@@ -124,11 +124,16 @@ const char kPermission[] = "permission";
 const char kPhaPatternType[] = "pha_pattern_type";
 const char kMalwareThreatType[] = "malware_threat_type";
 const char kSePatternType[] = "se_pattern_type";
+const char kSfPatternType[] = "sf_pattern_type";
+const char kExperimentalKey[] = "experimental";
 const char kLanding[] = "LANDING";
 const char kDistribution[] = "DISTRIBUTION";
 const char kSocialEngineeringAds[] = "SOCIAL_ENGINEERING_ADS";
 const char kSocialEngineeringLanding[] = "SOCIAL_ENGINEERING_LANDING";
 const char kPhishing[] = "PHISHING";
+const char kSubresourceFilterBetterAds[] = "BETTER_ADS";
+const char kSubresourceFilterAbusiveAds[] = "ABUSIVE_ADS";
+const char kSubresourceFilterAll[] = "ALL_ADS";
 
 }  // namespace
 
@@ -323,7 +328,7 @@ void V4GetHashProtocolManager::GetFullHashes(
           destination: GOOGLE_OWNED_SERVICE
         }
         policy {
-          cookies_allowed: true
+          cookies_allowed: YES
           cookies_store: "Safe Browsing cookie store"
           setting:
             "Users can disable Safe Browsing by unchecking 'Protect you and "
@@ -381,7 +386,7 @@ void V4GetHashProtocolManager::GetFullHashCachedResults(
         full_hash_to_store_and_hash_prefixes,
     const Time& now,
     std::vector<HashPrefix>* prefixes_to_request,
-    std::vector<FullHashInfo>* cached_full_hash_infos) const {
+    std::vector<FullHashInfo>* cached_full_hash_infos) {
   DCHECK(!full_hash_to_store_and_hash_prefixes.empty());
   DCHECK(prefixes_to_request->empty());
   DCHECK(cached_full_hash_infos->empty());
@@ -433,6 +438,7 @@ void V4GetHashProtocolManager::GetFullHashCachedResults(
               full_hash_info.list_id == list_id) {
             // Case a.
             found_full_hash = true;
+            number_of_hits_++;
             if (full_hash_info.positive_expiry > now) {
               // Case i.
               cached_full_hash_infos->push_back(full_hash_info);
@@ -664,6 +670,24 @@ void V4GetHashProtocolManager::ParseMetadata(const ThreatMatch& match,
         }
       }
     }
+  } else if (match.threat_type() == SUBRESOURCE_FILTER) {
+    for (const ThreatEntryMetadata::MetadataEntry& m :
+         match.threat_entry_metadata().entries()) {
+      if (m.key() == kSfPatternType) {
+        if (m.value() == kSubresourceFilterBetterAds) {
+          metadata->threat_pattern_type =
+              ThreatPatternType::SUBRESOURCE_FILTER_BETTER_ADS;
+        } else if (m.value() == kSubresourceFilterAbusiveAds) {
+          metadata->threat_pattern_type =
+              ThreatPatternType::SUBRESOURCE_FILTER_ABUSIVE_ADS;
+        } else if (m.value() == kSubresourceFilterAll) {
+          metadata->threat_pattern_type =
+              ThreatPatternType::SUBRESOURCE_FILTER_ALL_ADS;
+        }
+      } else if (m.key() == kExperimentalKey) {
+        metadata->experimental = m.value() == "true";
+      }
+    }
   } else if (match.has_threat_entry_metadata() &&
              match.threat_entry_metadata().entries_size() > 1) {
     RecordParseGetHashResult(UNEXPECTED_THREAT_TYPE_ERROR);
@@ -786,6 +810,35 @@ void V4GetHashProtocolManager::OnURLFetchComplete(
   fhci->callback.Run(fhci->cached_full_hash_infos);
 
   pending_hash_requests_.erase(it);
+}
+
+void V4GetHashProtocolManager::CollectFullHashCacheInfo(
+    FullHashCacheInfo* full_hash_cache_info) {
+  full_hash_cache_info->set_number_of_hits(number_of_hits_);
+
+  for (const auto& it : full_hash_cache_) {
+    FullHashCacheInfo::FullHashCache* full_hash_cache =
+        full_hash_cache_info->add_full_hash_cache();
+    full_hash_cache->set_hash_prefix(it.first);
+    full_hash_cache->mutable_cached_hash_prefix_info()->set_negative_expiry(
+        it.second.negative_expiry.ToJavaTime());
+
+    for (const auto& full_hash_infos_it : it.second.full_hash_infos) {
+      FullHashCacheInfo::FullHashCache::CachedHashPrefixInfo::FullHashInfo*
+          full_hash_info = full_hash_cache->mutable_cached_hash_prefix_info()
+                               ->add_full_hash_info();
+      full_hash_info->set_positive_expiry(
+          full_hash_infos_it.positive_expiry.ToJavaTime());
+      full_hash_info->set_full_hash(full_hash_infos_it.full_hash);
+
+      full_hash_info->mutable_list_identifier()->set_platform_type(
+          static_cast<int>(full_hash_infos_it.list_id.platform_type()));
+      full_hash_info->mutable_list_identifier()->set_threat_entry_type(
+          static_cast<int>(full_hash_infos_it.list_id.threat_entry_type()));
+      full_hash_info->mutable_list_identifier()->set_threat_type(
+          static_cast<int>(full_hash_infos_it.list_id.threat_type()));
+    }
+  }
 }
 
 #ifndef DEBUG

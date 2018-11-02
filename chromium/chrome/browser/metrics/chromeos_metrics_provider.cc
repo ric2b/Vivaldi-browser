@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include "base/barrier_closure.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
@@ -31,10 +32,6 @@
 #include "device/bluetooth/bluetooth_device.h"
 #include "ui/display/display.h"
 #include "ui/events/event_utils.h"
-
-#if defined(USE_X11)
-#include "ui/events/devices/x11/touch_factory_x11.h"
-#endif  // defined(USE_X11)
 
 using metrics::ChromeUserMetricsExtension;
 using metrics::SampledProfile;
@@ -80,26 +77,20 @@ PairedDevice::Type AsBluetoothDeviceType(
   return PairedDevice::DEVICE_UNKNOWN;
 }
 
-void WriteExternalTouchscreensProto(SystemProfileProto::Hardware* hardware) {
-#if defined(USE_X11)
-  std::set<std::pair<int, int> > touchscreen_ids =
-      ui::TouchFactory::GetInstance()->GetTouchscreenIds();
-  for (std::set<std::pair<int, int> >::iterator it = touchscreen_ids.begin();
-       it != touchscreen_ids.end();
-       ++it) {
-    SystemProfileProto::Hardware::TouchScreen* touchscreen =
-        hardware->add_external_touchscreen();
-    touchscreen->set_vendor_id(it->first);
-    touchscreen->set_product_id(it->second);
-  }
-#endif  // defined(USE_X11)
-}
-
 void IncrementPrefValue(const char* path) {
   PrefService* pref = g_browser_process->local_state();
   DCHECK(pref);
   int value = pref->GetInteger(path);
   pref->SetInteger(path, value + 1);
+}
+
+// Called on a background thread to load hardware class information.
+std::string GetHardwareClassOnBackgroundThread() {
+  base::ThreadRestrictions::AssertWaitAllowed();
+  std::string hardware_class;
+  chromeos::system::StatisticsProvider::GetInstance()->GetMachineStatistic(
+      "hardware_class", &hardware_class);
+  return hardware_class;
 }
 
 }  // namespace
@@ -158,6 +149,12 @@ void ChromeOSMetricsProvider::Init() {
 #endif
 }
 
+void ChromeOSMetricsProvider::AsyncInit(const base::Closure& done_callback) {
+  base::Closure barrier = base::BarrierClosure(2, done_callback);
+  InitTaskGetHardwareClass(barrier);
+  InitTaskGetBluetoothAdapter(barrier);
+}
+
 void ChromeOSMetricsProvider::OnDidCreateMetricsLog() {
   registered_user_count_at_log_initialization_ = false;
   if (user_manager::UserManager::IsInitialized()) {
@@ -171,21 +168,14 @@ void ChromeOSMetricsProvider::InitTaskGetHardwareClass(
     const base::Closure& callback) {
   // Run the (potentially expensive) task in the background to avoid blocking
   // the UI thread.
-  base::PostTaskWithTraitsAndReply(
+  base::PostTaskWithTraitsAndReplyWithResult(
       FROM_HERE,
       {base::MayBlock(), base::WithBaseSyncPrimitives(),
        base::TaskPriority::BACKGROUND,
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
-      base::BindOnce(
-          &ChromeOSMetricsProvider::InitTaskGetHardwareClassOnBackgroundThread,
-          weak_ptr_factory_.GetWeakPtr()),
-      callback);
-}
-
-void ChromeOSMetricsProvider::InitTaskGetHardwareClassOnBackgroundThread() {
-  base::ThreadRestrictions::AssertWaitAllowed();
-  chromeos::system::StatisticsProvider::GetInstance()->GetMachineStatistic(
-      "hardware_class", &hardware_class_);
+      base::BindOnce(&GetHardwareClassOnBackgroundThread),
+      base::BindOnce(&ChromeOSMetricsProvider::SetHardwareClass,
+                     weak_ptr_factory_.GetWeakPtr(), callback));
 }
 
 void ChromeOSMetricsProvider::InitTaskGetBluetoothAdapter(
@@ -209,7 +199,6 @@ void ChromeOSMetricsProvider::ProvideSystemProfileMetrics(
     hardware->set_internal_display_supports_touch(true);
   else if (has_touch == display::Display::TOUCH_SUPPORT_UNAVAILABLE)
     hardware->set_internal_display_supports_touch(false);
-  WriteExternalTouchscreensProto(hardware);
 }
 
 void ChromeOSMetricsProvider::ProvideStabilityMetrics(
@@ -236,8 +225,14 @@ void ChromeOSMetricsProvider::ProvideStabilityMetrics(
   }
 }
 
-void ChromeOSMetricsProvider::ProvideGeneralMetrics(
+void ChromeOSMetricsProvider::ProvidePreviousSessionData(
     metrics::ChromeUserMetricsExtension* uma_proto) {
+  ProvideStabilityMetrics(uma_proto->mutable_system_profile());
+}
+
+void ChromeOSMetricsProvider::ProvideCurrentSessionData(
+    metrics::ChromeUserMetricsExtension* uma_proto) {
+  ProvideStabilityMetrics(uma_proto->mutable_system_profile());
   std::vector<SampledProfile> sampled_profiles;
   if (perf_provider_.GetSampledProfiles(&sampled_profiles)) {
     for (auto& profile : sampled_profiles) {
@@ -333,6 +328,12 @@ void ChromeOSMetricsProvider::SetBluetoothAdapter(
     base::Closure callback,
     scoped_refptr<device::BluetoothAdapter> adapter) {
   adapter_ = adapter;
+  callback.Run();
+}
+
+void ChromeOSMetricsProvider::SetHardwareClass(base::Closure callback,
+                                               std::string hardware_class) {
+  hardware_class_ = hardware_class;
   callback.Run();
 }
 

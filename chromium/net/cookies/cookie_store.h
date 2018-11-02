@@ -42,7 +42,7 @@ class NET_EXPORT CookieStore {
     // The following four values have the same meaning as EXPLICIT, but are
     // being used to track down where a bug is coming from.
     // TODO(nharper): Remove the following four values once the one of interest
-    // has been found.
+    // has been found.  See http://crbug.com/548423.
     EXPLICIT_DELETE_BETWEEN,
     EXPLICIT_DELETE_PREDICATE,
     EXPLICIT_DELETE_SINGLE,
@@ -202,9 +202,11 @@ class NET_EXPORT CookieStore {
 
   // Deletes all of the cookies that match the given predicate and that have a
   // creation_date greater than or equal to |delete_begin| and smaller than
-  // |delete_end|. This includes all http_only and secure cookies. Avoid
-  // deleting cookies that could leave websites with a partial set of visible
-  // cookies.
+  // |delete_end|. Null times do not cap their ranges (i.e.
+  // |delete_end.is_null()| would mean that there is no time after which
+  // cookies are not deleted).  This includes all http_only and secure
+  // cookies. Avoid deleting cookies that could leave websites with a
+  // partial set of visible cookies.
   // Calls |callback| with the number of cookies deleted.
   virtual void DeleteAllCreatedBetweenWithPredicateAsync(
       const base::Time& delete_begin,
@@ -247,6 +249,12 @@ class NET_EXPORT CookieStore {
   virtual std::unique_ptr<CookieChangedSubscription> AddCallbackForCookie(
       const GURL& url,
       const std::string& name,
+      const CookieChangedCallback& callback) = 0;
+
+  // Add a callback to be notified on all cookie changes (with a few
+  // bookkeeping exceptions; see kChangeCauseMapping in
+  // cookie_monster.cc).
+  virtual std::unique_ptr<CookieChangedSubscription> AddCallbackForAllChanges(
       const CookieChangedCallback& callback) = 0;
 
   // Returns true if this cookie store is ephemeral, and false if it is backed

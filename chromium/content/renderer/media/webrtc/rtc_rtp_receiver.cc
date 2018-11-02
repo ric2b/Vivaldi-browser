@@ -17,13 +17,12 @@ uintptr_t RTCRtpReceiver::getId(
 }
 
 RTCRtpReceiver::RTCRtpReceiver(
-    scoped_refptr<webrtc::RtpReceiverInterface> webrtc_rtp_receiver,
+    rtc::scoped_refptr<webrtc::RtpReceiverInterface> webrtc_rtp_receiver,
     std::unique_ptr<WebRtcMediaStreamTrackAdapterMap::AdapterRef> track_adapter)
     : webrtc_rtp_receiver_(std::move(webrtc_rtp_receiver)),
       track_adapter_(std::move(track_adapter)) {
   DCHECK(webrtc_rtp_receiver_);
   DCHECK(track_adapter_);
-  DCHECK_EQ(track_adapter_->webrtc_track(), webrtc_rtp_receiver_->track());
 }
 
 RTCRtpReceiver::~RTCRtpReceiver() {}

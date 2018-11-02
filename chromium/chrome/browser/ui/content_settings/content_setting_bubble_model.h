@@ -79,6 +79,15 @@ class ContentSettingBubbleModel : public content::NotificationObserver {
   };
   typedef std::vector<ListItem> ListItems;
 
+  class Owner {
+   public:
+    virtual void OnListItemAdded(const ListItem& item) {}
+    virtual void OnListItemRemovedAt(int index) {}
+
+   protected:
+    virtual ~Owner() = default;
+  };
+
   typedef std::vector<base::string16> RadioItems;
   struct RadioGroup {
     RadioGroup();
@@ -126,7 +135,7 @@ class ContentSettingBubbleModel : public content::NotificationObserver {
     base::string16 manage_text;
     bool show_manage_text_as_checkbox = false;
     MediaMenuMap media_menus;
-    base::string16 learn_more_link;
+    bool show_learn_more = false;
     base::string16 done_button_text;
 
    private:
@@ -147,17 +156,19 @@ class ContentSettingBubbleModel : public content::NotificationObserver {
 
   const BubbleContent& bubble_content() const { return bubble_content_; }
 
+  void set_owner(Owner* owner) { owner_ = owner; }
+
   // content::NotificationObserver:
   void Observe(int type,
                const content::NotificationSource& source,
                const content::NotificationDetails& details) override;
 
   virtual void OnRadioClicked(int radio_index) {}
-  virtual void OnListItemClicked(int index) {}
+  virtual void OnListItemClicked(int index, int event_flags) {}
   virtual void OnCustomLinkClicked() {}
-  virtual void OnManageLinkClicked() {}
+  virtual void OnManageButtonClicked() {}
   virtual void OnManageCheckboxChecked(bool is_checked) {}
-  virtual void OnLearnMoreLinkClicked() {}
+  virtual void OnLearnMoreClicked() {}
   virtual void OnMediaMenuClicked(content::MediaStreamType type,
                                   const std::string& selected_device_id) {}
 
@@ -205,9 +216,8 @@ class ContentSettingBubbleModel : public content::NotificationObserver {
   void set_message(const base::string16& message) {
     bubble_content_.message = message;
   }
-  void add_list_item(const ListItem& item) {
-    bubble_content_.list_items.push_back(item);
-  }
+  void AddListItem(const ListItem& item);
+  void RemoveListItem(int index);
   void set_radio_group(const RadioGroup& radio_group) {
     bubble_content_.radio_group = radio_group;
   }
@@ -235,8 +245,8 @@ class ContentSettingBubbleModel : public content::NotificationObserver {
   void set_selected_device(const content::MediaStreamDevice& device) {
     bubble_content_.media_menus[device.type].selected_device = device;
   }
-  void set_learn_more_link(const base::string16& link) {
-    bubble_content_.learn_more_link = link;
+  void set_show_learn_more(bool show_learn_more) {
+    bubble_content_.show_learn_more = show_learn_more;
   }
   void set_done_button_text(const base::string16& done_button_text) {
     bubble_content_.done_button_text = done_button_text;
@@ -249,6 +259,7 @@ class ContentSettingBubbleModel : public content::NotificationObserver {
 
   content::WebContents* web_contents_;
   Profile* profile_;
+  Owner* owner_;
   Delegate* delegate_;
   BubbleContent bubble_content_;
   // A registrar for listening for WEB_CONTENTS_DESTROYED notifications.
@@ -276,7 +287,7 @@ class ContentSettingSimpleBubbleModel : public ContentSettingBubbleModel {
   // ContentSettingBubbleModel implementation.
   void SetTitle() override;
   void SetManageText() override;
-  void OnManageLinkClicked() override;
+  void OnManageButtonClicked() override;
   void SetCustomLink();
   void OnCustomLinkClicked() override;
 
@@ -333,7 +344,7 @@ class ContentSettingSubresourceFilterBubbleModel
   void OnManageCheckboxChecked(bool is_checked) override;
   ContentSettingSubresourceFilterBubbleModel* AsSubresourceFilterBubbleModel()
       override;
-  void OnLearnMoreLinkClicked() override;
+  void OnLearnMoreClicked() override;
   void OnDoneClicked() override;
 
   bool is_checked_ = false;
@@ -352,7 +363,7 @@ class ContentSettingMediaStreamBubbleModel : public ContentSettingBubbleModel {
 
   // ContentSettingBubbleModel:
   ContentSettingMediaStreamBubbleModel* AsMediaStreamBubbleModel() override;
-  void OnManageLinkClicked() override;
+  void OnManageButtonClicked() override;
 
  private:
   // Helper functions to check if this bubble was invoked for microphone,
@@ -415,7 +426,7 @@ class ContentSettingDownloadsBubbleModel : public ContentSettingBubbleModel {
   void OnRadioClicked(int radio_index) override;
   void SetTitle() override;
   void SetManageText() override;
-  void OnManageLinkClicked() override;
+  void OnManageButtonClicked() override;
 
   int selected_item_ = 0;
 

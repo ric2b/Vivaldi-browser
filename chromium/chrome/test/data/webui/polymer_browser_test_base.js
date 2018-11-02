@@ -52,8 +52,8 @@ PolymerTest.prototype = {
     PolymerTest.importUrls_ = [];
     PolymerTest.scriptUrls_ = [];
 
-    // Importing a URL like "chrome://md-settings/foo" redirects to the base
-    // ("chrome://md-settings") page, which due to how browsePreload works can
+    // Importing a URL like "chrome://settings/foo" redirects to the base
+    // ("chrome://settings") page, which due to how browsePreload works can
     // result in duplicate imports. Wrap document.registerElement so failures
     // caused by re-registering Polymer elements are caught; otherwise Chrome
     // simply throws "Script error" which is unhelpful.
@@ -158,7 +158,8 @@ PolymerTest.loadScript = function(src) {
  */
 PolymerTest.clearBody = function() {
   // Save the div where vulcanize inlines content before clearing the page.
-  var vulcanizeDiv = document.querySelector('body > div[hidden][by-vulcanize]');
+  var vulcanizeDiv = document.querySelector(
+      'body > div[hidden][by-polymer-bundler]');
   document.body.innerHTML = '';
   if (vulcanizeDiv)
     document.body.appendChild(vulcanizeDiv);

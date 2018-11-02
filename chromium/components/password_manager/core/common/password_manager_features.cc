@@ -4,6 +4,8 @@
 
 #include "components/password_manager/core/common/password_manager_features.h"
 
+#include "build/build_config.h"
+
 namespace password_manager {
 
 namespace features {
@@ -18,6 +20,17 @@ const base::Feature kAffiliationBasedMatching = {
 const base::Feature kDropSyncCredential = {"drop-sync-credential",
                                            base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Enable additional elements in the form popup UI, which will allow the user to
+// view all saved passwords.
+const base::Feature kEnableManualFallbacksFilling = {
+    "EnableManualFallbacksFilling", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Enable that an omnibox icon is shown when the user types into a password
+// field. When the user clicks on the icon, a password save/update bubble is
+// shown.
+const base::Feature kEnableManualSaving = {"EnableManualSaving",
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
+
 // Enable a context menu item in the password field that allows the user
 // to manually enforce saving of their password.
 const base::Feature kEnablePasswordForceSaving = {
@@ -29,7 +42,11 @@ extern const base::Feature kEnableManualPasswordGeneration = {
 
 // Enables username correction while saving username and password details.
 extern const base::Feature kEnableUsernameCorrection{
-    "EnableUsernameCorrection", base::FEATURE_DISABLED_BY_DEFAULT};
+    "EnableUsernameCorrection", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Enables password selection while saving username and password details.
+extern const base::Feature kEnablePasswordSelection{
+    "EnablePasswordSelection", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Disallow autofilling of the sync credential.
 const base::Feature kProtectSyncCredential = {
@@ -47,7 +64,7 @@ const base::Feature kPasswordImportExport = {"password-import-export",
 // mobile, the desktop version of Chrome always allows users to view
 // passwords.
 const base::Feature kViewPasswords = {"view-passwords",
-                                      base::FEATURE_DISABLED_BY_DEFAULT};
+                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables the experiment for the password manager to only fill on account
 // selection, rather than autofilling on page load, with highlighting of fields.

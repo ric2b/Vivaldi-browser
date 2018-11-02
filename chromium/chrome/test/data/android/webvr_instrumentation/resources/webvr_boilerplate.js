@@ -19,6 +19,7 @@ var gl = webglCanvas.getContext("webgl", glAttribs);
 var vrDisplay = null;
 var frameData = null;
 var onAnimationFrameCallback = null;
+var shouldSubmitFrame = true;
 
 function onResize() {
   if (vrDisplay && vrDisplay.isPresenting) {
@@ -60,7 +61,7 @@ function onAnimationFrame(t) {
     gl.viewport(webglCanvas.width * 0.5, 0, webglCanvas.width * 0.5,
                 webglCanvas.height);
 
-    vrDisplay.submitFrame();
+    if (shouldSubmitFrame) vrDisplay.submitFrame();
   } else {
     gl.clearColor(1.0, 0.0, 0.0, 1.0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -87,7 +88,6 @@ gl.enable(gl.DEPTH_TEST);
 gl.enable(gl.CULL_FACE);
 window.addEventListener("resize", onResize, false);
 window.addEventListener("vrdisplaypresentchange", onVrPresentChange, false);
-window.addEventListener('vrdisplayactivate', onVrRequestPresent, false);
 window.requestAnimationFrame(onAnimationFrame);
 webglCanvas.onclick = onVrRequestPresent;
 onResize();

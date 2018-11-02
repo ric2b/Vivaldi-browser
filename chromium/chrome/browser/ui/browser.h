@@ -231,6 +231,10 @@ class Browser : public TabStripModelObserver,
   explicit Browser(const CreateParams& params);
   ~Browser() override;
 
+  // Returns the Browser that contains the specified WebContents. May return
+  // null if no Browser has that WebContents as a tab.
+  static Browser* FromWebContents(content::WebContents* web_contents);
+
   // Set overrides for the initial window bounds and maximized state.
   void set_override_bounds(const gfx::Rect& bounds) {
     override_bounds_ = bounds;
@@ -384,6 +388,13 @@ class Browser : public TabStripModelObserver,
   // cleanup.
   void OnWindowClosing();
 
+  // Vivaldi: Invoked from the WebContentsDelegate (GuestView) when the
+  // beforeunload handling is done for this tab.
+  void DoBeforeUnloadFired(content::WebContents* web_contents,
+                           bool proceed,
+                           bool* proceed_to_fire_unload);
+  void DoCloseContents(content::WebContents* source);
+
   // In-progress download termination handling /////////////////////////////////
 
   // Called when the user has decided whether to proceed or not with the browser
@@ -504,9 +515,6 @@ class Browser : public TabStripModelObserver,
   blink::WebSecurityStyle GetSecurityStyle(
       content::WebContents* web_contents,
       content::SecurityStyleExplanations* security_style_explanations) override;
-  void ShowCertificateViewerInDevTools(
-      content::WebContents* web_contents,
-      scoped_refptr<net::X509Certificate> certificate) override;
   std::unique_ptr<content::BluetoothChooser> RunBluetoothChooser(
       content::RenderFrameHost* frame,
       const content::BluetoothChooser::EventHandler& event_handler) override;
@@ -845,6 +853,10 @@ class Browser : public TabStripModelObserver,
   void TabDetachedAtImpl(content::WebContents* contents,
                          int index,
                          DetachType type);
+
+  // Updates the loading state for the window and tabstrip.
+  void UpdateWindowForLoadingStateChanged(content::WebContents* source,
+                                          bool to_different_document);
 
   // Shared code between Reload() and ReloadBypassingCache().
   void ReloadInternal(WindowOpenDisposition disposition, bool bypass_cache);

@@ -5,7 +5,6 @@
 #include "components/sync/driver/frontend_data_type_controller.h"
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/sync/base/data_type_histogram.h"
 #include "components/sync/base/model_type.h"
@@ -104,11 +103,6 @@ void FrontendDataTypeController::Stop() {
   change_processor_.reset();
 
   state_ = NOT_RUNNING;
-}
-
-std::string FrontendDataTypeController::name() const {
-  // For logging only.
-  return ModelTypeToString(type());
 }
 
 DataTypeController::State FrontendDataTypeController::state() const {
@@ -214,7 +208,7 @@ void FrontendDataTypeController::StartDone(
 
 std::unique_ptr<DataTypeErrorHandler>
 FrontendDataTypeController::CreateErrorHandler() {
-  return base::MakeUnique<DataTypeErrorHandlerImpl>(
+  return std::make_unique<DataTypeErrorHandlerImpl>(
       base::ThreadTaskRunnerHandle::Get(), dump_stack_,
       base::Bind(&FrontendDataTypeController::OnUnrecoverableError,
                  base::AsWeakPtr(this)));
@@ -238,8 +232,10 @@ void FrontendDataTypeController::RecordAssociationTime(base::TimeDelta time) {
 
 void FrontendDataTypeController::RecordStartFailure(ConfigureResult result) {
   DCHECK(CalledOnValidThread());
+  // TODO(wychen): enum uma should be strongly typed. crbug.com/661401
   UMA_HISTOGRAM_ENUMERATION("Sync.DataTypeStartFailures",
-                            ModelTypeToHistogramInt(type()), MODEL_TYPE_COUNT);
+                            ModelTypeToHistogramInt(type()),
+                            static_cast<int>(MODEL_TYPE_COUNT));
 #define PER_DATA_TYPE_MACRO(type_str)                                    \
   UMA_HISTOGRAM_ENUMERATION("Sync." type_str "ConfigureFailure", result, \
                             MAX_CONFIGURE_RESULT);

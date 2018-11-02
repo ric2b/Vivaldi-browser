@@ -26,18 +26,17 @@
 #include "core/paint/LinkHighlightImpl.h"
 
 #include <memory>
-#include "core/dom/DOMNodeIds.h"
 #include "core/dom/LayoutTreeBuilderTraversal.h"
 #include "core/dom/Node.h"
 #include "core/exported/WebSettingsImpl.h"
-#include "core/exported/WebViewBase.h"
+#include "core/exported/WebViewImpl.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "core/layout/LayoutBoxModelObject.h"
 #include "core/layout/LayoutObject.h"
-#include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/paint/PaintLayer.h"
+#include "core/paint/compositing/CompositedLayerMapping.h"
 #include "platform/LayoutTestSupport.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/animation/CompositorAnimation.h"
@@ -46,7 +45,6 @@
 #include "platform/animation/CompositorTargetProperty.h"
 #include "platform/animation/TimingFunction.h"
 #include "platform/graphics/Color.h"
-#include "platform/graphics/CompositorElementId.h"
 #include "platform/graphics/CompositorMutableProperties.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/graphics/paint/DrawingRecorder.h"
@@ -71,18 +69,19 @@ namespace blink {
 
 std::unique_ptr<LinkHighlightImpl> LinkHighlightImpl::Create(
     Node* node,
-    WebViewBase* owning_web_view) {
+    WebViewImpl* owning_web_view) {
   return WTF::WrapUnique(new LinkHighlightImpl(node, owning_web_view));
 }
 
-LinkHighlightImpl::LinkHighlightImpl(Node* node, WebViewBase* owning_web_view)
+LinkHighlightImpl::LinkHighlightImpl(Node* node, WebViewImpl* owning_web_view)
     : node_(node),
       owning_web_view_(owning_web_view),
       current_graphics_layer_(0),
       is_scrolling_graphics_layer_(false),
       geometry_needs_update_(false),
       is_animating_(false),
-      start_time_(MonotonicallyIncreasingTime()) {
+      start_time_(MonotonicallyIncreasingTime()),
+      unique_id_(NewUniqueObjectId()) {
   DCHECK(node_);
   DCHECK(owning_web_view);
   WebCompositorSupport* compositor_support =
@@ -99,9 +98,8 @@ LinkHighlightImpl::LinkHighlightImpl(Node* node, WebViewBase* owning_web_view)
   if (owning_web_view_->LinkHighlightsTimeline())
     owning_web_view_->LinkHighlightsTimeline()->PlayerAttached(*this);
 
-  CompositorElementId element_id = CompositorElementIdFromDOMNodeId(
-      DOMNodeIds::IdForNode(node),
-      CompositorElementIdNamespace::kLinkHighlight);
+  CompositorElementId element_id =
+      CompositorElementIdFromUniqueObjectId(unique_id_);
   compositor_player_->AttachElement(element_id);
   content_layer_->Layer()->SetDrawsContent(true);
   content_layer_->Layer()->SetOpacity(1);

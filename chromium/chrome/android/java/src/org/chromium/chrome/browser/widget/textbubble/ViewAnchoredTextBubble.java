@@ -112,6 +112,8 @@ public class ViewAnchoredTextBubble extends TextBubble
 
     private void refreshAnchorBounds() {
         mAnchorView.getLocationOnScreen(mCachedScreenCoordinates);
+        if (mCachedScreenCoordinates[0] < 0 || mCachedScreenCoordinates[1] < 0) return;
+
         mAnchorRect.left = mCachedScreenCoordinates[0];
         mAnchorRect.top = mCachedScreenCoordinates[1];
         mAnchorRect.right = mAnchorRect.left + mAnchorView.getWidth();

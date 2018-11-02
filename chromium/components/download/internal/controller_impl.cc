@@ -20,6 +20,7 @@
 #include "components/download/internal/scheduler/scheduler.h"
 #include "components/download/internal/stats.h"
 #include "components/download/public/client.h"
+#include "components/download/public/download_metadata.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 
 namespace download {
@@ -143,8 +144,8 @@ void ControllerImpl::StartDownload(const DownloadParams& params) {
     return;
   }
 
-  uint32_t client_count =
-      util::GetNumberOfEntriesForClient(params.client, model_->PeekEntries());
+  uint32_t client_count = util::GetNumberOfLiveEntriesForClient(
+      params.client, model_->PeekEntries());
   if (client_count >= config_->max_scheduled_downloads) {
     HandleStartDownloadResponse(params.client, params.guid,
                                 DownloadParams::StartResult::BACKOFF,
@@ -290,10 +291,39 @@ void ControllerImpl::OnCompleteCleanupTask() {
 }
 
 void ControllerImpl::RemoveCleanupEligibleDownloads() {
-  auto timed_out_entries = file_monitor_->CleanupFilesForCompletedEntries(
-      model_->PeekEntries(), base::Bind(&ControllerImpl::OnCompleteCleanupTask,
-                                        weak_ptr_factory_.GetWeakPtr()));
-  for (auto* entry : timed_out_entries) {
+  std::vector<Entry*> entries_to_remove;
+  for (auto* entry : model_->PeekEntries()) {
+    if (entry->state != Entry::State::COMPLETE)
+      continue;
+
+    bool optional_cleanup =
+        base::Time::Now() >
+        (entry->last_cleanup_check_time + config_->file_keep_alive_time);
+    bool mandatory_cleanup =
+        base::Time::Now() >
+        (entry->completion_time + config_->max_file_keep_alive_time);
+
+    if (!optional_cleanup && !mandatory_cleanup)
+      continue;
+
+    download::Client* client = clients_->GetClient(entry->client);
+    DCHECK(client);
+    bool client_ok =
+        client->CanServiceRemoveDownloadedFile(entry->guid, mandatory_cleanup);
+    entry->cleanup_attempt_count++;
+
+    if (client_ok || mandatory_cleanup) {
+      entries_to_remove.push_back(entry);
+    } else {
+      entry->last_cleanup_check_time = base::Time::Now();
+    }
+  }
+
+  file_monitor_->CleanupFilesForCompletedEntries(
+      entries_to_remove, base::Bind(&ControllerImpl::OnCompleteCleanupTask,
+                                    weak_ptr_factory_.GetWeakPtr()));
+
+  for (auto* entry : entries_to_remove) {
     DCHECK_EQ(Entry::State::COMPLETE, entry->state);
     model_->Remove(entry->guid);
   }
@@ -775,16 +805,16 @@ void ControllerImpl::UpdateDriverState(Entry* entry) {
     if (driver_entry.has_value()) {
       driver_->Resume(entry->guid);
     } else {
-      driver_->Start(entry->request_params, entry->guid,
-                     entry->target_file_path, NO_TRAFFIC_ANNOTATION_YET);
+      driver_->Start(
+          entry->request_params, entry->guid, entry->target_file_path,
+          net::NetworkTrafficAnnotationTag(entry->traffic_annotation));
     }
   }
 }
 
 void ControllerImpl::NotifyClientsOfStartup(bool state_lost) {
-  std::set<Entry::State> ignored_states = {Entry::State::COMPLETE};
-  auto categorized = util::MapEntriesToClients(
-      clients_->GetRegisteredClients(), model_->PeekEntries(), ignored_states);
+  auto categorized = util::MapEntriesToMetadataForClients(
+      clients_->GetRegisteredClients(), model_->PeekEntries());
 
   for (auto client_id : clients_->GetRegisteredClients()) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -845,21 +875,22 @@ void ControllerImpl::HandleCompleteDownload(CompletionType type,
   auto driver_entry = driver_->Find(guid);
   uint64_t file_size =
       driver_entry.has_value() ? driver_entry->bytes_downloaded : 0;
-  stats::LogDownloadCompletion(
-      type, entry->completion_time - entry->create_time, file_size);
+  stats::LogDownloadCompletion(type, file_size);
 
   if (type == CompletionType::SUCCEED) {
     DCHECK(driver_entry.has_value());
     stats::LogFilePathRenamed(driver_entry->current_file_path !=
                               entry->target_file_path);
     entry->target_file_path = driver_entry->current_file_path;
-
     entry->completion_time = driver_entry->completion_time;
+    entry->bytes_downloaded = driver_entry->bytes_downloaded;
+    CompletionInfo completion_info(driver_entry->current_file_path,
+                                   driver_entry->bytes_downloaded);
+    entry->last_cleanup_check_time = driver_entry->completion_time;
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::Bind(&ControllerImpl::SendOnDownloadSucceeded,
                               weak_ptr_factory_.GetWeakPtr(), entry->client,
-                              guid, driver_entry->current_file_path,
-                              driver_entry->bytes_downloaded));
+                              guid, completion_info));
     TransitTo(entry, Entry::State::COMPLETE, model_.get());
     ScheduleCleanupTask();
   } else {
@@ -877,23 +908,29 @@ void ControllerImpl::HandleCompleteDownload(CompletionType type,
 }
 
 void ControllerImpl::ScheduleCleanupTask() {
-  base::Time earliest_completion_time = base::Time::Max();
+  base::Time earliest_cleanup_start_time = base::Time::Max();
   for (const Entry* entry : model_->PeekEntries()) {
-    if (entry->completion_time == base::Time() ||
-        entry->state != Entry::State::COMPLETE)
+    if (entry->state != Entry::State::COMPLETE)
       continue;
-    if (entry->completion_time < earliest_completion_time) {
-      earliest_completion_time = entry->completion_time;
+
+    base::Time cleanup_time_for_entry =
+        std::min(entry->last_cleanup_check_time + config_->file_keep_alive_time,
+                 entry->completion_time + config_->max_file_keep_alive_time);
+    cleanup_time_for_entry =
+        std::max(cleanup_time_for_entry, base::Time::Now());
+    if (cleanup_time_for_entry < earliest_cleanup_start_time) {
+      earliest_cleanup_start_time = cleanup_time_for_entry;
     }
   }
 
-  if (earliest_completion_time == base::Time::Max())
+  if (earliest_cleanup_start_time == base::Time::Max())
     return;
 
-  base::TimeDelta start_time = earliest_completion_time +
-                               config_->file_keep_alive_time -
-                               base::Time::Now();
+  base::TimeDelta start_time = earliest_cleanup_start_time - base::Time::Now();
   base::TimeDelta end_time = start_time + config_->file_cleanup_window;
+  DCHECK_LT(std::ceil(start_time.InSecondsF()),
+            std::ceil(end_time.InSecondsF()))
+      << "GCM requires start time to be less than end time";
 
   task_scheduler_->ScheduleTask(DownloadTaskType::CLEANUP_TASK, false, false,
                                 std::ceil(start_time.InSecondsF()),
@@ -990,10 +1027,10 @@ void ControllerImpl::HandleExternalDownload(const std::string& guid,
 void ControllerImpl::SendOnServiceInitialized(
     DownloadClient client_id,
     bool state_lost,
-    const std::vector<std::string>& guids) {
+    const std::vector<DownloadMetaData>& downloads) {
   auto* client = clients_->GetClient(client_id);
   DCHECK(client);
-  client->OnServiceInitialized(state_lost, guids);
+  client->OnServiceInitialized(state_lost, downloads);
 }
 
 void ControllerImpl::SendOnServiceUnavailable() {
@@ -1013,13 +1050,13 @@ void ControllerImpl::SendOnDownloadUpdated(DownloadClient client_id,
   client->OnDownloadUpdated(guid, bytes_downloaded);
 }
 
-void ControllerImpl::SendOnDownloadSucceeded(DownloadClient client_id,
-                                             const std::string& guid,
-                                             const base::FilePath& path,
-                                             uint64_t size) {
+void ControllerImpl::SendOnDownloadSucceeded(
+    DownloadClient client_id,
+    const std::string& guid,
+    const CompletionInfo& completion_info) {
   auto* client = clients_->GetClient(client_id);
   DCHECK(client);
-  client->OnDownloadSucceeded(guid, path, size);
+  client->OnDownloadSucceeded(guid, completion_info);
 }
 
 void ControllerImpl::SendOnDownloadFailed(

@@ -5,11 +5,11 @@
 #include "core/layout/ng/inline/ng_inline_node.h"
 
 #include "core/layout/BidiRun.h"
-#include "core/layout/LayoutBlockFlow.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutText.h"
 #include "core/layout/LayoutTextFragment.h"
 #include "core/layout/api/LineLayoutAPIShim.h"
+#include "core/layout/line/InlineTextBox.h"
 #include "core/layout/line/LineInfo.h"
 #include "core/layout/line/RootInlineBox.h"
 #include "core/layout/ng/inline/ng_bidi_paragraph.h"
@@ -24,6 +24,7 @@
 #include "core/layout/ng/inline/ng_physical_text_fragment.h"
 #include "core/layout/ng/inline/ng_text_fragment.h"
 #include "core/layout/ng/layout_ng_block_flow.h"
+#include "core/layout/ng/legacy_layout_tree_walking.h"
 #include "core/layout/ng/ng_box_fragment.h"
 #include "core/layout/ng/ng_constraint_space_builder.h"
 #include "core/layout/ng/ng_fragment_builder.h"
@@ -31,6 +32,7 @@
 #include "core/layout/ng/ng_length_utils.h"
 #include "core/layout/ng/ng_physical_box_fragment.h"
 #include "core/style/ComputedStyle.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/fonts/shaping/HarfBuzzShaper.h"
 #include "platform/fonts/shaping/ShapeResultSpacing.h"
 #include "platform/wtf/text/CharacterNames.h"
@@ -42,6 +44,7 @@ namespace {
 struct FragmentPosition {
   NGLogicalOffset offset;
   LayoutUnit inline_size;
+  NGTextEndEffect end_effect;
   NGBorderEdges border_edges;
 
   void operator+=(const NGBoxStrut& strut) {
@@ -63,13 +66,15 @@ void CreateBidiRuns(BidiRunList<BidiRun>* bidi_runs,
   for (const auto& child : children) {
     if (child->Type() == NGPhysicalFragment::kFragmentText) {
       const auto* physical_fragment = ToNGPhysicalTextFragment(child.Get());
-      const NGInlineItem& item = items[physical_fragment->ItemIndex()];
+      const NGInlineItem& item =
+          items[physical_fragment->ItemIndexDeprecated()];
       BidiRun* run;
       if (item.Type() == NGInlineItem::kText ||
           item.Type() == NGInlineItem::kControl) {
         LayoutObject* layout_object = item.GetLayoutObject();
         DCHECK(layout_object->IsText());
-        unsigned text_offset = text_offsets[physical_fragment->ItemIndex()];
+        unsigned text_offset =
+            text_offsets[physical_fragment->ItemIndexDeprecated()];
         run = new BidiRun(physical_fragment->StartOffset() - text_offset,
                           physical_fragment->EndOffset() - text_offset,
                           item.BidiLevel(), LineLayoutItem(layout_object));
@@ -89,7 +94,8 @@ void CreateBidiRuns(BidiRunList<BidiRun>* bidi_runs,
       // One LayoutText may produce multiple text fragments that they can't
       // be set to a map.
       positions_for_bidi_runs_out->push_back(FragmentPosition{
-          fragment.Offset() + parent_offset, fragment.InlineSize()});
+          fragment.Offset() + parent_offset, fragment.InlineSize(),
+          physical_fragment->EndEffect()});
     } else {
       DCHECK_EQ(child->Type(), NGPhysicalFragment::kFragmentBox);
       NGPhysicalBoxFragment* physical_fragment =
@@ -107,9 +113,10 @@ void CreateBidiRuns(BidiRunList<BidiRun>* bidi_runs,
         bidi_runs->AddRun(run);
       }
       // Store box fragments in a map by LineLayoutItem.
-      positions_out->Set(LineLayoutItem(child->GetLayoutObject()),
-                         FragmentPosition{child_offset, fragment.InlineSize(),
-                                          fragment.BorderEdges()});
+      positions_out->Set(
+          LineLayoutItem(child->GetLayoutObject()),
+          FragmentPosition{child_offset, fragment.InlineSize(),
+                           NGTextEndEffect::kNone, fragment.BorderEdges()});
     }
   }
 }
@@ -148,7 +155,10 @@ unsigned PlaceInlineBoxChildren(
       inline_box->SetLogicalLeft(position.offset.inline_offset);
       inline_box->SetLogicalTop(position.offset.block_offset);
       inline_box->SetLogicalWidth(position.inline_size);
-      if (inline_box->GetLineLayoutItem().IsBox()) {
+      if (inline_box->IsInlineTextBox()) {
+        InlineTextBox* text_box = ToInlineTextBox(inline_box);
+        text_box->SetHasHyphen(position.end_effect == NGTextEndEffect::kHyphen);
+      } else if (inline_box->GetLineLayoutItem().IsBox()) {
         LineLayoutBox box(inline_box->GetLineLayoutItem());
         box.SetLocation(inline_box->Location());
 
@@ -214,10 +224,8 @@ String GetTextForInlineCollection<NGOffsetMappingBuilder>(
       // Reaches here if the LayoutTextFragment is due to a LayoutQuote.
       return layout_text.GetText();
     }
-    unsigned first_letter_length = node->GetLayoutObject()->TextStartOffset();
-    if (text_fragment.IsRemainingTextLayoutObject())
-      return node->data().Substring(first_letter_length);
-    return node->data().Substring(0, first_letter_length);
+    return node->data().Substring(text_fragment.Start(),
+                                  text_fragment.FragmentLength());
   }
 
   Node* node = layout_text.GetNode();
@@ -239,6 +247,8 @@ void AppendTextTransformedOffsetMapping<NGOffsetMappingBuilder>(
     const String& text_transformed_string) {
   // TODO(xiaochengh): We are assuming that DOM data string and text-transformed
   // strings have the same length, which is incorrect.
+  if (text_transformed_string.IsEmpty())
+    return;
   NGOffsetMappingBuilder text_transformed_mapping_builder;
   text_transformed_mapping_builder.AppendIdentityMapping(
       text_transformed_string.length());
@@ -258,29 +268,34 @@ void AppendTextTransformedOffsetMapping<NGOffsetMappingBuilder>(
 // for condition checking and branching.
 template <typename OffsetMappingBuilder>
 LayoutBox* CollectInlinesInternal(
-    LayoutBlockFlow* block,
+    LayoutNGBlockFlow* block,
     NGInlineItemsBuilderTemplate<OffsetMappingBuilder>* builder) {
   builder->EnterBlock(block->Style());
-  LayoutObject* node = block->FirstChild();
+  LayoutObject* node = GetLayoutObjectForFirstChildNode(block);
   LayoutBox* next_box = nullptr;
   while (node) {
     if (node->IsText()) {
-      builder->SetIsSVGText(node->IsSVGInlineText());
-
       LayoutText* layout_text = ToLayoutText(node);
-      const String& text =
-          GetTextForInlineCollection<OffsetMappingBuilder>(*layout_text);
-      builder->Append(text, node->Style(), layout_text);
+      if (UNLIKELY(layout_text->IsWordBreak())) {
+        builder->Append(NGInlineItem::kControl, kZeroWidthSpaceCharacter,
+                        node->Style(), layout_text);
+      } else {
+        builder->SetIsSVGText(node->IsSVGInlineText());
+        const String& text =
+            GetTextForInlineCollection<OffsetMappingBuilder>(*layout_text);
+        builder->Append(text, node->Style(), layout_text);
+        AppendTextTransformedOffsetMapping(
+            &builder->GetConcatenatedOffsetMappingBuilder(), layout_text, text);
+      }
       ClearNeedsLayoutIfUpdatingLayout<OffsetMappingBuilder>(layout_text);
 
-      AppendTextTransformedOffsetMapping(
-          &builder->GetConcatenatedOffsetMappingBuilder(), layout_text, text);
 
     } else if (node->IsFloating()) {
       // Add floats and positioned objects in the same way as atomic inlines.
       // Because these objects need positions, they will be handled in
       // NGInlineLayoutAlgorithm.
-      builder->AppendOpaque(NGInlineItem::kFloating, nullptr, node);
+      builder->AppendOpaque(NGInlineItem::kFloating,
+                            kObjectReplacementCharacter, nullptr, node);
 
     } else if (node->IsOutOfFlowPositioned()) {
       builder->AppendOpaque(NGInlineItem::kOutOfFlowPositioned, nullptr, node);
@@ -318,7 +333,7 @@ LayoutBox* CollectInlinesInternal(
         node = next;
         break;
       }
-      node = node->Parent();
+      node = GetLayoutObjectForParentNode(node);
       if (node == block) {
         // Set |node| to |nullptr| to break out of the outer loop.
         node = nullptr;
@@ -342,14 +357,20 @@ NGInlineNode::NGInlineNode(LayoutNGBlockFlow* block)
     block->ResetNGInlineNodeData();
 }
 
+const Vector<NGInlineItem>& NGInlineNode::Items(bool is_first_line) const {
+  const NGInlineNodeData& data = Data();
+  if (!is_first_line || !data.first_line_items_)
+    return data.items_;
+  return *data.first_line_items_;
+}
+
 NGInlineItemRange NGInlineNode::Items(unsigned start, unsigned end) {
-  return NGInlineItemRange(&MutableData().items_, start, end);
+  return NGInlineItemRange(&MutableData()->items_, start, end);
 }
 
 void NGInlineNode::InvalidatePrepareLayout() {
-  ToLayoutNGBlockFlow(GetLayoutBlockFlow())->ResetNGInlineNodeData();
-  MutableData().text_content_ = String();
-  MutableData().items_.clear();
+  GetLayoutBlockFlow()->ResetNGInlineNodeData();
+  DCHECK(!IsPrepareLayoutFinished());
 }
 
 void NGInlineNode::PrepareLayout() {
@@ -377,7 +398,7 @@ const NGOffsetMappingResult& NGInlineNode::ComputeOffsetMappingIfNeeded() {
         builder.GetConcatenatedOffsetMappingBuilder();
     mapping_builder.Composite(builder.GetOffsetMappingBuilder());
 
-    MutableData().offset_mapping_ =
+    MutableData()->offset_mapping_ =
         WTF::MakeUnique<NGOffsetMappingResult>(mapping_builder.Build());
   }
 
@@ -391,43 +412,43 @@ const NGOffsetMappingResult& NGInlineNode::ComputeOffsetMappingIfNeeded() {
 void NGInlineNode::CollectInlines() {
   DCHECK(Data().text_content_.IsNull());
   DCHECK(Data().items_.IsEmpty());
-  NGInlineItemsBuilder builder(&MutableData().items_);
-  MutableData().next_sibling_ =
-      CollectInlinesInternal(GetLayoutBlockFlow(), &builder);
-  MutableData().text_content_ = builder.ToString();
-  MutableData().is_bidi_enabled_ =
+  NGInlineNodeData* data = MutableData();
+  NGInlineItemsBuilder builder(&data->items_);
+  data->next_sibling_ = CollectInlinesInternal(GetLayoutBlockFlow(), &builder);
+  data->text_content_ = builder.ToString();
+  data->is_bidi_enabled_ =
       !Data().text_content_.IsEmpty() &&
       !(Data().text_content_.Is8Bit() && !builder.HasBidiControls());
-  MutableData().is_empty_inline_ = builder.IsEmptyInline();
+  data->is_empty_inline_ = builder.IsEmptyInline();
 }
 
 void NGInlineNode::SegmentText() {
-  NGInlineNodeData& data = MutableData();
-  if (!data.is_bidi_enabled_) {
-    data.SetBaseDirection(TextDirection::kLtr);
+  NGInlineNodeData* data = MutableData();
+  if (!data->is_bidi_enabled_) {
+    data->SetBaseDirection(TextDirection::kLtr);
     return;
   }
 
   NGBidiParagraph bidi;
-  data.text_content_.Ensure16Bit();
-  if (!bidi.SetParagraph(data.text_content_, Style())) {
+  data->text_content_.Ensure16Bit();
+  if (!bidi.SetParagraph(data->text_content_, Style())) {
     // On failure, give up bidi resolving and reordering.
-    data.is_bidi_enabled_ = false;
-    data.SetBaseDirection(TextDirection::kLtr);
+    data->is_bidi_enabled_ = false;
+    data->SetBaseDirection(TextDirection::kLtr);
     return;
   }
 
-  data.SetBaseDirection(bidi.BaseDirection());
+  data->SetBaseDirection(bidi.BaseDirection());
 
   if (bidi.IsUnidirectional() && IsLtr(bidi.BaseDirection())) {
     // All runs are LTR, no need to reorder.
-    data.is_bidi_enabled_ = false;
+    data->is_bidi_enabled_ = false;
     return;
   }
 
-  Vector<NGInlineItem>& items = data.items_;
+  Vector<NGInlineItem>& items = data->items_;
   unsigned item_index = 0;
-  for (unsigned start = 0; start < Data().text_content_.length();) {
+  for (unsigned start = 0; start < data->text_content_.length();) {
     UBiDiLevel level;
     unsigned end = bidi.GetLogicalRun(start, &level);
     DCHECK_EQ(items[item_index].start_offset_, start);
@@ -439,13 +460,19 @@ void NGInlineNode::SegmentText() {
 
 void NGInlineNode::ShapeText() {
   // TODO(eae): Add support for shaping latin-1 text?
-  MutableData().text_content_.Ensure16Bit();
-  const String& text_content = Data().text_content_;
+  NGInlineNodeData* data = MutableData();
+  data->text_content_.Ensure16Bit();
+  ShapeText(data->text_content_, &data->items_);
 
+  ShapeTextForFirstLineIfNeeded();
+}
+
+void NGInlineNode::ShapeText(const String& text_content,
+                             Vector<NGInlineItem>* items) {
   // Shape each item with the full context of the entire node.
   HarfBuzzShaper shaper(text_content.Characters16(), text_content.length());
   ShapeResultSpacing<String> spacing(text_content);
-  for (auto& item : MutableData().items_) {
+  for (auto& item : *items) {
     if (item.Type() != NGInlineItem::kText)
       continue;
 
@@ -454,14 +481,49 @@ void NGInlineNode::ShapeText() {
         &font, item.Direction(), item.StartOffset(), item.EndOffset());
 
     if (UNLIKELY(spacing.SetSpacing(font.GetFontDescription())))
-      shape_result->ApplySpacing(spacing, item.Direction());
+      shape_result->ApplySpacing(spacing);
 
     item.shape_result_ = std::move(shape_result);
   }
 }
 
-RefPtr<NGLayoutResult> NGInlineNode::Layout(NGConstraintSpace* constraint_space,
-                                            NGBreakToken* break_token) {
+// Create Vector<NGInlineItem> with :first-line rules applied if needed.
+void NGInlineNode::ShapeTextForFirstLineIfNeeded() {
+  // First check if the document has any :first-line rules.
+  NGInlineNodeData* data = MutableData();
+  DCHECK(!data->first_line_items_);
+  LayoutObject* layout_object = GetLayoutObject();
+  if (!layout_object->GetDocument().GetStyleEngine().UsesFirstLineRules())
+    return;
+
+  // Check if :first-line rules make any differences in the style.
+  const ComputedStyle* block_style = layout_object->Style();
+  const ComputedStyle* first_line_style = layout_object->FirstLineStyle();
+  if (block_style == first_line_style)
+    return;
+
+  auto first_line_items = WTF::MakeUnique<Vector<NGInlineItem>>();
+  first_line_items->AppendVector(data->items_);
+  for (auto& item : *first_line_items) {
+    if (item.style_) {
+      DCHECK(item.layout_object_);
+      item.style_ = item.layout_object_->FirstLineStyle();
+    }
+  }
+
+  // Re-shape if the font is different.
+  const Font& font = block_style->GetFont();
+  const Font& first_line_font = first_line_style->GetFont();
+  if (&font != &first_line_font && font != first_line_font) {
+    ShapeText(data->text_content_, first_line_items.get());
+  }
+
+  data->first_line_items_ = std::move(first_line_items);
+}
+
+RefPtr<NGLayoutResult> NGInlineNode::Layout(
+    const NGConstraintSpace& constraint_space,
+    NGBreakToken* break_token) {
   // TODO(kojii): Invalidate PrepareLayout() more efficiently.
   InvalidatePrepareLayout();
   PrepareLayout();
@@ -471,8 +533,10 @@ RefPtr<NGLayoutResult> NGInlineNode::Layout(NGConstraintSpace* constraint_space,
   RefPtr<NGLayoutResult> result = algorithm.Layout();
 
   if (result->Status() == NGLayoutResult::kSuccess &&
-      result->UnpositionedFloats().IsEmpty())
-    CopyFragmentDataToLayoutBox(*constraint_space, result.Get());
+      result->UnpositionedFloats().IsEmpty() &&
+      !RuntimeEnabledFeatures::LayoutNGPaintFragmentsEnabled()) {
+    CopyFragmentDataToLayoutBox(constraint_space, result.Get());
+  }
 
   return result;
 }
@@ -483,22 +547,26 @@ static LayoutUnit ComputeContentSize(NGInlineNode node,
   NGWritingMode writing_mode = FromPlatformWritingMode(style.GetWritingMode());
 
   RefPtr<NGConstraintSpace> space =
-      NGConstraintSpaceBuilder(writing_mode)
+      NGConstraintSpaceBuilder(
+          writing_mode,
+          /* icb_size */ {NGSizeIndefinite, NGSizeIndefinite})
           .SetTextDirection(style.Direction())
           .SetAvailableSize({available_inline_size, NGSizeIndefinite})
           .ToConstraintSpace(writing_mode);
 
-  NGFragmentBuilder container_builder(
-      NGPhysicalFragment::NGFragmentType::kFragmentBox, node);
-  container_builder.SetBfcOffset(NGLogicalOffset{LayoutUnit(), LayoutUnit()});
+  NGFragmentBuilder container_builder(node, &node.Style(), space->WritingMode(),
+                                      TextDirection::kLtr);
+  container_builder.SetBfcOffset(NGBfcOffset{LayoutUnit(), LayoutUnit()});
 
   Vector<RefPtr<NGUnpositionedFloat>> unpositioned_floats;
-  NGLineBreaker line_breaker(node, space.Get(), &container_builder,
+  NGLineBreaker line_breaker(node, *space, &container_builder,
                              &unpositioned_floats);
 
   NGLineInfo line_info;
+  NGExclusionSpace empty_exclusion_space;
   LayoutUnit result;
-  while (line_breaker.NextLine(&line_info, NGLogicalOffset())) {
+  while (line_breaker.NextLine(NGLogicalOffset(), empty_exclusion_space,
+                               &line_info)) {
     LayoutUnit inline_size = line_info.TextIndent();
     for (const NGInlineItemResult item_result : line_info.Results())
       inline_size += item_result.inline_size;
@@ -507,7 +575,7 @@ static LayoutUnit ComputeContentSize(NGInlineNode node,
   return result;
 }
 
-MinMaxContentSize NGInlineNode::ComputeMinMaxContentSize() {
+MinMaxSize NGInlineNode::ComputeMinMaxSize() {
   // TODO(kojii): Invalidate PrepareLayout() more efficiently.
   InvalidatePrepareLayout();
   PrepareLayout();
@@ -520,17 +588,17 @@ MinMaxContentSize NGInlineNode::ComputeMinMaxContentSize() {
   // Compute the max of inline sizes of all line boxes with 0 available inline
   // size. This gives the min-content, the width where lines wrap at every
   // break opportunity.
-  MinMaxContentSize sizes;
-  sizes.min_content = ComputeContentSize(*this, LayoutUnit());
+  MinMaxSize sizes;
+  sizes.min_size = ComputeContentSize(*this, LayoutUnit());
 
   // Compute the sum of inline sizes of all inline boxes with no line breaks.
   // TODO(kojii): NGConstraintSpaceBuilder does not allow NGSizeIndefinite
   // inline available size. We can allow it, or make this more efficient
   // without using NGLineBreaker.
-  sizes.max_content = ComputeContentSize(*this, LayoutUnit::Max());
+  sizes.max_size = ComputeContentSize(*this, LayoutUnit::Max());
 
   // Negative text-indent can make min > max. Ensure min is the minimum size.
-  sizes.min_content = std::min(sizes.min_content, sizes.max_content);
+  sizes.min_size = std::min(sizes.min_size, sizes.max_size);
 
   return sizes;
 }
@@ -545,7 +613,7 @@ NGLayoutInputNode NGInlineNode::NextSibling() {
 void NGInlineNode::CopyFragmentDataToLayoutBox(
     const NGConstraintSpace& constraint_space,
     NGLayoutResult* layout_result) {
-  LayoutBlockFlow* block_flow = GetLayoutBlockFlow();
+  LayoutNGBlockFlow* block_flow = GetLayoutBlockFlow();
   block_flow->DeleteLineBoxTree();
 
   const Vector<NGInlineItem>& items = Data().items_;
@@ -617,6 +685,7 @@ void NGInlineNode::CopyFragmentDataToLayoutBox(
         baseline - line_metrics.ascent, baseline + line_metrics.descent,
         line_top, baseline + max_with_leading.descent);
 
+    line_info.SetFirstLine(false);
     bidi_runs.DeleteRuns();
     positions_for_bidi_runs.clear();
     positions.clear();
@@ -672,6 +741,43 @@ void NGInlineNode::CheckConsistency() const {
 
 String NGInlineNode::ToString() const {
   return String::Format("NGInlineNode");
+}
+
+// static
+Optional<NGInlineNode> GetNGInlineNodeFor(const Node& node) {
+  return GetNGInlineNodeFor(node, 0);
+}
+
+// static
+Optional<NGInlineNode> GetNGInlineNodeFor(const Node& node, unsigned offset) {
+  const LayoutObject* layout_object = AssociatedLayoutObjectOf(node, offset);
+  if (!layout_object || !layout_object->IsInline())
+    return WTF::nullopt;
+  LayoutBox* box = layout_object->EnclosingBox();
+  if (!box->IsLayoutNGBlockFlow())
+    return WTF::nullopt;
+  DCHECK(box);
+  DCHECK(box->ChildrenInline());
+  return NGInlineNode(ToLayoutNGBlockFlow(box));
+}
+
+const NGOffsetMappingUnit* NGInlineNode::GetMappingUnitForDOMOffset(
+    const Node& node,
+    unsigned offset) {
+  const LayoutObject* layout_object = AssociatedLayoutObjectOf(node, offset);
+  if (!layout_object || !layout_object->IsText())
+    return nullptr;
+
+  DCHECK_EQ(layout_object->EnclosingBox(), GetLayoutBlockFlow());
+  const auto& result = ComputeOffsetMappingIfNeeded();
+  return result.GetMappingUnitForDOMOffset(ToLayoutText(layout_object), offset);
+}
+
+size_t NGInlineNode::GetTextContentOffset(const Node& node, unsigned offset) {
+  const NGOffsetMappingUnit* unit = GetMappingUnitForDOMOffset(node, offset);
+  if (!unit)
+    return kNotFound;
+  return unit->ConvertDOMOffsetToTextContent(offset);
 }
 
 }  // namespace blink

@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_SEARCH_INSTANT_SERVICE_H_
 #define CHROME_BROWSER_SEARCH_INSTANT_SERVICE_H_
 
+#include <map>
 #include <memory>
 #include <set>
 #include <vector>
@@ -68,14 +69,12 @@ class InstantService : public KeyedService,
   // items.
   void OnNewTabPageOpened();
 
-  // Most visited item API.
-
+  // Most visited item APIs.
+  //
   // Invoked when the Instant page wants to delete a Most Visited item.
   void DeleteMostVisitedItem(const GURL& url);
-
   // Invoked when the Instant page wants to undo the deletion.
   void UndoMostVisitedDeletion(const GURL& url);
-
   // Invoked when the Instant page wants to undo all Most Visited deletions.
   void UndoAllMostVisitedDeletions();
 
@@ -97,11 +96,8 @@ class InstantService : public KeyedService,
  private:
   friend class InstantExtendedTest;
   friend class InstantServiceTest;
-  friend class InstantTestBase;
   friend class InstantUnitTestBase;
 
-  FRIEND_TEST_ALL_PREFIXES(InstantExtendedManualTest,
-                           MANUAL_SearchesFromFakebox);
   FRIEND_TEST_ALL_PREFIXES(InstantExtendedTest, ProcessIsolation);
   FRIEND_TEST_ALL_PREFIXES(InstantServiceEnabledTest,
                            SendsSearchURLsToRenderer);
@@ -133,16 +129,16 @@ class InstantService : public KeyedService,
   void OnTopSitesReceived(const history::MostVisitedURLList& data);
 
   // ntp_tiles::MostVisitedSites::Observer implementation.
-  void OnMostVisitedURLsAvailable(
-      const ntp_tiles::NTPTilesVector& tiles) override;
+  void OnURLsAvailable(
+      const std::map<ntp_tiles::SectionType, ntp_tiles::NTPTilesVector>&
+          sections) override;
   void OnIconMadeAvailable(const GURL& site_url) override;
 
-  // Notifies the observer about the last known most visited items.
   void NotifyAboutMostVisitedItems();
+  void NotifyAboutThemeInfo();
 
 #if !defined(OS_ANDROID)
-  // Theme changed notification handler.
-  void OnThemeChanged();
+  void BuildThemeInfo();
 #endif
 
   void ResetInstantSearchPrerendererIfNecessary();

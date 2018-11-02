@@ -80,6 +80,18 @@ Polymer({
     },
 
     /**
+     * True if quick unlock settings are disabled by policy.
+     * @private
+     */
+    quickUnlockDisabledByPolicy_: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.getBoolean('quickUnlockDisabledByPolicy');
+      },
+      readOnly: true,
+    },
+
+    /**
      * True if fingerprint unlock settings should be displayed on this machine.
      * @private
      */
@@ -199,9 +211,9 @@ Polymer({
     if (newRoute == settings.routes.LOCK_SCREEN &&
         this.fingerprintUnlockEnabled_ && this.fingerprintBrowserProxy_) {
       this.fingerprintBrowserProxy_.getNumFingerprints().then(
-          function(numFingerprints) {
+          numFingerprints => {
             this.numFingerprints_ = numFingerprints;
-          }.bind(this));
+          });
     }
 
     if (this.shouldAskForPassword_(newRoute)) {

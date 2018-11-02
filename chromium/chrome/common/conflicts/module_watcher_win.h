@@ -15,16 +15,15 @@ class ModuleWatcherTest;
 
 union LDR_DLL_NOTIFICATION_DATA;
 
-// This class observes modules as they are loaded and unloaded into a process's
-// address space.
+// This class observes modules as they are loaded into a process's address
+// space.
 //
 // This class is safe to be created on any thread. Similarly, it is safe to be
 // destroyed on any thread, independent of the thread on which the instance was
 // created.
 class ModuleWatcher {
  public:
-  // Houses information about a module load/unload event, and some module
-  // metadata.
+  // Houses information about a module event, and some module metadata.
   struct ModuleEvent {
     ModuleEvent() = default;
     ModuleEvent(const ModuleEvent& other) = default;
@@ -41,27 +40,39 @@ class ModuleWatcher {
     mojom::ModuleEventType event_type;
     // The full path to the module on disk.
     base::FilePath module_path;
-    // The load address of the module.
+    // The load address of the module. Careful consideration must be made before
+    // accessing memory at this address. See the comment for
+    // OnModuleEventCallback.
     void* module_load_address;
     // The size of the module in memory.
     size_t module_size;
   };
 
-  // The type of callback that will be invoked for each module event. This is
-  // invoked by the loader and potentially on any thread. The loader lock is not
-  // held but the execution of this callback blocks the module from being bound.
-  // Keep the amount of work performed here to an absolute minimum. Note that
-  // it is possible for this callback to be invoked after the destruction of the
-  // watcher, but very unlikely.
+  // The type of callback that will be invoked for each module event. This
+  // callback may be run from any thread in the process, and may be invoked
+  // during initialization (while iterating over already loaded modules) or in
+  // response to LdrDllNotifications received from the loader. As such, keep the
+  // amount of work performed here to an absolute minimum.
+  //
+  // MODULE_LOADED events are always dispatched directly from the loader while
+  // under the loader's lock, so the module is guaranteed to be loaded in memory
+  // (it is safe to access module_load_address).
+  //
+  // If the event is of type MODULE_ALREADY_LOADED, then the module data comes
+  // from a snapshot and it is possible that its |module_load_address| is
+  // invalid by the time the event is sent.
+  //
+  // Note that it is possible for this callback to be invoked after the
+  // destruction of the watcher.
   using OnModuleEventCallback = base::Callback<void(const ModuleEvent& event)>;
 
   // Creates and starts a watcher. This enumerates all loaded modules
   // synchronously on the current thread during construction, and provides
-  // synchronous notifications as modules are loaded and unloaded. The callback
-  // is invoked in the context of the thread that is loading a module, and as
-  // such may be invoked on any thread in the process. Note that it is possible
-  // to receive two notifications for some modules as the initial loaded module
-  // enumeration races briefly with the callback mechanism. In this case both a
+  // synchronous notifications as modules are loaded. The callback is invoked in
+  // the context of the thread that is loading a module, and as such may be
+  // invoked on any thread in the process. Note that it is possible to receive
+  // two notifications for some modules as the initial loaded module enumeration
+  // races briefly with the callback mechanism. In this case both a
   // MODULE_LOADED and a MODULE_ALREADY_LOADED event will be received for the
   // same module. Since the callback is installed first no modules can be
   // missed, however. This factory function may be called on any thread.
@@ -74,9 +85,12 @@ class ModuleWatcher {
   // provided to the constructor will no longer be invoked with module events.
   ~ModuleWatcher();
 
- protected:
+ private:
   // For unittesting.
   friend class ModuleWatcherTest;
+
+  // Initializes the ModuleWatcher instance.
+  void Initialize(OnModuleEventCallback callback);
 
   // Registers a DllNotification callback with the OS. Modifies
   // |dll_notification_cookie_|. Can be called on any thread.
@@ -104,9 +118,8 @@ class ModuleWatcher {
       const LDR_DLL_NOTIFICATION_DATA* notification_data,
       void* context);
 
- private:
   // Private to enforce Singleton semantics. See Create above.
-  explicit ModuleWatcher(OnModuleEventCallback callback);
+  ModuleWatcher();
 
   // The current callback. Can end up being invoked on any thread.
   OnModuleEventCallback callback_;

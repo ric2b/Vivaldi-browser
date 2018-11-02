@@ -4,16 +4,15 @@
 
 #import "ios/chrome/search_widget_extension/search_widget_view_controller.h"
 
-#import <NotificationCenter/NotificationCenter.h>
-
 #include "base/ios/ios_util.h"
 #include "base/mac/foundation_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/open_from_clipboard/clipboard_recent_content_impl_ios.h"
+#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
 #include "ios/chrome/common/app_group/app_group_constants.h"
+#include "ios/chrome/common/app_group/app_group_metrics.h"
 #import "ios/chrome/search_widget_extension/copied_url_view.h"
 #import "ios/chrome/search_widget_extension/search_widget_view.h"
-#import "ios/chrome/search_widget_extension/ui_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -34,16 +33,19 @@ NSString* const kXCallbackURLHost = @"x-callback-url";
     ClipboardRecentContentImplIOS* clipboardRecentContent;
 
 // Updates the widget with latest data from the clipboard. Returns whether any
-// visual updates occured.
+// visual updates occurred.
 - (BOOL)updateWidget;
 // Opens the main application with the given |command|.
 - (void)openAppWithCommand:(NSString*)command;
-// Opens the main application with the given |command| and |parameter|.
-- (void)openAppWithCommand:(NSString*)command parameter:(NSString*)parameter;
+// Opens the main application with the given |command| and |URL|.
+- (void)openAppWithCommand:(NSString*)command URL:(NSString*)URL;
 // Returns the dictionary of commands to pass via user defaults to open the main
-// application for a given |command| and |parameter|.
-+ (NSDictionary*)dictForCommand:(NSString*)command
-                      parameter:(NSString*)parameter;
+// application for a given |command| and optional |URL|.
++ (NSDictionary*)dictForCommand:(NSString*)command URL:(NSString*)URL;
+// Register a display of the widget in the app_group NSUserDefaults.
+// Metrics on the widget usage will be sent (if enabled) on the next Chrome
+// startup.
+- (void)registerWidgetDisplay;
 
 @end
 
@@ -70,48 +72,43 @@ NSString* const kXCallbackURLHost = @"x-callback-url";
 - (void)viewDidLoad {
   [super viewDidLoad];
 
-  UIVibrancyEffect* primary;
-  UIVibrancyEffect* secondary;
   CGFloat height =
-      self.extensionContext
+      self.extensionContext && base::ios::IsRunningOnIOS10OrLater()
           ? [self.extensionContext
                 widgetMaximumSizeForDisplayMode:NCWidgetDisplayModeCompact]
                 .height
           : 110;
-  if (base::ios::IsRunningOnIOS10OrLater()) {
-    primary = [UIVibrancyEffect widgetPrimaryVibrancyEffect];
-    secondary = [UIVibrancyEffect widgetSecondaryVibrancyEffect];
-  } else {
-    primary = [UIVibrancyEffect notificationCenterVibrancyEffect];
-    secondary = [UIVibrancyEffect notificationCenterVibrancyEffect];
-  }
 
   // A local variable is necessary here as the property is declared weak and the
   // object would be deallocated before being retained by the addSubview call.
   SearchWidgetView* widgetView = [[SearchWidgetView alloc]
          initWithActionTarget:self
-        primaryVibrancyEffect:primary
-      secondaryVibrancyEffect:secondary
                 compactHeight:height
-             initiallyCompact:([self.extensionContext
+             initiallyCompact:(base::ios::IsRunningOnIOS10OrLater() &&
+                               [self.extensionContext
                                        widgetActiveDisplayMode] ==
-                               NCWidgetDisplayModeCompact)];
+                                   NCWidgetDisplayModeCompact)];
   self.widgetView = widgetView;
   [self.view addSubview:self.widgetView];
+  [self updateWidget];
 
   if (base::ios::IsRunningOnIOS10OrLater()) {
     self.extensionContext.widgetLargestAvailableDisplayMode =
         NCWidgetDisplayModeExpanded;
+  } else {
+    self.preferredContentSize =
+        CGSizeMake([[UIScreen mainScreen] bounds].size.width,
+                   [self.widgetView widgetHeight]);
   }
 
   self.widgetView.translatesAutoresizingMaskIntoConstraints = NO;
 
-  [NSLayoutConstraint activateConstraints:ui_util::CreateSameConstraints(
-                                              self.view, self.widgetView)];
+  AddSameConstraints(self.view, self.widgetView);
 }
 
 - (void)viewWillAppear:(BOOL)animated {
   [super viewWillAppear:animated];
+  [self registerWidgetDisplay];
   [self updateWidget];
 }
 
@@ -137,8 +134,9 @@ NSString* const kXCallbackURLHost = @"x-callback-url";
            (id<UIViewControllerTransitionCoordinator>)coordinator {
   [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
 
-  BOOL isCompact = [self.extensionContext widgetActiveDisplayMode] ==
-                   NCWidgetDisplayModeCompact;
+  BOOL isCompact = base::ios::IsRunningOnIOS10OrLater() &&
+                   [self.extensionContext widgetActiveDisplayMode] ==
+                       NCWidgetDisplayModeCompact;
 
   [coordinator
       animateAlongsideTransition:^(
@@ -172,7 +170,7 @@ NSString* const kXCallbackURLHost = @"x-callback-url";
 }
 #endif
 
-#pragma mark - WidgetViewActionTarget
+#pragma mark - SearchWidgetViewActionTarget
 
 - (void)openSearch:(id)sender {
   [self openAppWithCommand:base::SysUTF8ToNSString(
@@ -199,23 +197,29 @@ NSString* const kXCallbackURLHost = @"x-callback-url";
   DCHECK(self.copiedURL);
   [self openAppWithCommand:base::SysUTF8ToNSString(
                                app_group::kChromeAppGroupOpenURLCommand)
-                 parameter:self.copiedURL.absoluteString];
+                       URL:self.copiedURL.absoluteString];
 }
 
 #pragma mark - internal
 
 - (void)openAppWithCommand:(NSString*)command {
-  return [self openAppWithCommand:command parameter:nil];
+  return [self openAppWithCommand:command URL:nil];
 }
 
-- (void)openAppWithCommand:(NSString*)command parameter:(NSString*)parameter {
-  NSUserDefaults* sharedDefaults =
-      [[NSUserDefaults alloc] initWithSuiteName:app_group::ApplicationGroup()];
+- (void)registerWidgetDisplay {
+  NSUserDefaults* sharedDefaults = app_group::GetGroupUserDefaults();
+  NSInteger numberOfDisplay =
+      [sharedDefaults integerForKey:app_group::kSearchExtensionDisplayCount];
+  [sharedDefaults setInteger:numberOfDisplay + 1
+                      forKey:app_group::kSearchExtensionDisplayCount];
+}
+
+- (void)openAppWithCommand:(NSString*)command URL:(NSString*)URL {
+  NSUserDefaults* sharedDefaults = app_group::GetGroupUserDefaults();
   NSString* defaultsKey =
       base::SysUTF8ToNSString(app_group::kChromeAppGroupCommandPreference);
   [sharedDefaults
-      setObject:[SearchWidgetViewController dictForCommand:command
-                                                 parameter:parameter]
+      setObject:[SearchWidgetViewController dictForCommand:command URL:URL]
          forKey:defaultsKey];
   [sharedDefaults synchronize];
 
@@ -235,8 +239,7 @@ NSString* const kXCallbackURLHost = @"x-callback-url";
   [self.extensionContext openURL:openURL completionHandler:nil];
 }
 
-+ (NSDictionary*)dictForCommand:(NSString*)command
-                      parameter:(NSString*)parameter {
++ (NSDictionary*)dictForCommand:(NSString*)command URL:(NSString*)URL {
   NSString* timePrefKey =
       base::SysUTF8ToNSString(app_group::kChromeAppGroupCommandTimePreference);
   NSString* appPrefKey =
@@ -244,19 +247,19 @@ NSString* const kXCallbackURLHost = @"x-callback-url";
   NSString* commandPrefKey = base::SysUTF8ToNSString(
       app_group::kChromeAppGroupCommandCommandPreference);
 
-  if (parameter) {
-    NSString* paramPrefKey = base::SysUTF8ToNSString(
-        app_group::kChromeAppGroupCommandParameterPreference);
+  if (URL) {
+    NSString* URLPrefKey =
+        base::SysUTF8ToNSString(app_group::kChromeAppGroupCommandURLPreference);
     return @{
       timePrefKey : [NSDate date],
-      appPrefKey : @"TodayExtension",
+      appPrefKey : app_group::kOpenCommandSourceSearchExtension,
       commandPrefKey : command,
-      paramPrefKey : parameter,
+      URLPrefKey : URL,
     };
   }
   return @{
     timePrefKey : [NSDate date],
-    appPrefKey : @"TodayExtension",
+    appPrefKey : app_group::kOpenCommandSourceSearchExtension,
     commandPrefKey : command,
   };
 }

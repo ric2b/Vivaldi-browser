@@ -9,12 +9,15 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
 
-#include "base/id_map.h"
 #include "base/macros.h"
+#include "base/observer_list.h"
+#include "base/optional.h"
 #include "chrome/browser/ui/blocked_content/blocked_window_params.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
+#include "ui/base/window_open_disposition.h"
 
 namespace chrome {
 struct NavigateParams;
@@ -34,25 +37,71 @@ class PopupBlockerTabHelper
   // Mapping from popup IDs to blocked popup requests.
   typedef std::map<int32_t, GURL> PopupIdMap;
 
-  // Returns true if a popup with |user_gesture| should be considered for
-  // blocking from |web_contents|.
-  static bool ConsiderForPopupBlocking(
-      content::WebContents* web_contents,
-      bool user_gesture,
-      const content::OpenURLParams* open_url_params);
+  // This class backs a histogram. Make sure you update enums.xml if you make
+  // any changes.
+  enum class PopupPosition : int {
+    kOnlyPopup,
+    kFirstPopup,
+    kMiddlePopup,
+    kLastPopup,
+
+    // Any new values should go before this one.
+    kLast,
+  };
+
+  // This enum is backed by a histogram. Make sure enums.xml is updated if this
+  // is updated.
+  enum class Action : int {
+    // A popup was initiated and was sent to the popup blocker for
+    // consideration.
+    kInitiated,
+
+    // A popup was blocked by the popup blocker.
+    kBlocked,
+
+    // A previously blocked popup was clicked through.
+    kClickedThrough,
+
+    // Add new elements before this value.
+    kLast
+  };
+
+  class Observer {
+   public:
+    virtual void BlockedPopupAdded(int32_t id, const GURL& url) {}
+
+   protected:
+    virtual ~Observer() = default;
+  };
 
   ~PopupBlockerTabHelper() override;
 
-  // Returns true if the popup request defined by |params| should be blocked.
-  // In that case, it is also added to the |blocked_popups_| container.
-  bool MaybeBlockPopup(const chrome::NavigateParams& params,
-                       const blink::mojom::WindowFeatures& window_features);
+  void AddObserver(Observer* observer);
+  void RemoveObserver(Observer* observer);
 
-  // Adds a popup request to the |blocked_popups_| container.
-  void AddBlockedPopup(const BlockedWindowParams& params);
+  // Whether a new window opened with |disposition| would be considered for
+  // popup blocking. Note that this includes more dispositions than just
+  // NEW_POPUP since the popup blocker targets all new windows and tabs.
+  static bool ConsiderForPopupBlocking(WindowOpenDisposition disposition);
 
-  // Creates the blocked popup with |popup_id|.
-  void ShowBlockedPopup(int32_t popup_id);
+  // Returns true if the popup request defined by |params| and the optional
+  // |open_url_params| should be blocked. In that case, it is also added to the
+  // |blocked_popups_| container.
+  //
+  // |opener_url| is an optional parameter used to compute how the popup
+  // permission will behave. If it is not set the current committed URL will be
+  // used instead.
+  static bool MaybeBlockPopup(
+      content::WebContents* web_contents,
+      const base::Optional<GURL>& opener_url,
+      const chrome::NavigateParams& params,
+      const content::OpenURLParams* open_url_params,
+      const blink::mojom::WindowFeatures& window_features);
+
+  // Creates the blocked popup with |popup_id| in given |dispostion|.
+  // Note that if |disposition| is WindowOpenDisposition::CURRENT_TAB,
+  // blocked popup will be opened as it was specified by renderer.
+  void ShowBlockedPopup(int32_t popup_id, WindowOpenDisposition disposition);
 
   // Returns the number of blocked popups.
   size_t GetBlockedPopupsCount() const;
@@ -75,7 +124,17 @@ class PopupBlockerTabHelper
   // Called when the blocked popup notification is shown or hidden.
   void PopupNotificationVisibilityChanged(bool visible);
 
-  IDMap<std::unique_ptr<BlockedRequest>> blocked_popups_;
+  PopupPosition GetPopupPosition(int32_t id) const;
+
+  static void LogAction(Action action);
+
+  // Note, this container should be sorted based on the position in the popup
+  // list, so it is keyed by an id which is continually increased.
+  std::map<int32_t, std::unique_ptr<BlockedRequest>> blocked_popups_;
+
+  base::ObserverList<Observer> observers_;
+
+  int32_t next_id_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(PopupBlockerTabHelper);
 };

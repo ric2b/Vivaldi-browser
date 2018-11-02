@@ -172,6 +172,15 @@ class ChannelAssociatedGroupController
     if (!mojo::IsValidInterfaceId(id))
       return mojo::ScopedInterfaceEndpointHandle();
 
+    // Unless it is the master ID, |id| is from the remote side and therefore
+    // its namespace bit is supposed to be different than the value that this
+    // router would use.
+    if (!mojo::IsMasterInterfaceId(id) &&
+        set_interface_id_namespace_bit_ ==
+            mojo::HasInterfaceIdNamespaceBitSet(id)) {
+      return mojo::ScopedInterfaceEndpointHandle();
+    }
+
     base::AutoLock locker(lock_);
     bool inserted = false;
     Endpoint* endpoint = FindOrInsertEndpoint(id, &inserted);
@@ -493,7 +502,7 @@ class ChannelAssociatedGroupController
       {
         base::AutoLock locker(controller_->lock_);
         if (!sync_message_event_) {
-          sync_message_event_ = base::MakeUnique<base::WaitableEvent>(
+          sync_message_event_ = std::make_unique<base::WaitableEvent>(
               base::WaitableEvent::ResetPolicy::MANUAL,
               base::WaitableEvent::InitialState::NOT_SIGNALED);
           if (peer_closed_ || !sync_messages_.empty())
@@ -501,7 +510,7 @@ class ChannelAssociatedGroupController
         }
       }
 
-      sync_watcher_ = base::MakeUnique<mojo::SyncEventWatcher>(
+      sync_watcher_ = std::make_unique<mojo::SyncEventWatcher>(
           sync_message_event_.get(),
           base::Bind(&Endpoint::OnSyncMessageEventReady,
                      base::Unretained(this)));
@@ -821,8 +830,6 @@ class ChannelAssociatedGroupController
       const base::Optional<mojo::DisconnectReason>& reason) override {
     DCHECK(thread_checker_.CalledOnValidThread());
 
-    DCHECK(!mojo::IsMasterInterfaceId(id) || reason);
-
     scoped_refptr<ChannelAssociatedGroupController> keepalive(this);
     base::AutoLock locker(lock_);
     scoped_refptr<Endpoint> endpoint = FindOrInsertEndpoint(id, nullptr);
@@ -921,7 +928,7 @@ std::unique_ptr<MojoBootstrap> MojoBootstrap::Create(
     mojo::ScopedMessagePipeHandle handle,
     Channel::Mode mode,
     const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner) {
-  return base::MakeUnique<MojoBootstrapImpl>(
+  return std::make_unique<MojoBootstrapImpl>(
       std::move(handle), new ChannelAssociatedGroupController(
                              mode == Channel::MODE_SERVER, ipc_task_runner));
 }

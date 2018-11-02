@@ -17,7 +17,6 @@ import android.os.Build;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
-
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;

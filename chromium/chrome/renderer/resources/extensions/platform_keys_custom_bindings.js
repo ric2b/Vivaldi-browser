@@ -4,7 +4,7 @@
 
 // Custom binding for the platformKeys API.
 
-var binding = require('binding').Binding.create('platformKeys');
+var binding = apiBridge || require('binding').Binding.create('platformKeys');
 var SubtleCrypto = require('platformKeys.SubtleCrypto').SubtleCrypto;
 var getPublicKey = require('platformKeys.getPublicKey').getPublicKey;
 var internalAPI = require('platformKeys.internalAPI');
@@ -63,4 +63,5 @@ binding.registerCustomHook(function(api) {
       });
 });
 
-exports.$set('binding', binding.generate());
+if (!apiBridge)
+  exports.$set('binding', binding.generate());

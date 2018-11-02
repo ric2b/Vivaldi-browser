@@ -7,10 +7,10 @@
 
 #include <stddef.h>
 
-#include <deque>
 #include <memory>
 #include <vector>
 
+#include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
@@ -119,7 +119,7 @@ class DOMAIN_RELIABILITY_EXPORT DomainReliabilityContext {
   DomainReliabilityDispatcher* dispatcher_;
   DomainReliabilityUploader* uploader_;
 
-  std::deque<std::unique_ptr<DomainReliabilityBeacon>> beacons_;
+  base::circular_deque<std::unique_ptr<DomainReliabilityBeacon>> beacons_;
   size_t uploading_beacons_size_;
   base::TimeTicks upload_time_;
   base::TimeTicks last_upload_time_;

@@ -11,9 +11,11 @@
 #include "base/memory/ptr_util.h"
 #include "base/task_scheduler/post_task.h"
 #include "content/public/browser/browser_thread.h"
+#include "headless/lib/browser/headless_browser_context_impl.h"
 #include "headless/lib/browser/headless_browser_context_options.h"
 #include "headless/lib/browser/headless_network_delegate.h"
 #include "net/dns/mapped_host_resolver.h"
+#include "net/http/http_util.h"
 #include "net/proxy/proxy_service.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_builder.h"
@@ -29,6 +31,7 @@ HeadlessURLRequestContextGetter::HeadlessURLRequestContextGetter(
     net::NetLog* net_log,
     HeadlessBrowserContextImpl* headless_browser_context)
     : io_task_runner_(std::move(io_task_runner)),
+      accept_language_(options->accept_language()),
       user_agent_(options->user_agent()),
       host_resolver_rules_(options->host_resolver_rules()),
       proxy_config_(options->proxy_config()),
@@ -54,16 +57,23 @@ HeadlessURLRequestContextGetter::HeadlessURLRequestContextGetter(
     proxy_config_service_ =
         net::ProxyService::CreateSystemProxyConfigService(io_task_runner_);
   }
+  base::AutoLock lock(lock_);
+  headless_browser_context_->AddObserver(this);
 }
 
-HeadlessURLRequestContextGetter::~HeadlessURLRequestContextGetter() {}
+HeadlessURLRequestContextGetter::~HeadlessURLRequestContextGetter() {
+  base::AutoLock lock(lock_);
+  if (headless_browser_context_)
+    headless_browser_context_->RemoveObserver(this);
+}
 
 net::URLRequestContext*
 HeadlessURLRequestContextGetter::GetURLRequestContext() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   if (!url_request_context_) {
     net::URLRequestContextBuilder builder;
-    // TODO(skyostil): Make language settings configurable.
+    builder.set_accept_language(
+        net::HttpUtil::GenerateAcceptLanguageHeader(accept_language_));
     builder.set_user_agent(user_agent_);
     // TODO(skyostil): Make these configurable.
     builder.set_data_enabled(true);
@@ -73,8 +83,12 @@ HeadlessURLRequestContextGetter::GetURLRequestContext() {
     } else {
       builder.set_proxy_config_service(std::move(proxy_config_service_));
     }
-    builder.set_network_delegate(
-        base::MakeUnique<HeadlessNetworkDelegate>(headless_browser_context_));
+
+    {
+      base::AutoLock lock(lock_);
+      builder.set_network_delegate(
+          base::MakeUnique<HeadlessNetworkDelegate>(headless_browser_context_));
+    }
 
     if (!host_resolver_rules_.empty()) {
       std::unique_ptr<net::HostResolver> host_resolver(
@@ -106,6 +120,11 @@ HeadlessURLRequestContextGetter::GetNetworkTaskRunner() const {
 
 net::HostResolver* HeadlessURLRequestContextGetter::host_resolver() const {
   return url_request_context_->host_resolver();
+}
+
+void HeadlessURLRequestContextGetter::OnHeadlessBrowserContextDestruct() {
+  base::AutoLock lock(lock_);
+  headless_browser_context_ = nullptr;
 }
 
 }  // namespace headless

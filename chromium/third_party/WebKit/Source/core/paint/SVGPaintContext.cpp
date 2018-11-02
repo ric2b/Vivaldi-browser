@@ -124,7 +124,9 @@ void SVGPaintContext::ApplyPaintPropertyState() {
   if (object_.IsSVGRoot())
     return;
 
-  const auto* paint_properties = object_.PaintProperties();
+  const auto* paint_properties =
+      object_.FirstFragment() ? object_.FirstFragment()->PaintProperties()
+                              : nullptr;
   const EffectPaintPropertyNode* effect =
       paint_properties ? paint_properties->Effect() : nullptr;
   if (!effect)
@@ -134,6 +136,8 @@ void SVGPaintContext::ApplyPaintPropertyState() {
   PaintChunkProperties properties(
       paint_controller.CurrentPaintChunkProperties());
   properties.property_tree_state.SetEffect(effect);
+  if (const ClipPaintPropertyNode* mask_clip = paint_properties->MaskClip())
+    properties.property_tree_state.SetClip(mask_clip);
   scoped_paint_chunk_properties_.emplace(paint_controller, object_, properties);
 }
 

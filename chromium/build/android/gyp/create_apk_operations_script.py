@@ -24,11 +24,19 @@ def main():
       script_directory, p))
   sys.path.append(resolve(${APK_OPERATIONS_DIR}))
   import apk_operations
-  apk_operations.Run(output_directory=resolve(${OUTPUT_DIR}),
-                     apk_path=resolve(${APK_PATH}),
-                     inc_apk_path=resolve(${INC_APK_PATH}),
-                     inc_install_script=resolve(${INC_INSTALL_SCRIPT}),
-                     command_line_flags_file=${FLAGS_FILE})
+  output_dir = resolve(${OUTPUT_DIR})
+  try:
+    apk_operations.Run(output_dir,
+                       resolve(${APK_PATH}),
+                       resolve(${INC_JSON_PATH}),
+                       ${FLAGS_FILE},
+                       target_cpu=${TARGET_CPU})
+  except TypeError:
+    rel_output_dir = os.path.relpath(output_dir)
+    rel_script_path = os.path.relpath(sys.argv[0], output_dir)
+    sys.stderr.write('Script out-of-date. Rebuild via:\\n')
+    sys.stderr.write('  ninja -C %s %s\\n' % (rel_output_dir, rel_script_path))
+    return 1
 
 
 if __name__ == '__main__':
@@ -41,9 +49,9 @@ def main(args):
   parser.add_argument('--script-output-path',
                       help='Output path for executable script.')
   parser.add_argument('--apk-path')
-  parser.add_argument('--incremental-apk-path')
-  parser.add_argument('--incremental-install-script')
+  parser.add_argument('--incremental-install-json-path')
   parser.add_argument('--command-line-flags-file')
+  parser.add_argument('--target-cpu')
   args = parser.parse_args(args)
 
   def relativize(path):
@@ -57,11 +65,11 @@ def main(args):
   with open(args.script_output_path, 'w') as script:
     script_dict = {
         'APK_OPERATIONS_DIR': repr(apk_operations_dir),
-        'OUTPUT_DIR': repr('.'),
+        'OUTPUT_DIR': repr(relativize('.')),
         'APK_PATH': repr(relativize(args.apk_path)),
-        'INC_APK_PATH': repr(relativize(args.incremental_apk_path)),
-        'INC_INSTALL_SCRIPT': repr(relativize(args.incremental_install_script)),
+        'INC_JSON_PATH': repr(relativize(args.incremental_install_json_path)),
         'FLAGS_FILE': repr(args.command_line_flags_file),
+        'TARGET_CPU': repr(args.target_cpu),
     }
     script.write(SCRIPT_TEMPLATE.substitute(script_dict))
   os.chmod(args.script_output_path, 0750)

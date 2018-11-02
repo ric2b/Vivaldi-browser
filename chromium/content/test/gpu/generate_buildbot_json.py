@@ -30,6 +30,11 @@ class Types(object):
   # AMD bot on a tryserver. It represents some of the tests on
   # win_angle_rel_ng and is not a real machine on the waterfall.
   WIN_ANGLE_AMD_TRYSERVER = 'win_angle_amd_tryserver'
+  # The dEQP tests use a different compiler configuration than the
+  # rest of the bots; they're the only target which use exceptions and
+  # RTTI. They're split off so that these specialized compiler options
+  # apply only to these targets.
+  DEQP = 'deqp'
 
 # The predicate functions receive a list of types as input and
 # determine whether the test should run on the given bot.
@@ -37,17 +42,19 @@ class Predicates(object):
   @staticmethod
   def DEFAULT(x):
     # By default, tests run on the chromium.gpu and chromium.gpu.fyi
-    # waterfalls, but not on the optional tryservers, nor on the
-    # client.v8.fyi waterfall, nor on the Win ANGLE AMD tryserver.
-    return Types.OPTIONAL not in x and Types.V8_FYI not in x and \
-      Types.WIN_ANGLE_AMD_TRYSERVER not in x
+    # waterfalls, but not on the DEQP bots, not on the optional
+    # tryservers, not on the client.v8.fyi waterfall, nor on the Win
+    # ANGLE AMD tryserver.
+    return Types.DEQP not in x and Types.OPTIONAL not in x and \
+      Types.V8_FYI not in x and Types.WIN_ANGLE_AMD_TRYSERVER not in x
 
   @staticmethod
   def FYI_ONLY(x):
     # This predicate is more complex than desired because the optional
     # tryservers and the Win ANGLE AMD tryserver are considered to be
     # on the chromium.gpu.fyi waterfall.
-    return Types.GPU_FYI in x and Types.OPTIONAL not in x and \
+    return Types.GPU_FYI in x and Types.DEQP not in x and \
+      Types.OPTIONAL not in x and \
       Types.WIN_ANGLE_AMD_TRYSERVER not in x
 
   @staticmethod
@@ -64,12 +71,21 @@ class Predicates(object):
     return Predicates.FYI_AND_OPTIONAL(x) or Types.V8_FYI in x
 
   @staticmethod
+  def FYI_OPTIONAL_V8_AND_WIN_ANGLE_AMD(x):
+    return Predicates.FYI_OPTIONAL_AND_V8(x) or \
+      Types.WIN_ANGLE_AMD_TRYSERVER in x
+
+  @staticmethod
   def DEFAULT_PLUS_V8(x):
     return Predicates.DEFAULT(x) or Types.V8_FYI in x
 
   @staticmethod
   def DEFAULT_AND_OPTIONAL(x):
     return Predicates.DEFAULT(x) or Types.OPTIONAL in x
+
+  @staticmethod
+  def DEQP(x):
+    return Types.DEQP in x
 
 WATERFALL = {
   'name': 'chromium.gpu',
@@ -111,6 +127,7 @@ WATERFALL = {
       'swarming_dimensions': [
         {
           'gpu': '8086:0a2e',
+          # TODO(crbug.com/754777): change to 10.12.6.
           'os': 'Mac-10.12'
         },
       ],
@@ -122,6 +139,7 @@ WATERFALL = {
       'swarming_dimensions': [
         {
           'gpu': '8086:0a2e',
+          # TODO(crbug.com/754777): change to 10.12.6.
           'os': 'Mac-10.12'
         },
       ],
@@ -134,6 +152,7 @@ WATERFALL = {
         {
           'gpu': '1002:6821',
           'hidpi': '1',
+          # TODO(crbug.com/754777): change to 10.12.6.
           'os': 'Mac'
         },
       ],
@@ -146,6 +165,7 @@ WATERFALL = {
         {
           'gpu': '1002:6821',
           'hidpi': '1',
+          # TODO(crbug.com/754777): change to 10.12.6.
           'os': 'Mac'
         },
       ],
@@ -220,6 +240,18 @@ FYI_WATERFALL = {
       'swarming': True,
       'os_type': 'win',
     },
+    'Win7 dEQP Release (NVIDIA)': {
+      'swarming_dimensions': [
+        {
+          'gpu': '10de:104a',
+          'os': 'Windows-2008ServerR2-SP1'
+        },
+      ],
+      'build_config': 'Release',
+      'swarming': True,
+      'os_type': 'win',
+      'type': Types.DEQP,
+    },
     'Win10 Release (NVIDIA)': {
       'swarming_dimensions': [
         {
@@ -264,18 +296,17 @@ FYI_WATERFALL = {
       'swarming': True,
       'os_type': 'win',
     },
-    'Win10 Release (Intel HD 530)': {
+    'Win7 dEQP Release (AMD)': {
       'swarming_dimensions': [
         {
-          'gpu': '8086:1912',
-          'os': 'Windows-10',
+          'gpu': '1002:6613',
+          'os': 'Windows-2008ServerR2-SP1'
         },
       ],
       'build_config': 'Release',
-      # This bot is a one-off and doesn't have similar slaves in the
-      # swarming pool.
-      'swarming': False,
+      'swarming': True,
       'os_type': 'win',
+      'type': Types.DEQP,
     },
     'Win10 Release (Intel HD 630)': {
       'swarming_dimensions': [
@@ -285,19 +316,6 @@ FYI_WATERFALL = {
         },
       ],
       'build_config': 'Release',
-      # This bot is a one-off and doesn't have similar slaves in the
-      # swarming pool.
-      'swarming': False,
-      'os_type': 'win',
-    },
-    'Win10 Debug (Intel HD 530)': {
-      'swarming_dimensions': [
-        {
-          'gpu': '8086:1912',
-          'os': 'Windows-10',
-        },
-      ],
-      'build_config': 'Debug',
       # This bot is a one-off and doesn't have similar slaves in the
       # swarming pool.
       'swarming': False,
@@ -351,10 +369,23 @@ FYI_WATERFALL = {
       'swarming': True,
       'os_type': 'win',
     },
+    'Win7 x64 dEQP Release (NVIDIA)': {
+      'swarming_dimensions': [
+        {
+          'gpu': '10de:104a',
+          'os': 'Windows-2008ServerR2-SP1'
+        },
+      ],
+      'build_config': 'Release_x64',
+      'swarming': True,
+      'os_type': 'win',
+      'type': Types.DEQP,
+    },
     'Mac Release (Intel)': {
       'swarming_dimensions': [
         {
           'gpu': '8086:0a2e',
+          # TODO(crbug.com/754777): change to 10.12.6.
           'os': 'Mac-10.12'
         },
       ],
@@ -366,6 +397,7 @@ FYI_WATERFALL = {
       'swarming_dimensions': [
         {
           'gpu': '8086:0a2e',
+          # TODO(crbug.com/754777): change to 10.12.6.
           'os': 'Mac-10.12'
         },
       ],
@@ -404,6 +436,7 @@ FYI_WATERFALL = {
         {
           'gpu': '10de:0fe9',
           'hidpi': '1',
+          # TODO(crbug.com/754777): change to 10.12.6.
           'os': 'Mac'
         },
       ],
@@ -416,6 +449,7 @@ FYI_WATERFALL = {
         {
           'gpu': '10de:0fe9',
           'hidpi': '1',
+          # TODO(crbug.com/754777): change to 10.12.6.
           'os': 'Mac'
         },
       ],
@@ -428,6 +462,7 @@ FYI_WATERFALL = {
         {
           'gpu': '1002:6821',
           'hidpi': '1',
+          # TODO(crbug.com/754777): change to 10.12.6.
           'os': 'Mac'
         },
       ],
@@ -440,6 +475,7 @@ FYI_WATERFALL = {
         {
           'gpu': '1002:6821',
           'hidpi': '1',
+          # TODO(crbug.com/754777): change to 10.12.6.
           'os': 'Mac'
         },
       ],
@@ -490,11 +526,13 @@ FYI_WATERFALL = {
       'swarming_dimensions': [
         {
           'gpu': '8086:0a2e',
+          # TODO(crbug.com/754777): change to 10.12.6.
           'os': 'Mac-10.12'
         },
         {
           'gpu': '1002:6821',
           'hidpi': '1',
+          # TODO(crbug.com/754777): change to 10.12.6.
           'os': 'Mac'
         },
       ],
@@ -538,18 +576,17 @@ FYI_WATERFALL = {
       'swarming': True,
       'os_type': 'linux',
     },
-    'Linux Release (Intel HD 530)': {
+    'Linux dEQP Release (NVIDIA)': {
       'swarming_dimensions': [
         {
-          'gpu': '8086:1912',
+          'gpu': '10de:104a',
           'os': 'Ubuntu'
         },
       ],
       'build_config': 'Release',
-      # This bot is a one-off and doesn't have similar slaves in the
-      # swarming pool.
-      'swarming': False,
+      'swarming': True,
       'os_type': 'linux',
+      'type': Types.DEQP,
     },
     'Linux Release (Intel HD 630)': {
       'swarming_dimensions': [
@@ -559,19 +596,6 @@ FYI_WATERFALL = {
         },
       ],
       'build_config': 'Release',
-      # This bot is a one-off and doesn't have similar slaves in the
-      # swarming pool.
-      'swarming': False,
-      'os_type': 'linux',
-    },
-    'Linux Debug (Intel HD 530)': {
-      'swarming_dimensions': [
-        {
-          'gpu': '8086:1912',
-          'os': 'Ubuntu'
-        },
-      ],
-      'build_config': 'Debug',
       # This bot is a one-off and doesn't have similar slaves in the
       # swarming pool.
       'swarming': False,
@@ -703,6 +727,20 @@ FYI_WATERFALL = {
       'swarming': False,
       'os_type': 'android',
     },
+    'Android dEQP Release (Nexus 5X)': {
+      'swarming_dimensions': [
+        {
+          'android_devices': '1',
+          'device_type': 'bullhead',
+          'device_os': 'M',
+          'os': 'Android'
+        },
+      ],
+      'build_config': 'android-chromium',
+      'swarming': True,
+      'os_type': 'android',
+      'type': Types.DEQP,
+    },
 
     # The following "optional" testers don't actually exist on the
     # waterfall. They are present here merely to specify additional
@@ -725,6 +763,7 @@ FYI_WATERFALL = {
       'swarming_dimensions': [
         {
           'gpu': '8086:0a2e',
+          # TODO(crbug.com/754777): change to 10.12.6.
           'os': 'Mac-10.12'
         },
       ],
@@ -738,6 +777,7 @@ FYI_WATERFALL = {
         {
           'gpu': '10de:0fe9',
           'hidpi': '1',
+          # TODO(crbug.com/754777): change to 10.12.6.
           'os': 'Mac'
         },
       ],
@@ -751,6 +791,7 @@ FYI_WATERFALL = {
         {
           'gpu': '1002:6821',
           'hidpi': '1',
+          # TODO(crbug.com/754777): change to 10.12.6.
           'os': 'Mac'
         },
       ],
@@ -873,6 +914,7 @@ V8_FYI_WATERFALL = {
       'swarming_dimensions': [
         {
           'gpu': '8086:0a2e',
+          # TODO(crbug.com/754777): change to 10.12.6.
           'os': 'Mac-10.12'
         },
       ],
@@ -922,8 +964,7 @@ COMMON_GTESTS = {
   'angle_deqp_egl_tests': {
     'tester_configs': [
       {
-        # Run this on the FYI waterfall and optional tryservers.
-        'predicate': Predicates.FYI_AND_OPTIONAL,
+        'predicate': Predicates.DEQP,
         # Run only on the Win7 Release NVIDIA 32- and 64-bit bots
         # (and trybots) for the time being, at least until more capacity is
         # added.
@@ -952,9 +993,7 @@ COMMON_GTESTS = {
   'angle_deqp_gles2_d3d11_tests': {
     'tester_configs': [
       {
-        # Run this on the FYI waterfall, optional tryservers, and Win
-        # ANGLE AMD tryserver.
-        'predicate': Predicates.FYI_AND_OPTIONAL_AND_WIN_ANGLE_AMD,
+        'predicate': Predicates.DEQP,
         # Run only on the Win7 NVIDIA/AMD R7 240 32- and 64-bit bots (and
         # trybots) for the time being, at least until more capacity is
         # added.
@@ -993,8 +1032,7 @@ COMMON_GTESTS = {
   'angle_deqp_gles2_gl_tests': {
     'tester_configs': [
       {
-        # Run this on the FYI waterfall and optional tryservers.
-        'predicate': Predicates.FYI_AND_OPTIONAL,
+        'predicate': Predicates.DEQP,
         # Run only on the Linux Release NVIDIA 32- and 64-bit bots (and
         # trybots) for the time being, at least until more capacity is added.
         'build_configs': ['Release', 'Release_x64'],
@@ -1027,8 +1065,7 @@ COMMON_GTESTS = {
   'angle_deqp_gles2_gles_tests': {
     'tester_configs': [
       {
-        # Run this on the FYI waterfall and optional tryservers.
-        'predicate': Predicates.FYI_AND_OPTIONAL,
+        'predicate': Predicates.DEQP,
         # Run on Nexus 5X swarmed bots.
         'build_configs': ['android-chromium'],
         'swarming_dimension_sets': [
@@ -1059,15 +1096,14 @@ COMMON_GTESTS = {
     ],
     'android_args': [
       '--enable-xml-result-parsing',
-      '--shard-timeout=300'
+      '--shard-timeout=500'
     ],
   },
 
   'angle_deqp_gles3_gles_tests': {
     'tester_configs': [
       {
-        # Run this on the FYI waterfall and optional tryservers.
-        'predicate': Predicates.FYI_AND_OPTIONAL,
+        'predicate': Predicates.DEQP,
         # Run on Nexus 5X swarmed bots.
         'build_configs': ['android-chromium'],
         'swarming_dimension_sets': [
@@ -1101,7 +1137,7 @@ COMMON_GTESTS = {
     ],
     'android_args': [
       '--enable-xml-result-parsing',
-      '--shard-timeout=300'
+      '--shard-timeout=500'
     ],
   },
 
@@ -1109,7 +1145,7 @@ COMMON_GTESTS = {
     'tester_configs': [
       {
         # TODO(jmadill): Run this on ANGLE roll tryservers.
-        'predicate': Predicates.FYI_ONLY,
+        'predicate': Predicates.DEQP,
         # Run only on the NVIDIA and AMD Win7 bots (and trybots) for the time
         # being, at least until more capacity is added.
         'build_configs': ['Release'],
@@ -1151,7 +1187,7 @@ COMMON_GTESTS = {
     'tester_configs': [
       {
         # TODO(jmadill): Run this on ANGLE roll tryservers.
-        'predicate': Predicates.FYI_ONLY,
+        'predicate': Predicates.DEQP,
         # Run only on the Linux Release NVIDIA 32-bit bots (and trybots) for
         # the time being, at least until more capacity is added.
         'build_configs': ['Release'],
@@ -1184,7 +1220,7 @@ COMMON_GTESTS = {
   'angle_deqp_gles31_d3d11_tests': {
     'tester_configs': [
       {
-        'predicate': Predicates.FYI_ONLY,
+        'predicate': Predicates.DEQP,
         # Run on the Win Release NVIDIA bots.
         'build_configs': ['Release'],
         'swarming_dimension_sets': [
@@ -1217,7 +1253,7 @@ COMMON_GTESTS = {
   'angle_deqp_gles31_gl_tests': {
     'tester_configs': [
       {
-        'predicate': Predicates.FYI_ONLY,
+        'predicate': Predicates.DEQP,
         # Run on the Win Release NVIDIA bots.
         'build_configs': ['Release'],
         'swarming_dimension_sets': [
@@ -1350,6 +1386,25 @@ COMMON_GTESTS = {
       },
     ],
     'desktop_args': ['--use-gpu-in-tests']
+  },
+  'gl_tests_passthrough': {
+    'tester_configs': [
+      {
+        'os_types': ['win'],
+      }
+    ],
+    'disabled_tester_configs': [
+      {
+        'names': [
+          'Linux ChromiumOS Ozone (Intel)',
+        ],
+      },
+    ],
+    'test': 'gl_tests',
+    'desktop_args': [
+      '--use-gpu-in-tests',
+      '--use-passthrough-cmd-decoder',
+     ]
   },
   'gl_unittests': {
     'disabled_tester_configs': [
@@ -1543,8 +1598,6 @@ COMMON_GTESTS = {
     'disabled_tester_configs': [
       {
         'names': [
-          'Win10 Debug (Intel HD 530)',
-          'Win10 Release (Intel HD 530)',
           'Win10 Release (Intel HD 630)',
         ],
       },
@@ -1782,6 +1835,24 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
       },
     ],
     'asan_args': ['--is-asan'],
+    'android_swarming': {
+      # On desktop platforms these don't take very long (~7 minutes),
+      # but on Android they take ~30 minutes and we want to shard them
+      # when sharding is available -- specifically on the Nexus 5X
+      # bots, which are currently the only Android configuration on
+      # the waterfalls where these tests are swarmed. If we had to
+      # restrict the sharding to certain Android devices, then we'd
+      # need some way to apply these Swarming parameters only to a
+      # subset of machines, like the way the tester_configs work.
+      'shards': 6,
+    },
+    'android_args': [
+      # The current working directory when run via isolate is
+      # out/Debug or out/Release. Reference this file relatively to
+      # it.
+      '--read-abbreviated-json-results-from=' + \
+      '../../content/test/data/gpu/webgl_conformance_tests_output.json',
+    ],
   },
   'webgl_conformance_d3d9_tests': {
     'tester_configs': [
@@ -1907,7 +1978,7 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
          # The WebGL 2.0 conformance tests take over an hour to run on
          # the Debug bots, which is too long.
         'build_configs': ['Release', 'Release_x64'],
-        'predicate': Predicates.FYI_OPTIONAL_AND_V8,
+        'predicate': Predicates.FYI_OPTIONAL_V8_AND_WIN_ANGLE_AMD,
         'disabled_instrumentation_types': ['tsan'],
       },
     ],
@@ -1919,6 +1990,10 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
           # http://crbug.com/599451: this test is currently too slow
           # to run on x64 in Debug mode. Need to shard the tests.
           'Win7 x64 Debug (NVIDIA)',
+
+          # The Mac NVIDIA Retina bots don't have the capacity to run
+          # this test suite on mac_optional_gpu_tests_rel.
+          'Optional Mac Retina Release (NVIDIA)',
         ],
         # Don't run these tests on Android yet.
         'os_types': ['android'],
@@ -2313,6 +2388,8 @@ def generate_isolated_test(tester_name, tester_config, test, test_config,
   }
   if 'swarming' in test_config:
     swarming.update(test_config['swarming'])
+  if 'android_swarming' in test_config and is_android(tester_config):
+    swarming.update(test_config['android_swarming'])
   result = {
     'args': prefix_args + test_args,
     'isolate_name': isolate_name,

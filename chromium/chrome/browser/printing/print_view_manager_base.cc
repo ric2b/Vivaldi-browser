@@ -171,7 +171,7 @@ void PrintViewManagerBase::OnDidPrintPage(
   }
 
   std::unique_ptr<PdfMetafileSkia> metafile(
-      new PdfMetafileSkia(PDF_SKIA_DOCUMENT_TYPE));
+      new PdfMetafileSkia(SkiaDocumentType::PDF));
   if (metafile_must_be_valid) {
     if (!metafile->InitFromData(shared_buf->memory(), params.data_size)) {
       NOTREACHED() << "Invalid metafile header";
@@ -274,6 +274,19 @@ void PrintViewManagerBase::RenderFrameDeleted(
   }
 }
 
+#if defined(OS_WIN) && BUILDFLAG(ENABLE_PRINT_PREVIEW)
+void PrintViewManagerBase::SystemDialogCancelled() {
+  // System dialog was cancelled. Clean up the print job and notify the
+  // BackgroundPrintingManager.
+  ReleasePrinterQuery();
+  TerminatePrintJob(true);
+  content::NotificationService::current()->Notify(
+      chrome::NOTIFICATION_PRINT_JOB_RELEASED,
+      content::Source<content::WebContents>(web_contents()),
+      content::NotificationService::NoDetails());
+}
+#endif
+
 bool PrintViewManagerBase::OnMessageReceived(
     const IPC::Message& message,
     content::RenderFrameHost* render_frame_host) {
@@ -367,7 +380,7 @@ bool PrintViewManagerBase::RenderAllMissingPagesNow() {
   // to actually spool the pages, only to have the renderer generate them. Run
   // a message loop until we get our signal that the print job is satisfied.
   // PrintJob will send a ALL_PAGES_REQUESTED after having received all the
-  // pages it needs. MessageLoop::current()->QuitWhenIdle() will be called as
+  // pages it needs. RunLoop::QuitCurrentWhenIdleDeprecated() will be called as
   // soon as print_job_->document()->IsComplete() is true on either
   // ALL_PAGES_REQUESTED or in DidPrintPage(). The check is done in
   // ShouldQuitFromInnerMessageLoop().
@@ -388,7 +401,7 @@ void PrintViewManagerBase::ShouldQuitFromInnerMessageLoop() {
       inside_inner_message_loop_) {
     // We are in a message loop created by RenderAllMissingPagesNow. Quit from
     // it.
-    base::MessageLoop::current()->QuitWhenIdle();
+    base::RunLoop::QuitCurrentWhenIdleDeprecated();
     inside_inner_message_loop_ = false;
   }
 }
@@ -495,9 +508,10 @@ bool PrintViewManagerBase::RunInnerMessageLoop() {
   // memory-bound.
   static const int kPrinterSettingsTimeout = 60000;
   base::OneShotTimer quit_timer;
-  quit_timer.Start(
-      FROM_HERE, TimeDelta::FromMilliseconds(kPrinterSettingsTimeout),
-      base::MessageLoop::current(), &base::MessageLoop::QuitWhenIdle);
+  base::RunLoop run_loop;
+  quit_timer.Start(FROM_HERE,
+                   TimeDelta::FromMilliseconds(kPrinterSettingsTimeout),
+                   run_loop.QuitWhenIdleClosure());
 
   inside_inner_message_loop_ = true;
 
@@ -505,7 +519,7 @@ bool PrintViewManagerBase::RunInnerMessageLoop() {
   {
     base::MessageLoop::ScopedNestableTaskAllower allow(
         base::MessageLoop::current());
-    base::RunLoop().Run();
+    run_loop.Run();
   }
 
   bool success = true;

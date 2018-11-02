@@ -377,17 +377,17 @@ TEST_F(ChromeContentRendererClientTest, AllowPepperMediaStreamAPI) {
 
 TEST_F(ChromeContentRendererClientTest, ShouldSuppressErrorPage) {
   ChromeContentRendererClient client;
-  SearchBouncer::GetInstance()->OnSetSearchURLs(
-      std::vector<GURL>(), GURL("http://example.com/n"));
+  SearchBouncer::GetInstance()->SetSearchURLs(std::vector<GURL>(),
+                                              GURL("http://example.com/n"));
   EXPECT_FALSE(client.ShouldSuppressErrorPage(nullptr,
                                               GURL("http://example.com")));
   EXPECT_TRUE(client.ShouldSuppressErrorPage(nullptr,
                                              GURL("http://example.com/n")));
-  SearchBouncer::GetInstance()->OnSetSearchURLs(
-      std::vector<GURL>(), GURL::EmptyGURL());
+  SearchBouncer::GetInstance()->SetSearchURLs(std::vector<GURL>(),
+                                              GURL::EmptyGURL());
 }
 
-TEST_F(ChromeContentRendererClientTest, AddImageContextMenuProperties) {
+TEST_F(ChromeContentRendererClientTest, AddImageContextMenuPropertiesForLoFi) {
   ChromeContentRendererClient client;
   blink::WebURLResponse web_url_response;
   web_url_response.AddHTTPHeaderField(
@@ -396,7 +396,22 @@ TEST_F(ChromeContentRendererClientTest, AddImageContextMenuProperties) {
       blink::WebString::FromUTF8(
           data_reduction_proxy::empty_image_directive()));
   std::map<std::string, std::string> properties;
-  client.AddImageContextMenuProperties(web_url_response, &properties);
+  client.AddImageContextMenuProperties(
+      web_url_response, /*is_image_in_context_a_placeholder_image=*/false,
+      &properties);
+  EXPECT_EQ(
+      data_reduction_proxy::empty_image_directive(),
+      properties
+          [data_reduction_proxy::chrome_proxy_content_transform_header()]);
+}
+
+TEST_F(ChromeContentRendererClientTest,
+       AddImageContextMenuPropertiesForPlaceholder) {
+  ChromeContentRendererClient client;
+  std::map<std::string, std::string> properties;
+  client.AddImageContextMenuProperties(
+      blink::WebURLResponse(), /*is_image_in_context_a_placeholder_image=*/true,
+      &properties);
   EXPECT_EQ(
       data_reduction_proxy::empty_image_directive(),
       properties

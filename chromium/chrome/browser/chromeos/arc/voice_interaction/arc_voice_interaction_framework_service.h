@@ -7,10 +7,12 @@
 
 #include <memory>
 
+#include "base/callback_forward.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
-#include "components/arc/arc_service.h"
+#include "chromeos/audio/cras_audio_handler.h"
 #include "components/arc/common/voice_interaction_framework.mojom.h"
 #include "components/arc/instance_holder.h"
 #include "components/keyed_service/core/keyed_service.h"
@@ -35,7 +37,8 @@ class ArcBridgeService;
 // to ARC to be used by VoiceInteractionSession. This class lives on the UI
 // thread.
 class ArcVoiceInteractionFrameworkService
-    : public KeyedService,
+    : public chromeos::CrasAudioHandler::AudioObserver,
+      public KeyedService,
       public mojom::VoiceInteractionFrameworkHost,
       public InstanceHolder<mojom::VoiceInteractionFrameworkInstance>::Observer,
       public ArcSessionManager::Observer,
@@ -76,6 +79,9 @@ class ArcVoiceInteractionFrameworkService
   // session_manager::SessionManagerObserver overrides.
   void OnSessionStateChanged() override;
 
+  // CrasAudioHandler::AudioObserver overrides.
+  void OnHotwordTriggered(uint64_t tv_sec, uint64_t tv_nsec) override;
+
   // Starts a voice interaction session after user-initiated interaction.
   // Records a timestamp and sets number of allowed requests to 2 since by
   // design, there will be one request for screenshot and the other for
@@ -90,10 +96,13 @@ class ArcVoiceInteractionFrameworkService
   // seesion if it is already running.
   void ToggleSessionFromUserInteraction();
 
-  // Turn on / off voice interaction in ARC.
-  // TODO(muyuanli): We should also check on Chrome side once CrOS side settings
-  // are ready (tracked separately at crbug.com/727873).
-  void SetVoiceInteractionEnabled(bool enable);
+  using VoiceInteractionSettingCompleteCallback =
+      base::OnceCallback<void(bool)>;
+  // Turn on / off voice interaction in ARC. |callback| will be called with
+  // |true| if setting is applied to Android side.
+  void SetVoiceInteractionEnabled(
+      bool enable,
+      VoiceInteractionSettingCompleteCallback callback);
 
   // Turn on / off voice interaction context (screenshot and structural data)
   // in ARC.
@@ -121,16 +130,23 @@ class ArcVoiceInteractionFrameworkService
  private:
   void NotifyMetalayerStatusChanged(bool visible);
 
-  bool InitiateUserInteraction();
+  bool InitiateUserInteraction(bool is_toggle);
 
   void SetVoiceInteractionSetupCompletedInternal(bool completed);
+
+  bool IsHomescreenActive();
+
+  void StartVoiceInteractionSetupWizardActivity();
 
   content::BrowserContext* context_;
   ArcBridgeService* const arc_bridge_service_;  // Owned by ArcServiceManager
   mojo::Binding<mojom::VoiceInteractionFrameworkHost> binding_;
 
-  // Whether there is a pending request to start voice interaction.
+  // Whether there is a pending request to start/toggle voice interaction.
   bool is_request_pending_ = false;
+
+  // Whether the pending request is toggle the voice interaction.
+  bool is_pending_request_toggle_ = false;
 
   // Whether we should launch runtime setup flow for voice interaction.
   bool should_start_runtime_flow_ = false;
@@ -150,6 +166,8 @@ class ArcVoiceInteractionFrameworkService
   // quota is 0, but we still get requests from the container side, we assume
   // something malicious is going on.
   int32_t context_request_remaining_count_ = 0;
+
+  base::WeakPtrFactory<ArcVoiceInteractionFrameworkService> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ArcVoiceInteractionFrameworkService);
 };

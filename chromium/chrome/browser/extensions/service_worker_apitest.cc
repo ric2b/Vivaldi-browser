@@ -6,6 +6,7 @@
 
 #include "base/bind_helpers.h"
 #include "base/macros.h"
+#include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
@@ -557,7 +558,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTest,
 
   // Disable the extension. Opening the page should fail.
   extension_service()->DisableExtension(extension_id,
-                                        Extension::DISABLE_USER_ACTION);
+                                        disable_reason::DISABLE_USER_ACTION);
   base::RunLoop().RunUntilIdle();
 
   EXPECT_EQ(content::PAGE_TYPE_ERROR,
@@ -720,14 +721,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, EventsToStoppedWorker) {
 
 // Tests that worker ref count increments while extension API function is
 // active.
-
-// Flaky on Linux and ChromeOS, https://crbug.com/702126
-#if defined(OS_LINUX)
-#define MAYBE_WorkerRefCount DISABLED_WorkerRefCount
-#else
-#define MAYBE_WorkerRefCount WorkerRefCount
-#endif
-IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, MAYBE_WorkerRefCount) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, WorkerRefCount) {
   // Extensions APIs from SW are only enabled on trunk.
   ScopedCurrentChannel current_channel_override(version_info::Channel::UNKNOWN);
   const Extension* extension = LoadExtensionWithFlags(
@@ -772,11 +766,26 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, MAYBE_WorkerRefCount) {
     listener.Reply("Hello world");
   }
 
-  ExtensionTestMessageListener extension_listener("SUCCESS", false);
-  extension_listener.set_failure_message("FAILURE");
+  ExtensionTestMessageListener worker_completion_listener("SUCCESS_FROM_WORKER",
+                                                          false);
   // Finish executing chrome.test.sendMessage().
   worker_listener.Reply("Hello world");
-  ASSERT_TRUE(extension_listener.WaitUntilSatisfied());
+  EXPECT_TRUE(worker_completion_listener.WaitUntilSatisfied());
+
+  // The following block makes sure we have received all the IPCs related to
+  // ref-count from the worker.
+  {
+    // The following roundtrip:
+    // browser->extension->worker->extension->browser
+    // will ensure that the worker sent the relevant ref count IPCs.
+    std::string result;
+    EXPECT_TRUE(content::ExecuteScriptAndExtractString(
+        web_contents, "window.roundtripToWorker();", &result));
+    EXPECT_EQ("roundtrip-succeeded", result);
+
+    // Ensure IO thread IPCs run.
+    content::RunAllBlockingPoolTasksUntilIdle();
+  }
 
   // The ref count should drop to 0.
   EXPECT_EQ(0u, GetWorkerRefCount(extension->url()));
@@ -854,8 +863,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, WebAccessibleResourcesIframeSrc) {
   EXPECT_EQ("FROM_SW_RESOURCE", result);
 }
 
-// Test is flaky. See https://crbug.com/737260
-IN_PROC_BROWSER_TEST_F(ServiceWorkerBackgroundSyncTest, DISABLED_Sync) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerBackgroundSyncTest, Sync) {
   const Extension* extension = LoadExtensionWithFlags(
       test_data_dir_.AppendASCII("service_worker/sync"), kFlagNone);
   ASSERT_TRUE(extension);

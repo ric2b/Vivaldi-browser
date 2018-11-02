@@ -44,7 +44,6 @@
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/proximity_auth/logging/logging.h"
 #include "components/proximity_auth/promotion_manager.h"
-#include "components/proximity_auth/proximity_auth_pref_manager.h"
 #include "components/proximity_auth/proximity_auth_pref_names.h"
 #include "components/proximity_auth/proximity_auth_profile_pref_manager.h"
 #include "components/proximity_auth/proximity_auth_system.h"
@@ -62,7 +61,6 @@
 
 #if defined(OS_CHROMEOS)
 #include "apps/app_lifetime_monitor_factory.h"
-#include "ash/shell.h"
 #include "base/linux_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_key_manager.h"
@@ -332,8 +330,7 @@ void EasyUnlockServiceRegular::SetPermitAccess(
     const base::DictionaryValue& permit) {
   DictionaryPrefUpdate pairing_update(profile()->GetPrefs(),
                                       prefs::kEasyUnlockPairing);
-  pairing_update->SetWithoutPathExpansion(
-      kKeyPermitAccess, base::MakeUnique<base::Value>(permit));
+  pairing_update->SetKey(kKeyPermitAccess, permit.Clone());
 }
 
 void EasyUnlockServiceRegular::ClearPermitAccess() {
@@ -363,8 +360,7 @@ void EasyUnlockServiceRegular::SetRemoteDevices(
   if (devices.empty())
     pairing_update->RemoveWithoutPathExpansion(kKeyDevices, NULL);
   else
-    pairing_update->SetWithoutPathExpansion(
-        kKeyDevices, base::MakeUnique<base::Value>(devices));
+    pairing_update->SetKey(kKeyDevices, devices.Clone());
 
   RefreshCryptohomeKeysIfPossible();
 }

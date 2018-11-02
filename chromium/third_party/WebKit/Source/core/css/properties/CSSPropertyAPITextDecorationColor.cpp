@@ -8,13 +8,13 @@
 #include "core/css/parser/CSSPropertyParserHelpers.h"
 #include "platform/RuntimeEnabledFeatures.h"
 
-class CSSParserLocalContext;
 namespace blink {
 
-const CSSValue* CSSPropertyAPITextDecorationColor::parseSingleValue(
+const CSSValue* CSSPropertyAPITextDecorationColor::ParseSingleValue(
+    CSSPropertyID,
     CSSParserTokenRange& range,
     const CSSParserContext& context,
-    const CSSParserLocalContext&) {
+    const CSSParserLocalContext&) const {
   DCHECK(RuntimeEnabledFeatures::CSS3TextDecorationsEnabled());
   return CSSPropertyParserHelpers::ConsumeColor(range, context.Mode());
 }

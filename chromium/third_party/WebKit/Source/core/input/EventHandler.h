@@ -149,6 +149,8 @@ class CORE_EXPORT EventHandler final
       const Vector<WebMouseEvent>& coalesced_events);
   void HandleMouseLeaveEvent(const WebMouseEvent&);
 
+  WebInputEventResult HandlePointerEvent(const WebPointerEvent&, Node* target);
+
   WebInputEventResult HandleMousePressEvent(const WebMouseEvent&);
   WebInputEventResult HandleMouseReleaseEvent(const WebMouseEvent&);
   WebInputEventResult HandleWheelEvent(const WebMouseWheelEvent&);
@@ -238,7 +240,7 @@ class CORE_EXPORT EventHandler final
 
   void NotifyElementActivated();
 
-  PassRefPtr<UserGestureToken> TakeLastMouseDownGestureToken() {
+  RefPtr<UserGestureToken> TakeLastMouseDownGestureToken() {
     return std::move(last_mouse_down_user_gesture_token_);
   }
 
@@ -396,8 +398,19 @@ class CORE_EXPORT EventHandler final
   // firing for the current gesture sequence (i.e. until next GestureTapDown).
   bool suppress_mouse_events_from_gestures_;
 
+  // ShouldShowIBeamForNode's unit tests:
   FRIEND_TEST_ALL_PREFIXES(EventHandlerTest, HitOnNothingDoesNotShowIBeam);
   FRIEND_TEST_ALL_PREFIXES(EventHandlerTest, HitOnTextShowsIBeam);
+  FRIEND_TEST_ALL_PREFIXES(EventHandlerTest,
+                           HitOnUserSelectNoneDoesNotShowIBeam);
+  FRIEND_TEST_ALL_PREFIXES(EventHandlerTest, ChildCanOverrideUserSelectNone);
+  FRIEND_TEST_ALL_PREFIXES(EventHandlerTest,
+                           ShadowChildCanOverrideUserSelectNone);
+  FRIEND_TEST_ALL_PREFIXES(EventHandlerTest, ChildCanOverrideUserSelectText);
+  FRIEND_TEST_ALL_PREFIXES(EventHandlerTest,
+                           ShadowChildCanOverrideUserSelectText);
+  FRIEND_TEST_ALL_PREFIXES(EventHandlerTest, InputFieldsCanStartSelection);
+  FRIEND_TEST_ALL_PREFIXES(EventHandlerTest, ImagesCannotStartSelection);
 };
 
 }  // namespace blink

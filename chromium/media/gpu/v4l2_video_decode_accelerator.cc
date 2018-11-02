@@ -24,8 +24,8 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "media/base/media_switches.h"
-#include "media/filters/h264_parser.h"
 #include "media/gpu/shared_memory_region.h"
+#include "media/video/h264_parser.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/scoped_binders.h"
@@ -89,13 +89,6 @@ struct V4L2VideoDecodeAccelerator::EGLSyncKHRRef {
   ~EGLSyncKHRRef();
   EGLDisplay const egl_display;
   EGLSyncKHR egl_sync;
-};
-
-struct V4L2VideoDecodeAccelerator::PictureRecord {
-  PictureRecord(bool cleared, const Picture& picture);
-  ~PictureRecord();
-  bool cleared;  // Whether the texture is cleared and safe to render from.
-  Picture picture;  // The decoded picture.
 };
 
 V4L2VideoDecodeAccelerator::BitstreamBufferRef::BitstreamBufferRef(
@@ -2110,17 +2103,30 @@ gfx::Size V4L2VideoDecodeAccelerator::GetVisibleSize(
     const gfx::Size& coded_size) {
   DCHECK(decoder_thread_.task_runner()->BelongsToCurrentThread());
 
-  struct v4l2_crop crop_arg;
-  memset(&crop_arg, 0, sizeof(crop_arg));
-  crop_arg.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+  struct v4l2_rect* visible_rect;
+  struct v4l2_selection selection_arg;
+  memset(&selection_arg, 0, sizeof(selection_arg));
+  selection_arg.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+  selection_arg.target = V4L2_SEL_TGT_COMPOSE;
 
-  if (device_->Ioctl(VIDIOC_G_CROP, &crop_arg) != 0) {
-    PLOGF(ERROR) << "ioctl() VIDIOC_G_CROP failed";
-    return coded_size;
+  if (device_->Ioctl(VIDIOC_G_SELECTION, &selection_arg) == 0) {
+    DVLOGF(2) << "VIDIOC_G_SELECTION is supported";
+    visible_rect = &selection_arg.r;
+  } else {
+    DVLOGF(2) << "Fallback to VIDIOC_G_CROP";
+    struct v4l2_crop crop_arg;
+    memset(&crop_arg, 0, sizeof(crop_arg));
+    crop_arg.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+
+    if (device_->Ioctl(VIDIOC_G_CROP, &crop_arg) != 0) {
+      PLOGF(ERROR) << "ioctl() VIDIOC_G_CROP failed";
+      return coded_size;
+    }
+    visible_rect = &crop_arg.c;
   }
 
-  gfx::Rect rect(crop_arg.c.left, crop_arg.c.top, crop_arg.c.width,
-                 crop_arg.c.height);
+  gfx::Rect rect(visible_rect->left, visible_rect->top, visible_rect->width,
+                 visible_rect->height);
   VLOGF(2) << "visible rectangle is " << rect.ToString();
   if (!gfx::Rect(coded_size).Contains(rect)) {
     DLOGF(ERROR) << "visible rectangle " << rect.ToString()

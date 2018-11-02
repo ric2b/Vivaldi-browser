@@ -17,7 +17,6 @@
 #include "ash/shell_port.h"
 #include "ash/system/brightness_control_delegate.h"
 #include "ash/system/keyboard_brightness_control_delegate.h"
-#include "ash/system/tray/system_tray_delegate.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test_screenshot_delegate.h"
 #include "ash/wm/lock_state_controller.h"
@@ -48,11 +47,6 @@
 #include "ui/events/test/event_generator.h"
 #include "ui/message_center/message_center.h"
 #include "ui/views/widget/widget.h"
-
-#if defined(USE_X11)
-#include <X11/Xlib.h>
-#include "ui/events/test/events_test_utils_x11.h"
-#endif
 
 using chromeos::input_method::InputMethodManager;
 
@@ -801,8 +795,8 @@ TEST_F(AcceleratorControllerTest, GlobalAccelerators) {
       ui::Accelerator(ui::VKEY_T, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN)));
 
   // Show task manager
-  EXPECT_TRUE(
-      ProcessInController(ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_SHIFT_DOWN)));
+  EXPECT_TRUE(ProcessInController(
+      ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_COMMAND_DOWN)));
 
   // Open file manager
   EXPECT_TRUE(ProcessInController(
@@ -814,6 +808,9 @@ TEST_F(AcceleratorControllerTest, GlobalAccelerators) {
   // effect of locking the screen.
   EXPECT_TRUE(
       ProcessInController(ui::Accelerator(ui::VKEY_L, ui::EF_COMMAND_DOWN)));
+
+  message_center::MessageCenter::Get()->RemoveAllNotifications(
+      false /* by_user */, message_center::MessageCenter::RemoveType::ALL);
 }
 
 TEST_F(AcceleratorControllerTest, GlobalAcceleratorsToggleAppList) {
@@ -1332,6 +1329,8 @@ TEST_F(DeprecatedAcceleratorTester, TestNewAccelerators) {
     // screen before we proceed testing the rest of accelerators.
     ResetStateIfNeeded();
   }
+
+  RemoveAllNotifications();
 }
 
 }  // namespace ash

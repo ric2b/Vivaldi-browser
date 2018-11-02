@@ -6,12 +6,12 @@
 <translation id="1728549374069268714">粘贴并转到</translation>
 <translation id="1756026472674246267">在新标签页中打开链接</translation>
 <translation id="1759842336958782510">Chrome 浏览器</translation>
-<translation id="1769904678986817931">图片属性</translation>
+<translation id="1769904678986817931">图像属性...</translation>
 <translation id="1920297417712412573">复制到笔记</translation>
 <translation id="1921101374471252440">刷新图片(&amp;R)</translation>
 <translation id="2444387452209867610">插入笔记</translation>
 <translation id="2556876185419854533">撤消编辑(&amp;U)</translation>
-<translation id="2873951654529031587">垃圾桶</translation>
+<translation id="2873951654529031587">回收站</translation>
 <translation id="2923448633003185837">粘贴并转到</translation>
 <translation id="2972581237482394796">重做(&amp;R)</translation>
 <translation id="2977472760057091832">在隐身窗口中打开链接</translation>
@@ -25,7 +25,7 @@
 <translation id="3588820906588687999">在新标签页中打开图片</translation>
 <translation id="3732157130969736834">保存链接为书签</translation>
 <translation id="3914946330804881301">从 Opera 导入</translation>
-<translation id="4044951018940382324">Vivaldi 浏览器</translation>
+<translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">不再显示(&amp;D)</translation>
 <translation id="4074744496918018786">在隐身窗口中打开图片</translation>
 <translation id="4512900838580567989">在后台标签页中打开链接</translation>
@@ -42,8 +42,9 @@
 <translation id="5615637589913244581">Opera 15+ （Beta 版浏览器）</translation>
 <translation id="5648110075441906505">在新窗口中打开图片</translation>
 <translation id="5716238312826274098">关闭通知</translation>
-<translation id="588258955323874662">全屏模式</translation>
+<translation id="588258955323874662">全屏</translation>
 <translation id="5916080360077521750">很遗憾，你的 Chrome 浏览器设置不能在浏览器运行时使用。要导入这些配置到 Vivaldi，你需要保存工作并关闭 Chrome 窗口然后点击继续。</translation>
+<translation id="6229528619562190452">点击此处更新 Vivaldi。</translation>
 <translation id="6234173136417926046">使用图片作为起始页背景</translation>
 <translation id="6259156558325130047">重新排序(&amp;R)</translation>
 <translation id="630690498669249215">Opera 书签文件</translation>

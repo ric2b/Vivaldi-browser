@@ -21,8 +21,8 @@
 #include "base/timer/hi_res_timer_manager.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
-#include "content/child/child_process.h"
 #include "content/common/content_constants_internal.h"
+#include "content/common/content_switches_internal.h"
 #include "content/gpu/gpu_child_thread.h"
 #include "content/gpu/gpu_process.h"
 #include "content/public/common/content_client.h"
@@ -38,6 +38,7 @@
 #include "gpu/ipc/service/gpu_config.h"
 #include "gpu/ipc/service/gpu_init.h"
 #include "gpu/ipc/service/gpu_watchdog_thread.h"
+#include "media/gpu/features.h"
 #include "ui/events/platform/platform_event_source.h"
 #include "ui/gfx/switches.h"
 #include "ui/gl/gl_context.h"
@@ -84,7 +85,7 @@
 #include "ui/ozone/public/ozone_platform.h"
 #endif
 
-#if defined(OS_CHROMEOS) && defined(ARCH_CPU_X86_FAMILY)
+#if BUILDFLAG(USE_VAAPI)
 #include "media/gpu/vaapi_wrapper.h"
 #endif
 
@@ -135,7 +136,7 @@ class ContentSandboxHelper : public gpu::GpuSandboxHelper {
       (void)base::RandUint64();
     }
 
-#if defined(OS_CHROMEOS) && defined(ARCH_CPU_X86_FAMILY)
+#if BUILDFLAG(USE_VAAPI)
     media::VaapiWrapper::PreSandboxInitialization();
 #endif
 #if defined(OS_WIN)
@@ -174,9 +175,8 @@ int GpuMain(const MainFunctionParams& parameters) {
       kTraceEventGpuProcessSortIndex);
 
   const base::CommandLine& command_line = parameters.command_line;
-  if (command_line.HasSwitch(switches::kGpuStartupDialog)) {
-    ChildProcess::WaitForDebugger("Gpu");
-  }
+  if (command_line.HasSwitch(switches::kGpuStartupDialog))
+    WaitForDebugger("Gpu");
 
   base::Time start_time = base::Time::Now();
 
@@ -266,7 +266,9 @@ int GpuMain(const MainFunctionParams& parameters) {
   // exits early, the browser process will never detect it.  For this reason we
   // defer tearing down the GPU process until receiving the initialization
   // message from the browser (through mojom::GpuMain::CreateGpuService()).
-  const bool init_success = gpu_init.InitializeAndStartSandbox(command_line);
+  constexpr bool kInProcessGpu = false;
+  const bool init_success = gpu_init.InitializeAndStartSandbox(
+      const_cast<base::CommandLine*>(&command_line), kInProcessGpu);
   const bool dead_on_arrival = !init_success;
 
   logging::SetLogMessageHandler(NULL);

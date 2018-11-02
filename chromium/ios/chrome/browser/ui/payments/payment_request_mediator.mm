@@ -15,9 +15,11 @@
 #include "components/payments/core/autofill_payment_instrument.h"
 #include "components/payments/core/currency_formatter.h"
 #include "components/payments/core/payment_prefs.h"
+#include "components/payments/core/payment_shipping_option.h"
 #include "components/payments/core/strings_util.h"
 #include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_strings.h"
+#include "ios/chrome/browser/payments/ios_payment_instrument.h"
 #include "ios/chrome/browser/payments/payment_request.h"
 #include "ios/chrome/browser/payments/payment_request_util.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_detail_item.h"
@@ -105,15 +107,15 @@ using ::payment_request_util::GetShippingSectionTitle;
 
 - (CollectionViewItem*)paymentSummaryItem {
   PriceItem* item = [[PriceItem alloc] init];
-  item.item = base::SysUTF16ToNSString(
-      self.paymentRequest->payment_details().total.label);
+  item.item = base::SysUTF8ToNSString(
+      self.paymentRequest->payment_details().total->label);
   payments::CurrencyFormatter* currencyFormatter =
       self.paymentRequest->GetOrCreateCurrencyFormatter();
-  item.price = SysUTF16ToNSString(l10n_util::GetStringFUTF16(
+  item.price = base::SysUTF16ToNSString(l10n_util::GetStringFUTF16(
       IDS_PAYMENT_REQUEST_ORDER_SUMMARY_SHEET_TOTAL_FORMAT,
       base::UTF8ToUTF16(currencyFormatter->formatted_currency_code()),
-      currencyFormatter->Format(base::UTF16ToASCII(
-          self.paymentRequest->payment_details().total.amount.value))));
+      currencyFormatter->Format(
+          self.paymentRequest->payment_details().total->amount.value)));
   item.notification = self.totalValueChanged
                           ? l10n_util::GetNSString(IDS_PAYMENTS_UPDATED_LABEL)
                           : nil;
@@ -143,7 +145,7 @@ using ::payment_request_util::GetShippingSectionTitle;
   }
 
   CollectionViewDetailItem* item = [[CollectionViewDetailItem alloc] init];
-  item.text = SysUTF16ToNSString(
+  item.text = base::SysUTF16ToNSString(
       GetShippingAddressSectionString(self.paymentRequest->shipping_type()));
   if (self.paymentRequest->shipping_profiles().empty()) {
     item.detailText = [l10n_util::GetNSString(IDS_ADD)
@@ -155,15 +157,15 @@ using ::payment_request_util::GetShippingSectionTitle;
 }
 
 - (CollectionViewItem*)shippingOptionItem {
-  const web::PaymentShippingOption* option =
+  const payments::PaymentShippingOption* option =
       self.paymentRequest->selected_shipping_option();
   if (option) {
     PaymentsTextItem* item = [[PaymentsTextItem alloc] init];
-    item.text = base::SysUTF16ToNSString(option->label);
+    item.text = base::SysUTF8ToNSString(option->label);
     payments::CurrencyFormatter* currencyFormatter =
         self.paymentRequest->GetOrCreateCurrencyFormatter();
-    item.detailText = SysUTF16ToNSString(
-        currencyFormatter->Format(base::UTF16ToASCII(option->amount.value)));
+    item.detailText = base::SysUTF16ToNSString(
+        currencyFormatter->Format(option->amount.value));
     item.accessoryType = MDCCollectionViewCellAccessoryDisclosureIndicator;
     return item;
   }
@@ -185,13 +187,24 @@ using ::payment_request_util::GetShippingSectionTitle;
 }
 
 - (CollectionViewItem*)paymentMethodItem {
-  const payments::PaymentInstrument* paymentMethod =
+  payments::PaymentInstrument* paymentMethod =
       self.paymentRequest->selected_payment_method();
   if (paymentMethod) {
     PaymentMethodItem* item = [[PaymentMethodItem alloc] init];
     item.methodID = base::SysUTF16ToNSString(paymentMethod->GetLabel());
     item.methodDetail = base::SysUTF16ToNSString(paymentMethod->GetSublabel());
-    item.methodTypeIcon = NativeImage(paymentMethod->icon_resource_id());
+
+    switch (paymentMethod->type()) {
+      case payments::PaymentInstrument::Type::AUTOFILL:
+        item.methodTypeIcon = NativeImage(paymentMethod->icon_resource_id());
+        break;
+      case payments::PaymentInstrument::Type::NATIVE_MOBILE_APP:
+        payments::IOSPaymentInstrument* mobileApp =
+            static_cast<payments::IOSPaymentInstrument*>(paymentMethod);
+        item.methodTypeIcon = mobileApp->icon_image();
+        break;
+    }
+
     item.accessoryType = MDCCollectionViewCellAccessoryDisclosureIndicator;
     return item;
   }

@@ -19,8 +19,9 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
-#include "components/safe_browsing/csd.pb.h"
+#include "components/safe_browsing/proto/csd.pb.h"
 #include "components/safe_browsing_db/database_manager.h"
+#include "components/safe_browsing_db/whitelist_checker_client.h"
 #include "components/variations/variations_associated_data.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/base/net_errors.h"
@@ -70,7 +71,7 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
           destination: GOOGLE_OWNED_SERVICE
         }
         policy {
-          cookies_allowed: false
+          cookies_allowed: NO
           setting:
             "Users can control this feature via the 'Automatically report "
             "details of possible security incidents to Google' setting under "
@@ -116,7 +117,25 @@ void NotificationImageReporter::ReportNotificationImageOnIO(
   DCHECK(origin.is_valid());
 
   // Skip whitelisted origins to cut down on report volume.
-  if (!database_manager || database_manager->MatchCsdWhitelistUrl(origin)) {
+  if (!database_manager) {
+    SkippedReporting();
+    return;
+  }
+
+  // Query the CSD Whitelist asynchronously. We're already on the IO thread so
+  // can call WhitelistCheckerClient directly.
+  base::Callback<void(bool)> result_callback =
+      base::Bind(&NotificationImageReporter::OnWhitelistCheckDoneOnIO,
+                 weak_factory_on_io_.GetWeakPtr(), profile, origin, image);
+  WhitelistCheckerClient::StartCheckCsdWhitelist(database_manager, origin,
+                                                 result_callback);
+}
+
+void NotificationImageReporter::OnWhitelistCheckDoneOnIO(Profile* profile,
+                                                         const GURL& origin,
+                                                         const SkBitmap& image,
+                                                         bool match_whitelist) {
+  if (match_whitelist) {
     SkippedReporting();
     return;
   }

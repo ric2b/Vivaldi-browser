@@ -140,14 +140,16 @@ void InsertListCommand::DoApply(EditingState* editing_state) {
   // IndentOutdentCommand::outdentParagraph, both of which ensure clean layout.
   DCHECK(!GetDocument().NeedsLayoutTreeUpdate());
 
-  if (!EndingSelection().IsNonOrphanedCaretOrRange())
+  if (EndingVisibleSelection().IsNone() ||
+      EndingVisibleSelection().Start().IsOrphan() ||
+      EndingVisibleSelection().End().IsOrphan())
     return;
 
-  if (!EndingSelection().RootEditableElement())
+  if (!RootEditableElementOf(EndingSelection().Base()))
     return;
 
-  VisiblePosition visible_end = EndingSelection().VisibleEnd();
-  VisiblePosition visible_start = EndingSelection().VisibleStart();
+  VisiblePosition visible_end = EndingVisibleSelection().VisibleEnd();
+  VisiblePosition visible_start = EndingVisibleSelection().VisibleStart();
   // When a selection ends at the start of a paragraph, we rarely paint
   // the selection gap before that paragraph, because there often is no gap.
   // In a case like this, it's not obvious to the user that the selection
@@ -165,8 +167,8 @@ void InsertListCommand::DoApply(EditingState* editing_state) {
     builder.Collapse(visible_start.ToPositionWithAffinity());
     if (new_end.IsNotNull())
       builder.Extend(new_end.DeepEquivalent());
-    SetEndingSelection(builder.Build());
-    if (!EndingSelection().RootEditableElement())
+    SetEndingSelection(SelectionForUndoStep::From(builder.Build()));
+    if (!RootEditableElementOf(EndingSelection().Base()))
       return;
   }
 
@@ -174,7 +176,7 @@ void InsertListCommand::DoApply(EditingState* editing_state) {
   if (EndingSelection().IsRange()) {
     bool force_list_creation = false;
     VisibleSelection selection =
-        SelectionForParagraphIteration(EndingSelection());
+        SelectionForParagraphIteration(EndingVisibleSelection());
     DCHECK(selection.IsRange());
 
     VisiblePosition visible_start_of_selection = selection.VisibleStart();
@@ -188,7 +190,7 @@ void InsertListCommand::DoApply(EditingState* editing_state) {
             .DeepEquivalent();
 
     Range* current_selection =
-        CreateRange(FirstEphemeralRangeOf(EndingSelection()));
+        CreateRange(FirstEphemeralRangeOf(EndingVisibleSelection()));
     ContainerNode* scope_for_start_of_selection = nullptr;
     ContainerNode* scope_for_end_of_selection = nullptr;
     // FIXME: This is an inefficient way to keep selection alive because
@@ -222,10 +224,10 @@ void InsertListCommand::DoApply(EditingState* editing_state) {
         // and use it as the end of the new selection.
         if (!start_of_last_paragraph.IsConnected())
           return;
-        SetEndingSelection(
+        SetEndingSelection(SelectionForUndoStep::From(
             SelectionInDOMTree::Builder()
                 .Collapse(start_of_current_paragraph.DeepEquivalent())
-                .Build());
+                .Build()));
 
         // Save and restore visibleEndOfSelection and startOfLastParagraph when
         // necessary since moveParagraph and movePragraphWithClones can remove
@@ -250,7 +252,7 @@ void InsertListCommand::DoApply(EditingState* editing_state) {
           // exit early immediately because we've lost the loop invariant.
           DCHECK(visible_end_of_selection.IsNotNull());
           if (visible_end_of_selection.IsNull() ||
-              !RootEditableElementOf(visible_end_of_selection))
+              !RootEditableElementOf(visible_end_of_selection.DeepEquivalent()))
             return;
           start_of_last_paragraph =
               StartOfParagraph(visible_end_of_selection,
@@ -261,12 +263,12 @@ void InsertListCommand::DoApply(EditingState* editing_state) {
         }
 
         start_of_current_paragraph =
-            StartOfNextParagraph(EndingSelection().VisibleStart());
+            StartOfNextParagraph(EndingVisibleSelection().VisibleStart());
       }
-      SetEndingSelection(
+      SetEndingSelection(SelectionForUndoStep::From(
           SelectionInDOMTree::Builder()
               .Collapse(visible_end_of_selection.DeepEquivalent())
-              .Build());
+              .Build()));
     }
     DoApplyForSingleParagraph(force_list_creation, list_tag, *current_selection,
                               editing_state);
@@ -294,17 +296,19 @@ void InsertListCommand::DoApply(EditingState* editing_state) {
       visible_start_of_selection = CreateVisiblePosition(start_of_selection);
     }
 
-    SetEndingSelection(SelectionInDOMTree::Builder()
-                           .SetAffinity(visible_start_of_selection.Affinity())
-                           .SetBaseAndExtentDeprecated(
-                               visible_start_of_selection.DeepEquivalent(),
-                               visible_end_of_selection.DeepEquivalent())
-                           .SetIsDirectional(EndingSelection().IsDirectional())
-                           .Build());
+    SetEndingSelection(SelectionForUndoStep::From(
+        SelectionInDOMTree::Builder()
+            .SetAffinity(visible_start_of_selection.Affinity())
+            .SetBaseAndExtentDeprecated(
+                visible_start_of_selection.DeepEquivalent(),
+                visible_end_of_selection.DeepEquivalent())
+            .SetIsDirectional(EndingSelection().IsDirectional())
+            .Build()));
     return;
   }
 
-  Range* const range = CreateRange(FirstEphemeralRangeOf(EndingSelection()));
+  Range* const range =
+      CreateRange(FirstEphemeralRangeOf(EndingVisibleSelection()));
   DCHECK(range);
   DoApplyForSingleParagraph(false, list_tag, *range, editing_state);
 }
@@ -323,7 +327,7 @@ bool InsertListCommand::DoApplyForSingleParagraph(
   // just before a table and ends inside the first cell,
   // selectionForParagraphIteration should probably be renamed and deployed
   // inside setEndingSelection().
-  Node* selection_node = EndingSelection().Start().AnchorNode();
+  Node* selection_node = EndingVisibleSelection().Start().AnchorNode();
   Node* list_child_node = EnclosingListChild(selection_node);
   bool switch_list_type = false;
   if (list_child_node) {
@@ -426,22 +430,25 @@ bool InsertListCommand::DoApplyForSingleParagraph(
                                  IGNORE_EXCEPTION_FOR_TESTING);
       }
 
-      SetEndingSelection(SelectionInDOMTree::Builder()
-                             .Collapse(Position::FirstPositionInNode(*new_list))
-                             .Build());
+      SetEndingSelection(SelectionForUndoStep::From(
+          SelectionInDOMTree::Builder()
+              .Collapse(Position::FirstPositionInNode(*new_list))
+              .Build()));
 
       return true;
     }
 
-    UnlistifyParagraph(EndingSelection().VisibleStart(), list_element,
+    UnlistifyParagraph(EndingVisibleSelection().VisibleStart(), list_element,
                        list_child_node, editing_state);
     if (editing_state->IsAborted())
       return false;
     GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
   }
 
-  if (!list_child_node || switch_list_type || force_create_list)
-    ListifyParagraph(EndingSelection().VisibleStart(), list_tag, editing_state);
+  if (!list_child_node || switch_list_type || force_create_list) {
+    ListifyParagraph(EndingVisibleSelection().VisibleStart(), list_tag,
+                     editing_state);
+  }
 
   return true;
 }
@@ -662,7 +669,8 @@ void InsertListCommand::ListifyParagraph(const VisiblePosition& original_start,
   MergeWithNeighboringLists(list_element, editing_state);
 }
 
-// TODO(xiaochengh): Stop storing VisiblePositions through mutations.
+// TODO(editing-dev): Stop storing VisiblePositions through mutations.
+// See crbug.com/648949 for details.
 void InsertListCommand::MoveParagraphOverPositionIntoEmptyListItem(
     const VisiblePosition& pos,
     HTMLLIElement* list_item_element,

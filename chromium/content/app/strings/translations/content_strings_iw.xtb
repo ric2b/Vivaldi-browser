@@ -16,7 +16,6 @@
 <translation id="1589122976691792535">אזור</translation>
 <translation id="1591562245178063882">החודש</translation>
 <translation id="1637811476055996098">בחר קבצים</translation>
-<translation id="167575180612809735">סימן ויזואלי 'לא פנוי/ה'</translation>
 <translation id="1729654308190250600">הזן ערך נדרש בשדה של כתובת האימייל.</translation>
 <translation id="1758486001363313524">אחר...</translation>
 <translation id="1806710327868736751">alert_dialog</translation>
@@ -24,7 +23,6 @@
 <translation id="1822429046913737220">AM/PM</translation>
 <translation id="1832974991323546415">הפעלה במכשיר מרוחק</translation>
 <translation id="1854180393107901205">הפסק העברה</translation>
-<translation id="1880518467580572141">קו מתאר</translation>
 <translation id="1921819250265091946">dd</translation>
 <translation id="1930711995431081526">מצב</translation>
 <translation id="1938124657309484470">על הערך להיות <ph name="MAXIMUM_DATE_OR_TIME" /> או מוקדם יותר.</translation>
@@ -96,7 +94,6 @@
 <translation id="512758898067543763">כותרת שורה</translation>
 <translation id="5164977714490026579">הערך חייב להיות גדול מ-<ph name="MINIMUM" /> או שווה לו.</translation>
 <translation id="5307600278924710095">הזן חלק ולאחריו '<ph name="ATSIGN" />'‏. השדה '<ph name="INVALIDADDRESS" />' אינו מלא.</translation>
-<translation id="5317780077021120954">שמור</translation>
 <translation id="5406322316791861025">ספרה</translation>
 <translation id="5453733299334684579">פריט בעץ</translation>
 <translation id="5466621249238537318">בחר קובץ אחד או יותר.</translation>
@@ -111,6 +108,7 @@
 <translation id="57838592816432529">השתק</translation>
 <translation id="5860033963881614850">כבוי</translation>
 <translation id="588258955323874662">מסך מלא</translation>
+<translation id="5888666972993069672">מתבצעת העברה אל <ph name="DEVICE_FRIENDLY_NAME" /></translation>
 <translation id="5939518447894949180">אפס</translation>
 <translation id="5966707198760109579">שבוע</translation>
 <translation id="5987525920412732405">לחצן קביעת ערך</translation>
@@ -127,7 +125,6 @@
 <translation id="6643016212128521049">נקה</translation>
 <translation id="668171684555832681">אחר...</translation>
 <translation id="6692633176391053278">פקד חצים</translation>
-<translation id="6739588121953935928">סרגל</translation>
 <translation id="6755330956360078551">הסבר קצר</translation>
 <translation id="6790428901817661496">הפעל</translation>
 <translation id="6820355525329141109">לא ניתן היה לטעון את הפלאגין.</translation>

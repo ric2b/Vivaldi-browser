@@ -51,8 +51,8 @@ class Document;
 class DocumentLoader;
 class InspectedFrames;
 class InspectorResourceContentLoader;
-class KURL;
 class LocalFrame;
+class ScheduledNavigation;
 class SharedBuffer;
 
 using blink::protocol::Maybe;
@@ -94,13 +94,12 @@ class CORE_EXPORT InspectorPageAgent final
   static bool CachedResourceContent(Resource*,
                                     String* result,
                                     bool* base64_encoded);
-  static bool SharedBufferContent(PassRefPtr<const SharedBuffer>,
+  static bool SharedBufferContent(RefPtr<const SharedBuffer>,
                                   const String& mime_type,
                                   const String& text_encoding_name,
                                   String* result,
                                   bool* base64_encoded);
 
-  static Resource* CachedResource(LocalFrame*, const KURL&);
   static String ResourceTypeJson(ResourceType);
   static ResourceType CachedResourceType(const Resource&);
   static String CachedResourceTypeJson(const Resource&);
@@ -125,6 +124,7 @@ class CORE_EXPORT InspectorPageAgent final
                               Maybe<String> transitionType,
                               String* frame_id) override;
   protocol::Response stopLoading() override;
+  protocol::Response setAdBlockingEnabled(bool) override;
   protocol::Response getResourceTree(
       std::unique_ptr<protocol::Page::FrameResourceTree>* frame_tree) override;
   void getResourceContent(const String& frame_id,
@@ -157,17 +157,19 @@ class CORE_EXPORT InspectorPageAgent final
   void DidClearDocumentOfWindowObject(LocalFrame*);
   void DomContentLoadedEventFired(LocalFrame*);
   void LoadEventFired(LocalFrame*);
-  void DidCommitLoad(LocalFrame*, DocumentLoader*);
+  void WillCommitLoad(LocalFrame*, DocumentLoader*);
   void FrameAttachedToParent(LocalFrame*);
   void FrameDetachedFromParent(LocalFrame*);
   void FrameStartedLoading(LocalFrame*, FrameLoadType);
   void FrameStoppedLoading(LocalFrame*);
-  void FrameScheduledNavigation(LocalFrame*, double delay);
+  void FrameScheduledNavigation(LocalFrame*, ScheduledNavigation*);
   void FrameClearedScheduledNavigation(LocalFrame*);
-  void WillRunJavaScriptDialog(const String& message, ChromeClient::DialogType);
-  void DidRunJavaScriptDialog(bool result);
+  void WillRunJavaScriptDialog();
+  void DidRunJavaScriptDialog();
   void DidResizeMainFrame();
   void DidChangeViewport();
+  void LifecycleEvent(const char* name, double timestamp);
+  void PaintTiming(Document*, const char* name, double timestamp);
   void Will(const probe::UpdateLayout&);
   void Did(const probe::UpdateLayout&);
   void Will(const probe::RecalculateStyle&);

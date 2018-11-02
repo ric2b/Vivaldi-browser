@@ -37,12 +37,43 @@
       -webkit-margin-start: var(--cr-icon-button-margin-start);
     }
 
+    --cr-primary-text: {
+        color: var(--paper-grey-900);
+        line-height: 154%;  /* 20px. */
+     }
+
+    --cr-secondary-text: {
+      color: var(--paper-grey-600);
+      font-weight: 400;
+    }
+
+    /* TODO (scottchen): re-implement with paddings instead; */
+    /* These are used for row items such as radio buttons, check boxes, list
+     * items etc. */
+    --cr-section-min-height: 48px;
+    --cr-section-two-line-min-height: 64px;
+    --cr-section-three-line-min-height: 84px;
+
+    --cr-section-padding: 20px;
+    --cr-section-indent-width: 40px;
+    --cr-section-indent-padding: calc(
+        var(--cr-section-padding) + var(--cr-section-indent-width));
+
+    --cr-section: {
+      align-items: center;
+      border-top: var(--cr-separator-line);
+      display: flex;
+      min-height: var(--cr-section-min-height);
+      padding: 0 var(--cr-section-padding);
+    };
+
+    --cr-toggle-color: var(--google-blue-500);
+
     --cr-selectable-focus: {
       background-color: var(--cr-focused-item-color);
       outline: none;
     }
     --cr-separator-height: 1px;
     --cr-separator-line: var(--cr-separator-height) solid rgba(0, 0, 0, 0.06);
-    --paper-checkbox-ink-size: 40px;
   }
 </style>

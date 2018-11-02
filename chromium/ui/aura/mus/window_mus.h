@@ -14,10 +14,6 @@
 #include "ui/aura/aura_export.h"
 #include "ui/aura/mus/mus_types.h"
 
-namespace cc {
-class SurfaceInfo;
-}
-
 namespace gfx {
 class Rect;
 class Transform;
@@ -27,6 +23,12 @@ namespace ui {
 namespace mojom {
 enum class OrderDirection;
 }
+}
+
+namespace viz {
+class FrameSinkId;
+class LocalSurfaceId;
+class SurfaceInfo;
 }
 
 namespace aura {
@@ -60,6 +62,9 @@ class AURA_EXPORT WindowMus {
   virtual ~WindowMus() {}
 
   // Returns the WindowMus associated with |window|.
+  static const WindowMus* Get(const Window* window) {
+    return const_cast<const WindowMus*>(Get(const_cast<Window*>(window)));
+  }
   static WindowMus* Get(Window* window);
 
   Id server_id() const { return server_id_; }

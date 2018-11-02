@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/memory/ptr_util.h"
+#include "base/optional.h"
 #include "base/strings/string_util.h"
 #include "content/browser/appcache/appcache_navigation_handle.h"
 #include "content/browser/appcache/chrome_appcache_service.h"
@@ -46,6 +47,7 @@
 #include "content/public/common/resource_request_body.h"
 #include "content/public/common/resource_response.h"
 #include "content/public/common/url_constants.h"
+#include "content/public/common/url_utils.h"
 #include "content/public/common/web_preferences.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
@@ -157,13 +159,8 @@ void AddAdditionalRequestHeaders(net::HttpRequestHeaders* headers,
                                   : user_agent_override);
 
   // Check whether DevTools wants to override user agent for this request
-  // after setting the default user agent.
-  std::string devtools_user_agent =
-      RenderFrameDevToolsAgentHost::UserAgentOverride(frame_tree_node);
-  if (!devtools_user_agent.empty()) {
-    headers->SetHeader(net::HttpRequestHeaders::kUserAgent,
-                       devtools_user_agent);
-  }
+  // after setting the default user agent, or append throttling control header.
+  RenderFrameDevToolsAgentHost::AppendDevToolsHeaders(frame_tree_node, headers);
 
   // Tack an 'Upgrade-Insecure-Requests' header to outgoing navigational
   // requests, as described in
@@ -188,6 +185,12 @@ void AddAdditionalRequestHeaders(net::HttpRequestHeaders* headers,
   }
 
   headers->SetHeader(net::HttpRequestHeaders::kOrigin, origin.Serialize());
+}
+
+// Should match the definition of
+// blink::SchemeRegistry::ShouldTreatURLSchemeAsLegacy.
+bool ShouldTreatURLSchemeAsLegacy(const GURL& url) {
+  return url.SchemeIs(url::kFtpScheme) || url.SchemeIs(url::kGopherScheme);
 }
 
 }  // namespace
@@ -422,7 +425,7 @@ void NavigationRequest::BeginNavigation() {
     // Create a navigation handle so that the correct error code can be set on
     // it by OnRequestFailed().
     CreateNavigationHandle();
-    OnRequestFailed(false, net::ERR_BLOCKED_BY_CLIENT);
+    OnRequestFailed(false, net::ERR_BLOCKED_BY_CLIENT, base::nullopt, false);
 
     // DO NOT ADD CODE after this. The previous call to OnRequestFailed has
     // destroyed the NavigationRequest.
@@ -430,11 +433,13 @@ void NavigationRequest::BeginNavigation() {
   }
 
   if (CheckCredentialedSubresource() ==
-      CredentialedSubresourceCheckResult::BLOCK_REQUEST) {
+          CredentialedSubresourceCheckResult::BLOCK_REQUEST ||
+      CheckLegacyProtocolInSubresource() ==
+          LegacyProtocolInSubresourceCheckResult::BLOCK_REQUEST) {
     // Create a navigation handle so that the correct error code can be set on
     // it by OnRequestFailed().
     CreateNavigationHandle();
-    OnRequestFailed(false, net::ERR_ABORTED);
+    OnRequestFailed(false, net::ERR_ABORTED, base::nullopt, false);
 
     // DO NOT ADD CODE after this. The previous call to OnRequestFailed has
     // destroyed the NavigationRequest.
@@ -443,7 +448,7 @@ void NavigationRequest::BeginNavigation() {
 
   CreateNavigationHandle();
 
-  if (ShouldMakeNetworkRequestForURL(common_params_.url) &&
+  if (IsURLHandledByNetworkStack(common_params_.url) &&
       !navigation_handle_->IsSameDocument()) {
     // It's safe to use base::Unretained because this NavigationRequest owns
     // the NavigationHandle where the callback will be stored.
@@ -593,7 +598,7 @@ void NavigationRequest::OnRequestRedirected(
   // otherwise block.
   if (CheckContentSecurityPolicyFrameSrc(true /* is redirect */) ==
       CONTENT_SECURITY_POLICY_CHECK_FAILED) {
-    OnRequestFailed(false, net::ERR_BLOCKED_BY_CLIENT);
+    OnRequestFailed(false, net::ERR_BLOCKED_BY_CLIENT, base::nullopt, false);
 
     // DO NOT ADD CODE after this. The previous call to OnRequestFailed has
     // destroyed the NavigationRequest.
@@ -601,11 +606,10 @@ void NavigationRequest::OnRequestRedirected(
   }
 
   if (CheckCredentialedSubresource() ==
-      CredentialedSubresourceCheckResult::BLOCK_REQUEST) {
-    // Create a navigation handle so that the correct error code can be set on
-    // it by OnRequestFailed().
-    CreateNavigationHandle();
-    OnRequestFailed(false, net::ERR_ABORTED);
+          CredentialedSubresourceCheckResult::BLOCK_REQUEST ||
+      CheckLegacyProtocolInSubresource() ==
+          LegacyProtocolInSubresourceCheckResult::BLOCK_REQUEST) {
+    OnRequestFailed(false, net::ERR_ABORTED, base::nullopt, false);
 
     // DO NOT ADD CODE after this. The previous call to OnRequestFailed has
     // destroyed the NavigationRequest.
@@ -737,9 +741,15 @@ void NavigationRequest::OnResponseStarted(
                  base::Unretained(this)));
 }
 
-void NavigationRequest::OnRequestFailed(bool has_stale_copy_in_cache,
-                                        int net_error) {
+// TODO(crbug.com/751941): Pass certificate_error_info to navigation throttles.
+void NavigationRequest::OnRequestFailed(
+    bool has_stale_copy_in_cache,
+    int net_error,
+    const base::Optional<net::SSLInfo>& ssl_info,
+    bool should_ssl_errors_be_fatal) {
   DCHECK(state_ == STARTED || state_ == RESPONSE_STARTED);
+  // TODO(https://crbug.com/757633): Check that ssl_info.has_value() if
+  // net_error is a certificate error.
   TRACE_EVENT_ASYNC_STEP_INTO1("navigation", "NavigationRequest", this,
                                "OnRequestFailed", "error", net_error);
   state_ = FAILED;
@@ -835,10 +845,10 @@ void NavigationRequest::OnStartChecksComplete(
     // is no onbeforeunload handler or if a NavigationThrottle cancelled it,
     // then this could cause reentrancy into NavigationController. So use a
     // PostTask to avoid that.
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
-        base::Bind(&NavigationRequest::OnRequestFailed,
-                   weak_factory_.GetWeakPtr(), false, error_code));
+    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                            base::BindOnce(&NavigationRequest::OnRequestFailed,
+                                           weak_factory_.GetWeakPtr(), false,
+                                           error_code, base::nullopt, false));
 
     // DO NOT ADD CODE after this. The previous call to OnRequestFailed has
     // destroyed the NavigationRequest.
@@ -892,7 +902,7 @@ void NavigationRequest::OnStartChecksComplete(
   // 'Document::firstPartyForCookies()' in Blink, which walks the ancestor tree
   // and verifies that all origins are PSL-matches (and special-cases extension
   // URLs).
-  const GURL& first_party_for_cookies =
+  const GURL& site_for_cookies =
       frame_tree_node_->IsMainFrame()
           ? common_params_.url
           : frame_tree_node_->frame_tree()->root()->current_url();
@@ -914,7 +924,7 @@ void NavigationRequest::OnStartChecksComplete(
   loader_ = NavigationURLLoader::Create(
       browser_context->GetResourceContext(), partition,
       base::MakeUnique<NavigationRequestInfo>(
-          common_params_, begin_params_, first_party_for_cookies,
+          common_params_, begin_params_, site_for_cookies,
           frame_tree_node_->IsMainFrame(), parent_is_main_frame,
           IsSecureFrame(frame_tree_node_->parent()),
           frame_tree_node_->frame_tree_node_id(), is_for_guests_only,
@@ -933,7 +943,7 @@ void NavigationRequest::OnRedirectChecksComplete(
   if (result == NavigationThrottle::CANCEL_AND_IGNORE ||
       result == NavigationThrottle::CANCEL) {
     // TODO(clamy): distinguish between CANCEL and CANCEL_AND_IGNORE if needed.
-    OnRequestFailed(false, net::ERR_ABORTED);
+    OnRequestFailed(false, net::ERR_ABORTED, base::nullopt, false);
 
     // DO NOT ADD CODE after this. The previous call to OnRequestFailed has
     // destroyed the NavigationRequest.
@@ -942,7 +952,7 @@ void NavigationRequest::OnRedirectChecksComplete(
 
   if (result == NavigationThrottle::BLOCK_REQUEST ||
       result == NavigationThrottle::BLOCK_REQUEST_AND_COLLAPSE) {
-    OnRequestFailed(false, net::ERR_BLOCKED_BY_CLIENT);
+    OnRequestFailed(false, net::ERR_BLOCKED_BY_CLIENT, base::nullopt, false);
     // DO NOT ADD CODE after this. The previous call to OnRequestFailed has
     // destroyed the NavigationRequest.
     return;
@@ -966,7 +976,7 @@ void NavigationRequest::OnWillProcessResponseChecksComplete(
   if (result == NavigationThrottle::CANCEL_AND_IGNORE ||
       result == NavigationThrottle::CANCEL || !response_should_be_rendered_) {
     // TODO(clamy): distinguish between CANCEL and CANCEL_AND_IGNORE.
-    OnRequestFailed(false, net::ERR_ABORTED);
+    OnRequestFailed(false, net::ERR_ABORTED, base::nullopt, false);
 
     // DO NOT ADD CODE after this. The previous call to OnRequestFailed has
     // destroyed the NavigationRequest.
@@ -974,7 +984,7 @@ void NavigationRequest::OnWillProcessResponseChecksComplete(
   }
 
   if (result == NavigationThrottle::BLOCK_RESPONSE) {
-    OnRequestFailed(false, net::ERR_BLOCKED_BY_RESPONSE);
+    OnRequestFailed(false, net::ERR_BLOCKED_BY_RESPONSE, base::nullopt, false);
     // DO NOT ADD CODE after this. The previous call to OnRequestFailed has
     // destroyed the NavigationRequest.
     return;
@@ -987,7 +997,7 @@ void NavigationRequest::OnWillProcessResponseChecksComplete(
 }
 
 void NavigationRequest::CommitNavigation() {
-  DCHECK(response_ || !ShouldMakeNetworkRequestForURL(common_params_.url) ||
+  DCHECK(response_ || !IsURLHandledByNetworkStack(common_params_.url) ||
          navigation_handle_->IsSameDocument());
   DCHECK(!common_params_.url.SchemeIs(url::kJavaScriptScheme));
 
@@ -1102,13 +1112,41 @@ NavigationRequest::CheckCredentialedSubresource() const {
       "Subresource requests whose URLs contain embedded credentials (e.g. "
       "`https://user:pass@host/`) are blocked. See "
       "https://www.chromestatus.com/feature/5669008342777856 for more "
-      "details. ";
-  parent->AddMessageToConsole(CONSOLE_MESSAGE_LEVEL_INFO, console_message);
+      "details.";
+  parent->AddMessageToConsole(CONSOLE_MESSAGE_LEVEL_WARNING, console_message);
 
   if (!base::FeatureList::IsEnabled(features::kBlockCredentialedSubresources))
     return CredentialedSubresourceCheckResult::ALLOW_REQUEST;
 
   return CredentialedSubresourceCheckResult::BLOCK_REQUEST;
+}
+
+NavigationRequest::LegacyProtocolInSubresourceCheckResult
+NavigationRequest::CheckLegacyProtocolInSubresource() const {
+  // It only applies to subframes.
+  if (frame_tree_node_->IsMainFrame())
+    return LegacyProtocolInSubresourceCheckResult::ALLOW_REQUEST;
+
+  if (!ShouldTreatURLSchemeAsLegacy(common_params_.url))
+    return LegacyProtocolInSubresourceCheckResult::ALLOW_REQUEST;
+
+  FrameTreeNode* parent_ftn = frame_tree_node_->parent();
+  DCHECK(parent_ftn);
+  const GURL& parent_url = parent_ftn->current_url();
+  if (ShouldTreatURLSchemeAsLegacy(parent_url))
+    return LegacyProtocolInSubresourceCheckResult::ALLOW_REQUEST;
+
+  // Warn the user about the request being blocked.
+  RenderFrameHostImpl* parent = parent_ftn->current_frame_host();
+  DCHECK(parent);
+  const char* console_message =
+      "Subresource requests using legacy protocols (like `ftp:`) are blocked. "
+      "Please deliver web-accessible resources over modern protocols like "
+      "HTTPS. See https://www.chromestatus.com/feature/5709390967472128 for "
+      "details.";
+  parent->AddMessageToConsole(CONSOLE_MESSAGE_LEVEL_WARNING, console_message);
+
+  return LegacyProtocolInSubresourceCheckResult::BLOCK_REQUEST;
 }
 
 }  // namespace content

@@ -8,7 +8,6 @@
 
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
@@ -230,7 +229,7 @@ class TestSyncedTabDelegate : public SyncedTabDelegate {
           navs) {
     for (auto& entry : navs) {
       blocked_navigations_.push_back(
-          base::MakeUnique<sessions::SerializedNavigationEntry>(*entry));
+          std::make_unique<sessions::SerializedNavigationEntry>(*entry));
     }
   }
 
@@ -516,16 +515,16 @@ class SessionsSyncManagerTest : public testing::Test {
   SessionsSyncManagerTest() {}
 
   void SetUp() override {
-    local_device_ = base::MakeUnique<LocalDeviceInfoProviderMock>(
+    local_device_ = std::make_unique<LocalDeviceInfoProviderMock>(
         "cache_guid", "Wayne Gretzky's Hacking Box", "Chromium 10k",
         "Chrome 10k", sync_pb::SyncEnums_DeviceType_TYPE_LINUX, "device_id");
-    sync_client_ = base::MakeUnique<syncer::FakeSyncClient>();
+    sync_client_ = std::make_unique<syncer::FakeSyncClient>();
     sessions_client_shim_ =
-        base::MakeUnique<SyncSessionsClientShim>(&window_getter_);
+        std::make_unique<SyncSessionsClientShim>(&window_getter_);
     sync_prefs_ =
-        base::MakeUnique<syncer::SyncPrefs>(sync_client_->GetPrefService());
-    router_ = base::MakeUnique<DummyRouter>();
-    manager_ = base::MakeUnique<SessionsSyncManager>(
+        std::make_unique<syncer::SyncPrefs>(sync_client_->GetPrefService());
+    router_ = std::make_unique<DummyRouter>();
+    manager_ = std::make_unique<SessionsSyncManager>(
         sessions_client_shim(), sync_prefs_.get(), local_device_.get(),
         router_.get(),
         base::Bind(&SessionNotificationObserver::NotifyOfUpdate,
@@ -689,7 +688,7 @@ class SessionsSyncManagerTest : public testing::Test {
   TestSyncedTabDelegate* AddTab(SessionID::id_type window_id,
                                 const std::string& url,
                                 base::Time time) {
-    tabs_.push_back(base::MakeUnique<TestSyncedTabDelegate>());
+    tabs_.push_back(std::make_unique<TestSyncedTabDelegate>());
     for (auto& window : windows_) {
       if (window->GetSessionId() == window_id) {
         int tab_index = window->GetTabCount();
@@ -721,7 +720,7 @@ class SessionsSyncManagerTest : public testing::Test {
     tab_navigation.set_unique_id(time.ToInternalValue());
     tab_navigation.set_http_status_code(200);
 
-    auto entry = base::MakeUnique<sessions::SerializedNavigationEntry>(
+    auto entry = std::make_unique<sessions::SerializedNavigationEntry>(
         sessions::SerializedNavigationEntry::FromSyncData(0, tab_navigation));
     SerializedNavigationEntryTestHelper::SetTimestamp(time, entry.get());
     SerializedNavigationEntryTestHelper::SetTransitionType(transition,
@@ -745,13 +744,27 @@ class SessionsSyncManagerTest : public testing::Test {
     NavigateTab(delegate, url, base::Time::Now(), transition);
   }
 
+  void ReloadTab(TestSyncedTabDelegate* delegate, base::Time time) {
+    sessions::SerializedNavigationEntry old_entry;
+    delegate->GetSerializedNavigationAtIndex(delegate->GetCurrentEntryIndex(),
+                                             &old_entry);
+
+    auto new_entry =
+        std::make_unique<sessions::SerializedNavigationEntry>(old_entry);
+    SerializedNavigationEntryTestHelper::SetTimestamp(time, new_entry.get());
+
+    delegate->reset();
+    delegate->AppendEntry(std::move(new_entry));
+    router_->NotifyNav(delegate);
+  }
+
   void ResetWindows() {
     window_getter_.ClearSyncedWindowDelegates();
     windows_.clear();
   }
 
   TestSyncedWindowDelegate* AddWindow() {
-    windows_.push_back(base::MakeUnique<TestSyncedWindowDelegate>());
+    windows_.push_back(std::make_unique<TestSyncedWindowDelegate>());
     window_getter_.AddSyncedWindowDelegate(windows_.back().get());
     return windows_.back().get();
   }
@@ -893,12 +906,12 @@ TEST_F(SessionsSyncManagerTest, BlockedNavigations) {
   TestSyncedTabDelegate* tab =
       AddTab(AddWindow()->GetSessionId(), kFoo1, kTime1);
 
-  auto entry2 = base::MakeUnique<sessions::SerializedNavigationEntry>();
+  auto entry2 = std::make_unique<sessions::SerializedNavigationEntry>();
   GURL url2("http://blocked.com/foo");
   SerializedNavigationEntryTestHelper::SetVirtualURL(GURL(url2), entry2.get());
   SerializedNavigationEntryTestHelper::SetTimestamp(kTime2, entry2.get());
 
-  auto entry3 = base::MakeUnique<sessions::SerializedNavigationEntry>();
+  auto entry3 = std::make_unique<sessions::SerializedNavigationEntry>();
   GURL url3("http://evil.com");
   SerializedNavigationEntryTestHelper::SetVirtualURL(GURL(url3), entry3.get());
   SerializedNavigationEntryTestHelper::SetTimestamp(kTime3, entry3.get());
@@ -1040,7 +1053,7 @@ TEST_F(SessionsSyncManagerTest, PreserveTabbedDataCustomTab) {
   SessionID new_window_id;
   window->OverrideWindowId(new_window_id.id());
   std::unique_ptr<TestSyncedTabDelegate> custom_tab =
-      base::MakeUnique<TestSyncedTabDelegate>();
+      std::make_unique<TestSyncedTabDelegate>();
   NavigateTab(custom_tab.get(), kBar1);
   window->OverrideTabAt(0, custom_tab.get());
   InitWithSyncDataTakeOutput(ConvertToRemote(in), &out);
@@ -2619,6 +2632,82 @@ TEST_F(SessionsSyncManagerTest, TrackTasksOnLocalTabModified) {
   // navigation(1) is a subtask of navigation(0).
   EXPECT_EQ(tab.navigation(1).ancestor_task_id_size(), 1);
   EXPECT_EQ(tab.navigation(1).ancestor_task_id(0), tab.navigation(0).task_id());
+}
+
+void CaptureGlobalIdChange(int64_t* old_ptr,
+                           int64_t* new_ptr,
+                           int64_t old_id,
+                           int64_t new_id) {
+  *old_ptr = old_id;
+  *new_ptr = new_id;
+}
+
+// Tests that subscribers to AddGlobalIdChangeObserver are notified when a
+// global_id is noticed to have been changed.
+TEST_F(SessionsSyncManagerTest, AddGlobalIdChangeObserver) {
+  TestSyncedWindowDelegate* window = AddWindow();
+  SessionID::id_type window_id = window->GetSessionId();
+  SyncChangeList out;
+  InitWithSyncDataTakeOutput(SyncDataList(), &out);
+
+  int64_t old_id = -1;
+  int64_t new_id = -1;
+  manager()->AddGlobalIdChangeObserver(
+      base::Bind(&CaptureGlobalIdChange, &old_id, &new_id));
+
+  TestSyncedTabDelegate* tab = AddTab(window_id, kFoo1, kTime1);
+  EXPECT_EQ(-1, old_id);
+  EXPECT_EQ(-1, new_id);
+
+  ReloadTab(tab, kTime2);
+  EXPECT_EQ(kTime1.ToInternalValue(), old_id);
+  EXPECT_EQ(kTime2.ToInternalValue(), new_id);
+}
+
+// Tests that GetLatestGlobalId returns correct mappings for updated global_ids.
+TEST_F(SessionsSyncManagerTest, GetLatestGlobalId) {
+  TestSyncedWindowDelegate* window = AddWindow();
+  SessionID::id_type window_id = window->GetSessionId();
+  SyncChangeList out;
+  InitWithSyncDataTakeOutput(SyncDataList(), &out);
+
+  TestSyncedTabDelegate* tab = AddTab(window_id, kFoo1, kTime1);
+  ReloadTab(tab, kTime2);
+  ReloadTab(tab, kTime3);
+
+  EXPECT_EQ(kTime3.ToInternalValue(),
+            manager()->GetLatestGlobalId(kTime1.ToInternalValue()));
+  EXPECT_EQ(kTime3.ToInternalValue(),
+            manager()->GetLatestGlobalId(kTime2.ToInternalValue()));
+  EXPECT_EQ(kTime3.ToInternalValue(),
+            manager()->GetLatestGlobalId(kTime3.ToInternalValue()));
+  // kTime4 is not mapped, so itself should be returned.
+  EXPECT_EQ(kTime4.ToInternalValue(),
+            manager()->GetLatestGlobalId(kTime4.ToInternalValue()));
+}
+
+// Tests that the global_id mapping is eventually dropped after we reach out
+// threshold for the amount to remember.
+TEST_F(SessionsSyncManagerTest, GlobalIdMapperCleanup) {
+  TestSyncedWindowDelegate* window = AddWindow();
+  SessionID::id_type window_id = window->GetSessionId();
+  SyncChangeList out;
+  InitWithSyncDataTakeOutput(SyncDataList(), &out);
+
+  base::Time current_time = kTime1;
+  TestSyncedTabDelegate* tab = AddTab(window_id, kFoo1, current_time);
+
+  for (int i = 0; i < 105; i++) {
+    current_time =
+        base::Time::FromInternalValue(current_time.ToInternalValue() + 1);
+    ReloadTab(tab, current_time);
+  }
+
+  // Threshold is 100, kTime1 should be dropped, kTime1+10 should not.
+  EXPECT_EQ(kTime1.ToInternalValue(),
+            manager()->GetLatestGlobalId(kTime1.ToInternalValue()));
+  EXPECT_EQ(current_time.ToInternalValue(),
+            manager()->GetLatestGlobalId(10 + kTime1.ToInternalValue()));
 }
 
 }  // namespace sync_sessions

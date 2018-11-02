@@ -32,6 +32,7 @@
 #include "core/css/CSSPaintValue.h"
 #include "core/css/CSSPrimitiveValue.h"
 #include "core/css/CSSPropertyEquality.h"
+#include "core/css/properties/CSSPropertyAPI.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/layout/LayoutTheme.h"
 #include "core/layout/TextAutosizer.h"
@@ -57,10 +58,12 @@
 #include "platform/transforms/RotateTransformOperation.h"
 #include "platform/transforms/ScaleTransformOperation.h"
 #include "platform/transforms/TranslateTransformOperation.h"
+#include "platform/wtf/Assertions.h"
 #include "platform/wtf/MathExtras.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/SaturatedArithmetic.h"
 #include "platform/wtf/SizeAssertions.h"
+#include "public/platform/WebScrollBoundaryBehavior.h"
 
 namespace blink {
 
@@ -598,8 +601,7 @@ bool ComputedStyle::DiffNeedsPaintInvalidationObject(
     return true;
 
   if (!BorderVisuallyEqual(other) || !RadiiEqual(other) ||
-      (BackgroundInternal() != other.BackgroundInternal() ||
-       BackgroundColorInternal() != other.BackgroundColorInternal()))
+      !BackgroundVisuallyEqual(other))
     return true;
 
   if (PaintImagesInternal()) {
@@ -628,7 +630,7 @@ bool ComputedStyle::DiffNeedsPaintInvalidationObjectForPaintImage(
   for (CSSPropertyID property_id : *value->NativeInvalidationProperties()) {
     // TODO(ikilpatrick): remove IsInterpolableProperty check once
     // CSSPropertyEquality::PropertiesEqual correctly handles all properties.
-    if (!CSSPropertyMetadata::IsInterpolableProperty(property_id) ||
+    if (!CSSPropertyAPI::Get(property_id).IsInterpolable() ||
         !CSSPropertyEquality::PropertiesEqual(PropertyHandle(property_id),
                                               *this, other))
       return true;
@@ -800,6 +802,9 @@ bool ComputedStyle::HasWillChangeCompositingHint() const {
       case CSSPropertyOpacity:
       case CSSPropertyTransform:
       case CSSPropertyAliasWebkitTransform:
+      case CSSPropertyTranslate:
+      case CSSPropertyScale:
+      case CSSPropertyRotate:
       case CSSPropertyTop:
       case CSSPropertyLeft:
       case CSSPropertyBottom:
@@ -1351,10 +1356,10 @@ float ComputedStyle::FontSizeAdjust() const {
 bool ComputedStyle::HasFontSizeAdjust() const {
   return GetFontDescription().HasSizeAdjust();
 }
-FontWeight ComputedStyle::GetFontWeight() const {
+FontSelectionValue ComputedStyle::GetFontWeight() const {
   return GetFontDescription().Weight();
 }
-FontStretch ComputedStyle::GetFontStretch() const {
+FontSelectionValue ComputedStyle::GetFontStretch() const {
   return GetFontDescription().Stretch();
 }
 
@@ -1547,6 +1552,7 @@ bool ComputedStyle::HasIdenticalAscentDescentAndLineGap(
 const Length& ComputedStyle::SpecifiedLineHeight() const {
   return LineHeightInternal();
 }
+
 Length ComputedStyle::LineHeight() const {
   const Length& lh = LineHeightInternal();
   // Unlike getFontDescription().computedSize() and hence fontSize(), this is
@@ -1589,10 +1595,12 @@ LayoutUnit ComputedStyle::ComputedLineHeightAsFixed() const {
   if (lh.IsNegative() && GetFont().PrimaryFont())
     return GetFont().PrimaryFont()->GetFontMetrics().FixedLineSpacing();
 
-  if (lh.IsPercentOrCalc())
-    return MinimumValueForLength(lh, ComputedFontSizeAsFixed());
+  if (lh.IsPercentOrCalc()) {
+    return LayoutUnit(
+        MinimumValueForLength(lh, ComputedFontSizeAsFixed()).ToInt());
+  }
 
-  return LayoutUnit::FromFloatRound(lh.Value());
+  return LayoutUnit(floorf(lh.Value()));
 }
 
 void ComputedStyle::SetWordSpacing(float word_spacing) {
@@ -1898,7 +1906,7 @@ int ComputedStyle::OutlineOutsetExtent() const {
     return GraphicsContext::FocusRingOutsetExtent(
         OutlineOffset(), std::ceil(GetOutlineStrokeWidthForFocusRing()));
   }
-  return std::max(0, SaturatedAddition(OutlineWidth(), OutlineOffset()));
+  return ClampAdd(OutlineWidth(), OutlineOffset()).Max(0);
 }
 
 float ComputedStyle::GetOutlineStrokeWidthForFocusRing() const {
@@ -2056,5 +2064,13 @@ int AdjustForAbsoluteZoom(int value, float zoom_factor) {
 
   return RoundForImpreciseConversion<int>(fvalue / zoom_factor);
 }
+
+STATIC_ASSERT_ENUM(WebScrollBoundaryBehavior::kScrollBoundaryBehaviorTypeAuto,
+                   EScrollBoundaryBehavior::kAuto);
+STATIC_ASSERT_ENUM(
+    WebScrollBoundaryBehavior::kScrollBoundaryBehaviorTypeContain,
+    EScrollBoundaryBehavior::kContain);
+STATIC_ASSERT_ENUM(WebScrollBoundaryBehavior::kScrollBoundaryBehaviorTypeNone,
+                   EScrollBoundaryBehavior::kNone);
 
 }  // namespace blink

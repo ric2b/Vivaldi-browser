@@ -14,6 +14,7 @@
 @protocol ContentSuggestionsCommands;
 @protocol ContentSuggestionsDataSource;
 @protocol ContentSuggestionsHeaderSynchronizing;
+@protocol ContentSuggestionsMetricsRecording;
 @protocol ContentSuggestionsViewControllerAudience;
 @protocol ContentSuggestionsViewControllerDelegate;
 @protocol OverscrollActionsControllerDelegate;
@@ -24,7 +25,6 @@
     : CollectionViewController<ContentSuggestionsCollectionControlling>
 
 - (instancetype)initWithStyle:(CollectionViewControllerStyle)style
-                   dataSource:(id<ContentSuggestionsDataSource>)dataSource
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)initWithLayout:(UICollectionViewLayout*)layout
@@ -45,6 +45,10 @@
 // Delegate for the overscroll actions.
 @property(nonatomic, weak) id<OverscrollActionsControllerDelegate>
     overscrollDelegate;
+@property(nonatomic, weak) id<ContentSuggestionsMetricsRecording>
+    metricsRecorder;
+
+- (void)setDataSource:(id<ContentSuggestionsDataSource>)dataSource;
 
 // Removes the entry at |indexPath|, from the collection and its model.
 - (void)dismissEntryAtIndexPath:(NSIndexPath*)indexPath;
@@ -55,6 +59,16 @@
 - (void)addSuggestions:
             (NSArray<CollectionViewItem<SuggestedContent>*>*)suggestions
          toSectionInfo:(ContentSuggestionsSectionInformation*)sectionInfo;
+// Returns the number of suggestions displayed above this |section|.
+- (NSInteger)numberOfSuggestionsAbove:(NSInteger)section;
+// Returns the number of sections containing suggestions displayed above this
+// |section|.
+- (NSInteger)numberOfSectionsAbove:(NSInteger)section;
+// Updates the constraints of the collection.
+- (void)updateConstraints;
+
+// Returns the accessibility identifier of the collection.
++ (NSString*)collectionAccessibilityIdentifier;
 
 @end
 

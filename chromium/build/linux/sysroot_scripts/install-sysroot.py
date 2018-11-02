@@ -32,8 +32,7 @@ import urllib2
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(os.path.dirname(SCRIPT_DIR)))
 import detect_host_arch
-import gyp_chromium
-import gyp_environment
+import gn_chromium
 
 
 URL_PREFIX = 'https://commondatastorage.googleapis.com'
@@ -87,10 +86,9 @@ def DetectTargetArch():
   """
   # TODO(agrieve): Make this script not depend on GYP_DEFINES so that it works
   #     with GN as well.
-  gyp_environment.SetEnvironment()
-  supplemental_includes = gyp_chromium.GetSupplementalFiles()
-  gyp_defines = gyp_chromium.GetGypVars(supplemental_includes)
-  target_arch = gyp_defines.get('target_arch')
+  supplemental_includes = gn_chromium.GetSupplementalFiles()
+  gn_defines = gn_chromium.GetGNVars(supplemental_includes)
+  target_arch = gn_defines.get('target_cpu')
   if target_arch == 'x64':
     return 'amd64'
   if target_arch == 'ia32':

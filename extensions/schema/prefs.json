@@ -1,0 +1,166 @@
+// Copyright (c) 2017 Vivaldi Technologies AS. All rights reserved
+
+[
+  {
+    "namespace": "prefs",
+    "description": "Use the <code>vivaldi.prefs</code> to change preferences.",
+    "types": [
+      {
+        "id": "PreferenceValue",
+        "type": "object",
+        "description": "Preference with its current value.",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "The preference path"
+          },
+          "value": {
+            "type": "any",
+            "description": "Preference value."
+          }
+        }
+      },
+      {
+        "id": "PreferenceValueAndDefault",
+        "type": "object",
+        "description": "Preference with its current value and default value.",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "The preference path"
+          },
+          "value": {
+            "type": "any",
+            "optional": "true",
+            "description": "Preference value."
+          },
+          "default_value": {
+            "type": "any",
+            "description": "Preference default value."
+          }
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "toggle",
+        "type": "function",
+        "description": "Toggles the value of a boolean preference.",
+        "parameters": [
+          {
+            "name": "path",
+            "type": "string",
+            "description": "The preference path"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "description": "Returns the value of the preference after toggling.",
+            "parameters": [
+              {
+                "name": "newValue",
+                "type": "boolean"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "get",
+        "type": "function",
+        "description": "Get a specific named preference value.",
+        "parameters": [
+          {
+            "name": "path",
+            "type": "string",
+            "description": "The preference path"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "description": "Returns the value of the preference.",
+            "parameters": [
+              {
+                "optional": "true",
+                "name": "value",
+                "type": "any"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "set",
+        "type": "function",
+        "description": "Set a specific preference.",
+        "parameters": [
+          {
+            "name": "newValue",
+            "$ref": "PreferenceValue"
+          }
+        ]
+      },
+      {
+        "name": "reset",
+        "description": "Reset a preference to its default value.",
+        "parameters": [
+          {
+            "name": "path",
+            "type": "string",
+            "description": "The preference path"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "description": "Returns the value of the preference after it's been reset.",
+            "parameters": [
+              {
+                "name": "value",
+                "type": "any"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "getForCache",
+        "type": "function",
+        "description": "Get all preferences to be cached on the JS side with one call. Only changes to these will be reported by onChanged",
+        "parameters": [
+          {
+            "name": "paths",
+            "type": "array",
+            "description": "Which preferences are needed",
+            "items": { "type": "string" }
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "results",
+                "type": "array",
+                "items": { "$ref": "PreferenceValueAndDefault" }
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "onChanged",
+        "type": "function",
+        "description": "Fired when a preference value has changed.",
+        "parameters": [
+          {
+            "name": "newValue",
+            "description": "Information about the changed preference.",
+            "$ref": "PreferenceValue"
+          }
+        ]
+      }
+    ]
+  }
+]

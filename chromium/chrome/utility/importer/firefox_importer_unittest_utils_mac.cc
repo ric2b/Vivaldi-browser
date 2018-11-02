@@ -57,13 +57,10 @@ base::Process LaunchNSSDecrypterChildProcess(
   // why we need this.
   base::LaunchOptions options;
   options.environ["DYLD_FALLBACK_LIBRARY_PATH"] = nss_path.value();
-
-  base::FileHandleMappingVector fds_to_map;
-  fds_to_map.push_back(std::pair<int, int>(
+  options.fds_to_remap.push_back(std::pair<int, int>(
       mojo_handle.get().handle,
       kMojoIPCChannel + base::GlobalDescriptors::kBaseDescriptor));
 
-  options.fds_to_remap = &fds_to_map;
   return base::LaunchProcess(cl.argv(), options);
 }
 
@@ -88,14 +85,14 @@ class FFDecryptorServerChannelListener : public IPC::Listener {
     DCHECK(!got_result);
     result_bool = result;
     got_result = true;
-    base::MessageLoop::current()->QuitWhenIdle();
+    base::RunLoop::QuitCurrentWhenIdleDeprecated();
   }
 
   void OnDecryptedTextResponse(const base::string16& decrypted_text) {
     DCHECK(!got_result);
     result_string = decrypted_text;
     got_result = true;
-    base::MessageLoop::current()->QuitWhenIdle();
+    base::RunLoop::QuitCurrentWhenIdleDeprecated();
   }
 
   void OnParseSignonsResponse(
@@ -103,7 +100,7 @@ class FFDecryptorServerChannelListener : public IPC::Listener {
     DCHECK(!got_result);
     result_vector = parsed_vector;
     got_result = true;
-    base::MessageLoop::current()->QuitWhenIdle();
+    base::RunLoop::QuitCurrentWhenIdleDeprecated();
   }
 
   void QuitClient() {
@@ -125,7 +122,7 @@ class FFDecryptorServerChannelListener : public IPC::Listener {
   // If an error occured, just kill the message Loop.
   void OnChannelError() override {
     got_result = false;
-    base::MessageLoop::current()->QuitWhenIdle();
+    base::RunLoop::QuitCurrentWhenIdleDeprecated();
   }
 
   // Results of IPC calls.
@@ -256,7 +253,7 @@ class FFDecryptorClientChannelListener : public IPC::Listener {
     sender_->Send(new Msg_ParseSignons_Response(forms));
   }
 
-  void OnQuitRequest() { base::MessageLoop::current()->QuitWhenIdle(); }
+  void OnQuitRequest() { base::RunLoop::QuitCurrentWhenIdleDeprecated(); }
 
   bool OnMessageReceived(const IPC::Message& msg) override {
     bool handled = true;
@@ -271,7 +268,7 @@ class FFDecryptorClientChannelListener : public IPC::Listener {
   }
 
   void OnChannelError() override {
-    base::MessageLoop::current()->QuitWhenIdle();
+    base::RunLoop::QuitCurrentWhenIdleDeprecated();
   }
 
  private:

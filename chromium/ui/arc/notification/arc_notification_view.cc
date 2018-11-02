@@ -14,6 +14,7 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/message_center/message_center_style.h"
 #include "ui/message_center/views/message_center_controller.h"
+#include "ui/message_center/views/notification_control_buttons_view.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/image_view.h"
@@ -44,6 +45,8 @@ ArcNotificationView::ArcNotificationView(
         contents_view_->background()->get_color());
   }
 
+  UpdateControlButtonsVisibilityWithNotification(notification);
+
   focus_painter_ = views::Painter::CreateSolidFocusPainter(
       message_center::kFocusBorderColor, gfx::Insets(0, 1, 3, 2));
 }
@@ -56,6 +59,13 @@ void ArcNotificationView::OnContentFocused() {
 
 void ArcNotificationView::OnContentBlured() {
   SchedulePaint();
+}
+
+void ArcNotificationView::UpdateWithNotification(
+    const message_center::Notification& notification) {
+  message_center::MessageView::UpdateWithNotification(notification);
+
+  UpdateControlButtonsVisibilityWithNotification(notification);
 }
 
 void ArcNotificationView::SetDrawBackgroundAsActive(bool active) {
@@ -96,6 +106,17 @@ ArcNotificationView::GetControlButtonsView() const {
   return contents_view_delegate_->GetControlButtonsView();
 }
 
+bool ArcNotificationView::IsExpanded() const {
+  if (contents_view_delegate_)
+    return contents_view_delegate_->IsExpanded();
+  return false;
+}
+
+void ArcNotificationView::SetExpanded(bool expanded) {
+  if (contents_view_delegate_)
+    contents_view_delegate_->SetExpanded(expanded);
+}
+
 void ArcNotificationView::OnSlideChanged() {
   if (contents_view_delegate_)
     contents_view_delegate_->OnSlideChanged();
@@ -103,17 +124,17 @@ void ArcNotificationView::OnSlideChanged() {
 
 gfx::Size ArcNotificationView::CalculatePreferredSize() const {
   const gfx::Insets insets = GetInsets();
-  const int contents_width =
-      message_center::kNotificationWidth - insets.width();
+  const int contents_width = message_center::kNotificationWidth;
   const int contents_height = contents_view_->GetHeightForWidth(contents_width);
-  return gfx::Size(message_center::kNotificationWidth,
+  return gfx::Size(contents_width + insets.width(),
                    contents_height + insets.height());
 }
 
 void ArcNotificationView::Layout() {
-  message_center::MessageView::Layout();
-
+  // Setting the bounds before calling the parent to prevent double Layout.
   contents_view_->SetBoundsRect(GetContentsBounds());
+
+  message_center::MessageView::Layout();
 
   // If the content view claims focus, defer focus handling to the content view.
   if (contents_view_->IsFocusable())
@@ -174,6 +195,20 @@ bool ArcNotificationView::HandleAccessibleAction(
   if (contents_view_)
     return contents_view_->HandleAccessibleAction(action);
   return false;
+}
+
+// TODO(yoshiki): move this to MessageView and share the code among
+// NotificationView and NotificationViewMD.
+void ArcNotificationView::UpdateControlButtonsVisibilityWithNotification(
+    const message_center::Notification& notification) {
+  if (!GetControlButtonsView())
+    return;
+
+  GetControlButtonsView()->ShowSettingsButton(
+      notification.delegate() &&
+      notification.delegate()->ShouldDisplaySettingsButton());
+  GetControlButtonsView()->ShowCloseButton(!GetPinned());
+  UpdateControlButtonsVisibility();
 }
 
 }  // namespace message_center

@@ -56,6 +56,8 @@ enum AcceptTransformEvent {
   COMPRESSED_VIDEO_REQUESTED = 5,
   IDENTITY_TRANSFORM_REQUESTED = 6,
   IDENTITY_TRANSFORM_RECEIVED = 7,
+  COMPRESSED_VIDEO_RECEIVED = 8,
+  UNKNOWN_TRANSFORM_RECEIVED = 9,
   ACCEPT_TRANSFORM_EVENT_BOUNDARY
 };
 
@@ -206,6 +208,7 @@ void RecordAcceptTransformSentUMA(
     case TRANSFORM_NONE:
       break;
     case TRANSFORM_PAGE_POLICIES_EMPTY_IMAGE:
+    case TRANSFORM_UNKNOWN:
       NOTREACHED();
       break;
   }
@@ -218,6 +221,9 @@ void RecordAcceptTransformReceivedUMA(const net::URLRequest& request) {
   }
 
   switch (ParseResponseTransform(*response_headers)) {
+    case TRANSFORM_UNKNOWN:
+      RecordAcceptTransformEvent(UNKNOWN_TRANSFORM_RECEIVED);
+      break;
     case TRANSFORM_LITE_PAGE:
       RecordAcceptTransformEvent(LITE_PAGE_TRANSFORM_RECEIVED);
       break;
@@ -230,11 +236,10 @@ void RecordAcceptTransformReceivedUMA(const net::URLRequest& request) {
     case TRANSFORM_IDENTITY:
       RecordAcceptTransformEvent(IDENTITY_TRANSFORM_RECEIVED);
       break;
-    case TRANSFORM_NONE:
-      break;
     case TRANSFORM_COMPRESSED_VIDEO:
-      // Compressed video response would instead be a redirect to resource.
-      NOTREACHED();
+      RecordAcceptTransformEvent(COMPRESSED_VIDEO_RECEIVED);
+      break;
+    case TRANSFORM_NONE:
       break;
   }
 }
@@ -264,6 +269,17 @@ void VerifyHttpRequestHeaders(bool via_chrome_proxy,
     DCHECK(!headers.HasHeader(chrome_proxy_accept_transform_header()));
     DCHECK(!headers.HasHeader(chrome_proxy_ect_header()));
   }
+}
+
+// If the response is the entire resource, then the renderer won't show a
+// placeholder. This should match the behavior in blink::ImageResource.
+bool IsEntireResource(const net::HttpResponseHeaders* response_headers) {
+  if (!response_headers || response_headers->response_code() != 206)
+    return true;
+
+  int64_t first, last, length;
+  return response_headers->GetContentRangeFor206(&first, &last, &length) &&
+         first == 0 && last + 1 == length;
 }
 
 }  // namespace
@@ -335,11 +351,7 @@ void DataReductionProxyNetworkDelegate::OnBeforeStartTransactionInternal(
 
   if (data_reduction_proxy_io_data_->lofi_decider()) {
     data_reduction_proxy_io_data_->lofi_decider()
-        ->MaybeSetAcceptTransformHeader(
-            *request,
-            !params::IsBlackListEnabledForServerPreviews() &&
-                data_reduction_proxy_config_->lofi_off(),
-            headers);
+        ->MaybeSetAcceptTransformHeader(*request, headers);
   }
 
   MaybeAddChromeProxyECTHeader(headers, *request);
@@ -494,12 +506,18 @@ void DataReductionProxyNetworkDelegate::OnCompletedInternal(
   net::HttpRequestHeaders request_headers;
   bool server_lofi = request->response_headers() &&
                      IsEmptyImagePreview(*(request->response_headers()));
-  bool client_lofi =
+  bool will_show_client_lofi_placeholder =
       data_reduction_proxy_io_data_ &&
       data_reduction_proxy_io_data_->lofi_decider() &&
       data_reduction_proxy_io_data_->lofi_decider()->IsClientLoFiImageRequest(
-          *request);
-  if ((server_lofi || client_lofi) && data_reduction_proxy_io_data_ &&
+          *request) &&
+      // If the response contains the entire resource, then the renderer won't
+      // show a placeholder for this image, so don't bother triggering an
+      // infobar.
+      !IsEntireResource(request->response_headers());
+
+  if ((server_lofi || will_show_client_lofi_placeholder) &&
+      data_reduction_proxy_io_data_ &&
       data_reduction_proxy_io_data_->lofi_ui_service()) {
     data_reduction_proxy_io_data_->lofi_ui_service()->OnLoFiReponseReceived(
         *request);

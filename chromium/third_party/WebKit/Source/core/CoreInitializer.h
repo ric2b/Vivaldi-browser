@@ -36,24 +36,95 @@
 
 namespace blink {
 
+class Document;
+class HTMLLinkElement;
+class HTMLMediaElement;
+class InspectedFrames;
+class InspectorDOMAgent;
+class InspectorSession;
+class LinkResource;
+class LocalFrame;
+class MediaControls;
+class Page;
+class Settings;
+class ShadowRoot;
+class WebCredentialManagerClient;
+class WebFrameClient;
+class WebLayerTreeView;
+class WebMediaPlayer;
+class WebMediaPlayerClient;
+class WebMediaPlayerSource;
+class WebRemotePlaybackClient;
+class WebViewClient;
+class WorkerClients;
+
 class CORE_EXPORT CoreInitializer {
   USING_FAST_MALLOC(CoreInitializer);
   WTF_MAKE_NONCOPYABLE(CoreInitializer);
 
  public:
-  CoreInitializer() : is_initialized_(false) {}
+  // Initialize must be called before GetInstance.
+  static CoreInitializer& GetInstance() {
+    DCHECK(instance_);
+    return *instance_;
+  }
+
   virtual ~CoreInitializer() {}
 
   // Should be called by clients before trying to create Frames.
   virtual void Initialize();
 
+  // Methods defined in CoreInitializer and implemented by ModulesInitializer to
+  // bypass the inverted dependency from core/ to modules/.
+  // Mojo Interfaces registered with LocalFrame
+  virtual void InitLocalFrame(LocalFrame&) const = 0;
+  // Supplements installed on a frame using ChromeClient
+  virtual void InstallSupplements(LocalFrame&) const = 0;
+  virtual void ProvideLocalFileSystemToWorker(WorkerClients&) const = 0;
+  virtual void ProvideIndexedDBClientToWorker(WorkerClients&) const = 0;
+  virtual MediaControls* CreateMediaControls(HTMLMediaElement&,
+                                             ShadowRoot&) const = 0;
+  // Session Initializers for Inspector Agents in modules/
+  // These methods typically create agents and append them to a session.
+  // TODO(nverne): remove this and restore to WebDevToolsAgentImpl once that
+  // class is a controller/ crbug:731490
+  virtual void InitInspectorAgentSession(InspectorSession*,
+                                         bool,
+                                         InspectorDOMAgent*,
+                                         InspectedFrames*,
+                                         Page*) const = 0;
+  virtual LinkResource* CreateServiceWorkerLinkResource(
+      HTMLLinkElement*) const = 0;
+
+  virtual void OnClearWindowObjectInMainWorld(Document&,
+                                              const Settings&) const = 0;
+
+  virtual std::unique_ptr<WebMediaPlayer> CreateWebMediaPlayer(
+      WebFrameClient*,
+      HTMLMediaElement&,
+      const WebMediaPlayerSource&,
+      WebMediaPlayerClient*,
+      WebLayerTreeView*) const = 0;
+
+  virtual WebRemotePlaybackClient* CreateWebRemotePlaybackClient(
+      HTMLMediaElement&) const = 0;
+
+  virtual void ProvideCredentialManagerClient(
+      Page&,
+      WebCredentialManagerClient*) const = 0;
+
+  virtual void ProvideModulesToPage(Page&, WebViewClient*) const = 0;
+  virtual void ForceNextWebGLContextCreationToFail() const = 0;
+
+  virtual void CollectAllGarbageForAnimationWorklet() const = 0;
+
  protected:
-  bool IsInitialized() const { return is_initialized_; }
+  // CoreInitializer is only instantiated by subclass ModulesInitializer.
+  CoreInitializer() {}
 
  private:
+  static CoreInitializer* instance_;
   void RegisterEventFactory();
-
-  bool is_initialized_;
 };
 
 }  // namespace blink

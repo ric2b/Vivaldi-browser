@@ -38,12 +38,12 @@ class V8TestInterfaceEventInitConstructor {
   CORE_EXPORT static TestInterfaceEventInitConstructor* toImplWithTypeCheck(v8::Isolate*, v8::Local<v8::Value>);
   CORE_EXPORT static const WrapperTypeInfo wrapperTypeInfo;
   static void Trace(Visitor* visitor, ScriptWrappable* scriptWrappable) {
-    visitor->Trace(scriptWrappable->ToImpl<TestInterfaceEventInitConstructor>());
+    visitor->TraceFromGeneratedCode(scriptWrappable->ToImpl<TestInterfaceEventInitConstructor>());
   }
-  static void TraceWrappers(WrapperVisitor* visitor, ScriptWrappable* scriptWrappable) {
-    visitor->TraceWrappersWithManualWriteBarrier(scriptWrappable->ToImpl<TestInterfaceEventInitConstructor>());
+  static void TraceWrappers(ScriptWrappableVisitor* visitor, ScriptWrappable* scriptWrappable) {
+    visitor->TraceWrappersFromGeneratedCode(scriptWrappable->ToImpl<TestInterfaceEventInitConstructor>());
   }
-  static const int internalFieldCount = kV8DefaultWrapperInternalFieldCount + 0;
+  static const int internalFieldCount = kV8DefaultWrapperInternalFieldCount;
 
   // Callback functions
   CORE_EXPORT static void constructorCallback(const v8::FunctionCallbackInfo<v8::Value>&);

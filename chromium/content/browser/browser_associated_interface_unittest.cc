@@ -106,7 +106,7 @@ class TestDriverMessageFilter
   void RequestQuit(RequestQuitCallback callback) override {
     EXPECT_EQ(kNumTestMessages, message_count_);
     std::move(callback).Run();
-    base::MessageLoop::current()->QuitWhenIdle();
+    base::RunLoop::QuitCurrentWhenIdleDeprecated();
   }
 
   std::string next_expected_string_;
@@ -119,7 +119,7 @@ class TestClientRunner {
       : client_thread_("Test client") {
     client_thread_.Start();
     client_thread_.task_runner()->PostTask(
-        FROM_HERE, base::Bind(&RunTestClient, base::Passed(&pipe)));
+        FROM_HERE, base::BindOnce(&RunTestClient, base::Passed(&pipe)));
   }
 
   ~TestClientRunner() {

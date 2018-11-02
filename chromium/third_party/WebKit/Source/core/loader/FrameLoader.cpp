@@ -94,12 +94,15 @@
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/weborigin/SecurityPolicy.h"
 #include "platform/weborigin/Suborigin.h"
+#include "platform/wtf/Assertions.h"
 #include "platform/wtf/AutoReset.h"
 #include "platform/wtf/text/CString.h"
 #include "platform/wtf/text/WTFString.h"
 #include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebURLRequest.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerNetworkProvider.h"
+#include "public/web/WebFrameLoadType.h"
+#include "public/web/WebHistoryItem.h"
 
 using blink::WebURLRequest;
 
@@ -120,23 +123,6 @@ bool IsReloadLoadType(FrameLoadType type) {
 static bool NeedsHistoryItemRestore(FrameLoadType type) {
   // FrameLoadtypeInitialHistoryLoad is intentionally excluded.
   return type == kFrameLoadTypeBackForward || IsReloadLoadType(type);
-}
-
-static void CheckForLegacyProtocolInSubresource(
-    const ResourceRequest& resource_request,
-    Document* document) {
-  if (resource_request.GetFrameType() == WebURLRequest::kFrameTypeTopLevel)
-    return;
-  if (!SchemeRegistry::ShouldTreatURLSchemeAsLegacy(
-          resource_request.Url().Protocol())) {
-    return;
-  }
-  if (SchemeRegistry::ShouldTreatURLSchemeAsLegacy(
-          document->GetSecurityOrigin()->Protocol())) {
-    return;
-  }
-  Deprecation::CountDeprecation(
-      document, WebFeature::kLegacyProtocolEmbeddedAsSubresource);
 }
 
 static NavigationPolicy MaybeCheckCSP(
@@ -306,7 +292,7 @@ void FrameLoader::Init() {
   // Suppress finish notifications for initial empty documents, since they don't
   // generate start notifications.
   document_loader_->SetSentDidFinishLoad();
-  if (frame_->GetPage()->Suspended())
+  if (frame_->GetPage()->Paused())
     SetDefersLoading(true);
 
   TakeObjectSnapshot();
@@ -395,20 +381,21 @@ void FrameLoader::DidExplicitOpen() {
 void FrameLoader::ReplaceDocumentWhileExecutingJavaScriptURL(
     const String& source,
     Document* owner_document) {
-  if (!frame_->GetDocument()->Loader() ||
+  DocumentLoader* document_loader = frame_->GetDocument()->Loader();
+
+  if (!document_loader ||
       frame_->GetDocument()->PageDismissalEventBeingDispatched() !=
           Document::kNoDismissal)
     return;
 
-  DocumentLoader* document_loader(frame_->GetDocument()->Loader());
-
   UseCounter::Count(*frame_->GetDocument(),
                     WebFeature::kReplaceDocumentViaJavaScriptURL);
 
-  // Prepare a DocumentInit before clearing the frame, because it may need to
-  // inherit an aliased security context.
-  DocumentInit init(owner_document, frame_->GetDocument()->Url(), frame_);
-  init.WithNewRegistrationContext();
+  const KURL& url = frame_->GetDocument()->Url();
+
+  // Compute this before clearing the frame, because it may need to inherit an
+  // aliased security context.
+  bool should_reuse_default_view = frame_->ShouldReuseDefaultView(url);
 
   StopAllLoaders();
   // Don't allow any new child frames to load in this frame: attaching a new
@@ -424,7 +411,8 @@ void FrameLoader::ReplaceDocumentWhileExecutingJavaScriptURL(
     return;
 
   Client()->TransitionToCommittedForNewPage();
-  document_loader->ReplaceDocumentWhileExecutingJavaScriptURL(init, source);
+  document_loader->ReplaceDocumentWhileExecutingJavaScriptURL(
+      url, owner_document, should_reuse_default_view, source);
 }
 
 void FrameLoader::FinishedParsing() {
@@ -515,7 +503,7 @@ bool FrameLoader::AllowPlugins(ReasonForCallingAllowPlugins reason) {
 void FrameLoader::UpdateForSameDocumentNavigation(
     const KURL& new_url,
     SameDocumentNavigationSource same_document_navigation_source,
-    PassRefPtr<SerializedScriptValue> data,
+    RefPtr<SerializedScriptValue> data,
     HistoryScrollRestorationType scroll_restoration_type,
     FrameLoadType type,
     Document* initiating_document) {
@@ -857,7 +845,8 @@ void FrameLoader::Load(const FrameLoadRequest& passed_request,
   Frame* target_frame = request.Form()
                             ? nullptr
                             : frame_->FindFrameForNavigation(
-                                  AtomicString(request.FrameName()), *frame_);
+                                  AtomicString(request.FrameName()), *frame_,
+                                  request.GetResourceRequest().Url());
 
   NavigationPolicy policy = NavigationPolicyForRequest(request);
   if (target_frame && target_frame != frame_ &&
@@ -1066,8 +1055,8 @@ void FrameLoader::CommitProvisionalLoad() {
   // Check if the destination page is allowed to access the previous page's
   // timing information.
   if (frame_->GetDocument()) {
-    RefPtr<SecurityOrigin> security_origin = SecurityOrigin::Create(
-        provisional_document_loader_->GetRequest().Url());
+    RefPtr<SecurityOrigin> security_origin =
+        SecurityOrigin::Create(provisional_document_loader_->Url());
     provisional_document_loader_->GetTiming()
         .SetHasSameOriginAsPreviousDocument(
             security_origin->CanRequest(frame_->GetDocument()->Url()));
@@ -1364,21 +1353,11 @@ NavigationPolicy FrameLoader::ShouldContinueForNavigationPolicy(
       policy == kNavigationPolicyHandledByClient ||
       policy == kNavigationPolicyHandledByClientForInitialHistory) {
     return policy;
-  }
-
-  // TODO(csharrison,dcheng): The common idiom for the embedder is to process
-  // the navigation in DecidePolicyForNavigation and pass down
-  // kNavigationPolicyIgnore if the embedder wants to handle the navigation.
-  // This has become more common with PlzNavigate.
-  //
-  // It would be nice to standarize that idiom in the API and potentially remove
-  // LoadURLExternally. Additionally, we may be able to move the download logic
-  // here to that method as well.
-  if (policy == kNavigationPolicyDownload) {
+  } else if (policy == kNavigationPolicyDownload) {
+    // TODO(csharrison): Could probably move this logic into
+    // DecidePolicyForNavigation and handle it by the embedder, or deal with it
+    // earlier.
     Client()->DownloadURL(request, String());
-  } else {
-    Client()->LoadURLExternally(request, policy, triggering_event_info,
-                                replaces_current_history_item);
   }
   return kNavigationPolicyIgnore;
 }
@@ -1525,7 +1504,7 @@ void FrameLoader::StartLoad(FrameLoadRequest& frame_load_request,
     Client()->DispatchWillSubmitForm(frame_load_request.Form());
 
   provisional_document_loader_->AppendRedirect(
-      provisional_document_loader_->GetRequest().Url());
+      provisional_document_loader_->Url());
 
   if (IsBackForwardLoadType(type)) {
     DCHECK(history_item);
@@ -1549,13 +1528,6 @@ void FrameLoader::StartLoad(FrameLoadRequest& frame_load_request,
     // is available while sending the request.
     probe::frameClearedScheduledClientNavigation(frame_);
   } else {
-    // PlzNavigate
-    // Check for usage of legacy schemes now. Unsupported schemes will be
-    // rewritten by the client, so the FrameFetchContext will not be able to
-    // check for those when the navigation commits.
-    if (navigation_policy == kNavigationPolicyHandledByClient)
-      CheckForLegacyProtocolInSubresource(resource_request,
-                                          frame_->GetDocument());
     probe::frameScheduledClientNavigation(frame_);
   }
 
@@ -1779,5 +1751,25 @@ DocumentLoader* FrameLoader::CreateDocumentLoader(
   loader->SetReplacesCurrentHistoryItem(replace_current_item);
   return loader;
 }
+
+STATIC_ASSERT_ENUM(kWebHistorySameDocumentLoad, kHistorySameDocumentLoad);
+STATIC_ASSERT_ENUM(kWebHistoryDifferentDocumentLoad,
+                   kHistoryDifferentDocumentLoad);
+
+STATIC_ASSERT_ENUM(kWebHistoryScrollRestorationManual,
+                   kScrollRestorationManual);
+STATIC_ASSERT_ENUM(kWebHistoryScrollRestorationAuto, kScrollRestorationAuto);
+
+STATIC_ASSERT_ENUM(WebFrameLoadType::kStandard, kFrameLoadTypeStandard);
+STATIC_ASSERT_ENUM(WebFrameLoadType::kBackForward, kFrameLoadTypeBackForward);
+STATIC_ASSERT_ENUM(WebFrameLoadType::kReload, kFrameLoadTypeReload);
+STATIC_ASSERT_ENUM(WebFrameLoadType::kReplaceCurrentItem,
+                   kFrameLoadTypeReplaceCurrentItem);
+STATIC_ASSERT_ENUM(WebFrameLoadType::kInitialInChildFrame,
+                   kFrameLoadTypeInitialInChildFrame);
+STATIC_ASSERT_ENUM(WebFrameLoadType::kInitialHistoryLoad,
+                   kFrameLoadTypeInitialHistoryLoad);
+STATIC_ASSERT_ENUM(WebFrameLoadType::kReloadBypassingCache,
+                   kFrameLoadTypeReloadBypassingCache);
 
 }  // namespace blink

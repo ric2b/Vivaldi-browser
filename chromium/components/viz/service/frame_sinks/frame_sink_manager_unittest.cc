@@ -4,19 +4,17 @@
 
 #include <stddef.h>
 
-#include "cc/scheduler/begin_frame_source.h"
-#include "cc/test/begin_frame_source_test.h"
-#include "cc/test/fake_external_begin_frame_source.h"
+#include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_client.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
+#include "components/viz/test/begin_frame_source_test.h"
+#include "components/viz/test/fake_external_begin_frame_source.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace viz {
-
 namespace {
 
 constexpr FrameSinkId kArbitraryFrameSinkId(1, 1);
-}
 
 class FakeFrameSinkManagerClient : public FrameSinkManagerClient {
  public:
@@ -37,7 +35,7 @@ class FakeFrameSinkManagerClient : public FrameSinkManagerClient {
     EXPECT_EQ(nullptr, source_);
   }
 
-  cc::BeginFrameSource* source() { return source_; }
+  BeginFrameSource* source() { return source_; }
   const FrameSinkId& frame_sink_id() { return frame_sink_id_; }
 
   void Register(FrameSinkManagerImpl* manager) {
@@ -53,13 +51,13 @@ class FakeFrameSinkManagerClient : public FrameSinkManagerClient {
   }
 
   // FrameSinkManagerClient implementation.
-  void SetBeginFrameSource(cc::BeginFrameSource* begin_frame_source) override {
+  void SetBeginFrameSource(BeginFrameSource* begin_frame_source) override {
     DCHECK(!source_ || !begin_frame_source);
     source_ = begin_frame_source;
   }
 
  private:
-  cc::BeginFrameSource* source_;
+  BeginFrameSource* source_;
   FrameSinkManagerImpl* manager_;
   FrameSinkId frame_sink_id_;
 };
@@ -67,7 +65,6 @@ class FakeFrameSinkManagerClient : public FrameSinkManagerClient {
 class FrameSinkManagerTest : public testing::Test {
  public:
   FrameSinkManagerTest() = default;
-
   ~FrameSinkManagerTest() override = default;
 
  protected:
@@ -77,7 +74,7 @@ class FrameSinkManagerTest : public testing::Test {
 TEST_F(FrameSinkManagerTest, SingleClients) {
   FakeFrameSinkManagerClient client(FrameSinkId(1, 1));
   FakeFrameSinkManagerClient other_client(FrameSinkId(2, 2));
-  cc::StubBeginFrameSource source;
+  StubBeginFrameSource source;
 
   EXPECT_EQ(nullptr, client.source());
   EXPECT_EQ(nullptr, other_client.source());
@@ -113,7 +110,7 @@ TEST_F(FrameSinkManagerTest, SingleClients) {
 // after restart.
 TEST_F(FrameSinkManagerTest, ClientRestart) {
   FakeFrameSinkManagerClient client(kArbitraryFrameSinkId);
-  cc::StubBeginFrameSource source;
+  StubBeginFrameSource source;
   client.Register(&manager_);
 
   manager_.RegisterBeginFrameSource(&source, kArbitraryFrameSinkId);
@@ -137,29 +134,27 @@ TEST_F(FrameSinkManagerTest, ClientRestart) {
 TEST_F(FrameSinkManagerTest, PrimaryBeginFrameSource) {
   // This PrimaryBeginFrameSource should track the first BeginFrameSource
   // registered with the SurfaceManager.
-  testing::NiceMock<cc::MockBeginFrameObserver> obs;
-  cc::BeginFrameSource* begin_frame_source =
-      manager_.GetPrimaryBeginFrameSource();
+  testing::NiceMock<MockBeginFrameObserver> obs;
+  BeginFrameSource* begin_frame_source = manager_.GetPrimaryBeginFrameSource();
   begin_frame_source->AddObserver(&obs);
 
   FakeFrameSinkManagerClient root1(FrameSinkId(1, 1), &manager_);
-  std::unique_ptr<cc::FakeExternalBeginFrameSource> external_source1 =
-      base::MakeUnique<cc::FakeExternalBeginFrameSource>(60.f, false);
+  std::unique_ptr<FakeExternalBeginFrameSource> external_source1 =
+      base::MakeUnique<FakeExternalBeginFrameSource>(60.f, false);
   manager_.RegisterBeginFrameSource(external_source1.get(),
                                     root1.frame_sink_id());
 
   FakeFrameSinkManagerClient root2(FrameSinkId(2, 2), &manager_);
-  std::unique_ptr<cc::FakeExternalBeginFrameSource> external_source2 =
-      base::MakeUnique<cc::FakeExternalBeginFrameSource>(60.f, false);
+  std::unique_ptr<FakeExternalBeginFrameSource> external_source2 =
+      base::MakeUnique<FakeExternalBeginFrameSource>(60.f, false);
   manager_.RegisterBeginFrameSource(external_source2.get(),
                                     root2.frame_sink_id());
 
-  cc::BeginFrameArgs args =
-      cc::CreateBeginFrameArgsForTesting(BEGINFRAME_FROM_HERE, 0, 1);
-
   // Ticking |external_source2| does not propagate to |begin_frame_source|.
   {
-    EXPECT_CALL(obs, OnBeginFrame(args)).Times(0);
+    BeginFrameArgs args = CreateBeginFrameArgsForTesting(
+        BEGINFRAME_FROM_HERE, external_source2->source_id(), 1);
+    EXPECT_CALL(obs, OnBeginFrame(testing::_)).Times(0);
     external_source2->TestOnBeginFrame(args);
     testing::Mock::VerifyAndClearExpectations(&obs);
   }
@@ -167,7 +162,9 @@ TEST_F(FrameSinkManagerTest, PrimaryBeginFrameSource) {
   // Ticking |external_source1| does propagate to |begin_frame_source| and
   // |obs|.
   {
-    EXPECT_CALL(obs, OnBeginFrame(testing::_)).Times(1);
+    BeginFrameArgs args = CreateBeginFrameArgsForTesting(
+        BEGINFRAME_FROM_HERE, external_source1->source_id(), 1);
+    EXPECT_CALL(obs, OnBeginFrame(args)).Times(1);
     external_source1->TestOnBeginFrame(args);
     testing::Mock::VerifyAndClearExpectations(&obs);
   }
@@ -176,11 +173,17 @@ TEST_F(FrameSinkManagerTest, PrimaryBeginFrameSource) {
   // propagate. Instead, |external_source2|'s BeginFrames will propagate
   // to |begin_frame_source|.
   {
+    BeginFrameArgs args = CreateBeginFrameArgsForTesting(
+        BEGINFRAME_FROM_HERE, external_source1->source_id(), 2);
     manager_.UnregisterBeginFrameSource(external_source1.get());
     EXPECT_CALL(obs, OnBeginFrame(testing::_)).Times(0);
     external_source1->TestOnBeginFrame(args);
     testing::Mock::VerifyAndClearExpectations(&obs);
+  }
 
+  {
+    BeginFrameArgs args = CreateBeginFrameArgsForTesting(
+        BEGINFRAME_FROM_HERE, external_source2->source_id(), 2);
     EXPECT_CALL(obs, OnBeginFrame(testing::_)).Times(1);
     external_source2->TestOnBeginFrame(args);
     testing::Mock::VerifyAndClearExpectations(&obs);
@@ -192,8 +195,8 @@ TEST_F(FrameSinkManagerTest, PrimaryBeginFrameSource) {
 }
 
 TEST_F(FrameSinkManagerTest, MultipleDisplays) {
-  cc::StubBeginFrameSource root1_source;
-  cc::StubBeginFrameSource root2_source;
+  StubBeginFrameSource root1_source;
+  StubBeginFrameSource root2_source;
 
   // root1 -> A -> B
   // root2 -> C
@@ -262,7 +265,7 @@ TEST_F(FrameSinkManagerTest, MultipleDisplays) {
 // FrameSinkId is preserved even if that FrameSinkId has no children
 // and does not have a corresponding FrameSinkManagerClient.
 TEST_F(FrameSinkManagerTest, ParentWithoutClientRetained) {
-  cc::StubBeginFrameSource root_source;
+  StubBeginFrameSource root_source;
 
   constexpr FrameSinkId kFrameSinkIdRoot(1, 1);
   constexpr FrameSinkId kFrameSinkIdA(2, 2);
@@ -301,7 +304,7 @@ TEST_F(FrameSinkManagerTest, ParentWithoutClientRetained) {
 // propagates all the way to C.
 TEST_F(FrameSinkManagerTest,
        ParentWithoutClientRetained_LateBeginFrameRegistration) {
-  cc::StubBeginFrameSource root_source;
+  StubBeginFrameSource root_source;
 
   constexpr FrameSinkId kFrameSinkIdRoot(1, 1);
   constexpr FrameSinkId kFrameSinkIdA(2, 2);
@@ -439,7 +442,7 @@ class SurfaceManagerOrderingTest : public FrameSinkManagerTest {
     AssertAllValidBFS();
   }
 
-  cc::StubBeginFrameSource source_;
+  StubBeginFrameSource source_;
   // A -> B -> C hierarchy, with A always having the BFS.
   FakeFrameSinkManagerClient client_a_;
   FakeFrameSinkManagerClient client_b_;
@@ -526,4 +529,5 @@ INSTANTIATE_TEST_CASE_P(
                        ::testing::ValuesIn(kUnregisterOrderList),
                        ::testing::ValuesIn(kBFSOrderList)));
 
+}  // namespace
 }  // namespace viz

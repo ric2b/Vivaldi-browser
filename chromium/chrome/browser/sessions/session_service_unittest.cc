@@ -20,11 +20,11 @@
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/synchronization/waitable_event.h"
+#include "base/synchronization/atomic_flag.h"
+#include "base/threading/platform_thread.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/defaults.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
@@ -40,9 +40,6 @@
 #include "components/sessions/core/session_command.h"
 #include "components/sessions/core/session_types.h"
 #include "content/public/browser/navigation_entry.h"
-#include "content/public/browser/notification_observer.h"
-#include "content/public/browser/notification_registrar.h"
-#include "content/public/browser/notification_service.h"
 #include "content/public/common/page_state.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -50,10 +47,9 @@ using content::NavigationEntry;
 using sessions::SerializedNavigationEntry;
 using sessions::SerializedNavigationEntryTestHelper;
 
-class SessionServiceTest : public BrowserWithTestWindowTest,
-                           public content::NotificationObserver {
+class SessionServiceTest : public BrowserWithTestWindowTest {
  public:
-  SessionServiceTest() : window_bounds(0, 1, 2, 3), sync_save_count_(0) {}
+  SessionServiceTest() : window_bounds(0, 1, 2, 3) {}
 
  protected:
   void SetUp() override {
@@ -77,14 +73,6 @@ class SessionServiceTest : public BrowserWithTestWindowTest,
                                window_bounds,
                                ui::SHOW_STATE_NORMAL);
     service()->SetWindowWorkspace(window_id, window_workspace);
-  }
-
-  // Upon notification, increment the sync_save_count variable
-  void Observe(int type,
-               const content::NotificationSource& source,
-               const content::NotificationDetails& details) override {
-    ASSERT_EQ(type, chrome::NOTIFICATION_SESSION_SERVICE_SAVED);
-    sync_save_count_++;
   }
 
   void TearDown() override {
@@ -184,8 +172,6 @@ class SessionServiceTest : public BrowserWithTestWindowTest,
   const std::string window_workspace = "abc";
 
   SessionID window_id;
-
-  int sync_save_count_;
 
   // Path used in testing.
   base::ScopedTempDir temp_dir_;
@@ -743,15 +729,6 @@ TEST_F(SessionServiceTest, PersistUserAgentOverrides) {
   EXPECT_TRUE(user_agent_override == tab->user_agent_override);
 }
 
-// Test that the notification for SESSION_SERVICE_SAVED is working properly.
-TEST_F(SessionServiceTest, SavedSessionNotification) {
-  content::NotificationRegistrar registrar_;
-  registrar_.Add(this, chrome::NOTIFICATION_SESSION_SERVICE_SAVED,
-                 content::NotificationService::AllSources());
-  service()->GetBaseSessionServiceForTest()->Save();
-  EXPECT_EQ(sync_save_count_, 1);
-}
-
 // Makes sure a tab closed by a user gesture is not restored.
 TEST_F(SessionServiceTest, CloseTabUserGesture) {
   SessionID tab_id;
@@ -1020,6 +997,15 @@ void PostBackToThread(base::MessageLoop* message_loop,
       FROM_HERE, base::Bind(&base::RunLoop::Quit, base::Unretained(run_loop)));
 }
 
+// Blocks until |keep_waiting| is false.
+void SimulateWaitForTesting(const base::AtomicFlag* flag) {
+  // Ideally this code would use WaitableEvent, but that triggers a DCHECK in
+  // thread_restrictions. Rather than inject a trait only for the test this
+  // code uses yield.
+  while (!flag->IsSet())
+    base::PlatformThread::YieldCurrentThread();
+}
+
 }  // namespace
 
 // Verifies that SessionService::GetLastSession() works correctly if the
@@ -1036,13 +1022,11 @@ void PostBackToThread(base::MessageLoop* message_loop,
 // The call to get the previous session should never be invoked because the
 // SessionService was destroyed before SessionService could process the results.
 TEST_F(SessionServiceTest, GetSessionsAndDestroy) {
+  base::AtomicFlag flag;
   base::CancelableTaskTracker cancelable_task_tracker;
   base::RunLoop run_loop;
-  base::WaitableEvent event(base::WaitableEvent::ResetPolicy::MANUAL,
-                            base::WaitableEvent::InitialState::NOT_SIGNALED);
-  helper_.RunTaskOnBackendThread(FROM_HERE,
-                                 base::Bind(&base::WaitableEvent::Wait,
-                                            base::Unretained(&event)));
+  helper_.RunTaskOnBackendThread(
+      FROM_HERE, base::Bind(&SimulateWaitForTesting, base::Unretained(&flag)));
   service()->GetLastSession(base::Bind(&OnGotPreviousSession),
                             &cancelable_task_tracker);
   helper_.RunTaskOnBackendThread(
@@ -1051,6 +1035,6 @@ TEST_F(SessionServiceTest, GetSessionsAndDestroy) {
                  base::Unretained(base::MessageLoop::current()),
                  base::Unretained(&run_loop)));
   delete helper_.ReleaseService();
-  event.Signal();
+  flag.Set();
   run_loop.Run();
 }

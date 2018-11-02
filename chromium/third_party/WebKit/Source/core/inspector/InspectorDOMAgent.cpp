@@ -279,6 +279,8 @@ void InspectorDOMAgent::ReleaseDanglingNodes() {
 }
 
 int InspectorDOMAgent::Bind(Node* node, NodeToIdMap* nodes_map) {
+  if (!nodes_map)
+    return 0;
   int id = nodes_map->at(node);
   if (id)
     return id;
@@ -857,9 +859,12 @@ Response InspectorDOMAgent::setNodeName(int node_id,
   return Response::OK();
 }
 
-Response InspectorDOMAgent::getOuterHTML(int node_id, WTF::String* outer_html) {
+Response InspectorDOMAgent::getOuterHTML(Maybe<int> node_id,
+                                         Maybe<int> backend_node_id,
+                                         Maybe<String> object_id,
+                                         WTF::String* outer_html) {
   Node* node = nullptr;
-  Response response = AssertNode(node_id, node);
+  Response response = AssertNode(node_id, backend_node_id, object_id, node);
   if (!response.isSuccess())
     return response;
 
@@ -960,6 +965,9 @@ Response InspectorDOMAgent::performSearch(
     Maybe<bool> optional_include_user_agent_shadow_dom,
     String* search_id,
     int* result_count) {
+  if (!Enabled())
+    return Response::Error("DOM agent is not enabled");
+
   // FIXME: Few things are missing here:
   // 1) Search works with node granularity - number of matches within node is
   //    not calculated.
@@ -1217,12 +1225,16 @@ Response InspectorDOMAgent::moveTo(int node_id,
 }
 
 Response InspectorDOMAgent::undo() {
+  if (!Enabled())
+    return Response::Error("DOM agent is not enabled");
   DummyExceptionStateForTesting exception_state;
   history_->Undo(exception_state);
   return InspectorDOMAgent::ToResponse(exception_state);
 }
 
 Response InspectorDOMAgent::redo() {
+  if (!Enabled())
+    return Response::Error("DOM agent is not enabled");
   DummyExceptionStateForTesting exception_state;
   history_->Redo(exception_state);
   return InspectorDOMAgent::ToResponse(exception_state);
@@ -1291,6 +1303,8 @@ Response InspectorDOMAgent::getNodeForLocation(
     int y,
     Maybe<bool> optional_include_user_agent_shadow_dom,
     int* node_id) {
+  if (!Enabled())
+    return Response::Error("DOM agent is not enabled");
   bool include_user_agent_shadow_dom =
       optional_include_user_agent_shadow_dom.fromMaybe(false);
   Response response = PushDocumentUponHandlelessOperation();
@@ -1368,7 +1382,7 @@ String InspectorDOMAgent::DocumentURLString(Document* document) {
 
 // static
 String InspectorDOMAgent::DocumentBaseURLString(Document* document) {
-  return document->BaseURLForOverride(document->BaseURL()).GetString();
+  return document->BaseURL().GetString();
 }
 
 static protocol::DOM::ShadowRootType GetShadowRootType(
@@ -1530,7 +1544,7 @@ std::unique_ptr<protocol::DOM::Node> InspectorDOMAgent::BuildObjectForNode(
     value->setChildNodeCount(node_count);
     if (nodes_map == document_node_to_id_map_)
       cached_child_count_.Set(id, node_count);
-    if (force_push_children && !depth)
+    if (nodes_map && force_push_children && !depth)
       depth = 1;
     std::unique_ptr<protocol::Array<protocol::DOM::Node>> children =
         BuildArrayForContainerChildren(node, depth, pierce, nodes_map,
@@ -1567,6 +1581,8 @@ InspectorDOMAgent::BuildArrayForContainerChildren(
   std::unique_ptr<protocol::Array<protocol::DOM::Node>> children =
       protocol::Array<protocol::DOM::Node>::create();
   if (depth == 0) {
+    if (!nodes_map)
+      return children;
     // Special-case the only text child - pretend that container's children have
     // been requested.
     Node* first_child = container->firstChild();
@@ -1587,7 +1603,8 @@ InspectorDOMAgent::BuildArrayForContainerChildren(
 
   Node* child = InnerFirstChild(container);
   depth--;
-  children_requested_.insert(Bind(container, nodes_map));
+  if (nodes_map)
+    children_requested_.insert(Bind(container, nodes_map));
 
   while (child) {
     std::unique_ptr<protocol::DOM::Node> child_node =
@@ -1598,7 +1615,8 @@ InspectorDOMAgent::BuildArrayForContainerChildren(
     } else {
       children->addItem(std::move(child_node));
     }
-    children_requested_.insert(Bind(container, nodes_map));
+    if (nodes_map)
+      children_requested_.insert(Bind(container, nodes_map));
     child = InnerNextSibling(child);
   }
   return children;
@@ -1734,9 +1752,9 @@ v8::Local<v8::Value> InspectorDOMAgent::NodeV8Value(
 void InspectorDOMAgent::CollectNodes(Node* node,
                                      int depth,
                                      bool pierce,
-                                     Function<bool(Node*)>* filter,
+                                     const Function<bool(Node*)>& filter,
                                      HeapVector<Member<Node>>* result) {
-  if (filter && filter->operator()(node))
+  if (filter && filter(node))
     result->push_back(node);
   if (--depth <= 0)
     return;
@@ -2100,6 +2118,8 @@ Node* InspectorDOMAgent::NodeForPath(const String& path) {
 
 Response InspectorDOMAgent::pushNodeByPathToFrontend(const String& path,
                                                      int* node_id) {
+  if (!Enabled())
+    return Response::Error("DOM agent is not enabled");
   if (Node* node = NodeForPath(path))
     *node_id = PushNodePathToFrontend(node);
   else
@@ -2110,6 +2130,8 @@ Response InspectorDOMAgent::pushNodeByPathToFrontend(const String& path,
 Response InspectorDOMAgent::pushNodesByBackendIdsToFrontend(
     std::unique_ptr<protocol::Array<int>> backend_node_ids,
     std::unique_ptr<protocol::Array<int>>* result) {
+  if (!Enabled())
+    return Response::Error("DOM agent is not enabled");
   *result = protocol::Array<int>::create();
   for (size_t index = 0; index < backend_node_ids->length(); ++index) {
     Node* node = DOMNodeIds::NodeForId(backend_node_ids->get(index));
@@ -2164,6 +2186,24 @@ Response InspectorDOMAgent::getRelayoutBoundary(
   Node* result_node =
       layout_object ? layout_object->GeneratingNode() : node->ownerDocument();
   *relayout_boundary_node_id = PushNodePathToFrontend(result_node);
+  return Response::OK();
+}
+
+protocol::Response InspectorDOMAgent::describeNode(
+    protocol::Maybe<int> node_id,
+    protocol::Maybe<int> backend_node_id,
+    protocol::Maybe<String> object_id,
+    protocol::Maybe<int> depth,
+    protocol::Maybe<bool> pierce,
+    std::unique_ptr<protocol::DOM::Node>* result) {
+  Node* node = nullptr;
+  Response response = AssertNode(node_id, backend_node_id, object_id, node);
+  if (!response.isSuccess())
+    return response;
+  if (!node)
+    return Response::Error("Node not found");
+  *result = BuildObjectForNode(node, depth.fromMaybe(0),
+                               pierce.fromMaybe(false), nullptr, nullptr);
   return Response::OK();
 }
 

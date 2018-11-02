@@ -31,6 +31,11 @@ class PixelExpectations(GpuTestExpectations):
     # TODO(ccameron) fix these on Mac Retina
     self.Fail('Pixel_CSS3DBlueBox', ['mac'], bug=533690)
 
+    # TODO(ccameron): Re-enable this after baseline. This is caused by changing
+    # the way we interpret BT709 color spaces.
+    self.Fail('Pixel_Video_VP9', bug=763260)
+    self.Fail('Pixel_Video_MP4', bug=763260)
+
     # TODO(vmiura) check / generate reference images for Android devices
     self.Fail('Pixel_SolidColorBackground', ['mac', 'android'], bug=624256)
 
@@ -52,20 +57,10 @@ class PixelExpectations(GpuTestExpectations):
     self.Flaky('Pixel_OffscreenCanvas2DResizeOnWorker',
         ['win10', ('intel', 0x1912)], bug=690663)
 
-    # TODO(zakerinasab): check / generate reference images.
-    self.Fail('Pixel_Canvas2DUntagged', bug=713632)
-
     self.Flaky('Pixel_OffscreenCanvasTransferBeforeStyleResize',
               ['mac', 'linux', 'win', 'android'], bug=735228)
     self.Flaky('Pixel_OffscreenCanvasTransferAfterStyleResize',
               ['mac', 'linux', 'win', 'android'], bug=735171)
 
-    # TODO(junov): update reference images
-    self.Fail('Pixel_CSSFilterEffects', ['mac'], bug=721727)
-    self.Fail('Pixel_CSSFilterEffects_NoOverlays', ['mac'], bug=721727)
-
-    # TODO(dshwang): remove these after new reference images are generated.
-    self.Fail('Pixel_DirectComposition_Video_MP4', bug=615325)
-    self.Fail('Pixel_DirectComposition_Video_VP9', bug=615325)
-    self.Fail('Pixel_Video_MP4', bug=615325)
-    self.Fail('Pixel_Video_VP9', bug=615325)
+    self.Flaky('Pixel_OffscreenCanvasWebGLSoftwareCompositingWorker',
+        ['mac', ('nvidia', 0xfe9), 'debug'], bug=751328)

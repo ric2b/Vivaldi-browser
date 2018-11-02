@@ -25,6 +25,7 @@ class CORE_EXPORT ThreadedWorkletMessagingProxy
  public:
   // WorkletGlobalScopeProxy implementation.
   void FetchAndInvokeScript(const KURL& module_url_record,
+                            WorkletModuleResponsesMap*,
                             WebURLRequest::FetchCredentialsMode,
                             RefPtr<WebTaskRunner> outside_settings_task_runner,
                             WorkletPendingTasks*) final;
@@ -45,6 +46,10 @@ class CORE_EXPORT ThreadedWorkletMessagingProxy
  private:
   friend class ThreadedWorkletMessagingProxyForTest;
   class LoaderClient;
+
+  virtual std::unique_ptr<ThreadedWorkletObjectProxy> CreateObjectProxy(
+      ThreadedWorkletMessagingProxy*,
+      ParentFrameTaskRunners*);
 
   void NotifyLoadingFinished(WorkletScriptLoader*);
   void EvaluateScript(const ScriptSourceCode&);

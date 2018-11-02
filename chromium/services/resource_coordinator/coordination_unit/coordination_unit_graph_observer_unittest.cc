@@ -2,11 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "services/resource_coordinator/coordination_unit/coordination_unit_graph_observer.h"
+
 #include <string>
 
 #include "base/memory/ptr_util.h"
 #include "base/process/process_handle.h"
-#include "services/resource_coordinator/coordination_unit/coordination_unit_graph_observer.h"
 #include "services/resource_coordinator/coordination_unit/coordination_unit_impl.h"
 #include "services/resource_coordinator/coordination_unit/coordination_unit_impl_unittest_util.h"
 #include "services/resource_coordinator/coordination_unit/coordination_unit_manager.h"
@@ -53,35 +54,35 @@ class TestCoordinationUnitGraphObserver : public CoordinationUnitGraphObserver {
       const CoordinationUnitImpl* coordination_unit) override {
     ++coordination_unit_created_count_;
   }
+  void OnBeforeCoordinationUnitDestroyed(
+      const CoordinationUnitImpl* coordination_unit) override {
+    ++coordination_unit_destroyed_count_;
+  }
   void OnChildAdded(
       const CoordinationUnitImpl* coordination_unit,
       const CoordinationUnitImpl* child_coordination_unit) override {
     ++child_added_count_;
-  }
-  void OnParentAdded(
-      const CoordinationUnitImpl* coordination_unit,
-      const CoordinationUnitImpl* parent_coordination_unit) override {
-    ++parent_added_count_;
-  }
-
-  void OnPropertyChanged(const CoordinationUnitImpl* coordination_unit,
-                         const mojom::PropertyType property_type,
-                         const base::Value& value) override {
-    ++property_changed_count_;
   }
   void OnChildRemoved(
       const CoordinationUnitImpl* coordination_unit,
       const CoordinationUnitImpl* former_child_coordination_unit) override {
     ++child_removed_count_;
   }
+  void OnParentAdded(
+      const CoordinationUnitImpl* coordination_unit,
+      const CoordinationUnitImpl* parent_coordination_unit) override {
+    ++parent_added_count_;
+  }
   void OnParentRemoved(
       const CoordinationUnitImpl* coordination_unit,
       const CoordinationUnitImpl* former_parent_coordination_unit) override {
     ++parent_removed_count_;
   }
-  void OnBeforeCoordinationUnitDestroyed(
-      const CoordinationUnitImpl* coordination_unit) override {
-    ++coordination_unit_destroyed_count_;
+  void OnFramePropertyChanged(
+      const FrameCoordinationUnitImpl* frame_coordination_unit,
+      const mojom::PropertyType property_type,
+      int64_t value) override {
+    ++property_changed_count_;
   }
 
  private:
@@ -154,10 +155,8 @@ TEST_F(CoordinationUnitGraphObserverTest, CallbacksInvoked) {
   // |root_frame_coordination_unit| and |frame_coordination_unit| because
   // they are CoordinationUnitType::kFrame, so OnPropertyChanged
   // will only be called for |root_frame_coordination_unit|.
-  root_frame_coordination_unit->SetProperty(mojom::PropertyType::kTest,
-                                            base::MakeUnique<base::Value>(42));
-  process_coordination_unit->SetProperty(mojom::PropertyType::kTest,
-                                         base::MakeUnique<base::Value>(42));
+  root_frame_coordination_unit->SetProperty(mojom::PropertyType::kTest, 42);
+  process_coordination_unit->SetProperty(mojom::PropertyType::kTest, 42);
   EXPECT_EQ(1u, observer->property_changed_count());
 
   coordination_unit_manager().OnBeforeCoordinationUnitDestroyed(

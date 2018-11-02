@@ -4,12 +4,22 @@
 
 package org.chromium.android_webview.test;
 
+import static org.chromium.android_webview.test.AwActivityTestRule.WAIT_TIMEOUT_MS;
+
 import android.os.Handler;
 import android.os.Message;
+import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.LargeTest;
 import android.support.test.filters.SmallTest;
 import android.view.KeyEvent;
 import android.webkit.WebView.HitTestResult;
+
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.runner.RunWith;
 
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.test.util.AwTestTouchUtils;
@@ -19,13 +29,16 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.content.browser.test.util.TestCallbackHelperContainer.OnPageCommitVisibleHelper;
 import org.chromium.net.test.util.TestWebServer;
 
-import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 
 /**
  * Test for getHitTestResult, requestFocusNodeHref, and requestImageRef methods
  */
-public class WebKitHitTestTest extends AwTestBase {
+@RunWith(AwJUnit4ClassRunner.class)
+public class WebKitHitTestTest {
+    @Rule
+    public AwActivityTestRule mActivityTestRule = new AwActivityTestRule();
+
     private TestAwContentsClient mContentsClient;
     private AwTestContainerView mTestView;
     private AwContents mAwContents;
@@ -35,11 +48,10 @@ public class WebKitHitTestTest extends AwTestBase {
     private static final String ANCHOR_TEXT = "anchor text";
     private int mServerResponseCount;
 
-    @Override
+    @Before
     public void setUp() throws Exception {
-        super.setUp();
         mContentsClient = new TestAwContentsClient();
-        mTestView = createAwTestContainerViewOnMainSync(mContentsClient);
+        mTestView = mActivityTestRule.createAwTestContainerViewOnMainSync(mContentsClient);
         mAwContents = mTestView.getAwContents();
         mWebServer = TestWebServer.start();
         final String imagePath = "/" + CommonResources.TEST_IMAGE_FILENAME;
@@ -47,12 +59,11 @@ public class WebKitHitTestTest extends AwTestBase {
                 CommonResources.FAVICON_DATA_BASE64, CommonResources.getImagePngHeaders(true));
     }
 
-    @Override
+    @After
     public void tearDown() throws Exception {
         if (mWebServer != null) {
             mWebServer.shutdown();
         }
-        super.tearDown();
     }
 
     private String setServerResponseAndLoad(String response) throws Throwable {
@@ -61,7 +72,7 @@ public class WebKitHitTestTest extends AwTestBase {
         String url = mWebServer.setResponse(path, response, null);
         OnPageCommitVisibleHelper commitHelper = mContentsClient.getOnPageCommitVisibleHelper();
         int currentCallCount = commitHelper.getCallCount();
-        loadUrlSync(mAwContents, mContentsClient.getOnPageFinishedHelper(), url);
+        mActivityTestRule.loadUrlSync(mAwContents, mContentsClient.getOnPageFinishedHelper(), url);
         commitHelper.waitForCallback(currentCallCount, 1, WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         return url;
     }
@@ -72,14 +83,11 @@ public class WebKitHitTestTest extends AwTestBase {
     }
 
     private void simulateTabDownUpOnUiThread() throws Throwable {
-        runTestOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                mAwContents.getContentViewCore().dispatchKeyEvent(
-                        new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_TAB));
-                mAwContents.getContentViewCore().dispatchKeyEvent(
-                        new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_TAB));
-            }
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+            mAwContents.getContentViewCore().dispatchKeyEvent(
+                    new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_TAB));
+            mAwContents.getContentViewCore().dispatchKeyEvent(
+                    new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_TAB));
         });
     }
 
@@ -99,13 +107,10 @@ public class WebKitHitTestTest extends AwTestBase {
 
     private void pollForHitTestDataOnUiThread(
             final int expectedType, final String expectedExtra) throws Throwable {
-        pollUiThread(new Callable<Boolean>() {
-            @Override
-            public Boolean call() {
-                AwContents.HitTestData data = mAwContents.getLastHitTestResult();
-                return expectedType == data.hitTestResultType
-                        && stringEquals(expectedExtra, data.hitTestResultExtraData);
-            }
+        mActivityTestRule.pollUiThread(() -> {
+            AwContents.HitTestData data = mAwContents.getLastHitTestResult();
+            return expectedType == data.hitTestResultType
+                    && stringEquals(expectedExtra, data.hitTestResultExtraData);
         });
     }
 
@@ -113,30 +118,27 @@ public class WebKitHitTestTest extends AwTestBase {
             final String expectedHref,
             final String expectedAnchorText,
             final String expectedImageSrc) throws Throwable {
-        pollUiThread(new Callable<Boolean>() {
-            @Override
-            public Boolean call() {
-                AwContents.HitTestData data = mAwContents.getLastHitTestResult();
-                return stringEquals(expectedHref, data.href)
-                        && stringEquals(expectedAnchorText, data.anchorText)
-                        && stringEquals(expectedImageSrc, data.imgSrc);
-            }
+        mActivityTestRule.pollUiThread(() -> {
+            AwContents.HitTestData data = mAwContents.getLastHitTestResult();
+            return stringEquals(expectedHref, data.href)
+                    && stringEquals(expectedAnchorText, data.anchorText)
+                    && stringEquals(expectedImageSrc, data.imgSrc);
         });
 
-        Handler dummyHandler = new Handler();
-        final Message focusNodeHrefMsg = dummyHandler.obtainMessage();
-        final Message imageRefMsg = dummyHandler.obtainMessage();
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                mAwContents.requestFocusNodeHref(focusNodeHrefMsg);
-                mAwContents.requestImageRef(imageRefMsg);
-            }
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            Handler dummyHandler = new Handler();
+            Message focusNodeHrefMsg = dummyHandler.obtainMessage();
+            Message imageRefMsg = dummyHandler.obtainMessage();
+
+            mAwContents.requestFocusNodeHref(focusNodeHrefMsg);
+            mAwContents.requestImageRef(imageRefMsg);
+
+            Assert.assertEquals(expectedHref, focusNodeHrefMsg.getData().getString("url"));
+            Assert.assertEquals(
+                    expectedAnchorText, focusNodeHrefMsg.getData().getString("title"));
+            Assert.assertEquals(expectedImageSrc, focusNodeHrefMsg.getData().getString("src"));
+            Assert.assertEquals(expectedImageSrc, imageRefMsg.getData().getString("url"));
         });
-        assertEquals(expectedHref, focusNodeHrefMsg.getData().getString("url"));
-        assertEquals(expectedAnchorText, focusNodeHrefMsg.getData().getString("title"));
-        assertEquals(expectedImageSrc, focusNodeHrefMsg.getData().getString("src"));
-        assertEquals(expectedImageSrc, imageRefMsg.getData().getString("url"));
     }
 
     private void srcAnchorTypeTestBody(boolean byTouch) throws Throwable {
@@ -147,12 +149,14 @@ public class WebKitHitTestTest extends AwTestBase {
         pollForHrefAndImageSrcOnUiThread(HREF, ANCHOR_TEXT, null);
     }
 
+    @Test
     @SmallTest
     @Feature({"AndroidWebView", "WebKitHitTest"})
     public void testSrcAnchorType() throws Throwable {
         srcAnchorTypeTestBody(true);
     }
 
+    @Test
     @SmallTest
     @Feature({"AndroidWebView", "WebKitHitTest"})
     public void testSrcAnchorTypeByFocus() throws Throwable {
@@ -167,12 +171,14 @@ public class WebKitHitTestTest extends AwTestBase {
         pollForHrefAndImageSrcOnUiThread(fullPath, ANCHOR_TEXT, null);
     }
 
+    @Test
     @SmallTest
     @Feature({"AndroidWebView", "WebKitHitTest"})
     public void testSrcAnchorTypeBlankHref() throws Throwable {
         blankHrefTestBody(true);
     }
 
+    @Test
     @SmallTest
     @Feature({"AndroidWebView", "WebKitHitTest"})
     public void testSrcAnchorTypeBlankHrefByFocus() throws Throwable {
@@ -189,12 +195,14 @@ public class WebKitHitTestTest extends AwTestBase {
         pollForHrefAndImageSrcOnUiThread(fullPath, ANCHOR_TEXT, null);
     }
 
+    @Test
     @SmallTest
     @Feature({"AndroidWebView", "WebKitHitTest"})
     public void testSrcAnchorTypeRelativeUrl() throws Throwable {
         srcAnchorTypeRelativeUrlTestBody(true);
     }
 
+    @Test
     @SmallTest
     @Feature({"AndroidWebView", "WebKitHitTest"})
     public void testSrcAnchorTypeRelativeUrlByFocus() throws Throwable {
@@ -211,12 +219,14 @@ public class WebKitHitTestTest extends AwTestBase {
         pollForHrefAndImageSrcOnUiThread(prefix + email, ANCHOR_TEXT, null);
     }
 
+    @Test
     @SmallTest
     @Feature({"AndroidWebView", "WebKitHitTest"})
     public void testSrcEmailType() throws Throwable {
         srcEmailTypeTestBody(true);
     }
 
+    @Test
     @SmallTest
     @Feature({"AndroidWebView", "WebKitHitTest"})
     public void testSrcEmailTypeByFocus() throws Throwable {
@@ -233,12 +243,14 @@ public class WebKitHitTestTest extends AwTestBase {
         pollForHrefAndImageSrcOnUiThread(prefix + location, ANCHOR_TEXT, null);
     }
 
+    @Test
     @SmallTest
     @Feature({"AndroidWebView", "WebKitHitTest"})
     public void testSrcGeoType() throws Throwable {
         srcGeoTypeTestBody(true);
     }
 
+    @Test
     @SmallTest
     @Feature({"AndroidWebView", "WebKitHitTest"})
     public void testSrcGeoTypeByFocus() throws Throwable {
@@ -256,12 +268,14 @@ public class WebKitHitTestTest extends AwTestBase {
         pollForHrefAndImageSrcOnUiThread(prefix + phone_num, ANCHOR_TEXT, null);
     }
 
+    @Test
     @SmallTest
     @Feature({"AndroidWebView", "WebKitHitTest"})
     public void testSrcPhoneType() throws Throwable {
         srcPhoneTypeTestBody(true);
     }
 
+    @Test
     @SmallTest
     @Feature({"AndroidWebView", "WebKitHitTest"})
     public void testSrcPhoneTypeByFocus() throws Throwable {
@@ -279,12 +293,14 @@ public class WebKitHitTestTest extends AwTestBase {
         pollForHrefAndImageSrcOnUiThread(HREF, null, fullImageSrc);
     }
 
+    @Test
     @SmallTest
     @Feature({"AndroidWebView", "WebKitHitTest"})
     public void testSrcImgeAnchorType() throws Throwable {
         srcImgeAnchorTypeTestBody(true);
     }
 
+    @Test
     @SmallTest
     @Feature({"AndroidWebView", "WebKitHitTest"})
     public void testSrcImgeAnchorTypeByFocus() throws Throwable {
@@ -305,18 +321,21 @@ public class WebKitHitTestTest extends AwTestBase {
         pollForHrefAndImageSrcOnUiThread(fullPath, null, fullImageSrc);
     }
 
+    @Test
     @SmallTest
     @Feature({"AndroidWebView", "WebKitHitTest"})
     public void testSrcImgeAnchorTypeRelativeUrl() throws Throwable {
         srcImgeAnchorTypeRelativeUrlTestBody(true);
     }
 
+    @Test
     @SmallTest
     @Feature({"AndroidWebView", "WebKitHitTest"})
     public void testSrcImgeAnchorTypeRelativeUrlByFocus() throws Throwable {
         srcImgeAnchorTypeRelativeUrlTestBody(false);
     }
 
+    @Test
     @SmallTest
     @Feature({"AndroidWebView", "WebKitHitTest"})
     public void testImgeType() throws Throwable {
@@ -339,12 +358,14 @@ public class WebKitHitTestTest extends AwTestBase {
         pollForHrefAndImageSrcOnUiThread(null, null, null);
     }
 
+    @Test
     @SmallTest
     @Feature({"AndroidWebView", "WebKitHitTest"})
     public void testEditTextType() throws Throwable {
         editTextTypeTestBody(true);
     }
 
+    @Test
     @SmallTest
     @Feature({"AndroidWebView", "WebKitHitTest"})
     public void testEditTextTypeByFocus() throws Throwable {
@@ -361,18 +382,21 @@ public class WebKitHitTestTest extends AwTestBase {
         pollForHitTestDataOnUiThread(HitTestResult.UNKNOWN_TYPE, null);
     }
 
+    @Test
     @SmallTest
     @Feature({"AndroidWebView", "WebKitHitTest"})
     public void testUnknownTypeJavascriptScheme() throws Throwable {
         unknownTypeJavascriptSchemeTestBody(true);
     }
 
+    @Test
     @SmallTest
     @Feature({"AndroidWebView", "WebKitHitTest"})
     public void testUnknownTypeJavascriptSchemeByFocus() throws Throwable {
         unknownTypeJavascriptSchemeTestBody(false);
     }
 
+    @Test
     @SmallTest
     @Feature({"AndroidWebView", "WebKitHitTest"})
     public void testUnknownTypeUnrecognizedNode() throws Throwable {
@@ -390,6 +414,7 @@ public class WebKitHitTestTest extends AwTestBase {
         pollForHitTestDataOnUiThread(HitTestResult.UNKNOWN_TYPE, null);
     }
 
+    @Test
     @LargeTest
     @Feature({"AndroidWebView", "WebKitHitTest"})
     public void testUnfocusedNodeAndTouchRace() throws Throwable {

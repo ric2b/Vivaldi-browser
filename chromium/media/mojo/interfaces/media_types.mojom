@@ -6,6 +6,7 @@ module media.mojom;
 
 import "gpu/ipc/common/mailbox_holder.mojom";
 import "mojo/common/time.mojom";
+import "mojo/common/values.mojom";
 import "ui/gfx/geometry/mojo/geometry.mojom";
 
 // See media/base/audio_codecs.h for descriptions.
@@ -36,6 +37,10 @@ struct MediaLogEvent;
 [Native]
 enum OutputDeviceStatus;
 
+// See media/base/pipeline_status.h for descriptions.
+[Native]
+enum PipelineStatus;
+
 // See media/base/sample_format.h for descriptions.
 [Native]
 enum SampleFormat;
@@ -51,6 +56,10 @@ enum VideoCodecProfile;
 // See media/base/video_types.h for descriptions.
 [Native]
 enum VideoPixelFormat;
+
+// See media/base/watch_time_keys.h for descriptions.
+[Native]
+enum WatchTimeKey;
 
 // This defines a mojo transport format for media::EncryptionScheme::Pattern
 // See media/base/encryption_scheme.h for description.
@@ -222,6 +231,9 @@ struct VideoFrame {
 
   // Contents of the video frame (or EOS marker).
   VideoFrameData data;
+
+  // Extra properties associated with the VideoFrame.
+  mojo.common.mojom.DictionaryValue metadata;
 };
 
 // Possible choices for storing VideoFrame data.

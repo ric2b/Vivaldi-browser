@@ -68,7 +68,7 @@ std::string ServiceWorkerDevToolsAgentHost::GetType() {
 
 std::string ServiceWorkerDevToolsAgentHost::GetTitle() {
   if (RenderProcessHost* host = RenderProcessHost::FromID(worker_id().first)) {
-    return base::StringPrintf("Worker pid:%d",
+    return base::StringPrintf("Worker pid:%" CrPRIdPid,
                               base::GetProcId(host->GetHandle()));
   }
   return "";
@@ -87,25 +87,24 @@ void ServiceWorkerDevToolsAgentHost::Reload() {
 
 bool ServiceWorkerDevToolsAgentHost::Close() {
   BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-      base::Bind(&TerminateServiceWorkerOnIO,
-                  service_worker_->context_weak(),
-                  service_worker_->version_id()));
+                          base::BindOnce(&TerminateServiceWorkerOnIO,
+                                         service_worker_->context_weak(),
+                                         service_worker_->version_id()));
   return true;
 }
 
 void ServiceWorkerDevToolsAgentHost::UnregisterWorker() {
   BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-      base::Bind(&UnregisterServiceWorkerOnIO,
-                  service_worker_->context_weak(),
-                  service_worker_->version_id()));
+                          base::BindOnce(&UnregisterServiceWorkerOnIO,
+                                         service_worker_->context_weak(),
+                                         service_worker_->version_id()));
 }
 
 void ServiceWorkerDevToolsAgentHost::OnAttachedStateChanged(bool attached) {
-  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-      base::Bind(&SetDevToolsAttachedOnIO,
-                  service_worker_->context_weak(),
-                  service_worker_->version_id(),
-                  attached));
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::BindOnce(&SetDevToolsAttachedOnIO, service_worker_->context_weak(),
+                     service_worker_->version_id(), attached));
 }
 
 void ServiceWorkerDevToolsAgentHost::WorkerVersionInstalled() {

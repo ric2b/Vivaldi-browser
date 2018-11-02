@@ -12,7 +12,9 @@
 #include "base/sys_info.h"
 #include "base/threading/thread.h"
 #include "chromeos/chromeos_switches.h"
+#include "chromeos/dbus/arc_midis_client.h"
 #include "chromeos/dbus/arc_obb_mounter_client.h"
+#include "chromeos/dbus/arc_oemcrypto_client.h"
 #include "chromeos/dbus/auth_policy_client.h"
 #include "chromeos/dbus/biod/biod_client.h"
 #include "chromeos/dbus/cras_audio_client.h"
@@ -110,8 +112,17 @@ dbus::Bus* DBusThreadManager::GetSystemBus() {
   return system_bus_.get();
 }
 
+ArcMidisClient* DBusThreadManager::GetArcMidisClient() {
+  return clients_browser_ ? clients_browser_->arc_midis_client_.get() : nullptr;
+}
+
 ArcObbMounterClient* DBusThreadManager::GetArcObbMounterClient() {
   return clients_browser_ ? clients_browser_->arc_obb_mounter_client_.get()
+                          : nullptr;
+}
+
+ArcOemCryptoClient* DBusThreadManager::GetArcOemCryptoClient() {
+  return clients_browser_ ? clients_browser_->arc_oemcrypto_client_.get()
                           : nullptr;
 }
 

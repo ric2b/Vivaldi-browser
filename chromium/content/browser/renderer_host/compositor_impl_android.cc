@@ -36,14 +36,15 @@
 #include "cc/output/output_surface_client.h"
 #include "cc/output/output_surface_frame.h"
 #include "cc/output/texture_mailbox_deleter.h"
-#include "cc/output/vulkan_in_process_context_provider.h"
 #include "cc/raster/single_thread_task_graph_runner.h"
 #include "cc/resources/ui_resource_manager.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_settings.h"
 #include "components/viz/common/gl_helper.h"
 #include "components/viz/common/gpu/context_provider.h"
+#include "components/viz/common/gpu/vulkan_in_process_context_provider.h"
 #include "components/viz/common/surfaces/frame_sink_id_allocator.h"
+#include "components/viz/common/switches.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "components/viz/service/display/display.h"
 #include "components/viz/service/display/display_scheduler.h"
@@ -76,6 +77,7 @@
 #include "ui/display/screen.h"
 #include "ui/gfx/color_space_switches.h"
 #include "ui/gfx/swap_result.h"
+#include "ui/gl/gl_utils.h"
 
 namespace gpu {
 struct GpuProcessHostedCALayerTreeParamsMac;
@@ -100,9 +102,17 @@ class SingleThreadTaskGraphRunner : public cc::SingleThreadTaskGraphRunner {
 
 struct CompositorDependencies {
   CompositorDependencies() : frame_sink_id_allocator(kDefaultClientId) {
+    // TODO(kylechar): Switch this back to kDisableSurfaceReferences.
+    auto surface_lifetime_type =
+        base::CommandLine::ForCurrentProcess()->HasSwitch(
+            "enable-surface-references")
+            ? viz::SurfaceManager::LifetimeType::REFERENCES
+            : viz::SurfaceManager::LifetimeType::SEQUENCES;
+
     // TODO(danakj): Don't make a FrameSinkManagerImpl when display is in the
     // Gpu process, instead get the mojo pointer from the Gpu process.
-    frame_sink_manager_impl = base::MakeUnique<viz::FrameSinkManagerImpl>();
+    frame_sink_manager_impl =
+        std::make_unique<viz::FrameSinkManagerImpl>(surface_lifetime_type);
     surface_utils::ConnectWithLocalFrameSinkManager(
         &host_frame_sink_manager, frame_sink_manager_impl.get());
   }
@@ -118,7 +128,7 @@ struct CompositorDependencies {
   std::unique_ptr<viz::FrameSinkManagerImpl> frame_sink_manager_impl;
 
 #if BUILDFLAG(ENABLE_VULKAN)
-  scoped_refptr<cc::VulkanContextProvider> vulkan_context_provider;
+  scoped_refptr<viz::VulkanContextProvider> vulkan_context_provider;
 #endif
 };
 
@@ -128,13 +138,13 @@ base::LazyInstance<CompositorDependencies>::DestructorAtExit
 const unsigned int kMaxDisplaySwapBuffers = 1U;
 
 #if BUILDFLAG(ENABLE_VULKAN)
-scoped_refptr<cc::VulkanContextProvider> GetSharedVulkanContextProvider() {
+scoped_refptr<viz::VulkanContextProvider> GetSharedVulkanContextProvider() {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kEnableVulkan)) {
-    scoped_refptr<cc::VulkanContextProvider> context_provider =
+    scoped_refptr<viz::VulkanContextProvider> context_provider =
         g_compositor_dependencies.Get().vulkan_context_provider;
     if (!*context_provider)
-      *context_provider = cc::VulkanInProcessContextProvider::Create();
+      *context_provider = viz::VulkanInProcessContextProvider::Create();
     return *context_provider;
   }
   return nullptr;
@@ -298,7 +308,8 @@ class AndroidOutputSurface : public cc::OutputSurface {
                bool has_alpha,
                bool use_stencil) override {
     context_provider()->ContextGL()->ResizeCHROMIUM(
-        size.width(), size.height(), device_scale_factor, has_alpha);
+        size.width(), size.height(), device_scale_factor,
+        gl::GetGLColorSpace(color_space), has_alpha);
   }
 
   cc::OverlayCandidateValidator* GetOverlayCandidateValidator() const override {
@@ -350,7 +361,7 @@ class AndroidOutputSurface : public cc::OutputSurface {
 class VulkanOutputSurface : public cc::OutputSurface {
  public:
   explicit VulkanOutputSurface(
-      scoped_refptr<cc::VulkanContextProvider> vulkan_context_provider,
+      scoped_refptr<viz::VulkanContextProvider> vulkan_context_provider,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner)
       : OutputSurface(std::move(vulkan_context_provider)),
         task_runner_(std::move(task_runner)),
@@ -466,7 +477,7 @@ CompositorImpl::CompositorImpl(CompositorClient* client,
       num_successive_context_creation_failures_(0),
       layer_tree_frame_sink_request_pending_(false),
       weak_factory_(this) {
-  GetFrameSinkManager()->surface_manager()->RegisterFrameSinkId(frame_sink_id_);
+  GetHostFrameSinkManager()->RegisterFrameSinkId(frame_sink_id_, this);
   DCHECK(client);
   DCHECK(root_window);
   DCHECK(root_window->GetLayer() == nullptr);
@@ -484,8 +495,7 @@ CompositorImpl::~CompositorImpl() {
   root_window_->SetLayer(nullptr);
   // Clean-up any surface references.
   SetSurface(NULL);
-  GetFrameSinkManager()->surface_manager()->InvalidateFrameSinkId(
-      frame_sink_id_);
+  GetHostFrameSinkManager()->InvalidateFrameSinkId(frame_sink_id_);
 }
 
 bool CompositorImpl::IsForSubframe() {
@@ -690,21 +700,24 @@ void CompositorImpl::HandlePendingLayerTreeFrameSinkRequest() {
     return;
 #endif
 
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kDisableTimeoutsForProfiling)) {
 #if defined(ADDRESS_SANITIZER) || defined(THREAD_SANITIZER) || \
     defined(SYZYASAN) || defined(CYGPROFILE_INSTRUMENTATION)
-  const int64_t kGpuChannelTimeoutInSeconds = 40;
+    const int64_t kGpuChannelTimeoutInSeconds = 40;
 #else
-  // The GPU watchdog timeout is 15 seconds (1.5x the kGpuTimeout value due to
-  // logic in GpuWatchdogThread). Make this slightly longer to give the GPU a
-  // chance to crash itself before crashing the browser.
-  const int64_t kGpuChannelTimeoutInSeconds = 20;
+    // The GPU watchdog timeout is 15 seconds (1.5x the kGpuTimeout value due to
+    // logic in GpuWatchdogThread). Make this slightly longer to give the GPU a
+    // chance to crash itself before crashing the browser.
+    const int64_t kGpuChannelTimeoutInSeconds = 20;
 #endif
 
-  // Start the timer first, if the result comes synchronously, we want it to
-  // stop in the callback.
-  establish_gpu_channel_timeout_.Start(
-      FROM_HERE, base::TimeDelta::FromSeconds(kGpuChannelTimeoutInSeconds),
-      this, &CompositorImpl::OnGpuChannelTimeout);
+    // Start the timer first, if the result comes synchronously, we want it to
+    // stop in the callback.
+    establish_gpu_channel_timeout_.Start(
+        FROM_HERE, base::TimeDelta::FromSeconds(kGpuChannelTimeoutInSeconds),
+        this, &CompositorImpl::OnGpuChannelTimeout);
+  }
 
   DCHECK(surface_handle_ != gpu::kNullSurfaceHandle);
   BrowserMainLoop::GetInstance()
@@ -723,7 +736,7 @@ void CompositorImpl::CreateVulkanOutputSurface() {
           switches::kEnableVulkan))
     return;
 
-  scoped_refptr<cc::VulkanContextProvider> vulkan_context_provider =
+  scoped_refptr<viz::VulkanContextProvider> vulkan_context_provider =
       GetSharedVulkanContextProvider();
   if (!vulkan_context_provider)
     return;
@@ -801,7 +814,7 @@ void CompositorImpl::OnGpuChannelEstablished(
 
 void CompositorImpl::InitializeDisplay(
     std::unique_ptr<cc::OutputSurface> display_output_surface,
-    scoped_refptr<cc::VulkanContextProvider> vulkan_context_provider,
+    scoped_refptr<viz::VulkanContextProvider> vulkan_context_provider,
     scoped_refptr<viz::ContextProvider> context_provider) {
   DCHECK(layer_tree_frame_sink_request_pending_);
 
@@ -900,7 +913,7 @@ void CompositorImpl::AttachLayerForReadback(scoped_refptr<cc::Layer> layer) {
 }
 
 void CompositorImpl::RequestCopyOfOutputOnRootLayer(
-    std::unique_ptr<cc::CopyOutputRequest> request) {
+    std::unique_ptr<viz::CopyOutputRequest> request) {
   root_window_->GetLayer()->RequestCopyOfOutput(std::move(request));
 }
 
@@ -919,8 +932,8 @@ viz::FrameSinkId CompositorImpl::GetFrameSinkId() {
 
 void CompositorImpl::AddChildFrameSink(const viz::FrameSinkId& frame_sink_id) {
   if (has_layer_tree_frame_sink_) {
-    GetFrameSinkManager()->RegisterFrameSinkHierarchy(frame_sink_id_,
-                                                      frame_sink_id);
+    GetHostFrameSinkManager()->RegisterFrameSinkHierarchy(frame_sink_id_,
+                                                          frame_sink_id);
   } else {
     pending_child_frame_sink_ids_.insert(frame_sink_id);
   }
@@ -933,8 +946,14 @@ void CompositorImpl::RemoveChildFrameSink(
     pending_child_frame_sink_ids_.erase(it);
     return;
   }
-  GetFrameSinkManager()->UnregisterFrameSinkHierarchy(frame_sink_id_,
-                                                      frame_sink_id);
+  GetHostFrameSinkManager()->UnregisterFrameSinkHierarchy(frame_sink_id_,
+                                                          frame_sink_id);
+}
+
+void CompositorImpl::OnFirstSurfaceActivation(
+    const viz::SurfaceInfo& surface_info) {
+  // TODO(fsamuel): Once surface synchronization is turned on, the fallback
+  // surface should be set here.
 }
 
 bool CompositorImpl::HavePendingReadbacks() {

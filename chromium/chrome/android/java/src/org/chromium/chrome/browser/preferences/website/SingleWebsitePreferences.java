@@ -16,6 +16,7 @@ import android.preference.Preference.OnPreferenceChangeListener;
 import android.preference.Preference.OnPreferenceClickListener;
 import android.preference.PreferenceFragment;
 import android.preference.PreferenceScreen;
+import android.provider.Settings;
 import android.support.v7.app.AlertDialog;
 import android.text.format.Formatter;
 import android.widget.ListAdapter;
@@ -29,6 +30,7 @@ import org.chromium.chrome.browser.ContentSettingsType;
 import org.chromium.chrome.browser.notifications.channels.SiteChannelsManager;
 import org.chromium.chrome.browser.omnibox.geo.GeolocationHeader;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
+import org.chromium.chrome.browser.preferences.PreferenceUtils;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.content_public.browser.WebContents;
@@ -270,7 +272,7 @@ public class SingleWebsitePreferences extends PreferenceFragment
      * Must only be called once mSite is set.
      */
     private void displaySitePermissions() {
-        addPreferencesFromResource(R.xml.single_website_preferences);
+        PreferenceUtils.addPreferencesFromResource(this, R.xml.single_website_preferences);
 
         Set<String> permissionPreferenceKeys =
                 new HashSet<>(Arrays.asList(PERMISSION_PREFERENCE_KEYS));
@@ -404,13 +406,9 @@ public class SingleWebsitePreferences extends PreferenceFragment
     }
 
     private static void launchOsChannelSettings(Context context, String channelId) {
-        // TODO(crbug.com/707804): Refer to these ACTION & EXTRA constants by name not value, i.e.
-        // Intent intent = new Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS);
-        // intent.putExtra(Settings.EXTRA_CHANNEL_ID, channelId);
-        // intent.putExtra(Settings.EXTRA_APP_PACKAGE, context.getPackageName());
-        Intent intent = new Intent("android.settings.CHANNEL_NOTIFICATION_SETTINGS");
-        intent.putExtra("android.provider.extra.CHANNEL_ID", channelId);
-        intent.putExtra("android.provider.extra.APP_PACKAGE", context.getPackageName());
+        Intent intent = new Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS);
+        intent.putExtra(Settings.EXTRA_CHANNEL_ID, channelId);
+        intent.putExtra(Settings.EXTRA_APP_PACKAGE, context.getPackageName());
         context.startActivity(intent);
     }
 
@@ -575,7 +573,8 @@ public class SingleWebsitePreferences extends PreferenceFragment
                 preference.setIcon(category.getDisabledInAndroidIcon(getActivity()));
                 preference.setEnabled(false);
             } else {
-                preference.setIcon(ContentSettingsResources.getIcon(contentType));
+                preference.setIcon(
+                        ContentSettingsResources.getTintedIcon(contentType, getResources()));
             }
         } else {
             preference.setIcon(

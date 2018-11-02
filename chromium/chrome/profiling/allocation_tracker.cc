@@ -6,19 +6,19 @@
 
 #include "base/callback.h"
 #include "chrome/profiling/backtrace_storage.h"
-#include "chrome/profiling/profiling_globals.h"
 
 namespace profiling {
 
-AllocationTracker::AllocationTracker(CompleteCallback complete_cb)
+AllocationTracker::AllocationTracker(CompleteCallback complete_cb,
+                                     BacktraceStorage* backtrace_storage)
     : complete_callback_(std::move(complete_cb)),
-      backtrace_storage_(ProfilingGlobals::Get()->GetBacktraceStorage()) {}
+      backtrace_storage_(backtrace_storage) {}
 
 AllocationTracker::~AllocationTracker() {
-  std::vector<BacktraceStorage::Key> to_free;
+  std::vector<const Backtrace*> to_free;
   to_free.reserve(live_allocs_.size());
   for (const auto& cur : live_allocs_)
-    to_free.push_back(cur.backtrace_key());
+    to_free.push_back(cur.backtrace());
   backtrace_storage_->Free(to_free);
 }
 
@@ -26,17 +26,16 @@ void AllocationTracker::OnHeader(const StreamHeader& header) {}
 
 void AllocationTracker::OnAlloc(const AllocPacket& alloc_packet,
                                 std::vector<Address>&& bt) {
-  BacktraceStorage::Key backtrace_key =
-      backtrace_storage_->Insert(std::move(bt));
+  const Backtrace* backtrace = backtrace_storage_->Insert(std::move(bt));
   live_allocs_.emplace(Address(alloc_packet.address), alloc_packet.size,
-                       backtrace_key);
+                       backtrace);
 }
 
 void AllocationTracker::OnFree(const FreePacket& free_packet) {
   AllocationEvent find_me(Address(free_packet.address));
   auto found = live_allocs_.find(find_me);
   if (found != live_allocs_.end()) {
-    backtrace_storage_->Free(found->backtrace_key());
+    backtrace_storage_->Free(found->backtrace());
     live_allocs_.erase(found);
   }
 }

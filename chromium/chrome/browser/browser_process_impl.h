@@ -92,12 +92,14 @@ class BrowserProcessImpl : public BrowserProcess,
   // BrowserProcess implementation.
   void ResourceDispatcherHostCreated() override;
   void EndSession() override;
+  void FlushLocalStateAndReply(base::OnceClosure reply) override;
   metrics_services_manager::MetricsServicesManager* GetMetricsServicesManager()
       override;
   metrics::MetricsService* metrics_service() override;
   rappor::RapporServiceImpl* rappor_service() override;
   ukm::UkmRecorder* ukm_recorder() override;
   IOThread* io_thread() override;
+  SystemNetworkContextManager* system_network_context_manager() override;
   WatchDogThread* watchdog_thread() override;
   ProfileManager* profile_manager() override;
   PrefService* local_state() override;
@@ -136,7 +138,7 @@ class BrowserProcessImpl : public BrowserProcess,
   subresource_filter::ContentRulesetService*
   subresource_filter_ruleset_service() override;
 
-#if (defined(OS_WIN) || defined(OS_LINUX)) && !defined(OS_CHROMEOS)
+#if defined(OS_WIN) || (defined(OS_LINUX) && !defined(OS_CHROMEOS))
   void StartAutoupdateTimer() override;
 #endif
 
@@ -148,7 +150,6 @@ class BrowserProcessImpl : public BrowserProcess,
   component_updater::SupervisedUserWhitelistInstaller*
   supervised_user_whitelist_installer() override;
   MediaFileSystemRegistry* media_file_system_registry() override;
-  bool created_local_state() const override;
 #if BUILDFLAG(ENABLE_WEBRTC)
   WebRtcLogUploader* webrtc_log_uploader() override;
 #endif
@@ -214,8 +215,9 @@ class BrowserProcessImpl : public BrowserProcess,
   bool created_profile_manager_;
   std::unique_ptr<ProfileManager> profile_manager_;
 
-  bool created_local_state_;
   std::unique_ptr<PrefService> local_state_;
+
+  std::unique_ptr<SystemNetworkContextManager> system_network_context_manager_;
 
   bool created_icon_manager_;
   std::unique_ptr<IconManager> icon_manager_;
@@ -298,7 +300,7 @@ class BrowserProcessImpl : public BrowserProcess,
   std::unique_ptr<ChromeResourceDispatcherHostDelegate>
       resource_dispatcher_host_delegate_;
 
-#if (defined(OS_WIN) || defined(OS_LINUX)) && !defined(OS_CHROMEOS)
+#if defined(OS_WIN) || (defined(OS_LINUX) && !defined(OS_CHROMEOS))
   base::RepeatingTimer autoupdate_timer_;
 
   // Gets called by autoupdate timer to see if browser needs restart and can be
@@ -306,7 +308,7 @@ class BrowserProcessImpl : public BrowserProcess,
   void OnAutoupdateTimer();
   bool CanAutorestartForUpdate() const;
   void RestartBackgroundInstance();
-#endif  // defined(OS_WIN) || defined(OS_LINUX) && !defined(OS_CHROMEOS)
+#endif  // defined(OS_WIN) || (defined(OS_LINUX) && !defined(OS_CHROMEOS))
 
   // component updater is normally not used under ChromeOS due
   // to concerns over integrity of data shared between profiles,

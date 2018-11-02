@@ -24,9 +24,11 @@
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_consumer.h"
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_mediator.h"
 #import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
+#include "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #import "ios/chrome/browser/ui/context_menu/context_menu_coordinator.h"
+#import "ios/chrome/browser/ui/ntp/recent_tabs/recent_tabs_handset_view_controller.h"
 #include "ios/chrome/browser/ui/ntp/recent_tabs/synced_sessions.h"
 #import "ios/chrome/browser/ui/ntp/recent_tabs/views/generic_section_header_view.h"
 #import "ios/chrome/browser/ui/ntp/recent_tabs/views/header_of_collapsable_section_protocol.h"
@@ -39,8 +41,8 @@
 #import "ios/chrome/browser/ui/ntp/recent_tabs/views/signed_out_view.h"
 #import "ios/chrome/browser/ui/ntp/recent_tabs/views/spacers_view.h"
 #include "ios/chrome/browser/ui/ui_util.h"
-#import "ios/chrome/browser/ui/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/url_loader.h"
+#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/web/public/referrer.h"
@@ -118,9 +120,6 @@ enum CellType {
 - (NSInteger)numberOfSectionsBeforeSessionOrOtherDevicesSections;
 // Dismisses the modal containing the Recent Tabs panel (iPhone only).
 - (void)dismissRecentTabsModal;
-// Dismisses the modal containing the Recent Tabs panel, with completion
-// handler (iPhone only).
-- (void)dismissRecentTabsModalWithCompletion:(ProceduralBlock)completion;
 // Opens a new tab with the content of |distantTab|.
 - (void)openTabWithContentOfDistantTab:
     (synced_sessions::DistantTab const*)distantTab;
@@ -156,11 +155,17 @@ enum CellType {
 - (void)removeSessionAtIndexPath:(NSIndexPath*)indexPath;
 // Handles long presses on the UITableView, possibly opening context menus.
 - (void)handleLongPress:(UILongPressGestureRecognizer*)longPressGesture;
+
+// The dispatcher used by this ViewController.
+@property(nonatomic, readonly, weak) id<ApplicationCommands> dispatcher;
+
 @end
 
 @implementation RecentTabsTableViewController
 
 @synthesize delegate = delegate_;
+@synthesize dispatcher = _dispatcher;
+@synthesize handsetCommandHandler = _handsetCommandHandler;
 
 - (instancetype)init {
   NOTREACHED();
@@ -168,7 +173,8 @@ enum CellType {
 }
 
 - (instancetype)initWithBrowserState:(ios::ChromeBrowserState*)browserState
-                              loader:(id<UrlLoader>)loader {
+                              loader:(id<UrlLoader>)loader
+                          dispatcher:(id<ApplicationCommands>)dispatcher {
   self = [super initWithStyle:UITableViewStylePlain];
   if (self) {
     DCHECK(browserState);
@@ -177,6 +183,7 @@ enum CellType {
     _loader = loader;
     _sessionState = SessionsSyncUserState::USER_SIGNED_OUT;
     _syncedSessions.reset(new synced_sessions::SyncedSessions());
+    _dispatcher = dispatcher;
   }
   return self;
 }
@@ -351,17 +358,7 @@ enum CellType {
 #pragma mark - Helpers to open tabs, or show the full history view.
 
 - (void)dismissRecentTabsModal {
-  [self dismissRecentTabsModalWithCompletion:nil];
-}
-
-- (void)dismissRecentTabsModalWithCompletion:(ProceduralBlock)completion {
-  // Recent Tabs are modally presented only on iPhone.
-  if (!IsIPadIdiom()) {
-    // TODO(crbug.com/434683): Use a delegate to dismiss the table view.
-    [self.tableView.window.rootViewController
-        dismissViewControllerAnimated:YES
-                           completion:completion];
-  }
+  [self.handsetCommandHandler dismissRecentTabsWithCompletion:nil];
 }
 
 - (void)openTabWithContentOfDistantTab:
@@ -412,18 +409,15 @@ enum CellType {
 }
 
 - (void)showFullHistory {
-  UIViewController* rootViewController =
-      self.tableView.window.rootViewController;
+  __weak RecentTabsTableViewController* weakSelf = self;
   ProceduralBlock openHistory = ^{
-    GenericChromeCommand* openHistory =
-        [[GenericChromeCommand alloc] initWithTag:IDC_SHOW_HISTORY];
-    [rootViewController chromeExecuteCommand:openHistory];
+    [weakSelf.dispatcher showHistory];
   };
   // Dismiss modal, if shown, and open history.
-  if (IsIPadIdiom()) {
-    openHistory();
+  if (self.handsetCommandHandler) {
+    [self.handsetCommandHandler dismissRecentTabsWithCompletion:openHistory];
   } else {
-    [self dismissRecentTabsModalWithCompletion:openHistory];
+    openHistory();
   }
 }
 

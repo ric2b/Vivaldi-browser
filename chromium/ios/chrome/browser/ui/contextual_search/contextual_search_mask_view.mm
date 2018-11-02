@@ -7,6 +7,7 @@
 #include "base/logging.h"
 #import "ios/chrome/browser/ui/contextual_search/contextual_search_panel_view.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
 
 // Linearly map |delta| in the range [0, 1] to a value in [min, max].
 #define LERP(min, max, delta) (min * (1 - delta) + max * delta)

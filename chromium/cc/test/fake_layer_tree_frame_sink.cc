@@ -7,10 +7,10 @@
 #include "base/bind.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/output/layer_tree_frame_sink_client.h"
-#include "cc/resources/returned_resource.h"
-#include "cc/scheduler/begin_frame_source.h"
-#include "cc/scheduler/delay_based_time_source.h"
-#include "cc/test/begin_frame_args_test.h"
+#include "components/viz/common/frame_sinks/begin_frame_source.h"
+#include "components/viz/common/frame_sinks/delay_based_time_source.h"
+#include "components/viz/common/resources/returned_resource.h"
+#include "components/viz/test/begin_frame_args_test.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace cc {
@@ -34,8 +34,8 @@ FakeLayerTreeFrameSink::~FakeLayerTreeFrameSink() = default;
 bool FakeLayerTreeFrameSink::BindToClient(LayerTreeFrameSinkClient* client) {
   if (!LayerTreeFrameSink::BindToClient(client))
     return false;
-  begin_frame_source_ = base::MakeUnique<BackToBackBeginFrameSource>(
-      base::MakeUnique<DelayBasedTimeSource>(
+  begin_frame_source_ = std::make_unique<viz::BackToBackBeginFrameSource>(
+      std::make_unique<viz::DelayBasedTimeSource>(
           base::ThreadTaskRunnerHandle::Get().get()));
   client_->SetBeginFrameSource(begin_frame_source_.get());
   return true;
@@ -64,7 +64,8 @@ void FakeLayerTreeFrameSink::SubmitCompositorFrame(CompositorFrame frame) {
                      weak_ptr_factory_.GetWeakPtr()));
 }
 
-void FakeLayerTreeFrameSink::DidNotProduceFrame(const BeginFrameAck& ack) {}
+void FakeLayerTreeFrameSink::DidNotProduceFrame(const viz::BeginFrameAck& ack) {
+}
 
 void FakeLayerTreeFrameSink::DidReceiveCompositorFrameAck() {
   client_->DidReceiveCompositorFrameAck();
@@ -73,7 +74,7 @@ void FakeLayerTreeFrameSink::DidReceiveCompositorFrameAck() {
 void FakeLayerTreeFrameSink::ReturnResourcesHeldByParent() {
   if (last_sent_frame_) {
     // Return the last frame's resources immediately.
-    std::vector<ReturnedResource> resources;
+    std::vector<viz::ReturnedResource> resources;
     for (const auto& resource : resources_held_by_parent_)
       resources.push_back(resource.ToReturnedResource());
     resources_held_by_parent_.clear();

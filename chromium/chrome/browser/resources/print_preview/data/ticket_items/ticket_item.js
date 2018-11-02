@@ -145,7 +145,9 @@ cr.define('print_preview.ticket_items', function() {
       var sendUpdateEvent = !this.isValueEqual(value);
       // Don't lose requested value if capability is not available.
       this.updateValueInternal(value);
-      if (this.appState_ && (this.field_ != null)) {
+      if (this.appState_ && (this.field_ != null) &&
+          (this.field_ != print_preview.AppStateField.SCALING ||
+           this.wouldValueBeValid(value))) {
         this.appState_.persistField(this.field_, value);
       }
       if (sendUpdateEvent)
@@ -155,7 +157,6 @@ cr.define('print_preview.ticket_items', function() {
     /**
      * @return {?} Default value of the ticket item if no value was set by
      *     the user.
-     * @abstract
      * @protected
      */
     getDefaultValueInternal: function() {
@@ -165,7 +166,6 @@ cr.define('print_preview.ticket_items', function() {
     /**
      * @return {?} Default value of the ticket item if the capability is
      *     not available.
-     * @abstract
      * @protected
      */
     getCapabilityNotAvailableValueInternal: function() {

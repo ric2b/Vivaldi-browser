@@ -204,9 +204,6 @@ SystemTray::SystemTray(Shelf* shelf) : TrayBackgroundView(shelf) {
   // horizontal shelf and that is sufficient to indicate separation, no
   // separator is required.
   set_separator_visibility(false);
-
-  if (!drag_controller())
-    set_drag_controller(base::MakeUnique<TrayDragController>(shelf));
 }
 
 SystemTray::~SystemTray() {
@@ -218,12 +215,11 @@ SystemTray::~SystemTray() {
 }
 
 void SystemTray::InitializeTrayItems(
-    SystemTrayDelegate* delegate,
     WebNotificationTray* web_notification_tray) {
   DCHECK(web_notification_tray);
   web_notification_tray_ = web_notification_tray;
   TrayBackgroundView::Initialize();
-  CreateItems(delegate);
+  CreateItems();
 }
 
 void SystemTray::Shutdown() {
@@ -231,7 +227,7 @@ void SystemTray::Shutdown() {
   web_notification_tray_ = nullptr;
 }
 
-void SystemTray::CreateItems(SystemTrayDelegate* delegate) {
+void SystemTray::CreateItems() {
   AddTrayItem(base::MakeUnique<TrayUser>(this));
 
   // Crucially, this trailing padding has to be inside the user item(s).
@@ -268,7 +264,8 @@ void SystemTray::CreateItems(SystemTrayDelegate* delegate) {
   AddTrayItem(base::WrapUnique(tray_scale_));
   AddTrayItem(base::MakeUnique<TrayBrightness>(this));
   AddTrayItem(base::MakeUnique<TrayKeyboardBrightness>(this));
-  AddTrayItem(base::MakeUnique<TrayCapsLock>(this));
+  tray_caps_lock_ = new TrayCapsLock(this);
+  AddTrayItem(base::WrapUnique(tray_caps_lock_));
   if (NightLightController::IsFeatureEnabled()) {
     tray_night_light_ = new TrayNightLight(this);
     AddTrayItem(base::WrapUnique(tray_night_light_));
@@ -308,15 +305,16 @@ std::vector<SystemTrayItem*> SystemTray::GetTrayItems() const {
   return result;
 }
 
-void SystemTray::ShowDefaultView(BubbleCreationType creation_type) {
+void SystemTray::ShowDefaultView(BubbleCreationType creation_type,
+                                 bool show_by_click) {
   if (creation_type != BUBBLE_USE_EXISTING)
     Shell::Get()->metrics()->RecordUserMetricsAction(
         UMA_STATUS_AREA_MENU_OPENED);
-  ShowItems(GetTrayItems(), false, true, creation_type, false);
+  ShowItems(GetTrayItems(), false, true, creation_type, false, show_by_click);
 }
 
 void SystemTray::ShowPersistentDefaultView() {
-  ShowItems(GetTrayItems(), false, false, BUBBLE_CREATE_NEW, true);
+  ShowItems(GetTrayItems(), false, false, BUBBLE_CREATE_NEW, true, false);
 }
 
 void SystemTray::ShowDetailedView(SystemTrayItem* item,
@@ -330,7 +328,7 @@ void SystemTray::ShowDetailedView(SystemTrayItem* item,
   bool persistent =
       (!activate && close_delay > 0 && creation_type == BUBBLE_CREATE_NEW);
   items.push_back(item);
-  ShowItems(items, true, activate, creation_type, persistent);
+  ShowItems(items, true, activate, creation_type, persistent, false);
   if (system_bubble_)
     system_bubble_->bubble()->StartAutoCloseTimer(close_delay);
 }
@@ -422,7 +420,8 @@ void SystemTray::ShowItems(const std::vector<SystemTrayItem*>& items,
                            bool detailed,
                            bool can_activate,
                            BubbleCreationType creation_type,
-                           bool persistent) {
+                           bool persistent,
+                           bool show_by_click) {
   // No system tray bubbles in kiosk mode.
   if (Shell::Get()->session_controller()->IsKioskSession())
     return;
@@ -449,12 +448,13 @@ void SystemTray::ShowItems(const std::vector<SystemTrayItem*>& items,
 
     TrayBubbleView::InitParams init_params;
     init_params.anchor_alignment = GetAnchorAlignment();
-    init_params.min_width = kTrayMenuMinimumWidth;
-    init_params.max_width = kTrayPopupMaxWidth;
+    init_params.min_width = kTrayMenuWidth;
+    init_params.max_width = kTrayMenuWidth;
     // The bubble is not initially activatable, but will become activatable if
     // the user presses Tab. For behavioral consistency with the non-activatable
     // scenario, don't close on deactivation after Tab either.
     init_params.close_on_deactivate = false;
+    init_params.show_by_click = show_by_click;
     if (detailed) {
       // This is the case where a volume control or brightness control bubble
       // is created.
@@ -530,6 +530,7 @@ void SystemTray::UpdateAfterShelfAlignmentChange() {
 
 void SystemTray::AnchorUpdated() {
   if (system_bubble_) {
+    UpdateClippingWindowBounds();
     system_bubble_->bubble_view()->UpdateBubble();
     // Should check |system_bubble_| again here. Since UpdateBubble above
     // set the bounds of the bubble which will stop the current animation.
@@ -565,7 +566,7 @@ bool SystemTray::PerformAction(const ui::Event& event) {
   if (HasSystemBubble() && full_system_tray_menu_) {
     system_bubble_->bubble()->Close();
   } else {
-    ShowDefaultView(BUBBLE_CREATE_NEW);
+    ShowBubble(event.IsMouseEvent() || event.IsGestureEvent());
     if (event.IsKeyEvent() || (event.flags() & ui::EF_TOUCH_ACCESSIBILITY))
       ActivateBubble();
   }
@@ -578,8 +579,8 @@ void SystemTray::CloseBubble() {
   system_bubble_->bubble()->Close();
 }
 
-void SystemTray::ShowBubble() {
-  ShowDefaultView(BUBBLE_CREATE_NEW);
+void SystemTray::ShowBubble(bool show_by_click) {
+  ShowDefaultView(BUBBLE_CREATE_NEW, show_by_click);
 }
 
 views::TrayBubbleView* SystemTray::GetBubbleView() {

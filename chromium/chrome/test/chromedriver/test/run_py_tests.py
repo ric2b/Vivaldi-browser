@@ -69,10 +69,23 @@ _NEGATIVE_FILTER = [
     'ChromeDriverTest.testHoverOverElement',
     # https://bugs.chromium.org/p/chromedriver/issues/detail?id=833
     'ChromeDriverTest.testAlertOnNewWindow',
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1882
+    'PerfTest.testColdExecuteScript',
 ]
 
 _VERSION_SPECIFIC_FILTER = {}
 _VERSION_SPECIFIC_FILTER['HEAD'] = [
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1819
+    'ChromeExtensionsCapabilityTest.testIFrameWithExtensionsSource',
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1918
+    'ChromeDriverTest.testWindowFullScreen',
+    'ChromeDriverTest.testWindowMaximize',
+    'ChromeDriverTest.testWindowPosition',
+    'ChromeDriverTest.testWindowSize',
+    'ChromeLoggingCapabilityTest.testPerformanceLogger',
+    'MobileEmulationCapabilityTest.testDeviceMetricsWithStandardWidth',
+]
+_VERSION_SPECIFIC_FILTER['61'] = [
     # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1819
     'ChromeExtensionsCapabilityTest.testIFrameWithExtensionsSource',
 ]
@@ -80,9 +93,9 @@ _VERSION_SPECIFIC_FILTER['60'] = [
     # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1819
     'ChromeExtensionsCapabilityTest.testIFrameWithExtensionsSource',
 ]
-_VERSION_SPECIFIC_FILTER['58'] = [
-    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1673
-    'ChromeDriverPageLoadTimeoutTest.testPageLoadTimeoutCrossDomain',
+_VERSION_SPECIFIC_FILTER['59'] = [
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=717
+    'ChromeDriverTest.testCloseWindowUsingJavascript',
 ]
 
 _OS_SPECIFIC_FILTER = {}
@@ -91,12 +104,19 @@ _OS_SPECIFIC_FILTER['win'] = [
     'ChromeLogPathCapabilityTest.testChromeLogPath',
     # https://bugs.chromium.org/p/chromedriver/issues/detail?id=992
     'ChromeDownloadDirTest.testDownloadDirectoryOverridesExistingPreferences',
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1945
+    'ChromeDriverTest.testWindowFullScreen',
 ]
 _OS_SPECIFIC_FILTER['linux'] = [
     # Xvfb doesn't support maximization.
     'ChromeDriverTest.testWindowMaximize',
 ]
-_OS_SPECIFIC_FILTER['mac'] = []
+_OS_SPECIFIC_FILTER['mac'] = [
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1927
+    'MobileEmulationCapabilityTest.testTapElement',
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1945
+    'ChromeDriverTest.testWindowFullScreen',
+]
 
 _DESKTOP_NEGATIVE_FILTER = [
     # Desktop doesn't support touch (without --touch-events).
@@ -133,6 +153,7 @@ _ANDROID_NEGATIVE_FILTER['chrome'] = (
         # https://crbug.com/274650
         'ChromeDriverTest.testCloseWindow',
         # https://bugs.chromium.org/p/chromedriver/issues/detail?id=298
+        'ChromeDriverTest.testWindowFullScreen',
         'ChromeDriverTest.testWindowPosition',
         'ChromeDriverTest.testWindowSize',
         'ChromeDriverTest.testWindowMaximize',
@@ -168,8 +189,6 @@ _ANDROID_NEGATIVE_FILTER['chromium'] = (
         'ChromeDriverTest.testHoverOverElement',
         # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1478
         'ChromeDriverTest.testShouldHandleNewWindowLoadingProperly',
-        # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1852
-        'ChromeDriverTest.testTouchScrollElement',
     ]
 )
 _ANDROID_NEGATIVE_FILTER['chromedriver_webview_shell'] = (
@@ -194,6 +213,7 @@ _ANDROID_NEGATIVE_FILTER['chromedriver_webview_shell'] = (
         'ChromeDriverTest.testPopups',
         'ChromeDriverTest.testDontGoBackOrGoForward',
         # ChromeDriver WebView shell doesn't support multiple tabs.
+        'ChromeDriverTest.testCloseWindowUsingJavascript',
         'ChromeDriverTest.testGetWindowHandles',
         'ChromeDriverTest.testSwitchToWindow',
         'ChromeDriverTest.testShouldHandleNewWindowLoadingProperly',
@@ -215,14 +235,20 @@ _ANDROID_NEGATIVE_FILTER['chromedriver_webview_shell'] = (
         'ChromeDriverTest.testAlertHandlingOnPageUnload',
         'ChromeDriverTest.testClickElementAfterNavigation',
         'ChromeDriverTest.testGetLogOnWindowWithAlert',
+        'ChromeDriverTest.testSendTextToAlert',
         'ChromeDriverTest.testUnexpectedAlertOpenExceptionMessage',
         # The WebView shell that we test against (on Kitkat) does not yet
-        # support Network.setCookie DevTools command.
+        # support Network.setCookie & deleteCookies DevTools command.
         # TODO(gmanikpure): reenable when it does.
         'ChromeDriverLogTest.testDisablingDriverLogsSuppressesChromeDriverLog',
         'ChromeDriverTest.testCookiePath',
+        'ChromeDriverTest.testDeleteCookie',
         'ChromeDriverTest.testGetHttpOnlyCookie',
         'ChromeDriverTest.testGetNamedCookie',
+        # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1941
+        'ChromeDriverTest.testTouchDownMoveUpElement',
+        'ChromeDriverTest.testTouchFlickElement',
+        'ChromeDriverTest.testTouchSingleTapElement',
     ]
 )
 
@@ -369,6 +395,20 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
       self._driver.SwitchToWindow(handle)
       self.assertEquals(handle, self._driver.GetCurrentWindowHandle())
       self._driver.CloseWindow()
+
+  def testCloseWindowUsingJavascript(self):
+    self._driver.Load(self.GetHttpUrlForFile('/chromedriver/page_test.html'))
+    old_handles = self._driver.GetWindowHandles()
+    self._driver.FindElement('id', 'link').Click()
+    new_window_handle = self.WaitForNewWindow(self._driver, old_handles)
+    self.assertNotEqual(None, new_window_handle)
+    self._driver.SwitchToWindow(new_window_handle)
+    self.assertEquals(new_window_handle, self._driver.GetCurrentWindowHandle())
+    self.assertRaises(chromedriver.NoSuchElement,
+                      self._driver.FindElement, 'id', 'link')
+    self._driver.ExecuteScript('window.close()')
+    with self.assertRaises(chromedriver.NoSuchWindow):
+      self._driver.GetTitle()
 
   def testGetWindowHandles(self):
     self._driver.Load(self.GetHttpUrlForFile('/chromedriver/page_test.html'))
@@ -646,6 +686,19 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
     self.assertEquals('prickly pete', self._driver.ExecuteScript(
         'return arguments[0].value;', second))
 
+  def testSendKeysToInputFileElement(self):
+    file_name = os.path.join(_TEST_DATA_DIR, 'anchor_download_test.png')
+    self._driver.Load(ChromeDriverTest.GetHttpUrlForFile(
+        '/chromedriver/file_input.html'))
+    elem = self._driver.FindElement('id', 'id_file')
+    elem.SendKeys(file_name)
+    text = self._driver.ExecuteScript(
+        'var input = document.getElementById("id_file").value;'
+        'return input;')
+    self.assertEquals('C:\\fakepath\\anchor_download_test.png', text);
+    self.assertRaises(chromedriver.InvalidArgument,
+                                  elem.SendKeys, "/blah/blah/blah")
+
   def testGetElementAttribute(self):
     self._driver.Load(self.GetHttpUrlForFile(
         '/chromedriver/attribute_colon_test.html'))
@@ -810,6 +863,25 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
     self.assertEquals(False,
                       self._driver.ExecuteScript('return window.confirmed'))
 
+  def testSendTextToAlert(self):
+    self._driver.ExecuteScript('prompt = window.prompt()')
+    self.assertTrue(self._driver.IsAlertOpen())
+    self._driver.HandleAlert(True, 'TextToPrompt')
+    self.assertEquals('TextToPrompt',
+                      self._driver.ExecuteScript('return prompt'))
+    self._driver.ExecuteScript('window.confirmed = confirm(\'HI\');')
+    self.assertRaises(chromedriver.ElementNotInteractable,
+                 self._driver.HandleAlert,
+                 True, 'textToConfirm')
+    self._driver.HandleAlert(True) #for closing the previous alert.
+    self._driver.ExecuteScript('window.onbeforeunload=function(){return true}')
+    self._driver.FindElement('tag name', 'body').Click()
+    self._driver.Refresh()
+    self.assertTrue(self._driver.IsAlertOpen())
+    self.assertRaises(chromedriver.UnsupportedOperation,
+                 self._driver.HandleAlert,
+                 True, 'textToOnBeforeUnload')
+
   def testAlertOnNewWindow(self):
     self._driver.Load(self.GetHttpUrlForFile('/chromedriver/empty.html'))
     old_windows = self._driver.GetWindowHandles()
@@ -882,6 +954,20 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
     self._driver.SetWindowPosition(100, 200)
     self._driver.SetWindowSize(500, 300)
     self._driver.MaximizeWindow()
+
+    self.assertNotEqual([100, 200], self._driver.GetWindowPosition())
+    self.assertNotEqual([500, 300], self._driver.GetWindowSize())
+    # Set size first so that the window isn't moved offscreen.
+    # See https://bugs.chromium.org/p/chromedriver/issues/detail?id=297.
+    self._driver.SetWindowSize(600, 400)
+    self._driver.SetWindowPosition(100, 200)
+    self.assertEquals([100, 200], self._driver.GetWindowPosition())
+    self.assertEquals([600, 400], self._driver.GetWindowSize())
+
+  def testWindowFullScreen(self):
+    self._driver.SetWindowPosition(100, 200)
+    self._driver.SetWindowSize(500, 300)
+    self._driver.FullScreenWindow()
 
     self.assertNotEqual([100, 200], self._driver.GetWindowPosition())
     self.assertNotEqual([500, 300], self._driver.GetWindowSize())
@@ -1226,8 +1312,13 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
   def testTouchScrollElement(self):
     self._driver.Load(self.GetHttpUrlForFile(
         '/chromedriver/touch_action_tests.html'))
-    scroll_left = 'return document.body.scrollLeft;'
-    scroll_top = 'return document.body.scrollTop;'
+    major_version = int(self._driver.capabilities['version'].split('.')[0])
+    if major_version >= 61:
+      scroll_left = 'return document.documentElement.scrollLeft;'
+      scroll_top = 'return document.documentElement.scrollTop;'
+    else:
+      scroll_left = 'return document.body.scrollLeft;'
+      scroll_top = 'return document.body.scrollTop;'
     self.assertEquals(0, self._driver.ExecuteScript(scroll_left))
     self.assertEquals(0, self._driver.ExecuteScript(scroll_top))
     target = self._driver.FindElement('id', 'target')
@@ -1408,8 +1499,21 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
         chromedriver.NoSuchCookie, "no such cookie",
         self._driver.GetNamedCookie, 'foo')
 
+  def testDeleteCookie(self):
+    self._driver.Load(self.GetHttpUrlForFile(
+        '/chromedriver/empty.html'))
+    self._driver.AddCookie({'name': 'a', 'value': 'b'})
+    self._driver.AddCookie({'name': 'x', 'value': 'y'})
+    self._driver.AddCookie({'name': 'p', 'value': 'q'})
+    cookies = self._driver.GetCookies()
+    self.assertEquals(3, len(cookies))
+    self._driver.DeleteCookie('a')
+    self.assertEquals(2, len(self._driver.GetCookies()))
+    self._driver.DeleteAllCookies()
+    self.assertEquals(0, len(self._driver.GetCookies()))
+
   def testGetUrlOnInvalidUrl(self):
-    # Make sure we don't return 'data:text/html,chromewebdata' (see
+    # Make sure we don't return 'chrome-error://chromewebdata/' (see
     # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1272). RFC 6761
     # requires domain registrars to keep 'invalid.' unregistered (see
     # https://tools.ietf.org/html/rfc6761#section-6.4).

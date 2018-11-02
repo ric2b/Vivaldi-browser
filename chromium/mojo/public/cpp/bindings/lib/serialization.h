@@ -7,7 +7,8 @@
 
 #include <string.h>
 
-#include "mojo/public/cpp/bindings/array_traits_carray.h"
+#include "base/numerics/safe_math.h"
+#include "mojo/public/cpp/bindings/array_traits_span.h"
 #include "mojo/public/cpp/bindings/array_traits_stl.h"
 #include "mojo/public/cpp/bindings/lib/array_serialization.h"
 #include "mojo/public/cpp/bindings/lib/buffer.h"
@@ -18,6 +19,7 @@
 #include "mojo/public/cpp/bindings/lib/string_serialization.h"
 #include "mojo/public/cpp/bindings/lib/template_util.h"
 #include "mojo/public/cpp/bindings/map_traits_stl.h"
+#include "mojo/public/cpp/bindings/message.h"
 #include "mojo/public/cpp/bindings/string_traits_stl.h"
 #include "mojo/public/cpp/bindings/string_traits_string16.h"
 #include "mojo/public/cpp/bindings/string_traits_string_piece.h"
@@ -25,45 +27,32 @@
 namespace mojo {
 namespace internal {
 
+template <typename MojomType, typename UserType>
+mojo::Message StructSerializeAsMessageImpl(UserType* input) {
+  SerializationContext context;
+  mojo::Message message(0, 0, 0, 0, nullptr);
+  typename MojomTypeTraits<MojomType>::Data::BufferWriter writer;
+  Serialize<MojomType>(*input, message.payload_buffer(), &writer, &context);
+  message.AttachHandlesFromSerializationContext(&context);
+  return message;
+}
+
 template <typename MojomType, typename DataArrayType, typename UserType>
 DataArrayType StructSerializeImpl(UserType* input) {
   static_assert(BelongsTo<MojomType, MojomTypeCategory::STRUCT>::value,
                 "Unexpected type.");
-
-  SerializationContext context;
-  size_t size = PrepareToSerialize<MojomType>(*input, &context);
-  DCHECK_EQ(size, Align(size));
-
+  Message message = StructSerializeAsMessageImpl<MojomType>(input);
+  uint32_t size = message.payload_num_bytes();
   DataArrayType result(size);
-  if (size == 0)
-    return result;
-
-  void* result_buffer = &result.front();
-  // The serialization logic requires that the buffer is 8-byte aligned. If the
-  // result buffer is not properly aligned, we have to do an extra copy. In
-  // practice, this should never happen for std::vector.
-  bool need_copy = !IsAligned(result_buffer);
-
-  if (need_copy) {
-    // calloc sets the memory to all zero.
-    result_buffer = calloc(size, 1);
-    DCHECK(IsAligned(result_buffer));
-  }
-
-  Buffer buffer(result_buffer, size);
-  typename MojomTypeTraits<MojomType>::Data* data = nullptr;
-  Serialize<MojomType>(*input, &buffer, &data, &context);
-
-  if (need_copy) {
-    memcpy(&result.front(), result_buffer, size);
-    free(result_buffer);
-  }
-
+  if (size)
+    memcpy(&result.front(), message.payload(), size);
   return result;
 }
 
-template <typename MojomType, typename DataArrayType, typename UserType>
-bool StructDeserializeImpl(const DataArrayType& input,
+template <typename MojomType, typename UserType>
+bool StructDeserializeImpl(const void* data,
+                           size_t data_num_bytes,
+                           std::vector<mojo::ScopedHandle> handles,
                            UserType* output,
                            bool (*validate_func)(const void*,
                                                  ValidationContext*)) {
@@ -71,31 +60,34 @@ bool StructDeserializeImpl(const DataArrayType& input,
                 "Unexpected type.");
   using DataType = typename MojomTypeTraits<MojomType>::Data;
 
-  // TODO(sammc): Use DataArrayType::empty() once WTF::Vector::empty() exists.
-  void* input_buffer =
-      input.size() == 0
-          ? nullptr
-          : const_cast<void*>(reinterpret_cast<const void*>(&input.front()));
+  const void* input_buffer = data_num_bytes == 0 ? nullptr : data;
+  void* aligned_input_buffer = nullptr;
 
-  // Please see comments in StructSerializeImpl.
+  // Validation code will insist that the input buffer is aligned, so we ensure
+  // that here. If the input data is not aligned, we (sadly) copy into an
+  // aligned buffer. In practice this should happen only rarely if ever.
   bool need_copy = !IsAligned(input_buffer);
-
   if (need_copy) {
-    input_buffer = malloc(input.size());
-    DCHECK(IsAligned(input_buffer));
-    memcpy(input_buffer, &input.front(), input.size());
+    aligned_input_buffer = malloc(data_num_bytes);
+    DCHECK(IsAligned(aligned_input_buffer));
+    memcpy(aligned_input_buffer, data, data_num_bytes);
+    input_buffer = aligned_input_buffer;
   }
 
-  ValidationContext validation_context(input_buffer, input.size(), 0, 0);
+  DCHECK(base::IsValueInRangeForNumericType<uint32_t>(data_num_bytes));
+  ValidationContext validation_context(
+      input_buffer, static_cast<uint32_t>(data_num_bytes), handles.size(), 0);
   bool result = false;
   if (validate_func(input_buffer, &validation_context)) {
-    auto data = reinterpret_cast<DataType*>(input_buffer);
     SerializationContext context;
-    result = Deserialize<MojomType>(data, output, &context);
+    *context.mutable_handles() = std::move(handles);
+    result = Deserialize<MojomType>(
+        reinterpret_cast<DataType*>(const_cast<void*>(input_buffer)), output,
+        &context);
   }
 
-  if (need_copy)
-    free(input_buffer);
+  if (aligned_input_buffer)
+    free(aligned_input_buffer);
 
   return result;
 }

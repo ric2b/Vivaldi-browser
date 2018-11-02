@@ -3,12 +3,13 @@
 <translationbundle lang="sw">
 <translation id="1012876632442809908">Kifaa cha USB-C (mlango wa mbele)</translation>
 <translation id="1013923882670373915">Kifaa cha Bluetooth cha "<ph name="DEVICE_NAME" />" kinaomba idhini ya kuoanisha. Tafadhali weka nambari hii ya PIN kwenye kifaa hicho: <ph name="PINCODE" /></translation>
-<translation id="1032891413405719768">Betri ya Stylus imepungua</translation>
+<translation id="1032891413405719768">Chaji ya betri ya Stylus imepungua</translation>
 <translation id="112308213915226829">Ficha rafu kiotomatiki</translation>
 <translation id="1153356358378277386">Vifaa vilivyooanishwa</translation>
 <translation id="1195412055398077112">angalia kwa ujumla:</translation>
 <translation id="1247372569136754018">Maikrofoni (ya ndani)</translation>
 <translation id="1252999807265626933">Inachaji kwenye <ph name="POWER_SOURCE" /></translation>
+<translation id="1267032506238418139">Mabadiliko kwenye njia ya mkato</translation>
 <translation id="1270290102613614947">Kibodi ya skrini imezimwa</translation>
 <translation id="1272079795634619415">Simamisha</translation>
 <translation id="1279938420744323401"><ph name="DISPLAY_NAME" /> (<ph name="ANNOTATION" />)</translation>
@@ -22,7 +23,6 @@
 <translation id="15373452373711364">Kishale kikubwa cha kipanya</translation>
 <translation id="1550523713251050646">Bofya ili upate chaguo zaidi</translation>
 <translation id="1621499497873603021">Muda unaosalia mpaka betri inapoisha, <ph name="TIME_LEFT" /></translation>
-<translation id="164969095109328410">Kifaa cha Chrome</translation>
 <translation id="1677472565718498478">Zimesalia <ph name="TIME" /></translation>
 <translation id="1698760176351776263">Anwani ya IPv6: <ph name="ADDRESS" /></translation>
 <translation id="1734367976349034509">Kifaa hiki kinadhibitiwa kibiashara</translation>
@@ -92,6 +92,7 @@
 <translation id="315116470104423982">Data ya mtandao wa simu</translation>
 <translation id="3236488194889173876">Mtandao wa simu haupatikani</translation>
 <translation id="3294437725009624529">Mgeni</translation>
+<translation id="332587331255250389">Tafadhali badilisha betri</translation>
 <translation id="3364721542077212959">Zana za stylus</translation>
 <translation id="3368922792935385530">Umeunganishwa</translation>
 <translation id="3371140690572404006">Kifaa cha USB-C (mlango wa upande wa kulia mbele)</translation>
@@ -110,6 +111,7 @@
 <translation id="3712407551474845318">Piga eneo picha</translation>
 <translation id="371370241367527062">Maikrofoni ya mbele</translation>
 <translation id="3742055079367172538">Picha ya skrini imepigwa</translation>
+<translation id="3771549900096082774">Hali ya Juu ya Utofautishaji</translation>
 <translation id="3775358506042162758">Unaweza tu kuwa na hadi akaunti tatu zilizoingiwa kwa wakati mmoja</translation>
 <translation id="3783640748446814672">alt</translation>
 <translation id="3784455785234192852">Funga</translation>
@@ -142,14 +144,12 @@
 <translation id="4729904664295161097">Programu ya Mratibu inaweza kutumika kwenye wasifu msingi pekee.</translation>
 <translation id="479989351350248267">tafuta</translation>
 <translation id="4804818685124855865">Tenganisha</translation>
-<translation id="4821830640883629383">Tafadhali chaji au ubadilishe betri.</translation>
 <translation id="4849058404725798627">Angazia kipengee kilicholengwa kwa kibodi</translation>
 <translation id="4872237917498892622">Alt + Utafutaji au Hama</translation>
 <translation id="4895488851634969361">Betri imejaa.</translation>
 <translation id="4905614135390995787">Njia ya mkato ya kugeuza Hali ya Utofautishaji wa Juu imebadilika. Tafadhali tumia <ph name="NEW_SHORTCUT" /> badala ya <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="4918086044614829423">Kubali</translation>
 <translation id="4961318399572185831">Tuma skrini</translation>
-<translation id="5011233892417813670">Chromebook</translation>
 <translation id="5168181903108465623">Vifaa vinavyorusha maudhui vinapatikana</translation>
 <translation id="5170568018924773124">Onyesha katika folda</translation>
 <translation id="5207949376430453814">Angazia kareti ya maandishi</translation>
@@ -175,7 +175,6 @@
 <translation id="5901316534475909376">Shift+Esc</translation>
 <translation id="5916664084637901428">Imewashwa</translation>
 <translation id="5927132638760172455">Inatuma kwa mpokeaji asiyejulikana</translation>
-<translation id="5932901536148835538">Chromebit</translation>
 <translation id="5947494881799873997">Rejesha</translation>
 <translation id="595202126637698455">Ufuatiliaji wa utendaji umewashwa</translation>
 <translation id="5957083217255311415">Data ya mtandao wa simu imezimwa.</translation>
@@ -218,7 +217,6 @@
 <translation id="683971173229319003">Search+L</translation>
 <translation id="6857811139397017780">Amilisha <ph name="NETWORKSERVICE" /></translation>
 <translation id="6911468394164995108">Jiunge na mwingine...</translation>
-<translation id="6915678159055240887">Chromebox</translation>
 <translation id="6981982820502123353">Upatikanaji</translation>
 <translation id="7029814467594812963">Toka kwenye kipindi</translation>
 <translation id="7034339000180558234">Inatuma <ph name="TAB_NAME" /> kwenye <ph name="RECEIVER_NAME" /></translation>
@@ -226,7 +224,6 @@
 <translation id="7066646422045619941">Mtandao huu umezimwa na msimamizi wako.</translation>
 <translation id="7067196344162293536">Zungusha kiotomatiki</translation>
 <translation id="7098389117866926363">Kifaa cha USB-C (mlango wa kushoto nyuma)</translation>
-<translation id="714034171374937760">Chromebase</translation>
 <translation id="7165278925115064263">Alt+Shift+K</translation>
 <translation id="7168224885072002358">Inarejesha katika ubora wa zamani baada ya <ph name="TIMEOUT_SECONDS" /></translation>
 <translation id="7246339268451149667">Je, ungependa kuwasha kipengele cha kufungua kwa kutumia Alama ya Kidole?</translation>

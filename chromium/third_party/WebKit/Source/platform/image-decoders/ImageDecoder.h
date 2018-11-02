@@ -139,6 +139,7 @@ class PLATFORM_EXPORT ImageDecoder {
   bool IsDecodedSizeAvailable() const { return !failed_ && size_available_; }
 
   virtual IntSize Size() const { return size_; }
+  virtual std::vector<SkISize> GetSupportedDecodeSizes() { return {}; };
 
   // Decoders which downsample images should override this method to
   // return the actual decoded size.
@@ -185,7 +186,7 @@ class PLATFORM_EXPORT ImageDecoder {
 
   // Decodes as much of the requested frame as possible, and returns an
   // ImageDecoder-owned pointer.
-  ImageFrame* FrameBufferAtIndex(size_t);
+  ImageFrame* DecodeFrameBufferAtIndex(size_t);
 
   // Whether the requested frame has alpha.
   virtual bool FrameHasAlphaAtIndex(size_t) const;
@@ -248,22 +249,13 @@ class PLATFORM_EXPORT ImageDecoder {
   // Callers may pass WTF::kNotFound to clear all frames.
   // Note: If |frame_buffer_cache_| contains only one frame, it won't be
   // cleared. Returns the number of bytes of frame data actually cleared.
-  //
-  // This is a virtual method because MockImageDecoder needs to override it in
-  // order to run the test ImageFrameGeneratorTest::ClearMultiFrameDecode.
-  //
-  // @TODO  Let MockImageDecoder override ImageFrame::ClearFrameBuffer instead,
-  //        so this method can be made non-virtual. It is used in the test
-  //        ImageFrameGeneratorTest::ClearMultiFrameDecode. The test needs to
-  //        be modified since two frames may be kept in cache, instead of
-  //        always just one, with this ClearCacheExceptFrame implementation.
   virtual size_t ClearCacheExceptFrame(size_t);
 
   // If the image has a cursor hot-spot, stores it in the argument
   // and returns true. Otherwise returns false.
   virtual bool HotSpot(IntPoint&) const { return false; }
 
-  void SetMemoryAllocator(SkBitmap::Allocator* allocator) {
+  virtual void SetMemoryAllocator(SkBitmap::Allocator* allocator) {
     // FIXME: this doesn't work for images with multiple frames.
     if (frame_buffer_cache_.IsEmpty()) {
       // Ensure that InitializeNewFrame is called, after parsing if
@@ -396,7 +388,9 @@ class PLATFORM_EXPORT ImageDecoder {
   // |index| is smaller than |frame_buffer_cache_|.size().
   virtual bool FrameStatusSufficientForSuccessors(size_t index) {
     DCHECK(index < frame_buffer_cache_.size());
-    return frame_buffer_cache_[index].GetStatus() != ImageFrame::kFrameEmpty;
+    ImageFrame::Status frame_status = frame_buffer_cache_[index].GetStatus();
+    return frame_status == ImageFrame::kFramePartial ||
+           frame_status == ImageFrame::kFrameComplete;
   }
 
  private:

@@ -13,12 +13,12 @@
 #include "chrome/browser/predictors/resource_prefetch_predictor_tables.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/history/core/browser/history_service.h"
-#include "components/mime_util/mime_util.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/common/resource_type.h"
 #include "net/http/http_response_headers.h"
 #include "net/url_request/url_request.h"
+#include "third_party/WebKit/common/mime_util/mime_util.h"
 
 using content::BrowserThread;
 
@@ -29,18 +29,18 @@ namespace {
 bool g_allow_port_in_urls = false;
 
 // Sorted by decreasing likelihood according to HTTP archive.
-const char* kFontMimeTypes[] = {"font/woff2",
-                                "application/x-font-woff",
-                                "application/font-woff",
-                                "application/font-woff2",
-                                "font/x-woff",
-                                "application/x-font-ttf",
-                                "font/woff",
-                                "font/ttf",
-                                "application/x-font-otf",
-                                "x-font/woff",
-                                "application/font-sfnt",
-                                "application/font-ttf"};
+const char* const kFontMimeTypes[] = {"font/woff2",
+                                      "application/x-font-woff",
+                                      "application/font-woff",
+                                      "application/font-woff2",
+                                      "font/x-woff",
+                                      "application/x-font-ttf",
+                                      "font/woff",
+                                      "font/ttf",
+                                      "application/x-font-otf",
+                                      "x-font/woff",
+                                      "application/font-sfnt",
+                                      "application/font-ttf"};
 
 bool IsNoStore(const net::URLRequest& response) {
   if (response.was_cached())
@@ -156,9 +156,9 @@ content::ResourceType LoadingDataCollector::GetResourceTypeFromMimeType(
     content::ResourceType fallback) {
   if (mime_type.empty()) {
     return fallback;
-  } else if (mime_util::IsSupportedImageMimeType(mime_type)) {
+  } else if (blink::IsSupportedImageMimeType(mime_type)) {
     return content::RESOURCE_TYPE_IMAGE;
-  } else if (mime_util::IsSupportedJavascriptMimeType(mime_type)) {
+  } else if (blink::IsSupportedJavascriptMimeType(mime_type)) {
     return content::RESOURCE_TYPE_SCRIPT;
   } else if (net::MatchesMimeType("text/css", mime_type)) {
     return content::RESOURCE_TYPE_STYLESHEET;
@@ -239,7 +239,7 @@ bool LoadingDataCollector::IsHandledSubresource(
     content::ResourceType resource_type) {
   const GURL& url = response->url();
   bool bad_port = !g_allow_port_in_urls && url.has_port();
-  if (!response->first_party_for_cookies().SchemeIsHTTPOrHTTPS() ||
+  if (!response->site_for_cookies().SchemeIsHTTPOrHTTPS() ||
       !url.SchemeIsHTTPOrHTTPS() || bad_port) {
     return false;
   }

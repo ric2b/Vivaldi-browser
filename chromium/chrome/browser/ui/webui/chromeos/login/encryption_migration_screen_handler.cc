@@ -8,7 +8,6 @@
 #include <string>
 #include <utility>
 
-#include "ash/system/devicetype_utils.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/metrics/histogram_macros.h"
@@ -43,6 +42,7 @@
 #include "services/device/public/interfaces/wake_lock_provider.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "ui/base/text/bytes_formatting.h"
+#include "ui/chromeos/devicetype_utils.h"
 
 namespace {
 
@@ -324,19 +324,19 @@ void EncryptionMigrationScreenHandler::DeclareLocalizedValues(
     ::login::LocalizedValuesBuilder* builder) {
   builder->Add("migrationReadyTitle", IDS_ENCRYPTION_MIGRATION_READY_TITLE);
   builder->Add("migrationReadyDescription",
-               ash::SubstituteChromeOSDeviceType(
+               ui::SubstituteChromeOSDeviceType(
                    IDS_ENCRYPTION_MIGRATION_READY_DESCRIPTION));
   builder->Add("migrationMigratingTitle",
                IDS_ENCRYPTION_MIGRATION_MIGRATING_TITLE);
   builder->Add("migrationMigratingDescription",
-               ash::SubstituteChromeOSDeviceType(
+               ui::SubstituteChromeOSDeviceType(
                    IDS_ENCRYPTION_MIGRATION_MIGRATING_DESCRIPTION));
   builder->Add("migrationProgressLabel",
                IDS_ENCRYPTION_MIGRATION_PROGRESS_LABEL);
   builder->Add("migrationBatteryWarningLabel",
                IDS_ENCRYPTION_MIGRATION_BATTERY_WARNING_LABEL);
   builder->Add("migrationAskChargeMessage",
-               ash::SubstituteChromeOSDeviceType(
+               ui::SubstituteChromeOSDeviceType(
                    IDS_ENCRYPTION_MIGRATION_ASK_CHARGE_MESSAGE));
   builder->Add("migrationNecessaryBatteryLevelLabel",
                IDS_ENCRYPTION_MIGRATION_NECESSARY_BATTERY_LEVEL_MESSAGE);
@@ -346,7 +346,7 @@ void EncryptionMigrationScreenHandler::DeclareLocalizedValues(
   builder->Add("migrationFailedSubtitle",
                IDS_ENCRYPTION_MIGRATION_FAILED_SUBTITLE);
   builder->Add("migrationFailedMessage",
-               ash::SubstituteChromeOSDeviceType(
+               ui::SubstituteChromeOSDeviceType(
                    IDS_ENCRYPTION_MIGRATION_FAILED_MESSAGE));
   builder->Add("migrationNospaceWarningLabel",
                IDS_ENCRYPTION_MIGRATION_NOSPACE_WARNING_LABEL);
@@ -782,7 +782,8 @@ void EncryptionMigrationScreenHandler::MaybeStopForcingMigration() {
   // |mode_| will be START_MIGRATION if migration was forced by user policy.
   // If an incomplete migration is being resumed, it would be RESUME_MIGRATION.
   // We only want to disable auto-starting migration in the first case.
-  if (mode_ == EncryptionMigrationMode::START_MIGRATION)
+  if (mode_ == EncryptionMigrationMode::START_MIGRATION ||
+      mode_ == EncryptionMigrationMode::START_MINIMAL_MIGRATION)
     CallJS("setIsResuming", false);
 }
 

@@ -38,11 +38,13 @@
 #include "core/editing/markers/ActiveSuggestionMarkerListImpl.h"
 #include "core/editing/markers/CompositionMarker.h"
 #include "core/editing/markers/CompositionMarkerListImpl.h"
-#include "core/editing/markers/DocumentMarkerListEditor.h"
 #include "core/editing/markers/GrammarMarker.h"
 #include "core/editing/markers/GrammarMarkerListImpl.h"
+#include "core/editing/markers/SortedDocumentMarkerListEditor.h"
 #include "core/editing/markers/SpellingMarker.h"
 #include "core/editing/markers/SpellingMarkerListImpl.h"
+#include "core/editing/markers/SuggestionMarker.h"
+#include "core/editing/markers/SuggestionMarkerListImpl.h"
 #include "core/editing/markers/TextMatchMarker.h"
 #include "core/editing/markers/TextMatchMarkerListImpl.h"
 #include "core/frame/LocalFrameView.h"
@@ -69,6 +71,8 @@ DocumentMarker::MarkerTypeIndex MarkerTypeToMarkerIndex(
       return DocumentMarker::kCompositionMarkerIndex;
     case DocumentMarker::kActiveSuggestion:
       return DocumentMarker::kActiveSuggestionMarkerIndex;
+    case DocumentMarker::kSuggestion:
+      return DocumentMarker::kSuggestionMarkerIndex;
   }
 
   NOTREACHED();
@@ -85,6 +89,8 @@ DocumentMarkerList* CreateListForType(DocumentMarker::MarkerType type) {
       return new SpellingMarkerListImpl();
     case DocumentMarker::kGrammar:
       return new GrammarMarkerListImpl();
+    case DocumentMarker::kSuggestion:
+      return new SuggestionMarkerListImpl();
     case DocumentMarker::kTextMatch:
       return new TextMatchMarkerListImpl();
   }
@@ -182,6 +188,23 @@ void DocumentMarkerController::AddActiveSuggestionMarker(
   });
 }
 
+void DocumentMarkerController::AddSuggestionMarker(
+    const EphemeralRange& range,
+    const Vector<String>& suggestions,
+    Color suggestion_highlight_color,
+    Color underline_color,
+    StyleableMarker::Thickness thickness,
+    Color background_color) {
+  DCHECK(!document_->NeedsLayoutTreeUpdate());
+  AddMarkerInternal(
+      range, [this, &suggestions, suggestion_highlight_color, underline_color,
+              thickness, background_color](int start_offset, int end_offset) {
+        return new SuggestionMarker(start_offset, end_offset, suggestions,
+                                    suggestion_highlight_color, underline_color,
+                                    thickness, background_color);
+      });
+}
+
 void DocumentMarkerController::PrepareForDestruction() {
   Clear();
 }
@@ -241,8 +264,6 @@ void DocumentMarkerController::AddMarkerInternal(
   }
 }
 
-// Markers are stored in order sorted by their start offset.
-// Markers of the same type do not overlap each other.
 void DocumentMarkerController::AddMarkerToNode(Node* node,
                                                DocumentMarker* new_marker) {
   possibly_existing_marker_types_.Add(new_marker->GetType());
@@ -362,40 +383,87 @@ void DocumentMarkerController::RemoveMarkersInternal(
   }
 }
 
-DocumentMarker* DocumentMarkerController::MarkerAtPosition(
-    const Position& position,
-    DocumentMarker::MarkerTypes marker_types) {
-  if (!PossiblyHasMarkers(marker_types))
+DocumentMarker* DocumentMarkerController::FirstMarkerIntersectingOffsetRange(
+    const Text& node,
+    unsigned start_offset,
+    unsigned end_offset,
+    DocumentMarker::MarkerTypes types) {
+  if (!PossiblyHasMarkers(types))
     return nullptr;
 
-  Node* const node = position.ComputeContainerNode();
-  MarkerLists* const markers = markers_.at(node);
+  // Minor optimization: if we have an empty range at a node boundary, it
+  // doesn't fall in the interior of any marker.
+  if (start_offset == 0 && end_offset == 0)
+    return nullptr;
+  const unsigned node_length = node.length();
+  if (start_offset == node_length && end_offset == node_length)
+    return nullptr;
+
+  MarkerLists* const markers = markers_.at(&node);
   if (!markers)
     return nullptr;
 
-  const unsigned offset =
-      static_cast<unsigned>(position.ComputeOffsetInContainerNode());
-
-  // This position can't be in the interior of a marker if it occurs at an
-  // endpoint of the node
-  if (offset == 0 ||
-      offset == static_cast<unsigned>(node->MaxCharacterOffset()))
-    return nullptr;
-
-  // Query each of the DocumentMarkerLists until we find a marker at the
-  // specified position (or have gone through all the MarkerTypes)
-  for (DocumentMarker::MarkerType type : marker_types) {
+  for (DocumentMarker::MarkerType type : types) {
     const DocumentMarkerList* const list = ListForType(markers, type);
     if (!list)
       continue;
 
-    const HeapVector<Member<DocumentMarker>>& results =
-        list->MarkersIntersectingRange(offset, offset);
-    if (!results.IsEmpty())
-      return results.front();
+    DocumentMarker* found_marker =
+        list->FirstMarkerIntersectingRange(start_offset, end_offset);
+    if (found_marker)
+      return found_marker;
   }
 
   return nullptr;
+}
+
+HeapVector<std::pair<Member<Node>, Member<DocumentMarker>>>
+DocumentMarkerController::MarkersIntersectingRange(
+    const EphemeralRangeInFlatTree& range,
+    DocumentMarker::MarkerTypes types) {
+  HeapVector<std::pair<Member<Node>, Member<DocumentMarker>>> node_marker_pairs;
+  if (!PossiblyHasMarkers(types))
+    return node_marker_pairs;
+
+  Node* const range_start_container =
+      range.StartPosition().ComputeContainerNode();
+  const unsigned range_start_offset =
+      range.StartPosition().ComputeOffsetInContainerNode();
+  Node* const range_end_container = range.EndPosition().ComputeContainerNode();
+  const unsigned range_end_offset =
+      range.EndPosition().ComputeOffsetInContainerNode();
+
+  for (Node& node : range.Nodes()) {
+    MarkerLists* const markers = markers_.at(&node);
+    if (!markers)
+      continue;
+
+    for (DocumentMarker::MarkerType type : types) {
+      const DocumentMarkerList* const list = ListForType(markers, type);
+      if (!list)
+        continue;
+
+      const unsigned start_offset =
+          node == range_start_container ? range_start_offset : 0;
+      const unsigned max_character_offset = node.MaxCharacterOffset();
+      const unsigned end_offset =
+          node == range_end_container ? range_end_offset : max_character_offset;
+
+      // Minor optimization: if we have an empty offset range at the boundary
+      // of a text node, it doesn't fall into the interior of any marker.
+      if (start_offset == 0 && end_offset == 0)
+        continue;
+      if (start_offset == max_character_offset && end_offset == 0)
+        continue;
+
+      const DocumentMarkerVector& markers_from_this_list =
+          list->MarkersIntersectingRange(start_offset, end_offset);
+      for (DocumentMarker* marker : markers_from_this_list)
+        node_marker_pairs.push_back(std::make_pair(&node, marker));
+    }
+  }
+
+  return node_marker_pairs;
 }
 
 DocumentMarkerVector DocumentMarkerController::MarkersFor(
@@ -740,7 +808,7 @@ void DocumentMarkerController::DidUpdateCharacterData(CharacterData* node,
     if (!list)
       continue;
 
-    if (list->ShiftMarkers(offset, old_length, new_length))
+    if (list->ShiftMarkers(node->data(), offset, old_length, new_length))
       did_shift_marker = true;
   }
 

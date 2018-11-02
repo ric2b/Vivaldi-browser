@@ -7,15 +7,20 @@
 
 #include "core/CoreExport.h"
 #include "core/layout/ng/inline/ng_inline_item.h"
-#include "core/layout/ng/inline/ng_offset_mapping_result.h"
 #include "platform/wtf/Vector.h"
 
 namespace blink {
 
 class LayoutBox;
+class NGOffsetMappingResult;
 
 // Data which is required for inline nodes.
 struct CORE_EXPORT NGInlineNodeData {
+  // The constructor and destructor can't be implicit or inlined, because they
+  // need full definition of NGOffsetMappingResult.
+  NGInlineNodeData();
+  ~NGInlineNodeData();
+
  private:
   TextDirection BaseDirection() const {
     return static_cast<TextDirection>(base_direction_);
@@ -32,6 +37,11 @@ struct CORE_EXPORT NGInlineNodeData {
   // Encoded either as UTF-16 or latin-1 depending on the content.
   String text_content_;
   Vector<NGInlineItem> items_;
+
+  // |items_| to use for the first line, when the node has :first-line rules.
+  // Items have different ComputedStyle, and may also have different ShapeResult
+  // if fonts are different.
+  std::unique_ptr<Vector<NGInlineItem>> first_line_items_;
 
   // The DOM to text content offset mapping of this inline node.
   std::unique_ptr<NGOffsetMappingResult> offset_mapping_;

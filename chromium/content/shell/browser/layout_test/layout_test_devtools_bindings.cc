@@ -8,6 +8,7 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/path_service.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -61,7 +62,10 @@ GURL LayoutTestDevToolsBindings::GetDevToolsPathAsURL(
 GURL LayoutTestDevToolsBindings::MapTestURLIfNeeded(const GURL& test_url,
                                                     bool* is_devtools_js_test) {
   std::string spec = test_url.spec();
-  *is_devtools_js_test = spec.find("/devtools/") != std::string::npos;
+  bool is_js_test =
+      base::EndsWith(spec, ".js", base::CompareCase::INSENSITIVE_ASCII);
+  *is_devtools_js_test =
+      spec.find("/devtools/") != std::string::npos && is_js_test;
   bool is_unit_test = spec.find("/inspector-unit/") != std::string::npos;
   if (!*is_devtools_js_test && !is_unit_test)
     return test_url;
@@ -99,6 +103,18 @@ LayoutTestDevToolsBindings* LayoutTestDevToolsBindings::LoadDevTools(
   bindings->web_contents()->GetController().LoadURLWithParams(params);
   bindings->web_contents()->Focus();
   return bindings;
+}
+
+// static.
+GURL LayoutTestDevToolsBindings::GetInspectedPageURL(const GURL& test_url) {
+  std::string spec = test_url.spec();
+  std::string test_query_param = "&test=";
+  std::string test_script_url =
+      spec.substr(spec.find(test_query_param) + test_query_param.length());
+  std::string inspected_page_url = test_script_url.replace(
+      test_script_url.find("/devtools/"), std::string::npos,
+      "/devtools/resources/inspected-page.html");
+  return GURL(inspected_page_url);
 }
 
 void LayoutTestDevToolsBindings::EvaluateInFrontend(int call_id,

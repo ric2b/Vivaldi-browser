@@ -16,7 +16,6 @@
 <translation id="1589122976691792535">регіон</translation>
 <translation id="1591562245178063882">Цей місяць</translation>
 <translation id="1637811476055996098">Вибрати файли</translation>
-<translation id="167575180612809735">індикатор зайнятості</translation>
 <translation id="1729654308190250600">Введіть електронну адресу.</translation>
 <translation id="1758486001363313524">Інші...</translation>
 <translation id="1806710327868736751">вікно сповіщення</translation>
@@ -24,7 +23,6 @@
 <translation id="1822429046913737220">д.п./п.п.</translation>
 <translation id="1832974991323546415">відтворити на віддаленому пристрої</translation>
 <translation id="1854180393107901205">Зупинити трансляцію</translation>
-<translation id="1880518467580572141">структура</translation>
 <translation id="1921819250265091946">дд</translation>
 <translation id="1930711995431081526">статус</translation>
 <translation id="1938124657309484470">Має бути <ph name="MAXIMUM_DATE_OR_TIME" /> або раніша дата.</translation>
@@ -96,7 +94,6 @@
 <translation id="512758898067543763">заголовок рядка</translation>
 <translation id="5164977714490026579">Значення має бути більшим або дорівнювати <ph name="MINIMUM" />.</translation>
 <translation id="5307600278924710095">Введіть частину електронної адреси до знака "<ph name="ATSIGN" />". Електронна адреса "<ph name="INVALIDADDRESS" />" неповна.</translation>
-<translation id="5317780077021120954">Зберегти</translation>
 <translation id="5406322316791861025">фігура</translation>
 <translation id="5453733299334684579">елемент дерева</translation>
 <translation id="5466621249238537318">Виберіть один або декілька файлів.</translation>
@@ -111,6 +108,7 @@
 <translation id="57838592816432529">Вимкнути звук</translation>
 <translation id="5860033963881614850">Вимк.</translation>
 <translation id="588258955323874662">Повноекранний режим</translation>
+<translation id="5888666972993069672">Транслюється на пристрій <ph name="DEVICE_FRIENDLY_NAME" /></translation>
 <translation id="5939518447894949180">Скинути</translation>
 <translation id="5966707198760109579">Тиждень</translation>
 <translation id="5987525920412732405">лічильник</translation>
@@ -127,7 +125,6 @@
 <translation id="6643016212128521049">Очистити</translation>
 <translation id="668171684555832681">Інший...</translation>
 <translation id="6692633176391053278">повторювач stepper</translation>
-<translation id="6739588121953935928">лінійка</translation>
 <translation id="6755330956360078551">підказка</translation>
 <translation id="6790428901817661496">Відтворити</translation>
 <translation id="6820355525329141109">Не вдалося завантажити плагін.</translation>

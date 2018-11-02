@@ -88,11 +88,6 @@ NSColor* SecureSchemeColor(bool in_dark_mode) {
   return in_dark_mode ? skia::SkColorToSRGBNSColor(SK_ColorWHITE)
                       : skia::SkColorToSRGBNSColor(gfx::kGoogleGreen700);
 }
-NSColor* SecurityWarningSchemeColor(bool in_dark_mode) {
-  return in_dark_mode
-      ? skia::SkColorToSRGBNSColor(SkColorSetA(SK_ColorWHITE, 0x7F))
-      : skia::SkColorToSRGBNSColor(gfx::kGoogleYellow700);
-}
 NSColor* SecurityErrorSchemeColor(bool in_dark_mode) {
   return in_dark_mode
       ? skia::SkColorToSRGBNSColor(SkColorSetA(SK_ColorWHITE, 0x7F))
@@ -161,11 +156,8 @@ NSColor* OmniboxViewMac::GetSecureTextColor(
     return SecureSchemeColor(in_dark_mode);
   }
 
-  if (security_level == security_state::DANGEROUS)
-    return SecurityErrorSchemeColor(in_dark_mode);
-
-  DCHECK_EQ(security_state::SECURITY_WARNING, security_level);
-  return SecurityWarningSchemeColor(in_dark_mode);
+  DCHECK_EQ(security_state::DANGEROUS, security_level);
+  return SecurityErrorSchemeColor(in_dark_mode);
 }
 
 OmniboxViewMac::OmniboxViewMac(OmniboxEditController* controller,
@@ -248,25 +240,14 @@ void OmniboxViewMac::ResetTabState(WebContents* web_contents) {
 
 void OmniboxViewMac::Update() {
   if (model()->UpdatePermanentText()) {
-    const bool was_select_all = IsSelectAll();
-    NSTextView* text_view =
-        base::mac::ObjCCastStrict<NSTextView>([field_ currentEditor]);
-    const bool was_reversed =
-        [text_view selectionAffinity] == NSSelectionAffinityUpstream;
-
     // Restore everything to the baseline look.
     RevertAll();
 
-    // Only select all when we have focus.  If we don't have focus, selecting
-    // all is unnecessary since the selection will change on regaining focus,
-    // and can in fact cause artifacts, e.g. if the user is on the NTP and
-    // clicks a link to navigate, causing |was_select_all| to be vacuously true
-    // for the empty omnibox, and we then select all here, leading to the
-    // trailing portion of a long URL being scrolled into view.  We could try
-    // and address cases like this, but it seems better to just not muck with
-    // things when the omnibox isn't focused to begin with.
-    if (was_select_all && model()->has_focus())
-      SelectAll(was_reversed);
+    // Only select all when we have focus. It's incorrect to have the
+    // Omnibox text selected while unfocused, and we'll re-select it
+    // when focus returns.
+    if (model()->has_focus())
+      SelectAll(true);
   } else {
     // TODO(shess): This corresponds to _win and _gtk, except those
     // guard it with a test for whether the security level changed.
@@ -541,6 +522,8 @@ void OmniboxViewMac::ApplyTextStyle(
   [paragraph_style setAlignment:cocoa_l10n_util::ShouldDoExperimentalRTLLayout()
                                     ? NSRightTextAlignment
                                     : NSLeftTextAlignment];
+  if (@available(macOS 10.11, *))
+    [paragraph_style setAllowsDefaultTighteningForTruncation:NO];
   // If this is a URL, set the top-level paragraph direction to LTR (avoids RTL
   // characters from making the URL render from right to left, as per RFC 3987
   // Section 4.1).
@@ -755,6 +738,10 @@ void OmniboxViewMac::OnInsertText() {
 }
 
 void OmniboxViewMac::OnBeforeDrawRect() {
+  if (!insert_char_time_.is_null()) {
+    UMA_HISTOGRAM_TIMES("Omnibox.CharTypedToRepaintLatency.ToPaint",
+                        base::TimeTicks::Now() - insert_char_time_);
+  }
   draw_rect_start_time_ = base::TimeTicks::Now();
 }
 

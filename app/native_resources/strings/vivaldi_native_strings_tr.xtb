@@ -6,7 +6,7 @@
 <translation id="1728549374069268714">Yapıştır ve git</translation>
 <translation id="1756026472674246267">Bağlantıyı Yeni Sekmede Aç</translation>
 <translation id="1759842336958782510">Chrome</translation>
-<translation id="1769904678986817931">Resim Özellikleri</translation>
+<translation id="1769904678986817931">Resim Özellikleri...</translation>
 <translation id="1920297417712412573">Nota Kopyala</translation>
 <translation id="1921101374471252440">&amp;Resmi Yeniden Yükle</translation>
 <translation id="2444387452209867610">Not Ekle</translation>
@@ -44,6 +44,7 @@
 <translation id="5716238312826274098">Bildirimler devre dışı bırakılıyor</translation>
 <translation id="588258955323874662">Tam Ekran</translation>
 <translation id="5916080360077521750">Maalesef, tarayıcınız çalışıyorken Chrome ayarlarınıza erişilemiyor. Ayarları Vivaldi içerisine almak için, işlerinizi kaydedin ve Chrome pencerelerini kapatın.Daha sonra Devam düğmesine basın.</translation>
+<translation id="6229528619562190452">Vivaldi'yi güncellemek için buraya tıklayın.</translation>
 <translation id="6234173136417926046">Resmi Başlangıç Sayfası Arka Planı Olarak Kullan</translation>
 <translation id="6259156558325130047">Yapılan işi yineler</translation>
 <translation id="630690498669249215">Opera Yer İmleri Dosyası</translation>

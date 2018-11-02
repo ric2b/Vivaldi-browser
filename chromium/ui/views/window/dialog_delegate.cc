@@ -31,11 +31,20 @@ namespace views {
 ////////////////////////////////////////////////////////////////////////////////
 // DialogDelegate:
 
-DialogDelegate::DialogDelegate() : supports_custom_frame_(true) {
+DialogDelegate::DialogDelegate()
+    : supports_custom_frame_(true),
+      // TODO(crbug.com/733040): Most subclasses assume they must set their own
+      // margins explicitly, so we set them to 0 here for now to avoid doubled
+      // margins.
+      margins_(0) {
   UMA_HISTOGRAM_BOOLEAN("Dialog.DialogDelegate.Create", true);
+  creation_time_ = base::TimeTicks::Now();
 }
 
-DialogDelegate::~DialogDelegate() {}
+DialogDelegate::~DialogDelegate() {
+  UMA_HISTOGRAM_LONG_TIMES("Dialog.DialogDelegate.Duration",
+                           base::TimeTicks::Now() - creation_time_);
+}
 
 // static
 Widget* DialogDelegate::CreateDialogWidget(WidgetDelegate* delegate,

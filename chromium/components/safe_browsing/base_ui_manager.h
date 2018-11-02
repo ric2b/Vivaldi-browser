@@ -11,7 +11,6 @@
 #include "base/bind_helpers.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/time/time.h"
 #include "components/security_interstitials/content/unsafe_resource.h"
 
 class GURL;
@@ -47,12 +46,6 @@ class BaseUIManager
   // in the chain, and |original_url| is the first one (the root of the
   // chain). Otherwise, |original_url| = |url|.
   virtual void DisplayBlockingPage(const UnsafeResource& resource);
-
-  // Log the user perceived delay caused by SafeBrowsing. This delay is the time
-  // delta starting from when we would have started reading data from the
-  // network, and ending when the SafeBrowsing check completes indicating that
-  // the current page is 'safe'.
-  virtual void LogPauseDelay(base::TimeDelta time);
 
   // This is a no-op in the base class, but should be overridden to send threat
   // details. Called on the IO thread by the ThreatDetails with the serialized
@@ -112,6 +105,7 @@ class BaseUIManager
   virtual const GURL default_safe_page() const;
 
  protected:
+  friend class ChromePasswordProtectionService;
   virtual ~BaseUIManager();
 
   // Updates the whitelist URL set for |web_contents|. Called on the UI thread.
@@ -125,10 +119,11 @@ class BaseUIManager
   virtual void ReportSafeBrowsingHitOnIOThread(
       const safe_browsing::HitReport& hit_report);
 
-  // Removes |whitelist_url| from the pending whitelist for
-  // |web_contents|. Called on the UI thread.
-  void RemoveFromPendingWhitelistUrlSet(const GURL& whitelist_url,
-                                        content::WebContents* web_contents);
+  // Removes |whitelist_url| from the whitelist for |web_contents|.
+  // Called on the UI thread.
+  void RemoveWhitelistUrlSet(const GURL& whitelist_url,
+                             content::WebContents* web_contents,
+                             bool from_pending_only);
 
   // Ensures that |web_contents| has its whitelist set in its userdata
   static void EnsureWhitelistCreated(content::WebContents* web_contents);

@@ -37,6 +37,7 @@ media_router_integration_test_resources = [
   "resources/fail_create_route.json",
   "resources/fail_reconnect_session.html",
   "resources/fail_reconnect_session.json",
+  "resources/local_media_sink.json",
   "resources/no_provider.json",
   "resources/no_sinks.json",
   "resources/no_supported_sinks.json",
@@ -85,7 +86,7 @@ source_set("media_router_browsertests") {
     "//chrome/test:test_support",
     "//chrome/test:test_support_ui",
     "//extensions/browser",
-    "//media/base:test_support",
+    "//media:test_support",
     "//skia",
     "//testing/gtest",
   ]

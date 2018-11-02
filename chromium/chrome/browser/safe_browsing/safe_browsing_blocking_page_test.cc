@@ -13,6 +13,7 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/histogram_tester.h"
@@ -244,9 +245,11 @@ class TestThreatDetailsFactory : public ThreatDetailsFactory {
       WebContents* web_contents,
       const security_interstitials::UnsafeResource& unsafe_resource,
       net::URLRequestContextGetter* request_context_getter,
-      history::HistoryService* history_service) override {
+      history::HistoryService* history_service,
+      bool trim_to_ad_tags) override {
     details_ = new ThreatDetails(delegate, web_contents, unsafe_resource,
-                                 request_context_getter, history_service);
+                                 request_context_getter, history_service,
+                                 trim_to_ad_tags);
     return details_;
   }
 
@@ -280,7 +283,7 @@ class TestSafeBrowsingBlockingPage : public SafeBrowsingBlockingPage {
       return;
 
     // Notify that we are gone
-    base::MessageLoopForUI::current()->QuitWhenIdle();
+    base::RunLoop::QuitCurrentWhenIdleDeprecated();
     wait_for_delete_ = false;
   }
 

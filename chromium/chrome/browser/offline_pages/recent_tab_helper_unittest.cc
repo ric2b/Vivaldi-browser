@@ -27,6 +27,7 @@
 #include "content/public/browser/reload_type.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/referrer.h"
+#include "content/public/test/navigation_simulator.h"
 #include "content/public/test/web_contents_tester.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -235,13 +236,8 @@ void RecentTabHelperTest::TearDown() {
 }
 
 void RecentTabHelperTest::FailLoad(const GURL& url) {
-  controller().LoadURL(url, content::Referrer(), ui::PAGE_TRANSITION_TYPED,
-                       std::string());
-  content::RenderFrameHostTester::For(main_rfh())->SimulateNavigationStart(url);
-  content::RenderFrameHostTester::For(main_rfh())->
-      SimulateNavigationError(url, net::ERR_INTERNET_DISCONNECTED);
-  content::RenderFrameHostTester::For(main_rfh())->
-      SimulateNavigationErrorPageCommit();
+  content::NavigationSimulator::NavigateAndFailFromBrowser(
+      web_contents(), url, net::ERR_INTERNET_DISCONNECTED);
 }
 
 const std::vector<OfflinePageItem>& RecentTabHelperTest::GetAllPages() {
@@ -342,7 +338,7 @@ TEST_F(RecentTabHelperTest, NoTabIdNoCapture) {
   FastForwardSnapshotController();
   recent_tab_helper()->WasHidden();
   recent_tab_helper()->ObserveAndDownloadCurrentPage(NewDownloadClientId(),
-                                                     123L);
+                                                     123L, "");
   RunUntilIdle();
   EXPECT_TRUE(model()->is_loaded());
   // No page should be captured.
@@ -368,7 +364,7 @@ TEST_F(RecentTabHelperTest, LastNDisabledOnSvelte) {
 
   // But the following download request should work normally
   recent_tab_helper()->ObserveAndDownloadCurrentPage(NewDownloadClientId(),
-                                                     123L);
+                                                     123L, "");
   RunUntilIdle();
   EXPECT_EQ(1U, page_added_count());
   ASSERT_EQ(1U, GetAllPages().size());
@@ -392,7 +388,7 @@ TEST_F(RecentTabHelperTest, LastNWontSaveCustomTab) {
 
   // But the following download request should work normally
   recent_tab_helper()->ObserveAndDownloadCurrentPage(NewDownloadClientId(),
-                                                     123L);
+                                                     123L, "");
   RunUntilIdle();
   EXPECT_EQ(1U, page_added_count());
   ASSERT_EQ(1U, GetAllPages().size());
@@ -608,7 +604,7 @@ TEST_F(RecentTabHelperTest, TwoLastNAndTwoDownloadCapturesSamePage) {
   const int64_t second_offline_id = first_offline_id + 1;
   const ClientId second_client_id = NewDownloadClientId();
   recent_tab_helper()->ObserveAndDownloadCurrentPage(second_client_id,
-                                                     second_offline_id);
+                                                     second_offline_id, "");
   RunUntilIdle();
   EXPECT_EQ(3U, page_added_count());
   EXPECT_EQ(1U, model_removed_count());
@@ -623,7 +619,7 @@ TEST_F(RecentTabHelperTest, TwoLastNAndTwoDownloadCapturesSamePage) {
   const int64_t third_offline_id = first_offline_id + 2;
   const ClientId third_client_id = NewDownloadClientId();
   recent_tab_helper()->ObserveAndDownloadCurrentPage(third_client_id,
-                                                     third_offline_id);
+                                                     third_offline_id, "");
   RunUntilIdle();
   EXPECT_EQ(4U, page_added_count());
   EXPECT_EQ(1U, model_removed_count());
@@ -644,7 +640,7 @@ TEST_F(RecentTabHelperTest, NoCaptureOnErrorPage) {
   FastForwardSnapshotController();
   recent_tab_helper()->WasHidden();
   recent_tab_helper()->ObserveAndDownloadCurrentPage(NewDownloadClientId(),
-                                                     123L);
+                                                     123L, "");
   RunUntilIdle();
   EXPECT_TRUE(model()->is_loaded());
   ASSERT_EQ(0U, GetAllPages().size());
@@ -665,7 +661,7 @@ TEST_F(RecentTabHelperTest, LastNFeatureNotEnabled) {
   ASSERT_EQ(0U, GetAllPages().size());
 
   recent_tab_helper()->ObserveAndDownloadCurrentPage(NewDownloadClientId(),
-                                                     123L);
+                                                     123L, "");
   RunUntilIdle();
   // No page should be captured.
   ASSERT_EQ(1U, GetAllPages().size());
@@ -678,7 +674,7 @@ TEST_F(RecentTabHelperTest, DownloadRequestEarlyInLoad) {
   // so far.
   NavigateAndCommit(kTestPageUrl);
   const ClientId client_id = NewDownloadClientId();
-  recent_tab_helper()->ObserveAndDownloadCurrentPage(client_id, 153L);
+  recent_tab_helper()->ObserveAndDownloadCurrentPage(client_id, 153L, "");
   FastForwardSnapshotController();
   EXPECT_TRUE(model()->is_loaded());
   ASSERT_EQ(0U, GetAllPages().size());
@@ -715,7 +711,7 @@ TEST_F(RecentTabHelperTest, DownloadRequestLaterInLoad) {
   ASSERT_EQ(0U, GetAllPages().size());
 
   const ClientId client_id = NewDownloadClientId();
-  recent_tab_helper()->ObserveAndDownloadCurrentPage(client_id, 153L);
+  recent_tab_helper()->ObserveAndDownloadCurrentPage(client_id, 153L, "");
   RunUntilIdle();
   ASSERT_EQ(1U, GetAllPages().size());
   const OfflinePageItem& page = GetAllPages()[0];
@@ -740,13 +736,34 @@ TEST_F(RecentTabHelperTest, DownloadRequestAfterFullyLoad) {
   ASSERT_EQ(0U, GetAllPages().size());
 
   const ClientId client_id = NewDownloadClientId();
-  recent_tab_helper()->ObserveAndDownloadCurrentPage(client_id, 153L);
+  recent_tab_helper()->ObserveAndDownloadCurrentPage(client_id, 153L, "");
   RunUntilIdle();
   ASSERT_EQ(1U, GetAllPages().size());
   const OfflinePageItem& page = GetAllPages()[0];
   EXPECT_EQ(kTestPageUrl, page.url);
   EXPECT_EQ(client_id, page.client_id);
   EXPECT_EQ(153L, page.offline_id);
+  EXPECT_EQ("", page.request_origin);
+}
+
+// Simulates a download request to offline the current page made after loading
+// is completed. Should end up with one offline page.
+TEST_F(RecentTabHelperTest, DownloadRequestAfterFullyLoadWithOrigin) {
+  NavigateAndCommit(kTestPageUrl);
+  recent_tab_helper()->DocumentOnLoadCompletedInMainFrame();
+  FastForwardSnapshotController();
+  EXPECT_TRUE(model()->is_loaded());
+  ASSERT_EQ(0U, GetAllPages().size());
+
+  const ClientId client_id = NewDownloadClientId();
+  recent_tab_helper()->ObserveAndDownloadCurrentPage(client_id, 153L, "abc");
+  RunUntilIdle();
+  ASSERT_EQ(1U, GetAllPages().size());
+  const OfflinePageItem& page = GetAllPages()[0];
+  EXPECT_EQ(kTestPageUrl, page.url);
+  EXPECT_EQ(client_id, page.client_id);
+  EXPECT_EQ(153L, page.offline_id);
+  EXPECT_EQ("abc", page.request_origin);
 }
 
 // Simulates requests coming from last_n and downloads at the same time for a
@@ -759,7 +776,7 @@ TEST_F(RecentTabHelperTest, SimultaneousCapturesFromLastNAndDownloads) {
   const int64_t download_offline_id = 153L;
   const ClientId download_client_id = NewDownloadClientId();
   recent_tab_helper()->ObserveAndDownloadCurrentPage(download_client_id,
-                                                     download_offline_id);
+                                                     download_offline_id, "");
   RunUntilIdle();
   ASSERT_EQ(2U, GetAllPages().size());
 
@@ -818,9 +835,10 @@ TEST_F(RecentTabHelperTest, OverlappingDownloadRequestsAreIgnored) {
   NavigateAndCommit(kTestPageUrl);
   const ClientId client_id_1 = NewDownloadClientId();
   const int64_t offline_id_1 = 153L;
-  recent_tab_helper()->ObserveAndDownloadCurrentPage(client_id_1, offline_id_1);
+  recent_tab_helper()->ObserveAndDownloadCurrentPage(client_id_1, offline_id_1,
+                                                     "");
   recent_tab_helper()->ObserveAndDownloadCurrentPage(NewDownloadClientId(),
-                                                     351L);
+                                                     351L, "");
 
   // Finish loading the page. Only the first request should be executed.
   recent_tab_helper()->DocumentOnLoadCompletedInMainFrame();
@@ -836,9 +854,10 @@ TEST_F(RecentTabHelperTest, OverlappingDownloadRequestsAreIgnored) {
   // generate a snapshot.
   const ClientId client_id_3 = NewDownloadClientId();
   const int64_t offline_id_3 = 789L;
-  recent_tab_helper()->ObserveAndDownloadCurrentPage(client_id_3, offline_id_3);
+  recent_tab_helper()->ObserveAndDownloadCurrentPage(client_id_3, offline_id_3,
+                                                     "");
   recent_tab_helper()->ObserveAndDownloadCurrentPage(NewDownloadClientId(),
-                                                     987L);
+                                                     987L, "");
   RunUntilIdle();
   EXPECT_EQ(2U, page_added_count());
   EXPECT_EQ(0U, model_removed_count());
@@ -876,7 +895,7 @@ TEST_F(RecentTabHelperTest, SaveSameDocumentNavigationSnapshots) {
   // Now create a download request and check the snapshot is properly created.
   const ClientId client_id = NewDownloadClientId();
   const int64_t offline_id = 153L;
-  recent_tab_helper()->ObserveAndDownloadCurrentPage(client_id, offline_id);
+  recent_tab_helper()->ObserveAndDownloadCurrentPage(client_id, offline_id, "");
   RunUntilIdle();
   EXPECT_EQ(3U, page_added_count());
   EXPECT_EQ(1U, model_removed_count());

@@ -9,7 +9,7 @@
 #include "cc/output/overlay_strategy_single_on_top.h"
 #include "cc/output/overlay_strategy_underlay.h"
 #include "cc/quads/draw_quad.h"
-#include "cc/resources/resource_provider.h"
+#include "cc/resources/display_resource_provider.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/transform.h"
 
@@ -20,8 +20,9 @@ namespace {
 // before returning from ProcessForOverlays.
 class SendPromotionHintsBeforeReturning {
  public:
-  SendPromotionHintsBeforeReturning(cc::ResourceProvider* resource_provider,
-                                    cc::OverlayCandidateList* candidates)
+  SendPromotionHintsBeforeReturning(
+      cc::DisplayResourceProvider* resource_provider,
+      cc::OverlayCandidateList* candidates)
       : resource_provider_(resource_provider), candidates_(candidates) {}
   ~SendPromotionHintsBeforeReturning() {
     resource_provider_->SendPromotionHints(
@@ -29,7 +30,7 @@ class SendPromotionHintsBeforeReturning {
   }
 
  private:
-  cc::ResourceProvider* resource_provider_;
+  cc::DisplayResourceProvider* resource_provider_;
   cc::OverlayCandidateList* candidates_;
 
   DISALLOW_COPY_AND_ASSIGN(SendPromotionHintsBeforeReturning);
@@ -60,7 +61,7 @@ gfx::Rect OverlayProcessor::GetAndResetOverlayDamage() {
 }
 
 bool OverlayProcessor::ProcessForCALayers(
-    ResourceProvider* resource_provider,
+    DisplayResourceProvider* resource_provider,
     RenderPass* render_pass,
     const OverlayProcessor::FilterOperationsMap& render_pass_filters,
     const OverlayProcessor::FilterOperationsMap& render_pass_background_filters,
@@ -88,8 +89,8 @@ bool OverlayProcessor::ProcessForCALayers(
 }
 
 bool OverlayProcessor::ProcessForDCLayers(
-    ResourceProvider* resource_provider,
-    RenderPass* render_pass,
+    DisplayResourceProvider* resource_provider,
+    RenderPassList* render_passes,
     const OverlayProcessor::FilterOperationsMap& render_pass_filters,
     const OverlayProcessor::FilterOperationsMap& render_pass_background_filters,
     OverlayCandidateList* overlay_candidates,
@@ -100,17 +101,17 @@ bool OverlayProcessor::ProcessForDCLayers(
   if (!overlay_validator || !overlay_validator->AllowDCLayerOverlays())
     return false;
 
-  dc_processor_.Process(resource_provider, gfx::RectF(render_pass->output_rect),
-                        &render_pass->quad_list, &overlay_damage_rect_,
-                        damage_rect, dc_layer_overlays);
+  dc_processor_.Process(
+      resource_provider, gfx::RectF(render_passes->back()->output_rect),
+      render_passes, &overlay_damage_rect_, damage_rect, dc_layer_overlays);
 
   DCHECK(overlay_candidates->empty());
   return true;
 }
 
 void OverlayProcessor::ProcessForOverlays(
-    ResourceProvider* resource_provider,
-    RenderPass* render_pass,
+    DisplayResourceProvider* resource_provider,
+    RenderPassList* render_passes,
     const OverlayProcessor::FilterOperationsMap& render_pass_filters,
     const OverlayProcessor::FilterOperationsMap& render_pass_background_filters,
     OverlayCandidateList* candidates,
@@ -130,6 +131,8 @@ void OverlayProcessor::ProcessForOverlays(
   const gfx::Rect previous_frame_underlay_rect = previous_frame_underlay_rect_;
   previous_frame_underlay_rect_ = gfx::Rect();
 
+  RenderPass* render_pass = render_passes->back().get();
+
   // If we have any copy requests, we can't remove any quads for overlays or
   // CALayers because the framebuffer would be missing the removed quads'
   // contents.
@@ -139,13 +142,13 @@ void OverlayProcessor::ProcessForOverlays(
   }
 
   // First attempt to process for CALayers.
-  if (ProcessForCALayers(resource_provider, render_pass, render_pass_filters,
-                         render_pass_background_filters, candidates,
-                         ca_layer_overlays, damage_rect)) {
+  if (ProcessForCALayers(resource_provider, render_passes->back().get(),
+                         render_pass_filters, render_pass_background_filters,
+                         candidates, ca_layer_overlays, damage_rect)) {
     return;
   }
 
-  if (ProcessForDCLayers(resource_provider, render_pass, render_pass_filters,
+  if (ProcessForDCLayers(resource_provider, render_passes, render_pass_filters,
                          render_pass_background_filters, candidates,
                          dc_layer_overlays, damage_rect)) {
     return;
@@ -153,8 +156,8 @@ void OverlayProcessor::ProcessForOverlays(
 
   // Only if that fails, attempt hardware overlay strategies.
   for (const auto& strategy : strategies_) {
-    if (!strategy->Attempt(resource_provider, render_pass, candidates,
-                           content_bounds))
+    if (!strategy->Attempt(resource_provider, render_passes->back().get(),
+                           candidates, content_bounds))
       continue;
 
     UpdateDamageRect(candidates, previous_frame_underlay_rect, damage_rect);

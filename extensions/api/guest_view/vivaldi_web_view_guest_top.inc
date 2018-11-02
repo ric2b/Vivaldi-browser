@@ -2,8 +2,6 @@
 // included by "extensions/browser/guest_view/web_view/web_view_guest.h"
 
 #include "content/public/browser/notification_source.h"
-#include "extensions/browser/app_window/app_window.h"
-#include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/app_window/native_app_window.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/notification_types.h"
@@ -26,6 +24,7 @@
 #endif  // USE_AURA
 
 #include "ui/devtools/devtools_connector.h"
+#include "browser/vivaldi_browser_finder.h"
 
 namespace extensions {
 

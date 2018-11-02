@@ -51,6 +51,7 @@
 #include "ui/gl/gl_image.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_switches.h"
+#include "ui/gl/gl_workarounds.h"
 #include "ui/gl/init/gl_factory.h"
 
 #if defined(OS_WIN)
@@ -251,7 +252,7 @@ GpuCommandBufferStub::GpuCommandBufferStub(
       sequence_id_(sequence_id),
       stream_id_(stream_id),
       route_id_(route_id),
-      last_flush_count_(0),
+      last_flush_id_(0),
       waiting_for_sync_point_(false),
       previous_processed_num_(0),
       active_url_(init_params.active_url),
@@ -367,6 +368,10 @@ void GpuCommandBufferStub::DidSwapBuffersComplete(
 
 const gles2::FeatureInfo* GpuCommandBufferStub::GetFeatureInfo() const {
   return context_group_->feature_info();
+}
+
+const GpuPreferences& GpuCommandBufferStub::GetGpuPreferences() const {
+  return context_group_->gpu_preferences();
 }
 
 void GpuCommandBufferStub::SetLatencyInfoCallback(
@@ -564,6 +569,11 @@ bool GpuCommandBufferStub::Initialize(
     GpuCommandBufferStub* share_command_buffer_stub,
     const GPUCreateCommandBufferConfig& init_params,
     std::unique_ptr<base::SharedMemory> shared_state_shm) {
+#if defined(OS_FUCHSIA)
+  // TODO(crbug.com/707031): Implement this.
+  NOTIMPLEMENTED();
+  return false;
+#else
   TRACE_EVENT0("gpu", "GpuCommandBufferStub::Initialize");
   FastSetActiveURL(active_url_, active_url_hash_, channel_);
 
@@ -580,7 +590,8 @@ bool GpuCommandBufferStub::Initialize(
     gpu::GpuMemoryBufferFactory* gmb_factory =
         channel_->gpu_channel_manager()->gpu_memory_buffer_factory();
     context_group_ = new gles2::ContextGroup(
-        manager->gpu_preferences(), manager->mailbox_manager(),
+        manager->gpu_preferences(), gles2::PassthroughCommandDecoderSupported(),
+        manager->mailbox_manager(),
         new GpuCommandBufferMemoryTracker(
             channel_, command_buffer_id_.GetUnsafeValue(),
             init_params.attribs.context_type, channel_->task_runner()),
@@ -711,7 +722,7 @@ bool GpuCommandBufferStub::Initialize(
     }
   }
 
-  if (context_group_->gpu_preferences().use_passthrough_cmd_decoder) {
+  if (context_group_->use_passthrough_cmd_decoder()) {
     // When using the passthrough command decoder, only share with other
     // contexts in the explicitly requested share group
     if (share_command_buffer_stub) {
@@ -735,8 +746,7 @@ bool GpuCommandBufferStub::Initialize(
     if (!context.get()) {
       context = gl::init::CreateGLContext(
           share_group_.get(), surface_.get(),
-          GenerateGLContextAttribs(init_params.attribs,
-                                   context_group_->gpu_preferences()));
+          GenerateGLContextAttribs(init_params.attribs, context_group_.get()));
       if (!context.get()) {
         DLOG(ERROR) << "Failed to create shared context for virtualization.";
         return false;
@@ -745,6 +755,10 @@ bool GpuCommandBufferStub::Initialize(
       // group.
       DCHECK(context->share_group() == share_group_.get());
       share_group_->SetSharedContext(surface_.get(), context.get());
+
+      // This needs to be called against the real shared context, not the
+      // virtual context created below.
+      manager->gpu_feature_info().ApplyToGLContext(context.get());
     }
     // This should be either:
     // (1) a non-virtual GL context, or
@@ -754,26 +768,25 @@ bool GpuCommandBufferStub::Initialize(
            gl::GetGLImplementation() == gl::kGLImplementationStubGL);
     context = new GLContextVirtual(share_group_.get(), context.get(),
                                    decoder_->AsWeakPtr());
-    if (!context->Initialize(
-            surface_.get(),
-            GenerateGLContextAttribs(init_params.attribs,
-                                     context_group_->gpu_preferences()))) {
+    if (!context->Initialize(surface_.get(),
+                             GenerateGLContextAttribs(init_params.attribs,
+                                                      context_group_.get()))) {
       // The real context created above for the default offscreen surface
       // might not be compatible with this surface.
       context = NULL;
       DLOG(ERROR) << "Failed to initialize virtual GL context.";
       return false;
     }
-  }
-  if (!context.get()) {
+  } else {
     context = gl::init::CreateGLContext(
         share_group_.get(), surface_.get(),
-        GenerateGLContextAttribs(init_params.attribs,
-                                 context_group_->gpu_preferences()));
-  }
-  if (!context.get()) {
-    DLOG(ERROR) << "Failed to create context.";
-    return false;
+        GenerateGLContextAttribs(init_params.attribs, context_group_.get()));
+    if (!context.get()) {
+      DLOG(ERROR) << "Failed to create context.";
+      return false;
+    }
+
+    manager->gpu_feature_info().ApplyToGLContext(context.get());
   }
 
   if (!context->MakeCurrent(surface_.get())) {
@@ -830,6 +843,7 @@ bool GpuCommandBufferStub::Initialize(
 
   initialized_ = true;
   return true;
+#endif  // defined(OS_FUCHSIA)
 }
 
 void GpuCommandBufferStub::OnCreateStreamTexture(uint32_t texture_id,
@@ -958,26 +972,25 @@ void GpuCommandBufferStub::CheckCompleteWaits() {
 
 void GpuCommandBufferStub::OnAsyncFlush(
     int32_t put_offset,
-    uint32_t flush_count,
-    const std::vector<ui::LatencyInfo>& latency_info,
-    const std::vector<SyncToken>& sync_token_fences) {
+    uint32_t flush_id,
+    const std::vector<ui::LatencyInfo>& latency_info) {
   TRACE_EVENT1(
       "gpu", "GpuCommandBufferStub::OnAsyncFlush", "put_offset", put_offset);
   DCHECK(command_buffer_);
 
   // We received this message out-of-order. This should not happen but is here
   // to catch regressions. Ignore the message.
-  DVLOG_IF(0, flush_count - last_flush_count_ >= 0x8000000U)
+  DVLOG_IF(0, flush_id - last_flush_id_ >= 0x8000000U)
       << "Received a Flush message out-of-order";
 
-  if (flush_count > last_flush_count_ &&
+  if (flush_id > last_flush_id_ &&
       ui::LatencyInfo::Verify(latency_info,
                               "GpuCommandBufferStub::OnAsyncFlush") &&
       !latency_info_callback_.is_null()) {
     latency_info_callback_.Run(latency_info);
   }
 
-  last_flush_count_ = flush_count;
+  last_flush_id_ = flush_id;
   CommandBuffer::State pre_state = command_buffer_->GetState();
   FastSetActiveURL(active_url_, active_url_hash_, channel_);
   command_buffer_->Flush(put_offset, decoder_.get());

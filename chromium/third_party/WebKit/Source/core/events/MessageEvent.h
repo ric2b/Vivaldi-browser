@@ -34,8 +34,8 @@
 #include "bindings/core/v8/serialization/UnpackedSerializedScriptValue.h"
 #include "core/CoreExport.h"
 #include "core/dom/MessagePort.h"
-#include "core/events/Event.h"
-#include "core/events/EventTarget.h"
+#include "core/dom/events/Event.h"
+#include "core/dom/events/EventTarget.h"
 #include "core/events/MessageEventInit.h"
 #include "core/fileapi/Blob.h"
 #include "core/typed_arrays/DOMArrayBuffer.h"
@@ -56,7 +56,7 @@ class CORE_EXPORT MessageEvent final : public Event {
     return new MessageEvent(origin, last_event_id, source, ports, suborigin);
   }
   static MessageEvent* Create(MessagePortArray* ports,
-                              PassRefPtr<SerializedScriptValue> data,
+                              RefPtr<SerializedScriptValue> data,
                               const String& origin = String(),
                               const String& last_event_id = String(),
                               EventTarget* source = nullptr,
@@ -65,7 +65,7 @@ class CORE_EXPORT MessageEvent final : public Event {
                             ports, suborigin);
   }
   static MessageEvent* Create(MessagePortChannelArray channels,
-                              PassRefPtr<SerializedScriptValue> data,
+                              RefPtr<SerializedScriptValue> data,
                               const String& origin = String(),
                               const String& last_event_id = String(),
                               EventTarget* source = nullptr,
@@ -122,8 +122,8 @@ class CORE_EXPORT MessageEvent final : public Event {
   const String& suborigin() const { return suborigin_; }
   const String& lastEventId() const { return last_event_id_; }
   EventTarget* source() const { return source_.Get(); }
-  MessagePortArray ports(bool& is_null) const;
-  MessagePortArray ports() const;
+  MessagePortArray ports();
+  bool isPortsDirty() const { return is_ports_dirty_; }
 
   MessagePortChannelArray ReleaseChannels() { return std::move(channels_); }
 
@@ -181,13 +181,13 @@ class CORE_EXPORT MessageEvent final : public Event {
                EventTarget* source,
                MessagePortArray*,
                const String& suborigin);
-  MessageEvent(PassRefPtr<SerializedScriptValue> data,
+  MessageEvent(RefPtr<SerializedScriptValue> data,
                const String& origin,
                const String& last_event_id,
                EventTarget* source,
                MessagePortArray*,
                const String& suborigin);
-  MessageEvent(PassRefPtr<SerializedScriptValue> data,
+  MessageEvent(RefPtr<SerializedScriptValue> data,
                const String& origin,
                const String& last_event_id,
                EventTarget* source,
@@ -211,10 +211,11 @@ class CORE_EXPORT MessageEvent final : public Event {
   String origin_;
   String last_event_id_;
   Member<EventTarget> source_;
-  // m_ports are the MessagePorts in an entangled state, and m_channels are
+  // ports_ are the MessagePorts in an entangled state, and channels_ are
   // the MessageChannels in a disentangled state. Only one of them can be
-  // non-empty at a time. entangleMessagePorts() moves between the states.
+  // non-empty at a time. EntangleMessagePorts() moves between the states.
   Member<MessagePortArray> ports_;
+  bool is_ports_dirty_ = true;
   MessagePortChannelArray channels_;
   String suborigin_;
 };

@@ -10,6 +10,7 @@ import "audio.mojom";
 import "auth.mojom";
 import "bluetooth.mojom";
 import "boot_phase_monitor.mojom";
+import "cast_receiver.mojom";
 import "clipboard.mojom";
 import "crash_collector.mojom";
 import "enterprise_reporting.mojom";
@@ -22,6 +23,7 @@ import "metrics.mojom";
 import "net.mojom";
 import "notifications.mojom";
 import "obb_mounter.mojom";
+import "oemcrypto.mojom";
 import "policy.mojom";
 import "power.mojom";
 import "print.mojom";
@@ -63,6 +65,10 @@ interface ArcBridgeHost {
   [MinVersion=19] OnBootPhaseMonitorInstanceReady@125(
       BootPhaseMonitorInstance instance_ptr);
 
+  // Notifies Chrome that the CastReceiverInstance interface is ready.
+  [MinVersion=27] OnCastReceiverInstanceReady@132(
+      CastReceiverInstance instance_ptr);
+
   // Notifies Chrome that the ClipboardInstance interface is ready.
   [MinVersion=2] OnClipboardInstanceReady@109(ClipboardInstance instance_ptr);
 
@@ -102,6 +108,9 @@ interface ArcBridgeHost {
 
   // Notifies Chrome that the ObbMounter interface is ready.
   [MinVersion=14] OnObbMounterInstanceReady@120(ObbMounterInstance instance_ptr);
+
+  // Notifies Chrome that the OemCryptoInstance interface is ready.
+  [MinVersion=28] OnOemCryptoInstanceReady@133(OemCryptoInstance instance_ptr);
 
   // Notifies Chrome that the PolicyInstance interface is ready.
   [MinVersion=7] OnPolicyInstanceReady@114(PolicyInstance instance_ptr);

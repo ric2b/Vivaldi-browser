@@ -7,19 +7,16 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "media/base/media_switches.h"
 #include "media/gpu/fake_jpeg_decode_accelerator.h"
+#include "media/gpu/features.h"
 
-#if defined(OS_CHROMEOS) && defined(ARCH_CPU_X86_FAMILY)
-#define USE_VAAPI_JDA
-#endif
-
-#if defined(OS_CHROMEOS) && defined(USE_V4L2_CODEC) && \
-    defined(ARCH_CPU_ARM_FAMILY)
+#if BUILDFLAG(USE_V4L2_CODEC) && defined(ARCH_CPU_ARM_FAMILY)
 #define USE_V4L2_JDA
 #endif
 
-#if defined(USE_VAAPI_JDA)
+#if BUILDFLAG(USE_VAAPI)
 #include "media/gpu/vaapi_jpeg_decode_accelerator.h"
 #endif
 
@@ -45,7 +42,7 @@ std::unique_ptr<JpegDecodeAccelerator> CreateV4L2JDA(
 }
 #endif
 
-#if defined(USE_VAAPI_JDA)
+#if BUILDFLAG(USE_VAAPI)
 std::unique_ptr<JpegDecodeAccelerator> CreateVaapiJDA(
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner) {
   return base::MakeUnique<VaapiJpegDecodeAccelerator>(
@@ -85,7 +82,7 @@ GpuJpegDecodeAcceleratorFactoryProvider::GetAcceleratorFactories() {
 #if defined(USE_V4L2_JDA)
     result.push_back(base::Bind(&CreateV4L2JDA));
 #endif
-#if defined(USE_VAAPI_JDA)
+#if BUILDFLAG(USE_VAAPI)
     result.push_back(base::Bind(&CreateVaapiJDA));
 #endif
   }

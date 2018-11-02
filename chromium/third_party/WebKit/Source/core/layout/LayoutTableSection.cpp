@@ -37,6 +37,7 @@
 #include "core/layout/LayoutView.h"
 #include "core/layout/SubtreeLayoutScope.h"
 #include "core/paint/TableSectionPainter.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/wtf/HashSet.h"
 
 namespace blink {
@@ -95,7 +96,8 @@ LayoutTableSection::LayoutTableSection(Element* element)
       force_full_paint_(false),
       has_multiple_cell_levels_(false),
       has_spanning_cells_(false),
-      is_repeating_header_group_(false) {
+      is_repeating_header_group_(false),
+      is_repeating_footer_group_(false) {
   // init LayoutObject attributes
   SetInline(false);  // our object is not Inline
 }
@@ -768,35 +770,43 @@ void LayoutTableSection::DistributeRowSpanHeightToRows(
   }
 }
 
+bool LayoutTableSection::RowHasVisibilityCollapse(unsigned row) const {
+  return (RuntimeEnabledFeatures::VisibilityCollapseRowEnabled() &&
+          ((grid_[row].row &&
+            grid_[row].row->Style()->Visibility() == EVisibility::kCollapse) ||
+           Style()->Visibility() == EVisibility::kCollapse));
+}
+
 // Find out the baseline of the cell
 // If the cell's baseline is more than the row's baseline then the cell's
 // baseline become the row's baseline and if the row's baseline goes out of the
 // row's boundaries then adjust row height accordingly.
 void LayoutTableSection::UpdateBaselineForCell(LayoutTableCell* cell,
                                                unsigned row,
-                                               int& baseline_descent) {
+                                               LayoutUnit& baseline_descent) {
   if (!cell->IsBaselineAligned())
     return;
 
   // Ignoring the intrinsic padding as it depends on knowing the row's baseline,
   // which won't be accurate until the end of this function.
-  int baseline_position =
+  LayoutUnit baseline_position =
       cell->CellBaselinePosition() - cell->IntrinsicPaddingBefore();
   if (baseline_position >
       cell->BorderBefore() +
           (cell->PaddingBefore() - cell->IntrinsicPaddingBefore())) {
     grid_[row].baseline = std::max(grid_[row].baseline, baseline_position);
 
-    int cell_start_row_baseline_descent = 0;
+    LayoutUnit cell_start_row_baseline_descent;
     if (cell->RowSpan() == 1) {
       baseline_descent =
           std::max(baseline_descent,
                    cell->LogicalHeightForRowSizing() - baseline_position);
       cell_start_row_baseline_descent = baseline_descent;
     }
-    row_pos_[row + 1] =
-        std::max<int>(row_pos_[row + 1], row_pos_[row] + grid_[row].baseline +
-                                             cell_start_row_baseline_descent);
+    row_pos_[row + 1] = std::max(
+        row_pos_[row + 1],
+        (row_pos_[row] + grid_[row].baseline + cell_start_row_baseline_descent)
+            .ToInt());
   }
 }
 
@@ -829,9 +839,14 @@ int LayoutTableSection::CalcRowLogicalHeight() {
   // it spans. Otherwise we'd need to refragment afterwards.
   unsigned index_of_first_stretchable_row = 0;
 
+  is_any_row_collapsed_ = false;
+
   for (unsigned r = 0; r < grid_.size(); r++) {
-    grid_[r].baseline = -1;
-    int baseline_descent = 0;
+    grid_[r].baseline = LayoutUnit(-1);
+    LayoutUnit baseline_descent;
+
+    if (!is_any_row_collapsed_)
+      is_any_row_collapsed_ = RowHasVisibilityCollapse(r);
 
     if (state.IsPaginated() && grid_[r].row)
       row_pos_[r] += grid_[r].row->PaginationStrut().Ceil();
@@ -874,6 +889,16 @@ int LayoutTableSection::CalcRowLogicalHeight() {
               std::max(index_of_first_stretchable_row, row_index_below_cell);
         } else if (cell->RowSpan() > 1) {
           DCHECK(!row_span_cells.Contains(cell));
+
+          cell->SetIsSpanningCollapsedRow(false);
+          unsigned end_row = cell->RowSpan() + r;
+          for (unsigned spanning = r; spanning < end_row; spanning++) {
+            if (RowHasVisibilityCollapse(spanning)) {
+              cell->SetIsSpanningCollapsedRow(true);
+              break;
+            }
+          }
+
           row_span_cells.push_back(cell);
         }
 
@@ -909,6 +934,30 @@ int LayoutTableSection::CalcRowLogicalHeight() {
     DistributeRowSpanHeightToRows(row_span_cells);
 
   DCHECK(!NeedsLayout());
+
+  // Collapsed rows are dealt with after distributing row span height to rows.
+  // This is because the distribution calculations should be as if the row were
+  // not collapsed. First, all rows' collapsed heights are set. After, row
+  // positions are adjusted accordingly.
+  if (is_any_row_collapsed_) {
+    row_collapsed_height_.resize(grid_.size());
+    for (unsigned r = 0; r < grid_.size(); r++) {
+      if (RowHasVisibilityCollapse(r)) {
+        // Update vector that keeps track of collapsed height of each row.
+        row_collapsed_height_[r] = row_pos_[r + 1] - row_pos_[r];
+      } else {
+        // Reset rows that are no longer collapsed.
+        row_collapsed_height_[r] = 0;
+      }
+    }
+
+    int total_collapsed_height = 0;
+    for (unsigned r = 0; r < grid_.size(); r++) {
+      total_collapsed_height += row_collapsed_height_[r];
+      // Adjust row position according to the height collapsed so far.
+      row_pos_[r + 1] -= total_collapsed_height;
+    }
+  }
 
   return row_pos_[grid_.size()];
 }
@@ -1184,7 +1233,18 @@ void LayoutTableSection::LayoutRows() {
         cell_vertical_align = EVerticalAlign::kTop;
       else
         cell_vertical_align = cell->Style()->VerticalAlign();
-      cell->ComputeIntrinsicPadding(r_height, cell_vertical_align, layouter);
+
+      // Calculate total collapsed height affecting one cell.
+      int collapsed_height = 0;
+      if (is_any_row_collapsed_) {
+        unsigned end_row = cell->RowSpan() + r;
+        for (unsigned spanning = r; spanning < end_row; spanning++) {
+          collapsed_height += row_collapsed_height_[spanning];
+        }
+      }
+
+      cell->ComputeIntrinsicPadding(collapsed_height, r_height,
+                                    cell_vertical_align, layouter);
 
       LayoutRect old_cell_rect = cell->FrameRect();
 
@@ -1213,10 +1273,54 @@ void LayoutTableSection::LayoutRows() {
   ComputeOverflowFromDescendants();
 }
 
+void LayoutTableSection::UpdateLogicalWidthForCollapsedCells(
+    const Vector<int>& col_collapsed_width) {
+  if (!RuntimeEnabledFeatures::VisibilityCollapseColumnEnabled())
+    return;
+  unsigned total_rows = grid_.size();
+  for (unsigned r = 0; r < total_rows; r++) {
+    unsigned n_cols = NumCols(r);
+    for (unsigned c = 0; c < n_cols; c++) {
+      LayoutTableCell* cell = OriginatingCellAt(r, c);
+      if (!cell)
+        continue;
+      if (!col_collapsed_width.size()) {
+        cell->SetIsSpanningCollapsedColumn(false);
+        continue;
+      }
+      // TODO(joysyu): Current behavior assumes that collapsing the first column
+      // in a col-spanning cell makes the cell width zero. This is consistent
+      // with collapsing row-spanning cells, but still needs to be specified.
+      if (cell->IsFirstColumnCollapsed()) {
+        // Collapsed cells have zero width.
+        cell->SetLogicalWidth(LayoutUnit());
+      } else if (cell->ColSpan() > 1) {
+        // A column-spanning cell may be affected by collapsed columns, so its
+        // width needs to be adjusted accordingly
+        int collapsed_width = 0;
+        cell->SetIsSpanningCollapsedColumn(false);
+        unsigned end_col = std::min(cell->ColSpan() + c, n_cols);
+        for (unsigned spanning = c; spanning < end_col; spanning++)
+          collapsed_width += col_collapsed_width[spanning];
+        cell->SetLogicalWidth(cell->LogicalWidth() - collapsed_width);
+        if (collapsed_width != 0)
+          cell->SetIsSpanningCollapsedColumn(true);
+        // Recompute overflow in case overflow clipping is necessary.
+        cell->ComputeOverflow(cell->ClientLogicalBottom());
+        DCHECK_GE(cell->LogicalWidth(), 0);
+      }
+    }
+  }
+}
+
 int LayoutTableSection::PaginationStrutForRow(LayoutTableRow* row,
                                               LayoutUnit logical_offset) const {
   DCHECK(row);
-  if (row->GetPaginationBreakability() == kAllowAnyBreaks)
+  const LayoutTableSection* footer = Table()->Footer();
+  bool make_room_for_repeating_footer =
+      footer && footer->IsRepeatingFooterGroup() && row->RowIndex();
+  if (!make_room_for_repeating_footer &&
+      row->GetPaginationBreakability() == kAllowAnyBreaks)
     return 0;
   if (!IsPageLogicalHeightKnown())
     return 0;
@@ -1230,8 +1334,8 @@ int LayoutTableSection::PaginationStrutForRow(LayoutTableRow* row,
       logical_offset, LayoutBlock::kAssociateWithLatterPage);
   if (remaining_logical_height >= row_logical_height)
     return 0;  // It fits fine where it is. No need to break.
-  LayoutUnit pagination_strut = CalculatePaginationStrutToFitContent(
-      logical_offset, remaining_logical_height, row_logical_height);
+  LayoutUnit pagination_strut =
+      CalculatePaginationStrutToFitContent(logical_offset, row_logical_height);
   if (pagination_strut == remaining_logical_height &&
       remaining_logical_height == page_logical_height) {
     // Don't break if we were at the top of a page, and we failed to fit the
@@ -1351,21 +1455,20 @@ void LayoutTableSection::MarkAllCellsWidthsDirtyAndOrNeedsLayout(
   }
 }
 
-int LayoutTableSection::FirstLineBoxBaseline() const {
+LayoutUnit LayoutTableSection::FirstLineBoxBaseline() const {
   if (!grid_.size())
-    return -1;
+    return LayoutUnit(-1);
 
-  int first_line_baseline = grid_[0].baseline;
+  LayoutUnit first_line_baseline(grid_[0].baseline);
   if (first_line_baseline >= 0)
     return first_line_baseline + row_pos_[0];
 
   for (const auto& grid_cell : grid_[0].grid_cells) {
     if (const auto* cell = grid_cell.PrimaryCell()) {
-      first_line_baseline =
-          std::max<int>(first_line_baseline,
-                        (cell->LogicalTop() + cell->BorderBefore() +
-                         cell->PaddingBefore() + cell->ContentLogicalHeight())
-                            .ToInt());
+      first_line_baseline = std::max<LayoutUnit>(
+          first_line_baseline, cell->LogicalTop() + cell->BorderBefore() +
+                                   cell->PaddingBefore() +
+                                   cell->ContentLogicalHeight());
     }
   }
 
@@ -1401,7 +1504,8 @@ void LayoutTableSection::DirtiedRowsAndEffectiveColumns(
     CellSpan& columns) const {
   if (!grid_.size()) {
     rows = CellSpan();
-    columns = CellSpan();
+    columns = CellSpan(1, 1);
+    return;
   }
 
   if (force_full_paint_) {
@@ -1809,7 +1913,7 @@ void LayoutTableSection::RelayoutCellIfFlexed(LayoutTableCell& cell,
   // If the baseline moved, we may have to update the data for our row. Find
   // out the new baseline.
   if (cell.IsBaselineAligned()) {
-    int baseline = cell.CellBaselinePosition();
+    LayoutUnit baseline = cell.CellBaselinePosition();
     if (baseline > cell.BorderBefore() + cell.PaddingBefore())
       grid_[row_index].baseline = std::max(grid_[row_index].baseline, baseline);
   }
@@ -1912,15 +2016,15 @@ void LayoutTableSection::AdjustRowForPagination(LayoutTableRow& row_object,
   row_object.SetLogicalHeight(LayoutUnit(LogicalHeightForRow(row_object)));
 }
 
-bool LayoutTableSection::HeaderGroupShouldRepeat() const {
-  if (Table()->Header() != this)
-    return false;
-
+bool LayoutTableSection::GroupShouldRepeat() const {
+  DCHECK(Table()->Header() == this || Table()->Footer() == this);
   if (GetPaginationBreakability() == kAllowAnyBreaks)
     return false;
+
   // TODO(rhogan): Sections can be self-painting.
   if (HasSelfPaintingLayer())
     return false;
+
   // If we don't know the page height yet, just assume we fit.
   if (!IsPageLogicalHeightKnown())
     return true;
@@ -1943,17 +2047,21 @@ bool LayoutTableSection::MapToVisualRectInAncestorSpaceInternal(
     VisualRectFlags flags) const {
   if (ancestor == this)
     return true;
-  // Repeating table headers are painted once per fragmentation page/column.
+  // Repeating table headers and footers are painted once per
+  // page/column. So we need to use the rect for the entire table because
+  // the repeating headers/footers will appear throughout it.
   // This does not go through the regular fragmentation machinery, so we need
   // special code to expand the invalidation rect to contain all positions of
   // the header in all columns.
   // Note that this is in flow thread coordinates, not visual coordinates. The
   // enclosing LayoutFlowThread will convert to visual coordinates.
-  if (IsRepeatingHeaderGroup()) {
+  if (IsRepeatingHeaderGroup() || IsRepeatingFooterGroup()) {
     transform_state.Flatten();
     FloatRect rect = transform_state.LastPlanarQuad().BoundingBox();
     rect.SetHeight(Table()->LogicalHeight());
     transform_state.SetQuad(FloatQuad(rect));
+    return Table()->MapToVisualRectInAncestorSpaceInternal(
+        ancestor, transform_state, flags);
   }
   return LayoutTableBoxComponent::MapToVisualRectInAncestorSpaceInternal(
       ancestor, transform_state, flags);

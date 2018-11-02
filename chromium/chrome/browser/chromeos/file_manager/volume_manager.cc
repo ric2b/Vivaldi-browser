@@ -209,8 +209,10 @@ std::unique_ptr<Volume> Volume::CreateForRemovable(
                         : SOURCE_DEVICE;
   volume->mount_path_ = base::FilePath(mount_point.mount_path);
   volume->mount_condition_ = mount_point.mount_condition;
-  volume->volume_label_ = volume->mount_path().BaseName().AsUTF8Unsafe();
+
   if (disk) {
+    volume->file_system_type_ = disk->file_system_type();
+    volume->volume_label_ = disk->device_label();
     volume->device_type_ = disk->device_type();
     volume->system_path_prefix_ = base::FilePath(disk->system_path_prefix());
     volume->is_parent_ = disk->is_parent();
@@ -218,6 +220,7 @@ std::unique_ptr<Volume> Volume::CreateForRemovable(
     volume->is_read_only_removable_device_ = disk->is_read_only_hardware();
     volume->has_media_ = disk->has_media();
   } else {
+    volume->volume_label_ = volume->mount_path().BaseName().AsUTF8Unsafe();
     volume->device_type_ = chromeos::DEVICE_TYPE_UNKNOWN;
     volume->is_read_only_ =
         (mount_point.mount_type == chromeos::MOUNT_TYPE_ARCHIVE);
@@ -678,6 +681,56 @@ void VolumeManager::OnFormatEvent(
         observer.OnFormatCompleted(device_path,
                                    error_code == chromeos::FORMAT_ERROR_NONE);
       }
+
+      return;
+  }
+  NOTREACHED();
+}
+
+void VolumeManager::OnRenameEvent(
+    chromeos::disks::DiskMountManager::RenameEvent event,
+    chromeos::RenameError error_code,
+    const std::string& device_path) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  DVLOG(1) << "OnDeviceEvent: " << event << ", " << error_code << ", "
+           << device_path;
+
+  switch (event) {
+    case chromeos::disks::DiskMountManager::RENAME_STARTED:
+      for (auto& observer : observers_) {
+        observer.OnRenameStarted(device_path,
+                                 error_code == chromeos::RENAME_ERROR_NONE);
+      }
+      return;
+    case chromeos::disks::DiskMountManager::RENAME_COMPLETED:
+      if (error_code != chromeos::RENAME_ERROR_NONE) {
+        for (auto& observer : observers_)
+          observer.OnRenameCompleted(device_path, false);
+
+        return;
+      }
+
+      // Find previous mount point label if it exists
+      std::string mount_label = "";
+      auto disk_map_iter = disk_mount_manager_->disks().find(device_path);
+      if (disk_map_iter != disk_mount_manager_->disks().end() &&
+          !disk_map_iter->second->base_mount_path().empty()) {
+        mount_label = base::FilePath(disk_map_iter->second->base_mount_path())
+                          .BaseName()
+                          .AsUTF8Unsafe();
+      }
+
+      // If rename is completed successfully, try to mount the device.
+      // MountPath auto-detects filesystem format if second argument is
+      // empty. Third argument is a mount point name of the disk when it was
+      // first time mounted (to preserve mount point regardless of the volume
+      // name).
+      disk_mount_manager_->MountPath(device_path, std::string(), mount_label,
+                                     chromeos::MOUNT_TYPE_DEVICE,
+                                     GetExternalStorageAccessMode(profile_));
+
+      for (auto& observer : observers_)
+        observer.OnRenameCompleted(device_path, true);
 
       return;
   }

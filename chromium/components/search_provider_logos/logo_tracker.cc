@@ -37,10 +37,8 @@ bool IsLogoOkToShow(const LogoMetadata& metadata, base::Time now) {
   base::TimeDelta offset =
       base::TimeDelta::FromMilliseconds(kMaxTimeToLiveMS * 3 / 2);
   base::Time distant_past = now - offset;
-  base::Time distant_future = now + offset;
   // Sanity check so logos aren't accidentally cached forever.
-  if (metadata.expiration_time < distant_past ||
-      metadata.expiration_time > distant_future) {
+  if (metadata.expiration_time < distant_past) {
     return false;
   }
   return metadata.can_show_after_expiration || metadata.expiration_time >= now;
@@ -55,8 +53,7 @@ std::unique_ptr<EncodedLogo> GetLogoFromCacheOnFileThread(LogoCache* logo_cache,
   if (!metadata)
     return nullptr;
 
-  if (metadata->source_url != logo_url.spec() ||
-      !IsLogoOkToShow(*metadata, now)) {
+  if (metadata->source_url != logo_url || !IsLogoOkToShow(*metadata, now)) {
     logo_cache->SetCachedLogo(NULL);
     return nullptr;
   }
@@ -135,7 +132,8 @@ void LogoTracker::SetClockForTests(std::unique_ptr<base::Clock> clock) {
 
 void LogoTracker::ReturnToIdle(int outcome) {
   if (outcome != kDownloadOutcomeNotTracked) {
-    UMA_HISTOGRAM_ENUMERATION("NewTabPage.LogoDownloadOutcome", outcome,
+    UMA_HISTOGRAM_ENUMERATION("NewTabPage.LogoDownloadOutcome",
+                              static_cast<LogoDownloadOutcome>(outcome),
                               DOWNLOAD_OUTCOME_COUNT);
   }
   // Cancel the current asynchronous operation, if any.
@@ -227,7 +225,7 @@ void LogoTracker::FetchLogo() {
           destination: OTHER
         }
         policy {
-          cookies_allowed: true
+          cookies_allowed: YES
           cookies_store: "user"
           setting:
             "Choosing a non-Google search engine in Chromium settings under "
@@ -252,7 +250,7 @@ void LogoTracker::OnFreshLogoParsed(bool* parsing_failed,
   DCHECK(!is_idle_);
 
   if (logo)
-    logo->metadata.source_url = logo_url_.spec();
+    logo->metadata.source_url = logo_url_;
 
   if (!logo || !logo->encoded_image.get()) {
     OnFreshLogoAvailable(std::move(logo), *parsing_failed, from_http_cache,

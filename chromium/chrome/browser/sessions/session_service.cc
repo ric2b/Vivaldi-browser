@@ -14,7 +14,6 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
-#include "base/json/json_reader.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/pickle.h"
@@ -61,6 +60,7 @@
 
 #include "app/vivaldi_apptools.h"
 #include "components/sessions/vivaldi_session_service_commands.h"
+#include "ui/vivaldi_browser_window.h"
 
 using base::Time;
 using content::NavigationEntry;
@@ -537,36 +537,14 @@ base::CancelableTaskTracker::TaskId SessionService::GetLastSession(
       tracker);
 }
 
-base::SequencedWorkerPool* SessionService::GetBlockingPool() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  return content::BrowserThread::GetBlockingPool();
-}
-
 bool SessionService::ShouldUseDelayedSave() {
   return should_use_delayed_save_;
 }
 
-void SessionService::OnSavedCommands() {
-  content::NotificationService::current()->Notify(
-      chrome::NOTIFICATION_SESSION_SERVICE_SAVED,
-      content::Source<Profile>(profile()),
-      content::NotificationService::NoDetails());
-}
-
 void SessionService::Init() {
-  // Register for the notifications we're interested in.
-  registrar_.Add(this, content::NOTIFICATION_NAV_LIST_PRUNED,
-                 content::NotificationService::AllSources());
-  registrar_.Add(this, content::NOTIFICATION_NAV_ENTRY_CHANGED,
-                 content::NotificationService::AllSources());
-  registrar_.Add(this, content::NOTIFICATION_NAV_ENTRY_COMMITTED,
-                 content::NotificationService::AllSources());
   registrar_.Add(
-      this, chrome::NOTIFICATION_TAB_CONTENTS_APPLICATION_EXTENSION_CHANGED,
+      this, content::NOTIFICATION_EXTDATA_UPDATED,
       content::NotificationService::AllSources());
-  registrar_.Add(
-    this, content::NOTIFICATION_EXTDATA_UPDATED,
-    content::NotificationService::AllSources());
 
   BrowserList::AddObserver(this);
 }
@@ -631,99 +609,12 @@ bool SessionService::RestoreIfNecessary(const std::vector<GURL>& urls_to_open,
 void SessionService::Observe(int type,
                              const content::NotificationSource& source,
                              const content::NotificationDetails& details) {
-  // All of our messages have the NavigationController as the source.
   switch (type) {
-    case content::NOTIFICATION_NAV_LIST_PRUNED: {
-      WebContents* web_contents =
-          content::Source<content::NavigationController>(source).ptr()->
-              GetWebContents();
-      SessionTabHelper* session_tab_helper =
-          SessionTabHelper::FromWebContents(web_contents);
-      if (!session_tab_helper || web_contents->GetBrowserContext() != profile())
-        return;
-      content::Details<content::PrunedDetails> pruned_details(details);
-      if (pruned_details->from_front) {
-        TabNavigationPathPrunedFromFront(
-            session_tab_helper->window_id(),
-            session_tab_helper->session_id(),
-            pruned_details->count);
-      } else {
-        TabNavigationPathPrunedFromBack(
-            session_tab_helper->window_id(),
-            session_tab_helper->session_id(),
-            web_contents->GetController().GetEntryCount());
-      }
-      break;
-    }
-
-    case content::NOTIFICATION_NAV_ENTRY_CHANGED: {
-      WebContents* web_contents =
-          content::Source<content::NavigationController>(source).ptr()->
-              GetWebContents();
-      SessionTabHelper* session_tab_helper =
-          SessionTabHelper::FromWebContents(web_contents);
-      if (!session_tab_helper || web_contents->GetBrowserContext() != profile())
-        return;
-      content::Details<content::EntryChangedDetails> changed(details);
-      const SerializedNavigationEntry navigation =
-          ContentSerializedNavigationBuilder::FromNavigationEntry(
-              changed->index, *changed->changed_entry);
-      UpdateTabNavigation(session_tab_helper->window_id(),
-                          session_tab_helper->session_id(),
-                          navigation);
-      break;
-    }
-
-    case content::NOTIFICATION_NAV_ENTRY_COMMITTED: {
-      WebContents* web_contents =
-          content::Source<content::NavigationController>(source).ptr()->
-              GetWebContents();
-      SessionTabHelper* session_tab_helper =
-          SessionTabHelper::FromWebContents(web_contents);
-      if (!session_tab_helper || web_contents->GetBrowserContext() != profile())
-        return;
-      int current_entry_index =
-          web_contents->GetController().GetCurrentEntryIndex();
-      SetSelectedNavigationIndex(
-          session_tab_helper->window_id(),
-          session_tab_helper->session_id(),
-          current_entry_index);
-      const SerializedNavigationEntry navigation =
-          ContentSerializedNavigationBuilder::FromNavigationEntry(
-              current_entry_index,
-              *web_contents->GetController().GetEntryAtIndex(
-                  current_entry_index));
-      UpdateTabNavigation(
-          session_tab_helper->window_id(),
-          session_tab_helper->session_id(),
-          navigation);
-      content::Details<content::LoadCommittedDetails> changed(details);
-      break;
-    }
-
-    case chrome::NOTIFICATION_TAB_CONTENTS_APPLICATION_EXTENSION_CHANGED: {
-      extensions::TabHelper* extension_tab_helper =
-          content::Source<extensions::TabHelper>(source).ptr();
-      if (extension_tab_helper->web_contents()->GetBrowserContext() !=
-              profile()) {
-        return;
-      }
-      if (extension_tab_helper->extension_app()) {
-        SessionTabHelper* session_tab_helper =
-            SessionTabHelper::FromWebContents(
-                extension_tab_helper->web_contents());
-        SetTabExtensionAppID(session_tab_helper->window_id(),
-                             session_tab_helper->session_id(),
-                             extension_tab_helper->extension_app()->id());
-      }
-      break;
-    }
-
     case content::NOTIFICATION_EXTDATA_UPDATED: {
       WebContents* web_contents =
-        content::Source<content::WebContents>(source).ptr();
+          content::Source<content::WebContents>(source).ptr();
       SessionTabHelper* session_tab_helper =
-        SessionTabHelper::FromWebContents(web_contents);
+          SessionTabHelper::FromWebContents(web_contents);
       if (!session_tab_helper)
         return;
       SetTabExtData(session_tab_helper->window_id(),
@@ -1051,18 +942,11 @@ sessions::BaseSessionService* SessionService::GetBaseSessionServiceForTest() {
 
 /* static */
 bool SessionService::ShouldTrackVivaldiBrowser(Browser* browser) {
-  base::JSONParserOptions options = base::JSON_PARSE_RFC;
-  std::unique_ptr<base::Value> json =
-      base::JSONReader::Read(browser->ext_data(), options);
-  base::DictionaryValue* dict = NULL;
-  std::string window_type;
-  if (json && json->GetAsDictionary(&dict)) {
-    dict->GetString("windowType", &window_type);
-    // Don't track popup windows (like settings) in the session.
-    // We have "", "popup" and "settings".
-    return window_type != "popup" && window_type != "settings";
+  if (static_cast<VivaldiBrowserWindow*>(browser->window())->type() ==
+      VivaldiBrowserWindow::WindowType::NORMAL) {
+    return true;
   }
-  return true;
+  return false;
 }
 
 /* static */

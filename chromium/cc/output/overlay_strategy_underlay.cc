@@ -18,10 +18,11 @@ OverlayStrategyUnderlay::OverlayStrategyUnderlay(
 
 OverlayStrategyUnderlay::~OverlayStrategyUnderlay() {}
 
-bool OverlayStrategyUnderlay::Attempt(ResourceProvider* resource_provider,
-                                      RenderPass* render_pass,
-                                      OverlayCandidateList* candidate_list,
-                                      std::vector<gfx::Rect>* content_bounds) {
+bool OverlayStrategyUnderlay::Attempt(
+    DisplayResourceProvider* resource_provider,
+    RenderPass* render_pass,
+    OverlayCandidateList* candidate_list,
+    std::vector<gfx::Rect>* content_bounds) {
   QuadList& quad_list = render_pass->quad_list;
   for (auto it = quad_list.begin(); it != quad_list.end(); ++it) {
     OverlayCandidate candidate;
@@ -41,12 +42,7 @@ bool OverlayStrategyUnderlay::Attempt(ResourceProvider* resource_provider,
     if (new_candidate_list.back().overlay_handled) {
       new_candidate_list.back().is_unoccluded =
           !OverlayCandidate::IsOccluded(candidate, quad_list.cbegin(), it);
-      const SharedQuadState* shared_quad_state = it->shared_quad_state;
-      gfx::Rect rect = it->visible_rect;
-      SolidColorDrawQuad* replacement =
-          quad_list.ReplaceExistingElement<SolidColorDrawQuad>(it);
-      replacement->SetAll(shared_quad_state, rect, rect, rect, false,
-                          SK_ColorTRANSPARENT, true);
+      quad_list.ReplaceExistingQuadWithOpaqueTransparentSolidColor(it);
       candidate_list->swap(new_candidate_list);
 
       // This quad will be promoted.  We clear the promotable hints here, since

@@ -23,33 +23,6 @@ class UiElement;
 
 using GestureList = std::vector<std::unique_ptr<blink::WebGestureEvent>>;
 
-// Receives interaction events with the web content from the UiInputManager.
-class UiInputManagerDelegate {
- public:
-  virtual ~UiInputManagerDelegate();
-
-  virtual void OnContentEnter(const gfx::PointF& normalized_hit_point) = 0;
-  virtual void OnContentLeave() = 0;
-  virtual void OnContentMove(const gfx::PointF& normalized_hit_point) = 0;
-  virtual void OnContentDown(const gfx::PointF& normalized_hit_point) = 0;
-  virtual void OnContentUp(const gfx::PointF& normalized_hit_point) = 0;
-  virtual void OnContentFlingBegin(
-      std::unique_ptr<blink::WebGestureEvent> gesture,
-      const gfx::PointF& normalized_hit_point) = 0;
-  virtual void OnContentFlingCancel(
-      std::unique_ptr<blink::WebGestureEvent> gesture,
-      const gfx::PointF& normalized_hit_point) = 0;
-  virtual void OnContentScrollBegin(
-      std::unique_ptr<blink::WebGestureEvent> gesture,
-      const gfx::PointF& normalized_hit_point) = 0;
-  virtual void OnContentScrollUpdate(
-      std::unique_ptr<blink::WebGestureEvent> gesture,
-      const gfx::PointF& normalized_hit_point) = 0;
-  virtual void OnContentScrollEnd(
-      std::unique_ptr<blink::WebGestureEvent> gesture,
-      const gfx::PointF& normalized_hit_point) = 0;
-};
-
 // Based on controller input finds the hit UI element and determines the
 // interaction with UI elements and the web contents.
 class UiInputManager {
@@ -60,7 +33,7 @@ class UiInputManager {
     CLICKED,  // Since the last update the button has been pressed and released.
               // The button is released now.
   };
-  UiInputManager(UiScene* scene, UiInputManagerDelegate* delegate);
+  explicit UiInputManager(UiScene* scene);
   ~UiInputManager();
   // TODO(tiborg): Use generic gesture type instead of blink::WebGestureEvent.
   void HandleInput(const gfx::Vector3dF& laser_direction,
@@ -96,15 +69,8 @@ class UiInputManager {
                               gfx::Point3F* out_target_point,
                               UiElement** out_target_element,
                               gfx::PointF* out_target_local_point) const;
-  bool GetTargetLocalPoint(const gfx::Vector3dF& eye_to_target,
-                           const UiElement& element,
-                           float max_distance_to_plane,
-                           gfx::PointF* out_target_local_point,
-                           gfx::Point3F* out_target_point,
-                           float* out_distance_to_plane) const;
 
   UiScene* scene_;
-  UiInputManagerDelegate* delegate_;
   // TODO(mthiesse): We need to handle elements being removed, and update this
   // state appropriately.
   UiElement* hover_target_ = nullptr;

@@ -63,7 +63,7 @@
   <message name="IDS_AUTOFILL_CC_DISCOVER" desc="Discover credit card name." formatter_data="android_java">
     Discover
   </message>
-  <message name="IDS_AUTOFILL_CC_ELO" desc="Elo credit card name." formatter_data="android_java">
+  <message name="IDS_AUTOFILL_CC_ELO" desc="Elo credit card name.">
     Elo
   </message>
   <message name="IDS_AUTOFILL_CC_JCB" desc="JCB credit card name." formatter_data="android_java">
@@ -128,16 +128,6 @@
     Postal code
   </message>
 
-  <message translateable="false" name="IDS_AUTOFILL_SHOW_PREDICTIONS_TITLE" desc="The title for form elements when annotated with Autofill predictions.">
-    overall type: <ph name="OVERALL_TYPE">$1<ex>NAME_FIRST</ex></ph>
-    server type: <ph name="SERVER_TYPE">$2<ex>NAME_FIRST</ex></ph>
-    heuristic type: <ph name="HEURISTIC_TYPE">$3<ex>NAME_FIRST</ex></ph>
-    label: <ph name="LABEL">$4<ex>SOME LABEL</ex></ph>
-    parseable name: <ph name="PARSEABLE_NAME">$5<ex>SOME_NAME</ex></ph>
-    field signature: <ph name="FIELD_SIGNATURE">$6<ex>12345678</ex></ph>
-    form signature: <ph name="FORM_SIGNATURE">$7<ex>1234567812345678</ex></ph>
-  </message>
-
   <if expr="_google_chrome">
     <message name="IDS_AUTOFILL_OPTIONS_POPUP" desc="The text displayed in the Autofill popup to direct the user to the Autofill settings UI.">
      Chrome Autofill settings...
@@ -176,6 +166,10 @@
     Login not secure
   </message>
 
+  <message name="IDS_AUTOFILL_SHOW_ALL_SAVED_FALLBACK" desc="The text shown as an option in the suggestion drop down when a password field is clicked">
+    Show all saved passwords...
+  </message>
+
   <!-- Autofill Credit Card Assisted Filling Infobar -->
   <if expr="is_android">
     <message name="IDS_AUTOFILL_CREDIT_CARD_FILLING_INFOBAR_TITLE" desc="Title text for the Autofill Credit Card Assisted Filling Infobar">
@@ -197,6 +191,12 @@
   <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_ACCEPT" desc="Text to show for the Autofill save credit card prompt accept button. The prompt can be either a bubble or an infobar.">
     Save
   </message>
+  <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_NEXT" desc="Text to show for the Autofill upload save credit card prompt accept button when more information (e.g., CVC) is needed in order to save the card.">
+    Next
+  </message>
+  <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_CONFIRM" desc="Text to show for the Autofill upload save credit card prompt accept button when more information (e.g., CVC) was needed in order to save the card and was entered.">
+    Confirm
+  </message>
   <if expr="_google_chrome">
     <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_TITLE_LOCAL" desc="Title text for the Autofill save card prompt when the card is to be saved locally. The prompt can be either a bubble or an infobar.">
       Do you want Chrome to save this card?
@@ -207,24 +207,41 @@
       Do you want Chromium to save this card?
     </message>
   </if>
-  <if expr="is_linux and not is_chromeos">
+  <if expr="is_linux and not chromeos">
     <then>
       <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_TITLE_TO_CLOUD" desc="Title text for the Autofill save card prompt when the card is to be saved by uploading it to Google Payments and also saved locally. The prompt can be either a bubble or an infobar.">
         Do you want to save this card to your Google Account?
       </message>
     </then>
     <else>
-      <!-- TODO(crbug/714920): Rename IDS_AUTOFILL_SAVE_CARD_PROMPT_TITLE_TO_CLOUD to IDS_AUTOFILL_SAVE_CARD_PROMPT_TITLE_TO_CLOUD_AND_LOCAL -->
       <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_TITLE_TO_CLOUD" desc="Title text for the Autofill save card prompt when the card is to be saved by uploading it to Google Payments and also saved locally. The prompt can be either a bubble or an infobar.">
         Do you want to save this card to your Google Account and on this device?
       </message>
     </else>
   </if>
+  <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_TITLE_TO_CLOUD_V2" desc="Title text for the Autofill save card prompt when the card is to be saved by uploading it to Google Payments, according to June 2017 UI guidelines. The prompt can be either a bubble or an infobar.">
+    Save card to Google?
+  </message>
   <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_UPLOAD_EXPLANATION" desc="Explanation of the effect of the Autofill save card prompt when the card is to be saved by uploading it to Google Payments and also saved locally. The prompt can be either a bubble or an infobar.">
     Pay quickly on sites and apps across devices using cards you have saved with Google.
   </message>
-  <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_ENTER_CVC" desc="Text displayed in the Autofill save credit card prompt explaining that the card needs additional CVC information in order to be saved to Google Payments.">
-    Please verify your CVC
+  <if expr="is_linux and not chromeos">
+    <then>
+      <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_UPLOAD_EXPLANATION_V2" desc="Explanation of the effect of the Autofill save card prompt when the card is to be saved by uploading it to Google Payments, according to June 2017 UI guidelines. The prompt will be shown in a bubble below the omnibox.">
+        To pay faster next time, save this card to your Google Account.
+      </message>
+    </then>
+    <else>
+      <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_UPLOAD_EXPLANATION_V2" desc="Explanation of the effect of the Autofill save card prompt when the card is to be saved by uploading it to Google Payments and also saved locally, according to June 2017 UI guidelines. The prompt can be either a bubble or an infobar.">
+        To pay faster next time, save this card to your Google Account and to this device.
+      </message>
+    </else>
+  </if>
+  <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_ENTER_CVC_TITLE" desc="Title text to show for the Autofill upload save credit card prompt when more information (e.g., CVC) is needed in order to save the card.">
+    Confirm security code
+  </message>
+  <message name="IDS_AUTOFILL_SAVE_CARD_PROMPT_ENTER_CVC_EXPLANATION" desc="Text displayed in the Autofill save credit card prompt requesting the additional CVC information needed in order to save the card to Google Payments.  It will display the network and last four digits of the card to be saved.">
+    Enter the security code for <ph name="CREDIT_CARD">$1<ex>Visa ****5678</ex></ph>.  This code won't be saved.
   </message>
 
   <!-- Autofill credit card suggestion popup -->
@@ -328,12 +345,12 @@
   </if>
   <if expr="is_ios">
     <if expr="_google_chrome">
-      <message name="IDS_AUTOFILL_CARD_UNMASK_PROMPT_STORAGE_TOOLTIP" desc="Text that provides further explanation on iOS for the option in the card unmasking dialog that allows user to store a Wallet card on their local device." formatter_data="android_java">
+      <message name="IDS_AUTOFILL_CARD_UNMASK_PROMPT_STORAGE_TOOLTIP" desc="Text that provides further explanation on iOS for the option in the card unmasking dialog that allows user to store a Wallet card on their local device.">
         If enabled, Chrome will store a copy of your card on this device for faster form filling.
       </message>
     </if>
     <if expr="not _google_chrome">
-      <message name="IDS_AUTOFILL_CARD_UNMASK_PROMPT_STORAGE_TOOLTIP" desc="Text that provides further explanation on iOS for the option in the card unmasking dialog that allows user to store a Wallet card on their local device." formatter_data="android_java">
+      <message name="IDS_AUTOFILL_CARD_UNMASK_PROMPT_STORAGE_TOOLTIP" desc="Text that provides further explanation on iOS for the option in the card unmasking dialog that allows user to store a Wallet card on their local device.">
         If enabled, Chromium will store a copy of your card on this device for faster form filling.
       </message>
     </if>

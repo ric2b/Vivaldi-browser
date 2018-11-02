@@ -51,8 +51,6 @@ class TestImage : public Image {
 
   IntSize Size() const override { return size_; }
 
-  sk_sp<SkImage> ImageForCurrentFrame() override { return image_; }
-
   void DestroyDecodedData() override {
     // Image pure virtual stub.
   }
@@ -64,6 +62,13 @@ class TestImage : public Image {
             RespectImageOrientationEnum,
             ImageClampingMode) override {
     // Image pure virtual stub.
+  }
+
+  PaintImage PaintImageForCurrentFrame() override {
+    PaintImageBuilder builder;
+    InitPaintImageBuilder(builder);
+    builder.set_image(image_);
+    return builder.TakePaintImage();
   }
 
  private:

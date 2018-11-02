@@ -53,7 +53,7 @@ DedicatedWorkerGlobalScope* DedicatedWorkerGlobalScope::Create(
       time_origin, std::move(creation_params->starter_origin_privilege_data),
       creation_params->worker_clients);
   context->ApplyContentSecurityPolicyFromVector(
-      *creation_params->content_security_policy_headers);
+      *creation_params->content_security_policy_parsed_headers);
   context->SetWorkerSettings(std::move(creation_params->worker_settings));
   if (!creation_params->referrer_policy.IsNull())
     context->ParseAndSetReferrerPolicy(creation_params->referrer_policy);
@@ -86,7 +86,7 @@ const AtomicString& DedicatedWorkerGlobalScope::InterfaceName() const {
 
 void DedicatedWorkerGlobalScope::postMessage(
     ScriptState* script_state,
-    PassRefPtr<SerializedScriptValue> message,
+    RefPtr<SerializedScriptValue> message,
     const MessagePortArray& ports,
     ExceptionState& exception_state) {
   // Disentangle the port in preparation for sending it to the remote context.

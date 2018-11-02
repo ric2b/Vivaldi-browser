@@ -56,17 +56,17 @@ class PLATFORM_EXPORT CompositorAnimationPlayer : public cc::AnimationDelegate {
 
   // cc::AnimationDelegate implementation.
   void NotifyAnimationStarted(base::TimeTicks monotonic_time,
-                              cc::TargetProperty::Type,
+                              int target_property,
                               int group) override;
   void NotifyAnimationFinished(base::TimeTicks monotonic_time,
-                               cc::TargetProperty::Type,
+                               int target_property,
                                int group) override;
   void NotifyAnimationAborted(base::TimeTicks monotonic_time,
-                              cc::TargetProperty::Type,
+                              int target_property,
                               int group) override;
   void NotifyAnimationTakeover(base::TimeTicks monotonic_time,
-                               cc::TargetProperty::Type,
-                               double animation_start_time,
+                               int target_property,
+                               base::TimeTicks animation_start_time,
                                std::unique_ptr<cc::AnimationCurve>) override;
 
   scoped_refptr<cc::AnimationPlayer> animation_player_;

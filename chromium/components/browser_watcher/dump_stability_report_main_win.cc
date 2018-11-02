@@ -140,18 +140,72 @@ void PrintActivity(FILE* out,
 
 void PrintProcessState(FILE* out,
                        const browser_watcher::ProcessState& process) {
-  fprintf(out, "Process %lld (%d threads)\n", process.process_id(),
-          process.threads_size());
+  std::string process_type;
+  switch (process.process_type()) {
+    case browser_watcher::ProcessState::UNKNOWN_PROCESS:
+      process_type = "unknown type";
+      break;
+    case browser_watcher::ProcessState::BROWSER_PROCESS:
+      process_type = "browser";
+      break;
+    case browser_watcher::ProcessState::WATCHER_PROCESS:
+      process_type = "watcher";
+      break;
+    default:
+      base::SStringPrintf(&process_type, "process type %d",
+                          process.process_type());
+      break;
+  }
+
+  fprintf(out, "Process %lld (%s, %d threads)\n", process.process_id(),
+          process_type.c_str(), process.threads_size());
+
+  if (process.has_memory_state() &&
+      process.memory_state().has_windows_memory()) {
+    const auto& windows_memory = process.memory_state().windows_memory();
+    if (windows_memory.has_process_private_usage()) {
+      fprintf(out, "process_private_usage: %u pages\n",
+              windows_memory.process_private_usage());
+    }
+    if (windows_memory.has_process_peak_workingset_size()) {
+      fprintf(out, "process_peak_workingset_size: %u pages\n",
+              windows_memory.process_peak_workingset_size());
+    }
+    if (windows_memory.has_process_peak_pagefile_usage()) {
+      fprintf(out, "process_peak_pagefile_usage: %u pages\n",
+              windows_memory.process_peak_pagefile_usage());
+    }
+    if (windows_memory.has_process_allocation_attempt()) {
+      fprintf(out, "process_allocation_attempt: %u bytes\n",
+              windows_memory.process_allocation_attempt());
+    }
+  }
+
   for (const browser_watcher::ThreadState& thread : process.threads()) {
     fprintf(out, "Thread %lld (%s) : %d activities\n", thread.thread_id(),
             thread.thread_name().c_str(), thread.activity_count());
     for (const browser_watcher::Activity& activity : thread.activities())
       PrintActivity(out, 1, activity);
   }
+
+  PrintUserData(out, 1, process.data());
 }
 
 // TODO(manzagop): flesh out as StabilityReport gets fleshed out.
 void PrintReport(FILE* out, const browser_watcher::StabilityReport& report) {
+  if (report.has_system_memory_state() &&
+      report.system_memory_state().has_windows_memory()) {
+    const auto& windows_memory = report.system_memory_state().windows_memory();
+
+    if (windows_memory.has_system_commit_limit()) {
+      fprintf(out, "system_commit_limit: %u pages\n",
+              windows_memory.system_commit_limit());
+    }
+    if (windows_memory.has_system_commit_remaining()) {
+      fprintf(out, "system_commit_remaining: %u pages\n",
+              windows_memory.system_commit_remaining());
+    }
+  }
   PrintUserData(out, 0, report.global_data());
   for (int i = 0; i < report.process_states_size(); ++i) {
     const browser_watcher::ProcessState process = report.process_states(i);

@@ -36,7 +36,6 @@
 #import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
 #import "ios/chrome/browser/ui/rtl_geometry.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
-#import "ios/chrome/browser/ui/url_loader.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/web/public/referrer.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -56,38 +55,27 @@ const CGFloat kNavigationBarTopMargin = 8.0;
 
 @interface BookmarkHomeTabletNTPController ()<BookmarkMenuViewDelegate>
 
-#pragma mark - Properties and methods akin to BookmarkHomeHandsetViewController
 // When the view is first shown on the screen, this property represents the
-// cached value of the y of the content offset of the primary view. This
+// cached value of the y of the content offset of the folder view. This
 // property is set to nil after it is used.
-@property(nonatomic, strong)
-    NSNumber* cachedContentPosition;  // FIXME: INACTIVE
+@property(nonatomic, strong) NSNumber* cachedContentPosition;
 
-#pragma mark Specific to this class.
-
-// Opens the url.
-- (void)loadURL:(const GURL&)url;
 #pragma mark View loading, laying out, and switching.
-// This method should be called at most once in the life-cycle of the class.
-// It should be called at the soonest possible time after the view has been
-// loaded, and the bookmark model is loaded.
-- (void)loadBookmarkViews;
+
 // Returns whether the menu should be in a side panel that slides in.
 - (BOOL)shouldPresentMenuInSlideInPanel;
-// Returns the leading margin of the primary view.
-- (CGFloat)primaryViewLeadingMargin;
-// Moves the menu and primary view to their correct parent views depending on
-// the layout.
-- (void)moveMenuAndPrimaryViewToAdequateParent;
-// Updates the frame of the primary view.
-- (void)refreshFrameOfPrimaryView;
-// Returns the frame of the primary view.
-- (CGRect)frameForPrimaryView;
+// Returns the leading margin of the folder view.
+- (CGFloat)folderViewLeadingMargin;
+// Updates the frame of the folder view.
+- (void)refreshFrameOfFolderView;
+// Returns the frame of the folder view.
+- (CGRect)frameForFolderView;
 
 // The menu button is pressed on the editing bar.
 - (void)toggleMenuAnimated;
 
 #pragma mark Navigation bar
+
 - (void)updateNavigationBarWithDuration:(CGFloat)duration
                             orientation:(UIInterfaceOrientation)orientation;
 // Whether the edit button on the navigation bar should be shown.
@@ -96,17 +84,25 @@ const CGFloat kNavigationBarTopMargin = 8.0;
 @end
 
 @implementation BookmarkHomeTabletNTPController
-
 @synthesize cachedContentPosition = _cachedContentPosition;
 // Property declared in NewTabPagePanelProtocol.
 @synthesize delegate = _delegate;
 
-#pragma mark - UIViewController method.
+#pragma mark - UIViewController
 
 - (void)viewWillLayoutSubviews {
   [super viewWillLayoutSubviews];
-  if (![self primaryView] && ![self primaryMenuItem] &&
-      self.bookmarks->loaded()) {
+
+  // Store the content scroll position.
+  CGFloat contentPosition =
+      [[self folderView] contentPositionInPortraitOrientation];
+  // If we have the cached position, use it instead.
+  if (self.cachedContentPosition) {
+    contentPosition = [self.cachedContentPosition floatValue];
+    self.cachedContentPosition = nil;
+  }
+
+  if (!self.folderView && ![self primaryMenuItem] && self.bookmarks->loaded()) {
     BookmarkMenuItem* item = nil;
     CGFloat position = 0;
     BOOL found =
@@ -117,8 +113,10 @@ const CGFloat kNavigationBarTopMargin = 8.0;
     [self updatePrimaryMenuItem:item animated:NO];
   }
 
-  [self moveMenuAndPrimaryViewToAdequateParent];
-  CGFloat leadingMargin = [self primaryViewLeadingMargin];
+  // Make sure the navigation bar is the frontmost subview.
+  [self.view bringSubviewToFront:self.navigationBar];
+
+  CGFloat leadingMargin = [self folderViewLeadingMargin];
 
   // Prevent the panelView from hijacking the gestures so that the
   // NTPController's scrollview can still scroll with the gestures.
@@ -132,11 +130,19 @@ const CGFloat kNavigationBarTopMargin = 8.0;
   [self.editingBar setFrame:[self editingBarFrame]];
 
   UIInterfaceOrientation orient = GetInterfaceOrientation();
-  [self refreshFrameOfPrimaryView];
-  [[self primaryView] changeOrientation:orient];
+  [self refreshFrameOfFolderView];
+  [self.folderView changeOrientation:orient];
   [self updateNavigationBarWithDuration:0 orientation:orient];
   if (![self shouldPresentMenuInSlideInPanel])
     [self updateMenuViewLayout];
+
+  // Restore the content scroll position if it was reset to zero. This could
+  // happen when folderView is newly created (restore from cached); its frame
+  // height has changed; or it was re-attached to the view hierarchy.
+  if (contentPosition > 0 &&
+      [[self folderView] contentPositionInPortraitOrientation] == 0) {
+    [[self folderView] applyContentPosition:contentPosition];
+  }
 }
 
 - (void)viewDidLoad {
@@ -170,7 +176,24 @@ const CGFloat kNavigationBarTopMargin = 8.0;
 
   self.menuView.delegate = self;
 
-  [self moveMenuAndPrimaryViewToAdequateParent];
+  // Set view frames and add them to hierarchy.
+  if ([self shouldPresentMenuInSlideInPanel]) {
+    // Add the panelView to the view hierarchy.
+    [self.view addSubview:self.panelView];
+    CGSize size = self.view.bounds.size;
+    CGFloat navBarHeight = CGRectGetHeight([self navigationBarFrame]);
+    LayoutRect panelLayout = LayoutRectMake(
+        0, size.width, navBarHeight, size.width, size.height - navBarHeight);
+
+    // Initialize the panelView with the menuView and the folderView.
+    [self.panelView setFrame:LayoutRectGetRect(panelLayout)];
+    [self.panelView.menuView addSubview:self.menuView];
+    self.menuView.frame = self.panelView.menuView.bounds;
+    [self.panelView.contentView addSubview:self.folderView];
+  } else {
+    [self.view addSubview:self.menuView];
+    [self.view addSubview:self.folderView];
+  }
 
   // Load the last primary menu item which the user had active.
   BookmarkMenuItem* item = nil;
@@ -182,13 +205,11 @@ const CGFloat kNavigationBarTopMargin = 8.0;
 
   [self updatePrimaryMenuItem:item animated:NO];
 
-  [[self primaryView] applyContentPosition:position];
-
   if (found) {
     // If the view has already been laid out, then immediately apply the content
     // position.
     if (self.view.window) {
-      [[self primaryView] applyContentPosition:position];
+      [self.folderView applyContentPosition:position];
     } else {
       // Otherwise, save the position to be applied once the view has been laid
       // out.
@@ -199,15 +220,12 @@ const CGFloat kNavigationBarTopMargin = 8.0;
 
 - (void)updatePrimaryMenuItem:(BookmarkMenuItem*)menuItem
                      animated:(BOOL)animated {
-  if (![self.view superview])
-    return;
-
   [super updatePrimaryMenuItem:menuItem animated:animated];
 
-  [self moveMenuAndPrimaryViewToAdequateParent];
+  // Make sure the navigation bar is the frontmost subview.
+  [self.view bringSubviewToFront:self.navigationBar];
 
-  // [self.view sendSubviewToBack:primaryView];
-  [self refreshFrameOfPrimaryView];
+  [self refreshFrameOfFolderView];
 
   self.navigationBar.hidden = NO;
   [self updateNavigationBarAnimated:animated
@@ -259,16 +277,6 @@ const CGFloat kNavigationBarTopMargin = 8.0;
       }];
 }
 
-- (void)navigateToBookmarkURL:(const GURL&)url {
-  [self cachePosition];
-  // Before passing the URL to the block, make sure the block has a copy of the
-  // URL and not just a reference.
-  const GURL localUrl(url);
-  dispatch_async(dispatch_get_main_queue(), ^{
-    [self loadURL:localUrl];
-  });
-}
-
 - (ActionSheetCoordinator*)createActionSheetCoordinatorOnView:(UIView*)view {
   return [[ActionSheetCoordinator alloc]
       initWithBaseViewController:self.view.window.rootViewController
@@ -278,79 +286,33 @@ const CGFloat kNavigationBarTopMargin = 8.0;
                             view:view];
 }
 
-#pragma mark - private methods
-
-- (void)loadURL:(const GURL&)url {
-  if (url == GURL() || url.SchemeIs(url::kJavaScriptScheme))
-    return;
-
-  new_tab_page_uma::RecordAction(self.browserState,
-                                 new_tab_page_uma::ACTION_OPENED_BOOKMARK);
-  base::RecordAction(
-      base::UserMetricsAction("MobileBookmarkManagerEntryOpened"));
-  [self.loader loadURL:url
-               referrer:web::Referrer()
-             transition:ui::PAGE_TRANSITION_AUTO_BOOKMARK
-      rendererInitiated:NO];
-}
+#pragma mark - Private methods
 
 - (BOOL)shouldPresentMenuInSlideInPanel {
   return IsCompactTablet();
 }
 
-- (CGFloat)primaryViewLeadingMargin {
+- (CGFloat)folderViewLeadingMargin {
   if ([self shouldPresentMenuInSlideInPanel])
     return 0;
   return [self menuWidth];
 }
 
-- (void)moveMenuAndPrimaryViewToAdequateParent {
-  // Remove the menuView, panelView, and primaryView from the view hierarchy.
-  if ([self.menuView superview])
-    [self.menuView removeFromSuperview];
-  if ([self.panelView superview])
-    [self.panelView removeFromSuperview];
-  UIView* primaryView = [self primaryView];
-  if ([primaryView superview])
-    [primaryView removeFromSuperview];
-
-  if ([self shouldPresentMenuInSlideInPanel]) {
-    // Add the panelView to the view hierarchy.
-    [self.view addSubview:self.panelView];
-    CGSize size = self.view.bounds.size;
-    CGFloat navBarHeight = CGRectGetHeight([self navigationBarFrame]);
-    LayoutRect panelLayout = LayoutRectMake(
-        0, size.width, navBarHeight, size.width, size.height - navBarHeight);
-
-    // Initialize the panelView with the menuView and the primaryView.
-    [self.panelView setFrame:LayoutRectGetRect(panelLayout)];
-    [self.panelView.menuView addSubview:self.menuView];
-    self.menuView.frame = self.panelView.menuView.bounds;
-    [self.panelView.contentView addSubview:primaryView];
-  } else {
-    [self.view addSubview:self.menuView];
-    [self.view addSubview:primaryView];
-  }
-
-  // Make sure the navigation bar is the frontmost subview.
-  [self.view bringSubviewToFront:self.navigationBar];
+- (void)refreshFrameOfFolderView {
+  self.folderView.frame = [self frameForFolderView];
 }
 
-- (void)refreshFrameOfPrimaryView {
-  [self primaryView].frame = [self frameForPrimaryView];
-}
-
-- (CGRect)frameForPrimaryView {
+- (CGRect)frameForFolderView {
   CGFloat topInset = 0;
   if (!IsCompactTablet())
     topInset = CGRectGetHeight([self navigationBarFrame]);
 
-  CGFloat leadingMargin = [self primaryViewLeadingMargin];
+  CGFloat leadingMargin = [self folderViewLeadingMargin];
   CGSize size = self.view.bounds.size;
-  LayoutRect primaryViewLayout =
+  LayoutRect folderViewLayout =
       LayoutRectMake(leadingMargin, size.width, topInset,
                      size.width - leadingMargin, size.height - topInset);
-  return LayoutRectGetRect(primaryViewLayout);
+  return LayoutRectGetRect(folderViewLayout);
 }
 
 #pragma mark - BookmarkMenuViewDelegate
@@ -426,20 +388,19 @@ const CGFloat kNavigationBarTopMargin = 8.0;
 }
 
 - (void)dismissModals {
-  [self.actionSheetCoordinator stop];
-  self.actionSheetCoordinator = nil;
+  [super dismissModals];
   [self.editViewController dismiss];
 }
 
 - (void)dismissKeyboard {
-  // Uses self.view directly instead of going throught self.view to
+  // Uses self.view directly instead of going through self.view to
   // avoid creating the view hierarchy unnecessarily.
   [self.view endEditing:YES];
 }
 
 - (void)setScrollsToTop:(BOOL)enabled {
   self.scrollToTop = enabled;
-  [[self primaryView] setScrollsToTop:self.scrollToTop];
+  [self.folderView setScrollsToTop:self.scrollToTop];
 }
 
 - (CGFloat)alphaForBottomShadow {

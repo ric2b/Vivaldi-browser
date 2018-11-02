@@ -70,24 +70,11 @@ const char* GetAsString(MouseEventType type) {
 const char* GetAsString(TouchEventType type) {
   switch (type) {
     case kTouchStart:
-      return "touchStart";
+      return "touchstart";
     case kTouchEnd:
-      return "touchEnd";
+      return "touchend";
     case kTouchMove:
-      return "touchMove";
-    default:
-      return "";
-  }
-}
-
-const char* GetPointStateString(TouchEventType type) {
-  switch (type) {
-    case kTouchStart:
-      return "touchPressed";
-    case kTouchEnd:
-      return "touchReleased";
-    case kTouchMove:
-      return "touchMoved";
+      return "touchmove";
     default:
       return "";
   }
@@ -136,10 +123,11 @@ WebViewImpl::WebViewImpl(const std::string& id,
       browser_info_(browser_info),
       dom_tracker_(new DomTracker(client.get())),
       frame_tracker_(new FrameTracker(client.get())),
-      dialog_manager_(new JavaScriptDialogManager(client.get())),
-      navigation_tracker_(PageLoadStrategy::Create(
-          page_load_strategy, client.get(),
-          browser_info, dialog_manager_.get())),
+      dialog_manager_(new JavaScriptDialogManager(client.get(), browser_info)),
+      navigation_tracker_(PageLoadStrategy::Create(page_load_strategy,
+                                                   client.get(),
+                                                   browser_info,
+                                                   dialog_manager_.get())),
       mobile_emulation_override_manager_(
           new MobileEmulationOverrideManager(client.get(), device_metrics)),
       geolocation_override_manager_(
@@ -386,16 +374,12 @@ Status WebViewImpl::DispatchMouseEvents(const std::list<MouseEvent>& events,
 }
 
 Status WebViewImpl::DispatchTouchEvent(const TouchEvent& event) {
-  base::DictionaryValue params;
-  params.SetString("type", GetAsString(event.type));
-  auto point = base::MakeUnique<base::DictionaryValue>();
-  point->SetString("state", GetPointStateString(event.type));
-  point->SetInteger("x", event.x);
-  point->SetInteger("y", event.y);
-  auto point_list = base::MakeUnique<base::ListValue>();
-  point_list->Append(std::move(point));
-  params.Set("touchPoints", std::move(point_list));
-  return client_->SendCommand("Input.dispatchTouchEvent", params);
+  base::ListValue args;
+  args.Append(base::MakeUnique<base::Value>(event.x));
+  args.Append(base::MakeUnique<base::Value>(event.y));
+  args.Append(base::MakeUnique<base::Value>(GetAsString(event.type)));
+  std::unique_ptr<base::Value> unused;
+  return CallFunction(std::string(), kDispatchTouchEventScript, args, &unused);
 }
 
 Status WebViewImpl::DispatchTouchEvents(const std::list<TouchEvent>& events) {
@@ -422,7 +406,6 @@ Status WebViewImpl::DispatchKeyEvents(const std::list<KeyEvent>& events) {
     }
     params.SetString("text", it->modified_text);
     params.SetString("unmodifiedText", it->unmodified_text);
-    params.SetInteger("nativeVirtualKeyCode", it->key_code);
     params.SetInteger("windowsVirtualKeyCode", it->key_code);
     ui::DomCode dom_code = ui::UsLayoutKeyboardCodeToDomCode(it->key_code);
     std::string code = ui::KeycodeConverter::DomCodeToCodeString(dom_code);
@@ -446,7 +429,7 @@ Status WebViewImpl::GetCookies(std::unique_ptr<base::ListValue>* cookies,
       browser_info_->browser_name != "webview") {
     base::ListValue url_list;
     url_list.AppendString(current_page_url);
-    params.Set("urls", base::MakeUnique<base::Value>(url_list));
+    params.SetKey("urls", url_list.Clone());
     Status status =
         client_->SendCommandAndGetResult("Network.getCookies", params, &result);
     if (status.IsError())
@@ -466,11 +449,23 @@ Status WebViewImpl::GetCookies(std::unique_ptr<base::ListValue>* cookies,
 }
 
 Status WebViewImpl::DeleteCookie(const std::string& name,
-                                 const std::string& url) {
+                                 const std::string& url,
+                                 const std::string& domain,
+                                 const std::string& path) {
   base::DictionaryValue params;
-  params.SetString("cookieName", name);
   params.SetString("url", url);
-  return client_->SendCommand("Page.deleteCookie", params);
+  std::string command;
+  if (browser_info_->build_no >= 3189) {
+    params.SetString("name", name);
+    params.SetString("domain", domain);
+    params.SetString("path", path);
+    command = "Network.deleteCookies";
+  } else {
+    params.SetString("cookieName", name);
+    command = "Page.deleteCookie";
+  }
+
+  return client_->SendCommand(command, params);
 }
 
 Status WebViewImpl::AddCookie(const std::string& name,
@@ -490,6 +485,7 @@ Status WebViewImpl::AddCookie(const std::string& name,
   params.SetBoolean("secure", secure);
   params.SetBoolean("httpOnly", httpOnly);
   params.SetDouble("expirationDate", expiry);
+  params.SetDouble("expires", expiry);
   return client_->SendCommand("Network.setCookie", params);
 }
 
@@ -590,7 +586,7 @@ Status WebViewImpl::SetFileInputFiles(
     return Status(kUnknownError, "no node ID for file input");
   base::DictionaryValue params;
   params.SetInteger("nodeId", node_id);
-  params.Set("files", base::MakeUnique<base::Value>(file_list));
+  params.SetKey("files", file_list.Clone());
   return client_->SendCommand("DOM.setFileInputFiles", params);
 }
 

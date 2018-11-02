@@ -679,20 +679,17 @@ bool WifiConfigView::Login() {
   bool only_policy_autoconnect =
       onc::PolicyAllowsOnlyPolicyNetworksToAutoconnect(!share_network);
   if (only_policy_autoconnect) {
-    properties.SetBooleanWithoutPathExpansion(shill::kAutoConnectProperty,
-                                              false);
+    properties.SetKey(shill::kAutoConnectProperty, base::Value(false));
   }
 
   if (service_path_.empty()) {
     // TODO(stevenjb): Support modifying existing EAP configurations.
     // Will probably wait to do this in WebUI instead.
-    properties.SetStringWithoutPathExpansion(
-        shill::kTypeProperty, shill::kTypeWifi);
+    properties.SetKey(shill::kTypeProperty, base::Value(shill::kTypeWifi));
     shill_property_util::SetSSID(GetSsid(), &properties);
-    properties.SetStringWithoutPathExpansion(
-        shill::kModeProperty, shill::kModeManaged);
-    properties.SetBooleanWithoutPathExpansion(
-        shill::kSaveCredentialsProperty, GetSaveCredentials());
+    properties.SetKey(shill::kModeProperty, base::Value(shill::kModeManaged));
+    properties.SetKey(shill::kSaveCredentialsProperty,
+                      base::Value(GetSaveCredentials()));
     std::string security_class = shill::kSecurityNone;
     if (!eap_method_combobox_) {
       switch (security_combobox_->selected_index()) {
@@ -708,15 +705,15 @@ bool WifiConfigView::Login() {
       }
       std::string passphrase = GetPassphrase();
       if (!passphrase.empty()) {
-        properties.SetStringWithoutPathExpansion(
-            shill::kPassphraseProperty, GetPassphrase());
+        properties.SetKey(shill::kPassphraseProperty,
+                          base::Value(GetPassphrase()));
       }
     } else {
       security_class = shill::kSecurity8021x;
       SetEapProperties(&properties, false /* not configured */);
     }
-    properties.SetStringWithoutPathExpansion(
-        shill::kSecurityClassProperty, security_class);
+    properties.SetKey(shill::kSecurityClassProperty,
+                      base::Value(security_class));
 
     // Configure and connect to network.
     NetworkConnect::Get()->CreateConfigurationAndConnect(&properties,
@@ -730,21 +727,20 @@ bool WifiConfigView::Login() {
     }
     if (eap_method_combobox_) {
       SetEapProperties(&properties, true /* configured */);
-      properties.SetBooleanWithoutPathExpansion(
-          shill::kSaveCredentialsProperty, GetSaveCredentials());
+      properties.SetKey(shill::kSaveCredentialsProperty,
+                        base::Value(GetSaveCredentials()));
     } else {
       const std::string passphrase = GetPassphrase();
       if (!passphrase.empty()) {
-        properties.SetStringWithoutPathExpansion(
-            shill::kPassphraseProperty, passphrase);
+        properties.SetKey(shill::kPassphraseProperty, base::Value(passphrase));
       }
     }
     if (network->type() == shill::kTypeEthernet) {
       // When configuring an ethernet service, we actually configure the
       // EthernetEap service, which exists in the Profile only.
       // See crbug.com/126870 for more info.
-      properties.SetStringWithoutPathExpansion(shill::kTypeProperty,
-                                               shill::kTypeEthernetEap);
+      properties.SetKey(shill::kTypeProperty,
+                        base::Value(shill::kTypeEthernetEap));
       share_network = false;
       NetworkConnect::Get()->CreateConfiguration(&properties, share_network);
     } else {
@@ -878,24 +874,23 @@ std::string WifiConfigView::GetEapAnonymousIdentity() const {
 
 void WifiConfigView::SetEapProperties(base::DictionaryValue* properties,
                                       bool configured) {
-  properties->SetStringWithoutPathExpansion(
-      shill::kEapIdentityProperty, GetEapIdentity());
-  properties->SetStringWithoutPathExpansion(
-      shill::kEapMethodProperty, GetEapMethod());
-  properties->SetStringWithoutPathExpansion(
-      shill::kEapPhase2AuthProperty, GetEapPhase2Auth());
-  properties->SetStringWithoutPathExpansion(
-      shill::kEapAnonymousIdentityProperty, GetEapAnonymousIdentity());
-  properties->SetStringWithoutPathExpansion(
-      shill::kEapSubjectMatchProperty, GetEapSubjectMatch());
+  properties->SetKey(shill::kEapIdentityProperty,
+                     base::Value(GetEapIdentity()));
+  properties->SetKey(shill::kEapMethodProperty, base::Value(GetEapMethod()));
+  properties->SetKey(shill::kEapPhase2AuthProperty,
+                     base::Value(GetEapPhase2Auth()));
+  properties->SetKey(shill::kEapAnonymousIdentityProperty,
+                     base::Value(GetEapAnonymousIdentity()));
+  properties->SetKey(shill::kEapSubjectMatchProperty,
+                     base::Value(GetEapSubjectMatch()));
 
   SetEapClientCertProperties(properties);
 
-  properties->SetBooleanWithoutPathExpansion(
-      shill::kEapUseSystemCasProperty, GetEapUseSystemCas());
+  properties->SetKey(shill::kEapUseSystemCasProperty,
+                     base::Value(GetEapUseSystemCas()));
   if (!configured || passphrase_textfield_->changed()) {
-    properties->SetStringWithoutPathExpansion(
-        shill::kEapPasswordProperty, GetPassphrase());
+    properties->SetKey(shill::kEapPasswordProperty,
+                       base::Value(GetPassphrase()));
   }
   auto pem_list = base::MakeUnique<base::ListValue>();
   std::string ca_cert_pem = GetEapServerCaCertPEM();
@@ -1205,19 +1200,19 @@ void WifiConfigView::Init(bool show_8021x) {
     passphrase_visible_button_->SetImage(
         views::ImageButton::STATE_NORMAL,
         *ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-            IDR_NETWORK_SHOW_PASSWORD));
+            IDR_SHOW_PASSWORD));
     passphrase_visible_button_->SetImage(
         views::ImageButton::STATE_HOVERED,
         *ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-            IDR_NETWORK_SHOW_PASSWORD_HOVER));
+            IDR_SHOW_PASSWORD_HOVER));
     passphrase_visible_button_->SetToggledImage(
         views::ImageButton::STATE_NORMAL,
-        ResourceBundle::GetSharedInstance().
-        GetImageSkiaNamed(IDR_NETWORK_HIDE_PASSWORD));
+        ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+            IDR_HIDE_PASSWORD));
     passphrase_visible_button_->SetToggledImage(
         views::ImageButton::STATE_HOVERED,
-        ResourceBundle::GetSharedInstance().
-        GetImageSkiaNamed(IDR_NETWORK_HIDE_PASSWORD_HOVER));
+        ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+            IDR_HIDE_PASSWORD_HOVER));
     passphrase_visible_button_->SetImageAlignment(
         views::ImageButton::ALIGN_CENTER, views::ImageButton::ALIGN_MIDDLE);
     layout->AddView(passphrase_visible_button_);

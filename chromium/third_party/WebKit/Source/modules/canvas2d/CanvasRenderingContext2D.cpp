@@ -37,12 +37,13 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/modules/v8/RenderingContext.h"
 #include "core/CSSPropertyNames.h"
+#include "core/css/CSSFontSelector.h"
 #include "core/css/StylePropertySet.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/StyleEngine.h"
 #include "core/dom/TaskRunnerHelper.h"
-#include "core/events/Event.h"
+#include "core/dom/events/Event.h"
 #include "core/events/MouseEvent.h"
 #include "core/frame/Settings.h"
 #include "core/html/TextMetrics.h"
@@ -57,6 +58,7 @@
 #include "platform/graphics/CanvasHeuristicParameters.h"
 #include "platform/graphics/DrawLooperBuilder.h"
 #include "platform/graphics/ImageBuffer.h"
+#include "platform/graphics/StaticBitmapImage.h"
 #include "platform/graphics/StrokeData.h"
 #include "platform/graphics/paint/PaintCanvas.h"
 #include "platform/graphics/paint/PaintFlags.h"
@@ -70,13 +72,8 @@
 
 namespace blink {
 
-static const char kDefaultFont[] = "10px sans-serif";
-static const char kInheritDirectionString[] = "inherit";
-static const char kRtlDirectionString[] = "rtl";
-static const char kLtrDirectionString[] = "ltr";
 static const double kTryRestoreContextInterval = 0.5;
 static const unsigned kMaxTryRestoreContextAttempts = 4;
-static const double kCDeviceScaleFactor = 1.0;  // Canvas is device independent
 
 static bool ContextLostRestoredEventsEnabled() {
   return RuntimeEnabledFeatures::ExperimentalCanvasFeaturesEnabled();
@@ -415,9 +412,9 @@ String CanvasRenderingContext2D::font() const {
   const FontDescription& font_description =
       GetState().GetFont().GetFontDescription();
 
-  if (font_description.Style() == kFontStyleItalic)
+  if (font_description.Style() == ItalicSlopeValue())
     serialized_font.Append("italic ");
-  if (font_description.Weight() == kFontWeightBold)
+  if (font_description.Weight() == BoldWeightValue())
     serialized_font.Append("bold ");
   if (font_description.VariantCaps() == FontDescription::kSmallCaps)
     serialized_font.Append("small-caps ");
@@ -476,8 +473,7 @@ void CanvasRenderingContext2D::setFont(const String& new_font) {
       DCHECK(font_lru_list_.Contains(new_font));
       font_lru_list_.erase(new_font);
       font_lru_list_.insert(new_font);
-      ModifiableState().SetFont(
-          i->value, canvas()->GetDocument().GetStyleEngine().FontSelector());
+      ModifiableState().SetFont(i->value, host()->GetFontSelector());
     } else {
       MutableStylePropertySet* parsed_style =
           canvas_font_cache->ParseFont(new_font);
@@ -511,15 +507,13 @@ void CanvasRenderingContext2D::setFont(const String& new_font) {
       font_lru_list_.insert(new_font);
       PruneLocalFontCache(canvas_font_cache->HardMaxFonts());  // hard limit
       should_prune_local_font_cache_ = true;  // apply soft limit
-      ModifiableState().SetFont(
-          final_font, canvas()->GetDocument().GetStyleEngine().FontSelector());
+      ModifiableState().SetFont(final_font, host()->GetFontSelector());
     }
   } else {
     Font resolved_font;
     if (!canvas_font_cache->GetFontUsingDefaultStyle(new_font, resolved_font))
       return;
-    ModifiableState().SetFont(
-        resolved_font, canvas()->GetDocument().GetStyleEngine().FontSelector());
+    ModifiableState().SetFont(resolved_font, host()->GetFontSelector());
   }
 
   // The parse succeeded.
@@ -615,7 +609,7 @@ ImageBuffer* CanvasRenderingContext2D::GetImageBuffer() const {
       ->GetOrCreateImageBuffer();
 }
 
-PassRefPtr<Image> blink::CanvasRenderingContext2D::GetImage(
+RefPtr<StaticBitmapImage> blink::CanvasRenderingContext2D::GetImage(
     AccelerationHint hint,
     SnapshotReason reason) const {
   if (!HasImageBuffer())
@@ -661,32 +655,6 @@ String CanvasRenderingContext2D::GetIdFromControl(const Element* element) {
           hit_region_manager_->GetHitRegionByControl(element))
     return hit_region->Id();
   return String();
-}
-
-String CanvasRenderingContext2D::textAlign() const {
-  return TextAlignName(GetState().GetTextAlign());
-}
-
-void CanvasRenderingContext2D::setTextAlign(const String& s) {
-  TextAlign align;
-  if (!ParseTextAlign(s, align))
-    return;
-  if (GetState().GetTextAlign() == align)
-    return;
-  ModifiableState().SetTextAlign(align);
-}
-
-String CanvasRenderingContext2D::textBaseline() const {
-  return TextBaselineName(GetState().GetTextBaseline());
-}
-
-void CanvasRenderingContext2D::setTextBaseline(const String& s) {
-  TextBaseline baseline;
-  if (!ParseTextBaseline(s, baseline))
-    return;
-  if (GetState().GetTextBaseline() == baseline)
-    return;
-  ModifiableState().SetTextBaseline(baseline);
 }
 
 static inline TextDirection ToTextDirection(
@@ -794,8 +762,7 @@ TextMetrics* CanvasRenderingContext2D::measureText(const String& text) {
       direction, false);
   text_run.SetNormalizeSpace(true);
   FloatRect text_bounds = font.SelectionRectForText(
-      text_run, FloatPoint(), font.GetFontDescription().ComputedSize(), 0, -1,
-      true);
+      text_run, FloatPoint(), font.GetFontDescription().ComputedSize(), 0, -1);
 
   // x direction
   metrics->SetWidth(font.Width(text_run));
@@ -941,43 +908,6 @@ const Font& CanvasRenderingContext2D::AccessFont() {
     setFont(GetState().UnparsedFont());
   canvas()->GetDocument().GetCanvasFontCache()->WillUseCurrentFont();
   return GetState().GetFont();
-}
-
-float CanvasRenderingContext2D::GetFontBaseline(
-    const FontMetrics& font_metrics) const {
-  // If the font is so tiny that the lroundf operations result in two
-  // different types of text baselines to return the same baseline, use
-  // floating point metrics (crbug.com/338908).
-  // If you changed the heuristic here, for consistency please also change it
-  // in SimpleFontData::platformInit().
-  bool use_float_ascent_descent =
-      font_metrics.Ascent() < 3 || font_metrics.Height() < 2;
-  switch (GetState().GetTextBaseline()) {
-    case kTopTextBaseline:
-      return use_float_ascent_descent ? font_metrics.FloatAscent()
-                                      : font_metrics.Ascent();
-    case kHangingTextBaseline:
-      // According to
-      // http://wiki.apache.org/xmlgraphics-fop/LineLayout/AlignmentHandling
-      // "FOP (Formatting Objects Processor) puts the hanging baseline at 80% of
-      // the ascender height"
-      return use_float_ascent_descent ? (font_metrics.FloatAscent() * 4.0) / 5.0
-                                      : (font_metrics.Ascent() * 4) / 5;
-    case kBottomTextBaseline:
-    case kIdeographicTextBaseline:
-      return use_float_ascent_descent ? -font_metrics.FloatDescent()
-                                      : -font_metrics.Descent();
-    case kMiddleTextBaseline:
-      return use_float_ascent_descent
-                 ? -font_metrics.FloatDescent() +
-                       font_metrics.FloatHeight() / 2.0
-                 : -font_metrics.Descent() + font_metrics.Height() / 2;
-    case kAlphabeticTextBaseline:
-    default:
-      // Do nothing.
-      break;
-  }
-  return 0;
 }
 
 void CanvasRenderingContext2D::SetIsHidden(bool hidden) {

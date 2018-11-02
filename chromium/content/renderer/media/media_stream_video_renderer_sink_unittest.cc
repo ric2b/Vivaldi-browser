@@ -17,8 +17,8 @@
 #include "content/renderer/media/mock_media_stream_registry.h"
 #include "content/renderer/media/mock_media_stream_video_source.h"
 #include "media/base/video_frame.h"
-#include "media/renderers/gpu_video_accelerator_factories.h"
-#include "media/renderers/mock_gpu_memory_buffer_video_frame_pool.h"
+#include "media/video/gpu_video_accelerator_factories.h"
+#include "media/video/mock_gpu_memory_buffer_video_frame_pool.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/WebString.h"
@@ -122,7 +122,7 @@ class MediaStreamVideoRendererSinkTest : public testing::Test {
     // tasks on IO thread are completed before moving on.
     base::RunLoop run_loop;
     child_process_->io_task_runner()->PostTaskAndReply(
-        FROM_HERE, base::Bind([] {}), run_loop.QuitClosure());
+        FROM_HERE, base::BindOnce([] {}), run_loop.QuitClosure());
     run_loop.Run();
     base::RunLoop().RunUntilIdle();
   }

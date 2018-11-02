@@ -20,6 +20,7 @@ const bool PlatformStyle::kDefaultLabelButtonHasBoldFont = false;
 const bool PlatformStyle::kDialogDefaultButtonCanBeCancel = false;
 const bool PlatformStyle::kSelectWordOnRightClick = true;
 const bool PlatformStyle::kSelectAllOnRightClickWhenUnfocused = true;
+const bool PlatformStyle::kTextfieldScrollsToStartOnFocusChange = true;
 const bool PlatformStyle::kTreeViewSelectionPaintsEntireRow = true;
 const bool PlatformStyle::kTreeViewUsesOpenIcon = false;
 const bool PlatformStyle::kUseRipples = false;
@@ -30,11 +31,11 @@ const bool PlatformStyle::kUseRipples = false;
 const bool PlatformStyle::kMirrorBubbleArrowInRTLByDefault =
     BUILDFLAG(MAC_VIEWS_BROWSER);
 
-const CustomButton::NotifyAction PlatformStyle::kMenuNotifyActivationAction =
-    CustomButton::NOTIFY_ON_PRESS;
+const Button::NotifyAction PlatformStyle::kMenuNotifyActivationAction =
+    Button::NOTIFY_ON_PRESS;
 
-const CustomButton::KeyClickAction PlatformStyle::kKeyClickActionOnSpace =
-    CustomButton::CLICK_ON_KEY_PRESS;
+const Button::KeyClickAction PlatformStyle::kKeyClickActionOnSpace =
+    Button::CLICK_ON_KEY_PRESS;
 
 // On Mac, the Return key is used to perform the default action even when a
 // control is focused.

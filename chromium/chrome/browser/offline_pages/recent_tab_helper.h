@@ -48,6 +48,7 @@ class RecentTabHelper
 
   // SnapshotController::Client
   void StartSnapshot() override;
+  void RunRenovations() override;
 
   // Delegate that is used by RecentTabHelper to get external dependencies.
   // Default implementation lives in .cc file, while tests provide an override.
@@ -86,7 +87,8 @@ class RecentTabHelper
   // Note #2: Currently this method only accepts download requests from the
   // downloads namespace.
   void ObserveAndDownloadCurrentPage(const ClientId& client_id,
-                                     int64_t request_id);
+                                     int64_t request_id,
+                                     const std::string& origin);
 
  private:
   struct SnapshotProgressInfo;

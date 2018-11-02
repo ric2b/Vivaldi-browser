@@ -9,6 +9,19 @@
 <dom-module id="settings-toggle-button">
   <template>
     <style include="settings-shared iron-flex">
+      :host {
+        @apply(--cr-section);
+      }
+
+      :host(.first),
+      :host(.continuation) {
+        border-top: none;
+      }
+
+      :host(.three-line) {
+        min-height: var(--settings-row-three-line-min-height);
+      }
+
       :host([elide-label]),
       :host([elide-label]) #outerRow,
       :host([elide-label]) #outerRow > div.flex {
@@ -31,7 +44,7 @@
       }
 
       #labelWrapper,
-      ::content .more-actions {
+      ::slotted([slot='more-actions']) {
         -webkit-margin-end: var(--settings-control-label-spacing);
       }
 
@@ -40,13 +53,11 @@
       }
     </style>
     <div id="outerRow" noSubLabel$="[[!subLabel]]">
-      <div class="flex" id="labelWrapper" on-tap="onLabelWrapperTap_"
-          actionable$="[[!controlDisabled_(disabled, pref.*)]]"
-          hidden="[[!label]]">
+      <div class="flex" id="labelWrapper" hidden="[[!label]]">
         <div id="label" class="label">[[label]]</div>
         <div id="subLabel" class="secondary label">[[subLabel]]</div>
       </div>
-      <content select=".more-actions"></content>
+      <slot name="more-actions"></slot>
       <template is="dom-if" if="[[hasPrefPolicyIndicator(pref.*)]]">
         <cr-policy-pref-indicator pref="[[pref]]" icon-aria-label="[[label]]">
         </cr-policy-pref-indicator>
@@ -54,7 +65,8 @@
       <paper-toggle-button id="control" checked="{{checked}}"
           on-change="notifyChangedByUserInteraction" aria-labelledby="label"
           aria-describedby="subLabel" on-up="resetTrackLock_"
-          disabled="[[controlDisabled_(disabled, pref)]]">
+          disabled="[[controlDisabled_(disabled, pref)]]"
+          on-tap="onToggleTap_">
       </paper-toggle-button>
     </div>
   </template>

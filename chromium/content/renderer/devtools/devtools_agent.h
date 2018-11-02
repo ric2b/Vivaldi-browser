@@ -24,7 +24,6 @@ class GURL;
 
 namespace content {
 
-class DevToolsCPUThrottler;
 class RenderFrameImpl;
 struct Manifest;
 struct ManifestDebugInfo;
@@ -32,9 +31,8 @@ struct ManifestDebugInfo;
 // DevToolsAgent belongs to the inspectable RenderFrameImpl and communicates
 // with WebDevToolsAgent. There is a corresponding DevToolsAgentHost
 // on the browser side.
-class CONTENT_EXPORT DevToolsAgent
-    : public RenderFrameObserver,
-      NON_EXPORTED_BASE(public blink::WebDevToolsAgentClient) {
+class CONTENT_EXPORT DevToolsAgent : public RenderFrameObserver,
+                                     public blink::WebDevToolsAgentClient {
  public:
   explicit DevToolsAgent(RenderFrameImpl* frame);
   ~DevToolsAgent() override;
@@ -107,7 +105,6 @@ class CONTENT_EXPORT DevToolsAgent
   RenderFrameImpl* frame_;
   base::Callback<void(int, int, const std::string&, const std::string&)>
       send_protocol_message_callback_for_test_;
-  std::unique_ptr<DevToolsCPUThrottler> cpu_throttler_;
   base::WeakPtrFactory<DevToolsAgent> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(DevToolsAgent);

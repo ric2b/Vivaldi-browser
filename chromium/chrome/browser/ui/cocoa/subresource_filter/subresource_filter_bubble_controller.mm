@@ -64,8 +64,9 @@
   [messageLabel_ release];
 
   // Set up the "Learn more" link.
-  NSString* linkText = base::SysUTF16ToNSString(
-      contentSettingBubbleModel_->bubble_content().learn_more_link);
+  // TODO(csharrison): Migrate this to use the help icon to align with
+  // Windows/Linux.
+  NSString* linkText = l10n_util::GetNSString(IDS_LEARN_MORE);
   learnMoreLink_ = [[NSButton alloc] initWithFrame:NSMakeRect(18, 76, 282, 28)];
   base::scoped_nsobject<HyperlinkButtonCell> cell(
       [[HyperlinkButtonCell alloc] initTextCell:linkText]);
@@ -99,8 +100,8 @@
   if (!manageCheckbox_)
     return;
 
-  NSString* label = base::SysUTF16ToNSString(
-      contentSettingBubbleModel_->bubble_content().manage_text);
+  NSString* label =
+      base::SysUTF16ToNSString([super model]->bubble_content().manage_text);
   [manageCheckbox_ setTitle:label];
 
   CGFloat deltaY =
@@ -116,13 +117,13 @@
 // Callback for "manage" checkbox button.
 - (void)manageCheckboxChecked:(id)sender {
   bool isChecked = [sender state] == NSOnState;
-  contentSettingBubbleModel_->OnManageCheckboxChecked(isChecked);
+  [super model]->OnManageCheckboxChecked(isChecked);
   [self layoutView];
 }
 
 // Callback for clicking on the "Learn more" link.
 - (void)learnMoreLinkClicked:(id)sender {
-  contentSettingBubbleModel_->OnCustomLinkClicked();
+  [super model]->OnCustomLinkClicked();
   [self close];
 }
 

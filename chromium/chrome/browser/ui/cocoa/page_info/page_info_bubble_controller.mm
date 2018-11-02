@@ -16,14 +16,17 @@
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/cocoa/browser_dialogs_views_mac.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #include "chrome/browser/ui/cocoa/bubble_anchor_helper.h"
 #import "chrome/browser/ui/cocoa/info_bubble_view.h"
 #import "chrome/browser/ui/cocoa/info_bubble_window.h"
+#include "chrome/browser/ui/cocoa/key_equivalent_constants.h"
 #import "chrome/browser/ui/cocoa/location_bar/location_bar_decoration.h"
 #import "chrome/browser/ui/cocoa/location_bar/location_bar_view_mac.h"
 #import "chrome/browser/ui/cocoa/page_info/permission_selector_button.h"
+#include "chrome/browser/ui/page_info/page_info_dialog.h"
 #include "chrome/browser/ui/page_info/permission_menu_model.h"
 #import "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/common/url_constants.h"
@@ -40,6 +43,7 @@
 #import "third_party/google_toolbox_for_mac/src/AppKit/GTMUILocalizerAndLayoutTweaker.h"
 #import "ui/base/cocoa/a11y_util.h"
 #include "ui/base/cocoa/cocoa_base_utils.h"
+#import "ui/base/cocoa/controls/button_utils.h"
 #import "ui/base/cocoa/controls/hyperlink_button_cell.h"
 #import "ui/base/cocoa/flipped_view.h"
 #import "ui/base/cocoa/hover_image_button.h"
@@ -400,6 +404,8 @@ bool IsInternalURL(const GURL& url) {
   // These will be created only if necessary.
   resetDecisionsField_ = nil;
   resetDecisionsButton_ = nil;
+  changePasswordButton_ = nil;
+  whitelistPasswordReuseButton_ = nil;
 
   NSString* connectionHelpButtonText = l10n_util::GetNSString(IDS_LEARN_MORE);
   connectionHelpButton_ = [self addLinkButtonWithText:connectionHelpButtonText
@@ -572,6 +578,20 @@ bool IsInternalURL(const GURL& url) {
   [self close];
 }
 
+// Handler for the button to change password decisions.
+- (void)changePasswordDecisions:(id)sender {
+  DCHECK(changePasswordButton_);
+  presenter_->OnChangePasswordButtonPressed(webContents_);
+  [self close];
+}
+
+// Handler for the button to whitelist password reuse decisions.
+- (void)whitelistPasswordReuseDecisions:(id)sender {
+  DCHECK(whitelistPasswordReuseButton_);
+  presenter_->OnWhitelistPasswordReuseButtonPressed(webContents_);
+  [self close];
+}
+
 - (CGFloat)layoutViewAtRTLStart:(NSView*)view withYPosition:(CGFloat)yPos {
   CGFloat xPos;
   if (base::i18n::IsRTL()) {
@@ -659,6 +679,41 @@ bool IsInternalURL(const GURL& url) {
                                        kLinkButtonXAdjustment,
                                    yPos)];
     yPos = NSMaxY([resetDecisionsButton_ frame]);
+  }
+
+  if (changePasswordButton_) {
+    NSPoint changePasswordButtonOrigin;
+    NSPoint whitelistReuseButtonOrigin;
+    bool canFitInOneLine = NSWidth([changePasswordButton_ frame]) +
+                               NSWidth([whitelistPasswordReuseButton_ frame]) +
+                               kNSButtonBuiltinMargin <=
+                           NSWidth([contentView_ frame]);
+    bool isRTL = base::i18n::IsRTL();
+    CGFloat horizontalPadding =
+        kSectionHorizontalPadding - kNSButtonBuiltinMargin;
+    changePasswordButtonOrigin.x =
+        isRTL ? NSWidth([contentView_ frame]) -
+                    NSWidth([changePasswordButton_ frame]) - horizontalPadding
+              : horizontalPadding;
+    changePasswordButtonOrigin.y = yPos + kSecurityParagraphSpacing;
+    whitelistReuseButtonOrigin.x =
+        isRTL ? (canFitInOneLine
+                     ? changePasswordButtonOrigin.x - kNSButtonBuiltinMargin -
+                           NSWidth([whitelistPasswordReuseButton_ frame])
+                     : NSWidth([contentView_ frame]) -
+                           NSWidth([whitelistPasswordReuseButton_ frame]) -
+                           horizontalPadding)
+              : (canFitInOneLine ? changePasswordButtonOrigin.x +
+                                       NSWidth([changePasswordButton_ frame]) +
+                                       kNSButtonBuiltinMargin
+                                 : changePasswordButtonOrigin.x);
+    whitelistReuseButtonOrigin.y =
+        canFitInOneLine ? changePasswordButtonOrigin.y
+                        : yPos + NSHeight([changePasswordButton_ frame]);
+    [changePasswordButton_ setFrameOrigin:changePasswordButtonOrigin];
+    [whitelistPasswordReuseButton_ setFrameOrigin:whitelistReuseButtonOrigin];
+    yPos =
+        NSMaxY([whitelistPasswordReuseButton_ frame]) - kNSButtonBuiltinMargin;
   }
 
   // Resize the height based on contents.
@@ -837,15 +892,15 @@ bool IsInternalURL(const GURL& url) {
 }
 
 // Set the content of the identity and identity status fields, and add the
-// Certificate view if applicable.
+// Certificate view or password reuse buttons if applicable.
 - (void)setIdentityInfo:(const PageInfoUI::IdentityInfo&)identityInfo {
   std::unique_ptr<PageInfoUI::SecurityDescription> security_description =
       identityInfo.GetSecurityDescription();
   [securitySummaryField_
-      setStringValue:SysUTF16ToNSString(security_description->summary)];
+      setStringValue:base::SysUTF16ToNSString(security_description->summary)];
 
   [securityDetailsField_
-      setStringValue:SysUTF16ToNSString(security_description->details)];
+      setStringValue:base::SysUTF16ToNSString(security_description->details)];
 
   certificate_ = identityInfo.certificate;
 
@@ -896,6 +951,23 @@ bool IsInternalURL(const GURL& url) {
       [certificateView_ setLinkTarget:self
                            withAction:@selector(showCertificateInfo:)];
     }
+  }
+  if (identityInfo.show_change_password_buttons) {
+    changePasswordButton_ =
+        [ButtonUtils buttonWithTitle:l10n_util::GetNSString(
+                                         IDS_PAGE_INFO_CHANGE_PASSWORD_BUTTON)
+                              action:@selector(changePasswordDecisions:)
+                              target:securitySectionView_];
+    [changePasswordButton_ sizeToFit];
+    [changePasswordButton_ setKeyEquivalent:kKeyEquivalentReturn];
+    [securitySectionView_ addSubview:changePasswordButton_];
+    whitelistPasswordReuseButton_ = [ButtonUtils
+        buttonWithTitle:l10n_util::GetNSString(
+                            IDS_PAGE_INFO_WHITELIST_PASSWORD_REUSE_BUTTON)
+                 action:@selector(whitelistPasswordReuseDecisions:)
+                 target:securitySectionView_];
+    [whitelistPasswordReuseButton_ sizeToFit];
+    [securitySectionView_ addSubview:whitelistPasswordReuseButton_];
   }
 
   [self performLayout];
@@ -1271,13 +1343,45 @@ void PageInfoUIBridge::set_bubble_controller(
   bubble_controller_ = controller;
 }
 
-void PageInfoUIBridge::Show(gfx::NativeWindow parent,
-                            Profile* profile,
+void PageInfoUIBridge::SetIdentityInfo(
+    const PageInfoUI::IdentityInfo& identity_info) {
+  [bubble_controller_ setIdentityInfo:identity_info];
+}
+
+void PageInfoUIBridge::RenderFrameDeleted(
+    content::RenderFrameHost* render_frame_host) {
+  if (render_frame_host == web_contents_->GetMainFrame()) {
+    [bubble_controller_ close];
+  }
+}
+
+void PageInfoUIBridge::SetCookieInfo(const CookieInfoList& cookie_info_list) {
+  [bubble_controller_ setCookieInfo:cookie_info_list];
+}
+
+void PageInfoUIBridge::SetPermissionInfo(
+    const PermissionInfoList& permission_info_list,
+    ChosenObjectInfoList chosen_object_info_list) {
+  [bubble_controller_ setPermissionInfo:permission_info_list
+                       andChosenObjects:std::move(chosen_object_info_list)];
+}
+
+void PageInfoUIBridge::DidFinishNavigation(
+    content::NavigationHandle* navigation_handle) {
+  if (!navigation_handle->IsInMainFrame() ||
+      !navigation_handle->HasCommitted()) {
+    return;
+  }
+  // If the browser navigates to another page, close the bubble.
+  [bubble_controller_ close];
+}
+
+void ShowPageInfoDialogImpl(Browser* browser,
                             content::WebContents* web_contents,
                             const GURL& virtual_url,
                             const security_state::SecurityInfo& security_info) {
   if (ui::MaterialDesignController::IsSecondaryUiMaterial()) {
-    chrome::ShowPageInfoBubbleViews(parent, profile, web_contents, virtual_url,
+    chrome::ShowPageInfoBubbleViews(browser, web_contents, virtual_url,
                                     security_info);
     return;
   }
@@ -1290,6 +1394,7 @@ void PageInfoUIBridge::Show(gfx::NativeWindow parent,
 
   // Create the bridge. This will be owned by the bubble controller.
   PageInfoUIBridge* bridge = new PageInfoUIBridge(web_contents);
+  NSWindow* parent = browser->window()->GetNativeWindow();
 
   // Create the bubble controller. It will dealloc itself when it closes,
   // resetting |g_is_bubble_showing|.
@@ -1303,7 +1408,7 @@ void PageInfoUIBridge::Show(gfx::NativeWindow parent,
     // Initialize the presenter, which holds the model and controls the UI.
     // This is also owned by the bubble controller.
     PageInfo* presenter =
-        new PageInfo(bridge, profile,
+        new PageInfo(bridge, browser->profile(),
                      TabSpecificContentSettings::FromWebContents(web_contents),
                      web_contents, virtual_url, security_info);
     [bubble_controller setPresenter:presenter];
@@ -1350,37 +1455,4 @@ void PageInfoUIBridge::ShowAt(gfx::NativeWindow parent,
   [bubble_controller setAnchorPoint:ns_anchor];
 
   [bubble_controller showWindow:nil];
-}
-
-void PageInfoUIBridge::SetIdentityInfo(
-    const PageInfoUI::IdentityInfo& identity_info) {
-  [bubble_controller_ setIdentityInfo:identity_info];
-}
-
-void PageInfoUIBridge::RenderFrameDeleted(
-    content::RenderFrameHost* render_frame_host) {
-  if (render_frame_host == web_contents_->GetMainFrame()) {
-    [bubble_controller_ close];
-  }
-}
-
-void PageInfoUIBridge::SetCookieInfo(const CookieInfoList& cookie_info_list) {
-  [bubble_controller_ setCookieInfo:cookie_info_list];
-}
-
-void PageInfoUIBridge::SetPermissionInfo(
-    const PermissionInfoList& permission_info_list,
-    ChosenObjectInfoList chosen_object_info_list) {
-  [bubble_controller_ setPermissionInfo:permission_info_list
-                       andChosenObjects:std::move(chosen_object_info_list)];
-}
-
-void PageInfoUIBridge::DidFinishNavigation(
-    content::NavigationHandle* navigation_handle) {
-  if (!navigation_handle->IsInMainFrame() ||
-      !navigation_handle->HasCommitted()) {
-    return;
-  }
-  // If the browser navigates to another page, close the bubble.
-  [bubble_controller_ close];
 }

@@ -53,6 +53,10 @@ class BrowserPluginDelegate;
 struct WebPluginInfo;
 }
 
+namespace error_page {
+class Error;
+}
+
 namespace network_hints {
 class PrescientNetworkingDispatcher;
 }
@@ -117,7 +121,7 @@ class ChromeContentRendererClient : public content::ContentRendererClient {
   blink::WebPlugin* CreatePluginReplacement(
       content::RenderFrame* render_frame,
       const base::FilePath& plugin_path) override;
-  bool HasErrorPage(int http_status_code, std::string* error_domain) override;
+  bool HasErrorPage(int http_status_code) override;
   bool ShouldSuppressErrorPage(content::RenderFrame* render_frame,
                                const GURL& url) override;
   void GetNavigationErrorStrings(content::RenderFrame* render_frame,
@@ -125,11 +129,19 @@ class ChromeContentRendererClient : public content::ContentRendererClient {
                                  const blink::WebURLError& error,
                                  std::string* error_html,
                                  base::string16* error_description) override;
+  void GetNavigationErrorStringsForHttpStatusError(
+      content::RenderFrame* render_frame,
+      const blink::WebURLRequest& failed_request,
+      const GURL& unreachable_url,
+      int http_status,
+      std::string* error_html,
+      base::string16* error_description) override;
+
   void DeferMediaLoad(content::RenderFrame* render_frame,
                       bool has_played_media_before,
                       const base::Closure& closure) override;
   bool RunIdleHandlerWhenWidgetsHidden() override;
-  bool AllowTimerSuspensionWhenProcessBackgrounded() override;
+  bool AllowStoppingTimersWhenProcessBackgrounded() override;
   bool AllowPopup() override;
   bool ShouldFork(blink::WebLocalFrame* frame,
                   const GURL& url,
@@ -180,6 +192,7 @@ class ChromeContentRendererClient : public content::ContentRendererClient {
   void RecordRapporURL(const std::string& metric, const GURL& url) override;
   void AddImageContextMenuProperties(
       const blink::WebURLResponse& response,
+      bool is_image_in_context_a_placeholder_image,
       std::map<std::string, std::string>* properties) override;
   void RunScriptsAtDocumentStart(content::RenderFrame* render_frame) override;
   void RunScriptsAtDocumentEnd(content::RenderFrame* render_frame) override;
@@ -225,9 +238,15 @@ class ChromeContentRendererClient : public content::ContentRendererClient {
   static GURL GetNaClContentHandlerURL(const std::string& actual_mime_type,
                                        const content::WebPluginInfo& plugin);
 
-  // Returns |true| if we should use the SafeBrowsing mojo service. Initialises
-  // |safe_browsing_| on the first call as a side-effect.
-  bool UsingSafeBrowsingMojoService();
+  // Initialises |safe_browsing_| if it is not already initialised.
+  void InitSafeBrowsingIfNecessary();
+
+  void GetNavigationErrorStringsInternal(
+      content::RenderFrame* render_frame,
+      const blink::WebURLRequest& failed_request,
+      const error_page::Error& error,
+      std::string* error_html,
+      base::string16* error_description);
 
   // Time at which this object was created. This is very close to the time at
   // which the RendererMain function was entered.

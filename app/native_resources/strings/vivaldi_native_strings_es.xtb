@@ -6,7 +6,7 @@
 <translation id="1728549374069268714">Pegar e ir</translation>
 <translation id="1756026472674246267">Abrir enlace en una pestaña nueva</translation>
 <translation id="1759842336958782510">Chrome</translation>
-<translation id="1769904678986817931">Propiedades de la imagen</translation>
+<translation id="1769904678986817931">Propiedades de la imagen...</translation>
 <translation id="1920297417712412573">Copiar como Nota</translation>
 <translation id="1921101374471252440">&amp;Recargar la imagen</translation>
 <translation id="2444387452209867610">Insertar Nota</translation>
@@ -44,6 +44,7 @@
 <translation id="5716238312826274098">Deshabilitando las notificaciones</translation>
 <translation id="588258955323874662">Pantalla completa</translation>
 <translation id="5916080360077521750">Desgraciadamente, sus preferencias de Chrome no están disponibles mientras está en funcionamiento. Para poder importarlas a Vivaldi, guarde su trabajo, cierre todas las ventanas de Chrome y luego pulse en Continuar.</translation>
+<translation id="6229528619562190452">Clic aquí para actualizar Vivaldi.</translation>
 <translation id="6234173136417926046">Usar imagen como fondo de la pantalla de inicio</translation>
 <translation id="6259156558325130047">&amp;Rehacer Reordenación</translation>
 <translation id="630690498669249215">Archivo de marcadores de Opera</translation>

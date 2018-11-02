@@ -61,7 +61,8 @@ void CdmPromiseAdapter::Clear() {
   // Reject all outstanding promises.
   DCHECK(thread_checker_.CalledOnValidThread());
   for (auto& promise : promises_)
-    promise.second->reject(CdmPromise::UNKNOWN_ERROR, 0, "Operation aborted.");
+    promise.second->reject(CdmPromise::Exception::INVALID_STATE_ERROR, 0,
+                           "Operation aborted.");
   promises_.clear();
 }
 
@@ -78,6 +79,9 @@ std::unique_ptr<CdmPromise> CdmPromiseAdapter::TakePromise(
 
 // Explicit instantiation of function templates.
 template MEDIA_EXPORT void CdmPromiseAdapter::ResolvePromise(uint32_t);
+template MEDIA_EXPORT void CdmPromiseAdapter::ResolvePromise(
+    uint32_t,
+    const CdmKeyInformation::KeyStatus&);
 template MEDIA_EXPORT void CdmPromiseAdapter::ResolvePromise(
     uint32_t,
     const std::string&);

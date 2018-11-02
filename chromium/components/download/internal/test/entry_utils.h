@@ -21,6 +21,12 @@ bool CompareEntryList(const std::vector<Entry*>& a,
 bool CompareEntryList(const std::vector<Entry>& list1,
                       const std::vector<Entry>& list2);
 
+bool CompareEntryUsingGuidOnly(const Entry* const& expected,
+                               const Entry* const& actual);
+
+bool CompareEntryListUsingGuidOnly(const std::vector<Entry*>& a,
+                                   const std::vector<Entry*>& b);
+
 Entry BuildBasicEntry();
 
 Entry BuildBasicEntry(Entry::State state);
@@ -39,7 +45,10 @@ Entry BuildEntry(DownloadClient client,
                  const base::FilePath& file_path,
                  base::Time create_time,
                  base::Time completion_time,
-                 int attempt_count);
+                 base::Time last_cleanup_check_time,
+                 uint64_t bytes_downloaded,
+                 int attempt_count,
+                 int cleanup_attempt_count);
 
 }  // namespace test
 }  // namespace download

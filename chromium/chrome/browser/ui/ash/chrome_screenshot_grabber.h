@@ -5,8 +5,11 @@
 #ifndef CHROME_BROWSER_UI_ASH_CHROME_SCREENSHOT_GRABBER_H_
 #define CHROME_BROWSER_UI_ASH_CHROME_SCREENSHOT_GRABBER_H_
 
+#include <memory>
+
 #include "ash/screenshot_delegate.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "chrome/browser/notifications/notification.h"
 #include "components/drive/chromeos/file_system_interface.h"
@@ -41,7 +44,6 @@ class ChromeScreenshotGrabber : public ash::ScreenshotDelegate,
   // ui::ScreenshotGrabberDelegate:
   void PrepareFileAndRunOnBlockingPool(
       const base::FilePath& path,
-      scoped_refptr<base::TaskRunner> blocking_task_runner,
       const FileCallback& callback_on_blocking_pool) override;
 
   // ui::ScreenshotGrabberObserver:
@@ -112,11 +114,9 @@ class ChromeScreenshotGrabber : public ash::ScreenshotDelegate,
       const base::FilePath& screenshot_path,
       gfx::Image image);
 
-  void SetProfileForTest(Profile* profile);
   Profile* GetProfile();
 
   std::unique_ptr<ui::ScreenshotGrabber> screenshot_grabber_;
-  Profile* profile_for_test_;
 
   base::WeakPtrFactory<ChromeScreenshotGrabber> weak_factory_;
 

@@ -18,6 +18,7 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/profiles/avatar_menu.h"
 #include "chrome/browser/profiles/profile_avatar_downloader.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/profiles/profile_info_cache.h"
@@ -108,9 +109,9 @@ void ProfileInfoCacheTest::SetUp() {
 }
 
 void ProfileInfoCacheTest::TearDown() {
-  // Drain the UI thread to make sure all tasks are completed. This prevents
+  // Drain remaining tasks to make sure all tasks are completed. This prevents
   // memory leaks.
-  base::RunLoop().RunUntilIdle();
+  content::RunAllBlockingPoolTasksUntilIdle();
 }
 
 ProfileInfoCache* ProfileInfoCacheTest::GetCache() {
@@ -277,6 +278,7 @@ TEST_F(ProfileInfoCacheTest, Sort) {
   EXPECT_EQ(name_a, GetCache()->GetNameOfProfileAtIndex(1));
 }
 
+// Will be removed SOON with ProfileInfoCache tests.
 TEST_F(ProfileInfoCacheTest, BackgroundModeStatus) {
   GetCache()->AddProfileToCache(
       GetProfilePath("path_1"), ASCIIToUTF16("name_1"),
@@ -302,24 +304,6 @@ TEST_F(ProfileInfoCacheTest, BackgroundModeStatus) {
 
   EXPECT_TRUE(GetCache()->GetBackgroundStatusOfProfileAtIndex(0));
   EXPECT_FALSE(GetCache()->GetBackgroundStatusOfProfileAtIndex(1));
-}
-
-TEST_F(ProfileInfoCacheTest, ProfileActiveTime) {
-  GetCache()->AddProfileToCache(
-      GetProfilePath("path_1"), ASCIIToUTF16("name_1"),
-      std::string(), base::string16(), 0, std::string());
-  EXPECT_EQ(base::Time(), GetCache()->GetProfileActiveTimeAtIndex(0));
-  // Before & After times are artificially shifted because just relying upon
-  // the system time can yield problems due to inaccuracies in the
-  // underlying storage system (which uses a double with only 52 bits of
-  // precision to store the 64-bit "time" number).  http://crbug.com/346827
-  base::Time before = base::Time::Now();
-  before -= base::TimeDelta::FromSeconds(1);
-  GetCache()->SetProfileActiveTimeAtIndex(0);
-  base::Time after = base::Time::Now();
-  after += base::TimeDelta::FromSeconds(1);
-  EXPECT_LE(before, GetCache()->GetProfileActiveTimeAtIndex(0));
-  EXPECT_GE(after, GetCache()->GetProfileActiveTimeAtIndex(0));
 }
 
 TEST_F(ProfileInfoCacheTest, GAIAName) {
@@ -441,7 +425,7 @@ TEST_F(ProfileInfoCacheTest, PersistGAIAPicture) {
   GetCache()->SetGAIAPictureOfProfileAtIndex(0, &gaia_image);
 
   // Make sure everything has completed, and the file has been written to disk.
-  base::RunLoop().RunUntilIdle();
+  content::RunAllBlockingPoolTasksUntilIdle();
 
   EXPECT_TRUE(gfx::test::AreImagesEqual(
       gaia_image, *GetCache()->GetGAIAPictureOfProfileAtIndex(0)));
@@ -450,7 +434,7 @@ TEST_F(ProfileInfoCacheTest, PersistGAIAPicture) {
   // Try to get the GAIA picture. This should return NULL until the read from
   // disk is done.
   EXPECT_EQ(NULL, GetCache()->GetGAIAPictureOfProfileAtIndex(0));
-  base::RunLoop().RunUntilIdle();
+  content::RunAllBlockingPoolTasksUntilIdle();
 
   EXPECT_TRUE(gfx::test::AreImagesEqual(
     gaia_image, *GetCache()->GetGAIAPictureOfProfileAtIndex(0)));
@@ -656,7 +640,7 @@ TEST_F(ProfileInfoCacheTest, DownloadHighResAvatarTest) {
   profile_info_cache.AddProfileToCache(path_1, ASCIIToUTF16("name_1"),
       std::string(), base::string16(), kIconIndex, std::string());
   EXPECT_EQ(1U, profile_info_cache.GetNumberOfProfiles());
-  base::RunLoop().RunUntilIdle();
+  content::RunAllBlockingPoolTasksUntilIdle();
 
   // We haven't downloaded any high-res avatars yet.
   EXPECT_EQ(0U, profile_info_cache.cached_avatar_images_.size());
@@ -696,7 +680,7 @@ TEST_F(ProfileInfoCacheTest, DownloadHighResAvatarTest) {
       profile_info_cache.GetHighResAvatarOfProfileAtIndex(0));
 
   // Make sure everything has completed, and the file has been written to disk.
-  base::RunLoop().RunUntilIdle();
+  content::RunAllBlockingPoolTasksUntilIdle();
 
   // Clean up.
   EXPECT_NE(std::string::npos, icon_path.MaybeAsASCII().find(file_name));
@@ -719,7 +703,7 @@ TEST_F(ProfileInfoCacheTest, NothingToDownloadHighResAvatarTest) {
                                        std::string(), base::string16(),
                                        kIconIndex, std::string());
   EXPECT_EQ(1U, profile_info_cache.GetNumberOfProfiles());
-  base::RunLoop().RunUntilIdle();
+  content::RunAllBlockingPoolTasksUntilIdle();
 
   // We haven't tried to download any high-res avatars as the specified icon is
   // just a placeholder.
@@ -774,6 +758,50 @@ TEST_F(ProfileInfoCacheTest, MigrateLegacyProfileNamesWithNewAvatarMenu) {
       GetCache()->GetIndexOfProfileWithPath(path_4)));
   EXPECT_EQ(name_5, GetCache()->GetNameOfProfileAtIndex(
       GetCache()->GetIndexOfProfileWithPath(path_5)));
+}
+
+TEST_F(ProfileInfoCacheTest, GetGaiaImageForAvatarMenu) {
+  // The TestingProfileManager's ProfileInfoCache doesn't download avatars.
+  ProfileInfoCache profile_info_cache(
+      g_browser_process->local_state(),
+      testing_profile_manager_.profile_manager()->user_data_dir());
+
+  base::FilePath profile_path = GetProfilePath("path_1");
+
+  GetCache()->AddProfileToCache(profile_path, ASCIIToUTF16("name_1"),
+                                std::string(), base::string16(), 0,
+                                std::string());
+
+  gfx::Image gaia_image(gfx::test::CreateImage());
+  GetCache()->SetGAIAPictureOfProfileAtIndex(0, &gaia_image);
+
+  // Make sure everything has completed, and the file has been written to disk.
+  content::RunAllBlockingPoolTasksUntilIdle();
+
+  // Make sure this profile is using GAIA picture.
+  EXPECT_TRUE(GetCache()->IsUsingGAIAPictureOfProfileAtIndex(0));
+
+  ResetCache();
+
+  // We need to explicitly set the GAIA usage flag after resetting the cache.
+  GetCache()->SetIsUsingGAIAPictureOfProfileAtIndex(0, true);
+  EXPECT_TRUE(GetCache()->IsUsingGAIAPictureOfProfileAtIndex(0));
+
+  gfx::Image image_loaded;
+
+  // Try to get the GAIA image. For the first time, it triggers an async image
+  // load from disk. The load status indicates the image is still being loaded.
+  EXPECT_EQ(AvatarMenu::ImageLoadStatus::LOADING,
+            AvatarMenu::GetImageForMenuButton(profile_path, &image_loaded));
+  EXPECT_FALSE(gfx::test::AreImagesEqual(gaia_image, image_loaded));
+
+  // Wait until the async image load finishes.
+  content::RunAllBlockingPoolTasksUntilIdle();
+
+  // Since the GAIA image is loaded now, we can get it this time.
+  EXPECT_EQ(AvatarMenu::ImageLoadStatus::LOADED,
+            AvatarMenu::GetImageForMenuButton(profile_path, &image_loaded));
+  EXPECT_TRUE(gfx::test::AreImagesEqual(gaia_image, image_loaded));
 }
 #endif
 

@@ -18,6 +18,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
+#include "base/run_loop.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -151,7 +152,7 @@ class SyncServerStatusChecker : public net::URLFetcherDelegate {
         (source->GetStatus().status() == net::URLRequestStatus::SUCCESS &&
          source->GetResponseCode() == 200 &&
          base::StartsWith(data, "ok", base::CompareCase::SENSITIVE));
-    base::MessageLoop::current()->QuitWhenIdle();
+    base::RunLoop::QuitCurrentWhenIdleDeprecated();
   }
 
   bool running() const { return running_; }
@@ -180,7 +181,7 @@ class EncryptionChecker : public SingleClientStatusChangeChecker {
 
 std::unique_ptr<KeyedService> BuildFakeServerProfileInvalidationProvider(
     content::BrowserContext* context) {
-  return base::MakeUnique<invalidation::ProfileInvalidationProvider>(
+  return std::make_unique<invalidation::ProfileInvalidationProvider>(
       std::unique_ptr<invalidation::InvalidationService>(
           new fake_server::FakeServerInvalidationService));
 }
@@ -189,7 +190,7 @@ std::unique_ptr<KeyedService> BuildP2PProfileInvalidationProvider(
     content::BrowserContext* context,
     syncer::P2PNotificationTarget notification_target) {
   Profile* profile = static_cast<Profile*>(context);
-  return base::MakeUnique<invalidation::ProfileInvalidationProvider>(
+  return std::make_unique<invalidation::ProfileInvalidationProvider>(
       std::unique_ptr<invalidation::InvalidationService>(
           new invalidation::P2PInvalidationService(
               std::unique_ptr<IdentityProvider>(new ProfileIdentityProvider(
@@ -266,7 +267,7 @@ void SyncTest::SetUp() {
     LOG(FATAL) << "Cannot run sync tests without GAIA credentials.";
 
   // Mock the Mac Keychain service.  The real Keychain can block on user input.
-  OSCryptMocker::SetUpWithSingleton();
+  OSCryptMocker::SetUp();
 
   // Start up a sync test server if one is needed and setup mock gaia responses.
   // Note: This must be done prior to the call to SetupClients() because we want
@@ -365,7 +366,7 @@ void SyncTest::CreateProfile(int index) {
     // For test profiles, a custom delegate needs to be used to do the
     // initialization work before the profile is registered.
     profile_delegates_[index] =
-        base::MakeUnique<SyncProfileDelegate>(base::Bind(
+        std::make_unique<SyncProfileDelegate>(base::Bind(
             &SyncTest::InitializeProfile, base::Unretained(this), index));
     MakeTestProfile(profile_path, index);
   }
@@ -551,7 +552,7 @@ bool SyncTest::SetupClients() {
     base::FilePath user_data_dir;
     PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
     profile_delegates_[num_clients_] =
-        base::MakeUnique<SyncProfileDelegate>(base::Callback<void(Profile*)>());
+        std::make_unique<SyncProfileDelegate>(base::Callback<void(Profile*)>());
     verifier_ = MakeTestProfile(
         user_data_dir.Append(FILE_PATH_LITERAL("Verifier")), num_clients_);
     WaitForDataModels(verifier());
@@ -597,11 +598,9 @@ void SyncTest::InitializeProfile(int index, Profile* profile) {
           : ProfileSyncServiceHarness::SigninType::FAKE_SIGNIN;
 
   DCHECK(!clients_[index]);
-  clients_[index] =
-      ProfileSyncServiceHarness::Create(GetProfile(index),
-                                        username_,
-                                        password_,
-                                        singin_type);
+  clients_[index] = ProfileSyncServiceHarness::Create(
+      GetProfile(index), username_, "gaia-id-" + username_, password_,
+      singin_type);
   EXPECT_NE(nullptr, GetClient(index)) << "Could not create Client " << index;
   InitializeInvalidations(index);
 }
@@ -643,7 +642,7 @@ void SyncTest::InitializeInvalidations(int index) {
     // Start listening for and emitting notifications of commits.
     DCHECK(!invalidation_forwarders_[index]);
     invalidation_forwarders_[index] =
-        base::MakeUnique<P2PInvalidationForwarder>(clients_[index]->service(),
+        std::make_unique<P2PInvalidationForwarder>(clients_[index]->service(),
                                                    p2p_invalidation_service);
   }
 }
@@ -702,7 +701,7 @@ bool SyncTest::SetupSync() {
   if (UsingExternalServers()) {
     for (int i = 0; i < num_clients_; ++i) {
       DCHECK(!sync_refreshers_[i]);
-      sync_refreshers_[i] = base::MakeUnique<P2PSyncRefresher>(
+      sync_refreshers_[i] = std::make_unique<P2PSyncRefresher>(
           GetProfile(i), clients_[i]->service());
     }
 
@@ -809,8 +808,8 @@ void SyncTest::ReadPasswordFile() {
 }
 
 void SyncTest::SetupMockGaiaResponses() {
-  factory_ = base::MakeUnique<net::URLFetcherImplFactory>();
-  fake_factory_ = base::MakeUnique<net::FakeURLFetcherFactory>(factory_.get());
+  factory_ = std::make_unique<net::URLFetcherImplFactory>();
+  fake_factory_ = std::make_unique<net::FakeURLFetcherFactory>(factory_.get());
   fake_factory_->SetFakeResponse(
       GaiaUrls::GetInstance()->get_user_info_url(),
       "email=user@gmail.com\ndisplayEmail=user@gmail.com",
@@ -939,7 +938,7 @@ void SyncTest::SetUpTestServerIfRequired() {
     if (!SetUpLocalTestServer())
       LOG(FATAL) << "Failed to set up local test server";
   } else if (server_type_ == IN_PROCESS_FAKE_SERVER) {
-    fake_server_ = base::MakeUnique<fake_server::FakeServer>();
+    fake_server_ = std::make_unique<fake_server::FakeServer>();
     SetupMockGaiaResponses();
   } else {
     LOG(FATAL) << "Don't know which server environment to run test in.";
@@ -969,7 +968,7 @@ bool SyncTest::SetUpLocalPythonTestServer() {
 
   net::HostPortPair xmpp_host_port_pair(sync_server_.host_port_pair());
   xmpp_host_port_pair.set_port(xmpp_port);
-  xmpp_port_ = base::MakeUnique<net::ScopedPortException>(xmpp_port);
+  xmpp_port_ = std::make_unique<net::ScopedPortException>(xmpp_port);
 
   if (!cl->HasSwitch(invalidation::switches::kSyncNotificationHostPort)) {
     cl->AppendSwitchASCII(invalidation::switches::kSyncNotificationHostPort,

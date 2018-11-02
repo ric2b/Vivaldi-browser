@@ -6,6 +6,7 @@ import("//build/config/chrome_build.gni")
 import("//build/config/chromecast_build.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/features.gni")
+import("//build/config/linux/gtk/gtk.gni")
 import("//device/vr/features/features.gni")
 import("//extensions/features/features.gni")
 import("//media/media_options.gni")
@@ -35,7 +36,7 @@ declare_args() {
 
   # Hangout services is an extension that adds extra features to Hangouts.
   # It is enableable separately to facilitate testing.
-  enable_hangout_services_extension = is_chrome_branded
+  enable_hangout_services_extension = (is_chrome_branded || is_vivaldi)
 
   # 'Ok Google' hotwording is disabled to prepare for its removal.
   # http://crbug.com/755579
@@ -45,16 +46,17 @@ declare_args() {
   enable_native_notifications =
       is_android || is_mac || (is_desktop_linux && use_dbus)
 
+  # Whether we should draw the minimize, maximize/restore, and close
+  # buttons using the system theme.  Only used on Linux with GTK3.
+  enable_native_window_nav_buttons =
+      use_aura && !use_ozone && is_desktop_linux && use_gtk3
+
   enable_one_click_signin =
       is_win || is_mac || (is_linux && !is_chromeos && !is_chromecast)
 
   # Indicates if Exo should use ozone gamepad. If this is false, exo will use
   # /device/gamepad as backend.
   enable_exo_ozone_gamepad = use_ozone
-
-  # Enable out-of-process logging of heap profiling data. Currently being
-  # implemented.
-  enable_oop_heap_profiling = false
 
   # Set to true to bundle all the mash related mojo services into chrome.
   # Specify --mash to chrome to have chrome start the mash environment.

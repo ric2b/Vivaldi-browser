@@ -22,13 +22,12 @@
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "calendar/calendar_typedefs.h"
+#include "calendar/recurrence_type.h"
 #include "calendar_type.h"
 #include "url/gurl.h"
 
 namespace calendar {
-
-typedef int64_t EventID;
-typedef int64_t AlarmID;
 
 // Bit flags determing which fields should be updated in the
 // UpdateEvent method
@@ -45,6 +44,7 @@ enum UpdateEventFields {
   ENDRECURRING = 1 << 9,
   LOCATION = 1 << 10,
   URL = 1 << 11,
+  RECURRENCE = 1 << 12,
 };
 
 // Represents a simplified version of a event.
@@ -64,7 +64,7 @@ struct CalendarEvent {
   base::Time end_recurring;
   base::string16 location;
   base::string16 url;
-
+  EventRecurrence recurrence;
   int updateFields;
 };
 
@@ -86,7 +86,8 @@ class EventRow {
            base::Time start_recurring,
            base::Time end_recurring,
            base::string16 location,
-           base::string16 url);
+           base::string16 url,
+           EventRecurrence recurrence);
   ~EventRow();
 
   EventRow(const EventRow& row);
@@ -140,6 +141,9 @@ class EventRow {
   base::string16 url() const { return url_; }
   void set_url(base::string16 url) { url_ = url; }
 
+  EventRecurrence recurrence() const { return recurrence_; }
+  void set_recurrence(EventRecurrence recurrence) { recurrence_ = recurrence; }
+
   EventID id_;
   CalendarID calendar_id_;
   AlarmID alarm_id_;
@@ -153,6 +157,7 @@ class EventRow {
   base::Time end_recurring_;
   base::string16 location_;
   base::string16 url_;
+  EventRecurrence recurrence_;
 
  protected:
   void Swap(EventRow* other);
@@ -207,7 +212,7 @@ class EventQueryResults {
  private:
   // The ordered list of results. The pointers inside this are owned by this
   // QueryResults object.
-   EventResultVector results_;
+  EventResultVector results_;
 
   DISALLOW_COPY_AND_ASSIGN(EventQueryResults);
 };

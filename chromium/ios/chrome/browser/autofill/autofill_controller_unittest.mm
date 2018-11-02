@@ -10,6 +10,7 @@
 #include "base/guid.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task_scheduler/task_scheduler.h"
 #include "base/test/histogram_tester.h"
 #import "base/test/ios/wait_util.h"
 #include "components/autofill/core/browser/autofill_manager.h"
@@ -27,6 +28,7 @@
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #include "ios/chrome/browser/infobars/infobar_manager_impl.h"
 #import "ios/chrome/browser/ui/autofill/autofill_client_ios.h"
+#include "ios/chrome/browser/ui/settings/personal_data_manager_data_changed_observer.h"
 #import "ios/chrome/browser/web/chrome_web_test.h"
 #include "ios/chrome/browser/web_data_service_factory.h"
 #import "ios/web/public/navigation_item.h"
@@ -142,7 +144,7 @@ void CheckField(const FormStructure& form,
   FAIL() << "Missing field " << name;
 }
 
-// WebDataServiceConsumer for receving vectors of strings and making them
+// WebDataServiceConsumer for receiving vectors of strings and making them
 // available to tests.
 class TestConsumer : public WebDataServiceConsumer {
  public:
@@ -346,6 +348,7 @@ void AutofillControllerTest::SetUpForSuggestions(NSString* data) {
   EXPECT_EQ(0U, personal_data_manager->GetProfiles().size());
   personal_data_manager->SaveImportedProfile(profile);
   EXPECT_EQ(1U, personal_data_manager->GetProfiles().size());
+
   LoadHtml(data);
   WaitForBackgroundTasks();
 }
@@ -385,7 +388,6 @@ TEST_F(AutofillControllerTest, ProfileSuggestionsTwoAnonymousForms) {
 // into a test data manager.
 TEST_F(AutofillControllerTest, ProfileSuggestionsFromSelectField) {
   SetUpForSuggestions(kProfileFormHtml);
-  WaitForBackgroundTasks();
   ui::test::uiview_utils::ForceViewRendering(web_state()->GetView());
   ExecuteJavaScript(@"document.forms[0].state.focus()");
   WaitForSuggestionRetrieval();
@@ -421,6 +423,7 @@ TEST_F(AutofillControllerTest, MultipleProfileSuggestions) {
   personal_data_manager->SaveImportedProfile(profile2);
   EXPECT_EQ(2U, personal_data_manager->GetProfiles().size());
   LoadHtml(kProfileFormHtml);
+  base::TaskScheduler::GetInstance()->FlushForTesting();
   WaitForBackgroundTasks();
   ui::test::uiview_utils::ForceViewRendering(web_state()->GetView());
   ExecuteJavaScript(@"document.forms[0].name.focus()");
@@ -445,6 +448,7 @@ TEST_F(AutofillControllerTest, KeyValueImport) {
                       base::ASCIIToUTF16("overwritten")};
   web_data_service->GetFormValuesForElementName(
       base::UTF8ToUTF16("greeting"), base::string16(), limit, &consumer);
+  base::TaskScheduler::GetInstance()->FlushForTesting();
   WaitForBackgroundTasks();
   // No value should be returned before anything is loaded via form submission.
   ASSERT_EQ(0U, consumer.result_.size());
@@ -454,6 +458,7 @@ TEST_F(AutofillControllerTest, KeyValueImport) {
         base::UTF8ToUTF16("greeting"), base::string16(), limit, &consumer);
     return consumer.result_.size();
   });
+  base::TaskScheduler::GetInstance()->FlushForTesting();
   WaitForBackgroundTasks();
   // One result should be returned, matching the filled value.
   ASSERT_EQ(1U, consumer.result_.size());
@@ -493,8 +498,8 @@ TEST_F(AutofillControllerTest, KeyValueSuggestions) {
 };
 
 // Checks that typing events (simulated in script) result in suggestions. Note
-// that the field is not explictly focused before typing starts; this can happen
-// in practice and should not result in a crash or incorrect behavior.
+// that the field is not explicitly focused before typing starts; this can
+// happen in practice and should not result in a crash or incorrect behavior.
 TEST_F(AutofillControllerTest, KeyValueTypedSuggestions) {
   SetUpKeyValueData();
   ExecuteJavaScript(@"document.forms[0].greeting.select()");
@@ -544,6 +549,7 @@ TEST_F(AutofillControllerTest, KeyValueFocusChange) {
 // been loaded into a test data manager.
 TEST_F(AutofillControllerTest, NoKeyValueSuggestionsWithoutTyping) {
   SetUpKeyValueData();
+
   // Focus element.
   ExecuteJavaScript(@"document.forms[0].greeting.focus()");
   WaitForSuggestionRetrieval();
@@ -578,7 +584,13 @@ TEST_F(AutofillControllerTest, CreditCardImport) {
   infobars::InfoBarDelegate* infobar =
       infobar_manager->infobar_at(0)->delegate();
   ConfirmInfoBarDelegate* confirm_infobar = infobar->AsConfirmInfoBarDelegate();
+
+  // This call cause a modification of the PersonalDataManager, so wait until
+  // the asynchronous task complete in addition to waiting for the UI update.
+  PersonalDataManagerDataChangedObserver observer(personal_data_manager);
   confirm_infobar->Accept();
+  observer.Wait();
+
   const std::vector<CreditCard*>& credit_cards =
       personal_data_manager->GetCreditCards();
   ASSERT_EQ(1U, credit_cards.size());

@@ -54,28 +54,26 @@ class GIN_EXPORT V8Initializer {
   // so that it will not return if natives cannot be loaded.
   static void LoadV8Natives();
 
-  // Opens (unless already cached) and returns the V8 natives file.
-  // Use with LoadV8NativesFromFD().
-  // Asserts if the file does not exist.
-  static base::PlatformFile GetOpenNativesFileForChildProcesses(
-      base::MemoryMappedFile::Region* region_out);
-
-  // Opens (unless already cached) and returns the V8 snapshot file.
-  // Use with LoadV8SnapshotFromFD().
-  // Will return -1 if the file does not exist.
-  static base::PlatformFile GetOpenSnapshotFileForChildProcesses(
-      base::MemoryMappedFile::Region* region_out);
-
 #if defined(OS_ANDROID)
-  static base::PlatformFile GetOpenSnapshotFileForChildProcesses(
-      base::MemoryMappedFile::Region* region_out,
-      bool abi_32_bit);
-
   static base::FilePath GetNativesFilePath();
   static base::FilePath GetSnapshotFilePath(bool abi_32_bit);
 #endif
 
 #endif  // V8_USE_EXTERNAL_STARTUP_DATA
+
+  // Load V8 context snapshot from user provided platform file descriptors.
+  // Other details are same with LoadV8SnapshotFromFD.
+  static void LoadV8ContextSnapshotFromFD(base::PlatformFile snapshot_fd,
+                                          int64_t snapshot_offset,
+                                          int64_t snapshot_size);
+
+  // Load V8 context snapshot from default resources, if they are available.
+  static void LoadV8ContextSnapshot();
+
+  // Get address and size information for currently loaded V8 context snapshot.
+  // If no snapshot is loaded, the return values are nullptr and 0.
+  static void GetV8ContextSnapshotData(const char** snapshot_data_out,
+                                       int* snapshot_size_out);
 };
 
 }  // namespace gin

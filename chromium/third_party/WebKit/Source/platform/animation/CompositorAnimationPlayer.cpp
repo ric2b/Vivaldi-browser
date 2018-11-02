@@ -66,7 +66,7 @@ void CompositorAnimationPlayer::AbortAnimation(int animation_id) {
 
 void CompositorAnimationPlayer::NotifyAnimationStarted(
     base::TimeTicks monotonic_time,
-    cc::TargetProperty::Type target_property,
+    int target_property,
     int group) {
   if (delegate_)
     delegate_->NotifyAnimationStarted(
@@ -75,7 +75,7 @@ void CompositorAnimationPlayer::NotifyAnimationStarted(
 
 void CompositorAnimationPlayer::NotifyAnimationFinished(
     base::TimeTicks monotonic_time,
-    cc::TargetProperty::Type target_property,
+    int target_property,
     int group) {
   if (delegate_)
     delegate_->NotifyAnimationFinished(
@@ -84,7 +84,7 @@ void CompositorAnimationPlayer::NotifyAnimationFinished(
 
 void CompositorAnimationPlayer::NotifyAnimationAborted(
     base::TimeTicks monotonic_time,
-    cc::TargetProperty::Type target_property,
+    int target_property,
     int group) {
   if (delegate_)
     delegate_->NotifyAnimationAborted(
@@ -93,12 +93,13 @@ void CompositorAnimationPlayer::NotifyAnimationAborted(
 
 void CompositorAnimationPlayer::NotifyAnimationTakeover(
     base::TimeTicks monotonic_time,
-    cc::TargetProperty::Type,
-    double animation_start_time,
+    int target_property,
+    base::TimeTicks animation_start_time,
     std::unique_ptr<cc::AnimationCurve> curve) {
   if (delegate_) {
     delegate_->NotifyAnimationTakeover(
-        (monotonic_time - base::TimeTicks()).InSecondsF(), animation_start_time,
+        (monotonic_time - base::TimeTicks()).InSecondsF(),
+        (animation_start_time - base::TimeTicks()).InSecondsF(),
         std::move(curve));
   }
 }

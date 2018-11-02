@@ -48,6 +48,7 @@ class GPU_EXPORT DirectCompositionSurfaceWin : public gl::GLSurfaceEGL {
   void* GetHandle() override;
   bool Resize(const gfx::Size& size,
               float scale_factor,
+              ColorSpace color_space,
               bool has_alpha) override;
   gfx::SwapResult SwapBuffers() override;
   gfx::SwapResult PostSubBuffer(int x, int y, int width, int height) override;
@@ -57,6 +58,7 @@ class GPU_EXPORT DirectCompositionSurfaceWin : public gl::GLSurfaceEGL {
   bool SupportsPostSubBuffer() override;
   bool OnMakeCurrent(gl::GLContext* context) override;
   bool SupportsDCLayers() const override;
+  bool UseOverlaysForVideo() const override;
   bool SetDrawRectangle(const gfx::Rect& rect) override;
   gfx::Vector2d GetDrawOffset() const override;
   void WaitForSnapshotRendering() override;
@@ -70,6 +72,8 @@ class GPU_EXPORT DirectCompositionSurfaceWin : public gl::GLSurfaceEGL {
 
   const base::win::ScopedComPtr<IDCompositionSurface> dcomp_surface() const;
   const base::win::ScopedComPtr<IDXGISwapChain1> swap_chain() const;
+
+  uint64_t GetDCompSurfaceSerial() const;
 
   scoped_refptr<base::TaskRunner> GetWindowTaskRunnerForTesting();
 
@@ -95,6 +99,7 @@ class GPU_EXPORT DirectCompositionSurfaceWin : public gl::GLSurfaceEGL {
 
   gfx::Size size_ = gfx::Size(1, 1);
   bool enable_dc_layers_ = false;
+  bool is_hdr_ = false;
   bool has_alpha_ = true;
   std::unique_ptr<gfx::VSyncProvider> vsync_provider_;
   scoped_refptr<DirectCompositionChildSurfaceWin> root_surface_;

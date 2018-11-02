@@ -19,10 +19,10 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "cc/layers/layer.h"
-#include "cc/output/copy_output_request.h"
-#include "cc/output/copy_output_result.h"
 #include "cc/trees/layer_tree_settings.h"
 #include "components/viz/common/gl_helper.h"
+#include "components/viz/common/quads/copy_output_request.h"
+#include "components/viz/common/quads/copy_output_result.h"
 #include "components/viz/common/quads/texture_mailbox.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/accessibility/browser_accessibility_state_impl.h"
@@ -61,7 +61,7 @@
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
-#include "third_party/WebKit/public/web/WebCompositionUnderline.h"
+#include "third_party/WebKit/public/web/WebImeTextSpan.h"
 #include "ui/accessibility/platform/aura_window_properties.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/cursor_client.h"
@@ -113,7 +113,7 @@
 #include "ui/gfx/gdi_util.h"
 #endif
 
-#if defined(USE_X11) && !defined(OS_CHROMEOS)
+#if defined(USE_X11)
 #include "content/browser/accessibility/browser_accessibility_auralinux.h"
 #endif
 
@@ -158,6 +158,11 @@ class WinScreenKeyboardObserver : public ui::OnScreenKeyboardObserver {
         device_scale_factor_(scale_factor),
         window_(window) {
     host_view_->SetInsets(gfx::Insets());
+  }
+
+  ~WinScreenKeyboardObserver() override {
+    if (auto* instance = ui::OnScreenKeyboardDisplayManager::GetInstance())
+      instance->RemoveObserver(this);
   }
 
   // base::win::OnScreenKeyboardObserver overrides.
@@ -594,7 +599,7 @@ gfx::NativeViewAccessible RenderWidgetHostViewAura::GetNativeViewAccessible() {
       host_->GetOrCreateRootBrowserAccessibilityManager();
   if (manager)
     return ToBrowserAccessibilityWin(manager->GetRoot())->GetCOM();
-#elif defined(USE_X11) && !defined(OS_CHROMEOS)
+#elif defined(USE_X11)
   BrowserAccessibilityManager* manager =
       host_->GetOrCreateRootBrowserAccessibilityManager();
   if (manager)
@@ -915,7 +920,7 @@ void RenderWidgetHostViewAura::OnLegacyWindowDestroyed() {
 #endif
 
 void RenderWidgetHostViewAura::DidCreateNewRendererCompositorFrameSink(
-    cc::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink) {
+    viz::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink) {
   renderer_compositor_frame_sink_ = renderer_compositor_frame_sink;
   if (delegated_frame_host_) {
     delegated_frame_host_->DidCreateNewRendererCompositorFrameSink(
@@ -965,7 +970,7 @@ void RenderWidgetHostViewAura::SubmitCompositorFrame(
 }
 
 void RenderWidgetHostViewAura::OnDidNotProduceFrame(
-    const cc::BeginFrameAck& ack) {
+    const viz::BeginFrameAck& ack) {
   if (delegated_frame_host_)
     delegated_frame_host_->DidNotProduceFrame(ack);
 }
@@ -1221,7 +1226,7 @@ void RenderWidgetHostViewAura::SetCompositionText(
   // TODO(suzhe): due to a bug of webkit, we can't use selection range with
   // composition string. See: https://bugs.webkit.org/show_bug.cgi?id=37788
   text_input_manager_->GetActiveWidget()->ImeSetComposition(
-      composition.text, composition.underlines, gfx::Range::InvalidRange(),
+      composition.text, composition.ime_text_spans, gfx::Range::InvalidRange(),
       composition.selection.end(), composition.selection.end());
 
   has_composition_text_ = !composition.text.empty();
@@ -1248,8 +1253,7 @@ void RenderWidgetHostViewAura::InsertText(const base::string16& text) {
   if (text_input_manager_ && text_input_manager_->GetActiveWidget()) {
     if (text.length())
       text_input_manager_->GetActiveWidget()->ImeCommitText(
-          text, std::vector<ui::CompositionUnderline>(),
-          gfx::Range::InvalidRange(), 0);
+          text, std::vector<ui::ImeTextSpan>(), gfx::Range::InvalidRange(), 0);
     else if (has_composition_text_)
       text_input_manager_->GetActiveWidget()->ImeFinishComposingText(false);
   }
@@ -1625,11 +1629,11 @@ bool RenderWidgetHostViewAura::HasHitTestMask() const {
 void RenderWidgetHostViewAura::GetHitTestMask(gfx::Path* mask) const {
 }
 
-void RenderWidgetHostViewAura::OnWindowSurfaceChanged(
+void RenderWidgetHostViewAura::OnFirstSurfaceActivation(
     const viz::SurfaceInfo& surface_info) {
   if (!is_guest_view_hack_)
     return;
-  host_->GetView()->OnSurfaceChanged(surface_info);
+  host_->GetView()->OnFirstSurfaceActivation(surface_info);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1653,21 +1657,24 @@ void RenderWidgetHostViewAura::OnMouseEvent(ui::MouseEvent* event) {
 }
 
 viz::FrameSinkId RenderWidgetHostViewAura::FrameSinkIdAtPoint(
-    cc::SurfaceHittestDelegate* delegate,
+    viz::SurfaceHittestDelegate* delegate,
     const gfx::Point& point,
     gfx::Point* transformed_point) {
   DCHECK(device_scale_factor_ != 0.0f);
+
+  // TODO: this shouldn't be used with aura-mus, so that the null check so
+  // go away and become a DCHECK.
+  if (!delegated_frame_host_) {
+    *transformed_point = point;
+    return GetFrameSinkId();
+  }
 
   // The surface hittest happens in device pixels, so we need to convert the
   // |point| from DIPs to pixels before hittesting.
   gfx::Point point_in_pixels =
       gfx::ConvertPointToPixel(device_scale_factor_, point);
-  // TODO: this shouldn't be used with aura-mus, so that the null check so
-  // go away and become a DCHECK.
-  viz::SurfaceId id = delegated_frame_host_
-                          ? delegated_frame_host_->SurfaceIdAtPoint(
-                                delegate, point_in_pixels, transformed_point)
-                          : viz::SurfaceId();
+  viz::SurfaceId id = delegated_frame_host_->SurfaceIdAtPoint(
+      delegate, point_in_pixels, transformed_point);
   *transformed_point =
       gfx::ConvertPointToDIP(device_scale_factor_, *transformed_point);
 
@@ -1869,7 +1876,7 @@ void RenderWidgetHostViewAura::OnWindowFocused(aura::Window* gained_focus,
 // RenderWidgetHostViewAura, aura::WindowTreeHostObserver implementation:
 
 void RenderWidgetHostViewAura::OnHostMovedInPixels(
-    const aura::WindowTreeHost* host,
+    aura::WindowTreeHost* host,
     const gfx::Point& new_origin_in_pixels) {
   TRACE_EVENT1("ui", "RenderWidgetHostViewAura::OnHostMovedInPixels",
                "new_origin_in_pixels", new_origin_in_pixels.ToString());
@@ -1921,14 +1928,6 @@ RenderWidgetHostViewAura::~RenderWidgetHostViewAura() {
   // RenderWidgetHostViewAura::OnWindowDestroying and the pointer should
   // be set to NULL.
   DCHECK(!legacy_render_widget_host_HWND_);
-  if (virtual_keyboard_requested_) {
-    DCHECK(keyboard_observer_.get());
-    ui::OnScreenKeyboardDisplayManager* osk_display_manager =
-        ui::OnScreenKeyboardDisplayManager::GetInstance();
-    DCHECK(osk_display_manager);
-    osk_display_manager->RemoveObserver(keyboard_observer_.get());
-  }
-
 #endif
 
   if (text_input_manager_)
@@ -2180,8 +2179,6 @@ void RenderWidgetHostViewAura::InternalSetBounds(const gfx::Rect& rect) {
   // a Window::SetBoundsInternal call.
   if (!in_bounds_changed_)
     window_->SetBounds(rect);
-  if (IsMus())
-    local_surface_id_ = aura::WindowMus::Get(window_)->GetLocalSurfaceId();
   host_->WasResized();
   if (delegated_frame_host_)
     delegated_frame_host_->WasResized();
@@ -2343,7 +2340,7 @@ viz::FrameSinkId RenderWidgetHostViewAura::GetFrameSinkId() {
 }
 
 viz::LocalSurfaceId RenderWidgetHostViewAura::GetLocalSurfaceId() const {
-  return local_surface_id_;
+  return window_->GetLocalSurfaceId();
 }
 
 viz::SurfaceId RenderWidgetHostViewAura::SurfaceIdForTesting() const {
@@ -2424,7 +2421,7 @@ void RenderWidgetHostViewAura::OnTextSelectionChanged(
   if (!focused_view)
     return;
 
-#if defined(USE_X11) && !defined(OS_CHROMEOS)
+#if defined(USE_X11)
   if (vivaldi::IsVivaldiRunning()) {
     // NOTE(espen@vivaldi.com): OnTextSelectionChanged gets broadcasted to all
     // observers whenever a selection change. A view keeps observing as long as

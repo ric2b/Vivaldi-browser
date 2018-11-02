@@ -5,8 +5,6 @@
 #ifndef COMPONENTS_EXO_WM_HELPER_H_
 #define COMPONENTS_EXO_WM_HELPER_H_
 
-#include <memory>
-
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "ui/aura/client/drag_drop_delegate.h"
@@ -133,6 +131,7 @@ class WMHelper : public aura::client::DragDropDelegate {
   virtual void AddPostTargetHandler(ui::EventHandler* handler) = 0;
   virtual void RemovePostTargetHandler(ui::EventHandler* handler) = 0;
   virtual bool IsTabletModeWindowManagerEnabled() const = 0;
+  virtual double GetDefaultDeviceScaleFactor() const = 0;
 
   // Overridden from aura::client::DragDropDelegate:
   void OnDragEntered(const ui::DropTargetEvent& event) override;

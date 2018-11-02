@@ -192,7 +192,6 @@ void DumpAccessibilityTreeTest::AddDefaultFilters(
   // States
   AddFilter(filters, "check*");
   AddFilter(filters, "descript*");
-  AddFilter(filters, "busy");
   AddFilter(filters, "collapsed");
   AddFilter(filters, "default");
   AddFilter(filters, "haspopup");
@@ -205,6 +204,7 @@ void DumpAccessibilityTreeTest::AddDefaultFilters(
   AddFilter(filters, "select*");
   AddFilter(filters, "visited");
   // Other attributes
+  AddFilter(filters, "busy=true");
   AddFilter(filters, "valueForRange*");
   AddFilter(filters, "minValueForRange*");
   AddFilter(filters, "maxValueForRange*");
@@ -226,6 +226,12 @@ void DumpAccessibilityTreeTest::AddDefaultFilters(
   //
 
   AddFilter(filters, "roleDescription=*");
+
+  //
+  // Android
+  //
+
+  AddFilter(filters, "hint=*");
 
   //
   // General
@@ -301,10 +307,16 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAOnclick) {
 
 #if defined(THREAD_SANITIZER)
 // See (crbug.com/708759).
+#define MAYBE_AccessibilityAomBusy DISABLED_AccessibilityAomBusy
 #define MAYBE_AccessibilityAomChecked DISABLED_AccessibilityAomChecked
 #else
+#define MAYBE_AccessibilityAomBusy AccessibilityAomBusy
 #define MAYBE_AccessibilityAomChecked AccessibilityAomChecked
 #endif
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, MAYBE_AccessibilityAomBusy) {
+  RunAomTest(FILE_PATH_LITERAL("aom-busy.html"));
+}
+
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
                        MAYBE_AccessibilityAomChecked) {
   RunAomTest(FILE_PATH_LITERAL("aom-checked.html"));
@@ -484,12 +496,20 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaGrid) {
   RunAriaTest(FILE_PATH_LITERAL("aria-grid.html"));
 }
 
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
+                       AccessibilityAriaGridExtraWrapElems) {
+  RunAriaTest(FILE_PATH_LITERAL("aria-grid-extra-wrap-elems.html"));
+}
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaGridCell) {
   RunAriaTest(FILE_PATH_LITERAL("aria-gridcell.html"));
 }
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaGroup) {
   RunAriaTest(FILE_PATH_LITERAL("aria-group.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaIllegalVal) {
+  RunAriaTest(FILE_PATH_LITERAL("aria-illegal-val.html"));
 }
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaImg) {
@@ -819,6 +839,20 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaTree) {
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaTreeGrid) {
   RunAriaTest(FILE_PATH_LITERAL("aria-treegrid.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaUndefined) {
+  RunAriaTest(FILE_PATH_LITERAL("aria-undefined.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
+                       AccessibilityAriaUndefinedLiteral) {
+  RunAriaTest(FILE_PATH_LITERAL("aria-undefined-literal.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
+                       AccessibilityAriaEmptyString) {
+  RunAriaTest(FILE_PATH_LITERAL("aria-empty-string.html"));
 }
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,

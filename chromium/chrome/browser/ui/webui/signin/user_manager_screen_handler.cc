@@ -630,7 +630,7 @@ void UserManagerScreenHandler::RemoveUserDialogLoadStatsCallback(
   base::DictionaryValue return_value;
   for (const auto& item : result) {
     auto stat = base::MakeUnique<base::DictionaryValue>();
-    stat->SetIntegerWithoutPathExpansion("count", item.count);
+    stat->SetKey("count", base::Value(item.count));
     return_value.SetWithoutPathExpansion(item.category, std::move(stat));
   }
   if (result.size() == profiles::kProfileStatisticsCategories.size()) {
@@ -700,7 +700,7 @@ void UserManagerScreenHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback("accountPickerReady", kDoNothingCallback);
   web_ui()->RegisterMessageCallback("loginUIStateChanged", kDoNothingCallback);
   web_ui()->RegisterMessageCallback("hideCaptivePortal", kDoNothingCallback);
-  web_ui()->RegisterMessageCallback("getTouchViewState", kDoNothingCallback);
+  web_ui()->RegisterMessageCallback("getTabletModeState", kDoNothingCallback);
   // Unused callbacks from display_manager.js
   web_ui()->RegisterMessageCallback("showAddUser", kDoNothingCallback);
   web_ui()->RegisterMessageCallback("updateCurrentScreen", kDoNothingCallback);
@@ -848,6 +848,13 @@ void UserManagerScreenHandler::GetLocalizedValues(
   localized_strings->SetString("browseAsGuestAllProfilesLockedError",
       l10n_util::GetStringUTF16(
           IDS_USER_MANAGER_GO_GUEST_PROFILES_LOCKED_ERROR));
+
+  base::string16 prompt_message;
+  if (signin_util::IsForceSigninEnabled()) {
+    prompt_message = l10n_util::GetStringUTF16(IDS_USER_MANAGER_PROMPT_MESSAGE);
+  }
+
+  localized_strings->SetString("userManagerPromptMessage", prompt_message);
 }
 
 void UserManagerScreenHandler::SendUserList() {

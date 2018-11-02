@@ -10,6 +10,7 @@
 #include "extensions/browser/extension_host_delegate.h"
 #include "extensions/browser/test_runtime_api_delegate.h"
 #include "extensions/browser/updater/null_extension_cache.h"
+#include "ui/base/l10n/l10n_util.h"
 
 #if defined(OS_CHROMEOS)
 #include "chromeos/login/login_state.h"
@@ -21,21 +22,32 @@ namespace extensions {
 
 TestExtensionsBrowserClient::TestExtensionsBrowserClient(
     BrowserContext* main_context)
-    : main_context_(main_context),
+    : main_context_(nullptr),
       incognito_context_(nullptr),
       lock_screen_context_(nullptr),
       process_manager_delegate_(nullptr),
       extension_system_factory_(nullptr),
       extension_cache_(new NullExtensionCache) {
-  DCHECK(main_context_);
-  DCHECK(!main_context_->IsOffTheRecord());
+  if (main_context)
+    SetMainContext(main_context);
 }
+
+TestExtensionsBrowserClient::TestExtensionsBrowserClient()
+    : TestExtensionsBrowserClient(nullptr) {}
 
 TestExtensionsBrowserClient::~TestExtensionsBrowserClient() {}
 
 void TestExtensionsBrowserClient::SetUpdateClientFactory(
     const base::Callback<update_client::UpdateClient*(void)>& factory) {
   update_client_factory_ = factory;
+}
+
+void TestExtensionsBrowserClient::SetMainContext(
+    content::BrowserContext* main_context) {
+  DCHECK(!main_context_);
+  DCHECK(main_context);
+  DCHECK(!main_context->IsOffTheRecord());
+  main_context_ = main_context;
 }
 
 void TestExtensionsBrowserClient::SetIncognitoContext(BrowserContext* context) {
@@ -168,10 +180,11 @@ TestExtensionsBrowserClient::GetExtensionSystemFactory() {
 void TestExtensionsBrowserClient::RegisterExtensionFunctions(
     ExtensionFunctionRegistry* registry) const {}
 
-void TestExtensionsBrowserClient::RegisterMojoServices(
+void TestExtensionsBrowserClient::RegisterExtensionInterfaces(
+    service_manager::BinderRegistryWithArgs<content::RenderFrameHost*>*
+        registry,
     content::RenderFrameHost* render_frame_host,
-    const Extension* extension) const {
-}
+    const Extension* extension) const {}
 
 std::unique_ptr<RuntimeAPIDelegate>
 TestExtensionsBrowserClient::CreateRuntimeAPIDelegate(
@@ -227,6 +240,10 @@ TestExtensionsBrowserClient::CreateUpdateClient(
 bool TestExtensionsBrowserClient::IsLockScreenContext(
     content::BrowserContext* context) {
   return lock_screen_context_ && context == lock_screen_context_;
+}
+
+std::string TestExtensionsBrowserClient::GetApplicationLocale() {
+  return l10n_util::GetApplicationLocale(std::string());
 }
 
 }  // namespace extensions

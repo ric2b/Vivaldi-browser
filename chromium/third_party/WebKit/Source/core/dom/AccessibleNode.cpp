@@ -9,6 +9,7 @@
 #include "core/dom/Element.h"
 #include "core/dom/QualifiedName.h"
 #include "core/frame/Settings.h"
+#include "platform/RuntimeEnabledFeatures.h"
 
 namespace blink {
 
@@ -352,6 +353,10 @@ uint32_t AccessibleNode::GetProperty(Element* element,
                            default_value);
 }
 
+bool AccessibleNode::IsUndefinedAttrValue(const AtomicString& value) {
+  return value.IsEmpty() || EqualIgnoringASCIICase(value, "undefined");
+}
+
 // static
 const AtomicString& AccessibleNode::GetPropertyOrARIAAttribute(
     Element* element,
@@ -359,33 +364,39 @@ const AtomicString& AccessibleNode::GetPropertyOrARIAAttribute(
   if (!element)
     return g_null_atom;
 
+  const bool is_token_attr = IsStringTokenProperty(property);
   const AtomicString& result = GetProperty(element, property);
-  if (!result.IsNull())
-    return result;
 
-  // Fall back on the equivalent ARIA attribute.
-  QualifiedName attribute = GetCorrespondingARIAAttribute(property);
-  return element->FastGetAttribute(attribute);
+  if (result.IsNull()) {
+    // Fall back on the equivalent ARIA attribute.
+    QualifiedName attribute = GetCorrespondingARIAAttribute(property);
+    const AtomicString& attr_value = element->FastGetAttribute(attribute);
+    if (is_token_attr && IsUndefinedAttrValue(attr_value))
+      return g_null_atom;  // Attribute not set or explicitly undefined.
+
+    return attr_value;
+  }
+
+  if (is_token_attr && IsUndefinedAttrValue(result))
+    return g_null_atom;  // Property specifically set to undefined value.
+
+  return result;
 }
 
 // static
-AccessibleNode* AccessibleNode::GetPropertyOrARIAAttribute(
+Element* AccessibleNode::GetPropertyOrARIAAttribute(
     Element* element,
     AOMRelationProperty property) {
   if (!element)
     return nullptr;
 
   if (AccessibleNode* result = GetProperty(element, property))
-    return result;
+    return result->element();
 
   // Fall back on the equivalent ARIA attribute.
   QualifiedName attribute = GetCorrespondingARIAAttribute(property);
   AtomicString value = element->FastGetAttribute(attribute);
-  Element* target = element->GetTreeScope().getElementById(value);
-  if (!target)
-    return nullptr;
-
-  return target->accessibleNode();
+  return element->GetTreeScope().getElementById(value);
 }
 
 // static
@@ -436,8 +447,8 @@ bool AccessibleNode::GetPropertyOrARIAAttribute(Element* element,
   // Fall back on the equivalent ARIA attribute.
   QualifiedName attribute = GetCorrespondingARIAAttribute(property);
   AtomicString attr_value = element->FastGetAttribute(attribute);
-  is_null = attr_value.IsNull();
-  return EqualIgnoringASCIICase(attr_value, "true");
+  is_null = IsUndefinedAttrValue(attr_value);
+  return !is_null && !EqualIgnoringASCIICase(attr_value, "false");
 }
 
 // static
@@ -967,6 +978,41 @@ void AccessibleNode::setValueText(const AtomicString& value_text) {
   NotifyAttributeChanged(aria_valuetextAttr);
 }
 
+// These properties support a list of tokens, and "undefined"/"" is
+// equivalent to not setting the attribute.
+bool AccessibleNode::IsStringTokenProperty(AOMStringProperty property) {
+  switch (property) {
+    case AOMStringProperty::kAutocomplete:
+    case AOMStringProperty::kChecked:
+    case AOMStringProperty::kCurrent:
+    case AOMStringProperty::kHasPopUp:
+    case AOMStringProperty::kInvalid:
+    case AOMStringProperty::kLive:
+    case AOMStringProperty::kOrientation:
+    case AOMStringProperty::kPressed:
+    case AOMStringProperty::kRelevant:
+    case AOMStringProperty::kSort:
+      return true;
+    case AOMStringProperty::kKeyShortcuts:
+    case AOMStringProperty::kLabel:
+    case AOMStringProperty::kPlaceholder:
+    case AOMStringProperty::kRole:  // Is token, but ""/"undefined" not
+                                    // supported.
+    case AOMStringProperty::kRoleDescription:
+    case AOMStringProperty::kValueText:
+      break;
+  }
+  return false;
+}
+
+const AtomicString& AccessibleNode::InterfaceName() const {
+  return EventTargetNames::AccessibleNode;
+}
+
+ExecutionContext* AccessibleNode::GetExecutionContext() const {
+  return element_->GetExecutionContext();
+}
+
 void AccessibleNode::SetStringProperty(AOMStringProperty property,
                                        const AtomicString& value) {
   for (auto& item : string_properties_) {
@@ -1070,6 +1116,7 @@ DEFINE_TRACE(AccessibleNode) {
   visitor->Trace(element_);
   visitor->Trace(relation_properties_);
   visitor->Trace(relation_list_properties_);
+  EventTargetWithInlineData::Trace(visitor);
 }
 
 }  // namespace blink

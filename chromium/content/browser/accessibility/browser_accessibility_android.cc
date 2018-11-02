@@ -4,7 +4,9 @@
 
 #include "content/browser/accessibility/browser_accessibility_android.h"
 
+#include "base/containers/hash_tables.h"
 #include "base/i18n/break_iterator.h"
+#include "base/lazy_instance.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -16,6 +18,7 @@
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/ax_role_properties.h"
 #include "ui/accessibility/platform/ax_android_constants.h"
+#include "ui/accessibility/platform/ax_platform_unique_id.h"
 #include "ui/accessibility/platform/ax_snapshot_node_android_platform.h"
 
 namespace aria_strings {
@@ -62,8 +65,31 @@ BrowserAccessibility* BrowserAccessibility::Create() {
   return new BrowserAccessibilityAndroid();
 }
 
-BrowserAccessibilityAndroid::BrowserAccessibilityAndroid() {
+using UniqueIdMap = base::hash_map<int32_t, BrowserAccessibilityAndroid*>;
+// Map from each AXPlatformNode's unique id to its instance.
+base::LazyInstance<UniqueIdMap>::DestructorAtExit g_unique_id_map =
+    LAZY_INSTANCE_INITIALIZER;
+
+// static
+BrowserAccessibilityAndroid* BrowserAccessibilityAndroid::GetFromUniqueId(
+    int32_t unique_id) {
+  UniqueIdMap* unique_ids = g_unique_id_map.Pointer();
+  auto iter = unique_ids->find(unique_id);
+  if (iter != unique_ids->end())
+    return iter->second;
+
+  return nullptr;
+}
+
+BrowserAccessibilityAndroid::BrowserAccessibilityAndroid()
+    : unique_id_(ui::GetNextAXPlatformNodeUniqueId()) {
+  g_unique_id_map.Get()[unique_id_] = this;
   first_time_ = true;
+}
+
+BrowserAccessibilityAndroid::~BrowserAccessibilityAndroid() {
+  if (unique_id_)
+    g_unique_id_map.Get().erase(unique_id_);
 }
 
 bool BrowserAccessibilityAndroid::IsNative() const {
@@ -198,7 +224,11 @@ bool BrowserAccessibilityAndroid::IsDismissable() const {
 }
 
 bool BrowserAccessibilityAndroid::IsEditableText() const {
-  return GetRole() == ui::AX_ROLE_TEXT_FIELD;
+  // TODO(dmazzoni): Use utility function in ax_role_properties, and
+  // handle different types of combo boxes correctly.
+  return GetRole() == ui::AX_ROLE_TEXT_FIELD ||
+         GetRole() == ui::AX_ROLE_SEARCH_BOX ||
+         GetRole() == ui::AX_ROLE_COMBO_BOX;
 }
 
 bool BrowserAccessibilityAndroid::IsEnabled() const {
@@ -264,8 +294,7 @@ bool BrowserAccessibilityAndroid::IsRangeType() const {
 }
 
 bool BrowserAccessibilityAndroid::IsScrollable() const {
-  return (HasIntAttribute(ui::AX_ATTR_SCROLL_X_MAX) &&
-          GetRole() != ui::AX_ROLE_SCROLL_AREA);
+  return HasIntAttribute(ui::AX_ATTR_SCROLL_X_MAX);
 }
 
 bool BrowserAccessibilityAndroid::IsSelected() const {
@@ -322,6 +351,23 @@ const BrowserAccessibilityAndroid*
   return sole_interesting_node;
 }
 
+bool BrowserAccessibilityAndroid::AreInlineTextBoxesLoaded() const {
+  if (GetRole() == ui::AX_ROLE_STATIC_TEXT)
+    return InternalChildCount() > 0;
+
+  // Return false if any descendant needs to load inline text boxes.
+  for (uint32_t i = 0; i < InternalChildCount(); ++i) {
+    BrowserAccessibilityAndroid* child =
+        static_cast<BrowserAccessibilityAndroid*>(InternalGetChild(i));
+    if (!child->AreInlineTextBoxesLoaded())
+      return false;
+  }
+
+  // Otherwise return true - either they're all loaded, or there aren't
+  // any descendants that need to load inline text boxes.
+  return true;
+}
+
 bool BrowserAccessibilityAndroid::CanOpenPopup() const {
   return HasState(ui::AX_STATE_HASPOPUP);
 }
@@ -337,25 +383,11 @@ base::string16 BrowserAccessibilityAndroid::GetText() const {
     return base::string16();
   }
 
-  // We can only expose one accessible name on Android,
-  // not 2 or 3 like on Windows or Mac.
-
   // First, always return the |value| attribute if this is an
   // input field.
   base::string16 value = GetValue();
-  if (!value.empty()) {
-    if (HasState(ui::AX_STATE_EDITABLE))
-      return value;
-
-    switch (GetRole()) {
-      case ui::AX_ROLE_COMBO_BOX:
-      case ui::AX_ROLE_POP_UP_BUTTON:
-      case ui::AX_ROLE_TEXT_FIELD:
-        return value;
-      default:
-        break;
-    }
-  }
+  if (ShouldExposeValueAsName())
+    return value;
 
   // For color wells, the color is stored in separate attributes.
   // Perhaps we could return color names in the future?
@@ -370,13 +402,6 @@ base::string16 BrowserAccessibilityAndroid::GetText() const {
   }
 
   base::string16 text = GetString16Attribute(ui::AX_ATTR_NAME);
-  base::string16 description = GetString16Attribute(ui::AX_ATTR_DESCRIPTION);
-  if (!description.empty()) {
-    if (!text.empty())
-      text += base::ASCIIToUTF16(" ");
-    text += description;
-  }
-
   if (text.empty())
     text = value;
 
@@ -404,6 +429,22 @@ base::string16 BrowserAccessibilityAndroid::GetText() const {
   }
 
   return text;
+}
+
+base::string16 BrowserAccessibilityAndroid::GetHint() const {
+  base::string16 description = GetString16Attribute(ui::AX_ATTR_DESCRIPTION);
+
+  // If we're returning the value as the main text, then return both the
+  // accessible name and description as the hint.
+  if (ShouldExposeValueAsName()) {
+    base::string16 name = GetString16Attribute(ui::AX_ATTR_NAME);
+    if (!name.empty() && !description.empty())
+      return name + base::ASCIIToUTF16(" ") + description;
+    else if (!name.empty())
+      return name;
+  }
+
+  return description;
 }
 
 base::string16 BrowserAccessibilityAndroid::GetRoleDescription() const {
@@ -453,9 +494,6 @@ base::string16 BrowserAccessibilityAndroid::GetRoleDescription() const {
       break;
     case ui::AX_ROLE_BLOCKQUOTE:
       message_id = IDS_AX_ROLE_BLOCKQUOTE;
-      break;
-    case ui::AX_ROLE_BUSY_INDICATOR:
-      message_id = IDS_AX_ROLE_BUSY_INDICATOR;
       break;
     case ui::AX_ROLE_BUTTON:
       message_id = IDS_AX_ROLE_BUTTON;
@@ -576,9 +614,6 @@ base::string16 BrowserAccessibilityAndroid::GetRoleDescription() const {
     case ui::AX_ROLE_IGNORED:
       // No role description.
       break;
-    case ui::AX_ROLE_IMAGE_MAP_LINK:
-      message_id = IDS_AX_ROLE_LINK;
-      break;
     case ui::AX_ROLE_IMAGE_MAP:
       message_id = IDS_AX_ROLE_GRAPHIC;
       break;
@@ -669,9 +704,6 @@ base::string16 BrowserAccessibilityAndroid::GetRoleDescription() const {
     case ui::AX_ROLE_NOTE:
       message_id = IDS_AX_ROLE_NOTE;
       break;
-    case ui::AX_ROLE_OUTLINE:
-      message_id = IDS_AX_ROLE_OUTLINE;
-      break;
     case ui::AX_ROLE_PANE:
       // No role description.
       break;
@@ -711,20 +743,11 @@ base::string16 BrowserAccessibilityAndroid::GetRoleDescription() const {
     case ui::AX_ROLE_RUBY:
       // No role description.
       break;
-    case ui::AX_ROLE_RULER:
-      message_id = IDS_AX_ROLE_RULER;
-      break;
     case ui::AX_ROLE_SVG_ROOT:
       message_id = IDS_AX_ROLE_GRAPHIC;
       break;
-    case ui::AX_ROLE_SCROLL_AREA:
-      // No role description.
-      break;
     case ui::AX_ROLE_SCROLL_BAR:
       message_id = IDS_AX_ROLE_SCROLL_BAR;
-      break;
-    case ui::AX_ROLE_SEAMLESS_WEB_AREA:
-      // No role description.
       break;
     case ui::AX_ROLE_SEARCH:
       message_id = IDS_AX_ROLE_SEARCH;
@@ -755,9 +778,6 @@ base::string16 BrowserAccessibilityAndroid::GetRoleDescription() const {
       break;
     case ui::AX_ROLE_SWITCH:
       message_id = IDS_AX_ROLE_SWITCH;
-      break;
-    case ui::AX_ROLE_TAB_GROUP:
-      // No role description.
       break;
     case ui::AX_ROLE_TAB_LIST:
       message_id = IDS_AX_ROLE_TAB_LIST;
@@ -1062,6 +1082,9 @@ size_t BrowserAccessibilityAndroid::CommonSuffixLength(
   return i;
 }
 
+// TODO(nektar): Merge this function with
+// |BrowserAccessibilityCocoa::computeTextEdit|.
+//
 // static
 size_t BrowserAccessibilityAndroid::CommonEndLengths(
     const base::string16 a,
@@ -1359,6 +1382,26 @@ bool BrowserAccessibilityAndroid::HasOnlyTextAndImageChildren() const {
 bool BrowserAccessibilityAndroid::IsIframe() const {
   return (GetRole() == ui::AX_ROLE_IFRAME ||
           GetRole() == ui::AX_ROLE_IFRAME_PRESENTATIONAL);
+}
+
+bool BrowserAccessibilityAndroid::ShouldExposeValueAsName() const {
+  base::string16 value = GetValue();
+  if (value.empty())
+    return false;
+
+  if (HasState(ui::AX_STATE_EDITABLE))
+    return true;
+
+  switch (GetRole()) {
+    case ui::AX_ROLE_COMBO_BOX:
+    case ui::AX_ROLE_POP_UP_BUTTON:
+    case ui::AX_ROLE_TEXT_FIELD:
+      return true;
+    default:
+      break;
+  }
+
+  return false;
 }
 
 void BrowserAccessibilityAndroid::OnDataChanged() {

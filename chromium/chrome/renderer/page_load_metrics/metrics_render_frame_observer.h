@@ -35,6 +35,7 @@ class MetricsRenderFrameObserver : public content::RenderFrameObserver {
   void DidChangePerformanceTiming() override;
   void DidObserveLoadingBehavior(
       blink::WebLoadingBehaviorFlag behavior) override;
+  void DidObserveNewFeatureUsage(blink::mojom::WebFeature feature) override;
   void DidCommitProvisionalLoad(bool is_new_navigation,
                                 bool is_same_document_navigation) override;
   void OnDestruct() override;
@@ -45,7 +46,6 @@ class MetricsRenderFrameObserver : public content::RenderFrameObserver {
 
  private:
   void SendMetrics();
-  virtual bool ShouldSendMetrics() const;
   virtual mojom::PageLoadTimingPtr GetTiming() const;
   virtual std::unique_ptr<base::Timer> CreateTimer();
   virtual std::unique_ptr<PageTimingSender> CreatePageTimingSender();

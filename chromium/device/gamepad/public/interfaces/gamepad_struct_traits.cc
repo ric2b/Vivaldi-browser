@@ -4,6 +4,8 @@
 
 #include "device/gamepad/public/interfaces/gamepad_struct_traits.h"
 
+#include "base/containers/span.h"
+
 namespace mojo {
 
 // static
@@ -130,18 +132,18 @@ bool EnumTraits<device::mojom::GamepadHand, device::GamepadHand>::FromMojom(
 }
 
 // static
-ConstCArray<uint16_t>
+base::span<const uint16_t>
 StructTraits<device::mojom::GamepadDataView, device::Gamepad>::id(
     const device::Gamepad& r) {
   size_t id_length = 0;
   while (id_length < device::Gamepad::kIdLengthCap && r.id[id_length] != 0) {
     id_length++;
   }
-  return {id_length, reinterpret_cast<const uint16_t*>(&r.id[0])};
+  return base::make_span(reinterpret_cast<const uint16_t*>(r.id), id_length);
 }
 
 // static
-ConstCArray<uint16_t>
+base::span<const uint16_t>
 StructTraits<device::mojom::GamepadDataView, device::Gamepad>::mapping(
     const device::Gamepad& r) {
   size_t mapping_length = 0;
@@ -149,7 +151,8 @@ StructTraits<device::mojom::GamepadDataView, device::Gamepad>::mapping(
          r.mapping[mapping_length] != 0) {
     mapping_length++;
   }
-  return {mapping_length, reinterpret_cast<const uint16_t*>(&r.mapping[0])};
+  return base::make_span(reinterpret_cast<const uint16_t*>(r.mapping),
+                         mapping_length);
 }
 
 // static
@@ -158,34 +161,32 @@ bool StructTraits<device::mojom::GamepadDataView, device::Gamepad>::Read(
     device::Gamepad* out) {
   out->connected = data.connected();
 
-  memset(&out->id[0], 0, device::Gamepad::kIdLengthCap * sizeof(device::UChar));
-  CArray<uint16_t> id = {0, device::Gamepad::kIdLengthCap,
-                         reinterpret_cast<uint16_t*>(&out->id[0])};
+  memset(out->id, 0, sizeof(out->id));
+  base::span<uint16_t> id(reinterpret_cast<uint16_t*>(out->id),
+                          device::Gamepad::kIdLengthCap);
   if (!data.ReadId(&id)) {
     return false;
   }
 
   out->timestamp = data.timestamp();
 
-  CArray<double> axes = {0, device::Gamepad::kAxesLengthCap, &out->axes[0]};
+  base::span<double> axes(out->axes);
   if (!data.ReadAxes(&axes)) {
     return false;
   }
   // static_cast is safe when "data.ReadAxes(&axes)" above returns true.
-  out->axes_length = static_cast<unsigned>(axes.size);
+  out->axes_length = static_cast<unsigned>(axes.size());
 
-  CArray<device::GamepadButton> buttons = {
-      0, device::Gamepad::kButtonsLengthCap, &out->buttons[0]};
+  base::span<device::GamepadButton> buttons(out->buttons);
   if (!data.ReadButtons(&buttons)) {
     return false;
   }
   // static_cast is safe when "data.ReadButtons(&buttons)" above returns true.
-  out->buttons_length = static_cast<unsigned>(buttons.size);
+  out->buttons_length = static_cast<unsigned>(buttons.size());
 
-  memset(&out->mapping[0], 0,
-         device::Gamepad::kMappingLengthCap * sizeof(device::UChar));
-  CArray<uint16_t> mapping = {0, device::Gamepad::kMappingLengthCap,
-                              reinterpret_cast<uint16_t*>(&out->mapping[0])};
+  memset(out->mapping, 0, sizeof(out->mapping));
+  base::span<uint16_t> mapping(reinterpret_cast<uint16_t*>(out->mapping),
+                               device::Gamepad::kMappingLengthCap);
   if (!data.ReadMapping(&mapping)) {
     return false;
   }

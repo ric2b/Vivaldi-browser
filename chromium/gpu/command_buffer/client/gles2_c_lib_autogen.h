@@ -1269,8 +1269,10 @@ void GL_APIENTRY GLES2UnmapTexSubImage2DCHROMIUM(const void* mem) {
 void GL_APIENTRY GLES2ResizeCHROMIUM(GLuint width,
                                      GLuint height,
                                      GLfloat scale_factor,
+                                     GLenum color_space,
                                      GLboolean alpha) {
-  gles2::GetGLContext()->ResizeCHROMIUM(width, height, scale_factor, alpha);
+  gles2::GetGLContext()->ResizeCHROMIUM(width, height, scale_factor,
+                                        color_space, alpha);
 }
 const GLchar* GL_APIENTRY GLES2GetRequestableExtensionsCHROMIUM() {
   return gles2::GetGLContext()->GetRequestableExtensionsCHROMIUM();
@@ -1497,6 +1499,12 @@ void GL_APIENTRY GLES2ScheduleCALayerCHROMIUM(GLuint contents_texture_id,
   gles2::GetGLContext()->ScheduleCALayerCHROMIUM(
       contents_texture_id, contents_rect, background_color, edge_aa_mask,
       bounds_rect, filter);
+}
+void GL_APIENTRY
+GLES2SetColorSpaceForScanoutCHROMIUM(GLuint texture_id,
+                                     GLColorSpace color_space) {
+  gles2::GetGLContext()->SetColorSpaceForScanoutCHROMIUM(texture_id,
+                                                         color_space);
 }
 void GL_APIENTRY
 GLES2ScheduleCALayerInUseQueryCHROMIUM(GLsizei count, const GLuint* textures) {
@@ -1740,9 +1748,12 @@ GLES2UniformMatrix4fvStreamTextureMatrixCHROMIUM(GLint location,
 void GL_APIENTRY GLES2OverlayPromotionHintCHROMIUM(GLuint texture,
                                                    GLboolean promotion_hint,
                                                    GLint display_x,
-                                                   GLint display_y) {
-  gles2::GetGLContext()->OverlayPromotionHintCHROMIUM(texture, promotion_hint,
-                                                      display_x, display_y);
+                                                   GLint display_y,
+                                                   GLint display_width,
+                                                   GLint display_height) {
+  gles2::GetGLContext()->OverlayPromotionHintCHROMIUM(
+      texture, promotion_hint, display_x, display_y, display_width,
+      display_height);
 }
 void GL_APIENTRY GLES2SwapBuffersWithBoundsCHROMIUM(GLsizei count,
                                                     const GLint* rects) {
@@ -1765,6 +1776,26 @@ void GL_APIENTRY GLES2UnlockDiscardableTextureCHROMIUM(GLuint texture_id) {
 }
 bool GL_APIENTRY GLES2LockDiscardableTextureCHROMIUM(GLuint texture_id) {
   return gles2::GetGLContext()->LockDiscardableTextureCHROMIUM(texture_id);
+}
+void GL_APIENTRY GLES2BeginRasterCHROMIUM(GLuint texture_id,
+                                          GLuint sk_color,
+                                          GLuint msaa_sample_count,
+                                          GLboolean can_use_lcd_text,
+                                          GLboolean use_distance_field_text,
+                                          GLint pixel_config) {
+  gles2::GetGLContext()->BeginRasterCHROMIUM(
+      texture_id, sk_color, msaa_sample_count, can_use_lcd_text,
+      use_distance_field_text, pixel_config);
+}
+void GL_APIENTRY GLES2RasterCHROMIUM(const cc::DisplayItemList* list,
+                                     GLint x,
+                                     GLint y,
+                                     GLint w,
+                                     GLint h) {
+  gles2::GetGLContext()->RasterCHROMIUM(list, x, y, w, h);
+}
+void GL_APIENTRY GLES2EndRasterCHROMIUM() {
+  gles2::GetGLContext()->EndRasterCHROMIUM();
 }
 
 namespace gles2 {
@@ -2904,6 +2935,11 @@ extern const NameToFunc g_gles2_function_table[] = {
         reinterpret_cast<GLES2FunctionPointer>(glScheduleCALayerCHROMIUM),
     },
     {
+        "glSetColorSpaceForScanoutCHROMIUM",
+        reinterpret_cast<GLES2FunctionPointer>(
+            glSetColorSpaceForScanoutCHROMIUM),
+    },
+    {
         "glScheduleCALayerInUseQueryCHROMIUM",
         reinterpret_cast<GLES2FunctionPointer>(
             glScheduleCALayerInUseQueryCHROMIUM),
@@ -3104,6 +3140,18 @@ extern const NameToFunc g_gles2_function_table[] = {
         "glLockDiscardableTextureCHROMIUM",
         reinterpret_cast<GLES2FunctionPointer>(
             glLockDiscardableTextureCHROMIUM),
+    },
+    {
+        "glBeginRasterCHROMIUM",
+        reinterpret_cast<GLES2FunctionPointer>(glBeginRasterCHROMIUM),
+    },
+    {
+        "glRasterCHROMIUM",
+        reinterpret_cast<GLES2FunctionPointer>(glRasterCHROMIUM),
+    },
+    {
+        "glEndRasterCHROMIUM",
+        reinterpret_cast<GLES2FunctionPointer>(glEndRasterCHROMIUM),
     },
     {
         NULL, NULL,

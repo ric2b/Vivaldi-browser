@@ -27,6 +27,7 @@
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/common/bindings_policy.h"
 #include "content/public/common/origin_util.h"
+#include "content/public/common/renderer_preferences.h"
 #include "headless/lib/browser/headless_browser_context_impl.h"
 #include "headless/lib/browser/headless_browser_impl.h"
 #include "headless/lib/browser/headless_browser_main_parts.h"
@@ -122,6 +123,63 @@ class HeadlessWebContentsImpl::Delegate : public content::WebContentsDelegate {
         HeadlessWebContentsImpl::From(browser(), new_contents);
     DCHECK(headless_contents);
     headless_contents->SetBounds(rect);
+  }
+
+  content::WebContents* OpenURLFromTab(
+      content::WebContents* source,
+      const content::OpenURLParams& params) override {
+    DCHECK_EQ(source, headless_web_contents_->web_contents());
+    content::WebContents* target = nullptr;
+    switch (params.disposition) {
+      case WindowOpenDisposition::CURRENT_TAB:
+        target = source;
+        break;
+
+      case WindowOpenDisposition::NEW_POPUP:
+      case WindowOpenDisposition::NEW_WINDOW:
+      case WindowOpenDisposition::NEW_BACKGROUND_TAB:
+      case WindowOpenDisposition::NEW_FOREGROUND_TAB: {
+        HeadlessWebContentsImpl* child_contents = HeadlessWebContentsImpl::From(
+            headless_web_contents_->browser_context()
+                ->CreateWebContentsBuilder()
+                .SetAllowTabSockets(
+                    !!headless_web_contents_->GetHeadlessTabSocket())
+                .SetWindowSize(source->GetContainerBounds().size())
+                .Build());
+        headless_web_contents_->browser_context()->NotifyChildContentsCreated(
+            headless_web_contents_, child_contents);
+        target = child_contents->web_contents();
+        break;
+      }
+
+      // TODO(veluca): add support for other disposition types.
+      case WindowOpenDisposition::SINGLETON_TAB:
+      case WindowOpenDisposition::OFF_THE_RECORD:
+      case WindowOpenDisposition::SAVE_TO_DISK:
+      case WindowOpenDisposition::IGNORE_ACTION:
+      default:
+        return nullptr;
+    }
+
+    content::NavigationController::LoadURLParams load_url_params(params.url);
+    load_url_params.source_site_instance = params.source_site_instance;
+    load_url_params.transition_type = params.transition;
+    load_url_params.frame_tree_node_id = params.frame_tree_node_id;
+    load_url_params.referrer = params.referrer;
+    load_url_params.redirect_chain = params.redirect_chain;
+    load_url_params.extra_headers = params.extra_headers;
+    load_url_params.is_renderer_initiated = params.is_renderer_initiated;
+    load_url_params.should_replace_current_entry =
+        params.should_replace_current_entry;
+
+    if (params.uses_post) {
+      load_url_params.load_type =
+          content::NavigationController::LOAD_TYPE_HTTP_POST;
+      load_url_params.post_data = params.post_data;
+    }
+
+    target->GetController().LoadURLWithParams(load_url_params);
+    return target;
   }
 
  private:
@@ -226,6 +284,8 @@ HeadlessWebContentsImpl::HeadlessWebContentsImpl(
 #if BUILDFLAG(ENABLE_BASIC_PRINTING) && !defined(CHROME_MULTIPLE_DLL_CHILD)
   HeadlessPrintManager::CreateForWebContents(web_contents);
 #endif
+  web_contents->GetMutableRendererPrefs()->accept_languages =
+      browser_context->options()->accept_language();
   web_contents_->SetDelegate(web_contents_delegate_.get());
   render_process_host_->AddObserver(this);
   agent_host_->AddObserver(this);
@@ -250,11 +310,8 @@ void HeadlessWebContentsImpl::CreateMojoService(
 
 void HeadlessWebContentsImpl::RenderFrameCreated(
     content::RenderFrameHost* render_frame_host) {
-  service_manager::BinderRegistry* interface_registry =
-      render_frame_host->GetInterfaceRegistry();
-
   for (const MojoService& service : mojo_services_) {
-    interface_registry->AddInterface(
+    registry_.AddInterface(
         service.service_name,
         base::Bind(&HeadlessWebContentsImpl::CreateMojoService,
                    base::Unretained(this), service.service_factory),
@@ -266,6 +323,13 @@ void HeadlessWebContentsImpl::RenderFrameCreated(
                                        render_frame_host->GetFrameTreeNodeId());
   if (headless_tab_socket_)
     headless_tab_socket_->RenderFrameCreated(render_frame_host);
+}
+
+void HeadlessWebContentsImpl::OnInterfaceRequestFromFrame(
+    content::RenderFrameHost* render_frame_host,
+    const std::string& interface_name,
+    mojo::ScopedMessagePipeHandle* interface_pipe) {
+  registry_.TryBindInterface(interface_name, interface_pipe);
 }
 
 void HeadlessWebContentsImpl::RenderFrameDeleted(
@@ -293,8 +357,17 @@ HeadlessWebContentsImpl::GetUntrustedDevToolsFrameIdForFrameTreeNodeId(
                                                     frame_tree_node_id);
 }
 
+int HeadlessWebContentsImpl::GetFrameTreeNodeIdForDevToolsFrameId(
+    const std::string& devtools_id) const {
+  return browser_context_->GetFrameTreeNodeIdForDevToolsFrameId(devtools_id);
+}
+
 int HeadlessWebContentsImpl::GetMainFrameRenderProcessId() const {
   return web_contents()->GetMainFrame()->GetProcess()->GetID();
+}
+
+int HeadlessWebContentsImpl::GetMainFrameTreeNodeId() const {
+  return web_contents()->GetMainFrame()->GetFrameTreeNodeId();
 }
 
 bool HeadlessWebContentsImpl::OpenURL(const GURL& url) {

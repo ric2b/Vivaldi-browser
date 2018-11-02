@@ -28,9 +28,11 @@
 
 #include "platform/HTTPNames.h"
 #include "platform/network/HTTPParsers.h"
+#include "platform/wtf/Assertions.h"
 #include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/StdLibExtras.h"
+#include "public/platform/WebURLResponse.h"
 
 #include <memory>
 
@@ -92,7 +94,8 @@ ResourceResponse::ResourceResponse()
       was_fetched_via_foreign_fetch_(false),
       was_fallback_required_by_service_worker_(false),
       did_service_worker_navigation_preload_(false),
-      service_worker_response_type_(kWebServiceWorkerResponseTypeDefault),
+      response_type_via_service_worker_(
+          network::mojom::FetchResponseType::kDefault),
       http_version_(kHTTPVersionUnknown),
       security_style_(kSecurityStyleUnknown),
       age_(0.0),
@@ -131,7 +134,8 @@ ResourceResponse::ResourceResponse(const KURL& url,
       was_fetched_via_foreign_fetch_(false),
       was_fallback_required_by_service_worker_(false),
       did_service_worker_navigation_preload_(false),
-      service_worker_response_type_(kWebServiceWorkerResponseTypeDefault),
+      response_type_via_service_worker_(
+          network::mojom::FetchResponseType::kDefault),
       http_version_(kHTTPVersionUnknown),
       security_style_(kSecurityStyleUnknown),
       age_(0.0),
@@ -166,7 +170,7 @@ ResourceResponse::ResourceResponse(CrossThreadResourceResponseData* data)
       data->was_fallback_required_by_service_worker_;
   did_service_worker_navigation_preload_ =
       data->did_service_worker_navigation_preload_;
-  service_worker_response_type_ = data->service_worker_response_type_;
+  response_type_via_service_worker_ = data->response_type_via_service_worker_;
   security_style_ = data->security_style_;
   security_details_.protocol = data->security_details_.protocol;
   security_details_.cipher = data->security_details_.cipher;
@@ -227,7 +231,7 @@ std::unique_ptr<CrossThreadResourceResponseData> ResourceResponse::CopyData()
       was_fallback_required_by_service_worker_;
   data->did_service_worker_navigation_preload_ =
       did_service_worker_navigation_preload_;
-  data->service_worker_response_type_ = service_worker_response_type_;
+  data->response_type_via_service_worker_ = response_type_via_service_worker_;
   data->security_style_ = security_style_;
   data->security_details_.protocol = security_details_.protocol.IsolatedCopy();
   data->security_details_.cipher = security_details_.cipher.IsolatedCopy();
@@ -641,4 +645,14 @@ bool ResourceResponse::Compare(const ResourceResponse& a,
   return true;
 }
 
+STATIC_ASSERT_ENUM(WebURLResponse::kHTTPVersionUnknown,
+                   ResourceResponse::kHTTPVersionUnknown);
+STATIC_ASSERT_ENUM(WebURLResponse::kHTTPVersion_0_9,
+                   ResourceResponse::kHTTPVersion_0_9);
+STATIC_ASSERT_ENUM(WebURLResponse::kHTTPVersion_1_0,
+                   ResourceResponse::kHTTPVersion_1_0);
+STATIC_ASSERT_ENUM(WebURLResponse::kHTTPVersion_1_1,
+                   ResourceResponse::kHTTPVersion_1_1);
+STATIC_ASSERT_ENUM(WebURLResponse::kHTTPVersion_2_0,
+                   ResourceResponse::kHTTPVersion_2_0);
 }  // namespace blink

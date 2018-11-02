@@ -17,6 +17,8 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/aura/client/window_types.h"
+#include "ui/aura/env_observer.h"
+#include "ui/aura/window_tree_host_observer.h"
 #include "ui/display/display.h"
 
 namespace aura {
@@ -57,14 +59,12 @@ class SystemTray;
 class TestScreenshotDelegate;
 class TestSessionControllerClient;
 
-class AshTestBase : public testing::Test {
+class AshTestBase : public testing::Test,
+                    public aura::EnvObserver,
+                    public aura::WindowTreeHostObserver {
  public:
   AshTestBase();
   ~AshTestBase() override;
-
-  // Give all ui::Compositors a valid viz::LocalSurfaceId so that they can
-  // unblock cc::LayerTreeHost.
-  void UnblockCompositors();
 
   // testing::Test:
   void SetUp() override;
@@ -88,9 +88,9 @@ class AshTestBase : public testing::Test {
   // Creates and shows a widget. See ash/public/cpp/shell_window_ids.h for
   // values for |container_id|.
   static std::unique_ptr<views::Widget> CreateTestWidget(
-      views::WidgetDelegate* delegate,
-      int container_id,
-      const gfx::Rect& bounds);
+      views::WidgetDelegate* delegate = nullptr,
+      int container_id = kShellWindowId_DefaultContainer,
+      const gfx::Rect& bounds = gfx::Rect());
 
   // Creates a visible window in the appropriate container. If
   // |bounds_in_screen| is empty the window is added to the primary root
@@ -167,6 +167,7 @@ class AshTestBase : public testing::Test {
   static display::Display::Rotation GetCurrentInternalDisplayRotation();
 
   void set_start_session(bool start_session) { start_session_ = start_session; }
+  void disable_provide_local_state() { provide_local_state_ = false; }
 
   AshTestHelper* ash_test_helper() { return ash_test_helper_.get(); }
 
@@ -176,12 +177,24 @@ class AshTestBase : public testing::Test {
 
   TestSessionControllerClient* GetSessionControllerClient();
 
-  // Utility methods to emulate user logged in or not, session started or not
-  // and user able to lock screen or not cases.
-  void SetSessionStarted(bool session_started);
-  void SetUserLoggedIn(bool user_logged_in);
+  // Emulates an ash session that have |session_count| user sessions running.
+  // Note that existing user sessions will be cleared.
+  void CreateUserSessions(int session_count);
+
+  // Simulates a user sign-in. It creates a new user session, adds it to
+  // existing user sessions and makes it the active user session.
+  void SimulateUserLogin(const std::string& user_email);
+
+  // Clears all user sessions and resets to the primary login screen state.
+  void ClearLogin();
+
+  // Emulates whether the active user can lock screen.
   void SetCanLockScreen(bool can_lock);
+
+  // Emulates whether the screen should be locked automatically.
   void SetShouldLockScreenAutomatically(bool should_lock);
+
+  // Emulates whether the user adding screen is running.
   void SetUserAddingScreenRunning(bool user_adding_screen_running);
 
   // Methods to emulate blocking and unblocking user session with given
@@ -198,10 +211,20 @@ class AshTestBase : public testing::Test {
   display::Display GetSecondaryDisplay();
 
  private:
+  // aura::EnvObserver:
+  void OnWindowInitialized(aura::Window* window) override;
+  void OnHostInitialized(aura::WindowTreeHost* host) override;
+
+  // aura::WindowTreeHostObserver:
+  void OnHostResized(aura::WindowTreeHost* host) override;
+
   bool setup_called_;
   bool teardown_called_;
   // |SetUp()| doesn't activate session if this is set to false.
   bool start_session_;
+  // |SetUp()| doesn't inject local-state PrefService into Shell if this is
+  // set to false.
+  bool provide_local_state_ = true;
   std::unique_ptr<AshTestEnvironment> ash_test_environment_;
   std::unique_ptr<AshTestHelper> ash_test_helper_;
   std::unique_ptr<ui::test::EventGenerator> event_generator_;

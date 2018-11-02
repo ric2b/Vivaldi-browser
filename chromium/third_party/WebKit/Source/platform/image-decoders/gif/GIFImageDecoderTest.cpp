@@ -59,16 +59,8 @@ void TestRepetitionCount(const char* dir,
   RefPtr<SharedBuffer> data = ReadFile(dir, file);
   ASSERT_TRUE(data.Get());
   decoder->SetData(data.Get(), true);
-  EXPECT_EQ(kAnimationLoopOnce,
-            decoder->RepetitionCount());  // Default value before decode.
 
-  for (size_t i = 0; i < decoder->FrameCount(); ++i) {
-    ImageFrame* frame = decoder->FrameBufferAtIndex(i);
-    EXPECT_EQ(ImageFrame::kFrameComplete, frame->GetStatus());
-  }
-
-  EXPECT_EQ(expected_repetition_count,
-            decoder->RepetitionCount());  // Expected value after decode.
+  EXPECT_EQ(expected_repetition_count, decoder->RepetitionCount());
 }
 
 }  // anonymous namespace
@@ -79,15 +71,14 @@ TEST(GIFImageDecoderTest, decodeTwoFrames) {
   RefPtr<SharedBuffer> data = ReadFile(kLayoutTestResourcesDir, "animated.gif");
   ASSERT_TRUE(data.Get());
   decoder->SetData(data.Get(), true);
-  EXPECT_EQ(kAnimationLoopOnce, decoder->RepetitionCount());
 
-  ImageFrame* frame = decoder->FrameBufferAtIndex(0);
+  ImageFrame* frame = decoder->DecodeFrameBufferAtIndex(0);
   uint32_t generation_id0 = frame->Bitmap().getGenerationID();
   EXPECT_EQ(ImageFrame::kFrameComplete, frame->GetStatus());
   EXPECT_EQ(16, frame->Bitmap().width());
   EXPECT_EQ(16, frame->Bitmap().height());
 
-  frame = decoder->FrameBufferAtIndex(1);
+  frame = decoder->DecodeFrameBufferAtIndex(1);
   uint32_t generation_id1 = frame->Bitmap().getGenerationID();
   EXPECT_EQ(ImageFrame::kFrameComplete, frame->GetStatus());
   EXPECT_EQ(16, frame->Bitmap().width());
@@ -104,17 +95,13 @@ TEST(GIFImageDecoderTest, parseAndDecode) {
   RefPtr<SharedBuffer> data = ReadFile(kLayoutTestResourcesDir, "animated.gif");
   ASSERT_TRUE(data.Get());
   decoder->SetData(data.Get(), true);
-  EXPECT_EQ(kAnimationLoopOnce, decoder->RepetitionCount());
 
-  // This call will parse the entire file.
-  EXPECT_EQ(2u, decoder->FrameCount());
-
-  ImageFrame* frame = decoder->FrameBufferAtIndex(0);
+  ImageFrame* frame = decoder->DecodeFrameBufferAtIndex(0);
   EXPECT_EQ(ImageFrame::kFrameComplete, frame->GetStatus());
   EXPECT_EQ(16, frame->Bitmap().width());
   EXPECT_EQ(16, frame->Bitmap().height());
 
-  frame = decoder->FrameBufferAtIndex(1);
+  frame = decoder->DecodeFrameBufferAtIndex(1);
   EXPECT_EQ(ImageFrame::kFrameComplete, frame->GetStatus());
   EXPECT_EQ(16, frame->Bitmap().width());
   EXPECT_EQ(16, frame->Bitmap().height());
@@ -140,8 +127,8 @@ TEST(GIFImageDecoderTest, parseByteByByte) {
 
   EXPECT_EQ(2u, decoder->FrameCount());
 
-  decoder->FrameBufferAtIndex(0);
-  decoder->FrameBufferAtIndex(1);
+  decoder->DecodeFrameBufferAtIndex(0);
+  decoder->DecodeFrameBufferAtIndex(1);
   EXPECT_EQ(kAnimationLoopInfinite, decoder->RepetitionCount());
 }
 
@@ -160,7 +147,7 @@ TEST(GIFImageDecoderTest, brokenSecondFrame) {
 
   // One frame is detected but cannot be decoded.
   EXPECT_EQ(1u, decoder->FrameCount());
-  ImageFrame* frame = decoder->FrameBufferAtIndex(1);
+  ImageFrame* frame = decoder->DecodeFrameBufferAtIndex(1);
   EXPECT_FALSE(frame);
 }
 
@@ -182,9 +169,9 @@ TEST(GIFImageDecoderTest, allDataReceivedTruncation) {
   EXPECT_EQ(2u, decoder->FrameCount());
   EXPECT_FALSE(decoder->Failed());
 
-  decoder->FrameBufferAtIndex(0);
+  decoder->DecodeFrameBufferAtIndex(0);
   EXPECT_FALSE(decoder->Failed());
-  decoder->FrameBufferAtIndex(1);
+  decoder->DecodeFrameBufferAtIndex(1);
   EXPECT_TRUE(decoder->Failed());
 }
 
@@ -237,13 +224,13 @@ TEST(GIFImageDecoderTest, badTerminator) {
   std::unique_ptr<ImageDecoder> reference_decoder = CreateDecoder();
   reference_decoder->SetData(reference_data.Get(), true);
   EXPECT_EQ(1u, reference_decoder->FrameCount());
-  ImageFrame* reference_frame = reference_decoder->FrameBufferAtIndex(0);
+  ImageFrame* reference_frame = reference_decoder->DecodeFrameBufferAtIndex(0);
   DCHECK(reference_frame);
 
   std::unique_ptr<ImageDecoder> test_decoder = CreateDecoder();
   test_decoder->SetData(test_data.Get(), true);
   EXPECT_EQ(1u, test_decoder->FrameCount());
-  ImageFrame* test_frame = test_decoder->FrameBufferAtIndex(0);
+  ImageFrame* test_frame = test_decoder->DecodeFrameBufferAtIndex(0);
   DCHECK(test_frame);
 
   EXPECT_EQ(HashBitmap(reference_frame->Bitmap()),
@@ -292,7 +279,7 @@ TEST(GIFImageDecoderTest, badInitialCode) {
   std::unique_ptr<ImageDecoder> test_decoder = CreateDecoder();
   test_decoder->SetData(test_data.Get(), true);
   EXPECT_EQ(1u, test_decoder->FrameCount());
-  ASSERT_TRUE(test_decoder->FrameBufferAtIndex(0));
+  ASSERT_TRUE(test_decoder->DecodeFrameBufferAtIndex(0));
   EXPECT_TRUE(test_decoder->Failed());
 }
 
@@ -306,7 +293,7 @@ TEST(GIFImageDecoderTest, badCode) {
   std::unique_ptr<ImageDecoder> test_decoder = CreateDecoder();
   test_decoder->SetData(test_data.Get(), true);
   EXPECT_EQ(1u, test_decoder->FrameCount());
-  ASSERT_TRUE(test_decoder->FrameBufferAtIndex(0));
+  ASSERT_TRUE(test_decoder->DecodeFrameBufferAtIndex(0));
   EXPECT_TRUE(test_decoder->Failed());
 }
 
@@ -321,11 +308,14 @@ TEST(GIFImageDecoderTest, invalidDisposalMethod) {
 
   EXPECT_EQ(2u, decoder->FrameCount());
   // Disposal method 4 is converted to ImageFrame::DisposeOverwritePrevious.
+  // This is because some specs say method 3 is "overwrite previous", while
+  // others say setting the third bit (i.e. method 4) is.
   EXPECT_EQ(ImageFrame::kDisposeOverwritePrevious,
-            decoder->FrameBufferAtIndex(0)->GetDisposalMethod());
-  // Disposal method 5 is ignored.
-  EXPECT_EQ(ImageFrame::kDisposeNotSpecified,
-            decoder->FrameBufferAtIndex(1)->GetDisposalMethod());
+            decoder->DecodeFrameBufferAtIndex(0)->GetDisposalMethod());
+  // Unknown disposal methods (5 in this case) are converted to
+  // ImageFrame::DisposeKeep.
+  EXPECT_EQ(ImageFrame::kDisposeKeep,
+            decoder->DecodeFrameBufferAtIndex(1)->GetDisposalMethod());
 }
 
 TEST(GIFImageDecoderTest, firstFrameHasGreaterSizeThanScreenSize) {
@@ -388,28 +378,28 @@ TEST(GIFImageDecoderTest, bitmapAlphaType) {
   ASSERT_TRUE(premul_decoder->FrameCount());
   unpremul_decoder->SetData(partial_data.Get(), false);
   ASSERT_TRUE(unpremul_decoder->FrameCount());
-  ImageFrame* premul_frame = premul_decoder->FrameBufferAtIndex(0);
+  ImageFrame* premul_frame = premul_decoder->DecodeFrameBufferAtIndex(0);
   EXPECT_TRUE(premul_frame &&
               premul_frame->GetStatus() != ImageFrame::kFrameComplete);
-  EXPECT_EQ(premul_frame->Bitmap().alphaType(), kPremul_SkAlphaType);
-  ImageFrame* unpremul_frame = unpremul_decoder->FrameBufferAtIndex(0);
+  EXPECT_EQ(kPremul_SkAlphaType, premul_frame->Bitmap().alphaType());
+  ImageFrame* unpremul_frame = unpremul_decoder->DecodeFrameBufferAtIndex(0);
   EXPECT_TRUE(unpremul_frame &&
               unpremul_frame->GetStatus() != ImageFrame::kFrameComplete);
-  EXPECT_EQ(unpremul_frame->Bitmap().alphaType(), kUnpremul_SkAlphaType);
+  EXPECT_EQ(kUnpremul_SkAlphaType, unpremul_frame->Bitmap().alphaType());
 
   // Fully decoded frame => the frame alpha type is known (opaque).
   premul_decoder->SetData(full_data_buffer.Get(), true);
   ASSERT_TRUE(premul_decoder->FrameCount());
   unpremul_decoder->SetData(full_data_buffer.Get(), true);
   ASSERT_TRUE(unpremul_decoder->FrameCount());
-  premul_frame = premul_decoder->FrameBufferAtIndex(0);
+  premul_frame = premul_decoder->DecodeFrameBufferAtIndex(0);
   EXPECT_TRUE(premul_frame &&
               premul_frame->GetStatus() == ImageFrame::kFrameComplete);
-  EXPECT_EQ(premul_frame->Bitmap().alphaType(), kOpaque_SkAlphaType);
-  unpremul_frame = unpremul_decoder->FrameBufferAtIndex(0);
+  EXPECT_EQ(kOpaque_SkAlphaType, premul_frame->Bitmap().alphaType());
+  unpremul_frame = unpremul_decoder->DecodeFrameBufferAtIndex(0);
   EXPECT_TRUE(unpremul_frame &&
               unpremul_frame->GetStatus() == ImageFrame::kFrameComplete);
-  EXPECT_EQ(unpremul_frame->Bitmap().alphaType(), kOpaque_SkAlphaType);
+  EXPECT_EQ(kOpaque_SkAlphaType, unpremul_frame->Bitmap().alphaType());
 }
 
 namespace {
@@ -432,12 +422,51 @@ TEST(GIFImageDecoderTest, externalAllocator) {
   Allocator allocator;
   decoder->SetMemoryAllocator(&allocator);
   EXPECT_EQ(1u, decoder->FrameCount());
-  ImageFrame* frame = decoder->FrameBufferAtIndex(0);
+  ImageFrame* frame = decoder->DecodeFrameBufferAtIndex(0);
   decoder->SetMemoryAllocator(nullptr);
 
   ASSERT_TRUE(frame);
   EXPECT_EQ(IntRect(IntPoint(), decoder->Size()), frame->OriginalFrameRect());
   EXPECT_FALSE(frame->HasAlpha());
+}
+
+TEST(GIFImageDecoderTest, recursiveDecodeFailure) {
+  auto data = ReadFile(kLayoutTestResourcesDir, "count-down-color-test.gif");
+  ASSERT_TRUE(data.Get());
+
+  {
+    auto decoder = CreateDecoder();
+    decoder->SetData(data.Get(), true);
+    for (size_t i = 0; i <= 3; ++i) {
+      ImageFrame* frame = decoder->DecodeFrameBufferAtIndex(i);
+      ASSERT_NE(frame, nullptr);
+      ASSERT_EQ(frame->GetStatus(), ImageFrame::kFrameComplete);
+    }
+  }
+
+  // Modify data to have an error in frame 2.
+  const size_t kErrorOffset = 15302u;
+  RefPtr<SharedBuffer> modified_data =
+      SharedBuffer::Create(data->Data(), kErrorOffset);
+  modified_data->Append("A", 1u);
+  modified_data->Append(data->Data() + kErrorOffset + 1,
+                        data->size() - kErrorOffset - 1);
+  {
+    auto decoder = CreateDecoder();
+    decoder->SetData(modified_data.Get(), true);
+    decoder->DecodeFrameBufferAtIndex(2);
+    ASSERT_TRUE(decoder->Failed());
+  }
+
+  {
+    // Decode frame 3, recursively decoding frame 2, which 3 depends on.
+    auto decoder = CreateDecoder();
+    decoder->SetData(modified_data.Get(), true);
+    ImageFrame* frame = decoder->DecodeFrameBufferAtIndex(3);
+    EXPECT_TRUE(decoder->Failed());
+    ASSERT_NE(frame, nullptr);
+    ASSERT_EQ(frame->RequiredPreviousFrameIndex(), 2u);
+  }
 }
 
 }  // namespace blink

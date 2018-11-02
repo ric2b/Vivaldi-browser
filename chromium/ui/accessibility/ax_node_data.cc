@@ -35,7 +35,7 @@ std::string StateBitfieldToString(uint32_t state) {
   std::string str;
   for (uint32_t i = AX_STATE_NONE + 1; i <= AX_STATE_LAST; ++i) {
     if (IsFlagSet(state, i))
-      str += " " + base::ToUpperASCII(ToString(static_cast<AXState>(i)));
+      str += " " + base::ToUpperASCII(ui::ToString(static_cast<AXState>(i)));
   }
   return str;
 }
@@ -44,7 +44,7 @@ std::string ActionsBitfieldToString(uint32_t actions) {
   std::string str;
   for (uint32_t i = AX_ACTION_NONE + 1; i <= AX_ACTION_LAST; ++i) {
     if (IsFlagSet(actions, i)) {
-      str += ToString(static_cast<AXAction>(i));
+      str += ui::ToString(static_cast<AXAction>(i));
       actions = ModifyFlag(actions, i, false);
       str += actions ? "," : "";
     }
@@ -525,15 +525,21 @@ void AXNodeData::AddAction(AXAction action_enum) {
     case AX_ACTION_GET_IMAGE_DATA:
     case AX_ACTION_HIT_TEST:
     case AX_ACTION_INCREMENT:
+    case AX_ACTION_LOAD_INLINE_TEXT_BOXES:
     case AX_ACTION_REPLACE_SELECTED_TEXT:
     case AX_ACTION_SCROLL_TO_MAKE_VISIBLE:
     case AX_ACTION_SCROLL_TO_POINT:
-    case AX_ACTION_SET_ACCESSIBILITY_FOCUS:
     case AX_ACTION_SET_SCROLL_OFFSET:
     case AX_ACTION_SET_SELECTION:
     case AX_ACTION_SET_SEQUENTIAL_FOCUS_NAVIGATION_STARTING_POINT:
     case AX_ACTION_SET_VALUE:
     case AX_ACTION_SHOW_CONTEXT_MENU:
+    case AX_ACTION_SCROLL_BACKWARD:
+    case AX_ACTION_SCROLL_FORWARD:
+    case AX_ACTION_SCROLL_UP:
+    case AX_ACTION_SCROLL_DOWN:
+    case AX_ACTION_SCROLL_LEFT:
+    case AX_ACTION_SCROLL_RIGHT:
       break;
   }
 
@@ -909,10 +915,13 @@ std::string AXNodeData::ToString() const {
   for (size_t i = 0; i < bool_attributes.size(); ++i) {
     std::string value = bool_attributes[i].second ? "true" : "false";
     switch (bool_attributes[i].first) {
+      case AX_ATTR_EDITABLE_ROOT:
+        result += " editable_root=" + value;
+        break;
       case AX_ATTR_LIVE_ATOMIC:
         result += " atomic=" + value;
         break;
-      case AX_ATTR_LIVE_BUSY:
+      case AX_ATTR_BUSY:
         result += " busy=" + value;
         break;
       case AX_ATTR_CONTAINER_LIVE_ATOMIC:
@@ -929,6 +938,9 @@ std::string AXNodeData::ToString() const {
         break;
       case AX_ATTR_MODAL:
         result += " modal=" + value;
+        break;
+      case AX_ATTR_SCROLLABLE:
+        result += " scrollable=" + value;
         break;
       case AX_BOOL_ATTRIBUTE_NONE:
         break;
@@ -977,6 +989,8 @@ std::string AXNodeData::ToString() const {
             types_str += "text_match&";
           if (type & AX_MARKER_TYPE_ACTIVE_SUGGESTION)
             types_str += "active_suggestion&";
+          if (type & AX_MARKER_TYPE_SUGGESTION)
+            types_str += "suggestion&";
 
           if (!types_str.empty())
             types_str = types_str.substr(0, types_str.size() - 1);

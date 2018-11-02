@@ -9,10 +9,10 @@
 #include "base/single_thread_task_runner.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "cc/output/begin_frame_args.h"
-#include "cc/surfaces/surface_manager.h"
-#include "cc/test/begin_frame_args_test.h"
+#include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/surfaces/local_surface_id_allocator.h"
+#include "components/viz/service/surfaces/surface_manager.h"
+#include "components/viz/test/begin_frame_args_test.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/compositor/compositor.h"
@@ -40,7 +40,8 @@ class CompositorTest : public testing::Test {
     compositor_.reset(new ui::Compositor(
         context_factory_private->AllocateFrameSinkId(), context_factory,
         context_factory_private, CreateTaskRunner(),
-        false /* enable_surface_synchronization */));
+        false /* enable_surface_synchronization */,
+        false /* enable_pixel_canvas */));
     compositor_->SetAcceleratedWidget(gfx::kNullAcceleratedWidget);
   }
 
@@ -114,8 +115,7 @@ class CompositorObserverForLocks : public CompositorObserver {
   bool locked_ = false;
 };
 
-class MockCompositorLockClient
-    : NON_EXPORTED_BASE(public ui::CompositorLockClient) {
+class MockCompositorLockClient : public ui::CompositorLockClient {
  public:
   MOCK_METHOD0(CompositorLockTimedOut, void());
 };

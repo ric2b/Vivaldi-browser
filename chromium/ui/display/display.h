@@ -192,11 +192,15 @@ class DISPLAY_EXPORT Display final {
     maximum_cursor_size_ = size;
   }
 
-  // The full color space of the display.
+  // The color space of the display.
   gfx::ColorSpace color_space() const { return color_space_; }
   void set_color_space(const gfx::ColorSpace& color_space) {
     color_space_ = color_space;
   }
+
+  // Set the color space of the display and reset the color depth and depth per
+  // component based on whether or not the color space is HDR.
+  void SetColorSpaceAndDepth(const gfx::ColorSpace& color_space);
 
   // The number of bits per pixel. Used by media query APIs.
   int color_depth() const { return color_depth_; }

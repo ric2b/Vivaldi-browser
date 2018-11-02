@@ -11,8 +11,8 @@
   <template>
     <style include="cups-printer-shared"></style>
     <add-printer-dialog>
-      <div class="dialog-title">$i18n{editPrinterDialogTitle}</div>
-      <div class="dialog-body">
+      <div slot="dialog-title">$i18n{editPrinterDialogTitle}</div>
+      <div slot="dialog-body">
         <div class="settings-box first two-line">
           <div class="start">
             <div class="label">$i18n{printerName}</div>
@@ -109,7 +109,7 @@
           </div>
         </div>
       </div>
-      <div class="dialog-buttons">
+      <div slot="dialog-buttons">
         <paper-button class="cancel-button secondary-button"
             on-tap="onCancelTap_">
           $i18n{cancelButtonText}

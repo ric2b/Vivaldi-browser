@@ -42,7 +42,11 @@
 #include "services/service_manager/public/cpp/service_context.h"
 
 #if defined(OS_LINUX)
-#include "content/public/child/child_process_sandbox_support_linux.h"
+#include "content/public/common/common_sandbox_support_linux.h"
+#endif
+
+#if defined(OS_POSIX)
+#include "base/posix/eintr_wrapper.h"
 #endif
 
 #if defined(OS_WIN)
@@ -285,7 +289,7 @@ void NaClListener::OnAddPrefetchedResource(
 void NaClListener::OnStart(const nacl::NaClStartParams& params) {
   is_started_ = true;
 #if defined(OS_LINUX) || defined(OS_MACOSX)
-  int urandom_fd = dup(base::GetUrandomFD());
+  int urandom_fd = HANDLE_EINTR(dup(base::GetUrandomFD()));
   if (urandom_fd < 0) {
     LOG(FATAL) << "Failed to dup() the urandom FD";
   }

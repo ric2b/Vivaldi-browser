@@ -188,6 +188,19 @@ cast_test_group("cast_tests") {
   }
   filters += [ base_unittests_filter ]
 
+  cc_unittests_filter = {
+    test_name = "cc_unittests"
+    if (!is_cast_desktop_build) {
+      #Disable ToColorSpace/ColorTransformPixelTest*  (b/64346790)
+      #Disable ImageBackgroundFilter* (b/64346875)
+      gtest_excludes = [
+        "ToColorSpace/ColorTransformPixelTest.*",
+        "ImageBackgroundFilter.*",
+      ]
+    }
+  }
+  filters += [ cc_unittests_filter ]
+
   content_unittests_filter = {
     test_name = "content_unittests"
 
@@ -265,17 +278,6 @@ cast_test_group("cast_tests") {
     }
   }
   filters += [ media_unittests_filter ]
-
-  midi_unittests_filter = {
-    test_name = "midi_unittests"
-    if (!is_cast_desktop_build && !is_cast_audio_only) {
-      # Disable MidiTaskServiceTest.RunBoundTasks. This is failing on v1
-      # devices. Temporarily disable to get dashboards green again while the
-      # failure is investigated. (crbug/744777)
-      gtest_excludes = [ "MidiTaskServiceTest.RunBoundTasks" ]
-    }
-  }
-  filters += [ midi_unittests_filter ]
 
   net_unittests_filter = {
     test_name = "net_unittests"
@@ -409,8 +411,8 @@ cast_executable("cast_shell") {
 
 repack("cast_shell_pak") {
   sources = [
-    "$root_gen_dir/blink/public/resources/blink_image_resources_100_percent.pak",
     "$root_gen_dir/blink/public/resources/blink_resources.pak",
+    "$root_gen_dir/blink/public/resources/blink_scaled_resources_100_percent.pak",
     "$root_gen_dir/chromecast/app/shell_resources.pak",
     "$root_gen_dir/chromecast/browser/cast_browser_resources.pak",
     "$root_gen_dir/content/app/resources/content_resources_100_percent.pak",
@@ -432,8 +434,8 @@ repack("cast_shell_pak") {
     "//content/app/resources",
     "//content/app/strings",
     "//net:net_resources",
-    "//third_party/WebKit/public:image_resources_grit",
     "//third_party/WebKit/public:resources",
+    "//third_party/WebKit/public:scaled_resources_100_percent",
     "//ui/resources",
     "//ui/strings",
   ]
@@ -485,6 +487,7 @@ buildflag_header("chromecast_features") {
   header = "chromecast_features.h"
   flags = [
     "ENABLE_ASSISTANT=$enable_assistant",
+    "ENABLE_ATHINGS_LOOPBACK=$enable_athings_loopback",
     "IS_ANDROID_THINGS=$is_android_things",
     "IS_CAST_AUDIO_ONLY=$is_cast_audio_only",
     "IS_CAST_USING_CMA_BACKEND=$is_cast_using_cma_backend",

@@ -17,6 +17,7 @@
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_util.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/redirect_info.h"
 #include "net/url_request/url_request_job.h"
 #include "net/url_request/url_request_test_util.h"
@@ -150,8 +151,8 @@ TEST_F(ClearSiteDataThrottleTest, MaybeCreateThrottleForRequest) {
   // Create a URL request.
   GURL url("https://www.example.com");
   net::TestURLRequestContext context;
-  std::unique_ptr<net::URLRequest> request(
-      context.CreateRequest(url, net::DEFAULT_PRIORITY, nullptr));
+  std::unique_ptr<net::URLRequest> request(context.CreateRequest(
+      url, net::DEFAULT_PRIORITY, nullptr, TRAFFIC_ANNOTATION_FOR_TESTS));
 
   // We will not create the throttle for an empty ResourceRequestInfo.
   EXPECT_FALSE(
@@ -175,17 +176,24 @@ TEST_F(ClearSiteDataThrottleTest, ParseHeaderAndExecuteClearingTask) {
       // One data type.
       {"\"cookies\"", true, false, false},
       {"\"storage\"", false, true, false},
-      {"\"cache\"", false, false, true},
+
+      // TODO(crbug.com/762417): The "cache" parameter is temporarily disabled.
+      // Therefore, a header consisting solely of the "cache" parameter is
+      // invalid. As this test verifies the behavior of Clear-Site-Data with
+      // valid headers, we will omit such test case.
 
       // Two data types.
       {"\"cookies\", \"storage\"", true, true, false},
-      {"\"cookies\", \"cache\"", true, false, true},
-      {"\"storage\", \"cache\"", false, true, true},
+
+      // TODO(crbug.com/762417): The "cache" parameter is temporarily disabled.
+      {"\"cookies\", \"cache\"", true, false, false},
+      {"\"storage\", \"cache\"", false, true, false},
 
       // Three data types.
-      {"\"storage\", \"cache\", \"cookies\"", true, true, true},
-      {"\"cache\", \"cookies\", \"storage\"", true, true, true},
-      {"\"cookies\", \"storage\", \"cache\"", true, true, true},
+      // TODO(crbug.com/762417): The "cache" parameter is temporarily disabled.
+      {"\"storage\", \"cache\", \"cookies\"", true, true, false},
+      {"\"cache\", \"cookies\", \"storage\"", true, true, false},
+      {"\"cookies\", \"storage\", \"cache\"", true, true, false},
 
       // Different formatting.
       {"\"cookies\"", true, false, false},
@@ -198,7 +206,7 @@ TEST_F(ClearSiteDataThrottleTest, ParseHeaderAndExecuteClearingTask) {
 
       // Unknown types are ignored, but we still proceed with the deletion for
       // those that we recognize.
-      {"\"cache\", \"foo\"", false, false, true},
+      {"\"storage\", \"foo\"", false, true, false},
   };
 
   for (const TestCase& test_case : test_cases) {
@@ -223,8 +231,8 @@ TEST_F(ClearSiteDataThrottleTest, ParseHeaderAndExecuteClearingTask) {
     // Test that a call with the above parameters actually reaches
     // ExecuteClearingTask().
     net::TestURLRequestContext context;
-    std::unique_ptr<net::URLRequest> request(
-        context.CreateRequest(url, net::DEFAULT_PRIORITY, nullptr));
+    std::unique_ptr<net::URLRequest> request(context.CreateRequest(
+        url, net::DEFAULT_PRIORITY, nullptr, TRAFFIC_ANNOTATION_FOR_TESTS));
     TestThrottle throttle(request.get(),
                           base::MakeUnique<ConsoleMessagesDelegate>());
     MockResourceThrottleDelegate delegate;
@@ -252,6 +260,9 @@ TEST_F(ClearSiteDataThrottleTest, InvalidHeader) {
                      "No recognized types specified.\n"},
                     {"\"passwords\"",
                      "Unrecognized type: \"passwords\".\n"
+                     "No recognized types specified.\n"},
+                    {"\"cache\"",
+                     "The \"cache\" datatype is temporarily not supported.\n"
                      "No recognized types specified.\n"},
                     {"[ \"list\" ]",
                      "Unrecognized type: [ \"list\" ].\n"
@@ -291,7 +302,8 @@ TEST_F(ClearSiteDataThrottleTest, InvalidHeader) {
 TEST_F(ClearSiteDataThrottleTest, LoadDoNotSaveCookies) {
   net::TestURLRequestContext context;
   std::unique_ptr<net::URLRequest> request(context.CreateRequest(
-      GURL("https://www.example.com"), net::DEFAULT_PRIORITY, nullptr));
+      GURL("https://www.example.com"), net::DEFAULT_PRIORITY, nullptr,
+      TRAFFIC_ANNOTATION_FOR_TESTS));
   std::unique_ptr<ConsoleMessagesDelegate> scoped_console_delegate(
       new ConsoleMessagesDelegate());
   const ConsoleMessagesDelegate* console_delegate =
@@ -352,8 +364,9 @@ TEST_F(ClearSiteDataThrottleTest, InvalidOrigin) {
   net::TestURLRequestContext context;
 
   for (const TestCase& test_case : kTestCases) {
-    std::unique_ptr<net::URLRequest> request(context.CreateRequest(
-        GURL(test_case.origin), net::DEFAULT_PRIORITY, nullptr));
+    std::unique_ptr<net::URLRequest> request(
+        context.CreateRequest(GURL(test_case.origin), net::DEFAULT_PRIORITY,
+                              nullptr, TRAFFIC_ANNOTATION_FOR_TESTS));
     std::unique_ptr<ConsoleMessagesDelegate> scoped_console_delegate(
         new ConsoleMessagesDelegate());
     const ConsoleMessagesDelegate* console_delegate =
@@ -455,8 +468,9 @@ TEST_F(ClearSiteDataThrottleTest, DeferAndResume) {
                                       test_origin.origin, test_case.stage,
                                       test_case.response_headers.c_str()));
 
-      std::unique_ptr<net::URLRequest> request(context.CreateRequest(
-          GURL(test_origin.origin), net::DEFAULT_PRIORITY, nullptr));
+      std::unique_ptr<net::URLRequest> request(
+          context.CreateRequest(GURL(test_origin.origin), net::DEFAULT_PRIORITY,
+                                nullptr, TRAFFIC_ANNOTATION_FOR_TESTS));
       TestThrottle throttle(request.get(),
                             base::MakeUnique<ConsoleMessagesDelegate>());
       throttle.SetResponseHeaders(test_case.response_headers);
@@ -544,9 +558,9 @@ TEST_F(ClearSiteDataThrottleTest, FormattedConsoleOutput) {
        "No recognized types specified.\n"},
 
       // Successful deletion on the same URL.
-      {"\"cache\"", "https://origin3.com/bar",
+      {"\"cookies\"", "https://origin3.com/bar",
        "Clear-Site-Data header on 'https://origin3.com/bar': "
-       "Cleared data types: \"cache\".\n"},
+       "Cleared data types: \"cookies\".\n"},
 
       // Redirect to the original URL.
       // Successful deletion outputs one line.
@@ -560,8 +574,9 @@ TEST_F(ClearSiteDataThrottleTest, FormattedConsoleOutput) {
     SCOPED_TRACE(navigation ? "Navigation test." : "Subresource test.");
 
     net::TestURLRequestContext context;
-    std::unique_ptr<net::URLRequest> request(context.CreateRequest(
-        GURL(kTestCases[0].url), net::DEFAULT_PRIORITY, nullptr));
+    std::unique_ptr<net::URLRequest> request(
+        context.CreateRequest(GURL(kTestCases[0].url), net::DEFAULT_PRIORITY,
+                              nullptr, TRAFFIC_ANNOTATION_FOR_TESTS));
     ResourceRequestInfo::AllocateForTesting(
         request.get(),
         navigation ? RESOURCE_TYPE_SUB_FRAME : RESOURCE_TYPE_IMAGE, nullptr, 0,

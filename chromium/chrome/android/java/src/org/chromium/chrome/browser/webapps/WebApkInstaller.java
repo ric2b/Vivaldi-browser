@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.webapps;
 
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
 
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
@@ -50,10 +51,13 @@ public class WebApkInstaller {
      * @param title The title of the WebAPK to display during installation.
      * @param token The token from WebAPK Server.
      * @param url The start URL of the WebAPK to install.
+     * @param source The source (either app banner or menu) that the install of a WebAPK was
+     *               triggered.
+     * @param icon The primary icon of the WebAPK to install.
      */
     @CalledByNative
-    private void installWebApkAsync(final String packageName, int version, String title,
-            String token, String url, final int source) {
+    private void installWebApkAsync(final String packageName, int version, final String title,
+            String token, final String url, final int source, final Bitmap icon) {
         // Check whether the WebAPK package is already installed. The WebAPK may have been installed
         // by another Chrome version (e.g. Chrome Dev). We have to do this check because the Play
         // install API fails silently if the package is already installed.

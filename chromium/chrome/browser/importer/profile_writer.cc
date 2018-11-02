@@ -301,7 +301,7 @@ void ProfileWriter::AddSpeedDial(
 
 void ProfileWriter::AddNotes(const std::vector<ImportedNotesEntry> &notes,
                              const base::string16 &top_level_folder_name) {
-  Notes_Model *model = NotesModelFactory::GetForProfile(profile_);
+  Notes_Model *model = NotesModelFactory::GetForBrowserContext(profile_);
 
   model->BeginExtensiveChanges();
 

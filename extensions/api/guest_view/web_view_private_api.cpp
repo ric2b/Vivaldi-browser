@@ -136,7 +136,11 @@ bool WebViewInternalThumbnailFunction::InternalRunAsyncSafe(
     if (params.get()->height.get()) {
       height_ = *params->height.get();
     }
-    if (params->incognito.get()) {
+    Profile* profile = Profile::FromBrowserContext(browser_context());
+    is_incognito_ = profile->IsOffTheRecord();
+    // The thumbnail service should not store data in incognito so
+    // only allow overriding it if we're not in incognito already.
+    if (is_incognito_ == false && params->incognito.get()) {
       is_incognito_ = *params->incognito.get();
     }
   }

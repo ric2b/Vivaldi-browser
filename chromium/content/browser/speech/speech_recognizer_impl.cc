@@ -290,7 +290,7 @@ void SpeechRecognizerImpl::OnError(AudioInputController* controller,
 void SpeechRecognizerImpl::Write(const AudioBus* data,
                                  double volume,
                                  bool key_pressed,
-                                 uint32_t hardware_delay_bytes) {
+                                 base::TimeTicks capture_time) {
   // Convert audio from native format to fixed format used by WebSpeech.
   FSMEventArgs event_args(EVENT_AUDIO_DATA);
   event_args.audio_data = audio_converter_->Convert(data);
@@ -565,8 +565,8 @@ SpeechRecognizerImpl::FSMState SpeechRecognizerImpl::PrepareRecognition(
   DCHECK(recognition_engine_.get() != NULL);
   DCHECK(!IsCapturingAudio());
   GetAudioSystem()->GetInputStreamParameters(
-      device_id_, base::Bind(&SpeechRecognizerImpl::OnDeviceInfo,
-                             weak_ptr_factory_.GetWeakPtr()));
+      device_id_, base::BindOnce(&SpeechRecognizerImpl::OnDeviceInfo,
+                                 weak_ptr_factory_.GetWeakPtr()));
 
   listener()->OnRecognitionStart(session_id());
   return STATE_PREPARING;

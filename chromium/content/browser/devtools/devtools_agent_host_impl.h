@@ -26,7 +26,7 @@ class DevToolsSession;
 class CONTENT_EXPORT DevToolsAgentHostImpl : public DevToolsAgentHost {
  public:
   // DevToolsAgentHost implementation.
-  bool AttachClient(DevToolsAgentHostClient* client) override;
+  void AttachClient(DevToolsAgentHostClient* client) override;
   void ForceAttachClient(DevToolsAgentHostClient* client) override;
   bool DetachClient(DevToolsAgentHostClient* client) override;
   bool DispatchProtocolMessage(DevToolsAgentHostClient* client,
@@ -44,7 +44,6 @@ class CONTENT_EXPORT DevToolsAgentHostImpl : public DevToolsAgentHost {
   void DisconnectWebContents() override;
   void ConnectWebContents(WebContents* wc) override;
 
-  void AttachMultiClient(DevToolsAgentHostClient* client);
   bool Inspect();
 
  protected:
@@ -84,7 +83,6 @@ class CONTENT_EXPORT DevToolsAgentHostImpl : public DevToolsAgentHost {
   base::flat_map<DevToolsAgentHostClient*, std::unique_ptr<DevToolsSession>>
       session_by_client_;
   DevToolsIOContext io_context_;
-  static int s_attached_count_;
   static int s_force_creation_count_;
 };
 

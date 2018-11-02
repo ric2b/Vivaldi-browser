@@ -74,7 +74,6 @@
     audio,
     banner,
     blockquote,
-    busyIndicator,
     button,
     buttonDropDown,
     canvas,
@@ -114,7 +113,6 @@
     iframe,
     iframePresentational,
     ignored,
-    imageMapLink,
     imageMap,
     image,
     inlineTextBox,
@@ -145,7 +143,6 @@
     meter,
     navigation,
     note,
-    outline,
     pane,
     paragraph,
     popUpButton,
@@ -159,11 +156,8 @@
     rowHeader,
     row,
     ruby,
-    ruler,
     svgRoot,
-    scrollArea,
     scrollBar,
-    seamlessWebArea,
     search,
     searchBox,
     slider,
@@ -174,7 +168,6 @@
     staticText,
     status,
     switch,
-    tabGroup,
     tabList,
     tabPanel,
     tab,
@@ -200,7 +193,6 @@
 
   // Describes characteristics of an $(ref:automation.AutomationNode).
   enum StateType {
-    busy,
     collapsed,
     default,
     editable,
@@ -369,6 +361,9 @@
 
   // A listener for changes on the <code>AutomationNode</code> tree.
   callback TreeChangeObserver = void(TreeChange treeChange);
+
+  // Callback called for actions with a response.
+  callback PerformActionCallback = void(boolean result);
 
   dictionary CustomAction {
     long id;
@@ -623,8 +618,8 @@
     // The value of aria-atomic for a live region.
     boolean? liveAtomic;
 
-    // The value of aria-busy for a live region.
-    boolean? liveBusy;
+    // The value of aria-busy for a live region or any other element.
+    boolean? busy;
 
     // The type of live region if this node is inside a live region.
     DOMString? containerLiveStatus;
@@ -761,6 +756,24 @@
 
     // Suspend any media playing within this tree.
     static void suspendMedia();
+
+    // Scrolls this scrollable container backward.
+    static void scrollBackward(PerformActionCallback callback);
+
+    // Scrolls this scrollable container forward.
+    static void scrollForward(PerformActionCallback callback);
+
+    // Scrolls this scrollable container up.
+    static void scrollUp(PerformActionCallback callback);
+
+    // Scrolls this scrollable container down.
+    static void scrollDown(PerformActionCallback callback);
+
+    // Scrolls this scrollable container left.
+    static void scrollLeft(PerformActionCallback callback);
+
+    // Scrolls this scrollable container right.
+    static void scrollRight(PerformActionCallback callback);
 
     // Adds a listener for the given event type and event phase.
     static void addEventListener(

@@ -72,8 +72,12 @@ void ExampleAppListPresenter::ToggleVoiceInteractionSession() {}
 
 void ExampleAppListPresenter::UpdateYPositionAndOpacity(
     int new_y_position,
-    float background_opacity,
-    bool is_end_gesture) {}
+    float background_opacity) {}
+
+void ExampleAppListPresenter::EndDragFromShelf(
+    app_list::mojom::AppListState app_list_state) {}
+
+void ExampleAppListPresenter::ProcessMouseWheelOffset(int offset) {}
 
 }  // namespace shell
 }  // namespace ash

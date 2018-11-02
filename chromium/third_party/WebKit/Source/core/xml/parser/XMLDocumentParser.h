@@ -49,15 +49,16 @@ class Document;
 class DocumentFragment;
 class Element;
 class LocalFrameView;
+class ScriptElementBase;
 class Text;
 
 class XMLParserContext : public RefCounted<XMLParserContext> {
  public:
-  static PassRefPtr<XMLParserContext> CreateMemoryParser(xmlSAXHandlerPtr,
-                                                         void* user_data,
-                                                         const CString& chunk);
-  static PassRefPtr<XMLParserContext> CreateStringParser(xmlSAXHandlerPtr,
-                                                         void* user_data);
+  static RefPtr<XMLParserContext> CreateMemoryParser(xmlSAXHandlerPtr,
+                                                     void* user_data,
+                                                     const CString& chunk);
+  static RefPtr<XMLParserContext> CreateStringParser(xmlSAXHandlerPtr,
+                                                     void* user_data);
   ~XMLParserContext();
   xmlParserCtxtPtr Context() const { return context_; }
 
@@ -209,7 +210,7 @@ class XMLDocumentParser final : public ScriptableDocumentParser,
   XMLErrors xml_errors_;
 
   Member<PendingScript> pending_script_;
-  Member<Element> script_element_;
+  Member<ScriptElementBase> script_element_;
   TextPosition script_start_position_;
 
   bool parsing_fragment_;

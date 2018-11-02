@@ -18,7 +18,6 @@
 #include "cc/raster/raster_source.h"
 #include "cc/raster/synchronous_task_graph_runner.h"
 #include "cc/resources/resource_pool.h"
-#include "cc/test/begin_frame_args_test.h"
 #include "cc/test/fake_impl_task_runner_provider.h"
 #include "cc/test/fake_layer_tree_frame_sink.h"
 #include "cc/test/fake_layer_tree_frame_sink_client.h"
@@ -30,6 +29,7 @@
 #include "cc/test/fake_tile_manager.h"
 #include "cc/test/fake_tile_task_manager.h"
 #include "cc/test/skia_common.h"
+#include "cc/test/stub_paint_image_generator.h"
 #include "cc/test/test_layer_tree_host_base.h"
 #include "cc/test/test_task_graph_runner.h"
 #include "cc/test/test_tile_priorities.h"
@@ -39,6 +39,7 @@
 #include "cc/tiles/tile_priority.h"
 #include "cc/tiles/tiling_set_raster_queue_all.h"
 #include "cc/trees/layer_tree_impl.h"
+#include "components/viz/test/begin_frame_args_test.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkImageGenerator.h"
@@ -1543,7 +1544,7 @@ class TileManagerTest : public TestLayerTreeHostBase {
       const LayerTreeSettings& settings,
       TaskRunnerProvider* task_runner_provider,
       TaskGraphRunner* task_graph_runner) override {
-    return base::MakeUnique<testing::NiceMock<MockLayerTreeHostImpl>>(
+    return std::make_unique<testing::NiceMock<MockLayerTreeHostImpl>>(
         settings, task_runner_provider, task_graph_runner);
   }
 
@@ -1718,16 +1719,16 @@ TEST_F(TileManagerTest, LowResHasNoImage) {
         .WillOnce(testing::Invoke([&run_loop]() { run_loop.Quit(); }));
     tile_manager->PrepareTiles(host_impl()->global_tile_state());
     run_loop.Run();
-    tile_manager->Flush();
+    tile_manager->CheckForCompletedTasks();
 
     Tile* tile = tiling->TileAt(0, 0);
     // The tile in the tiling was rastered.
     EXPECT_EQ(TileDrawInfo::RESOURCE_MODE, tile->draw_info().mode());
     EXPECT_TRUE(tile->draw_info().IsReadyToDraw());
 
-    ResourceProvider::ScopedReadLockSoftware lock(
+    ResourceProvider::ScopedWriteLockSoftware lock(
         host_impl()->resource_provider(), tile->draw_info().resource_id());
-    const SkBitmap* bitmap = lock.sk_bitmap();
+    const SkBitmap bitmap = lock.sk_bitmap();
     for (int x = 0; x < size.width(); ++x) {
       for (int y = 0; y < size.height(); ++y) {
         SCOPED_TRACE(y);
@@ -1735,12 +1736,12 @@ TEST_F(TileManagerTest, LowResHasNoImage) {
         if (resolutions[i] == LOW_RESOLUTION) {
           // Since it's low res, the bitmap was not drawn, and the background
           // (green) is visible instead.
-          ASSERT_EQ(SK_ColorGREEN, bitmap->getColor(x, y));
+          ASSERT_EQ(SK_ColorGREEN, bitmap.getColor(x, y));
         } else {
           EXPECT_EQ(HIGH_RESOLUTION, resolutions[i]);
           // Since it's high res, the bitmap (blue) was drawn, and the
           // background is not visible.
-          ASSERT_EQ(SK_ColorBLUE, bitmap->getColor(x, y));
+          ASSERT_EQ(SK_ColorBLUE, bitmap.getColor(x, y));
         }
       }
     }
@@ -1750,7 +1751,7 @@ TEST_F(TileManagerTest, LowResHasNoImage) {
 class ActivationTasksDoNotBlockReadyToDrawTest : public TileManagerTest {
  protected:
   std::unique_ptr<TaskGraphRunner> CreateTaskGraphRunner() override {
-    return base::MakeUnique<SynchronousTaskGraphRunner>();
+    return std::make_unique<SynchronousTaskGraphRunner>();
   }
 
   std::unique_ptr<LayerTreeFrameSink> CreateLayerTreeFrameSink() override {
@@ -1827,7 +1828,7 @@ TEST_F(PartialRasterTileManagerTest, CancelledTasksHaveNoContentId) {
   // scheduled work is immediately cancelled.
 
   host_impl()->tile_manager()->SetTileTaskManagerForTesting(
-      base::MakeUnique<FakeTileTaskManagerImpl>());
+      std::make_unique<FakeTileTaskManagerImpl>());
 
   // Pick arbitrary IDs - they don't really matter as long as they're constant.
   const int kLayerId = 7;
@@ -1914,7 +1915,7 @@ void RunPartialRasterCheck(std::unique_ptr<LayerTreeHostImpl> host_impl,
   // Create a VerifyResourceContentIdTileTaskManager to ensure that the
   // raster task we see is created with |kExpectedId|.
   host_impl->tile_manager()->SetTileTaskManagerForTesting(
-      base::MakeUnique<FakeTileTaskManagerImpl>());
+      std::make_unique<FakeTileTaskManagerImpl>());
 
   VerifyResourceContentIdRasterBufferProvider raster_buffer_provider(
       kExpectedId);
@@ -1980,7 +1981,7 @@ TEST_F(TileManagerTest, PartialRasterSuccessfullyDisabled) {
 class MockReadyToDrawRasterBufferProviderImpl
     : public FakeRasterBufferProviderImpl {
  public:
-  MOCK_CONST_METHOD1(IsResourceReadyToDraw, bool(ResourceId resource_id));
+  MOCK_CONST_METHOD1(IsResourceReadyToDraw, bool(viz::ResourceId resource_id));
   MOCK_CONST_METHOD3(
       SetReadyToDrawCallback,
       uint64_t(const ResourceProvider::ResourceIdArray& resource_ids,
@@ -1991,7 +1992,7 @@ class MockReadyToDrawRasterBufferProviderImpl
       const Resource* resource,
       uint64_t resource_content_id,
       uint64_t previous_content_id) override {
-    return base::MakeUnique<FakeRasterBuffer>();
+    return std::make_unique<FakeRasterBuffer>();
   }
 
  private:
@@ -2306,15 +2307,14 @@ TEST_F(TileManagerReadyToDrawTest, ReadyToDrawRespectsRequirementChange) {
 
 class CheckerImagingTileManagerTest : public TestLayerTreeHostBase {
  public:
-  class MockImageGenerator : public SkImageGenerator {
+  class MockImageGenerator : public StubPaintImageGenerator {
    public:
     explicit MockImageGenerator(const gfx::Size& size)
-        : SkImageGenerator(
+        : StubPaintImageGenerator(
               SkImageInfo::MakeN32Premul(size.width(), size.height())) {}
 
-   protected:
-    MOCK_METHOD4(onGetPixels,
-                 bool(const SkImageInfo&, void*, size_t, const Options&));
+    MOCK_METHOD5(GetPixels,
+                 bool(const SkImageInfo&, void*, size_t, size_t, uint32_t));
   };
 
   void TearDown() override {
@@ -2325,9 +2325,11 @@ class CheckerImagingTileManagerTest : public TestLayerTreeHostBase {
 
   LayerTreeSettings CreateSettings() override {
     LayerTreeSettings settings;
+    settings.commit_to_active_tree = false;
     settings.enable_checker_imaging = true;
     settings.resource_settings.buffer_to_texture_target_map =
         viz::DefaultBufferToTextureTargetMapForTesting();
+    settings.min_image_bytes_to_checker = 512 * 1024;
     return settings;
   }
 
@@ -2336,12 +2338,12 @@ class CheckerImagingTileManagerTest : public TestLayerTreeHostBase {
       TaskRunnerProvider* task_runner_provider,
       TaskGraphRunner* task_graph_runner) override {
     task_runner_ = make_scoped_refptr(new SynchronousSimpleTaskRunner);
-    return base::MakeUnique<FakeLayerTreeHostImpl>(
+    return std::make_unique<FakeLayerTreeHostImpl>(
         settings, task_runner_provider, task_graph_runner, task_runner_);
   }
 
   std::unique_ptr<TaskGraphRunner> CreateTaskGraphRunner() override {
-    return base::MakeUnique<SynchronousTaskGraphRunner>();
+    return std::make_unique<SynchronousTaskGraphRunner>();
   }
 
   void FlushDecodeTasks() {
@@ -2370,9 +2372,12 @@ TEST_F(CheckerImagingTileManagerTest,
       FakeRecordingSource::CreateFilledRecordingSource(layer_bounds);
   recording_source->set_fill_with_nonsolid_color(true);
 
-  sk_sp<SkImage> image = SkImage::MakeFromGenerator(
-      base::MakeUnique<testing::StrictMock<MockImageGenerator>>(
-          gfx::Size(512, 512)));
+  auto generator =
+      sk_make_sp<testing::StrictMock<MockImageGenerator>>(gfx::Size(512, 512));
+  PaintImage image = PaintImageBuilder()
+                         .set_id(PaintImage::GetNextId())
+                         .set_paint_image_generator(generator)
+                         .TakePaintImage();
   recording_source->add_draw_image(image, gfx::Point(0, 0));
 
   recording_source->Rerecord();
@@ -2380,7 +2385,7 @@ TEST_F(CheckerImagingTileManagerTest,
       recording_source->CreateRasterSource();
 
   std::unique_ptr<PictureLayerImpl> layer_impl = PictureLayerImpl::Create(
-      host_impl()->active_tree(), 1, Layer::LayerMaskType::NOT_MASK);
+      host_impl()->pending_tree(), 1, Layer::LayerMaskType::NOT_MASK);
   layer_impl->set_contributes_to_drawn_render_surface(true);
   PictureLayerTilingSet* tiling_set = layer_impl->picture_layer_tiling_set();
 
@@ -2393,6 +2398,7 @@ TEST_F(CheckerImagingTileManagerTest,
       gfx::Rect(layer_bounds),   // Skewport rect.
       gfx::Rect(layer_bounds),   // Soon rect.
       gfx::Rect(layer_bounds));  // Eventually rect.
+  tiling->set_can_require_tiles_for_activation(true);
 
   // PrepareTiles and synchronously run all tasks added to the TaskGraph. Since
   // we are using a strict mock for the SkImageGenerator, if the decode runs as
@@ -2412,12 +2418,12 @@ TEST_F(CheckerImagingTileManagerTest, BuildsImageDecodeQueueAsExpected) {
   recording_source->set_fill_with_nonsolid_color(true);
 
   int dimension = 450;
-  sk_sp<SkImage> image1 =
-      CreateDiscardableImage(gfx::Size(dimension, dimension));
-  sk_sp<SkImage> image2 =
-      CreateDiscardableImage(gfx::Size(dimension, dimension));
-  sk_sp<SkImage> image3 =
-      CreateDiscardableImage(gfx::Size(dimension, dimension));
+  PaintImage image1 =
+      CreateDiscardablePaintImage(gfx::Size(dimension, dimension));
+  PaintImage image2 =
+      CreateDiscardablePaintImage(gfx::Size(dimension, dimension));
+  PaintImage image3 =
+      CreateDiscardablePaintImage(gfx::Size(dimension, dimension));
   recording_source->add_draw_image(image1, gfx::Point(0, 0));
   recording_source->add_draw_image(image2, gfx::Point(600, 0));
   recording_source->add_draw_image(image3, gfx::Point(0, 600));
@@ -2574,7 +2580,7 @@ TEST_F(CheckerImagingTileManagerTest,
   std::unique_ptr<FakeRecordingSource> recording_source =
       FakeRecordingSource::CreateFilledRecordingSource(layer_bounds);
   recording_source->set_fill_with_nonsolid_color(true);
-  sk_sp<SkImage> image = CreateDiscardableImage(gfx::Size(512, 512));
+  PaintImage image = CreateDiscardablePaintImage(gfx::Size(512, 512));
   recording_source->add_draw_image(image, gfx::Point(0, 0));
   recording_source->Rerecord();
   scoped_refptr<RasterSource> raster_source =
@@ -2613,7 +2619,7 @@ TEST_F(CheckerImagingTileManagerTest,
   std::unique_ptr<FakeRecordingSource> recording_source =
       FakeRecordingSource::CreateFilledRecordingSource(layer_bounds);
   recording_source->set_fill_with_nonsolid_color(true);
-  sk_sp<SkImage> image = CreateDiscardableImage(gfx::Size(512, 512));
+  PaintImage image = CreateDiscardablePaintImage(gfx::Size(512, 512));
   recording_source->add_draw_image(image, gfx::Point(0, 0));
   recording_source->Rerecord();
   scoped_refptr<RasterSource> raster_source =
@@ -2697,10 +2703,10 @@ TEST_F(CheckerImagingTileManagerMemoryTest, AddsAllNowTilesToImageDecodeQueue) {
   recording_source->set_fill_with_nonsolid_color(true);
 
   int dimension = 450;
-  sk_sp<SkImage> image1 =
-      CreateDiscardableImage(gfx::Size(dimension, dimension));
-  sk_sp<SkImage> image2 =
-      CreateDiscardableImage(gfx::Size(dimension, dimension));
+  PaintImage image1 =
+      CreateDiscardablePaintImage(gfx::Size(dimension, dimension));
+  PaintImage image2 =
+      CreateDiscardablePaintImage(gfx::Size(dimension, dimension));
   recording_source->add_draw_image(image1, gfx::Point(0, 515));
   recording_source->add_draw_image(image2, gfx::Point(515, 515));
 

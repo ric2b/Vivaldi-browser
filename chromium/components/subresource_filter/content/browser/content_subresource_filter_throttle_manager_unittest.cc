@@ -16,6 +16,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/test/histogram_tester.h"
 #include "base/test/test_simple_task_runner.h"
+#include "base/time/time.h"
 #include "components/subresource_filter/content/browser/async_document_subresource_filter.h"
 #include "components/subresource_filter/content/browser/subresource_filter_observer_manager.h"
 #include "components/subresource_filter/content/common/subresource_filter_messages.h"
@@ -278,6 +279,15 @@ class ContentSubresourceFilterThrottleManagerTest
   void OnFirstSubresourceLoadDisallowed() override {
     ++disallowed_notification_count_;
   }
+  bool AllowRulesetRules() override { return allow_ruleset_rules_; }
+
+  ContentSubresourceFilterThrottleManager* throttle_manager() {
+    return throttle_manager_.get();
+  }
+
+  void set_allow_ruleset_rules(bool allow_ruleset_rules) {
+    allow_ruleset_rules_ = allow_ruleset_rules;
+  }
 
  private:
   testing::TestRulesetCreator test_ruleset_creator_;
@@ -291,6 +301,8 @@ class ContentSubresourceFilterThrottleManagerTest
 
   // Incremented on every OnFirstSubresourceLoadDisallowed call.
   int disallowed_notification_count_ = 0;
+
+  bool allow_ruleset_rules_ = true;
 
   DISALLOW_COPY_AND_ASSIGN(ContentSubresourceFilterThrottleManagerTest);
 };
@@ -705,8 +717,41 @@ TEST_F(ContentSubresourceFilterThrottleManagerTest, LogActivation) {
   // Only those with page level activation do ruleset lookups.
   tester.ExpectTotalCount("SubresourceFilter.PageLoad.Activation.WallDuration",
                           2);
+  // The *.CPUDuration histograms are recorded only if base::ThreadTicks is
+  // supported.
   tester.ExpectTotalCount("SubresourceFilter.PageLoad.Activation.CPUDuration",
-                          2);
+                          base::ThreadTicks::IsSupported() ? 2 : 0);
+}
+
+// If ruleset rules are disabled, should never map the ruleset into memory.
+TEST_F(ContentSubresourceFilterThrottleManagerTest,
+       DisableRulesetRules_NoRuleset) {
+  set_allow_ruleset_rules(false);
+  NavigateAndCommitMainFrame(GURL(kTestURLWithActivation));
+  ExpectActivationSignalForFrame(main_rfh(), false /* expect_activation */);
+  EXPECT_FALSE(ManagerHasRulesetHandle());
+}
+
+TEST_F(ContentSubresourceFilterThrottleManagerTest,
+       DisableRulesAfterActivation_NoRuleset) {
+  NavigateAndCommitMainFrame(GURL(kTestURLWithActivation));
+  ExpectActivationSignalForFrame(main_rfh(), true /* expect_activation */);
+  EXPECT_TRUE(ManagerHasRulesetHandle());
+
+  // Navigate a subframe that is not filtered, but should still activate.
+  CreateSubframeWithTestNavigation(GURL("https://whitelist.com"), main_rfh());
+  SimulateStartAndExpectResult(content::NavigationThrottle::PROCEED);
+  content::RenderFrameHost* subframe1 =
+      SimulateCommitAndExpectResult(content::NavigationThrottle::PROCEED);
+  ExpectActivationSignalForFrame(subframe1, true /* expect_activation */);
+
+  // Simulate a commit of a page which should disallow ruleset rules. This
+  // should cause the subframe to detach.
+  set_allow_ruleset_rules(false);
+  content::RenderFrameHostTester::For(subframe1)->Detach();
+  NavigateAndCommitMainFrame(GURL(kTestURLWithActivation2));
+  ExpectActivationSignalForFrame(main_rfh(), false /* expect_activation */);
+  EXPECT_FALSE(ManagerHasRulesetHandle());
 }
 
 // TODO(csharrison): Make sure the following conditions are exercised in tests:

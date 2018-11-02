@@ -31,8 +31,6 @@ component("ime") {
     "chromeos/ime_candidate_window_handler_interface.h",
     "chromeos/ime_keyboard.cc",
     "chromeos/ime_keyboard.h",
-    "chromeos/ime_keyboard_x11.cc",
-    "chromeos/ime_keyboard_x11.h",
     "chromeos/ime_keymap.cc",
     "chromeos/ime_keymap.h",
     "chromeos/input_method_delegate.h",
@@ -54,11 +52,12 @@ component("ime") {
     "composition_text.h",
     "composition_text_util_pango.cc",
     "composition_text_util_pango.h",
-    "composition_underline.h",
     "ime_bridge.cc",
     "ime_bridge.h",
     "ime_engine_handler_interface.h",
     "ime_input_context_handler_interface.h",
+    "ime_text_span.cc",
+    "ime_text_span.h",
     "infolist_entry.cc",
     "infolist_entry.h",
     "input_method.h",
@@ -161,22 +160,14 @@ component("ime") {
   if (is_chromeos) {
     deps += [
       "//chromeos",
+      "//services/ui/public/cpp/input_devices",
       "//ui/chromeos/strings",
       "//ui/events:dom_keycode_converter",
     ]
-    if (use_ozone) {
-      deps += [ "//services/ui/public/cpp/input_devices" ]
-      sources += [
-        "chromeos/ime_keyboard_mus.cc",
-        "chromeos/ime_keyboard_mus.h",
-      ]
-    }
-    if (!use_x11) {
-      sources -= [
-        "chromeos/ime_keyboard_x11.cc",
-        "chromeos/ime_keyboard_x11.h",
-      ]
-    }
+    sources += [
+      "chromeos/ime_keyboard_mus.cc",
+      "chromeos/ime_keyboard_mus.h",
+    ]
   }
 
   if (use_pango) {
@@ -207,6 +198,13 @@ component("ime") {
     deps += [
       "//ui/events/ozone:events_ozone_layout",
       "//ui/ozone",
+    ]
+  }
+
+  if (is_fuchsia) {
+    sources -= [
+      "input_method_auralinux.cc",
+      "input_method_auralinux.h",
     ]
   }
 }

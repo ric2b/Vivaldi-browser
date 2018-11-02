@@ -9,6 +9,7 @@
 <translation id="1195412055398077112">nadmiarowość obrazu</translation>
 <translation id="1247372569136754018">Mikrofon (wewnętrzny)</translation>
 <translation id="1252999807265626933">Trwa ładowanie z: <ph name="POWER_SOURCE" /></translation>
+<translation id="1267032506238418139">Zmiana skrótu klawiszowego</translation>
 <translation id="1270290102613614947">Klawiatura ekranowa wyłączona</translation>
 <translation id="1272079795634619415">Zatrzymaj</translation>
 <translation id="1279938420744323401"><ph name="DISPLAY_NAME" /> (<ph name="ANNOTATION" />)</translation>
@@ -22,7 +23,6 @@
 <translation id="15373452373711364">Duży kursor myszy</translation>
 <translation id="1550523713251050646">Kliknij, by wyświetlić więcej opcji</translation>
 <translation id="1621499497873603021">Czas pozostały do wyczerpania baterii: <ph name="TIME_LEFT" /></translation>
-<translation id="164969095109328410">Urządzenie z Chrome</translation>
 <translation id="1677472565718498478">Pozostało <ph name="TIME" /></translation>
 <translation id="1698760176351776263">Adres IPv6: <ph name="ADDRESS" /></translation>
 <translation id="1734367976349034509">Tym urządzeniem zarządza firma</translation>
@@ -92,6 +92,7 @@
 <translation id="315116470104423982">Komórkowa transmisja danych</translation>
 <translation id="3236488194889173876">Brak dostępnych sieci komórkowych</translation>
 <translation id="3294437725009624529">Gość</translation>
+<translation id="332587331255250389">Wymień baterię</translation>
 <translation id="3364721542077212959">Narzędzia rysika</translation>
 <translation id="3368922792935385530">Połączone</translation>
 <translation id="3371140690572404006">Urządzenie USB-C (przedni port na prawym boku)</translation>
@@ -110,6 +111,7 @@
 <translation id="3712407551474845318">Zrzut obszaru ekranu</translation>
 <translation id="371370241367527062">Przedni mikrofon</translation>
 <translation id="3742055079367172538">Wykonano zrzut ekranu</translation>
+<translation id="3771549900096082774">Tryb wysokiego kontrastu</translation>
 <translation id="3775358506042162758">W wielokrotnym logowaniu możesz mieć najwyżej trzy konta.</translation>
 <translation id="3783640748446814672">alt</translation>
 <translation id="3784455785234192852">Zablokuj</translation>
@@ -142,14 +144,12 @@
 <translation id="4729904664295161097">Asystent jest dostępny tylko na profilu głównym.</translation>
 <translation id="479989351350248267">search</translation>
 <translation id="4804818685124855865">Rozłącz</translation>
-<translation id="4821830640883629383">Naładuj lub wymień baterie.</translation>
 <translation id="4849058404725798627">Podświetlaj obiekt wybrany za pomocą klawiatury</translation>
 <translation id="4872237917498892622">Alt+Szukaj lub Shift</translation>
 <translation id="4895488851634969361">Bateria jest pełna.</translation>
 <translation id="4905614135390995787">Zmieniliśmy skrót, który włącza i wyłącza tryb wysokiego kontrastu. Użyj <ph name="NEW_SHORTCUT" /> zamiast <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="4918086044614829423">Akceptuj</translation>
 <translation id="4961318399572185831">Przesyłanie ekranu</translation>
-<translation id="5011233892417813670">Chromebook</translation>
 <translation id="5168181903108465623">Dostępne są urządzenia przesyłające</translation>
 <translation id="5170568018924773124">Pokaż w folderze</translation>
 <translation id="5207949376430453814">Podświetlaj kursor tekstu</translation>
@@ -175,7 +175,6 @@
 <translation id="5901316534475909376">Shift+Esc</translation>
 <translation id="5916664084637901428">Włączone</translation>
 <translation id="5927132638760172455">Przesyłam do nieznanego odbiornika</translation>
-<translation id="5932901536148835538">Chromebit</translation>
 <translation id="5947494881799873997">Przywróć</translation>
 <translation id="595202126637698455">Śledzenie wydajności jest włączone</translation>
 <translation id="5957083217255311415">Mobilna transmisja danych jest wyłączona.</translation>
@@ -218,7 +217,6 @@
 <translation id="683971173229319003">Szukaj+L</translation>
 <translation id="6857811139397017780">Aktywuj sieć <ph name="NETWORKSERVICE" /></translation>
 <translation id="6911468394164995108">Połącz z inną...</translation>
-<translation id="6915678159055240887">Chromebox</translation>
 <translation id="6981982820502123353">Ułatwienia dostępu</translation>
 <translation id="7029814467594812963">Zakończ sesję</translation>
 <translation id="7034339000180558234">Przesyłam kartę <ph name="TAB_NAME" /> do: <ph name="RECEIVER_NAME" /></translation>
@@ -226,7 +224,6 @@
 <translation id="7066646422045619941">Ta sieć została wyłączona przez administratora.</translation>
 <translation id="7067196344162293536">Obracanie automatyczne</translation>
 <translation id="7098389117866926363">Urządzenie USB-C (lewy port z tyłu)</translation>
-<translation id="714034171374937760">Chromebase</translation>
 <translation id="7165278925115064263">Alt + Shift + K</translation>
 <translation id="7168224885072002358">Powrót do wcześniejszej rozdzielczości za <ph name="TIMEOUT_SECONDS" /></translation>
 <translation id="7246339268451149667">Włączyć odblokowanie odciskiem palca?</translation>

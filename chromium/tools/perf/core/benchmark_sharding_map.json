@@ -17,7 +17,8 @@
     "build13-b1--device3": {
       "benchmarks": [
         "page_cycler_v2.intl_ja_zh",
-        "v8.runtimestats.browsing_mobile_classic"
+        "v8.runtimestats.browsing_mobile_classic",
+        "blink_perf.owp_storage"
       ]
     },
     "build13-b1--device4": {
@@ -48,7 +49,6 @@
       "benchmarks": [
         "blink_perf.shadow_dom",
         "dromaeo.domcorequery",
-        "memory.blink_memory_mobile",
         "page_cycler_v2.intl_ko_th_vi",
         "power.idle_platform",
         "smoothness.gpu_rasterization_and_decoding.image_decoding_cases",
@@ -73,6 +73,7 @@
     "build14-b1--device2": {
       "benchmarks": [
         "dummy_benchmark.noisy_benchmark_1",
+        "dummy_benchmark.histogram_benchmark_1",
         "jetstream",
         "page_cycler_v2.intl_hi_ru",
         "smoothness.tough_texture_upload_cases",
@@ -248,7 +249,8 @@
     "build73-b1--device3": {
       "benchmarks": [
         "page_cycler_v2.intl_ja_zh",
-        "v8.runtimestats.browsing_mobile_classic"
+        "v8.runtimestats.browsing_mobile_classic",
+        "blink_perf.owp_storage"
       ]
     },
     "build73-b1--device4": {
@@ -279,7 +281,6 @@
       "benchmarks": [
         "blink_perf.shadow_dom",
         "dromaeo.domcorequery",
-        "memory.blink_memory_mobile",
         "page_cycler_v2.intl_ko_th_vi",
         "power.idle_platform",
         "smoothness.gpu_rasterization_and_decoding.image_decoding_cases",
@@ -304,6 +305,7 @@
     "build74-b1--device2": {
       "benchmarks": [
         "dummy_benchmark.noisy_benchmark_1",
+        "dummy_benchmark.histogram_benchmark_1",
         "jetstream",
         "page_cycler_v2.intl_hi_ru",
         "smoothness.tough_texture_upload_cases",
@@ -477,7 +479,8 @@
     },
     "build164-b1--device3": {
       "benchmarks": [
-        "system_health.common_desktop"
+        "system_health.common_desktop",
+        "blink_perf.owp_storage"
       ]
     },
     "build164-b1--device4": {
@@ -505,7 +508,6 @@
         "battor.steady_state",
         "blink_perf.canvas",
         "blink_perf.paint",
-        "memory.blink_memory_mobile",
         "power.idle_platform",
         "smoothness.image_decoding_cases",
         "start_with_ext.warm.blank_page"
@@ -515,6 +517,7 @@
       "benchmarks": [
         "blink_perf.shadow_dom",
         "dummy_benchmark.noisy_benchmark_1",
+        "dummy_benchmark.histogram_benchmark_1",
         "media.tough_video_cases_tbmv2",
         "memory.long_running_idle_gmail_background_tbmv2",
         "smoothness.gpu_rasterization.tough_scrolling_cases",
@@ -685,7 +688,8 @@
     "build15-b1--device3": {
       "benchmarks": [
         "page_cycler_v2.intl_ja_zh",
-        "v8.runtimestats.browsing_mobile_classic"
+        "v8.runtimestats.browsing_mobile_classic",
+        "blink_perf.owp_storage"
       ]
     },
     "build15-b1--device4": {
@@ -716,7 +720,6 @@
       "benchmarks": [
         "blink_perf.shadow_dom",
         "dromaeo.domcorequery",
-        "memory.blink_memory_mobile",
         "page_cycler_v2.intl_ko_th_vi",
         "power.idle_platform",
         "smoothness.gpu_rasterization_and_decoding.image_decoding_cases",
@@ -741,6 +744,7 @@
     "build16-b1--device2": {
       "benchmarks": [
         "dummy_benchmark.noisy_benchmark_1",
+        "dummy_benchmark.histogram_benchmark_1",
         "jetstream",
         "page_cycler_v2.intl_hi_ru",
         "smoothness.tough_texture_upload_cases",
@@ -914,7 +918,8 @@
     },
     "build112-b1--device3": {
       "benchmarks": [
-        "system_health.common_desktop"
+        "system_health.common_desktop",
+        "blink_perf.owp_storage"
       ]
     },
     "build112-b1--device4": {
@@ -942,7 +947,6 @@
         "battor.steady_state",
         "blink_perf.canvas",
         "blink_perf.paint",
-        "memory.blink_memory_mobile",
         "power.idle_platform",
         "smoothness.image_decoding_cases",
         "start_with_ext.warm.blank_page"
@@ -952,6 +956,7 @@
       "benchmarks": [
         "blink_perf.shadow_dom",
         "dummy_benchmark.noisy_benchmark_1",
+        "dummy_benchmark.histogram_benchmark_1",
         "media.tough_video_cases_tbmv2",
         "memory.long_running_idle_gmail_background_tbmv2",
         "smoothness.gpu_rasterization.tough_scrolling_cases",
@@ -1122,6 +1127,7 @@
     "build10-b1--device2": {
       "benchmarks": [
         "dummy_benchmark.noisy_benchmark_1",
+        "dummy_benchmark.histogram_benchmark_1",
         "jetstream",
         "page_cycler_v2.intl_hi_ru",
         "smoothness.tough_scrolling_cases",
@@ -1295,7 +1301,8 @@
     "build9-b1--device3": {
       "benchmarks": [
         "page_cycler_v2.intl_ja_zh",
-        "v8.runtimestats.browsing_mobile_classic"
+        "v8.runtimestats.browsing_mobile_classic",
+        "blink_perf.owp_storage"
       ]
     },
     "build9-b1--device4": {
@@ -1326,7 +1333,6 @@
       "benchmarks": [
         "blink_perf.shadow_dom",
         "dromaeo.domcorequery",
-        "memory.blink_memory_mobile",
         "page_cycler_v2.intl_ko_th_vi",
         "power.idle_platform",
         "smoothness.gpu_rasterization_and_decoding.image_decoding_cases",
@@ -1353,7 +1359,8 @@
     "build17-b1--device3": {
       "benchmarks": [
         "page_cycler_v2.intl_ja_zh",
-        "v8.runtimestats.browsing_mobile_classic"
+        "v8.runtimestats.browsing_mobile_classic",
+        "blink_perf.owp_storage"
       ]
     },
     "build17-b1--device4": {
@@ -1382,7 +1389,6 @@
     "build17-b1--device7": {
       "benchmarks": [
         "kraken",
-        "memory.blink_memory_mobile",
         "page_cycler_v2.intl_ko_th_vi",
         "power.idle_platform",
         "start_with_ext.warm.blank_page",
@@ -1415,6 +1421,7 @@
     "build18-b1--device3": {
       "benchmarks": [
         "dummy_benchmark.noisy_benchmark_1",
+        "dummy_benchmark.histogram_benchmark_1",
         "memory.top_10_mobile",
         "smoothness.gpu_rasterization.tough_path_rendering_cases",
         "smoothness.pathological_mobile_sites",
@@ -1584,7 +1591,8 @@
     "build245-m4--device3": {
       "benchmarks": [
         "page_cycler_v2.intl_ja_zh",
-        "v8.runtimestats.browsing_mobile_classic"
+        "v8.runtimestats.browsing_mobile_classic",
+        "blink_perf.owp_storage"
       ]
     },
     "build245-m4--device4": {
@@ -1615,7 +1623,6 @@
       "benchmarks": [
         "blink_perf.shadow_dom",
         "dromaeo.domcorequery",
-        "memory.blink_memory_mobile",
         "page_cycler_v2.intl_ko_th_vi",
         "power.idle_platform",
         "smoothness.gpu_rasterization_and_decoding.image_decoding_cases",
@@ -1640,6 +1647,7 @@
     "build248-m4--device2": {
       "benchmarks": [
         "dummy_benchmark.noisy_benchmark_1",
+        "dummy_benchmark.histogram_benchmark_1",
         "jetstream",
         "page_cycler_v2.intl_hi_ru",
         "smoothness.tough_texture_upload_cases",
@@ -1825,7 +1833,9 @@
         "blink_perf.bindings",
         "blink_perf.blink_gc",
         "blink_perf.canvas",
+        "blink_perf.owp_storage",
         "dummy_benchmark.noisy_benchmark_1",
+        "dummy_benchmark.histogram_benchmark_1",
         "loading.desktop",
         "octane",
         "oortonline_tbmv2",
@@ -1936,7 +1946,6 @@
         "loading.mobile",
         "media.mse_cases",
         "media.tough_video_cases_tbmv2",
-        "memory.blink_memory_mobile",
         "memory.long_running_idle_gmail_tbmv2",
         "memory.top_10_mobile_stress",
         "page_cycler_v2_site_isolation.basic_oopif",
@@ -1995,7 +2004,9 @@
         "blink_perf.bindings",
         "blink_perf.blink_gc",
         "blink_perf.canvas",
+        "blink_perf.owp_storage",
         "dummy_benchmark.noisy_benchmark_1",
+        "dummy_benchmark.histogram_benchmark_1",
         "loading.desktop",
         "octane",
         "oortonline_tbmv2",
@@ -2103,7 +2114,6 @@
         "loading.mobile",
         "media.mse_cases",
         "media.tough_video_cases_tbmv2",
-        "memory.blink_memory_mobile",
         "memory.long_running_idle_gmail_tbmv2",
         "memory.top_10_mobile_stress",
         "page_cycler_v2_site_isolation.basic_oopif",
@@ -2162,7 +2172,9 @@
         "blink_perf.bindings",
         "blink_perf.blink_gc",
         "blink_perf.canvas",
+        "blink_perf.owp_storage",
         "dummy_benchmark.noisy_benchmark_1",
+        "dummy_benchmark.histogram_benchmark_1",
         "loading.desktop",
         "octane",
         "oortonline_tbmv2",
@@ -2270,7 +2282,6 @@
         "loading.mobile",
         "media.mse_cases",
         "media.tough_video_cases_tbmv2",
-        "memory.blink_memory_mobile",
         "memory.long_running_idle_gmail_tbmv2",
         "memory.top_10_mobile_stress",
         "page_cycler_v2_site_isolation.basic_oopif",
@@ -2328,7 +2339,9 @@
         "blink_perf.bindings",
         "blink_perf.blink_gc",
         "blink_perf.canvas",
+        "blink_perf.owp_storage",
         "dummy_benchmark.noisy_benchmark_1",
+        "dummy_benchmark.histogram_benchmark_1",
         "loading.desktop",
         "octane",
         "oortonline_tbmv2",
@@ -2437,7 +2450,6 @@
         "loading.mobile",
         "media.mse_cases",
         "media.tough_video_cases_tbmv2",
-        "memory.blink_memory_mobile",
         "memory.long_running_idle_gmail_tbmv2",
         "memory.top_10_mobile_stress",
         "page_cycler_v2_site_isolation.basic_oopif",
@@ -2496,7 +2508,9 @@
         "blink_perf.bindings",
         "blink_perf.blink_gc",
         "blink_perf.canvas",
+        "blink_perf.owp_storage",
         "dummy_benchmark.noisy_benchmark_1",
+        "dummy_benchmark.histogram_benchmark_1",
         "loading.desktop",
         "octane",
         "oortonline_tbmv2",
@@ -2604,7 +2618,6 @@
         "loading.mobile",
         "media.mse_cases",
         "media.tough_video_cases_tbmv2",
-        "memory.blink_memory_mobile",
         "memory.long_running_idle_gmail_tbmv2",
         "memory.top_10_mobile_stress",
         "page_cycler_v2_site_isolation.basic_oopif",
@@ -2663,7 +2676,9 @@
         "blink_perf.bindings",
         "blink_perf.blink_gc",
         "blink_perf.canvas",
+        "blink_perf.owp_storage",
         "dummy_benchmark.noisy_benchmark_1",
+        "dummy_benchmark.histogram_benchmark_1",
         "loading.desktop",
         "octane",
         "oortonline_tbmv2",
@@ -2771,7 +2786,6 @@
         "loading.mobile",
         "media.mse_cases",
         "media.tough_video_cases_tbmv2",
-        "memory.blink_memory_mobile",
         "memory.long_running_idle_gmail_tbmv2",
         "memory.top_10_mobile_stress",
         "page_cycler_v2_site_isolation.basic_oopif",
@@ -2810,7 +2824,6 @@
         "loading.mobile",
         "media.mse_cases",
         "media.tough_video_cases_tbmv2",
-        "memory.blink_memory_mobile",
         "memory.long_running_idle_gmail_tbmv2",
         "memory.top_10_mobile_stress",
         "page_cycler_v2_site_isolation.basic_oopif",
@@ -2867,7 +2880,9 @@
         "blink_perf.bindings",
         "blink_perf.blink_gc",
         "blink_perf.canvas",
+        "blink_perf.owp_storage",
         "dummy_benchmark.noisy_benchmark_1",
+        "dummy_benchmark.histogram_benchmark_1",
         "loading.desktop",
         "octane",
         "oortonline_tbmv2",
@@ -2978,7 +2993,6 @@
     "build137-b1": {
       "benchmarks": [
         "loading.desktop",
-        "memory.blink_memory_mobile",
         "smoothness.gpu_rasterization.polymer",
         "v8.runtimestats.browsing_mobile_classic"
       ]
@@ -2994,6 +3008,7 @@
     },
     "build139-b1": {
       "benchmarks": [
+        "blink_perf.owp_storage",
         "page_cycler_v2.typical_25",
         "speedometer-turbo",
         "system_health.common_mobile",
@@ -3085,6 +3100,7 @@
         "battor.steady_state",
         "blink_perf.paint",
         "dummy_benchmark.noisy_benchmark_1",
+        "dummy_benchmark.histogram_benchmark_1",
         "oortonline_tbmv2",
         "rasterize_and_record_micro.top_25",
         "smoothness.tough_webgl_cases",
@@ -3232,7 +3248,9 @@
         "blink_perf.bindings",
         "blink_perf.blink_gc",
         "blink_perf.canvas",
+        "blink_perf.owp_storage",
         "dummy_benchmark.noisy_benchmark_1",
+        "dummy_benchmark.histogram_benchmark_1",
         "loading.desktop",
         "octane",
         "oortonline_tbmv2",
@@ -3340,7 +3358,6 @@
         "loading.mobile",
         "media.mse_cases",
         "media.tough_video_cases_tbmv2",
-        "memory.blink_memory_mobile",
         "memory.long_running_idle_gmail_tbmv2",
         "memory.top_10_mobile_stress",
         "page_cycler_v2_site_isolation.basic_oopif",
@@ -3380,7 +3397,6 @@
     "build186-b4": {
       "benchmarks": [
         "loading.desktop",
-        "memory.blink_memory_mobile",
         "smoothness.gpu_rasterization.polymer",
         "v8.runtimestats.browsing_mobile_classic"
       ]
@@ -3396,6 +3412,7 @@
     },
     "build203-b4": {
       "benchmarks": [
+        "blink_perf.owp_storage",
         "page_cycler_v2.typical_25",
         "speedometer-turbo",
         "system_health.common_mobile",
@@ -3487,6 +3504,7 @@
         "battor.steady_state",
         "blink_perf.paint",
         "dummy_benchmark.noisy_benchmark_1",
+        "dummy_benchmark.histogram_benchmark_1",
         "oortonline_tbmv2",
         "rasterize_and_record_micro.top_25",
         "smoothness.tough_webgl_cases",
@@ -3634,7 +3652,9 @@
         "blink_perf.bindings",
         "blink_perf.blink_gc",
         "blink_perf.canvas",
+        "blink_perf.owp_storage",
         "dummy_benchmark.noisy_benchmark_1",
+        "dummy_benchmark.histogram_benchmark_1",
         "loading.desktop",
         "octane",
         "oortonline_tbmv2",
@@ -3743,7 +3763,6 @@
         "loading.mobile",
         "media.mse_cases",
         "media.tough_video_cases_tbmv2",
-        "memory.blink_memory_mobile",
         "memory.long_running_idle_gmail_tbmv2",
         "memory.top_10_mobile_stress",
         "page_cycler_v2_site_isolation.basic_oopif",
@@ -3801,7 +3820,9 @@
         "blink_perf.bindings",
         "blink_perf.blink_gc",
         "blink_perf.canvas",
+        "blink_perf.owp_storage",
         "dummy_benchmark.noisy_benchmark_1",
+        "dummy_benchmark.histogram_benchmark_1",
         "loading.desktop",
         "octane",
         "oortonline_tbmv2",
@@ -3909,7 +3930,6 @@
         "loading.mobile",
         "media.mse_cases",
         "media.tough_video_cases_tbmv2",
-        "memory.blink_memory_mobile",
         "memory.long_running_idle_gmail_tbmv2",
         "memory.top_10_mobile_stress",
         "page_cycler_v2_site_isolation.basic_oopif",
@@ -3968,7 +3988,9 @@
         "blink_perf.bindings",
         "blink_perf.blink_gc",
         "blink_perf.canvas",
+        "blink_perf.owp_storage",
         "dummy_benchmark.noisy_benchmark_1",
+        "dummy_benchmark.histogram_benchmark_1",
         "loading.desktop",
         "octane",
         "oortonline_tbmv2",
@@ -4076,7 +4098,6 @@
         "loading.mobile",
         "media.mse_cases",
         "media.tough_video_cases_tbmv2",
-        "memory.blink_memory_mobile",
         "memory.long_running_idle_gmail_tbmv2",
         "memory.top_10_mobile_stress",
         "page_cycler_v2_site_isolation.basic_oopif",
@@ -4135,7 +4156,9 @@
         "blink_perf.bindings",
         "blink_perf.blink_gc",
         "blink_perf.canvas",
+        "blink_perf.owp_storage",
         "dummy_benchmark.noisy_benchmark_1",
+        "dummy_benchmark.histogram_benchmark_1",
         "loading.desktop",
         "octane",
         "oortonline_tbmv2",
@@ -4244,7 +4267,6 @@
         "loading.mobile",
         "media.mse_cases",
         "media.tough_video_cases_tbmv2",
-        "memory.blink_memory_mobile",
         "memory.long_running_idle_gmail_tbmv2",
         "memory.top_10_mobile_stress",
         "page_cycler_v2_site_isolation.basic_oopif",
@@ -4302,7 +4324,9 @@
         "blink_perf.bindings",
         "blink_perf.blink_gc",
         "blink_perf.canvas",
+        "blink_perf.owp_storage",
         "dummy_benchmark.noisy_benchmark_1",
+        "dummy_benchmark.histogram_benchmark_1",
         "loading.desktop",
         "octane",
         "oortonline_tbmv2",
@@ -4410,7 +4434,6 @@
         "loading.mobile",
         "media.mse_cases",
         "media.tough_video_cases_tbmv2",
-        "memory.blink_memory_mobile",
         "memory.long_running_idle_gmail_tbmv2",
         "memory.top_10_mobile_stress",
         "page_cycler_v2_site_isolation.basic_oopif",
@@ -4469,7 +4492,9 @@
         "blink_perf.bindings",
         "blink_perf.blink_gc",
         "blink_perf.canvas",
+        "blink_perf.owp_storage",
         "dummy_benchmark.noisy_benchmark_1",
+        "dummy_benchmark.histogram_benchmark_1",
         "loading.desktop",
         "octane",
         "oortonline_tbmv2",
@@ -4577,7 +4602,6 @@
         "loading.mobile",
         "media.mse_cases",
         "media.tough_video_cases_tbmv2",
-        "memory.blink_memory_mobile",
         "memory.long_running_idle_gmail_tbmv2",
         "memory.top_10_mobile_stress",
         "page_cycler_v2_site_isolation.basic_oopif",
@@ -4636,7 +4660,9 @@
         "blink_perf.bindings",
         "blink_perf.blink_gc",
         "blink_perf.canvas",
+        "blink_perf.owp_storage",
         "dummy_benchmark.noisy_benchmark_1",
+        "dummy_benchmark.histogram_benchmark_1",
         "loading.desktop",
         "octane",
         "oortonline_tbmv2",
@@ -4745,7 +4771,6 @@
         "loading.mobile",
         "media.mse_cases",
         "media.tough_video_cases_tbmv2",
-        "memory.blink_memory_mobile",
         "memory.long_running_idle_gmail_tbmv2",
         "memory.top_10_mobile_stress",
         "page_cycler_v2_site_isolation.basic_oopif",
@@ -4781,6 +4806,7 @@
     "blink_perf.dom",
     "blink_perf.events",
     "blink_perf.layout",
+    "blink_perf.owp_storage",
     "blink_perf.paint",
     "blink_perf.parser",
     "blink_perf.shadow_dom",
@@ -4790,6 +4816,7 @@
     "dromaeo.domcoremodify",
     "dromaeo.domcorequery",
     "dromaeo.domcoretraverse",
+    "dummy_benchmark.histogram_benchmark_1",
     "dummy_benchmark.noisy_benchmark_1",
     "dummy_benchmark.stable_benchmark_1",
     "image_decoding.image_decoding_measurement",
@@ -4803,7 +4830,6 @@
     "media.mse_cases",
     "media.tough_video_cases",
     "media.tough_video_cases_tbmv2",
-    "memory.blink_memory_mobile",
     "memory.desktop",
     "memory.long_running_idle_gmail_background_tbmv2",
     "memory.long_running_idle_gmail_tbmv2",

@@ -14,11 +14,19 @@
 @property(nonatomic, assign, getter=isOmniboxFocused, readonly)
     BOOL omniboxFocused;
 
-// Updates the iPhone fakebox's frame based on the current scroll view |offset|.
-- (void)updateSearchFieldForOffset:(CGFloat)offset;
+// Updates the iPhone fakebox's frame based on the current scroll view |offset|
+// and |width|. |width| can be 0 to use the current view width.
+- (void)updateFakeOmniboxForOffset:(CGFloat)offset width:(CGFloat)width;
+
+// Updates the fakeomnibox's width in order to be adapted to the new |width|,
+// without taking the y-position into account.
+- (void)updateFakeOmniboxForWidth:(CGFloat)width;
 
 // Unfocuses the omnibox.
 - (void)unfocusOmnibox;
+
+// Calls layoutIfNeeded on the header.
+- (void)layoutHeader;
 
 @end
 

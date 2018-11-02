@@ -17,6 +17,7 @@
 
 namespace ui {
 struct TouchscreenDevice;
+struct TouchDeviceTransform;
 }
 
 namespace display {
@@ -25,8 +26,6 @@ class DisplayConfigurator;
 class DisplayManager;
 class ManagedDisplayInfo;
 class TouchTransformSetter;
-
-struct TouchDeviceTransform;
 
 namespace test {
 class TouchTransformControllerTest;
@@ -59,7 +58,7 @@ class DISPLAY_MANAGER_EXPORT TouchTransformController {
     ~UpdateData();
 
     std::map<int32_t, double> device_to_scale;
-    std::vector<TouchDeviceTransform> touch_device_transforms;
+    std::vector<ui::TouchDeviceTransform> touch_device_transforms;
   };
 
   void UpdateTouchTransforms(UpdateData* data) const;
@@ -69,14 +68,12 @@ class DISPLAY_MANAGER_EXPORT TouchTransformController {
   // The transform is also responsible for properly scaling the display if the
   // display supports panel fitting.
   //
-  // On X11 events are reported in framebuffer coordinate space, so the
-  // |framebuffer_size| is used for scaling.
   // On Ozone events are reported in the touchscreen's resolution, so
   // |touch_display| is used to determine the size and scale the event.
-  gfx::Transform GetTouchTransform(const ManagedDisplayInfo& display,
-                                   const ManagedDisplayInfo& touch_display,
-                                   const ui::TouchscreenDevice& touchscreen,
-                                   const gfx::Size& framebuffer_size) const;
+  gfx::Transform GetTouchTransform(
+      const ManagedDisplayInfo& display,
+      const ManagedDisplayInfo& touch_display,
+      const ui::TouchscreenDevice& touchscreen) const;
 
   // Returns the scaling factor for the touch radius such that it scales the
   // radius from |touch_device|'s coordinate system to the |touch_display|'s

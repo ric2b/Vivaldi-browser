@@ -8,11 +8,11 @@
 #include "core/frame/RemoteFrameClient.h"
 
 namespace blink {
-class WebRemoteFrameBase;
+class WebRemoteFrameImpl;
 
 class RemoteFrameClientImpl final : public RemoteFrameClient {
  public:
-  static RemoteFrameClientImpl* Create(WebRemoteFrameBase*);
+  static RemoteFrameClientImpl* Create(WebRemoteFrameImpl*);
 
   DECLARE_VIRTUAL_TRACE();
 
@@ -34,7 +34,7 @@ class RemoteFrameClientImpl final : public RemoteFrameClient {
   void Reload(FrameLoadType, ClientRedirectPolicy) override;
   unsigned BackForwardLength() override;
   void ForwardPostMessage(MessageEvent*,
-                          PassRefPtr<SecurityOrigin> target,
+                          RefPtr<SecurityOrigin> target,
                           LocalFrame* source) const override;
   void FrameRectsChanged(const IntRect& frame_rect) override;
   void UpdateRemoteViewportIntersection(const IntRect&) override;
@@ -42,12 +42,12 @@ class RemoteFrameClientImpl final : public RemoteFrameClient {
   void VisibilityChanged(bool visible) override;
   void SetIsInert(bool) override;
 
-  WebRemoteFrameBase* GetWebFrame() const { return web_frame_; }
+  WebRemoteFrameImpl* GetWebFrame() const { return web_frame_; }
 
  private:
-  explicit RemoteFrameClientImpl(WebRemoteFrameBase*);
+  explicit RemoteFrameClientImpl(WebRemoteFrameImpl*);
 
-  Member<WebRemoteFrameBase> web_frame_;
+  Member<WebRemoteFrameImpl> web_frame_;
 };
 
 }  // namespace blink

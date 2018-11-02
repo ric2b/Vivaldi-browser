@@ -7,7 +7,7 @@
 
 #import "ios/chrome/browser/ui/ntp/new_tab_page_panel_protocol.h"
 
-#import "ios/chrome/browser/ui/ntp/recent_tabs/recent_tabs_panel_controller.h"
+#import "ios/chrome/browser/ui/ntp/recent_tabs/recent_tabs_table_coordinator.h"
 #import "ios/chrome/browser/ui/ntp/recent_tabs/sessions_sync_user_state.h"
 
 namespace sessions {
@@ -17,6 +17,9 @@ class TabRestoreService;
 namespace ios {
 class ChromeBrowserState;
 }
+
+@protocol ApplicationCommands;
+@protocol RecentTabsHandsetViewControllerCommand;
 
 @protocol RecentTabsTableViewControllerDelegate<NSObject>
 // Tells the delegate when the table view content scrolled or changed size.
@@ -44,12 +47,15 @@ class ChromeBrowserState;
     : UITableViewController<UIGestureRecognizerDelegate>
 
 @property(nonatomic, weak) id<RecentTabsTableViewControllerDelegate> delegate;
+@property(nonatomic, weak) id<RecentTabsHandsetViewControllerCommand>
+    handsetCommandHandler;
 
 // Designated initializer. The controller opens link with |loader|.
 // |browserState|
 // and |loader| must not be nil.
 - (instancetype)initWithBrowserState:(ios::ChromeBrowserState*)browserState
-                              loader:(id<UrlLoader>)loader;
+                              loader:(id<UrlLoader>)loader
+                          dispatcher:(id<ApplicationCommands>)dispatcher;
 
 // Refreshes the table view to match the current sync state.
 - (void)refreshUserState:(SessionsSyncUserState)state;

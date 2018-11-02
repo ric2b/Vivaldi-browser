@@ -26,8 +26,7 @@ namespace viz {
 class Display;
 
 // In-process implementation of DisplayProvider.
-class VIZ_SERVICE_EXPORT GpuDisplayProvider
-    : public NON_EXPORTED_BASE(DisplayProvider) {
+class VIZ_SERVICE_EXPORT GpuDisplayProvider : public DisplayProvider {
  public:
   GpuDisplayProvider(
       scoped_refptr<gpu::InProcessCommandBuffer::Service> gpu_service,
@@ -38,7 +37,8 @@ class VIZ_SERVICE_EXPORT GpuDisplayProvider
   std::unique_ptr<Display> CreateDisplay(
       const FrameSinkId& frame_sink_id,
       gpu::SurfaceHandle surface_handle,
-      std::unique_ptr<cc::BeginFrameSource>* begin_frame_source) override;
+      const RendererSettings& renderer_settings,
+      std::unique_ptr<BeginFrameSource>* begin_frame_source) override;
 
  private:
   scoped_refptr<gpu::InProcessCommandBuffer::Service> gpu_service_;

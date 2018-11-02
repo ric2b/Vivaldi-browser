@@ -59,6 +59,7 @@ class ZoomAPI : public BrowserContextKeyedAPI, public EventRouter::Observer {
 
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "ZoomAPI"; }
+  static const bool kServiceRedirectedInIncognito = true;
 
   // Created lazily upon OnListenerAdded.
   std::unique_ptr<ZoomEventRouter> zoom_event_router_;

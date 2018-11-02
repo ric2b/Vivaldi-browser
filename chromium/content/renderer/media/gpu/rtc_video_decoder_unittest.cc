@@ -13,7 +13,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/renderer/media/gpu/rtc_video_decoder.h"
 #include "media/base/gmock_callback_support.h"
-#include "media/renderers/mock_gpu_video_accelerator_factories.h"
+#include "media/video/mock_gpu_video_accelerator_factories.h"
 #include "media/video/mock_video_decode_accelerator.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -120,24 +120,22 @@ class RTCVideoDecoderTest
   void NotifyResetDone() {
     DVLOG(2) << "NotifyResetDone";
     vda_task_runner_->PostTask(
-        FROM_HERE,
-        base::Bind(&RTCVideoDecoder::NotifyResetDone,
-                   base::Unretained(rtc_decoder_.get())));
+        FROM_HERE, base::BindOnce(&RTCVideoDecoder::NotifyResetDone,
+                                  base::Unretained(rtc_decoder_.get())));
   }
 
   void NotifyError(media::VideoDecodeAccelerator::Error error) {
     DVLOG(2) << "NotifyError";
     vda_task_runner_->PostTask(
-        FROM_HERE,
-        base::Bind(&RTCVideoDecoder::NotifyError,
-                   base::Unretained(rtc_decoder_.get()), error));
+        FROM_HERE, base::BindOnce(&RTCVideoDecoder::NotifyError,
+                                  base::Unretained(rtc_decoder_.get()), error));
   }
 
   void RunUntilIdle() {
     DVLOG(2) << "RunUntilIdle";
     vda_task_runner_->PostTask(FROM_HERE,
-                               base::Bind(&base::WaitableEvent::Signal,
-                                          base::Unretained(&idle_waiter_)));
+                               base::BindOnce(&base::WaitableEvent::Signal,
+                                              base::Unretained(&idle_waiter_)));
     idle_waiter_.Wait();
   }
 
@@ -158,9 +156,9 @@ class RTCVideoDecoderTest
                              uint32_t texture_target) {
     vda_task_runner_->PostTask(
         FROM_HERE,
-        base::Bind(&RTCVideoDecoder::ProvidePictureBuffers,
-                   base::Unretained(rtc_decoder_.get()), buffer_count, format,
-                   textures_per_buffer, size, texture_target));
+        base::BindOnce(&RTCVideoDecoder::ProvidePictureBuffers,
+                       base::Unretained(rtc_decoder_.get()), buffer_count,
+                       format, textures_per_buffer, size, texture_target));
     RunUntilIdle();
   }
 

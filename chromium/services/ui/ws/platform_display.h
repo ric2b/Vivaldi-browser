@@ -56,12 +56,16 @@ class PlatformDisplay : public ui::EventSource {
 
   virtual void SetCursorSize(const ui::CursorSize& cursor_size) = 0;
 
+  virtual void ConfineCursorToBounds(const gfx::Rect& pixel_bounds) = 0;
+
   virtual void UpdateTextInputState(const ui::TextInputState& state) = 0;
   virtual void SetImeVisibility(bool visible) = 0;
 
   // Updates the viewport metrics for the display.
   virtual void UpdateViewportMetrics(
       const display::ViewportMetrics& metrics) = 0;
+
+  virtual const display::ViewportMetrics& GetViewportMetrics() = 0;
 
   // Returns the AcceleratedWidget associated with the Display. It can return
   // kNullAcceleratedWidget if the accelerated widget is not available yet.

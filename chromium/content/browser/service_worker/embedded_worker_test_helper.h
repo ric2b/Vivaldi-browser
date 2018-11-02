@@ -24,7 +24,7 @@
 #include "content/common/service_worker/service_worker_status_code.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_test_sink.h"
-#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/associated_binding.h"
 #include "net/http/http_response_info.h"
 #include "url/gurl.h"
 
@@ -59,7 +59,6 @@ struct ServiceWorkerFetchRequest;
 // methods to add their own logic/verification code.
 //
 // See embedded_worker_instance_unittest.cc for example usages.
-//
 class EmbeddedWorkerTestHelper : public IPC::Sender,
                                  public IPC::Listener {
  public:
@@ -75,8 +74,9 @@ class EmbeddedWorkerTestHelper : public IPC::Sender,
         base::WeakPtr<EmbeddedWorkerTestHelper> helper);
     ~MockEmbeddedWorkerInstanceClient() override;
 
-    static void Bind(const base::WeakPtr<EmbeddedWorkerTestHelper>& helper,
-                     mojo::ScopedMessagePipeHandle request);
+    static void Bind(
+        const base::WeakPtr<EmbeddedWorkerTestHelper>& helper,
+        mojom::EmbeddedWorkerInstanceClientAssociatedRequest request);
 
    protected:
     // mojom::EmbeddedWorkerInstanceClient implementation.
@@ -84,7 +84,9 @@ class EmbeddedWorkerTestHelper : public IPC::Sender,
         const EmbeddedWorkerStartParams& params,
         mojom::ServiceWorkerEventDispatcherRequest dispatcher_request,
         mojom::ServiceWorkerInstalledScriptsInfoPtr installed_scripts_info,
-        mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo instance_host)
+        mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo instance_host,
+        mojom::ServiceWorkerProviderInfoForStartWorkerPtr provider_info,
+        blink::mojom::WorkerContentSettingsProxyPtr content_settings_proxy)
         override;
     void StopWorker() override;
     void ResumeAfterDownload() override;
@@ -92,7 +94,7 @@ class EmbeddedWorkerTestHelper : public IPC::Sender,
                              const std::string& message) override;
 
     base::WeakPtr<EmbeddedWorkerTestHelper> helper_;
-    mojo::Binding<mojom::EmbeddedWorkerInstanceClient> binding_;
+    mojo::AssociatedBinding<mojom::EmbeddedWorkerInstanceClient> binding_;
 
     base::Optional<int> embedded_worker_id_;
 
@@ -115,7 +117,7 @@ class EmbeddedWorkerTestHelper : public IPC::Sender,
   // IPC::Listener implementation.
   bool OnMessageReceived(const IPC::Message& msg) override;
 
-  // Register a mojo endpoint object derived from
+  // Registers a Mojo endpoint object derived from
   // MockEmbeddedWorkerInstanceClient.
   void RegisterMockInstanceClient(
       std::unique_ptr<MockEmbeddedWorkerInstanceClient> client);
@@ -148,7 +150,6 @@ class EmbeddedWorkerTestHelper : public IPC::Sender,
   void ShutdownContext();
 
   int GetNextThreadId() { return next_thread_id_++; }
-  int GetNextProviderId() { return next_provider_id_++; }
 
   int mock_render_process_id() const { return mock_render_process_id_; }
   MockRenderProcessHost* mock_render_process_host() {
@@ -163,6 +164,8 @@ class EmbeddedWorkerTestHelper : public IPC::Sender,
   int new_render_process_id() const { return new_mock_render_process_id_; }
 
   TestBrowserContext* browser_context() { return browser_context_.get(); }
+
+  ServiceWorkerDispatcherHost* GetDispatcherHostForProcess(int process_id);
 
   base::WeakPtr<EmbeddedWorkerTestHelper> AsWeakPtr() {
     return weak_factory_.GetWeakPtr();
@@ -181,7 +184,8 @@ class EmbeddedWorkerTestHelper : public IPC::Sender,
       const GURL& script_url,
       bool pause_after_download,
       mojom::ServiceWorkerEventDispatcherRequest request,
-      mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo instance_host);
+      mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo instance_host,
+      mojom::ServiceWorkerProviderInfoForStartWorkerPtr provider_info);
   virtual void OnResumeAfterDownload(int embedded_worker_id);
   // StopWorker IPC handler routed through MockEmbeddedWorkerInstanceClient.
   // This calls SimulateWorkerStopped() by default.
@@ -241,6 +245,15 @@ class EmbeddedWorkerTestHelper : public IPC::Sender,
   virtual void OnPushEvent(
       const PushEventPayload& payload,
       mojom::ServiceWorkerEventDispatcher::DispatchPushEventCallback callback);
+  virtual void OnAbortPaymentEvent(
+      payments::mojom::PaymentHandlerResponseCallbackPtr response_callback,
+      mojom::ServiceWorkerEventDispatcher::DispatchAbortPaymentEventCallback
+          callback);
+  virtual void OnCanMakePaymentEvent(
+      payments::mojom::CanMakePaymentEventDataPtr data,
+      payments::mojom::PaymentHandlerResponseCallbackPtr response_callback,
+      mojom::ServiceWorkerEventDispatcher::DispatchCanMakePaymentEventCallback
+          callback);
   virtual void OnPaymentRequestEvent(
       payments::mojom::PaymentRequestEventDataPtr data,
       payments::mojom::PaymentHandlerResponseCallbackPtr response_callback,
@@ -252,9 +265,7 @@ class EmbeddedWorkerTestHelper : public IPC::Sender,
   void SimulateWorkerReadyForInspection(int embedded_worker_id);
   void SimulateWorkerScriptCached(int embedded_worker_id);
   void SimulateWorkerScriptLoaded(int embedded_worker_id);
-  void SimulateWorkerThreadStarted(int thread_id,
-                                   int embedded_worker_id,
-                                   int provider_id);
+  void SimulateWorkerThreadStarted(int thread_id, int embedded_worker_id);
   void SimulateWorkerScriptEvaluated(int embedded_worker_id, bool success);
   void SimulateWorkerStarted(int embedded_worker_id);
   void SimulateWorkerStopped(int embedded_worker_id);
@@ -264,11 +275,13 @@ class EmbeddedWorkerTestHelper : public IPC::Sender,
 
  private:
   class MockServiceWorkerEventDispatcher;
+  class MockRendererInterface;
 
   void OnStartWorkerStub(
       const EmbeddedWorkerStartParams& params,
       mojom::ServiceWorkerEventDispatcherRequest request,
-      mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo instance_host);
+      mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo instance_host,
+      mojom::ServiceWorkerProviderInfoForStartWorkerPtr provider_info);
   void OnResumeAfterDownloadStub(int embedded_worker_id);
   void OnStopWorkerStub(int embedded_worker_id);
   void OnMessageToWorkerStub(int thread_id,
@@ -326,6 +339,15 @@ class EmbeddedWorkerTestHelper : public IPC::Sender,
   void OnPushEventStub(
       const PushEventPayload& payload,
       mojom::ServiceWorkerEventDispatcher::DispatchPushEventCallback callback);
+  void OnAbortPaymentEventStub(
+      payments::mojom::PaymentHandlerResponseCallbackPtr response_callback,
+      mojom::ServiceWorkerEventDispatcher::DispatchAbortPaymentEventCallback
+          callback);
+  void OnCanMakePaymentEventStub(
+      payments::mojom::CanMakePaymentEventDataPtr data,
+      payments::mojom::PaymentHandlerResponseCallbackPtr response_callback,
+      mojom::ServiceWorkerEventDispatcher::DispatchCanMakePaymentEventCallback
+          callback);
   void OnPaymentRequestEventStub(
       payments::mojom::PaymentRequestEventDataPtr data,
       payments::mojom::PaymentHandlerResponseCallbackPtr response_callback,
@@ -340,12 +362,12 @@ class EmbeddedWorkerTestHelper : public IPC::Sender,
 
   IPC::TestSink sink_;
 
+  std::unique_ptr<MockRendererInterface> mock_renderer_interface_;
   std::vector<std::unique_ptr<MockEmbeddedWorkerInstanceClient>>
       mock_instance_clients_;
   size_t mock_instance_clients_next_index_;
 
   int next_thread_id_;
-  int next_provider_id_;
   int mock_render_process_id_;
   int new_mock_render_process_id_;
 

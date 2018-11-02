@@ -36,8 +36,6 @@ class MediaPlayerManager;
 // the Android MediaPlayer instance.
 class MEDIA_EXPORT MediaPlayerBridge : public MediaPlayerAndroid {
  public:
-  static bool RegisterMediaPlayerBridge(JNIEnv* env);
-
   // Construct a MediaPlayerBridge object. This object needs to call |manager|'s
   // RequestMediaResources() before decoding the media stream. This allows
   // |manager| to track unused resources and free them when needed.
@@ -46,7 +44,7 @@ class MEDIA_EXPORT MediaPlayerBridge : public MediaPlayerAndroid {
   MediaPlayerBridge(
       int player_id,
       const GURL& url,
-      const GURL& first_party_for_cookies,
+      const GURL& site_for_cookies,
       const std::string& user_agent,
       bool hide_url_log,
       MediaPlayerManager* manager,
@@ -76,7 +74,7 @@ class MEDIA_EXPORT MediaPlayerBridge : public MediaPlayerAndroid {
   bool CanSeekBackward() override;
   bool IsPlayerReady() override;
   GURL GetUrl() override;
-  GURL GetFirstPartyForCookies() override;
+  GURL GetSiteForCookies() override;
 
   void OnDidSetDataUriDataSource(
       JNIEnv* env,
@@ -166,7 +164,7 @@ class MEDIA_EXPORT MediaPlayerBridge : public MediaPlayerAndroid {
   GURL url_;
 
   // First party url for cookies.
-  GURL first_party_for_cookies_;
+  GURL site_for_cookies_;
 
   // User agent string to be used for media player.
   const std::string user_agent_;

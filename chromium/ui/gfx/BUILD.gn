@@ -44,8 +44,6 @@ component("geometry_skia") {
 
 component("gfx") {
   sources = [
-    "android/gfx_jni_registrar.cc",
-    "android/gfx_jni_registrar.h",
     "android/java_bitmap.cc",
     "android/java_bitmap.h",
     "android/view_configuration.cc",
@@ -94,6 +92,7 @@ component("gfx") {
     "image/image_family.h",
     "image/image_ios.mm",
     "image/image_mac.mm",
+    "image/image_platform.h",
     "image/image_png_rep.cc",
     "image/image_png_rep.h",
     "image/image_skia.cc",
@@ -206,6 +205,7 @@ component("gfx") {
       "canvas_skia_paint.h",
       "image/canvas_image_source.cc",
       "image/canvas_image_source.h",
+      "image/image_generic.cc",
       "image/image_skia_operations.cc",
       "image/image_skia_operations.h",
       "paint_throbber.cc",
@@ -256,7 +256,7 @@ component("gfx") {
   ]
 
   # Text rendering conditions (complicated so separated out).
-  if (use_aura || is_mac || (is_android && enable_vr)) {
+  if (use_aura || is_mac || (is_android && enable_vr) || is_fuchsia) {
     # Mac doesn't use RenderTextHarfBuzz by default yet.
     sources += [
       "harfbuzz_font_skia.cc",
@@ -330,8 +330,7 @@ component("gfx") {
     sources -= [ "canvas_notimplemented.cc" ]
   }
 
-  # Desktop and Android+VR only.
-  if (use_aura || (!is_ios && !is_android) || (is_android && enable_vr)) {
+  if (!is_ios) {
     sources += [
       "paint_vector_icon.cc",
       "paint_vector_icon.h",
@@ -387,6 +386,14 @@ component("gfx") {
 
   if (use_cairo) {
     configs += [ "//build/config/linux/pangocairo" ]
+  }
+
+  if (is_fuchsia) {
+    sources += [
+      "font_fallback_fuchsia.cc",
+      "font_render_params_fuchsia.cc",
+      "platform_font_fuchsia.cc",
+    ]
   }
 }
 
@@ -483,6 +490,13 @@ source_set("selection_bound_sources") {
   ]
 }
 
+# Depend on this to use buffer_types.h without pulling in all of gfx.
+source_set("buffer_types") {
+  sources = [
+    "buffer_types.h",
+  ]
+}
+
 # The GPU memory buffer stuff is separate from "gfx" to allow GPU-related
 # things to use these files without pulling in all of gfx, which includes large
 # things like Skia.
@@ -510,7 +524,6 @@ source_set("memory_buffer_sources") {
   sources = [
     "buffer_format_util.cc",
     "buffer_format_util.h",
-    "buffer_types.h",
     "client_native_pixmap.h",
     "client_native_pixmap_factory.cc",
     "client_native_pixmap_factory.h",
@@ -529,12 +542,14 @@ source_set("memory_buffer_sources") {
     sources += [
       "gpu_memory_buffer.cc",
       "gpu_memory_buffer.h",
-      "gpu_memory_buffer_tracing.cc",
-      "gpu_memory_buffer_tracing.h",
     ]
   }
 
   defines = [ "GFX_IMPLEMENTATION" ]
+
+  public_deps = [
+    ":buffer_types",
+  ]
 
   deps = [
     ":gfx_switches",
@@ -702,11 +717,12 @@ test("gfx_unittests") {
     ]
   }
 
+  if (!is_ios) {
+    sources += [ "paint_vector_icon_unittest.cc" ]
+  }
+
   if (!is_android && !is_ios) {
-    sources += [
-      "paint_vector_icon_unittest.cc",
-      "render_text_unittest.cc",
-    ]
+    sources += [ "render_text_unittest.cc" ]
   }
 
   # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.

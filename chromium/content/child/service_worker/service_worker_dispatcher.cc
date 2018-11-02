@@ -21,12 +21,14 @@
 #include "content/child/service_worker/web_service_worker_registration_impl.h"
 #include "content/child/thread_safe_sender.h"
 #include "content/child/webmessageportchannel_impl.h"
+#include "content/common/service_worker/service_worker_event_dispatcher.mojom.h"
 #include "content/common/service_worker/service_worker_messages.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/public/common/content_constants.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebNavigationPreloadState.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerProviderClient.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_error_type.mojom.h"
 #include "url/url_constants.h"
 
 using blink::WebServiceWorkerError;
@@ -67,10 +69,6 @@ void ServiceWorkerDispatcher::OnMessageReceived(const IPC::Message& msg) {
   // handler in ServiceWorkerMessageFilter to release references passed from
   // the browser process in case we fail to post task to the thread.
   IPC_BEGIN_MESSAGE_MAP(ServiceWorkerDispatcher, msg)
-    IPC_MESSAGE_HANDLER(ServiceWorkerMsg_AssociateRegistration,
-                        OnAssociateRegistration)
-    IPC_MESSAGE_HANDLER(ServiceWorkerMsg_DisassociateRegistration,
-                        OnDisassociateRegistration)
     IPC_MESSAGE_HANDLER(ServiceWorkerMsg_ServiceWorkerRegistered, OnRegistered)
     IPC_MESSAGE_HANDLER(ServiceWorkerMsg_ServiceWorkerUpdated, OnUpdated)
     IPC_MESSAGE_HANDLER(ServiceWorkerMsg_ServiceWorkerUnregistered,
@@ -131,7 +129,7 @@ void ServiceWorkerDispatcher::RegisterServiceWorker(
     std::string error_message(kServiceWorkerRegisterErrorPrefix);
     error_message += "The provided scriptURL or scope is too long.";
     callbacks->OnError(
-        WebServiceWorkerError(WebServiceWorkerError::kErrorTypeSecurity,
+        WebServiceWorkerError(blink::mojom::ServiceWorkerErrorType::kSecurity,
                               blink::WebString::FromASCII(error_message)));
     return;
   }
@@ -181,7 +179,7 @@ void ServiceWorkerDispatcher::GetRegistration(
     std::string error_message(kServiceWorkerGetRegistrationErrorPrefix);
     error_message += "The provided documentURL is too long.";
     callbacks->OnError(
-        WebServiceWorkerError(WebServiceWorkerError::kErrorTypeSecurity,
+        WebServiceWorkerError(blink::mojom::ServiceWorkerErrorType::kSecurity,
                               blink::WebString::FromASCII(error_message)));
     return;
   }
@@ -389,36 +387,6 @@ ServiceWorkerDispatcher::GetOrAdoptRegistration(
   return registration;
 }
 
-void ServiceWorkerDispatcher::OnAssociateRegistration(
-    int thread_id,
-    int provider_id,
-    const ServiceWorkerRegistrationObjectInfo& info,
-    const ServiceWorkerVersionAttributes& attrs) {
-  // Adopt the references sent from the browser process and pass them to the
-  // provider context if it exists.
-  std::unique_ptr<ServiceWorkerRegistrationHandleReference> registration =
-      Adopt(info);
-  std::unique_ptr<ServiceWorkerHandleReference> installing =
-      Adopt(attrs.installing);
-  std::unique_ptr<ServiceWorkerHandleReference> waiting = Adopt(attrs.waiting);
-  std::unique_ptr<ServiceWorkerHandleReference> active = Adopt(attrs.active);
-  ProviderContextMap::iterator context = provider_contexts_.find(provider_id);
-  if (context != provider_contexts_.end()) {
-    context->second->OnAssociateRegistration(
-        std::move(registration), std::move(installing), std::move(waiting),
-        std::move(active));
-  }
-}
-
-void ServiceWorkerDispatcher::OnDisassociateRegistration(
-    int thread_id,
-    int provider_id) {
-  ProviderContextMap::iterator provider = provider_contexts_.find(provider_id);
-  if (provider == provider_contexts_.end())
-    return;
-  provider->second->OnDisassociateRegistration();
-}
-
 void ServiceWorkerDispatcher::OnRegistered(
     int thread_id,
     int request_id,
@@ -605,7 +573,7 @@ void ServiceWorkerDispatcher::OnDidSetNavigationPreloadHeader(int thread_id,
 void ServiceWorkerDispatcher::OnRegistrationError(
     int thread_id,
     int request_id,
-    WebServiceWorkerError::ErrorType error_type,
+    blink::mojom::ServiceWorkerErrorType error_type,
     const base::string16& message) {
   TRACE_EVENT_ASYNC_STEP_INTO0("ServiceWorker",
                                "ServiceWorkerDispatcher::RegisterServiceWorker",
@@ -628,7 +596,7 @@ void ServiceWorkerDispatcher::OnRegistrationError(
 void ServiceWorkerDispatcher::OnUpdateError(
     int thread_id,
     int request_id,
-    WebServiceWorkerError::ErrorType error_type,
+    blink::mojom::ServiceWorkerErrorType error_type,
     const base::string16& message) {
   TRACE_EVENT_ASYNC_STEP_INTO0("ServiceWorker",
                                "ServiceWorkerDispatcher::UpdateServiceWorker",
@@ -650,7 +618,7 @@ void ServiceWorkerDispatcher::OnUpdateError(
 void ServiceWorkerDispatcher::OnUnregistrationError(
     int thread_id,
     int request_id,
-    WebServiceWorkerError::ErrorType error_type,
+    blink::mojom::ServiceWorkerErrorType error_type,
     const base::string16& message) {
   TRACE_EVENT_ASYNC_STEP_INTO0(
       "ServiceWorker",
@@ -674,7 +642,7 @@ void ServiceWorkerDispatcher::OnUnregistrationError(
 void ServiceWorkerDispatcher::OnGetRegistrationError(
     int thread_id,
     int request_id,
-    WebServiceWorkerError::ErrorType error_type,
+    blink::mojom::ServiceWorkerErrorType error_type,
     const base::string16& message) {
   TRACE_EVENT_ASYNC_STEP_INTO0(
       "ServiceWorker",
@@ -698,7 +666,7 @@ void ServiceWorkerDispatcher::OnGetRegistrationError(
 void ServiceWorkerDispatcher::OnGetRegistrationsError(
     int thread_id,
     int request_id,
-    WebServiceWorkerError::ErrorType error_type,
+    blink::mojom::ServiceWorkerErrorType error_type,
     const base::string16& message) {
   TRACE_EVENT_ASYNC_STEP_INTO0(
       "ServiceWorker",
@@ -722,7 +690,7 @@ void ServiceWorkerDispatcher::OnGetRegistrationsError(
 void ServiceWorkerDispatcher::OnEnableNavigationPreloadError(
     int thread_id,
     int request_id,
-    WebServiceWorkerError::ErrorType error_type,
+    blink::mojom::ServiceWorkerErrorType error_type,
     const std::string& message) {
   WebEnableNavigationPreloadCallbacks* callbacks =
       enable_navigation_preload_callbacks_.Lookup(request_id);
@@ -737,7 +705,7 @@ void ServiceWorkerDispatcher::OnEnableNavigationPreloadError(
 void ServiceWorkerDispatcher::OnGetNavigationPreloadStateError(
     int thread_id,
     int request_id,
-    WebServiceWorkerError::ErrorType error_type,
+    blink::mojom::ServiceWorkerErrorType error_type,
     const std::string& message) {
   WebGetNavigationPreloadStateCallbacks* callbacks =
       get_navigation_preload_state_callbacks_.Lookup(request_id);
@@ -752,7 +720,7 @@ void ServiceWorkerDispatcher::OnGetNavigationPreloadStateError(
 void ServiceWorkerDispatcher::OnSetNavigationPreloadHeaderError(
     int thread_id,
     int request_id,
-    WebServiceWorkerError::ErrorType error_type,
+    blink::mojom::ServiceWorkerErrorType error_type,
     const std::string& message) {
   WebSetNavigationPreloadHeaderCallbacks* callbacks =
       set_navigation_preload_header_callbacks_.Lookup(request_id);
@@ -820,37 +788,44 @@ void ServiceWorkerDispatcher::OnUpdateFound(
 }
 
 void ServiceWorkerDispatcher::OnSetControllerServiceWorker(
-    int thread_id,
-    int provider_id,
-    const ServiceWorkerObjectInfo& info,
-    bool should_notify_controllerchange,
-    const std::set<uint32_t>& used_features) {
-  TRACE_EVENT2("ServiceWorker",
-               "ServiceWorkerDispatcher::OnSetControllerServiceWorker",
-               "Thread ID", thread_id,
-               "Provider ID", provider_id);
+    const ServiceWorkerMsg_SetControllerServiceWorker_Params& params) {
+  TRACE_EVENT2(
+      "ServiceWorker", "ServiceWorkerDispatcher::OnSetControllerServiceWorker",
+      "Thread ID", params.thread_id, "Provider ID", params.provider_id);
+
+  mojom::ServiceWorkerEventDispatcherPtrInfo event_dispatcher_ptr_info;
+  if (params.controller_event_dispatcher.is_valid()) {
+    // Chrome doesn't use interface versioning.
+    event_dispatcher_ptr_info = mojom::ServiceWorkerEventDispatcherPtrInfo(
+        mojo::ScopedMessagePipeHandle(params.controller_event_dispatcher),
+        0u /* version */);
+  }
 
   // Adopt the reference sent from the browser process and pass it to the
   // provider context if it exists.
-  std::unique_ptr<ServiceWorkerHandleReference> handle_ref = Adopt(info);
-  ProviderContextMap::iterator provider = provider_contexts_.find(provider_id);
+  std::unique_ptr<ServiceWorkerHandleReference> handle_ref =
+      Adopt(params.object_info);
+  ProviderContextMap::iterator provider =
+      provider_contexts_.find(params.provider_id);
   if (provider != provider_contexts_.end()) {
-    provider->second->OnSetControllerServiceWorker(std::move(handle_ref),
-                                                   used_features);
+    provider->second->SetController(std::move(handle_ref), params.used_features,
+                                    std::move(event_dispatcher_ptr_info));
   }
 
-  ProviderClientMap::iterator found = provider_clients_.find(provider_id);
+  ProviderClientMap::iterator found =
+      provider_clients_.find(params.provider_id);
   if (found != provider_clients_.end()) {
     // Sync the controllee's use counter with the service worker's one.
-    for (uint32_t feature : used_features)
+    for (uint32_t feature : params.used_features)
       found->second->CountFeature(feature);
 
     // Get the existing worker object or create a new one with a new reference
     // to populate the .controller field.
-    scoped_refptr<WebServiceWorkerImpl> worker = GetOrCreateServiceWorker(
-        ServiceWorkerHandleReference::Create(info, thread_safe_sender_.get()));
+    scoped_refptr<WebServiceWorkerImpl> worker =
+        GetOrCreateServiceWorker(ServiceWorkerHandleReference::Create(
+            params.object_info, thread_safe_sender_.get()));
     found->second->SetController(WebServiceWorkerImpl::CreateHandle(worker),
-                                 should_notify_controllerchange);
+                                 params.should_notify_controllerchange);
     // You must not access |found| after setController() because it may fire the
     // controllerchange event that may remove the provider client, for example,
     // by detaching an iframe.

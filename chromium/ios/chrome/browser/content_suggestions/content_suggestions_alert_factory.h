@@ -8,33 +8,35 @@
 #import <UIKit/UIKit.h>
 
 @class AlertCoordinator;
-@class CollectionViewItem;
-@protocol ContentSuggestionsAlertCommands;
+@class ContentSuggestionsItem;
+@class ContentSuggestionsMostVisitedItem;
+@protocol ContentSuggestionsGestureCommands;
 
 // Factory for AlertCoordinators for ContentSuggestions.
 @interface ContentSuggestionsAlertFactory : NSObject
 
 // Returns an AlertCoordinator for a suggestions |item| with the indexPath
 // |indexPath|. The alert will be presented on the |viewController| at the
-// |touchLocation|, in the coordinates of the |viewController|'s view. The
-// |commandHandler| will receive callbacks when the user chooses one of the
+// |touchLocation|, in the coordinates of the |viewController|'s collectionView.
+// The |commandHandler| will receive callbacks when the user chooses one of the
 // options displayed by the alert.
 + (AlertCoordinator*)
-alertCoordinatorForSuggestionItem:(CollectionViewItem*)item
-                 onViewController:(UIViewController*)viewController
+alertCoordinatorForSuggestionItem:(ContentSuggestionsItem*)item
+                 onViewController:(UICollectionViewController*)viewController
                           atPoint:(CGPoint)touchLocation
                       atIndexPath:(NSIndexPath*)indexPath
+                  readLaterAction:(BOOL)readLaterAction
                    commandHandler:
-                       (id<ContentSuggestionsAlertCommands>)commandHandler;
+                       (id<ContentSuggestionsGestureCommands>)commandHandler;
 
 // Same as above but for a MostVisited item.
 + (AlertCoordinator*)
-alertCoordinatorForMostVisitedItem:(CollectionViewItem*)item
-                  onViewController:(UIViewController*)viewController
+alertCoordinatorForMostVisitedItem:(ContentSuggestionsMostVisitedItem*)item
+                  onViewController:(UICollectionViewController*)viewController
                            atPoint:(CGPoint)touchLocation
                        atIndexPath:(NSIndexPath*)indexPath
                     commandHandler:
-                        (id<ContentSuggestionsAlertCommands>)commandHandler;
+                        (id<ContentSuggestionsGestureCommands>)commandHandler;
 
 @end
 

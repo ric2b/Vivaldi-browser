@@ -9,8 +9,6 @@
 
 #include "core/layout/ng/ng_absolute_utils.h"
 #include "core/layout/ng/ng_constraint_space.h"
-#include "core/layout/ng/ng_layout_algorithm.h"
-#include "platform/heap/Handle.h"
 #include "platform/wtf/Optional.h"
 
 namespace blink {
@@ -49,7 +47,8 @@ class CORE_EXPORT NGOutOfFlowLayoutPart {
 
   NGLogicalOffset container_border_offset_;
   NGPhysicalOffset container_border_physical_offset_;
-  RefPtr<NGConstraintSpace> container_space_;
+  NGLogicalSize container_size_;
+  NGPhysicalSize icb_size_;
 };
 
 }  // namespace blink

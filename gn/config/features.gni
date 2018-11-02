@@ -34,8 +34,10 @@ if (use_cc_wrapper) {
   disable_precompiled_headers = true
 }
 
-if (!is_mac) {
-  is_component_ffmpeg = true
+declare_overrides() {
+  if (!is_mac) {
+    is_component_ffmpeg = true
+  }
 }
 
 if (is_mac && is_official_build) {

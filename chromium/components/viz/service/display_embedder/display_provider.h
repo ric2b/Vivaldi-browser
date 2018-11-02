@@ -9,13 +9,12 @@
 
 #include "gpu/ipc/common/surface_handle.h"
 
-namespace cc {
-class BeginFrameSource;
-class FrameSinkId;
-}  // namespace cc
-
 namespace viz {
+
+class BeginFrameSource;
 class Display;
+class FrameSinkId;
+class RendererSettings;
 
 // Handles creating Display and related classes for FrameSinkManagerImpl.
 class DisplayProvider {
@@ -23,11 +22,12 @@ class DisplayProvider {
   virtual ~DisplayProvider() {}
 
   // Creates a new Display for |surface_handle| with |frame_sink_id|. Will
-  // also create cc::BeginFrameSource and return it in |begin_frame_source|.
+  // also create BeginFrameSource and return it in |begin_frame_source|.
   virtual std::unique_ptr<Display> CreateDisplay(
       const FrameSinkId& frame_sink_id,
       gpu::SurfaceHandle surface_handle,
-      std::unique_ptr<cc::BeginFrameSource>* begin_frame_source) = 0;
+      const RendererSettings& renderer_settings,
+      std::unique_ptr<BeginFrameSource>* begin_frame_source) = 0;
 };
 
 }  // namespace viz

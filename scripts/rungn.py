@@ -12,6 +12,7 @@ if not os.path.isabs(script_name):
 sourcedir = os.path.abspath(os.path.dirname(os.path.dirname(script_name)))
 
 is_windows = platform.system() == "Windows"
+is_android = os.access(os.path.join(sourcedir, ".enable_android"), os.F_OK)
 gn_name = "gn.exe" if is_windows else "gn"
 bin_dir = os.path.join(sourcedir, "build", "bin",)
 gn_path =  os.path.join(bin_dir, gn_name)
@@ -63,6 +64,8 @@ if args.refresh or args.bootstrap or not os.access(gn_path, os.F_OK):
     else:
       shutil.copy2(os.path.join(gn_releasedir, gn_name), gn_path)
   if full_bootstrap:
+    if is_windows:
+      bootstrap_env["PATH"] = "C:\\Program Files (x86)\\Windows Kits\\10\\bin\\10.0.15063.0\\x64;" + bootstrap_env["PATH"]
     def do_full_bootstrap():
       return subprocess.call(["python",
         os.path.join(sourcedir, "chromium", "tools", "gn",
@@ -97,12 +100,14 @@ if args.refresh or not args.args:
     else:
       ide_kind = "eclipse"
 
+  platform_target=' target_os="android"' if is_android else ""
+
   profiles = [
       # args MUST be unquoted. are passed directly to the command
-      ("out/Release", ['--args=is_debug=false']),
+      ("out/Release", ['--args=is_debug=false'+platform_target]),
     ]
   if not is_builder:
-    profiles.append(("out/Debug", ['--args=is_debug=true']))
+    profiles.append(("out/Debug", ['--args=is_debug=true'+platform_target]))
   if is_windows and is_builder:
     profiles.append(("out/Release_x64",
                     ['--args=is_debug=false target_cpu="x64"']))

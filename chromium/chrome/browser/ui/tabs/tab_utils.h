@@ -42,6 +42,7 @@ enum class TabMutedReason {
   AUDIO_INDICATOR,  // Mute toggled via tab-strip audio icon.
   MEDIA_CAPTURE,    // Media recording/capture was started.
   EXTENSION,        // Mute state changed via extension API.
+  CONTENT_SETTING,  // The sound content setting was set to BLOCK.
 };
 
 enum class TabMutedResult {
@@ -106,6 +107,14 @@ std::unique_ptr<gfx::Animation> CreateTabAlertIndicatorFadeAnimation(
 base::string16 AssembleTabTooltipText(const base::string16& title,
                                       TabAlertState alert_state);
 
+// Returns the text to use for a tab's accessibility label: the |title|,
+// followed by text describing |is_crashed|, |is_network_error|, and
+// |alert_state|.
+base::string16 AssembleTabAccessibilityLabel(const base::string16& title,
+                                             bool is_crashed,
+                                             bool is_network_error,
+                                             TabAlertState alert_state);
+
 // Returns true if experimental audio mute controls (UI or extension API) are
 // enabled.  Currently, toggling mute from a tab's context menu is the only
 // non-experimental control method.
@@ -144,6 +153,18 @@ const std::string& GetExtensionIdForMutedTab(content::WebContents* contents);
 // Returns true if the tabs at the |indices| in |tab_strip| are all muted.
 bool AreAllTabsMuted(const TabStripModel& tab_strip,
                      const std::vector<int>& indices);
+
+// Sets the sound content setting for each site at the |indices| in |tab_strip|.
+void SetSitesMuted(const TabStripModel& tab_strip,
+                   const std::vector<int>& indices,
+                   const bool mute);
+
+// Returns true if the site at |index| in |tab_strip| is muted.
+bool IsSiteMuted(const TabStripModel& tab_strip, const int index);
+
+// Returns true if the sites at the |indices| in |tab_strip| are all muted.
+bool AreAllSitesMuted(const TabStripModel& tab_strip,
+                      const std::vector<int>& indices);
 
 }  // namespace chrome
 

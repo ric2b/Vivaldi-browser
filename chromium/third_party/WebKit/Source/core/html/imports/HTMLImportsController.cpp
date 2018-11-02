@@ -31,7 +31,6 @@
 #include "core/html/imports/HTMLImportsController.h"
 
 #include "core/dom/Document.h"
-#include "core/frame/LocalFrame.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/imports/HTMLImportChild.h"
 #include "core/html/imports/HTMLImportChildClient.h"
@@ -42,7 +41,7 @@
 namespace blink {
 
 HTMLImportsController::HTMLImportsController(Document& master)
-    : root_(this, HTMLImportTreeRoot::Create(&master)) {
+    : root_(HTMLImportTreeRoot::Create(&master)) {
   UseCounter::Count(master, WebFeature::kHTMLImports);
 }
 
@@ -76,29 +75,35 @@ HTMLImportChild* HTMLImportsController::CreateChild(
                                   ? HTMLImport::kSync
                                   : HTMLImport::kAsync;
   if (mode == HTMLImport::kAsync) {
-    UseCounter::Count(Root()->GetDocument(),
+    UseCounter::Count(root_->GetDocument(),
                       WebFeature::kHTMLImportsAsyncAttribute);
   }
 
-  HTMLImportChild* child = new HTMLImportChild(url, loader, mode);
-  child->SetClient(client);
+  HTMLImportChild* child = new HTMLImportChild(url, loader, client, mode);
   parent->AppendImport(child);
   loader->AddImport(child);
-  return Root()->Add(child);
+  return root_->Add(child);
 }
 
-HTMLImportChild* HTMLImportsController::Load(HTMLImport* parent,
+HTMLImportChild* HTMLImportsController::Load(const Document& parent_document,
                                              HTMLImportChildClient* client,
-                                             FetchParameters params) {
-  DCHECK(!params.Url().IsEmpty());
-  DCHECK(params.Url().IsValid());
-  DCHECK(parent == Root() || ToHTMLImportChild(parent)->Loader()->IsFirstImport(
-                                 ToHTMLImportChild(parent)));
+                                             FetchParameters& params) {
+  DCHECK(client);
 
-  if (HTMLImportChild* child_to_share_with = Root()->Find(params.Url())) {
+  HTMLImportLoader* parent_loader = LoaderFor(parent_document);
+  HTMLImport* parent =
+      parent_loader ? static_cast<HTMLImport*>(parent_loader->FirstImport())
+                    : static_cast<HTMLImport*>(root_);
+
+  const KURL& url = params.Url();
+
+  DCHECK(!url.IsEmpty());
+  DCHECK(url.IsValid());
+
+  if (HTMLImportChild* child_to_share_with = root_->Find(url)) {
     HTMLImportLoader* loader = child_to_share_with->Loader();
     DCHECK(loader);
-    HTMLImportChild* child = CreateChild(params.Url(), loader, parent, client);
+    HTMLImportChild* child = CreateChild(url, loader, parent, client);
     child->DidShareLoader();
     return child;
   }
@@ -111,7 +116,7 @@ HTMLImportChild* HTMLImportsController::Load(HTMLImport* parent,
     return nullptr;
 
   HTMLImportLoader* loader = CreateLoader();
-  HTMLImportChild* child = CreateChild(params.Url(), loader, parent, client);
+  HTMLImportChild* child = CreateChild(url, loader, parent, client);
   // We set resource after the import tree is built since
   // Resource::addClient() immediately calls back to feed the bytes when the
   // resource is cached.
@@ -121,7 +126,7 @@ HTMLImportChild* HTMLImportsController::Load(HTMLImport* parent,
 }
 
 Document* HTMLImportsController::Master() const {
-  return Root() ? Root()->GetDocument() : nullptr;
+  return root_ ? root_->GetDocument() : nullptr;
 }
 
 bool HTMLImportsController::ShouldBlockScriptExecution(
@@ -129,7 +134,7 @@ bool HTMLImportsController::ShouldBlockScriptExecution(
   DCHECK_EQ(document.ImportsController(), this);
   if (HTMLImportLoader* loader = LoaderFor(document))
     return loader->ShouldBlockScriptExecution();
-  return Root()->GetState().ShouldBlockScriptExecution();
+  return root_->GetState().ShouldBlockScriptExecution();
 }
 
 HTMLImportLoader* HTMLImportsController::CreateLoader() {

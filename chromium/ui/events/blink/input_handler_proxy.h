@@ -48,10 +48,9 @@ struct DidOverscrollParams;
 // the compositor's input handling logic. InputHandlerProxy instances live
 // entirely on the compositor thread. Each InputHandler instance handles input
 // events intended for a specific WebWidget.
-class InputHandlerProxy
-    : public cc::InputHandlerClient,
-      public SynchronousInputHandlerProxy,
-      public NON_EXPORTED_BASE(blink::WebGestureCurveTarget) {
+class InputHandlerProxy : public cc::InputHandlerClient,
+                          public SynchronousInputHandlerProxy,
+                          public blink::WebGestureCurveTarget {
  public:
   InputHandlerProxy(cc::InputHandler* input_handler,
                     InputHandlerProxyClient* client,
@@ -69,7 +68,12 @@ class InputHandlerProxy
     DID_NOT_HANDLE,
     DID_NOT_HANDLE_NON_BLOCKING_DUE_TO_FLING,
     DID_HANDLE_NON_BLOCKING,
-    DROP_EVENT
+    DROP_EVENT,
+    // The compositor did handle the scroll event (so it wouldn't forward the
+    // event to the main thread.) but it didn't consume the scroll so it should
+    // pass it to the next consumer (either overscrolling or bubbling the event
+    // to the next renderer).
+    DID_HANDLE_SHOULD_BUBBLE,
   };
   using EventDispositionCallback =
       base::OnceCallback<void(EventDisposition,
@@ -247,7 +251,6 @@ class InputHandlerProxy
       scroll_elasticity_controller_;
 
   bool smooth_scroll_enabled_;
-  bool uma_latency_reporting_enabled_;
   const bool touchpad_and_wheel_scroll_latching_enabled_;
 
   // The merged result of the last touch event with previous touch events.

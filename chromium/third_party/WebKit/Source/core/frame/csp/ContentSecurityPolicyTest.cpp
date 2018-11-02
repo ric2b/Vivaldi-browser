@@ -398,7 +398,7 @@ TEST_F(ContentSecurityPolicyTest, RequireSRIForInHeaderPresentIntegrity) {
   KURL url(NullURL(), "https://example.test");
   IntegrityMetadataSet integrity_metadata;
   integrity_metadata.insert(
-      IntegrityMetadata("1234", kHashAlgorithmSha384).ToPair());
+      IntegrityMetadata("1234", IntegrityAlgorithm::kSha384).ToPair());
   csp->BindToExecutionContext(execution_context.Get());
   // Enforce
   Persistent<ContentSecurityPolicy> policy = ContentSecurityPolicy::Create();
@@ -570,7 +570,7 @@ TEST_F(ContentSecurityPolicyTest, RequireSRIForInMetaPresentIntegrity) {
   KURL url(NullURL(), "https://example.test");
   IntegrityMetadataSet integrity_metadata;
   integrity_metadata.insert(
-      IntegrityMetadata("1234", kHashAlgorithmSha384).ToPair());
+      IntegrityMetadata("1234", IntegrityAlgorithm::kSha384).ToPair());
   csp->BindToExecutionContext(execution_context.Get());
   // Enforce
   Persistent<ContentSecurityPolicy> policy = ContentSecurityPolicy::Create();
@@ -721,7 +721,7 @@ TEST_F(ContentSecurityPolicyTest, NonceInline) {
   WTF::OrdinalNumber context_line;
 
   // We need document for HTMLScriptElement tests.
-  Document* document = Document::Create();
+  Document* document = Document::CreateForTest();
   document->SetSecurityOrigin(secure_origin);
 
   for (const auto& test : cases) {

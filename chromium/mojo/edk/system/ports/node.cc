@@ -11,10 +11,13 @@
 
 #include "base/atomicops.h"
 #include "base/containers/stack_container.h"
+#include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
 #include "base/optional.h"
 #include "base/synchronization/lock.h"
+#include "base/threading/thread_local.h"
+#include "build/build_config.h"
 #include "mojo/edk/system/ports/event.h"
 #include "mojo/edk/system/ports/node_delegate.h"
 #include "mojo/edk/system/ports/port_locker.h"
@@ -30,6 +33,44 @@ namespace edk {
 namespace ports {
 
 namespace {
+
+constexpr size_t kRandomNameCacheSize = 256;
+
+// Random port name generator which maintains a cache of random bytes to draw
+// from. This amortizes the cost of random name generation on platforms where
+// RandBytes may have significant per-call overhead.
+//
+// Note that the use of this cache means one has to be careful about fork()ing
+// a process once any port names have been generated, as that behavior can lead
+// to collisions between independently generated names in different processes.
+class RandomNameGenerator {
+ public:
+  RandomNameGenerator() = default;
+  ~RandomNameGenerator() = default;
+
+  PortName GenerateRandomPortName() {
+    base::AutoLock lock(lock_);
+    if (cache_index_ == kRandomNameCacheSize) {
+#if defined(OS_NACL)
+      base::RandBytes(cache_, sizeof(PortName) * kRandomNameCacheSize);
+#else
+      crypto::RandBytes(cache_, sizeof(PortName) * kRandomNameCacheSize);
+#endif
+      cache_index_ = 0;
+    }
+    return cache_[cache_index_++];
+  }
+
+ private:
+  base::Lock lock_;
+  PortName cache_[kRandomNameCacheSize];
+  size_t cache_index_ = kRandomNameCacheSize;
+
+  DISALLOW_COPY_AND_ASSIGN(RandomNameGenerator);
+};
+
+base::LazyInstance<RandomNameGenerator>::Leaky g_name_generator =
+    LAZY_INSTANCE_INITIALIZER;
 
 int DebugError(const char* message, int error_code) {
   NOTREACHED() << "Oops: " << message;
@@ -52,11 +93,7 @@ bool CanAcceptMoreMessages(const Port* port) {
 }
 
 void GenerateRandomPortName(PortName* name) {
-#if defined(OS_NACL)
-  base::RandBytes(name, sizeof(PortName));
-#else
-  crypto::RandBytes(name, sizeof(PortName));
-#endif
+  *name = g_name_generator.Get().GenerateRandomPortName();
 }
 
 }  // namespace
@@ -75,10 +112,12 @@ bool Node::CanShutdownCleanly(ShutdownPolicy policy) {
 
   if (policy == ShutdownPolicy::DONT_ALLOW_LOCAL_PORTS) {
 #if DCHECK_IS_ON()
-    for (auto entry : ports_) {
+    for (auto& entry : ports_) {
       DVLOG(2) << "Port " << entry.first << " referencing node "
-               << entry.second->peer_node_name << " is blocking shutdown of "
-               << "node " << name_ << " (state=" << entry.second->state << ")";
+               << entry.second.port->peer_node_name
+               << " is blocking shutdown of "
+               << "node " << name_ << " (state=" << entry.second.port->state
+               << ")";
     }
 #endif
     return ports_.empty();
@@ -90,8 +129,8 @@ bool Node::CanShutdownCleanly(ShutdownPolicy policy) {
   // relatively few ports should be open during shutdown and shutdown doesn't
   // need to be blazingly fast.
   bool can_shutdown = true;
-  for (auto entry : ports_) {
-    PortRef port_ref(entry.first, entry.second);
+  for (auto& entry : ports_) {
+    PortRef port_ref(entry.first, entry.second.port);
     SinglePortLocker locker(&port_ref);
     auto* port = locker.port();
     if (port->peer_node_name != name_ && port->state != Port::kReceiving) {
@@ -122,7 +161,7 @@ int Node::GetPort(const PortName& port_name, PortRef* port_ref) {
   base::subtle::MemoryBarrier();
 #endif
 
-  *port_ref = PortRef(port_name, iter->second);
+  *port_ref = PortRef(port_name, iter->second.port);
   return OK;
 }
 
@@ -251,7 +290,7 @@ int Node::ClosePort(const PortRef& port_ref) {
     DVLOG(2) << "Sending ObserveClosure from " << port_ref.name() << "@"
              << name_ << " to " << peer_port_name << "@" << peer_node_name;
     delegate_->ForwardEvent(peer_node_name,
-                            base::MakeUnique<ObserveClosureEvent>(
+                            std::make_unique<ObserveClosureEvent>(
                                 peer_port_name, last_sequence_num));
     for (const auto& message : undelivered_messages) {
       for (size_t i = 0; i < message->num_ports(); ++i) {
@@ -385,7 +424,7 @@ int Node::MergePorts(const PortRef& port_ref,
 
   delegate_->ForwardEvent(
       destination_node_name,
-      base::MakeUnique<MergePortEvent>(destination_port_name, new_port_name,
+      std::make_unique<MergePortEvent>(destination_port_name, new_port_name,
                                        new_port_descriptor));
   return OK;
 }
@@ -559,7 +598,7 @@ int Node::OnObserveProxy(std::unique_ptr<ObserveProxyEvent> event) {
         port->peer_node_name = event->proxy_target_node_name();
         port->peer_port_name = event->proxy_target_port_name();
         event_target_node = event->proxy_node_name();
-        event_to_forward = base::MakeUnique<ObserveProxyAckEvent>(
+        event_to_forward = std::make_unique<ObserveProxyAckEvent>(
             event->proxy_port_name(), port->next_sequence_num_to_send - 1);
         update_status = true;
         DVLOG(2) << "Forwarding ObserveProxyAck from " << event->port_name()
@@ -581,7 +620,7 @@ int Node::OnObserveProxy(std::unique_ptr<ObserveProxyEvent> event) {
 
         port->send_on_proxy_removal.reset(new std::pair<NodeName, ScopedEvent>(
             event->proxy_node_name(),
-            base::MakeUnique<ObserveProxyAckEvent>(event->proxy_port_name(),
+            std::make_unique<ObserveProxyAckEvent>(event->proxy_port_name(),
                                                    kInvalidSequenceNum)));
       }
     } else {
@@ -750,7 +789,7 @@ int Node::OnMergePort(std::unique_ptr<MergePortEvent> event) {
 int Node::AddPortWithName(const PortName& port_name, scoped_refptr<Port> port) {
   PortLocker::AssertNoPortsLockedOnCurrentThread();
   base::AutoLock lock(ports_lock_);
-  if (!ports_.insert(std::make_pair(port_name, std::move(port))).second)
+  if (!ports_.emplace(port_name, PortTableEntry(std::move(port))).second)
     return OOPS(ERROR_PORT_EXISTS);  // Suggests a bad UUID generator.
   DVLOG(2) << "Created port " << port_name << "@" << name_;
   return OK;
@@ -764,7 +803,7 @@ void Node::ErasePort(const PortName& port_name) {
     auto it = ports_.find(port_name);
     if (it == ports_.end())
       return;
-    port = std::move(it->second);
+    port = std::move(it->second.port);
     ports_.erase(it);
   }
   // NOTE: We are careful not to release the port's messages while holding any
@@ -882,7 +921,7 @@ int Node::MergePortsInternal(const PortRef& port0_ref,
           // If either end of the port cycle is closed, we propagate an
           // ObserveClosure event.
           closure_event_target_node = port->peer_node_name;
-          closure_event = base::MakeUnique<ObserveClosureEvent>(
+          closure_event = std::make_unique<ObserveClosureEvent>(
               port->peer_port_name, port->last_sequence_num_to_receive);
         }
       }
@@ -988,7 +1027,7 @@ int Node::AcceptPort(const PortName& port_name,
   // Allow referring port to forward messages.
   delegate_->ForwardEvent(
       port_descriptor.referring_node_name,
-      base::MakeUnique<PortAcceptedEvent>(port_descriptor.referring_port_name));
+      std::make_unique<PortAcceptedEvent>(port_descriptor.referring_port_name));
   return OK;
 }
 
@@ -1151,7 +1190,7 @@ int Node::BeginProxying(const PortRef& port_ref) {
     if (try_remove_proxy_immediately) {
       // Make sure we propagate closure to our current peer.
       closure_target_node = port->peer_node_name;
-      closure_event = base::MakeUnique<ObserveClosureEvent>(
+      closure_event = std::make_unique<ObserveClosureEvent>(
           port->peer_port_name, port->last_sequence_num_to_receive);
     }
   }
@@ -1207,7 +1246,7 @@ void Node::InitiateProxyRemoval(const PortRef& port_ref) {
   // Eventually, this node will receive ObserveProxyAck (or ObserveClosure if
   // the peer was closed in the meantime).
   delegate_->ForwardEvent(peer_node_name,
-                          base::MakeUnique<ObserveProxyEvent>(
+                          std::make_unique<ObserveProxyEvent>(
                               peer_port_name, name_, port_ref.name(),
                               peer_node_name, peer_port_name));
 }
@@ -1260,7 +1299,7 @@ void Node::DestroyAllPortsWithPeer(const NodeName& node_name,
     base::AutoLock ports_lock(ports_lock_);
 
     for (auto iter = ports_.begin(); iter != ports_.end(); ++iter) {
-      PortRef port_ref(iter->first, iter->second);
+      PortRef port_ref(iter->first, iter->second.port);
       {
         SinglePortLocker locker(&port_ref);
         auto* port = locker.port();
@@ -1290,7 +1329,7 @@ void Node::DestroyAllPortsWithPeer(const NodeName& node_name,
           if (port->state != Port::kReceiving) {
             dead_proxies_to_broadcast.push_back(iter->first);
             std::vector<std::unique_ptr<UserMessageEvent>> messages;
-            iter->second->message_queue.TakeAllMessages(&messages);
+            iter->second.port->message_queue.TakeAllMessages(&messages);
             for (auto& message : messages)
               undelivered_messages.emplace_back(std::move(message));
           }
@@ -1310,7 +1349,7 @@ void Node::DestroyAllPortsWithPeer(const NodeName& node_name,
 
   for (const auto& proxy_name : dead_proxies_to_broadcast) {
     // Broadcast an event signifying that this proxy is no longer functioning.
-    delegate_->BroadcastEvent(base::MakeUnique<ObserveProxyEvent>(
+    delegate_->BroadcastEvent(std::make_unique<ObserveProxyEvent>(
         kInvalidPortName, name_, proxy_name, kInvalidNodeName,
         kInvalidPortName));
 
@@ -1344,6 +1383,23 @@ void Node::DelegateHolder::EnsureSafeDelegateAccess() const {
   base::AutoLock lock(node_->ports_lock_);
 }
 #endif
+
+Node::PortTableEntry::PortTableEntry(scoped_refptr<Port> port)
+    : port(std::move(port)) {}
+
+Node::PortTableEntry::PortTableEntry(PortTableEntry&& other) = default;
+
+Node::PortTableEntry::~PortTableEntry() {
+  // We don't really anticipate hitting this CHECK given that we should be
+  // effectively working around memory corruption. Still it's a potentially
+  // useful signal if anything continues to go wrong, and it forces the value to
+  // be used.
+  CHECK_EQ(0x1827364554637281ULL, sentinel_value_);
+  sentinel_value_ = 0x8127364554637281ULL;
+}
+
+Node::PortTableEntry& Node::PortTableEntry::operator=(PortTableEntry&& other) =
+    default;
 
 }  // namespace ports
 }  // namespace edk

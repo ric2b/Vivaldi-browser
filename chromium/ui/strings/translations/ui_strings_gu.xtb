@@ -32,6 +32,7 @@
 <translation id="2190355936436201913">(ખાલી)</translation>
 <translation id="2289052229480071835">તમારી સ્ક્રીન પર ટચ કરવાના લક્ષ્યોને ટૅપ કરો.</translation>
 <translation id="2297836609126180313"><ph name="QUANTITY" /> TB/s</translation>
+<translation id="24452542372838207">નોટિફિકેશન વિસ્તૃત કરો</translation>
 <translation id="2482878487686419369">સૂચનાઓ</translation>
 <translation id="2497284189126895209">બધી ફાઇલો</translation>
 <translation id="2522350507219695259">કૅલિબ્રેશન પૂર્ણ થયું</translation>
@@ -162,6 +163,7 @@
 <translation id="9002566407876343676">ખોલો</translation>
 <translation id="9038489124413477075">અનામાંકિત ફોલ્ડર</translation>
 <translation id="9044832324875206639">{SECONDS,plural, =1{1 સે}one{# સે}other{# સે}}</translation>
+<translation id="9059834730836941392">નોટિફિકેશન સંકુચિત કરો</translation>
 <translation id="9150735707954472829">ટૅબ</translation>
 <translation id="9161053988251441839">સૂચવેલ ઍપ્લિકેશનો</translation>
 <translation id="9170848237812810038">&amp;પૂર્વવત્ કરો</translation>

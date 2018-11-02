@@ -41,9 +41,9 @@
 #include "core/editing/iterators/SearchBuffer.h"
 #include "core/editing/markers/DocumentMarker.h"
 #include "core/editing/markers/DocumentMarkerController.h"
-#include "core/exported/WebViewBase.h"
+#include "core/exported/WebViewImpl.h"
 #include "core/frame/LocalFrameView.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/TextAutosizer.h"
 #include "core/page/Page.h"
@@ -241,9 +241,7 @@ void TextFinder::SetFindEndstateFocusAndSelection() {
 
   // If the user has set the selection since the match was found, we
   // don't focus anything.
-  VisibleSelection selection(
-      GetFrame()->Selection().ComputeVisibleSelectionInDOMTreeDeprecated());
-  if (!selection.IsNone())
+  if (!GetFrame()->Selection().GetSelectionInDOMTree().IsNone())
     return;
 
   // Need to clean out style and layout state before querying
@@ -375,7 +373,6 @@ void TextFinder::StartScopingStringMatches(int identifier,
   // Clear the counters from last operation.
   last_match_count_ = 0;
   next_invalidate_after_ = 0;
-  resume_scoping_from_range_ = nullptr;
 
   // The view might be null on detached frames.
   LocalFrame* frame = OwnerFrame().GetFrame();
@@ -422,6 +419,7 @@ void TextFinder::ScopeStringMatches(int identifier,
   int match_count = 0;
   bool timed_out = false;
   double start_time = CurrentTime();
+  PositionInFlatTree next_scoping_start;
   do {
     // Find next occurrence of the search string.
     // FIXME: (http://crbug.com/6818) This WebKit operation may run for longer
@@ -491,11 +489,16 @@ void TextFinder::ScopeStringMatches(int identifier,
     // text nodes.
     search_start = result.EndPosition();
 
-    resume_scoping_from_range_ = Range::Create(
-        result.GetDocument(), ToPositionInDOMTree(result.EndPosition()),
-        ToPositionInDOMTree(result.EndPosition()));
+    next_scoping_start = search_start;
     timed_out = (CurrentTime() - start_time) >= kMaxScopingDuration;
   } while (!timed_out);
+
+  if (next_scoping_start.IsNotNull()) {
+    resume_scoping_from_range_ =
+        Range::Create(*next_scoping_start.GetDocument(),
+                      ToPositionInDOMTree(next_scoping_start),
+                      ToPositionInDOMTree(next_scoping_start));
+  }
 
   // Remember what we search for last time, so we can skip searching if more
   // letters are added to the search string (and last outcome was 0).
@@ -560,6 +563,8 @@ void TextFinder::CancelPendingScopingEffort() {
     last_find_request_completed_with_no_matches_ = false;
 
   scoping_in_progress_ = false;
+
+  resume_scoping_from_range_ = nullptr;
 }
 
 void TextFinder::IncreaseMatchCount(int identifier, int count) {
@@ -641,7 +646,7 @@ void TextFinder::UpdateFindMatchRects() {
   if (!find_match_rects_are_valid_) {
     for (WebFrame* child = OwnerFrame().FirstChild(); child;
          child = child->NextSibling()) {
-      ToWebLocalFrameBase(child)
+      ToWebLocalFrameImpl(child)
           ->EnsureTextFinder()
           .find_match_rects_are_valid_ = false;
     }
@@ -757,11 +762,11 @@ int TextFinder::SelectFindMatch(unsigned index, WebRect* selection_rect) {
   return active_match_index_ + 1;
 }
 
-TextFinder* TextFinder::Create(WebLocalFrameBase& owner_frame) {
+TextFinder* TextFinder::Create(WebLocalFrameImpl& owner_frame) {
   return new TextFinder(owner_frame);
 }
 
-TextFinder::TextFinder(WebLocalFrameBase& owner_frame)
+TextFinder::TextFinder(WebLocalFrameImpl& owner_frame)
     : owner_frame_(&owner_frame),
       current_active_match_frame_(false),
       active_match_index_(-1),

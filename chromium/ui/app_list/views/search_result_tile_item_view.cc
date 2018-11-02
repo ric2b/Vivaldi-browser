@@ -24,7 +24,7 @@ namespace {
 
 constexpr int kSearchTileWidth = 80;
 constexpr int kSearchTileTopPadding = 4;
-constexpr int kSearchTitleSpacing = 6;
+constexpr int kSearchTitleSpacing = 5;
 constexpr int kSearchPriceSize = 37;
 constexpr int kSearchRatingSize = 26;
 constexpr int kSearchRatingStarSize = 12;
@@ -137,6 +137,11 @@ void SearchResultTileItemView::SetSearchResult(SearchResult* item) {
       title()->SetLineHeight(font.GetHeight());
       title()->SetEnabledColor(kSearchTitleColor);
     }
+
+    title()->SetMaxLines(2);
+    title()->SetMultiLine(item_->display_type() == SearchResult::DISPLAY_TILE &&
+                          item_->result_type() ==
+                              SearchResult::RESULT_INSTALLED_APP);
   }
 
   // Only refresh the icon if it's different from the old one. This prevents

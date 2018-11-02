@@ -11,13 +11,14 @@
 #include "base/win/windows_version.h"
 #include "chrome/browser/ui/views/apps/chrome_native_app_window_views_win.h"
 #include "ui/views/win/hwnd_util.h"
+#include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_ui_utils.h"
 
 namespace vivaldi {
 void UpdateTaskbarProgressBarForVivaldiWindows(int download_count,
                                                bool progress_known,
                                                float progress) {
-  extensions::AppWindow* current_vivaldi_window =
+  VivaldiBrowserWindow* current_vivaldi_window =
       vivaldi::ui_tools::GetActiveAppWindow();
 
   if (!current_vivaldi_window)

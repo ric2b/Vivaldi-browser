@@ -29,6 +29,7 @@ import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.process_launcher.ChildConnectionAllocator;
 import org.chromium.base.process_launcher.ChildProcessConnection;
 import org.chromium.base.process_launcher.FileDescriptorInfo;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.content.browser.test.ChildProcessAllocatorSettings;
 import org.chromium.content.browser.test.ContentJUnit4ClassRunner;
@@ -88,8 +89,12 @@ public class ChildProcessLauncherHelperTest {
      * ChildProcessLauncher retries on a new connection.
      */
     @Test
-    @MediumTest
-    @Feature({"ProcessManagement"})
+    //@MediumTest
+    //@Feature({"ProcessManagement"})
+    // Test is flaky: crbug.com/752691
+    @DisabledTest
+    @ChildProcessAllocatorSettings(
+            sandboxedServiceCount = 2, sandboxedServiceName = DEFAULT_SANDBOXED_PROCESS_SERVICE)
     public void testBindServiceFromMultipleProcesses() throws RemoteException {
         final Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
 
@@ -162,9 +167,10 @@ public class ChildProcessLauncherHelperTest {
 
         // Launch a service from this process. Since slot 0 is already bound by the Helper, it
         // will fail to start and the ChildProcessLauncher will retry and use the slot 1.
-        ChildProcessCreationParams creationParams = new ChildProcessCreationParams(
-                context.getPackageName(), false /* isExternalService */,
-                LibraryProcessType.PROCESS_CHILD, true /* bindToCallerCheck */);
+        ChildProcessCreationParams creationParams =
+                new ChildProcessCreationParams(context.getPackageName(),
+                        false /* isExternalService */, LibraryProcessType.PROCESS_CHILD,
+                        true /* bindToCallerCheck */, false /* ignoreVisibilityForImportance */);
         ChildProcessLauncherHelper launcher = startSandboxedChildProcessWithCreationParams(
                 creationParams, BLOCK_UNTIL_SETUP, true /* doSetupConnection */);
 
@@ -176,11 +182,11 @@ public class ChildProcessLauncherHelperTest {
         ChildConnectionAllocator connectionAllocator =
                 launcher.getChildConnectionAllocatorForTesting();
 
-        // Check that only two connections are created.
+        // Check that only one connection is created.
         for (int i = 0; i < connectionAllocator.getNumberOfServices(); ++i) {
             ChildProcessConnection sandboxedConn =
                     connectionAllocator.getChildProcessConnectionAtSlotForTesting(i);
-            if (i <= 1) {
+            if (i == 1) {
                 Assert.assertNotNull(sandboxedConn);
                 Assert.assertNotNull(
                         ChildProcessLauncherTestUtils.getConnectionService(sandboxedConn));
@@ -191,12 +197,6 @@ public class ChildProcessLauncherHelperTest {
 
         Assert.assertEquals(
                 connectionAllocator.getChildProcessConnectionAtSlotForTesting(1), retryConnection);
-
-        ChildProcessConnection failedConnection =
-                connectionAllocator.getChildProcessConnectionAtSlotForTesting(0);
-        Assert.assertEquals(0, ChildProcessLauncherTestUtils.getConnectionPid(failedConnection));
-        Assert.assertFalse(ChildProcessLauncherTestUtils.getConnectionService(failedConnection)
-                                   .bindToCaller());
 
         CriteriaHelper.pollInstrumentationThread(
                 new Criteria("Failed waiting retry connection to get pid") {
@@ -209,6 +209,28 @@ public class ChildProcessLauncherHelperTest {
                 != helperConnectionPid);
         Assert.assertTrue(
                 ChildProcessLauncherTestUtils.getConnectionService(retryConnection).bindToCaller());
+
+        // Unbind the service.
+        replyHandler.mMessage = null;
+        msg = Message.obtain(null, ChildProcessLauncherTestHelperService.MSG_UNBIND_SERVICE);
+        msg.replyTo = new Messenger(new Handler(Looper.getMainLooper(), replyHandler));
+        serviceConnection.mMessenger.send(msg);
+        CriteriaHelper.pollInstrumentationThread(
+                new Criteria("Failed waiting for helper service unbind reply") {
+                    @Override
+                    public boolean isSatisfied() {
+                        return replyHandler.mMessage != null;
+                    }
+                });
+        Assert.assertEquals(ChildProcessLauncherTestHelperService.MSG_UNBIND_SERVICE_REPLY,
+                replyHandler.mMessage.what);
+
+        // The 0th connection should now be usable.
+        launcher = startSandboxedChildProcessWithCreationParams(
+                creationParams, BLOCK_UNTIL_SETUP, true /* doSetupConnection */);
+        ChildProcessConnection connection = ChildProcessLauncherTestUtils.getConnection(launcher);
+        Assert.assertEquals(
+                0, ChildProcessLauncherTestUtils.getConnectionServiceNumber(connection));
     }
 
     private static void warmUpOnUiThreadBlocking(final Context context) {
@@ -260,9 +282,10 @@ public class ChildProcessLauncherHelperTest {
     @Feature({"ProcessManagement"})
     public void testWarmUpWithBindToCaller() {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
-        ChildProcessCreationParams creationParams = new ChildProcessCreationParams(
-                context.getPackageName(), false /* isExternalService */,
-                LibraryProcessType.PROCESS_CHILD, true /* bindToCallerCheck */);
+        ChildProcessCreationParams creationParams =
+                new ChildProcessCreationParams(context.getPackageName(),
+                        false /* isExternalService */, LibraryProcessType.PROCESS_CHILD,
+                        true /* bindToCallerCheck */, false /* ignoreVisibilityForImportance */);
         testWarmUpWithCreationParams(creationParams);
     }
 
@@ -334,6 +357,33 @@ public class ChildProcessLauncherHelperTest {
 
         // Poll until allocator is removed. Need to poll here because actually freeing a connection
         // from allocator is a posted task, rather than a direct call from stop.
+        CriteriaHelper.pollInstrumentationThread(
+                new Criteria("The connection allocator was not removed.") {
+                    @Override
+                    public boolean isSatisfied() {
+                        return !hasSandboxedConnectionAllocatorForPackage(packageName);
+                    }
+                });
+    }
+
+    /**
+     * Tests that 2 connections stopping consecutively don't trigger an assert.
+     * https://crbug.com/749149
+     */
+    @Test
+    @MediumTest
+    @Feature({"ProcessManagement"})
+    public void testSandboxedAllocatorFreedWith2Connections() {
+        ChildProcessLauncherHelper launcher1 = startSandboxedChildProcess(
+                null /* packageName */, BLOCK_UNTIL_SETUP, true /* doSetupConnection */);
+        ChildProcessLauncherHelper launcher2 = startSandboxedChildProcess(
+                null /* packageName */, BLOCK_UNTIL_SETUP, true /* doSetupConnection */);
+        stopProcesses(launcher1, launcher2);
+
+        // Wait for the allocator to be removed, so we know both connections' listeners have been
+        // run.
+        final String packageName =
+                InstrumentationRegistry.getInstrumentation().getTargetContext().getPackageName();
         CriteriaHelper.pollInstrumentationThread(
                 new Criteria("The connection allocator was not removed.") {
                     @Override
@@ -507,7 +557,8 @@ public class ChildProcessLauncherHelperTest {
         return packageName == null
                 ? null
                 : new ChildProcessCreationParams(packageName, false /* isExternalService */,
-                          LibraryProcessType.PROCESS_CHILD, false /* bindToCallerCheck */);
+                          LibraryProcessType.PROCESS_CHILD, false /* bindToCallerCheck */,
+                          false /* ignoreVisibilityForImportance */);
     }
 
     private static boolean hasSandboxedConnectionAllocatorForPackage(final String packageName) {
@@ -539,6 +590,21 @@ public class ChildProcessLauncherHelperTest {
             @Override
             public void run() {
                 ChildProcessLauncherHelper.stop(connection.getPid());
+            }
+        });
+    }
+
+    private static void stopProcesses(ChildProcessLauncherHelper... launcherHelpers) {
+        final int[] pids = new int[launcherHelpers.length];
+        for (int i = 0; i < launcherHelpers.length; i++) {
+            pids[i] = getPid(launcherHelpers[i]);
+        }
+        ChildProcessLauncherTestUtils.runOnLauncherThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                for (int pid : pids) {
+                    ChildProcessLauncherHelper.stop(pid);
+                }
             }
         });
     }

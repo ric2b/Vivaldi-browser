@@ -96,11 +96,6 @@ namespace {
 WebContentsViewAura::RenderWidgetHostViewCreateFunction
     g_create_render_widget_host_view = nullptr;
 
-bool IsScrollEndEffectEnabled() {
-  return base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-      switches::kScrollEndEffect) == "1";
-}
-
 RenderWidgetHostViewAura* ToRenderWidgetHostViewAura(
     RenderWidgetHostView* view) {
   if (!view || (RenderViewHostFactory::has_factory() &&
@@ -157,7 +152,7 @@ class WebDragSourceAura : public NotificationObserver {
   DISALLOW_COPY_AND_ASSIGN(WebDragSourceAura);
 };
 
-#if (!defined(OS_CHROMEOS) && defined(USE_X11)) || defined(OS_WIN)
+#if defined(USE_X11) || defined(OS_WIN)
 // Fill out the OSExchangeData with a file contents, synthesizing a name if
 // necessary.
 void PrepareDragForFileContents(const DropData& drop_data,
@@ -293,7 +288,7 @@ void PrepareDragData(const DropData& drop_data,
   if (!drop_data.download_metadata.empty())
     PrepareDragForDownload(drop_data, provider, web_contents);
 #endif
-#if (!defined(OS_CHROMEOS) && defined(USE_X11)) || defined(OS_WIN)
+#if defined(USE_X11) || defined(OS_WIN)
   // We set the file contents before the URL because the URL also sets file
   // contents (to a .URL shortcut).  We want to prefer file content data over
   // a shortcut so we add it first.
@@ -499,7 +494,7 @@ class WebContentsViewAura::WindowObserver
   }
 
   // Overridden WindowTreeHostObserver:
-  void OnHostMovedInPixels(const aura::WindowTreeHost* host,
+  void OnHostMovedInPixels(aura::WindowTreeHost* host,
                            const gfx::Point& new_origin_in_pixels) override {
     TRACE_EVENT1("ui",
                  "WebContentsViewAura::WindowObserver::OnHostMovedInPixels",
@@ -650,12 +645,6 @@ void WebContentsViewAura::CompleteOverscrollNavigation(OverscrollMode mode) {
     selection_controller->HideAndDisallowShowingAutomatically();
 }
 
-void WebContentsViewAura::OverscrollUpdateForWebContentsDelegate(
-    float delta_y) {
-  if (web_contents_->GetDelegate() && IsScrollEndEffectEnabled())
-    web_contents_->GetDelegate()->OverscrollUpdate(delta_y);
-}
-
 ui::TouchSelectionController* WebContentsViewAura::GetSelectionController()
     const {
   RenderWidgetHostViewAura* view =
@@ -723,6 +712,7 @@ void GetScreenInfoForWindow(ScreenInfo* results,
   results->is_monochrome = display.is_monochrome();
   results->device_scale_factor = display.device_scale_factor();
   results->color_space = display.color_space();
+  results->color_space.GetICCProfile(&results->icc_profile);
 
   // The Display rotation and the ScreenInfo orientation are not the same
   // angle. The former is the physical display rotation while the later is the
@@ -1056,14 +1046,6 @@ void WebContentsViewAura::TakeFocus(bool reverse) {
 ////////////////////////////////////////////////////////////////////////////////
 // WebContentsViewAura, OverscrollControllerDelegate implementation:
 
-gfx::Size WebContentsViewAura::GetVisibleSize() const {
-  RenderWidgetHostView* rwhv = web_contents_->GetRenderWidgetHostView();
-  if (!rwhv || !rwhv->IsShowing())
-    return gfx::Size();
-
-  return rwhv->GetViewBounds().size();
-}
-
 gfx::Size WebContentsViewAura::GetDisplaySize() const {
   RenderWidgetHostView* rwhv = web_contents_->GetRenderWidgetHostView();
   if (!rwhv)
@@ -1075,33 +1057,22 @@ gfx::Size WebContentsViewAura::GetDisplaySize() const {
 }
 
 bool WebContentsViewAura::OnOverscrollUpdate(float delta_x, float delta_y) {
-  if (current_overscroll_gesture_ == OVERSCROLL_NONE)
+  if (current_overscroll_gesture_ != OVERSCROLL_EAST &&
+      current_overscroll_gesture_ != OVERSCROLL_WEST) {
     return false;
-
-  if (current_overscroll_gesture_ == OVERSCROLL_NORTH ||
-      current_overscroll_gesture_ == OVERSCROLL_SOUTH) {
-    OverscrollUpdateForWebContentsDelegate(delta_y);
-    return delta_y != 0;
   }
+
   return navigation_overlay_->relay_delegate()->OnOverscrollUpdate(delta_x,
                                                                    delta_y);
 }
 
 void WebContentsViewAura::OnOverscrollComplete(OverscrollMode mode) {
-  if (web_contents_->GetDelegate() &&
-      IsScrollEndEffectEnabled() &&
-      (mode == OVERSCROLL_NORTH || mode == OVERSCROLL_SOUTH)) {
-    web_contents_->GetDelegate()->OverscrollComplete();
-  }
   CompleteOverscrollNavigation(mode);
 }
 
 void WebContentsViewAura::OnOverscrollModeChange(OverscrollMode old_mode,
                                                  OverscrollMode new_mode,
                                                  OverscrollSource source) {
-  if (old_mode == OVERSCROLL_NORTH || old_mode == OVERSCROLL_SOUTH)
-    OverscrollUpdateForWebContentsDelegate(0);
-
   current_overscroll_gesture_ = new_mode;
   navigation_overlay_->relay_delegate()->OnOverscrollModeChange(
       old_mode, new_mode, source);
@@ -1215,7 +1186,7 @@ void WebContentsViewAura::OnMouseEvent(ui::MouseEvent* event) {
     // Linux window managers like to handle raise-on-click themselves.  If we
     // raise-on-click manually, this may override user settings that prevent
     // focus-stealing.
-#if !defined(USE_X11) || defined (OS_CHROMEOS)
+#if !defined(USE_X11)
     web_contents_->GetDelegate()->ActivateContents(web_contents_);
 #endif
   }

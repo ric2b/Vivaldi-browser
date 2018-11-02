@@ -25,7 +25,7 @@ ServiceWorkerDataPipeReader::ServiceWorkerDataPipeReader(
   TRACE_EVENT_ASYNC_BEGIN1("ServiceWorker", "ServiceWorkerDataPipeReader", this,
                            "Url", owner->request()->url().spec());
   streaming_version_->AddStreamingURLRequestJob(owner_);
-  binding_.set_connection_error_handler(base::Bind(
+  binding_.set_connection_error_handler(base::BindOnce(
       &ServiceWorkerDataPipeReader::OnAborted, base::Unretained(this)));
 }
 
@@ -66,9 +66,8 @@ void ServiceWorkerDataPipeReader::OnHandleGotSignal(MojoResult) {
   // |stream_pending_buffer_| is set to the IOBuffer instance provided to
   // ReadRawData() by URLRequestJob.
   uint32_t size_to_pass = stream_pending_buffer_size_;
-  MojoResult mojo_result =
-      mojo::ReadDataRaw(stream_.get(), stream_pending_buffer_->data(),
-                        &size_to_pass, MOJO_READ_DATA_FLAG_NONE);
+  MojoResult mojo_result = stream_->ReadData(
+      stream_pending_buffer_->data(), &size_to_pass, MOJO_READ_DATA_FLAG_NONE);
 
   switch (mojo_result) {
     case MOJO_RESULT_OK:
@@ -104,8 +103,8 @@ int ServiceWorkerDataPipeReader::ReadRawData(net::IOBuffer* buf, int buf_size) {
     return SyncComplete();
 
   uint32_t size_to_pass = buf_size;
-  MojoResult mojo_result = mojo::ReadDataRaw(
-      stream_.get(), buf->data(), &size_to_pass, MOJO_READ_DATA_FLAG_NONE);
+  MojoResult mojo_result =
+      stream_->ReadData(buf->data(), &size_to_pass, MOJO_READ_DATA_FLAG_NONE);
   switch (mojo_result) {
     case MOJO_RESULT_OK:
       return size_to_pass;

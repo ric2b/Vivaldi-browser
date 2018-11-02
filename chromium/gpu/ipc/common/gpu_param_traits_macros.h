@@ -11,9 +11,12 @@
 #include "gpu/config/gpu_feature_info.h"
 #include "gpu/config/gpu_info.h"
 #include "gpu/gpu_export.h"
+#include "gpu/ipc/common/flush_params.h"
+#include "gpu/ipc/common/gpu_command_buffer_traits.h"
 #include "ipc/ipc_message_macros.h"
 #include "ui/gfx/ipc/geometry/gfx_param_traits.h"
 #include "ui/gfx/ipc/gfx_param_traits.h"
+#include "ui/latency/ipc/latency_info_param_traits.h"
 #include "url/ipc/url_param_traits.h"
 
 #undef IPC_MESSAGE_EXPORT
@@ -36,6 +39,14 @@ IPC_STRUCT_TRAITS_BEGIN(gpu::VideoEncodeAcceleratorSupportedProfile)
   IPC_STRUCT_TRAITS_MEMBER(max_resolution)
   IPC_STRUCT_TRAITS_MEMBER(max_framerate_numerator)
   IPC_STRUCT_TRAITS_MEMBER(max_framerate_denominator)
+IPC_STRUCT_TRAITS_END()
+
+IPC_STRUCT_TRAITS_BEGIN(gpu::FlushParams)
+  IPC_STRUCT_TRAITS_MEMBER(route_id)
+  IPC_STRUCT_TRAITS_MEMBER(put_offset)
+  IPC_STRUCT_TRAITS_MEMBER(flush_id)
+  IPC_STRUCT_TRAITS_MEMBER(latency_info)
+  IPC_STRUCT_TRAITS_MEMBER(sync_token_fences)
 IPC_STRUCT_TRAITS_END()
 
 IPC_ENUM_TRAITS_MAX_VALUE(gpu::SchedulingPriority,
@@ -101,7 +112,7 @@ IPC_STRUCT_TRAITS_BEGIN(gpu::GPUInfo)
   IPC_STRUCT_TRAITS_MEMBER(video_decode_accelerator_capabilities)
   IPC_STRUCT_TRAITS_MEMBER(video_encode_accelerator_supported_profiles)
   IPC_STRUCT_TRAITS_MEMBER(jpeg_decode_accelerator_supported)
-#if defined(USE_X11) && !defined(OS_CHROMEOS)
+#if defined(USE_X11)
   IPC_STRUCT_TRAITS_MEMBER(system_visual)
   IPC_STRUCT_TRAITS_MEMBER(rgba_visual)
 #endif

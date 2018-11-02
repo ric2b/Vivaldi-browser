@@ -35,7 +35,7 @@ class Layer;
 
 namespace cc_blink {
 
-class CC_BLINK_EXPORT WebLayerImpl : public NON_EXPORTED_BASE(blink::WebLayer) {
+class CC_BLINK_EXPORT WebLayerImpl : public blink::WebLayer {
  public:
   WebLayerImpl();
   explicit WebLayerImpl(scoped_refptr<cc::Layer>);
@@ -92,6 +92,7 @@ class CC_BLINK_EXPORT WebLayerImpl : public NON_EXPORTED_BASE(blink::WebLayer) {
   void SetBackgroundFilters(const cc::FilterOperations& filters) override;
   bool HasTickingAnimationForTesting() override;
   void SetScrollable(const blink::WebSize&) override;
+  blink::WebSize ScrollContainerBoundsForTesting() const override;
   void SetScrollPosition(blink::WebFloatPoint position) override;
   blink::WebFloatPoint ScrollPosition() const override;
   bool Scrollable() const override;
@@ -110,8 +111,12 @@ class CC_BLINK_EXPORT WebLayerImpl : public NON_EXPORTED_BASE(blink::WebLayer) {
   void SetTouchEventHandlerRegion(
       const blink::WebVector<blink::WebTouchInfo>& touch_info) override;
   blink::WebVector<blink::WebRect> TouchEventHandlerRegion() const override;
+  blink::WebVector<blink::WebRect>
+      TouchEventHandlerRegionForTouchActionForTesting(
+          cc::TouchAction) const override;
   void SetIsContainerForFixedPositionLayers(bool is_container) override;
   bool IsContainerForFixedPositionLayers() const override;
+  void SetIsResizedByBrowserControls(bool) override;
   void SetPositionConstraint(
       const blink::WebLayerPositionConstraint& constraint) override;
   blink::WebLayerPositionConstraint PositionConstraint() const override;
@@ -120,6 +125,7 @@ class CC_BLINK_EXPORT WebLayerImpl : public NON_EXPORTED_BASE(blink::WebLayer) {
   blink::WebLayerStickyPositionConstraint StickyPositionConstraint()
       const override;
   void SetScrollClient(blink::WebLayerScrollClient* client) override;
+  void SetScrollOffsetFromImplSideForTesting(const gfx::ScrollOffset&) override;
   void SetLayerClient(cc::LayerClient* client) override;
   const cc::Layer* CcLayer() const override;
   cc::Layer* CcLayer() override;

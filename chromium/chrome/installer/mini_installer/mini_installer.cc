@@ -18,9 +18,6 @@
 //   OptimizeForWindows98="1" linker: /OPT:NOWIN98
 //   linker: /SAFESEH:NO
 
-// have the linker merge the sections, saving us ~500 bytes.
-#pragma comment(linker, "/MERGE:.rdata=.text")
-
 #include "chrome/installer/mini_installer/mini_installer.h"
 
 #include <windows.h>
@@ -166,6 +163,16 @@ ProcessExitResult GetSetupExePathForAppGuid(bool system_level,
   if (!SearchStringI(path, previous_version))
     return ProcessExitResult(PATCH_NOT_FOR_INSTALLED_VERSION);
 
+  // Strip double-quotes surrounding the string, if present.
+  if (size >= 1 && path[0] == '\"') {
+    size_t path_length = SafeStrLen(path, size);
+    if (path_length >= 2 && path[path_length - 1] == '\"') {
+      if (!SafeStrCopy(path, size, path + 1))
+        return ProcessExitResult(PATH_STRING_OVERFLOW);
+      path[path_length - 2] = '\0';
+    }
+  }
+
   return ProcessExitResult(SUCCESS_EXIT_CODE);
 }
 
@@ -196,14 +203,40 @@ ProcessExitResult GetPreviousSetupExePath(const Configuration& configuration,
 }
 
 // Calls CreateProcess with good default parameters and waits for the process to
-// terminate returning the process exit code. |exit_code|, if non-NULL, is
-// populated with the process exit code.
-ProcessExitResult RunProcessAndWait(const wchar_t* exe_path, wchar_t* cmdline) {
+// terminate returning the process exit code. In case of CreateProcess failure,
+// returns a results object with the provided codes as follows:
+// - ERROR_FILE_NOT_FOUND: (file_not_found_code, attributes of setup.exe).
+// - ERROR_PATH_NOT_FOUND: (path_not_found_code, attributes of setup.exe).
+// - Otherwise: (generic_failure_code, CreateProcess error code).
+// In case of error waiting for the process to exit, returns a results object
+// with (WAIT_FOR_PROCESS_FAILED, last error code). Otherwise, returns a results
+// object with the subprocess's exit code.
+ProcessExitResult RunProcessAndWait(const wchar_t* exe_path,
+                                    wchar_t* cmdline,
+                                    DWORD file_not_found_code,
+                                    DWORD path_not_found_code,
+                                    DWORD generic_failure_code) {
   STARTUPINFOW si = {sizeof(si)};
   PROCESS_INFORMATION pi = {0};
   if (!::CreateProcess(exe_path, cmdline, NULL, NULL, FALSE, CREATE_NO_WINDOW,
                        NULL, NULL, &si, &pi)) {
-    return ProcessExitResult(COULD_NOT_CREATE_PROCESS, ::GetLastError());
+    // Split specific failure modes. If setup.exe couldn't be launched because
+    // its file/path couldn't be found, report its attributes in ExtraCode1.
+    // This will help diagnose the prevalence of launch failures due to Image
+    // File Execution Options tampering. See https://crbug.com/672813 for more
+    // details.
+    const DWORD last_error = ::GetLastError();
+    const DWORD attributes = ::GetFileAttributes(exe_path);
+    switch (last_error) {
+      case ERROR_FILE_NOT_FOUND:
+        return ProcessExitResult(file_not_found_code, attributes);
+      case ERROR_PATH_NOT_FOUND:
+        return ProcessExitResult(path_not_found_code, attributes);
+      default:
+        break;
+    }
+    // Lump all other errors into a distinct failure bucket.
+    return ProcessExitResult(generic_failure_code, last_error);
   }
 
   ::CloseHandle(pi.hThread);
@@ -372,15 +405,11 @@ ProcessExitResult UnpackBinaryResources(const Configuration& configuration,
     exit_code = GetPreviousSetupExePath(configuration, exe_path.get(),
                                         exe_path.capacity());
     if (exit_code.IsSuccess()) {
-      if (!cmd_line.append(exe_path.get()) ||
-          !cmd_line.append(L" --") ||
-          !cmd_line.append(kCmdUpdateSetupExe) ||
-          !cmd_line.append(L"=\"") ||
-          !cmd_line.append(setup_path->get()) ||
-          !cmd_line.append(L"\" --") ||
-          !cmd_line.append(kCmdNewSetupExe) ||
-          !cmd_line.append(L"=\"") ||
-          !cmd_line.append(setup_dest_path.get()) ||
+      if (!cmd_line.append(L"\"") || !cmd_line.append(exe_path.get()) ||
+          !cmd_line.append(L"\" --") || !cmd_line.append(kCmdUpdateSetupExe) ||
+          !cmd_line.append(L"=\"") || !cmd_line.append(setup_path->get()) ||
+          !cmd_line.append(L"\" --") || !cmd_line.append(kCmdNewSetupExe) ||
+          !cmd_line.append(L"=\"") || !cmd_line.append(setup_dest_path.get()) ||
           !cmd_line.append(L"\"")) {
         exit_code = ProcessExitResult(COMMAND_STRING_OVERFLOW);
       }
@@ -390,8 +419,12 @@ ProcessExitResult UnpackBinaryResources(const Configuration& configuration,
     // on to setup.exe.
     AppendCommandLineFlags(configuration.command_line(), &cmd_line);
 
-    if (exit_code.IsSuccess())
-      exit_code = RunProcessAndWait(exe_path.get(), cmd_line.get());
+    if (exit_code.IsSuccess()) {
+      exit_code = RunProcessAndWait(
+          exe_path.get(), cmd_line.get(), SETUP_PATCH_FAILED_FILE_NOT_FOUND,
+          SETUP_PATCH_FAILED_PATH_NOT_FOUND,
+          SETUP_PATCH_FAILED_COULD_NOT_CREATE_PROCESS);
+    }
 
     if (!exit_code.IsSuccess())
       DeleteFile(setup_path->get());
@@ -443,22 +476,28 @@ ProcessExitResult UnpackBinaryResources(const Configuration& configuration,
 ProcessExitResult RunSetup(const Configuration& configuration,
                            const wchar_t* archive_path,
                            const wchar_t* setup_path) {
+  // Get the path to setup.exe.
+  PathString setup_exe;
+
+  if (*setup_path != L'\0') {
+    if (!setup_exe.assign(setup_path))
+      return ProcessExitResult(COMMAND_STRING_OVERFLOW);
+  } else {
+    ProcessExitResult exit_code = GetPreviousSetupExePath(
+        configuration, setup_exe.get(), setup_exe.capacity());
+    if (!exit_code.IsSuccess())
+      return exit_code;
+  }
+
   // There could be three full paths in the command line for setup.exe (path
   // to exe itself, path to archive and path to log file), so we declare
   // total size as three + one additional to hold command line options.
   CommandString cmd_line;
 
-  // Get the path to setup.exe first.
-  if (::lstrlen(setup_path) > 0) {
-    if (!cmd_line.assign(L"\"") ||
-        !cmd_line.append(setup_path) ||
-        !cmd_line.append(L"\""))
-      return ProcessExitResult(COMMAND_STRING_OVERFLOW);
-  } else {
-    ProcessExitResult exit_code = GetPreviousSetupExePath(
-        configuration, cmd_line.get(), cmd_line.capacity());
-    if (!exit_code.IsSuccess())
-      return exit_code;
+  // Put the quoted path to setup.exe in cmd_line first.
+  if (!cmd_line.assign(L"\"") || !cmd_line.append(setup_exe.get()) ||
+      !cmd_line.append(L"\"")) {
+    return ProcessExitResult(COMMAND_STRING_OVERFLOW);
   }
 
   // Append the command line param for chrome archive file.
@@ -470,12 +509,12 @@ ProcessExitResult RunSetup(const Configuration& configuration,
 #else
       !cmd_line.append(kCmdInstallArchive) ||
 #endif
-      !cmd_line.append(L"=\"") ||
-      !cmd_line.append(archive_path) ||
-      !cmd_line.append(L"\""))
+      !cmd_line.append(L"=\"") || !cmd_line.append(archive_path) ||
+      !cmd_line.append(L"\"")) {
     return ProcessExitResult(COMMAND_STRING_OVERFLOW);
+  }
 
-  // Append the command line param for chrome previous version.
+  // Append the command line param for the previous version of Chrome.
   if (configuration.previous_version() &&
       (!cmd_line.append(L" --") ||
        !cmd_line.append(kCmdPreviousVersion) ||
@@ -497,7 +536,10 @@ ProcessExitResult RunSetup(const Configuration& configuration,
     cmd_line.append(L" --vivaldi-force-launch");
   }
 
-  return RunProcessAndWait(NULL, cmd_line.get());
+  return RunProcessAndWait(setup_exe.get(), cmd_line.get(),
+                           RUN_SETUP_FAILED_FILE_NOT_FOUND,
+                           RUN_SETUP_FAILED_PATH_NOT_FOUND,
+                           RUN_SETUP_FAILED_COULD_NOT_CREATE_PROCESS);
 }
 
 // Deletes given files and working dir.

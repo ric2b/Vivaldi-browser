@@ -49,7 +49,7 @@ public class CastWebContentsActivity extends Activity {
     private Handler mHandler;
     private String mInstanceId;
     private BroadcastReceiver mWindowDestroyedBroadcastReceiver;
-    private IntentFilter mWindowDestroyedIntentFilter;
+    private BroadcastReceiver mScreenOffBroadcastReceiver;
     private FrameLayout mCastWebContentsLayout;
     private AudioManager mAudioManager;
     private ContentViewRenderView mContentViewRenderView;
@@ -59,9 +59,6 @@ public class CastWebContentsActivity extends Activity {
     private boolean mReceivedUserLeave = false;
 
     private static final int TEARDOWN_GRACE_PERIOD_TIMEOUT_MILLIS = 300;
-
-    public static final String ACTION_STOP_ACTIVITY =
-            "com.google.android.apps.castshell.intent.action.STOP_ACTIVITY";
 
     /*
      * Intended to be called from "onStop" to determine if this is a "legitimate" stop or not.
@@ -131,6 +128,7 @@ public class CastWebContentsActivity extends Activity {
             LocalBroadcastManager.getInstance(this).unregisterReceiver(
                     mWindowDestroyedBroadcastReceiver);
         }
+
         mWindowDestroyedBroadcastReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
@@ -138,16 +136,35 @@ public class CastWebContentsActivity extends Activity {
                 maybeFinishLater();
             }
         };
-        mWindowDestroyedIntentFilter = new IntentFilter();
-        mWindowDestroyedIntentFilter.addDataScheme(intent.getData().getScheme());
-        mWindowDestroyedIntentFilter.addDataAuthority(intent.getData().getAuthority(), null);
-        mWindowDestroyedIntentFilter.addDataPath(mInstanceId, PatternMatcher.PATTERN_LITERAL);
-        mWindowDestroyedIntentFilter.addAction(ACTION_STOP_ACTIVITY);
+
+        IntentFilter windowDestroyedIntentFilter = new IntentFilter();
+        windowDestroyedIntentFilter.addDataScheme(intent.getData().getScheme());
+        windowDestroyedIntentFilter.addDataAuthority(intent.getData().getAuthority(), null);
+        windowDestroyedIntentFilter.addDataPath(mInstanceId, PatternMatcher.PATTERN_LITERAL);
+        windowDestroyedIntentFilter.addAction(CastIntents.ACTION_STOP_ACTIVITY);
         LocalBroadcastManager.getInstance(this).registerReceiver(
-                mWindowDestroyedBroadcastReceiver, mWindowDestroyedIntentFilter);
+                mWindowDestroyedBroadcastReceiver, windowDestroyedIntentFilter);
+
+        if (mScreenOffBroadcastReceiver != null) {
+            LocalBroadcastManager.getInstance(this).unregisterReceiver(mScreenOffBroadcastReceiver);
+        }
+
+        mScreenOffBroadcastReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                detachWebContentsIfAny();
+                maybeFinishLater();
+            }
+        };
+
+        IntentFilter screenOffIntentFilter = new IntentFilter();
+        screenOffIntentFilter.addAction(CastIntents.ACTION_SCREEN_OFF);
+        LocalBroadcastManager.getInstance(this).registerReceiver(
+                mScreenOffBroadcastReceiver, screenOffIntentFilter);
 
         WebContents webContents = (WebContents) intent.getParcelableExtra(
                 CastWebContentsComponent.ACTION_EXTRA_WEB_CONTENTS);
+
         if (webContents == null) {
             Log.e(TAG, "Received null WebContents in intent.");
             maybeFinishLater();
@@ -179,6 +196,15 @@ public class CastWebContentsActivity extends Activity {
     @Override
     protected void onDestroy() {
         if (DEBUG) Log.d(TAG, "onDestroy");
+
+        if (mWindowDestroyedBroadcastReceiver != null) {
+            LocalBroadcastManager.getInstance(this).unregisterReceiver(
+                    mWindowDestroyedBroadcastReceiver);
+        }
+
+        if (mScreenOffBroadcastReceiver != null) {
+            LocalBroadcastManager.getInstance(this).unregisterReceiver(mScreenOffBroadcastReceiver);
+        }
         super.onDestroy();
     }
 
@@ -227,8 +253,11 @@ public class CastWebContentsActivity extends Activity {
         if (DEBUG) Log.d(TAG, "onWindowFocusChanged(%b)", hasFocus);
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus) {
+            // switch to fullscreen (immersive) mode
             getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_FULLSCREEN);
+                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                    | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    | View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
         }
     }
 

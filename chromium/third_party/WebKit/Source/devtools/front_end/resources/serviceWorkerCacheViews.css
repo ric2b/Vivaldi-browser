@@ -8,6 +8,7 @@
     position: relative;
     background-color: #eee;
     border-bottom: 1px solid #ccc;
+    padding-right: 10px;
 }
 
 .service-worker-cache-data-view .data-view-toolbar .key-input {
@@ -53,4 +54,10 @@
     white-space: nowrap;
     text-overflow: ellipsis;
     overflow: hidden;
+}
+
+.cache-preview-panel-resizer {
+    background-color: #eee;
+    height: 4px;
+    border-bottom: 1px solid rgb(64%, 64%, 64%);
 }

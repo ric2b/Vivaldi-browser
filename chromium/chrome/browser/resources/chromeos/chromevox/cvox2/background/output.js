@@ -94,6 +94,9 @@ Output = function() {
    * @private
    */
   this.outputContextFirst_ = false;
+
+  /** @private {!Object<string, boolean>} */
+  this.suppressions_ = {};
 };
 
 /**
@@ -133,7 +136,7 @@ Output.ROLE_INFO_ = {
   directory: {msgId: 'role_directory', inherits: 'abstractContainer'},
   document: {msgId: 'role_document', inherits: 'abstractContainer'},
   form: {msgId: 'role_form', inherits: 'abstractContainer'},
-  grid: {msgId: 'role_grid'},
+  grid: {msgId: 'role_grid', inherits: 'table'},
   group: {msgId: 'role_group', inherits: 'abstractContainer'},
   heading: {
     msgId: 'role_heading',
@@ -187,7 +190,7 @@ Output.ROLE_INFO_ = {
   },
   status: {msgId: 'role_status'},
   tab: {msgId: 'role_tab'},
-  tabList: {msgId: 'role_tablist'},
+  tabList: {msgId: 'role_tablist', inherits: 'abstractContainer'},
   tabPanel: {msgId: 'role_tabpanel'},
   textBox: {msgId: 'input_type_text', earconId: 'EDITABLE_TEXT'},
   textField: {msgId: 'input_type_text', earconId: 'EDITABLE_TEXT'},
@@ -210,7 +213,6 @@ Output.ROLE_INFO_ = {
  * @private
  */
 Output.STATE_INFO_ = {
-  busy: {on: {msgId: 'busy_state'}},
   collapsed: {on: {msgId: 'aria_expanded_false'}},
   default: {on: {msgId: 'default_state'}},
   expanded: {on: {msgId: 'aria_expanded_true'}},
@@ -273,201 +275,224 @@ Output.PRESSED_STATE_MAP = {
 Output.RULES = {
   navigate: {
     'default': {
-      speak: '$name $value $state $restriction $role $description',
-      braille: ''
+      speak: `$name $value $state $restriction $role $description`,
+      braille: ``
     },
     abstractContainer: {
-      enter: '$nameFromNode $role $state $description',
-      leave: '@exited_container($role)'
+      enter: `$nameFromNode $role $state $description`,
+      leave: `@exited_container($role)`
     },
     abstractRange: {
-      speak: '$if($valueForRange, $valueForRange, $value) ' +
-          '$if($minValueForRange, @aria_value_min($minValueForRange)) ' +
-          '$if($maxValueForRange, @aria_value_max($maxValueForRange)) ' +
-          '$name $role $description $state $restriction'
+      speak: `$if($valueForRange, $valueForRange, $value)
+          $if($minValueForRange, @aria_value_min($minValueForRange))
+          $if($maxValueForRange, @aria_value_max($maxValueForRange))
+          $name $role $description $state $restriction`
     },
     alert: {
-      enter: '$name $role $state',
-      speak: '$earcon(ALERT_NONMODAL) $role $nameOrTextContent $description ' +
-          '$state'
+      enter: `$name $role $state`,
+      speak: `$earcon(ALERT_NONMODAL) $role $nameOrTextContent $description
+          $state`
     },
     alertDialog: {
-      enter: '$earcon(ALERT_MODAL) $name $state $description',
-      speak:
-          '$earcon(ALERT_MODAL) $name $nameOrTextContent $description $state ' +
-          '$role'
+      enter: `$earcon(ALERT_MODAL) $name $state $description`,
+      speak: `$earcon(ALERT_MODAL) $name $nameOrTextContent $description $state
+          $role`
     },
     cell: {
-      enter: '@cell_summary($if($ariaCellRowIndex, $ariaCellRowIndex, ' +
-          '$tableCellRowIndex), ' +
-          '$if($ariaCellColumnIndex, $ariaCellColumnIndex, ' +
-          '$tableCellColumnIndex)) $node(tableColumnHeader)',
-      speak: '$name @cell_summary($if($ariaCellRowIndex, $ariaCellRowIndex, ' +
-          '$tableCellRowIndex), ' +
-          '$if($ariaCellColumnIndex, $ariaCellColumnIndex, ' +
-          '$tableCellColumnIndex)) $node(tableColumnHeader) $state $description'
+      enter: {
+        speak: `@cell_summary($if($ariaCellRowIndex, $ariaCellRowIndex,
+            $tableCellRowIndex),
+            $if($ariaCellColumnIndex, $ariaCellColumnIndex,
+            $tableCellColumnIndex)) $node(tableColumnHeader) $state`,
+        braille: `$state @cell_summary($if($ariaCellRowIndex, $ariaCellRowIndex,
+            $tableCellRowIndex),
+            $if($ariaCellColumnIndex, $ariaCellColumnIndex,
+            $tableCellColumnIndex)) $node(tableColumnHeader)`,
+      },
+      speak: `$name @cell_summary($if($ariaCellRowIndex, $ariaCellRowIndex,
+          $tableCellRowIndex),
+          $if($ariaCellColumnIndex, $ariaCellColumnIndex,
+          $tableCellColumnIndex)) $node(tableColumnHeader)
+          $state $description`,
+      braille: `$state
+          $name @cell_summary($if($ariaCellRowIndex, $ariaCellRowIndex,
+          $tableCellRowIndex),
+          $if($ariaCellColumnIndex, $ariaCellColumnIndex,
+          $tableCellColumnIndex)) $node(tableColumnHeader) $description`
     },
     checkBox: {
-      speak: '$if($checked, $earcon(CHECK_ON), $earcon(CHECK_OFF)) ' +
-          '$name $role $checked $description $state $restriction'
+      speak: `$if($checked, $earcon(CHECK_ON), $earcon(CHECK_OFF))
+          $name $role $checked $description $state $restriction`
     },
-    client: {speak: '$name'},
-    date: {enter: '$nameFromNode $role $state $restriction $description'},
-    dialog: {enter: '$nameFromNode $role $description'},
+    client: {speak: `$name`},
+    comboBox: {
+      speak: `$name $value $node(activeDescendant)
+          $state $restriction $role $description`,
+    },
+    date: {enter: `$nameFromNode $role $state $restriction $description`},
+    dialog: {enter: `$nameFromNode $role $description`},
     genericContainer: {
-      enter: '$nameFromNode $description $state',
-      speak: '$nameOrTextContent $description $state'
+      enter: `$nameFromNode $description $state`,
+      speak: `$nameOrTextContent $description $state`
     },
-    embeddedObject: {speak: '$name'},
-    grid: {enter: '$nameFromNode $role $description'},
+    embeddedObject: {speak: `$name`},
+    grid: {
+      speak: `$name $node(activeDescendant) $role $state $restriction
+          $description`
+    },
     group: {
-      enter: '$nameFromNode $state $restriction $description',
-      speak: '$nameOrDescendants $value $state $restriction $description',
-      leave: ''
+      enter: `$nameFromNode $state $restriction $description`,
+      speak: `$nameOrDescendants $value $state $restriction $description`,
+      leave: ``
     },
     heading: {
-      enter: '!relativePitch(hierarchicalLevel) ' +
-          '$nameFromNode= ' +
-          '$if($hierarchicalLevel, @tag_h+$hierarchicalLevel, $role) $state ' +
-          '$description',
-      speak: '!relativePitch(hierarchicalLevel) ' +
-          '$nameOrDescendants= ' +
-          '$if($hierarchicalLevel, @tag_h+$hierarchicalLevel, $role) $state ' +
-          '$restriction $description'
+      enter: `!relativePitch(hierarchicalLevel)
+          $nameFromNode=
+          $if($hierarchicalLevel, @tag_h+$hierarchicalLevel, $role) $state
+          $description`,
+      speak: `!relativePitch(hierarchicalLevel)
+          $nameOrDescendants=
+          $if($hierarchicalLevel, @tag_h+$hierarchicalLevel, $role) $state
+          $restriction $description`
     },
     image: {
-      speak: '$if($name, $name, $urlFilename) ' +
-          '$value $state $role $description',
+      speak: `$if($name, $name, $urlFilename)
+          $value $state $role $description`,
     },
-    inlineTextBox: {speak: '$name='},
-    inputTime: {enter: '$nameFromNode $role $state $restriction $description'},
+    inlineTextBox: {speak: `$name=`},
+    inputTime: {enter: `$nameFromNode $role $state $restriction $description`},
+    lineBreak: {speak: `$name=`},
     link: {
-      enter: '$nameFromNode= $role $state $restriction',
-      speak: '$name $value $state $restriction ' +
-          '$if($inPageLinkTarget, @internal_link, $role) $description',
+      enter: `$nameFromNode= $role $state $restriction`,
+      speak: `$name $value $state $restriction
+          $if($inPageLinkTarget, @internal_link, $role) $description`,
     },
     list: {
-      enter: '$role @@list_with_items($countChildren(listItem))',
-      speak: '$descendants $role @@list_with_items($countChildren(listItem)) ' +
-          '$description $state'
+      enter: `$role @@list_with_items($countChildren(listItem))`,
+      speak: `$descendants $role @@list_with_items($countChildren(listItem))
+          $description $state`
     },
     listBox: {
-      enter: '$nameFromNode ' +
-          '$role @@list_with_items($countChildren(listBoxOption)) ' +
-          '$restriction $description'
+      enter: `$nameFromNode
+          $role @@list_with_items($countChildren(listBoxOption))
+          $restriction $description`
     },
     listBoxOption: {
-      speak: '$name $role @describe_index($indexInParent, $parentChildCount) ' +
-          '$description $state $restriction'
+      speak: `$name $role @describe_index($indexInParent, $parentChildCount)
+          $description $state $restriction`
     },
     listItem: {
-      enter: '$name= $role $state $description',
-      speak: '$nameOrDescendants $earcon(LIST_ITEM) $role $state ' +
-          '$restriction $description'
+      enter: `$name= $role $state $description`,
+      speak: `$nameOrDescendants $earcon(LIST_ITEM) $role $state
+          $restriction $description`
     },
-    listMarker: {speak: '$name'},
+    listMarker: {speak: `$name`},
     menu: {
-      enter: '$name $role',
-      speak: '$name $role @@list_with_items($countChildren(menuItem)) ' +
-          '$description $state $restriction'
+      enter: `$name $role`,
+      speak: `$name $role @@list_with_items($countChildren(menuItem))
+          $description $state $restriction`
     },
     menuItem: {
-      speak: '$name $role $if($haspopup, @has_submenu) ' +
-          '@describe_index($indexInParent, $parentChildCount) ' +
-          '$description $state $restriction'
+      speak: `$name $role $if($haspopup, @has_submenu)
+          @describe_index($indexInParent, $parentChildCount)
+          $description $state $restriction`
     },
     menuItemCheckBox: {
-      speak: '$if($checked, $earcon(CHECK_ON), $earcon(CHECK_OFF)) ' +
-          '$name $role $checked $state $restriction $description ' +
-          '@describe_index($indexInParent, $parentChildCount) '
+      speak: `$if($checked, $earcon(CHECK_ON), $earcon(CHECK_OFF))
+          $name $role $checked $state $restriction $description
+          @describe_index($indexInParent, $parentChildCount)`
     },
     menuItemRadio: {
-      speak: '$if($checked, $earcon(CHECK_ON), $earcon(CHECK_OFF)) ' +
-          '$if($checked, @describe_radio_selected($name), ' +
-          '@describe_radio_unselected($name)) $state $restriction ' +
-          '$description @describe_index($indexInParent, $parentChildCount) '
+      speak: `$if($checked, $earcon(CHECK_ON), $earcon(CHECK_OFF))
+          $if($checked, @describe_radio_selected($name),
+          @describe_radio_unselected($name)) $state $restriction
+          $description @describe_index($indexInParent, $parentChildCount) `
     },
     menuListOption: {
-      speak: '$name @role_menuitem ' +
-          '@describe_index($indexInParent, $parentChildCount) $state ' +
-          '$restriction $description'
+      speak: `$name @role_menuitem
+          @describe_index($indexInParent, $parentChildCount) $state
+          $restriction $description`
     },
-    paragraph: {speak: '$descendants'},
+    paragraph: {speak: `$descendants`},
     popUpButton: {
-      speak: '$value $name $role @aria_has_popup ' +
-          '$state $restriction $description'
+      speak: `$value $name $role @aria_has_popup
+          $state $restriction $description`
     },
     radioButton: {
-      speak: '$if($checked, $earcon(CHECK_ON), $earcon(CHECK_OFF)) ' +
-          '$if($checked, @describe_radio_selected($name), ' +
-          '@describe_radio_unselected($name)) $description $state ' +
-          '$restriction'
+      speak: `$if($checked, $earcon(CHECK_ON), $earcon(CHECK_OFF))
+          $if($checked, @describe_radio_selected($name),
+          @describe_radio_unselected($name)) $description $state
+          $restriction`
     },
-    radioGroup: {enter: '$name $role $restriction $description'},
-    rootWebArea: {enter: '$name', speak: '$if($name, $name, $docUrl)'},
-    region: {speak: '$state $nameOrTextContent $description'},
-    row: {enter: '$node(tableRowHeader)'},
-    rowHeader: {speak: '$nameOrTextContent $description $state'},
-    staticText: {speak: '$name='},
+    radioGroup: {enter: `$name $role $restriction $description`},
+    rootWebArea: {enter: `$name`, speak: `$if($name, $name, $docUrl)`},
+    region: {speak: `$state $nameOrTextContent $description`},
+    row: {enter: `$node(tableRowHeader)`},
+    rowHeader: {speak: `$nameOrTextContent $description $state`},
+    staticText: {speak: `$name=`},
     switch: {
-      speak: '$if($checked, $earcon(CHECK_ON), $earcon(CHECK_OFF)) ' +
-          '$if($checked, @describe_switch_on($name), ' +
-          '@describe_switch_off($name)) $description $state $restriction'
+      speak: `$if($checked, $earcon(CHECK_ON), $earcon(CHECK_OFF))
+          $if($checked, @describe_switch_on($name),
+          @describe_switch_off($name)) $description $state $restriction`
     },
     tab: {
-      speak: '@describe_tab($name) $state $restriction $description ' +
-          '$if($setSize, @describe_index($posInSet, $setSize))',
+      speak: `@describe_tab($name) $state $restriction $description
+          $if($setSize, @describe_index($posInSet, $setSize))`,
     },
     table: {
-      enter: '@table_summary($name, ' +
-          '$if($ariaRowCount, $ariaRowCount, $tableRowCount), ' +
-          '$if($ariaColumnCount, $ariaColumnCount, $tableColumnCount)) ' +
-          '$node(tableHeader)'
+      enter: `@table_summary($name,
+          $if($ariaRowCount, $ariaRowCount, $tableRowCount),
+          $if($ariaColumnCount, $ariaColumnCount, $tableColumnCount))
+          $node(tableHeader)`
     },
-    tableHeaderContainer: {speak: '$nameOrTextContent $state $description'},
+    tableHeaderContainer: {speak: `$nameOrTextContent $state $description`},
+    tabList: {
+      speak: `$name $node(activeDescendant) $state $restriction $role
+          $description`,
+    },
     textField: {
-      speak: '$name $value $if($multiline, @tag_textarea, $if(' +
-          '$inputType, $inputType, $role)) $description $state $restriction',
-      braille: ''
+      speak: `$name $value $if($multiline, @tag_textarea,
+          $if($inputType, $inputType, $role)) $description $state $restriction`,
+      braille: ``
     },
-    timer: {speak: '$nameFromNode $descendants $value $state $description'},
+    timer: {speak: `$nameFromNode $descendants $value $state $description`},
     toggleButton: {
-      speak: '$if($checked, $earcon(CHECK_ON), $earcon(CHECK_OFF)) ' +
-          '$name $role $pressed $description $state $restriction'
+      speak: `$if($checked, $earcon(CHECK_ON), $earcon(CHECK_OFF))
+          $name $role $pressed $description $state $restriction`
     },
-    toolbar: {enter: '$name $role $description $restriction'},
+    toolbar: {enter: `$name $role $description $restriction`},
     tree: {
-      enter: '$name $role @@list_with_items($countChildren(treeItem)) ' +
-          '$restriction'
+      enter: `$name $role @@list_with_items($countChildren(treeItem))
+          $restriction`
     },
     treeItem: {
-      enter: '$role $expanded $collapsed $restriction ' +
-          '@describe_index($indexInParent, $parentChildCount) ' +
-          '@describe_depth($hierarchicalLevel)',
-      speak: '$name ' +
-          '$role $description $state $restriction ' +
-          '@describe_index($indexInParent, $parentChildCount) ' +
-          '@describe_depth($hierarchicalLevel)'
+      enter: `$role $expanded $collapsed $restriction
+          @describe_index($indexInParent, $parentChildCount)
+          @describe_depth($hierarchicalLevel)`,
+      speak: `$name
+          $role $description $state $restriction
+          @describe_index($indexInParent, $parentChildCount)
+          @describe_depth($hierarchicalLevel)`
     },
     window: {
-      enter: '@describe_window($name)',
-      speak: '@describe_window($name) $earcon(OBJECT_OPEN)'
+      enter: `@describe_window($name)`,
+      speak: `@describe_window($name) $earcon(OBJECT_OPEN)`
     }
   },
   menuStart:
-      {'default': {speak: '@chrome_menu_opened($name)  $earcon(OBJECT_OPEN)'}},
-  menuEnd: {'default': {speak: '@chrome_menu_closed $earcon(OBJECT_CLOSE)'}},
+      {'default': {speak: `@chrome_menu_opened($name)  $earcon(OBJECT_OPEN)`}},
+  menuEnd: {'default': {speak: `@chrome_menu_closed $earcon(OBJECT_CLOSE)`}},
   menuListValueChanged: {
     'default': {
-      speak: '$value $name ' +
-          '$find({"state": {"selected": true, "invisible": false}}, ' +
-          '@describe_index($indexInParent, $parentChildCount)) '
+      speak: `$value $name
+          $find({"state": {"selected": true, "invisible": false}},
+          @describe_index($indexInParent, $parentChildCount)) `
     }
   },
   alert: {
     default: {
-      speak: '$earcon(ALERT_NONMODAL) @role_alert ' +
-          '$nameOrTextContent $description'
+      speak: `$earcon(ALERT_NONMODAL) @role_alert
+          $nameOrTextContent $description`
     }
   }
 };
@@ -596,6 +621,11 @@ Output.prototype = {
     return false;
   },
 
+  /** @return {Spannable} */
+  get braille() {
+    return this.mergeBraille_(this.brailleBuffer_);
+  },
+
   /**
    * Specify ranges for speech.
    * @param {!cursors.Range} range
@@ -631,6 +661,21 @@ Output.prototype = {
    */
   withBraille: function(range, prevRange, type) {
     this.formatOptions_ = {speech: false, braille: true, auralStyle: false};
+
+    // Braille sometimes shows contextual information depending on role.
+    if (range.start.equals(range.end) && range.start.node &&
+        AutomationPredicate.contextualBraille(range.start.node) &&
+        range.start.node.parent) {
+      var start = range.start.node.parent;
+      while (start.firstChild)
+        start = start.firstChild;
+      var end = range.start.node.parent;
+      while (end.lastChild)
+        end = end.lastChild;
+      prevRange = cursors.Range.fromNode(range.start.node.parent);
+      range = new cursors.Range(
+          cursors.Cursor.fromNode(start), cursors.Cursor.fromNode(end));
+    }
     this.render_(range, prevRange, type, this.brailleBuffer_);
     return this;
   },
@@ -712,6 +757,16 @@ Output.prototype = {
    */
   withContextFirst: function() {
     this.outputContextFirst_ = true;
+    return this;
+  },
+
+  /**
+   * Suppresses processing of a token for subsequent formatting commands.
+   * @param {string} token
+   * @return {Output}
+   */
+  suppress: function(token) {
+    this.suppressions_[token] = true;
     return this;
   },
 
@@ -825,8 +880,11 @@ Output.prototype = {
         var valueEnd = buff.getSpanEnd(selSpan);
         startIndex = valueStart + selSpan.startIndex;
         endIndex = valueStart + selSpan.endIndex;
-        buff.setSpan(new cvox.ValueSpan(0), valueStart, valueEnd);
-        buff.setSpan(new cvox.ValueSelectionSpan(), startIndex, endIndex);
+        try {
+          buff.setSpan(new cvox.ValueSpan(0), valueStart, valueEnd);
+          buff.setSpan(new cvox.ValueSelectionSpan(), startIndex, endIndex);
+        } catch (e) {
+        }
       }
 
       var output = new cvox.NavBraille(
@@ -890,7 +948,7 @@ Output.prototype = {
 
     // Hacky way to support args.
     if (typeof(format) == 'string') {
-      format = format.replace(/([,:])\W/g, '$1');
+      format = format.replace(/([,:])\s+/gm, '$1');
       tokens = format.split(' ');
     } else {
       tokens = [format];
@@ -925,6 +983,9 @@ Output.prototype = {
 
       // All possible tokens based on prefix.
       if (prefix == '$') {
+        if (this.suppressions_[token])
+          return;
+
         if (token == 'value') {
           var text = node.value || '';
           if (!node.state[StateType.EDITABLE] && node.name == text)
@@ -1028,8 +1089,9 @@ Output.prototype = {
           if (node.state) {
             Object.getOwnPropertyNames(node.state).forEach(function(s) {
               var stateInfo = Output.STATE_INFO_[s];
-              if (stateInfo && !stateInfo.isRoleSpecific && stateInfo.on)
-                this.format_(node, '@' + stateInfo.on.msgId, buff);
+              if (stateInfo && !stateInfo.isRoleSpecific && stateInfo.on) {
+                this.format_(node, '$' + s, buff);
+              }
             }.bind(this));
           }
         } else if (token == 'find') {
@@ -1149,6 +1211,9 @@ Output.prototype = {
               resolvedInfo.msgId + '_brl' :
               resolvedInfo.msgId;
           var msg = Msgs.getMsg(msgId);
+          if (token == StateType.SELECTED)
+            options.annotation.push(new Output.SelectionSpan(
+                buff.length, buff.length + msg.length));
           this.append_(buff, msg, options);
         } else if (tree.firstChild) {
           // Custom functions.
@@ -1393,11 +1458,16 @@ Output.prototype = {
         if (enterRole[formatNode.role])
           continue;
 
-        if (this.formatOptions_.braille)
+        var enterBlock = roleBlock.enter;
+        var enterFormat = enterBlock.speak ? enterBlock.speak : enterBlock;
+        if (this.formatOptions_.braille) {
           buff = [];
+          if (enterBlock.braille)
+            enterFormat = roleBlock.enter.braille;
+        }
 
         enterRole[formatNode.role] = true;
-        this.format_(formatNode, roleBlock.enter, buff, prevNode);
+        this.format_(formatNode, enterFormat, buff, prevNode);
 
         if (this.formatOptions_.braille && buff.length) {
           var nodeSpan = this.mergeBraille_(buff);
@@ -1426,10 +1496,13 @@ Output.prototype = {
     var roleBlock = eventBlock[node.role] || {};
     var parentRole = (Output.ROLE_INFO_[node.role] || {}).inherits;
     var parentRoleBlock = eventBlock[parentRole || ''] || {};
-    var speakFormat =
-        roleBlock.speak || parentRoleBlock.speak || eventBlock['default'].speak;
 
-    this.format_(node, speakFormat, buff, prevNode);
+    var format =
+        roleBlock.speak || parentRoleBlock.speak || eventBlock['default'].speak;
+    if (this.formatOptions_.braille)
+      format = roleBlock.braille || parentRoleBlock.braille || format;
+
+    this.format_(node, format, buff, prevNode);
 
     // Restore braille and add an annotation for this node.
     if (this.formatOptions_.braille) {
@@ -1590,6 +1663,8 @@ Output.prototype = {
         currentNode.nextSibling = {value: ''};
         currentNode.nextSibling.parent = currentNode.parent;
         currentNode = currentNode.nextSibling;
+      } else if (inputStr[index] == ' ' || inputStr[index] == '\n') {
+        // Ignored.
       } else {
         currentNode.value += inputStr[index];
       }

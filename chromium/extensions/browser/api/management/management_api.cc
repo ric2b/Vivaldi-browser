@@ -34,7 +34,7 @@
 #include "extensions/browser/requirements_checker.h"
 #include "extensions/browser/uninstall_reason.h"
 #include "extensions/common/api/management.h"
-#include "extensions/common/constants.h"
+#include "extensions/common/disable_reason.h"
 #include "extensions/common/error_utils.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_icon_set.h"
@@ -145,6 +145,12 @@ management::ExtensionInfo CreateExtensionInfo(
     } else {
       info.disabled_reason = management::EXTENSION_DISABLED_REASON_UNKNOWN;
     }
+
+    info.may_enable = base::MakeUnique<bool>(
+        system->management_policy()->UserMayModifySettings(&extension,
+                                                           nullptr) &&
+        !system->management_policy()->MustRemainDisabled(&extension, nullptr,
+                                                         nullptr));
   }
 
   if (!ManifestURL::GetUpdateURL(&extension).is_empty()) {
@@ -450,9 +456,9 @@ ExtensionFunction::ResponseAction ManagementSetEnabledFunction::Run() {
       return RespondLater();
     }
     if (prefs->GetDisableReasons(extension_id_) &
-            Extension::DISABLE_UNSUPPORTED_REQUIREMENT) {
+        disable_reason::DISABLE_UNSUPPORTED_REQUIREMENT) {
       // Recheck the requirements.
-      requirements_checker_ = base::MakeUnique<RequirementsChecker>(extension);
+      requirements_checker_ = std::make_unique<RequirementsChecker>(extension);
       requirements_checker_->Start(
           base::Bind(&ManagementSetEnabledFunction::OnRequirementsChecked,
                      this));  // This bind creates a reference.
@@ -461,7 +467,7 @@ ExtensionFunction::ResponseAction ManagementSetEnabledFunction::Run() {
     delegate->EnableExtension(browser_context(), extension_id_);
   } else if (currently_enabled && !params->enabled) {
     delegate->DisableExtension(browser_context(), extension_id_,
-                               Extension::DISABLE_USER_ACTION);
+                               disable_reason::DISABLE_USER_ACTION);
   }
 
   return RespondNow(NoArguments());
@@ -473,7 +479,7 @@ void ManagementSetEnabledFunction::OnInstallPromptDone(bool did_accept) {
         ->Get(browser_context())
         ->GetDelegate()
         ->EnableExtension(browser_context(), extension_id_);
-    Respond(OneArgument(base::MakeUnique<base::Value>(true)));
+    Respond(OneArgument(std::make_unique<base::Value>(true)));
   } else {
     Respond(Error(keys::kUserDidNotReEnableError));
   }

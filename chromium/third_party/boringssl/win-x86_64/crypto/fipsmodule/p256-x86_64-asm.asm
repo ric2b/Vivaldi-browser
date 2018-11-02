@@ -547,6 +547,10 @@ global	ecp_nistz256_select_w5
 
 ALIGN	32
 ecp_nistz256_select_w5:
+	lea	rax,[OPENSSL_ia32cap_P]
+	mov	rax,QWORD[8+rax]
+	test	eax,32
+	jnz	NEAR $L$avx2_select_w5
 	lea	rax,[((-136))+rsp]
 $L$SEH_begin_ecp_nistz256_select_w5:
 DB	0x48,0x8d,0x60,0xe0
@@ -631,6 +635,10 @@ global	ecp_nistz256_select_w7
 
 ALIGN	32
 ecp_nistz256_select_w7:
+	lea	rax,[OPENSSL_ia32cap_P]
+	mov	rax,QWORD[8+rax]
+	test	eax,32
+	jnz	NEAR $L$avx2_select_w7
 	lea	rax,[((-136))+rsp]
 $L$SEH_begin_ecp_nistz256_select_w7:
 DB	0x48,0x8d,0x60,0xe0
@@ -697,24 +705,193 @@ $L$select_loop_sse_w7:
 $L$SEH_end_ecp_nistz256_select_w7:
 	DB	0F3h,0C3h		;repret
 
+
+
+
+ALIGN	32
+ecp_nistz256_avx2_select_w5:
+$L$avx2_select_w5:
+	vzeroupper
+	lea	rax,[((-136))+rsp]
+$L$SEH_begin_ecp_nistz256_avx2_select_w5:
+DB	0x48,0x8d,0x60,0xe0
+DB	0xc5,0xf8,0x29,0x70,0xe0
+DB	0xc5,0xf8,0x29,0x78,0xf0
+DB	0xc5,0x78,0x29,0x40,0x00
+DB	0xc5,0x78,0x29,0x48,0x10
+DB	0xc5,0x78,0x29,0x50,0x20
+DB	0xc5,0x78,0x29,0x58,0x30
+DB	0xc5,0x78,0x29,0x60,0x40
+DB	0xc5,0x78,0x29,0x68,0x50
+DB	0xc5,0x78,0x29,0x70,0x60
+DB	0xc5,0x78,0x29,0x78,0x70
+	vmovdqa	ymm0,YMMWORD[$L$Two]
+
+	vpxor	ymm2,ymm2,ymm2
+	vpxor	ymm3,ymm3,ymm3
+	vpxor	ymm4,ymm4,ymm4
+
+	vmovdqa	ymm5,YMMWORD[$L$One]
+	vmovdqa	ymm10,YMMWORD[$L$Two]
+
+	vmovd	xmm1,r8d
+	vpermd	ymm1,ymm2,ymm1
+
+	mov	rax,8
+$L$select_loop_avx2_w5:
+
+	vmovdqa	ymm6,YMMWORD[rdx]
+	vmovdqa	ymm7,YMMWORD[32+rdx]
+	vmovdqa	ymm8,YMMWORD[64+rdx]
+
+	vmovdqa	ymm11,YMMWORD[96+rdx]
+	vmovdqa	ymm12,YMMWORD[128+rdx]
+	vmovdqa	ymm13,YMMWORD[160+rdx]
+
+	vpcmpeqd	ymm9,ymm5,ymm1
+	vpcmpeqd	ymm14,ymm10,ymm1
+
+	vpaddd	ymm5,ymm5,ymm0
+	vpaddd	ymm10,ymm10,ymm0
+	lea	rdx,[192+rdx]
+
+	vpand	ymm6,ymm6,ymm9
+	vpand	ymm7,ymm7,ymm9
+	vpand	ymm8,ymm8,ymm9
+	vpand	ymm11,ymm11,ymm14
+	vpand	ymm12,ymm12,ymm14
+	vpand	ymm13,ymm13,ymm14
+
+	vpxor	ymm2,ymm2,ymm6
+	vpxor	ymm3,ymm3,ymm7
+	vpxor	ymm4,ymm4,ymm8
+	vpxor	ymm2,ymm2,ymm11
+	vpxor	ymm3,ymm3,ymm12
+	vpxor	ymm4,ymm4,ymm13
+
+	dec	rax
+	jnz	NEAR $L$select_loop_avx2_w5
+
+	vmovdqu	YMMWORD[rcx],ymm2
+	vmovdqu	YMMWORD[32+rcx],ymm3
+	vmovdqu	YMMWORD[64+rcx],ymm4
+	vzeroupper
+	movaps	xmm6,XMMWORD[rsp]
+	movaps	xmm7,XMMWORD[16+rsp]
+	movaps	xmm8,XMMWORD[32+rsp]
+	movaps	xmm9,XMMWORD[48+rsp]
+	movaps	xmm10,XMMWORD[64+rsp]
+	movaps	xmm11,XMMWORD[80+rsp]
+	movaps	xmm12,XMMWORD[96+rsp]
+	movaps	xmm13,XMMWORD[112+rsp]
+	movaps	xmm14,XMMWORD[128+rsp]
+	movaps	xmm15,XMMWORD[144+rsp]
+	lea	rsp,[168+rsp]
+$L$SEH_end_ecp_nistz256_avx2_select_w5:
+	DB	0F3h,0C3h		;repret
+
+
+
+
 global	ecp_nistz256_avx2_select_w7
 
 ALIGN	32
 ecp_nistz256_avx2_select_w7:
-	mov	QWORD[8+rsp],rdi	;WIN64 prologue
-	mov	QWORD[16+rsp],rsi
-	mov	rax,rsp
+$L$avx2_select_w7:
+	vzeroupper
+	lea	rax,[((-136))+rsp]
 $L$SEH_begin_ecp_nistz256_avx2_select_w7:
-	mov	rdi,rcx
-	mov	rsi,rdx
-	mov	rdx,r8
+DB	0x48,0x8d,0x60,0xe0
+DB	0xc5,0xf8,0x29,0x70,0xe0
+DB	0xc5,0xf8,0x29,0x78,0xf0
+DB	0xc5,0x78,0x29,0x40,0x00
+DB	0xc5,0x78,0x29,0x48,0x10
+DB	0xc5,0x78,0x29,0x50,0x20
+DB	0xc5,0x78,0x29,0x58,0x30
+DB	0xc5,0x78,0x29,0x60,0x40
+DB	0xc5,0x78,0x29,0x68,0x50
+DB	0xc5,0x78,0x29,0x70,0x60
+DB	0xc5,0x78,0x29,0x78,0x70
+	vmovdqa	ymm0,YMMWORD[$L$Three]
+
+	vpxor	ymm2,ymm2,ymm2
+	vpxor	ymm3,ymm3,ymm3
+
+	vmovdqa	ymm4,YMMWORD[$L$One]
+	vmovdqa	ymm8,YMMWORD[$L$Two]
+	vmovdqa	ymm12,YMMWORD[$L$Three]
+
+	vmovd	xmm1,r8d
+	vpermd	ymm1,ymm2,ymm1
 
 
-DB	0x0f,0x0b
-	mov	rdi,QWORD[8+rsp]	;WIN64 epilogue
-	mov	rsi,QWORD[16+rsp]
-	DB	0F3h,0C3h		;repret
+	mov	rax,21
+$L$select_loop_avx2_w7:
+
+	vmovdqa	ymm5,YMMWORD[rdx]
+	vmovdqa	ymm6,YMMWORD[32+rdx]
+
+	vmovdqa	ymm9,YMMWORD[64+rdx]
+	vmovdqa	ymm10,YMMWORD[96+rdx]
+
+	vmovdqa	ymm13,YMMWORD[128+rdx]
+	vmovdqa	ymm14,YMMWORD[160+rdx]
+
+	vpcmpeqd	ymm7,ymm4,ymm1
+	vpcmpeqd	ymm11,ymm8,ymm1
+	vpcmpeqd	ymm15,ymm12,ymm1
+
+	vpaddd	ymm4,ymm4,ymm0
+	vpaddd	ymm8,ymm8,ymm0
+	vpaddd	ymm12,ymm12,ymm0
+	lea	rdx,[192+rdx]
+
+	vpand	ymm5,ymm5,ymm7
+	vpand	ymm6,ymm6,ymm7
+	vpand	ymm9,ymm9,ymm11
+	vpand	ymm10,ymm10,ymm11
+	vpand	ymm13,ymm13,ymm15
+	vpand	ymm14,ymm14,ymm15
+
+	vpxor	ymm2,ymm2,ymm5
+	vpxor	ymm3,ymm3,ymm6
+	vpxor	ymm2,ymm2,ymm9
+	vpxor	ymm3,ymm3,ymm10
+	vpxor	ymm2,ymm2,ymm13
+	vpxor	ymm3,ymm3,ymm14
+
+	dec	rax
+	jnz	NEAR $L$select_loop_avx2_w7
+
+
+	vmovdqa	ymm5,YMMWORD[rdx]
+	vmovdqa	ymm6,YMMWORD[32+rdx]
+
+	vpcmpeqd	ymm7,ymm4,ymm1
+
+	vpand	ymm5,ymm5,ymm7
+	vpand	ymm6,ymm6,ymm7
+
+	vpxor	ymm2,ymm2,ymm5
+	vpxor	ymm3,ymm3,ymm6
+
+	vmovdqu	YMMWORD[rcx],ymm2
+	vmovdqu	YMMWORD[32+rcx],ymm3
+	vzeroupper
+	movaps	xmm6,XMMWORD[rsp]
+	movaps	xmm7,XMMWORD[16+rsp]
+	movaps	xmm8,XMMWORD[32+rsp]
+	movaps	xmm9,XMMWORD[48+rsp]
+	movaps	xmm10,XMMWORD[64+rsp]
+	movaps	xmm11,XMMWORD[80+rsp]
+	movaps	xmm12,XMMWORD[96+rsp]
+	movaps	xmm13,XMMWORD[112+rsp]
+	movaps	xmm14,XMMWORD[128+rsp]
+	movaps	xmm15,XMMWORD[144+rsp]
+	lea	rsp,[168+rsp]
 $L$SEH_end_ecp_nistz256_avx2_select_w7:
+	DB	0F3h,0C3h		;repret
+
 
 ALIGN	32
 __ecp_nistz256_add_toq:

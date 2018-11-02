@@ -10,25 +10,17 @@
 namespace ash {
 namespace switches {
 
-// Enables an animated transition from the boot splash screen (Chrome logo on a
-// white background) to the login screen.  Implies
-// |kAshCopyHostBackgroundAtBoot| and doesn't make much sense if used in
-// conjunction with |kDisableBootAnimation| (since the transition begins at the
-// same time as the white/grayscale login screen animation).
-const char kAshAnimateFromBootSplashScreen[] =
-    "ash-animate-from-boot-splash-screen";
-
-// Copies the host window's content to the system background layer at startup.
-// Can make boot slightly slower, but also hides an even-longer awkward period
-// where we display a white background if the login wallpaper takes a long time
-// to load.
-const char kAshCopyHostBackgroundAtBoot[] = "ash-copy-host-background-at-boot";
-
 // Enable keyboard shortcuts useful for debugging.
 const char kAshDebugShortcuts[] = "ash-debug-shortcuts";
 
 // Enable keyboard shortcuts used by developers only.
 const char kAshDeveloperShortcuts[] = "ash-dev-shortcuts";
+
+// Disables autohide titlebars feature. With this flag disabled, apps in tablet
+// mode will have visible titlebars instead of autohidden titlebars.
+// TODO(crbug.com/764393): Remove this flag in M66/M67.
+const char kAshDisableTabletAutohideTitlebars[] =
+    "ash-disable-tablet-autohide-titlebars";
 
 // Disable the Touch Exploration Mode. Touch Exploration Mode will no longer be
 // turned on automatically when spoken feedback is enabled when this flag is
@@ -50,8 +42,10 @@ const char kAshEnablePaletteOnAllDisplays[] =
 // Enables the split view on tablet mode.
 const char kAshEnableTabletSplitView[] = "enable-tablet-splitview";
 
-// Enables the observation of accelerometer events to enter touch-view mode.
-const char kAshEnableTouchView[] = "enable-touchview";
+// Enables the observation of accelerometer events to enter tablet
+// mode.  The flag is "enable-touchview" not "enable-tabletmode" as this
+// is used to enable tablet mode on convertible devices.
+const char kAshEnableTabletMode[] = "enable-touchview";
 
 // Enables mirrored screen.
 const char kAshEnableMirroredScreen[] = "ash-enable-mirrored-screen";
@@ -74,12 +68,12 @@ const char kAshForceEnableStylusTools[] = "force-enable-stylus-tools";
 
 // Enables required things for the selected UI mode, regardless of whether the
 // Chromebook is currently in the selected UI mode.
-const char kAshForceTabletMode[] = "force-tablet-mode";
+const char kAshUiMode[] = "force-tablet-mode";
 
-// Values for the kAshForceTabletMode flag.
-const char kAshForceTabletModeAuto[] = "auto";
-const char kAshForceTabletModeClamshell[] = "clamshell";
-const char kAshForceTabletModeTouchView[] = "touch_view";
+// Values for the kAshUiMode flag.
+const char kAshUiModeAuto[] = "auto";
+const char kAshUiModeClamshell[] = "clamshell";
+const char kAshUiModeTablet[] = "touch_view";
 
 // Hides notifications that are irrelevant to Chrome OS device factory testing,
 // such as battery level updates.

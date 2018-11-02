@@ -466,6 +466,12 @@ ui::TextEditCommand GetTextEditCommandForMenuAction(SEL action) {
   if (!hostedView_)
     return;
 
+  // Always propagate the shift modifier if present. Shift doesn't always alter
+  // the command selector, but should always be passed along. Control and Alt
+  // have different meanings on Mac, so they do not propagate automatically.
+  if ([keyDownEvent_ modifierFlags] & NSShiftKeyMask)
+    eventFlags |= ui::EF_SHIFT_DOWN;
+
   // Generate a synthetic event with the keycode toolkit-views expects.
   ui::KeyEvent event(ui::ET_KEY_PRESSED, keyCode, domCode, eventFlags);
 
@@ -622,6 +628,13 @@ ui::TextEditCommand GetTextEditCommandForMenuAction(SEL action) {
 
   ui::MouseEvent event(theEvent);
 
+  // ui::EventLocationFromNative() assumes the event hit the contentView.
+  // Adjust if that's not the case (e.g. for reparented views).
+  if ([theEvent window] && [[self window] contentView] != self) {
+    NSPoint p = [self convertPoint:[theEvent locationInWindow] fromView:nil];
+    event.set_location(gfx::Point(p.x, NSHeight([self frame]) - p.y));
+  }
+
   // Aura updates tooltips with the help of aura::Window::AddPreTargetHandler().
   // Mac hooks in here.
   [self updateTooltipIfRequiredAt:event.location()];
@@ -669,7 +682,7 @@ ui::TextEditCommand GetTextEditCommandForMenuAction(SEL action) {
   // window containing it, since AppKit requires a titlebar to give frameless
   // windows correct shadows and rounded corners.
   NSWindow* window = [self window];
-  if (window)
+  if (window && [window contentView] == self)
     newSize = [window contentRectForFrameRect:[window frame]].size;
 
   [super setFrameSize:newSize];
@@ -1449,8 +1462,9 @@ ui::TextEditCommand GetTextEditCommandForMenuAction(SEL action) {
   // the Chrome renderer. Add code to extract underlines from |text| once our
   // render text implementation supports thick underlines and discontinous
   // underlines for consecutive characters. See http://crbug.com/612675.
-  composition.underlines.push_back(ui::CompositionUnderline(
-      0, [text length], SK_ColorBLACK, false, SK_ColorTRANSPARENT));
+  composition.ime_text_spans.push_back(
+      ui::ImeTextSpan(ui::ImeTextSpan::Type::kComposition, 0, [text length],
+                      SK_ColorBLACK, false, SK_ColorTRANSPARENT));
   textInputClient_->SetCompositionText(composition);
   hasUnhandledKeyDownEvent_ = NO;
 }

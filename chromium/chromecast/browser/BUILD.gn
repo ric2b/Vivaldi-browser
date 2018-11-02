@@ -40,6 +40,8 @@ source_set("browser") {
     "cast_quota_permission_context.h",
     "cast_resource_dispatcher_host_delegate.cc",
     "cast_resource_dispatcher_host_delegate.h",
+    "cast_web_contents_manager.cc",
+    "cast_web_contents_manager.h",
     "cast_web_view.cc",
     "cast_web_view.h",
     "devtools/cast_devtools_manager_delegate.cc",
@@ -151,11 +153,8 @@ source_set("browser") {
       "android/cast_content_window_android.cc",
       "android/cast_content_window_android.h",
       "android/cast_metrics_helper_android.cc",
-      "android/cast_metrics_helper_android.h",
       "android/cast_web_contents_activity.cc",
       "android/cast_web_contents_activity.h",
-      "android/jni_registrar.cc",
-      "android/jni_registrar.h",
     ]
 
     deps += [
@@ -274,7 +273,7 @@ source_set("browsertests") {
     "//chromecast/base:chromecast_switches",
     "//chromecast/base/metrics",
     "//components/prefs",
-    "//media/base:test_support",
+    "//media:test_support",
   ]
 }
 

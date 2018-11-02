@@ -27,19 +27,22 @@
 #include "content/browser/cache_storage/cache_storage_cache_observer.h"
 #include "content/browser/cache_storage/cache_storage_scheduler.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/referrer.h"
 #include "net/base/completion_callback.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/disk_cache/disk_cache.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "services/network/public/interfaces/fetch_api.mojom.h"
 #include "storage/browser/blob/blob_data_builder.h"
 #include "storage/browser/blob/blob_data_handle.h"
+#include "storage/browser/blob/blob_impl.h"
 #include "storage/browser/blob/blob_storage_context.h"
 #include "storage/browser/blob/blob_url_request_job_factory.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
+#include "storage/common/blob_storage/blob_handle.h"
 #include "storage/common/storage_histograms.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerResponseType.h"
 
 namespace content {
 
@@ -76,40 +79,40 @@ using MetadataCallback =
 // is controlled per-origin by the QuotaManager.
 const int kMaxCacheBytes = std::numeric_limits<int>::max();
 
-blink::WebServiceWorkerResponseType ProtoResponseTypeToWebResponseType(
+network::mojom::FetchResponseType ProtoResponseTypeToFetchResponseType(
     proto::CacheResponse::ResponseType response_type) {
   switch (response_type) {
     case proto::CacheResponse::BASIC_TYPE:
-      return blink::kWebServiceWorkerResponseTypeBasic;
+      return network::mojom::FetchResponseType::kBasic;
     case proto::CacheResponse::CORS_TYPE:
-      return blink::kWebServiceWorkerResponseTypeCORS;
+      return network::mojom::FetchResponseType::kCORS;
     case proto::CacheResponse::DEFAULT_TYPE:
-      return blink::kWebServiceWorkerResponseTypeDefault;
+      return network::mojom::FetchResponseType::kDefault;
     case proto::CacheResponse::ERROR_TYPE:
-      return blink::kWebServiceWorkerResponseTypeError;
+      return network::mojom::FetchResponseType::kError;
     case proto::CacheResponse::OPAQUE_TYPE:
-      return blink::kWebServiceWorkerResponseTypeOpaque;
+      return network::mojom::FetchResponseType::kOpaque;
     case proto::CacheResponse::OPAQUE_REDIRECT_TYPE:
-      return blink::kWebServiceWorkerResponseTypeOpaqueRedirect;
+      return network::mojom::FetchResponseType::kOpaqueRedirect;
   }
   NOTREACHED();
-  return blink::kWebServiceWorkerResponseTypeOpaque;
+  return network::mojom::FetchResponseType::kOpaque;
 }
 
-proto::CacheResponse::ResponseType WebResponseTypeToProtoResponseType(
-    blink::WebServiceWorkerResponseType response_type) {
+proto::CacheResponse::ResponseType FetchResponseTypeToProtoResponseType(
+    network::mojom::FetchResponseType response_type) {
   switch (response_type) {
-    case blink::kWebServiceWorkerResponseTypeBasic:
+    case network::mojom::FetchResponseType::kBasic:
       return proto::CacheResponse::BASIC_TYPE;
-    case blink::kWebServiceWorkerResponseTypeCORS:
+    case network::mojom::FetchResponseType::kCORS:
       return proto::CacheResponse::CORS_TYPE;
-    case blink::kWebServiceWorkerResponseTypeDefault:
+    case network::mojom::FetchResponseType::kDefault:
       return proto::CacheResponse::DEFAULT_TYPE;
-    case blink::kWebServiceWorkerResponseTypeError:
+    case network::mojom::FetchResponseType::kError:
       return proto::CacheResponse::ERROR_TYPE;
-    case blink::kWebServiceWorkerResponseTypeOpaque:
+    case network::mojom::FetchResponseType::kOpaque:
       return proto::CacheResponse::OPAQUE_TYPE;
-    case blink::kWebServiceWorkerResponseTypeOpaqueRedirect:
+    case network::mojom::FetchResponseType::kOpaqueRedirect:
       return proto::CacheResponse::OPAQUE_REDIRECT_TYPE;
   }
   NOTREACHED();
@@ -246,8 +249,9 @@ std::unique_ptr<ServiceWorkerResponse> CreateResponse(
   return base::MakeUnique<ServiceWorkerResponse>(
       std::move(url_list), metadata.response().status_code(),
       metadata.response().status_text(),
-      ProtoResponseTypeToWebResponseType(metadata.response().response_type()),
-      std::move(headers), "", 0, blink::kWebServiceWorkerResponseErrorUnknown,
+      ProtoResponseTypeToFetchResponseType(metadata.response().response_type()),
+      std::move(headers), "", 0, nullptr /* blob */,
+      blink::kWebServiceWorkerResponseErrorUnknown,
       base::Time::FromInternalValue(metadata.response().response_time()),
       true /* is_in_cache_storage */, cache_name,
       base::MakeUnique<ServiceWorkerHeaderList>(
@@ -1059,6 +1063,8 @@ void CacheStorageCache::Put(const CacheStorageBatchOperation& operation,
   std::unique_ptr<storage::BlobDataHandle> blob_data_handle;
 
   if (!response->blob_uuid.empty()) {
+    DCHECK_EQ(response->blob != nullptr,
+              base::FeatureList::IsEnabled(features::kMojoBlobs));
     if (!blob_storage_context_) {
       std::move(callback).Run(CACHE_STORAGE_ERROR_STORAGE);
       return;
@@ -1074,8 +1080,7 @@ void CacheStorageCache::Put(const CacheStorageBatchOperation& operation,
   UMA_HISTOGRAM_ENUMERATION(
       "ServiceWorkerCache.Cache.AllWritesResponseType",
       operation.response.response_type,
-      blink::WebServiceWorkerResponseType::kWebServiceWorkerResponseTypeLast +
-          1);
+      static_cast<int>(network::mojom::FetchResponseType::kLast) + 1);
 
   std::unique_ptr<PutContext> put_context(new PutContext(
       std::move(request), std::move(response), std::move(blob_data_handle),
@@ -1161,8 +1166,8 @@ void CacheStorageCache::PutDidCreateEntry(
   proto::CacheResponse* response_metadata = metadata.mutable_response();
   response_metadata->set_status_code(put_context->response->status_code);
   response_metadata->set_status_text(put_context->response->status_text);
-  response_metadata->set_response_type(
-      WebResponseTypeToProtoResponseType(put_context->response->response_type));
+  response_metadata->set_response_type(FetchResponseTypeToProtoResponseType(
+      put_context->response->response_type));
   for (const auto& url : put_context->response->url_list)
     response_metadata->add_url_list(url.spec());
   response_metadata->set_response_time(
@@ -1299,6 +1304,9 @@ void CacheStorageCache::UpdateCacheSizeGotSize(
       storage::QuotaClient::kServiceWorkerCache, origin_,
       storage::kStorageTypeTemporary, size_delta);
 
+  if (cache_storage_)
+    cache_storage_->NotifyCacheContentChanged(cache_name_);
+
   if (cache_observer_)
     cache_observer_->CacheSizeUpdated(this, current_cache_size);
 
@@ -1396,11 +1404,18 @@ void CacheStorageCache::KeysDidQueryCache(
 }
 
 void CacheStorageCache::CloseImpl(base::OnceClosure callback) {
-  DCHECK_NE(BACKEND_CLOSED, backend_state_);
+  DCHECK_EQ(BACKEND_OPEN, backend_state_);
 
-  backend_state_ = BACKEND_CLOSED;
   backend_.reset();
-  std::move(callback).Run();
+  post_backend_closed_callback_ = std::move(callback);
+}
+
+void CacheStorageCache::DeleteBackendCompletedIO() {
+  if (!post_backend_closed_callback_.is_null()) {
+    DCHECK_NE(BACKEND_CLOSED, backend_state_);
+    backend_state_ = BACKEND_CLOSED;
+    std::move(post_backend_closed_callback_).Run();
+  }
 }
 
 void CacheStorageCache::SizeImpl(SizeCallback callback) {
@@ -1433,13 +1448,13 @@ void CacheStorageCache::CreateBackend(ErrorCallback callback) {
                          weak_ptr_factory_.GetWeakPtr(), std::move(callback),
                          base::Passed(std::move(backend_ptr))));
 
-  // TODO(jkarlin): Use the cache task runner that ServiceWorkerCacheCore
-  // has for disk caches.
   int rv = disk_cache::CreateCacheBackend(
       cache_type, net::CACHE_BACKEND_SIMPLE, path_, kMaxCacheBytes,
       false, /* force */
-      BrowserThread::GetTaskRunnerForThread(BrowserThread::CACHE).get(), NULL,
-      backend, create_cache_callback);
+      NULL, backend,
+      base::BindOnce(&CacheStorageCache::DeleteBackendCompletedIO,
+                     weak_ptr_factory_.GetWeakPtr()),
+      create_cache_callback);
   if (rv != net::ERR_IO_PENDING)
     create_cache_callback.Run(rv);
 }
@@ -1535,7 +1550,18 @@ CacheStorageCache::PopulateResponseBody(disk_cache::ScopedEntryPtr entry,
   blob_data.AppendDiskCacheEntryWithSideData(
       new CacheStorageCacheDataHandle(CreateCacheHandle(), std::move(entry)),
       temp_entry, INDEX_RESPONSE_BODY, INDEX_SIDE_DATA);
-  return blob_storage_context_->AddFinishedBlob(&blob_data);
+  auto result = blob_storage_context_->AddFinishedBlob(&blob_data);
+
+  if (base::FeatureList::IsEnabled(features::kMojoBlobs)) {
+    storage::mojom::BlobPtr blob_ptr;
+    storage::BlobImpl::Create(
+        base::MakeUnique<storage::BlobDataHandle>(*result),
+        MakeRequest(&blob_ptr));
+    response->blob =
+        base::MakeRefCounted<storage::BlobHandle>(std::move(blob_ptr));
+  }
+
+  return result;
 }
 
 std::unique_ptr<CacheStorageCacheHandle>

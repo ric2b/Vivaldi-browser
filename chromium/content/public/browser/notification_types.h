@@ -45,30 +45,6 @@ enum NotificationType {
   // DEPRECATED: Use WebContentsObserver::NavigationEntryCommitted()
   NOTIFICATION_NAV_ENTRY_COMMITTED,
 
-  // Indicates that the NavigationController given in the Source has
-  // decreased its back/forward list count by removing entries from either
-  // the front or back of its list. This is usually the result of going back
-  // and then doing a new navigation, meaning all the "forward" items are
-  // deleted.
-  //
-  // This normally happens as a result of a new navigation. It will be
-  // followed by a NAV_ENTRY_COMMITTED message for the new page that
-  // caused the pruning. It could also be a result of removing an item from
-  // the list to fix up after interstitials.
-  //
-  // The details are NavigationController::PrunedDetails.
-  NOTIFICATION_NAV_LIST_PRUNED,
-
-  // Indicates that a NavigationEntry has changed. The source will be the
-  // NavigationController that owns the NavigationEntry. The details will be
-  // a NavigationController::EntryChangedDetails struct.
-  //
-  // This will NOT be sent on navigation, interested parties should also
-  // listen for NAV_ENTRY_COMMITTED to handle that case. This will be
-  // sent when the entry is updated outside of navigation (like when a new
-  // title comes).
-  NOTIFICATION_NAV_ENTRY_CHANGED,
-
   // Other load-related (not from NavigationController) ----------------------
 
   // Corresponds to ViewHostMsg_DocumentOnLoadCompletedInMainFrame. The source
@@ -88,12 +64,6 @@ enum NotificationType {
   // are optional.
   // DEPRECATED: Use WebContentsObserver::DidStopLoading()
   NOTIFICATION_LOAD_STOP,
-
-  // A redirect was received while requesting a resource.  The source will be
-  // a Source<WebContents> corresponding to the tab in which the request was
-  // issued.  Details in the form of a ResourceRedirectDetails are provided.
-  // DEPRECATED: Use WebContentsObserver::DidGetRedirectForResourceRequest()
-  NOTIFICATION_RESOURCE_RECEIVED_REDIRECT,
 
   // WebContents ---------------------------------------------------------------
 
@@ -154,14 +124,6 @@ enum NotificationType {
   // painted. The source is the RenderWidgetHost, the details are not used.
   NOTIFICATION_RENDER_WIDGET_HOST_DID_UPDATE_BACKING_STORE,
 
-  // Sent from RenderViewHost::ClosePage.  The hosted RenderView has
-  // processed the onbeforeunload handler and is about to be sent a
-  // ViewMsg_ClosePage message to complete the tear-down process.  The source
-  // is the RenderViewHost sending the message, and no details are provided.
-  // Note:  This message is not sent in response to RenderView closure
-  // initiated by window.close().
-  NOTIFICATION_RENDER_VIEW_HOST_WILL_CLOSE_RENDER_VIEW,
-
   // Indicates a RenderWidgetHost has been hidden or restored. The source is
   // the RWH whose visibility changed, the details is a bool set to true if
   // the new state is "visible."
@@ -178,7 +140,6 @@ enum NotificationType {
   NOTIFICATION_DOM_OPERATION_RESPONSE,
 
   // Sent when contents extdata is updated (Vivaldi).
-  // DEPRECATED: Use WebContentsObserver::ExtDataSet()
   NOTIFICATION_EXTDATA_UPDATED,
 
   // Custom notifications used by the embedder should start from here.

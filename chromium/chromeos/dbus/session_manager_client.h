@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/files/scoped_file.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
@@ -316,11 +317,13 @@ class CHROMEOS_EXPORT SessionManagerClient : public DBusClient {
   // is stopped.
   using StartArcInstanceCallback =
       base::Callback<void(StartArcInstanceResult result,
-                          const std::string& container_instance_id)>;
+                          const std::string& container_instance_id,
+                          base::ScopedFD server_socket)>;
   virtual void StartArcInstance(ArcStartupMode startup_mode,
                                 const cryptohome::Identification& cryptohome_id,
                                 bool skip_boot_completed_broadcast,
                                 bool scan_vendor_priv_app,
+                                bool native_bridge_experiment,
                                 const StartArcInstanceCallback& callback) = 0;
 
   // Asynchronously stops the ARC instance.  Upon completion, invokes

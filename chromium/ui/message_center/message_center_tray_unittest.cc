@@ -29,7 +29,9 @@ class MockDelegate : public MessageCenterTrayDelegate {
   void OnMessageCenterTrayChanged() override {}
   bool ShowPopups() override { return show_message_center_success_; }
   void HidePopups() override {}
-  bool ShowMessageCenter() override { return show_popups_success_; }
+  bool ShowMessageCenter(bool show_by_click) override {
+    return show_popups_success_;
+  }
   void HideMessageCenter() override {}
   bool ShowNotifierSettings() override { return true; }
   bool IsContextMenuEnabled() const override { return enable_context_menu_; }
@@ -100,7 +102,8 @@ TEST_F(MessageCenterTrayTest, BasicMessageCenter) {
   ASSERT_FALSE(message_center_tray_->popups_visible());
   ASSERT_FALSE(message_center_tray_->message_center_visible());
 
-  bool shown = message_center_tray_->ShowMessageCenterBubble();
+  bool shown =
+      message_center_tray_->ShowMessageCenterBubble(false /* show_by_click */);
   EXPECT_TRUE(shown);
 
   ASSERT_FALSE(message_center_tray_->popups_visible());
@@ -111,7 +114,7 @@ TEST_F(MessageCenterTrayTest, BasicMessageCenter) {
   ASSERT_FALSE(message_center_tray_->popups_visible());
   ASSERT_FALSE(message_center_tray_->message_center_visible());
 
-  message_center_tray_->ShowMessageCenterBubble();
+  message_center_tray_->ShowMessageCenterBubble(false /* show_by_click */);
 
   ASSERT_FALSE(message_center_tray_->popups_visible());
   ASSERT_TRUE(message_center_tray_->message_center_visible());
@@ -153,7 +156,8 @@ TEST_F(MessageCenterTrayTest, MessageCenterClosesPopups) {
   ASSERT_TRUE(message_center_tray_->popups_visible());
   ASSERT_FALSE(message_center_tray_->message_center_visible());
 
-  bool shown = message_center_tray_->ShowMessageCenterBubble();
+  bool shown =
+      message_center_tray_->ShowMessageCenterBubble(false /* show_by_click */);
   EXPECT_TRUE(shown);
 
   ASSERT_FALSE(message_center_tray_->popups_visible());
@@ -173,7 +177,7 @@ TEST_F(MessageCenterTrayTest, MessageCenterClosesPopups) {
   ASSERT_FALSE(message_center_tray_->popups_visible());
   ASSERT_FALSE(message_center_tray_->message_center_visible());
 
-  message_center_tray_->ShowMessageCenterBubble();
+  message_center_tray_->ShowMessageCenterBubble(false /* show_by_click */);
   message_center_tray_->HideMessageCenterBubble();
   ASSERT_FALSE(message_center_tray_->popups_visible());
   ASSERT_FALSE(message_center_tray_->message_center_visible());
@@ -191,7 +195,7 @@ TEST_F(MessageCenterTrayTest, MessageCenterClosesPopupsWithChangeQueue) {
   ASSERT_TRUE(message_center_tray_->popups_visible());
   ASSERT_FALSE(message_center_tray_->message_center_visible());
 
-  bool shown = message_center_tray_->ShowMessageCenterBubble();
+  bool shown = message_center_tray_->ShowMessageCenterBubble(false /* show_by_click */);
   EXPECT_TRUE(shown);
 
   ASSERT_FALSE(message_center_tray_->popups_visible());
@@ -211,7 +215,7 @@ TEST_F(MessageCenterTrayTest, MessageCenterClosesPopupsWithChangeQueue) {
   ASSERT_TRUE(message_center_tray_->popups_visible());
   ASSERT_FALSE(message_center_tray_->message_center_visible());
 
-  message_center_tray_->ShowMessageCenterBubble();
+  message_center_tray_->ShowMessageCenterBubble(false /* show_by_click */);
   message_center_tray_->HideMessageCenterBubble();
   ASSERT_FALSE(message_center_tray_->popups_visible());
   ASSERT_FALSE(message_center_tray_->message_center_visible());
@@ -234,7 +238,8 @@ TEST_F(MessageCenterTrayTest, MessageCenterReopenPopupsForSystemPriority) {
   ASSERT_TRUE(message_center_tray_->popups_visible());
   ASSERT_FALSE(message_center_tray_->message_center_visible());
 
-  bool shown = message_center_tray_->ShowMessageCenterBubble();
+  bool shown =
+      message_center_tray_->ShowMessageCenterBubble(false /* show_by_click */);
   EXPECT_TRUE(shown);
 
   ASSERT_FALSE(message_center_tray_->popups_visible());
@@ -261,7 +266,8 @@ TEST_F(MessageCenterTrayTest, ShowBubbleFails) {
   ASSERT_FALSE(message_center_tray_->popups_visible());
   ASSERT_FALSE(message_center_tray_->message_center_visible());
 
-  bool shown = message_center_tray_->ShowMessageCenterBubble();
+  bool shown =
+      message_center_tray_->ShowMessageCenterBubble(false /* show_by_click */);
   EXPECT_FALSE(shown);
 
   ASSERT_FALSE(message_center_tray_->popups_visible());
@@ -272,7 +278,7 @@ TEST_F(MessageCenterTrayTest, ShowBubbleFails) {
   ASSERT_FALSE(message_center_tray_->popups_visible());
   ASSERT_FALSE(message_center_tray_->message_center_visible());
 
-  message_center_tray_->ShowMessageCenterBubble();
+  message_center_tray_->ShowMessageCenterBubble(false /* show_by_click */);
 
   ASSERT_FALSE(message_center_tray_->popups_visible());
   ASSERT_FALSE(message_center_tray_->message_center_visible());

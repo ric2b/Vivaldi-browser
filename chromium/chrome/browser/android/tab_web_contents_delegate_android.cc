@@ -10,6 +10,7 @@
 #include "base/android/jni_string.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
+#include "base/optional.h"
 #include "chrome/browser/android/banners/app_banner_manager_android.h"
 #include "chrome/browser/android/feature_utilities.h"
 #include "chrome/browser/android/hung_renderer_infobar_delegate.h"
@@ -117,8 +118,10 @@ void TabWebContentsDelegateAndroid::RunFileChooser(
     content::RenderFrameHost* render_frame_host,
     const FileChooserParams& params) {
   if (vr::VrTabHelper::IsInVr(
-          WebContents::FromRenderFrameHost(render_frame_host)))
+          WebContents::FromRenderFrameHost(render_frame_host))) {
+    vr::VrTabHelper::UISuppressed(vr::UiSuppressedElement::kFileChooser);
     return;
+  }
   FileSelectHelper::RunFileChooser(render_frame_host, params);
 }
 
@@ -126,8 +129,10 @@ std::unique_ptr<BluetoothChooser>
 TabWebContentsDelegateAndroid::RunBluetoothChooser(
     content::RenderFrameHost* frame,
     const BluetoothChooser::EventHandler& event_handler) {
-  if (vr::VrTabHelper::IsInVr(WebContents::FromRenderFrameHost(frame)))
+  if (vr::VrTabHelper::IsInVr(WebContents::FromRenderFrameHost(frame))) {
+    vr::VrTabHelper::UISuppressed(vr::UiSuppressedElement::kBluetoothChooser);
     return nullptr;
+  }
   return base::MakeUnique<BluetoothChooserAndroid>(frame, event_handler);
 }
 
@@ -258,6 +263,7 @@ content::JavaScriptDialogManager*
 TabWebContentsDelegateAndroid::GetJavaScriptDialogManager(
     WebContents* source) {
   if (vr::VrTabHelper::IsInVr(source)) {
+    vr::VrTabHelper::UISuppressed(vr::UiSuppressedElement::kJavascriptDialog);
     return nullptr;
   }
   return app_modal::JavaScriptDialogManager::GetInstance();
@@ -270,6 +276,7 @@ void TabWebContentsDelegateAndroid::RequestMediaAccessPermission(
   if (vr::VrTabHelper::IsInVr(web_contents)) {
     callback.Run(content::MediaStreamDevices(),
                  content::MEDIA_DEVICE_NOT_SUPPORTED, nullptr);
+    vr::VrTabHelper::UISuppressed(vr::UiSuppressedElement::kMediaPermission);
     return;
   }
   MediaCaptureDevicesDispatcher::GetInstance()->ProcessMediaAccessRequest(
@@ -282,6 +289,15 @@ bool TabWebContentsDelegateAndroid::CheckMediaAccessPermission(
     content::MediaStreamType type) {
   return MediaCaptureDevicesDispatcher::GetInstance()
       ->CheckMediaAccessPermission(web_contents, security_origin, type);
+}
+
+void TabWebContentsDelegateAndroid::SetOverlayMode(bool use_overlay_mode) {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> obj = GetJavaDelegate(env);
+  if (obj.is_null())
+    return;
+
+  Java_TabWebContentsDelegateAndroid_setOverlayMode(env, obj, use_overlay_mode);
 }
 
 bool TabWebContentsDelegateAndroid::RequestPpapiBrokerPermission(
@@ -320,21 +336,14 @@ WebContents* TabWebContentsDelegateAndroid::OpenURLFromTab(
   nav_params.source_contents = source;
   nav_params.window_action = chrome::NavigateParams::SHOW_WINDOW;
   nav_params.user_gesture = params.user_gesture;
-
-  PopupBlockerTabHelper* popup_blocker_helper =
-      PopupBlockerTabHelper::FromWebContents(source);
-  DCHECK(popup_blocker_helper);
-
   if ((params.disposition == WindowOpenDisposition::NEW_POPUP ||
        params.disposition == WindowOpenDisposition::NEW_FOREGROUND_TAB ||
        params.disposition == WindowOpenDisposition::NEW_BACKGROUND_TAB ||
        params.disposition == WindowOpenDisposition::NEW_WINDOW) &&
-      PopupBlockerTabHelper::ConsiderForPopupBlocking(
-          source, params.user_gesture, &params)) {
-    if (popup_blocker_helper->MaybeBlockPopup(nav_params,
-                                              blink::mojom::WindowFeatures())) {
-      return nullptr;
-    }
+      PopupBlockerTabHelper::MaybeBlockPopup(source, base::Optional<GURL>(),
+                                             nav_params, &params,
+                                             blink::mojom::WindowFeatures())) {
+    return nullptr;
   }
 
   if (disposition == WindowOpenDisposition::CURRENT_TAB) {

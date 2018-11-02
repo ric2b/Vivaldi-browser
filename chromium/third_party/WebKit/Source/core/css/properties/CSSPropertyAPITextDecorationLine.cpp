@@ -8,10 +8,11 @@
 
 namespace blink {
 
-const CSSValue* CSSPropertyAPITextDecorationLine::parseSingleValue(
+const CSSValue* CSSPropertyAPITextDecorationLine::ParseSingleValue(
+    CSSPropertyID,
     CSSParserTokenRange& range,
     const CSSParserContext&,
-    const CSSParserLocalContext&) {
+    const CSSParserLocalContext&) const {
   return CSSPropertyTextDecorationLineUtils::ConsumeTextDecorationLine(range);
 }
 

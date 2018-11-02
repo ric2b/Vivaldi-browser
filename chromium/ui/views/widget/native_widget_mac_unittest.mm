@@ -664,7 +664,7 @@ TEST_F(NativeWidgetMacTest, AccessibilityIntegration) {
   NSPoint midpoint = NSMakePoint(NSMidX(nsrect), NSMidY(nsrect));
 
   id hit = [widget->GetNativeWindow() accessibilityHitTest:midpoint];
-  id title = [hit accessibilityAttributeValue:NSAccessibilityTitleAttribute];
+  id title = [hit accessibilityAttributeValue:NSAccessibilityValueAttribute];
   EXPECT_NSEQ(title, @"Green");
 
   widget->CloseNow();
@@ -915,11 +915,17 @@ class ModalDialogDelegate : public DialogDelegateView {
   explicit ModalDialogDelegate(ui::ModalType modal_type)
       : modal_type_(modal_type) {}
 
+  void set_can_close(bool value) { can_close_ = value; }
+
   // WidgetDelegate:
   ui::ModalType GetModalType() const override { return modal_type_; }
 
+  // DialogDelegate:
+  bool Close() override { return can_close_; }
+
  private:
   const ui::ModalType modal_type_;
+  bool can_close_ = true;
 
   DISALLOW_COPY_AND_ASSIGN(ModalDialogDelegate);
 };
@@ -1697,6 +1703,80 @@ TEST_F(NativeWidgetMacTest, ChangeFocusOnChangeFirstResponder) {
   widget->CloseNow();
 }
 
+// Ensure reparented native view has correct bounds.
+TEST_F(NativeWidgetMacTest, ReparentNativeViewBounds) {
+  Widget* parent = CreateTopLevelFramelessPlatformWidget();
+  gfx::Rect parent_rect(100, 100, 300, 200);
+  parent->SetBounds(parent_rect);
+
+  Widget::InitParams params(Widget::InitParams::TYPE_CONTROL);
+  params.parent = parent->GetNativeView();
+  Widget* widget = new Widget;
+  widget->Init(params);
+  widget->SetContentsView(new View);
+
+  NSView* child_view = widget->GetNativeView();
+  Widget::ReparentNativeView(child_view, parent->GetNativeView());
+
+  // Reparented content view has the size of the Widget that created it.
+  gfx::Rect widget_rect(0, 0, 200, 100);
+  widget->SetBounds(widget_rect);
+  EXPECT_EQ(200, NSWidth([child_view frame]));
+  EXPECT_EQ(100, NSHeight([child_view frame]));
+
+  // Reparented widget has bounds relative to the native parent
+  NSRect native_parent_rect = NSMakeRect(50, 100, 200, 70);
+  base::scoped_nsobject<NSView> native_parent(
+      [[NSView alloc] initWithFrame:native_parent_rect]);
+  [parent->GetNativeView() addSubview:native_parent];
+
+  gfx::Rect screen_rect = widget->GetWindowBoundsInScreen();
+  EXPECT_EQ(100, screen_rect.x());
+  EXPECT_EQ(100, screen_rect.y());
+
+  Widget::ReparentNativeView(child_view, native_parent);
+  widget->SetBounds(widget_rect);
+  screen_rect = widget->GetWindowBoundsInScreen();
+  EXPECT_EQ(150, screen_rect.x());
+  EXPECT_EQ(130, screen_rect.y());
+
+  parent->CloseNow();
+}
+
+// Test two kinds of widgets to re-parent.
+TEST_F(NativeWidgetMacTest, ReparentNativeViewTypes) {
+  std::unique_ptr<Widget> toplevel1(new Widget);
+  Widget::InitParams toplevel_params =
+      CreateParams(Widget::InitParams::TYPE_POPUP);
+  toplevel_params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  toplevel1->Init(toplevel_params);
+
+  std::unique_ptr<Widget> toplevel2(new Widget);
+  toplevel2->Init(toplevel_params);
+
+  Widget* child = new Widget;
+  Widget::InitParams child_params(Widget::InitParams::TYPE_CONTROL);
+  child->Init(child_params);
+
+  Widget::ReparentNativeView(child->GetNativeView(),
+                             toplevel1->GetNativeView());
+  EXPECT_EQ([child->GetNativeView() window],
+            [toplevel1->GetNativeView() window]);
+  EXPECT_EQ(0, [child->GetNativeWindow() alphaValue]);
+
+  Widget::ReparentNativeView(child->GetNativeView(),
+                             toplevel2->GetNativeView());
+  EXPECT_EQ([child->GetNativeView() window],
+            [toplevel2->GetNativeView() window]);
+  EXPECT_EQ(0, [child->GetNativeWindow() alphaValue]);
+  EXPECT_NE(0, [toplevel1->GetNativeWindow() alphaValue]);
+
+  Widget::ReparentNativeView(toplevel2->GetNativeView(),
+                             toplevel1->GetNativeView());
+  EXPECT_EQ([toplevel2->GetNativeWindow() parentWindow],
+            [toplevel1->GetNativeView() window]);
+}
+
 // Test class for Full Keyboard Access related tests.
 class NativeWidgetMacFullKeyboardAccessTest : public NativeWidgetMacTest {
  public:
@@ -1875,6 +1955,19 @@ TEST_F(NativeWidgetMacViewsOrderTest, UnassociatedViewsIsAbove) {
     compositor_view_, hosts_[0]->view(), hosts_[2]->view(),
     hosts_[1]->view(), child_view
   ]]));
+}
+
+// Test -[NSWindowDelegate windowShouldClose:].
+TEST_F(NativeWidgetMacTest, CanClose) {
+  ModalDialogDelegate* delegate = new ModalDialogDelegate(ui::MODAL_TYPE_NONE);
+  Widget* widget =
+      views::DialogDelegate::CreateDialogWidget(delegate, nullptr, nullptr);
+  NSWindow* window = widget->GetNativeWindow();
+  delegate->set_can_close(false);
+  EXPECT_FALSE([[window delegate] windowShouldClose:window]);
+  delegate->set_can_close(true);
+  EXPECT_TRUE([[window delegate] windowShouldClose:window]);
+  widget->CloseNow();
 }
 
 }  // namespace test

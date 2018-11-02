@@ -36,12 +36,6 @@ const CGFloat kShiftTilesUpAnimationDuration = 0.25;
 // Tap gesture recognizer when the omnibox is focused.
 @property(nonatomic, strong) UITapGestureRecognizer* tapGestureRecognizer;
 
-// When the omnibox is focused, this value represents the shift distance of the
-// collection needed to pin the omnibox to the top. It is 0 if the omnibox has
-// not been moved when focused (i.e. the collection was already scrolled to
-// top).
-@property(nonatomic, assign) CGFloat collectionShiftingOffset;
-
 @end
 
 @implementation ContentSuggestionsHeaderSynchronizer
@@ -84,7 +78,8 @@ initWithCollectionController:
   self.shouldAnimateHeader = YES;
 
   if (self.collectionShiftingOffset == 0 || self.collectionView.dragging) {
-    [self updateFakeOmniboxForScrollView:self.collectionView];
+    self.collectionShiftingOffset = 0;
+    [self updateFakeOmniboxOnCollectionScroll];
     return;
   }
 
@@ -125,7 +120,11 @@ initWithCollectionController:
   [UIView animateWithDuration:kShiftTilesUpAnimationDuration
       animations:^{
         if (self.collectionView.contentOffset.y < pinnedOffsetY) {
+          // Changing the contentOffset of the collection results in a scroll
+          // and a change in the constraints of the header.
           self.collectionView.contentOffset = CGPointMake(0, pinnedOffsetY);
+          // Layout the header for the constraints to be animated.
+          [self.headerController layoutHeader];
           [self.collectionView.collectionViewLayout invalidateLayout];
         }
       }
@@ -147,9 +146,8 @@ initWithCollectionController:
 
 #pragma mark - ContentSuggestionsHeaderSynchronizing
 
-- (void)updateFakeOmniboxForScrollView:(UIScrollView*)scrollView {
-  // Unfocus the omnibox when the scroll view is scrolled below the pinned
-  // offset.
+- (void)updateFakeOmniboxOnCollectionScroll {
+  // Unfocus the omnibox when the scroll view is scrolled.
   if ([self.headerController isOmniboxFocused] && !self.shouldAnimateHeader) {
     [self.headerController unfocusOmnibox];
   }
@@ -160,7 +158,18 @@ initWithCollectionController:
 
   if (self.shouldAnimateHeader) {
     [self.headerController
-        updateSearchFieldForOffset:self.collectionView.contentOffset.y];
+        updateFakeOmniboxForOffset:self.collectionView.contentOffset.y
+                             width:0];
+  }
+}
+
+- (void)updateFakeOmniboxOnNewWidth:(CGFloat)width {
+  if (self.shouldAnimateHeader && !IsIPadIdiom()) {
+    [self.headerController
+        updateFakeOmniboxForOffset:self.collectionView.contentOffset.y
+                             width:width];
+  } else {
+    [self.headerController updateFakeOmniboxForWidth:width];
   }
 }
 
@@ -202,6 +211,7 @@ initWithCollectionController:
 
   if (percentComplete == 1.0) {
     [link invalidate];
+    self.collectionShiftingOffset = 0;
     // Reset |shiftTilesDownStartTime to its sentinel value.
     self.shiftTilesDownStartTime = -1;
   }

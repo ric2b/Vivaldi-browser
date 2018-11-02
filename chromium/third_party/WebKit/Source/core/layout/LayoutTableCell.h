@@ -37,7 +37,7 @@
 
 namespace blink {
 
-#define BITS_OF_ABSOLUTE_COLUMN_INDEX 28
+#define BITS_OF_ABSOLUTE_COLUMN_INDEX 25
 static const unsigned kUnsetColumnIndex =
     (1u << BITS_OF_ABSOLUTE_COLUMN_INDEX) - 1;
 static const unsigned kMaxColumnIndex = kUnsetColumnIndex - 1;
@@ -178,20 +178,20 @@ class CORE_EXPORT LayoutTableCell final : public LayoutBlockFlow {
 
   void SetCellLogicalWidth(int constrained_logical_width, SubtreeLayoutScope&);
 
+  // Returns true if a non-column-spanning cell is in a collapsed column, or if
+  // a column-spanning cell starts in a collapsed column.
+  bool IsFirstColumnCollapsed() const;
+
   LayoutUnit BorderLeft() const override;
   LayoutUnit BorderRight() const override;
   LayoutUnit BorderTop() const override;
   LayoutUnit BorderBottom() const override;
-  LayoutUnit BorderStart() const override;
-  LayoutUnit BorderEnd() const override;
-  LayoutUnit BorderBefore() const override;
-  LayoutUnit BorderAfter() const override;
 
   void UpdateLayout() override;
 
   void Paint(const PaintInfo&, const LayoutPoint&) const override;
 
-  int CellBaselinePosition() const;
+  LayoutUnit CellBaselinePosition() const;
   bool IsBaselineAligned() const {
     EVerticalAlign va = Style()->VerticalAlign();
     return va == EVerticalAlign::kBaseline ||
@@ -203,7 +203,8 @@ class CORE_EXPORT LayoutTableCell final : public LayoutBlockFlow {
   // Align the cell in the block direction. This is done by calculating an
   // intrinsic padding before and after the cell contents, so that all cells in
   // the row get the same logical height.
-  void ComputeIntrinsicPadding(int row_height,
+  void ComputeIntrinsicPadding(int collapsed_height,
+                               int row_height,
                                EVerticalAlign,
                                SubtreeLayoutScope&);
 
@@ -217,21 +218,16 @@ class CORE_EXPORT LayoutTableCell final : public LayoutBlockFlow {
   LayoutUnit PaddingLeft() const override;
   LayoutUnit PaddingRight() const override;
 
-  // FIXME: For now we just assume the cell has the same block flow direction as
-  // the table. It's likely we'll create an extra anonymous LayoutBlock to
-  // handle mixing directionality anyway, in which case we can lock the block
-  // flow directionality of the cells to the table's directionality.
-  LayoutUnit PaddingBefore() const override;
-  LayoutUnit PaddingAfter() const override;
-
   void SetOverrideLogicalContentHeightFromRowHeight(LayoutUnit);
 
   void ScrollbarsChanged(bool horizontal_scrollbar_changed,
                          bool vertical_scrollbar_changed,
                          ScrollbarChangeContext = kLayout) override;
 
-  bool CellWidthChanged() const { return cell_width_changed_; }
-  void SetCellWidthChanged(bool b = true) { cell_width_changed_ = b; }
+  bool CellChildrenNeedLayout() const { return cell_children_need_layout_; }
+  void SetCellChildrenNeedLayout(bool b = true) {
+    cell_children_need_layout_ = b;
+  }
 
   static LayoutTableCell* CreateAnonymous(Document*);
   static LayoutTableCell* CreateAnonymousWithParent(const LayoutObject*);
@@ -328,6 +324,23 @@ class CORE_EXPORT LayoutTableCell final : public LayoutBlockFlow {
            RowIndex() + RowSpan() == other->RowIndex() + other->RowSpan();
   }
 
+  void SetIsSpanningCollapsedRow(bool spanningCollapsedRow) {
+    is_spanning_collapsed_row_ = spanningCollapsedRow;
+  }
+
+  bool IsSpanningCollapsedRow() const { return is_spanning_collapsed_row_; }
+
+  void SetIsSpanningCollapsedColumn(bool spanningCollapsedColumn) {
+    is_spanning_collapsed_column_ = spanningCollapsedColumn;
+  }
+
+  bool IsSpanningCollapsedColumn() const {
+    return is_spanning_collapsed_column_;
+  }
+
+  void ComputeOverflow(LayoutUnit old_client_after_edge,
+                       bool recompute_floats = false) override;
+
  protected:
   void StyleDidChange(StyleDifference, const ComputedStyle* old_style) override;
   void ComputePreferredLogicalWidths() override;
@@ -357,8 +370,7 @@ class CORE_EXPORT LayoutTableCell final : public LayoutBlockFlow {
 
   LayoutSize OffsetFromContainer(const LayoutObject*) const override;
 
-  void ComputeOverflow(LayoutUnit old_client_after_edge,
-                       bool recompute_floats = false) override;
+  bool ShouldClipOverflow() const override;
 
   using CollapsedBorderValuesMethod =
       const CollapsedBorderValue& (CollapsedBorderValues::*)() const;
@@ -430,6 +442,11 @@ class CORE_EXPORT LayoutTableCell final : public LayoutBlockFlow {
     return 0;
   }
 
+  LogicalToPhysical<int> LogicalIntrinsicPaddingToPhysical() const {
+    return LogicalToPhysical<int>(
+        StyleRef().GetWritingMode(), StyleRef().Direction(), 0, 0,
+        intrinsic_padding_before_, intrinsic_padding_after_);
+  }
   void SetIntrinsicPaddingBefore(int p) { intrinsic_padding_before_ = p; }
   void SetIntrinsicPaddingAfter(int p) { intrinsic_padding_after_ = p; }
   void SetIntrinsicPadding(int before, int after) {
@@ -470,12 +487,15 @@ class CORE_EXPORT LayoutTableCell final : public LayoutBlockFlow {
   // BITS_OF_ABSOLUTE_COLUMN_INDEX to use remaining bits of a 32-bit word.
   // Note MSVC will only pack members if they have identical types, hence we use
   // unsigned instead of bool here.
-  unsigned cell_width_changed_ : 1;
+  unsigned cell_children_need_layout_ : 1;
   unsigned has_col_span_ : 1;
   unsigned has_row_span_ : 1;
+  unsigned is_spanning_collapsed_row_ : 1;
+  unsigned is_spanning_collapsed_column_ : 1;
 
-  // This is set when collapsed_border_values_ needs recalculation.
+  // This is set to false when |collapsed_border_values_| needs update.
   mutable unsigned collapsed_border_values_valid_ : 1;
+  mutable unsigned collapsed_borders_need_paint_invalidation_ : 1;
   mutable std::unique_ptr<CollapsedBorderValues> collapsed_border_values_;
 
   // The intrinsic padding.

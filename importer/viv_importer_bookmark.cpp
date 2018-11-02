@@ -19,7 +19,6 @@
 #include "chrome/common/importer/importer_bridge.h"
 #include "chrome/common/importer/importer_data_types.h"
 #include "chrome/common/ini_parser.h"
-#include "chrome/grit/generated_resources.h"
 #include "importer/viv_importer.h"
 #include "importer/viv_importer_utils.h"
 #include "importer/viv_opera_reader.h"

@@ -27,10 +27,6 @@ namespace net {
 class X509Certificate;
 }
 
-namespace security_state {
-struct SecurityInfo;
-}  // namespace security_state
-
 // This NSWindowController subclass manages the InfoBubbleWindow and view that
 // are displayed when the user clicks the omnibox security indicator icon.
 @interface PageInfoBubbleController : BaseBubbleController {
@@ -106,6 +102,14 @@ struct SecurityInfo;
   // info icon has a race condition where it might switch between
   // LocationIconDecoration and SecurityStateBubbleDecoration.
   LocationBarDecoration* decoration_;  // Weak.
+
+  // The button for changing password decisions.
+  // This button only shows when there is an password reuse event.
+  NSButton* changePasswordButton_;
+
+  // The button for whitelisting password reuse decisions.
+  // This button only shows when there is an password reuse event.
+  NSButton* whitelistPasswordReuseButton_;
 }
 
 // Designated initializer. The controller will release itself when the bubble
@@ -129,18 +133,6 @@ class PageInfoUIBridge : public content::WebContentsObserver,
  public:
   explicit PageInfoUIBridge(content::WebContents* web_contents);
   ~PageInfoUIBridge() override;
-
-  // Creates a |PageInfoBubbleController| and displays the UI. |parent|
-  // is the currently active window. |profile| points to the currently active
-  // profile. |web_contents| points to the WebContents that wraps the currently
-  // active tab. |virtual_url| is the virtual GURL of the currently active
-  // tab. |security_info| is the |security_state::SecurityInfo| of the
-  // connection to the website in the currently active tab.
-  static void Show(gfx::NativeWindow parent,
-                   Profile* profile,
-                   content::WebContents* web_contents,
-                   const GURL& virtual_url,
-                   const security_state::SecurityInfo& security_info);
 
   static void ShowAt(gfx::NativeWindow parent,
       Profile* profile,

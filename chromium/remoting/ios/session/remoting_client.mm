@@ -173,6 +173,9 @@ NSString* const kHostSessionPin = @"kHostSessionPin";
   if (_renderer) {
     _runtime->display_task_runner()->DeleteSoon(FROM_HERE, _renderer.release());
   }
+
+  _gestureInterpreter.reset();
+  _keyboardInterpreter.reset();
 }
 
 #pragma mark - Eventing
@@ -327,12 +330,9 @@ NSString* const kHostSessionPin = @"kHostSessionPin";
         type, message);
 }
 
-- (void)surfaceChanged:(const CGRect&)frame {
-  // Note that GLKView automatically sets the OpenGL viewport size to the size
-  // of the surface.
-  [_displayHandler onSurfaceChanged:frame];
-  _gestureInterpreter->OnSurfaceSizeChanged(frame.size.width,
-                                            frame.size.height);
+- (void)setHostResolution:(CGSize)dipsResolution scale:(int)scale {
+  _session->SendClientResolution(dipsResolution.width, dipsResolution.height,
+                                 scale);
 }
 
 #pragma mark - GlDisplayHandlerDelegate

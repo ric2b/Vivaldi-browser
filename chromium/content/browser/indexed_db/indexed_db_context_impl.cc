@@ -470,6 +470,10 @@ void IndexedDBContextImpl::DatabaseDeleted(const Origin& origin) {
   QueryDiskAndUpdateQuotaUsage(origin);
 }
 
+void IndexedDBContextImpl::BlobFilesCleaned(const url::Origin& origin) {
+  QueryDiskAndUpdateQuotaUsage(origin);
+}
+
 IndexedDBContextImpl::~IndexedDBContextImpl() {
   if (factory_.get()) {
     TaskRunner()->PostTask(FROM_HERE,

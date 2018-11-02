@@ -11,12 +11,13 @@
 
 namespace blink {
 
-bool CSSShorthandPropertyAPIFlex::parseShorthand(
+bool CSSShorthandPropertyAPIFlex::ParseShorthand(
+    CSSPropertyID,
     bool important,
     CSSParserTokenRange& range,
     const CSSParserContext& context,
-    bool,
-    HeapVector<CSSProperty, 256>& properties) {
+    const CSSParserLocalContext&,
+    HeapVector<CSSProperty, 256>& properties) const {
   static const double kUnsetValue = -1;
   double flex_grow = kUnsetValue;
   double flex_shrink = kUnsetValue;

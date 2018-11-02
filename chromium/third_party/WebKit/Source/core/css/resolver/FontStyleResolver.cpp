@@ -32,14 +32,12 @@ FontDescription FontStyleResolver::ComputeFont(
       nullptr));
 
   // CSSPropertyFontStretch
-  builder.SetStretch(ToCSSIdentifierValue(*property_set.GetPropertyCSSValue(
-                                              CSSPropertyFontStretch))
-                         .ConvertTo<FontStretch>());
+  builder.SetStretch(StyleBuilderConverterBase::ConvertFontStretch(
+      *property_set.GetPropertyCSSValue(CSSPropertyFontStretch)));
 
   // CSSPropertyFontStyle
-  builder.SetStyle(ToCSSIdentifierValue(
-                       *property_set.GetPropertyCSSValue(CSSPropertyFontStyle))
-                       .ConvertTo<FontStyle>());
+  builder.SetStyle(StyleBuilderConverterBase::ConvertFontStyle(
+      *property_set.GetPropertyCSSValue(CSSPropertyFontStyle)));
 
   // CSSPropertyFontVariantCaps
   builder.SetVariantCaps(StyleBuilderConverterBase::ConvertFontVariantCaps(

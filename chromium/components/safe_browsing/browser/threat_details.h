@@ -21,7 +21,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "components/safe_browsing/common/safebrowsing_types.h"
-#include "components/safe_browsing/csd.pb.h"
+#include "components/safe_browsing/proto/csd.pb.h"
 #include "components/security_interstitials/content/unsafe_resource.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -77,7 +77,8 @@ class ThreatDetails : public base::RefCountedThreadSafe<
       content::WebContents* web_contents,
       const UnsafeResource& resource,
       net::URLRequestContextGetter* request_context_getter,
-      history::HistoryService* history_service);
+      history::HistoryService* history_service,
+      bool trim_to_ad_tags);
 
   // Makes the passed |factory| the factory used to instantiate
   // SafeBrowsingBlockingPage objects. Useful for tests.
@@ -109,7 +110,8 @@ class ThreatDetails : public base::RefCountedThreadSafe<
                 content::WebContents* web_contents,
                 const UnsafeResource& resource,
                 net::URLRequestContextGetter* request_context_getter,
-                history::HistoryService* history_service);
+                history::HistoryService* history_service,
+                bool trim_to_ad_tags);
   // Default constructor for testing only.
   ThreatDetails();
 
@@ -218,6 +220,15 @@ class ThreatDetails : public base::RefCountedThreadSafe<
   // associated with a parent Element in the parent frame.
   bool ambiguous_dom_;
 
+  // Whether this report should be trimmed down to only ad tags, not the entire
+  // page contents. Used for sampling ads.
+  bool trim_to_ad_tags_;
+
+  // A vector containing the IDs of the DOM Elements to trim to. If an element
+  // ID is in this list, then its siblings and its children should be included
+  // in the report. Only populated if this report will be trimmed.
+  std::set<int> trimmed_dom_element_ids_;
+
   // The factory used to instantiate SafeBrowsingBlockingPage objects.
   // Useful for tests, so they can provide their own implementation of
   // SafeBrowsingBlockingPage.
@@ -235,6 +246,7 @@ class ThreatDetails : public base::RefCountedThreadSafe<
   FRIEND_TEST_ALL_PREFIXES(ThreatDetailsTest, HTTPCache);
   FRIEND_TEST_ALL_PREFIXES(ThreatDetailsTest, ThreatDOMDetails_AmbiguousDOM);
   FRIEND_TEST_ALL_PREFIXES(ThreatDetailsTest, ThreatDOMDetails_MultipleFrames);
+  FRIEND_TEST_ALL_PREFIXES(ThreatDetailsTest, ThreatDOMDetails_TrimToAdTags);
   FRIEND_TEST_ALL_PREFIXES(ThreatDetailsTest, ThreatDOMDetails);
 
   DISALLOW_COPY_AND_ASSIGN(ThreatDetails);
@@ -250,7 +262,8 @@ class ThreatDetailsFactory {
       content::WebContents* web_contents,
       const security_interstitials::UnsafeResource& unsafe_resource,
       net::URLRequestContextGetter* request_context_getter,
-      history::HistoryService* history_service) = 0;
+      history::HistoryService* history_service,
+      bool trim_to_ad_tags) = 0;
 };
 
 }  // namespace safe_browsing

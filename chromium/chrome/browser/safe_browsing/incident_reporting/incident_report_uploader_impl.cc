@@ -8,7 +8,7 @@
 
 #include "base/metrics/histogram_macros.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
-#include "components/safe_browsing/csd.pb.h"
+#include "components/safe_browsing/proto/csd.pb.h"
 #include "google_apis/google_api_keys.h"
 #include "net/base/escape.h"
 #include "net/base/load_flags.h"
@@ -40,7 +40,7 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
       destination: GOOGLE_OWNED_SERVICE
     }
     policy {
-      cookies_allowed: true
+      cookies_allowed: YES
       cookies_store: "Safe Browsing cookie store"
       setting:
         "Users can control this feature via the 'Automatically report details "

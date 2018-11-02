@@ -30,7 +30,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/task_scheduler/task_traits.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/trace_event/trace_event.h"
 #include "base/version.h"
@@ -106,7 +105,6 @@
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/pref_registry/pref_registry_syncable.h"
-#include "components/prefs/json_pref_store.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/proxy_config/pref_proxy_config_tracker.h"
 #include "components/signin/core/browser/signin_manager.h"
@@ -133,6 +131,11 @@
 #include "services/preferences/public/interfaces/tracked_preference_validation_delegate.mojom.h"
 #include "services/service_manager/public/cpp/service.h"
 #include "ui/base/l10n/l10n_util.h"
+
+#if defined(OS_ANDROID)
+#include "prefs/vivaldi_browser_prefs.h"
+#include "prefs/vivaldi_pref_names.h"
+#endif
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/arc/arc_service_launcher.h"
@@ -245,10 +248,6 @@ void CreateProfileDirectory(base::SequencedTaskRunner* io_task_runner,
   }
 }
 
-base::FilePath GetCachePath(const base::FilePath& base) {
-  return base.Append(chrome::kCacheDirname);
-}
-
 base::FilePath GetMediaCachePath(const base::FilePath& base) {
   return base.Append(chrome::kMediaCacheDirname);
 }
@@ -299,14 +298,14 @@ Profile* Profile::CreateProfile(const base::FilePath& path,
                path.AsUTF8Unsafe());
 
   // Get sequenced task runner for making sure that file operations of
-  // this profile (defined by |path|) are executed in expected order
-  // (what was previously assured by the FILE thread).
-  scoped_refptr<base::SequencedTaskRunner> sequenced_task_runner =
-      JsonPrefStore::GetTaskRunnerForFile(path,
-                                          BrowserThread::GetBlockingPool());
+  // this profile are executed in expected order (what was previously assured by
+  // the FILE thread).
+  scoped_refptr<base::SequencedTaskRunner> io_task_runner =
+      base::CreateSequencedTaskRunnerWithTraits(
+          {base::TaskShutdownBehavior::BLOCK_SHUTDOWN, base::MayBlock()});
   if (create_mode == CREATE_MODE_ASYNCHRONOUS) {
     DCHECK(delegate);
-    CreateProfileDirectory(sequenced_task_runner.get(), path, true);
+    CreateProfileDirectory(io_task_runner.get(), path, true);
   } else if (create_mode == CREATE_MODE_SYNCHRONOUS) {
     if (!base::PathExists(path)) {
       // TODO(rogerta): http://crbug/160553 - Bad things happen if we can't
@@ -321,8 +320,7 @@ Profile* Profile::CreateProfile(const base::FilePath& path,
     NOTREACHED();
   }
 
-  return new ProfileImpl(
-      path, delegate, create_mode, sequenced_task_runner.get());
+  return new ProfileImpl(path, delegate, create_mode, io_task_runner);
 }
 
 // static
@@ -340,6 +338,11 @@ void ProfileImpl::RegisterProfilePrefs(
   registry->RegisterStringPref(prefs::kAllowedDomainsForApps, std::string());
 
 #if defined(OS_ANDROID)
+  registry->RegisterInt64Pref(vivaldiprefs::kVivaldiLastTopSitesVacuumDate, 0);
+  registry->RegisterIntegerPref(
+      vivaldiprefs::kVivaldiNumberOfDaysToKeepVisits, 90,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+
   // The following prefs don't need to be sync'd to mobile. This file isn't
   // compiled on iOS so we only need to exclude them syncing from the Android
   // build.
@@ -405,17 +408,19 @@ void ProfileImpl::RegisterProfilePrefs(
   registry->RegisterIntegerPref(prefs::kMediaCacheSize, 0);
 }
 
-ProfileImpl::ProfileImpl(const base::FilePath& path,
-                         Delegate* delegate,
-                         CreateMode create_mode,
-                         base::SequencedTaskRunner* sequenced_task_runner)
+ProfileImpl::ProfileImpl(
+    const base::FilePath& path,
+    Delegate* delegate,
+    CreateMode create_mode,
+    scoped_refptr<base::SequencedTaskRunner> io_task_runner)
     : path_(path),
+      io_task_runner_(std::move(io_task_runner)),
       pref_registry_(new user_prefs::PrefRegistrySyncable),
       io_data_(this),
       last_session_exit_type_(EXIT_NORMAL),
       start_time_(Time::Now()),
       delegate_(delegate),
-      predictor_(NULL) {
+      predictor_(nullptr) {
   TRACE_EVENT0("browser,startup", "ProfileImpl::ctor")
   DCHECK(!path.empty()) << "Using an empty path will attempt to write " <<
                             "profile files to the root directory!";
@@ -462,14 +467,13 @@ ProfileImpl::ProfileImpl(const base::FilePath& path,
     chromeos::DeviceSettingsService::Get()->LoadImmediately();
   configuration_policy_provider_ =
       policy::UserPolicyManagerFactoryChromeOS::CreateForProfile(
-          this, force_immediate_policy_load, sequenced_task_runner);
+          this, force_immediate_policy_load, io_task_runner_);
   chromeos::AuthPolicyCredentialsManagerFactory::
       BuildForProfileIfActiveDirectory(this);
 #else
   configuration_policy_provider_ =
       policy::UserCloudPolicyManagerFactory::CreateForOriginalBrowserContext(
-          this, force_immediate_policy_load, sequenced_task_runner,
-          BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE),
+          this, force_immediate_policy_load, io_task_runner_,
           BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
 #endif
   profile_policy_connector_ =
@@ -494,8 +498,8 @@ ProfileImpl::ProfileImpl(const base::FilePath& path,
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   supervised_user_settings =
       SupervisedUserSettingsServiceFactory::GetForProfile(this);
-  supervised_user_settings->Init(
-      path_, sequenced_task_runner, create_mode == CREATE_MODE_SYNCHRONOUS);
+  supervised_user_settings->Init(path_, io_task_runner_.get(),
+                                 create_mode == CREATE_MODE_SYNCHRONOUS);
 #endif
 
   scoped_refptr<safe_browsing::SafeBrowsingService> safe_browsing_service(
@@ -586,10 +590,7 @@ void ProfileImpl::DoFinalInit() {
   // to PathService.
   chrome::GetUserCacheDirectory(path_, &base_cache_path_);
   // Always create the cache directory asynchronously.
-  scoped_refptr<base::SequencedTaskRunner> sequenced_task_runner =
-      JsonPrefStore::GetTaskRunnerForFile(base_cache_path_,
-                                          BrowserThread::GetBlockingPool());
-  CreateProfileDirectory(sequenced_task_runner.get(), base_cache_path_, false);
+  CreateProfileDirectory(io_task_runner_.get(), base_cache_path_, false);
 
   // Initialize components that depend on the current value.
   UpdateSupervisedUserIdInStorage();
@@ -624,14 +625,10 @@ void ProfileImpl::DoFinalInit() {
   cookie_path = cookie_path.Append(chrome::kCookieFilename);
   base::FilePath channel_id_path = GetPath();
   channel_id_path = channel_id_path.Append(chrome::kChannelIDFilename);
-  base::FilePath cache_path = base_cache_path_;
-  int cache_max_size;
-  GetCacheParameters(false, &cache_path, &cache_max_size);
-  cache_path = GetCachePath(cache_path);
 
   base::FilePath media_cache_path = base_cache_path_;
   int media_cache_max_size;
-  GetCacheParameters(true, &media_cache_path, &media_cache_max_size);
+  GetMediaCacheParameters(&media_cache_path, &media_cache_max_size);
   media_cache_path = GetMediaCachePath(media_cache_path);
 
   base::FilePath extensions_cookie_path = GetPath();
@@ -656,10 +653,9 @@ void ProfileImpl::DoFinalInit() {
   // Make sure we initialize the ProfileIOData after everything else has been
   // initialized that we might be reading from the IO thread.
 
-  io_data_.Init(cookie_path, channel_id_path, cache_path,
-                cache_max_size, media_cache_path, media_cache_max_size,
-                extensions_cookie_path, GetPath(), predictor_,
-                session_cookie_mode, GetSpecialStoragePolicy(),
+  io_data_.Init(cookie_path, channel_id_path, media_cache_path,
+                media_cache_max_size, extensions_cookie_path, GetPath(),
+                predictor_, session_cookie_mode, GetSpecialStoragePolicy(),
                 CreateDomainReliabilityMonitor(local_state));
 
 #if BUILDFLAG(ENABLE_PLUGINS)
@@ -800,8 +796,7 @@ base::FilePath ProfileImpl::GetPath() const {
 }
 
 scoped_refptr<base::SequencedTaskRunner> ProfileImpl::GetIOTaskRunner() {
-  return JsonPrefStore::GetTaskRunnerForFile(
-      GetPath(), BrowserThread::GetBlockingPool());
+  return io_task_runner_;
 }
 
 bool ProfileImpl::IsOffTheRecord() const {
@@ -1356,23 +1351,16 @@ void ProfileImpl::UpdateIsEphemeralInStorage() {
   }
 }
 
-// Gets the cache parameters from the command line. If |is_media_context| is
-// set to true then settings for the media context type is what we need,
-// |cache_path| will be set to the user provided path, or will not be touched if
-// there is not an argument. |max_size| will be the user provided value or zero
-// by default.
-void ProfileImpl::GetCacheParameters(bool is_media_context,
-                                     base::FilePath* cache_path,
-                                     int* max_size) {
-  DCHECK(cache_path);
-  DCHECK(max_size);
-
+// Gets the media cache parameters from the command line. |cache_path| will be
+// set to the user provided path, or will not be touched if there is not an
+// argument. |max_size| will be the user provided value or zero by default.
+void ProfileImpl::GetMediaCacheParameters(base::FilePath* cache_path,
+                                          int* max_size) {
   base::FilePath path(prefs_->GetFilePath(prefs::kDiskCacheDir));
   if (!path.empty())
     *cache_path = path.Append(cache_path->BaseName());
 
-  *max_size = is_media_context ? prefs_->GetInteger(prefs::kMediaCacheSize) :
-                                 prefs_->GetInteger(prefs::kDiskCacheSize);
+  *max_size = prefs_->GetInteger(prefs::kMediaCacheSize);
 }
 
 PrefProxyConfigTracker* ProfileImpl::CreateProxyConfigTracker() {

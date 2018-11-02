@@ -32,8 +32,10 @@
 
 #include <memory>
 #include "mojo/public/cpp/bindings/strong_binding.h"
+#include "platform/CrossThreadFunctional.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/UUID.h"
+#include "platform/WebTaskRunner.h"
 #include "platform/blob/BlobBytesProvider.h"
 #include "platform/blob/BlobRegistry.h"
 #include "platform/text/LineEnding.h"
@@ -50,6 +52,7 @@
 using storage::mojom::blink::BlobPtr;
 using storage::mojom::blink::BlobRegistryPtr;
 using storage::mojom::blink::BytesProviderPtr;
+using storage::mojom::blink::BytesProviderRequest;
 using storage::mojom::blink::DataElement;
 using storage::mojom::blink::DataElementBlob;
 using storage::mojom::blink::DataElementPtr;
@@ -74,6 +77,11 @@ bool IsValidBlobType(const String& type) {
       return false;
   }
   return true;
+}
+
+void BindBytesProvider(std::unique_ptr<BlobBytesProvider> provider,
+                       BytesProviderRequest request) {
+  mojo::MakeStrongBinding(std::move(provider), std::move(request));
 }
 
 }  // namespace
@@ -266,7 +274,7 @@ BlobDataHandle::BlobDataHandle()
     BlobRegistryPtr registry;
     Platform::Current()->GetInterfaceProvider()->GetInterface(
         MakeRequest(&registry));
-    registry->Register(MakeRequest(&blob_), uuid_, "", "", {});
+    registry->Register(MakeRequest(&blob_info_), uuid_, "", "", {});
   } else {
     BlobRegistry::RegisterBlobData(uuid_, BlobData::Create());
   }
@@ -289,6 +297,7 @@ BlobDataHandle::BlobDataHandle(std::unique_ptr<BlobData> data, long long size)
     Vector<DataElementPtr> elements;
     const DataElementPtr null_element = nullptr;
     BlobBytesProvider* last_bytes_provider = nullptr;
+    RefPtr<WebTaskRunner> file_runner = Platform::Current()->FileTaskRunner();
 
     // TODO(mek): When the mojo code path is the default BlobData should
     // directly create mojom::DataElements rather than BlobDataItems,
@@ -330,14 +339,20 @@ BlobDataHandle::BlobDataHandle(std::unique_ptr<BlobData> data, long long size)
             last_bytes_provider->AppendData(item.data);
           } else {
             BytesProviderPtr bytes_provider;
-            // TODO(mek): BytesProvider should be bound on a thread that doesn't
-            // run javascript to prevent deadlock if javascript starts trying to
-            // synchronously read the blob before all data has been transported
-            // to the browser process.
-            last_bytes_provider = static_cast<BlobBytesProvider*>(
-                MakeStrongBinding(WTF::MakeUnique<BlobBytesProvider>(item.data),
-                                  MakeRequest(&bytes_provider))
-                    ->impl());
+            auto provider = WTF::MakeUnique<BlobBytesProvider>(item.data);
+            last_bytes_provider = provider.get();
+            if (file_runner) {
+              // TODO(mek): Considering binding BytesProvider on the IO thread
+              // instead, only using the File thread for actual file operations.
+              file_runner->PostTask(
+                  FROM_HERE,
+                  CrossThreadBind(&BindBytesProvider,
+                                  WTF::Passed(std::move(provider)),
+                                  WTF::Passed(MakeRequest(&bytes_provider))));
+            } else {
+              BindBytesProvider(std::move(provider),
+                                MakeRequest(&bytes_provider));
+            }
             DataElementBytesPtr bytes_element = DataElementBytes::New(
                 item.data->length(), WTF::nullopt, std::move(bytes_provider));
             if (should_embed_bytes) {
@@ -362,8 +377,7 @@ BlobDataHandle::BlobDataHandle(std::unique_ptr<BlobData> data, long long size)
                   WTF::Time::FromDoubleT(item.expected_modification_time))));
           break;
         case BlobDataItem::kBlob: {
-          BlobPtr blob_clone;
-          item.blob_data_handle->blob_->Clone(MakeRequest(&blob_clone));
+          BlobPtr blob_clone = item.blob_data_handle->CloneBlobPtr();
           elements.push_back(DataElement::NewBlob(DataElementBlob::New(
               std::move(blob_clone), item.offset, item.length)));
           break;
@@ -371,8 +385,8 @@ BlobDataHandle::BlobDataHandle(std::unique_ptr<BlobData> data, long long size)
       }
     }
 
-    registry->Register(MakeRequest(&blob_), uuid_, type_.IsNull() ? "" : type_,
-                       "", std::move(elements));
+    registry->Register(MakeRequest(&blob_info_), uuid_,
+                       type_.IsNull() ? "" : type_, "", std::move(elements));
   } else {
     BlobRegistry::RegisterBlobData(uuid_, std::move(data));
   }
@@ -392,15 +406,39 @@ BlobDataHandle::BlobDataHandle(const String& uuid,
     storage::mojom::blink::BlobRegistryPtr registry;
     Platform::Current()->GetInterfaceProvider()->GetInterface(
         MakeRequest(&registry));
-    registry->GetBlobFromUUID(MakeRequest(&blob_), uuid_);
+    registry->GetBlobFromUUID(MakeRequest(&blob_info_), uuid_);
   } else {
     BlobRegistry::AddBlobDataRef(uuid_);
   }
 }
 
+BlobDataHandle::BlobDataHandle(const String& uuid,
+                               const String& type,
+                               long long size,
+                               storage::mojom::blink::BlobPtrInfo blob_info)
+    : uuid_(uuid.IsolatedCopy()),
+      type_(IsValidBlobType(type) ? type.IsolatedCopy() : ""),
+      size_(size),
+      is_single_unknown_size_file_(false),
+      blob_info_(std::move(blob_info)) {
+  DCHECK(RuntimeEnabledFeatures::MojoBlobsEnabled());
+  DCHECK(blob_info_.is_valid());
+}
+
 BlobDataHandle::~BlobDataHandle() {
   if (!RuntimeEnabledFeatures::MojoBlobsEnabled())
     BlobRegistry::RemoveBlobDataRef(uuid_);
+}
+
+BlobPtr BlobDataHandle::CloneBlobPtr() {
+  MutexLocker locker(blob_info_mutex_);
+  if (!blob_info_.is_valid())
+    return nullptr;
+  BlobPtr blob, blob_clone;
+  blob.Bind(std::move(blob_info_));
+  blob->Clone(MakeRequest(&blob_clone));
+  blob_info_ = blob.PassInterface();
+  return blob_clone;
 }
 
 }  // namespace blink

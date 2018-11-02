@@ -154,7 +154,7 @@ fuzzer_test("libsrtp_fuzzer") {
   deps = [
     "//third_party/libsrtp",
   ]
-  libfuzzer_options = [ "max_len=1000" ]
+  libfuzzer_options = [ "max_len=1500" ]
 }
 
 fuzzer_test("base_json_reader_fuzzer") {
@@ -167,7 +167,7 @@ fuzzer_test("base_json_reader_fuzzer") {
 }
 
 libpng_seed_corpuses = [
-  "//cc/test/data",
+  "//components/viz/test/data",
   "//third_party/WebKit/LayoutTests/images/png-suite/samples",
   "//third_party/WebKit/LayoutTests/images/resources/pngfuzz",
 ]

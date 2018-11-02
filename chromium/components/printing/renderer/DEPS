@@ -1,6 +1,8 @@
 include_rules = [
   "+components/grit/components_resources.h",
+  "+content/public/renderer",
   "+net/base",
+  "+services/service_manager/public/cpp",
   "+third_party/skia",
   "+ui/base",
 ]

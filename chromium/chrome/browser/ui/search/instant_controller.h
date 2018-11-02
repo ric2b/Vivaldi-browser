@@ -16,22 +16,17 @@
 #include "base/macros.h"
 #include "chrome/browser/ui/search/instant_tab.h"
 #include "chrome/browser/ui/search/search_model.h"
-#include "chrome/common/search/search_types.h"
 
 class BrowserInstantController;
-class InstantService;
 
 namespace content {
 class WebContents;
 }
 
-// InstantController drives Chrome Instant, i.e., the browser implementation of
-// the Embedded Search API (see http://dev.chromium.org/embeddedsearch).
-//
-// InstantController maintains and coordinates an InstantTab.
-// An InstantTab instance points to the currently active tab, if it supports the
-// Embedded Search API. InstantTab is backed by a WebContents and it does not
-// own that WebContents.
+// InstantController is responsible for updating the theme and most visited info
+// of the current tab when
+// * the user switches to an existing NTP tab, or
+// * an open tab navigates to an NTP.
 //
 // InstantController is owned by Browser via BrowserInstantController.
 class InstantController : public InstantTab::Delegate {
@@ -40,12 +35,12 @@ class InstantController : public InstantTab::Delegate {
   ~InstantController() override;
 
   // The search mode in the active tab has changed. Bind |instant_tab_| if the
-  // |new_mode| reflects an Instant search results page.
-  void SearchModeChanged(const SearchMode& old_mode,
-                         const SearchMode& new_mode);
+  // |new_mode| reflects an Instant NTP.
+  void SearchModeChanged(SearchModel::Origin old_origin,
+                         SearchModel::Origin new_origin);
 
   // The user switched tabs. Bind |instant_tab_| if the newly active tab is an
-  // Instant search results page.
+  // Instant NTP.
   void ActiveTabChanged();
 
   // Resets list of debug events.
@@ -57,9 +52,6 @@ class InstantController : public InstantTab::Delegate {
   }
 
  private:
-  friend class InstantExtendedManualTest;
-  friend class InstantTestBase;
-
   FRIEND_TEST_ALL_PREFIXES(InstantExtendedTest,
                            SearchDoesntReuseInstantTabWithoutSupport);
   FRIEND_TEST_ALL_PREFIXES(InstantExtendedTest,
@@ -77,15 +69,12 @@ class InstantController : public InstantTab::Delegate {
   // |debug_events_| doesn't get too large.
   void LogDebugEvent(const std::string& info) const;
 
-  // If the active tab is an Instant search results page, sets |instant_tab_| to
-  // point to it. Else, deletes any existing |instant_tab_|.
+  // If the active tab is an Instant NTP, sets |instant_tab_| to point to it.
+  // Else, deletes any existing |instant_tab_|.
   void ResetInstantTab();
 
-  // Sends theme info and most visited items to the Instant tab.
+  // Sends theme info and most visited items to the Instant renderer process.
   void UpdateInfoForInstantTab();
-
-  // Returns the InstantService for the browser profile.
-  InstantService* GetInstantService() const;
 
   BrowserInstantController* const browser_;
 
@@ -93,7 +82,7 @@ class InstantController : public InstantTab::Delegate {
   std::unique_ptr<InstantTab> instant_tab_;
 
   // The search model mode for the active tab.
-  SearchMode search_mode_;
+  SearchModel::Origin search_origin_;
 
   // List of events and their timestamps, useful in debugging Instant behaviour.
   mutable std::list<std::pair<int64_t, std::string>> debug_events_;

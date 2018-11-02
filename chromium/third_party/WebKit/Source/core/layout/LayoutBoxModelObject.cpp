@@ -33,10 +33,10 @@
 #include "core/layout/LayoutGeometryMap.h"
 #include "core/layout/LayoutInline.h"
 #include "core/layout/LayoutView.h"
-#include "core/layout/compositing/CompositedLayerMapping.h"
-#include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/paint/ObjectPaintInvalidator.h"
 #include "core/paint/PaintLayer.h"
+#include "core/paint/compositing/CompositedLayerMapping.h"
+#include "core/paint/compositing/PaintLayerCompositor.h"
 #include "core/style/ShadowList.h"
 #include "platform/LengthFunctions.h"
 #include "platform/geometry/TransformState.h"
@@ -53,30 +53,12 @@ inline bool IsOutOfFlowPositionedWithImplicitHeight(
          !child->Style()->LogicalBottom().IsAuto();
 }
 
-StickyPositionScrollingConstraints* StickyConstraintsForLayoutObject(
-    const LayoutBoxModelObject* obj,
-    const PaintLayer* ancestor_overflow_layer) {
-  if (!obj)
-    return nullptr;
-
-  PaintLayerScrollableArea* scrollable_area =
-      ancestor_overflow_layer->GetScrollableArea();
-  if (!scrollable_area)
-    return nullptr;
-  auto it = scrollable_area->GetStickyConstraintsMap().find(obj->Layer());
-  if (it == scrollable_area->GetStickyConstraintsMap().end())
-    return nullptr;
-
-  return &it->value;
-}
-
 // Inclusive of |from|, exclusive of |to|.
-LayoutBoxModelObject* FindFirstStickyBetween(LayoutObject* from,
-                                             LayoutObject* to) {
+PaintLayer* FindFirstStickyBetween(LayoutObject* from, LayoutObject* to) {
   LayoutObject* maybe_sticky_ancestor = from;
   while (maybe_sticky_ancestor && maybe_sticky_ancestor != to) {
     if (maybe_sticky_ancestor->Style()->HasStickyConstrainedPosition()) {
-      return ToLayoutBoxModelObject(maybe_sticky_ancestor);
+      return ToLayoutBoxModelObject(maybe_sticky_ancestor)->Layer();
     }
 
     maybe_sticky_ancestor =
@@ -87,28 +69,6 @@ LayoutBoxModelObject* FindFirstStickyBetween(LayoutObject* from,
   return nullptr;
 }
 }  // namespace
-
-class FloatStateForStyleChange {
- public:
-  static void SetWasFloating(LayoutBoxModelObject* box_model_object,
-                             bool was_floating) {
-    was_floating_ = was_floating;
-    box_model_object_ = box_model_object;
-  }
-
-  static bool WasFloating(LayoutBoxModelObject* box_model_object) {
-    DCHECK_EQ(box_model_object, box_model_object_);
-    return was_floating_;
-  }
-
- private:
-  // Used to store state between styleWillChange and styleDidChange
-  static bool was_floating_;
-  static LayoutBoxModelObject* box_model_object_;
-};
-
-bool FloatStateForStyleChange::was_floating_ = false;
-LayoutBoxModelObject* FloatStateForStyleChange::box_model_object_ = nullptr;
 
 // The HashMap for storing continuation pointers.
 // The continuation chain is a singly linked list. As such, the HashMap's value
@@ -266,25 +226,34 @@ void LayoutBoxModelObject::WillBeDestroyed() {
 
 void LayoutBoxModelObject::StyleWillChange(StyleDifference diff,
                                            const ComputedStyle& new_style) {
-  // This object's layer may begin or cease to be a stacking context, in which
-  // case the paint invalidation container of this object and descendants may
-  // change. Thus we need to invalidate paint eagerly for all such children.
-  // PaintLayerCompositor::paintInvalidationOnCompositingChange() doesn't work
-  // for the case because we can only see the new paintInvalidationContainer
-  // during compositing update.
-  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled() && Style() &&
-      Style()->IsStackingContext() != new_style.IsStackingContext() &&
-      // InvalidatePaintIncludingNonCompositingDescendants() requires this.
+  // SPv1:
+  // This object's layer may begin or cease to be stacked or stacking context,
+  // in which case the paint invalidation container of this object and
+  // descendants may change. Thus we need to invalidate paint eagerly for all
+  // such children. PaintLayerCompositor::paintInvalidationOnCompositingChange()
+  // doesn't work for the case because we can only see the new
+  // paintInvalidationContainer during compositing update.
+  // SPv1 and v2:
+  // Change of stacked/stacking context status may cause change of this or
+  // descendant PaintLayer's CompositingContainer, so we need to eagerly
+  // invalidate the current compositing container chain which may have painted
+  // cached subsequences containing this object or descendant objects.
+  if (Style() &&
+      (Style()->IsStacked() != new_style.IsStacked() ||
+       Style()->IsStackingContext() != new_style.IsStackingContext()) &&
+      // ObjectPaintInvalidator requires this.
       IsRooted()) {
-    // The following disablers are valid because we need to invalidate based on
-    // the current status.
-    DisableCompositingQueryAsserts compositing_disabler;
-    DisablePaintInvalidationStateAsserts paint_disabler;
-    ObjectPaintInvalidator(*this)
-        .InvalidatePaintIncludingNonCompositingDescendants();
+    if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
+      ObjectPaintInvalidator(*this).SlowSetPaintingLayerNeedsRepaint();
+    } else {
+      // The following disablers are valid because we need to invalidate based
+      // on the current status.
+      DisableCompositingQueryAsserts compositing_disabler;
+      DisablePaintInvalidationStateAsserts paint_disabler;
+      ObjectPaintInvalidator(*this)
+          .InvalidatePaintIncludingNonCompositingDescendants();
+    }
   }
-
-  FloatStateForStyleChange::SetWasFloating(this, IsFloating());
 
   if (HasLayer() && diff.CssClipChanged())
     Layer()->ClearClipRects();
@@ -298,8 +267,6 @@ void LayoutBoxModelObject::StyleDidChange(StyleDifference diff,
   bool had_transform_related_property = HasTransformRelatedProperty();
   bool had_layer = HasLayer();
   bool layer_was_self_painting = had_layer && Layer()->IsSelfPaintingLayer();
-  bool was_floating_before_style_changed =
-      FloatStateForStyleChange::WasFloating(this);
   bool was_horizontal_writing_mode = IsHorizontalWritingMode();
 
   LayoutObject::StyleDidChange(diff, old_style);
@@ -329,14 +296,15 @@ void LayoutBoxModelObject::StyleDidChange(StyleDifference diff,
   PaintLayerType type = LayerTypeRequired();
   if (type != kNoPaintLayer) {
     if (!Layer()) {
-      if (was_floating_before_style_changed && IsFloating())
+      // In order to update this object properly, we need to lay it out again.
+      // However, if we have never laid it out, don't mark it for layout. If
+      // this is a new object, it may not yet have been inserted into the tree,
+      // and if we mark it for layout then, we risk upsetting the tree
+      // insertion machinery.
+      if (EverHadLayout())
         SetChildNeedsLayout();
+
       CreateLayerAfterStyleChange();
-      if (Parent() && !NeedsLayout()) {
-        Layer()->UpdateSize();
-        // FIXME: We should call a specialized versions of this function.
-        Layer()->UpdateLayerPositionsAfterLayout();
-      }
     }
   } else if (Layer() && Layer()->Parent()) {
     PaintLayer* parent_layer = Layer()->Parent();
@@ -348,7 +316,7 @@ void LayoutBoxModelObject::StyleDidChange(StyleDifference diff,
     Layer()->UpdateClipPath(old_style, StyleRef());
     // Calls DestroyLayer() which clears the layer.
     Layer()->RemoveOnlyThisLayerAfterStyleChange();
-    if (was_floating_before_style_changed && IsFloating())
+    if (EverHadLayout())
       SetChildNeedsLayout();
     if (had_transform_related_property) {
       SetNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation(
@@ -736,6 +704,7 @@ bool LayoutBoxModelObject::HasAutoHeightOrContainingBlockWithAutoHeight()
 }
 
 LayoutSize LayoutBoxModelObject::RelativePositionOffset() const {
+  DCHECK(IsRelPositioned());
   LayoutSize offset = AccumulateInFlowPositionOffsets();
 
   LayoutBlock* containing_block = this->ContainingBlock();
@@ -949,12 +918,14 @@ void LayoutBoxModelObject::UpdateStickyPositionConstraints() const {
   //
   // The respective search ranges are [container, containingBlock) and
   // [containingBlock, scrollAncestor).
-  constraints.SetNearestStickyBoxShiftingStickyBox(
+  constraints.SetNearestStickyLayerShiftingStickyBox(
       FindFirstStickyBetween(location_container, containing_block));
   // We cannot use |scrollAncestor| here as it disregards the root
   // ancestorOverflowLayer(), which we should include.
-  constraints.SetNearestStickyBoxShiftingContainingBlock(FindFirstStickyBetween(
-      containing_block, &Layer()->AncestorOverflowLayer()->GetLayoutObject()));
+  constraints.SetNearestStickyLayerShiftingContainingBlock(
+      FindFirstStickyBetween(
+          containing_block,
+          &Layer()->AncestorOverflowLayer()->GetLayoutObject()));
 
   // We skip the right or top sticky offset if there is not enough space to
   // honor both the left/right or top/bottom offsets.
@@ -1054,30 +1025,21 @@ LayoutSize LayoutBoxModelObject::StickyPositionOffset() const {
   const PaintLayer* ancestor_overflow_layer = Layer()->AncestorOverflowLayer();
   // TODO: Force compositing input update if we ask for offset before
   // compositing inputs have been computed?
-  if (!ancestor_overflow_layer)
+  if (!ancestor_overflow_layer || !ancestor_overflow_layer->GetScrollableArea())
     return LayoutSize();
 
-  StickyPositionScrollingConstraints* constraints =
-      StickyConstraintsForLayoutObject(this, ancestor_overflow_layer);
-  if (!constraints)
+  StickyConstraintsMap& constraints_map =
+      ancestor_overflow_layer->GetScrollableArea()->GetStickyConstraintsMap();
+  auto it = constraints_map.find(Layer());
+  if (it == constraints_map.end())
     return LayoutSize();
-
-  StickyPositionScrollingConstraints* shifting_sticky_box_constraints =
-      StickyConstraintsForLayoutObject(
-          constraints->NearestStickyBoxShiftingStickyBox(),
-          ancestor_overflow_layer);
-
-  StickyPositionScrollingConstraints* shifting_containing_block_constraints =
-      StickyConstraintsForLayoutObject(
-          constraints->NearestStickyBoxShiftingContainingBlock(),
-          ancestor_overflow_layer);
+  StickyPositionScrollingConstraints* constraints = &it->value;
 
   // The sticky offset is physical, so we can just return the delta computed in
   // absolute coords (though it may be wrong with transforms).
   FloatRect constraining_rect = ComputeStickyConstrainingRect();
-  return LayoutSize(constraints->ComputeStickyOffset(
-      constraining_rect, shifting_sticky_box_constraints,
-      shifting_containing_block_constraints));
+  return LayoutSize(
+      constraints->ComputeStickyOffset(constraining_rect, constraints_map));
 }
 
 LayoutPoint LayoutBoxModelObject::AdjustedPositionRelativeTo(

@@ -72,6 +72,7 @@ class PLATFORM_EXPORT DOMWrapperWorld : public RefCounted<DOMWrapperWorld> {
     kGarbageCollector,
     kRegExp,
     kTesting,
+    kForV8ContextSnapshotNonMain,
     kWorker,
   };
 
@@ -126,6 +127,8 @@ class PLATFORM_EXPORT DOMWrapperWorld : public RefCounted<DOMWrapperWorld> {
   static void SetIsolatedWorldContentSecurityPolicy(int world_id,
                                                     const String& policy);
   bool IsolatedWorldHasContentSecurityPolicy();
+
+  static bool HasWrapperInAnyWorldInMainThread(ScriptWrappable*);
 
   bool IsMainWorld() const { return world_type_ == WorldType::kMain; }
   bool IsWorkerWorld() const { return world_type_ == WorldType::kWorker; }

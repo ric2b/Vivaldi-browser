@@ -12,12 +12,14 @@
 #include "base/stl_util.h"
 #include "cc/layers/layer.h"
 #include "jni/ViewAndroidDelegate_jni.h"
+#include "third_party/WebKit/public/platform/WebCursorInfo.h"
 #include "ui/android/event_forwarder.h"
 #include "ui/android/view_client.h"
 #include "ui/android/window_android.h"
 #include "ui/base/layout.h"
 #include "ui/events/android/drag_event_android.h"
 #include "ui/events/android/motion_event_android.h"
+#include "ui/gfx/android/java_bitmap.h"
 #include "url/gurl.h"
 
 namespace ui {
@@ -25,6 +27,7 @@ namespace ui {
 using base::android::ConvertUTF8ToJavaString;
 using base::android::JavaRef;
 using base::android::ScopedJavaLocalRef;
+using blink::WebCursorInfo;
 
 ViewAndroid::ScopedAnchorView::ScopedAnchorView(
     JNIEnv* env,
@@ -84,6 +87,7 @@ ViewAndroid::ViewAndroid(ViewClient* view_client)
 ViewAndroid::ViewAndroid() : ViewAndroid(nullptr) {}
 
 ViewAndroid::~ViewAndroid() {
+  observer_list_.Clear();
   RemoveFromParent();
 
   for (std::list<ViewAndroid*>::iterator it = children_.begin();
@@ -136,6 +140,8 @@ void ViewAndroid::AddChild(ViewAndroid* child) {
   // accidentally overwrite the valid ones in the children.
   if (!physical_size_.IsEmpty())
     child->OnPhysicalBackingSizeChanged(physical_size_);
+  if (GetWindowAndroid())
+    child->OnAttachedToWindow();
 }
 
 // static
@@ -210,16 +216,16 @@ ScopedJavaLocalRef<jobject> ViewAndroid::GetContainerView() {
   return Java_ViewAndroidDelegate_getContainerView(env, delegate);
 }
 
-gfx::Point ViewAndroid::GetLocationOfContainerViewOnScreen() {
+gfx::Point ViewAndroid::GetLocationOfContainerViewInWindow() {
   ScopedJavaLocalRef<jobject> delegate(GetViewAndroidDelegate());
   if (delegate.is_null())
     return gfx::Point();
 
   JNIEnv* env = base::android::AttachCurrentThread();
   gfx::Point result(
-      Java_ViewAndroidDelegate_getXLocationOfContainerViewOnScreen(env,
+      Java_ViewAndroidDelegate_getXLocationOfContainerViewInWindow(env,
                                                                    delegate),
-      Java_ViewAndroidDelegate_getYLocationOfContainerViewOnScreen(env,
+      Java_ViewAndroidDelegate_getYLocationOfContainerViewInWindow(env,
                                                                    delegate));
 
   return result;
@@ -229,11 +235,35 @@ void ViewAndroid::RemoveChild(ViewAndroid* child) {
   DCHECK(child);
   DCHECK_EQ(child->parent_, this);
 
+  if (GetWindowAndroid())
+    child->OnDetachedFromWindow();
   std::list<ViewAndroid*>::iterator it =
       std::find(children_.begin(), children_.end(), child);
   DCHECK(it != children_.end());
   children_.erase(it);
   child->parent_ = nullptr;
+}
+
+void ViewAndroid::AddObserver(ViewAndroidObserver* observer) {
+  observer_list_.AddObserver(observer);
+}
+
+void ViewAndroid::RemoveObserver(ViewAndroidObserver* observer) {
+  observer_list_.RemoveObserver(observer);
+}
+
+void ViewAndroid::OnAttachedToWindow() {
+  for (auto& observer : observer_list_)
+    observer.OnAttachedToWindow();
+  for (auto* child : children_)
+    child->OnAttachedToWindow();
+}
+
+void ViewAndroid::OnDetachedFromWindow() {
+  for (auto& observer : observer_list_)
+    observer.OnDetachedFromWindow();
+  for (auto* child : children_)
+    child->OnDetachedFromWindow();
 }
 
 WindowAndroid* ViewAndroid::GetWindowAndroid() const {
@@ -254,6 +284,22 @@ cc::Layer* ViewAndroid::GetLayer() const {
   return layer_.get();
 }
 
+bool ViewAndroid::HasFocus() {
+  ScopedJavaLocalRef<jobject> delegate(GetViewAndroidDelegate());
+  if (delegate.is_null())
+    return false;
+  JNIEnv* env = base::android::AttachCurrentThread();
+  return Java_ViewAndroidDelegate_hasFocus(env, delegate);
+}
+
+void ViewAndroid::RequestFocus() {
+  ScopedJavaLocalRef<jobject> delegate(GetViewAndroidDelegate());
+  if (delegate.is_null())
+    return;
+  JNIEnv* env = base::android::AttachCurrentThread();
+  Java_ViewAndroidDelegate_requestFocus(env, delegate);
+}
+
 void ViewAndroid::SetLayer(scoped_refptr<cc::Layer> layer) {
   layer_ = layer;
 }
@@ -270,6 +316,28 @@ bool ViewAndroid::StartDragAndDrop(const JavaRef<jstring>& jtext,
   JNIEnv* env = base::android::AttachCurrentThread();
   return Java_ViewAndroidDelegate_startDragAndDrop(env, delegate, jtext,
                                                    jimage);
+}
+
+void ViewAndroid::OnCursorChanged(int type,
+                                  const SkBitmap& custom_image,
+                                  const gfx::Point& hotspot) {
+  ScopedJavaLocalRef<jobject> delegate(GetViewAndroidDelegate());
+  if (delegate.is_null())
+    return;
+  JNIEnv* env = base::android::AttachCurrentThread();
+  if (type == WebCursorInfo::kTypeCustom) {
+    if (custom_image.drawsNothing()) {
+      Java_ViewAndroidDelegate_onCursorChanged(env, delegate,
+                                               WebCursorInfo::kTypePointer);
+      return;
+    }
+    ScopedJavaLocalRef<jobject> java_bitmap =
+        gfx::ConvertToJavaBitmap(&custom_image);
+    Java_ViewAndroidDelegate_onCursorChangedToCustom(env, delegate, java_bitmap,
+                                                     hotspot.x(), hotspot.y());
+  } else {
+    Java_ViewAndroidDelegate_onCursorChanged(env, delegate, type);
+  }
 }
 
 void ViewAndroid::OnBackgroundColorChanged(unsigned int color) {
@@ -335,20 +403,17 @@ bool ViewAndroid::SendDragEventToClient(ViewClient* client,
   return client->OnDragEvent(*e);
 }
 
-bool ViewAndroid::OnTouchEvent(const MotionEventAndroid& event,
-                               bool for_touch_handle) {
-  return HitTest(
-      base::Bind(&ViewAndroid::SendTouchEventToClient, for_touch_handle), event,
-      event.GetPoint());
+bool ViewAndroid::OnTouchEvent(const MotionEventAndroid& event) {
+  return HitTest(base::Bind(&ViewAndroid::SendTouchEventToClient), event,
+                 event.GetPoint());
 }
 
 // static
-bool ViewAndroid::SendTouchEventToClient(bool for_touch_handle,
-                                         ViewClient* client,
+bool ViewAndroid::SendTouchEventToClient(ViewClient* client,
                                          const MotionEventAndroid& event,
                                          const gfx::PointF& point) {
   std::unique_ptr<MotionEventAndroid> e(event.CreateFor(point));
-  return client->OnTouchEvent(*e, for_touch_handle);
+  return client->OnTouchEvent(*e);
 }
 
 bool ViewAndroid::OnMouseEvent(const MotionEventAndroid& event) {

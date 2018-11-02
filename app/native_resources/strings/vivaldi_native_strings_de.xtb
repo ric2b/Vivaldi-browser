@@ -6,7 +6,7 @@
 <translation id="1728549374069268714">Einfügen und aufrufen</translation>
 <translation id="1756026472674246267">Link in neuem Tab öffnen</translation>
 <translation id="1759842336958782510">Chrome</translation>
-<translation id="1769904678986817931">Bildeigenschaften</translation>
+<translation id="1769904678986817931">Bildeigenschaften...</translation>
 <translation id="1920297417712412573">Als Notiz kopieren</translation>
 <translation id="1921101374471252440">Bild &amp;neu laden</translation>
 <translation id="2444387452209867610">Notiz einfügen</translation>
@@ -42,8 +42,9 @@
 <translation id="5615637589913244581">Opera Version 15+ (Beta)</translation>
 <translation id="5648110075441906505">Bild in neuem Fenster öffnen</translation>
 <translation id="5716238312826274098">Deaktiviere Benachrichtigungen</translation>
-<translation id="588258955323874662">Vollbildmodus</translation>
+<translation id="588258955323874662">Vollbild</translation>
 <translation id="5916080360077521750">Leider stehen Ihre Chrome Einstellungen nicht zur Verfügung solange der Browser noch läuft. Um die Einstellungen nach Vivaldi zu importieren, speichern Sie Ihre Dokumente, beenden Sie alle Chrome Fenster und klicken dann auf Fortsetzen.</translation>
+<translation id="6229528619562190452">Klicken Sie hier, um Vivaldi zu aktualisieren.</translation>
 <translation id="6234173136417926046">Bild als Schnellwahl-Hintergrund verwenden</translation>
 <translation id="6259156558325130047">&amp;Wiederholen Neusortierung</translation>
 <translation id="630690498669249215">Opera Lesezeichen-Datei</translation>

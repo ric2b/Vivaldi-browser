@@ -8,19 +8,24 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "extensions/features/features.h"
 
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/api/show_menu/show_menu_api.h"
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
+#endif
 
 namespace vivaldi {
 
 void SetVivaldiScrollType(int scrollType) {
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   Browser* browser = chrome::FindLastActive();
   if (browser) {
     extensions::VivaldiUtilitiesAPI::GetFactoryInstance()
         ->Get(browser->profile())
         ->ScrollType(scrollType);
   }
+#endif
 }
 
 void UpdateCommandsForVivaldi(CommandUpdater* command_updater_) {
@@ -85,6 +90,7 @@ void UpdateCommandsForVivaldi(CommandUpdater* command_updater_) {
 
 bool ExecuteVivaldiCommands(Browser* browser, int id) {
   switch (id) {
+#if BUILDFLAG(ENABLE_EXTENSIONS)
     case IDC_VIV_NEW_TAB:
     case IDC_VIV_NEW_WINDOW:
     case IDC_VIV_IMPORT_DATA:
@@ -143,6 +149,7 @@ bool ExecuteVivaldiCommands(Browser* browser, int id) {
           ->Get(browser->profile()->GetOriginalProfile())
           ->CommandExecuted(id);
       break;
+#endif
 
     default:
       return false;

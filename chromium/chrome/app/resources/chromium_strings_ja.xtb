@@ -12,14 +12,12 @@
 <translation id="1403254041219632970">Chromium の今後のバージョンでは Mac OS X 10.6、10.7、10.8 はサポートされなくなります。</translation>
 <translation id="1414495520565016063">Chromium にログインしました</translation>
 <translation id="1444754455097148408">Chromium オープンソース ライセンス</translation>
-<translation id="1480489203462860648">使ってみる（既にインストール済み）</translation>
 <translation id="1502360822835740515">Chromium をデフォルトのブラウザにする</translation>
 <translation id="151962892725702025">お使いのドメインでは同期を利用できないため、Chromium OS はデータを同期できませんでした。</translation>
 <translation id="1559451348202814456">Mac OS X 10.6、10.7、10.8 はサポートされなくなったため、Chromium は正常に機能しない可能性があります。</translation>
 <translation id="1653828314016431939">OK - 今すぐ再起動</translation>
 <translation id="1668054258064581266">Chromium からアカウントを削除したら、場合によっては開いているタブを再読み込みして変更を反映させる必要があります。</translation>
 <translation id="1688750314291223739">同期を設定すると、パーソナライズされたブラウザ機能をウェブ上に保存して、どのパソコンの Chromium からでも使用できるようになります。</translation>
-<translation id="1699664235656412242">Chromium のウィンドウ（Windows 8 モードのウィンドウを含む）をすべて閉じてからもう一度お試しください。</translation>
 <translation id="1708666629004767631">Chromium がさらに安全になりました。最新バージョンをぜひお試しください。</translation>
 <translation id="1774152462503052664">Chromium をバックグラウンドで実行する</translation>
 <translation id="1779356040007214683">Chromium をより安全にご利用いただくため、<ph name="IDS_EXTENSION_WEB_STORE_TITLE" />で提供していない一部の拡張機能を無効にしました。これらは知らないうちに追加された可能性があります。</translation>
@@ -101,6 +99,7 @@
 <translation id="4271805377592243930">Chromium のヘルプを見る</translation>
 <translation id="4285930937574705105">原因不明のエラーによりインストールが失敗しました。実行中の Chromium を終了してからもう一度お試しください。</translation>
 <translation id="4330585738697551178">このモジュールは Chromium と競合することがわかっています。</translation>
+<translation id="4421155425831608516">Chromium へのログインは、この端末の管理者によって無効にされています。</translation>
 <translation id="4423735387467980091">Chromium の設定</translation>
 <translation id="4458285410772214805">変更内容を反映するには、一度ログアウトして、もう一度ログインしてください。</translation>
 <translation id="4469812139324097969">Chromium はしばらく再起動していないため最新ではありません。再起動するとすぐにアップデートが適用されます。</translation>
@@ -177,7 +176,6 @@
 一部の機能が利用できない可能性があります。別の場所のプロフィールを指定するか、新しいバージョンの Chromium をご使用ください。</translation>
 <translation id="6734080038664603509">Chromium を更新(&amp;C)</translation>
 <translation id="6734291798041940871">Chromium は既にパソコンのすべてのユーザーに対してインストールされています。</translation>
-<translation id="6757767188268205357">今後は表示しない</translation>
 <translation id="6810143991807788455">現在の設定を送信して Chromium の品質向上にご協力ください</translation>
 <translation id="6857782730669500492">Chromium - <ph name="PAGE_TITLE" /></translation>
 <translation id="6883876366448858277">機能は、単語とその周辺のコンテキストを Google 検索に送信し、定義、画像などの検索結果を返します。</translation>
@@ -190,7 +188,6 @@
 <translation id="707471633328071618">Google ペイメント（Chromium にコピー）</translation>
 <translation id="7138853919861947730">Chromium は、より快適なブラウジングを提供する目的でウェブ サービスを使用することがあります。</translation>
 <translation id="7162152143154757523">Chromium ではブラウザに入力された内容を Google のサーバーに送信することで高度なスペルチェックを実現し、Google 検索で使用されるスペルチェック テクノロジーを活用できます。</translation>
-<translation id="7196020411877309443">このウィンドウが表示される理由</translation>
 <translation id="7205698830395646142">Chromium メニューで非表示</translation>
 <translation id="7223968959479464213">タスク マネージャ - Chromium</translation>
 <translation id="722928257909516027">Chromium メニューを表示</translation>

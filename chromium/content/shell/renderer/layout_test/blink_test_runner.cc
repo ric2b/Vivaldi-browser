@@ -81,7 +81,6 @@
 #include "third_party/WebKit/public/platform/modules/app_banner/app_banner.mojom.h"
 #include "third_party/WebKit/public/web/WebArrayBufferView.h"
 #include "third_party/WebKit/public/web/WebContextMenuData.h"
-#include "third_party/WebKit/public/web/WebDataSource.h"
 #include "third_party/WebKit/public/web/WebDevToolsAgent.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebElement.h"
@@ -700,13 +699,10 @@ void BlinkTestRunner::DispatchBeforeInstallPromptEvent(
     const std::vector<std::string>& event_platforms,
     const base::Callback<void(bool)>& callback) {
   app_banner_service_.reset(new test_runner::AppBannerService());
-
-  service_manager::BinderRegistry* registry =
-      render_view()->GetMainRenderFrame()->GetInterfaceRegistry();
   blink::mojom::AppBannerControllerRequest request =
       mojo::MakeRequest(&app_banner_service_->controller());
-  registry->BindInterface(blink::mojom::AppBannerController::Name_,
-                          request.PassMessagePipe());
+  render_view()->GetMainRenderFrame()->BindLocalInterface(
+      blink::mojom::AppBannerController::Name_, request.PassMessagePipe());
   app_banner_service_->SendBannerPromptRequest(event_platforms, callback);
 }
 
@@ -824,7 +820,8 @@ void BlinkTestRunner::Reset(bool for_new_test) {
   render_view()->ClearEditCommands();
   if (for_new_test) {
     if (render_view()->GetWebView()->MainFrame()->IsWebLocalFrame())
-      render_view()->GetWebView()->MainFrame()->SetName(WebString());
+      render_view()->GetWebView()->MainFrame()->ToWebLocalFrame()->SetName(
+          WebString());
     render_view()->GetWebView()->MainFrame()->ClearOpener();
   }
 
@@ -898,8 +895,8 @@ void BlinkTestRunner::CaptureDumpContinued() {
 
     interfaces->TestRunner()->DumpPixelsAsync(
         render_view()->GetWebView()->MainFrame()->ToWebLocalFrame(),
-        base::Bind(&BlinkTestRunner::OnPixelsDumpCompleted,
-                   base::Unretained(this)));
+        base::BindOnce(&BlinkTestRunner::OnPixelsDumpCompleted,
+                       base::Unretained(this)));
     return;
   }
 
@@ -952,12 +949,13 @@ void BlinkTestRunner::OnSetupSecondaryRenderer() {
   test_runner::WebTestInterfaces* interfaces =
       LayoutTestRenderThreadObserver::GetInstance()->test_interfaces();
   interfaces->SetTestIsRunning(true);
-  interfaces->ConfigureForTestWithURL(GURL(), false);
+  interfaces->ConfigureForTestWithURL(GURL(), false, false);
   ForceResizeRenderView(render_view(), WebSize(800, 600));
 }
 
-void BlinkTestRunner::OnReplicateTestConfiguration(
-    mojom::ShellTestConfigurationPtr params) {
+void BlinkTestRunner::ApplyTestConfiguration(
+    mojom::ShellTestConfigurationPtr params,
+    bool initial_application) {
   test_runner::WebTestInterfaces* interfaces =
       LayoutTestRenderThreadObserver::GetInstance()->test_interfaces();
 
@@ -967,14 +965,19 @@ void BlinkTestRunner::OnReplicateTestConfiguration(
   interfaces->SetMainView(render_view()->GetWebView());
 
   interfaces->SetTestIsRunning(true);
-  interfaces->ConfigureForTestWithURL(params->test_url,
-                                      params->enable_pixel_dumping);
+  interfaces->ConfigureForTestWithURL(
+      params->test_url, params->enable_pixel_dumping, initial_application);
+}
+
+void BlinkTestRunner::OnReplicateTestConfiguration(
+    mojom::ShellTestConfigurationPtr params) {
+  ApplyTestConfiguration(std::move(params), false /* initial_configuration */);
 }
 
 void BlinkTestRunner::OnSetTestConfiguration(
     mojom::ShellTestConfigurationPtr params) {
   mojom::ShellTestConfigurationPtr local_params = params.Clone();
-  OnReplicateTestConfiguration(std::move(params));
+  ApplyTestConfiguration(std::move(params), true /* initial_configuration */);
 
   ForceResizeRenderView(render_view(),
                         WebSize(local_params->initial_size.width(),
@@ -1026,10 +1029,9 @@ void BlinkTestRunner::OnTryLeakDetection() {
   blink::WebFrame* main_frame = render_view()->GetWebView()->MainFrame();
 
   DCHECK(!main_frame->IsLoading());
-  if (main_frame->IsWebLocalFrame()) {
-    DCHECK_EQ(GURL(url::kAboutBlankURL),
-              GURL(main_frame->ToWebLocalFrame()->GetDocument().Url()));
-  }
+  DCHECK(main_frame->IsWebLocalFrame());
+  DCHECK_EQ(GURL(url::kAboutBlankURL),
+            GURL(main_frame->ToWebLocalFrame()->GetDocument().Url()));
 
   leak_detector_->TryLeakDetection(main_frame);
 }

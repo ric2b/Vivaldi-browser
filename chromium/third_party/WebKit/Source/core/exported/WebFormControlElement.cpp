@@ -31,14 +31,14 @@
 #include "public/web/WebFormControlElement.h"
 
 #include "core/dom/NodeComputedStyle.h"
-#include "core/events/Event.h"
+#include "core/dom/events/Event.h"
 #include "core/html/HTMLFormControlElement.h"
 #include "core/html/HTMLFormElement.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLSelectElement.h"
 #include "core/html/HTMLTextAreaElement.h"
 
-#include "platform/wtf/PassRefPtr.h"
+#include "platform/wtf/RefPtr.h"
 
 namespace blink {
 

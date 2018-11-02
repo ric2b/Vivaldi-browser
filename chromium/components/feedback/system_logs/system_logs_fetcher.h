@@ -30,7 +30,7 @@ using SysLogsFetcherCallback =
 // EXAMPLE:
 // class Example {
 //  public:
-//   void ProcessLogs(SystemLogsResponse* response) {
+//   void ProcessLogs(std::unique_ptr<SystemLogsResponse> response) {
 //      // do something with the logs
 //   }
 //   void GetLogs() {
@@ -51,7 +51,8 @@ class SystemLogsFetcher {
   // Adds a source to use when fetching.
   void AddSource(std::unique_ptr<SystemLogsSource> source);
 
-  // Starts the fetch process.
+  // Starts the fetch process. After the fetch completes, this instance calls
+  // |callback|, then schedules itself to be deleted.
   void Fetch(const SysLogsFetcherCallback& callback);
 
  private:

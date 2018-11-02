@@ -98,16 +98,6 @@ size_t RegisterWebViewCrashKeys() {
       {"initrf_main_frame_id", kSmallSize},
       {"initrf_view_is_live", kSmallSize},
 
-      // Temporary for https://crbug.com/591478.
-      {"initrf_parent_proxy_exists", kSmallSize},
-      {"initrf_render_view_is_live", kSmallSize},
-      {"initrf_parent_is_in_same_site_instance", kSmallSize},
-      {"initrf_parent_process_is_live", kSmallSize},
-      {"initrf_root_is_in_same_site_instance", kSmallSize},
-      {"initrf_root_is_in_same_site_instance_as_parent", kSmallSize},
-      {"initrf_root_process_is_live", kSmallSize},
-      {"initrf_root_proxy_is_live", kSmallSize},
-
       // Temporary for https://crbug.com/626802.
       {"newframe_routing_id", kSmallSize},
       {"newframe_proxy_id", kSmallSize},
@@ -116,16 +106,9 @@ size_t RegisterWebViewCrashKeys() {
       {"newframe_widget_id", kSmallSize},
       {"newframe_widget_hidden", kSmallSize},
       {"newframe_replicated_origin", kSmallSize},
-      {"newframe_oopifs_possible", kSmallSize},
 
       // Temporary for https://crbug.com/612711.
       {"aci_wrong_sp_extension_id", kSmallSize},
-
-      // Temporary for https://crbug.com/668633.
-      {"swdh_set_hosted_version_worker_pid", kSmallSize},
-      {"swdh_set_hosted_version_host_pid", kSmallSize},
-      {"swdh_set_hosted_version_is_new_process", kSmallSize},
-      {"swdh_set_hosted_version_restart_count", kSmallSize},
 
       // Temporary for https://crbug.com/685996.
       {"user-cloud-policy-manager-connect-trace", kMediumSize},

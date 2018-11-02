@@ -17,7 +17,7 @@
 #include "cc/output/dc_layer_overlay.h"
 #include "cc/output/overlay_processor.h"
 #include "cc/quads/tile_draw_quad.h"
-#include "cc/resources/resource_provider.h"
+#include "cc/resources/display_resource_provider.h"
 #include "gpu/command_buffer/common/texture_in_use_response.h"
 #include "ui/gfx/geometry/quad_f.h"
 #include "ui/gfx/geometry/rect.h"
@@ -32,10 +32,10 @@ class RendererSettings;
 }
 
 namespace cc {
+class DisplayResourceProvider;
 class DrawPolygon;
 class OutputSurface;
 class RenderPass;
-class ResourceProvider;
 class ScopedResource;
 
 // This is the base class for code shared between the GL and software
@@ -46,7 +46,7 @@ class CC_EXPORT DirectRenderer {
  public:
   DirectRenderer(const viz::RendererSettings* settings,
                  OutputSurface* output_surface,
-                 ResourceProvider* resource_provider);
+                 DisplayResourceProvider* resource_provider);
   virtual ~DirectRenderer();
 
   void Initialize();
@@ -56,7 +56,7 @@ class CC_EXPORT DirectRenderer {
   void SetVisible(bool visible);
   void DecideRenderPassAllocationsForFrame(
       const RenderPassList& render_passes_in_draw_order);
-  bool HasAllocatedResourcesForTesting(int render_pass_id) const;
+  bool HasAllocatedResourcesForTesting(RenderPassId render_pass_id) const;
   void DrawFrame(RenderPassList* render_passes_in_draw_order,
                  float device_scale_factor,
                  const gfx::Size& device_viewport_size);
@@ -173,7 +173,7 @@ class CC_EXPORT DirectRenderer {
   virtual void EnsureScissorTestDisabled() = 0;
   virtual void DidChangeVisibility() = 0;
   virtual void CopyCurrentRenderPassToBitmap(
-      std::unique_ptr<CopyOutputRequest> request) = 0;
+      std::unique_ptr<viz::CopyOutputRequest> request) = 0;
   virtual void SetEnableDCLayers(bool enable) = 0;
 
   gfx::Size surface_size_for_swap_buffers() const {
@@ -182,7 +182,7 @@ class CC_EXPORT DirectRenderer {
 
   const viz::RendererSettings* const settings_;
   OutputSurface* const output_surface_;
-  ResourceProvider* const resource_provider_;
+  DisplayResourceProvider* const resource_provider_;
   // This can be replaced by test implementations.
   std::unique_ptr<OverlayProcessor> overlay_processor_;
 

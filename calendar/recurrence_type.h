@@ -22,19 +22,19 @@
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
-#include "event_type.h"
+#include "calendar/calendar_typedefs.h"
 #include "url/gurl.h"
 
 namespace calendar {
 
-typedef int64_t RecurrenceID;
+class EventRow;
 
 // Bit flags determing which fields should be updated in the
 // UpdateRecurrence method
 enum UpdateRecurrenceFields {
   RECURRENCE_EVENT_ID = 1 << 0,
-  RECURRENCE_TYPE = 1 << 1,
-  NUMBER_OF_RECURRENCE = 1 << 2,
+  RECURRENCE_INTERVAL = 1 << 1,
+  NUMBER_OF_OCCURRENCES = 1 << 2,
   RECURRENCE_SKIP_COUNT = 1 << 3,
   RECURRENCE_DAY_OF_WEEK = 1 << 4,
   RECURRENCE_WEEK_OF_MONTH = 1 << 5,
@@ -42,25 +42,24 @@ enum UpdateRecurrenceFields {
   RECURRENCE_MONTH_OF_YEAR = 1 << 7,
 };
 
-enum RecurrenceInterval {
-  DAILY = 0,
-  WEEKLY,
-  MONTHLY,
-  YEARLY,
-};
+enum class RecurrenceInterval { NONE = 0, DAILY, WEEKLY, MONTHLY, YEARLY };
 
-// Represents a simplified version of a recurring event.
-struct RecurrenceEvent {
-  RecurrenceEvent();
-  RecurrenceEvent(const RecurrenceEvent& event);
-
-  EventID event_id;
-  RecurrenceInterval reccurence_type;
+// Represents a simplified version of a event.
+struct EventRecurrence {
+  EventRecurrence();
+  EventRecurrence(const EventRecurrence& event);
+  ~EventRecurrence();
+  RecurrenceInterval interval;
+  int number_of_occurrences;
+  int skip_count;
+  int day_of_week;
+  int week_of_month;
+  int day_of_month;
+  int month_of_year;
+  int updateFields;
 };
 
 // RecurrenceRow
-// -------------------------------------------------------------------
-
 // Holds all information associated with a recurrence row.
 class RecurrenceRow {
  public:
@@ -87,9 +86,11 @@ class RecurrenceRow {
   RecurrenceInterval recurrence_interval() const {
     return recurrence_interval_;
   }
+
   void set_recurrence_interval(RecurrenceInterval recurrence_interval) {
     recurrence_interval_ = recurrence_interval;
   }
+
   int number_of_ocurrences() const { return number_of_ocurrences_; }
   void set_number_of_ocurrences(int number_of_ocurrences) {
     number_of_ocurrences_ = number_of_ocurrences;

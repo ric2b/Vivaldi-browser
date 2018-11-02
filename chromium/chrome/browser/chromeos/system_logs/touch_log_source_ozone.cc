@@ -20,7 +20,6 @@
 #include "base/task_scheduler/post_task.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part_chromeos.h"
-#include "components/feedback/feedback_util.h"
 #include "content/public/browser/browser_thread.h"
 #include "services/ui/public/cpp/input_devices/input_device_controller_client.h"
 
@@ -89,7 +88,7 @@ std::string GetEventLogListOfOnePrefix(
 void PackEventLog(system_logs::SystemLogsResponse* response,
                   const std::vector<base::FilePath>& log_paths) {
   // Combine logs with a command line call that tars them up and uuencode the
-  // result in one string. This is to be compatible with the X11 behavior.
+  // result in one string.
   std::vector<std::pair<std::string, base::CommandLine>> commands;
   base::CommandLine command = base::CommandLine(base::FilePath(kShellCommand));
   command.AppendArg("-c");

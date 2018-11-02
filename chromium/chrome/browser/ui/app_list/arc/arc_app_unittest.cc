@@ -56,6 +56,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/app_list/app_list_constants.h"
 #include "ui/app_list/app_list_model.h"
+#include "ui/display/types/display_constants.h"
 #include "ui/events/event_constants.h"
 #include "ui/gfx/geometry/safe_integer_conversions.h"
 #include "ui/gfx/image/image_skia.h"
@@ -1720,13 +1721,13 @@ TEST_P(ArcAppModelBuilderTest, AppLauncher) {
   const std::string id2 = ArcAppTest::GetAppId(app2);
   const std::string id3 = ArcAppTest::GetAppId(app3);
 
-  ArcAppLauncher launcher1(profile(), id1, base::Optional<std::string>(), true,
-                           false);
+  ArcAppLauncher launcher1(profile(), id1, base::Optional<std::string>(), false,
+                           display::kInvalidDisplayId);
   EXPECT_FALSE(launcher1.app_launched());
   EXPECT_TRUE(prefs->HasObserver(&launcher1));
 
-  ArcAppLauncher launcher3(profile(), id3, base::Optional<std::string>(), true,
-                           false);
+  ArcAppLauncher launcher3(profile(), id3, base::Optional<std::string>(), false,
+                           display::kInvalidDisplayId);
   EXPECT_FALSE(launcher1.app_launched());
   EXPECT_TRUE(prefs->HasObserver(&launcher1));
   EXPECT_FALSE(launcher3.app_launched());
@@ -1747,7 +1748,8 @@ TEST_P(ArcAppModelBuilderTest, AppLauncher) {
 
   const std::string launch_intent2 = arc::GetLaunchIntent(
       app2.package_name, app2.activity, std::vector<std::string>());
-  ArcAppLauncher launcher2(profile(), id2, launch_intent2, true, false);
+  ArcAppLauncher launcher2(profile(), id2, launch_intent2, false,
+                           display::kInvalidDisplayId);
   EXPECT_TRUE(launcher2.app_launched());
   EXPECT_FALSE(prefs->HasObserver(&launcher2));
   EXPECT_EQ(1u, app_instance()->launch_requests().size());
@@ -1918,11 +1920,11 @@ TEST_P(ArcAppLauncherForDefaulAppTest, AppLauncherForDefaultApps) {
   const std::string id2 = ArcAppTest::GetAppId(app2);
 
   // Launch when app is registered and ready.
-  ArcAppLauncher launcher1(profile(), id1, base::Optional<std::string>(), true,
-                           false);
+  ArcAppLauncher launcher1(profile(), id1, base::Optional<std::string>(), false,
+                           display::kInvalidDisplayId);
   // Launch when app is registered.
   ArcAppLauncher launcher2(profile(), id2, base::Optional<std::string>(), true,
-                           true);
+                           display::kInvalidDisplayId);
 
   EXPECT_FALSE(launcher1.app_launched());
   EXPECT_FALSE(launcher2.app_launched());

@@ -15,6 +15,7 @@
 #include "chrome/browser/ui/views/payments/validating_combobox.h"
 #include "chrome/browser/ui/views/payments/validating_textfield.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/autofill/core/browser/address_i18n.h"
 #include "components/autofill/core/browser/autofill_address_util.h"
 #include "components/autofill/core/browser/autofill_country.h"
 #include "components/autofill/core/browser/autofill_type.h"
@@ -29,6 +30,8 @@
 #include "components/payments/core/payments_profile_comparator.h"
 #include "components/strings/grit/components_strings.h"
 #include "third_party/libaddressinput/messages.h"
+#include "third_party/libaddressinput/src/cpp/include/libaddressinput/address_data.h"
+#include "third_party/libaddressinput/src/cpp/include/libaddressinput/address_formatter.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/views/controls/textfield/textfield.h"
 
@@ -111,8 +114,8 @@ base::string16 ShippingAddressEditorViewController::GetInitialValueForType(
   if (type == autofill::ADDRESS_HOME_STATE && region_model_) {
     // For the state, check if the inital value matches either a region code or
     // a region name.
-    base::string16 initial_region = temporary_profile_.GetInfo(
-        autofill::AutofillType(type), state()->GetApplicationLocale());
+    base::string16 initial_region =
+        temporary_profile_.GetInfo(type, state()->GetApplicationLocale());
     autofill::l10n::CaseInsensitiveCompare compare;
 
     for (const auto& region : region_model_->GetRegions()) {
@@ -127,8 +130,16 @@ base::string16 ShippingAddressEditorViewController::GetInitialValueForType(
     return initial_region;
   }
 
-  return temporary_profile_.GetInfo(autofill::AutofillType(type),
-                                    state()->GetApplicationLocale());
+  if (type == autofill::ADDRESS_HOME_STREET_ADDRESS) {
+    std::string street_address_line;
+    i18n::addressinput::GetStreetAddressLinesAsSingleLine(
+        *autofill::i18n::CreateAddressDataFromAutofillProfile(
+            temporary_profile_, state()->GetApplicationLocale()),
+        &street_address_line);
+    return base::UTF8ToUTF16(street_address_line);
+  }
+
+  return temporary_profile_.GetInfo(type, state()->GetApplicationLocale());
 }
 
 bool ShippingAddressEditorViewController::ValidateModelAndSave() {
@@ -289,9 +300,8 @@ void ShippingAddressEditorViewController::UpdateCountries(
   // If there is a profile to edit, make sure to use its country for the initial
   // |chosen_country_index_|.
   if (IsEditingExistingItem()) {
-    autofill::AutofillType country_type(autofill::ADDRESS_HOME_COUNTRY);
     base::string16 chosen_country(temporary_profile_.GetInfo(
-        country_type, state()->GetApplicationLocale()));
+        autofill::ADDRESS_HOME_COUNTRY, state()->GetApplicationLocale()));
     for (chosen_country_index_ = 0; chosen_country_index_ < countries_.size();
          ++chosen_country_index_) {
       if (chosen_country == countries_[chosen_country_index_].second)
@@ -305,7 +315,7 @@ void ShippingAddressEditorViewController::UpdateCountries(
       if (countries_.size() > 0) {
         LOG(ERROR) << "Unexpected country: " << chosen_country;
         chosen_country_index_ = 0;
-        temporary_profile_.SetInfo(country_type,
+        temporary_profile_.SetInfo(autofill::ADDRESS_HOME_COUNTRY,
                                    countries_[chosen_country_index_].second,
                                    state()->GetApplicationLocale());
       } else {
@@ -373,10 +383,11 @@ void ShippingAddressEditorViewController::UpdateEditorFields() {
            !failed_to_load_region_data_)) {
         control_type = EditorField::ControlType::COMBOBOX;
       }
-      editor_fields_.emplace_back(
-          server_field_type, base::UTF8ToUTF16(field_name), length_hint,
-          /*required=*/server_field_type != autofill::COMPANY_NAME,
-          control_type);
+      editor_fields_.emplace_back(server_field_type,
+                                  base::UTF8ToUTF16(field_name), length_hint,
+                                  autofill::i18n::IsFieldRequired(
+                                      server_field_type, chosen_country_code),
+                                  control_type);
       // Insert the Country combobox right after NAME_FULL.
       if (server_field_type == autofill::NAME_FULL) {
         editor_fields_.emplace_back(
@@ -435,8 +446,7 @@ bool ShippingAddressEditorViewController::SaveFieldsToProfile(
   if (combobox) {
     base::string16 country(combobox->GetTextForRow(combobox->selected_index()));
     bool success =
-        profile->SetInfo(autofill::AutofillType(autofill::ADDRESS_HOME_COUNTRY),
-                         country, locale);
+        profile->SetInfo(autofill::ADDRESS_HOME_COUNTRY, country, locale);
     LOG_IF(ERROR, !success && !ignore_errors)
         << "Can't set profile country to: " << country;
     if (!success && !ignore_errors)
@@ -447,8 +457,8 @@ bool ShippingAddressEditorViewController::SaveFieldsToProfile(
   for (const auto& field : text_fields()) {
     // ValidatingTextfield* is the key, EditorField is the value.
     if (field.first->IsValid()) {
-      success = profile->SetInfo(autofill::AutofillType(field.second.type),
-                                 field.first->text(), locale);
+      success =
+          profile->SetInfo(field.second.type, field.first->text(), locale);
     } else {
       success = false;
     }
@@ -465,7 +475,7 @@ bool ShippingAddressEditorViewController::SaveFieldsToProfile(
       continue;
     if (combobox->IsValid()) {
       success = profile->SetInfo(
-          autofill::AutofillType(field.second.type),
+          field.second.type,
           combobox->GetTextForRow(combobox->selected_index()), locale);
     } else {
       success = false;

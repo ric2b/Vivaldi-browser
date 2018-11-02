@@ -6,17 +6,16 @@
 #define COMPONENTS_EXO_SHELL_SURFACE_H_
 
 #include <cstdint>
-#include <deque>
 #include <memory>
 #include <string>
 
 #include "ash/wm/window_state_observer.h"
+#include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "components/exo/surface_observer.h"
 #include "components/exo/surface_tree_host.h"
 #include "components/exo/wm_helper.h"
-#include "ui/aura/window_observer.h"
 #include "ui/base/hit_test.h"
 #include "ui/compositor/compositor_lock.h"
 #include "ui/display/display_observer.h"
@@ -56,10 +55,9 @@ class ShellSurface : public SurfaceTreeHost,
                      public views::View,
                      public display::DisplayObserver,
                      public ash::wm::WindowStateObserver,
-                     public aura::WindowObserver,
                      public WMHelper::ActivationObserver,
                      public WMHelper::DisplayConfigurationObserver,
-                     NON_EXPORTED_BASE(public ui::CompositorLockClient) {
+                     public ui::CompositorLockClient {
  public:
   enum class BoundsMode { SHELL, CLIENT, FIXED };
 
@@ -271,6 +269,9 @@ class ShellSurface : public SurfaceTreeHost,
   void OnWindowBoundsChanged(aura::Window* window,
                              const gfx::Rect& old_bounds,
                              const gfx::Rect& new_bounds) override;
+  void OnWindowAddedToRootWindow(aura::Window* window) override;
+  void OnWindowRemovingFromRootWindow(aura::Window* window,
+                                      aura::Window* new_root) override;
   void OnWindowDestroying(aura::Window* window) override;
 
   // Overridden from WMHelper::ActivationObserver:
@@ -395,8 +396,9 @@ class ShellSurface : public SurfaceTreeHost,
   std::unique_ptr<aura::Window> shadow_overlay_;
   std::unique_ptr<aura::Window> shadow_underlay_;
   gfx::Rect shadow_content_bounds_;
+  bool shadow_content_bounds_changed_ = false;
   float shadow_background_opacity_ = 1.0;
-  std::deque<Config> pending_configs_;
+  base::circular_deque<Config> pending_configs_;
   std::unique_ptr<ash::WindowResizer> resizer_;
   std::unique_ptr<ScopedAnimationsDisabled> scoped_animations_disabled_;
   int top_inset_height_ = 0;

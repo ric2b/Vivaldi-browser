@@ -94,7 +94,6 @@ class ApplicationContextImpl : public ApplicationContext {
 
   bool was_last_shutdown_clean_;
   bool is_shutting_down_;
-  bool created_local_state_;
 
   DISALLOW_COPY_AND_ASSIGN(ApplicationContextImpl);
 };

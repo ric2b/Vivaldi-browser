@@ -32,10 +32,10 @@
 
 #include <memory>
 #include "core/animation/Animation.h"
-#include "core/animation/CompositorPendingAnimations.h"
 #include "core/animation/DocumentTimeline.h"
 #include "core/animation/ElementAnimations.h"
 #include "core/animation/KeyframeEffect.h"
+#include "core/animation/PendingAnimations.h"
 #include "core/animation/animatable/AnimatableDouble.h"
 #include "core/animation/animatable/AnimatableFilterOperations.h"
 #include "core/animation/animatable/AnimatableTransform.h"
@@ -53,7 +53,6 @@
 #include "platform/transforms/TransformOperations.h"
 #include "platform/transforms/TranslateTransformOperation.h"
 #include "platform/wtf/HashFunctions.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/RefPtr.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -174,7 +173,7 @@ class AnimationCompositorAnimationsTest : public ::testing::Test {
     return timing;
   }
 
-  PassRefPtr<AnimatableValueKeyframe> CreateReplaceOpKeyframe(
+  RefPtr<AnimatableValueKeyframe> CreateReplaceOpKeyframe(
       CSSPropertyID id,
       AnimatableValue* value,
       double offset = 0) {
@@ -187,7 +186,7 @@ class AnimationCompositorAnimationsTest : public ::testing::Test {
     return keyframe;
   }
 
-  PassRefPtr<AnimatableValueKeyframe> CreateDefaultKeyframe(
+  RefPtr<AnimatableValueKeyframe> CreateDefaultKeyframe(
       CSSPropertyID id,
       EffectModel::CompositeOperation op,
       double offset = 0) {
@@ -271,8 +270,8 @@ class AnimationCompositorAnimationsTest : public ::testing::Test {
 
   void SimulateFrame(double time) {
     document_->GetAnimationClock().UpdateTime(time);
-    document_->GetCompositorPendingAnimations().Update(
-        Optional<CompositorElementIdSet>(), false);
+    document_->GetPendingAnimations().Update(Optional<CompositorElementIdSet>(),
+                                             false);
     timeline_->ServiceAnimations(kTimingUpdateForAnimationFrame);
   }
 
@@ -1279,8 +1278,9 @@ TEST_F(AnimationCompositorAnimationsTest,
   element->SetLayoutObject(layout_object);
 
   ScopedSlimmingPaintV2ForTest enable_s_pv2(true);
-  auto& properties =
-      layout_object->GetMutableForPainting().EnsurePaintProperties();
+  auto& properties = layout_object->GetMutableForPainting()
+                         .EnsureFirstFragment()
+                         .EnsurePaintProperties();
 
   // Add a transform with a compositing reason, which should allow starting
   // animation.
@@ -1309,8 +1309,9 @@ TEST_F(AnimationCompositorAnimationsTest,
   element->SetLayoutObject(layout_object);
 
   ScopedSlimmingPaintV2ForTest enable_s_pv2(true);
-  auto& properties =
-      layout_object->GetMutableForPainting().EnsurePaintProperties();
+  auto& properties = layout_object->GetMutableForPainting()
+                         .EnsureFirstFragment()
+                         .EnsurePaintProperties();
 
   // Add an effect with a compositing reason, which should allow starting
   // animation.

@@ -10,9 +10,10 @@
 #include <vector>
 
 #include "base/gtest_prod_util.h"
-#include "cc/output/begin_frame_args.h"
-#include "cc/output/copy_output_result.h"
-#include "cc/scheduler/begin_frame_source.h"
+#include "components/viz/common/frame_sinks/begin_frame_args.h"
+#include "components/viz/common/frame_sinks/begin_frame_source.h"
+#include "components/viz/common/quads/copy_output_result.h"
+#include "components/viz/host/host_frame_sink_client.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support_client.h"
 #include "components/viz/service/frame_sinks/frame_evictor.h"
 #include "content/browser/compositor/image_transport_factory.h"
@@ -80,7 +81,8 @@ class CONTENT_EXPORT DelegatedFrameHost
       public ui::CompositorVSyncManager::Observer,
       public ui::ContextFactoryObserver,
       public viz::FrameEvictorClient,
-      public NON_EXPORTED_BASE(viz::CompositorFrameSinkSupportClient),
+      public viz::CompositorFrameSinkSupportClient,
+      public viz::HostFrameSinkClient,
       public base::SupportsWeakPtr<DelegatedFrameHost> {
  public:
   DelegatedFrameHost(const viz::FrameSinkId& frame_sink_id,
@@ -107,18 +109,21 @@ class CONTENT_EXPORT DelegatedFrameHost
 
   // viz::CompositorFrameSinkSupportClient implementation.
   void DidReceiveCompositorFrameAck(
-      const std::vector<cc::ReturnedResource>& resources) override;
-  void OnBeginFrame(const cc::BeginFrameArgs& args) override;
+      const std::vector<viz::ReturnedResource>& resources) override;
+  void OnBeginFrame(const viz::BeginFrameArgs& args) override;
   void ReclaimResources(
-      const std::vector<cc::ReturnedResource>& resources) override;
+      const std::vector<viz::ReturnedResource>& resources) override;
   void WillDrawSurface(const viz::LocalSurfaceId& id,
                        const gfx::Rect& damage_rect) override;
   void OnBeginFramePausedChanged(bool paused) override;
 
+  // viz::HostFrameSinkClient implementation.
+  void OnFirstSurfaceActivation(const viz::SurfaceInfo& surface_info) override;
+
   // Public interface exposed to RenderWidgetHostView.
 
   void DidCreateNewRendererCompositorFrameSink(
-      cc::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink);
+      viz::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink);
   void SubmitCompositorFrame(const viz::LocalSurfaceId& local_surface_id,
                              cc::CompositorFrame frame);
   void ClearDelegatedFrame();
@@ -148,7 +153,7 @@ class CONTENT_EXPORT DelegatedFrameHost
   viz::FrameSinkId GetFrameSinkId();
   // Returns a null SurfaceId if this DelegatedFrameHost has not yet created
   // a compositor Surface.
-  viz::SurfaceId SurfaceIdAtPoint(cc::SurfaceHittestDelegate* delegate,
+  viz::SurfaceId SurfaceIdAtPoint(viz::SurfaceHittestDelegate* delegate,
                                   const gfx::Point& point,
                                   gfx::Point* transformed_point);
 
@@ -170,7 +175,7 @@ class CONTENT_EXPORT DelegatedFrameHost
                                          gfx::Point* transformed_point);
 
   void SetNeedsBeginFrames(bool needs_begin_frames);
-  void DidNotProduceFrame(const cc::BeginFrameAck& ack);
+  void DidNotProduceFrame(const viz::BeginFrameAck& ack);
 
   // Exposed for tests.
   viz::SurfaceId SurfaceIdForTesting() const {
@@ -186,7 +191,7 @@ class CONTENT_EXPORT DelegatedFrameHost
     return !!released_front_lock_.get();
   }
   void SetRequestCopyOfOutputCallbackForTesting(
-      const base::Callback<void(std::unique_ptr<cc::CopyOutputRequest>)>&
+      const base::Callback<void(std::unique_ptr<viz::CopyOutputRequest>)>&
           callback) {
     request_copy_of_output_callback_for_testing_ = callback;
   }
@@ -204,7 +209,7 @@ class CONTENT_EXPORT DelegatedFrameHost
   }
   void LockResources();
   void UnlockResources();
-  void RequestCopyOfOutput(std::unique_ptr<cc::CopyOutputRequest> request);
+  void RequestCopyOfOutput(std::unique_ptr<viz::CopyOutputRequest> request);
 
   bool ShouldSkipFrame(const gfx::Size& size_in_dip);
 
@@ -228,13 +233,13 @@ class CONTENT_EXPORT DelegatedFrameHost
       scoped_refptr<OwnedMailbox> subscriber_texture,
       scoped_refptr<media::VideoFrame> video_frame,
       const base::Callback<void(const gfx::Rect&, bool)>& callback,
-      std::unique_ptr<cc::CopyOutputResult> result);
+      std::unique_ptr<viz::CopyOutputResult> result);
   static void CopyFromCompositingSurfaceFinishedForVideo(
       scoped_refptr<media::VideoFrame> video_frame,
       base::WeakPtr<DelegatedFrameHost> rwhva,
       const base::Callback<void(bool)>& callback,
       scoped_refptr<OwnedMailbox> subscriber_texture,
-      std::unique_ptr<cc::SingleReleaseCallback> release_callback,
+      std::unique_ptr<viz::SingleReleaseCallback> release_callback,
       bool result);
   static void ReturnSubscriberTexture(
       base::WeakPtr<DelegatedFrameHost> rwhva,
@@ -279,7 +284,7 @@ class CONTENT_EXPORT DelegatedFrameHost
   std::unique_ptr<viz::CompositorFrameSinkSupport> support_;
   gfx::Size current_surface_size_;
   float current_scale_factor_;
-  std::vector<cc::ReturnedResource> surface_returned_resources_;
+  std::vector<viz::ReturnedResource> surface_returned_resources_;
 
   // This lock is the one waiting for a frame of the right size to come back
   // from the renderer/GPU process. It is set from the moment the aura window
@@ -305,7 +310,7 @@ class CONTENT_EXPORT DelegatedFrameHost
 
   // Callback used to pass the output request to the layer or to a function
   // specified by a test.
-  base::Callback<void(std::unique_ptr<cc::CopyOutputRequest>)>
+  base::Callback<void(std::unique_ptr<viz::CopyOutputRequest>)>
       request_copy_of_output_callback_for_testing_;
 
   // YUV readback pipeline.
@@ -314,7 +319,7 @@ class CONTENT_EXPORT DelegatedFrameHost
   bool needs_begin_frame_ = false;
 
   bool has_frame_ = false;
-  cc::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink_ =
+  viz::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink_ =
       nullptr;
 
   std::unique_ptr<viz::FrameEvictor> frame_evictor_;

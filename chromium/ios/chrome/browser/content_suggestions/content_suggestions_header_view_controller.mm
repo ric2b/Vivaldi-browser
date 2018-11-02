@@ -5,18 +5,24 @@
 #import "ios/chrome/browser/content_suggestions/content_suggestions_header_view_controller.h"
 
 #include "base/logging.h"
+#include "base/mac/foundation_util.h"
 #include "base/metrics/user_metrics.h"
 #include "components/strings/grit/components_strings.h"
-#import "ios/chrome/browser/content_suggestions/content_suggestions_header_view_controller_delegate.h"
 #import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
+#import "ios/chrome/browser/ui/commands/application_commands.h"
+#import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
+#include "ios/chrome/browser/ui/commands/start_voice_search_command.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_synchronizing.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_view_controller_delegate.h"
+#import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_header_view.h"
 #import "ios/chrome/browser/ui/toolbar/web_toolbar_controller.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/url_loader.h"
+#include "ios/chrome/grit/ios_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -123,7 +129,7 @@ const CGFloat kHintLabelSidePadding = 12;
 
 #pragma mark - ContentSuggestionsHeaderControlling
 
-- (void)updateSearchFieldForOffset:(CGFloat)offset {
+- (void)updateFakeOmniboxForOffset:(CGFloat)offset width:(CGFloat)width {
   NSArray* constraints =
       @[ self.hintLabelLeadingConstraint, self.voiceTapTrailingConstraint ];
 
@@ -132,7 +138,13 @@ const CGFloat kHintLabelSidePadding = 12;
                                 topMargin:self.fakeOmniboxTopMarginConstraint
                        subviewConstraints:constraints
                             logoIsShowing:self.logoIsShowing
-                                forOffset:offset];
+                                forOffset:offset
+                                    width:width];
+}
+
+- (void)updateFakeOmniboxForWidth:(CGFloat)width {
+  self.fakeOmniboxWidthConstraint.constant =
+      content_suggestions::searchFieldWidth(width);
 }
 
 - (void)unfocusOmnibox {
@@ -143,12 +155,20 @@ const CGFloat kHintLabelSidePadding = 12;
   }
 }
 
+- (void)layoutHeader {
+  [self.headerView layoutIfNeeded];
+}
+
 #pragma mark - ContentSuggestionsHeaderProvider
 
 - (UIView*)headerForWidth:(CGFloat)width {
   if (!self.headerView) {
     self.headerView = [[NewTabPageHeaderView alloc] init];
     [self addFakeOmnibox];
+
+    self.logoVendor.view.isAccessibilityElement = YES;
+    self.logoVendor.view.accessibilityLabel =
+        l10n_util::GetNSString(IDS_IOS_NEW_TAB_LOGO_ACCESSIBILITY_LABEL);
 
     [self.headerView addSubview:self.logoVendor.view];
     [self.headerView addSubview:self.fakeOmnibox];
@@ -192,10 +212,13 @@ const CGFloat kHintLabelSidePadding = 12;
   [self.fakeOmnibox addTarget:self
                        action:@selector(fakeOmniboxTapped:)
              forControlEvents:UIControlEventTouchUpInside];
+
   [self.fakeOmnibox
       setAccessibilityLabel:l10n_util::GetNSString(IDS_OMNIBOX_EMPTY_HINT)];
   // Set isAccessibilityElement to NO so that Voice Search button is accessible.
   [self.fakeOmnibox setIsAccessibilityElement:NO];
+  self.fakeOmnibox.accessibilityIdentifier =
+      ntp_home::FakeOmniboxAccessibilityID();
 
   // Set up fakebox hint label.
   UILabel* searchHintLabel = [[UILabel alloc] init];
@@ -235,7 +258,10 @@ const CGFloat kHintLabelSidePadding = 12;
 - (void)loadVoiceSearch:(id)sender {
   DCHECK(self.voiceSearchIsEnabled);
   base::RecordAction(UserMetricsAction("MobileNTPMostVisitedVoiceSearch"));
-  [sender chromeExecuteCommand:sender];
+  UIView* view = base::mac::ObjCCastStrict<UIView>(sender);
+  StartVoiceSearchCommand* command =
+      [[StartVoiceSearchCommand alloc] initWithOriginView:view];
+  [self.dispatcher startVoiceSearch:command];
 }
 
 - (void)preloadVoiceSearch:(id)sender {
@@ -243,12 +269,7 @@ const CGFloat kHintLabelSidePadding = 12;
   [sender removeTarget:self
                 action:@selector(preloadVoiceSearch:)
       forControlEvents:UIControlEventTouchDown];
-
-  // Use a GenericChromeCommand because |sender| already has a tag set for a
-  // different command.
-  GenericChromeCommand* command =
-      [[GenericChromeCommand alloc] initWithTag:IDC_PRELOAD_VOICE_SEARCH];
-  [sender chromeExecuteCommand:command];
+  [self.dispatcher preloadVoiceSearch];
 }
 
 - (void)fakeOmniboxTapped:(id)sender {
@@ -275,7 +296,7 @@ const CGFloat kHintLabelSidePadding = 12;
                     andHeaderView:(UIView*)headerView {
   self.doodleTopMarginConstraint = [logoView.topAnchor
       constraintEqualToAnchor:headerView.topAnchor
-                     constant:content_suggestions::doodleTopMargin()];
+                     constant:content_suggestions::doodleTopMargin(YES)];
   self.doodleHeightConstraint = [logoView.heightAnchor
       constraintEqualToConstant:content_suggestions::doodleHeight(
                                     self.logoIsShowing)];

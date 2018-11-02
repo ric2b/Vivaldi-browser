@@ -36,6 +36,7 @@
 #include "core/frame/FrameTypes.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
+#include "core/frame/UseCounter.h"
 #include "core/html/HTMLIFrameElement.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/EmptyClients.h"
@@ -49,6 +50,7 @@
 #include "platform/loader/fetch/ResourceTimingInfo.h"
 #include "platform/loader/fetch/UniqueIdentifier.h"
 #include "platform/loader/testing/MockResource.h"
+#include "platform/testing/HistogramTester.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityViolationReportingPolicy.h"
 #include "public/platform/WebAddressSpace.h"
@@ -202,7 +204,8 @@ class FrameFetchContextSubresourceFilterTest : public FrameFetchContextTest {
     ResourceLoaderOptions options;
     return fetch_context->CanRequest(
         Resource::kImage, resource_request, input_url, options,
-        reporting_policy, FetchParameters::kUseDefaultOriginRestrictionForType);
+        reporting_policy, FetchParameters::kUseDefaultOriginRestrictionForType,
+        ResourceRequest::RedirectStatus::kNoRedirect);
   }
 
   int filtered_load_callback_counter_;
@@ -484,32 +487,6 @@ TEST_F(FrameFetchContextModifyRequestTest, SendRequiredCSPHeader) {
   }
 }
 
-// Tests that PopulateResourceRequest() checks report-only CSP headers, so that
-// any violations are reported before the request is modified.
-TEST_F(FrameFetchContextTest, PopulateResourceRequestChecksReportOnlyCSP) {
-  ContentSecurityPolicy* policy = document->GetContentSecurityPolicy();
-  policy->DidReceiveHeader(
-      "upgrade-insecure-requests; script-src https://foo.test",
-      kContentSecurityPolicyHeaderTypeEnforce,
-      kContentSecurityPolicyHeaderSourceHTTP);
-  policy->DidReceiveHeader("script-src https://bar.test",
-                           kContentSecurityPolicyHeaderTypeReport,
-                           kContentSecurityPolicyHeaderSourceHTTP);
-  KURL url(NullURL(), "http://baz.test");
-  ResourceRequest resource_request(url);
-  resource_request.SetRequestContext(WebURLRequest::kRequestContextScript);
-  resource_request.SetFetchCredentialsMode(
-      WebURLRequest::kFetchCredentialsModeOmit);
-  ResourceLoaderOptions options;
-  fetch_context->PopulateResourceRequest(
-      url, Resource::kScript, ClientHintsPreferences(),
-      FetchParameters::ResourceWidth(), options,
-      SecurityViolationReportingPolicy::kReport, resource_request);
-  EXPECT_EQ(1u, policy->violation_reports_sent_.size());
-  // Check that the resource was upgraded to a secure URL.
-  EXPECT_EQ(KURL(NullURL(), "https://baz.test"), resource_request.Url());
-}
-
 class FrameFetchContextHintsTest : public FrameFetchContextTest {
  public:
   FrameFetchContextHintsTest() {}
@@ -542,7 +519,7 @@ class FrameFetchContextHintsTest : public FrameFetchContextTest {
 TEST_F(FrameFetchContextHintsTest, MonitorDeviceMemoryHints) {
   ExpectHeader("http://www.example.com/1.gif", "Device-Memory", false, "");
   ClientHintsPreferences preferences;
-  preferences.SetShouldSendForTesting(kWebClientHintsTypeDeviceMemory);
+  preferences.SetShouldSendForTesting(mojom::WebClientHintsType::kDeviceMemory);
   document->GetClientHintsPreferences().UpdateFrom(preferences);
   MemoryCoordinator::SetPhysicalMemoryMBForTesting(4096);
   ExpectHeader("http://www.example.com/1.gif", "Device-Memory", true, "4");
@@ -560,7 +537,7 @@ TEST_F(FrameFetchContextHintsTest, MonitorDeviceMemoryHints) {
 TEST_F(FrameFetchContextHintsTest, MonitorDPRHints) {
   ExpectHeader("http://www.example.com/1.gif", "DPR", false, "");
   ClientHintsPreferences preferences;
-  preferences.SetShouldSendForTesting(kWebClientHintsTypeDpr);
+  preferences.SetShouldSendForTesting(mojom::WebClientHintsType::kDpr);
   document->GetClientHintsPreferences().UpdateFrom(preferences);
   ExpectHeader("http://www.example.com/1.gif", "DPR", true, "1");
   dummy_page_holder->GetPage().SetDeviceScaleFactorDeprecated(2.5);
@@ -572,7 +549,8 @@ TEST_F(FrameFetchContextHintsTest, MonitorDPRHints) {
 TEST_F(FrameFetchContextHintsTest, MonitorResourceWidthHints) {
   ExpectHeader("http://www.example.com/1.gif", "Width", false, "");
   ClientHintsPreferences preferences;
-  preferences.SetShouldSendForTesting(kWebClientHintsTypeResourceWidth);
+  preferences.SetShouldSendForTesting(
+      mojom::WebClientHintsType::kResourceWidth);
   document->GetClientHintsPreferences().UpdateFrom(preferences);
   ExpectHeader("http://www.example.com/1.gif", "Width", true, "500", 500);
   ExpectHeader("http://www.example.com/1.gif", "Width", true, "667", 666.6666);
@@ -585,7 +563,8 @@ TEST_F(FrameFetchContextHintsTest, MonitorResourceWidthHints) {
 TEST_F(FrameFetchContextHintsTest, MonitorViewportWidthHints) {
   ExpectHeader("http://www.example.com/1.gif", "Viewport-Width", false, "");
   ClientHintsPreferences preferences;
-  preferences.SetShouldSendForTesting(kWebClientHintsTypeViewportWidth);
+  preferences.SetShouldSendForTesting(
+      mojom::WebClientHintsType::kViewportWidth);
   document->GetClientHintsPreferences().UpdateFrom(preferences);
   ExpectHeader("http://www.example.com/1.gif", "Viewport-Width", true, "500");
   dummy_page_holder->GetFrameView().SetLayoutSizeFixedToFrameSize(false);
@@ -603,37 +582,18 @@ TEST_F(FrameFetchContextHintsTest, MonitorAllHints) {
   ExpectHeader("http://www.example.com/1.gif", "Width", false, "");
 
   ClientHintsPreferences preferences;
-  preferences.SetShouldSendForTesting(kWebClientHintsTypeDeviceMemory);
-  preferences.SetShouldSendForTesting(kWebClientHintsTypeDpr);
-  preferences.SetShouldSendForTesting(kWebClientHintsTypeResourceWidth);
-  preferences.SetShouldSendForTesting(kWebClientHintsTypeViewportWidth);
+  preferences.SetShouldSendForTesting(mojom::WebClientHintsType::kDeviceMemory);
+  preferences.SetShouldSendForTesting(mojom::WebClientHintsType::kDpr);
+  preferences.SetShouldSendForTesting(
+      mojom::WebClientHintsType::kResourceWidth);
+  preferences.SetShouldSendForTesting(
+      mojom::WebClientHintsType::kViewportWidth);
   MemoryCoordinator::SetPhysicalMemoryMBForTesting(4096);
   document->GetClientHintsPreferences().UpdateFrom(preferences);
   ExpectHeader("http://www.example.com/1.gif", "Device-Memory", true, "4");
   ExpectHeader("http://www.example.com/1.gif", "DPR", true, "1");
   ExpectHeader("http://www.example.com/1.gif", "Width", true, "400", 400);
   ExpectHeader("http://www.example.com/1.gif", "Viewport-Width", true, "500");
-}
-
-TEST_F(FrameFetchContextHintsTest, ClientHintsDeviceMemory) {
-  EXPECT_EQ(0.125, FrameFetchContext::ClientHintsDeviceMemory(128));  // 128MB
-  EXPECT_EQ(0.25, FrameFetchContext::ClientHintsDeviceMemory(256));   // 256MB
-  EXPECT_EQ(0.5, FrameFetchContext::ClientHintsDeviceMemory(510));    // <512MB
-  EXPECT_EQ(0.5, FrameFetchContext::ClientHintsDeviceMemory(512));    // 512MB
-  EXPECT_EQ(0.5, FrameFetchContext::ClientHintsDeviceMemory(640));  // 512+128MB
-  EXPECT_EQ(0.75,
-            FrameFetchContext::ClientHintsDeviceMemory(768));      // 512+256MB
-  EXPECT_EQ(1, FrameFetchContext::ClientHintsDeviceMemory(1000));  // <1GB
-  EXPECT_EQ(1, FrameFetchContext::ClientHintsDeviceMemory(1024));  // 1GB
-  EXPECT_EQ(1.5, FrameFetchContext::ClientHintsDeviceMemory(1536));  // 1.5GB
-  EXPECT_EQ(2, FrameFetchContext::ClientHintsDeviceMemory(2000));    // <2GB
-  EXPECT_EQ(2, FrameFetchContext::ClientHintsDeviceMemory(2048));    // 2GB
-  EXPECT_EQ(3, FrameFetchContext::ClientHintsDeviceMemory(3000));    // <3GB
-  EXPECT_EQ(4, FrameFetchContext::ClientHintsDeviceMemory(5120));    // 5GB
-  EXPECT_EQ(8, FrameFetchContext::ClientHintsDeviceMemory(8192));    // 8GB
-  EXPECT_EQ(16, FrameFetchContext::ClientHintsDeviceMemory(16384));  // 16GB
-  EXPECT_EQ(32, FrameFetchContext::ClientHintsDeviceMemory(32768));  // 32GB
-  EXPECT_EQ(64, FrameFetchContext::ClientHintsDeviceMemory(64385));  // <64GB
 }
 
 TEST_F(FrameFetchContextTest, MainResourceCachePolicy) {
@@ -837,7 +797,7 @@ TEST_F(FrameFetchContextTest, SetFirstPartyCookieAndRequestorOrigin) {
                 request.RequestorOrigin()->ToString());
     }
 
-    EXPECT_EQ(document->FirstPartyForCookies(), request.FirstPartyForCookies());
+    EXPECT_EQ(document->SiteForCookies(), request.SiteForCookies());
   }
 }
 
@@ -912,6 +872,30 @@ TEST_F(FrameFetchContextMockedLocalFrameClientTest,
                   ResourceResponse()));
   fetch_context->DispatchDidLoadResourceFromMemoryCache(
       CreateUniqueIdentifier(), resource_request, resource->GetResponse());
+}
+
+// Tests that the client hints lifetime header is parsed correctly.
+TEST_F(FrameFetchContextMockedLocalFrameClientTest, PersistClientHints) {
+  HistogramTester histogram_tester;
+  ResourceRequest resource_request(url);
+  resource_request.SetRequestContext(WebURLRequest::kRequestContextImage);
+  resource_request.SetFetchCredentialsMode(
+      WebURLRequest::kFetchCredentialsModeOmit);
+
+  ResourceResponse response;
+  response.SetHTTPHeaderField("accept-ch", "dpr");
+  response.SetHTTPHeaderField("accept-ch-lifetime", "3600");
+  response.SetURL(url);
+  Resource* resource = MockResource::Create(resource_request);
+  resource->SetResponse(response);
+  fetch_context->DispatchDidReceiveResponse(
+      CreateUniqueIdentifier(), response, resource_request.GetFrameType(),
+      resource_request.GetRequestContext(), resource,
+      FetchContext::ResourceResponseType::kNotFromMemoryCache);
+
+  histogram_tester.ExpectBucketCount(
+      "Blink.UseCounter.Features",
+      static_cast<int>(WebFeature::kPersistentClientHintHeader), 1);
 }
 
 // Tests that when a resource with certificate errors is loaded from the memory
@@ -1224,7 +1208,7 @@ TEST_F(FrameFetchContextTest, SendImagePingWhenDetached) {
 TEST_F(FrameFetchContextTest, AddConsoleMessageWhenDetached) {
   dummy_page_holder = nullptr;
 
-  fetch_context->AddConsoleMessage("foobar");
+  fetch_context->AddWarningConsoleMessage("foobar", FetchContext::kJSSource);
   // Should not crash.
 }
 
@@ -1244,30 +1228,30 @@ TEST_F(FrameFetchContextTest, PopulateResourceRequestWhenDetached) {
 
   ClientHintsPreferences client_hints_preferences;
   client_hints_preferences.SetShouldSendForTesting(
-      kWebClientHintsTypeDeviceMemory);
-  client_hints_preferences.SetShouldSendForTesting(kWebClientHintsTypeDpr);
+      mojom::WebClientHintsType::kDeviceMemory);
   client_hints_preferences.SetShouldSendForTesting(
-      kWebClientHintsTypeResourceWidth);
+      mojom::WebClientHintsType::kDpr);
   client_hints_preferences.SetShouldSendForTesting(
-      kWebClientHintsTypeViewportWidth);
+      mojom::WebClientHintsType::kResourceWidth);
+  client_hints_preferences.SetShouldSendForTesting(
+      mojom::WebClientHintsType::kViewportWidth);
 
   FetchParameters::ResourceWidth resource_width;
   ResourceLoaderOptions options;
 
   document->GetClientHintsPreferences().SetShouldSendForTesting(
-      kWebClientHintsTypeDeviceMemory);
+      mojom::WebClientHintsType::kDeviceMemory);
   document->GetClientHintsPreferences().SetShouldSendForTesting(
-      kWebClientHintsTypeDpr);
+      mojom::WebClientHintsType::kDpr);
   document->GetClientHintsPreferences().SetShouldSendForTesting(
-      kWebClientHintsTypeResourceWidth);
+      mojom::WebClientHintsType::kResourceWidth);
   document->GetClientHintsPreferences().SetShouldSendForTesting(
-      kWebClientHintsTypeViewportWidth);
+      mojom::WebClientHintsType::kViewportWidth);
 
   dummy_page_holder = nullptr;
 
   fetch_context->PopulateResourceRequest(
-      url, Resource::kRaw, client_hints_preferences, resource_width, options,
-      SecurityViolationReportingPolicy::kReport, request);
+      Resource::kRaw, client_hints_preferences, resource_width, request);
   // Should not crash.
 }
 
@@ -1285,7 +1269,7 @@ TEST_F(FrameFetchContextTest,
 
   fetch_context->SetFirstPartyCookieAndRequestorOrigin(request);
 
-  EXPECT_EQ(document_url, request.FirstPartyForCookies());
+  EXPECT_EQ(document_url, request.SiteForCookies());
   EXPECT_EQ(origin, request.RequestorOrigin());
 }
 

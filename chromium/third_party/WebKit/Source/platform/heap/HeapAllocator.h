@@ -329,23 +329,22 @@ void HeapVectorBacking<T, Traits>::Finalize(void* pointer) {
   // Use the payload size as recorded by the heap to determine how many
   // elements to finalize.
   size_t length = header->PayloadSize() / sizeof(T);
-  T* buffer = reinterpret_cast<T*>(pointer);
+  char* payload = static_cast<char*>(pointer);
 #ifdef ANNOTATE_CONTIGUOUS_CONTAINER
+  ANNOTATE_CHANGE_SIZE(payload, length * sizeof(T), 0, length * sizeof(T));
+#endif
   // As commented above, HeapVectorBacking calls finalizers for unused slots
   // (which are already zeroed out).
-  ANNOTATE_CHANGE_SIZE(buffer, length, 0, length);
-#endif
   if (std::is_polymorphic<T>::value) {
-    char* pointer = reinterpret_cast<char*>(buffer);
     for (unsigned i = 0; i < length; ++i) {
-      char* element = pointer + i * sizeof(T);
+      char* element = payload + i * sizeof(T);
       if (blink::VTableInitialized(element))
         reinterpret_cast<T*>(element)->~T();
     }
   } else {
-    for (unsigned i = 0; i < length; ++i) {
+    T* buffer = reinterpret_cast<T*>(payload);
+    for (unsigned i = 0; i < length; ++i)
       buffer[i].~T();
-    }
   }
 }
 
@@ -576,24 +575,24 @@ template <typename T, size_t inlineCapacity>
 struct VectorTraits<blink::HeapVector<T, inlineCapacity>>
     : VectorTraitsBase<blink::HeapVector<T, inlineCapacity>> {
   STATIC_ONLY(VectorTraits);
-  static const bool kNeedsDestruction = VectorTraits<T>::needsDestruction;
+  static const bool kNeedsDestruction = VectorTraits<T>::kNeedsDestruction;
   static const bool kCanInitializeWithMemset =
-      VectorTraits<T>::canInitializeWithMemset;
+      VectorTraits<T>::kCanInitializeWithMemset;
   static const bool kCanClearUnusedSlotsWithMemset =
-      VectorTraits<T>::canClearUnusedSlotsWithMemset;
-  static const bool kCanMoveWithMemcpy = VectorTraits<T>::canMoveWithMemcpy;
+      VectorTraits<T>::kCanClearUnusedSlotsWithMemset;
+  static const bool kCanMoveWithMemcpy = VectorTraits<T>::kCanMoveWithMemcpy;
 };
 
 template <typename T, size_t inlineCapacity>
 struct VectorTraits<blink::HeapDeque<T, inlineCapacity>>
     : VectorTraitsBase<blink::HeapDeque<T, inlineCapacity>> {
   STATIC_ONLY(VectorTraits);
-  static const bool kNeedsDestruction = VectorTraits<T>::needsDestruction;
+  static const bool kNeedsDestruction = VectorTraits<T>::kNeedsDestruction;
   static const bool kCanInitializeWithMemset =
-      VectorTraits<T>::canInitializeWithMemset;
+      VectorTraits<T>::kCanInitializeWithMemset;
   static const bool kCanClearUnusedSlotsWithMemset =
-      VectorTraits<T>::canClearUnusedSlotsWithMemset;
-  static const bool kCanMoveWithMemcpy = VectorTraits<T>::canMoveWithMemcpy;
+      VectorTraits<T>::kCanClearUnusedSlotsWithMemset;
+  static const bool kCanMoveWithMemcpy = VectorTraits<T>::kCanMoveWithMemcpy;
 };
 
 template <typename T>
@@ -690,9 +689,7 @@ struct HashTraits<blink::TraceWrapperMember<T>>
     return value;
   }
 
-  static blink::TraceWrapperMember<T> EmptyValue() {
-    return blink::TraceWrapperMember<T>(nullptr, nullptr);
-  }
+  static blink::TraceWrapperMember<T> EmptyValue() { return nullptr; }
 };
 
 template <typename T>

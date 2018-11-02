@@ -6,7 +6,7 @@
 <translation id="1728549374069268714">Liitä ja siirry</translation>
 <translation id="1756026472674246267">Avaa linkki uuteen välilehteen</translation>
 <translation id="1759842336958782510">Chrome</translation>
-<translation id="1769904678986817931">Kuvan ominaisuudet</translation>
+<translation id="1769904678986817931">Kuvan ominaisuudet…</translation>
 <translation id="1920297417712412573">Kopioi muistiinpanoihin</translation>
 <translation id="1921101374471252440">Lataa &amp;kuva uudelleen</translation>
 <translation id="2444387452209867610">Lisää muistiinpano</translation>
@@ -44,6 +44,7 @@
 <translation id="5716238312826274098">Poista ilmoitukset käytöstä</translation>
 <translation id="588258955323874662">Kokoruutu</translation>
 <translation id="5916080360077521750">Chromen asetukset eivät valitettavasti ole käytettävissä selaimen ollessa auki. Tuodaksesi asetukset Vivaldiin tallenna työsi ja sulje kaikki Chrome-ikkunat. Napsauta sitten Jatka.</translation>
+<translation id="6229528619562190452">Päivitä Vivaldi napsauttamalla tästä.</translation>
 <translation id="6234173136417926046">Käytä kuvaa aloitussivun taustana</translation>
 <translation id="6259156558325130047">&amp;Tee uudelleen järjestyksen muutos</translation>
 <translation id="630690498669249215">Operan kirjanmerkkitiedosto</translation>

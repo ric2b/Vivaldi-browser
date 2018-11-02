@@ -11,6 +11,7 @@
 #include <set>
 #include <utility>
 
+#include "base/atomic_sequence_num.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
@@ -24,6 +25,7 @@
 #include "base/sequence_checker.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "gpu/command_buffer/client/gpu_control_client.h"
 #include "gpu/command_buffer/client/gpu_memory_buffer_manager.h"
 #include "gpu/command_buffer/common/gpu_memory_buffer_support.h"
@@ -65,6 +67,7 @@ namespace gpu {
 namespace {
 
 base::AtomicSequenceNumber g_next_command_buffer_id;
+base::AtomicSequenceNumber g_next_image_id;
 
 template <typename T>
 static void RunTaskWithResult(base::Callback<T(void)> task,
@@ -83,10 +86,16 @@ class GpuInProcessThreadHolder : public base::Thread {
 
   ~GpuInProcessThreadHolder() override { Stop(); }
 
+  void SetGpuFeatureInfo(const GpuFeatureInfo& gpu_feature_info) {
+    DCHECK(!gpu_thread_service_.get());
+    gpu_feature_info_ = gpu_feature_info;
+  }
+
   const scoped_refptr<InProcessCommandBuffer::Service>& GetGpuThreadService() {
     if (!gpu_thread_service_) {
       gpu_thread_service_ = new GpuInProcessThreadService(
-          task_runner(), sync_point_manager_.get(), nullptr, nullptr);
+          task_runner(), sync_point_manager_.get(), nullptr, nullptr,
+          gpu_feature_info_);
     }
     return gpu_thread_service_;
   }
@@ -94,6 +103,7 @@ class GpuInProcessThreadHolder : public base::Thread {
  private:
   std::unique_ptr<SyncPointManager> sync_point_manager_;
   scoped_refptr<InProcessCommandBuffer::Service> gpu_thread_service_;
+  GpuFeatureInfo gpu_feature_info_;
 };
 
 base::LazyInstance<GpuInProcessThreadHolder>::DestructorAtExit
@@ -125,20 +135,15 @@ scoped_refptr<InProcessCommandBuffer::Service> GetInitialService(
 
 }  // anonyous namespace
 
-InProcessCommandBuffer::Service::Service(const GpuPreferences& gpu_preferences)
-    : Service(gpu_preferences, nullptr, nullptr) {}
-
-InProcessCommandBuffer::Service::Service(
-    gpu::gles2::MailboxManager* mailbox_manager,
-    scoped_refptr<gl::GLShareGroup> share_group)
-    : Service(GpuPreferences(), mailbox_manager, share_group) {}
-
 InProcessCommandBuffer::Service::Service(
     const GpuPreferences& gpu_preferences,
     gpu::gles2::MailboxManager* mailbox_manager,
-    scoped_refptr<gl::GLShareGroup> share_group)
+    scoped_refptr<gl::GLShareGroup> share_group,
+    const GpuFeatureInfo& gpu_feature_info)
     : gpu_preferences_(gpu_preferences),
-      gpu_driver_bug_workarounds_(base::CommandLine::ForCurrentProcess()),
+      gpu_feature_info_(gpu_feature_info),
+      gpu_driver_bug_workarounds_(
+          gpu_feature_info.enabled_gpu_driver_bug_workarounds),
       mailbox_manager_(mailbox_manager),
       share_group_(share_group),
       shader_translator_cache_(gpu_preferences_) {
@@ -206,11 +211,23 @@ InProcessCommandBuffer::InProcessCommandBuffer(
       client_thread_weak_ptr_factory_(this),
       gpu_thread_weak_ptr_factory_(this) {
   DCHECK(service_.get());
-  next_image_id_.GetNext();
 }
 
 InProcessCommandBuffer::~InProcessCommandBuffer() {
   Destroy();
+}
+
+// static
+void InProcessCommandBuffer::InitializeDefaultServiceForTesting(
+    const GpuFeatureInfo& gpu_feature_info) {
+  // Call base::ThreadTaskRunnerHandle::IsSet() to ensure that it is
+  // instantiated before we create the GPU thread, otherwise shutdown order will
+  // delete the ThreadTaskRunnerHandle before the GPU thread's message loop,
+  // and when the message loop is shutdown, it will recreate
+  // ThreadTaskRunnerHandle, which will re-add a new task to the, AtExitManager,
+  // which causes a deadlock because it's already locked.
+  base::ThreadTaskRunnerHandle::IsSet();
+  g_default_service.Get().SetGpuFeatureInfo(gpu_feature_info);
 }
 
 bool InProcessCommandBuffer::MakeCurrent() {
@@ -297,8 +314,9 @@ bool InProcessCommandBuffer::InitializeOnGpuThread(
       params.context_group
           ? params.context_group->decoder_->GetContextGroup()
           : new gles2::ContextGroup(
-                service_->gpu_preferences(), service_->mailbox_manager(),
-                nullptr /* memory_tracker */,
+                service_->gpu_preferences(),
+                gles2::PassthroughCommandDecoderSupported(),
+                service_->mailbox_manager(), nullptr /* memory_tracker */,
                 service_->shader_translator_cache(),
                 service_->framebuffer_completeness_cache(), feature_info,
                 bind_generates_resource, service_->image_manager(),
@@ -353,18 +371,19 @@ bool InProcessCommandBuffer::InitializeOnGpuThread(
     if (!context_.get()) {
       context_ = gl::init::CreateGLContext(
           gl_share_group_.get(), surface_.get(),
-          GenerateGLContextAttribs(
-              params.attribs, decoder_->GetContextGroup()->gpu_preferences()));
+          GenerateGLContextAttribs(params.attribs,
+                                   decoder_->GetContextGroup()));
+      if (context_.get()) {
+        service_->gpu_feature_info().ApplyToGLContext(context_.get());
+      }
       gl_share_group_->SetSharedContext(surface_.get(), context_.get());
     }
 
     context_ = new GLContextVirtual(gl_share_group_.get(), context_.get(),
                                     decoder_->AsWeakPtr());
     if (context_->Initialize(
-            surface_.get(),
-            GenerateGLContextAttribs(
-                params.attribs,
-                decoder_->GetContextGroup()->gpu_preferences()))) {
+            surface_.get(), GenerateGLContextAttribs(
+                                params.attribs, decoder_->GetContextGroup()))) {
       VLOG(1) << "Created virtual GL context.";
     } else {
       context_ = NULL;
@@ -372,8 +391,10 @@ bool InProcessCommandBuffer::InitializeOnGpuThread(
   } else {
     context_ = gl::init::CreateGLContext(
         gl_share_group_.get(), surface_.get(),
-        GenerateGLContextAttribs(
-            params.attribs, decoder_->GetContextGroup()->gpu_preferences()));
+        GenerateGLContextAttribs(params.attribs, decoder_->GetContextGroup()));
+    if (context_.get()) {
+      service_->gpu_feature_info().ApplyToGLContext(context_.get());
+    }
   }
 
   if (!context_.get()) {
@@ -722,7 +743,7 @@ int32_t InProcessCommandBuffer::CreateImage(ClientBuffer buffer,
       reinterpret_cast<gfx::GpuMemoryBuffer*>(buffer);
   DCHECK(gpu_memory_buffer);
 
-  int32_t new_id = next_image_id_.GetNext();
+  int32_t new_id = g_next_image_id.GetNext() + 1;
 
   DCHECK(gpu::IsImageFromGpuMemoryBufferFormatSupported(
       gpu_memory_buffer->GetFormat(), capabilities_));
@@ -754,8 +775,7 @@ int32_t InProcessCommandBuffer::CreateImage(ClientBuffer buffer,
 
   if (fence_sync) {
     flushed_fence_sync_release_ = fence_sync;
-    SyncToken sync_token(GetNamespaceID(), GetStreamId(), GetCommandBufferID(),
-                         fence_sync);
+    SyncToken sync_token(GetNamespaceID(), 0, GetCommandBufferID(), fence_sync);
     sync_token.SetVerifyFlush();
     gpu_memory_buffer_manager_->SetDestructionSyncToken(gpu_memory_buffer,
                                                         sync_token);
@@ -851,8 +871,7 @@ void InProcessCommandBuffer::CacheShader(const std::string& key,
 }
 
 void InProcessCommandBuffer::OnFenceSyncRelease(uint64_t release) {
-  SyncToken sync_token(GetNamespaceID(), GetStreamId(), GetCommandBufferID(),
-                       release);
+  SyncToken sync_token(GetNamespaceID(), 0, GetCommandBufferID(), release);
 
   gles2::MailboxManager* mailbox_manager =
       decoder_->GetContextGroup()->mailbox_manager();
@@ -971,11 +990,7 @@ CommandBufferId InProcessCommandBuffer::GetCommandBufferID() const {
   return command_buffer_id_;
 }
 
-int32_t InProcessCommandBuffer::GetStreamId() const {
-  return 0;
-}
-
-void InProcessCommandBuffer::FlushOrderingBarrierOnStream(int32_t stream_id) {
+void InProcessCommandBuffer::FlushPendingWork() {
   // This is only relevant for out-of-process command buffers.
 }
 
@@ -1043,6 +1058,10 @@ void InProcessCommandBuffer::DidSwapBuffersComplete(
 
 const gles2::FeatureInfo* InProcessCommandBuffer::GetFeatureInfo() const {
   return context_group_->feature_info();
+}
+
+const GpuPreferences& InProcessCommandBuffer::GetGpuPreferences() const {
+  return context_group_->gpu_preferences();
 }
 
 void InProcessCommandBuffer::SetLatencyInfoCallback(

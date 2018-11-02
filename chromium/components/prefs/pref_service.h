@@ -283,7 +283,11 @@ class COMPONENTS_PREFS_EXPORT PrefService {
 
   bool ReadOnly() const;
 
+  // Returns the initialization state, taking only user prefs into account.
   PrefInitializationStatus GetInitializationStatus() const;
+
+  // Returns the initialization state, taking all pref stores into account.
+  PrefInitializationStatus GetAllPrefStoresInitializationStatus() const;
 
   // Tell our PrefValueStore to update itself to |command_line_store|.
   // Takes ownership of the store.
@@ -311,6 +315,10 @@ class COMPONENTS_PREFS_EXPORT PrefService {
 
   // Clears mutable values.
   void ClearMutableValues();
+
+  // Invoked when the store is deleted from disk. Allows this PrefService
+  // to tangentially cleanup data it may have saved outside the store.
+  void OnStoreDeletionFromDisk();
 
  protected:
   // The PrefNotifier handles registering and notifying preference observers.

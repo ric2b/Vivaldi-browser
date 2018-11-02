@@ -20,12 +20,13 @@
 #include "ui/gfx/geometry/size.h"
 
 using base::android::JavaParamRef;
+using base::android::JavaRef;
 
 namespace android {
 
 // static
-LayerTitleCache* LayerTitleCache::FromJavaObject(jobject jobj) {
-  if (!jobj)
+LayerTitleCache* LayerTitleCache::FromJavaObject(const JavaRef<jobject>& jobj) {
+  if (jobj.is_null())
     return nullptr;
   return reinterpret_cast<LayerTitleCache*>(Java_LayerTitleCache_getNativePtr(
       base::android::AttachCurrentThread(), jobj));
@@ -82,7 +83,7 @@ void LayerTitleCache::UpdateFavicon(JNIEnv* env,
                                     jint tab_id,
                                     jint favicon_resource_id) {
   DecorationTitle* title_layer = layer_cache_.Lookup(tab_id);
-  if (title_layer == nullptr && favicon_resource_id != -1) {
+  if (title_layer && favicon_resource_id != -1) {
     title_layer->SetFaviconResourceId(favicon_resource_id);
   }
 }
@@ -90,7 +91,7 @@ void LayerTitleCache::UpdateFavicon(JNIEnv* env,
 void LayerTitleCache::ClearExcept(JNIEnv* env,
                                   const JavaParamRef<jobject>& obj,
                                   jint except_id) {
-  IDMap<std::unique_ptr<DecorationTitle>>::iterator iter(&layer_cache_);
+  base::IDMap<std::unique_ptr<DecorationTitle>>::iterator iter(&layer_cache_);
   for (; !iter.IsAtEnd(); iter.Advance()) {
     const int id = iter.GetCurrentKey();
     if (id != except_id)
@@ -112,7 +113,7 @@ void LayerTitleCache::SetResourceManager(
     ui::ResourceManager* resource_manager) {
   resource_manager_ = resource_manager;
 
-  IDMap<std::unique_ptr<DecorationTitle>>::iterator iter(&layer_cache_);
+  base::IDMap<std::unique_ptr<DecorationTitle>>::iterator iter(&layer_cache_);
   for (; !iter.IsAtEnd(); iter.Advance()) {
     iter.GetCurrentValue()->SetResourceManager(resource_manager_);
   }

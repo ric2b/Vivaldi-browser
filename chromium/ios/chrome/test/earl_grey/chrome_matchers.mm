@@ -10,20 +10,23 @@
 
 #include "base/mac/foundation_util.h"
 #include "base/strings/sys_string_conversions.h"
-#import "base/test/ios/wait_util.h"
 #include "components/strings/grit/components_strings.h"
+#import "ios/chrome/browser/ui/authentication/signin_promo_view.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_switch_item.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_text_field_ios.h"
+#import "ios/chrome/browser/ui/payments/payment_request_error_view_controller.h"
+#import "ios/chrome/browser/ui/payments/payment_request_view_controller.h"
 #import "ios/chrome/browser/ui/settings/accounts_collection_view_controller.h"
 #import "ios/chrome/browser/ui/settings/clear_browsing_data_collection_view_controller.h"
+#import "ios/chrome/browser/ui/settings/import_data_collection_view_controller.h"
 #import "ios/chrome/browser/ui/settings/settings_collection_view_controller.h"
+#import "ios/chrome/browser/ui/settings/sync_settings_collection_view_controller.h"
 #import "ios/chrome/browser/ui/static_content/static_html_view_controller.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_controller.h"
 #import "ios/chrome/browser/ui/tools_menu/tools_menu_constants.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
-#import "ios/testing/wait_util.h"
 #import "ios/web/public/block_types.h"
 #import "ios/web/public/test/earl_grey/web_view_matchers.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -138,6 +141,20 @@ id<GREYMatcher> OmniboxText(std::string text) {
                     hasProperty(@"text", base::SysUTF8ToNSString(text)), nil);
 }
 
+id<GREYMatcher> OmniboxContainingText(std::string text) {
+  GREYElementMatcherBlock* matcher = [GREYElementMatcherBlock
+      matcherWithMatchesBlock:^BOOL(UITextField* element) {
+        return [element.text containsString:base::SysUTF8ToNSString(text)];
+      }
+      descriptionBlock:^void(id<GREYDescription> description) {
+        [description
+            appendText:[NSString
+                           stringWithFormat:@"Omnibox contains text \"%@\"",
+                                            base::SysUTF8ToNSString(text)]];
+      }];
+  return matcher;
+}
+
 id<GREYMatcher> ToolsMenuButton() {
   return grey_allOf(grey_accessibilityID(kToolbarToolsMenuButtonIdentifier),
                     grey_sufficientlyVisible(), nil);
@@ -189,16 +206,40 @@ id<GREYMatcher> SettingsMenuButton() {
   return grey_accessibilityID(kToolsMenuSettingsId);
 }
 
+id<GREYMatcher> ToolsMenuView() {
+  return grey_accessibilityID(kToolsMenuTableViewId);
+}
+
 id<GREYMatcher> OKButton() {
   return ButtonWithAccessibilityLabelId(IDS_OK);
 }
 
-id<GREYMatcher> SignInMenuButton() {
-  return grey_accessibilityID(kSettingsSignInCellId);
+id<GREYMatcher> PrimarySignInButton() {
+  return grey_accessibilityID(kSigninPromoPrimaryButtonId);
+}
+
+id<GREYMatcher> SecondarySignInButton() {
+  return grey_accessibilityID(kSigninPromoSecondaryButtonId);
 }
 
 id<GREYMatcher> SettingsAccountButton() {
   return grey_accessibilityID(kSettingsAccountCellId);
+}
+
+id<GREYMatcher> SettingsAccountsCollectionView() {
+  return grey_accessibilityID(kSettingsAccountsId);
+}
+
+id<GREYMatcher> SettingsImportDataImportButton() {
+  return grey_accessibilityID(kImportDataImportCellId);
+}
+
+id<GREYMatcher> SettingsImportDataKeepSeparateButton() {
+  return grey_accessibilityID(kImportDataKeepSeparateCellId);
+}
+
+id<GREYMatcher> SettingsSyncManageSyncedDataButton() {
+  return grey_accessibilityID(kSettingsSyncId);
 }
 
 id<GREYMatcher> AccountsSyncButton() {
@@ -221,6 +262,15 @@ id<GREYMatcher> SettingsMenuPrivacyButton() {
 
 id<GREYMatcher> SettingsMenuPasswordsButton() {
   return ButtonWithAccessibilityLabelId(IDS_IOS_SAVE_PASSWORDS);
+}
+
+id<GREYMatcher> PaymentRequestView() {
+  return grey_accessibilityID(kPaymentRequestCollectionViewID);
+}
+
+// Returns matcher for the error confirmation view for payment request.
+id<GREYMatcher> PaymentRequestErrorView() {
+  return grey_accessibilityID(kPaymentRequestErrorCollectionViewID);
 }
 
 }  // namespace chrome_test_util

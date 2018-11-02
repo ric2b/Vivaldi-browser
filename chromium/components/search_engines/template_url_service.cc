@@ -870,6 +870,11 @@ base::string16 TemplateURLService::GetKeywordShortName(
 }
 
 void TemplateURLService::OnHistoryURLVisited(const URLVisitedDetails& details) {
+#if defined(VIVALDI_BUILD)
+  // This interferes with keyword storage in history
+  // and we do not use it at the moment anyway
+  return;
+#endif
   if (!loaded_)
     visits_to_add_.push_back(details);
   else
@@ -1334,19 +1339,6 @@ TemplateURLService::CreateTemplateURLFromTemplateURLAndSyncData(
   // possible that sync is trying to modify fields that should not be touched.
   // Revert these fields to the built-in values.
   UpdateTemplateURLIfPrepopulated(turl.get(), prefs);
-
-  // We used to sync keywords associated with omnibox extensions, but no longer
-  // want to.  Delete them from the server.
-  // TODO(vasilii): After a few Chrome versions, delete this code together with
-  // IsOmniboxExtensionURL().
-  DCHECK(client);
-  if (client->IsOmniboxExtensionURL(turl->url())) {
-    change_list->push_back(
-        syncer::SyncChange(FROM_HERE,
-                           syncer::SyncChange::ACTION_DELETE,
-                           sync_data));
-    return nullptr;
-  }
 
   DCHECK_EQ(TemplateURL::NORMAL, turl->type());
   if (reset_keyword || deduped) {

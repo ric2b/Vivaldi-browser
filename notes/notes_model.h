@@ -19,6 +19,10 @@ namespace base {
 class SequencedTaskRunner;
 }
 
+namespace content {
+class BrowserContext;
+}
+
 namespace vivaldi {
 
 class NotesLoadDetails;
@@ -33,7 +37,7 @@ class Notes_Model : public KeyedService {
   };
 
  public:
-  explicit Notes_Model(Profile* profile);
+  explicit Notes_Model(content::BrowserContext* context);
 
   ~Notes_Model() override;
 
@@ -209,7 +213,7 @@ class Notes_Model : public KeyedService {
   };
 
  private:
-  Profile* profile_;
+  content::BrowserContext* context_;
   Notes_Node root_;
   Notes_Node* main_node_;
   Notes_Node* other_node_;

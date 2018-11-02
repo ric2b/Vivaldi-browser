@@ -209,7 +209,10 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
                          bool is_stream,
                          mojom::URLLoaderFactoryPtrInfo
                              subresource_url_loader_factory_info) override;
-  void OnRequestFailed(bool has_stale_copy_in_cache, int net_error) override;
+  void OnRequestFailed(bool has_stale_copy_in_cache,
+                       int net_error,
+                       const base::Optional<net::SSLInfo>& ssl_info,
+                       bool should_ssl_errors_be_fatal) override;
   void OnRequestStarted(base::TimeTicks timestamp) override;
 
   // Called when the NavigationThrottles have been checked by the
@@ -243,6 +246,18 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
   // (e.g. `https://user:pass@example.com/page.html`). Check whether the
   // request should be allowed to continue or should be blocked.
   CredentialedSubresourceCheckResult CheckCredentialedSubresource() const;
+
+  // This enum describes the result of the legacy protocol check for
+  // the request.
+  enum class LegacyProtocolInSubresourceCheckResult {
+    ALLOW_REQUEST,
+    BLOCK_REQUEST,
+  };
+
+  // Block subresources requests that target "legacy" protocol (like "ftp") when
+  // the main document is not served from a "legacy" protocol.
+  LegacyProtocolInSubresourceCheckResult CheckLegacyProtocolInSubresource()
+      const;
 
   FrameTreeNode* frame_tree_node_;
 

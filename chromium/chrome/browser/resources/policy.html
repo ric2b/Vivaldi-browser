@@ -23,7 +23,6 @@
       <input id="filter" class="search-field-container" type="search"
           i18n-values="placeholder:filterPlaceholder;
                        aria-label:filterPlaceholder" incremental>
-      </input>
     </header>
   </div>
   <div class="page">
@@ -31,8 +30,12 @@
       <h1 i18n-content="title"></h1>
     </header>
     <section class="reload-show-unset-section">
-      <div class="reload-policies-button">
+      <div class="left-aligned-button">
         <button id="reload-policies" i18n-content="reloadPolicies"></button>
+      </div>
+      <div class="left-aligned-button">
+        <button id="export-policies" i18n-content="exportPoliciesJSON">
+        </button>
       </div>
       <div class="chrome-for-work">
          <a href="http://g.co/chromeent/learn" target="_blank">
@@ -40,7 +43,7 @@
       </div>
       <div id="show-unset-container" class="show-unset-checkbox">
         <label>
-          <input id="show-unset" type="checkbox"></input>
+          <input id="show-unset" type="checkbox">
           <span i18n-content="showUnset"></span>
         </label>
       </div>
@@ -132,5 +135,6 @@
 
 <script src="chrome://policy/strings.js"></script>
 <script src="chrome://resources/js/i18n_template.js"></script>
+<script src="chrome://policy/policy_base.js"></script>
 <script src="chrome://policy/policy.js"></script>
 </html>

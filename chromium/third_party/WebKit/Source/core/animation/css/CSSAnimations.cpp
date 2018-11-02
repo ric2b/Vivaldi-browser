@@ -52,6 +52,7 @@
 #include "core/css/CSSValueList.h"
 #include "core/css/PropertyRegistry.h"
 #include "core/css/parser/CSSVariableParser.h"
+#include "core/css/properties/CSSPropertyAPI.h"
 #include "core/css/resolver/CSSToStyleMap.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/Element.h"
@@ -265,7 +266,8 @@ void CSSAnimations::CalculateCompositorAnimationUpdate(
 
     bool update_compositor_keyframes = false;
     if ((transform_zoom_changed || was_viewport_resized) &&
-        keyframe_effect->Affects(PropertyHandle(CSSPropertyTransform)) &&
+        (keyframe_effect->Affects(PropertyHandle(CSSPropertyTransform)) ||
+         keyframe_effect->Affects(PropertyHandle(CSSPropertyTranslate))) &&
         keyframe_effect->SnapshotAllCompositorKeyframes(element, style,
                                                         parent_style)) {
       update_compositor_keyframes = true;
@@ -861,8 +863,7 @@ void CSSAnimations::CalculateTransitionUpdateForStandardProperty(
     PropertyHandle property = PropertyHandle(longhand_id);
     DCHECK_GE(longhand_id, firstCSSProperty);
 
-    if (!animate_all &&
-        !CSSPropertyMetadata::IsInterpolableProperty(longhand_id)) {
+    if (!animate_all && !CSSPropertyAPI::Get(longhand_id).IsInterpolable()) {
       continue;
     }
 
@@ -1197,7 +1198,7 @@ const StylePropertyShorthand& CSSAnimations::PropertiesForTransitionAll() {
   DEFINE_STATIC_LOCAL(Vector<CSSPropertyID>, properties, ());
   DEFINE_STATIC_LOCAL(StylePropertyShorthand, property_shorthand, ());
   if (properties.IsEmpty()) {
-    for (int i = firstCSSProperty; i < lastCSSProperty; ++i) {
+    for (int i = firstCSSProperty; i <= lastCSSProperty; ++i) {
       CSSPropertyID id = convertToCSSPropertyID(i);
       // Avoid creating overlapping transitions with perspective-origin and
       // transition-origin.
@@ -1207,7 +1208,7 @@ const StylePropertyShorthand& CSSAnimations::PropertiesForTransitionAll() {
           id == CSSPropertyWebkitTransformOriginY ||
           id == CSSPropertyWebkitTransformOriginZ)
         continue;
-      if (CSSPropertyMetadata::IsInterpolableProperty(id))
+      if (CSSPropertyAPI::Get(id).IsInterpolable())
         properties.push_back(id);
     }
     property_shorthand = StylePropertyShorthand(

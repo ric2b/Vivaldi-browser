@@ -19,11 +19,11 @@
 <translation id="1187722533808055681">Անգործ վիճակից արթնացումներ</translation>
 <translation id="119944043368869598">Ջնջել բոլորը</translation>
 <translation id="1221825588892235038">Միայն նշված մասը</translation>
+<translation id="1238150413700645698">Պաշտպանված բովանդակություն</translation>
 <translation id="1244303850296295656">Ընդլայնման սխալ</translation>
 <translation id="1278049586634282054">Տեսքերի հետազոտում.</translation>
 <translation id="1297175357211070620">Վերջնակետ</translation>
 <translation id="1303101771013849280">Էջանիշերի HTML ֆայլ</translation>
-<translation id="1303319084542230573">Ավելացնել տպիչ</translation>
 <translation id="1317502925920562130">Արդյոք սա՞ է Ձեր ակնկալած գլխավոր էջը։</translation>
 <translation id="1368832886055348810">Ձախից աջ</translation>
 <translation id="1430915738399379752">Տպում</translation>
@@ -40,10 +40,12 @@
 <translation id="1601560923496285236">Կիրառել</translation>
 <translation id="1603914832182249871">(Գաղտնի)</translation>
 <translation id="1616206807336925449">Այս ընդլայնումը հատուկ թույլտվություն չի պահանջում։</translation>
+<translation id="1620510694547887537">Տեսախցիկ</translation>
 <translation id="1627276047960621195">Ֆայլի դեսկրիպտորներ</translation>
 <translation id="1635033183663317347">Տեղակայված է Ձեր խնամակալի կողմից։</translation>
 <translation id="1681120471812444678">Կարգավորեք՝ տպիչ ավելացնելու համար…</translation>
 <translation id="1682548588986054654">Նոր գաղտնի պատուհան</translation>
+<translation id="1706625117072057435">Խոշորացումներ</translation>
 <translation id="1708338024780164500">(Ոչ ակտիվ)</translation>
 <translation id="1708713382908678956"><ph name="NAME_PH" /> (ID. <ph name="ID_PH" />)</translation>
 <translation id="1723824996674794290">Նոր պատու&amp;հան</translation>
@@ -53,6 +55,7 @@
 <translation id="1744108098763830590">հետին էջ</translation>
 <translation id="176587472219019965">Նոր պատու&amp;հան</translation>
 <translation id="1769104665586091481">Բացել հղումը նոր պատու&amp;հանում</translation>
+<translation id="1789575671122666129">Թռուցիկներ</translation>
 <translation id="1815083418640426271">Փակցնել որպես պարզ տեքստ</translation>
 <translation id="1828901632669367785">Տպել համակարգային պատուհանի միջոցով…</translation>
 <translation id="1838288018605456492">Կտտացրեք՝ կարգավորելու համար</translation>
@@ -61,6 +64,7 @@
 <translation id="1859234291848436338">Գրի ուղղություն</translation>
 <translation id="1901303067676059328">Նշել &amp;ամբողջը</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
+<translation id="1963227389609234879">Հեռացնել բոլորը</translation>
 <translation id="1965328510789761112">Անհատական հիշողություն</translation>
 <translation id="1974060860693918893">Լրացուցիչ</translation>
 <translation id="1979718561647571293">Արդյոք սա՞ է Ձեր ակնկալած սկզբնական էջը։</translation>
@@ -80,10 +84,10 @@
 <translation id="218070003709087997">Նշեք տպելու օրինակների քանակը՝ մուտքագրելով թիվ (1-ից 999)։</translation>
 <translation id="2181927652428971824">Տպեք Google Docs-ով և այլ ամպային վերջնակետերով։ <ph name="BEGIN_LINK" />Մուտք գործեք՝<ph name="END_LINK" /> Google Cloud Print-ով տպելու համար։</translation>
 <translation id="219008588003277019">Հանգույց Native Client. <ph name="NEXE_NAME" /></translation>
-<translation id="220138918934036434">Թաքցնել կոճակը</translation>
 <translation id="2218515861914035131">Փակցնել որպես պարզ տեքստ</translation>
 <translation id="2249605167705922988">օր.՝ 1-5, 8, 11-13</translation>
 <translation id="2263497240924215535">(Անջատված է)</translation>
+<translation id="2277255602909579701">Բոլոր քուքիներն ու կայքերի տվյալները</translation>
 <translation id="2280486287150724112">Աջ լուսանցք</translation>
 <translation id="2282146716419988068">GPU պրոցես</translation>
 <translation id="2301382460326681002">Ընդլայնման արմատային պանակն անվավեր է։</translation>
@@ -93,7 +97,7 @@
 <translation id="2327492829706409234">Միացնել հավելվածը</translation>
 <translation id="2344028582131185878">Ավտոմատ ներբեռնումներ</translation>
 <translation id="2348176352564285430">Հավելված. <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="2357949918965361754">Այս ֆունկցիայի օգնությամբ Դուք կարող եք Vivaldi-ի պարունակությունը ցուցադրել Ձեր հեռուստացույցի կամ այլ սարքի վրա։</translation>
+<translation id="2357949918965361754">Այս ֆունկցիայի օգնությամբ Դուք կարող եք Vivaldi-ի բովանդակությունը ցուցադրել Ձեր հեռուստացույցի կամ այլ սարքի վրա։</translation>
 <translation id="2378982052244864789">Ընտրեք ընդլայնման պանակը։</translation>
 <translation id="2379281330731083556">Տպել համակարգային պատուհանի միջոցով… <ph name="SHORTCUT_KEY" /></translation>
 <translation id="241082044617551207">Անհայտ փլագին</translation>
@@ -103,7 +107,8 @@
 <translation id="2439110203301358333">Ձեր համակարգչի մեկ այլ ծրագիր ավելացրել է ընդլայնում, որը կարող է ազդել Vivaldi-ի աշխատանքի վրա ու փոխել այն։</translation>
 <translation id="2445081178310039857">Պահանջվում է ընդլայնման արմատային պանակը։</translation>
 <translation id="2470702053775288986">Չաջակցվող ընդլայնումներն անջատվել են</translation>
-<translation id="2498436043474441766">Ավելացնել տպիչներ</translation>
+<translation id="2476578072172137802">Կայքի կարգավորումներ</translation>
+<translation id="2482878487686419369">Ծանուցումներ</translation>
 <translation id="2501797496290880632">Մուտքագրեք կարճ ստեղն</translation>
 <translation id="2509495747794740764">Մասշտաբի արժեքը պետք է լինի թիվ 10-ի ու 200-ի միջև։</translation>
 <translation id="253557089021624350">Keepalive ակտիվությունների հաշվիչ</translation>
@@ -118,6 +123,7 @@
 <translation id="2726934403674109201">(ընդհանուր՝ <ph name="COUNT" />)</translation>
 <translation id="2785873697295365461">Ֆայլի դեսկրիպտորներ</translation>
 <translation id="2809586584051668049">ու ևս <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
+<translation id="2812989263793994277">Ցույց չտալ որևէ պատկեր</translation>
 <translation id="2844111009524261443">Կտտացնելով աշխատեցնել</translation>
 <translation id="2847759467426165163">Հեռարձակել դեպի</translation>
 <translation id="2850541429955027218">Ավելացնել ոճը</translation>
@@ -135,6 +141,7 @@
 <translation id="299483336428448530">Տեղակայված է Ձեր ծնողների կողմից։</translation>
 <translation id="3003623123441819449">CSS-ի քեշ</translation>
 <translation id="3012631534724231212">(ֆրեյմ)</translation>
+<translation id="3013291976881901233">MIDI սարքեր</translation>
 <translation id="3021678814754966447">Տեսնել ֆրե&amp;յմի կոդը</translation>
 <translation id="302620147503052030">Ցույց տալ կոճակը</translation>
 <translation id="3031601332414921114">Շարունակել տպումը</translation>
@@ -145,11 +152,13 @@
 <translation id="3084548735795614657">Գցեք՝ տեղակայելու համար</translation>
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">USER մշակիչներ</translation>
+<translation id="3127156390846601284">Այսպիսով Ձեր սարքի միջից ամբողջությամբ կջնջվեն ցուցադրվող բոլոր կայքերի տվյալները։ Ցանկանո՞ւմ եք շարունակել։</translation>
 <translation id="3129173833825111527">Ձախ լուսանցք</translation>
 <translation id="3144647712221361880">Բացել հղումը որպես</translation>
 <translation id="3149510190863420837">Chrome-ի հավելվածներ</translation>
 <translation id="3154429428035006212">Ցանցում չէ ավելի քան մեկ ամիս</translation>
 <translation id="3222066309010235055">Նախնական ռենդեր. <ph name="PRERENDER_CONTENTS_NAME" /></translation>
+<translation id="3227137524299004712">Խոսափող</translation>
 <translation id="32279126412636473">Կրկին բեռնել (⌘R)</translation>
 <translation id="3241680850019875542">Ընտրեք արմատային պանակը՝ ընդլայնումը փաթեթավորելու համար։ Ընդլայնումը թարմացնելու համար ընտրեք նաև մասնավոր բանալիի ֆայլը՝ վերօգտագործելու համար։</translation>
 <translation id="3269093882174072735">Բեռնել պատկերը</translation>
@@ -160,7 +169,6 @@
 <translation id="33022249435934718">GDI մշակիչներ</translation>
 <translation id="3303818374450886607">Պատճեններ</translation>
 <translation id="3305661444342691068">Բացել PDF-ը նախադիտման տեղում</translation>
-<translation id="3308134619352333507">Թաքցնել կոճակը</translation>
 <translation id="3309747692199697901">Միշտ աշխատեցնել բոլոր կայքերում</translation>
 <translation id="3317459757438853210">Երկկողմանի</translation>
 <translation id="3319048459796106952">Նոր &amp;գաղտնի պատուհան</translation>
@@ -171,6 +179,7 @@
 <translation id="3360297538363969800">Տպումը ձախողվեց։ Խնդրում ենք ստուգեք Ձեր տպիչն ու փորձեք նորից։</translation>
 <translation id="3378572629723696641">Այս ընդլայնումը կարող է վնասված լինել։</translation>
 <translation id="3396331542604645348">Ընտրված տպիչն անհասանելի է կամ ճիշտ չի տեղակայված։ Ստուգեք Ձեր տպիչը կամ փորձեք ընտրել մեկ այլ տպիչ։</translation>
+<translation id="3432227430032737297">Հեռացնել բոլոր ցուցադրվողները</translation>
 <translation id="3435896845095436175">Միացնել</translation>
 <translation id="3439970425423980614">PDF-ը բացվում է նախադիտման մեջ</translation>
 <translation id="345693547134384690">Բացել պատկերը նոր ներ&amp;դիրում</translation>
@@ -190,6 +199,7 @@
 <translation id="3725367690636977613">էջ</translation>
 <translation id="3727187387656390258">Հետազոտել թռուցիկը</translation>
 <translation id="3730639321086573427">Լոկալ վերջնակետեր</translation>
+<translation id="3744111561329211289">Ֆոնային սինք</translation>
 <translation id="3760460896538743390">Հ&amp;ետազոտել հետին էջը</translation>
 <translation id="3763401818161139108">Միշտ աշխատեցնել <ph name="ORIGIN" />-ում</translation>
 <translation id="3797900183766075808"><ph name="SEARCH_ENGINE" />-ում որոնել «<ph name="SEARCH_TERMS" />»</translation>
@@ -225,14 +235,14 @@
 <translation id="411666854932687641">Անհատական հիշողություն</translation>
 <translation id="4130207949184424187">Այս ընդլայնումը փոխել է ստանդարտ որոնիչը, որով Դուք որոնում եք հասցեի տողի միջոցով։</translation>
 <translation id="4131410914670010031">Սև ու սպիտակ</translation>
-<translation id="4176463684765177261">Անջատված</translation>
+<translation id="4176463684765177261">Անջատած է</translation>
 <translation id="4200983522494130825">Նոր &amp;ներդիր</translation>
 <translation id="420665587194630159">(Այս ընդլայնումը կառավարման է ենթարկվում և չի կարող հեռացվել կամ անջատվել։)</translation>
 <translation id="4206944295053515692">Առաջարկներ Google-ից</translation>
 <translation id="4240511609794012987">Ընդհանուր հիշողություն</translation>
 <translation id="4256316378292851214">Պահպանել տեսանյութը որպե&amp;ս…</translation>
+<translation id="4278390842282768270">Թույլատրված</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> ԿԲ (<ph name="NUM_KILOBYTES_LIVE" /> ԿԲ ակտիվ)</translation>
-<translation id="431291515148403474">Ավելացնելով տպիչներ Google Cloud Print-ում՝ Դուք կկարողանաք տպել ցանկացած մի տեղից մյուսը։ Ընդհանրացրեք Ձեր տպիչներն ում հետ ցանկանում եք և տպեք նրանց մոտ Vivaldi-ի, Ձեր հեռախոսի, պլանշետի, համակարգչի կամ ցանկացած այլ՝ ինտերնետին միացած սարքի միջոցով։</translation>
 <translation id="4345587454538109430">Կարգավորել…</translation>
 <translation id="4348766275249686434">Սխալները ժողովել</translation>
 <translation id="4363771538994847871">Հեռարձակման վերջնակետեր չեն գտնվել։ Օգնություն պե՞տք է։</translation>
@@ -251,13 +261,13 @@
 <translation id="4579581181964204535">Հնարավոր չէ հեռարձակել <ph name="HOST_NAME" />-ը։</translation>
 <translation id="4593021220803146968">&amp;Գնալ <ph name="URL" /></translation>
 <translation id="4595560905247879544">Հավելվածներն ու ընդլայնումները կարող է փոփոխել միայն մենեջերը (<ph name="CUSTODIAN_NAME" />)։</translation>
-<translation id="4613271546271159013">Էջը, որը երևում է, երբ նոր ներդիր եք բացում, փոխվել է ընդլայնման կողմից։</translation>
+<translation id="4613271546271159013">Էջը, որը երևում է նոր ներդիր բացելիս՝ փոխվել է ընդլայնման կողմից։</translation>
 <translation id="4624768044135598934">Ստացվե՛ց։</translation>
 <translation id="4628314759732363424">Փոխել…</translation>
 <translation id="4643612240819915418">&amp;Բացել տեսանյութը նոր ներդիրում</translation>
 <translation id="4677772697204437347">GPU-ի հիշողություն</translation>
 <translation id="4681930562518940301">Բացել օրիգինալ պատկերը նոր ներդիրում</translation>
-<translation id="4688541352655220763">Այս ֆունկցիայի օգնությամբ Դուք կարող եք Vivaldi-ի պարունակությունը ցուցադրել Ձեր հեռուստացույցի կամ այլ սարքի վրա։</translation>
+<translation id="4688541352655220763">Այս ֆունկցիայի օգնությամբ Դուք կարող եք Vivaldi-ի բովանդակությունը ցուցադրել Ձեր հեռուստացույցի կամ այլ սարքի վրա։</translation>
 <translation id="4711638718396952945">Վերականգնել կարգավորումները</translation>
 <translation id="4726710629007580002">Այս ընդլայնումը տեղակայելիս եղել են հետևյալ զգուշացումները.</translation>
 <translation id="4742746985488890273">Ամրացնել</translation>
@@ -265,7 +275,7 @@
 <translation id="4816492930507672669">Հարմարեցնել էջի չափսին</translation>
 <translation id="4839303808932127586">Պահպանել տեսանյութը որպե&amp;ս…</translation>
 <translation id="4850258771229959924">Դիտել Մշակողի գործիքների մեջ</translation>
-<translation id="488785315393301722">Ցույց տալ մանրամասները</translation>
+<translation id="488785315393301722">Ցուցադրել մանրամասները</translation>
 <translation id="4911714727432509308">Ընդլայնումների համար կարճ ստեղներ սահմանված չեն։</translation>
 <translation id="4912643508233590958">Անգործ վիճակից արթնացումներ</translation>
 <translation id="4918086044614829423">Հաստատել</translation>
@@ -280,7 +290,6 @@
 <translation id="5116628073786783676">Պահպանել աուդիոն որպե&amp;ս…</translation>
 <translation id="5143374789336132547">«<ph name="EXTENSION_NAME" />» ընդլայնումը փոխել է այն հասցեն, որը բացվում է, երբ սեղմում եք գլխավոր էջի կոճակը։</translation>
 <translation id="5154108062446123722"><ph name="PRINTING_DESTINATION" />-ի լրացուցիչ կարգավորումներ</translation>
-<translation id="5154383699530644092">Դուք կարող եք ավելացնել տպիչ Ձեր համակարգչին՝ ստորև սեղմելով «Ավելացնել տպիչ» կոճակը։ Եթե տպիչ չունեք, այնուամենայնիվ կկարողանաք ստեղծել PDF կամ պահպանել Google Drive-ում։</translation>
 <translation id="5154917547274118687">Հիշողություն</translation>
 <translation id="5171343362375269016">Փոխանակվող հիշողություն</translation>
 <translation id="5233019165164992427">NaCl վրիպազերծման պորտ</translation>
@@ -319,28 +328,34 @@
 <translation id="5623842676595125836">Մատյան</translation>
 <translation id="5627086634964711283">Այն նաև փոխել է այն հասցեն, որը բացվում է, երբ սեղմում եք գլխավոր էջի կոճակը։</translation>
 <translation id="5646376287012673985">Տեղորոշում</translation>
+<translation id="5649053991847567735">Ավտոմատ ներբեռնումներ</translation>
+<translation id="5677928146339483299">Արգելափակված</translation>
 <translation id="5707185214361380026">Չհաջողվեց բեռնել ընդլայնում այստեղից՝</translation>
 <translation id="5715711091495208045">Փլագինի միջնորդ. <ph name="PLUGIN_NAME" /></translation>
 <translation id="5729996640881880439">Ցավոք այս սխալի կոդը չի կարող ցույց տրվել։</translation>
 <translation id="5746169159649715125">Պահպանել որպես PDF</translation>
 <translation id="5759728514498647443"><ph name="APP_NAME" />-ի միջոցով տպելու ուղարկված փաստաթղթերը կարող են կարդացվել <ph name="APP_NAME" />-ի կողմից։</translation>
 <translation id="5764483294734785780">Պահպանել աուդիոն որպե&amp;ս…</translation>
+<translation id="577624874850706961">Քուքիների որոնում</translation>
 <translation id="5780973441651030252">Պրոցեսի առաջնահերթություն</translation>
 <translation id="5804241973901381774">Թույլտվություններ</translation>
 <translation id="5828633471261496623">Տպվում է…</translation>
 <translation id="5829401023154985950">Կառավարել…</translation>
-<translation id="583281660410589416">Անհայտ</translation>
+<translation id="583281660410589416">Անհայտ է</translation>
 <translation id="5848934677402291689">PDF-ի պահպանումն ընթացքի մեջ է</translation>
 <translation id="5849869942539715694">Փաթեթավորել ընդլայնում…</translation>
+<translation id="5908769186679515905">Արգելափակել կայքերում Flash-ի աշխատեցումը</translation>
 <translation id="5910363049092958439">Պահպանել պատկերը որպե&amp;ս…</translation>
-<translation id="59174027418879706">Միացած</translation>
+<translation id="59174027418879706">Միացած է</translation>
 <translation id="5956585768868398362">Արդյոք սա՞ է Ձեր ակնկալած որոնիչը։</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (մաքս. <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="5965661248935608907">Այն նաև փոխել է այն հասցեները, որոնք բացվում են, երբ սեղմում եք գլխավոր էջի կոճակը կամ որոնում եք հասցեի տողի միջոցով։</translation>
 <translation id="5979421442488174909">Թարգմանել <ph name="LANGUAGE" /></translation>
+<translation id="6011449291337289699">Կայքի տվյալների մաքրում</translation>
 <translation id="6025215716629925253">Stack-ի հետագծում</translation>
 <translation id="6040143037577758943">Փակել</translation>
 <translation id="6042308850641462728">Ավելին</translation>
+<translation id="6059925163896151826">USB սարքեր</translation>
 <translation id="6082651258230788217">Ցույց տալ գործիքների երիզում</translation>
 <translation id="6086814797483779854">Կտտացնելով աշխատեցնել</translation>
 <translation id="6086846494333236931">Տեղակայված է Ձեր ադմինիստրատորի կողմից</translation>
@@ -363,6 +378,7 @@
 <translation id="6268252012308737255">Բացել <ph name="APP" />-ով</translation>
 <translation id="6272643420381259437">Փլագինը ներբեռնելիս տեղի է ունեցել սխալ (<ph name="ERROR" />)</translation>
 <translation id="6273677812470008672">Որակ</translation>
+<translation id="6295158916970320988">Բոլոր կայքերը</translation>
 <translation id="6295855836753816081">Պահպանվում է…</translation>
 <translation id="6308937455967653460">Պահպանել հ&amp;ղումը որպես…</translation>
 <translation id="6314335155547195432">Գեներացնել գաղտնաբառ</translation>
@@ -395,12 +411,12 @@
 <translation id="6812841287760418429">Պահել փոփոխությունները</translation>
 <translation id="682123305478866682">Հեռարձակել աշխատաէկրանը</translation>
 <translation id="6824564591481349393">Պատճենել &amp;էլ. փոստի հասցեն</translation>
+<translation id="6840155290835956714">Հարցնել մինչ ուղարկելը</translation>
 <translation id="6841186874966388268">Սխալներ</translation>
 <translation id="6886871292305414135">Բացել հղումը նոր &amp;ներդիրում</translation>
 <translation id="6892812721183419409">Բացել հղումը որպես <ph name="USER" /></translation>
 <translation id="6900284862687837908">Հետին հավելված. <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Արգելել մոտեցումը ֆայլերին</translation>
-<translation id="6916590542764765824">Կառավարել ընդլայնումները</translation>
 <translation id="6943176775188458830">Չեղարկել տպումը</translation>
 <translation id="6945221475159498467">Ընտրել</translation>
 <translation id="6955446738988643816">Հետազոտել թռուցիկը</translation>
@@ -413,7 +429,9 @@
 <translation id="7006634003215061422">Ստորին լուսանցք</translation>
 <translation id="7013485839273047434">Ավելի շատ ընդլայնումներ</translation>
 <translation id="7030031465713069059">Պահպանել գաղտնաբառը</translation>
+<translation id="7053983685419859001">Արգելափակել</translation>
 <translation id="708060913198414444">Պատճենել աուդիոյի հաս&amp;ցեն</translation>
+<translation id="7084192839369222683">Աշխատեցնել միայն կարևոր բովանդակությունը</translation>
 <translation id="7144878232160441200">Կրկին փորձել</translation>
 <translation id="7175353351958621980">Բեռնված է հետևյալ տեղից.</translation>
 <translation id="7186088072322679094">Պահել գործիքների երիզում</translation>
@@ -430,6 +448,7 @@
 <translation id="7401543881546089382">Ջնջել կարճ ստեղնը</translation>
 <translation id="7412226954991670867">GPU-ի հիշողություն</translation>
 <translation id="7421925624202799674">Տեսնել էջի &amp;կոդը</translation>
+<translation id="7423098979219808738">Նախ հարցնել</translation>
 <translation id="7427348830195639090">Հետին էջ. <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7438940380767210568">Տպիչը կարգավորվում է…</translation>
 <translation id="7453008956351770337">Ընտրելով այս տպիչը՝ Դուք արտոնում եք հետևյալ ընդլայնումներին օգտվել Ձեր տպիչից.</translation>
@@ -437,7 +456,6 @@
 <translation id="749028671485790643">Անձ <ph name="VALUE" /></translation>
 <translation id="7521387064766892559">JavaScript</translation>
 <translation id="7551643184018910560">Ամրացնել</translation>
-<translation id="7554791636758816595">Նոր ներդիր</translation>
 <translation id="7564847347806291057">Ավարտել պրոցեսը</translation>
 <translation id="7576690715254076113">Խմբավորել</translation>
 <translation id="7629827748548208700">Ներդիր. <ph name="TAB_NAME" /></translation>
@@ -445,11 +463,12 @@
 <translation id="7663719505383602579">Ստացող. <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Տեղակայված է Ձեր ադմինիստրատորի կողմից</translation>
 <translation id="7685049629764448582">JavaScript-ի հիշողություն</translation>
-<translation id="7701040980221191251">Ոչ մի</translation>
+<translation id="7701040980221191251">Չկա</translation>
 <translation id="7701869757853594372">USER մշակիչներ</translation>
 <translation id="7704305437604973648">Խնդիր</translation>
 <translation id="7705600705238488017">Ուզո՞ւմ եք փոխարենը <ph name="BEGIN_LINK" />զննել Chrome ինտերնետ-խանութը<ph name="END_LINK" />։</translation>
 <translation id="7710568461918838723">Հե&amp;ռարձակել…</translation>
+<translation id="7751260505918304024">Ցույց տալ բոլորը</translation>
 <translation id="7760004034676677601">Արդյոք սա՞ է Ձեր ակնկալած սկզբնական էջը։</translation>
 <translation id="7771452384635174008">Դասավորում</translation>
 <translation id="7782102568078991263">Առաջարկներ Google-ից այլևս չկան</translation>
@@ -483,6 +502,7 @@
 
 Պահեք բանալիի ֆայլն ապահով վայրում։ Այն Ձեզ պետք կգա ընդլայնման նոր տարբերակներ ստեղծելու համար։</translation>
 <translation id="8004582292198964060">Բրաուզեր</translation>
+<translation id="8018313076035239964">Կառավարեք՝ ինչ տեղեկույթ կարող են վեբ կայքերն օգտագործել և ինչ բովանդակություն կարող են Ձեզ ցույց տալ</translation>
 <translation id="8023801379949507775">Ընդլայնումները հիմա թարմացնել</translation>
 <translation id="8032244173881942855">Հնարավոր չէ հեռարձակել ներդիրը։</translation>
 <translation id="8069615408251337349">Google Cloud Phttps://translations.vivaldi.com/translate/vivaldi/vivaldi-browser-chromium-strings/hy/?sid=6a4c7762-16fc-11e7-9407-0242ac120004&amp;offset=43rint</translation>
@@ -493,9 +513,12 @@
 <translation id="8188120771410500975">&amp;Ստուգել ուղղագրությունը տեքստային դաշտերում</translation>
 <translation id="8259581864063078725">Կտտացրեք՝ այս տպիչի գործածման հավելված գտնելու համար։</translation>
 <translation id="8261378640211443080">Այս ընդլայնման մասին <ph name="IDS_EXTENSION_WEB_STORE_TITLE" />ում տեղեկություն չկա և այն կարող է ավելացված լինել առանց Ձեր իմացության։</translation>
+<translation id="8261506727792406068">Ջնջել</translation>
+<translation id="8270242299912238708">PDF փաստաթղթեր</translation>
 <translation id="8294431847097064396">Աղբյուր</translation>
 <translation id="8335587457941836791">Արձակել</translation>
 <translation id="8338952601723052325">Մշակողի կայքը</translation>
+<translation id="8339059274628563283"><ph name="SITE" /> կայքի լոկալ պահպանված տվյալներ</translation>
 <translation id="8351419472474436977">Այս ընդլայնումը փոփոխել է պրոքսի կարգավորումները, ինչը նշանակում է, որ այն կարող է փոխել, ընդհատել կամ ծածուկ հսկել այն ամենն, ինչ Դուք անում եք ցանցում։ Եթե չգիտեք, թե ինչու է այս փոփոխությունը կատարվել, հավանաբար չունեք դրա կարիքը։</translation>
 <translation id="8357224663288891423">Կարճ ստեղներ ընդլայնումների ու հավելվածների համար</translation>
 <translation id="8382913212082956454">Պատճենել &amp;էլ. փոստի հասցեն</translation>

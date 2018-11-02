@@ -92,6 +92,7 @@ TestingBrowserProcess::~TestingBrowserProcess() {
   ShutdownBrowserPolicyConnector();
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   extensions::ExtensionsBrowserClient::Set(nullptr);
+  extensions::AppWindowClient::Set(nullptr);
 #endif
 
   // Destructors for some objects owned by TestingBrowserProcess will use
@@ -100,6 +101,13 @@ TestingBrowserProcess::~TestingBrowserProcess() {
 }
 
 void TestingBrowserProcess::ResourceDispatcherHostCreated() {
+}
+
+void TestingBrowserProcess::FlushLocalStateAndReply(base::OnceClosure reply) {
+  // This could be implemented the same way as in BrowserProcessImpl but it's
+  // not currently expected to be used by TestingBrowserProcess users so we
+  // don't bother.
+  CHECK(false);
 }
 
 void TestingBrowserProcess::EndSession() {
@@ -124,6 +132,11 @@ ukm::UkmRecorder* TestingBrowserProcess::ukm_recorder() {
 
 IOThread* TestingBrowserProcess::io_thread() {
   return io_thread_;
+}
+
+SystemNetworkContextManager*
+TestingBrowserProcess::system_network_context_manager() {
+  return nullptr;
 }
 
 WatchDogThread* TestingBrowserProcess::watchdog_thread() {
@@ -363,10 +376,6 @@ MediaFileSystemRegistry* TestingBrowserProcess::media_file_system_registry() {
     media_file_system_registry_.reset(new MediaFileSystemRegistry());
   return media_file_system_registry_.get();
 #endif
-}
-
-bool TestingBrowserProcess::created_local_state() const {
-  return (local_state_ != nullptr);
 }
 
 #if BUILDFLAG(ENABLE_WEBRTC)

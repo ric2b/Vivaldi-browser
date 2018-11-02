@@ -32,7 +32,7 @@
 #include "core/dom/Element.h"
 #include "core/dom/SandboxFlags.h"
 #include "core/dom/TaskRunnerHelper.h"
-#include "core/events/EventQueue.h"
+#include "core/dom/events/EventQueue.h"
 #include "core/events/SecurityPolicyViolationEvent.h"
 #include "core/frame/FrameClient.h"
 #include "core/frame/LocalDOMWindow.h"
@@ -331,7 +331,7 @@ void ContentSecurityPolicy::AddPolicyFromHeaderValue(
   // separated chunk as a separate header.
   const UChar* position = begin;
   while (position < end) {
-    skipUntil<UChar>(position, end, ',');
+    SkipUntil<UChar>(position, end, ',');
 
     // header1,header2 OR header1
     //        ^                  ^
@@ -349,7 +349,7 @@ void ContentSecurityPolicy::AddPolicyFromHeaderValue(
 
     // Skip the comma, and begin the next header from the current position.
     DCHECK(position == end || *position == ',');
-    skipExactly<UChar>(position, end, ',');
+    SkipExactly<UChar>(position, end, ',');
     begin = position;
   }
 }
@@ -432,7 +432,6 @@ void ContentSecurityPolicy::FillInCSPHashValues(
     ContentSecurityPolicyHashAlgorithm csp_hash_algorithm;
     HashAlgorithm algorithm;
   } kAlgorithmMap[] = {
-      {kContentSecurityPolicyHashAlgorithmSha1, kHashAlgorithmSha1},
       {kContentSecurityPolicyHashAlgorithmSha256, kHashAlgorithmSha256},
       {kContentSecurityPolicyHashAlgorithmSha384, kHashAlgorithmSha384},
       {kContentSecurityPolicyHashAlgorithmSha512, kHashAlgorithmSha512}};
@@ -1190,6 +1189,7 @@ void ContentSecurityPolicy::ReportViolation(
     const String& console_message,
     const KURL& blocked_url,
     const Vector<String>& report_endpoints,
+    bool use_reporting_api,
     const String& header,
     ContentSecurityPolicyHeaderType header_type,
     ViolationType violation_type,
@@ -1235,7 +1235,8 @@ void ContentSecurityPolicy::ReportViolation(
     return;
   }
 
-  PostViolationReport(violation_data, context_frame, report_endpoints);
+  PostViolationReport(violation_data, context_frame, report_endpoints,
+                      use_reporting_api);
 
   // Fire a violation event if we're working within an execution context (e.g.
   // we're not processing 'frame-ancestors').
@@ -1251,7 +1252,8 @@ void ContentSecurityPolicy::ReportViolation(
 void ContentSecurityPolicy::PostViolationReport(
     const SecurityPolicyViolationEventInit& violation_data,
     LocalFrame* context_frame,
-    const Vector<String>& report_endpoints) {
+    const Vector<String>& report_endpoints,
+    bool use_reporting_api) {
   // We need to be careful here when deciding what information to send to the
   // report-uri. Currently, we send only the current document's URL and the
   // directive that was violated. The document's URL is safe to send because
@@ -1309,23 +1311,27 @@ void ContentSecurityPolicy::PostViolationReport(
     RefPtr<EncodedFormData> report =
         EncodedFormData::Create(stringified_report.Utf8());
 
-    for (const String& endpoint : report_endpoints) {
-      // If we have a context frame we're dealing with 'frame-ancestors' and we
-      // don't have our own execution context. Use the frame's document to
-      // complete the endpoint URL, overriding its URL with the blocked
-      // document's URL.
-      DCHECK(!context_frame || !execution_context_);
-      DCHECK(!context_frame ||
-             GetDirectiveType(violation_data.effectiveDirective()) ==
-                 DirectiveType::kFrameAncestors);
-      KURL url = context_frame
-                     ? frame->GetDocument()->CompleteURLWithOverride(
-                           endpoint,
-                           KURL(kParsedURLString, violation_data.blockedURI()))
-                     : CompleteURL(endpoint);
-      PingLoader::SendViolationReport(
-          frame, url, report,
-          PingLoader::kContentSecurityPolicyViolationReport);
+    // TODO(andypaicu): for now we can only send reports to report-uri, skip
+    // report-to
+    if (!use_reporting_api) {
+      for (const auto& report_endpoint : report_endpoints) {
+        // If we have a context frame we're dealing with 'frame-ancestors' and
+        // we don't have our own execution context. Use the frame's document to
+        // complete the endpoint URL, overriding its URL with the blocked
+        // document's URL.
+        DCHECK(!context_frame || !execution_context_);
+        DCHECK(!context_frame ||
+               GetDirectiveType(violation_data.effectiveDirective()) ==
+                   DirectiveType::kFrameAncestors);
+        KURL url = context_frame
+                       ? frame->GetDocument()->CompleteURLWithOverride(
+                             report_endpoint, KURL(kParsedURLString,
+                                                   violation_data.blockedURI()))
+                       : CompleteURL(report_endpoint);
+        PingLoader::SendViolationReport(
+            frame, url, report,
+            PingLoader::kContentSecurityPolicyViolationReport);
+      }
     }
   }
 }
@@ -1646,6 +1652,8 @@ const char* ContentSecurityPolicy::GetDirectiveName(const DirectiveType& type) {
       return "upgrade-insecure-requests";
     case DirectiveType::kWorkerSrc:
       return "worker-src";
+    case DirectiveType::kReportTo:
+      return "report-to";
     case DirectiveType::kUndefined:
       NOTREACHED();
       return "";
@@ -1701,6 +1709,8 @@ ContentSecurityPolicy::DirectiveType ContentSecurityPolicy::GetDirectiveType(
     return DirectiveType::kUpgradeInsecureRequests;
   if (name == "worker-src")
     return DirectiveType::kWorkerSrc;
+  if (name == "report-to")
+    return DirectiveType::kReportTo;
 
   return DirectiveType::kUndefined;
 }

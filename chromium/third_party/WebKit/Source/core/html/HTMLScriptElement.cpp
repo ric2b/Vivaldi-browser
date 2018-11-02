@@ -32,7 +32,7 @@
 #include "core/dom/ScriptLoader.h"
 #include "core/dom/ScriptRunner.h"
 #include "core/dom/Text.h"
-#include "core/events/Event.h"
+#include "core/dom/events/Event.h"
 #include "core/frame/UseCounter.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 
@@ -45,8 +45,7 @@ inline HTMLScriptElement::HTMLScriptElement(Document& document,
                                             bool already_started,
                                             bool created_during_document_write)
     : HTMLElement(scriptTag, document),
-      loader_(this,
-              InitializeScriptLoader(was_inserted_by_parser,
+      loader_(InitializeScriptLoader(was_inserted_by_parser,
                                      already_started,
                                      created_during_document_write)) {}
 

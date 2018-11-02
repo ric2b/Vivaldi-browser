@@ -183,7 +183,8 @@ std::unique_ptr<ShellSurface> Display::CreatePopupShellSurface(
 
 std::unique_ptr<ShellSurface> Display::CreateRemoteShellSurface(
     Surface* surface,
-    int container) {
+    int container,
+    double default_device_scale_factor) {
   TRACE_EVENT2("exo", "Display::CreateRemoteShellSurface", "surface",
                surface->AsTracedValue(), "container", container);
 
@@ -195,9 +196,12 @@ std::unique_ptr<ShellSurface> Display::CreateRemoteShellSurface(
   // Remote shell surfaces in system modal container cannot be minimized.
   bool can_minimize = container != ash::kShellWindowId_SystemModalContainer;
 
-  return base::MakeUnique<ShellSurface>(
+  std::unique_ptr<ShellSurface> shell_surface(base::MakeUnique<ShellSurface>(
       surface, nullptr, ShellSurface::BoundsMode::CLIENT, gfx::Point(),
-      true /* activatable */, can_minimize, container);
+      true /* activatable */, can_minimize, container));
+  DCHECK_GE(default_device_scale_factor, 1.0);
+  shell_surface->SetScale(default_device_scale_factor);
+  return shell_surface;
 }
 
 std::unique_ptr<SubSurface> Display::CreateSubSurface(Surface* surface,

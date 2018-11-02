@@ -7,7 +7,6 @@
 #include <string>
 
 #include "base/command_line.h"
-#include "base/run_loop.h"
 #include "build/build_config.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/prefs/pref_service.h"
@@ -18,7 +17,6 @@
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/common/result_codes.h"
 #include "content/shell/browser/shell_devtools_manager_delegate.h"
-#include "extensions/browser/app_window/app_window_client.h"
 #include "extensions/browser/browser_context_keyed_service_factories.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/updater/update_service.h"
@@ -52,7 +50,7 @@
 #include "extensions/shell/browser/shell_network_controller_chromeos.h"
 #endif
 
-#if defined(OS_CHROMEOS) || defined(OS_LINUX)
+#if defined(OS_LINUX)
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "device/bluetooth/dbus/bluez_dbus_manager.h"
 #endif
@@ -181,7 +179,8 @@ void ShellBrowserMainParts::PreMainMessageLoopRun() {
 
   storage_monitor::StorageMonitor::Create();
 
-  desktop_controller_.reset(browser_main_delegate_->CreateDesktopController());
+  desktop_controller_.reset(
+      browser_main_delegate_->CreateDesktopController(browser_context_.get()));
 
   // TODO(jamescook): Initialize user_manager::UserManager.
 
@@ -220,7 +219,7 @@ void ShellBrowserMainParts::PreMainMessageLoopRun() {
 
 #if !defined(DISABLE_NACL)
   nacl::NaClBrowser::SetDelegate(
-      base::MakeUnique<ShellNaClBrowserDelegate>(browser_context_.get()));
+      std::make_unique<ShellNaClBrowserDelegate>(browser_context_.get()));
   // Track the task so it can be canceled if app_shell shuts down very quickly,
   // such as in browser tests.
   task_tracker_.PostTask(
@@ -243,14 +242,15 @@ void ShellBrowserMainParts::PreMainMessageLoopRun() {
 bool ShellBrowserMainParts::MainMessageLoopRun(int* result_code) {
   if (!run_message_loop_)
     return true;
-  // TODO(yoz): just return false here?
-  base::RunLoop run_loop;
-  run_loop.Run();
+  desktop_controller_->Run();
   *result_code = content::RESULT_CODE_NORMAL_EXIT;
   return true;
 }
 
 void ShellBrowserMainParts::PostMainMessageLoopRun() {
+  // Close apps before shutting down browser context and extensions system.
+  desktop_controller_->CloseAppWindows();
+
   // NOTE: Please destroy objects in the reverse order of their creation.
   browser_main_delegate_->Shutdown();
   content::ShellDevToolsManagerDelegate::StopHttpHandler();

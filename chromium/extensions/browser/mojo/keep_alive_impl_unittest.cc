@@ -19,7 +19,7 @@ namespace extensions {
 class KeepAliveTest : public ExtensionsTest {
  public:
   KeepAliveTest()
-      : ExtensionsTest(base::MakeUnique<content::TestBrowserThreadBundle>()) {}
+      : ExtensionsTest(std::make_unique<content::TestBrowserThreadBundle>()) {}
   ~KeepAliveTest() override {}
 
   void SetUp() override {
@@ -52,9 +52,9 @@ class KeepAliveTest : public ExtensionsTest {
     }
   }
 
-  void CreateKeepAlive(mojo::InterfaceRequest<KeepAlive> request) {
+  void CreateKeepAlive(KeepAliveRequest request) {
     KeepAliveImpl::Create(browser_context(), extension_.get(),
-                          std::move(request));
+                          std::move(request), nullptr);
   }
 
   const Extension* extension() { return extension_.get(); }

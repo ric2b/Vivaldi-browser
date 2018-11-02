@@ -181,7 +181,7 @@ void OpenVRDevice::CreateVRDisplayInfo(
   // If it is the first initialization, OpenVRRenderLoop instance needs to be
   // created and the polling event callback needs to be registered.
   if (!render_loop_) {
-    render_loop_ = base::MakeUnique<OpenVRRenderLoop>(vr_system_);
+    render_loop_ = std::make_unique<OpenVRRenderLoop>(vr_system_);
 
     render_loop_->RegisterPollingEventCallback(base::Bind(
         &OpenVRDevice::OnPollingEvents, weak_ptr_factory_.GetWeakPtr()));
@@ -195,10 +195,6 @@ void OpenVRDevice::RequestPresent(mojom::VRSubmitFrameClientPtr submit_client,
                                   const base::Callback<void(bool)>& callback) {
   callback.Run(false);
   // We don't support presentation currently.
-}
-
-void OpenVRDevice::SetSecureOrigin(bool secure_origin) {
-  // We don't support presentation currently, so don't do anything.
 }
 
 void OpenVRDevice::ExitPresent() {

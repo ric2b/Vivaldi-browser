@@ -4,6 +4,7 @@
 
 #import <XCTest/XCTest.h>
 
+#include "base/ios/ios_util.h"
 #import "base/mac/bind_objc_block.h"
 #include "ios/chrome/browser/ui/tools_menu/tools_menu_constants.h"
 #include "ios/chrome/grit/ios_strings.h"
@@ -75,40 +76,6 @@ const UserTypedCountryExpectedResultPair kCountryTests[] = {
 NSString* GetTextFieldForID(int categoryId) {
   return [NSString
       stringWithFormat:@"%@_textField", l10n_util::GetNSString(categoryId)];
-}
-
-// Call this in the "Edit Address" view to clear the Country value. The case
-// of the value being empty is handled gracefully.
-void ClearCountryValue() {
-  // Switch on edit mode.
-  [[EarlGrey selectElementWithMatcher:ButtonWithAccessibilityLabelId(
-                                          IDS_IOS_NAVIGATION_BAR_EDIT_BUTTON)]
-      performAction:grey_tap()];
-
-  // The test only can tap "Select All" if there is a text to select. Type "a"
-  // to ensure that.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(GetTextFieldForID(
-                                          IDS_IOS_AUTOFILL_COUNTRY))]
-      performAction:grey_typeText(@"a")];
-  // Remove the country value by select all + cut.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(GetTextFieldForID(
-                                          IDS_IOS_AUTOFILL_COUNTRY))]
-      performAction:grey_longPress()];
-  [[EarlGrey
-      selectElementWithMatcher:grey_allOf(
-                                   grey_accessibilityLabel(@"Select All"),
-                                   grey_accessibilityTrait(
-                                       UIAccessibilityTraitStaticText),
-                                   nil)] performAction:grey_tap()];
-  [[EarlGrey
-      selectElementWithMatcher:grey_allOf(grey_accessibilityLabel(@"Cut"),
-                                          grey_accessibilityTrait(
-                                              UIAccessibilityTraitStaticText),
-                                          nil)] performAction:grey_tap()];
-
-  // Switch off edit mode.
-  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
-      performAction:grey_tap()];
 }
 
 }  // namespace
@@ -183,17 +150,15 @@ void ClearCountryValue() {
 
   // Keep editing the Country field and verify that validation works.
   for (const UserTypedCountryExpectedResultPair& expectation : kCountryTests) {
-    ClearCountryValue();
-
     // Switch on edit mode.
     [[EarlGrey selectElementWithMatcher:ButtonWithAccessibilityLabelId(
                                             IDS_IOS_NAVIGATION_BAR_EDIT_BUTTON)]
         performAction:grey_tap()];
 
-    // Type the user-version of the country.
+    // Replace the text field with the user-version of the country.
     [[EarlGrey selectElementWithMatcher:grey_accessibilityID(GetTextFieldForID(
                                             IDS_IOS_AUTOFILL_COUNTRY))]
-        performAction:grey_typeText(expectation.user_typed_country)];
+        performAction:grey_replaceText(expectation.user_typed_country)];
 
     // Switch off edit mode.
     [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]

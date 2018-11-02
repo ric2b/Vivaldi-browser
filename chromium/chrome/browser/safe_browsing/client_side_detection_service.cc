@@ -25,7 +25,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/safe_browsing/common/safebrowsing_messages.h"
-#include "components/safe_browsing/csd.pb.h"
+#include "components/safe_browsing/proto/csd.pb.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
@@ -311,7 +311,7 @@ void ClientSideDetectionService::StartClientReportPhishingRequest(
             destination: GOOGLE_OWNED_SERVICE
           }
           policy {
-            cookies_allowed: true
+            cookies_allowed: YES
             cookies_store: "Safe browsing cookie store"
             setting:
               "Users can enable or disable this feature by toggling 'Protect "
@@ -387,7 +387,7 @@ void ClientSideDetectionService::StartClientReportMalwareRequest(
             destination: GOOGLE_OWNED_SERVICE
           }
           policy {
-            cookies_allowed: true
+            cookies_allowed: YES
             cookies_store: "Safe browsing cookie store"
             setting:
               "Users can enable or disable this feature by toggling 'Protect "

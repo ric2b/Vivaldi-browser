@@ -1,6 +1,8 @@
 // Copyright 2016 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+#include <memory>
+#include <utility>
 
 #include "core/html/forms/PasswordInputType.h"
 
@@ -9,32 +11,31 @@
 #include "core/testing/DummyPageHolder.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "platform/testing/UnitTestHelpers.h"
-#include "public/platform/modules/sensitive_input_visibility/sensitive_input_visibility_service.mojom-blink.h"
+#include "public/platform/modules/insecure_input/insecure_input_service.mojom-blink.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
 
-class MockSensitiveInputVisibilityService
-    : public mojom::blink::SensitiveInputVisibilityService {
+class MockInsecureInputService : public mojom::blink::InsecureInputService {
  public:
-  MockSensitiveInputVisibilityService(LocalFrame& frame) {
+  explicit MockInsecureInputService(LocalFrame& frame) {
     service_manager::InterfaceProvider::TestApi test_api(
         &frame.GetInterfaceProvider());
     test_api.SetBinderForName(
-        mojom::blink::SensitiveInputVisibilityService::Name_,
-        ConvertToBaseCallback(
-            WTF::Bind(&MockSensitiveInputVisibilityService::BindRequest,
-                      WTF::Unretained(this))));
+        mojom::blink::InsecureInputService::Name_,
+        ConvertToBaseCallback(WTF::Bind(&MockInsecureInputService::BindRequest,
+                                        WTF::Unretained(this))));
   }
 
-  ~MockSensitiveInputVisibilityService() override {}
+  ~MockInsecureInputService() override {}
 
   void BindRequest(mojo::ScopedMessagePipeHandle handle) {
     binding_set_.AddBinding(
-        this, mojom::blink::SensitiveInputVisibilityServiceRequest(
-                  std::move(handle)));
+        this, mojom::blink::InsecureInputServiceRequest(std::move(handle)));
   }
+
+  unsigned DidEditFieldCalls() const { return num_did_edit_field_calls_; }
 
   bool PasswordFieldVisibleCalled() const {
     return password_field_visible_called_;
@@ -45,7 +46,7 @@ class MockSensitiveInputVisibilityService
   }
 
  private:
-  // mojom::SensitiveInputVisibilityService
+  // mojom::InsecureInputService
   void PasswordFieldVisibleInInsecureContext() override {
     password_field_visible_called_ = true;
   }
@@ -54,9 +55,12 @@ class MockSensitiveInputVisibilityService
     ++num_password_fields_invisible_calls_;
   }
 
-  mojo::BindingSet<SensitiveInputVisibilityService> binding_set_;
+  void DidEditFieldInInsecureContext() override { ++num_did_edit_field_calls_; }
+
+  mojo::BindingSet<InsecureInputService> binding_set_;
 
   bool password_field_visible_called_ = false;
+  unsigned num_did_edit_field_calls_ = 0;
   unsigned num_password_fields_invisible_calls_ = 0;
 };
 
@@ -65,7 +69,7 @@ class MockSensitiveInputVisibilityService
 TEST(PasswordInputTypeTest, PasswordVisibilityEvent) {
   std::unique_ptr<DummyPageHolder> page_holder =
       DummyPageHolder::Create(IntSize(2000, 2000), nullptr, nullptr, nullptr);
-  MockSensitiveInputVisibilityService mock_service(page_holder->GetFrame());
+  MockInsecureInputService mock_service(page_holder->GetFrame());
   page_holder->GetDocument().body()->setInnerHTML("<input type='password'>");
   page_holder->GetDocument().View()->UpdateAllLifecyclePhases();
   blink::testing::RunPendingTasks();
@@ -77,7 +81,7 @@ TEST(PasswordInputTypeTest, PasswordVisibilityEvent) {
 TEST(PasswordInputTypeTest, PasswordVisibilityEventInSecureContext) {
   std::unique_ptr<DummyPageHolder> page_holder =
       DummyPageHolder::Create(IntSize(2000, 2000), nullptr, nullptr, nullptr);
-  MockSensitiveInputVisibilityService mock_service(page_holder->GetFrame());
+  MockInsecureInputService mock_service(page_holder->GetFrame());
   page_holder->GetDocument().SetURL(KURL(NullURL(), "https://example.test"));
   page_holder->GetDocument().SetSecurityOrigin(
       SecurityOrigin::Create(KURL(NullURL(), "https://example.test")));
@@ -93,7 +97,7 @@ TEST(PasswordInputTypeTest, PasswordVisibilityEventInSecureContext) {
 TEST(PasswordInputTypeTest, InvisiblePasswordFieldBecomesVisible) {
   std::unique_ptr<DummyPageHolder> page_holder =
       DummyPageHolder::Create(IntSize(2000, 2000), nullptr, nullptr, nullptr);
-  MockSensitiveInputVisibilityService mock_service(page_holder->GetFrame());
+  MockInsecureInputService mock_service(page_holder->GetFrame());
   page_holder->GetDocument().body()->setInnerHTML(
       "<input type='password' style='display:none;'>");
   page_holder->GetDocument().View()->UpdateAllLifecyclePhases();
@@ -115,7 +119,7 @@ TEST(PasswordInputTypeTest, InvisiblePasswordFieldBecomesVisible) {
 TEST(PasswordInputTypeTest, NonPasswordFieldBecomesPassword) {
   std::unique_ptr<DummyPageHolder> page_holder =
       DummyPageHolder::Create(IntSize(2000, 2000), nullptr, nullptr, nullptr);
-  MockSensitiveInputVisibilityService mock_service(page_holder->GetFrame());
+  MockInsecureInputService mock_service(page_holder->GetFrame());
   page_holder->GetDocument().body()->setInnerHTML("<input type='text'>");
   page_holder->GetDocument().View()->UpdateAllLifecyclePhases();
   // The message should not be sent for a non-password field.
@@ -137,7 +141,7 @@ TEST(PasswordInputTypeTest,
      InvisiblePasswordFieldBecomesVisibleNonPasswordField) {
   std::unique_ptr<DummyPageHolder> page_holder =
       DummyPageHolder::Create(IntSize(2000, 2000), nullptr, nullptr, nullptr);
-  MockSensitiveInputVisibilityService mock_service(page_holder->GetFrame());
+  MockInsecureInputService mock_service(page_holder->GetFrame());
   page_holder->GetDocument().body()->setInnerHTML(
       "<input type='password' style='display:none;'>");
   page_holder->GetDocument().View()->UpdateAllLifecyclePhases();
@@ -160,7 +164,7 @@ TEST(PasswordInputTypeTest,
 TEST(PasswordInputTypeTest, VisiblePasswordFieldBecomesInvisible) {
   std::unique_ptr<DummyPageHolder> page_holder =
       DummyPageHolder::Create(IntSize(2000, 2000), nullptr, nullptr, nullptr);
-  MockSensitiveInputVisibilityService mock_service(page_holder->GetFrame());
+  MockInsecureInputService mock_service(page_holder->GetFrame());
   page_holder->GetDocument().body()->setInnerHTML("<input type='password'>");
   page_holder->GetDocument().View()->UpdateAllLifecyclePhases();
   blink::testing::RunPendingTasks();
@@ -181,7 +185,7 @@ TEST(PasswordInputTypeTest, VisiblePasswordFieldBecomesInvisible) {
 TEST(PasswordInputTypeTest, AllVisiblePasswordFieldBecomeInvisible) {
   std::unique_ptr<DummyPageHolder> page_holder =
       DummyPageHolder::Create(IntSize(2000, 2000), nullptr, nullptr, nullptr);
-  MockSensitiveInputVisibilityService mock_service(page_holder->GetFrame());
+  MockInsecureInputService mock_service(page_holder->GetFrame());
   page_holder->GetDocument().body()->setInnerHTML(
       "<input type='password'><input type='password'>");
   page_holder->GetDocument().View()->UpdateAllLifecyclePhases();
@@ -221,7 +225,7 @@ TEST(PasswordInputTypeTest, AllVisiblePasswordFieldBecomeInvisible) {
 TEST(PasswordInputTypeTest, PasswordFieldContainerBecomesInvisible) {
   std::unique_ptr<DummyPageHolder> page_holder =
       DummyPageHolder::Create(IntSize(2000, 2000), nullptr, nullptr, nullptr);
-  MockSensitiveInputVisibilityService mock_service(page_holder->GetFrame());
+  MockInsecureInputService mock_service(page_holder->GetFrame());
   page_holder->GetDocument().body()->setInnerHTML(
       "<div><input type='password'></div>");
   page_holder->GetDocument().View()->UpdateAllLifecyclePhases();
@@ -253,7 +257,7 @@ TEST(PasswordInputTypeTest, PasswordFieldContainerBecomesInvisible) {
 TEST(PasswordInputTypeTest, PasswordFieldsBecomeNonPasswordFields) {
   std::unique_ptr<DummyPageHolder> page_holder =
       DummyPageHolder::Create(IntSize(2000, 2000), nullptr, nullptr, nullptr);
-  MockSensitiveInputVisibilityService mock_service(page_holder->GetFrame());
+  MockInsecureInputService mock_service(page_holder->GetFrame());
   page_holder->GetDocument().body()->setInnerHTML(
       "<input type='password'><input type='password'>");
   page_holder->GetDocument().View()->UpdateAllLifecyclePhases();
@@ -282,7 +286,7 @@ TEST(PasswordInputTypeTest, PasswordFieldsBecomeNonPasswordFields) {
 TEST(PasswordInputTypeTest, MultipleEventsInSameTask) {
   std::unique_ptr<DummyPageHolder> page_holder =
       DummyPageHolder::Create(IntSize(2000, 2000), nullptr, nullptr, nullptr);
-  MockSensitiveInputVisibilityService mock_service(page_holder->GetFrame());
+  MockInsecureInputService mock_service(page_holder->GetFrame());
   page_holder->GetDocument().body()->setInnerHTML("<input type='password'>");
   page_holder->GetDocument().View()->UpdateAllLifecyclePhases();
   // Make the password field invisible in the same task.
@@ -295,6 +299,44 @@ TEST(PasswordInputTypeTest, MultipleEventsInSameTask) {
   // the page (which is that no password fields are visible).
   EXPECT_EQ(1u, mock_service.NumPasswordFieldsInvisibleCalls());
   EXPECT_FALSE(mock_service.PasswordFieldVisibleCalled());
+}
+
+// Tests that a Mojo message is sent when a password field is edited
+// on the page.
+TEST(PasswordInputTypeTest, DidEditFieldEvent) {
+  std::unique_ptr<DummyPageHolder> page_holder =
+      DummyPageHolder::Create(IntSize(2000, 2000), nullptr, nullptr, nullptr);
+  MockInsecureInputService mock_service(page_holder->GetFrame());
+  page_holder->GetDocument().body()->setInnerHTML("<input type='password'>");
+  page_holder->GetDocument().View()->UpdateAllLifecyclePhases();
+  blink::testing::RunPendingTasks();
+  EXPECT_EQ(0u, mock_service.DidEditFieldCalls());
+  // Simulate a text field edit.
+  page_holder->GetDocument().MaybeQueueSendDidEditFieldInInsecureContext();
+  blink::testing::RunPendingTasks();
+  EXPECT_EQ(1u, mock_service.DidEditFieldCalls());
+  // Ensure additional edits do not trigger additional notifications.
+  page_holder->GetDocument().MaybeQueueSendDidEditFieldInInsecureContext();
+  blink::testing::RunPendingTasks();
+  EXPECT_EQ(1u, mock_service.DidEditFieldCalls());
+}
+
+// Tests that a Mojo message is not sent when a password field is edited
+// in a secure context.
+TEST(PasswordInputTypeTest, DidEditFieldEventNotSentFromSecureContext) {
+  std::unique_ptr<DummyPageHolder> page_holder =
+      DummyPageHolder::Create(IntSize(2000, 2000), nullptr, nullptr, nullptr);
+  MockInsecureInputService mock_service(page_holder->GetFrame());
+  page_holder->GetDocument().SetURL(KURL(NullURL(), "https://example.test"));
+  page_holder->GetDocument().SetSecurityOrigin(
+      SecurityOrigin::Create(KURL(NullURL(), "https://example.test")));
+  page_holder->GetDocument().body()->setInnerHTML("<input type='password'>");
+  page_holder->GetDocument().View()->UpdateAllLifecyclePhases();
+  // Simulate a text field edit.
+  page_holder->GetDocument().MaybeQueueSendDidEditFieldInInsecureContext();
+  // No message should have been sent from a secure context.
+  blink::testing::RunPendingTasks();
+  EXPECT_EQ(0u, mock_service.DidEditFieldCalls());
 }
 
 }  // namespace blink

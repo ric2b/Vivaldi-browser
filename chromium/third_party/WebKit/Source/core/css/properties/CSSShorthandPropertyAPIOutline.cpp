@@ -8,12 +8,13 @@
 
 namespace blink {
 
-bool CSSShorthandPropertyAPIOutline::parseShorthand(
+bool CSSShorthandPropertyAPIOutline::ParseShorthand(
+    CSSPropertyID,
     bool important,
     CSSParserTokenRange& range,
     const CSSParserContext& context,
-    bool,
-    HeapVector<CSSProperty, 256>& properties) {
+    const CSSParserLocalContext&,
+    HeapVector<CSSProperty, 256>& properties) const {
   return CSSPropertyParserHelpers::ConsumeShorthandGreedilyViaLonghandAPIs(
       outlineShorthand(), important, context, range, properties);
 }

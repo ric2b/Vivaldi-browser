@@ -9,13 +9,22 @@
 
 namespace cc {
 
-TouchActionRegion::TouchActionRegion() : region_(base::MakeUnique<Region>()) {}
+TouchActionRegion::TouchActionRegion() : region_(std::make_unique<Region>()) {}
 TouchActionRegion::TouchActionRegion(
     const TouchActionRegion& touch_action_region)
     : map_(touch_action_region.map_),
-      region_(base::MakeUnique<Region>(touch_action_region.region())) {}
+      region_(std::make_unique<Region>(touch_action_region.region())) {}
 TouchActionRegion::TouchActionRegion(TouchActionRegion&& touch_action_region) =
     default;
+
+TouchActionRegion::TouchActionRegion(
+    const base::flat_map<TouchAction, Region>& region_map)
+    : map_(region_map), region_(std::make_unique<Region>()) {
+  for (const auto& pair : region_map) {
+    region_->Union(pair.second);
+  }
+}
+
 TouchActionRegion::~TouchActionRegion() = default;
 
 void TouchActionRegion::Union(TouchAction touch_action, const gfx::Rect& rect) {

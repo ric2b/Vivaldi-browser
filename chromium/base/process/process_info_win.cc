@@ -15,11 +15,11 @@ namespace base {
 
 namespace {
 
-HANDLE GetCurrentProcessToken() {
+base::win::ScopedHandle GetCurrentProcessToken() {
   HANDLE process_token;
   OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &process_token);
   DCHECK(process_token != NULL && process_token != INVALID_HANDLE_VALUE);
-  return process_token;
+  return base::win::ScopedHandle(process_token);
 }
 
 }  // namespace
@@ -47,7 +47,7 @@ IntegrityLevel GetCurrentProcessIntegrityLevel() {
     return INTEGRITY_UNKNOWN;
   }
 
-  auto token_label_bytes = MakeUnique<char[]>(token_info_length);
+  auto token_label_bytes = std::make_unique<char[]>(token_info_length);
   TOKEN_MANDATORY_LABEL* token_label =
       reinterpret_cast<TOKEN_MANDATORY_LABEL*>(token_label_bytes.get());
   if (!::GetTokenInformation(scoped_process_token.Get(), TokenIntegrityLevel,

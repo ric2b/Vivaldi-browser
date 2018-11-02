@@ -34,11 +34,6 @@ using content::BrowserThread;
 
 namespace extensions {
 
-// Dummy function for RuntimeExitFunction::Run() to work around linking issues on Linux
-void PerformApplicationShutdown()
-{
-}
-
 ShellExtensionSystem::ShellExtensionSystem(BrowserContext* browser_context)
     : browser_context_(browser_context),
       store_factory_(new ValueStoreFactoryImpl(browser_context->GetPath())),
@@ -200,7 +195,7 @@ ContentVerifier* ShellExtensionSystem::content_verifier() {
 
 std::unique_ptr<ExtensionSet> ShellExtensionSystem::GetDependentExtensions(
     const Extension* extension) {
-  return base::MakeUnique<ExtensionSet>();
+  return std::make_unique<ExtensionSet>();
 }
 
 void ShellExtensionSystem::InstallUpdate(const std::string& extension_id,

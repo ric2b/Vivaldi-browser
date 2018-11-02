@@ -280,6 +280,11 @@ cr.define('device_page_tests', function() {
             type: chrome.settingsPrivate.PrefType.BOOLEAN,
             value: false,
           },
+          reverse_scroll: {
+            key: 'settings.mouse.reverse_scroll',
+            type: chrome.settingsPrivate.PrefType.BOOLEAN,
+            value: false,
+          },
           sensitivity2: {
             key: 'settings.mouse.sensitivity2',
             type: chrome.settingsPrivate.PrefType.NUMBER,
@@ -859,8 +864,25 @@ cr.define('device_page_tests', function() {
               });
         });
 
+        test('no battery', function() {
+          var batteryStatus = {
+            present: false,
+            charging: false,
+            calculating: false,
+            percent: -1,
+            statusText: '',
+          };
+          cr.webUIListenerCallback(
+              'battery-status-changed', Object.assign({}, batteryStatus));
+          Polymer.dom.flush();
+
+          // Power source row is hidden since there's no battery.
+          assertTrue(powerSourceRow.hidden);
+        });
+
         test('power sources', function() {
           var batteryStatus = {
+            present: true,
             charging: false,
             calculating: false,
             percent: 50,
@@ -871,7 +893,8 @@ cr.define('device_page_tests', function() {
           setPowerSources([], '', false);
           Polymer.dom.flush();
 
-          // Power sources dropdown is hidden.
+          // Power sources row is visible but dropdown is hidden.
+          assertFalse(powerSourceRow.hidden);
           assertTrue(powerSourceWrapper.hidden);
 
           // Attach a dual-role USB device.
@@ -905,6 +928,7 @@ cr.define('device_page_tests', function() {
 
         test('choose power source', function() {
           var batteryStatus = {
+            present: true,
             charging: false,
             calculating: false,
             percent: 50,
@@ -1043,15 +1067,17 @@ cr.define('device_page_tests', function() {
 
         test('hide lid behavior when lid not present', function() {
           return new Promise(function(resolve) {
-            expectFalse(powerPage.$$('#lidClosedRow').hidden);
-            sendPowerManagementSettings(
-                settings.IdleBehavior.DISPLAY_OFF_SLEEP,
-                false /* idleControlled */, settings.LidClosedBehavior.SUSPEND,
-                false /* lidClosedControlled */, false /* hasLid */);
-            powerPage.async(resolve);
-          }).then(function() {
-            expectTrue(powerPage.$$('#lidClosedRow').hidden);
-          });
+                   expectFalse(powerPage.$$('#lidClosedToggle').hidden);
+                   sendPowerManagementSettings(
+                       settings.IdleBehavior.DISPLAY_OFF_SLEEP,
+                       false /* idleControlled */,
+                       settings.LidClosedBehavior.SUSPEND,
+                       false /* lidClosedControlled */, false /* hasLid */);
+                   powerPage.async(resolve);
+                 })
+              .then(function() {
+                expectTrue(powerPage.$$('#lidClosedToggle').hidden);
+              });
         });
       });
     });

@@ -6,6 +6,7 @@
 
 #include "base/bind_helpers.h"
 #include "content/browser/download/download_item_impl.h"
+#include "content/browser/download/download_task_runner.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
 
@@ -48,16 +49,16 @@ WebContents* DownloadJob::GetWebContents() const {
 void DownloadJob::Start(DownloadFile* download_file_,
                         const DownloadFile::InitializeCallback& callback,
                         const DownloadItem::ReceivedSlices& received_slices) {
-  BrowserThread::PostTask(
-      BrowserThread::FILE, FROM_HERE,
-      base::Bind(&DownloadFile::Initialize,
-                 // Safe because we control download file lifetime.
-                 base::Unretained(download_file_),
-                 base::Bind(&DownloadJob::OnDownloadFileInitialized,
-                            weak_ptr_factory_.GetWeakPtr(), callback),
-                 base::Bind(&DownloadJob::CancelRequestWithOffset,
-                            weak_ptr_factory_.GetWeakPtr()),
-                 received_slices, IsParallelizable()));
+  GetDownloadTaskRunner()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&DownloadFile::Initialize,
+                     // Safe because we control download file lifetime.
+                     base::Unretained(download_file_),
+                     base::Bind(&DownloadJob::OnDownloadFileInitialized,
+                                weak_ptr_factory_.GetWeakPtr(), callback),
+                     base::Bind(&DownloadJob::CancelRequestWithOffset,
+                                weak_ptr_factory_.GetWeakPtr()),
+                     received_slices, IsParallelizable()));
 }
 
 void DownloadJob::OnDownloadFileInitialized(
@@ -75,12 +76,12 @@ bool DownloadJob::AddByteStream(std::unique_ptr<ByteStreamReader> stream_reader,
     return false;
 
   // download_file_ is owned by download_item_ on the UI thread and is always
-  // deleted on the FILE thread after download_file_ is nulled out.
+  // deleted on the download task runner after download_file_ is nulled out.
   // So it's safe to use base::Unretained here.
-  BrowserThread::PostTask(
-      BrowserThread::FILE, FROM_HERE,
-      base::Bind(&DownloadFile::AddByteStream, base::Unretained(download_file),
-                 base::Passed(&stream_reader), offset, length));
+  GetDownloadTaskRunner()->PostTask(
+      FROM_HERE, base::BindOnce(&DownloadFile::AddByteStream,
+                                base::Unretained(download_file),
+                                base::Passed(&stream_reader), offset, length));
   return true;
 }
 

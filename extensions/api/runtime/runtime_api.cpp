@@ -37,9 +37,6 @@ const char kRuntimeFeaturesFilename[] = "features.json";
 
 using vivaldi::runtime_private::FeatureFlagInfo;
 
-// Action function used by RuntimePrivateExitFunction::Run()
-void PerformApplicationShutdown();
-
 FeatureEntry::FeatureEntry() {}
 
 VivaldiRuntimeFeatures::VivaldiRuntimeFeatures(Profile* profile)
@@ -203,7 +200,7 @@ VivaldiRuntimeFeaturesFactory::~VivaldiRuntimeFeaturesFactory() {}
 
 KeyedService* VivaldiRuntimeFeaturesFactory::BuildServiceInstanceFor(
     content::BrowserContext* profile) const {
-  return new VivaldiRuntimeFeatures(static_cast<Profile*>(profile));
+  return new VivaldiRuntimeFeatures(Profile::FromBrowserContext(profile));
 }
 
 bool VivaldiRuntimeFeaturesFactory::ServiceIsNULLWhileTesting() const {
@@ -233,7 +230,8 @@ ExtensionFunction::ResponseAction RuntimePrivateExitFunction::Run() {
   DCHECK(api);
   api->CloseAllDevtools();
 
-  PerformApplicationShutdown();
+  chrome::CloseAllBrowsersAndQuit();
+
   return RespondNow(NoArguments());
 }
 

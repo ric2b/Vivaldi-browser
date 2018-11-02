@@ -23,12 +23,14 @@
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/safe_browsing/common/safebrowsing_messages.h"
-#include "components/safe_browsing/csd.pb.h"
+#include "components/safe_browsing/proto/csd.pb.h"
 #include "components/safe_browsing_db/database_manager.h"
 #include "components/safe_browsing_db/test_database_manager.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/test/mock_render_process_host.h"
+#include "content/public/test/navigation_simulator.h"
 #include "content/public/test/test_browser_thread.h"
 #include "content/public/test/test_renderer_host.h"
 #include "content/public/test/web_contents_tester.h"
@@ -95,7 +97,7 @@ MATCHER(CallbackIsNull, "") {
 
 ACTION(QuitUIMessageLoop) {
   EXPECT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::UI));
-  base::MessageLoopForUI::current()->QuitWhenIdle();
+  base::RunLoop::QuitCurrentWhenIdleDeprecated();
 }
 
 ACTION_P(InvokeDoneCallback, verdict) {
@@ -164,7 +166,8 @@ class MockSafeBrowsingDatabaseManager : public TestSafeBrowsingDatabaseManager {
  public:
   MockSafeBrowsingDatabaseManager() {}
 
-  MOCK_METHOD1(MatchCsdWhitelistUrl, bool(const GURL&));
+  MOCK_METHOD2(CheckCsdWhitelistUrl,
+               AsyncMatch(const GURL&, SafeBrowsingDatabaseManager::Client*));
   MOCK_METHOD1(MatchMalwareIP, bool(const std::string& ip_address));
   MOCK_METHOD0(IsMalwareKillSwitchOn, bool());
 
@@ -276,8 +279,9 @@ class ClientSideDetectionHostTest : public ChromeRenderViewHostTestHarness {
           .WillRepeatedly(Return(*is_incognito));
     }
     if (match_csd_whitelist) {
-      EXPECT_CALL(*database_manager_.get(), MatchCsdWhitelistUrl(url))
-          .WillOnce(Return(*match_csd_whitelist));
+      EXPECT_CALL(*database_manager_.get(), CheckCsdWhitelistUrl(url, _))
+          .WillOnce(Return(*match_csd_whitelist ? AsyncMatch::MATCH
+                                                : AsyncMatch::NO_MATCH));
     }
     if (malware_killswitch) {
       EXPECT_CALL(*database_manager_.get(), IsMalwareKillSwitchOn())
@@ -780,7 +784,10 @@ TEST_F(
 
   // Create a pending navigation, but don't commit it.
   GURL pending_url("http://slow.example.com/");
-  content::WebContentsTester::For(web_contents())->StartNavigation(pending_url);
+  auto pending_navigation =
+      content::NavigationSimulator::CreateBrowserInitiated(pending_url,
+                                                           web_contents());
+  pending_navigation->Start();
 
   WaitAndCheckPreClassificationChecks();
 
@@ -933,6 +940,14 @@ TEST_F(ClientSideDetectionHostTest, UpdateIPUrlMap) {
 }
 
 TEST_F(ClientSideDetectionHostTest, NavigationCancelsShouldClassifyUrl) {
+  if (content::IsBrowserSideNavigationEnabled()) {
+    // PlzNavigate: this test doesn't work because it makes assumption about how
+    // the message loop is run, and those assumptions are wrong when properly
+    // simulating a navigation with browser-side navigations.
+    // TODO(clamy): Fix the test and re-enable for PlzNavigate. See
+    // crbug.com/753357.
+    return;
+  }
   // Test that canceling pending should classify requests works as expected.
 
   GURL first_url("http://first.phishy.url.com");

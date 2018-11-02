@@ -22,7 +22,6 @@
 #include "core/testing/DummyPageHolder.h"
 #include "platform/graphics/paint/DrawingRecorder.h"
 #include "platform/graphics/paint/PaintController.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/RefPtr.h"
 #include "platform/wtf/StdLibExtras.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -32,7 +31,7 @@ namespace blink {
 class FrameSelectionTest : public EditingTestBase {
  protected:
   const VisibleSelection& VisibleSelectionInDOMTree() const {
-    return Selection().ComputeVisibleSelectionInDOMTreeDeprecated();
+    return Selection().ComputeVisibleSelectionInDOMTree();
   }
   const VisibleSelectionInFlatTree& GetVisibleSelectionInFlatTree() const {
     return Selection().GetSelectionInFlatTree();
@@ -65,7 +64,7 @@ TEST_F(FrameSelectionTest, FirstEphemeralRangeOf) {
                                .SetBaseAndExtent(EphemeralRange(
                                    Position(text, 3), Position(text, 6)))
                                .Build(),
-                           0);
+                           SetSelectionOptions());
   sample->setAttribute(HTMLNames::styleAttr, "display:none");
   // Move |VisibleSelection| before "abc".
   UpdateAllLifecyclePhases();
@@ -83,8 +82,7 @@ TEST_F(FrameSelectionTest, SetValidSelection) {
       SelectionInDOMTree::Builder()
           .SetBaseAndExtent(Position(text, 0), Position(text, 5))
           .Build());
-  EXPECT_FALSE(
-      Selection().ComputeVisibleSelectionInDOMTreeDeprecated().IsNone());
+  EXPECT_FALSE(Selection().ComputeVisibleSelectionInDOMTree().IsNone());
 }
 
 TEST_F(FrameSelectionTest, PaintCaretShouldNotLayout) {
@@ -99,8 +97,7 @@ TEST_F(FrameSelectionTest, PaintCaretShouldNotLayout) {
   Selection().SetSelection(
       SelectionInDOMTree::Builder().Collapse(Position(text, 0)).Build());
   GetDocument().View()->UpdateAllLifecyclePhases();
-  EXPECT_TRUE(
-      Selection().ComputeVisibleSelectionInDOMTreeDeprecated().IsCaret());
+  EXPECT_TRUE(Selection().ComputeVisibleSelectionInDOMTree().IsCaret());
   EXPECT_TRUE(ToLayoutBlock(GetDocument().body()->GetLayoutObject())
                   ->ShouldPaintCursorCaret());
 
@@ -172,8 +169,9 @@ TEST_F(FrameSelectionTest, ModifyExtendWithFlatTree) {
           .Extend(
               ToPositionInDOMTree(PositionInFlatTree(GetDocument().body(), 2)))
           .Build());
-  Selection().Modify(SelectionModifyAlteration::kExtend, kDirectionForward,
-                     TextGranularity::kWord);
+  Selection().Modify(SelectionModifyAlteration::kExtend,
+                     SelectionModifyDirection::kForward, TextGranularity::kWord,
+                     SetSelectionBy::kSystem);
   EXPECT_EQ(Position(two, 0), VisibleSelectionInDOMTree().Start());
   EXPECT_EQ(Position(two, 3), VisibleSelectionInDOMTree().End());
   EXPECT_EQ(PositionInFlatTree(two, 0),
@@ -188,21 +186,19 @@ TEST_F(FrameSelectionTest, ModifyWithUserTriggered) {
   Selection().SetSelection(
       SelectionInDOMTree::Builder().Collapse(end_of_text).Build());
 
-  EXPECT_FALSE(
-      Selection().Modify(SelectionModifyAlteration::kMove, kDirectionForward,
-                         TextGranularity::kCharacter, kNotUserTriggered))
+  EXPECT_FALSE(Selection().Modify(
+      SelectionModifyAlteration::kMove, SelectionModifyDirection::kForward,
+      TextGranularity::kCharacter, SetSelectionBy::kSystem))
       << "Selection.modify() returns false for non-user-triggered call when "
          "selection isn't modified.";
-  EXPECT_EQ(end_of_text,
-            Selection().ComputeVisibleSelectionInDOMTreeDeprecated().Start())
+  EXPECT_EQ(end_of_text, Selection().ComputeVisibleSelectionInDOMTree().Start())
       << "Selection isn't modified";
 
-  EXPECT_TRUE(Selection().Modify(SelectionModifyAlteration::kMove,
-                                 kDirectionForward, TextGranularity::kCharacter,
-                                 kUserTriggered))
+  EXPECT_TRUE(Selection().Modify(
+      SelectionModifyAlteration::kMove, SelectionModifyDirection::kForward,
+      TextGranularity::kCharacter, SetSelectionBy::kUser))
       << "Selection.modify() returns true for user-triggered call";
-  EXPECT_EQ(end_of_text,
-            Selection().ComputeVisibleSelectionInDOMTreeDeprecated().Start())
+  EXPECT_EQ(end_of_text, Selection().ComputeVisibleSelectionInDOMTree().Start())
       << "Selection isn't modified";
 }
 
@@ -288,7 +284,7 @@ TEST_F(FrameSelectionTest, SelectAllWithUnselectableRoot) {
   GetDocument().ReplaceChild(select, GetDocument().documentElement());
   GetDocument().UpdateStyleAndLayout();
   Selection().SelectAll();
-  EXPECT_TRUE(Selection().ComputeVisibleSelectionInDOMTreeDeprecated().IsNone())
+  EXPECT_TRUE(Selection().ComputeVisibleSelectionInDOMTree().IsNone())
       << "Nothing should be selected if the "
          "content of the documentElement is not "
          "selctable.";
@@ -300,7 +296,6 @@ TEST_F(FrameSelectionTest, SelectAllPreservesHandle) {
   const Position end_of_text(sample->firstChild(), 3);
   Selection().SetSelection(SelectionInDOMTree::Builder()
                                .Collapse(end_of_text)
-                               .SetIsHandleVisible(false)
                                .Build());
   EXPECT_FALSE(Selection().IsHandleVisible());
   Selection().SelectAll();
@@ -309,10 +304,13 @@ TEST_F(FrameSelectionTest, SelectAllPreservesHandle) {
          "selectAll. Then they shouldn't be present "
          "after it.";
 
-  Selection().SetSelection(SelectionInDOMTree::Builder()
-                               .Collapse(end_of_text)
-                               .SetIsHandleVisible(true)
-                               .Build());
+  Selection().SetSelection(
+      SelectionInDOMTree::Builder().Collapse(end_of_text).Build(),
+      SetSelectionOptions::Builder()
+          .SetShouldCloseTyping(true)
+          .SetShouldClearTypingStyle(true)
+          .SetShouldShowHandle(true)
+          .Build());
   EXPECT_TRUE(Selection().IsHandleVisible());
   Selection().SelectAll();
   EXPECT_TRUE(Selection().IsHandleVisible())
@@ -327,7 +325,6 @@ TEST_F(FrameSelectionTest, BoldCommandPreservesHandle) {
   const Position end_of_text(sample->firstChild(), 3);
   Selection().SetSelection(SelectionInDOMTree::Builder()
                                .Collapse(end_of_text)
-                               .SetIsHandleVisible(false)
                                .Build());
   EXPECT_FALSE(Selection().IsHandleVisible());
   Selection().SelectAll();
@@ -337,10 +334,13 @@ TEST_F(FrameSelectionTest, BoldCommandPreservesHandle) {
          "bold command. Then they shouldn't "
          "be present after it.";
 
-  Selection().SetSelection(SelectionInDOMTree::Builder()
-                               .Collapse(end_of_text)
-                               .SetIsHandleVisible(true)
-                               .Build());
+  Selection().SetSelection(
+      SelectionInDOMTree::Builder().Collapse(end_of_text).Build(),
+      SetSelectionOptions::Builder()
+          .SetShouldCloseTyping(true)
+          .SetShouldClearTypingStyle(true)
+          .SetShouldShowHandle(true)
+          .Build());
   EXPECT_TRUE(Selection().IsHandleVisible());
   Selection().SelectAll();
   GetDocument().execCommand("bold", false, "", ASSERT_NO_EXCEPTION);
@@ -356,14 +356,13 @@ TEST_F(FrameSelectionTest, SelectionOnRangeHidesHandles) {
   Selection().SetSelection(
       SelectionInDOMTree::Builder()
           .SetBaseAndExtent(Position(text, 0), Position(text, 5))
-          .SetIsHandleVisible(false)
           .Build());
 
   Selection().SetSelection(SelectionInDOMTree::Builder()
                                .SetBaseAndExtent(EphemeralRange(
                                    Position(text, 0), Position(text, 12)))
                                .Build(),
-                           0);
+                           SetSelectionOptions());
 
   EXPECT_FALSE(Selection().IsHandleVisible())
       << "After SetSelection on Range, handles shouldn't be present.";
@@ -371,14 +370,18 @@ TEST_F(FrameSelectionTest, SelectionOnRangeHidesHandles) {
   Selection().SetSelection(
       SelectionInDOMTree::Builder()
           .SetBaseAndExtent(Position(text, 0), Position(text, 5))
-          .SetIsHandleVisible(true)
+          .Build(),
+      SetSelectionOptions::Builder()
+          .SetShouldCloseTyping(true)
+          .SetShouldClearTypingStyle(true)
+          .SetShouldShowHandle(true)
           .Build());
 
   Selection().SetSelection(SelectionInDOMTree::Builder()
                                .SetBaseAndExtent(EphemeralRange(
                                    Position(text, 0), Position(text, 12)))
                                .Build(),
-                           0);
+                           SetSelectionOptions());
 
   EXPECT_FALSE(Selection().IsHandleVisible())
       << "After SetSelection on Range, handles shouldn't be present.";

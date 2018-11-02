@@ -12,7 +12,7 @@
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/sessions/core/live_tab_context.h"
 
-@class TabModel;
+class WebStateList;
 
 namespace ios {
 class ChromeBrowserState;
@@ -39,6 +39,9 @@ class TabRestoreServiceDelegateImplIOS : public sessions::LiveTabContext,
   sessions::LiveTab* GetLiveTabAt(int index) const override;
   sessions::LiveTab* GetActiveLiveTab() const override;
   bool IsTabPinned(int index) const override;
+  const gfx::Rect GetRestoredBounds() const override;
+  ui::WindowShowState GetRestoredState() const override;
+  std::string GetWorkspace() const override;
   sessions::LiveTab* AddRestoredTab(
       const std::vector<sessions::SerializedNavigationEntry>& navigations,
       int tab_index,
@@ -59,8 +62,8 @@ class TabRestoreServiceDelegateImplIOS : public sessions::LiveTabContext,
   void CloseTab() override;
 
  private:
-  // Retrieves the current |TabModel| corresponding to |browser_state_|;
-  TabModel* tab_model() const;
+  // Retrieves the current |WebStateList| corresponding to |browser_state_|;
+  WebStateList* GetWebStateList() const;
 
   ios::ChromeBrowserState* browser_state_;  // weak
   SessionID session_id_;

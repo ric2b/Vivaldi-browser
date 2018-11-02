@@ -11,6 +11,7 @@
 #include "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ui/material_components/activity_indicator.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
 #import "ios/third_party/material_components_ios/src/components/ActivityIndicator/src/MaterialActivityIndicator.h"
 #import "ios/third_party/material_components_ios/src/components/Buttons/src/MaterialButtons.h"
 #import "ios/third_party/material_components_ios/src/components/Dialogs/src/MaterialDialogs.h"
@@ -105,7 +106,8 @@ const CGFloat kPrefHeight = 300;
   NSString* cancelTitle = l10n_util::GetNSString(IDS_CANCEL);
   MDCFlatButton* cancelButton = [[MDCFlatButton alloc] init];
   [cancelButton sizeToFit];
-  [cancelButton setCustomTitleColor:[UIColor blackColor]];
+  [cancelButton setTitleColor:[UIColor blackColor]
+                     forState:UIControlStateNormal];
   [cancelButton setTitle:cancelTitle forState:UIControlStateNormal];
   [cancelButton addTarget:self
                    action:@selector(cancelCallback)

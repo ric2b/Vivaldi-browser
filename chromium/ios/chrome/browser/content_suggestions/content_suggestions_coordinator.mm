@@ -6,6 +6,7 @@
 
 #include "base/mac/foundation_util.h"
 #include "base/mac/scoped_nsobject.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/sys_string_conversions.h"
@@ -16,42 +17,54 @@
 #include "components/reading_list/core/reading_list_model.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/content_suggestions/content_suggestions_alert_commands.h"
 #import "ios/chrome/browser/content_suggestions/content_suggestions_alert_factory.h"
 #import "ios/chrome/browser/content_suggestions/content_suggestions_header_view_controller.h"
-#import "ios/chrome/browser/content_suggestions/content_suggestions_header_view_controller_delegate.h"
 #import "ios/chrome/browser/content_suggestions/content_suggestions_mediator.h"
+#import "ios/chrome/browser/content_suggestions/content_suggestions_metrics_recorder.h"
+#import "ios/chrome/browser/content_suggestions/ntp_home_metrics.h"
 #include "ios/chrome/browser/favicon/ios_chrome_large_icon_cache_factory.h"
 #include "ios/chrome/browser/favicon/ios_chrome_large_icon_service_factory.h"
 #include "ios/chrome/browser/favicon/large_icon_cache.h"
 #import "ios/chrome/browser/metrics/new_tab_page_uma.h"
 #include "ios/chrome/browser/ntp_snippets/ios_chrome_content_suggestions_service_factory.h"
 #include "ios/chrome/browser/ntp_tiles/ios_most_visited_sites_factory.h"
+#include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
+#include "ios/chrome/browser/tabs/tab_constants.h"
 #import "ios/chrome/browser/ui/alert_coordinator/alert_coordinator.h"
 #import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
+#import "ios/chrome/browser/ui/commands/reading_list_add_command.h"
+#import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_gesture_commands.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_commands.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_data_sink.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_synchronizer.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_view_controller_delegate.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller_audience.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller_delegate.h"
 #import "ios/chrome/browser/ui/content_suggestions/identifier/content_suggestion_identifier.h"
+#import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/browser/ui/ntp/google_landing_mediator.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_header_constants.h"
 #import "ios/chrome/browser/ui/ntp/notification_promo_whats_new.h"
 #import "ios/chrome/browser/ui/overscroll_actions/overscroll_actions_controller.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/url_loader.h"
+#import "ios/chrome/browser/web_state_list/web_state_list.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/third_party/material_components_ios/src/components/Snackbar/src/MaterialSnackbar.h"
+#import "ios/web/public/navigation_item.h"
+#import "ios/web/public/navigation_manager.h"
 #include "ios/web/public/referrer.h"
+#import "ios/web/public/web_state/web_state.h"
+#import "ios/web/public/web_state/web_state_observer_bridge.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/strings/grit/ui_strings.h"
 
@@ -59,12 +72,18 @@
 #error "This file requires ARC support."
 #endif
 
+namespace {
+const char kNTPHelpURL[] = "https://support.google.com/chrome/?p=ios_new_tab";
+}  // namespace
+
 @interface ContentSuggestionsCoordinator ()<
-    ContentSuggestionsAlertCommands,
     ContentSuggestionsCommands,
+    ContentSuggestionsGestureCommands,
     ContentSuggestionsHeaderViewControllerCommandHandler,
+    ContentSuggestionsHeaderViewControllerDelegate,
     ContentSuggestionsViewControllerAudience,
     ContentSuggestionsViewControllerDelegate,
+    CRWWebStateObserver,
     OverscrollActionsControllerDelegate>
 
 @property(nonatomic, strong) AlertCoordinator* alertCoordinator;
@@ -75,6 +94,7 @@
 @property(nonatomic, strong) GoogleLandingMediator* googleLandingMediator;
 @property(nonatomic, strong)
     ContentSuggestionsHeaderSynchronizer* headerCollectionInteractionHandler;
+@property(nonatomic, strong) ContentSuggestionsMetricsRecorder* metricsRecorder;
 
 // Redefined as readwrite.
 @property(nonatomic, strong, readwrite)
@@ -82,7 +102,9 @@
 
 @end
 
-@implementation ContentSuggestionsCoordinator
+@implementation ContentSuggestionsCoordinator {
+  std::unique_ptr<web::WebStateObserverBridge> _webStateObserver;
+}
 
 @synthesize alertCoordinator = _alertCoordinator;
 @synthesize browserState = _browserState;
@@ -97,6 +119,7 @@
 @synthesize webStateList = _webStateList;
 @synthesize dispatcher = _dispatcher;
 @synthesize delegate = _delegate;
+@synthesize metricsRecorder = _metricsRecorder;
 
 - (void)start {
   if (self.visible || !self.browserState) {
@@ -107,14 +130,33 @@
 
   _visible = YES;
 
+  web::WebState* webState = self.webStateList->GetActiveWebState();
+  _webStateObserver =
+      base::MakeUnique<web::WebStateObserverBridge>(webState, self);
+
   ntp_snippets::ContentSuggestionsService* contentSuggestionsService =
       IOSChromeContentSuggestionsServiceFactory::GetForBrowserState(
           self.browserState);
   contentSuggestionsService->remote_suggestions_scheduler()
       ->OnSuggestionsSurfaceOpened();
+  contentSuggestionsService->user_classifier()->OnEvent(
+      ntp_snippets::UserClassifier::Metric::NTP_OPENED);
+  contentSuggestionsService->user_classifier()->OnEvent(
+      ntp_snippets::UserClassifier::Metric::SUGGESTIONS_SHOWN);
+  PrefService* prefs =
+      ios::ChromeBrowserState::FromBrowserState(self.browserState)->GetPrefs();
+  bool contentSuggestionsEnabled =
+      prefs->GetBoolean(prefs::kSearchSuggestEnabled);
+  if (contentSuggestionsEnabled) {
+    ntp_home::RecordNTPImpression(ntp_home::REMOTE_SUGGESTIONS);
+  } else {
+    ntp_home::RecordNTPImpression(ntp_home::LOCAL_SUGGESTIONS);
+  }
 
   self.headerController = [[ContentSuggestionsHeaderViewController alloc] init];
   self.headerController.dispatcher = self.dispatcher;
+  self.headerController.commandHandler = self;
+  self.headerController.delegate = self;
   self.headerController.readingListModel =
       ReadingListModelFactory::GetForBrowserState(self.browserState);
   self.googleLandingMediator =
@@ -136,14 +178,18 @@
              mostVisitedSite:std::move(mostVisitedFactory)];
   self.contentSuggestionsMediator.commandHandler = self;
   self.contentSuggestionsMediator.headerProvider = self.headerController;
+  self.metricsRecorder = [[ContentSuggestionsMetricsRecorder alloc] init];
+  self.metricsRecorder.delegate = self.contentSuggestionsMediator;
 
   self.suggestionsViewController = [[ContentSuggestionsViewController alloc]
-      initWithStyle:CollectionViewControllerStyleDefault
-         dataSource:self.contentSuggestionsMediator];
+      initWithStyle:CollectionViewControllerStyleDefault];
+  [self.suggestionsViewController
+      setDataSource:self.contentSuggestionsMediator];
   self.suggestionsViewController.suggestionCommandHandler = self;
   self.suggestionsViewController.suggestionsDelegate = self;
   self.suggestionsViewController.audience = self;
   self.suggestionsViewController.overscrollDelegate = self;
+  self.suggestionsViewController.metricsRecorder = self.metricsRecorder;
 
   [self.suggestionsViewController addChildViewController:self.headerController];
   [self.headerController
@@ -167,30 +213,71 @@
   [self.googleLandingMediator shutdown];
   self.googleLandingMediator = nil;
   _visible = NO;
+  _webStateObserver.reset();
 }
 
 - (UIViewController*)viewController {
   return self.suggestionsViewController;
 }
 
+- (void)webState:(web::WebState*)webState didLoadPageWithSuccess:(BOOL)success {
+  if (!success)
+    return;
+
+  web::NavigationManager* navigationManager = webState->GetNavigationManager();
+  web::NavigationItem* item = navigationManager->GetVisibleItem();
+  if (item && item->GetPageDisplayState().scroll_state().offset_y() > 0) {
+    CGFloat offset = item->GetPageDisplayState().scroll_state().offset_y();
+    UICollectionView* collection =
+        self.suggestionsViewController.collectionView;
+    // Don't set the offset such as the content of the collection is smaller
+    // than the part of the collection which should be displayed with that
+    // offset, taking into account the size of the toolbar.
+    offset = MAX(0, MIN(offset, collection.contentSize.height -
+                                    collection.bounds.size.height -
+                                    ntp_header::kToolbarHeight));
+    collection.contentOffset = CGPointMake(0, offset);
+    // Update the constraints in case the omnibox needs to be moved.
+    [self.suggestionsViewController updateConstraints];
+  }
+}
+
 #pragma mark - ContentSuggestionsCommands
 
 - (void)openReadingList {
-  [self.suggestionsViewController
-      chromeExecuteCommand:[GenericChromeCommand
-                               commandWithTag:IDC_SHOW_READING_LIST]];
+  [self.dispatcher showReadingList];
 }
 
-- (void)openPageForItem:(CollectionViewItem*)item {
-  // TODO(crbug.com/691979): Add metrics.
-
+- (void)openPageForItemAtIndexPath:(NSIndexPath*)indexPath {
+  CollectionViewItem* item = [self.suggestionsViewController.collectionViewModel
+      itemAtIndexPath:indexPath];
   ContentSuggestionsItem* suggestionItem =
       base::mac::ObjCCastStrict<ContentSuggestionsItem>(item);
 
+  [self.metricsRecorder
+         onSuggestionOpened:suggestionItem
+                atIndexPath:indexPath
+         sectionsShownAbove:[self.suggestionsViewController
+                                numberOfSectionsAbove:indexPath.section]
+      suggestionsShownAbove:[self.suggestionsViewController
+                                numberOfSuggestionsAbove:indexPath.section]
+                 withAction:WindowOpenDisposition::CURRENT_TAB];
+  IOSChromeContentSuggestionsServiceFactory::GetForBrowserState(
+      self.browserState)
+      ->user_classifier()
+      ->OnEvent(ntp_snippets::UserClassifier::Metric::SUGGESTIONS_USED);
+
+  // Use a referrer with a specific URL to mark this entry as coming from
+  // ContentSuggestions.
+  web::Referrer referrer;
+  referrer.url = GURL(tab_constants::kDoNotConsiderForMostVisited);
+
   [self.URLLoader loadURL:suggestionItem.URL
-                 referrer:web::Referrer()
+                 referrer:referrer
                transition:ui::PAGE_TRANSITION_AUTO_BOOKMARK
         rendererInitiated:NO];
+  new_tab_page_uma::RecordAction(self.browserState,
+                                 new_tab_page_uma::ACTION_OPENED_SUGGESTION);
 }
 
 - (void)openMostVisitedItem:(CollectionViewItem*)item
@@ -206,14 +293,26 @@
         rendererInitiated:NO];
 }
 
-- (void)displayContextMenuForArticle:(CollectionViewItem*)item
-                             atPoint:(CGPoint)touchLocation
-                         atIndexPath:(NSIndexPath*)indexPath {
+- (void)displayContextMenuForSuggestion:(CollectionViewItem*)item
+                                atPoint:(CGPoint)touchLocation
+                            atIndexPath:(NSIndexPath*)indexPath
+                        readLaterAction:(BOOL)readLaterAction {
+  ContentSuggestionsItem* suggestionsItem =
+      base::mac::ObjCCastStrict<ContentSuggestionsItem>(item);
+
+  [self.metricsRecorder
+      onMenuOpenedForSuggestion:suggestionsItem
+                    atIndexPath:indexPath
+          suggestionsShownAbove:[self.suggestionsViewController
+                                    numberOfSuggestionsAbove:indexPath
+                                                                 .section]];
+
   self.alertCoordinator = [ContentSuggestionsAlertFactory
-      alertCoordinatorForSuggestionItem:item
+      alertCoordinatorForSuggestionItem:suggestionsItem
                        onViewController:self.suggestionsViewController
                                 atPoint:touchLocation
                             atIndexPath:indexPath
+                        readLaterAction:readLaterAction
                          commandHandler:self];
 
   [self.alertCoordinator start];
@@ -222,8 +321,10 @@
 - (void)displayContextMenuForMostVisitedItem:(CollectionViewItem*)item
                                      atPoint:(CGPoint)touchLocation
                                  atIndexPath:(NSIndexPath*)indexPath {
+  ContentSuggestionsMostVisitedItem* mostVisitedItem =
+      base::mac::ObjCCastStrict<ContentSuggestionsMostVisitedItem>(item);
   self.alertCoordinator = [ContentSuggestionsAlertFactory
-      alertCoordinatorForMostVisitedItem:item
+      alertCoordinatorForMostVisitedItem:mostVisitedItem
                         onViewController:self.suggestionsViewController
                                  atPoint:touchLocation
                              atIndexPath:indexPath
@@ -232,11 +333,14 @@
   [self.alertCoordinator start];
 }
 
+// TODO(crbug.com/761096) : Promo handling should be DRY and tested.
 - (void)handlePromoTapped {
   NotificationPromoWhatsNew* notificationPromo =
       [self.contentSuggestionsMediator notificationPromo];
   DCHECK(notificationPromo);
   notificationPromo->HandleClosed();
+  new_tab_page_uma::RecordAction(self.browserState,
+                                 new_tab_page_uma::ACTION_OPENED_PROMO);
 
   if (notificationPromo->IsURLPromo()) {
     [self.URLLoader webPageOrderedOpen:notificationPromo->url()
@@ -247,60 +351,120 @@
   }
 
   if (notificationPromo->IsChromeCommand()) {
-    GenericChromeCommand* command = [[GenericChromeCommand alloc]
-        initWithTag:notificationPromo->command_id()];
-    [self.suggestionsViewController chromeExecuteCommand:command];
+    int command_id = notificationPromo->command_id();
+    if (command_id == IDC_RATE_THIS_APP) {
+      [self.dispatcher performSelector:@selector(showRateThisAppDialog)];
+    } else {
+      GenericChromeCommand* command = [[GenericChromeCommand alloc]
+          initWithTag:notificationPromo->command_id()];
+      [self.suggestionsViewController chromeExecuteCommand:command];
+    }
     return;
   }
   NOTREACHED();
 }
 
-#pragma mark - ContentSuggestionsAlertCommands
+- (void)handleLearnMoreTapped {
+  [self.URLLoader loadURL:GURL(kNTPHelpURL)
+                 referrer:web::Referrer()
+               transition:ui::PAGE_TRANSITION_LINK
+        rendererInitiated:NO];
+  new_tab_page_uma::RecordAction(self.browserState,
+                                 new_tab_page_uma::ACTION_OPENED_LEARN_MORE);
+}
 
-- (void)openNewTabWithSuggestionsItem:(CollectionViewItem*)item
+#pragma mark - ContentSuggestionsGestureCommands
+
+- (void)openNewTabWithSuggestionsItem:(ContentSuggestionsItem*)item
                             incognito:(BOOL)incognito {
-  ContentSuggestionsItem* suggestionsItem =
-      base::mac::ObjCCastStrict<ContentSuggestionsItem>(item);
-  [self openNewTabWithURL:suggestionsItem.URL incognito:incognito];
+  new_tab_page_uma::RecordAction(self.browserState,
+                                 new_tab_page_uma::ACTION_OPENED_SUGGESTION);
+  IOSChromeContentSuggestionsServiceFactory::GetForBrowserState(
+      self.browserState)
+      ->user_classifier()
+      ->OnEvent(ntp_snippets::UserClassifier::Metric::SUGGESTIONS_USED);
+
+  NSIndexPath* indexPath = [self.suggestionsViewController.collectionViewModel
+      indexPathForItem:item];
+  if (indexPath) {
+    WindowOpenDisposition disposition =
+        incognito ? WindowOpenDisposition::OFF_THE_RECORD
+                  : WindowOpenDisposition::NEW_BACKGROUND_TAB;
+    [self.metricsRecorder
+           onSuggestionOpened:item
+                  atIndexPath:indexPath
+           sectionsShownAbove:[self.suggestionsViewController
+                                  numberOfSectionsAbove:indexPath.section]
+        suggestionsShownAbove:[self.suggestionsViewController
+                                  numberOfSuggestionsAbove:indexPath.section]
+                   withAction:disposition];
+  }
+
+  [self openNewTabWithURL:item.URL incognito:incognito];
 }
 
-- (void)addItemToReadingList:(CollectionViewItem*)item {
-  ContentSuggestionsItem* suggestionsItem =
-      base::mac::ObjCCastStrict<ContentSuggestionsItem>(item);
-  base::RecordAction(base::UserMetricsAction("MobileReadingListAdd"));
-  ReadingListModel* readingModel =
-      ReadingListModelFactory::GetForBrowserState(self.browserState);
-  readingModel->AddEntry(suggestionsItem.URL,
-                         base::SysNSStringToUTF8(suggestionsItem.title),
-                         reading_list::ADDED_VIA_CURRENT_APP);
+- (void)addItemToReadingList:(ContentSuggestionsItem*)item {
+  NSIndexPath* indexPath = [self.suggestionsViewController.collectionViewModel
+      indexPathForItem:item];
+  if (indexPath) {
+    [self.metricsRecorder
+           onSuggestionOpened:item
+                  atIndexPath:indexPath
+           sectionsShownAbove:[self.suggestionsViewController
+                                  numberOfSectionsAbove:indexPath.section]
+        suggestionsShownAbove:[self.suggestionsViewController
+                                  numberOfSuggestionsAbove:indexPath.section]
+                   withAction:WindowOpenDisposition::SAVE_TO_DISK];
+  }
+
+  self.contentSuggestionsMediator.readingListNeedsReload = YES;
+  ReadingListAddCommand* command =
+      [[ReadingListAddCommand alloc] initWithURL:item.URL title:item.title];
+  [self.dispatcher addToReadingList:command];
 }
 
-- (void)dismissSuggestion:(CollectionViewItem*)item
+- (void)dismissSuggestion:(ContentSuggestionsItem*)item
               atIndexPath:(NSIndexPath*)indexPath {
-  ContentSuggestionsItem* suggestionsItem =
-      base::mac::ObjCCastStrict<ContentSuggestionsItem>(item);
+  NSIndexPath* itemIndexPath = indexPath;
+  if (!itemIndexPath) {
+    // If the caller uses a nil |indexPath|, find it from the model.
+    itemIndexPath = [self.suggestionsViewController.collectionViewModel
+        indexPathForItem:item];
+  }
 
-  // TODO(crbug.com/691979): Add metrics.
-  [self.contentSuggestionsMediator
-      dismissSuggestion:suggestionsItem.suggestionIdentifier];
-  [self.suggestionsViewController dismissEntryAtIndexPath:indexPath];
+  [self.contentSuggestionsMediator dismissSuggestion:item.suggestionIdentifier];
+  [self.suggestionsViewController dismissEntryAtIndexPath:itemIndexPath];
 }
 
-- (void)openNewTabWithMostVisitedItem:(CollectionViewItem*)item
+- (void)openNewTabWithMostVisitedItem:(ContentSuggestionsMostVisitedItem*)item
                             incognito:(BOOL)incognito
                               atIndex:(NSInteger)index {
-  ContentSuggestionsMostVisitedItem* mostVisitedItem =
-      base::mac::ObjCCastStrict<ContentSuggestionsMostVisitedItem>(item);
-  [self logMostVisitedOpening:mostVisitedItem atIndex:index];
-  [self openNewTabWithURL:mostVisitedItem.URL incognito:incognito];
+  [self logMostVisitedOpening:item atIndex:index];
+  [self openNewTabWithURL:item.URL incognito:incognito];
 }
 
-- (void)removeMostVisited:(CollectionViewItem*)item {
-  ContentSuggestionsMostVisitedItem* mostVisitedItem =
-      base::mac::ObjCCastStrict<ContentSuggestionsMostVisitedItem>(item);
+- (void)openNewTabWithMostVisitedItem:(ContentSuggestionsMostVisitedItem*)item
+                            incognito:(BOOL)incognito {
+  NSInteger index =
+      [self.suggestionsViewController.collectionViewModel indexPathForItem:item]
+          .item;
+  [self openNewTabWithMostVisitedItem:item incognito:incognito atIndex:index];
+}
+
+- (void)removeMostVisited:(ContentSuggestionsMostVisitedItem*)item {
   base::RecordAction(base::UserMetricsAction("MostVisited_UrlBlacklisted"));
-  [self.contentSuggestionsMediator blacklistMostVisitedURL:mostVisitedItem.URL];
-  [self showMostVisitedUndoForURL:mostVisitedItem.URL];
+  [self.contentSuggestionsMediator blacklistMostVisitedURL:item.URL];
+  [self showMostVisitedUndoForURL:item.URL];
+}
+
+#pragma mark - ContentSuggestionsHeaderViewControllerDelegate
+
+- (BOOL)isContextMenuVisible {
+  return self.alertCoordinator.isVisible;
+}
+
+- (BOOL)isScrolledToTop {
+  return self.suggestionsViewController.scrolledToTop;
 }
 
 #pragma mark - ContentSuggestionsViewControllerDelegate
@@ -308,7 +472,7 @@
 - (CGFloat)pinnedOffsetY {
   CGFloat headerHeight = content_suggestions::heightForLogoHeader(
       self.headerController.logoIsShowing,
-      [self.contentSuggestionsMediator notificationPromo]->CanShow());
+      [self.contentSuggestionsMediator notificationPromo]->CanShow(), YES);
   CGFloat offsetY =
       headerHeight - ntp_header::kScrolledToTopOmniboxBottomMargin;
   if (!IsIPadIdiom())
@@ -324,12 +488,12 @@
 - (CGFloat)headerHeight {
   return content_suggestions::heightForLogoHeader(
       self.headerController.logoIsShowing,
-      [self.contentSuggestionsMediator notificationPromo]->CanShow());
+      [self.contentSuggestionsMediator notificationPromo]->CanShow(), YES);
 }
 
 #pragma mark - ContentSuggestionsViewControllerAudience
 
-- (void)contentSuggestionsDidScroll {
+- (void)contentOffsetDidChange {
   [self.delegate updateNtpBarShadowForPanelController:self];
 }
 
@@ -387,8 +551,31 @@
 - (CGFloat)alphaForBottomShadow {
   UICollectionView* collection = self.suggestionsViewController.collectionView;
 
+  NSInteger numberOfSection =
+      [collection.dataSource numberOfSectionsInCollectionView:collection];
+
+  NSInteger lastNonEmptySection = 0;
+  NSInteger lastItemIndex = 0;
+  for (NSInteger i = 0; i < numberOfSection; i++) {
+    NSInteger itemsInSection = [collection.dataSource collectionView:collection
+                                              numberOfItemsInSection:i];
+    if (itemsInSection > 0) {
+      // Some sections might be empty. Only consider the last non-empty one.
+      lastNonEmptySection = i;
+      lastItemIndex = itemsInSection - 1;
+    }
+  }
+  if (lastNonEmptySection == 0)
+    return 0;
+
+  NSIndexPath* lastCellIndexPath =
+      [NSIndexPath indexPathForItem:lastItemIndex
+                          inSection:lastNonEmptySection];
+  UICollectionViewLayoutAttributes* attributes =
+      [collection layoutAttributesForItemAtIndexPath:lastCellIndexPath];
+  CGRect lastCellFrame = attributes.frame;
   CGFloat pixelsBelowFrame =
-      collection.contentSize.height - CGRectGetMaxY(collection.bounds);
+      CGRectGetMaxY(lastCellFrame) - CGRectGetMaxY(collection.bounds);
   CGFloat alpha = pixelsBelowFrame / kNewTabPageDistanceToFadeShadow;
   return MIN(MAX(alpha, 0), 1);
 }
@@ -398,11 +585,14 @@
 }
 
 - (void)reload {
-  // TODO(crbug.com/700375): implement this.
+  [self.contentSuggestionsMediator.dataSink reloadAllData];
 }
 
 - (void)wasShown {
   self.headerController.isShowing = YES;
+  [self.suggestionsViewController.collectionView
+          .collectionViewLayout invalidateLayout];
+  [self.delegate updateNtpBarShadowForPanelController:self];
 }
 
 - (void)wasHidden {
@@ -420,16 +610,23 @@
 - (void)setScrollsToTop:(BOOL)enable {
 }
 
+- (CGPoint)scrollOffset {
+  CGPoint collectionOffset =
+      self.suggestionsViewController.collectionView.contentOffset;
+  collectionOffset.y -=
+      self.headerCollectionInteractionHandler.collectionShiftingOffset;
+  return collectionOffset;
+}
+
 #pragma mark - Private
 
 // Opens the |URL| in a new tab |incognito| or not.
 - (void)openNewTabWithURL:(const GURL&)URL incognito:(BOOL)incognito {
-  // TODO(crbug.com/691979): Add metrics.
-
+  // Open the tab in background if it is non-incognito only.
   [self.URLLoader webPageOrderedOpen:URL
                             referrer:web::Referrer()
                          inIncognito:incognito
-                        inBackground:NO
+                        inBackground:!incognito
                             appendTo:kCurrentTab];
 }
 

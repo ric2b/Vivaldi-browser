@@ -14,14 +14,14 @@
 #include "chrome/browser/search/one_google_bar/one_google_bar_service_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
 
-class SigninManagerBase;
+class GaiaCookieManagerService;
 
 // A service that downloads, caches, and hands out OneGoogleBarData. It never
 // initiates a download automatically, only when Refresh is called. When the
 // user signs in or out, the cached value is cleared.
 class OneGoogleBarService : public KeyedService {
  public:
-  OneGoogleBarService(SigninManagerBase* signin_manager,
+  OneGoogleBarService(GaiaCookieManagerService* cookie_service,
                       std::unique_ptr<OneGoogleBarFetcher> fetcher);
   ~OneGoogleBarService() override;
 
@@ -34,7 +34,7 @@ class OneGoogleBarService : public KeyedService {
   }
 
   // Requests an asynchronous refresh from the network. After the update
-  // completes, the observers will be notified only if something changed.
+  // completes, OnOneGoogleBarDataUpdated will be called on the observers.
   void Refresh();
 
   // Add/remove observers. All observers must unregister themselves before the
@@ -52,7 +52,7 @@ class OneGoogleBarService : public KeyedService {
   void OneGoogleBarDataFetched(OneGoogleBarFetcher::Status status,
                                const base::Optional<OneGoogleBarData>& data);
 
-  void SetOneGoogleBarData(const base::Optional<OneGoogleBarData>& data);
+  void NotifyObservers();
 
   std::unique_ptr<OneGoogleBarFetcher> fetcher_;
 

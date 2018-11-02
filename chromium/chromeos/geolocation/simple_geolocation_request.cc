@@ -308,21 +308,20 @@ std::unique_ptr<base::DictionaryValue> CreateAccessPointDictionary(
     WifiAccessPoint access_point) {
   auto access_point_dictionary = base::MakeUnique<base::DictionaryValue>();
 
-  access_point_dictionary->SetStringWithoutPathExpansion(
-      kMacAddress, access_point.mac_address);
-  access_point_dictionary->SetIntegerWithoutPathExpansion(
-      kSignalStrength, access_point.signal_strength);
+  access_point_dictionary->SetKey(kMacAddress,
+                                  base::Value(access_point.mac_address));
+  access_point_dictionary->SetKey(kSignalStrength,
+                                  base::Value(access_point.signal_strength));
   if (!access_point.timestamp.is_null()) {
-    access_point_dictionary->SetStringWithoutPathExpansion(
+    access_point_dictionary->SetKey(
         kAge,
-        base::Int64ToString(
-            (base::Time::Now() - access_point.timestamp).InMilliseconds()));
+        base::Value(base::Int64ToString(
+            (base::Time::Now() - access_point.timestamp).InMilliseconds())));
   }
 
-  access_point_dictionary->SetIntegerWithoutPathExpansion(kChannel,
-                                                          access_point.channel);
-  access_point_dictionary->SetIntegerWithoutPathExpansion(
-      kSignalToNoiseRatio, access_point.signal_to_noise);
+  access_point_dictionary->SetKey(kChannel, base::Value(access_point.channel));
+  access_point_dictionary->SetKey(kSignalToNoiseRatio,
+                                  base::Value(access_point.signal_to_noise));
 
   return access_point_dictionary;
 }
@@ -330,18 +329,18 @@ std::unique_ptr<base::DictionaryValue> CreateAccessPointDictionary(
 std::unique_ptr<base::DictionaryValue> CreateCellTowerDictionary(
     CellTower cell_tower) {
   auto cell_tower_dictionary = base::MakeUnique<base::DictionaryValue>();
-  cell_tower_dictionary->SetStringWithoutPathExpansion(kCellId, cell_tower.ci);
-  cell_tower_dictionary->SetStringWithoutPathExpansion(kLocationAreaCode,
-                                                       cell_tower.lac);
-  cell_tower_dictionary->SetStringWithoutPathExpansion(kMobileCountryCode,
-                                                       cell_tower.mcc);
-  cell_tower_dictionary->SetStringWithoutPathExpansion(kMobileNetworkCode,
-                                                       cell_tower.mnc);
+  cell_tower_dictionary->SetKey(kCellId, base::Value(cell_tower.ci));
+  cell_tower_dictionary->SetKey(kLocationAreaCode, base::Value(cell_tower.lac));
+  cell_tower_dictionary->SetKey(kMobileCountryCode,
+                                base::Value(cell_tower.mcc));
+  cell_tower_dictionary->SetKey(kMobileNetworkCode,
+                                base::Value(cell_tower.mnc));
 
   if (!cell_tower.timestamp.is_null()) {
-    cell_tower_dictionary->SetStringWithoutPathExpansion(
-        kAge, base::Int64ToString(
-                  (base::Time::Now() - cell_tower.timestamp).InMilliseconds()));
+    cell_tower_dictionary->SetKey(
+        kAge,
+        base::Value(base::Int64ToString(
+            (base::Time::Now() - cell_tower.timestamp).InMilliseconds())));
   }
   return cell_tower_dictionary;
 }
@@ -389,7 +388,7 @@ std::string SimpleGeolocationRequest::FormatRequestBody() const {
     return std::string(kSimpleGeolocationRequestBody);
 
   std::unique_ptr<base::DictionaryValue> request(new base::DictionaryValue);
-  request->SetBooleanWithoutPathExpansion(kConsiderIp, true);
+  request->SetKey(kConsiderIp, base::Value(true));
 
   if (wifi_data_) {
     auto wifi_access_points = base::MakeUnique<base::ListValue>();

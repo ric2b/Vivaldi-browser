@@ -153,7 +153,7 @@ void FindNodeInVerifier(Notes_Model* foreign_model,
 namespace notes_helper {
 
 Notes_Model* GetNotesModel(int index) {
-  return NotesModelFactory::GetForProfile(
+  return NotesModelFactory::GetForBrowserContext(
       sync_datatype_helper::test()->GetProfile(index));
 }
 
@@ -162,7 +162,7 @@ const Notes_Node* GetNotesTopNode(int index) {
 }
 
 Notes_Model* GetVerifierNotesModel() {
-  return NotesModelFactory::GetForProfile(
+  return NotesModelFactory::GetForBrowserContext(
       sync_datatype_helper::test()->verifier());
 }
 

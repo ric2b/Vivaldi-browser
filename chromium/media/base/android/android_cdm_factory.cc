@@ -15,9 +15,27 @@
 #include "media/base/media_switches.h"
 #include "media/cdm/aes_decryptor.h"
 #include "third_party/widevine/cdm/widevine_cdm_common.h"
-#include "url/gurl.h"
+#include "url/origin.h"
 
 namespace media {
+namespace {
+void OnCdmCreated(const std::string& key_system,
+                  MediaDrmBridge::SecurityLevel security_level,
+                  const CdmCreatedCB& bound_cdm_created_cb,
+                  scoped_refptr<MediaDrmBridge> cdm) {
+  if (!cdm) {
+    std::string error_message = "MediaDrmBridge cannot be created for " +
+                                key_system + " with security level " +
+                                base::IntToString(security_level);
+    LOG(ERROR) << error_message;
+    bound_cdm_created_cb.Run(nullptr, error_message);
+    return;
+  }
+
+  // Success!
+  bound_cdm_created_cb.Run(cdm, "");
+}
+}  // namespace
 
 AndroidCdmFactory::AndroidCdmFactory(const CreateFetcherCB& create_fetcher_cb,
                                      const CreateStorageCB& create_storage_cb)
@@ -28,7 +46,7 @@ AndroidCdmFactory::~AndroidCdmFactory() {}
 
 void AndroidCdmFactory::Create(
     const std::string& key_system,
-    const GURL& security_origin,
+    const url::Origin& security_origin,
     const CdmConfig& cdm_config,
     const SessionMessageCB& session_message_cb,
     const SessionClosedCB& session_closed_cb,
@@ -38,7 +56,7 @@ void AndroidCdmFactory::Create(
   // Bound |cdm_created_cb| so we always fire it asynchronously.
   CdmCreatedCB bound_cdm_created_cb = BindToCurrentLoop(cdm_created_cb);
 
-  if (!security_origin.is_valid()) {
+  if (security_origin.unique()) {
     bound_cdm_created_cb.Run(nullptr, "Invalid origin.");
     return;
   }
@@ -48,7 +66,7 @@ void AndroidCdmFactory::Create(
   if (base::FeatureList::IsEnabled(media::kExternalClearKeyForTesting) &&
       IsExternalClearKey(key_system)) {
     scoped_refptr<ContentDecryptionModule> cdm(
-        new AesDecryptor(security_origin, session_message_cb, session_closed_cb,
+        new AesDecryptor(session_message_cb, session_closed_cb,
                          session_keys_change_cb, session_expiration_update_cb));
     bound_cdm_created_cb.Run(cdm, "");
     return;
@@ -80,20 +98,12 @@ void AndroidCdmFactory::Create(
     return;
   }
 
-  scoped_refptr<MediaDrmBridge> cdm(MediaDrmBridge::Create(
-      key_system, security_origin, security_level, create_fetcher_cb_,
-      create_storage_cb_, session_message_cb, session_closed_cb,
-      session_keys_change_cb, session_expiration_update_cb));
-  if (!cdm) {
-    error_message = "MediaDrmBridge cannot be created for " + key_system +
-                    " with security level " + base::IntToString(security_level);
-    LOG(ERROR) << error_message;
-    bound_cdm_created_cb.Run(nullptr, error_message);
-    return;
-  }
-
-  // Success!
-  bound_cdm_created_cb.Run(cdm, "");
+  MediaDrmBridge::Create(key_system, security_origin, security_level,
+                         create_fetcher_cb_, create_storage_cb_,
+                         session_message_cb, session_closed_cb,
+                         session_keys_change_cb, session_expiration_update_cb,
+                         base::BindOnce(&OnCdmCreated, key_system,
+                                        security_level, bound_cdm_created_cb));
 }
 
 }  // namespace media

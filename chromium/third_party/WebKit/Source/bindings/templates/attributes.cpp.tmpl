@@ -1,5 +1,5 @@
 {% from 'utilities.cpp.tmpl' import declare_enum_validation_variable, v8_value_to_local_cpp_value %}
-{% from 'methods.cpp.tmpl' import runtime_timer_scope, runtime_call_stats_enter, runtime_call_stats_leave %}
+{% from 'methods.cpp.tmpl' import runtime_timer_scope, runtime_timer_scope_disabled_by_default %}
 
 {##############################################################################}
 {% macro attribute_getter(attribute, world_suffix) %}
@@ -9,7 +9,6 @@ const v8::PropertyCallbackInfo<v8::Value>& info
 {%- else %}
 const v8::FunctionCallbackInfo<v8::Value>& info
 {%- endif %}) {
-  {{ runtime_timer_scope(attribute.runtime_call_stats.getter_counter) | indent(2) }}
   {% filter format_remove_duplicates(['ExceptionState exceptionState']) %}
   {% set define_exception_state -%}
   ExceptionState exceptionState(info.GetIsolate(), ExceptionState::kGetterContext, "{{interface_name}}", "{{attribute.name}}");
@@ -100,15 +99,21 @@ const v8::FunctionCallbackInfo<v8::Value>& info
   {% endif %}
 
   {% if attribute.is_call_with_execution_context %}
-  ExecutionContext* executionContext = CurrentExecutionContext(info.GetIsolate());
+  {% if attribute.is_static %}
+  ExecutionContext* executionContext = ExecutionContext::ForCurrentRealm(info);
+  {% else %}
+  ExecutionContext* executionContext = ExecutionContext::ForRelevantRealm(info);
   {% endif %}
+  {% endif %}
+
   {% if attribute.is_call_with_script_state %}
   {% if attribute.is_static %}
-  ScriptState* scriptState = ScriptState::ForFunctionObject(info);
+  ScriptState* scriptState = ScriptState::ForCurrentRealm(info);
   {% else %}
-  ScriptState* scriptState = ScriptState::ForReceiverObject(info);
+  ScriptState* scriptState = ScriptState::ForRelevantRealm(info);
   {% endif %}
   {% endif %}
+
   {% if attribute.is_getter_raises_exception %}
   {{define_exception_state}}
   {% endif %}
@@ -218,6 +223,12 @@ v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info
 {%- else %}
 const v8::FunctionCallbackInfo<v8::Value>& info
 {%- endif %}) {
+  {% if attribute.runtime_call_stats.extended_attribute_defined %}
+  {{ runtime_timer_scope(attribute.runtime_call_stats.getter_counter) | indent(2) }}
+  {% else %}
+  {{ runtime_timer_scope_disabled_by_default(attribute.runtime_call_stats.getter_counter) }}
+  {% endif %}
+
   {% if attribute.deprecate_as %}
   Deprecation::CountDeprecation(CurrentExecutionContext(info.GetIsolate()), WebFeature::k{{attribute.deprecate_as}});
   {% endif %}
@@ -228,9 +239,9 @@ const v8::FunctionCallbackInfo<v8::Value>& info
 
   {% if world_suffix in attribute.activity_logging_world_list_for_getter %}
   {% if attribute.is_static %}
-  ScriptState* scriptState = ScriptState::ForFunctionObject(info);
+  ScriptState* scriptState = ScriptState::ForCurrentRealm(info);
   {% else %}
-  ScriptState* scriptState = ScriptState::ForReceiverObject(info);
+  ScriptState* scriptState = ScriptState::ForRelevantRealm(info);
   {% endif %}
   V8PerContextData* contextData = scriptState->PerContextData();
   if (
@@ -252,17 +263,9 @@ const v8::FunctionCallbackInfo<v8::Value>& info
 
 
 {##############################################################################}
-{% macro attribute_cached_property_key(attribute) %}
-v8::Local<v8::Private> {{v8_class_or_partial}}::{{attribute.name}}CachedPropertyKey(v8::Isolate* isolate)
-{
-  return V8PrivateProperty::Get{{attribute.cached_accessor_name}}(isolate).GetPrivate();
-}
-{% endmacro %}
-
-
-{##############################################################################}
 {% macro constructor_getter_callback(attribute, world_suffix) %}
 void {{v8_class_or_partial}}::{{attribute.name}}ConstructorGetterCallback{{world_suffix}}(v8::Local<v8::Name> property, const v8::PropertyCallbackInfo<v8::Value>& info) {
+  {{ runtime_timer_scope_disabled_by_default(attribute.runtime_call_stats.constructor_getter_callback_counter) }}
   {% if attribute.deprecate_as %}
   Deprecation::CountDeprecation(CurrentExecutionContext(info.GetIsolate()), WebFeature::k{{attribute.deprecate_as}});
   {% endif %}
@@ -286,7 +289,6 @@ v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info
 {%- else %}
 v8::Local<v8::Value> v8Value, const v8::FunctionCallbackInfo<v8::Value>& info
 {%- endif %}) {
-  {{ runtime_timer_scope(attribute.runtime_call_stats.setter_counter) | indent(2) }}
   {% filter format_remove_duplicates(['ExceptionState exceptionState']) %}
   v8::Isolate* isolate = info.GetIsolate();
   ALLOW_UNUSED_LOCAL(isolate);
@@ -368,11 +370,7 @@ v8::Local<v8::Value> v8Value, const v8::FunctionCallbackInfo<v8::Value>& info
   {% endif %}
 
   // Prepare the value to be set.
-  {% if attribute.idl_type == 'EventHandler' %}
-  {% if not is_node %}
-  MoveEventListenerToNewWrapper(isolate, holder, {{attribute.event_handler_getter_expression}}, v8Value, {{v8_class}}::eventListenerCacheIndex);
-  {% endif %}
-  {% else %}{# not EventHandler #}
+  {% if attribute.idl_type != 'EventHandler' %}
   {{v8_value_to_local_cpp_value(attribute) | indent(2)}}
   {% endif %}
 
@@ -390,20 +388,27 @@ v8::Local<v8::Value> v8Value, const v8::FunctionCallbackInfo<v8::Value>& info
   DummyExceptionStateForTesting dummyExceptionState;
   {{declare_enum_validation_variable(attribute.enum_values) | indent(2)}}
   if (!IsValidEnum(cppValue, validValues, WTF_ARRAY_LENGTH(validValues), "{{attribute.enum_type}}", dummyExceptionState)) {
-    CurrentExecutionContext(isolate)->AddConsoleMessage(ConsoleMessage::Create(kJSMessageSource, kWarningMessageLevel, dummyExceptionState.Message()));
+    ExecutionContext::ForCurrentRealm(info)->AddConsoleMessage(
+        ConsoleMessage::Create(kJSMessageSource, kWarningMessageLevel,
+                               dummyExceptionState.Message()));
     return;
   }
   {% endif %}
 
-  {% if attribute.is_call_with_execution_context or attribute.is_setter_call_with_execution_context %}
-  ExecutionContext* executionContext = CurrentExecutionContext(isolate);
+  {% if attribute.is_call_with_execution_context or
+        attribute.is_setter_call_with_execution_context %}
+  {% if attribute.is_static %}
+  ExecutionContext* executionContext = ExecutionContext::ForCurrentRealm(info);
+  {% else %}
+  ExecutionContext* executionContext = ExecutionContext::ForRelevantRealm(info);
+  {% endif %}
   {% endif %}
 
   {% if attribute.is_call_with_script_state %}
   {% if attribute.is_static %}
-  ScriptState* scriptState = ScriptState::ForFunctionObject(info);
+  ScriptState* scriptState = ScriptState::ForCurrentRealm(info);
   {% else %}
-  ScriptState* scriptState = ScriptState::ForReceiverObject(info);
+  ScriptState* scriptState = ScriptState::ForRelevantRealm(info);
   {% endif %}
   {% endif %}
 
@@ -436,6 +441,12 @@ v8::Local<v8::Name>, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInf
 {%- else %}
 const v8::FunctionCallbackInfo<v8::Value>& info
 {%- endif %}) {
+  {% if attribute.runtime_call_stats.extended_attribute_defined %}
+  {{ runtime_timer_scope(attribute.runtime_call_stats.setter_counter) | indent(2) }}
+  {% else %}
+  {{ runtime_timer_scope_disabled_by_default(attribute.runtime_call_stats.setter_counter) }}
+  {% endif %}
+
   {% if not attribute.is_data_type_property %}
   v8::Local<v8::Value> v8Value = info[0];
   {% endif %}
@@ -450,9 +461,9 @@ const v8::FunctionCallbackInfo<v8::Value>& info
 
   {% if world_suffix in attribute.activity_logging_world_list_for_setter %}
   {% if attribute.is_static %}
-  ScriptState* scriptState = ScriptState::ForFunctionObject(info);
+  ScriptState* scriptState = ScriptState::ForCurrentRealm(info);
   {% else %}
-  ScriptState* scriptState = ScriptState::ForReceiverObject(info);
+  ScriptState* scriptState = ScriptState::ForRelevantRealm(info);
   {% endif %}
   V8PerContextData* contextData = scriptState->PerContextData();
   if (
@@ -505,9 +516,9 @@ const v8::FunctionCallbackInfo<v8::Value>& info
     if attribute.constructor_type else 'nullptr' %}
 {% set property_attribute = 'static_cast<v8::PropertyAttribute>(%s)' %
                             ' | '.join(attribute.property_attributes) %}
-{% set cached_property_key =
-    '%s::%sCachedPropertyKey' % (v8_class_or_partial, attribute.name)
-    if attribute.is_cached_accessor else 'nullptr' %}
+{% set cached_property_key = 'V8PrivateProperty::k' +
+    (attribute.cached_accessor_name if attribute.is_cached_accessor
+     else 'NoCachedAccessor') %}
 {% set holder_check = 'V8DOMConfiguration::kDoNotCheckHolder'
     if attribute.is_lenient_this else 'V8DOMConfiguration::kCheckHolder' %}
 {% if attribute.is_per_world_bindings %}
@@ -520,16 +531,17 @@ const v8::FunctionCallbackInfo<v8::Value>& info
         '"%s"' % attribute.name,
         getter_callback_for_main_world,
         setter_callback_for_main_world,
+        wrapper_type_info,
     ],
     'non_main' : [
         '"%s"' % attribute.name,
         getter_callback,
         setter_callback,
+        wrapper_type_info,
     ],
 } %}
 {% set accessor_only_fields = [] if config_type == 'attribute' else [cached_property_key] %}
 {% set config_post = [
-    wrapper_type_info,
     property_attribute,
     property_location(attribute),
     holder_check,
@@ -565,18 +577,46 @@ const v8::FunctionCallbackInfo<v8::Value>& info
 
 
 {##############################################################################}
-{% macro install_conditionally_enabled_attributes_on_prototype() %}
-{% for attribute in conditionally_enabled_attributes if attribute.on_prototype %}
-{% filter exposed(attribute.exposed_test) %}
-{% filter secure_context(attribute.secure_context_test) %}
-{% filter runtime_enabled(attribute.runtime_enabled_feature_name) %}
-static const V8DOMConfiguration::AccessorConfiguration accessorConfiguration[] = {
-    {{accessor_configuration(attribute) | indent(4)}}
+{% macro install_conditionally_enabled_attributes_on_prototype(secure_context_test_result) %}
+{% for exposed_test, exposed_attribute_list in conditionally_enabled_attributes | selectattr('on_prototype') | groupby('exposed_test') %}
+{% filter exposed(exposed_test) %}
+{% for secure_context_test, secure_context_attribute_list in exposed_attribute_list | groupby('secure_context_test') %}
+{% filter secure_context(secure_context_test, secure_context_test_result) %}
+{% for feature_name, attribute_list in secure_context_attribute_list | groupby('runtime_enabled_feature_name') %}
+{% filter runtime_enabled(feature_name) %}
+static const V8DOMConfiguration::AccessorConfiguration accessor_configurations[] = {
+    {% for attribute in attribute_list | sort %}
+    {{accessor_configuration(attribute) | indent(4)}},
+    {% endfor %}
 };
-for (const auto& accessorConfig : accessorConfiguration)
-  V8DOMConfiguration::InstallAccessor(isolate, world, v8::Local<v8::Object>(), prototypeObject, interfaceObject, signature, accessorConfig);
+V8DOMConfiguration::InstallAccessors(isolate, world, v8::Local<v8::Object>(), prototypeObject, interfaceObject, signature, accessor_configurations, WTF_ARRAY_LENGTH(accessor_configurations));
 {% endfilter %}{# runtime_enabled #}
+{% endfor %}{# secure_context_attribute_list grouped by runtime_enabled #}
 {% endfilter %}{# secure_context #}
+{% endfor %}{# exposed_attribute_list grouped by secure_context_text #}
 {% endfilter %}{# exposed #}
-{% endfor %}
+{% endfor %}{# attributes grouped by exposed_test #}
+{% endmacro %}
+
+
+{##############################################################################}
+{% macro install_conditionally_enabled_constructors(secure_context_test_result) %}
+{% for exposed_test, exposed_attribute_list in conditionally_enabled_attributes | selectattr('constructor_type') | groupby('exposed_test') %}
+{% filter exposed(exposed_test) %}
+{% for secure_context_test, secure_context_attribute_list in exposed_attribute_list | groupby('secure_context_test') %}
+{% filter secure_context(secure_context_test, secure_context_test_result) %}
+{% for feature_name, attribute_list in secure_context_attribute_list | groupby('runtime_enabled_feature_name') %}
+{% filter runtime_enabled(feature_name) %}
+static const V8DOMConfiguration::AttributeConfiguration constructor_configurations[] = {
+    {% for attribute in attribute_list | sort %}
+    {{attribute_configuration(attribute) | indent(4)}},
+    {% endfor %}
+};
+V8DOMConfiguration::InstallAttributes(isolate, world, instance, prototype_object, constructor_configurations, WTF_ARRAY_LENGTH(constructor_configurations));
+{% endfilter %}{# runtime_enabled #}
+{% endfor %}{# secure_context_attribute_list grouped by runtime_enabled #}
+{% endfilter %}{# secure_context #}
+{% endfor %}{# exposed_attribute_list grouped by secure_context_text #}
+{% endfilter %}{# exposed #}
+{% endfor %}{# attributes grouped by exposed_test #}
 {% endmacro %}

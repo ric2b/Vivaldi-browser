@@ -13,12 +13,13 @@
         --scroll-border: 1px solid var(--paper-grey-300);
         border: 0;
         border-radius: 2px;
-        bottom: 0;
+        bottom: 50%;
         box-shadow: 0 0 16px rgba(0, 0, 0, 0.12),
                     0 16px 16px rgba(0, 0, 0, 0.24);
         color: inherit;
+        overflow-y: hidden;
         padding: 0;
-        top: 0;
+        top: 50%;
         width: 512px;
       }
 
@@ -55,6 +56,7 @@
         font-size: calc(15 / 13 * 100%);
         line-height: 1;
         padding: 16px 16px;
+        @apply(--cr-dialog-title);
       }
 
       :host ::slotted([slot=button-container]) {
@@ -95,7 +97,7 @@
       .top-container {
         align-items: flex-start;
         display: flex;
-        min-height: 47px;
+        min-height: var(--cr-dialog-top-container-min-height, 47px);
       }
 
       .title-container {
@@ -127,6 +129,7 @@
             on-keypress="onCloseKeypress_">
         </button>
       </div>
+      <slot name="header"></slot>
       <div class="body-container">
         <span id="bodyTopMarker"></span>
         <slot name="body"></slot>

@@ -352,8 +352,7 @@ void WebNavigationTabObserver::DidFailLoad(
     content::RenderFrameHost* render_frame_host,
     const GURL& validated_url,
     int error_code,
-    const base::string16& error_description,
-    bool was_ignored_by_handler) {
+    const base::string16& error_description) {
   // When showing replacement content, we might get load signals for frames
   // that weren't reguarly loaded.
   if (!navigation_state_.IsValidFrame(render_frame_host))
@@ -421,8 +420,10 @@ void WebNavigationTabObserver::DispatchCachedOnBeforeNavigate() {
 
 void WebNavigationTabObserver::HandleCommit(
     content::NavigationHandle* navigation_handle) {
-  bool is_reference_fragment_navigation = IsReferenceFragmentNavigation(
-      navigation_handle->GetRenderFrameHost(), navigation_handle->GetURL());
+  bool is_reference_fragment_navigation =
+      navigation_handle->IsSameDocument() &&
+      IsReferenceFragmentNavigation(navigation_handle->GetRenderFrameHost(),
+                                    navigation_handle->GetURL());
 
   navigation_state_.StartTrackingDocumentLoad(
       navigation_handle->GetRenderFrameHost(), navigation_handle->GetURL(),

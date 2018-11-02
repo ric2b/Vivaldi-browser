@@ -9,8 +9,8 @@
 #include "printing/features/features.h"
 
 #if BUILDFLAG(ENABLE_BASIC_PRINTING)
-#include "components/printing/renderer/print_web_view_helper.h"
-#include "headless/lib/renderer/headless_print_web_view_helper_delegate.h"
+#include "components/printing/renderer/print_render_frame_helper.h"
+#include "headless/lib/renderer/headless_print_render_frame_helper_delegate.h"
 #endif
 
 namespace headless {
@@ -22,8 +22,8 @@ HeadlessContentRendererClient::~HeadlessContentRendererClient() {}
 void HeadlessContentRendererClient::RenderFrameCreated(
     content::RenderFrame* render_frame) {
 #if BUILDFLAG(ENABLE_BASIC_PRINTING)
-  new printing::PrintWebViewHelper(
-      render_frame, base::MakeUnique<HeadlessPrintWebViewHelperDelegate>());
+  new printing::PrintRenderFrameHelper(
+      render_frame, base::MakeUnique<HeadlessPrintRenderFrameHelperDelegate>());
 #endif
   new HeadlessRenderFrameControllerImpl(render_frame);
 }

@@ -85,7 +85,7 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
   ~EmptyChromeClient() override {}
   void ChromeDestroyed() override {}
 
-  WebViewBase* GetWebView() const override { return nullptr; }
+  WebViewImpl* GetWebView() const override { return nullptr; }
   void SetWindowRect(const IntRect&, LocalFrame&) override {}
   IntRect RootWindowRect() override { return IntRect(); }
 
@@ -109,7 +109,8 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
   void DidOverscroll(const FloatSize&,
                      const FloatSize&,
                      const FloatPoint&,
-                     const FloatSize&) override {}
+                     const FloatSize&,
+                     const WebScrollBoundaryBehavior&) override {}
 
   void BeginLifecycleUpdates() override {}
 
@@ -291,10 +292,6 @@ class CORE_EXPORT EmptyLocalFrameClient : public LocalFrameClient {
 
   void DownloadURL(const ResourceRequest&,
                    const String& suggested_name) override {}
-  void LoadURLExternally(const ResourceRequest&,
-                         NavigationPolicy,
-                         WebTriggeringEventInfo,
-                         bool) override {}
   void LoadErrorPage(int reason) override {}
 
   DocumentLoader* CreateDocumentLoader(LocalFrame*,
@@ -332,7 +329,8 @@ class CORE_EXPORT EmptyLocalFrameClient : public LocalFrameClient {
   std::unique_ptr<WebMediaPlayer> CreateWebMediaPlayer(
       HTMLMediaElement&,
       const WebMediaPlayerSource&,
-      WebMediaPlayerClient*) override;
+      WebMediaPlayerClient*,
+      WebLayerTreeView*) override;
   WebRemotePlaybackClient* CreateWebRemotePlaybackClient(
       HTMLMediaElement&) override;
 
@@ -451,8 +449,7 @@ class EmptyContextMenuClient final : public ContextMenuClient {
   void ClearContextMenu() override {}
 };
 
-class CORE_EXPORT EmptyRemoteFrameClient
-    : NON_EXPORTED_BASE(public RemoteFrameClient) {
+class CORE_EXPORT EmptyRemoteFrameClient : public RemoteFrameClient {
   WTF_MAKE_NONCOPYABLE(EmptyRemoteFrameClient);
 
  public:
@@ -464,7 +461,7 @@ class CORE_EXPORT EmptyRemoteFrameClient
   void Reload(FrameLoadType, ClientRedirectPolicy) override {}
   unsigned BackForwardLength() override { return 0; }
   void ForwardPostMessage(MessageEvent*,
-                          PassRefPtr<SecurityOrigin> target,
+                          RefPtr<SecurityOrigin> target,
                           LocalFrame* source_frame) const override {}
   void FrameRectsChanged(const IntRect& frame_rect) override {}
   void UpdateRemoteViewportIntersection(

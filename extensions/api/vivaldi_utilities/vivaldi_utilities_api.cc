@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "app/vivaldi_apptools.h"
+#include "app/vivaldi_version_info.h"
 #include "base/guid.h"
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
@@ -33,12 +34,12 @@
 #include "components/prefs/pref_service.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/version_info/version_info.h"
-#include "content/public/browser/download_manager.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "prefs/vivaldi_pref_names.h"
+#include "ui/shell_dialogs/select_file_policy.h"
 #include "ui/vivaldi_ui_utils.h"
 #include "url/url_constants.h"
 
@@ -72,8 +73,6 @@ void VivaldiUtilitiesEventRouter::DispatchEvent(
 
 VivaldiUtilitiesAPI::VivaldiUtilitiesAPI(content::BrowserContext* context)
     : browser_context_(context) {
-  extensions::AppWindowRegistry::Get(context)->AddObserver(this);
-
   EventRouter* event_router = EventRouter::Get(browser_context_);
   event_router->RegisterObserver(this,
                                  vivaldi::utilities::OnScroll::kEventName);
@@ -82,7 +81,10 @@ VivaldiUtilitiesAPI::VivaldiUtilitiesAPI(content::BrowserContext* context)
 VivaldiUtilitiesAPI::~VivaldiUtilitiesAPI() {}
 
 void VivaldiUtilitiesAPI::Shutdown() {
-  extensions::AppWindowRegistry::Get(browser_context_)->RemoveObserver(this);
+  for (auto it : key_to_values_map_) {
+    // Get rid of the allocated items
+    delete it.second;
+  }
 }
 
 static base::LazyInstance<BrowserContextKeyedAPIFactory<VivaldiUtilitiesAPI> >::
@@ -92,44 +94,6 @@ static base::LazyInstance<BrowserContextKeyedAPIFactory<VivaldiUtilitiesAPI> >::
 BrowserContextKeyedAPIFactory<VivaldiUtilitiesAPI>*
 VivaldiUtilitiesAPI::GetFactoryInstance() {
   return g_factory.Pointer();
-}
-
-Browser* VivaldiUtilitiesAPI::FindBrowserFromAppWindowId(
-    const std::string& appwindow_id) {
-  WindowIdToAppWindowId::const_iterator iter =
-      appwindow_id_to_window_id_.find(appwindow_id);
-  if (iter == appwindow_id_to_window_id_.end())
-    return nullptr;  // not a window
-
-  int window_id = iter->second;
-  for (auto* browser : *BrowserList::GetInstance()) {
-    if (ExtensionTabUtil::GetWindowId(browser) == window_id &&
-        browser->window()) {
-      return browser;
-    }
-  }
-  return nullptr;
-}
-
-void VivaldiUtilitiesAPI::MapAppWindowIdToWindowId(
-    const std::string& appwindow_id,
-    int window_id) {
-  appwindow_id_to_window_id_.insert(std::make_pair(appwindow_id, window_id));
-}
-
-void VivaldiUtilitiesAPI::OnAppWindowActivated(
-    extensions::AppWindow* app_window) {
-  Browser* browser = FindBrowserFromAppWindowId(app_window->window_key());
-  if (browser) {
-    // Activate the found browser but don't call Activate as that will call back
-    // to the app window again.
-    BrowserList::SetLastActive(browser);
-  }
-}
-
-void VivaldiUtilitiesAPI::OnAppWindowRemoved(
-    extensions::AppWindow* app_window) {
-  appwindow_id_to_window_id_.erase(app_window->window_key());
 }
 
 void VivaldiUtilitiesAPI::ScrollType(int scrollType) {
@@ -144,6 +108,31 @@ void VivaldiUtilitiesAPI::OnListenerAdded(const EventListenerInfo& details) {
   event_router_.reset(new VivaldiUtilitiesEventRouter(
       Profile::FromBrowserContext(browser_context_)));
   EventRouter::Get(browser_context_)->UnregisterObserver(this);
+}
+
+// Returns true if the key didn't not exist previously, false if it updated
+// an existing value
+bool VivaldiUtilitiesAPI::SetSharedData(const std::string& key,
+                                        base::Value* value) {
+  bool retval = true;
+  auto it = key_to_values_map_.find(key);
+  if (it != key_to_values_map_.end()) {
+    delete it->second;
+    key_to_values_map_.erase(it);
+    retval = false;
+  }
+  key_to_values_map_.insert(std::make_pair(key, value->DeepCopy()));
+  return retval;
+}
+
+// Looks up an existing key/value pair, returns nullptr if the key does not
+// exist.
+const base::Value* VivaldiUtilitiesAPI::GetSharedData(const std::string& key) {
+  auto it = key_to_values_map_.find(key);
+  if (it != key_to_values_map_.end()) {
+    return it->second;
+  }
+  return nullptr;
 }
 
 namespace ClearAllRecentlyClosedSessions =
@@ -325,41 +314,6 @@ UtilitiesIsUrlValidFunction::UtilitiesIsUrlValidFunction() {}
 
 UtilitiesIsUrlValidFunction::~UtilitiesIsUrlValidFunction() {}
 
-UtilitiesMapFocusAppWindowToWindowIdFunction::
-    UtilitiesMapFocusAppWindowToWindowIdFunction() {}
-
-UtilitiesMapFocusAppWindowToWindowIdFunction::
-    ~UtilitiesMapFocusAppWindowToWindowIdFunction() {}
-
-bool UtilitiesMapFocusAppWindowToWindowIdFunction::RunAsync() {
-  std::unique_ptr<vivaldi::utilities::MapFocusAppWindowToWindowId::Params>
-      params(vivaldi::utilities::MapFocusAppWindowToWindowId::Params::Create(
-          *args_));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
-
-  VivaldiUtilitiesAPI* api =
-      VivaldiUtilitiesAPI::GetFactoryInstance()->Get(GetProfile());
-
-  api->MapAppWindowIdToWindowId(params->app_window_id, params->window_id);
-
-  SendResponse(true);
-  return true;
-}
-
-bool UtilitiesPauseAllDownloadsFunction::RunAsync() {
-  content::DownloadManager* manager =
-      content::BrowserContext::GetDownloadManager(GetProfile());
-  content::DownloadManager::DownloadVector items;
-  manager->GetAllDownloads(&items);
-  for (auto* item : items) {
-    if (item->GetState() == content::DownloadItem::DownloadState::IN_PROGRESS) {
-      item->Cancel(false);
-    }
-  }
-  SendResponse(true);
-  return true;
-}
-
 bool UtilitiesCreateUrlMappingFunction::RunAsync() {
   std::unique_ptr<vivaldi::utilities::CreateUrlMapping::Params>
     params(vivaldi::utilities::CreateUrlMapping::Params::Create(
@@ -489,6 +443,38 @@ void UtilitiesSelectFileFunction::FileSelectionCanceled(void* params) {
 bool UtilitiesGetVersionFunction::RunAsync() {
   results_ = vivaldi::utilities::GetVersion::Results::Create(
       ::vivaldi::GetVivaldiVersionString(), version_info::GetVersionNumber());
+
+  SendResponse(true);
+  return true;
+}
+
+bool UtilitiesSetSharedDataFunction::RunAsync() {
+  std::unique_ptr<vivaldi::utilities::SetSharedData::Params> params(
+      vivaldi::utilities::SetSharedData::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  VivaldiUtilitiesAPI* api =
+      VivaldiUtilitiesAPI::GetFactoryInstance()->Get(GetProfile());
+
+  bool found = api->SetSharedData(params->key_value_pair.key,
+                                  params->key_value_pair.value.get());
+  results_ = vivaldi::utilities::SetSharedData::Results::Create(found);
+
+  SendResponse(true);
+  return true;
+}
+
+bool UtilitiesGetSharedDataFunction::RunAsync() {
+  std::unique_ptr<vivaldi::utilities::GetSharedData::Params> params(
+    vivaldi::utilities::GetSharedData::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  VivaldiUtilitiesAPI* api =
+      VivaldiUtilitiesAPI::GetFactoryInstance()->Get(GetProfile());
+
+  const base::Value* value = api->GetSharedData(params->key_value_pair.key);
+  results_ = vivaldi::utilities::GetSharedData::Results::Create(
+      value ? *value : *params->key_value_pair.value.get());
 
   SendResponse(true);
   return true;

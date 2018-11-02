@@ -23,11 +23,10 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
 <translation id="1520828917794284345">Resize desktop to fit</translation>
 <translation id="154040539590487450">Failed to start remote access service.</translation>
 <translation id="1546934824884762070">An unexpected error occurred. Please report this problem to the developers.</translation>
-<translation id="1619813076098775562">Closed connection to Cast device.</translation>
 <translation id="1643640058022401035">Leaving this page will end your Chromoting session.</translation>
 <translation id="1654128982815600832">Enabling remote connections for this computer…</translation>
 <translation id="170207782578677537">Failed to register this computer.</translation>
-<translation id="1704090719919187045">Chromoting Host Preferences</translation>
+<translation id="1727412735341161734">Chrome Remote Desktop</translation>
 <translation id="174018511426417793">You have no computers registered. To enable remote connections to a computer, install Chrome Remote Desktop there and click “<ph name="BUTTON_NAME" />”.</translation>
 <translation id="1742469581923031760">Connecting…</translation>
 <translation id="1770394049404108959">I can't open the application.</translation>
@@ -42,10 +41,6 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
 <translation id="2013996867038862849">All paired clients have been deleted.</translation>
 <translation id="2038229918502634450">Host is restarting, to take into account a policy change.</translation>
 <translation id="2046651113449445291">The following clients have been paired with this computer and can connect without supplying a PIN. You can revoke this permission at any time, either individually, or for all clients.</translation>
-<translation id="2053901200959289492">• Added Multi-Window support for Android Nougat.
-• Improved desktop image quality, responsiveness and battery consumption.
-• Improved responsiveness of click-drag operations.
-• Improved several UI animation effects.</translation>
 <translation id="2078880767960296260">Host Process</translation>
 <translation id="20876857123010370">Trackpad mode</translation>
 <translation id="2089514346391228378">Remote connections for this computer have been enabled.</translation>
@@ -81,6 +76,7 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
 <translation id="2676780859508944670">Working…</translation>
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2747641796667576127">Software updates usually happen automatically, but can fail in some rare cases. Updating the software should take no more than a few minutes and can be done while connected to your computer remotely.</translation>
+<translation id="2758123043070977469">There was an issue authenticating. Please login again.</translation>
 <translation id="2803375539583399270">Enter PIN</translation>
 <translation id="2841013758207633010">Time</translation>
 <translation id="2851754573186462851">Chromium App Streaming</translation>
@@ -99,8 +95,15 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
 <translation id="3150823315463303127">Host failed to read the policy.</translation>
 <translation id="3194245623920924351">Chrome Remote Desktop</translation>
 <translation id="3197730452537982411">Remote Desktop</translation>
+<translation id="321944585103975186">• Redesigned user interface.
+• Improved performance, responsiveness and reliability.
+• Support for playing audio from Windows or Linux computers.
+• Enhanced keyboard support.</translation>
+<translation id="324272851072175193">Email these instructions</translation>
 <translation id="3258789396564295715">You may securely access this computer using Chrome Remote Desktop.</translation>
 <translation id="3286521253923406898">Chromoting Host Controller</translation>
+<translation id="3305934114213025800"><ph name="PRODUCT_NAME" /> wants to make changes.</translation>
+<translation id="331779822864701136">• Added support for Android 8.0 Oreo.</translation>
 <translation id="332624996707057614">Edit computer name</translation>
 <translation id="3339299787263251426">Access your computer securely over the Internet</translation>
 <translation id="3360306038446926262">Windows</translation>
@@ -109,6 +112,12 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
 <translation id="3385242214819933234">Invalid host owner.</translation>
 <translation id="3403830762023901068">Policy settings do not permit sharing this computer as a Chromoting host. Contact your system administrator for assistance.</translation>
 <translation id="3423542133075182604">Security Key Remoting Process</translation>
+<translation id="3426467947138417795">Chrome Remote Desktop
+Remote Desktop
+Remote PC
+Remote Computer
+Remote Access
+Remote Support</translation>
 <translation id="3581045510967524389">Could not connect to the network. Please check that your device is on-line.</translation>
 <translation id="3596628256176442606">This service enables incoming connections from Chromoting clients.</translation>
 <translation id="3606997049964069799">You are not signed in to Chromium. Please sign in and try again.</translation>
@@ -117,8 +126,13 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
 <translation id="3695446226812920698">Find out how</translation>
 <translation id="3718805989288361841">There is an error with the policy settings for Chrome Remote Desktop. Contact your system administrator for assistance.</translation>
 <translation id="3776024066357219166">Your Chrome Remote Desktop session has ended.</translation>
-<translation id="3785447812627779171">Chromoting
-Host</translation>
+<translation id="3788372335219293587">Securely access your computer from your iOS device. Its fast, simple and free.
+
+• On the computer that you want to access remotely, find the Chrome Remote Desktop app on the Chrome Web Store – https://chrome.google.com/remotedesktop
+• Install Chrome Remote Desktop software and follow the instructions to complete setup.
+• On your iOS device, open the app and tap on any of your online computers to connect.
+
+For information about privacy, please see the Google Privacy Policy (http://goo.gl/SyrVzj).</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">Please confirm your account and PIN below to allow access by Chrome Remote Desktop.</translation>
 <translation id="3897092660631435901">Menu</translation>
@@ -132,9 +146,9 @@ Host</translation>
 <translation id="405887016757208221">The remote computer has failed to initialise the session. If problem persists please try to configure the host again.</translation>
 <translation id="4068946408131579958">All connections</translation>
 <translation id="409800995205263688">NOTE: Policy settings permit connections only between computers within your network.</translation>
+<translation id="4145029455188493639">Signed in as <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4155497795971509630">Some required components are missing. Please make sure that you have installed the latest version of the software and try again.</translation>
 <translation id="4156740505453712750">To protect access to this computer, please choose a PIN of <ph name="BOLD_START" />at least six digits<ph name="BOLD_END" />. This PIN will be required when connecting from another location.</translation>
-<translation id="4156741816461781891">Signed in as <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4176825807642096119">Access code</translation>
 <translation id="4207623512727273241">Please run the installer before continuing.</translation>
 <translation id="4227991223508142681">Host Provisioning Utility</translation>
@@ -152,8 +166,7 @@ Host</translation>
 <translation id="4517233780764084060">NOTE: To ensure that all keyboard shortcuts are available, you can configure Chromoting to ‘Open as window’.</translation>
 <translation id="4563926062592110512">Client disconnected: <ph name="CLIENT_USERNAME" />.</translation>
 <translation id="4572065712096155137">Access</translation>
-<translation id="4573676252416618192">Chrome Remote
-Desktop Host</translation>
+<translation id="4592037108270173918">Data charges may apply when connecting to a device over a mobile network. Do you want to continue?</translation>
 <translation id="4619978527973181021">Accept and install</translation>
 <translation id="4635770493235256822">Remote devices</translation>
 <translation id="4660011489602794167">Show keyboard</translation>
@@ -192,20 +205,19 @@ Desktop Host</translation>
 <translation id="5419418238395129586">Last online: <ph name="DATE" /></translation>
 <translation id="544077782045763683">Host has shut down.</translation>
 <translation id="5510035215749041527">Disconnect now</translation>
-<translation id="5537725057119320332">Cast</translation>
 <translation id="5593560073513909978">The service is temporarily unavailable. Please try again later.</translation>
 <translation id="5601503069213153581">PIN</translation>
 <translation id="5619148062500147964">To this computer</translation>
 <translation id="5625493749705183369">Access other computers or allow another user to access your computer securely over the Internet.</translation>
 <translation id="5702987232842159181">Connected:</translation>
 <translation id="5708869785009007625">Your desktop is currently shared with <ph name="USER" />.</translation>
+<translation id="5750083143895808682">Signed in as <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="5773590752998175013">Pairing date</translation>
 <translation id="579702532610384533">Reconnect</translation>
+<translation id="5810269635982033450">Screen acts like a trackpad</translation>
 <translation id="5841343754884244200">Display options</translation>
 <translation id="5843054235973879827">Why is this safe?</translation>
 <translation id="5859141382851488196">New window…</translation>
-<translation id="5885438903806970186">Online</translation>
-<translation id="6001953797859482435">Chrome Remote Desktop Host Preferences</translation>
 <translation id="6011539954251327702">Chromoting allows you to securely share your computer over the Web. Both users must be running the Chromoting app, which can be found at <ph name="URL" />.</translation>
 <translation id="6033507038939587647">Keyboard options</translation>
 <translation id="6040143037577758943">Close</translation>
@@ -254,10 +266,14 @@ Desktop Host</translation>
 <translation id="7019153418965365059">Unrecognised host error: <ph name="HOST_OFFLINE_REASON" />.</translation>
 <translation id="701976023053394610">Remote Assistance</translation>
 <translation id="7038683108611689168">Help us improve Chromoting by allowing us to collect usage statistics and crash reports.</translation>
-<translation id="712467900648340229">Failed to connect to Cast device.</translation>
+<translation id="7067321367069083429">Screen acts like a touch screen</translation>
+<translation id="7116737094673640201">Welcome to Chrome Remote Desktop</translation>
 <translation id="7144878232160441200">Retry</translation>
 <translation id="7149517134817561223">Application to issue commands to Chrome remote desktop host.</translation>
 <translation id="7215059001581613786">Please enter a PIN consisting of six or more digits.</translation>
+<translation id="7237767047212540055">On the computer that you want to access remotely, open Chrome and visit <ph name="INSTALLATION_LINK" />
+Install Chrome Remote Desktop software and follow the instructions to complete setup
+After setup is complete, you'll be able to access the computer from this page by entering the PIN or access code</translation>
 <translation id="7312846573060934304">Host is offline.</translation>
 <translation id="7319983568955948908">Stop Sharing</translation>
 <translation id="7401733114166276557">Chrome Remote Desktop</translation>
@@ -271,6 +287,7 @@ Desktop Host</translation>
 <translation id="7658239707568436148">Cancel</translation>
 <translation id="7665369617277396874">Add account</translation>
 <translation id="7672203038394118626">Remote connections for this computer have been disabled.</translation>
+<translation id="7678209621226490279">Dock Left</translation>
 <translation id="7693372326588366043">Refresh the list of hosts</translation>
 <translation id="7782471917492991422">Please check your computer's power management settings and ensure that it is not configured to sleep when idle.</translation>
 <translation id="7810127880729796595">Show statistics (connection: <ph name="QUALITY" />)</translation>
@@ -278,6 +295,7 @@ Desktop Host</translation>
 <translation id="7868137160098754906">Please enter your PIN for the remote computer.</translation>
 <translation id="7869445566579231750">You do not have permission to run this application.</translation>
 <translation id="7895403300744144251">Security policies on the remote computer do not allow connections from your account.</translation>
+<translation id="7936528439960309876">Dock Right</translation>
 <translation id="7948001860594368197">Screen options</translation>
 <translation id="7970576581263377361">Authentication failed. Please sign in to Chromium again.</translation>
 <translation id="7981525049612125370">The remote session has expired.</translation>

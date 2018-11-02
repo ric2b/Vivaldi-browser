@@ -6,6 +6,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "cc/test/animation_test_common.h"
+#include "cc/trees/target_property.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -15,15 +16,14 @@ namespace {
 using base::TimeDelta;
 
 static base::TimeTicks TicksFromSecondsF(double seconds) {
-  return base::TimeTicks::FromInternalValue(seconds *
-                                            base::Time::kMicrosecondsPerSecond);
+  return base::TimeTicks() + base::TimeDelta::FromSecondsD(seconds);
 }
 
 std::unique_ptr<Animation> CreateAnimation(double iterations,
                                            double duration,
                                            double playback_rate) {
   std::unique_ptr<Animation> to_return(
-      Animation::Create(base::MakeUnique<FakeFloatAnimationCurve>(duration), 0,
+      Animation::Create(std::make_unique<FakeFloatAnimationCurve>(duration), 0,
                         1, TargetProperty::OPACITY));
   to_return->set_iterations(iterations);
   to_return->set_playback_rate(playback_rate);
@@ -1000,6 +1000,15 @@ TEST(AnimationTest, InEffectFillModePlayback) {
   EXPECT_TRUE(anim->InEffect(TicksFromSecondsF(-1.0)));
   EXPECT_TRUE(anim->InEffect(TicksFromSecondsF(0.0)));
   EXPECT_TRUE(anim->InEffect(TicksFromSecondsF(1.0)));
+}
+
+TEST(AnimationTest, ToString) {
+  EXPECT_EQ(
+      "Animation{id=42, group=73, target_property_id=1, "
+      "run_state=WAITING_FOR_TARGET_AVAILABILITY}",
+      Animation::Create(std::make_unique<FakeFloatAnimationCurve>(15), 42, 73,
+                        TargetProperty::OPACITY)
+          ->ToString());
 }
 
 }  // namespace

@@ -46,6 +46,9 @@ import org.chromium.components.signin.SystemAccountManagerDelegate;
 import org.chromium.policy.AppRestrictionsProvider;
 import org.chromium.policy.CombinedPolicyProvider;
 
+import java.util.Collections;
+import java.util.List;
+
 /**
  * Base class for defining methods where different behavior is required by downstream targets.
  * The correct version of {@link AppHooksImpl} will be determined at compile time via build rules.
@@ -75,12 +78,7 @@ public abstract class AppHooks {
      * @param callback Callback that should receive the results of the AndroidEdu device check.
      */
     public void checkIsAndroidEduDevice(final AndroidEduOwnerCheckCallback callback) {
-        new Handler(Looper.getMainLooper()).post(new Runnable() {
-            @Override
-            public void run() {
-                callback.onSchoolCheckDone(false);
-            }
-        });
+        new Handler(Looper.getMainLooper()).post(() -> callback.onSchoolCheckDone(false));
     }
 
     /**
@@ -294,5 +292,14 @@ public abstract class AppHooks {
     @CalledByNative
     public Callback<CCTRequestStatus> getOfflinePagesCCTRequestDoneCallback() {
         return null;
+    }
+
+    /**
+     * @return A list of whitelisted apps that are allowed to receive notification when the
+     * set of offlined pages downloaded on their behalf has changed. Apps are listed by their
+     * package name.
+     */
+    public List<String> getOfflinePagesCctWhitelist() {
+        return Collections.emptyList();
     }
 }

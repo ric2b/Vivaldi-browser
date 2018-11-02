@@ -21,17 +21,16 @@ class CC_EXPORT StreamVideoDrawQuad : public DrawQuad {
 
   StreamVideoDrawQuad();
 
-  void SetNew(const SharedQuadState* shared_quad_state,
+  void SetNew(const viz::SharedQuadState* shared_quad_state,
               const gfx::Rect& rect,
-              const gfx::Rect& opaque_rect,
               const gfx::Rect& visible_rect,
+              bool needs_blending,
               unsigned resource_id,
               gfx::Size resource_size_in_pixels,
               const gfx::Transform& matrix);
 
-  void SetAll(const SharedQuadState* shared_quad_state,
+  void SetAll(const viz::SharedQuadState* shared_quad_state,
               const gfx::Rect& rect,
-              const gfx::Rect& opaque_rect,
               const gfx::Rect& visible_rect,
               bool needs_blending,
               unsigned resource_id,
@@ -48,7 +47,9 @@ class CC_EXPORT StreamVideoDrawQuad : public DrawQuad {
 
   static const StreamVideoDrawQuad* MaterialCast(const DrawQuad*);
 
-  ResourceId resource_id() const { return resources.ids[kResourceIdIndex]; }
+  viz::ResourceId resource_id() const {
+    return resources.ids[kResourceIdIndex];
+  }
   const gfx::Size& resource_size_in_pixels() const {
     return overlay_resources.size_in_pixels[kResourceIdIndex];
   }

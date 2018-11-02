@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/memory/ptr_util.h"
+#include "base/stl_util.h"
 #include "components/payments/content/can_make_payment_query_factory.h"
 #include "components/payments/content/origin_security_checker.h"
 #include "components/payments/content/payment_details_validation.h"
@@ -15,6 +16,7 @@
 #include "components/payments/core/can_make_payment_query.h"
 #include "components/payments/core/payment_prefs.h"
 #include "components/prefs/pref_service.h"
+#include "components/url_formatter/elide_url.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
@@ -32,7 +34,10 @@ PaymentRequest::PaymentRequest(
       delegate_(std::move(delegate)),
       manager_(manager),
       binding_(this, std::move(request)),
-      frame_origin_(GURL(render_frame_host->GetLastCommittedURL()).GetOrigin()),
+      top_level_origin_(url_formatter::FormatUrlForSecurityDisplay(
+          web_contents_->GetLastCommittedURL())),
+      frame_origin_(url_formatter::FormatUrlForSecurityDisplay(
+          render_frame_host->GetLastCommittedURL())),
       observer_for_testing_(observer_for_testing),
       journey_logger_(delegate_->IsIncognito(),
                       web_contents_->GetLastCommittedURL(),
@@ -109,6 +114,30 @@ void PaymentRequest::Init(mojom::PaymentRequestClientPtr client,
   state_ = base::MakeUnique<PaymentRequestState>(
       spec_.get(), this, delegate_->GetApplicationLocale(),
       delegate_->GetPersonalDataManager(), delegate_.get(), &journey_logger_);
+
+  journey_logger_.SetRequestedInformation(
+      spec_->request_shipping(), spec_->request_payer_email(),
+      spec_->request_payer_phone(), spec_->request_payer_name());
+
+  // Log metrics around which payment methods are requested by the merchant.
+  GURL google_pay_url(kGooglePayMethodName);
+  GURL android_pay_url(kAndroidPayMethodName);
+  // Looking for payment methods that are NOT google-related payment methods.
+  auto non_google_it =
+      std::find_if(spec_->url_payment_method_identifiers().begin(),
+                   spec_->url_payment_method_identifiers().end(),
+                   [google_pay_url, android_pay_url](const GURL& url) {
+                     return url != google_pay_url && url != android_pay_url;
+                   });
+  journey_logger_.SetRequestedPaymentMethodTypes(
+      /*requested_basic_card=*/!spec_->supported_card_networks().empty(),
+      /*requested_method_google=*/
+      base::ContainsValue(spec_->url_payment_method_identifiers(),
+                          google_pay_url) ||
+          base::ContainsValue(spec_->url_payment_method_identifiers(),
+                              android_pay_url),
+      /*requested_method_other=*/non_google_it !=
+          spec_->url_payment_method_identifiers().end());
 }
 
 void PaymentRequest::Show() {
@@ -123,7 +152,6 @@ void PaymentRequest::Show() {
     LOG(ERROR) << "A PaymentRequest UI is already showing";
     journey_logger_.SetNotShown(
         JourneyLogger::NOT_SHOWN_REASON_CONCURRENT_REQUESTS);
-    has_recorded_completion_ = true;
     client_->OnError(mojom::PaymentErrorReason::USER_CANCEL);
     OnConnectionTerminated();
     return;
@@ -132,7 +160,6 @@ void PaymentRequest::Show() {
   if (!state_->AreRequestedMethodsSupported()) {
     journey_logger_.SetNotShown(
         JourneyLogger::NOT_SHOWN_REASON_NO_SUPPORTED_PAYMENT_METHOD);
-    has_recorded_completion_ = true;
     client_->OnError(mojom::PaymentErrorReason::NOT_SUPPORTED);
     if (observer_for_testing_)
       observer_for_testing_->OnNotSupportedError();
@@ -140,11 +167,7 @@ void PaymentRequest::Show() {
     return;
   }
 
-  journey_logger_.SetShowCalled();
   journey_logger_.SetEventOccurred(JourneyLogger::EVENT_SHOWN);
-  journey_logger_.SetRequestedInformation(
-      spec_->request_shipping(), spec_->request_payer_email(),
-      spec_->request_payer_phone(), spec_->request_payer_name());
 
   delegate_->ShowDialog(this);
 }
@@ -215,7 +238,8 @@ void PaymentRequest::CanMakePayment() {
     journey_logger_.SetCanMakePaymentValue(true);
   } else if (CanMakePaymentQueryFactory::GetInstance()
                  ->GetForContext(web_contents_->GetBrowserContext())
-                 ->CanQuery(frame_origin_, spec()->stringified_method_data())) {
+                 ->CanQuery(top_level_origin_, frame_origin_,
+                            spec()->stringified_method_data())) {
     client_->OnCanMakePayment(
         can_make_payment
             ? mojom::CanMakePaymentQueryResult::CAN_MAKE_PAYMENT
@@ -296,8 +320,7 @@ void PaymentRequest::OnConnectionTerminated() {
 
 void PaymentRequest::Pay() {
   journey_logger_.SetEventOccurred(JourneyLogger::EVENT_PAY_CLICKED);
-  journey_logger_.SetSelectedPaymentMethod(
-      JourneyLogger::SELECTED_PAYMENT_METHOD_CREDIT_CARD);
+  journey_logger_.SetEventOccurred(JourneyLogger::EVENT_SELECTED_CREDIT_CARD);
   state_->GeneratePaymentResponse();
 }
 

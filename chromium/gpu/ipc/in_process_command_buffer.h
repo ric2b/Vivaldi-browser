@@ -12,7 +12,6 @@
 #include <memory>
 #include <vector>
 
-#include "base/atomic_sequence_num.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
@@ -32,6 +31,7 @@
 #include "gpu/command_buffer/service/image_manager.h"
 #include "gpu/command_buffer/service/service_discardable_manager.h"
 #include "gpu/config/gpu_driver_bug_workarounds.h"
+#include "gpu/config/gpu_feature_info.h"
 #include "gpu/gpu_export.h"
 #include "gpu/ipc/service/image_transport_surface_delegate.h"
 #include "ui/gfx/gpu_memory_buffer.h"
@@ -129,8 +129,7 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
   void EnsureWorkVisible() override;
   CommandBufferNamespace GetNamespaceID() const override;
   CommandBufferId GetCommandBufferID() const override;
-  int32_t GetStreamId() const override;
-  void FlushOrderingBarrierOnStream(int32_t stream_id) override;
+  void FlushPendingWork() override;
   uint64_t GenerateFenceSyncRelease() override;
   bool IsFenceSyncRelease(uint64_t release) override;
   bool IsFenceSyncFlushed(uint64_t release) override;
@@ -163,6 +162,7 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
 #endif
   void DidSwapBuffersComplete(SwapBuffersCompleteParams params) override;
   const gles2::FeatureInfo* GetFeatureInfo() const override;
+  const GpuPreferences& GetGpuPreferences() const override;
   void SetLatencyInfoCallback(const LatencyInfoCallback& callback) override;
   void UpdateVSyncParameters(base::TimeTicks timebase,
                              base::TimeDelta interval) override;
@@ -186,12 +186,20 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
   void UpdateVSyncParametersOnOriginThread(base::TimeTicks timebase,
                                            base::TimeDelta interval);
 
+  // Mostly the GpuFeatureInfo from GpuInit will be used to create a gpu thread
+  // service. In certain tests GpuInit is not part of the execution path, so
+  // the test suite need to compute it and pass it to the default service.
+  // See "gpu/ipc/in_process_command_buffer.cc".
+  static void InitializeDefaultServiceForTesting(
+      const GpuFeatureInfo& gpu_feature_info);
+
   // The serializer interface to the GPU service (i.e. thread).
   class Service {
    public:
-    explicit Service(const gpu::GpuPreferences& gpu_preferences);
-    Service(gles2::MailboxManager* mailbox_manager,
-            scoped_refptr<gl::GLShareGroup> share_group);
+    Service(const GpuPreferences& gpu_preferences,
+            gles2::MailboxManager* mailbox_manager,
+            scoped_refptr<gl::GLShareGroup> share_group,
+            const GpuFeatureInfo& gpu_feature_info);
 
     virtual ~Service();
 
@@ -210,6 +218,7 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
     virtual bool BlockThreadOnWaitSyncToken() const = 0;
 
     const GpuPreferences& gpu_preferences();
+    const GpuFeatureInfo& gpu_feature_info() { return gpu_feature_info_; }
     const GpuDriverBugWorkarounds& gpu_driver_bug_workarounds();
     scoped_refptr<gl::GLShareGroup> share_group();
     gles2::MailboxManager* mailbox_manager() { return mailbox_manager_; }
@@ -226,11 +235,8 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
     }
 
    protected:
-    Service(const gpu::GpuPreferences& gpu_preferences,
-            gles2::MailboxManager* mailbox_manager,
-            scoped_refptr<gl::GLShareGroup> share_group);
-
     const GpuPreferences gpu_preferences_;
+    const GpuFeatureInfo gpu_feature_info_;
     const GpuDriverBugWorkarounds gpu_driver_bug_workarounds_;
     std::unique_ptr<gles2::MailboxManager> owned_mailbox_manager_;
     gles2::MailboxManager* mailbox_manager_ = nullptr;
@@ -334,7 +340,6 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
   int32_t last_put_offset_;
   gpu::Capabilities capabilities_;
   GpuMemoryBufferManager* gpu_memory_buffer_manager_;
-  base::AtomicSequenceNumber next_image_id_;
   uint64_t next_fence_sync_release_;
   uint64_t flushed_fence_sync_release_;
 

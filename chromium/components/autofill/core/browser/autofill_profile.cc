@@ -18,6 +18,7 @@
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sha1.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversion_utils.h"
 #include "base/strings/utf_string_conversions.h"
@@ -190,6 +191,21 @@ void GetFieldsForDistinguishingProfiles(
   }
 }
 
+// Constants for the validity bitfield.
+static const size_t validity_bits_per_type = 2;
+static const size_t number_supported_types_for_validation = 7;
+// The order is important to ensure a consistent bitfield value. New values
+// should be added at the end NOT at the start or middle.
+static const ServerFieldType
+    supported_types_for_validation[number_supported_types_for_validation] = {
+        ADDRESS_HOME_COUNTRY,
+        ADDRESS_HOME_STATE,
+        ADDRESS_HOME_ZIP,
+        ADDRESS_HOME_CITY,
+        ADDRESS_HOME_DEPENDENT_LOCALITY,
+        EMAIL_ADDRESS,
+        PHONE_HOME_WHOLE_NUMBER};
+
 }  // namespace
 
 AutofillProfile::AutofillProfile(const std::string& guid,
@@ -275,38 +291,6 @@ void AutofillProfile::SetRawInfo(ServerFieldType type,
   FormGroup* form_group = MutableFormGroupForType(AutofillType(type));
   if (form_group)
     form_group->SetRawInfo(type, value);
-}
-
-base::string16 AutofillProfile::GetInfo(const AutofillType& type,
-                                        const std::string& app_locale) const {
-  if (type.html_type() == HTML_TYPE_FULL_ADDRESS) {
-    std::unique_ptr<AddressData> address_data =
-        i18n::CreateAddressDataFromAutofillProfile(*this, app_locale);
-    if (!addressinput::HasAllRequiredFields(*address_data))
-      return base::string16();
-
-    std::vector<std::string> lines;
-    ::i18n::addressinput::GetFormattedNationalAddress(*address_data, &lines);
-    return base::UTF8ToUTF16(base::JoinString(lines, "\n"));
-  }
-
-  const FormGroup* form_group = FormGroupForType(type);
-  if (!form_group)
-    return base::string16();
-
-  return form_group->GetInfo(type, app_locale);
-}
-
-bool AutofillProfile::SetInfo(const AutofillType& type,
-                              const base::string16& value,
-                              const std::string& app_locale) {
-  FormGroup* form_group = MutableFormGroupForType(type);
-  if (!form_group)
-    return false;
-
-  base::string16 trimmed_value;
-  base::TrimWhitespace(value, base::TRIM_ALL, &trimmed_value);
-  return form_group->SetInfo(type, trimmed_value, app_locale);
 }
 
 void AutofillProfile::GetSupportedTypes(
@@ -715,6 +699,87 @@ void AutofillProfile::RecordAndLogUse() {
   UMA_HISTOGRAM_COUNTS_1000("Autofill.DaysSinceLastUse.Profile",
                             (AutofillClock::Now() - use_date()).InDays());
   RecordUse();
+}
+
+AutofillProfile::ValidityState AutofillProfile::GetValidityState(
+    ServerFieldType type) {
+  // Return valid for types that autofill does not validate.
+  if (!IsValidationSupportedForType(type))
+    return UNSUPPORTED;
+
+  if (!base::ContainsKey(validity_states_, type))
+    return UNVALIDATED;
+
+  return validity_states_[type];
+}
+
+void AutofillProfile::SetValidityState(ServerFieldType type,
+                                       ValidityState validity) {
+  // Do not save validity of unsupported types.
+  if (!IsValidationSupportedForType(type))
+    return;
+
+  std::map<ServerFieldType, ValidityState>::iterator it =
+      validity_states_.find(type);
+
+  if (it != validity_states_.end()) {
+    it->second = validity;
+  } else {
+    validity_states_.insert(std::make_pair(type, validity));
+  }
+}
+
+bool AutofillProfile::IsValidationSupportedForType(ServerFieldType type) {
+  return std::find(supported_types_for_validation,
+                   supported_types_for_validation +
+                       number_supported_types_for_validation,
+                   type) !=
+         supported_types_for_validation + number_supported_types_for_validation;
+}
+
+int AutofillProfile::GetValidityBitfieldValue() {
+  int validity_value = 0;
+  size_t field_type_shift = 0;
+  for (ServerFieldType supported_type : supported_types_for_validation) {
+    DCHECK(GetValidityState(supported_type) != UNSUPPORTED);
+    validity_value |= GetValidityState(supported_type) << field_type_shift;
+    field_type_shift += validity_bits_per_type;
+  }
+
+  return validity_value;
+}
+
+base::string16 AutofillProfile::GetInfoImpl(
+    const AutofillType& type,
+    const std::string& app_locale) const {
+  if (type.html_type() == HTML_TYPE_FULL_ADDRESS) {
+    std::unique_ptr<AddressData> address_data =
+        i18n::CreateAddressDataFromAutofillProfile(*this, app_locale);
+    if (!addressinput::HasAllRequiredFields(*address_data))
+      return base::string16();
+
+    std::vector<std::string> lines;
+    ::i18n::addressinput::GetFormattedNationalAddress(*address_data, &lines);
+    return base::UTF8ToUTF16(base::JoinString(lines, "\n"));
+  }
+
+  const FormGroup* form_group = FormGroupForType(type);
+  if (!form_group)
+    return base::string16();
+
+  return form_group->GetInfoImpl(type, app_locale);
+}
+
+bool AutofillProfile::SetInfoImpl(const AutofillType& type,
+                                  const base::string16& value,
+                                  const std::string& app_locale) {
+  FormGroup* form_group = MutableFormGroupForType(type);
+  if (!form_group)
+    return false;
+
+  base::string16 trimmed_value;
+  base::TrimWhitespace(value, base::TRIM_ALL, &trimmed_value);
+  return form_group->SetInfoImpl(type, trimmed_value, app_locale);
 }
 
 // static

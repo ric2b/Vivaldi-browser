@@ -23,7 +23,6 @@ int FakeEncryptedMedia::TestCdmContext::GetCdmId() const {
 
 FakeEncryptedMedia::FakeEncryptedMedia(AppBase* app)
     : decryptor_(new AesDecryptor(
-          GURL::EmptyGURL(),
           base::Bind(&FakeEncryptedMedia::OnSessionMessage,
                      base::Unretained(this)),
           base::Bind(&FakeEncryptedMedia::OnSessionClosed,

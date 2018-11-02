@@ -2,20 +2,16 @@
 
 #include "prefs/native_settings_observer_linux.h"
 
+#include "base/logging.h"
+
 namespace vivaldi {
 
 // static
-NativeSettingsObserver* NativeSettingsObserver::Create(
-    NativeSettingsObserverDelegate* delegate) {
-  return new NativeSettingsObserverLinux(delegate);
+NativeSettingsObserver* NativeSettingsObserver::Create(Profile* profile) {
+  return new NativeSettingsObserverLinux(profile);
 }
 
-NativeSettingsObserverLinux::NativeSettingsObserverLinux(
-    NativeSettingsObserverDelegate* delegate)
-    : delegate_(delegate) {
-  DCHECK(delegate_);
-}
-
-NativeSettingsObserverLinux::~NativeSettingsObserverLinux() {}
+NativeSettingsObserverLinux::NativeSettingsObserverLinux(Profile* profile)
+    : NativeSettingsObserver(profile) {}
 
 }  // namespace vivaldi

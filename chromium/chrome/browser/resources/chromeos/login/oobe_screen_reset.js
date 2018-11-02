@@ -18,6 +18,7 @@ login.createScreen('ResetScreen', 'reset', function() {
   var CONTEXT_KEY_TPM_FIRMWARE_UPDATE_AVAILABLE =
       'tpm-firmware-update-available';
   var CONTEXT_KEY_TPM_FIRMWARE_UPDATE_CHECKED = 'tpm-firmware-update-checked';
+  var CONTEXT_KEY_TPM_FIRMWARE_UPDATE_EDITABLE = 'tpm-firmware-update-editable';
   var CONTEXT_KEY_IS_OFFICIAL_BUILD = 'is-official-build';
   var CONTEXT_KEY_IS_CONFIRMATIONAL_VIEW = 'is-confirmational-view';
   var CONTEXT_KEY_SCREEN_STATE = 'screen-state';
@@ -94,6 +95,10 @@ login.createScreen('ResetScreen', 'reset', function() {
             self.setTPMFirmwareUpdateView_();
           });
       this.context.addObserver(
+          CONTEXT_KEY_TPM_FIRMWARE_UPDATE_EDITABLE, function() {
+            self.setTPMFirmwareUpdateView_();
+          });
+      this.context.addObserver(
           CONTEXT_KEY_TPM_FIRMWARE_UPDATE_AVAILABLE, function() {
             self.setTPMFirmwareUpdateView_();
           });
@@ -106,8 +111,12 @@ login.createScreen('ResetScreen', 'reset', function() {
                 return;
               console.log(self);
               reset.ConfirmResetOverlay.getInstance().initializePage();
+              if (!$('reset-confirm-overlay-md').hidden)
+                $('reset-confirm-overlay-md').showModal();
             } else {
               $('overlay-reset').setAttribute('hidden', true);
+              if ($('reset-confirm-overlay-md').open)
+                $('reset-confirm-overlay-md').close();
             }
           });
 
@@ -293,6 +302,8 @@ login.createScreen('ResetScreen', 'reset', function() {
           this.context.get(CONTEXT_KEY_TPM_FIRMWARE_UPDATE_AVAILABLE);
       $('oobe-reset-md').tpmFirmwareUpdateChecked_ =
           this.context.get(CONTEXT_KEY_TPM_FIRMWARE_UPDATE_CHECKED);
+      $('oobe-reset-md').tpmFirmwareUpdateEditable_ =
+          this.context.get(CONTEXT_KEY_TPM_FIRMWARE_UPDATE_EDITABLE);
     },
 
     onTPMFirmwareUpdateChanged_: function(value) {

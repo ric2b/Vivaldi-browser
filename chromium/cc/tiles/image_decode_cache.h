@@ -7,8 +7,8 @@
 
 #include "base/memory/ref_counted.h"
 #include "cc/base/devtools_instrumentation.h"
+#include "cc/paint/decoded_draw_image.h"
 #include "cc/paint/draw_image.h"
-#include "cc/tiles/decoded_draw_image.h"
 #include "cc/tiles/tile_priority.h"
 
 namespace cc {
@@ -101,6 +101,10 @@ class CC_EXPORT ImageDecodeCache {
   //
   // This is called by a raster task (on a worker thread) when an image is
   // required.
+  //
+  // TODO(khushalsagar/vmpstr): Since the cache knows if it's a video frame, it
+  // should discard any frames from the same source not in use in the
+  // compositor.
   virtual DecodedDrawImage GetDecodedImageForDraw(const DrawImage& image) = 0;
   // Unrefs an image. This should be called for every GetDecodedImageForDraw
   // when the draw with the image is finished.
@@ -129,7 +133,7 @@ class CC_EXPORT ImageDecodeCache {
   // to be used. This means it can be deleted altogether. If the
   // image is locked, then the cache can do its best to clean it
   // up later.
-  virtual void NotifyImageUnused(uint32_t skimage_id) = 0;
+  virtual void NotifyImageUnused(const PaintImage::FrameKey& frame_key) = 0;
 
  protected:
   void RecordImageMipLevelUMA(int mip_level);

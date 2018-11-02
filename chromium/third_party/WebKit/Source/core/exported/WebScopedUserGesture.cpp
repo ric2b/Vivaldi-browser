@@ -31,7 +31,8 @@
 #include "public/web/WebScopedUserGesture.h"
 
 #include "core/dom/UserGestureIndicator.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/frame/LocalFrame.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "public/web/WebUserGestureToken.h"
 
 namespace blink {
@@ -42,9 +43,9 @@ WebScopedUserGesture::WebScopedUserGesture(const WebUserGestureToken& token) {
 }
 
 WebScopedUserGesture::WebScopedUserGesture(WebLocalFrame* frame) {
-  indicator_.reset(new UserGestureIndicator(UserGestureToken::Create(
-      frame ? ToWebLocalFrameBase(frame)->GetFrame()->GetDocument() : nullptr,
-      UserGestureToken::kNewGesture)));
+  indicator_ = LocalFrame::CreateUserGesture(
+      frame ? ToWebLocalFrameImpl(frame)->GetFrame() : nullptr,
+      UserGestureToken::kNewGesture);
 }
 
 WebScopedUserGesture::~WebScopedUserGesture() {}

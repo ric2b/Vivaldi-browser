@@ -10,13 +10,16 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
+#include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
+#include "content/browser/service_worker/service_worker_dispatcher_host.h"
 #include "content/browser/service_worker/service_worker_register_job.h"
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/browser/service_worker/service_worker_test_utils.h"
 #include "content/browser/service_worker/service_worker_version.h"
+#include "content/common/service_worker/service_worker_messages.h"
 #include "content/common/url_schemes.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/child_process_host.h"
@@ -29,6 +32,19 @@
 
 namespace content {
 
+namespace {
+
+// Sets the document URL for |host| and associates it with |registration|.
+// A dumb version of
+// ServiceWorkerControlleeRequestHandler::PrepareForMainResource().
+void SimulateServiceWorkerControlleeRequestHandler(
+    ServiceWorkerProviderHost* host,
+    ServiceWorkerRegistration* registration) {
+  host->SetDocumentUrl(GURL("https://www.example.com/page"));
+  host->AssociateRegistration(registration,
+                              false /* notify_controllerchange */);
+}
+
 const char kServiceWorkerScheme[] = "i-can-use-service-worker";
 
 class ServiceWorkerTestContentClient : public TestContentClient {
@@ -38,12 +54,13 @@ class ServiceWorkerTestContentClient : public TestContentClient {
   }
 };
 
+}  // namespace
+
 class ServiceWorkerProviderHostTest : public testing::Test {
  protected:
   ServiceWorkerProviderHostTest()
       : thread_bundle_(TestBrowserThreadBundle::IO_MAINLOOP),
-        next_renderer_provided_id_(1),
-        next_browser_provided_id_(-2) {
+        next_renderer_provided_id_(1) {
     SetContentClient(&test_content_client_);
   }
   ~ServiceWorkerProviderHostTest() override {}
@@ -69,8 +86,9 @@ class ServiceWorkerProviderHostTest : public testing::Test {
   }
 
   void TearDown() override {
-    registration1_ = 0;
-    registration2_ = 0;
+    registration1_ = nullptr;
+    registration2_ = nullptr;
+    registration3_ = nullptr;
     helper_.reset();
     SetBrowserClientForTesting(old_content_browser_client_);
     // Reset cached security schemes so we don't affect other tests.
@@ -88,8 +106,7 @@ class ServiceWorkerProviderHostTest : public testing::Test {
       host = ServiceWorkerProviderHost::PreCreateNavigationHost(
           helper_->context()->AsWeakPtr(), true,
           base::Callback<WebContents*(void)>());
-      ServiceWorkerProviderHostInfo info(next_browser_provided_id_--,
-                                         1 /* route_id */,
+      ServiceWorkerProviderHostInfo info(host->provider_id(), 1 /* route_id */,
                                          SERVICE_WORKER_PROVIDER_FOR_WINDOW,
                                          true /* is_parent_frame_secure */);
       remote_endpoints_.back().BindWithProviderHostInfo(&info);
@@ -133,7 +150,6 @@ class ServiceWorkerProviderHostTest : public testing::Test {
   TestContentBrowserClient test_content_browser_client_;
   ContentBrowserClient* old_content_browser_client_;
   int next_renderer_provided_id_;
-  int next_browser_provided_id_;
   std::vector<ServiceWorkerRemoteProviderEndpoint> remote_endpoints_;
 
  private:
@@ -349,6 +365,82 @@ TEST_F(ServiceWorkerProviderHostTest, RemoveProvider) {
   remote_endpoints_.back().host_ptr()->reset();
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(context_->GetProviderHost(process_id, provider_id));
+}
+
+TEST_F(ServiceWorkerProviderHostTest, Controller) {
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kEnableBrowserSideNavigation);
+  // Create a host.
+  std::unique_ptr<ServiceWorkerProviderHost> host =
+      ServiceWorkerProviderHost::PreCreateNavigationHost(
+          helper_->context()->AsWeakPtr(), true /* are_ancestors_secure */,
+          base::Callback<WebContents*(void)>());
+  ServiceWorkerProviderHostInfo info(host->provider_id(), 1 /* route_id */,
+                                     SERVICE_WORKER_PROVIDER_FOR_WINDOW,
+                                     true /* is_parent_frame_secure */);
+  remote_endpoints_.emplace_back();
+  remote_endpoints_.back().BindWithProviderHostInfo(&info);
+
+  // Create an active version and then start the navigation.
+  scoped_refptr<ServiceWorkerVersion> version = new ServiceWorkerVersion(
+      registration1_.get(), GURL("https://www.example.com/sw.js"),
+      1 /* version_id */, helper_->context()->AsWeakPtr());
+  registration1_->SetActiveVersion(version);
+  SimulateServiceWorkerControlleeRequestHandler(host.get(),
+                                                registration1_.get());
+
+  // Finish the navigation.
+  host->CompleteNavigationInitialized(
+      helper_->mock_render_process_id(), std::move(info),
+      helper_->GetDispatcherHostForProcess(helper_->mock_render_process_id())
+          ->AsWeakPtr());
+
+  // The page should be controlled since there was an active version at the
+  // time navigation started. The SetController IPC should have been sent.
+  EXPECT_TRUE(host->active_version());
+  EXPECT_EQ(host->active_version(), host->controller());
+  EXPECT_TRUE(helper_->ipc_sink()->GetUniqueMessageMatching(
+      ServiceWorkerMsg_SetControllerServiceWorker::ID));
+}
+
+TEST_F(ServiceWorkerProviderHostTest, ActiveIsNotController) {
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kEnableBrowserSideNavigation);
+  // Create a host.
+  std::unique_ptr<ServiceWorkerProviderHost> host =
+      ServiceWorkerProviderHost::PreCreateNavigationHost(
+          helper_->context()->AsWeakPtr(), true /* are_ancestors_secure */,
+          base::Callback<WebContents*(void)>());
+  ServiceWorkerProviderHostInfo info(host->provider_id(), 1 /* route_id */,
+                                     SERVICE_WORKER_PROVIDER_FOR_WINDOW,
+                                     true /* is_parent_frame_secure */);
+  remote_endpoints_.emplace_back();
+  remote_endpoints_.back().BindWithProviderHostInfo(&info);
+
+  // Associate it with an installing registration then start the navigation.
+  scoped_refptr<ServiceWorkerVersion> version = new ServiceWorkerVersion(
+      registration1_.get(), GURL("https://www.example.com/sw.js"),
+      1 /* version_id */, helper_->context()->AsWeakPtr());
+  registration1_->SetInstallingVersion(version);
+  SimulateServiceWorkerControlleeRequestHandler(host.get(),
+                                                registration1_.get());
+
+  // Promote the worker to active while navigation is still happening.
+  registration1_->SetActiveVersion(version);
+
+  // Finish the navigation.
+  host->CompleteNavigationInitialized(
+      helper_->mock_render_process_id(), std::move(info),
+      helper_->GetDispatcherHostForProcess(helper_->mock_render_process_id())
+          ->AsWeakPtr());
+
+  // The page should not be controlled since there was no active version at the
+  // time navigation started. Furthermore, no SetController IPC should have been
+  // sent.
+  EXPECT_TRUE(host->active_version());
+  EXPECT_FALSE(host->controller());
+  EXPECT_EQ(nullptr, helper_->ipc_sink()->GetFirstMessageMatching(
+                         ServiceWorkerMsg_SetControllerServiceWorker::ID));
 }
 
 }  // namespace content

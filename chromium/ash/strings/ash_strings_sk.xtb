@@ -9,6 +9,7 @@
 <translation id="1195412055398077112">presah obsahu</translation>
 <translation id="1247372569136754018">Mikrofón (vnútorný)</translation>
 <translation id="1252999807265626933">Nabíja sa zo <ph name="POWER_SOURCE" /></translation>
+<translation id="1267032506238418139">Zmena skratky</translation>
 <translation id="1270290102613614947">Klávesnica na obrazovke je zakázaná</translation>
 <translation id="1272079795634619415">Zastaviť</translation>
 <translation id="1279938420744323401"><ph name="DISPLAY_NAME" /> (<ph name="ANNOTATION" />)</translation>
@@ -22,7 +23,6 @@
 <translation id="15373452373711364">Veľký kurzor myši</translation>
 <translation id="1550523713251050646">Kliknutím zobrazíte ďalšie možnosti</translation>
 <translation id="1621499497873603021">Čas zostávajúci do vybitia batérie: <ph name="TIME_LEFT" /></translation>
-<translation id="164969095109328410">Zariadenie Chrome</translation>
 <translation id="1677472565718498478">Zostávajúci čas: <ph name="TIME" /></translation>
 <translation id="1698760176351776263">Adresa IPv6: <ph name="ADDRESS" /></translation>
 <translation id="1734367976349034509">Toto zariadenie je spravované organizáciou</translation>
@@ -92,6 +92,7 @@
 <translation id="315116470104423982">Mobilné dátové prenosy</translation>
 <translation id="3236488194889173876">Nie je k dispozícii žiadna mobilná sieť</translation>
 <translation id="3294437725009624529">Hosť</translation>
+<translation id="332587331255250389">Vymeňte batériu</translation>
 <translation id="3364721542077212959">Nástroje pre dotykové pero</translation>
 <translation id="3368922792935385530">Pripojené</translation>
 <translation id="3371140690572404006">zariadenia USB-C (port vpravo vpredu)</translation>
@@ -110,6 +111,7 @@
 <translation id="3712407551474845318">Nasnímať oblasť</translation>
 <translation id="371370241367527062">Predný mikrofón</translation>
 <translation id="3742055079367172538">Vytvorila sa snímka obrazovky</translation>
+<translation id="3771549900096082774">Režim s vysokým kontrastom</translation>
 <translation id="3775358506042162758">V rámci viacnásobného prihlásenia môžete mať maximálne tri účty.</translation>
 <translation id="3783640748446814672">alt</translation>
 <translation id="3784455785234192852">Uzamknúť</translation>
@@ -142,14 +144,12 @@
 <translation id="4729904664295161097">Asistent je k dispozícii iba pre primárny profil.</translation>
 <translation id="479989351350248267">search</translation>
 <translation id="4804818685124855865">Odpojiť</translation>
-<translation id="4821830640883629383">Nabite ju alebo ju vymeňte.</translation>
 <translation id="4849058404725798627">Zvýrazniť objekt so zameraním klávesnice</translation>
 <translation id="4872237917498892622">Alt + Hľadať alebo Shift</translation>
 <translation id="4895488851634969361">Batéria je úplne nabitá.</translation>
 <translation id="4905614135390995787">Skratka na prepnutie režimu vysokého kontrastu sa zmenila. Namiesto skratky <ph name="OLD_SHORTCUT" /> používajte kombináciu klávesov <ph name="NEW_SHORTCUT" />.</translation>
 <translation id="4918086044614829423">Prijať</translation>
 <translation id="4961318399572185831">Prenášanie obrazovky</translation>
-<translation id="5011233892417813670">Chromebook</translation>
 <translation id="5168181903108465623">Dostupné zariadenia na prenos</translation>
 <translation id="5170568018924773124">Zobraziť v priečinku</translation>
 <translation id="5207949376430453814">Zvýrazniť textový kurzor</translation>
@@ -175,7 +175,6 @@
 <translation id="5901316534475909376">Shift+Esc</translation>
 <translation id="5916664084637901428">Zapnuté</translation>
 <translation id="5927132638760172455">Prebieha prenášanie na neznámy prijímač</translation>
-<translation id="5932901536148835538">Chromebit</translation>
 <translation id="5947494881799873997">Vrátiť</translation>
 <translation id="595202126637698455">Sledovanie výkonnosti je povolené</translation>
 <translation id="5957083217255311415">Mobilné dáta sú vypnuté.</translation>
@@ -218,7 +217,6 @@
 <translation id="683971173229319003">Hľadať+L</translation>
 <translation id="6857811139397017780">Aktivovať zariadenie <ph name="NETWORKSERVICE" /></translation>
 <translation id="6911468394164995108">Pripojiť k ďalšej...</translation>
-<translation id="6915678159055240887">Chromebox</translation>
 <translation id="6981982820502123353">Dostupnosť</translation>
 <translation id="7029814467594812963">Ukončiť reláciu</translation>
 <translation id="7034339000180558234">Prenášanie karty <ph name="TAB_NAME" /> do zariadenia <ph name="RECEIVER_NAME" /></translation>
@@ -226,7 +224,6 @@
 <translation id="7066646422045619941">Táto sieť je zakázaná správcom.</translation>
 <translation id="7067196344162293536">Automatické otáčanie</translation>
 <translation id="7098389117866926363">Zariadenie USB-C (ľavý port vzadu)</translation>
-<translation id="714034171374937760">Chromebase</translation>
 <translation id="7165278925115064263">Alt+Shift+K</translation>
 <translation id="7168224885072002358">Vrátenie starého rozlíšenia prebehne o <ph name="TIMEOUT_SECONDS" /></translation>
 <translation id="7246339268451149667">Povoliť odomykanie odtlačkom prsta?</translation>

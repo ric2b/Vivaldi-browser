@@ -223,8 +223,8 @@ void MediaStreamVideoWebRtcSink::WebRtcVideoSourceAdapter::SetContentHint(
   DCHECK(render_thread_checker_.CalledOnValidThread());
   libjingle_worker_thread_->PostTask(
       FROM_HERE,
-      base::Bind(&WebRtcVideoSourceAdapter::SetContentHintOnWorkerThread, this,
-                 content_hint));
+      base::BindOnce(&WebRtcVideoSourceAdapter::SetContentHintOnWorkerThread,
+                     this, content_hint));
 }
 
 void MediaStreamVideoWebRtcSink::WebRtcVideoSourceAdapter::
@@ -242,13 +242,12 @@ void MediaStreamVideoWebRtcSink::WebRtcVideoSourceAdapter::OnVideoFrameOnIO(
   DCHECK(io_thread_checker_.CalledOnValidThread());
   render_thread_task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&WebRtcVideoSourceAdapter::ResetRefreshTimerOnMainThread,
-                 this));
+      base::BindOnce(&WebRtcVideoSourceAdapter::ResetRefreshTimerOnMainThread,
+                     this));
   libjingle_worker_thread_->PostTask(
       FROM_HERE,
-      base::Bind(&WebRtcVideoSourceAdapter::OnVideoFrameOnWorkerThread,
-                 this,
-                 frame));
+      base::BindOnce(&WebRtcVideoSourceAdapter::OnVideoFrameOnWorkerThread,
+                     this, frame));
 }
 
 void MediaStreamVideoWebRtcSink::WebRtcVideoSourceAdapter::
@@ -269,7 +268,7 @@ MediaStreamVideoWebRtcSink::MediaStreamVideoWebRtcSink(
 
   rtc::Optional<bool> needs_denoising =
       ToRtcOptional(video_track->noise_reduction());
-  bool is_screencast = is_screencast = video_track->is_screencast();
+  bool is_screencast = video_track->is_screencast();
   base::Optional<double> min_frame_rate = video_track->min_frame_rate();
   base::Optional<double> max_frame_rate = video_track->max_frame_rate();
 

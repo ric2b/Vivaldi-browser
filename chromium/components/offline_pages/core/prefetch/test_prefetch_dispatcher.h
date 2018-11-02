@@ -29,18 +29,30 @@ class TestPrefetchDispatcher : public PrefetchDispatcher {
   void BeginBackgroundTask(std::unique_ptr<ScopedBackgroundTask> task) override;
   void StopBackgroundTask() override;
   void SetService(PrefetchService* service) override;
+  void SchedulePipelineProcessing() override;
+  void EnsureTaskScheduled() override;
   void GCMOperationCompletedMessageReceived(
       const std::string& operation_name) override;
+  void CleanupDownloads(
+      const std::set<std::string>& outstanding_download_ids,
+      const std::map<std::string, std::pair<base::FilePath, int64_t>>&
+          success_downloads) override;
+  void DownloadCompleted(
+      const PrefetchDownloadResult& download_result) override;
+  void ImportCompleted(int64_t offline_id, bool success) override;
   void RequestFinishBackgroundTaskForTest() override;
 
   std::string latest_name_space;
   std::vector<PrefetchURL> latest_prefetch_urls;
   std::unique_ptr<ClientId> last_removed_client_id;
   std::vector<std::string> operation_list;
+  std::vector<PrefetchDownloadResult> download_results;
 
   int new_suggestions_count = 0;
+  int processing_schedule_count = 0;
   int remove_all_suggestions_count = 0;
   int remove_by_client_id_count = 0;
+  int task_schedule_count = 0;
 };
 
 }  // namespace offline_pages

@@ -1,0 +1,32 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module profiling.mojom;
+
+import "mojo/common/file.mojom";
+import "mojo/common/process_id.mojom";
+import "mojo/common/values.mojom";
+
+interface Memlog {
+  // Adds a new platform-specific pipe to read memlog trace data from.
+  // In normal usage, each child process will be given the other end of this
+  // pipe.
+  //
+  // This function has a return value so the caller can know when the
+  // connection has been established.
+  AddSender(mojo.common.mojom.ProcessId pid, handle sender_pipe) => ();
+
+  // Dumps the memory log of the process with the given |pid| into
+  // |output_file|. |metadata| is a dictionary that should be added to the trace
+  // under the "metadata" key.
+  DumpProcess(mojo.common.mojom.ProcessId pid, handle output_file,
+              mojo.common.mojom.DictionaryValue metadata) => (bool result);
+
+  // Dumps the memory log of the process with the given |pid| into a data
+  // pipe. The format is a JSON string compatible with TRACE_EVENT* macros.
+  // On success, returns a valid shared_buffer handle and the size of the
+  // data written. On failure, returns an invalid shared_buffer handle.
+  DumpProcessForTracing(mojo.common.mojom.ProcessId pid) =>
+      (handle<shared_buffer> consumer, uint32 size);
+};

@@ -35,10 +35,8 @@ static constexpr float kReticleHeight = 0.025f;
 }  // namespace
 
 UiRenderer::UiRenderer(UiScene* scene,
-                       int content_texture_id,
                        VrShellRenderer* vr_shell_renderer)
     : scene_(scene),
-      content_texture_id_(content_texture_id),
       vr_shell_renderer_(vr_shell_renderer) {}
 
 UiRenderer::~UiRenderer() = default;
@@ -50,18 +48,20 @@ void UiRenderer::Draw(const RenderInfo& render_info,
   DrawOverlayElements(render_info, controller_info);
 }
 
-void UiRenderer::DrawHeadLocked(const RenderInfo& render_info,
-                                const ControllerInfo& controller_info) {
-  TRACE_EVENT0("gpu", "VrShellGl::DrawHeadLockedElements");
-  std::vector<const UiElement*> elements = scene_->GetHeadLockedElements();
+void UiRenderer::DrawViewportAware(const RenderInfo& render_info,
+                                   const ControllerInfo& controller_info,
+                                   bool web_vr_mode) {
+  TRACE_EVENT0("gpu", "VrShellGl::DrawViewportAwareElements");
+  std::vector<const UiElement*> elements = scene_->GetViewportAwareElements();
 
-  glEnable(GL_CULL_FACE);
-  glEnable(GL_DEPTH_TEST);
-  glDepthMask(GL_TRUE);
+  if (web_vr_mode) {
+    glEnable(GL_CULL_FACE);
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
 
-  glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-  gfx::Transform identity_matrix;
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  }
   DrawUiView(render_info, controller_info, elements, false);
 }
 
@@ -79,17 +79,14 @@ void UiRenderer::DrawWorldElements(const RenderInfo& render_info,
     // mode, this will need further testing if those get added
     // later.
   } else {
-    // Non-WebVR mode, enable depth testing and clear the primary buffers.
+    // Non-WebVR mode, enable depth testing and clear the primary buffers. Note
+    // also that we do not clear the color buffer. The scene's background
+    // elements are responsible for drawing a complete background.
     glEnable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_TRUE);
 
-    const SkColor backgroundColor = scene_->background_color();
-    glClearColor(SkColorGetR(backgroundColor) / 255.0,
-                 SkColorGetG(backgroundColor) / 255.0,
-                 SkColorGetB(backgroundColor) / 255.0,
-                 SkColorGetA(backgroundColor) / 255.0);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glClear(GL_DEPTH_BUFFER_BIT);
   }
   std::vector<const UiElement*> elements = scene_->GetWorldElements();
   DrawUiView(render_info, controller_info, elements,
@@ -141,18 +138,20 @@ void UiRenderer::DrawElements(const gfx::Transform& view_proj_matrix,
   if (elements.empty()) {
     return;
   }
-  int initial_draw_phase = elements.front()->draw_phase();
+  vr_shell_renderer_->set_surface_texture_size(
+      render_info.surface_texture_size);
   bool drawn_reticle = false;
   for (const auto* element : elements) {
     // If we have no element to draw the reticle on, draw it after the
     // background (the initial draw phase).
     if (!controller_info.reticle_render_target && draw_reticle &&
-        !drawn_reticle && element->draw_phase() > initial_draw_phase) {
+        !drawn_reticle &&
+        element->draw_phase() >= scene_->first_foreground_draw_phase()) {
       DrawReticle(view_proj_matrix, render_info, controller_info);
       drawn_reticle = true;
     }
 
-    DrawElement(view_proj_matrix, *element, render_info.content_texture_size);
+    DrawElement(view_proj_matrix, *element);
 
     if (draw_reticle && (controller_info.reticle_render_target == element)) {
       DrawReticle(view_proj_matrix, render_info, controller_info);
@@ -162,39 +161,10 @@ void UiRenderer::DrawElements(const gfx::Transform& view_proj_matrix,
 }
 
 void UiRenderer::DrawElement(const gfx::Transform& view_proj_matrix,
-                             const UiElement& element,
-                             const gfx::Size& content_texture_size) {
-  gfx::Transform transform =
-      view_proj_matrix * element.screen_space_transform();
-
-  switch (element.fill()) {
-    case Fill::OPAQUE_GRADIENT: {
-      vr_shell_renderer_->GetGradientQuadRenderer()->Draw(
-          transform, element.edge_color(), element.center_color(),
-          element.computed_opacity());
-      break;
-    }
-    case Fill::GRID_GRADIENT: {
-      vr_shell_renderer_->GetGradientGridRenderer()->Draw(
-          transform, element.edge_color(), element.center_color(),
-          element.grid_color(), element.gridline_count(),
-          element.computed_opacity());
-      break;
-    }
-    case Fill::CONTENT: {
-      vr_shell_renderer_->GetExternalTexturedQuadRenderer()->Draw(
-          content_texture_id_, transform, content_texture_size,
-          gfx::SizeF(element.size().width(), element.size().height()),
-          element.computed_opacity(), element.corner_radius());
-      break;
-    }
-    case Fill::SELF: {
-      element.Render(vr_shell_renderer_, transform);
-      break;
-    }
-    default:
-      break;
-  }
+                             const UiElement& element) {
+  DCHECK_GE(element.draw_phase(), 0);
+  element.Render(vr_shell_renderer_,
+                 view_proj_matrix * element.world_space_transform());
 }
 
 std::vector<const UiElement*> UiRenderer::GetElementsInDrawOrder(
@@ -213,8 +183,8 @@ std::vector<const UiElement*> UiRenderer::GetElementsInDrawOrder(
               if (first->draw_phase() != second->draw_phase()) {
                 return first->draw_phase() < second->draw_phase();
               } else {
-                return first->screen_space_transform().matrix().get(2, 3) <
-                       second->screen_space_transform().matrix().get(2, 3);
+                return first->world_space_transform().matrix().get(2, 3) <
+                       second->world_space_transform().matrix().get(2, 3);
               }
             });
 
@@ -237,7 +207,7 @@ void UiRenderer::DrawReticle(const gfx::Transform& render_matrix,
     // Make the reticle planar to the element it's hitting.
     rotation =
         gfx::Quaternion(gfx::Vector3dF(0.0f, 0.0f, -1.0f),
-                        controller_info.reticle_render_target->GetNormal());
+                        -controller_info.reticle_render_target->GetNormal());
   } else {
     // Rotate the reticle to directly face the eyes.
     rotation = gfx::Quaternion(gfx::Vector3dF(0.0f, 0.0f, -1.0f),

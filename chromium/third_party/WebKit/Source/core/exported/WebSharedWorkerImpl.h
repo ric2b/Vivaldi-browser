@@ -35,29 +35,26 @@
 
 #include <memory>
 #include "core/CoreExport.h"
-#include "core/dom/ExecutionContext.h"
+#include "core/exported/WorkerShadowPage.h"
 #include "core/workers/SharedWorkerReportingProxy.h"
 #include "core/workers/WorkerClients.h"
 #include "core/workers/WorkerThread.h"
 #include "platform/WebTaskRunner.h"
 #include "platform/wtf/RefPtr.h"
-#include "public/platform/Platform.h"
 #include "public/platform/WebAddressSpace.h"
 #include "public/platform/WebContentSecurityPolicy.h"
 #include "public/web/WebDevToolsAgentClient.h"
-#include "public/web/WebFrameClient.h"
 #include "public/web/WebSharedWorkerClient.h"
+#include "public/web/worker_content_settings_proxy.mojom-blink.h"
 
 namespace blink {
 
 class WebApplicationCacheHost;
 class WebApplicationCacheHostClient;
-class WebLocalFrameBase;
 class WebServiceWorkerNetworkProvider;
 class WebSharedWorkerClient;
 class WebString;
 class WebURL;
-class WebView;
 class WorkerInspectorProxy;
 class WorkerScriptLoader;
 
@@ -65,18 +62,15 @@ class WorkerScriptLoader;
 // implementation. This is basically accessed on the main thread, but some
 // methods must be called from a worker thread. Such methods are suffixed with
 // *OnWorkerThread or have header comments.
-class CORE_EXPORT WebSharedWorkerImpl final
-    : public WebFrameClient,
-      public WebSharedWorker,
-      NON_EXPORTED_BASE(public WebDevToolsAgentClient) {
+class CORE_EXPORT WebSharedWorkerImpl final : public WebSharedWorker,
+                                              public WorkerShadowPage::Client {
  public:
   explicit WebSharedWorkerImpl(WebSharedWorkerClient*);
 
-  // WebFrameClient methods to support resource loading thru the 'shadow page'.
+  // WorkerShadowPage::Client overrides.
   std::unique_ptr<WebApplicationCacheHost> CreateApplicationCacheHost(
       WebApplicationCacheHostClient*) override;
-  void FrameDetached(WebLocalFrame*, DetachType) override;
-  void DidFinishDocumentLoad() override;
+  void OnShadowPageInitialized() override;
 
   // WebDevToolsAgentClient overrides.
   void SendProtocolMessage(int session_id,
@@ -88,12 +82,14 @@ class CORE_EXPORT WebSharedWorkerImpl final
       override;
 
   // WebSharedWorker methods:
-  void StartWorkerContext(const WebURL&,
-                          const WebString& name,
-                          const WebString& content_security_policy,
-                          WebContentSecurityPolicyType,
-                          WebAddressSpace,
-                          bool data_saver_enabled) override;
+  void StartWorkerContext(
+      const WebURL&,
+      const WebString& name,
+      const WebString& content_security_policy,
+      WebContentSecurityPolicyType,
+      WebAddressSpace,
+      bool data_saver_enabled,
+      mojo::ScopedMessagePipeHandle content_settings_handle) override;
   void Connect(std::unique_ptr<WebMessagePortChannel>) override;
   void TerminateWorkerContext() override;
 
@@ -107,13 +103,6 @@ class CORE_EXPORT WebSharedWorkerImpl final
                                int call_id,
                                const WebString& method,
                                const WebString& message) override;
-
-  std::unique_ptr<blink::WebURLLoader> CreateURLLoader(
-      const WebURLRequest& request,
-      SingleThreadTaskRunner* task_runner) override {
-    // TODO(yhirano): Stop using Platform::CreateURLLoader() here.
-    return Platform::Current()->CreateURLLoader(request, task_runner);
-  }
 
   // Callback methods for SharedWorkerReportingProxy.
   void CountFeature(WebFeature);
@@ -129,22 +118,12 @@ class CORE_EXPORT WebSharedWorkerImpl final
   // Shuts down the worker thread.
   void TerminateWorkerThread();
 
-  // Creates the shadow loader used for worker network requests.
-  void InitializeLoader(bool data_saver_enabled);
-
-  void LoadShadowPage();
   void DidReceiveScriptLoaderResponse();
   void OnScriptLoaderFinished();
 
   void ConnectTaskOnWorkerThread(std::unique_ptr<WebMessagePortChannel>);
 
-  // 'shadow page' - created to proxy loading requests from the worker.
-  // Will be accessed by worker thread when posting tasks.
-  Persistent<ExecutionContext> loading_document_;
-  Persistent<ThreadableLoadingContext> loading_context_;
-  WebView* web_view_;
-  Persistent<WebLocalFrameBase> main_frame_;
-  bool asked_to_terminate_;
+  std::unique_ptr<WorkerShadowPage> shadow_page_;
 
   std::unique_ptr<WebServiceWorkerNetworkProvider> network_provider_;
 
@@ -152,11 +131,13 @@ class CORE_EXPORT WebSharedWorkerImpl final
 
   Persistent<SharedWorkerReportingProxy> reporting_proxy_;
   std::unique_ptr<WorkerThread> worker_thread_;
+  mojom::blink::WorkerContentSettingsProxyPtrInfo content_settings_info_;
 
   WebSharedWorkerClient* client_;
 
-  bool pause_worker_context_on_start_;
-  bool is_paused_on_start_;
+  bool asked_to_terminate_ = false;
+  bool pause_worker_context_on_start_ = false;
+  bool is_paused_on_start_ = false;
 
   // Kept around only while main script loading is ongoing.
   RefPtr<WorkerScriptLoader> main_script_loader_;
@@ -165,9 +146,6 @@ class CORE_EXPORT WebSharedWorkerImpl final
   WebString name_;
   WebAddressSpace creation_address_space_;
 };
-
-extern template class CORE_EXTERN_TEMPLATE_EXPORT
-    WorkerClientsInitializer<WebSharedWorkerImpl>;
 
 }  // namespace blink
 

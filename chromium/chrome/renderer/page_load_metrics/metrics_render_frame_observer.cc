@@ -5,18 +5,18 @@
 #include "chrome/renderer/page_load_metrics/metrics_render_frame_observer.h"
 
 #include <string>
+#include <utility>
 
 #include "base/memory/ptr_util.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/renderer/page_load_metrics/page_timing_metrics_sender.h"
 #include "chrome/renderer/page_load_metrics/page_timing_sender.h"
-#include "chrome/renderer/page_load_metrics/renderer_page_track_decider.h"
 #include "chrome/renderer/searchbox/search_bouncer.h"
 #include "content/public/common/associated_interface_provider.h"
 #include "content/public/renderer/render_frame.h"
-#include "third_party/WebKit/public/web/WebDataSource.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
+#include "third_party/WebKit/public/web/WebDocumentLoader.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebPerformance.h"
 #include "url/gurl.h"
@@ -40,9 +40,11 @@ class MojoPageTimingSender : public PageTimingSender {
   }
   ~MojoPageTimingSender() override {}
   void SendTiming(const mojom::PageLoadTimingPtr& timing,
-                  const mojom::PageLoadMetadataPtr& metadata) override {
+                  const mojom::PageLoadMetadataPtr& metadata,
+                  mojom::PageLoadFeaturesPtr new_features) override {
     DCHECK(page_load_metrics_);
-    page_load_metrics_->UpdateTiming(timing->Clone(), metadata->Clone());
+    page_load_metrics_->UpdateTiming(timing->Clone(), metadata->Clone(),
+                                     std::move(new_features));
   }
 
  private:
@@ -69,6 +71,12 @@ void MetricsRenderFrameObserver::DidObserveLoadingBehavior(
     page_timing_metrics_sender_->DidObserveLoadingBehavior(behavior);
 }
 
+void MetricsRenderFrameObserver::DidObserveNewFeatureUsage(
+    blink::mojom::WebFeature feature) {
+  if (page_timing_metrics_sender_)
+    page_timing_metrics_sender_->DidObserveNewFeatureUsage(feature);
+}
+
 void MetricsRenderFrameObserver::FrameDetached() {
   page_timing_metrics_sender_.reset();
 }
@@ -87,14 +95,11 @@ void MetricsRenderFrameObserver::DidCommitProvisionalLoad(
   // Make sure to release the sender for a previous navigation, if we have one.
   page_timing_metrics_sender_.reset();
 
-  // We only create a PageTimingMetricsSender if the page meets the criteria for
-  // sending and recording metrics. Once page_timing_metrics_sender_ is
-  // non-null, we will send metrics for the current page at some later time, as
-  // those metrics become available.
-  if (ShouldSendMetrics()) {
-    page_timing_metrics_sender_ = base::MakeUnique<PageTimingMetricsSender>(
-        CreatePageTimingSender(), CreateTimer(), GetTiming());
-  }
+  if (HasNoRenderFrame())
+    return;
+
+  page_timing_metrics_sender_ = base::MakeUnique<PageTimingMetricsSender>(
+      CreatePageTimingSender(), CreateTimer(), GetTiming());
 }
 
 void MetricsRenderFrameObserver::SendMetrics() {
@@ -103,14 +108,6 @@ void MetricsRenderFrameObserver::SendMetrics() {
   if (HasNoRenderFrame())
     return;
   page_timing_metrics_sender_->Send(GetTiming());
-}
-
-bool MetricsRenderFrameObserver::ShouldSendMetrics() const {
-  if (HasNoRenderFrame())
-    return false;
-  const blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
-  const blink::WebDocument& document = frame->GetDocument();
-  return RendererPageTrackDecider(&document, frame->DataSource()).ShouldTrack();
 }
 
 mojom::PageLoadTimingPtr MetricsRenderFrameObserver::GetTiming() const {

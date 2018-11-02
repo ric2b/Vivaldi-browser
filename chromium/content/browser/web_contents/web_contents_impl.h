@@ -32,7 +32,6 @@
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/wake_lock/wake_lock_context_host.h"
-#include "content/common/accessibility_mode.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/color_chooser.h"
 #include "content/public/browser/download_url_parameters.h"
@@ -51,12 +50,14 @@
 #include "services/device/public/interfaces/wake_lock.mojom.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "third_party/WebKit/public/platform/WebDragOperation.h"
+#include "ui/accessibility/ax_modes.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/size.h"
 
 #if defined(OS_ANDROID)
 #include "content/browser/android/nfc_host.h"
+#include "content/public/browser/android/child_process_importance.h"
 #endif
 
 struct ViewHostMsg_DateTimeDialogValue_Params;
@@ -119,15 +120,14 @@ WebContentsView* CreateWebContentsView(
     WebContentsViewDelegate* delegate,
     RenderViewHostDelegateView** render_view_host_delegate_view);
 
-class CONTENT_EXPORT WebContentsImpl
-    : public NON_EXPORTED_BASE(WebContents),
-      public NON_EXPORTED_BASE(RenderFrameHostDelegate),
-      public RenderViewHostDelegate,
-      public RenderWidgetHostDelegate,
-      public RenderFrameHostManager::Delegate,
-      public NotificationObserver,
-      public NON_EXPORTED_BASE(NavigationControllerDelegate),
-      public NON_EXPORTED_BASE(NavigatorDelegate) {
+class CONTENT_EXPORT WebContentsImpl : public WebContents,
+                                       public RenderFrameHostDelegate,
+                                       public RenderViewHostDelegate,
+                                       public RenderWidgetHostDelegate,
+                                       public RenderFrameHostManager::Delegate,
+                                       public NotificationObserver,
+                                       public NavigationControllerDelegate,
+                                       public NavigatorDelegate {
  public:
   class FriendWrapper;
 
@@ -232,18 +232,12 @@ class CONTENT_EXPORT WebContentsImpl
 
   bool should_normally_be_visible() { return should_normally_be_visible_; }
 
-  // Indicate if the window has been occluded, and pass this to the views, only
-  // if there is no active capture going on (otherwise it is dropped on the
-  // floor).
-  void WasOccluded();
-  void WasUnOccluded();
-
   // Broadcasts the mode change to all frames.
-  void SetAccessibilityMode(AccessibilityMode mode);
+  void SetAccessibilityMode(ui::AXMode mode);
 
   // Adds the given accessibility mode to the current accessibility mode
   // bitmap.
-  void AddAccessibilityMode(AccessibilityMode mode);
+  void AddAccessibilityMode(ui::AXMode mode);
 
 #if !defined(OS_ANDROID)
   // Set a temporary zoom level for the frames associated with this WebContents.
@@ -295,6 +289,10 @@ class CONTENT_EXPORT WebContentsImpl
   std::vector<WebContentsImpl*> GetWebContentsAndAllInner();
 
   void NotifyManifestUrlChanged(const base::Optional<GURL>& manifest_url);
+
+#if defined(OS_ANDROID)
+  void SetImportance(ChildProcessImportance importance);
+#endif
 
   // WebContents ------------------------------------------------------
   WebContentsDelegate* GetDelegate() override;
@@ -355,6 +353,7 @@ class CONTENT_EXPORT WebContentsImpl
   int GetCapturerCount() const override;
   bool IsAudioMuted() const override;
   void SetAudioMuted(bool mute) override;
+  bool IsCurrentlyAudible() override;
   bool IsConnectedToBluetoothDevice() const override;
   bool IsCrashed() const override;
   void SetIsCrashed(base::TerminationStatus status, int error_code) override;
@@ -369,6 +368,8 @@ class CONTENT_EXPORT WebContentsImpl
   void WasShown() override;
   void WasHidden() override;
   bool IsVisible() const override;
+  void WasOccluded() override;
+  void WasUnOccluded() override;
   bool NeedToFireBeforeUnload() override;
   void DispatchBeforeUnload() override;
   void AttachToOuterWebContentsFrame(
@@ -491,6 +492,10 @@ class CONTENT_EXPORT WebContentsImpl
       RenderFrameHost* render_frame_host,
       const std::string& interface_name,
       mojo::ScopedInterfaceEndpointHandle handle) override;
+  void OnInterfaceRequest(
+      RenderFrameHost* render_frame_host,
+      const std::string& interface_name,
+      mojo::ScopedMessagePipeHandle* interface_pipe) override;
   const GURL& GetMainFrameLastCommittedURL() const override;
   void RenderFrameCreated(RenderFrameHost* render_frame_host) override;
   void RenderFrameDeleted(RenderFrameHost* render_frame_host) override;
@@ -520,7 +525,7 @@ class CONTENT_EXPORT WebContentsImpl
                       const std::string& encoding) override;
   WebContents* GetAsWebContents() override;
   bool IsNeverVisible() override;
-  AccessibilityMode GetAccessibilityMode() const override;
+  ui::AXMode GetAccessibilityMode() const override;
   void AccessibilityEventReceived(
       const std::vector<AXEventNotificationDetails>& details) override;
   void AccessibilityLocationChangesReceived(
@@ -645,8 +650,7 @@ class CONTENT_EXPORT WebContentsImpl
   void DidFailLoadWithError(RenderFrameHostImpl* render_frame_host,
                             const GURL& url,
                             int error_code,
-                            const base::string16& error_description,
-                            bool was_ignored_by_handler) override;
+                            const base::string16& error_description) override;
   void DidNavigateMainFramePreCommit(bool navigation_is_within_page) override;
   void DidNavigateMainFramePostCommit(
       RenderFrameHostImpl* render_frame_host,
@@ -790,6 +794,9 @@ class CONTENT_EXPORT WebContentsImpl
   WebContents* GetWebContents() override;
   void NotifyNavigationEntryCommitted(
       const LoadCommittedDetails& load_details) override;
+  void NotifyNavigationEntryChanged(
+      const EntryChangedDetails& change_details) override;
+  void NotifyNavigationListPruned(const PrunedDetails& pruned_details) override;
 
   // Invoked before a form repost warning is shown.
   void NotifyBeforeFormRepostWarningShow() override;
@@ -856,7 +863,7 @@ class CONTENT_EXPORT WebContentsImpl
                     const WebContentsObserver::MediaPlayerId& id);
 
   int GetCurrentlyPlayingVideoCount() override;
-  const VideoSizeMap& GetCurrentlyPlayingVideoSizes() override;
+  base::Optional<gfx::Size> GetFullscreenVideoSize() override;
   bool IsFullscreen() override;
 
   MediaWebContentsObserver* media_web_contents_observer() {
@@ -941,10 +948,15 @@ class CONTENT_EXPORT WebContentsImpl
                            JavaScriptDialogsInMainAndSubframes);
   FRIEND_TEST_ALL_PREFIXES(WebContentsImplBrowserTest,
                            DialogsFromJavaScriptEndFullscreen);
+  FRIEND_TEST_ALL_PREFIXES(WebContentsImplBrowserTest,
+                           PopupsFromJavaScriptEndFullscreen);
   FRIEND_TEST_ALL_PREFIXES(RenderFrameHostImplBrowserTest,
                            IframeBeforeUnloadParentHang);
   FRIEND_TEST_ALL_PREFIXES(RenderFrameHostImplBrowserTest,
                            BeforeUnloadDialogRequiresGesture);
+  FRIEND_TEST_ALL_PREFIXES(DevToolsProtocolTest, JavaScriptDialogNotifications);
+  FRIEND_TEST_ALL_PREFIXES(DevToolsProtocolTest, JavaScriptDialogInterop);
+  FRIEND_TEST_ALL_PREFIXES(DevToolsProtocolTest, BeforeUnloadDialog);
 
   // So |find_request_manager_| can be accessed for testing.
   friend class FindRequestManagerTest;
@@ -1037,6 +1049,9 @@ class CONTENT_EXPORT WebContentsImpl
   // all the unique RenderWidgetHostViews.
   std::set<RenderWidgetHostView*> GetRenderWidgetHostViewsInTree();
 
+  // Calls WasUnOccluded() on all RenderWidgetHostViews in the frame tree.
+  void DoWasUnOccluded();
+
   // Called with the result of a DownloadImage() request.
   void OnDidDownloadImage(const ImageDownloadCallback& callback,
                           int id,
@@ -1045,7 +1060,7 @@ class CONTENT_EXPORT WebContentsImpl
                           const std::vector<SkBitmap>& images,
                           const std::vector<gfx::Size>& original_image_sizes);
 
-  // Callback function when showing JavaScript dialogs.  Takes in a routing ID
+  // Callback function when showing JavaScript dialogs. Takes in a routing ID
   // pair to identify the RenderFrameHost that opened the dialog, because it's
   // possible for the RenderFrameHost to be deleted by the time this is called.
   void OnDialogClosed(int render_process_id,
@@ -1169,9 +1184,9 @@ class CONTENT_EXPORT WebContentsImpl
                                const gfx::Rect& anchor_in_root_view);
 
   // Called by derived classes to indicate that we're no longer waiting for a
-  // response. This won't actually update the throbber, but it will get picked
-  // up at the next animation step if the throbber is going.
-  void SetNotWaitingForResponse() { waiting_for_response_ = false; }
+  // response. Will inform |delegate_| of the change in status so that it may,
+  // for example, update the throbber.
+  void SetNotWaitingForResponse();
 
   // Inner WebContents Helpers -------------------------------------------------
   //
@@ -1314,6 +1329,10 @@ class CONTENT_EXPORT WebContentsImpl
   static DownloadUrlParameters::RequestHeadersType ParseDownloadHeaders(
       const std::string& headers);
 
+  // Sets the visibility of immediate child views, i.e. views whose parent view
+  // is that of the main frame.
+  void SetVisibilityForChildViews(bool visible);
+
   // Data for core operation ---------------------------------------------------
 
   // Delegate for notifying our owner about stuff. Not owned by us.
@@ -1450,6 +1469,9 @@ class CONTENT_EXPORT WebContentsImpl
 
   // Tracks whether RWHV should be visible once capturer_count_ becomes zero.
   bool should_normally_be_visible_;
+
+  // Tracks whether RWHV should be occluded once |capturer_count_| becomes zero.
+  bool should_normally_be_occluded_;
 
   // Tracks whether this WebContents was ever set to be visible. Used to
   // facilitate WebContents being loaded in the background by setting
@@ -1612,7 +1634,7 @@ class CONTENT_EXPORT WebContentsImpl
 
   // The accessibility mode for all frames. This is queried when each frame
   // is created, and broadcast to all frames when it changes.
-  AccessibilityMode accessibility_mode_;
+  ui::AXMode accessibility_mode_;
 
   // Monitors power levels for audio streams associated with this WebContents.
   AudioStreamMonitor audio_stream_monitor_;

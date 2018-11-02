@@ -60,16 +60,18 @@
 <translation id="4165986682804962316">Site-instellingen</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Controleer firewall- en antivirusconfiguraties<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Probeer de Probleemoplosser voor netwerken uit te voeren<ph name="END_LINK" />.</translation>
-<translation id="4304224509867189079">Inloggen</translation>
-<translation id="4432688616882109544"><ph name="HOST_NAME" /> heeft je inlogcertificaat niet geaccepteerd of er is geen inlogcertificaat geleverd.</translation>
+<translation id="4304224509867189079">Aanmelden</translation>
+<translation id="4432688616882109544"><ph name="HOST_NAME" /> heeft je aanmeldingscertificaat niet geaccepteerd of er is geen aanmeldingscertificaat geleverd.</translation>
 <translation id="4506599922270137252">Neem contact op met de systeembeheerder</translation>
 <translation id="4522570452068850558">Details</translation>
 <translation id="4558551763791394412">Probeer je extensies uit te schakelen.</translation>
+<translation id="4611292653554630842">Aanmelden</translation>
 <translation id="4708268264240856090">Je verbinding is onderbroken</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Windows Probleemoplosser voor netwerken uitvoeren<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">Uitvoerbaar pad</translation>
 <translation id="4764776831041365478">De webpagina op <ph name="URL" /> is mogelijk tijdelijk uitgeschakeld of permanent verplaatst naar een nieuw webadres.</translation>
 <translation id="4807049035289105102">Je kunt <ph name="SITE" /> momenteel niet bezoeken, omdat de website versleutelde referenties gebruikt die Vivaldi niet kan verwerken. Netwerkfouten en aanvallen zijn doorgaans tijdelijk, dus deze pagina werkt later waarschijnlijk correct.</translation>
+<translation id="4913131542719409934">Verificatie vereist</translation>
 <translation id="5023310440958281426">Neem het beleid van je beheerder door</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Controleer het proxy-adres<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bits)</translation>
@@ -98,10 +100,12 @@
 <translation id="6328639280570009161">Probeer netwerkvoorspelling uit te schakelen</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> heeft de verbinding geweigerd.</translation>
 <translation id="6569060085658103619">Je bekijkt een extensiepagina</translation>
+<translation id="6657585470893396449">Wachtwoord</translation>
 <translation id="6685834062052613830">Afmelden en configuratie voltooien</translation>
 <translation id="6711464428925977395">Er is iets mis met de proxyserver of het adres is onjuist.</translation>
 <translation id="6757797048963528358">Je apparaat is in de slaapstand gegaan.</translation>
 <translation id="6897140037006041989">User-agent</translation>
+<translation id="7090678807593890770">Zoek op Google naar <ph name="LINK" /></translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> voldoet niet aan de beveiligingsnormen.</translation>
 <translation id="7353601530677266744">Opdrachtregel</translation>
 <translation id="7419106976560586862">Profielpad</translation>
@@ -120,6 +124,7 @@
 <translation id="8289355894181816810">Neem contact op met je netwerkbeheerder als je niet zeker weet wat dit betekent.</translation>
 <translation id="8332188693563227489">Toegang tot <ph name="HOST_NAME" /> is geweigerd</translation>
 <translation id="8498891568109133222">Het duurt te lang voordat <ph name="HOST_NAME" /> reageert.</translation>
+<translation id="8503813439785031346">Gebruikersnaam</translation>
 <translation id="8740359287975076522">Het &lt;abbr id="dnsDefinition"&gt;DNS-adres&lt;/abbr&gt; van <ph name="HOST_NAME" /> kan niet worden gevonden. Er wordt een diagnose van het probleem uitgevoerd.</translation>
 <translation id="9001074447101275817">Voor de proxy <ph name="DOMAIN" /> is een gebruikersnaam en wachtwoord vereist.</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> gebruikt een niet-ondersteund protocol.</translation>

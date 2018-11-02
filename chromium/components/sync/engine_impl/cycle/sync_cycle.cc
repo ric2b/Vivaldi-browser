@@ -8,14 +8,13 @@
 #include <iterator>
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "components/sync/syncable/directory.h"
 
 namespace syncer {
 
 SyncCycle::SyncCycle(SyncCycleContext* context, Delegate* delegate)
     : context_(context), delegate_(delegate) {
-  status_controller_ = base::MakeUnique<StatusController>();
+  status_controller_ = std::make_unique<StatusController>();
 }
 
 SyncCycle::~SyncCycle() {}
@@ -42,7 +41,7 @@ SyncCycleSnapshot SyncCycle::TakeSnapshotWithSource(
 
   SyncCycleSnapshot snapshot(
       status_controller_->model_neutral_state(), download_progress_markers,
-      delegate_->IsCurrentlyThrottled(),
+      delegate_->IsAnyThrottleOrBackoff(),
       status_controller_->num_encryption_conflicts(),
       status_controller_->num_hierarchy_conflicts(),
       status_controller_->num_server_conflicts(),

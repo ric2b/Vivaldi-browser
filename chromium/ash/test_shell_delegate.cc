@@ -10,11 +10,11 @@
 #include "ash/keyboard/test_keyboard_ui.h"
 #include "ash/palette_delegate.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/public/cpp/touchscreen_enabled_source.h"
 #include "ash/root_window_controller.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/shell_observer.h"
-#include "ash/system/tray/system_tray_delegate.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/test/test_accessibility_delegate.h"
 #include "ash/wallpaper/test_wallpaper_delegate.h"
@@ -100,8 +100,8 @@ void TestShellDelegate::ShelfInit() {
 
 void TestShellDelegate::ShelfShutdown() {}
 
-SystemTrayDelegate* TestShellDelegate::CreateSystemTrayDelegate() {
-  return new SystemTrayDelegate;
+NetworkingConfigDelegate* TestShellDelegate::GetNetworkingConfigDelegate() {
+  return nullptr;
 }
 
 std::unique_ptr<WallpaperDelegate>
@@ -114,11 +114,6 @@ AccessibilityDelegate* TestShellDelegate::CreateAccessibilityDelegate() {
 }
 
 std::unique_ptr<PaletteDelegate> TestShellDelegate::CreatePaletteDelegate() {
-  return nullptr;
-}
-
-ui::MenuModel* TestShellDelegate::CreateContextMenu(Shelf* shelf,
-                                                    const ShelfItem* item) {
   return nullptr;
 }
 
@@ -135,36 +130,26 @@ gfx::Image TestShellDelegate::GetDeprecatedAcceleratorImage() const {
   return gfx::Image();
 }
 
-PrefService* TestShellDelegate::GetActiveUserPrefService() const {
-  return active_user_pref_service_;
+bool TestShellDelegate::GetTouchscreenEnabled(
+    TouchscreenEnabledSource source) const {
+  return source == TouchscreenEnabledSource::GLOBAL
+             ? global_touchscreen_enabled_
+             : true;
 }
 
-PrefService* TestShellDelegate::GetLocalStatePrefService() const {
-  return local_state_pref_service_;
+void TestShellDelegate::SetTouchscreenEnabled(bool enabled,
+                                              TouchscreenEnabledSource source) {
+  DCHECK_EQ(TouchscreenEnabledSource::GLOBAL, source);
+  global_touchscreen_enabled_ = enabled;
 }
-
-bool TestShellDelegate::IsTouchscreenEnabledInPrefs(
-    bool use_local_state) const {
-  return use_local_state ? touchscreen_enabled_in_local_pref_ : true;
-}
-
-void TestShellDelegate::SetTouchscreenEnabledInPrefs(bool enabled,
-                                                     bool use_local_state) {
-  if (use_local_state)
-    touchscreen_enabled_in_local_pref_ = enabled;
-}
-
-void TestShellDelegate::UpdateTouchscreenStatusFromPrefs() {}
 
 void TestShellDelegate::SuspendMediaSessions() {
   media_sessions_suspended_ = true;
 }
 
-#if defined(USE_OZONE)
 ui::InputDeviceControllerClient*
 TestShellDelegate::GetInputDeviceControllerClient() {
   return nullptr;
 }
-#endif
 
 }  // namespace ash

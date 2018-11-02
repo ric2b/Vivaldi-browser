@@ -22,8 +22,8 @@ class ProxyMain;
 // This class aggregates all the interactions that the main side of the
 // compositor needs to have with the impl side.
 // The class is created and lives on the impl thread.
-class CC_EXPORT ProxyImpl : public NON_EXPORTED_BASE(LayerTreeHostImplClient),
-                            public NON_EXPORTED_BASE(SchedulerClient) {
+class CC_EXPORT ProxyImpl : public LayerTreeHostImplClient,
+                            public SchedulerClient {
  public:
   ProxyImpl(base::WeakPtr<ProxyMain> proxy_main_weak_ptr,
             LayerTreeHost* layer_tree_host,
@@ -72,7 +72,7 @@ class CC_EXPORT ProxyImpl : public NON_EXPORTED_BASE(LayerTreeHostImplClient),
 
   // LayerTreeHostImplClient implementation
   void DidLoseLayerTreeFrameSinkOnImplThread() override;
-  void SetBeginFrameSource(BeginFrameSource* source) override;
+  void SetBeginFrameSource(viz::BeginFrameSource* source) override;
   void DidReceiveCompositorFrameAckOnImplThread() override;
   void OnCanDrawStateChanged(bool can_draw) override;
   void NotifyReadyToActivate() override;
@@ -95,14 +95,15 @@ class CC_EXPORT ProxyImpl : public NON_EXPORTED_BASE(LayerTreeHostImplClient),
   void DidPrepareTiles() override;
   void DidCompletePageScaleAnimationOnImplThread() override;
   void OnDrawForLayerTreeFrameSink(bool resourceless_software_draw) override;
-  void NeedsImplSideInvalidation() override;
+  void NeedsImplSideInvalidation(bool needs_first_draw_on_activation) override;
   void NotifyImageDecodeRequestFinished() override;
 
   // SchedulerClient implementation
-  void WillBeginImplFrame(const BeginFrameArgs& args) override;
+  void WillBeginImplFrame(const viz::BeginFrameArgs& args) override;
   void DidFinishImplFrame() override;
-  void DidNotProduceFrame(const BeginFrameAck& ack) override;
-  void ScheduledActionSendBeginMainFrame(const BeginFrameArgs& args) override;
+  void DidNotProduceFrame(const viz::BeginFrameAck& ack) override;
+  void ScheduledActionSendBeginMainFrame(
+      const viz::BeginFrameArgs& args) override;
   DrawResult ScheduledActionDrawIfPossible() override;
   DrawResult ScheduledActionDrawForced() override;
   void ScheduledActionCommit() override;
@@ -147,7 +148,7 @@ class CC_EXPORT ProxyImpl : public NON_EXPORTED_BASE(LayerTreeHostImplClient),
 
   RenderingStatsInstrumentation* rendering_stats_instrumentation_;
 
-  std::unique_ptr<LayerTreeHostImpl> layer_tree_host_impl_;
+  std::unique_ptr<LayerTreeHostImpl> host_impl_;
 
   // Use accessors instead of this variable directly.
   BlockedMainCommitOnly main_thread_blocked_commit_vars_unsafe_;

@@ -33,7 +33,6 @@ class WebFrameTestClient : public blink::WebFrameClient {
   ~WebFrameTestClient() override;
 
   // WebFrameClient overrides needed by WebFrameTestProxy.
-  void FrameDetached(blink::WebLocalFrame*, DetachType) override;
   blink::WebColorChooser* CreateColorChooser(
       blink::WebColorChooserClient* client,
       const blink::WebColor& initial_color,
@@ -58,12 +57,8 @@ class WebFrameTestClient : public blink::WebFrameClient {
                               const blink::WebString& stack_trace) override;
   void DownloadURL(const blink::WebURLRequest& request,
                    const blink::WebString& suggested_name) override;
-  void LoadURLExternally(const blink::WebURLRequest& request,
-                         blink::WebNavigationPolicy policy,
-                         blink::WebTriggeringEventInfo triggering_event_info,
-                         bool replaces_current_history_item) override;
   void LoadErrorPage(int reason) override;
-  void DidStartProvisionalLoad(blink::WebDataSource* data_source,
+  void DidStartProvisionalLoad(blink::WebDocumentLoader* loader,
                                blink::WebURLRequest& request) override;
   void DidReceiveServerRedirectForProvisionalLoad() override;
   void DidFailProvisionalLoad(const blink::WebURLError& error,

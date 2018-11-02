@@ -29,6 +29,7 @@
 #include "core/dom/TaskRunnerHelper.h"
 #include "modules/webaudio/AudioNodeInput.h"
 #include "modules/webaudio/AudioNodeOutput.h"
+#include "modules/webaudio/AudioWorkletThread.h"
 #include "modules/webaudio/BaseAudioContext.h"
 #include "modules/webaudio/OfflineAudioContext.h"
 #include "platform/CrossThreadFunctional.h"
@@ -43,26 +44,29 @@ namespace blink {
 
 OfflineAudioDestinationHandler::OfflineAudioDestinationHandler(
     AudioNode& node,
-    AudioBuffer* render_target)
+    unsigned number_of_channels,
+    size_t frames_to_process,
+    float sample_rate)
     : AudioDestinationHandler(node),
-      render_target_(render_target),
+      render_target_(nullptr),
       frames_processed_(0),
-      frames_to_process_(0),
-      is_rendering_started_(false) {
-  render_bus_ = AudioBus::Create(render_target->numberOfChannels(),
-                                 AudioUtilities::kRenderQuantumFrames);
-  frames_to_process_ = render_target_->length();
+      frames_to_process_(frames_to_process),
+      is_rendering_started_(false),
+      number_of_channels_(number_of_channels),
+      sample_rate_(sample_rate) {
+  channel_count_ = number_of_channels;
 
-  // Node-specific defaults.
-  channel_count_ = render_target_->numberOfChannels();
   SetInternalChannelCountMode(kExplicit);
   SetInternalChannelInterpretation(AudioBus::kSpeakers);
 }
 
 PassRefPtr<OfflineAudioDestinationHandler>
 OfflineAudioDestinationHandler::Create(AudioNode& node,
-                                       AudioBuffer* render_target) {
-  return AdoptRef(new OfflineAudioDestinationHandler(node, render_target));
+                                       unsigned number_of_channels,
+                                       size_t frames_to_process,
+                                       float sample_rate) {
+  return AdoptRef(new OfflineAudioDestinationHandler(
+      node, number_of_channels, frames_to_process, sample_rate));
 }
 
 OfflineAudioDestinationHandler::~OfflineAudioDestinationHandler() {
@@ -85,8 +89,8 @@ void OfflineAudioDestinationHandler::Uninitialize() {
   if (!IsInitialized())
     return;
 
-  if (render_thread_)
-    render_thread_.reset();
+  render_thread_.reset();
+  worklet_backing_thread_ = nullptr;
 
   AudioHandler::Uninitialize();
 }
@@ -101,16 +105,13 @@ unsigned long OfflineAudioDestinationHandler::MaxChannelCount() const {
 
 void OfflineAudioDestinationHandler::StartRendering() {
   DCHECK(IsMainThread());
-  DCHECK(render_thread_);
+  DCHECK(GetRenderingThread());
   DCHECK(render_target_);
-
-  if (!render_target_)
-    return;
 
   // Rendering was not started. Starting now.
   if (!is_rendering_started_) {
     is_rendering_started_ = true;
-    render_thread_->GetWebTaskRunner()->PostTask(
+    GetRenderingThread()->GetWebTaskRunner()->PostTask(
         BLINK_FROM_HERE,
         CrossThreadBind(&OfflineAudioDestinationHandler::StartOfflineRendering,
                         WrapPassRefPtr(this)));
@@ -119,7 +120,7 @@ void OfflineAudioDestinationHandler::StartRendering() {
 
   // Rendering is already started, which implicitly means we resume the
   // rendering by calling |doOfflineRendering| on the render thread.
-  render_thread_->GetWebTaskRunner()->PostTask(
+  GetRenderingThread()->GetWebTaskRunner()->PostTask(
       BLINK_FROM_HERE,
       CrossThreadBind(&OfflineAudioDestinationHandler::DoOfflineRendering,
                       WrapPassRefPtr(this)));
@@ -136,9 +137,22 @@ size_t OfflineAudioDestinationHandler::CallbackBufferSize() const {
   return 0;
 }
 
-void OfflineAudioDestinationHandler::InitializeOfflineRenderThread() {
+void OfflineAudioDestinationHandler::InitializeOfflineRenderThread(
+    AudioBuffer* render_target) {
   DCHECK(IsMainThread());
-  render_thread_ = Platform::Current()->CreateThread("offline audio renderer");
+
+  if (RuntimeEnabledFeatures::AudioWorkletEnabled()) {
+    AudioWorkletThread::EnsureSharedBackingThread();
+    worklet_backing_thread_ = AudioWorkletThread::GetSharedBackingThread();
+  } else {
+    render_thread_ =
+        Platform::Current()->CreateThread("offline audio renderer");
+  }
+
+  render_target_ = render_target;
+  render_bus_ = AudioBus::Create(render_target->numberOfChannels(),
+                                 AudioUtilities::kRenderQuantumFrames);
+  DCHECK(render_bus_);
 }
 
 void OfflineAudioDestinationHandler::StartOfflineRendering() {
@@ -183,7 +197,7 @@ void OfflineAudioDestinationHandler::DoOfflineRendering() {
         ProcessHeap::GetCrossThreadPersistentRegion(), true);
     if (!gc_lock.HasLock()) {
       // To ensure that the rendering step eventually happens, repost.
-      render_thread_->GetWebTaskRunner()->PostTask(
+      GetRenderingThread()->GetWebTaskRunner()->PostTask(
           BLINK_FROM_HERE,
           Bind(&OfflineAudioDestinationHandler::DoOfflineRendering,
                WrapPassRefPtr(this)));
@@ -347,19 +361,37 @@ bool OfflineAudioDestinationHandler::RenderIfNotSuspended(
   return false;
 }
 
+WebThread* OfflineAudioDestinationHandler::GetRenderingThread() {
+  DCHECK(IsInitialized());
+
+  if (RuntimeEnabledFeatures::AudioWorkletEnabled()) {
+    DCHECK(!render_thread_ && worklet_backing_thread_);
+    return worklet_backing_thread_;
+  }
+
+  DCHECK(render_thread_ && !worklet_backing_thread_);
+  return render_thread_.get();
+}
+
 // ----------------------------------------------------------------
 
 OfflineAudioDestinationNode::OfflineAudioDestinationNode(
     BaseAudioContext& context,
-    AudioBuffer* render_target)
+    unsigned number_of_channels,
+    size_t frames_to_process,
+    float sample_rate)
     : AudioDestinationNode(context) {
-  SetHandler(OfflineAudioDestinationHandler::Create(*this, render_target));
+  SetHandler(OfflineAudioDestinationHandler::Create(
+      *this, number_of_channels, frames_to_process, sample_rate));
 }
 
 OfflineAudioDestinationNode* OfflineAudioDestinationNode::Create(
     BaseAudioContext* context,
-    AudioBuffer* render_target) {
-  return new OfflineAudioDestinationNode(*context, render_target);
+    unsigned number_of_channels,
+    size_t frames_to_process,
+    float sample_rate) {
+  return new OfflineAudioDestinationNode(*context, number_of_channels,
+                                         frames_to_process, sample_rate);
 }
 
 }  // namespace blink

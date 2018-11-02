@@ -60,9 +60,9 @@ void HTMLImageFallbackHelper::CreateAltTextShadowTree(Element& element) {
   alt_text->AppendChild(text);
 }
 
-PassRefPtr<ComputedStyle> HTMLImageFallbackHelper::CustomStyleForAltText(
+RefPtr<ComputedStyle> HTMLImageFallbackHelper::CustomStyleForAltText(
     Element& element,
-    PassRefPtr<ComputedStyle> new_style) {
+    RefPtr<ComputedStyle> new_style) {
   // If we have an author shadow root or have not created the UA shadow root
   // yet, bail early. We can't use ensureUserAgentShadowRoot() here because that
   // would alter the DOM tree during style recalc.
@@ -113,6 +113,8 @@ PassRefPtr<ComputedStyle> HTMLImageFallbackHelper::CustomStyleForAltText(
     place_holder->SetInlineStyleProperty(CSSPropertyOverflow, CSSValueHidden);
     place_holder->SetInlineStyleProperty(CSSPropertyDisplay,
                                          CSSValueInlineBlock);
+    place_holder->SetInlineStyleProperty(CSSPropertyPointerEvents,
+                                         CSSValueNone);
     CSSPrimitiveValue::UnitType unit =
         new_style->Height().IsPercent()
             ? CSSPrimitiveValue::UnitType::kPercentage

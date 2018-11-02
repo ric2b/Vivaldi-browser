@@ -21,8 +21,8 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
-#include "cc/output/begin_frame_args.h"
-#include "cc/scheduler/begin_frame_source.h"
+#include "components/viz/common/frame_sinks/begin_frame_args.h"
+#include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/compositor/image_transport_factory.h"
 #include "content/browser/compositor/owned_mailbox.h"
@@ -79,7 +79,7 @@ class TouchSelectionControllerClientAura;
 // RenderWidgetHostView class hierarchy described in render_widget_host_view.h.
 class CONTENT_EXPORT RenderWidgetHostViewAura
     : public RenderWidgetHostViewBase,
-      NON_EXPORTED_BASE(public RenderWidgetHostViewEventHandler::Delegate),
+      public RenderWidgetHostViewEventHandler::Delegate,
       public TextInputManager::Observer,
       public ui::TextInputClient,
       public display::DisplayObserver,
@@ -173,17 +173,17 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   bool LockMouse() override;
   void UnlockMouse() override;
   void DidCreateNewRendererCompositorFrameSink(
-      cc::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink)
+      viz::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink)
       override;
   void SubmitCompositorFrame(const viz::LocalSurfaceId& local_surface_id,
                              cc::CompositorFrame frame) override;
-  void OnDidNotProduceFrame(const cc::BeginFrameAck& ack) override;
+  void OnDidNotProduceFrame(const viz::BeginFrameAck& ack) override;
   void ClearCompositorFrame() override;
   void DidStopFlinging() override;
   void OnDidNavigateMainFrameToNewPage() override;
   viz::FrameSinkId GetFrameSinkId() override;
   viz::LocalSurfaceId GetLocalSurfaceId() const override;
-  viz::FrameSinkId FrameSinkIdAtPoint(cc::SurfaceHittestDelegate* delegate,
+  viz::FrameSinkId FrameSinkIdAtPoint(viz::SurfaceHittestDelegate* delegate,
                                       const gfx::Point& point,
                                       gfx::Point* transformed_point) override;
   void ProcessMouseEvent(const blink::WebMouseEvent& event,
@@ -260,7 +260,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   void OnWindowTargetVisibilityChanged(bool visible) override;
   bool HasHitTestMask() const override;
   void GetHitTestMask(gfx::Path* mask) const override;
-  void OnWindowSurfaceChanged(const viz::SurfaceInfo& surface_info) override;
+  void OnFirstSurfaceActivation(const viz::SurfaceInfo& surface_info) override;
 
   // Overridden from ui::EventHandler:
   void OnKeyEvent(ui::KeyEvent* event) override;
@@ -280,7 +280,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
                        aura::Window* lost_focus) override;
 
   // Overridden from aura::WindowTreeHostObserver:
-  void OnHostMovedInPixels(const aura::WindowTreeHost* host,
+  void OnHostMovedInPixels(aura::WindowTreeHost* host,
                            const gfx::Point& new_origin_in_pixels) override;
 
 #if defined(OS_WIN)
@@ -604,7 +604,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
 
   float device_scale_factor_;
 
-  cc::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink_ =
+  viz::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink_ =
       nullptr;
 
   // While this is a ui::EventHandler for targetting, |event_handler_| actually
@@ -612,7 +612,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   std::unique_ptr<RenderWidgetHostViewEventHandler> event_handler_;
 
   viz::FrameSinkId frame_sink_id_;
-  viz::LocalSurfaceId local_surface_id_;
 
   std::unique_ptr<CursorManager> cursor_manager_;
 

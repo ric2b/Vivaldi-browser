@@ -4,11 +4,26 @@
 
 package org.chromium.net;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+import static org.chromium.net.CronetTestRule.getContext;
+import static org.chromium.net.CronetTestRule.getTestStorage;
+
 import android.support.test.filters.SmallTest;
+
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.runner.RunWith;
 
 import org.chromium.base.FileUtils;
 import org.chromium.base.PathUtils;
+import org.chromium.base.annotations.SuppressFBWarnings;
+import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.Feature;
+import org.chromium.net.CronetTestRule.OnlyRunNativeCronet;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -20,25 +35,29 @@ import java.util.Arrays;
 /**
  * Test CronetEngine disk storage.
  */
-public class DiskStorageTest extends CronetTestBase {
+@RunWith(BaseJUnit4ClassRunner.class)
+public class DiskStorageTest {
+    @SuppressFBWarnings("URF_UNREAD_PUBLIC_OR_PROTECTED_FIELD")
+    @Rule
+    public final CronetTestRule mTestRule = new CronetTestRule();
+
     private String mReadOnlyStoragePath;
 
-    @Override
-    protected void setUp() throws Exception {
-        super.setUp();
+    @Before
+    public void setUp() throws Exception {
         System.loadLibrary("cronet_tests");
         assertTrue(NativeTestServer.startNativeTestServer(getContext()));
     }
 
-    @Override
-    protected void tearDown() throws Exception {
+    @After
+    public void tearDown() throws Exception {
         if (mReadOnlyStoragePath != null) {
             FileUtils.recursivelyDeleteFile(new File(mReadOnlyStoragePath));
         }
         NativeTestServer.shutdownNativeTestServer();
-        super.tearDown();
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @OnlyRunNativeCronet
@@ -84,6 +103,7 @@ public class DiskStorageTest extends CronetTestBase {
         assertTrue(prefsDir.exists());
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @OnlyRunNativeCronet
@@ -147,6 +167,7 @@ public class DiskStorageTest extends CronetTestBase {
         assertTrue(prefsDir.exists());
     }
 
+    @Test
     @SmallTest
     @Feature({"Cronet"})
     @OnlyRunNativeCronet

@@ -63,6 +63,7 @@
 #include "net/ssl/ssl_cert_request_info.h"
 #include "net/ssl/ssl_config_service.h"
 #include "net/url_request/http_user_agent_settings.h"
+#include "net/url_request/network_error_logging_delegate.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_error_job.h"
@@ -172,6 +173,24 @@ void LogChannelIDAndCookieStores(const GURL& url,
                             EPHEMERALITY_MAX);
 }
 
+void LogCookieAgeForNonSecureRequest(const net::CookieList& cookie_list,
+                                     const net::URLRequest& request) {
+  base::Time oldest = base::Time::Max();
+  for (const auto& cookie : cookie_list)
+    oldest = std::min(cookie.CreationDate(), oldest);
+  base::TimeDelta delta = base::Time::Now() - oldest;
+
+  if (net::registry_controlled_domains::SameDomainOrHost(
+          request.url(), request.site_for_cookies(),
+          net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES)) {
+    UMA_HISTOGRAM_COUNTS_1000("Cookie.AgeForNonSecureSameSiteRequest",
+                              delta.InDays());
+  } else {
+    UMA_HISTOGRAM_COUNTS_1000("Cookie.AgeForNonSecureCrossSiteRequest",
+                              delta.InDays());
+  }
+}
+
 }  // namespace
 
 namespace net {
@@ -201,6 +220,7 @@ URLRequestJob* URLRequestHttpJob::Factory(URLRequest* request,
     if (hsts && hsts->ShouldUpgradeToSSL(url.host())) {
       GURL::Replacements replacements;
       replacements.SetSchemeStr(
+
           url.SchemeIs(url::kHttpScheme) ? url::kHttpsScheme : url::kWssScheme);
       return new URLRequestRedirectJob(
           request, network_delegate, url.ReplaceComponents(replacements),
@@ -368,6 +388,7 @@ void URLRequestHttpJob::NotifyHeadersComplete() {
   ProcessPublicKeyPinsHeader();
   ProcessExpectCTHeader();
   ProcessReportToHeader();
+  ProcessNetworkErrorLoggingHeader();
 
   // Handle the server notification of a new SDCH dictionary.
   SdchManager* sdch_manager(request()->context()->sdch_manager());
@@ -554,6 +575,8 @@ void URLRequestHttpJob::StartTransactionInternal() {
       transaction_->SetBeforeHeadersSentCallback(
           base::Bind(&URLRequestHttpJob::NotifyBeforeSendHeadersCallback,
                      base::Unretained(this)));
+      transaction_->SetRequestHeadersCallback(request_headers_callback_);
+      transaction_->SetResponseHeadersCallback(response_headers_callback_);
 
       if (!throttling_entry_.get() ||
           !throttling_entry_->ShouldRejectRequest(*request_)) {
@@ -683,16 +706,16 @@ void URLRequestHttpJob::AddCookieHeaderAndStart() {
     options.set_include_httponly();
 
     // Set SameSiteCookieMode according to the rules laid out in
-    // https://tools.ietf.org/html/draft-west-first-party-cookies:
+    // https://tools.ietf.org/html/draft-ietf-httpbis-cookie-same-site:
     //
     // * Include both "strict" and "lax" same-site cookies if the request's
-    //   |url|, |initiator|, and |first_party_for_cookies| all have the same
+    //   |url|, |initiator|, and |site_for_cookies| all have the same
     //   registrable domain. Note: this also covers the case of a request
     //   without an initiator (only happens for browser-initiated main frame
     //   navigations).
     //
     // * Include only "lax" same-site cookies if the request's |URL| and
-    //   |first_party_for_cookies| have the same registrable domain, _and_ the
+    //   |site_for_cookies| have the same registrable domain, _and_ the
     //   request's |method| is "safe" ("GET" or "HEAD").
     //
     //   Note that this will generally be the case only for cross-site requests
@@ -700,7 +723,7 @@ void URLRequestHttpJob::AddCookieHeaderAndStart() {
     //
     // * Otherwise, do not include same-site cookies.
     if (registry_controlled_domains::SameDomainOrHost(
-            request_->url(), request_->first_party_for_cookies(),
+            request_->url(), request_->site_for_cookies(),
             registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES)) {
       if (!request_->initiator() ||
           registry_controlled_domains::SameDomainOrHost(
@@ -725,6 +748,9 @@ void URLRequestHttpJob::AddCookieHeaderAndStart() {
 
 void URLRequestHttpJob::SetCookieHeaderAndStart(const CookieList& cookie_list) {
   if (!cookie_list.empty() && CanGetCookies(cookie_list)) {
+    if (!request_info_.url.SchemeIsCryptographic())
+      LogCookieAgeForNonSecureRequest(cookie_list, *request_);
+
     request_info_.extra_headers.SetHeader(
         HttpRequestHeaders::kCookie, CookieStore::BuildCookieLine(cookie_list));
     // Disable privacy mode as we are sending cookies anyway.
@@ -886,6 +912,30 @@ void URLRequestHttpJob::ProcessReportToHeader() {
 
   service->ProcessHeader(request_info_.url.GetOrigin(), value);
 #endif  // BUILDFLAG(ENABLE_REPORTING)
+}
+
+void URLRequestHttpJob::ProcessNetworkErrorLoggingHeader() {
+  DCHECK(response_info_);
+
+  HttpResponseHeaders* headers = GetResponseHeaders();
+  std::string value;
+  if (!headers->GetNormalizedHeader(NetworkErrorLoggingDelegate::kHeaderName,
+                                    &value)) {
+    return;
+  }
+
+  NetworkErrorLoggingDelegate* delegate =
+      request_->context()->network_error_logging_delegate();
+  if (!delegate)
+    return;
+
+  // Only accept Report-To headers on HTTPS connections that have no
+  // certificate errors.
+  const SSLInfo& ssl_info = response_info_->ssl_info;
+  if (!ssl_info.is_valid() || IsCertStatusError(ssl_info.cert_status))
+    return;
+
+  delegate->OnHeader(url::Origin(request_info_.url), value);
 }
 
 void URLRequestHttpJob::OnStartCompleted(int result) {
@@ -1500,6 +1550,20 @@ void URLRequestHttpJob::RecordPacketStats(
       NOTREACHED();
       return;
   }
+}
+
+void URLRequestHttpJob::SetRequestHeadersCallback(
+    RequestHeadersCallback callback) {
+  DCHECK(!transaction_);
+  DCHECK(!request_headers_callback_);
+  request_headers_callback_ = std::move(callback);
+}
+
+void URLRequestHttpJob::SetResponseHeadersCallback(
+    ResponseHeadersCallback callback) {
+  DCHECK(!transaction_);
+  DCHECK(!response_headers_callback_);
+  response_headers_callback_ = std::move(callback);
 }
 
 void URLRequestHttpJob::RecordPerfHistograms(CompletionCause reason) {

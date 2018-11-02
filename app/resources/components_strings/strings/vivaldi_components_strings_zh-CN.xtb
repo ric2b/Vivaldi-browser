@@ -66,11 +66,13 @@
 <translation id="4506599922270137252">联系系统管理员</translation>
 <translation id="4522570452068850558">详细信息</translation>
 <translation id="4558551763791394412">尝试停用扩展程序。</translation>
+<translation id="4611292653554630842">登录</translation>
 <translation id="4708268264240856090">您的连接已中断</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />正在进行Windows网络诊断<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">可执行文件路径</translation>
 <translation id="4764776831041365478">网址为 <ph name="URL" /> 的网页可能暂时无法连接，或者它已永久性地移动到了新网址。</translation>
 <translation id="4807049035289105102">您目前无法访问 <ph name="SITE" />，因为此网站发送了 Vivaldi 无法处理的杂乱凭据。网络错误和攻击通常是暂时的，该网页稍后可能会恢复正常。</translation>
+<translation id="4913131542719409934">需要验证身份</translation>
 <translation id="5023310440958281426">请查看管理员制定的政策</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />检查代理服务器地址<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">（64 位）</translation>
@@ -99,10 +101,12 @@
 <translation id="6328639280570009161">请尝试停用网络联想查询功能</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> 拒绝了我们的连接请求。</translation>
 <translation id="6569060085658103619">您正在查看扩展程序页面</translation>
+<translation id="6657585470893396449">密码</translation>
 <translation id="6685834062052613830">请退出并完成设置</translation>
 <translation id="6711464428925977395">代理服务器出现问题，或者地址有误。</translation>
 <translation id="6757797048963528358">您的计算机已进入休眠模式。</translation>
 <translation id="6897140037006041989">用户代理</translation>
+<translation id="7090678807593890770">用谷歌搜索“<ph name="LINK" />”</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> 不符合相关安全标准。</translation>
 <translation id="7353601530677266744">命令行</translation>
 <translation id="7419106976560586862">个人资料路径</translation>
@@ -121,6 +125,7 @@
 <translation id="8289355894181816810">如果您不确定这是什么意思，请与您的网络管理员联系。</translation>
 <translation id="8332188693563227489">访问 <ph name="HOST_NAME" /> 的请求遭到拒绝</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> 的响应时间过长。</translation>
+<translation id="8503813439785031346">用户名</translation>
 <translation id="8740359287975076522">无法找到 <ph name="HOST_NAME" /> 的 &lt;abbr id="dnsDefinition"&gt;DNS 地址&lt;/abbr&gt;。正在诊断该问题。</translation>
 <translation id="9001074447101275817">代理 (<ph name="DOMAIN" />) 要求提供用户名和口令。</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> 使用了不受支持的协议。</translation>

@@ -61,9 +61,10 @@ void AppWebMessagePort::PostMessage(
     const base::android::JavaParamRef<jobject>& jcaller,
     const base::android::JavaParamRef<jstring>& jmessage,
     const base::android::JavaParamRef<jobjectArray>& jports) {
-  port_.PostMessage(
-      EncodeStringMessage(base::android::ConvertJavaStringToUTF16(jmessage)),
-      UnwrapJavaArray(env, jports));
+  std::vector<uint8_t> encoded_message =
+      EncodeStringMessage(base::android::ConvertJavaStringToUTF16(jmessage));
+  port_.PostMessage(encoded_message.data(), encoded_message.size(),
+                    UnwrapJavaArray(env, jports));
 }
 
 jboolean AppWebMessagePort::DispatchNextMessage(
@@ -75,9 +76,10 @@ jboolean AppWebMessagePort::DispatchNextMessage(
 
   jmethodID app_web_message_port_constructor =
       base::android::MethodID::Get<base::android::MethodID::TYPE_INSTANCE>(
-          env, AppWebMessagePort_clazz(env), "<init>", "()V");
+          env, org_chromium_content_browser_AppWebMessagePort_clazz(env),
+          "<init>", "()V");
 
-  base::string16 encoded_message;
+  std::vector<uint8_t> encoded_message;
   std::vector<MessagePort> ports;
   if (!port_.GetMessage(&encoded_message, &ports))
     return false;
@@ -92,17 +94,17 @@ jboolean AppWebMessagePort::DispatchNextMessage(
   base::android::ScopedJavaLocalRef<jobjectArray> jports;
   if (ports.size() > 0) {
     jports = base::android::ScopedJavaLocalRef<jobjectArray>(
-        env,
-        env->NewObjectArray(ports.size(),
-                            AppWebMessagePort_clazz(env),
-                            nullptr));
+        env, env->NewObjectArray(
+                 ports.size(),
+                 org_chromium_content_browser_AppWebMessagePort_clazz(env),
+                 nullptr));
 
     // Instantiate the Java and C++ wrappers for the transferred ports.
     for (size_t i = 0; i < ports.size(); ++i) {
       base::android::ScopedJavaLocalRef<jobject> jport(
-          env,
-          env->NewObject(AppWebMessagePort_clazz(env),
-                         app_web_message_port_constructor));
+          env, env->NewObject(
+                   org_chromium_content_browser_AppWebMessagePort_clazz(env),
+                   app_web_message_port_constructor));
       CreateAndBindToJavaObject(env, ports[i].ReleaseHandle(), jport);
 
       env->SetObjectArrayElement(jports.obj(), i, jport.obj());
@@ -139,10 +141,6 @@ void AppWebMessagePort::OnMessagesAvailable() {
   if (obj.is_null())
     return;
   Java_AppWebMessagePort_onMessagesAvailable(env, obj);
-}
-
-bool RegisterAppWebMessagePort(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 void InitializeAppWebMessagePortPair(

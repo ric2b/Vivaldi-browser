@@ -13,9 +13,13 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/web_preferences.h"
-#include "extensions/helper/vivaldi_app_helper.h"
+#include "extensions/features/features.h"
 #include "prefs/vivaldi_pref_names.h"
 #include "ui/base/l10n/l10n_util.h"
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "extensions/helper/vivaldi_app_helper.h"
+#endif
 
 namespace vivaldi {
 
@@ -51,13 +55,14 @@ void VivaldiContentBrowserClientParts::OverrideWebkitPrefs(
       content::WebContents::FromRenderViewHost(rvh);
   if (web_contents) {
     // web_contents is nullptr on interstitial pages.
+#if !defined(OS_ANDROID)
     Profile* profile =
         Profile::FromBrowserContext(web_contents->GetBrowserContext());
     PrefService* prefs = profile->GetPrefs();
-
     web_prefs->tabs_to_links =
         prefs->GetBoolean(vivaldiprefs::kVivaldiTabsToLinks);
-
+#endif
+#if BUILDFLAG(ENABLE_EXTENSIONS)
     extensions::VivaldiAppHelper* vivaldi_app_helper =
         extensions::VivaldiAppHelper::FromWebContents(web_contents);
     // Returns nullptr on regular pages, and a valid VivaldiAppHelper
@@ -70,5 +75,6 @@ void VivaldiContentBrowserClientParts::OverrideWebkitPrefs(
       if (success)
         web_prefs->minimum_font_size = min_font_size;
     }
+#endif
   }
 }

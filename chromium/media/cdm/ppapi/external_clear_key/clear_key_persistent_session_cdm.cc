@@ -87,7 +87,6 @@ class FinishLoadCdmPromise : public SimpleCdmPromise {
 }  // namespace
 
 ClearKeyPersistentSessionCdm::ClearKeyPersistentSessionCdm(
-    const GURL& origin,
     ClearKeyCdmHost* host,
     const SessionMessageCB& session_message_cb,
     const SessionClosedCB& session_closed_cb,
@@ -95,7 +94,7 @@ ClearKeyPersistentSessionCdm::ClearKeyPersistentSessionCdm(
     const SessionExpirationUpdateCB& session_expiration_update_cb)
     : host_(host), session_closed_cb_(session_closed_cb), weak_factory_(this) {
   cdm_ = base::MakeRefCounted<AesDecryptor>(
-      origin, session_message_cb,
+      session_message_cb,
       base::Bind(&ClearKeyPersistentSessionCdm::OnSessionClosed,
                  weak_factory_.GetWeakPtr()),
       session_keys_change_cb, session_expiration_update_cb);
@@ -180,7 +179,7 @@ void ClearKeyPersistentSessionCdm::OnFileReadForLoadSession(
                            CdmSessionType::PERSISTENT_LICENSE_SESSION)) {
     // If the session can't be created it's due to an already existing session
     // with the same name.
-    promise->reject(CdmPromise::QUOTA_EXCEEDED_ERROR, 0,
+    promise->reject(CdmPromise::Exception::QUOTA_EXCEEDED_ERROR, 0,
                     "Session already exists.");
     return;
   }
@@ -188,10 +187,11 @@ void ClearKeyPersistentSessionCdm::OnFileReadForLoadSession(
 
   // Set the session's state using the data just read.
   bool key_added = false;
+  CdmPromise::Exception exception;
   std::string error_message;
   if (!cdm_->UpdateSessionWithJWK(session_id,
                                   std::string(data.begin(), data.end()),
-                                  &key_added, &error_message)) {
+                                  &key_added, &exception, &error_message)) {
     NOTREACHED() << "Saved session data is not usable, error = "
                  << error_message;
     // Return an empty string to indicate that the session was not found.
@@ -219,11 +219,12 @@ void ClearKeyPersistentSessionCdm::UpdateSession(
   }
 
   bool key_added = false;
+  CdmPromise::Exception exception;
   std::string error_message;
   if (!cdm_->UpdateSessionWithJWK(session_id,
                                   std::string(response.begin(), response.end()),
-                                  &key_added, &error_message)) {
-    promise->reject(CdmPromise::INVALID_ACCESS_ERROR, 0, error_message);
+                                  &key_added, &exception, &error_message)) {
+    promise->reject(exception, 0, error_message);
     return;
   }
 
@@ -245,7 +246,7 @@ void ClearKeyPersistentSessionCdm::OnFileOpenedForUpdateSession(
     CdmFileAdapter::Status status) {
   if (status != CdmFileAdapter::Status::kSuccess) {
     // Unable to open the file, so the state can't be saved.
-    promise->reject(CdmPromise::INVALID_ACCESS_ERROR, 0,
+    promise->reject(CdmPromise::Exception::INVALID_STATE_ERROR, 0,
                     "Unable to save session state.");
     return;
   }
@@ -269,7 +270,7 @@ void ClearKeyPersistentSessionCdm::OnFileWrittenForUpdateSession(
     bool success) {
   if (!success) {
     // Unable to save the state.
-    promise->reject(CdmPromise::INVALID_ACCESS_ERROR, 0,
+    promise->reject(CdmPromise::Exception::INVALID_STATE_ERROR, 0,
                     "Unable to save session state.");
     return;
   }

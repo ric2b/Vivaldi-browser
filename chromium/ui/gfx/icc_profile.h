@@ -23,6 +23,8 @@ template <typename, typename> struct StructTraits;
 
 namespace gfx {
 
+class ICCProfileCache;
+
 // Used to represent a full ICC profile, usually retrieved from a monitor. It
 // can be lossily compressed into a ColorSpace object. This structure should
 // only be sent from higher-privilege processes to lower-privilege processes,
@@ -49,11 +51,6 @@ class COLOR_SPACE_EXPORT ICCProfile {
   static ICCProfile FromCGColorSpace(CGColorSpaceRef cg_color_space);
 #endif
 
-  // This will recover a ICCProfile from a compact ColorSpace representation.
-  // Internally, this will make an effort to create an identical ICCProfile
-  // to the one that created |color_space|, but this is not guaranteed.
-  static ICCProfile FromColorSpace(const gfx::ColorSpace& color_space);
-
   // Create directly from profile data.
   static ICCProfile FromData(const void* icc_profile, size_t size);
 
@@ -68,6 +65,10 @@ class COLOR_SPACE_EXPORT ICCProfile {
 
   const std::vector<char>& GetData() const;
 
+  // Histogram how we this was approximated by a gfx::ColorSpace. Only
+  // histogram a given profile once per display.
+  void HistogramDisplay(int64_t display_id) const;
+
 #if defined(OS_WIN)
   // This will read monitor ICC profiles from disk and cache the results for the
   // other functions to read. This should not be called on the UI or IO thread.
@@ -76,32 +77,48 @@ class COLOR_SPACE_EXPORT ICCProfile {
 #endif
 
  private:
+  // This must match ICCProfileAnalyzeResult enum in histograms.xml.
+  enum AnalyzeResult {
+    kICCExtractedMatrixAndAnalyticTrFn = 0,
+    kICCExtractedMatrixAndApproximatedTrFn = 1,
+    kICCFailedToConvergeToApproximateTrFn = 2,
+    kICCFailedToExtractRawTrFn = 3,
+    kICCFailedToExtractMatrix = 4,
+    kICCFailedToParse = 5,
+    kICCFailedToExtractSkColorSpace = 6,
+    kICCFailedToCreateXform = 7,
+    kICCFailedToApproximateTrFnAccurately = 8,
+    kICCExtractedSRGBColorSpace = 9,
+    kICCProfileAnalyzeLast = kICCExtractedSRGBColorSpace,
+  };
+
+  friend class ICCProfileCache;
   friend ICCProfile ICCProfileForTestingAdobeRGB();
   friend ICCProfile ICCProfileForTestingColorSpin();
   friend ICCProfile ICCProfileForTestingGenericRGB();
   friend ICCProfile ICCProfileForTestingSRGB();
-  friend ICCProfile ICCProfileForTestingNoAnalyticTrFn();
-  friend ICCProfile ICCProfileForTestingA2BOnly();
-  friend ICCProfile ICCProfileForTestingOvershoot();
   friend ICCProfile ICCProfileForLayoutTests();
   static const uint64_t test_id_adobe_rgb_;
   static const uint64_t test_id_color_spin_;
   static const uint64_t test_id_generic_rgb_;
   static const uint64_t test_id_srgb_;
-  static const uint64_t test_id_no_analytic_tr_fn_;
-  static const uint64_t test_id_a2b_only_;
-  static const uint64_t test_id_overshoot_;
 
   // Populate |icc_profile| with the ICCProfile corresponding to id |id|. Return
   // false if |id| is not in the cache.
   static bool FromId(uint64_t id, ICCProfile* icc_profile);
 
   // This method is used to hard-code the |id_| to a specific value, and is
-  // used by test methods to ensure that they don't conflict with the values
-  // generated in the browser.
+  // used by layout test methods to ensure that they don't conflict with the
+  // values generated in the browser.
   static ICCProfile FromDataWithId(const void* icc_profile,
                                    size_t size,
                                    uint64_t id);
+
+  static AnalyzeResult ExtractColorSpaces(
+      const std::vector<char>& data,
+      gfx::ColorSpace* parametric_color_space,
+      float* parametric_tr_fn_max_error,
+      sk_sp<SkColorSpace>* useable_sk_color_space);
 
   void ComputeColorSpaceAndCache();
 
@@ -111,6 +128,9 @@ class COLOR_SPACE_EXPORT ICCProfile {
   uint64_t id_ = 0;
   std::vector<char> data_;
 
+  // The result of attepting to extract a color space from the color profile.
+  AnalyzeResult analyze_result_ = kICCFailedToParse;
+
   // |color_space| always links back to this ICC profile, and its SkColorSpace
   // is always equal to the SkColorSpace created from this ICCProfile.
   gfx::ColorSpace color_space_;
@@ -119,8 +139,10 @@ class COLOR_SPACE_EXPORT ICCProfile {
   // is accurate, and its SkColorSpace will always be parametrically created.
   gfx::ColorSpace parametric_color_space_;
 
-  // This is set to true if SkICC successfully parsed this profile.
-  bool successfully_parsed_by_sk_icc_ = false;
+  // The L-infinity error of the parametric color space fit. This is undefined
+  // unless |analyze_result_| is kICCFailedToApproximateTrFnAccurately or
+  // kICCExtractedMatrixAndApproximatedTrFn.
+  float parametric_tr_fn_error_ = -1;
 
   FRIEND_TEST_ALL_PREFIXES(SimpleColorSpace, BT709toSRGBICC);
   FRIEND_TEST_ALL_PREFIXES(SimpleColorSpace, GetColorSpace);

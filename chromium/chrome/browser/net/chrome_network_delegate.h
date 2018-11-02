@@ -114,6 +114,10 @@ class ChromeNetworkDelegate : public net::NetworkDelegateImpl {
     domain_reliability_monitor_ = std::move(monitor);
   }
 
+  domain_reliability::DomainReliabilityMonitor* domain_reliability_monitor() {
+    return domain_reliability_monitor_.get();
+  }
+
   void set_data_use_aggregator(
       data_usage::DataUseAggregator* data_use_aggregator,
       bool is_data_usage_off_the_record);
@@ -180,9 +184,8 @@ class ChromeNetworkDelegate : public net::NetworkDelegateImpl {
   bool OnCanAccessFile(const net::URLRequest& request,
                        const base::FilePath& original_path,
                        const base::FilePath& absolute_path) const override;
-  bool OnCanEnablePrivacyMode(
-      const GURL& url,
-      const GURL& first_party_for_cookies) const override;
+  bool OnCanEnablePrivacyMode(const GURL& url,
+                              const GURL& site_for_cookies) const override;
   bool OnAreExperimentalCookieFeaturesEnabled() const override;
   bool OnCancelURLRequestWithPolicyViolatingReferrerHeader(
       const net::URLRequest& request,

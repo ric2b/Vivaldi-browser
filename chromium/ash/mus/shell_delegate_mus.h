@@ -35,33 +35,24 @@ class ShellDelegateMus : public ShellDelegate {
   void OpenUrlFromArc(const GURL& url) override;
   void ShelfInit() override;
   void ShelfShutdown() override;
-  SystemTrayDelegate* CreateSystemTrayDelegate() override;
+  NetworkingConfigDelegate* GetNetworkingConfigDelegate() override;
   std::unique_ptr<WallpaperDelegate> CreateWallpaperDelegate() override;
   AccessibilityDelegate* CreateAccessibilityDelegate() override;
   std::unique_ptr<PaletteDelegate> CreatePaletteDelegate() override;
-  ui::MenuModel* CreateContextMenu(Shelf* shelf,
-                                   const ShelfItem* item) override;
   GPUSupport* CreateGPUSupport() override;
   base::string16 GetProductName() const override;
   gfx::Image GetDeprecatedAcceleratorImage() const override;
-  PrefService* GetActiveUserPrefService() const override;
-  PrefService* GetLocalStatePrefService() const override;
-  bool IsTouchscreenEnabledInPrefs(bool use_local_state) const override;
-  void SetTouchscreenEnabledInPrefs(bool enabled,
-                                    bool use_local_state) override;
-  void UpdateTouchscreenStatusFromPrefs() override;
-#if defined(USE_OZONE)
+  bool GetTouchscreenEnabled(TouchscreenEnabledSource source) const override;
+  void SetTouchscreenEnabled(bool enabled,
+                             TouchscreenEnabledSource source) override;
   ui::InputDeviceControllerClient* GetInputDeviceControllerClient() override;
-#endif
 
  private:
   // |connector_| may be null in tests.
   service_manager::Connector* connector_;
 
-#if defined(USE_OZONE)
   std::unique_ptr<ui::InputDeviceControllerClient>
       input_device_controller_client_;
-#endif
 
   DISALLOW_COPY_AND_ASSIGN(ShellDelegateMus);
 };

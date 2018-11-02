@@ -76,8 +76,10 @@ void ChromeBookmarkReader::AddBookmark(
   base::string16 url;
   base::string16 nickname;
   base::string16 description;
+#if 0 /* current unused */
   base::string16 on_personal_bar_s;
   bool on_personal_bar = false;
+#endif
 
   double created_time = 0;
   double visited_time = 0;
@@ -94,8 +96,10 @@ void ChromeBookmarkReader::AddBookmark(
   if (!entries.GetString("description", &description))
     description.clear();
 
+#if 0 /* current unused */
   if (!entries.GetString("on personalbar", &on_personal_bar_s))
     on_personal_bar = (base::LowerCaseEqualsASCII(on_personal_bar_s, "yes"));
+#endif
 
   if (!entries.GetString("created", &temp) ||
       !base::StringToDouble(temp, &created_time)) {

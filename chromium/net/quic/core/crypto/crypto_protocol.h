@@ -82,12 +82,14 @@ const QuicTag kIFWA = TAG('I', 'F', 'W', 'a');   // Set initial size
 const QuicTag kTBBR = TAG('T', 'B', 'B', 'R');   // Reduced Buffer Bloat TCP
 const QuicTag k1RTT = TAG('1', 'R', 'T', 'T');   // STARTUP in BBR for 1 RTT
 const QuicTag k2RTT = TAG('2', 'R', 'T', 'T');   // STARTUP in BBR for 2 RTTs
+const QuicTag kLRTT = TAG('L', 'R', 'T', 'T');   // Exit STARTUP in BBR on loss
 const QuicTag kBBRR = TAG('B', 'B', 'R', 'R');   // Rate-based recovery in BBR
+const QuicTag kBBR1 = TAG('B', 'B', 'R', '1');   // Ack aggregatation v1
+const QuicTag kBBR2 = TAG('B', 'B', 'R', '2');   // Ack aggregatation v2
 const QuicTag kRENO = TAG('R', 'E', 'N', 'O');   // Reno Congestion Control
 const QuicTag kTPCC = TAG('P', 'C', 'C', '\0');  // Performance-Oriented
                                                  // Congestion Control
 const QuicTag kBYTE = TAG('B', 'Y', 'T', 'E');   // TCP cubic or reno in bytes
-const QuicTag kRATE = TAG('R', 'A', 'T', 'E');   // TCP cubic rate based sending
 const QuicTag kIW03 = TAG('I', 'W', '0', '3');   // Force ICWND to 3
 const QuicTag kIW10 = TAG('I', 'W', '1', '0');   // Force ICWND to 10
 const QuicTag kIW20 = TAG('I', 'W', '2', '0');   // Force ICWND to 20
@@ -96,8 +98,6 @@ const QuicTag k1CON = TAG('1', 'C', 'O', 'N');   // Emulate a single connection
 const QuicTag kNTLP = TAG('N', 'T', 'L', 'P');   // No tail loss probe
 const QuicTag kNCON = TAG('N', 'C', 'O', 'N');   // N Connection Congestion Ctrl
 const QuicTag kNRTO = TAG('N', 'R', 'T', 'O');   // CWND reduction on loss
-const QuicTag kUNDO = TAG('U', 'N', 'D', 'O');   // Undo any pending retransmits
-                                                 // if they're likely spurious.
 const QuicTag kTIME = TAG('T', 'I', 'M', 'E');   // Time based loss detection
 const QuicTag kATIM = TAG('A', 'T', 'I', 'M');   // Adaptive time loss detection
 const QuicTag kMIN1 = TAG('M', 'I', 'N', '1');   // Min CWND of 1 packet
@@ -112,6 +112,8 @@ const QuicTag kAKD3 = TAG('A', 'K', 'D', '3');   // Ack decimation style acking
                                                  // with 1/8 RTT acks.
 const QuicTag kAKD4 = TAG('A', 'K', 'D', '4');   // Ack decimation with 1/8 RTT
                                                  // tolerating out of order.
+const QuicTag kAKDU = TAG('A', 'K', 'D', 'U');   // Unlimited number of packets
+                                                 // receieved before acking
 const QuicTag kSSLR = TAG('S', 'S', 'L', 'R');   // Slow Start Large Reduction.
 const QuicTag kNPRR = TAG('N', 'P', 'R', 'R');   // Pace at unity instead of PRR
 const QuicTag k5RTO = TAG('5', 'R', 'T', 'O');   // Close connection on 5 RTOs

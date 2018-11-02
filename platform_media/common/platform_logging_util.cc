@@ -80,4 +80,12 @@ std::string Loggable(const PlatformAudioConfig & config) {
   return s.str();
 }
 
+std::string LoggableMediaType(PlatformMediaDataType type) {
+    switch (type) {
+      case media::PLATFORM_MEDIA_AUDIO: return "AUDIO";
+      case media::PLATFORM_MEDIA_VIDEO: return "VIDEO";
+      default : return "UNKNOWN";
+    }
+}
+
 }

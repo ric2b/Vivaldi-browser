@@ -4,7 +4,6 @@
 
 #include "chrome/browser/ui/views/toolbar/app_menu_button.h"
 
-#include "base/command_line.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
@@ -22,14 +21,16 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/app_menu_model.h"
 #include "chrome/browser/ui/views/extensions/browser_action_drag_data.h"
+#include "chrome/browser/ui/views/feature_promos/incognito_window_promo_bubble_view.h"
 #include "chrome/browser/ui/views/toolbar/app_menu.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
-#include "chrome/common/chrome_switches.h"
+#include "chrome/common/chrome_features.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/theme_provider.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
+#include "ui/gfx/color_utils.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/keyboard/keyboard_controller.h"
 #include "ui/views/controls/button/label_button_border.h"
@@ -51,8 +52,7 @@ AppMenuButton::AppMenuButton(ToolbarView* toolbar_view)
   SetInkDropMode(InkDropMode::ON);
   SetFocusPainter(nullptr);
 
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(switches::kEnableNewAppMenuIcon)) {
+  if (base::FeatureList::IsEnabled(features::kAnimatedAppMenuIcon)) {
     toolbar_view_->browser()->tab_strip_model()->AddObserver(this);
     should_use_new_icon_ = true;
   }
@@ -183,11 +183,12 @@ void AppMenuButton::UpdateIcon(bool should_animate) {
     // Only show a special color for severity when using the classic Chrome
     // theme. Otherwise, we can't be sure that it contrasts with the toolbar
     // background.
-    new_icon_->SetColor(
-        ThemeServiceFactory::GetForProfile(toolbar_view_->browser()->profile())
-                ->UsingDefaultTheme()
-            ? severity_color
-            : toolbar_icon_color);
+    ThemeService* theme_service =
+        ThemeServiceFactory::GetForProfile(toolbar_view_->browser()->profile());
+    new_icon_->SetColor(theme_service->UsingSystemTheme() ||
+                                theme_service->UsingDefaultTheme()
+                            ? severity_color
+                            : toolbar_icon_color);
 
     if (should_animate)
       AnimateIconIfPossible();
@@ -227,6 +228,18 @@ void AppMenuButton::AnimateIconIfPossible() {
   }
 
   new_icon_->Animate(views::AnimatedIconView::END);
+}
+
+void AppMenuButton::ShowPromo() {
+  // Owned by its native widget. Will be destroyed when its widget is destroyed.
+  IncognitoWindowPromoBubbleView* incognito_window_promo =
+      IncognitoWindowPromoBubbleView::CreateOwned(this);
+  views::Widget* widget = incognito_window_promo->GetWidget();
+  if (!incognito_window_promo_observer_.IsObserving(widget)) {
+    incognito_window_promo_observer_.Add(widget);
+    AnimateInkDrop(views::InkDropState::ACTIVATED, nullptr);
+    AppMenuButton::SchedulePaint();
+  }
 }
 
 const char* AppMenuButton::GetClassName() const {
@@ -292,4 +305,12 @@ void AppMenuButton::OnDragExited() {
 
 int AppMenuButton::OnPerformDrop(const ui::DropTargetEvent& event) {
   return ui::DragDropTypes::DRAG_MOVE;
+}
+
+void AppMenuButton::OnWidgetDestroying(views::Widget* widget) {
+  if (incognito_window_promo_observer_.IsObserving(widget)) {
+    incognito_window_promo_observer_.Remove(widget);
+    AnimateInkDrop(views::InkDropState::DEACTIVATED, nullptr);
+    AppMenuButton::SchedulePaint();
+  }
 }

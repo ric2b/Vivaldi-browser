@@ -65,20 +65,20 @@ TEST_F(TraySessionLengthLimitTest, Visibility) {
   SystemTray* system_tray = GetPrimarySystemTray();
 
   // By default there is no session length limit item.
-  system_tray->ShowDefaultView(BUBBLE_CREATE_NEW);
+  system_tray->ShowDefaultView(BUBBLE_CREATE_NEW, false /* show_by_click */);
   EXPECT_FALSE(GetSessionLengthLimitTrayView());
   system_tray->CloseBubble();
 
   // Setting a length limit shows an item in the system tray menu.
   UpdateSessionLengthLimitInMin(10);
-  system_tray->ShowDefaultView(BUBBLE_CREATE_NEW);
+  system_tray->ShowDefaultView(BUBBLE_CREATE_NEW, false /* show_by_click */);
   ASSERT_TRUE(GetSessionLengthLimitTrayView());
   EXPECT_TRUE(GetSessionLengthLimitTrayView()->visible());
   system_tray->CloseBubble();
 
   // Removing the session length limit removes the tray menu item.
   UpdateSessionLengthLimitInMin(0);
-  system_tray->ShowDefaultView(BUBBLE_CREATE_NEW);
+  system_tray->ShowDefaultView(BUBBLE_CREATE_NEW, false /* show_by_click */);
   EXPECT_FALSE(GetSessionLengthLimitTrayView());
   system_tray->CloseBubble();
 }
@@ -161,6 +161,8 @@ TEST_F(TraySessionLengthLimitTest, RemoveNotification) {
   EXPECT_TRUE(notification);
   EXPECT_TRUE(notification->rich_notification_data()
                   .should_make_spoken_feedback_for_popup_updates);
+
+  RemoveNotification();
 }
 
 class TraySessionLengthLimitLoginTest : public TraySessionLengthLimitTest {
@@ -178,8 +180,10 @@ TEST_F(TraySessionLengthLimitLoginTest, NotificationShownAfterLogin) {
   EXPECT_FALSE(GetNotification());
 
   // Notification is shown after login.
-  SetSessionStarted(true);
+  CreateUserSessions(1);
   EXPECT_TRUE(GetNotification());
+
+  RemoveNotification();
 }
 
 }  // namespace ash

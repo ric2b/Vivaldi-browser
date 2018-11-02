@@ -27,6 +27,8 @@ class DrmThreadProxy {
 
   void BindThreadIntoMessagingProxy(InterThreadMessagingProxy* messaging_proxy);
 
+  void StartDrmThread();
+
   std::unique_ptr<DrmWindowProxy> CreateDrmWindowProxy(
       gfx::AcceleratedWidget widget);
 
@@ -45,7 +47,8 @@ class DrmThreadProxy {
   void GetScanoutFormats(gfx::AcceleratedWidget widget,
                          std::vector<gfx::BufferFormat>* scanout_formats);
 
-  void AddBinding(ozone::mojom::DeviceCursorRequest request);
+  void AddBindingCursorDevice(ozone::mojom::DeviceCursorRequest request);
+  void AddBindingDrmDevice(ozone::mojom::DrmDeviceRequest request);
 
  private:
   DrmThread drm_thread_;

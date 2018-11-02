@@ -23,14 +23,15 @@ public class BottomSheetMetrics extends EmptyBottomSheetObserver {
      * histogram and should therefore be treated as append-only.
      */
     @IntDef({OPENED_BY_SWIPE, OPENED_BY_OMNIBOX_FOCUS, OPENED_BY_NEW_TAB_CREATION,
-            OPENED_BY_EXPAND_BUTTON})
+            OPENED_BY_EXPAND_BUTTON, OPENED_BY_STARTUP})
     @Retention(RetentionPolicy.SOURCE)
     public @interface SheetOpenReason {}
     public static final int OPENED_BY_SWIPE = 0;
     public static final int OPENED_BY_OMNIBOX_FOCUS = 1;
     public static final int OPENED_BY_NEW_TAB_CREATION = 2;
     public static final int OPENED_BY_EXPAND_BUTTON = 3;
-    private static final int OPENED_BY_BOUNDARY = 4;
+    public static final int OPENED_BY_STARTUP = 4;
+    private static final int OPENED_BY_BOUNDARY = 5;
 
     /** The different ways that the bottom sheet can be closed. */
     @IntDef({CLOSED_BY_NONE, CLOSED_BY_SWIPE, CLOSED_BY_BACK_PRESS, CLOSED_BY_TAP_SCRIM,
@@ -160,6 +161,9 @@ public class BottomSheetMetrics extends EmptyBottomSheetObserver {
             case OPENED_BY_EXPAND_BUTTON:
                 RecordUserAction.record("Android.ChromeHome.OpenedByExpandButton");
                 break;
+            case OPENED_BY_STARTUP:
+                RecordUserAction.record("Android.ChromeHome.OpenedByStartup");
+                break;
             default:
                 assert false;
         }
@@ -199,5 +203,12 @@ public class BottomSheetMetrics extends EmptyBottomSheetObserver {
      */
     public void recordNativeNewTabPageShown() {
         RecordUserAction.record("Android.ChromeHome.NativeNTPShown");
+    }
+
+    /**
+     * Records that the user tapped the app menu item that triggers the in-product help bubble.
+     */
+    public void recordInProductHelpMenuItemClicked() {
+        RecordUserAction.record("Android.ChromeHome.IPHMenuItemClicked");
     }
 }

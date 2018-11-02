@@ -17,6 +17,7 @@
 #include "remoting/base/logging.h"
 #include "remoting/host/audio_capturer.h"
 #include "remoting/host/desktop_environment.h"
+#include "remoting/host/file_transfer_message_handler.h"
 #include "remoting/host/host_extension_session.h"
 #include "remoting/host/input_injector.h"
 #include "remoting/host/mouse_shape_pump.h"
@@ -25,6 +26,7 @@
 #include "remoting/proto/control.pb.h"
 #include "remoting/proto/event.pb.h"
 #include "remoting/protocol/audio_stream.h"
+#include "remoting/protocol/capability_names.h"
 #include "remoting/protocol/client_stub.h"
 #include "remoting/protocol/clipboard_thread_proxy.h"
 #include "remoting/protocol/pairing_registry.h"
@@ -180,6 +182,13 @@ void ClientSession::SetCapabilities(
                                         host_capabilities_);
   extension_manager_->OnNegotiatedCapabilities(
       connection_->client_stub(), capabilities_);
+
+  if (HasCapability(capabilities_, protocol::kFileTransferCapability)) {
+    data_channel_manager_.RegisterCreateHandlerCallback(
+        kFileTransferDataChannelPrefix,
+        base::Bind(&ClientSession::CreateFileTransferMessageHandler,
+                   base::Unretained(this)));
+  }
 
   VLOG(1) << "Client capabilities: " << *client_capabilities_;
 
@@ -473,6 +482,17 @@ void ClientSession::OnVideoSizeChanged(protocol::VideoStream* video_stream,
       break;
     }
   }
+}
+
+void ClientSession::CreateFileTransferMessageHandler(
+    const std::string& channel_name,
+    std::unique_ptr<protocol::MessagePipe> pipe) {
+  // FileTransferMessageHandler manages its own lifetime and is tied to the
+  // lifetime of |pipe|. Once |pipe| is closed, this instance will be cleaned
+  // up.
+  new FileTransferMessageHandler(
+      channel_name, std::move(pipe),
+      desktop_environment_->CreateFileProxyWrapper());
 }
 
 }  // namespace remoting

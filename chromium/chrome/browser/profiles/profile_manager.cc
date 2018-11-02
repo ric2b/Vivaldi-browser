@@ -22,6 +22,8 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task_scheduler/post_task.h"
+#include "base/threading/thread_restrictions.h"
 #include "base/trace_event/trace_event.h"
 #include "base/value_conversions.h"
 #include "build/build_config.h"
@@ -164,7 +166,7 @@ int64_t ComputeFilesSize(const base::FilePath& directory,
 
 // Simple task to log the size of the current profile.
 void ProfileSizeTask(const base::FilePath& path, int enabled_app_count) {
-  DCHECK_CURRENTLY_ON(BrowserThread::FILE);
+  base::ThreadRestrictions::AssertIOAllowed();
   const int64_t kBytesInOneMB = 1024 * 1024;
 
   int64_t size = ComputeFilesSize(path, FILE_PATH_LITERAL("*"));
@@ -898,8 +900,11 @@ void ProfileManager::CleanUpEphemeralProfiles() {
   // This uses a separate loop, because deleting the profile from the
   // ProfileInfoCache will modify indices.
   for (const base::FilePath& profile_path : profiles_to_delete) {
-    BrowserThread::PostTask(BrowserThread::FILE, FROM_HERE,
-                            base::BindOnce(&NukeProfileFromDisk, profile_path));
+    base::PostTaskWithTraits(
+        FROM_HERE,
+        {base::MayBlock(), base::TaskPriority::BACKGROUND,
+         base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+        base::BindOnce(&NukeProfileFromDisk, profile_path));
 
     storage.RemoveProfile(profile_path);
   }
@@ -923,8 +928,10 @@ void ProfileManager::CleanUpDeletedProfiles() {
       if (base::PathExists(profile_path)) {
         LOG(WARNING) << "Files of a deleted profile still exist after restart. "
                         "Cleaning up now.";
-        BrowserThread::PostTaskAndReply(
-            BrowserThread::FILE, FROM_HERE,
+        base::PostTaskWithTraitsAndReply(
+            FROM_HERE,
+            {base::MayBlock(), base::TaskPriority::BACKGROUND,
+             base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
             base::BindOnce(&NukeProfileFromDisk, profile_path),
             base::BindOnce(&ProfileCleanedUp, &value));
       } else {
@@ -993,6 +1000,9 @@ void ProfileManager::InitProfileUserPrefs(Profile* profile) {
       g_browser_process->platform_part()
               ->profile_helper()
               ->GetSigninProfileDir() != profile->GetPath() &&
+      g_browser_process->platform_part()
+              ->profile_helper()
+              ->GetLockScreenAppProfilePath() != profile->GetPath() &&
 #endif
       command_line->HasSwitch(switches::kSupervisedUserId);
   if (force_supervised_user_id) {
@@ -1284,8 +1294,10 @@ void ProfileManager::DoFinalInitLogging(Profile* profile) {
 #endif
 
   // Log the profile size after a reasonable startup delay.
-  BrowserThread::PostDelayedTask(
-      BrowserThread::FILE, FROM_HERE,
+  base::PostDelayedTaskWithTraits(
+      FROM_HERE,
+      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::BindOnce(&ProfileSizeTask, profile->GetPath(), enabled_app_count),
       base::TimeDelta::FromSeconds(112));
 }
@@ -1451,19 +1463,12 @@ void ProfileManager::EnsureActiveProfileExistsBeforeDeletion(
                      new_profile_name, new_avatar_url, std::string());
 }
 
-void ProfileManager::FinishDeletingProfile(
+void ProfileManager::OnLoadProfileForProfileDeletion(
     const base::FilePath& profile_dir,
-    const base::FilePath& new_active_profile_dir) {
-  // Update the last used profile pref before closing browser windows. This
-  // way the correct last used profile is set for any notification observers.
-  profiles::SetLastUsedProfile(
-      new_active_profile_dir.BaseName().MaybeAsASCII());
-
+    Profile* profile) {
   ProfileAttributesStorage& storage = GetProfileAttributesStorage();
   // TODO(sail): Due to bug 88586 we don't delete the profile instance. Once we
   // start deleting the profile instance we need to close background apps too.
-  Profile* profile = GetProfileByPath(profile_dir);
-
   if (profile) {
     // TODO: Migrate additional code in this block to observe this notification
     // instead of being implemented here.
@@ -1495,8 +1500,9 @@ void ProfileManager::FinishDeletingProfile(
     ProfileMetrics::LogProfileDelete(entry->IsAuthenticated());
     // Some platforms store passwords in keychains. They should be removed.
     scoped_refptr<password_manager::PasswordStore> password_store =
-        PasswordStoreFactory::GetForProfile(
-            profile, ServiceAccessType::EXPLICIT_ACCESS).get();
+        PasswordStoreFactory::GetForProfile(profile,
+                                            ServiceAccessType::EXPLICIT_ACCESS)
+            .get();
     if (password_store.get()) {
       password_store->RemoveLoginsCreatedBetween(
           base::Time(), base::Time::Max(), base::Closure());
@@ -1505,17 +1511,38 @@ void ProfileManager::FinishDeletingProfile(
     // The Profile Data doesn't get wiped until Chrome closes. Since we promised
     // that the user's data would be removed, do so immediately.
     profiles::RemoveBrowsingDataForProfile(profile_dir);
+
+    // Clean-up pref data that won't be cleaned up by deleting the profile dir.
+    profile->GetPrefs()->OnStoreDeletionFromDisk();
   } else {
-    // It is safe to delete a not yet loaded Profile from disk.
-    BrowserThread::PostTask(BrowserThread::FILE, FROM_HERE,
-                            base::BindOnce(&NukeProfileFromDisk, profile_dir));
+    // We failed to load the profile, but it's safe to delete a not yet loaded
+    // Profile from disk.
+    base::PostTaskWithTraits(FROM_HERE,
+                             {base::MayBlock(), base::TaskPriority::BACKGROUND,
+                              base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+                             base::BindOnce(&NukeProfileFromDisk, profile_dir));
   }
 
-  // Queue even a profile that was nuked so it will be MarkedForDeletion and so
-  // CreateProfileAsync can't create it.
-  MarkProfileDirectoryForDeletion(profile_dir);
   storage.RemoveProfile(profile_dir);
   ProfileMetrics::UpdateReportedProfilesStatistics(this);
+}
+
+void ProfileManager::FinishDeletingProfile(
+    const base::FilePath& profile_dir,
+    const base::FilePath& new_active_profile_dir) {
+  // Update the last used profile pref before closing browser windows. This
+  // way the correct last used profile is set for any notification observers.
+  profiles::SetLastUsedProfile(
+      new_active_profile_dir.BaseName().MaybeAsASCII());
+
+  // Attempt to load the profile before deleting it to properly clean up
+  // profile-specific data stored outside the profile directory.
+  LoadProfileByPath(profile_dir, false,
+                    base::Bind(&ProfileManager::OnLoadProfileForProfileDeletion,
+                               base::Unretained(this), profile_dir));
+
+  // Prevents CreateProfileAsync from re-creating the profile.
+  MarkProfileDirectoryForDeletion(profile_dir);
 }
 #endif  // !defined(OS_ANDROID)
 
@@ -1523,10 +1550,10 @@ ProfileManager::ProfileInfo* ProfileManager::RegisterProfile(
     Profile* profile,
     bool created) {
   TRACE_EVENT0("browser", "ProfileManager::RegisterProfile");
-  ProfileInfo* info = new ProfileInfo(profile, created);
-  profiles_info_.insert(
-      std::make_pair(profile->GetPath(), linked_ptr<ProfileInfo>(info)));
-  return info;
+  auto info = base::MakeUnique<ProfileInfo>(profile, created);
+  ProfileInfo* info_raw = info.get();
+  profiles_info_.insert(std::make_pair(profile->GetPath(), std::move(info)));
+  return info_raw;
 }
 
 ProfileManager::ProfileInfo* ProfileManager::GetProfileInfoByPath(
@@ -1561,16 +1588,12 @@ void ProfileManager::AddProfileToStorage(Profile* profile) {
     bool has_entry = storage.GetProfileAttributesWithPath(profile->GetPath(),
                                                           &entry);
     if (has_entry) {
-#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
-      bool was_authenticated_status = entry->IsAuthenticated();
-#endif
       // The ProfileAttributesStorage's info must match the Signin Manager.
       entry->SetAuthInfo(account_info.gaia, username);
 #if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
       // Sign out if force-sign-in policy is enabled and profile is not signed
       // in.
-      if (signin_util::IsForceSigninEnabled() && was_authenticated_status &&
-          !entry->IsAuthenticated()) {
+      if (signin_util::IsForceSigninEnabled() && !entry->IsAuthenticated()) {
         BrowserThread::PostTask(
             BrowserThread::UI, FROM_HERE,
             base::BindOnce(&SignOut,

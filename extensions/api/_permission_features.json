@@ -20,7 +20,7 @@
     "channel": "stable",
     "extension_types": [ "platform_app" ],
     "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "bookmarksPrivate": {
@@ -28,7 +28,7 @@
     "channel": "stable",
     "extension_types": [ "platform_app" ],
     "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "calendar": {
@@ -36,7 +36,7 @@
     "channel": "stable",
     "extension_types": [ "platform_app" ],
     "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "devtoolsPrivate": {
@@ -44,21 +44,21 @@
     "channel": "stable",
     "extension_types": [ "platform_app" ],
     "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "editcommand": {
     "channel": "stable",
     "extension_types": [ "platform_app" ],
     "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "extensionActionUtils": {
     "channel": "stable",
     "extension_types": [ "platform_app" ],
     "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "historyPrivate": {
@@ -66,7 +66,7 @@
     "channel": "stable",
     "extension_types": [ "platform_app" ],
     "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "importData": {
@@ -74,7 +74,7 @@
     "channel": "stable",
     "extension_types": [ "platform_app" ],
     "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "notes": {
@@ -82,7 +82,15 @@
     "channel": "stable",
     "extension_types": [ "platform_app" ],
     "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
+    ]
+  },
+  "prefs": {
+    "vivaldi": true,
+    "channel": "stable",
+    "extension_types": [ "platform_app" ],
+    "whitelist": [
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "runtimePrivate": {
@@ -90,7 +98,7 @@
     "channel": "stable",
     "extension_types": [ "platform_app" ],
     "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "savedpasswords": {
@@ -98,7 +106,7 @@
     "channel": "stable",
     "extension_types": [ "platform_app" ],
     "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "sessionsPrivate": {
@@ -106,7 +114,7 @@
     "channel": "stable",
     "extension_types": [ "platform_app" ],
     "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "settings": {
@@ -114,7 +122,7 @@
     "channel": "stable",
     "extension_types": [ "platform_app" ],
     "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "showMenu": {
@@ -122,8 +130,8 @@
     "channel": "stable",
     "extension_types": [ "platform_app" ],
     "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli", // Vivaldi
-      "nngaafnlpkkdofeeiaeaaojibnemfnml" // showMenu test
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C", // Vivaldi
+      "9BDA982ACDCC4D336065C67D618CB5ED844751FF" // showMenu test
     ]
   },
   "sync": {
@@ -131,7 +139,7 @@
    "channel": "stable",
     "extension_types": ["platform_app"],
     "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli"   // Vivaldi
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C"   // Vivaldi
     ]
   },
   "tabsPrivate": {
@@ -139,7 +147,7 @@
     "channel": "stable",
     "extension_types": [ "platform_app" ],
     "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "thumbnails": {
@@ -147,15 +155,7 @@
     "channel": "stable",
     "extension_types": [ "platform_app" ],
     "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
-    ]
-  },
-  "zoom": {
-    "vivaldi": true,
-    "channel": "stable",
-    "extension_types": [ "platform_app" ],
-    "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
   "utilities": {
@@ -163,7 +163,23 @@
     "channel": "stable",
     "extension_types": [ "platform_app" ],
     "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
+    ]
+  },
+  "windowPrivate": {
+    "vivaldi": true,
+    "channel": "stable",
+    "extension_types": [ "platform_app" ],
+    "whitelist": [
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
+    ]
+  },
+  "zoom": {
+    "vivaldi": true,
+    "channel": "stable",
+    "extension_types": [ "platform_app" ],
+    "whitelist": [
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   }
 }

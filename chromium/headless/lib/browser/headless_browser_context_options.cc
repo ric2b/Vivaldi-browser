@@ -41,8 +41,13 @@ const std::string& HeadlessBrowserContextOptions::product_name_and_version()
                                browser_options_->product_name_and_version);
 }
 
+const std::string& HeadlessBrowserContextOptions::accept_language() const {
+  return ReturnOverriddenValue(accept_language_,
+                               browser_options_->accept_language);
+}
+
 const std::string& HeadlessBrowserContextOptions::user_agent() const {
-  return browser_options_->user_agent;
+  return ReturnOverriddenValue(user_agent_, browser_options_->user_agent);
 }
 
 const net::ProxyConfig* HeadlessBrowserContextOptions::proxy_config() const {

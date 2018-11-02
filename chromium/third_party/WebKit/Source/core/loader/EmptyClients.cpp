@@ -34,8 +34,8 @@
 #include "core/html/HTMLFormElement.h"
 #include "core/html/forms/ColorChooser.h"
 #include "core/html/forms/DateTimeChooser.h"
+#include "core/html/forms/FileChooser.h"
 #include "core/loader/DocumentLoader.h"
-#include "platform/FileChooser.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebApplicationCacheHost.h"
@@ -75,29 +75,34 @@ class EmptyFrameScheduler : public WebFrameScheduler {
   void RemoveThrottlingObserver(ObserverType, Observer*) override {}
   void SetFrameVisible(bool) override {}
   RefPtr<WebTaskRunner> LoadingTaskRunner() override;
-  RefPtr<WebTaskRunner> TimerTaskRunner() override;
-  RefPtr<WebTaskRunner> UnthrottledTaskRunner() override;
-  RefPtr<WebTaskRunner> SuspendableTaskRunner() override;
-  RefPtr<WebTaskRunner> UnthrottledButBlockableTaskRunner() override;
+  RefPtr<WebTaskRunner> LoadingControlTaskRunner() override;
+  RefPtr<WebTaskRunner> ThrottleableTaskRunner() override;
+  RefPtr<WebTaskRunner> DeferrableTaskRunner() override;
+  RefPtr<WebTaskRunner> PausableTaskRunner() override;
+  RefPtr<WebTaskRunner> UnpausableTaskRunner() override;
 };
 
 RefPtr<WebTaskRunner> EmptyFrameScheduler::LoadingTaskRunner() {
   return Platform::Current()->MainThread()->GetWebTaskRunner();
 }
 
-RefPtr<WebTaskRunner> EmptyFrameScheduler::TimerTaskRunner() {
+RefPtr<WebTaskRunner> EmptyFrameScheduler::LoadingControlTaskRunner() {
   return Platform::Current()->MainThread()->GetWebTaskRunner();
 }
 
-RefPtr<WebTaskRunner> EmptyFrameScheduler::UnthrottledTaskRunner() {
+RefPtr<WebTaskRunner> EmptyFrameScheduler::ThrottleableTaskRunner() {
   return Platform::Current()->MainThread()->GetWebTaskRunner();
 }
 
-RefPtr<WebTaskRunner> EmptyFrameScheduler::SuspendableTaskRunner() {
+RefPtr<WebTaskRunner> EmptyFrameScheduler::DeferrableTaskRunner() {
   return Platform::Current()->MainThread()->GetWebTaskRunner();
 }
 
-RefPtr<WebTaskRunner> EmptyFrameScheduler::UnthrottledButBlockableTaskRunner() {
+RefPtr<WebTaskRunner> EmptyFrameScheduler::PausableTaskRunner() {
+  return Platform::Current()->MainThread()->GetWebTaskRunner();
+}
+
+RefPtr<WebTaskRunner> EmptyFrameScheduler::UnpausableTaskRunner() {
   return Platform::Current()->MainThread()->GetWebTaskRunner();
 }
 
@@ -185,7 +190,8 @@ PluginView* EmptyLocalFrameClient::CreatePlugin(HTMLPlugInElement&,
 std::unique_ptr<WebMediaPlayer> EmptyLocalFrameClient::CreateWebMediaPlayer(
     HTMLMediaElement&,
     const WebMediaPlayerSource&,
-    WebMediaPlayerClient*) {
+    WebMediaPlayerClient*,
+    WebLayerTreeView*) {
   return nullptr;
 }
 

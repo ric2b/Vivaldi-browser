@@ -145,15 +145,14 @@ Provider::Provider(Profile* profile,
 
 void Provider::VisitRegisteredExtension() {
   if (!profile_ || !ShouldInstallInProfile()) {
-    base::DictionaryValue* prefs = new base::DictionaryValue;
-    SetPrefs(prefs);
+    SetPrefs(base::MakeUnique<base::DictionaryValue>());
     return;
   }
 
   extensions::ExternalProviderImpl::VisitRegisteredExtension();
 }
 
-void Provider::SetPrefs(base::DictionaryValue* prefs) {
+void Provider::SetPrefs(std::unique_ptr<base::DictionaryValue> prefs) {
   if (is_migration_) {
     std::set<std::string> new_default_apps;
     for (base::DictionaryValue::Iterator i(*prefs); !i.IsAtEnd(); i.Advance()) {
@@ -167,7 +166,7 @@ void Provider::SetPrefs(base::DictionaryValue* prefs) {
     }
   }
 
-  ExternalProviderImpl::SetPrefs(prefs);
+  ExternalProviderImpl::SetPrefs(std::move(prefs));
 }
 
 }  // namespace default_apps

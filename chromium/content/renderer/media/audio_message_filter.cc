@@ -20,8 +20,7 @@ namespace {
 const int kStreamIDNotSet = -1;
 }
 
-class AudioMessageFilter::AudioOutputIPCImpl
-    : public NON_EXPORTED_BASE(media::AudioOutputIPC) {
+class AudioMessageFilter::AudioOutputIPCImpl : public media::AudioOutputIPC {
  public:
   AudioOutputIPCImpl(const scoped_refptr<AudioMessageFilter>& filter,
                      int render_frame_id);
@@ -176,7 +175,7 @@ void AudioMessageFilter::OnChannelClosing() {
   DLOG_IF(WARNING, !delegates_.IsEmpty())
       << "Not all audio devices have been closed.";
 
-  IDMap<media::AudioOutputIPCDelegate*>::iterator it(&delegates_);
+  base::IDMap<media::AudioOutputIPCDelegate*>::iterator it(&delegates_);
   while (!it.IsAtEnd()) {
     it.GetCurrentValue()->OnIPCClosed();
     delegates_.Remove(it.GetCurrentKey());

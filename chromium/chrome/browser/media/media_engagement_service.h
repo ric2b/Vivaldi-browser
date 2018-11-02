@@ -14,6 +14,7 @@
 #include "chrome/browser/media/media_engagement_score_details.mojom.h"
 #include "components/history/core/browser/history_service_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/pref_registry/pref_registry_syncable.h"
 
 class GURL;
 class MediaEngagementContentsObserver;
@@ -45,11 +46,17 @@ class MediaEngagementService : public KeyedService,
   // WebContentsObserver.
   static void CreateWebContentsObserver(content::WebContents* web_contents);
 
+  // Register profile prefs in the pref registry.
+  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+
   explicit MediaEngagementService(Profile* profile);
   ~MediaEngagementService() override;
 
   // Returns the engagement score of |url|.
   double GetEngagementScore(const GURL& url) const;
+
+  // Returns true if |url| has an engagement score considered high.
+  bool HasHighEngagement(const GURL& url) const;
 
   // Returns a map of all stored origins and their engagement levels.
   std::map<GURL, double> GetScoreMapForTesting() const;
@@ -86,6 +93,7 @@ class MediaEngagementService : public KeyedService,
   static const char kHistogramScoreAtStartupName[];
 
  private:
+  friend class MediaEngagementBrowserTest;
   friend class MediaEngagementServiceTest;
   friend class MediaEngagementContentsObserverTest;
   friend MediaEngagementContentsObserver;
@@ -108,6 +116,9 @@ class MediaEngagementService : public KeyedService,
 
   // Records all the stored scores to a histogram.
   void RecordStoredScoresToHistogram();
+
+  int GetSchemaVersion() const;
+  void SetSchemaVersion(int);
 
   DISALLOW_COPY_AND_ASSIGN(MediaEngagementService);
 };

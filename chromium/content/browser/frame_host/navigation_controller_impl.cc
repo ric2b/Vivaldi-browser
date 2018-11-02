@@ -49,7 +49,6 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "cc/base/switches.h"
-#include "components/mime_util/mime_util.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/browser_url_handler_impl.h"
 #include "content/browser/dom_storage/dom_storage_context_wrapper.h"
@@ -80,6 +79,7 @@
 #include "media/base/mime_util.h"
 #include "net/base/escape.h"
 #include "skia/ext/platform_canvas.h"
+#include "third_party/WebKit/common/mime_util/mime_util.h"
 #include "url/url_constants.h"
 
 namespace content {
@@ -94,10 +94,7 @@ void NotifyPrunedEntries(NavigationControllerImpl* nav_controller,
   PrunedDetails details;
   details.from_front = from_front;
   details.count = count;
-  NotificationService::current()->Notify(
-      NOTIFICATION_NAV_LIST_PRUNED,
-      Source<NavigationController>(nav_controller),
-      Details<PrunedDetails>(&details));
+  nav_controller->delegate()->NotifyNavigationListPruned(details);
 }
 
 // Ensure the given NavigationEntry has a valid state, so that WebKit does not
@@ -420,12 +417,6 @@ void NavigationControllerImpl::Reload(ReloadType reload_type,
       pending_entry_ = entry;
       pending_entry_index_ = current_index;
 
-      // The title of the page being reloaded might have been removed in the
-      // meanwhile, so we need to revert to the default title upon reload and
-      // invalidate the previously cached title (SetTitle will do both).
-      // See Chromium issue 96041.
-      pending_entry_->SetTitle(base::string16());
-
       pending_entry_->SetTransitionType(ui::PAGE_TRANSITION_RELOAD);
     }
 
@@ -551,9 +542,8 @@ NavigationEntryImpl* NavigationControllerImpl::GetLastCommittedEntry() const {
 
 bool NavigationControllerImpl::CanViewSource() const {
   const std::string& mime_type = delegate_->GetContentsMimeType();
-  bool is_viewable_mime_type =
-      mime_util::IsSupportedNonImageMimeType(mime_type) &&
-      !media::IsSupportedMediaMimeType(mime_type);
+  bool is_viewable_mime_type = blink::IsSupportedNonImageMimeType(mime_type) &&
+                               !media::IsSupportedMediaMimeType(mime_type);
   NavigationEntry* visible_entry = GetVisibleEntry();
   return visible_entry && !visible_entry->IsViewSourceMode() &&
       is_viewable_mime_type && !delegate_->GetInterstitialPage();
@@ -943,8 +933,14 @@ bool NavigationControllerImpl::RendererDidNavigate(
   active_entry->SetTimestamp(timestamp);
   active_entry->SetHttpStatusCode(params.http_status_code);
 
+  // Grab the corresponding FrameNavigationEntry for a few updates, but only if
+  // the SiteInstance matches (to avoid updating the wrong entry by mistake).
+  // A mismatch can occur if the renderer lies or due to a unique name collision
+  // after a race with an OOPIF (see https://crbug.com/616820).
   FrameNavigationEntry* frame_entry =
       active_entry->GetFrameEntry(rfh->frame_tree_node());
+  if (frame_entry && frame_entry->site_instance() != rfh->GetSiteInstance())
+    frame_entry = nullptr;
   // Update the frame-specific PageState and RedirectChain
   // We may not find a frame_entry in some cases; ignore the PageState if so.
   // TODO(creis): Remove the "if" once https://crbug.com/522193 is fixed.
@@ -2230,10 +2226,7 @@ void NavigationControllerImpl::NotifyEntryChanged(
   det.changed_entry = entry;
   det.index = GetIndexOfEntry(
       NavigationEntryImpl::FromNavigationEntry(entry));
-  NotificationService::current()->Notify(
-      NOTIFICATION_NAV_ENTRY_CHANGED,
-      Source<NavigationController>(this),
-      Details<EntryChangedDetails>(&det));
+  delegate_->NotifyNavigationEntryChanged(det);
 }
 
 void NavigationControllerImpl::FinishRestore(int selected_index,

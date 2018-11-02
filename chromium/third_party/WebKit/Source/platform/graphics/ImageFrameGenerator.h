@@ -66,9 +66,10 @@ class PLATFORM_EXPORT ImageFrameGenerator final
   static PassRefPtr<ImageFrameGenerator> Create(
       const SkISize& full_size,
       bool is_multi_frame,
-      const ColorBehavior& color_behavior) {
-    return AdoptRef(
-        new ImageFrameGenerator(full_size, is_multi_frame, color_behavior));
+      const ColorBehavior& color_behavior,
+      std::vector<SkISize> supported_sizes) {
+    return AdoptRef(new ImageFrameGenerator(
+        full_size, is_multi_frame, color_behavior, std::move(supported_sizes)));
   }
 
   ~ImageFrameGenerator();
@@ -98,6 +99,8 @@ class PLATFORM_EXPORT ImageFrameGenerator final
 
   const SkISize& GetFullSize() const { return full_size_; }
 
+  SkISize GetSupportedDecodeSize(const SkISize& requested_size) const;
+
   bool IsMultiFrame() const { return is_multi_frame_; }
   bool DecodeFailed() const { return decode_failed_; }
 
@@ -111,7 +114,8 @@ class PLATFORM_EXPORT ImageFrameGenerator final
  private:
   ImageFrameGenerator(const SkISize& full_size,
                       bool is_multi_frame,
-                      const ColorBehavior&);
+                      const ColorBehavior&,
+                      std::vector<SkISize> supported_sizes);
 
   friend class ImageFrameGeneratorTest;
   friend class DeferredImageDecoderTest;
@@ -127,16 +131,19 @@ class PLATFORM_EXPORT ImageFrameGenerator final
                              bool all_data_received,
                              size_t index,
                              const SkISize& scaled_size,
-                             SkBitmap::Allocator*,
+                             SkBitmap::Allocator&,
                              ImageDecoder::AlphaOption);
-  // This method should only be called while m_decodeMutex is locked.
-  bool Decode(SegmentReader*,
-              bool all_data_received,
-              size_t index,
-              ImageDecoder**,
-              SkBitmap*,
-              SkBitmap::Allocator*,
-              ImageDecoder::AlphaOption);
+  // This method should only be called while decode_mutex_ is locked.
+  // Returns a pointer to frame |index|'s ImageFrame, if available.
+  // Sets |used_external_allocator| to true if the the image was decoded into
+  // |external_allocator|'s memory.
+  ImageFrame* Decode(SegmentReader*,
+                     bool all_data_received,
+                     size_t index,
+                     ImageDecoder**,
+                     SkBitmap::Allocator& external_allocator,
+                     ImageDecoder::AlphaOption,
+                     bool& used_external_allocator);
 
   const SkISize full_size_;
 
@@ -148,13 +155,14 @@ class PLATFORM_EXPORT ImageFrameGenerator final
   bool yuv_decoding_failed_;
   size_t frame_count_;
   Vector<bool> has_alpha_;
+  std::vector<SkISize> supported_sizes_;
 
   std::unique_ptr<ImageDecoderFactory> image_decoder_factory_;
 
   // Prevents multiple decode operations on the same data.
   Mutex decode_mutex_;
 
-  // Protect concurrent access to m_hasAlpha.
+  // Protect concurrent access to has_alpha_.
   Mutex alpha_mutex_;
 };
 

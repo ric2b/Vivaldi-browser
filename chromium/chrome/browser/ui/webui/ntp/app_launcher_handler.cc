@@ -70,6 +70,7 @@
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_icon_set.h"
 #include "extensions/common/extension_set.h"
+#include "extensions/common/manifest_handlers/icons_handler.h"
 #include "net/base/url_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
@@ -166,12 +167,25 @@ void AppLauncherHandler::CreateAppInfo(
       service->profile())->management_policy()->UserMayModifySettings(
       extension, NULL));
 
-  // Instead of setting grayscale here, we do it in apps_page.js.
-  GURL icon = extensions::ExtensionIconSource::GetIconURL(
-      extension, extension_misc::EXTENSION_ICON_LARGE,
-      ExtensionIconSet::MATCH_BIGGER, false);
-  DCHECK_NE(GURL(), icon);
-  value->SetString("icon", icon.spec());
+  auto icon_size = extension_misc::EXTENSION_ICON_LARGE;
+  auto match_type = ExtensionIconSet::MATCH_BIGGER;
+  bool has_non_default_large_icon =
+      !extensions::IconsInfo::GetIconURL(extension, icon_size, match_type)
+           .is_empty();
+  GURL large_icon = extensions::ExtensionIconSource::GetIconURL(
+      extension, icon_size, match_type, false);
+  value->SetString("icon_big", large_icon.spec());
+  value->SetBoolean("icon_big_exists", has_non_default_large_icon);
+
+  icon_size = extension_misc::EXTENSION_ICON_BITTY;
+  bool has_non_default_small_icon =
+      !extensions::IconsInfo::GetIconURL(extension, icon_size, match_type)
+           .is_empty();
+  GURL small_icon = extensions::ExtensionIconSource::GetIconURL(
+      extension, icon_size, match_type, false);
+  value->SetString("icon_small", small_icon.spec());
+  value->SetBoolean("icon_small_exists", has_non_default_small_icon);
+
   value->SetInteger("launch_container",
                     extensions::AppLaunchInfo::GetLaunchContainer(extension));
   ExtensionPrefs* prefs = ExtensionPrefs::Get(service->profile());
@@ -387,10 +401,9 @@ void AppLauncherHandler::FillAppDictionary(base::DictionaryValue* dictionary) {
     base::ListValue* list = update.Get();
     list->Set(0, base::MakeUnique<base::Value>(
                      l10n_util::GetStringUTF16(IDS_APP_DEFAULT_PAGE_NAME)));
-    dictionary->Set("appPageNames", base::MakeUnique<base::Value>(*list));
+    dictionary->SetKey("appPageNames", list->Clone());
   } else {
-    dictionary->Set("appPageNames",
-                    base::MakeUnique<base::Value>(*app_page_names));
+    dictionary->SetKey("appPageNames", app_page_names->Clone());
   }
 }
 

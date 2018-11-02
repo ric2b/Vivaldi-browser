@@ -13,16 +13,18 @@
 #include "cc/benchmarks/benchmark_instrumentation.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/output/direct_renderer.h"
-#include "cc/output/gl_renderer.h"
+#include "cc/output/output_surface.h"
 #include "cc/output/software_renderer.h"
 #include "cc/output/texture_mailbox_deleter.h"
-#include "cc/scheduler/begin_frame_source.h"
-#include "cc/surfaces/surface.h"
-#include "cc/surfaces/surface_manager.h"
 #include "components/viz/common/display/renderer_settings.h"
+#include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/service/display/display_client.h"
 #include "components/viz/service/display/display_scheduler.h"
+#include "components/viz/service/display/gl_renderer.h"
+#include "components/viz/service/display/skia_renderer.h"
 #include "components/viz/service/display/surface_aggregator.h"
+#include "components/viz/service/surfaces/surface.h"
+#include "components/viz/service/surfaces/surface_manager.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/vulkan/features.h"
 #include "ui/gfx/buffer_types.h"
@@ -64,7 +66,7 @@ Display::~Display() {
   }
   if (aggregator_) {
     for (const auto& id_entry : aggregator_->previous_contained_surfaces()) {
-      cc::Surface* surface = surface_manager_->GetSurfaceForId(id_entry.first);
+      Surface* surface = surface_manager_->GetSurfaceForId(id_entry.first);
       if (surface)
         surface->RunDrawCallback();
     }
@@ -72,7 +74,7 @@ Display::~Display() {
 }
 
 void Display::Initialize(DisplayClient* client,
-                         cc::SurfaceManager* surface_manager) {
+                         SurfaceManager* surface_manager) {
   DCHECK(client);
   DCHECK(surface_manager);
   client_ = client;
@@ -93,6 +95,14 @@ void Display::Initialize(DisplayClient* client,
         // destructor and is never posted.
         base::Unretained(this)));
   }
+}
+
+void Display::AddObserver(DisplayObserver* observer) {
+  observers_.AddObserver(observer);
+}
+
+void Display::RemoveObserver(DisplayObserver* observer) {
+  observers_.RemoveObserver(observer);
 }
 
 void Display::SetLocalSurfaceId(const LocalSurfaceId& id,
@@ -173,16 +183,21 @@ void Display::SetOutputIsSecure(bool secure) {
 void Display::InitializeRenderer() {
   // Not relevant for display compositor since it's not delegated.
   constexpr bool delegated_sync_points_required = false;
-  resource_provider_ = base::MakeUnique<cc::ResourceProvider>(
+  resource_provider_ = base::MakeUnique<cc::DisplayResourceProvider>(
       output_surface_->context_provider(), bitmap_manager_,
       gpu_memory_buffer_manager_, nullptr, delegated_sync_points_required,
       settings_.enable_color_correct_rendering, settings_.resource_settings);
 
   if (output_surface_->context_provider()) {
     DCHECK(texture_mailbox_deleter_);
-    renderer_ = base::MakeUnique<cc::GLRenderer>(
-        &settings_, output_surface_.get(), resource_provider_.get(),
-        texture_mailbox_deleter_.get());
+    if (!settings_.use_skia_renderer) {
+      renderer_ = base::MakeUnique<GLRenderer>(
+          &settings_, output_surface_.get(), resource_provider_.get(),
+          texture_mailbox_deleter_.get());
+    } else {
+      renderer_ = base::MakeUnique<SkiaRenderer>(
+          &settings_, output_surface_.get(), resource_provider_.get());
+    }
   } else if (output_surface_->vulkan_context_provider()) {
 #if defined(ENABLE_VULKAN)
     DCHECK(texture_mailbox_deleter_);
@@ -213,7 +228,7 @@ void Display::InitializeRenderer() {
 }
 
 void Display::UpdateRootSurfaceResourcesLocked() {
-  cc::Surface* surface = surface_manager_->GetSurfaceForId(current_surface_id_);
+  Surface* surface = surface_manager_->GetSurfaceForId(current_surface_id_);
   bool root_surface_resources_locked = !surface || !surface->HasActiveFrame();
   if (scheduler_)
     scheduler_->SetRootSurfaceResourcesLocked(root_surface_resources_locked);
@@ -253,7 +268,7 @@ bool Display::DrawAndSwap() {
 
   // Run callbacks early to allow pipelining.
   for (const auto& id_entry : aggregator_->previous_contained_surfaces()) {
-    cc::Surface* surface = surface_manager_->GetSurfaceForId(id_entry.first);
+    Surface* surface = surface_manager_->GetSurfaceForId(id_entry.first);
     if (surface)
       surface->RunDrawCallback();
   }
@@ -376,19 +391,19 @@ void Display::DidReceiveTextureInUseResponses(
 void Display::SetNeedsRedrawRect(const gfx::Rect& damage_rect) {
   aggregator_->SetFullDamageForSurface(current_surface_id_);
   if (scheduler_) {
-    cc::BeginFrameAck ack;
+    BeginFrameAck ack;
     ack.has_damage = true;
     scheduler_->ProcessSurfaceDamage(current_surface_id_, ack, true);
   }
 }
 
 bool Display::SurfaceDamaged(const SurfaceId& surface_id,
-                             const cc::BeginFrameAck& ack) {
+                             const BeginFrameAck& ack) {
   bool display_damaged = false;
   if (ack.has_damage) {
     if (aggregator_ &&
         aggregator_->previous_contained_surfaces().count(surface_id)) {
-      cc::Surface* surface = surface_manager_->GetSurfaceForId(surface_id);
+      Surface* surface = surface_manager_->GetSurfaceForId(surface_id);
       if (surface) {
         DCHECK(surface->HasActiveFrame());
         if (surface->GetActiveFrame().resource_list.empty())
@@ -415,11 +430,16 @@ bool Display::SurfaceHasUndrawnFrame(const SurfaceId& surface_id) const {
   if (!surface_manager_)
     return false;
 
-  cc::Surface* surface = surface_manager_->GetSurfaceForId(surface_id);
+  Surface* surface = surface_manager_->GetSurfaceForId(surface_id);
   if (!surface)
     return false;
 
   return surface->HasUndrawnActiveFrame();
+}
+
+void Display::DidFinishFrame(const BeginFrameAck& ack) {
+  for (auto& observer : observers_)
+    observer.OnDisplayDidFinishFrame(ack);
 }
 
 const SurfaceId& Display::CurrentSurfaceId() {

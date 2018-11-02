@@ -7,10 +7,11 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "cc/output/layer_tree_frame_sink.h"
-#include "cc/scheduler/begin_frame_source.h"
+#include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
-#include "components/viz/common/surfaces/local_surface_id_allocator.h"
+#include "components/viz/host/host_frame_sink_client.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support_client.h"
 #include "ui/aura/window_port.h"
 #include "ui/base/property_data.h"
@@ -28,47 +29,53 @@ namespace aura {
 // aura::Window's ui::Layer.
 class LayerTreeFrameSinkLocal : public cc::LayerTreeFrameSink,
                                 public viz::CompositorFrameSinkSupportClient,
-                                public cc::ExternalBeginFrameSourceClient {
+                                public viz::ExternalBeginFrameSourceClient,
+                                public viz::HostFrameSinkClient {
  public:
   LayerTreeFrameSinkLocal(const viz::FrameSinkId& frame_sink_id,
                           viz::HostFrameSinkManager* host_frame_sink_manager);
   ~LayerTreeFrameSinkLocal() override;
 
-  using SurfaceChangedCallback =
-      base::Callback<void(const viz::SurfaceId&, const gfx::Size&)>;
+  using SurfaceChangedCallback = base::Callback<void(const viz::SurfaceInfo&)>;
+
   // Set a callback which will be called when the surface is changed.
   void SetSurfaceChangedCallback(const SurfaceChangedCallback& callback);
+
+  base::WeakPtr<LayerTreeFrameSinkLocal> GetWeakPtr();
 
   // cc::LayerTreeFrameSink:
   bool BindToClient(cc::LayerTreeFrameSinkClient* client) override;
   void DetachFromClient() override;
+  void SetLocalSurfaceId(const viz::LocalSurfaceId& local_surface_id) override;
   void SubmitCompositorFrame(cc::CompositorFrame frame) override;
-  void DidNotProduceFrame(const cc::BeginFrameAck& ack) override;
+  void DidNotProduceFrame(const viz::BeginFrameAck& ack) override;
 
   // viz::CompositorFrameSinkSupportClient:
   void DidReceiveCompositorFrameAck(
-      const std::vector<cc::ReturnedResource>& resources) override;
-  void OnBeginFrame(const cc::BeginFrameArgs& args) override;
+      const std::vector<viz::ReturnedResource>& resources) override;
+  void OnBeginFrame(const viz::BeginFrameArgs& args) override;
   void ReclaimResources(
-      const std::vector<cc::ReturnedResource>& resources) override;
+      const std::vector<viz::ReturnedResource>& resources) override;
   void WillDrawSurface(const viz::LocalSurfaceId& local_surface_id,
                        const gfx::Rect& damage_rect) override {}
   void OnBeginFramePausedChanged(bool paused) override;
 
-  // cc::ExternalBeginFrameSourceClient:
+  // viz::ExternalBeginFrameSourceClient:
   void OnNeedsBeginFrames(bool needs_begin_frames) override;
 
  private:
+  // public viz::HostFrameSinkClient:
+  void OnFirstSurfaceActivation(const viz::SurfaceInfo& surface_info) override;
+
   const viz::FrameSinkId frame_sink_id_;
   viz::HostFrameSinkManager* const host_frame_sink_manager_;
   std::unique_ptr<viz::CompositorFrameSinkSupport> support_;
   gfx::Size surface_size_;
-  float device_scale_factor_ = 0;
-  viz::LocalSurfaceIdAllocator id_allocator_;
   viz::LocalSurfaceId local_surface_id_;
-  std::unique_ptr<cc::ExternalBeginFrameSource> begin_frame_source_;
+  std::unique_ptr<viz::ExternalBeginFrameSource> begin_frame_source_;
   std::unique_ptr<base::ThreadChecker> thread_checker_;
   SurfaceChangedCallback surface_changed_callback_;
+  base::WeakPtrFactory<LayerTreeFrameSinkLocal> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(LayerTreeFrameSinkLocal);
 };

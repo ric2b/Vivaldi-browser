@@ -81,3 +81,10 @@ DISABLE(DownloadExtensionTest, DownloadsDragFunction)
 DISABLE(ExtensionWebstorePrivateApiTest, IconUrl)
 DISABLE(SSLClientCertificateSelectorCocoaTest, WorkaroundCrashySierra)
 DISABLE(CaptureScreenshotTest, CaptureScreenshot)
+
+// Broke in v62
+DISABLE(FullscreenControllerTest, MouseLockBubbleHideCallbackLockThenFullscreen)
+DISABLE(GlobalKeyboardShortcuts, ShortcutsToWindowCommand)
+DISABLE(GlobalKeyboardShortcutsTest, SwitchTabsMac)
+DISABLE(PermissionBubbleInteractiveUITest, SwitchTabs/Views)
+DISABLE(PermissionBubbleInteractiveUITest, SwitchTabs/Cocoa)

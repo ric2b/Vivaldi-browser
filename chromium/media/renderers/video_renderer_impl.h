@@ -29,8 +29,8 @@
 #include "media/filters/decoder_stream.h"
 #include "media/filters/video_renderer_algorithm.h"
 #include "media/renderers/default_renderer_factory.h"
-#include "media/renderers/gpu_video_accelerator_factories.h"
 #include "media/video/gpu_memory_buffer_video_frame_pool.h"
+#include "media/video/gpu_video_accelerator_factories.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -44,7 +44,7 @@ namespace media {
 // ready for rendering.
 class MEDIA_EXPORT VideoRendererImpl
     : public VideoRenderer,
-      public NON_EXPORTED_BASE(VideoRendererSink::RenderCallback) {
+      public VideoRendererSink::RenderCallback {
  public:
   // |decoders| contains the VideoDecoders to use when initializing.
   //
@@ -140,7 +140,12 @@ class MEDIA_EXPORT VideoRendererImpl
 
   // Returns true if the renderer has enough data for playback purposes.
   // Note that having enough data may be due to reaching end of stream.
-  bool HaveEnoughData_Locked();
+  //
+  // |low_latency_frames_required| indicates the required number of frame for
+  // have enough with a low latency playback. By default it's one frame, but
+  // during resume after a Flush() we may wait for 2 frames to ensure we have
+  // effective frames.
+  bool HaveEnoughData_Locked(size_t low_latency_frames_required = 1u) const;
   void TransitionToHaveEnough_Locked();
   void TransitionToHaveNothing();
   void TransitionToHaveNothing_Locked();
@@ -150,7 +155,7 @@ class MEDIA_EXPORT VideoRendererImpl
   void UpdateStats_Locked();
 
   // Returns true if there is no more room for additional buffered frames.
-  bool HaveReachedBufferingCap();
+  bool HaveReachedBufferingCap() const;
 
   // Starts or stops |sink_| respectively. Do not call while |lock_| is held.
   void StartSink();

@@ -4,16 +4,17 @@
 
 #include "cc/animation/animation_player.h"
 
+#include <inttypes.h>
 #include <algorithm>
 
 #include "base/stl_util.h"
+#include "base/strings/stringprintf.h"
 #include "cc/animation/animation_delegate.h"
 #include "cc/animation/animation_events.h"
 #include "cc/animation/animation_host.h"
 #include "cc/animation/animation_timeline.h"
 #include "cc/animation/scroll_offset_animation_curve.h"
 #include "cc/animation/transform_operations.h"
-#include "cc/base/math_util.h"
 #include "cc/trees/property_animation_state.h"
 
 namespace cc {
@@ -124,10 +125,10 @@ void AnimationPlayer::UnbindElementAnimations() {
 }
 
 void AnimationPlayer::AddAnimation(std::unique_ptr<Animation> animation) {
-  DCHECK(animation->target_property() != TargetProperty::SCROLL_OFFSET ||
+  DCHECK(animation->target_property_id() != TargetProperty::SCROLL_OFFSET ||
          (animation_host_ && animation_host_->SupportsScrollAnimations()));
   DCHECK(!animation->is_impl_only() ||
-         animation->target_property() == TargetProperty::SCROLL_OFFSET);
+         animation->target_property_id() == TargetProperty::SCROLL_OFFSET);
 
   animations_.push_back(std::move(animation));
   if (element_animations_) {
@@ -175,7 +176,7 @@ void AnimationPlayer::RemoveAnimation(int animation_id) {
         return animation->id() != animation_id;
       });
   for (auto it = animations_to_remove; it != animations_.end(); ++it) {
-    if ((*it)->target_property() == TargetProperty::SCROLL_OFFSET) {
+    if ((*it)->target_property_id() == TargetProperty::SCROLL_OFFSET) {
       if (element_animations_)
         scroll_offset_animation_was_interrupted_ = true;
     } else if (!(*it)->is_finished()) {
@@ -216,7 +217,7 @@ void AnimationPlayer::AbortAnimations(TargetProperty::Type target_property,
 
   bool aborted_animation = false;
   for (size_t i = 0; i < animations_.size(); ++i) {
-    if (animations_[i]->target_property() == target_property &&
+    if (animations_[i]->target_property_id() == target_property &&
         !animations_[i]->is_finished()) {
       // Currently only impl-only scroll offset animations can be completed on
       // the main thread.
@@ -343,7 +344,7 @@ bool AnimationPlayer::NotifyAnimationStarted(const AnimationEvent& event) {
 
   for (size_t i = 0; i < animations_.size(); ++i) {
     if (animations_[i]->group() == event.group_id &&
-        animations_[i]->target_property() == event.target_property &&
+        animations_[i]->target_property_id() == event.target_property &&
         animations_[i]->needs_synchronized_start_time()) {
       animations_[i]->set_needs_synchronized_start_time(false);
       if (!animations_[i]->has_set_start_time())
@@ -365,7 +366,7 @@ bool AnimationPlayer::NotifyAnimationFinished(const AnimationEvent& event) {
 
   for (size_t i = 0; i < animations_.size(); ++i) {
     if (animations_[i]->group() == event.group_id &&
-        animations_[i]->target_property() == event.target_property) {
+        animations_[i]->target_property_id() == event.target_property) {
       animations_[i]->set_received_finished_event(true);
 
       if (animation_delegate_) {
@@ -396,7 +397,7 @@ bool AnimationPlayer::NotifyAnimationAborted(const AnimationEvent& event) {
 
   for (size_t i = 0; i < animations_.size(); ++i) {
     if (animations_[i]->group() == event.group_id &&
-        animations_[i]->target_property() == event.target_property) {
+        animations_[i]->target_property_id() == event.target_property) {
       animations_[i]->SetRunState(Animation::ABORTED, event.monotonic_time);
       animations_[i]->set_received_finished_event(true);
       if (animation_delegate_) {
@@ -470,13 +471,12 @@ void AnimationPlayer::StartAnimations(base::TimeTicks monotonic_time) {
   for (size_t i = 0; i < animations_.size(); ++i) {
     if (animations_[i]->run_state() == Animation::STARTING ||
         animations_[i]->run_state() == Animation::RUNNING) {
+      int property = animations_[i]->target_property_id();
       if (animations_[i]->affects_active_elements()) {
-        blocked_properties_for_active_elements[animations_[i]
-                                                   ->target_property()] = true;
+        blocked_properties_for_active_elements[property] = true;
       }
       if (animations_[i]->affects_pending_elements()) {
-        blocked_properties_for_pending_elements[animations_[i]
-                                                    ->target_property()] = true;
+        blocked_properties_for_pending_elements[property] = true;
       }
     } else if (animations_[i]->run_state() ==
                Animation::WAITING_FOR_TARGET_AVAILABILITY) {
@@ -500,11 +500,11 @@ void AnimationPlayer::StartAnimations(base::TimeTicks monotonic_time) {
           animation_waiting_for_target->affects_active_elements();
       bool affects_pending_elements =
           animation_waiting_for_target->affects_pending_elements();
-      enqueued_properties[animation_waiting_for_target->target_property()] =
+      enqueued_properties[animation_waiting_for_target->target_property_id()] =
           true;
       for (size_t j = animation_index + 1; j < animations_.size(); ++j) {
         if (animation_waiting_for_target->group() == animations_[j]->group()) {
-          enqueued_properties[animations_[j]->target_property()] = true;
+          enqueued_properties[animations_[j]->target_property_id()] = true;
           affects_active_elements |= animations_[j]->affects_active_elements();
           affects_pending_elements |=
               animations_[j]->affects_pending_elements();
@@ -570,7 +570,7 @@ void AnimationPlayer::PromoteStartedAnimations(base::TimeTicks monotonic_time,
           start_time = monotonic_time;
         AnimationEvent started_event(
             AnimationEvent::STARTED, element_id_, animations_[i]->group(),
-            animations_[i]->target_property(), start_time);
+            animations_[i]->target_property_id(), start_time);
         started_event.is_impl_only = animations_[i]->is_impl_only();
         if (started_event.is_impl_only) {
           // Notify delegate directly, do not record the event.
@@ -603,7 +603,7 @@ void AnimationPlayer::MarkAnimationsForDeletion(base::TimeTicks monotonic_time,
       if (events && !animations_[i]->is_impl_only()) {
         AnimationEvent aborted_event(
             AnimationEvent::ABORTED, element_id_, group_id,
-            animations_[i]->target_property(), monotonic_time);
+            animations_[i]->target_property_id(), monotonic_time);
         events->events_.push_back(aborted_event);
       }
       // If on the compositor or on the main thread and received finish event,
@@ -621,11 +621,10 @@ void AnimationPlayer::MarkAnimationsForDeletion(base::TimeTicks monotonic_time,
     if (events &&
         animations_[i]->run_state() ==
             Animation::ABORTED_BUT_NEEDS_COMPLETION) {
-      AnimationEvent aborted_event(AnimationEvent::TAKEOVER, element_id_,
-                                   group_id, animations_[i]->target_property(),
-                                   monotonic_time);
-      aborted_event.animation_start_time =
-          (animations_[i]->start_time() - base::TimeTicks()).InSecondsF();
+      AnimationEvent aborted_event(
+          AnimationEvent::TAKEOVER, element_id_, group_id,
+          animations_[i]->target_property_id(), monotonic_time);
+      aborted_event.animation_start_time = animations_[i]->start_time();
       const ScrollOffsetAnimationCurve* scroll_offset_animation_curve =
           animations_[i]->curve()->ToScrollOffsetAnimationCurve();
       aborted_event.curve = scroll_offset_animation_curve->Clone();
@@ -696,7 +695,8 @@ void AnimationPlayer::MarkAnimationsForDeletion(base::TimeTicks monotonic_time,
           AnimationEvent finished_event(
               AnimationEvent::FINISHED, element_id_,
               animations_[animation_index]->group(),
-              animations_[animation_index]->target_property(), monotonic_time);
+              animations_[animation_index]->target_property_id(),
+              monotonic_time);
           finished_event.is_impl_only =
               animations_[animation_index]->is_impl_only();
           if (finished_event.is_impl_only) {
@@ -738,36 +738,36 @@ void AnimationPlayer::TickAnimation(base::TimeTicks monotonic_time,
   base::TimeDelta trimmed =
       animation->TrimTimeToCurrentIteration(monotonic_time);
 
-  switch (animation->target_property()) {
-    case TargetProperty::TRANSFORM:
+  switch (curve->Type()) {
+    case AnimationCurve::TRANSFORM:
       target->NotifyClientTransformOperationsAnimated(
-          curve->ToTransformAnimationCurve()->GetValue(trimmed), animation);
+          curve->ToTransformAnimationCurve()->GetValue(trimmed),
+          animation->target_property_id(), animation);
       break;
-    case TargetProperty::OPACITY:
-      target->NotifyClientOpacityAnimated(
-          MathUtil::ClampToRange(
-              curve->ToFloatAnimationCurve()->GetValue(trimmed), 0.0f, 1.0f),
-          animation);
+    case AnimationCurve::FLOAT:
+      target->NotifyClientFloatAnimated(
+          curve->ToFloatAnimationCurve()->GetValue(trimmed),
+          animation->target_property_id(), animation);
       break;
-    case TargetProperty::FILTER:
+    case AnimationCurve::FILTER:
       target->NotifyClientFilterAnimated(
-          curve->ToFilterAnimationCurve()->GetValue(trimmed), animation);
+          curve->ToFilterAnimationCurve()->GetValue(trimmed),
+          animation->target_property_id(), animation);
       break;
-    case TargetProperty::BACKGROUND_COLOR:
-      target->NotifyClientBackgroundColorAnimated(
-          curve->ToColorAnimationCurve()->GetValue(trimmed), animation);
+    case AnimationCurve::COLOR:
+      target->NotifyClientColorAnimated(
+          curve->ToColorAnimationCurve()->GetValue(trimmed),
+          animation->target_property_id(), animation);
       break;
-    case TargetProperty::SCROLL_OFFSET:
+    case AnimationCurve::SCROLL_OFFSET:
       target->NotifyClientScrollOffsetAnimated(
-          curve->ToScrollOffsetAnimationCurve()->GetValue(trimmed), animation);
+          curve->ToScrollOffsetAnimationCurve()->GetValue(trimmed),
+          animation->target_property_id(), animation);
       break;
-    case TargetProperty::BOUNDS:
-      target->NotifyClientBoundsAnimated(
-          curve->ToSizeAnimationCurve()->GetValue(trimmed), animation);
-      break;
-    case TargetProperty::VISIBILITY:
-      target->NotifyClientVisibilityAnimated(
-          curve->ToBooleanAnimationCurve()->GetValue(trimmed), animation);
+    case AnimationCurve::SIZE:
+      target->NotifyClientSizeAnimated(
+          curve->ToSizeAnimationCurve()->GetValue(trimmed),
+          animation->target_property_id(), animation);
       break;
   }
 }
@@ -829,20 +829,6 @@ void AnimationPlayer::ActivateAnimations() {
   UpdateTickingState(UpdateTickingType::NORMAL);
 }
 
-bool AnimationPlayer::HasFilterAnimationThatInflatesBounds() const {
-  for (size_t i = 0; i < animations_.size(); ++i) {
-    if (!animations_[i]->is_finished() &&
-        animations_[i]->target_property() == TargetProperty::FILTER &&
-        animations_[i]
-            ->curve()
-            ->ToFilterAnimationCurve()
-            ->HasFilterThatMovesPixels())
-      return true;
-  }
-
-  return false;
-}
-
 bool AnimationPlayer::HasTransformAnimationThatInflatesBounds() const {
   return IsCurrentlyAnimatingProperty(TargetProperty::TRANSFORM,
                                       ElementListType::ACTIVE) ||
@@ -864,7 +850,7 @@ bool AnimationPlayer::TransformAnimationBoundsForBox(const gfx::BoxF& box,
   *bounds = gfx::BoxF();
   for (size_t i = 0; i < animations_.size(); ++i) {
     if (animations_[i]->is_finished() ||
-        animations_[i]->target_property() != TargetProperty::TRANSFORM)
+        animations_[i]->target_property_id() != TargetProperty::TRANSFORM)
       continue;
 
     const TransformAnimationCurve* transform_animation_curve =
@@ -884,7 +870,7 @@ bool AnimationPlayer::HasOnlyTranslationTransforms(
     ElementListType list_type) const {
   for (size_t i = 0; i < animations_.size(); ++i) {
     if (animations_[i]->is_finished() ||
-        animations_[i]->target_property() != TargetProperty::TRANSFORM)
+        animations_[i]->target_property_id() != TargetProperty::TRANSFORM)
       continue;
 
     if ((list_type == ElementListType::ACTIVE &&
@@ -905,7 +891,7 @@ bool AnimationPlayer::HasOnlyTranslationTransforms(
 bool AnimationPlayer::AnimationsPreserveAxisAlignment() const {
   for (size_t i = 0; i < animations_.size(); ++i) {
     if (animations_[i]->is_finished() ||
-        animations_[i]->target_property() != TargetProperty::TRANSFORM)
+        animations_[i]->target_property_id() != TargetProperty::TRANSFORM)
       continue;
 
     const TransformAnimationCurve* transform_animation_curve =
@@ -922,7 +908,7 @@ bool AnimationPlayer::AnimationStartScale(ElementListType list_type,
   *start_scale = 0.f;
   for (size_t i = 0; i < animations_.size(); ++i) {
     if (animations_[i]->is_finished() ||
-        animations_[i]->target_property() != TargetProperty::TRANSFORM)
+        animations_[i]->target_property_id() != TargetProperty::TRANSFORM)
       continue;
 
     if ((list_type == ElementListType::ACTIVE &&
@@ -959,7 +945,7 @@ bool AnimationPlayer::MaximumTargetScale(ElementListType list_type,
   *max_scale = 0.f;
   for (size_t i = 0; i < animations_.size(); ++i) {
     if (animations_[i]->is_finished() ||
-        animations_[i]->target_property() != TargetProperty::TRANSFORM)
+        animations_[i]->target_property_id() != TargetProperty::TRANSFORM)
       continue;
 
     if ((list_type == ElementListType::ACTIVE &&
@@ -997,7 +983,7 @@ bool AnimationPlayer::IsPotentiallyAnimatingProperty(
     ElementListType list_type) const {
   for (size_t i = 0; i < animations_.size(); ++i) {
     if (!animations_[i]->is_finished() &&
-        animations_[i]->target_property() == target_property) {
+        animations_[i]->target_property_id() == target_property) {
       if ((list_type == ElementListType::ACTIVE &&
            animations_[i]->affects_active_elements()) ||
           (list_type == ElementListType::PENDING &&
@@ -1014,7 +1000,7 @@ bool AnimationPlayer::IsCurrentlyAnimatingProperty(
   for (size_t i = 0; i < animations_.size(); ++i) {
     if (!animations_[i]->is_finished() &&
         animations_[i]->InEffect(last_tick_time_) &&
-        animations_[i]->target_property() == target_property) {
+        animations_[i]->target_property_id() == target_property) {
       if ((list_type == ElementListType::ACTIVE &&
            animations_[i]->affects_active_elements()) ||
           (list_type == ElementListType::PENDING &&
@@ -1039,7 +1025,7 @@ Animation* AnimationPlayer::GetAnimation(
     TargetProperty::Type target_property) const {
   for (size_t i = 0; i < animations_.size(); ++i) {
     size_t index = animations_.size() - i - 1;
-    if (animations_[index]->target_property() == target_property)
+    if (animations_[index]->target_property_id() == target_property)
       return animations_[index].get();
   }
   return nullptr;
@@ -1063,7 +1049,7 @@ void AnimationPlayer::GetPropertyAnimationState(
       bool in_effect = animation->InEffect(last_tick_time_);
       bool active = animation->affects_active_elements();
       bool pending = animation->affects_pending_elements();
-      TargetProperty::Type property = animation->target_property();
+      int property = animation->target_property_id();
 
       if (pending)
         pending_state->potentially_animating[property] = true;
@@ -1119,7 +1105,7 @@ void AnimationPlayer::PushNewAnimationsToImplThread(
     if (animation_player_impl->GetAnimationById(animations_[i]->id()))
       continue;
 
-    if (animations_[i]->target_property() == TargetProperty::SCROLL_OFFSET &&
+    if (animations_[i]->target_property_id() == TargetProperty::SCROLL_OFFSET &&
         !animations_[i]
              ->curve()
              ->ToScrollOffsetAnimationCurve()
@@ -1197,6 +1183,22 @@ void AnimationPlayer::PushPropertiesToImplThread(
   animation_player_impl->scroll_offset_animation_was_interrupted_ =
       scroll_offset_animation_was_interrupted_;
   scroll_offset_animation_was_interrupted_ = false;
+}
+
+std::string AnimationPlayer::ToString() const {
+  return base::StringPrintf(
+      "AnimationPlayer{id=%d, element_id=%s, animations=[%s]}", id_,
+      element_id_.ToString().c_str(), AnimationsToString().c_str());
+}
+
+std::string AnimationPlayer::AnimationsToString() const {
+  std::string str;
+  for (size_t i = 0; i < animations_.size(); i++) {
+    if (i > 0)
+      str.append(", ");
+    str.append(animations_[i]->ToString());
+  }
+  return str;
 }
 
 }  // namespace cc

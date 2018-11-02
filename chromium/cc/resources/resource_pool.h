@@ -19,7 +19,7 @@
 #include "cc/cc_export.h"
 #include "cc/resources/resource.h"
 #include "cc/resources/scoped_resource.h"
-#include "components/viz/common/quads/resource_format.h"
+#include "components/viz/common/resources/resource_format.h"
 
 namespace cc {
 
@@ -27,7 +27,8 @@ class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider,
                                public base::MemoryCoordinatorClient {
  public:
   // Delay before a resource is considered expired.
-  static base::TimeDelta kDefaultExpirationDelay;
+  static constexpr base::TimeDelta kDefaultExpirationDelay =
+      base::TimeDelta::FromSeconds(5);
 
   static std::unique_ptr<ResourcePool> CreateForGpuMemoryBufferResources(
       ResourceProvider* resource_provider,
@@ -69,7 +70,7 @@ class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider,
 
   // Called when a resource's content has been fully replaced (and is completely
   // valid). Updates the resource's content ID to its new value.
-  void OnContentReplaced(ResourceId resource_id, uint64_t content_id);
+  void OnContentReplaced(viz::ResourceId resource_id, uint64_t content_id);
   void ReleaseResource(Resource* resource);
 
   void SetResourceUsageLimits(size_t max_memory_usage_bytes,
@@ -190,7 +191,8 @@ class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider,
   ResourceDeque unused_resources_;
   ResourceDeque busy_resources_;
 
-  using InUseResourceMap = std::map<ResourceId, std::unique_ptr<PoolResource>>;
+  using InUseResourceMap =
+      std::map<viz::ResourceId, std::unique_ptr<PoolResource>>;
   InUseResourceMap in_use_resources_;
 
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;

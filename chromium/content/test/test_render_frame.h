@@ -45,11 +45,11 @@ class TestRenderFrame : public RenderFrameImpl {
   void DeleteSurroundingText(int before, int after);
   void DeleteSurroundingTextInCodePoints(int before, int after);
   void CollapseSelection();
-  void SetAccessibilityMode(AccessibilityMode new_mode);
+  void SetAccessibilityMode(ui::AXMode new_mode);
   void SetCompositionFromExistingText(
       int start,
       int end,
-      const std::vector<blink::WebCompositionUnderline>& underlines);
+      const std::vector<blink::WebImeTextSpan>& ime_text_spans);
 
   blink::WebNavigationPolicy DecidePolicyForNavigation(
       const blink::WebFrameClient::NavigationPolicyInfo& info) override;

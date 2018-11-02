@@ -11,6 +11,10 @@
 
 class PrefRegistrySimple;
 
+namespace ash {
+enum class TouchscreenEnabledSource;
+}  // namespace ash
+
 namespace chromeos {
 namespace system {
 
@@ -88,6 +92,10 @@ class MouseSettings {
   bool GetPrimaryButtonRight() const;
   bool IsPrimaryButtonRightSet() const;
 
+  void SetReverseScroll(bool enabled);
+  bool GetReverseScroll() const;
+  bool IsReverseScrollSet() const;
+
   // Updates |this| with |settings|. If at least one setting was updated returns
   // true.
   bool Update(const MouseSettings& settings);
@@ -99,6 +107,7 @@ class MouseSettings {
  private:
   base::Optional<int> sensitivity_;
   base::Optional<bool> primary_button_right_;
+  base::Optional<bool> reverse_scroll_;
 };
 
 // Interface for configuring input device settings.
@@ -125,9 +134,6 @@ class CHROMEOS_EXPORT InputDeviceSettings {
   // where other input devices like mouse are absent.
   static bool ForceKeyboardDrivenUINavigation();
 
-  // Registers local state pref names for touchscreen status.
-  static void RegisterPrefs(PrefRegistrySimple* registry);
-
   // Registers profile pref names for touchpad and touchscreen statuses.
   static void RegisterProfilePrefs(PrefRegistrySimple* registry);
 
@@ -135,17 +141,16 @@ class CHROMEOS_EXPORT InputDeviceSettings {
   // preferences.
   void UpdateTouchDevicesStatusFromPrefs();
 
-  // If |use_local_state| is true, returns the touchscreen status from local
-  // state, otherwise from user prefs.
-  bool IsTouchscreenEnabledInPrefs(bool use_local_state) const;
+  // Returns the current touchscreen enabled status as specified by |source|.
+  // Note that the actual state of the touchscreen device is automatically
+  // determined based on the requests of multiple sources.
+  bool GetTouchscreenEnabled(ash::TouchscreenEnabledSource source) const;
 
-  // Sets the status of touchscreen to |enabled| in prefs. If |use_local_state|,
-  // pref is set in local state, otherwise in user pref.
-  void SetTouchscreenEnabledInPrefs(bool enabled, bool use_local_state);
-
-  // Updates the enabled/disabled status of the touchscreen from prefs. Enabled
-  // if both local state and user prefs are enabled, otherwise disabled.
-  void UpdateTouchscreenStatusFromPrefs();
+  // Sets |source|'s requested touchscreen enabled status to |enabled|. Note
+  // that the actual state of the touchscreen device is automatically determined
+  // based on the requests of multiple sources.
+  void SetTouchscreenEnabled(bool enabled,
+                             ash::TouchscreenEnabledSource source);
 
   // Toggles the status of touchpad between enabled and disabled.
   void ToggleTouchpad();
@@ -191,6 +196,9 @@ class CHROMEOS_EXPORT InputDeviceSettings {
   // Sets the primary mouse button to the right button if |right| is true.
   virtual void SetPrimaryButtonRight(bool right) = 0;
 
+  // Turns mouse reverse scrolling on/off.
+  virtual void SetMouseReverseScroll(bool enabled) = 0;
+
   // Reapplies previously set touchpad settings.
   virtual void ReapplyTouchpadSettings() = 0;
 
@@ -203,6 +211,14 @@ class CHROMEOS_EXPORT InputDeviceSettings {
  private:
   virtual void SetInternalTouchpadEnabled(bool enabled) {}
   virtual void SetTouchscreensEnabled(bool enabled) {}
+
+  // Updates the actual enabled/disabled status of the touchscreen. Touchscreen
+  // is enabled if all the touchscreen enabled sources are enabled.
+  void UpdateTouchscreenEnabled();
+
+  // The touchscreen state which is associated with the global touchscreen
+  // enabled source.
+  bool global_touchscreen_enabled_ = false;
 };
 
 }  // namespace system

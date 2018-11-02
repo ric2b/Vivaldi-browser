@@ -37,13 +37,13 @@ class WebContents;
 class CONTENT_EXPORT DevToolsAgentHost
     : public base::RefCounted<DevToolsAgentHost> {
  public:
-  static char kTypePage[];
-  static char kTypeFrame[];
-  static char kTypeSharedWorker[];
-  static char kTypeServiceWorker[];
-  static char kTypeBrowser[];
-  static char kTypeGuest[];
-  static char kTypeOther[];
+  static const char kTypePage[];
+  static const char kTypeFrame[];
+  static const char kTypeSharedWorker[];
+  static const char kTypeServiceWorker[];
+  static const char kTypeBrowser[];
+  static const char kTypeGuest[];
+  static const char kTypeOther[];
 
   // Latest DevTools protocol version supported.
   static std::string GetProtocolVersion();
@@ -115,9 +115,7 @@ class CONTENT_EXPORT DevToolsAgentHost
       std::unique_ptr<DevToolsSocketFactory> server_socket_factory,
       const std::string& frontend_url,
       const base::FilePath& active_port_output_directory,
-      const base::FilePath& debug_frontend_dir,
-      const std::string& product_name,
-      const std::string& user_agent);
+      const base::FilePath& debug_frontend_dir);
 
   // Stops remote debugging.
   static void StopRemoteDebuggingServer();
@@ -127,8 +125,7 @@ class CONTENT_EXPORT DevToolsAgentHost
   static void RemoveObserver(DevToolsAgentHostObserver*);
 
   // Attaches |client| to this agent host to start debugging.
-  // Returns true iff attach succeeded.
-  virtual bool AttachClient(DevToolsAgentHostClient* client) = 0;
+  virtual void AttachClient(DevToolsAgentHostClient* client) = 0;
 
   // Attaches |client| to this agent host to start debugging. Disconnects
   // any existing clients.

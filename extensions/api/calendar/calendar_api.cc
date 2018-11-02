@@ -20,10 +20,13 @@
 
 using calendar::CalendarService;
 using calendar::CalendarServiceFactory;
+using calendar::RecurrenceInterval;
 
 namespace extensions {
 
 using vivaldi::calendar::Calendar;
+using vivaldi::calendar::OccurrenceInterval;
+using vivaldi::calendar::RecurrencePattern;
 
 namespace OnEventCreated = vivaldi::calendar::OnEventCreated;
 namespace OnEventRemoved = vivaldi::calendar::OnEventRemoved;
@@ -36,6 +39,22 @@ double MilliSecondsFromTime(const base::Time& time) {
   return 1000 * time.ToDoubleT();
 }
 
+// static
+RecurrenceInterval UiOccurrenceToEventOccurrence(
+    OccurrenceInterval transition) {
+  switch (transition) {
+    case vivaldi::calendar::OccurrenceInterval::OCCURRENCE_INTERVAL_DAYS:
+      return RecurrenceInterval::DAILY;
+    case vivaldi::calendar::OccurrenceInterval::OCCURRENCE_INTERVAL_WEEKS:
+      return calendar::RecurrenceInterval::WEEKLY;
+    case vivaldi::calendar::OccurrenceInterval::OCCURRENCE_INTERVAL_MONTHS:
+      return calendar::RecurrenceInterval::MONTHLY;
+    default:
+      NOTREACHED();
+  }
+  return RecurrenceInterval::NONE;
+}
+
 CalendarEvent GetEventItem(const calendar::EventRow& row) {
   CalendarEvent event_item;
   event_item.id = base::Int64ToString(row.id());
@@ -45,6 +64,50 @@ CalendarEvent GetEventItem(const calendar::EventRow& row) {
   event_item.start.reset(new double(MilliSecondsFromTime(row.start())));
   event_item.end.reset(new double(MilliSecondsFromTime(row.end())));
   return event_item;
+}
+
+calendar::EventRecurrence GetEventRecurrence(
+    const RecurrencePattern& recurring_pattern) {
+  calendar::EventRecurrence recurrence_event;
+
+  if (recurring_pattern.interval) {
+    recurrence_event.interval =
+        UiOccurrenceToEventOccurrence(recurring_pattern.interval);
+    recurrence_event.updateFields |= calendar::RECURRENCE_INTERVAL;
+  }
+
+  if (recurring_pattern.number_of_occurrences.get()) {
+    recurrence_event.number_of_occurrences =
+        *recurring_pattern.number_of_occurrences.get();
+    recurrence_event.updateFields |= calendar::NUMBER_OF_OCCURRENCES;
+  }
+
+  if (recurring_pattern.skip_count.get()) {
+    recurrence_event.skip_count = *recurring_pattern.skip_count.get();
+    recurrence_event.updateFields |= calendar::RECURRENCE_SKIP_COUNT;
+  }
+
+  if (recurring_pattern.day_of_week.get()) {
+    recurrence_event.day_of_week = *recurring_pattern.day_of_week.get();
+    recurrence_event.updateFields |= calendar::RECURRENCE_DAY_OF_WEEK;
+  }
+
+  if (recurring_pattern.week_of_month.get()) {
+    recurrence_event.week_of_month = *recurring_pattern.week_of_month.get();
+    recurrence_event.updateFields |= calendar::RECURRENCE_WEEK_OF_MONTH;
+  }
+
+  if (recurring_pattern.day_of_month.get()) {
+    recurrence_event.day_of_month = *recurring_pattern.day_of_month.get();
+    recurrence_event.updateFields |= calendar::RECURRENCE_DAY_OF_MONTH;
+  }
+
+  if (recurring_pattern.month_of_year.get()) {
+    recurrence_event.month_of_year = *recurring_pattern.month_of_year.get();
+    recurrence_event.updateFields |= calendar::RECURRENCE_MONTH_OF_YEAR;
+  }
+
+  return recurrence_event;
 }
 
 Calendar GetCalendarItem(const calendar::CalendarRow& row) {
@@ -142,6 +205,25 @@ BrowserContextKeyedAPIFactory<CalendarAPI>* CalendarAPI::GetFactoryInstance() {
   return g_factory.Pointer();
 }
 
+OccurrenceInterval RecurrenceToUiRecurrence(RecurrenceInterval transition) {
+  switch (transition) {
+    case RecurrenceInterval::NONE:
+      return OccurrenceInterval::OCCURRENCE_INTERVAL_NONE;
+    case RecurrenceInterval::DAILY:
+      return OccurrenceInterval::OCCURRENCE_INTERVAL_DAYS;
+    case RecurrenceInterval::WEEKLY:
+      return OccurrenceInterval::OCCURRENCE_INTERVAL_WEEKS;
+    case RecurrenceInterval::MONTHLY:
+      return OccurrenceInterval::OCCURRENCE_INTERVAL_MONTHS;
+    case RecurrenceInterval::YEARLY:
+      return OccurrenceInterval::OCCURRENCE_INTERVAL_YEARS;
+    default:
+      NOTREACHED();
+  }
+  // We have to return something
+  return OccurrenceInterval::OCCURRENCE_INTERVAL_NONE;
+}
+
 void CalendarAPI::OnListenerAdded(const EventListenerInfo& details) {
   calendar_event_router_.reset(
       new CalendarEventRouter(Profile::FromBrowserContext(browser_context_)));
@@ -173,6 +255,18 @@ std::unique_ptr<CalendarEvent> CreateVivaldiEvent(
   cal_event->location.reset(
       new std::string(base::UTF16ToUTF8(event.location())));
   cal_event->url.reset(new std::string(base::UTF16ToUTF8(event.url())));
+
+  RecurrencePattern* pattern = new RecurrencePattern();
+  pattern->interval = RecurrenceToUiRecurrence(event.recurrence().interval);
+  pattern->number_of_occurrences.reset(
+      new int(event.recurrence().number_of_occurrences));
+  pattern->skip_count.reset(new int(event.recurrence().skip_count));
+  pattern->day_of_week.reset(new int(event.recurrence().day_of_week));
+  pattern->week_of_month.reset(new int(event.recurrence().week_of_month));
+  pattern->day_of_month.reset(new int(event.recurrence().day_of_month));
+  pattern->month_of_year.reset(new int(event.recurrence().month_of_year));
+
+  cal_event->recurrence.reset(pattern);
 
   return cal_event;
 }
@@ -241,8 +335,7 @@ ExtensionFunction::ResponseAction CalendarEventCreateFunction::Run() {
   }
 
   if (params->event.start.get()) {
-    double start;
-    start = *params->event.start.get();
+    double start = *params->event.start.get();
     createEvent.set_start(GetTime(start));
   }
 
@@ -253,26 +346,22 @@ ExtensionFunction::ResponseAction CalendarEventCreateFunction::Run() {
   }
 
   if (params->event.all_day.get()) {
-    bool all_day = false;
-    end = *params->event.all_day.get();
+    bool all_day = *params->event.all_day.get();
     createEvent.set_all_day(all_day);
   }
 
   if (params->event.is_recurring.get()) {
-    bool is_recurring = false;
-    is_recurring = *params->event.is_recurring.get();
+    bool is_recurring =  *params->event.is_recurring.get();
     createEvent.set_is_recurring(is_recurring);
   }
 
   if (params->event.start_recurring.get()) {
-    double start_recurring;
-    start_recurring = *params->event.start_recurring.get();
+    double start_recurring = *params->event.start_recurring.get();
     createEvent.set_start_recurring(GetTime(start_recurring));
   }
 
   if (params->event.end_recurring.get()) {
-    double end_recurring;
-    end_recurring = *params->event.end_recurring.get();
+    double end_recurring = *params->event.end_recurring.get();
     createEvent.set_end_recurring(GetTime(end_recurring));
   }
 
@@ -286,6 +375,10 @@ ExtensionFunction::ResponseAction CalendarEventCreateFunction::Run() {
   if (params->event.url.get()) {
     url = base::UTF8ToUTF16(*params->event.url);
     createEvent.set_url(url);
+  }
+
+  if (params->event.recurrence.get()) {
+    createEvent.set_recurrence(GetEventRecurrence(*params->event.recurrence));
   }
 
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
@@ -406,6 +499,11 @@ ExtensionFunction::ResponseAction CalendarUpdateEventFunction::Run() {
   if (params->changes.url.get()) {
     updatedEvent.url = base::UTF8ToUTF16(*params->changes.url);
     updatedEvent.updateFields |= calendar::URL;
+  }
+
+  if (params->changes.recurrence.get()) {
+    updatedEvent.recurrence = GetEventRecurrence(*params->changes.recurrence);
+    updatedEvent.updateFields |= calendar::RECURRENCE;
   }
 
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());

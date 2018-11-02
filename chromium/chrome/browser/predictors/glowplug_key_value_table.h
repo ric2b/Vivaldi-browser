@@ -38,7 +38,8 @@ std::string GetDeleteAllSql(const std::string& table_name);
 // always consists of two columns, TEXT type "key" and BLOB type "proto". The
 // class doesn't manage the creation and the deletion of the table.
 //
-// All the functions except of the constructor must be called on a DB thread.
+// All the functions except of the constructor must be called on a DB sequence
+// of the ResourcePrefetchPredictorTables.
 // The preferred way to call the methods of this class is passing the method to
 // ResourcePrefetchPredictorTables::ScheduleDBTask().
 //
@@ -52,6 +53,7 @@ class GlowplugKeyValueTable {
  public:
   explicit GlowplugKeyValueTable(const std::string& table_name);
   // Virtual for testing.
+  virtual ~GlowplugKeyValueTable() {}
   virtual void GetAllData(std::map<std::string, T>* data_map,
                           sql::Connection* db) const;
   virtual void UpdateData(const std::string& key,

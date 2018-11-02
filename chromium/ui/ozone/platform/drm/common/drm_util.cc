@@ -16,9 +16,8 @@
 #include "base/containers/flat_map.h"
 #include "base/memory/ptr_util.h"
 #include "ui/display/types/display_mode.h"
-#include "ui/display/types/display_snapshot_mojo.h"
+#include "ui/display/types/display_snapshot.h"
 #include "ui/display/util/edid_parser.h"
-#include "ui/ozone/common/display_snapshot_proxy.h"
 
 #if !defined(DRM_FORMAT_R16)
 // TODO(riju): crbug.com/733703
@@ -202,6 +201,12 @@ bool HasColorCorrectionMatrix(int fd, drmModeCrtc* crtc) {
     }
   }
   return false;
+}
+
+bool DisplayModeEquals(const DisplayMode_Params& lhs,
+                       const DisplayMode_Params& rhs) {
+  return lhs.size == rhs.size && lhs.is_interlaced == rhs.is_interlaced &&
+         lhs.refresh_rate == rhs.refresh_rate;
 }
 
 }  // namespace
@@ -427,12 +432,34 @@ std::vector<DisplaySnapshot_Params> CreateParamsFromSnapshot(
     }
 
     p.product_id = d->product_id();
-    p.string_representation = d->ToString();
     p.maximum_cursor_size = d->maximum_cursor_size();
 
     params.push_back(p);
   }
   return params;
+}
+
+std::unique_ptr<display::DisplaySnapshot> CreateDisplaySnapshotFromParams(
+    const DisplaySnapshot_Params& params) {
+  display::DisplaySnapshot::DisplayModeList modes;
+  const display::DisplayMode* current_mode = nullptr;
+  const display::DisplayMode* native_mode = nullptr;
+
+  // Find pointers to current and native mode in the copied data.
+  for (auto& mode : params.modes) {
+    modes.push_back(CreateDisplayModeFromParams(mode));
+    if (params.has_current_mode && DisplayModeEquals(mode, params.current_mode))
+      current_mode = modes.back().get();
+    if (params.has_native_mode && DisplayModeEquals(mode, params.native_mode))
+      native_mode = modes.back().get();
+  }
+
+  return std::make_unique<display::DisplaySnapshot>(
+      params.display_id, params.origin, params.physical_size, params.type,
+      params.is_aspect_preserving_scaling, params.has_overscan,
+      params.has_color_correction_matrix, params.display_name, params.sys_path,
+      std::move(modes), params.edid, current_mode, native_mode,
+      params.product_id, params.maximum_cursor_size);
 }
 
 int GetFourCCFormatFromBufferFormat(gfx::BufferFormat format) {
@@ -522,8 +549,57 @@ MovableDisplaySnapshots CreateMovableDisplaySnapshotsFromParams(
     const std::vector<DisplaySnapshot_Params>& displays) {
   MovableDisplaySnapshots snapshots;
   for (const auto& d : displays)
-    snapshots.push_back(base::MakeUnique<DisplaySnapshotProxy>(d));
+    snapshots.push_back(CreateDisplaySnapshotFromParams(d));
   return snapshots;
+}
+
+OverlaySurfaceCandidateList CreateOverlaySurfaceCandidateListFrom(
+    const std::vector<OverlayCheck_Params>& params) {
+  OverlaySurfaceCandidateList candidates;
+  for (auto& p : params) {
+    OverlaySurfaceCandidate osc;
+    osc.transform = p.transform;
+    osc.buffer_size = p.buffer_size;
+    osc.format = p.format;
+    osc.display_rect = gfx::RectF(p.display_rect);
+    osc.crop_rect = p.crop_rect;
+    osc.plane_z_order = p.plane_z_order;
+    osc.overlay_handled = p.is_overlay_candidate;
+    candidates.push_back(osc);
+  }
+
+  return candidates;
+}
+
+std::vector<OverlayCheck_Params> CreateParamsFromOverlaySurfaceCandidate(
+    const OverlaySurfaceCandidateList& candidates) {
+  std::vector<OverlayCheck_Params> overlay_params;
+  for (auto& candidate : candidates) {
+    overlay_params.push_back(OverlayCheck_Params(candidate));
+  }
+
+  return overlay_params;
+}
+
+OverlayStatusList CreateOverlayStatusListFrom(
+    const std::vector<OverlayCheckReturn_Params>& params) {
+  OverlayStatusList returns;
+  for (auto& p : params) {
+    returns.push_back(p.status);
+  }
+
+  return returns;
+}
+
+std::vector<OverlayCheckReturn_Params> CreateParamsFromOverlayStatusList(
+    const OverlayStatusList& returns) {
+  std::vector<OverlayCheckReturn_Params> params;
+  for (auto& s : returns) {
+    OverlayCheckReturn_Params p;
+    p.status = s;
+    params.push_back(p);
+  }
+  return params;
 }
 
 }  // namespace ui

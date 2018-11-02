@@ -39,6 +39,9 @@ class GPU_EXPORT FencedAllocator {
   // Allocation alignment, must be a power of two.
   enum : unsigned int { kAllocAlignment = 16 };
 
+  // Status of a block of memory, for book-keeping.
+  enum State { IN_USE, FREE, FREE_PENDING_TOKEN };
+
   // Creates a FencedAllocator. Note that the size of the buffer is passed, but
   // not its base address: everything is handled as offsets into the buffer.
   FencedAllocator(unsigned int size, CommandBufferHelper* helper);
@@ -90,19 +93,16 @@ class GPU_EXPORT FencedAllocator {
   bool CheckConsistency();
 
   // True if any memory is allocated.
-  bool InUse();
+  bool InUseOrFreePending();
 
   // Return bytes of memory that is IN_USE
   size_t bytes_in_use() const { return bytes_in_use_; }
 
- private:
-  // Status of a block of memory, for book-keeping.
-  enum State {
-    IN_USE,
-    FREE,
-    FREE_PENDING_TOKEN
-  };
+  // Gets the status of a block, as well as the corresponding token if
+  // FREE_PENDING_TOKEN.
+  State GetBlockStatusForTest(Offset offset, int32_t* token_if_pending);
 
+ private:
   // Book-keeping sturcture that describes a block of memory.
   struct Block {
     State state;
@@ -252,13 +252,17 @@ class FencedAllocatorWrapper {
   }
 
   // True if any memory is allocated.
-  bool InUse() {
-    return allocator_.InUse();
-  }
+  bool InUseOrFreePending() { return allocator_.InUseOrFreePending(); }
 
   FencedAllocator &allocator() { return allocator_; }
 
   size_t bytes_in_use() const { return allocator_.bytes_in_use(); }
+
+  FencedAllocator::State GetPointerStatusForTest(void* pointer,
+                                                 int32_t* token_if_pending) {
+    return allocator_.GetBlockStatusForTest(GetOffset(pointer),
+                                            token_if_pending);
+  }
 
  private:
   FencedAllocator allocator_;

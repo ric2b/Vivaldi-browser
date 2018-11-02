@@ -104,9 +104,9 @@ Polymer({
       visible: false,
       configured: true
     };
-    this.networkingPrivate.getNetworks(filter, function(states) {
+    this.networkingPrivate.getNetworks(filter, states => {
       this.networkStateList_ = states;
-    }.bind(this));
+    });
   },
 
   /**
@@ -133,9 +133,8 @@ Polymer({
    * @private
    */
   havePreferred_: function() {
-    return this.networkStateList_.find(function(state) {
-      return this.networkIsPreferred_(state);
-    }.bind(this)) !== undefined;
+    return this.networkStateList_.find(
+               state => this.networkIsPreferred_(state)) !== undefined;
   },
 
   /**
@@ -143,9 +142,8 @@ Polymer({
    * @private
    */
   haveNotPreferred_: function() {
-    return this.networkStateList_.find(function(state) {
-      return this.networkIsNotPreferred_(state);
-    }.bind(this)) !== undefined;
+    return this.networkStateList_.find(
+               state => this.networkIsNotPreferred_(state)) !== undefined;
   },
 
   /**
@@ -161,7 +159,7 @@ Polymer({
     // properties for the network. The delay is not noticeable (~5ms) and is
     // preferable to initiating a query for every known network at load time.
     this.networkingPrivate.getManagedProperties(
-        this.selectedGuid_, function(properties) {
+        this.selectedGuid_, properties => {
           if (chrome.runtime.lastError || !properties) {
             console.error(
                 'Unexpected error: ' + chrome.runtime.lastError.message);
@@ -177,7 +175,7 @@ Polymer({
           }
           this.enableForget_ = !this.isPolicySource(properties.Source);
           /** @type {!CrActionMenuElement} */ (this.$.dotsMenu).showAt(button);
-        }.bind(this));
+        });
     event.stopPropagation();
   },
 

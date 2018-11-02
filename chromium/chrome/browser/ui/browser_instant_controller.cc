@@ -5,15 +5,12 @@
 #include "chrome/browser/ui/browser_instant_controller.h"
 
 #include "base/bind.h"
-#include "base/metrics/user_metrics.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/instant_service.h"
 #include "chrome/browser/search/instant_service_factory.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/search/instant_search_prerenderer.h"
 #include "chrome/browser/ui/search/search_model.h"
 #include "chrome/browser/ui/search/search_tab_helper.h"
@@ -150,15 +147,9 @@ void BrowserInstantController::TabDeactivated(content::WebContents* contents) {
     prerenderer->Cancel();
 }
 
-void BrowserInstantController::ModelChanged(const SearchMode& old_mode,
-                                            const SearchMode& new_mode) {
-  // Record some actions corresponding to the mode change. Note that to get
-  // the full story, it's necessary to look at other UMA actions as well,
-  // such as tab switches.
-  if (new_mode.is_ntp())
-    base::RecordAction(base::UserMetricsAction("InstantExtended.ShowNTP"));
-
-  instant_.SearchModeChanged(old_mode, new_mode);
+void BrowserInstantController::ModelChanged(SearchModel::Origin old_origin,
+                                            SearchModel::Origin new_origin) {
+  instant_.SearchModeChanged(old_origin, new_origin);
 }
 
 void BrowserInstantController::DefaultSearchProviderChanged(
@@ -183,7 +174,8 @@ void BrowserInstantController::DefaultSearchProviderChanged(
       continue;
 
     SearchModel* model = SearchTabHelper::FromWebContents(contents)->model();
-    if (google_base_url_domain_changed && model->mode().is_origin_ntp()) {
+    if (google_base_url_domain_changed &&
+        model->origin() == SearchModel::Origin::NTP) {
       GURL local_ntp_url(chrome::kChromeSearchLocalNtpUrl);
       // Replace the server NTP with the local NTP.
       content::NavigationController::LoadURLParams params(local_ntp_url);

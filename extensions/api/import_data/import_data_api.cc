@@ -661,7 +661,7 @@ ImportDataSavePageFunction::ImportDataSavePageFunction() {}
 ImportDataSavePageFunction::~ImportDataSavePageFunction() {}
 
 bool ImportDataSavePageFunction::RunAsync() {
-  Browser* browser = ::vivaldi::ui_tools::GetBrowserFromWebContents(
+  Browser* browser = ::vivaldi::FindBrowserForEmbedderWebContents(
       dispatcher()->GetAssociatedWebContents());
 
   WebContents* current_tab = browser->tab_strip_model()->GetActiveWebContents();
@@ -675,7 +675,7 @@ ImportDataOpenPageFunction::ImportDataOpenPageFunction() {}
 ImportDataOpenPageFunction::~ImportDataOpenPageFunction() {}
 
 bool ImportDataOpenPageFunction::RunAsync() {
-  Browser* browser = ::vivaldi::ui_tools::GetBrowserFromWebContents(
+  Browser* browser = ::vivaldi::FindBrowserForEmbedderWebContents(
       dispatcher()->GetAssociatedWebContents());
   browser->OpenFile();
   SendResponse(true);
@@ -807,7 +807,7 @@ bool ImportDataGetBlockThirdPartyCookiesFunction::RunAsync() {
 ImportDataOpenTaskManagerFunction::~ImportDataOpenTaskManagerFunction() {}
 
 bool ImportDataOpenTaskManagerFunction::RunAsync() {
-  Browser* browser = ::vivaldi::ui_tools::GetBrowserFromWebContents(
+  Browser* browser = ::vivaldi::FindBrowserForEmbedderWebContents(
       dispatcher()->GetAssociatedWebContents());
 
   chrome::OpenTaskManager(browser);

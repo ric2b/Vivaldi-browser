@@ -14,8 +14,11 @@ namespace {
 
 // Checks if at least one value has been changed.
 bool HaveValuesChanged(const SensorReading& lhs, const SensorReading& rhs) {
-  return lhs.values[0] != rhs.values[0] || lhs.values[1] != rhs.values[1] ||
-         lhs.values[2] != rhs.values[2];
+  for (size_t i = 0; i < SensorReadingRaw::kValuesCount; ++i) {
+    if (lhs.raw.values[i] != rhs.raw.values[i])
+      return true;
+  }
+  return false;
 }
 
 }  // namespace
@@ -48,15 +51,14 @@ mojom::ReportingMode PlatformSensorLinux::GetReportingMode() {
 
 void PlatformSensorLinux::UpdatePlatformSensorReading(SensorReading reading) {
   DCHECK(task_runner_->BelongsToCurrentThread());
-  bool notifyNeeded = false;
-  if (GetReportingMode() == mojom::ReportingMode::ON_CHANGE) {
-    if (!HaveValuesChanged(reading, old_values_))
-      return;
-    notifyNeeded = true;
+  if (GetReportingMode() == mojom::ReportingMode::ON_CHANGE &&
+      !HaveValuesChanged(reading, old_values_)) {
+    return;
   }
   old_values_ = reading;
-  reading.timestamp = (base::TimeTicks::Now() - base::TimeTicks()).InSecondsF();
-  UpdateSensorReading(reading, notifyNeeded);
+  reading.raw.timestamp =
+      (base::TimeTicks::Now() - base::TimeTicks()).InSecondsF();
+  UpdateSensorReading(reading);
 }
 
 void PlatformSensorLinux::NotifyPlatformSensorError() {

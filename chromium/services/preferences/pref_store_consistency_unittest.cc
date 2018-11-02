@@ -26,10 +26,8 @@ namespace {
 
 constexpr int kInitialValue = 1;
 constexpr char kKey[] = "key";
-constexpr char kNestedKey[] = "key.child";
 constexpr char kChildKey[] = "child";
 constexpr char kOtherKey[] = "other_key";
-constexpr char kNestedOtherKey[] = "key.other_key";
 constexpr char kDictionaryKey[] = "a.dictionary.pref";
 
 void DoNothingHandleReadError(PersistentPrefStore::PrefReadError error) {}
@@ -156,6 +154,7 @@ class PrefServiceConnection : public mojom::PrefStoreObserver,
   void CommitPendingWrite(base::OnceClosure) override {}
   void SchedulePendingLossyWrites() override {}
   void ClearMutableValues() override {}
+  void OnStoreDeletionFromDisk() override {}
 
   // mojom::PrefStoreObserver
   void OnPrefsChanged(std::vector<mojom::PrefUpdatePtr> updates) override {
@@ -357,8 +356,8 @@ TEST_F(PersistentPrefStoreConsistencyTest, WriteParentThenChild) {
   three_dict.SetInteger(kKey, 3);
   three_dict.SetDictionary(kDictionaryKey,
                            base::MakeUnique<base::DictionaryValue>());
-  base::DictionaryValue five_dict = three_dict;
-  five_dict.SetInteger(kKey, 5);
+  base::Value five_dict = three_dict.Clone();
+  five_dict.SetKey(kKey, base::Value(5));
   base::DictionaryValue expected_dict;
   expected_dict.SetInteger(kKey, 3);
   expected_dict.SetInteger(kOtherKey, 4);
@@ -620,7 +619,7 @@ TEST_F(PersistentPrefStoreConsistencyTest, DeleteChildThenWriteParent) {
 
 TEST_F(PersistentPrefStoreConsistencyTest, ReplaceParentThenWriteChild) {
   auto initial_value = base::MakeUnique<base::DictionaryValue>();
-  initial_value->SetInteger(kNestedOtherKey, 5);
+  initial_value->SetPath({kKey, kOtherKey}, base::Value(5));
   pref_store()->SetValue(kDictionaryKey, std::move(initial_value), 0);
   auto connection = CreateConnection();
   auto connection2 = CreateConnection();
@@ -632,7 +631,7 @@ TEST_F(PersistentPrefStoreConsistencyTest, ReplaceParentThenWriteChild) {
   }
   {
     ScopedDictionaryPrefUpdate update(&pref_service2, kDictionaryKey);
-    update->SetInteger(kNestedKey, 2);
+    update->SetPath({kKey, kChildKey}, base::Value(2));
   }
 
   connection->ForwardWrites(1);
@@ -644,10 +643,10 @@ TEST_F(PersistentPrefStoreConsistencyTest, ReplaceParentThenWriteChild) {
   base::DictionaryValue simple_dict;
   simple_dict.SetInteger(kKey, 1);
   base::DictionaryValue nested_dict;
-  nested_dict.SetInteger(kNestedKey, 2);
-  nested_dict.SetInteger(kNestedOtherKey, 5);
+  nested_dict.SetPath({kKey, kChildKey}, base::Value(2));
+  nested_dict.SetPath({kKey, kOtherKey}, base::Value(5));
   base::DictionaryValue expected_dict;
-  expected_dict.SetInteger(kNestedKey, 2);
+  expected_dict.SetPath({kKey, kChildKey}, base::Value(2));
 
   connection->ForwardUpdates(1);
   EXPECT_EQ(simple_dict, *pref_service.GetDictionary(kDictionaryKey));
@@ -676,7 +675,7 @@ TEST_F(PersistentPrefStoreConsistencyTest, WriteChildThenReplaceParent) {
   }
   {
     ScopedDictionaryPrefUpdate update(&pref_service2, kDictionaryKey);
-    update->SetInteger(kNestedKey, 2);
+    update->SetPath({kKey, kChildKey}, base::Value(2));
   }
 
   connection2->ForwardWrites(1);
@@ -688,7 +687,7 @@ TEST_F(PersistentPrefStoreConsistencyTest, WriteChildThenReplaceParent) {
   base::DictionaryValue simple_dict;
   simple_dict.SetInteger(kKey, 1);
   base::DictionaryValue nested_dict;
-  nested_dict.SetInteger(kNestedKey, 2);
+  nested_dict.SetPath({kKey, kChildKey}, base::Value(2));
 
   connection->ForwardUpdates(1);
   EXPECT_EQ(simple_dict, *pref_service.GetDictionary(kDictionaryKey));
@@ -717,7 +716,7 @@ TEST_F(PersistentPrefStoreConsistencyTest, NestedWriteParentThenChild) {
   }
   {
     ScopedDictionaryPrefUpdate update(&pref_service2, kDictionaryKey);
-    update->SetInteger(kNestedKey, 3);
+    update->SetPath({kKey, kChildKey}, base::Value(3));
   }
 
   connection->ForwardWrites(1);
@@ -727,12 +726,12 @@ TEST_F(PersistentPrefStoreConsistencyTest, NestedWriteParentThenChild) {
   connection2->WaitForUpdates(2);
 
   base::DictionaryValue two_and_four_dict;
-  two_and_four_dict.SetInteger(kNestedKey, 2);
-  two_and_four_dict.SetInteger(kNestedOtherKey, 4);
+  two_and_four_dict.SetPath({kKey, kChildKey}, base::Value(2));
+  two_and_four_dict.SetPath({kKey, kOtherKey}, base::Value(4));
   base::DictionaryValue three_dict;
-  three_dict.SetInteger(kNestedKey, 3);
-  base::DictionaryValue expected_dict = two_and_four_dict;
-  expected_dict.SetInteger(kNestedKey, 3);
+  three_dict.SetPath({kKey, kChildKey}, base::Value(3));
+  base::Value expected_dict = two_and_four_dict.Clone();
+  expected_dict.SetPath({kKey, kChildKey}, base::Value(3));
 
   connection->ForwardUpdates(1);
   EXPECT_EQ(two_and_four_dict, *pref_service.GetDictionary(kDictionaryKey));
@@ -770,7 +769,7 @@ TEST_F(PersistentPrefStoreConsistencyTest, NestedWriteChildThenParent) {
   }
   {
     ScopedDictionaryPrefUpdate update(&pref_service2, kDictionaryKey);
-    update->SetInteger(kNestedKey, 3);
+    update->SetPath({kKey, kChildKey}, base::Value(3));
   }
 
   connection2->ForwardWrites(1);
@@ -780,10 +779,10 @@ TEST_F(PersistentPrefStoreConsistencyTest, NestedWriteChildThenParent) {
   connection2->WaitForUpdates(2);
 
   base::DictionaryValue expected_dict;
-  expected_dict.SetInteger(kNestedKey, 2);
-  expected_dict.SetInteger(kNestedOtherKey, 4);
+  expected_dict.SetPath({kKey, kChildKey}, base::Value(2));
+  expected_dict.SetPath({kKey, kOtherKey}, base::Value(4));
   base::DictionaryValue three_dict;
-  three_dict.SetInteger(kNestedKey, 3);
+  three_dict.SetPath({kKey, kChildKey}, base::Value(3));
 
   connection->ForwardUpdates(1);
   EXPECT_EQ(expected_dict, *pref_service.GetDictionary(kDictionaryKey));
@@ -853,7 +852,7 @@ TEST_F(PersistentPrefStoreConsistencyTest,
 TEST_F(PersistentPrefStoreConsistencyTest,
        NestedDeleteParentThenWriteChildThenDeleteChild) {
   auto initial_value = base::MakeUnique<base::DictionaryValue>();
-  initial_value->SetInteger(kNestedOtherKey, 5);
+  initial_value->SetPath({kKey, kOtherKey}, base::Value(5));
   pref_store()->SetValue(kDictionaryKey, std::move(initial_value), 0);
   auto connection = CreateConnection();
   auto connection2 = CreateConnection();
@@ -865,7 +864,7 @@ TEST_F(PersistentPrefStoreConsistencyTest,
   }
   {
     ScopedDictionaryPrefUpdate update(&pref_service2, kDictionaryKey);
-    update->SetInteger(kNestedKey, 3);
+    update->SetPath({kKey, kChildKey}, base::Value(3));
   }
 
   connection->ForwardWrites(1);
@@ -875,11 +874,11 @@ TEST_F(PersistentPrefStoreConsistencyTest,
   connection2->WaitForUpdates(2);
 
   base::DictionaryValue intermediate_dict;
-  intermediate_dict.SetInteger(kNestedKey, 3);
-  intermediate_dict.SetInteger(kNestedOtherKey, 5);
+  intermediate_dict.SetPath({kKey, kChildKey}, base::Value(3));
+  intermediate_dict.SetPath({kKey, kOtherKey}, base::Value(5));
 
   base::DictionaryValue expected_dict;
-  expected_dict.SetInteger(kNestedKey, 3);
+  expected_dict.SetPath({kKey, kChildKey}, base::Value(3));
 
   base::DictionaryValue empty_dict;
 

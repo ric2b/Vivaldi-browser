@@ -38,7 +38,6 @@
 #include "ash/system/toast/toast_data.h"
 #include "ash/system/toast/toast_manager.h"
 #include "ash/system/tray/system_tray.h"
-#include "ash/system/tray/system_tray_delegate.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/system/web_notification/web_notification_tray.h"
 #include "ash/wm/mru_window_tracker.h"
@@ -79,6 +78,7 @@ namespace {
 using base::UserMetricsAction;
 using chromeos::input_method::InputMethodManager;
 using message_center::Notification;
+using message_center::SystemNotificationWarningLevel;
 
 // Identifier for the high contrast toggle accelerator notification.
 const char kHighContrastToggleAccelNotificationId[] =
@@ -154,16 +154,18 @@ void ShowDeprecatedAcceleratorNotification(const char* const notification_id,
                                            int new_shortcut_id) {
   const base::string16 message =
       GetNotificationText(message_id, old_shortcut_id, new_shortcut_id);
-  std::unique_ptr<Notification> notification(new Notification(
-      message_center::NOTIFICATION_TYPE_SIMPLE, notification_id,
-      base::string16(), message,
-      Shell::Get()->shell_delegate()->GetDeprecatedAcceleratorImage(),
-      base::string16(), GURL(),
-      message_center::NotifierId(
-          message_center::NotifierId::SYSTEM_COMPONENT,
-          system_notifier::kNotifierDeprecatedAccelerator),
-      message_center::RichNotificationData(),
-      new DeprecatedAcceleratorNotificationDelegate));
+  std::unique_ptr<Notification> notification =
+      system_notifier::CreateSystemNotification(
+          message_center::NOTIFICATION_TYPE_SIMPLE, notification_id,
+          l10n_util::GetStringUTF16(IDS_DEPRECATED_SHORTCUT_TITLE), message,
+          Shell::Get()->shell_delegate()->GetDeprecatedAcceleratorImage(),
+          base::string16(), GURL(),
+          message_center::NotifierId(
+              message_center::NotifierId::SYSTEM_COMPONENT,
+              system_notifier::kNotifierDeprecatedAccelerator),
+          message_center::RichNotificationData(),
+          new DeprecatedAcceleratorNotificationDelegate,
+          kNotificationSettingsIcon, SystemNotificationWarningLevel::NORMAL);
   message_center::MessageCenter::Get()->AddNotification(
       std::move(notification));
 }
@@ -371,7 +373,7 @@ void HandleShowKeyboardOverlay() {
   Shell::Get()->new_window_controller()->ShowKeyboardOverlay();
 }
 
-bool CanHandleShowMessageCenterBubble() {
+bool CanHandleToggleMessageCenterBubble() {
   aura::Window* target_root = Shell::GetRootWindowForNewWindows();
   StatusAreaWidget* status_area_widget =
       Shelf::ForWindow(target_root)->shelf_widget()->status_area_widget();
@@ -379,17 +381,21 @@ bool CanHandleShowMessageCenterBubble() {
          status_area_widget->web_notification_tray()->visible();
 }
 
-void HandleShowMessageCenterBubble() {
-  base::RecordAction(UserMetricsAction("Accel_Show_Message_Center_Bubble"));
+void HandleToggleMessageCenterBubble() {
+  base::RecordAction(UserMetricsAction("Accel_Toggle_Message_Center_Bubble"));
   aura::Window* target_root = Shell::GetRootWindowForNewWindows();
   StatusAreaWidget* status_area_widget =
       Shelf::ForWindow(target_root)->shelf_widget()->status_area_widget();
-  if (status_area_widget) {
-    WebNotificationTray* notification_tray =
-        status_area_widget->web_notification_tray();
-    if (notification_tray->visible())
-      notification_tray->ShowBubble();
-  }
+  if (!status_area_widget)
+    return;
+  WebNotificationTray* notification_tray =
+      status_area_widget->web_notification_tray();
+  if (!notification_tray->visible())
+    return;
+  if (notification_tray->IsMessageCenterBubbleVisible())
+    notification_tray->CloseBubble();
+  else
+    notification_tray->ShowBubble(false /* show_by_click */);
 }
 
 void HandleToggleSystemTrayBubble() {
@@ -400,7 +406,7 @@ void HandleToggleSystemTrayBubble() {
   if (tray->HasSystemBubble()) {
     tray->CloseBubble();
   } else {
-    tray->ShowDefaultView(BUBBLE_CREATE_NEW);
+    tray->ShowDefaultView(BUBBLE_CREATE_NEW, false /* show_by_click */);
     tray->ActivateBubble();
   }
 }
@@ -523,7 +529,7 @@ void HandleShowImeMenuBubble() {
     ImeMenuTray* ime_menu_tray = status_area_widget->ime_menu_tray();
     if (ime_menu_tray && ime_menu_tray->visible() &&
         !ime_menu_tray->GetBubbleView()) {
-      ime_menu_tray->ShowBubble();
+      ime_menu_tray->ShowBubble(false /* show_by_click */);
     }
   }
 }
@@ -582,7 +588,7 @@ void HandleShowStylusTools() {
   Shelf::ForWindow(Shell::GetRootWindowForNewWindows())
       ->GetStatusAreaWidget()
       ->palette_tray()
-      ->ShowBubble();
+      ->ShowBubble(false /* show_by_click */);
 }
 
 bool CanHandleShowStylusTools() {
@@ -714,15 +720,21 @@ void HandleToggleHighContrast() {
   // Show a notification so the user knows that this accelerator toggled
   // high contrast mode, and that they can press it again to toggle back.
   // The message center automatically only shows this once per session.
-  std::unique_ptr<Notification> notification(new Notification(
-      message_center::NOTIFICATION_TYPE_SIMPLE,
-      kHighContrastToggleAccelNotificationId, base::string16() /* title */,
-      l10n_util::GetStringUTF16(IDS_HIGH_CONTRAST_ACCEL_MSG),
-      gfx::Image(CreateVectorIcon(kSystemMenuAccessibilityIcon, SK_ColorBLACK)),
-      base::string16() /* display source */, GURL(),
-      message_center::NotifierId(message_center::NotifierId::SYSTEM_COMPONENT,
-                                 system_notifier::kNotifierAccessibility),
-      message_center::RichNotificationData(), nullptr));
+  std::unique_ptr<Notification> notification =
+      system_notifier::CreateSystemNotification(
+          message_center::NOTIFICATION_TYPE_SIMPLE,
+          kHighContrastToggleAccelNotificationId,
+          l10n_util::GetStringUTF16(IDS_HIGH_CONTRAST_ACCEL_TITLE),
+          l10n_util::GetStringUTF16(IDS_HIGH_CONTRAST_ACCEL_MSG),
+          gfx::Image(
+              CreateVectorIcon(kSystemMenuAccessibilityIcon, SK_ColorBLACK)),
+          base::string16() /* display source */, GURL(),
+          message_center::NotifierId(
+              message_center::NotifierId::SYSTEM_COMPONENT,
+              system_notifier::kNotifierAccessibility),
+          message_center::RichNotificationData(), nullptr,
+          kNotificationAccessibilityIcon,
+          SystemNotificationWarningLevel::NORMAL);
   message_center::MessageCenter::Get()->AddNotification(
       std::move(notification));
 
@@ -1011,7 +1023,7 @@ bool AcceleratorController::CanPerformAction(
     case DEBUG_TOGGLE_DEVICE_SCALE_FACTOR:
     case DEBUG_TOGGLE_TOUCH_PAD:
     case DEBUG_TOGGLE_TOUCH_SCREEN:
-    case DEBUG_TOGGLE_TOUCH_VIEW:
+    case DEBUG_TOGGLE_TABLET_MODE:
     case DEBUG_TOGGLE_WALLPAPER_MODE:
     case DEBUG_TRIGGER_CRASH:
       return debug::DebugAcceleratorsEnabled();
@@ -1033,8 +1045,6 @@ bool AcceleratorController::CanPerformAction(
     case SCALE_UI_RESET:
     case SCALE_UI_UP:
       return accelerators::IsInternalDisplayZoomEnabled();
-    case SHOW_MESSAGE_CENTER_BUBBLE:
-      return CanHandleShowMessageCenterBubble();
     case SHOW_STYLUS_TOOLS:
       return CanHandleShowStylusTools();
     case START_VOICE_INTERACTION:
@@ -1050,6 +1060,8 @@ bool AcceleratorController::CanPerformAction(
       return CanHandleToggleAppList(accelerator, previous_accelerator);
     case TOGGLE_CAPS_LOCK:
       return CanHandleToggleCapsLock(accelerator, previous_accelerator);
+    case TOGGLE_MESSAGE_CENTER_BUBBLE:
+      return CanHandleToggleMessageCenterBubble();
     case TOGGLE_MIRROR_MODE:
       return true;
     case WINDOW_CYCLE_SNAP_LEFT:
@@ -1152,7 +1164,7 @@ void AcceleratorController::PerformAction(AcceleratorAction action,
     case DEBUG_TOGGLE_DEVICE_SCALE_FACTOR:
     case DEBUG_TOGGLE_TOUCH_PAD:
     case DEBUG_TOGGLE_TOUCH_SCREEN:
-    case DEBUG_TOGGLE_TOUCH_VIEW:
+    case DEBUG_TOGGLE_TABLET_MODE:
     case DEBUG_TOGGLE_WALLPAPER_MODE:
     case DEBUG_TRIGGER_CRASH:
       debug::PerformDebugActionIfEnabled(action);
@@ -1283,9 +1295,6 @@ void AcceleratorController::PerformAction(AcceleratorAction action,
     case SHOW_KEYBOARD_OVERLAY:
       HandleShowKeyboardOverlay();
       break;
-    case SHOW_MESSAGE_CENTER_BUBBLE:
-      HandleShowMessageCenterBubble();
-      break;
     case SHOW_STYLUS_TOOLS:
       HandleShowStylusTools();
       break;
@@ -1324,6 +1333,9 @@ void AcceleratorController::PerformAction(AcceleratorAction action,
       break;
     case TOGGLE_MAXIMIZED:
       accelerators::ToggleMaximized();
+      break;
+    case TOGGLE_MESSAGE_CENTER_BUBBLE:
+      HandleToggleMessageCenterBubble();
       break;
     case TOGGLE_MIRROR_MODE:
       HandleToggleMirrorMode();

@@ -42,17 +42,18 @@
 #include "core/dom/ScriptRunner.h"
 #include "core/dom/ScriptableDocumentParser.h"
 #include "core/dom/Text.h"
-#include "core/events/Event.h"
+#include "core/dom/events/Event.h"
 #include "core/frame/LocalFrame.h"
-#include "core/frame/SubresourceIntegrity.h"
 #include "core/frame/UseCounter.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/imports/HTMLImport.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/inspector/ConsoleMessage.h"
+#include "core/loader/SubresourceIntegrityHelper.h"
 #include "core/loader/modulescript/ModuleScriptFetchRequest.h"
 #include "core/loader/resource/ScriptResource.h"
 #include "platform/WebFrameScheduler.h"
+#include "platform/loader/SubresourceIntegrity.h"
 #include "platform/loader/fetch/AccessControlStatus.h"
 #include "platform/loader/fetch/FetchParameters.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
@@ -77,9 +78,7 @@ ScriptLoader::ScriptLoader(ScriptElementBase* element,
       created_during_document_write_(created_during_document_write),
       async_exec_type_(ScriptRunner::kNone),
       document_write_intervention_(
-          DocumentWriteIntervention::kDocumentWriteInterventionNone),
-      pending_script_(this, nullptr),
-      module_tree_client_(this, nullptr) {
+          DocumentWriteIntervention::kDocumentWriteInterventionNone) {
   // https://html.spec.whatwg.org/#already-started
   // "The cloning steps for script elements must set the "already started"
   //  flag on the copy if it is set on the element being cloned."
@@ -420,8 +419,10 @@ bool ScriptLoader::PrepareScript(const TextPosition& script_start_position,
       String integrity_attr = element_->IntegrityAttributeValue();
       IntegrityMetadataSet integrity_metadata;
       if (!integrity_attr.IsEmpty()) {
+        SubresourceIntegrity::ReportInfo report_info;
         SubresourceIntegrity::ParseIntegrityAttribute(
-            integrity_attr, integrity_metadata, &element_document);
+            integrity_attr, integrity_metadata, &report_info);
+        SubresourceIntegrityHelper::DoReport(element_document, report_info);
       }
 
       if (!FetchClassicScript(url, element_document.Fetcher(), nonce,
@@ -620,8 +621,6 @@ bool ScriptLoader::PrepareScript(const TextPosition& script_start_position,
     //  time the prepare a script algorithm started."
     pending_script_ = CreatePendingScript();
     async_exec_type_ = ScriptRunner::kAsync;
-    pending_script_->StartStreamingIfPossible(&element_->GetDocument(),
-                                              ScriptStreamer::kAsync);
     // TODO(hiroshige): Here |contextDocument| is used as "node document"
     // while Step 14 uses |elementDocument| as "node document". Fix this.
     context_document->GetScriptRunner()->QueueScriptForExecution(
@@ -682,8 +681,9 @@ bool ScriptLoader::PrepareScript(const TextPosition& script_start_position,
                         ? element_document.Url()
                         : KURL();
 
-  return ExecuteScriptBlock(ClassicPendingScript::Create(element_, position),
-                            script_url);
+  ExecuteScriptBlock(ClassicPendingScript::Create(element_, position),
+                     script_url);
+  return true;
 }
 
 bool ScriptLoader::FetchClassicScript(
@@ -794,29 +794,9 @@ PendingScript* ScriptLoader::CreatePendingScript() {
   return nullptr;
 }
 
-ScriptLoader::ExecuteScriptResult ScriptLoader::ExecuteScript(
-    const Script* script) {
-  double script_exec_start_time = MonotonicallyIncreasingTime();
-  ExecuteScriptResult result = DoExecuteScript(script);
-
-  // NOTE: we do not check m_willBeParserExecuted here, since
-  // m_willBeParserExecuted is false for inline scripts, and we want to
-  // include inline script execution time as part of parser blocked script
-  // execution time.
-  if (async_exec_type_ == ScriptRunner::kNone)
-    DocumentParserTiming::From(element_->GetDocument())
-        .RecordParserBlockedOnScriptExecutionDuration(
-            MonotonicallyIncreasingTime() - script_exec_start_time,
-            WasCreatedDuringDocumentWrite());
-  return result;
-}
-
-// https://html.spec.whatwg.org/#execute-the-script-block
+// Steps 3--7 of https://html.spec.whatwg.org/#execute-the-script-block
 // with additional support for HTML imports.
-// Note that Steps 2 and 8 must be handled by the caller of doExecuteScript(),
-// i.e. load/error events are dispatched by the caller.
-// Steps 3--7 are implemented here in doExecuteScript().
-// TODO(hiroshige): Move event dispatching code to doExecuteScript().
+// Steps 2 and 8 are handled in ExecuteScriptBlock().
 ScriptLoader::ExecuteScriptResult ScriptLoader::DoExecuteScript(
     const Script* script) {
   DCHECK(already_started_);
@@ -911,7 +891,7 @@ void ScriptLoader::Execute() {
 }
 
 // https://html.spec.whatwg.org/#execute-the-script-block
-bool ScriptLoader::ExecuteScriptBlock(PendingScript* pending_script,
+void ScriptLoader::ExecuteScriptBlock(PendingScript* pending_script,
                                       const KURL& document_url) {
   DCHECK(pending_script);
   DCHECK_EQ(pending_script->IsExternal(), is_external_script_);
@@ -920,6 +900,8 @@ bool ScriptLoader::ExecuteScriptBlock(PendingScript* pending_script,
   Script* script = pending_script->GetSource(document_url, error_occurred);
   const bool was_canceled = pending_script->WasCanceled();
   const bool is_external = pending_script->IsExternal();
+  const double parser_blocking_load_start_time =
+      pending_script->ParserBlockingLoadStartTime();
   pending_script->Dispose();
 
   // Do not execute module scripts if they are moved between documents.
@@ -928,39 +910,58 @@ bool ScriptLoader::ExecuteScriptBlock(PendingScript* pending_script,
   Document* context_document = element_document->ContextDocument();
   if (original_document_ != context_document &&
       script->GetScriptType() == ScriptType::kModule)
-    return false;
+    return;
 
   // 2. "If the script's script is null, fire an event named error at the
   //     element, and abort these steps."
   if (error_occurred) {
     DispatchErrorEvent();
-    return false;
+    return;
+  }
+
+  if (parser_blocking_load_start_time > 0.0) {
+    DocumentParserTiming::From(element_->GetDocument())
+        .RecordParserBlockedOnScriptLoadDuration(
+            MonotonicallyIncreasingTime() - parser_blocking_load_start_time,
+            WasCreatedDuringDocumentWrite());
   }
 
   if (was_canceled)
-    return false;
+    return;
 
-  // Steps 3--7 are in ExecuteScript().
-  switch (ExecuteScript(script)) {
+  double script_exec_start_time = MonotonicallyIncreasingTime();
+
+  // Steps 3--7 are in DoExecuteScript().
+  ExecuteScriptResult result = DoExecuteScript(script);
+
+  // NOTE: we do not check m_willBeParserExecuted here, since
+  // m_willBeParserExecuted is false for inline scripts, and we want to
+  // include inline script execution time as part of parser blocked script
+  // execution time.
+  if (async_exec_type_ == ScriptRunner::kNone) {
+    DocumentParserTiming::From(element_->GetDocument())
+        .RecordParserBlockedOnScriptExecutionDuration(
+            MonotonicallyIncreasingTime() - script_exec_start_time,
+            WasCreatedDuringDocumentWrite());
+  }
+
+  switch (result) {
     case ExecuteScriptResult::kShouldFireLoadEvent:
       // 8. "If the script is from an external file, then fire an event named
       //     load at the script element."
       if (is_external)
         DispatchLoadEvent();
-      return true;
+      break;
 
     case ExecuteScriptResult::kShouldFireErrorEvent:
       // Consider as if "the script's script is null" retrospectively,
       // due to CSP check failures etc., which are considered as load failure.
       DispatchErrorEvent();
-      return false;
+      break;
 
     case ExecuteScriptResult::kShouldFireNone:
-      return true;
+      break;
   }
-
-  NOTREACHED();
-  return false;
 }
 
 void ScriptLoader::PendingScriptFinished(PendingScript* pending_script) {
@@ -1024,6 +1025,12 @@ bool ScriptLoader::IsScriptForEventSupported() const {
   //     then abort these steps at this point. The script is not executed.
   return DeprecatedEqualIgnoringCase(event_attribute, "onload") ||
          DeprecatedEqualIgnoringCase(event_attribute, "onload()");
+}
+
+PendingScript* ScriptLoader::GetPendingScriptIfScriptIsAsync() {
+  if (pending_script_ && async_exec_type_ == ScriptRunner::kAsync)
+    return pending_script_;
+  return nullptr;
 }
 
 }  // namespace blink

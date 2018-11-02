@@ -9,9 +9,11 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/download_manager.h"
 #include "content/public/browser/download_url_parameters.h"
 #include "content/public/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -49,7 +51,7 @@ void DownloadUpdatedObserver::OnDownloadUpdated(DownloadItem* item) {
   if (filter_.Run(item_))
     event_seen_ = true;
   if (waiting_ && event_seen_)
-    base::MessageLoopForUI::current()->QuitWhenIdle();
+    base::RunLoop::QuitCurrentWhenIdleDeprecated();
 }
 
 void DownloadUpdatedObserver::OnDownloadDestroyed(DownloadItem* item) {
@@ -57,7 +59,7 @@ void DownloadUpdatedObserver::OnDownloadDestroyed(DownloadItem* item) {
   item_->RemoveObserver(this);
   item_ = NULL;
   if (waiting_)
-    base::MessageLoopForUI::current()->QuitWhenIdle();
+    base::RunLoop::QuitCurrentWhenIdleDeprecated();
 }
 
 DownloadTestObserver::DownloadTestObserver(
@@ -150,9 +152,8 @@ void DownloadTestObserver::OnDownloadUpdated(DownloadItem* download) {
         // real UI would.
         BrowserThread::PostTask(
             BrowserThread::UI, FROM_HERE,
-            base::Bind(&DownloadTestObserver::AcceptDangerousDownload,
-                       weak_factory_.GetWeakPtr(),
-                       download->GetId()));
+            base::BindOnce(&DownloadTestObserver::AcceptDangerousDownload,
+                           weak_factory_.GetWeakPtr(), download->GetId()));
         break;
 
       case ON_DANGEROUS_DOWNLOAD_DENY:
@@ -160,9 +161,8 @@ void DownloadTestObserver::OnDownloadUpdated(DownloadItem* download) {
         // real UI would.
         BrowserThread::PostTask(
             BrowserThread::UI, FROM_HERE,
-            base::Bind(&DownloadTestObserver::DenyDangerousDownload,
-                       weak_factory_.GetWeakPtr(),
-                       download->GetId()));
+            base::BindOnce(&DownloadTestObserver::DenyDangerousDownload,
+                           weak_factory_.GetWeakPtr(), download->GetId()));
         break;
 
       case ON_DANGEROUS_DOWNLOAD_FAIL:
@@ -216,7 +216,7 @@ void DownloadTestObserver::DownloadInFinalState(DownloadItem* download) {
 
 void DownloadTestObserver::SignalIfFinished() {
   if (waiting_ && IsFinished())
-    base::MessageLoopForUI::current()->QuitWhenIdle();
+    base::RunLoop::QuitCurrentWhenIdleDeprecated();
 }
 
 void DownloadTestObserver::AcceptDangerousDownload(uint32_t download_id) {
@@ -386,9 +386,9 @@ void DownloadTestFlushObserver::CheckDownloadsInProgress(
 
       // Trigger next step.  We need to go past the IO thread twice, as
       // there's a self-task posting in the IO thread cancel path.
-      BrowserThread::PostTask(
-          BrowserThread::FILE, FROM_HERE,
-          base::Bind(&DownloadTestFlushObserver::PingFileThread, this, 2));
+      DownloadManager::GetTaskRunner()->PostTask(
+          FROM_HERE,
+          base::BindOnce(&DownloadTestFlushObserver::PingFileThread, this, 2));
     }
   }
 }
@@ -396,14 +396,15 @@ void DownloadTestFlushObserver::CheckDownloadsInProgress(
 void DownloadTestFlushObserver::PingFileThread(int cycle) {
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&DownloadTestFlushObserver::PingIOThread, this, cycle));
+      base::BindOnce(&DownloadTestFlushObserver::PingIOThread, this, cycle));
 }
 
 void DownloadTestFlushObserver::PingIOThread(int cycle) {
   if (--cycle) {
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(&DownloadTestFlushObserver::PingFileThread, this, cycle));
+        base::BindOnce(&DownloadTestFlushObserver::PingFileThread, this,
+                       cycle));
   } else {
     BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
                             base::MessageLoop::QuitWhenIdleClosure());
@@ -442,7 +443,7 @@ void DownloadTestItemCreationObserver::DownloadItemCreationCallback(
   DCHECK_EQ(1u, called_back_count_);
 
   if (waiting_)
-    base::MessageLoopForUI::current()->QuitWhenIdle();
+    base::RunLoop::QuitCurrentWhenIdleDeprecated();
 }
 
 const DownloadUrlParameters::OnStartedCallback

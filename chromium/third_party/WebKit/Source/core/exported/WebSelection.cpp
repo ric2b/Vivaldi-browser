@@ -5,7 +5,7 @@
 #include "public/web/WebSelection.h"
 
 #include "core/editing/SelectionType.h"
-#include "core/layout/compositing/CompositedSelection.h"
+#include "core/paint/compositing/CompositedSelection.h"
 
 namespace blink {
 
@@ -33,6 +33,7 @@ static WebSelectionBound GetWebSelectionBound(
   result.edge_top_in_layer = RoundedIntPoint(bound.edge_top_in_layer);
   result.edge_bottom_in_layer = RoundedIntPoint(bound.edge_bottom_in_layer);
   result.is_text_direction_rtl = bound.is_text_direction_rtl;
+  result.hidden = bound.hidden;
   return result;
 }
 

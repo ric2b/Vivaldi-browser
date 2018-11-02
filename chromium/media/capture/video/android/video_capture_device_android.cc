@@ -96,16 +96,9 @@ PhotoCapabilities::AndroidFillLightMode ToAndroidFillLightMode(
 
 }  // anonymous namespace
 
-// static
-bool VideoCaptureDeviceAndroid::RegisterVideoCaptureDevice(JNIEnv* env) {
-  return RegisterNativesImpl(env);
-}
-
 VideoCaptureDeviceAndroid::VideoCaptureDeviceAndroid(
     const VideoCaptureDeviceDescriptor& device_descriptor)
     : main_task_runner_(base::ThreadTaskRunnerHandle::Get()),
-      state_(kIdle),
-      got_first_frame_(false),
       device_descriptor_(device_descriptor),
       weak_ptr_factory_(this) {}
 
@@ -262,51 +255,33 @@ void VideoCaptureDeviceAndroid::OnFrameAvailable(
     const JavaParamRef<jbyteArray>& data,
     jint length,
     jint rotation) {
-  {
-    base::AutoLock lock(lock_);
-    if (state_ != kConfigured || !client_)
-      return;
-  }
+  if (!IsClientConfigured())
+    return;
+
+  const base::TimeTicks current_time = base::TimeTicks::Now();
+  ProcessFirstFrameAvailable(current_time);
+  // Using |expected_next_frame_time_| to estimate a proper capture timestamp
+  // since android.hardware.Camera API doesn't expose a better timestamp.
+  const base::TimeDelta capture_time =
+      expected_next_frame_time_ - base::TimeTicks();
+
+  // Deliver the frame when it doesn't arrive too early.
+  if (ThrottleFrame(current_time))
+    return;
 
   jbyte* buffer = env->GetByteArrayElements(data, NULL);
   if (!buffer) {
     LOG(ERROR) << "VideoCaptureDeviceAndroid::OnFrameAvailable: "
                   "failed to GetByteArrayElements";
+    // In case of error, restore back the throttle control value.
+    expected_next_frame_time_ -= frame_interval_;
     return;
   }
 
-  const base::TimeTicks current_time = base::TimeTicks::Now();
-  {
-    base::AutoLock lock(lock_);
-    if (!got_first_frame_) {
-      // Set aside one frame allowance for fluctuation.
-      expected_next_frame_time_ = current_time - frame_interval_;
-      got_first_frame_ = true;
-
-      for (const auto& request : photo_requests_queue_)
-        main_task_runner_->PostTask(FROM_HERE, request);
-      photo_requests_queue_.clear();
-    }
-  }
-
-  // Deliver the frame when it doesn't arrive too early.
-  if (expected_next_frame_time_ <= current_time) {
-    // Using |expected_next_frame_time_| to estimate a proper capture timestamp
-    // since android.hardware.Camera API doesn't expose a better timestamp.
-    const base::TimeDelta capture_time =
-        expected_next_frame_time_ - base::TimeTicks();
-
-    expected_next_frame_time_ += frame_interval_;
-
-    // TODO(qiangchen): Investigate how to get raw timestamp for Android,
-    // rather than using reference time to calculate timestamp.
-    base::AutoLock lock(lock_);
-    if (!client_)
-      return;
-    client_->OnIncomingCapturedData(reinterpret_cast<uint8_t*>(buffer), length,
-                                    capture_format_, rotation, current_time,
-                                    capture_time);
-  }
+  // TODO(qiangchen): Investigate how to get raw timestamp for Android,
+  // rather than using reference time to calculate timestamp.
+  SendIncomingDataToClient(reinterpret_cast<uint8_t*>(buffer), length, rotation,
+                           current_time, capture_time);
 
   env->ReleaseByteArrayElements(data, buffer, JNI_ABORT);
 }
@@ -323,29 +298,19 @@ void VideoCaptureDeviceAndroid::OnI420FrameAvailable(JNIEnv* env,
                                                      jint height,
                                                      jint rotation,
                                                      jlong timestamp) {
-  {
-    base::AutoLock lock(lock_);
-    if (state_ != kConfigured || !client_)
-      return;
-  }
+  if (!IsClientConfigured())
+    return;
   const int64_t absolute_micro =
       timestamp / base::Time::kNanosecondsPerMicrosecond;
   const base::TimeDelta capture_time =
       base::TimeDelta::FromMicroseconds(absolute_micro);
 
   const base::TimeTicks current_time = base::TimeTicks::Now();
-  {
-    base::AutoLock lock(lock_);
-    if (!got_first_frame_) {
-      // Set aside one frame allowance for fluctuation.
-      expected_next_frame_time_ = current_time - frame_interval_;
-      got_first_frame_ = true;
+  ProcessFirstFrameAvailable(current_time);
 
-      for (const auto& request : photo_requests_queue_)
-        main_task_runner_->PostTask(FROM_HERE, request);
-      photo_requests_queue_.clear();
-    }
-  }
+  // Deliver the frame when it doesn't arrive too early.
+  if (ThrottleFrame(current_time))
+    return;
 
   uint8_t* const y_src =
       reinterpret_cast<uint8_t*>(env->GetDirectBufferAddress(y_buffer));
@@ -368,19 +333,8 @@ void VideoCaptureDeviceAndroid::OnI420FrameAvailable(JNIEnv* env,
                            buffer.get() + y_plane_length + uv_plane_length,
                            width / 2, width, height);
 
-  // Deliver the frame when it doesn't arrive too early.
-  if (expected_next_frame_time_ <= current_time) {
-    expected_next_frame_time_ += frame_interval_;
-
-    // TODO(qiangchen): Investigate how to get raw timestamp for Android,
-    // rather than using reference time to calculate timestamp.
-    base::AutoLock lock(lock_);
-    if (!client_)
-      return;
-    client_->OnIncomingCapturedData(buffer.get(), buffer_length,
-                                    capture_format_, rotation, current_time,
-                                    capture_time);
-  }
+  SendIncomingDataToClient(buffer.get(), buffer_length, rotation, current_time,
+                           capture_time);
 }
 
 void VideoCaptureDeviceAndroid::OnError(JNIEnv* env,
@@ -415,7 +369,7 @@ void VideoCaptureDeviceAndroid::OnPhotoTaken(
   mojom::BlobPtr blob = mojom::Blob::New();
   base::android::JavaByteArrayToByteVector(env, data.obj(), &blob->data);
   blob->mime_type = blob->data.empty() ? "" : "image/jpeg";
-  cb->Run(std::move(blob));
+  std::move(*cb).Run(std::move(blob));
 
   photo_callbacks_.erase(reference_it);
 }
@@ -428,6 +382,45 @@ void VideoCaptureDeviceAndroid::OnStarted(JNIEnv* env,
 
 void VideoCaptureDeviceAndroid::ConfigureForTesting() {
   Java_VideoCapture_setTestMode(AttachCurrentThread(), j_capture_);
+}
+
+void VideoCaptureDeviceAndroid::ProcessFirstFrameAvailable(
+    base::TimeTicks current_time) {
+  base::AutoLock lock(lock_);
+  if (got_first_frame_)
+    return;
+  got_first_frame_ = true;
+
+  // Set aside one frame allowance for fluctuation.
+  expected_next_frame_time_ = current_time - frame_interval_;
+  for (const auto& request : photo_requests_queue_)
+    main_task_runner_->PostTask(FROM_HERE, request);
+  photo_requests_queue_.clear();
+}
+
+bool VideoCaptureDeviceAndroid::IsClientConfigured() {
+  base::AutoLock lock(lock_);
+  return (state_ == kConfigured && client_);
+}
+
+bool VideoCaptureDeviceAndroid::ThrottleFrame(base::TimeTicks current_time) {
+  if (expected_next_frame_time_ > current_time)
+    return true;
+  expected_next_frame_time_ += frame_interval_;
+  return false;
+}
+
+void VideoCaptureDeviceAndroid::SendIncomingDataToClient(
+    const uint8_t* data,
+    int length,
+    int rotation,
+    base::TimeTicks reference_time,
+    base::TimeDelta timestamp) {
+  base::AutoLock lock(lock_);
+  if (!client_)
+    return;
+  client_->OnIncomingCapturedData(data, length, capture_format_, rotation,
+                                  reference_time, timestamp);
 }
 
 VideoPixelFormat VideoCaptureDeviceAndroid::GetColorspace() {
@@ -580,7 +573,7 @@ void VideoCaptureDeviceAndroid::DoGetPhotoState(
     modes.push_back(ToMojomFillLightMode(fill_light_mode));
   photo_capabilities->fill_light_mode = modes;
 
-  callback.Run(std::move(photo_capabilities));
+  std::move(callback).Run(std::move(photo_capabilities));
 }
 
 void VideoCaptureDeviceAndroid::DoSetPhotoOptions(
@@ -647,7 +640,7 @@ void VideoCaptureDeviceAndroid::DoSetPhotoOptions(
       static_cast<int>(fill_light_mode), settings->has_torch, settings->torch,
       color_temperature);
 
-  callback.Run(true);
+  std::move(callback).Run(true);
 }
 
 }  // namespace media

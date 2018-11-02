@@ -11,6 +11,10 @@
 struct SupportedKeySystemRequest;
 struct SupportedKeySystemResponse;
 
+namespace base {
+class SequencedTaskRunner;
+}
+
 namespace cdm {
 
 // Message filter for EME on Android. It is responsible for getting the
@@ -19,21 +23,28 @@ namespace cdm {
 // desktop Chromium's IsPepperCdmAvailable() path.
 class CdmMessageFilterAndroid : public content::BrowserMessageFilter {
  public:
-  explicit CdmMessageFilterAndroid(bool can_use_secure_codecs = false);
+  CdmMessageFilterAndroid(bool can_persist_data,
+                          bool force_to_support_secure_codecs);
 
  private:
   ~CdmMessageFilterAndroid() override;
 
   // BrowserMessageFilter implementation.
   bool OnMessageReceived(const IPC::Message& message) override;
-  void OverrideThreadForMessage(const IPC::Message& message,
-                                content::BrowserThread::ID* thread) override;
+  base::TaskRunner* OverrideTaskRunnerForMessage(
+      const IPC::Message& message) override;
 
   // Query the key system information.
   void OnQueryKeySystemSupport(const SupportedKeySystemRequest& request,
                                SupportedKeySystemResponse* response);
 
   void OnGetPlatformKeySystemNames(std::vector<std::string>* key_systems);
+
+  const scoped_refptr<base::SequencedTaskRunner> task_runner_;
+
+  // Whether any data can be persisted by Chromium or by MediaDrm (e.g. false in
+  // incognito mode).
+  const bool can_persist_data_;
 
   // By default, rendering of secure codecs is supported when AndroidOverlay is
   // enabled. However, on platforms like Cast on Android, secure codecs are

@@ -66,6 +66,7 @@ class PathParser {
       case V_LINE_TO:
       case R_V_LINE_TO:
       case CANVAS_DIMENSIONS:
+      case PATH_COLOR_ALPHA:
         return 1;
 
       case MOVE_TO:
@@ -123,6 +124,7 @@ CommandType CommandFromString(const std::string& source) {
     return command;
 
   RETURN_IF_IS(NEW_PATH);
+  RETURN_IF_IS(PATH_COLOR_ALPHA);
   RETURN_IF_IS(PATH_COLOR_ARGB);
   RETURN_IF_IS(PATH_MODE_CLEAR);
   RETURN_IF_IS(STROKE);
@@ -211,6 +213,10 @@ void PaintPath(Canvas* canvas,
     switch (command_type) {
       // Handled above.
       case NEW_PATH:
+        break;
+
+      case PATH_COLOR_ALPHA:
+        flags.setAlpha(SkScalarFloorToInt(arg(0)));
         break;
 
       case PATH_COLOR_ARGB:
@@ -392,8 +398,9 @@ void PaintPath(Canvas* canvas,
         if (elapsed_time >= delay + duration) {
           state = 1;
         } else if (elapsed_time > delay) {
-          state = (elapsed_time - delay).ToInternalValue() /
-                  static_cast<double>(duration.ToInternalValue());
+          DCHECK(!duration.is_zero());
+          state = (elapsed_time - delay).InMicroseconds() /
+                  static_cast<double>(duration.InMicroseconds());
         }
 
         auto weight = Tween::CalculateValue(
@@ -432,12 +439,14 @@ void PaintPath(Canvas* canvas,
     previous_command_type = command_type;
   }
 
-  ScopedRTLFlipCanvas scoped_rtl_flip_canvas(canvas, canvas_size, flips_in_rtl);
+  ScopedCanvas scoped_canvas(canvas);
 
   if (dip_size != canvas_size) {
     SkScalar scale = SkIntToScalar(dip_size) / SkIntToScalar(canvas_size);
     canvas->sk_canvas()->scale(scale, scale);
   }
+
+  ScopedRTLFlipCanvas scoped_rtl_flip_canvas(canvas, canvas_size, flips_in_rtl);
 
   if (!clip_rect.isEmpty())
     canvas->sk_canvas()->clipRect(clip_rect);
@@ -497,7 +506,7 @@ class VectorIconCache {
     if (iter != images_.end())
       return iter->second;
 
-    ImageSkia icon_image(new VectorIconSource(description),
+    ImageSkia icon_image(base::MakeUnique<VectorIconSource>(description),
                          Size(description.dip_size, description.dip_size));
     images_.insert(std::make_pair(description, icon_image));
     return icon_image;

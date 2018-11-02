@@ -895,7 +895,7 @@ def perform_list_actions(action, target_location, main_source_location,
                        overlay_source_location)
 
 def DoMain(argv):
-  argparser = argparse.ArgumentParser();
+  argparser = argparse.ArgumentParser(add_help=False);
 
   action = argparser.add_mutually_exclusive_group(required=True)
   action.add_argument("--build", action="store_const", dest="action",
@@ -921,6 +921,7 @@ def DoMain(argv):
   action.add_argument("--list-all", action="store_const", dest="action",
                       const=PRINT_ALL)
 
+  argparser.add_argument("-h", action="append", dest="grit_code") # rc-arg, ignored
   argparser.add_argument("-D", action="append", dest="defines")
   argparser.add_argument("-E", action="append", dest="build_env")
   argparser.add_argument("-p", action="append", dest="profile_name")
@@ -937,7 +938,10 @@ def DoMain(argv):
   argparser.add_argument("secondary_resource")
   argparser.add_argument("target_dir")
 
-  options = argparser.parse_args(argv)
+  try:
+    options = argparser.parse_args(argv)
+  except:
+    sys.exit(1) # Any errors during parsing cause error
 
   # Copied from chromium
   # Copyright (c) 2012 The Chromium Authors. All rights reserved.

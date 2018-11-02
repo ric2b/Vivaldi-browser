@@ -131,7 +131,7 @@ void FontResource::StartLoadLimitTimers() {
                                            BLINK_FROM_HERE);
 }
 
-PassRefPtr<FontCustomPlatformData> FontResource::GetCustomFontData() {
+RefPtr<FontCustomPlatformData> FontResource::GetCustomFontData() {
   if (!font_data_ && !ErrorOccurred() && !IsLoading()) {
     if (Data())
       font_data_ = FontCustomPlatformData::Create(Data(), ots_parsing_message_);
@@ -203,11 +203,11 @@ void FontResource::AllClientsAndObserversRemoved() {
   Resource::AllClientsAndObserversRemoved();
 }
 
-void FontResource::CheckNotify() {
+void FontResource::NotifyFinished() {
   font_load_short_limit_timer_.Stop();
   font_load_long_limit_timer_.Stop();
 
-  Resource::CheckNotify();
+  Resource::NotifyFinished();
 }
 
 bool FontResource::IsLowPriorityLoadingAllowedForRemoteFont() const {

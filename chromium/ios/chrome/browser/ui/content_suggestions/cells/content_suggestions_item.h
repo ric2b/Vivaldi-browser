@@ -16,6 +16,8 @@ class Time;
 @class FaviconAttributes;
 class GURL;
 
+@protocol ContentSuggestionsGestureCommands;
+
 // Delegate for SuggestedContent.
 @protocol ContentSuggestionsItemDelegate
 
@@ -44,12 +46,19 @@ class GURL;
 @property(nonatomic, strong) UIImage* image;
 // Whether the suggestion has an image associated.
 @property(nonatomic, assign) BOOL hasImage;
-// Whether the suggestion is available offline. If YES, an icon is displayed.
-@property(nonatomic, assign) BOOL availableOffline;
 // Attributes for favicon.
 @property(nonatomic, strong) FaviconAttributes* attributes;
 // URL for the favicon, if different of |URL|.
 @property(nonatomic, assign) GURL faviconURL;
+// Whether this item should have an option to be read later.
+@property(nonatomic, assign) BOOL readLaterAction;
+// Command handler for the accessibility custom actions.
+@property(nonatomic, weak) id<ContentSuggestionsGestureCommands> commandHandler;
+
+// Score of the suggestions.
+@property(nonatomic, assign) float score;
+// Date when the suggestion has been fetched.
+@property(nonatomic, assign) base::Time fetchDate;
 
 @end
 

@@ -13,8 +13,8 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/containers/id_map.h"
 #include "base/files/file_path.h"
-#include "base/id_map.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list_threadsafe.h"
@@ -24,14 +24,12 @@
 #include "content/browser/service_worker/service_worker_registration_status.h"
 #include "content/browser/service_worker/service_worker_storage.h"
 #include "content/common/content_export.h"
-#include "content/common/worker_url_loader_factory_provider.mojom.h"
 #include "content/public/browser/service_worker_context.h"
 
 class GURL;
 
 namespace base {
 class FilePath;
-class SingleThreadTaskRunner;
 }
 
 namespace storage {
@@ -45,7 +43,6 @@ namespace content {
 class EmbeddedWorkerRegistry;
 class ServiceWorkerContextCoreObserver;
 class ServiceWorkerContextWrapper;
-class ServiceWorkerDatabaseTaskManager;
 class ServiceWorkerDispatcherHost;
 class ServiceWorkerJobCoordinator;
 class ServiceWorkerNavigationHandleCore;
@@ -60,7 +57,7 @@ class URLLoaderFactoryGetter;
 // is the root of the containment hierarchy for service worker data
 // associated with a particular partition.
 class CONTENT_EXPORT ServiceWorkerContextCore
-    : NON_EXPORTED_BASE(public ServiceWorkerVersion::Listener) {
+    : public ServiceWorkerVersion::Listener {
  public:
   using BoolCallback = base::Callback<void(bool)>;
   using StatusCallback = base::Callback<void(ServiceWorkerStatusCode status)>;
@@ -73,8 +70,8 @@ class CONTENT_EXPORT ServiceWorkerContextCore
                                              int64_t registration_id)>;
   using UnregistrationCallback =
       base::Callback<void(ServiceWorkerStatusCode status)>;
-  using ProviderMap = IDMap<std::unique_ptr<ServiceWorkerProviderHost>>;
-  using ProcessToProviderMap = IDMap<std::unique_ptr<ProviderMap>>;
+  using ProviderMap = base::IDMap<std::unique_ptr<ServiceWorkerProviderHost>>;
+  using ProcessToProviderMap = base::IDMap<std::unique_ptr<ProviderMap>>;
 
   using ProviderByClientUUIDMap =
       std::map<std::string, ServiceWorkerProviderHost*>;
@@ -117,9 +114,7 @@ class CONTENT_EXPORT ServiceWorkerContextCore
   // when IsServicificationEnabled is true.
   ServiceWorkerContextCore(
       const base::FilePath& user_data_directory,
-      std::unique_ptr<ServiceWorkerDatabaseTaskManager>
-          database_task_runner_manager,
-      const scoped_refptr<base::SingleThreadTaskRunner>& disk_cache_thread,
+      scoped_refptr<base::SequencedTaskRunner> database_task_runner,
       storage::QuotaManagerProxy* quota_manager_proxy,
       storage::SpecialStoragePolicy* special_storage_policy,
       base::WeakPtr<storage::BlobStorageContext> blob_context,
@@ -303,14 +298,6 @@ class CONTENT_EXPORT ServiceWorkerContextCore
   // version. The count resets to zero when the worker successfully starts.
   int GetVersionFailureCount(int64_t version_id);
 
-  // Binds the ServiceWorkerWorkerClient of a dedicated (or shared) worker to
-  // the parent frame's ServiceWorkerProviderHost. (This is used only when
-  // off-main-thread-fetch is enabled.)
-  void BindWorkerFetchContext(
-      int render_process_id,
-      int service_worker_provider_id,
-      mojom::ServiceWorkerWorkerClientAssociatedPtrInfo client_ptr_info);
-
   base::WeakPtr<storage::BlobStorageContext> blob_storage_context() {
     return blob_storage_context_;
   }
@@ -335,9 +322,7 @@ class CONTENT_EXPORT ServiceWorkerContextCore
     ServiceWorkerStatusCode last_failure;
   };
 
-  ProviderMap* GetProviderMapForProcess(int process_id) {
-    return providers_->Lookup(process_id);
-  }
+  ProviderMap* GetProviderMapForProcess(int process_id);
 
   void RegistrationComplete(const GURL& pattern,
                             const RegistrationCallback& callback,

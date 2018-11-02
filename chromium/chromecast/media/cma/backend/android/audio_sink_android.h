@@ -57,6 +57,14 @@ class AudioSinkAndroid {
     virtual ~Delegate() {}
   };
 
+  // Gets the Android audio session ids used for media and communication (TTS)
+  // tracks.
+  // Set a return value pointer to null if that id is not needed.
+  // Returns true if the ids populated are valid.
+  static bool GetSessionIds(SinkType sink_type,
+                            int* media_id,
+                            int* communication_id);
+
   AudioSinkAndroid() {}
   virtual ~AudioSinkAndroid() {}
 

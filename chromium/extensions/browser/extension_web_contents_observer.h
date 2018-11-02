@@ -11,10 +11,11 @@
 #include "base/macros.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "extensions/browser/extension_function_dispatcher.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 
 namespace content {
 class BrowserContext;
-class RenderViewHost;
+class RenderFrameHost;
 class WebContents;
 }
 
@@ -80,14 +81,15 @@ class ExtensionWebContentsObserver
   content::WebContents* GetAssociatedWebContents() const override;
 
   // content::WebContentsObserver overrides.
-
-  // A subclass should invoke this method to finish extension process setup.
-  void RenderViewCreated(content::RenderViewHost* render_view_host) override;
-
   void RenderFrameCreated(content::RenderFrameHost* render_frame_host) override;
   void RenderFrameDeleted(content::RenderFrameHost* render_frame_host) override;
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
+
+  void OnInterfaceRequestFromFrame(
+      content::RenderFrameHost* render_frame_host,
+      const std::string& interface_name,
+      mojo::ScopedMessagePipeHandle* interface_pipe) override;
 
   // Subclasses should call this first before doing their own message handling.
   bool OnMessageReceived(const IPC::Message& message,
@@ -103,15 +105,6 @@ class ExtensionWebContentsObserver
   std::string GetExtensionIdFromFrame(
       content::RenderFrameHost* render_frame_host) const;
 
-  // TODO(devlin): Remove these once callers are updated to use the FromFrame
-  // equivalents.
-  // Returns the extension or app associated with a render view host. Returns
-  // NULL if the render view host is not for a valid extension.
-  const Extension* GetExtension(content::RenderViewHost* render_view_host);
-  // Returns the extension or app ID associated with a render view host. Returns
-  // the empty string if the render view host is not for a valid extension.
-  static std::string GetExtensionId(content::RenderViewHost* render_view_host);
-
  private:
   void OnRequest(content::RenderFrameHost* render_frame_host,
                  const ExtensionHostMsg_Request_Params& params);
@@ -124,6 +117,8 @@ class ExtensionWebContentsObserver
   content::BrowserContext* browser_context_;
 
   ExtensionFunctionDispatcher dispatcher_;
+
+  service_manager::BinderRegistryWithArgs<content::RenderFrameHost*> registry_;
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionWebContentsObserver);
 };

@@ -16,6 +16,8 @@
 #include "extensions/common/manifest_handlers/background_info.h"
 #include "extensions/common/url_pattern_set.h"
 
+#include "app/vivaldi_apptools.h"
+
 using extensions::ErrorUtils;
 namespace helpers = extensions::context_menus_api_helpers;
 
@@ -35,6 +37,13 @@ namespace Update = api::context_menus::Update;
 ExtensionFunction::ResponseAction ContextMenusCreateFunction::Run() {
   MenuItem::Id id(browser_context()->IsOffTheRecord(),
                   MenuItem::ExtensionKey(extension_id()));
+  // NOTE(espen@vivaldi.com): Force regular mode for the limited set of
+  // items (search items) set by this api. These will be phased out with
+  // synchable search engines so this workaround can be removed then. VB-34245.
+  // We also have the same override in context_menus_api_helpers.h. Shall be
+  // removed at the same time. VB-34390
+  if (id.incognito && vivaldi::IsVivaldiApp(extension_id()))
+    id.incognito = false;
   std::unique_ptr<Create::Params> params(Create::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
@@ -62,6 +71,8 @@ ExtensionFunction::ResponseAction ContextMenusCreateFunction::Run() {
 ExtensionFunction::ResponseAction ContextMenusUpdateFunction::Run() {
   MenuItem::Id item_id(browser_context()->IsOffTheRecord(),
                        MenuItem::ExtensionKey(extension_id()));
+  if (item_id.incognito && vivaldi::IsVivaldiApp(extension_id()))
+    item_id.incognito = false;
   std::unique_ptr<Update::Params> params(Update::Params::Create(*args_));
 
   EXTENSION_FUNCTION_VALIDATE(params.get());
@@ -88,6 +99,8 @@ ExtensionFunction::ResponseAction ContextMenusRemoveFunction::Run() {
 
   MenuItem::Id id(browser_context()->IsOffTheRecord(),
                   MenuItem::ExtensionKey(extension_id()));
+  if (id.incognito && vivaldi::IsVivaldiApp(extension_id()))
+    id.incognito = false;
   if (params->menu_item_id.as_string)
     id.string_uid = *params->menu_item_id.as_string;
   else if (params->menu_item_id.as_integer)

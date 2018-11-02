@@ -126,6 +126,7 @@ h3 {
 #clipboard-dialog {
   top: 0;
   bottom: 0;
+  padding-top: 0;
 }
 
 ::backdrop {
@@ -187,6 +188,7 @@ label.selectable-button {
   padding: 6px;
   margin: 4px 0;
   line-height: 1.4;
+  word-break: break-all;
 }
 
 input.selectable-button {

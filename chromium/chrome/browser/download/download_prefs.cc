@@ -130,10 +130,9 @@ DownloadPrefs::DownloadPrefs(Profile* profile) : profile_(profile) {
   }
 
   // Ensure that the default download directory exists.
-  BrowserThread::PostTask(
-      BrowserThread::FILE, FROM_HERE,
-      base::BindOnce(base::IgnoreResult(&base::CreateDirectory),
-                     GetDefaultDownloadDirectoryForProfile()));
+  content::DownloadManager::GetTaskRunner()->PostTask(
+      FROM_HERE, base::BindOnce(base::IgnoreResult(&base::CreateDirectory),
+                                GetDefaultDownloadDirectoryForProfile()));
 #endif  // defined(OS_CHROMEOS)
 
 #if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_MACOSX)
@@ -318,7 +317,9 @@ bool DownloadPrefs::IsAutoOpenEnabledBasedOnExtension(
   DCHECK(extension[0] == base::FilePath::kExtensionSeparator);
   extension.erase(0, 1);
 #if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_MACOSX)
-  if (extension == FILE_PATH_LITERAL("pdf") && ShouldOpenPdfInSystemReader())
+  if (base::FilePath::CompareEqualIgnoreCase(extension,
+                                             FILE_PATH_LITERAL("pdf")) &&
+      ShouldOpenPdfInSystemReader())
     return true;
 #endif
 

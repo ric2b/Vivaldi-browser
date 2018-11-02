@@ -9,6 +9,7 @@
 <translation id="1195412055398077112">overscan</translation>
 <translation id="1247372569136754018">Mikrofon (intern)</translation>
 <translation id="1252999807265626933">Lader fra <ph name="POWER_SOURCE" /></translation>
+<translation id="1267032506238418139">Endring av hurtigtast</translation>
 <translation id="1270290102613614947">Skjermtastaturet er deaktivert</translation>
 <translation id="1272079795634619415">Stopp</translation>
 <translation id="1279938420744323401"><ph name="DISPLAY_NAME" /> (<ph name="ANNOTATION" />)</translation>
@@ -22,7 +23,6 @@
 <translation id="15373452373711364">Stor markør</translation>
 <translation id="1550523713251050646">Klikk for å se flere alternativer</translation>
 <translation id="1621499497873603021">Gjenværende tid til batteriet er tomt – <ph name="TIME_LEFT" /></translation>
-<translation id="164969095109328410">Chrome-enhet</translation>
 <translation id="1677472565718498478"><ph name="TIME" /> igjen</translation>
 <translation id="1698760176351776263">IPv6-adresse: <ph name="ADDRESS" /></translation>
 <translation id="1734367976349034509">Denne enheten er administrert av en bedrift</translation>
@@ -92,6 +92,7 @@
 <translation id="315116470104423982">Mobildata</translation>
 <translation id="3236488194889173876">Ingen mobilnettverk er tilgjengelige</translation>
 <translation id="3294437725009624529">Gjest</translation>
+<translation id="332587331255250389">Bytt ut batteriet</translation>
 <translation id="3364721542077212959">Pekepennverktøy</translation>
 <translation id="3368922792935385530">Tilkoblet</translation>
 <translation id="3371140690572404006">USB-C-enhet (porten foran på høyre side)</translation>
@@ -110,6 +111,7 @@
 <translation id="3712407551474845318">Ta skjermdump av et område</translation>
 <translation id="371370241367527062">Mikrofon foran</translation>
 <translation id="3742055079367172538">Skjermdump tatt</translation>
+<translation id="3771549900096082774">Høykontrastmodus</translation>
 <translation id="3775358506042162758">Du kan bare ha opptil tre kontoer i flerpålogging.</translation>
 <translation id="3783640748446814672">alt</translation>
 <translation id="3784455785234192852">Lås</translation>
@@ -142,14 +144,12 @@
 <translation id="4729904664295161097">Assistenten er bare tilgjengelig for hovedprofilen.</translation>
 <translation id="479989351350248267">søk</translation>
 <translation id="4804818685124855865">Koble fra</translation>
-<translation id="4821830640883629383">Lad pekepennen eller bytt ut batteriene.</translation>
 <translation id="4849058404725798627">Fremhev objektet med tastaturfokus</translation>
 <translation id="4872237917498892622">Alt + Søk eller Shift</translation>
 <translation id="4895488851634969361">Batteriet er fullt.</translation>
 <translation id="4905614135390995787">Hurtigtasten for å slå høykontrastmodus av eller på er endret. Bruk <ph name="NEW_SHORTCUT" /> i stedet for <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="4918086044614829423">Godta</translation>
 <translation id="4961318399572185831">Cast skjermen</translation>
-<translation id="5011233892417813670">Chromebook</translation>
 <translation id="5168181903108465623">Cast-enheter er tilgjengelige</translation>
 <translation id="5170568018924773124">Vis i mappen</translation>
 <translation id="5207949376430453814">Fremhev tekstinnsettingspunktet</translation>
@@ -175,7 +175,6 @@
 <translation id="5901316534475909376">Shift+Esc</translation>
 <translation id="5916664084637901428">På</translation>
 <translation id="5927132638760172455">Caster til en ukjent mottaker</translation>
-<translation id="5932901536148835538">Chromebit</translation>
 <translation id="5947494881799873997">Tilbakestill</translation>
 <translation id="595202126637698455">Ytelsessporing er aktivert</translation>
 <translation id="5957083217255311415">Mobildata er slått av.</translation>
@@ -218,7 +217,6 @@
 <translation id="683971173229319003">Søk+L</translation>
 <translation id="6857811139397017780">Aktiver <ph name="NETWORKSERVICE" /></translation>
 <translation id="6911468394164995108">Koble til annet</translation>
-<translation id="6915678159055240887">Chromebox</translation>
 <translation id="6981982820502123353">Tilgjengelighet</translation>
 <translation id="7029814467594812963">Avslutt økten</translation>
 <translation id="7034339000180558234">Caster <ph name="TAB_NAME" /> til <ph name="RECEIVER_NAME" /></translation>
@@ -226,7 +224,6 @@
 <translation id="7066646422045619941">Administratoren din har slått av dette nettverket.</translation>
 <translation id="7067196344162293536">Automatisk retning</translation>
 <translation id="7098389117866926363">USB-C-enhet (venstre port på baksiden)</translation>
-<translation id="714034171374937760">Chromebase</translation>
 <translation id="7165278925115064263">Alt + Shift + K</translation>
 <translation id="7168224885072002358">Går tilbake til den gamle oppløsningen om <ph name="TIMEOUT_SECONDS" /></translation>
 <translation id="7246339268451149667">Vil du slå på opplåsing med fingeravtrykk?</translation>

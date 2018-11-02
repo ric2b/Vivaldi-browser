@@ -41,22 +41,25 @@ struct RenderInfo {
   EyeInfo left_eye_info;
   EyeInfo right_eye_info;
 
-  gfx::Size content_texture_size;
+  gfx::Size surface_texture_size;
 };
 
 // Renders a UI scene.
 class UiRenderer {
  public:
   UiRenderer(UiScene* scene,
-             int content_texture_id,
              VrShellRenderer* vr_shell_renderer);
   ~UiRenderer();
 
   void Draw(const RenderInfo& render_info,
             const ControllerInfo& controller_info,
             bool web_vr_mode);
-  void DrawHeadLocked(const RenderInfo& render_info,
-                      const ControllerInfo& controller_info);
+  // This is used to draw visible viewport aware elements in the scene, i.e.
+  // the security warning elements on top of WebVR or the exit warning element
+  // in ChromeVR.
+  void DrawViewportAware(const RenderInfo& render_info,
+                         const ControllerInfo& controller_info,
+                         bool web_vr_mode);
 
  private:
   void DrawWorldElements(const RenderInfo& render_info,
@@ -74,8 +77,7 @@ class UiRenderer {
                     const ControllerInfo& controller_info,
                     bool draw_reticle);
   void DrawElement(const gfx::Transform& view_proj_matrix,
-                   const UiElement& element,
-                   const gfx::Size& content_texture_size);
+                   const UiElement& element);
   std::vector<const UiElement*> GetElementsInDrawOrder(
       const gfx::Transform& view_matrix,
       const std::vector<const UiElement*>& elements);
@@ -90,7 +92,6 @@ class UiRenderer {
                       const ControllerInfo& controller_info);
 
   UiScene* scene_ = nullptr;
-  int content_texture_id_ = 0;
   VrShellRenderer* vr_shell_renderer_ = nullptr;
 };
 

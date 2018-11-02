@@ -15,8 +15,8 @@
 #include "mojo/public/cpp/bindings/strong_binding_set.h"
 #include "services/ui/gpu/gpu_main.h"
 #include "services/ui/gpu/interfaces/gpu_host.mojom.h"
-#include "services/ui/gpu/interfaces/gpu_service.mojom.h"
 #include "services/ui/public/interfaces/gpu.mojom.h"
+#include "services/viz/privileged/interfaces/gl/gpu_service.mojom.h"
 
 namespace viz {
 class ServerGpuMemoryBufferManager;
@@ -45,10 +45,10 @@ class GpuHost {
   virtual void OnAcceleratedWidgetAvailable(gfx::AcceleratedWidget widget) = 0;
   virtual void OnAcceleratedWidgetDestroyed(gfx::AcceleratedWidget widget) = 0;
 
-  // Requests a cc::mojom::FrameSinkManager interface from mus-gpu.
+  // Requests a viz::mojom::FrameSinkManager interface from mus-gpu.
   virtual void CreateFrameSinkManager(
-      cc::mojom::FrameSinkManagerRequest request,
-      cc::mojom::FrameSinkManagerClientPtr client) = 0;
+      viz::mojom::FrameSinkManagerRequest request,
+      viz::mojom::FrameSinkManagerClientPtr client) = 0;
 };
 
 class DefaultGpuHost : public GpuHost, public mojom::GpuHost {
@@ -67,8 +67,8 @@ class DefaultGpuHost : public GpuHost, public mojom::GpuHost {
   void OnAcceleratedWidgetAvailable(gfx::AcceleratedWidget widget) override;
   void OnAcceleratedWidgetDestroyed(gfx::AcceleratedWidget widget) override;
   void CreateFrameSinkManager(
-      cc::mojom::FrameSinkManagerRequest request,
-      cc::mojom::FrameSinkManagerClientPtr client) override;
+      viz::mojom::FrameSinkManagerRequest request,
+      viz::mojom::FrameSinkManagerClientPtr client) override;
 
   // mojom::GpuHost:
   void DidInitialize(const gpu::GPUInfo& gpu_info,
@@ -92,7 +92,7 @@ class DefaultGpuHost : public GpuHost, public mojom::GpuHost {
   GpuHostDelegate* const delegate_;
   int32_t next_client_id_;
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
-  mojom::GpuServicePtr gpu_service_;
+  viz::mojom::GpuServicePtr gpu_service_;
   mojo::Binding<mojom::GpuHost> gpu_host_binding_;
   gpu::GPUInfo gpu_info_;
   std::unique_ptr<viz::ServerGpuMemoryBufferManager> gpu_memory_buffer_manager_;

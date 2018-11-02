@@ -143,18 +143,15 @@ public class PaymentRequestContactDetailsTest implements MainActivityStartCallba
 
         // Quickly press on "add contact info" and then [X].
         int callCount = mPaymentRequestTestRule.getReadyToEdit().getCallCount();
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                mPaymentRequestTestRule.getPaymentRequestUI()
-                        .getContactDetailsSectionForTest()
-                        .findViewById(R.id.payments_add_option_button)
-                        .performClick();
-                mPaymentRequestTestRule.getPaymentRequestUI()
-                        .getDialogForTest()
-                        .findViewById(R.id.close_button)
-                        .performClick();
-            }
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            mPaymentRequestTestRule.getPaymentRequestUI()
+                    .getContactDetailsSectionForTest()
+                    .findViewById(R.id.payments_add_option_button)
+                    .performClick();
+            mPaymentRequestTestRule.getPaymentRequestUI()
+                    .getDialogForTest()
+                    .findViewById(R.id.close_button)
+                    .performClick();
         });
         mPaymentRequestTestRule.getReadyToEdit().waitForCallback(callCount);
 
@@ -177,18 +174,15 @@ public class PaymentRequestContactDetailsTest implements MainActivityStartCallba
 
         // Quickly press on [X] and then "add contact info."
         int callCount = mPaymentRequestTestRule.getDismissed().getCallCount();
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                mPaymentRequestTestRule.getPaymentRequestUI()
-                        .getDialogForTest()
-                        .findViewById(R.id.close_button)
-                        .performClick();
-                mPaymentRequestTestRule.getPaymentRequestUI()
-                        .getContactDetailsSectionForTest()
-                        .findViewById(R.id.payments_add_option_button)
-                        .performClick();
-            }
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            mPaymentRequestTestRule.getPaymentRequestUI()
+                    .getDialogForTest()
+                    .findViewById(R.id.close_button)
+                    .performClick();
+            mPaymentRequestTestRule.getPaymentRequestUI()
+                    .getContactDetailsSectionForTest()
+                    .findViewById(R.id.payments_add_option_button)
+                    .performClick();
         });
         mPaymentRequestTestRule.getDismissed().waitForCallback(callCount);
 
@@ -249,18 +243,15 @@ public class PaymentRequestContactDetailsTest implements MainActivityStartCallba
 
         // Quickly press on "add contact info" and then "cancel."
         int callCount = mPaymentRequestTestRule.getReadyToEdit().getCallCount();
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                mPaymentRequestTestRule.getPaymentRequestUI()
-                        .getContactDetailsSectionForTest()
-                        .findViewById(R.id.payments_add_option_button)
-                        .performClick();
-                mPaymentRequestTestRule.getPaymentRequestUI()
-                        .getDialogForTest()
-                        .findViewById(R.id.button_secondary)
-                        .performClick();
-            }
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            mPaymentRequestTestRule.getPaymentRequestUI()
+                    .getContactDetailsSectionForTest()
+                    .findViewById(R.id.payments_add_option_button)
+                    .performClick();
+            mPaymentRequestTestRule.getPaymentRequestUI()
+                    .getDialogForTest()
+                    .findViewById(R.id.button_secondary)
+                    .performClick();
         });
         mPaymentRequestTestRule.getReadyToEdit().waitForCallback(callCount);
 
@@ -283,18 +274,15 @@ public class PaymentRequestContactDetailsTest implements MainActivityStartCallba
 
         // Quickly press on "cancel" and then "add contact info."
         int callCount = mPaymentRequestTestRule.getDismissed().getCallCount();
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                mPaymentRequestTestRule.getPaymentRequestUI()
-                        .getDialogForTest()
-                        .findViewById(R.id.button_secondary)
-                        .performClick();
-                mPaymentRequestTestRule.getPaymentRequestUI()
-                        .getContactDetailsSectionForTest()
-                        .findViewById(R.id.payments_add_option_button)
-                        .performClick();
-            }
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            mPaymentRequestTestRule.getPaymentRequestUI()
+                    .getDialogForTest()
+                    .findViewById(R.id.button_secondary)
+                    .performClick();
+            mPaymentRequestTestRule.getPaymentRequestUI()
+                    .getContactDetailsSectionForTest()
+                    .findViewById(R.id.payments_add_option_button)
+                    .performClick();
         });
         mPaymentRequestTestRule.getDismissed().waitForCallback(callCount);
 
@@ -318,13 +306,12 @@ public class PaymentRequestContactDetailsTest implements MainActivityStartCallba
 
     /**
      * Test that ending a payment request that requires the user's email address, phone number and
-     * name results in the appropriate metric being logged in the
-     * PaymentRequest.RequestedInformation histogram.
+     * name results in the appropriate metric being logged in PaymentRequest.Events.
      */
     @Test
     @MediumTest
     @Feature({"Payments"})
-    public void testRequestedInformationMetric()
+    public void testPaymentRequestEventsMetric()
             throws InterruptedException, ExecutionException, TimeoutException {
         // Start and complete the Payment Request.
         mPaymentRequestTestRule.triggerUIAndWait(mPaymentRequestTestRule.getReadyToPay());
@@ -333,16 +320,14 @@ public class PaymentRequestContactDetailsTest implements MainActivityStartCallba
         mPaymentRequestTestRule.expectResultContains(
                 new String[] {"Jon Doe", "+15555555555", "jon.doe@google.com"});
 
-        // Make sure that only the appropriate enum value was logged.
-        for (int i = 0; i < RequestedInformation.MAX; ++i) {
-            Assert.assertEquals((i
-                                                        == (RequestedInformation.EMAIL
-                                                                   | RequestedInformation.PHONE
-                                                                   | RequestedInformation.NAME)
-                                                ? 1
-                                                : 0),
-                    RecordHistogram.getHistogramValueCountForTesting(
-                            "PaymentRequest.RequestedInformation", i));
-        }
+        int expectedSample = Event.SHOWN | Event.COMPLETED | Event.PAY_CLICKED
+                | Event.HAD_INITIAL_FORM_OF_PAYMENT | Event.HAD_NECESSARY_COMPLETE_SUGGESTIONS
+                | Event.RECEIVED_INSTRUMENT_DETAILS | Event.REQUEST_PAYER_EMAIL
+                | Event.REQUEST_PAYER_PHONE | Event.REQUEST_PAYER_NAME
+                | Event.REQUEST_METHOD_BASIC_CARD | Event.REQUEST_METHOD_OTHER
+                | Event.SELECTED_OTHER;
+        Assert.assertEquals(1,
+                RecordHistogram.getHistogramValueCountForTesting(
+                        "PaymentRequest.Events", expectedSample));
     }
 }

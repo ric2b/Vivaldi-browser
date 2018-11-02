@@ -241,13 +241,13 @@ Polymer({
   /** @override */
   attached: function() {
     // Create listener functions.
-    var setSavedPasswordsListener = function(list) {
+    var setSavedPasswordsListener = list => {
       this.savedPasswords = list;
-    }.bind(this);
+    };
 
-    var setPasswordExceptionsListener = function(list) {
+    var setPasswordExceptionsListener = list => {
       this.passwordExceptions = list;
-    }.bind(this);
+    };
 
     this.setSavedPasswordsListener_ = setSavedPasswordsListener;
     this.setPasswordExceptionsListener_ = setPasswordExceptionsListener;
@@ -274,19 +274,6 @@ Polymer({
     this.passwordManager_.removeExceptionListChangedListener(
         /** @type {function(!Array<PasswordManager.ExceptionEntry>):void} */ (
             this.setPasswordExceptionsListener_));
-  },
-
-  /**
-   * Sets the password in the current password dialog if the loginPair matches.
-   * @param {!chrome.passwordsPrivate.LoginPair} loginPair
-   * @param {string} password
-   */
-  setPassword: function(loginPair, password) {
-    if (this.activePassword &&
-        this.activePassword.loginPair.urls.origin == loginPair.urls.origin &&
-        this.activePassword.loginPair.username == loginPair.username) {
-      this.$$('password-edit-dialog').password = password;
-    }
   },
 
   /**
@@ -317,9 +304,9 @@ Polymer({
     if (!filter)
       return savedPasswords;
 
-    return savedPasswords.filter(function(password) {
-      return password.loginPair.urls.shown.includes(filter) ||
-          password.loginPair.username.includes(filter);
+    return savedPasswords.filter(p => {
+      return [p.loginPair.urls.shown, p.loginPair.username].some(
+          term => term.toLowerCase().includes(filter.toLowerCase()));
     });
   },
 
@@ -330,7 +317,7 @@ Polymer({
    */
   passwordExceptionFilter_: function(filter) {
     return function(exception) {
-      return exception.urls.shown.includes(filter);
+      return exception.urls.shown.toLowerCase().includes(filter.toLowerCase());
     };
   },
 
@@ -385,10 +372,10 @@ Polymer({
    */
   showPassword_: function(event) {
     this.passwordManager_.getPlaintextPassword(
-        /** @type {!PasswordManager.LoginPair} */ (event.detail),
-        function(item) {
-          this.setPassword(item.loginPair, item.plaintextPassword);
-        }.bind(this));
+        /** @type {!PasswordManager.LoginPair} */ (event.detail.item.loginPair),
+        item => {
+          event.detail.password = item.plaintextPassword;
+        });
   },
 
   /**

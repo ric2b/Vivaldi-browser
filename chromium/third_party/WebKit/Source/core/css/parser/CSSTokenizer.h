@@ -35,6 +35,10 @@ class CORE_EXPORT CSSTokenizer {
   Vector<String> TakeEscapedStrings() { return std::move(string_pool_); }
 
  private:
+  CSSParserToken TokenizeSingle();
+  void EnsureTokenizedToEOF();
+  unsigned CurrentSize() const;
+
   CSSParserToken NextToken();
 
   UChar Consume();
@@ -103,9 +107,11 @@ class CORE_EXPORT CSSTokenizer {
   CSSTokenizerInputStream input_;
   Vector<CSSParserTokenType, 8> block_stack_;
 
-  Vector<CSSParserToken, 32> tokens_;
+  Vector<CSSParserToken> tokens_;
   // We only allocate strings when escapes are used.
   Vector<String> string_pool_;
+
+  friend class CSSParserTokenStream;
 };
 
 }  // namespace blink

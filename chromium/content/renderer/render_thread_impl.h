@@ -119,7 +119,9 @@ class Extension;
 }
 
 namespace viz {
+class BeginFrameSource;
 class ClientSharedBitmapManager;
+class SyntheticBeginFrameSource;
 }
 
 namespace content {
@@ -176,8 +178,8 @@ class CONTENT_EXPORT RenderThreadImpl
       public blink::scheduler::RendererScheduler::RAILModeObserver,
       public ChildMemoryCoordinatorDelegate,
       public base::MemoryCoordinatorClient,
-      NON_EXPORTED_BASE(public mojom::Renderer),
-      NON_EXPORTED_BASE(public CompositorDependencies) {
+      public mojom::Renderer,
+      public CompositorDependencies {
  public:
   static RenderThreadImpl* Create(const InProcessChildThreadParams& params);
   static RenderThreadImpl* Create(
@@ -229,6 +231,8 @@ class CONTENT_EXPORT RenderThreadImpl
   int32_t GetClientId() override;
   scoped_refptr<base::SingleThreadTaskRunner> GetTimerTaskRunner() override;
   scoped_refptr<base::SingleThreadTaskRunner> GetLoadingTaskRunner() override;
+  void SetRendererProcessType(
+      blink::scheduler::RendererProcessType type) override;
 
   // IPC::Listener implementation via ChildThreadImpl:
   void OnAssociatedInterfaceRequest(
@@ -283,7 +287,7 @@ class CONTENT_EXPORT RenderThreadImpl
 
   std::unique_ptr<cc::SwapPromise> RequestCopyOfOutputForLayoutTest(
       int32_t routing_id,
-      std::unique_ptr<cc::CopyOutputRequest> request);
+      std::unique_ptr<viz::CopyOutputRequest> request);
 
   // True if we are running layout tests. This currently disables forwarding
   // various status messages to the console, skips network error pages, and
@@ -384,7 +388,7 @@ class CONTENT_EXPORT RenderThreadImpl
   // Returns a SingleThreadTaskRunner instance corresponding to the message loop
   // of the thread on which file operations should be run. Must be called
   // on the renderer's main thread.
-  scoped_refptr<base::SingleThreadTaskRunner> GetFileThreadTaskRunner();
+  scoped_refptr<base::TaskRunner> GetFileThreadTaskRunner();
 
   // Returns a SingleThreadTaskRunner instance corresponding to the message loop
   // of the thread on which media operations should be run. Must be called
@@ -501,7 +505,6 @@ class CONTENT_EXPORT RenderThreadImpl
 
   mojom::StoragePartitionService* GetStoragePartitionService();
   mojom::RendererHost* GetRendererHost();
-  mojom::URLLoaderFactory* GetBlobURLLoaderFactory();
 
   // ChildMemoryCoordinatorDelegate implementation.
   void OnTrimMemoryImmediately() override;
@@ -518,9 +521,7 @@ class CONTENT_EXPORT RenderThreadImpl
   };
   bool GetRendererMemoryMetrics(RendererMemoryMetrics* memory_metrics) const;
 
-  bool NeedsToRecordFirstActivePaint() const {
-    return needs_to_record_first_active_paint_;
-  }
+  bool NeedsToRecordFirstActivePaint(int metric_type) const;
 
  protected:
   RenderThreadImpl(
@@ -566,6 +567,9 @@ class CONTENT_EXPORT RenderThreadImpl
   // mojom::Renderer:
   void CreateView(mojom::CreateViewParamsPtr params) override;
   void CreateFrame(mojom::CreateFrameParamsPtr params) override;
+  void SetUpEmbeddedWorkerChannelForServiceWorker(
+      mojom::EmbeddedWorkerInstanceClientAssociatedRequest client_request)
+      override;
   void CreateFrameProxy(int32_t routing_id,
                         int32_t render_view_routing_id,
                         int32_t opener_routing_id,
@@ -606,10 +610,10 @@ class CONTENT_EXPORT RenderThreadImpl
   void OnSyncMemoryPressure(
       base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level);
 
-  std::unique_ptr<cc::BeginFrameSource> CreateExternalBeginFrameSource(
+  std::unique_ptr<viz::BeginFrameSource> CreateExternalBeginFrameSource(
       int routing_id);
 
-  std::unique_ptr<cc::SyntheticBeginFrameSource>
+  std::unique_ptr<viz::SyntheticBeginFrameSource>
   CreateSyntheticBeginFrameSource();
 
   void OnRendererInterfaceRequest(mojom::RendererAssociatedRequest request);
@@ -668,6 +672,9 @@ class CONTENT_EXPORT RenderThreadImpl
 
   std::unique_ptr<viz::ClientSharedBitmapManager> shared_bitmap_manager_;
 
+  // The time Blink was initialized. Used for UMA.
+  base::TimeTicks blink_initialized_time_;
+
   // The count of RenderWidgets running through this thread.
   int widget_count_;
 
@@ -696,9 +703,6 @@ class CONTENT_EXPORT RenderThreadImpl
   // This message loop should be destructed before the RenderThreadImpl
   // shuts down Blink.
   std::unique_ptr<base::MessageLoop> main_message_loop_;
-
-  // A lazily initiated thread on which file operations are run.
-  std::unique_ptr<base::Thread> file_thread_;
 
   // May be null if overridden by ContentRendererClient.
   std::unique_ptr<blink::scheduler::WebThreadBase> compositor_thread_;
@@ -801,7 +805,6 @@ class CONTENT_EXPORT RenderThreadImpl
 
   mojom::StoragePartitionServicePtr storage_partition_service_;
   mojom::RendererHostPtr renderer_host_;
-  mojom::URLLoaderFactoryPtr blob_url_loader_factory_;
 
   AssociatedInterfaceRegistryImpl associated_interfaces_;
 
@@ -812,6 +815,7 @@ class CONTENT_EXPORT RenderThreadImpl
 
   RendererMemoryMetrics purge_and_suspend_memory_metrics_;
   bool needs_to_record_first_active_paint_;
+  base::TimeTicks was_backgrounded_time_;
   int process_foregrounded_count_;
 
   int32_t client_id_;

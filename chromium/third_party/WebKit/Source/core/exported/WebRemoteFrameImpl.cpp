@@ -7,13 +7,12 @@
 #include "bindings/core/v8/WindowProxy.h"
 #include "core/dom/RemoteSecurityContext.h"
 #include "core/dom/SecurityContext.h"
-#include "core/exported/WebFactory.h"
-#include "core/exported/WebViewBase.h"
+#include "core/exported/WebViewImpl.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/RemoteFrameClientImpl.h"
 #include "core/frame/RemoteFrameOwner.h"
 #include "core/frame/Settings.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/fullscreen/Fullscreen.h"
 #include "core/html/HTMLFrameOwnerElement.h"
@@ -59,7 +58,7 @@ WebRemoteFrameImpl* WebRemoteFrameImpl::CreateMainFrame(
   WebRemoteFrameImpl* frame =
       new WebRemoteFrameImpl(WebTreeScopeType::kDocument, client);
   frame->SetOpener(opener);
-  Page& page = *static_cast<WebViewBase*>(web_view)->GetPage();
+  Page& page = *static_cast<WebViewImpl*>(web_view)->GetPage();
   // It would be nice to DCHECK that the main frame is not set yet here.
   // Unfortunately, there is an edge case with a pending RenderFrameHost that
   // violates this: the embedder may create a pending RenderFrameHost for
@@ -77,7 +76,6 @@ WebRemoteFrameImpl::~WebRemoteFrameImpl() {}
 DEFINE_TRACE(WebRemoteFrameImpl) {
   visitor->Trace(frame_client_);
   visitor->Trace(frame_);
-  WebRemoteFrameBase::Trace(visitor);
   WebFrame::TraceFrames(visitor, this);
 }
 
@@ -104,15 +102,6 @@ void WebRemoteFrameImpl::Close() {
   self_keep_alive_.Clear();
 }
 
-WebString WebRemoteFrameImpl::AssignedName() const {
-  NOTREACHED();
-  return WebString();
-}
-
-void WebRemoteFrameImpl::SetName(const WebString&) {
-  NOTREACHED();
-}
-
 WebRect WebRemoteFrameImpl::VisibleContentRect() const {
   NOTREACHED();
   return WebRect();
@@ -126,23 +115,9 @@ WebView* WebRemoteFrameImpl::View() const {
   return GetFrame()->GetPage()->GetChromeClient().GetWebView();
 }
 
-WebPerformance WebRemoteFrameImpl::Performance() const {
-  NOTREACHED();
-  return WebPerformance();
-}
-
 void WebRemoteFrameImpl::StopLoading() {
   // TODO(dcheng,japhet): Calling this method should stop loads
   // in all subframes, both remote and local.
-}
-
-void WebRemoteFrameImpl::EnableViewSourceMode(bool enable) {
-  NOTREACHED();
-}
-
-bool WebRemoteFrameImpl::IsViewSourceModeEnabled() const {
-  NOTREACHED();
-  return false;
 }
 
 WebLocalFrame* WebRemoteFrameImpl::CreateLocalChild(
@@ -155,8 +130,8 @@ WebLocalFrame* WebRemoteFrameImpl::CreateLocalChild(
     const WebParsedFeaturePolicy& container_policy,
     const WebFrameOwnerProperties& frame_owner_properties,
     WebFrame* opener) {
-  WebLocalFrameBase* child = WebFactory::GetInstance().CreateWebLocalFrameBase(
-      scope, client, interface_registry, opener);
+  WebLocalFrameImpl* child =
+      WebLocalFrameImpl::Create(scope, client, interface_registry, opener);
   InsertAfter(child, previous_sibling);
   RemoteFrameOwner* owner =
       RemoteFrameOwner::Create(static_cast<SandboxFlags>(sandbox_flags),
@@ -207,7 +182,7 @@ WebRemoteFrameImpl* WebRemoteFrameImpl::FromFrame(RemoteFrame& frame) {
     return nullptr;
   RemoteFrameClientImpl* client =
       static_cast<RemoteFrameClientImpl*>(frame.Client());
-  return ToWebRemoteFrameImpl(client->GetWebFrame());
+  return client->GetWebFrame();
 }
 
 void WebRemoteFrameImpl::SetReplicatedOrigin(const WebSecurityOrigin& origin) {
@@ -305,8 +280,8 @@ void WebRemoteFrameImpl::DidStartLoading() {
 void WebRemoteFrameImpl::DidStopLoading() {
   GetFrame()->SetIsLoading(false);
   if (Parent() && Parent()->IsWebLocalFrame()) {
-    WebLocalFrameBase* parent_frame =
-        ToWebLocalFrameBase(Parent()->ToWebLocalFrame());
+    WebLocalFrameImpl* parent_frame =
+        ToWebLocalFrameImpl(Parent()->ToWebLocalFrame());
     parent_frame->GetFrame()->GetDocument()->CheckCompleted();
   }
 }
@@ -342,7 +317,7 @@ void WebRemoteFrameImpl::WillEnterFullscreen() {
 }
 
 void WebRemoteFrameImpl::SetHasReceivedUserGesture() {
-  GetFrame()->SetDocumentHasReceivedUserGesture();
+  GetFrame()->UpdateUserActivationInFrameTree();
 }
 
 v8::Local<v8::Object> WebRemoteFrameImpl::GlobalProxy() const {
@@ -353,7 +328,7 @@ v8::Local<v8::Object> WebRemoteFrameImpl::GlobalProxy() const {
 
 WebRemoteFrameImpl::WebRemoteFrameImpl(WebTreeScopeType scope,
                                        WebRemoteFrameClient* client)
-    : WebRemoteFrameBase(scope),
+    : WebRemoteFrame(scope),
       frame_client_(RemoteFrameClientImpl::Create(this)),
       client_(client),
       self_keep_alive_(this) {

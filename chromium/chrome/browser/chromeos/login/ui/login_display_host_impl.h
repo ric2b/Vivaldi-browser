@@ -66,7 +66,7 @@ class LoginDisplayHostImpl : public LoginDisplayHost,
   WebUILoginView* GetWebUILoginView() const override;
   void BeforeSessionStart() override;
   void Finalize(base::OnceClosure completion_callback) override;
-  void OpenProxySettings() override;
+  void OpenProxySettings(const std::string& network_id) override;
   void SetStatusAreaVisible(bool visible) override;
   void StartWizard(OobeScreen first_screen) override;
   WizardController* GetWizardController() override;
@@ -298,12 +298,8 @@ class LoginDisplayHostImpl : public LoginDisplayHost,
 
   // True when request to play startup sound was sent to
   // SoundsManager.
+  // After OOBE is completed, this is always initialized with true.
   bool startup_sound_played_ = false;
-
-  // When true, startup sound should be played only when spoken
-  // feedback is enabled.  Otherwise, startup sound should be played
-  // in any case.
-  bool startup_sound_honors_spoken_feedback_ = false;
 
   // Keeps a copy of the old Drag'n'Drop client, so that it would be disabled
   // during a login session and restored afterwards.

@@ -497,6 +497,13 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
                                 ? calling_profile->GetOffTheRecordProfile()
                                 : calling_profile;
 
+  // We allow opening normal windows from an incognito window, but only
+  // if we do it ourself.
+  if (is_vivaldi && vivaldi::IsVivaldiApp(extension_id()) &&
+      calling_profile->IsOffTheRecord() && open_incognito_window == false) {
+    window_profile = calling_profile->GetOriginalProfile();
+  }
+
   // Look for optional tab id.
   if (create_data && create_data->tab_id) {
     // Find the tab. |source_tab_strip| and |tab_index| will later be used to
@@ -654,7 +661,8 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
   }
   // Create a new tab if the created window is still empty. Don't create a new
   // tab when it is intended to create an empty popup, or vivaldi view.
-  if (!contents && urls.empty() && window_type != Browser::TYPE_POPUP && !is_vivaldi) {
+  if (!contents && urls.empty() && window_type != Browser::TYPE_POPUP &&
+      !is_vivaldi) {
     chrome::NewTab(new_window);
   }
   chrome::SelectNumberedTab(new_window, 0);
@@ -1243,9 +1251,17 @@ bool TabsUpdateFunction::RunAsync() {
 
   // Navigate the tab to a new location if the url is different.
   bool is_async = false;
-  if (params->update_properties.url.get() &&
-      !UpdateURL(*params->update_properties.url, tab_id, &is_async)) {
-    return false;
+  if (params->update_properties.url.get()) {
+    std::string updated_url = *params->update_properties.url;
+    if (browser->profile()->GetProfileType() == Profile::INCOGNITO_PROFILE &&
+        !chrome::IsURLAllowedInIncognito(GURL(updated_url),
+                                         browser->profile())) {
+      error_ = ErrorUtils::FormatErrorMessage(
+          keys::kURLsNotAllowedInIncognitoError, updated_url);
+      return false;
+    }
+    if (!UpdateURL(updated_url, tab_id, &is_async))
+      return false;
   }
 
   bool active = false;
@@ -1792,12 +1808,13 @@ bool TabsDetectLanguageFunction::RunAsync() {
     return false;
   }
 
-  AddRef();  // Balanced in GotLanguage().
-
   ChromeTranslateClient* chrome_translate_client =
       ChromeTranslateClient::FromWebContents(contents);
   if (!chrome_translate_client && vivaldi::IsVivaldiRunning())
     return false;
+
+  AddRef();  // Balanced in GotLanguage().
+
   if (!chrome_translate_client->GetLanguageState()
            .original_language()
            .empty()) {

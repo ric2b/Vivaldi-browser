@@ -15,7 +15,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.StrictMode;
 import android.provider.Browser;
-import android.support.annotation.Nullable;
 import android.support.customtabs.CustomTabsIntent;
 import android.text.TextUtils;
 
@@ -38,6 +37,7 @@ import org.chromium.chrome.browser.WarmupManager;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
 import org.chromium.chrome.browser.customtabs.CustomTabIntentDataProvider;
 import org.chromium.chrome.browser.customtabs.SeparateTaskCustomTabActivity;
+import org.chromium.chrome.browser.dom_distiller.ReaderModeManager;
 import org.chromium.chrome.browser.firstrun.FirstRunFlowSequencer;
 import org.chromium.chrome.browser.instantapps.InstantAppsHandler;
 import org.chromium.chrome.browser.metrics.MediaNotificationUma;
@@ -50,7 +50,8 @@ import org.chromium.chrome.browser.upgrade.UpgradeActivity;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.chrome.browser.util.UrlUtilities;
-import org.chromium.chrome.browser.vr_shell.VrShellDelegate;
+import org.chromium.chrome.browser.vr.VrMainActivity;
+import org.chromium.chrome.browser.vr_shell.VrIntentUtils;
 import org.chromium.chrome.browser.webapps.ActivityAssigner;
 import org.chromium.chrome.browser.webapps.WebappLauncherActivity;
 import org.chromium.ui.widget.Toast;
@@ -146,7 +147,10 @@ public class ChromeLauncherActivity extends Activity
                 MultiWindowUtils.getInstance().shouldRunInLegacyMultiInstanceMode(this);
         mIntentHandler = new IntentHandler(this, getPackageName());
         mIsCustomTabIntent = isCustomTabIntent(getIntent());
-        if (!mIsCustomTabIntent) {
+        boolean isVrIntent = VrIntentUtils.isVrIntent(getIntent());
+        // If the intent was created by Reader Mode, ignore herb and custom tab information.
+        if (!mIsCustomTabIntent && !ReaderModeManager.isReaderModeCreatedIntent(getIntent())
+                && !isVrIntent) {
             mIsHerbIntent = isHerbIntent();
             mIsCustomTabIntent = mIsHerbIntent;
         }
@@ -199,11 +203,7 @@ public class ChromeLauncherActivity extends Activity
 
         // Check if we should launch the ChromeTabbedActivity.
         if (!mIsCustomTabIntent && !FeatureUtilities.isDocumentMode(this)) {
-            Bundle options = null;
-            if (VrShellDelegate.isVrIntent(getIntent())) {
-                options = VrShellDelegate.getVrIntentOptions(this);
-            }
-            launchTabbedMode(options);
+            launchTabbedMode();
             finish();
             return;
         }
@@ -281,6 +281,11 @@ public class ChromeLauncherActivity extends Activity
             return false;
         }
 
+        // Don't reroute intents created by Reader Mode.
+        if (ReaderModeManager.isReaderModeCreatedIntent(intent)) {
+            return false;
+        }
+
         return true;
     }
 
@@ -309,9 +314,10 @@ public class ChromeLauncherActivity extends Activity
      * @return Whether the intent is for launching a Custom Tab.
      */
     public static boolean isCustomTabIntent(Intent intent) {
-        if (intent == null
-                || CustomTabsIntent.shouldAlwaysUseBrowserUI(intent)
-                || !intent.hasExtra(CustomTabsIntent.EXTRA_SESSION)) {
+        if (intent == null) return false;
+        if ((CustomTabsIntent.shouldAlwaysUseBrowserUI(intent)
+                    || !intent.hasExtra(CustomTabsIntent.EXTRA_SESSION))
+                && !VrIntentUtils.isCustomTabVrIntent(intent)) {
             return false;
         }
         return IntentHandler.getUrlFromIntent(intent) != null;
@@ -335,14 +341,17 @@ public class ChromeLauncherActivity extends Activity
         // so explicitly remove it to ensure the CCT does not get lost in recents.
         if ((newIntent.getFlags() & Intent.FLAG_ACTIVITY_NEW_TASK) != 0
                 || (newIntent.getFlags() & Intent.FLAG_ACTIVITY_NEW_DOCUMENT) != 0) {
-            newIntent.setFlags(
-                    newIntent.getFlags() & ~Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
+            newIntent.setFlags(newIntent.getFlags() & ~Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
             String uuid = UUID.randomUUID().toString();
             newIntent.addFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 // Force a new document L+ to ensure the proper task/stack creation.
                 newIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT);
-                newIntent.setClassName(context, SeparateTaskCustomTabActivity.class.getName());
+                if (VrIntentUtils.isVrIntent(intent)) {
+                    newIntent.setClassName(context, VrMainActivity.class.getName());
+                } else {
+                    newIntent.setClassName(context, SeparateTaskCustomTabActivity.class.getName());
+                }
             } else {
                 int activityIndex = ActivityAssigner
                         .instance(ActivityAssigner.SEPARATE_TASK_CCT_NAMESPACE).assign(uuid);
@@ -383,8 +392,17 @@ public class ChromeLauncherActivity extends Activity
         maybePrefetchDnsInBackground();
 
         // Create and fire a launch intent.
+        Bundle options = null;
+        if (VrIntentUtils.isVrIntent(getIntent())) {
+            // VR intents will open a VR-specific CCT {@link VrMainActivity} which
+            // starts with a theme that disables the system preview window. As a side effect, you
+            // see a flash of the previous app exiting before Chrome is started. These options
+            // prevent that flash as it can look jarring while the user is in their headset.
+            options = VrIntentUtils.getVrIntentOptions(this);
+        }
         startActivity(createCustomTabActivityIntent(
-                this, getIntent(), !isCustomTabIntent(getIntent()) && mIsHerbIntent));
+                              this, getIntent(), !isCustomTabIntent(getIntent()) && mIsHerbIntent),
+                options);
         if (mIsHerbIntent) overridePendingTransition(R.anim.activity_open_enter, R.anim.no_anim);
     }
 
@@ -392,7 +410,7 @@ public class ChromeLauncherActivity extends Activity
      * Handles launching a {@link ChromeTabbedActivity}.
      */
     @SuppressLint("InlinedApi")
-    private void launchTabbedMode(@Nullable Bundle options) {
+    private void launchTabbedMode() {
         maybePrefetchDnsInBackground();
 
         Intent newIntent = new Intent(getIntent());
@@ -416,7 +434,7 @@ public class ChromeLauncherActivity extends Activity
         // This system call is often modified by OEMs and not actionable. http://crbug.com/619646.
         StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskWrites();
         try {
-            startActivity(newIntent, options);
+            startActivity(newIntent);
         } catch (SecurityException ex) {
             if (isContentScheme) {
                 Toast.makeText(

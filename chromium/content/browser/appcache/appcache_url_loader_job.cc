@@ -6,12 +6,13 @@
 
 #include "base/strings/string_number_conversions.h"
 #include "content/browser/appcache/appcache_histograms.h"
+#include "content/browser/appcache/appcache_request_handler.h"
 #include "content/browser/appcache/appcache_subresource_url_factory.h"
 #include "content/browser/appcache/appcache_url_loader_request.h"
 #include "content/browser/url_loader_factory_getter.h"
-#include "content/common/net_adapters.h"
 #include "content/public/common/resource_type.h"
 #include "net/http/http_status_code.h"
+#include "services/network/public/cpp/net_adapters.h"
 
 namespace content {
 
@@ -42,6 +43,10 @@ void AppCacheURLLoaderJob::DeliverAppCachedResponse(const GURL& manifest_url,
 
   delivery_type_ = APPCACHED_DELIVERY;
 
+  // In tests we only care about the delivery_type_ state.
+  if (AppCacheRequestHandler::IsRunningInTests())
+    return;
+
   load_timing_info_.request_start_time = base::Time::Now();
   load_timing_info_.request_start = base::TimeTicks::Now();
 
@@ -66,6 +71,10 @@ void AppCacheURLLoaderJob::DeliverAppCachedResponse(const GURL& manifest_url,
 
 void AppCacheURLLoaderJob::DeliverNetworkResponse() {
   delivery_type_ = NETWORK_DELIVERY;
+
+  // In tests we only care about the delivery_type_ state.
+  if (AppCacheRequestHandler::IsRunningInTests())
+    return;
 
   AppCacheHistograms::AddNetworkJobStartDelaySample(base::TimeTicks::Now() -
                                                     start_time_tick_);
@@ -94,8 +103,9 @@ void AppCacheURLLoaderJob::DeliverNetworkResponse() {
 void AppCacheURLLoaderJob::DeliverErrorResponse() {
   delivery_type_ = ERROR_DELIVERY;
 
-  // We expect the URLLoaderClient pointer to be valid at this point.
-  DCHECK(client_);
+  // In tests we only care about the delivery_type_ state.
+  if (AppCacheRequestHandler::IsRunningInTests())
+    return;
 
   // AppCacheURLRequestJob uses ERR_FAILED as the error code here. That seems
   // to map to HTTP_INTERNAL_SERVER_ERROR.
@@ -143,6 +153,9 @@ void AppCacheURLLoaderJob::OnReceiveResponse(
   // response to us. Reset the delivery_type_ to ensure that we can
   // receive it
   delivery_type_ = AWAITING_DELIVERY_ORDERS;
+
+  received_response_ = true;
+
   if (!sub_resource_handler_->MaybeLoadFallbackForResponse(nullptr)) {
     client_->OnReceiveResponse(response_head, ssl_info,
                                std::move(downloaded_file));
@@ -201,39 +214,31 @@ void AppCacheURLLoaderJob::OnStartLoadingResponseBody(
 void AppCacheURLLoaderJob::OnComplete(
     const ResourceRequestCompletionStatus& status) {
   delivery_type_ = AWAITING_DELIVERY_ORDERS;
-  if (!sub_resource_handler_->MaybeLoadFallbackForResponse(nullptr)) {
-    client_->OnComplete(status);
-  } else {
-    // Disconnect from the network loader as we are delivering a fallback
-    // response to the client.
-    DisconnectFromNetworkLoader();
+  if (status.error_code != net::OK && !received_response_) {
+    if (sub_resource_handler_->MaybeLoadFallbackForResponse(nullptr)) {
+      // Disconnect from the network loader as we are delivering a fallback
+      // response to the client.
+      DisconnectFromNetworkLoader();
+      return;
+    }
   }
+  client_->OnComplete(status);
 }
 
-void AppCacheURLLoaderJob::SetSubresourceLoadInfo(
-    std::unique_ptr<SubresourceLoadInfo> subresource_load_info,
-    URLLoaderFactoryGetter* default_url_loader) {
-  subresource_load_info_ = std::move(subresource_load_info);
+void AppCacheURLLoaderJob::BindRequest(mojom::URLLoaderClientPtr client,
+                                       mojom::URLLoaderRequest request) {
+  DCHECK(!binding_.is_bound());
+  binding_.Bind(std::move(request));
 
-  associated_binding_.reset(new mojo::AssociatedBinding<mojom::URLLoader>(
-      this, std::move(subresource_load_info_->url_loader_request)));
-  associated_binding_->set_connection_error_handler(base::Bind(
+  client_ = std::move(client);
+
+  binding_.set_connection_error_handler(base::BindOnce(
       &AppCacheURLLoaderJob::OnConnectionError, StaticAsWeakPtr(this)));
-
-  client_ = std::move(subresource_load_info_->client);
-  default_url_loader_factory_getter_ = default_url_loader;
 }
 
 void AppCacheURLLoaderJob::Start(mojom::URLLoaderRequest request,
                                  mojom::URLLoaderClientPtr client) {
-  DCHECK(!binding_.is_bound());
-  binding_.Bind(std::move(request));
-
-  binding_.set_connection_error_handler(base::Bind(
-      &AppCacheURLLoaderJob::OnConnectionError, StaticAsWeakPtr(this)));
-
-  client_ = std::move(client);
-
+  BindRequest(std::move(client), std::move(request));
   // Send the cached AppCacheResponse if any.
   if (info_.get())
     SendResponseInfo();
@@ -242,7 +247,9 @@ void AppCacheURLLoaderJob::Start(mojom::URLLoaderRequest request,
 AppCacheURLLoaderJob::AppCacheURLLoaderJob(
     const ResourceRequest& request,
     AppCacheURLLoaderRequest* appcache_request,
-    AppCacheStorage* storage)
+    AppCacheStorage* storage,
+    std::unique_ptr<SubresourceLoadInfo> subresource_load_info,
+    URLLoaderFactoryGetter* loader_factory_getter)
     : request_(request),
       storage_(storage->GetWeakPtr()),
       start_time_tick_(base::TimeTicks::Now()),
@@ -252,7 +259,20 @@ AppCacheURLLoaderJob::AppCacheURLLoaderJob(
       writable_handle_watcher_(FROM_HERE,
                                mojo::SimpleWatcher::ArmingPolicy::MANUAL),
       network_loader_client_binding_(this),
-      appcache_request_(appcache_request) {}
+      appcache_request_(appcache_request),
+      received_response_(false) {
+  if (subresource_load_info.get()) {
+    DCHECK(loader_factory_getter);
+    subresource_load_info_ = std::move(subresource_load_info);
+
+    binding_.Bind(std::move(subresource_load_info_->url_loader_request));
+    binding_.set_connection_error_handler(base::BindOnce(
+        &AppCacheURLLoaderJob::OnConnectionError, StaticAsWeakPtr(this)));
+
+    client_ = std::move(subresource_load_info_->client);
+    default_url_loader_factory_getter_ = loader_factory_getter;
+  }
+}
 
 void AppCacheURLLoaderJob::OnResponseInfoLoaded(
     AppCacheResponseInfo* response_info,
@@ -272,10 +292,11 @@ void AppCacheURLLoaderJob::OnResponseInfoLoaded(
     if (is_range_request())
       SetupRangeResponse();
 
-    if (IsResourceTypeFrame(request_.resource_type)) {
-      DCHECK(!main_resource_loader_callback_.is_null());
+    if (IsResourceTypeFrame(request_.resource_type) &&
+        main_resource_loader_callback_) {
       std::move(main_resource_loader_callback_)
-          .Run(base::Bind(&AppCacheURLLoaderJob::Start, StaticAsWeakPtr(this)));
+          .Run(base::BindOnce(&AppCacheURLLoaderJob::Start,
+                              StaticAsWeakPtr(this)));
     }
 
     response_body_stream_ = std::move(data_pipe_.producer_handle);
@@ -390,7 +411,7 @@ void AppCacheURLLoaderJob::ReadMore() {
 
   uint32_t num_bytes;
   // TODO: we should use the abstractions in MojoAsyncResourceHandler.
-  MojoResult result = NetToMojoPendingBuffer::BeginWrite(
+  MojoResult result = network::NetToMojoPendingBuffer::BeginWrite(
       &response_body_stream_, &pending_write_, &num_bytes);
   if (result == MOJO_RESULT_SHOULD_WAIT) {
     // The pipe is full. We need to wait for it to have more space.
@@ -407,8 +428,8 @@ void AppCacheURLLoaderJob::ReadMore() {
   }
 
   CHECK_GT(static_cast<uint32_t>(std::numeric_limits<int>::max()), num_bytes);
-  scoped_refptr<NetToMojoIOBuffer> buffer =
-      new NetToMojoIOBuffer(pending_write_.get());
+  auto buffer =
+      base::MakeRefCounted<network::NetToMojoIOBuffer>(pending_write_.get());
 
   reader_->ReadData(
       buffer.get(), info_->response_data_size(),
@@ -429,9 +450,12 @@ void AppCacheURLLoaderJob::NotifyCompleted(int error_code) {
   if (storage_.get())
     storage_->CancelDelegateCallbacks(this);
 
-  const net::HttpResponseInfo* http_info = is_range_request()
-                                               ? range_response_info_.get()
-                                               : info_->http_response_info();
+  if (AppCacheRequestHandler::IsRunningInTests())
+    return;
+
+  const net::HttpResponseInfo* http_info =
+      is_range_request() ? range_response_info_.get()
+                         : (info_ ? info_->http_response_info() : nullptr);
 
   ResourceRequestCompletionStatus request_complete_data;
   request_complete_data.error_code = error_code;
@@ -444,7 +468,7 @@ void AppCacheURLLoaderJob::NotifyCompleted(int error_code) {
     request_complete_data.completion_time = base::TimeTicks::Now();
     request_complete_data.encoded_body_length =
         is_range_request() ? range_response_info_->headers->GetContentLength()
-                           : info_->response_data_size();
+                           : (info_ ? info_->response_data_size() : 0);
     request_complete_data.decoded_body_length =
         request_complete_data.encoded_body_length;
   }

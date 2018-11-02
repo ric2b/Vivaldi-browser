@@ -56,9 +56,6 @@ class GFX_EXPORT Image {
     kImageRepPNG,
   };
 
-  using RepresentationMap =
-      std::map<RepresentationType, std::unique_ptr<internal::ImageRep>>;
-
   // Creates an empty image with no representations.
   Image();
 
@@ -87,8 +84,16 @@ class GFX_EXPORT Image {
   // Initializes a new Image by AddRef()ing |other|'s internal storage.
   Image(const Image& other);
 
+  // Moves a reference from |other| to the new image without changing the
+  // reference count.
+  Image(Image&& other);
+
   // Copies a reference to |other|'s storage.
   Image& operator=(const Image& other);
+
+  // Moves a reference from |other|'s storage without changing the reference
+  // count.
+  Image& operator=(Image&& other);
 
   // Deletes the image and, if the only owner of the storage, all of its cached
   // representations.
@@ -169,9 +174,6 @@ class GFX_EXPORT Image {
   int Height() const;
   gfx::Size Size() const;
 
-  // Swaps this image's internal representations with |other|.
-  void SwapRepresentations(gfx::Image* other);
-
 #if defined(OS_MACOSX) && !defined(OS_IOS)
   // Set the default representation's color space. This is used for converting
   // to NSImage. This is used to compensate for PNGCodec not writing or reading
@@ -185,14 +187,20 @@ class GFX_EXPORT Image {
 
   // Returns the ImageRep of the appropriate type or NULL if there is no
   // representation of that type (and must_exist is false).
-  internal::ImageRep* GetRepresentation(
-      RepresentationType rep_type, bool must_exist) const;
+  const internal::ImageRep* GetRepresentation(RepresentationType rep_type,
+                                              bool must_exist) const;
 
   // Stores a representation into the map. A representation of that type must
   // not already be in the map. Returns a pointer to the representation stored
   // inside the map.
-  internal::ImageRep* AddRepresentation(
+  const internal::ImageRep* AddRepresentation(
       std::unique_ptr<internal::ImageRep> rep) const;
+
+  // Getter should be used internally (unless a handle to the scoped_refptr is
+  // needed) instead of directly accessing |storage_|, to ensure logical
+  // constness is upheld.
+  const internal::ImageStorage* storage() const { return storage_.get(); }
+  internal::ImageStorage* storage() { return storage_.get(); }
 
   // Internal class that holds all the representations. This allows the Image to
   // be cheaply copied.

@@ -6,8 +6,11 @@
 
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/frame/DeprecationReport.h"
 #include "core/frame/FrameConsole.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/Report.h"
+#include "core/frame/ReportingContext.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/page/Page.h"
 #include "core/workers/WorkerOrWorkletGlobalScope.h"
@@ -149,12 +152,15 @@ void Deprecation::CountDeprecation(const LocalFrame* frame,
     return;
 
   if (!page->GetUseCounter().HasRecordedMeasurement(feature)) {
-    page->GetUseCounter().RecordMeasurement(feature);
-    DCHECK(!DeprecationMessage(feature).IsEmpty());
-    ConsoleMessage* console_message =
-        ConsoleMessage::Create(kDeprecationMessageSource, kWarningMessageLevel,
-                               DeprecationMessage(feature));
+    page->GetUseCounter().RecordMeasurement(feature, *frame);
+    String message = DeprecationMessage(feature);
+
+    DCHECK(!message.IsEmpty());
+    ConsoleMessage* console_message = ConsoleMessage::Create(
+        kDeprecationMessageSource, kWarningMessageLevel, message);
     frame->Console().AddMessage(console_message);
+
+    GenerateReport(frame, message);
   }
 }
 
@@ -248,6 +254,22 @@ void Deprecation::CountDeprecationFeaturePolicy(
     default:
       NOTREACHED();
   }
+}
+
+void Deprecation::GenerateReport(const LocalFrame* frame,
+                                 const String& message) {
+  if (!frame || !frame->Client())
+    return;
+
+  Document* document = frame->GetDocument();
+  ReportingContext* reporting_context = ReportingContext::From(document);
+  if (!reporting_context->ObserverExists())
+    return;
+
+  // Send a deprecation report to any ReportingObservers.
+  ReportBody* body = new DeprecationReport(message, SourceLocation::Capture());
+  Report* report = new Report("deprecation", document->Url().GetString(), body);
+  reporting_context->QueueReport(report);
 }
 
 String Deprecation::DeprecationMessage(WebFeature feature) {
@@ -401,33 +423,30 @@ String Deprecation::DeprecationMessage(WebFeature feature) {
     case WebFeature::kNotificationAPIInsecureOriginIframe:
     case WebFeature::kNotificationPermissionRequestedInsecureOrigin:
       return String::Format(
-          "Using the Notification API on insecure origins is "
-          "deprecated and will be removed in %s. You should consider "
-          "switching your application to a secure origin, such as HTTPS. See "
-          "https://goo.gl/rStTGz for more details.",
-          milestoneString(M61));
+          "The Notification API may no longer be used from insecure origins. "
+          "You should consider switching your application to a secure origin, "
+          "such as HTTPS. See https://goo.gl/rStTGz for more details.");
 
     case WebFeature::kNotificationPermissionRequestedIframe:
       return String::Format(
-          "Using the Notification API from an iframe is deprecated and will "
-          "be removed in %s. You should consider requesting permission from "
-          "the top-level frame or opening a new window instead. See "
+          "Permission for the Notification API may no longer be requested from "
+          "a cross-origin iframe. You should consider requesting permission "
+          "from a top-level frame or opening a new window instead. See "
           "https://www.chromestatus.com/feature/6451284559265792 for more "
-          "details.",
-          milestoneString(M61));
+          "details.");
 
     case WebFeature::kElementCreateShadowRootMultiple:
-      return "Calling Element.createShadowRoot() for an element which already "
-             "hosts a shadow root is deprecated. See "
-             "https://www.chromestatus.com/features/4668884095336448 for more "
-             "details.";
+      return willBeRemoved(
+          "Calling Element.createShadowRoot() for an element "
+          "which already hosts a shadow root",
+          M63, "4668884095336448");
 
     case WebFeature::kCSSDeepCombinator:
-      return "/deep/ combinator is no longer supported in CSS dynamic profile. "
-             "It is now effectively no-op, acting as if it were a descendant "
-             "combinator. You should consider to remove it. See "
-             "https://www.chromestatus.com/features/4964279606312960 for more "
-             "details.";
+      return willBeRemoved("/deep/ combinator in CSS", M63, "4964279606312960");
+
+    case WebFeature::kCSSSelectorPseudoShadow:
+      return willBeRemoved("::shadow pseudo-element in CSS", M63,
+                           "6750456638341120");
 
     case WebFeature::kVREyeParametersOffset:
       return replacedBy("VREyeParameters.offset",
@@ -471,14 +490,6 @@ String Deprecation::DeprecationMessage(WebFeature feature) {
              "load these resources. See "
              "https://www.chromestatus.com/feature/5735596811091968 for more "
              "details.";
-
-    case WebFeature::kV8RTCPeerConnection_GetStreamById_Method:
-      return willBeRemoved("RTCPeerConnection.getStreamById()", M62,
-                           "5751819573657600");
-
-    case WebFeature::kV8SVGPathElement_GetPathSegAtLength_Method:
-      return willBeRemoved("SVGPathElement.getPathSegAtLength", M62,
-                           "5638783282184192");
 
     case WebFeature::kCredentialManagerCredentialRequestOptionsUnmediated:
       return replacedWillBeRemoved(
@@ -546,6 +557,11 @@ String Deprecation::DeprecationMessage(WebFeature feature) {
           "deprecated and will be removed in M68. You should consider "
           "switching your application to a secure origin, such as HTTPS. See "
           "https://goo.gl/rStTGz for more details.");
+
+    case WebFeature::kPaymentRequestSupportedMethodsArray:
+      return replacedWillBeRemoved(
+          "PaymentRequest's supportedMethods taking an array",
+          "a single string", M64, "5177301645918208");
 
     // Features that aren't deprecated don't have a deprecation message.
     default:

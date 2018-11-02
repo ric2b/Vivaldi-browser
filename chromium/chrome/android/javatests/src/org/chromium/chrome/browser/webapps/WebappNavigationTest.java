@@ -14,9 +14,7 @@ import android.graphics.Color;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.SmallTest;
 
-import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -25,6 +23,8 @@ import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.RetryOnFailure;
+import org.chromium.blink_public.platform.WebDisplayMode;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
@@ -34,11 +34,12 @@ import org.chromium.chrome.browser.externalnav.ExternalNavigationHandler.Overrid
 import org.chromium.chrome.browser.firstrun.FirstRunStatus;
 import org.chromium.chrome.browser.tab.InterceptNavigationDelegateImpl;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.util.MenuUtils;
 import org.chromium.chrome.test.util.browser.contextmenu.ContextMenuUtils;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.DOMUtils;
-import org.chromium.net.test.EmbeddedTestServer;
+import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.PageTransition;
 
 /**
@@ -56,21 +57,10 @@ public class WebappNavigationTest {
     @Rule
     public final WebappActivityTestRule mActivityTestRule = new WebappActivityTestRule();
 
-    private EmbeddedTestServer mTestServer;
-
-    @Before
-    public void setUp() throws Exception {
-        mTestServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
-    }
-
-    @After
-    public void tearDown() throws Exception {
-        mTestServer.stopAndDestroyServer();
-    }
-
     @Test
     @SmallTest
     @Feature({"Webapps"})
+    @RetryOnFailure
     public void testRegularLinkOffOriginInCctNoWebappThemeColor() throws Exception {
         runWebappActivityAndWaitForIdle(mActivityTestRule.createIntent());
         addAnchor("testId", OFF_ORIGIN_URL, "_self");
@@ -89,6 +79,7 @@ public class WebappNavigationTest {
     @Test
     @SmallTest
     @Feature({"Webapps"})
+    @RetryOnFailure
     public void testWindowTopLocationOffOriginInCctAndWebappThemeColor() throws Exception {
         runWebappActivityAndWaitForIdle(mActivityTestRule.createIntent().putExtra(
                 ShortcutHelper.EXTRA_THEME_COLOR, (long) Color.CYAN));
@@ -105,6 +96,7 @@ public class WebappNavigationTest {
     @Test
     @SmallTest
     @Feature({"Webapps"})
+    @RetryOnFailure
     public void testOffScopeNewTabLinkOpensInCct() throws Exception {
         runWebappActivityAndWaitForIdle(mActivityTestRule.createIntent().putExtra(
                 ShortcutHelper.EXTRA_THEME_COLOR, (long) Color.CYAN));
@@ -122,10 +114,11 @@ public class WebappNavigationTest {
     @Test
     @SmallTest
     @Feature({"Webapps"})
+    @RetryOnFailure
     public void testInScopeNewTabLinkOpensInCct() throws Exception {
         runWebappActivityAndWaitForIdle(mActivityTestRule.createIntent().putExtra(
                 ShortcutHelper.EXTRA_THEME_COLOR, (long) Color.CYAN));
-        addAnchor("testId", mTestServer.getURL(IN_SCOPE_PAGE_PATH), "_blank");
+        addAnchor("testId", mActivityTestRule.getUrlFromTestServer(IN_SCOPE_PAGE_PATH), "_blank");
         DOMUtils.clickNode(
                 mActivityTestRule.getActivity().getActivityTab().getContentViewCore(), "testId");
         CustomTabActivity customTab = waitFor(CustomTabActivity.class);
@@ -138,6 +131,7 @@ public class WebappNavigationTest {
     @Test
     @SmallTest
     @Feature({"Webapps"})
+    @RetryOnFailure
     public void testWindowOpenInCct() throws Exception {
         runWebappActivityAndWaitForIdle(mActivityTestRule.createIntent());
         // Executing window.open() through a click on a link,
@@ -165,10 +159,11 @@ public class WebappNavigationTest {
     @Test
     @SmallTest
     @Feature({"Webapps"})
+    @RetryOnFailure
     public void testInScopeNavigationStaysInWebapp() throws Exception {
         runWebappActivityAndWaitForIdle(mActivityTestRule.createIntent());
 
-        String otherPageUrl = mTestServer.getURL(IN_SCOPE_PAGE_PATH);
+        String otherPageUrl = mActivityTestRule.getUrlFromTestServer(IN_SCOPE_PAGE_PATH);
         mActivityTestRule.loadUrlInTab(otherPageUrl, PageTransition.LINK,
                 mActivityTestRule.getActivity().getActivityTab());
 
@@ -183,6 +178,7 @@ public class WebappNavigationTest {
     @Test
     @SmallTest
     @Feature({"Webapps"})
+    @RetryOnFailure
     public void testOpenInChromeFromContextMenuTabbedChrome() throws Exception {
         // Needed to get full context menu.
         FirstRunStatus.setFirstRunFlowComplete(true);
@@ -205,6 +201,31 @@ public class WebappNavigationTest {
     @Test
     @SmallTest
     @Feature({"Webapps"})
+    @RetryOnFailure
+    public void testOpenInChromeFromCustomMenuTabbedChrome() throws Exception {
+        runWebappActivityAndWaitForIdle(mActivityTestRule.createIntent().putExtra(
+                ShortcutHelper.EXTRA_DISPLAY_MODE, WebDisplayMode.MINIMAL_UI));
+
+        WebappActivity activity = mActivityTestRule.getActivity();
+        WebContents webAppWebContents = activity.getActivityTab().getWebContents();
+
+        MenuUtils.invokeCustomMenuActionSync(
+                InstrumentationRegistry.getInstrumentation(), activity, R.id.open_in_browser_id);
+
+        ChromeTabbedActivity tabbedChrome = waitFor(ChromeTabbedActivity.class);
+        mActivityTestRule.waitUntilIdle(tabbedChrome);
+
+        Assert.assertEquals("Tab in tabbed activity should show the Web App page",
+                mActivityTestRule.getUrlFromTestServer(WEB_APP_PATH),
+                tabbedChrome.getActivityTab().getUrl());
+        Assert.assertSame("WebContents should be reparented from Web App to tabbed Chrome",
+                webAppWebContents, tabbedChrome.getActivityTab().getWebContents());
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Webapps"})
+    @RetryOnFailure
     public void testRegularLinkToExternalApp() throws Exception {
         runWebappActivityAndWaitForIdle(mActivityTestRule.createIntent());
 
@@ -223,6 +244,7 @@ public class WebappNavigationTest {
     @Test
     @SmallTest
     @Feature({"Webapps"})
+    @RetryOnFailure
     public void testNewTabLinkToExternalApp() throws Exception {
         runWebappActivityAndWaitForIdle(mActivityTestRule.createIntent());
 
@@ -234,8 +256,8 @@ public class WebappNavigationTest {
     }
 
     private void runWebappActivityAndWaitForIdle(Intent intent) throws Exception {
-        mActivityTestRule.startWebappActivity(
-                intent.putExtra(ShortcutHelper.EXTRA_URL, mTestServer.getURL(WEB_APP_PATH)));
+        mActivityTestRule.startWebappActivity(intent.putExtra(
+                ShortcutHelper.EXTRA_URL, mActivityTestRule.getUrlFromTestServer(WEB_APP_PATH)));
 
         mActivityTestRule.waitUntilSplashscreenHides();
         mActivityTestRule.waitUntilIdle();

@@ -73,10 +73,9 @@ void RenderAccessibilityImpl::SnapshotAccessibilityTree(
   if (!root.UpdateLayoutAndCheckValidity())
     return;
   BlinkAXTreeSource tree_source(
-      render_frame,
-      AccessibilityMode::kNativeAPIs | AccessibilityMode::kWebContents |
-          AccessibilityMode::kInlineTextBoxes |
-          AccessibilityMode::kScreenReader | AccessibilityMode::kHTML);
+      render_frame, ui::AXMode::kNativeAPIs | ui::AXMode::kWebContents |
+                        ui::AXMode::kInlineTextBoxes |
+                        ui::AXMode::kScreenReader | ui::AXMode::kHTML);
   tree_source.SetRoot(root);
   ScopedFreezeBlinkAXTreeSource freeze(&tree_source);
   BlinkAXTreeSerializer serializer(&tree_source);
@@ -85,7 +84,7 @@ void RenderAccessibilityImpl::SnapshotAccessibilityTree(
 }
 
 RenderAccessibilityImpl::RenderAccessibilityImpl(RenderFrameImpl* render_frame,
-                                                 AccessibilityMode mode)
+                                                 ui::AXMode mode)
     : RenderFrameObserver(render_frame),
       render_frame_(render_frame),
       tree_source_(render_frame, mode),
@@ -109,7 +108,7 @@ RenderAccessibilityImpl::RenderAccessibilityImpl(RenderFrameImpl* render_frame,
 #if !defined(OS_ANDROID)
   // Inline text boxes can be enabled globally on all except Android.
   // On Android they can be requested for just a specific node.
-  if (mode.has_mode(AccessibilityMode::kInlineTextBoxes))
+  if (mode.has_mode(ui::AXMode::kInlineTextBoxes))
     settings->SetInlineTextBoxAccessibilityEnabled(true);
 #endif
 
@@ -127,7 +126,7 @@ RenderAccessibilityImpl::~RenderAccessibilityImpl() {
 }
 
 void RenderAccessibilityImpl::AccessibilityModeChanged() {
-  AccessibilityMode new_mode = render_frame_->accessibility_mode();
+  ui::AXMode new_mode = render_frame_->accessibility_mode();
   if (tree_source_.accessibility_mode() == new_mode)
     return;
   tree_source_.SetAccessibilityMode(new_mode);
@@ -141,7 +140,7 @@ void RenderAccessibilityImpl::AccessibilityModeChanged() {
     if (web_view) {
       WebSettings* settings = web_view->GetSettings();
       if (settings) {
-        if (new_mode.has_mode(AccessibilityMode::kInlineTextBoxes)) {
+        if (new_mode.has_mode(ui::AXMode::kInlineTextBoxes)) {
           settings->SetInlineTextBoxAccessibilityEnabled(true);
           tree_source_.GetRoot().LoadInlineTextBoxes();
         } else {
@@ -519,13 +518,13 @@ void RenderAccessibilityImpl::OnPerformAction(
 
   switch (data.action) {
     case ui::AX_ACTION_BLUR:
-      target.SetFocused(false);
+      root.Focus();
       break;
     case ui::AX_ACTION_DECREMENT:
       target.Decrement();
       break;
     case ui::AX_ACTION_DO_DEFAULT:
-      target.PerformDefaultAction();
+      target.Click();
       break;
     case ui::AX_ACTION_GET_IMAGE_DATA:
       OnGetImageData(target, data.target_rect.size());
@@ -546,16 +545,11 @@ void RenderAccessibilityImpl::OnPerformAction(
       target.ScrollToGlobalPoint(
           WebPoint(data.target_point.x(), data.target_point.y()));
       break;
-    case ui::AX_ACTION_SET_ACCESSIBILITY_FOCUS:
-      OnSetAccessibilityFocus(target);
+    case ui::AX_ACTION_LOAD_INLINE_TEXT_BOXES:
+      OnLoadInlineTextBoxes(target);
       break;
     case ui::AX_ACTION_FOCUS:
-      // By convention, calling SetFocus on the root of the tree should
-      // clear the current focus. Otherwise set the focus to the new node.
-      if (data.target_node_id == root.AxID())
-        render_frame_->GetRenderView()->GetWebView()->ClearFocusedElement();
-      else
-        target.SetFocused(true);
+      target.Focus();
       break;
     case ui::AX_ACTION_SET_SCROLL_OFFSET:
       target.SetScrollOffset(
@@ -577,6 +571,12 @@ void RenderAccessibilityImpl::OnPerformAction(
       break;
     case ui::AX_ACTION_CUSTOM_ACTION:
     case ui::AX_ACTION_REPLACE_SELECTED_TEXT:
+    case ui::AX_ACTION_SCROLL_BACKWARD:
+    case ui::AX_ACTION_SCROLL_FORWARD:
+    case ui::AX_ACTION_SCROLL_UP:
+    case ui::AX_ACTION_SCROLL_DOWN:
+    case ui::AX_ACTION_SCROLL_LEFT:
+    case ui::AX_ACTION_SCROLL_RIGHT:
     case ui::AX_ACTION_NONE:
       NOTREACHED();
       break;
@@ -628,13 +628,13 @@ void RenderAccessibilityImpl::OnHitTest(const gfx::Point& point,
   HandleAXEvent(obj, event_to_fire);
 }
 
-void RenderAccessibilityImpl::OnSetAccessibilityFocus(
+void RenderAccessibilityImpl::OnLoadInlineTextBoxes(
     const blink::WebAXObject& obj) {
   ScopedFreezeBlinkAXTreeSource freeze(&tree_source_);
-  if (tree_source_.accessibility_focus_id() == obj.AxID())
+  if (tree_source_.ShouldLoadInlineTextBoxes(obj))
     return;
 
-  tree_source_.set_accessibility_focus_id(obj.AxID());
+  tree_source_.SetLoadInlineTextBoxesForId(obj.AxID());
 
   const WebDocument& document = GetMainDocument();
   if (document.IsNull())

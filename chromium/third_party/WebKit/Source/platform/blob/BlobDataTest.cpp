@@ -19,6 +19,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 using storage::mojom::blink::Blob;
+using storage::mojom::blink::BlobPtr;
 using storage::mojom::blink::BlobRegistry;
 using storage::mojom::blink::BlobRegistryRequest;
 using storage::mojom::blink::BlobRequest;
@@ -68,6 +69,18 @@ class MockBlob : public Blob {
                             std::move(request));
   }
 
+  void ReadRange(uint64_t offset,
+                 uint64_t length,
+                 mojo::ScopedDataPipeProducerHandle,
+                 storage::mojom::blink::BlobReaderClientPtr) override {
+    NOTREACHED();
+  }
+
+  void ReadAll(mojo::ScopedDataPipeProducerHandle,
+               storage::mojom::blink::BlobReaderClientPtr) override {
+    NOTREACHED();
+  }
+
   void GetInternalUUID(GetInternalUUIDCallback callback) override {
     std::move(callback).Run(uuid_);
   }
@@ -95,6 +108,12 @@ class MockBlobRegistry : public BlobRegistry {
     mojo::MakeStrongBinding(WTF::MakeUnique<MockBlob>(uuid), std::move(blob));
   }
 
+  void RegisterURL(BlobPtr blob,
+                   const KURL& url,
+                   RegisterURLCallback callback) override {
+    NOTREACHED();
+  }
+
   struct Registration {
     String uuid;
     String content_type;
@@ -109,7 +128,7 @@ class MockBlobRegistry : public BlobRegistry {
   Vector<BindingRequest> binding_requests;
 };
 
-class MojoBlobInterfaceProvider : public InterfaceProvider {
+class MojoBlobInterfaceProvider final : public InterfaceProvider {
  public:
   explicit MojoBlobInterfaceProvider(BlobRegistry* mock_registry)
       : mock_registry_(mock_registry) {}

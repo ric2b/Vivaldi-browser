@@ -5,7 +5,7 @@
 #include "core/dom/Range.h"
 #include "core/frame/FrameTestHelpers.h"
 #include "core/frame/LocalFrameView.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "core/input/EventHandler.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/ContextMenuController.h"
@@ -50,8 +50,8 @@ class LinkSelectionTestBase : public ::testing::Test {
   String GetSelectionText();
 
   FrameTestHelpers::WebViewHelper helper_;
-  WebViewBase* web_view_ = nullptr;
-  Persistent<WebLocalFrameBase> main_frame_ = nullptr;
+  WebViewImpl* web_view_ = nullptr;
+  Persistent<WebLocalFrameImpl> main_frame_ = nullptr;
 };
 
 void LinkSelectionTestBase::EmulateMouseDrag(const IntPoint& down_point,

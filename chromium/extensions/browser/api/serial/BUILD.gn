@@ -18,8 +18,11 @@ source_set("serial") {
   ]
 
   deps = [
-    "//device/serial",
+    "//content/public/common",
     "//extensions/common/api",
+    "//mojo/public/cpp/bindings",
+    "//services/device/public/interfaces",
+    "//services/service_manager/public/cpp",
   ]
 
   public_deps = [

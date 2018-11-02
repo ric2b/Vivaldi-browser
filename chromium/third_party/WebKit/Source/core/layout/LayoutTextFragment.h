@@ -51,9 +51,7 @@ class LayoutTextFragment final : public LayoutText {
 
   bool IsTextFragment() const override { return true; }
 
-  bool CanBeSelectionLeaf() const override {
-    return GetNode() && HasEditableStyle(*GetNode());
-  }
+  bool CanBeSelectionLeaf() const override { return GetNode(); }
 
   unsigned Start() const { return start_; }
   unsigned FragmentLength() const { return fragment_length_; }
@@ -70,8 +68,8 @@ class LayoutTextFragment final : public LayoutText {
 
   RefPtr<StringImpl> OriginalText() const override;
 
-  void SetText(PassRefPtr<StringImpl>, bool force = false) override;
-  void SetTextFragment(PassRefPtr<StringImpl>, unsigned start, unsigned length);
+  void SetText(RefPtr<StringImpl>, bool force = false) override;
+  void SetTextFragment(RefPtr<StringImpl>, unsigned start, unsigned length);
 
   void TransformText() override;
 

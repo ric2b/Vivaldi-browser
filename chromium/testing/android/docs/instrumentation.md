@@ -51,13 +51,20 @@ other files in the same directory.
 In many cases, Chromium has extended the instrumentation test framework
 classes to implement additional features.
 
-### Test runners
+### Tracing
 
-[todo](/testing/android/docs/todo.md)
+Enabling tracing during a test run allows all the function calls involved to be
+observed in a visual display (using Chrome's built-in chrome://tracing feature).
+To run a test with tracing, add the `--trace-output` flag to the command used to
+call the instrumentation test (either running the test_runner.py script, or a
+generated binary such as `run_chrome_public_test_apk`). The `--trace-output` flag
+takes a filename, which, after the test run, will contain a JSON file readable
+by chrome://tracing.
 
-### Test cases
-
-[todo](/testing/android/docs/todo.md)
+By default, the trace includes only certain function calls important to the test
+run, both within the Python test runner framework and the Java code running on
+the device. For a more detailed look, add the (no-argument) `--trace-all` flag.
+This causes every function called on the Python side to be added to the trace.
 
 ### Annotations
 
@@ -179,9 +186,9 @@ allows for conditional test disabling based on values in
 allows for conditional test disabling based on whether
 a device is a phone, a tablet, or a "large tablet" as determined by
 [org.chromium.ui.base.DeviceFormFactor](https://chromium.googlesource.com/chromium/src/+/master/ui/android/java/src/org/chromium/ui/base/DeviceFormFactor.java).
-Note that this is currently only available to tests in
-[//chrome](https://chromium.googlesource.com/chromium/src/+/master/chrome/)
-or code that uses //chrome.
+This is available to tests in
+[//ui](https://chromium.googlesource.com/chromium/src/+/master/ui/)
+or code that uses //ui.
 
 ```java
 @DisableIf.Device(
@@ -214,14 +221,15 @@ up to date, and whether the build was an official one.
     //  - ChromeRestriction.RESTRICTION_TYPE_GOOGLE_PLAY_SERVICES
     //    Restricts the test to devices with up-to-date versions of Google Play Services.
     //
-    //  - ChromeRestriction.RESTRICTION_TYPE_PHONE
-    //    Restricts the test to phones as determined by DeviceFormFactor.
-    //
-    //  - ChromeRestriction.RESTRICTION_TYPE_TABLET
-    //    Restricts the test to tablets as determined by DeviceFormFactor.
-    //
     //  - ChromeRestriction.RESTRICTION_TYPE_OFFICIAL_BUILD
     //    Restricts the test to official builds as determined by ChromeVersionInfo.isOfficialBuild().
+    //
+    // ui:
+    //  - UiRestriction.RESTRICTION_TYPE_PHONE
+    //    Restricts the test to phones as determined by DeviceFormFactor.
+    //
+    //  - UiRestriction.RESTRICTION_TYPE_TABLET
+    //    Restricts the test to tablets as determined by DeviceFormFactor.
     value = {}
 )
 ```

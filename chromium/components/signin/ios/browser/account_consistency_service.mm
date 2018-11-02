@@ -56,7 +56,8 @@ class AccountConsistencyHandler : public web::WebStatePolicyDecider {
 
  private:
   // web::WebStatePolicyDecider override
-  bool ShouldAllowResponse(NSURLResponse* response) override;
+  bool ShouldAllowResponse(NSURLResponse* response,
+                           bool for_main_frame) override;
   void WebStateDestroyed() override;
 
   AccountConsistencyService* account_consistency_service_;  // Weak.
@@ -75,7 +76,8 @@ AccountConsistencyHandler::AccountConsistencyHandler(
       account_reconcilor_(account_reconcilor),
       delegate_(delegate) {}
 
-bool AccountConsistencyHandler::ShouldAllowResponse(NSURLResponse* response) {
+bool AccountConsistencyHandler::ShouldAllowResponse(NSURLResponse* response,
+                                                    bool for_main_frame) {
   NSHTTPURLResponse* http_response =
       base::mac::ObjCCast<NSHTTPURLResponse>(response);
   if (!http_response)
@@ -373,7 +375,7 @@ void AccountConsistencyService::FinishedApplyingCookieRequest(bool success) {
       case ADD_CHROME_CONNECTED_COOKIE:
         // Add request.domain to prefs, use |true| as a dummy value (that is
         // never used), as the dictionary is used as a set.
-        update->SetBooleanWithoutPathExpansion(request.domain, true);
+        update->SetKey(request.domain, base::Value(true));
         break;
       case REMOVE_CHROME_CONNECTED_COOKIE:
         // Remove request.domain from prefs.

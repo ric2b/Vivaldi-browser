@@ -266,6 +266,9 @@ TEST_F(StyleEngineTest, RuleSetInvalidationHost) {
   GetDocument().View()->UpdateAllLifecyclePhases();
   after_count = GetStyleEngine().StyleForElementCount();
   EXPECT_EQ(1u, after_count - before_count);
+  EXPECT_EQ(ScheduleInvalidationsForRules(*shadow_root,
+                                          ":host(div) { background: green}"),
+            kRuleSetInvalidationsScheduled);
 
   EXPECT_EQ(ScheduleInvalidationsForRules(*shadow_root,
                                           ":host(*) { background: green}"),
@@ -364,12 +367,14 @@ TEST_F(StyleEngineTest, RuleSetInvalidationV0BoundaryCrossing) {
   EXPECT_EQ(ScheduleInvalidationsForRules(
                 *shadow_root, ".a ::content span { background: green}"),
             kRuleSetInvalidationFullRecalc);
-  EXPECT_EQ(ScheduleInvalidationsForRules(
-                *shadow_root, ".a /deep/ span { background: green}"),
-            kRuleSetInvalidationFullRecalc);
-  EXPECT_EQ(ScheduleInvalidationsForRules(
-                *shadow_root, ".a::shadow span { background: green}"),
-            kRuleSetInvalidationFullRecalc);
+  if (RuntimeEnabledFeatures::DeepCombinatorInCSSDynamicProfileEnabled()) {
+    EXPECT_EQ(ScheduleInvalidationsForRules(
+                  *shadow_root, ".a /deep/ span { background: green}"),
+              kRuleSetInvalidationFullRecalc);
+    EXPECT_EQ(ScheduleInvalidationsForRules(
+                  *shadow_root, ".a::shadow span { background: green}"),
+              kRuleSetInvalidationFullRecalc);
+  }
 }
 
 TEST_F(StyleEngineTest, HasViewportDependentMediaQueries) {

@@ -14,6 +14,7 @@
 #include "base/json/json_writer.h"
 #include "base/macros.h"
 #include "base/path_service.h"
+#include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
@@ -164,12 +165,11 @@ IN_PROC_BROWSER_TEST_F(MessagingApiTest, MessagingCrash) {
 // Tests that message passing from one extension to another works.
 IN_PROC_BROWSER_TEST_F(MessagingApiTest, MessagingExternal) {
   ASSERT_TRUE(LoadExtension(
-      test_data_dir_.AppendASCII("..").AppendASCII("good")
-                    .AppendASCII("Extensions")
-                    .AppendASCII("bjafgdebaacbbbecmhlhpofkepfkgcpa")
-                    .AppendASCII("1.0")));
+      shared_test_data_dir().AppendASCII("messaging").AppendASCII("receiver")));
 
-  ASSERT_TRUE(RunExtensionTest("messaging/connect_external")) << message_;
+  ASSERT_TRUE(RunExtensionTestWithFlags("messaging/connect_external",
+                                        kFlagUseRootExtensionsDir))
+      << message_;
 }
 
 // Tests that a content script can exchange messages with a tab even if there is
@@ -1324,6 +1324,12 @@ IN_PROC_BROWSER_TEST_F(MessagingApiTest, MessagingOnUnload) {
       "window.domAutomationController.send(window.messageCount);",
       &message_count));
   EXPECT_EQ(1, message_count);
+}
+
+// Tests that messages over a certain size are not sent.
+// https://crbug.com/766713.
+IN_PROC_BROWSER_TEST_F(MessagingApiTest, LargeMessages) {
+  ASSERT_TRUE(RunExtensionTest("messaging/large_messages"));
 }
 
 }  // namespace

@@ -12,14 +12,12 @@
 <translation id="1403254041219632970">Versi Chromium yang akan datang tidak lagi akan menyokong Mac OS X 10.6, 10.7 atau 10.8.</translation>
 <translation id="1414495520565016063">Anda log masuk ke Chromium!</translation>
 <translation id="1444754455097148408">Lesen sumber terbuka Chromium</translation>
-<translation id="1480489203462860648">Cubalah, ia sudah dipasang</translation>
 <translation id="1502360822835740515">Jadikan Chromium penyemak imbas lalai anda</translation>
 <translation id="151962892725702025">OS Chromium tidak dapat menyegerakkan data anda kerana Segerak tidak tersedia untuk domain anda.</translation>
 <translation id="1559451348202814456">Chromium mungkin tidak akan berfungsi dengan betul kerana tidak lagi disokong pada Mac OS X 10.6, 10.7 atau 10.8.</translation>
 <translation id="1653828314016431939">OK - Mulakan semula sekarang</translation>
 <translation id="1668054258064581266">Selepas mengalih keluar akaun anda daripada Chromium, anda mungkin perlu memuatkan semula tab yang dibuka untuk memberi kesan.</translation>
 <translation id="1688750314291223739">Sediakan Penyegerakan untuk menyimpan ciri penyemak imbas yang diperibadikan di web dan aksesnya dari Chromium pada mana-mana komputer.</translation>
-<translation id="1699664235656412242">Sila tutup semua tetingkap Chromium (termasuk yang di dalam mod Windows 8) dan cuba lagi.</translation>
 <translation id="1708666629004767631">Terdapat versi Chromium baharu yang lebih selamat tersedia.</translation>
 <translation id="1774152462503052664">Benarkan Chromium dijalankan dalam latar belakang</translation>
 <translation id="1779356040007214683">Untuk menjadikan Chromium lebih selamat, kami melumpuhkan beberapa sambungan yang tidak disenaraikan dalam <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> dan mungkin telah ditambahkan tanpa pengetahuan anda.</translation>
@@ -101,6 +99,7 @@
 <translation id="4271805377592243930">Dapatkan bantuan berkenaan Chromium</translation>
 <translation id="4285930937574705105">Pemasangan gagal disebabkan ralat yang tidak dinyatakan. Jika Chromium sedang dijalankan, sila tutup dan cuba semula.</translation>
 <translation id="4330585738697551178">Modul ini diketahui bercanggah dengan Chromium.</translation>
+<translation id="4421155425831608516">Log masuk ke Chromium dilumpuhkan oleh pentadbir peranti ini.</translation>
 <translation id="4423735387467980091">Sesuaikan dan kawal Chromium</translation>
 <translation id="4458285410772214805">Sila log keluar dan log masuk semula supaya perubahan ini boleh dilaksanakan.</translation>
 <translation id="4469812139324097969">Chromium sudah usang kerana telah lama tidak dilancarkan. Terdapat kemas kini tersedia dan akan digunakan sebaik sahaja anda melancarkannya semula.</translation>
@@ -177,7 +176,6 @@
 Beberapa ciri mungkin tidak tersedia. Sila nyatakan direktori profil yang berbeza atau gunakan versi Chromium yang lebih baharu.</translation>
 <translation id="6734080038664603509">Kemas kini &amp;Chromium</translation>
 <translation id="6734291798041940871">Chromium telah dipasang untuk semua pengguna pada komputer anda.</translation>
-<translation id="6757767188268205357">Jangan ganggu saya</translation>
 <translation id="6810143991807788455">Bantu jadikan Chromium lebih baik dengan melaporkan tetapan semasa</translation>
 <translation id="6857782730669500492">Chromium - <ph name="PAGE_TITLE" /></translation>
 <translation id="6883876366448858277">menghantar perkataan dan konteks sekitarnya kepada Carian Google, mengembalikan takrif, gambar dan hasil carian lain.</translation>
@@ -190,7 +188,6 @@ Beberapa ciri mungkin tidak tersedia. Sila nyatakan direktori profil yang berbez
 <translation id="707471633328071618">Google Payments (disalin ke Chromium)</translation>
 <translation id="7138853919861947730">Chromium boleh menggunakan perkhidmatan web untuk meningkatkan pengalaman penyemakan imbas anda.</translation>
 <translation id="7162152143154757523">Chromium dapat menyediakan semakan ejaan yang lebih pintar dengan menghantar apa yang anda taip dalam penyemak imbas kepada pelayan Google, membolehkan anda menggunakan teknologi semakan ejaan yang sama seperti yang digunakan oleh carian Google.</translation>
-<translation id="7196020411877309443">Mengapakah halaman ini yang saya lihat?</translation>
 <translation id="7205698830395646142">Sembunyikan dalam Menu Chromium</translation>
 <translation id="7223968959479464213">Pengurus Tugas - Chromium</translation>
 <translation id="722928257909516027">Paparkan menu Chromium</translation>

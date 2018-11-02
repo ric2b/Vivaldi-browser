@@ -39,9 +39,7 @@
 #include "content/shell/common/shell_messages.h"
 #include "content/shell/common/shell_switches.h"
 #include "content/shell/grit/shell_resources.h"
-#include "content/test/data/mojo_layouttest_test.mojom.h"
 #include "media/mojo/features.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "net/ssl/client_cert_identity.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "storage/browser/quota/quota_settings.h"
@@ -52,7 +50,7 @@
 #if defined(OS_ANDROID)
 #include "base/android/apk_assets.h"
 #include "base/android/path_utils.h"
-#include "components/crash/content/browser/crash_dump_manager_android.h"
+#include "components/crash/content/browser/crash_dump_observer_android.h"
 #include "content/shell/android/shell_descriptors.h"
 #endif
 
@@ -128,26 +126,6 @@ int GetCrashSignalFD(const base::CommandLine& command_line) {
 }
 #endif  // defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
 
-class MojoLayoutTestHelper : public mojom::MojoLayoutTestHelper {
- public:
-  MojoLayoutTestHelper() {}
-  ~MojoLayoutTestHelper() override {}
-
-  // mojom::MojoLayoutTestHelper:
-  void Reverse(const std::string& message, ReverseCallback callback) override {
-    std::move(callback).Run(std::string(message.rbegin(), message.rend()));
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MojoLayoutTestHelper);
-};
-
-void BindLayoutTestHelper(mojom::MojoLayoutTestHelperRequest request,
-                          RenderFrameHost* render_frame_host) {
-  mojo::MakeStrongBinding(base::MakeUnique<MojoLayoutTestHelper>(),
-                          std::move(request));
-}
-
 }  // namespace
 
 ShellContentBrowserClient* ShellContentBrowserClient::Get() {
@@ -162,7 +140,6 @@ ShellContentBrowserClient::ShellContentBrowserClient()
     : shell_browser_main_parts_(NULL) {
   DCHECK(!g_browser_client);
   g_browser_client = this;
-  frame_interfaces_.AddInterface(base::Bind(&BindLayoutTestHelper));
 }
 
 ShellContentBrowserClient::~ShellContentBrowserClient() {
@@ -223,8 +200,14 @@ void ShellContentBrowserClient::BindInterfaceRequestFromFrame(
     RenderFrameHost* render_frame_host,
     const std::string& interface_name,
     mojo::ScopedMessagePipeHandle interface_pipe) {
-  frame_interfaces_.TryBindInterface(interface_name, &interface_pipe,
-                                     render_frame_host);
+  if (!frame_interfaces_) {
+    frame_interfaces_ = base::MakeUnique<
+        service_manager::BinderRegistryWithArgs<content::RenderFrameHost*>>();
+    ExposeInterfacesToFrame(frame_interfaces_.get());
+  }
+
+  frame_interfaces_->TryBindInterface(interface_name, &interface_pipe,
+                                      render_frame_host);
 }
 
 void ShellContentBrowserClient::RegisterInProcessServices(
@@ -370,7 +353,7 @@ void ShellContentBrowserClient::OpenURL(
 void ShellContentBrowserClient::GetAdditionalMappedFilesForChildProcess(
     const base::CommandLine& command_line,
     int child_process_id,
-    content::FileDescriptorInfo* mappings) {
+    content::PosixFileDescriptorInfo* mappings) {
 #if defined(OS_ANDROID)
   mappings->ShareWithRegion(
       kShellPakDescriptor,
@@ -413,5 +396,9 @@ ShellBrowserContext*
     ShellContentBrowserClient::off_the_record_browser_context() {
   return shell_browser_main_parts_->off_the_record_browser_context();
 }
+
+void ShellContentBrowserClient::ExposeInterfacesToFrame(
+    service_manager::BinderRegistryWithArgs<content::RenderFrameHost*>*
+        registry) {}
 
 }  // namespace content

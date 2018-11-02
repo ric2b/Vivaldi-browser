@@ -8,7 +8,7 @@
 #include <memory>
 
 #include "base/macros.h"
-#include "cc/scheduler/begin_frame_source.h"
+#include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "content/browser/renderer_host/delegated_frame_host.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/compositor_observer.h"
@@ -38,7 +38,7 @@ class BrowserCompositorMacClient {
 //   is visible.
 // - The RenderWidgetHostViewMac that is used to display these frames is
 //   attached to the NSView hierarchy of an NSWindow.
-class BrowserCompositorMac : public DelegatedFrameHostClient {
+class CONTENT_EXPORT BrowserCompositorMac : public DelegatedFrameHostClient {
  public:
   BrowserCompositorMac(
       ui::AcceleratedWidgetMacNSView* accelerated_widget_mac_ns_view,
@@ -51,15 +51,19 @@ class BrowserCompositorMac : public DelegatedFrameHostClient {
   // These will not return nullptr until Destroy is called.
   DelegatedFrameHost* GetDelegatedFrameHost();
 
+  // Ensure that the currect compositor frame be cleared (even if it is
+  // potentially visible).
+  void ClearCompositorFrame();
+
   // This may return nullptr, if this has detached itself from its
   // ui::Compositor.
   ui::AcceleratedWidgetMac* GetAcceleratedWidgetMac();
 
   void DidCreateNewRendererCompositorFrameSink(
-      cc::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink);
+      viz::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink);
   void SubmitCompositorFrame(const viz::LocalSurfaceId& local_surface_id,
                              cc::CompositorFrame frame);
-  void OnDidNotProduceFrame(const cc::BeginFrameAck& ack);
+  void OnDidNotProduceFrame(const viz::BeginFrameAck& ack);
   void SetHasTransparentBackground(bool transparent);
   void SetDisplayColorSpace(const gfx::ColorSpace& color_space);
   void UpdateVSyncParameters(const base::TimeTicks& timebase,
@@ -104,6 +108,9 @@ class BrowserCompositorMac : public DelegatedFrameHostClient {
       override;
   void OnBeginFrame() override;
   bool IsAutoResizeEnabled() const override;
+
+  // Returns nullptr if no compositor is attached.
+  ui::Compositor* CompositorForTesting() const;
 
  private:
   // The state of |delegated_frame_host_| and |recyclable_compositor_| to
@@ -163,7 +170,7 @@ class BrowserCompositorMac : public DelegatedFrameHostClient {
   std::unique_ptr<ui::Layer> root_layer_;
 
   bool has_transparent_background_ = false;
-  cc::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink_ =
+  viz::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink_ =
       nullptr;
 
   base::WeakPtrFactory<BrowserCompositorMac> weak_factory_;

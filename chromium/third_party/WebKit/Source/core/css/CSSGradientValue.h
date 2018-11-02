@@ -39,6 +39,8 @@ class Gradient;
 class Document;
 class LayoutObject;
 
+namespace cssvalue {
+
 enum CSSGradientType {
   kCSSDeprecatedLinearGradient,
   kCSSDeprecatedRadialGradient,
@@ -78,20 +80,23 @@ struct CSSGradientColorStop {
   Member<const CSSValue> color_;
 };
 
+}  // namespace cssvalue
 }  // namespace blink
 
 // We have to declare the VectorTraits specialization before CSSGradientValue
 // declares its inline capacity vector below.
-WTF_ALLOW_MOVE_AND_INIT_WITH_MEM_FUNCTIONS(blink::CSSGradientColorStop);
+WTF_ALLOW_MOVE_AND_INIT_WITH_MEM_FUNCTIONS(
+    blink::cssvalue::CSSGradientColorStop);
 
 namespace blink {
+namespace cssvalue {
 
 class CSSGradientValue : public CSSImageGeneratorValue {
  public:
-  PassRefPtr<Image> GetImage(const ImageResourceObserver&,
-                             const Document&,
-                             const ComputedStyle&,
-                             const IntSize&);
+  RefPtr<Image> GetImage(const ImageResourceObserver&,
+                         const Document&,
+                         const ComputedStyle&,
+                         const IntSize&);
 
   void AddStop(const CSSGradientColorStop& stop) {
     stops_.push_back(stop);
@@ -164,9 +169,9 @@ class CSSLinearGradientValue final : public CSSGradientValue {
   String CustomCSSText() const;
 
   // Create the gradient for a given size.
-  PassRefPtr<Gradient> CreateGradient(const CSSToLengthConversionData&,
-                                      const IntSize&,
-                                      const LayoutObject&);
+  RefPtr<Gradient> CreateGradient(const CSSToLengthConversionData&,
+                                  const IntSize&,
+                                  const LayoutObject&);
 
   bool Equals(const CSSLinearGradientValue&) const;
 
@@ -237,9 +242,9 @@ class CSSRadialGradientValue final : public CSSGradientValue {
   void SetEndVerticalSize(CSSPrimitiveValue* val) { end_vertical_size_ = val; }
 
   // Create the gradient for a given size.
-  PassRefPtr<Gradient> CreateGradient(const CSSToLengthConversionData&,
-                                      const IntSize&,
-                                      const LayoutObject&);
+  RefPtr<Gradient> CreateGradient(const CSSToLengthConversionData&,
+                                  const IntSize&,
+                                  const LayoutObject&);
 
   bool Equals(const CSSRadialGradientValue&) const;
 
@@ -303,9 +308,9 @@ class CSSConicGradientValue final : public CSSGradientValue {
   String CustomCSSText() const;
 
   // Create the gradient for a given size.
-  PassRefPtr<Gradient> CreateGradient(const CSSToLengthConversionData&,
-                                      const IntSize&,
-                                      const LayoutObject&);
+  RefPtr<Gradient> CreateGradient(const CSSToLengthConversionData&,
+                                  const IntSize&,
+                                  const LayoutObject&);
 
   bool Equals(const CSSConicGradientValue&) const;
 
@@ -329,6 +334,7 @@ class CSSConicGradientValue final : public CSSGradientValue {
 
 DEFINE_CSS_VALUE_TYPE_CASTS(CSSConicGradientValue, IsConicGradientValue());
 
+}  // namespace cssvalue
 }  // namespace blink
 
 #endif  // CSSGradientValue_h

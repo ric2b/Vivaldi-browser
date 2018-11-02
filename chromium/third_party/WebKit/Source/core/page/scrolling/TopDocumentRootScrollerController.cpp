@@ -11,13 +11,13 @@
 #include "core/frame/VisualViewport.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/layout/LayoutView.h"
-#include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "core/page/scrolling/OverscrollController.h"
 #include "core/page/scrolling/RootScrollerUtil.h"
 #include "core/page/scrolling/ViewportScrollCallback.h"
 #include "core/paint/PaintLayer.h"
+#include "core/paint/compositing/PaintLayerCompositor.h"
 #include "platform/scroll/ScrollableArea.h"
 
 namespace blink {
@@ -107,6 +107,24 @@ Element* TopDocumentRootScrollerController::FindGlobalRootScrollerElement() {
   return element;
 }
 
+void SetNeedsCompositingUpdateOnAncestors(ScrollableArea* area) {
+  if (!area || !area->Layer())
+    return;
+
+  Frame* frame = area->Layer()->GetLayoutObject().GetFrame();
+  for (; frame; frame = frame->Tree().Parent()) {
+    if (!frame->IsLocalFrame())
+      continue;
+
+    PaintLayerCompositor* plc =
+        ToLocalFrame(frame)->View()->GetLayoutView()->Compositor();
+    if (plc) {
+      plc->SetNeedsCompositingUpdate(
+          kCompositingUpdateAfterCompositingInputChange);
+    }
+  }
+}
+
 void TopDocumentRootScrollerController::RecomputeGlobalRootScroller() {
   if (!viewport_apply_scroll_)
     return;
@@ -140,6 +158,9 @@ void TopDocumentRootScrollerController::RecomputeGlobalRootScroller() {
   // ViewportScrollCallback to swap the target into the layout viewport
   // in RootFrameViewport.
   viewport_apply_scroll_->SetScroller(target_scroller);
+
+  SetNeedsCompositingUpdateOnAncestors(old_root_scroller_area);
+  SetNeedsCompositingUpdateOnAncestors(target_scroller);
 
   if (old_root_scroller_area)
     old_root_scroller_area->DidChangeGlobalRootScroller();

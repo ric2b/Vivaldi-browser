@@ -59,17 +59,6 @@ size_t RegisterCastCrashKeys() {
       // gin/:
       {"v8-ignition", ::crash_keys::kSmallSize},
 
-      // Temporary for https://crbug.com/591478.
-      {"initrf_parent_proxy_exists", ::crash_keys::kSmallSize},
-      {"initrf_render_view_is_live", ::crash_keys::kSmallSize},
-      {"initrf_parent_is_in_same_site_instance", ::crash_keys::kSmallSize},
-      {"initrf_parent_process_is_live", ::crash_keys::kSmallSize},
-      {"initrf_root_is_in_same_site_instance", ::crash_keys::kSmallSize},
-      {"initrf_root_is_in_same_site_instance_as_parent",
-       ::crash_keys::kSmallSize},
-      {"initrf_root_process_is_live", ::crash_keys::kSmallSize},
-      {"initrf_root_proxy_is_live", ::crash_keys::kSmallSize},
-
       // Temporary for https://crbug.com/626802.
       {"newframe_routing_id", ::crash_keys::kSmallSize},
       {"newframe_proxy_id", ::crash_keys::kSmallSize},
@@ -78,16 +67,9 @@ size_t RegisterCastCrashKeys() {
       {"newframe_widget_id", ::crash_keys::kSmallSize},
       {"newframe_widget_hidden", ::crash_keys::kSmallSize},
       {"newframe_replicated_origin", ::crash_keys::kSmallSize},
-      {"newframe_oopifs_possible", ::crash_keys::kSmallSize},
 
       // Temporary for https://crbug.com/612711.
       {"aci_wrong_sp_extension_id", ::crash_keys::kSmallSize},
-
-      // Temporary for https://crbug.com/668633.
-      {"swdh_set_hosted_version_worker_pid", ::crash_keys::kSmallSize},
-      {"swdh_set_hosted_version_host_pid", ::crash_keys::kSmallSize},
-      {"swdh_set_hosted_version_is_new_process", ::crash_keys::kSmallSize},
-      {"swdh_set_hosted_version_restart_count", ::crash_keys::kSmallSize},
 
       // Temporary for https://crbug.com/685996.
       {"user-cloud-policy-manager-connect-trace", ::crash_keys::kMediumSize},

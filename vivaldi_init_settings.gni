@@ -18,14 +18,15 @@ declare_overrides() {
       use_lld = true
     }
   }
-  #if (is_mac && !is_component_build) {
-    # We need to force SDK 10.10 for Mac builds
-    # Static builds are mostly built by the builder
-  #  mac_use_sdk = "10.10" 
-  #}
+
+  use_v8_context_snapshot = is_mac
 
   exclude_unwind_tables = is_official_build
 
   # enable jumbo file compile
   use_jumbo_build = !is_mac || !is_component_build
+
+  if (is_android) {
+    enable_vr = false
+  }
 }

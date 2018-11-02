@@ -17,7 +17,6 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string16.h"
@@ -203,7 +202,7 @@ class ProfileSyncServiceTypedUrlTest : public AbstractProfileSyncServiceTest {
   void CreateHistoryService() {
     history_backend_ = new HistoryBackendMock();
     syncable_service_ =
-        base::MakeUnique<TestTypedUrlSyncableService>(history_backend_.get());
+        std::make_unique<TestTypedUrlSyncableService>(history_backend_.get());
   }
 
   void DeleteSyncableService() {
@@ -259,7 +258,7 @@ class ProfileSyncServiceTypedUrlTest : public AbstractProfileSyncServiceTest {
           account_id, "oauth2_login_token");
 
       sync_service()->RegisterDataTypeController(
-          base::MakeUnique<TypedUrlDataTypeController>(
+          std::make_unique<TypedUrlDataTypeController>(
               base::Bind(&base::DoNothing), sync_service()->GetSyncClient(),
               kDummySavingBrowserHistoryDisabled));
 
@@ -308,9 +307,7 @@ class ProfileSyncServiceTypedUrlTest : public AbstractProfileSyncServiceTest {
 
   void SendNotification(const base::Closure& task) {
     data_type_thread()->task_runner()->PostTaskAndReply(
-        FROM_HERE, task,
-        base::Bind(&base::MessageLoop::QuitNow,
-                   base::Unretained(base::MessageLoop::current())));
+        FROM_HERE, task, base::Bind(&base::RunLoop::QuitCurrentDeprecated));
     base::RunLoop().Run();
   }
 

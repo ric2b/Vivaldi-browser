@@ -21,6 +21,8 @@ class DeathAwareScriptWrappable
   static bool has_died_;
 
  public:
+  typedef TraceWrapperMember<DeathAwareScriptWrappable> Wrapper;
+
   virtual ~DeathAwareScriptWrappable() {
     if (this == instance_) {
       has_died_ = true;
@@ -38,14 +40,12 @@ class DeathAwareScriptWrappable
   }
 
   DEFINE_INLINE_VIRTUAL_TRACE() {
-    visitor->Trace(raw_dependency_);
     visitor->Trace(wrapped_dependency_);
     visitor->Trace(wrapped_vector_dependency_);
     visitor->Trace(wrapped_hash_map_dependency_);
   }
 
   DEFINE_INLINE_VIRTUAL_TRACE_WRAPPERS() {
-    visitor->TraceWrappersWithManualWriteBarrier(raw_dependency_);
     visitor->TraceWrappers(wrapped_dependency_);
     for (auto dep : wrapped_vector_dependency_) {
       visitor->TraceWrappers(dep);
@@ -56,30 +56,22 @@ class DeathAwareScriptWrappable
     }
   }
 
-  void SetRawDependency(DeathAwareScriptWrappable* dependency) {
-    ScriptWrappableVisitor::WriteBarrier(this, dependency);
-    raw_dependency_ = dependency;
-  }
-
   void SetWrappedDependency(DeathAwareScriptWrappable* dependency) {
     wrapped_dependency_ = dependency;
   }
 
   void AddWrappedVectorDependency(DeathAwareScriptWrappable* dependency) {
-    wrapped_vector_dependency_.push_back(Wrapper(this, dependency));
+    wrapped_vector_dependency_.push_back(dependency);
   }
 
   void AddWrappedHashMapDependency(DeathAwareScriptWrappable* key,
                                    DeathAwareScriptWrappable* value) {
-    wrapped_hash_map_dependency_.insert(Wrapper(this, key),
-                                        Wrapper(this, value));
+    wrapped_hash_map_dependency_.insert(key, value);
   }
 
  private:
-  typedef TraceWrapperMember<DeathAwareScriptWrappable> Wrapper;
-  DeathAwareScriptWrappable() : wrapped_dependency_(this, nullptr) {}
+  DeathAwareScriptWrappable() {}
 
-  Member<DeathAwareScriptWrappable> raw_dependency_;
   Wrapper wrapped_dependency_;
   HeapVector<Wrapper> wrapped_vector_dependency_;
   HeapHashMap<Wrapper, Wrapper> wrapped_hash_map_dependency_;

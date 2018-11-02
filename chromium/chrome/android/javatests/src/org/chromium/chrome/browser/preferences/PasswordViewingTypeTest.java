@@ -12,7 +12,6 @@ import android.content.Intent;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.SmallTest;
 
-import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -21,7 +20,6 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
-import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.preferences.password.SavePasswordsPreferences;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
@@ -75,11 +73,6 @@ public class PasswordViewingTypeTest {
         AccountHolder.Builder accountHolder =
                 AccountHolder.builder(mAccount).password("password").alwaysAccept(true);
         mAccountManager.addAccountHolderExplicitly(accountHolder.build());
-    }
-
-    @After
-    public void tearDown() {
-        AccountManagerFacade.resetAccountManagerFacadeForTests();
     }
 
     /**
@@ -138,10 +131,10 @@ public class PasswordViewingTypeTest {
 
     /**
      * Verifies that sync settings are being set up correctly in the case of redirecting users.
+     * Checks that sync users are allowed to view passwords natively.
      */
     @Test
     @SmallTest
-    @CommandLineFlags.Add("enable-features=" + MainPreferences.VIEW_PASSWORDS)
     @Feature({"Sync"})
     public void testUserRedirectSyncSettings() throws InterruptedException {
         setSyncability(true);
@@ -154,6 +147,8 @@ public class PasswordViewingTypeTest {
                 Assert.assertFalse(ProfileSyncService.get().isUsingSecondaryPassphrase());
             }
         });
+        Assert.assertEquals(
+                SavePasswordsPreferences.class.getCanonicalName(), mPasswordsPref.getFragment());
     }
 
     /**

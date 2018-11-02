@@ -9,13 +9,16 @@
 #include "base/command_line.h"
 #include "browser/launch_update_notifier.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/extensions/app_launch_params.h"
-#include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/common/extensions/extension_metrics.h"
 #include "components/prefs/pref_service.h"
+#include "extensions/features/features.h"
+#include "prefs/vivaldi_pref_names.h"
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "chrome/browser/ui/extensions/application_launch.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
-#include "prefs/vivaldi_pref_names.h"
+#endif
 
 #if defined(OS_MACOSX)
 #include "browser/init_sparkle.h"
@@ -37,10 +40,14 @@ namespace {
 // TODO(koz): Consolidate this function and remove the special casing.
 const Extension* GetPlatformApp(Profile* profile,
                                 const std::string& extension_id) {
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   const Extension* extension =
       extensions::ExtensionRegistry::Get(profile)->GetExtensionById(
           extension_id, extensions::ExtensionRegistry::EVERYTHING);
   return extension && extension->is_platform_app() ? extension : NULL;
+#else
+  return NULL;
+#endif
 }
 
 void RecordCmdLineAppHistogram(extensions::Manifest::Type app_type) {
@@ -77,6 +84,7 @@ bool LaunchVivaldi(const base::CommandLine& command_line,
   }
   LaunchUpdateNotifier(profile);
 
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   AppLaunchParams params(profile, extension, extensions::LAUNCH_CONTAINER_NONE,
                          WindowOpenDisposition::NEW_WINDOW,
                          extensions::SOURCE_EXTENSIONS_PAGE);
@@ -86,6 +94,9 @@ bool LaunchVivaldi(const base::CommandLine& command_line,
   ::OpenApplicationWithReenablePrompt(params);
 
   return true;
+#else
+  return false;
+#endif
 }
 
 bool AddVivaldiNewPage(bool welcome_run_none, std::vector<GURL>* startup_urls) {

@@ -44,8 +44,6 @@ enum EffectiveConnectionType {
     unsigned long getResourcePriority (DOMString url, Document document);
     DOMString getResourceHeader (DOMString url, DOMString header, Document document);
 
-    boolean isSharingStyle(Element element1, Element element2);
-
     CSSStyleDeclaration computedStyleIncludingVisitedInfo(Node node);
 
     ShadowRoot createUserAgentShadowRoot(Element host);
@@ -55,7 +53,8 @@ enum EffectiveConnectionType {
     ShadowRoot oldestShadowRoot(Element host);
     [RaisesException] ShadowRoot youngerShadowRoot(Node root);
 
-    void setBrowserControlsState(float height, boolean shrinksLayout);
+    void setBrowserControlsState(float top_height, float bottom_height, boolean shrinksLayout);
+    void setBrowserControlsShownRatio(float ratio);
 
     [RaisesException] DOMString shadowRootType(Node root);
     [RaisesException] boolean hasShadowInsertionPoint(Node root);
@@ -67,10 +66,7 @@ enum EffectiveConnectionType {
     Node parentTreeScope(Node node);
     [RaisesException] unsigned short compareTreeScopePosition(Node treeScope1, Node treeScope2);
     [RaisesException] unsigned long updateStyleAndReturnAffectedElementCount();
-    // Returns the number of LayoutObjects with needs-layout flag.
     [RaisesException] unsigned long needsLayoutCount();
-    // The number of force layout since Document creation.
-    [RaisesException] readonly attribute unsigned long forceLayoutCount;
     [RaisesException] unsigned long hitTestCount(Document document);
     [RaisesException] unsigned long hitTestCacheHits(Document document);
     [RaisesException] Element? elementFromPoint(Document document, double x, double y, boolean ignoreClipping, boolean allowChildFrameContent);
@@ -98,7 +94,7 @@ enum EffectiveConnectionType {
     [RaisesException] Node previousInFlatTree(Node node);
 
     DOMString visiblePlaceholder(Element element);
-
+    boolean isValidationMessageVisible(Element element);
     void selectColorInColorChooser(Element element, DOMString colorValue);
     void endColorChooser(Element element);
 
@@ -120,6 +116,7 @@ enum EffectiveConnectionType {
     [RaisesException] void addTextMatchMarker(Range range, DOMString matchStatus);
     [RaisesException] void addCompositionMarker(Range range, DOMString underlineColorValue, DOMString thicknessValue, DOMString backgroundColorValue);
     [RaisesException] void addActiveSuggestionMarker(Range range, DOMString underlineColorValue, DOMString thicknessValue, DOMString backgroundColorValue);
+    [RaisesException] void addSuggestionMarker(Range range, sequence<DOMString> suggestions, DOMString suggestionHighlightColorValue, DOMString underlineColorValue, DOMString thicknessValue, DOMString backgroundColorValue);
     void setTextMatchMarkersActive(Node node, unsigned long startOffset, unsigned long endOffset, boolean active);
     void setMarkedTextMatchesAreHighlighted(Document document, boolean highlight);
 
@@ -268,7 +265,7 @@ enum EffectiveConnectionType {
     DOMString getCurrentCursorInfo();
 
     readonly attribute boolean cursorUpdatePending;
-    readonly attribute boolean fakeMouseMovePending; 
+    readonly attribute boolean fakeMouseMovePending;
 
     DOMString markerTextForListItem(Element element);
 
@@ -396,4 +393,6 @@ enum EffectiveConnectionType {
 
     void setIsLowEndDevice(boolean isLowEndDevice);
     boolean isLowEndDevice();
+
+    sequence<DOMString> supportedTextEncodingLabels();
 };

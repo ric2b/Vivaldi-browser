@@ -152,6 +152,10 @@ void DoLegacyCleanups(const InstallerState& installer_state,
 // a null time in case of error.
 base::Time GetConsoleSessionStartTime();
 
+// Returns true if the current OS vesion suppors drawing dark text on Start Menu
+// tiles.
+bool OsSupportsDarkTextTiles();
+
 // Gets handles to all active processes on the system running from a given path,
 // that could be opened with the |desired_access|.
 std::vector<base::win::ScopedHandle> GetRunningProcessesForPath(

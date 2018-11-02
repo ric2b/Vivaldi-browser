@@ -79,6 +79,7 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
 
   // RenderViewContextMenuBase:
   bool IsCommandIdChecked(int command_id) const override;
+  bool IsCommandIdVisible(int command_id) const override;
   bool IsCommandIdEnabled(int command_id) const override;
   void ExecuteCommand(int command_id, int event_flags) override;
   void AddSpellCheckServiceItem(bool is_checked) override;
@@ -237,8 +238,10 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
   std::unique_ptr<NotesSubMenuObserver>
     insert_note_submenu_observer_;
 
+#if defined(OS_CHROMEOS)
   // An observer that handles "Open with <app>" items.
   std::unique_ptr<RenderViewContextMenuObserver> open_with_menu_observer_;
+#endif
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   // An observer that disables menu items when print preview is active.

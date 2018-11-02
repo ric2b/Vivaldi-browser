@@ -92,6 +92,8 @@ const WrapperTypeInfo V8TestInterfaceEventTargetConstructor::wrapperTypeInfo = {
 #endif
 
 static void V8TestInterfaceEventTargetConstructorCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceEventTarget_ConstructorCallback");
+
   if (!info.IsConstructCall()) {
     V8ThrowException::ThrowTypeError(info.GetIsolate(), ExceptionMessages::ConstructorNotCallableAsFunction("Name"));
     return;
@@ -102,7 +104,8 @@ static void V8TestInterfaceEventTargetConstructorCallback(const v8::FunctionCall
     return;
   }
 
-  Document& document = *ToDocument(CurrentExecutionContext(info.GetIsolate()));
+  Document& document = *ToDocument(ToExecutionContext(
+      info.NewTarget().As<v8::Object>()->CreationContext()));
   TestInterfaceEventTarget* impl = TestInterfaceEventTarget::CreateForJSConstructor(document);
   v8::Local<v8::Object> wrapper = info.Holder();
   wrapper = impl->AssociateWithWrapper(info.GetIsolate(), &V8TestInterfaceEventTargetConstructor::wrapperTypeInfo, wrapper);
@@ -128,6 +131,8 @@ v8::Local<v8::FunctionTemplate> V8TestInterfaceEventTargetConstructor::domTempla
 void V8TestInterfaceEventTargetConstructor::NamedConstructorAttributeGetter(
     v8::Local<v8::Name> propertyName,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceEventTarget_NamedConstructorAttributeGetter");
+
   v8::Local<v8::Context> creationContext = info.Holder()->CreationContext();
   V8PerContextData* perContextData = V8PerContextData::From(creationContext);
   if (!perContextData) {

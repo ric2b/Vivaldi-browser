@@ -4,15 +4,36 @@
 
 #include "services/device/generic_sensor/platform_sensor_provider_linux.h"
 
+#include <utility>
+#include <vector>
+
+#include "base/memory/ptr_util.h"
+#include "base/memory/ref_counted.h"
 #include "base/memory/singleton.h"
 #include "base/message_loop/message_loop.h"
 #include "base/task_runner_util.h"
 #include "base/threading/thread.h"
+#include "services/device/generic_sensor/linear_acceleration_fusion_algorithm_using_accelerometer.h"
 #include "services/device/generic_sensor/linux/sensor_data_linux.h"
+#include "services/device/generic_sensor/orientation_quaternion_fusion_algorithm_using_euler_angles.h"
+#include "services/device/generic_sensor/platform_sensor_fusion.h"
 #include "services/device/generic_sensor/platform_sensor_linux.h"
 #include "services/device/generic_sensor/platform_sensor_reader_linux.h"
+#include "services/device/generic_sensor/relative_orientation_euler_angles_fusion_algorithm_using_accelerometer.h"
 
 namespace device {
+namespace {
+bool IsFusionSensorType(mojom::SensorType type) {
+  switch (type) {
+    case mojom::SensorType::LINEAR_ACCELERATION:
+    case mojom::SensorType::RELATIVE_ORIENTATION_EULER_ANGLES:
+    case mojom::SensorType::RELATIVE_ORIENTATION_QUATERNION:
+      return true;
+    default:
+      return false;
+  }
+}
+}  // namespace
 
 // static
 PlatformSensorProviderLinux* PlatformSensorProviderLinux::GetInstance() {
@@ -36,6 +57,13 @@ void PlatformSensorProviderLinux::CreateSensorInternal(
     const CreateSensorCallback& callback) {
   if (!sensor_device_manager_)
     sensor_device_manager_.reset(new SensorDeviceManager());
+
+  if (IsFusionSensorType(type)) {
+    // For sensor fusion the device nodes initialization will happen
+    // during fetching the source sensors.
+    CreateFusionSensor(type, std::move(mapping), callback);
+    return;
+  }
 
   if (!sensor_nodes_enumerated_) {
     if (!sensor_nodes_enumeration_started_) {
@@ -159,6 +187,9 @@ void PlatformSensorProviderLinux::ProcessStoredRequests() {
     return;
 
   for (auto const& type : request_types) {
+    if (IsFusionSensorType(type))
+      continue;
+
     SensorInfoLinux* device = nullptr;
     auto device_entry = sensor_devices_by_type_.find(type);
     if (device_entry != sensor_devices_by_type_.end())
@@ -209,6 +240,35 @@ void PlatformSensorProviderLinux::OnDeviceRemoved(
   if (it != sensor_devices_by_type_.end() &&
       it->second->device_node == device_node)
     sensor_devices_by_type_.erase(it);
+}
+
+void PlatformSensorProviderLinux::CreateFusionSensor(
+    mojom::SensorType type,
+    mojo::ScopedSharedBufferMapping mapping,
+    const CreateSensorCallback& callback) {
+  DCHECK(IsFusionSensorType(type));
+  std::unique_ptr<PlatformSensorFusionAlgorithm> fusion_algorithm;
+  switch (type) {
+    case mojom::SensorType::LINEAR_ACCELERATION:
+      fusion_algorithm = base::MakeUnique<
+          LinearAccelerationFusionAlgorithmUsingAccelerometer>();
+      break;
+    case mojom::SensorType::RELATIVE_ORIENTATION_EULER_ANGLES:
+      fusion_algorithm = base::MakeUnique<
+          RelativeOrientationEulerAnglesFusionAlgorithmUsingAccelerometer>();
+      break;
+    case mojom::SensorType::RELATIVE_ORIENTATION_QUATERNION:
+      fusion_algorithm = base::MakeUnique<
+          OrientationQuaternionFusionAlgorithmUsingEulerAngles>(
+          false /* absolute */);
+      break;
+    default:
+      NOTREACHED();
+  }
+
+  DCHECK(fusion_algorithm);
+  PlatformSensorFusion::Create(std::move(mapping), this,
+                               std::move(fusion_algorithm), callback);
 }
 
 }  // namespace device

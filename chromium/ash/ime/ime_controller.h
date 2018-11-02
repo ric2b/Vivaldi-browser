@@ -11,6 +11,7 @@
 #include "ash/public/interfaces/ime_controller.mojom.h"
 #include "ash/public/interfaces/ime_info.mojom.h"
 #include "base/macros.h"
+#include "base/observer_list.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 
 namespace ui {
@@ -21,11 +22,19 @@ namespace ash {
 
 // Connects ash IME users (e.g. the system tray) to the IME implementation,
 // which might live in Chrome browser or in a separate mojo service.
-class ASH_EXPORT ImeController
-    : public NON_EXPORTED_BASE(mojom::ImeController) {
+class ASH_EXPORT ImeController : public mojom::ImeController {
  public:
+  class Observer {
+   public:
+    // Called when the caps lock state has changed.
+    virtual void OnCapsLockChanged(bool enabled) = 0;
+  };
+
   ImeController();
   ~ImeController() override;
+
+  void AddObserver(Observer* observer);
+  void RemoveObserver(Observer* observer);
 
   const mojom::ImeInfo& current_ime() const { return current_ime_; }
 
@@ -50,6 +59,7 @@ class ASH_EXPORT ImeController
   void SwitchToPreviousIme();
   void SwitchImeById(const std::string& ime_id, bool show_message);
   void ActivateImeMenuItem(const std::string& key);
+  void SetCapsLockFromTray(bool caps_enabled);
 
   // Returns true if the switch is allowed and the keystroke should be
   // consumed.
@@ -64,6 +74,10 @@ class ASH_EXPORT ImeController
                   std::vector<mojom::ImeMenuItemPtr> menu_items) override;
   void SetImesManagedByPolicy(bool managed) override;
   void ShowImeMenuOnShelf(bool show) override;
+  void SetCapsLockState(bool caps_enabled) override;
+
+  // Synchronously returns the cached caps lock state.
+  bool IsCapsLockEnabled() const;
 
   void FlushMojoForTesting();
 
@@ -92,6 +106,13 @@ class ASH_EXPORT ImeController
 
   // Additional menu items for properties of the currently selected IME.
   std::vector<mojom::ImeMenuItem> current_ime_menu_items_;
+
+  // A slightly delayed state value that is updated by asynchronously reported
+  // changes from the ImeControllerClient client (source of truth) which is in
+  // another process. This is required for synchronous method calls in ash.
+  bool is_caps_lock_enabled_ = false;
+
+  base::ObserverList<Observer> observers_;
 
   DISALLOW_COPY_AND_ASSIGN(ImeController);
 };

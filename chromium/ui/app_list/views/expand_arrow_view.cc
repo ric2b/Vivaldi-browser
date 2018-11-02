@@ -63,7 +63,7 @@ constexpr SkColor kInkDropRippleColor =
 
 ExpandArrowView::ExpandArrowView(ContentsView* contents_view,
                                  AppListView* app_list_view)
-    : views::CustomButton(this),
+    : views::Button(this),
       contents_view_(contents_view),
       app_list_view_(app_list_view),
       weak_ptr_factory_(this) {
@@ -154,7 +154,7 @@ bool ExpandArrowView::OnKeyPressed(const ui::KeyEvent& event) {
 
 std::unique_ptr<views::InkDrop> ExpandArrowView::CreateInkDrop() {
   std::unique_ptr<views::InkDropImpl> ink_drop =
-      CustomButton::CreateDefaultInkDropImpl();
+      Button::CreateDefaultInkDropImpl();
   ink_drop->SetShowHighlightOnHover(false);
   ink_drop->SetShowHighlightOnFocus(false);
   ink_drop->SetAutoHighlightMode(views::InkDropImpl::AutoHighlightMode::NONE);

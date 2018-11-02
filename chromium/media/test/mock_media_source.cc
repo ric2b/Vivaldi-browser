@@ -37,6 +37,27 @@ MockMediaSource::MockMediaSource(const std::string& filename,
   CHECK_LE(initial_append_size_, file_data_->data_size());
 }
 
+MockMediaSource::MockMediaSource(const scoped_refptr<DecoderBuffer>& data,
+                                 const std::string& mimetype,
+                                 size_t initial_append_size)
+    : file_data_(data),
+      current_position_(0),
+      initial_append_size_(initial_append_size),
+      mimetype_(mimetype),
+      chunk_demuxer_(new ChunkDemuxer(
+          base::Bind(&MockMediaSource::DemuxerOpened, base::Unretained(this)),
+          base::Bind(&base::DoNothing),
+          base::Bind(&MockMediaSource::OnEncryptedMediaInitData,
+                     base::Unretained(this)),
+          &media_log_)),
+      owned_chunk_demuxer_(chunk_demuxer_) {
+  if (initial_append_size_ == kAppendWholeFile)
+    initial_append_size_ = file_data_->data_size();
+
+  CHECK_GT(initial_append_size_, 0u);
+  CHECK_LE(initial_append_size_, file_data_->data_size());
+}
+
 MockMediaSource::~MockMediaSource() {}
 
 std::unique_ptr<Demuxer> MockMediaSource::GetDemuxer() {
@@ -66,10 +87,18 @@ void MockMediaSource::AppendData(size_t size) {
   CHECK_LT(current_position_, file_data_->data_size());
   CHECK_LE(current_position_ + size, file_data_->data_size());
 
-  ASSERT_TRUE(chunk_demuxer_->AppendData(
+  bool success = chunk_demuxer_->AppendData(
       kSourceId, file_data_->data() + current_position_, size,
-      base::TimeDelta(), kInfiniteDuration, &last_timestamp_offset_));
+      base::TimeDelta(), kInfiniteDuration, &last_timestamp_offset_);
   current_position_ += size;
+
+  ASSERT_EQ(expect_append_success_, success);
+
+  if (do_eos_after_next_append_) {
+    do_eos_after_next_append_ = false;
+    if (success)
+      EndOfStream();
+  }
 }
 
 bool MockMediaSource::AppendAtTime(base::TimeDelta timestamp_offset,
@@ -90,9 +119,10 @@ void MockMediaSource::AppendAtTimeWithWindow(
     const uint8_t* pData,
     int size) {
   CHECK(!chunk_demuxer_->IsParsingMediaSegment(kSourceId));
-  ASSERT_TRUE(chunk_demuxer_->AppendData(kSourceId, pData, size,
-                                         append_window_start, append_window_end,
-                                         &timestamp_offset));
+  ASSERT_EQ(
+      expect_append_success_,
+      chunk_demuxer_->AppendData(kSourceId, pData, size, append_window_start,
+                                 append_window_end, &timestamp_offset));
   last_timestamp_offset_ = timestamp_offset;
 }
 

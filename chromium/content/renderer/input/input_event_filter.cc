@@ -131,9 +131,11 @@ void InputEventFilter::DispatchNonBlockingEventToMainThread(
 }
 
 void InputEventFilter::SetWhiteListedTouchAction(int routing_id,
-                                                 cc::TouchAction touch_action) {
+                                                 cc::TouchAction touch_action,
+                                                 uint32_t unique_touch_event_id,
+                                                 InputEventAckState ack_state) {
   SendMessage(base::MakeUnique<InputHostMsg_SetWhiteListedTouchAction>(
-      routing_id, touch_action));
+      routing_id, touch_action, unique_touch_event_id, ack_state));
 }
 
 void InputEventFilter::OnFilterAdded(IPC::Channel* channel) {
@@ -194,8 +196,8 @@ bool InputEventFilter::OnMessageReceived(const IPC::Message& message) {
   }
 
   bool postedTask = target_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&InputEventFilter::ForwardToHandler, this,
-                            routing_id, message, received_time));
+      FROM_HERE, base::BindOnce(&InputEventFilter::ForwardToHandler, this,
+                                routing_id, message, received_time));
   LOG_IF(WARNING, !postedTask) << "PostTask failed";
   return true;
 }
@@ -274,7 +276,7 @@ void InputEventFilter::DidForwardToHandlerAndOverscroll(
   }
   if (callback) {
     std::move(callback).Run(ack_state, latency_info,
-                            std::move(overscroll_params));
+                            std::move(overscroll_params), base::nullopt);
   }
 }
 
@@ -284,21 +286,23 @@ void InputEventFilter::SendInputEventAck(
     int unique_touch_event_id,
     InputEventAckState ack_state,
     const ui::LatencyInfo& latency_info,
-    std::unique_ptr<ui::DidOverscrollParams> overscroll_params) {
+    std::unique_ptr<ui::DidOverscrollParams> overscroll_params,
+    base::Optional<cc::TouchAction> touch_action) {
   bool main_thread = main_task_runner_->BelongsToCurrentThread();
 
   InputEventAck ack(main_thread ? InputEventAckSource::MAIN_THREAD
                                 : InputEventAckSource::COMPOSITOR_THREAD,
                     event_type, ack_state, latency_info,
-                    std::move(overscroll_params), unique_touch_event_id);
+                    std::move(overscroll_params), unique_touch_event_id,
+                    touch_action);
   SendMessage(std::unique_ptr<IPC::Message>(
       new InputHostMsg_HandleInputEvent_ACK(routing_id, ack)));
 }
 
 void InputEventFilter::SendMessage(std::unique_ptr<IPC::Message> message) {
   CHECK(io_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&InputEventFilter::SendMessageOnIOThread, this,
-                            base::Passed(&message))))
+      FROM_HERE, base::BindOnce(&InputEventFilter::SendMessageOnIOThread, this,
+                                base::Passed(&message))))
       << "PostTask failed";
 }
 

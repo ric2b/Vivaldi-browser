@@ -16,9 +16,10 @@
 #include "content/common/content_export.h"
 #include "media/blink/webmediaplayer_delegate.h"
 #include "media/blink/webmediaplayer_util.h"
-#include "media/renderers/gpu_video_accelerator_factories.h"
 #include "media/renderers/skcanvas_video_renderer.h"
+#include "media/video/gpu_video_accelerator_factories.h"
 #include "third_party/WebKit/public/platform/WebMediaPlayer.h"
+#include "third_party/WebKit/public/platform/WebMediaStream.h"
 #include "url/origin.h"
 
 namespace blink {
@@ -62,9 +63,10 @@ class WebMediaPlayerMSCompositor;
 // blink::WebMediaPlayerClient
 //   WebKit client of this media player object.
 class CONTENT_EXPORT WebMediaPlayerMS
-    : public NON_EXPORTED_BASE(blink::WebMediaPlayer),
-      public NON_EXPORTED_BASE(media::WebMediaPlayerDelegate::Observer),
-      public NON_EXPORTED_BASE(base::SupportsWeakPtr<WebMediaPlayerMS>) {
+    : public blink::WebMediaStreamObserver,
+      public blink::WebMediaPlayer,
+      public media::WebMediaPlayerDelegate::Observer,
+      public base::SupportsWeakPtr<WebMediaPlayerMS> {
  public:
   // Construct a WebMediaPlayerMS with reference to the client, and
   // a MediaStreamClient which provides MediaStreamVideoRenderer.
@@ -119,6 +121,8 @@ class CONTENT_EXPORT WebMediaPlayerMS
 
   // Dimensions of the video.
   blink::WebSize NaturalSize() const override;
+
+  blink::WebSize VisibleRect() const override;
 
   // Getters of playback state.
   bool Paused() const override;
@@ -177,6 +181,10 @@ class CONTENT_EXPORT WebMediaPlayerMS
                     bool flip_y,
                     bool premultiply_alpha) override;
 
+  // blink::WebMediaStreamObserver implementation
+  void TrackAdded(const blink::WebMediaStreamTrack& track) override;
+  void TrackRemoved(const blink::WebMediaStreamTrack& track) override;
+
  private:
   friend class WebMediaPlayerMSTest;
 
@@ -198,6 +206,11 @@ class CONTENT_EXPORT WebMediaPlayerMS
 
   // Getter method to |client_|.
   blink::WebMediaPlayerClient* get_client() { return client_; }
+
+  // To be run when tracks are added or removed.
+  void Reload();
+  void ReloadVideo();
+  void ReloadAudio();
 
   blink::WebLocalFrame* const frame_;
 
@@ -264,6 +277,10 @@ class CONTENT_EXPORT WebMediaPlayerMS
   // True if playback should be started upon the next call to OnShown(). Only
   // used on Android.
   bool should_play_upon_shown_;
+  blink::WebMediaStream web_stream_;
+  // IDs of the tracks currently played.
+  blink::WebString current_video_track_id_;
+  blink::WebString current_audio_track_id_;
 
   DISALLOW_COPY_AND_ASSIGN(WebMediaPlayerMS);
 };

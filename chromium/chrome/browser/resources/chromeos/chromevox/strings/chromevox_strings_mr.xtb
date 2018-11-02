@@ -219,6 +219,7 @@
 <translation id="3143851963874289911">cll</translation>
 <translation id="3149472044574196936">पुढील रेखा</translation>
 <translation id="3153024374267644603">भाषण चालू</translation>
+<translation id="3153928844647607688">सारणी <ph name="TABLENAME" />, <ph name="TABLEROWS" /> बाय <ph name="TABLECOLS" /></translation>
 <translation id="3155083529632865074">मागील बटण नाही.</translation>
 <translation id="3163593631834463955">रिक्त स्‍तंभ शीर्षलेख</translation>
 <translation id="316542773973815724">नेव्हिगेशन</translation>
@@ -403,6 +404,7 @@
 <translation id="4597532268155981612">फॉर्म</translation>
 <translation id="4597896406374528575">एप्रिल</translation>
 <translation id="460018603901637538">प्रदर्शन आकार शेजारी शेजारी वर बदला.</translation>
+<translation id="4601367666219428522">tbl <ph name="TABLENAME" /> <ph name="TABLEROWS" />x<ph name="TABLECOLS" /></translation>
 <translation id="4615592953348396470">पुढील की दाबणे दुर्लक्षित करत आहे</translation>
 <translation id="461613135510474570">वाक्य</translation>
 <translation id="4647836961514597010">रंग निवडक</translation>
@@ -452,7 +454,6 @@
 <translation id="5000760171916499057">कोणतेही फॉर्म नाहीत.</translation>
 <translation id="5005670136041063723">आणखी सारखे घटक नाहीत.</translation>
 <translation id="501473567976723023">जानेवारी</translation>
-<translation id="5040591161308540832">सारणी $1, $3 नुसार $2</translation>
 <translation id="5041394372352067729">पृष्ठाच्या शीर्षस्थानी ब्रेल प्रदर्शन हलवा</translation>
 <translation id="5042770794184672516">बोलण्‍याचा आवाज वाढवा</translation>
 <translation id="5050015258024679800">मागील स्तर 4 शीर्षक</translation>
@@ -782,6 +783,7 @@ Chrome ब्राउझर मेनू उघडण्यासाठी, Alt
 <translation id="820417203470636242">रिक्त सेल.</translation>
 <translation id="8215202828671303819">एकाधिक निवड</translation>
 <translation id="8224171046658870249">ChromeVox Next वर स्विच केले</translation>
+<translation id="826991282343985864">r$1c$2</translation>
 <translation id="8276439074553447000">मागील फोकस करण्यायोग्य आयटमवर जा</translation>
 <translation id="8278417001922463147">मागील लेख नाही.</translation>
 <translation id="8283603667300770666">पुढील फॉर्म फील्‍ड</translation>

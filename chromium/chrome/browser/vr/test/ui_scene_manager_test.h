@@ -9,10 +9,12 @@
 
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
-#include "cc/trees/target_property.h"
-#include "chrome/browser/vr/elements/ui_element_debug_id.h"
+#include "chrome/browser/vr/elements/ui_element_name.h"
+#include "chrome/browser/vr/target_property.h"
 #include "chrome/browser/vr/test/mock_browser_interface.h"
+#include "chrome/browser/vr/test/mock_content_input_delegate.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/skia/include/core/SkColor.h"
 
 namespace vr {
 
@@ -45,16 +47,22 @@ class UiSceneManagerTest : public testing::Test {
 
   void MakeManager(InCct in_cct, InWebVr in_web_vr);
   void MakeAutoPresentedManager();
-  bool IsVisible(UiElementDebugId debug_id);
+
+  bool IsVisible(UiElementName name) const;
 
   // Verify that only the elements in the set are visible.
   void VerifyElementsVisible(const std::string& debug_name,
-                             const std::set<UiElementDebugId>& debug_ids);
+                             const std::set<UiElementName>& names) const;
 
   // Return false if not all elements in the set match the specified visibility
   // state. Other elements are ignored.
-  bool VerifyVisibility(const std::set<UiElementDebugId>& debug_ids,
-                        bool visible);
+  bool VerifyVisibility(const std::set<UiElementName>& names,
+                        bool visible) const;
+
+  // Return false if not all elements in the set match the specified requires
+  // layout state. Other elements are ignored.
+  bool VerifyRequiresLayout(const std::set<UiElementName>& names,
+                            bool requires_layout) const;
 
   // Advances current_time_ by delta. This is done in frame increments and
   // UiScene::OnBeginFrame is called at each increment.
@@ -62,12 +70,15 @@ class UiSceneManagerTest : public testing::Test {
 
   // Returns true if the given properties are being animated by the element.
   bool IsAnimating(UiElement* element,
-                   const std::vector<cc::TargetProperty::Type>& properties);
+                   const std::vector<TargetProperty>& properties) const;
+
+  SkColor GetBackgroundColor() const;
 
   base::MessageLoop message_loop_;
   std::unique_ptr<MockBrowserInterface> browser_;
   std::unique_ptr<UiScene> scene_;
   std::unique_ptr<UiSceneManager> manager_;
+  MockContentInputDelegate content_input_delegate_;
   base::TimeTicks current_time_;
 };
 

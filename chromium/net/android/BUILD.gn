@@ -37,6 +37,7 @@ android_library("net_java") {
 android_aidl("embedded_test_server_aidl") {
   interface_file = "../test/android/javatests/src/org/chromium/net/test/IEmbeddedTestServerInterface.aidl"
   sources = [
+    "../test/android/javatests/src/org/chromium/net/test/IConnectionListener.aidl",
     "../test/android/javatests/src/org/chromium/net/test/IEmbeddedTestServerImpl.aidl",
   ]
 }
@@ -85,6 +86,10 @@ android_library("net_java_test_support_provider") {
     ":net_java",
     "//base:base_java",
     "//base:base_java_test_support",
+  ]
+
+  data_deps = [
+    "//net:test_support",
   ]
 }
 
@@ -172,6 +177,7 @@ java_cpp_template("net_errors_java") {
 
 java_cpp_enum("net_java_test_support_enums_srcjar") {
   sources = [
+    "../test/embedded_test_server/embedded_test_server.h",
     "../test/url_request/url_request_failed_job.h",
   ]
 }

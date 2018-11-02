@@ -10,6 +10,7 @@
 #include "chrome/browser/engagement/site_engagement_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/resource_coordinator/tab_manager.h"
+#include "chrome/browser/resource_coordinator/tab_manager_stats_collector.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
@@ -40,8 +41,8 @@ void TabManager::WebContentsData::DidStopLoading() {
   // We may already be in the stopped state if this is being invoked due to an
   // iframe loading new content.
   //
-  // TODO(shaseley): switch to the new done signal (network and cpu quiescence)
-  // when available.
+  // TODO(lpy): switch to the new done signal (network and cpu quiescence) when
+  // available.
   if (tab_data_.tab_loading_state != TAB_IS_LOADED) {
     SetTabLoadingState(TAB_IS_LOADED);
     g_browser_process->GetTabManager()->OnDidStopLoading(web_contents());
@@ -53,16 +54,20 @@ void TabManager::WebContentsData::DidStartNavigation(
   // Only change to the loading state if there is a navigation in the main
   // frame. DidStartLoading() happens before this, but at that point we don't
   // know if the load is happening in the main frame or an iframe.
-  //
-  // TODO(shaseley): Consider NavigationThrottle signal when available.
-  if (!navigation_handle->IsInMainFrame())
+  if (!navigation_handle->IsInMainFrame() ||
+      navigation_handle->IsSameDocument()) {
     return;
+  }
 
   SetTabLoadingState(TAB_IS_LOADING);
+  g_browser_process->GetTabManager()
+      ->stats_collector()
+      ->OnDidStartMainFrameNavigation(web_contents());
 }
 
 void TabManager::WebContentsData::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
+  SetIsInSessionRestore(false);
   g_browser_process->GetTabManager()->OnDidFinishNavigation(navigation_handle);
 }
 
@@ -83,6 +88,7 @@ void TabManager::WebContentsData::WebContentsDestroyed() {
   }
 
   SetTabLoadingState(TAB_IS_NOT_LOADING);
+  SetIsInSessionRestore(false);
   g_browser_process->GetTabManager()->OnWebContentsDestroyed(web_contents());
 }
 
@@ -209,7 +215,9 @@ TabManager::WebContentsData::Data::Data()
       last_inactive_time(TimeTicks::UnixEpoch()),
       engagement_score(-1.0),
       is_auto_discardable(true),
-      tab_loading_state(TAB_IS_NOT_LOADING) {}
+      tab_loading_state(TAB_IS_NOT_LOADING),
+      is_in_session_restore(false),
+      is_restored_in_foreground(false) {}
 
 bool TabManager::WebContentsData::Data::operator==(const Data& right) const {
   return is_discarded == right.is_discarded &&
@@ -219,7 +227,9 @@ bool TabManager::WebContentsData::Data::operator==(const Data& right) const {
          last_reload_time == right.last_reload_time &&
          last_inactive_time == right.last_inactive_time &&
          engagement_score == right.engagement_score &&
-         tab_loading_state == right.tab_loading_state;
+         tab_loading_state == right.tab_loading_state &&
+         is_in_session_restore == right.is_in_session_restore &&
+         is_restored_in_foreground == right.is_restored_in_foreground;
 }
 
 bool TabManager::WebContentsData::Data::operator!=(const Data& right) const {

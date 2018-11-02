@@ -5,12 +5,12 @@
 #import "ios/clean/chrome/browser/ui/omnibox/location_bar_coordinator.h"
 
 #include "base/memory/ptr_util.h"
+#import "ios/chrome/browser/ui/browser_list/browser.h"
+#import "ios/chrome/browser/ui/coordinators/browser_coordinator+internal.h"
 #import "ios/chrome/browser/ui/omnibox/location_bar_controller_impl.h"
 #include "ios/chrome/browser/ui/toolbar/toolbar_model_ios.h"
 #import "ios/clean/chrome/browser/ui/omnibox/location_bar_mediator.h"
 #import "ios/clean/chrome/browser/ui/omnibox/location_bar_view_controller.h"
-#import "ios/shared/chrome/browser/ui/browser_list/browser.h"
-#import "ios/shared/chrome/browser/ui/coordinators/browser_coordinator+internal.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -42,7 +42,7 @@
       base::MakeUnique<LocationBarControllerImpl>(
           self.viewController.omnibox, browser->browser_state(),
           nil /* PreloadProvider */, nil /* OmniboxPopupPositioner */,
-          self.mediator);
+          self.mediator, nil /* dispatcher */);
   [self.mediator setLocationBar:std::move(locationBar)];
   [super start];
 }

@@ -18,6 +18,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/frame/LocalDOMWindow.h"
+#include "platform/bindings/RuntimeCallStats.h"
 #include "platform/bindings/V8ObjectConstructor.h"
 #include "platform/bindings/V8PrivateProperty.h"
 #include "platform/wtf/GetPtr.h"
@@ -107,6 +108,8 @@ const WrapperTypeInfo V8TestInterfaceNamedConstructorConstructor::wrapperTypeInf
 #endif
 
 static void V8TestInterfaceNamedConstructorConstructorCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceNamedConstructor_ConstructorCallback");
+
   if (!info.IsConstructCall()) {
     V8ThrowException::ThrowTypeError(info.GetIsolate(), ExceptionMessages::ConstructorNotCallableAsFunction("Audio"));
     return;
@@ -160,7 +163,8 @@ static void V8TestInterfaceNamedConstructorConstructorCallback(const v8::Functio
     defaultNullStringOptionalstringArg = nullptr;
   }
   if (UNLIKELY(numArgsPassed <= 5)) {
-    Document& document = *ToDocument(CurrentExecutionContext(info.GetIsolate()));
+    Document& document = *ToDocument(ToExecutionContext(
+        info.NewTarget().As<v8::Object>()->CreationContext()));
     TestInterfaceNamedConstructor* impl = TestInterfaceNamedConstructor::CreateForJSConstructor(document, stringArg, defaultUndefinedOptionalBooleanArg, defaultUndefinedOptionalLongArg, defaultUndefinedOptionalStringArg, defaultNullStringOptionalstringArg, exceptionState);
     if (exceptionState.HadException()) {
       return;
@@ -174,7 +178,8 @@ static void V8TestInterfaceNamedConstructorConstructorCallback(const v8::Functio
   if (!optionalStringArg.Prepare())
     return;
 
-  Document& document = *ToDocument(CurrentExecutionContext(info.GetIsolate()));
+  Document& document = *ToDocument(ToExecutionContext(
+      info.NewTarget().As<v8::Object>()->CreationContext()));
   TestInterfaceNamedConstructor* impl = TestInterfaceNamedConstructor::CreateForJSConstructor(document, stringArg, defaultUndefinedOptionalBooleanArg, defaultUndefinedOptionalLongArg, defaultUndefinedOptionalStringArg, defaultNullStringOptionalstringArg, optionalStringArg, exceptionState);
   if (exceptionState.HadException()) {
     return;
@@ -203,6 +208,8 @@ v8::Local<v8::FunctionTemplate> V8TestInterfaceNamedConstructorConstructor::domT
 void V8TestInterfaceNamedConstructorConstructor::NamedConstructorAttributeGetter(
     v8::Local<v8::Name> propertyName,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceNamedConstructor_NamedConstructorAttributeGetter");
+
   v8::Local<v8::Context> creationContext = info.Holder()->CreationContext();
   V8PerContextData* perContextData = V8PerContextData::From(creationContext);
   if (!perContextData) {

@@ -3,15 +3,34 @@
 #include "browser/vivaldi_browser_finder.h"
 
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/browser_list.h"
 #include "components/guest_view/browser/guest_view_base.h"
+#include "extensions/features/features.h"
+#include "ui/vivaldi_browser_window.h"
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
+#endif
 
 using content::WebContents;
 
 namespace vivaldi {
 
+Browser* FindBrowserForEmbedderWebContents(const WebContents* contents) {
+  for (auto* browser : *BrowserList::GetInstance()) {
+    // Devtools windows are not vivaldi windows, so exclude those.
+    if (browser->is_vivaldi() &&
+        static_cast<VivaldiBrowserWindow*>(browser->window())->web_contents() ==
+            contents) {
+      return browser;
+    }
+  }
+  return nullptr;
+}
+
 Browser* FindBrowserWithWebContents(WebContents* web_contents) {
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
 
   // NOTE(espen@vivaldi.com): Some elements (e.g., within panels) will not match
@@ -24,20 +43,15 @@ Browser* FindBrowserWithWebContents(WebContents* web_contents) {
       WebContents* embedder_web_contents = gvb->embedder_web_contents();
       content::BrowserContext* browser_context = gvb->browser_context();
       if (embedder_web_contents && browser_context) {
-        extensions::AppWindowRegistry* registry =
-            extensions::AppWindowRegistry::Get(browser_context);
-        extensions::AppWindow* app_window =
-            registry
-                ? registry->GetAppWindowForWebContents(embedder_web_contents)
-                : nullptr;
-        if (app_window) {
-          browser =
-              chrome::FindBrowserWithWindow(app_window->GetNativeWindow());
-        }
+        browser = FindBrowserForEmbedderWebContents(embedder_web_contents);
       }
     }
   }
+
   return browser;
+#else
+  return NULL;
+#endif
 }
 
 }  // namespace vivaldi

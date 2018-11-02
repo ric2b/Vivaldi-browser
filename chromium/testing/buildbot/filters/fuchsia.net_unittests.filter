@@ -1,36 +1,26 @@
 # TODO(fuchsia): Fix these tests and remove the filter. crbug.com/731302 .
-
 -*HTTPS*
 -*QuicEndToEndTest.Large*
 -*QuicEndToEndTest.TokenBinding*
 -*QuicEndToEndTest.Uber*
--*QuicHttpStreamTest*
--*RootCert*
--*Socket*
--BbrSenderTest.SimpleTransferAckDecimation2
--CertNetFetcherImplTest*
 -CertVerifyProcInternalTest.*
 -CloseOnConnectHttpServerTest.ServerImmediatelyClosesConnection
--DiskCache*
--EffectiveConnectionTypeTest*
--EmbeddedTestServer*
--FilenameUtilTest.Generate*
--FileStreamTest.*
+-DiskCacheEntryTest*AsyncIO*  # Flaky on the bots
+-DiskCacheTest.BlockFiles_Grow  # Flaky timeouts
+-HttpCache.RangeGET_ParallelValidationDifferentRanges  # https://crbug.com/755552
+-HttpCache.RangeGET_ParallelValidationOverlappingRanges  # https://crbug.com/758221
 -HttpNetworkTransactionTest.UploadUnreadableFile
 -HttpServerTest.*
--MimeUtilTest.*
 -NetworkInterfacesTest.GetNetworkList
--NetworkQualitiesPrefManager*
 -NetworkQualityEstimatorTest*
 -Proxy*
 -PythonUtils*
--QuicSimpleClientTest*
 -ReportingUploader*
--SimpleIndexFileTest*
 -SpdyNetworkTransactionTest.UnreadableFilePost
 -SQLite*
 -SSL*
--ThroughputAnalyzerTest*
 -TokenBindingURLRequest*
+-UnixDomain*Socket*
 -URLFetcher*
 -URLRequest*
+-WebSocket*

@@ -7,6 +7,7 @@ import("//build/util/process_version.gni")
 import("//chrome/common/features.gni")
 import("//chrome/process_version_rc_template.gni")  # For branding_file_path.
 import("//extensions/features/features.gni")
+import("//media/media_options.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//pdf/features.gni")
 import("//ppapi/features/features.gni")
@@ -38,7 +39,7 @@ buildflag_header("features") {
     "ENABLE_HANGOUT_SERVICES_EXTENSION=$enable_hangout_services_extension",
     "ENABLE_ONE_CLICK_SIGNIN=$enable_one_click_signin",
     "ENABLE_NATIVE_NOTIFICATIONS=$enable_native_notifications",
-    "ENABLE_OOP_HEAP_PROFILING=$enable_oop_heap_profiling",
+    "ENABLE_NATIVE_WINDOW_NAV_BUTTONS=$enable_native_window_nav_buttons",
     "ENABLE_PACKAGE_MASH_SERVICES=$enable_package_mash_services",
     "ENABLE_SERVICE_DISCOVERY=$enable_service_discovery",
     "ENABLE_SESSION_SERVICE=$enable_session_service",
@@ -167,7 +168,6 @@ static_library("common") {
     "search/instant_types.cc",
     "search/instant_types.h",
     "search/ntp_logging_events.h",
-    "search/search_types.h",
     "search/search_urls.cc",
     "search/search_urls.h",
     "secure_origin_whitelist.cc",
@@ -197,6 +197,7 @@ static_library("common") {
 
   public_deps = [
     ":channel_info",
+    ":client_hints_mojom",
     ":common_param_traits_macros",
     ":features",
     ":ini_parser",
@@ -232,6 +233,7 @@ static_library("common") {
     "//components/network_session_configurator/common",
     "//components/ntp_tiles",
     "//components/offline_pages/core:switches",
+    "//components/offline_pages/features:features",
     "//components/omnibox/common",
     "//components/password_manager/core/common",
     "//components/policy:generated",
@@ -416,7 +418,6 @@ static_library("common") {
     if (enable_print_preview) {
       # Full printing support.
       sources += [
-        "service_messages.h",
         "service_process_util.cc",
         "service_process_util.h",
         "service_process_util_linux.cc",
@@ -442,6 +443,7 @@ static_library("common") {
   if (is_win) {
     deps = [
       "//chrome/common/win:eventlog_messages",
+      "//components/crash/content/app:crash_export_thunk_include",
     ]
 
     public_deps += [
@@ -476,7 +478,7 @@ static_library("common") {
       "pepper_permission_util.h",
     ]
   }
-  if (enable_pepper_cdms) {
+  if (enable_library_cdms) {
     sources += [
       "widevine_cdm_constants.cc",
       "widevine_cdm_constants.h",
@@ -621,13 +623,13 @@ static_library("test_support") {
   sources = [
     "page_load_metrics/test/page_load_metrics_test_util.cc",
     "page_load_metrics/test/page_load_metrics_test_util.h",
-    "search/mock_searchbox.cc",
-    "search/mock_searchbox.h",
+    "search/mock_embedded_search_client.cc",
+    "search/mock_embedded_search_client.h",
   ]
 
   deps = [
     ":common",
-    ":instant_mojom",
+    ":search_mojom",
     "//base",
     "//testing/gmock",
     "//testing/gtest",
@@ -672,9 +674,12 @@ source_set("app_mode_app_support") {
 mojom("mojo_bindings") {
   sources = [
     "cache_stats_recorder.mojom",
+    "chrome_render_frame.mojom",
+    "constants.mojom",
     "file_patcher.mojom",
     "image_context_menu_renderer.mojom",
     "insecure_content_renderer.mojom",
+    "navigation_corrector.mojom",
     "net_benchmarking.mojom",
     "network_diagnostics.mojom",
     "open_search_description_document_handler.mojom",
@@ -696,23 +701,34 @@ mojom("mojo_bindings") {
   }
 
   if (safe_browsing_mode == 1) {
-    sources += [ "safe_browsing/safe_archive_analyzer.mojom" ]
+    sources += [
+      "safe_browsing/phishing_detector.mojom",
+      "safe_browsing/safe_archive_analyzer.mojom",
+    ]
+  }
+
+  if (!is_android) {
+    sources += [ "web_ui_tester.mojom" ]
   }
 
   public_deps = [
     "//components/content_settings/core/common:mojo_bindings",
     "//mojo/common:common_custom_types",
+    "//third_party/WebKit/public:mojo_bindings",
     "//ui/gfx/geometry/mojo",
     "//url/mojo:url_mojom_gurl",
   ]
+
+  overridden_deps = [ "//third_party/WebKit/public:mojo_bindings" ]
+  component_deps = [ "//content/public/common" ]
 
   # TODO(crbug.com/714018): Convert the implementation to use OnceCallback.
   use_once_callback = false
 }
 
-mojom("instant_mojom") {
+mojom("search_mojom") {
   sources = [
-    "instant.mojom",
+    "search.mojom",
   ]
 
   public_deps = [
@@ -726,6 +742,29 @@ mojom("page_load_metrics_mojom") {
     "page_load_metrics/page_load_metrics.mojom",
   ]
 
+  public_deps = [
+    "//mojo/common:common_custom_types",
+    "//third_party/WebKit/public:web_feature_mojo_bindings",
+  ]
+}
+
+mojom("client_hints_mojom") {
+  sources = [
+    "client_hints.mojom",
+  ]
+
+  public_deps = [
+    "//mojo/common:common_custom_types",
+    "//third_party/WebKit/public:web_client_hints_types_mojo_bindings",
+    "//url/mojo:url_mojom_origin",
+  ]
+}
+
+mojom("service_process_mojom") {
+  sources = [
+    "cloud_print.mojom",
+    "service_process.mojom",
+  ]
   public_deps = [
     "//mojo/common:common_custom_types",
   ]

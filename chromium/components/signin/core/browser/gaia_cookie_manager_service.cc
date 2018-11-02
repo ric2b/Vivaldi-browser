@@ -65,7 +65,7 @@ const int kMaxFetcherRetries = 8;
 
 // Name of the GAIA cookie that is being observed to detect when available
 // accounts have changed in the content-area.
-const char* kGaiaCookieName = "APISID";
+const char* const kGaiaCookieName = "APISID";
 
 enum GaiaCookieRequestType {
   ADD_ACCOUNT,
@@ -144,11 +144,9 @@ void GaiaCookieManagerService::ExternalCcResultFetcher::Start() {
   helper_->gaia_auth_fetcher_->StartGetCheckConnectionInfo();
 
   // Some fetches may timeout.  Start a timer to decide when the result fetcher
-  // has waited long enough.
-  // TODO(rogerta): I have no idea how long to wait before timing out.
-  // Gaia folks say this should take no more than 2 second even in mobile.
-  // This will need to be tweaked.
-  timer_.Start(FROM_HERE, base::TimeDelta::FromSeconds(5), this,
+  // has waited long enough. See https://crbug.com/750316#c36 for details on
+  // exact timeout duration.
+  timer_.Start(FROM_HERE, base::TimeDelta::FromSeconds(7), this,
                &GaiaCookieManagerService::ExternalCcResultFetcher::Timeout);
 }
 
@@ -234,7 +232,7 @@ GaiaCookieManagerService::ExternalCcResultFetcher::CreateFetcher(
             destination: GOOGLE_OWNED_SERVICE
           }
           policy {
-            cookies_allowed: false
+            cookies_allowed: NO
             setting: "This feature cannot be disabled in settings."
             policy_exception_justification:
               "Not implemented. Disabling GaiaCookieManager would break "

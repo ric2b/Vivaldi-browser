@@ -34,8 +34,8 @@
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/XMLDocument.h"
+#include "core/dom/events/Event.h"
 #include "core/editing/serializers/Serialization.h"
-#include "core/events/Event.h"
 #include "core/events/ProgressEvent.h"
 #include "core/fileapi/Blob.h"
 #include "core/fileapi/File.h"
@@ -65,7 +65,7 @@
 #include "platform/bindings/DOMWrapperWorld.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/blob/BlobData.h"
-#include "platform/loader/fetch/CrossOriginAccessControl.h"
+#include "platform/exported/WrappedResourceResponse.h"
 #include "platform/loader/fetch/FetchInitiatorTypeNames.h"
 #include "platform/loader/fetch/FetchUtils.h"
 #include "platform/loader/fetch/ResourceError.h"
@@ -81,6 +81,7 @@
 #include "platform/wtf/AutoReset.h"
 #include "platform/wtf/StdLibExtras.h"
 #include "platform/wtf/text/CString.h"
+#include "public/platform/WebCORS.h"
 #include "public/platform/WebURLRequest.h"
 
 namespace blink {
@@ -227,7 +228,7 @@ class XMLHttpRequest::BlobLoader final
       public FileReaderLoaderClient {
  public:
   static BlobLoader* Create(XMLHttpRequest* xhr,
-                            PassRefPtr<BlobDataHandle> handle) {
+                            RefPtr<BlobDataHandle> handle) {
     return new BlobLoader(xhr, std::move(handle));
   }
 
@@ -247,7 +248,7 @@ class XMLHttpRequest::BlobLoader final
   DEFINE_INLINE_TRACE() { visitor->Trace(xhr_); }
 
  private:
-  BlobLoader(XMLHttpRequest* xhr, PassRefPtr<BlobDataHandle> handle)
+  BlobLoader(XMLHttpRequest* xhr, RefPtr<BlobDataHandle> handle)
       : xhr_(xhr),
         loader_(
             FileReaderLoader::Create(FileReaderLoader::kReadByClient, this)) {
@@ -282,14 +283,11 @@ XMLHttpRequest* XMLHttpRequest::Create(ExecutionContext* context) {
 XMLHttpRequest::XMLHttpRequest(
     ExecutionContext* context,
     bool is_isolated_world,
-    PassRefPtr<SecurityOrigin> isolated_world_security_origin)
+    RefPtr<SecurityOrigin> isolated_world_security_origin)
     : SuspendableObject(context),
       timeout_milliseconds_(0),
-      response_blob_(this, nullptr),
       state_(kUnsent),
-      response_document_(this, nullptr),
       length_downloaded_to_file_(0),
-      response_array_buffer_(this, nullptr),
       received_length_(0),
       exception_code_(0),
       progress_event_throttle_(
@@ -363,8 +361,9 @@ void XMLHttpRequest::InitResponseDocument() {
     return;
   }
 
-  DocumentInit init = DocumentInit::FromContext(
-      GetDocument()->ContextDocument(), response_.Url());
+  DocumentInit init = DocumentInit::Create()
+                          .WithContextDocument(GetDocument()->ContextDocument())
+                          .WithURL(response_.Url());
   if (is_html)
     response_document_ = HTMLDocument::Create(init);
   else
@@ -828,7 +827,7 @@ void XMLHttpRequest::send(Document* document, ExceptionState& exception_state) {
     // FIXME: Per https://xhr.spec.whatwg.org/#dom-xmlhttprequest-send the
     // Content-Type header and whether to serialize as HTML or XML should
     // depend on |document->isHTMLDocument()|.
-    if (GetRequestHeader(HTTPNames::Content_Type).IsEmpty())
+    if (!HasContentTypeRequestHeader())
       SetRequestHeaderInternal(HTTPNames::Content_Type,
                                "application/xml;charset=UTF-8");
 
@@ -867,7 +866,7 @@ void XMLHttpRequest::send(Blob* body, ExceptionState& exception_state) {
   RefPtr<EncodedFormData> http_body;
 
   if (AreMethodAndURLValidForSend()) {
-    if (GetRequestHeader(HTTPNames::Content_Type).IsEmpty()) {
+    if (!HasContentTypeRequestHeader()) {
       const String& blob_type = FetchUtils::NormalizeHeaderValue(body->type());
       if (!blob_type.IsEmpty() && ParsedContentType(blob_type).IsValid()) {
         SetRequestHeaderInternal(HTTPNames::Content_Type,
@@ -906,7 +905,7 @@ void XMLHttpRequest::send(FormData* body, ExceptionState& exception_state) {
 
     // TODO (sof): override any author-provided charset= in the
     // content type value to UTF-8 ?
-    if (GetRequestHeader(HTTPNames::Content_Type).IsEmpty()) {
+    if (!HasContentTypeRequestHeader()) {
       AtomicString content_type =
           AtomicString("multipart/form-data; boundary=") +
           FetchUtils::NormalizeHeaderValue(http_body->Boundary().data());
@@ -965,7 +964,7 @@ void XMLHttpRequest::SendBytesData(const void* data,
 }
 
 void XMLHttpRequest::SendForInspectorXHRReplay(
-    PassRefPtr<EncodedFormData> form_data,
+    RefPtr<EncodedFormData> form_data,
     ExceptionState& exception_state) {
   CreateRequest(form_data ? form_data->DeepCopy() : nullptr, exception_state);
   exception_code_ = exception_state.Code();
@@ -991,7 +990,7 @@ void XMLHttpRequest::ThrowForLoadFailureIfNeeded(
   exception_state.ThrowDOMException(exception_code_, message);
 }
 
-void XMLHttpRequest::CreateRequest(PassRefPtr<EncodedFormData> http_body,
+void XMLHttpRequest::CreateRequest(RefPtr<EncodedFormData> http_body,
                                    ExceptionState& exception_state) {
   // Only GET request is supported for blob URL.
   if (url_.ProtocolIs("blob") && method_ != HTTPNames::GET) {
@@ -1084,7 +1083,9 @@ void XMLHttpRequest::CreateRequest(PassRefPtr<EncodedFormData> http_body,
 
   // When responseType is set to "blob", we redirect the downloaded data to a
   // file-handle directly.
-  downloading_to_file_ = GetResponseTypeCode() == kResponseTypeBlob;
+  // TODO: implement this for network service code path. http://crbug.com/754493
+  if (!RuntimeEnabledFeatures::NetworkServiceEnabled())
+    downloading_to_file_ = GetResponseTypeCode() == kResponseTypeBlob;
   if (downloading_to_file_) {
     request.SetDownloadToFile(true);
     resource_loader_options.data_buffering_policy = kDoNotBufferData;
@@ -1401,9 +1402,9 @@ void XMLHttpRequest::SetRequestHeaderInternal(const AtomicString& name,
   }
 }
 
-const AtomicString& XMLHttpRequest::GetRequestHeader(
-    const AtomicString& name) const {
-  return request_headers_.Get(name);
+bool XMLHttpRequest::HasContentTypeRequestHeader() const {
+  return request_headers_.Find(HTTPNames::Content_Type) !=
+         request_headers_.end();
 }
 
 String XMLHttpRequest::getAllResponseHeaders() const {
@@ -1412,9 +1413,9 @@ String XMLHttpRequest::getAllResponseHeaders() const {
 
   StringBuilder string_builder;
 
-  HTTPHeaderSet access_control_expose_header_set;
-  CrossOriginAccessControl::ExtractCorsExposedHeaderNamesList(
-      response_, access_control_expose_header_set);
+  WebHTTPHeaderSet access_control_expose_header_set;
+  WebCORS::ExtractCorsExposedHeaderNamesList(WrappedResourceResponse(response_),
+                                             access_control_expose_header_set);
 
   HTTPHeaderMap::const_iterator end = response_.HttpHeaderFields().end();
   for (HTTPHeaderMap::const_iterator it = response_.HttpHeaderFields().begin();
@@ -1429,9 +1430,9 @@ String XMLHttpRequest::getAllResponseHeaders() const {
       continue;
 
     if (!same_origin_request_ &&
-        !CrossOriginAccessControl::IsOnAccessControlResponseHeaderWhitelist(
-            it->key) &&
-        !access_control_expose_header_set.Contains(it->key))
+        !WebCORS::IsOnAccessControlResponseHeaderWhitelist(it->key) &&
+        access_control_expose_header_set.find(it->key.Ascii().data()) ==
+            access_control_expose_header_set.end())
       continue;
 
     string_builder.Append(it->key.LowerASCII());
@@ -1458,14 +1459,14 @@ const AtomicString& XMLHttpRequest::getResponseHeader(
     return g_null_atom;
   }
 
-  HTTPHeaderSet access_control_expose_header_set;
-  CrossOriginAccessControl::ExtractCorsExposedHeaderNamesList(
-      response_, access_control_expose_header_set);
+  WebHTTPHeaderSet access_control_expose_header_set;
+  WebCORS::ExtractCorsExposedHeaderNamesList(WrappedResourceResponse(response_),
+                                             access_control_expose_header_set);
 
   if (!same_origin_request_ &&
-      !CrossOriginAccessControl::IsOnAccessControlResponseHeaderWhitelist(
-          name) &&
-      !access_control_expose_header_set.Contains(name)) {
+      !WebCORS::IsOnAccessControlResponseHeaderWhitelist(name) &&
+      access_control_expose_header_set.find(name.Ascii().data()) ==
+          access_control_expose_header_set.end()) {
     LogConsoleError(GetExecutionContext(),
                     "Refused to get unsafe header \"" + name + "\"");
     return g_null_atom;
@@ -1507,7 +1508,7 @@ void XMLHttpRequest::UpdateContentTypeAndCharset(
     const String& charset) {
   // http://xhr.spec.whatwg.org/#the-send()-method step 4's concilliation of
   // "charset=" in any author-provided Content-Type: request header.
-  String content_type = GetRequestHeader(HTTPNames::Content_Type);
+  String content_type = request_headers_.Get(HTTPNames::Content_Type);
   if (content_type.IsEmpty()) {
     SetRequestHeaderInternal(HTTPNames::Content_Type, default_content_type);
     return;
@@ -1567,12 +1568,6 @@ void XMLHttpRequest::DidFail(const ResourceError& error) {
     HandleDidTimeout();
     return;
   }
-
-  // Network failures are already reported to Web Inspector by ResourceLoader.
-  if (error.Domain() == kErrorDomainBlinkInternal)
-    LogConsoleError(GetExecutionContext(), "XMLHttpRequest cannot load " +
-                                               error.FailingURL() + ". " +
-                                               error.LocalizedDescription());
 
   HandleNetworkError();
 }
@@ -1646,7 +1641,7 @@ void XMLHttpRequest::DidFailLoadingFromBlob() {
   HandleNetworkError();
 }
 
-PassRefPtr<BlobDataHandle> XMLHttpRequest::CreateBlobDataHandleFromResponse() {
+RefPtr<BlobDataHandle> XMLHttpRequest::CreateBlobDataHandleFromResponse() {
   DCHECK(downloading_to_file_);
   std::unique_ptr<BlobData> blob_data = BlobData::Create();
   String file_path = response_.DownloadedFilePath();

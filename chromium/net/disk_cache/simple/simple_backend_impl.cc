@@ -27,12 +27,14 @@
 #include "base/single_thread_task_runner.h"
 #include "base/sys_info.h"
 #include "base/task_runner_util.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/memory_usage_estimator.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "net/base/net_errors.h"
+#include "net/disk_cache/backend_cleanup_tracker.h"
 #include "net/disk_cache/cache_util.h"
 #include "net/disk_cache/simple/simple_entry_format.h"
 #include "net/disk_cache/simple/simple_entry_impl.h"
@@ -88,6 +90,15 @@ class LeakySequencedWorkerPool {
 
 base::LazyInstance<LeakySequencedWorkerPool>::Leaky g_sequenced_worker_pool =
     LAZY_INSTANCE_INITIALIZER;
+
+scoped_refptr<base::SequencedTaskRunner> FallbackToInternalIfNull(
+    const scoped_refptr<base::SequencedTaskRunner>& cache_runner) {
+  if (cache_runner)
+    return cache_runner;
+  return base::CreateSequencedTaskRunnerWithTraits(
+      {base::MayBlock(), base::TaskPriority::USER_BLOCKING,
+       base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
+}
 
 bool g_fd_limit_histogram_has_been_populated = false;
 
@@ -241,18 +252,24 @@ class SimpleBackendImpl::ActiveEntryProxy
 
 SimpleBackendImpl::SimpleBackendImpl(
     const FilePath& path,
+    scoped_refptr<BackendCleanupTracker> cleanup_tracker,
     int max_bytes,
     net::CacheType cache_type,
-    const scoped_refptr<base::SingleThreadTaskRunner>& cache_thread,
+    const scoped_refptr<base::SequencedTaskRunner>& cache_runner,
     net::NetLog* net_log)
-    : path_(path),
+    : cleanup_tracker_(std::move(cleanup_tracker)),
+      path_(path),
       cache_type_(cache_type),
-      cache_thread_(cache_thread),
+      cache_runner_(FallbackToInternalIfNull(cache_runner)),
       orig_max_size_(max_bytes),
-      entry_operations_mode_(cache_type == net::DISK_CACHE ?
-                                 SimpleEntryImpl::OPTIMISTIC_OPERATIONS :
-                                 SimpleEntryImpl::NON_OPTIMISTIC_OPERATIONS),
+      entry_operations_mode_(cache_type == net::DISK_CACHE
+                                 ? SimpleEntryImpl::OPTIMISTIC_OPERATIONS
+                                 : SimpleEntryImpl::NON_OPTIMISTIC_OPERATIONS),
       net_log_(net_log) {
+  // Treat negative passed-in sizes same as SetMaxSize would here and in other
+  // backends, as default (if first call).
+  if (orig_max_size_ < 0)
+    orig_max_size_ = 0;
   MaybeHistogramFdLimit(cache_type_);
 }
 
@@ -263,15 +280,16 @@ SimpleBackendImpl::~SimpleBackendImpl() {
 int SimpleBackendImpl::Init(const CompletionCallback& completion_callback) {
   worker_pool_ = g_sequenced_worker_pool.Get().GetTaskRunner();
 
-  index_.reset(new SimpleIndex(
-      base::ThreadTaskRunnerHandle::Get(), this, cache_type_,
-      base::MakeUnique<SimpleIndexFile>(cache_thread_, worker_pool_.get(),
-                                        cache_type_, path_)));
+  index_ = std::make_unique<SimpleIndex>(
+      base::ThreadTaskRunnerHandle::Get(), cleanup_tracker_.get(), this,
+      cache_type_,
+      std::make_unique<SimpleIndexFile>(cache_runner_, worker_pool_.get(),
+                                        cache_type_, path_));
   index_->ExecuteWhenReady(
       base::Bind(&RecordIndexLoad, cache_type_, base::TimeTicks::Now()));
 
   PostTaskAndReplyWithResult(
-      cache_thread_.get(), FROM_HERE,
+      cache_runner_.get(), FROM_HERE,
       base::Bind(&SimpleBackendImpl::InitCacheStructureOnDisk, path_,
                  orig_max_size_, GetSimpleExperiment(cache_type_)),
       base::Bind(&SimpleBackendImpl::InitializeIndex, AsWeakPtr(),
@@ -576,6 +594,17 @@ size_t SimpleBackendImpl::DumpMemoryStats(
   return size;
 }
 
+uint8_t SimpleBackendImpl::GetEntryInMemoryData(const std::string& key) {
+  const uint64_t entry_hash = simple_util::GetEntryHashKey(key);
+  return index_->GetEntryInMemoryData(entry_hash);
+}
+
+void SimpleBackendImpl::SetEntryInMemoryData(const std::string& key,
+                                             uint8_t data) {
+  const uint64_t entry_hash = simple_util::GetEntryHashKey(key);
+  index_->SetEntryInMemoryData(entry_hash, data);
+}
+
 void SimpleBackendImpl::InitializeIndex(const CompletionCallback& callback,
                                         const DiskStatResult& result) {
   if (result.net_error == net::OK) {
@@ -660,8 +689,9 @@ scoped_refptr<SimpleEntryImpl> SimpleBackendImpl::CreateOrFindActiveEntry(
   EntryMap::iterator& it = insert_result.first;
   const bool did_insert = insert_result.second;
   if (did_insert) {
-    SimpleEntryImpl* entry = it->second = new SimpleEntryImpl(
-        cache_type_, path_, entry_hash, entry_operations_mode_, this, net_log_);
+    SimpleEntryImpl* entry = it->second =
+        new SimpleEntryImpl(cache_type_, path_, cleanup_tracker_.get(),
+                            entry_hash, entry_operations_mode_, this, net_log_);
     entry->SetKey(key);
     entry->SetActiveEntryProxy(ActiveEntryProxy::Create(entry_hash, this));
   }
@@ -695,8 +725,9 @@ int SimpleBackendImpl::OpenEntryFromHash(uint64_t entry_hash,
     return OpenEntry(has_active->second->key(), entry, callback);
   }
 
-  scoped_refptr<SimpleEntryImpl> simple_entry = new SimpleEntryImpl(
-      cache_type_, path_, entry_hash, entry_operations_mode_, this, net_log_);
+  scoped_refptr<SimpleEntryImpl> simple_entry =
+      new SimpleEntryImpl(cache_type_, path_, cleanup_tracker_.get(),
+                          entry_hash, entry_operations_mode_, this, net_log_);
   CompletionCallback backend_callback =
       base::Bind(&SimpleBackendImpl::OnEntryOpenedFromHash,
                  AsWeakPtr(), entry_hash, entry, simple_entry, callback);

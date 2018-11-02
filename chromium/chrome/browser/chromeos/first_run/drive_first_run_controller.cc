@@ -7,8 +7,6 @@
 #include <stdint.h>
 #include <utility>
 
-#include "ash/shell.h"
-#include "ash/system/tray/system_tray_delegate.h"
 #include "base/callback.h"
 #include "base/location.h"
 #include "base/macros.h"
@@ -157,8 +155,7 @@ class DriveWebContentsManager : public content::WebContentsObserver,
   void DidFailLoad(content::RenderFrameHost* render_frame_host,
                    const GURL& validated_url,
                    int error_code,
-                   const base::string16& error_description,
-                   bool was_ignored_by_handler) override;
+                   const base::string16& error_description) override;
 
   // content::WebContentsDelegate overrides:
   bool ShouldCreateWebContents(
@@ -266,8 +263,7 @@ void DriveWebContentsManager::DidFailLoad(
     content::RenderFrameHost* render_frame_host,
     const GURL& validated_url,
     int error_code,
-    const base::string16& error_description,
-    bool was_ignored_by_handler) {
+    const base::string16& error_description) {
   if (!render_frame_host->GetParent()) {
     LOG(WARNING) << "Failed to load WebContents to enable offline mode.";
     OnOfflineInit(false,

@@ -15,7 +15,9 @@ extern const char kDisableVivaldi[];
 extern const char kRunningVivaldi[];
 
 extern const char kVivaldiUpdateURL[];
-
+#if defined(COMPONENT_BUILD)
+extern const char kLaunchUpdater[];
+#endif
 }  // namespace switches
 
 #endif  // BASE_VIVALDI_SWITCHES_H_

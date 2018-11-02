@@ -38,8 +38,8 @@
 #include "platform/graphics/BitmapImage.h"
 #include "platform/graphics/Color.h"
 #include "platform/graphics/GraphicsContext.h"
-#include "platform/graphics/Image.h"
 #include "platform/graphics/ImageBuffer.h"
+#include "platform/graphics/StaticBitmapImage.h"
 #include "platform/graphics/paint/DrawingRecorder.h"
 #include "platform/text/BidiTextRun.h"
 #include "platform/text/StringTruncator.h"
@@ -80,7 +80,7 @@ PaintImage DragImage::ResizeAndOrientImage(
     FloatSize image_scale,
     float opacity,
     InterpolationQuality interpolation_quality) {
-  IntSize size(image.sk_image()->width(), image.sk_image()->height());
+  IntSize size(image.width(), image.height());
   size.Scale(image_scale.Width(), image_scale.Height());
   AffineTransform transform;
   if (orientation != kDefaultImageOrientation) {
@@ -95,8 +95,8 @@ PaintImage DragImage::ResizeAndOrientImage(
 
   if (transform.IsIdentity() && opacity == 1) {
     // Nothing to adjust, just use the original.
-    DCHECK_EQ(image.sk_image()->width(), size.Width());
-    DCHECK_EQ(image.sk_image()->height(), size.Height());
+    DCHECK_EQ(image.width(), size.Width());
+    DCHECK_EQ(image.height(), size.Height());
     return image;
   }
 
@@ -121,11 +121,11 @@ PaintImage DragImage::ResizeAndOrientImage(
     canvas = color_transform_canvas.get();
   }
   canvas->concat(AffineTransformToSkMatrix(transform));
-  canvas->drawImage(image.sk_image(), 0, 0, &paint);
+  canvas->drawImage(image.GetSkImage(), 0, 0, &paint);
 
-  return PaintImage(image.stable_id(), surface->makeImageSnapshot(),
-                    image.animation_type(), image.completion_state(),
-                    image.frame_count());
+  return PaintImageBuilder(std::move(image))
+      .set_image(surface->makeImageSnapshot())
+      .TakePaintImage();
 }
 
 FloatSize DragImage::ClampedImageScale(const IntSize& image_size,
@@ -172,7 +172,7 @@ std::unique_ptr<DragImage> DragImage::Create(
   SkBitmap bm;
   paint_image = ResizeAndOrientImage(paint_image, orientation, image_scale,
                                      opacity, interpolation_quality);
-  if (!paint_image || !paint_image.sk_image()->asLegacyBitmap(
+  if (!paint_image || !paint_image.GetSkImage()->asLegacyBitmap(
                           &bm, SkImage::kRO_LegacyBitmapMode)) {
     return nullptr;
   }
@@ -182,7 +182,7 @@ std::unique_ptr<DragImage> DragImage::Create(
 }
 
 static Font DeriveDragLabelFont(int size,
-                                FontWeight font_weight,
+                                FontSelectionValue font_weight,
                                 const FontDescription& system_font) {
   FontDescription description = system_font;
   description.SetWeight(font_weight);
@@ -197,12 +197,12 @@ std::unique_ptr<DragImage> DragImage::Create(const KURL& url,
                                              const String& in_label,
                                              const FontDescription& system_font,
                                              float device_scale_factor) {
-  const Font label_font =
-      DeriveDragLabelFont(kDragLinkLabelFontSize, kFontWeightBold, system_font);
+  const Font label_font = DeriveDragLabelFont(kDragLinkLabelFontSize,
+                                              BoldWeightValue(), system_font);
   const SimpleFontData* label_font_data = label_font.PrimaryFont();
   DCHECK(label_font_data);
-  const Font url_font =
-      DeriveDragLabelFont(kDragLinkUrlFontSize, kFontWeightNormal, system_font);
+  const Font url_font = DeriveDragLabelFont(kDragLinkUrlFontSize,
+                                            NormalWeightValue(), system_font);
   const SimpleFontData* url_font_data = url_font.PrimaryFont();
   DCHECK(url_font_data);
 
@@ -311,7 +311,7 @@ std::unique_ptr<DragImage> DragImage::Create(const KURL& url,
                           FloatPoint(text_pos), Font::kDoNotPaintIfFontNotReady,
                           device_scale_factor, text_paint);
 
-  RefPtr<Image> image = buffer->NewImageSnapshot();
+  RefPtr<StaticBitmapImage> image = buffer->NewImageSnapshot();
   return DragImage::Create(image.Get(), kDoNotRespectImageOrientation,
                            device_scale_factor);
 }

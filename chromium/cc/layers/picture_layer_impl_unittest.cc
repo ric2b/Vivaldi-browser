@@ -20,7 +20,6 @@
 #include "cc/layers/picture_layer.h"
 #include "cc/quads/draw_quad.h"
 #include "cc/quads/tile_draw_quad.h"
-#include "cc/test/begin_frame_args_test.h"
 #include "cc/test/fake_content_layer_client.h"
 #include "cc/test/fake_impl_task_runner_provider.h"
 #include "cc/test/fake_layer_tree_frame_sink.h"
@@ -39,6 +38,7 @@
 #include "cc/tiles/tiling_set_raster_queue_required.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "components/viz/common/resources/buffer_to_texture_target_map.h"
+#include "components/viz/test/begin_frame_args_test.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
@@ -79,6 +79,7 @@ class PictureLayerImplTest : public TestLayerTreeHostBase {
 
   LayerTreeSettings CreateSettings() override {
     LayerTreeSettings settings;
+    settings.commit_to_active_tree = false;
     settings.layer_transforms_should_scale_layer_contents = true;
     settings.create_low_res_tiling = true;
     settings.resource_settings.buffer_to_texture_target_map =
@@ -267,6 +268,15 @@ class PictureLayerImplTest : public TestLayerTreeHostBase {
   }
 
   void TestQuadsForSolidColor(bool test_for_solid, bool partial_opaque);
+};
+
+class CommitToActiveTreePictureLayerImplTest : public PictureLayerImplTest {
+ public:
+  LayerTreeSettings CreateSettings() override {
+    LayerTreeSettings settings = PictureLayerImplTest::CreateSettings();
+    settings.commit_to_active_tree = true;
+    return settings;
+  }
 };
 
 class NoLowResPictureLayerImplTest : public PictureLayerImplTest {
@@ -727,7 +737,7 @@ TEST_F(PictureLayerImplTest, ScaledBoundsOverflowInt) {
   // See http://crbug.com/679035
   active_layer()->draw_properties().visible_layer_rect =
       gfx::Rect(layer_bounds);
-  SharedQuadState state;
+  viz::SharedQuadState state;
   active_layer()->PopulateScaledSharedQuadState(&state, adjusted_scale,
                                                 adjusted_scale);
 }
@@ -1226,7 +1236,7 @@ TEST_F(PictureLayerImplTest, HugeMasksGetScaledDown) {
   // Mask layers have a tiling with a single tile in it.
   EXPECT_EQ(1u, active_mask->HighResTiling()->AllTilesForTesting().size());
   // The mask resource exists.
-  ResourceId mask_resource_id;
+  viz::ResourceId mask_resource_id;
   gfx::Size mask_texture_size;
   gfx::SizeF mask_uv_size;
   active_mask->GetContentsResourceId(&mask_resource_id, &mask_texture_size,
@@ -1360,7 +1370,7 @@ TEST_F(PictureLayerImplTest, ScaledMaskLayer) {
   // Mask layers have a tiling with a single tile in it.
   EXPECT_EQ(1u, active_mask->HighResTiling()->AllTilesForTesting().size());
   // The mask resource exists.
-  ResourceId mask_resource_id;
+  viz::ResourceId mask_resource_id;
   gfx::Size mask_texture_size;
   gfx::SizeF mask_uv_size;
   active_mask->GetContentsResourceId(&mask_resource_id, &mask_texture_size,
@@ -1517,7 +1527,7 @@ TEST_F(PictureLayerImplTest, DisallowTileDrawQuads) {
   EXPECT_EQ(DrawQuad::PICTURE_CONTENT,
             render_pass->quad_list.front()->material);
   EXPECT_EQ(render_pass->quad_list.front()->rect, layer_rect);
-  EXPECT_EQ(render_pass->quad_list.front()->opaque_rect, layer_rect);
+  EXPECT_FALSE(render_pass->quad_list.front()->needs_blending);
   EXPECT_EQ(render_pass->quad_list.front()->visible_rect, layer_rect);
 }
 
@@ -1554,8 +1564,8 @@ TEST_F(PictureLayerImplTest, ResourcelessPartialRecording) {
             render_pass->quad_list.front()->material);
   const DrawQuad* quad = render_pass->quad_list.front();
   EXPECT_EQ(quad_visible, quad->rect);
-  EXPECT_EQ(quad_visible, quad->opaque_rect);
   EXPECT_EQ(quad_visible, quad->visible_rect);
+  EXPECT_FALSE(quad->needs_blending);
 }
 
 TEST_F(PictureLayerImplTest, ResourcelessEmptyRecording) {
@@ -2404,7 +2414,8 @@ TEST_F(PictureLayerImplTest, LowResTilingWithoutGpuRasterization) {
   EXPECT_EQ(2u, active_layer()->tilings()->num_tilings());
 }
 
-TEST_F(PictureLayerImplTest, NoLowResTilingWithGpuRasterization) {
+TEST_F(CommitToActiveTreePictureLayerImplTest,
+       NoLowResTilingWithGpuRasterization) {
   gfx::Size default_tile_size(host_impl()->settings().default_tile_size);
   gfx::Size layer_bounds(default_tile_size.width() * 4,
                          default_tile_size.height() * 4);
@@ -2421,7 +2432,8 @@ TEST_F(PictureLayerImplTest, NoLowResTilingWithGpuRasterization) {
   EXPECT_EQ(1u, active_layer()->tilings()->num_tilings());
 }
 
-TEST_F(PictureLayerImplTest, RequiredTilesWithGpuRasterization) {
+TEST_F(CommitToActiveTreePictureLayerImplTest,
+       RequiredTilesWithGpuRasterization) {
   host_impl()->SetHasGpuRasterizationTrigger(true);
   host_impl()->CommitComplete();
 
@@ -4768,6 +4780,55 @@ TEST_F(TileSizeTest, TileSizes) {
   result = layer->CalculateTileSize(gfx::Size(500, 499));
   EXPECT_EQ(result.width(), 512);
   EXPECT_EQ(result.height(), 512);  // 500 + 2, 32-byte aligned.
+}
+
+class HalfWidthTileTest : public PictureLayerImplTest {
+ public:
+  LayerTreeSettings CreateSettings() override {
+    LayerTreeSettings settings = PictureLayerImplTest::CreateSettings();
+    settings.use_half_width_tiles_for_gpu_rasterization = true;
+    return settings;
+  }
+};
+
+TEST_F(HalfWidthTileTest, TileSizes) {
+  host_impl()->CreatePendingTree();
+
+  LayerTreeImpl* pending_tree = host_impl()->pending_tree();
+  std::unique_ptr<FakePictureLayerImpl> layer =
+      FakePictureLayerImpl::Create(pending_tree, layer_id());
+
+  gfx::Size result;
+  host_impl()->SetHasGpuRasterizationTrigger(true);
+  host_impl()->CommitComplete();
+  EXPECT_EQ(host_impl()->gpu_rasterization_status(),
+            GpuRasterizationStatus::ON);
+  host_impl()->SetViewportSize(gfx::Size(2000, 2000));
+  host_impl()->NotifyReadyToActivate();
+
+  layer->set_gpu_raster_max_texture_size(host_impl()->device_viewport_size());
+  result = layer->CalculateTileSize(gfx::Size(10000, 10000));
+  EXPECT_EQ(result.width(),
+            MathUtil::UncheckedRoundUp(
+                (2000 + 2 * PictureLayerTiling::kBorderTexels) / 2, 32));
+  EXPECT_EQ(result.height(), 512);
+
+  // Clamp and round-up, when smaller than viewport.
+  // Tile-height doubles to 50% when width shrinks to <= 50%.
+  host_impl()->SetViewportSize(gfx::Size(1000, 1000));
+  layer->set_gpu_raster_max_texture_size(host_impl()->device_viewport_size());
+  result = layer->CalculateTileSize(gfx::Size(447, 10000));
+  EXPECT_EQ(result.width(), 448);
+  EXPECT_EQ(result.height(), 512);
+
+  // Largest layer is 50% of viewport width (rounded up), and
+  // 50% of viewport in height.
+  result = layer->CalculateTileSize(gfx::Size(447, 400));
+  EXPECT_EQ(result.width(), 448);
+  EXPECT_EQ(result.height(), 448);
+  result = layer->CalculateTileSize(gfx::Size(500, 499));
+  EXPECT_EQ(result.width(), 512);
+  EXPECT_EQ(result.height(), 512);
 }
 
 TEST_F(NoLowResPictureLayerImplTest, LowResWasHighResCollision) {

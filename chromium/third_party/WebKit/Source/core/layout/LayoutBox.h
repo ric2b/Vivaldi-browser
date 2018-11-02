@@ -595,19 +595,15 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   void ScrollByRecursively(const ScrollOffset& delta);
   // If makeVisibleInVisualViewport is set, the visual viewport will be scrolled
   // if required to make the rect visible.
-  // TODO(sunyunjia): Rename this method to distinguish with the one in
-  // LayoutObject. crbug.com/738160
-  void ScrollRectToVisible(const LayoutRect&,
-                           const ScrollAlignment& align_x,
-                           const ScrollAlignment& align_y,
-                           ScrollType = kProgrammaticScroll,
-                           bool make_visible_in_visual_viewport = true,
-                           ScrollBehavior = kScrollBehaviorAuto,
-                           bool is_for_scroll_sequence = false);
+  void ScrollRectToVisibleRecursive(const LayoutRect&,
+                                    const ScrollAlignment& align_x,
+                                    const ScrollAlignment& align_y,
+                                    ScrollType = kProgrammaticScroll,
+                                    bool make_visible_in_visual_viewport = true,
+                                    ScrollBehavior = kScrollBehaviorAuto,
+                                    bool is_for_scroll_sequence = false);
 
-  LayoutRectOutsets MarginBoxOutsets() const override {
-    return margin_box_outsets_;
-  }
+  LayoutRectOutsets MarginBoxOutsets() const { return margin_box_outsets_; }
   LayoutUnit MarginTop() const override { return margin_box_outsets_.Top(); }
   LayoutUnit MarginBottom() const override {
     return margin_box_outsets_.Bottom();
@@ -625,66 +621,21 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
     margin_box_outsets_.SetRight(margin);
   }
 
-  LayoutUnit MarginLogicalLeft() const {
-    return margin_box_outsets_.LogicalLeft(Style()->GetWritingMode());
-  }
-  LayoutUnit MarginLogicalRight() const {
-    return margin_box_outsets_.LogicalRight(Style()->GetWritingMode());
-  }
-
-  LayoutUnit MarginBefore(
-      const ComputedStyle* override_style = nullptr) const final {
-    return margin_box_outsets_.Before(
-        (override_style ? override_style : Style())->GetWritingMode());
-  }
-  LayoutUnit MarginAfter(
-      const ComputedStyle* override_style = nullptr) const final {
-    return margin_box_outsets_.After(
-        (override_style ? override_style : Style())->GetWritingMode());
-  }
-  LayoutUnit MarginStart(
-      const ComputedStyle* override_style = nullptr) const final {
-    const ComputedStyle* style_to_use =
-        override_style ? override_style : Style();
-    return margin_box_outsets_.Start(style_to_use->GetWritingMode(),
-                                     style_to_use->Direction());
-  }
-  LayoutUnit MarginEnd(
-      const ComputedStyle* override_style = nullptr) const final {
-    const ComputedStyle* style_to_use =
-        override_style ? override_style : Style();
-    return margin_box_outsets_.end(style_to_use->GetWritingMode(),
-                                   style_to_use->Direction());
-  }
-  LayoutUnit MarginOver() const final {
-    return margin_box_outsets_.Over(Style()->GetWritingMode());
-  }
-  LayoutUnit MarginUnder() const final {
-    return margin_box_outsets_.Under(Style()->GetWritingMode());
-  }
   void SetMarginBefore(LayoutUnit value,
                        const ComputedStyle* override_style = nullptr) {
-    margin_box_outsets_.SetBefore(
-        (override_style ? override_style : Style())->GetWritingMode(), value);
+    LogicalMarginToPhysicalSetter(override_style).SetBefore(value);
   }
   void SetMarginAfter(LayoutUnit value,
                       const ComputedStyle* override_style = nullptr) {
-    margin_box_outsets_.SetAfter(
-        (override_style ? override_style : Style())->GetWritingMode(), value);
+    LogicalMarginToPhysicalSetter(override_style).SetAfter(value);
   }
   void SetMarginStart(LayoutUnit value,
                       const ComputedStyle* override_style = nullptr) {
-    const ComputedStyle* style_to_use =
-        override_style ? override_style : Style();
-    margin_box_outsets_.SetStart(style_to_use->GetWritingMode(),
-                                 style_to_use->Direction(), value);
+    LogicalMarginToPhysicalSetter(override_style).SetStart(value);
   }
   void SetMarginEnd(LayoutUnit value,
                     const ComputedStyle* override_style = nullptr) {
-    const ComputedStyle* style_to_use =
-        override_style ? override_style : Style();
-    margin_box_outsets_.SetEnd(style_to_use->GetWritingMode(),
-                               style_to_use->Direction(), value);
+    LogicalMarginToPhysicalSetter(override_style).SetEnd(value);
   }
 
   // The following functions are used to implement collapsing margins.
@@ -823,13 +774,13 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   bool CrossesPageBoundary(LayoutUnit offset, LayoutUnit logical_height) const;
 
   // Calculate the strut to insert in order fit content of size
-  // |contentLogicalHeight|. |strutToNextPage| is the strut to add to |offset|
-  // to merely get to the top of the next page or column. This is what will be
-  // returned if the content can actually fit there. Otherwise, return the
-  // distance to the next fragmentainer that can fit this piece of content.
-  virtual LayoutUnit CalculatePaginationStrutToFitContent(
+  // |content_logical_height|. Usually this will merely return the distance to
+  // the next fragmentainer. However, in cases where the next fragmentainer
+  // isn't tall enough to fit the content, and there's a likelihood of taller
+  // fragmentainers further ahead, we'll search for one and return the distance
+  // to the first fragmentainer that can fit this piece of content.
+  LayoutUnit CalculatePaginationStrutToFitContent(
       LayoutUnit offset,
-      LayoutUnit strut_to_next_page,
       LayoutUnit content_logical_height) const;
 
   void PositionLineBox(InlineBox*);
@@ -909,7 +860,6 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   bool NeedsForcedBreakBefore(EBreakBetween previous_break_after_value) const;
 
   bool PaintedOutputOfObjectHasNoEffectRegardlessOfSize() const override;
-  LayoutRect LocalVisualRect() const override;
   bool MapToVisualRectInAncestorSpaceInternal(
       const LayoutBoxModelObject* ancestor,
       TransformState&,
@@ -1133,9 +1083,9 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
 
   PaintLayer* EnclosingFloatPaintingLayer() const;
 
-  virtual int FirstLineBoxBaseline() const { return -1; }
-  virtual int InlineBlockBaseline(LineDirectionMode) const {
-    return -1;
+  virtual LayoutUnit FirstLineBoxBaseline() const { return LayoutUnit(-1); }
+  virtual LayoutUnit InlineBlockBaseline(LineDirectionMode) const {
+    return LayoutUnit(-1);
   }  // Returns -1 if we should skip this box when computing the baseline of an
      // inline-block.
 
@@ -1184,7 +1134,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
       bool first_line,
       LineDirectionMode,
       LinePositionMode = kPositionOnContainingLine) const override;
-  int BaselinePosition(
+  LayoutUnit BaselinePosition(
       FontBaseline,
       bool first_line,
       LineDirectionMode,
@@ -1550,6 +1500,8 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   bool SkipContainingBlockForPercentHeightCalculation(
       const LayoutBox* containing_block) const;
 
+  LayoutRect LocalVisualRectIgnoringVisibility() const override;
+
  private:
   void UpdateShapeOutsideInfoAfterStyleChange(const ComputedStyle&,
                                               const ComputedStyle* old_style);
@@ -1690,6 +1642,15 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   std::unique_ptr<BoxOverflowModel> overflow_;
 
  private:
+  LogicalToPhysicalSetter<LayoutUnit, LayoutBox> LogicalMarginToPhysicalSetter(
+      const ComputedStyle* override_style) {
+    const auto& style = override_style ? *override_style : StyleRef();
+    return LogicalToPhysicalSetter<LayoutUnit, LayoutBox>(
+        style.GetWritingMode(), style.Direction(), *this,
+        &LayoutBox::SetMarginTop, &LayoutBox::SetMarginRight,
+        &LayoutBox::SetMarginBottom, &LayoutBox::SetMarginLeft);
+  }
+
   // The inline box containing this LayoutBox, for atomic inline elements.
   InlineBox* inline_box_wrapper_;
 

@@ -7,13 +7,13 @@
 #include "core/css/properties/CSSPropertyAlignmentUtils.h"
 #include "platform/RuntimeEnabledFeatures.h"
 
-class CSSParserLocalContext;
 namespace blink {
 
-const CSSValue* CSSPropertyAPIAlignOrJustifySelf::parseSingleValue(
+const CSSValue* CSSPropertyAPIAlignOrJustifySelf::ParseSingleValue(
+    CSSPropertyID,
     CSSParserTokenRange& range,
     const CSSParserContext& context,
-    const CSSParserLocalContext&) {
+    const CSSParserLocalContext&) const {
   DCHECK(RuntimeEnabledFeatures::CSSGridLayoutEnabled());
   return CSSPropertyAlignmentUtils::ConsumeSelfPositionOverflowPosition(range);
 }

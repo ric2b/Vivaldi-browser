@@ -5,7 +5,7 @@
 #include "modules/media_controls/elements/MediaControlDownloadButtonElement.h"
 
 #include "core/InputTypeNames.h"
-#include "core/events/Event.h"
+#include "core/dom/events/Event.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLAnchorElement.h"
 #include "core/html/HTMLMediaElement.h"
@@ -13,6 +13,7 @@
 #include "core/html/media/HTMLMediaSource.h"
 #include "core/page/Page.h"
 #include "modules/media_controls/MediaControlsImpl.h"
+#include "modules/media_controls/MediaDownloadInProductHelpManager.h"
 #include "public/platform/Platform.h"
 
 namespace blink {
@@ -91,6 +92,15 @@ DEFINE_TRACE(MediaControlDownloadButtonElement) {
 
 const char* MediaControlDownloadButtonElement::GetNameForHistograms() const {
   return IsOverflowElement() ? "DownloadOverflowButton" : "DownloadButton";
+}
+
+void MediaControlDownloadButtonElement::UpdateShownState() {
+  MediaControlInputElement::UpdateShownState();
+
+  if (GetMediaControls().DownloadInProductHelp()) {
+    GetMediaControls().DownloadInProductHelp()->SetDownloadButtonVisibility(
+        IsWanted() && DoesFit());
+  }
 }
 
 void MediaControlDownloadButtonElement::DefaultEventHandler(Event* event) {

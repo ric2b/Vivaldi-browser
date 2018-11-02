@@ -16,12 +16,12 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.chromium.base.Callback;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
+import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.blink.mojom.document_metadata.Entity;
 import org.chromium.blink.mojom.document_metadata.Property;
 import org.chromium.blink.mojom.document_metadata.Values;
@@ -68,31 +68,16 @@ public class CopylessPasteTest {
 
         mCallbackHelper = new CopylessHelper();
 
-        AppIndexingUtil.setCallbackForTesting(new Callback<WebPage>() {
-            @Override
-            public void onResult(WebPage webpage) {
-                mCallbackHelper.notifyCalled(webpage);
-            }
-        });
+        AppIndexingUtil.setCallbackForTesting(webpage -> mCallbackHelper.notifyCalled(webpage));
 
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                FirstRunStatus.setFirstRunFlowComplete(true);
-            }
-        });
+        ThreadUtils.runOnUiThreadBlocking(() -> FirstRunStatus.setFirstRunFlowComplete(true));
         mActivityTestRule.startMainActivityOnBlankPage();
     }
 
     @After
     public void tearDown() throws Exception {
         mTestServer.stopAndDestroyServer();
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                FirstRunStatus.setFirstRunFlowComplete(false);
-            }
-        });
+        ThreadUtils.runOnUiThreadBlocking(() -> FirstRunStatus.setFirstRunFlowComplete(false));
         AppIndexingUtil.setCallbackForTesting(null);
     }
 
@@ -143,6 +128,7 @@ public class CopylessPasteTest {
      */
     @Test
     @LargeTest
+    @RetryOnFailure
     @Feature({"CopylessPaste"})
     public void testNoMeta() throws InterruptedException, TimeoutException {
         mActivityTestRule.loadUrl(mTestServer.getURL(NODATA_PAGE));
@@ -155,6 +141,7 @@ public class CopylessPasteTest {
      */
     @Test
     @LargeTest
+    @RetryOnFailure
     @Feature({"CopylessPaste"})
     public void testValid() throws InterruptedException, TimeoutException {
         mActivityTestRule.loadUrl(mTestServer.getURL(DATA_PAGE));
@@ -186,6 +173,7 @@ public class CopylessPasteTest {
      */
     @Test
     @LargeTest
+    @RetryOnFailure
     @Feature({"CopylessPaste"})
     public void testCache() throws InterruptedException, TimeoutException {
         mActivityTestRule.loadUrl(mTestServer.getURL(NODATA_PAGE));

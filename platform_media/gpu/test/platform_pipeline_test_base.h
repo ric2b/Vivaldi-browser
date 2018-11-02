@@ -2,7 +2,7 @@
 #define MEDIA_TEST_PLATFORM_PIPELINE_TEST_BASE_H
 
 #include "base/files/file_path.h"
-#include "base/message_loop/message_loop.h"
+#include "base/test/scoped_task_environment.h"
 #include "media/base/data_source.h"
 #include "media/base/demuxer.h"
 
@@ -20,7 +20,7 @@ protected:
   class DecodingMockVDA;
 
   Demuxer * CreatePlatformDemuxer(std::unique_ptr<DataSource> & data_source,
-                                  base::MessageLoop & message_loop_,
+                                  base::test::ScopedTaskEnvironment & task_environment_,
                                   MediaLog* media_log);
 
   void AppendPlatformAudioDecoders(std::vector<std::unique_ptr<AudioDecoder>> & audio_decoders,

@@ -198,12 +198,16 @@ void MetricsWebContentsObserver::WillStartNavigationRequest(
   // the MetricsWebContentsObserver owns them both list and they are torn down
   // after the PageLoadTracker. The PageLoadTracker does not hold on to
   // committed_load_ or navigation_handle beyond the scope of the constructor.
-  provisional_loads_.insert(std::make_pair(
+  auto insertion_result = provisional_loads_.insert(std::make_pair(
       navigation_handle,
       base::MakeUnique<PageLoadTracker>(
           in_foreground_, embedder_interface_.get(), currently_committed_url,
           navigation_handle, user_initiated_info, chain_size,
           chain_size_same_url)));
+  DCHECK(insertion_result.second)
+      << "provisional_loads_ already contains NavigationHandle.";
+  for (auto& observer : testing_observers_)
+    observer.OnTrackerCreated(insertion_result.first->second.get());
 }
 
 void MetricsWebContentsObserver::WillProcessNavigationResponse(
@@ -283,7 +287,8 @@ void MetricsWebContentsObserver::OnRequestComplete(
     int64_t raw_body_bytes,
     int64_t original_content_length,
     base::TimeTicks creation_time,
-    int net_error) {
+    int net_error,
+    std::unique_ptr<net::LoadTimingInfo> load_timing_info) {
   // Ignore non-HTTP(S) resources (blobs, data uris, etc).
   if (!url.SchemeIsHTTPOrHTTPS())
     return;
@@ -294,7 +299,8 @@ void MetricsWebContentsObserver::OnRequestComplete(
     ExtraRequestCompleteInfo extra_request_complete_info(
         url, host_port_pair, frame_tree_node_id, was_cached, raw_body_bytes,
         was_cached ? 0 : original_content_length,
-        std::move(data_reduction_proxy_data), resource_type, net_error);
+        std::move(data_reduction_proxy_data), resource_type, net_error,
+        std::move(load_timing_info));
     tracker->OnLoadedResource(extra_request_complete_info);
   }
 }
@@ -584,7 +590,8 @@ MetricsWebContentsObserver::NotifyAbortedProvisionalLoadsNewNavigation(
 void MetricsWebContentsObserver::OnTimingUpdated(
     content::RenderFrameHost* render_frame_host,
     const mojom::PageLoadTiming& timing,
-    const mojom::PageLoadMetadata& metadata) {
+    const mojom::PageLoadMetadata& metadata,
+    const mojom::PageLoadFeatures& new_features) {
   // We may receive notifications from frames that have been navigated away
   // from. We simply ignore them.
   if (GetMainFrame(render_frame_host) != web_contents()->GetMainFrame()) {
@@ -611,20 +618,23 @@ void MetricsWebContentsObserver::OnTimingUpdated(
 
     if (error)
       return;
+  } else if (!committed_load_) {
+    RecordInternalError(ERR_SUBFRAME_IPC_WITH_NO_RELEVANT_LOAD);
   }
 
   if (committed_load_) {
     committed_load_->metrics_update_dispatcher()->UpdateMetrics(
-        render_frame_host, timing, metadata);
+        render_frame_host, timing, metadata, new_features);
   }
 }
 
 void MetricsWebContentsObserver::UpdateTiming(
     const mojom::PageLoadTimingPtr timing,
-    const mojom::PageLoadMetadataPtr metadata) {
+    const mojom::PageLoadMetadataPtr metadata,
+    const mojom::PageLoadFeaturesPtr new_features) {
   content::RenderFrameHost* render_frame_host =
       page_load_metrics_binding_.GetCurrentTargetFrame();
-  OnTimingUpdated(render_frame_host, *timing, *metadata);
+  OnTimingUpdated(render_frame_host, *timing, *metadata, *new_features);
 }
 
 bool MetricsWebContentsObserver::ShouldTrackNavigation(

@@ -102,6 +102,8 @@
 -DragDropControllerTest.TouchDragDropLongTapGestureIsForwarded
 -DragDropControllerTest.ViewRemovedWhileInDragDropTest
 -DragDropControllerTest.WindowDestroyedDuringDragDrop
+-DragDropControllerTest.DragStartedAndEndedEvents
+-DragDropControllerTest.EventTarget
 -DragWindowResizerTest.CursorDeviceScaleFactor
 -DragWindowResizerTest.DragWindowController
 -DragWindowResizerTest.DragWindowControllerAcrossThreeDisplays
@@ -135,6 +137,8 @@
 -LockLayoutManagerTest.MaximizedFullscreenWindowBoundsAreEqualToScreen
 -LockLayoutManagerTest.MultipleMonitors
 -LockLayoutManagerTest.NorwmalWindowBoundsArePreserved
+-LockStateControllerTest.Screenshot
+-LockStateControllerTest.VolumeDownKeyWithTrayBubbleShown
 -MagnificationControllerTest.CenterTextCaretInViewport
 -MagnificationControllerTest.CenterTextCaretNotInsideViewport
 -MagnificationControllerTest.EnableAndDisable
@@ -331,9 +335,12 @@
 -WindowTreeHostManagerTest.UpdateMouseLocationAfterDisplayChange_PrimaryDisconnected
 -WindowTreeHostManagerTest.UpdateMouseLocationAfterDisplayChange_SwapPrimary
 -WindowTreeHostManagerTest.UpdateMouseocationfterisplayChange
+# TODO: fix this. It fails because a container used in the test has more
+# children in mash.
+# http://crbug.com/764577.
+-WorkspaceLayoutManagerBackdropTest.BackdropForSplitScreenTest
 -WorkspaceLayoutManagerKeyboardTest2.ChangeWorkAreaInNonStickyMode
 -WorkspaceLayoutManagerKeyboardTest2.IgnoreWorkAreaChangeinNonStickyMode
-
 # TODO: fix these. They fail because DeviceDataManager isn't created.
 # http://crbug.com/734812.
 -TrayIMETest.HidesOnA11yEnabled

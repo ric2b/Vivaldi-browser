@@ -32,6 +32,9 @@ namespace {
 // Used when sound is unmuted, but volume was less than kMuteThresholdPercent.
 const int kDefaultUnmuteVolumePercent = 4;
 
+// Default output buffer size in frames.
+const int kDefaultOutputBufferSize = 512;
+
 // Volume value which should be considered as muted in range [0, 100].
 const int kMuteThresholdPercent = 1;
 
@@ -105,6 +108,10 @@ void CrasAudioHandler::AudioObserver::OnOuputChannelRemixingChanged(
     bool /* mono_on */) {
 }
 
+void CrasAudioHandler::AudioObserver::OnHotwordTriggered(
+    uint64_t /* tv_sec */,
+    uint64_t /* tv_nsec */) {}
+
 // static
 void CrasAudioHandler::Initialize(
     scoped_refptr<AudioDevicesPrefHandler> audio_pref_handler) {
@@ -138,6 +145,34 @@ CrasAudioHandler* CrasAudioHandler::Get() {
 }
 
 void CrasAudioHandler::OnVideoCaptureStarted(media::VideoFacingMode facing) {
+  DCHECK(main_task_runner_);
+  if (!main_task_runner_->BelongsToCurrentThread()) {
+    main_task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&CrasAudioHandler::OnVideoCaptureStartedOnMainThread,
+                       weak_ptr_factory_.GetWeakPtr(), facing));
+    return;
+  }
+  // Unittest may call this from the main thread.
+  OnVideoCaptureStartedOnMainThread(facing);
+}
+
+void CrasAudioHandler::OnVideoCaptureStopped(media::VideoFacingMode facing) {
+  DCHECK(main_task_runner_);
+  if (!main_task_runner_->BelongsToCurrentThread()) {
+    main_task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&CrasAudioHandler::OnVideoCaptureStoppedOnMainThread,
+                       weak_ptr_factory_.GetWeakPtr(), facing));
+    return;
+  }
+  // Unittest may call this from the main thread.
+  OnVideoCaptureStoppedOnMainThread(facing);
+}
+
+void CrasAudioHandler::OnVideoCaptureStartedOnMainThread(
+    media::VideoFacingMode facing) {
+  DCHECK(main_task_runner_->BelongsToCurrentThread());
   // Do nothing if the device doesn't have both front and rear microphones.
   if (!HasDualInternalMic())
     return;
@@ -175,7 +210,9 @@ void CrasAudioHandler::OnVideoCaptureStarted(media::VideoFacingMode facing) {
   ActivateMicForCamera(facing);
 }
 
-void CrasAudioHandler::OnVideoCaptureStopped(media::VideoFacingMode facing) {
+void CrasAudioHandler::OnVideoCaptureStoppedOnMainThread(
+    media::VideoFacingMode facing) {
+  DCHECK(main_task_runner_->BelongsToCurrentThread());
   // Do nothing if the device doesn't have both front and rear microphones.
   if (!HasDualInternalMic())
     return;
@@ -315,6 +352,10 @@ const AudioDevice* CrasAudioHandler::GetDeviceByType(AudioDeviceType type) {
       return &device;
   }
   return nullptr;
+}
+
+void CrasAudioHandler::GetDefaultOutputBufferSize(int32_t* buffer_size) const {
+  *buffer_size = default_output_buffer_size_;
 }
 
 void CrasAudioHandler::SetKeyboardMicActive(bool active) {
@@ -648,6 +689,7 @@ CrasAudioHandler::CrasAudioHandler(
       hdmi_rediscover_grace_period_duration_in_ms_(
           kHDMIRediscoverGracePeriodDurationInMs),
       hdmi_rediscovering_(false),
+      default_output_buffer_size_(kDefaultOutputBufferSize),
       weak_ptr_factory_(this) {
   if (!audio_pref_handler.get())
     return;
@@ -660,6 +702,9 @@ CrasAudioHandler::CrasAudioHandler(
   if (DBusThreadManager::Get()->GetSessionManagerClient())
     DBusThreadManager::Get()->GetSessionManagerClient()->AddObserver(this);
   InitializeAudioState();
+  // Unittest may not have the task runner for the current thread.
+  if (base::ThreadTaskRunnerHandle::IsSet())
+    main_task_runner_ = base::ThreadTaskRunnerHandle::Get();
 }
 
 CrasAudioHandler::~CrasAudioHandler() {
@@ -764,6 +809,11 @@ void CrasAudioHandler::ActiveInputNodeChanged(uint64_t node_id) {
         << "Active input node changed unexpectedly by system node_id="
         << "0x" << std::hex << node_id;
   }
+}
+
+void CrasAudioHandler::HotwordTriggered(uint64_t tv_sec, uint64_t tv_nsec) {
+  for (auto& observer : observers_)
+    observer.OnHotwordTriggered(tv_sec, tv_nsec);
 }
 
 void CrasAudioHandler::OnAudioPolicyPrefChanged() {
@@ -896,6 +946,7 @@ void CrasAudioHandler::InitializeAudioAfterCrasServiceAvailable(
   }
 
   cras_service_available_ = true;
+  GetDefaultOutputBufferSizeInternal();
   GetNodes();
 }
 
@@ -1583,6 +1634,22 @@ bool CrasAudioHandler::HasExternalDevice(bool is_input) const {
       return true;
   }
   return false;
+}
+
+void CrasAudioHandler::GetDefaultOutputBufferSizeInternal() {
+  GetCrasAudioClient()->GetDefaultOutputBufferSize(
+      base::Bind(&CrasAudioHandler::HandleGetDefaultOutputBufferSize,
+                 weak_ptr_factory_.GetWeakPtr()));
+}
+
+void CrasAudioHandler::HandleGetDefaultOutputBufferSize(int32_t buffer_size,
+                                                        bool success) {
+  if (!success) {
+    LOG_IF(ERROR, log_errors_) << "Failed to retrieve output buffer size";
+    return;
+  }
+
+  default_output_buffer_size_ = buffer_size;
 }
 
 }  // namespace chromeos

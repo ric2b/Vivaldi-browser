@@ -33,7 +33,7 @@
 #include "core/CoreExport.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/SuspendableObject.h"
-#include "core/events/GenericEventQueue.h"
+#include "core/dom/events/MediaElementEventQueue.h"
 #include "core/html/HTMLElement.h"
 #include "core/html/media/MediaControls.h"
 #include "core/html/track/TextTrack.h"
@@ -102,11 +102,6 @@ class CORE_EXPORT HTMLMediaElement
   // Notify the HTMLMediaElement that the media controls settings have changed
   // for the given document.
   static void OnMediaControlsEnabledChange(Document*);
-
-  // Called by the module implementing the media controls to notify of the
-  // factory to use. It should only be called once at process initialisation.
-  static void RegisterMediaControlsFactory(
-      std::unique_ptr<MediaControls::Factory>);
 
   DECLARE_VIRTUAL_TRACE();
 
@@ -321,9 +316,6 @@ class CORE_EXPORT HTMLMediaElement
 
   void VideoWillBeDrawnToCanvas() const;
 
-  WebRemotePlaybackClient* RemotePlaybackClient() {
-    return remote_playback_client_;
-  }
   const WebRemotePlaybackClient* RemotePlaybackClient() const {
     return remote_playback_client_;
   }
@@ -414,13 +406,20 @@ class CORE_EXPORT HTMLMediaElement
   void DisconnectedFromRemoteDevice() final;
   void CancelledRemotePlaybackRequest() final;
   void RemotePlaybackStarted() final;
+  void RemotePlaybackCompatibilityChanged(const WebURL&,
+                                          bool is_compatible) final;
   void OnBecamePersistentVideo(bool) override {}
   bool HasSelectedVideoTrack() final;
   WebMediaPlayer::TrackId GetSelectedVideoTrackId() final;
   bool IsAutoplayingMuted() final;
   void ActivateViewportIntersectionMonitoring(bool) final;
   bool HasNativeControls() final;
+  bool IsAudioElement() final;
   WebMediaPlayer::DisplayType DisplayType() const override;
+  WebRemotePlaybackClient* RemotePlaybackClient() final {
+    return remote_playback_client_;
+  }
+  gfx::ColorSpace TargetColorSpace() override;
 
   void LoadTimerFired(TimerBase*);
   void ProgressEventTimerFired(TimerBase*);
@@ -540,17 +539,14 @@ class CORE_EXPORT HTMLMediaElement
 
   EnumerationHistogram& ShowControlsHistogram() const;
 
-  void ViewportFillDebouncerTimerFired(TimerBase*);
-
   TaskRunnerTimer<HTMLMediaElement> load_timer_;
   TaskRunnerTimer<HTMLMediaElement> progress_event_timer_;
   TaskRunnerTimer<HTMLMediaElement> playback_progress_timer_;
   TaskRunnerTimer<HTMLMediaElement> audio_tracks_timer_;
-  TaskRunnerTimer<HTMLMediaElement> viewport_fill_debouncer_timer_;
   TaskRunnerTimer<HTMLMediaElement> check_viewport_intersection_timer_;
 
   Member<TimeRanges> played_time_ranges_;
-  Member<GenericEventQueue> async_event_queue_;
+  Member<MediaElementEventQueue> async_event_queue_;
 
   double playback_rate_;
   double default_playback_rate_;

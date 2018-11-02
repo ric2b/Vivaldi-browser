@@ -279,8 +279,8 @@ TEST_F(ContentSuggestionsServiceTest, ShouldRedirectFetchSuggestionImage) {
                                     CreateSuggestions(articles_category, {1}));
   ContentSuggestion::ID suggestion_id(articles_category, "1");
 
-  EXPECT_CALL(*provider1, FetchSuggestionImage(suggestion_id, _));
-  EXPECT_CALL(*provider2, FetchSuggestionImage(_, _)).Times(0);
+  EXPECT_CALL(*provider1, FetchSuggestionImageMock(suggestion_id, _));
+  EXPECT_CALL(*provider2, FetchSuggestionImageMock(_, _)).Times(0);
   service()->FetchSuggestionImage(
       suggestion_id, base::Bind(&ContentSuggestionsServiceTest::OnImageFetched,
                                 base::Unretained(this)));
@@ -649,7 +649,7 @@ TEST_F(ContentSuggestionsServiceTest, ShouldForwardFetch) {
   MockContentSuggestionsProvider* provider =
       MakeRegisteredMockProvider(category);
   provider->FireCategoryStatusChangedWithCurrentStatus(category);
-  EXPECT_CALL(*provider, Fetch(category, known_suggestions, _));
+  EXPECT_CALL(*provider, FetchMock(category, known_suggestions, _));
   service()->Fetch(category, known_suggestions, FetchDoneCallback());
 }
 

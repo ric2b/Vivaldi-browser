@@ -15,6 +15,7 @@
 
 #include "base/files/scoped_file.h"
 #include "base/macros.h"
+#include "media/gpu/features.h"
 #include "media/gpu/v4l2_device.h"
 
 namespace media {
@@ -49,6 +50,11 @@ class GenericV4L2Device : public V4L2Device {
       const gfx::Size& size,
       unsigned int buffer_index,
       uint32_t v4l2_pixfmt,
+      const std::vector<base::ScopedFD>& dmabuf_fds) override;
+
+  scoped_refptr<gl::GLImage> CreateGLImage(
+      const gfx::Size& size,
+      uint32_t fourcc,
       const std::vector<base::ScopedFD>& dmabuf_fds) override;
 
   EGLBoolean DestroyEGLImage(EGLDisplay egl_display,
@@ -109,7 +115,7 @@ class GenericV4L2Device : public V4L2Device {
   // interrupted.
   base::ScopedFD device_poll_interrupt_fd_;
 
-#if USE_LIBV4L2
+#if BUILDFLAG(USE_LIBV4L2)
   // Use libv4l2 when operating |device_fd_|.
   bool use_libv4l2_;
 #endif

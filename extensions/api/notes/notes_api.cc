@@ -29,7 +29,7 @@ const char noteNotFoundStr[] = "Note not found.";
 
 NotesEventRouter::NotesEventRouter(Profile* profile)
     : browser_context_(profile),
-      model_(NotesModelFactory::GetForProfile(profile)) {
+      model_(NotesModelFactory::GetForBrowserContext(profile)) {
   model_->AddObserver(this);
 }
 
@@ -183,7 +183,7 @@ Notes_Node* NotesAsyncFunction::GetNodeFromId(Notes_Node* node, int64_t id) {
 }
 
 Notes_Model* NotesAsyncFunction::GetNotesModel() {
-  return NotesModelFactory::GetForProfile(GetProfile());
+  return NotesModelFactory::GetForBrowserContext(GetProfile());
 }
 
 bool NotesGetFunction::RunAsync() {
@@ -192,7 +192,7 @@ bool NotesGetFunction::RunAsync() {
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::vector<NoteTreeNode> notes;
-  Notes_Model* model = NotesModelFactory::GetForProfile(GetProfile());
+  Notes_Model* model = NotesModelFactory::GetForBrowserContext(GetProfile());
   Notes_Node* root = model->root_node();
   if (params->id_or_id_list.as_strings) {
     std::vector<std::string>& ids = *params->id_or_id_list.as_strings;
@@ -234,7 +234,8 @@ NotesGetFunction::~NotesGetFunction() {}
 NotesGetTreeFunction::NotesGetTreeFunction() {}
 
 bool NotesGetTreeFunction::RunAsync() {
-  Notes_Model* model = NotesModelFactory::GetForProfile(GetProfile());
+  Notes_Model* model = NotesModelFactory::GetForBrowserContext(GetProfile());
+
   // If the model has not loaded yet wait until it does and do the work then.
   if (!model->loaded()) {
     model->AddObserver(this);
@@ -601,7 +602,7 @@ bool NotesSearchFunction::RunAsync() {
   base::string16 needle = base::UTF8ToUTF16(params->query.substr(offset));
   if (needle.length() > 0) {
     ui::TreeNodeIterator<Notes_Node> iterator(
-        NotesModelFactory::GetForProfile(GetProfile())->root_node());
+      NotesModelFactory::GetForBrowserContext(GetProfile())->root_node());
 
     while (iterator.has_next()) {
       Notes_Node* node = iterator.Next();
@@ -637,7 +638,7 @@ bool NotesMoveFunction::RunAsync() {
       vivaldi::notes::Move::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  Notes_Model* model = NotesModelFactory::GetForProfile(GetProfile());
+  Notes_Model* model = NotesModelFactory::GetForBrowserContext(GetProfile());
   Notes_Node* root = model->root_node();
 
   int64_t id;

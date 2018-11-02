@@ -12,6 +12,7 @@
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
+#include "ash/shell_delegate.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/bluetooth/bluetooth_power_controller.h"
 #include "ash/system/network/network_icon.h"
@@ -23,7 +24,6 @@
 #include "ash/system/tray/hover_highlight_view.h"
 #include "ash/system/tray/system_menu_button.h"
 #include "ash/system/tray/system_tray_controller.h"
-#include "ash/system/tray/system_tray_delegate.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_info_label.h"
 #include "ash/system/tray/tray_popup_item_style.h"
@@ -123,7 +123,7 @@ class NetworkListView::SectionHeaderRowView : public views::View,
   }
 
   virtual void SetIsOn(bool enabled) {
-    toggle_->SetEnabled(true);
+    toggle_->set_accepts_events(true);
     toggle_->SetIsOn(enabled, true);
   }
 
@@ -150,9 +150,10 @@ class NetworkListView::SectionHeaderRowView : public views::View,
     DCHECK_EQ(toggle_, sender);
     // In the event of frequent clicks, helps to prevent a toggle button state
     // from becoming inconsistent with the async operation of enabling /
-    // disabling of mobile radio. The toggle will get re-enabled in the next
-    // call to NetworkListView::Update().
-    toggle_->SetEnabled(false);
+    // disabling of mobile radio. The toggle will get unlocked in the next
+    // call to NetworkListView::Update(). Note that we don't disable/enable
+    // because that would clear focus.
+    toggle_->set_accepts_events(false);
     OnToggleToggled(toggle_->is_on());
   }
 
@@ -742,7 +743,7 @@ views::View* NetworkListView::CreatePowerStatusView(const NetworkInfo& info) {
 views::View* NetworkListView::CreateControlledByExtensionView(
     const NetworkInfo& info) {
   NetworkingConfigDelegate* networking_config_delegate =
-      Shell::Get()->system_tray_delegate()->GetNetworkingConfigDelegate();
+      Shell::Get()->shell_delegate()->GetNetworkingConfigDelegate();
   if (!networking_config_delegate)
     return nullptr;
   std::unique_ptr<const NetworkingConfigDelegate::ExtensionInfo>

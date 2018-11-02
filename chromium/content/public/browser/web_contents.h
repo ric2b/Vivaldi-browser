@@ -413,6 +413,9 @@ class WebContents : public PageNavigator,
   virtual bool IsAudioMuted() const = 0;
   virtual void SetAudioMuted(bool mute) = 0;
 
+  // Returns true if the audio is currently audible.
+  virtual bool IsCurrentlyAudible() = 0;
+
   // Indicates whether any frame in the WebContents is connected to a Bluetooth
   // Device.
   virtual bool IsConnectedToBluetoothDevice() const = 0;
@@ -443,7 +446,8 @@ class WebContents : public PageNavigator,
   // Get the last time that the WebContents was made hidden.
   virtual base::TimeTicks GetLastHiddenTime() const = 0;
 
-  // Invoked when the WebContents becomes shown/hidden.
+  // Invoked when the WebContents becomes shown/hidden. A hidden WebContents
+  // isn't painted on the screen.
   virtual void WasShown() = 0;
   virtual void WasHidden() = 0;
 
@@ -451,6 +455,12 @@ class WebContents : public PageNavigator,
   // is still loading, as opposed to RenderWidgetHostView::IsShowing(), which
   // always returns false when the page is still loading.
   virtual bool IsVisible() const = 0;
+
+  // Invoked when the WebContents becomes occluded/unoccluded. An occluded
+  // WebContents isn't painted on the screen, except in a window switching
+  // feature (e.g. Alt-Tab).
+  virtual void WasOccluded() = 0;
+  virtual void WasUnOccluded() = 0;
 
   // Returns true if the before unload and unload listeners need to be
   // fired. The value of this changes over time. For example, if true and the
@@ -688,7 +698,9 @@ class WebContents : public PageNavigator,
   // Returns true if this WebContents was opened by another WebContents, even
   // if the opener was suppressed. In contrast to HasOpener/GetOpener, the
   // original opener doesn't reflect window.opener which can be suppressed or
-  // updated.
+  // updated. This traces all the way back, so if the original owner was closed,
+  // but _it_ had an original owner, this will return the original owner's
+  // original owner, etc.
   virtual bool HasOriginalOpener() const = 0;
 
   // Returns the original opener if HasOriginalOpener() is true, or nullptr
@@ -796,7 +808,7 @@ class WebContents : public PageNavigator,
   // Returns a map containing the sizes of all currently playing videos.
   using VideoSizeMap =
       base::flat_map<WebContentsObserver::MediaPlayerId, gfx::Size>;
-  virtual const VideoSizeMap& GetCurrentlyPlayingVideoSizes() = 0;
+  virtual base::Optional<gfx::Size> GetFullscreenVideoSize() = 0;
   virtual bool IsFullscreen() = 0;
 
   // Tells the renderer to clear the focused element (if any).

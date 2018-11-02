@@ -85,7 +85,6 @@ chrome.automation.RoleType = {
   AUDIO: 'audio',
   BANNER: 'banner',
   BLOCKQUOTE: 'blockquote',
-  BUSY_INDICATOR: 'busyIndicator',
   BUTTON: 'button',
   BUTTON_DROP_DOWN: 'buttonDropDown',
   CANVAS: 'canvas',
@@ -125,7 +124,6 @@ chrome.automation.RoleType = {
   IFRAME: 'iframe',
   IFRAME_PRESENTATIONAL: 'iframePresentational',
   IGNORED: 'ignored',
-  IMAGE_MAP_LINK: 'imageMapLink',
   IMAGE_MAP: 'imageMap',
   IMAGE: 'image',
   INLINE_TEXT_BOX: 'inlineTextBox',
@@ -156,7 +154,6 @@ chrome.automation.RoleType = {
   METER: 'meter',
   NAVIGATION: 'navigation',
   NOTE: 'note',
-  OUTLINE: 'outline',
   PANE: 'pane',
   PARAGRAPH: 'paragraph',
   POP_UP_BUTTON: 'popUpButton',
@@ -170,11 +167,8 @@ chrome.automation.RoleType = {
   ROW_HEADER: 'rowHeader',
   ROW: 'row',
   RUBY: 'ruby',
-  RULER: 'ruler',
   SVG_ROOT: 'svgRoot',
-  SCROLL_AREA: 'scrollArea',
   SCROLL_BAR: 'scrollBar',
-  SEAMLESS_WEB_AREA: 'seamlessWebArea',
   SEARCH: 'search',
   SEARCH_BOX: 'searchBox',
   SLIDER: 'slider',
@@ -185,7 +179,6 @@ chrome.automation.RoleType = {
   STATIC_TEXT: 'staticText',
   STATUS: 'status',
   SWITCH: 'switch',
-  TAB_GROUP: 'tabGroup',
   TAB_LIST: 'tabList',
   TAB_PANEL: 'tabPanel',
   TAB: 'tab',
@@ -214,7 +207,6 @@ chrome.automation.RoleType = {
  * @see https://developer.chrome.com/extensions/automation#type-StateType
  */
 chrome.automation.StateType = {
-  BUSY: 'busy',
   COLLAPSED: 'collapsed',
   DEFAULT: 'default',
   EDITABLE: 'editable',
@@ -858,11 +850,11 @@ chrome.automation.AutomationNode.prototype.liveRelevant;
 chrome.automation.AutomationNode.prototype.liveAtomic;
 
 /**
- * The value of aria-busy for a live region.
+ * The value of aria-busy for a live region or any other element.
  * @type {(boolean|undefined)}
- * @see https://developer.chrome.com/extensions/automation#type-liveBusy
+ * @see https://developer.chrome.com/extensions/automation#type-busy
  */
-chrome.automation.AutomationNode.prototype.liveBusy;
+chrome.automation.AutomationNode.prototype.busy;
 
 /**
  * The type of live region if this node is inside a live region.
@@ -942,7 +934,7 @@ chrome.automation.AutomationNode.prototype.imageDataUrl;
 chrome.automation.AutomationNode.prototype.language;
 
 /**
- * State describing input restriction associated with an object: undefined - enabled control or other object that is not disabled  'disabled' - a control or group of controls that does not take input 'readOnly' - an edit field that allows focus and selection but not input
+ * Input restriction, if any, such as readonly or disabled: undefined - enabled control or other object that is not disabled  Restriction.DISABLED - disallows input in itself + any descendants Restriction.READONLY - allow focus/selection but not input
  * @type {(string|undefined)}
  * @see https://developer.chrome.com/extensions/automation#type-restriction
  */
@@ -1150,6 +1142,54 @@ chrome.automation.AutomationNode.prototype.stopDuckingMedia = function() {};
  * @see https://developer.chrome.com/extensions/automation#method-suspendMedia
  */
 chrome.automation.AutomationNode.prototype.suspendMedia = function() {};
+
+/**
+ * Scrolls this scrollable container backward.
+ * @param {function(boolean):void} callback Callback called for actions with a
+ *     response.
+ * @see https://developer.chrome.com/extensions/automation#method-scrollBackward
+ */
+chrome.automation.AutomationNode.prototype.scrollBackward = function(callback) {};
+
+/**
+ * Scrolls this scrollable container forward.
+ * @param {function(boolean):void} callback Callback called for actions with a
+ *     response.
+ * @see https://developer.chrome.com/extensions/automation#method-scrollForward
+ */
+chrome.automation.AutomationNode.prototype.scrollForward = function(callback) {};
+
+/**
+ * Scrolls this scrollable container up.
+ * @param {function(boolean):void} callback Callback called for actions with a
+ *     response.
+ * @see https://developer.chrome.com/extensions/automation#method-scrollUp
+ */
+chrome.automation.AutomationNode.prototype.scrollUp = function(callback) {};
+
+/**
+ * Scrolls this scrollable container down.
+ * @param {function(boolean):void} callback Callback called for actions with a
+ *     response.
+ * @see https://developer.chrome.com/extensions/automation#method-scrollDown
+ */
+chrome.automation.AutomationNode.prototype.scrollDown = function(callback) {};
+
+/**
+ * Scrolls this scrollable container left.
+ * @param {function(boolean):void} callback Callback called for actions with a
+ *     response.
+ * @see https://developer.chrome.com/extensions/automation#method-scrollLeft
+ */
+chrome.automation.AutomationNode.prototype.scrollLeft = function(callback) {};
+
+/**
+ * Scrolls this scrollable container right.
+ * @param {function(boolean):void} callback Callback called for actions with a
+ *     response.
+ * @see https://developer.chrome.com/extensions/automation#method-scrollRight
+ */
+chrome.automation.AutomationNode.prototype.scrollRight = function(callback) {};
 
 /**
  * Adds a listener for the given event type and event phase.

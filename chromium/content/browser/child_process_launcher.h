@@ -22,6 +22,10 @@
 #include "mojo/edk/embedder/outgoing_broker_client_invitation.h"
 #include "mojo/edk/embedder/scoped_platform_handle.h"
 
+#if defined(OS_ANDROID)
+#include "content/public/browser/android/child_process_importance.h"
+#endif
+
 namespace base {
 class CommandLine;
 }
@@ -48,6 +52,19 @@ static_assert(static_cast<int>(LAUNCH_RESULT_START) >
                   static_cast<int>(sandbox::SBOX_ERROR_LAST),
               "LaunchResultCode must not overlap with sandbox::ResultCode");
 #endif
+
+struct ChildProcessLauncherPriority {
+  bool background;
+  bool boost_for_pending_views;
+#if defined(OS_ANDROID)
+  ChildProcessImportance importance;
+#endif
+
+  bool operator==(const ChildProcessLauncherPriority& other) const;
+  bool operator!=(const ChildProcessLauncherPriority& other) const {
+    return !(*this == other);
+  }
+};
 
 // Launches a process asynchronously and notifies the client of the process
 // handle when it's available.  It's used to avoid blocking the calling thread
@@ -108,7 +125,7 @@ class CONTENT_EXPORT ChildProcessLauncher {
 
   // Changes whether the process runs in the background or not.  Only call
   // this after the process has started.
-  void SetProcessPriority(bool background, bool boost_for_pending_views);
+  void SetProcessPriority(const ChildProcessLauncherPriority& priority);
 
   // Terminates the process associated with this ChildProcessLauncher.
   // Returns true if the process was stopped, false if the process had not been

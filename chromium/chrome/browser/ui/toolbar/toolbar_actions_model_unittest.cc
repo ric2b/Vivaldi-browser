@@ -13,6 +13,7 @@
 #include "base/files/file_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/run_loop.h"
 #include "base/strings/string16.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
@@ -493,11 +494,11 @@ TEST_F(ToolbarActionsModelUnitTest, ActionsToolbarUnloadDisableAndUninstall) {
 
   // Disabling extensions should also preserve order.
   service()->DisableExtension(browser_action_b()->id(),
-                              extensions::Extension::DISABLE_USER_ACTION);
+                              extensions::disable_reason::DISABLE_USER_ACTION);
   service()->DisableExtension(browser_action_c()->id(),
-                              extensions::Extension::DISABLE_USER_ACTION);
+                              extensions::disable_reason::DISABLE_USER_ACTION);
   service()->DisableExtension(browser_action_a()->id(),
-                              extensions::Extension::DISABLE_USER_ACTION);
+                              extensions::disable_reason::DISABLE_USER_ACTION);
   service()->EnableExtension(browser_action_c()->id());
   service()->EnableExtension(browser_action_a()->id());
   service()->EnableExtension(browser_action_b()->id());
@@ -736,7 +737,7 @@ TEST_F(ToolbarActionsModelUnitTest, ActionsToolbarHighlightModeRemove) {
 
   // Disable one of them - only one should remain highlighted.
   service()->DisableExtension(browser_action_a()->id(),
-                              extensions::Extension::DISABLE_USER_ACTION);
+                              extensions::disable_reason::DISABLE_USER_ACTION);
   EXPECT_TRUE(toolbar_model()->is_highlighting());
   EXPECT_EQ(1u, num_toolbar_items());
   EXPECT_EQ(browser_action_b()->id(), GetActionIdAtIndex(0u));

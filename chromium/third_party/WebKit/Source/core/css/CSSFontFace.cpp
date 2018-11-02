@@ -25,15 +25,15 @@
 
 #include "core/css/CSSFontFace.h"
 
+#include <algorithm>
 #include "core/css/CSSFontFaceSource.h"
 #include "core/css/CSSFontSelector.h"
 #include "core/css/CSSSegmentedFontFace.h"
-#include "core/css/FontFaceSet.h"
+#include "core/css/FontFaceSetDocument.h"
 #include "core/css/RemoteFontFaceSource.h"
 #include "core/frame/UseCounter.h"
 #include "platform/fonts/FontDescription.h"
 #include "platform/fonts/SimpleFontData.h"
-#include <algorithm>
 
 namespace blink {
 
@@ -88,14 +88,16 @@ void CSSFontFace::DidBecomeVisibleFallback(RemoteFontFaceSource* source) {
     segmented_font_face_->FontFaceInvalidated();
 }
 
-PassRefPtr<SimpleFontData> CSSFontFace::GetFontData(
+RefPtr<SimpleFontData> CSSFontFace::GetFontData(
     const FontDescription& font_description) {
   if (!IsValid())
     return nullptr;
 
   while (!sources_.IsEmpty()) {
     Member<CSSFontFaceSource>& source = sources_.front();
-    if (RefPtr<SimpleFontData> result = source->GetFontData(font_description)) {
+    if (RefPtr<SimpleFontData> result = source->GetFontData(
+            font_description,
+            segmented_font_face_->GetFontSelectionCapabilities())) {
       if (LoadStatus() == FontFace::kUnloaded &&
           (source->IsLoading() || source->IsLoaded()))
         SetLoadStatus(FontFace::kLoading);
@@ -144,7 +146,6 @@ void CSSFontFace::Load() {
   FontFamily font_family;
   font_family.SetFamily(font_face_->family());
   font_description.SetFamily(font_family);
-  font_description.SetTraits(font_face_->Traits());
   Load(font_description);
 }
 
@@ -186,7 +187,7 @@ void CSSFontFace::SetLoadStatus(FontFace::LoadStatusType new_status) {
     return;
   Document* document = ToDocument(font_face_->GetExecutionContext());
   if (document && new_status == FontFace::kLoading)
-    FontFaceSet::From(*document)->BeginFontLoading(font_face_);
+    FontFaceSetDocument::From(*document)->BeginFontLoading(font_face_);
 }
 
 DEFINE_TRACE(CSSFontFace) {

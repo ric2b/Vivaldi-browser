@@ -6,7 +6,7 @@
 
 #include <queue>
 #include "core/frame/FrameTestHelpers.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "core/page/Page.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
@@ -35,7 +35,7 @@ class DocumentLoaderTest : public ::testing::Test {
         ->UnregisterAllURLsAndClearMemoryCache();
   }
 
-  WebLocalFrameBase* MainFrame() { return web_view_helper_.LocalMainFrame(); }
+  WebLocalFrameImpl* MainFrame() { return web_view_helper_.LocalMainFrame(); }
 
   FrameTestHelpers::WebViewHelper web_view_helper_;
 };
@@ -115,7 +115,7 @@ TEST_F(DocumentLoaderTest, MultiChunkWithReentrancy) {
     }
 
     // WebFrameClient overrides:
-    void FrameDetached(WebLocalFrame* frame, DetachType detach_type) override {
+    void FrameDetached(DetachType detach_type) override {
       if (dispatching_did_receive_data_) {
         // This should be called by the first didReceiveData() call, since
         // it should commit the provisional load.
@@ -127,7 +127,7 @@ TEST_F(DocumentLoaderTest, MultiChunkWithReentrancy) {
           DispatchOneByte();
         served_reentrantly_ = true;
       }
-      TestWebFrameClient::FrameDetached(frame, detach_type);
+      TestWebFrameClient::FrameDetached(detach_type);
     }
 
     void DispatchOneByte() {
@@ -185,7 +185,7 @@ TEST_F(DocumentLoaderTest, MultiChunkWithReentrancy) {
 }
 
 TEST_F(DocumentLoaderTest, isCommittedButEmpty) {
-  WebViewBase* web_view_impl =
+  WebViewImpl* web_view_impl =
       web_view_helper_.InitializeAndLoad("about:blank");
   EXPECT_TRUE(ToLocalFrame(web_view_impl->GetPage()->MainFrame())
                   ->Loader()

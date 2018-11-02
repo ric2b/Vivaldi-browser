@@ -14,6 +14,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
@@ -140,6 +141,7 @@ WebApplicationInfo CreateWebAppInfo(const char* title,
   web_app_info.title = base::UTF8ToUTF16(title);
   web_app_info.description = base::UTF8ToUTF16(description);
   web_app_info.app_url = GURL(app_url);
+  web_app_info.scope = GURL(app_url);
 
   web_app_info.icons.push_back(CreateIconInfoWithBitmap(size));
 
@@ -157,12 +159,12 @@ class MockInstallPrompt : public ExtensionInstallPrompt {
   void OnInstallSuccess(const Extension* extension, SkBitmap* icon) override {
     proxy_->set_extension_id(extension->id());
     proxy_->set_confirmation_requested(did_call_show_dialog());
-    base::MessageLoopForUI::current()->QuitWhenIdle();
+    base::RunLoop::QuitCurrentWhenIdleDeprecated();
   }
   void OnInstallFailure(const CrxInstallError& error) override {
     proxy_->set_error(error.message());
     proxy_->set_confirmation_requested(did_call_show_dialog());
-    base::MessageLoopForUI::current()->QuitWhenIdle();
+    base::RunLoop::QuitCurrentWhenIdleDeprecated();
   }
 
  private:
@@ -201,7 +203,8 @@ class ManagementPolicyMock : public extensions::ManagementPolicy::Provider {
 
   bool UserMayLoad(const Extension* extension,
                    base::string16* error) const override {
-    *error = base::UTF8ToUTF16("Dummy error message");
+    if (error)
+      *error = base::UTF8ToUTF16("Dummy error message");
     return false;
   }
 };

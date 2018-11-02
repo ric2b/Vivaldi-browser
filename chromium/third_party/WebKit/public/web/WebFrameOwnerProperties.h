@@ -6,6 +6,7 @@
 #define WebFrameOwnerProperties_h
 
 #include "public/platform/WebFeaturePolicy.h"
+#include "public/platform/WebScrollbar.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebVector.h"
 
@@ -14,7 +15,7 @@
 namespace blink {
 
 struct WebFrameOwnerProperties {
-  enum class ScrollingMode { kAuto, kAlwaysOff, kAlwaysOn, kLast = kAlwaysOn };
+  using ScrollingMode = WebScrollbar::ScrollingMode;
 
   WebString name;  // browsing context container's name
   ScrollingMode scrolling_mode;
@@ -26,8 +27,6 @@ struct WebFrameOwnerProperties {
   WebString required_csp;
 
  public:
-  WebVector<WebFeaturePolicyFeature> allowed_features;
-
   WebFrameOwnerProperties()
       : scrolling_mode(ScrollingMode::kAuto),
         margin_width(-1),
@@ -37,16 +36,14 @@ struct WebFrameOwnerProperties {
         is_display_none(false) {}
 
 #if INSIDE_BLINK
-  WebFrameOwnerProperties(
-      const WebString& name,
-      ScrollbarMode scrolling_mode,
-      int margin_width,
-      int margin_height,
-      bool allow_fullscreen,
-      bool allow_payment_request,
-      bool is_display_none,
-      const WebString& required_csp,
-      const WebVector<WebFeaturePolicyFeature>& allowed_features)
+  WebFrameOwnerProperties(const WebString& name,
+                          ScrollbarMode scrolling_mode,
+                          int margin_width,
+                          int margin_height,
+                          bool allow_fullscreen,
+                          bool allow_payment_request,
+                          bool is_display_none,
+                          const WebString& required_csp)
       : name(name),
         scrolling_mode(static_cast<ScrollingMode>(scrolling_mode)),
         margin_width(margin_width),
@@ -54,8 +51,7 @@ struct WebFrameOwnerProperties {
         allow_fullscreen(allow_fullscreen),
         allow_payment_request(allow_payment_request),
         is_display_none(is_display_none),
-        required_csp(required_csp),
-        allowed_features(allowed_features) {}
+        required_csp(required_csp) {}
 #endif
 };
 

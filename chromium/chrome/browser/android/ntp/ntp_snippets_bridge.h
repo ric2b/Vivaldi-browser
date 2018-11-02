@@ -13,6 +13,7 @@
 #include "components/ntp_snippets/category.h"
 #include "components/ntp_snippets/category_status.h"
 #include "components/ntp_snippets/content_suggestions_service.h"
+#include "components/ntp_snippets/contextual/contextual_content_suggestions_service.h"
 #include "components/ntp_snippets/status.h"
 
 namespace gfx {
@@ -84,6 +85,13 @@ class NTPSnippetsBridge
       const base::android::JavaParamRef<jstring>& j_url,
       const base::android::JavaParamRef<jobject>& j_callback);
 
+  void FetchContextualSuggestionImage(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      jint j_category_id,
+      const base::android::JavaParamRef<jstring>& id_within_category,
+      const base::android::JavaParamRef<jobject>& j_callback);
+
   void ReloadSuggestions(JNIEnv* env,
                          const base::android::JavaParamRef<jobject>& obj);
 
@@ -125,7 +133,15 @@ class NTPSnippetsBridge
       ntp_snippets::Status status,
       std::vector<ntp_snippets::ContentSuggestion> suggestions);
 
+  void OnContextualSuggestionsFetched(
+      base::android::ScopedJavaGlobalRef<jobject> j_callback,
+      ntp_snippets::Status status,
+      const GURL& url,
+      std::vector<ntp_snippets::ContentSuggestion> suggestions);
+
   ntp_snippets::ContentSuggestionsService* content_suggestions_service_;
+  ntp_snippets::ContextualContentSuggestionsService*
+      contextual_content_suggestions_service_;
   history::HistoryService* history_service_;
   base::CancelableTaskTracker tracker_;
 

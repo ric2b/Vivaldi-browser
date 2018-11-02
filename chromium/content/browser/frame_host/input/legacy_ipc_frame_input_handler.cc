@@ -11,6 +11,23 @@
 
 namespace content {
 
+namespace {
+
+blink::WebImeTextSpan::Type ConvertUiImeTextSpanTypeToBlinkType(
+    ui::ImeTextSpan::Type type) {
+  switch (type) {
+    case ui::ImeTextSpan::Type::kComposition:
+      return blink::WebImeTextSpan::Type::kComposition;
+    case ui::ImeTextSpan::Type::kSuggestion:
+      return blink::WebImeTextSpan::Type::kSuggestion;
+  }
+
+  NOTREACHED();
+  return blink::WebImeTextSpan::Type::kComposition;
+}
+
+}  // namespace
+
 LegacyIPCFrameInputHandler::LegacyIPCFrameInputHandler(
     RenderFrameHostImpl* frame_host)
     : frame_host_(frame_host), routing_id_(frame_host->GetRoutingID()) {}
@@ -20,17 +37,20 @@ LegacyIPCFrameInputHandler::~LegacyIPCFrameInputHandler() {}
 void LegacyIPCFrameInputHandler::SetCompositionFromExistingText(
     int32_t start,
     int32_t end,
-    const std::vector<ui::CompositionUnderline>& ui_underlines) {
-  std::vector<blink::WebCompositionUnderline> underlines;
-  for (const auto& underline : ui_underlines) {
-    blink::WebCompositionUnderline blink_underline(
-        underline.start_offset, underline.end_offset, underline.color,
-        underline.thick, underline.background_color);
-    underlines.push_back(blink_underline);
+    const std::vector<ui::ImeTextSpan>& ui_ime_text_spans) {
+  std::vector<blink::WebImeTextSpan> ime_text_spans;
+  for (const auto& ime_text_span : ui_ime_text_spans) {
+    blink::WebImeTextSpan blink_ime_text_span(
+        ConvertUiImeTextSpanTypeToBlinkType(ime_text_span.type),
+        ime_text_span.start_offset, ime_text_span.end_offset,
+        ime_text_span.underline_color, ime_text_span.thick,
+        ime_text_span.background_color,
+        ime_text_span.suggestion_highlight_color, ime_text_span.suggestions);
+    ime_text_spans.push_back(blink_ime_text_span);
   }
 
   SendInput(base::MakeUnique<InputMsg_SetCompositionFromExistingText>(
-      routing_id_, start, end, underlines));
+      routing_id_, start, end, ime_text_spans));
 }
 
 void LegacyIPCFrameInputHandler::ExtendSelectionAndDelete(int32_t before,
@@ -143,6 +163,11 @@ void LegacyIPCFrameInputHandler::ScrollFocusedEditableNodeIntoRect(
 
 void LegacyIPCFrameInputHandler::MoveCaret(const gfx::Point& point) {
   SendInput(base::MakeUnique<InputMsg_MoveCaret>(routing_id_, point));
+}
+
+void LegacyIPCFrameInputHandler::GetWidgetInputHandler(
+    mojom::WidgetInputHandlerAssociatedRequest interface_request) {
+  NOTREACHED();
 }
 
 void LegacyIPCFrameInputHandler::SendInput(

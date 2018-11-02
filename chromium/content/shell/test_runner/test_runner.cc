@@ -49,8 +49,8 @@
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerRegistration.h"
 #include "third_party/WebKit/public/web/WebArrayBuffer.h"
 #include "third_party/WebKit/public/web/WebArrayBufferConverter.h"
-#include "third_party/WebKit/public/web/WebDataSource.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
+#include "third_party/WebKit/public/web/WebDocumentLoader.h"
 #include "third_party/WebKit/public/web/WebFindOptions.h"
 #include "third_party/WebKit/public/web/WebFrame.h"
 #include "third_party/WebKit/public/web/WebInputElement.h"
@@ -1665,8 +1665,8 @@ void TestRunner::Reset() {
 #endif
 
   if (delegate_) {
-    // Reset the default quota for each origin to 5MB
-    delegate_->SetDatabaseQuota(5 * 1024 * 1024);
+    // Reset the default quota for each origin.
+    delegate_->SetDatabaseQuota(kDefaultDatabaseQuota);
     delegate_->SetDeviceColorSpace("reset");
     delegate_->SetDeviceScaleFactor(GetDefaultDeviceScaleFactor());
     delegate_->SetBlockThirdPartyCookies(true);
@@ -1846,7 +1846,9 @@ void TestRunner::setShouldEnableViewSource(bool value) {
   // is guaranteed to exist at this point.
   DCHECK(main_view_);
 
-  main_view_->MainFrame()->EnableViewSourceMode(value);
+  CHECK(main_view_->MainFrame()->IsWebLocalFrame())
+      << "This function requires that the main frame is a local frame.";
+  main_view_->MainFrame()->ToWebLocalFrame()->EnableViewSourceMode(value);
 }
 
 bool TestRunner::shouldDumpUserGestureInFrameLoadCallbacks() const {
@@ -2596,7 +2598,7 @@ void TestRunner::SetDisallowedSubresourcePathSuffixes(
     return;
   main_view_->MainFrame()
       ->ToWebLocalFrame()
-      ->DataSource()
+      ->GetDocumentLoader()
       ->SetSubresourceFilter(new MockWebDocumentSubresourceFilter(suffixes));
 }
 
@@ -2832,12 +2834,12 @@ void TestRunner::CheckResponseMimeType() {
   if (!main_view_->MainFrame()->IsWebLocalFrame())
     return;
 
-  WebDataSource* data_source =
-      main_view_->MainFrame()->ToWebLocalFrame()->DataSource();
-  if (!data_source)
+  WebDocumentLoader* document_loader =
+      main_view_->MainFrame()->ToWebLocalFrame()->GetDocumentLoader();
+  if (!document_loader)
     return;
 
-  std::string mimeType = data_source->GetResponse().MimeType().Utf8();
+  std::string mimeType = document_loader->GetResponse().MimeType().Utf8();
   if (mimeType != "text/plain")
     return;
 

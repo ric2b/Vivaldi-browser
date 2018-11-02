@@ -13,7 +13,7 @@
 
 #if !defined(USE_PPAPI_CDM_ADAPTER)
 #include "base/memory/ref_counted.h"
-#include "media/base/media_export.h"
+#include "media/base/media_export.h"  // nogncheck
 #include "ui/gfx/geometry/size.h"
 #define MEDIA_CDM_EXPORT MEDIA_EXPORT
 #else
@@ -42,8 +42,7 @@ class DecryptedBlockImpl : public cdm::DecryptedBlock {
   DISALLOW_COPY_AND_ASSIGN(DecryptedBlockImpl);
 };
 
-class MEDIA_CDM_EXPORT VideoFrameImpl
-    : NON_EXPORTED_BASE(public cdm::VideoFrame) {
+class MEDIA_CDM_EXPORT VideoFrameImpl : public cdm::VideoFrame {
  public:
   VideoFrameImpl();
   ~VideoFrameImpl() override;

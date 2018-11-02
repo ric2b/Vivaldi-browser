@@ -395,11 +395,6 @@ void DiscardableSharedMemoryHeap::OnMemoryDump(
       base::StringPrintf("discardable/segment_%d", segment_id);
   base::trace_event::MemoryAllocatorDump* segment_dump =
       pmd->CreateAllocatorDump(segment_dump_name);
-  // The size is added here so that telemetry picks up the size. Usually it is
-  // just enough to add it to the global dump.
-  segment_dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
-                          base::trace_event::MemoryAllocatorDump::kUnitsBytes,
-                          allocated_objects_size_in_bytes);
   segment_dump->AddScalar("virtual_size",
                           base::trace_event::MemoryAllocatorDump::kUnitsBytes,
                           size);
@@ -416,42 +411,9 @@ void DiscardableSharedMemoryHeap::OnMemoryDump(
                       base::trace_event::MemoryAllocatorDump::kUnitsBytes,
                       locked_objects_size_in_bytes);
 
-  // Emit an ownership edge towards a global allocator dump node. This allows
-  // to avoid double-counting segments when both browser and client process emit
-  // them. In the special case of single-process-mode, this will be the only
-  // dumper active and the single ownership edge will become a no-op in the UI.
-  // The global dump is created as a weak dump so that the segment is removed if
-  // the browser does not dump it (segment was purged).
-  const uint64_t tracing_process_id =
-      base::trace_event::MemoryDumpManager::GetInstance()
-          ->GetTracingProcessId();
-  base::trace_event::MemoryAllocatorDumpGuid shared_segment_guid =
-      GetSegmentGUIDForTracing(tracing_process_id, segment_id);
-  // TODO(ssid): Make this weak once the GUID created is consistent
-  // crbug.com/661257.
-  pmd->CreateSharedGlobalAllocatorDump(shared_segment_guid);
-
-  // The size is added to the global dump so that it gets propagated to both the
-  // dumps associated.
-  pmd->GetSharedGlobalAllocatorDump(shared_segment_guid)
-      ->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
-                  base::trace_event::MemoryAllocatorDump::kUnitsBytes,
-                  allocated_objects_size_in_bytes);
-
-  // By creating an edge with a higher |importance| (w.r.t. browser-side dumps)
-  // the tracing UI will account the effective size of the segment to the
-  // client.
-  const int kImportance = 2;
-  pmd->AddOwnershipEdge(segment_dump->guid(), shared_segment_guid, kImportance);
-}
-
-// static
-base::trace_event::MemoryAllocatorDumpGuid
-DiscardableSharedMemoryHeap::GetSegmentGUIDForTracing(
-    uint64_t tracing_process_id,
-    int32_t segment_id) {
-  return base::trace_event::MemoryAllocatorDumpGuid(base::StringPrintf(
-      "discardable-x-process/%" PRIx64 "/%d", tracing_process_id, segment_id));
+  // The memory is owned by the client process (current).
+  shared_memory->CreateSharedMemoryOwnershipEdge(segment_dump, pmd,
+                                                 /*is_owned=*/true);
 }
 
 base::trace_event::MemoryAllocatorDump*

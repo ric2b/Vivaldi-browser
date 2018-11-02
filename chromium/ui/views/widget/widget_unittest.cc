@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -1059,7 +1058,7 @@ TEST_F(WidgetTest, GetWindowPlacement) {
 #endif
 
   WidgetAutoclosePtr widget;
-#if defined(USE_X11) && !defined(OS_CHROMEOS)
+#if defined(USE_X11)
   // On desktop-Linux cheat and use non-desktop widgets. On X11, minimize is
   // asynchronous. Also (harder) showing a window doesn't activate it without
   // user interaction (or extra steps only done for interactive ui tests).
@@ -2096,7 +2095,7 @@ class CloseDestroysWidget : public Widget {
   ~CloseDestroysWidget() override {
     if (destroyed_) {
       *destroyed_ = true;
-      base::MessageLoop::current()->QuitNow();
+      base::RunLoop::QuitCurrentDeprecated();
     }
   }
 

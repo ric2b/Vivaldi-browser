@@ -51,6 +51,9 @@ class RemoteSuggestion {
                                          int remote_category_id,
                                          const base::Time& fetch_date);
 
+  static std::unique_ptr<RemoteSuggestion>
+  CreateFromContextualSuggestionsDictionary(const base::DictionaryValue& dict);
+
   // Creates an RemoteSuggestion from a protocol buffer. Returns a null pointer
   // if the protocol buffer doesn't correspond to a valid suggestion.
   static std::unique_ptr<RemoteSuggestion> CreateFromProto(
@@ -107,7 +110,12 @@ class RemoteSuggestion {
   float score() const { return score_; }
 
   bool should_notify() const { return should_notify_; }
+  void set_should_notify(bool new_value) { should_notify_ = new_value; }
+
   base::Time notification_deadline() const { return notification_deadline_; }
+  void set_notification_deadline(const base::Time& new_value) {
+    notification_deadline_ = new_value;
+  }
 
   ContentType content_type() const { return content_type_; }
 
@@ -115,8 +123,11 @@ class RemoteSuggestion {
   void set_dismissed(bool dismissed) { is_dismissed_ = dismissed; }
 
   // The ID of the remote category this suggestion belongs to, for use with
-  // CategoryFactory::FromRemoteCategory.
+  // Category::FromRemoteCategory.
   int remote_category_id() const { return remote_category_id_; }
+
+  int rank() const { return rank_; }
+  void set_rank(int rank) { rank_ = rank; }
 
   base::Time fetch_date() const { return fetch_date_; }
 
@@ -148,6 +159,7 @@ class RemoteSuggestion {
   float score_;
   bool is_dismissed_;
   int remote_category_id_;
+  int rank_;
 
   bool should_notify_;
   base::Time notification_deadline_;

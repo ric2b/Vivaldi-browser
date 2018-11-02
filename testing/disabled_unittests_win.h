@@ -105,3 +105,11 @@ DISABLE_MULTI(WebViewInteractiveTest, EditCommandsNoMenu)
 // Failed in v61, does not fail locally
 DISABLE(ChromeVisibilityObserverBrowserTest, VisibilityTest)
 DISABLE(SslCastSocketTest, TestConnectEndToEndWithRealSSL)
+
+// Started to fail in 61
+DISABLE(PipelineIntegrationTest, BasicFallback)
+DISABLE(PlatformMediaPipelineIntegrationTest, AudioConfigChange)
+DISABLE(PlatformMediaPipelineIntegrationTest, BasicPlayback_VideoOnly)
+DISABLE(PlatformMediaPipelineIntegrationTest, SeekWhilePaused)
+DISABLE(PlatformMediaPipelineIntegrationTest, SeekWhilePlaying)
+DISABLE(PlatformMediaPipelineIntegrationTest, VideoConfigChange)

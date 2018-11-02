@@ -426,15 +426,13 @@ TEST_F(CupsPrintersManagerTest, UpdateConfiguredPrinter) {
   // into the configured category.
   manager_->UpdateConfiguredPrinter(Printer("Automatic"));
   scoped_task_environment_.RunUntilIdle();
-  ExpectPrintersInClassAre(CupsPrintersManager::kAutomatic,
-                           std::vector<std::string>());
+  ExpectPrintersInClassAre(CupsPrintersManager::kAutomatic, {});
   ExpectPrintersInClassAre(CupsPrintersManager::kConfigured,
                            {"Automatic", "Configured"});
 
   manager_->UpdateConfiguredPrinter(Printer("Discovered"));
   scoped_task_environment_.RunUntilIdle();
-  ExpectPrintersInClassAre(CupsPrintersManager::kDiscovered,
-                           std::vector<std::string>());
+  ExpectPrintersInClassAre(CupsPrintersManager::kDiscovered, {});
   ExpectPrintersInClassAre(CupsPrintersManager::kConfigured,
                            {"Automatic", "Configured", "Discovered"});
 

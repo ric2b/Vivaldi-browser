@@ -10,19 +10,15 @@
   <template>
     <style include="shared-style">
       :host {
-        display: block;
-        flex-direction: row;
-        position: relative;
-      }
-
-      #url {
         -webkit-padding-start: 20px;
-        -webkit-user-select: none;
         align-items: center;
         color: inherit;
         display: flex;
+        flex-direction: row;
         height: 40px;
+        position: relative;
         text-decoration: none;
+        user-select: none;
       }
 
       :host([is-selected-item_]) {
@@ -46,22 +42,22 @@
         -webkit-margin-end: 12px;
       }
     </style>
-    <div id="url">
-      <div id="icon"></div>
-      <div id="website-title">
-        [[item_.title]]
-      </div>
-      <button is="paper-icon-button-light"
-          class="more-vert-button"
-          tabindex$="[[ironListTabIndex]]"
-          title="$i18n{moreActionsButtonTitle}"
-          on-click="onMenuButtonClick_"
-          on-dblclick="onMenuButtonDblClick_">
-        <div></div>
-        <div></div>
-        <div></div>
-      </button>
+    <div id="icon"></div>
+    <div id="website-title">
+      [[item_.title]]
     </div>
+    <button id="menuButton"
+        is="paper-icon-button-light"
+        class="more-vert-button"
+        tabindex$="[[ironListTabIndex]]"
+        title="$i18n{moreActionsButtonTitle}"
+        on-click="onMenuButtonClick_"
+        on-dblclick="onMenuButtonDblClick_"
+        aria-haspopup="menu">
+      <div></div>
+      <div></div>
+      <div></div>
+    </button>
   </template>
   <script src="chrome://bookmarks/item.js"></script>
 <dom-module>

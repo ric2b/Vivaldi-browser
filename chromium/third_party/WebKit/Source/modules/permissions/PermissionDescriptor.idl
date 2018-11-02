@@ -7,7 +7,12 @@ enum PermissionName {
     "midi",
     "notifications",
     "push",
-    "background-sync"
+    "background-sync",
+    "ambient-light-sensor",
+    "accelerometer",
+    "gyroscope",
+    "magnetometer",
+    "accessibility-events",
 };
 
 // The PermissionDescriptor dictionary is a base to describe permissions. Some

@@ -21,6 +21,7 @@
 @synthesize publisher;
 @synthesize publicationDate;
 @synthesize availableOffline;
+@synthesize metricsRecorded;
 
 - (instancetype)initWithType:(NSInteger)type {
   self = [super initWithType:type];
@@ -37,8 +38,7 @@
   cell.displayImage = self.hasImage;
   [cell setContentImage:self.image animated:NO];
   [cell setAdditionalInformationWithPublisherName:self.publisher
-                                             date:self.publicationDate
-                              offlineAvailability:self.availableOffline];
+                                             date:self.publicationDate];
   cell.isAccessibilityElement = YES;
   cell.accessibilityLabel = self.title;
   cell.accessibilityIdentifier = self.title;
@@ -53,8 +53,7 @@
                               withImage:self.hasImage
                                   title:self.title
                           publisherName:self.publisher
-                        publicationDate:self.publicationDate
-                       availableOffline:self.availableOffline];
+                        publicationDate:self.publicationDate];
 }
 
 @end

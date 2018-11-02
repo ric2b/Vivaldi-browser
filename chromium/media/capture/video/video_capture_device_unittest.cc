@@ -13,6 +13,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/memory/ref_counted.h"
+#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/test/scoped_task_environment.h"
@@ -44,6 +45,8 @@
 #endif
 
 #if defined(OS_CHROMEOS)
+#include "media/capture/video/chromeos/camera_buffer_factory.h"
+#include "media/capture/video/chromeos/local_gpu_memory_buffer_manager.h"
 #include "media/capture/video/chromeos/video_capture_device_arc_chromeos.h"
 #include "media/capture/video/chromeos/video_capture_device_factory_chromeos.h"
 #include "mojo/edk/embedder/embedder.h"
@@ -98,6 +101,19 @@ void DumpError(const tracked_objects::Location& location,
                const std::string& message) {
   DPLOG(ERROR) << location.ToString() << " " << message;
 }
+
+#if defined(OS_ANDROID)
+static bool IsDeviceUsableForTesting(
+    const VideoCaptureDeviceDescriptor& descriptor) {
+  // Android deprecated/legacy devices and Tango cameras capture on a single
+  // thread, which is occupied by the tests, so nothing gets actually delivered.
+  // TODO(mcasas): use those devices' test mode to deliver frames in a
+  // background thread, https://crbug.com/626857
+  return !VideoCaptureDeviceFactoryAndroid::IsLegacyOrDeprecatedDevice(
+             descriptor.device_id) &&
+         descriptor.capture_api != VideoCaptureApi::ANDROID_TANGO;
+};
+#endif
 
 class MockVideoCaptureClient : public VideoCaptureDevice::Client {
  public:
@@ -193,26 +209,12 @@ class MockImageCaptureClient
   }
   MOCK_METHOD0(OnCorrectPhotoTaken, void(void));
 
-  void OnTakePhotoFailure(mojom::ImageCapture::TakePhotoCallback callback) {
-    OnTakePhotoFailureInternal(callback);
-  }
-
-  MOCK_METHOD1(OnTakePhotoFailureInternal,
-               void(mojom::ImageCapture::TakePhotoCallback&));
-
   // GMock doesn't support move-only arguments, so we use this forward method.
   void DoOnGetPhotoState(mojom::PhotoStatePtr state) {
     state_ = std::move(state);
     OnCorrectGetPhotoState();
   }
   MOCK_METHOD0(OnCorrectGetPhotoState, void(void));
-
-  void OnGetPhotoStateFailure(
-      mojom::ImageCapture::GetPhotoStateCallback callback) {
-    OnGetPhotoStateFailureInternal(callback);
-  }
-  MOCK_METHOD1(OnGetPhotoStateFailureInternal,
-               void(mojom::ImageCapture::GetPhotoStateCallback&));
 
   const mojom::PhotoState* capabilities() { return state_.get(); }
 
@@ -268,14 +270,21 @@ class VideoCaptureDeviceTest : public testing::TestWithParam<gfx::Size> {
             base::Bind(&VideoCaptureDeviceTest::OnFrameCaptured,
                        base::Unretained(this)))),
         image_capture_client_(new MockImageCaptureClient()),
+#if defined(OS_CHROMEOS)
+        local_gpu_memory_buffer_manager_(new LocalGpuMemoryBufferManager()),
+#endif
         video_capture_device_factory_(VideoCaptureDeviceFactory::CreateFactory(
-            base::ThreadTaskRunnerHandle::Get())) {}
+            base::ThreadTaskRunnerHandle::Get(),
+#if defined(OS_CHROMEOS)
+            local_gpu_memory_buffer_manager_.get()
+#else
+            nullptr
+#endif
+                )) {
+  }
 
   void SetUp() override {
 #if defined(OS_ANDROID)
-    VideoCaptureDeviceAndroid::RegisterVideoCaptureDevice(
-        base::android::AttachCurrentThread());
-
     static_cast<VideoCaptureDeviceFactoryAndroid*>(
         video_capture_device_factory_.get())
         ->ConfigureForTesting();
@@ -302,31 +311,30 @@ class VideoCaptureDeviceTest : public testing::TestWithParam<gfx::Size> {
     run_loop_->Run();
   }
 
-  bool FindUsableDevices() {
+  std::unique_ptr<VideoCaptureDeviceDescriptor> FindUsableDeviceDescriptor() {
     video_capture_device_factory_->GetDeviceDescriptors(
         device_descriptors_.get());
 
 #if defined(OS_ANDROID)
-    // Android deprecated/legacy devices capture on a single thread, which is
-    // occupied by the tests, so nothing gets actually delivered.
-    // TODO(mcasas): use those devices' test mode to deliver frames in a
-    // background thread, https://crbug.com/626857
     for (const auto& descriptor : *device_descriptors_) {
-      if (VideoCaptureDeviceFactoryAndroid::IsLegacyOrDeprecatedDevice(
-              descriptor.device_id)) {
-        return false;
+      if (IsDeviceUsableForTesting(descriptor)) {
+        DLOG(INFO) << "Using camera " << descriptor.GetNameAndModel();
+        return base::MakeUnique<VideoCaptureDeviceDescriptor>(descriptor);
       }
     }
+    DLOG(WARNING) << "No usable camera found";
+    return nullptr;
 #endif
 
-    if (device_descriptors_->empty())
-      LOG(WARNING) << "No camera found";
-    else {
-      LOG(INFO) << "Using camera " << device_descriptors_->front().display_name
-                << " (" << device_descriptors_->front().model_id << ")";
+    if (device_descriptors_->empty()) {
+      DLOG(WARNING) << "No camera found";
+      return nullptr;
     }
-
-    return !device_descriptors_->empty();
+    DLOG(INFO) << "Using camera "
+               << device_descriptors_->front().GetNameAndModel();
+    ;
+    return base::MakeUnique<VideoCaptureDeviceDescriptor>(
+        device_descriptors_->front());
   }
 
   const VideoCaptureFormat& last_format() const { return last_format_; }
@@ -334,7 +342,7 @@ class VideoCaptureDeviceTest : public testing::TestWithParam<gfx::Size> {
   std::unique_ptr<VideoCaptureDeviceDescriptor>
   GetFirstDeviceDescriptorSupportingPixelFormat(
       const VideoPixelFormat& pixel_format) {
-    if (!FindUsableDevices())
+    if (!FindUsableDeviceDescriptor())
       return nullptr;
 
     for (const auto& descriptor : *device_descriptors_) {
@@ -377,6 +385,10 @@ class VideoCaptureDeviceTest : public testing::TestWithParam<gfx::Size> {
   std::unique_ptr<MockVideoCaptureClient> video_capture_client_;
   const scoped_refptr<MockImageCaptureClient> image_capture_client_;
   VideoCaptureFormat last_format_;
+#if defined(OS_CHROMEOS)
+  const std::unique_ptr<LocalGpuMemoryBufferManager>
+      local_gpu_memory_buffer_manager_;
+#endif
   const std::unique_ptr<VideoCaptureDeviceFactory>
       video_capture_device_factory_;
 };
@@ -421,11 +433,12 @@ TEST_F(VideoCaptureDeviceTest, MAYBE_OpenInvalidDevice) {
 
 // Allocates the first enumerated device, and expects a frame.
 TEST_P(VideoCaptureDeviceTest, CaptureWithSize) {
-  if (!FindUsableDevices())
+  const auto descriptor = FindUsableDeviceDescriptor();
+  if (!descriptor)
     return;
 
   const gfx::Size& size = GetParam();
-  if (!IsCaptureSizeSupported(device_descriptors_->front(), size))
+  if (!IsCaptureSizeSupported(*descriptor, size))
     return;
   const int width = size.width();
   const int height = size.height();
@@ -462,12 +475,12 @@ INSTANTIATE_TEST_CASE_P(VideoCaptureDeviceTests,
 // Allocates a device with an uncommon resolution and verifies frames are
 // captured in a close, much more typical one.
 TEST_F(VideoCaptureDeviceTest, MAYBE_AllocateBadSize) {
-  if (!FindUsableDevices())
+  const auto descriptor = FindUsableDeviceDescriptor();
+  if (!descriptor)
     return;
 
   std::unique_ptr<VideoCaptureDevice> device(
-      video_capture_device_factory_->CreateDevice(
-          device_descriptors_->front()));
+      video_capture_device_factory_->CreateDevice(*descriptor));
   ASSERT_TRUE(device);
 
   EXPECT_CALL(*video_capture_client_, OnError(_, _)).Times(0);
@@ -489,15 +502,15 @@ TEST_F(VideoCaptureDeviceTest, MAYBE_AllocateBadSize) {
 
 // Cause hangs on Windows, Linux. Fails Android. https://crbug.com/417824
 TEST_F(VideoCaptureDeviceTest, DISABLED_ReAllocateCamera) {
-  if (!FindUsableDevices())
+  const auto descriptor = FindUsableDeviceDescriptor();
+  if (!descriptor)
     return;
 
   // First, do a number of very fast device start/stops.
   for (int i = 0; i <= 5; i++) {
     ResetWithNewClient();
     std::unique_ptr<VideoCaptureDevice> device(
-        video_capture_device_factory_->CreateDevice(
-            device_descriptors_->front()));
+        video_capture_device_factory_->CreateDevice(*descriptor));
     gfx::Size resolution;
     if (i % 2)
       resolution = gfx::Size(640, 480);
@@ -582,7 +595,8 @@ TEST_F(VideoCaptureDeviceTest, NoCameraSupportsPixelFormatMax) {
 // Starts the camera and verifies that a photo can be taken. The correctness of
 // the photo is enforced by MockImageCaptureClient.
 TEST_F(VideoCaptureDeviceTest, MAYBE_TakePhoto) {
-  if (!FindUsableDevices())
+  const auto descriptor = FindUsableDeviceDescriptor();
+  if (!descriptor)
     return;
 
 #if defined(OS_CHROMEOS)
@@ -601,8 +615,7 @@ TEST_F(VideoCaptureDeviceTest, MAYBE_TakePhoto) {
 #endif
 
   std::unique_ptr<VideoCaptureDevice> device(
-      video_capture_device_factory_->CreateDevice(
-          device_descriptors_->front()));
+      video_capture_device_factory_->CreateDevice(*descriptor));
   ASSERT_TRUE(device);
 
   EXPECT_CALL(*video_capture_client_, OnError(_, _)).Times(0);
@@ -614,11 +627,8 @@ TEST_F(VideoCaptureDeviceTest, MAYBE_TakePhoto) {
   capture_params.requested_format.pixel_format = PIXEL_FORMAT_I420;
   device->AllocateAndStart(capture_params, std::move(video_capture_client_));
 
-  VideoCaptureDevice::TakePhotoCallback scoped_callback(
-      base::BindOnce(&MockImageCaptureClient::DoOnPhotoTaken,
-                     image_capture_client_),
-      media::BindToCurrentLoop(base::Bind(
-          &MockImageCaptureClient::OnTakePhotoFailure, image_capture_client_)));
+  VideoCaptureDevice::TakePhotoCallback scoped_callback = base::BindOnce(
+      &MockImageCaptureClient::DoOnPhotoTaken, image_capture_client_);
 
   base::RunLoop run_loop;
   base::Closure quit_closure = media::BindToCurrentLoop(run_loop.QuitClosure());
@@ -634,7 +644,8 @@ TEST_F(VideoCaptureDeviceTest, MAYBE_TakePhoto) {
 
 // Starts the camera and verifies that the photo capabilities can be retrieved.
 TEST_F(VideoCaptureDeviceTest, MAYBE_GetPhotoState) {
-  if (!FindUsableDevices())
+  const auto descriptor = FindUsableDeviceDescriptor();
+  if (!descriptor)
     return;
 
 #if defined(OS_CHROMEOS)
@@ -653,8 +664,7 @@ TEST_F(VideoCaptureDeviceTest, MAYBE_GetPhotoState) {
 #endif
 
   std::unique_ptr<VideoCaptureDevice> device(
-      video_capture_device_factory_->CreateDevice(
-          device_descriptors_->front()));
+      video_capture_device_factory_->CreateDevice(*descriptor));
   ASSERT_TRUE(device);
 
   EXPECT_CALL(*video_capture_client_, OnError(_, _)).Times(0);
@@ -666,12 +676,9 @@ TEST_F(VideoCaptureDeviceTest, MAYBE_GetPhotoState) {
   capture_params.requested_format.pixel_format = PIXEL_FORMAT_I420;
   device->AllocateAndStart(capture_params, std::move(video_capture_client_));
 
-  VideoCaptureDevice::GetPhotoStateCallback scoped_get_callback(
+  VideoCaptureDevice::GetPhotoStateCallback scoped_get_callback =
       base::BindOnce(&MockImageCaptureClient::DoOnGetPhotoState,
-                     image_capture_client_),
-      media::BindToCurrentLoop(
-          base::BindOnce(&MockImageCaptureClient::OnGetPhotoStateFailure,
-                         image_capture_client_)));
+                     image_capture_client_);
 
   base::RunLoop run_loop;
   base::Closure quit_closure = media::BindToCurrentLoop(run_loop.QuitClosure());

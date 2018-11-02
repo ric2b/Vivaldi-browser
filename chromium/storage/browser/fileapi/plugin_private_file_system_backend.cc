@@ -126,20 +126,19 @@ void PluginPrivateFileSystemBackend::OpenPrivateFileSystem(
     const std::string& filesystem_id,
     const std::string& plugin_id,
     OpenFileSystemMode mode,
-    const StatusCallback& callback) {
+    StatusCallback callback) {
   if (!CanHandleType(type) || file_system_options_.is_incognito()) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(callback, base::File::FILE_ERROR_SECURITY));
+        FROM_HERE,
+        base::BindOnce(std::move(callback), base::File::FILE_ERROR_SECURITY));
     return;
   }
 
   PostTaskAndReplyWithResult(
-      file_task_runner_.get(),
-      FROM_HERE,
-      base::Bind(&OpenFileSystemOnFileTaskRunner,
-                 obfuscated_file_util(), plugin_map_,
-                 origin_url, filesystem_id, plugin_id, mode),
-      callback);
+      file_task_runner_.get(), FROM_HERE,
+      base::BindOnce(&OpenFileSystemOnFileTaskRunner, obfuscated_file_util(),
+                     plugin_map_, origin_url, filesystem_id, plugin_id, mode),
+      std::move(callback));
 }
 
 bool PluginPrivateFileSystemBackend::CanHandleType(FileSystemType type) const {
@@ -152,13 +151,12 @@ void PluginPrivateFileSystemBackend::Initialize(FileSystemContext* context) {
 void PluginPrivateFileSystemBackend::ResolveURL(
     const FileSystemURL& url,
     OpenFileSystemMode mode,
-    const OpenFileSystemCallback& callback) {
+    OpenFileSystemCallback callback) {
   // We never allow opening a new plugin-private filesystem via usual
   // ResolveURL.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::Bind(callback, GURL(), std::string(),
-                 base::File::FILE_ERROR_SECURITY));
+      FROM_HERE, base::BindOnce(std::move(callback), GURL(), std::string(),
+                                base::File::FILE_ERROR_SECURITY));
 }
 
 AsyncFileUtil*

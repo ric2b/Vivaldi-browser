@@ -37,7 +37,6 @@
 #include "core/css/StyleSheetContents.h"
 #include "core/css/invalidation/InvalidationSet.h"
 #include "core/css/resolver/ScopedStyleResolver.h"
-#include "core/css/resolver/SharedStyleFinder.h"
 #include "core/css/resolver/StyleRuleUsageTracker.h"
 #include "core/css/resolver/ViewportStyleResolver.h"
 #include "core/dom/DocumentStyleSheetCollector.h"
@@ -57,6 +56,7 @@
 #include "core/probe/CoreProbes.h"
 #include "core/svg/SVGStyleElement.h"
 #include "platform/fonts/FontCache.h"
+#include "platform/fonts/FontSelector.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 
 namespace blink {
@@ -65,10 +65,8 @@ using namespace HTMLNames;
 
 StyleEngine::StyleEngine(Document& document)
     : document_(&document),
-      is_master_(!document.ImportsController() ||
-                 document.ImportsController()->Master() == &document),
+      is_master_(!document.IsHTMLImport()),
       document_style_sheet_collection_(
-          this,
           DocumentStyleSheetCollection::Create(document)) {
   if (document.GetFrame()) {
     // We don't need to create CSSFontSelector for imported document or
@@ -88,7 +86,8 @@ inline Document* StyleEngine::Master() {
   if (IsMaster())
     return document_;
   HTMLImportsController* import = GetDocument().ImportsController();
-  // Document::import() can return null while executing its destructor.
+  // Document::ImportsController() can return null while executing its
+  // destructor.
   if (!import)
     return nullptr;
   return import->Master();
@@ -141,10 +140,9 @@ StyleEngine::StyleSheetsForStyleSheetList(TreeScope& tree_scope) {
 
 WebStyleSheetId StyleEngine::InjectAuthorSheet(
     StyleSheetContents* author_sheet) {
-  injected_author_style_sheets_.push_back(std::make_pair(
-      ++injected_author_sheets_id_count_,
-      TraceWrapperMember<CSSStyleSheet>(
-          this, CSSStyleSheet::Create(author_sheet, *document_))));
+  injected_author_style_sheets_.push_back(
+      std::make_pair(++injected_author_sheets_id_count_,
+                     CSSStyleSheet::Create(author_sheet, *document_)));
 
   MarkDocumentDirty();
   return injected_author_sheets_id_count_;
@@ -550,11 +548,7 @@ void StyleEngine::MarkDocumentDirty() {
   if (RuntimeEnabledFeatures::CSSViewportEnabled())
     ViewportRulesChanged();
   if (GetDocument().ImportLoader())
-    GetDocument()
-        .ImportsController()
-        ->Master()
-        ->GetStyleEngine()
-        .MarkDocumentDirty();
+    GetDocument().MasterDocument().GetStyleEngine().MarkDocumentDirty();
   else
     GetDocument().ScheduleLayoutTreeUpdateIfNeeded();
 }
@@ -623,7 +617,7 @@ void StyleEngine::CollectScopedStyleFeaturesTo(RuleFeatureSet& features) const {
   }
 }
 
-void StyleEngine::FontsNeedUpdate(CSSFontSelector*) {
+void StyleEngine::FontsNeedUpdate(FontSelector*) {
   if (!GetDocument().IsActive())
     return;
 
@@ -892,6 +886,22 @@ void StyleEngine::ScheduleTypeRuleSetInvalidations(
                                                         node);
   DCHECK(invalidation_lists.siblings.IsEmpty());
   style_invalidator_.ScheduleInvalidationSetsForNode(invalidation_lists, node);
+
+  if (!node.IsShadowRoot())
+    return;
+
+  Element& host = ToShadowRoot(node).host();
+  if (host.NeedsStyleRecalc())
+    return;
+
+  for (auto& invalidation_set : invalidation_lists.descendants) {
+    if (invalidation_set->InvalidatesTagName(host)) {
+      host.SetNeedsStyleRecalc(kLocalStyleChange,
+                               StyleChangeReasonForTracing::Create(
+                                   StyleChangeReason::kStyleSheetChange));
+      return;
+    }
+  }
 }
 
 void StyleEngine::InvalidateSlottedElements(HTMLSlotElement& slot) {
@@ -1023,11 +1033,7 @@ void StyleEngine::ViewportRulesChanged() {
 
 void StyleEngine::HtmlImportAddedOrRemoved() {
   if (GetDocument().ImportLoader()) {
-    GetDocument()
-        .ImportsController()
-        ->Master()
-        ->GetStyleEngine()
-        .HtmlImportAddedOrRemoved();
+    GetDocument().MasterDocument().GetStyleEngine().HtmlImportAddedOrRemoved();
     return;
   }
 
@@ -1051,17 +1057,6 @@ void StyleEngine::HtmlImportAddedOrRemoved() {
   }
 }
 
-PassRefPtr<ComputedStyle> StyleEngine::FindSharedStyle(
-    const ElementResolveContext& element_resolve_context) {
-  DCHECK(IsMaster());
-  DCHECK(resolver_);
-  DCHECK(global_rule_set_);
-  return SharedStyleFinder(
-             element_resolve_context, global_rule_set_->GetRuleFeatureSet(),
-             global_rule_set_->SiblingRuleSet(),
-             global_rule_set_->UncommonAttributeRuleSet(), *resolver_)
-      .FindSharedStyle();
-}
 namespace {
 
 enum RuleSetFlags {
@@ -1203,6 +1198,31 @@ bool StyleEngine::MediaQueryAffectedByDeviceChange() {
   return false;
 }
 
+bool StyleEngine::UpdateRemUnits(const ComputedStyle* old_root_style,
+                                 const ComputedStyle* new_root_style) {
+  if (!UsesRemUnits())
+    return false;
+  if (!old_root_style ||
+      old_root_style->FontSize() != new_root_style->FontSize()) {
+    DCHECK(Resolver());
+    // Resolved rem units are stored in the matched properties cache so we need
+    // to make sure to invalidate the cache if the documentElement font size
+    // changes.
+    Resolver()->InvalidateMatchedPropertiesCache();
+    return true;
+  }
+  return false;
+}
+
+void StyleEngine::CustomPropertyRegistered() {
+  // TODO(timloh): Invalidate only elements with this custom property set
+  GetDocument().SetNeedsStyleRecalc(
+      kSubtreeStyleChange, StyleChangeReasonForTracing::Create(
+                               StyleChangeReason::kPropertyRegistration));
+  if (resolver_)
+    resolver_->InvalidateMatchedPropertiesCache();
+}
+
 DEFINE_TRACE(StyleEngine) {
   visitor->Trace(document_);
   visitor->Trace(injected_author_style_sheets_);
@@ -1221,7 +1241,7 @@ DEFINE_TRACE(StyleEngine) {
   visitor->Trace(text_to_sheet_cache_);
   visitor->Trace(sheet_to_text_cache_);
   visitor->Trace(tracker_);
-  CSSFontSelectorClient::Trace(visitor);
+  FontSelectorClient::Trace(visitor);
 }
 
 DEFINE_TRACE_WRAPPERS(StyleEngine) {

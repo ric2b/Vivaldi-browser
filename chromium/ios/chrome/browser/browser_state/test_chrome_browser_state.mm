@@ -4,8 +4,6 @@
 
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 
-#include <utility>
-
 #include "base/base_paths.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
@@ -16,6 +14,7 @@
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/common/bookmark_constants.h"
@@ -87,7 +86,6 @@ std::unique_ptr<KeyedService> BuildWebDataService(web::BrowserState* context) {
   return base::MakeUnique<WebDataServiceWrapper>(
       browser_state_path, GetApplicationContext()->GetApplicationLocale(),
       web::WebThread::GetTaskRunnerForThread(web::WebThread::UI),
-      web::WebThread::GetTaskRunnerForThread(web::WebThread::DB),
       ios::sync_start_util::GetFlareForSyncableService(browser_state_path),
       &NotReachedErrorCallback);
 }
@@ -100,7 +98,7 @@ base::FilePath CreateTempBrowserStateDir(base::ScopedTempDir* temp_dir) {
     base::FilePath system_tmp_dir;
     bool success = PathService::Get(base::DIR_TEMP, &system_tmp_dir);
 
-    // We're severly screwed if we can't get the system temporary
+    // We're severely screwed if we can't get the system temporary
     // directory. Die now to avoid writing to the filesystem root
     // or other bad places.
     CHECK(success);
@@ -123,7 +121,8 @@ base::FilePath CreateTempBrowserStateDir(base::ScopedTempDir* temp_dir) {
 
 TestChromeBrowserState::TestChromeBrowserState(
     TestChromeBrowserState* original_browser_state)
-    : testing_prefs_(nullptr),
+    : ChromeBrowserState(original_browser_state->GetIOTaskRunner()),
+      testing_prefs_(nullptr),
       otr_browser_state_(nullptr),
       original_browser_state_(original_browser_state) {
   // Not calling Init() here as the bi-directional link between original and
@@ -137,7 +136,9 @@ TestChromeBrowserState::TestChromeBrowserState(
     std::unique_ptr<sync_preferences::PrefServiceSyncable> prefs,
     const TestingFactories& testing_factories,
     const RefcountedTestingFactories& refcounted_testing_factories)
-    : state_path_(path),
+    : ChromeBrowserState(base::CreateSequencedTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskShutdownBehavior::BLOCK_SHUTDOWN})),
+      state_path_(path),
       prefs_(std::move(prefs)),
       testing_prefs_(nullptr),
       otr_browser_state_(nullptr),
@@ -319,8 +320,9 @@ void TestChromeBrowserState::CreateBookmarkModel(bool delete_file) {
 }
 
 bool TestChromeBrowserState::CreateHistoryService(bool delete_file) {
-  // Ensure that no HistoryService exists before creating a new one.
-  DestroyHistoryService();
+  // Should never be created multiple times.
+  DCHECK(!ios::HistoryServiceFactory::GetForBrowserStateIfExists(
+      this, ServiceAccessType::EXPLICIT_ACCESS));
 
   if (delete_file) {
     base::FilePath path =
@@ -351,31 +353,6 @@ bool TestChromeBrowserState::CreateHistoryService(bool delete_file) {
                                                                   nullptr);
 
   return true;
-}
-
-void TestChromeBrowserState::DestroyHistoryService() {
-  history::HistoryService* history_service =
-      ios::HistoryServiceFactory::GetInstance()->GetForBrowserStateIfExists(
-          this, ServiceAccessType::EXPLICIT_ACCESS);
-  if (!history_service)
-    return;
-
-  base::RunLoop run_loop;
-
-  history_service->ClearCachedDataForContextID(0);
-  history_service->SetOnBackendDestroyTask(run_loop.QuitWhenIdleClosure());
-  history_service->Shutdown();
-  history_service = nullptr;
-
-  // Resetting the testing factory force the destruction of the current
-  // HistoryService instance associated with the TestChromeBrowserState.
-  ios::HistoryServiceFactory::GetInstance()->SetTestingFactory(this, nullptr);
-
-  // Wait for the backend class to terminate before deleting the files and
-  // moving to the next test. Note: if this never terminates, somebody is
-  // probably leaking a reference to the history backend, so it never calls
-  // our destroy task.
-  run_loop.Run();
 }
 
 sync_preferences::TestingPrefServiceSyncable*

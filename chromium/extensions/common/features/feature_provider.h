@@ -18,7 +18,7 @@ class Feature;
 
 // Note: Binding code (specifically native_extension_bindings_system.cc) relies
 // on this being a sorted map.
-using FeatureMap = std::map<std::string, std::unique_ptr<Feature>>;
+using FeatureMap = std::map<std::string, std::unique_ptr<const Feature>>;
 
 // Implemented by classes that can vend features.
 class FeatureProvider {
@@ -46,13 +46,13 @@ class FeatureProvider {
   static const Feature* GetBehaviorFeature(const std::string& name);
 
   // Returns the feature with the specified name.
-  Feature* GetFeature(const std::string& name) const;
+  const Feature* GetFeature(const std::string& name) const;
 
-  // Returns the parent feature of |feature|, or NULL if there isn't one.
-  Feature* GetParent(Feature* feature) const;
+  // Returns the parent feature of |feature|, or null if there isn't one.
+  const Feature* GetParent(const Feature& feature) const;
 
   // Returns the features inside the |parent| namespace, recursively.
-  std::vector<Feature*> GetChildren(const Feature& parent) const;
+  std::vector<const Feature*> GetChildren(const Feature& parent) const;
 
   // Returns a map containing all features described by this instance.
   // TODO(devlin): Rename this to be features().

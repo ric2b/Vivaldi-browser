@@ -3,6 +3,8 @@
 # found in the LICENSE file.
 
 import contextlib
+import hashlib
+import json
 import logging
 import os
 import posixpath
@@ -15,8 +17,10 @@ from devil.android import crash_handler
 from devil.android import device_errors
 from devil.android import device_temp_file
 from devil.android import flag_changer
+from devil.android.sdk import shared_prefs
 from devil.android.tools import system_app
 from devil.utils import reraiser_thread
+from incremental_install import installer
 from pylib import valgrind_tools
 from pylib.android import logdog_logcat_monitor
 from pylib.base import base_test_result
@@ -29,6 +33,7 @@ from pylib.utils import instrumentation_tracing
 from pylib.utils import logdog_helper
 from pylib.utils import shared_preference_utils
 from py_trace_event import trace_event
+from py_trace_event import trace_time
 from py_utils import contextlib_ext
 from py_utils import tempfile_ext
 import tombstones
@@ -64,6 +69,14 @@ EXTRA_SCREENSHOT_FILE = (
 EXTRA_UI_CAPTURE_DIR = (
     'org.chromium.base.test.util.Screenshooter.ScreenshotDir')
 
+EXTRA_TRACE_FILE = ('org.chromium.base.test.BaseJUnit4ClassRunner.TraceFile')
+
+_EXTRA_TEST_LIST = (
+    'org.chromium.base.test.BaseChromiumAndroidJUnitRunner.TestList')
+
+_TEST_LIST_JUNIT4_RUNNERS = [
+    'org.chromium.base.test.BaseChromiumAndroidJUnitRunner']
+
 UI_CAPTURE_DIRS = ['chromium_tests_root', 'UiCapture']
 
 FEATURE_ANNOTATION = 'Feature'
@@ -72,9 +85,8 @@ RENDER_TEST_FEATURE_ANNOTATION = 'RenderTest'
 # This needs to be kept in sync with formatting in |RenderUtils.imageName|
 RE_RENDER_IMAGE_NAME = re.compile(
       r'(?P<test_class>\w+)\.'
-      r'(?P<description>\w+)\.'
-      r'(?P<device_model>\w+)\.'
-      r'(?P<orientation>port|land)\.png')
+      r'(?P<description>[-\w]+)\.'
+      r'(?P<device_model_sdk>[-\w]+)\.png')
 
 @contextlib.contextmanager
 def _LogTestEndpoints(device, test_name):
@@ -88,8 +100,8 @@ def _LogTestEndpoints(device, test_name):
         ['log', '-p', 'i', '-t', _TAG, 'END %s' % test_name],
         check_return=True)
 
-# TODO(jbudorick): Make this private once the instrumentation test_runner is
-# deprecated.
+# TODO(jbudorick): Make this private once the instrumentation test_runner
+# is deprecated.
 def DidPackageCrashOnDevice(package_name, device):
   # Dismiss any error dialogs. Limit the number in case we have an error
   # loop or we are failing to dismiss.
@@ -127,21 +139,26 @@ class LocalDeviceInstrumentationTestRun(
     @local_device_environment.handle_shard_failures_with(
         self._env.BlacklistDevice)
     @trace_event.traced
-    def individual_device_set_up(dev, host_device_tuples):
+    def individual_device_set_up(device, host_device_tuples):
       steps = []
 
       if self._test_instance.replace_system_package:
-        # We need the context manager to be applied before modifying any shared
-        # preference files in case the replacement APK needs to be set up, and
-        # it needs to be applied while the test is running. Thus, it needs to
-        # be applied early during setup, but must still be applied during
-        # _RunTest, which isn't possible using 'with' without applying the
-        # context manager up in test_runner. Instead, we manually invoke
-        # its __enter__ and __exit__ methods in setup and teardown
-        self._replace_package_contextmanager = system_app.ReplaceSystemApp(
-            dev, self._test_instance.replace_system_package.package,
-            self._test_instance.replace_system_package.replacement_apk)
-        steps.append(self._replace_package_contextmanager.__enter__)
+        @trace_event.traced
+        def replace_package(dev):
+          # We need the context manager to be applied before modifying any
+          # shared preference files in case the replacement APK needs to be
+          # set up, and it needs to be applied while the test is running.
+          # Thus, it needs to be applied early during setup, but must still be
+          # applied during _RunTest, which isn't possible using 'with' without
+          # applying the context manager up in test_runner. Instead, we
+          # manually invoke its __enter__ and __exit__ methods in setup and
+          # teardown.
+          self._replace_package_contextmanager = system_app.ReplaceSystemApp(
+              dev, self._test_instance.replace_system_package.package,
+              self._test_instance.replace_system_package.replacement_apk)
+          self._replace_package_contextmanager.__enter__()
+
+        steps.append(replace_package)
 
       def install_helper(apk, permissions):
         @instrumentation_tracing.no_tracing
@@ -149,34 +166,31 @@ class LocalDeviceInstrumentationTestRun(
         def install_helper_internal(d, apk_path=apk.path):
           # pylint: disable=unused-argument
           d.Install(apk, permissions=permissions)
-        return lambda: crash_handler.RetryOnSystemCrash(
-            install_helper_internal, dev)
+        return install_helper_internal
 
-      def incremental_install_helper(apk, script):
+      def incremental_install_helper(apk, json_path):
         @trace_event.traced("apk_path")
         def incremental_install_helper_internal(d, apk_path=apk.path):
           # pylint: disable=unused-argument
-          local_device_test_run.IncrementalInstall(
-              d, apk, script)
-        return lambda: crash_handler.RetryOnSystemCrash(
-            incremental_install_helper_internal, dev)
+          installer.Install(d, json_path, apk=apk)
+        return incremental_install_helper_internal
 
       if self._test_instance.apk_under_test:
-        if self._test_instance.apk_under_test_incremental_install_script:
+        if self._test_instance.apk_under_test_incremental_install_json:
           steps.append(incremental_install_helper(
                            self._test_instance.apk_under_test,
                            self._test_instance.
-                               apk_under_test_incremental_install_script))
+                               apk_under_test_incremental_install_json))
         else:
           permissions = self._test_instance.apk_under_test.GetPermissions()
           steps.append(install_helper(self._test_instance.apk_under_test,
                                       permissions))
 
-      if self._test_instance.test_apk_incremental_install_script:
+      if self._test_instance.test_apk_incremental_install_json:
         steps.append(incremental_install_helper(
                          self._test_instance.test_apk,
                          self._test_instance.
-                             test_apk_incremental_install_script))
+                             test_apk_incremental_install_json))
       else:
         permissions = self._test_instance.test_apk.GetPermissions()
         steps.append(install_helper(self._test_instance.test_apk,
@@ -186,7 +200,7 @@ class LocalDeviceInstrumentationTestRun(
                    for apk in self._test_instance.additional_apks)
 
       @trace_event.traced
-      def set_debug_app():
+      def set_debug_app(dev):
         # Set debug app in order to enable reading command line flags on user
         # builds
         if self._test_instance.flags:
@@ -196,16 +210,19 @@ class LocalDeviceInstrumentationTestRun(
             logging.error("Couldn't set debug app: no package defined")
           else:
             dev.RunShellCommand(['am', 'set-debug-app', '--persistent',
-                                 self._test_instance.package_info.package],
-                                check_return=True)
+                               self._test_instance.package_info.package],
+                              check_return=True)
 
       @trace_event.traced
-      def edit_shared_prefs():
-        shared_preference_utils.ApplySharedPreferenceSettings(
-            dev, self._test_instance.edit_shared_prefs)
+      def edit_shared_prefs(dev):
+        for setting in self._test_instance.edit_shared_prefs:
+          shared_pref = shared_prefs.SharedPrefs(dev, setting['package'],
+                                                 setting['filename'])
+          shared_preference_utils.ApplySharedPreferenceSetting(
+              shared_pref, setting)
 
       @instrumentation_tracing.no_tracing
-      def push_test_data():
+      def push_test_data(dev):
         device_root = posixpath.join(dev.GetExternalStoragePath(),
                                      'chromium_tests_root')
         host_device_tuples_substituted = [
@@ -221,7 +238,7 @@ class LocalDeviceInstrumentationTestRun(
           dev.RunShellCommand(['mkdir', '-p', device_root], check_return=True)
 
       @trace_event.traced
-      def create_flag_changer():
+      def create_flag_changer(dev):
         if self._test_instance.flags:
           if not self._test_instance.package_info:
             logging.error("Couldn't set flags: no package info")
@@ -237,12 +254,13 @@ class LocalDeviceInstrumentationTestRun(
             dev, self._test_instance.timeout_scale)
 
       @trace_event.traced
-      def setup_ui_capture_dir():
+      def setup_ui_capture_dir(dev):
         # Make sure the UI capture directory exists and is empty by deleting
         # and recreating it.
         # TODO (aberent) once DeviceTempDir exists use it here.
-        self._ui_capture_dir[dev] = posixpath.join(dev.GetExternalStoragePath(),
-                                              *UI_CAPTURE_DIRS)
+        self._ui_capture_dir[dev] = posixpath.join(
+            dev.GetExternalStoragePath(),
+            *UI_CAPTURE_DIRS)
 
         if dev.PathExists(self._ui_capture_dir[dev]):
           dev.RunShellCommand(['rm', '-rf', self._ui_capture_dir[dev]])
@@ -250,13 +268,19 @@ class LocalDeviceInstrumentationTestRun(
 
       steps += [set_debug_app, edit_shared_prefs, push_test_data,
                 create_flag_changer, setup_ui_capture_dir]
+
+      def bind_crash_handler(step, dev):
+        return lambda: crash_handler.RetryOnSystemCrash(step, dev)
+
+      steps = [bind_crash_handler(s, device) for s in steps]
+
       if self._env.concurrent_adb:
         reraiser_thread.RunAsync(steps)
       else:
         for step in steps:
           step()
       if self._test_instance.store_tombstones:
-        tombstones.ClearAllTombstones(dev)
+        tombstones.ClearAllTombstones(device)
 
     self._env.parallel_devices.pMap(
         individual_device_set_up,
@@ -306,7 +330,12 @@ class LocalDeviceInstrumentationTestRun(
 
   #override
   def _GetTests(self):
-    tests = self._test_instance.GetTests()
+    tests = None
+    if self._test_instance.junit4_runner_class in _TEST_LIST_JUNIT4_RUNNERS:
+      raw_tests = self._GetTestsFromRunner()
+      tests = self._test_instance.ProcessRawTests(raw_tests)
+    else:
+      tests = self._test_instance.GetTests()
     tests = self._ApplyExternalSharding(
         tests, self._test_instance.external_shard_index,
         self._test_instance.total_external_shards)
@@ -342,6 +371,11 @@ class LocalDeviceInstrumentationTestRun(
 
     extras[EXTRA_UI_CAPTURE_DIR] = self._ui_capture_dir[device]
 
+    if self._env.trace_output:
+      trace_device_file = device_temp_file.DeviceTempFile(
+          device.adb, suffix='.json', dir=device.GetExternalStoragePath())
+      extras[EXTRA_TRACE_FILE] = trace_device_file.name
+
     if isinstance(test, list):
       if not self._test_instance.driver_apk:
         raise Exception('driver_apk does not exist. '
@@ -371,10 +405,11 @@ class LocalDeviceInstrumentationTestRun(
       if test['is_junit4']:
         target = '%s/%s' % (
             self._test_instance.test_package,
-            self._test_instance.test_runner_junit4)
+            self._test_instance.junit4_runner_class)
       else:
         target = '%s/%s' % (
-            self._test_instance.test_package, self._test_instance.test_runner)
+            self._test_instance.test_package,
+            self._test_instance.junit3_runner_class)
       extras['class'] = test_name
       if 'flags' in test and test['flags']:
         flags_to_add.extend(test['flags'])
@@ -424,12 +459,16 @@ class LocalDeviceInstrumentationTestRun(
     logcat_url = logmon.GetLogcatURL()
     duration_ms = time_ms() - start_ms
 
+    if self._env.trace_output:
+      self._SaveTraceData(trace_device_file, device, test['class'])
+
     # TODO(jbudorick): Make instrumentation tests output a JSON so this
     # doesn't have to parse the output.
     result_code, result_bundle, statuses = (
         self._test_instance.ParseAmInstrumentRawOutput(output))
     results = self._test_instance.GenerateTestResults(
-        result_code, result_bundle, statuses, start_ms, duration_ms)
+        result_code, result_bundle, statuses, start_ms, duration_ms,
+        device.product_cpu_abi, self._test_instance.symbolizer)
 
     def restore_flags():
       if flags_to_add:
@@ -539,7 +578,8 @@ class LocalDeviceInstrumentationTestRun(
                 device,
                 resolve_all_tombstones=True,
                 include_stack_symbols=False,
-                wipe_tombstones=True)
+                wipe_tombstones=True,
+                tombstone_symbolizer=self._test_instance.symbolizer)
             stream_name = 'tombstones_%s_%s' % (
                 time.strftime('%Y%m%dT%H%M%S-UTC', time.gmtime()),
                 device.serial)
@@ -550,6 +590,114 @@ class LocalDeviceInstrumentationTestRun(
     if self._env.concurrent_adb:
       post_test_step_thread_group.JoinAll()
     return results, None
+
+  def _GetTestsFromRunner(self):
+    test_apk_path = self._test_instance.test_apk.path
+    pickle_path = '%s-runner.pickle' % test_apk_path
+    try:
+      return instrumentation_test_instance.GetTestsFromPickle(
+          pickle_path, test_apk_path)
+    except instrumentation_test_instance.TestListPickleException as e:
+      logging.info('Could not get tests from pickle: %s', e)
+    logging.info('Getting tests by having %s list them.',
+                 self._test_instance.junit4_runner_class)
+    def list_tests(d):
+      def _run(dev):
+        with device_temp_file.DeviceTempFile(
+            dev.adb, suffix='.json',
+            dir=dev.GetExternalStoragePath()) as dev_test_list_json:
+          junit4_runner_class = self._test_instance.junit4_runner_class
+          test_package = self._test_instance.test_package
+          extras = {}
+          extras['log'] = 'true'
+          extras[_EXTRA_TEST_LIST] = dev_test_list_json.name
+          target = '%s/%s' % (test_package, junit4_runner_class)
+          test_list_run_output = dev.StartInstrumentation(
+              target, extras=extras)
+          if any(test_list_run_output):
+            logging.error('Unexpected output while listing tests:')
+            for line in test_list_run_output:
+              logging.error('  %s', line)
+          with tempfile_ext.NamedTemporaryDirectory() as host_dir:
+            host_file = os.path.join(host_dir, 'list_tests.json')
+            dev.PullFile(dev_test_list_json.name, host_file)
+            with open(host_file, 'r') as host_file:
+                return json.load(host_file)
+      return crash_handler.RetryOnSystemCrash(_run, d)
+
+    raw_test_lists = self._env.parallel_devices.pMap(list_tests).pGet(None)
+
+    # If all devices failed to list tests, raise an exception.
+    # Check that tl is not None and is not empty.
+    if all(not tl for tl in raw_test_lists):
+      raise device_errors.CommandFailedError(
+          'Failed to list tests on any device')
+
+    # Get the first viable list of raw tests
+    raw_tests = [tl for tl in raw_test_lists if tl][0]
+
+    instrumentation_test_instance.SaveTestsToPickle(
+        pickle_path, test_apk_path, raw_tests)
+    return raw_tests
+
+  def _SaveTraceData(self, trace_device_file, device, test_class):
+    trace_host_file = self._env.trace_output
+
+    if device.FileExists(trace_device_file.name):
+      try:
+        java_trace_json = device.ReadFile(trace_device_file.name)
+      except IOError:
+        raise Exception('error pulling trace file from device')
+      finally:
+        trace_device_file.close()
+
+      process_name = '%s (device %s)' % (test_class, device.serial)
+      process_hash = int(hashlib.md5(process_name).hexdigest()[:6], 16)
+
+      java_trace = json.loads(java_trace_json)
+      java_trace.sort(key=lambda event: event['ts'])
+
+      get_date_command = 'echo $EPOCHREALTIME'
+      device_time = device.RunShellCommand(get_date_command, single_line=True)
+      device_time = float(device_time) * 1e6
+      system_time = trace_time.Now()
+      time_difference = system_time - device_time
+
+      threads_to_add = set()
+      for event in java_trace:
+        # Ensure thread ID and thread name will be linked in the metadata.
+        threads_to_add.add((event['tid'], event['name']))
+
+        event['pid'] = process_hash
+
+        # Adjust time stamp to align with Python trace times (from
+        # trace_time.Now()).
+        event['ts'] += time_difference
+
+      for tid, thread_name in threads_to_add:
+        thread_name_metadata = {'pid': process_hash, 'tid': tid,
+                                'ts': 0, 'ph': 'M', 'cat': '__metadata',
+                                'name': 'thread_name',
+                                'args': {'name': thread_name}}
+        java_trace.append(thread_name_metadata)
+
+      process_name_metadata = {'pid': process_hash, 'tid': 0, 'ts': 0,
+                               'ph': 'M', 'cat': '__metadata',
+                               'name': 'process_name',
+                               'args': {'name': process_name}}
+      java_trace.append(process_name_metadata)
+
+      java_trace_json = json.dumps(java_trace)
+      java_trace_json = java_trace_json.rstrip(' ]')
+
+      with open(trace_host_file, 'r') as host_handle:
+        host_contents = host_handle.readline()
+
+      if host_contents:
+        java_trace_json = ',%s' % java_trace_json.lstrip(' [')
+
+      with open(trace_host_file, 'a') as host_handle:
+        host_handle.write(java_trace_json)
 
   def _SaveScreenshot(self, device, screenshot_host_dir, screenshot_device_file,
                       test_name, results):
@@ -679,8 +827,13 @@ class LocalDeviceInstrumentationTestRun(
           result.SetLink(failure_filename, html_results_link)
 
   #override
-  def _ShouldRetry(self, test):
-    if 'RetryOnFailure' in test.get('annotations', {}):
+  def _ShouldRetry(self, test, result):
+    def not_run(res):
+      if isinstance(res, list):
+        return any(not_run(r) for r in res)
+      return res.GetType() == base_test_result.ResultType.NOTRUN
+
+    if 'RetryOnFailure' in test.get('annotations', {}) or not_run(result):
       return True
 
     # TODO(jbudorick): Remove this log message once @RetryOnFailure has been

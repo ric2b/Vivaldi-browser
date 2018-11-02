@@ -273,17 +273,10 @@ void MediaDevicesManager::StartMonitoringOnUIThread() {
 
   // TODO(erikchen): Remove ScopedTracker below once crbug.com/458404 is
   // fixed.
-  tracked_objects::ScopedTracker tracking_profile2(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "458404 MediaDevicesManager::GetTaskRunner"));
-  const scoped_refptr<base::SingleThreadTaskRunner> task_runner =
-      audio_system_->GetTaskRunner();
-  // TODO(erikchen): Remove ScopedTracker below once crbug.com/458404 is
-  // fixed.
   tracked_objects::ScopedTracker tracking_profile3(
       FROM_HERE_WITH_EXPLICIT_FUNCTION(
           "458404 MediaDevicesManager::DeviceMonitorMac::StartMonitoring"));
-  browser_main_loop->device_monitor_mac()->StartMonitoring(task_runner);
+  browser_main_loop->device_monitor_mac()->StartMonitoring();
 }
 #endif
 
@@ -355,16 +348,15 @@ void MediaDevicesManager::EnumerateAudioDevices(bool is_input) {
       is_input ? MEDIA_DEVICE_TYPE_AUDIO_INPUT : MEDIA_DEVICE_TYPE_AUDIO_OUTPUT;
   if (use_fake_devices_) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&MediaDevicesManager::DevicesEnumerated,
-                              weak_factory_.GetWeakPtr(), type,
-                              GetFakeAudioDevices(is_input)));
+        FROM_HERE, base::BindOnce(&MediaDevicesManager::DevicesEnumerated,
+                                  weak_factory_.GetWeakPtr(), type,
+                                  GetFakeAudioDevices(is_input)));
     return;
   }
 
   audio_system_->GetDeviceDescriptions(
-      base::Bind(&MediaDevicesManager::AudioDevicesEnumerated,
-                 weak_factory_.GetWeakPtr(), type),
-      is_input);
+      is_input, base::BindOnce(&MediaDevicesManager::AudioDevicesEnumerated,
+                               weak_factory_.GetWeakPtr(), type));
 }
 
 void MediaDevicesManager::VideoInputDevicesEnumerated(

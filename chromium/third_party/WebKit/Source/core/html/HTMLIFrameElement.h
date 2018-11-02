@@ -26,7 +26,6 @@
 
 #include "core/CoreExport.h"
 #include "core/html/HTMLFrameElementBase.h"
-#include "core/html/HTMLIFrameElementAllow.h"
 #include "core/html/HTMLIFrameElementSandbox.h"
 #include "platform/Supplementable.h"
 #include "public/platform/WebFeaturePolicy.h"
@@ -45,10 +44,10 @@ class CORE_EXPORT HTMLIFrameElement final
   DECLARE_VIRTUAL_TRACE();
   ~HTMLIFrameElement() override;
   DOMTokenList* sandbox() const;
-  DOMTokenList* allow() const;
 
-  Vector<WebParsedFeaturePolicyDeclaration> ConstructContainerPolicy()
-      const override;
+  Vector<WebParsedFeaturePolicyDeclaration> ConstructContainerPolicy(
+      Vector<String>* /* messages */,
+      bool* /* old_syntax */) const override;
 
  private:
   explicit HTMLIFrameElement(Document&);
@@ -81,20 +80,15 @@ class CORE_EXPORT HTMLIFrameElement final
   bool AllowFullscreen() const override { return allow_fullscreen_; }
   bool AllowPaymentRequest() const override { return allow_payment_request_; }
   AtomicString Csp() const override { return csp_; }
-  const WebVector<WebFeaturePolicyFeature>& AllowedFeatures() const override {
-    return allowed_features_;
-  }
 
   AtomicString name_;
   AtomicString csp_;
+  AtomicString allow_;
   bool did_load_non_empty_document_;
   bool allow_fullscreen_;
   bool allow_payment_request_;
   bool collapsed_by_client_;
   Member<HTMLIFrameElementSandbox> sandbox_;
-  Member<HTMLIFrameElementAllow> allow_;
-
-  WebVector<WebFeaturePolicyFeature> allowed_features_;
 
   ReferrerPolicy referrer_policy_;
 };

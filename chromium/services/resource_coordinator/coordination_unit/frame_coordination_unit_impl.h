@@ -12,6 +12,9 @@
 
 namespace resource_coordinator {
 
+// Frame Coordination Units form a tree structure, each FrameCoordinationUnit at
+// most has one parent that is a FrameCoordinationUnit.
+// A Frame Coordination Unit will have parents only if navigation committed.
 class FrameCoordinationUnitImpl : public CoordinationUnitImpl {
  public:
   FrameCoordinationUnitImpl(
@@ -21,11 +24,17 @@ class FrameCoordinationUnitImpl : public CoordinationUnitImpl {
 
   // CoordinationUnitImpl implementation.
   std::set<CoordinationUnitImpl*> GetAssociatedCoordinationUnitsOfType(
-      CoordinationUnitType type) override;
+      CoordinationUnitType type) const override;
+
+  WebContentsCoordinationUnitImpl* GetWebContentsCoordinationUnit() const;
 
   bool IsMainFrame() const;
 
  private:
+  // CoordinationUnitImpl implementation.
+  void OnEventReceived(const mojom::Event event) override;
+  void OnPropertyChanged(const mojom::PropertyType property_type,
+                         int64_t value) override;
   DISALLOW_COPY_AND_ASSIGN(FrameCoordinationUnitImpl);
 };
 

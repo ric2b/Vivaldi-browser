@@ -144,6 +144,11 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
     [self setSpellCheckingType:UITextSpellCheckingTypeNo];
     [self setTextAlignment:NSTextAlignmentNatural];
     [self setKeyboardType:(UIKeyboardType)UIKeyboardTypeWebSearch];
+#if defined(__IPHONE_11_0) && (__IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_11_0)
+    if (@available(iOS 11.0, *)) {
+      [self setSmartQuotesType:UITextSmartQuotesTypeNo];
+    }
+#endif
 
     // Sanity check:
     DCHECK([self conformsToProtocol:@protocol(UITextInput)]);
@@ -245,8 +250,16 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
   _preEditStaticLabel.textColor = _displayedTextColor;
   _preEditStaticLabel.lineBreakMode = NSLineBreakByTruncatingHead;
 
-  NSDictionary* attributes =
-      @{NSBackgroundColorAttributeName : [self selectedTextBackgroundColor]};
+  NSMutableParagraphStyle* style = [[NSMutableParagraphStyle alloc] init];
+  // URLs have their text direction set to to LTR (avoids RTL characters
+  // making the URL render from right to left, as per the URL rendering standard
+  // described here: https://url.spec.whatwg.org/#url-rendering
+  [style setBaseWritingDirection:NSWritingDirectionLeftToRight];
+  NSDictionary* attributes = @{
+    NSBackgroundColorAttributeName : [self selectedTextBackgroundColor],
+    NSParagraphStyleAttributeName : style
+  };
+
   NSAttributedString* preEditString =
       [[NSAttributedString alloc] initWithString:self.text
                                       attributes:attributes];
@@ -475,10 +488,7 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
   // no longer work. The check for |autocompleteLength| reduces the scope of
   // this workaround, without it having introduced crbug.com/740075.
   BOOL updateText = YES;
-  // After M61 branch point remove the Japanese keyboard check to make this fix
-  // cover other languages.
-  if (experimental_flags::IsThirdPartyKeyboardWorkaroundEnabled() &&
-      [self.textInputMode.primaryLanguage isEqualToString:@"ja"]) {
+  if (experimental_flags::IsThirdPartyKeyboardWorkaroundEnabled()) {
     updateText =
         (!self.editing || ![self.text isEqualToString:fieldText.string] ||
          autocompleteLength == 0);
@@ -524,7 +534,8 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
   } else {
     NSMutableParagraphStyle* style = [[NSMutableParagraphStyle alloc] init];
     // URLs have their text direction set to to LTR (avoids RTL characters
-    // making the URL render from right to left, as per RFC 3987 Section 4.1).
+    // making the URL render from right to left, as per the URL rendering
+    // standard described here: https://url.spec.whatwg.org/#url-rendering
     [style setBaseWritingDirection:NSWritingDirectionLeftToRight];
 
     // Set linebreak mode to 'clipping' to ensure the text is never elided.
@@ -772,6 +783,13 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
 
 // Enumerate url components (host, path) and draw each one in different rect.
 - (void)drawTextInRect:(CGRect)rect {
+  if (base::ios::IsRunningOnOrLater(11, 1, 0)) {
+    // -[UITextField drawTextInRect:] ignores the argument, so we can't do
+    // anything on 11.1 and up.
+    [super drawTextInRect:rect];
+    return;
+  }
+
   // Save and restore the graphics state because rectForDrawTextInRect may
   // apply an image mask to fade out beginning and/or end of the URL.
   gfx::ScopedCGContextSaveGState saver(UIGraphicsGetCurrentContext());

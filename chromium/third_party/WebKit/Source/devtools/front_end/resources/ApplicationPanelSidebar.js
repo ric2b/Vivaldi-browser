@@ -821,7 +821,6 @@ Resources.ServiceWorkerCacheTreeElement = class extends Resources.StorageCategor
     if (!swCacheTreeElement)
       return;
 
-    swCacheTreeElement.clear();
     this.removeChild(swCacheTreeElement);
     this._swCacheTreeElements.remove(swCacheTreeElement);
     this.setExpandable(this.childCount() > 0);
@@ -846,9 +845,6 @@ Resources.ServiceWorkerCacheTreeElement = class extends Resources.StorageCategor
   }
 };
 
-/**
- * @unrestricted
- */
 Resources.SWCacheTreeElement = class extends Resources.BaseStorageTreeElement {
   /**
    * @param {!Resources.ResourcesPanel} storagePanel
@@ -859,6 +855,8 @@ Resources.SWCacheTreeElement = class extends Resources.BaseStorageTreeElement {
     super(storagePanel, cache.cacheName + ' - ' + cache.securityOrigin, false);
     this._model = model;
     this._cache = cache;
+    /** @type {?Resources.ServiceWorkerCacheView} */
+    this._view = null;
     var icon = UI.Icon.create('mediumicon-table', 'resource-tree-item');
     this.setLeadingIcons([icon]);
   }
@@ -906,11 +904,6 @@ Resources.SWCacheTreeElement = class extends Resources.BaseStorageTreeElement {
 
     this.showView(this._view);
     return false;
-  }
-
-  clear() {
-    if (this._view)
-      this._view.clear();
   }
 };
 

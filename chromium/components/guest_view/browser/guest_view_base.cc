@@ -35,7 +35,11 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "extensions/features/features.h"
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/helper/vivaldi_app_helper.h"
+#endif
 #endif //VIVALDI_BUILD
 
 using content::WebContents;
@@ -238,7 +242,9 @@ void GuestViewBase::InitWithWebContents(
   // ZoomController::DidFinishNavigation has completed.
   zoom::ZoomController::CreateForWebContents(guest_web_contents);
 
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   AttachWebContentsObservers(guest_web_contents);
+#endif
 
   // At this point, we have just created the guest WebContents, we need to add
   // an observer to the owner WebContents. This observer will be responsible
@@ -525,7 +531,11 @@ void GuestViewBase::Destroy(bool also_delete) {
   }
 
   if (web_contents()) {
-    if (HandOverToBrowser(web_contents()) || !web_contents_is_owned_by_this_) {
+    if (
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+      HandOverToBrowser(web_contents()) ||
+#endif
+      !web_contents_is_owned_by_this_) {
       content::WebContentsObserver::Observe(NULL);
     } else if (web_contents_is_owned_by_this_) {
       // NOTE(jarle@vivaldi): Check if the WebContent object is already being
@@ -789,6 +799,7 @@ content::SiteInstance* GuestViewBase::GetOwnerSiteInstance() {
 
 void GuestViewBase::OnZoomChanged(
     const zoom::ZoomController::ZoomChangedEventData& data) {
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   // NOTE(arnar@vivaldi.com): Do not update guest zoom level if embedder
   // is Vivaldi app. (UI Zoom)
   if (embedder_web_contents()) {
@@ -798,6 +809,7 @@ void GuestViewBase::OnZoomChanged(
       return;
     }
   }
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
   if (data.web_contents == embedder_web_contents()) {
     // The embedder's zoom level has changed.
@@ -923,6 +935,7 @@ void GuestViewBase::SetGuestZoomLevelToMatchEmbedder() {
   if (!embedder_zoom_controller)
     return;
 
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   if (embedder_web_contents()) {
     auto *vivaldi_app_helper =
       extensions::VivaldiAppHelper::FromWebContents(owner_web_contents());
@@ -932,6 +945,7 @@ void GuestViewBase::SetGuestZoomLevelToMatchEmbedder() {
       return;
     }
   }
+#endif // BUILDFLAG(ENABLE_EXTENSIONS)
 
   zoom::ZoomController::FromWebContents(web_contents())
       ->SetZoomLevel(embedder_zoom_controller->GetZoomLevel());

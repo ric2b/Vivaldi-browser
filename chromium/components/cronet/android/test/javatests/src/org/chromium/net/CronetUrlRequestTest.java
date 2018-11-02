@@ -12,6 +12,9 @@ import android.support.test.filters.SmallTest;
 import org.chromium.base.Log;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
+import org.chromium.net.CronetTestRule.CronetTestFramework;
+import org.chromium.net.CronetTestRule.OnlyRunNativeCronet;
+import org.chromium.net.CronetTestRule.RequiresMinApi;
 import org.chromium.net.TestUrlRequestCallback.FailureType;
 import org.chromium.net.TestUrlRequestCallback.ResponseStep;
 import org.chromium.net.impl.CronetUrlRequest;
@@ -2074,6 +2077,8 @@ public class CronetUrlRequestTest extends CronetTestBase {
         assertNotNull(callback.mError);
         assertEquals(netError, ((NetworkException) callback.mError).getCronetInternalErrorCode());
         assertEquals(errorCode, ((NetworkException) callback.mError).getErrorCode());
+        assertEquals(
+                immediatelyRetryable, ((NetworkException) callback.mError).immediatelyRetryable());
         assertContains(
                 "Exception in CronetUrlRequest: net::ERR_" + name, callback.mError.getMessage());
         assertEquals(0, callback.mRedirectCount);
@@ -2154,5 +2159,17 @@ public class CronetUrlRequestTest extends CronetTestBase {
             // allow the ExecutorService to terminate did not increase the chances of catching the
             // leak.
         }
+    }
+
+    @SmallTest
+    @Feature({"Cronet"})
+    @RequiresMinApi(8) // JavaUrlRequest fixed in API level 8: crrev.com/499303
+    /** Do a HEAD request and get back a 404. */
+    public void test404Head() throws Exception {
+        TestUrlRequestCallback callback = new TestUrlRequestCallback();
+        UrlRequest.Builder builder = mTestFramework.mCronetEngine.newUrlRequestBuilder(
+                NativeTestServer.getFileURL("/notfound.html"), callback, callback.getExecutor());
+        builder.setHttpMethod("HEAD").build().start();
+        callback.blockForDone();
     }
 }

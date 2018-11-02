@@ -109,17 +109,18 @@ class CORE_EXPORT InspectorNetworkAgent final
                         double monotonic_finish_time,
                         int64_t encoded_data_length,
                         int64_t decoded_body_length);
-  void DidReceiveCORSRedirectResponse(LocalFrame*,
-                                      unsigned long identifier,
+  void DidReceiveCORSRedirectResponse(unsigned long identifier,
                                       DocumentLoader*,
                                       const ResourceResponse&,
                                       Resource*);
-  void DidFailLoading(unsigned long identifier, const ResourceError&);
+  void DidFailLoading(unsigned long identifier,
+                      DocumentLoader*,
+                      const ResourceError&);
   void DidCommitLoad(LocalFrame*, DocumentLoader*);
   void ScriptImported(unsigned long identifier, const String& source_string);
   void DidReceiveScriptResponse(unsigned long identifier);
   void ShouldForceCORSPreflight(bool* result);
-  void ShouldBlockRequest(const ResourceRequest&, bool* result);
+  void ShouldBlockRequest(const KURL&, bool* result);
 
   void DocumentThreadableLoaderStartedLoadingForClient(unsigned long identifier,
                                                        ThreadableLoaderClient*);
@@ -130,7 +131,7 @@ class CORE_EXPORT InspectorNetworkAgent final
                    const AtomicString& method,
                    const KURL&,
                    bool async,
-                   PassRefPtr<EncodedFormData> body,
+                   RefPtr<EncodedFormData> body,
                    const HTTPHeaderMap& headers,
                    bool include_crendentials);
   void DidFailXHRLoading(ExecutionContext*,
@@ -164,7 +165,7 @@ class CORE_EXPORT InspectorNetworkAgent final
   void WillDestroyResource(Resource*);
 
   void ApplyUserAgentOverride(String* user_agent);
-  void FrameScheduledNavigation(LocalFrame*, double);
+  void FrameScheduledNavigation(LocalFrame*, ScheduledNavigation*);
   void FrameClearedScheduledNavigation(LocalFrame*);
   void FrameScheduledClientNavigation(LocalFrame*);
   void FrameClearedScheduledClientNavigation(LocalFrame*);
@@ -227,6 +228,9 @@ class CORE_EXPORT InspectorNetworkAgent final
 
   // Called from other agents.
   void SetHostId(const String&);
+  protocol::Response GetResponseBody(const String& request_id,
+                                     String* content,
+                                     bool* base64_encoded);
   bool FetchResourceContent(Document*,
                             const KURL&,
                             String* content,

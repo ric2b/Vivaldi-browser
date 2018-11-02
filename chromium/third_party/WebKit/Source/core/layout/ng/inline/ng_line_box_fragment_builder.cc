@@ -8,29 +8,15 @@
 #include "core/layout/ng/inline/ng_inline_break_token.h"
 #include "core/layout/ng/inline/ng_inline_node.h"
 #include "core/layout/ng/inline/ng_physical_line_box_fragment.h"
-#include "core/layout/ng/ng_fragment.h"
-#include "core/layout/ng/ng_layout_result.h"
-#include "core/layout/ng/ng_unpositioned_float.h"
-#include "platform/heap/Handle.h"
 
 namespace blink {
 
-NGLineBoxFragmentBuilder::NGLineBoxFragmentBuilder(NGInlineNode node)
-    : writing_mode_(kHorizontalTopBottom),
-      direction_(TextDirection::kLtr),
+NGLineBoxFragmentBuilder::NGLineBoxFragmentBuilder(
+    NGInlineNode node,
+    RefPtr<const ComputedStyle> style,
+    NGWritingMode writing_mode)
+    : NGBaseFragmentBuilder(style, writing_mode, TextDirection::kLtr),
       node_(node) {}
-
-NGLineBoxFragmentBuilder& NGLineBoxFragmentBuilder::SetWritingMode(
-    NGWritingMode writing_mode) {
-  writing_mode_ = writing_mode;
-  return *this;
-}
-
-NGLineBoxFragmentBuilder& NGLineBoxFragmentBuilder::SetDirection(
-    TextDirection direction) {
-  direction_ = direction;
-  return *this;
-}
 
 NGLineBoxFragmentBuilder& NGLineBoxFragmentBuilder::SetInlineSize(
     LayoutUnit size) {
@@ -81,11 +67,11 @@ NGLineBoxFragmentBuilder::ToLineBoxFragment() {
   for (size_t i = 0; i < children_.size(); ++i) {
     NGPhysicalFragment* child = children_[i].Get();
     child->SetOffset(offsets_[i].ConvertToPhysical(
-        writing_mode, direction_, physical_size, child->Size()));
+        writing_mode, Direction(), physical_size, child->Size()));
   }
 
   return AdoptRef(new NGPhysicalLineBoxFragment(
-      physical_size, children_, metrics_,
+      Style(), physical_size, children_, metrics_,
       break_token_ ? std::move(break_token_)
                    : NGInlineBreakToken::Create(node_)));
 }

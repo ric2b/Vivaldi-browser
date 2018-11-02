@@ -11,7 +11,7 @@
 #include <memory>
 
 #include "base/compiler_specific.h"
-#include "base/id_map.h"
+#include "base/containers/id_map.h"
 #include "base/macros.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -56,6 +56,7 @@ class Connector;
 
 namespace content {
 class BlinkInterfaceProviderImpl;
+class ChildURLLoaderFactoryGetter;
 class LocalStorageCachedAreas;
 class PlatformEventObserverBase;
 class QuotaMessageFilter;
@@ -66,9 +67,8 @@ class WebDatabaseObserverImpl;
 
 class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
  public:
-  RendererBlinkPlatformImpl(
-      blink::scheduler::RendererScheduler* renderer_scheduler,
-      base::WeakPtr<service_manager::Connector> connector);
+  explicit RendererBlinkPlatformImpl(
+      blink::scheduler::RendererScheduler* renderer_scheduler);
   ~RendererBlinkPlatformImpl() override;
 
   // Shutdown must be called just prior to shutting down blink.
@@ -248,6 +248,15 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
 
   void RequestPurgeMemory() override;
 
+  PossiblyAssociatedInterfacePtr<mojom::URLLoaderFactory>
+  CreateNetworkURLLoaderFactory();
+
+  // Returns non-null.
+  // It is invalid to call this in an incomplete env where
+  // RenderThreadImpl::current() returns nullptr (e.g. in some tests).
+  scoped_refptr<ChildURLLoaderFactoryGetter>
+  CreateDefaultURLLoaderFactoryGetter();
+
  private:
   bool CheckPreparsedJsCachingEnabled() const;
 
@@ -269,7 +278,7 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   class FileUtilities;
   std::unique_ptr<FileUtilities> file_utilities_;
 
-#if !defined(OS_ANDROID) && !defined(OS_WIN)
+#if !defined(OS_ANDROID) && !defined(OS_WIN) && !defined(OS_FUCHSIA)
   class SandboxSupport;
   std::unique_ptr<SandboxSupport> sandbox_support_;
 #endif
@@ -302,7 +311,8 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
 
   std::unique_ptr<blink::WebScrollbarBehavior> web_scrollbar_behavior_;
 
-  IDMap<std::unique_ptr<PlatformEventObserverBase>> platform_event_observers_;
+  base::IDMap<std::unique_ptr<PlatformEventObserverBase>>
+      platform_event_observers_;
 
   blink::scheduler::RendererScheduler* renderer_scheduler_;  // NOT OWNED
   TopLevelBlameContext top_level_blame_context_;

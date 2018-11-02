@@ -30,6 +30,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/result_codes.h"
 #include "extensions/browser/api_activity_monitor.h"
+#include "extensions/browser/bad_message.h"
 #include "extensions/browser/extension_function_registry.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
@@ -172,14 +173,15 @@ class ExtensionFunctionDispatcher::UIThreadWorkerResponseCallbackWrapper
  public:
   UIThreadWorkerResponseCallbackWrapper(
       const base::WeakPtr<ExtensionFunctionDispatcher>& dispatcher,
-      int render_process_id,
+      content::RenderProcessHost* render_process_host,
       int worker_thread_id)
       : dispatcher_(dispatcher),
         observer_(this),
-        render_process_id_(render_process_id),
+        render_process_host_(render_process_host),
         worker_thread_id_(worker_thread_id),
         weak_ptr_factory_(this) {
-    observer_.Add(content::RenderProcessHost::FromID(render_process_id_));
+    observer_.Add(render_process_host_);
+
     DCHECK(ExtensionsClient::Get()
                ->ExtensionAPIEnabledInExtensionServiceWorkers());
   }
@@ -207,8 +209,10 @@ class ExtensionFunctionDispatcher::UIThreadWorkerResponseCallbackWrapper
  private:
   void CleanUp() {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
-    if (dispatcher_)
-      dispatcher_->RemoveWorkerCallbacksForProcess(render_process_id_);
+    if (dispatcher_) {
+      dispatcher_->RemoveWorkerCallbacksForProcess(
+          render_process_host_->GetID());
+    }
     // Note: we are deleted here!
   }
 
@@ -217,14 +221,11 @@ class ExtensionFunctionDispatcher::UIThreadWorkerResponseCallbackWrapper
                                     const base::ListValue& results,
                                     const std::string& error,
                                     functions::HistogramValue histogram_value) {
-    content::RenderProcessHost* sender =
-        content::RenderProcessHost::FromID(render_process_id_);
     if (type == ExtensionFunction::BAD_MESSAGE) {
       // The renderer will be shut down from ExtensionFunction::SetBadMessage().
       return;
     }
-    DCHECK(sender);
-    sender->Send(new ExtensionMsg_ResponseWorker(
+    render_process_host_->Send(new ExtensionMsg_ResponseWorker(
         worker_thread_id_, request_id, type == ExtensionFunction::SUCCEEDED,
         results, error));
   }
@@ -233,7 +234,7 @@ class ExtensionFunctionDispatcher::UIThreadWorkerResponseCallbackWrapper
   ScopedObserver<content::RenderProcessHost,
                  UIThreadWorkerResponseCallbackWrapper>
       observer_;
-  const int render_process_id_;
+  content::RenderProcessHost* const render_process_host_;
   const int worker_thread_id_;
   base::WeakPtrFactory<UIThreadWorkerResponseCallbackWrapper> weak_ptr_factory_;
 
@@ -358,6 +359,16 @@ void ExtensionFunctionDispatcher::Dispatch(
     const ExtensionHostMsg_Request_Params& params,
     content::RenderFrameHost* render_frame_host,
     int render_process_id) {
+  // Kill the renderer if it's an invalid request.
+  const bool is_valid_request =
+      (!render_frame_host && IsRequestFromServiceWorker(params)) ||
+      (render_frame_host && !IsRequestFromServiceWorker(params));
+  if (!is_valid_request) {
+    bad_message::ReceivedBadMessage(render_process_id,
+                                    bad_message::EFD_BAD_MESSAGE);
+    return;
+  }
+
   if (render_frame_host) {
     // Extension API from a non Service Worker context, e.g. extension page,
     // background page, content script.
@@ -376,8 +387,13 @@ void ExtensionFunctionDispatcher::Dispatch(
         params, render_frame_host, render_process_id,
         callback_wrapper->CreateCallback(params.request_id));
   } else {
-    // Extension API from Service Worker.
-    DCHECK_NE(kInvalidServiceWorkerVersionId, params.service_worker_version_id);
+    content::RenderProcessHost* rph =
+        content::RenderProcessHost::FromID(render_process_id);
+    // UIThreadWorkerResponseCallbackWrapper requires render process host to be
+    // around.
+    if (!rph)
+      return;
+
     WorkerResponseCallbackMapKey key(render_process_id,
                                      params.service_worker_version_id);
     UIThreadWorkerResponseCallbackWrapperMap::const_iterator iter =
@@ -385,7 +401,7 @@ void ExtensionFunctionDispatcher::Dispatch(
     UIThreadWorkerResponseCallbackWrapper* callback_wrapper = nullptr;
     if (iter == ui_thread_response_callback_wrappers_for_worker_.end()) {
       callback_wrapper = new UIThreadWorkerResponseCallbackWrapper(
-          AsWeakPtr(), render_process_id, params.worker_thread_id);
+          AsWeakPtr(), rph, params.worker_thread_id);
       ui_thread_response_callback_wrappers_for_worker_[key] =
           base::WrapUnique(callback_wrapper);
     } else {

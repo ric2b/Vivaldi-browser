@@ -10,5 +10,13 @@ namespace features {
 const base::Feature kUseDdljsonApi{"UseDdljsonApi",
                                    base::FEATURE_DISABLED_BY_DEFAULT};
 
+const char kDdljsonOverrideUrlParam[] = "ddljson-override-url";
+
+const base::Feature kThirdPartyDoodles{"ThirdPartyDoodles",
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
+
+const char kThirdPartyDoodlesOverrideUrlParam[] =
+    "third-party-doodles-override-url";
+
 }  // namespace features
 }  // namespace search_provider_logos

@@ -16,8 +16,8 @@
 #include "ui/events/devices/device_hotplug_event_observer.h"
 #include "ui/events/devices/events_devices_export.h"
 #include "ui/events/devices/input_device_manager.h"
+#include "ui/events/devices/touch_device_transform.h"
 #include "ui/events/devices/touchscreen_device.h"
-#include "ui/gfx/transform.h"
 
 namespace ui {
 
@@ -40,16 +40,16 @@ class EVENTS_DEVICES_EXPORT DeviceDataManager
   static DeviceDataManager* GetInstance();
   static bool HasInstance();
 
-  void ClearTouchDeviceAssociations();
-  void UpdateTouchInfoForDisplay(int64_t target_display_id,
-                                 int touch_device_id,
-                                 const gfx::Transform& touch_transformer);
+  // Configures the touch devices. |transforms| contains the transform for each
+  // device and display pair.
+  void ConfigureTouchDevices(
+      const std::vector<ui::TouchDeviceTransform>& transforms);
+
   void ApplyTouchTransformer(int touch_device_id, float* x, float* y);
 
   // Gets the display that touches from |touch_device_id| should be sent to.
   int64_t GetTargetDisplayForTouchDevice(int touch_device_id) const;
 
-  void UpdateTouchRadiusScale(int touch_device_id, double scale);
   void ApplyTouchRadiusScale(int touch_device_id, double* radius);
 
   void SetTouchscreensEnabled(bool enabled);
@@ -61,14 +61,13 @@ class EVENTS_DEVICES_EXPORT DeviceDataManager
   const std::vector<InputDevice>& GetTouchpadDevices() const override;
   bool AreDeviceListsComplete() const override;
   bool AreTouchscreensEnabled() const override;
+  bool AreTouchscreenTargetDisplaysValid() const override;
 
   void AddObserver(InputDeviceEventObserver* observer) override;
   void RemoveObserver(InputDeviceEventObserver* observer) override;
 
  protected:
   DeviceDataManager();
-
-  static DeviceDataManager* instance();
 
   static void set_instance(DeviceDataManager* instance);
 
@@ -85,20 +84,11 @@ class EVENTS_DEVICES_EXPORT DeviceDataManager
   void OnStylusStateChanged(StylusState state) override;
 
  private:
-  // Information related to a touchscreen device.
-  struct TouchscreenInfo {
-    TouchscreenInfo();
-    void Reset();
-
-    double radius_scale;
-    int64_t target_display;
-    gfx::Transform device_transform;
-  };
-
   friend class test::DeviceDataManagerTestAPI;
 
-  static DeviceDataManager* instance_;
-
+  void ClearTouchDeviceAssociations();
+  void UpdateTouchInfoFromTransform(
+      const ui::TouchDeviceTransform& touch_device_transform);
   bool IsTouchDeviceIdValid(int touch_device_id) const;
 
   void NotifyObserversTouchscreenDeviceConfigurationChanged();
@@ -107,6 +97,8 @@ class EVENTS_DEVICES_EXPORT DeviceDataManager
   void NotifyObserversTouchpadDeviceConfigurationChanged();
   void NotifyObserversDeviceListsComplete();
   void NotifyObserversStylusStateChanged(StylusState stylus_state);
+
+  static DeviceDataManager* instance_;
 
   std::vector<TouchscreenDevice> touchscreen_devices_;
   std::vector<InputDevice> keyboard_devices_;
@@ -118,10 +110,13 @@ class EVENTS_DEVICES_EXPORT DeviceDataManager
 
   bool touch_screens_enabled_ = true;
 
+  // Set to true when ConfigureTouchDevices() is called.
+  bool are_touchscreen_target_displays_valid_ = false;
+
   // Contains touchscreen device info for each device mapped by device ID. Will
   // have default values if the device with corresponding ID isn't a touchscreen
   // or doesn't exist.
-  std::array<TouchscreenInfo, kMaxDeviceNum> touch_map_;
+  std::array<TouchDeviceTransform, kMaxDeviceNum> touch_map_;
 
   DISALLOW_COPY_AND_ASSIGN(DeviceDataManager);
 };

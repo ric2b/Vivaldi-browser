@@ -88,7 +88,7 @@ class MEDIA_EXPORT AudioManager {
   // was created.
   // Returns true on success but false if AudioManager could not be shutdown.
   // AudioManager instance must not be deleted if shutdown failed.
-  bool Shutdown();
+  virtual bool Shutdown();
 
   // Log callback used for sending log messages from a stream to the object
   // that manages the stream.
@@ -213,12 +213,6 @@ class MEDIA_EXPORT AudioManager {
   // Returns a human readable string for the model/make of the active audio
   // input device for this computer.
   virtual base::string16 GetAudioInputDeviceModel() = 0;
-
-  // Opens the platform default audio input settings UI.
-  // Note: This could invoke an external application/preferences pane, so
-  // ideally must not be called from the UI thread or other time sensitive
-  // threads to avoid blocking the rest of the application.
-  virtual void ShowAudioInputSettings() = 0;
 
   // Appends a list of available input devices to |device_descriptions|,
   // which must initially be empty. It is not guaranteed that all the

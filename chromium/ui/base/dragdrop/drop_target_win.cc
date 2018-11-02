@@ -57,6 +57,12 @@ HRESULT DropTargetWin::DragEnter(IDataObject* data_object,
 HRESULT DropTargetWin::DragOver(DWORD key_state,
                                 POINTL cursor_position,
                                 DWORD* effect) {
+  // NOTE(andre@vivaldi.com): We end up here after |DropTargetWin::DragLeave|
+  // for certain drag out of patterns. Bail as the operation is done and will be
+  // resumed with an additional |DragEnter|.
+  if (!current_data_object_) {
+    return E_UNEXPECTED;
+  }
   // Tell the helper that we moved over it so it can update the drag image.
   IDropTargetHelper* drop_helper = DropHelper();
   if (drop_helper)

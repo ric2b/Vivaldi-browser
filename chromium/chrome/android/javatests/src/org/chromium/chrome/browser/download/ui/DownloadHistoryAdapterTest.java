@@ -40,10 +40,11 @@ public class DownloadHistoryAdapterTest {
     public final ChromeBrowserTestRule mBrowserTestRule = new ChromeBrowserTestRule();
 
     private static class Observer extends RecyclerView.AdapterDataObserver
-            implements DownloadHistoryAdapter.TestObserver {
+            implements DownloadHistoryAdapter.TestObserver, SpaceDisplay.Observer {
         public CallbackHelper onChangedCallback = new CallbackHelper();
         public CallbackHelper onDownloadItemCreatedCallback = new CallbackHelper();
         public CallbackHelper onDownloadItemUpdatedCallback = new CallbackHelper();
+        public CallbackHelper onSpaceDisplayUpdatedCallback = new CallbackHelper();
 
         public DownloadItem createdItem;
         public DownloadItem updatedItem;
@@ -63,6 +64,11 @@ public class DownloadHistoryAdapterTest {
         public void onDownloadItemUpdated(DownloadItem item) {
             updatedItem = item;
             onDownloadItemUpdatedCallback.notifyCalled();
+        }
+
+        @Override
+        public void onSpaceDisplayUpdated(SpaceDisplay spaceDisplay) {
+            onSpaceDisplayUpdatedCallback.notifyCalled();
         }
     }
 
@@ -90,7 +96,7 @@ public class DownloadHistoryAdapterTest {
         editor.putBoolean(PREF_SHOW_STORAGE_INFO_HEADER, true).apply();
     }
 
-    private void initializeAdapter(boolean showOffTheRecord) throws Exception {
+    private void initializeAdapter(boolean showOffTheRecord, boolean hasHeader) throws Exception {
         mObserver = new Observer();
         mAdapter = new DownloadHistoryAdapter(showOffTheRecord, null);
         mAdapter.registerAdapterDataObserver(mObserver);
@@ -98,6 +104,7 @@ public class DownloadHistoryAdapterTest {
 
         // Initialize the Adapter with all the DownloadItems and OfflinePageDownloadItems.
         int callCount = mObserver.onChangedCallback.getCallCount();
+        int onSpaceDisplayUpdatedCallCount = mObserver.onSpaceDisplayUpdatedCallback.getCallCount();
         Assert.assertEquals(0, callCount);
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
@@ -105,15 +112,122 @@ public class DownloadHistoryAdapterTest {
                 mAdapter.initialize(mBackendProvider, null);
             }
         });
+        mAdapter.getSpaceDisplayForTests().addObserverForTests(mObserver);
         mDownloadDelegate.addCallback.waitForCallback(0);
-        mObserver.onChangedCallback.waitForCallback(callCount, 1);
+        // If header should be added, onChanged() will be called twice because both setHeaders()
+        // and loadMoreItems() will call notifyDataSetChanged(). Otherwise, setHeaders() will not
+        // be called and onChanged() will only be called once.
+        mObserver.onChangedCallback.waitForCallback(callCount, hasHeader ? 2 : 1);
+        mObserver.onSpaceDisplayUpdatedCallback.waitForCallback(onSpaceDisplayUpdatedCallCount);
+    }
+
+    private void onDownloadItemCreated(final DownloadItem item, int numberOfCallsToWaitFor)
+            throws Exception {
+        int callCount = mObserver.onChangedCallback.getCallCount();
+        int onSpaceDisplayUpdatedCallCount = mObserver.onSpaceDisplayUpdatedCallback.getCallCount();
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                mAdapter.onDownloadItemCreated(item);
+            }
+        });
+        if (numberOfCallsToWaitFor > 0) {
+            mObserver.onChangedCallback.waitForCallback(callCount, numberOfCallsToWaitFor);
+            mObserver.onSpaceDisplayUpdatedCallback.waitForCallback(onSpaceDisplayUpdatedCallCount);
+        }
+    }
+
+    private void onDownloadItemUpdated(final DownloadItem item, int numberOfCallsToWaitFor)
+            throws Exception {
+        int callCount = mObserver.onDownloadItemUpdatedCallback.getCallCount();
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                mAdapter.onDownloadItemUpdated(item);
+            }
+        });
+        if (numberOfCallsToWaitFor > 0) {
+            mObserver.onDownloadItemUpdatedCallback.waitForCallback(
+                    callCount, numberOfCallsToWaitFor);
+        }
+    }
+
+    private void onDownloadItemRemoved(final String id, final boolean isOffTheRecord,
+            int numberOfCallsToWaitFor) throws Exception {
+        int callCount = mObserver.onChangedCallback.getCallCount();
+        int onSpaceDisplayUpdatedCallCount = mObserver.onSpaceDisplayUpdatedCallback.getCallCount();
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                mAdapter.onDownloadItemRemoved(id, isOffTheRecord);
+            }
+        });
+        if (numberOfCallsToWaitFor > 0) {
+            mObserver.onChangedCallback.waitForCallback(callCount, numberOfCallsToWaitFor);
+            mObserver.onSpaceDisplayUpdatedCallback.waitForCallback(onSpaceDisplayUpdatedCallCount);
+        }
+    }
+
+    private void onOfflineItemAdded(final OfflinePageDownloadItem item, int numberOfCallsToWaitFor)
+            throws Exception {
+        int callCount = mObserver.onChangedCallback.getCallCount();
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                mOfflineDelegate.observer.onItemAdded(item);
+            }
+        });
+        if (numberOfCallsToWaitFor > 0) {
+            mObserver.onChangedCallback.waitForCallback(callCount, numberOfCallsToWaitFor);
+        }
+    }
+
+    private void onOfflineItemUpdated(
+            final OfflinePageDownloadItem item, int numberOfCallsToWaitFor) throws Exception {
+        int callCount = mObserver.onChangedCallback.getCallCount();
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                mOfflineDelegate.observer.onItemUpdated(item);
+            }
+        });
+        if (numberOfCallsToWaitFor > 0) {
+            mObserver.onChangedCallback.waitForCallback(callCount, numberOfCallsToWaitFor);
+        }
+    }
+
+    private void onOfflineItemDeleted(final String id, int numberOfCallsToWaitFor)
+            throws Exception {
+        int callCount = mObserver.onChangedCallback.getCallCount();
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                mOfflineDelegate.observer.onItemDeleted(id);
+            }
+        });
+        if (numberOfCallsToWaitFor > 0) {
+            mObserver.onChangedCallback.waitForCallback(callCount, numberOfCallsToWaitFor);
+        }
+    }
+
+    private void onFilterChanged(final int flag, int numberOfCallsToWaitFor) throws Exception {
+        int callCount = mObserver.onChangedCallback.getCallCount();
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                mAdapter.onFilterChanged(flag);
+            }
+        });
+        if (numberOfCallsToWaitFor > 0) {
+            mObserver.onChangedCallback.waitForCallback(callCount, numberOfCallsToWaitFor);
+        }
     }
 
     /** Nothing downloaded, nothing shown. */
     @Test
     @SmallTest
     public void testInitialize_Empty() throws Exception {
-        initializeAdapter(false);
+        initializeAdapter(false, false);
         Assert.assertEquals(0, mAdapter.getItemCount());
         Assert.assertEquals(0, mAdapter.getTotalDownloadSize());
 
@@ -133,7 +247,7 @@ public class DownloadHistoryAdapterTest {
     public void testInitialize_SingleItem() throws Exception {
         DownloadItem item = StubbedProvider.createDownloadItem(0, "19840116 12:00");
         mDownloadDelegate.regularItems.add(item);
-        initializeAdapter(false);
+        initializeAdapter(false, true);
         checkAdapterContents(HEADER, null, item);
         Assert.assertEquals(1, mAdapter.getTotalDownloadSize());
     }
@@ -146,7 +260,7 @@ public class DownloadHistoryAdapterTest {
         DownloadItem item1 = StubbedProvider.createDownloadItem(1, "19840116 12:01");
         mDownloadDelegate.regularItems.add(item0);
         mDownloadDelegate.regularItems.add(item1);
-        initializeAdapter(false);
+        initializeAdapter(false, true);
         checkAdapterContents(HEADER, null, item1, item0);
         Assert.assertEquals(11, mAdapter.getTotalDownloadSize());
     }
@@ -159,7 +273,7 @@ public class DownloadHistoryAdapterTest {
         DownloadItem item1 = StubbedProvider.createDownloadItem(1, "19840117 12:00");
         mDownloadDelegate.regularItems.add(item0);
         mDownloadDelegate.regularItems.add(item1);
-        initializeAdapter(false);
+        initializeAdapter(false, true);
         checkAdapterContents(HEADER, null, item1, null, item0);
         Assert.assertEquals(11, mAdapter.getTotalDownloadSize());
     }
@@ -172,7 +286,7 @@ public class DownloadHistoryAdapterTest {
         editor.putBoolean(PREF_SHOW_STORAGE_INFO_HEADER, false).apply();
         DownloadItem item = StubbedProvider.createDownloadItem(0, "19840116 12:00");
         mDownloadDelegate.regularItems.add(item);
-        initializeAdapter(false);
+        initializeAdapter(false, false);
         checkAdapterContents(null, item);
         Assert.assertEquals(1, mAdapter.getTotalDownloadSize());
     }
@@ -185,7 +299,7 @@ public class DownloadHistoryAdapterTest {
         DownloadItem item1 = StubbedProvider.createDownloadItem(1, "19840116 12:01");
         mDownloadDelegate.regularItems.add(item0);
         mDownloadDelegate.regularItems.add(item1);
-        initializeAdapter(false);
+        initializeAdapter(false, true);
         checkAdapterContents(HEADER, null, item1, item0);
         Assert.assertEquals(11, mAdapter.getTotalDownloadSize());
 
@@ -216,7 +330,7 @@ public class DownloadHistoryAdapterTest {
         DownloadItem item1 = StubbedProvider.createDownloadItem(1, "19840116 12:01");
         mDownloadDelegate.regularItems.add(item0);
         mDownloadDelegate.offTheRecordItems.add(item1);
-        initializeAdapter(false);
+        initializeAdapter(false, true);
         checkAdapterContents(HEADER, null, item0);
         Assert.assertEquals(1, mAdapter.getTotalDownloadSize());
     }
@@ -229,7 +343,7 @@ public class DownloadHistoryAdapterTest {
         DownloadItem item1 = StubbedProvider.createDownloadItem(1, "19840116 12:00");
         mDownloadDelegate.regularItems.add(item0);
         mDownloadDelegate.offTheRecordItems.add(item1);
-        initializeAdapter(true);
+        initializeAdapter(true, true);
         checkAdapterContents(HEADER, null, item0, item1);
         Assert.assertEquals(11, mAdapter.getTotalDownloadSize());
     }
@@ -244,7 +358,7 @@ public class DownloadHistoryAdapterTest {
         mDownloadDelegate.regularItems.add(item0);
         mDownloadDelegate.offTheRecordItems.add(item1);
         mOfflineDelegate.items.add(item2);
-        initializeAdapter(true);
+        initializeAdapter(true, true);
         checkAdapterContents(HEADER, null, item2, null, item0, item1);
         Assert.assertEquals(100011, mAdapter.getTotalDownloadSize());
     }
@@ -254,23 +368,21 @@ public class DownloadHistoryAdapterTest {
     @SmallTest
     public void testUpdate_UpdateItems() throws Exception {
         // Start with an empty Adapter.
-        initializeAdapter(false);
+        initializeAdapter(false, false);
         Assert.assertEquals(0, mAdapter.getItemCount());
         Assert.assertEquals(0, mAdapter.getTotalDownloadSize());
 
         // Add the first item.
         Assert.assertEquals(1, mObserver.onChangedCallback.getCallCount());
         DownloadItem item0 = StubbedProvider.createDownloadItem(0, "19840116 12:00");
-        mAdapter.onDownloadItemCreated(item0);
-        mObserver.onChangedCallback.waitForCallback(1);
+        onDownloadItemCreated(item0, 2);
         checkAdapterContents(HEADER, null, item0);
         Assert.assertEquals(1, mAdapter.getTotalDownloadSize());
 
         // Add a second item with a different date.
-        Assert.assertEquals(2, mObserver.onChangedCallback.getCallCount());
+        Assert.assertEquals(3, mObserver.onChangedCallback.getCallCount());
         DownloadItem item1 = StubbedProvider.createDownloadItem(1, "19840117 12:00");
-        mAdapter.onDownloadItemCreated(item1);
-        mObserver.onChangedCallback.waitForCallback(2);
+        onDownloadItemCreated(item1, 2);
         checkAdapterContents(HEADER, null, item1, null, item0);
         Assert.assertEquals(11, mAdapter.getTotalDownloadSize());
 
@@ -278,7 +390,7 @@ public class DownloadHistoryAdapterTest {
         Assert.assertEquals(2, mObserver.onDownloadItemCreatedCallback.getCallCount());
         DownloadItem item2 = StubbedProvider.createDownloadItem(
                 2, "19840117 18:00", false, DownloadState.IN_PROGRESS, 0);
-        mAdapter.onDownloadItemCreated(item2);
+        onDownloadItemCreated(item2, 2);
         mObserver.onDownloadItemCreatedCallback.waitForCallback(2);
         Assert.assertEquals(mObserver.createdItem, item2);
         checkAdapterContents(HEADER, null, item2, item1, null, item0);
@@ -286,27 +398,21 @@ public class DownloadHistoryAdapterTest {
 
         // An item with the same download ID as the second item should just update the old one,
         // but it should now be visible.
-        int callCount = mObserver.onDownloadItemUpdatedCallback.getCallCount();
         DownloadItem item3 = StubbedProvider.createDownloadItem(
                 2, "19840117 18:00", false, DownloadState.COMPLETE, 100);
-        mAdapter.onDownloadItemUpdated(item3);
-        mObserver.onDownloadItemUpdatedCallback.waitForCallback(callCount);
+        onDownloadItemUpdated(item3, 1);
         Assert.assertEquals(mObserver.updatedItem, item3);
         checkAdapterContents(HEADER, null, item3, item1, null, item0);
         Assert.assertEquals(111, mAdapter.getTotalDownloadSize());
 
         // Throw on a new OfflinePageItem.
-        callCount = mObserver.onChangedCallback.getCallCount();
         OfflinePageDownloadItem item4 = StubbedProvider.createOfflineItem(0, "19840117 19:00");
-        mOfflineDelegate.observer.onItemAdded(item4);
-        mObserver.onChangedCallback.waitForCallback(callCount);
+        onOfflineItemAdded(item4, 2);
         checkAdapterContents(HEADER, null, item4, item3, item1, null, item0);
 
         // Update the existing OfflinePageItem.
-        callCount = mObserver.onChangedCallback.getCallCount();
         OfflinePageDownloadItem item5 = StubbedProvider.createOfflineItem(0, "19840117 19:00");
-        mOfflineDelegate.observer.onItemUpdated(item5);
-        mObserver.onChangedCallback.waitForCallback(callCount);
+        onOfflineItemUpdated(item5, 2);
         checkAdapterContents(HEADER, null, item5, item3, item1, null, item0);
     }
 
@@ -323,28 +429,27 @@ public class DownloadHistoryAdapterTest {
         mDownloadDelegate.regularItems.add(regularItem);
         mDownloadDelegate.offTheRecordItems.add(offTheRecordItem);
         mOfflineDelegate.items.add(offlineItem);
-        initializeAdapter(true);
+        initializeAdapter(true, true);
         checkAdapterContents(HEADER, null, offlineItem, null, regularItem, offTheRecordItem);
         Assert.assertEquals(100011, mAdapter.getTotalDownloadSize());
 
-        // Remove an item from the date bucket with two items.
-        Assert.assertEquals(1, mObserver.onChangedCallback.getCallCount());
-        mAdapter.onDownloadItemRemoved(offTheRecordItem.getId(), true);
-        mObserver.onChangedCallback.waitForCallback(1);
+        // Remove an item from the date bucket with two items. Wait for two callbacks as
+        // notifyDataSetChanged() is called once when setHeaders() is called and once when items
+        // are loaded.
+        Assert.assertEquals(2, mObserver.onChangedCallback.getCallCount());
+        onDownloadItemRemoved(offTheRecordItem.getId(), true, 2);
         checkAdapterContents(HEADER, null, offlineItem, null, regularItem);
         Assert.assertEquals(100001, mAdapter.getTotalDownloadSize());
 
         // Remove an item from the second bucket, which removes the bucket entirely.
-        Assert.assertEquals(2, mObserver.onChangedCallback.getCallCount());
-        mOfflineDelegate.observer.onItemDeleted(offlineItem.getGuid());
-        mObserver.onChangedCallback.waitForCallback(2);
+        Assert.assertEquals(4, mObserver.onChangedCallback.getCallCount());
+        onOfflineItemDeleted(offlineItem.getGuid(), 2);
         checkAdapterContents(HEADER, null, regularItem);
         Assert.assertEquals(1, mAdapter.getTotalDownloadSize());
 
         // Remove the last item in the list.
-        Assert.assertEquals(3, mObserver.onChangedCallback.getCallCount());
-        mAdapter.onDownloadItemRemoved(regularItem.getId(), false);
-        mObserver.onChangedCallback.waitForCallback(3);
+        Assert.assertEquals(6, mObserver.onChangedCallback.getCallCount());
+        onDownloadItemRemoved(regularItem.getId(), false, 1);
         Assert.assertEquals(0, mAdapter.getItemCount());
         Assert.assertEquals(0, mAdapter.getTotalDownloadSize());
     }
@@ -367,25 +472,25 @@ public class DownloadHistoryAdapterTest {
         mDownloadDelegate.offTheRecordItems.add(item4);
         mDownloadDelegate.regularItems.add(item5);
         mOfflineDelegate.items.add(item6);
-        initializeAdapter(true);
+        initializeAdapter(true, true);
         checkAdapterContents(
                 HEADER, null, item5, item4, item6, null, item3, item2, null, item1, item0);
         Assert.assertEquals(1666, mAdapter.getTotalDownloadSize());
 
-        mAdapter.onFilterChanged(DownloadFilter.FILTER_AUDIO);
+        onFilterChanged(DownloadFilter.FILTER_AUDIO, 2);
         checkAdapterContents(HEADER, null, item5, item4);
         Assert.assertEquals(1666, mAdapter.getTotalDownloadSize()); // Total size ignores filters.
 
-        mAdapter.onFilterChanged(DownloadFilter.FILTER_VIDEO);
+        onFilterChanged(DownloadFilter.FILTER_VIDEO, 2);
         checkAdapterContents(HEADER, null, item3);
 
-        mAdapter.onFilterChanged(DownloadFilter.FILTER_IMAGE);
+        onFilterChanged(DownloadFilter.FILTER_IMAGE, 2);
         checkAdapterContents(HEADER, null, item1, item0);
 
-        mAdapter.onFilterChanged(DownloadFilter.FILTER_PAGE);
+        onFilterChanged(DownloadFilter.FILTER_PAGE, 2);
         checkAdapterContents(HEADER, null, item6);
 
-        mAdapter.onFilterChanged(DownloadFilter.FILTER_ALL);
+        onFilterChanged(DownloadFilter.FILTER_ALL, 2);
         checkAdapterContents(
                 HEADER, null, item5, item4, item6, null, item3, item2, null, item1, item0);
         Assert.assertEquals(1666, mAdapter.getTotalDownloadSize());
@@ -401,24 +506,24 @@ public class DownloadHistoryAdapterTest {
         mOfflineDelegate.items.add(item0);
         mOfflineDelegate.items.add(item1);
         mOfflineDelegate.items.add(item2);
-        initializeAdapter(false);
+        initializeAdapter(false, true);
         checkAdapterContents(HEADER, null, item2, null, item1, item0);
         Assert.assertEquals(111000, mAdapter.getTotalDownloadSize());
 
         // Filter shows everything.
-        mOfflineDelegate.observer.onItemDeleted(item1.getGuid());
+        onOfflineItemDeleted(item1.getGuid(), 2);
         checkAdapterContents(HEADER, null, item2, null, item0);
 
         // Filter shows nothing when the item is deleted because it's a different kind of item.
-        mAdapter.onFilterChanged(DownloadFilter.FILTER_AUDIO);
+        onFilterChanged(DownloadFilter.FILTER_AUDIO, 1);
         Assert.assertEquals(0, mAdapter.getItemCount());
-        mOfflineDelegate.observer.onItemDeleted(item0.getGuid());
+        onOfflineItemDeleted(item0.getGuid(), 0);
         Assert.assertEquals(0, mAdapter.getItemCount());
 
         // Filter shows just pages.
-        mAdapter.onFilterChanged(DownloadFilter.FILTER_PAGE);
+        onFilterChanged(DownloadFilter.FILTER_PAGE, 2);
         checkAdapterContents(HEADER, null, item2);
-        mOfflineDelegate.observer.onItemDeleted(item2.getGuid());
+        onOfflineItemDeleted(item2.getGuid(), 1);
         Assert.assertEquals(0, mAdapter.getItemCount());
     }
 
@@ -427,14 +532,14 @@ public class DownloadHistoryAdapterTest {
     public void testInProgress_FilePathMapAccurate() throws Exception {
         Set<DownloadHistoryItemWrapper> toDelete;
 
-        initializeAdapter(false);
+        initializeAdapter(false, false);
         Assert.assertEquals(0, mAdapter.getItemCount());
         Assert.assertEquals(0, mAdapter.getTotalDownloadSize());
 
         // Simulate the creation of a new item by providing a DownloadItem without a path.
         DownloadItem itemCreated = StubbedProvider.createDownloadItem(
                 9, "19840118 12:01", false, DownloadState.IN_PROGRESS, 0);
-        mAdapter.onDownloadItemCreated(itemCreated);
+        onDownloadItemCreated(itemCreated, 0);
         mObserver.onDownloadItemCreatedCallback.waitForCallback(0);
         Assert.assertEquals(mObserver.createdItem, itemCreated);
 
@@ -443,11 +548,9 @@ public class DownloadHistoryAdapterTest {
         Assert.assertNull(toDelete);
 
         // Update the Adapter with new information about the item.
-        int callCount = mObserver.onDownloadItemUpdatedCallback.getCallCount();
         DownloadItem itemUpdated = StubbedProvider.createDownloadItem(
                 10, "19840118 12:01", false, DownloadState.IN_PROGRESS, 50);
-        mAdapter.onDownloadItemUpdated(itemUpdated);
-        mObserver.onDownloadItemUpdatedCallback.waitForCallback(callCount);
+        onDownloadItemUpdated(itemUpdated, 1);
         Assert.assertEquals(mObserver.updatedItem, itemUpdated);
 
         checkAdapterContents(HEADER, null, itemUpdated);
@@ -455,11 +558,9 @@ public class DownloadHistoryAdapterTest {
         Assert.assertNull(toDelete);
 
         // Tell the Adapter that the item has finished downloading.
-        callCount = mObserver.onDownloadItemUpdatedCallback.getCallCount();
         DownloadItem itemCompleted = StubbedProvider.createDownloadItem(
                 10, "19840118 12:01", false, DownloadState.COMPLETE, 100);
-        mAdapter.onDownloadItemUpdated(itemCompleted);
-        mObserver.onDownloadItemUpdatedCallback.waitForCallback(callCount);
+        onDownloadItemUpdated(itemCompleted, 1);
         Assert.assertEquals(mObserver.updatedItem, itemCompleted);
         checkAdapterContents(HEADER, null, itemCompleted);
 
@@ -486,7 +587,7 @@ public class DownloadHistoryAdapterTest {
         mDownloadDelegate.offTheRecordItems.add(item4);
         mDownloadDelegate.regularItems.add(item5);
         mOfflineDelegate.items.add(item6);
-        initializeAdapter(true);
+        initializeAdapter(true, true);
         checkAdapterContents(
                 HEADER, null, item5, item4, item6, null, item3, item2, null, item1, item0);
 
@@ -540,12 +641,12 @@ public class DownloadHistoryAdapterTest {
         mDownloadDelegate.offTheRecordItems.add(item4);
         mDownloadDelegate.regularItems.add(item5);
         mOfflineDelegate.items.add(item6);
-        initializeAdapter(true);
+        initializeAdapter(true, true);
         checkAdapterContents(
                 HEADER, null, item5, item4, item6, null, item3, item2, null, item1, item0);
 
         // Change the filter
-        mAdapter.onFilterChanged(DownloadFilter.FILTER_IMAGE);
+        onFilterChanged(DownloadFilter.FILTER_IMAGE, 2);
         checkAdapterContents(HEADER, null, item1, item0);
 
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
@@ -572,12 +673,12 @@ public class DownloadHistoryAdapterTest {
     @Test
     @SmallTest
     public void testSearch_RemoveItem() throws Exception {
-        DownloadItem item0 = StubbedProvider.createDownloadItem(0, "19840116 12:00");
-        DownloadItem item1 = StubbedProvider.createDownloadItem(1, "19840116 12:01");
-        DownloadItem item2 = StubbedProvider.createDownloadItem(2, "19840117 12:00");
-        DownloadItem item3 = StubbedProvider.createDownloadItem(3, "19840117 12:01");
-        DownloadItem item4 = StubbedProvider.createDownloadItem(4, "19840118 12:00");
-        DownloadItem item5 = StubbedProvider.createDownloadItem(5, "19840118 12:01");
+        final DownloadItem item0 = StubbedProvider.createDownloadItem(0, "19840116 12:00");
+        final DownloadItem item1 = StubbedProvider.createDownloadItem(1, "19840116 12:01");
+        final DownloadItem item2 = StubbedProvider.createDownloadItem(2, "19840117 12:00");
+        final DownloadItem item3 = StubbedProvider.createDownloadItem(3, "19840117 12:01");
+        final DownloadItem item4 = StubbedProvider.createDownloadItem(4, "19840118 12:00");
+        final DownloadItem item5 = StubbedProvider.createDownloadItem(5, "19840118 12:01");
         OfflinePageDownloadItem item6 = StubbedProvider.createOfflineItem(0, "19840118 6:00");
         mDownloadDelegate.regularItems.add(item0);
         mDownloadDelegate.offTheRecordItems.add(item1);
@@ -586,7 +687,7 @@ public class DownloadHistoryAdapterTest {
         mDownloadDelegate.offTheRecordItems.add(item4);
         mDownloadDelegate.regularItems.add(item5);
         mOfflineDelegate.items.add(item6);
-        initializeAdapter(true);
+        initializeAdapter(true, true);
         checkAdapterContents(
                 HEADER, null, item5, item4, item6, null, item3, item2, null, item1, item0);
 
@@ -597,11 +698,10 @@ public class DownloadHistoryAdapterTest {
                 mAdapter.search("FiLe");
             }
         });
-
         // Only items matching the query should be shown.
         checkAdapterContents(null, item2, null, item1, item0);
 
-        mAdapter.onDownloadItemRemoved(item1.getId(), false);
+        onDownloadItemRemoved(item1.getId(), false, 1);
 
         checkAdapterContents(null, item2, null, item0);
     }

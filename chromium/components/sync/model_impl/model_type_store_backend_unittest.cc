@@ -6,10 +6,10 @@
 
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "base/test/histogram_tester.h"
 #include "components/sync/protocol/model_type_store_schema_descriptor.pb.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/leveldatabase/env_chromium.h"
 #include "third_party/leveldatabase/src/include/leveldb/db.h"
 #include "third_party/leveldatabase/src/include/leveldb/env.h"
 #include "third_party/leveldatabase/src/include/leveldb/options.h"
@@ -170,7 +170,7 @@ TEST_F(ModelTypeStoreBackendTest, ReadDeletedRecord) {
   ASSERT_TRUE(missing_id_list.empty());
 
   // Delete one record.
-  write_batch = base::MakeUnique<leveldb::WriteBatch>();
+  write_batch = std::make_unique<leveldb::WriteBatch>();
   write_batch->Delete("prefix:id2");
   result = backend->WriteModifications(std::move(write_batch));
   ASSERT_EQ(ModelTypeStore::Result::SUCCESS, result);
@@ -272,7 +272,7 @@ TEST_F(ModelTypeStoreBackendTest, RecoverAfterCorruption) {
 
   // Prepare environment that looks corrupt to leveldb.
   std::unique_ptr<leveldb::Env> env =
-      base::MakeUnique<leveldb::EnvWrapper>(leveldb::Env::Default());
+      std::make_unique<leveldb::EnvWrapper>(leveldb::Env::Default());
 
   std::string path;
   env->GetTestDirectory(&path);
@@ -295,7 +295,7 @@ TEST_F(ModelTypeStoreBackendTest, RecoverAfterCorruption) {
 
   // Cleanup directory after the test.
   backend = nullptr;
-  s = leveldb::DestroyDB(path, leveldb::Options());
+  s = leveldb::DestroyDB(path, leveldb_env::Options());
   EXPECT_TRUE(s.ok()) << s.ToString();
 
   // Check that both recovery and consecutive initialization are recorded in

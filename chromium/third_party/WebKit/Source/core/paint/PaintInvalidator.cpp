@@ -38,9 +38,9 @@ static LayoutRect SlowMapToVisualRectInAncestorSpace(
   if (object.IsLayoutView()) {
     ToLayoutView(object).MapToVisualRectInAncestorSpace(
         &ancestor, result, kInputIsInFrameCoordinates, kDefaultVisualRectFlags);
+  } else {
+    object.MapToVisualRectInAncestorSpace(&ancestor, result);
   }
-
-  object.MapToVisualRectInAncestorSpace(&ancestor, result);
   return result;
 }
 
@@ -105,7 +105,8 @@ LayoutRect PaintInvalidator::MapLocalRectToVisualRectInBacking(
       rect.MoveBy(Point(object.PaintOffset()));
 
     auto container_contents_properties =
-        context.paint_invalidation_container->ContentsProperties();
+        context.paint_invalidation_container->FirstFragment()
+            ->ContentsProperties();
     if (context.tree_builder_context_->current.transform ==
             container_contents_properties.Transform() &&
         context.tree_builder_context_->current.clip ==
@@ -180,7 +181,9 @@ LayoutPoint PaintInvalidator::ComputeLocationInBacking(
     point.MoveBy(object.PaintOffset());
 
     const auto* container_transform =
-        context.paint_invalidation_container->ContentsProperties().Transform();
+        context.paint_invalidation_container->FirstFragment()
+            ->ContentsProperties()
+            .Transform();
     if (context.tree_builder_context_->current.transform !=
         container_transform) {
       FloatRect rect = FloatRect(FloatPoint(point), FloatSize());
@@ -265,12 +268,14 @@ class ScopedUndoFrameViewContentClipAndScroll {
         saved_context_(tree_builder_context_.current) {
     DCHECK(!RuntimeEnabledFeatures::RootLayerScrollingEnabled());
 
+    if (const auto* scroll_node = frame_view.ScrollNode()) {
+      DCHECK_EQ(scroll_node, saved_context_.scroll);
+      tree_builder_context_.current.scroll = saved_context_.scroll->Parent();
+    }
     if (const auto* scroll_translation = frame_view.ScrollTranslation()) {
       DCHECK_EQ(scroll_translation, saved_context_.transform);
-      DCHECK_EQ(scroll_translation->ScrollNode(), saved_context_.scroll);
       tree_builder_context_.current.transform =
           saved_context_.transform->Parent();
-      tree_builder_context_.current.scroll = saved_context_.scroll->Parent();
     }
     DCHECK_EQ(frame_view.PreTranslation(),
               tree_builder_context_.current.transform);

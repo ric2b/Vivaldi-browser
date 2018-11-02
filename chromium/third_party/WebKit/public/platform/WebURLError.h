@@ -39,24 +39,30 @@ namespace blink {
 class ResourceError;
 
 struct WebURLError {
-  // A namespace for "reason" to support various layers generating
-  // resource errors. WebKit does not care about the value of this
-  // string as it will just be passed via callbacks to the consumer.
-  WebString domain;
+  // A namespace for "reason" to support various layers generating resource
+  // errors.
+  enum class Domain {
+    // |reason| should be always zero. An error with this domain is considered
+    // as an empty error (== "no error").
+    // TODO(yhirano): Consider removing this domain.
+    kEmpty,
+
+    // The error is a "net" error. |reason| is an error code specified in
+    // net/base/net_error_list.h.
+    kNet,
+
+    // Used for testing.
+    kTest,
+  };
+  Domain domain = Domain::kEmpty;
 
   // A numeric error code detailing the reason for this error. A value
-  // of 0 means no error. WebKit does not interpret the meaning of other
-  // values and normally just forwards this error information back to the
-  // embedder (see for example WebFrameClient).
+  // of 0 means no error.
   int reason = 0;
 
   // A flag showing whether or not "unreachableURL" has a copy in the
   // cache that was too stale to return for this request.
   bool stale_copy_in_cache = false;
-
-  // A flag showing whether this error is the result of a request being
-  // ignored (e.g. through shouldOverrideUrlLoading).
-  bool was_ignored_by_handler = false;
 
   // True if this error is created for a web security violation.
   bool is_web_security_violation = false;
@@ -79,6 +85,9 @@ struct WebURLError {
   BLINK_PLATFORM_EXPORT operator ResourceError() const;
 #endif
 };
+
+BLINK_PLATFORM_EXPORT std::ostream& operator<<(std::ostream&,
+                                               WebURLError::Domain);
 
 }  // namespace blink
 

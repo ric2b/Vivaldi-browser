@@ -33,6 +33,8 @@
 #include "base/trace_event/trace_event_argument.h"
 #include "cc/layers/layer.h"
 #include "platform/DragImage.h"
+#include "platform/bindings/RuntimeCallStats.h"
+#include "platform/bindings/V8PerIsolateData.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/geometry/LayoutRect.h"
 #include "platform/geometry/Region.h"
@@ -114,9 +116,7 @@ GraphicsLayer::GraphicsLayer(GraphicsLayerClient* client)
   if (client_)
     client_->VerifyNotPainting();
 #endif
-  content_layer_delegate_ = WTF::MakeUnique<ContentLayerDelegate>(this);
-  layer_ = Platform::Current()->CompositorSupport()->CreateContentLayer(
-      content_layer_delegate_.get());
+  layer_ = Platform::Current()->CompositorSupport()->CreateContentLayer(this);
   layer_->Layer()->SetDrawsContent(draws_content_ && contents_visible_);
   layer_->Layer()->SetLayerClient(this);
 }
@@ -152,6 +152,12 @@ void GraphicsLayer::SetHasWillChangeTransformHint(
 void GraphicsLayer::SetScrollBoundaryBehavior(
     const WebScrollBoundaryBehavior& behavior) {
   layer_->Layer()->SetScrollBoundaryBehavior(behavior);
+}
+
+void GraphicsLayer::SetIsResizedByBrowserControls(
+    bool is_resized_by_browser_controls) {
+  PlatformLayer()->SetIsResizedByBrowserControls(
+      is_resized_by_browser_controls);
 }
 
 void GraphicsLayer::SetParent(GraphicsLayer* layer) {
@@ -591,21 +597,76 @@ static String PointerAsString(const void* ptr) {
   return ts.Release();
 }
 
+class GraphicsLayer::LayersAsJSONArray {
+ public:
+  LayersAsJSONArray(LayerTreeFlags flags)
+      : flags_(flags),
+        next_transform_id_(1),
+        layers_json_(JSONArray::Create()),
+        transforms_json_(JSONArray::Create()) {}
+
+  // Outputs the layer tree rooted at |layer| as a JSON array, in paint order,
+  // and the transform tree also as a JSON array.
+  std::unique_ptr<JSONObject> operator()(const GraphicsLayer& layer) {
+    auto json = JSONObject::Create();
+    Walk(layer, 0, FloatPoint());
+    json->SetArray("layers", std::move(layers_json_));
+    if (transforms_json_->size())
+      json->SetArray("transforms", std::move(transforms_json_));
+    return json;
+  }
+
+  void Walk(const GraphicsLayer& layer,
+            int parent_transform_id,
+            const FloatPoint& parent_offset) {
+    FloatPoint offset = parent_offset;
+    int transform_id = parent_transform_id;
+    std::unique_ptr<JSONObject> transform_json;
+    if (!layer.transform_.IsIdentity() || layer.rendering_context3d_) {
+      transform_json = JSONObject::Create();
+      transform_id = next_transform_id_++;
+      transform_json->SetInteger("id", transform_id);
+      if (parent_transform_id)
+        transform_json->SetInteger("parent", parent_transform_id);
+      layer.AddTransformJSONProperties(*transform_json, rendering_context_map_);
+      transforms_json_->PushObject(std::move(transform_json));
+
+      offset = FloatPoint();
+    }
+
+    auto json =
+        layer.LayerAsJSONInternal(flags_, rendering_context_map_, offset);
+    if (transform_id)
+      json->SetInteger("transform", transform_id);
+    layers_json_->PushObject(std::move(json));
+
+    offset += layer.position_;
+    for (auto& child : layer.children_)
+      Walk(*child, transform_id, offset);
+  }
+
+ private:
+  LayerTreeFlags flags_;
+  int next_transform_id_;
+  RenderingContextMap rendering_context_map_;
+  std::unique_ptr<JSONArray> layers_json_;
+  std::unique_ptr<JSONArray> transforms_json_;
+};
+
 std::unique_ptr<JSONObject> GraphicsLayer::LayerTreeAsJSON(
     LayerTreeFlags flags) const {
-  RenderingContextMap rendering_context_map;
-  if (flags & kOutputAsLayerTree)
+  if (flags & kOutputAsLayerTree) {
+    RenderingContextMap rendering_context_map;
     return LayerTreeAsJSONInternal(flags, rendering_context_map);
-  std::unique_ptr<JSONObject> json = JSONObject::Create();
-  std::unique_ptr<JSONArray> layers_array = JSONArray::Create();
-  LayersAsJSONArray(flags, rendering_context_map, layers_array.get());
-  json->SetArray("layers", std::move(layers_array));
-  return json;
+  }
+
+  return LayersAsJSONArray(flags)(*this);
 }
 
 std::unique_ptr<JSONObject> GraphicsLayer::LayerAsJSONInternal(
     LayerTreeFlags flags,
-    RenderingContextMap& rendering_context_map) const {
+    RenderingContextMap& rendering_context_map,
+    const FloatPoint& offset) const {
   std::unique_ptr<JSONObject> json = JSONObject::Create();
 
   if (flags & kLayerTreeIncludesDebugInfo)
@@ -613,19 +674,15 @@ std::unique_ptr<JSONObject> GraphicsLayer::LayerAsJSONInternal(
 
   json->SetString("name", DebugName());
 
-  if (position_ != FloatPoint())
-    json->SetArray("position", PointAsJSONArray(position_));
+  FloatPoint position = offset + position_;
+  if (position != FloatPoint())
+    json->SetArray("position", PointAsJSONArray(position));
 
   if (flags & kLayerTreeIncludesDebugInfo &&
       offset_from_layout_object_ != DoubleSize()) {
     json->SetArray("offsetFromLayoutObject",
                    SizeAsJSONArray(offset_from_layout_object_));
   }
-
-  if (has_transform_origin_ &&
-      transform_origin_ !=
-          FloatPoint3D(size_.Width() * 0.5f, size_.Height() * 0.5f, 0))
-    json->SetArray("transformOrigin", PointAsJSONArray(transform_origin_));
 
   if (size_ != IntSize())
     json->SetArray("bounds", SizeAsJSONArray(size_));
@@ -639,36 +696,19 @@ std::unique_ptr<JSONObject> GraphicsLayer::LayerAsJSONInternal(
   }
 
   if (is_root_for_isolated_group_)
-    json->SetBoolean("isolate", is_root_for_isolated_group_);
+    json->SetBoolean("isolate", true);
 
   if (contents_opaque_)
-    json->SetBoolean("contentsOpaque", contents_opaque_);
+    json->SetBoolean("contentsOpaque", true);
 
-  if (!should_flatten_transform_)
-    json->SetBoolean("shouldFlattenTransform", should_flatten_transform_);
-
-  if (rendering_context3d_) {
-    RenderingContextMap::const_iterator it =
-        rendering_context_map.find(rendering_context3d_);
-    int context_id = rendering_context_map.size() + 1;
-    if (it == rendering_context_map.end())
-      rendering_context_map.Set(rendering_context3d_, context_id);
-    else
-      context_id = it->value;
-
-    json->SetInteger("3dRenderingContext", context_id);
-  }
-
-  if (draws_content_)
-    json->SetBoolean("drawsContent", draws_content_);
+  if (!draws_content_)
+    json->SetBoolean("drawsContent", false);
 
   if (!contents_visible_)
-    json->SetBoolean("contentsVisible", contents_visible_);
+    json->SetBoolean("contentsVisible", false);
 
-  if (!backface_visibility_) {
-    json->SetString("backfaceVisibility",
-                    backface_visibility_ ? "visible" : "hidden");
-  }
+  if (!backface_visibility_)
+    json->SetString("backfaceVisibility", "hidden");
 
   if (flags & kLayerTreeIncludesDebugInfo)
     json->SetString("client", PointerAsString(client_));
@@ -678,8 +718,8 @@ std::unique_ptr<JSONObject> GraphicsLayer::LayerAsJSONInternal(
                     background_color_.NameForLayoutTreeAsText());
   }
 
-  if (!transform_.IsIdentity())
-    json->SetArray("transform", TransformAsJSONArray(transform_));
+  if (flags & kOutputAsLayerTree)
+    AddTransformJSONProperties(*json, rendering_context_map);
 
   if (flags & kLayerTreeIncludesPaintInvalidations)
     GetRasterInvalidationTrackingMap().AsJSON(this, json.get());
@@ -779,15 +819,27 @@ std::unique_ptr<JSONObject> GraphicsLayer::LayerTreeAsJSONInternal(
   return json;
 }
 
-void GraphicsLayer::LayersAsJSONArray(
-    LayerTreeFlags flags,
-    RenderingContextMap& rendering_context_map,
-    JSONArray* json_array) const {
-  json_array->PushObject(LayerAsJSONInternal(flags, rendering_context_map));
+void GraphicsLayer::AddTransformJSONProperties(
+    JSONObject& json,
+    RenderingContextMap& rendering_context_map) const {
+  if (!transform_.IsIdentity())
+    json.SetArray("transform", TransformAsJSONArray(transform_));
 
-  if (children_.size()) {
-    for (auto& child : children_)
-      child->LayersAsJSONArray(flags, rendering_context_map, json_array);
+  if (!transform_.IsIdentityOrTranslation())
+    json.SetArray("origin", PointAsJSONArray(transform_origin_));
+
+  if (!should_flatten_transform_)
+    json.SetBoolean("flattenInheritedTransform", false);
+
+  if (rendering_context3d_) {
+    auto it = rendering_context_map.find(rendering_context3d_);
+    int context_id = rendering_context_map.size() + 1;
+    if (it == rendering_context_map.end())
+      rendering_context_map.Set(rendering_context3d_, context_id);
+    else
+      context_id = it->value;
+
+    json.SetInteger("renderingContext", context_id);
   }
 }
 
@@ -1132,20 +1184,10 @@ void GraphicsLayer::RemoveLinkHighlight(LinkHighlight* link_highlight) {
   UpdateChildList();
 }
 
-void GraphicsLayer::SetScrollableArea(ScrollableArea* scrollable_area,
-                                      bool is_visual_viewport) {
+void GraphicsLayer::SetScrollableArea(ScrollableArea* scrollable_area) {
   if (scrollable_area_ == scrollable_area)
     return;
-
   scrollable_area_ = scrollable_area;
-
-  // VisualViewport scrolling may involve pinch zoom and gets routed through
-  // WebViewImpl explicitly rather than via ScrollableArea::didScroll since it
-  // needs to be set in tandem with the page scale delta.
-  if (is_visual_viewport)
-    layer_->Layer()->SetScrollClient(nullptr);
-  else
-    layer_->Layer()->SetScrollClient(scrollable_area);
 }
 
 std::unique_ptr<base::trace_event::ConvertableToTraceFormat>
@@ -1167,7 +1209,7 @@ void GraphicsLayer::didChangeScrollbarsHidden(bool hidden) {
     scrollable_area_->SetScrollbarsHidden(hidden);
 }
 
-PaintController& GraphicsLayer::GetPaintController() {
+PaintController& GraphicsLayer::GetPaintController() const {
   CHECK(DrawsContent());
   if (!paint_controller_)
     paint_controller_ = PaintController::Create();
@@ -1200,6 +1242,51 @@ sk_sp<PaintRecord> GraphicsLayer::CaptureRecord() {
   graphics_context.BeginRecording(bounds);
   GetPaintController().GetPaintArtifact().Replay(bounds, graphics_context);
   return graphics_context.EndRecording();
+}
+
+void GraphicsLayer::PaintContents(WebDisplayItemList* web_display_item_list,
+                                  PaintingControlSetting painting_control) {
+  TRACE_EVENT0("blink,benchmark", "GraphicsLayer::PaintContents");
+
+  PaintController& paint_controller = GetPaintController();
+  paint_controller.SetDisplayItemConstructionIsDisabled(
+      painting_control == kDisplayListConstructionDisabled);
+  paint_controller.SetSubsequenceCachingIsDisabled(painting_control ==
+                                                   kSubsequenceCachingDisabled);
+
+  if (painting_control == kPartialInvalidation)
+    client_->InvalidateTargetElementForTesting();
+
+  // We also disable caching when Painting or Construction are disabled. In both
+  // cases we would like to compare assuming the full cost of recording, not the
+  // cost of re-using cached content.
+  if (painting_control == kDisplayListCachingDisabled ||
+      painting_control == kDisplayListPaintingDisabled ||
+      painting_control == kDisplayListConstructionDisabled)
+    paint_controller.InvalidateAll();
+
+  GraphicsContext::DisabledMode disabled_mode =
+      GraphicsContext::kNothingDisabled;
+  if (painting_control == kDisplayListPaintingDisabled ||
+      painting_control == kDisplayListConstructionDisabled)
+    disabled_mode = GraphicsContext::kFullyDisabled;
+
+  // Anything other than PaintDefaultBehavior is for testing. In non-testing
+  // scenarios, it is an error to call GraphicsLayer::paint. Actual painting
+  // occurs in FrameView::paintTree(); this method merely copies the painted
+  // output to the WebDisplayItemList.
+  if (painting_control != kPaintDefaultBehavior)
+    Paint(nullptr, disabled_mode);
+
+  paint_controller.GetPaintArtifact().AppendToWebDisplayItemList(
+      OffsetFromLayoutObjectWithSubpixelAccumulation(), web_display_item_list);
+
+  paint_controller.SetDisplayItemConstructionIsDisabled(false);
+  paint_controller.SetSubsequenceCachingIsDisabled(false);
+}
+
+size_t GraphicsLayer::ApproximateUnsharedMemoryUsage() const {
+  return GetPaintController().ApproximateUnsharedMemoryUsage();
 }
 
 bool ScopedSetNeedsDisplayInRectForTrackingOnly::s_enabled_ = false;

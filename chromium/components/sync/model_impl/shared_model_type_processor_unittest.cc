@@ -12,7 +12,6 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
@@ -61,7 +60,7 @@ std::unique_ptr<EntityData> GenerateEntityData(const std::string& key,
 
 std::unique_ptr<ModelTypeChangeProcessor>
 CreateProcessor(bool commit_only, ModelType type, ModelTypeSyncBridge* bridge) {
-  return base::MakeUnique<SharedModelTypeProcessor>(
+  return std::make_unique<SharedModelTypeProcessor>(
       type, bridge, base::RepeatingClosure(), commit_only);
 }
 
@@ -179,7 +178,7 @@ class TestModelTypeSyncBridge : public FakeModelTypeSyncBridge {
 class SharedModelTypeProcessorTest : public ::testing::Test {
  public:
   SharedModelTypeProcessorTest()
-      : bridge_(base::MakeUnique<TestModelTypeSyncBridge>(false)) {}
+      : bridge_(std::make_unique<TestModelTypeSyncBridge>(false)) {}
 
   ~SharedModelTypeProcessorTest() override { CheckPostConditions(); }
 
@@ -225,10 +224,20 @@ class SharedModelTypeProcessorTest : public ::testing::Test {
     return specifics;
   }
 
+  void WriteItemAndAck(const std::string& key,
+                       std::unique_ptr<EntityData> entity_data) {
+    bridge()->WriteItem(key, std::move(entity_data));
+    worker()->VerifyPendingCommits(
+        {FakeModelTypeSyncBridge::TagHashFromKey(key)});
+    worker()->AckOnePendingCommit();
+    EXPECT_EQ(0U, worker()->GetNumPendingCommits());
+    return;
+  }
+
   void ResetState(bool keep_db, bool commit_only = false) {
-    bridge_ = keep_db ? base::MakeUnique<TestModelTypeSyncBridge>(
+    bridge_ = keep_db ? std::make_unique<TestModelTypeSyncBridge>(
                             std::move(bridge_), commit_only)
-                      : base::MakeUnique<TestModelTypeSyncBridge>(commit_only);
+                      : std::make_unique<TestModelTypeSyncBridge>(commit_only);
     worker_ = nullptr;
     CheckPostConditions();
   }
@@ -757,7 +766,7 @@ TEST_F(SharedModelTypeProcessorTest, LocalUpdateItemWithOverrides) {
   InitializeToReadyState();
   EXPECT_EQ(0U, worker()->GetNumPendingCommits());
 
-  std::unique_ptr<EntityData> entity_data = base::MakeUnique<EntityData>();
+  std::unique_ptr<EntityData> entity_data = std::make_unique<EntityData>();
   entity_data->specifics.mutable_preference()->set_name(kKey1);
   entity_data->specifics.mutable_preference()->set_value(kValue1);
 
@@ -780,7 +789,7 @@ TEST_F(SharedModelTypeProcessorTest, LocalUpdateItemWithOverrides) {
   EXPECT_EQ(kId1, metadata_v1.server_id());
   EXPECT_EQ(metadata_v1.client_tag_hash(), out_entity1.client_tag_hash);
 
-  entity_data = base::MakeUnique<EntityData>();
+  entity_data = std::make_unique<EntityData>();
   // This is a sketchy move here, changing the name will change the generated
   // storage key and client tag values.
   entity_data->specifics.mutable_preference()->set_name(kKey2);
@@ -1521,6 +1530,71 @@ TEST_F(SharedModelTypeProcessorTest, UntrackEntity) {
   EXPECT_FALSE(db().HasMetadata(kHash1));
   EXPECT_EQ(0U, db().metadata_count());
   EXPECT_EQ(0, bridge()->get_storage_key_call_count());
+}
+
+// Tests that SharedModelTypeProcessor can do garbage collection by version.
+// Create 2 entries, one is version 1, another is version 3. Check if sync
+// will delete version 1 entry when server set expired version is 2.
+TEST_F(SharedModelTypeProcessorTest, GarbageCollectionByVersion) {
+  InitializeToReadyState();
+
+  // Create 2 entries, one is version 3, another is version 1.
+  WriteItemAndAck(kKey1, kValue1);
+  worker()->UpdateFromServer(kHash1, GenerateSpecifics(kKey1, kValue2));
+  worker()->UpdateFromServer(kHash1, GenerateSpecifics(kKey1, kValue3));
+  WriteItemAndAck(kKey2, kValue2);
+
+  // Verify entries are created correctly.
+  EXPECT_EQ(3, db().GetMetadata(kKey1).server_version());
+  EXPECT_EQ(1, db().GetMetadata(kKey2).server_version());
+  EXPECT_EQ(2U, ProcessorEntityCount());
+  EXPECT_EQ(2U, db().metadata_count());
+  EXPECT_EQ(2U, db().data_count());
+  EXPECT_EQ(0U, worker()->GetNumPendingCommits());
+
+  // Expired the entries which are older than version 2.
+  sync_pb::GarbageCollectionDirective garbage_collection_directive;
+  garbage_collection_directive.set_version_watermark(2);
+  worker()->UpdateWithGarbageConllection(garbage_collection_directive);
+
+  EXPECT_EQ(1U, ProcessorEntityCount());
+  EXPECT_EQ(1U, db().metadata_count());
+  EXPECT_EQ(2U, db().data_count());
+  EXPECT_EQ(0U, worker()->GetNumPendingCommits());
+}
+
+// Tests that SharedModelTypeProcessor can do garbage collection by age.
+// Create 2 entries, one is 15-days-old, another is 5-days-old. Check if sync
+// will delete 15-days-old entry when server set expired age is 10 days.
+TEST_F(SharedModelTypeProcessorTest, GarbageCollectionByAge) {
+  InitializeToReadyState();
+
+  // Create 2 entries, one is 15-days-old, another is 5-days-old.
+  std::unique_ptr<EntityData> entity_data =
+      bridge()->GenerateEntityData(kKey1, kValue1);
+  entity_data->modification_time =
+      base::Time::Now() - base::TimeDelta::FromDays(15);
+  WriteItemAndAck(kKey1, std::move(entity_data));
+  entity_data = bridge()->GenerateEntityData(kKey2, kValue2);
+  entity_data->modification_time =
+      base::Time::Now() - base::TimeDelta::FromDays(5);
+  WriteItemAndAck(kKey2, std::move(entity_data));
+
+  // Verify entries are created correctly.
+  EXPECT_EQ(2U, ProcessorEntityCount());
+  EXPECT_EQ(2U, db().metadata_count());
+  EXPECT_EQ(2U, db().data_count());
+  EXPECT_EQ(0U, worker()->GetNumPendingCommits());
+
+  // Expired the entries which are older than 10 days.
+  sync_pb::GarbageCollectionDirective garbage_collection_directive;
+  garbage_collection_directive.set_age_watermark_in_days(10);
+  worker()->UpdateWithGarbageConllection(garbage_collection_directive);
+
+  EXPECT_EQ(1U, ProcessorEntityCount());
+  EXPECT_EQ(1U, db().metadata_count());
+  EXPECT_EQ(2U, db().data_count());
+  EXPECT_EQ(0U, worker()->GetNumPendingCommits());
 }
 
 }  // namespace syncer

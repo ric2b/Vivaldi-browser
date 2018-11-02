@@ -9,6 +9,7 @@
 #include "base/time/time.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "google_apis/gaia/google_service_auth_error.h"
+#include "services/identity/public/interfaces/account.mojom.h"
 
 namespace identity {
 
@@ -103,7 +104,8 @@ void IdentityManager::GetPrimaryAccountWhenAvailable(
   AccountInfo account_info = signin_manager_->GetAuthenticatedAccountInfo();
   AccountState account_state = GetStateOfAccount(account_info);
 
-  if (!account_state.has_refresh_token) {
+  if (!account_state.has_refresh_token ||
+      token_service_->RefreshTokenHasError(account_info.account_id)) {
     primary_account_available_callbacks_.push_back(std::move(callback));
     return;
   }
@@ -120,6 +122,26 @@ void IdentityManager::GetAccountInfoFromGaiaId(
   AccountInfo account_info = account_tracker_->FindAccountInfoByGaiaId(gaia_id);
   AccountState account_state = GetStateOfAccount(account_info);
   std::move(callback).Run(account_info, account_state);
+}
+
+void IdentityManager::GetAccounts(GetAccountsCallback callback) {
+  std::vector<mojom::AccountPtr> accounts;
+
+  for (const std::string& account_id : token_service_->GetAccounts()) {
+    AccountInfo account_info = account_tracker_->GetAccountInfo(account_id);
+    AccountState account_state = GetStateOfAccount(account_info);
+
+    mojom::AccountPtr account =
+        mojom::Account::New(account_info, account_state);
+
+    if (account->state.is_primary_account) {
+      accounts.insert(accounts.begin(), std::move(account));
+    } else {
+      accounts.push_back(std::move(account));
+    }
+  }
+
+  std::move(callback).Run(std::move(accounts));
 }
 
 void IdentityManager::GetAccessToken(const std::string& account_id,
@@ -150,7 +172,8 @@ void IdentityManager::OnAccountStateChange(const std::string& account_id) {
 
   // Check whether the primary account is available and notify any waiting
   // consumers if so.
-  if (account_state.is_primary_account && account_state.has_refresh_token) {
+  if (account_state.is_primary_account && account_state.has_refresh_token &&
+      !token_service_->RefreshTokenHasError(account_info.account_id)) {
     DCHECK(!account_info.account_id.empty());
     DCHECK(!account_info.email.empty());
     DCHECK(!account_info.gaia.empty());

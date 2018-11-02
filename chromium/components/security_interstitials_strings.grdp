@@ -8,6 +8,62 @@
     Hide advanced
   </message>
 
+  <!-- Captive portal interstitial -->
+  <message name="IDS_CAPTIVE_PORTAL_AUTHORIZATION_DIALOG_NAME" desc="Name of the modal Web dialog (displayed in the title) displaying captive portal login page on Chrome OS.">
+    Captive Portal Authorization
+  </message>
+  <message name="IDS_CAPTIVE_PORTAL_HEADING_WIRED" desc="Heading in the error page when a secure request is blocked because a captive portal is manipulating a wired connection (e.g. ethernet)">
+    Connect to network
+  </message>
+  <message name="IDS_CAPTIVE_PORTAL_HEADING_WIFI" desc="Heading in the error page when a secure request is blocked because a captive portal is manipulating a Wi-Fi connection">
+    Connect to Wi-Fi
+  </message>
+  <message name="IDS_CAPTIVE_PORTAL_PRIMARY_PARAGRAPH_WIRED" desc="The primary explanatory paragraph for the captive portal error page for wired network connections.">
+    The network you are using may require you to visit <ph name="BEGIN_BOLD">&lt;strong&gt;</ph><ph name="LOGIN_URL">$1<ex>example.com</ex></ph><ph name="END_BOLD">&lt;/strong&gt;</ph>.
+  </message>
+  <message name="IDS_CAPTIVE_PORTAL_PRIMARY_PARAGRAPH_WIFI" desc="The primary explanatory paragraph for the captive portal error page for Wi-Fi connections.">
+    The Wi-Fi you are using may require you to visit <ph name="BEGIN_BOLD">&lt;strong&gt;</ph><ph name="LOGIN_URL">$1<ex>example.com</ex></ph><ph name="END_BOLD">&lt;/strong&gt;</ph>.
+  </message>
+  <message name="IDS_CAPTIVE_PORTAL_PRIMARY_PARAGRAPH_WIFI_SSID" desc="The primary explanatory paragraph for the captive portal error page for Wi-Fi connections, displaying the Wi-Fi name.">
+    The Wi-Fi you are using (<ph name="WIFI_NAME">$1<ex>Google Guest</ex></ph>) may require you to visit <ph name="BEGIN_BOLD">&lt;strong&gt;</ph><ph name="LOGIN_URL">$2<ex>example.com</ex></ph><ph name="END_BOLD">&lt;/strong&gt;</ph>.
+  </message>
+  <message name="IDS_CAPTIVE_PORTAL_PRIMARY_PARAGRAPH_NO_LOGIN_URL_WIRED" desc="The primary explanatory paragraph for the captive portal error page for network connections when the captive portal login url isn't available.">
+    The network you are using may require you to visit its login page.
+  </message>
+  <message name="IDS_CAPTIVE_PORTAL_PRIMARY_PARAGRAPH_NO_LOGIN_URL_WIFI" desc="The primary explanatory paragraph for the captive portal error page for Wi-Fi connections when the captive portal login url isn't available.">
+    The Wi-Fi you are using may require you to visit its login page.
+  </message>
+  <message name="IDS_CAPTIVE_PORTAL_PRIMARY_PARAGRAPH_NO_LOGIN_URL_WIFI_SSID" desc="The primary explanatory paragraph for the captive portal error page for Wi-Fi connections when the captive portal login url isn't available.">
+    The Wi-Fi you are using (<ph name="WIFI_NAME">$1<ex>Google Guest</ex></ph>) may require you to visit its login page.
+  </message>
+  <message name="IDS_CAPTIVE_PORTAL_BUTTON_OPEN_LOGIN_PAGE" desc="Text for the open login page button">
+    Connect
+  </message>
+
+  <!-- MITM software interstitial -->
+  <message name="IDS_MITM_SOFTWARE_HEADING" desc="Header of an error page. A user visits a website, antivirus or firewall software interferes with their connection, and they are shown this error.">
+    An application is stopping Chrome from safely connecting to this site
+  </message>
+  <message name="IDS_MITM_SOFTWARE_PRIMARY_PARAGRAPH_ENTERPRISE" desc="Main body of an error page. A user visits a website, antivirus or firewall software interferes with their connection, and they are shown this error. There is a title above and a button below that exposes more information. ‘IT administrator’ here refers to the information technology expert at the user’s school or company. Placeholder text is the name of a computer program.">
+    &quot;<ph name="SOFTWARE_NAME">$1<ex>Misconfigured Antivirus</ex></ph>&quot; wasn’t installed properly on your computer or network. Ask your IT administrator to resolve this issue.
+  </message>
+  <message name="IDS_MITM_SOFTWARE_PRIMARY_PARAGRAPH_NONENTERPRISE" desc="Main body of an error page. A user visits a website, antivirus or firewall software interferes with their connection, and they are shown this error. There is a title above and a button below that exposes more information. Placeholder text is the name of a computer program.">
+    &quot;<ph name="SOFTWARE_NAME">$1<ex>Misconfigured Antivirus</ex></ph>&quot; wasn’t installed properly on your computer or the network:
+    &lt;ul&gt;
+    &lt;li&gt;Try uninstalling or disabling &quot;<ph name="SOFTWARE_NAME">$1<ex>Misconfigured Antivirus</ex></ph>&quot;&lt;/li&gt;
+    &lt;li&gt;Try connecting to another network&lt;/li&gt;
+    &lt;/ul&gt;
+  </message>
+  <message name="IDS_MITM_SOFTWARE_EXPLANATION_ENTERPRISE" desc="Extended description for an error page hidden behind an 'Advanced' button. A user visits a website, antivirus or firewall software interferes with their connection, and they are shown this error. Page title reads 'An application is stopping Chrome from safely connection to this site' and there is a shorter description of the error shown above. First placeholder text is the name of a computer program. Second placeholder text is some further explanation.">
+    A root certificate for &quot;<ph name="SOFTWARE_NAME">$1<ex>Misconfigured Antivirus</ex></ph>&quot; is required but isn’t installed. Your IT administrator should look at configuration instructions for &quot;<ph name="SOFTWARE_NAME">$1<ex>Misconfigured Antivirus</ex></ph>&quot; to fix this problem. <ph name="FURTHER_EXPLANATION">$2<ex>Further explanation goes here.</ex></ph>
+  </message>
+  <message name="IDS_MITM_SOFTWARE_EXPLANATION_NONENTERPRISE" desc="Extended description for an error page hidden behind an 'Advanced' button. A user visits a website, antivirus or firewall software interferes with their connection, and they are shown this error. Page title reads 'An application is stopping Chrome from safely connection to this site' and there is a shorter description of the error shown above. First placeholder text is the name of a computer program. Second placeholder text is some further explanation.">
+    &quot;<ph name="SOFTWARE_NAME">$1<ex>Misconfigured Antivirus</ex></ph>&quot; isn’t configured correctly. Uninstalling &quot;<ph name="SOFTWARE_NAME">$1<ex>Misconfigured Antivirus</ex></ph>&quot; usually fixes the problem. <ph name="FURTHER_EXPLANATION">$2<ex>Further explanation goes here.</ex></ph>
+  </message>
+  <message name="IDS_MITM_SOFTWARE_EXPLANATION" desc="Part of an extended description hidden behind an 'Advanced' button on an error page. A user visits a website, antivirus or firewall software interferes with their connection, and they are shown this error. Page title and additional description of the error are shown above. 'Antivirus software' is software that finds and deletes viruses on a user's computer. 'Firewall software' is software typically used on a company network that keeps unwanted people from accessing the network. 'Proxy software' is software on a network that blocks the user from viewing certain websites. Proxies may be used to keep school children from viewing inappropriate websites for example. 'Web-filtering software' is a synonym for proxy software, so it can be excluded in translation.">
+    Applications that can cause this error includes antivirus, firewall, and web-filtering or proxy software.
+  </message>
+
   <!-- Clock errors -->
   <message name="IDS_CLOCK_ERROR_TITLE" desc="Tab title. Context: the browser can't load a page because the device's clock is wrong.">
     Clock error
@@ -61,9 +117,16 @@
   </message>
 
   <!-- SSL error page: Superfish-specific -->
-  <message name="IDS_SSL_SUPERFISH_HEADING" desc="The large heading at the top of the Superfish-specific SSL interstitial.">
-    Software on your computer is stopping Chrome from safely connecting to the web
-  </message>
+  <if expr="_google_chrome">
+    <message name="IDS_SSL_SUPERFISH_HEADING" desc="The large heading at the top of the Superfish-specific SSL interstitial.">
+      Software on your computer is stopping Chrome from safely connecting to the web
+    </message>
+  </if>
+  <if expr="not _google_chrome">
+    <message name="IDS_SSL_SUPERFISH_HEADING" desc="The large heading at the top of the Superfish-specific SSL interstitial.">
+      Software on your computer is stopping Chromium from safely connecting to the web
+    </message>
+  </if>
   <message name="IDS_SSL_SUPERFISH_PRIMARY_PARAGRAPH" desc="The primary explanatory paragraph for the Superfish-specific SSL interstitial.">
     <ph name="BEGIN_PARAGRAPH">&lt;p&gt;</ph>Follow these steps to temporarily disable the software so you can get on the web. You'll need administrator privileges.<ph name="END_PARAGRAPH">&lt;/p&gt;</ph>
 

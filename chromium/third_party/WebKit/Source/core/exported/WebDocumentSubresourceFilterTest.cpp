@@ -9,7 +9,7 @@
 
 #include "core/dom/Element.h"
 #include "core/frame/FrameTestHelpers.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "core/html/HTMLImageElement.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
@@ -61,7 +61,7 @@ class TestDocumentSubresourceFilter : public WebDocumentSubresourceFilter {
 class SubresourceFilteringWebFrameClient
     : public FrameTestHelpers::TestWebFrameClient {
  public:
-  void DidStartProvisionalLoad(WebDataSource* data_source,
+  void DidStartProvisionalLoad(WebDocumentLoader* data_source,
                                WebURLRequest& request) override {
     // Normally, the filter should be set when the load is committed. For
     // the sake of this test, however, inject it earlier to verify that it
@@ -79,7 +79,7 @@ class SubresourceFilteringWebFrameClient
   }
 
  private:
-  // Weak, owned by WebDataSource.
+  // Weak, owned by WebDocumentLoader.
   TestDocumentSubresourceFilter* subresource_filter_ = nullptr;
   bool allow_subresources_from_next_load_ = false;
 };
@@ -107,7 +107,7 @@ class WebDocumentSubresourceFilterTest : public ::testing::Test {
   }
 
   const std::string& BaseURL() const { return base_url_; }
-  WebLocalFrameBase* MainFrame() { return web_view_helper_.LocalMainFrame(); }
+  WebLocalFrameImpl* MainFrame() { return web_view_helper_.LocalMainFrame(); }
   const std::vector<std::string>& QueriedSubresourcePaths() const {
     return client_.SubresourceFilter()->QueriedSubresourcePaths();
   }

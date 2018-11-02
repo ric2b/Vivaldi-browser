@@ -126,11 +126,11 @@ class CORE_EXPORT ImageResource final
   bool HasClientsOrObservers() const override;
 
   void UpdateImageAndClearBuffer();
-  void UpdateImage(PassRefPtr<SharedBuffer>,
+  void UpdateImage(RefPtr<SharedBuffer>,
                    ImageResourceContent::UpdateImageOption,
                    bool all_data_received);
 
-  void CheckNotify() override;
+  void NotifyFinished() override;
 
   void DestroyDecodedDataIfPossible() override;
   void DestroyDecodedDataForFailedRevalidation() override;

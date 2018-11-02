@@ -13,7 +13,7 @@
 #include "android_webview/grit/aw_strings.h"
 #include "android_webview/renderer/aw_content_settings_client.h"
 #include "android_webview/renderer/aw_key_systems.h"
-#include "android_webview/renderer/aw_print_web_view_helper_delegate.h"
+#include "android_webview/renderer/aw_print_render_frame_helper_delegate.h"
 #include "android_webview/renderer/aw_render_frame_ext.h"
 #include "android_webview/renderer/aw_render_view_ext.h"
 #include "android_webview/renderer/print_render_frame_observer.h"
@@ -24,9 +24,8 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "components/autofill/content/renderer/autofill_agent.h"
-#include "components/autofill/content/renderer/password_autofill_agent.h"
-#include "components/printing/renderer/print_web_view_helper.h"
+#include "components/printing/renderer/print_render_frame_helper.h"
+#include "components/safe_browsing/renderer/renderer_url_loader_throttle.h"
 #include "components/safe_browsing/renderer/websocket_sb_handshake_throttle.h"
 #include "components/spellcheck/spellcheck_build_features.h"
 #include "components/supervised_user_error_page/gin_wrapper.h"
@@ -46,7 +45,6 @@
 #include "content/public/renderer/render_view.h"
 #include "net/base/escape.h"
 #include "net/base/net_errors.h"
-#include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/WebKit/public/platform/WebString.h"
@@ -163,8 +161,8 @@ void AwContentRendererClient::RenderFrameCreated(
     content::RenderFrame* render_frame) {
   new AwContentSettingsClient(render_frame);
   new PrintRenderFrameObserver(render_frame);
-  new printing::PrintWebViewHelper(
-      render_frame, base::MakeUnique<AwPrintWebViewHelperDelegate>());
+  new printing::PrintRenderFrameHelper(
+      render_frame, base::MakeUnique<AwPrintRenderFrameHelperDelegate>());
   new AwRenderFrameExt(render_frame);
 
   // TODO(jam): when the frame tree moves into content and parent() works at
@@ -177,12 +175,6 @@ void AwContentRendererClient::RenderFrameCreated(
     RenderThread::Get()->Send(new AwViewHostMsg_SubFrameCreated(
         parent_frame->GetRoutingID(), render_frame->GetRoutingID()));
   }
-
-  // TODO(sgurun) do not create a password autofill agent (change
-  // autofill agent to store a weakptr).
-  autofill::PasswordAutofillAgent* password_autofill_agent =
-      new autofill::PasswordAutofillAgent(render_frame);
-  new autofill::AutofillAgent(render_frame, password_autofill_agent, NULL);
 
 #if BUILDFLAG(ENABLE_SPELLCHECK)
   new SpellCheckProvider(render_frame, spellcheck_.get());
@@ -204,8 +196,7 @@ void AwContentRendererClient::RenderViewCreated(
 #endif
 }
 
-bool AwContentRendererClient::HasErrorPage(int http_status_code,
-                                           std::string* error_domain) {
+bool AwContentRendererClient::HasErrorPage(int http_status_code) {
   return http_status_code >= 400;
 }
 
@@ -308,6 +299,23 @@ AwContentRendererClient::CreateWebSocketHandshakeThrottle() {
     return nullptr;
   return base::MakeUnique<safe_browsing::WebSocketSBHandshakeThrottle>(
       safe_browsing_.get());
+}
+
+bool AwContentRendererClient::WillSendRequest(
+    blink::WebLocalFrame* frame,
+    ui::PageTransition transition_type,
+    const blink::WebURL& url,
+    std::vector<std::unique_ptr<content::URLLoaderThrottle>>* throttles,
+    GURL* new_url) {
+  if (UsingSafeBrowsingMojoService()) {
+    content::RenderFrame* render_frame =
+        content::RenderFrame::FromWebFrame(frame);
+    throttles->push_back(
+        base::MakeUnique<safe_browsing::RendererURLLoaderThrottle>(
+            safe_browsing_.get(), render_frame->GetRoutingID()));
+  }
+
+  return false;
 }
 
 bool AwContentRendererClient::ShouldUseMediaPlayerForURL(const GURL& url) {

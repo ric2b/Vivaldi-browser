@@ -40,10 +40,12 @@ IDCompositionSurface* g_current_surface;
 
 DirectCompositionChildSurfaceWin::DirectCompositionChildSurfaceWin(
     const gfx::Size& size,
+    bool is_hdr,
     bool has_alpha,
     bool enable_dc_layers)
     : gl::GLSurfaceEGL(),
       size_(size),
+      is_hdr_(is_hdr),
       has_alpha_(has_alpha),
       enable_dc_layers_(enable_dc_layers) {}
 
@@ -79,15 +81,13 @@ void DirectCompositionChildSurfaceWin::ReleaseCurrentSurface() {
   swap_chain_.Reset();
 }
 
-void DirectCompositionChildSurfaceWin::InitializeSurface() {
+bool DirectCompositionChildSurfaceWin::InitializeSurface() {
   TRACE_EVENT1("gpu", "DirectCompositionChildSurfaceWin::InitializeSurface()",
                "enable_dc_layers_", enable_dc_layers_);
   DCHECK(!dcomp_surface_);
   DCHECK(!swap_chain_);
   DXGI_FORMAT output_format =
-      base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kEnableHDR)
-          ? DXGI_FORMAT_R16G16B16A16_FLOAT
-          : DXGI_FORMAT_B8G8R8A8_UNORM;
+      is_hdr_ ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_B8G8R8A8_UNORM;
   if (enable_dc_layers_) {
     // Always treat as premultiplied, because an underlay could cause it to
     // become transparent.
@@ -113,7 +113,8 @@ void DirectCompositionChildSurfaceWin::InitializeSurface() {
     desc.Stereo = FALSE;
     desc.SampleDesc.Count = 1;
     desc.BufferCount = 2;
-    desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    desc.BufferUsage =
+        DXGI_USAGE_RENDER_TARGET_OUTPUT | DXGI_USAGE_SHADER_INPUT;
     desc.Scaling = DXGI_SCALING_STRETCH;
     desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
     desc.AlphaMode = alpha_mode;
@@ -122,8 +123,9 @@ void DirectCompositionChildSurfaceWin::InitializeSurface() {
         d3d11_device_.Get(), &desc, nullptr, swap_chain_.GetAddressOf());
     has_been_rendered_to_ = false;
     first_swap_ = true;
-    CHECK(SUCCEEDED(hr));
+    return SUCCEEDED(hr);
   }
+  return true;
 }
 
 void DirectCompositionChildSurfaceWin::ReleaseDrawTexture(bool will_discard) {
@@ -136,6 +138,7 @@ void DirectCompositionChildSurfaceWin::ReleaseDrawTexture(bool will_discard) {
     if (dcomp_surface_) {
       HRESULT hr = dcomp_surface_->EndDraw();
       CHECK(SUCCEEDED(hr));
+      dcomp_surface_serial_++;
     } else if (!will_discard) {
       DXGI_PRESENT_PARAMETERS params = {};
       RECT dirty_rect = swap_rect_.ToRECT();
@@ -158,7 +161,7 @@ void DirectCompositionChildSurfaceWin::ReleaseDrawTexture(bool will_discard) {
       }
     }
   }
-  if (dcomp_surface_ == g_current_surface)
+  if (dcomp_surface_.Get() == g_current_surface)
     g_current_surface = nullptr;
 }
 
@@ -177,7 +180,7 @@ void DirectCompositionChildSurfaceWin::Destroy() {
     }
     real_surface_ = nullptr;
   }
-  if (dcomp_surface_ && (dcomp_surface_ == g_current_surface)) {
+  if (dcomp_surface_ && (dcomp_surface_.Get() == g_current_surface)) {
     HRESULT hr = dcomp_surface_->EndDraw();
     CHECK(SUCCEEDED(hr));
     g_current_surface = nullptr;
@@ -212,7 +215,7 @@ bool DirectCompositionChildSurfaceWin::SupportsPostSubBuffer() {
 }
 
 bool DirectCompositionChildSurfaceWin::OnMakeCurrent(gl::GLContext* context) {
-  if (g_current_surface != dcomp_surface_) {
+  if (g_current_surface != dcomp_surface_.Get()) {
     if (g_current_surface) {
       HRESULT hr = g_current_surface->SuspendDraw();
       CHECK(SUCCEEDED(hr));
@@ -241,7 +244,10 @@ bool DirectCompositionChildSurfaceWin::SetDrawRectangle(
   if ((enable_dc_layers_ && !dcomp_surface_) ||
       (!enable_dc_layers_ && !swap_chain_)) {
     ReleaseCurrentSurface();
-    InitializeSurface();
+    if (!InitializeSurface()) {
+      LOG(ERROR) << "InitializeSurface failed";
+      return false;
+    }
   }
 
   if (!gfx::Rect(size_).Contains(rectangle)) {

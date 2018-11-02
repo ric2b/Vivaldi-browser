@@ -23,10 +23,11 @@
 #include "components/toolbar/toolbar_model.h"
 #include "ios/chrome/browser/autocomplete/autocomplete_scheme_classifier_impl.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#include "ios/chrome/browser/prerender/preload_provider.h"
 #include "ios/chrome/browser/ui/omnibox/chrome_omnibox_client_ios.h"
 #include "ios/chrome/browser/ui/omnibox/omnibox_popup_view_ios.h"
+#include "ios/chrome/browser/ui/omnibox/omnibox_text_field_paste_delegate.h"
 #include "ios/chrome/browser/ui/omnibox/omnibox_util.h"
-#include "ios/chrome/browser/ui/omnibox/preload_provider.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #include "ios/chrome/grit/ios_theme_resources.h"
 #include "ios/shared/chrome/browser/ui/omnibox/web_omnibox_edit_controller.h"
@@ -170,13 +171,19 @@ OmniboxViewIOS::OmniboxViewIOS(OmniboxTextFieldIOS* field,
       browser_state_(browser_state),
       field_(field),
       controller_(controller),
-      preloader_(preloader),
       ignore_popup_updates_(false),
       attributing_display_string_(nil) {
   DCHECK(field_);
-  popup_view_.reset(new OmniboxPopupViewIOS(this, model(), positioner));
+  popup_view_ = base::MakeUnique<OmniboxPopupViewIOS>(
+      this->browser_state(), model(), this, positioner);
   field_delegate_.reset(
       [[AutocompleteTextFieldDelegate alloc] initWithEditView:this]);
+
+  if (@available(iOS 11.0, *)) {
+    paste_delegate_.reset([[OmniboxTextFieldPasteDelegate alloc] init]);
+    [field_ setPasteDelegate:paste_delegate_];
+  }
+
   [field_ setDelegate:field_delegate_];
   [field_ addTarget:field_delegate_
                 action:@selector(textFieldDidChange:)
@@ -393,10 +400,6 @@ void OmniboxViewIOS::OnDidEndEditing() {
   // OnKillFocus() must come after exiting pre-edit.
   controller_->OnKillFocus();
 
-  // Cancel any outstanding preload requests.
-  [preloader_ cancelPrerender];
-  [preloader_ cancelPrefetch];
-
   // Blow away any in-progress edits.
   RevertAll();
   DCHECK(![field_ hasAutocompleteText]);
@@ -492,7 +495,7 @@ void OmniboxViewIOS::OnDidChange(bool processing_user_event) {
     base::string16 pastedText = base::SysNSStringToUTF16([field_ text]);
     base::string16 newText = OmniboxView::SanitizeTextForPaste(pastedText);
     if (pastedText != newText) {
-      [field_ setText:SysUTF16ToNSString(newText)];
+      [field_ setText:base::SysUTF16ToNSString(newText)];
     }
   }
 
@@ -644,7 +647,6 @@ void OmniboxViewIOS::UpdateSchemeStyle(const gfx::Range& range) {
     return;
   }
 
-  DCHECK_NE(security_state::SECURITY_WARNING, security_level);
   DCHECK_NE(security_state::SECURE_WITH_POLICY_INSTALLED_CERT, security_level);
 
   if (security_level == security_state::DANGEROUS) {
@@ -803,43 +805,6 @@ void OmniboxViewIOS::FocusOmnibox() {
   [field_ becomeFirstResponder];
 }
 
-// Called whenever the popup results change.  May trigger the URLs of
-// autocomplete results to be prerendered or prefetched.
-void OmniboxViewIOS::OnPopupResultsChanged(const AutocompleteResult& result) {
-  if (!ignore_popup_updates_ && !result.empty()) {
-    const AutocompleteMatch& match = result.match_at(0);
-    bool is_inline_autocomplete = !match.inline_autocompletion.empty();
-
-    // TODO(rohitrao): When prerendering the result of a paste operation, we
-    // should change the transition to LINK instead of TYPED.  b/6143631.
-
-    // Only prerender HISTORY_URL matches, which come from the history DB.  Do
-    // not prerender other types of matches, including matches from the search
-    // provider.
-    if (is_inline_autocomplete &&
-        match.type == AutocompleteMatchType::HISTORY_URL) {
-      ui::PageTransition transition = ui::PageTransitionFromInt(
-          match.transition | ui::PAGE_TRANSITION_FROM_ADDRESS_BAR);
-      [preloader_ prerenderURL:match.destination_url
-                      referrer:web::Referrer()
-                    transition:transition
-                   immediately:is_inline_autocomplete];
-    } else {
-      [preloader_ cancelPrerender];
-    }
-
-    // If the first autocomplete result is a search suggestion, prefetch the
-    // corresponding search result page.
-    if (match.type == AutocompleteMatchType::SEARCH_SUGGEST) {
-      ui::PageTransition transition = ui::PageTransitionFromInt(
-          match.transition | ui::PAGE_TRANSITION_FROM_ADDRESS_BAR);
-      [preloader_ prefetchURL:match.destination_url transition:transition];
-    } else {
-      [preloader_ cancelPrefetch];
-    }
-  }
-}
-
 BOOL OmniboxViewIOS::IsPopupOpen() {
   return popup_view_->IsOpen();
 }
@@ -874,4 +839,42 @@ void OmniboxViewIOS::EmphasizeURLComponents() {
   if (!IsEditingOrEmpty())
     SetText(GetText());
 #endif
+}
+
+#pragma mark - OmniboxPopupViewSuggestionsDelegate
+
+void OmniboxViewIOS::OnTopmostSuggestionImageChanged(int imageId) {
+  this->SetLeftImage(imageId);
+}
+
+void OmniboxViewIOS::OnResultsChanged(const AutocompleteResult& result) {
+  if (ignore_popup_updates_) {
+    // Please contact rohitrao@ if the following DCHECK ever fires.  If
+    // |ignore_popup_updates_| is true but |result| is not empty, then the new
+    // prerender code in ChromeOmniboxClientIOS will incorrectly discard its
+    // prerender.
+    // TODO(crbug.com/754050): Remove this whole method once we are reasonably
+    // confident that we are not throwing away prerenders.
+    DCHECK(result.empty());
+  }
+}
+
+void OmniboxViewIOS::OnPopupDidScroll() {
+  if (!IsIPadIdiom()) {
+    this->HideKeyboard();
+  }
+}
+
+void OmniboxViewIOS::OnSelectedMatchForAppending(const base::string16& str) {
+  this->SetUserText(str);
+  this->FocusOmnibox();
+}
+
+void OmniboxViewIOS::OnSelectedMatchForOpening(
+    AutocompleteMatch match,
+    WindowOpenDisposition disposition,
+    const GURL& alternate_nav_url,
+    const base::string16& pasted_text,
+    size_t index) {
+  this->OpenMatch(match, disposition, alternate_nav_url, pasted_text, index);
 }

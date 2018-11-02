@@ -44,6 +44,7 @@
 #include "platform/graphics/AcceleratedStaticBitmapImage.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/graphics/ImageBuffer.h"
+#include "platform/graphics/UnacceleratedStaticBitmapImage.h"
 #include "platform/graphics/WebGraphicsContext3DProviderWrapper.h"
 #include "platform/graphics/gpu/Extensions3DUtil.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
@@ -56,6 +57,7 @@
 #include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/gpu/GrContext.h"
 #include "third_party/skia/include/gpu/gl/GrGLTypes.h"
+#include "v8/include/v8.h"
 
 namespace blink {
 
@@ -80,13 +82,19 @@ PassRefPtr<DrawingBuffer> DrawingBuffer::Create(
     WebGLVersion webgl_version,
     ChromiumImageUsage chromium_image_usage,
     const CanvasColorParams& color_params) {
-  DCHECK(context_provider);
-
   if (g_should_fail_drawing_buffer_creation_for_testing) {
     g_should_fail_drawing_buffer_creation_for_testing = false;
     return nullptr;
   }
 
+  CheckedNumeric<int> data_size = color_params.BytesPerPixel();
+  data_size *= size.Width();
+  data_size *= size.Height();
+  if (!data_size.IsValid() ||
+      data_size.ValueOrDie() > v8::TypedArray::kMaxLength)
+    return nullptr;
+
+  DCHECK(context_provider);
   std::unique_ptr<Extensions3DUtil> extensions_util =
       Extensions3DUtil::Create(context_provider->ContextGL());
   if (!extensions_util->IsValid()) {
@@ -253,7 +261,7 @@ std::unique_ptr<viz::SharedBitmap> DrawingBuffer::CreateOrRecycleBitmap() {
 
 bool DrawingBuffer::PrepareTextureMailbox(
     viz::TextureMailbox* out_mailbox,
-    std::unique_ptr<cc::SingleReleaseCallback>* out_release_callback) {
+    std::unique_ptr<viz::SingleReleaseCallback>* out_release_callback) {
   ScopedStateRestorer scoped_state_restorer(this);
   bool force_gpu_result = false;
   return PrepareTextureMailboxInternal(out_mailbox, out_release_callback,
@@ -262,7 +270,7 @@ bool DrawingBuffer::PrepareTextureMailbox(
 
 bool DrawingBuffer::PrepareTextureMailboxInternal(
     viz::TextureMailbox* out_mailbox,
-    std::unique_ptr<cc::SingleReleaseCallback>* out_release_callback,
+    std::unique_ptr<viz::SingleReleaseCallback>* out_release_callback,
     bool force_gpu_result) {
   DCHECK(state_restorer_);
   if (destruction_in_progress_) {
@@ -298,7 +306,7 @@ bool DrawingBuffer::PrepareTextureMailboxInternal(
 
 bool DrawingBuffer::FinishPrepareTextureMailboxSoftware(
     viz::TextureMailbox* out_mailbox,
-    std::unique_ptr<cc::SingleReleaseCallback>* out_release_callback) {
+    std::unique_ptr<viz::SingleReleaseCallback>* out_release_callback) {
   DCHECK(state_restorer_);
   std::unique_ptr<viz::SharedBitmap> bitmap = CreateOrRecycleBitmap();
   if (!bitmap)
@@ -327,8 +335,8 @@ bool DrawingBuffer::FinishPrepareTextureMailboxSoftware(
   auto func = WTF::Bind(&DrawingBuffer::MailboxReleasedSoftware,
                         RefPtr<DrawingBuffer>(this),
                         WTF::Passed(std::move(bitmap)), size_);
-  *out_release_callback =
-      cc::SingleReleaseCallback::Create(ConvertToBaseCallback(std::move(func)));
+  *out_release_callback = viz::SingleReleaseCallback::Create(
+      ConvertToBaseCallback(std::move(func)));
 
   if (preserve_drawing_buffer_ == kDiscard) {
     SetBufferClearNeeded(true);
@@ -339,7 +347,7 @@ bool DrawingBuffer::FinishPrepareTextureMailboxSoftware(
 
 bool DrawingBuffer::FinishPrepareTextureMailboxGpu(
     viz::TextureMailbox* out_mailbox,
-    std::unique_ptr<cc::SingleReleaseCallback>* out_release_callback) {
+    std::unique_ptr<viz::SingleReleaseCallback>* out_release_callback) {
   DCHECK(state_restorer_);
   if (webgl_version_ > kWebGL1) {
     state_restorer_->SetPixelUnpackBufferBindingDirty();
@@ -387,7 +395,19 @@ bool DrawingBuffer::FinishPrepareTextureMailboxGpu(
 #if defined(OS_MACOSX)
     gl_->DescheduleUntilFinishedCHROMIUM();
 #endif
-    gl_->Flush();
+    // It's critical to order the execution of this context's work relative
+    // to other contexts, in particular the compositor. Previously this
+    // used to be a Flush, and there was a bug that we didn't flush before
+    // InsertFenceSyncCHROMIUM, above. On some platforms this caused
+    // incorrect rendering with complex WebGL content that wasn't always
+    // properly flushed to the driver. There is now a basic assumption that
+    // there are implicit flushes between contexts at the lowest level.
+    //
+    // Note also that theoretically this should be ShallowFlushCHROMIUM,
+    // but as we are moving toward using unverified sync tokens everywhere,
+    // and this code is working, we would rather not incur two synchronous
+    // IPCs here (which that would imply).
+    gl_->OrderingBarrierCHROMIUM();
     gl_->GenSyncTokenCHROMIUM(
         fence_sync, color_buffer_for_mailbox->produce_sync_token.GetData());
   }
@@ -408,7 +428,7 @@ bool DrawingBuffer::FinishPrepareTextureMailboxGpu(
     auto func =
         WTF::Bind(&DrawingBuffer::MailboxReleasedGpu,
                   RefPtr<DrawingBuffer>(this), color_buffer_for_mailbox);
-    *out_release_callback = cc::SingleReleaseCallback::Create(
+    *out_release_callback = viz::SingleReleaseCallback::Create(
         ConvertToBaseCallback(std::move(func)));
   }
 
@@ -470,7 +490,7 @@ PassRefPtr<StaticBitmapImage> DrawingBuffer::TransferToStaticBitmapImage() {
   GrContext* gr_context = ContextProvider()->GetGrContext();
 
   viz::TextureMailbox texture_mailbox;
-  std::unique_ptr<cc::SingleReleaseCallback> release_callback;
+  std::unique_ptr<viz::SingleReleaseCallback> release_callback;
   bool success = false;
   if (gr_context) {
     bool force_gpu_result = true;

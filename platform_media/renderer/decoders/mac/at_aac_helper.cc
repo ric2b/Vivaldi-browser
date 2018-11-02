@@ -51,8 +51,8 @@ ScopedAudioChannelLayoutPtr ReadInputChannelLayoutFromEsds(
       &config.extra_data()[0], &channel_layout_size);
   if (status != noErr) {
     OSSTATUS_VLOG(1, status) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                             << " " << FourCCToString(status)
-                             << ": Failed to get channel layout info";
+                             << ": Failed to get channel layout info"
+                             << " Error Status : " << status;
     return nullptr;
   }
 
@@ -64,8 +64,8 @@ ScopedAudioChannelLayoutPtr ReadInputChannelLayoutFromEsds(
                                   &channel_layout_size, layout.get());
   if (status != noErr) {
     OSSTATUS_VLOG(1, status) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                             << " " << FourCCToString(status)
-                             << ": Failed to get channel layout";
+                             << ": Failed to get channel layout"
+                             << " Error Status : " << status;
     return nullptr;
   }
 
@@ -148,8 +148,8 @@ bool ATAACHelper::AudioFormatReader::ParseAndQueueBuffer(
         kAudioFileAAC_ADTSType, stream_.InitializeInto());
     if (status != noErr) {
       OSSTATUS_VLOG(1, status) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                               << " " << FourCCToString(status)
-                               << ": Failed to open audio file stream";
+                               << ": Failed to open audio file stream"
+                               << " Error Status : " << status;
       return false;
     }
   }
@@ -159,8 +159,8 @@ bool ATAACHelper::AudioFormatReader::ParseAndQueueBuffer(
       stream_, buffer->data_size(), buffer->data(), 0);
   if (status != noErr) {
     OSSTATUS_VLOG(1, status) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                             << " " << FourCCToString(status)
-                             << ": Failed to parse audio file stream";
+                             << ": Failed to parse audio file stream"
+                             << " Error Status : " << status;
     return false;
   }
 
@@ -217,8 +217,8 @@ bool ATAACHelper::AudioFormatReader::ReadFormatList() {
       stream_, kAudioFileStreamProperty_FormatList, &format_list_size, nullptr);
   if (status != noErr || format_list_size % sizeof(AudioFormatListItem) != 0) {
     OSSTATUS_VLOG(1, status) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                             << " " << FourCCToString(status)
-                             << ": Failed to get format list count";
+                             << ": Failed to get format list count"
+                             << " Error Status : " << status;
     return false;
   }
 
@@ -234,8 +234,8 @@ bool ATAACHelper::AudioFormatReader::ReadFormatList() {
   if (status != noErr ||
       format_list_size != format_count * sizeof(AudioFormatListItem)) {
     OSSTATUS_VLOG(1, status) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                             << " " << FourCCToString(status)
-                             << ": Failed to get format list";
+                             << ": Failed to get format list"
+                             << " Error Status : " << status;
     return false;
   }
 
@@ -246,8 +246,8 @@ bool ATAACHelper::AudioFormatReader::ReadFormatList() {
       format_list.get(), &format_index_size, &format_index);
   if (status != noErr) {
     OSSTATUS_VLOG(1, status) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                             << " " << FourCCToString(status)
-                             << ": Failed to get format from list";
+                             << ": Failed to get format from list"
+                             << " Error Status : " << status;
     return false;
   }
 

@@ -13,15 +13,17 @@
 
 // Opens the Reading List.
 - (void)openReadingList;
-// Opens the page associated with this |item|.
-- (void)openPageForItem:(nonnull CollectionViewItem*)item;
+// Opens the page associated with the item at |indexPath|.
+- (void)openPageForItemAtIndexPath:(nonnull NSIndexPath*)indexPath;
 // Opens the Most Visited associated with this |item| at the |mostVisitedItem|.
 - (void)openMostVisitedItem:(nonnull CollectionViewItem*)item
                     atIndex:(NSInteger)mostVisitedIndex;
-// Displays a context menu for the |articleItem|.
-- (void)displayContextMenuForArticle:(nonnull CollectionViewItem*)articleItem
-                             atPoint:(CGPoint)touchLocation
-                         atIndexPath:(nonnull NSIndexPath*)indexPath;
+// Displays a context menu for the |suggestionItem|.
+- (void)displayContextMenuForSuggestion:
+            (nonnull CollectionViewItem*)suggestionItem
+                                atPoint:(CGPoint)touchLocation
+                            atIndexPath:(nonnull NSIndexPath*)indexPath
+                        readLaterAction:(BOOL)readLaterAction;
 // Displays a context menu for the |mostVisitedItem|.
 - (void)displayContextMenuForMostVisitedItem:
             (nonnull CollectionViewItem*)mostVisitedItem
@@ -31,6 +33,8 @@
 - (void)dismissModals;
 // Handles the actions following a tap on the promo.
 - (void)handlePromoTapped;
+// Handles the actions following a tap on the "Learn more" item.
+- (void)handleLearnMoreTapped;
 
 @end
 

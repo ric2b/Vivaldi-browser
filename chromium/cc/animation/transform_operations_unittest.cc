@@ -58,23 +58,23 @@ TEST(TransformOperationTest, TransformTypesAreUnique) {
   std::vector<std::unique_ptr<TransformOperations>> transforms;
 
   std::unique_ptr<TransformOperations> to_add(
-      base::MakeUnique<TransformOperations>());
+      std::make_unique<TransformOperations>());
   to_add->AppendTranslate(1, 0, 0);
   transforms.push_back(std::move(to_add));
 
-  to_add = base::MakeUnique<TransformOperations>();
+  to_add = std::make_unique<TransformOperations>();
   to_add->AppendRotate(0, 0, 1, 2);
   transforms.push_back(std::move(to_add));
 
-  to_add = base::MakeUnique<TransformOperations>();
+  to_add = std::make_unique<TransformOperations>();
   to_add->AppendScale(2, 2, 2);
   transforms.push_back(std::move(to_add));
 
-  to_add = base::MakeUnique<TransformOperations>();
+  to_add = std::make_unique<TransformOperations>();
   to_add->AppendSkew(1, 0);
   transforms.push_back(std::move(to_add));
 
-  to_add = base::MakeUnique<TransformOperations>();
+  to_add = std::make_unique<TransformOperations>();
   to_add->AppendPerspective(800);
   transforms.push_back(std::move(to_add));
 
@@ -130,50 +130,50 @@ TEST(TransformOperationTest, MatchTypesDifferentLength) {
 std::vector<std::unique_ptr<TransformOperations>> GetIdentityOperations() {
   std::vector<std::unique_ptr<TransformOperations>> operations;
   std::unique_ptr<TransformOperations> to_add(
-      base::MakeUnique<TransformOperations>());
+      std::make_unique<TransformOperations>());
   operations.push_back(std::move(to_add));
 
-  to_add = base::MakeUnique<TransformOperations>();
+  to_add = std::make_unique<TransformOperations>();
   to_add->AppendTranslate(0, 0, 0);
   operations.push_back(std::move(to_add));
 
-  to_add = base::MakeUnique<TransformOperations>();
+  to_add = std::make_unique<TransformOperations>();
   to_add->AppendTranslate(0, 0, 0);
   to_add->AppendTranslate(0, 0, 0);
   operations.push_back(std::move(to_add));
 
-  to_add = base::MakeUnique<TransformOperations>();
+  to_add = std::make_unique<TransformOperations>();
   to_add->AppendScale(1, 1, 1);
   operations.push_back(std::move(to_add));
 
-  to_add = base::MakeUnique<TransformOperations>();
+  to_add = std::make_unique<TransformOperations>();
   to_add->AppendScale(1, 1, 1);
   to_add->AppendScale(1, 1, 1);
   operations.push_back(std::move(to_add));
 
-  to_add = base::MakeUnique<TransformOperations>();
+  to_add = std::make_unique<TransformOperations>();
   to_add->AppendSkew(0, 0);
   operations.push_back(std::move(to_add));
 
-  to_add = base::MakeUnique<TransformOperations>();
+  to_add = std::make_unique<TransformOperations>();
   to_add->AppendSkew(0, 0);
   to_add->AppendSkew(0, 0);
   operations.push_back(std::move(to_add));
 
-  to_add = base::MakeUnique<TransformOperations>();
+  to_add = std::make_unique<TransformOperations>();
   to_add->AppendRotate(0, 0, 1, 0);
   operations.push_back(std::move(to_add));
 
-  to_add = base::MakeUnique<TransformOperations>();
+  to_add = std::make_unique<TransformOperations>();
   to_add->AppendRotate(0, 0, 1, 0);
   to_add->AppendRotate(0, 0, 1, 0);
   operations.push_back(std::move(to_add));
 
-  to_add = base::MakeUnique<TransformOperations>();
+  to_add = std::make_unique<TransformOperations>();
   to_add->AppendMatrix(gfx::Transform());
   operations.push_back(std::move(to_add));
 
-  to_add = base::MakeUnique<TransformOperations>();
+  to_add = std::make_unique<TransformOperations>();
   to_add->AppendMatrix(gfx::Transform());
   to_add->AppendMatrix(gfx::Transform());
   operations.push_back(std::move(to_add));
@@ -1589,12 +1589,14 @@ TEST(TransformOperationTest, ScaleComponent) {
   EXPECT_EQ(2.f, scale);
 }
 
-TEST(TransformOperationsTest, Equality) {
+TEST(TransformOperationsTest, ApproximateEquality) {
+  float noise = 1e-7f;
+  float tolerance = 1e-5f;
   TransformOperations lhs;
   TransformOperations rhs;
 
   // Empty lists of operations are trivially equal.
-  EXPECT_EQ(lhs, rhs);
+  EXPECT_TRUE(lhs.ApproximatelyEqual(rhs, tolerance));
 
   rhs.AppendIdentity();
   rhs.AppendTranslate(0, 0, 0);
@@ -1605,40 +1607,52 @@ TEST(TransformOperationsTest, Equality) {
 
   // Even though both lists operations are effectively the identity matrix, rhs
   // has a different number of operations and is therefore different.
-  EXPECT_NE(lhs, rhs);
+  EXPECT_FALSE(lhs.ApproximatelyEqual(rhs, tolerance));
 
   rhs.AppendPerspective(800);
 
   // Assignment should produce equal lists of operations.
   lhs = rhs;
-  EXPECT_EQ(lhs, rhs);
+  EXPECT_TRUE(lhs.ApproximatelyEqual(rhs, tolerance));
 
   // Cannot affect identity operations.
   lhs.at(0).translate.x = 1;
-  EXPECT_EQ(lhs, rhs);
+  EXPECT_TRUE(lhs.ApproximatelyEqual(rhs, tolerance));
 
-  lhs.at(1).translate.x = 1;
-  EXPECT_NE(lhs, rhs);
+  lhs.at(1).translate.x += noise;
+  EXPECT_TRUE(lhs.ApproximatelyEqual(rhs, tolerance));
+  lhs.at(1).translate.x += 1;
+  EXPECT_FALSE(lhs.ApproximatelyEqual(rhs, tolerance));
 
   lhs = rhs;
+  lhs.at(2).rotate.angle += noise;
+  EXPECT_TRUE(lhs.ApproximatelyEqual(rhs, tolerance));
   lhs.at(2).rotate.angle = 1;
-  EXPECT_NE(lhs, rhs);
+  EXPECT_FALSE(lhs.ApproximatelyEqual(rhs, tolerance));
 
   lhs = rhs;
-  lhs.at(3).scale.x = 2;
-  EXPECT_NE(lhs, rhs);
+  lhs.at(3).scale.x += noise;
+  EXPECT_TRUE(lhs.ApproximatelyEqual(rhs, tolerance));
+  lhs.at(3).scale.x += 1;
+  EXPECT_FALSE(lhs.ApproximatelyEqual(rhs, tolerance));
 
   lhs = rhs;
+  lhs.at(4).skew.x += noise;
+  EXPECT_TRUE(lhs.ApproximatelyEqual(rhs, tolerance));
   lhs.at(4).skew.x = 2;
-  EXPECT_NE(lhs, rhs);
+  EXPECT_FALSE(lhs.ApproximatelyEqual(rhs, tolerance));
 
   lhs = rhs;
+  lhs.at(5).matrix.Translate3d(noise, 0, 0);
+  EXPECT_TRUE(lhs.ApproximatelyEqual(rhs, tolerance));
   lhs.at(5).matrix.Translate3d(1, 1, 1);
-  EXPECT_NE(lhs, rhs);
+  EXPECT_FALSE(lhs.ApproximatelyEqual(rhs, tolerance));
 
   lhs = rhs;
+  lhs.at(6).perspective_depth += noise;
+  EXPECT_TRUE(lhs.ApproximatelyEqual(rhs, tolerance));
   lhs.at(6).perspective_depth = 801;
-  EXPECT_NE(lhs, rhs);
+  EXPECT_FALSE(lhs.ApproximatelyEqual(rhs, tolerance));
 }
 
 }  // namespace

@@ -6,9 +6,9 @@
  * are met:
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 2. Redistributions in binary form must reproduce the above copyright
  *
  * THIS SOFTWARE IS PROVIDED BY APPLE COMPUTER, INC. ``AS IS'' AND ANY
  * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -31,8 +31,8 @@
 #include "bindings/core/v8/V8CacheOptions.h"
 #include "core/CoreExport.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/events/EventListener.h"
-#include "core/events/EventTarget.h"
+#include "core/dom/events/EventListener.h"
+#include "core/dom/events/EventTarget.h"
 #include "core/frame/DOMTimerCoordinator.h"
 #include "core/frame/DOMWindowBase64.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
@@ -48,6 +48,7 @@ namespace blink {
 
 class ConsoleMessage;
 class ExceptionState;
+class OffscreenFontSelector;
 class V8AbstractEventListener;
 class WorkerLocation;
 class WorkerNavigator;
@@ -79,10 +80,12 @@ class CORE_EXPORT WorkerGlobalScope
   KURL CompleteURL(const String&) const;
 
   // WorkerOrWorkletGlobalScope
+  void EvaluateClassicScript(const KURL& script_url,
+                             String source_code,
+                             std::unique_ptr<Vector<char>> cached_meta_data,
+                             V8CacheOptions) final;
   bool IsClosing() const final { return closing_; }
   virtual void Dispose();
-  void ReportFeature(WebFeature) final;
-  void ReportDeprecation(WebFeature) final;
   WorkerThread* GetThread() const final { return thread_; }
 
   void ExceptionUnhandled(int exception_id);
@@ -130,6 +133,8 @@ class CORE_EXPORT WorkerGlobalScope
   WorkerEventQueue* GetEventQueue() const final;
   bool IsSecureContext(String& error_message) const override;
 
+  OffscreenFontSelector* GetFontSelector() { return font_selector_; }
+
   CoreProbeSink* GetProbeSink() final;
 
   // EventTarget
@@ -153,6 +158,8 @@ class CORE_EXPORT WorkerGlobalScope
                     std::unique_ptr<SecurityOrigin::PrivilegeData>,
                     WorkerClients*);
   void SetWorkerSettings(std::unique_ptr<WorkerSettings>);
+  void ApplyContentSecurityPolicyFromHeaders(
+      const ContentSecurityPolicyResponseHeaders&);
   void ApplyContentSecurityPolicyFromVector(
       const Vector<CSPHeaderAndType>& headers);
 
@@ -165,6 +172,33 @@ class CORE_EXPORT WorkerGlobalScope
   void RemoveURLFromMemoryCache(const KURL&) final;
 
  private:
+  // |kNotHandled| is used when the script was not in
+  // InstalledScriptsManager, which means either it was not an installed script
+  // or it was already taken.
+  enum class LoadResult { kSuccess, kFailed, kNotHandled };
+
+  // Tries to load the script synchronously from the
+  // InstalledScriptsManager, which holds scripts that are sent from the browser
+  // upon starting an installed worker. This blocks until the script is
+  // received. If the script load could not be handled by the
+  // InstalledScriptsManager, e.g. when the script was not an installed script,
+  // returns LoadResult::kNotHandled.
+  // TODO(crbug.com/753350): Factor out LoadingScriptFrom* into a new class
+  // which provides the worker's scripts.
+  LoadResult LoadingScriptFromInstalledScriptsManager(
+      const KURL& script_url,
+      KURL* out_response_url,
+      String* out_source_code,
+      std::unique_ptr<Vector<char>>* out_cached_meta_data);
+  // Tries to load the script synchronously from the WorkerScriptLoader, which
+  // requests the script from the browser. This
+  // blocks until the script is received.
+  LoadResult LoadingScriptFromWorkerScriptLoader(
+      const KURL& script_url,
+      KURL* out_response_url,
+      String* out_source_code,
+      std::unique_ptr<Vector<char>>* out_cached_meta_data);
+
   // ExecutionContext
   EventTarget* ErrorEventTarget() final { return this; }
   const KURL& VirtualURL() const final { return url_; }
@@ -195,6 +229,8 @@ class CORE_EXPORT WorkerGlobalScope
 
   HeapHashMap<int, Member<ErrorEvent>> pending_error_events_;
   int last_pending_error_event_id_ = 0;
+
+  Member<OffscreenFontSelector> font_selector_;
 };
 
 DEFINE_TYPE_CASTS(WorkerGlobalScope,

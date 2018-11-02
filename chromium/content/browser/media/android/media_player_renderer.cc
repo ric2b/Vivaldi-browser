@@ -79,7 +79,7 @@ void MediaPlayerRenderer::CreateMediaPlayer(
   // Force the initialization of |media_resource_getter_| first. If it fails,
   // the RenderFrameHost may have been destroyed already.
   if (!GetMediaResourceGetter()) {
-    DLOG(ERROR) << "Unable to retreive MediaResourceGetter";
+    DLOG(ERROR) << "Unable to retrieve MediaResourceGetter";
     init_cb.Run(media::PIPELINE_ERROR_INITIALIZATION_FAILED);
     return;
   }
@@ -88,10 +88,11 @@ void MediaPlayerRenderer::CreateMediaPlayer(
 
   media_player_.reset(new media::MediaPlayerBridge(
       kUnusedAndIrrelevantPlayerId, url_params.media_url,
-      url_params.first_party_for_cookies, user_agent,
+      url_params.site_for_cookies, user_agent,
       false,  // hide_url_log
-      this, base::Bind(&MediaPlayerRenderer::OnDecoderResourcesReleased,
-                       weak_factory_.GetWeakPtr()),
+      this,
+      base::Bind(&MediaPlayerRenderer::OnDecoderResourcesReleased,
+                 weak_factory_.GetWeakPtr()),
       GURL(),  // frame_url
       true));  // allow_crendentials
 

@@ -25,35 +25,10 @@
 #include "gpu/config/gpu_info_collector.h"
 #include "gpu/config/gpu_switches.h"
 #include "ui/gl/gl_switches.h"
-#include "ui/gl/gpu_switching_manager.h"
 
 namespace gpu {
 
 namespace {
-
-// Combine the integers into a string, seperated by ','.
-std::string IntSetToString(const std::set<int>& list) {
-  std::string rt;
-  for (std::set<int>::const_iterator it = list.begin();
-       it != list.end(); ++it) {
-    if (!rt.empty())
-      rt += ",";
-    rt += base::IntToString(*it);
-  }
-  return rt;
-}
-
-void StringToIntSet(const std::string& str, std::set<int>* list) {
-  DCHECK(list);
-  for (const base::StringPiece& piece :
-       base::SplitStringPiece(str, ",", base::TRIM_WHITESPACE,
-                              base::SPLIT_WANT_ALL)) {
-    int number = 0;
-    bool succeed = base::StringToInt(piece, &number);
-    DCHECK(succeed);
-    list->insert(number);
-  }
-}
 
 // |str| is in the format of "0x040a;0x10de;...;hex32_N".
 void StringToIds(const std::string& str, std::vector<uint32_t>* list) {
@@ -93,51 +68,20 @@ GpuFeatureStatus GetGpuRasterizationFeatureStatus(
   return kGpuFeatureStatusEnabled;
 }
 
+void AppendWorkaroundsToCommandLine(const GpuFeatureInfo& gpu_feature_info,
+                                    base::CommandLine* command_line) {
+  if (gpu_feature_info.IsWorkaroundEnabled(DISABLE_D3D11)) {
+    command_line->AppendSwitch(switches::kDisableD3D11);
+  }
+  if (gpu_feature_info.IsWorkaroundEnabled(DISABLE_ES3_GL_CONTEXT)) {
+    command_line->AppendSwitch(switches::kDisableES3GLContext);
+  }
+  if (gpu_feature_info.IsWorkaroundEnabled(DISABLE_DIRECT_COMPOSITION)) {
+    command_line->AppendSwitch(switches::kDisableDirectComposition);
+  }
+}
+
 }  // namespace anonymous
-
-void ApplyGpuDriverBugWorkarounds(const GPUInfo& gpu_info,
-                                  base::CommandLine* command_line) {
-  std::unique_ptr<GpuDriverBugList> list(GpuDriverBugList::Create());
-  std::set<int> workarounds = list->MakeDecision(
-      GpuControlList::kOsAny, std::string(), gpu_info);
-  GpuDriverBugList::AppendWorkaroundsFromCommandLine(
-      &workarounds, *command_line);
-  if (!workarounds.empty()) {
-    command_line->AppendSwitchASCII(switches::kGpuDriverBugWorkarounds,
-                                    IntSetToString(workarounds));
-  }
-
-  std::vector<std::string> buglist_disabled_extensions =
-      list->GetDisabledExtensions();
-  std::set<base::StringPiece> disabled_extensions(
-      buglist_disabled_extensions.begin(), buglist_disabled_extensions.end());
-
-  // Must be outside if statement to remain in scope (referenced by
-  // |disabled_extensions|).
-  std::string command_line_disable_gl_extensions;
-  if (command_line->HasSwitch(switches::kDisableGLExtensions)) {
-    command_line_disable_gl_extensions =
-        command_line->GetSwitchValueASCII(switches::kDisableGLExtensions);
-    std::vector<base::StringPiece> existing_disabled_extensions =
-        base::SplitStringPiece(command_line_disable_gl_extensions, " ",
-                               base::TRIM_WHITESPACE,
-                               base::SPLIT_WANT_NONEMPTY);
-    disabled_extensions.insert(existing_disabled_extensions.begin(),
-                               existing_disabled_extensions.end());
-  }
-
-  if (!disabled_extensions.empty()) {
-    std::vector<base::StringPiece> v(disabled_extensions.begin(),
-                                     disabled_extensions.end());
-    command_line->AppendSwitchASCII(switches::kDisableGLExtensions,
-                                    base::JoinString(v, " "));
-  }
-}
-
-void StringToFeatureSet(
-    const std::string& str, std::set<int>* feature_set) {
-  StringToIntSet(str, feature_set);
-}
 
 void ParseSecondaryGpuDevicesFromCommandLine(
     const base::CommandLine& command_line,
@@ -176,23 +120,67 @@ void ParseSecondaryGpuDevicesFromCommandLine(
   }
 }
 
-void InitializeDualGpusIfSupported(
-    const std::set<int>& driver_bug_workarounds) {
-  ui::GpuSwitchingManager* switching_manager =
-      ui::GpuSwitchingManager::GetInstance();
-  if (!switching_manager->SupportsDualGpus())
+void GetGpuInfoFromCommandLine(const base::CommandLine& command_line,
+                               GPUInfo* gpu_info) {
+  DCHECK(gpu_info);
+
+  if (!command_line.HasSwitch(switches::kGpuVendorID) ||
+      !command_line.HasSwitch(switches::kGpuDeviceID) ||
+      !command_line.HasSwitch(switches::kGpuDriverVersion))
     return;
-  if (driver_bug_workarounds.count(gpu::FORCE_DISCRETE_GPU) == 1)
-    ui::GpuSwitchingManager::GetInstance()->ForceUseOfDiscreteGpu();
-  else if (driver_bug_workarounds.count(gpu::FORCE_INTEGRATED_GPU) == 1)
-    ui::GpuSwitchingManager::GetInstance()->ForceUseOfIntegratedGpu();
+  bool success = base::HexStringToUInt(
+      command_line.GetSwitchValueASCII(switches::kGpuVendorID),
+      &gpu_info->gpu.vendor_id);
+  DCHECK(success);
+  success = base::HexStringToUInt(
+      command_line.GetSwitchValueASCII(switches::kGpuDeviceID),
+      &gpu_info->gpu.device_id);
+  DCHECK(success);
+  gpu_info->driver_vendor =
+      command_line.GetSwitchValueASCII(switches::kGpuDriverVendor);
+  gpu_info->driver_version =
+      command_line.GetSwitchValueASCII(switches::kGpuDriverVersion);
+  gpu_info->driver_date =
+      command_line.GetSwitchValueASCII(switches::kGpuDriverDate);
+  gpu::ParseSecondaryGpuDevicesFromCommandLine(command_line, gpu_info);
+
+  // Set active gpu device.
+  if (command_line.HasSwitch(switches::kGpuActiveVendorID) &&
+      command_line.HasSwitch(switches::kGpuActiveDeviceID)) {
+    uint32_t active_vendor_id = 0;
+    uint32_t active_device_id = 0;
+    success = base::HexStringToUInt(
+        command_line.GetSwitchValueASCII(switches::kGpuActiveVendorID),
+        &active_vendor_id);
+    DCHECK(success);
+    success = base::HexStringToUInt(
+        command_line.GetSwitchValueASCII(switches::kGpuActiveDeviceID),
+        &active_device_id);
+    DCHECK(success);
+    if (gpu_info->gpu.vendor_id == active_vendor_id &&
+        gpu_info->gpu.device_id == active_device_id) {
+      gpu_info->gpu.active = true;
+    } else {
+      for (size_t i = 0; i < gpu_info->secondary_gpus.size(); ++i) {
+        if (gpu_info->secondary_gpus[i].vendor_id == active_vendor_id &&
+            gpu_info->secondary_gpus[i].device_id == active_device_id) {
+          gpu_info->secondary_gpus[i].active = true;
+          break;
+        }
+      }
+    }
+  }
+
+  if (command_line.HasSwitch(switches::kAMDSwitchable)) {
+    gpu_info->amd_switchable = true;
+  }
 }
 
-GpuFeatureInfo GetGpuFeatureInfo(const GPUInfo& gpu_info,
-                                 const base::CommandLine& command_line) {
+GpuFeatureInfo ComputeGpuFeatureInfo(const GPUInfo& gpu_info,
+                                     base::CommandLine* command_line) {
   GpuFeatureInfo gpu_feature_info;
   std::set<int> blacklisted_features;
-  if (!command_line.HasSwitch(switches::kIgnoreGpuBlacklist)) {
+  if (!command_line->HasSwitch(switches::kIgnoreGpuBlacklist)) {
     std::unique_ptr<GpuBlacklist> list(GpuBlacklist::Create());
     blacklisted_features =
         list->MakeDecision(GpuControlList::kOsAny, std::string(), gpu_info);
@@ -200,7 +188,50 @@ GpuFeatureInfo GetGpuFeatureInfo(const GPUInfo& gpu_info,
 
   // Currently only used for GPU rasterization.
   gpu_feature_info.status_values[GPU_FEATURE_TYPE_GPU_RASTERIZATION] =
-      GetGpuRasterizationFeatureStatus(blacklisted_features, command_line);
+      GetGpuRasterizationFeatureStatus(blacklisted_features, *command_line);
+
+  std::set<base::StringPiece> all_disabled_extensions;
+  std::string disabled_gl_extensions_value =
+      command_line->GetSwitchValueASCII(switches::kDisableGLExtensions);
+  if (!disabled_gl_extensions_value.empty()) {
+    std::vector<base::StringPiece> command_line_disabled_extensions =
+        base::SplitStringPiece(disabled_gl_extensions_value, ", ;",
+                               base::KEEP_WHITESPACE,
+                               base::SPLIT_WANT_NONEMPTY);
+    all_disabled_extensions.insert(command_line_disabled_extensions.begin(),
+                                   command_line_disabled_extensions.end());
+  }
+
+  std::set<int> enabled_driver_bug_workarounds;
+  std::vector<std::string> driver_bug_disabled_extensions;
+  if (!command_line->HasSwitch(switches::kDisableGpuDriverBugWorkarounds)) {
+    std::unique_ptr<gpu::GpuDriverBugList> list(GpuDriverBugList::Create());
+    enabled_driver_bug_workarounds =
+        list->MakeDecision(GpuControlList::kOsAny, std::string(), gpu_info);
+    gpu_feature_info.applied_gpu_driver_bug_list_entries =
+        list->GetActiveEntries();
+
+    driver_bug_disabled_extensions = list->GetDisabledExtensions();
+    all_disabled_extensions.insert(driver_bug_disabled_extensions.begin(),
+                                   driver_bug_disabled_extensions.end());
+  }
+  gpu::GpuDriverBugList::AppendWorkaroundsFromCommandLine(
+      &enabled_driver_bug_workarounds, *command_line);
+
+  gpu_feature_info.enabled_gpu_driver_bug_workarounds.insert(
+      gpu_feature_info.enabled_gpu_driver_bug_workarounds.begin(),
+      enabled_driver_bug_workarounds.begin(),
+      enabled_driver_bug_workarounds.end());
+
+  if (all_disabled_extensions.size()) {
+    std::vector<base::StringPiece> v(all_disabled_extensions.begin(),
+                                     all_disabled_extensions.end());
+    gpu_feature_info.disabled_extensions = base::JoinString(v, " ");
+  }
+
+  // TODO(zmo): Find a better way to communicate these settings to bindings
+  // initialization than commandline switches.
+  AppendWorkaroundsToCommandLine(gpu_feature_info, command_line);
 
   return gpu_feature_info;
 }

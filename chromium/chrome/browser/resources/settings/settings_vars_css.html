@@ -14,10 +14,9 @@
 
     --settings-actionable: var(--cr-actionable);
 
-    --settings-box-row-padding: 20px;
-    --settings-box-row-indent: calc(
-        var(--settings-box-row-padding) + var(--settings-indent-width));
-    --settings-indent-width: 40px;
+    --settings-box-row-padding: var(--cr-section-padding);
+    --settings-box-row-indent: var(--cr-section-indent-padding);
+    --settings-indent-width: var(--cr-section-indent-width);
     --settings-card-max-width: 680px;
     --settings-disabled-opacity: .65;
     --settings-error-color: var(--paper-red-700);
@@ -33,12 +32,10 @@
 
     --settings-page-vertical-margin: 21px;
 
-    /* TODO (scottchen): re-implement with paddings instead; */
-    /* These are used for row items such as radio buttons, check boxes, list
-     * items etc. */
-    --settings-row-min-height: 48px;
-    --settings-row-two-line-min-height: 64px;
-    --settings-row-three-line-min-height: 84px;
+    --settings-row-min-height: var(--cr-section-min-height);
+    --settings-row-two-line-min-height: var(--cr-section-two-line-min-height);
+    --settings-row-three-line-min-height:
+        var(--cr-section-three-line-min-height);
 
     --settings-text-elide: {
       overflow: hidden;
@@ -46,36 +43,11 @@
       white-space: nowrap;
     };
 
-    --settings-secondary: {
-      color: var(--paper-grey-600);
-      font-weight: 400;
-    };
     --settings-separator-height: var(--cr-separator-height);
     --settings-separator-line: var(--cr-separator-line);
 
     --settings-title-bar-color: rgb(255, 255, 255);
     --settings-title-search-color: rgb(192, 199, 205);
-    --settings-toggle-bar-size: {
-      height: 12px;
-      left: 4px;
-      width: 28px;
-    };
-    --settings-toggle-button-size: {
-      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.4);
-      height: 16px;
-      top: -2px;
-      width: 16px;
-    };
-    --settings-toggle-ink-size: {
-      height: 40px;
-      top: -12px;
-      left: -12px;
-      width: 40px;
-    };
-    --settings-toggle-color: var(--google-blue-500);
-
-    --checkbox-margin-start: 2px;
-    --checkbox-size: 16px;
 
     /* Spacing between a control (e.g. checkbox) and its label. */
     --settings-control-label-spacing: 20px;
@@ -86,19 +58,18 @@
     --iron-icon-fill-color: var(--paper-grey-600);
     --iron-icon-height: var(--cr-icon-size);
     --iron-icon-width: var(--cr-icon-size);
-    --paper-checkbox-label-color: inherit;
 
     --paper-input-container-focus-color: var(--google-blue-500);
     --paper-input-container-input: {
       color: inherit;
       font-size: inherit;
       font-weight: inherit;
-      line-height: 154%;
+      line-height: 1.54;
       vertical-align: baseline;
     };
     --paper-input-container-label: {
       font-size: inherit;
-      line-height: 154%;
+      line-height: 1.54;
     };
     --paper-input-container-label-floating: {
       /* Using "rem" to make it easier to equalize with other labels. */
@@ -107,7 +78,7 @@
     };
     --paper-input-error: {
       font-size: 92.31%; /* Should be 12px when 100% is 13px. */
-      line-height: 154%;
+      line-height: 1.54;
       overflow: visible; /* Half-visible error message is not useful at all. */
     };
     --paper-input-max-width: 264px;
@@ -115,18 +86,6 @@
     --paper-radio-button-label-color: inherit;
     --paper-radio-button-size: 16px;
     --paper-radio-group-item-padding: 0;
-
-    --paper-toggle-button-checked-bar: var(--settings-toggle-bar-size);
-    --paper-toggle-button-checked-bar-color: var(--settings-toggle-color);
-    --paper-toggle-button-checked-button: {
-      @apply(--settings-toggle-button-size);
-      transform: translate(18px, 0);
-    };
-    --paper-toggle-button-checked-button-color: var(--settings-toggle-color);
-    --paper-toggle-button-label-spacing: 0;
-    --paper-toggle-button-unchecked-bar: var(--settings-toggle-bar-size);
-    --paper-toggle-button-unchecked-button: var(--settings-toggle-button-size);
-    --paper-toggle-button-unchecked-ink: var(--settings-toggle-ink-size);
 
     --settings-input-underline: {
       border-color: var(--paper-grey-300);

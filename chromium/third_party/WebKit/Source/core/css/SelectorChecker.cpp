@@ -57,6 +57,7 @@
 #include "core/page/Page.h"
 #include "core/probe/CoreProbes.h"
 #include "core/style/ComputedStyle.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/scroll/ScrollableArea.h"
 #include "platform/scroll/ScrollbarTheme.h"
 #include "platform/wtf/AutoReset.h"
@@ -324,21 +325,18 @@ SelectorChecker::MatchStatus SelectorChecker::MatchForRelation(
                                      relation != CSSSelector::kChild)))
     next_context.visited_match_type = kVisitedMatchDisabled;
 
-  // The ParentElement() method will walk up to the host element for :host() and
-  // :host-context() rules in the same scope as the element we are matching.
-  // For kSharingRules, we don't know which scope the rules came from, so we are
-  // using nullptr as scope. This is a workaround to make ParentElement() walk
-  // up to the host when matching :host rules by assuming the scope of the :host
-  // rule is the same as the element we are matching rules for.
-  if (mode_ == kSharingRules && next_context.selector->IsHostPseudoClass())
-    next_context.scope = next_context.element->ContainingShadowRoot();
-
   next_context.in_rightmost_compound = false;
   next_context.is_sub_selector = false;
   next_context.previous_element = context.element;
   next_context.pseudo_id = kPseudoIdNone;
 
   switch (relation) {
+    case CSSSelector::kShadowDeepAsDescendant:
+      DCHECK(
+          !RuntimeEnabledFeatures::DeepCombinatorInCSSDynamicProfileEnabled());
+      Deprecation::CountDeprecation(context.element->GetDocument(),
+                                    WebFeature::kCSSDeepCombinator);
+    // fall through
     case CSSSelector::kDescendant:
       if (context.selector->RelationIsAffectedByPseudoContent()) {
         for (Element* element = context.element; element;
@@ -416,10 +414,13 @@ SelectorChecker::MatchStatus SelectorChecker::MatchForRelation(
       return kSelectorFailsAllSiblings;
 
     case CSSSelector::kShadowPseudo: {
-      if (!is_ua_rule_ && mode_ != kQueryingRules &&
-          context.selector->GetPseudoType() == CSSSelector::kPseudoShadow) {
-        Deprecation::CountDeprecation(context.element->GetDocument(),
-                                      WebFeature::kCSSSelectorPseudoShadow);
+      if (RuntimeEnabledFeatures::
+              ShadowPseudoElementInCSSDynamicProfileEnabled()) {
+        if (!is_ua_rule_ && mode_ != kQueryingRules &&
+            context.selector->GetPseudoType() == CSSSelector::kPseudoShadow) {
+          Deprecation::CountDeprecation(context.element->GetDocument(),
+                                        WebFeature::kCSSSelectorPseudoShadow);
+        }
       }
       // If we're in the same tree-scope as the scoping element, then following
       // a shadow descendant combinator would escape that and thus the scope.
@@ -526,9 +527,6 @@ SelectorChecker::MatchStatus SelectorChecker::MatchForPseudoContent(
   SelectorCheckingContext next_context(context);
   for (const auto& insertion_point : insertion_points) {
     next_context.element = insertion_point;
-    // TODO(esprehn): Why does kSharingRules have a special case?
-    if (mode_ == kSharingRules)
-      next_context.scope = insertion_point->ContainingShadowRoot();
     if (Match(next_context, result))
       return kSelectorMatches;
   }
@@ -733,22 +731,6 @@ bool SelectorChecker::CheckPseudoNot(const SelectorCheckingContext& context,
         (sub_context.selector->GetPseudoType() == CSSSelector::kPseudoLink &&
          sub_context.visited_match_type == kVisitedMatchEnabled))
       return true;
-    if (mode_ == kSharingRules) {
-      // context.scope is not available if mode_ == kSharingRules.
-      // We cannot determine whether :host or :scope matches a given element or
-      // not.
-      if (sub_context.selector->IsHostPseudoClass() ||
-          sub_context.selector->GetPseudoType() == CSSSelector::kPseudoScope)
-        return true;
-      // :hover, :active, :focus, :-webkit-drag relies on setting flags on
-      // ComputedStyle even if the whole selector may not match. That
-      // means we cannot share style between elements which may fail
-      // matching the same selector for different reasons. An example is
-      // [attr]:hover which both fail for :hover, but an element without
-      // attr won't reach the :hover selector, hence not setting the bit.
-      if (sub_context.selector->IsUserActionPseudoClass())
-        return true;
-    }
     if (!CheckOne(sub_context, result))
       return true;
   }
@@ -790,9 +772,7 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
         element.SetStyleAffectedByEmpty();
         if (context.in_rightmost_compound)
           element_style_->SetEmptyState(result);
-        else if (element.GetComputedStyle() &&
-                 (element.GetDocument().GetStyleEngine().UsesSiblingRules() ||
-                  element.GetComputedStyle()->Unique()))
+        else if (element.GetComputedStyle())
           element.MutableComputedStyle()->SetEmptyState(result);
       }
       return result;
@@ -918,8 +898,6 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
       return element.IsLink() &&
              context.visited_match_type == kVisitedMatchEnabled;
     case CSSSelector::kPseudoDrag:
-      if (mode_ == kSharingRules)
-        return true;
       if (mode_ == kResolvingStyle) {
         if (context.in_rightmost_compound) {
           element_style_->SetAffectedByDrag();
@@ -930,16 +908,12 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
       }
       return element.IsDragged();
     case CSSSelector::kPseudoFocus:
-      if (mode_ == kSharingRules)
-        return true;
       if (mode_ == kResolvingStyle && !context.in_rightmost_compound) {
         element_style_->SetUnique();
         element.SetChildrenOrSiblingsAffectedByFocus();
       }
       return MatchesFocusPseudoClass(element);
     case CSSSelector::kPseudoFocusWithin:
-      if (mode_ == kSharingRules)
-        return true;
       if (mode_ == kResolvingStyle) {
         if (context.in_rightmost_compound) {
           element_style_->SetAffectedByFocusWithin();
@@ -954,8 +928,6 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
         return true;
       return element.HasFocusWithin();
     case CSSSelector::kPseudoHover:
-      if (mode_ == kSharingRules)
-        return true;
       if (mode_ == kResolvingStyle) {
         if (context.in_rightmost_compound) {
           element_style_->SetAffectedByHover();
@@ -972,8 +944,6 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
         return true;
       return element.IsHovered();
     case CSSSelector::kPseudoActive:
-      if (mode_ == kSharingRules)
-        return true;
       if (mode_ == kResolvingStyle) {
         if (context.in_rightmost_compound) {
           element_style_->SetAffectedByActive();
@@ -1082,8 +1052,6 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
     case CSSSelector::kPseudoPastCue:
       return element.IsVTTElement() && ToVTTElement(element).IsPastNode();
     case CSSSelector::kPseudoScope:
-      if (mode_ == kSharingRules)
-        return true;
       if (context.scope == &element.GetDocument())
         return element == element.GetDocument().documentElement();
       return context.scope == &element;
@@ -1187,8 +1155,6 @@ bool SelectorChecker::CheckPseudoElement(const SelectorCheckingContext& context,
     case CSSSelector::kPseudoShadow:
       return element.IsInShadowTree() && context.previous_element;
     default:
-      if (mode_ == kSharingRules)
-        return true;
       DCHECK_NE(mode_, kQueryingRules);
       result.dynamic_pseudo =
           CSSSelector::GetPseudoId(selector.GetPseudoType());
@@ -1202,8 +1168,6 @@ bool SelectorChecker::CheckPseudoHost(const SelectorCheckingContext& context,
   const CSSSelector& selector = *context.selector;
   Element& element = *context.element;
 
-  if (mode_ == kSharingRules)
-    return true;
   // :host only matches a shadow host when :host is in a shadow tree of the
   // shadow host.
   if (!context.scope)

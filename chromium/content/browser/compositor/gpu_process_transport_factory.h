@@ -10,7 +10,7 @@
 #include <map>
 #include <memory>
 
-#include "base/id_map.h"
+#include "base/containers/id_map.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
@@ -32,11 +32,14 @@ class ResourceSettings;
 class SingleThreadTaskGraphRunner;
 class SoftwareOutputDevice;
 class SurfaceManager;
-class VulkanInProcessContextProvider;
 }
 
 namespace ui {
 class ContextProviderCommandBuffer;
+}
+
+namespace viz {
+class VulkanInProcessContextProvider;
 }
 
 namespace content {
@@ -81,6 +84,8 @@ class GpuProcessTransportFactory : public ui::ContextFactory,
   void SetDisplayVSyncParameters(ui::Compositor* compositor,
                                  base::TimeTicks timebase,
                                  base::TimeDelta interval) override;
+  void IssueExternalBeginFrame(ui::Compositor* compositor,
+                               const viz::BeginFrameArgs& args) override;
   void SetOutputIsSecure(ui::Compositor* compositor, bool secure) override;
 
   // ImageTransportFactory implementation.
@@ -110,7 +115,7 @@ class GpuProcessTransportFactory : public ui::ContextFactory,
   void OnLostMainThreadSharedContextInsideCallback();
   void OnLostMainThreadSharedContext();
 
-  scoped_refptr<cc::VulkanInProcessContextProvider>
+  scoped_refptr<viz::VulkanInProcessContextProvider>
   SharedVulkanContextProvider();
 
   viz::FrameSinkIdAllocator frame_sink_id_allocator_;
@@ -135,8 +140,9 @@ class GpuProcessTransportFactory : public ui::ContextFactory,
       shared_worker_context_provider_;
 
   bool disable_display_vsync_ = false;
+  bool wait_for_all_pipeline_stages_before_draw_ = false;
   bool shared_vulkan_context_provider_initialized_ = false;
-  scoped_refptr<cc::VulkanInProcessContextProvider>
+  scoped_refptr<viz::VulkanInProcessContextProvider>
       shared_vulkan_context_provider_;
 
   gpu::GpuChannelEstablishFactory* gpu_channel_factory_ = nullptr;

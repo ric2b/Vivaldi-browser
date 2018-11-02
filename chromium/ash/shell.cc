@@ -13,6 +13,7 @@
 #include "ash/accelerators/ash_focus_manager_factory.h"
 #include "ash/accelerators/magnifier_key_scroller.h"
 #include "ash/accelerators/spoken_feedback_toggler.h"
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/accessibility_delegate.h"
 #include "ash/app_list/app_list_delegate_impl.h"
 #include "ash/ash_constants.h"
@@ -82,12 +83,14 @@
 #include "ash/system/power/power_status.h"
 #include "ash/system/power/video_activity_notifier.h"
 #include "ash/system/screen_layout_observer.h"
+#include "ash/system/session/logout_button_tray.h"
 #include "ash/system/session/logout_confirmation_controller.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/system/toast/toast_manager.h"
 #include "ash/system/tray/system_tray_controller.h"
-#include "ash/system/tray/system_tray_delegate.h"
 #include "ash/system/tray/system_tray_notifier.h"
+#include "ash/system/tray_caps_lock.h"
+#include "ash/system/web_notification/message_center_controller.h"
 #include "ash/touch/ash_touch_transform_controller.h"
 #include "ash/tray_action/tray_action.h"
 #include "ash/utility/screenshot_controller.h"
@@ -337,8 +340,12 @@ void Shell::RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
 }
 
 // static
-void Shell::RegisterProfilePrefs(PrefRegistrySimple* registry) {
+void Shell::RegisterProfilePrefs(PrefRegistrySimple* registry, bool for_test) {
+  AccessibilityController::RegisterProfilePrefs(registry, for_test);
+  LogoutButtonTray::RegisterProfilePrefs(registry);
   NightLightController::RegisterProfilePrefs(registry);
+  ShelfController::RegisterProfilePrefs(registry);
+  TrayCapsLock::RegisterProfilePrefs(registry, for_test);
   BluetoothPowerController::RegisterProfilePrefs(registry);
 }
 
@@ -424,18 +431,8 @@ void Shell::UpdateShelfVisibility() {
     Shelf::ForWindow(root)->UpdateVisibilityState();
 }
 
-PrefService* Shell::GetActiveUserPrefService() const {
-  if (shell_port_->GetAshConfig() == Config::MASH)
-    return profile_pref_service_.get();
-
-  return shell_delegate_->GetActiveUserPrefService();
-}
-
 PrefService* Shell::GetLocalStatePrefService() const {
-  if (shell_port_->GetAshConfig() == Config::MASH)
-    return local_state_.get();
-
-  return shell_delegate_->GetLocalStatePrefService();
+  return local_state_.get();
 }
 
 WebNotificationTray* Shell::GetWebNotificationTray() {
@@ -506,13 +503,6 @@ void Shell::ShowAppList(app_list::AppListShowSource toggle_method) {
   app_list_->Show(display::Screen::GetScreen()
                       ->GetDisplayNearestWindow(GetRootWindowForNewWindows())
                       .id());
-}
-
-void Shell::UpdateAppListYPositionAndOpacity(int y_position_in_screen,
-                                             float app_list_background_opacity,
-                                             bool is_end_gesture) {
-  app_list_->UpdateYPositionAndOpacity(
-      y_position_in_screen, app_list_background_opacity, is_end_gesture);
 }
 
 void Shell::DismissAppList() {
@@ -653,8 +643,8 @@ Shell::Shell(std::unique_ptr<ShellDelegate> shell_delegate,
       lock_screen_controller_(base::MakeUnique<LockScreenController>()),
       media_controller_(base::MakeUnique<MediaController>()),
       new_window_controller_(base::MakeUnique<NewWindowController>()),
-      session_controller_(base::MakeUnique<SessionController>()),
-      shelf_controller_(base::MakeUnique<ShelfController>()),
+      session_controller_(base::MakeUnique<SessionController>(
+          shell_delegate->GetShellConnector())),
       shell_delegate_(std::move(shell_delegate)),
       shutdown_controller_(base::MakeUnique<ShutdownController>()),
       system_tray_controller_(base::MakeUnique<SystemTrayController>()),
@@ -664,7 +654,6 @@ Shell::Shell(std::unique_ptr<ShellDelegate> shell_delegate,
       window_cycle_controller_(base::MakeUnique<WindowCycleController>()),
       window_selector_controller_(base::MakeUnique<WindowSelectorController>()),
       app_list_(base::MakeUnique<app_list::AppList>()),
-      link_handler_model_factory_(nullptr),
       tray_bluetooth_helper_(base::MakeUnique<TrayBluetoothHelper>()),
       display_configurator_(new display::DisplayConfigurator()),
       native_cursor_manager_(nullptr),
@@ -700,8 +689,6 @@ Shell::~Shell() {
   aura::client::GetFocusClient(GetPrimaryRootWindow())->FocusWindow(nullptr);
 
   // Please keep in reverse order as in Init() because it's easy to miss one.
-  split_view_controller_.reset();
-
   if (window_modality_controller_)
     window_modality_controller_.reset();
 
@@ -743,12 +730,12 @@ Shell::~Shell() {
 
   toast_manager_.reset();
 
-  // Destroy SystemTrayDelegate before destroying the status area(s). Make sure
-  // to deinitialize the shelf first, as it is initialized after the delegate.
   for (aura::Window* root : GetAllRootWindows())
     Shelf::ForWindow(root)->ShutdownShelfWidget();
   tray_bluetooth_helper_.reset();
-  DeleteSystemTrayDelegate();
+
+  // Accesses root window containers.
+  logout_confirmation_controller_.reset();
 
   // Drag-and-drop must be canceled prior to close all windows.
   drag_drop_controller_.reset();
@@ -769,6 +756,10 @@ Shell::~Shell() {
   // Has to happen before ~MruWindowTracker.
   window_cycle_controller_.reset();
   window_selector_controller_.reset();
+
+  // |split_view_controller_| needs to be deleted after
+  // |window_selector_controller_|.
+  split_view_controller_.reset();
 
   CloseAllRootWindowChildWindows();
 
@@ -813,6 +804,7 @@ Shell::~Shell() {
 
   // These members access Shell in their destructors.
   wallpaper_controller_.reset();
+  accessibility_controller_.reset();
   accessibility_delegate_.reset();
 
   // Balances the Install() in Initialize().
@@ -873,7 +865,7 @@ Shell::~Shell() {
   // NightLightController depeneds on the PrefService and must be destructed
   // before it. crbug.com/724231.
   night_light_controller_ = nullptr;
-  profile_pref_service_ = nullptr;
+  local_state_.reset();
   shell_delegate_.reset();
 
   for (auto& observer : shell_observers_)
@@ -894,7 +886,7 @@ void Shell::Init(const ShellInitParams& init_params) {
   wallpaper_delegate_ = shell_delegate_->CreateWallpaperDelegate();
 
   // Connector can be null in tests.
-  if (config == Config::MASH && shell_delegate_->GetShellConnector()) {
+  if (shell_delegate_->GetShellConnector()) {
     // Connect to local state prefs now, but wait for an active user before
     // connecting to the profile pref service. The login screen has a temporary
     // user profile that is not associated with a real user.
@@ -910,6 +902,7 @@ void Shell::Init(const ShellInitParams& init_params) {
   // Some delegates access ShellPort during their construction. Create them here
   // instead of the ShellPort constructor.
   accessibility_delegate_.reset(shell_delegate_->CreateAccessibilityDelegate());
+  accessibility_controller_ = base::MakeUnique<AccessibilityController>();
   palette_delegate_ = shell_delegate_->CreatePaletteDelegate();
   toast_manager_ = base::MakeUnique<ToastManager>();
 
@@ -919,8 +912,7 @@ void Shell::Init(const ShellInitParams& init_params) {
 
   wallpaper_controller_ = base::MakeUnique<WallpaperController>();
 
-  if (config == Config::MASH)
-    app_list_delegate_impl_ = base::MakeUnique<AppListDelegateImpl>();
+  app_list_delegate_impl_ = base::MakeUnique<AppListDelegateImpl>();
 
   // TODO(sky): move creation to ShellPort.
   if (config != Config::MASH)
@@ -974,11 +966,7 @@ void Shell::Init(const ShellInitParams& init_params) {
     display_configurator_->AddObserver(display_error_observer_.get());
     display_configurator_->set_state_controller(display_change_observer_.get());
     display_configurator_->set_mirroring_controller(display_manager_.get());
-    display_configurator_->ForceInitialConfigure(
-        base::CommandLine::ForCurrentProcess()->HasSwitch(
-            chromeos::switches::kFirstExecAfterBoot)
-            ? kChromeOsBootColor
-            : 0);
+    display_configurator_->ForceInitialConfigure();
     display_initialized = true;
   }
   display_color_manager_ =
@@ -1030,6 +1018,7 @@ void Shell::Init(const ShellInitParams& init_params) {
 
   accelerator_controller_ = shell_port_->CreateAcceleratorController();
   tablet_mode_controller_ = base::MakeUnique<TabletModeController>();
+  shelf_controller_ = base::MakeUnique<ShelfController>();
 
   magnifier_key_scroll_handler_ = MagnifierKeyScroller::CreateHandler();
   AddPreTargetHandler(magnifier_key_scroll_handler_.get());
@@ -1128,8 +1117,8 @@ void Shell::Init(const ShellInitParams& init_params) {
   resize_shadow_controller_.reset(new ResizeShadowController());
   shadow_controller_.reset(new ::wm::ShadowController(focus_controller_.get()));
 
-  SetSystemTrayDelegate(
-      base::WrapUnique(shell_delegate_->CreateSystemTrayDelegate()));
+  logout_confirmation_controller_ =
+      base::MakeUnique<LogoutConfirmationController>();
 
   // May trigger initialization of the Bluetooth adapter.
   tray_bluetooth_helper_->Initialize();
@@ -1183,6 +1172,8 @@ void Shell::Init(const ShellInitParams& init_params) {
   // is started.
   display_manager_->CreateMirrorWindowAsyncIfAny();
 
+  message_center_controller_ = base::MakeUnique<MessageCenterController>();
+
   for (auto& observer : shell_observers_)
     observer.OnShellInitialized();
 
@@ -1212,24 +1203,6 @@ void Shell::InitRootWindow(aura::Window* root_window) {
   ::wm::SetWindowMoveClient(root_window, toplevel_window_event_handler_.get());
   root_window->AddPreTargetHandler(toplevel_window_event_handler_.get());
   root_window->AddPostTargetHandler(toplevel_window_event_handler_.get());
-}
-
-void Shell::SetSystemTrayDelegate(
-    std::unique_ptr<SystemTrayDelegate> delegate) {
-  DCHECK(delegate);
-  system_tray_delegate_ = std::move(delegate);
-  system_tray_delegate_->Initialize();
-  // Accesses ShellPort in its constructor.
-  logout_confirmation_controller_.reset(new LogoutConfirmationController(
-      base::Bind(&SystemTrayController::SignOut,
-                 base::Unretained(system_tray_controller_.get()))));
-}
-
-void Shell::DeleteSystemTrayDelegate() {
-  DCHECK(system_tray_delegate_);
-  // Accesses ShellPort in its destructor.
-  logout_confirmation_controller_.reset();
-  system_tray_delegate_.reset();
 }
 
 void Shell::CloseAllRootWindowChildWindows() {
@@ -1283,30 +1256,6 @@ void Shell::OnWindowActivated(
     root_window_for_new_windows_ = gained_active->GetRootWindow();
 }
 
-void Shell::OnActiveUserSessionChanged(const AccountId& account_id) {
-  if (GetAshConfig() == Config::MASH && shell_delegate_->GetShellConnector()) {
-    // NOTE: |profile_pref_service_| will point to the previous user's profile
-    // while the connection is being made.
-    auto pref_registry = base::MakeRefCounted<PrefRegistrySimple>();
-    RegisterProfilePrefs(pref_registry.get());
-    prefs::ConnectToPrefService(
-        shell_delegate_->GetShellConnector(), pref_registry,
-        base::Bind(&Shell::OnProfilePrefServiceInitialized,
-                   weak_factory_.GetWeakPtr()),
-        prefs::mojom::kForwarderServiceName);
-    return;
-  }
-
-  // On classic ash user profile prefs are available immediately after login.
-  // The login screen temporary profile is never available.
-  PrefService* profile_prefs = shell_delegate_->GetActiveUserPrefService();
-  for (auto& observer : shell_observers_)
-    observer.OnActiveUserPrefServiceChanged(profile_prefs);
-
-  // HACK for M61. See SessionObserver comments.
-  session_controller_->NotifyActiveUserPrefServiceChanged(profile_prefs);
-}
-
 void Shell::OnSessionStateChanged(session_manager::SessionState state) {
   // Initialize the shelf when a session becomes active. It's safe to do this
   // multiple times (e.g. initial login vs. multiprofile add session).
@@ -1326,6 +1275,8 @@ void Shell::OnSessionStateChanged(session_manager::SessionState state) {
       CreateKeyboard();
     }
   }
+
+  shell_port_->UpdateSystemModalAndBlockingContainers();
 }
 
 void Shell::OnLoginStatusChanged(LoginStatus login_status) {
@@ -1360,22 +1311,18 @@ void Shell::InitializeShelf() {
     root->InitializeShelf();
 }
 
-void Shell::OnProfilePrefServiceInitialized(
-    std::unique_ptr<::PrefService> pref_service) {
-  // |pref_service| can be null if can't connect to Chrome (as happens when
-  // running mash outside of chrome --mash and chrome isn't built).
-  for (auto& observer : shell_observers_)
-    observer.OnActiveUserPrefServiceChanged(pref_service.get());
-  // Reset after notifying clients so they can unregister pref observers on the
-  // old PrefService.
-  profile_pref_service_ = std::move(pref_service);
-}
-
 void Shell::OnLocalStatePrefServiceInitialized(
     std::unique_ptr<::PrefService> pref_service) {
+  DCHECK(!local_state_);
   // |pref_service| is null if can't connect to Chrome (as happens when
   // running mash outside of chrome --mash and chrome isn't built).
+  if (!pref_service)
+    return;
+
   local_state_ = std::move(pref_service);
+
+  for (auto& observer : shell_observers_)
+    observer.OnLocalStatePrefServiceInitialized(local_state_.get());
 }
 
 }  // namespace ash

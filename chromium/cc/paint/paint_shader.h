@@ -10,6 +10,7 @@
 
 #include "base/optional.h"
 #include "cc/paint/paint_export.h"
+#include "cc/paint/paint_image.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkScalar.h"
 #include "third_party/skia/include/core/SkShader.h"
@@ -21,6 +22,22 @@ using PaintRecord = PaintOpBuffer;
 
 class CC_PAINT_EXPORT PaintShader : public SkRefCnt {
  public:
+  enum class Type : uint8_t {
+    kColor,
+    kLinearGradient,
+    kRadialGradient,
+    kTwoPointConicalGradient,
+    kSweepGradient,
+    kImage,
+    kPaintRecord,
+    kShaderCount
+  };
+
+  // Scaling behavior dictates how a PaintRecord shader will behave. Use
+  // RasterAtScale to create a picture shader. Use FixedScale to create an image
+  // shader that is backed by the paint record.
+  enum class ScalingBehavior : uint8_t { kRasterAtScale, kFixedScale };
+
   static sk_sp<PaintShader> MakeColor(SkColor color);
 
   static sk_sp<PaintShader> MakeLinearGradient(
@@ -63,42 +80,53 @@ class CC_PAINT_EXPORT PaintShader : public SkRefCnt {
       const SkColor colors[],
       const SkScalar pos[],
       int color_count,
+      SkShader::TileMode mode,
+      SkScalar start_degrees,
+      SkScalar end_degrees,
       uint32_t flags = 0,
       const SkMatrix* local_matrix = nullptr,
       SkColor fallback_color = SK_ColorTRANSPARENT);
 
-  static sk_sp<PaintShader> MakeImage(sk_sp<const SkImage> image,
+  static sk_sp<PaintShader> MakeImage(const PaintImage& image,
                                       SkShader::TileMode tx,
                                       SkShader::TileMode ty,
                                       const SkMatrix* local_matrix);
 
-  static sk_sp<PaintShader> MakePaintRecord(sk_sp<PaintRecord> record,
-                                            const SkRect& tile,
-                                            SkShader::TileMode tx,
-                                            SkShader::TileMode ty,
-                                            const SkMatrix* local_matrix);
+  static sk_sp<PaintShader> MakePaintRecord(
+      sk_sp<PaintRecord> record,
+      const SkRect& tile,
+      SkShader::TileMode tx,
+      SkShader::TileMode ty,
+      const SkMatrix* local_matrix,
+      ScalingBehavior scaling_behavior = ScalingBehavior::kRasterAtScale);
 
   ~PaintShader() override;
 
   SkMatrix GetLocalMatrix() const {
     return local_matrix_ ? *local_matrix_ : SkMatrix::I();
   }
+  Type shader_type() const { return shader_type_; }
+  const PaintImage& paint_image() const {
+    DCHECK_EQ(Type::kImage, shader_type_);
+    return image_;
+  }
+
+  SkShader::TileMode tx() const { return tx_; }
+  SkShader::TileMode ty() const { return ty_; }
 
   bool IsOpaque() const;
 
+  // Returns true if the shader looks like it is valid (ie the members required
+  // for this shader type all look reasonable. Returns false otherwise. Note
+  // that this is a best effort function since truly validating whether the
+  // shader is correct is hard.
+  bool IsValid() const;
+
  private:
   friend class PaintFlags;
-
-  enum Type {
-    kColor,
-    kLinearGradient,
-    kRadialGradient,
-    kTwoPointConicalGradient,
-    kSweepGradient,
-    kImage,
-    kPaintRecord,
-    kShaderCount
-  };
+  friend class PaintOpReader;
+  friend class PaintOpSerializationTestUtils;
+  friend class PaintOpWriter;
 
   explicit PaintShader(Type type);
 
@@ -112,7 +140,7 @@ class CC_PAINT_EXPORT PaintShader : public SkRefCnt {
                           SkShader::TileMode ty);
   void SetFlagsAndFallback(uint32_t flags, SkColor fallback_color);
 
-  Type shader_type_ = kShaderCount;
+  Type shader_type_ = Type::kShaderCount;
 
   uint32_t flags_ = 0;
   SkScalar end_radius_ = 0;
@@ -120,6 +148,7 @@ class CC_PAINT_EXPORT PaintShader : public SkRefCnt {
   SkShader::TileMode tx_ = SkShader::kClamp_TileMode;
   SkShader::TileMode ty_ = SkShader::kClamp_TileMode;
   SkColor fallback_color_ = SK_ColorTRANSPARENT;
+  ScalingBehavior scaling_behavior_ = ScalingBehavior::kRasterAtScale;
 
   base::Optional<SkMatrix> local_matrix_;
   SkPoint center_ = SkPoint::Make(0, 0);
@@ -128,7 +157,10 @@ class CC_PAINT_EXPORT PaintShader : public SkRefCnt {
   SkPoint start_point_ = SkPoint::Make(0, 0);
   SkPoint end_point_ = SkPoint::Make(0, 0);
 
-  sk_sp<const SkImage> image_;
+  SkScalar start_degrees_ = 0;
+  SkScalar end_degrees_ = 0;
+
+  PaintImage image_;
   sk_sp<PaintRecord> record_;
 
   std::vector<SkColor> colors_;

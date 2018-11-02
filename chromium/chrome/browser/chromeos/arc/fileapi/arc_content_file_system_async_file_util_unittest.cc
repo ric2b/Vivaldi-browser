@@ -38,7 +38,7 @@ constexpr char kMimeType[] = "application/octet-stream";
 std::unique_ptr<KeyedService> CreateArcFileSystemOperationRunnerForTesting(
     content::BrowserContext* context) {
   return ArcFileSystemOperationRunner::CreateForTesting(
-      ArcServiceManager::Get()->arc_bridge_service());
+      context, ArcServiceManager::Get()->arc_bridge_service());
 }
 
 class ArcContentFileSystemAsyncFileUtilTest : public testing::Test {
@@ -51,9 +51,10 @@ class ArcContentFileSystemAsyncFileUtilTest : public testing::Test {
         File(kArcUrl, kData, kMimeType, File::Seekable::NO));
 
     arc_service_manager_ = base::MakeUnique<ArcServiceManager>();
-    arc_service_manager_->set_browser_context(&profile_);
+    profile_ = base::MakeUnique<TestingProfile>();
+    arc_service_manager_->set_browser_context(profile_.get());
     ArcFileSystemOperationRunner::GetFactory()->SetTestingFactoryAndUse(
-        &profile_, &CreateArcFileSystemOperationRunnerForTesting);
+        profile_.get(), &CreateArcFileSystemOperationRunnerForTesting);
     arc_service_manager_->arc_bridge_service()->file_system()->SetInstance(
         &fake_file_system_);
 
@@ -74,9 +75,12 @@ class ArcContentFileSystemAsyncFileUtilTest : public testing::Test {
   }
 
   content::TestBrowserThreadBundle thread_bundle_;
-  TestingProfile profile_;
   FakeFileSystemInstance fake_file_system_;
+
+  // Use the same initialization/destruction order as
+  // ChromeBrowserMainPartsChromeos.
   std::unique_ptr<ArcServiceManager> arc_service_manager_;
+  std::unique_ptr<TestingProfile> profile_;
   std::unique_ptr<ArcContentFileSystemAsyncFileUtil> async_file_util_;
 
  private:

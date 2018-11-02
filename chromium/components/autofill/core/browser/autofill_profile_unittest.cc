@@ -343,9 +343,8 @@ TEST(AutofillProfileTest, CreateInferredLabelsI18n_KR) {
                        "Gangnam Finance Center", "152 Teheran-ro", "Gangnam-Gu",
                        "Seoul", "135-984", "KR", "+82-2-531-9000");
   profiles.back()->set_language_code("ko_Latn");
-  profiles.back()->SetInfo(AutofillType(ADDRESS_HOME_DEPENDENT_LOCALITY),
-                           UTF8ToUTF16("Yeoksam-Dong"),
-                           "en-US");
+  profiles.back()->SetInfo(ADDRESS_HOME_DEPENDENT_LOCALITY,
+                           UTF8ToUTF16("Yeoksam-Dong"), "en-US");
   static const char* kExpectedLabels[] = {
       "",
       "Park Jae-sang",
@@ -735,7 +734,7 @@ TEST(AutofillProfileTest, MergeDataFrom_DifferentProfile) {
   EXPECT_EQ(kSettingsOrigin, a.origin());
   EXPECT_EQ(ASCIIToUTF16("Unit 5, area 51"), a.GetRawInfo(ADDRESS_HOME_LINE2));
   EXPECT_EQ(ASCIIToUTF16("Fox"), a.GetRawInfo(COMPANY_NAME));
-  base::string16 name = a.GetInfo(AutofillType(NAME_FULL), "en-US");
+  base::string16 name = a.GetInfo(NAME_FULL, "en-US");
   EXPECT_EQ(ASCIIToUTF16("Marion Mitchell Morrison"), name);
   EXPECT_EQ("en", a.language_code());
 }
@@ -917,7 +916,7 @@ TEST(AutofillProfileTest, SetRawInfoPreservesLineBreaks) {
 TEST(AutofillProfileTest, SetInfoPreservesLineBreaks) {
   AutofillProfile profile(base::GenerateGUID(), "https://www.example.com/");
 
-  profile.SetInfo(AutofillType(ADDRESS_HOME_STREET_ADDRESS),
+  profile.SetInfo(ADDRESS_HOME_STREET_ADDRESS,
                   ASCIIToUTF16("123 Super St.\n"
                                "Apt. #42"),
                   "en-US");
@@ -937,8 +936,7 @@ TEST(AutofillProfileTest, SetRawInfoDoesntTrimWhitespace) {
 TEST(AutofillProfileTest, SetInfoTrimsWhitespace) {
   AutofillProfile profile(base::GenerateGUID(), "https://www.example.com/");
 
-  profile.SetInfo(AutofillType(EMAIL_ADDRESS),
-                  ASCIIToUTF16("\tuser@example.com    "),
+  profile.SetInfo(EMAIL_ADDRESS, ASCIIToUTF16("\tuser@example.com    "),
                   "en-US");
   EXPECT_EQ(ASCIIToUTF16("user@example.com"),
             profile.GetRawInfo(EMAIL_ADDRESS));
@@ -964,12 +962,8 @@ TEST(AutofillProfileTest, FullAddress) {
   EXPECT_EQ(formatted_address, profile.GetInfo(full_address, "en-US"));
 
   // Some things can be missing...
-  profile.SetInfo(AutofillType(ADDRESS_HOME_LINE2),
-                  base::string16(),
-                  "en-US");
-  profile.SetInfo(AutofillType(EMAIL_ADDRESS),
-                  base::string16(),
-                  "en-US");
+  profile.SetInfo(ADDRESS_HOME_LINE2, base::string16(), "en-US");
+  profile.SetInfo(EMAIL_ADDRESS, base::string16(), "en-US");
   EXPECT_EQ(ASCIIToUTF16("Marion Mitchell Morrison\n"
                          "Fox\n"
                          "123 Zoo St.\n"
@@ -977,17 +971,13 @@ TEST(AutofillProfileTest, FullAddress) {
             profile.GetInfo(full_address, "en-US"));
 
   // ...but nothing comes out if a required field is missing.
-  profile.SetInfo(AutofillType(ADDRESS_HOME_STATE), base::string16(), "en-US");
+  profile.SetInfo(ADDRESS_HOME_STATE, base::string16(), "en-US");
   EXPECT_TRUE(profile.GetInfo(full_address, "en-US").empty());
 
   // Restore the state but remove country. This should also fail.
-  profile.SetInfo(AutofillType(ADDRESS_HOME_STATE),
-                               ASCIIToUTF16("CA"),
-                               "en-US");
+  profile.SetInfo(ADDRESS_HOME_STATE, ASCIIToUTF16("CA"), "en-US");
   EXPECT_FALSE(profile.GetInfo(full_address, "en-US").empty());
-  profile.SetInfo(AutofillType(ADDRESS_HOME_COUNTRY),
-                               base::string16(),
-                               "en-US");
+  profile.SetInfo(ADDRESS_HOME_COUNTRY, base::string16(), "en-US");
   EXPECT_TRUE(profile.GetInfo(full_address, "en-US").empty());
 }
 
@@ -1098,6 +1088,218 @@ TEST(AutofillProfileTest, SaveAdditionalInfo_Name_ComplementaryInformation) {
   EXPECT_EQ(base::ASCIIToUTF16("Morrison"), a.GetRawInfo(NAME_LAST));
   EXPECT_EQ(base::ASCIIToUTF16("Marion Mitchell Morrison"),
             a.GetRawInfo(NAME_FULL));
+}
+
+TEST(AutofillProfileTest, ValidityStates) {
+  AutofillProfile profile;
+
+  // The default validity state should be UNVALIDATED.
+  EXPECT_EQ(AutofillProfile::UNVALIDATED,
+            profile.GetValidityState(ADDRESS_HOME_COUNTRY));
+
+  // Make sure setting the validity state works.
+  profile.SetValidityState(ADDRESS_HOME_COUNTRY, AutofillProfile::VALID);
+  profile.SetValidityState(ADDRESS_HOME_CITY, AutofillProfile::INVALID);
+  profile.SetValidityState(ADDRESS_HOME_STATE, AutofillProfile::EMPTY);
+  EXPECT_EQ(AutofillProfile::VALID,
+            profile.GetValidityState(ADDRESS_HOME_COUNTRY));
+  EXPECT_EQ(AutofillProfile::INVALID,
+            profile.GetValidityState(ADDRESS_HOME_CITY));
+  EXPECT_EQ(AutofillProfile::EMPTY,
+            profile.GetValidityState(ADDRESS_HOME_STATE));
+}
+
+TEST(AutofillProfileTest, ValidityStates_UnsupportedTypes) {
+  AutofillProfile profile;
+
+  // The validity state of unsupported types should be UNSUPPORTED.
+  EXPECT_EQ(AutofillProfile::UNSUPPORTED,
+            profile.GetValidityState(ADDRESS_HOME_LINE1));
+
+  // Make sure setting the validity state of an unsupported type does nothing.
+  profile.SetValidityState(ADDRESS_HOME_LINE1, AutofillProfile::VALID);
+  profile.SetValidityState(ADDRESS_HOME_LINE2, AutofillProfile::INVALID);
+  profile.SetValidityState(PHONE_HOME_CITY_AND_NUMBER,
+                           AutofillProfile::UNVALIDATED);
+  EXPECT_EQ(AutofillProfile::UNSUPPORTED,
+            profile.GetValidityState(ADDRESS_HOME_LINE1));
+  EXPECT_EQ(AutofillProfile::UNSUPPORTED,
+            profile.GetValidityState(ADDRESS_HOME_LINE2));
+  EXPECT_EQ(AutofillProfile::UNSUPPORTED,
+            profile.GetValidityState(PHONE_HOME_CITY_AND_NUMBER));
+}
+
+TEST(AutofillProfileTest, GetValidityBitfieldValue_Country) {
+  AutofillProfile profile;
+
+  // By default all validity statuses should be set to UNVALIDATED, thus the
+  // bitfield value should be empty.
+  EXPECT_EQ(0, profile.GetValidityBitfieldValue());
+
+  profile.SetValidityState(ADDRESS_HOME_COUNTRY, AutofillProfile::EMPTY);
+  // 0b01
+  EXPECT_EQ(1, profile.GetValidityBitfieldValue());
+
+  profile.SetValidityState(ADDRESS_HOME_COUNTRY, AutofillProfile::VALID);
+  // 0b10
+  EXPECT_EQ(2, profile.GetValidityBitfieldValue());
+
+  profile.SetValidityState(ADDRESS_HOME_COUNTRY, AutofillProfile::INVALID);
+  // 0b11
+  EXPECT_EQ(3, profile.GetValidityBitfieldValue());
+}
+
+TEST(AutofillProfileTest, GetValidityBitfieldValue_State) {
+  AutofillProfile profile;
+
+  // By default all validity statuses should be set to UNVALIDATED, thus the
+  // bitfield value should be empty.
+  EXPECT_EQ(0, profile.GetValidityBitfieldValue());
+
+  profile.SetValidityState(ADDRESS_HOME_STATE, AutofillProfile::EMPTY);
+  // 0b0100
+  EXPECT_EQ(4, profile.GetValidityBitfieldValue());
+
+  profile.SetValidityState(ADDRESS_HOME_STATE, AutofillProfile::VALID);
+  // 0b1000
+  EXPECT_EQ(8, profile.GetValidityBitfieldValue());
+
+  profile.SetValidityState(ADDRESS_HOME_STATE, AutofillProfile::INVALID);
+  // 0b1100
+  EXPECT_EQ(12, profile.GetValidityBitfieldValue());
+}
+
+TEST(AutofillProfileTest, GetValidityBitfieldValue_Zip) {
+  AutofillProfile profile;
+
+  // By default all validity statuses should be set to UNVALIDATED, thus the
+  // bitfield value should be empty.
+  EXPECT_EQ(0, profile.GetValidityBitfieldValue());
+
+  profile.SetValidityState(ADDRESS_HOME_ZIP, AutofillProfile::EMPTY);
+  // 0b010000
+  EXPECT_EQ(16, profile.GetValidityBitfieldValue());
+
+  profile.SetValidityState(ADDRESS_HOME_ZIP, AutofillProfile::VALID);
+  // 0b100000
+  EXPECT_EQ(32, profile.GetValidityBitfieldValue());
+
+  profile.SetValidityState(ADDRESS_HOME_ZIP, AutofillProfile::INVALID);
+  // 0b110000
+  EXPECT_EQ(48, profile.GetValidityBitfieldValue());
+}
+
+TEST(AutofillProfileTest, GetValidityBitfieldValue_City) {
+  AutofillProfile profile;
+
+  // By default all validity statuses should be set to UNVALIDATED, thus the
+  // bitfield value should be empty.
+  EXPECT_EQ(0, profile.GetValidityBitfieldValue());
+
+  profile.SetValidityState(ADDRESS_HOME_CITY, AutofillProfile::EMPTY);
+  // 0b01000000
+  EXPECT_EQ(64, profile.GetValidityBitfieldValue());
+
+  profile.SetValidityState(ADDRESS_HOME_CITY, AutofillProfile::VALID);
+  // 0b10000000
+  EXPECT_EQ(128, profile.GetValidityBitfieldValue());
+
+  profile.SetValidityState(ADDRESS_HOME_CITY, AutofillProfile::INVALID);
+  // 0b11000000
+  EXPECT_EQ(192, profile.GetValidityBitfieldValue());
+}
+
+TEST(AutofillProfileTest, GetValidityBitfieldValue_DependentLocality) {
+  AutofillProfile profile;
+
+  // By default all validity statuses should be set to UNVALIDATED, thus the
+  // bitfield value should be empty.
+  EXPECT_EQ(0, profile.GetValidityBitfieldValue());
+
+  profile.SetValidityState(ADDRESS_HOME_DEPENDENT_LOCALITY,
+                           AutofillProfile::EMPTY);
+  // 0b0100000000
+  EXPECT_EQ(256, profile.GetValidityBitfieldValue());
+
+  profile.SetValidityState(ADDRESS_HOME_DEPENDENT_LOCALITY,
+                           AutofillProfile::VALID);
+  // 0b1000000000
+  EXPECT_EQ(512, profile.GetValidityBitfieldValue());
+
+  profile.SetValidityState(ADDRESS_HOME_DEPENDENT_LOCALITY,
+                           AutofillProfile::INVALID);
+  // 0b1100000000
+  EXPECT_EQ(768, profile.GetValidityBitfieldValue());
+}
+
+TEST(AutofillProfileTest, GetValidityBitfieldValue_Email) {
+  AutofillProfile profile;
+
+  // By default all validity statuses should be set to UNVALIDATED, thus the
+  // bitfield value should be empty.
+  EXPECT_EQ(0, profile.GetValidityBitfieldValue());
+
+  profile.SetValidityState(EMAIL_ADDRESS, AutofillProfile::EMPTY);
+  // 0b010000000000
+  EXPECT_EQ(1024, profile.GetValidityBitfieldValue());
+
+  profile.SetValidityState(EMAIL_ADDRESS, AutofillProfile::VALID);
+  // 0b100000000000
+  EXPECT_EQ(2048, profile.GetValidityBitfieldValue());
+
+  profile.SetValidityState(EMAIL_ADDRESS, AutofillProfile::INVALID);
+  // 0b110000000000
+  EXPECT_EQ(3072, profile.GetValidityBitfieldValue());
+}
+
+TEST(AutofillProfileTest, GetValidityBitfieldValue_Phone) {
+  AutofillProfile profile;
+
+  // By default all validity statuses should be set to UNVALIDATED, thus the
+  // bitfield value should be empty.
+  EXPECT_EQ(0, profile.GetValidityBitfieldValue());
+
+  profile.SetValidityState(PHONE_HOME_WHOLE_NUMBER, AutofillProfile::EMPTY);
+  // 0b01000000000000
+  EXPECT_EQ(4096, profile.GetValidityBitfieldValue());
+
+  profile.SetValidityState(PHONE_HOME_WHOLE_NUMBER, AutofillProfile::VALID);
+  // 0b10000000000000
+  EXPECT_EQ(8192, profile.GetValidityBitfieldValue());
+
+  profile.SetValidityState(PHONE_HOME_WHOLE_NUMBER, AutofillProfile::INVALID);
+  // 0b11000000000000
+  EXPECT_EQ(12288, profile.GetValidityBitfieldValue());
+}
+
+TEST(AutofillProfileTest, GetValidityBitfieldValue_Mixed) {
+  AutofillProfile profile;
+
+  // By default all validity statuses should be set to UNVALIDATED, thus the
+  // bitfield value should be empty.
+  EXPECT_EQ(0, profile.GetValidityBitfieldValue());
+
+  profile.SetValidityState(ADDRESS_HOME_COUNTRY, AutofillProfile::VALID);
+  profile.SetValidityState(ADDRESS_HOME_STATE, AutofillProfile::UNVALIDATED);
+  profile.SetValidityState(ADDRESS_HOME_ZIP, AutofillProfile::EMPTY);
+  profile.SetValidityState(ADDRESS_HOME_CITY, AutofillProfile::INVALID);
+  profile.SetValidityState(ADDRESS_HOME_DEPENDENT_LOCALITY,
+                           AutofillProfile::UNVALIDATED);
+  profile.SetValidityState(EMAIL_ADDRESS, AutofillProfile::INVALID);
+  profile.SetValidityState(PHONE_HOME_WHOLE_NUMBER, AutofillProfile::EMPTY);
+  // 0b01110011010010
+  EXPECT_EQ(7378, profile.GetValidityBitfieldValue());
+
+  profile.SetValidityState(ADDRESS_HOME_COUNTRY, AutofillProfile::EMPTY);
+  profile.SetValidityState(ADDRESS_HOME_STATE, AutofillProfile::INVALID);
+  profile.SetValidityState(ADDRESS_HOME_ZIP, AutofillProfile::VALID);
+  profile.SetValidityState(ADDRESS_HOME_CITY, AutofillProfile::VALID);
+  profile.SetValidityState(ADDRESS_HOME_DEPENDENT_LOCALITY,
+                           AutofillProfile::INVALID);
+  profile.SetValidityState(EMAIL_ADDRESS, AutofillProfile::UNVALIDATED);
+  profile.SetValidityState(PHONE_HOME_WHOLE_NUMBER, AutofillProfile::INVALID);
+  // 0b11001110101101
+  EXPECT_EQ(13229, profile.GetValidityBitfieldValue());
 }
 
 }  // namespace autofill

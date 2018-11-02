@@ -200,7 +200,7 @@ testing::AssertionResult CompareFaviconDataToSpecifics(
     if (tracking_specifics.last_visit_time_ms() != test_data.last_visit_time)
       return testing::AssertionFailure() << "Visit time doesn't match.";
     if (tracking_specifics.is_bookmarked() != test_data.is_bookmarked)
-      return testing::AssertionFailure() << "Bookmark status doens't match.";
+      return testing::AssertionFailure() << "Bookmark status doesn't match.";
   }
   return testing::AssertionSuccess();
 }
@@ -401,7 +401,7 @@ testing::AssertionResult SyncFaviconCacheTest::VerifyLocalCustomIcons(
 
 std::unique_ptr<syncer::SyncChangeProcessor>
 SyncFaviconCacheTest::CreateAndPassProcessor() {
-  return base::MakeUnique<syncer::SyncChangeProcessorWrapperForTest>(
+  return std::make_unique<syncer::SyncChangeProcessorWrapperForTest>(
       sync_processor_.get());
 }
 

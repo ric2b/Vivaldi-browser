@@ -36,15 +36,10 @@ FencedAllocator::FencedAllocator(unsigned int size, CommandBufferHelper* helper)
 }
 
 FencedAllocator::~FencedAllocator() {
-  // Free blocks pending tokens.
-  for (unsigned int i = 0; i < blocks_.size(); ++i) {
-    if (blocks_[i].state == FREE_PENDING_TOKEN) {
-      i = WaitForTokenAndFreeBlock(i);
-    }
-  }
-
-  DCHECK_EQ(blocks_.size(), 1u);
-  DCHECK_EQ(blocks_[0].state, FREE);
+  // All IN_USE blocks should be released at this point. There may still be
+  // FREE_PENDING_TOKEN blocks, the assumption is that the underlying memory
+  // will not be re-used without higher level synchronization.
+  DCHECK_EQ(bytes_in_use_, 0u);
 }
 
 // Looks for a non-allocated block that is big enough. Search in the FREE
@@ -86,8 +81,9 @@ FencedAllocator::Offset FencedAllocator::Alloc(unsigned int size) {
 // necessary.
 void FencedAllocator::Free(FencedAllocator::Offset offset) {
   BlockIndex index = GetBlockByOffset(offset);
-  DCHECK_NE(blocks_[index].state, FREE);
   Block &block = blocks_[index];
+  DCHECK_NE(block.state, FREE);
+  DCHECK_EQ(block.offset, offset);
 
   if (block.state == IN_USE)
     bytes_in_use_ -= block.size;
@@ -101,6 +97,7 @@ void FencedAllocator::FreePendingToken(FencedAllocator::Offset offset,
                                        int32_t token) {
   BlockIndex index = GetBlockByOffset(offset);
   Block &block = blocks_[index];
+  DCHECK_EQ(block.offset, offset);
   if (block.state == IN_USE)
     bytes_in_use_ -= block.size;
   block.state = FREE_PENDING_TOKEN;
@@ -171,8 +168,18 @@ bool FencedAllocator::CheckConsistency() {
 
 // Returns false if all blocks are actually FREE, in which
 // case they would be coalesced into one block, true otherwise.
-bool FencedAllocator::InUse() {
+bool FencedAllocator::InUseOrFreePending() {
   return blocks_.size() != 1 || blocks_[0].state != FREE;
+}
+
+FencedAllocator::State FencedAllocator::GetBlockStatusForTest(
+    Offset offset,
+    int32_t* token_if_pending) {
+  BlockIndex index = GetBlockByOffset(offset);
+  Block& block = blocks_[index];
+  if ((block.state == FREE_PENDING_TOKEN) && token_if_pending)
+    *token_if_pending = block.token;
+  return block.state;
 }
 
 // Collapse the block to the next one, then to the previous one. Provided the
@@ -247,7 +254,7 @@ FencedAllocator::BlockIndex FencedAllocator::GetBlockByOffset(Offset offset) {
   Block templ = { IN_USE, offset, 0, kUnusedToken };
   Container::iterator it = std::lower_bound(blocks_.begin(), blocks_.end(),
                                             templ, OffsetCmp());
-  DCHECK(it != blocks_.end() && it->offset == offset);
+  DCHECK(it != blocks_.end());
   return it-blocks_.begin();
 }
 

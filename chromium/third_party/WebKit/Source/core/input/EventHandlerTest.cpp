@@ -7,6 +7,7 @@
 #include <memory>
 #include "core/dom/Document.h"
 #include "core/dom/Range.h"
+#include "core/editing/EditingTestBase.h"
 #include "core/editing/Editor.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/SelectionController.h"
@@ -32,6 +33,7 @@ class EventHandlerTest : public ::testing::Test {
     return GetDocument().GetFrame()->Selection();
   }
   void SetHtmlInnerHTML(const char* html_content);
+  ShadowRoot* SetShadowContent(const char* shadow_content, const char* host);
 
  protected:
   std::unique_ptr<DummyPageHolder> dummy_page_holder_;
@@ -89,6 +91,14 @@ void EventHandlerTest::SetUp() {
 void EventHandlerTest::SetHtmlInnerHTML(const char* html_content) {
   GetDocument().documentElement()->setInnerHTML(String::FromUTF8(html_content));
   GetDocument().View()->UpdateAllLifecyclePhases();
+}
+
+ShadowRoot* EventHandlerTest::SetShadowContent(const char* shadow_content,
+                                               const char* host) {
+  ShadowRoot* shadow_root =
+      EditingTestBase::CreateShadowRootForElementWithIDAndSetInnerHTML(
+          GetDocument(), host, shadow_content);
+  return shadow_root;
 }
 
 TEST_F(EventHandlerTest, dragSelectionAfterScroll) {
@@ -153,11 +163,10 @@ TEST_F(EventHandlerTest, dragSelectionAfterScroll) {
                    .GetSelectionController()
                    .MouseDownMayStartSelect());
 
-  ASSERT_TRUE(
-      Selection().ComputeVisibleSelectionInDOMTreeDeprecated().IsRange());
-  Range* range = CreateRange(Selection()
-                                 .ComputeVisibleSelectionInDOMTreeDeprecated()
-                                 .ToNormalizedEphemeralRange());
+  ASSERT_TRUE(Selection().GetSelectionInDOMTree().IsRange());
+  Range* range =
+      CreateRange(EphemeralRange(Selection().GetSelectionInDOMTree().Base(),
+                                 Selection().GetSelectionInDOMTree().Extent()));
   ASSERT_TRUE(range);
   EXPECT_EQ("Line 1\nLine 2", range->GetText());
 }
@@ -174,42 +183,33 @@ TEST_F(EventHandlerTest, multiClickSelectionFromTap) {
   TapEventBuilder single_tap_event(IntPoint(0, 0), 1);
   GetDocument().GetFrame()->GetEventHandler().HandleGestureEvent(
       single_tap_event);
-  ASSERT_TRUE(
-      Selection().ComputeVisibleSelectionInDOMTreeDeprecated().IsCaret());
-  EXPECT_EQ(Position(line, 0),
-            Selection().ComputeVisibleSelectionInDOMTreeDeprecated().Start());
+  ASSERT_TRUE(Selection().GetSelectionInDOMTree().IsCaret());
+  EXPECT_EQ(Position(line, 0), Selection().GetSelectionInDOMTree().Base());
 
   // Multi-tap events on editable elements should trigger selection, just
   // like multi-click events.
   TapEventBuilder double_tap_event(IntPoint(0, 0), 2);
   GetDocument().GetFrame()->GetEventHandler().HandleGestureEvent(
       double_tap_event);
-  ASSERT_TRUE(
-      Selection().ComputeVisibleSelectionInDOMTreeDeprecated().IsRange());
-  EXPECT_EQ(Position(line, 0),
-            Selection().ComputeVisibleSelectionInDOMTreeDeprecated().Start());
+  ASSERT_TRUE(Selection().GetSelectionInDOMTree().IsRange());
+  EXPECT_EQ(Position(line, 0), Selection().GetSelectionInDOMTree().Base());
   if (GetDocument()
           .GetFrame()
           ->GetEditor()
           .IsSelectTrailingWhitespaceEnabled()) {
-    EXPECT_EQ(Position(line, 4),
-              Selection().ComputeVisibleSelectionInDOMTreeDeprecated().End());
+    EXPECT_EQ(Position(line, 4), Selection().GetSelectionInDOMTree().Extent());
     EXPECT_EQ("One ", WebString(Selection().SelectedText()).Utf8());
   } else {
-    EXPECT_EQ(Position(line, 3),
-              Selection().ComputeVisibleSelectionInDOMTreeDeprecated().End());
+    EXPECT_EQ(Position(line, 3), Selection().GetSelectionInDOMTree().Extent());
     EXPECT_EQ("One", WebString(Selection().SelectedText()).Utf8());
   }
 
   TapEventBuilder triple_tap_event(IntPoint(0, 0), 3);
   GetDocument().GetFrame()->GetEventHandler().HandleGestureEvent(
       triple_tap_event);
-  ASSERT_TRUE(
-      Selection().ComputeVisibleSelectionInDOMTreeDeprecated().IsRange());
-  EXPECT_EQ(Position(line, 0),
-            Selection().ComputeVisibleSelectionInDOMTreeDeprecated().Start());
-  EXPECT_EQ(Position(line, 13),
-            Selection().ComputeVisibleSelectionInDOMTreeDeprecated().End());
+  ASSERT_TRUE(Selection().GetSelectionInDOMTree().IsRange());
+  EXPECT_EQ(Position(line, 0), Selection().GetSelectionInDOMTree().Base());
+  EXPECT_EQ(Position(line, 13), Selection().GetSelectionInDOMTree().Extent());
   EXPECT_EQ("One Two Three", WebString(Selection().SelectedText()).Utf8());
 }
 
@@ -224,27 +224,21 @@ TEST_F(EventHandlerTest, multiClickSelectionFromTapDisabledIfNotEditable) {
   TapEventBuilder single_tap_event(IntPoint(0, 0), 1);
   GetDocument().GetFrame()->GetEventHandler().HandleGestureEvent(
       single_tap_event);
-  ASSERT_TRUE(
-      Selection().ComputeVisibleSelectionInDOMTreeDeprecated().IsCaret());
-  EXPECT_EQ(Position(line, 0),
-            Selection().ComputeVisibleSelectionInDOMTreeDeprecated().Start());
+  ASSERT_TRUE(Selection().GetSelectionInDOMTree().IsCaret());
+  EXPECT_EQ(Position(line, 0), Selection().GetSelectionInDOMTree().Base());
 
   // As the text is readonly, multi-tap events should not trigger selection.
   TapEventBuilder double_tap_event(IntPoint(0, 0), 2);
   GetDocument().GetFrame()->GetEventHandler().HandleGestureEvent(
       double_tap_event);
-  ASSERT_TRUE(
-      Selection().ComputeVisibleSelectionInDOMTreeDeprecated().IsCaret());
-  EXPECT_EQ(Position(line, 0),
-            Selection().ComputeVisibleSelectionInDOMTreeDeprecated().Start());
+  ASSERT_TRUE(Selection().GetSelectionInDOMTree().IsCaret());
+  EXPECT_EQ(Position(line, 0), Selection().GetSelectionInDOMTree().Base());
 
   TapEventBuilder triple_tap_event(IntPoint(0, 0), 3);
   GetDocument().GetFrame()->GetEventHandler().HandleGestureEvent(
       triple_tap_event);
-  ASSERT_TRUE(
-      Selection().ComputeVisibleSelectionInDOMTreeDeprecated().IsCaret());
-  EXPECT_EQ(Position(line, 0),
-            Selection().ComputeVisibleSelectionInDOMTreeDeprecated().Start());
+  ASSERT_TRUE(Selection().GetSelectionInDOMTree().IsCaret());
+  EXPECT_EQ(Position(line, 0), Selection().GetSelectionInDOMTree().Base());
 }
 
 TEST_F(EventHandlerTest, draggedInlinePositionTest) {
@@ -331,13 +325,142 @@ TEST_F(EventHandlerTest, HitOnNothingDoesNotShowIBeam) {
 
 TEST_F(EventHandlerTest, HitOnTextShowsIBeam) {
   SetHtmlInnerHTML("blabla");
-  Node* text = GetDocument().body()->firstChild();
+  Node* const text = GetDocument().body()->firstChild();
   LayoutPoint location = text->GetLayoutObject()->VisualRect().Center();
   HitTestResult hit =
       GetDocument().GetFrame()->GetEventHandler().HitTestResultAtPoint(
           location);
+  EXPECT_TRUE(text->CanStartSelection());
   EXPECT_TRUE(
       GetDocument().GetFrame()->GetEventHandler().ShouldShowIBeamForNode(text,
+                                                                         hit));
+}
+
+TEST_F(EventHandlerTest, HitOnUserSelectNoneDoesNotShowIBeam) {
+  SetHtmlInnerHTML("<span style='user-select: none'>blabla</span>");
+  Node* const text = GetDocument().body()->firstChild()->firstChild();
+  LayoutPoint location = text->GetLayoutObject()->VisualRect().Center();
+  HitTestResult hit =
+      GetDocument().GetFrame()->GetEventHandler().HitTestResultAtPoint(
+          location);
+  EXPECT_FALSE(text->CanStartSelection());
+  EXPECT_FALSE(
+      GetDocument().GetFrame()->GetEventHandler().ShouldShowIBeamForNode(text,
+                                                                         hit));
+}
+
+TEST_F(EventHandlerTest, ChildCanOverrideUserSelectNone) {
+  SetHtmlInnerHTML(
+      "<div style='user-select: none'>"
+      "<span style='user-select: text'>blabla</span>"
+      "</div>");
+  Node* const text = GetDocument().body()->firstChild()->firstChild()->firstChild();
+  LayoutPoint location = text->GetLayoutObject()->VisualRect().Center();
+  HitTestResult hit =
+      GetDocument().GetFrame()->GetEventHandler().HitTestResultAtPoint(
+          location);
+  EXPECT_TRUE(text->CanStartSelection());
+  EXPECT_TRUE(
+      GetDocument().GetFrame()->GetEventHandler().ShouldShowIBeamForNode(text,
+                                                                         hit));
+}
+
+TEST_F(EventHandlerTest, ShadowChildCanOverrideUserSelectNone) {
+  SetHtmlInnerHTML("<p style='user-select: none' id='host'></p>");
+  ShadowRoot* const shadow_root = SetShadowContent(
+      "<span style='user-select: text' id='bla'>blabla</span>", "host");
+
+  Node* const text = shadow_root->getElementById("bla")->firstChild();
+  LayoutPoint location = text->GetLayoutObject()->VisualRect().Center();
+  HitTestResult hit =
+      GetDocument().GetFrame()->GetEventHandler().HitTestResultAtPoint(
+          location);
+  EXPECT_TRUE(text->CanStartSelection());
+  EXPECT_TRUE(
+      GetDocument().GetFrame()->GetEventHandler().ShouldShowIBeamForNode(text,
+                                                                         hit));
+}
+
+TEST_F(EventHandlerTest, ChildCanOverrideUserSelectText) {
+  SetHtmlInnerHTML(
+      "<div style='user-select: text'>"
+      "<span style='user-select: none'>blabla</span>"
+      "</div>");
+  Node* const text = GetDocument().body()->firstChild()->firstChild()->firstChild();
+  LayoutPoint location = text->GetLayoutObject()->VisualRect().Center();
+  HitTestResult hit =
+      GetDocument().GetFrame()->GetEventHandler().HitTestResultAtPoint(
+          location);
+  EXPECT_FALSE(text->CanStartSelection());
+  EXPECT_FALSE(
+      GetDocument().GetFrame()->GetEventHandler().ShouldShowIBeamForNode(text,
+                                                                         hit));
+}
+
+TEST_F(EventHandlerTest, ShadowChildCanOverrideUserSelectText) {
+  SetHtmlInnerHTML("<p style='user-select: text' id='host'></p>");
+  ShadowRoot* const shadow_root = SetShadowContent(
+      "<span style='user-select: none' id='bla'>blabla</span>", "host");
+
+  Node* const text = shadow_root->getElementById("bla")->firstChild();
+  LayoutPoint location = text->GetLayoutObject()->VisualRect().Center();
+  HitTestResult hit =
+      GetDocument().GetFrame()->GetEventHandler().HitTestResultAtPoint(
+          location);
+  EXPECT_FALSE(text->CanStartSelection());
+  EXPECT_FALSE(
+      GetDocument().GetFrame()->GetEventHandler().ShouldShowIBeamForNode(text,
+                                                                         hit));
+}
+
+TEST_F(EventHandlerTest, InputFieldsCanStartSelection) {
+  SetHtmlInnerHTML("<input value='blabla'>");
+  Element* const field = ToElement(GetDocument().body()->firstChild());
+  ShadowRoot* const shadow_root = field->UserAgentShadowRoot();
+
+  Element* const text = shadow_root->getElementById("inner-editor");
+  LayoutPoint location = text->GetLayoutObject()->VisualRect().Center();
+  HitTestResult hit =
+      GetDocument().GetFrame()->GetEventHandler().HitTestResultAtPoint(
+          location);
+  EXPECT_TRUE(text->CanStartSelection());
+  EXPECT_TRUE(
+      GetDocument().GetFrame()->GetEventHandler().ShouldShowIBeamForNode(text,
+                                                                         hit));
+}
+
+TEST_F(EventHandlerTest, ReadOnlyInputDoesNotInheritUserSelect) {
+  SetHtmlInnerHTML(
+      "<div style='user-select: none'>"
+      "<input readonly value='blabla'>"
+      "</div>");
+  Element* const field =
+      ToElement(GetDocument().body()->firstChild()->firstChild());
+  ShadowRoot* const shadow_root = field->UserAgentShadowRoot();
+
+  Element* const text = shadow_root->getElementById("inner-editor");
+  LayoutPoint location = text->GetLayoutObject()->VisualRect().Center();
+  HitTestResult hit =
+      GetDocument().GetFrame()->GetEventHandler().HitTestResultAtPoint(
+          location);
+  EXPECT_TRUE(text->CanStartSelection());
+
+  // TODO(crbug.com/764661): Show I-beam because field is selectable.
+  // EXPECT_TRUE(
+  //   GetDocument().GetFrame()->GetEventHandler().ShouldShowIBeamForNode(field,
+  //                                                                      hit));
+}
+
+TEST_F(EventHandlerTest, ImagesCannotStartSelection) {
+  SetHtmlInnerHTML("<img>");
+  Element* const img = ToElement(GetDocument().body()->firstChild());
+  LayoutPoint location = img->GetLayoutObject()->VisualRect().Center();
+  HitTestResult hit =
+      GetDocument().GetFrame()->GetEventHandler().HitTestResultAtPoint(
+          location);
+  EXPECT_FALSE(img->CanStartSelection());
+  EXPECT_FALSE(
+      GetDocument().GetFrame()->GetEventHandler().ShouldShowIBeamForNode(img,
                                                                          hit));
 }
 
@@ -375,8 +498,7 @@ TEST_F(EventHandlerTest, EmptyTextfieldInsertionOnTap) {
   GetDocument().GetFrame()->GetEventHandler().HandleGestureEvent(
       single_tap_event);
 
-  ASSERT_TRUE(
-      Selection().ComputeVisibleSelectionInDOMTreeDeprecated().IsCaret());
+  ASSERT_TRUE(Selection().GetSelectionInDOMTree().IsCaret());
   ASSERT_FALSE(Selection().IsHandleVisible());
 }
 
@@ -387,8 +509,18 @@ TEST_F(EventHandlerTest, NonEmptyTextfieldInsertionOnTap) {
   GetDocument().GetFrame()->GetEventHandler().HandleGestureEvent(
       single_tap_event);
 
-  ASSERT_TRUE(
-      Selection().ComputeVisibleSelectionInDOMTreeDeprecated().IsCaret());
+  ASSERT_TRUE(Selection().GetSelectionInDOMTree().IsCaret());
+  ASSERT_TRUE(Selection().IsHandleVisible());
+}
+
+TEST_F(EventHandlerTest, NewlineDivInsertionOnTap) {
+  SetHtmlInnerHTML("<div contenteditable><br/></div>");
+
+  TapEventBuilder single_tap_event(IntPoint(10, 10), 1);
+  GetDocument().GetFrame()->GetEventHandler().HandleGestureEvent(
+      single_tap_event);
+
+  ASSERT_TRUE(Selection().GetSelectionInDOMTree().IsCaret());
   ASSERT_TRUE(Selection().IsHandleVisible());
 }
 
@@ -399,8 +531,7 @@ TEST_F(EventHandlerTest, EmptyTextfieldInsertionOnLongPress) {
   GetDocument().GetFrame()->GetEventHandler().HandleGestureEvent(
       long_press_event);
 
-  ASSERT_TRUE(
-      Selection().ComputeVisibleSelectionInDOMTreeDeprecated().IsCaret());
+  ASSERT_TRUE(Selection().GetSelectionInDOMTree().IsCaret());
   ASSERT_TRUE(Selection().IsHandleVisible());
 
   // Single Tap on an empty edit field should clear insertion handle
@@ -408,8 +539,7 @@ TEST_F(EventHandlerTest, EmptyTextfieldInsertionOnLongPress) {
   GetDocument().GetFrame()->GetEventHandler().HandleGestureEvent(
       single_tap_event);
 
-  ASSERT_TRUE(
-      Selection().ComputeVisibleSelectionInDOMTreeDeprecated().IsCaret());
+  ASSERT_TRUE(Selection().GetSelectionInDOMTree().IsCaret());
   ASSERT_FALSE(Selection().IsHandleVisible());
 }
 
@@ -420,8 +550,7 @@ TEST_F(EventHandlerTest, NonEmptyTextfieldInsertionOnLongPress) {
   GetDocument().GetFrame()->GetEventHandler().HandleGestureEvent(
       long_press_event);
 
-  ASSERT_TRUE(
-      Selection().ComputeVisibleSelectionInDOMTreeDeprecated().IsCaret());
+  ASSERT_TRUE(Selection().GetSelectionInDOMTree().IsCaret());
   ASSERT_TRUE(Selection().IsHandleVisible());
 }
 
@@ -433,8 +562,7 @@ TEST_F(EventHandlerTest, ClearHandleAfterTap) {
   GetDocument().GetFrame()->GetEventHandler().HandleGestureEvent(
       long_press_event);
 
-  ASSERT_TRUE(
-      Selection().ComputeVisibleSelectionInDOMTreeDeprecated().IsCaret());
+  ASSERT_TRUE(Selection().GetSelectionInDOMTree().IsCaret());
   ASSERT_TRUE(Selection().IsHandleVisible());
 
   // Tap away from text area should clear handle
@@ -453,8 +581,7 @@ TEST_F(EventHandlerTest, HandleNotShownOnMouseEvents) {
   GetDocument().GetFrame()->GetEventHandler().HandleMousePressEvent(
       left_mouse_press_event);
 
-  ASSERT_TRUE(
-      Selection().ComputeVisibleSelectionInDOMTreeDeprecated().IsCaret());
+  ASSERT_TRUE(Selection().GetSelectionInDOMTree().IsCaret());
   ASSERT_FALSE(Selection().IsHandleVisible());
 
   MousePressEventBuilder right_mouse_press_event(
@@ -462,8 +589,7 @@ TEST_F(EventHandlerTest, HandleNotShownOnMouseEvents) {
   GetDocument().GetFrame()->GetEventHandler().HandleMousePressEvent(
       right_mouse_press_event);
 
-  ASSERT_TRUE(
-      Selection().ComputeVisibleSelectionInDOMTreeDeprecated().IsCaret());
+  ASSERT_TRUE(Selection().GetSelectionInDOMTree().IsCaret());
   ASSERT_FALSE(Selection().IsHandleVisible());
 
   MousePressEventBuilder double_click_mouse_press_event(
@@ -471,8 +597,7 @@ TEST_F(EventHandlerTest, HandleNotShownOnMouseEvents) {
   GetDocument().GetFrame()->GetEventHandler().HandleMousePressEvent(
       double_click_mouse_press_event);
 
-  ASSERT_TRUE(
-      Selection().ComputeVisibleSelectionInDOMTreeDeprecated().IsRange());
+  ASSERT_TRUE(Selection().GetSelectionInDOMTree().IsRange());
   ASSERT_FALSE(Selection().IsHandleVisible());
 
   MousePressEventBuilder triple_click_mouse_press_event(
@@ -480,8 +605,7 @@ TEST_F(EventHandlerTest, HandleNotShownOnMouseEvents) {
   GetDocument().GetFrame()->GetEventHandler().HandleMousePressEvent(
       triple_click_mouse_press_event);
 
-  ASSERT_TRUE(
-      Selection().ComputeVisibleSelectionInDOMTreeDeprecated().IsRange());
+  ASSERT_TRUE(Selection().GetSelectionInDOMTree().IsRange());
   ASSERT_FALSE(Selection().IsHandleVisible());
 }
 
@@ -499,15 +623,13 @@ TEST_F(EventHandlerTest, MisspellingContextMenuEvent) {
   GetDocument().GetFrame()->GetEventHandler().HandleGestureEvent(
       single_tap_event);
 
-  ASSERT_TRUE(
-      Selection().ComputeVisibleSelectionInDOMTreeDeprecated().IsCaret());
+  ASSERT_TRUE(Selection().GetSelectionInDOMTree().IsCaret());
   ASSERT_TRUE(Selection().IsHandleVisible());
 
   GetDocument().GetFrame()->GetEventHandler().ShowNonLocatedContextMenu(
       nullptr, kMenuSourceTouchHandle);
 
-  ASSERT_TRUE(
-      Selection().ComputeVisibleSelectionInDOMTreeDeprecated().IsCaret());
+  ASSERT_TRUE(Selection().GetSelectionInDOMTree().IsCaret());
   ASSERT_TRUE(Selection().IsHandleVisible());
 }
 
@@ -547,6 +669,44 @@ TEST_F(EventHandlerTest, dragEndInNewDrag) {
       mouse_up_event, kDragOperationNone);
 
   // This test passes if it doesn't crash.
+}
+
+// This test mouse move with modifier kRelativeMotionEvent
+// should not start drag.
+TEST_F(EventHandlerTest, FakeMouseMoveNotStartDrag) {
+  SetHtmlInnerHTML(
+      "<style>"
+      "body { margin: 0px; }"
+      ".line { font-family: sans-serif; background: blue; width: 300px; "
+      "height: 30px; font-size: 40px; margin-left: 250px; }"
+      "</style>"
+      "<div style='width: 300px; height: 100px;'>"
+      "<span class='line' draggable='true'>abcd</span>"
+      "</div>");
+  WebMouseEvent mouse_down_event(WebMouseEvent::kMouseDown,
+                                 WebFloatPoint(262, 29), WebFloatPoint(329, 67),
+                                 WebPointerProperties::Button::kLeft, 1,
+                                 WebInputEvent::Modifiers::kLeftButtonDown,
+                                 WebInputEvent::kTimeStampForTesting);
+  mouse_down_event.SetFrameScale(1);
+  GetDocument().GetFrame()->GetEventHandler().HandleMousePressEvent(
+      mouse_down_event);
+
+  WebMouseEvent fake_mouse_move(
+      WebMouseEvent::kMouseMove, WebFloatPoint(618, 298),
+      WebFloatPoint(685, 436), WebPointerProperties::Button::kLeft, 1,
+      WebInputEvent::Modifiers::kLeftButtonDown |
+          WebInputEvent::Modifiers::kRelativeMotionEvent,
+      WebInputEvent::kTimeStampForTesting);
+  fake_mouse_move.SetFrameScale(1);
+  EXPECT_EQ(WebInputEventResult::kHandledSuppressed,
+            GetDocument().GetFrame()->GetEventHandler().HandleMouseMoveEvent(
+                fake_mouse_move, Vector<WebMouseEvent>()));
+
+  EXPECT_EQ(IntPoint(0, 0), GetDocument()
+                                .GetFrame()
+                                ->GetEventHandler()
+                                .DragDataTransferLocationForTesting());
 }
 
 class TooltipCapturingChromeClient : public EmptyChromeClient {

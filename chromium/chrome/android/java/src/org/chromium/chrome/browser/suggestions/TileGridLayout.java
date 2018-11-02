@@ -6,20 +6,26 @@ package org.chromium.chrome.browser.suggestions;
 
 import android.content.Context;
 import android.content.res.Resources;
-import android.text.TextUtils;
+import android.support.annotation.Nullable;
 import android.util.AttributeSet;
 import android.view.View;
 import android.widget.FrameLayout;
 
 import org.chromium.base.ApiCompatibilityUtils;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.util.MathUtils;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * A layout that arranges tiles in a grid.
  */
 public class TileGridLayout extends FrameLayout {
+    public static final int PADDING_START_PX = 0;
+    public static final int PADDING_END_PX = 0;
+
     private final int mVerticalSpacing;
     private final int mMinHorizontalSpacing;
     private final int mMaxHorizontalSpacing;
@@ -39,7 +45,9 @@ public class TileGridLayout extends FrameLayout {
         super(context, attrs);
 
         Resources res = getResources();
-        mVerticalSpacing = res.getDimensionPixelOffset(R.dimen.tile_grid_layout_vertical_spacing);
+        mVerticalSpacing = FeatureUtilities.isChromeHomeModernEnabled()
+                ? res.getDimensionPixelOffset(R.dimen.tile_grid_layout_vertical_spacing_modern)
+                : res.getDimensionPixelOffset(R.dimen.tile_grid_layout_vertical_spacing);
         mMinHorizontalSpacing =
                 res.getDimensionPixelOffset(R.dimen.tile_grid_layout_min_horizontal_spacing);
         mMaxHorizontalSpacing =
@@ -75,24 +83,6 @@ public class TileGridLayout extends FrameLayout {
         forceLayout();
     }
 
-    /**
-     * Sets a new icon on the child view with a matching URL.
-     * @param tile The tile that holds the data to populate the tile view.
-     */
-    public void updateIconView(Tile tile) {
-        TileView tileView = getTileView(tile.getUrl());
-        if (tileView != null) tileView.renderIcon(tile);
-    }
-
-    /**
-     * Updates the visibility of the offline badge on the child view with a matching URL.
-     * @param tile The tile that holds the data to populate the tile view.
-     */
-    public void updateOfflineBadge(Tile tile) {
-        TileView tileView = getTileView(tile.getUrl());
-        if (tileView != null) tileView.renderOfflineBadge(tile);
-    }
-
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         int totalWidth = resolveSize(mMaxWidth, widthMeasureSpec);
@@ -102,14 +92,16 @@ public class TileGridLayout extends FrameLayout {
             return;
         }
 
-        // Measure the children.
+        // Measure the children. We don't use the ViewGroup.measureChildren() method here because
+        // it only measures visible children. In a situation where a child is invisible before
+        // this measurement and we decide to show it after the measurement, it will not have its
+        // dimensions and will not be displayed.
         for (int i = 0; i < childCount; i++) {
             measureChild(getChildAt(i), MeasureSpec.UNSPECIFIED, MeasureSpec.UNSPECIFIED);
         }
 
         // Determine the number of columns that will fit.
-        int gridWidth = totalWidth - ApiCompatibilityUtils.getPaddingStart(this)
-                - ApiCompatibilityUtils.getPaddingEnd(this);
+        int gridWidth = totalWidth - PADDING_START_PX - PADDING_END_PX;
         int childHeight = getChildAt(0).getMeasuredHeight();
         int childWidth = getChildAt(0).getMeasuredWidth();
         int numColumns = MathUtils.clamp(
@@ -136,8 +128,11 @@ public class TileGridLayout extends FrameLayout {
         int numRows = (visibleChildCount + numColumns - 1) / numColumns;
         int paddingTop = getPaddingTop();
         boolean isRtl = ApiCompatibilityUtils.isLayoutRtl(this);
+
+        List<TileView> orderedChildren = getCorrectTileViewOrder(numColumns);
+
         for (int i = 0; i < visibleChildCount; i++) {
-            View child = getChildAt(i);
+            View child = orderedChildren.get(i);
             child.setVisibility(View.VISIBLE);
             int row = i / numColumns;
             int column = i % numColumns;
@@ -152,7 +147,7 @@ public class TileGridLayout extends FrameLayout {
         // Hide any extra children in case there are more than needed for the maximum number of
         // rows.
         for (int i = visibleChildCount; i < childCount; i++) {
-            getChildAt(i).setVisibility(View.GONE);
+            orderedChildren.get(i).setVisibility(View.GONE);
         }
 
         int totalHeight = paddingTop + getPaddingBottom() + numRows * childHeight
@@ -161,13 +156,39 @@ public class TileGridLayout extends FrameLayout {
         setMeasuredDimension(totalWidth, resolveSize(totalHeight, heightMeasureSpec));
     }
 
-    /** @return A tile view associated to the provided URL, or {@code null} if none is found. */
-    @VisibleForTesting
-    TileView getTileView(String url) {
+    /**
+     * Returns a list of {@link TileView}s in the order that they should be displayed in the tile
+     * grid. The {@link TileView}s in the list are the children of the {@link TileGridLayout}.
+     *
+     * If there is a home page tile view, it is put on the first row of the grid. If its original
+     * position is on the first row, we keep that position, otherwise we put it as the last tile on
+     * the first row and shift all following tiles.
+     *
+     * @param numColumns The number of columns that the tile grid will display.
+     * @return A list of {@link TileView}s in the order they should be displayed.
+     */
+    private List<TileView> getCorrectTileViewOrder(int numColumns) {
+        List<TileView> orderedChildren = new ArrayList<>(getChildCount());
+
+        for (int i = 0; i < getChildCount(); i++) {
+            TileView view = (TileView) getChildAt(i);
+
+            if (view.getTileSource() == TileSource.HOMEPAGE && i > numColumns - 1) {
+                orderedChildren.add(numColumns - 1, view);
+            } else {
+                orderedChildren.add(view);
+            }
+        }
+
+        return orderedChildren;
+    }
+
+    @Nullable
+    public TileView getTileView(SiteSuggestion suggestion) {
         int childCount = getChildCount();
         for (int i = 0; i < childCount; i++) {
             TileView tileView = (TileView) getChildAt(i);
-            if (TextUtils.equals(url, tileView.getUrl())) return tileView;
+            if (suggestion.equals(tileView.getData())) return tileView;
         }
         return null;
     }

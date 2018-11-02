@@ -21,17 +21,19 @@
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/sys_string_conversions.h"
+#include "components/feature_engagement/public/event_constants.h"
+#include "components/feature_engagement/public/tracker.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
 #include "ios/chrome/browser/experimental_flags.h"
+#include "ios/chrome/browser/feature_engagement/tracker_factory.h"
+#include "ios/chrome/browser/feature_engagement/tracker_util.h"
 #import "ios/chrome/browser/tabs/tab.h"
 #import "ios/chrome/browser/tabs/tab_model.h"
 #import "ios/chrome/browser/tabs/tab_model_observer.h"
 #import "ios/chrome/browser/ui/animation_util.h"
 #import "ios/chrome/browser/ui/background_generator.h"
-#import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
-#import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
-#include "ios/chrome/browser/ui/commands/ios_command_ids.h"
+#import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/keyboard/UIKeyCommand+Chrome.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_toolbar_controller.h"
@@ -48,13 +50,12 @@
 #import "ios/chrome/browser/ui/stack_view/title_label.h"
 #import "ios/chrome/browser/ui/toolbar/new_tab_button.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_owner.h"
+#import "ios/chrome/browser/ui/tools_menu/tools_menu_configuration.h"
 #import "ios/chrome/browser/ui/tools_menu/tools_menu_view_item.h"
 #import "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #import "ios/chrome/common/material_timing.h"
 #include "ios/chrome/grit/ios_strings.h"
-#import "ios/shared/chrome/browser/ui/commands/command_dispatcher.h"
-#import "ios/shared/chrome/browser/ui/tools_menu/tools_menu_configuration.h"
 #include "ios/web/public/referrer.h"
 #import "net/base/mac/url_conversions.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -322,7 +323,7 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
 // presentation and |transitionStyle| = StackTransitionStyleDismissing for
 // dismissal.
 - (void)animateTransitionWithStyle:(StackTransitionStyle)transitionStyle;
-// Updates the view heirarchy for the transition based on the current transition
+// Updates the view hierarchy for the transition based on the current transition
 // style.  If the style is STACK_TRANSITION_STYLE_PRESENTING or
 // STACK_TRANSITION_STYLE_DISMISSING, the display views are added to the root
 // view and the toolbar is inserted between them.  If the style is
@@ -757,6 +758,17 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
   CGRect scrollViewFrame =
       UIEdgeInsetsInsetRect(self.view.bounds, contentInsets);
   _scrollView = [[UIScrollView alloc] initWithFrame:scrollViewFrame];
+
+  if (IsIPhoneX()) {
+    if (@available(iOS 11, *)) {
+      // The safe area adds a content inset which negatively impacts the stack
+      // view opening animation after a rotation.
+      // TODO(crbug.com/768868): Figure out what is going on, and whether
+      // changing the contentInsetAdjustmentBehavior is the right fix.
+      _scrollView.contentInsetAdjustmentBehavior =
+          UIScrollViewContentInsetAdjustmentNever;
+    }
+  }
   [self.view addSubview:_scrollView];
   [_scrollView setAutoresizingMask:(UIViewAutoresizingFlexibleHeight |
                                     UIViewAutoresizingFlexibleWidth)];
@@ -779,7 +791,7 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
   // be done only once, however, and viewWillAppear: can be called more than
   // once. For initial display, the transition animation will handle initial
   // layout. Avoid doing it here since that will potentially cause more views
-  // to be added to the hierarchy synchronously, slowing down inital load.  The
+  // to be added to the hierarchy synchronously, slowing down initial load.  The
   // rest of the time refreshing is necessary because the card views may have
   // been purged and recreated or the orientation might have changed while in
   // a modal view.
@@ -1028,8 +1040,8 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
       completion();
   };
   BOOL isPortrait = UIInterfaceOrientationIsPortrait(_lastInterfaceOrientation);
-  ios_internal::page_animation_util::AnimateOutWithCompletion(
-      cardView, delay, clockwise, isPortrait, toDoWhenDone);
+  page_animation_util::AnimateOutWithCompletion(cardView, delay, clockwise,
+                                                isPortrait, toDoWhenDone);
 }
 
 - (void)removeAllCardsFromSet:(CardSet*)cardSet {
@@ -1120,10 +1132,10 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
   // fan-out, margins, etc. should stay the same even if the cards change size
   // due to rotation.
   [self updateDeckOrientationWithAnimation:NO];
-  [_mainCardSet configureLayoutParametersWithMargin:
-                    ios_internal::page_animation_util::kCardMargin];
-  [_otrCardSet configureLayoutParametersWithMargin:
-                   ios_internal::page_animation_util::kCardMargin];
+  [_mainCardSet
+      configureLayoutParametersWithMargin:page_animation_util::kCardMargin];
+  [_otrCardSet
+      configureLayoutParametersWithMargin:page_animation_util::kCardMargin];
 }
 
 - (void)updateDeckOrientationWithAnimation:(BOOL)animates {
@@ -1196,9 +1208,8 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
     center += viewportBreadth - fullDisplayBreadth;
   // Adjust the set's center if it's not the active card set.
   if (cardSet != _activeCardSet) {
-    CGFloat inactiveSetDelta = fullDisplayBreadth -
-                               ios_internal::page_animation_util::kCardMargin +
-                               kCardFrameInset;
+    CGFloat inactiveSetDelta =
+        fullDisplayBreadth - page_animation_util::kCardMargin + kCardFrameInset;
     center = [self isCurrentSetIncognito] ? center - inactiveSetDelta
                                           : center + inactiveSetDelta;
   }
@@ -1368,8 +1379,7 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
 
 - (CGSize)cardSizeForBreadth:(CGFloat)breadth {
   BOOL isPortrait = IsPortrait();
-  CGFloat cardBreadth =
-      breadth - 2 * ios_internal::page_animation_util::kCardMargin;
+  CGFloat cardBreadth = breadth - 2 * page_animation_util::kCardMargin;
   CGFloat contentBreadthInset =
       isPortrait ? kCardImageInsets.left + kCardImageInsets.right
                  : kCardImageInsets.top + kCardImageInsets.bottom;
@@ -1384,9 +1394,8 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
   CGFloat cardLength = contentLength + contentLengthInset;
   // Truncate the card length so that the entire card can be visible at once.
   CGFloat viewLength = isPortrait ? viewSize.height : viewSize.width;
-  CGFloat truncatedCardLength = viewLength -
-                                ios_internal::page_animation_util::kCardMargin -
-                                kCardBottomPadding;
+  CGFloat truncatedCardLength =
+      viewLength - page_animation_util::kCardMargin - kCardBottomPadding;
   cardLength = std::min(cardLength, truncatedCardLength);
   return [self sizeForScrollLength:cardLength breadth:cardBreadth];
 }
@@ -1986,7 +1995,7 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
   LayoutRect cardLayout = LayoutRectZero;
   cardLayout.boundingWidth = CGRectGetWidth(activeSetView.bounds);
   cardLayout.size = [self cardSize];
-  cardLayout.position.leading = ios_internal::page_animation_util::kCardMargin;
+  cardLayout.position.leading = page_animation_util::kCardMargin;
   cardLayout.position.originY = -kCardImageInsets.top;
 
   for (StackCard* card in _activeCardSet.cards) {
@@ -2096,7 +2105,7 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
 
   CGPoint origin = _lastTapPoint;
   _lastTapPoint = CGPointZero;
-  ios_internal::page_animation_util::AnimateInPaperWithAnimationAndCompletion(
+  page_animation_util::AnimateInPaperWithAnimationAndCompletion(
       newCard, -statusBarHeight,
       newCard.frame.size.height - newCard.image.size.height, origin,
       [self isCurrentSetIncognito], nil, completionBlock);
@@ -2628,8 +2637,7 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
   // Calculate fractions of animation breadth to trigger dismissal that have
   // been covered so far.
   CGFloat fractionOfAnimationBreadth =
-      distanceMoved /
-      ios_internal::page_animation_util::AnimateOutTransformBreadth();
+      distanceMoved / page_animation_util::AnimateOutTransformBreadth();
   // User can potentially move their finger further than animation breath/
   // dismissal threshold distance. Ensure that these corner cases don't cause
   // any unexpected behavior.
@@ -2648,9 +2656,8 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
   if (gesture.state == UIGestureRecognizerStateChanged) {
     // Transform card along |AnimateOutTransform| by the fraction of the
     // animation breadth that has been covered so far.
-    [card view].transform =
-        ios_internal::page_animation_util::AnimateOutTransform(
-            fractionOfAnimationBreadth, clockwise, isPortrait);
+    [card view].transform = page_animation_util::AnimateOutTransform(
+        fractionOfAnimationBreadth, clockwise, isPortrait);
     // Fade the card to become transparent at the conclusion of the animation,
     // and the card's tab to become transparent at the time that the card
     // reaches the threshold for being dismissed.
@@ -2713,34 +2720,30 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
   // Ensure that the right mode is showing.
   if ([self isCurrentSetIncognito] != command.incognito)
     [self setActiveCardSet:[self inactiveCardSet]];
+
+  // Either send or don't send the "New Tab Opened" or "Incognito Tab Opened" to
+  // the feature_engagement::Tracker based on |command.userInitiated| and
+  // |command.incognito|.
+  feature_engagement::NotifyNewTabEventForCommand(
+      _activeCardSet.tabModel.browserState, command);
+
   [self setLastTapPoint:command];
   [self dismissWithNewTabAnimation:GURL(kChromeUINewTabURL)
                            atIndex:NSNotFound
                         transition:ui::PAGE_TRANSITION_TYPED];
 }
 
-- (IBAction)chromeExecuteCommand:(id)sender {
-  int command = [sender tag];
+// Closing all while the main set is active closes everything, but closing
+// all while incognito is active only closes incognito tabs.
+- (void)closeAllTabs {
+  DCHECK(![self isCurrentSetIncognito]);
+  [self removeAllCardsFromSet:_mainCardSet];
+  [self removeAllCardsFromSet:_otrCardSet];
+}
 
-  switch (command) {
-    // Closing all while the main set is active closes everything, but closing
-    // all while incognito is active only closes incognito tabs.
-    case IDC_CLOSE_ALL_TABS:
-      DCHECK(![self isCurrentSetIncognito]);
-      [self removeAllCardsFromSet:_mainCardSet];
-      [self removeAllCardsFromSet:_otrCardSet];
-      break;
-    case IDC_CLOSE_ALL_INCOGNITO_TABS:
-      DCHECK([self isCurrentSetIncognito]);
-      [self removeAllCardsFromSet:_activeCardSet];
-      break;
-    case IDC_TOGGLE_TAB_SWITCHER:
-      [self dismissWithSelectedTabAnimation];
-      break;
-    default:
-      [super chromeExecuteCommand:sender];
-      break;
-  }
+- (void)closeAllIncognitoTabs {
+  DCHECK([self isCurrentSetIncognito]);
+  [self removeAllCardsFromSet:_activeCardSet];
 }
 
 #pragma mark Notification Handlers
@@ -2773,7 +2776,7 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
   // animation of switching to main-card-set-only mode, so if the incognito set
   // finishes closing while the main set is still animating (in the case of
   // closing all cards at once) wait until the main set finishes before updating
-  // the display (neccessary so the state is right if a new tab is opened).
+  // the display (necessary so the state is right if a new tab is opened).
   if ((closedSet == _otrCardSet && ![_mainCardSet ignoresTabModelChanges]) ||
       (closedSet == _mainCardSet && [[_otrCardSet cards] count] == 0)) {
     [self displayMainCardSetOnly];
@@ -2822,8 +2825,8 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
   }
 
   // Animate the new card in at its destination location.
-  ios_internal::page_animation_util::AnimateInCardWithAnimationAndCompletion(
-      newCard.view, NULL, NULL);
+  page_animation_util::AnimateInCardWithAnimationAndCompletion(newCard.view,
+                                                               NULL, NULL);
 
   // Set up the animation of the existing cards.
   NSUInteger indexToScroll = cardIndex + 1;
@@ -3142,6 +3145,18 @@ NSString* const kDummyToolbarBackgroundViewAnimationKey =
   DCHECK(!_isBeingDismissed);
   DCHECK(_isActive);
   DCHECK(scrollView == _scrollView);
+
+  // During rotation on iPhone X, UIScrollView's internal handling of the status
+  // bar triggers a |-scrollViewDidScroll:| callback before any rotation-
+  // related callbacks have been received.  When this occurs, the bounds of the
+  // UIScrollView have been updated to its new rotated value, but the content
+  // size has not yet been updated via |-updateScrollViewContentSize|.  When
+  // this occurs, early return before peforming subsequent scrolling
+  // calculations.  The layout logic will eventually be triggered when the
+  // UIScrollView's contentSize is reset.
+  if (_lastInterfaceOrientation != GetInterfaceOrientation())
+    return;
+
   // Whether this callback will trigger a scroll or not, have to ensure that
   // the display views' positions are updated after any change in the scroll
   // view's content offset.

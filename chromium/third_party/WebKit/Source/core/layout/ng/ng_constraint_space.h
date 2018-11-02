@@ -6,15 +6,14 @@
 #define NGConstraintSpace_h
 
 #include "core/CoreExport.h"
-#include "core/layout/ng/geometry/ng_logical_offset.h"
+#include "core/layout/ng/geometry/ng_bfc_offset.h"
 #include "core/layout/ng/geometry/ng_logical_size.h"
 #include "core/layout/ng/geometry/ng_margin_strut.h"
 #include "core/layout/ng/geometry/ng_physical_size.h"
 #include "core/layout/ng/inline/ng_baseline.h"
-#include "core/layout/ng/ng_exclusion.h"
+#include "core/layout/ng/ng_exclusion_space.h"
 #include "core/layout/ng/ng_unpositioned_float.h"
 #include "core/layout/ng/ng_writing_mode.h"
-#include "platform/heap/Handle.h"
 #include "platform/text/TextDirection.h"
 #include "platform/wtf/Optional.h"
 #include "platform/wtf/RefCounted.h"
@@ -36,13 +35,17 @@ enum NGFragmentationType {
 class CORE_EXPORT NGConstraintSpace final
     : public RefCounted<NGConstraintSpace> {
  public:
+  // Creates NGConstraintSpace representing LayoutObject's containing block.
   // This should live on NGBlockNode or another layout bridge and probably take
   // a root NGConstraintSpace.
-  static RefPtr<NGConstraintSpace> CreateFromLayoutObject(const LayoutBox&);
+  // override_logical_width/height are only used if
+  // LayoutObject::OverideLogicalContentWidth/Height is undefined.
+  static RefPtr<NGConstraintSpace> CreateFromLayoutObject(
+      const LayoutBox&,
+      Optional<LayoutUnit> override_logical_width = WTF::nullopt,
+      Optional<LayoutUnit> override_logical_height = WTF::nullopt);
 
-  const std::shared_ptr<NGExclusions>& Exclusions() const {
-    return exclusions_;
-  }
+  const NGExclusionSpace& ExclusionSpace() const { return *exclusion_space_; }
 
   TextDirection Direction() const {
     return static_cast<TextDirection>(direction_);
@@ -51,8 +54,6 @@ class CORE_EXPORT NGConstraintSpace final
   NGWritingMode WritingMode() const {
     return static_cast<NGWritingMode>(writing_mode_);
   }
-
-  void AddExclusion(const NGExclusion& exclusion);
 
   // The size to use for percentage resolution.
   // See: https://drafts.csswg.org/css-sizing/#percentage-sizing
@@ -67,6 +68,10 @@ class CORE_EXPORT NGConstraintSpace final
   // The available space size.
   // See: https://drafts.csswg.org/css-sizing/#available
   NGLogicalSize AvailableSize() const { return available_size_; }
+
+  NGPhysicalSize InitialContainingBlockSize() const {
+    return initial_containing_block_size_;
+  }
 
   // Return the block-direction space available in the current fragmentainer.
   LayoutUnit FragmentainerSpaceAvailable() const {
@@ -137,7 +142,7 @@ class CORE_EXPORT NGConstraintSpace final
   //   - block_start border or padding in the current layout.
   //   - Text content, atomic inlines, (see NGLineBreaker).
   //   - The current layout having a block_size.
-  NGLogicalOffset BfcOffset() const { return bfc_offset_; }
+  NGBfcOffset BfcOffset() const { return bfc_offset_; }
 
   // If present, and the current layout hasn't resolved its BFC offset yet (see
   // BfcOffset), the layout should position all of its unpositioned floats at
@@ -148,7 +153,7 @@ class CORE_EXPORT NGConstraintSpace final
   //
   // This value is calculated *after* an initial pass of the tree, this value
   // should only be present during the second pass.
-  WTF::Optional<NGLogicalOffset> FloatsBfcOffset() const {
+  WTF::Optional<NGBfcOffset> FloatsBfcOffset() const {
     return floats_bfc_offset_;
   }
 
@@ -189,16 +194,12 @@ class CORE_EXPORT NGConstraintSpace final
       bool is_new_fc,
       bool is_anonymous,
       const NGMarginStrut& margin_strut,
-      const NGLogicalOffset& bfc_offset,
-      const WTF::Optional<NGLogicalOffset>& floats_bfc_offset,
-      const std::shared_ptr<NGExclusions>& exclusions,
+      const NGBfcOffset& bfc_offset,
+      const WTF::Optional<NGBfcOffset>& floats_bfc_offset,
+      const NGExclusionSpace& exclusion_space,
       Vector<RefPtr<NGUnpositionedFloat>>& unpositioned_floats,
       const WTF::Optional<LayoutUnit>& clearance_offset,
       Vector<NGBaselineRequest>& baseline_requests);
-
-  NGPhysicalSize InitialContainingBlockSize() const {
-    return initial_containing_block_size_;
-  }
 
   NGLogicalSize available_size_;
   NGLogicalSize percentage_resolution_size_;
@@ -227,10 +228,10 @@ class CORE_EXPORT NGConstraintSpace final
   unsigned direction_ : 1;
 
   NGMarginStrut margin_strut_;
-  NGLogicalOffset bfc_offset_;
-  WTF::Optional<NGLogicalOffset> floats_bfc_offset_;
+  NGBfcOffset bfc_offset_;
+  WTF::Optional<NGBfcOffset> floats_bfc_offset_;
 
-  const std::shared_ptr<NGExclusions> exclusions_;
+  const std::unique_ptr<const NGExclusionSpace> exclusion_space_;
   WTF::Optional<LayoutUnit> clearance_offset_;
   Vector<RefPtr<NGUnpositionedFloat>> unpositioned_floats_;
 

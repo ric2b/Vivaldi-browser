@@ -41,30 +41,39 @@ typedef std::map<std::pair<ContentSettingsPattern, std::string>,
                  OnePatternSettings>
     AllPatternsSettings;
 
-extern const char kSetting[];
-extern const char kOrigin[];
-extern const char kDisplayName[];
-extern const char kOriginForFavicon[];
-extern const char kExtensionProviderId[];
-extern const char kPolicyProviderId[];
-extern const char kSource[];
-extern const char kIncognito[];
-extern const char kEmbeddingOrigin[];
-extern const char kPreferencesSource[];
+constexpr char kDisplayName[] = "displayName";
+constexpr char kEmbeddingOrigin[] = "embeddingOrigin";
+constexpr char kIncognito[] = "incognito";
+constexpr char kOrigin[] = "origin";
+constexpr char kOriginForFavicon[] = "originForFavicon";
+constexpr char kSetting[] = "setting";
+constexpr char kSource[] = "source";
 
 // Group types.
-extern const char kGroupTypeUsb[];
+constexpr char kGroupTypeUsb[] = "usb-devices";
+
+enum class SiteSettingSource {
+  kDefault,
+  kEmbargo,
+  kExtension,
+  kInsecureOrigin,
+  kKillSwitch,
+  kPolicy,
+  kPreference,
+  kNumSources,
+};
 
 // Returns whether a group name has been registered for the given type.
 bool HasRegisteredGroupName(ContentSettingsType type);
 
-// Gets a content settings type from the group name identifier.
+// Converts a ContentSettingsType to/from its group name identifier.
 ContentSettingsType ContentSettingsTypeFromGroupName(const std::string& name);
-
-// Gets a string identifier for the group name.
 std::string ContentSettingsTypeToGroupName(ContentSettingsType type);
 
-// Helper function to construct a dictonary for an exception.
+// Converts a SiteSettingSource to its string identifier.
+std::string SiteSettingSourceToString(const SiteSettingSource source);
+
+// Helper function to construct a dictionary for an exception.
 std::unique_ptr<base::DictionaryValue> GetExceptionForPage(
     const ContentSettingsPattern& pattern,
     const ContentSettingsPattern& secondary_pattern,
@@ -73,7 +82,7 @@ std::unique_ptr<base::DictionaryValue> GetExceptionForPage(
     const std::string& provider_name,
     bool incognito);
 
-// Helper function to construct a dictonary for a hosted app exception.
+// Helper function to construct a dictionary for a hosted app exception.
 void AddExceptionForHostedApp(const std::string& url_pattern,
     const extensions::Extension& app, base::ListValue* exceptions);
 
@@ -96,6 +105,19 @@ void GetContentCategorySetting(
     const HostContentSettingsMap* map,
     ContentSettingsType content_type,
     base::DictionaryValue* object);
+
+// Retrieves the current setting for a given origin, category pair, the source
+// of that setting, and its display name, which will be different if it's an
+// extension. Note this is similar to GetContentCategorySetting() above but this
+// goes through the PermissionManager (preferred, see https://crbug.com/739241).
+ContentSetting GetContentSettingForOrigin(
+    Profile* profile,
+    const HostContentSettingsMap* map,
+    const GURL& origin,
+    ContentSettingsType content_type,
+    std::string* source_string,
+    const extensions::ExtensionRegistry* extension_registry,
+    std::string* display_name);
 
 // Returns exceptions constructed from the policy-set allowed URLs
 // for the content settings |type| mic or camera.

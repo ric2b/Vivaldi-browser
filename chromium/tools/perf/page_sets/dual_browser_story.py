@@ -98,8 +98,9 @@ class MultiBrowserSharedState(story_module.SharedState):
     else:
       wpr_mode = wpr_modes.WPR_REPLAY
 
-    self.platform.network_controller.Open(wpr_mode,
-                                          browser_options.extra_wpr_args)
+    self.platform.network_controller.Open(
+        wpr_mode, browser_options.extra_wpr_args,
+        use_wpr_go=story_set.wpr_archive_info.is_using_wpr_go_archives)
 
   @property
   def current_tab(self):
@@ -179,6 +180,11 @@ class MultiBrowserSharedState(story_module.SharedState):
     self._current_story.Run(self)
 
   def DidRunStory(self, _):
+    if (not self._story_set.long_running and
+        self._story_set[-1] == self._current_story):
+      # In long_running mode we never close the browsers; otherwise we close
+      # them only after the last story in the set runs.
+      self._CloseAllBrowsers()
     self._current_story = None
 
   def TakeMemoryMeasurement(self):
@@ -197,8 +203,11 @@ class MultiBrowserSharedState(story_module.SharedState):
   def DumpStateUponFailure(self, unused_story, unused_results):
     if self._browsers:
       for browser_type, browser in self._browsers.iteritems():
-        logging.info('vvvvv BROWSER STATE BELOW FOR \'%s\' vvvvv', browser_type)
-        browser.DumpStateUponFailure()
+        if browser is not None:
+          logging.info("vvvvv BROWSER STATE BELOW FOR '%s' vvvvv", browser_type)
+          browser.DumpStateUponFailure()
+        else:
+          logging.info("browser '%s' not yet created", browser_type)
     else:
       logging.warning('Cannot dump browser states: No browsers.')
 
@@ -238,10 +247,11 @@ class SinglePage(story_module.Story):
 class DualBrowserStorySet(story_module.StorySet):
   """A story set that switches back and forth between two browsers."""
 
-  def __init__(self):
+  def __init__(self, long_running=False):
     super(DualBrowserStorySet, self).__init__(
         archive_data_file='data/dual_browser_story.json',
         cloud_storage_bucket=story_module.PARTNER_BUCKET)
+    self.long_running = long_running
 
     for query, url in zip(SEARCH_QUERIES, URL_LIST):
       # Stories that run on the android-webview browser.
@@ -257,8 +267,3 @@ class DualBrowserStorySet(story_module.StorySet):
           url=url,
           browser_type='default',
           phase='on_chrome'))
-
-
-class DualBrowserStoryExpectations(story_module.expectations.StoryExpectations):
-  def SetExpectations(self):
-    pass  # No tests disabled.

@@ -167,24 +167,17 @@ class DefaultComponentInstallerTest : public testing::Test {
   const scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_ =
       base::ThreadTaskRunnerHandle::Get();
   base::RunLoop runloop_;
-  base::Closure quit_closure_;
+  base::Closure quit_closure_ = runloop_.QuitClosure();
 
-  scoped_refptr<TestConfigurator> config_;
-  scoped_refptr<MockUpdateClient> update_client_;
+  scoped_refptr<TestConfigurator> config_ =
+      base::MakeRefCounted<TestConfigurator>();
+  scoped_refptr<MockUpdateClient> update_client_ =
+      base::MakeRefCounted<MockUpdateClient>();
   std::unique_ptr<ComponentUpdateService> component_updater_;
   ComponentUnpacker::Result result_;
 };
 
-DefaultComponentInstallerTest::DefaultComponentInstallerTest()
-    : scoped_task_environment_(
-          base::test::ScopedTaskEnvironment::MainThreadType::UI) {
-  quit_closure_ = runloop_.QuitClosure();
-
-  config_ = base::MakeRefCounted<TestConfigurator>(
-      base::CreateSequencedTaskRunnerWithTraits({base::MayBlock()}),
-      base::ThreadTaskRunnerHandle::Get());
-
-  update_client_ = base::MakeRefCounted<MockUpdateClient>();
+DefaultComponentInstallerTest::DefaultComponentInstallerTest() {
   EXPECT_CALL(update_client(), AddObserver(_)).Times(1);
   component_updater_ =
       base::MakeUnique<CrxUpdateService>(config_, update_client_);
@@ -202,7 +195,7 @@ void DefaultComponentInstallerTest::RunThreads() {
 void DefaultComponentInstallerTest::Unpack(const base::FilePath& crx_path) {
   auto component_unpacker = base::MakeRefCounted<ComponentUnpacker>(
       std::vector<uint8_t>(std::begin(kSha256Hash), std::end(kSha256Hash)),
-      crx_path, nullptr, nullptr, config_->GetSequencedTaskRunner());
+      crx_path, nullptr, nullptr);
   component_unpacker->Unpack(base::Bind(
       &DefaultComponentInstallerTest::UnpackComplete, base::Unretained(this)));
   RunThreads();

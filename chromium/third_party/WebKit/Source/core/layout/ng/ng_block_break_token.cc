@@ -4,10 +4,6 @@
 
 #include "core/layout/ng/ng_block_break_token.h"
 
-#include "core/layout/ng/ng_block_node.h"
-#include "core/layout/ng/ng_layout_result.h"
-#include "core/layout/ng/ng_unpositioned_float.h"
-
 namespace blink {
 
 NGBlockBreakToken::NGBlockBreakToken(
@@ -19,7 +15,9 @@ NGBlockBreakToken::NGBlockBreakToken(
   child_break_tokens_.swap(child_break_tokens);
 }
 
-NGBlockBreakToken::NGBlockBreakToken(NGLayoutInputNode node)
-    : NGBreakToken(kBlockBreakToken, kFinished, node) {}
+NGBlockBreakToken::NGBlockBreakToken(NGLayoutInputNode node,
+                                     LayoutUnit used_block_size)
+    : NGBreakToken(kBlockBreakToken, kFinished, node),
+      used_block_size_(used_block_size) {}
 
 }  // namespace blink

@@ -36,10 +36,6 @@
 #include "net/log/net_log_source_type.h"
 #include "net/log/net_log_with_source.h"
 
-#if defined(USE_NSS_CERTS)
-#include <private/pprthred.h>  // PR_DetachThread
-#endif
-
 namespace net {
 
 class NetLogCaptureMode;
@@ -193,17 +189,6 @@ void DoVerifyOnWorkerThread(const scoped_refptr<CertVerifyProc>& verify_proc,
   TRACE_EVENT0(kNetTracingCategory, "DoVerifyOnWorkerThread");
   *error = verify_proc->Verify(cert.get(), hostname, ocsp_response, flags,
                                crl_set.get(), additional_trust_anchors, result);
-
-#if defined(USE_NSS_CERTS)
-  // Detach the thread from NSPR.
-  // Calling NSS functions attaches the thread to NSPR, which stores
-  // the NSPR thread ID in thread-specific data.
-  // The threads in our thread pool terminate after we have called
-  // PR_Cleanup.  Unless we detach them from NSPR, net_unittests gets
-  // segfaults on shutdown when the threads' thread-specific data
-  // destructors run.
-  PR_DetachThread();
-#endif
 }
 
 // CertVerifierJob lives only on the verifier's origin message loop.
@@ -372,7 +357,7 @@ int MultiThreadedCertVerifier::Verify(const RequestParams& params,
   } else {
     // Need to make a new job.
     std::unique_ptr<CertVerifierJob> new_job =
-        base::MakeUnique<CertVerifierJob>(params, net_log.net_log(), this);
+        std::make_unique<CertVerifierJob>(params, net_log.net_log(), this);
 
     if (!new_job->Start(verify_proc_, crl_set)) {
       // TODO(wtc): log to the NetLog.

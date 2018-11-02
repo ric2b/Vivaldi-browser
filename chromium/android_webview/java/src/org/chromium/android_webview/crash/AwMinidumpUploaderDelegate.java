@@ -6,7 +6,6 @@ package org.chromium.android_webview.crash;
 
 import android.content.Context;
 import android.net.ConnectivityManager;
-import android.webkit.ValueCallback;
 
 import org.chromium.android_webview.PlatformServiceBridge;
 import org.chromium.android_webview.command_line.CommandLineUtil;
@@ -14,7 +13,6 @@ import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
-import org.chromium.components.minidump_uploader.CrashFileManager;
 import org.chromium.components.minidump_uploader.MinidumpUploaderDelegate;
 import org.chromium.components.minidump_uploader.util.CrashReportingPermissionManager;
 import org.chromium.components.minidump_uploader.util.NetworkPermissionUtil;
@@ -77,12 +75,10 @@ public class AwMinidumpUploaderDelegate implements MinidumpUploaderDelegate {
 
     @Override
     public void prepareToUploadMinidumps(final Runnable startUploads) {
-        PlatformServiceBridge.getInstance().queryMetricsSetting(new ValueCallback<Boolean>() {
-            public void onReceiveValue(Boolean enabled) {
-                ThreadUtils.assertOnUiThread();
-                mPermittedByUser = enabled;
-                startUploads.run();
-            }
+        PlatformServiceBridge.getInstance().queryMetricsSetting(enabled -> {
+            ThreadUtils.assertOnUiThread();
+            mPermittedByUser = enabled;
+            startUploads.run();
         });
     }
 
@@ -91,12 +87,4 @@ public class AwMinidumpUploaderDelegate implements MinidumpUploaderDelegate {
 
     @Override
     public void recordUploadFailure(File minidump) {}
-
-    @Override
-    public void migrateMinidumpFilenamesIfNeeded(CrashFileManager crashFileManager) {
-        File[] minidumpFilesUsingOldNamingScheme = crashFileManager.getMinidumpsSansLogcat();
-        for (File minidump : minidumpFilesUsingOldNamingScheme) {
-            CrashFileManager.trySetReadyForUpload(minidump);
-        }
-    }
 }

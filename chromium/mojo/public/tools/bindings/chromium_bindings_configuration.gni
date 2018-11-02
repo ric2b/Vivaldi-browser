@@ -19,6 +19,7 @@ _typemap_imports = [
   "//content/public/common/typemaps.gni",
   "//device/bluetooth/public/interfaces/typemaps.gni",
   "//device/gamepad/public/interfaces/typemaps.gni",
+  "//device/hid/public/interfaces/typemaps.gni",
   "//extensions/common/typemaps.gni",
   "//gpu/ipc/common/typemaps.gni",
   "//media/capture/mojo/typemaps.gni",
@@ -35,6 +36,8 @@ _typemap_imports = [
   "//services/ui/gpu/interfaces/typemaps.gni",
   "//services/ui/public/interfaces/cursor/typemaps.gni",
   "//services/ui/public/interfaces/ime/typemaps.gni",
+  "//services/viz/privileged/interfaces/compositing/typemaps.gni",
+  "//services/viz/public/cpp/compositing/typemaps.gni",
   "//skia/public/interfaces/typemaps.gni",
   "//third_party/WebKit/public/public_typemaps.gni",
   "//ui/base/mojo/typemaps.gni",
@@ -50,8 +53,7 @@ _typemap_imports = [
 
 _typemap_imports_mac = [ "//content/common/typemaps_mac.gni" ]
 
-_typemap_imports_chromeos =
-    [ "//ui/display/manager/chromeos/mojo/typemaps.gni" ]
+_typemap_imports_chromeos = []
 
 _typemaps = []
 foreach(typemap_import, _typemap_imports) {

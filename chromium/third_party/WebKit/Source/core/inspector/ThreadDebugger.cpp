@@ -7,6 +7,7 @@
 #include <memory>
 #include "bindings/core/v8/SourceLocation.h"
 #include "bindings/core/v8/V8BindingForCore.h"
+#include "bindings/core/v8/V8Blob.h"
 #include "bindings/core/v8/V8DOMException.h"
 #include "bindings/core/v8/V8DOMTokenList.h"
 #include "bindings/core/v8/V8Event.h"
@@ -23,6 +24,7 @@
 #include "core/inspector/InspectorDOMDebuggerAgent.h"
 #include "core/inspector/InspectorTraceEvents.h"
 #include "core/inspector/V8InspectorString.h"
+#include "core/probe/CoreProbes.h"
 #include "platform/ScriptForbiddenScope.h"
 #include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/PtrUtil.h"
@@ -130,8 +132,10 @@ void ThreadDebugger::PromiseRejectionRevoked(v8::Local<v8::Context> context,
 }
 
 void ThreadDebugger::beginUserGesture() {
-  user_gesture_indicator_ = WTF::WrapUnique(
-      new UserGestureIndicator(UserGestureToken::Create(nullptr)));
+  ExecutionContext* ec = CurrentExecutionContext(isolate_);
+  Document* document = ec && ec->IsDocument() ? ToDocument(ec) : nullptr;
+  user_gesture_indicator_ =
+      LocalFrame::CreateUserGesture(document ? document->GetFrame() : nullptr);
 }
 
 void ThreadDebugger::endUserGesture() {
@@ -143,6 +147,7 @@ std::unique_ptr<v8_inspector::StringBuffer> ThreadDebugger::valueSubtype(
   static const char kNode[] = "node";
   static const char kArray[] = "array";
   static const char kError[] = "error";
+  static const char kBlob[] = "blob";
   if (V8Node::hasInstance(value, isolate_))
     return ToV8InspectorStringBuffer(kNode);
   if (V8NodeList::hasInstance(value, isolate_) ||
@@ -153,6 +158,8 @@ std::unique_ptr<v8_inspector::StringBuffer> ThreadDebugger::valueSubtype(
   }
   if (V8DOMException::hasInstance(value, isolate_))
     return ToV8InspectorStringBuffer(kError);
+  if (V8Blob::hasInstance(value, isolate_))
+    return ToV8InspectorStringBuffer(kBlob);
   return nullptr;
 }
 
@@ -212,7 +219,7 @@ static void CreateFunctionPropertyWithData(v8::Local<v8::Context> context,
                         v8::ConstructorBehavior::kThrow)
           .ToLocal(&to_string_function))
     CreateDataProperty(context, func,
-                       V8String(context->GetIsolate(), "toString"),
+                       V8AtomicString(context->GetIsolate(), "toString"),
                        to_string_function);
   CreateDataProperty(context, object, func_name, func);
 }
@@ -250,6 +257,8 @@ void ThreadDebugger::installAdditionalCommandLineAPI(
   v8::Local<v8::Value> function_value;
   bool success =
       V8ScriptRunner::CompileAndRunInternalScript(
+          ScriptState::From(context),
+
           V8String(isolate_, "(function(e) { console.log(e.type, e); })"),
           isolate_)
           .ToLocal(&function_value) &&
@@ -396,21 +405,25 @@ void ThreadDebugger::GetEventListenersCallback(
       current_event_type = info.event_type;
       listeners = v8::Array::New(isolate);
       output_index = 0;
-      CreateDataProperty(context, result, V8String(isolate, current_event_type),
+      CreateDataProperty(context, result,
+                         V8AtomicString(isolate, current_event_type),
                          listeners);
     }
 
     v8::Local<v8::Object> listener_object = v8::Object::New(isolate);
-    CreateDataProperty(context, listener_object, V8String(isolate, "listener"),
-                       info.handler);
     CreateDataProperty(context, listener_object,
-                       V8String(isolate, "useCapture"),
+                       V8AtomicString(isolate, "listener"), info.handler);
+    CreateDataProperty(context, listener_object,
+                       V8AtomicString(isolate, "useCapture"),
                        v8::Boolean::New(isolate, info.use_capture));
-    CreateDataProperty(context, listener_object, V8String(isolate, "passive"),
+    CreateDataProperty(context, listener_object,
+                       V8AtomicString(isolate, "passive"),
                        v8::Boolean::New(isolate, info.passive));
-    CreateDataProperty(context, listener_object, V8String(isolate, "once"),
+    CreateDataProperty(context, listener_object,
+                       V8AtomicString(isolate, "once"),
                        v8::Boolean::New(isolate, info.once));
-    CreateDataProperty(context, listener_object, V8String(isolate, "type"),
+    CreateDataProperty(context, listener_object,
+                       V8AtomicString(isolate, "type"),
                        V8String(isolate, current_event_type));
     CreateDataPropertyInArray(context, listeners, output_index++,
                               listener_object);
@@ -433,13 +446,13 @@ void ThreadDebugger::consoleTimeEnd(const v8_inspector::StringView& title) {
 }
 
 void ThreadDebugger::consoleTimeStamp(const v8_inspector::StringView& title) {
-  v8::Isolate* isolate = isolate_;
+  ExecutionContext* ec = CurrentExecutionContext(isolate_);
   // TODO(dgozman): we can save on a copy here if TracedValue would take a
   // StringView.
-  TRACE_EVENT_INSTANT1(
-      "devtools.timeline", "TimeStamp", TRACE_EVENT_SCOPE_THREAD, "data",
-      InspectorTimeStampEvent::Data(CurrentExecutionContext(isolate),
-                                    ToCoreString(title)));
+  TRACE_EVENT_INSTANT1("devtools.timeline", "TimeStamp",
+                       TRACE_EVENT_SCOPE_THREAD, "data",
+                       InspectorTimeStampEvent::Data(ec, ToCoreString(title)));
+  probe::consoleTimeStamp(ec, ToCoreString(title));
 }
 
 void ThreadDebugger::startRepeatingTimer(

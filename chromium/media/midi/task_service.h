@@ -8,9 +8,10 @@
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/sequence_checker.h"
 #include "base/single_thread_task_runner.h"
+#include "base/synchronization/condition_variable.h"
 #include "base/synchronization/lock.h"
-#include "base/synchronization/read_write_lock.h"
 #include "base/threading/thread.h"
 #include "base/time/time.h"
 #include "media/midi/midi_export.h"
@@ -39,6 +40,9 @@ class MIDI_EXPORT TaskService final {
   bool BindInstance();
   bool UnbindInstance();
 
+  // Checks if the current thread belongs to the specified runner.
+  bool IsOnTaskRunner(RunnerId runner_id);
+
   // Posts a task to run on a specified TaskRunner. |runner_id| should be
   // kDefaultRunnerId or a positive number. If kDefaultRunnerId is specified
   // the task runs on the thread on which BindInstance() is called. Other number
@@ -63,6 +67,9 @@ class MIDI_EXPORT TaskService final {
                RunnerId runner_id,
                base::OnceClosure task);
 
+  // Returns true if |instance_id| is equal to |bound_instance_id_|.
+  bool IsInstanceIdStillBound(InstanceId instance_id);
+
   // Keeps a TaskRunner for the thread that calls BindInstance() as a default
   // task runner to run posted tasks.
   scoped_refptr<base::SingleThreadTaskRunner> default_task_runner_;
@@ -70,9 +77,15 @@ class MIDI_EXPORT TaskService final {
   // Holds threads to host SingleThreadTaskRunners.
   std::vector<std::unique_ptr<base::Thread>> threads_;
 
-  // Holds readers writer lock to ensure that tasks run only while the instance
-  // is bound. Writer lock should not be taken while |lock_| is acquired.
-  base::subtle::ReadWriteLock task_lock_;
+  // Protects |tasks_in_flight_|.
+  base::Lock tasks_in_flight_lock_;
+
+  // Signalled when the number of tasks in flight is 0 and ensures that
+  // UnbindInstance() does not return until all tasks have completed.
+  base::ConditionVariable no_tasks_in_flight_cv_;
+
+  // Number of tasks in flight.
+  int tasks_in_flight_;
 
   // Holds InstanceId for the next bound instance.
   InstanceId next_instance_id_;
@@ -80,8 +93,12 @@ class MIDI_EXPORT TaskService final {
   // Holds InstanceId for the current bound instance.
   InstanceId bound_instance_id_;
 
-  // Protects all members other than |task_lock_|.
+  // Protects all members other than |tasks_in_flight_|.
   base::Lock lock_;
+
+  // Verifies all UnbindInstance() calls occur on the same sequence as
+  // BindSequence().
+  SEQUENCE_CHECKER(instance_binding_sequence_checker_);
 
   DISALLOW_COPY_AND_ASSIGN(TaskService);
 };

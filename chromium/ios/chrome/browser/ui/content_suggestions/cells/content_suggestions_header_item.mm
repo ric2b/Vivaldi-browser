@@ -4,7 +4,7 @@
 
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_header_item.h"
 
-#import "ios/chrome/browser/ui/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -25,6 +25,7 @@
 - (void)configureCell:(ContentSuggestionsHeaderCell*)cell {
   [super configureCell:cell];
   [cell setHeaderView:self.view];
+  cell.accessibilityIdentifier = @"CSHeaderIdentifier";
 }
 
 @end

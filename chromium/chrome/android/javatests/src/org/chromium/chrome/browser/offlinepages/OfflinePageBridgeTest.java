@@ -22,6 +22,7 @@ import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge.OfflinePageModelObserver;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge.SavePageCallback;
+import org.chromium.chrome.browser.offlinepages.downloads.OfflinePageDownloadBridge;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
@@ -132,18 +133,6 @@ public class OfflinePageBridgeTest {
         OfflinePageItem offlinePage = allPages.get(0);
         Assert.assertEquals("Offline pages count incorrect.", 1, allPages.size());
         Assert.assertEquals("Offline page item url incorrect.", mTestPage, offlinePage.getUrl());
-
-        // We don't care about the exact file size of the mhtml file:
-        // - exact file size is not something that the end user sees or cares about
-        // - exact file size can vary based on external factors (i.e. see crbug.com/518758)
-        // - verification of contents of the resulting mhtml file should be covered by mhtml
-        //   serialization tests (i.e. save_page_browsertest.cc)
-        // - we want to avoid overtesting and artificially requiring specific formatting and/or
-        //   implementation choices in the mhtml serialization code
-        // OTOH, it still seems useful to assert that the file is not empty and that its size is in
-        // the right ballpark.
-        long size = offlinePage.getFileSize();
-        Assert.assertTrue("Offline page item size is incorrect: " + size, 600 < size && size < 800);
     }
 
     @Test
@@ -357,6 +346,91 @@ public class OfflinePageBridgeTest {
         Assert.assertEquals(
                 "The offline ID of the page saved in an alternate namespace does not match.",
                 offlineIdToIgnore, asyncPages.get(0).getOfflineId());
+    }
+
+    @Test
+    @SmallTest
+    @RetryOnFailure
+    public void testDownloadPage() throws Exception {
+        final OfflinePageOrigin origin =
+                new OfflinePageOrigin("abc.xyz", new String[] {"deadbeef"});
+        mActivityTestRule.loadUrl(mTestPage);
+        final String originString = origin.encodeAsJsonString();
+        final Semaphore semaphore = new Semaphore(0);
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                Assert.assertNotNull(
+                        "Tab is null", mActivityTestRule.getActivity().getActivityTab());
+                Assert.assertEquals("URL does not match requested.", mTestPage,
+                        mActivityTestRule.getActivity().getActivityTab().getUrl());
+                Assert.assertNotNull("WebContents is null",
+                        mActivityTestRule.getActivity().getActivityTab().getWebContents());
+
+                // Use Downloadbridge, because scheduler does not work in test.
+                OfflinePageDownloadBridge downloadBridge =
+                        new OfflinePageDownloadBridge(Profile.getLastUsedProfile());
+
+                mOfflinePageBridge.addObserver(new OfflinePageModelObserver() {
+                    @Override
+                    public void offlinePageAdded(OfflinePageItem newPage) {
+                        mOfflinePageBridge.removeObserver(this);
+                        semaphore.release();
+                    }
+                });
+
+                downloadBridge.startDownload(
+                        mActivityTestRule.getActivity().getActivityTab(), origin);
+            }
+        });
+        Assert.assertTrue("Semaphore acquire failed. Timed out.",
+                semaphore.tryAcquire(TIMEOUT_MS, TimeUnit.MILLISECONDS));
+
+        List<OfflinePageItem> pages = getAllPages();
+        Assert.assertEquals(originString, pages.get(0).getRequestOrigin());
+    }
+
+    @Test
+    @SmallTest
+    public void testSavePageWithRequestOrigin() throws Exception {
+        final OfflinePageOrigin origin =
+                new OfflinePageOrigin("abc.xyz", new String[] {"deadbeef"});
+        mActivityTestRule.loadUrl(mTestPage);
+        final String originString = origin.encodeAsJsonString();
+        final Semaphore semaphore = new Semaphore(0);
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                mOfflinePageBridge.addObserver(new OfflinePageModelObserver() {
+                    @Override
+                    public void offlinePageAdded(OfflinePageItem newPage) {
+                        mOfflinePageBridge.removeObserver(this);
+                        semaphore.release();
+                    }
+                });
+                mOfflinePageBridge.savePage(
+                        mActivityTestRule.getActivity().getActivityTab().getWebContents(),
+                        BOOKMARK_ID, origin, new SavePageCallback() {
+                            @Override
+                            public void onSavePageDone(
+                                    int savePageResult, String url, long offlineId) {}
+                        });
+            }
+        });
+
+        Assert.assertTrue("Semaphore acquire failed. Timed out.",
+                semaphore.tryAcquire(TIMEOUT_MS, TimeUnit.MILLISECONDS));
+        List<OfflinePageItem> pages = getAllPages();
+        Assert.assertEquals(originString, pages.get(0).getRequestOrigin());
+    }
+
+    @Test
+    @SmallTest
+    public void testSavePageNoOrigin() throws Exception {
+        mActivityTestRule.loadUrl(mTestPage);
+        savePage(SavePageResult.SUCCESS, mTestPage);
+        List<OfflinePageItem> pages = getAllPages();
+        Assert.assertEquals("", pages.get(0).getRequestOrigin());
     }
 
     // Returns offline ID.

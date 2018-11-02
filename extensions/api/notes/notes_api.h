@@ -70,6 +70,7 @@ class NotesAPI : public BrowserContextKeyedAPI, public EventRouter::Observer {
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "NotesAPI"; }
   static const bool kServiceIsNULLWhileTesting = true;
+  static const bool kServiceRedirectedInIncognito = true;
 
   // Created lazily upon OnListenerAdded.
   std::unique_ptr<NotesEventRouter> notes_event_router_;

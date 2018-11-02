@@ -6,6 +6,7 @@ import("//build/config/ios/rules.gni")
 import("//build/config/mac/base_rules.gni")
 import("//build/mac/tweak_info_plist.gni")
 import("//ios/build/chrome_build.gni")
+import("//ios/public/provider/chrome/browser/build_config.gni")
 import("//ios/third_party/earl_grey/ios_eg_test.gni")
 
 tweak_info_plist("info_plist") {
@@ -47,23 +48,28 @@ ios_eg_test("ios_clean_skeleton_perf_egtests") {
   ]
 
   deps = [
+    "//ios/chrome/app:tests_fake_hook",
     "//ios/clean/chrome/app:main",
     "//ios/testing/perf:startup",
   ]
 
-  bundle_deps = [ "//ios/chrome/app/resources" ]
+  bundle_deps = [
+    "//ios/chrome/app/resources",
+    ios_application_icons_target,
+  ]
 
   configs += [ "//build/config/compiler:enable_arc" ]
 
   _eg_main_application_delegate = "MainApplicationDelegate"
 
   extra_substitutions = [
+    "CONTENT_WIDGET_EXTENSION_BUNDLE_ID=$chromium_bundle_id.ContentTodayExtension",
     "CHROMIUM_HANDOFF_ID=$chromium_handoff_id",
     "CHROMIUM_SHORT_NAME=$target_name",
     "CHROMIUM_URL_SCHEME_1=$url_unsecure_scheme",
     "CHROMIUM_URL_SCHEME_2=$url_secure_scheme",
     "CHROMIUM_URL_SCHEME_3=$url_x_callback_scheme",
-    "CHROMIUM_URL_SCHEME_4=$url_channel_scheme",
+    "CHROMIUM_URL_CHANNEL_SCHEME=$url_channel_scheme",
     "EG_MAIN_APPLICATION_DELEGATE=$_eg_main_application_delegate",
     "SSOAUTH_URL_SCHEME=$url_ssoauth_scheme",
   ]

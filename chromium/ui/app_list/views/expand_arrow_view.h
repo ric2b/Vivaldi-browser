@@ -8,7 +8,6 @@
 #include "base/memory/weak_ptr.h"
 #include "ui/app_list/app_list_export.h"
 #include "ui/views/controls/button/button.h"
-#include "ui/views/controls/button/custom_button.h"
 
 namespace gfx {
 class SlideAnimation;
@@ -27,7 +26,7 @@ class AppListView;
 class ContentsView;
 
 // A tile item for the expand arrow on the start page.
-class APP_LIST_EXPORT ExpandArrowView : public views::CustomButton,
+class APP_LIST_EXPORT ExpandArrowView : public views::Button,
                                         public views::ButtonListener {
  public:
   ExpandArrowView(ContentsView* contents_view, AppListView* app_list_view);
@@ -36,7 +35,7 @@ class APP_LIST_EXPORT ExpandArrowView : public views::CustomButton,
   bool selected() { return selected_; }
   void SetSelected(bool selected);
 
-  // Overridden from views::CustomButton:
+  // Overridden from views::Button:
   void PaintButtonContents(gfx::Canvas* canvas) override;
 
   // Overridden from views::ButtonListener:

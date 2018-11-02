@@ -489,23 +489,27 @@ GURL AutocompleteMatch::GURLToStrippedGURL(
 
 // static
 url_formatter::FormatUrlTypes AutocompleteMatch::GetFormatTypes(
-    bool trim_scheme) {
-  auto format_types = url_formatter::kFormatUrlOmitAll;
-  if (!trim_scheme) {
+    bool preserve_scheme,
+    bool preserve_subdomain,
+    bool preserve_after_host) {
+  auto format_types = url_formatter::kFormatUrlOmitDefaults;
+  if (preserve_scheme) {
     format_types &= ~url_formatter::kFormatUrlOmitHTTP;
   } else if (base::FeatureList::IsEnabled(
                  omnibox::kUIExperimentHideSuggestionUrlScheme)) {
-    format_types |= url_formatter::kFormatUrlExperimentalOmitHTTPS;
+    format_types |= url_formatter::kFormatUrlOmitHTTPS;
   }
 
-  if (base::FeatureList::IsEnabled(
-          omnibox::kUIExperimentElideSuggestionUrlAfterHost)) {
-    format_types |= url_formatter::kFormatUrlExperimentalElideAfterHost;
-  }
-
-  if (base::FeatureList::IsEnabled(
+  if (!preserve_subdomain &&
+      base::FeatureList::IsEnabled(
           omnibox::kUIExperimentHideSuggestionUrlTrivialSubdomains)) {
     format_types |= url_formatter::kFormatUrlExperimentalOmitTrivialSubdomains;
+  }
+
+  if (!preserve_after_host &&
+      base::FeatureList::IsEnabled(
+          omnibox::kUIExperimentElideSuggestionUrlAfterHost)) {
+    format_types |= url_formatter::kFormatUrlExperimentalElideAfterHost;
   }
 
   return format_types;
@@ -615,6 +619,39 @@ void AutocompleteMatch::PossiblySwapContentsAndDescriptionForDisplay() {
   if (swap_contents_and_description) {
     std::swap(contents, description);
     std::swap(contents_class, description_class);
+  }
+}
+
+void AutocompleteMatch::InlineTailPrefix(const base::string16& common_prefix) {
+  if (type == AutocompleteMatchType::SEARCH_SUGGEST_TAIL) {
+    contents = common_prefix + contents;
+    // Shift existing styles.
+    for (ACMatchClassification& classification : contents_class)
+      classification.offset += common_prefix.size();
+    // Prefix with dim text.
+    contents_class.insert(contents_class.begin(),
+                          ACMatchClassification(0, ACMatchClassification::DIM));
+  } else if (base::StartsWith(contents, common_prefix,
+                              base::CompareCase::SENSITIVE)) {
+    // Prefix with dim text.
+    contents_class.insert(contents_class.begin(),
+                          ACMatchClassification(0, ACMatchClassification::DIM));
+    // Find last one that overlaps or starts at common prefix.
+    size_t i = 1;
+    while (i < contents_class.size() &&
+           contents_class[i].offset <= common_prefix.size())
+      ++i;
+    if (i > 1) {
+      // Erase any in-between.
+      contents_class.erase(contents_class.begin() + 1,
+                           contents_class.begin() + i - 1);
+      // Make this classification start after common prefix.
+      contents_class[1].offset = common_prefix.size();
+      // If |common_prefix| and |contents| are equal, we'll end up with a
+      // classification that's outside the range of the string. Remove it here.
+      if (contents_class[1].offset >= contents.size())
+        contents_class.erase(contents_class.begin() + 1, contents_class.end());
+    }
   }
 }
 

@@ -227,7 +227,7 @@ class GFX_EXPORT Rect {
 
   // Clamp the size to avoid integer overflow in bottom() and right().
   // This returns the width given an origin and a width.
-  // TODO(enne): this should probably use base::SaturatedAddition, but that
+  // TODO(enne): this should probably use base::ClampAdd, but that
   // function is not a constexpr.
   static constexpr int GetClampedValue(int origin, int size) {
     return AddWouldOverflow(origin, size)
@@ -338,6 +338,41 @@ inline Rect ScaleToEnclosedRect(const Rect& rect,
 
 inline Rect ScaleToEnclosedRect(const Rect& rect, float scale) {
   return ScaleToEnclosedRect(rect, scale, scale);
+}
+
+// Scales |rect| by scaling its four corner points. If the corner points lie on
+// non-integral coordinate after scaling, their values are rounded to the
+// nearest integer.
+// This is helpful during layout when relative positions of multiple gfx::Rect
+// in a given coordinate space needs to be same after scaling as it was before
+// scaling. ie. this gives a lossless relative positioning of rects.
+inline Rect ScaleToRoundedRect(const Rect& rect, float x_scale, float y_scale) {
+  if (x_scale == 1.f && y_scale == 1.f)
+    return rect;
+
+  DCHECK(
+      base::IsValueInRangeForNumericType<int>(std::round(rect.x() * x_scale)));
+  DCHECK(
+      base::IsValueInRangeForNumericType<int>(std::round(rect.y() * y_scale)));
+  DCHECK(base::IsValueInRangeForNumericType<int>(
+      std::round(rect.right() * x_scale)));
+  DCHECK(base::IsValueInRangeForNumericType<int>(
+      std::round(rect.bottom() * y_scale)));
+
+  int x = static_cast<int>(std::round(rect.x() * x_scale));
+  int y = static_cast<int>(std::round(rect.y() * y_scale));
+  int r = rect.width() == 0
+              ? x
+              : static_cast<int>(std::round(rect.right() * x_scale));
+  int b = rect.height() == 0
+              ? y
+              : static_cast<int>(std::round(rect.bottom() * y_scale));
+
+  return Rect(x, y, r - x, b - y);
+}
+
+inline Rect ScaleToRoundedRect(const Rect& rect, float scale) {
+  return ScaleToRoundedRect(rect, scale, scale);
 }
 
 // This is declared here for use in gtest-based unit tests but is defined in

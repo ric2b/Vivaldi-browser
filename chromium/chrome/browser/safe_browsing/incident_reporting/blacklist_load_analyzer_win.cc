@@ -16,13 +16,13 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/install_verification/win/module_info.h"
 #include "chrome/browser/install_verification/win/module_verification_common.h"
+#include "chrome/browser/safe_browsing/download_protection/path_sanitizer.h"
 #include "chrome/browser/safe_browsing/incident_reporting/blacklist_load_incident.h"
 #include "chrome/browser/safe_browsing/incident_reporting/incident_receiver.h"
-#include "chrome/browser/safe_browsing/path_sanitizer.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/common/safe_browsing/binary_feature_extractor.h"
 #include "chrome_elf/blacklist/blacklist.h"
-#include "components/safe_browsing/csd.pb.h"
+#include "components/safe_browsing/proto/csd.pb.h"
 
 namespace safe_browsing {
 

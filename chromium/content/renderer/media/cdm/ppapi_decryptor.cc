@@ -23,12 +23,13 @@
 #include "media/base/key_systems.h"
 #include "media/base/video_decoder_config.h"
 #include "media/base/video_frame.h"
+#include "url/origin.h"
 
 namespace content {
 
 void PpapiDecryptor::Create(
     const std::string& key_system,
-    const GURL& security_origin,
+    const url::Origin& security_origin,
     bool allow_distinctive_identifier,
     bool allow_persistent_state,
     const CreatePepperCdmCB& create_pepper_cdm_cb,
@@ -51,7 +52,7 @@ void PpapiDecryptor::Create(
         "Unable to create the CDM for the key system " + key_system + ".";
     DLOG(ERROR) << message;
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(cdm_created_cb, nullptr, message));
+        FROM_HERE, base::BindOnce(cdm_created_cb, nullptr, message));
     return;
   }
 
@@ -114,12 +115,27 @@ void PpapiDecryptor::SetServerCertificate(
   DCHECK(render_task_runner_->BelongsToCurrentThread());
 
   if (!CdmDelegate()) {
-    promise->reject(media::CdmPromise::INVALID_STATE_ERROR, 0,
+    promise->reject(media::CdmPromise::Exception::INVALID_STATE_ERROR, 0,
                     "CDM has failed.");
     return;
   }
 
   CdmDelegate()->SetServerCertificate(certificate, std::move(promise));
+}
+
+void PpapiDecryptor::GetStatusForPolicy(
+    media::HdcpVersion min_hdcp_version,
+    std::unique_ptr<media::KeyStatusCdmPromise> promise) {
+  DVLOG(2) << __func__;
+  DCHECK(render_task_runner_->BelongsToCurrentThread());
+
+  if (!CdmDelegate()) {
+    promise->reject(media::CdmPromise::Exception::INVALID_STATE_ERROR, 0,
+                    "CDM has failed.");
+    return;
+  }
+
+  CdmDelegate()->GetStatusForPolicy(min_hdcp_version, std::move(promise));
 }
 
 void PpapiDecryptor::CreateSessionAndGenerateRequest(
@@ -131,7 +147,7 @@ void PpapiDecryptor::CreateSessionAndGenerateRequest(
   DCHECK(render_task_runner_->BelongsToCurrentThread());
 
   if (!CdmDelegate()) {
-    promise->reject(media::CdmPromise::INVALID_STATE_ERROR, 0,
+    promise->reject(media::CdmPromise::Exception::INVALID_STATE_ERROR, 0,
                     "CDM has failed.");
     return;
   }
@@ -148,7 +164,7 @@ void PpapiDecryptor::LoadSession(
   DCHECK(render_task_runner_->BelongsToCurrentThread());
 
   if (!CdmDelegate()) {
-    promise->reject(media::CdmPromise::INVALID_STATE_ERROR, 0,
+    promise->reject(media::CdmPromise::Exception::INVALID_STATE_ERROR, 0,
                     "CDM has failed.");
     return;
   }
@@ -163,7 +179,7 @@ void PpapiDecryptor::UpdateSession(
   DCHECK(render_task_runner_->BelongsToCurrentThread());
 
   if (!CdmDelegate()) {
-    promise->reject(media::CdmPromise::INVALID_STATE_ERROR, 0,
+    promise->reject(media::CdmPromise::Exception::INVALID_STATE_ERROR, 0,
                     "CDM has failed.");
     return;
   }
@@ -177,7 +193,7 @@ void PpapiDecryptor::CloseSession(
   DCHECK(render_task_runner_->BelongsToCurrentThread());
 
   if (!CdmDelegate()) {
-    promise->reject(media::CdmPromise::INVALID_STATE_ERROR, 0,
+    promise->reject(media::CdmPromise::Exception::INVALID_STATE_ERROR, 0,
                     "CDM has failed.");
     return;
   }
@@ -192,7 +208,7 @@ void PpapiDecryptor::RemoveSession(
   DCHECK(render_task_runner_->BelongsToCurrentThread());
 
   if (!CdmDelegate()) {
-    promise->reject(media::CdmPromise::INVALID_STATE_ERROR, 0,
+    promise->reject(media::CdmPromise::Exception::INVALID_STATE_ERROR, 0,
                     "CDM has failed.");
     return;
   }
@@ -217,9 +233,9 @@ void PpapiDecryptor::RegisterNewKeyCB(StreamType stream_type,
                                       const NewKeyCB& new_key_cb) {
   if (!render_task_runner_->BelongsToCurrentThread()) {
     render_task_runner_->PostTask(
-        FROM_HERE,
-        base::Bind(&PpapiDecryptor::RegisterNewKeyCB,
-                   weak_ptr_factory_.GetWeakPtr(), stream_type, new_key_cb));
+        FROM_HERE, base::BindOnce(&PpapiDecryptor::RegisterNewKeyCB,
+                                  weak_ptr_factory_.GetWeakPtr(), stream_type,
+                                  new_key_cb));
     return;
   }
 
@@ -243,8 +259,8 @@ void PpapiDecryptor::Decrypt(
   if (!render_task_runner_->BelongsToCurrentThread()) {
     render_task_runner_->PostTask(
         FROM_HERE,
-        base::Bind(&PpapiDecryptor::Decrypt, weak_ptr_factory_.GetWeakPtr(),
-                   stream_type, encrypted, decrypt_cb));
+        base::BindOnce(&PpapiDecryptor::Decrypt, weak_ptr_factory_.GetWeakPtr(),
+                       stream_type, encrypted, decrypt_cb));
     return;
   }
 
@@ -260,8 +276,8 @@ void PpapiDecryptor::Decrypt(
 void PpapiDecryptor::CancelDecrypt(StreamType stream_type) {
   if (!render_task_runner_->BelongsToCurrentThread()) {
     render_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&PpapiDecryptor::CancelDecrypt,
-                              weak_ptr_factory_.GetWeakPtr(), stream_type));
+        FROM_HERE, base::BindOnce(&PpapiDecryptor::CancelDecrypt,
+                                  weak_ptr_factory_.GetWeakPtr(), stream_type));
     return;
   }
 
@@ -275,8 +291,9 @@ void PpapiDecryptor::InitializeAudioDecoder(
     const DecoderInitCB& init_cb) {
   if (!render_task_runner_->BelongsToCurrentThread()) {
     render_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&PpapiDecryptor::InitializeAudioDecoder,
-                              weak_ptr_factory_.GetWeakPtr(), config, init_cb));
+        FROM_HERE,
+        base::BindOnce(&PpapiDecryptor::InitializeAudioDecoder,
+                       weak_ptr_factory_.GetWeakPtr(), config, init_cb));
     return;
   }
 
@@ -298,8 +315,9 @@ void PpapiDecryptor::InitializeVideoDecoder(
     const DecoderInitCB& init_cb) {
   if (!render_task_runner_->BelongsToCurrentThread()) {
     render_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&PpapiDecryptor::InitializeVideoDecoder,
-                              weak_ptr_factory_.GetWeakPtr(), config, init_cb));
+        FROM_HERE,
+        base::BindOnce(&PpapiDecryptor::InitializeVideoDecoder,
+                       weak_ptr_factory_.GetWeakPtr(), config, init_cb));
     return;
   }
 
@@ -321,9 +339,9 @@ void PpapiDecryptor::DecryptAndDecodeAudio(
     const AudioDecodeCB& audio_decode_cb) {
   if (!render_task_runner_->BelongsToCurrentThread()) {
     render_task_runner_->PostTask(
-        FROM_HERE,
-        base::Bind(&PpapiDecryptor::DecryptAndDecodeAudio,
-                   weak_ptr_factory_.GetWeakPtr(), encrypted, audio_decode_cb));
+        FROM_HERE, base::BindOnce(&PpapiDecryptor::DecryptAndDecodeAudio,
+                                  weak_ptr_factory_.GetWeakPtr(), encrypted,
+                                  audio_decode_cb));
     return;
   }
 
@@ -339,9 +357,9 @@ void PpapiDecryptor::DecryptAndDecodeVideo(
     const VideoDecodeCB& video_decode_cb) {
   if (!render_task_runner_->BelongsToCurrentThread()) {
     render_task_runner_->PostTask(
-        FROM_HERE,
-        base::Bind(&PpapiDecryptor::DecryptAndDecodeVideo,
-                   weak_ptr_factory_.GetWeakPtr(), encrypted, video_decode_cb));
+        FROM_HERE, base::BindOnce(&PpapiDecryptor::DecryptAndDecodeVideo,
+                                  weak_ptr_factory_.GetWeakPtr(), encrypted,
+                                  video_decode_cb));
     return;
   }
 
@@ -355,8 +373,8 @@ void PpapiDecryptor::DecryptAndDecodeVideo(
 void PpapiDecryptor::ResetDecoder(StreamType stream_type) {
   if (!render_task_runner_->BelongsToCurrentThread()) {
     render_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&PpapiDecryptor::ResetDecoder,
-                              weak_ptr_factory_.GetWeakPtr(), stream_type));
+        FROM_HERE, base::BindOnce(&PpapiDecryptor::ResetDecoder,
+                                  weak_ptr_factory_.GetWeakPtr(), stream_type));
     return;
   }
 
@@ -368,8 +386,8 @@ void PpapiDecryptor::ResetDecoder(StreamType stream_type) {
 void PpapiDecryptor::DeinitializeDecoder(StreamType stream_type) {
   if (!render_task_runner_->BelongsToCurrentThread()) {
     render_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&PpapiDecryptor::DeinitializeDecoder,
-                              weak_ptr_factory_.GetWeakPtr(), stream_type));
+        FROM_HERE, base::BindOnce(&PpapiDecryptor::DeinitializeDecoder,
+                                  weak_ptr_factory_.GetWeakPtr(), stream_type));
     return;
   }
 

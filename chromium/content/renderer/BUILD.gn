@@ -176,6 +176,10 @@ target(link_target_type, "renderer") {
     "input/render_widget_input_handler_delegate.h",
     "input/scoped_web_input_event_with_latency_info.cc",
     "input/scoped_web_input_event_with_latency_info.h",
+    "input/widget_input_handler_impl.cc",
+    "input/widget_input_handler_impl.h",
+    "input/widget_input_handler_manager.cc",
+    "input/widget_input_handler_manager.h",
     "installedapp/related_apps_fetcher.cc",
     "installedapp/related_apps_fetcher.h",
     "internal_document_state_data.cc",
@@ -188,6 +192,7 @@ target(link_target_type, "renderer") {
     "java/gin_java_bridge_value_converter.h",
     "java/gin_java_function_invocation_helper.cc",
     "java/gin_java_function_invocation_helper.h",
+    "layout_test_dependencies.cc",
     "layout_test_dependencies.h",
     "manifest/manifest_debug_info.cc",
     "manifest/manifest_debug_info.h",
@@ -257,10 +262,6 @@ target(link_target_type, "renderer") {
     "media/video_capture_impl_manager.h",
     "media/web_media_element_source_utils.cc",
     "media/web_media_element_source_utils.h",
-    "media/webmediaplayer_ms.cc",
-    "media/webmediaplayer_ms.h",
-    "media/webmediaplayer_ms_compositor.cc",
-    "media/webmediaplayer_ms_compositor.h",
     "menu_item_builder.cc",
     "menu_item_builder.h",
     "message_delivery_policy.h",
@@ -296,8 +297,6 @@ target(link_target_type, "renderer") {
     "presentation/presentation_connection_proxy.h",
     "presentation/presentation_dispatcher.cc",
     "presentation/presentation_dispatcher.h",
-    "previews_state_helper.cc",
-    "previews_state_helper.h",
     "push_messaging/push_messaging_client.cc",
     "push_messaging/push_messaging_client.h",
     "render_frame_impl.cc",
@@ -370,8 +369,6 @@ target(link_target_type, "renderer") {
     "service_worker/worker_fetch_context_impl.h",
     "shared_memory_seqlock_reader.cc",
     "shared_memory_seqlock_reader.h",
-    "shared_worker/embedded_shared_worker_content_settings_client_proxy.cc",
-    "shared_worker/embedded_shared_worker_content_settings_client_proxy.h",
     "shared_worker/embedded_shared_worker_stub.cc",
     "shared_worker/embedded_shared_worker_stub.h",
     "shared_worker/shared_worker_repository.cc",
@@ -437,8 +434,6 @@ target(link_target_type, "renderer") {
     "//cc/blink",
     "//cc/ipc",
     "//cc/paint",
-    "//cc/surfaces",
-    "//cc/surfaces:surfaces",
     "//components/discardable_memory/client",
     "//components/metrics",
     "//components/metrics:single_sample_metrics",
@@ -466,8 +461,8 @@ target(link_target_type, "renderer") {
     "//gin",
     "//gpu",
     "//gpu/command_buffer/client:gles2_interface",
-    "//jingle:jingle_glue",
     "//media",
+    "//media:media_features",
     "//media/blink",
     "//media/capture",
     "//media/gpu",
@@ -476,6 +471,8 @@ target(link_target_type, "renderer") {
     "//media/midi",
     "//media/midi:mojo",
     "//media/mojo:features",
+    "//media/mojo/clients",
+    "//media/mojo/interfaces",
     "//media/mojo/interfaces:remoting",
     "//mojo/common",
     "//mojo/edk/js",
@@ -485,6 +482,7 @@ target(link_target_type, "renderer") {
     "//ppapi/features",
     "//printing/features",
     "//sandbox",
+    "//services/device/public/cpp/generic_sensor",
     "//services/device/public/interfaces",
     "//services/device/public/interfaces:constants",
     "//services/metrics/public/cpp:metrics_cpp",
@@ -558,6 +556,13 @@ target(link_target_type, "renderer") {
     ]
   }
 
+  if (is_fuchsia) {
+    sources += [
+      "render_view_fuchsia.cc",
+      "renderer_main_platform_delegate_fuchsia.cc",
+    ]
+  }
+
   if (enable_media_remoting) {
     deps += [ "//media/remoting" ]
   }
@@ -587,8 +592,6 @@ target(link_target_type, "renderer") {
       "media/media_devices_event_dispatcher.h",
       "media/media_devices_listener_impl.cc",
       "media/media_devices_listener_impl.h",
-      "media/media_stream.cc",
-      "media/media_stream.h",
       "media/media_stream_audio_deliverer.h",
       "media/media_stream_audio_level_calculator.cc",
       "media/media_stream_audio_level_calculator.h",
@@ -657,6 +660,10 @@ target(link_target_type, "renderer") {
       "media/video_track_adapter.h",
       "media/webaudio_media_stream_source.cc",
       "media/webaudio_media_stream_source.h",
+      "media/webmediaplayer_ms.cc",
+      "media/webmediaplayer_ms.h",
+      "media/webmediaplayer_ms_compositor.cc",
+      "media/webmediaplayer_ms_compositor.h",
       "media/webrtc/media_stream_remote_video_source.cc",
       "media/webrtc/media_stream_remote_video_source.h",
       "media/webrtc/media_stream_track_metrics.cc",
@@ -681,6 +688,7 @@ target(link_target_type, "renderer") {
       "media/webrtc/stun_field_trial.h",
       "media/webrtc/track_observer.cc",
       "media/webrtc/track_observer.h",
+      "media/webrtc/two_keys_adapter_map.h",
       "media/webrtc/webrtc_audio_sink.cc",
       "media/webrtc/webrtc_audio_sink.h",
       "media/webrtc/webrtc_media_stream_adapter.cc",
@@ -765,6 +773,7 @@ target(link_target_type, "renderer") {
 
     deps += [
       "//crypto",
+      "//jingle:jingle_glue",
       "//third_party/libvpx",
       "//third_party/opus",
       "//third_party/webrtc/api:libjingle_peerconnection",
@@ -772,15 +781,18 @@ target(link_target_type, "renderer") {
       "//third_party/webrtc/api:video_frame_api",
       "//third_party/webrtc/api/audio_codecs:builtin_audio_decoder_factory",
       "//third_party/webrtc/api/audio_codecs:builtin_audio_encoder_factory",
+      "//third_party/webrtc/common_video:common_video",
       "//third_party/webrtc/media:rtc_media",
       "//third_party/webrtc/media:rtc_media_base",
       "//third_party/webrtc/modules/audio_device",
       "//third_party/webrtc/modules/audio_processing",
+      "//third_party/webrtc/modules/audio_processing/aec_dump",
       "//third_party/webrtc/modules/video_coding:webrtc_h264",
       "//third_party/webrtc/p2p:libstunprober",
       "//third_party/webrtc/p2p:rtc_p2p",
       "//third_party/webrtc/pc:rtc_pc",
       "//third_party/webrtc/rtc_base:rtc_base",
+      "//third_party/webrtc/rtc_base:rtc_task_queue",
       "//third_party/webrtc/stats",
       "//third_party/webrtc/system_wrappers",
       "//third_party/webrtc_overrides:init_webrtc",
@@ -949,7 +961,7 @@ target(link_target_type, "renderer") {
     ]
   }
 
-  if (!enable_pepper_cdms) {
+  if (!enable_library_cdms) {
     sources -= [
       "media/cdm/pepper_cdm_wrapper.h",
       "media/cdm/pepper_cdm_wrapper_impl.cc",
@@ -965,13 +977,8 @@ target(link_target_type, "renderer") {
 
   if (enable_mojo_media) {
     sources += [
-      "media/media_interface_provider.cc",
-      "media/media_interface_provider.h",
-    ]
-
-    deps += [
-      "//media/mojo/clients",
-      "//media/mojo/interfaces",
+      "media/media_interface_factory.cc",
+      "media/media_interface_factory.h",
     ]
   }
 

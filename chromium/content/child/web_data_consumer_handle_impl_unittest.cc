@@ -51,8 +51,8 @@ class ClientImpl final : public WebDataConsumerHandle::Client {
 
   void DidGetReadable() override {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&ReadDataOperationBase::ReadMore,
-                              base::Unretained(operation_)));
+        FROM_HERE, base::BindOnce(&ReadDataOperationBase::ReadMore,
+                                  base::Unretained(operation_)));
   }
 
  private:
@@ -219,13 +219,13 @@ class WebDataConsumerHandleImplTest : public ::testing::Test {
     MojoResult rv;
     while (remaining > 0) {
       uint32_t size = remaining;
-      rv = mojo::WriteDataRaw(producer_.get(), p, &size, kNone);
+      rv = producer_->WriteData(p, &size, kNone);
       if (rv == MOJO_RESULT_OK) {
         remaining -= size;
         p += size;
       } else if (rv != MOJO_RESULT_SHOULD_WAIT) {
         // Something is wrong.
-        EXPECT_TRUE(false) << "mojo::WriteDataRaw returns an invalid value.";
+        EXPECT_TRUE(false) << "WriteData() returns an invalid value.";
         return "error on writing";
       }
     }
@@ -247,8 +247,8 @@ TEST_F(WebDataConsumerHandleImplTest, ReadData) {
   ASSERT_TRUE(t.Start());
 
   t.task_runner()->PostTask(FROM_HERE,
-                            base::Bind(&ReadDataOperation::ReadData,
-                                       base::Unretained(operation.get())));
+                            base::BindOnce(&ReadDataOperation::ReadData,
+                                           base::Unretained(operation.get())));
 
   std::string expected = ProduceData(24 * 1024);
   producer_.reset();
@@ -268,8 +268,8 @@ TEST_F(WebDataConsumerHandleImplTest, TwoPhaseReadData) {
   ASSERT_TRUE(t.Start());
 
   t.task_runner()->PostTask(FROM_HERE,
-                            base::Bind(&TwoPhaseReadDataOperation::ReadData,
-                                       base::Unretained(operation.get())));
+                            base::BindOnce(&TwoPhaseReadDataOperation::ReadData,
+                                           base::Unretained(operation.get())));
 
   std::string expected = ProduceData(24 * 1024);
   producer_.reset();
@@ -342,8 +342,8 @@ TEST_F(WebDataConsumerHandleImplTest, DidGetReadable) {
       index = (37 * index + 11) % 26;
     }
     uint32_t size = expected.size();
-    MojoResult rv = mojo::WriteDataRaw(producer_.get(), expected.data(), &size,
-                                       MOJO_WRITE_DATA_FLAG_NONE);
+    MojoResult rv =
+        producer_->WriteData(expected.data(), &size, MOJO_WRITE_DATA_FLAG_NONE);
     EXPECT_EQ(MOJO_RESULT_OK, rv);
     EXPECT_EQ(kTotalSize, size);
   }

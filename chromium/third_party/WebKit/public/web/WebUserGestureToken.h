@@ -51,12 +51,10 @@ class WebUserGestureToken {
   ~WebUserGestureToken() { Reset(); }
 
   BLINK_EXPORT bool HasGestures() const;
-  BLINK_EXPORT void SetOutOfProcess();
-  BLINK_EXPORT void SetJavascriptPrompt();
   bool IsNull() const { return token_.IsNull(); }
 
-#if BLINK_IMPLEMENTATION
-  explicit WebUserGestureToken(PassRefPtr<UserGestureToken>);
+#if INSIDE_BLINK
+  explicit WebUserGestureToken(RefPtr<UserGestureToken>);
   operator PassRefPtr<UserGestureToken>() const;
 #endif
 

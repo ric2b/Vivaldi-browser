@@ -9,12 +9,13 @@
 #include "core/dom/Document.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameClient.h"
-#include "core/frame/SubresourceIntegrity.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/CrossOriginAttribute.h"
 #include "core/html/HTMLLinkElement.h"
+#include "core/loader/SubresourceIntegrityHelper.h"
 #include "core/loader/resource/CSSStyleSheetResource.h"
 #include "platform/Histogram.h"
+#include "platform/loader/SubresourceIntegrity.h"
 #include "platform/loader/fetch/FetchParameters.h"
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/loader/fetch/ResourceRequest.h"
@@ -82,28 +83,8 @@ void LinkStyle::SetCSSStyleSheet(
     ResourceIntegrityDisposition disposition =
         cached_style_sheet->IntegrityDisposition();
 
-    if (disposition == ResourceIntegrityDisposition::kNotChecked &&
-        !cached_style_sheet->LoadFailedOrCanceled()) {
-      bool check_result;
-
-      // cachedStyleSheet->resourceBuffer() can be nullptr on load success.
-      // If response size == 0.
-      const char* data = nullptr;
-      size_t size = 0;
-      if (cached_style_sheet->ResourceBuffer()) {
-        data = cached_style_sheet->ResourceBuffer()->Data();
-        size = cached_style_sheet->ResourceBuffer()->size();
-      }
-      check_result = SubresourceIntegrity::CheckSubresourceIntegrity(
-          owner_->FastGetAttribute(integrityAttr), GetDocument(), data, size,
-          KURL(base_url, href), *cached_style_sheet);
-      disposition = check_result ? ResourceIntegrityDisposition::kPassed
-                                 : ResourceIntegrityDisposition::kFailed;
-
-      // TODO(kouhei): Remove this const_cast crbug.com/653502
-      const_cast<CSSStyleSheetResource*>(cached_style_sheet)
-          ->SetIntegrityDisposition(disposition);
-    }
+    SubresourceIntegrityHelper::DoReport(
+        GetDocument(), cached_style_sheet->IntegrityReportInfo());
 
     if (disposition == ResourceIntegrityDisposition::kFailed) {
       loading_ = false;

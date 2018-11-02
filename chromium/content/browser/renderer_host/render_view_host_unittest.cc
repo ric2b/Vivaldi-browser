@@ -22,6 +22,7 @@
 #include "content/public/common/drop_data.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/mock_render_process_host.h"
+#include "content/test/mock_widget_impl.h"
 #include "content/test/test_content_browser_client.h"
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_web_contents.h"
@@ -30,15 +31,6 @@
 #include "ui/base/page_transition_types.h"
 
 namespace content {
-
-class WidgetImpl : public mojom::Widget {
- public:
-  explicit WidgetImpl(mojo::InterfaceRequest<mojom::Widget> request)
-      : binding_(this, std::move(request)) {}
-
- private:
-  mojo::Binding<mojom::Widget> binding_;
-};
 
 class RenderViewHostTestBrowserClient : public TestContentBrowserClient {
  public:
@@ -90,8 +82,8 @@ TEST_F(RenderViewHostTest, CreateFullscreenWidget) {
   int32_t routing_id = process()->GetNextRoutingID();
 
   mojom::WidgetPtr widget;
-  std::unique_ptr<WidgetImpl> widget_impl =
-      base::MakeUnique<WidgetImpl>(mojo::MakeRequest(&widget));
+  std::unique_ptr<MockWidgetImpl> widget_impl =
+      base::MakeUnique<MockWidgetImpl>(mojo::MakeRequest(&widget));
   test_rvh()->CreateNewFullscreenWidget(routing_id, std::move(widget));
 }
 

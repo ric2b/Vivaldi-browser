@@ -69,6 +69,7 @@ class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "VivaldiBookmarksAPI"; }
   static const bool kServiceIsNULLWhileTesting = true;
+  static const bool kServiceRedirectedInIncognito = true;
 };
 
 class BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction

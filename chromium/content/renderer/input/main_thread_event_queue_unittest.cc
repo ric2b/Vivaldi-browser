@@ -115,7 +115,8 @@ class HandledEventCallbackTracker {
   void DidHandleEvent(size_t index,
                       InputEventAckState ack_result,
                       const ui::LatencyInfo& latency,
-                      std::unique_ptr<ui::DidOverscrollParams> params) {
+                      std::unique_ptr<ui::DidOverscrollParams> params,
+                      base::Optional<cc::TouchAction> touch_action) {
     callbacks_received_[index] =
         handling_event_ ? CallbackReceivedState::kCalledWhileHandlingEvent
                         : CallbackReceivedState::kCalledAfterHandleEvent;
@@ -181,8 +182,8 @@ class MainThreadEventQueueTest : public testing::TestWithParam<unsigned>,
 
   void QueueClosure() {
     unsigned closure_id = ++closure_count_;
-    queue_->QueueClosure(base::Bind(&MainThreadEventQueueTest::RunClosure,
-                                    base::Unretained(this), closure_id));
+    queue_->QueueClosure(base::BindOnce(&MainThreadEventQueueTest::RunClosure,
+                                        base::Unretained(this), closure_id));
   }
 
   MainThreadEventQueueTaskList& event_queue() {
@@ -220,7 +221,7 @@ class MainThreadEventQueueTest : public testing::TestWithParam<unsigned>,
     std::unique_ptr<HandledTask> handled_event(new HandledEvent(event));
     handled_tasks_.push_back(std::move(handled_event));
     std::move(callback).Run(INPUT_EVENT_ACK_STATE_NOT_CONSUMED, latency,
-                            nullptr);
+                            nullptr, base::nullopt);
   }
 
   void SetNeedsMainFrame() override { needs_main_frame_ = true; }
@@ -1107,7 +1108,7 @@ class MainThreadEventQueueInitializationTest
                         const ui::LatencyInfo& latency,
                         HandledEventCallback callback) override {
     std::move(callback).Run(INPUT_EVENT_ACK_STATE_NOT_CONSUMED, latency,
-                            nullptr);
+                            nullptr, base::nullopt);
   }
 
   void SetNeedsMainFrame() override {}

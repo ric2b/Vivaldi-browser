@@ -89,10 +89,22 @@ class PaymentsProfileComparator : public autofill::AutofillProfileComparator {
   base::string16 GetStringForMissingContactFields(
       const autofill::AutofillProfile& profile) const;
 
+  // Returns a localized string to be displayed as the title of a piece of UI,
+  // indicating what action must be taken for the given profile to be used as
+  // contact info.
+  base::string16 GetTitleForMissingContactFields(
+      const autofill::AutofillProfile& profile) const;
+
   // Returns a localized string to be displayed in UI indicating what action,
   // if any, must be taken for the given profile to be used as a shipping
   // address.
   base::string16 GetStringForMissingShippingFields(
+      const autofill::AutofillProfile& profile) const;
+
+  // Returns a localized string to be displayed as the title of a piece of UI,
+  // indicating what action must be taken for the given profile to be used as
+  // shipping address.
+  base::string16 GetTitleForMissingShippingFields(
       const autofill::AutofillProfile& profile) const;
 
   // Clears the cached evaluation result for |profile|. Must be called when a
@@ -105,6 +117,7 @@ class PaymentsProfileComparator : public autofill::AutofillProfileComparator {
   ProfileFields GetRequiredProfileFieldsForContact() const;
   ProfileFields GetRequiredProfileFieldsForShipping() const;
   base::string16 GetStringForMissingFields(ProfileFields fields) const;
+  base::string16 GetTitleForMissingFields(ProfileFields fields) const;
   bool AreRequiredAddressFieldsPresent(
       const autofill::AutofillProfile& profile) const;
 

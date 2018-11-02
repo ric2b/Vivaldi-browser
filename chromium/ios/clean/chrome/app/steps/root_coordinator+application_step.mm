@@ -7,13 +7,14 @@
 #include "base/memory/ptr_util.h"
 #include "base/supports_user_data.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/ui/browser_list/browser.h"
+#import "ios/chrome/browser/ui/browser_list/browser_list.h"
+#import "ios/chrome/browser/ui/browser_list/browser_list_session_service.h"
+#import "ios/chrome/browser/ui/browser_list/browser_list_session_service_factory.h"
+#import "ios/chrome/browser/ui/coordinators/browser_coordinator+internal.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
+#import "ios/chrome/browser/web_state_list/web_state_opener.h"
 #import "ios/clean/chrome/app/application_state.h"
-#import "ios/shared/chrome/browser/ui/browser_list/browser.h"
-#import "ios/shared/chrome/browser/ui/browser_list/browser_list.h"
-#import "ios/shared/chrome/browser/ui/browser_list/browser_list_session_service.h"
-#import "ios/shared/chrome/browser/ui/browser_list/browser_list_session_service_factory.h"
-#import "ios/shared/chrome/browser/ui/coordinators/browser_coordinator+internal.h"
 #import "ios/web/public/navigation_manager.h"
 #include "ios/web/public/web_state/web_state.h"
 
@@ -58,8 +59,10 @@ const char kRootCoordinatorContainerKey[] = "root_coordinator";
     WebStateList& webStateList = self.browser->web_state_list();
     web::WebState::CreateParams webStateCreateParams(
         self.browser->browser_state());
-    webStateList.InsertWebState(0, web::WebState::Create(webStateCreateParams));
-    webStateList.ActivateWebStateAt(0);
+    webStateList.InsertWebState(
+        0, web::WebState::Create(webStateCreateParams),
+        WebStateList::INSERT_FORCE_INDEX | WebStateList::INSERT_ACTIVATE,
+        WebStateOpener());
   }
 
   [self start];

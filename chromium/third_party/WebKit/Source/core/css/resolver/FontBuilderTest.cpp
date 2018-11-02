@@ -49,7 +49,8 @@ TEST_F(FontBuilderInitTest, InitialFontSizeNotScaled) {
 
   FontBuilder builder(&GetDocument());
   builder.SetInitial(1.0f);  // FIXME: Remove unused param.
-  builder.CreateFont(GetDocument().GetStyleEngine().FontSelector(), *initial);
+  builder.CreateFont(GetDocument().GetStyleEngine().GetFontSelector(),
+                     *initial);
 
   EXPECT_EQ(16.0f, initial->GetFontDescription().ComputedSize());
 }
@@ -73,7 +74,7 @@ TEST_P(FontBuilderAdditiveTest, OnlySetValueIsModified) {
 
   FontBuilder font_builder(&GetDocument());
   funcs.set_value(font_builder);
-  font_builder.CreateFont(GetDocument().GetStyleEngine().FontSelector(),
+  font_builder.CreateFont(GetDocument().GetStyleEngine().GetFontSelector(),
                           *style);
 
   FontDescription output_description = style->GetFontDescription();
@@ -92,17 +93,17 @@ TEST_P(FontBuilderAdditiveTest, OnlySetValueIsModified) {
 }
 
 static void FontWeightBase(FontDescription& d) {
-  d.SetWeight(kFontWeight900);
+  d.SetWeight(FontSelectionValue(900));
 }
 static void FontWeightValue(FontBuilder& b) {
-  b.SetWeight(kFontWeightNormal);
+  b.SetWeight(NormalWeightValue());
 }
 
 static void FontStretchBase(FontDescription& d) {
-  d.SetStretch(kFontStretchUltraExpanded);
+  d.SetStretch(UltraExpandedWidthValue());
 }
 static void FontStretchValue(FontBuilder& b) {
-  b.SetStretch(kFontStretchExtraCondensed);
+  b.SetStretch(ExtraCondensedWidthValue());
 }
 
 static void FontFamilyBase(FontDescription& d) {
@@ -121,10 +122,10 @@ static void FontFeatureSettingsValue(FontBuilder& b) {
 }
 
 static void FontStyleBase(FontDescription& d) {
-  d.SetStyle(kFontStyleItalic);
+  d.SetStyle(ItalicSlopeValue());
 }
 static void FontStyleValue(FontBuilder& b) {
-  b.SetStyle(kFontStyleNormal);
+  b.SetStyle(NormalSlopeValue());
 }
 
 static void FontVariantCapsBase(FontDescription& d) {

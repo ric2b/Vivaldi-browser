@@ -32,6 +32,7 @@
 <translation id="2190355936436201913">(puste)</translation>
 <translation id="2289052229480071835">Kliknij docelowe obszary kliknięcia na ekranie.</translation>
 <translation id="2297836609126180313"><ph name="QUANTITY" /> TB/s</translation>
+<translation id="24452542372838207">Rozwiń powiadomienie</translation>
 <translation id="2482878487686419369">Powiadomienia</translation>
 <translation id="2497284189126895209">Wszystkie pliki</translation>
 <translation id="2522350507219695259">Kalibracja została ukończona</translation>
@@ -162,6 +163,7 @@
 <translation id="9002566407876343676">otwórz</translation>
 <translation id="9038489124413477075">Folder bez nazwy</translation>
 <translation id="9044832324875206639">{SECONDS,plural, =1{1 s}few{# s}many{# s}other{# s}}</translation>
+<translation id="9059834730836941392">Zwiń powiadomienie</translation>
 <translation id="9150735707954472829">Karta</translation>
 <translation id="9161053988251441839">SUGEROWANE APLIKACJE</translation>
 <translation id="9170848237812810038">&amp;Cofnij</translation>

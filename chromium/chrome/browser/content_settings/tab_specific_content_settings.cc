@@ -52,7 +52,10 @@
 #include "net/cookies/canonical_cookie.h"
 #include "storage/common/fileapi/file_system_types.h"
 
+#include "extensions/features/features.h"
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
+#endif
 
 using content::BrowserThread;
 using content::NavigationController;
@@ -310,6 +313,7 @@ void TabSpecificContentSettings::OnContentBlockedWithDetail(
   if (!content_settings::ContentSettingsRegistry::GetInstance()->Get(type))
     return;
 
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   guest_view::GuestViewBase* guest =
       guest_view::GuestViewBase::FromWebContents(web_contents());
 
@@ -317,6 +321,7 @@ void TabSpecificContentSettings::OnContentBlockedWithDetail(
     static_cast<extensions::WebViewGuest*>(guest)->OnContentBlocked(type,
                                                                     details);
   }
+#endif
 
   // TODO(robwu): Should this be restricted to cookies only?
   // In the past, content_settings_status_[type].allowed was set to false, but

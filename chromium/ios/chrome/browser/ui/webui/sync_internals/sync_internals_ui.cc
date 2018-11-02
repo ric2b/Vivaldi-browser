@@ -4,7 +4,8 @@
 
 #include "ios/chrome/browser/ui/webui/sync_internals/sync_internals_ui.h"
 
-#include "base/memory/ptr_util.h"
+#include <memory>
+
 #include "components/grit/components_resources.h"
 #include "components/sync/driver/about_sync_util.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
@@ -40,6 +41,10 @@ web::WebUIIOSDataSource* CreateSyncInternalsHTMLSource() {
                           IDR_SYNC_DRIVER_SYNC_INTERNALS_EVENTS_JS);
   source->AddResourcePath(syncer::sync_ui_util::kSearchJS,
                           IDR_SYNC_DRIVER_SYNC_INTERNALS_SEARCH_JS);
+  source->AddResourcePath(syncer::sync_ui_util::kUserEventsJS,
+                          IDR_SYNC_DRIVER_SYNC_INTERNALS_USER_EVENTS_JS);
+  source->AddResourcePath(syncer::sync_ui_util::kTrafficLogJS,
+                          IDR_SYNC_DRIVER_SYNC_INTERNALS_TRAFFIC_LOG_JS);
   source->SetDefaultResource(IDR_SYNC_DRIVER_SYNC_INTERNALS_INDEX_HTML);
   return source;
 }
@@ -50,7 +55,7 @@ SyncInternalsUI::SyncInternalsUI(web::WebUIIOS* web_ui)
     : web::WebUIIOSController(web_ui) {
   web::WebUIIOSDataSource::Add(ios::ChromeBrowserState::FromWebUIIOS(web_ui),
                                CreateSyncInternalsHTMLSource());
-  web_ui->AddMessageHandler(base::MakeUnique<SyncInternalsMessageHandler>());
+  web_ui->AddMessageHandler(std::make_unique<SyncInternalsMessageHandler>());
 }
 
 SyncInternalsUI::~SyncInternalsUI() {}

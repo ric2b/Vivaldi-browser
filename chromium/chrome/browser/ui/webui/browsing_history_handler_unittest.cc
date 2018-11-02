@@ -11,10 +11,10 @@
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/simple_test_clock.h"
 #include "base/values.h"
-#include "chrome/browser/history/browsing_history_service.h"
 #include "chrome/browser/history/web_history_service_factory.h"
 #include "chrome/browser/signin/fake_profile_oauth2_token_service_builder.h"
 #include "chrome/browser/signin/fake_signin_manager_builder.h"
@@ -24,6 +24,7 @@
 #include "chrome/browser/sync/profile_sync_test_util.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/browser_sync/test_profile_sync_service.h"
+#include "components/history/core/browser/browsing_history_service.h"
 #include "components/history/core/test/fake_web_history_service.h"
 #include "components/signin/core/browser/fake_profile_oauth2_token_service.h"
 #include "components/signin/core/browser/fake_signin_manager.h"
@@ -214,7 +215,7 @@ TEST_F(BrowsingHistoryHandlerTest, ObservingWebHistoryDeletions) {
     web_history_service()->ExpireHistoryBetween(
         std::set<GURL>(), base::Time(), base::Time::Max(),
         base::Bind(
-            &BrowsingHistoryService::RemoveWebHistoryComplete,
+            &history::BrowsingHistoryService::RemoveWebHistoryComplete,
             handler.browsing_history_service_->weak_factory_.GetWeakPtr()),
         PARTIAL_TRAFFIC_ANNOTATION_FOR_TESTS);
 
@@ -241,27 +242,23 @@ TEST_F(BrowsingHistoryHandlerTest, ObservingWebHistoryDeletions) {
 
 #if !defined(OS_ANDROID)
 TEST_F(BrowsingHistoryHandlerTest, MdTruncatesTitles) {
-  history::URLResult long_result(
-      GURL("http://looooooooooooooooooooooooooooooooooooooooooooooooooooooooooo"
+  history::BrowsingHistoryService::HistoryEntry long_url_entry;
+  long_url_entry.url = GURL(
+      "http://loooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo"
       "oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo"
       "oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo"
       "oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo"
       "oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo"
       "oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo"
-      "ngurlislong.com"), base::Time());
-  ASSERT_GT(long_result.url().spec().size(), 300u);
-
-  std::vector<history::URLResult> result_vector;
-  result_vector.push_back(std::move(long_result));
-  history::QueryResults results;
-  results.SetURLResults(std::move(result_vector));
+      "ngurlislong.com");
+  ASSERT_GT(long_url_entry.url.spec().size(), 300U);
 
   BrowsingHistoryHandlerWithWebUIForTesting handler(web_ui());
-  handler.RegisterMessages();  // Needed to create BrowsingHistoryService.
-  web_ui()->ClearTrackedCalls();
+  ASSERT_TRUE(web_ui()->call_data().empty());
 
-  handler.browsing_history_service_->QueryComplete(
-      base::string16(), history::QueryOptions(), &results);
+  handler.OnQueryComplete({long_url_entry},
+                          history::BrowsingHistoryService::QueryResultsInfo(),
+                          base::OnceClosure());
   ASSERT_FALSE(web_ui()->call_data().empty());
 
   const base::ListValue* arg2;

@@ -26,15 +26,7 @@ TestNativeDisplayDelegate::TestNativeDisplayDelegate(ActionLogger* log)
 TestNativeDisplayDelegate::~TestNativeDisplayDelegate() {}
 
 void TestNativeDisplayDelegate::Initialize() {
-  log_->AppendAction(kInitXRandR);
-}
-
-void TestNativeDisplayDelegate::GrabServer() {
-  log_->AppendAction(kGrab);
-}
-
-void TestNativeDisplayDelegate::UngrabServer() {
-  log_->AppendAction(kUngrab);
+  log_->AppendAction(kInit);
 }
 
 void TestNativeDisplayDelegate::TakeDisplayControl(
@@ -49,18 +41,6 @@ void TestNativeDisplayDelegate::RelinquishDisplayControl(
   callback.Run(true);
 }
 
-void TestNativeDisplayDelegate::SyncWithServer() {
-  log_->AppendAction(kSync);
-}
-
-void TestNativeDisplayDelegate::SetBackgroundColor(uint32_t color_argb) {
-  log_->AppendAction(GetBackgroundAction(color_argb));
-}
-
-void TestNativeDisplayDelegate::ForceDPMSOn() {
-  log_->AppendAction(kForceDPMS);
-}
-
 void TestNativeDisplayDelegate::GetDisplays(
     const GetDisplaysCallback& callback) {
   // This mimics the behavior of Ozone DRM when new display state arrives.
@@ -73,11 +53,6 @@ void TestNativeDisplayDelegate::GetDisplays(
   } else {
     callback.Run(outputs_);
   }
-}
-
-void TestNativeDisplayDelegate::AddMode(const DisplaySnapshot& output,
-                                        const DisplayMode* mode) {
-  log_->AppendAction(GetAddOutputModeAction(output, mode));
 }
 
 bool TestNativeDisplayDelegate::Configure(const DisplaySnapshot& output,
@@ -107,12 +82,6 @@ void TestNativeDisplayDelegate::Configure(const DisplaySnapshot& output,
   }
 }
 
-void TestNativeDisplayDelegate::CreateFrameBuffer(const gfx::Size& size) {
-  log_->AppendAction(
-      GetFramebufferAction(size, outputs_.size() >= 1 ? outputs_[0] : nullptr,
-                           outputs_.size() >= 2 ? outputs_[1] : nullptr));
-}
-
 void TestNativeDisplayDelegate::GetHDCPState(
     const DisplaySnapshot& output,
     const GetHDCPStateCallback& callback) {
@@ -125,18 +94,6 @@ void TestNativeDisplayDelegate::SetHDCPState(
     const SetHDCPStateCallback& callback) {
   log_->AppendAction(GetSetHDCPStateAction(output, state));
   callback.Run(set_hdcp_expectation_);
-}
-
-std::vector<ColorCalibrationProfile>
-TestNativeDisplayDelegate::GetAvailableColorCalibrationProfiles(
-    const DisplaySnapshot& output) {
-  return std::vector<ColorCalibrationProfile>();
-}
-
-bool TestNativeDisplayDelegate::SetColorCalibrationProfile(
-    const DisplaySnapshot& output,
-    ColorCalibrationProfile new_profile) {
-  return false;
 }
 
 bool TestNativeDisplayDelegate::SetColorCorrection(

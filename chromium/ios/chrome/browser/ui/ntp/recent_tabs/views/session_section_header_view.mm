@@ -10,7 +10,7 @@
 #include "ios/chrome/browser/ui/ntp/recent_tabs/views/disclosure_view.h"
 #include "ios/chrome/browser/ui/ntp/recent_tabs/views/views_utils.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
-#import "ios/chrome/browser/ui/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
 #include "ui/base/l10n/l10n_util_mac.h"
@@ -156,7 +156,7 @@ const int kRelativeTimeMaxHours = 4;
   if (last_used_delta.ToInternalValue() < base::Time::kMicrosecondsPerMinute)
     return l10n_util::GetNSString(IDS_IOS_OPEN_TABS_RECENTLY_SYNCED);
   if (last_used_delta.InHours() < kRelativeTimeMaxHours) {
-    return SysUTF16ToNSString(
+    return base::SysUTF16ToNSString(
         ui::TimeFormat::Simple(ui::TimeFormat::FORMAT_ELAPSED,
                                ui::TimeFormat::LENGTH_SHORT, last_used_delta));
   }

@@ -165,8 +165,6 @@ class NaClSandboxedProcessLauncherDelegate
  public:
   NaClSandboxedProcessLauncherDelegate() {}
 
-  ~NaClSandboxedProcessLauncherDelegate() override {}
-
 #if defined(OS_WIN)
   void PostSpawnTarget(base::ProcessHandle process) override {
     // For Native Client sel_ldr processes on 32-bit Windows, reserve 1 GB of
@@ -185,6 +183,9 @@ class NaClSandboxedProcessLauncherDelegate
     return content::GetGenericZygote();
   }
 #endif  // OS_WIN
+  content::SandboxType GetSandboxType() override {
+    return content::SANDBOX_TYPE_PPAPI;
+  }
 };
 
 void CloseFile(base::File file) {
@@ -267,14 +268,16 @@ NaClProcessHost::~NaClProcessHost() {
     // handles.
     base::File file(IPC::PlatformFileForTransitToFile(
         prefetched_resource_files_[i].file));
-    content::BrowserThread::GetBlockingPool()->PostTask(
-        FROM_HERE, base::Bind(&CloseFile, base::Passed(std::move(file))));
+    base::PostTaskWithTraits(
+        FROM_HERE, {base::TaskPriority::BACKGROUND, base::MayBlock()},
+        base::Bind(&CloseFile, base::Passed(std::move(file))));
   }
 #endif
   // Open files need to be closed on the blocking pool.
   if (nexe_file_.IsValid()) {
-    content::BrowserThread::GetBlockingPool()->PostTask(
-        FROM_HERE, base::Bind(&CloseFile, base::Passed(std::move(nexe_file_))));
+    base::PostTaskWithTraits(
+        FROM_HERE, {base::TaskPriority::BACKGROUND, base::MayBlock()},
+        base::Bind(&CloseFile, base::Passed(std::move(nexe_file_))));
   }
 
   if (reply_msg_) {
@@ -838,8 +841,9 @@ void NaClProcessHost::StartNaClFileResolved(
   if (checked_nexe_file.IsValid()) {
     // Release the file received from the renderer. This has to be done on a
     // thread where IO is permitted, though.
-    content::BrowserThread::GetBlockingPool()->PostTask(
-        FROM_HERE, base::Bind(&CloseFile, base::Passed(std::move(nexe_file_))));
+    base::PostTaskWithTraits(
+        FROM_HERE, {base::TaskPriority::BACKGROUND, base::MayBlock()},
+        base::Bind(&CloseFile, base::Passed(std::move(nexe_file_))));
     params.nexe_file_path_metadata = file_path;
     params.nexe_file =
         IPC::TakePlatformFileForTransit(std::move(checked_nexe_file));

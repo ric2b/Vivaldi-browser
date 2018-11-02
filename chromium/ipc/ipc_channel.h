@@ -140,9 +140,7 @@ class IPC_EXPORT Channel : public Sender {
 
   // The maximum message size in bytes. Attempting to receive a message of this
   // size or bigger results in a channel error.
-  // NOTE(andre@vivald.com) : This was changed from 128 to 256 because our
-  // mailer need to send huge messages when the mailbox is big.
-  static const size_t kMaximumMessageSize = 256 * 1024 * 1024;
+  static constexpr size_t kMaximumMessageSize = 256 * 1024 * 1024;
 
   // Amount of data to read at once from the pipe.
   static const size_t kReadBufferSize = 4 * 1024;

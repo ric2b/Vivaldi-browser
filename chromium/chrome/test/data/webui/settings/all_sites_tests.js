@@ -64,9 +64,10 @@ var prefsMixedOriginAndPattern = {
     mic: [],
     notifications: [],
     plugins: [],
-    midiDevices: [],
+    midi_devices: [],
     protectedContent: [],
     popups: [],
+    sound: [],
     unsandboxed_plugins: [],
   }
 };
@@ -102,7 +103,7 @@ var prefsVarious = {
     images: [],
     javascript: [],
     mic: [],
-    midiDevices: [],
+    midi_devices: [],
     notifications: [
       {
         embeddingOrigin: '',
@@ -129,6 +130,7 @@ var prefsVarious = {
     plugins: [],
     protectedContent: [],
     popups: [],
+    sound: [],
     unsandboxed_plugins: [],
   }
 };

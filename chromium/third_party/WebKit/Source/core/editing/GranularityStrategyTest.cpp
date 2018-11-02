@@ -14,7 +14,6 @@
 #include "core/html/HTMLSpanElement.h"
 #include "core/testing/DummyPageHolder.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/RefPtr.h"
 #include "platform/wtf/StdLibExtras.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -726,9 +725,13 @@ TEST_F(GranularityStrategyTest, UpdateExtentWithNullPositionForCharacter) {
       SelectionInDOMTree::Builder()
           .Collapse(Position(sample->firstChild(), 2))
           .SetIsDirectional(true)
-          .SetIsHandleVisible(true)
           .Build();
-  Selection().SetSelection(selection_in_dom_tree);
+  Selection().SetSelection(selection_in_dom_tree,
+                           SetSelectionOptions::Builder()
+                               .SetShouldCloseTyping(true)
+                               .SetShouldClearTypingStyle(true)
+                               .SetShouldShowHandle(true)
+                               .Build());
 
   // Since, it is not obvious that |visiblePositionForContentsPoint()| returns
   // null position, we verify here.
@@ -758,9 +761,13 @@ TEST_F(GranularityStrategyTest, UpdateExtentWithNullPositionForDirectional) {
       SelectionInDOMTree::Builder()
           .Collapse(Position(sample->firstChild(), 2))
           .SetIsDirectional(true)
-          .SetIsHandleVisible(true)
           .Build();
-  Selection().SetSelection(selection_in_dom_tree);
+  Selection().SetSelection(selection_in_dom_tree,
+                           SetSelectionOptions::Builder()
+                               .SetShouldCloseTyping(true)
+                               .SetShouldClearTypingStyle(true)
+                               .SetShouldShowHandle(true)
+                               .Build());
 
   // Since, it is not obvious that |visiblePositionForContentsPoint()| returns
   // null position, we verify here.

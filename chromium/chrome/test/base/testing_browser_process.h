@@ -63,12 +63,14 @@ class TestingBrowserProcess : public BrowserProcess {
   // BrowserProcess overrides:
   void ResourceDispatcherHostCreated() override;
   void EndSession() override;
+  void FlushLocalStateAndReply(base::OnceClosure reply) override;
   metrics_services_manager::MetricsServicesManager* GetMetricsServicesManager()
       override;
   metrics::MetricsService* metrics_service() override;
   rappor::RapporServiceImpl* rappor_service() override;
   ukm::UkmRecorder* ukm_recorder() override;
   IOThread* io_thread() override;
+  SystemNetworkContextManager* system_network_context_manager() override;
   WatchDogThread* watchdog_thread() override;
   ProfileManager* profile_manager() override;
   PrefService* local_state() override;
@@ -120,7 +122,6 @@ class TestingBrowserProcess : public BrowserProcess {
   component_updater::SupervisedUserWhitelistInstaller*
   supervised_user_whitelist_installer() override;
   MediaFileSystemRegistry* media_file_system_registry() override;
-  bool created_local_state() const override;
 
 #if BUILDFLAG(ENABLE_WEBRTC)
   WebRtcLogUploader* webrtc_log_uploader() override;

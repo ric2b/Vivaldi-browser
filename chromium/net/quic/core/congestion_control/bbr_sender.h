@@ -98,18 +98,18 @@ class QUIC_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
   // Start implementation of SendAlgorithmInterface.
   bool InSlowStart() const override;
   bool InRecovery() const override;
+  bool IsProbingForMoreBandwidth() const override;
 
   void SetFromConfig(const QuicConfig& config,
                      Perspective perspective) override;
 
-  void ResumeConnectionState(
-      const CachedNetworkParameters& cached_network_params,
-      bool max_bandwidth_resumption) override;
+  void AdjustNetworkParameters(QuicBandwidth bandwidth,
+                               QuicTime::Delta rtt) override;
   void SetNumEmulatedConnections(int num_connections) override {}
   void OnCongestionEvent(bool rtt_updated,
                          QuicByteCount prior_in_flight,
                          QuicTime event_time,
-                         const CongestionVector& acked_packets,
+                         const AckedPacketVector& acked_packets,
                          const CongestionVector& lost_packets) override;
   bool OnPacketSent(QuicTime sent_time,
                     QuicByteCount bytes_in_flight,
@@ -175,7 +175,7 @@ class QUIC_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
   // Updates the current bandwidth and min_rtt estimate based on the samples for
   // the received acknowledgements.  Returns true if min_rtt has expired.
   bool UpdateBandwidthAndMinRtt(QuicTime now,
-                                const CongestionVector& acked_packets);
+                                const AckedPacketVector& acked_packets);
   // Updates the current gain used in PROBE_BW mode.
   void UpdateGainCyclePhase(QuicTime now,
                             QuicByteCount prior_in_flight,
@@ -217,7 +217,7 @@ class QUIC_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
 
   // Bandwidth sampler provides BBR with the bandwidth measurements at
   // individual points.
-  BandwidthSampler sampler_;
+  std::unique_ptr<BandwidthSamplerInterface> sampler_;
 
   // The number of the round trips that have occurred during the connection.
   QuicRoundTripCount round_trip_count_;
@@ -242,6 +242,10 @@ class QUIC_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
   // The number of bytes acknowledged since the last time bytes in flight
   // dropped below the target window.
   QuicByteCount bytes_acked_since_queue_drained_;
+
+  // The muliplier for calculating the max amount of extra CWND to add to
+  // compensate for ack aggregation.
+  float max_aggregation_bytes_multiplier_;
 
   // Minimum RTT estimate.  Automatically expires within 10 seconds (and
   // triggers PROBE_RTT mode) if no new value is sampled during that period.
@@ -274,6 +278,9 @@ class QUIC_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
   const float rtt_variance_weight_;
   // The number of RTTs to stay in STARTUP mode.  Defaults to 3.
   QuicRoundTripCount num_startup_rtts_;
+  // If true, exit startup if 1RTT has passed with no bandwidth increase and
+  // the connection is in recovery.
+  bool exit_startup_on_loss_;
 
   // Number of round-trips in PROBE_BW mode, used for determining the current
   // pacing gain cycle.

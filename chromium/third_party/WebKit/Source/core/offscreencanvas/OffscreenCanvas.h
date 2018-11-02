@@ -8,7 +8,7 @@
 #include <memory>
 #include "bindings/core/v8/ScriptPromise.h"
 #include "core/dom/DOMNodeIds.h"
-#include "core/events/EventTarget.h"
+#include "core/dom/events/EventTarget.h"
 #include "core/html/HTMLCanvasElement.h"
 #include "core/html/canvas/CanvasImageSource.h"
 #include "core/html/canvas/CanvasRenderingContextHost.h"
@@ -129,14 +129,13 @@ class CORE_EXPORT OffscreenCanvas final
   ScriptPromise CreateImageBitmap(ScriptState*,
                                   EventTarget&,
                                   Optional<IntRect>,
-                                  const ImageBitmapOptions&,
-                                  ExceptionState&) final;
+                                  const ImageBitmapOptions&) final;
 
   // CanvasImageSource implementation
-  PassRefPtr<Image> GetSourceImageForCanvas(SourceImageStatus*,
-                                            AccelerationHint,
-                                            SnapshotReason,
-                                            const FloatSize&) final;
+  RefPtr<Image> GetSourceImageForCanvas(SourceImageStatus*,
+                                        AccelerationHint,
+                                        SnapshotReason,
+                                        const FloatSize&) final;
   bool WouldTaintOrigin(SecurityOrigin*) const final { return !origin_clean_; }
   FloatSize ElementSize(const FloatSize& default_object_size) const final {
     return FloatSize(width(), height());
@@ -151,6 +150,8 @@ class CORE_EXPORT OffscreenCanvas final
   }
 
   bool IsWebGLAllowed() const override { return true; }
+
+  FontSelector* GetFontSelector() override;
 
   DECLARE_VIRTUAL_TRACE();
 

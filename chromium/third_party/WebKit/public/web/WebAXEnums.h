@@ -87,7 +87,6 @@ enum WebAXRole {
   kWebAXRoleAudio,
   kWebAXRoleBanner,
   kWebAXRoleBlockquote,
-  kWebAXRoleBusyIndicator,
   kWebAXRoleButton,
   kWebAXRoleCanvas,
   kWebAXRoleCaption,
@@ -123,7 +122,6 @@ enum WebAXRole {
   kWebAXRoleIframePresentational,
   kWebAXRoleIframe,
   kWebAXRoleIgnored,
-  kWebAXRoleImageMapLink,
   kWebAXRoleImageMap,
   kWebAXRoleImage,
   kWebAXRoleInlineTextBox,
@@ -154,7 +152,6 @@ enum WebAXRole {
   kWebAXRoleNavigation,
   kWebAXRoleNone,
   kWebAXRoleNote,
-  kWebAXRoleOutline,
   kWebAXRoleParagraph,
   kWebAXRolePopUpButton,
   kWebAXRolePre,
@@ -163,15 +160,11 @@ enum WebAXRole {
   kWebAXRoleRadioButton,
   kWebAXRoleRadioGroup,
   kWebAXRoleRegion,
-  kWebAXRoleRootWebArea,
   kWebAXRoleRowHeader,
   kWebAXRoleRow,
   kWebAXRoleRuby,
-  kWebAXRoleRuler,
   kWebAXRoleSVGRoot,
-  kWebAXRoleScrollArea,
   kWebAXRoleScrollBar,
-  kWebAXRoleSeamlessWebArea,
   kWebAXRoleSearch,
   kWebAXRoleSearchBox,
   kWebAXRoleSlider,
@@ -182,7 +175,6 @@ enum WebAXRole {
   kWebAXRoleStaticText,
   kWebAXRoleStatus,
   kWebAXRoleSwitch,
-  kWebAXRoleTabGroup,
   kWebAXRoleTabList,
   kWebAXRoleTabPanel,
   kWebAXRoleTab,
@@ -200,28 +192,6 @@ enum WebAXRole {
   kWebAXRoleUserInterfaceTooltip,
   kWebAXRoleVideo,
   kWebAXRoleWebArea,
-  kWebAXRoleWindow,
-};
-
-// Accessibility states, used as a bitmask.
-enum WebAXState {
-  kWebAXStateBusy,
-  kWebAXStateExpanded,
-  kWebAXStateFocusable,
-  kWebAXStateFocused,
-  kWebAXStateHaspopup,
-  kWebAXStateHovered,
-  kWebAXStateInvisible,
-  kWebAXStateLinked,
-  kWebAXStateMultiline,
-  kWebAXStateMultiselectable,
-  kWebAXStateOffscreen,
-  kWebAXStateProtected,
-  kWebAXStateRequired,
-  kWebAXStateSelectable,
-  kWebAXStateSelected,
-  kWebAXStateVertical,
-  kWebAXStateVisited,
 };
 
 enum class WebAXDefaultActionVerb {
@@ -312,6 +282,7 @@ enum WebAXMarkerType {
   kWebAXMarkerTypeTextMatch = 1 << 2,
   // Skip DocumentMarker::MarkerType::Composition
   kWebAXMarkerTypeActiveSuggestion = 1 << 4,
+  kWebAXMarkerTypeSuggestion = 1 << 5,
 };
 
 // Used for exposing text attributes.
@@ -369,7 +340,9 @@ enum WebAXTextAffinity {
 // Sparse attributes of a WebAXObject whose value is either true or
 // false. In order for it to be a sparse attribute the default value
 // must be false.
-enum class WebAXBoolAttribute {};
+enum class WebAXBoolAttribute {
+  kAriaBusy,
+};
 
 // Sparse attributes of a WebAXObject whose value is a string.
 // In order for it to be a sparse attribute the default value

@@ -70,11 +70,13 @@
 <translation id="4506599922270137252">ottaa yhteyttä järjestelmän ylläpitoon</translation>
 <translation id="4522570452068850558">Tiedot</translation>
 <translation id="4558551763791394412">Kokeile poistaa laajennukset käytöstä.</translation>
+<translation id="4611292653554630842">Kirjaudu</translation>
 <translation id="4708268264240856090">Yhteys keskeytyi</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Tehdään Windowsin verkkodiagnostiikkaa<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">Suoritettavan tiedoston polku</translation>
 <translation id="4764776831041365478">Osoitteessa <ph name="URL" /> oleva sivu saattaa olla väliaikaisesti pois käytöstä tai se on voitu siirtää pysyvästi uuteen osoitteeseen.</translation>
 <translation id="4807049035289105102">Et voi käydä sivulla <ph name="SITE" /> juuri nyt, koska sivusto palautti sekavat tunnistautumistiedot, joita Google Chrome ei pysty käsittelemään. Verkkovirheet ja -hyökkäykset ovat yleensä lyhytaikaisia, joten yhteydenotto onnistunee myöhemmin.</translation>
+<translation id="4913131542719409934">Vaaditaan todennusta</translation>
 <translation id="5023310440958281426">Tarkista järjestelmänvalvojan käytännöt</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />tarkistaa välityspalvelimen osoite<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bittinen)</translation>
@@ -104,10 +106,12 @@
 <translation id="6328639280570009161">Kokeile verkon ennakoinnin poistamista käytöstä</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> kieltäytyi muodostamasta yhteyttä.</translation>
 <translation id="6569060085658103619">Olet laajennussivulla</translation>
+<translation id="6657585470893396449">Salasana</translation>
 <translation id="6685834062052613830">Kirjaudu ulos ja viimeistele määritys</translation>
 <translation id="6711464428925977395">Välityspalvelimessa on jotain vikaa tai osoite on virheellinen.</translation>
 <translation id="6757797048963528358">Laitteesi siirtyi virransäästötilaan.</translation>
 <translation id="6897140037006041989">User agent</translation>
+<translation id="7090678807593890770">Tee Google-haku: <ph name="LINK" /></translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> ei noudata tietoturvastandardeja.</translation>
 <translation id="7353601530677266744">Komentorivi</translation>
 <translation id="7419106976560586862">Profiilin polku</translation>
@@ -126,6 +130,7 @@
 <translation id="8289355894181816810">Ota yhteyttä verkon ylläpitäjään, jos et tiedä, mitä tämä tarkoittaa.</translation>
 <translation id="8332188693563227489">Sivuston <ph name="HOST_NAME" /> käyttöoikeus evättiin</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> ei vastannut riittävän nopeasti.</translation>
+<translation id="8503813439785031346">Käyttäjätunnus</translation>
 <translation id="8740359287975076522">Sivuston <ph name="HOST_NAME" /> &lt;abbr id="dnsDefinition"&gt;DNS-osoitetta&lt;/abbr&gt; ei löydy. Ongelmaa diagnosoidaan.</translation>
 <translation id="9001074447101275817">Välityspalvelin <ph name="DOMAIN" /> vaatii käyttäjänimen ja salasanan.</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> käyttää protokollaa, jota ei tueta.</translation>

@@ -311,7 +311,7 @@ void ScopedGroupPolicyRegistrySandbox::ActivateOverrides() {
   // makes sure that tests executing in parallel won't delete each other's
   // key, at DeleteKeys().
   key_name_ = base::ASCIIToUTF16(base::StringPrintf(
-        "SOFTWARE\\chromium unittest %d", base::GetCurrentProcId()));
+      "SOFTWARE\\chromium unittest %" CrPRIdPid, base::GetCurrentProcId()));
   std::wstring hklm_key_name = key_name_ + L"\\HKLM";
   std::wstring hkcu_key_name = key_name_ + L"\\HKCU";
 
@@ -779,8 +779,8 @@ class PolicyLoaderWinTest : public PolicyTestBase,
   }
 
   bool Matches(const PolicyBundle& expected) {
-    PolicyLoaderWin loader(loop_.task_runner(), kTestPolicyKey,
-                           gpo_list_provider_);
+    PolicyLoaderWin loader(scoped_task_environment_.GetMainThreadTaskRunner(),
+                           kTestPolicyKey, gpo_list_provider_);
     std::unique_ptr<PolicyBundle> loaded(
         loader.InitialLoad(schema_registry_.schema_map()));
     return loaded->Equals(expected);
@@ -938,14 +938,14 @@ TEST_F(PolicyLoaderWinTest, LoadStringEncodedValues) {
   policy.SetInteger("int", -123);
   policy.SetDouble("double", 456.78e9);
   base::ListValue list;
-  list.Append(base::MakeUnique<base::Value>(policy));
-  list.Append(base::MakeUnique<base::Value>(policy));
-  policy.Set("list", base::MakeUnique<base::Value>(list));
+  list.Append(base::MakeUnique<base::Value>(policy.Clone()));
+  list.Append(base::MakeUnique<base::Value>(policy.Clone()));
+  policy.SetKey("list", list.Clone());
   // Encode |policy| before adding the "dict" entry.
   std::string encoded_dict;
   base::JSONWriter::Write(policy, &encoded_dict);
   ASSERT_FALSE(encoded_dict.empty());
-  policy.Set("dict", base::MakeUnique<base::Value>(policy));
+  policy.SetKey("dict", policy.Clone());
   std::string encoded_list;
   base::JSONWriter::Write(list, &encoded_list);
   ASSERT_FALSE(encoded_list.empty());
@@ -1032,7 +1032,7 @@ TEST_F(PolicyLoaderWinTest, DefaultPropertySchemaType) {
   policy.SetString("double2", "123.456e7");
   policy.SetString("invalid", "omg");
   base::DictionaryValue all_policies;
-  all_policies.Set("policy", base::MakeUnique<base::Value>(policy));
+  all_policies.SetKey("policy", policy.Clone());
 
   const base::string16 kPathSuffix =
       kTestPolicyKey + base::ASCIIToUTF16("\\3rdparty\\extensions\\test");
@@ -1045,8 +1045,7 @@ TEST_F(PolicyLoaderWinTest, DefaultPropertySchemaType) {
   expected_policy.SetDouble("double1", 789.0);
   expected_policy.SetDouble("double2", 123.456e7);
   base::DictionaryValue expected_policies;
-  expected_policies.Set("policy",
-                        base::MakeUnique<base::Value>(expected_policy));
+  expected_policies.SetKey("policy", expected_policy.Clone());
   PolicyBundle expected;
   expected.Get(ns).LoadFrom(&expected_policies, POLICY_LEVEL_MANDATORY,
                             POLICY_SCOPE_USER, POLICY_SOURCE_PLATFORM);

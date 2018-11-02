@@ -230,23 +230,7 @@ function hasReceiverWithTrack(trackId) {
 function createReceiverWithSetRemoteDescription() {
   var pc = new RTCPeerConnection();
   var receivers = null;
-  pc.setRemoteDescription({
-    type: "offer",
-    sdp: "v=0\n" +
-      "o=- 0 1 IN IP4 0.0.0.0\n" +
-      "s=-\n" +
-      "t=0 0\n" +
-      "a=ice-ufrag:0000\n" +
-      "a=ice-pwd:0000000000000000000000\n" +
-      "a=fingerprint:sha-256 00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:" +
-      "00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00\n" +
-      "m=audio 9 UDP/TLS/RTP/SAVPF 0\n" +
-      "c=IN IP4 0.0.0.0\n" +
-      "a=sendonly\n" +
-      "a=rtcp-mux\n" +
-      "a=ssrc:1 cname:0\n" +
-      "a=ssrc:1 msid:stream track1\n"
-    }).then(() => {
+  pc.setRemoteDescription(createOffer("stream", "track1")).then(() => {
       receivers = pc.getReceivers();
       if (receivers.length != 1)
         throw failTest('getReceivers() should return 1 receiver: ' +
@@ -261,6 +245,100 @@ function createReceiverWithSetRemoteDescription() {
                    receivers.length)
 }
 
+function switchRemoteStreamAndBackAgain() {
+  let pc1 = new RTCPeerConnection();
+  let firstStream0 = null;
+  let firstTrack0 = null;
+  pc1.setRemoteDescription(createOffer('stream0', 'track0'))
+    .then(() => {
+      firstStream0 = pc1.getRemoteStreams()[0];
+      firstTrack0 = firstStream0.getTracks()[0];
+      if (firstStream0.id != 'stream0')
+        throw failTest('Unexpected firstStream0.id');
+      if (firstTrack0.id != 'track0')
+        throw failTest('Unexpected firstTrack0.id');
+      return pc1.setRemoteDescription(createOffer('stream1', 'track1'));
+    }).then(() => {
+      return pc1.setRemoteDescription(createOffer('stream0', 'track0'));
+    }).then(() => {
+      let secondStream0 = pc1.getRemoteStreams()[0];
+      let secondTrack0 = secondStream0.getTracks()[0];
+      if (secondStream0.id != 'stream0')
+        throw failTest('Unexpected secondStream0.id');
+      if (secondTrack0.id != 'track0')
+        throw failTest('Unexpected secondTrack0.id');
+      if (secondTrack0 == firstTrack0)
+        throw failTest('Expected a new track object with the same id');
+      if (secondStream0 == firstStream0)
+        throw failTest('Expected a new stream object with the same id');
+      returnToTest('ok');
+    });
+}
+
+function switchRemoteStreamWithoutWaitingForPromisesToResolve() {
+  let pc = new RTCPeerConnection();
+  let trackEventsFired = 0;
+  let streamEventsFired = 0;
+  pc.ontrack = (e) => {
+    ++trackEventsFired;
+    if (trackEventsFired == 1) {
+      if (e.track.id != 'track0')
+        throw failTest('Unexpected track id in first track event.');
+      if (e.receiver.track != e.track)
+        throw failTest('Unexpected receiver.track in first track event.');
+      if (e.streams[0].id != 'stream0')
+        throw failTest('Unexpected stream id in first track event.');
+      // Because we did not wait for promises to resolve before calling
+      // |setRemoteDescription| a second time, it may or may not have had an
+      // effect here. This is inherently racey and we have to check if the
+      // stream contains the track.
+      if (e.streams[0].getTracks().length != 0) {
+        if (e.streams[0].getTracks()[0] != e.track)
+          throw failTest('Unexpected track in stream in first track event.');
+      }
+    } else if (trackEventsFired == 2) {
+      if (e.track.id != 'track1')
+        throw failTest('Unexpected track id in second track event.');
+      if (e.receiver.track != e.track)
+        throw failTest('Unexpected receiver.track in second track event.');
+      if (e.streams[0].id != 'stream1')
+        throw failTest('Unexpected stream id in second track event.');
+      if (e.streams[0].getTracks()[0] != e.track)
+        throw failTest('The track should belong to the stream in the second ' +
+                       'track event.');
+      if (streamEventsFired != trackEventsFired)
+        throw failTest('All stream events should already have fired.');
+      returnToTest('ok');
+    }
+  };
+  pc.onaddstream = (e) => {
+    ++streamEventsFired;
+    if (streamEventsFired == 1) {
+      if (e.stream.id != 'stream0')
+        throw failTest('Unexpected stream id in first stream event.');
+      // Because we did not wait for promises to resolve before calling
+      // |setRemoteDescription| a second time, it may or may not have had an
+      // effect here. This is inherently racey and we have to check if the
+      // stream contains the track.
+      if (e.stream.getTracks().length != 0) {
+        if (e.stream.getTracks()[0].id != 'track0')
+          throw failTest('Unexpected track id in first stream event.');
+      }
+    } else if (streamEventsFired == 2) {
+      if (e.stream.id != 'stream1')
+        throw failTest('Unexpected stream id in second stream event.');
+      if (e.stream.getTracks()[0].id != 'track1')
+        throw failTest('Unexpected track id in second stream event.');
+    }
+  };
+  pc.setRemoteDescription(createOffer('stream0', 'track0'));
+  pc.setRemoteDescription(createOffer('stream1', 'track1'));
+}
+
+// TODO(hbos): Also try switching back again for the case where IDs do match
+// but the objects are in fact different. Verify that they are different objects
+// like in the |switchRemoteStreamAndBackAgain| test.
+
 /**
  * Invokes the GC and returns "ok-gc".
  */
@@ -270,6 +348,26 @@ function collectGarbage() {
 }
 
 // Internals.
+
+function createOffer(streamId, trackId) {
+  return {
+    type: "offer",
+    sdp: "v=0\n" +
+      "o=- 0 1 IN IP4 0.0.0.0\n" +
+      "s=-\n" +
+      "t=0 0\n" +
+      "a=ice-ufrag:0000\n" +
+      "a=ice-pwd:0000000000000000000000\n" +
+      "a=fingerprint:sha-256 00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:" +
+      "00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00\n" +
+      "m=audio 9 UDP/TLS/RTP/SAVPF 0\n" +
+      "c=IN IP4 0.0.0.0\n" +
+      "a=sendonly\n" +
+      "a=rtcp-mux\n" +
+      "a=ssrc:1 cname:0\n" +
+      "a=ssrc:1 msid:" + streamId + " " + trackId + "\n"
+  };
+}
 
 /** @private */
 function hasStreamWithTrack(streams, streamId, trackId) {

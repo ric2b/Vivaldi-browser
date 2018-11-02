@@ -9,7 +9,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/observer_list.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -34,6 +33,7 @@ class CommitQueueProxy : public CommitQueue {
   ~CommitQueueProxy() override;
 
   void EnqueueForCommit(const CommitRequestDataList& list) override;
+  void NudgeForCommit() override;
 
  private:
   base::WeakPtr<ModelTypeWorker> worker_;
@@ -52,16 +52,23 @@ void CommitQueueProxy::EnqueueForCommit(const CommitRequestDataList& list) {
       FROM_HERE, base::Bind(&ModelTypeWorker::EnqueueForCommit, worker_, list));
 }
 
+void CommitQueueProxy::NudgeForCommit() {
+  sync_thread_->PostTask(FROM_HERE,
+                         base::Bind(&ModelTypeWorker::NudgeForCommit, worker_));
+}
+
 }  // namespace
 
 ModelTypeRegistry::ModelTypeRegistry(
     const std::vector<scoped_refptr<ModelSafeWorker>>& workers,
     UserShare* user_share,
     NudgeHandler* nudge_handler,
-    const UssMigrator& uss_migrator)
+    const UssMigrator& uss_migrator,
+    CancelationSignal* cancelation_signal)
     : user_share_(user_share),
       nudge_handler_(nudge_handler),
       uss_migrator_(uss_migrator),
+      cancelation_signal_(cancelation_signal),
       weak_ptr_factory_(this) {
   for (size_t i = 0u; i < workers.size(); ++i) {
     workers_map_.insert(
@@ -91,21 +98,22 @@ void ModelTypeRegistry::ConnectNonBlockingType(
 
   std::unique_ptr<Cryptographer> cryptographer_copy;
   if (encrypted_types_.Has(type))
-    cryptographer_copy = base::MakeUnique<Cryptographer>(*cryptographer_);
+    cryptographer_copy = std::make_unique<Cryptographer>(*cryptographer_);
 
   DataTypeDebugInfoEmitter* emitter = GetEmitter(type);
   if (emitter == nullptr) {
-    auto new_emitter = base::MakeUnique<NonBlockingTypeDebugInfoEmitter>(
+    auto new_emitter = std::make_unique<NonBlockingTypeDebugInfoEmitter>(
         type, &type_debug_info_observers_);
     emitter = new_emitter.get();
     data_type_debug_info_emitter_map_.insert(
         std::make_pair(type, std::move(new_emitter)));
   }
 
-  auto worker = base::MakeUnique<ModelTypeWorker>(
+  auto worker = std::make_unique<ModelTypeWorker>(
       type, activation_context->model_type_state, trigger_initial_sync,
       std::move(cryptographer_copy), nudge_handler_,
-      std::move(activation_context->type_processor), emitter);
+      std::move(activation_context->type_processor), emitter,
+      cancelation_signal_);
 
   // Save a raw pointer and add the worker to our structures.
   ModelTypeWorker* worker_ptr = worker.get();
@@ -114,7 +122,7 @@ void ModelTypeRegistry::ConnectNonBlockingType(
   commit_contributor_map_.insert(std::make_pair(type, worker_ptr));
 
   // Initialize Processor -> Worker communication channel.
-  type_processor->ConnectSync(base::MakeUnique<CommitQueueProxy>(
+  type_processor->ConnectSync(std::make_unique<CommitQueueProxy>(
       worker_ptr->AsWeakPtr(), base::ThreadTaskRunnerHandle::Get()));
 
   // Attempt migration if necessary.
@@ -122,17 +130,19 @@ void ModelTypeRegistry::ConnectNonBlockingType(
     // TODO(crbug.com/658002): Store a pref before attempting migration
     // indicating that it was attempted so we can avoid failure loops.
     if (uss_migrator_.Run(type, user_share_, worker_ptr)) {
+      // TODO(wychen): enum uma should be strongly typed. crbug.com/661401
       UMA_HISTOGRAM_ENUMERATION("Sync.USSMigrationSuccess",
                                 ModelTypeToHistogramInt(type),
-                                MODEL_TYPE_COUNT);
+                                static_cast<int>(MODEL_TYPE_COUNT));
       // If we succesfully migrated, purge the directory of data for the type.
       // Purging removes the directory's local copy of the data only.
       directory()->PurgeEntriesWithTypeIn(ModelTypeSet(type), ModelTypeSet(),
                                           ModelTypeSet());
     } else {
+      // TODO(wychen): enum uma should be strongly typed. crbug.com/661401
       UMA_HISTOGRAM_ENUMERATION("Sync.USSMigrationFailure",
                                 ModelTypeToHistogramInt(type),
-                                MODEL_TYPE_COUNT);
+                                static_cast<int>(MODEL_TYPE_COUNT));
     }
   }
 
@@ -180,14 +190,14 @@ void ModelTypeRegistry::RegisterDirectoryType(ModelType type,
 
   auto worker = workers_map_.find(group)->second;
   DCHECK(GetEmitter(type) == nullptr);
-  auto owned_emitter = base::MakeUnique<DirectoryTypeDebugInfoEmitter>(
+  auto owned_emitter = std::make_unique<DirectoryTypeDebugInfoEmitter>(
       directory(), type, &type_debug_info_observers_);
   DataTypeDebugInfoEmitter* emitter_ptr = owned_emitter.get();
   data_type_debug_info_emitter_map_[type] = std::move(owned_emitter);
 
-  auto updater = base::MakeUnique<DirectoryUpdateHandler>(directory(), type,
+  auto updater = std::make_unique<DirectoryUpdateHandler>(directory(), type,
                                                           worker, emitter_ptr);
-  auto committer = base::MakeUnique<DirectoryCommitContributor>(
+  auto committer = std::make_unique<DirectoryCommitContributor>(
       directory(), type, emitter_ptr);
 
   update_handler_map_[type] = updater.get();
@@ -316,7 +326,7 @@ void ModelTypeRegistry::OnEncryptionComplete() {}
 
 void ModelTypeRegistry::OnCryptographerStateChanged(
     Cryptographer* cryptographer) {
-  cryptographer_ = base::MakeUnique<Cryptographer>(*cryptographer);
+  cryptographer_ = std::make_unique<Cryptographer>(*cryptographer);
   OnEncryptionStateChanged();
 }
 
@@ -330,7 +340,7 @@ void ModelTypeRegistry::OnEncryptionStateChanged() {
   for (const auto& worker : model_type_workers_) {
     if (encrypted_types_.Has(worker->GetModelType())) {
       worker->UpdateCryptographer(
-          base::MakeUnique<Cryptographer>(*cryptographer_));
+          std::make_unique<Cryptographer>(*cryptographer_));
     }
   }
 }

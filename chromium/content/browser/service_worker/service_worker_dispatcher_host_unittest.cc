@@ -53,14 +53,14 @@ void SetUpDummyMessagePort(std::vector<MessagePort>* ports) {
 }
 
 struct RemoteProviderInfo {
-  mojom::ServiceWorkerProviderHostAssociatedPtr host_ptr;
-  mojom::ServiceWorkerProviderAssociatedRequest client_request;
+  mojom::ServiceWorkerContainerHostAssociatedPtr host_ptr;
+  mojom::ServiceWorkerContainerAssociatedRequest client_request;
 };
 
 RemoteProviderInfo SetupProviderHostInfoPtrs(
     ServiceWorkerProviderHostInfo* host_info) {
   RemoteProviderInfo remote_info;
-  mojom::ServiceWorkerProviderAssociatedPtr browser_side_client_ptr;
+  mojom::ServiceWorkerContainerAssociatedPtr browser_side_client_ptr;
   remote_info.client_request =
       mojo::MakeIsolatedRequest(&browser_side_client_ptr);
   host_info->host_request = mojo::MakeIsolatedRequest(&remote_info.host_ptr);
@@ -123,14 +123,16 @@ class FailToStartWorkerTestHelper : public EmbeddedWorkerTestHelper {
  public:
   FailToStartWorkerTestHelper() : EmbeddedWorkerTestHelper(base::FilePath()) {}
 
-  void OnStartWorker(int embedded_worker_id,
-                     int64_t service_worker_version_id,
-                     const GURL& scope,
-                     const GURL& script_url,
-                     bool pause_after_download,
-                     mojom::ServiceWorkerEventDispatcherRequest request,
-                     mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo
-                         instance_host) override {
+  void OnStartWorker(
+      int embedded_worker_id,
+      int64_t service_worker_version_id,
+      const GURL& scope,
+      const GURL& script_url,
+      bool pause_after_download,
+      mojom::ServiceWorkerEventDispatcherRequest request,
+      mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo instance_host,
+      mojom::ServiceWorkerProviderInfoForStartWorkerPtr provider_info)
+      override {
     mojom::EmbeddedWorkerInstanceHostAssociatedPtr instance_host_ptr;
     instance_host_ptr.Bind(std::move(instance_host));
     instance_host_ptr->OnStopped();
@@ -197,13 +199,6 @@ class ServiceWorkerDispatcherHostTest : public testing::Test {
     EXPECT_EQ(SERVICE_WORKER_OK, status);
   }
 
-  void SendSetHostedVersionId(int provider_id,
-                              int64_t version_id,
-                              int embedded_worker_id) {
-    dispatcher_host_->OnSetHostedVersionId(provider_id, version_id,
-                                           embedded_worker_id, nullptr);
-  }
-
   void SendProviderCreated(ServiceWorkerProviderType type,
                            const GURL& pattern) {
     const int64_t kProviderId = 99;
@@ -216,6 +211,19 @@ class ServiceWorkerDispatcherHostTest : public testing::Test {
                                          helper_->mock_render_process_id());
     provider_host_ = context()->GetProviderHost(
         helper_->mock_render_process_id(), kProviderId);
+  }
+
+  void PrepareProviderForServiceWorkerContext(ServiceWorkerVersion* version,
+                                              const GURL& pattern) {
+    std::unique_ptr<ServiceWorkerProviderHost> host =
+        CreateProviderHostForServiceWorkerContext(
+            helper_->mock_render_process_id(),
+            true /* is_parent_frame_secure */, version,
+            helper_->context()->AsWeakPtr(), &remote_endpoint_);
+    provider_host_ = host.get();
+    helper_->SimulateAddProcessToPattern(pattern,
+                                         helper_->mock_render_process_id());
+    context()->AddProviderHost(std::move(host));
   }
 
   void SendRegister(int64_t provider_id, GURL pattern, GURL worker_url) {
@@ -612,13 +620,17 @@ TEST_F(ServiceWorkerDispatcherHostTest, ProviderCreatedAndDestroyed) {
             base::Callback<WebContents*(void)>()));
   }
 
-  // Deletion of the dispatcher_host should cause providers for that
-  // process to get deleted as well.
+  // Deletion of the dispatcher_host should cause provider hosts for
+  // that process to have a null dispatcher host.
   dispatcher_host_->OnProviderCreated(std::move(host_info_3));
-  EXPECT_TRUE(context()->GetProviderHost(process_id, kProviderId));
+  ServiceWorkerProviderHost* host =
+      context()->GetProviderHost(process_id, kProviderId);
+  EXPECT_TRUE(host->dispatcher_host());
   EXPECT_TRUE(dispatcher_host_->HasOneRef());
   dispatcher_host_ = nullptr;
-  EXPECT_FALSE(context()->GetProviderHost(process_id, kProviderId));
+  host = context()->GetProviderHost(process_id, kProviderId);
+  ASSERT_TRUE(host);
+  EXPECT_FALSE(host->dispatcher_host());
 }
 
 TEST_F(ServiceWorkerDispatcherHostTest, GetRegistration_SameOrigin) {
@@ -735,9 +747,17 @@ TEST_F(ServiceWorkerDispatcherHostTest, CleanupOnRendererCrash) {
   // Simulate the render process crashing.
   dispatcher_host_->OnFilterRemoved();
 
-  // The dispatcher host should clean up the state from the process.
-  EXPECT_FALSE(context()->GetProviderHost(process_id, provider_id));
-  EXPECT_EQ(EmbeddedWorkerStatus::STOPPED, version_->running_status());
+  // The provider host still exists, since it will clean itself up when its Mojo
+  // connection to the renderer breaks. But it should no longer be using the
+  // dispatcher host.
+  ServiceWorkerProviderHost* host =
+      context()->GetProviderHost(process_id, provider_id);
+  ASSERT_TRUE(host);
+  EXPECT_FALSE(host->dispatcher_host());
+
+  // The EmbeddedWorkerInstance should still think it is running, since it will
+  // clean itself up when its Mojo connection to the renderer breaks.
+  EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, version_->running_status());
 
   // We should be able to hook up a new dispatcher host although the old object
   // is not yet destroyed. This is what the browser does when reusing a crashed
@@ -747,10 +767,8 @@ TEST_F(ServiceWorkerDispatcherHostTest, CleanupOnRendererCrash) {
                                              helper_.get()));
   new_dispatcher_host->Init(context_wrapper());
 
-  // To show the new dispatcher can operate, simulate provider creation. Since
-  // the old dispatcher cleaned up the old provider host, the new one won't
-  // complain.
-  ServiceWorkerProviderHostInfo host_info(provider_id, MSG_ROUTING_NONE,
+  // To show the new dispatcher can operate, simulate provider creation.
+  ServiceWorkerProviderHostInfo host_info(provider_id + 1, MSG_ROUTING_NONE,
                                           SERVICE_WORKER_PROVIDER_FOR_WINDOW,
                                           true /* is_parent_frame_secure */);
   ServiceWorkerRemoteProviderEndpoint remote_endpoint;
@@ -763,8 +781,8 @@ TEST_F(ServiceWorkerDispatcherHostTest, DispatchExtendableMessageEvent) {
   GURL pattern = GURL("http://www.example.com/");
   GURL script_url = GURL("http://www.example.com/service_worker.js");
 
-  SendProviderCreated(SERVICE_WORKER_PROVIDER_FOR_CONTROLLER, pattern);
   SetUpRegistration(pattern, script_url);
+  PrepareProviderForServiceWorkerContext(version_.get(), pattern);
 
   // Set the running hosted version so that we can retrieve a valid service
   // worker object information for the source attribute of the message event.
@@ -839,88 +857,6 @@ TEST_F(ServiceWorkerDispatcherHostTest, DispatchExtendableMessageEvent_Fail) {
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(called);
   EXPECT_EQ(SERVICE_WORKER_ERROR_START_WORKER_FAILED, status);
-}
-
-TEST_F(ServiceWorkerDispatcherHostTest, OnSetHostedVersionId) {
-  GURL pattern = GURL("http://www.example.com/");
-  GURL script_url = GURL("http://www.example.com/service_worker.js");
-
-  Initialize(base::WrapUnique(new FailToStartWorkerTestHelper));
-  SendProviderCreated(SERVICE_WORKER_PROVIDER_FOR_CONTROLLER, pattern);
-  SetUpRegistration(pattern, script_url);
-
-  const int64_t kProviderId = 99;  // Dummy value
-  bool called;
-  ServiceWorkerStatusCode status;
-  // StartWorker puts the worker in STARTING state but it will have no
-  // process id yet.
-  version_->StartWorker(ServiceWorkerMetrics::EventType::UNKNOWN,
-                        base::Bind(&SaveStatusCallback, &called, &status));
-  EXPECT_NE(version_->embedded_worker()->process_id(),
-            provider_host_->process_id());
-  // SendSetHostedVersionId should reject because the provider host process id
-  // is different. It should call BadMessageReceived because it's not an
-  // expected error state.
-  SendSetHostedVersionId(kProviderId, version_->version_id(),
-                         version_->embedded_worker()->embedded_worker_id());
-  base::RunLoop().RunUntilIdle();
-  EXPECT_FALSE(dispatcher_host_->ipc_sink()->GetUniqueMessageMatching(
-      ServiceWorkerMsg_AssociateRegistration::ID));
-  EXPECT_EQ(1, dispatcher_host_->bad_messages_received_count_);
-}
-
-TEST_F(ServiceWorkerDispatcherHostTest, OnSetHostedVersionId_DetachedWorker) {
-  GURL pattern = GURL("http://www.example.com/");
-  GURL script_url = GURL("http://www.example.com/service_worker.js");
-
-  Initialize(base::WrapUnique(new FailToStartWorkerTestHelper));
-  SendProviderCreated(SERVICE_WORKER_PROVIDER_FOR_CONTROLLER, pattern);
-  SetUpRegistration(pattern, script_url);
-
-  const int64_t kProviderId = 99;  // Dummy value
-  bool called;
-  ServiceWorkerStatusCode status;
-  // StartWorker puts the worker in STARTING state.
-  version_->StartWorker(ServiceWorkerMetrics::EventType::UNKNOWN,
-                        base::Bind(&SaveStatusCallback, &called, &status));
-
-  // SendSetHostedVersionId should bail because the embedded worker is
-  // different. It shouldn't call BadMessageReceived because receiving a message
-  // for a detached worker is a legitimite possibility.
-  int bad_embedded_worker_id =
-      version_->embedded_worker()->embedded_worker_id() + 1;
-  SendSetHostedVersionId(kProviderId, version_->version_id(),
-                         bad_embedded_worker_id);
-  base::RunLoop().RunUntilIdle();
-  EXPECT_FALSE(dispatcher_host_->ipc_sink()->GetUniqueMessageMatching(
-      ServiceWorkerMsg_AssociateRegistration::ID));
-  EXPECT_EQ(0, dispatcher_host_->bad_messages_received_count_);
-}
-
-TEST_F(ServiceWorkerDispatcherHostTest, ReceivedTimedOutRequestResponse) {
-  GURL pattern = GURL("https://www.example.com/");
-  GURL script_url = GURL("https://www.example.com/service_worker.js");
-
-  SendProviderCreated(SERVICE_WORKER_PROVIDER_FOR_WINDOW, pattern);
-  SetUpRegistration(pattern, script_url);
-
-  version_->StartWorker(ServiceWorkerMetrics::EventType::UNKNOWN,
-                        base::Bind(&ServiceWorkerUtils::NoOpStatusCallback));
-  base::RunLoop().RunUntilIdle();
-
-  // Set the worker status to STOPPING.
-  version_->embedded_worker()->Stop();
-  EXPECT_EQ(EmbeddedWorkerStatus::STOPPING, version_->running_status());
-
-  // Receive a response for a timed out request. The bad message count should
-  // not increase.
-  const int kFetchEventId = 91;  // Dummy value
-  dispatcher_host_->OnMessageReceived(ServiceWorkerHostMsg_FetchEventResponse(
-      version_->embedded_worker()->embedded_worker_id(), kFetchEventId,
-      ServiceWorkerResponse(), base::Time::Now()));
-
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(0, dispatcher_host_->bad_messages_received_count_);
 }
 
 }  // namespace content

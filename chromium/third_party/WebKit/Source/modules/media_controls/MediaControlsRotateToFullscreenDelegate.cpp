@@ -6,11 +6,13 @@
 
 #include "core/dom/ElementVisibilityObserver.h"
 #include "core/dom/UserGestureIndicator.h"
-#include "core/events/Event.h"
+#include "core/dom/events/Event.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/fullscreen/Fullscreen.h"
 #include "core/html/HTMLVideoElement.h"
 #include "core/page/ChromeClient.h"
+#include "modules/device_orientation/DeviceOrientationData.h"
+#include "modules/device_orientation/DeviceOrientationEvent.h"
 #include "modules/media_controls/MediaControlsImpl.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebScreenInfo.h"
@@ -52,6 +54,7 @@ void MediaControlsRotateToFullscreenDelegate::Attach() {
   // TODO(johnme): Check this is battery efficient (note that this doesn't need
   // to receive events for 180 deg rotations).
   dom_window->addEventListener(EventTypeNames::orientationchange, this, false);
+  dom_window->addEventListener(EventTypeNames::deviceorientation, this, false);
 }
 
 void MediaControlsRotateToFullscreenDelegate::Detach() {
@@ -77,6 +80,8 @@ void MediaControlsRotateToFullscreenDelegate::Detach() {
     return;
   dom_window->removeEventListener(EventTypeNames::orientationchange, this,
                                   false);
+  dom_window->removeEventListener(EventTypeNames::deviceorientation, this,
+                                  false);
 }
 
 bool MediaControlsRotateToFullscreenDelegate::operator==(
@@ -92,6 +97,13 @@ void MediaControlsRotateToFullscreenDelegate::handleEvent(
       event->type() == EventTypeNames::fullscreenchange ||
       event->type() == EventTypeNames::webkitfullscreenchange) {
     OnStateChange();
+    return;
+  }
+  if (event->type() == EventTypeNames::deviceorientation) {
+    if (event->isTrusted() &&
+        event->InterfaceName() == EventNames::DeviceOrientationEvent) {
+      OnDeviceOrientationAvailable(ToDeviceOrientationEvent(event));
+    }
     return;
   }
   if (event->type() == EventTypeNames::orientationchange) {
@@ -129,6 +141,29 @@ void MediaControlsRotateToFullscreenDelegate::OnVisibilityChange(
   is_visible_ = is_visible;
 }
 
+void MediaControlsRotateToFullscreenDelegate::OnDeviceOrientationAvailable(
+    DeviceOrientationEvent* event) {
+  LocalDOMWindow* dom_window = video_element_->GetDocument().domWindow();
+  if (!dom_window)
+    return;
+  // Stop listening after the first event. Just need to know if it's available.
+  dom_window->removeEventListener(EventTypeNames::deviceorientation, this,
+                                  false);
+
+  // MediaControlsOrientationLockDelegate needs Device Orientation events with
+  // beta and gamma in order to unlock screen orientation and exit fullscreen
+  // when the device is rotated. Some devices cannot provide beta and/or gamma
+  // values and must be excluded. Unfortunately, some other devices incorrectly
+  // return true for both CanProvideBeta() and CanProvideGamma() but their
+  // Beta() and Gamma() values are permanently stuck on zero (crbug/760737); so
+  // we have to also exclude devices where both of these values are exactly
+  // zero, even though that's a valid (albeit unlikely) device orientation.
+  DeviceOrientationData* data = event->Orientation();
+  device_orientation_supported_ =
+      WTF::make_optional(data->CanProvideBeta() && data->CanProvideGamma() &&
+                         (data->Beta() != 0.0 || data->Gamma() != 0.0));
+}
+
 void MediaControlsRotateToFullscreenDelegate::OnScreenOrientationChange() {
   SimpleOrientation previous_screen_orientation = current_screen_orientation_;
   current_screen_orientation_ = ComputeScreenOrientation();
@@ -137,6 +172,13 @@ void MediaControlsRotateToFullscreenDelegate::OnScreenOrientationChange() {
 
   // Only enable if native media controls are used.
   if (!video_element_->ShouldShowControls())
+    return;
+
+  // Only enable if the Device Orientation API can provide beta and gamma values
+  // that will be needed for MediaControlsOrientationLockDelegate to
+  // automatically unlock, such that it will be possible to exit fullscreen by
+  // rotating back to the previous orientation.
+  if (!device_orientation_supported_.value_or(false))
     return;
 
   // Don't enter/exit fullscreen if some other element is fullscreen.
@@ -175,8 +217,8 @@ void MediaControlsRotateToFullscreenDelegate::OnScreenOrientationChange() {
       *static_cast<MediaControlsImpl*>(video_element_->GetMediaControls());
 
   {
-    UserGestureIndicator gesture(
-        UserGestureToken::Create(&video_element_->GetDocument()));
+    std::unique_ptr<UserGestureIndicator> gesture =
+        LocalFrame::CreateUserGesture(video_element_->GetDocument().GetFrame());
 
     bool should_be_fullscreen =
         current_screen_orientation_ == video_orientation;

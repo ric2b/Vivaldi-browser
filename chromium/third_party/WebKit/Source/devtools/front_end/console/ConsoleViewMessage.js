@@ -452,20 +452,21 @@ Console.ConsoleViewMessage = class {
   }
 
   /**
-   * @param {!Array.<!SDK.RemoteObject|string>} parameters
+   * @param {!Array.<!SDK.RemoteObject|string>} rawParameters
    * @return {!Element}
    */
-  _format(parameters) {
+  _format(rawParameters) {
     // This node is used like a Builder. Values are continually appended onto it.
     var formattedResult = createElement('span');
-    if (!parameters.length)
+    if (!rawParameters.length)
       return formattedResult;
 
     // Formatting code below assumes that parameters are all wrappers whereas frontend console
     // API allows passing arbitrary values as messages (strings, numbers, etc.). Wrap them here.
     // FIXME: Only pass runtime wrappers here.
-    for (var i = 0; i < parameters.length; ++i)
-      parameters[i] = this._parameterToRemoteObject(parameters[i]);
+    var parameters = [];
+    for (var i = 0; i < rawParameters.length; ++i)
+      parameters[i] = this._parameterToRemoteObject(rawParameters[i]);
 
     // There can be string log and string eval result. We distinguish between them based on message type.
     var shouldFormatMessage =
@@ -508,16 +509,16 @@ Console.ConsoleViewMessage = class {
     var type = forceObjectFormat ? 'object' : (output.subtype || output.type);
     var element;
     switch (type) {
-      case 'array':
-      case 'typedarray':
-        element = this._formatParameterAsObject(output, includePreview);
-        break;
       case 'error':
         element = this._formatParameterAsError(output);
         break;
       case 'function':
         element = this._formatParameterAsFunction(output, includePreview);
         break;
+      case 'array':
+      case 'arraybuffer':
+      case 'blob':
+      case 'dataview':
       case 'generator':
       case 'iterator':
       case 'map':
@@ -525,6 +526,7 @@ Console.ConsoleViewMessage = class {
       case 'promise':
       case 'proxy':
       case 'set':
+      case 'typedarray':
       case 'weakmap':
       case 'weakset':
         element = this._formatParameterAsObject(output, includePreview);
@@ -581,6 +583,9 @@ Console.ConsoleViewMessage = class {
     } else {
       titleElement.createTextChild(obj.description || '');
     }
+
+    if (!obj.hasChildren || obj.customPreview())
+      return titleElement;
 
     var note = titleElement.createChild('span', 'object-state-note');
     note.classList.add('info-note');

@@ -69,11 +69,29 @@ Polymer({
     },
 
     /**
+     * The timestamp for when the controller last submitted a seek request.
+     * @private {number}
+     */
+    lastSeekByUser_: {
+      type: Number,
+      value: 0,
+    },
+
+    /**
+     * The timestamp for when |routeStatus| was last updated.
+     * @private {number}
+     */
+    lastStatusUpdate_: {
+      type: Number,
+      value: 0,
+    },
+
+    /**
      * The timestamp for when the controller last submitted a volume change
-     * request for the volume slider being dragged.
+     * request.
      * @private {boolean}
      */
-    lastVolumeChangeByDragging_: {
+    lastVolumeChangeByUser_: {
       type: Number,
       value: 0,
     },
@@ -128,9 +146,34 @@ Polymer({
    * @private
    */
   canIncrementCurrentTime_: function() {
-    return this.routeStatus.playState === media_router.PlayState.PLAYING &&
+    return !this.isSeeking_ &&
+        this.routeStatus.playState === media_router.PlayState.PLAYING &&
         (this.routeStatus.duration === 0 ||
-         this.routeStatus.currentTime < this.routeStatus.duration);
+         this.displayedCurrentTime_ < this.routeStatus.duration);
+  },
+
+  /**
+   * Creates an accessibility label for the element showing the media's current
+   * time.
+   * @param {number} displayedCurrentTime
+   * @return {string}
+   * @private
+   */
+  getCurrentTimeLabel_: function(displayedCurrentTime) {
+    return `${
+              this.i18n('currentTimeLabel')
+            } ${this.getFormattedTime_(displayedCurrentTime)}`;
+  },
+
+  /**
+   * Creates an accessibility label for the element showing the media's
+   * duration.
+   * @param {number} duration
+   * @return {string}
+   * @private
+   */
+  getDurationLabel_: function(duration) {
+    return `${this.i18n('durationLabel')} ${this.getFormattedTime_(duration)}`;
   },
 
   /**
@@ -148,8 +191,9 @@ Polymer({
     var hours = Math.floor(timeInSec / 3600);
     var minutes = Math.floor(timeInSec / 60) % 60;
     var seconds = Math.floor(timeInSec) % 60;
-    return ('0' + hours).substr(-2) + ':' + ('0' + minutes).substr(-2) + ':' +
-        ('0' + seconds).substr(-2);
+    // Show the hours only if it is nonzero.
+    return (hours ? ('0' + hours).substr(-2) + ':' : '') +
+        ('0' + minutes).substr(-2) + ':' + ('0' + seconds).substr(-2);
   },
 
   /**
@@ -195,6 +239,28 @@ Polymer({
   },
 
   /**
+   * @return {string} Text representing the current position on the seek slider.
+   * @private
+   */
+  getTimeSliderValueText_: function(displayedCurrentTime) {
+    if (!this.routeStatus) {
+      return '';
+    }
+    return `${
+              this.getFormattedTime_(displayedCurrentTime)
+            } / ${this.getFormattedTime_(this.routeStatus.duration)}`;
+  },
+
+  /**
+   * @param {number} volume
+   * @return {string} The volume as a percentage.
+   * @private
+   */
+  getVolumeSliderValueText_: function(volume) {
+    return String(Math.round(volume * 100)) + '%';
+  },
+
+  /**
    * Checks whether the media is still playing, and if so, sends a media status
    * update incrementing the current time and schedules another call for a
    * second later.
@@ -202,10 +268,13 @@ Polymer({
    */
   maybeIncrementCurrentTime_: function() {
     if (this.canIncrementCurrentTime_()) {
-      this.routeStatus.currentTime++;
-      this.displayedCurrentTime_ = this.routeStatus.currentTime;
+      var updatedCurrentTime = this.routeStatus.currentTime +
+          Math.floor((Date.now() - this.lastStatusUpdate_) / 1000);
+      this.displayedCurrentTime_ = this.routeStatus.duration === 0 ?
+          updatedCurrentTime :
+          Math.min(updatedCurrentTime, this.routeStatus.duration);
       if (this.routeStatus.duration === 0 ||
-          this.routeStatus.currentTime < this.routeStatus.duration) {
+          this.displayedCurrentTime_ < this.routeStatus.duration) {
         this.timeIncrementsTimeoutId_ =
             setTimeout(() => this.maybeIncrementCurrentTime_(), 1000);
       }
@@ -243,11 +312,12 @@ Polymer({
    * @private
    */
   onRouteStatusChange_: function(newRouteStatus) {
-    if (!this.isSeeking_) {
+    this.lastStatusUpdate_ = Date.now();
+    if (this.shouldAcceptCurrentTimeUpdates_()) {
       this.displayedCurrentTime_ = newRouteStatus.currentTime;
     }
-    if (!this.isVolumeChanging_) {
-      this.displayedVolume_ = newRouteStatus.volume;
+    if (this.shouldAcceptVolumeUpdates_()) {
+      this.displayedVolume_ = Math.round(newRouteStatus.volume * 100) / 100;
     }
     if (newRouteStatus.description !== '') {
       this.displayedDescription_ = newRouteStatus.description;
@@ -257,13 +327,10 @@ Polymer({
       media_router.browserApi.reportWebUIRouteControllerLoaded(
           this.initialLoadTime_ - this.routeDetailsOpenTime);
     }
+    this.stopIncrementingCurrentTime_();
     if (this.canIncrementCurrentTime_()) {
-      if (!this.timeIncrementsTimeoutId_) {
-        this.timeIncrementsTimeoutId_ =
-            setTimeout(() => this.maybeIncrementCurrentTime_(), 1000);
-      }
-    } else {
-      this.stopIncrementingCurrentTime_();
+      this.timeIncrementsTimeoutId_ =
+          setTimeout(() => this.maybeIncrementCurrentTime_(), 1000);
     }
   },
 
@@ -289,9 +356,10 @@ Polymer({
    */
   onSeekComplete_: function(e) {
     this.stopIncrementingCurrentTime_();
-    this.isSeeking_ = false;
     this.displayedCurrentTime_ = e.target.value;
     media_router.browserApi.seekCurrentMedia(this.displayedCurrentTime_);
+    this.isSeeking_ = false;
+    this.lastSeekByUser_ = Date.now();
   },
 
   /**
@@ -311,17 +379,10 @@ Polymer({
    * @private
    */
   onVolumeChangeComplete_: function(e) {
-    this.volumeSliderValue_ = e.target.value;
-    media_router.browserApi.setCurrentMediaVolume(this.volumeSliderValue_);
-    if (this.isVolumeChanging_) {
-      // Wait for 1 second before applying external volume updates, to prevent
-      // notifications originating from this controller moving the slider knob
-      // around.
-      var that = this;
-      setTimeout(function() {
-        that.isVolumeChanging_ = false;
-      }, 1000);
-    }
+    this.displayedVolume_ = e.target.value;
+    media_router.browserApi.setCurrentMediaVolume(this.displayedVolume_);
+    this.isVolumeChanging_ = false;
+    this.lastVolumeChangeByUser_ = Date.now();
   },
 
   /**
@@ -333,14 +394,14 @@ Polymer({
     /** @const */ var currentTime = Date.now();
     // We limit the frequency of volume change requests during dragging to
     // limit the number of Mojo calls to the component extension.
-    if (currentTime - this.lastVolumeChangeByDragging_ < 300) {
+    if (currentTime - this.lastVolumeChangeByUser_ < 300) {
       return;
     }
-    this.lastVolumeChangeByDragging_ = currentTime;
+    this.lastVolumeChangeByUser_ = currentTime;
     this.isVolumeChanging_ = true;
     var target = /** @type {{immediateValue: number}} */ (e.target);
-    this.volumeSliderValue_ = target.immediateValue;
-    media_router.browserApi.setCurrentMediaVolume(this.volumeSliderValue_);
+    this.displayedVolume_ = target.immediateValue;
+    media_router.browserApi.setCurrentMediaVolume(this.displayedVolume_);
   },
 
   /**
@@ -349,6 +410,31 @@ Polymer({
   reset: function() {
     this.routeStatus = new media_router.RouteStatus();
     media_router.ui.setRouteControls(null);
+  },
+
+  /**
+   * @return {boolean} Whether external current time updates should be reflected
+   *     on the seek slider.
+   * @private
+   */
+  shouldAcceptCurrentTimeUpdates_: function() {
+    // Ignore external updates immediately after internal updates, because it's
+    // likely to just be internal updates coming back from the device, and could
+    // make the slider knob jump around.
+    return !this.isSeeking_ && Date.now() - this.lastSeekByUser_ > 1000;
+  },
+
+  /**
+   * @return {boolean} Whether external volume updates should be reflected on
+   *     the volume slider.
+   * @private
+   */
+  shouldAcceptVolumeUpdates_: function() {
+    // Ignore external updates immediately after internal updates, because it's
+    // likely to just be internal updates coming back from the device, and could
+    // make the slider knob jump around.
+    return !this.isVolumeChanging_ &&
+        Date.now() - this.lastVolumeChangeByUser_ > 1000;
   },
 
   /**

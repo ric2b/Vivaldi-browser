@@ -44,6 +44,7 @@
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/process_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/app_list/app_list_features.h"
 #include "ui/app_list/app_list_switches.h"
 #include "ui/base/test/ui_controls.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
@@ -207,7 +208,7 @@ IN_PROC_BROWSER_TEST_F(LoggedInSpokenFeedbackTest,
                        DISABLED_NavigateNotificationCenter) {
   EnableChromeVox();
 
-  EXPECT_TRUE(PerformAcceleratorAction(ash::SHOW_MESSAGE_CENTER_BUBBLE));
+  EXPECT_TRUE(PerformAcceleratorAction(ash::TOGGLE_MESSAGE_CENTER_BUBBLE));
 
   // Tab to request the initial focus.
   SendKeyPress(ui::VKEY_TAB);
@@ -244,10 +245,7 @@ IN_PROC_BROWSER_TEST_F(LoggedInSpokenFeedbackTest,
 // Spoken feedback tests in both a logged in browser window and guest mode.
 //
 
-enum SpokenFeedbackTestVariant {
-  kTestAsNormalUser,
-  kTestAsGuestUser
-};
+enum SpokenFeedbackTestVariant { kTestAsNormalUser, kTestAsGuestUser };
 
 class SpokenFeedbackTest
     : public LoggedInSpokenFeedbackTest,
@@ -268,11 +266,9 @@ class SpokenFeedbackTest
   }
 };
 
-INSTANTIATE_TEST_CASE_P(
-    TestAsNormalAndGuestUser,
-    SpokenFeedbackTest,
-    ::testing::Values(kTestAsNormalUser,
-                      kTestAsGuestUser));
+INSTANTIATE_TEST_CASE_P(TestAsNormalAndGuestUser,
+                        SpokenFeedbackTest,
+                        ::testing::Values(kTestAsNormalUser, kTestAsGuestUser));
 
 // TODO(tommi): Flakily hitting HasOneRef DCHECK in
 // AudioOutputResampler::Shutdown, see crbug.com/630031.
@@ -324,7 +320,12 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, FocusShelf) {
   EXPECT_TRUE(base::MatchPattern(speech_monitor_.GetNextUtterance(), "Button"));
 }
 
-IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, DISABLED_NavigateAppLauncher) {
+IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, NavigateAppLauncher) {
+  // TODO(newcomer): this test needs to be reevaluated for the fullscreen app
+  // list (http://crbug.com/759779).
+  if (app_list::features::IsFullscreenAppListEnabled())
+    return;
+
   EnableChromeVox();
 
   EXPECT_TRUE(PerformAcceleratorAction(ash::FOCUS_SHELF));
@@ -465,7 +466,7 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, DISABLED_ScreenBrightness) {
                                  "Brightness * percent"));
 }
 
-IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, VolumeSlider) {
+IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, DISABLED_VolumeSlider) {
   EnableChromeVox();
 
   // Volume slider does not fire valueChanged event on first key press because
@@ -609,7 +610,8 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, DISABLED_ChromeVoxNextStickyMode) {
   }
 }
 
-IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, TouchExploreStatusTray) {
+// Flaky on Linux ChromiumOS MSan Tests. https://crbug.com/752427
+IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, DISABLED_TouchExploreStatusTray) {
   EnableChromeVox();
   SimulateTouchScreenInChromeVox();
 

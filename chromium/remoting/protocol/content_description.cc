@@ -35,6 +35,7 @@ const char kEventTag[] = "event";
 const char kVideoTag[] = "video";
 const char kAudioTag[] = "audio";
 const char kVp9ExperimentTag[] = "vp9-experiment";
+const char kH264ExperimentTag[] = "h264-experiment";
 
 const char kTransportAttr[] = "transport";
 const char kVersionAttr[] = "version";
@@ -51,6 +52,7 @@ const NameMapElement<ChannelConfig::Codec> kCodecs[] = {
   { ChannelConfig::CODEC_VERBATIM, "verbatim" },
   { ChannelConfig::CODEC_VP8, "vp8" },
   { ChannelConfig::CODEC_VP9, "vp9" },
+  { ChannelConfig::CODEC_H264, "h264" },
   { ChannelConfig::CODEC_ZIP, "zip" },
   { ChannelConfig::CODEC_OPUS, "opus" },
   { ChannelConfig::CODEC_SPEEX, "speex" },
@@ -230,6 +232,11 @@ std::unique_ptr<ContentDescription> ContentDescription::ParseXml(
   // Check if VP9 experiment is enabled.
   if (element->FirstNamed(QName(kChromotingXmlNamespace, kVp9ExperimentTag))) {
     config->set_vp9_experiment_enabled(true);
+  }
+
+  // Check if H264 experiment is enabled.
+  if (element->FirstNamed(QName(kChromotingXmlNamespace, kH264ExperimentTag))) {
+    config->set_h264_experiment_enabled(true);
   }
 
   std::unique_ptr<XmlElement> authenticator_message;

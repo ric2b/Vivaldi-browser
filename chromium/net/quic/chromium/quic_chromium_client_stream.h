@@ -26,7 +26,7 @@
 
 namespace net {
 
-class QuicClientSessionBase;
+class QuicSpdyClientSessionBase;
 
 // A client-initiated ReliableQuicStream.  Instances of this class
 // are owned by the QuicClientSession which created them.
@@ -116,6 +116,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientStream : public QuicSpdyStream {
     uint64_t stream_bytes_read() const;
     uint64_t stream_bytes_written() const;
     size_t NumBytesConsumed() const;
+    bool HasBytesToRead() const;
     bool IsDoneReading() const;
     bool IsFirstStream() const;
 
@@ -125,6 +126,8 @@ class NET_EXPORT_PRIVATE QuicChromiumClientStream : public QuicSpdyStream {
                              const QuicHeaderList& header_list);
     SpdyPriority priority() const;
     bool can_migrate();
+
+    const NetLogWithSource& net_log() const;
 
    private:
     friend class QuicChromiumClientStream;
@@ -184,13 +187,15 @@ class NET_EXPORT_PRIVATE QuicChromiumClientStream : public QuicSpdyStream {
 
     int net_error_;
 
+    NetLogWithSource net_log_;
+
     base::WeakPtrFactory<Handle> weak_factory_;
 
     DISALLOW_COPY_AND_ASSIGN(Handle);
   };
 
   QuicChromiumClientStream(QuicStreamId id,
-                           QuicClientSessionBase* session,
+                           QuicSpdyClientSessionBase* session,
                            const NetLogWithSource& net_log);
 
   ~QuicChromiumClientStream() override;
@@ -273,7 +278,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientStream : public QuicSpdyStream {
   // True when initial headers have been sent.
   bool initial_headers_sent_;
 
-  QuicClientSessionBase* session_;
+  QuicSpdyClientSessionBase* session_;
 
   // Set to false if this stream to not be migrated during connection migration.
   bool can_migrate_;

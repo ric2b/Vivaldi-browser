@@ -65,6 +65,10 @@ void DevtoolsConnectorAPI::RemoveDevtoolsConnectorItem(int tab_id) {
 }
 
 void DevtoolsConnectorAPI::CloseAllDevtools() {
+  CloseDevtoolsForBrowser(nullptr);
+}
+
+void DevtoolsConnectorAPI::CloseDevtoolsForBrowser(Browser* closing_browser) {
   Profile* profile = Profile::FromBrowserContext(browser_context_);
   content::WebContents* tabstrip_contents = nullptr;
   Browser* browser;
@@ -75,13 +79,17 @@ void DevtoolsConnectorAPI::CloseAllDevtools() {
     if (extensions::ExtensionTabUtil::GetTabById(
             (*it)->tab_id(), profile, true, &browser, nullptr,
             &tabstrip_contents, &tab_index)) {
-      DevToolsWindow* window =
-          DevToolsWindow::GetInstanceForInspectedWebContents(
-              tabstrip_contents);
-      if (window) {
-        // This call removes the element from connector_items_.
-        window->ForceCloseWindow();
-        it = connector_items_.begin();
+      if (closing_browser == nullptr || closing_browser == browser) {
+        DevToolsWindow* window =
+            DevToolsWindow::GetInstanceForInspectedWebContents(
+                tabstrip_contents);
+        if (window) {
+          // This call removes the element from connector_items_.
+          window->ForceCloseWindow();
+          it = connector_items_.begin();
+        }
+      } else {
+        it++;
       }
     } else {
       it++;
@@ -117,13 +125,14 @@ void DevtoolsConnectorAPI::SendOnUndockedEvent(
     base::DictionaryValue* wp_prefs = update.Get();
     std::unique_ptr<base::DictionaryValue>
           dev_tools_defaults(new base::DictionaryValue);
-    wp_prefs->Set(DevToolsWindow::kDevToolsApp, std::move(dev_tools_defaults));
     dev_tools_defaults->SetInteger("left", 100);
     dev_tools_defaults->SetInteger("top", 100);
     dev_tools_defaults->SetInteger("right", 740);
     dev_tools_defaults->SetInteger("bottom", 740);
     dev_tools_defaults->SetBoolean("maximized", false);
     dev_tools_defaults->SetBoolean("always_on_top", false);
+
+    wp_prefs->Set(DevToolsWindow::kDevToolsApp, std::move(dev_tools_defaults));
   }
 
   std::unique_ptr<base::ListValue> args =
@@ -313,17 +322,6 @@ bool DevtoolsConnectorItem::PreHandleGestureEvent(
   return true;
 }
 
-void DevtoolsConnectorItem::ShowCertificateViewerInDevTools(
-  content::WebContents* web_contents,
-  scoped_refptr<net::X509Certificate> certificate) {
-  if (devtools_delegate_) {
-    devtools_delegate_->ShowCertificateViewerInDevTools(web_contents,
-                                                        certificate);
-  } else if (guest_delegate_) {
-    guest_delegate_->ShowCertificateViewerInDevTools(web_contents, certificate);
-  }
-}
-
 // DevToolsUIBindings::Delegate implementation
 UIBindingsDelegate::UIBindingsDelegate(content::BrowserContext* browser_context,
                                        int tab_id,
@@ -460,6 +458,12 @@ void UIBindingsDelegate::RenderProcessGone(
 void UIBindingsDelegate::SetEyeDropperActive(bool active) {
   if (ui_bindings_delegate_) {
     ui_bindings_delegate_->SetEyeDropperActive(active);
+  }
+}
+
+void UIBindingsDelegate::ShowCertificateViewer(const std::string& cert_chain) {
+  if (ui_bindings_delegate_) {
+    ui_bindings_delegate_->ShowCertificateViewer(cert_chain);
   }
 }
 

@@ -4,6 +4,8 @@
 
 #include "ui/aura/test/mus/test_window_manager_client.h"
 
+#include <algorithm>
+
 namespace aura {
 
 TestWindowManagerClient::TestWindowManagerClient() {}
@@ -20,13 +22,18 @@ size_t TestWindowManagerClient::GetChangeCountForType(
   return count;
 }
 
+size_t TestWindowManagerClient::IndexOfFirstChangeOfType(
+    WindowManagerClientChangeType type) const {
+  auto iter = std::find(changes_.begin(), changes_.end(), type);
+  return iter == changes_.end() ? static_cast<size_t>(-1)
+                                : iter - changes_.begin();
+}
+
 void TestWindowManagerClient::AddActivationParent(Id transport_window_id) {
   changes_.push_back(WindowManagerClientChangeType::ADD_ACTIVATION_PARENT);
 }
 
 void TestWindowManagerClient::RemoveActivationParent(Id transport_window_id) {}
-
-void TestWindowManagerClient::ActivateNextWindow() {}
 
 void TestWindowManagerClient::SetExtendedHitRegionForChildren(
     Id window_id,
@@ -64,6 +71,10 @@ void TestWindowManagerClient::SwapDisplayRoots(
     int64_t display_id2,
     const SwapDisplayRootsCallback& callback) {}
 
+void TestWindowManagerClient::SetBlockingContainers(
+    std::vector<ui::mojom::BlockingContainersPtr> blocking_containers,
+    const SetBlockingContainersCallback& callback) {}
+
 void TestWindowManagerClient::WmResponse(uint32_t change_id, bool response) {}
 
 void TestWindowManagerClient::WmSetBoundsResponse(uint32_t change_id) {}
@@ -71,7 +82,9 @@ void TestWindowManagerClient::WmSetBoundsResponse(uint32_t change_id) {}
 void TestWindowManagerClient::WmRequestClose(Id transport_window_id) {}
 
 void TestWindowManagerClient::WmSetFrameDecorationValues(
-    ui::mojom::FrameDecorationValuesPtr values) {}
+    ui::mojom::FrameDecorationValuesPtr values) {
+  changes_.push_back(WindowManagerClientChangeType::SET_FRAME_DECORATIONS);
+}
 
 void TestWindowManagerClient::WmSetNonClientCursor(uint32_t window_id,
                                                    ui::CursorData cursor_data) {
@@ -91,6 +104,12 @@ void TestWindowManagerClient::WmSetGlobalOverrideCursor(
 void TestWindowManagerClient::WmMoveCursorToDisplayLocation(
     const gfx::Point& display_pixels,
     int64_t display_id) {}
+
+void TestWindowManagerClient::WmConfineCursorToBounds(
+    const gfx::Rect& bounds_in_pixles,
+    int64_t display_id) {}
+
+void TestWindowManagerClient::WmSetCursorTouchVisible(bool enabled) {}
 
 void TestWindowManagerClient::OnWmCreatedTopLevelWindow(
     uint32_t change_id,

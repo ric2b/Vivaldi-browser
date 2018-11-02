@@ -6,21 +6,20 @@
 #define CC_IPC_CC_PARAM_TRAITS_MACROS_H_
 
 #include "cc/base/filter_operation.h"
-#include "cc/output/begin_frame_args.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/quads/debug_border_draw_quad.h"
 #include "cc/quads/draw_quad.h"
 #include "cc/quads/render_pass.h"
-#include "cc/quads/shared_quad_state.h"
 #include "cc/quads/solid_color_draw_quad.h"
 #include "cc/quads/stream_video_draw_quad.h"
 #include "cc/quads/surface_draw_quad.h"
 #include "cc/quads/texture_draw_quad.h"
 #include "cc/quads/tile_draw_quad.h"
 #include "cc/quads/yuv_video_draw_quad.h"
-#include "cc/resources/returned_resource.h"
-#include "cc/resources/transferable_resource.h"
-#include "components/viz/common/quads/resource_format.h"
+#include "components/viz/common/frame_sinks/begin_frame_args.h"
+#include "components/viz/common/resources/resource_format.h"
+#include "components/viz/common/resources/returned_resource.h"
+#include "components/viz/common/resources/transferable_resource.h"
 #include "components/viz/common/surfaces/surface_id.h"
 #include "components/viz/common/surfaces/surface_info.h"
 #include "components/viz/common/surfaces/surface_sequence.h"
@@ -55,7 +54,6 @@ IPC_STRUCT_TRAITS_END()
 IPC_STRUCT_TRAITS_BEGIN(cc::DrawQuad)
   IPC_STRUCT_TRAITS_MEMBER(material)
   IPC_STRUCT_TRAITS_MEMBER(rect)
-  IPC_STRUCT_TRAITS_MEMBER(opaque_rect)
   IPC_STRUCT_TRAITS_MEMBER(visible_rect)
   IPC_STRUCT_TRAITS_MEMBER(needs_blending)
   IPC_STRUCT_TRAITS_MEMBER(resources)
@@ -127,7 +125,7 @@ IPC_STRUCT_TRAITS_BEGIN(cc::TileDrawQuad)
   IPC_STRUCT_TRAITS_MEMBER(nearest_neighbor)
 IPC_STRUCT_TRAITS_END()
 
-IPC_STRUCT_TRAITS_BEGIN(cc::SharedQuadState)
+IPC_STRUCT_TRAITS_BEGIN(viz::SharedQuadState)
   IPC_STRUCT_TRAITS_MEMBER(quad_to_target_transform)
   IPC_STRUCT_TRAITS_MEMBER(quad_layer_rect)
   IPC_STRUCT_TRAITS_MEMBER(visible_quad_layer_rect)
@@ -138,7 +136,7 @@ IPC_STRUCT_TRAITS_BEGIN(cc::SharedQuadState)
   IPC_STRUCT_TRAITS_MEMBER(sorting_context_id)
 IPC_STRUCT_TRAITS_END()
 
-IPC_STRUCT_TRAITS_BEGIN(cc::TransferableResource)
+IPC_STRUCT_TRAITS_BEGIN(viz::TransferableResource)
   IPC_STRUCT_TRAITS_MEMBER(id)
   IPC_STRUCT_TRAITS_MEMBER(format)
   IPC_STRUCT_TRAITS_MEMBER(buffer_format)
@@ -156,7 +154,7 @@ IPC_STRUCT_TRAITS_BEGIN(cc::TransferableResource)
 #endif
 IPC_STRUCT_TRAITS_END()
 
-IPC_STRUCT_TRAITS_BEGIN(cc::ReturnedResource)
+IPC_STRUCT_TRAITS_BEGIN(viz::ReturnedResource)
   IPC_STRUCT_TRAITS_MEMBER(id)
   IPC_STRUCT_TRAITS_MEMBER(sync_token)
   IPC_STRUCT_TRAITS_MEMBER(count)
@@ -168,10 +166,10 @@ IPC_STRUCT_TRAITS_BEGIN(cc::Selection<gfx::SelectionBound>)
   IPC_STRUCT_TRAITS_MEMBER(end)
 IPC_STRUCT_TRAITS_END()
 
-IPC_ENUM_TRAITS_MAX_VALUE(cc::BeginFrameArgs::BeginFrameArgsType,
-                          cc::BeginFrameArgs::BEGIN_FRAME_ARGS_TYPE_MAX - 1)
+IPC_ENUM_TRAITS_MAX_VALUE(viz::BeginFrameArgs::BeginFrameArgsType,
+                          viz::BeginFrameArgs::BEGIN_FRAME_ARGS_TYPE_MAX - 1)
 
-IPC_STRUCT_TRAITS_BEGIN(cc::BeginFrameArgs)
+IPC_STRUCT_TRAITS_BEGIN(viz::BeginFrameArgs)
   IPC_STRUCT_TRAITS_MEMBER(frame_time)
   IPC_STRUCT_TRAITS_MEMBER(deadline)
   IPC_STRUCT_TRAITS_MEMBER(interval)

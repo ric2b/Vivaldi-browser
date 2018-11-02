@@ -31,15 +31,12 @@
 #include "ui/gl/test/gl_surface_test_support.h"
 #endif
 
-#if defined(OS_ANDROID)
-#include "base/android/jni_android.h"
-#include "content/public/test/test_utils.h"
-#include "net/android/net_jni_registrar.h"
-#include "ui/base/android/ui_base_jni_registrar.h"
-#include "ui/gfx/android/gfx_jni_registrar.h"
-#endif
-
 namespace {
+
+// Not using kExtensionScheme and kChromeSearchScheme to avoid the dependency
+// to extensions and chrome/common.
+const char* const kNonWildcardDomainNonPortSchemes[] = {"chrome-extension",
+                                                        "chrome-search"};
 
 class ComponentsTestSuite : public base::TestSuite {
  public:
@@ -64,14 +61,6 @@ class ComponentsTestSuite : public base::TestSuite {
       content::ContentClient content_client;
       content::ContentTestSuiteBase::RegisterContentSchemes(&content_client);
     }
-#endif
-#if defined(OS_ANDROID)
-    // Register JNI bindings for android.
-    JNIEnv* env = base::android::AttachCurrentThread();
-    ASSERT_TRUE(content::RegisterJniForTesting(env));
-    ASSERT_TRUE(gfx::android::RegisterJni(env));
-    ASSERT_TRUE(net::android::RegisterJni(env));
-    ASSERT_TRUE(ui::android::RegisterJni(env));
 #endif
 
     ui::RegisterPathProvider();
@@ -98,9 +87,9 @@ class ComponentsTestSuite : public base::TestSuite {
     url::AddStandardScheme("chrome-devtools", url::SCHEME_WITHOUT_PORT);
     url::AddStandardScheme("chrome-search", url::SCHEME_WITHOUT_PORT);
 
-    // Not using kExtensionScheme to avoid the dependency to extensions.
-    ContentSettingsPattern::SetNonWildcardDomainNonPortScheme(
-        "chrome-extension");
+    ContentSettingsPattern::SetNonWildcardDomainNonPortSchemes(
+        kNonWildcardDomainNonPortSchemes,
+        arraysize(kNonWildcardDomainNonPortSchemes));
   }
 
   void Shutdown() override {

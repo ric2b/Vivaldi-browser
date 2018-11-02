@@ -62,7 +62,7 @@ class OfflinePageUtils {
   static void SelectPageForURL(
       content::BrowserContext* browser_context,
       const GURL& url,
-      OfflinePageModel::URLSearchMode url_search_mode,
+      URLSearchMode url_search_mode,
       int tab_id,
       const base::Callback<void(const OfflinePageItem*)>& callback);
 
@@ -124,6 +124,12 @@ class OfflinePageUtils {
   // Schedules to download a page from |url| and categorize under |name_space|.
   // The duplicate pages or requests will be checked. Note that |url| can be
   // different from the one rendered in |web_contents|.
+  static void ScheduleDownload(content::WebContents* web_contents,
+                               const std::string& name_space,
+                               const GURL& url,
+                               DownloadUIActionFlags ui_action,
+                               const std::string& request_origin);
+
   static void ScheduleDownload(content::WebContents* web_contents,
                                const std::string& name_space,
                                const GURL& url,

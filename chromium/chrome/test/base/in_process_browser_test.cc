@@ -85,7 +85,6 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/input_method/input_method_configuration.h"
-#include "chrome/browser/ui/webui/options/browser_options_handler.h"
 #endif  // defined(OS_CHROMEOS)
 
 #if defined(USE_ASH)
@@ -96,7 +95,7 @@
 #include "ui/views/test/test_desktop_screen_x11.h"
 #endif
 
-#include "app/vivaldi_constants.h"
+#include "app/vivaldi_version_constants.h"
 
 namespace {
 
@@ -242,7 +241,7 @@ void InProcessBrowserTest::SetUp() {
   // Always use a mocked password storage if OS encryption is used (which is
   // when anything sensitive gets stored, including Cookies). Without this on
   // Mac, many tests will hang waiting for a user to approve KeyChain access.
-  OSCryptMocker::SetUpWithSingleton();
+  OSCryptMocker::SetUp();
 
 #if BUILDFLAG(ENABLE_CAPTIVE_PORTAL_DETECTION)
   CaptivePortalService::set_state_for_testing(
@@ -255,9 +254,6 @@ void InProcessBrowserTest::SetUp() {
   google_util::SetMockLinkDoctorBaseURLForTesting();
 
 #if defined(OS_CHROMEOS)
-  // Polymer Elements are used for quick unlock configuration in options page,
-  // which is chromeos specific feature.
-  options::BrowserOptionsHandler::DisablePolymerPreloadForTesting();
   // On Chrome OS, access to files via file: scheme is restricted. Enable
   // access to all files here since browser_tests and interactive_ui_tests
   // rely on the ability to open any files via file: scheme.

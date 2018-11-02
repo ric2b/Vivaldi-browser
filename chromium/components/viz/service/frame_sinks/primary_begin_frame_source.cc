@@ -12,7 +12,7 @@ PrimaryBeginFrameSource::PrimaryBeginFrameSource()
 PrimaryBeginFrameSource::~PrimaryBeginFrameSource() = default;
 
 void PrimaryBeginFrameSource::OnBeginFrameSourceAdded(
-    cc::BeginFrameSource* begin_frame_source) {
+    BeginFrameSource* begin_frame_source) {
   sources_.insert(begin_frame_source);
 
   if (current_begin_frame_source_)
@@ -24,7 +24,7 @@ void PrimaryBeginFrameSource::OnBeginFrameSourceAdded(
 }
 
 void PrimaryBeginFrameSource::OnBeginFrameSourceRemoved(
-    cc::BeginFrameSource* begin_frame_source) {
+    BeginFrameSource* begin_frame_source) {
   sources_.erase(begin_frame_source);
   if (current_begin_frame_source_ != begin_frame_source)
     return;
@@ -41,27 +41,26 @@ void PrimaryBeginFrameSource::OnBeginFrameSourceRemoved(
     current_begin_frame_source_->AddObserver(this);
 }
 
-void PrimaryBeginFrameSource::OnBeginFrame(const cc::BeginFrameArgs& args) {
+void PrimaryBeginFrameSource::OnBeginFrame(const BeginFrameArgs& args) {
   begin_frame_source_.OnBeginFrame(args);
   last_begin_frame_args_ = args;
 }
 
-const cc::BeginFrameArgs& PrimaryBeginFrameSource::LastUsedBeginFrameArgs()
-    const {
+const BeginFrameArgs& PrimaryBeginFrameSource::LastUsedBeginFrameArgs() const {
   return last_begin_frame_args_;
 }
 
 void PrimaryBeginFrameSource::OnBeginFrameSourcePausedChanged(bool paused) {}
 
-void PrimaryBeginFrameSource::DidFinishFrame(cc::BeginFrameObserver* obs) {
+void PrimaryBeginFrameSource::DidFinishFrame(BeginFrameObserver* obs) {
   begin_frame_source_.DidFinishFrame(obs);
 }
 
-void PrimaryBeginFrameSource::AddObserver(cc::BeginFrameObserver* obs) {
+void PrimaryBeginFrameSource::AddObserver(BeginFrameObserver* obs) {
   begin_frame_source_.AddObserver(obs);
 }
 
-void PrimaryBeginFrameSource::RemoveObserver(cc::BeginFrameObserver* obs) {
+void PrimaryBeginFrameSource::RemoveObserver(BeginFrameObserver* obs) {
   begin_frame_source_.RemoveObserver(obs);
 }
 

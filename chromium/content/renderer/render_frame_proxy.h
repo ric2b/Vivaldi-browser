@@ -7,6 +7,7 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "components/viz/common/surfaces/local_surface_id_allocator.h"
 #include "content/common/content_export.h"
 #include "content/common/feature_policy/feature_policy.h"
 #include "ipc/ipc_listener.h"
@@ -56,10 +57,9 @@ struct FrameReplicationState;
 // RenderFrameProxy will be deleted when the node in the frame tree is deleted
 // or when navigating the frame causes it to return to this process and a new
 // RenderFrame is created for it.
-class CONTENT_EXPORT RenderFrameProxy
-    : public IPC::Listener,
-      public IPC::Sender,
-      NON_EXPORTED_BASE(public blink::WebRemoteFrameClient) {
+class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
+                                        public IPC::Sender,
+                                        public blink::WebRemoteFrameClient {
  public:
   // This method should be used to create a RenderFrameProxy, which will replace
   // an existing RenderFrame during its cross-process navigation from the
@@ -157,6 +157,8 @@ class CONTENT_EXPORT RenderFrameProxy
             RenderViewImpl* render_view,
             RenderWidget* render_widget);
 
+  void ResendFrameRects();
+
   // IPC::Listener
   bool OnMessageReceived(const IPC::Message& msg) override;
 
@@ -167,6 +169,7 @@ class CONTENT_EXPORT RenderFrameProxy
   void OnSetChildFrameSurface(const viz::SurfaceInfo& surface_info,
                               const viz::SurfaceSequence& sequence);
   void OnUpdateOpener(int opener_routing_id);
+  void OnViewChanged(const viz::FrameSinkId& frame_sink_id);
   void OnDidStopLoading();
   void OnDidUpdateFramePolicy(
       blink::WebSandboxFlags flags,
@@ -200,6 +203,13 @@ class CONTENT_EXPORT RenderFrameProxy
 
   RenderViewImpl* render_view_;
   RenderWidget* render_widget_;
+
+  gfx::Rect frame_rect_;
+  viz::FrameSinkId frame_sink_id_;
+  viz::LocalSurfaceId local_surface_id_;
+  viz::LocalSurfaceIdAllocator local_surface_id_allocator_;
+
+  bool enable_surface_synchronization_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(RenderFrameProxy);
 };

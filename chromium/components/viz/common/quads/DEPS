@@ -1,5 +1,9 @@
 include_rules = [
+  # TODO(staraz): cc/base was added because SharedQuadState includes
+  # cc::MathUtil. Remove it once cc/base/math_util* are moved to viz.
+  "+cc/base",
+
   "+gpu/command_buffer/common",
   "+mojo/public/cpp/bindings",
-  "+ui/gfx",
+  "+third_party/skia",
 ]

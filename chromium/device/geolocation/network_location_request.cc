@@ -140,7 +140,7 @@ bool NetworkLocationRequest::MakeRequest(const base::string16& access_token,
           destination: GOOGLE_OWNED_SERVICE
         }
         policy {
-          cookies_allowed: false
+          cookies_allowed: NO
           setting:
             "Users can control this feature via the Location setting under "
             "'Privacy', 'Content Settings...'."
@@ -277,9 +277,9 @@ void AddWifiData(const WifiData& wifi_data,
   for (const auto& ap_data : wifi_data.access_point_data)
     access_points_by_signal_strength.insert(&ap_data);
 
-  auto wifi_access_point_list = base::MakeUnique<base::ListValue>();
+  auto wifi_access_point_list = std::make_unique<base::ListValue>();
   for (auto* ap_data : access_points_by_signal_strength) {
-    auto wifi_dict = base::MakeUnique<base::DictionaryValue>();
+    auto wifi_dict = std::make_unique<base::DictionaryValue>();
     AddString("macAddress", base::UTF16ToUTF8(ap_data->mac_address),
               wifi_dict.get());
     AddInteger("signalStrength", ap_data->radio_signal_strength,

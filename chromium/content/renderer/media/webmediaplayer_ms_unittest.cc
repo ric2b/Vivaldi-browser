@@ -202,13 +202,39 @@ class MockMediaStreamVideoRenderer : public MediaStreamVideoRenderer {
   base::TimeDelta delay_till_next_generated_frame_;
 };
 
+class MockMediaStreamAudioRenderer : public MediaStreamAudioRenderer {
+ public:
+  MockMediaStreamAudioRenderer() {}
+
+  void Start() override {}
+  void Stop() override {}
+  void Play() override {}
+  void Pause() override {}
+  void SetVolume(float volume) override {}
+  media::OutputDeviceInfo GetOutputDeviceInfo() override {
+    return media::OutputDeviceInfo();
+  }
+
+  void SwitchOutputDevice(
+      const std::string& device_id,
+      const url::Origin& security_origin,
+      const media::OutputDeviceStatusCB& callback) override {}
+  base::TimeDelta GetCurrentRenderTime() const override {
+    return base::TimeDelta();
+  }
+
+  bool IsLocalRenderer() const override { return true; }
+
+ protected:
+  ~MockMediaStreamAudioRenderer() override {}
+};
+
 void MockMediaStreamVideoRenderer::Start() {
   started_ = true;
   paused_ = false;
   task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&MockMediaStreamVideoRenderer::InjectFrame,
-                 base::Unretained(this)));
+      FROM_HERE, base::BindOnce(&MockMediaStreamVideoRenderer::InjectFrame,
+                                base::Unretained(this)));
 }
 
 void MockMediaStreamVideoRenderer::Stop() {
@@ -316,8 +342,8 @@ void MockMediaStreamVideoRenderer::InjectFrame() {
 
   task_runner_->PostDelayedTask(
       FROM_HERE,
-      base::Bind(&MockMediaStreamVideoRenderer::InjectFrame,
-                 base::Unretained(this)),
+      base::BindOnce(&MockMediaStreamVideoRenderer::InjectFrame,
+                     base::Unretained(this)),
       delay_till_next_generated_frame_);
 
   // This will pause the |message_loop_|, and the purpose is to allow the main
@@ -356,13 +382,26 @@ class MockRenderFactory : public MediaStreamRendererFactory {
       int render_frame_id,
       const std::string& device_id,
       const url::Origin& security_origin) override {
-    return nullptr;
+    return audio_renderer_;
   }
+
+  void set_audio_renderer(scoped_refptr<MediaStreamAudioRenderer> renderer) {
+    audio_renderer_ = std::move(renderer);
+  }
+
+  void set_support_video_renderer(bool support) {
+    DCHECK(!provider_);
+    support_video_renderer_ = support;
+  }
+
+  bool support_video_renderer() const { return support_video_renderer_; }
 
  private:
   const scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   scoped_refptr<MediaStreamVideoRenderer> provider_;
   ReusableMessageLoopEvent* const message_loop_controller_;
+  bool support_video_renderer_ = true;
+  scoped_refptr<MediaStreamAudioRenderer> audio_renderer_;
 };
 
 scoped_refptr<MediaStreamVideoRenderer> MockRenderFactory::GetVideoRenderer(
@@ -373,6 +412,9 @@ scoped_refptr<MediaStreamVideoRenderer> MockRenderFactory::GetVideoRenderer(
     const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
     const scoped_refptr<base::TaskRunner>& worker_task_runner,
     media::GpuVideoAcceleratorFactories* gpu_factories) {
+  if (!support_video_renderer_)
+    return nullptr;
+
   provider_ = new MockMediaStreamVideoRenderer(task_runner_,
       message_loop_controller_, error_cb, repaint_cb);
 
@@ -466,6 +508,8 @@ class WebMediaPlayerMSTest
   void DisconnectedFromRemoteDevice() override {}
   void CancelledRemotePlaybackRequest() override {}
   void RemotePlaybackStarted() override {}
+  void RemotePlaybackCompatibilityChanged(const blink::WebURL& url,
+                                          bool is_compatible) override {}
   void OnBecamePersistentVideo(bool) override {}
   bool IsAutoplayingMuted() override { return false; }
   bool HasSelectedVideoTrack() override { return false; }
@@ -473,9 +517,14 @@ class WebMediaPlayerMSTest
     return blink::WebMediaPlayer::TrackId();
   }
   bool HasNativeControls() override { return false; }
+  bool IsAudioElement() override { return is_audio_element_; }
   blink::WebMediaPlayer::DisplayType DisplayType() const override {
     return blink::WebMediaPlayer::DisplayType::kInline;
   }
+  void ActivateViewportIntersectionMonitoring(bool activate) override {}
+  void MediaRemotingStarted(
+      const blink::WebString& remote_device_friendly_name) override {}
+  void MediaRemotingStopped() override {}
 
   // Implementation of cc::VideoFrameProvider::Client
   void StopUsingProvider() override;
@@ -505,6 +554,7 @@ class WebMediaPlayerMSTest
   WebMediaPlayerMSCompositor* compositor_;
   ReusableMessageLoopEvent message_loop_controller_;
   blink::WebLayer* web_layer_;
+  bool is_audio_element_ = false;
 
  private:
   // Main function trying to ask WebMediaPlayerMS to submit a frame for
@@ -532,9 +582,12 @@ MockMediaStreamVideoRenderer* WebMediaPlayerMSTest::LoadAndGetFrameProvider(
   EXPECT_TRUE(!!compositor_);
   compositor_->SetAlgorithmEnabledForTesting(algorithm_enabled);
 
-  MockMediaStreamVideoRenderer* const provider = render_factory_->provider();
-  EXPECT_TRUE(!!provider);
-  EXPECT_TRUE(provider->Started());
+  MockMediaStreamVideoRenderer* provider = nullptr;
+  if (render_factory_->support_video_renderer()) {
+    provider = render_factory_->provider();
+    EXPECT_TRUE(!!provider);
+    EXPECT_TRUE(provider->Started());
+  }
 
   testing::Mock::VerifyAndClearExpectations(this);
   return provider;
@@ -579,8 +632,8 @@ void WebMediaPlayerMSTest::StartRendering() {
   if (!rendering_) {
     rendering_ = true;
     message_loop_.task_runner()->PostTask(
-        FROM_HERE,
-        base::Bind(&WebMediaPlayerMSTest::RenderFrame, base::Unretained(this)));
+        FROM_HERE, base::BindOnce(&WebMediaPlayerMSTest::RenderFrame,
+                                  base::Unretained(this)));
   }
   DoStartRendering();
 }
@@ -610,13 +663,70 @@ void WebMediaPlayerMSTest::RenderFrame() {
   }
   message_loop_.task_runner()->PostDelayedTask(
       FROM_HERE,
-      base::Bind(&WebMediaPlayerMSTest::RenderFrame, base::Unretained(this)),
+      base::BindOnce(&WebMediaPlayerMSTest::RenderFrame,
+                     base::Unretained(this)),
       base::TimeDelta::FromSecondsD(1.0 / 60.0));
 }
 
 void WebMediaPlayerMSTest::SizeChanged() {
   gfx::Size frame_size = compositor_->GetCurrentSize();
   CheckSizeChanged(frame_size);
+}
+
+TEST_F(WebMediaPlayerMSTest, NoDataDuringLoadForVideo) {
+  EXPECT_CALL(*this, DoReadyStateChanged(
+                         blink::WebMediaPlayer::kReadyStateHaveMetadata))
+      .Times(0);
+  EXPECT_CALL(*this, DoReadyStateChanged(
+                         blink::WebMediaPlayer::kReadyStateHaveEnoughData))
+      .Times(0);
+
+  LoadAndGetFrameProvider(true);
+
+  message_loop_controller_.RunAndWaitForStatus(
+      media::PipelineStatus::PIPELINE_OK);
+  testing::Mock::VerifyAndClearExpectations(this);
+
+  EXPECT_CALL(*this, DoSetWebLayer(false));
+}
+
+TEST_F(WebMediaPlayerMSTest, NoWaitForFrameForAudio) {
+  is_audio_element_ = true;
+  scoped_refptr<MediaStreamAudioRenderer> audio_renderer(
+      new MockMediaStreamAudioRenderer());
+  render_factory_->set_audio_renderer(audio_renderer);
+  EXPECT_CALL(*this, DoNetworkStateChanged(
+                         blink::WebMediaPlayer::kNetworkStateLoading));
+  EXPECT_CALL(*this, DoReadyStateChanged(
+                         blink::WebMediaPlayer::kReadyStateHaveNothing));
+
+  EXPECT_CALL(*this, DoReadyStateChanged(
+                         blink::WebMediaPlayer::kReadyStateHaveMetadata));
+  EXPECT_CALL(*this, DoReadyStateChanged(
+                         blink::WebMediaPlayer::kReadyStateHaveEnoughData));
+
+  player_->Load(blink::WebMediaPlayer::kLoadTypeURL,
+                blink::WebMediaPlayerSource(),
+                blink::WebMediaPlayer::kCORSModeUnspecified);
+
+  message_loop_controller_.RunAndWaitForStatus(
+      media::PipelineStatus::PIPELINE_OK);
+  testing::Mock::VerifyAndClearExpectations(this);
+
+  EXPECT_CALL(*this, DoSetWebLayer(false));
+}
+
+TEST_F(WebMediaPlayerMSTest, NoWaitForFrameForAudioOnly) {
+  render_factory_->set_support_video_renderer(false);
+  scoped_refptr<MediaStreamAudioRenderer> audio_renderer(
+      new MockMediaStreamAudioRenderer());
+  render_factory_->set_audio_renderer(audio_renderer);
+  EXPECT_CALL(*this, DoReadyStateChanged(
+                         blink::WebMediaPlayer::kReadyStateHaveMetadata));
+  EXPECT_CALL(*this, DoReadyStateChanged(
+                         blink::WebMediaPlayer::kReadyStateHaveEnoughData));
+  LoadAndGetFrameProvider(true);
+  EXPECT_CALL(*this, DoSetWebLayer(false));
 }
 
 TEST_F(WebMediaPlayerMSTest, Playing_Normal) {

@@ -6,6 +6,7 @@
 
 #include <memory>
 #include "bindings/core/v8/V8BindingForCore.h"
+#include "bindings/core/v8/V8ContextSnapshot.h"
 #include "bindings/core/v8/V8GCController.h"
 #include "bindings/core/v8/V8IdleTaskRunner.h"
 #include "bindings/core/v8/V8Initializer.h"
@@ -18,8 +19,19 @@
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebTraceLocation.h"
+#include "public/web/WebKit.h"
 
 namespace blink {
+
+// Wrapper functions defined in WebKit.h
+void MemoryPressureNotificationToWorkerThreadIsolates(
+    v8::MemoryPressureLevel level) {
+  WorkerBackingThread::MemoryPressureNotificationToWorkerThreadIsolates(level);
+}
+
+void SetRAILModeOnWorkerThreadIsolates(v8::RAILMode rail_mode) {
+  WorkerBackingThread::SetRAILModeOnWorkerThreadIsolates(rail_mode);
+}
 
 static Mutex& IsolatesMutex() {
   DEFINE_THREAD_SAFE_STATIC_LOCAL(Mutex, mutex, ());
@@ -64,8 +76,13 @@ void WorkerBackingThread::InitializeOnBackingThread(
   backing_thread_->InitializeOnThread();
 
   DCHECK(!isolate_);
+  // Use nullptr for |external_reference_table|, since it's used for the context
+  // snapshot feature which workers don't use.
+  intptr_t* external_reference_table = nullptr;
   isolate_ = V8PerIsolateData::Initialize(
-      backing_thread_->PlatformThread().GetWebTaskRunner());
+      backing_thread_->PlatformThread().GetWebTaskRunner(),
+      external_reference_table,
+      V8PerIsolateData::V8ContextSnapshotMode::kDontUseSnapshot);
   AddWorkerIsolate(isolate_);
   V8Initializer::InitializeWorker(isolate_);
 

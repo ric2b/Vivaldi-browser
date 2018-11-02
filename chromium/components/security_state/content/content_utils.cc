@@ -11,6 +11,7 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "components/security_state/content/ssl_status_input_event_data.h"
 #include "components/security_state/core/security_state.h"
 #include "components/strings/grit/components_chromium_strings.h"
 #include "components/strings/grit/components_strings.h"
@@ -39,9 +40,7 @@ blink::WebSecurityStyle SecurityLevelToSecurityStyle(
     case security_state::NONE:
     case security_state::HTTP_SHOW_WARNING:
       return blink::kWebSecurityStyleNeutral;
-    case security_state::SECURITY_WARNING:
     case security_state::SECURE_WITH_POLICY_INSTALLED_CERT:
-      return blink::kWebSecurityStyleWarning;
     case security_state::EV_SECURE:
     case security_state::SECURE:
       return blink::kWebSecurityStyleSecure;
@@ -56,21 +55,27 @@ blink::WebSecurityStyle SecurityLevelToSecurityStyle(
 void ExplainHTTPSecurity(
     const security_state::SecurityInfo& security_info,
     content::SecurityStyleExplanations* security_style_explanations) {
-  if (security_info.security_level == security_state::HTTP_SHOW_WARNING) {
-    if (security_info.displayed_password_field_on_http ||
-        security_info.displayed_credit_card_field_on_http) {
-      security_style_explanations->neutral_explanations.push_back(
-          content::SecurityStyleExplanation(
-              l10n_util::GetStringUTF8(IDS_PRIVATE_USER_DATA_INPUT),
-              l10n_util::GetStringUTF8(
-                  IDS_PRIVATE_USER_DATA_INPUT_DESCRIPTION)));
-    }
-    if (security_info.incognito_downgraded_security_level) {
-      security_style_explanations->neutral_explanations.push_back(
-          content::SecurityStyleExplanation(
-              l10n_util::GetStringUTF8(IDS_INCOGNITO_NONSECURE),
-              l10n_util::GetStringUTF8(IDS_INCOGNITO_NONSECURE_DESCRIPTION)));
-    }
+  if (security_info.security_level != security_state::HTTP_SHOW_WARNING)
+    return;
+
+  if (security_info.field_edit_downgraded_security_level) {
+    security_style_explanations->neutral_explanations.push_back(
+        content::SecurityStyleExplanation(
+            l10n_util::GetStringUTF8(IDS_EDITED_NONSECURE),
+            l10n_util::GetStringUTF8(IDS_EDITED_NONSECURE_DESCRIPTION)));
+  }
+  if (security_info.displayed_password_field_on_http ||
+      security_info.displayed_credit_card_field_on_http) {
+    security_style_explanations->neutral_explanations.push_back(
+        content::SecurityStyleExplanation(
+            l10n_util::GetStringUTF8(IDS_PRIVATE_USER_DATA_INPUT),
+            l10n_util::GetStringUTF8(IDS_PRIVATE_USER_DATA_INPUT_DESCRIPTION)));
+  }
+  if (security_info.incognito_downgraded_security_level) {
+    security_style_explanations->neutral_explanations.push_back(
+        content::SecurityStyleExplanation(
+            l10n_util::GetStringUTF8(IDS_INCOGNITO_NONSECURE),
+            l10n_util::GetStringUTF8(IDS_INCOGNITO_NONSECURE_DESCRIPTION)));
   }
 }
 
@@ -92,7 +97,7 @@ void ExplainCertificateSecurity(
         content::SecurityStyleExplanation(
             l10n_util::GetStringUTF8(IDS_SHA1),
             l10n_util::GetStringUTF8(IDS_SHA1_DESCRIPTION),
-            !!security_info.certificate,
+            security_info.certificate,
             blink::WebMixedContentContextType::kNotMixedContent));
   }
 
@@ -101,7 +106,7 @@ void ExplainCertificateSecurity(
         content::SecurityStyleExplanation(
             l10n_util::GetStringUTF8(IDS_SUBJECT_ALT_NAME_MISSING),
             l10n_util::GetStringUTF8(IDS_SUBJECT_ALT_NAME_MISSING_DESCRIPTION),
-            !!security_info.certificate,
+            security_info.certificate,
             blink::WebMixedContentContextType::kNotMixedContent));
   }
 
@@ -117,7 +122,7 @@ void ExplainCertificateSecurity(
         l10n_util::GetStringUTF8(IDS_CERTIFICATE_CHAIN_ERROR),
         l10n_util::GetStringFUTF8(
             IDS_CERTIFICATE_CHAIN_ERROR_DESCRIPTION_FORMAT, error_string),
-        !!security_info.certificate,
+        security_info.certificate,
         blink::WebMixedContentContextType::kNotMixedContent);
 
     if (is_cert_status_minor_error) {
@@ -148,7 +153,7 @@ void ExplainCertificateSecurity(
               l10n_util::GetStringUTF8(IDS_VALID_SERVER_CERTIFICATE),
               l10n_util::GetStringFUTF8(
                   IDS_VALID_SERVER_CERTIFICATE_DESCRIPTION, issuer_name),
-              !!security_info.certificate,
+              security_info.certificate,
               blink::WebMixedContentContextType::kNotMixedContent));
     }
   }
@@ -254,21 +259,46 @@ void ExplainContentSecurity(
       SecurityLevelToSecurityStyle(
           security_state::kDisplayedInsecureContentLevel);
 
-  // Record the presence of mixed content (HTTP subresources on an HTTPS
-  // page).
+  // Add the secure explanation unless there is an issue.
+  bool add_secure_explanation = true;
+
   security_style_explanations->ran_mixed_content =
       security_info.mixed_content_status ==
           security_state::CONTENT_STATUS_RAN ||
       security_info.mixed_content_status ==
           security_state::CONTENT_STATUS_DISPLAYED_AND_RAN;
+  if (security_style_explanations->ran_mixed_content) {
+    add_secure_explanation = false;
+    security_style_explanations->insecure_explanations.push_back(
+        content::SecurityStyleExplanation(
+            l10n_util::GetStringUTF8(IDS_MIXED_ACTIVE_CONTENT_SUMMARY),
+            l10n_util::GetStringUTF8(IDS_MIXED_ACTIVE_CONTENT_DESCRIPTION),
+            nullptr, blink::WebMixedContentContextType::kBlockable));
+  }
+
   security_style_explanations->displayed_mixed_content =
       security_info.mixed_content_status ==
           security_state::CONTENT_STATUS_DISPLAYED ||
       security_info.mixed_content_status ==
           security_state::CONTENT_STATUS_DISPLAYED_AND_RAN;
+  if (security_style_explanations->displayed_mixed_content) {
+    add_secure_explanation = false;
+    security_style_explanations->neutral_explanations.push_back(
+        content::SecurityStyleExplanation(
+            l10n_util::GetStringUTF8(IDS_MIXED_PASSIVE_CONTENT_SUMMARY),
+            l10n_util::GetStringUTF8(IDS_MIXED_PASSIVE_CONTENT_DESCRIPTION),
+            nullptr, blink::WebMixedContentContextType::kOptionallyBlockable));
+  }
 
   security_style_explanations->contained_mixed_form =
       security_info.contained_mixed_form;
+  if (security_style_explanations->contained_mixed_form) {
+    add_secure_explanation = false;
+    security_style_explanations->neutral_explanations.push_back(
+        content::SecurityStyleExplanation(
+            l10n_util::GetStringUTF8(IDS_NON_SECURE_FORM_SUMMARY),
+            l10n_util::GetStringUTF8(IDS_NON_SECURE_FORM_DESCRIPTION)));
+  }
 
   // If the main resource was loaded with no certificate errors or only minor
   // certificate errors, then record the presence of subresources with
@@ -285,11 +315,36 @@ void ExplainContentSecurity(
             security_state::CONTENT_STATUS_RAN ||
         security_info.content_with_cert_errors_status ==
             security_state::CONTENT_STATUS_DISPLAYED_AND_RAN;
+    if (security_style_explanations->ran_content_with_cert_errors) {
+      add_secure_explanation = false;
+      security_style_explanations->insecure_explanations.push_back(
+          content::SecurityStyleExplanation(
+              l10n_util::GetStringUTF8(IDS_CERT_ERROR_ACTIVE_CONTENT_SUMMARY),
+              l10n_util::GetStringUTF8(
+                  IDS_CERT_ERROR_ACTIVE_CONTENT_DESCRIPTION)));
+    }
+
     security_style_explanations->displayed_content_with_cert_errors =
         security_info.content_with_cert_errors_status ==
             security_state::CONTENT_STATUS_DISPLAYED ||
         security_info.content_with_cert_errors_status ==
             security_state::CONTENT_STATUS_DISPLAYED_AND_RAN;
+    if (security_style_explanations->displayed_content_with_cert_errors) {
+      add_secure_explanation = false;
+      security_style_explanations->neutral_explanations.push_back(
+          content::SecurityStyleExplanation(
+              l10n_util::GetStringUTF8(IDS_CERT_ERROR_PASSIVE_CONTENT_SUMMARY),
+              l10n_util::GetStringUTF8(
+                  IDS_CERT_ERROR_PASSIVE_CONTENT_DESCRIPTION)));
+    }
+  }
+
+  if (add_secure_explanation) {
+    DCHECK(security_info.scheme_is_cryptographic);
+    security_style_explanations->secure_explanations.push_back(
+        content::SecurityStyleExplanation(
+            l10n_util::GetStringUTF8(IDS_SECURE_RESOURCES_SUMMARY),
+            l10n_util::GetStringUTF8(IDS_SECURE_RESOURCES_DESCRIPTION)));
   }
 }
 
@@ -331,6 +386,12 @@ std::unique_ptr<security_state::VisibleSecurityState> GetVisibleSecurityState(
   state->displayed_credit_card_field_on_http =
       !!(ssl.content_status &
          content::SSLStatus::DISPLAYED_CREDIT_CARD_FIELD_ON_HTTP);
+
+  SSLStatusInputEventData* input_events =
+      static_cast<SSLStatusInputEventData*>(ssl.user_data.get());
+
+  if (input_events)
+    state->insecure_input_events = *input_events->input_events();
 
   return state;
 }

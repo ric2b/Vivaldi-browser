@@ -14,6 +14,10 @@ class PrefRegistrySimple;
 class PrefService;
 
 namespace prefs {
+// Boolean that is true when Chrome settings page should show change password
+// warning.
+extern const char kSafeBrowsingChangePasswordInSettingsEnabled[];
+
 // Boolean that is true when SafeBrowsing is enabled.
 extern const char kSafeBrowsingEnabled[];
 
@@ -85,7 +89,7 @@ enum ExtendedReportingLevel {
 // These values are written to logs.  New enum values can be added, but
 // existing enums must never be renumbered or deleted and reused.
 enum ExtendedReportingOptInLocation {
-  // The chrome://settings UI (also shared with chrome://md-settings).
+  // The chrome://settings UI.
   SBER_OPTIN_SITE_CHROME_SETTINGS = 0,
   // The Android settings UI.
   SBER_OPTIN_SITE_ANDROID_SETTINGS = 1,

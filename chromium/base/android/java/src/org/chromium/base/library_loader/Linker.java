@@ -247,7 +247,7 @@ public abstract class Linker {
                 boolean isIncrementalInstall =
                         appClass != null && appClass.contains("incrementalinstall");
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !isIncrementalInstall) {
-                    sSingleton = ModernLinker.create();
+                    sSingleton = LegacyLinker.create(); //!!
                 } else {
                     sSingleton = LegacyLinker.create();
                 }

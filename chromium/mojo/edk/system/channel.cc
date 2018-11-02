@@ -15,6 +15,7 @@
 #include "base/memory/aligned_memory.h"
 #include "base/numerics/safe_math.h"
 #include "base/process/process_handle.h"
+#include "build/build_config.h"
 #include "mojo/edk/embedder/embedder_internal.h"
 #include "mojo/edk/embedder/platform_handle.h"
 #include "mojo/edk/system/configuration.h"
@@ -53,7 +54,11 @@ static_assert(offsetof(Channel::Message::LegacyHeader, message_type) ==
 
 const size_t kReadBufferSize = 4096;
 const size_t kMaxUnusedReadBufferCapacity = 4096;
-const size_t kMaxAttachedHandles = 128;
+
+// TODO(rockot): Increase this if/when Channel implementations support more.
+// Linux: The platform imposes a limit of 253 handles per sendmsg().
+// Fuchsia: The mx_channel_write() API supports up to 64 handles.
+const size_t kMaxAttachedHandles = 64;
 
 Channel::Message::Message(size_t payload_size, size_t max_handles)
     : Message(payload_size, payload_size, max_handles) {}
@@ -87,6 +92,9 @@ Channel::Message::Message(size_t capacity,
 #if defined(OS_WIN)
   // On Windows we serialize HANDLEs into the extra header space.
   extra_header_size = max_handles_ * sizeof(HandleEntry);
+#elif defined(OS_FUCHSIA)
+  // On Fuchsia we serialize handle types into the extra header space.
+  extra_header_size = max_handles_ * sizeof(HandleInfoEntry);
 #elif defined(OS_MACOSX) && !defined(OS_IOS)
   // On OSX, some of the platform handles may be mach ports, which are
   // serialised into the message buffer. Since there could be a mix of fds and
@@ -193,6 +201,8 @@ Channel::MessagePtr Channel::Message::Deserialize(const void* data,
 
 #if defined(OS_WIN)
   uint32_t max_handles = extra_header_size / sizeof(HandleEntry);
+#elif defined(OS_FUCHSIA)
+  uint32_t max_handles = extra_header_size / sizeof(HandleInfoEntry);
 #elif defined(OS_MACOSX) && !defined(OS_IOS)
   if (extra_header_size > 0 &&
       extra_header_size < sizeof(MachPortsExtraHeader)) {
@@ -265,10 +275,21 @@ void Channel::Message::ExtendPayload(size_t new_payload_size) {
     size_t new_capacity =
         std::max(capacity_without_header * 2, new_payload_size) + header_size;
     void* new_data = base::AlignedAlloc(new_capacity, kChannelMessageAlignment);
-    memcpy(new_data, data_, size_);
+    memcpy(new_data, data_, capacity_);
     base::AlignedFree(data_);
     data_ = static_cast<char*>(new_data);
     capacity_ = new_capacity;
+
+    if (max_handles_ > 0) {
+// We also need to update the cached extra header addresses in case the
+// payload buffer has been relocated.
+#if defined(OS_WIN)
+      handles_ = reinterpret_cast<HandleEntry*>(mutable_extra_header());
+#elif defined(OS_MACOSX) && !defined(OS_IOS)
+      mach_ports_header_ =
+          reinterpret_cast<MachPortsExtraHeader*>(mutable_extra_header());
+#endif
+    }
   }
   size_ = header_size + new_payload_size;
   DCHECK(base::IsValueInRangeForNumericType<uint32_t>(size_));

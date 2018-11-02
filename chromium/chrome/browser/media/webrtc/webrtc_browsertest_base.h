@@ -55,6 +55,15 @@ class WebRtcTestBase : public InProcessBrowserTest {
     INDIVIDUAL_STREAMS
   };
 
+  struct TrackEvent {
+    explicit TrackEvent(const std::string& track_id);
+    TrackEvent(const TrackEvent&);
+    ~TrackEvent();
+
+    std::string track_id;
+    std::vector<std::string> stream_ids;
+  };
+
  protected:
   WebRtcTestBase();
   ~WebRtcTestBase() override;
@@ -193,8 +202,13 @@ class WebRtcTestBase : public InProcessBrowserTest {
   // Change the default audio/video codec in the offer SDP.
   void SetDefaultAudioCodec(content::WebContents* tab,
                             const std::string& audio_codec) const;
+  // |prefer_hw_codec| controls if the first or last codec with name
+  // |video_codec| should be selected. External video codecs are currently at
+  // the end of the SDP list. This parameter only matters if there are multiple
+  // codecs with the same name, which can be the case for H264.
   void SetDefaultVideoCodec(content::WebContents* tab,
-                            const std::string& video_codec) const;
+                            const std::string& video_codec,
+                            bool prefer_hw_codec = false) const;
 
   // Add 'usedtx=1' to the offer SDP.
   void EnableOpusDtx(content::WebContents* tab) const;
@@ -222,6 +236,7 @@ class WebRtcTestBase : public InProcessBrowserTest {
   bool HasReceiverWithTrack(content::WebContents* tab,
                             std::string track_id) const;
   size_t GetNegotiationNeededCount(content::WebContents* tab) const;
+  std::vector<TrackEvent> GetTrackEvents(content::WebContents* tab) const;
   // Performs garbage collection with "gc()". Requires command line switch
   // |kJavaScriptFlags| with "--expose-gc".
   void CollectGarbage(content::WebContents* tab) const;

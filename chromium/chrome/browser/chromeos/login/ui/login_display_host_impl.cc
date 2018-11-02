@@ -16,7 +16,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
@@ -94,12 +94,13 @@
 #include "ui/base/ime/chromeos/input_method_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/compositor/compositor_observer.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_observer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
-#include "ui/events/devices/device_data_manager.h"
+#include "ui/events/devices/input_device_manager.h"
 #include "ui/events/event_handler.h"
 #include "ui/events/event_utils.h"
 #include "ui/gfx/geometry/rect.h"
@@ -190,20 +191,29 @@ void ShowLoginWizardFinish(
     chromeos::LoginDisplayHost* display_host) {
   TRACE_EVENT0("chromeos", "ShowLoginWizard::ShowLoginWizardFinish");
 
+  // Restore system timezone.
+  std::string timezone;
+  if (chromeos::system::PerUserTimezoneEnabled()) {
+    timezone = g_browser_process->local_state()->GetString(
+        prefs::kSigninScreenTimezone);
+  }
+
   if (ShouldShowSigninScreen(first_screen)) {
     display_host->StartSignInScreen(chromeos::LoginScreenContext());
   } else {
     display_host->StartWizard(first_screen);
 
     // Set initial timezone if specified by customization.
-    const std::string timezone_name = startup_manifest->initial_timezone();
-    VLOG(1) << "Initial time zone: " << timezone_name;
+    const std::string customization_timezone =
+        startup_manifest->initial_timezone();
+    VLOG(1) << "Initial time zone: " << customization_timezone;
     // Apply locale customizations only once to preserve whatever locale
     // user has changed to during OOBE.
-    if (!timezone_name.empty()) {
-      chromeos::system::TimezoneSettings::GetInstance()->SetTimezoneFromID(
-          base::UTF8ToUTF16(timezone_name));
-    }
+    if (!customization_timezone.empty())
+      timezone = customization_timezone;
+  }
+  if (!timezone.empty()) {
+    chromeos::system::SetSystemAndSigninScreenTimezone(timezone);
   }
 }
 
@@ -275,10 +285,6 @@ std::string GetManagedLoginScreenLocale() {
   return login_screen_locale;
 }
 
-void EnableSystemSoundsForAccessibility() {
-  chromeos::AccessibilityManager::Get()->EnableSystemSounds(true);
-}
-
 // Disables virtual keyboard overscroll. Login UI will scroll user pods
 // into view on JS side when virtual keyboard is shown.
 void DisableKeyboardOverscroll() {
@@ -300,6 +306,42 @@ void ScheduleCompletionCallbacks(std::vector<base::OnceClosure>&& callbacks) {
                                                   std::move(callback));
   }
 }
+
+class CloseAfterCommit : public ui::CompositorObserver,
+                         public views::WidgetObserver {
+ public:
+  explicit CloseAfterCommit(views::Widget* widget) : widget_(widget) {
+    widget->GetCompositor()->AddObserver(this);
+    widget_->AddObserver(this);
+  }
+  ~CloseAfterCommit() override {
+    widget_->RemoveObserver(this);
+    widget_->GetCompositor()->RemoveObserver(this);
+  }
+
+  // ui::CompositorObserver:
+  void OnCompositingDidCommit(ui::Compositor* compositor) override {
+    DCHECK_EQ(widget_->GetCompositor(), compositor);
+    widget_->Close();
+  }
+
+  void OnCompositingStarted(ui::Compositor* compositor,
+                            base::TimeTicks start_time) override {}
+  void OnCompositingEnded(ui::Compositor* compositor) override {}
+  void OnCompositingLockStateChanged(ui::Compositor* compositor) override {}
+  void OnCompositingShuttingDown(ui::Compositor* compositor) override {}
+
+  // views::WidgetObserver:
+  void OnWidgetDestroying(views::Widget* widget) override {
+    DCHECK_EQ(widget, widget_);
+    delete this;
+  }
+
+ private:
+  views::Widget* const widget_;
+
+  DISALLOW_COPY_AND_ASSIGN(CloseAfterCommit);
+};
 
 }  // namespace
 
@@ -372,6 +414,7 @@ class LoginDisplayHostImpl::LoginWidgetDelegate : public views::WidgetDelegate {
 
 LoginDisplayHostImpl::LoginDisplayHostImpl(const gfx::Rect& wallpaper_bounds)
     : wallpaper_bounds_(wallpaper_bounds),
+      startup_sound_played_(StartupUtils::IsOobeCompleted()),
       pointer_factory_(this),
       animation_weak_ptr_factory_(this) {
   if (ash_util::IsRunningInMash()) {
@@ -385,11 +428,7 @@ LoginDisplayHostImpl::LoginDisplayHostImpl(const gfx::Rect& wallpaper_bounds)
 
   display::Screen::GetScreen()->AddObserver(this);
 
-  // TODO(crbug.com/747267): Add Mash case. Not strictly needed since callee in
-  // observer method is NOP in Mash, but good for symmetry and to avoid leaking
-  // implementation details about OobeUI.
-  if (!ash_util::IsRunningInMash())
-    ui::DeviceDataManager::GetInstance()->AddObserver(this);
+  ui::InputDeviceManager::GetInstance()->AddObserver(this);
 
   // We need to listen to CLOSE_ALL_BROWSERS_REQUEST but not APP_TERMINATING
   // because/ APP_TERMINATING will never be fired as long as this keeps
@@ -501,11 +540,7 @@ LoginDisplayHostImpl::~LoginDisplayHostImpl() {
   CrasAudioHandler::Get()->RemoveAudioObserver(this);
   display::Screen::GetScreen()->RemoveObserver(this);
 
-  // TODO(crbug.com/747267): Add Mash case. Not strictly needed since callee in
-  // observer method is NOP in Mash, but good for symmetry and to avoid leaking
-  // implementation details about OobeUI.
-  if (!ash_util::IsRunningInMash())
-    ui::DeviceDataManager::GetInstance()->RemoveObserver(this);
+  ui::InputDeviceManager::GetInstance()->RemoveObserver(this);
 
   if (login_view_ && login_window_)
     login_window_->RemoveRemovalsObserver(this);
@@ -592,9 +627,9 @@ void LoginDisplayHostImpl::Finalize(base::OnceClosure completion_callback) {
   }
 }
 
-void LoginDisplayHostImpl::OpenProxySettings() {
+void LoginDisplayHostImpl::OpenProxySettings(const std::string& network_id) {
   if (login_view_)
-    login_view_->OpenProxySettings();
+    login_view_->OpenProxySettings(network_id);
 }
 
 void LoginDisplayHostImpl::SetStatusAreaVisible(bool visible) {
@@ -607,7 +642,6 @@ void LoginDisplayHostImpl::SetStatusAreaVisible(bool visible) {
 void LoginDisplayHostImpl::StartWizard(OobeScreen first_screen) {
   DisableKeyboardOverscroll();
 
-  startup_sound_honors_spoken_feedback_ = false;
   TryToPlayStartupSound();
 
   // Keep parameters to restore if renderer crashes.
@@ -709,9 +743,6 @@ void LoginDisplayHostImpl::CancelUserAdding() {
 void LoginDisplayHostImpl::StartSignInScreen(
     const LoginScreenContext& context) {
   DisableKeyboardOverscroll();
-
-  startup_sound_honors_spoken_feedback_ = true;
-  TryToPlayStartupSound();
 
   restore_path_ = RESTORE_SIGN_IN;
   is_showing_login_ = true;
@@ -1021,6 +1052,11 @@ void LoginDisplayHostImpl::OnDisplayMetricsChanged(
   }
 
   if (GetOobeUI()) {
+    // Reset widget size for voice interaction OOBE, since the screen rotation
+    // will break the widget size if it is not full screen.
+    if (is_voice_interaction_oobe_)
+      login_window_->SetSize(primary_display.work_area_size());
+
     const gfx::Size& size = primary_display.size();
     GetOobeUI()->GetCoreOobeView()->SetClientAreaSize(size.width(),
                                                       size.height());
@@ -1064,7 +1100,7 @@ void LoginDisplayHostImpl::ShutdownDisplayHost(bool post_quit_task) {
   registrar_.RemoveAll();
   base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
   if (post_quit_task)
-    base::MessageLoop::current()->QuitWhenIdle();
+    base::RunLoop::QuitCurrentWhenIdleDeprecated();
 }
 
 void LoginDisplayHostImpl::ScheduleWorkspaceAnimation() {
@@ -1234,7 +1270,15 @@ void LoginDisplayHostImpl::ResetLoginWindowAndView() {
   }
 
   if (login_window_) {
-    login_window_->Close();
+    if (ash_util::IsRunningInMash()) {
+      login_window_->Close();
+    } else {
+      login_window_->Hide();
+      // This CompositorObserver becomes "owned" by login_window_ after
+      // construction and will delete itself once login_window_ is destroyed.
+      new CloseAfterCommit(login_window_);
+    }
+    login_window_->RemoveRemovalsObserver(this);
     login_window_ = nullptr;
     login_window_delegate_ = nullptr;
   }
@@ -1263,27 +1307,11 @@ void LoginDisplayHostImpl::TryToPlayStartupSound() {
   // for a long time or can't be played.
   if (base::TimeTicks::Now() - login_prompt_visible_time_ >
       base::TimeDelta::FromMilliseconds(kStartupSoundMaxDelayMs)) {
-    EnableSystemSoundsForAccessibility();
     return;
   }
 
-  if (!startup_sound_honors_spoken_feedback_ &&
-      !AccessibilityManager::Get()->PlayEarcon(SOUND_STARTUP,
-                                               PlaySoundOption::ALWAYS)) {
-    EnableSystemSoundsForAccessibility();
-    return;
-  }
-
-  if (startup_sound_honors_spoken_feedback_ &&
-      !AccessibilityManager::Get()->PlayEarcon(
-          SOUND_STARTUP, PlaySoundOption::SPOKEN_FEEDBACK_ENABLED)) {
-    EnableSystemSoundsForAccessibility();
-    return;
-  }
-
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::BindOnce(&EnableSystemSoundsForAccessibility),
-      media::SoundsManager::Get()->GetDuration(SOUND_STARTUP));
+  AccessibilityManager::Get()->PlayEarcon(SOUND_STARTUP,
+                                          PlaySoundOption::ALWAYS);
 }
 
 void LoginDisplayHostImpl::OnLoginPromptVisible() {

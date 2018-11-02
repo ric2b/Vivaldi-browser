@@ -4,12 +4,12 @@
 
 #include "core/layout/ng/ng_layout_input_node.h"
 
+#include "core/layout/LayoutReplaced.h"
+#include "core/layout/MinMaxSize.h"
+#include "core/layout/ng/geometry/ng_logical_size.h"
 #include "core/layout/ng/inline/ng_inline_node.h"
-#include "core/layout/ng/layout_ng_block_flow.h"
 #include "core/layout/ng/ng_block_node.h"
 #include "core/layout/ng/ng_layout_result.h"
-#include "core/layout/ng/ng_min_max_content_size.h"
-#include "core/layout/ng/ng_unpositioned_float.h"
 #include "platform/wtf/text/StringBuilder.h"
 
 namespace blink {
@@ -73,19 +73,54 @@ bool NGLayoutInputNode::IsOutOfFlowPositioned() const {
   return IsBlock() && Style().HasOutOfFlowPosition();
 }
 
-bool NGLayoutInputNode::CreatesNewFormattingContext() const {
-  return box_->AvoidsFloats();
+bool NGLayoutInputNode::IsReplaced() const {
+  return box_->IsLayoutReplaced();
 }
 
-RefPtr<NGLayoutResult> NGLayoutInputNode::Layout(NGConstraintSpace* space,
+bool NGLayoutInputNode::IsQuirkyContainer() const {
+  return box_->GetDocument().InQuirksMode() &&
+         (box_->IsBody() || box_->IsTableCell());
+}
+
+bool NGLayoutInputNode::CreatesNewFormattingContext() const {
+  return IsBlock() && box_->AvoidsFloats();
+}
+
+RefPtr<NGLayoutResult> NGLayoutInputNode::Layout(const NGConstraintSpace& space,
                                                  NGBreakToken* break_token) {
   return IsInline() ? ToNGInlineNode(*this).Layout(space, break_token)
                     : ToNGBlockNode(*this).Layout(space, break_token);
 }
 
-MinMaxContentSize NGLayoutInputNode::ComputeMinMaxContentSize() {
-  return IsInline() ? ToNGInlineNode(*this).ComputeMinMaxContentSize()
-                    : ToNGBlockNode(*this).ComputeMinMaxContentSize();
+MinMaxSize NGLayoutInputNode::ComputeMinMaxSize() {
+  return IsInline() ? ToNGInlineNode(*this).ComputeMinMaxSize()
+                    : ToNGBlockNode(*this).ComputeMinMaxSize();
+}
+
+void NGLayoutInputNode::IntrinsicSize(
+    NGLogicalSize* default_intrinsic_size,
+    Optional<LayoutUnit>* computed_inline_size,
+    Optional<LayoutUnit>* computed_block_size,
+    NGLogicalSize* aspect_ratio) const {
+  DCHECK(IsReplaced());
+
+  LayoutSize box_intrinsic_size = box_->IntrinsicSize();
+  // Transform to logical coordinates if needed.
+  if (!Style().IsHorizontalWritingMode())
+    box_intrinsic_size = box_intrinsic_size.TransposedSize();
+  *default_intrinsic_size =
+      NGLogicalSize(box_intrinsic_size.Width(), box_intrinsic_size.Height());
+
+  LayoutReplaced::IntrinsicSizingInfo legacy_sizing_info;
+
+  ToLayoutReplaced(box_)->ComputeIntrinsicSizingInfo(legacy_sizing_info);
+  if (legacy_sizing_info.has_width)
+    *computed_inline_size = LayoutUnit(legacy_sizing_info.size.Width());
+  if (legacy_sizing_info.has_height)
+    *computed_block_size = LayoutUnit(legacy_sizing_info.size.Height());
+  *aspect_ratio =
+      NGLogicalSize(LayoutUnit(legacy_sizing_info.aspect_ratio.Width()),
+                    LayoutUnit(legacy_sizing_info.aspect_ratio.Height()));
 }
 
 NGLayoutInputNode NGLayoutInputNode::NextSibling() {

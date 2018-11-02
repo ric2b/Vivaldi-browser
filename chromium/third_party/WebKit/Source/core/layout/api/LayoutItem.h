@@ -17,7 +17,6 @@ class LocalFrame;
 class LocalFrameView;
 class LayoutViewItem;
 class Node;
-class ObjectPaintProperties;
 
 class LayoutItem {
   DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
@@ -111,7 +110,7 @@ class LayoutItem {
     return layout_object_->MutableStyleRef();
   }
 
-  void SetStyle(PassRefPtr<ComputedStyle> style) {
+  void SetStyle(RefPtr<ComputedStyle> style) {
     layout_object_->SetStyle(std::move(style));
   }
 
@@ -219,15 +218,11 @@ class LayoutItem {
     return layout_object_->ResolveColor(color_property);
   }
 
-  const ObjectPaintProperties* PaintProperties() const {
-    return layout_object_->PaintProperties();
-  }
-
   void InvalidatePaintRectangle(const LayoutRect& dirty_rect) const {
     layout_object_->InvalidatePaintRectangle(dirty_rect);
   }
 
-  PassRefPtr<ComputedStyle> GetUncachedPseudoStyle(
+  RefPtr<ComputedStyle> GetUncachedPseudoStyle(
       const PseudoStyleRequest& pseudo_style_request,
       const ComputedStyle* parent_style = nullptr) const {
     return layout_object_->GetUncachedPseudoStyle(pseudo_style_request,

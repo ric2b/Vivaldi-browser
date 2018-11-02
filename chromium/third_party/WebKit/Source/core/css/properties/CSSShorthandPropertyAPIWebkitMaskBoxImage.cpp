@@ -11,12 +11,13 @@
 
 namespace blink {
 
-bool CSSShorthandPropertyAPIWebkitMaskBoxImage::parseShorthand(
+bool CSSShorthandPropertyAPIWebkitMaskBoxImage::ParseShorthand(
+    CSSPropertyID,
     bool important,
     CSSParserTokenRange& range,
     const CSSParserContext& context,
-    bool,
-    HeapVector<CSSProperty, 256>& properties) {
+    const CSSParserLocalContext&,
+    HeapVector<CSSProperty, 256>& properties) const {
   CSSValue* source = nullptr;
   CSSValue* slice = nullptr;
   CSSValue* width = nullptr;
@@ -24,7 +25,8 @@ bool CSSShorthandPropertyAPIWebkitMaskBoxImage::parseShorthand(
   CSSValue* repeat = nullptr;
 
   if (!CSSPropertyBorderImageUtils::ConsumeBorderImageComponents(
-          range, &context, source, slice, width, outset, repeat, true)) {
+          range, context, source, slice, width, outset, repeat,
+          DefaultFill::kFill)) {
     return false;
   }
 

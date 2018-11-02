@@ -19,6 +19,7 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
+#include "content/public/test/navigation_simulator.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/web_contents_tester.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -129,7 +130,9 @@ class SafeBrowsingUIManagerTest : public ChromeRenderViewHostTestHarness {
 
     // The WC doesn't have a URL without a navigation. A main-frame malware
     // unsafe resource must be a pending navigation.
-    content::WebContentsTester::For(web_contents())->StartNavigation(GURL(url));
+    auto navigation = content::NavigationSimulator::CreateBrowserInitiated(
+        GURL(url), web_contents());
+    navigation->Start();
     return resource;
   }
 
@@ -153,20 +156,39 @@ class SafeBrowsingUIManagerTest : public ChromeRenderViewHostTestHarness {
   scoped_refptr<SafeBrowsingUIManager> ui_manager_;
 };
 
-TEST_F(SafeBrowsingUIManagerTest, Whitelist) {
+// Leaks memory. https://crbug.com/755118
+#if defined(LEAK_SANITIZER)
+#define MAYBE_Whitelist DISABLED_Whitelist
+#else
+#define MAYBE_Whitelist Whitelist
+#endif
+TEST_F(SafeBrowsingUIManagerTest, MAYBE_Whitelist) {
   security_interstitials::UnsafeResource resource =
       MakeUnsafeResourceAndStartNavigation(kBadURL);
   AddToWhitelist(resource);
   EXPECT_TRUE(IsWhitelisted(resource));
 }
 
-TEST_F(SafeBrowsingUIManagerTest, WhitelistIgnoresSitesNotAdded) {
+// Leaks memory. https://crbug.com/755118
+#if defined(LEAK_SANITIZER)
+#define MAYBE_WhitelistIgnoresSitesNotAdded \
+  DISABLED_WhitelistIgnoresSitesNotAdded
+#else
+#define MAYBE_WhitelistIgnoresSitesNotAdded WhitelistIgnoresSitesNotAdded
+#endif
+TEST_F(SafeBrowsingUIManagerTest, MAYBE_WhitelistIgnoresSitesNotAdded) {
   security_interstitials::UnsafeResource resource =
       MakeUnsafeResourceAndStartNavigation(kGoodURL);
   EXPECT_FALSE(IsWhitelisted(resource));
 }
 
-TEST_F(SafeBrowsingUIManagerTest, WhitelistRemembersThreatType) {
+// Leaks memory. https://crbug.com/755118
+#if defined(LEAK_SANITIZER)
+#define MAYBE_WhitelistRemembersThreatType DISABLED_WhitelistRemembersThreatType
+#else
+#define MAYBE_WhitelistRemembersThreatType WhitelistRemembersThreatType
+#endif
+TEST_F(SafeBrowsingUIManagerTest, MAYBE_WhitelistRemembersThreatType) {
   security_interstitials::UnsafeResource resource =
       MakeUnsafeResourceAndStartNavigation(kBadURL);
   AddToWhitelist(resource);
@@ -181,7 +203,13 @@ TEST_F(SafeBrowsingUIManagerTest, WhitelistRemembersThreatType) {
   EXPECT_EQ(resource.threat_type, threat_type);
 }
 
-TEST_F(SafeBrowsingUIManagerTest, WhitelistIgnoresPath) {
+// Leaks memory. https://crbug.com/755118
+#if defined(LEAK_SANITIZER)
+#define MAYBE_WhitelistIgnoresPath DISABLED_WhitelistIgnoresPath
+#else
+#define MAYBE_WhitelistIgnoresPath WhitelistIgnoresPath
+#endif
+TEST_F(SafeBrowsingUIManagerTest, MAYBE_WhitelistIgnoresPath) {
   security_interstitials::UnsafeResource resource =
       MakeUnsafeResourceAndStartNavigation(kBadURL);
   AddToWhitelist(resource);
@@ -194,7 +222,13 @@ TEST_F(SafeBrowsingUIManagerTest, WhitelistIgnoresPath) {
   EXPECT_TRUE(IsWhitelisted(resource_path));
 }
 
-TEST_F(SafeBrowsingUIManagerTest, WhitelistIgnoresThreatType) {
+// Leaks memory. https://crbug.com/755118
+#if defined(LEAK_SANITIZER)
+#define MAYBE_WhitelistIgnoresThreatType DISABLED_WhitelistIgnoresThreatType
+#else
+#define MAYBE_WhitelistIgnoresThreatType WhitelistIgnoresThreatType
+#endif
+TEST_F(SafeBrowsingUIManagerTest, MAYBE_WhitelistIgnoresThreatType) {
   security_interstitials::UnsafeResource resource =
       MakeUnsafeResourceAndStartNavigation(kBadURL);
   AddToWhitelist(resource);
@@ -206,17 +240,27 @@ TEST_F(SafeBrowsingUIManagerTest, WhitelistIgnoresThreatType) {
   EXPECT_TRUE(IsWhitelisted(resource_phishing));
 }
 
-TEST_F(SafeBrowsingUIManagerTest, WhitelistWithUnrelatedPendingLoad) {
+// Leaks memory. https://crbug.com/755118
+#if defined(LEAK_SANITIZER)
+#define MAYBE_WhitelistWithUnrelatedPendingLoad \
+  DISABLED_WhitelistWithUnrelatedPendingLoad
+#else
+#define MAYBE_WhitelistWithUnrelatedPendingLoad \
+  WhitelistWithUnrelatedPendingLoad
+#endif
+TEST_F(SafeBrowsingUIManagerTest, MAYBE_WhitelistWithUnrelatedPendingLoad) {
   // Commit load of landing page.
   NavigateAndCommit(GURL(kLandingURL));
+  auto unrelated_navigation =
+      content::NavigationSimulator::CreateBrowserInitiated(GURL(kGoodURL),
+                                                           web_contents());
   {
     // Simulate subresource malware hit on the landing page.
     security_interstitials::UnsafeResource resource =
         MakeUnsafeResource(kBadURL, true /* is_subresource */);
 
     // Start pending load to unrelated site.
-    content::WebContentsTester::For(web_contents())
-        ->StartNavigation(GURL(kGoodURL));
+    unrelated_navigation->Start();
 
     // Whitelist the resource on the landing page.
     AddToWhitelist(resource);
@@ -224,7 +268,7 @@ TEST_F(SafeBrowsingUIManagerTest, WhitelistWithUnrelatedPendingLoad) {
   }
 
   // Commit the pending load of unrelated site.
-  content::WebContentsTester::For(web_contents())->CommitPendingNavigation();
+  unrelated_navigation->Commit();
   {
     // The unrelated site is not on the whitelist, even if the same subresource
     // was on it.
@@ -250,7 +294,13 @@ TEST_F(SafeBrowsingUIManagerTest, WhitelistWithUnrelatedPendingLoad) {
   }
 }
 
-TEST_F(SafeBrowsingUIManagerTest, UICallbackProceed) {
+// Leaks memory. https://crbug.com/755118
+#if defined(LEAK_SANITIZER)
+#define MAYBE_UICallbackProceed DISABLED_UICallbackProceed
+#else
+#define MAYBE_UICallbackProceed UICallbackProceed
+#endif
+TEST_F(SafeBrowsingUIManagerTest, MAYBE_UICallbackProceed) {
   security_interstitials::UnsafeResource resource =
       MakeUnsafeResourceAndStartNavigation(kBadURL);
   SafeBrowsingCallbackWaiter waiter;
@@ -268,7 +318,13 @@ TEST_F(SafeBrowsingUIManagerTest, UICallbackProceed) {
   EXPECT_TRUE(waiter.proceed());
 }
 
-TEST_F(SafeBrowsingUIManagerTest, UICallbackDontProceed) {
+// Leaks memory. https://crbug.com/755118
+#if defined(LEAK_SANITIZER)
+#define MAYBE_UICallbackDontProceed DISABLED_UICallbackDontProceed
+#else
+#define MAYBE_UICallbackDontProceed UICallbackDontProceed
+#endif
+TEST_F(SafeBrowsingUIManagerTest, MAYBE_UICallbackDontProceed) {
   security_interstitials::UnsafeResource resource =
       MakeUnsafeResourceAndStartNavigation(kBadURL);
   SafeBrowsingCallbackWaiter waiter;
@@ -286,7 +342,13 @@ TEST_F(SafeBrowsingUIManagerTest, UICallbackDontProceed) {
   EXPECT_FALSE(waiter.proceed());
 }
 
-TEST_F(SafeBrowsingUIManagerTest, IOCallbackProceed) {
+// Leaks memory. https://crbug.com/755118
+#if defined(LEAK_SANITIZER)
+#define MAYBE_IOCallbackProceed DISABLED_IOCallbackProceed
+#else
+#define MAYBE_IOCallbackProceed IOCallbackProceed
+#endif
+TEST_F(SafeBrowsingUIManagerTest, MAYBE_IOCallbackProceed) {
   security_interstitials::UnsafeResource resource =
       MakeUnsafeResourceAndStartNavigation(kBadURL);
   SafeBrowsingCallbackWaiter waiter;
@@ -304,7 +366,13 @@ TEST_F(SafeBrowsingUIManagerTest, IOCallbackProceed) {
   EXPECT_TRUE(waiter.proceed());
 }
 
-TEST_F(SafeBrowsingUIManagerTest, IOCallbackDontProceed) {
+// Leaks memory. https://crbug.com/755118
+#if defined(LEAK_SANITIZER)
+#define MAYBE_IOCallbackDontProceed DISABLED_IOCallbackDontProceed
+#else
+#define MAYBE_IOCallbackDontProceed IOCallbackDontProceed
+#endif
+TEST_F(SafeBrowsingUIManagerTest, MAYBE_IOCallbackDontProceed) {
   security_interstitials::UnsafeResource resource =
       MakeUnsafeResourceAndStartNavigation(kBadURL);
   SafeBrowsingCallbackWaiter waiter;
@@ -398,8 +466,16 @@ class TestSafeBrowsingBlockingPageFactory
 
 // Tests that the WebContentsDelegate is notified of a visible security
 // state change when a blocking page is shown for a subresource.
+// Leaks memory. https://crbug.com/755118
+#if defined(LEAK_SANITIZER)
+#define MAYBE_VisibleSecurityStateChangedForUnsafeSubresource \
+  DISABLED_VisibleSecurityStateChangedForUnsafeSubresource
+#else
+#define MAYBE_VisibleSecurityStateChangedForUnsafeSubresource \
+  VisibleSecurityStateChangedForUnsafeSubresource
+#endif
 TEST_F(SafeBrowsingUIManagerTest,
-       VisibleSecurityStateChangedForUnsafeSubresource) {
+       MAYBE_VisibleSecurityStateChangedForUnsafeSubresource) {
   TestSafeBrowsingBlockingPageFactory factory;
   SafeBrowsingBlockingPage::RegisterFactory(&factory);
   SecurityStateWebContentsDelegate delegate;

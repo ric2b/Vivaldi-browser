@@ -5,6 +5,7 @@
 #include <stddef.h>
 
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "gpu/command_buffer/service/gpu_preferences.h"
 #include "media/mojo/interfaces/video_encode_accelerator.mojom.h"
 #include "media/mojo/services/mojo_video_encode_accelerator_service.h"
@@ -180,6 +181,21 @@ TEST_F(MojoVideoEncodeAcceleratorServiceTest, EncodingParametersChange) {
   EXPECT_EQ(kNewBitrate, fake_vea()->stored_bitrates().front());
 }
 
+// This test verifies that MojoVEA::Initialize() fails with an invalid |client|.
+TEST_F(MojoVideoEncodeAcceleratorServiceTest,
+       InitializeWithInvalidClientFails) {
+  CreateMojoVideoEncodeAccelerator();
+
+  mojom::VideoEncodeAcceleratorClientPtr invalid_mojo_vea_client = nullptr;
+
+  const uint32_t kInitialBitrate = 100000u;
+  mojo_vea_service()->Initialize(
+      PIXEL_FORMAT_I420, kInputVisibleSize, H264PROFILE_MIN, kInitialBitrate,
+      std::move(invalid_mojo_vea_client),
+      base::Bind([](bool success) { ASSERT_FALSE(success); }));
+  base::RunLoop().RunUntilIdle();
+}
+
 // This test verifies that when FakeVEA is configured to fail upon start,
 // MojoVEA::Initialize() causes a NotifyError().
 TEST_F(MojoVideoEncodeAcceleratorServiceTest, InitializeFailure) {
@@ -190,10 +206,6 @@ TEST_F(MojoVideoEncodeAcceleratorServiceTest, InitializeFailure) {
   auto mojo_vea_binding = mojo::MakeStrongBinding(
       base::MakeUnique<MockMojoVideoEncodeAcceleratorClient>(),
       mojo::MakeRequest(&mojo_vea_client));
-
-  EXPECT_CALL(*static_cast<media::MockMojoVideoEncodeAcceleratorClient*>(
-                  mojo_vea_binding->impl()),
-              NotifyError(VideoEncodeAccelerator::kPlatformFailureError));
 
   const uint32_t kInitialBitrate = 100000u;
   mojo_vea_service()->Initialize(

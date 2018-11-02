@@ -2,9 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/extensions/api/tabs/tabs_api.h"
+#include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/extensions/api/tabs/tabs_api.h"
 #include "chrome/browser/extensions/api/tabs/tabs_constants.h"
 #include "chrome/browser/extensions/extension_function_test_utils.h"
 #include "chrome/browser/extensions/extension_service_test_base.h"
@@ -20,7 +21,6 @@
 #include "extensions/browser/api_test_utils.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension_builder.h"
-#include "extensions/common/test_util.h"
 
 namespace extensions {
 
@@ -108,7 +108,7 @@ TEST_F(TabsApiUnitTest, QueryWithoutTabsPermission) {
       "[{\"title\": \"Sample title\", \"url\": \"*://www.google.com/*\"}]";
 
   // An extension without "tabs" permission will see none of the 3 tabs.
-  scoped_refptr<const Extension> extension = test_util::CreateEmptyExtension();
+  scoped_refptr<const Extension> extension = ExtensionBuilder("Test").Build();
   std::unique_ptr<base::ListValue> tabs_list_without_permission(
       RunTabsQueryFunction(browser(), extension.get(), kTitleAndURLQueryInfo));
   ASSERT_TRUE(tabs_list_without_permission);

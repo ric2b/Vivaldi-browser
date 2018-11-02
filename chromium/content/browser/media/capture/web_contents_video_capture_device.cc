@@ -17,7 +17,6 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
-#include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "content/browser/media/capture/cursor_renderer.h"
 #include "content/browser/media/capture/web_contents_tracker.h"
@@ -48,9 +47,6 @@ namespace {
 // periods of animated content not being detected (due to CPU fluctations for
 // example) from causing a flip-flop on interactive mode.
 constexpr int64_t kMinPeriodNoAnimationMillis = 3000;
-
-// The delay in ms before capturing the webcontents for tab casting in guests.
-constexpr int kFrameCaptureRateForGuest = 33; // 1000/33 = ~30 fps.
 
 // FrameSubscriber is a proxy to the ThreadSafeCaptureOracle that's compatible
 // with RenderWidgetHostViewFrameSubscriber. One is created per event type.
@@ -152,10 +148,6 @@ class ContentCaptureSubscription {
   // Responsible for tracking the UI events and making a decision on whether
   // user is actively interacting with content.
   std::unique_ptr<content::WindowActivityTracker> window_activity_tracker_;
-
-  // NOTE(andre@vivaldi.com): Used in Vivaldi to trigger frame captures for tab
-  // casting of the guestview.
-  base::RepeatingTimer guest_capture_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(ContentCaptureSubscription);
 };
@@ -369,19 +361,8 @@ ContentCaptureSubscription::ContentCaptureSubscription(
                            : base::WeakPtr<CursorRenderer>(),
           window_activity_tracker_ ? window_activity_tracker_->GetWeakPtr()
                                    : base::WeakPtr<WindowActivityTracker>()));
-
-  // NOTE(andre@vivaldi.com): This needs to subscribe to
-  // RenderWidgetHostViewChildFrame changes when |RenderWidgetHostViewGuest| is
-  // retired.
-  if (source_view_->IsRenderWidgetHostViewGuest()) {
-    guest_capture_timer_.Start(
-        FROM_HERE, base::TimeDelta::FromMilliseconds(kFrameCaptureRateForGuest),
-        base::Bind(&ContentCaptureSubscription::OnEvent, base::Unretained(this),
-                   refresh_subscriber_.get()));
-
-  } else {
   source_view_->BeginFrameSubscription(std::move(subscriber));
-  }
+
   // Begin monitoring for user activity that is used to signal "interactive
   // content."
   if (window_activity_tracker_) {
@@ -490,8 +471,8 @@ bool WebContentsCaptureMachine::InternalStart(
 void WebContentsCaptureMachine::Suspend() {
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(&WebContentsCaptureMachine::InternalSuspend,
-                 base::Unretained(this)));
+      base::BindOnce(&WebContentsCaptureMachine::InternalSuspend,
+                     base::Unretained(this)));
 }
 
 void WebContentsCaptureMachine::InternalSuspend() {
@@ -504,9 +485,10 @@ void WebContentsCaptureMachine::InternalSuspend() {
 }
 
 void WebContentsCaptureMachine::Resume() {
-  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                          base::Bind(&WebContentsCaptureMachine::InternalResume,
-                                     base::Unretained(this)));
+  BrowserThread::PostTask(
+      BrowserThread::UI, FROM_HERE,
+      base::BindOnce(&WebContentsCaptureMachine::InternalResume,
+                     base::Unretained(this)));
 }
 
 void WebContentsCaptureMachine::InternalResume() {
@@ -519,9 +501,10 @@ void WebContentsCaptureMachine::InternalResume() {
 }
 
 void WebContentsCaptureMachine::Stop(const base::Closure& callback) {
-  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                          base::Bind(&WebContentsCaptureMachine::InternalStop,
-                                     base::Unretained(this), callback));
+  BrowserThread::PostTask(
+      BrowserThread::UI, FROM_HERE,
+      base::BindOnce(&WebContentsCaptureMachine::InternalStop,
+                     base::Unretained(this), callback));
 }
 
 void WebContentsCaptureMachine::InternalStop(const base::Closure& callback) {
@@ -545,10 +528,11 @@ void WebContentsCaptureMachine::InternalStop(const base::Closure& callback) {
 void WebContentsCaptureMachine::MaybeCaptureForRefresh() {
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(&WebContentsCaptureMachine::InternalMaybeCaptureForRefresh,
-                 // Use of Unretained() is safe here since this task must run
-                 // before InternalStop().
-                 base::Unretained(this)));
+      base::BindOnce(
+          &WebContentsCaptureMachine::InternalMaybeCaptureForRefresh,
+          // Use of Unretained() is safe here since this task must run
+          // before InternalStop().
+          base::Unretained(this)));
 }
 
 void WebContentsCaptureMachine::InternalMaybeCaptureForRefresh() {

@@ -20,6 +20,7 @@
 #include "base/threading/thread_checker.h"
 #include "components/content_settings/core/browser/content_settings_observer.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
+#include "components/content_settings/core/browser/user_modifiable_provider.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_types.h"
@@ -60,6 +61,11 @@ class HostContentSettingsMap : public content_settings::Observer,
     NOTIFICATION_ANDROID_PROVIDER,
     PREF_PROVIDER,
     DEFAULT_PROVIDER,
+
+    // The following providers are for tests only.
+    PROVIDER_FOR_TESTS,
+    OTHER_PROVIDER_FOR_TESTS,
+
     NUM_PROVIDER_TYPES
   };
 
@@ -72,6 +78,16 @@ class HostContentSettingsMap : public content_settings::Observer,
                          bool store_last_modified);
 
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+
+  // Adds a new provider for |type|. This should be used instead of
+  // |RegisterProvider|, not in addition.
+  //
+  // Providers added via this method will be queried when
+  // |GetSettingLastModifiedDate| is called and their settings may be cleared by
+  // |ClearSettingsForOneTypeWithPredicate| if they were recently modified.
+  void RegisterUserModifiableProvider(
+      ProviderType type,
+      std::unique_ptr<content_settings::UserModifiableProvider> provider);
 
   // Adds a new provider for |type|.
   void RegisterProvider(
@@ -285,6 +301,11 @@ class HostContentSettingsMap : public content_settings::Observer,
   // |last_modified| timestamp.
   void SetClockForTesting(std::unique_ptr<base::Clock> clock);
 
+  // Returns the provider that contains content settings from user preferences.
+  content_settings::PrefProvider* GetPrefProvider() const {
+    return pref_provider_;
+  }
+
  private:
   friend class base::RefCountedThreadSafe<HostContentSettingsMap>;
 
@@ -385,6 +406,12 @@ class HostContentSettingsMap : public content_settings::Observer,
   // before any other uses of it.
   std::map<ProviderType, std::unique_ptr<content_settings::ProviderInterface>>
       content_settings_providers_;
+
+  // List of content settings providers containing settings which can be
+  // modified by the user. Members are owned by the
+  // |content_settings_providers_| map above.
+  std::vector<content_settings::UserModifiableProvider*>
+      user_modifiable_providers_;
 
   // content_settings_providers_[PREF_PROVIDER] but specialized.
   content_settings::PrefProvider* pref_provider_ = nullptr;

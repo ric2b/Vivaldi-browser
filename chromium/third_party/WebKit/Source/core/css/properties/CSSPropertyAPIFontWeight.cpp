@@ -4,15 +4,17 @@
 
 #include "core/css/properties/CSSPropertyAPIFontWeight.h"
 
+#include "core/css/parser/CSSParserContext.h"
 #include "core/css/properties/CSSPropertyFontUtils.h"
 
 namespace blink {
 
-const CSSValue* CSSPropertyAPIFontWeight::parseSingleValue(
+const CSSValue* CSSPropertyAPIFontWeight::ParseSingleValue(
+    CSSPropertyID,
     CSSParserTokenRange& range,
-    const CSSParserContext&,
-    const CSSParserLocalContext&) {
-  return CSSPropertyFontUtils::ConsumeFontWeight(range);
+    const CSSParserContext& context,
+    const CSSParserLocalContext&) const {
+  return CSSPropertyFontUtils::ConsumeFontWeight(range, context.Mode());
 }
 
 }  // namespace blink

@@ -12,11 +12,13 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/values.h"
 #include "chrome/browser/ui/autofill/save_card_bubble_view.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
+#include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/credit_card.h"
@@ -122,7 +124,7 @@ class SaveCardBubbleControllerImplTest : public BrowserWithTestWindowTest {
   }
 
  private:
-  class TestSaveCardBubbleView : public SaveCardBubbleView {
+  class TestSaveCardBubbleView final : public SaveCardBubbleView {
     void Hide() override {}
   };
 
@@ -534,6 +536,10 @@ TEST_F(SaveCardBubbleControllerImplTest, Metrics_Local_Reshows_LearnMore) {
 }
 
 TEST_F(SaveCardBubbleControllerImplTest, Metrics_Upload_FirstShow_LearnMore) {
+  // Learn More link only appears on upload if new UI is disabled.
+  base::test::ScopedFeatureList scoped_feature_list_;
+  scoped_feature_list_.InitAndDisableFeature(kAutofillUpstreamShowNewUi);
+
   ShowUploadBubble();
 
   base::HistogramTester histogram_tester;
@@ -545,6 +551,10 @@ TEST_F(SaveCardBubbleControllerImplTest, Metrics_Upload_FirstShow_LearnMore) {
 }
 
 TEST_F(SaveCardBubbleControllerImplTest, Metrics_Upload_Reshows_LearnMore) {
+  // Learn More link only appears on upload if new UI is disabled.
+  base::test::ScopedFeatureList scoped_feature_list_;
+  scoped_feature_list_.InitAndDisableFeature(kAutofillUpstreamShowNewUi);
+
   ShowUploadBubble();
   CloseAndReshowBubble();
 
@@ -604,6 +614,217 @@ TEST_F(SaveCardBubbleControllerImplTest,
       ElementsAre(
           Bucket(AutofillMetrics::SAVE_CARD_PROMPT_SHOW_REQUESTED, 1),
           Bucket(AutofillMetrics::SAVE_CARD_PROMPT_END_INVALID_LEGAL_MESSAGE,
+                 1)));
+}
+
+TEST_F(SaveCardBubbleControllerImplTest,
+       Metrics_Upload_FirstShow_CvcFixFlow_Shown) {
+  base::HistogramTester histogram_tester;
+  ShowUploadBubble();
+  controller()->ContinueToRequestCvcStage();
+
+  EXPECT_THAT(
+      histogram_tester.GetAllSamples(
+          "Autofill.SaveCreditCardPrompt.Upload.FirstShow"),
+      ElementsAre(
+          Bucket(AutofillMetrics::SAVE_CARD_PROMPT_SHOW_REQUESTED, 1),
+          Bucket(AutofillMetrics::SAVE_CARD_PROMPT_SHOWN, 1),
+          Bucket(AutofillMetrics::SAVE_CARD_PROMPT_CVC_FIX_FLOW_SHOWN, 1)));
+}
+
+TEST_F(SaveCardBubbleControllerImplTest,
+       Metrics_Upload_Reshows_CvcFixFlow_Shown) {
+  base::HistogramTester histogram_tester;
+  ShowUploadBubble();
+  CloseAndReshowBubble();
+  controller()->ContinueToRequestCvcStage();
+
+  EXPECT_THAT(
+      histogram_tester.GetAllSamples(
+          "Autofill.SaveCreditCardPrompt.Upload.Reshows"),
+      ElementsAre(
+          Bucket(AutofillMetrics::SAVE_CARD_PROMPT_SHOW_REQUESTED, 1),
+          Bucket(AutofillMetrics::SAVE_CARD_PROMPT_SHOWN, 1),
+          Bucket(AutofillMetrics::SAVE_CARD_PROMPT_CVC_FIX_FLOW_SHOWN, 1)));
+}
+
+TEST_F(SaveCardBubbleControllerImplTest,
+       Metrics_Upload_FirstShow_CvcFixFlow_SaveButton) {
+  ShowUploadBubble();
+  controller()->ContinueToRequestCvcStage();
+
+  base::HistogramTester histogram_tester;
+  controller()->OnSaveButton();
+  controller()->OnBubbleClosed();
+
+  EXPECT_THAT(
+      histogram_tester.GetAllSamples(
+          "Autofill.SaveCreditCardPrompt.Upload.FirstShow"),
+      ElementsAre(
+          Bucket(AutofillMetrics::SAVE_CARD_PROMPT_END_ACCEPTED, 1),
+          Bucket(AutofillMetrics::SAVE_CARD_PROMPT_CVC_FIX_FLOW_END_ACCEPTED,
+                 1)));
+}
+
+TEST_F(SaveCardBubbleControllerImplTest,
+       Metrics_Upload_Reshows_CvcFixFlow_SaveButton) {
+  ShowUploadBubble();
+  CloseAndReshowBubble();
+  controller()->ContinueToRequestCvcStage();
+
+  base::HistogramTester histogram_tester;
+  controller()->OnSaveButton();
+  controller()->OnBubbleClosed();
+
+  EXPECT_THAT(
+      histogram_tester.GetAllSamples(
+          "Autofill.SaveCreditCardPrompt.Upload.Reshows"),
+      ElementsAre(
+          Bucket(AutofillMetrics::SAVE_CARD_PROMPT_END_ACCEPTED, 1),
+          Bucket(AutofillMetrics::SAVE_CARD_PROMPT_CVC_FIX_FLOW_END_ACCEPTED,
+                 1)));
+}
+
+TEST_F(SaveCardBubbleControllerImplTest,
+       Metrics_Upload_FirstShow_CvcFixFlow_NavigateWhileShowing) {
+  ShowUploadBubble();
+  controller()->ContinueToRequestCvcStage();
+
+  base::HistogramTester histogram_tester;
+  // The bubble should still stick around for up to kSurviveNavigationSeconds
+  // (5) seconds regardless of navigation.
+  controller()->set_elapsed(base::TimeDelta::FromSeconds(3));
+
+  controller()->SimulateNavigation();
+
+  histogram_tester.ExpectTotalCount(
+      "Autofill.SaveCreditCardPrompt.Upload.FirstShow", 0);
+
+  // Wait 3 more seconds (6 total); bubble should go away on next navigation.
+  controller()->set_elapsed(base::TimeDelta::FromSeconds(6));
+
+  controller()->SimulateNavigation();
+
+  EXPECT_THAT(
+      histogram_tester.GetAllSamples(
+          "Autofill.SaveCreditCardPrompt.Upload.FirstShow"),
+      ElementsAre(
+          Bucket(AutofillMetrics::SAVE_CARD_PROMPT_END_NAVIGATION_SHOWING, 1),
+          Bucket(AutofillMetrics::
+                     SAVE_CARD_PROMPT_CVC_FIX_FLOW_END_NAVIGATION_SHOWING,
+                 1)));
+}
+
+TEST_F(SaveCardBubbleControllerImplTest,
+       Metrics_Upload_Reshows_CvcFixFlow_NavigateWhileShowing) {
+  ShowUploadBubble();
+  CloseAndReshowBubble();
+  controller()->ContinueToRequestCvcStage();
+
+  base::HistogramTester histogram_tester;
+  // The bubble should still stick around for up to kSurviveNavigationSeconds
+  // (5) seconds regardless of navigation.
+  controller()->set_elapsed(base::TimeDelta::FromSeconds(3));
+
+  controller()->SimulateNavigation();
+
+  histogram_tester.ExpectTotalCount(
+      "Autofill.SaveCreditCardPrompt.Upload.Reshows", 0);
+
+  // Wait 3 more seconds (6 total); bubble should go away on next navigation.
+  controller()->set_elapsed(base::TimeDelta::FromSeconds(6));
+
+  controller()->SimulateNavigation();
+
+  EXPECT_THAT(
+      histogram_tester.GetAllSamples(
+          "Autofill.SaveCreditCardPrompt.Upload.Reshows"),
+      ElementsAre(
+          Bucket(AutofillMetrics::SAVE_CARD_PROMPT_END_NAVIGATION_SHOWING, 1),
+          Bucket(AutofillMetrics::
+                     SAVE_CARD_PROMPT_CVC_FIX_FLOW_END_NAVIGATION_SHOWING,
+                 1)));
+}
+
+TEST_F(SaveCardBubbleControllerImplTest,
+       Metrics_Upload_FirstShow_CvcFixFlow_NavigateWhileHidden) {
+  ShowUploadBubble();
+  controller()->ContinueToRequestCvcStage();
+
+  base::HistogramTester histogram_tester;
+  controller()->OnBubbleClosed();
+  // Fake-navigate after bubble has been visible for a long time.
+  controller()->set_elapsed(base::TimeDelta::FromMinutes(1));
+  controller()->SimulateNavigation();
+
+  EXPECT_THAT(
+      histogram_tester.GetAllSamples(
+          "Autofill.SaveCreditCardPrompt.Upload.FirstShow"),
+      ElementsAre(
+          Bucket(AutofillMetrics::SAVE_CARD_PROMPT_END_NAVIGATION_HIDDEN, 1),
+          Bucket(AutofillMetrics::
+                     SAVE_CARD_PROMPT_CVC_FIX_FLOW_END_NAVIGATION_HIDDEN,
+                 1)));
+}
+
+TEST_F(SaveCardBubbleControllerImplTest,
+       Metrics_Upload_Reshows_CvcFixFlow_NavigateWhileHidden) {
+  ShowUploadBubble();
+  CloseAndReshowBubble();
+  controller()->ContinueToRequestCvcStage();
+
+  base::HistogramTester histogram_tester;
+  controller()->OnBubbleClosed();
+  // Fake-navigate after bubble has been visible for a long time.
+  controller()->set_elapsed(base::TimeDelta::FromMinutes(1));
+  controller()->SimulateNavigation();
+
+  EXPECT_THAT(
+      histogram_tester.GetAllSamples(
+          "Autofill.SaveCreditCardPrompt.Upload.Reshows"),
+      ElementsAre(
+          Bucket(AutofillMetrics::SAVE_CARD_PROMPT_END_NAVIGATION_HIDDEN, 1),
+          Bucket(AutofillMetrics::
+                     SAVE_CARD_PROMPT_CVC_FIX_FLOW_END_NAVIGATION_HIDDEN,
+                 1)));
+}
+
+TEST_F(SaveCardBubbleControllerImplTest,
+       Metrics_Upload_FirstShow_CvcFixFlow_LegalMessageLink) {
+  ShowUploadBubble();
+  controller()->ContinueToRequestCvcStage();
+
+  base::HistogramTester histogram_tester;
+  controller()->OnLegalMessageLinkClicked(GURL("http://www.example.com"));
+
+  EXPECT_THAT(
+      histogram_tester.GetAllSamples(
+          "Autofill.SaveCreditCardPrompt.Upload.FirstShow"),
+      ElementsAre(
+          Bucket(AutofillMetrics::SAVE_CARD_PROMPT_DISMISS_CLICK_LEGAL_MESSAGE,
+                 1),
+          Bucket(AutofillMetrics::
+                     SAVE_CARD_PROMPT_CVC_FIX_FLOW_DISMISS_CLICK_LEGAL_MESSAGE,
+                 1)));
+}
+
+TEST_F(SaveCardBubbleControllerImplTest,
+       Metrics_Upload_Reshows_CvcFixFlow_LegalMessageLink) {
+  ShowUploadBubble();
+  CloseAndReshowBubble();
+  controller()->ContinueToRequestCvcStage();
+
+  base::HistogramTester histogram_tester;
+  controller()->OnLegalMessageLinkClicked(GURL("http://www.example.com"));
+
+  EXPECT_THAT(
+      histogram_tester.GetAllSamples(
+          "Autofill.SaveCreditCardPrompt.Upload.Reshows"),
+      ElementsAre(
+          Bucket(AutofillMetrics::SAVE_CARD_PROMPT_DISMISS_CLICK_LEGAL_MESSAGE,
+                 1),
+          Bucket(AutofillMetrics::
+                     SAVE_CARD_PROMPT_CVC_FIX_FLOW_DISMISS_CLICK_LEGAL_MESSAGE,
                  1)));
 }
 

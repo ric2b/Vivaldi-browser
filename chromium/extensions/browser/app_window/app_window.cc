@@ -57,7 +57,6 @@
 #include "ui/events/keycodes/keyboard_codes.h"
 
 #include "chrome/browser/profiles/profile_manager.h"
-#include "extensions/api/tabs/tabs_private_api.h"
 #if !defined(OS_MACOSX)
 #include "components/prefs/pref_service.h"
 #include "extensions/browser/pref_names.h"
@@ -101,7 +100,7 @@ void SetConstraintProperty(const std::string& name,
   if (value != SizeConstraints::kUnboundedSize)
     bounds_properties->SetInteger(name, value);
   else
-    bounds_properties->Set(name, base::MakeUnique<base::Value>());
+    bounds_properties->Set(name, std::make_unique<base::Value>());
 }
 
 void SetBoundsProperties(const gfx::Rect& bounds,
@@ -481,10 +480,6 @@ void AppWindow::HandleKeyboardEvent(
     WebContents* source,
     const content::NativeWebKeyboardEvent& event) {
 
-  TabsPrivateAPI* api = TabsPrivateAPI::GetFactoryInstance()->Get(
-      ProfileManager::GetActiveUserProfile());
-  api->SendKeyboardShortcutEvent(event);
-
   // If the window is currently fullscreen and not forced, ESC should leave
   // fullscreen.  If this code is being called for ESC, that means that the
   // KeyEvent's default behavior was not prevented by the content.
@@ -676,8 +671,8 @@ void AppWindow::SetAppIconUrl(const GURL& url) {
                  image_loader_ptr_factory_.GetWeakPtr()));
 }
 
-void AppWindow::UpdateShape(std::unique_ptr<SkRegion> region) {
-  native_app_window_->UpdateShape(std::move(region));
+void AppWindow::UpdateShape(std::unique_ptr<ShapeRects> rects) {
+  native_app_window_->UpdateShape(std::move(rects));
 }
 
 void AppWindow::UpdateDraggableRegions(

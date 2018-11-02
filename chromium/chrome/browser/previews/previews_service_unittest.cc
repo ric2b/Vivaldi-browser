@@ -27,15 +27,6 @@
 
 namespace {
 
-void CreateFieldTrialWithParams(
-    const std::string& trial_name,
-    const std::string& group_name,
-    std::initializer_list<
-        typename std::map<std::string, std::string>::value_type> params) {
-  EXPECT_TRUE(base::AssociateFieldTrialParams(trial_name, group_name, params));
-  EXPECT_TRUE(base::FieldTrialList::CreateFieldTrial(trial_name, group_name));
-}
-
 // This test class intercepts the |is_enabled_callback| and is used to test its
 // validity.
 class TestPreviewsIOData : public previews::PreviewsIOData {
@@ -99,26 +90,21 @@ class PreviewsServiceTest : public testing::Test {
 
 }  // namespace
 
-TEST_F(PreviewsServiceTest, TestOfflineFieldTrialEnabled) {
-  CreateFieldTrialWithParams("ClientSidePreviews", "Enabled",
-                             {{"show_offline_pages", "true"}});
+TEST_F(PreviewsServiceTest, TestOfflineFieldTrialNotSet) {
   EXPECT_TRUE(io_data()->IsPreviewEnabled(previews::PreviewsType::OFFLINE));
 }
 
-TEST_F(PreviewsServiceTest, TestOfflineFieldTrialDisabled) {
-  CreateFieldTrialWithParams("ClientSidePreviews", "Disabled",
-                             {{"show_offline_pages", "true"}});
-  EXPECT_FALSE(io_data()->IsPreviewEnabled(previews::PreviewsType::OFFLINE));
-}
+TEST_F(PreviewsServiceTest, TestOfflineFeatureDisabled) {
+  std::unique_ptr<base::FeatureList> feature_list =
+      base::MakeUnique<base::FeatureList>();
 
-TEST_F(PreviewsServiceTest, TestOfflineFieldTrialEnabledNotShowingOffline) {
-  CreateFieldTrialWithParams("ClientSidePreviews", "Disabled",
-                             {{"show_offline_pages", "false"}});
-  EXPECT_FALSE(io_data()->IsPreviewEnabled(previews::PreviewsType::OFFLINE));
-}
+  // The feature is explicitly enabled on the command-line.
+  feature_list->InitializeFromCommandLine("", "OfflinePreviews");
+  base::FeatureList::ClearInstanceForTesting();
+  base::FeatureList::SetInstance(std::move(feature_list));
 
-TEST_F(PreviewsServiceTest, TestOfflineFieldTrialNotSet) {
   EXPECT_FALSE(io_data()->IsPreviewEnabled(previews::PreviewsType::OFFLINE));
+  base::FeatureList::ClearInstanceForTesting();
 }
 
 TEST_F(PreviewsServiceTest, TestClientLoFiFieldTrialEnabled) {
@@ -135,42 +121,17 @@ TEST_F(PreviewsServiceTest, TestClientLoFiFieldTrialNotSet) {
   EXPECT_FALSE(io_data()->IsPreviewEnabled(previews::PreviewsType::LOFI));
 }
 
-TEST_F(PreviewsServiceTest, TestServerLoFiFieldTrialEnabled) {
-  base::FieldTrialList::CreateFieldTrial("DataCompressionProxyLoFi", "Enabled");
-  EXPECT_TRUE(io_data()->IsPreviewEnabled(previews::PreviewsType::LOFI));
-}
-
-TEST_F(PreviewsServiceTest, TestServerLoFiFieldTrialDisabled) {
-  base::FieldTrialList::CreateFieldTrial("DataCompressionProxyLoFi",
-                                         "Disabled");
-  EXPECT_FALSE(io_data()->IsPreviewEnabled(previews::PreviewsType::LOFI));
-}
-
-TEST_F(PreviewsServiceTest, TestServerLoFiFieldTrialNotSet) {
-  EXPECT_FALSE(io_data()->IsPreviewEnabled(previews::PreviewsType::LOFI));
-}
-
-TEST_F(PreviewsServiceTest, TestLitePageFieldTrialEnabledPreview) {
+TEST_F(PreviewsServiceTest, TestServerLoFiNotEnabled) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndDisableFeature(
       data_reduction_proxy::features::kDataReductionProxyDecidesTransform);
-  base::FieldTrialList::CreateFieldTrial("DataCompressionProxyLoFi",
-                                         "Enabled_Preview");
-  EXPECT_TRUE(io_data()->IsPreviewEnabled(previews::PreviewsType::LITE_PAGE));
+  EXPECT_FALSE(io_data()->IsPreviewEnabled(previews::PreviewsType::LOFI));
 }
 
-TEST_F(PreviewsServiceTest, TestLitePageFieldTrialEnabled) {
-  base::FieldTrialList::CreateFieldTrial("DataCompressionProxyLoFi", "Enabled");
-  EXPECT_FALSE(io_data()->IsPreviewEnabled(previews::PreviewsType::LITE_PAGE));
-}
-
-TEST_F(PreviewsServiceTest, TestLitePageFieldTrialDisabled) {
-  base::FieldTrialList::CreateFieldTrial("DataCompressionProxyLoFi",
-                                         "Disabled");
-  EXPECT_FALSE(io_data()->IsPreviewEnabled(previews::PreviewsType::LITE_PAGE));
-}
-
-TEST_F(PreviewsServiceTest, TestLitePageFieldTrialNotSet) {
+TEST_F(PreviewsServiceTest, TestLitePageNotEnabled) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(
+      data_reduction_proxy::features::kDataReductionProxyDecidesTransform);
   EXPECT_FALSE(io_data()->IsPreviewEnabled(previews::PreviewsType::LITE_PAGE));
 }
 
@@ -178,7 +139,7 @@ TEST_F(PreviewsServiceTest, TestServerLoFiProxyDecidesTransform) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndEnableFeature(
       data_reduction_proxy::features::kDataReductionProxyDecidesTransform);
-  EXPECT_TRUE(io_data()->IsPreviewEnabled(previews::PreviewsType::LITE_PAGE));
+  EXPECT_TRUE(io_data()->IsPreviewEnabled(previews::PreviewsType::LOFI));
 }
 
 TEST_F(PreviewsServiceTest, TestLitePageProxyDecidesTransform) {

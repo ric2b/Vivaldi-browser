@@ -18,10 +18,8 @@
 #include "cc/base/math_util.h"
 #include "cc/benchmarks/micro_benchmark_impl.h"
 #include "cc/debug/debug_colors.h"
-#include "cc/debug/traced_value.h"
 #include "cc/layers/append_quads_data.h"
 #include "cc/layers/solid_color_layer_impl.h"
-#include "cc/output/begin_frame_args.h"
 #include "cc/quads/debug_border_draw_quad.h"
 #include "cc/quads/picture_draw_quad.h"
 #include "cc/quads/solid_color_draw_quad.h"
@@ -30,6 +28,8 @@
 #include "cc/tiles/tiling_set_raster_queue_all.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/occlusion.h"
+#include "components/viz/common/frame_sinks/begin_frame_args.h"
+#include "components/viz/common/traced_value.h"
 #include "ui/gfx/geometry/quad_f.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
@@ -203,7 +203,7 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
       << " bounds " << bounds().ToString() << " pile "
       << raster_source_->GetSize().ToString();
 
-  SharedQuadState* shared_quad_state =
+  viz::SharedQuadState* shared_quad_state =
       render_pass->CreateAndAppendSharedQuadState();
 
   if (raster_source_->IsSolidColor()) {
@@ -240,16 +240,15 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
         DebugColors::DirectPictureBorderWidth(device_scale_factor));
 
     gfx::Rect geometry_rect = shared_quad_state->visible_quad_layer_rect;
-    gfx::Rect opaque_rect = contents_opaque() ? geometry_rect : gfx::Rect();
     gfx::Rect visible_geometry_rect =
         scaled_occlusion.GetUnoccludedContentRect(geometry_rect);
+    bool needs_blending = !contents_opaque();
 
     // The raster source may not be valid over the entire visible rect,
     // and rastering outside of that may cause incorrect pixels.
     gfx::Rect scaled_recorded_viewport = gfx::ScaleToEnclosingRect(
         raster_source_->RecordedViewport(), max_contents_scale);
     geometry_rect.Intersect(scaled_recorded_viewport);
-    opaque_rect.Intersect(scaled_recorded_viewport);
     visible_geometry_rect.Intersect(scaled_recorded_viewport);
 
     if (visible_geometry_rect.IsEmpty())
@@ -262,10 +261,10 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
 
     PictureDrawQuad* quad =
         render_pass->CreateAndAppendDrawQuad<PictureDrawQuad>();
-    quad->SetNew(shared_quad_state, geometry_rect, opaque_rect,
-                 visible_geometry_rect, texture_rect, texture_size,
-                 nearest_neighbor_, viz::RGBA_8888, quad_content_rect,
-                 max_contents_scale, raster_source_);
+    quad->SetNew(shared_quad_state, geometry_rect, visible_geometry_rect,
+                 needs_blending, texture_rect, texture_size, nearest_neighbor_,
+                 viz::RGBA_8888, quad_content_rect, max_contents_scale,
+                 raster_source_);
     ValidateQuadResources(quad);
     return;
   }
@@ -341,9 +340,9 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
            shared_quad_state->visible_quad_layer_rect, ideal_contents_scale_);
        iter; ++iter) {
     gfx::Rect geometry_rect = iter.geometry_rect();
-    gfx::Rect opaque_rect = contents_opaque() ? geometry_rect : gfx::Rect();
     gfx::Rect visible_geometry_rect =
         scaled_occlusion.GetUnoccludedContentRect(geometry_rect);
+    bool needs_blending = !contents_opaque();
     if (visible_geometry_rect.IsEmpty())
       continue;
 
@@ -373,10 +372,10 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
 
           TileDrawQuad* quad =
               render_pass->CreateAndAppendDrawQuad<TileDrawQuad>();
-          quad->SetNew(shared_quad_state, geometry_rect, opaque_rect,
-                       visible_geometry_rect, draw_info.resource_id(),
-                       texture_rect, draw_info.resource_size(),
-                       draw_info.contents_swizzled(), nearest_neighbor_);
+          quad->SetNew(shared_quad_state, geometry_rect, visible_geometry_rect,
+                       needs_blending, draw_info.resource_id(), texture_rect,
+                       draw_info.resource_size(), draw_info.contents_swizzled(),
+                       nearest_neighbor_);
           ValidateQuadResources(quad);
           has_draw_quad = true;
           break;
@@ -605,12 +604,6 @@ void PictureLayerImpl::UpdateRasterSource(
   bool could_have_tilings = raster_source_.get() && CanHaveTilings();
   raster_source_.swap(raster_source);
 
-  // Only set the image decode controller when we're committing.
-  if (!pending_set) {
-    raster_source_->set_image_decode_cache(
-        layer_tree_impl()->image_decode_cache());
-  }
-
   // The |new_invalidation| must be cleared before updating tilings since they
   // access the invalidation through the PictureLayerTilingClient interface.
   invalidation_.Clear();
@@ -691,10 +684,6 @@ void PictureLayerImpl::ReleaseTileResources() {
 
 void PictureLayerImpl::RecreateTileResources() {
   tilings_ = CreatePictureLayerTilingSet();
-  if (raster_source_) {
-    raster_source_->set_image_decode_cache(
-        layer_tree_impl()->image_decode_cache());
-  }
 }
 
 Region PictureLayerImpl::GetInvalidationRegionForDebugging() {
@@ -795,6 +784,14 @@ gfx::Size PictureLayerImpl::CalculateTileSize(
     default_tile_width += 2 * PictureLayerTiling::kBorderTexels;
     default_tile_height += 2 * PictureLayerTiling::kBorderTexels;
 
+    // Use half-width GPU tiles on low-end devices when the content width is
+    // larger than the viewport width.
+    if (layer_tree_impl()
+            ->settings()
+            .use_half_width_tiles_for_gpu_rasterization &&
+        content_bounds.width() > viewport_width)
+      default_tile_width /= 2;
+
     // Round GPU default tile sizes to a multiple of kGpuDefaultTileAlignment.
     // This helps prevent rounding errors in our CA path. crbug.com/632274
     default_tile_width =
@@ -852,7 +849,7 @@ gfx::Size PictureLayerImpl::CalculateTileSize(
 }
 
 void PictureLayerImpl::GetContentsResourceId(
-    ResourceId* resource_id,
+    viz::ResourceId* resource_id,
     gfx::Size* resource_size,
     gfx::SizeF* resource_uv_size) const {
   // The bounds and the pile size may differ if the pile wasn't updated (ie.
@@ -1422,7 +1419,7 @@ void PictureLayerImpl::AsValueInto(
     MathUtil::AddToTracedValue("geometry_rect", iter.geometry_rect(), state);
 
     if (*iter)
-      TracedValue::SetIDRef(*iter, state, "tile");
+      viz::TracedValue::SetIDRef(*iter, state, "tile");
 
     state->EndDictionary();
   }

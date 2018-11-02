@@ -30,7 +30,7 @@
 
 #include "platform/graphics/gpu/AcceleratedImageBufferSurface.h"
 
-#include "platform/RuntimeEnabledFeatures.h"
+#include "platform/graphics/AcceleratedStaticBitmapImage.h"
 #include "platform/graphics/gpu/SharedGpuContext.h"
 #include "platform/graphics/skia/SkiaUtils.h"
 #include "platform/wtf/PtrUtil.h"
@@ -45,17 +45,27 @@ AcceleratedImageBufferSurface::AcceleratedImageBufferSurface(
     OpacityMode opacity_mode,
     const CanvasColorParams& color_params)
     : ImageBufferSurface(size, opacity_mode, color_params) {
-  if (!SharedGpuContext::IsValid())
+  context_provider_wrapper_ = SharedGpuContext::ContextProviderWrapper();
+  if (!context_provider_wrapper_)
     return;
-  GrContext* gr_context = SharedGpuContext::Gr();
-  context_id_ = SharedGpuContext::ContextId();
+  GrContext* gr_context =
+      context_provider_wrapper_->ContextProvider()->GetGrContext();
+
   CHECK(gr_context);
 
   SkAlphaType alpha_type =
       (kOpaque == opacity_mode) ? kOpaque_SkAlphaType : kPremul_SkAlphaType;
   SkImageInfo info = SkImageInfo::Make(
-      size.Width(), size.Height(), color_params.GetSkColorType(), alpha_type,
-      color_params.GetSkColorSpaceForSkSurfaces());
+      size.Width(), size.Height(), color_params.GetSkColorType(), alpha_type);
+  // In legacy mode the backing SkSurface should not have any color space.
+  // If color correct rendering is enabled only for SRGB, still the backing
+  // surface should not have any color space and the treatment of legacy data
+  // as SRGB will be managed by wrapping the internal SkCanvas inside a
+  // SkColorSpaceXformCanvas. If color correct rendering is enbaled for other
+  // color spaces, we set the color space properly.
+  if (CanvasColorParams::ColorCorrectRenderingInAnyColorSpace())
+    info = info.makeColorSpace(color_params.GetSkColorSpaceForSkSurfaces());
+
   SkSurfaceProps disable_lcd_props(0, kUnknown_SkPixelGeometry);
   surface_ = SkSurface::MakeRenderTarget(
       gr_context, SkBudgeted::kYes, info, 0 /* sampleCount */,
@@ -63,12 +73,11 @@ AcceleratedImageBufferSurface::AcceleratedImageBufferSurface(
   if (!surface_)
     return;
 
-  canvas_ = WTF::WrapUnique(new SkiaPaintCanvas(
-      surface_->getCanvas(),
-      RuntimeEnabledFeatures::ColorCorrectRenderingEnabled() &&
-              color_params.UsesOutputSpaceBlending()
-          ? color_params.GetSkColorSpace()
-          : nullptr));
+  sk_sp<SkColorSpace> xform_canvas_color_space = nullptr;
+  if (color_params.ColorCorrectNoColorSpaceToSRGB())
+    xform_canvas_color_space = color_params.GetSkColorSpace();
+  canvas_ = WTF::WrapUnique(
+      new SkiaPaintCanvas(surface_->getCanvas(), xform_canvas_color_space));
   Clear();
 
   // Always save an initial frame, to support resetting the top level matrix
@@ -77,13 +86,25 @@ AcceleratedImageBufferSurface::AcceleratedImageBufferSurface(
 }
 
 bool AcceleratedImageBufferSurface::IsValid() const {
-  return surface_ && SharedGpuContext::IsValid() &&
-         context_id_ == SharedGpuContext::ContextId();
+  // Note: SharedGpuContext::ContextProviderWrapper() is called in order to
+  // actively detect not-yet-handled context losses.
+  return surface_ && context_provider_wrapper_;
 }
 
-sk_sp<SkImage> AcceleratedImageBufferSurface::NewImageSnapshot(AccelerationHint,
-                                                               SnapshotReason) {
-  return surface_->makeImageSnapshot();
+RefPtr<StaticBitmapImage> AcceleratedImageBufferSurface::NewImageSnapshot(
+    AccelerationHint,
+    SnapshotReason) {
+  if (!IsValid())
+    return nullptr;
+  // Must make a copy of the WeakPtr because CreateFromSkImage only takes
+  // r-value references.
+  WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider_wrapper =
+      context_provider_wrapper_;
+  RefPtr<AcceleratedStaticBitmapImage> image =
+      AcceleratedStaticBitmapImage::CreateFromSkImage(
+          surface_->makeImageSnapshot(), std::move(context_provider_wrapper));
+  image->RetainOriginalSkImageForCopyOnWrite();
+  return image;
 }
 
 GLuint AcceleratedImageBufferSurface::GetBackingTextureHandleForOverwrite() {

@@ -11,7 +11,7 @@
 #include "extensions/browser/api/sockets_tcp/sockets_tcp_api.h"
 #include "extensions/browser/api_test_utils.h"
 #include "extensions/common/extension.h"
-#include "extensions/common/test_util.h"
+#include "extensions/common/extension_builder.h"
 #include "extensions/shell/test/shell_apitest.h"
 #include "extensions/shell/test/shell_test.h"
 #include "extensions/test/extension_test_message_listener.h"
@@ -56,7 +56,7 @@ class SocketsTcpApiTest : public ShellApiTest {
 IN_PROC_BROWSER_TEST_F(SocketsTcpApiTest, SocketsTcpCreateGood) {
   scoped_refptr<api::SocketsTcpCreateFunction> socket_create_function(
       new api::SocketsTcpCreateFunction());
-  scoped_refptr<Extension> empty_extension = test_util::CreateEmptyExtension();
+  scoped_refptr<Extension> empty_extension = ExtensionBuilder("Test").Build();
 
   socket_create_function->set_extension(empty_extension.get());
   socket_create_function->set_has_callback(true);
@@ -77,7 +77,6 @@ IN_PROC_BROWSER_TEST_F(SocketsTcpApiTest, SocketTcpExtension) {
   std::unique_ptr<net::SpawnedTestServer> test_server(
       new net::SpawnedTestServer(
           net::SpawnedTestServer::TYPE_TCP_ECHO,
-          net::SpawnedTestServer::kLocalhost,
           base::FilePath(FILE_PATH_LITERAL("net/data"))));
   EXPECT_TRUE(test_server->Start());
 

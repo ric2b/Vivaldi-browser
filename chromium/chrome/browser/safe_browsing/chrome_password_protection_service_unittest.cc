@@ -4,6 +4,7 @@
 #include "chrome/browser/safe_browsing/chrome_password_protection_service.h"
 
 #include "base/memory/ref_counted.h"
+#include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/safe_browsing/ui_manager.h"
 #include "chrome/browser/signin/account_fetcher_service_factory.h"
@@ -16,19 +17,30 @@
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/signin/test_signin_client_builder.h"
+#include "chrome/browser/sync/user_event_service_factory.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/prefs/pref_service.h"
+#include "components/safe_browsing/features.h"
 #include "components/safe_browsing/password_protection/password_protection_request.h"
+#include "components/safe_browsing_db/v4_protocol_manager_util.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/fake_account_fetcher_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/browser/signin_manager_base.h"
+#include "components/sync/user_events/fake_user_event_service.h"
+#include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "components/variations/variations_params_manager.h"
+#include "content/public/browser/web_contents.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+using sync_pb::UserEventSpecifics;
+using GaiaPasswordReuse = UserEventSpecifics::GaiaPasswordReuse;
+using PasswordReuseLookup = GaiaPasswordReuse::PasswordReuseLookup;
 
 namespace safe_browsing {
 
@@ -37,6 +49,11 @@ namespace {
 const char kPhishingURL[] = "http://phishing.com";
 const char kTestAccountID[] = "account_id";
 const char kTestEmail[] = "foo@example.com";
+
+std::unique_ptr<KeyedService> BuildFakeUserEventService(
+    content::BrowserContext* context) {
+  return base::MakeUnique<syncer::FakeUserEventService>();
+}
 
 }  // namespace
 
@@ -65,23 +82,23 @@ class MockSafeBrowsingUIManager : public SafeBrowsingUIManager {
 class MockChromePasswordProtectionService
     : public ChromePasswordProtectionService {
  public:
-  explicit MockChromePasswordProtectionService(Profile* profile)
-      : ChromePasswordProtectionService(profile),
+  explicit MockChromePasswordProtectionService(
+      Profile* profile,
+      scoped_refptr<HostContentSettingsMap> content_setting_map,
+      scoped_refptr<SafeBrowsingUIManager> ui_manager)
+      : ChromePasswordProtectionService(profile,
+                                        content_setting_map,
+                                        ui_manager),
         is_incognito_(false),
-        is_extended_reporting_(false),
-        is_history_sync_enabled_(false) {}
+        is_extended_reporting_(false) {}
   bool IsExtendedReporting() override { return is_extended_reporting_; }
   bool IsIncognito() override { return is_incognito_; }
-  bool IsHistorySyncEnabled() override { return is_history_sync_enabled_; }
 
   // Configures the results returned by IsExtendedReporting(), IsIncognito(),
   // and IsHistorySyncEnabled().
-  void ConfigService(bool is_incognito,
-                     bool is_extended_reporting,
-                     bool is_history_sync_enabled) {
+  void ConfigService(bool is_incognito, bool is_extended_reporting) {
     is_incognito_ = is_incognito;
     is_extended_reporting_ = is_extended_reporting;
-    is_history_sync_enabled_ = is_history_sync_enabled;
   }
 
   void SetUIManager(scoped_refptr<SafeBrowsingUIManager> ui_manager) {
@@ -92,18 +109,12 @@ class MockChromePasswordProtectionService
     return static_cast<MockSafeBrowsingUIManager*>(ui_manager_.get());
   }
 
-  void CacheVerdict(const GURL& url,
-                    LoginReputationClientRequest::TriggerType trigger_type,
-                    LoginReputationClientResponse* verdict,
-                    const base::Time& receive_time) override {}
-
  protected:
   friend class ChromePasswordProtectionServiceTest;
 
  private:
   bool is_incognito_;
   bool is_extended_reporting_;
-  bool is_history_sync_enabled_;
 };
 
 class ChromePasswordProtectionServiceTest
@@ -116,15 +127,25 @@ class ChromePasswordProtectionServiceTest
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
     profile()->GetPrefs()->SetBoolean(prefs::kSafeBrowsingEnabled, true);
-    service_ = base::MakeUnique<MockChromePasswordProtectionService>(profile());
-    service_->SetUIManager(new testing::StrictMock<MockSafeBrowsingUIManager>(
-        SafeBrowsingService::CreateSafeBrowsingService()));
+    HostContentSettingsMap::RegisterProfilePrefs(test_pref_service_.registry());
+    content_setting_map_ = new HostContentSettingsMap(
+        &test_pref_service_, false /* incognito */, false /* guest_profile */,
+        false /* store_last_modified */);
+    service_ = base::MakeUnique<MockChromePasswordProtectionService>(
+        profile(), content_setting_map_,
+        new testing::StrictMock<MockSafeBrowsingUIManager>(
+            SafeBrowsingService::CreateSafeBrowsingService()));
+    fake_user_event_service_ = static_cast<syncer::FakeUserEventService*>(
+        browser_sync::UserEventServiceFactory::GetInstance()
+            ->SetTestingFactoryAndUse(browser_context(),
+                                      &BuildFakeUserEventService));
   }
 
   void TearDown() override {
     base::RunLoop().RunUntilIdle();
     service_.reset();
     request_ = nullptr;
+    content_setting_map_->ShutdownOnUIThread();
     ChromeRenderViewHostTestHarness::TearDown();
   }
 
@@ -141,32 +162,26 @@ class ChromePasswordProtectionServiceTest
     return builder.Build().release();
   }
 
-  // Sets up Finch trial feature parameters.
-  void SetFeatureParams(const base::Feature& feature,
-                        const std::string& trial_name,
-                        const Parameters& params) {
-    static std::set<std::string> features = {feature.name};
-    params_manager_.ClearAllVariationParams();
-    params_manager_.SetVariationParamsWithFeatureAssociations(trial_name,
-                                                              params, features);
+  void EnableGaiaPasswordReuseReporting() {
+    scoped_feature_list_.InitAndEnableFeature(kGaiaPasswordReuseReporting);
   }
 
-  // Creates Finch trial parameters.
-  Parameters CreateParameters(bool allowed_for_incognito,
-                              bool allowed_for_all,
-                              bool allowed_for_extended_reporting,
-                              bool allowed_for_history_sync) {
-    return {{"incognito", allowed_for_incognito ? "true" : "false"},
-            {"all_population", allowed_for_all ? "true" : "false"},
-            {"extended_reporting",
-             allowed_for_extended_reporting ? "true" : "false"},
-            {"history_sync", allowed_for_history_sync ? "true" : "false"}};
+  syncer::FakeUserEventService* GetUserEventService() {
+    return fake_user_event_service_;
   }
 
   void InitializeRequest(LoginReputationClientRequest::TriggerType type) {
-    request_ = new PasswordProtectionRequest(web_contents(), GURL(kPhishingURL),
-                                             GURL(), GURL(), std::string(),
-                                             type, true, service_.get(), 0);
+    if (type == LoginReputationClientRequest::UNFAMILIAR_LOGIN_PAGE) {
+      request_ = new PasswordProtectionRequest(
+          web_contents(), GURL(kPhishingURL), GURL(), GURL(), false,
+          std::vector<std::string>({"somedomain.com"}), type, true,
+          service_.get(), 0);
+    } else {
+      ASSERT_EQ(LoginReputationClientRequest::PASSWORD_REUSE_EVENT, type);
+      request_ = new PasswordProtectionRequest(
+          web_contents(), GURL(kPhishingURL), GURL(), GURL(), true,
+          std::vector<std::string>(), type, true, service_.get(), 0);
+    }
   }
 
   void InitializeVerdict(LoginReputationClientResponse::VerdictType type) {
@@ -194,233 +209,58 @@ class ChromePasswordProtectionServiceTest
   }
 
  protected:
-  variations::testing::VariationParamsManager params_manager_;
   base::test::ScopedFeatureList scoped_feature_list_;
+  sync_preferences::TestingPrefServiceSyncable test_pref_service_;
+  scoped_refptr<HostContentSettingsMap> content_setting_map_;
   std::unique_ptr<MockChromePasswordProtectionService> service_;
   scoped_refptr<PasswordProtectionRequest> request_;
   std::unique_ptr<LoginReputationClientResponse> verdict_;
+  // Owned by KeyedServiceFactory.
+  syncer::FakeUserEventService* fake_user_event_service_;
 };
 
 TEST_F(ChromePasswordProtectionServiceTest,
-       VerifyFinchControlForLowReputationPingSBEROnlyNoIncognito) {
+       VerifyUserPopulationForPasswordOnFocusPing) {
+  // Password field on focus pinging is enabled on !incognito && SBER.
+
   PasswordProtectionService::RequestOutcome reason;
-
-  // By default kPasswordFieldOnFocusPinging feature is disabled.
-  EXPECT_FALSE(
-      service_->IsPingingEnabled(kPasswordFieldOnFocusPinging, &reason));
-  EXPECT_EQ(PasswordProtectionService::DISABLED_DUE_TO_FEATURE_DISABLED,
-            reason);
-
-  // Enables kPasswordFieldOnFocusPinging feature.
-  scoped_feature_list_.InitAndEnableFeature(kPasswordFieldOnFocusPinging);
-  // Creates finch trial parameters correspond to the following experiment:
-  // "name": "SBEROnlyNoIncognito",
-  // "params": {
-  //     "incognito": "false",
-  //     "extended_reporting": "true",
-  //     "history_sync": "false"
-  // },
-  // "enable_features": [
-  //     "PasswordFieldOnFocusPinging"
-  // ]
-  Parameters sber_and_no_incognito =
-      CreateParameters(false, false, true, false);
-  SetFeatureParams(kPasswordFieldOnFocusPinging, "SBEROnlyNoIncognito",
-                   sber_and_no_incognito);
-
-  service_->ConfigService(false /*incognito*/, false /*SBER*/, false /*sync*/);
+  service_->ConfigService(false /*incognito*/, false /*SBER*/);
   EXPECT_FALSE(
       service_->IsPingingEnabled(kPasswordFieldOnFocusPinging, &reason));
   EXPECT_EQ(PasswordProtectionService::DISABLED_DUE_TO_USER_POPULATION, reason);
 
-  service_->ConfigService(false /*incognito*/, false /*SBER*/, true /*sync*/);
-  EXPECT_FALSE(
-      service_->IsPingingEnabled(kPasswordFieldOnFocusPinging, &reason));
-  EXPECT_EQ(PasswordProtectionService::DISABLED_DUE_TO_USER_POPULATION, reason);
-
-  service_->ConfigService(false /*incognito*/, true /*SBER*/, false /*sync*/);
+  service_->ConfigService(false /*incognito*/, true /*SBER*/);
   EXPECT_TRUE(
       service_->IsPingingEnabled(kPasswordFieldOnFocusPinging, &reason));
 
-  service_->ConfigService(false /*incognito*/, true /*SBER*/, true /*sync*/);
-  EXPECT_TRUE(
-      service_->IsPingingEnabled(kPasswordFieldOnFocusPinging, &reason));
-
-  service_->ConfigService(true /*incognito*/, false /*SBER*/, false /*sync*/);
+  service_->ConfigService(true /*incognito*/, false /*SBER*/);
   EXPECT_FALSE(
       service_->IsPingingEnabled(kPasswordFieldOnFocusPinging, &reason));
   EXPECT_EQ(PasswordProtectionService::DISABLED_DUE_TO_INCOGNITO, reason);
 
-  service_->ConfigService(true /*incognito*/, false /*SBER*/, true /*sync*/);
-  EXPECT_FALSE(
-      service_->IsPingingEnabled(kPasswordFieldOnFocusPinging, &reason));
-  EXPECT_EQ(PasswordProtectionService::DISABLED_DUE_TO_INCOGNITO, reason);
-
-  service_->ConfigService(true /*incognito*/, true /*SBER*/, false /*sync*/);
-  EXPECT_FALSE(
-      service_->IsPingingEnabled(kPasswordFieldOnFocusPinging, &reason));
-  EXPECT_EQ(PasswordProtectionService::DISABLED_DUE_TO_INCOGNITO, reason);
-
-  service_->ConfigService(true /*incognito*/, true /*SBER*/, true /*sync*/);
+  service_->ConfigService(true /*incognito*/, true /*SBER*/);
   EXPECT_FALSE(
       service_->IsPingingEnabled(kPasswordFieldOnFocusPinging, &reason));
   EXPECT_EQ(PasswordProtectionService::DISABLED_DUE_TO_INCOGNITO, reason);
 }
 
 TEST_F(ChromePasswordProtectionServiceTest,
-       VerifyFinchControlForLowReputationPingSBERAndHistorySyncNoIncognito) {
+       VerifyUserPopulationForProtectedPasswordEntryPing) {
+  // Protected password entry pinging is enabled for all safe browsing users.
   PasswordProtectionService::RequestOutcome reason;
 
-  // Enables kPasswordFieldOnFocusPinging feature.
-  scoped_feature_list_.InitAndEnableFeature(kPasswordFieldOnFocusPinging);
-  // Creates finch trial parameters correspond to the following experiment:
-  // "name": "SBERAndHistorySyncNoIncognito",
-  // "params": {
-  //     "incognito": "false",
-  //     "extended_reporting": "true",
-  //     "history_sync": "true"
-  // },
-  // "enable_features": [
-  //     "PasswordFieldOnFocusPinging"
-  // ]
-  Parameters sber_and_sync_no_incognito =
-      CreateParameters(false, false, true, true);
-  SetFeatureParams(kPasswordFieldOnFocusPinging,
-                   "SBERAndHistorySyncNoIncognito", sber_and_sync_no_incognito);
-  service_->ConfigService(false /*incognito*/, false /*SBER*/, false /*sync*/);
-  EXPECT_FALSE(
-      service_->IsPingingEnabled(kPasswordFieldOnFocusPinging, &reason));
-  EXPECT_EQ(PasswordProtectionService::DISABLED_DUE_TO_USER_POPULATION, reason);
-
-  service_->ConfigService(false /*incognito*/, false /*SBER*/, true /*sync*/);
+  service_->ConfigService(false /*incognito*/, false /*SBER*/);
   EXPECT_TRUE(
-      service_->IsPingingEnabled(kPasswordFieldOnFocusPinging, &reason));
-
-  service_->ConfigService(false /*incognito*/, true /*SBER*/, false /*sync*/);
+      service_->IsPingingEnabled(kProtectedPasswordEntryPinging, &reason));
+  service_->ConfigService(false /*incognito*/, true /*SBER*/);
   EXPECT_TRUE(
-      service_->IsPingingEnabled(kPasswordFieldOnFocusPinging, &reason));
-
-  service_->ConfigService(false /*incognito*/, true /*SBER*/, true /*sync*/);
+      service_->IsPingingEnabled(kProtectedPasswordEntryPinging, &reason));
+  service_->ConfigService(true /*incognito*/, false /*SBER*/);
   EXPECT_TRUE(
-      service_->IsPingingEnabled(kPasswordFieldOnFocusPinging, &reason));
-
-  service_->ConfigService(true /*incognito*/, false /*SBER*/, false /*sync*/);
-  EXPECT_FALSE(
-      service_->IsPingingEnabled(kPasswordFieldOnFocusPinging, &reason));
-  EXPECT_EQ(PasswordProtectionService::DISABLED_DUE_TO_INCOGNITO, reason);
-
-  service_->ConfigService(true /*incognito*/, false /*SBER*/, true /*sync*/);
-  EXPECT_FALSE(
-      service_->IsPingingEnabled(kPasswordFieldOnFocusPinging, &reason));
-  EXPECT_EQ(PasswordProtectionService::DISABLED_DUE_TO_INCOGNITO, reason);
-
-  service_->ConfigService(true /*incognito*/, true /*SBER*/, false /*sync*/);
-  EXPECT_FALSE(
-      service_->IsPingingEnabled(kPasswordFieldOnFocusPinging, &reason));
-  EXPECT_EQ(PasswordProtectionService::DISABLED_DUE_TO_INCOGNITO, reason);
-
-  service_->ConfigService(true /*incognito*/, true /*SBER*/, true /*sync*/);
-  EXPECT_FALSE(
-      service_->IsPingingEnabled(kPasswordFieldOnFocusPinging, &reason));
-  EXPECT_EQ(PasswordProtectionService::DISABLED_DUE_TO_INCOGNITO, reason);
-}
-
-TEST_F(ChromePasswordProtectionServiceTest,
-       VerifyFinchControlForLowReputationPingAllButNoIncognito) {
-  PasswordProtectionService::RequestOutcome reason;
-
-  // Enables kPasswordFieldOnFocusPinging feature.
-  scoped_feature_list_.InitAndEnableFeature(kPasswordFieldOnFocusPinging);
-  // Creates finch trial parameters correspond to the following experiment:
-  // "name": "AllButNoIncognito",
-  // "params": {
-  //     "all_population": "true",
-  //     "incongito": "false"
-  // },
-  // "enable_features": [
-  //     "PasswordFieldOnFocusPinging"
-  // ]
-  Parameters all_users = CreateParameters(false, true, true, true);
-  SetFeatureParams(kPasswordFieldOnFocusPinging, "AllButNoIncognito",
-                   all_users);
-  service_->ConfigService(false /*incognito*/, false /*SBER*/, false /*sync*/);
+      service_->IsPingingEnabled(kProtectedPasswordEntryPinging, &reason));
+  service_->ConfigService(true /*incognito*/, true /*SBER*/);
   EXPECT_TRUE(
-      service_->IsPingingEnabled(kPasswordFieldOnFocusPinging, &reason));
-
-  service_->ConfigService(false /*incognito*/, false /*SBER*/, true /*sync*/);
-  EXPECT_TRUE(
-      service_->IsPingingEnabled(kPasswordFieldOnFocusPinging, &reason));
-
-  service_->ConfigService(false /*incognito*/, true /*SBER*/, false /*sync*/);
-  EXPECT_TRUE(
-      service_->IsPingingEnabled(kPasswordFieldOnFocusPinging, &reason));
-
-  service_->ConfigService(false /*incognito*/, true /*SBER*/, true /*sync*/);
-  EXPECT_TRUE(
-      service_->IsPingingEnabled(kPasswordFieldOnFocusPinging, &reason));
-
-  service_->ConfigService(true /*incognito*/, false /*SBER*/, false /*sync*/);
-  EXPECT_FALSE(
-      service_->IsPingingEnabled(kPasswordFieldOnFocusPinging, &reason));
-  EXPECT_EQ(PasswordProtectionService::DISABLED_DUE_TO_INCOGNITO, reason);
-
-  service_->ConfigService(true /*incognito*/, false /*SBER*/, true /*sync*/);
-  EXPECT_FALSE(
-      service_->IsPingingEnabled(kPasswordFieldOnFocusPinging, &reason));
-  EXPECT_EQ(PasswordProtectionService::DISABLED_DUE_TO_INCOGNITO, reason);
-
-  service_->ConfigService(true /*incognito*/, true /*SBER*/, false /*sync*/);
-  EXPECT_FALSE(
-      service_->IsPingingEnabled(kPasswordFieldOnFocusPinging, &reason));
-  EXPECT_EQ(PasswordProtectionService::DISABLED_DUE_TO_INCOGNITO, reason);
-
-  service_->ConfigService(true /*incognito*/, true /*SBER*/, true /*sync*/);
-  EXPECT_FALSE(
-      service_->IsPingingEnabled(kPasswordFieldOnFocusPinging, &reason));
-  EXPECT_EQ(PasswordProtectionService::DISABLED_DUE_TO_INCOGNITO, reason);
-}
-
-TEST_F(ChromePasswordProtectionServiceTest,
-       VerifyFinchControlForLowReputationPingAll) {
-  PasswordProtectionService::RequestOutcome reason;
-
-  // Enables kPasswordFieldOnFocusPinging feature.
-  scoped_feature_list_.InitAndEnableFeature(kPasswordFieldOnFocusPinging);
-  // Creates finch trial parameters correspond to the following experiment:
-  // "name": "All",
-  // "params": {
-  //     "all_population": "true",
-  //     "incognito": "true"
-  // },
-  // "enable_features": [
-  //     "PasswordFieldOnFocusPinging"
-  // ]
-  Parameters all_users = CreateParameters(true, true, true, true);
-  SetFeatureParams(kPasswordFieldOnFocusPinging, "All", all_users);
-  service_->ConfigService(false /*incognito*/, false /*SBER*/, false /*sync*/);
-  EXPECT_TRUE(
-      service_->IsPingingEnabled(kPasswordFieldOnFocusPinging, &reason));
-  service_->ConfigService(false /*incognito*/, false /*SBER*/, true /*sync*/);
-  EXPECT_TRUE(
-      service_->IsPingingEnabled(kPasswordFieldOnFocusPinging, &reason));
-  service_->ConfigService(false /*incognito*/, true /*SBER*/, false /*sync*/);
-  EXPECT_TRUE(
-      service_->IsPingingEnabled(kPasswordFieldOnFocusPinging, &reason));
-  service_->ConfigService(false /*incognito*/, true /*SBER*/, true /*sync*/);
-  EXPECT_TRUE(
-      service_->IsPingingEnabled(kPasswordFieldOnFocusPinging, &reason));
-  service_->ConfigService(true /*incognito*/, false /*SBER*/, false /*sync*/);
-  EXPECT_TRUE(
-      service_->IsPingingEnabled(kPasswordFieldOnFocusPinging, &reason));
-  service_->ConfigService(true /*incognito*/, false /*SBER*/, true /*sync*/);
-  EXPECT_TRUE(
-      service_->IsPingingEnabled(kPasswordFieldOnFocusPinging, &reason));
-  service_->ConfigService(true /*incognito*/, true /*SBER*/, false /*sync*/);
-  EXPECT_TRUE(
-      service_->IsPingingEnabled(kPasswordFieldOnFocusPinging, &reason));
-  service_->ConfigService(true /*incognito*/, true /*SBER*/, true /*sync*/);
-  EXPECT_TRUE(
-      service_->IsPingingEnabled(kPasswordFieldOnFocusPinging, &reason));
+      service_->IsPingingEnabled(kProtectedPasswordEntryPinging, &reason));
 }
 
 TEST_F(ChromePasswordProtectionServiceTest,
@@ -497,4 +337,165 @@ TEST_F(ChromePasswordProtectionServiceTest, VerifyGetSyncAccountType) {
   EXPECT_EQ(LoginReputationClientRequest::PasswordReuseEvent::GSUITE,
             service_->GetSyncAccountType());
 }
+
+TEST_F(ChromePasswordProtectionServiceTest, VerifyUpdateSecurityState) {
+  GURL url("http://password_reuse_url.com");
+  NavigateAndCommit(url);
+  SBThreatType current_threat_type = SB_THREAT_TYPE_UNUSED;
+  ASSERT_FALSE(service_->ui_manager()->IsUrlWhitelistedOrPendingForWebContents(
+      url, false, web_contents()->GetController().GetVisibleEntry(),
+      web_contents(), false, &current_threat_type));
+  EXPECT_EQ(SB_THREAT_TYPE_UNUSED, current_threat_type);
+
+  service_->UpdateSecurityState(SB_THREAT_TYPE_PASSWORD_REUSE, web_contents());
+  ASSERT_TRUE(service_->ui_manager()->IsUrlWhitelistedOrPendingForWebContents(
+      url, false, web_contents()->GetController().GetVisibleEntry(),
+      web_contents(), false, &current_threat_type));
+  EXPECT_EQ(SB_THREAT_TYPE_PASSWORD_REUSE, current_threat_type);
+
+  service_->UpdateSecurityState(safe_browsing::SB_THREAT_TYPE_SAFE,
+                                web_contents());
+  current_threat_type = SB_THREAT_TYPE_UNUSED;
+  ASSERT_FALSE(service_->ui_manager()->IsUrlWhitelistedOrPendingForWebContents(
+      url, false, web_contents()->GetController().GetVisibleEntry(),
+      web_contents(), false, &current_threat_type));
+  EXPECT_EQ(SB_THREAT_TYPE_UNUSED, current_threat_type);
+  LoginReputationClientResponse verdict;
+  EXPECT_EQ(
+      LoginReputationClientResponse::SAFE,
+      service_->GetCachedVerdict(
+          url, LoginReputationClientRequest::PASSWORD_REUSE_EVENT, &verdict));
+}
+
+TEST_F(ChromePasswordProtectionServiceTest,
+       VerifyPasswordReuseUserEventNotRecorded) {
+  // Feature not enabled.
+  service_->MaybeLogPasswordReuseDetectedEvent(web_contents());
+  EXPECT_TRUE(GetUserEventService()->GetRecordedUserEvents().empty());
+  service_->MaybeLogPasswordReuseLookupEvent(
+      web_contents(), PasswordProtectionService::MATCHED_WHITELIST, nullptr);
+  EXPECT_TRUE(GetUserEventService()->GetRecordedUserEvents().empty());
+
+  EnableGaiaPasswordReuseReporting();
+  // Feature enabled but no committed navigation entry.
+  service_->MaybeLogPasswordReuseDetectedEvent(web_contents());
+  EXPECT_TRUE(GetUserEventService()->GetRecordedUserEvents().empty());
+  service_->MaybeLogPasswordReuseLookupEvent(
+      web_contents(), PasswordProtectionService::MATCHED_WHITELIST, nullptr);
+  EXPECT_TRUE(GetUserEventService()->GetRecordedUserEvents().empty());
+}
+
+TEST_F(ChromePasswordProtectionServiceTest,
+       VerifyPasswordReuseDetectedUserEventRecorded) {
+  EnableGaiaPasswordReuseReporting();
+  NavigateAndCommit(GURL("https://www.example.com/"));
+
+  // Case 1: safe_browsing_enabled = true
+  profile()->GetPrefs()->SetBoolean(prefs::kSafeBrowsingEnabled, true);
+  service_->MaybeLogPasswordReuseDetectedEvent(web_contents());
+  ASSERT_EQ(1ul, GetUserEventService()->GetRecordedUserEvents().size());
+  GaiaPasswordReuse event = GetUserEventService()
+                                ->GetRecordedUserEvents()[0]
+                                .gaia_password_reuse_event();
+  EXPECT_TRUE(event.reuse_detected().status().enabled());
+
+  // Case 2: safe_browsing_enabled = false
+  profile()->GetPrefs()->SetBoolean(prefs::kSafeBrowsingEnabled, false);
+  service_->MaybeLogPasswordReuseDetectedEvent(web_contents());
+  ASSERT_EQ(2ul, GetUserEventService()->GetRecordedUserEvents().size());
+  event = GetUserEventService()
+              ->GetRecordedUserEvents()[1]
+              .gaia_password_reuse_event();
+  EXPECT_FALSE(event.reuse_detected().status().enabled());
+
+  // Not checking for the extended_reporting_level since that requires setting
+  // multiple prefs and doesn't add much verification value.
+}
+
+TEST_F(ChromePasswordProtectionServiceTest,
+       VerifyPasswordReuseLookupUserEventRecorded) {
+  EnableGaiaPasswordReuseReporting();
+  NavigateAndCommit(GURL("https://www.example.com/"));
+
+  std::vector<std::pair<PasswordProtectionService::RequestOutcome,
+                        PasswordReuseLookup::LookupResult>>
+      test_cases_result_only = {
+          {PasswordProtectionService::MATCHED_WHITELIST,
+           PasswordReuseLookup::WHITELIST_HIT},
+          {PasswordProtectionService::URL_NOT_VALID_FOR_REPUTATION_COMPUTING,
+           PasswordReuseLookup::URL_UNSUPPORTED},
+          {PasswordProtectionService::CANCELED,
+           PasswordReuseLookup::REQUEST_FAILURE},
+          {PasswordProtectionService::TIMEDOUT,
+           PasswordReuseLookup::REQUEST_FAILURE},
+          {PasswordProtectionService::DISABLED_DUE_TO_INCOGNITO,
+           PasswordReuseLookup::REQUEST_FAILURE},
+          {PasswordProtectionService::REQUEST_MALFORMED,
+           PasswordReuseLookup::REQUEST_FAILURE},
+          {PasswordProtectionService::FETCH_FAILED,
+           PasswordReuseLookup::REQUEST_FAILURE},
+          {PasswordProtectionService::RESPONSE_MALFORMED,
+           PasswordReuseLookup::REQUEST_FAILURE},
+          {PasswordProtectionService::SERVICE_DESTROYED,
+           PasswordReuseLookup::REQUEST_FAILURE},
+          {PasswordProtectionService::DISABLED_DUE_TO_FEATURE_DISABLED,
+           PasswordReuseLookup::REQUEST_FAILURE},
+          {PasswordProtectionService::DISABLED_DUE_TO_USER_POPULATION,
+           PasswordReuseLookup::REQUEST_FAILURE},
+          {PasswordProtectionService::MAX_OUTCOME,
+           PasswordReuseLookup::REQUEST_FAILURE}};
+
+  unsigned long t = 0;
+  for (const auto& it : test_cases_result_only) {
+    VLOG(1) << __FUNCTION__ << ": case: " << t;
+    service_->MaybeLogPasswordReuseLookupEvent(web_contents(), it.first,
+                                               nullptr);
+    ASSERT_EQ(t + 1, GetUserEventService()->GetRecordedUserEvents().size());
+    PasswordReuseLookup reuse_lookup = GetUserEventService()
+                                           ->GetRecordedUserEvents()[t]
+                                           .gaia_password_reuse_event()
+                                           .reuse_lookup();
+    EXPECT_EQ(it.second, reuse_lookup.lookup_result());
+    t++;
+  }
+
+  {
+    VLOG(1) << __FUNCTION__ << ": case: " << t;
+    auto response = base::MakeUnique<LoginReputationClientResponse>();
+    response->set_verdict_token("token1");
+    response->set_verdict_type(LoginReputationClientResponse::LOW_REPUTATION);
+    service_->MaybeLogPasswordReuseLookupEvent(
+        web_contents(), PasswordProtectionService::RESPONSE_ALREADY_CACHED,
+        response.get());
+    ASSERT_EQ(t + 1, GetUserEventService()->GetRecordedUserEvents().size());
+    PasswordReuseLookup reuse_lookup = GetUserEventService()
+                                           ->GetRecordedUserEvents()[t]
+                                           .gaia_password_reuse_event()
+                                           .reuse_lookup();
+    EXPECT_EQ(PasswordReuseLookup::CACHE_HIT, reuse_lookup.lookup_result());
+    EXPECT_EQ(PasswordReuseLookup::LOW_REPUTATION, reuse_lookup.verdict());
+    EXPECT_EQ("token1", reuse_lookup.verdict_token());
+    t++;
+  }
+
+  {
+    VLOG(1) << __FUNCTION__ << ": case: " << t;
+    auto response = base::MakeUnique<LoginReputationClientResponse>();
+    response->set_verdict_token("token2");
+    response->set_verdict_type(LoginReputationClientResponse::SAFE);
+    service_->MaybeLogPasswordReuseLookupEvent(
+        web_contents(), PasswordProtectionService::SUCCEEDED, response.get());
+    ASSERT_EQ(t + 1, GetUserEventService()->GetRecordedUserEvents().size());
+    PasswordReuseLookup reuse_lookup = GetUserEventService()
+                                           ->GetRecordedUserEvents()[t]
+                                           .gaia_password_reuse_event()
+                                           .reuse_lookup();
+    EXPECT_EQ(PasswordReuseLookup::REQUEST_SUCCESS,
+              reuse_lookup.lookup_result());
+    EXPECT_EQ(PasswordReuseLookup::SAFE, reuse_lookup.verdict());
+    EXPECT_EQ("token2", reuse_lookup.verdict_token());
+    t++;
+  }
+}
+
 }  // namespace safe_browsing

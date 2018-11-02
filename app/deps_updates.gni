@@ -52,9 +52,15 @@ post_process_template("//chrome/browser/extensions:extensions") {
   ]
 }
 
+post_process_target("//chrome/common:non_code_constants") {
+  deps += [
+    "//components/version_info:generate_version_info",
+  ]
+}
+
 post_process_target("//components/bookmarks/browser:browser") {
   deps += [
-    "//chrome:strings",
+    #"//chrome:strings",
     "//vivaldi/app:vivaldi_native_strings",
     "//vivaldi/app:vivaldi_native_resources",
     "//vivaldi/app:vivaldi_unscaled_native_resources",

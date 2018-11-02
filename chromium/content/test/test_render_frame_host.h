@@ -57,15 +57,7 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   void InitializeRenderFrameIfNeeded() override;
   TestRenderFrameHost* AppendChild(const std::string& frame_name) override;
   void Detach() override;
-  void SimulateNavigationStart(const GURL& url) override;
-  void SimulateRedirect(const GURL& new_url) override;
-  void SimulateNavigationCommit(const GURL& url) override;
-  void SimulateNavigationError(const GURL& url, int error_code) override;
-  void SimulateNavigationErrorPageCommit() override;
   void SimulateNavigationStop() override;
-  void SendNavigate(int nav_entry_id,
-                    bool did_create_new_entry,
-                    const GURL& url) override;
   void SendFailedNavigate(int nav_entry_id,
                           bool did_create_new_entry,
                           const GURL& url) override;
@@ -76,6 +68,7 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   void SetContentsMimeType(const std::string& mime_type) override;
   void SendBeforeUnloadACK(bool proceed) override;
   void SimulateSwapOutACK() override;
+  // DEPRECATED: Use NavigationSimulator::NavigateAndCommitFromDocument().
   void NavigateAndCommitRendererInitiated(bool did_create_new_entry,
                                           const GURL& url) override;
   void SimulateFeaturePolicyHeader(
@@ -89,6 +82,9 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   using ModificationCallback =
       base::Callback<void(FrameHostMsg_DidCommitProvisionalLoad_Params*)>;
 
+  void SendNavigate(int nav_entry_id,
+                    bool did_create_new_entry,
+                    const GURL& url);
   void SendNavigateWithModificationCallback(
       int nav_entry_id,
       bool did_create_new_entry,
@@ -97,7 +93,29 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   void SendNavigateWithParams(
       FrameHostMsg_DidCommitProvisionalLoad_Params* params);
 
+  // Simulates a navigation to |url| failing with the error code |error_code|.
+  // DEPRECATED: use NavigationSimulator instead.
+  void SimulateNavigationError(const GURL& url, int error_code);
+
+  // Simulates the commit of an error page following a navigation failure.
+  // DEPRECATED: use NavigationSimulator instead.
+  void SimulateNavigationErrorPageCommit();
+
   // With the current navigation logic this method is a no-op.
+  // Simulates a renderer-initiated navigation to |url| starting in the
+  // RenderFrameHost.
+  // DEPRECATED: use NavigationSimulator instead.
+  void SimulateNavigationStart(const GURL& url);
+
+  // Simulates a redirect to |new_url| for the navigation in the
+  // RenderFrameHost.
+  // DEPRECATED: use NavigationSimulator instead.
+  void SimulateRedirect(const GURL& new_url);
+
+  // Simulates a navigation to |url| committing in the RenderFrameHost.
+  // DEPRECATED: use NavigationSimulator instead.
+  void SimulateNavigationCommit(const GURL& url);
+
   // PlzNavigate: this method simulates receiving a BeginNavigation IPC.
   void SendRendererInitiatedNavigationRequest(const GURL& url,
                                               bool has_user_gesture);
@@ -140,6 +158,10 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
 
   // Creates a WebBluetooth Service with a dummy InterfaceRequest.
   WebBluetoothServiceImpl* CreateWebBluetoothServiceForTesting();
+
+  bool last_commit_was_error_page() const {
+    return last_commit_was_error_page_;
+  }
 
  private:
   void SendNavigateWithParameters(int nav_entry_id,

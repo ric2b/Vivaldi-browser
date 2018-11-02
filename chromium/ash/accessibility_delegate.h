@@ -13,6 +13,10 @@
 namespace ash {
 
 // A delegate class to control and query accessibility features.
+//
+// NOTE: Methods in this class are migrating to AccessibilityController to
+// support mash (because ash is in a separate process and cannot call back into
+// chrome). Add new methods there, not here.
 class ASH_EXPORT AccessibilityDelegate {
  public:
   virtual ~AccessibilityDelegate() {}
@@ -33,20 +37,8 @@ class ASH_EXPORT AccessibilityDelegate {
   // Invoked to enable the screen magnifier.
   virtual void SetMagnifierEnabled(bool enabled) = 0;
 
-  // Invoked to change the type of the screen magnifier.
-  virtual void SetMagnifierType(MagnifierType type) = 0;
-
   // Returns true if the screen magnifier is enabled.
   virtual bool IsMagnifierEnabled() const = 0;
-
-  // Returns the current screen magnifier mode.
-  virtual MagnifierType GetMagnifierType() const = 0;
-
-  // Invoked to enable Large Cursor.
-  virtual void SetLargeCursorEnabled(bool enabled) = 0;
-
-  // Returns true if Large Cursor is enabled.
-  virtual bool IsLargeCursorEnabled() const = 0;
 
   // Invoked to enable autoclick.
   virtual void SetAutoclickEnabled(bool enabled) = 0;
@@ -159,6 +151,8 @@ class ASH_EXPORT AccessibilityDelegate {
   // Forward an accessibility gesture from the touch exploration controller to
   // ChromeVox.
   virtual void HandleAccessibilityGesture(ui::AXGesture gesture) = 0;
+
+  // NOTE: Prefer adding methods to AccessibilityController, see class comment.
 };
 
 }  // namespace ash

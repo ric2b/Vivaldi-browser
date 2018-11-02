@@ -11,6 +11,7 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -18,6 +19,7 @@
 #include "chrome/browser/bitmap_fetcher/bitmap_fetcher.h"
 #include "chrome/browser/bitmap_fetcher/bitmap_fetcher_delegate.h"
 #include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/extensions/convert_web_app.h"
 #include "chrome/browser/extensions/crx_installer.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/favicon_downloader.h"
@@ -31,6 +33,7 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/webshare/share_target_pref_helper.h"
+#include "chrome/common/extensions/api/url_handlers/url_handlers_parser.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "chrome/common/origin_trials/chrome_origin_trial_policy.h"
@@ -145,7 +148,7 @@ class GeneratedIconImageSource : public gfx::CanvasImageSource {
 void OnIconsLoaded(
     WebApplicationInfo web_app_info,
     const base::Callback<void(const WebApplicationInfo&)> callback,
-    const gfx::ImageFamily& image_family) {
+    gfx::ImageFamily image_family) {
   for (gfx::ImageFamily::const_iterator it = image_family.begin();
        it != image_family.end();
        ++it) {
@@ -230,8 +233,10 @@ class BookmarkAppInstaller : public base::RefCounted<BookmarkAppInstaller>,
 
   void Run() {
     for (const auto& icon : web_app_info_.icons) {
-      if (icon.url.is_valid())
+      if (icon.url.is_valid()) {
+        VLOG(1) << "Queuing download of " << icon.url.spec();
         urls_to_download_.push_back(icon.url);
+      }
     }
 
     if (urls_to_download_.size()) {
@@ -287,14 +292,17 @@ class BookmarkAppInstaller : public base::RefCounted<BookmarkAppInstaller>,
 
   void OnIconsDownloaded(bool success,
                          const std::map<GURL, std::vector<SkBitmap>>& bitmaps) {
+    VLOG(1) << "Bookmark app icons downloaded.";
     // Ignore the unsuccessful case, as the necessary icons will be generated.
     if (success) {
       for (const auto& url_bitmaps : bitmaps) {
+        VLOG(1) << "Downloaded bitmap " << url_bitmaps.first.spec();
         for (const auto& bitmap : url_bitmaps.second) {
           // Only accept square icons.
           if (bitmap.empty() || bitmap.width() != bitmap.height())
             continue;
 
+          VLOG(1) << "Adding bitmap of size " << bitmap.width();
           downloaded_bitmaps_.push_back(
               BookmarkAppHelper::BitmapAndSource(url_bitmaps.first, bitmap));
         }
@@ -305,6 +313,7 @@ class BookmarkAppInstaller : public base::RefCounted<BookmarkAppInstaller>,
   }
 
   void FinishInstallation() {
+    VLOG(1) << "Finishing bookmark app installation";
     // Ensure that all icons that are in web_app_info are present, by generating
     // icons for any sizes which have failed to download. This ensures that the
     // created manifest for the bookmark app does not contain links to icons
@@ -356,6 +365,14 @@ void BookmarkAppHelper::UpdateWebAppInfoFromManifest(
   // Set the url based on the manifest value, if any.
   if (manifest.start_url.is_valid())
     web_app_info->app_url = manifest.start_url;
+
+  // If there is no scope present, use 'start_url' without the filename as the
+  // scope. This does not match the spec but it matches what we do on Android.
+  // See: https://github.com/w3c/manifest/issues/550
+  if (!manifest.scope.is_empty())
+    web_app_info->scope = manifest.scope;
+  else if (manifest.start_url.is_valid())
+    web_app_info->scope = manifest.start_url.Resolve(".");
 
   // If any icons are specified in the manifest, they take precedence over any
   // we picked up from the web_app stuff.
@@ -416,7 +433,7 @@ void BookmarkAppHelper::GenerateIcon(
     return;
 
   gfx::ImageSkia icon_image(
-      new GeneratedIconImageSource(letter, color, output_size),
+      base::MakeUnique<GeneratedIconImageSource>(letter, color, output_size),
       gfx::Size(output_size, output_size));
   SkBitmap& dst = (*bitmaps)[output_size].bitmap;
   if (dst.tryAllocPixels(icon_image.bitmap()->info())) {
@@ -598,14 +615,17 @@ void BookmarkAppHelper::OnDidGetManifest(const GURL& manifest_url,
     UpdateShareTargetInPrefs(manifest_url, manifest, profile_->GetPrefs());
   }
 
+  VLOG(1) << "Preparing to download bookmark app icons";
   // Add urls from the WebApplicationInfo.
   std::vector<GURL> web_app_info_icon_urls;
   for (std::vector<WebApplicationInfo::IconInfo>::const_iterator it =
            web_app_info_.icons.begin();
        it != web_app_info_.icons.end();
        ++it) {
-    if (it->url.is_valid())
+    if (it->url.is_valid()) {
+      VLOG(1) << "Adding icon to download: " << it->url.spec();
       web_app_info_icon_urls.push_back(it->url);
+    }
   }
 
   favicon_downloader_.reset(
@@ -805,6 +825,7 @@ void GetWebApplicationInfoFromApp(
   web_app_info.app_url = AppLaunchInfo::GetLaunchWebURL(extension);
   web_app_info.title = base::UTF8ToUTF16(extension->non_localized_name());
   web_app_info.description = base::UTF8ToUTF16(extension->description());
+  web_app_info.scope = GetScopeURLFromBookmarkApp(extension);
 
   const ExtensionIconSet& icon_set = extensions::IconsInfo::GetIcons(extension);
   std::vector<extensions::ImageLoader::ImageRepresentation> info_list;

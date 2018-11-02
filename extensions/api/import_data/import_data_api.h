@@ -93,6 +93,7 @@ class ImportDataAPI : public importer::ImporterProgressObserver,
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "ImportDataAPI"; }
   static const bool kServiceIsNULLWhileTesting = true;
+  static const bool kServiceRedirectedInIncognito = true;
 
   // Created lazily upon OnListenerAdded.
   std::unique_ptr<ImportDataEventRouter> event_router_;

@@ -15,13 +15,13 @@ namespace proxy {
 
 class PPP_Pdf_Proxy : public InterfaceProxy {
  public:
-  PPP_Pdf_Proxy(Dispatcher* dispatcher);
-  virtual ~PPP_Pdf_Proxy();
+  explicit PPP_Pdf_Proxy(Dispatcher* dispatcher);
+  ~PPP_Pdf_Proxy() override;
 
   static const PPP_Pdf* GetProxyInterface();
 
   // InterfaceProxy implementation.
-  virtual bool OnMessageReceived(const IPC::Message& msg);
+  bool OnMessageReceived(const IPC::Message& msg) override;
 
  private:
   // Message handlers.
@@ -30,6 +30,16 @@ class PPP_Pdf_Proxy : public InterfaceProxy {
                                      PP_PdfPrintPresetOptions_Dev* options,
                                      PP_Bool* result);
   void OnPluginMsgEnableAccessibility(PP_Instance instance);
+  void OnPluginMsgSetCaretPosition(PP_Instance instance,
+                                   const PP_FloatPoint& position);
+  void OnPluginMsgMoveRangeSelectionExtent(PP_Instance instance,
+                                           const PP_FloatPoint& extent);
+  void OnPluginMsgSetSelectionBounds(PP_Instance instance,
+                                     const PP_FloatPoint& base,
+                                     const PP_FloatPoint& extent);
+  void OnPluginMsgCanEditText(PP_Instance instance, PP_Bool* result);
+  void OnPluginMsgReplaceSelection(PP_Instance instance,
+                                   const std::string& text);
 
   // When this proxy is in the plugin side, this value caches the interface
   // pointer so we don't have to retrieve it from the dispatcher each time.

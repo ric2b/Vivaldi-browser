@@ -69,11 +69,13 @@
 <translation id="4506599922270137252">システム管理者に問い合わせる</translation>
 <translation id="4522570452068850558">詳細</translation>
 <translation id="4558551763791394412">拡張機能を無効にしてみてください。</translation>
+<translation id="4611292653554630842">ログイン</translation>
 <translation id="4708268264240856090">接続が中断されました</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Windowsのネットワーク診断を実行<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">実行ファイルのパス</translation>
 <translation id="4764776831041365478"><ph name="URL" />のウェブページは一時的に停止しているか、新しいウェブアドレスに移動した可能性があります。</translation>
 <translation id="4807049035289105102"><ph name="SITE" />はVivaldiの扱えない寄せ集めの証明書を返したため、現在アクセスすることができません。通常、ネットワーク エラーやネットワークへの攻撃は一時的なものです。しばらくするとページにアクセスできるようになります。</translation>
+<translation id="4913131542719409934">認証が必要です</translation>
 <translation id="5023310440958281426">管理者のポリシーを確認してください</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />プロキシアドレスを確認する<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bit)</translation>
@@ -103,10 +105,12 @@
 <translation id="6328639280570009161">ネットワーク予測を無効にしてみてください</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" />で接続が拒否されました。</translation>
 <translation id="6569060085658103619">拡張機能のページを表示しています</translation>
+<translation id="6657585470893396449">パスワード</translation>
 <translation id="6685834062052613830">ログアウトして設定を完了してください</translation>
 <translation id="6711464428925977395">プロキシサーバーに問題がある、またはアドレスが正しくありません。</translation>
 <translation id="6757797048963528358">端末がスリープ状態でした。</translation>
 <translation id="6897140037006041989">ユーザーエージェント</translation>
+<translation id="7090678807593890770"><ph name="LINK" /> を Google で検索してください</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" />ではセキュリティ規格が遵守されていません。</translation>
 <translation id="7353601530677266744">コマンドライン</translation>
 <translation id="7419106976560586862">プロファイルのパス</translation>
@@ -125,6 +129,7 @@
 <translation id="8289355894181816810">確認方法がわからない場合は、ネットワーク管理者までお問い合わせください。</translation>
 <translation id="8332188693563227489"><ph name="HOST_NAME" />へのアクセスが拒否されました</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" />からの応答時間が長すぎます。</translation>
+<translation id="8503813439785031346">ユーザー名</translation>
 <translation id="8740359287975076522"><ph name="HOST_NAME" />の&lt;abbr id="dnsDefinition"&gt;DNSアドレス&lt;/abbr&gt;が見つかりませんでした。問題を診断しています。</translation>
 <translation id="9001074447101275817">プロキシ <ph name="DOMAIN" />にはユーザー名とパスワードが必要です。</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" />ではサポートされていないプロトコルが使用されています。</translation>

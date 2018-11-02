@@ -908,15 +908,13 @@ TEST_P(GLES3DecoderTest, ReadPixelsPixelPackBufferIsNotLargeEnough) {
 }
 
 TEST_P(GLES2DecoderManualInitTest, ReadPixels2RowLengthWorkaround) {
-  base::CommandLine command_line(0, NULL);
-  command_line.AppendSwitchASCII(
-      switches::kGpuDriverBugWorkarounds,
-      base::IntToString(gpu::PACK_PARAMETERS_WORKAROUND_WITH_PACK_BUFFER));
+  gpu::GpuDriverBugWorkarounds workarounds;
+  workarounds.pack_parameters_workaround_with_pack_buffer = true;
   InitState init;
   init.gl_version = "OpenGL ES 3.0";
   init.bind_generates_resource = true;
   init.context_type = CONTEXT_TYPE_OPENGLES3;
-  InitDecoderWithCommandLine(init, &command_line);
+  InitDecoderWithWorkarounds(init, workarounds);
 
   const GLsizei kWidth = 5;
   const GLsizei kHeight = 3;
@@ -961,15 +959,13 @@ TEST_P(GLES2DecoderManualInitTest, ReadPixels2RowLengthWorkaround) {
 }
 
 TEST_P(GLES2DecoderManualInitTest, ReadPixels2AlignmentWorkaround) {
-  base::CommandLine command_line(0, NULL);
-  command_line.AppendSwitchASCII(
-      switches::kGpuDriverBugWorkarounds,
-      base::IntToString(gpu::PACK_PARAMETERS_WORKAROUND_WITH_PACK_BUFFER));
+  gpu::GpuDriverBugWorkarounds workarounds;
+  workarounds.pack_parameters_workaround_with_pack_buffer = true;
   InitState init;
   init.gl_version = "OpenGL ES 3.0";
   init.bind_generates_resource = true;
   init.context_type = CONTEXT_TYPE_OPENGLES3;
-  InitDecoderWithCommandLine(init, &command_line);
+  InitDecoderWithWorkarounds(init, workarounds);
 
   const GLsizei kWidth = 5;
   const GLsizei kHeight = 3;
@@ -1016,15 +1012,13 @@ TEST_P(GLES2DecoderManualInitTest, ReadPixels2AlignmentWorkaround) {
 
 TEST_P(GLES2DecoderManualInitTest,
        ReadPixels2RowLengthAndAlignmentWorkarounds) {
-  base::CommandLine command_line(0, NULL);
-  command_line.AppendSwitchASCII(
-      switches::kGpuDriverBugWorkarounds,
-      base::IntToString(gpu::PACK_PARAMETERS_WORKAROUND_WITH_PACK_BUFFER));
+  gpu::GpuDriverBugWorkarounds workarounds;
+  workarounds.pack_parameters_workaround_with_pack_buffer = true;
   InitState init;
   init.gl_version = "OpenGL ES 3.0";
   init.bind_generates_resource = true;
   init.context_type = CONTEXT_TYPE_OPENGLES3;
-  InitDecoderWithCommandLine(init, &command_line);
+  InitDecoderWithWorkarounds(init, workarounds);
 
   const GLsizei kWidth = 5;
   const GLsizei kHeight = 3;
@@ -3358,7 +3352,7 @@ TEST_P(GLES2DecoderTest, ClearBackbufferBitsOnFlipSwap) {
 
   EXPECT_CALL(*gl_, Finish()).Times(AnyNumber());
   ResizeCHROMIUM& resize_cmd = *GetImmediateAs<ResizeCHROMIUM>();
-  resize_cmd.Init(1, 1, 1.0f, GL_TRUE);
+  resize_cmd.Init(1, 1, 1.0f, GL_COLOR_SPACE_UNSPECIFIED_CHROMIUM, GL_TRUE);
   EXPECT_EQ(error::kNoError, ExecuteCmd(resize_cmd));
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
   EXPECT_EQ(static_cast<uint32_t>(GL_COLOR_BUFFER_BIT),

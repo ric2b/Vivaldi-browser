@@ -202,6 +202,15 @@ void ImportDataHandler::ImportItemEnded(importer::ImportItem item) {
   import_did_succeed_ = true;
 }
 
+void ImportDataHandler::ImportItemFailed(importer::ImportItem item,
+                                         const std::string& error) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  // NOTE(pettern@vivaldi.com): We don't use this code, so this
+  // means nothing for us.
+  import_did_succeed_ = true;
+}
+
 void ImportDataHandler::ImportEnded() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
@@ -231,7 +240,8 @@ void ImportDataHandler::HandleChooseBookmarksFile(const base::ListValue* args) {
 
   DCHECK(args && args->empty());
   select_file_dialog_ = ui::SelectFileDialog::Create(
-      this, new ChromeSelectFilePolicy(web_ui()->GetWebContents()));
+      this,
+      std::make_unique<ChromeSelectFilePolicy>(web_ui()->GetWebContents()));
 
   ui::SelectFileDialog::FileTypeInfo file_type_info;
   file_type_info.extensions.resize(1);

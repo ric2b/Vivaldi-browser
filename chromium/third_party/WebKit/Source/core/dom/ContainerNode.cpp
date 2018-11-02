@@ -626,8 +626,8 @@ DEFINE_TRACE(ContainerNode) {
 }
 
 DEFINE_TRACE_WRAPPERS(ContainerNode) {
-  visitor->TraceWrappersWithManualWriteBarrier(first_child_);
-  visitor->TraceWrappersWithManualWriteBarrier(last_child_);
+  visitor->TraceWrappers(first_child_);
+  visitor->TraceWrappers(last_child_);
   Node::TraceWrappers(visitor);
 }
 
@@ -911,24 +911,14 @@ void ContainerNode::NotifyNodeRemoved(Node& root) {
 
 DISABLE_CFI_PERF
 void ContainerNode::AttachLayoutTree(AttachContext& context) {
-  AttachContext children_context(context);
-  children_context.resolved_style = nullptr;
-  bool clear_previous_in_flow = !!GetLayoutObject();
-  if (clear_previous_in_flow)
-    children_context.previous_in_flow = nullptr;
-  children_context.use_previous_in_flow = true;
-
   for (Node* child = firstChild(); child; child = child->nextSibling()) {
 #if DCHECK_IS_ON()
     DCHECK(child->NeedsAttach() ||
            ChildAttachedAllowedWhenAttachingChildren(this));
 #endif
     if (child->NeedsAttach())
-      child->AttachLayoutTree(children_context);
+      child->AttachLayoutTree(context);
   }
-
-  if (children_context.previous_in_flow && !clear_previous_in_flow)
-    context.previous_in_flow = children_context.previous_in_flow;
 
   ClearChildNeedsStyleRecalc();
   ClearChildNeedsReattachLayoutTree();
@@ -1445,7 +1435,6 @@ void ContainerNode::RecalcDescendantStyles(StyleRecalcChange change) {
   DCHECK(change >= kUpdatePseudoElements || ChildNeedsStyleRecalc());
   DCHECK(!NeedsStyleRecalc());
 
-  StyleResolver& style_resolver = GetDocument().EnsureStyleResolver();
   for (Node* child = lastChild(); child; child = child->previousSibling()) {
     if (child->IsTextNode()) {
       ToText(child)->RecalcTextStyle(change);
@@ -1453,8 +1442,6 @@ void ContainerNode::RecalcDescendantStyles(StyleRecalcChange change) {
       Element* element = ToElement(child);
       if (element->ShouldCallRecalcStyle(change))
         element->RecalcStyle(change);
-      else if (element->SupportsStyleSharing())
-        style_resolver.AddToStyleSharingList(*element);
     }
   }
 }

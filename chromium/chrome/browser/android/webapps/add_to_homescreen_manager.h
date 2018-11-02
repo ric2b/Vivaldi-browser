@@ -41,20 +41,12 @@ class AddToHomescreenManager : public AddToHomescreenDataFetcher::Observer {
  private:
   ~AddToHomescreenManager() override;
 
-  // Shows alert to prompt user for name of home screen shortcut.
-  void ShowDialog();
-
-  // Called only when the AddToHomescreenDataFetcher has retrieved all of the
-  // data needed to install a WebAPK.
-  void CreateInfoBarForWebApk(const ShortcutInfo& info,
-                              const SkBitmap& primary_icon,
-                              const SkBitmap& badge_icon);
-
   void RecordAddToHomescreen();
 
   // AddToHomescreenDataFetcher::Observer:
   void OnDidDetermineWebApkCompatibility(bool is_webapk_compatible) override;
-  void OnUserTitleAvailable(const base::string16& user_title) override;
+  void OnUserTitleAvailable(const base::string16& user_title,
+                            const GURL& url) override;
   void OnDataAvailable(const ShortcutInfo& info,
                        const SkBitmap& primary_icon,
                        const SkBitmap& badge_icon) override;

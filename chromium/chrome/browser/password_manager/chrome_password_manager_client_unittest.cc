@@ -85,10 +85,19 @@ class MockPasswordProtectionService
   MOCK_METHOD0(IsIncognito, bool());
   MOCK_METHOD2(IsPingingEnabled, bool(const base::Feature&, RequestOutcome*));
   MOCK_METHOD0(IsHistorySyncEnabled, bool());
+  MOCK_METHOD3(MaybeLogPasswordReuseLookupEvent,
+               void(WebContents*,
+                    PasswordProtectionService::RequestOutcome,
+                    const safe_browsing::LoginReputationClientResponse*));
+  MOCK_METHOD1(MaybeLogPasswordReuseDetectedEvent, void(WebContents*));
   MOCK_METHOD4(MaybeStartPasswordFieldOnFocusRequest,
                void(WebContents*, const GURL&, const GURL&, const GURL&));
-  MOCK_METHOD4(MaybeStartProtectedPasswordEntryRequest,
-               void(WebContents*, const GURL&, const std::string&, bool));
+  MOCK_METHOD5(MaybeStartProtectedPasswordEntryRequest,
+               void(WebContents*,
+                    const GURL&,
+                    bool,
+                    const std::vector<std::string>&,
+                    bool));
   MOCK_METHOD3(ShowPhishingInterstitial,
                void(const GURL&, const std::string&, content::WebContents*));
   MOCK_METHOD0(GetSyncAccountType,
@@ -167,6 +176,8 @@ class FakePasswordAutofillAgent
     called_set_logging_state_ = false;
     logging_state_active_ = false;
   }
+
+  void BlacklistedFormFound() override {}
 
  private:
   // autofill::mojom::PasswordAutofillAgent:
@@ -637,9 +648,33 @@ TEST_F(ChromePasswordManagerClientTest,
   std::unique_ptr<MockChromePasswordManagerClient> client(
       new MockChromePasswordManagerClient(test_web_contents.get()));
   EXPECT_CALL(*client->password_protection_service(),
-              MaybeStartProtectedPasswordEntryRequest(_, _, _, true))
+              MaybeStartProtectedPasswordEntryRequest(_, _, false, _, true))
       .Times(1);
-  client->CheckProtectedPasswordEntry(std::string("saved_domain.com"), true);
+  client->CheckProtectedPasswordEntry(
+      false, std::vector<std::string>({"saved_domain.com"}), true);
+}
+
+TEST_F(ChromePasswordManagerClientTest, VerifyLogPasswordReuseDetectedEvent) {
+  std::unique_ptr<WebContents> test_web_contents(
+      content::WebContentsTester::CreateTestWebContents(
+          web_contents()->GetBrowserContext(), nullptr));
+  std::unique_ptr<MockChromePasswordManagerClient> client(
+      new MockChromePasswordManagerClient(test_web_contents.get()));
+  EXPECT_CALL(*client->password_protection_service(),
+              MaybeLogPasswordReuseDetectedEvent(test_web_contents.get()))
+      .Times(1);
+  client->LogPasswordReuseDetectedEvent();
 }
 
 #endif
+
+TEST_F(ChromePasswordManagerClientTest, MissingUIDelegate) {
+  // Checks that the saving fallback methods don't crash if there is no UI
+  // delegate. It can happen on ChromeOS login form, for example.
+  GURL kUrl("https://example.com/");
+  NavigateAndCommit(kUrl);
+  std::unique_ptr<password_manager::PasswordFormManager> form_manager;
+  GetClient()->ShowManualFallbackForSaving(std::move(form_manager), false,
+                                           false);
+  GetClient()->HideManualFallbackForSaving();
+}

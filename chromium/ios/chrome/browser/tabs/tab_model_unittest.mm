@@ -24,6 +24,7 @@
 #import "ios/chrome/browser/tabs/tab_private.h"
 #import "ios/chrome/browser/web/chrome_web_client.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
+#import "ios/chrome/browser/web_state_list/web_state_opener.h"
 #include "ios/chrome/test/ios_chrome_scoped_testing_chrome_browser_state_manager.h"
 #import "ios/web/navigation/navigation_manager_impl.h"
 #import "ios/web/public/crw_session_storage.h"
@@ -540,220 +541,6 @@ TEST_F(TabModelTest, OpenerOfTabEmptyModel) {
   EXPECT_FALSE([tab_model_ openerOfTab:nil]);
 }
 
-TEST_F(TabModelTest, OpenersEmptyModel) {
-  // Empty model.
-  EXPECT_TRUE([tab_model_ isEmpty]);
-  EXPECT_FALSE([tab_model_ nextTabWithOpener:nil afterTab:nil]);
-  EXPECT_FALSE([tab_model_ lastTabWithOpener:nil]);
-}
-
-TEST_F(TabModelTest, OpenersNothingOpenedGeneral) {
-  // Start with a few tabs.
-  [tab_model_ insertTabWithURL:GURL(kURL1)
-                      referrer:web::Referrer()
-                    transition:ui::PAGE_TRANSITION_TYPED
-                        opener:nil
-                   openedByDOM:NO
-                       atIndex:[tab_model_ count]
-                  inBackground:NO];
-  [tab_model_ insertTabWithURL:GURL(kURL1)
-                      referrer:web::Referrer()
-                    transition:ui::PAGE_TRANSITION_TYPED
-                        opener:nil
-                   openedByDOM:NO
-                       atIndex:[tab_model_ count]
-                  inBackground:NO];
-
-  Tab* tab = [tab_model_ insertTabWithURL:GURL(kURL1)
-                                 referrer:web::Referrer()
-                               transition:ui::PAGE_TRANSITION_TYPED
-                                   opener:nil
-                              openedByDOM:NO
-                                  atIndex:[tab_model_ count]
-                             inBackground:NO];
-
-  [tab_model_ insertTabWithURL:GURL(kURL1)
-                      referrer:web::Referrer()
-                    transition:ui::PAGE_TRANSITION_TYPED
-                        opener:nil
-                   openedByDOM:NO
-                       atIndex:[tab_model_ count]
-                  inBackground:NO];
-  [tab_model_ insertTabWithURL:GURL(kURL1)
-                      referrer:web::Referrer()
-                    transition:ui::PAGE_TRANSITION_TYPED
-                        opener:nil
-                   openedByDOM:NO
-                       atIndex:[tab_model_ count]
-                  inBackground:NO];
-
-  // All should fail since this hasn't opened anything else.
-  EXPECT_FALSE([tab_model_ nextTabWithOpener:tab afterTab:nil]);
-  EXPECT_FALSE([tab_model_ lastTabWithOpener:tab]);
-
-  // Add more items to the tab, expect the same results.
-  [tab_model_ insertTabWithURL:GURL(kURL1)
-                      referrer:web::Referrer()
-                    transition:ui::PAGE_TRANSITION_TYPED
-                        opener:nil
-                   openedByDOM:NO
-                       atIndex:[tab_model_ count]
-                  inBackground:NO];
-  [tab_model_ insertTabWithURL:GURL(kURL1)
-                      referrer:web::Referrer()
-                    transition:ui::PAGE_TRANSITION_TYPED
-                        opener:nil
-                   openedByDOM:NO
-                       atIndex:[tab_model_ count]
-                  inBackground:NO];
-  EXPECT_FALSE([tab_model_ nextTabWithOpener:tab afterTab:nil]);
-  EXPECT_FALSE([tab_model_ lastTabWithOpener:tab]);
-}
-
-TEST_F(TabModelTest, OpenersNothingOpenedFirst) {
-  // Our tab is first.
-  Tab* tab = [tab_model_ insertTabWithURL:GURL(kURL1)
-                                 referrer:web::Referrer()
-                               transition:ui::PAGE_TRANSITION_TYPED
-                                   opener:nil
-                              openedByDOM:NO
-                                  atIndex:[tab_model_ count]
-                             inBackground:NO];
-
-  [tab_model_ insertTabWithURL:GURL(kURL1)
-                      referrer:web::Referrer()
-                    transition:ui::PAGE_TRANSITION_TYPED
-                        opener:nil
-                   openedByDOM:NO
-                       atIndex:[tab_model_ count]
-                  inBackground:NO];
-  [tab_model_ insertTabWithURL:GURL(kURL1)
-                      referrer:web::Referrer()
-                    transition:ui::PAGE_TRANSITION_TYPED
-                        opener:nil
-                   openedByDOM:NO
-                       atIndex:[tab_model_ count]
-                  inBackground:NO];
-
-  // All should fail since this hasn't opened anything else.
-  EXPECT_FALSE([tab_model_ nextTabWithOpener:tab afterTab:nil]);
-  EXPECT_FALSE([tab_model_ lastTabWithOpener:tab]);
-}
-
-TEST_F(TabModelTest, OpenersNothingOpenedLast) {
-  // Our tab is last.
-  [tab_model_ insertTabWithURL:GURL(kURL1)
-                      referrer:web::Referrer()
-                    transition:ui::PAGE_TRANSITION_TYPED
-                        opener:nil
-                   openedByDOM:NO
-                       atIndex:[tab_model_ count]
-                  inBackground:NO];
-  [tab_model_ insertTabWithURL:GURL(kURL1)
-                      referrer:web::Referrer()
-                    transition:ui::PAGE_TRANSITION_TYPED
-                        opener:nil
-                   openedByDOM:NO
-                       atIndex:[tab_model_ count]
-                  inBackground:NO];
-
-  Tab* tab = [tab_model_ insertTabWithURL:GURL(kURL1)
-                                 referrer:web::Referrer()
-                               transition:ui::PAGE_TRANSITION_TYPED
-                                   opener:nil
-                              openedByDOM:NO
-                                  atIndex:[tab_model_ count]
-                             inBackground:NO];
-
-  // All should fail since this hasn't opened anything else.
-  EXPECT_FALSE([tab_model_ nextTabWithOpener:tab afterTab:nil]);
-  EXPECT_FALSE([tab_model_ lastTabWithOpener:tab]);
-}
-
-TEST_F(TabModelTest, OpenersChildTabBeforeOpener) {
-  Tab* parent_tab = [tab_model_ insertTabWithURL:GURL(kURL1)
-                                        referrer:web::Referrer()
-                                      transition:ui::PAGE_TRANSITION_TYPED
-                                          opener:nil
-                                     openedByDOM:NO
-                                         atIndex:[tab_model_ count]
-                                    inBackground:NO];
-
-  // Insert child at start
-  [tab_model_ insertTabWithURL:GURL(kURL1)
-                      referrer:web::Referrer()
-                    transition:ui::PAGE_TRANSITION_TYPED
-                        opener:parent_tab
-                   openedByDOM:NO
-                       atIndex:0
-                  inBackground:NO];
-
-  // Insert a few more between them.
-  [tab_model_ insertTabWithURL:GURL(kURL1)
-                      referrer:web::Referrer()
-                    transition:ui::PAGE_TRANSITION_TYPED
-                        opener:nil
-                   openedByDOM:NO
-                       atIndex:1
-                  inBackground:NO];
-  [tab_model_ insertTabWithURL:GURL(kURL1)
-                      referrer:web::Referrer()
-                    transition:ui::PAGE_TRANSITION_TYPED
-                        opener:nil
-                   openedByDOM:NO
-                       atIndex:1
-                  inBackground:NO];
-
-  EXPECT_FALSE([tab_model_ nextTabWithOpener:parent_tab afterTab:nil]);
-  EXPECT_FALSE([tab_model_ lastTabWithOpener:parent_tab]);
-}
-
-TEST_F(TabModelTest, OpenersChildTabAfterOpener) {
-  Tab* parent_tab = [tab_model_ insertTabWithURL:GURL(kURL1)
-                                        referrer:web::Referrer()
-                                      transition:ui::PAGE_TRANSITION_TYPED
-                                          opener:nil
-                                     openedByDOM:NO
-                                         atIndex:[tab_model_ count]
-                                    inBackground:NO];
-
-  [tab_model_ insertTabWithURL:GURL(kURL1)
-                      referrer:web::Referrer()
-                    transition:ui::PAGE_TRANSITION_TYPED
-                        opener:nil
-                   openedByDOM:NO
-                       atIndex:[tab_model_ count]
-                  inBackground:NO];
-  [tab_model_ insertTabWithURL:GURL(kURL1)
-                      referrer:web::Referrer()
-                    transition:ui::PAGE_TRANSITION_TYPED
-                        opener:nil
-                   openedByDOM:NO
-                       atIndex:[tab_model_ count]
-                  inBackground:NO];
-
-  // Insert two children at end.
-  Tab* child_tab1 = [tab_model_ insertTabWithURL:GURL(kURL1)
-                                        referrer:web::Referrer()
-                                      transition:ui::PAGE_TRANSITION_TYPED
-                                          opener:parent_tab
-                                     openedByDOM:NO
-                                         atIndex:[tab_model_ count]
-                                    inBackground:NO];
-  Tab* child_tab2 = [tab_model_ insertTabWithURL:GURL(kURL1)
-                                        referrer:web::Referrer()
-                                      transition:ui::PAGE_TRANSITION_TYPED
-                                          opener:parent_tab
-                                     openedByDOM:NO
-                                         atIndex:[tab_model_ count]
-                                    inBackground:NO];
-
-  EXPECT_EQ([tab_model_ nextTabWithOpener:parent_tab afterTab:nil], child_tab1);
-  EXPECT_EQ([tab_model_ nextTabWithOpener:parent_tab afterTab:child_tab1],
-            child_tab2);
-  EXPECT_EQ([tab_model_ lastTabWithOpener:parent_tab], child_tab2);
-}
-
 TEST_F(TabModelTest, AddWithOrderController) {
   // Create a few tabs with the controller at the front.
   Tab* parent = [tab_model_ insertTabWithURL:GURL(kURL1)
@@ -1096,7 +883,9 @@ TEST_F(TabModelTest, ParentTabModel) {
   Tab* tab = LegacyTabHelper::GetTabForWebState(web_state.get());
   EXPECT_NSEQ(nil, [tab parentTabModel]);
 
-  [tab_model_ webStateList]->InsertWebState(0, std::move(web_state));
+  [tab_model_ webStateList]->InsertWebState(0, std::move(web_state),
+                                            WebStateList::INSERT_FORCE_INDEX,
+                                            WebStateOpener());
   EXPECT_NSEQ(tab_model_, [tab parentTabModel]);
 }
 
@@ -1107,7 +896,9 @@ TEST_F(TabModelTest, TabCreatedOnInsertion) {
   EXPECT_NSEQ(nil, LegacyTabHelper::GetTabForWebState(web_state.get()));
 
   web::WebState* web_state_ptr = web_state.get();
-  [tab_model_ webStateList]->InsertWebState(0, std::move(web_state));
+  [tab_model_ webStateList]->InsertWebState(0, std::move(web_state),
+                                            WebStateList::INSERT_FORCE_INDEX,
+                                            WebStateOpener());
   EXPECT_NSNE(nil, LegacyTabHelper::GetTabForWebState(web_state_ptr));
 }
 

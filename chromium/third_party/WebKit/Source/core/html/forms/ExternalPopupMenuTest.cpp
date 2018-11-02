@@ -8,7 +8,7 @@
 #include "core/HTMLNames.h"
 #include "core/frame/FrameTestHelpers.h"
 #include "core/frame/VisualViewport.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "core/html/HTMLSelectElement.h"
 #include "core/html/forms/PopupMenu.h"
 #include "core/layout/LayoutMenuList.h"
@@ -122,11 +122,11 @@ class ExternalPopupMenuTest : public ::testing::Test {
     WebView()->UpdateAllLifecyclePhases();
   }
 
-  WebViewBase* WebView() const { return helper_.WebView(); }
+  WebViewImpl* WebView() const { return helper_.WebView(); }
   const ExternalPopupMenuWebFrameClient& Client() const {
     return web_frame_client_;
   }
-  WebLocalFrameBase* MainFrame() const { return helper_.LocalMainFrame(); }
+  WebLocalFrameImpl* MainFrame() const { return helper_.LocalMainFrame(); }
 
  private:
   std::string base_url_;

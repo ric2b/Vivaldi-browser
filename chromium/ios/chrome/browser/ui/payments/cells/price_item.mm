@@ -6,7 +6,9 @@
 
 #include <algorithm>
 
+#import "ios/chrome/browser/ui/collection_view/cells/MDCCollectionViewCell+Chrome.h"
 #import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
+#import "ios/chrome/browser/ui/payments/cells/accessibility_util.h"
 #import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -46,7 +48,7 @@ const CGFloat kMinWidthRatio = 0.5f;
 
 - (void)configureCell:(PriceCell*)cell {
   [super configureCell:cell];
-  cell.accessoryType = self.accessoryType;
+  [cell cr_setAccessoryType:self.accessoryType];
   cell.itemLabel.text = self.item;
   cell.notificationLabel.text = self.notification;
   cell.priceLabel.text = self.price;
@@ -180,9 +182,11 @@ const CGFloat kMinWidthRatio = 0.5f;
 #pragma mark - NSObject(Accessibility)
 
 - (NSString*)accessibilityLabel {
-  return [NSString stringWithFormat:@"%@, %@, %@", self.itemLabel.text,
-                                    self.notificationLabel.text,
-                                    self.priceLabel.text];
+  AccessibilityLabelBuilder* builder = [[AccessibilityLabelBuilder alloc] init];
+  [builder appendItem:self.itemLabel.text];
+  [builder appendItem:self.notificationLabel.text];
+  [builder appendItem:self.priceLabel.text];
+  return [builder buildAccessibilityLabel];
 }
 
 @end

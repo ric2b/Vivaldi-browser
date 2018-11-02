@@ -107,7 +107,7 @@ void AppendStringIfNotEmpty(const AutofillProfile& profile,
                             const ServerFieldType& type,
                             const std::string& app_locale,
                             base::ListValue* list) {
-  const base::string16 value = profile.GetInfo(AutofillType(type), app_locale);
+  const base::string16 value = profile.GetInfo(type, app_locale);
   if (!value.empty())
     list->AppendString(value);
 }
@@ -466,7 +466,7 @@ void PaymentsClient::InitializeUrlFetcher() {
           destination: GOOGLE_OWNED_SERVICE
         }
         policy {
-          cookies_allowed: false
+          cookies_allowed: NO
           setting:
             "Users can enable or disable this feature in Chromium settings by "
             "toggling 'Credit cards and addresses using Google Payments', "

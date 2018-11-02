@@ -4,20 +4,15 @@
 
 #include "gpu/ipc/common/mailbox_struct_traits.h"
 
-namespace mojo {
+#include "base/containers/span.h"
 
-// static
-MailboxName StructTraits<gpu::mojom::MailboxDataView, gpu::Mailbox>::name(
-    const gpu::Mailbox& mailbox) {
-  return {GL_MAILBOX_SIZE_CHROMIUM, GL_MAILBOX_SIZE_CHROMIUM,
-          const_cast<int8_t*>(&mailbox.name[0])};
-}
+namespace mojo {
 
 // static
 bool StructTraits<gpu::mojom::MailboxDataView, gpu::Mailbox>::Read(
     gpu::mojom::MailboxDataView data,
     gpu::Mailbox* out) {
-  MailboxName mailbox_name = {0, GL_MAILBOX_SIZE_CHROMIUM, &out->name[0]};
+  base::span<int8_t> mailbox_name(out->name);
   return data.ReadName(&mailbox_name);
 }
 

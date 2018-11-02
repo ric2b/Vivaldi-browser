@@ -27,10 +27,9 @@ bool WaitUntilHidden();
 void WaitControllerStateChangesTo(const KeyboardControllerState state);
 
 // Gets the calculated keyboard bounds from |root_bounds|. The keyboard height
-// is specified by |keyboard_height|. This should be only called when keyboard
-// is in FULL_WDITH mode.
-gfx::Rect FullWidthKeyboardBoundsFromRootBounds(const gfx::Rect& root_bounds,
-                                                int keyboard_height);
+// is specified by |keyboard_height|.
+gfx::Rect KeyboardBoundsFromRootBounds(const gfx::Rect& root_bounds,
+                                       int keyboard_height);
 
 class FakeKeyboardUI : public KeyboardUI {
  public:

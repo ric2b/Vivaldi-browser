@@ -53,16 +53,10 @@ class ChromeWebViewPermissionHelperDelegate :
                                int request_id,
                                const GURL& url,
                                bool blocked_by_policy) override;
-  void FileSystemAccessedSync(int render_process_id,
-                              int render_frame_id,
-                              const GURL& url,
-                              bool blocked_by_policy,
-                              IPC::Message* reply_msg) override;
 #if BUILDFLAG(ENABLE_PLUGINS)
   // content::WebContentsObserver implementation.
   bool OnMessageReceived(const IPC::Message& message,
                          content::RenderFrameHost* render_frame_host) override;
-  bool OnMessageReceived(const IPC::Message& message) override;
 #endif  // BUILDFLAG(ENABLE_PLUGINS)
 
  private:
@@ -120,12 +114,6 @@ class ChromeWebViewPermissionHelperDelegate :
                                        int request_id,
                                        const GURL& url,
                                        bool allowed);
-
-  void FileSystemAccessedSyncResponse(int render_process_id,
-                                      int render_frame_id,
-                                      const GURL& url,
-                                      IPC::Message* reply_msg,
-                                      bool allowed);
 
   GuestViewBase* web_view_guest() {
     return web_view_permission_helper()->web_view_guest();

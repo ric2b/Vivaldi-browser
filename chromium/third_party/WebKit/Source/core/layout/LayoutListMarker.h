@@ -88,7 +88,7 @@ class LayoutListMarker final : public LayoutBox {
       bool first_line,
       LineDirectionMode,
       LinePositionMode = kPositionOnContainingLine) const override;
-  int BaselinePosition(
+  LayoutUnit BaselinePosition(
       FontBaseline,
       bool first_line,
       LineDirectionMode,
@@ -96,7 +96,6 @@ class LayoutListMarker final : public LayoutBox {
 
   bool IsText() const { return !IsImage(); }
 
-  void SetSelectionState(SelectionState) override;
   bool CanBeSelectionLeaf() const override { return true; }
 
   LayoutUnit GetWidthOfTextWithSuffix() const;

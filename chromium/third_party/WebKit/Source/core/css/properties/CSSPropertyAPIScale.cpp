@@ -8,13 +8,13 @@
 #include "core/css/parser/CSSPropertyParserHelpers.h"
 #include "platform/RuntimeEnabledFeatures.h"
 
-class CSSParserLocalContext;
 namespace blink {
 
-const CSSValue* CSSPropertyAPIScale::parseSingleValue(
+const CSSValue* CSSPropertyAPIScale::ParseSingleValue(
+    CSSPropertyID,
     CSSParserTokenRange& range,
     const CSSParserContext& context,
-    const CSSParserLocalContext&) {
+    const CSSParserLocalContext&) const {
   DCHECK(RuntimeEnabledFeatures::CSSIndependentTransformPropertiesEnabled());
 
   CSSValueID id = range.Peek().Id();

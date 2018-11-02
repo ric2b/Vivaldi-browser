@@ -63,6 +63,9 @@ void ShowResizeShadow(aura::Window* window, int component) {
     // TODO: http://crbug.com/640773.
     return;
   }
+  if (!wm::GetWindowState(window)->can_be_dragged())
+    return;
+
   ResizeShadowController* resize_shadow_controller =
       Shell::Get()->resize_shadow_controller();
   if (resize_shadow_controller)
@@ -74,6 +77,9 @@ void HideResizeShadow(aura::Window* window) {
     // TODO: http://crbug.com/640773.
     return;
   }
+  if (!wm::GetWindowState(window)->can_be_dragged())
+    return;
+
   ResizeShadowController* resize_shadow_controller =
       Shell::Get()->resize_shadow_controller();
   if (resize_shadow_controller)
@@ -327,7 +333,7 @@ void WmToplevelWindowEventHandler::OnGestureEvent(ui::GestureEvent* event,
     case ui::ET_SCROLL_FLING_START:
       CompleteDrag(DragResult::SUCCESS);
 
-      // TODO(pkotwicz): Fix tests which inadvertantly start flings and check
+      // TODO(pkotwicz): Fix tests which inadvertently start flings and check
       // window_resizer_->IsMove() instead of the hittest component at |event|'s
       // location.
       if (GetNonClientComponent(target, event->location()) != HTCAPTION ||

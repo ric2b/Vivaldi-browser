@@ -39,6 +39,7 @@
 #include "platform/graphics/TouchAction.h"
 #include "platform/heap/Handle.h"
 #include "platform/scroll/ScrollTypes.h"
+#include "platform/text/TextDirection.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/Optional.h"
 #include "platform/wtf/Vector.h"
@@ -46,6 +47,7 @@
 #include "public/platform/WebDragOperation.h"
 #include "public/platform/WebEventListenerProperties.h"
 #include "public/platform/WebFocusType.h"
+#include "public/platform/WebScrollBoundaryBehavior.h"
 
 // To avoid conflicts with the CreateWindow macro from the Windows SDK...
 #undef CreateWindow
@@ -74,15 +76,13 @@ class Page;
 class PagePopup;
 class PagePopupClient;
 class PopupOpeningObserver;
-class RemoteFrame;
 class WebDragData;
 class WebFrameScheduler;
 class WebImage;
 class WebLayer;
 class WebLayerTreeView;
-class WebLocalFrameBase;
-class WebRemoteFrameBase;
-class WebViewBase;
+class WebTappedInfo;
+class WebViewImpl;
 
 struct CompositedSelection;
 struct DateTimeChooserParameters;
@@ -143,7 +143,8 @@ class CORE_EXPORT ChromeClient : public PlatformChromeClient {
   virtual void DidOverscroll(const FloatSize& overscroll_delta,
                              const FloatSize& accumulated_overscroll,
                              const FloatPoint& position_in_viewport,
-                             const FloatSize& velocity_in_viewport) = 0;
+                             const FloatSize& velocity_in_viewport,
+                             const WebScrollBoundaryBehavior&) = 0;
 
   virtual bool ShouldReportDetailedMessageForSource(LocalFrame&,
                                                     const String& source) = 0;
@@ -170,7 +171,7 @@ class CORE_EXPORT ChromeClient : public PlatformChromeClient {
                             String& result);
   virtual bool TabsToLinks() = 0;
 
-  virtual WebViewBase* GetWebView() const = 0;
+  virtual WebViewImpl* GetWebView() const = 0;
 
   // Methods used by PlatformChromeClient.
   virtual WebScreenInfo GetScreenInfo() const = 0;
@@ -238,13 +239,13 @@ class CORE_EXPORT ChromeClient : public PlatformChromeClient {
 
   // Pass nullptr as the GraphicsLayer to detach the root layer.
   // This sets the graphics layer for the LocalFrame's WebWidget, if it has
-  // one. Otherwise it sets it for the WebViewBase.
+  // one. Otherwise it sets it for the WebViewImpl.
   virtual void AttachRootGraphicsLayer(GraphicsLayer*,
                                        LocalFrame* local_root) = 0;
 
   // Pass nullptr as the WebLayer to detach the root layer.
   // This sets the WebLayer for the LocalFrame's WebWidget, if it has
-  // one. Otherwise it sets it for the WebViewBase.
+  // one. Otherwise it sets it for the WebViewImpl.
   virtual void AttachRootLayer(WebLayer*, LocalFrame* local_root) = 0;
 
   virtual void AttachCompositorAnimationTimeline(CompositorAnimationTimeline*,
@@ -270,7 +271,6 @@ class CORE_EXPORT ChromeClient : public PlatformChromeClient {
   virtual void UpdateEventRectsForSubframeIfNecessary(LocalFrame*) = 0;
   virtual void SetHasScrollEventHandlers(LocalFrame*, bool) = 0;
   virtual void SetNeedsLowLatencyInput(LocalFrame*, bool) = 0;
-  virtual const WebInputEvent* GetCurrentInputEvent() const { return nullptr; }
 
   virtual void SetTouchAction(LocalFrame*, TouchAction) = 0;
 
@@ -281,7 +281,10 @@ class CORE_EXPORT ChromeClient : public PlatformChromeClient {
   virtual void ClosePagePopup(PagePopup*) = 0;
   virtual DOMWindow* PagePopupWindowForTesting() const = 0;
 
-  virtual void SetBrowserControlsState(float height, bool shrinks_layout){};
+  virtual void SetBrowserControlsState(float top_height,
+                                       float bottom_height,
+                                       bool shrinks_layout){};
+  virtual void SetBrowserControlsShownRatio(float){};
 
   virtual String AcceptLanguages() = 0;
 
@@ -322,11 +325,13 @@ class CORE_EXPORT ChromeClient : public PlatformChromeClient {
 
   virtual void RegisterViewportLayers() const {}
 
-  virtual void ShowUnhandledTapUIIfNeeded(IntPoint, Node*, bool) {}
+  virtual void ShowUnhandledTapUIIfNeeded(WebTappedInfo&) {}
 
   virtual void OnMouseDown(Node&) {}
 
   virtual void DidUpdateBrowserControls() const {}
+
+  virtual void SetScrollBoundaryBehavior(const WebScrollBoundaryBehavior&) {}
 
   virtual void RegisterPopupOpeningObserver(PopupOpeningObserver*) = 0;
   virtual void UnregisterPopupOpeningObserver(PopupOpeningObserver*) = 0;
@@ -346,27 +351,14 @@ class CORE_EXPORT ChromeClient : public PlatformChromeClient {
   // any, and 0.0 otherwise.
   virtual double LastFrameTimeMonotonic() const { return 0.0; }
 
-  using SupplementInstallCallback = void (*)(LocalFrame&);
-  // Allows for the registration of a callback that is used to install
-  // supplements on a specified LocalFrame.
-  static void RegisterSupplementInstallCallback(SupplementInstallCallback);
   virtual void InstallSupplements(LocalFrame&);
 
   virtual WebLayerTreeView* GetWebLayerTreeView(LocalFrame*) { return nullptr; }
 
-  virtual WebLocalFrameBase* GetWebLocalFrameBase(LocalFrame*) {
-    return nullptr;
-  }
-
-  virtual WebRemoteFrameBase* GetWebRemoteFrameBase(RemoteFrame&) {
-    return nullptr;
-  }
-
-  virtual void RequestDecode(
-      LocalFrame*,
-      const PaintImage& image,
-      std::unique_ptr<WTF::Function<void(bool)>> callback) {
-    (*callback)(false);
+  virtual void RequestDecode(LocalFrame*,
+                             const PaintImage& image,
+                             WTF::Function<void(bool)> callback) {
+    callback(false);
   }
 
   DECLARE_TRACE();
@@ -385,9 +377,6 @@ class CORE_EXPORT ChromeClient : public PlatformChromeClient {
                                             const String& default_value,
                                             String& result) = 0;
   virtual void PrintDelegate(LocalFrame*) = 0;
-
- protected:
-  static SupplementInstallCallback supplement_install_callback_;
 
  private:
   bool CanOpenModalIfDuringPageDismissal(Frame& main_frame,

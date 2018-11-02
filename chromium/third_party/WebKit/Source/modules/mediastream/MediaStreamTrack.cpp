@@ -32,7 +32,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/events/Event.h"
+#include "core/dom/events/Event.h"
 #include "core/frame/Deprecation.h"
 #include "modules/imagecapture/ImageCapture.h"
 #include "modules/mediastream/MediaConstraintsImpl.h"
@@ -207,7 +207,6 @@ void MediaStreamTrack::stopTrack(ExceptionState& exception_state) {
 
   ready_state_ = MediaStreamSource::kReadyStateEnded;
   MediaStreamCenter::Instance().DidStopMediaStreamTrack(Component());
-  DispatchEvent(Event::Create(EventTypeNames::ended));
   PropagateTrackEnded();
 }
 
@@ -270,10 +269,13 @@ void MediaStreamTrack::getSettings(MediaTrackSettings& settings) {
     settings.setHeight(platform_settings.height);
   if (platform_settings.HasAspectRatio())
     settings.setAspectRatio(platform_settings.aspect_ratio);
-  if (RuntimeEnabledFeatures::MediaCaptureDepthEnabled() &&
+  if (RuntimeEnabledFeatures::MediaCaptureDepthVideoKindEnabled() &&
       component_->Source()->GetType() == MediaStreamSource::kTypeVideo) {
     if (platform_settings.HasVideoKind())
       settings.setVideoKind(platform_settings.video_kind);
+  }
+  if (RuntimeEnabledFeatures::MediaCaptureDepthEnabled() &&
+      component_->Source()->GetType() == MediaStreamSource::kTypeVideo) {
     if (platform_settings.HasDepthNear())
       settings.setDepthNear(platform_settings.depth_near);
     if (platform_settings.HasDepthFar())
@@ -329,7 +331,7 @@ ScriptPromise MediaStreamTrack::applyConstraints(
   }
 
   // |constraints| empty means "remove/clear all current constraints".
-  if (!constraints.hasAdvanced())
+  if (!constraints.hasAdvanced() || constraints.advanced().IsEmpty())
     image_capture_->ClearMediaTrackConstraints(resolver);
   else
     image_capture_->SetMediaTrackConstraints(resolver, constraints.advanced());

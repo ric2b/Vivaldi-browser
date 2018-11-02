@@ -38,8 +38,7 @@ class RecurrrenceTable {
   RecurrenceID CreateRecurrenceEvent(RecurrenceRow ev);
   bool GetAllRecurrences(RecurrenceRows* recurrences);
 
-  bool GetRecurrenceRow(RecurrenceID recurrence_id,
-                        RecurrenceRow* out_recurrence);
+  bool GetRecurrenceRow(EventID event_id, RecurrenceRow* out_recurrence);
 
   bool UpdateRecurrenceRow(const RecurrenceRow& recurrence);
   bool DeleteRecurrence(RecurrenceID recurrence_id);
@@ -58,7 +57,7 @@ class RecurrrenceTable {
 // string, it will save time doing string appends. If you have to build a SQL
 // string dynamically anyway, use the constant, it will save space.
 #define CALENDAR_RECURRING_ROW_FIELDS                                  \
-  " id, event_id, interval, number_of_occurrences, skip_count, "       \
+  " id, event_id, interval, number_of_ocurrences, skip_count, "        \
   "day_of_week, week_of_month, day_of_month, month_of_year, created, " \
   "last_modified "
 

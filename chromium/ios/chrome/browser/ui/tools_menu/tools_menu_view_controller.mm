@@ -10,15 +10,19 @@
 #include "base/logging.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
+#include "components/feature_engagement/public/feature_constants.h"
+#include "components/feature_engagement/public/tracker.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/experimental_flags.h"
 #import "ios/chrome/browser/ui/animation_util.h"
+#import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
 #import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_menu_notification_delegate.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_menu_notifier.h"
 #import "ios/chrome/browser/ui/tools_menu/reading_list_menu_view_item.h"
+#import "ios/chrome/browser/ui/tools_menu/tools_menu_configuration.h"
 #import "ios/chrome/browser/ui/tools_menu/tools_menu_constants.h"
 #import "ios/chrome/browser/ui/tools_menu/tools_menu_model.h"
 #import "ios/chrome/browser/ui/tools_menu/tools_menu_view_item.h"
@@ -26,11 +30,11 @@
 #import "ios/chrome/browser/ui/tools_menu/tools_popup_controller.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
 #import "ios/chrome/common/material_timing.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #import "ios/public/provider/chrome/browser/user_feedback/user_feedback_provider.h"
-#import "ios/shared/chrome/browser/ui/tools_menu/tools_menu_configuration.h"
 #import "ios/third_party/material_components_ios/src/components/Ink/src/MaterialInk.h"
 #include "ios/web/public/user_agent.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -113,6 +117,17 @@ NS_INLINE void AnimateInViews(NSArray* views,
   // for the reading list badge.
   __weak ReadingListMenuNotifier* _readingListMenuNotifier;
 }
+
+// Determines if the reading list should display a new feature badge. Defaults
+// to |NO|.
+@property(nonatomic, assign) BOOL showReadingListNewBadge;
+// Indicates whether the New Incognito Tab cell should be highlighted. Defaults
+// to |NO|.
+@property(nonatomic, assign) BOOL highlightNewIncognitoTabCell;
+// Tracks events for the purpose of in-product help. Does not take ownership of
+// tracker. Tracker must not be destroyed during lifetime of
+// ToolsMenuViewController. Defaults to |NULL|.
+@property(nonatomic, assign) feature_engagement::Tracker* engagementTracker;
 @property(nonatomic, strong) ToolsMenuCollectionView* menuView;
 @property(nonatomic, strong) MDCInkView* touchFeedbackView;
 @property(nonatomic, assign) ToolbarType toolbarType;
@@ -127,6 +142,9 @@ NS_INLINE void AnimateInViews(NSArray* views,
 
 @implementation ToolsMenuViewController
 
+@synthesize showReadingListNewBadge = _showReadingListNewBadge;
+@synthesize highlightNewIncognitoTabCell = _highlightNewIncognitoTabCell;
+@synthesize engagementTracker = _engagementTracker;
 @synthesize menuView = _menuView;
 @synthesize isCurrentPageBookmarked = _isCurrentPageBookmarked;
 @synthesize touchFeedbackView = _touchFeedbackView;
@@ -183,12 +201,8 @@ NS_INLINE void AnimateInViews(NSArray* views,
   [[toolsCell starredButton] setHidden:!_isCurrentPageBookmarked];
 }
 
-- (void)setCanUseReaderMode:(BOOL)enabled {
-  [self setItemEnabled:enabled withTag:IDC_READER_MODE];
-}
-
 - (void)setCanShowFindBar:(BOOL)enabled {
-  [self setItemEnabled:enabled withTag:IDC_FIND];
+  [self setItemEnabled:enabled withTag:TOOLS_SHOW_FIND_IN_PAGE];
 }
 
 - (void)setCanShowShareMenu:(BOOL)enabled {
@@ -217,6 +231,10 @@ NS_INLINE void AnimateInViews(NSArray* views,
 
 - (void)initializeMenuWithConfiguration:(ToolsMenuConfiguration*)configuration {
   self.requestStartTime = configuration.requestStartTime;
+  self.showReadingListNewBadge = configuration.showReadingListNewBadge;
+  self.engagementTracker = configuration.engagementTracker;
+  self.highlightNewIncognitoTabCell =
+      configuration.highlightNewIncognitoTabCell;
 
   if (configuration.readingListMenuNotifier) {
     _readingListMenuNotifier = configuration.readingListMenuNotifier;
@@ -279,19 +297,13 @@ NS_INLINE void AnimateInViews(NSArray* views,
       break;
     case web::UserAgentType::DESKTOP:
       [self setItemEnabled:YES withTag:IDC_REQUEST_MOBILE_SITE];
-      if (!experimental_flags::IsRequestMobileSiteEnabled()) {
-        // When Request Mobile Site is disabled, the enabled state of Request
-        // Desktop Site button needs to be set to NO because it is visible even
-        // though the current UserAgentType is DESKTOP.
-        [self setItemEnabled:NO withTag:IDC_REQUEST_DESKTOP_SITE];
-      }
       break;
   }
 
-  // Disable IDC_CLOSE_ALL_TABS menu item if on phone with no tabs.
+  // Disable TOOLS_CLOSE_ALL_TABS menu item if on phone with no tabs.
   if (!IsIPadIdiom()) {
     [self setItemEnabled:!configuration.hasNoOpenedTabs
-                 withTag:IDC_CLOSE_ALL_TABS];
+                 withTag:TOOLS_CLOSE_ALL_TABS];
   }
 }
 
@@ -299,8 +311,8 @@ NS_INLINE void AnimateInViews(NSArray* views,
 - (ToolsMenuViewItem*)createViewSourceItem {
   return [ToolsMenuViewItem menuItemWithTitle:@"View Source"
                       accessibilityIdentifier:@"View Source"
-                                     selector:nullptr
-                                      command:IDC_VIEW_SOURCE];
+                                     selector:@selector(viewSource)
+                                      command:TOOLS_VIEW_SOURCE];
 }
 #endif  // !defined(NDEBUG)
 
@@ -382,6 +394,14 @@ NS_INLINE void AnimateInViews(NSArray* views,
   }
 }
 
+- (void)viewDidDisappear:(BOOL)animated {
+  [super viewDidDisappear:animated];
+  if (self.showReadingListNewBadge && self.engagementTracker) {
+    self.engagementTracker->Dismissed(
+        feature_engagement::kIPHBadgedReadingListFeature);
+  }
+}
+
 - (void)updateViewConstraints {
   [super updateViewConstraints];
 
@@ -444,12 +464,21 @@ NS_INLINE void AnimateInViews(NSArray* views,
   AnimateInViews(visibleCells, 0, -10);
   [CATransaction commit];
 
+  // The number badge should be prioritized over the new feature badge, so only
+  // show the new feature badge if number badge will not be shown.
+  if (_readingListMenuNotifier.readingListUnreadCount == 0) {
+    [[self readingListCell] updateShowTextBadge:_showReadingListNewBadge
+                                       animated:YES];
+  }
   [[self readingListCell]
       updateBadgeCount:_readingListMenuNotifier.readingListUnreadCount
               animated:YES];
   [[self readingListCell]
       updateSeenState:_readingListMenuNotifier.readingListUnseenItemsExist
              animated:YES];
+  if (self.highlightNewIncognitoTabCell) {
+    [self triggerNewIncognitoTabCellHighlight];
+  }
 }
 
 - (void)hideContent {
@@ -653,6 +682,35 @@ NS_INLINE void AnimateInViews(NSArray* views,
 
 - (void)unseenStateChanged:(BOOL)unseenItemsExist {
   [[self readingListCell] updateSeenState:unseenItemsExist animated:YES];
+}
+
+#pragma mark - New Incognito Tab in-product help promotion
+
+- (void)triggerNewIncognitoTabCellHighlight {
+  for (ToolsMenuViewCell* visibleCell in [_menuView visibleCells]) {
+    if ([visibleCell.accessibilityIdentifier
+            isEqualToString:kToolsMenuNewIncognitoTabId]) {
+      // Set the label's background color to be clear so that the highlight is
+      // is not covered by the label.
+      visibleCell.title.backgroundColor = [UIColor clearColor];
+      [UIView animateWithDuration:ios::material::kDuration5
+          delay:0.0
+          options:UIViewAnimationOptionAllowUserInteraction |
+                  UIViewAnimationOptionRepeat |
+                  UIViewAnimationOptionAutoreverse |
+                  UIViewAnimationOptionCurveEaseInOut
+          animations:^{
+            [UIView setAnimationRepeatCount:2];
+            visibleCell.contentView.backgroundColor =
+                [[MDCPalette cr_bluePalette] tint100];
+          }
+          completion:^(BOOL finished) {
+            visibleCell.contentView.backgroundColor = [UIColor whiteColor];
+          }];
+      self.highlightNewIncognitoTabCell = NO;
+      break;
+    }
+  }
 }
 
 @end

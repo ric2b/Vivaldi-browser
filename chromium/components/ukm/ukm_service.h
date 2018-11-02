@@ -13,6 +13,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "build/build_config.h"
+#include "components/metrics/delegating_provider.h"
 #include "components/metrics/metrics_provider.h"
 #include "components/metrics/metrics_rotation_scheduler.h"
 #include "components/ukm/ukm_recorder_impl.h"
@@ -115,12 +116,15 @@ class UkmService : public UkmRecorderImpl {
   // The UKM session id stored in prefs.
   int32_t session_id_;
 
+  // The number of reports generated this session.
+  int32_t report_count_;
+
   // Used to interact with the embedder. Weak pointer; must outlive |this|
   // instance.
   metrics::MetricsServiceClient* const client_;
 
   // Registered metrics providers.
-  std::vector<std::unique_ptr<metrics::MetricsProvider>> metrics_providers_;
+  metrics::DelegatingProvider metrics_providers_;
 
   // Log reporting service.
   ukm::UkmReportingService reporting_service_;

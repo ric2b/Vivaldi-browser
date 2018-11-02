@@ -65,11 +65,13 @@
 <translation id="4506599922270137252">與系統管理員聯絡</translation>
 <translation id="4522570452068850558">詳細資訊</translation>
 <translation id="4558551763791394412">試試看停用擴充功能。</translation>
+<translation id="4611292653554630842">登入</translation>
 <translation id="4708268264240856090">您的連線已中斷</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />正在執行網路診斷<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">可執行檔路徑</translation>
 <translation id="4764776831041365478"><ph name="URL" /> 的網頁可能暫時無法使用或被永久移至新網址。</translation>
 <translation id="4807049035289105102"><ph name="SITE" /> 傳送的憑證受到干擾，造成 Vivaldi 無法處理，因此你目前無法造訪該網站。網路錯誤和攻擊通常是暫時性狀態，因此這個網頁可能稍後就會恢復正常運作。</translation>
+<translation id="4913131542719409934">需要驗證</translation>
 <translation id="5023310440958281426">請查看您的管理員策略</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />檢查代理地址<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 位元)</translation>
@@ -98,10 +100,12 @@
 <translation id="6328639280570009161">建議停用網路預測功能</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> 拒絕連線。</translation>
 <translation id="6569060085658103619">目前顯示的是擴充功能頁面</translation>
+<translation id="6657585470893396449">密碼</translation>
 <translation id="6685834062052613830">請登出並完成設定程序</translation>
 <translation id="6711464428925977395">代理伺服器發生錯誤，或是網址不正確。</translation>
 <translation id="6757797048963528358">您的裝置已進入睡眠模式。</translation>
 <translation id="6897140037006041989">使用者代理</translation>
+<translation id="7090678807593890770">請透過 Google 搜尋「<ph name="LINK" />」</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> 不符合安全性標準。</translation>
 <translation id="7353601530677266744">命令列</translation>
 <translation id="7419106976560586862">設定檔路徑</translation>
@@ -120,6 +124,7 @@
 <translation id="8289355894181816810">如果您不確定這代表什麼意思，請與網路管理員聯絡。</translation>
 <translation id="8332188693563227489">存取 <ph name="HOST_NAME" /> 的要求遭到拒絕</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> 的回應時間過長。</translation>
+<translation id="8503813439785031346">使用者名稱</translation>
 <translation id="8740359287975076522">找不到 <ph name="HOST_NAME" /> 的 &lt;abbr id="dnsDefinition"&gt;DNS 位址&lt;/abbr&gt;，正在診斷問題。</translation>
 <translation id="9001074447101275817"><ph name="DOMAIN" /> Proxy 要求提供使用者名稱和密碼。</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> 使用了不支援的通訊協定。</translation>

@@ -23,7 +23,6 @@
 #include "content/browser/service_worker/embedded_worker_status.h"
 #include "content/browser/service_worker/service_worker_context_core_observer.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
-#include "content/browser/service_worker/service_worker_database_task_manager.h"
 #include "content/browser/service_worker/service_worker_dispatcher_host.h"
 #include "content/browser/service_worker/service_worker_info.h"
 #include "content/browser/service_worker/service_worker_job_coordinator.h"
@@ -237,8 +236,7 @@ bool ServiceWorkerContextCore::ProviderHostIterator::
 
 ServiceWorkerContextCore::ServiceWorkerContextCore(
     const base::FilePath& path,
-    std::unique_ptr<ServiceWorkerDatabaseTaskManager> database_task_manager,
-    const scoped_refptr<base::SingleThreadTaskRunner>& disk_cache_thread,
+    scoped_refptr<base::SequencedTaskRunner> database_task_runner,
     storage::QuotaManagerProxy* quota_manager_proxy,
     storage::SpecialStoragePolicy* special_storage_policy,
     base::WeakPtr<storage::BlobStorageContext> blob_storage_context,
@@ -260,8 +258,8 @@ ServiceWorkerContextCore::ServiceWorkerContextCore(
   // These get a WeakPtr from weak_factory_, so must be set after weak_factory_
   // is initialized.
   storage_ = ServiceWorkerStorage::Create(
-      path, AsWeakPtr(), std::move(database_task_manager), disk_cache_thread,
-      quota_manager_proxy, special_storage_policy);
+      path, AsWeakPtr(), std::move(database_task_runner), quota_manager_proxy,
+      special_storage_policy);
   embedded_worker_registry_ = EmbeddedWorkerRegistry::Create(AsWeakPtr());
   job_coordinator_.reset(new ServiceWorkerJobCoordinator(AsWeakPtr()));
 }
@@ -314,14 +312,15 @@ ServiceWorkerDispatcherHost* ServiceWorkerContextCore::GetDispatcherHost(
 }
 
 void ServiceWorkerContextCore::RemoveDispatcherHost(int process_id) {
-  DCHECK(dispatcher_hosts_.find(process_id) != dispatcher_hosts_.end());
-  RemoveAllProviderHostsForProcess(process_id);
-  embedded_worker_registry_->RemoveProcess(process_id);
+  // Temporary CHECK for debugging https://crbug.com/750267.
+  CHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
   dispatcher_hosts_.erase(process_id);
 }
 
 void ServiceWorkerContextCore::AddProviderHost(
     std::unique_ptr<ServiceWorkerProviderHost> host) {
+  // Temporary CHECK for debugging https://crbug.com/750267.
+  CHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
   int process_id = host->process_id();
   int provider_id = host->provider_id();
   ProviderMap* map = GetProviderMapForProcess(process_id);
@@ -343,6 +342,8 @@ ServiceWorkerProviderHost* ServiceWorkerContextCore::GetProviderHost(
 
 void ServiceWorkerContextCore::RemoveProviderHost(
     int process_id, int provider_id) {
+  // Temporary CHECK for debugging https://crbug.com/750267.
+  CHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
   ProviderMap* map = GetProviderMapForProcess(process_id);
   DCHECK(map);
   map->Remove(provider_id);
@@ -350,18 +351,24 @@ void ServiceWorkerContextCore::RemoveProviderHost(
 
 void ServiceWorkerContextCore::RemoveAllProviderHostsForProcess(
     int process_id) {
+  // Temporary CHECK for debugging https://crbug.com/750267.
+  CHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
   if (providers_->Lookup(process_id))
     providers_->Remove(process_id);
 }
 
 std::unique_ptr<ServiceWorkerContextCore::ProviderHostIterator>
 ServiceWorkerContextCore::GetProviderHostIterator() {
+  // Temporary CHECK for debugging https://crbug.com/750267.
+  CHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
   return base::WrapUnique(new ProviderHostIterator(
       providers_.get(), ProviderHostIterator::ProviderHostPredicate()));
 }
 
 std::unique_ptr<ServiceWorkerContextCore::ProviderHostIterator>
 ServiceWorkerContextCore::GetClientProviderHostIterator(const GURL& origin) {
+  // Temporary CHECK for debugging https://crbug.com/750267.
+  CHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
   return base::WrapUnique(new ProviderHostIterator(
       providers_.get(), base::Bind(IsSameOriginClientProviderHost, origin)));
 }
@@ -374,8 +381,8 @@ void ServiceWorkerContextCore::HasMainFrameProviderHost(
       providers_.get(), base::Bind(IsSameOriginWindowProviderHost, origin));
 
   if (provider_host_iterator.IsAtEnd()) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                  base::Bind(callback, false));
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(callback, false));
     return;
   }
 
@@ -489,14 +496,20 @@ void ServiceWorkerContextCore::DidGetAllRegistrationsForUnregisterForOrigin(
   }
   bool* overall_success = new bool(true);
   base::Closure barrier = base::BarrierClosure(
-      scopes.size(),
-      base::Bind(
-          &SuccessReportingCallback, base::Owned(overall_success), result));
+      scopes.size(), base::BindOnce(&SuccessReportingCallback,
+                                    base::Owned(overall_success), result));
 
   for (const GURL& scope : scopes) {
     UnregisterServiceWorker(
         scope, base::Bind(&SuccessCollectorCallback, barrier, overall_success));
   }
+}
+
+ServiceWorkerContextCore::ProviderMap*
+ServiceWorkerContextCore::GetProviderMapForProcess(int process_id) {
+  // Temporary CHECK for debugging https://crbug.com/750267.
+  CHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
+  return providers_->Lookup(process_id);
 }
 
 void ServiceWorkerContextCore::RegistrationComplete(
@@ -668,7 +681,8 @@ void ServiceWorkerContextCore::ScheduleDeleteAndStartOver() const {
   storage_->Disable();
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
-      base::Bind(&ServiceWorkerContextWrapper::DeleteAndStartOver, wrapper_));
+      base::BindOnce(&ServiceWorkerContextWrapper::DeleteAndStartOver,
+                     wrapper_));
 }
 
 void ServiceWorkerContextCore::DeleteAndStartOver(
@@ -916,17 +930,6 @@ void ServiceWorkerContextCore::OnRegistrationFinishedForCheckHasServiceWorker(
   }
 
   CheckFetchHandlerOfInstalledServiceWorker(callback, registration);
-}
-
-void ServiceWorkerContextCore::BindWorkerFetchContext(
-    int render_process_id,
-    int service_worker_provider_id,
-    mojom::ServiceWorkerWorkerClientAssociatedPtrInfo client_ptr_info) {
-  ServiceWorkerProviderHost* provider_host =
-      GetProviderHost(render_process_id, service_worker_provider_id);
-  if (!provider_host)
-    return;
-  provider_host->BindWorkerFetchContext(std::move(client_ptr_info));
 }
 
 }  // namespace content

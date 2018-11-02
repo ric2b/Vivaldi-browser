@@ -88,13 +88,17 @@ VivaldiSyncManagerFactory::VivaldiSyncManagerFactory()
   // destruction order.
   DependsOn(autofill::PersonalDataManagerFactory::GetInstance());
   DependsOn(BookmarkModelFactory::GetInstance());
+#if !defined(OS_ANDROID)
   DependsOn(GlobalErrorServiceFactory::GetInstance());
+#endif
   DependsOn(HistoryServiceFactory::GetInstance());
   DependsOn(PasswordStoreFactory::GetInstance());
   DependsOn(VivaldiSigninManagerFactory::GetInstance());
   DependsOn(TemplateURLServiceFactory::GetInstance());
+#if !defined(OS_ANDROID)
   DependsOn(
       extensions::ExtensionsBrowserClient::Get()->GetExtensionSystemFactory());
+#endif
   DependsOn(NotesModelFactory::GetInstance());
 }
 

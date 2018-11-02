@@ -224,17 +224,17 @@ class AXPlatformNodeRelationWin : public CComObjectRootEx<CComMultiThreadModel>,
   AXPlatformNodeRelationWin();
   virtual ~AXPlatformNodeRelationWin();
 
-  void Initialize(ui::AXPlatformNodeWin* owner, const base::string16& type);
+  void Initialize(AXPlatformNodeWin* owner, const base::string16& type);
   void AddTarget(int target_id);
   void RemoveTarget(int target_id);
 
   // IAccessibleRelation methods.
   STDMETHODIMP get_relationType(BSTR* relation_type) override;
-  STDMETHODIMP get_nTargets(long* n_targets) override;
-  STDMETHODIMP get_target(long target_index, IUnknown** target) override;
-  STDMETHODIMP get_targets(long max_targets,
+  STDMETHODIMP get_nTargets(LONG* n_targets) override;
+  STDMETHODIMP get_target(LONG target_index, IUnknown** target) override;
+  STDMETHODIMP get_targets(LONG max_targets,
                            IUnknown** targets,
-                           long* n_targets) override;
+                           LONG* n_targets) override;
   STDMETHODIMP get_localizedRelationType(BSTR* relation_type) override;
 
   // Accessors.
@@ -243,22 +243,21 @@ class AXPlatformNodeRelationWin : public CComObjectRootEx<CComMultiThreadModel>,
 
  private:
   base::string16 type_;
-  base::win::ScopedComPtr<ui::AXPlatformNodeWin> owner_;
+  base::win::ScopedComPtr<AXPlatformNodeWin> owner_;
   std::vector<int> target_ids_;
 };
 
 class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
-    AXPlatformNodeWin
-    : public NON_EXPORTED_BASE(CComObjectRootEx<CComMultiThreadModel>),
-      public IDispatchImpl<IAccessible2_2,
-                           &IID_IAccessible2,
-                           &LIBID_IAccessible2Lib>,
-      public IAccessibleText,
-      public IAccessibleTable,
-      public IAccessibleTable2,
-      public IAccessibleTableCell,
-      public IServiceProvider,
-      public AXPlatformNodeBase {
+    AXPlatformNodeWin : public CComObjectRootEx<CComMultiThreadModel>,
+                        public IDispatchImpl<IAccessible2_2,
+                                             &IID_IAccessible2,
+                                             &LIBID_IAccessible2Lib>,
+                        public IAccessibleText,
+                        public IAccessibleTable,
+                        public IAccessibleTable2,
+                        public IAccessibleTableCell,
+                        public IServiceProvider,
+                        public AXPlatformNodeBase {
  public:
   BEGIN_COM_MAP(AXPlatformNodeWin)
     COM_INTERFACE_ENTRY2(IDispatch, IAccessible2_2)
@@ -277,10 +276,12 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
 
   // Clear node's current relationships and set them to the default values.
   void CalculateRelationships();
+  static AXPlatformNode* GetFromUniqueId(int32_t unique_id);
+  int32_t unique_id() const { return unique_id_; }
 
   // AXPlatformNode overrides.
   gfx::NativeViewAccessible GetNativeViewAccessible() override;
-  void NotifyAccessibilityEvent(ui::AXEvent event_type) override;
+  void NotifyAccessibilityEvent(AXEvent event_type) override;
 
   // AXPlatformNodeBase overrides.
   void Destroy() override;
@@ -368,9 +369,9 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
   STDMETHODIMP get_windowHandle(HWND* window_handle) override;
 
   STDMETHODIMP get_relationTargetsOfType(BSTR type,
-                                         long max_targets,
+                                         LONG max_targets,
                                          IUnknown*** targets,
-                                         long* n_targets) override;
+                                         LONG* n_targets) override;
 
   STDMETHODIMP get_attributes(BSTR* attributes) override;
 
@@ -409,7 +410,7 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
       LONG* n_localized_extended_states) override;
   STDMETHODIMP get_locale(IA2Locale* locale) override;
   STDMETHODIMP get_accessibleWithCaret(IUnknown** accessible,
-                                       long* caret_offset) override;
+                                       LONG* caret_offset) override;
 
   //
   // IAccessibleText methods.
@@ -458,87 +459,87 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
 
   // get_description - also used by IAccessibleImage
 
-  STDMETHODIMP get_accessibleAt(long row,
-                                long column,
+  STDMETHODIMP get_accessibleAt(LONG row,
+                                LONG column,
                                 IUnknown** accessible) override;
 
   STDMETHODIMP get_caption(IUnknown** accessible) override;
 
-  STDMETHODIMP get_childIndex(long row_index,
-                              long column_index,
-                              long* cell_index) override;
+  STDMETHODIMP get_childIndex(LONG row_index,
+                              LONG column_index,
+                              LONG* cell_index) override;
 
-  STDMETHODIMP get_columnDescription(long column, BSTR* description) override;
+  STDMETHODIMP get_columnDescription(LONG column, BSTR* description) override;
 
   STDMETHODIMP
-  get_columnExtentAt(long row, long column, long* n_columns_spanned) override;
+  get_columnExtentAt(LONG row, LONG column, LONG* n_columns_spanned) override;
 
   STDMETHODIMP
   get_columnHeader(IAccessibleTable** accessible_table,
-                   long* starting_row_index) override;
+                   LONG* starting_row_index) override;
 
-  STDMETHODIMP get_columnIndex(long cell_index, long* column_index) override;
+  STDMETHODIMP get_columnIndex(LONG cell_index, LONG* column_index) override;
 
-  STDMETHODIMP get_nColumns(long* column_count) override;
+  STDMETHODIMP get_nColumns(LONG* column_count) override;
 
-  STDMETHODIMP get_nRows(long* row_count) override;
+  STDMETHODIMP get_nRows(LONG* row_count) override;
 
-  STDMETHODIMP get_nSelectedChildren(long* cell_count) override;
+  STDMETHODIMP get_nSelectedChildren(LONG* cell_count) override;
 
-  STDMETHODIMP get_nSelectedColumns(long* column_count) override;
+  STDMETHODIMP get_nSelectedColumns(LONG* column_count) override;
 
-  STDMETHODIMP get_nSelectedRows(long* row_count) override;
+  STDMETHODIMP get_nSelectedRows(LONG* row_count) override;
 
-  STDMETHODIMP get_rowDescription(long row, BSTR* description) override;
+  STDMETHODIMP get_rowDescription(LONG row, BSTR* description) override;
 
-  STDMETHODIMP get_rowExtentAt(long row,
-                               long column,
-                               long* n_rows_spanned) override;
+  STDMETHODIMP get_rowExtentAt(LONG row,
+                               LONG column,
+                               LONG* n_rows_spanned) override;
 
   STDMETHODIMP
   get_rowHeader(IAccessibleTable** accessible_table,
-                long* starting_column_index) override;
+                LONG* starting_column_index) override;
 
-  STDMETHODIMP get_rowIndex(long cell_index, long* row_index) override;
+  STDMETHODIMP get_rowIndex(LONG cell_index, LONG* row_index) override;
 
-  STDMETHODIMP get_selectedChildren(long max_children,
-                                    long** children,
-                                    long* n_children) override;
+  STDMETHODIMP get_selectedChildren(LONG max_children,
+                                    LONG** children,
+                                    LONG* n_children) override;
 
-  STDMETHODIMP get_selectedColumns(long max_columns,
-                                   long** columns,
-                                   long* n_columns) override;
+  STDMETHODIMP get_selectedColumns(LONG max_columns,
+                                   LONG** columns,
+                                   LONG* n_columns) override;
 
-  STDMETHODIMP get_selectedRows(long max_rows,
-                                long** rows,
-                                long* n_rows) override;
+  STDMETHODIMP get_selectedRows(LONG max_rows,
+                                LONG** rows,
+                                LONG* n_rows) override;
 
   STDMETHODIMP get_summary(IUnknown** accessible) override;
 
   STDMETHODIMP
-  get_isColumnSelected(long column, boolean* is_selected) override;
+  get_isColumnSelected(LONG column, boolean* is_selected) override;
 
-  STDMETHODIMP get_isRowSelected(long row, boolean* is_selected) override;
+  STDMETHODIMP get_isRowSelected(LONG row, boolean* is_selected) override;
 
-  STDMETHODIMP get_isSelected(long row,
-                              long column,
+  STDMETHODIMP get_isSelected(LONG row,
+                              LONG column,
                               boolean* is_selected) override;
 
   STDMETHODIMP
-  get_rowColumnExtentsAtIndex(long index,
-                              long* row,
-                              long* column,
-                              long* row_extents,
-                              long* column_extents,
+  get_rowColumnExtentsAtIndex(LONG index,
+                              LONG* row,
+                              LONG* column,
+                              LONG* row_extents,
+                              LONG* column_extents,
                               boolean* is_selected) override;
 
-  STDMETHODIMP selectRow(long row) override;
+  STDMETHODIMP selectRow(LONG row) override;
 
-  STDMETHODIMP selectColumn(long column) override;
+  STDMETHODIMP selectColumn(LONG column) override;
 
-  STDMETHODIMP unselectRow(long row) override;
+  STDMETHODIMP unselectRow(LONG row) override;
 
-  STDMETHODIMP unselectColumn(long column) override;
+  STDMETHODIMP unselectColumn(LONG column) override;
 
   STDMETHODIMP
   get_modelChange(IA2TableModelChange* model_change) override;
@@ -550,45 +551,45 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
   // unique ones are included here.)
   //
 
-  STDMETHODIMP get_cellAt(long row, long column, IUnknown** cell) override;
+  STDMETHODIMP get_cellAt(LONG row, LONG column, IUnknown** cell) override;
 
-  STDMETHODIMP get_nSelectedCells(long* cell_count) override;
+  STDMETHODIMP get_nSelectedCells(LONG* cell_count) override;
 
   STDMETHODIMP
-  get_selectedCells(IUnknown*** cells, long* n_selected_cells) override;
+  get_selectedCells(IUnknown*** cells, LONG* n_selected_cells) override;
 
-  STDMETHODIMP get_selectedColumns(long** columns, long* n_columns) override;
+  STDMETHODIMP get_selectedColumns(LONG** columns, LONG* n_columns) override;
 
-  STDMETHODIMP get_selectedRows(long** rows, long* n_rows) override;
+  STDMETHODIMP get_selectedRows(LONG** rows, LONG* n_rows) override;
 
   //
   // IAccessibleTableCell methods.
   //
 
   STDMETHODIMP
-  get_columnExtent(long* n_columns_spanned) override;
+  get_columnExtent(LONG* n_columns_spanned) override;
 
   STDMETHODIMP
   get_columnHeaderCells(IUnknown*** cell_accessibles,
-                        long* n_column_header_cells) override;
+                        LONG* n_column_header_cells) override;
 
-  STDMETHODIMP get_columnIndex(long* column_index) override;
+  STDMETHODIMP get_columnIndex(LONG* column_index) override;
 
-  STDMETHODIMP get_rowExtent(long* n_rows_spanned) override;
+  STDMETHODIMP get_rowExtent(LONG* n_rows_spanned) override;
 
   STDMETHODIMP
   get_rowHeaderCells(IUnknown*** cell_accessibles,
-                     long* n_row_header_cells) override;
+                     LONG* n_row_header_cells) override;
 
-  STDMETHODIMP get_rowIndex(long* row_index) override;
+  STDMETHODIMP get_rowIndex(LONG* row_index) override;
 
   STDMETHODIMP get_isSelected(boolean* is_selected) override;
 
   STDMETHODIMP
-  get_rowColumnExtents(long* row,
-                       long* column,
-                       long* row_extents,
-                       long* column_extents,
+  get_rowColumnExtents(LONG* row,
+                       LONG* column,
+                       LONG* row_extents,
+                       LONG* column_extents,
                        boolean* is_selected) override;
 
   STDMETHODIMP get_table(IUnknown** table) override;
@@ -650,14 +651,15 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
   void Dispose() override;
 
  private:
-  int MSAAEvent(ui::AXEvent event);
+  int32_t unique_id_;
+
+  int MSAAEvent(AXEvent event);
   bool IsWebAreaForPresentationalIframe();
   bool ShouldNodeHaveReadonlyStateByDefault(const AXNodeData& data) const;
   bool ShouldNodeHaveFocusableState(const AXNodeData& data) const;
 
-  HRESULT GetStringAttributeAsBstr(
-      ui::AXStringAttribute attribute,
-      BSTR* value_bstr) const;
+  HRESULT GetStringAttributeAsBstr(AXStringAttribute attribute,
+                                   BSTR* value_bstr) const;
 
   // Escapes characters in string attributes as required by the IA2 Spec.
   // It's okay for input to be the same as output.
@@ -670,19 +672,19 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
   // If the string attribute |attribute| is present, add its value as an
   // IAccessible2 attribute with the name |ia2_attr|.
   void StringAttributeToIA2(std::vector<base::string16>& attributes,
-                            ui::AXStringAttribute attribute,
+                            AXStringAttribute attribute,
                             const char* ia2_attr);
 
   // If the bool attribute |attribute| is present, add its value as an
   // IAccessible2 attribute with the name |ia2_attr|.
   void BoolAttributeToIA2(std::vector<base::string16>& attributes,
-                          ui::AXBoolAttribute attribute,
+                          AXBoolAttribute attribute,
                           const char* ia2_attr);
 
   // If the int attribute |attribute| is present, add its value as an
   // IAccessible2 attribute with the name |ia2_attr|.
   void IntAttributeToIA2(std::vector<base::string16>& attributes,
-                         ui::AXIntAttribute attribute,
+                         AXIntAttribute attribute,
                          const char* ia2_attr);
 
   void AddAlertTarget();
@@ -695,8 +697,8 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
   // value of offset and returns, otherwise offset remains unchanged.
   void HandleSpecialTextOffset(LONG* offset);
 
-  // Convert from a IA2TextBoundaryType to a ui::TextBoundaryType.
-  ui::TextBoundaryType IA2TextBoundaryToTextBoundary(IA2TextBoundaryType type);
+  // Convert from a IA2TextBoundaryType to a TextBoundaryType.
+  TextBoundaryType IA2TextBoundaryToTextBoundary(IA2TextBoundaryType type);
 
   // Search forwards (direction == 1) or backwards (direction == -1)
   // from the given offset until the given boundary is found, and
@@ -704,7 +706,7 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
   LONG FindBoundary(const base::string16& text,
                     IA2TextBoundaryType ia2_boundary,
                     LONG start_offset,
-                    ui::TextBoundaryDirection direction);
+                    TextBoundaryDirection direction);
 
   // Many MSAA methods take a var_id parameter indicating that the operation
   // should be performed on a particular child ID, rather than this object.
@@ -722,7 +724,7 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
   void AddRelation(const base::string16& relation_type, int target_id);
   void AddBidirectionalRelations(const base::string16& relation_type,
                                  const base::string16& reverse_relation_type,
-                                 ui::AXIntListAttribute attribute);
+                                 AXIntListAttribute attribute);
   void AddBidirectionalRelations(const base::string16& relation_type,
                                  const base::string16& reverse_relation_type,
                                  const std::vector<int32_t>& target_ids);
@@ -736,8 +738,17 @@ class AX_EXPORT __declspec(uuid("26f5641a-246d-457b-a96d-07f3fae6acf2"))
   void RemoveTargetFromRelation(const base::string16& relation_type,
                                 int target_id);
 
+  // Helper method for returning selected indicies. It is expected that the
+  // caller ensures that the input has been validated.
+  HRESULT AllocateComArrayFromVector(std::vector<LONG>& results,
+                                     LONG max,
+                                     LONG** selected,
+                                     LONG* n_selected);
+
+  bool IsAncestorComboBox();
+
   // Relationships between this node and other nodes.
-  std::vector<ui::AXPlatformNodeRelationWin*> relations_;
+  std::vector<AXPlatformNodeRelationWin*> relations_;
 };
 
 }  // namespace ui

@@ -3,12 +3,13 @@
 <translationbundle lang="fr">
 <translation id="1012876632442809908">Appareil USB de type C (port situé sur l'avant de l'appareil)</translation>
 <translation id="1013923882670373915">L'appareil Bluetooth "<ph name="DEVICE_NAME" />" demande l'autorisation de s'associer. Veuillez saisir le code suivant sur l'appareil : <ph name="PINCODE" />.</translation>
-<translation id="1032891413405719768">Le niveau de charge des piles du stylet est faible.</translation>
+<translation id="1032891413405719768">Le niveau de charge des piles du stylet est faible</translation>
 <translation id="112308213915226829">Masquer automatiquement l'étagère</translation>
 <translation id="1153356358378277386">Appareils associés</translation>
 <translation id="1195412055398077112">Surbalayage</translation>
 <translation id="1247372569136754018">Micro (interne)</translation>
 <translation id="1252999807265626933">Charge à partir de la source "<ph name="POWER_SOURCE" />"</translation>
+<translation id="1267032506238418139">Modification du raccourci</translation>
 <translation id="1270290102613614947">Clavier à l'écran désactivé</translation>
 <translation id="1272079795634619415">Arrêter</translation>
 <translation id="1279938420744323401"><ph name="DISPLAY_NAME" /> (<ph name="ANNOTATION" />)</translation>
@@ -22,7 +23,6 @@
 <translation id="15373452373711364">Grand curseur</translation>
 <translation id="1550523713251050646">Cliquez pour obtenir plus d'options.</translation>
 <translation id="1621499497873603021">Temps restant avant que la batterie ne soit vide : <ph name="TIME_LEFT" />.</translation>
-<translation id="164969095109328410">Appareil Google Chrome</translation>
 <translation id="1677472565718498478">Temps restant : <ph name="TIME" /></translation>
 <translation id="1698760176351776263">Adresse IPv6 : <ph name="ADDRESS" /></translation>
 <translation id="1734367976349034509">Cet appareil est géré par une entreprise</translation>
@@ -92,6 +92,7 @@
 <translation id="315116470104423982">Données mobiles</translation>
 <translation id="3236488194889173876">Aucun réseau mobile disponible</translation>
 <translation id="3294437725009624529">Invité</translation>
+<translation id="332587331255250389">Veuillez remplacer la batterie</translation>
 <translation id="3364721542077212959">Outils de stylet</translation>
 <translation id="3368922792935385530">Connecté</translation>
 <translation id="3371140690572404006">Appareil USB de type C (port situé sur la droite de l'appareil, à l'avant)</translation>
@@ -110,6 +111,7 @@
 <translation id="3712407551474845318">Capturer la zone</translation>
 <translation id="371370241367527062">Micro avant</translation>
 <translation id="3742055079367172538">Capture d'écran réalisée</translation>
+<translation id="3771549900096082774">Mode Contraste élevé</translation>
 <translation id="3775358506042162758">Vous ne pouvez vous connecter qu'à trois comptes au maximum dans le cadre de la connexion multicompte.</translation>
 <translation id="3783640748446814672">alt</translation>
 <translation id="3784455785234192852">Verrouiller</translation>
@@ -142,14 +144,12 @@
 <translation id="4729904664295161097">L'Assistant n'est disponible que pour le profil principal.</translation>
 <translation id="479989351350248267">rechercher</translation>
 <translation id="4804818685124855865">Se déconnecter</translation>
-<translation id="4821830640883629383">Veuillez recharger ou remplacer les piles.</translation>
 <translation id="4849058404725798627">Mettre l'objet sélectionné au clavier en surbrillance</translation>
 <translation id="4872237917498892622">Alt + Recherche ou Maj</translation>
 <translation id="4895488851634969361">La batterie est pleine.</translation>
 <translation id="4905614135390995787">Le raccourci permettant d'activer ou de désactiver le mode Contraste élevé a été modifié. Veuillez utiliser "<ph name="NEW_SHORTCUT" />" au lieu de "<ph name="OLD_SHORTCUT" />".</translation>
 <translation id="4918086044614829423">Accepter</translation>
 <translation id="4961318399572185831">Diffuser l'écran</translation>
-<translation id="5011233892417813670">Chromebook</translation>
 <translation id="5168181903108465623">Appareils Cast disponibles</translation>
 <translation id="5170568018924773124">Afficher le dossier</translation>
 <translation id="5207949376430453814">Mettre le curseur de texte en surbrillance</translation>
@@ -175,7 +175,6 @@
 <translation id="5901316534475909376">Maj+Échap</translation>
 <translation id="5916664084637901428">Activé</translation>
 <translation id="5927132638760172455">Destinataire de la diffusion inconnu</translation>
-<translation id="5932901536148835538">Chromebit</translation>
 <translation id="5947494881799873997">Rétablir</translation>
 <translation id="595202126637698455">Suivi des performances activé</translation>
 <translation id="5957083217255311415">Les données mobiles sont désactivées.</translation>
@@ -218,7 +217,6 @@
 <translation id="683971173229319003">Recherche+L</translation>
 <translation id="6857811139397017780">Activer <ph name="NETWORKSERVICE" /></translation>
 <translation id="6911468394164995108">Autre réseau…</translation>
-<translation id="6915678159055240887">Chromebox</translation>
 <translation id="6981982820502123353">Accessibilité</translation>
 <translation id="7029814467594812963">Quitter la session</translation>
 <translation id="7034339000180558234">Diffusion de l'onglet "<ph name="TAB_NAME" />" sur "<ph name="RECEIVER_NAME" />"</translation>
@@ -226,7 +224,6 @@
 <translation id="7066646422045619941">Votre administrateur a désactivé ce réseau.</translation>
 <translation id="7067196344162293536">Rotation automatique</translation>
 <translation id="7098389117866926363">Appareil USB de type C (port situé sur l'arrière de l'appareil, à gauche)</translation>
-<translation id="714034171374937760">Chromebase</translation>
 <translation id="7165278925115064263">Alt+Maj+K</translation>
 <translation id="7168224885072002358">Rétablissement de la résolution précédente dans <ph name="TIMEOUT_SECONDS" /></translation>
 <translation id="7246339268451149667">Activer le déverrouillage par empreinte digitale ?</translation>

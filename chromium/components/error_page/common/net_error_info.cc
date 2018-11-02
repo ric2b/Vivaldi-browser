@@ -9,8 +9,6 @@
 
 namespace error_page {
 
-const char kDnsProbeErrorDomain[] = "dnsprobe";
-
 const char* DnsProbeStatusToString(int status) {
   switch (status) {
     case DNS_PROBE_POSSIBLE:

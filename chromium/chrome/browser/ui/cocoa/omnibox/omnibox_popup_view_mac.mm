@@ -87,6 +87,7 @@ bool OmniboxPopupViewMac::IsOpen() const {
 
 void OmniboxPopupViewMac::UpdatePopupAppearance() {
   DCHECK([NSThread isMainThread]);
+  model_->autocomplete_controller()->InlineTailPrefixes();
   const AutocompleteResult& result = GetResult();
   const size_t rows = result.size();
   if (rows == 0) {
@@ -129,6 +130,11 @@ void OmniboxPopupViewMac::UpdatePopupAppearance() {
   // animation.
   DCHECK_EQ([matrix_ intercellSpacing].height, 0.0);
   PositionPopup(NSHeight([matrix_ frame]));
+}
+
+void OmniboxPopupViewMac::SetMatchIcon(size_t match_index,
+                                       const gfx::Image& icon) {
+  // TODO(tommycli): Implement favicons for Cocoa.
 }
 
 gfx::Rect OmniboxPopupViewMac::GetTargetBounds() {

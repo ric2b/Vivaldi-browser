@@ -207,7 +207,6 @@ void LogRecoveryOperation(Entry::State to_state) {
 }
 
 void LogDownloadCompletion(CompletionType type,
-                           const base::TimeDelta& time_span,
                            uint64_t file_size_bytes) {
   // Records completion type.
   UMA_HISTOGRAM_ENUMERATION("Download.Service.Finish.Type", type,
@@ -287,10 +286,13 @@ void LogFileCleanupStatus(FileCleanupReason reason,
   base::UmaHistogramCounts100(name, external_cleanups);
 }
 
-void LogFileLifeTime(const base::TimeDelta& file_life_time) {
+void LogFileLifeTime(const base::TimeDelta& file_life_time,
+                     int num_cleanup_attempts) {
   UMA_HISTOGRAM_CUSTOM_TIMES("Download.Service.Files.LifeTime", file_life_time,
                              base::TimeDelta::FromSeconds(1),
                              base::TimeDelta::FromDays(8), 100);
+  UMA_HISTOGRAM_SPARSE_SLOWLY("Download.Service.Files.Cleanup.Attempts",
+                              num_cleanup_attempts);
 }
 
 void LogFileDirDiskUtilization(int64_t total_disk_space,

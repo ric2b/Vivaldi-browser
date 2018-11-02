@@ -10,22 +10,25 @@
 #include "base/cancelable_callback.h"
 #include "base/macros.h"
 #include "base/time/time.h"
-#include "cc/output/begin_frame_args.h"
 #include "cc/scheduler/scheduler.h"
 #include "cc/trees/blocking_task_runner.h"
 #include "cc/trees/layer_tree_host_impl.h"
 #include "cc/trees/proxy.h"
 #include "cc/trees/task_runner_provider.h"
+#include "components/viz/common/frame_sinks/begin_frame_args.h"
+
+namespace viz {
+class BeginFrameSource;
+}
 
 namespace cc {
 
 class MutatorEvents;
-class BeginFrameSource;
 class LayerTreeHost;
 class LayerTreeHostSingleThreadClient;
 
 class CC_EXPORT SingleThreadProxy : public Proxy,
-                                    NON_EXPORTED_BASE(LayerTreeHostImplClient),
+                                    LayerTreeHostImplClient,
                                     public SchedulerClient {
  public:
   static std::unique_ptr<Proxy> Create(
@@ -60,10 +63,11 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
                                   bool animate) override;
 
   // SchedulerClient implementation
-  void WillBeginImplFrame(const BeginFrameArgs& args) override;
+  void WillBeginImplFrame(const viz::BeginFrameArgs& args) override;
   void DidFinishImplFrame() override;
-  void DidNotProduceFrame(const BeginFrameAck& ack) override;
-  void ScheduledActionSendBeginMainFrame(const BeginFrameArgs& args) override;
+  void DidNotProduceFrame(const viz::BeginFrameAck& ack) override;
+  void ScheduledActionSendBeginMainFrame(
+      const viz::BeginFrameArgs& args) override;
   DrawResult ScheduledActionDrawIfPossible() override;
   DrawResult ScheduledActionDrawForced() override;
   void ScheduledActionCommit() override;
@@ -78,7 +82,7 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
 
   // LayerTreeHostImplClient implementation
   void DidLoseLayerTreeFrameSinkOnImplThread() override;
-  void SetBeginFrameSource(BeginFrameSource* source) override;
+  void SetBeginFrameSource(viz::BeginFrameSource* source) override;
   void DidReceiveCompositorFrameAckOnImplThread() override;
   void OnCanDrawStateChanged(bool can_draw) override;
   void NotifyReadyToActivate() override;
@@ -99,7 +103,7 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
   void DidPrepareTiles() override;
   void DidCompletePageScaleAnimationOnImplThread() override;
   void OnDrawForLayerTreeFrameSink(bool resourceless_software_draw) override;
-  void NeedsImplSideInvalidation() override;
+  void NeedsImplSideInvalidation(bool needs_first_draw_on_activation) override;
   void RequestBeginMainFrameNotExpected(bool new_state) override;
   void NotifyImageDecodeRequestFinished() override;
 
@@ -114,9 +118,9 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
                     TaskRunnerProvider* task_runner_provider);
 
  private:
-  void BeginMainFrame(const BeginFrameArgs& begin_frame_args);
+  void BeginMainFrame(const viz::BeginFrameArgs& begin_frame_args);
   void BeginMainFrameAbortedOnImplThread(CommitEarlyOutReason reason);
-  void DoBeginMainFrame(const BeginFrameArgs& begin_frame_args);
+  void DoBeginMainFrame(const viz::BeginFrameArgs& begin_frame_args);
   void DoPainting();
   void DoCommit();
   DrawResult DoComposite(LayerTreeHostImpl::FrameData* frame);
@@ -138,7 +142,7 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
 
   // Used on the Thread, but checked on main thread during
   // initialization/shutdown.
-  std::unique_ptr<LayerTreeHostImpl> layer_tree_host_impl_;
+  std::unique_ptr<LayerTreeHostImpl> host_impl_;
 
   // Accessed from both threads.
   std::unique_ptr<Scheduler> scheduler_on_impl_thread_;

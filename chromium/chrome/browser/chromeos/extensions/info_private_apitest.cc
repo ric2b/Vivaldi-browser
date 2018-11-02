@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ash/public/cpp/ash_pref_names.h"
 #include "base/sys_info.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
@@ -44,18 +45,19 @@ class ChromeOSInfoPrivateTest : public ExtensionApiTest {
 IN_PROC_BROWSER_TEST_F(ChromeOSInfoPrivateTest, TestGetAndSet) {
   // Set the initial timezone different from what JS function
   // timezoneSetTest() will attempt to set.
-  base::Value initial_timezone("America/Los_Angeles");
-  chromeos::CrosSettings::Get()->Set(chromeos::kSystemTimezone,
-                                     initial_timezone);
+  profile()->GetPrefs()->SetString(prefs::kUserTimezone, "America/Los_Angeles");
 
   // Check that accessibility settings are set to default values.
   PrefService* prefs = profile()->GetPrefs();
-  ASSERT_FALSE(prefs->GetBoolean(prefs::kAccessibilityLargeCursorEnabled));
-  ASSERT_FALSE(prefs->GetBoolean(prefs::kAccessibilityStickyKeysEnabled));
-  ASSERT_FALSE(prefs->GetBoolean(prefs::kAccessibilitySpokenFeedbackEnabled));
-  ASSERT_FALSE(prefs->GetBoolean(prefs::kAccessibilityHighContrastEnabled));
-  ASSERT_FALSE(prefs->GetBoolean(prefs::kAccessibilityScreenMagnifierEnabled));
-  ASSERT_FALSE(prefs->GetBoolean(prefs::kAccessibilityAutoclickEnabled));
+  ASSERT_FALSE(prefs->GetBoolean(ash::prefs::kAccessibilityLargeCursorEnabled));
+  ASSERT_FALSE(prefs->GetBoolean(ash::prefs::kAccessibilityStickyKeysEnabled));
+  ASSERT_FALSE(
+      prefs->GetBoolean(ash::prefs::kAccessibilitySpokenFeedbackEnabled));
+  ASSERT_FALSE(
+      prefs->GetBoolean(ash::prefs::kAccessibilityHighContrastEnabled));
+  ASSERT_FALSE(
+      prefs->GetBoolean(ash::prefs::kAccessibilityScreenMagnifierEnabled));
+  ASSERT_FALSE(prefs->GetBoolean(ash::prefs::kAccessibilityAutoclickEnabled));
 
   ASSERT_FALSE(profile()->GetPrefs()->GetBoolean(
       prefs::kLanguageSendFunctionKeys));
@@ -64,12 +66,14 @@ IN_PROC_BROWSER_TEST_F(ChromeOSInfoPrivateTest, TestGetAndSet) {
       << message_;
 
   // Check that all accessibility settings have been flipped by the test.
-  ASSERT_TRUE(prefs->GetBoolean(prefs::kAccessibilityLargeCursorEnabled));
-  ASSERT_TRUE(prefs->GetBoolean(prefs::kAccessibilityStickyKeysEnabled));
-  ASSERT_TRUE(prefs->GetBoolean(prefs::kAccessibilitySpokenFeedbackEnabled));
-  ASSERT_TRUE(prefs->GetBoolean(prefs::kAccessibilityHighContrastEnabled));
-  ASSERT_TRUE(prefs->GetBoolean(prefs::kAccessibilityScreenMagnifierEnabled));
-  ASSERT_TRUE(prefs->GetBoolean(prefs::kAccessibilityAutoclickEnabled));
+  ASSERT_TRUE(prefs->GetBoolean(ash::prefs::kAccessibilityLargeCursorEnabled));
+  ASSERT_TRUE(prefs->GetBoolean(ash::prefs::kAccessibilityStickyKeysEnabled));
+  ASSERT_TRUE(
+      prefs->GetBoolean(ash::prefs::kAccessibilitySpokenFeedbackEnabled));
+  ASSERT_TRUE(prefs->GetBoolean(ash::prefs::kAccessibilityHighContrastEnabled));
+  ASSERT_TRUE(
+      prefs->GetBoolean(ash::prefs::kAccessibilityScreenMagnifierEnabled));
+  ASSERT_TRUE(prefs->GetBoolean(ash::prefs::kAccessibilityAutoclickEnabled));
 
   ASSERT_TRUE(prefs->GetBoolean(prefs::kLanguageSendFunctionKeys));
 }

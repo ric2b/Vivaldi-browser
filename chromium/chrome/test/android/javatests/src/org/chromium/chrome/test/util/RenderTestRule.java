@@ -4,15 +4,15 @@
 
 package org.chromium.chrome.test.util;
 
-import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.os.Build;
 import android.text.TextUtils;
-import android.util.DisplayMetrics;
 import android.util.Pair;
 import android.view.View;
+
+import junit.framework.Assert;
 
 import org.junit.rules.TestWatcher;
 import org.junit.runner.Description;
@@ -20,12 +20,14 @@ import org.junit.runner.Description;
 import org.chromium.base.CommandLine;
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.ui.UiUtils;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -40,11 +42,14 @@ import java.util.concurrent.Callable;
  * @RunWith(ChromeJUnit4ClassRunner.class)
  * @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
  * public class MyTest {
+ *     // Provide RenderTestRule with the path from src/ to the golden directory.
  *     @Rule
  *     public RenderTestRule mRenderTestRule =
  *             new RenderTestRule("chrome/test/data/android/render_tests");
  *
  *     @Test
+ *     // The test must have the feature "RenderTest" for the bots to display renders.
+ *     @Feature({"RenderTest"})
  *     public void testViewAppearance() {
  *         // Setup the UI.
  *         ...
@@ -66,19 +71,11 @@ public class RenderTestRule extends TestWatcher {
     private static final String GOLDEN_FOLDER_RELATIVE = "/goldens";
 
     /**
-     * This is a list of devices that we maintain golden images for. If render tests are being run
-     * on a device in this list, golden images should exist and their absence is a test failure.
-     * The absence of golden images for devices not on this list doesn't necessarily mean that
-     * something is wrong - the tests are just being run on a device that we don't have goldens for.
+     * This is a list of model-SDK version identifiers for devices we maintain golden images for.
+     * If render tests are being run on a device of a model-sdk on this list, goldens should exist.
      */
-    private static final String[] RENDER_TEST_DEVICES = {"Nexus 5X", "Nexus 5"};
-
-    /**
-     * Before we know how flaky screenshot tests are going to be we don't want them to cause a
-     * full test failure every time they fail. If the tests prove their worth, this will be set to
-     * false/removed.
-     */
-    private static final boolean REPORT_ONLY_DO_NOT_FAIL = true;
+    // TODO(peconn): Add "Nexus_5X-23" once it's run on CQ - https://crbug.com/731759.
+    private static final String[] RENDER_TEST_MODEL_SDK_PAIRS = {"Nexus_5-19"};
 
     /** How many pixels can be different in an image before counting the images as different. */
     private static final int PIXEL_DIFF_THRESHOLD = 0;
@@ -86,13 +83,17 @@ public class RenderTestRule extends TestWatcher {
     private enum ComparisonResult { MATCH, MISMATCH, GOLDEN_NOT_FOUND }
 
     // State for a test class.
-    private final String mOutputDirectory;
+    private final String mOutputFolder;
     private final String mGoldenFolder;
 
     // State for a test method.
     private String mTestClassName;
     private List<String> mMismatchIds = new LinkedList<>();
     private List<String> mGoldenMissingIds = new LinkedList<>();
+    private boolean mHasRenderTestFeature;
+
+    /** Parameterized tests have a prefix inserted at the front of the test description. */
+    private String mVariantPrefix;
 
     /**
      * An exception thrown after a Render Test if images do not match the goldens or goldens are
@@ -105,10 +106,11 @@ public class RenderTestRule extends TestWatcher {
     }
 
     public RenderTestRule(String goldenFolder) {
-        mGoldenFolder = goldenFolder;
-        // The output directory can be overridden with the --render-test-output-dir command.
-        mOutputDirectory =
-                CommandLine.getInstance().getSwitchValue("render-test-output-dir", goldenFolder);
+        // |goldenFolder| is relative to the src directory in the repository. |mGoldenFolder| will
+        // be the folder on the test device.
+        mGoldenFolder = UrlUtils.getIsolatedTestFilePath(goldenFolder);
+        // The output folder can be overridden with the --render-test-output-dir command.
+        mOutputFolder = CommandLine.getInstance().getSwitchValue("render-test-output-dir");
     }
 
     @Override
@@ -118,17 +120,23 @@ public class RenderTestRule extends TestWatcher {
 
         mMismatchIds.clear();
         mGoldenMissingIds.clear();
+
+        Feature feature = desc.getAnnotation(Feature.class);
+        mHasRenderTestFeature =
+                (feature != null && Arrays.asList(feature.value()).contains("RenderTest"));
     }
 
     /**
      * Renders the |view| and compares it to the golden view with the |id|. The RenderTestRule will
      * throw an exception after the test method has completed if the view does not match the
-     * golden or if a golden is missing on a render test device (see
-     * {@link RenderTestRule#RENDER_TEST_DEVICES}).
+     * golden or if a golden is missing on a device it should be present (see
+     * {@link RenderTestRule#RENDER_TEST_MODEL_SDK_PAIRS}).
      *
      * @throws IOException if the rendered image cannot be saved to the device.
      */
     public void render(final View view, String id) throws IOException {
+        Assert.assertTrue("Render Tests must have the RenderTest feature.", mHasRenderTestFeature);
+
         Bitmap testBitmap = ThreadUtils.runOnUiThreadBlockingNoException(new Callable<Bitmap>() {
             @Override
             public Bitmap call() throws Exception {
@@ -143,16 +151,15 @@ public class RenderTestRule extends TestWatcher {
             }
         });
 
-        String filename = imageName(mTestClassName, id);
+        String filename = imageName(mTestClassName, mVariantPrefix, id);
 
         BitmapFactory.Options options = new BitmapFactory.Options();
         options.inPreferredConfig = testBitmap.getConfig();
         File goldenFile = createGoldenPath(filename);
         Bitmap goldenBitmap = BitmapFactory.decodeFile(goldenFile.getAbsolutePath(), options);
-        Log.d(TAG, goldenFile.getAbsolutePath());
 
         Pair<ComparisonResult, Bitmap> result = compareBitmapToGolden(testBitmap, goldenBitmap);
-        Log.d(TAG, "RenderTest %s %s", id, result.first.toString());
+        Log.i(TAG, "RenderTest %s %s", id, result.first.toString());
 
         // Save the result and any interesting images.
         switch (result.first) {
@@ -198,21 +205,25 @@ public class RenderTestRule extends TestWatcher {
             sb.append(TextUtils.join(", ", mMismatchIds));
         }
 
-        if (REPORT_ONLY_DO_NOT_FAIL) {
-            Log.w(TAG, sb.toString());
-        } else {
-            throw new RenderTestException(sb.toString());
-        }
+        throw new RenderTestException(sb.toString());
     }
 
     /**
      * Returns whether goldens should exist for the current device.
      */
     private static boolean onRenderTestDevice() {
-        for (String model : RENDER_TEST_DEVICES) {
-            if (model.equals(Build.MODEL)) return true;
+        for (String model : RENDER_TEST_MODEL_SDK_PAIRS) {
+            if (model.equals(modelSdkIdentifier())) return true;
         }
         return false;
+    }
+
+    /**
+     * Sets a string that will be inserted at the start of the description in the golden image name.
+     * This is used to create goldens for multiple different variants of the UI.
+     */
+    public void setVariantPrefix(String variantPrefix) {
+        mVariantPrefix = variantPrefix;
     }
 
     /**
@@ -222,11 +233,19 @@ public class RenderTestRule extends TestWatcher {
      * This function must be kept in sync with |RE_RENDER_IMAGE_NAME| from
      * src/build/android/pylib/local/device/local_device_instrumentation_test_run.py.
      */
-    private static String imageName(String testClass, String desc) {
-        DisplayMetrics metrics = Resources.getSystem().getDisplayMetrics();
-        String orientation = metrics.widthPixels > metrics.heightPixels ? "land" : "port";
-        return String.format(
-                "%s.%s.%s.%s.png", testClass, desc, Build.MODEL.replace(' ', '_'), orientation);
+    private static String imageName(String testClass, String variantPrefix, String desc) {
+        if (!TextUtils.isEmpty(variantPrefix)) {
+            desc = variantPrefix + "-" + desc;
+        }
+
+        return String.format("%s.%s.%s.png", testClass, desc, modelSdkIdentifier());
+    }
+
+    /**
+     * Returns a string encoding the device model and sdk. It is used to identify device goldens.
+     */
+    private static String modelSdkIdentifier() {
+        return Build.MODEL.replace(' ', '_') + "-" + Build.VERSION.SDK_INT;
     }
 
     /**
@@ -245,15 +264,16 @@ public class RenderTestRule extends TestWatcher {
      * Convenience method to create a File pointing to |filename| in |mGoldenFolder|.
      */
     private File createGoldenPath(String filename) throws IOException {
-        return createPath(UrlUtils.getIsolatedTestFilePath(mGoldenFolder), filename);
+        return createPath(mGoldenFolder, filename);
     }
 
     /**
      * Convenience method to create a File pointing to |filename| in the |subfolder| in
-     * |mOutputDirectory|.
+     * |mOutputFolder|.
      */
     private File createOutputPath(String subfolder, String filename) throws IOException {
-        return createPath(mOutputDirectory + subfolder, filename);
+        String folder = mOutputFolder != null ? mOutputFolder : mGoldenFolder;
+        return createPath(folder + subfolder, filename);
     }
 
     private static File createPath(String folder, String filename) throws IOException {

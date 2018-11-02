@@ -44,14 +44,14 @@ class BlobURLLoaderFactory
   // Note that given |request|'s URL is not referenced, but only method and
   // range headers are used.
   static void CreateLoaderAndStart(
-      mojom::URLLoaderAssociatedRequest url_loader_request,
+      mojom::URLLoaderRequest url_loader_request,
       const ResourceRequest& request,
       mojom::URLLoaderClientPtr client,
       std::unique_ptr<storage::BlobDataHandle> blob_handle,
       storage::FileSystemContext* file_system_context);
 
   // mojom::URLLoaderFactory implementation:
-  void CreateLoaderAndStart(mojom::URLLoaderAssociatedRequest loader,
+  void CreateLoaderAndStart(mojom::URLLoaderRequest loader,
                             int32_t routing_id,
                             int32_t request_id,
                             uint32_t options,
@@ -59,10 +59,7 @@ class BlobURLLoaderFactory
                             mojom::URLLoaderClientPtr client,
                             const net::MutableNetworkTrafficAnnotationTag&
                                 traffic_annotation) override;
-  void SyncLoad(int32_t routing_id,
-                int32_t request_id,
-                const ResourceRequest& request,
-                SyncLoadCallback callback) override;
+  void Clone(mojom::URLLoaderFactoryRequest request) override;
 
  private:
   friend class base::DeleteHelper<BlobURLLoaderFactory>;

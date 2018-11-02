@@ -22,6 +22,7 @@
 #include "core/dom/NodeList.h"
 #include "core/dom/StaticNodeList.h"
 #include "core/html/LabelsNodeList.h"
+#include "platform/bindings/RuntimeCallStats.h"
 #include "platform/bindings/V8ObjectConstructor.h"
 #include "platform/wtf/GetPtr.h"
 #include "platform/wtf/RefPtr.h"
@@ -124,6 +125,9 @@ static void namedPropertyQuery(const AtomicString& name, const v8::PropertyCallb
   // https://heycam.github.io/webidl/#LegacyPlatformObjectGetOwnProperty
   // 2.7. If |O| implements an interface with a named property setter, then set
   //      desc.[[Writable]] to true, otherwise set it to false.
+  // 2.8. If |O| implements an interface with the
+  //      [LegacyUnenumerableNamedProperties] extended attribute, then set
+  //      desc.[[Enumerable]] to false, otherwise set it to true.
   V8SetReturnValueInt(info, v8::None);
 }
 
@@ -142,10 +146,14 @@ static void namedPropertyEnumerator(const v8::PropertyCallbackInfo<v8::Array>& i
 } // namespace TestSpecialOperationsV8Internal
 
 void V8TestSpecialOperations::namedItemMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestSpecialOperations_namedItem");
+
   TestSpecialOperationsV8Internal::namedItemMethod(info);
 }
 
 void V8TestSpecialOperations::namedPropertyGetterCallback(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestSpecialOperations_NamedPropertyGetter");
+
   if (!name->IsString())
     return;
   const AtomicString& propertyName = ToCoreAtomicString(name.As<v8::String>());
@@ -154,6 +162,8 @@ void V8TestSpecialOperations::namedPropertyGetterCallback(v8::Local<v8::Name> na
 }
 
 void V8TestSpecialOperations::namedPropertySetterCallback(v8::Local<v8::Name> name, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestSpecialOperations_NamedPropertySetter");
+
   if (!name->IsString())
     return;
   const AtomicString& propertyName = ToCoreAtomicString(name.As<v8::String>());
@@ -162,6 +172,8 @@ void V8TestSpecialOperations::namedPropertySetterCallback(v8::Local<v8::Name> na
 }
 
 void V8TestSpecialOperations::namedPropertyQueryCallback(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Integer>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestSpecialOperations_NamedPropertyQuery");
+
   if (!name->IsString())
     return;
   const AtomicString& propertyName = ToCoreAtomicString(name.As<v8::String>());
@@ -174,6 +186,8 @@ void V8TestSpecialOperations::namedPropertyEnumeratorCallback(const v8::Property
 }
 
 void V8TestSpecialOperations::indexedPropertyGetterCallback(uint32_t index, const v8::PropertyCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestSpecialOperations_IndexedPropertyGetter");
+
   const AtomicString& propertyName = AtomicString::Number(index);
 
   TestSpecialOperationsV8Internal::namedPropertyGetter(propertyName, info);

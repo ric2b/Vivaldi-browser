@@ -161,12 +161,14 @@ class WindowManager : public aura::WindowManagerDelegate,
       const ui::Event& event,
       std::unordered_map<std::string, std::vector<uint8_t>>* properties)
       override;
+  void OnCursorTouchVisibleChanged(bool enabled) override;
   void OnWmSetClientArea(
       aura::Window* window,
       const gfx::Insets& insets,
       const std::vector<gfx::Rect>& additional_client_areas) override;
   bool IsWindowActive(aura::Window* window) override;
   void OnWmDeactivateWindow(aura::Window* window) override;
+  void OnEventBlockedByModalWindow(aura::Window* window) override;
 
   service_manager::Connector* connector_;
   display::mojom::DisplayControllerPtr display_controller_;

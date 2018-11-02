@@ -38,6 +38,12 @@ void ExtensionsAPIClient::AttachWebContentsHelpers(
     content::WebContents* web_contents) const {
 }
 
+bool ExtensionsAPIClient::ShouldHideResponseHeader(
+    const GURL& url,
+    const std::string& header_name) const {
+  return false;
+}
+
 AppViewGuestDelegate* ExtensionsAPIClient::CreateAppViewGuestDelegate() const {
   return NULL;
 }
@@ -51,7 +57,7 @@ ExtensionsAPIClient::CreateExtensionOptionsGuestDelegate(
 std::unique_ptr<guest_view::GuestViewManagerDelegate>
 ExtensionsAPIClient::CreateGuestViewManagerDelegate(
     content::BrowserContext* context) const {
-  return base::MakeUnique<ExtensionsGuestViewManagerDelegate>(context);
+  return std::make_unique<ExtensionsGuestViewManagerDelegate>(context);
 }
 
 std::unique_ptr<MimeHandlerViewGuestDelegate>
@@ -109,6 +115,14 @@ ExtensionsAPIClient::GetNetworkingCastPrivateDelegate() {
 }
 
 FileSystemDelegate* ExtensionsAPIClient::GetFileSystemDelegate() {
+  return nullptr;
+}
+
+MessagingDelegate* ExtensionsAPIClient::GetMessagingDelegate() {
+  return nullptr;
+}
+
+FeedbackPrivateDelegate* ExtensionsAPIClient::GetFeedbackPrivateDelegate() {
   return nullptr;
 }
 

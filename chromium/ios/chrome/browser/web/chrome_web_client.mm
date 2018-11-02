@@ -23,6 +23,7 @@
 #include "ios/chrome/browser/chrome_url_constants.h"
 #include "ios/chrome/browser/experimental_flags.h"
 #include "ios/chrome/browser/ios_chrome_main_parts.h"
+#include "ios/chrome/browser/passwords/credential_manager_features.h"
 #include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/ssl/ios_ssl_error_handler.h"
 #import "ios/chrome/browser/ui/chrome_web_view_factory.h"
@@ -163,15 +164,19 @@ void ChromeWebClient::PostBrowserURLRewriterCreation(
 
 NSString* ChromeWebClient::GetEarlyPageScript(
     web::BrowserState* browser_state) const {
-  NSString* chrome_page_script = GetPageScript(@"chrome_bundle");
+  NSMutableArray* scripts = [NSMutableArray array];
+  [scripts addObject:GetPageScript(@"chrome_bundle")];
 
-  if (!base::FeatureList::IsEnabled(payments::features::kWebPayments))
-    return chrome_page_script;
+  if (base::FeatureList::IsEnabled(
+          credential_manager::features::kCredentialManager)) {
+    [scripts addObject:GetPageScript(@"credential_manager")];
+  }
 
-  NSString* kScriptTemplate = @"%@; %@";
-  return [NSString stringWithFormat:kScriptTemplate,
-                                    GetPageScript(@"payment_request"),
-                                    chrome_page_script];
+  if (base::FeatureList::IsEnabled(payments::features::kWebPayments)) {
+    [scripts addObject:GetPageScript(@"payment_request")];
+  }
+
+  return [scripts componentsJoinedByString:@";"];
 }
 
 void ChromeWebClient::AllowCertificateError(
@@ -181,6 +186,10 @@ void ChromeWebClient::AllowCertificateError(
     const GURL& request_url,
     bool overridable,
     const base::Callback<void(bool)>& callback) {
+  // TODO(crbug.com/760873): IOSSSLErrorHandler will present an interstitial
+  // for the user to decide if it is safe to proceed.
+  // Handle the case of web_state not presenting UI to users like prerender tabs
+  // or web_state used to fetch offline content in Reading List.
   IOSSSLErrorHandler::HandleSSLError(web_state, cert_error, info, request_url,
                                      overridable, callback);
 }

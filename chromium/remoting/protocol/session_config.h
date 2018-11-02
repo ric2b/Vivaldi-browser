@@ -32,6 +32,7 @@ struct ChannelConfig {
     CODEC_ZIP,
     CODEC_VP8,
     CODEC_VP9,
+    CODEC_H264,
     CODEC_OPUS,
     CODEC_SPEEX,
   };
@@ -180,6 +181,11 @@ class CandidateSessionConfig {
     vp9_experiment_enabled_ = value;
   }
 
+  bool h264_experiment_enabled() const { return h264_experiment_enabled_; }
+  void set_h264_experiment_enabled(bool value) {
+    h264_experiment_enabled_ = value;
+  }
+
   // Returns true if |config| is supported.
   bool IsSupported(const SessionConfig& config) const;
 
@@ -203,6 +209,7 @@ class CandidateSessionConfig {
   std::list<ChannelConfig> audio_configs_;
 
   bool vp9_experiment_enabled_ = false;
+  bool h264_experiment_enabled_ = false;
 };
 
 }  // namespace protocol

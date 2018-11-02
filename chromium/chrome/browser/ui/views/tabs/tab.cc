@@ -8,7 +8,6 @@
 #include <limits>
 #include <utility>
 
-#include "base/command_line.h"
 #include "base/debug/alias.h"
 #include "base/macros.h"
 #include "base/metrics/user_metrics.h"
@@ -31,7 +30,6 @@
 #include "chrome/browser/ui/views/tabs/tab_controller.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/ui/views/touch_uma/touch_uma.h"
-#include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
@@ -46,7 +44,7 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/theme_provider.h"
 #include "ui/gfx/animation/animation_container.h"
-#include "ui/gfx/animation/throb_animation.h"
+#include "ui/gfx/animation/tween.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_analysis.h"
 #include "ui/gfx/favicon_size.h"
@@ -299,12 +297,12 @@ class Tab::TabCloseButton : public views::ImageButton,
 
   void OnMouseMoved(const ui::MouseEvent& event) override {
     tab_->controller_->OnMouseEventInTab(this, event);
-    CustomButton::OnMouseMoved(event);
+    Button::OnMouseMoved(event);
   }
 
   void OnMouseReleased(const ui::MouseEvent& event) override {
     tab_->controller_->OnMouseEventInTab(this, event);
-    CustomButton::OnMouseReleased(event);
+    Button::OnMouseReleased(event);
   }
 
   void OnGestureEvent(ui::GestureEvent* event) override {
@@ -435,13 +433,14 @@ Tab::Tab(TabController* controller, gfx::AnimationContainer* container)
       detached_(false),
       favicon_hiding_offset_(0),
       should_display_crashed_favicon_(false),
-      pulse_animation_(new gfx::ThrobAnimation(this)),
-      crash_icon_animation_(new FaviconCrashAnimation(this)),
+      pulse_animation_(this),
+      crash_icon_animation_(base::MakeUnique<FaviconCrashAnimation>(this)),
       animation_container_(container),
       throbber_(nullptr),
       alert_indicator_button_(nullptr),
       close_button_(nullptr),
       title_(new views::Label()),
+      title_animation_(this),
       tab_activated_with_last_tap_down_(false),
       hover_controller_(this),
       showing_icon_(false),
@@ -485,8 +484,8 @@ Tab::Tab(TabController* controller, gfx::AnimationContainer* container)
       kTabCloseHoveredPressedIcon, SkColorSetRGB(0xDB, 0x44, 0x37));
   const gfx::ImageSkia& pressed = gfx::CreateVectorIcon(
       kTabCloseHoveredPressedIcon, SkColorSetRGB(0xA8, 0x35, 0x2A));
-  close_button_->SetImage(views::CustomButton::STATE_HOVERED, &hovered);
-  close_button_->SetImage(views::CustomButton::STATE_PRESSED, &pressed);
+  close_button_->SetImage(views::Button::STATE_HOVERED, &hovered);
+  close_button_->SetImage(views::Button::STATE_PRESSED, &pressed);
 
   // Disable animation so that the red danger sign shows up immediately
   // to help avoid mis-clicks.
@@ -496,8 +495,11 @@ Tab::Tab(TabController* controller, gfx::AnimationContainer* container)
   set_context_menu_controller(this);
 
   const int kPulseDurationMs = 200;
-  pulse_animation_->SetSlideDuration(kPulseDurationMs);
-  pulse_animation_->SetContainer(animation_container_.get());
+  pulse_animation_.SetSlideDuration(kPulseDurationMs);
+  pulse_animation_.SetContainer(animation_container_.get());
+
+  title_animation_.SetDuration(base::TimeDelta::FromMilliseconds(100));
+  title_animation_.SetContainer(animation_container_.get());
 
   hover_controller_.SetAnimationContainer(animation_container_.get());
 }
@@ -510,10 +512,9 @@ bool Tab::IsActive() const {
 }
 
 void Tab::ActiveStateChanged() {
-  // The pinned tab title changed indicator is only shown for inactive tabs.
-  // When transitioning between active and inactive always reset the state
-  // to enforce that.
-  SetPinnedTabTitleChangedIndicatorVisible(false);
+  // The attention indicator is only shown for inactive tabs. When transitioning
+  // between active and inactive always reset the state to enforce that.
+  SetTabNeedsAttention(false);
   OnButtonColorMaybeChanged();
   alert_indicator_button_->UpdateEnabledForMuteToggle();
   Layout();
@@ -561,7 +562,7 @@ void Tab::SetData(const TabRendererData& data) {
     alert_indicator_button_->TransitionToAlertState(data_.alert_state);
 
   if (old.pinned != data_.pinned)
-    showing_pinned_tab_title_changed_indicator_ = false;
+    showing_alert_indicator_ = false;
 
   DataChanged(old);
 
@@ -577,20 +578,18 @@ void Tab::StepLoadingAnimation() {
 }
 
 void Tab::StartPulse() {
-  pulse_animation_->StartThrobbing(std::numeric_limits<int>::max());
+  pulse_animation_.StartThrobbing(std::numeric_limits<int>::max());
 }
 
 void Tab::StopPulse() {
-  pulse_animation_->Stop();
+  pulse_animation_.Stop();
 }
 
-void Tab::SetPinnedTabTitleChangedIndicatorVisible(bool value) {
-  if (value == showing_pinned_tab_title_changed_indicator_)
+void Tab::SetTabNeedsAttention(bool value) {
+  if (value == showing_attention_indicator_)
     return;
 
-  DCHECK(!value || data().pinned);
-
-  showing_pinned_tab_title_changed_indicator_ = value;
+  showing_attention_indicator_ = value;
   SchedulePaint();
 }
 
@@ -661,10 +660,20 @@ int Tab::GetOverlap() {
 // Tab, AnimationDelegate overrides:
 
 void Tab::AnimationProgressed(const gfx::Animation* animation) {
+  if (animation == &title_animation_) {
+    title_->SetBoundsRect(gfx::Tween::RectValueBetween(
+        gfx::Tween::CalculateValue(gfx::Tween::FAST_OUT_SLOW_IN,
+                                   animation->GetCurrentValue()),
+        start_title_bounds_, target_title_bounds_));
+    return;
+  }
+
   // Ignore if the pulse animation is being performed on active tab because
   // it repaints the same image. See PaintTab().
-  if ((animation != pulse_animation_.get()) || !IsActive())
-    SchedulePaint();
+  if (animation == &pulse_animation_ && IsActive())
+    return;
+
+  SchedulePaint();
 }
 
 void Tab::AnimationCanceled(const gfx::Animation* animation) {
@@ -672,7 +681,10 @@ void Tab::AnimationCanceled(const gfx::Animation* animation) {
 }
 
 void Tab::AnimationEnded(const gfx::Animation* animation) {
-  SchedulePaint();
+  if (animation == &title_animation_)
+    title_->SetBoundsRect(target_title_bounds_);
+  else
+    SchedulePaint();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -753,6 +765,7 @@ void Tab::OnPaint(gfx::Canvas* canvas) {
 
 void Tab::Layout() {
   const gfx::Rect lb = GetContentsBounds();
+  const bool was_showing_icon = showing_icon_;
   showing_icon_ = ShouldShowIcon();
   // See comments in IconCapacity().
   const int extra_padding =
@@ -827,8 +840,19 @@ void Tab::Layout() {
     // The Label will automatically center the font's cap height within the
     // provided vertical space.
     const gfx::Rect title_bounds(title_left, lb.y(), title_width, lb.height());
-    title_->SetBoundsRect(title_bounds);
     show_title = title_width > 0;
+
+    if (title_bounds != target_title_bounds_) {
+      target_title_bounds_ = title_bounds;
+      if (was_showing_icon == showing_icon_ || title_->bounds().IsEmpty() ||
+          title_bounds.IsEmpty()) {
+        title_animation_.Stop();
+        title_->SetBoundsRect(title_bounds);
+      } else if (!title_animation_.is_animating()) {
+        start_title_bounds_ = title_->bounds();
+        title_animation_.Start();
+      }
+    }
   }
   title_->SetVisible(show_title);
 }
@@ -1219,10 +1243,9 @@ void Tab::PaintTabBackgroundStroke(gfx::Canvas* canvas,
   canvas->DrawPath(path, flags);
 }
 
-void Tab::PaintPinnedTabTitleChangedIndicatorAndIcon(
-    gfx::Canvas* canvas,
-    const gfx::Rect& favicon_draw_bounds) {
-  // The pinned tab title changed indicator consists of two parts:
+void Tab::PaintAttentionIndicatorAndIcon(gfx::Canvas* canvas,
+                                         const gfx::Rect& favicon_draw_bounds) {
+  // The attention indicator consists of two parts:
   // . a clear (totally transparent) part over the bottom right (or left in rtl)
   //   of the favicon. This is done by drawing the favicon to a layer, then
   //   drawing the clear part on top of the favicon.
@@ -1245,7 +1268,7 @@ void Tab::PaintPinnedTabTitleChangedIndicatorAndIcon(
     canvas->Restore();
   }
 
-  // Draws the actual pinned tab title changed indicator.
+  // Draws the actual attention indicator.
   cc::PaintFlags indicator_flags;
   indicator_flags.setColor(GetNativeTheme()->GetSystemColor(
       ui::NativeTheme::kColorId_ProminentButtonColor));
@@ -1288,9 +1311,8 @@ void Tab::PaintIcon(gfx::Canvas* canvas) {
     }
   }
 
-  if (showing_pinned_tab_title_changed_indicator_ &&
-      !should_display_crashed_favicon_) {
-    PaintPinnedTabTitleChangedIndicatorAndIcon(canvas, bounds);
+  if (showing_attention_indicator_ && !should_display_crashed_favicon_) {
+    PaintAttentionIndicatorAndIcon(canvas, bounds);
   } else if (!favicon_.isNull()) {
     canvas->DrawImageInt(favicon_, 0, 0, bounds.width(), bounds.height(),
                          bounds.x(), bounds.y(), bounds.width(),
@@ -1301,27 +1323,6 @@ void Tab::PaintIcon(gfx::Canvas* canvas) {
 void Tab::UpdateThrobber(const TabRendererData& old) {
   const bool should_show = ShouldShowThrobber(data_.network_state);
   const bool is_showing = throbber_->visible();
-
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDelayReloadStopButtonChange)) {
-    // Minimize flip-flops between showing the throbber and the favicon. Delay
-    // the switch from favicon to throbber if the switch would occur just after
-    // the a throbbing session finishes. The heuristic for "throbbing session
-    // finishing" is that the old and new URLs match and that the throbber has
-    // been shown recently. See crbug.com/734104
-    constexpr auto kSuppressChangeDuration = base::TimeDelta::FromSeconds(3);
-    if (!is_showing && should_show && old.url == data_.url &&
-        (base::TimeTicks::Now() - last_throbber_show_time_) <
-            kSuppressChangeDuration) {
-      if (!delayed_throbber_show_timer_.IsRunning()) {
-        delayed_throbber_show_timer_.Start(FROM_HERE, kSuppressChangeDuration,
-                                           this, &Tab::RefreshThrobber);
-      }
-      return;
-    }
-
-    delayed_throbber_show_timer_.Stop();
-  }
 
   if (!is_showing && !should_show)
     return;
@@ -1336,8 +1337,6 @@ void Tab::RefreshThrobber() {
     ScheduleIconPaint();
     return;
   }
-
-  last_throbber_show_time_ = base::TimeTicks::Now();
 
   // Since the throbber can animate for a long time, paint to a separate layer
   // when possible to reduce repaint overhead.
@@ -1415,8 +1414,8 @@ double Tab::GetThrobValue() {
   const double offset =
       is_selected ? (kSelectedTabThrobScale * kHoverOpacity) : kHoverOpacity;
 
-  if (pulse_animation_->is_animating())
-    val += pulse_animation_->GetCurrentValue() * offset;
+  if (pulse_animation_.is_animating())
+    val += pulse_animation_.GetCurrentValue() * offset;
   else if (hover_controller_.ShouldDraw())
     val += hover_controller_.GetAnimationValue() * offset;
   return val;
@@ -1452,7 +1451,7 @@ void Tab::OnButtonColorMaybeChanged() {
     alert_indicator_button_->OnParentTabButtonColorChanged();
     const gfx::ImageSkia& close_button_normal_image =
         gfx::CreateVectorIcon(kTabCloseNormalIcon, button_color_);
-    close_button_->SetImage(views::CustomButton::STATE_NORMAL,
+    close_button_->SetImage(views::Button::STATE_NORMAL,
                             &close_button_normal_image);
   }
 }

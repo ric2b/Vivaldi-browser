@@ -35,7 +35,7 @@ class CONTENT_EXPORT SpeechRecognizerImpl
     : public SpeechRecognizer,
       public media::AudioInputController::EventHandler,
       public media::AudioInputController::SyncWriter,
-      public NON_EXPORTED_BASE(SpeechRecognitionEngine::Delegate) {
+      public SpeechRecognitionEngine::Delegate {
  public:
   static const int kAudioSampleRate;
   static const media::ChannelLayout kChannelLayout;
@@ -156,7 +156,7 @@ class CONTENT_EXPORT SpeechRecognizerImpl
   void Write(const media::AudioBus* data,
              double volume,
              bool key_pressed,
-             uint32_t hardware_delay_bytes) override;
+             base::TimeTicks capture_time) override;
   void Close() override;
 
   // SpeechRecognitionEngineDelegate methods.

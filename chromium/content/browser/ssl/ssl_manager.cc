@@ -27,6 +27,8 @@
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/ssl_host_state_delegate.h"
+#include "content/public/common/console_message_level.h"
+#include "net/cert/symantec_certs.h"
 #include "net/url_request/url_request.h"
 
 namespace content {
@@ -41,6 +43,37 @@ enum SSLGoodCertSeenEvent {
   HAD_PREVIOUS_EXCEPTION = 1,
   SSL_GOOD_CERT_SEEN_EVENT_MAX = 2
 };
+
+// Should be called on navigation commit. Checks if the navigation described by
+// |details| was a different-page navigation that used a legacy Symantec
+// certificate |cert|, and if so, logs a console warning in |web_contents|.
+void MaybeLogLegacySymantecWarning(
+    const LoadCommittedDetails& details,
+    const scoped_refptr<net::X509Certificate>& cert,
+    const net::HashValueVector& public_key_hashes,
+    content::WebContents* web_contents) {
+  // No need to log on same-page navigations, because the message would be
+  // redundant.
+  if (details.is_same_document)
+    return;
+  if (!net::IsLegacySymantecCert(public_key_hashes))
+    return;
+  std::string content_client_message;
+  GURL url = details.entry->GetURL();
+  bool message_overridden =
+      GetContentClient()->browser()->OverrideLegacySymantecCertConsoleMessage(
+          url, cert, &content_client_message);
+  web_contents->GetMainFrame()->AddMessageToConsole(
+      CONSOLE_MESSAGE_LEVEL_WARNING,
+      message_overridden ? content_client_message
+                         : "The certificate used to load " + url.spec() +
+                               " uses an SSL certificate that will be "
+                               "distrusted in the future. "
+                               "Once distrusted, users will be prevented from "
+                               "loading this resource. See "
+                               "https://g.co/chrome/symantecpkicerts for "
+                               "more information.");
+}
 
 void OnAllowCertificateWithRecordDecision(
     bool record_decision,
@@ -191,7 +224,13 @@ SSLManager::~SSLManager() {
 
 void SSLManager::DidCommitProvisionalLoad(const LoadCommittedDetails& details) {
   NavigationEntryImpl* entry = controller_->GetLastCommittedEntry();
-  int content_status_flags = 0;
+  int add_content_status_flags = 0;
+  int remove_content_status_flags = 0;
+
+  MaybeLogLegacySymantecWarning(details, entry->GetSSL().certificate,
+                                entry->GetSSL().public_key_hashes,
+                                controller_->delegate()->GetWebContents());
+
   if (!details.is_main_frame) {
     // If it wasn't a main-frame navigation, then carry over content
     // status flags. (For example, the mixed content flag shouldn't
@@ -199,13 +238,25 @@ void SSLManager::DidCommitProvisionalLoad(const LoadCommittedDetails& details) {
     NavigationEntryImpl* previous_entry =
         controller_->GetEntryAtIndex(details.previous_entry_index);
     if (previous_entry) {
-      content_status_flags = previous_entry->GetSSL().content_status;
+      add_content_status_flags = previous_entry->GetSSL().content_status;
     }
+  } else if (!details.is_same_document) {
+    // For main-frame non-same-page navigations, clear content status
+    // flags. These flags are set based on the content on the page, and thus
+    // should reflect the current content, even if the navigation was to an
+    // existing entry that already had content status flags set.
+    remove_content_status_flags = ~0;
+    // Also clear any UserData from the SSLStatus.
+    if (entry)
+      entry->GetSSL().user_data = nullptr;
   }
-  UpdateEntry(entry, content_status_flags, 0);
-  // Always notify the WebContents that the SSL state changed when a
-  // load is committed, in case the active navigation entry has changed.
-  NotifyDidChangeVisibleSSLState();
+
+  if (!UpdateEntry(entry, add_content_status_flags,
+                   remove_content_status_flags)) {
+    // Ensure the WebContents is notified that the SSL state changed when a
+    // load is committed, in case the active navigation entry has changed.
+    NotifyDidChangeVisibleSSLState();
+  }
 }
 
 void SSLManager::DidDisplayMixedContent() {
@@ -401,18 +452,18 @@ void SSLManager::OnCertErrorInternal(std::unique_ptr<SSLErrorHandler> handler,
       base::Bind(&OnAllowCertificateWithRecordDecision, true, callback));
 }
 
-void SSLManager::UpdateEntry(NavigationEntryImpl* entry,
+bool SSLManager::UpdateEntry(NavigationEntryImpl* entry,
                              int add_content_status_flags,
                              int remove_content_status_flags) {
   // We don't always have a navigation entry to update, for example in the
   // case of the Web Inspector.
   if (!entry)
-    return;
+    return false;
 
   SSLStatus original_ssl_status = entry->GetSSL();  // Copy!
   entry->GetSSL().initialized = true;
-  entry->GetSSL().content_status |= add_content_status_flags;
   entry->GetSSL().content_status &= ~remove_content_status_flags;
+  entry->GetSSL().content_status |= add_content_status_flags;
 
   SiteInstance* site_instance = entry->site_instance();
   // Note that |site_instance| can be NULL here because NavigationEntries don't
@@ -436,8 +487,13 @@ void SSLManager::UpdateEntry(NavigationEntryImpl* entry,
     }
   }
 
-  if (!entry->GetSSL().Equals(original_ssl_status))
+  if (entry->GetSSL().initialized != original_ssl_status.initialized ||
+      entry->GetSSL().content_status != original_ssl_status.content_status) {
     NotifyDidChangeVisibleSSLState();
+    return true;
+  }
+
+  return false;
 }
 
 void SSLManager::UpdateLastCommittedEntry(int add_content_status_flags,

@@ -20,7 +20,6 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "content/browser/service_worker/service_worker_database.h"
-#include "content/browser/service_worker/service_worker_database_task_manager.h"
 #include "content/browser/service_worker/service_worker_metrics.h"
 #include "content/browser/service_worker/service_worker_version.h"
 #include "content/common/content_export.h"
@@ -29,7 +28,6 @@
 
 namespace base {
 class SequencedTaskRunner;
-class SingleThreadTaskRunner;
 }
 
 namespace storage {
@@ -53,7 +51,7 @@ struct ServiceWorkerRegistrationInfo;
 // disabled and all subsequent requests are aborted until the context core is
 // restarted.
 class CONTENT_EXPORT ServiceWorkerStorage
-    : NON_EXPORTED_BASE(public ServiceWorkerVersion::Listener) {
+    : public ServiceWorkerVersion::Listener {
  public:
   typedef std::vector<ServiceWorkerDatabase::ResourceRecord> ResourceList;
   typedef base::Callback<void(ServiceWorkerStatusCode status)> StatusCallback;
@@ -82,8 +80,7 @@ class CONTENT_EXPORT ServiceWorkerStorage
   static std::unique_ptr<ServiceWorkerStorage> Create(
       const base::FilePath& path,
       const base::WeakPtr<ServiceWorkerContextCore>& context,
-      std::unique_ptr<ServiceWorkerDatabaseTaskManager> database_task_manager,
-      const scoped_refptr<base::SingleThreadTaskRunner>& disk_cache_thread,
+      scoped_refptr<base::SequencedTaskRunner> database_task_runner,
       storage::QuotaManagerProxy* quota_manager_proxy,
       storage::SpecialStoragePolicy* special_storage_policy);
 
@@ -260,6 +257,8 @@ class CONTENT_EXPORT ServiceWorkerStorage
   friend class ServiceWorkerContextRequestHandlerTest;
   friend class ServiceWorkerReadFromCacheJobTest;
   friend class ServiceWorkerRequestHandlerTest;
+  friend class ServiceWorkerInstalledScriptsSenderTest;
+  friend class ServiceWorkerURLLoaderJobTest;
   friend class ServiceWorkerURLRequestJobTest;
   friend class ServiceWorkerVersionBrowserTest;
   friend class ServiceWorkerVersionTest;
@@ -353,8 +352,7 @@ class CONTENT_EXPORT ServiceWorkerStorage
   ServiceWorkerStorage(
       const base::FilePath& path,
       base::WeakPtr<ServiceWorkerContextCore> context,
-      std::unique_ptr<ServiceWorkerDatabaseTaskManager> database_task_manager,
-      const scoped_refptr<base::SingleThreadTaskRunner>& disk_cache_thread,
+      scoped_refptr<base::SequencedTaskRunner> database_task_runner,
       storage::QuotaManagerProxy* quota_manager_proxy,
       storage::SpecialStoragePolicy* special_storage_policy);
 
@@ -530,9 +528,13 @@ class CONTENT_EXPORT ServiceWorkerStorage
 
   bool IsDisabled() const;
   void ScheduleDeleteAndStartOver();
-  void DidDeleteDatabase(
-      const StatusCallback& callback,
-      ServiceWorkerDatabase::Status status);
+
+  // Posted by the underlying cache implementation after it finishes making
+  // disk changes upon its destruction.
+  void DiskCacheImplDoneWithDisk();
+  void DidDeleteDatabase(const StatusCallback& callback,
+                         ServiceWorkerDatabase::Status status);
+  // Posted when we finish deleting the cache directory.
   void DidDeleteDiskCache(
       const StatusCallback& callback,
       bool result);
@@ -560,16 +562,28 @@ class CONTENT_EXPORT ServiceWorkerStorage
   };
   State state_;
 
+  // non-null between when DeleteAndStartOver() is called and when the
+  // underlying disk cache stops using the disk.
+  StatusCallback delete_and_start_over_callback_;
+
+  // This is set when we know that a call to Disable() will result in
+  // DiskCacheImplDoneWithDisk() eventually called. This might not happen
+  // for many reasons:
+  // 1) A previous call to Disable() may have already triggered that.
+  // 2) We may be using a memory backend.
+  // 3) |disk_cache_| might not have been created yet.
+  // ... so it's easier to keep track of the case when it will happen.
+  bool expecting_done_with_disk_on_disable_;
+
   base::FilePath path_;
 
   // The context should be valid while the storage is alive.
   base::WeakPtr<ServiceWorkerContextCore> context_;
 
-  // Only accessed using |database_task_manager_|.
+  // |database_| is only accessed using |database_task_runner_|.
   std::unique_ptr<ServiceWorkerDatabase> database_;
+  scoped_refptr<base::SequencedTaskRunner> database_task_runner_;
 
-  std::unique_ptr<ServiceWorkerDatabaseTaskManager> database_task_manager_;
-  scoped_refptr<base::SingleThreadTaskRunner> disk_cache_thread_;
   scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy_;
   scoped_refptr<storage::SpecialStoragePolicy> special_storage_policy_;
 

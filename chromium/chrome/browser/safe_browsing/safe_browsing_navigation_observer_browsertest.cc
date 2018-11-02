@@ -2,12 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/safe_browsing/download_protection_service.h"
+#include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
 #include "chrome/browser/safe_browsing/safe_browsing_navigation_observer.h"
 #include "chrome/browser/safe_browsing/safe_browsing_navigation_observer_manager.h"
 #include "chrome/browser/safe_browsing/test_safe_browsing_service.h"
@@ -1166,14 +1167,9 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest,
                            referrer_chain.Get(2));
 }
 
-#if defined(OS_WIN)
-#define MAYBE_SubFrameDirectDownload DISABLED_SubFrameDirectDownload
-#else
-#define MAYBE_SubFrameDirectDownload SubFrameDirectDownload
-#endif
 // Click a link in a subframe and start download.
 IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest,
-                       MAYBE_SubFrameDirectDownload) {
+                       SubFrameDirectDownload) {
   GURL initial_url = embedded_test_server()->GetURL(kSingleFrameTestURL);
   ClickTestLink("sub_frame_download_attribution", 1, initial_url);
   std::string test_name =
@@ -1205,22 +1201,43 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest,
                         true,                  // has_committed
                         false,                 // has_server_redirect
                         nav_list->Get(1));
-  VerifyNavigationEvent(GURL(),                // source_url
-                        multi_frame_test_url,  // source_main_frame_url
-                        iframe_url,            // original_request_url
-                        iframe_url,            // destination_url
-                        false,                 // is_user_initiated,
-                        true,                  // has_committed
-                        false,                 // has_server_redirect
-                        nav_list->Get(2));
-  VerifyNavigationEvent(GURL(),                  // source_url
-                        multi_frame_test_url,    // source_main_frame_url
-                        iframe_retargeting_url,  // original_request_url
-                        iframe_retargeting_url,  // destination_url
-                        false,                   // is_user_initiated,
-                        true,                    // has_committed
-                        false,                   // has_server_redirect
-                        nav_list->Get(3));
+  // The order of the next two navigation events may vary. We check for both
+  // possibilities. Their order doesn't impact referrer chain attribution logic.
+  if (nav_list->Get(2)->original_request_url == iframe_url) {
+    VerifyNavigationEvent(GURL(),                // source_url
+                          multi_frame_test_url,  // source_main_frame_url
+                          iframe_url,            // original_request_url
+                          iframe_url,            // destination_url
+                          false,                 // is_user_initiated,
+                          true,                  // has_committed
+                          false,                 // has_server_redirect
+                          nav_list->Get(2));
+    VerifyNavigationEvent(GURL(),                  // source_url
+                          multi_frame_test_url,    // source_main_frame_url
+                          iframe_retargeting_url,  // original_request_url
+                          iframe_retargeting_url,  // destination_url
+                          false,                   // is_user_initiated,
+                          true,                    // has_committed
+                          false,                   // has_server_redirect
+                          nav_list->Get(3));
+  } else {
+    VerifyNavigationEvent(GURL(),                  // source_url
+                          multi_frame_test_url,    // source_main_frame_url
+                          iframe_retargeting_url,  // original_request_url
+                          iframe_retargeting_url,  // destination_url
+                          false,                   // is_user_initiated,
+                          true,                    // has_committed
+                          false,                   // has_server_redirect
+                          nav_list->Get(2));
+    VerifyNavigationEvent(GURL(),                // source_url
+                          multi_frame_test_url,  // source_main_frame_url
+                          iframe_url,            // original_request_url
+                          iframe_url,            // destination_url
+                          false,                 // is_user_initiated,
+                          true,                  // has_committed
+                          false,                 // has_server_redirect
+                          nav_list->Get(3));
+  }
   VerifyNavigationEvent(iframe_url,            // source_url
                         multi_frame_test_url,  // source_main_frame_url
                         download_url,          // original_request_url
@@ -1272,14 +1289,9 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest,
                            referrer_chain.Get(3));
 }
 
-#if defined(OS_WIN)
-#define MAYBE_SubFrameNewTabDownload DISABLED_SubFrameNewTabDownload
-#else
-#define MAYBE_SubFrameNewTabDownload SubFrameNewTabDownload
-#endif
 // Click a link in a subframe and open download in a new tab.
 IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest,
-                       MAYBE_SubFrameNewTabDownload) {
+                       SubFrameNewTabDownload) {
   GURL initial_url = embedded_test_server()->GetURL(kSingleFrameTestURL);
   ClickTestLink("sub_frame_download_attribution", 1, initial_url);
   std::string test_name =
@@ -1312,22 +1324,43 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest,
                         true,                  // has_committed
                         false,                 // has_server_redirect
                         nav_list->Get(1));
-  VerifyNavigationEvent(GURL(),                // source_url
-                        multi_frame_test_url,  // source_main_frame_url
-                        iframe_url,            // original_request_url
-                        iframe_url,            // destination_url
-                        false,                 // is_user_initiated,
-                        true,                  // has_committed
-                        false,                 // has_server_redirect
-                        nav_list->Get(2));
-  VerifyNavigationEvent(GURL(),                  // source_url
-                        multi_frame_test_url,    // source_main_frame_url
-                        iframe_retargeting_url,  // original_request_url
-                        iframe_retargeting_url,  // destination_url
-                        false,                   // is_user_initiated,
-                        true,                    // has_committed
-                        false,                   // has_server_redirect
-                        nav_list->Get(3));
+  // The order of the next two navigation events may vary. We check for both
+  // possibilities. Their order doesn't impact referrer chain attribution logic.
+  if (nav_list->Get(2)->original_request_url == iframe_url) {
+    VerifyNavigationEvent(GURL(),                // source_url
+                          multi_frame_test_url,  // source_main_frame_url
+                          iframe_url,            // original_request_url
+                          iframe_url,            // destination_url
+                          false,                 // is_user_initiated,
+                          true,                  // has_committed
+                          false,                 // has_server_redirect
+                          nav_list->Get(2));
+    VerifyNavigationEvent(GURL(),                  // source_url
+                          multi_frame_test_url,    // source_main_frame_url
+                          iframe_retargeting_url,  // original_request_url
+                          iframe_retargeting_url,  // destination_url
+                          false,                   // is_user_initiated,
+                          true,                    // has_committed
+                          false,                   // has_server_redirect
+                          nav_list->Get(3));
+  } else {
+    VerifyNavigationEvent(GURL(),                  // source_url
+                          multi_frame_test_url,    // source_main_frame_url
+                          iframe_retargeting_url,  // original_request_url
+                          iframe_retargeting_url,  // destination_url
+                          false,                   // is_user_initiated,
+                          true,                    // has_committed
+                          false,                   // has_server_redirect
+                          nav_list->Get(2));
+    VerifyNavigationEvent(GURL(),                // source_url
+                          multi_frame_test_url,  // source_main_frame_url
+                          iframe_url,            // original_request_url
+                          iframe_url,            // destination_url
+                          false,                 // is_user_initiated,
+                          true,                  // has_committed
+                          false,                 // has_server_redirect
+                          nav_list->Get(3));
+  }
   VerifyNavigationEvent(iframe_retargeting_url,  // source_url
                         multi_frame_test_url,    // source_main_frame_url
                         blank_url,               // original_request_url

@@ -7,12 +7,14 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/chrome/browser/content_suggestions/content_suggestions_header_provider.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_controlling.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_provider.h"
 #import "ios/chrome/browser/ui/ntp/google_landing_consumer.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_owner.h"
 #import "ios/public/provider/chrome/browser/voice/logo_animation_controller.h"
 
+@protocol ApplicationCommands;
+@protocol BrowserCommands;
 @protocol ContentSuggestionsCollectionSynchronizing;
 @protocol ContentSuggestionsHeaderViewControllerDelegate;
 @protocol ContentSuggestionsHeaderViewControllerCommandHandler;
@@ -30,7 +32,9 @@ class ReadingListModel;
                        ToolbarOwner,
                        LogoAnimationControllerOwnerOwner>
 
-@property(nonatomic, weak) id<UrlLoader, OmniboxFocuser> dispatcher;
+@property(nonatomic, weak)
+    id<ApplicationCommands, BrowserCommands, OmniboxFocuser, UrlLoader>
+        dispatcher;
 @property(nonatomic, weak) id<ContentSuggestionsHeaderViewControllerDelegate>
     delegate;
 @property(nonatomic, weak)

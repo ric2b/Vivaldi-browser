@@ -14,7 +14,7 @@ class ReadingListModel;
 // Header view for the Material Design NTP. The header view contains all views
 // that are displayed above the list of most visited sites, which includes the
 // toolbar buttons, Google doodle, and fake omnibox.
-@interface NewTabPageHeaderView : UICollectionReusableView<ToolbarOwner>
+@interface NewTabPageHeaderView : UIView<ToolbarOwner>
 
 // Return the toolbar view;
 @property(nonatomic, readonly) UIView* toolBarView;
@@ -27,12 +27,15 @@ class ReadingListModel;
 // Changes the constraints of searchField based on its initialFrame and the
 // scroll view's y |offset|. Also adjust the alpha values for |_searchBoxBorder|
 // and |_shadow| and the constant values for the |constraints|.
+// If |width| is > 0, it is used as the width to compute the new fake omnibox
+// width.
 - (void)updateSearchFieldWidth:(NSLayoutConstraint*)widthConstraint
                         height:(NSLayoutConstraint*)heightConstraint
                      topMargin:(NSLayoutConstraint*)topMarginConstraint
             subviewConstraints:(NSArray*)constraints
                  logoIsShowing:(BOOL)logoIsShowing
-                     forOffset:(CGFloat)offset;
+                     forOffset:(CGFloat)offset
+                         width:(CGFloat)width;
 
 // Initializes |_searchBoxBorder| and |_shadow| and adds them to |searchField|.
 - (void)addViewsToSearchField:(UIView*)searchField;

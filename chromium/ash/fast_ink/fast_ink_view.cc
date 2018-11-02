@@ -14,7 +14,6 @@
 #include "cc/base/math_util.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/output/layer_tree_frame_sink.h"
-#include "cc/output/layer_tree_frame_sink_client.h"
 #include "cc/quads/texture_draw_quad.h"
 #include "components/viz/common/gpu/context_provider.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
@@ -24,75 +23,80 @@
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/layout.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 #include "ui/views/widget/widget.h"
 
 namespace ash {
+namespace {
 
-class FastInkLayerTreeFrameSinkHolder : public cc::LayerTreeFrameSinkClient {
+// Helper class that can be used to delete exported textures while still
+// making sure the compositor had a chance to consume them.
+class ExportedTextureDeleter : public ui::CompositorObserver {
  public:
-  FastInkLayerTreeFrameSinkHolder(
-      FastInkView* view,
-      std::unique_ptr<cc::LayerTreeFrameSink> frame_sink)
-      : view_(view), frame_sink_(std::move(frame_sink)) {
-    frame_sink_->BindToClient(this);
-  }
-  ~FastInkLayerTreeFrameSinkHolder() override {
-    frame_sink_->DetachFromClient();
+  static void DeleteTexture(ui::Compositor* compositor,
+                            viz::ContextProvider* context_provider,
+                            uint32_t texture) {
+    // Deletes itself after texture has been deleted or when compositor is
+    // shutting down.
+    compositor->AddObserver(
+        new ExportedTextureDeleter(compositor, context_provider, texture));
   }
 
-  cc::LayerTreeFrameSink* frame_sink() { return frame_sink_.get(); }
-
-  // Called before fast ink view is destroyed.
-  void OnFastInkViewDestroying() { view_ = nullptr; }
-
-  // Overridden from cc::LayerTreeFrameSinkClient:
-  void SetBeginFrameSource(cc::BeginFrameSource* source) override {}
-  void ReclaimResources(
-      const std::vector<cc::ReturnedResource>& resources) override {
-    if (view_)
-      view_->ReclaimResources(resources);
+  // Overridden from ui::CompositorObserver:
+  void OnCompositingDidCommit(ui::Compositor* compositor) override {}
+  void OnCompositingStarted(ui::Compositor* compositor,
+                            base::TimeTicks start_time) override {
+    compositing_started_ = true;
   }
-  void SetTreeActivationCallback(const base::Closure& callback) override {}
-  void DidReceiveCompositorFrameAck() override {
-    if (view_)
-      view_->DidReceiveCompositorFrameAck();
+  void OnCompositingEnded(ui::Compositor* compositor) override {
+    if (compositing_started_)
+      delete this;
   }
-  void DidLoseLayerTreeFrameSink() override {}
-  void OnDraw(const gfx::Transform& transform,
-              const gfx::Rect& viewport,
-              bool resourceless_software_draw) override {}
-  void SetMemoryPolicy(const cc::ManagedMemoryPolicy& policy) override {}
-  void SetExternalTilePriorityConstraints(
-      const gfx::Rect& viewport_rect,
-      const gfx::Transform& transform) override {}
+  void OnCompositingLockStateChanged(ui::Compositor* compositor) override {}
+  void OnCompositingShuttingDown(ui::Compositor* compositor) override {
+    delete this;
+  }
 
  private:
-  FastInkView* view_;
-  std::unique_ptr<cc::LayerTreeFrameSink> frame_sink_;
+  ExportedTextureDeleter(ui::Compositor* compositor,
+                         viz::ContextProvider* context_provider,
+                         uint32_t texture)
+      : compositor_(compositor),
+        context_provider_(context_provider),
+        texture_(texture) {}
+  ~ExportedTextureDeleter() override {
+    context_provider_->ContextGL()->DeleteTextures(1, &texture_);
+    compositor_->RemoveObserver(this);
+  }
 
-  DISALLOW_COPY_AND_ASSIGN(FastInkLayerTreeFrameSinkHolder);
+  ui::Compositor* const compositor_;
+  scoped_refptr<viz::ContextProvider> context_provider_;
+  const uint32_t texture_;
+  bool compositing_started_ = false;
 };
 
-// This struct contains the resources associated with a fast ink frame.
-struct FastInkResource {
-  FastInkResource() {}
-  ~FastInkResource() {
-    if (context_provider) {
-      gpu::gles2::GLES2Interface* gles2 = context_provider->ContextGL();
-      if (texture)
-        gles2->DeleteTextures(1, &texture);
-      if (image)
-        gles2->DestroyImageCHROMIUM(image);
+}  // namespace
+
+struct FastInkView::Resource {
+  Resource() {}
+  ~Resource() {
+    gpu::gles2::GLES2Interface* gles2 = context_provider->ContextGL();
+    if (texture) {
+      // We shouldn't delete exported textures.
+      DCHECK(!exported);
+      gles2->DeleteTextures(1, &texture);
     }
+    if (image)
+      gles2->DestroyImageCHROMIUM(image);
   }
   scoped_refptr<viz::ContextProvider> context_provider;
   uint32_t texture = 0;
   uint32_t image = 0;
   gpu::Mailbox mailbox;
+  bool exported = false;
 };
 
-// FastInkView
 FastInkView::FastInkView(aura::Window* root_window) : weak_ptr_factory_(this) {
   widget_.reset(new views::Widget);
   views::Widget::InitParams params;
@@ -121,12 +125,24 @@ FastInkView::FastInkView(aura::Window* root_window) : weak_ptr_factory_(this) {
   screen_to_buffer_transform_ =
       widget_->GetNativeWindow()->GetHost()->GetRootTransform();
 
-  frame_sink_holder_ = base::MakeUnique<FastInkLayerTreeFrameSinkHolder>(
-      this, widget_->GetNativeView()->CreateLayerTreeFrameSink());
+  frame_sink_ = widget_->GetNativeView()->CreateLayerTreeFrameSink();
+  frame_sink_->BindToClient(this);
 }
 
 FastInkView::~FastInkView() {
-  frame_sink_holder_->OnFastInkViewDestroying();
+  frame_sink_->DetachFromClient();
+
+  // Use ExportedTextureDeleter to delete currently exported textures. This
+  // is needed to ensure that in-flight textures are consumed before they are
+  // deleted.
+  ui::Compositor* compositor =
+      widget_->GetNativeWindow()->layer()->GetCompositor();
+  for (auto& it : exported_resources_) {
+    Resource* resource = it.second.get();
+    ExportedTextureDeleter::DeleteTexture(
+        compositor, resource->context_provider.get(), resource->texture);
+    resource->texture = 0;
+  }
 }
 
 void FastInkView::DidReceiveCompositorFrameAck() {
@@ -136,12 +152,15 @@ void FastInkView::DidReceiveCompositorFrameAck() {
 }
 
 void FastInkView::ReclaimResources(
-    const std::vector<cc::ReturnedResource>& resources) {
+    const std::vector<viz::ReturnedResource>& resources) {
   for (auto& entry : resources) {
-    auto it = resources_.find(entry.id);
-    DCHECK(it != resources_.end());
-    std::unique_ptr<FastInkResource> resource = std::move(it->second);
-    resources_.erase(it);
+    auto it = exported_resources_.find(entry.id);
+    DCHECK(it != exported_resources_.end());
+    std::unique_ptr<Resource> resource = std::move(it->second);
+    exported_resources_.erase(it);
+
+    DCHECK(resource->exported);
+    resource->exported = false;
 
     gpu::gles2::GLES2Interface* gles2 = resource->context_provider->ContextGL();
     if (entry.sync_token.HasData())
@@ -271,7 +290,7 @@ void FastInkView::UpdateSurface() {
   DCHECK(needs_update_surface_);
   needs_update_surface_ = false;
 
-  std::unique_ptr<FastInkResource> resource;
+  std::unique_ptr<Resource> resource;
   // Reuse returned resource if available.
   if (!returned_resources_.empty()) {
     resource = std::move(returned_resources_.back());
@@ -280,7 +299,7 @@ void FastInkView::UpdateSurface() {
 
   // Create new resource if needed.
   if (!resource)
-    resource = base::MakeUnique<FastInkResource>();
+    resource = base::MakeUnique<Resource>();
 
   // Acquire context provider for resource if needed.
   // Note: We make no attempts to recover if the context provider is later
@@ -334,7 +353,7 @@ void FastInkView::UpdateSurface() {
   gles2->OrderingBarrierCHROMIUM();
   gles2->GenUnverifiedSyncTokenCHROMIUM(fence_sync, sync_token.GetData());
 
-  cc::TransferableResource transferable_resource;
+  viz::TransferableResource transferable_resource;
   transferable_resource.id = next_resource_id_++;
   transferable_resource.format = viz::RGBA_8888;
   transferable_resource.filter = GL_LINEAR;
@@ -343,22 +362,35 @@ void FastInkView::UpdateSurface() {
       gpu::MailboxHolder(resource->mailbox, sync_token, GL_TEXTURE_2D);
   transferable_resource.is_overlay_candidate = true;
 
-  gfx::Transform buffer_to_screen_transform;
-  bool rv = screen_to_buffer_transform_.GetInverse(&buffer_to_screen_transform);
+  float device_scale_factor = widget_->GetLayer()->device_scale_factor();
+  gfx::Transform target_to_buffer_transform(screen_to_buffer_transform_);
+  target_to_buffer_transform.Scale(1.f / device_scale_factor,
+                                   1.f / device_scale_factor);
+
+  gfx::Transform buffer_to_target_transform;
+  bool rv = target_to_buffer_transform.GetInverse(&buffer_to_target_transform);
   DCHECK(rv);
 
-  gfx::Rect output_rect(widget_->GetNativeView()->GetBoundsInScreen().size());
+  gfx::Rect output_rect(gfx::ScaleToEnclosingRect(
+      gfx::Rect(widget_->GetNativeView()->GetBoundsInScreen().size()),
+      device_scale_factor));
   gfx::Rect quad_rect(buffer_size);
+  bool needs_blending = true;
+
+  gfx::Rect damage_rect(
+      gfx::ScaleToEnclosingRect(surface_damage_rect_, device_scale_factor));
+  surface_damage_rect_ = gfx::Rect();
+  // Constrain damage rectangle to output rectangle.
+  damage_rect.Intersect(output_rect);
 
   const int kRenderPassId = 1;
   std::unique_ptr<cc::RenderPass> render_pass = cc::RenderPass::Create();
-  render_pass->SetNew(kRenderPassId, output_rect, surface_damage_rect_,
-                      buffer_to_screen_transform);
-  surface_damage_rect_ = gfx::Rect();
+  render_pass->SetNew(kRenderPassId, output_rect, damage_rect,
+                      buffer_to_target_transform);
 
-  cc::SharedQuadState* quad_state =
+  viz::SharedQuadState* quad_state =
       render_pass->CreateAndAppendSharedQuadState();
-  quad_state->SetAll(buffer_to_screen_transform,
+  quad_state->SetAll(buffer_to_target_transform,
                      /*quad_layer_rect=*/output_rect,
                      /*visible_quad_layer_rect=*/output_rect,
                      /*clip_rect=*/gfx::Rect(),
@@ -370,15 +402,14 @@ void FastInkView::UpdateSurface() {
   // TODO(eseckler): FastInkView should use BeginFrames and set the ack
   // accordingly.
   frame.metadata.begin_frame_ack =
-      cc::BeginFrameAck::CreateManualAckWithDamage();
-  frame.metadata.device_scale_factor =
-      widget_->GetLayer()->device_scale_factor();
+      viz::BeginFrameAck::CreateManualAckWithDamage();
+  frame.metadata.device_scale_factor = device_scale_factor;
   cc::TextureDrawQuad* texture_quad =
       render_pass->CreateAndAppendDrawQuad<cc::TextureDrawQuad>();
   float vertex_opacity[4] = {1.0, 1.0, 1.0, 1.0};
   gfx::PointF uv_top_left(0.f, 0.f);
   gfx::PointF uv_bottom_right(1.f, 1.f);
-  texture_quad->SetNew(quad_state, quad_rect, gfx::Rect(), quad_rect,
+  texture_quad->SetNew(quad_state, quad_rect, quad_rect, needs_blending,
                        transferable_resource.id, true, uv_top_left,
                        uv_bottom_right, SK_ColorTRANSPARENT, vertex_opacity,
                        false, false, false);
@@ -386,9 +417,10 @@ void FastInkView::UpdateSurface() {
   frame.resource_list.push_back(transferable_resource);
   frame.render_pass_list.push_back(std::move(render_pass));
 
-  frame_sink_holder_->frame_sink()->SubmitCompositorFrame(std::move(frame));
+  resource->exported = true;
+  exported_resources_[transferable_resource.id] = std::move(resource);
 
-  resources_[transferable_resource.id] = std::move(resource);
+  frame_sink_->SubmitCompositorFrame(std::move(frame));
 
   DCHECK(!pending_draw_surface_);
   pending_draw_surface_ = true;

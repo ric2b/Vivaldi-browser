@@ -14,6 +14,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "jni/SelectFileDialog_jni.h"
 #include "ui/android/window_android.h"
+#include "ui/shell_dialogs/select_file_policy.h"
 #include "ui/shell_dialogs/selected_file_info.h"
 
 using base::android::ConvertJavaStringToUTF8;
@@ -23,9 +24,10 @@ using base::android::ScopedJavaLocalRef;
 namespace ui {
 
 // static
-SelectFileDialogImpl* SelectFileDialogImpl::Create(Listener* listener,
-                                                   SelectFilePolicy* policy) {
-  return new SelectFileDialogImpl(listener, policy);
+SelectFileDialogImpl* SelectFileDialogImpl::Create(
+    Listener* listener,
+    std::unique_ptr<SelectFilePolicy> policy) {
+  return new SelectFileDialogImpl(listener, std::move(policy));
 }
 
 void SelectFileDialogImpl::OnFileSelected(
@@ -125,16 +127,13 @@ void SelectFileDialogImpl::SelectFileImpl(
                                    owning_window->GetJavaObject());
 }
 
-bool SelectFileDialogImpl::RegisterSelectFileDialog(JNIEnv* env) {
-  return RegisterNativesImpl(env);
-}
-
 SelectFileDialogImpl::~SelectFileDialogImpl() {
 }
 
-SelectFileDialogImpl::SelectFileDialogImpl(Listener* listener,
-                                           SelectFilePolicy* policy)
-    : SelectFileDialog(listener, policy) {
+SelectFileDialogImpl::SelectFileDialogImpl(
+    Listener* listener,
+    std::unique_ptr<SelectFilePolicy> policy)
+    : SelectFileDialog(listener, std::move(policy)) {
   JNIEnv* env = base::android::AttachCurrentThread();
   java_object_.Reset(
       Java_SelectFileDialog_create(env, reinterpret_cast<intptr_t>(this)));
@@ -145,9 +144,10 @@ bool SelectFileDialogImpl::HasMultipleFileTypeChoicesImpl() {
   return false;
 }
 
-SelectFileDialog* CreateSelectFileDialog(SelectFileDialog::Listener* listener,
-                                         SelectFilePolicy* policy) {
-  return SelectFileDialogImpl::Create(listener, policy);
+SelectFileDialog* CreateSelectFileDialog(
+    SelectFileDialog::Listener* listener,
+    std::unique_ptr<SelectFilePolicy> policy) {
+  return SelectFileDialogImpl::Create(listener, std::move(policy));
 }
 
 }  // namespace ui

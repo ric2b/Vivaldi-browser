@@ -62,6 +62,7 @@ class LoadingPredictor : public KeyedService,
   // Don't use, internal only.
   ResourcePrefetchPredictor* resource_prefetch_predictor();
   LoadingDataCollector* loading_data_collector();
+  PreconnectManager* preconnect_manager();
 
   // KeyedService:
   void Shutdown() override;
@@ -80,7 +81,7 @@ class LoadingPredictor : public KeyedService,
       std::unique_ptr<ResourcePrefetcher::PrefetcherStats> stats) override;
 
   // PreconnectManager::Delegate:
-  void PreconnectFinished(const GURL& url) override;
+  void PreconnectFinished(std::unique_ptr<PreconnectStats> stats) override;
 
   // Sets the |observer| to be notified when prefetches start and
   // finish. A previously registered observer will be discarded. Call this with

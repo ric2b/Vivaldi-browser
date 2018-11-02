@@ -9,7 +9,6 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/threading/platform_thread.h"
 #include "base/trace_event/trace_event.h"
@@ -31,7 +30,6 @@
 #include "services/ui/ws/display_binding.h"
 #include "services/ui/ws/display_creation_config.h"
 #include "services/ui/ws/display_manager.h"
-#include "services/ui/ws/frame_sink_manager_client_binding.h"
 #include "services/ui/ws/gpu_host.h"
 #include "services/ui/ws/threaded_image_cursors.h"
 #include "services/ui/ws/threaded_image_cursors_factory.h"
@@ -63,7 +61,7 @@
 #include "ui/ozone/public/ozone_platform.h"
 #endif
 
-#if defined(OS_CHROMEOS) && defined(USE_OZONE)
+#if defined(OS_CHROMEOS)
 #include "services/ui/public/cpp/input_devices/input_device_controller.h"
 #endif
 
@@ -145,9 +143,13 @@ Service::Service(const InProcessConfig* config)
       threaded_image_cursors_factory_(
           base::MakeUnique<ThreadedImageCursorsFactoryImpl>(config)),
       test_config_(false),
-      ime_registrar_(&ime_driver_) {}
+      ime_registrar_(&ime_driver_),
+      discardable_shared_memory_manager_(config ? config->memory_manager
+                                                : nullptr) {}
 
 Service::~Service() {
+  in_destructor_ = true;
+
   // Destroy |window_server_| first, since it depends on |event_source_|.
   // WindowServer (or more correctly its Displays) may have state that needs to
   // be destroyed before GpuState as well.
@@ -236,7 +238,7 @@ void Service::OnStart() {
   // in MUS, |InitializeForUI| will load the GL libraries.
   ui::OzonePlatform::InitParams params;
   params.connector = context()->connector();
-  params.single_process = false;
+  params.single_process = true;
   ui::OzonePlatform::InitializeForUI(params);
 
   // Assume a client will change the layout to an appropriate configuration.
@@ -269,25 +271,25 @@ void Service::OnStart() {
   // so keep this line below both of those.
   input_device_server_.RegisterAsObserver();
 
-  window_server_.reset(new ws::WindowServer(this));
+  window_server_ = base::MakeUnique<ws::WindowServer>(this);
   std::unique_ptr<ws::GpuHost> gpu_host =
       base::MakeUnique<ws::DefaultGpuHost>(window_server_.get());
-  std::unique_ptr<ws::FrameSinkManagerClientBinding> frame_sink_manager =
-      base::MakeUnique<ws::FrameSinkManagerClientBinding>(window_server_.get(),
-                                                          gpu_host.get());
   window_server_->SetGpuHost(std::move(gpu_host));
-  window_server_->SetFrameSinkManager(std::move(frame_sink_manager));
 
   ime_driver_.Init(context()->connector(), test_config_);
 
-  discardable_shared_memory_manager_ =
-      base::MakeUnique<discardable_memory::DiscardableSharedMemoryManager>();
-
-  registry_.AddInterface<mojom::AccessibilityManager>(base::Bind(
-      &Service::BindAccessibilityManagerRequest, base::Unretained(this)));
-  registry_.AddInterface<mojom::Clipboard>(
+  if (!discardable_shared_memory_manager_) {
+    owned_discardable_shared_memory_manager_ =
+        base::MakeUnique<discardable_memory::DiscardableSharedMemoryManager>();
+    discardable_shared_memory_manager_ =
+        owned_discardable_shared_memory_manager_.get();
+  }
+  registry_with_source_info_.AddInterface<mojom::AccessibilityManager>(
+      base::Bind(&Service::BindAccessibilityManagerRequest,
+                 base::Unretained(this)));
+  registry_with_source_info_.AddInterface<mojom::Clipboard>(
       base::Bind(&Service::BindClipboardRequest, base::Unretained(this)));
-  registry_.AddInterface<mojom::DisplayManager>(
+  registry_with_source_info_.AddInterface<mojom::DisplayManager>(
       base::Bind(&Service::BindDisplayManagerRequest, base::Unretained(this)));
   registry_.AddInterface<mojom::Gpu>(
       base::Bind(&Service::BindGpuRequest, base::Unretained(this)));
@@ -297,16 +299,18 @@ void Service::OnStart() {
       base::Bind(&Service::BindIMEDriverRequest, base::Unretained(this)));
   registry_.AddInterface<mojom::UserAccessManager>(base::Bind(
       &Service::BindUserAccessManagerRequest, base::Unretained(this)));
-  registry_.AddInterface<mojom::UserActivityMonitor>(base::Bind(
-      &Service::BindUserActivityMonitorRequest, base::Unretained(this)));
-  registry_.AddInterface<WindowTreeHostFactory>(base::Bind(
-      &Service::BindWindowTreeHostFactoryRequest, base::Unretained(this)));
-  registry_.AddInterface<mojom::WindowManagerWindowTreeFactory>(
-      base::Bind(&Service::BindWindowManagerWindowTreeFactoryRequest,
+  registry_with_source_info_.AddInterface<mojom::UserActivityMonitor>(
+      base::Bind(&Service::BindUserActivityMonitorRequest,
                  base::Unretained(this)));
-  registry_.AddInterface<mojom::WindowTreeFactory>(base::Bind(
+  registry_with_source_info_.AddInterface<WindowTreeHostFactory>(base::Bind(
+      &Service::BindWindowTreeHostFactoryRequest, base::Unretained(this)));
+  registry_with_source_info_
+      .AddInterface<mojom::WindowManagerWindowTreeFactory>(
+          base::Bind(&Service::BindWindowManagerWindowTreeFactoryRequest,
+                     base::Unretained(this)));
+  registry_with_source_info_.AddInterface<mojom::WindowTreeFactory>(base::Bind(
       &Service::BindWindowTreeFactoryRequest, base::Unretained(this)));
-  registry_
+  registry_with_source_info_
       .AddInterface<discardable_memory::mojom::DiscardableSharedMemoryManager>(
           base::Bind(&Service::BindDiscardableSharedMemoryManagerRequest,
                      base::Unretained(this)));
@@ -318,10 +322,10 @@ void Service::OnStart() {
   // On non-Linux platforms there will be no DeviceDataManager instance and no
   // purpose in adding the Mojo interface to connect to.
   if (input_device_server_.IsRegisteredAsObserver())
-    input_device_server_.AddInterface(&registry_);
+    input_device_server_.AddInterface(&registry_with_source_info_);
 
 #if defined(USE_OZONE)
-  ui::OzonePlatform::GetInstance()->AddInterfaces(&registry_);
+  ui::OzonePlatform::GetInstance()->AddInterfaces(&registry_with_source_info_);
 #endif
 }
 
@@ -329,8 +333,10 @@ void Service::OnBindInterface(
     const service_manager::BindSourceInfo& source_info,
     const std::string& interface_name,
     mojo::ScopedMessagePipeHandle interface_pipe) {
-  registry_.BindInterface(interface_name, std::move(interface_pipe),
-                          source_info);
+  if (!registry_with_source_info_.TryBindInterface(
+          interface_name, &interface_pipe, source_info)) {
+    registry_.BindInterface(interface_name, std::move(interface_pipe));
+  }
 }
 
 void Service::StartDisplayInit() {
@@ -355,9 +361,13 @@ void Service::OnFirstDisplayReady() {
 }
 
 void Service::OnNoMoreDisplays() {
-  // We may get here from the destructor, in which case there is no messageloop.
-  if (base::RunLoop::IsRunningOnCurrentThread())
-    base::MessageLoop::current()->QuitWhenIdle();
+  // We may get here from the destructor. Don't try to use RequestQuit() when
+  // that happens as ServiceContext DCHECKs in this case.
+  if (in_destructor_)
+    return;
+
+  DCHECK(context());
+  context()->RequestQuit();
 }
 
 bool Service::IsTestConfig() const {
@@ -379,7 +389,7 @@ void Service::OnWillCreateTreeForWindowManager(
   window_server_->SetDisplayCreationConfig(config);
   if (window_server_->display_creation_config() ==
       ws::DisplayCreationConfig::MANUAL) {
-#if defined(USE_OZONE) && defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS)
     display::ScreenManagerForwarding::Mode mode =
         is_in_process() ? display::ScreenManagerForwarding::Mode::IN_WM_PROCESS
                         : display::ScreenManagerForwarding::Mode::OWN_PROCESS;
@@ -390,7 +400,7 @@ void Service::OnWillCreateTreeForWindowManager(
   } else {
     screen_manager_ = display::ScreenManager::Create();
   }
-  screen_manager_->AddInterfaces(&registry_);
+  screen_manager_->AddInterfaces(&registry_with_source_info_);
   if (is_gpu_ready_)
     screen_manager_->Init(window_server_->display_manager());
 }
@@ -438,27 +448,20 @@ void Service::BindDisplayManagerRequest(
       ->AddDisplayManagerBinding(std::move(request));
 }
 
-void Service::BindGpuRequest(
-    mojom::GpuRequest request,
-    const service_manager::BindSourceInfo& source_info) {
+void Service::BindGpuRequest(mojom::GpuRequest request) {
   window_server_->gpu_host()->Add(std::move(request));
 }
 
-void Service::BindIMERegistrarRequest(
-    mojom::IMERegistrarRequest request,
-    const service_manager::BindSourceInfo& source_info) {
+void Service::BindIMERegistrarRequest(mojom::IMERegistrarRequest request) {
   ime_registrar_.AddBinding(std::move(request));
 }
 
-void Service::BindIMEDriverRequest(
-    mojom::IMEDriverRequest request,
-    const service_manager::BindSourceInfo& source_info) {
+void Service::BindIMEDriverRequest(mojom::IMEDriverRequest request) {
   ime_driver_.AddBinding(std::move(request));
 }
 
 void Service::BindUserAccessManagerRequest(
-    mojom::UserAccessManagerRequest request,
-    const service_manager::BindSourceInfo& source_info) {
+    mojom::UserAccessManagerRequest request) {
   window_server_->user_id_tracker()->Bind(std::move(request));
 }
 
@@ -517,8 +520,7 @@ void Service::BindDiscardableSharedMemoryManagerRequest(
 }
 
 void Service::BindWindowServerTestRequest(
-    mojom::WindowServerTestRequest request,
-    const service_manager::BindSourceInfo& source_info) {
+    mojom::WindowServerTestRequest request) {
   if (!test_config_)
     return;
   mojo::MakeStrongBinding(

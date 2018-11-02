@@ -5,8 +5,6 @@
 #ifndef SERVICES_METRICS_PUBLIC_CPP_UKM_RECORDER_H_
 #define SERVICES_METRICS_PUBLIC_CPP_UKM_RECORDER_H_
 
-#include <stddef.h>
-
 #include <memory>
 
 #include "base/callback.h"
@@ -15,6 +13,7 @@
 #include "base/threading/thread_checker.h"
 #include "services/metrics/public/cpp/metrics_export.h"
 #include "services/metrics/public/cpp/ukm_entry_builder.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/metrics/public/interfaces/ukm_interface.mojom.h"
 #include "url/gurl.h"
 
@@ -34,10 +33,13 @@ class AutofillMetrics;
 }
 
 namespace content {
-class MediaInternals;
 class RenderFrameImpl;
 class RenderWidgetHostLatencyTracker;
 }  // namespace content
+
+namespace media {
+class WatchTimeRecorder;
+}
 
 namespace resource_coordinator {
 class CoordinationUnitManager;
@@ -72,8 +74,6 @@ class UkmEntryBuilderBase;
 
 // This feature controls whether UkmService should be created.
 METRICS_EXPORT extern const base::Feature kUkmFeature;
-
-typedef int64_t SourceId;
 
 // Interface for recording UKM
 class METRICS_EXPORT UkmRecorder {
@@ -114,9 +114,9 @@ class METRICS_EXPORT UkmRecorder {
   friend translate::TranslateRankerImpl;
   friend TestRecordingHelper;
   friend UkmInterface;
-  friend content::MediaInternals;
   friend content::RenderFrameImpl;
   friend content::RenderWidgetHostLatencyTracker;
+  friend media::WatchTimeRecorder;
   friend password_manager::PasswordManagerMetricsRecorder;
   friend password_manager::PasswordFormMetricsRecorder;
   friend previews::PreviewsUKMObserver;

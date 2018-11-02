@@ -2,23 +2,29 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/buildflag_header.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//media/gpu/args.gni")
 import("//media/media_options.gni")
 import("//testing/test.gni")
 
-declare_args() {
-  # A temporary arg for building MCVD while it's being implemented.
-  # See http://crbug.com/660942
-  enable_media_codec_video_decoder = false
+buildflag_header("features") {
+  header = "features.h"
+
+  flags = [
+    "USE_VAAPI=$use_vaapi",
+    "USE_V4L2_CODEC=$use_v4l2_codec",
+    "USE_LIBV4L2=$use_v4lplugin",
+    "ENABLE_MEDIA_CODEC_VIDEO_DECODER=$enable_media_codec_video_decoder",
+  ]
 }
 
 if (is_mac) {
   import("//build/config/mac/mac_sdk.gni")
 }
 
-if (is_chromeos && current_cpu != "arm") {
+if (use_vaapi) {
   action("libva_generate_stubs") {
     extra_header = "va_stub_header.fragment"
 
@@ -96,16 +102,6 @@ if (is_chromeos && use_v4lplugin) {
   }
 }
 
-config("gpu_config") {
-  defines = []
-  if (is_chromeos && use_v4lplugin) {
-    defines += [ "USE_LIBV4L2" ]
-  }
-  if (is_chromeos && use_v4l2_codec) {
-    defines += [ "USE_V4L2_CODEC" ]
-  }
-}
-
 component("gpu") {
   output_name = "media_gpu"
 
@@ -117,6 +113,7 @@ component("gpu") {
     "//content/renderer:*",
     "//media/gpu/ipc/*",
     "//media/mojo/*",
+    "//remoting/codec:encoder",
     ":*",
   ]
 
@@ -152,6 +149,7 @@ component("gpu") {
   ]
 
   public_deps = [
+    ":features",
     "//base",
     "//gpu",
     "//media",
@@ -165,8 +163,6 @@ component("gpu") {
   ]
   libs = []
   ldflags = []
-
-  configs += [ ":gpu_config" ]
 
   if (is_mac) {
     sources += [
@@ -216,9 +212,10 @@ component("gpu") {
       "surface_texture_gl_owner.cc",
       "surface_texture_gl_owner.h",
     ]
-
-    deps += [ "//media/mojo:features" ]
-
+    deps += [
+      "//media/mojo:features",
+      "//services/service_manager/public/cpp:cpp",
+    ]
     if (enable_webrtc) {
       deps += [ "//third_party/libyuv" ]
       sources += [
@@ -226,7 +223,6 @@ component("gpu") {
         "android_video_encode_accelerator.h",
       ]
     }
-
     if (enable_media_codec_video_decoder) {
       assert(mojo_media_host == "gpu", "MCVD requires the CDM")
       sources += [
@@ -250,7 +246,7 @@ component("gpu") {
     }
   }
 
-  if (is_chromeos) {
+  if (use_v4l2_codec || use_vaapi) {
     sources += [
       "vp8_decoder.cc",
       "vp8_decoder.h",
@@ -261,79 +257,82 @@ component("gpu") {
       "vp9_picture.cc",
       "vp9_picture.h",
     ]
-    if (use_v4lplugin) {
-      sources += get_target_outputs(":libv4l2_generate_stubs")
-      deps += [ ":libv4l2_generate_stubs" ]
-    }
-    if (use_v4l2_codec) {
-      deps += [ "//third_party/libyuv" ]
+  }
+
+  if (use_v4lplugin) {
+    sources += get_target_outputs(":libv4l2_generate_stubs")
+    deps += [ ":libv4l2_generate_stubs" ]
+  }
+
+  if (use_v4l2_codec) {
+    deps += [
+      "//third_party/libyuv",
+      "//ui/ozone",
+    ]
+    sources += [
+      "generic_v4l2_device.cc",
+      "generic_v4l2_device.h",
+      "v4l2_device.cc",
+      "v4l2_device.h",
+      "v4l2_image_processor.cc",
+      "v4l2_image_processor.h",
+      "v4l2_jpeg_decode_accelerator.cc",
+      "v4l2_jpeg_decode_accelerator.h",
+      "v4l2_slice_video_decode_accelerator.cc",
+      "v4l2_slice_video_decode_accelerator.h",
+      "v4l2_video_decode_accelerator.cc",
+      "v4l2_video_decode_accelerator.h",
+      "v4l2_video_encode_accelerator.cc",
+      "v4l2_video_encode_accelerator.h",
+    ]
+    libs = [
+      "EGL",
+      "GLESv2",
+    ]
+    if (current_cpu == "arm") {
       sources += [
-        "generic_v4l2_device.cc",
-        "generic_v4l2_device.h",
-        "v4l2_device.cc",
-        "v4l2_device.h",
-        "v4l2_image_processor.cc",
-        "v4l2_image_processor.h",
-        "v4l2_slice_video_decode_accelerator.cc",
-        "v4l2_slice_video_decode_accelerator.h",
-        "v4l2_video_decode_accelerator.cc",
-        "v4l2_video_decode_accelerator.h",
-        "v4l2_video_encode_accelerator.cc",
-        "v4l2_video_encode_accelerator.h",
+        "tegra_v4l2_device.cc",
+        "tegra_v4l2_device.h",
       ]
-      libs = [
-        "EGL",
-        "GLESv2",
-      ]
-      if (current_cpu == "arm") {
-        sources += [
-          "tegra_v4l2_device.cc",
-          "tegra_v4l2_device.h",
-          "v4l2_jpeg_decode_accelerator.cc",
-          "v4l2_jpeg_decode_accelerator.h",
-        ]
-      }
     }
-    if (current_cpu != "arm") {
+  }
+
+  if (use_vaapi) {
+    sources += [
+                 "va_surface.h",
+                 "vaapi_jpeg_decode_accelerator.cc",
+                 "vaapi_jpeg_decode_accelerator.h",
+                 "vaapi_jpeg_decoder.cc",
+                 "vaapi_jpeg_decoder.h",
+                 "vaapi_picture.cc",
+                 "vaapi_picture.h",
+                 "vaapi_video_decode_accelerator.cc",
+                 "vaapi_video_decode_accelerator.h",
+                 "vaapi_video_encode_accelerator.cc",
+                 "vaapi_video_encode_accelerator.h",
+                 "vaapi_wrapper.cc",
+                 "vaapi_wrapper.h",
+               ] + get_target_outputs(":libva_generate_stubs")
+    configs += [ "//third_party/libyuv:libyuv_config" ]
+    deps += [
+      ":libva_generate_stubs",
+      "//media",
+      "//third_party/libyuv",
+    ]
+    if (use_x11) {
+      configs += [ "//build/config/linux:x11" ]
+      deps += [ "//ui/gfx/x" ]
       sources += [
-                   "va_surface.h",
-                   "vaapi_jpeg_decode_accelerator.cc",
-                   "vaapi_jpeg_decode_accelerator.h",
-                   "vaapi_jpeg_decoder.cc",
-                   "vaapi_jpeg_decoder.h",
-                   "vaapi_picture.cc",
-                   "vaapi_picture.h",
-                   "vaapi_video_decode_accelerator.cc",
-                   "vaapi_video_decode_accelerator.h",
-                   "vaapi_video_encode_accelerator.cc",
-                   "vaapi_video_encode_accelerator.h",
-                   "vaapi_wrapper.cc",
-                   "vaapi_wrapper.h",
-                 ] + get_target_outputs(":libva_generate_stubs")
-      configs += [
-        "//third_party/libva:libva_config",
-        "//third_party/libyuv:libyuv_config",
+        "vaapi_tfp_picture.cc",
+        "vaapi_tfp_picture.h",
       ]
-      deps += [
-        ":libva_generate_stubs",
-        "//media",
-        "//third_party/libyuv",
+    }
+    if (use_ozone) {
+      deps += [ "//ui/ozone" ]
+      sources += [
+        "vaapi_drm_picture.cc",
+        "vaapi_drm_picture.h",
       ]
-      if (use_x11) {
-        configs += [ "//build/config/linux:x11" ]
-        deps += [ "//ui/gfx/x" ]
-        sources += [
-          "vaapi_tfp_picture.cc",
-          "vaapi_tfp_picture.h",
-        ]
-      }
-      if (use_ozone) {
-        deps += [ "//ui/ozone" ]
-        sources += [
-          "vaapi_drm_picture.cc",
-          "vaapi_drm_picture.h",
-        ]
-      }
     }
   }
 
@@ -351,7 +350,7 @@ component("gpu") {
       "media_foundation_video_encode_accelerator_win.h",
     ]
     configs += [
-      # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+      # TODO(crbug.com/167187): Fix size_t to int truncations.
       "//build/config/compiler:no_size_t_to_int_warning",
       "//third_party/khronos:khronos_headers",
     ]
@@ -381,7 +380,7 @@ component("gpu") {
 }
 
 # TODO(watk): Run this on bots. http://crbug.com/461437
-if (is_win || is_android || is_chromeos) {
+if (is_win || is_android || use_v4l2_codec || use_vaapi) {
   test("video_decode_accelerator_unittest") {
     sources = [
       "video_accelerator_unittest_helpers.h",
@@ -395,8 +394,7 @@ if (is_win || is_android || is_chromeos) {
       ":gpu",
       "//base",
       "//base/test:test_support",
-      "//media",
-      "//media/base:test_support",
+      "//media:test_support",
       "//testing/gtest",
       "//ui/base",
       "//ui/display/manager",
@@ -408,13 +406,7 @@ if (is_win || is_android || is_chromeos) {
       "//ui/gl/init",
     ]
 
-    configs += [
-      "//third_party/khronos:khronos_headers",
-      ":gpu_config",
-    ]
-    if (is_chromeos && current_cpu != "arm") {
-      configs += [ "//third_party/libva:libva_config" ]
-    }
+    configs += [ "//third_party/khronos:khronos_headers" ]
 
     if (is_win || is_chromeos) {
       sources += [
@@ -439,7 +431,7 @@ if (is_win || is_android || is_chromeos) {
     }
 
     if (is_win) {
-      # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+      # TODO(crbug.com/167187): Fix size_t to int truncations.
       configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
       deps += [
         "//third_party/angle:libEGL",
@@ -490,19 +482,18 @@ source_set("android_video_decode_accelerator_unittests") {
       "//base/test:test_support",
       "//gpu:test_support",
       "//media",
-      "//media/base/android:test_support",
+      "//media:test_support",
       "//testing/gmock",
       "//testing/gtest",
     ]
   }
 }
 
-if (is_chromeos || is_mac || is_win) {
+if (use_v4l2_codec || use_vaapi || is_mac || is_win) {
   test("video_encode_accelerator_unittest") {
     deps = [
       "//base",
-      "//media",
-      "//media/base:test_support",
+      "//media:test_support",
       "//media/gpu",
       "//testing/gtest",
       "//ui/base",
@@ -512,11 +503,7 @@ if (is_chromeos || is_mac || is_win) {
       "//ui/gl",
       "//ui/gl:test_support",
     ]
-    configs += [
-      "//third_party/libva:libva_config",
-      "//third_party/libyuv:libyuv_config",
-      ":gpu_config",
-    ]
+    configs += [ "//third_party/libyuv:libyuv_config" ]
     sources = [
       "video_accelerator_unittest_helpers.h",
       "video_encode_accelerator_unittest.cc",
@@ -530,13 +517,13 @@ if (is_chromeos || is_mac || is_win) {
   }
 }
 
-if (is_chromeos) {
+if (use_v4l2_codec || use_vaapi) {
   test("jpeg_decode_accelerator_unittest") {
     deps = [
       "//base",
-      "//media",
-      "//media/base:test_support",
+      "//media:test_support",
       "//media/gpu",
+      "//media/gpu/ipc/service",
       "//testing/gtest",
       "//third_party/libyuv",
       "//ui/base",
@@ -546,11 +533,7 @@ if (is_chromeos) {
       "//ui/gl",
       "//ui/gl:test_support",
     ]
-    configs += [
-      "//third_party/libva:libva_config",
-      "//third_party/libyuv:libyuv_config",
-      ":gpu_config",
-    ]
+    configs += [ "//third_party/libyuv:libyuv_config" ]
     sources = [
       "jpeg_decode_accelerator_unittest.cc",
       "video_accelerator_unittest_helpers.h",
@@ -568,7 +551,7 @@ source_set("unit_tests") {
   testonly = true
   deps = [
     "//base",
-    "//media/base:test_support",
+    "//media:test_support",
     "//media/gpu",
     "//testing/gmock",
     "//testing/gtest",

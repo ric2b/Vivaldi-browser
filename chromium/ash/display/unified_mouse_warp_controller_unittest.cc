@@ -72,14 +72,9 @@ class UnifiedMouseWarpControllerTest : public AshTestBase {
             &point_in_mirroring_host, &point_in_unified_host)) {
       return false;
     }
-#if defined(USE_OZONE)
     // The location of the ozone's native event is relative to the host.
     GetEventGenerator().MoveMouseToWithNative(point_in_unified_host,
                                               point_in_mirroring_host);
-#else
-    GetEventGenerator().MoveMouseToWithNative(point_in_unified_host,
-                                              point_in_native);
-#endif
     aura::Window* root = Shell::GetPrimaryRootWindow();
     gfx::Point new_location_in_unified_host =
         aura::Env::GetInstance()->last_mouse_location();
@@ -198,7 +193,7 @@ TEST_F(UnifiedMouseWarpControllerTest, WarpMouse) {
   EXPECT_FALSE(TestIfMouseWarpsAt(gfx::Point(10, 10)));
   // Touch the right edge of the first display. Pointer should warp.
   EXPECT_TRUE(TestIfMouseWarpsAt(gfx::Point(499, 10)));
-  EXPECT_EQ("250,5",  // moved to 501 by 2px, devided by 2 (dsf).
+  EXPECT_EQ("250,5",  // moved to 501 by 2px, divided by 2 (dsf).
             aura::Env::GetInstance()->last_mouse_location().ToString());
 
   // Touch the left edge of the second display. Pointer should warp.

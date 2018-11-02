@@ -11,8 +11,6 @@
 
 namespace device {
 
-class GvrDelegate;
-class GvrDeviceProvider;
 class VRDisplayImpl;
 
 class DEVICE_VR_EXPORT GvrDelegateProvider {
@@ -21,17 +19,15 @@ class DEVICE_VR_EXPORT GvrDelegateProvider {
       const base::Callback<GvrDelegateProvider*()>& provider_callback);
   static GvrDelegateProvider* GetInstance();
 
-  virtual void SetDeviceProvider(GvrDeviceProvider* device_provider) = 0;
-  virtual void ClearDeviceProvider() = 0;
+  virtual void SetDeviceId(unsigned int device_id) = 0;
   virtual void RequestWebVRPresent(
       mojom::VRSubmitFrameClientPtr submit_client,
       mojom::VRPresentationProviderRequest request,
       const base::Callback<void(bool)>& callback) = 0;
   virtual void ExitWebVRPresent() = 0;
-  virtual GvrDelegate* GetDelegate() = 0;
   virtual void OnDisplayAdded(VRDisplayImpl* display) = 0;
   virtual void OnDisplayRemoved(VRDisplayImpl* display) = 0;
-  virtual void OnListeningForActivateChanged(VRDisplayImpl* display);
+  virtual void OnListeningForActivateChanged(VRDisplayImpl* display) = 0;
   virtual void CreateVRDisplayInfo(
       const base::Callback<void(mojom::VRDisplayInfoPtr)>& callback,
       uint32_t device_id) = 0;

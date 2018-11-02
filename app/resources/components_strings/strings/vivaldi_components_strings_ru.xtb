@@ -134,5 +134,5 @@
 <translation id="9183425211371246419">Сайт <ph name="HOST_NAME" /> использует неподдерживаемый протокол.</translation>
 <translation id="933612690413056017">Нет подключения к Интернету</translation>
 <translation id="969892804517981540">Официальная сборка</translation>
-<translation id="988159990683914416">Сборка для разработчиков</translation>
+<translation id="988159990683914416">Режим разработчика</translation>
 </translationbundle>

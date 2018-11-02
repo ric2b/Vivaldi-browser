@@ -35,14 +35,15 @@
 #include "core/dom/NodeWithIndex.h"
 #include "core/dom/ProcessingInstruction.h"
 #include "core/dom/Text.h"
+#include "core/dom/events/ScopedEventQueue.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/EphemeralRange.h"
 #include "core/editing/FrameSelection.h"
+#include "core/editing/SetSelectionOptions.h"
 #include "core/editing/VisiblePosition.h"
 #include "core/editing/VisibleUnits.h"
 #include "core/editing/iterators/TextIterator.h"
 #include "core/editing/serializers/Serialization.h"
-#include "core/events/ScopedEventQueue.h"
 #include "core/frame/Settings.h"
 #include "core/geometry/DOMRect.h"
 #include "core/geometry/DOMRectList.h"
@@ -50,6 +51,7 @@
 #include "core/html/HTMLElement.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutText.h"
+#include "core/layout/LayoutTextFragment.h"
 #include "core/svg/SVGSVGElement.h"
 #include "platform/EventDispatchForbiddenScope.h"
 #include "platform/geometry/FloatQuad.h"
@@ -1609,51 +1611,119 @@ DOMRect* Range::getBoundingClientRect() const {
   return DOMRect::FromFloatRect(BoundingRect());
 }
 
+// TODO(editing-dev): We should make
+// |Document::AdjustFloatQuadsForScrollAndAbsoluteZoom()| as const function
+// and takes |const LayoutObject&|.
+static Vector<FloatQuad> ComputeTextQuads(const Document& owner_document,
+                                          const LayoutText& layout_text,
+                                          unsigned start_offset,
+                                          unsigned end_offset) {
+  Vector<FloatQuad> text_quads;
+  layout_text.AbsoluteQuadsForRange(text_quads, start_offset, end_offset);
+  const_cast<Document&>(owner_document)
+      .AdjustFloatQuadsForScrollAndAbsoluteZoom(
+          text_quads, const_cast<LayoutText&>(layout_text));
+  return text_quads;
+}
+
+// https://www.w3.org/TR/cssom-view-1/#dom-range-getclientrects
 void Range::GetBorderAndTextQuads(Vector<FloatQuad>& quads) const {
   Node* start_container = &start_.Container();
   Node* end_container = &end_.Container();
   Node* stop_node = PastLastNode();
 
-  HeapHashSet<Member<Node>> node_set;
+  // Stores the elements selected by the range.
+  HeapHashSet<Member<const Node>> selected_elements;
   for (Node* node = FirstNode(); node != stop_node;
        node = NodeTraversal::Next(*node)) {
-    if (node->IsElementNode())
-      node_set.insert(node);
+    if (!node->IsElementNode())
+      continue;
+    if (selected_elements.Contains(node->parentNode()) ||
+        (!node->contains(start_container) && !node->contains(end_container))) {
+      DCHECK_LE(StartPosition(), Position::BeforeNode(*node));
+      DCHECK_GE(EndPosition(), Position::AfterNode(*node));
+      selected_elements.insert(node);
+    }
   }
 
-  for (Node* node = FirstNode(); node != stop_node;
+  for (const Node* node = FirstNode(); node != stop_node;
        node = NodeTraversal::Next(*node)) {
     if (node->IsElementNode()) {
-      // Exclude start & end container unless the entire corresponding
-      // node is included in the range.
-      if (!node_set.Contains(node->parentNode()) &&
-          (start_container == end_container ||
-           (!node->contains(start_container) &&
-            !node->contains(end_container)))) {
-        if (LayoutObject* layout_object = ToElement(node)->GetLayoutObject()) {
-          Vector<FloatQuad> element_quads;
-          layout_object->AbsoluteQuads(element_quads);
-          owner_document_->AdjustFloatQuadsForScrollAndAbsoluteZoom(
-              element_quads, *layout_object);
+      if (!selected_elements.Contains(node) ||
+          selected_elements.Contains(node->parentNode()))
+        continue;
+      LayoutObject* const layout_object = ToElement(node)->GetLayoutObject();
+      if (!layout_object)
+        continue;
+      Vector<FloatQuad> element_quads;
+      layout_object->AbsoluteQuads(element_quads);
+      owner_document_->AdjustFloatQuadsForScrollAndAbsoluteZoom(element_quads,
+                                                                *layout_object);
 
-          quads.AppendVector(element_quads);
-        }
+      quads.AppendVector(element_quads);
+      continue;
+    }
+
+    if (!node->IsTextNode())
+      continue;
+    LayoutText* const layout_text = ToText(node)->GetLayoutObject();
+    if (!layout_text)
+      continue;
+    if (!layout_text->IsTextFragment()) {
+      // TODO(editing-dev): Offset in |LayoutText| doesn't match to DOM offset
+      // when |text-transform| applied. We should map DOM offset to offset in
+      // |LayouText| for |start_offset| and |end_offset|.
+      const unsigned start_offset =
+          (node == start_container) ? start_.Offset() : 0;
+      const unsigned end_offset = (node == end_container)
+                                      ? end_.Offset()
+                                      : std::numeric_limits<unsigned>::max();
+      quads.AppendVector(ComputeTextQuads(*owner_document_, *layout_text,
+                                          start_offset, end_offset));
+      continue;
+    }
+    const LayoutTextFragment& first_letter_part =
+        *ToLayoutTextFragment(AssociatedLayoutObjectOf(*node, 0));
+    const LayoutTextFragment& remaining_part =
+        *ToLayoutTextFragment(layout_text);
+    // Set offsets in |LayoutTextFragment| to cover whole text in
+    // |LayoutTextFragment|.
+    unsigned first_letter_part_start = 0;
+    unsigned first_letter_part_end = first_letter_part.FragmentLength();
+    unsigned remaining_part_start = 0;
+    unsigned remaining_part_end = remaining_part.FragmentLength();
+    if (node == start_container) {
+      if (start_.Offset() < first_letter_part_end) {
+        // |this| range starts in first-letter part.
+        first_letter_part_start = start_.Offset();
+      } else {
+        first_letter_part_start = first_letter_part_end;
+        DCHECK_GE(static_cast<unsigned>(start_.Offset()),
+                  remaining_part.Start());
+        remaining_part_start = start_.Offset() - remaining_part.Start();
       }
-    } else if (node->IsTextNode()) {
-      if (LayoutText* layout_text = ToText(node)->GetLayoutObject()) {
-        unsigned start_offset = (node == start_container) ? start_.Offset() : 0;
-        unsigned end_offset = (node == end_container)
-                                  ? end_.Offset()
-                                  : std::numeric_limits<unsigned>::max();
-
-        Vector<FloatQuad> text_quads;
-        layout_text->AbsoluteQuadsForRange(text_quads, start_offset,
-                                           end_offset);
-        owner_document_->AdjustFloatQuadsForScrollAndAbsoluteZoom(text_quads,
-                                                                  *layout_text);
-
-        quads.AppendVector(text_quads);
+    }
+    if (node == end_container) {
+      if (end_.Offset() <= first_letter_part_end) {
+        // |this| range ends in first-letter part.
+        first_letter_part_end = end_.Offset();
+        remaining_part_end = remaining_part_start;
+      } else {
+        DCHECK_GE(static_cast<unsigned>(end_.Offset()), remaining_part.Start());
+        remaining_part_end = end_.Offset() - remaining_part.Start();
       }
+    }
+    DCHECK_LE(first_letter_part_start, first_letter_part_end);
+    DCHECK_LE(remaining_part_start, remaining_part_end);
+    if (first_letter_part_start < first_letter_part_end) {
+      quads.AppendVector(ComputeTextQuads(*owner_document_, first_letter_part,
+                                          first_letter_part_start,
+                                          first_letter_part_end));
+    }
+    if (remaining_part_start < remaining_part_end) {
+      quads.AppendVector(ComputeTextQuads(*owner_document_, remaining_part,
+                                          remaining_part_start,
+                                          remaining_part_end));
     }
   }
 }
@@ -1690,9 +1760,11 @@ void Range::UpdateSelectionIfAddedToSelection() {
                              .Collapse(StartPosition())
                              .Extend(EndPosition())
                              .Build(),
-                         FrameSelection::kCloseTyping |
-                             FrameSelection::kClearTypingStyle |
-                             FrameSelection::kDoNotSetFocus);
+                         SetSelectionOptions::Builder()
+                             .SetShouldCloseTyping(true)
+                             .SetShouldClearTypingStyle(true)
+                             .SetDoNotSetFocus(true)
+                             .Build());
   selection.CacheRangeOfDocument(this);
 }
 

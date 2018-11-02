@@ -26,7 +26,7 @@ class AxisTransform2d;
 namespace cc {
 class DisplayItemList;
 class DrawImage;
-class ImageDecodeCache;
+class ImageProvider;
 
 class CC_EXPORT RasterSource : public base::RefCountedThreadSafe<RasterSource> {
  public:
@@ -40,21 +40,11 @@ class CC_EXPORT RasterSource : public base::RefCountedThreadSafe<RasterSource> {
     // rasterized into. This means that the canvas cannot be cleared safely.
     bool playback_to_shared_canvas : 1;
 
-    // If set to true, none of the images will be rasterized.
-    bool skip_images : 1;
-
-    // If set to true, we will use an image hijack canvas, which enables
-    // compositor image caching.
-    bool use_image_hijack_canvas : 1;
-
     // If set to true, we should use LCD text.
     bool use_lcd_text : 1;
 
-    // If non-empty, an image hijack canvas will be used to skip these images
-    // during raster.
-    // TODO(khushalsagar): Consolidate more settings for playback here? See
-    // crbug.com/691076.
-    SkImageIdFlatSet images_to_skip;
+    // The ImageProvider used to replace images during playback.
+    ImageProvider* image_provider = nullptr;
   };
 
   // Helper function to apply a few common operations before passing the canvas
@@ -101,12 +91,9 @@ class CC_EXPORT RasterSource : public base::RefCountedThreadSafe<RasterSource> {
   gfx::Size GetSize() const;
 
   // Populate the given list with all images that may overlap the given
-  // rect in layer space. The returned draw images' matrices are modified as if
-  // they were being using during raster at scale |raster_scale|.
+  // rect in layer space.
   void GetDiscardableImagesInRect(const gfx::Rect& layer_rect,
-                                  float contents_scale,
-                                  const gfx::ColorSpace& target_color_space,
-                                  std::vector<DrawImage>* images) const;
+                                  std::vector<const DrawImage*>* images) const;
 
   // Return true iff this raster source can raster the given rect in layer
   // space.
@@ -126,12 +113,9 @@ class CC_EXPORT RasterSource : public base::RefCountedThreadSafe<RasterSource> {
   virtual sk_sp<SkPicture> GetFlattenedPicture();
   virtual size_t GetMemoryUsage() const;
 
-  // Image decode controller should be set once. Its lifetime has to exceed that
-  // of the raster source, since the raster source will access it during raster.
-  void set_image_decode_cache(ImageDecodeCache* image_decode_cache) {
-    DCHECK(image_decode_cache);
-    image_decode_cache_ = image_decode_cache;
-  }
+  const DisplayItemList* display_list() const { return display_list_.get(); }
+
+  SkColor background_color() const { return background_color_; }
 
  protected:
   // RecordingSource is the only class that can create a raster source.
@@ -153,16 +137,14 @@ class CC_EXPORT RasterSource : public base::RefCountedThreadSafe<RasterSource> {
   const gfx::Size size_;
   const bool clear_canvas_with_debug_color_;
   const int slow_down_raster_scale_factor_for_debug_;
-
-  // In practice, this is only set once before raster begins, so it's ok with
-  // respect to threading.
-  ImageDecodeCache* image_decode_cache_;
+  const float recording_scale_factor_;
 
  private:
   void RasterCommon(SkCanvas* canvas,
+                    ImageProvider* image_provider = nullptr,
                     SkPicture::AbortCallback* callback = nullptr) const;
 
-  void PrepareForPlaybackToCanvas(SkCanvas* canvas) const;
+  void ClearCanvasForPlayback(SkCanvas* canvas) const;
 
   DISALLOW_COPY_AND_ASSIGN(RasterSource);
 };

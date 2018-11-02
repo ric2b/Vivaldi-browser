@@ -11,17 +11,20 @@
 #include "core/dom/Document.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/UserGestureIndicator.h"
-#include "core/events/Event.h"
+#include "core/dom/events/Event.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/html/HTMLVideoElement.h"
 #include "core/probe/CoreProbes.h"
 #include "modules/EventTargetModules.h"
 #include "modules/presentation/PresentationController.h"
 #include "modules/remoteplayback/AvailabilityCallbackWrapper.h"
+#include "modules/remoteplayback/RemotePlaybackConnectionCallbacks.h"
 #include "platform/MemoryCoordinator.h"
-#include "platform/json/JSONValues.h"
 #include "platform/wtf/text/Base64.h"
 #include "public/platform/modules/presentation/WebPresentationClient.h"
+#include "public/platform/modules/presentation/WebPresentationConnectionProxy.h"
+#include "public/platform/modules/presentation/WebPresentationError.h"
+#include "public/platform/modules/presentation/WebPresentationInfo.h"
 
 namespace blink {
 
@@ -45,32 +48,25 @@ const AtomicString& RemotePlaybackStateToString(WebRemotePlaybackState state) {
   return disconnected_value;
 }
 
-void RunNotifyInitialAvailabilityTask(ExecutionContext* context,
-                                      std::unique_ptr<WTF::Closure> task) {
-  probe::AsyncTask async_task(context, task.get());
-  (*task)();
+void RunRemotePlaybackTask(ExecutionContext* context,
+                           WTF::Closure task,
+                           std::unique_ptr<int> task_id) {
+  probe::AsyncTask async_task(context, task_id.get());
+  task();
 }
 
-WebURL GetAvailabilityUrl(const WebURL& source) {
-  if (source.IsEmpty() || !source.IsValid())
+WebURL GetAvailabilityUrl(const WebURL& source, bool is_source_supported) {
+  if (source.IsEmpty() || !source.IsValid() || !is_source_supported)
     return WebURL();
 
   // The URL for each media element's source looks like the following:
-  // chrome-media-source://<encoded-data> where |encoded-data| is base64 URL
-  // encoded string representation of a JSON structure with various information
-  // about the media element's source that looks like this:
-  // {
-  //   "sourceUrl": "<source url>",
-  // }
-  // TODO(avayvod): add and fill more info to the JSON structure, like the
-  // frame URL, audio/video codec info, the result of the CORS check, etc.
-  std::unique_ptr<JSONObject> source_info = JSONObject::Create();
-  source_info->SetString("sourceUrl", source.GetString());
-  CString json_source_info = source_info->ToJSONString().Utf8();
-  String encoded_source_info =
-      WTF::Base64URLEncode(json_source_info.data(), json_source_info.length());
+  // remote-playback://<encoded-data> where |encoded-data| is base64 URL
+  // encoded string representation of the source URL.
+  std::string source_string = source.GetString().Utf8();
+  String encoded_source =
+      WTF::Base64URLEncode(source_string.data(), source_string.length());
 
-  return KURL(kParsedURLString, "remote-playback://" + encoded_source_info);
+  return KURL(kParsedURLString, "remote-playback://" + encoded_source);
 }
 
 bool IsBackgroundAvailabilityMonitoringDisabled() {
@@ -229,6 +225,35 @@ bool RemotePlayback::HasPendingActivity() const {
 }
 
 void RemotePlayback::PromptInternal() {
+  DCHECK(RuntimeEnabledFeatures::RemotePlaybackBackendEnabled());
+
+  if (RuntimeEnabledFeatures::NewRemotePlaybackPipelineEnabled()) {
+    WebPresentationClient* client =
+        PresentationController::ClientFromContext(GetExecutionContext());
+    if (client && !availability_urls_.IsEmpty()) {
+      client->StartPresentation(
+          availability_urls_,
+          WTF::MakeUnique<RemotePlaybackConnectionCallbacks>(this));
+    } else {
+      // TODO(yuryu): Wrapping PromptCancelled with WTF::Closure as
+      // InspectorInstrumentation requires a globally unique pointer to track
+      // tasks. We can remove the wrapper if InspectorInstrumentation returns a
+      // task id.
+      WTF::Closure task =
+          WTF::Bind(&RemotePlayback::PromptCancelled, WrapPersistent(this));
+      std::unique_ptr<int> task_id = WTF::MakeUnique<int>(0);
+      probe::AsyncTaskScheduled(GetExecutionContext(), "promptCancelled",
+                                task_id.get());
+      TaskRunnerHelper::Get(TaskType::kMediaElementEvent, GetExecutionContext())
+          ->PostTask(BLINK_FROM_HERE,
+                     WTF::Bind(RunRemotePlaybackTask,
+                               WrapPersistent(GetExecutionContext()),
+                               WTF::Passed(std::move(task)),
+                               WTF::Passed(std::move(task_id))));
+    }
+    return;
+  }
+
   if (state_ == WebRemotePlaybackState::kDisconnected)
     media_element_->RequestRemotePlayback();
   else
@@ -245,24 +270,23 @@ int RemotePlayback::WatchAvailabilityInternal(
   int id;
   do {
     id = GetExecutionContext()->CircularSequentialID();
-  } while (!availability_callbacks_
-                .insert(id, TraceWrapperMember<AvailabilityCallbackWrapper>(
-                                this, callback))
-                .is_new_entry);
+  } while (!availability_callbacks_.insert(id, callback).is_new_entry);
 
   // Report the current availability via the callback.
   // TODO(yuryu): Wrapping notifyInitialAvailability with WTF::Closure as
   // InspectorInstrumentation requires a globally unique pointer to track tasks.
   // We can remove the wrapper if InspectorInstrumentation returns a task id.
-  std::unique_ptr<WTF::Closure> task = WTF::Bind(
-      &RemotePlayback::NotifyInitialAvailability, WrapPersistent(this), id);
+  WTF::Closure task = WTF::Bind(&RemotePlayback::NotifyInitialAvailability,
+                                WrapPersistent(this), id);
+  std::unique_ptr<int> task_id = WTF::MakeUnique<int>(0);
   probe::AsyncTaskScheduled(GetExecutionContext(), "watchAvailabilityCallback",
-                            task.get());
+                            task_id.get());
   TaskRunnerHelper::Get(TaskType::kMediaElementEvent, GetExecutionContext())
       ->PostTask(BLINK_FROM_HERE,
-                 WTF::Bind(RunNotifyInitialAvailabilityTask,
+                 WTF::Bind(RunRemotePlaybackTask,
                            WrapPersistent(GetExecutionContext()),
-                           WTF::Passed(std::move(task))));
+                           WTF::Passed(std::move(task)),
+                           WTF::Passed(std::move(task_id))));
 
   MaybeStartListeningForAvailability();
   return id;
@@ -289,12 +313,9 @@ void RemotePlayback::NotifyInitialAvailability(int callback_id) {
 }
 
 void RemotePlayback::StateChanged(WebRemotePlaybackState state) {
-  if (state_ == state)
-    return;
-
   if (prompt_promise_resolver_) {
-    // Changing state to Disconnected from "disconnected" or "connecting" means
-    // that establishing connection with remote playback device failed.
+    // Changing state to "disconnected" from "disconnected" or "connecting"
+    // means that establishing connection with remote playback device failed.
     // Changing state to anything else means the state change intended by
     // prompt() succeeded.
     if (state_ != WebRemotePlaybackState::kConnected &&
@@ -311,13 +332,17 @@ void RemotePlayback::StateChanged(WebRemotePlaybackState state) {
     prompt_promise_resolver_ = nullptr;
   }
 
+  if (state_ == state)
+    return;
+
   state_ = state;
   switch (state_) {
     case WebRemotePlaybackState::kConnecting:
       DispatchEvent(Event::Create(EventTypeNames::connecting));
       if (RuntimeEnabledFeatures::NewRemotePlaybackPipelineEnabled() &&
           media_element_->IsHTMLVideoElement()) {
-        toHTMLVideoElement(media_element_)->MediaRemotingStarted();
+        // TODO(xjz): Pass the remote device name.
+        toHTMLVideoElement(media_element_)->MediaRemotingStarted(WebString());
       }
       break;
     case WebRemotePlaybackState::kConnected:
@@ -357,7 +382,8 @@ void RemotePlayback::PromptCancelled() {
   prompt_promise_resolver_ = nullptr;
 }
 
-void RemotePlayback::SourceChanged(const WebURL& source) {
+void RemotePlayback::SourceChanged(const WebURL& source,
+                                   bool is_source_supported) {
   DCHECK(RuntimeEnabledFeatures::NewRemotePlaybackPipelineEnabled());
 
   if (IsBackgroundAvailabilityMonitoringDisabled())
@@ -365,7 +391,7 @@ void RemotePlayback::SourceChanged(const WebURL& source) {
 
   WebURL current_url =
       availability_urls_.IsEmpty() ? WebURL() : availability_urls_[0];
-  WebURL new_url = GetAvailabilityUrl(source);
+  WebURL new_url = GetAvailabilityUrl(source, is_source_supported);
 
   if (new_url == current_url)
     return;
@@ -407,8 +433,19 @@ void RemotePlayback::RemotePlaybackDisabled() {
   availability_callbacks_.clear();
   StopListeningForAvailability();
 
-  if (state_ != WebRemotePlaybackState::kDisconnected)
+  if (state_ == WebRemotePlaybackState::kDisconnected)
+    return;
+
+  if (RuntimeEnabledFeatures::NewRemotePlaybackPipelineEnabled()) {
+    WebPresentationClient* client =
+        PresentationController::ClientFromContext(GetExecutionContext());
+    if (client) {
+      client->CloseConnection(presentation_url_, presentation_id_,
+                              connection_proxy_.get());
+    }
+  } else {
     media_element_->RequestRemotePlaybackStop();
+  }
 }
 
 void RemotePlayback::AvailabilityChanged(
@@ -447,6 +484,58 @@ const WebVector<WebURL>& RemotePlayback::Urls() const {
   // TODO(avayvod): update the URL format and add frame url, mime type and
   // response headers when available.
   return availability_urls_;
+}
+
+void RemotePlayback::OnConnectionSuccess(
+    const WebPresentationInfo& presentation_info) {
+  DCHECK(RuntimeEnabledFeatures::NewRemotePlaybackPipelineEnabled());
+  presentation_id_ = presentation_info.id;
+  presentation_url_ = presentation_info.url;
+
+  StateChanged(WebRemotePlaybackState::kConnecting);
+}
+
+void RemotePlayback::OnConnectionError(const WebPresentationError& error) {
+  DCHECK(RuntimeEnabledFeatures::NewRemotePlaybackPipelineEnabled());
+  presentation_id_ = "";
+  presentation_url_ = KURL();
+  if (error.error_type ==
+      WebPresentationError::kErrorTypePresentationRequestCancelled) {
+    PromptCancelled();
+    return;
+  }
+
+  StateChanged(WebRemotePlaybackState::kDisconnected);
+}
+
+void RemotePlayback::BindProxy(
+    std::unique_ptr<WebPresentationConnectionProxy> proxy) {
+  DCHECK(proxy);
+  connection_proxy_ = std::move(proxy);
+}
+
+void RemotePlayback::DidReceiveTextMessage(const WebString& message) {
+  NOTREACHED();
+}
+
+void RemotePlayback::DidReceiveBinaryMessage(const uint8_t* data,
+                                             size_t length) {
+  NOTREACHED();
+}
+
+void RemotePlayback::DidChangeState(WebPresentationConnectionState state) {
+  WebRemotePlaybackState remote_playback_state =
+      WebRemotePlaybackState::kDisconnected;
+  if (state == WebPresentationConnectionState::kConnecting)
+    remote_playback_state = WebRemotePlaybackState::kConnecting;
+  else if (state == WebPresentationConnectionState::kConnected)
+    remote_playback_state = WebRemotePlaybackState::kConnected;
+
+  StateChanged(remote_playback_state);
+}
+
+void RemotePlayback::DidClose() {
+  StateChanged(WebRemotePlaybackState::kDisconnected);
 }
 
 void RemotePlayback::StopListeningForAvailability() {

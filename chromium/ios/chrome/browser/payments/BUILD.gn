@@ -9,23 +9,35 @@ source_set("payments") {
   sources = [
     "ios_can_make_payment_query_factory.cc",
     "ios_can_make_payment_query_factory.h",
+    "ios_payment_instrument.h",
+    "ios_payment_instrument.mm",
+    "ios_payment_instrument_finder.h",
+    "ios_payment_instrument_finder.mm",
+    "ios_payment_instrument_launcher.h",
+    "ios_payment_instrument_launcher.mm",
+    "ios_payment_instrument_launcher_factory.h",
+    "ios_payment_instrument_launcher_factory.mm",
     "ios_payment_request_cache_factory.h",
     "ios_payment_request_cache_factory.mm",
-    "itunes_json_request.cc",
-    "itunes_json_request.h",
+    "origin_security_checker.h",
+    "origin_security_checker.mm",
     "payment_request.h",
     "payment_request.mm",
     "payment_request_cache.h",
     "payment_request_cache.mm",
     "payment_request_util.h",
     "payment_request_util.mm",
+    "payment_response_helper.h",
+    "payment_response_helper.mm",
   ]
   deps = [
     "//base",
     "//components/autofill/core/browser",
+    "//components/image_fetcher/ios",
     "//components/keyed_service/ios",
     "//components/payments/core",
     "//components/prefs",
+    "//components/security_state/core",
     "//components/signin/core/browser",
     "//components/strings:components_strings_grit",
     "//ios/chrome/browser",
@@ -44,7 +56,10 @@ source_set("unit_tests") {
   configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
+    "ios_payment_instrument_finder_unittest.mm",
+    "ios_payment_instrument_launcher_unittest.mm",
     "payment_request_unittest.mm",
+    "payment_response_helper_unittest.mm",
   ]
   deps = [
     ":payments",
@@ -56,10 +71,14 @@ source_set("unit_tests") {
     "//components/payments/core",
     "//ios/chrome/browser",
     "//ios/chrome/browser/browser_state:test_support",
+    "//ios/chrome/browser/web:test_support",
+    "//ios/testing:ocmock_support",
     "//ios/web",
     "//ios/web/public/test/fakes",
+    "//net:test_support",
     "//testing/gmock",
     "//testing/gtest",
+    "//url",
   ]
 }
 
@@ -78,6 +97,7 @@ source_set("test_support") {
     "//components/autofill/core/browser",
     "//components/autofill/core/browser:test_support",
     "//components/payments/core",
+    "//components/payments/core:test_support",
     "//components/prefs",
     "//ios/web",
   ]

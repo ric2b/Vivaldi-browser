@@ -27,7 +27,6 @@
 #include "net/base/load_states.h"
 #include "net/base/net_errors.h"
 #include "net/base/network_delegate.h"
-#include "net/http/http_response_headers.h"
 #include "net/log/net_log.h"
 #include "net/log/net_log_capture_mode.h"
 #include "net/log/net_log_event_type.h"
@@ -685,7 +684,7 @@ void URLRequestJob::DoneReadingRedirectResponse() {
 }
 
 std::unique_ptr<SourceStream> URLRequestJob::SetUpSourceStream() {
-  return base::MakeUnique<URLRequestJobSourceStream>(this);
+  return std::make_unique<URLRequestJobSourceStream>(this);
 }
 
 void URLRequestJob::DestroySourceStream() {
@@ -855,10 +854,9 @@ RedirectInfo URLRequestJob::ComputeRedirectInfo(const GURL& location,
   // Update the first-party URL if appropriate.
   if (request_->first_party_url_policy() ==
           URLRequest::UPDATE_FIRST_PARTY_URL_ON_REDIRECT) {
-    redirect_info.new_first_party_for_cookies = redirect_info.new_url;
+    redirect_info.new_site_for_cookies = redirect_info.new_url;
   } else {
-    redirect_info.new_first_party_for_cookies =
-        request_->first_party_for_cookies();
+    redirect_info.new_site_for_cookies = request_->site_for_cookies();
   }
 
   redirect_info.new_referrer_policy =

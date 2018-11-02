@@ -15,6 +15,7 @@
 #include "extensions/browser/extension_event_histogram_value.h"
 #include "extensions/browser/extension_prefs_observer.h"
 #include "extensions/common/view_type.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 
 class ExtensionFunctionRegistry;
 class PrefService;
@@ -186,9 +187,12 @@ class ExtensionsBrowserClient {
   virtual void RegisterExtensionFunctions(
       ExtensionFunctionRegistry* registry) const = 0;
 
-  // Registers Mojo services for a RenderFrame.
-  virtual void RegisterMojoServices(content::RenderFrameHost* render_frame_host,
-                                    const Extension* extension) const = 0;
+  // Registers additional interfaces to expose to a RenderFrame.
+  virtual void RegisterExtensionInterfaces(
+      service_manager::BinderRegistryWithArgs<content::RenderFrameHost*>*
+          registry,
+      content::RenderFrameHost* render_frame_host,
+      const Extension* extension) const = 0;
 
   // Creates a RuntimeAPIDelegate responsible for handling extensions
   // management-related events such as update and installation on behalf of the
@@ -265,6 +269,9 @@ class ExtensionsBrowserClient {
 
   // Whether the browser context is associated with Chrome OS lock screen.
   virtual bool IsLockScreenContext(content::BrowserContext* context) = 0;
+
+  // Returns the locale used by the application.
+  virtual std::string GetApplicationLocale() = 0;
 
   // Returns the single instance of |this|.
   static ExtensionsBrowserClient* Get();

@@ -11,17 +11,30 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_function_dispatcher.h"
 #include "extensions/browser/extension_zoom_request_client.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/common/extension_messages.h"
+#include "ui/vivaldi_browser_window.h"
 
 class Browser;
 
 namespace extensions {
 
 using content::WebContents;
+
+// Helper
+void SetUIZoomByWebContent(double zoom_level, WebContents* web_contents,
+    const Extension* extension) {
+  zoom::ZoomController* zoom_controller =
+      zoom::ZoomController::FromWebContents(web_contents);
+  DCHECK(zoom_controller);
+  scoped_refptr<ExtensionZoomRequestClient> client(
+      new ExtensionZoomRequestClient(extension));
+  zoom_controller->SetZoomLevelByClient(zoom_level, client);
+}
 
 ZoomAPI::ZoomAPI(content::BrowserContext* context) : browser_context_(context) {
   EventRouter* event_router = EventRouter::Get(browser_context_);
@@ -101,16 +114,20 @@ bool ZoomSetVivaldiUIZoomFunction::RunAsync() {
 
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  WebContents* web_contents = dispatcher()->GetAssociatedWebContents();
-
-  zoom::ZoomController* zoom_controller =
-      zoom::ZoomController::FromWebContents(web_contents);
-  DCHECK(zoom_controller);
-
   double zoom_level = content::ZoomFactorToZoomLevel(params->zoom_factor);
-  scoped_refptr<ExtensionZoomRequestClient> client(
-      new ExtensionZoomRequestClient(extension()));
-  zoom_controller->SetZoomLevelByClient(zoom_level, client);
+
+  // Set for windows using regular profile
+  SetUIZoomByWebContent(
+      zoom_level, dispatcher()->GetAssociatedWebContents(), extension());
+
+  // Set for windows using off the record profile, if any.
+  Profile* profile = GetProfile();
+  if (profile->HasOffTheRecordProfile()) {
+    VivaldiBrowserWindow* window =
+      VivaldiBrowserWindow::GetBrowserWindowForBrowser(
+          chrome::FindBrowserWithProfile(profile->GetOffTheRecordProfile()));
+    SetUIZoomByWebContent(zoom_level, window->web_contents(), extension());
+  }
 
   SendResponse(true);
   return true;
@@ -152,8 +169,18 @@ bool ZoomSetDefaultZoomFunction::RunAsync() {
 
   EXTENSION_FUNCTION_VALIDATE(params.get());
   Profile* profile = GetProfile();
+  if (profile->IsOffTheRecord()) {
+    profile = profile->GetOriginalProfile();
+  }
   double zoom_factor = content::ZoomFactorToZoomLevel(params->zoom_factor);
-  profile->GetZoomLevelPrefs()->SetDefaultZoomLevelPref(zoom_factor);
+
+  content::StoragePartition* partition =
+      profile->GetDefaultStoragePartition(profile);
+
+  ChromeZoomLevelPrefs* zoom_prefs =
+    static_cast<ChromeZoomLevelPrefs*>(partition->GetZoomLevelDelegate());
+  zoom_prefs->SetDefaultZoomLevelPref(zoom_factor);
+
   SendResponse(true);
   return true;
 }
@@ -164,7 +191,10 @@ ZoomGetDefaultZoomFunction::~ZoomGetDefaultZoomFunction() {}
 
 bool ZoomGetDefaultZoomFunction::RunAsync() {
   Profile* profile = GetProfile();
-  double zoom_level = profile->GetZoomLevelPrefs()->GetDefaultZoomLevelPref();
+  if (profile->IsOffTheRecord()) {
+    profile = profile->GetOriginalProfile();
+  }
+  double zoom_level = profile->GetDefaultZoomLevelForProfile();
   double zoom_factor = content::ZoomLevelToZoomFactor(zoom_level);
 
   results_ = vivaldi::zoom::GetDefaultZoom::Results::Create(zoom_factor);

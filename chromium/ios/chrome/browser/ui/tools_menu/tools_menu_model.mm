@@ -7,6 +7,7 @@
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/experimental_flags.h"
 #include "ios/chrome/browser/ui/commands/application_commands.h"
+#include "ios/chrome/browser/ui/commands/browser_commands.h"
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #import "ios/chrome/browser/ui/tools_menu/new_tab_menu_view_item.h"
 #import "ios/chrome/browser/ui/tools_menu/reading_list_menu_view_item.h"
@@ -43,29 +44,35 @@ const MenuItemInfo itemInfoList[kToolsMenuNumberOfItems] = {
     TOOLS_NEW_INCOGNITO_TAB_ITEM, nullptr,ToolbarTypeAll,
     0,                                    [NewIncognitoTabMenuViewItem class] },
   { IDS_IOS_TOOLS_MENU_CLOSE_ALL_TABS,    kToolsMenuCloseAllTabsId,
-    IDC_CLOSE_ALL_TABS, nullptr,          ToolbarTypeSwitcheriPhone,
+    TOOLS_CLOSE_ALL_TABS,
+    @selector(closeAllTabs), ToolbarTypeSwitcheriPhone,
     kVisibleNotIncognitoOnly,             nil },
   { IDS_IOS_TOOLS_MENU_CLOSE_ALL_INCOGNITO_TABS,
     kToolsMenuCloseAllIncognitoTabsId,
-    IDC_CLOSE_ALL_INCOGNITO_TABS, nullptr, ToolbarTypeSwitcheriPhone,
+    TOOLS_CLOSE_ALL_INCOGNITO_TABS,
+    @selector(closeAllIncognitoTabs), ToolbarTypeSwitcheriPhone,
     kVisibleIncognitoOnly,                nil },
   { IDS_IOS_TOOLS_MENU_BOOKMARKS,         kToolsMenuBookmarksId,
     IDC_SHOW_BOOKMARK_MANAGER, nullptr,   ToolbarTypeWebAll,
     0,                                    nil },
   { IDS_IOS_TOOLS_MENU_READING_LIST,      kToolsMenuReadingListId,
-    IDC_SHOW_READING_LIST, nullptr,       ToolbarTypeWebAll,
+    TOOLS_READING_LIST,
+    @selector(showReadingList),           ToolbarTypeWebAll,
     0,                                    [ReadingListMenuViewItem class] },
   { IDS_IOS_TOOLS_MENU_RECENT_TABS,       kToolsMenuOtherDevicesId,
     IDC_SHOW_OTHER_DEVICES, nullptr,      ToolbarTypeWebAll,
     kVisibleNotIncognitoOnly,             nil },
   { IDS_HISTORY_SHOW_HISTORY,             kToolsMenuHistoryId,
-    IDC_SHOW_HISTORY, nullptr,            ToolbarTypeWebAll,
+    TOOLS_SHOW_HISTORY,
+    @selector(showHistory),               ToolbarTypeWebAll,
     0,                                    nil },
   { IDS_IOS_OPTIONS_REPORT_AN_ISSUE,      kToolsMenuReportAnIssueId,
-    IDC_REPORT_AN_ISSUE, nullptr,         ToolbarTypeAll,
+    TOOLS_REPORT_AN_ISSUE,
+    @selector(showReportAnIssue),       ToolbarTypeAll,
     0,                                    nil },
   { IDS_IOS_TOOLS_MENU_FIND_IN_PAGE,      kToolsMenuFindInPageId,
-    IDC_FIND, nullptr,                    ToolbarTypeWebAll,
+    TOOLS_SHOW_FIND_IN_PAGE,
+    @selector(showFindInPage),            ToolbarTypeWebAll,
     0,                                    nil },
   { IDS_IOS_TOOLS_MENU_REQUEST_DESKTOP_SITE,
     kToolsMenuRequestDesktopId,
@@ -75,15 +82,13 @@ const MenuItemInfo itemInfoList[kToolsMenuNumberOfItems] = {
     kToolsMenuRequestMobileId,
     IDC_REQUEST_MOBILE_SITE, nullptr,     ToolbarTypeWebAll,
     0,                                    nil },
-  { IDS_IOS_TOOLS_MENU_READER_MODE,       kToolsMenuReaderMode,
-    IDC_READER_MODE, nullptr,             ToolbarTypeWebAll,
-    0,                                    nil },
   { IDS_IOS_TOOLS_MENU_SETTINGS,          kToolsMenuSettingsId,
     TOOLS_SETTINGS_ITEM,
     @selector(showSettings),              ToolbarTypeAll,
     0,                                    nil },
   { IDS_IOS_TOOLS_MENU_HELP_MOBILE,       kToolsMenuHelpId,
-    IDC_HELP_PAGE_VIA_MENU, nullptr,      ToolbarTypeWebAll,
+    TOOLS_SHOW_HELP_PAGE,
+    @selector(showHelpPage),              ToolbarTypeWebAll,
     0,                                    nil },
     // clang-format on
 };
@@ -103,22 +108,14 @@ bool ToolsMenuItemShouldBeVisible(const MenuItemInfo& item,
   switch (item.title_id) {
     case IDS_IOS_TOOLBAR_SHOW_TABS:
       return IsIPadIdiom();
-    case IDS_IOS_TOOLS_MENU_READER_MODE:
-      return experimental_flags::IsReaderModeEnabled();
     case IDS_IOS_OPTIONS_REPORT_AN_ISSUE:
       return ios::GetChromeBrowserProvider()
           ->GetUserFeedbackProvider()
           ->IsUserFeedbackEnabled();
     case IDS_IOS_TOOLS_MENU_REQUEST_DESKTOP_SITE:
-      if (experimental_flags::IsRequestMobileSiteEnabled())
-        return (configuration.userAgentType != web::UserAgentType::DESKTOP);
-      else
-        return true;
+      return (configuration.userAgentType != web::UserAgentType::DESKTOP);
     case IDS_IOS_TOOLS_MENU_REQUEST_MOBILE_SITE:
-      if (experimental_flags::IsRequestMobileSiteEnabled())
-        return (configuration.userAgentType == web::UserAgentType::DESKTOP);
-      else
-        return false;
+      return (configuration.userAgentType == web::UserAgentType::DESKTOP);
     default:
       return true;
   }

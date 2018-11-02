@@ -10,14 +10,14 @@ namespace vr {
 
 namespace {
 
-static ColorScheme kColorSchemes[ColorScheme::kNumModes];
+ColorScheme gColorSchemes[ColorScheme::kNumModes];
 
 void InitializeColorSchemes() {
   static bool initialized = false;
   if (initialized)
     return;
 
-  ColorScheme& normal_scheme = kColorSchemes[ColorScheme::kModeNormal];
+  ColorScheme& normal_scheme = gColorSchemes[ColorScheme::kModeNormal];
   normal_scheme.world_background = 0xFF999999;
   normal_scheme.world_background_text = 0xFF363636;
   normal_scheme.floor = 0xFF8C8C8C;
@@ -37,10 +37,8 @@ void InitializeColorSchemes() {
   normal_scheme.loading_indicator_background = 0xFF454545;
   normal_scheme.exit_warning_foreground = SK_ColorWHITE;
   normal_scheme.exit_warning_background = 0xCC1A1A1A;
-  normal_scheme.transient_warning_foreground =
-      normal_scheme.exit_warning_foreground;
-  normal_scheme.transient_warning_background =
-      normal_scheme.exit_warning_background;
+  normal_scheme.transient_warning_foreground = 0xFFF3F3F3;
+  normal_scheme.transient_warning_background = SK_ColorBLACK;
   normal_scheme.exclusive_screen_toast_foreground = 0xCCFFFFFF;
   normal_scheme.exclusive_screen_toast_background = 0xCC2F2F2F;
 
@@ -60,17 +58,18 @@ void InitializeColorSchemes() {
   normal_scheme.prompt_button_background_down = 0xE6FFFFFF;
   normal_scheme.secure = gfx::kGoogleGreen700;
   normal_scheme.insecure = gfx::kGoogleRed700;
-  normal_scheme.warning = 0xFF5A5A5A;
   normal_scheme.url_emphasized = SK_ColorBLACK;
-  normal_scheme.url_deemphasized = normal_scheme.warning;
+  normal_scheme.url_deemphasized = 0xFF5A5A5A;
+  normal_scheme.offline_page_warning = 0xFF242424;
   normal_scheme.disabled = 0x33333333;
   normal_scheme.dimmer_inner = 0xCC0D0D0D;
   normal_scheme.dimmer_outer = 0xE6000000;
   normal_scheme.splash_screen_background = SK_ColorBLACK;
+  normal_scheme.splash_screen_text_color = SK_ColorWHITE;
 
-  kColorSchemes[ColorScheme::kModeFullscreen] =
-      kColorSchemes[ColorScheme::kModeNormal];
-  ColorScheme& fullscreen_scheme = kColorSchemes[ColorScheme::kModeFullscreen];
+  gColorSchemes[ColorScheme::kModeFullscreen] =
+      gColorSchemes[ColorScheme::kModeNormal];
+  ColorScheme& fullscreen_scheme = gColorSchemes[ColorScheme::kModeFullscreen];
   fullscreen_scheme.world_background = 0xFF000714;
   fullscreen_scheme.floor = 0xFF070F1C;
   fullscreen_scheme.ceiling = 0xFF04080F;
@@ -88,9 +87,9 @@ void InitializeColorSchemes() {
   fullscreen_scheme.close_button_background_down =
       fullscreen_scheme.element_background_down;
 
-  kColorSchemes[ColorScheme::kModeIncognito] =
-      kColorSchemes[ColorScheme::kModeNormal];
-  ColorScheme& incognito_scheme = kColorSchemes[ColorScheme::kModeIncognito];
+  gColorSchemes[ColorScheme::kModeIncognito] =
+      gColorSchemes[ColorScheme::kModeNormal];
+  ColorScheme& incognito_scheme = gColorSchemes[ColorScheme::kModeIncognito];
   incognito_scheme.world_background = 0xFF2E2E2E;
   incognito_scheme.world_background_text = 0xFF878787;
   incognito_scheme.floor = 0xFF282828;
@@ -111,9 +110,9 @@ void InitializeColorSchemes() {
   incognito_scheme.separator = 0xFF474747;
   incognito_scheme.secure = 0xFFEDEDED;
   incognito_scheme.insecure = incognito_scheme.secure;
-  incognito_scheme.warning = incognito_scheme.secure;
   incognito_scheme.url_emphasized = incognito_scheme.secure;
   incognito_scheme.url_deemphasized = 0xFF878787;
+  incognito_scheme.offline_page_warning = incognito_scheme.secure;
   incognito_scheme.prompt_foreground = 0xCCFFFFFF;
   incognito_scheme.prompt_primary_button_forground = 0xD9000000;
   incognito_scheme.prompt_secondary_button_foreground = 0xD9000000;
@@ -122,7 +121,6 @@ void InitializeColorSchemes() {
   incognito_scheme.prompt_button_background_hover = 0xFF8C8C8C;
   incognito_scheme.prompt_button_background_down = 0xE6FFFFFF;
   incognito_scheme.disabled = 0x33E6E6E6;
-  incognito_scheme.splash_screen_background = SK_ColorBLACK;
 
   initialized = true;
 }
@@ -131,7 +129,7 @@ void InitializeColorSchemes() {
 
 const ColorScheme& ColorScheme::GetColorScheme(ColorScheme::Mode mode) {
   InitializeColorSchemes();
-  return kColorSchemes[static_cast<int>(mode)];
+  return gColorSchemes[static_cast<int>(mode)];
 }
 
 }  // namespace vr

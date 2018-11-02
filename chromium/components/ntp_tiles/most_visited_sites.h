@@ -7,6 +7,7 @@
 
 #include <stddef.h>
 
+#include <map>
 #include <memory>
 #include <set>
 #include <string>
@@ -15,6 +16,7 @@
 #include "base/callback_forward.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
@@ -24,6 +26,7 @@
 #include "components/history/core/browser/top_sites_observer.h"
 #include "components/ntp_tiles/ntp_tile.h"
 #include "components/ntp_tiles/popular_sites.h"
+#include "components/ntp_tiles/section_type.h"
 #include "components/ntp_tiles/tile_source.h"
 #include "components/suggestions/proto/suggestions.pb.h"
 #include "components/suggestions/suggestions_service.h"
@@ -85,7 +88,9 @@ class MostVisitedSites : public history::TopSitesObserver,
   // The observer to be notified when the list of most visited sites changes.
   class Observer {
    public:
-    virtual void OnMostVisitedURLsAvailable(const NTPTilesVector& tiles) = 0;
+    // |sections| must at least contain the PERSONALIZED section.
+    virtual void OnURLsAvailable(
+        const std::map<SectionType, NTPTilesVector>& sections) = 0;
     virtual void OnIconMadeAvailable(const GURL& site_url) = 0;
 
    protected:
@@ -165,6 +170,22 @@ class MostVisitedSites : public history::TopSitesObserver,
                                    NTPTilesVector popular_tiles);
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(MostVisitedSitesTest,
+                           ShouldDeduplicateDomainWithNoWwwDomain);
+  FRIEND_TEST_ALL_PREFIXES(MostVisitedSitesTest,
+                           ShouldDeduplicateDomainByRemovingMobilePrefixes);
+  FRIEND_TEST_ALL_PREFIXES(MostVisitedSitesTest,
+                           ShouldDeduplicateDomainByReplacingMobilePrefixes);
+
+  // This function tries to match the given |host| to a close fit in
+  // |hosts_to_skip| by removing a prefix that is commonly used to redirect from
+  // or to mobile pages (m.xyz.com --> xyz.com).
+  // If this approach fails, the prefix is replaced by another prefix.
+  // That way, true is returned for m.x.com if www.x.com is in |hosts_to_skip|.
+  static bool IsHostOrMobilePageKnown(
+      const std::set<std::string>& hosts_to_skip,
+      const std::string& host);
+
   // Initialize the query to Top Sites. Called if the SuggestionsService
   // returned no data.
   void InitiateTopSitesQuery();
@@ -193,10 +214,18 @@ class MostVisitedSites : public history::TopSitesObserver,
       const std::set<std::string>& used_hosts,
       size_t num_actual_tiles);
 
-  // Creates popular tiles whose hosts weren't used yet.
-  NTPTilesVector CreatePopularSitesTiles(
+  // Creates tiles for all popular site sections. Uses |num_actual_tiles| and
+  // |used_hosts| to restrict results for the PERSONALIZED section.
+  std::map<SectionType, NTPTilesVector> CreatePopularSitesSections(
       const std::set<std::string>& used_hosts,
       size_t num_actual_tiles);
+
+  // Creates tiles for |sites_vector|. The returned vector will neither contain
+  // more than |num_max_tiles| nor include sites in |hosts_to_skip|.
+  NTPTilesVector CreatePopularSitesTiles(
+      const PopularSites::SitesVector& sites_vector,
+      const std::set<std::string>& hosts_to_skip,
+      size_t num_max_tiles);
 
   // Initiates a query for the home page tile if needed and calls
   // |SaveTilesAndNotify| in the end.

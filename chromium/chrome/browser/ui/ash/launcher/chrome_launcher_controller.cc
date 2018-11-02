@@ -8,12 +8,12 @@
 #include "ash/public/cpp/remote_shelf_item_delegate.h"
 #include "ash/public/cpp/shelf_item.h"
 #include "ash/public/cpp/shelf_model.h"
+#include "ash/public/cpp/shelf_prefs.h"
 #include "ash/public/interfaces/constants.mojom.h"
 #include "ash/resources/grit/ash_resources.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
-#include "ash/system/tray/system_tray_delegate.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_util.h"
@@ -29,6 +29,7 @@
 #include "chrome/browser/ui/app_list/app_list_syncable_service_factory.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_icon_loader.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
+#include "chrome/browser/ui/ash/app_list/app_list_service_ash.h"
 #include "chrome/browser/ui/ash/app_sync_ui_state.h"
 #include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/ash/chrome_launcher_prefs.h"
@@ -66,6 +67,7 @@
 #include "content/public/common/service_manager_connection.h"
 #include "extensions/common/extension.h"
 #include "services/service_manager/public/cpp/connector.h"
+#include "ui/app_list/presenter/app_list_presenter_impl.h"
 #include "ui/aura/window.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -246,11 +248,6 @@ ChromeLauncherController::ChromeLauncherController(Profile* profile,
   app_window_controllers_.push_back(std::move(extension_app_window_controller));
   app_window_controllers_.push_back(
       base::MakeUnique<ArcAppWindowLauncherController>(this));
-
-  // Right now ash::Shell isn't created for tests.
-  // TODO(mukai): Allows it to observe display change and write tests.
-  if (ash::Shell::HasInstance())
-    ash::Shell::Get()->window_tree_host_manager()->AddObserver(this);
 }
 
 ChromeLauncherController::~ChromeLauncherController() {
@@ -261,8 +258,6 @@ ChromeLauncherController::~ChromeLauncherController() {
   app_window_controllers_.clear();
 
   model_->RemoveObserver(this);
-  if (ash::Shell::HasInstance())
-    ash::Shell::Get()->window_tree_host_manager()->RemoveObserver(this);
 
   // Release all profile dependent resources.
   ReleaseProfile();
@@ -527,8 +522,10 @@ ash::ShelfAction ChromeLauncherController::ActivateWindowOrMinimizeIfActive(
     }
   }
 
+  const app_list::AppListPresenterImpl* app_list_presenter =
+      AppListServiceAsh::GetInstance()->GetAppListPresenter();
   if (window->IsActive() && allow_minimize &&
-      !ash::Shell::Get()->IsAppListVisible()) {
+      (!app_list_presenter || !app_list_presenter->IsVisible())) {
     window->Minimize();
     return ash::SHELF_ACTION_WINDOW_MINIMIZED;
   }
@@ -563,8 +560,6 @@ void ChromeLauncherController::ActiveUserChanged(
   RestoreUnpinnedRunningApplicationOrder(user_email);
   // TODO(crbug.com/557406): Fix this interaction pattern in Mash.
   if (!ash_util::IsRunningInMash()) {
-    // Inform the system tray of the change.
-    ash::Shell::Get()->system_tray_delegate()->ActiveUserWasChanged();
     // Force on-screen keyboard to reset.
     if (keyboard::IsKeyboardEnabled())
       ash::Shell::Get()->CreateKeyboard();
@@ -685,15 +680,23 @@ bool ChromeLauncherController::ShelfBoundsChangesProbablyWithUser(
   // no window on desktop, multi user, ..) the shelf could be shown - or not.
   PrefService* prefs = profile()->GetPrefs();
   PrefService* other_prefs = other_profile->GetPrefs();
+  // If ash prefs have not been registered with Chrome yet, Chrome cannot know
+  // whether the shelf bounds will change; err on the side of false positives.
+  if (!ash::AreShelfPrefsAvailable(prefs) ||
+      !ash::AreShelfPrefsAvailable(other_prefs)) {
+    return true;
+  }
   const int64_t display = GetDisplayIDForShelf(shelf);
-  const bool currently_shown = ash::SHELF_AUTO_HIDE_BEHAVIOR_NEVER ==
-                               GetShelfAutoHideBehaviorPref(prefs, display);
-  const bool other_shown = ash::SHELF_AUTO_HIDE_BEHAVIOR_NEVER ==
-                           GetShelfAutoHideBehaviorPref(other_prefs, display);
+  const bool currently_shown =
+      ash::SHELF_AUTO_HIDE_BEHAVIOR_NEVER ==
+      ash::GetShelfAutoHideBehaviorPref(prefs, display);
+  const bool other_shown =
+      ash::SHELF_AUTO_HIDE_BEHAVIOR_NEVER ==
+      ash::GetShelfAutoHideBehaviorPref(other_prefs, display);
 
   return currently_shown != other_shown ||
-         GetShelfAlignmentPref(prefs, display) !=
-             GetShelfAlignmentPref(other_prefs, display);
+         ash::GetShelfAlignmentPref(prefs, display) !=
+             ash::GetShelfAlignmentPref(other_prefs, display);
 }
 
 void ChromeLauncherController::OnUserProfileReadyToSwitch(Profile* profile) {
@@ -704,35 +707,6 @@ void ChromeLauncherController::OnUserProfileReadyToSwitch(Profile* profile) {
 ArcAppDeferredLauncherController*
 ChromeLauncherController::GetArcDeferredLauncher() {
   return arc_deferred_launcher_.get();
-}
-
-void ChromeLauncherController::SetShelfAutoHideBehaviorFromPrefs() {
-  if (!ConnectToShelfController() || updating_shelf_pref_from_observer_)
-    return;
-
-  // The pref helper functions return default values for invalid display ids.
-  PrefService* prefs = profile_->GetPrefs();
-  for (const auto& display : display::Screen::GetScreen()->GetAllDisplays()) {
-    shelf_controller_->SetAutoHideBehavior(
-        GetShelfAutoHideBehaviorPref(prefs, display.id()), display.id());
-  }
-}
-
-void ChromeLauncherController::SetShelfAlignmentFromPrefs() {
-  if (!ConnectToShelfController() || updating_shelf_pref_from_observer_)
-    return;
-
-  // The pref helper functions return default values for invalid display ids.
-  PrefService* prefs = profile_->GetPrefs();
-  for (const auto& display : display::Screen::GetScreen()->GetAllDisplays()) {
-    shelf_controller_->SetAlignment(GetShelfAlignmentPref(prefs, display.id()),
-                                    display.id());
-  }
-}
-
-void ChromeLauncherController::SetShelfBehaviorsFromPrefs() {
-  SetShelfAutoHideBehaviorFromPrefs();
-  SetShelfAlignmentFromPrefs();
 }
 
 ChromeLauncherController::ScopedPinSyncDisabler
@@ -1190,8 +1164,6 @@ void ChromeLauncherController::AttachProfile(Profile* profile_to_attach) {
     app_icon_loaders_.push_back(std::move(arc_app_icon_loader));
   }
 
-  SetShelfBehaviorsFromPrefs();
-
   pref_change_registrar_.Init(profile()->GetPrefs());
   pref_change_registrar_.Add(
       prefs::kPolicyPinnedLauncherApps,
@@ -1203,18 +1175,6 @@ void ChromeLauncherController::AttachProfile(Profile* profile_to_attach) {
   pref_change_registrar_.Add(
       prefs::kArcEnabled,
       base::Bind(&ChromeLauncherController::ScheduleUpdateAppLaunchersFromPref,
-                 base::Unretained(this)));
-  pref_change_registrar_.Add(
-      prefs::kShelfAlignmentLocal,
-      base::Bind(&ChromeLauncherController::SetShelfAlignmentFromPrefs,
-                 base::Unretained(this)));
-  pref_change_registrar_.Add(
-      prefs::kShelfAutoHideBehaviorLocal,
-      base::Bind(&ChromeLauncherController::SetShelfAutoHideBehaviorFromPrefs,
-                 base::Unretained(this)));
-  pref_change_registrar_.Add(
-      prefs::kShelfPreferences,
-      base::Bind(&ChromeLauncherController::SetShelfBehaviorsFromPrefs,
                  base::Unretained(this)));
   pref_change_registrar_.Add(
       prefs::kTouchVirtualKeyboardEnabled,
@@ -1245,8 +1205,6 @@ void ChromeLauncherController::ReleaseProfile() {
 
   app_updaters_.clear();
 
-  prefs_observer_.reset();
-
   pref_change_registrar_.RemoveAll();
 
   app_list::AppListSyncableService* app_service =
@@ -1259,38 +1217,6 @@ void ChromeLauncherController::ReleaseProfile() {
 
 ///////////////////////////////////////////////////////////////////////////////
 // ash::mojom::ShelfObserver:
-
-void ChromeLauncherController::OnShelfInitialized(int64_t display_id) {
-  if (!ConnectToShelfController())
-    return;
-
-  // The pref helper functions return default values for invalid display ids.
-  PrefService* prefs = profile_->GetPrefs();
-  shelf_controller_->SetAlignment(GetShelfAlignmentPref(prefs, display_id),
-                                  display_id);
-  shelf_controller_->SetAutoHideBehavior(
-      GetShelfAutoHideBehaviorPref(prefs, display_id), display_id);
-}
-
-void ChromeLauncherController::OnAlignmentChanged(ash::ShelfAlignment alignment,
-                                                  int64_t display_id) {
-  // The locked alignment is set temporarily and not saved to preferences.
-  if (alignment == ash::SHELF_ALIGNMENT_BOTTOM_LOCKED)
-    return;
-  DCHECK(!updating_shelf_pref_from_observer_);
-  base::AutoReset<bool> updating(&updating_shelf_pref_from_observer_, true);
-  // This will uselessly store a preference value for invalid display ids.
-  SetShelfAlignmentPref(profile_->GetPrefs(), display_id, alignment);
-}
-
-void ChromeLauncherController::OnAutoHideBehaviorChanged(
-    ash::ShelfAutoHideBehavior auto_hide,
-    int64_t display_id) {
-  DCHECK(!updating_shelf_pref_from_observer_);
-  base::AutoReset<bool> updating(&updating_shelf_pref_from_observer_, true);
-  // This will uselessly store a preference value for invalid display ids.
-  SetShelfAutoHideBehaviorPref(profile_->GetPrefs(), display_id, auto_hide);
-}
 
 void ChromeLauncherController::OnShelfItemAdded(int32_t index,
                                                 const ash::ShelfItem& item) {
@@ -1480,18 +1406,6 @@ void ChromeLauncherController::ShelfItemDelegateChanged(
         id, delegate ? delegate->CreateInterfacePtrAndBind()
                      : ash::mojom::ShelfItemDelegatePtr());
   }
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// ash::WindowTreeHostManager::Observer:
-
-void ChromeLauncherController::OnDisplayConfigurationChanged() {
-  // In BOTTOM_LOCKED state, ignore the call of SetShelfBehaviorsFromPrefs.
-  // Because it might be called by some operations, like crbug.com/627040
-  // rotating screen.
-  ash::Shelf* shelf = ash::Shelf::ForWindow(ash::Shell::GetPrimaryRootWindow());
-  if (shelf->alignment() != ash::SHELF_ALIGNMENT_BOTTOM_LOCKED)
-    SetShelfBehaviorsFromPrefs();
 }
 
 ///////////////////////////////////////////////////////////////////////////////

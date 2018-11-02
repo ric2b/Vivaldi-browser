@@ -29,7 +29,7 @@ class TracingObserver;
 // local dump manager remotely connects to the Coordinator service. In the
 // browser process, it locally connects to the Coordinator service.
 class SERVICES_RESOURCE_COORDINATOR_PUBLIC_CPP_EXPORT ClientProcessImpl
-    : public NON_EXPORTED_BASE(mojom::ClientProcess) {
+    : public mojom::ClientProcess {
  public:
   struct SERVICES_RESOURCE_COORDINATOR_PUBLIC_CPP_EXPORT Config {
    public:
@@ -60,20 +60,21 @@ class SERVICES_RESOURCE_COORDINATOR_PUBLIC_CPP_EXPORT ClientProcessImpl
       const base::trace_event::MemoryDumpRequestArgs&);
 
   // mojom::ClientProcess implementation. The Coordinator calls this.
-  void RequestProcessMemoryDump(
+  void RequestChromeMemoryDump(
       const base::trace_event::MemoryDumpRequestArgs& args,
-      const RequestProcessMemoryDumpCallback& callback) override;
+      const RequestChromeMemoryDumpCallback& callback) override;
 
   // Callback passed to base::MemoryDumpManager::CreateProcessDump().
-  void OnProcessMemoryDumpDone(
-      const RequestProcessMemoryDumpCallback&,
+  void OnChromeMemoryDumpDone(
+      const RequestChromeMemoryDumpCallback&,
       const base::trace_event::MemoryDumpRequestArgs& req_args,
       bool success,
       uint64_t dump_guid,
-      const base::trace_event::ProcessMemoryDumpsMap&);
+      std::unique_ptr<base::trace_event::ProcessMemoryDump>);
 
   // mojom::ClientProcess implementation. The Coordinator calls this.
   void RequestOSMemoryDump(
+      bool wants_mmaps,
       const std::vector<base::ProcessId>& ids,
       const RequestOSMemoryDumpCallback& callback) override;
 

@@ -10,10 +10,9 @@
 #include "cc/base/math_util.h"
 #include "cc/base/region.h"
 #include "cc/debug/debug_colors.h"
-#include "cc/debug/traced_value.h"
 #include "cc/paint/display_item_list.h"
-#include "cc/raster/image_hijack_canvas.h"
-#include "cc/raster/skip_image_canvas.h"
+#include "cc/paint/skia_paint_canvas.h"
+#include "components/viz/common/traced_value.h"
 #include "skia/ext/analysis_canvas.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColorSpaceXformCanvas.h"
@@ -35,7 +34,7 @@ RasterSource::RasterSource(const RecordingSource* other)
       clear_canvas_with_debug_color_(other->clear_canvas_with_debug_color_),
       slow_down_raster_scale_factor_for_debug_(
           other->slow_down_raster_scale_factor_for_debug_),
-      image_decode_cache_(nullptr) {}
+      recording_scale_factor_(other->recording_scale_factor_) {}
 RasterSource::~RasterSource() = default;
 
 void RasterSource::PlaybackToCanvas(
@@ -57,7 +56,8 @@ void RasterSource::PlaybackToCanvas(
   raster_canvas->clipRect(SkRect::MakeFromIRect(raster_bounds));
   raster_canvas->translate(raster_transform.translation().x(),
                            raster_transform.translation().y());
-  raster_canvas->scale(raster_transform.scale(), raster_transform.scale());
+  raster_canvas->scale(raster_transform.scale() / recording_scale_factor_,
+                       raster_transform.scale() / recording_scale_factor_);
   PlaybackToCanvas(raster_canvas, target_color_space, settings);
   raster_canvas->restore();
 }
@@ -65,6 +65,7 @@ void RasterSource::PlaybackToCanvas(
 void RasterSource::PlaybackToCanvas(SkCanvas* input_canvas,
                                     const gfx::ColorSpace& target_color_space,
                                     const PlaybackSettings& settings) const {
+  // TODO(enne): color transform needs to be replicated in gles2_cmd_decoder
   SkCanvas* raster_canvas = input_canvas;
   std::unique_ptr<SkCanvas> color_transform_canvas;
   if (target_color_space.IsValid()) {
@@ -74,52 +75,12 @@ void RasterSource::PlaybackToCanvas(SkCanvas* input_canvas,
   }
 
   if (!settings.playback_to_shared_canvas)
-    PrepareForPlaybackToCanvas(raster_canvas);
+    ClearCanvasForPlayback(raster_canvas);
 
-  if (settings.skip_images) {
-    SkipImageCanvas canvas(raster_canvas);
-    RasterCommon(&canvas);
-  } else if (settings.use_image_hijack_canvas) {
-    const SkImageInfo& info = raster_canvas->imageInfo();
-    ImageHijackCanvas canvas(info.width(), info.height(), image_decode_cache_,
-                             &settings.images_to_skip, target_color_space);
-    // Before adding the canvas, make sure that the ImageHijackCanvas is aware
-    // of the current transform and clip, which may affect the clip bounds.
-    // Since we query the clip bounds of the current canvas to get the list of
-    // draw commands to process, this is important to produce correct content.
-    canvas.clipRect(
-        SkRect::MakeFromIRect(raster_canvas->getDeviceClipBounds()));
-    canvas.setMatrix(raster_canvas->getTotalMatrix());
-    canvas.addCanvas(raster_canvas);
-
-    RasterCommon(&canvas);
-  } else {
-    RasterCommon(raster_canvas);
-  }
+  RasterCommon(raster_canvas, settings.image_provider);
 }
 
-namespace {
-
-bool CanvasIsUnclipped(const SkCanvas* canvas) {
-  if (!canvas->isClipRect())
-    return false;
-
-  SkIRect bounds;
-  if (!canvas->getDeviceClipBounds(&bounds))
-    return false;
-
-  SkISize size = canvas->getBaseLayerSize();
-  return bounds.contains(0, 0, size.width(), size.height());
-}
-
-}  // namespace
-
-void RasterSource::PrepareForPlaybackToCanvas(SkCanvas* canvas) const {
-  // TODO(hendrikw): See if we can split this up into separate functions.
-
-  if (CanvasIsUnclipped(canvas))
-    canvas->discard();
-
+void RasterSource::ClearCanvasForPlayback(SkCanvas* canvas) const {
   // If this raster source has opaque contents, it is guaranteeing that it will
   // draw an opaque rect the size of the layer.  If it is not, then we must
   // clear this canvas ourselves.
@@ -188,11 +149,12 @@ void RasterSource::PrepareForPlaybackToCanvas(SkCanvas* canvas) const {
 }
 
 void RasterSource::RasterCommon(SkCanvas* raster_canvas,
+                                ImageProvider* image_provider,
                                 SkPicture::AbortCallback* callback) const {
   DCHECK(display_list_.get());
   int repeat_count = std::max(1, slow_down_raster_scale_factor_for_debug_);
   for (int i = 0; i < repeat_count; ++i)
-    display_list_->Raster(raster_canvas, callback);
+    display_list_->Raster(raster_canvas, image_provider, callback);
 }
 
 sk_sp<SkPicture> RasterSource::GetFlattenedPicture() {
@@ -201,7 +163,7 @@ sk_sp<SkPicture> RasterSource::GetFlattenedPicture() {
   SkPictureRecorder recorder;
   SkCanvas* canvas = recorder.beginRecording(size_.width(), size_.height());
   if (!size_.IsEmpty()) {
-    PrepareForPlaybackToCanvas(canvas);
+    canvas->clear(SK_ColorTRANSPARENT);
     RasterCommon(canvas);
   }
 
@@ -219,17 +181,16 @@ bool RasterSource::PerformSolidColorAnalysis(gfx::Rect layer_rect,
   TRACE_EVENT0("cc", "RasterSource::PerformSolidColorAnalysis");
 
   layer_rect.Intersect(gfx::Rect(size_));
+  layer_rect = gfx::ScaleToRoundedRect(layer_rect, recording_scale_factor_);
   return display_list_->GetColorIfSolidInRect(layer_rect, color);
 }
 
 void RasterSource::GetDiscardableImagesInRect(
     const gfx::Rect& layer_rect,
-    float contents_scale,
-    const gfx::ColorSpace& target_color_space,
-    std::vector<DrawImage>* images) const {
+    std::vector<const DrawImage*>* images) const {
   DCHECK_EQ(0u, images->size());
-  display_list_->discardable_image_map().GetDiscardableImagesInRect(
-      layer_rect, contents_scale, target_color_space, images);
+  display_list_->discardable_image_map().GetDiscardableImagesInRect(layer_rect,
+                                                                    images);
 }
 
 gfx::Rect RasterSource::GetRectForImage(PaintImage::Id image_id) const {
@@ -269,7 +230,7 @@ gfx::Rect RasterSource::RecordedViewport() const {
 
 void RasterSource::AsValueInto(base::trace_event::TracedValue* array) const {
   if (display_list_.get())
-    TracedValue::AppendIDRef(display_list_.get(), array);
+    viz::TracedValue::AppendIDRef(display_list_.get(), array);
 }
 
 void RasterSource::DidBeginTracing() {
@@ -279,8 +240,6 @@ void RasterSource::DidBeginTracing() {
 
 RasterSource::PlaybackSettings::PlaybackSettings()
     : playback_to_shared_canvas(false),
-      skip_images(false),
-      use_image_hijack_canvas(true),
       use_lcd_text(true) {}
 
 RasterSource::PlaybackSettings::PlaybackSettings(const PlaybackSettings&) =

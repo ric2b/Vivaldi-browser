@@ -14,8 +14,8 @@
 // backwards compatibility for legacy applications using the library.
 #define VPX_CODEC_DISABLE_COMPAT 1
 extern "C" {
-#include "third_party/libvpx/source/libvpx/vpx/vp8dx.h"
-#include "third_party/libvpx/source/libvpx/vpx/vpx_codec.h"
+#include "third_party/libvpx/source/libvpx/vpx/vp8dx.h"      // nogncheck
+#include "third_party/libvpx/source/libvpx/vpx/vpx_codec.h"  // nogncheck
 }
 #endif
 
@@ -23,7 +23,7 @@ namespace media {
 
 bool IsColorSpaceSupported(const media::VideoColorSpace& color_space) {
   bool color_management =
-      base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kEnableHDR) ||
+      base::FeatureList::IsEnabled(features::kHighDynamicRange) ||
       base::FeatureList::IsEnabled(media::kVideoColorManagement);
   switch (color_space.primaries) {
     case media::VideoColorSpace::PrimaryID::EBU_3213_E:

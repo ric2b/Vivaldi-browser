@@ -234,8 +234,17 @@ void AutoEnrollmentController::OnOwnershipStatusCheckDone(
 void AutoEnrollmentController::StartClient(
     const std::vector<std::string>& state_keys) {
   if (state_keys.empty()) {
-    LOG(ERROR) << "No state keys available!";
-    UpdateState(policy::AUTO_ENROLLMENT_STATE_NO_ENROLLMENT);
+    LOG(ERROR) << "No state keys available";
+    if (fre_requirement_ == EXPLICITLY_REQUIRED) {
+      g_browser_process->platform_part()
+          ->browser_policy_connector_chromeos()
+          ->GetStateKeysBroker()
+          ->RequestStateKeys(
+              base::Bind(&AutoEnrollmentController::StartClient,
+                         client_start_weak_factory_.GetWeakPtr()));
+    } else {
+      UpdateState(policy::AUTO_ENROLLMENT_STATE_NO_ENROLLMENT);
+    }
     return;
   }
 

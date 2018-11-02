@@ -22,6 +22,7 @@ class WebContents;
 
 namespace safe_browsing {
 
+class NetEventLogger;
 class UrlCheckerDelegate;
 
 // A SafeBrowsingUrlCheckerImpl instance is used to perform SafeBrowsing check
@@ -29,22 +30,31 @@ class UrlCheckerDelegate;
 // be used to handle queries from renderers. But it is also used to handle
 // queries from the browser. In that case, the public methods are called
 // directly instead of through Mojo.
-// Used when --enable-network-service is in effect.
-//
-// TODO(yzshen): Do all the logging like what BaseResourceThrottle does.
 class SafeBrowsingUrlCheckerImpl : public mojom::SafeBrowsingUrlChecker,
                                    public SafeBrowsingDatabaseManager::Client {
  public:
   SafeBrowsingUrlCheckerImpl(
+      const std::string& headers,
       int load_flags,
       content::ResourceType resource_type,
+      bool has_user_gesture,
       scoped_refptr<UrlCheckerDelegate> url_checker_delegate,
       const base::Callback<content::WebContents*()>& web_contents_getter);
 
   ~SafeBrowsingUrlCheckerImpl() override;
 
   // mojom::SafeBrowsingUrlChecker implementation.
-  void CheckUrl(const GURL& url, CheckUrlCallback callback) override;
+  // NOTE: |callback| could be run synchronously before this method returns. Be
+  // careful if |callback| could destroy this object.
+  void CheckUrl(const GURL& url,
+                const std::string& method,
+                CheckUrlCallback callback) override;
+
+  const GURL& GetCurrentlyCheckingUrl() const;
+
+  void set_net_event_logger(NetEventLogger* net_event_logger) {
+    net_event_logger_ = net_event_logger;
+  }
 
  private:
   // SafeBrowsingDatabaseManager::Client implementation:
@@ -54,11 +64,19 @@ class SafeBrowsingUrlCheckerImpl : public mojom::SafeBrowsingUrlChecker,
 
   void OnCheckUrlTimeout();
 
+  // NOTE: this method runs callbacks which could destroy this object.
   void ProcessUrls();
 
-  void BlockAndProcessUrls();
+  // NOTE: this method runs callbacks which could destroy this object.
+  void BlockAndProcessUrls(bool showed_interstitial);
 
   void OnBlockingPageComplete(bool proceed);
+
+  SBThreatType CheckWebUIUrls(const GURL& url);
+
+  // Returns false if this object has been destroyed by the callback. In that
+  // case none of the members of this object should be touched again.
+  bool RunNextCallback(bool proceed, bool showed_interstitial);
 
   enum State {
     // Haven't started checking or checking is complete.
@@ -71,18 +89,30 @@ class SafeBrowsingUrlCheckerImpl : public mojom::SafeBrowsingUrlChecker,
     STATE_BLOCKED
   };
 
+  struct UrlInfo {
+    UrlInfo(const GURL& url,
+            const std::string& method,
+            CheckUrlCallback callback);
+    UrlInfo(UrlInfo&& other);
+
+    ~UrlInfo();
+
+    GURL url;
+    std::string method;
+    CheckUrlCallback callback;
+  };
+
+  const std::string headers_;
   const int load_flags_;
   const content::ResourceType resource_type_;
+  const bool has_user_gesture_;
   base::Callback<content::WebContents*()> web_contents_getter_;
   scoped_refptr<UrlCheckerDelegate> url_checker_delegate_;
   scoped_refptr<SafeBrowsingDatabaseManager> database_manager_;
 
   // The redirect chain for this resource, including the original URL and
   // subsequent redirect URLs.
-  std::vector<GURL> urls_;
-  // Callbacks corresponding to |urls_| to report check results. |urls_| and
-  // |callbacks_| are always of the same size.
-  std::vector<CheckUrlCallback> callbacks_;
+  std::vector<UrlInfo> urls_;
   // |urls_| before |next_index_| have been checked. If |next_index_| is smaller
   // than the size of |urls_|, the URL at |next_index_| is being processed.
   size_t next_index_ = 0;
@@ -91,6 +121,8 @@ class SafeBrowsingUrlCheckerImpl : public mojom::SafeBrowsingUrlChecker,
 
   // Timer to abort the SafeBrowsing check if it takes too long.
   base::OneShotTimer timer_;
+
+  NetEventLogger* net_event_logger_ = nullptr;
 
   base::WeakPtrFactory<SafeBrowsingUrlCheckerImpl> weak_factory_;
 

@@ -91,7 +91,7 @@ class ShutdownNotifierFactory
   DISALLOW_COPY_AND_ASSIGN(ShutdownNotifierFactory);
 };
 
-#if BUILDFLAG(ENABLE_PEPPER_CDMS)
+#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
 enum PluginAvailabilityStatusForUMA {
   PLUGIN_NOT_REGISTERED,
@@ -112,7 +112,7 @@ static void SendPluginAvailabilityUMA(const std::string& mime_type,
 #endif  // defined(WIDEVINE_CDM_AVAILABLE)
 }
 
-#endif  // BUILDFLAG(ENABLE_PEPPER_CDMS)
+#endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 // Returns whether a request from a plugin to load |resource| from a renderer
@@ -201,7 +201,7 @@ bool PluginInfoMessageFilter::OnMessageReceived(const IPC::Message& message) {
   IPC_BEGIN_MESSAGE_MAP(PluginInfoMessageFilter, message)
     IPC_MESSAGE_HANDLER_DELAY_REPLY(ChromeViewHostMsg_GetPluginInfo,
                                     OnGetPluginInfo)
-#if BUILDFLAG(ENABLE_PEPPER_CDMS)
+#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
     IPC_MESSAGE_HANDLER(
         ChromeViewHostMsg_IsInternalPluginAvailableForMimeType,
         OnIsInternalPluginAvailableForMimeType)
@@ -272,7 +272,7 @@ void PluginInfoMessageFilter::PluginsLoaded(
   }
 }
 
-#if BUILDFLAG(ENABLE_PEPPER_CDMS)
+#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
 void PluginInfoMessageFilter::OnIsInternalPluginAvailableForMimeType(
     const std::string& mime_type,
@@ -308,7 +308,7 @@ void PluginInfoMessageFilter::OnIsInternalPluginAvailableForMimeType(
       mime_type, is_plugin_disabled ? PLUGIN_DISABLED : PLUGIN_NOT_REGISTERED);
 }
 
-#endif  // BUILDFLAG(ENABLE_PEPPER_CDMS)
+#endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
 void PluginInfoMessageFilter::Context::DecidePluginStatus(
     const GURL& url,
@@ -387,8 +387,7 @@ void PluginInfoMessageFilter::Context::DecidePluginStatus(
 
   if (plugin_setting == CONTENT_SETTING_DETECT_IMPORTANT_CONTENT ||
       (plugin_setting == CONTENT_SETTING_ALLOW &&
-       PluginUtils::ShouldPreferHtmlOverPlugins(host_content_settings_map_) &&
-       !base::FeatureList::IsEnabled(features::kRunAllFlashInAllowMode))) {
+       PluginUtils::ShouldPreferHtmlOverPlugins(host_content_settings_map_))) {
     *status = ChromeViewHostMsg_GetPluginInfo_Status::kPlayImportantContent;
   } else if (plugin_setting == CONTENT_SETTING_BLOCK) {
     // For managed users with the ASK policy, we allow manually running plugins

@@ -64,8 +64,6 @@ SDK.DebuggerModel = class extends SDK.SDKModel {
     Common.moduleSetting('pauseOnCaughtException').addChangeListener(this._pauseOnExceptionStateChanged, this);
     Common.moduleSetting('disableAsyncStackTraces').addChangeListener(this._asyncStackTracesStateChanged, this);
 
-    /** @type {!Map<string, string>} */
-    this._fileURLToNodeJSPath = new Map();
     this._enableDebugger();
 
     /** @type {!Map<string, string>} */
@@ -222,8 +220,8 @@ SDK.DebuggerModel = class extends SDK.SDKModel {
    */
   async setBreakpointByURL(url, lineNumber, columnNumber, condition, callback) {
     // Convert file url to node-js path.
-    if (this.target().isNodeJS() && this._fileURLToNodeJSPath.has(url))
-      url = this._fileURLToNodeJSPath.get(url);
+    if (this.target().isNodeJS() && SDK.DebuggerModel._fileURLToNodeJSPath.has(url))
+      url = SDK.DebuggerModel._fileURLToNodeJSPath.get(url);
     // Adjust column if needed.
     var minColumnNumber = 0;
     var scripts = this._scriptsBySourceURL.get(url) || [];
@@ -487,7 +485,7 @@ SDK.DebuggerModel = class extends SDK.SDKModel {
       var nodeJSPath = sourceURL;
       sourceURL = Common.ParsedURL.platformPathToURL(nodeJSPath);
       sourceURL = this._internString(sourceURL);
-      this._fileURLToNodeJSPath.set(sourceURL, nodeJSPath);
+      SDK.DebuggerModel._fileURLToNodeJSPath.set(sourceURL, nodeJSPath);
     } else {
       sourceURL = this._internString(sourceURL);
     }
@@ -683,37 +681,11 @@ SDK.DebuggerModel = class extends SDK.SDKModel {
   }
 
   /**
-   * @param {string} code
-   * @param {string} objectGroup
-   * @param {boolean} includeCommandLineAPI
-   * @param {boolean} silent
-   * @param {boolean} returnByValue
-   * @param {boolean} generatePreview
-   * @param {function(?SDK.RemoteObject, !Protocol.Runtime.ExceptionDetails=, string=)} callback
+   * @param {!SDK.RuntimeModel.EvaluationOptions} options
+   * @return {!Promise<!SDK.RuntimeModel.EvaluationResult>}
    */
-  evaluateOnSelectedCallFrame(
-      code,
-      objectGroup,
-      includeCommandLineAPI,
-      silent,
-      returnByValue,
-      generatePreview,
-      callback) {
-    /**
-     * @param {?Protocol.Runtime.RemoteObject} result
-     * @param {!Protocol.Runtime.ExceptionDetails=} exceptionDetails
-     * @param {string=} error
-     * @this {SDK.DebuggerModel}
-     */
-    function didEvaluate(result, exceptionDetails, error) {
-      if (!result)
-        callback(null, undefined, error);
-      else
-        callback(this._runtimeModel.createRemoteObject(result), exceptionDetails);
-    }
-
-    this.selectedCallFrame().evaluate(
-        code, objectGroup, includeCommandLineAPI, silent, returnByValue, generatePreview, didEvaluate.bind(this));
+  evaluateOnSelectedCallFrame(options) {
+    return this.selectedCallFrame().evaluate(options);
   }
 
   /**
@@ -840,6 +812,9 @@ SDK.DebuggerModel = class extends SDK.SDKModel {
     return this._stringMap.get(string);
   }
 };
+
+/** @type {!Map<string, string>} */
+SDK.DebuggerModel._fileURLToNodeJSPath = new Map();
 
 SDK.SDKModel.register(SDK.DebuggerModel, SDK.Target.Capability.JS, true);
 
@@ -1200,61 +1175,29 @@ SDK.DebuggerModel.CallFrame = class {
   }
 
   /**
-   * @param {string} code
-   * @param {string} objectGroup
-   * @param {boolean} includeCommandLineAPI
-   * @param {boolean} silent
-   * @param {boolean} returnByValue
-   * @param {boolean} generatePreview
-   * @param {function(?Protocol.Runtime.RemoteObject, !Protocol.Runtime.ExceptionDetails=, string=)} callback
+   * @param {!SDK.RuntimeModel.EvaluationOptions} options
+   * @return {!Promise<!SDK.RuntimeModel.EvaluationResult>}
    */
-  async evaluate(code, objectGroup, includeCommandLineAPI, silent, returnByValue, generatePreview, callback) {
+  async evaluate(options) {
     var response = await this.debuggerModel._agent.invoke_evaluateOnCallFrame({
-      callFrameId: this._payload.callFrameId,
-      expression: code,
-      objectGroup: objectGroup,
-      includeCommandLineAPI: includeCommandLineAPI,
-      silent: silent,
-      returnByValue: returnByValue,
-      generatePreview: generatePreview
+      callFrameId: this.id,
+      expression: options.expression,
+      objectGroup: options.objectGroup,
+      includeCommandLineAPI: options.includeCommandLineAPI,
+      silent: options.silent,
+      returnByValue: options.returnByValue,
+      generatePreview: options.generatePreview,
+      throwOnSideEffect: false
     });
     var error = response[Protocol.Error];
     if (error) {
       console.error(error);
-      callback(null, undefined, error);
-      return;
+      return {error: error};
     }
-    callback(response.result, response.exceptionDetails);
-  }
-
-  /**
-   * @param {string} code
-   * @param {string} objectGroup
-   * @param {boolean} includeCommandLineAPI
-   * @param {boolean} silent
-   * @param {boolean} returnByValue
-   * @param {boolean} generatePreview
-   * @return {!Promise<?SDK.RemoteObject>}
-   */
-  evaluatePromise(code, objectGroup, includeCommandLineAPI, silent, returnByValue, generatePreview) {
-    var fulfill;
-    var promise = new Promise(x => fulfill = x);
-    this.evaluate(
-        code, objectGroup, includeCommandLineAPI, silent, returnByValue, generatePreview, callback.bind(this));
-    return promise;
-
-    /**
-     * @param {?Protocol.Runtime.RemoteObject} result
-     * @param {!Protocol.Runtime.ExceptionDetails=} exceptionDetails
-     * @param {string=} error
-     * @this {SDK.DebuggerModel.CallFrame}
-     */
-    function callback(result, exceptionDetails, error) {
-      if (!result || exceptionDetails)
-        fulfill(null);
-      else
-        fulfill(this.debuggerModel._runtimeModel.createRemoteObject(result));
-    }
+    return {
+      object: this.debuggerModel.runtimeModel().createRemoteObject(response.result),
+      exceptionDetails: response.exceptionDetails
+    };
   }
 
   async restart() {

@@ -221,7 +221,8 @@ using signin_ui::CompletionCallback;
       [weakSelf runCompletionCallbackWithSuccess:NO showAccountsSettings:NO];
     };
 
-    alertCoordinator_ = ios_internal::ErrorCoordinator(
+    // TODO(crbug.com/754642): Stop using TopPresentedViewControllerFrom().
+    alertCoordinator_ = ErrorCoordinator(
         error, dismissAction,
         top_view_controller::TopPresentedViewControllerFrom(viewController));
     [alertCoordinator_ start];

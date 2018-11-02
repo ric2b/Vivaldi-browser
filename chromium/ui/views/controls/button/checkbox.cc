@@ -23,9 +23,12 @@
 #include "ui/views/painter.h"
 #include "ui/views/resources/grit/views_resources.h"
 #include "ui/views/style/platform_style.h"
+#include "ui/views/style/typography.h"
 #include "ui/views/vector_icons.h"
 
 namespace views {
+
+constexpr int kFocusRingThicknessDip = 2;
 
 // View used to paint the focus ring around the Checkbox icon.
 // The icon is painted separately.
@@ -50,7 +53,7 @@ IconFocusRing::IconFocusRing(Checkbox* checkbox) : checkbox_(checkbox) {
 
 void IconFocusRing::Layout() {
   gfx::Rect focus_bounds = checkbox_->image()->bounds();
-  focus_bounds.Inset(gfx::Insets(-2.f));
+  focus_bounds.Inset(-kFocusRingThicknessDip, -kFocusRingThicknessDip);
   SetBoundsRect(focus_bounds);
 }
 
@@ -205,18 +208,15 @@ std::unique_ptr<InkDropRipple> Checkbox::CreateInkDropRipple() const {
 }
 
 SkColor Checkbox::GetInkDropBaseColor() const {
-  return GetNativeTheme()->GetSystemColor(
-      ui::NativeTheme::kColorId_LabelEnabledColor);
+  // Usually ink drop ripples match the text color. Checkboxes use the color of
+  // the unchecked icon.
+  return GetIconImageColor(false);
 }
 
 gfx::ImageSkia Checkbox::GetImage(ButtonState for_state) const {
   if (UseMd()) {
-    return gfx::CreateVectorIcon(
-        GetVectorIcon(), 16,
-        // When not checked, the icon color matches the button text color.
-        GetNativeTheme()->GetSystemColor(
-            checked_ ? ui::NativeTheme::kColorId_FocusedBorderColor
-                     : ui::NativeTheme::kColorId_LabelEnabledColor));
+    return gfx::CreateVectorIcon(GetVectorIcon(), 16,
+                                 GetIconImageColor(checked_));
   }
 
   const size_t checked_index = checked_ ? 1 : 0;
@@ -248,11 +248,24 @@ void Checkbox::SetCustomImage(bool checked,
 void Checkbox::PaintFocusRing(View* view,
                               gfx::Canvas* canvas,
                               const cc::PaintFlags& flags) {
-  canvas->DrawRoundRect(view->GetLocalBounds(), 2.f, flags);
+  gfx::RectF bounds(view->GetLocalBounds());
+  bounds.Inset(kFocusRingThicknessDip, kFocusRingThicknessDip);
+  canvas->DrawRoundRect(bounds, kFocusRingThicknessDip, flags);
 }
 
 const gfx::VectorIcon& Checkbox::GetVectorIcon() const {
   return checked() ? kCheckboxActiveIcon : kCheckboxNormalIcon;
+}
+
+SkColor Checkbox::GetIconImageColor(bool checked) const {
+  DCHECK(UseMd());
+  const ui::NativeTheme* theme = GetNativeTheme();
+  return checked
+             ? theme->GetSystemColor(
+                   ui::NativeTheme::kColorId_FocusedBorderColor)
+             // When unchecked, the icon color matches push button text color.
+             : style::GetColor(style::CONTEXT_BUTTON_MD, style::STYLE_PRIMARY,
+                               theme);
 }
 
 void Checkbox::NotifyClick(const ui::Event& event) {

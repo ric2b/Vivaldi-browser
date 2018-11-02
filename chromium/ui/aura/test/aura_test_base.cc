@@ -162,7 +162,10 @@ void AuraTestBase::OnEmbedRootDestroyed(WindowTreeHostMus* window_tree_host) {}
 void AuraTestBase::OnLostConnection(WindowTreeClient* client) {}
 
 void AuraTestBase::OnPointerEventObserved(const ui::PointerEvent& event,
-                                          Window* target) {}
+                                          Window* target) {
+  observed_pointer_events_.push_back(std::unique_ptr<ui::PointerEvent>(
+      static_cast<ui::PointerEvent*>(ui::Event::Clone(event).release())));
+}
 
 void AuraTestBase::SetWindowManagerClient(WindowManagerClient* client) {}
 
@@ -222,6 +225,8 @@ ui::mojom::EventResult AuraTestBase::OnAccelerator(
     std::unordered_map<std::string, std::vector<uint8_t>>* properties) {
   return ui::mojom::EventResult::HANDLED;
 }
+
+void AuraTestBase::OnCursorTouchVisibleChanged(bool enabled) {}
 
 void AuraTestBase::OnWmPerformMoveLoop(
     Window* window,

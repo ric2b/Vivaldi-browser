@@ -10,7 +10,6 @@ import android.app.assist.AssistStructure.ViewNode;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
-import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.os.Build;
 import android.os.Bundle;
@@ -31,6 +30,7 @@ import android.view.accessibility.AccessibilityManager.AccessibilityStateChangeL
 import android.view.accessibility.AccessibilityNodeProvider;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
+import android.view.textclassifier.TextClassifier;
 
 import org.chromium.base.ObserverList;
 import org.chromium.base.ObserverList.RewindableIterator;
@@ -48,6 +48,7 @@ import org.chromium.content.browser.input.SelectPopup;
 import org.chromium.content.browser.input.SelectPopupDialog;
 import org.chromium.content.browser.input.SelectPopupDropdown;
 import org.chromium.content.browser.input.SelectPopupItem;
+import org.chromium.content.browser.input.TextSuggestionHost;
 import org.chromium.content_public.browser.AccessibilitySnapshotCallback;
 import org.chromium.content_public.browser.AccessibilitySnapshotNode;
 import org.chromium.content_public.browser.ActionModeCallbackHelper;
@@ -59,6 +60,7 @@ import org.chromium.device.gamepad.GamepadList;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.EventForwarder;
 import org.chromium.ui.base.ViewAndroidDelegate;
+import org.chromium.ui.base.ViewUtils;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.display.DisplayAndroid;
 import org.chromium.ui.display.DisplayAndroid.DisplayAndroidObserver;
@@ -218,6 +220,8 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
     // Only valid when focused on a text / password field.
     private ImeAdapter mImeAdapter;
 
+    private TextSuggestionHost mTextSuggestionHost;
+
     // Size of the viewport in physical pixels as set from onSizeChanged.
     private int mViewportWidthPix;
     private int mViewportHeightPix;
@@ -369,6 +373,19 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
         mSelectionPopupController = actionMode;
     }
 
+    /**
+     * @return The TextSuggestionHost that handles displaying the text suggestion menu.
+     */
+    @VisibleForTesting
+    public TextSuggestionHost getTextSuggestionHostForTesting() {
+        return mTextSuggestionHost;
+    }
+
+    @VisibleForTesting
+    public void setTextSuggestionHostForTesting(TextSuggestionHost textSuggestionHost) {
+        mTextSuggestionHost = textSuggestionHost;
+    }
+
     @Override
     public void addWindowAndroidChangedObserver(WindowAndroidChangedObserver observer) {
         mWindowAndroidChangedObservers.addObserver(observer);
@@ -456,10 +473,11 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
 
         setContainerViewInternals(internalDispatcher);
 
-        initPopupZoomer(mContext);
+        mPopupZoomer = new PopupZoomer(mContext, mWebContents, mContainerView);
         mImeAdapter = new ImeAdapter(
                 mWebContents, mContainerView, new InputMethodManagerWrapper(mContext));
         mImeAdapter.addEventObserver(this);
+        mTextSuggestionHost = new TextSuggestionHost(this);
 
         mSelectionPopupController = new SelectionPopupController(
                 mContext, windowAndroid, webContents, mContainerView, mRenderCoordinates);
@@ -583,55 +601,6 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
      */
     public void setContainerViewInternals(InternalAccessDelegate internalDispatcher) {
         mContainerViewInternals = internalDispatcher;
-    }
-
-    @VisibleForTesting
-    void initPopupZoomer(Context context) {
-        mPopupZoomer = new PopupZoomer(context);
-        mPopupZoomer.setOnVisibilityChangedListener(new PopupZoomer.OnVisibilityChangedListener() {
-            // mContainerView can change, but this OnVisibilityChangedListener can only be used
-            // to add and remove views from the mContainerViewAtCreation.
-            private final ViewGroup mContainerViewAtCreation = mContainerView;
-
-            @Override
-            public void onPopupZoomerShown(final PopupZoomer zoomer) {
-                mContainerViewAtCreation.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        if (mContainerViewAtCreation.indexOfChild(zoomer) == -1) {
-                            mContainerViewAtCreation.addView(zoomer);
-                        }
-                    }
-                });
-            }
-
-            @Override
-            public void onPopupZoomerHidden(final PopupZoomer zoomer) {
-                mContainerViewAtCreation.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        if (mContainerViewAtCreation.indexOfChild(zoomer) != -1) {
-                            mContainerViewAtCreation.removeView(zoomer);
-                            mContainerViewAtCreation.invalidate();
-                        }
-                    }
-                });
-            }
-        });
-        PopupZoomer.OnTapListener listener = new PopupZoomer.OnTapListener() {
-            // mContainerView can change, but this OnTapListener can only be used
-            // with the mContainerViewAtCreation.
-            private final ViewGroup mContainerViewAtCreation = mContainerView;
-
-            @Override
-            public void onResolveTapDisambiguation(
-                    long timeMs, float x, float y, boolean isLongPress) {
-                if (mNativeContentViewCore == 0) return;
-                mContainerViewAtCreation.requestFocus();
-                nativeResolveTapDisambiguation(mNativeContentViewCore, timeMs, x, y, isLongPress);
-            }
-        };
-        mPopupZoomer.setOnTapListener(listener);
     }
 
     @VisibleForTesting
@@ -869,15 +838,6 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
         return false;
     }
 
-    @SuppressWarnings("unused")
-    @CalledByNative
-    private void requestFocus() {
-        if (mContainerView.isFocusable() && mContainerView.isFocusableInTouchMode()
-                && !mContainerView.isFocused()) {
-            mContainerView.requestFocus();
-        }
-    }
-
     @VisibleForTesting
     public void sendDoubleTapForTest(long timeMs, int x, int y) {
         if (mNativeContentViewCore == 0) return;
@@ -990,6 +950,7 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
         destroyPastePopup();
         hideSelectPopupWithCancelMessage();
         mPopupZoomer.hide(false);
+        mTextSuggestionHost.hidePopups();
         if (mWebContents != null) mWebContents.dismissTextHandles();
     }
 
@@ -999,6 +960,7 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
         destroyPastePopup();
         hideSelectPopupWithCancelMessage();
         mPopupZoomer.hide(false);
+        mTextSuggestionHost.hidePopups();
     }
 
     private void restoreSelectionPopupsIfNecessary() {
@@ -1019,6 +981,13 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
     private void resetGestureDetection() {
         if (mNativeContentViewCore == 0) return;
         nativeResetGestureDetection(mNativeContentViewCore);
+    }
+
+    /**
+     * Whether or not the associated ContentView is currently attached to a window.
+     */
+    public boolean isAttachedToWindow() {
+        return mAttachedToWindow;
     }
 
     /**
@@ -1172,7 +1141,7 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
      * the View focus state.
      */
     public void onResume() {
-        onFocusChanged(getContainerView().hasFocus(), true);
+        onFocusChanged(ViewUtils.hasFocus(getContainerView()), true);
     }
 
     /**
@@ -1631,19 +1600,6 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
 
     @SuppressWarnings("unused")
     @CalledByNative
-    private void showDisambiguationPopup(Rect targetRect, Bitmap zoomedBitmap) {
-        mPopupZoomer.setBitmap(zoomedBitmap);
-        mPopupZoomer.show(targetRect);
-    }
-
-    @SuppressWarnings("unused")
-    @CalledByNative
-    private MotionEventSynthesizer createMotionEventSynthesizer() {
-        return new MotionEventSynthesizer(getContainerView(), this);
-    }
-
-    @SuppressWarnings("unused")
-    @CalledByNative
     private void performLongPressHapticFeedback() {
         mContainerView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
     }
@@ -1657,14 +1613,6 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
     private void onRenderProcessChange() {
         // Immediately sync closed caption settings to the new render process.
         mSystemCaptioningBridge.syncToListener(this);
-    }
-
-    /**
-     * @see View#hasFocus()
-     */
-    @CalledByNative
-    private boolean hasFocus() {
-        return ViewUtils.hasFocus(mContainerView);
     }
 
     /**
@@ -1854,15 +1802,6 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
         if (mNativeContentViewCore != 0) {
             nativeRemoveJavascriptInterface(mNativeContentViewCore, name);
         }
-    }
-
-    /**
-     * Return the current scale of the ContentView.
-     * @return The current page scale factor.
-     */
-    @VisibleForTesting
-    public float getScale() {
-        return mRenderCoordinates.getPageScaleFactor();
     }
 
     @Override
@@ -2085,11 +2024,6 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
         return mIsMobileOptimizedHint;
     }
 
-    @CalledByNative
-    private static Rect createRect(int x, int y, int right, int bottom) {
-        return new Rect(x, y, right, bottom);
-    }
-
     public void setBackgroundOpaque(boolean opaque) {
         if (mNativeContentViewCore != 0) {
             nativeSetBackgroundOpaque(mNativeContentViewCore, opaque);
@@ -2143,6 +2077,7 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
             hidePopupsAndPreserveSelection();
             showSelectActionMode();
         }
+        mTextSuggestionHost.hidePopups();
 
         int rotationDegrees = 0;
         switch (rotation) {
@@ -2197,29 +2132,26 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
         mSelectionPopupController.setSelectionClient(selectionClient);
     }
 
-    // TODO(timav): Use |TextClassifier| instead of |Object| after we switch to Android SDK 26.
     /**
      * Sets TextClassifier for Smart Text selection.
      */
-    public void setTextClassifier(Object textClassifier) {
+    public void setTextClassifier(TextClassifier textClassifier) {
         mSelectionPopupController.setTextClassifier(textClassifier);
     }
 
-    // TODO(timav): Use |TextClassifier| instead of |Object| after we switch to Android SDK 26.
     /**
      * Returns TextClassifier that is used for Smart Text selection. If the custom classifier
      * has been set with setTextClassifier, returns that object, otherwise returns the system
      * classifier.
      */
-    public Object getTextClassifier() {
+    public TextClassifier getTextClassifier() {
         return mSelectionPopupController.getTextClassifier();
     }
 
-    // TODO(timav): Use |TextClassifier| instead of |Object| after we switch to Android SDK 26.
     /**
      * Returns the TextClassifier which has been set with setTextClassifier(), or null.
      */
-    public Object getCustomTextClassifier() {
+    public TextClassifier getCustomTextClassifier() {
         return mSelectionPopupController.getCustomTextClassifier();
     }
 
@@ -2256,9 +2188,6 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
             long nativeContentViewCore, long timeMs, boolean fromGamepad);
 
     private native void nativeDoubleTap(long nativeContentViewCore, long timeMs, float x, float y);
-
-    private native void nativeResolveTapDisambiguation(
-            long nativeContentViewCore, long timeMs, float x, float y, boolean isLongPress);
 
     private native void nativePinchBegin(long nativeContentViewCore, long timeMs, float x, float y);
 

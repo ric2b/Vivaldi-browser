@@ -97,26 +97,22 @@ class PLATFORM_EXPORT ScriptState : public RefCounted<ScriptState> {
     return From(isolate->GetCurrentContext());
   }
 
-  static ScriptState* ForFunctionObject(
+  static ScriptState* ForCurrentRealm(
       const v8::FunctionCallbackInfo<v8::Value>& info) {
-    // We're assuming that the current context is not yet changed since
-    // the callback function has got called back.
-    // TODO(yukishiino): Once info.GetFunctionContext() gets implemented,
-    // we should use it instead.
     return From(info.GetIsolate()->GetCurrentContext());
   }
 
-  static ScriptState* ForReceiverObject(
+  static ScriptState* ForRelevantRealm(
       const v8::FunctionCallbackInfo<v8::Value>& info) {
     return From(info.Holder()->CreationContext());
   }
 
-  static ScriptState* ForReceiverObject(
+  static ScriptState* ForRelevantRealm(
       const v8::PropertyCallbackInfo<v8::Value>& info) {
     return From(info.Holder()->CreationContext());
   }
 
-  static ScriptState* ForReceiverObject(
+  static ScriptState* ForRelevantRealm(
       const v8::PropertyCallbackInfo<void>& info) {
     return From(info.Holder()->CreationContext());
   }
@@ -129,7 +125,7 @@ class PLATFORM_EXPORT ScriptState : public RefCounted<ScriptState> {
     // ScriptState::from() must not be called for a context that does not have
     // valid embedder data in the embedder field.
     SECURITY_CHECK(script_state);
-    SECURITY_CHECK(script_state->GetContext() == context);
+    SECURITY_CHECK(script_state->context_ == context);
     return script_state;
   }
 

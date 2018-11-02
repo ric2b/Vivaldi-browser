@@ -8,14 +8,10 @@
 #include "core/layout/line/InlineTextBox.h"
 #include "core/layout/ng/inline/ng_inline_node.h"
 #include "core/layout/ng/inline/ng_physical_line_box_fragment.h"
-#include "core/layout/ng/inline/ng_physical_text_fragment.h"
 #include "core/layout/ng/layout_ng_block_flow.h"
 #include "core/layout/ng/ng_block_break_token.h"
 #include "core/layout/ng/ng_constraint_space_builder.h"
 #include "core/layout/ng/ng_layout_result.h"
-#include "core/layout/ng/ng_unpositioned_float.h"
-#include "platform/geometry/LayoutPoint.h"
-#include "platform/geometry/LayoutRect.h"
 
 namespace blink {
 namespace {
@@ -41,12 +37,16 @@ TEST_F(NGInlineLayoutAlgorithmTest, BreakToken) {
   LayoutNGBlockFlow* block_flow =
       ToLayoutNGBlockFlow(GetLayoutObjectByElementId("container"));
   NGInlineNode inline_node(block_flow);
+  NGLogicalSize size(LayoutUnit(50), LayoutUnit(20));
+
   RefPtr<NGConstraintSpace> constraint_space =
-      NGConstraintSpaceBuilder(NGWritingMode::kHorizontalTopBottom)
-          .SetAvailableSize({LayoutUnit(50), LayoutUnit(20)})
-          .ToConstraintSpace(NGWritingMode::kHorizontalTopBottom);
+      NGConstraintSpaceBuilder(
+          kHorizontalTopBottom,
+          /* icb_size */ size.ConvertToPhysical(kHorizontalTopBottom))
+          .SetAvailableSize(size)
+          .ToConstraintSpace(kHorizontalTopBottom);
   RefPtr<NGLayoutResult> layout_result =
-      inline_node.Layout(constraint_space.Get(), nullptr);
+      inline_node.Layout(*constraint_space, nullptr);
   auto* wrapper =
       ToNGPhysicalBoxFragment(layout_result->PhysicalFragment().Get());
 
@@ -65,7 +65,7 @@ TEST_F(NGInlineLayoutAlgorithmTest, BreakToken) {
 
   // Perform 2nd layout with the break token from the 2nd line.
   RefPtr<NGLayoutResult> layout_result2 =
-      inline_node.Layout(constraint_space.Get(), line2->BreakToken());
+      inline_node.Layout(*constraint_space, line2->BreakToken());
   auto* wrapper2 =
       ToNGPhysicalBoxFragment(layout_result2->PhysicalFragment().Get());
 
@@ -102,12 +102,12 @@ TEST_F(NGInlineLayoutAlgorithmTest, ContainerBorderPadding) {
   NGBlockNode block_node(block_flow);
   RefPtr<NGConstraintSpace> space =
       NGConstraintSpace::CreateFromLayoutObject(*block_flow);
-  RefPtr<NGLayoutResult> layout_result = block_node.Layout(space.Get());
+  RefPtr<NGLayoutResult> layout_result = block_node.Layout(*space);
 
   auto* block_box =
       ToNGPhysicalBoxFragment(layout_result->PhysicalFragment().Get());
   EXPECT_TRUE(layout_result->BfcOffset().has_value());
-  EXPECT_EQ(0, layout_result->BfcOffset().value().inline_offset);
+  EXPECT_EQ(0, layout_result->BfcOffset().value().line_offset);
   EXPECT_EQ(0, layout_result->BfcOffset().value().block_offset);
 
   auto* wrapper = ToNGPhysicalBoxFragment(block_box->Children()[0].Get());
@@ -139,7 +139,7 @@ TEST_F(NGInlineLayoutAlgorithmTest, MAYBE_VerticalAlignBottomReplaced) {
   NGInlineNode inline_node(block_flow);
   RefPtr<NGConstraintSpace> space =
       NGConstraintSpace::CreateFromLayoutObject(*block_flow);
-  RefPtr<NGLayoutResult> layout_result = inline_node.Layout(space.Get());
+  RefPtr<NGLayoutResult> layout_result = inline_node.Layout(*space);
   auto* wrapper =
       ToNGPhysicalBoxFragment(layout_result->PhysicalFragment().Get());
   EXPECT_EQ(1u, wrapper->Children().size());

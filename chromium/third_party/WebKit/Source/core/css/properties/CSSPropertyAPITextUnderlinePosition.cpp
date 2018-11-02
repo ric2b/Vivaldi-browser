@@ -7,13 +7,13 @@
 #include "core/css/parser/CSSPropertyParserHelpers.h"
 #include "platform/RuntimeEnabledFeatures.h"
 
-class CSSParserLocalContext;
 namespace blink {
 
-const CSSValue* CSSPropertyAPITextUnderlinePosition::parseSingleValue(
+const CSSValue* CSSPropertyAPITextUnderlinePosition::ParseSingleValue(
+    CSSPropertyID,
     CSSParserTokenRange& range,
     const CSSParserContext& context,
-    const CSSParserLocalContext&) {
+    const CSSParserLocalContext&) const {
   // auto | [ under || [ left | right ] ], but we only support auto | under
   // for now
   DCHECK(RuntimeEnabledFeatures::CSS3TextDecorationsEnabled());

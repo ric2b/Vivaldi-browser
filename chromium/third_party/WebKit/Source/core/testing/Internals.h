@@ -104,11 +104,12 @@ class Internals final : public GarbageCollected<Internals>,
   int getResourcePriority(const String& url, Document*);
   String getResourceHeader(const String& url, const String& header, Document*);
 
-  bool isSharingStyle(Element*, Element*) const;
-
   CSSStyleDeclaration* computedStyleIncludingVisitedInfo(Node*) const;
 
-  void setBrowserControlsState(float height, bool shrinks_layout);
+  void setBrowserControlsState(float top_height,
+                               float bottom_height,
+                               bool shrinks_layout);
+  void setBrowserControlsShownRatio(float);
 
   ShadowRoot* createUserAgentShadowRoot(Element* host);
 
@@ -154,7 +155,6 @@ class Internals final : public GarbageCollected<Internals>,
 
   unsigned updateStyleAndReturnAffectedElementCount(ExceptionState&) const;
   unsigned needsLayoutCount(ExceptionState&) const;
-  unsigned forceLayoutCount(ExceptionState&) const;
   unsigned hitTestCount(Document*, ExceptionState&) const;
   unsigned hitTestCacheHits(Document*, ExceptionState&) const;
   Element* elementFromPoint(Document*,
@@ -166,6 +166,7 @@ class Internals final : public GarbageCollected<Internals>,
   void clearHitTestCache(Document*, ExceptionState&) const;
 
   String visiblePlaceholder(Element*);
+  bool isValidationMessageVisible(Element*);
   void selectColorInColorChooser(Element*, const String& color_value);
   void endColorChooser(Element*);
   bool hasAutofocusRequest(Document*);
@@ -202,6 +203,13 @@ class Internals final : public GarbageCollected<Internals>,
                                  const String& thickness_value,
                                  const String& background_color_value,
                                  ExceptionState&);
+  void addSuggestionMarker(const Range*,
+                           const Vector<String>& suggestions,
+                           const String& suggestion_highlight_color_value,
+                           const String& underline_color_value,
+                           const String& thickness_value,
+                           const String& background_color_value,
+                           ExceptionState&);
   void setTextMatchMarkersActive(Node*,
                                  unsigned start_offset,
                                  unsigned end_offset,
@@ -413,8 +421,8 @@ class Internals final : public GarbageCollected<Internals>,
   DOMRectList* draggableRegions(Document*, ExceptionState&);
   DOMRectList* nonDraggableRegions(Document*, ExceptionState&);
 
-  DOMArrayBuffer* serializeObject(PassRefPtr<SerializedScriptValue>) const;
-  PassRefPtr<SerializedScriptValue> deserializeBuffer(DOMArrayBuffer*) const;
+  DOMArrayBuffer* serializeObject(RefPtr<SerializedScriptValue>) const;
+  RefPtr<SerializedScriptValue> deserializeBuffer(DOMArrayBuffer*) const;
 
   DOMArrayBuffer* serializeWithInlineWasm(ScriptValue) const;
   ScriptValue deserializeBufferContainingWasm(ScriptState*,
@@ -572,6 +580,11 @@ class Internals final : public GarbageCollected<Internals>,
   void setIsLowEndDevice(bool);
   // Returns if the device is low-end.
   bool isLowEndDevice() const;
+
+  // Returns a list of the supported text encoding aliases ("UTF-8", "GBK",
+  // "windows-1252", "Latin-1", "iso-8859-1", etc).
+  // The order is not defined.
+  Vector<String> supportedTextEncodingLabels() const;
 
  private:
   explicit Internals(ExecutionContext*);

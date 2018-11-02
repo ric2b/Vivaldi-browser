@@ -16,6 +16,8 @@
 #include "base/profiler/scoped_tracker.h"
 #include "base/stl_util.h"
 #include "base/strings/string_piece.h"
+#include "base/task_scheduler/post_task.h"
+#include "base/threading/thread_restrictions.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -44,7 +46,6 @@ using content::BrowserThread;
 namespace {
 
 const char kNameKey[] = "name";
-const char kShortcutNameKey[] = "shortcut_name";
 const char kGAIANameKey[] = "gaia_name";
 const char kGAIAGivenNameKey[] = "gaia_given_name";
 const char kGAIAIdKey[] = "gaia_id";
@@ -52,8 +53,6 @@ const char kUserNameKey[] = "user_name";
 const char kIsUsingDefaultNameKey[] = "is_using_default_name";
 const char kIsUsingDefaultAvatarKey[] = "is_using_default_avatar";
 const char kAvatarIconKey[] = "avatar_icon";
-const char kAuthCredentialsKey[] = "local_auth_credentials";
-const char kPasswordTokenKey[] = "gaia_password_token";
 const char kUseGAIAPictureKey[] = "use_gaia_picture";
 const char kBackgroundAppsKey[] = "background_apps";
 const char kGAIAPictureFileNameKey[] = "gaia_picture_file_name";
@@ -61,8 +60,6 @@ const char kIsOmittedFromProfileListKey[] = "is_omitted_from_profile_list";
 const char kSigninRequiredKey[] = "signin_required";
 const char kSupervisedUserId[] = "managed_user_id";
 const char kProfileIsEphemeral[] = "is_ephemeral";
-const char kActiveTimeKey[] = "active_time";
-const char kIsAuthErrorKey[] = "is_auth_error";
 
 // TODO(dullweber): Remove these constants after the stored data is removed.
 const char kStatsBrowsingHistoryKeyDeprecated[] = "stats_browsing_history";
@@ -77,7 +74,7 @@ typedef std::vector<unsigned char> ImageData;
 void SaveBitmap(std::unique_ptr<ImageData> data,
                 const base::FilePath& image_path,
                 const base::Closure& callback) {
-  DCHECK_CURRENTLY_ON(BrowserThread::FILE);
+  base::ThreadRestrictions::AssertIOAllowed();
 
   // Make sure the destination directory exists.
   base::FilePath dir = image_path.DirName();
@@ -100,7 +97,7 @@ void SaveBitmap(std::unique_ptr<ImageData> data,
 // will be NULL.
 void ReadBitmap(const base::FilePath& image_path,
                 gfx::Image** out_image) {
-  DCHECK_CURRENTLY_ON(BrowserThread::FILE);
+  base::ThreadRestrictions::AssertIOAllowed();
   *out_image = NULL;
 
   // If the path doesn't exist, don't even try reading it.
@@ -125,13 +122,13 @@ void ReadBitmap(const base::FilePath& image_path,
 
 void RunCallbackIfFileMissing(const base::FilePath& file_path,
                               const base::Closure& callback) {
-  DCHECK_CURRENTLY_ON(BrowserThread::FILE);
+  base::ThreadRestrictions::AssertIOAllowed();
   if (!base::PathExists(file_path))
     BrowserThread::PostTask(BrowserThread::UI, FROM_HERE, callback);
 }
 
 void DeleteBitmap(const base::FilePath& image_path) {
-  DCHECK_CURRENTLY_ON(BrowserThread::FILE);
+  base::ThreadRestrictions::AssertIOAllowed();
   base::DeleteFile(image_path, false);
 }
 
@@ -140,7 +137,10 @@ void DeleteBitmap(const base::FilePath& image_path) {
 ProfileInfoCache::ProfileInfoCache(PrefService* prefs,
                                    const base::FilePath& user_data_dir)
     : ProfileAttributesStorage(prefs, user_data_dir),
-      disable_avatar_download_for_testing_(false) {
+      disable_avatar_download_for_testing_(false),
+      file_task_runner_(base::CreateSequencedTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+           base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})) {
   // Populate the cache
   DictionaryPrefUpdate update(prefs_, prefs::kProfileInfoCache);
   base::DictionaryValue* cache = update.Get();
@@ -218,14 +218,6 @@ void ProfileInfoCache::AddProfileToCache(
     observer.OnProfileAdded(profile_path);
 }
 
-void ProfileInfoCache::AddObserver(ProfileInfoCacheObserver* obs) {
-  observer_list_.AddObserver(obs);
-}
-
-void ProfileInfoCache::RemoveObserver(ProfileInfoCacheObserver* obs) {
-  observer_list_.RemoveObserver(obs);
-}
-
 void ProfileInfoCache::DeleteProfileFromCache(
     const base::FilePath& profile_path) {
   size_t profile_index = GetIndexOfProfileWithPath(profile_path);
@@ -278,25 +270,8 @@ base::string16 ProfileInfoCache::GetNameOfProfileAtIndex(size_t index) const {
   return name;
 }
 
-base::string16 ProfileInfoCache::GetShortcutNameOfProfileAtIndex(size_t index)
-    const {
-  base::string16 shortcut_name;
-  GetInfoForProfileAtIndex(index)->GetString(
-      kShortcutNameKey, &shortcut_name);
-  return shortcut_name;
-}
-
 base::FilePath ProfileInfoCache::GetPathOfProfileAtIndex(size_t index) const {
   return user_data_dir_.AppendASCII(sorted_keys_[index]);
-}
-
-base::Time ProfileInfoCache::GetProfileActiveTimeAtIndex(size_t index) const {
-  double dt;
-  if (GetInfoForProfileAtIndex(index)->GetDouble(kActiveTimeKey, &dt)) {
-    return base::Time::FromDoubleT(dt);
-  } else {
-    return base::Time();
-  }
 }
 
 base::string16 ProfileInfoCache::GetUserNameOfProfileAtIndex(
@@ -325,20 +300,6 @@ const gfx::Image& ProfileInfoCache::GetAvatarIconOfProfileAtIndex(
   int resource_id = profiles::GetDefaultAvatarIconResourceIDAtIndex(
       GetAvatarIconIndexOfProfileAtIndex(index));
   return ResourceBundle::GetSharedInstance().GetNativeImageNamed(resource_id);
-}
-
-std::string ProfileInfoCache::GetLocalAuthCredentialsOfProfileAtIndex(
-    size_t index) const {
-  std::string credentials;
-  GetInfoForProfileAtIndex(index)->GetString(kAuthCredentialsKey, &credentials);
-  return credentials;
-}
-
-std::string ProfileInfoCache::GetPasswordChangeDetectionTokenAtIndex(
-    size_t index) const {
-  std::string token;
-  GetInfoForProfileAtIndex(index)->GetString(kPasswordTokenKey, &token);
-  return token;
 }
 
 bool ProfileInfoCache::GetBackgroundStatusOfProfileAtIndex(
@@ -438,25 +399,10 @@ std::string ProfileInfoCache::GetSupervisedUserIdOfProfileAtIndex(
   return supervised_user_id;
 }
 
-bool ProfileInfoCache::ProfileIsEphemeralAtIndex(size_t index) const {
-  bool value = false;
-  GetInfoForProfileAtIndex(index)->GetBoolean(kProfileIsEphemeral, &value);
-  return value;
-}
-
 bool ProfileInfoCache::ProfileIsUsingDefaultNameAtIndex(size_t index) const {
   bool value = false;
   GetInfoForProfileAtIndex(index)->GetBoolean(kIsUsingDefaultNameKey, &value);
   return value;
-}
-
-bool ProfileInfoCache::ProfileIsAuthenticatedAtIndex(size_t index) const {
-  // The profile is authenticated if the gaia_id of the info is not empty.
-  // If it is empty, also check if the user name is not empty.  This latter
-  // check is needed in case the profile has not been loaded yet and the
-  // gaia_id property has not yet been written.
-  return !GetGAIAIdOfProfileAtIndex(index).empty() ||
-      !GetUserNameOfProfileAtIndex(index).empty();
 }
 
 bool ProfileInfoCache::ProfileIsUsingDefaultAvatarAtIndex(size_t index) const {
@@ -465,10 +411,9 @@ bool ProfileInfoCache::ProfileIsUsingDefaultAvatarAtIndex(size_t index) const {
   return value;
 }
 
-bool ProfileInfoCache::ProfileIsAuthErrorAtIndex(size_t index) const {
-  bool value = false;
-  GetInfoForProfileAtIndex(index)->GetBoolean(kIsAuthErrorKey, &value);
-  return value;
+bool ProfileInfoCache::IsGAIAPictureOfProfileAtIndexLoaded(size_t index) const {
+  return cached_avatar_images_.count(
+      CacheKeyFromProfilePath(GetPathOfProfileAtIndex(index)));
 }
 
 size_t ProfileInfoCache::GetAvatarIconIndexOfProfileAtIndex(size_t index)
@@ -480,18 +425,6 @@ size_t ProfileInfoCache::GetAvatarIconIndexOfProfileAtIndex(size_t index)
     DLOG(WARNING) << "Unknown avatar icon: " << icon_url;
 
   return icon_index;
-}
-
-void ProfileInfoCache::SetProfileActiveTimeAtIndex(size_t index) {
-  if (base::Time::Now() - GetProfileActiveTimeAtIndex(index) <
-      base::TimeDelta::FromHours(1)) {
-    return;
-  }
-
-  std::unique_ptr<base::DictionaryValue> info(
-      GetInfoForProfileAtIndex(index)->DeepCopy());
-  info->SetDouble(kActiveTimeKey, base::Time::Now().ToDoubleT());
-  SetInfoForProfileAtIndex(index, std::move(info));
 }
 
 void ProfileInfoCache::SetNameOfProfileAtIndex(size_t index,
@@ -516,17 +449,6 @@ void ProfileInfoCache::SetNameOfProfileAtIndex(size_t index,
     for (auto& observer : observer_list_)
       observer.OnProfileNameChanged(profile_path, old_display_name);
   }
-}
-
-void ProfileInfoCache::SetShortcutNameOfProfileAtIndex(
-    size_t index,
-    const base::string16& shortcut_name) {
-  if (shortcut_name == GetShortcutNameOfProfileAtIndex(index))
-    return;
-  std::unique_ptr<base::DictionaryValue> info(
-      GetInfoForProfileAtIndex(index)->DeepCopy());
-  info->SetString(kShortcutNameKey, shortcut_name);
-  SetInfoForProfileAtIndex(index, std::move(info));
 }
 
 void ProfileInfoCache::SetAuthInfoOfProfileAtIndex(
@@ -603,24 +525,6 @@ void ProfileInfoCache::SetSupervisedUserIdOfProfileAtIndex(
     observer.OnProfileSupervisedUserIdChanged(profile_path);
 }
 
-void ProfileInfoCache::SetLocalAuthCredentialsOfProfileAtIndex(
-    size_t index,
-    const std::string& credentials) {
-  std::unique_ptr<base::DictionaryValue> info(
-      GetInfoForProfileAtIndex(index)->DeepCopy());
-  info->SetString(kAuthCredentialsKey, credentials);
-  SetInfoForProfileAtIndex(index, std::move(info));
-}
-
-void ProfileInfoCache::SetPasswordChangeDetectionTokenAtIndex(
-    size_t index,
-    const std::string& token) {
-  std::unique_ptr<base::DictionaryValue> info(
-      GetInfoForProfileAtIndex(index)->DeepCopy());
-  info->SetString(kPasswordTokenKey, token);
-  SetInfoForProfileAtIndex(index, std::move(info));
-}
-
 void ProfileInfoCache::SetBackgroundStatusOfProfileAtIndex(
     size_t index,
     bool running_background_apps) {
@@ -690,8 +594,8 @@ void ProfileInfoCache::SetGAIAPictureOfProfileAtIndex(size_t index,
     // Delete the old bitmap from disk.
     if (!old_file_name.empty()) {
       base::FilePath image_path = path.AppendASCII(old_file_name);
-      BrowserThread::PostTask(BrowserThread::FILE, FROM_HERE,
-                              base::BindOnce(&DeleteBitmap, image_path));
+      file_task_runner_->PostTask(FROM_HERE,
+                                  base::BindOnce(&DeleteBitmap, image_path));
     }
   } else {
     // Save the new bitmap to disk.
@@ -735,16 +639,6 @@ void ProfileInfoCache::SetProfileSigninRequiredAtIndex(size_t index,
   NotifyIsSigninRequiredChanged(GetPathOfProfileAtIndex(index));
 }
 
-void ProfileInfoCache::SetProfileIsEphemeralAtIndex(size_t index, bool value) {
-  if (value == ProfileIsEphemeralAtIndex(index))
-    return;
-
-  std::unique_ptr<base::DictionaryValue> info(
-      GetInfoForProfileAtIndex(index)->DeepCopy());
-  info->SetBoolean(kProfileIsEphemeral, value);
-  SetInfoForProfileAtIndex(index, std::move(info));
-}
-
 void ProfileInfoCache::SetProfileIsUsingDefaultNameAtIndex(
     size_t index, bool value) {
   if (value == ProfileIsUsingDefaultNameAtIndex(index))
@@ -774,16 +668,6 @@ void ProfileInfoCache::SetProfileIsUsingDefaultAvatarAtIndex(
   std::unique_ptr<base::DictionaryValue> info(
       GetInfoForProfileAtIndex(index)->DeepCopy());
   info->SetBoolean(kIsUsingDefaultAvatarKey, value);
-  SetInfoForProfileAtIndex(index, std::move(info));
-}
-
-void ProfileInfoCache::SetProfileIsAuthErrorAtIndex(size_t index, bool value) {
-  if (value == ProfileIsAuthErrorAtIndex(index))
-    return;
-
-  std::unique_ptr<base::DictionaryValue> info(
-      GetInfoForProfileAtIndex(index)->DeepCopy());
-  info->SetBoolean(kIsAuthErrorKey, value);
   SetInfoForProfileAtIndex(index, std::move(info));
 }
 
@@ -824,8 +708,8 @@ void ProfileInfoCache::DownloadHighResAvatarIfNeeded(
                  AsWeakPtr(),
                  icon_index,
                  profile_path);
-  BrowserThread::PostTask(
-      BrowserThread::FILE, FROM_HERE,
+  file_task_runner_->PostTask(
+      FROM_HERE,
       base::BindOnce(&RunCallbackIfFileMissing, file_path, callback));
 }
 
@@ -856,8 +740,8 @@ void ProfileInfoCache::SaveAvatarImageAtPath(
   } else {
     base::Closure callback = base::Bind(&ProfileInfoCache::OnAvatarPictureSaved,
         AsWeakPtr(), key, profile_path);
-    BrowserThread::PostTask(
-        BrowserThread::FILE, FROM_HERE,
+    file_task_runner_->PostTask(
+        FROM_HERE,
         base::BindOnce(&SaveBitmap, base::Passed(&data), image_path, callback));
   }
 }
@@ -1001,9 +885,8 @@ const gfx::Image* ProfileInfoCache::LoadAvatarPictureFromPath(
   cached_avatar_images_loading_[key] = true;
 
   gfx::Image** image = new gfx::Image*;
-  BrowserThread::PostTaskAndReply(
-      BrowserThread::FILE, FROM_HERE,
-      base::BindOnce(&ReadBitmap, image_path, image),
+  file_task_runner_->PostTaskAndReply(
+      FROM_HERE, base::BindOnce(&ReadBitmap, image_path, image),
       base::BindOnce(&ProfileInfoCache::OnAvatarPictureLoaded,
                      const_cast<ProfileInfoCache*>(this)->AsWeakPtr(),
                      profile_path, key, image));
@@ -1125,18 +1008,6 @@ void ProfileInfoCache::RemoveProfile(const base::FilePath& profile_path) {
   DeleteProfileFromCache(profile_path);
 }
 
-std::vector<ProfileAttributesEntry*>
-ProfileInfoCache::GetAllProfilesAttributes() {
-  std::vector<ProfileAttributesEntry*> ret;
-  for (size_t i = 0; i < GetNumberOfProfiles(); ++i) {
-    ProfileAttributesEntry* entry;
-    if (GetProfileAttributesWithPath(GetPathOfProfileAtIndex(i), &entry)) {
-      ret.push_back(entry);
-    }
-  }
-  return ret;
-}
-
 bool ProfileInfoCache::GetProfileAttributesWithPath(
     const base::FilePath& path, ProfileAttributesEntry** entry) {
   const auto entry_iter = profile_attributes_entries_.find(path.value());
@@ -1148,7 +1019,7 @@ bool ProfileInfoCache::GetProfileAttributesWithPath(
     // The profile info is in the cache but its entry isn't created yet, insert
     // it in the map.
     current_entry.reset(new ProfileAttributesEntry());
-    current_entry->Initialize(this, path);
+    current_entry->Initialize(this, path, prefs_);
   }
 
   *entry = current_entry.get();

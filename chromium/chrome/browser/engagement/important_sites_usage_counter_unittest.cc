@@ -14,6 +14,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/test/test_browser_thread_bundle.h"
+#include "content/public/test/test_utils.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
 #include "storage/browser/test/mock_storage_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -30,15 +31,14 @@ class ImportantSitesUsageCounterTest : public testing::Test {
     run_loop_.reset(new base::RunLoop());
   }
 
-  void TearDown() override { base::RunLoop().RunUntilIdle(); }
+  void TearDown() override { content::RunAllBlockingPoolTasksUntilIdle(); }
 
   TestingProfile* profile() { return &profile_; }
 
   QuotaManager* CreateQuotaManager() {
     quota_manager_ = new QuotaManager(
         false, temp_dir_.GetPath(),
-        BrowserThread::GetTaskRunnerForThread(BrowserThread::IO).get(),
-        BrowserThread::GetTaskRunnerForThread(BrowserThread::DB).get(), nullptr,
+        BrowserThread::GetTaskRunnerForThread(BrowserThread::IO).get(), nullptr,
         storage::GetQuotaSettingsFunc());
     return quota_manager_.get();
   }

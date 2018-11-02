@@ -11,14 +11,74 @@
 #include <vector>
 
 #include "net/base/net_export.h"
+#include "net/cert/cert_type.h"
+#include "net/cert/scoped_nss_types.h"
+#include "net/cert/x509_certificate.h"
 
 typedef struct CERTCertificateStr CERTCertificate;
+typedef struct CERTNameStr CERTName;
 typedef struct PK11SlotInfoStr PK11SlotInfo;
 typedef struct SECItemStr SECItem;
 
 namespace net {
 
 namespace x509_util {
+
+// Returns true if two certificate handles refer to identical certificates.
+NET_EXPORT bool IsSameCertificate(CERTCertificate* a, CERTCertificate* b);
+NET_EXPORT bool IsSameCertificate(CERTCertificate* a, const X509Certificate* b);
+NET_EXPORT bool IsSameCertificate(const X509Certificate* a, CERTCertificate* b);
+
+// Returns a CERTCertificate handle from the DER-encoded representation. The
+// returned value may reference an already existing CERTCertificate object.
+// Returns NULL on failure.
+NET_EXPORT ScopedCERTCertificate
+CreateCERTCertificateFromBytes(const uint8_t* data, size_t length);
+
+// Returns a CERTCertificate handle from |cert|. The returned value may
+// reference an already existing CERTCertificate object.  Returns NULL on
+// failure.
+NET_EXPORT ScopedCERTCertificate
+CreateCERTCertificateFromX509Certificate(const X509Certificate* cert);
+
+// Returns a vector of CERTCertificates corresponding to |cert| and its
+// intermediates (if any). Returns an empty vector on failure.
+NET_EXPORT ScopedCERTCertificateList
+CreateCERTCertificateListFromX509Certificate(const X509Certificate* cert);
+
+// Parses all of the certificates possible from |data|. |format| is a
+// bit-wise OR of X509Certificate::Format, indicating the possible formats the
+// certificates may have been serialized as. If an error occurs, an empty
+// collection will be returned.
+NET_EXPORT ScopedCERTCertificateList
+CreateCERTCertificateListFromBytes(const char* data, size_t length, int format);
+
+// Increments the refcount of |cert| and returns a handle for that reference.
+NET_EXPORT ScopedCERTCertificate DupCERTCertificate(CERTCertificate* cert);
+
+// Creates an X509Certificate from |cert|, with intermediates from |chain|.
+// Returns NULL on failure.
+NET_EXPORT scoped_refptr<X509Certificate>
+CreateX509CertificateFromCERTCertificate(
+    CERTCertificate* cert,
+    const std::vector<CERTCertificate*>& chain);
+
+// Creates an X509Certificate with non-standard parsing options.
+// Do not use without consulting //net owners.
+NET_EXPORT scoped_refptr<X509Certificate>
+CreateX509CertificateFromCERTCertificate(
+    CERTCertificate* cert,
+    const std::vector<CERTCertificate*>& chain,
+    X509Certificate::UnsafeCreateOptions options);
+
+// Creates an X509Certificate from |cert|, with no intermediates.
+// Returns NULL on failure.
+NET_EXPORT scoped_refptr<X509Certificate>
+CreateX509CertificateFromCERTCertificate(CERTCertificate* cert);
+
+// Obtains the DER encoded certificate data for |cert|. On success, returns
+// true and writes the DER encoded certificate to |*der_encoded|.
+NET_EXPORT bool GetDEREncoded(CERTCertificate* cert, std::string* der_encoded);
 
 // Stores the values of all rfc822Name subjectAltNames from |cert_handle|
 // into |names|. If no names are present, clears |names|.
@@ -49,16 +109,15 @@ NET_EXPORT void GetRFC822SubjectAltNames(CERTCertificate* cert_handle,
 NET_EXPORT void GetUPNSubjectAltNames(CERTCertificate* cert_handle,
                                       std::vector<std::string>* names);
 
-// Generates a unique nickname for |slot|, returning |nickname| if it is
-// already unique.
-//
-// Note: The nickname returned will NOT include the token name, thus the
-// token name must be prepended if calling an NSS function that expects
-// <token>:<nickname>.
-// TODO(gspencer): Internationalize this: it's wrong to hard-code English.
-std::string GetUniqueNicknameForSlot(const std::string& nickname,
-                                     const SECItem* subject,
-                                     PK11SlotInfo* slot);
+// Generates a unique nickname for |nss_cert| based on the |type| and |slot|.
+NET_EXPORT std::string GetDefaultUniqueNickname(CERTCertificate* nss_cert,
+                                                CertType type,
+                                                PK11SlotInfo* slot);
+
+// Returns a name that can be used to represent the principal.  It tries in
+// this order: CN, O and OU and returns the first non-empty one found.
+// This mirrors net::CertPrincipal::GetDisplayName.
+NET_EXPORT std::string GetCERTNameDisplayName(CERTName* name);
 
 } // namespace x509_util
 

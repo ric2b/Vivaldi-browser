@@ -52,3 +52,7 @@ DISABLE(BrowsingHistoryHandlerTest, ObservingWebHistoryDeletions)
 // Suspect that this can cause addition of processes that stick around,
 // causing lots of processes to start on boot, in case of one or more crashes
 DISABLE(ServiceProcessStateTest, AutoRun)
+
+// Feature we do not use
+DISABLE_ALL(WebHistoryServiceTest)
+DISABLE(HistoryApiTest, Delete)

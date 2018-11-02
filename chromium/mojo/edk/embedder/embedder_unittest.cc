@@ -24,6 +24,7 @@
 #include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/test_timeouts.h"
+#include "build/build_config.h"
 #include "mojo/edk/embedder/embedder.h"
 #include "mojo/edk/embedder/named_platform_handle.h"
 #include "mojo/edk/embedder/named_platform_handle_utils.h"
@@ -161,7 +162,7 @@ TEST_F(EmbedderTest, PipeSetup_LaunchDeath) {
 TEST_F(EmbedderTest, PipeSetup_LaunchFailure) {
   PlatformChannelPair pair;
 
-  auto invitation = base::MakeUnique<OutgoingBrokerClientInvitation>();
+  auto invitation = std::make_unique<OutgoingBrokerClientInvitation>();
   ScopedMessagePipeHandle parent_mp = invitation->AttachMessagePipe("unused");
 
   // Ensure that if an OutgoingBrokerClientInvitation goes away before Send() is
@@ -493,6 +494,9 @@ DEFINE_TEST_CLIENT_TEST_WITH_PIPE(MultiprocessMixMachAndFdsClient,
 
 #endif  // !defined(OS_IOS)
 
+#if !defined(OS_FUCHSIA)
+// TODO(fuchsia): Implement NamedPlatformHandles (crbug.com/754038).
+
 NamedPlatformHandle GenerateChannelName() {
 #if defined(OS_POSIX)
   base::FilePath temp_dir;
@@ -513,7 +517,7 @@ TEST_F(EmbedderTest, ClosePendingPeerConnection) {
   NamedPlatformHandle named_handle = GenerateChannelName();
   std::string peer_token = GenerateRandomToken();
 
-  auto peer_connection = base::MakeUnique<PeerConnection>();
+  auto peer_connection = std::make_unique<PeerConnection>();
   ScopedMessagePipeHandle server_pipe =
       peer_connection->Connect(ConnectionParams(
           TransportProtocol::kLegacy, CreateServerHandle(named_handle)));
@@ -534,6 +538,8 @@ TEST_F(EmbedderTest, ClosePendingPeerConnection) {
   run_loop.Run();
   EXPECT_FALSE(client_handle.is_valid());
 }
+
+#endif  // !defined(OS_FUCHSIA)
 
 #if !defined(OS_IOS)
 

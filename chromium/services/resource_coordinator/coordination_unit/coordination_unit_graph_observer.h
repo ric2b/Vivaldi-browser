@@ -11,6 +11,9 @@
 namespace resource_coordinator {
 
 class CoordinationUnitImpl;
+class CoordinationUnitManager;
+class FrameCoordinationUnitImpl;
+class WebContentsCoordinationUnitImpl;
 
 // An observer API for the coordination unit graph maintained by GRC.
 //
@@ -39,9 +42,19 @@ class CoordinationUnitGraphObserver {
   virtual void OnCoordinationUnitCreated(
       const CoordinationUnitImpl* coordination_unit) {}
 
+  // Called when the |coordination_unit| is about to be destroyed.
+  virtual void OnBeforeCoordinationUnitDestroyed(
+      const CoordinationUnitImpl* coordination_unit) {}
+
   // Called whenever a new parent-child relationship occurs where the
   // |coordination_unit| is the parent of |child_coordination_unit|
   virtual void OnChildAdded(
+      const CoordinationUnitImpl* coordination_unit,
+      const CoordinationUnitImpl* child_coordination_unit) {}
+
+  // Called whenever parent-child relationship ends where the
+  // |coordination_unit| was the parent and the |child_coordination_unit|.
+  virtual void OnChildRemoved(
       const CoordinationUnitImpl* coordination_unit,
       const CoordinationUnitImpl* child_coordination_unit) {}
 
@@ -51,29 +64,51 @@ class CoordinationUnitGraphObserver {
       const CoordinationUnitImpl* coordination_unit,
       const CoordinationUnitImpl* parent_coordination_unit) {}
 
-  // Called whenever a |property| within the |coordination_unit|'s
-  // internal property store has changed.
-  virtual void OnPropertyChanged(const CoordinationUnitImpl* coordination_unit,
-                                 const mojom::PropertyType property_type,
-                                 const base::Value& value) {}
-
-  // Called whenever parent-child relationship ends where the
-  // |coordination_unit| was the parent and the |child_coordination_unit|.
-  virtual void OnChildRemoved(
-      const CoordinationUnitImpl* coordination_unit,
-      const CoordinationUnitImpl* child_coordination_unit) {}
-
   // Called whenever parent-child relationship ends where the
   // |coordination_unit| was the child and the |child_coordination_unit|.
   virtual void OnParentRemoved(
       const CoordinationUnitImpl* coordination_unit,
       const CoordinationUnitImpl* parent_coordination_unit) {}
 
-  // Called when the |coordination_unit| is about to be destroyed.
-  virtual void OnBeforeCoordinationUnitDestroyed(
-      const CoordinationUnitImpl* coordination_unit) {}
+  // Called whenever a property of the |coordination_unit| is changed if the
+  // |coordination_unit| doesn't implement its own PropertyChanged handler.
+  virtual void OnPropertyChanged(const CoordinationUnitImpl* coordination_unit,
+                                 const mojom::PropertyType property_type,
+                                 int64_t value) {}
+
+  // Called whenever a property of the FrameCoordinationUnit is changed.
+  virtual void OnFramePropertyChanged(const FrameCoordinationUnitImpl* frame_cu,
+                                      const mojom::PropertyType property_type,
+                                      int64_t value) {}
+
+  // Called whenever a property of the WebContentsCoordinationUnit is changed.
+  virtual void OnWebContentsPropertyChanged(
+      const WebContentsCoordinationUnitImpl* web_contents_cu,
+      const mojom::PropertyType property_type,
+      int64_t value) {}
+
+  // Called whenever an event is received in |coordination_unit| if the
+  // |coordination_unit| doesn't implement its own EventReceived handler.
+  virtual void OnEventReceived(const CoordinationUnitImpl* coordination_unit,
+                               const mojom::Event event) {}
+  virtual void OnFrameEventReceived(const FrameCoordinationUnitImpl* frame_cu,
+                                    const mojom::Event event) {}
+  virtual void OnWebContentsEventReceived(
+      const WebContentsCoordinationUnitImpl* web_contents_cu,
+      const mojom::Event event) {}
+
+  void set_coordination_unit_manager(
+      CoordinationUnitManager* coordination_unit_manager) {
+    coordination_unit_manager_ = coordination_unit_manager;
+  }
+
+  const CoordinationUnitManager& coordination_unit_manager() const {
+    return *coordination_unit_manager_;
+  }
 
  private:
+  CoordinationUnitManager* coordination_unit_manager_ = nullptr;
+
   DISALLOW_COPY_AND_ASSIGN(CoordinationUnitGraphObserver);
 };
 

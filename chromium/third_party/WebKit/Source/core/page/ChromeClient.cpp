@@ -22,6 +22,7 @@
 #include "core/page/ChromeClient.h"
 
 #include <algorithm>
+#include "core/CoreInitializer.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/frame/FrameConsole.h"
@@ -43,18 +44,8 @@ DEFINE_TRACE(ChromeClient) {
   PlatformChromeClient::Trace(visitor);
 }
 
-ChromeClient::SupplementInstallCallback
-    ChromeClient::supplement_install_callback_ = nullptr;
-
-void ChromeClient::RegisterSupplementInstallCallback(
-    SupplementInstallCallback callback) {
-  supplement_install_callback_ = callback;
-}
-
 void ChromeClient::InstallSupplements(LocalFrame& frame) {
-  if (supplement_install_callback_) {
-    supplement_install_callback_(frame);
-  }
+  CoreInitializer::GetInstance().InstallSupplements(frame);
 }
 
 void ChromeClient::SetWindowRectWithAdjustment(const IntRect& pending_rect,
@@ -108,9 +99,9 @@ static bool OpenJavaScriptDialog(LocalFrame* frame,
   // otherwise cause the load to continue while we're in the middle of
   // executing JavaScript.
   ScopedPageSuspender suspender;
-  probe::willRunJavaScriptDialog(frame, message, dialog_type);
+  probe::willRunJavaScriptDialog(frame);
   bool result = delegate();
-  probe::didRunJavaScriptDialog(frame, result);
+  probe::didRunJavaScriptDialog(frame);
   return result;
 }
 

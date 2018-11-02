@@ -40,7 +40,6 @@ class GLES2Interface;
 }
 
 namespace blink {
-class ExceptionState;
 class ImageBitmapOptions;
 class MediaCustomControlsFullscreenDetector;
 class MediaRemotingInterstitial;
@@ -56,14 +55,14 @@ class CORE_EXPORT HTMLVideoElement final : public HTMLMediaElement,
 
   bool HasPendingActivity() const final;
 
-  enum class MediaRemotingStatus { kNotStarted, kStarted, kDisabled };
-
   // Node override.
   Node::InsertionNotificationRequest InsertedInto(ContainerNode*) override;
   void RemovedFrom(ContainerNode*) override;
 
   unsigned videoWidth() const;
   unsigned videoHeight() const;
+
+  IntSize videoVisibleSize() const;
 
   // Fullscreen
   void webkitEnterFullscreen();
@@ -112,10 +111,10 @@ class CORE_EXPORT HTMLVideoElement final : public HTMLMediaElement,
   KURL PosterImageURL() const override;
 
   // CanvasImageSource implementation
-  PassRefPtr<Image> GetSourceImageForCanvas(SourceImageStatus*,
-                                            AccelerationHint,
-                                            SnapshotReason,
-                                            const FloatSize&) override;
+  RefPtr<Image> GetSourceImageForCanvas(SourceImageStatus*,
+                                        AccelerationHint,
+                                        SnapshotReason,
+                                        const FloatSize&) override;
   bool IsVideoElement() const override { return true; }
   bool WouldTaintOrigin(SecurityOrigin*) const override;
   FloatSize ElementSize(const FloatSize&) const override;
@@ -132,20 +131,17 @@ class CORE_EXPORT HTMLVideoElement final : public HTMLMediaElement,
   ScriptPromise CreateImageBitmap(ScriptState*,
                                   EventTarget&,
                                   Optional<IntRect> crop_rect,
-                                  const ImageBitmapOptions&,
-                                  ExceptionState&) override;
+                                  const ImageBitmapOptions&) override;
 
   // WebMediaPlayerClient implementation.
   void OnBecamePersistentVideo(bool) final;
 
   bool IsPersistent() const;
 
-  MediaRemotingStatus GetMediaRemotingStatus() const {
-    return media_remoting_status_;
-  }
+  bool IsRemotingInterstitialVisible() const;
   void DisableMediaRemoting();
 
-  void MediaRemotingStarted() final;
+  void MediaRemotingStarted(const WebString& remote_device_friendly_name) final;
   void MediaRemotingStopped() final;
   WebMediaPlayer::DisplayType DisplayType() const final;
 
@@ -177,8 +173,6 @@ class CORE_EXPORT HTMLVideoElement final : public HTMLMediaElement,
   Member<HTMLImageLoader> image_loader_;
   Member<MediaCustomControlsFullscreenDetector>
       custom_controls_fullscreen_detector_;
-
-  MediaRemotingStatus media_remoting_status_;
 
   Member<MediaRemotingInterstitial> remoting_interstitial_;
 

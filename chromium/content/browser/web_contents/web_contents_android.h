@@ -31,8 +31,6 @@ class WebContentsImpl;
 class CONTENT_EXPORT WebContentsAndroid
     : public base::SupportsUserData::Data {
  public:
-  static bool Register(JNIEnv* env);
-
   explicit WebContentsAndroid(WebContentsImpl* web_contents);
   ~WebContentsAndroid() override;
 
@@ -86,6 +84,9 @@ class CONTENT_EXPORT WebContentsAndroid
 
   void OnHide(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
   void OnShow(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
+  void SetImportance(JNIEnv* env,
+                     const base::android::JavaParamRef<jobject>& obj,
+                     jint importance);
   void SuspendAllMediaPlayers(JNIEnv* env,
                               const base::android::JavaParamRef<jobject>& jobj);
   void SetAudioMuted(JNIEnv* env,
@@ -208,7 +209,7 @@ class CONTENT_EXPORT WebContentsAndroid
   bool HasActiveEffectivelyFullscreenVideo(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
-  base::android::ScopedJavaLocalRef<jobject> GetCurrentlyPlayingVideoSizes(
+  base::android::ScopedJavaLocalRef<jobject> GetFullscreenVideoSize(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
 

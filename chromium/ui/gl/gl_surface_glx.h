@@ -27,6 +27,7 @@ class GL_EXPORT GLSurfaceGLX : public GLSurface {
   GLSurfaceGLX();
 
   static bool InitializeOneOff();
+  static bool InitializeExtensionSettingsOneOff();
 
   // These aren't particularly tied to surfaces, but since we already
   // have the static InitializeOneOff here, it's easiest to reuse its
@@ -55,6 +56,7 @@ class GL_EXPORT GLSurfaceGLX : public GLSurface {
 
  private:
   DISALLOW_COPY_AND_ASSIGN(GLSurfaceGLX);
+  static bool initialized_;
 };
 
 // A surface used to render to a view.
@@ -67,6 +69,7 @@ class GL_EXPORT NativeViewGLSurfaceGLX : public GLSurfaceGLX {
   void Destroy() override;
   bool Resize(const gfx::Size& size,
               float scale_factor,
+              ColorSpace color_space,
               bool has_alpha) override;
   bool IsOffscreen() override;
   gfx::SwapResult SwapBuffers() override;

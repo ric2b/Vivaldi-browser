@@ -60,7 +60,7 @@ class DriverOutput(object):
 
     def __init__(self, text, image, image_hash, audio, crash=False,
                  test_time=0, measurements=None, timeout=False, error='', crashed_process_name='??',
-                 crashed_pid=None, crash_log=None, leak=False, leak_log=None, pid=None):
+                 crashed_pid=None, crash_log=None, crash_site=None, leak=False, leak_log=None, pid=None):
         # FIXME: Args could be renamed to better clarify what they do.
         self.text = text
         self.image = image  # May be empty-string if the test crashes.
@@ -71,6 +71,7 @@ class DriverOutput(object):
         self.crashed_process_name = crashed_process_name
         self.crashed_pid = crashed_pid
         self.crash_log = crash_log
+        self.crash_site = crash_site
         self.leak = leak
         self.leak_log = leak_log
         self.test_time = test_time
@@ -192,8 +193,9 @@ class Driver(object):
             self._server_process = None
 
         crash_log = None
+        crash_site = None
         if crashed:
-            self.error_from_test, crash_log = self._get_crash_log(text, self.error_from_test, newer_than=start_time)
+            self.error_from_test, crash_log, crash_site = self._get_crash_log(text, self.error_from_test, newer_than=start_time)
 
             # If we don't find a crash log use a placeholder error message instead.
             if not crash_log:
@@ -211,7 +213,7 @@ class Driver(object):
                             crash=crashed, test_time=time.time() - test_begin_time, measurements=self._measurements,
                             timeout=timed_out, error=self.error_from_test,
                             crashed_process_name=self._crashed_process_name,
-                            crashed_pid=self._crashed_pid, crash_log=crash_log,
+                            crashed_pid=self._crashed_pid, crash_log=crash_log, crash_site=crash_site,
                             leak=leaked, leak_log=self._leak_log,
                             pid=pid)
 
@@ -338,8 +340,11 @@ class Driver(object):
             line = server_process.read_stdout_line(deadline)
             output += server_process.pop_all_buffered_stderr()
 
-        if server_process.timed_out or server_process.has_crashed():
-            _log.error('Failed to start the %s process: \n%s', server_process.name(), output)
+        if server_process.timed_out:
+            _log.error('Timed out while waiting for the %s process: \n"%s"', server_process.name(), output)
+            return False
+        if server_process.has_crashed():
+            _log.error('The %s process crashed while starting: \n"%s"', server_process.name(), output)
             return False
 
         return True
@@ -371,8 +376,10 @@ class Driver(object):
         cmd.append(self._port._path_to_driver())
         if self._no_timeout:
             cmd.append('--no-timeout')
-        cmd.extend(self._port.get_option('additional_driver_flag', []))
-        cmd.extend(self._port.additional_driver_flag())
+        primary_driver_flag = self._port.primary_driver_flag()
+        if primary_driver_flag:
+            cmd.append(primary_driver_flag)
+        cmd.extend(self._port.additional_driver_flags())
         if self._port.get_option('enable_leak_detection'):
             cmd.append('--enable-leak-detection')
         cmd.extend(per_test_args)

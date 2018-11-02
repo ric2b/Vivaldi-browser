@@ -8,12 +8,15 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/bubble_anchor_util.h"
 #include "chrome/browser/ui/cocoa/browser_dialogs_views_mac.h"
 #include "chrome/browser/ui/cocoa/bubble_anchor_helper_views.h"
 #include "chrome/browser/ui/content_settings/content_setting_bubble_model.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_bubble_view.h"
 #include "chrome/browser/ui/views/content_setting_bubble_contents.h"
+#include "chrome/browser/ui/views/extensions/extension_installed_bubble_view.h"
+#include "chrome/browser/ui/views/first_run_bubble.h"
 #include "chrome/browser/ui/views/importer/import_lock_dialog_view.h"
 #include "chrome/browser/ui/views/location_bar/zoom_bubble_view.h"
 #include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
@@ -29,8 +32,7 @@
 namespace chrome {
 
 void ShowPageInfoBubbleViews(
-    gfx::NativeWindow browser_window,
-    Profile* profile,
+    Browser* browser,
     content::WebContents* web_contents,
     const GURL& virtual_url,
     const security_state::SecurityInfo& security_info) {
@@ -46,12 +48,12 @@ void ShowPageInfoBubbleViews(
     return;
   }
 
-  Browser* browser = chrome::FindBrowserWithWindow(browser_window);
-  const gfx::Rect anchor = bubble_anchor_util::GetPageInfoAnchorRect(browser);
   views::BubbleDialogDelegateView* bubble =
-      PageInfoBubbleView::ShowBubble(nullptr, nullptr, anchor, profile,
-                                     web_contents, virtual_url, security_info);
-  KeepBubbleAnchored(bubble, GetPageInfoDecoration(browser_window));
+      PageInfoBubbleView::CreatePageInfoBubble(browser, web_contents,
+                                               virtual_url, security_info);
+  bubble->GetWidget()->Show();
+  KeepBubbleAnchored(
+      bubble, GetPageInfoDecoration(browser->window()->GetNativeWindow()));
 }
 
 void ShowBookmarkBubbleViewsAtPoint(const gfx::Point& anchor_point,
@@ -72,6 +74,11 @@ void ShowBookmarkBubbleViewsAtPoint(const gfx::Point& anchor_point,
   views::BubbleDialogDelegateView* bubble =
       BookmarkBubbleView::bookmark_bubble();
   KeepBubbleAnchored(bubble, decoration);
+}
+
+std::unique_ptr<BubbleUi> BuildViewsExtensionInstalledBubbleUi(
+    ExtensionInstalledBubble* bubble) {
+  return base::MakeUnique<ExtensionInstalledBubbleUi>(bubble);
 }
 
 void ShowZoomBubbleViewsAtPoint(content::WebContents* web_contents,
@@ -128,6 +135,10 @@ void ShowImportLockDialogViews(gfx::NativeWindow parent,
                                const base::Callback<void(bool)>& callback,
                                base::string16 importer_locktext) {
   return ImportLockDialogView::Show(parent, callback, importer_locktext);
+}
+
+void ShowFirstRunBubbleViews(Browser* browser) {
+  return FirstRunBubble::Show(browser);
 }
 
 }  // namespace chrome

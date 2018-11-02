@@ -6,6 +6,7 @@
 #include "base/run_loop.h"
 #include "base/test/scoped_command_line.h"
 #include "chrome/browser/extensions/activity_log/activity_log.h"
+#include "chrome/browser/extensions/activity_log/activity_log_task_runner.h"
 #include "chrome/browser/extensions/api/activity_log_private/activity_log_private_api.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/test_extension_system.h"
@@ -25,10 +26,13 @@ class ActivityLogEnabledTest : public ChromeRenderViewHostTestHarness {
  protected:
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
+    SetActivityLogTaskRunnerForTesting(
+        base::ThreadTaskRunnerHandle::Get().get());
   }
 
   void TearDown() override {
     ChromeRenderViewHostTestHarness::TearDown();
+    SetActivityLogTaskRunnerForTesting(nullptr);
   }
 };
 
@@ -152,7 +156,7 @@ TEST_F(ActivityLogEnabledTest, WatchdogSwitch) {
   EXPECT_FALSE(activity_log2->IsDatabaseEnabled());
 
   extension_service1->DisableExtension(kExtensionID,
-                                       Extension::DISABLE_USER_ACTION);
+                                       disable_reason::DISABLE_USER_ACTION);
 
   EXPECT_EQ(0,
       profile1->GetPrefs()->GetInteger(prefs::kWatchdogExtensionActive));
@@ -204,9 +208,9 @@ TEST_F(ActivityLogEnabledTest, WatchdogSwitch) {
       profile1->GetPrefs()->GetInteger(prefs::kWatchdogExtensionActive));
   EXPECT_TRUE(activity_log1->IsDatabaseEnabled());
   extension_service1->DisableExtension(kExtensionID,
-                                       Extension::DISABLE_USER_ACTION);
+                                       disable_reason::DISABLE_USER_ACTION);
   extension_service1->DisableExtension("fpofdchlamddhnajleknffcbmnjfahpg",
-                                       Extension::DISABLE_USER_ACTION);
+                                       disable_reason::DISABLE_USER_ACTION);
   EXPECT_EQ(0,
       profile1->GetPrefs()->GetInteger(prefs::kWatchdogExtensionActive));
   EXPECT_FALSE(activity_log1->IsDatabaseEnabled());

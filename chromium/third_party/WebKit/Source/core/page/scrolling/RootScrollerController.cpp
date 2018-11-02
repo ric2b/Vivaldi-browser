@@ -12,12 +12,12 @@
 #include "core/layout/LayoutBox.h"
 #include "core/layout/LayoutEmbeddedContent.h"
 #include "core/layout/api/LayoutViewItem.h"
-#include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/page/Page.h"
 #include "core/page/scrolling/RootScrollerUtil.h"
 #include "core/page/scrolling/TopDocumentRootScrollerController.h"
 #include "core/paint/PaintLayer.h"
 #include "core/paint/PaintLayerScrollableArea.h"
+#include "core/paint/compositing/PaintLayerCompositor.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/scroll/ScrollableArea.h"
 
@@ -200,12 +200,20 @@ void RootScrollerController::UpdateIFrameGeometryAndLayoutSize(
   DCHECK(document_->GetFrame());
   DCHECK(document_->GetFrame()->View());
 
-  LocalFrameView* view =
+  LocalFrameView* child_view =
       ToLocalFrameView(frame_owner.OwnedEmbeddedContentView());
-  view->UpdateGeometry();
+
+  // We can get here as a result of the "post layout resize" on the main frame.
+  // That happens from inside LocalFrameView::PerformLayout. Calling
+  // UpdateGeometry on the iframe causes it to layout which calls
+  // Document::UpdateStyleAndLayout. That tries to recurse up the hierarchy,
+  // reentering Layout on this Document. Thus, we avoid calling this here if
+  // we're in layout; it'll get called when this Document finishes laying out.
+  if (!document_->GetFrame()->View()->IsInPerformLayout())
+    child_view->UpdateGeometry();
 
   if (&EffectiveRootScroller() == frame_owner)
-    view->SetLayoutSize(document_->GetFrame()->View()->GetLayoutSize());
+    child_view->SetLayoutSize(document_->GetFrame()->View()->GetLayoutSize());
 }
 
 PaintLayer* RootScrollerController::RootScrollerPaintLayer() const {
@@ -223,8 +231,9 @@ void RootScrollerController::ElementRemoved(const Element& element) {
   if (element != effective_root_scroller_.Get())
     return;
 
-  RecomputeEffectiveRootScroller();
-  DCHECK(element != effective_root_scroller_.Get());
+  effective_root_scroller_ = document_;
+  if (Page* page = document_->GetPage())
+    page->GlobalRootScrollerController().DidChangeRootScroller();
 }
 
 }  // namespace blink

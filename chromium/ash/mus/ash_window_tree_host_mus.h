@@ -21,18 +21,15 @@ class AshWindowTreeHostMus : public AshWindowTreeHost,
 
   // AshWindowTreeHost:
   bool ConfineCursorToRootWindow() override;
-  void UnConfineCursor() override;
   void SetRootWindowTransformer(
       std::unique_ptr<RootWindowTransformer> transformer) override;
   gfx::Insets GetHostInsets() const override;
   aura::WindowTreeHost* AsWindowTreeHost() override;
   void PrepareForShutdown() override;
   void RegisterMirroringHost(AshWindowTreeHost* mirroring_ash_host) override;
-#if defined(USE_OZONE)
   void SetCursorConfig(const display::Display& display,
                        display::Display::Rotation rotation) override;
   void ClearCursorConfig() override;
-#endif
 
   // aura::WindowTreeHostMus:
   void SetRootTransform(const gfx::Transform& transform) override;

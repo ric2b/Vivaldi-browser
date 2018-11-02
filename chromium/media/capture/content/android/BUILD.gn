@@ -12,17 +12,13 @@ assert(is_android)
 
 source_set("android") {
   sources = [
-    "screen_capture_jni_registrar.cc",
-    "screen_capture_jni_registrar.h",
     "screen_capture_machine_android.cc",
     "screen_capture_machine_android.h",
   ]
-  configs += [
-    "//media:media_config",
-    "//media:media_implementation",
-  ]
+  configs += [ "//media:media_config" ]
   deps = [
     ":screen_capture_jni_headers",
+    "//media/capture:capture_device_specific",
     "//media/capture/mojo:image_capture",
     "//third_party/libyuv",
     "//ui/gfx:color_space",

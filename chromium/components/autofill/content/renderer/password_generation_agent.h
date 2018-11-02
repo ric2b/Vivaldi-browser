@@ -19,6 +19,7 @@
 #include "components/autofill/content/renderer/renderer_save_password_progress_logger.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 #include "third_party/WebKit/public/web/WebInputElement.h"
 #include "url/gurl.h"
 
@@ -35,7 +36,8 @@ class PasswordGenerationAgent : public content::RenderFrameObserver,
                                 public mojom::PasswordGenerationAgent {
  public:
   PasswordGenerationAgent(content::RenderFrame* render_frame,
-                          PasswordAutofillAgent* password_agent);
+                          PasswordAutofillAgent* password_agent,
+                          service_manager::BinderRegistry* registry);
   ~PasswordGenerationAgent() override;
 
   void BindRequest(mojom::PasswordGenerationAgentRequest request);

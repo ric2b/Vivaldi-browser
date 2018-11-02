@@ -132,30 +132,31 @@ void PhysicalWebPageSuggestionsProvider::DismissSuggestion(
 
 void PhysicalWebPageSuggestionsProvider::FetchSuggestionImage(
     const ContentSuggestion::ID& suggestion_id,
-    const ImageFetchedCallback& callback) {
+    ImageFetchedCallback callback) {
   ui::ResourceBundle& resource_bundle = ui::ResourceBundle::GetSharedInstance();
   base::StringPiece raw_data = resource_bundle.GetRawDataResourceForScale(
       IDR_PHYSICAL_WEB_LOGO_WITH_PADDING, resource_bundle.GetMaxScaleFactor());
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
-      base::Bind(callback,
-                 gfx::Image::CreateFrom1xPNGBytes(
-                     reinterpret_cast<const unsigned char*>(raw_data.data()),
-                     raw_data.size())));
+      base::BindOnce(
+          std::move(callback),
+          gfx::Image::CreateFrom1xPNGBytes(
+              reinterpret_cast<const unsigned char*>(raw_data.data()),
+              raw_data.size())));
 }
 
 void PhysicalWebPageSuggestionsProvider::Fetch(
     const Category& category,
     const std::set<std::string>& known_suggestion_ids,
-    const FetchDoneCallback& callback) {
+    FetchDoneCallback callback) {
   DCHECK_EQ(category, provided_category_);
   std::vector<ContentSuggestion> suggestions =
       GetMostRecentPhysicalWebPagesWithFilter(kMaxSuggestionsCount,
                                               known_suggestion_ids);
   AppendToShownScannedUrls(suggestions);
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(callback, Status::Success(),
-                            base::Passed(std::move(suggestions))));
+      FROM_HERE, base::BindOnce(std::move(callback), Status::Success(),
+                                std::move(suggestions)));
 }
 
 void PhysicalWebPageSuggestionsProvider::ClearHistory(
@@ -172,7 +173,7 @@ void PhysicalWebPageSuggestionsProvider::ClearCachedSuggestions(
 
 void PhysicalWebPageSuggestionsProvider::GetDismissedSuggestionsForDebugging(
     Category category,
-    const DismissedSuggestionsCallback& callback) {
+    DismissedSuggestionsCallback callback) {
   DCHECK_EQ(provided_category_, category);
   std::unique_ptr<physical_web::MetadataList> page_metadata_list =
       physical_web_data_source_->GetMetadataList();
@@ -184,7 +185,7 @@ void PhysicalWebPageSuggestionsProvider::GetDismissedSuggestionsForDebugging(
     }
   }
 
-  callback.Run(std::move(suggestions));
+  std::move(callback).Run(std::move(suggestions));
 }
 
 void PhysicalWebPageSuggestionsProvider::ClearDismissedSuggestionsForDebugging(

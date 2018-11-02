@@ -85,13 +85,13 @@ Polymer({
    */
   ready: function() {
     // Lazy-create the drawer the first time it is opened or swiped into view.
-    listenOnce(this.$.drawer, 'open-changed', function() {
+    listenOnce(this.$.drawer, 'open-changed', () => {
       this.$.drawerTemplate.if = true;
-    }.bind(this));
+    });
 
-    window.addEventListener('popstate', function(e) {
+    window.addEventListener('popstate', e => {
       this.$.drawer.closeDrawer();
-    }.bind(this));
+    });
 
     CrPolicyStrings = {
       controlledSettingExtension:
@@ -123,6 +123,8 @@ Polymer({
           loadTimeData.getString('networkListItemConnecting'),
       networkListItemConnectingTo:
           loadTimeData.getString('networkListItemConnectingTo'),
+      networkListItemInitializing:
+          loadTimeData.getString('networkListItemInitializing'),
       networkListItemNotConnected:
           loadTimeData.getString('networkListItemNotConnected'),
       vpnNameTemplate: loadTimeData.getString('vpnNameTemplate'),
@@ -137,13 +139,13 @@ Polymer({
     this.havePlayStoreApp_ = loadTimeData.valueExists('havePlayStoreApp') &&
         loadTimeData.getBoolean('havePlayStoreApp');
 
-    this.addEventListener('show-container', function() {
+    this.addEventListener('show-container', () => {
       this.$.container.style.visibility = 'visible';
-    }.bind(this));
+    });
 
-    this.addEventListener('hide-container', function() {
+    this.addEventListener('hide-container', () => {
       this.$.container.style.visibility = 'hidden';
-    }.bind(this));
+    });
   },
 
   /** @private {?IntersectionObserver} */
@@ -164,10 +166,10 @@ Polymer({
     settings.setGlobalScrollTarget(this.$.container);
 
     // Setup drop shadow logic.
-    var callback = function(entries) {
+    var callback = entries => {
       this.$.dropShadow.classList.toggle(
           'has-shadow', entries[entries.length - 1].intersectionRatio == 0);
-    }.bind(this);
+    };
 
     this.intersectionObserver_ = new IntersectionObserver(
         callback,
@@ -259,9 +261,9 @@ Polymer({
     this.$.container.setAttribute('tabindex', '-1');
     this.$.container.focus();
 
-    listenOnce(this.$.container, ['blur', 'pointerdown'], function() {
+    listenOnce(this.$.container, ['blur', 'pointerdown'], () => {
       this.$.container.removeAttribute('tabindex');
-    }.bind(this));
+    });
   },
 
   /** @private */

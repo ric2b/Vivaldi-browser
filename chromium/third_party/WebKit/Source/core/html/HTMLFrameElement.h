@@ -39,8 +39,9 @@ class CORE_EXPORT HTMLFrameElement final : public HTMLFrameElementBase {
 
   bool NoResize() const;
 
-  Vector<WebParsedFeaturePolicyDeclaration> ConstructContainerPolicy()
-      const override;
+  Vector<WebParsedFeaturePolicyDeclaration> ConstructContainerPolicy(
+      Vector<String>* /* messages */,
+      bool* /* old_syntax */) const override;
 
  private:
   explicit HTMLFrameElement(Document&);

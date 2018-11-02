@@ -126,6 +126,11 @@ class BrowserView : public BrowserWindow,
                                      const gfx::Rect& bounds,
                                      bool at_bottom);
 
+  // After calling RevealTabStripIfNeeded(), there is normally a delay before
+  // the tabstrip is hidden. Tests can use this function to disable that delay
+  // (and hide immediately).
+  static void SetDisableRevealerDelayForTesting(bool disable);
+
   // Returns a Browser instance of this view.
   Browser* browser() { return browser_.get(); }
   const Browser* browser() const { return browser_.get(); }
@@ -285,7 +290,8 @@ class BrowserView : public BrowserWindow,
   void ExitFullscreen() override;
   void UpdateExclusiveAccessExitBubbleContent(
       const GURL& url,
-      ExclusiveAccessBubbleType bubble_type) override;
+      ExclusiveAccessBubbleType bubble_type,
+      ExclusiveAccessBubbleHideCallback bubble_first_hide_callback) override;
   void OnExclusiveAccessUserInput() override;
   bool ShouldHideUIForFullscreen() const override;
   bool IsFullscreen() const override;
@@ -336,10 +342,6 @@ class BrowserView : public BrowserWindow,
       bool app_modal,
       const base::Callback<void(bool)>& callback) override;
   void UserChangedTheme() override;
-  void ShowPageInfo(Profile* profile,
-                    content::WebContents* web_contents,
-                    const GURL& virtual_url,
-                    const security_state::SecurityInfo& security_info) override;
   void ShowAppMenu() override;
   content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
       const content::NativeWebKeyboardEvent& event) override;
@@ -433,7 +435,7 @@ class BrowserView : public BrowserWindow,
   void OnGestureEvent(ui::GestureEvent* event) override;
   void ViewHierarchyChanged(
       const ViewHierarchyChangedDetails& details) override;
-  void PaintChildren(const ui::PaintContext& context) override;
+  void PaintChildren(const views::PaintInfo& paint_info) override;
   void ChildPreferredSizeChanged(View* child) override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   void OnThemeChanged() override;
@@ -487,6 +489,12 @@ class BrowserView : public BrowserWindow,
   // interface to keep these two classes decoupled and testable.
   friend class BrowserViewLayoutDelegateImpl;
   FRIEND_TEST_ALL_PREFIXES(BrowserViewTest, BrowserView);
+
+  // If the browser is in immersive full screen mode, it will reveal the
+  // tabstrip for a short duration. This is useful for shortcuts that perform
+  // tab navigations and need to give users a visual clue as to what tabs are
+  // affected.
+  void RevealTabStripIfNeeded();
 
   // Appends to |toolbars| a pointer to each AccessiblePaneView that
   // can be traversed using F6, in the order they should be traversed.
@@ -584,6 +592,12 @@ class BrowserView : public BrowserWindow,
 
   // Returns the max top arrow height for infobar.
   int GetMaxTopInfoBarArrowHeight();
+
+  // Retrieves the chrome command id associated with |accelerator|. The function
+  // returns false if |accelerator| is unknown. Otherwise |command_id| will be
+  // set to the chrome command id defined in //chrome/app/chrome_command_ids.h.
+  bool FindCommandIdForAccelerator(const ui::Accelerator& accelerator,
+                                   int* command_id) const;
 
   // The BrowserFrame that hosts this view.
   BrowserFrame* frame_ = nullptr;

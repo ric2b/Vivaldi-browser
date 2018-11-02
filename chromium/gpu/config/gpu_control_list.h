@@ -23,7 +23,15 @@ class GPU_EXPORT GpuControlList {
  public:
   typedef base::hash_map<int, std::string> FeatureMap;
 
-  enum OsType { kOsLinux, kOsMacosx, kOsWin, kOsChromeOS, kOsAndroid, kOsAny };
+  enum OsType {
+    kOsLinux,
+    kOsMacosx,
+    kOsWin,
+    kOsChromeOS,
+    kOsAndroid,
+    kOsFuchsia,
+    kOsAny
+  };
 
   enum OsFilter {
     // In loading, ignore all entries that belong to other OS.
@@ -124,7 +132,7 @@ class GPU_EXPORT GpuControlList {
 
   struct GPU_EXPORT MachineModelInfo {
     size_t machine_model_name_size;
-    const char** machine_model_names;
+    const char* const* machine_model_names;
     Version machine_model_version;
 
     bool Contains(const GPUInfo& gpu_info) const;
@@ -180,7 +188,7 @@ class GPU_EXPORT GpuControlList {
     size_t feature_size;
     const int* features;
     size_t disabled_extension_size;
-    const char** disabled_extensions;
+    const char* const* disabled_extensions;
     size_t cr_bug_size;
     const uint32_t* cr_bugs;
     Conditions conditions;
@@ -212,12 +220,15 @@ class GPU_EXPORT GpuControlList {
   // system and returns the union of features specified in each entry.
   // If os is kOsAny, use the current OS; if os_version is empty, use the
   // current OS version.
-  std::set<int> MakeDecision(OsType os,
-                             const std::string& os_version,
-                             const GPUInfo& gpu_info);
+  std::set<int32_t> MakeDecision(OsType os,
+                                 const std::string& os_version,
+                                 const GPUInfo& gpu_info);
 
-  // Collects the active entries from the last MakeDecision() call.
-  void GetDecisionEntries(std::vector<uint32_t>* entry_ids) const;
+  // Return the active entry indices from the last MakeDecision() call.
+  const std::vector<uint32_t>& GetActiveEntries() const;
+  // Return corresponding entry IDs from entry indices.
+  std::vector<uint32_t> GetEntryIDsFromIndices(
+      const std::vector<uint32_t>& entry_indices) const;
 
   // Collects all disabled extensions.
   std::vector<std::string> GetDisabledExtensions();
@@ -231,6 +242,14 @@ class GPU_EXPORT GpuControlList {
   //    "crBugs": [1234],
   // }
   void GetReasons(base::ListValue* problem_list, const std::string& tag) const;
+  // Similar to the previous function, but instead of using the active entries
+  // from the last MakeDecision() call, which may not happen at all, entries
+  // are provided.
+  // The use case is we compute the entries from GPU process and send them to
+  // browser process, and call GetReasons() in browser process.
+  void GetReasons(base::ListValue* problem_list,
+                  const std::string& tag,
+                  const std::vector<uint32_t>& entries) const;
 
   // Return the largest entry id.  This is used for histogramming.
   uint32_t max_entry_id() const;
@@ -268,7 +287,7 @@ class GPU_EXPORT GpuControlList {
   // This records all the entries that are appliable to the current user
   // machine.  It is updated everytime MakeDecision() is called and is used
   // later by GetDecisionEntries().
-  std::vector<size_t> active_entries_;
+  std::vector<uint32_t> active_entries_;
 
   uint32_t max_entry_id_;
 

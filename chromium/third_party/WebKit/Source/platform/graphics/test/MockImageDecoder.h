@@ -37,11 +37,12 @@ class MockImageDecoderClient {
 
   virtual void DecoderBeingDestroyed() = 0;
   virtual void DecodeRequested() = 0;
-  virtual ImageFrame::Status GetStatus() = 0;
+  virtual ImageFrame::Status GetStatus(size_t index) = 0;
   virtual size_t FrameCount() = 0;
   virtual int RepetitionCount() const = 0;
   virtual float FrameDuration() const = 0;
   virtual void ClearCacheExceptFrameRequested(size_t){};
+  virtual void MemoryAllocatorSet() {}
 
   // Clients can control the behavior of MockImageDecoder::decodedSize() by
   // overriding this method. The default implementation causes
@@ -83,8 +84,8 @@ class MockImageDecoder : public ImageDecoder {
 
   int RepetitionCount() const override { return client_->RepetitionCount(); }
 
-  bool FrameIsReceivedAtIndex(size_t) const override {
-    return client_->GetStatus() == ImageFrame::kFrameComplete;
+  bool FrameIsReceivedAtIndex(size_t index) const override {
+    return client_->GetStatus(index) == ImageFrame::kFrameComplete;
   }
 
   float FrameDurationAtIndex(size_t) const override {
@@ -102,6 +103,10 @@ class MockImageDecoder : public ImageDecoder {
     return ImageDecoder::FrameBytesAtIndex(index);
   }
 
+  void SetMemoryAllocator(SkBitmap::Allocator*) override {
+    client_->MemoryAllocatorSet();
+  }
+
  private:
   void DecodeSize() override {}
 
@@ -109,7 +114,7 @@ class MockImageDecoder : public ImageDecoder {
 
   void Decode(size_t index) override {
     client_->DecodeRequested();
-    frame_buffer_cache_[index].SetStatus(client_->GetStatus());
+    frame_buffer_cache_[index].SetStatus(client_->GetStatus(index));
   }
 
   void InitializeNewFrame(size_t index) override {

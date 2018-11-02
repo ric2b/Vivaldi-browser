@@ -7,6 +7,7 @@
 
 #include "base/numerics/safe_conversions.h"
 #include "content/public/common/referrer.h"
+#include "storage/common/blob_storage/blob_handle.h"
 #include "third_party/WebKit/public/platform/modules/fetch/fetch_api_request.mojom.h"
 
 namespace mojo {
@@ -72,10 +73,6 @@ struct EnumTraits<blink::mojom::ServiceWorkerFetchType,
 template <>
 struct StructTraits<blink::mojom::FetchAPIRequestDataView,
                     content::ServiceWorkerFetchRequest> {
-  static void* SetUpContext(const content::ServiceWorkerFetchRequest& request);
-  static void TearDownContext(const content::ServiceWorkerFetchRequest& request,
-                              void* context);
-
   static content::FetchRequestMode mode(
       const content::ServiceWorkerFetchRequest& request) {
     return request.mode;
@@ -105,9 +102,8 @@ struct StructTraits<blink::mojom::FetchAPIRequestDataView,
     return request.method;
   }
 
-  static const std::map<std::string, std::string>& headers(
-      const content::ServiceWorkerFetchRequest& request,
-      void* context);
+  static std::map<std::string, std::string> headers(
+      const content::ServiceWorkerFetchRequest& request);
 
   static const std::string& blob_uuid(
       const content::ServiceWorkerFetchRequest& request) {
@@ -116,6 +112,13 @@ struct StructTraits<blink::mojom::FetchAPIRequestDataView,
 
   static uint64_t blob_size(const content::ServiceWorkerFetchRequest& request) {
     return request.blob_size;
+  }
+
+  static storage::mojom::BlobPtr blob(
+      const content::ServiceWorkerFetchRequest& request) {
+    if (!request.blob)
+      return nullptr;
+    return request.blob->Clone();
   }
 
   static const content::Referrer& referrer(

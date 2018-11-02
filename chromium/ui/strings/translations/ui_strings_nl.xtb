@@ -32,6 +32,7 @@
 <translation id="2190355936436201913">(leeg)</translation>
 <translation id="2289052229480071835">Tik op de tikdoelen op je scherm.</translation>
 <translation id="2297836609126180313"><ph name="QUANTITY" /> TB/s</translation>
+<translation id="24452542372838207">Melding uitvouwen</translation>
 <translation id="2482878487686419369">Meldingen</translation>
 <translation id="2497284189126895209">Alle bestanden</translation>
 <translation id="2522350507219695259">Kalibratie is voltooid</translation>
@@ -162,6 +163,7 @@
 <translation id="9002566407876343676">openen</translation>
 <translation id="9038489124413477075">Naamloze map</translation>
 <translation id="9044832324875206639">{SECONDS,plural, =1{1 sec.}other{# sec.}}</translation>
+<translation id="9059834730836941392">Melding samenvouwen</translation>
 <translation id="9150735707954472829">Tabblad</translation>
 <translation id="9161053988251441839">VOORGESTELDE APPS</translation>
 <translation id="9170848237812810038">&amp;Ongedaan maken</translation>

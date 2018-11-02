@@ -34,6 +34,7 @@ config("skia_config") {
     "//third_party/skia/include/core",
     "//third_party/skia/include/effects",
     "//third_party/skia/include/encode",
+    "//third_party/skia/include/gpu",
     "//third_party/skia/include/images",
     "//third_party/skia/include/lazy",
     "//third_party/skia/include/pathops",
@@ -43,6 +44,10 @@ config("skia_config") {
     "//third_party/skia/include/utils",
     "//third_party/skia/third_party/vulkan",
   ]
+
+  if (!is_ios) {
+    include_dirs += [ "//third_party/skia/include/codec" ]
+  }
 
   defines = skia_for_chromium_defines
   defines += [
@@ -63,7 +68,6 @@ config("skia_config") {
 
   if (skia_support_gpu) {
     include_dirs += [
-      "//third_party/skia/include/gpu",
       "//third_party/skia/src/gpu",
       "//third_party/skia/src/sksl",
     ]
@@ -111,6 +115,7 @@ config("skia_library_config") {
     "//third_party/skia/src/sfnt",
     "//third_party/skia/src/utils",
     "//third_party/skia/src/lazy",
+    "//third_party/skia/third_party/gif",
   ]
   if (is_mac || is_ios) {
     include_dirs += [ "//third_party/skia/include/utils/mac" ]
@@ -222,8 +227,6 @@ component("skia") {
     "ext/event_tracer_impl.h",
     "ext/fontmgr_default_android.cc",
     "ext/fontmgr_default_android.h",
-    "ext/fontmgr_default_fuchsia.cc",
-    "ext/fontmgr_default_fuchsia.h",
     "ext/fontmgr_default_linux.cc",
     "ext/fontmgr_default_linux.h",
     "ext/fontmgr_default_win.cc",
@@ -269,13 +272,6 @@ component("skia") {
     ]
   }
 
-  if (!is_fuchsia) {
-    sources -= [
-      "ext/fontmgr_default_fuchsia.cc",
-      "ext/fontmgr_default_fuchsia.h",
-    ]
-  }
-
   # The imported Skia gni source paths are made absolute by gn.
   sources += skia_core_sources
   sources += skia_effects_sources
@@ -295,6 +291,30 @@ component("skia") {
     "//third_party/skia/src/sfnt/SkOTTable_name.cpp",
     "//third_party/skia/src/sfnt/SkOTUtils.cpp",
   ]
+  if (!is_ios) {
+    sources += [
+      "//third_party/skia/src/codec/SkBmpBaseCodec.cpp",
+      "//third_party/skia/src/codec/SkBmpCodec.cpp",
+      "//third_party/skia/src/codec/SkBmpMaskCodec.cpp",
+      "//third_party/skia/src/codec/SkBmpRLECodec.cpp",
+      "//third_party/skia/src/codec/SkBmpStandardCodec.cpp",
+      "//third_party/skia/src/codec/SkCodec.cpp",
+      "//third_party/skia/src/codec/SkGifCodec.cpp",
+      "//third_party/skia/src/codec/SkIcoCodec.cpp",
+      "//third_party/skia/src/codec/SkJpegCodec.cpp",
+      "//third_party/skia/src/codec/SkJpegDecoderMgr.cpp",
+      "//third_party/skia/src/codec/SkJpegUtility.cpp",
+      "//third_party/skia/src/codec/SkMaskSwizzler.cpp",
+      "//third_party/skia/src/codec/SkMasks.cpp",
+      "//third_party/skia/src/codec/SkPngCodec.cpp",
+      "//third_party/skia/src/codec/SkSampler.cpp",
+      "//third_party/skia/src/codec/SkStreamBuffer.cpp",
+      "//third_party/skia/src/codec/SkSwizzler.cpp",
+      "//third_party/skia/src/codec/SkWbmpCodec.cpp",
+      "//third_party/skia/src/codec/SkWebpCodec.cpp",
+      "//third_party/skia/third_party/gif/SkGifImageReader.cpp",
+    ]
+  }
 
   # This and skia_opts are really the same conceptual target so share headers.
   allow_circular_includes_from = [ ":skia_opts" ]
@@ -407,6 +427,14 @@ component("skia") {
       # Add the FreeType custom font manager as a fallback backend for variable fonts.
       "//third_party/skia/src/ports/SkFontMgr_custom.cpp",
       "//third_party/skia/src/ports/SkFontMgr_custom_empty.cpp",
+    ]
+  }
+
+  if (is_fuchsia) {
+    sources += [
+      "//third_party/skia/src/ports/SkFontMgr_custom.cpp",
+      "//third_party/skia/src/ports/SkFontMgr_custom_empty.cpp",
+      "//third_party/skia/src/ports/SkFontMgr_custom_empty_factory.cpp",
     ]
   }
 

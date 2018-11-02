@@ -4,4 +4,16 @@
 
 #include "core/css/properties/CSSPropertyAPIBorderImageRepeat.h"
 
-namespace blink {}  // namespace blink
+#include "core/css/properties/CSSPropertyBorderImageUtils.h"
+
+namespace blink {
+
+const CSSValue* CSSPropertyAPIBorderImageRepeat::ParseSingleValue(
+    CSSPropertyID,
+    CSSParserTokenRange& range,
+    const CSSParserContext&,
+    const CSSParserLocalContext&) const {
+  return CSSPropertyBorderImageUtils::ConsumeBorderImageRepeat(range);
+}
+
+}  // namespace blink

@@ -11,8 +11,8 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/sys_info.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -21,8 +21,10 @@
 #include "gpu/command_buffer/service/feature_info.h"
 #include "gpu/command_buffer/service/mailbox_manager.h"
 #include "gpu/command_buffer/service/memory_program_cache.h"
+#include "gpu/command_buffer/service/passthrough_program_cache.h"
 #include "gpu/command_buffer/service/preemption_flag.h"
 #include "gpu/command_buffer/service/scheduler.h"
+#include "gpu/command_buffer/service/service_utils.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
 #include "gpu/ipc/common/gpu_messages.h"
 #include "gpu/ipc/service/gpu_channel.h"
@@ -47,7 +49,6 @@ const int kMaxKeepAliveTimeMs = 200;
 
 GpuChannelManager::GpuChannelManager(
     const GpuPreferences& gpu_preferences,
-    const GpuDriverBugWorkarounds& workarounds,
     GpuChannelManagerDelegate* delegate,
     GpuWatchdogThread* watchdog,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
@@ -60,7 +61,8 @@ GpuChannelManager::GpuChannelManager(
     : task_runner_(task_runner),
       io_task_runner_(io_task_runner),
       gpu_preferences_(gpu_preferences),
-      gpu_driver_bug_workarounds_(workarounds),
+      gpu_driver_bug_workarounds_(
+          gpu_feature_info.enabled_gpu_driver_bug_workarounds),
       delegate_(delegate),
       watchdog_(watchdog),
       share_group_(new gl::GLShareGroup()),
@@ -103,16 +105,23 @@ GpuChannelManager::~GpuChannelManager() {
 }
 
 gles2::ProgramCache* GpuChannelManager::program_cache() {
-  if (!program_cache_.get() &&
-      !gpu_preferences_.disable_gpu_program_cache) {
+  if (!program_cache_.get()) {
     const GpuDriverBugWorkarounds& workarounds = gpu_driver_bug_workarounds_;
     bool disable_disk_cache =
         gpu_preferences_.disable_gpu_shader_disk_cache ||
         workarounds.disable_program_disk_cache;
-    program_cache_.reset(new gles2::MemoryProgramCache(
-        gpu_preferences_.gpu_program_cache_size, disable_disk_cache,
-        workarounds.disable_program_caching_for_transform_feedback,
-        &activity_flags_));
+
+    // Use the EGL cache control extension for the passthrough decoder.
+    if (gpu_preferences_.use_passthrough_cmd_decoder &&
+        gles2::PassthroughCommandDecoderSupported()) {
+      program_cache_.reset(new gles2::PassthroughProgramCache(
+          gpu_preferences_.gpu_program_cache_size, disable_disk_cache));
+    } else {
+      program_cache_.reset(new gles2::MemoryProgramCache(
+          gpu_preferences_.gpu_program_cache_size, disable_disk_cache,
+          workarounds.disable_program_caching_for_transform_feedback,
+          &activity_flags_));
+    }
   }
   return program_cache_.get();
 }
@@ -189,7 +198,7 @@ void GpuChannelManager::MaybeExitOnContextLost() {
                << " from problems.";
     // Signal the message loop to quit to shut down other threads
     // gracefully.
-    base::MessageLoop::current()->QuitNow();
+    base::RunLoop::QuitCurrentDeprecated();
     exiting_for_lost_context_ = true;
   }
 }

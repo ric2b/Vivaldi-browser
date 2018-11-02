@@ -26,6 +26,7 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/metrics/clean_exit_beacon.h"
+#include "components/metrics/delegating_provider.h"
 #include "components/metrics/execution_phase.h"
 #include "components/metrics/metrics_log.h"
 #include "components/metrics/metrics_log_manager.h"
@@ -108,11 +109,6 @@ class MetricsService : public base::HistogramFlattener {
   // HistogramFlattener:
   void RecordDelta(const base::HistogramBase& histogram,
                    const base::HistogramSamples& snapshot) override;
-  void InconsistencyDetected(
-      base::HistogramBase::Inconsistency problem) override;
-  void UniqueInconsistencyDetected(
-      base::HistogramBase::Inconsistency problem) override;
-  void InconsistencyDetectedInLoggedCount(int amount) override;
 
   // This should be called when the application is not idle, i.e. the user seems
   // to be interacting with the application.
@@ -187,6 +183,14 @@ class MetricsService : public base::HistogramFlattener {
     return reporting_service_.metrics_log_store();
   }
 
+  // Records the current environment (system profile) in |log|, and persists
+  // the results in prefs.
+  // Exposed for testing.
+  static std::string RecordCurrentEnvironmentHelper(
+      MetricsLog* log,
+      PrefService* local_state,
+      DelegatingProvider* delegating_provider);
+
  private:
   // The MetricsService has a lifecycle that is stored as a state.
   // See metrics_service.cc for description of this lifecycle.
@@ -245,9 +249,6 @@ class MetricsService : public base::HistogramFlattener {
   // Set up client ID, session ID, etc.
   void InitializeMetricsState();
 
-  // Notifies providers when a new metrics log is created.
-  void NotifyOnDidCreateMetricsLog();
-
   // Opens a new log for recording user experience metrics.
   void OpenNewLog();
 
@@ -268,10 +269,6 @@ class MetricsService : public base::HistogramFlattener {
   // Called by the client via a callback when final log info collection is
   // complete.
   void OnFinalLogInfoCollectionDone();
-
-  // Returns true if any of the registered metrics providers have critical
-  // stability metrics to report in an initial stability log.
-  bool ProvidersHaveInitialStabilityMetrics();
 
   // Prepares the initial stability log, which is only logged when the previous
   // run of Chrome crashed.  This log contains any stability metrics left over
@@ -295,7 +292,9 @@ class MetricsService : public base::HistogramFlattener {
   // Creates a new MetricsLog instance with the given |log_type|.
   std::unique_ptr<MetricsLog> CreateLog(MetricsLog::LogType log_type);
 
-  // Records the current environment (system profile) in |log|.
+  // Records the current environment (system profile) in |log|, and persists
+  // the results in prefs and GlobalPersistentSystemProfile.
+  // Exposed for testing.
   void RecordCurrentEnvironment(MetricsLog* log);
 
   // Record complete list of histograms into the current log.
@@ -333,7 +332,7 @@ class MetricsService : public base::HistogramFlattener {
   MetricsServiceClient* const client_;
 
   // Registered metrics providers.
-  std::vector<std::unique_ptr<MetricsProvider>> metrics_providers_;
+  DelegatingProvider delegating_provider_;
 
   PrefService* local_state_;
 

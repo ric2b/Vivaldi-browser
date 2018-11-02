@@ -7,9 +7,9 @@
 #include <memory>
 #include "core/dom/Document.h"
 #include "core/dom/FrameRequestCallback.h"
-#include "core/events/Event.h"
-#include "core/events/EventListener.h"
-#include "core/events/EventTarget.h"
+#include "core/dom/events/Event.h"
+#include "core/dom/events/EventListener.h"
+#include "core/dom/events/EventTarget.h"
 #include "core/testing/DummyPageHolder.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Functional.h"
@@ -44,7 +44,7 @@ namespace {
 
 class TaskOrderObserver {
  public:
-  std::unique_ptr<WTF::Closure> CreateTask(int id) {
+  WTF::Closure CreateTask(int id) {
     return WTF::Bind(&TaskOrderObserver::RunTask, WTF::Unretained(this), id);
   }
   const Vector<int>& Order() const { return order_; }
@@ -118,15 +118,15 @@ namespace {
 
 class RunTaskEventListener final : public EventListener {
  public:
-  RunTaskEventListener(std::unique_ptr<WTF::Closure> task)
+  RunTaskEventListener(WTF::Closure task)
       : EventListener(kCPPEventListenerType), task_(std::move(task)) {}
-  void handleEvent(ExecutionContext*, Event*) override { (*task_)(); }
+  void handleEvent(ExecutionContext*, Event*) override { task_(); }
   bool operator==(const EventListener& other) const override {
     return this == &other;
   }
 
  private:
-  std::unique_ptr<WTF::Closure> task_;
+  WTF::Closure task_;
 };
 
 }  // anonymous namespace
@@ -154,12 +154,11 @@ namespace {
 
 class RunTaskCallback final : public FrameRequestCallback {
  public:
-  RunTaskCallback(std::unique_ptr<WTF::Closure> task)
-      : task_(std::move(task)) {}
-  void handleEvent(double) override { (*task_)(); }
+  RunTaskCallback(WTF::Closure task) : task_(std::move(task)) {}
+  void handleEvent(double) override { task_(); }
 
  private:
-  std::unique_ptr<WTF::Closure> task_;
+  WTF::Closure task_;
 };
 
 }  // anonymous namespace

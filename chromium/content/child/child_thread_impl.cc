@@ -24,6 +24,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/process/process.h"
 #include "base/process/process_handle.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -51,6 +52,7 @@
 #include "content/common/field_trial_recorder.mojom.h"
 #include "content/common/in_process_child_thread_params.h"
 #include "content/public/common/connection_filter.h"
+#include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/mojo_channel_switches.h"
 #include "content/public/common/service_manager_connection.h"
@@ -83,6 +85,10 @@
 #include "base/allocator/allocator_interception_mac.h"
 #include "base/process/process.h"
 #include "content/common/mac/app_nap_activity.h"
+#endif
+
+#if defined(OS_WIN)
+#include "content/child/dwrite_font_proxy/dwrite_font_proxy_init_win.h"
 #endif
 
 using tracked_objects::ThreadData;
@@ -254,6 +260,10 @@ InitializeMojoIPCChannel() {
         mojo::edk::NamedPlatformChannelPair::PassClientHandleFromParentProcess(
             *base::CommandLine::ForCurrentProcess());
   }
+#elif defined(OS_FUCHSIA)
+  platform_channel =
+      mojo::edk::PlatformChannelPair::PassClientHandleFromParentProcess(
+          *base::CommandLine::ForCurrentProcess());
 #elif defined(OS_POSIX)
   platform_channel.reset(mojo::edk::PlatformHandle(
       base::GlobalDescriptors::GetInstance()->Get(kMojoIPCChannel)));
@@ -574,8 +584,9 @@ void ChildThreadImpl::Init(const Options& options) {
 #endif
 
   message_loop_->task_runner()->PostDelayedTask(
-      FROM_HERE, base::Bind(&ChildThreadImpl::EnsureConnected,
-                            channel_connected_factory_->GetWeakPtr()),
+      FROM_HERE,
+      base::BindOnce(&ChildThreadImpl::EnsureConnected,
+                     channel_connected_factory_->GetWeakPtr()),
       base::TimeDelta::FromSeconds(connection_timeout));
 
 #if defined(OS_ANDROID)
@@ -590,6 +601,10 @@ void ChildThreadImpl::Init(const Options& options) {
     field_trial_syncer_->InitFieldTrialObserving(
         *base::CommandLine::ForCurrentProcess());
   }
+
+#if defined(OS_WIN)
+  UpdateDWriteFontProxySender(thread_safe_sender());
+#endif
 }
 
 ChildThreadImpl::~ChildThreadImpl() {
@@ -633,7 +648,7 @@ void ChildThreadImpl::OnChannelError() {
   // If this thread runs in the browser process, only Thread::Stop should
   // stop its message loop. Otherwise, QuitWhenIdle could race Thread::Stop.
   if (!IsInBrowserProcess())
-    base::MessageLoop::current()->QuitWhenIdle();
+    base::RunLoop::QuitCurrentWhenIdleDeprecated();
 }
 
 bool ChildThreadImpl::Send(IPC::Message* msg) {
@@ -765,6 +780,8 @@ void ChildThreadImpl::OnAssociatedInterfaceRequest(
 void ChildThreadImpl::StartServiceManagerConnection() {
   DCHECK(service_manager_connection_);
   service_manager_connection_->Start();
+  GetContentClient()->OnServiceManagerConnected(
+      service_manager_connection_.get());
 }
 
 bool ChildThreadImpl::OnControlMessageReceived(const IPC::Message& msg) {
@@ -794,7 +811,7 @@ void ChildThreadImpl::OnProcessPurgeAndSuspend() {
 void ChildThreadImpl::OnProcessResume() {}
 
 void ChildThreadImpl::OnShutdown() {
-  base::MessageLoop::current()->QuitWhenIdle();
+  base::RunLoop::QuitCurrentWhenIdleDeprecated();
 }
 
 #if BUILDFLAG(IPC_MESSAGE_LOG_ENABLED)

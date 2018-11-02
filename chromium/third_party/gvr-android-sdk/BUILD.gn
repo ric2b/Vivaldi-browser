@@ -7,12 +7,14 @@ import("//build/config/android/rules.gni")
 android_aar_prebuilt("controller_test_api_java") {
   aar_path = "test-libraries/controller_test_api.aar"
   proguard_configs = [ "test-libraries/proguard.txt" ]
+
+  # Jar includes conflicting copies of Desugar-runtime.jar classes.
+  jar_excluded_patterns = [ "*ThrowableExtension*.class" ]
 }
 
 android_aar_prebuilt("gvr_common_java") {
-  aar_path = "common_library.aar"
+  aar_path = "src/libraries/sdk-common-1.80.0.aar"
   proguard_configs = [ "proguard-gvr-chromium.txt" ]
-  ignore_manifest = true  # Ignored because manifest merging is not supported (http://crbug.com/643967)
   ignore_native_libraries = true
 
   # Ignore unused auto generated classes. Proguard will not strip them automatically because they
@@ -37,11 +39,19 @@ android_aar_prebuilt("gvr_common_java") {
     "*google/common/logging/nano/Vr\$VREvent\$DoublePrecisionTransform.class",
     "*google/common/logging/nano/Vr\$VREvent\$Cyclops*.class",
     "*google/common/logging/nano/Vr\$VREvent\$AudioStats.class",
+    "*ThrowableExtension*.class",
+  ]
+
+  deps = [
+    "//third_party/android_protobuf:protobuf_nano_javalib",
   ]
 }
 
 android_aar_prebuilt("gvr_controller_java") {
-  aar_path = "src/libraries/sdk-controller-1.60.1.aar"
+  aar_path = "src/libraries/sdk-controller-1.80.0.aar"
+  deps = [
+    ":gvr_common_java",
+  ]
 }
 
 config("libgvr_config") {

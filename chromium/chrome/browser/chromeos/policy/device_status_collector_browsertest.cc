@@ -842,6 +842,7 @@ TEST_F(DeviceStatusCollectorTest, VersionInfo) {
   EXPECT_TRUE(device_status_.has_browser_version());
   EXPECT_TRUE(device_status_.has_os_version());
   EXPECT_TRUE(device_status_.has_firmware_version());
+  EXPECT_TRUE(device_status_.has_tpm_version_info());
 
   // When the pref to collect this data is not enabled, expect that none of
   // the fields are present in the protobuf.
@@ -850,12 +851,14 @@ TEST_F(DeviceStatusCollectorTest, VersionInfo) {
   EXPECT_FALSE(device_status_.has_browser_version());
   EXPECT_FALSE(device_status_.has_os_version());
   EXPECT_FALSE(device_status_.has_firmware_version());
+  EXPECT_FALSE(device_status_.has_tpm_version_info());
 
   settings_helper_.SetBoolean(chromeos::kReportDeviceVersionInfo, true);
   GetStatus();
   EXPECT_TRUE(device_status_.has_browser_version());
   EXPECT_TRUE(device_status_.has_os_version());
   EXPECT_TRUE(device_status_.has_firmware_version());
+  EXPECT_TRUE(device_status_.has_tpm_version_info());
 
   // Check that the browser version is not empty. OS version & firmware
   // don't have any reasonable values inside the unit test, so those
@@ -1483,10 +1486,10 @@ class DeviceStatusCollectorNetworkInterfacesTest
       if (strlen(fake_network.address) > 0) {
         // Set the IP config.
         base::DictionaryValue ip_config_properties;
-        ip_config_properties.SetStringWithoutPathExpansion(
-            shill::kAddressProperty, fake_network.address);
-        ip_config_properties.SetStringWithoutPathExpansion(
-            shill::kGatewayProperty, fake_network.gateway);
+        ip_config_properties.SetKey(shill::kAddressProperty,
+                                    base::Value(fake_network.address));
+        ip_config_properties.SetKey(shill::kGatewayProperty,
+                                    base::Value(fake_network.gateway));
         chromeos::ShillIPConfigClient::TestInterface* ip_config_test =
             chromeos::DBusThreadManager::Get()->GetShillIPConfigClient()->
             GetTestInterface();

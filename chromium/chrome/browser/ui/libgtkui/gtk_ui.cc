@@ -55,24 +55,29 @@
 #include "ui/gfx/skia_util.h"
 #include "ui/gfx/x/x11_types.h"
 #include "ui/native_theme/native_theme.h"
+#include "ui/shell_dialogs/select_file_policy.h"
 #include "ui/views/controls/button/blue_button.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/button/label_button_border.h"
 #include "ui/views/linux_ui/device_scale_factor_observer.h"
 #include "ui/views/linux_ui/window_button_order_observer.h"
 #include "ui/views/resources/grit/views_resources.h"
+#include "ui/views/window/nav_button_provider.h"
 
 #if GTK_MAJOR_VERSION == 2
 #include "chrome/browser/ui/libgtkui/native_theme_gtk2.h"  // nogncheck
 #elif GTK_MAJOR_VERSION == 3
 #include "chrome/browser/ui/libgtkui/native_theme_gtk3.h"  // nogncheck
+#include "chrome/browser/ui/libgtkui/nav_button_layout_manager_gtk3.h"  // nogncheck
+#include "chrome/browser/ui/libgtkui/nav_button_provider_gtk3.h"  // nogncheck
 #endif
 
 #if BUILDFLAG(ENABLE_BASIC_PRINTING)
 #include "printing/printing_context_linux.h"
 #endif
+
 #if defined(USE_GCONF)
-#include "chrome/browser/ui/libgtkui/gconf_listener.h"
+#include "chrome/browser/ui/libgtkui/nav_button_layout_manager_gconf.h"
 #endif
 
 // A minimized port of GtkThemeService into something that can provide colors
@@ -86,6 +91,15 @@
 namespace libgtkui {
 
 namespace {
+
+// We would like this to be a feature flag, but GtkUi gets initialized
+// earlier than the feature flag registry, so just use a simple bool.
+// The reason for wanting a flag is so that we can release the GTK3
+// nav button layout manager and the GTK3 nav button provider at the
+// same time (so users don't have to deal with things changing twice).
+// Since this was never really intended to be toggled by users, this
+// is fine for now.
+const bool kUseGtkNavButtonLayoutManager = true;
 
 const double kDefaultDPI = 96;
 
@@ -264,6 +278,18 @@ int indicators_count;
 
 // The unknown content type.
 const char* kUnknownContentType = "application/octet-stream";
+
+std::unique_ptr<NavButtonLayoutManager> CreateNavButtonLayoutManager(
+    GtkUi* gtk_ui) {
+#if GTK_MAJOR_VERSION == 3
+  if (GtkVersionCheck(3, 14) && kUseGtkNavButtonLayoutManager)
+    return std::make_unique<NavButtonLayoutManagerGtk3>(gtk_ui);
+#endif
+#if defined(USE_GCONF)
+  return std::make_unique<NavButtonLayoutManagerGconf>(gtk_ui);
+#endif
+  return nullptr;
+}
 
 // Returns a gfx::FontRenderParams corresponding to GTK's configuration.
 gfx::FontRenderParams GetGtkFontRenderParams() {
@@ -446,10 +472,8 @@ void GtkUi::Initialize() {
       &GetPdfPaperSizeDeviceUnitsGtk);
 #endif
 
-#if defined(USE_GCONF)
   // We must build this after GTK gets initialized.
-  gconf_listener_.reset(new GConfListener(this));
-#endif  // defined(USE_GCONF)
+  nav_button_layout_manager_ = CreateNavButtonLayoutManager(this);
 
   indicators_count = 0;
 
@@ -694,9 +718,8 @@ std::unique_ptr<views::Border> GtkUi::CreateNativeBorder(
 
 void GtkUi::AddWindowButtonOrderObserver(
     views::WindowButtonOrderObserver* observer) {
-  if (!leading_buttons_.empty() || !trailing_buttons_.empty()) {
+  if (nav_buttons_set_)
     observer->OnWindowButtonOrderingChange(leading_buttons_, trailing_buttons_);
-  }
 
   window_button_order_observer_list_.AddObserver(observer);
 }
@@ -711,6 +734,7 @@ void GtkUi::SetWindowButtonOrdering(
     const std::vector<views::FrameButton>& trailing_buttons) {
   leading_buttons_ = leading_buttons;
   trailing_buttons_ = trailing_buttons;
+  nav_buttons_set_ = true;
 
   for (views::WindowButtonOrderObserver& observer :
        window_button_order_observer_list_) {
@@ -748,8 +772,8 @@ void GtkUi::GetDefaultFontDescription(std::string* family_out,
 
 ui::SelectFileDialog* GtkUi::CreateSelectFileDialog(
     ui::SelectFileDialog::Listener* listener,
-    ui::SelectFilePolicy* policy) const {
-  return SelectFileDialogImpl::Create(listener, policy);
+    std::unique_ptr<ui::SelectFilePolicy> policy) const {
+  return SelectFileDialogImpl::Create(listener, std::move(policy));
 }
 
 bool GtkUi::UnityIsRunning() {
@@ -775,6 +799,14 @@ void GtkUi::AddDeviceScaleFactorObserver(
 void GtkUi::RemoveDeviceScaleFactorObserver(
     views::DeviceScaleFactorObserver* observer) {
   device_scale_factor_observer_list_.RemoveObserver(observer);
+}
+
+std::unique_ptr<views::NavButtonProvider> GtkUi::CreateNavButtonProvider() {
+#if GTK_MAJOR_VERSION >= 3
+  if (GtkVersionCheck(3, 14))
+    return base::MakeUnique<libgtkui::NavButtonProviderGtk3>();
+#endif
+  return nullptr;
 }
 
 bool GtkUi::MatchEvent(const ui::Event& event,
@@ -1052,11 +1084,20 @@ float GtkUi::GetRawDeviceScaleFactor() {
   if (display::Display::HasForceDeviceScaleFactor())
     return display::Display::GetForcedDeviceScaleFactor();
 
+#if GTK_MAJOR_VERSION == 2
+  GtkSettings* gtk_settings = gtk_settings_get_default();
+  gint gtk_dpi = -1;
+  g_object_get(gtk_settings, "gtk-xft-dpi", &gtk_dpi, nullptr);
+  const float scale_factor = gtk_dpi / (1024 * kDefaultDPI);
+#else
   GdkScreen* screen = gdk_screen_get_default();
   gint scale = gtk_widget_get_scale_factor(fake_window_);
+  DCHECK_GT(scale, 0);
   gdouble resolution = gdk_screen_get_resolution(screen);
   const float scale_factor =
       resolution <= 0 ? scale : resolution * scale / kDefaultDPI;
+#endif
+
   // Blacklist scaling factors <120% (crbug.com/484400) and round
   // to 1 decimal to prevent rendering problems (crbug.com/485183).
   return scale_factor < 1.2f ? 1.0f : roundf(scale_factor * 10) / 10;

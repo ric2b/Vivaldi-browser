@@ -50,9 +50,9 @@ std::string GetSystemString(bool is_tablet) {
 namespace syncer {
 namespace internal {
 
-const char* kSyncServerUrl = SYNC_URL("/vivid-sync");
+const char* const kSyncServerUrl = SYNC_URL("/vivid-sync");
 
-const char* kSyncDevServerUrl = TEST_SYNC_URL("/vivid-sync");
+const char* const kSyncDevServerUrl = TEST_SYNC_URL("/vivid-sync");
 
 std::string FormatUserAgentForSync(const std::string& system,
                                    version_info::Channel channel) {

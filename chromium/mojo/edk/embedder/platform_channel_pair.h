@@ -24,6 +24,8 @@ namespace edk {
 // independent way of representing handles that are passed to child processes.
 #if defined(OS_WIN)
 using HandlePassingInformation = base::HandlesToInheritVector;
+#elif defined(OS_FUCHSIA)
+using HandlePassingInformation = base::HandlesToTransferVector;
 #elif defined(OS_POSIX)
 using HandlePassingInformation = base::FileHandleMappingVector;
 #else
@@ -88,6 +90,16 @@ class MOJO_SYSTEM_IMPL_EXPORT PlatformChannelPair {
   // Like above, but returns a string instead of changing the command line.
   std::string PrepareToPassClientHandleToChildProcessAsString(
       HandlePassingInformation* handle_passing_info) const;
+
+#if defined(OS_FUCHSIA)
+  // Like above, but accepts a caller-supplied client |handle|.
+  // TODO(wez): Consider incorporating this call into other platform
+  // implementations.
+  static void PrepareToPassHandleToChildProcess(
+      const PlatformHandle& handle,
+      base::CommandLine* command_line,
+      HandlePassingInformation* handle_passing_info);
+#endif
 
   // To be called once the child process has been successfully launched, to do
   // any cleanup necessary.

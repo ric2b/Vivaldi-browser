@@ -163,7 +163,7 @@ class EmbeddedTestServerTest
   void OnURLFetchComplete(const URLFetcher* source) override {
     ++num_responses_received_;
     if (num_responses_received_ == num_responses_expected_)
-      base::MessageLoop::current()->QuitWhenIdle();
+      base::RunLoop::QuitCurrentWhenIdleDeprecated();
   }
 
   // Waits until the specified number of responses are received.
@@ -502,11 +502,6 @@ const CertificateValuesEntry kCertificateValuesEntry[] = {
     {EmbeddedTestServer::CERT_COMMON_NAME_IS_DOMAIN, false, "localhost",
      "Test Root CA"},
     {EmbeddedTestServer::CERT_EXPIRED, true, "127.0.0.1", "Test Root CA"},
-    {EmbeddedTestServer::CERT_CHAIN_WRONG_ROOT, false, "127.0.0.1", "B CA"},
-#if !defined(OS_WIN) && !defined(OS_ANDROID)
-    {EmbeddedTestServer::CERT_BAD_VALIDITY, true, "Leaf Certificate",
-     "Test Root CA"},
-#endif
 };
 
 TEST_P(EmbeddedTestServerTest, GetCertificate) {
@@ -609,7 +604,7 @@ class EmbeddedTestServerThreadingTestDelegate
 
   // URLFetcherDelegate override.
   void OnURLFetchComplete(const URLFetcher* source) override {
-    base::MessageLoop::current()->QuitWhenIdle();
+    base::RunLoop::QuitCurrentWhenIdleDeprecated();
   }
 
  private:

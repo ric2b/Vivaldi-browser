@@ -140,7 +140,6 @@ struct CONTENT_EXPORT WebPreferences {
   bool hide_scrollbars;
   bool accelerated_2d_canvas_enabled;
   int minimum_accelerated_2d_canvas_size;
-  bool disable_2d_canvas_copy_on_write;
   bool antialiased_2d_canvas_disabled;
   bool antialiased_clips_2d_canvas_enabled;
   int accelerated_2d_canvas_msaa_sample_count;
@@ -174,6 +173,7 @@ struct CONTENT_EXPORT WebPreferences {
   ui::PointerType primary_pointer_type;
   int available_hover_types;
   ui::HoverType primary_hover_type;
+  bool barrel_button_for_drag_enabled = false;
   bool sync_xhr_in_documents_enabled;
   bool color_correct_rendering_enabled = false;
   bool should_respect_image_orientation;
@@ -253,6 +253,10 @@ struct CONTENT_EXPORT WebPreferences {
   // If enabled, video fullscreen detection will be enabled.
   bool video_fullscreen_detection_enabled;
   bool embedded_media_experience_enabled;
+  // Enable 8 (#RRGGBBAA) and 4 (#RGBA) value hex colors in CSS Android
+  // WebView quirk (http://crbug.com/618472).
+  bool css_hex_alpha_color_enabled;
+  bool enable_media_download_in_product_help;
   // Enable support for document.scrollingElement
   // WebView sets this to false to retain old documentElement behaviour
   // (http://crbug.com/761016).

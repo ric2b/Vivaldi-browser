@@ -38,15 +38,7 @@ bool WebUserGestureToken::HasGestures() const {
   return !token_.IsNull() && token_->HasGestures();
 }
 
-void WebUserGestureToken::SetOutOfProcess() {
-  token_->SetTimeoutPolicy(UserGestureToken::kOutOfProcess);
-}
-
-void WebUserGestureToken::SetJavascriptPrompt() {
-  token_->SetTimeoutPolicy(UserGestureToken::kHasPaused);
-}
-
-WebUserGestureToken::WebUserGestureToken(PassRefPtr<UserGestureToken> token) {
+WebUserGestureToken::WebUserGestureToken(RefPtr<UserGestureToken> token) {
   token_ = std::move(token);
 }
 

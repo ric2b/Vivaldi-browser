@@ -36,12 +36,15 @@
 #include "base/trace_event/memory_dump_manager.h"
 #include "platform/FontFamilyNames.h"
 #include "platform/Histogram.h"
+#include "platform/InstanceCountersMemoryDumpProvider.h"
 #include "platform/Language.h"
 #include "platform/MemoryCoordinator.h"
 #include "platform/PartitionAllocMemoryDumpProvider.h"
 #include "platform/fonts/FontCacheMemoryDumpProvider.h"
 #include "platform/heap/BlinkGCMemoryDumpProvider.h"
 #include "platform/heap/GCTaskRunner.h"
+#include "platform/instrumentation/resource_coordinator/BlinkResourceCoordinatorBase.h"
+#include "platform/instrumentation/resource_coordinator/RendererResourceCoordinator.h"
 #include "platform/instrumentation/tracing/MemoryCacheDumpProvider.h"
 #include "platform/wtf/HashMap.h"
 #include "public/platform/InterfaceProvider.h"
@@ -108,6 +111,8 @@ Platform::Platform() : main_thread_(0) {
   WTF::Partitions::Initialize(MaxObservedSizeFunction);
 }
 
+Platform::~Platform() {}
+
 void Platform::Initialize(Platform* platform) {
   DCHECK(!g_platform);
   DCHECK(platform);
@@ -144,7 +149,17 @@ void Platform::Initialize(Platform* platform) {
     base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
         MemoryCacheDumpProvider::Instance(), "MemoryCache",
         base::ThreadTaskRunnerHandle::Get());
+    base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
+        InstanceCountersMemoryDumpProvider::Instance(), "BlinkObjectCounters",
+        base::ThreadTaskRunnerHandle::Get());
   }
+
+  // Pre-create the File thread so multiple threads can call FileTaskRunner() in
+  // a non racy way later.
+  g_platform->file_thread_ = g_platform->CreateThread("File");
+
+  if (BlinkResourceCoordinatorBase::IsEnabled())
+    RendererResourceCoordinator::Initialize();
 }
 
 void Platform::SetCurrentPlatformForTesting(Platform* platform) {
@@ -159,6 +174,14 @@ Platform* Platform::Current() {
 
 WebThread* Platform::MainThread() const {
   return main_thread_;
+}
+
+WebTaskRunner* Platform::FileTaskRunner() const {
+  return file_thread_ ? file_thread_->GetWebTaskRunner() : nullptr;
+}
+
+base::TaskRunner* Platform::BaseFileTaskRunner() const {
+  return file_thread_ ? file_thread_->GetSingleThreadTaskRunner() : nullptr;
 }
 
 service_manager::Connector* Platform::GetConnector() {
@@ -185,6 +208,10 @@ std::unique_ptr<WebServiceWorkerCacheStorage> Platform::CreateCacheStorage(
 }
 
 std::unique_ptr<WebThread> Platform::CreateThread(const char* name) {
+  return nullptr;
+}
+
+std::unique_ptr<WebThread> Platform::CreateWebAudioThread() {
   return nullptr;
 }
 

@@ -42,9 +42,9 @@ class TestStreamSender final : public mojom::RemotingDataStreamSender {
                         uint32_t size,
                         uint32_t total_payload_size) override {
     next_frame_data_.resize(total_payload_size);
-    MojoResult result = mojo::ReadDataRaw(
-        consumer_handle_.get(), next_frame_data_.data() + offset, &size,
-        MOJO_READ_DATA_FLAG_ALL_OR_NONE);
+    MojoResult result =
+        consumer_handle_->ReadData(next_frame_data_.data() + offset, &size,
+                                   MOJO_READ_DATA_FLAG_ALL_OR_NONE);
     CHECK(result == MOJO_RESULT_OK);
   }
 
@@ -108,6 +108,11 @@ class TestRemoter final : public mojom::Remoter {
   void SendMessageToSink(const std::vector<uint8_t>& message) override {
     if (!send_message_to_sink_cb_.is_null())
       send_message_to_sink_cb_.Run(message);
+  }
+
+  void EstimateTransmissionCapacity(
+      mojom::Remoter::EstimateTransmissionCapacityCallback callback) override {
+    std::move(callback).Run(0);
   }
 
   // Called when receives RPC messages from receiver.

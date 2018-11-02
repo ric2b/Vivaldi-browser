@@ -197,6 +197,7 @@ HistoryService::HistoryService(std::unique_ptr<HistoryClient> history_client,
       history_client_(std::move(history_client)),
       visit_delegate_(std::move(visit_delegate)),
       backend_loaded_(false),
+      drop_visits_and_url_tables_on_shutdown_(false),
       weak_ptr_factory_(this) {}
 
 HistoryService::~HistoryService() {
@@ -244,6 +245,10 @@ TypedUrlSyncableService* HistoryService::GetTypedUrlSyncableService() const {
 
 void HistoryService::Shutdown() {
   DCHECK(thread_checker_.CalledOnValidThread());
+  if (drop_visits_and_url_tables_on_shutdown_) {
+    ScheduleTask(PRIORITY_UI, base::Bind(&HistoryBackend::DropHistoryTables,
+                                         history_backend_));
+  }
   Cleanup();
 }
 
@@ -597,7 +602,7 @@ base::CancelableTaskTracker::TaskId HistoryService::GetFaviconForID(
 
 base::CancelableTaskTracker::TaskId
 HistoryService::UpdateFaviconMappingsAndFetch(
-    const GURL& page_url,
+    const std::set<GURL>& page_urls,
     const GURL& icon_url,
     favicon_base::IconType icon_type,
     const std::vector<int>& desired_sizes,
@@ -611,8 +616,8 @@ HistoryService::UpdateFaviconMappingsAndFetch(
   return tracker->PostTaskAndReply(
       backend_task_runner_.get(), FROM_HERE,
       base::Bind(&HistoryBackend::UpdateFaviconMappingsAndFetch,
-                 history_backend_, page_url, icon_url, icon_type, desired_sizes,
-                 results),
+                 history_backend_, page_urls, icon_url, icon_type,
+                 desired_sizes, results),
       base::Bind(&RunWithFaviconResults, callback, base::Owned(results)));
 }
 
@@ -964,6 +969,9 @@ bool HistoryService::Init(
   ScheduleTask(PRIORITY_UI,
                base::Bind(&HistoryBackend::Init, history_backend_,
                           no_db, history_database_params));
+
+  drop_visits_and_url_tables_on_shutdown_ =
+      history_database_params.number_of_days_to_keep_visits == 0;
 
   if (visit_delegate_ && !visit_delegate_->Init(this))
     return false;

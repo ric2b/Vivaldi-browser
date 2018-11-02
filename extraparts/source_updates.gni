@@ -22,7 +22,9 @@ foreach(_target, _main_dll_targets) {
       "//vivaldi/extraparts/vivaldi_main_delegate.cpp",
       "//vivaldi/extraparts/vivaldi_main_delegate.h",
     ]
-    deps += [ "//vivaldi/extensions:extensions_client" ]
+    if (!is_android) {
+      deps += [ "//vivaldi/extensions:extensions_client" ]
+    }
   }
 }
 
@@ -31,5 +33,7 @@ post_process_target("//chrome/test:test_support") {
     "//vivaldi/extraparts/vivaldi_main_delegate.cpp",
     "//vivaldi/extraparts/vivaldi_main_delegate.h",
   ]
-  public_deps += [ "//vivaldi/extensions:extensions_client" ]
+  if (!is_android) {
+    public_deps += [ "//vivaldi/extensions:extensions_client" ]
+  }
 }

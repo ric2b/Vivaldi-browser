@@ -60,7 +60,6 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
   // WebContentsTester implementation.
   void CommitPendingNavigation() override;
   TestRenderFrameHost* GetPendingMainFrame() const override;
-  void StartNavigation(const GURL& url) override;
   void NavigateAndCommit(const GURL& url) override;
   void TestSetIsLoading(bool value) override;
   void ProceedWithCrossSiteNavigation() override;
@@ -136,8 +135,7 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
   void TestDidFinishLoad(const GURL& url);
   void TestDidFailLoadWithError(const GURL& url,
                                 int error_code,
-                                const base::string16& error_description,
-                                bool was_ignored_by_handler);
+                                const base::string16& error_description);
 
   void SetNavigationData(
       NavigationHandle* navigation_handle,

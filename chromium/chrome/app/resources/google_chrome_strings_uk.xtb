@@ -17,7 +17,6 @@
 <translation id="1434626383986940139">Програми Chrome для версії Canary</translation>
 <translation id="1457721931618994305">Оновлення Google Chrome...</translation>
 <translation id="1469002951682717133">Панель запуску програм Chrome</translation>
-<translation id="1480489203462860648">Уже встановлено. Спробуйте</translation>
 <translation id="1553358976309200471">Оновити Chrome</translation>
 <translation id="1587223624401073077">Google Chrome використовує вашу камеру.</translation>
 <translation id="1587325591171447154">Файл <ph name="FILE_NAME" /> небезпечний, тому Chrome заблокував його.</translation>
@@ -94,6 +93,7 @@
 <translation id="345171907106878721">Додати себе в Chrome</translation>
 <translation id="3612333635265770873">Відомо, що модуль із такою назвою конфліктує з Google Chrome.</translation>
 <translation id="3622797965165704966">Користуватися Chrome у своєму обліковому записі Google на спільних комп’ютерах стало легше.</translation>
+<translation id="3637702109597584617"><ph name="TERMS_OF_SERVICE_LINK" />Умови використання<ph name="END_TERMS_OF_SERVICE_LINK" /> ОС Google Chrome</translation>
 <translation id="3718181793972440140">1 елемент буде видалено з цього пристрою. Щоб відновити дані пізніше, увійдіть в обліковий запис Chrome як <ph name="USER_EMAIL" />.</translation>
 <translation id="3735758079232443276">Розширення "<ph name="EXTENSION_NAME" />" змінило сторінку, яка відкривається під час запуску Chrome.</translation>
 <translation id="3738139272394829648">Пошук дотиком</translation>
@@ -132,12 +132,12 @@
 <translation id="4754614261631455953">Google Chrome Canary (mDNS-In)</translation>
 <translation id="4771048833395599659">Цей файл може бути небезпечним, тому Chrome заблокував його.</translation>
 <translation id="4794050651896644714">Зберігати дані в Chrome</translation>
+<translation id="4804732725083176494">Адміністратор цього пристрою вимкнув вхід у Chrome.</translation>
 <translation id="4891791193823137474">Дозволити Google Chrome працювати у фоновому режимі</translation>
 <translation id="4921569541910214635">Користуєтеся комп’ютером спільно з іншими? Тепер ви можете налаштувати Chrome на свій смак.</translation>
 <translation id="4953650215774548573">Зробити Google Chrome веб-переглядачем за умовчанням</translation>
 <translation id="495931528404527476">У Chrome</translation>
 <translation id="4965682129423310439">Chrome виявив зловмисне програмне забезпечення на вашому комп’ютері. Chrome може вилучити його та відновити налаштування для роботи веб-переглядача у звичайному режимі.</translation>
-<translation id="4987308747895123092">Закрийте всі вікна Google Chrome (зокрема вікна в режимі Windows 8) і повторіть спробу.</translation>
 <translation id="4990567037958725628">Google Chrome Canary</translation>
 <translation id="5028489144783860647">Google Chrome не вдалося синхронізувати ваші дані. Оновіть свою парольну фразу для синхронізації.</translation>
 <translation id="5037239767309817516">Щоб зміна почала діяти, закрийте всі вікна Google Chrome і перезапустіть веб-переглядач.</translation>
@@ -195,7 +195,6 @@
 <translation id="6634887557811630702">У вас остання версія Google Chrome.</translation>
 <translation id="6676384891291319759">Доступ до Інтернету</translation>
 <translation id="6697947395630195233">Chrome потрібен доступ до місцезнаходження, щоб повідомляти ваші геодані цьому сайту.</translation>
-<translation id="6757767188268205357">Не турбувати мене</translation>
 <translation id="683440813066116847">Вхідне правило для Google Chrome Canary дозволяє трафік mDNS.</translation>
 <translation id="686561893457936865">Використовуйте Chrome на всіх пристроях</translation>
 <translation id="6883876366448858277">надсилає слово та його контекст у Пошук Google і повертає визначення, зображення й інші результати пошуку.</translation>
@@ -210,7 +209,6 @@
 <translation id="7161904924553537242">Вітаємо у Google Chrome:</translation>
 <translation id="7164397146364144019">Ви можете допомогти зробити Chrome безпечнішим і простішим у користуванні, автоматично повідомляючи Google деталі щодо можливого порушення безпеки.</translation>
 <translation id="7185038942300673794"><ph name="EXTENSION_NAME" /> додано в Chrome.</translation>
-<translation id="7196020411877309443">Чому відображається це повідомлення?</translation>
 <translation id="7242029209006116544">Ви входите, використовуючи дані облікового запису, яким керує адміністратор. Адміністратор може контролювати ваш профіль Google Chrome. Ваші дані Chrome, як-от програми, закладки, історія, паролі й інші налаштування, буде назавжди пов’язано з обліковим записом <ph name="USER_NAME" />. Ці дані можна видалити на інформаційній панелі Облікових записів Google, але ви не зможете пов’язати їх з іншим обліковим записом. Проте ви можете створити новий профіль, щоб зберігати наявні дані Chrome окремо. <ph name="LEARN_MORE" /></translation>
 <translation id="729375352412857283">На цей комп’ютер невдовзі перестануть надходити оновлення Google Chrome, оскільки Windows XP та Windows Vista більше не підтримуватимуться.</translation>
 <translation id="7330164299247909639">Не вдалось отримати сертифікат автентифікації. Щоб дізнатися більше, знову ввійдіть в обліковий запис Google Chrome як користувач <ph name="USER_NAME" /> або зв’яжіться з адміністратором. <ph name="ADDITIONAL_EXPLANATION" /></translation>

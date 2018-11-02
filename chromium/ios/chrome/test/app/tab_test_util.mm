@@ -20,7 +20,6 @@
 #import "ios/chrome/browser/ui/tabs/tab_strip_controller_private.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
 #import "ios/testing/wait_util.h"
-#import "ios/web/web_state/ui/crw_web_controller.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -129,11 +128,12 @@ BOOL SetCurrentTabsToBeColdStartTabs() {
   if (!GetCurrentTabModel().tabUsageRecorder)
     return NO;
   TabModel* tab_model = GetCurrentTabModel();
-  NSMutableArray* tabs = [NSMutableArray array];
+  std::vector<web::WebState*> web_states;
   for (Tab* tab in tab_model) {
-    [tabs addObject:tab];
+    web_states.push_back(tab.webState);
   }
-  tab_model.tabUsageRecorder->InitialRestoredTabs(tab_model.currentTab, tabs);
+  tab_model.tabUsageRecorder->InitialRestoredTabs(tab_model.currentTab.webState,
+                                                  web_states);
   return YES;
 }
 
@@ -149,11 +149,9 @@ void EvictOtherTabModelTabs() {
       IsIncognitoMode()
           ? [GetMainController().browserViewInformation mainTabModel]
           : [GetMainController().browserViewInformation otrTabModel];
-  NSUInteger count = otherTabModel.count;
-  for (NSUInteger i = 0; i < count; i++) {
-    Tab* tab = [otherTabModel tabAtIndex:i];
-    [tab.webController handleLowMemory];
-  }
+  // Disabling and enabling web usage will evict all web views.
+  otherTabModel.webUsageEnabled = NO;
+  otherTabModel.webUsageEnabled = YES;
 }
 
 void CloseAllIncognitoTabs() {

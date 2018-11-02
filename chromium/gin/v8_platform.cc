@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "base/allocator/partition_allocator/page_allocator.h"
 #include "base/bind.h"
 #include "base/debug/stack_trace.h"
 #include "base/location.h"
@@ -13,6 +14,7 @@
 #include "base/task_scheduler/post_task.h"
 #include "base/task_scheduler/task_scheduler.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "gin/per_isolate_data.h"
 
 namespace gin {
@@ -195,9 +197,17 @@ V8Platform::V8Platform() : tracing_controller_(new TracingControllerImpl) {}
 
 V8Platform::~V8Platform() {}
 
+void V8Platform::OnCriticalMemoryPressure() {
+#if defined(OS_WIN)
+  // Some configurations do not use page_allocator. Only 32 bit Windows systems
+  // reserve memory currently.
+  base::ReleaseReservation();
+#endif
+}
+
 size_t V8Platform::NumberOfAvailableBackgroundThreads() {
   return std::max(1, base::TaskScheduler::GetInstance()
-                         ->GetMaxConcurrentTasksWithTraitsDeprecated(
+                         ->GetMaxConcurrentNonBlockedTasksWithTraitsDeprecated(
                              kBackgroundThreadTaskTraits));
 }
 
@@ -255,6 +265,10 @@ bool V8Platform::IdleTasksEnabled(v8::Isolate* isolate) {
 double V8Platform::MonotonicallyIncreasingTime() {
   return base::TimeTicks::Now().ToInternalValue() /
       static_cast<double>(base::Time::kMicrosecondsPerSecond);
+}
+
+double V8Platform::CurrentClockTimeMillis() {
+  return base::Time::Now().ToJsTime();
 }
 
 v8::TracingController* V8Platform::GetTracingController() {

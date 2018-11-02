@@ -40,6 +40,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/process/process_handle.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -59,11 +60,12 @@
 #include "gpu/command_buffer/service/gpu_preferences.h"
 #include "gpu/config/gpu_driver_bug_workarounds.h"
 #include "media/base/test_data_util.h"
-#include "media/filters/h264_parser.h"
 #include "media/gpu/fake_video_decode_accelerator.h"
+#include "media/gpu/features.h"
 #include "media/gpu/gpu_video_decode_accelerator_factory.h"
 #include "media/gpu/rendering_helper.h"
 #include "media/gpu/video_accelerator_unittest_helpers.h"
+#include "media/video/h264_parser.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gl/gl_image.h"
@@ -71,26 +73,17 @@
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
 #include "media/gpu/dxva_video_decode_accelerator_win.h"
-#elif defined(OS_CHROMEOS)
-#if defined(USE_V4L2_CODEC)
-#include "media/gpu/v4l2_device.h"
-#include "media/gpu/v4l2_slice_video_decode_accelerator.h"
-#include "media/gpu/v4l2_video_decode_accelerator.h"
-#endif
-#if defined(ARCH_CPU_X86_FAMILY)
-#include "media/gpu/vaapi_video_decode_accelerator.h"
+#endif  // defined(OS_WIN)
+#if BUILDFLAG(USE_VAAPI)
 #include "media/gpu/vaapi_wrapper.h"
-#endif  // defined(ARCH_CPU_X86_FAMILY)
-#else
-#error The VideoAccelerator tests are not supported on this platform.
-#endif  // OS_WIN
+#endif  // BUILDFLAG(USE_VAAPI)
 
-#if defined(USE_OZONE)
+#if defined(OS_CHROMEOS)
 #include "ui/gfx/native_pixmap.h"
 #include "ui/ozone/public/ozone_gpu_test_helper.h"
 #include "ui/ozone/public/ozone_platform.h"
 #include "ui/ozone/public/surface_factory_ozone.h"
-#endif  // defined(USE_OZONE)
+#endif  // defined(OS_CHROMEOS)
 
 namespace media {
 
@@ -276,7 +269,7 @@ class VideoDecodeAcceleratorTestEnvironment : public ::testing::Environment {
         FROM_HERE, base::Bind(&RenderingHelper::InitializeOneOff, &done));
     done.Wait();
 
-#if defined(USE_OZONE)
+#if defined(OS_CHROMEOS)
     gpu_helper_.reset(new ui::OzoneGpuTestHelper());
     // Need to initialize after the rendering side since the rendering side
     // initializes the "GPU" parts of Ozone.
@@ -296,7 +289,7 @@ class VideoDecodeAcceleratorTestEnvironment : public ::testing::Environment {
   }
 
   void TearDown() override {
-#if defined(USE_OZONE)
+#if defined(OS_CHROMEOS)
     gpu_helper_.reset();
 #endif
     rendering_thread_.Stop();
@@ -308,7 +301,7 @@ class VideoDecodeAcceleratorTestEnvironment : public ::testing::Environment {
 
  private:
   base::Thread rendering_thread_;
-#if defined(USE_OZONE)
+#if defined(OS_CHROMEOS)
   std::unique_ptr<ui::OzoneGpuTestHelper> gpu_helper_;
 #endif
 
@@ -343,7 +336,7 @@ class TextureRef : public base::RefCounted<TextureRef> {
 
   uint32_t texture_id_;
   base::Closure no_longer_needed_cb_;
-#if defined(USE_OZONE)
+#if defined(OS_CHROMEOS)
   scoped_refptr<gfx::NativePixmap> pixmap_;
 #endif
 };
@@ -359,7 +352,7 @@ scoped_refptr<TextureRef> TextureRef::Create(
   return make_scoped_refptr(new TextureRef(texture_id, no_longer_needed_cb));
 }
 
-#if defined(USE_OZONE)
+#if defined(OS_CHROMEOS)
 gfx::BufferFormat VideoPixelFormatToGfxBufferFormat(
     VideoPixelFormat pixel_format) {
   switch (pixel_format) {
@@ -383,7 +376,7 @@ scoped_refptr<TextureRef> TextureRef::CreatePreallocated(
     VideoPixelFormat pixel_format,
     const gfx::Size& size) {
   scoped_refptr<TextureRef> texture_ref;
-#if defined(USE_OZONE)
+#if defined(OS_CHROMEOS)
   texture_ref = TextureRef::Create(texture_id, no_longer_needed_cb);
   LOG_ASSERT(texture_ref);
 
@@ -402,7 +395,7 @@ scoped_refptr<TextureRef> TextureRef::CreatePreallocated(
 
 gfx::GpuMemoryBufferHandle TextureRef::ExportGpuMemoryBufferHandle() const {
   gfx::GpuMemoryBufferHandle handle;
-#if defined(USE_OZONE)
+#if defined(OS_CHROMEOS)
   CHECK(pixmap_);
   int duped_fd = HANDLE_EINTR(dup(pixmap_->GetDmaBufFd(0)));
   LOG_ASSERT(duped_fd != -1) << "Failed duplicating dmabuf fd";
@@ -1834,7 +1827,7 @@ class VDATestSuite : public base::TestSuite {
   VDATestSuite(int argc, char** argv) : base::TestSuite(argc, argv) {}
 
   int Run() {
-#if defined(OS_WIN) || defined(USE_OZONE)
+#if defined(OS_WIN) || defined(OS_CHROMEOS)
     // For windows the decoding thread initializes the media foundation decoder
     // which uses COM. We need the thread to be a UI thread.
     // On Ozone, the backend initializes the event system using a UI
@@ -1843,18 +1836,18 @@ class VDATestSuite : public base::TestSuite {
         base::test::ScopedTaskEnvironment::MainThreadType::UI);
 #else
     base::test::ScopedTaskEnvironment scoped_task_environment;
-#endif  // OS_WIN || USE_OZONE
+#endif  // OS_WIN || OS_CHROMEOS
 
     media::g_env =
         reinterpret_cast<media::VideoDecodeAcceleratorTestEnvironment*>(
             testing::AddGlobalTestEnvironment(
                 new media::VideoDecodeAcceleratorTestEnvironment()));
 
-#if defined(USE_OZONE)
+#if defined(OS_CHROMEOS)
     ui::OzonePlatform::InitializeForUI();
 #endif
 
-#if defined(OS_CHROMEOS) && defined(ARCH_CPU_X86_FAMILY)
+#if BUILDFLAG(USE_VAAPI)
     media::VaapiWrapper::PreSandboxInitialization();
 #elif defined(OS_WIN)
     media::DXVAVideoDecodeAccelerator::PreSandboxInitialization();

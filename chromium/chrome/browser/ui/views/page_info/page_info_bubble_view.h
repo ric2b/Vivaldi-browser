@@ -23,6 +23,7 @@
 #include "ui/views/controls/styled_label_listener.h"
 
 class GURL;
+class Browser;
 class BubbleHeaderView;
 class Profile;
 class Browser;
@@ -46,7 +47,6 @@ class PageInfoBubbleViewTestApi;
 namespace views {
 class Link;
 class Widget;
-class WidgetObserver;
 }
 
 enum : int {
@@ -77,12 +77,21 @@ class PageInfoBubbleView : public content::WebContentsObserver,
     BUBBLE_INTERNAL_PAGE
   };
 
-  // If |anchor_view| is null, |anchor_rect| is used to anchor the bubble.
-  static views::BubbleDialogDelegateView* ShowBubble(
-      views::View* anchor_view,
-      views::WidgetObserver* widget_observer,
-      const gfx::Rect& anchor_rect,
-      Profile* profile,
+  enum PageInfoBubbleViewID {
+    VIEW_ID_NONE = 0,
+    VIEW_ID_PAGE_INFO_BUTTON_CLOSE,
+    VIEW_ID_PAGE_INFO_BUTTON_CHANGE_PASSWORD,
+    VIEW_ID_PAGE_INFO_BUTTON_WHITELIST_PASSWORD_REUSE,
+    VIEW_ID_PAGE_INFO_LABEL_SECURITY_DETAILS,
+    VIEW_ID_PAGE_INFO_LABEL_RESET_CERTIFICATE_DECISIONS,
+    VIEW_ID_PAGE_INFO_LINK_COOKIE_DIALOG,
+    VIEW_ID_PAGE_INFO_LINK_SITE_SETTINGS,
+    VIEW_ID_PAGE_INFO_LINK_CERTIFICATE_VIEWER,
+  };
+
+  // Creates the appropriate page info bubble for the given |url|.
+  static views::BubbleDialogDelegateView* CreatePageInfoBubble(
+      Browser* browser,
       content::WebContents* web_contents,
       const GURL& url,
       const security_state::SecurityInfo& security_info);
@@ -106,6 +115,7 @@ class PageInfoBubbleView : public content::WebContentsObserver,
   friend class test::PageInfoBubbleViewTestApi;
 
   PageInfoBubbleView(views::View* anchor_view,
+                     const gfx::Rect& anchor_rect,
                      gfx::NativeView parent_window,
                      Profile* profile,
                      content::WebContents* web_contents,

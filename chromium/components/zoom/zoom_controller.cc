@@ -18,7 +18,11 @@
 #include "net/base/url_util.h"
 
 #include "app/vivaldi_apptools.h"
+#include "extensions/features/features.h"
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "prefs/vivaldi_tab_zoom_pref.h"
+#endif
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(zoom::ZoomController);
 
@@ -152,6 +156,7 @@ bool ZoomController::SetZoomLevelByClient(
     zoom_map->SetTemporaryZoomLevel(render_process_id, render_view_id,
                                     zoom_level);
   } else {
+#if BUILDFLAG(ENABLE_EXTENSIONS)
     if (vivaldi::IsVivaldiRunning()) {
       bool tabZoom = vivaldi::isTabZoomEnabled(web_contents());
       std::string host = net::GetHostOrSpecFromURL(web_contents()->GetURL());
@@ -169,6 +174,7 @@ bool ZoomController::SetZoomLevelByClient(
         // Will clean up and return below.
       }
     }
+#endif
     if (!entry) {
       last_client_ = NULL;
       // If we exit without triggering an update, we should clear event_data_,

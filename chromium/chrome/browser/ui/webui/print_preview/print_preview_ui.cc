@@ -9,8 +9,8 @@
 #include <utility>
 #include <vector>
 
+#include "base/containers/id_map.h"
 #include "base/feature_list.h"
-#include "base/id_map.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -112,7 +112,7 @@ base::LazyInstance<PrintPreviewRequestIdMapWithLock>::DestructorAtExit
 
 // PrintPreviewUI IDMap used to avoid exposing raw pointer addresses to WebUI.
 // Only accessed on the UI thread.
-base::LazyInstance<IDMap<PrintPreviewUI*>>::DestructorAtExit
+base::LazyInstance<base::IDMap<PrintPreviewUI*>>::DestructorAtExit
     g_print_preview_ui_id_map = LAZY_INSTANCE_INITIALIZER;
 
 // PrintPreviewUI serves data for chrome://print requests.
@@ -158,7 +158,7 @@ bool HandleRequestCallback(
     return true;
   }
   // Invalid request.
-  scoped_refptr<base::RefCountedBytes> empty_bytes(new base::RefCountedBytes);
+  auto empty_bytes = base::MakeRefCounted<base::RefCountedBytes>();
   callback.Run(empty_bytes.get());
   return true;
 }
@@ -336,18 +336,6 @@ content::WebUIDataSource* CreatePrintPreviewUISource(Profile* profile) {
   source->AddLocalizedString("offlineForWeek",
                              IDS_PRINT_PREVIEW_OFFLINE_FOR_WEEK);
   source->AddLocalizedString("offline", IDS_PRINT_PREVIEW_OFFLINE);
-  source->AddLocalizedString("noDestsPromoTitle",
-                             IDS_PRINT_PREVIEW_NO_DESTS_PROMO_TITLE);
-  source->AddLocalizedString("noDestsPromoBody",
-                             IDS_PRINT_PREVIEW_NO_DESTS_PROMO_BODY);
-  source->AddLocalizedString("noDestsPromoGcpDesc",
-                             IDS_PRINT_PREVIEW_NO_DESTS_GCP_DESC);
-  source->AddLocalizedString("learnMore",
-                             IDS_LEARN_MORE);
-  source->AddLocalizedString(
-      "noDestsPromoAddPrinterButtonLabel",
-      IDS_PRINT_PREVIEW_NO_DESTS_PROMO_ADD_PRINTER_BUTTON_LABEL);
-  source->AddLocalizedString("noDestsPromoNotNowButtonLabel", IDS_NOT_NOW);
   source->AddLocalizedString("couldNotPrint",
                              IDS_PRINT_PREVIEW_COULD_NOT_PRINT);
   source->AddLocalizedString("registerPromoButtonText",

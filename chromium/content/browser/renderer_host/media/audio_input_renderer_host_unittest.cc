@@ -116,7 +116,6 @@ class AudioInputRendererHostWithInterception : public AudioInputRendererHost {
 
  private:
   bool Send(IPC::Message* message) override {
-    DCHECK_CURRENTLY_ON(BrowserThread::IO);
     bool handled = true;
 
     IPC_BEGIN_MESSAGE_MAP(AudioInputRendererHostWithInterception, *message)
@@ -270,8 +269,8 @@ class AudioInputRendererHostTest : public testing::Test {
     audio_manager_.reset(new media::FakeAudioManager(
         base::MakeUnique<media::TestAudioThread>(), &log_factory_));
     audio_system_ = media::AudioSystemImpl::Create(audio_manager_.get());
-    media_stream_manager_ =
-        base::MakeUnique<MediaStreamManager>(audio_system_.get());
+    media_stream_manager_ = base::MakeUnique<MediaStreamManager>(
+        audio_system_.get(), audio_manager_->GetTaskRunner());
     airh_ = new AudioInputRendererHostWithInterception(
         kRenderProcessId, kRendererPid, media::AudioManager::Get(),
         media_stream_manager_.get(), AudioMirroringManager::GetInstance(),
@@ -552,8 +551,8 @@ TEST_F(AudioInputRendererHostTest, TabCaptureStream) {
   controls.audio.stream_source = kMediaStreamSourceTab;
   std::string request_label = media_stream_manager_->MakeMediaAccessRequest(
       kRenderProcessId, kRenderFrameId, 0, controls, SecurityOrigin(),
-      base::Bind([](const MediaStreamDevices& devices,
-                    std::unique_ptr<MediaStreamUIProxy>) {}));
+      base::BindOnce([](const MediaStreamDevices& devices,
+                        std::unique_ptr<MediaStreamUIProxy>) {}));
   base::RunLoop().RunUntilIdle();
   int session_id = Open("Tab capture", controls.audio.device_id);
 

@@ -5,10 +5,10 @@
 #ifndef CONTENT_RENDERER_MEDIA_CDM_PEPPER_CDM_WRAPPER_IMPL_H_
 #define CONTENT_RENDERER_MEDIA_CDM_PEPPER_CDM_WRAPPER_IMPL_H_
 
-#include "ppapi/features/features.h"
+#include "media/media_features.h"
 
-#if !BUILDFLAG(ENABLE_PEPPER_CDMS)
-#error This file should only be included when ENABLE_PEPPER_CDMS is defined
+#if !BUILDFLAG(ENABLE_LIBRARY_CDMS)
+#error This file should only be included when ENABLE_LIBRARY_CDMS is defined
 #endif
 
 #include <memory>
@@ -21,6 +21,10 @@
 namespace blink {
 class WebHelperPlugin;
 class WebLocalFrame;
+}
+
+namespace url {
+class Origin;
 }
 
 namespace content {
@@ -44,9 +48,10 @@ struct WebHelperPluginDeleter {
 // blink:: objects.
 class PepperCdmWrapperImpl : public PepperCdmWrapper {
  public:
-  static std::unique_ptr<PepperCdmWrapper> Create(blink::WebLocalFrame* frame,
-                                                  const std::string& pluginType,
-                                                  const GURL& security_origin);
+  static std::unique_ptr<PepperCdmWrapper> Create(
+      blink::WebLocalFrame* frame,
+      const std::string& pluginType,
+      const url::Origin& security_origin);
 
   ~PepperCdmWrapperImpl() override;
 

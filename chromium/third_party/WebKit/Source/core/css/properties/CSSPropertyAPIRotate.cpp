@@ -9,13 +9,13 @@
 #include "core/css/parser/CSSPropertyParserHelpers.h"
 #include "platform/RuntimeEnabledFeatures.h"
 
-class CSSParserLocalContext;
 namespace blink {
 
-const CSSValue* CSSPropertyAPIRotate::parseSingleValue(
+const CSSValue* CSSPropertyAPIRotate::ParseSingleValue(
+    CSSPropertyID,
     CSSParserTokenRange& range,
     const CSSParserContext& context,
-    const CSSParserLocalContext&) {
+    const CSSParserLocalContext&) const {
   DCHECK(RuntimeEnabledFeatures::CSSIndependentTransformPropertiesEnabled());
 
   CSSValueID id = range.Peek().Id();
@@ -36,7 +36,7 @@ const CSSValue* CSSPropertyAPIRotate::parseSingleValue(
   }
 
   CSSValue* rotation = CSSPropertyParserHelpers::ConsumeAngle(
-      range, context, WTF::Optional<WebFeature>());
+      range, &context, WTF::Optional<WebFeature>());
   if (!rotation)
     return nullptr;
   list->Append(*rotation);

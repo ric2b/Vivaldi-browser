@@ -20,8 +20,8 @@ namespace {
 
 class TestTarget : public AcceleratorTarget {
  public:
-  TestTarget() : accelerator_pressed_count_(0) {}
-  ~TestTarget() override {}
+  TestTarget() = default;
+  ~TestTarget() override = default;
 
   int accelerator_pressed_count() const {
     return accelerator_pressed_count_;
@@ -36,7 +36,7 @@ class TestTarget : public AcceleratorTarget {
   bool CanHandleAccelerators() const override;
 
  private:
-  int accelerator_pressed_count_;
+  int accelerator_pressed_count_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(TestTarget);
 };

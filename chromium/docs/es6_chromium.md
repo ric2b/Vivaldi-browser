@@ -281,16 +281,6 @@ this document.
 
 ---
 
-# Banned Features
-
-The following features are banned for Chromium development.
-
-# Features To Be Discussed
-
-The following features are currently disallowed. See the top of this page on
-how to propose moving a feature from this list into the allowed or banned
-sections.
-
 ## let (Block-Scoped Variables)
 
 `let` declares a variable within the scope of a block.  This differs from `var`,
@@ -330,7 +320,11 @@ function f() {
 
 **Documentation:** [link](http://www.ecma-international.org/ecma-262/6.0/#sec-let-and-const-declarations)
 
-**Discussion Notes / Link to Thread:**
+**Discussion Notes / Link to Thread:** [link](https://groups.google.com/a/chromium.org/d/msg/chromium-dev/MJhTok8Usr8/XCrkisaBBQAJ)
+
+**Note**: `let` is [not fully supported](https://caniuse.com/#feat=let) in iOS9.
+Don't use it in code that runs on Chrome for iOS, until support for iOS9 is
+dropped.
 
 ---
 
@@ -358,9 +352,117 @@ frobber.isFrobbing = false;  // Works.
 
 **See also:** [Object.freeze()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/freeze)
 
-**Discussion Notes / Link to Thread:**
+**Discussion Notes / Link to Thread:** [link](https://groups.google.com/a/chromium.org/d/msg/chromium-dev/MJhTok8Usr8/XCrkisaBBQAJ)
+
+**Note**: `const` [not fully supported](https://caniuse.com/#feat=let) in iOS9.
+Don't use it in code that runs on Chrome for iOS, until support for iOS9 is
+dropped.
 
 ---
+
+## Array Static & Prototype Methods
+
+**Usage Example:**
+
+```js
+// Static methods
+let a1 = Array.from(document.querySelectorAll('div'));
+let a2 = Array.of(7);
+
+// Prototype methods
+['a', 'b', 'c', 'd'].copyWithin(2, 0);  // Returns ['a', 'b', 'a', 'b']
+[2, 4, 6, 8].find(i => i == 6);  // Returns 6
+[2, 4, 6, 8].findIndex(i => i == 6); // Returns 2
+[2, 4, 6, 8].fill(1);  // Returns [1, 1, 1, 1]
+
+[2, 4, 6, 8].keys();  // Returns an Array iterator
+[2, 4, 6, 8].entries();  // Returns an Array iterator
+```
+
+**Documentation:** [link](http://www.ecma-international.org/ecma-262/6.0/#sec-properties-of-the-array-constructor)
+
+**Discussion Notes / Link to Thread:** [link](https://groups.google.com/a/chromium.org/d/msg/chromium-dev/d_2zUYQZJTg/-_PSji_OAQAJ)
+
+**Note**: `Array.prototype.values` is [not implemented in Chrome](https://kangax.github.io/compat-table/es6/#test-Array.prototype_methods) and should not be used. If the code in question is Closure compiled, a compile-time error will be thrown.
+
+---
+
+## Number Properties
+
+**Usage Example:**
+
+```js
+// Number.isFinite
+// Number.isInteger
+// Number.isSafeInteger
+// Number.isNaN
+// Number.EPSILON
+// Number.MIN_SAFE_INTEGER
+// Number.MAX_SAFE_INTEGER
+```
+
+**Documentation:** [link](http://www.ecma-international.org/ecma-262/6.0/#sec-isfinite-number)
+
+**Discussion Notes / Link to Thread:** [link](https://groups.google.com/a/chromium.org/d/msg/chromium-dev/d_2zUYQZJTg/-_PSji_OAQAJ)
+
+---
+
+## Object Static Methods
+
+**Usage Example:**
+
+```js
+// Object.assign
+var o = Object.assign({a:true}, {b:true}, {c:true});  // {a: true, b: true, c: true}
+'a' in o && 'b' in o && 'c' in o;  // true
+
+// Object.setPrototypeOf
+Object.setPrototypeOf({}, Array.prototype) instanceof Array;  // true
+
+// Object.is
+Object.is(null, null)  // true
+Object.is(NaN, NaN)  // true
+Object.is(-0, +0)  // false, btw: -0 === +0 is true
+
+```
+
+**Documentation:** [link](http://www.ecma-international.org/ecma-262/6.0/#sec-properties-of-the-object-constructor)
+
+**Discussion Notes / Link to Thread:** [link](https://groups.google.com/a/chromium.org/d/msg/chromium-dev/d_2zUYQZJTg/-_PSji_OAQAJ)
+
+---
+
+## for...of Loops
+
+Convenient operator to iterate over all values in an iterable collection. This
+differs from `for ...in`, which iterates over all enumerable properties of an
+object.
+
+**Usage Example:**
+
+```js
+// Given an iterable collection of Fibonacci numbers...
+for (let n of fibonacci) {
+  console.log(n);  // 1, 1, 2, 3, ...
+}
+```
+
+**Documentation:** [link1](http://www.ecma-international.org/ecma-262/6.0/#sec-for-in-and-for-of-statements)
+[link2](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/for...of)
+
+**Discussion Notes / Link to Thread:** [link](https://groups.google.com/a/chromium.org/d/msg/chromium-dev/d_2zUYQZJTg/-_PSji_OAQAJ)
+
+---
+
+# Banned Features
+
+The following features are banned for Chromium development.
+
+# Features To Be Discussed
+
+The following features are currently disallowed. See the top of this page on
+how to propose moving a feature from this list into the allowed or banned
+sections.
 
 ## Block Scope Functions
 
@@ -676,53 +778,6 @@ Object.getOwnPropertySymbols(obj);  // [foo, bar]
 
 ---
 
-## for...of Loops
-
-Convenient operator to iterate over all values in an iterable collection. This
-differs from `for ...in`, which iterates over all iterable properties.
-
-**Usage Example:**
-
-```js
-// Given an iterable collection fibonacci numbers...
-for (var n of fibonacci) {
-  console.log(n);  // 1, 1, 2, 3, ...
-}
-```
-
-**Documentation:** [link](http://www.ecma-international.org/ecma-262/6.0/#sec-for-in-and-for-of-statements)
-[link](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/for...of)
-
-**Discussion Notes / Link to Thread:**
-
----
-
-## Object Static Methods
-
-**Usage Example:**
-
-```js
-// Object.assign
-var o = Object.assign({a:true}, {b:true}, {c:true});  // {a: true, b: true, c: true}
-'a' in o && 'b' in o && 'c' in o;  // true
-
-// Object.setPrototypeOf
-Object.setPrototypeOf({}, Array.prototype) instanceof Array;  // true
-
-// Object.is
-Object.is(null, null)  // true
-Object.is(NaN, NaN)  // true
-Object.is(-0, +0)  // false, btw: -0 === +0 is true
-
-// Object.getOwnPropertySymbols
-```
-
-**Documentation:** [link](http://www.ecma-international.org/ecma-262/6.0/#sec-properties-of-the-object-constructor)
-
-**Discussion Notes / Link to Thread:**
-
----
-
 ## String Static & Prototype methods
 
 **Usage Example:**
@@ -740,49 +795,6 @@ Object.is(-0, +0)  // false, btw: -0 === +0 is true
 ```
 
 **Documentation:** [link](http://www.ecma-international.org/ecma-262/6.0/#sec-properties-of-the-string-constructor)
-
-**Discussion Notes / Link to Thread:**
-
----
-
-## Array Static & Prototype Methods
-
-**Usage Example:**
-
-```js
-// Array.from
-// Array.of
-
-// Array.prototype.copyWithin
-// Array.prototype.find
-// Array.prototype.findIndex
-// Array.prototype.fill
-// Array.prototype.keys
-// Array.prototype.values
-// Array.prototype.entries
-```
-
-**Documentation:** [link](http://www.ecma-international.org/ecma-262/6.0/#sec-properties-of-the-array-constructor)
-
-**Discussion Notes / Link to Thread:**
-
----
-
-## Number Properties
-
-**Usage Example:**
-
-```js
-// Number.isFinite
-// Number.isInteger
-// Number.isSafeInteger
-// Number.isNaN
-// Number.EPSILON
-// Number.MIN_SAFE_INTEGER
-// Number.MAX_SAFE_INTEGER
-```
-
-**Documentation:** [link](http://www.ecma-international.org/ecma-262/6.0/#sec-isfinite-number)
 
 **Discussion Notes / Link to Thread:**
 

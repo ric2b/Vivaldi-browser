@@ -119,6 +119,8 @@ class AppWindow : public content::WebContentsDelegate,
     FULLSCREEN_TYPE_FORCED = 1 << 3,
   };
 
+  using ShapeRects = std::vector<gfx::Rect>;
+
   struct BoundsSpecification {
     // INT_MIN represents an unspecified position component.
     static const int kUnspecifiedPosition;
@@ -284,8 +286,8 @@ class AppWindow : public content::WebContentsDelegate,
   // Specifies a url for the launcher icon.
   void SetAppIconUrl(const GURL& icon_url);
 
-  // Set the window shape. Passing a NULL |region| sets the default shape.
-  void UpdateShape(std::unique_ptr<SkRegion> region);
+  // Sets the window shape. Passing a nullptr |rects| sets the default shape.
+  void UpdateShape(std::unique_ptr<ShapeRects> rects);
 
   // Called from the render interface to modify the draggable regions.
   void UpdateDraggableRegions(const std::vector<DraggableRegion>& regions);

@@ -28,9 +28,9 @@
 #define SelectionEditor_h
 
 #include "core/dom/SynchronousMutationObserver.h"
+#include "core/dom/events/EventDispatchResult.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/SelectionTemplate.h"
-#include "core/events/EventDispatchResult.h"
 
 namespace blink {
 
@@ -48,10 +48,6 @@ class SelectionEditor final : public GarbageCollectedFinalized<SelectionEditor>,
   }
   virtual ~SelectionEditor();
   void Dispose();
-
-  bool HasEditableStyle() const;
-  bool IsContentEditable() const;
-  bool IsContentRichlyEditable() const;
 
   const SelectionInDOMTree& GetSelectionInDOMTree() const;
 

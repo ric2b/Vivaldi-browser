@@ -175,7 +175,7 @@ int InspectorResourceContentLoader::CreateClientId() {
 
 void InspectorResourceContentLoader::EnsureResourcesContentLoaded(
     int client_id,
-    std::unique_ptr<WTF::Closure> callback) {
+    WTF::Closure callback) {
   if (!started_)
     Start();
   callbacks_.insert(client_id, Callbacks())
@@ -201,6 +201,14 @@ void InspectorResourceContentLoader::DidCommitLoadForLocalFrame(
     LocalFrame* frame) {
   if (frame == inspected_frame_)
     Stop();
+}
+
+Resource* InspectorResourceContentLoader::ResourceForURL(const KURL& url) {
+  for (const auto& resource : resources_) {
+    if (resource->Url() == url)
+      return resource;
+  }
+  return nullptr;
 }
 
 void InspectorResourceContentLoader::Dispose() {
@@ -230,7 +238,7 @@ void InspectorResourceContentLoader::CheckDone() {
   callbacks.swap(callbacks_);
   for (const auto& key_value : callbacks) {
     for (const auto& callback : key_value.value)
-      (*callback)();
+      callback();
   }
 }
 

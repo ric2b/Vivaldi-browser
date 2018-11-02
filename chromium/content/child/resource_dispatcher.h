@@ -60,6 +60,15 @@ class URLLoaderFactory;
 // Virtual methods are for tests.
 class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
  public:
+  // Generates ids for requests initiated by child processes unique to the
+  // particular process, counted up from 0 (browser initiated requests count
+  // down from -2).
+  //
+  // Public to be used by URLLoaderFactory and/or URLLoader implementations with
+  // the need to perform additional requests besides the main request, e.g.,
+  // CORS preflight requests.
+  static int MakeRequestID();
+
   ResourceDispatcher(
       IPC::Sender* sender,
       scoped_refptr<base::SingleThreadTaskRunner> thread_task_runner);
@@ -81,6 +90,7 @@ class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
   virtual void StartSync(
       std::unique_ptr<ResourceRequest> request,
       int routing_id,
+      const url::Origin& frame_origin,
       SyncLoadResponse* response,
       blink::WebURLRequest::LoadingIPCType ipc_type,
       mojom::URLLoaderFactory* url_loader_factory,
@@ -101,6 +111,7 @@ class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
       int routing_id,
       scoped_refptr<base::SingleThreadTaskRunner> loading_task_runner,
       const url::Origin& frame_origin,
+      bool is_sync,
       std::unique_ptr<RequestPeer> peer,
       blink::WebURLRequest::LoadingIPCType ipc_type,
       mojom::URLLoaderFactory* url_loader_factory,
@@ -205,7 +216,7 @@ class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
   PendingRequestInfo* GetPendingRequestInfo(int request_id);
 
   // Follows redirect, if any, for the given request.
-  void FollowPendingRedirect(int request_id, PendingRequestInfo* request_info);
+  void FollowPendingRedirect(PendingRequestInfo* request_info);
 
   // Message response handlers, called by the message handler for this process.
   void OnUploadProgress(int request_id, int64_t position, int64_t size);

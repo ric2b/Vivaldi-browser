@@ -110,10 +110,15 @@ static bool IsJSNewline(UChar c) {
   return (c == '\n' || c == '\r' || c == 0x2028 || c == 0x2029);
 }
 
-static bool StartsHTMLCommentAt(const String& string, size_t start) {
+static bool StartsHTMLOpenCommentAt(const String& string, size_t start) {
   return (start + 3 < string.length() && string[start] == '<' &&
           string[start + 1] == '!' && string[start + 2] == '-' &&
           string[start + 3] == '-');
+}
+
+static bool StartsHTMLCloseCommentAt(const String& string, size_t start) {
+  return (start + 2 < string.length() && string[start] == '-' &&
+          string[start + 1] == '-' && string[start + 2] == '>');
 }
 
 static bool StartsSingleLineCommentAt(const String& string, size_t start) {
@@ -307,21 +312,30 @@ static void TruncateForScriptLikeAttribute(String& decoded_snippet) {
   }
 }
 
+static void TruncateForSemicolonSeparatedScriptLikeAttribute(
+    String& decoded_snippet) {
+  // Same as script-like attributes, but semicolons can introduce page data.
+  TruncateForScriptLikeAttribute(decoded_snippet);
+  size_t position = decoded_snippet.Find(";");
+  if (position != kNotFound)
+    decoded_snippet.Truncate(position);
+}
+
 static bool IsSemicolonSeparatedAttribute(
     const HTMLToken::Attribute& attribute) {
   return ThreadSafeMatch(attribute.NameAsVector(), SVGNames::valuesAttr);
 }
 
-static String SemicolonSeparatedValueContainingJavaScriptURL(
+static bool IsSemicolonSeparatedValueContainingJavaScriptURL(
     const String& value) {
   Vector<String> value_list;
   value.Split(';', value_list);
   for (size_t i = 0; i < value_list.size(); ++i) {
     String stripped = StripLeadingAndTrailingHTMLSpaces(value_list[i]);
     if (ProtocolIsJavaScript(stripped))
-      return stripped;
+      return true;
   }
-  return g_empty_string;
+  return false;
 }
 
 XSSAuditor::XSSAuditor()
@@ -659,7 +673,8 @@ bool XSSAuditor::FilterFormToken(const FilterTokenRequest& request) {
   DCHECK_EQ(request.token.GetType(), HTMLToken::kStartTag);
   DCHECK(HasName(request.token, formTag));
 
-  return EraseAttributeIfInjected(request, actionAttr, kURLWithUniqueOrigin);
+  return EraseAttributeIfInjected(request, actionAttr, kURLWithUniqueOrigin,
+                                  kSrcLikeAttributeTruncation);
 }
 
 bool XSSAuditor::FilterInputToken(const FilterTokenRequest& request) {
@@ -711,15 +726,14 @@ bool XSSAuditor::EraseDangerousAttributesIfInjected(
           Canonicalize(SnippetFromAttribute(request, attribute),
                        kScriptLikeAttributeTruncation));
     } else if (IsSemicolonSeparatedAttribute(attribute)) {
-      String sub_value =
-          SemicolonSeparatedValueContainingJavaScriptURL(attribute.Value());
-      if (!sub_value.IsEmpty()) {
+      if (IsSemicolonSeparatedValueContainingJavaScriptURL(attribute.Value())) {
         value_contains_java_script_url = true;
         erase_attribute =
             IsContainedInRequest(Canonicalize(
                 NameFromAttribute(request, attribute), kNoTruncation)) &&
             IsContainedInRequest(
-                Canonicalize(sub_value, kScriptLikeAttributeTruncation));
+                Canonicalize(SnippetFromAttribute(request, attribute),
+                             kSemicolonSeparatedScriptLikeAttributeTruncation));
       }
     } else if (ProtocolIsJavaScript(
                    StripLeadingAndTrailingHTMLSpaces(attribute.Value()))) {
@@ -772,11 +786,20 @@ bool XSSAuditor::EraseAttributeIfInjected(const FilterTokenRequest& request,
 
 String XSSAuditor::CanonicalizedSnippetForTagName(
     const FilterTokenRequest& request) {
+  String source = request.source_tracker.SourceForToken(request.token);
+
+  // TODO(tsepez): fix HTMLSourceTracker not to include NULs.
+  // Beware that the source tracker may include leading NULs as part of
+  // the souce for the token.
+  unsigned start = 0;
+  for (start = 0; start < source.length() && source[start] == '\0'; ++start)
+    continue;
+
   // Grab a fixed number of characters equal to the length of the token's name
   // plus one (to account for the "<").
-  return Canonicalize(request.source_tracker.SourceForToken(request.token)
-                          .Substring(0, request.token.GetName().size() + 1),
-                      kNoTruncation);
+  return Canonicalize(
+      source.Substring(start, request.token.GetName().size() + 1),
+      kNoTruncation);
 }
 
 String XSSAuditor::NameFromAttribute(const FilterTokenRequest& request,
@@ -825,6 +848,8 @@ String XSSAuditor::Canonicalize(String snippet, TruncationKind treatment) {
       TruncateForSrcLikeAttribute(decoded_snippet);
     else if (treatment == kScriptLikeAttributeTruncation)
       TruncateForScriptLikeAttribute(decoded_snippet);
+    else if (treatment == kSemicolonSeparatedScriptLikeAttributeTruncation)
+      TruncateForSemicolonSeparatedScriptLikeAttribute(decoded_snippet);
   }
 
   return decoded_snippet.RemoveCharacters(&IsNonCanonicalCharacter);
@@ -852,7 +877,7 @@ String XSSAuditor::CanonicalizedSnippetForJavaScript(
 
     // Under HTML rules, both the HTML and JS comment synatx matters, and the
     // HTML comment ends at the end of the line, not with -->.
-    if (StartsHTMLCommentAt(string, start_position) ||
+    if (StartsHTMLOpenCommentAt(string, start_position) ||
         StartsSingleLineCommentAt(string, start_position)) {
       while (start_position < end_position &&
              !IsJSNewline(string[start_position]))
@@ -870,18 +895,22 @@ String XSSAuditor::CanonicalizedSnippetForJavaScript(
   String result;
   while (start_position < end_position && !result.length()) {
     // Stop at next comment (using the same rules as above for SVG/XML vs HTML),
-    // when we encounter a comma, when we encoutner a backtick, when we hit an
-    // opening <script> tag, or when we exceed the maximum length target. The
-    // comma rule covers a common parameter concatenation case performed by some
-    // web servers. The backtick rule covers the ECMA6 multi-line template
-    // string feature.
+    // when we encounter a comma, when we encounter a backtick, when we hit an
+    // opening <script> tag, when we encounter a HTML closing comment, or when
+    // we exceed the maximum length target.
+    // - The comma rule covers a common parameter concatenation case performed
+    //   by some web servers.
+    // - The backtick rule covers the ECMA6 multi-line template string feature.
+    // - The HTML closing comment rule covers the generous interpretation in
+    //   https://tc39.github.io/ecma262/#prod-annexB-HTMLCloseComment.
     last_non_space_position = kNotFound;
     for (found_position = start_position; found_position < end_position;
          found_position++) {
       if (!request.should_allow_cdata) {
         if (StartsSingleLineCommentAt(string, found_position) ||
             StartsMultiLineCommentAt(string, found_position) ||
-            StartsHTMLCommentAt(string, found_position)) {
+            StartsHTMLOpenCommentAt(string, found_position) ||
+            StartsHTMLCloseCommentAt(string, found_position)) {
           break;
         }
       }

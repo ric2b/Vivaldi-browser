@@ -11,8 +11,11 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
+#include "build/build_config.h"
 #include "content/public/browser/permission_manager.h"
 #include "content/public/browser/permission_type.h"
+#include "content/public/browser/web_contents.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test.h"
 #include "headless/lib/browser/headless_browser_context_impl.h"
@@ -187,7 +190,6 @@ class HeadlessBrowserTestWithProxy : public HeadlessBrowserTest {
  public:
   HeadlessBrowserTestWithProxy()
       : proxy_server_(net::SpawnedTestServer::TYPE_HTTP,
-                      net::SpawnedTestServer::kLocalhost,
                       base::FilePath(FILE_PATH_LITERAL("headless/test/data"))) {
   }
 
@@ -456,7 +458,7 @@ void URLRequestJobWithCookies::Start() {
 
   // See net::URLRequestHttpJob::AddCookieHeaderAndStart().
   url::Origin requested_origin(request_->url());
-  url::Origin site_for_cookies(request_->first_party_for_cookies());
+  url::Origin site_for_cookies(request_->site_for_cookies());
 
   if (net::registry_controlled_domains::SameDomainOrHost(
           requested_origin, site_for_cookies,
@@ -609,7 +611,7 @@ IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, SetCookiesWithDevTools) {
             .SetSecure(true)
             .SetHttpOnly(true)
             .SetSameSite(network::CookieSameSite::EXACT)
-            .SetExpirationDate(0)
+            .SetExpires(0)
             .Build();
     CookieSetter cookie_setter(this, web_contents,
                                std::move(set_cookie_params));
@@ -644,9 +646,11 @@ IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, RendererCommandPrefixTest) {
   fprintf(launcher_file, "echo $@ > %s\n", launcher_stamp.value().c_str());
   fprintf(launcher_file, "exec $@\n");
   fclose(launcher_file);
+#if !defined(OS_FUCHSIA)
   base::SetPosixFilePermissions(launcher_script,
                                 base::FILE_PERMISSION_READ_BY_USER |
                                     base::FILE_PERMISSION_EXECUTE_BY_USER);
+#endif  // !defined(OS_FUCHSIA)
 
   base::CommandLine::ForCurrentProcess()->AppendSwitch("--no-sandbox");
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
@@ -911,6 +915,28 @@ IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, WindowPrint) {
   EXPECT_TRUE(WaitForLoad(web_contents));
   EXPECT_FALSE(
       EvaluateScript(web_contents, "window.print()")->HasExceptionDetails());
+}
+
+IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, AllowInsecureLocalhostFlag) {
+  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_server.SetSSLConfig(net::EmbeddedTestServer::CERT_EXPIRED);
+  https_server.ServeFilesFromSourceDirectory("headless/test/data");
+  ASSERT_TRUE(https_server.Start());
+  GURL test_url = https_server.GetURL("/hello.html");
+
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kAllowInsecureLocalhost);
+
+  HeadlessBrowserContext* browser_context =
+      browser()->CreateBrowserContextBuilder().Build();
+
+  HeadlessWebContentsImpl* web_contents =
+      HeadlessWebContentsImpl::From(browser_context->CreateWebContentsBuilder()
+                                        .SetInitialURL(test_url)
+                                        .Build());
+
+  // If the certificate fails to validate, this should fail.
+  EXPECT_TRUE(WaitForLoad(web_contents));
 }
 
 }  // namespace headless

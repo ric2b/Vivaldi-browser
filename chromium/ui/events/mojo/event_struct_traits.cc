@@ -5,7 +5,6 @@
 #include "ui/events/mojo/event_struct_traits.h"
 
 #include "ui/events/event.h"
-#include "ui/events/event_utils.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/events/mojo/event_constants.mojom.h"
 #include "ui/latency/mojo/latency_info_struct_traits.h"
@@ -133,9 +132,10 @@ int32_t StructTraits<ui::mojom::EventDataView, EventUniquePtr>::flags(
   return event->flags();
 }
 
-int64_t StructTraits<ui::mojom::EventDataView, EventUniquePtr>::time_stamp(
+base::TimeTicks
+StructTraits<ui::mojom::EventDataView, EventUniquePtr>::time_stamp(
     const EventUniquePtr& event) {
-  return event->time_stamp().ToInternalValue();
+  return event->time_stamp();
 }
 
 const ui::LatencyInfo&
@@ -242,6 +242,10 @@ bool StructTraits<ui::mojom::EventDataView, EventUniquePtr>::Read(
     EventUniquePtr* out) {
   DCHECK(!out->get());
 
+  base::TimeTicks time_stamp;
+  if (!event.ReadTimeStamp(&time_stamp))
+    return false;
+
   switch (event.action()) {
     case ui::mojom::EventType::KEY_PRESSED:
     case ui::mojom::EventType::KEY_RELEASED: {
@@ -250,18 +254,17 @@ bool StructTraits<ui::mojom::EventDataView, EventUniquePtr>::Read(
         return false;
 
       if (key_data->is_char) {
-        out->reset(new ui::KeyEvent(
-            static_cast<base::char16>(key_data->character),
-            static_cast<ui::KeyboardCode>(key_data->key_code), event.flags(),
-            base::TimeTicks::FromInternalValue(event.time_stamp())));
-
+        out->reset(
+            new ui::KeyEvent(static_cast<base::char16>(key_data->character),
+                             static_cast<ui::KeyboardCode>(key_data->key_code),
+                             event.flags(), time_stamp));
       } else {
-        out->reset(new ui::KeyEvent(
-            event.action() == ui::mojom::EventType::KEY_PRESSED
-                ? ui::ET_KEY_PRESSED
-                : ui::ET_KEY_RELEASED,
-            static_cast<ui::KeyboardCode>(key_data->key_code), event.flags(),
-            base::TimeTicks::FromInternalValue(event.time_stamp())));
+        out->reset(
+            new ui::KeyEvent(event.action() == ui::mojom::EventType::KEY_PRESSED
+                                 ? ui::ET_KEY_PRESSED
+                                 : ui::ET_KEY_RELEASED,
+                             static_cast<ui::KeyboardCode>(key_data->key_code),
+                             event.flags(), time_stamp));
       }
       if (key_data->properties)
         (*out)->AsKeyEvent()->SetProperties(*key_data->properties);
@@ -298,7 +301,7 @@ bool StructTraits<ui::mojom::EventDataView, EventUniquePtr>::Read(
                         ui::MouseEvent::kMousePointerId)
                   : ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_MOUSE,
                                        ui::MouseEvent::kMousePointerId),
-              ui::EventTimeForNow()));
+              time_stamp));
           break;
         }
         case ui::mojom::PointerKind::TOUCH: {
@@ -313,7 +316,7 @@ bool StructTraits<ui::mojom::EventDataView, EventUniquePtr>::Read(
                                  pointer_data->brush_data->pressure,
                                  pointer_data->brush_data->tilt_x,
                                  pointer_data->brush_data->tilt_y),
-              ui::EventTimeForNow()));
+              time_stamp));
           break;
         }
         case ui::mojom::PointerKind::PEN:

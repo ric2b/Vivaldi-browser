@@ -28,11 +28,9 @@ void RunCrashReporter(const std::string& crash_type,
                       const std::string& board,
                       const std::string& cpu_abi,
                       mojo::edk::ScopedPlatformHandle pipe) {
-  base::FileHandleMappingVector fd_map = {
-      std::make_pair(pipe.get().handle, STDIN_FILENO)};
-
   base::LaunchOptions options;
-  options.fds_to_remap = &fd_map;
+  options.fds_to_remap.push_back(
+      std::make_pair(pipe.get().handle, STDIN_FILENO));
 
   auto process =
       base::LaunchProcess({kCrashReporterPath, "--arc_java_crash=" + crash_type,
@@ -88,12 +86,7 @@ ArcCrashCollectorBridge::ArcCrashCollectorBridge(
 }
 
 ArcCrashCollectorBridge::~ArcCrashCollectorBridge() {
-  // TODO(hidehiko): Currently, the lifetime of ArcBridgeService and
-  // BrowserContextKeyedService is not nested.
-  // If ArcServiceManager::Get() returns nullptr, it is already destructed,
-  // so do not touch it.
-  if (ArcServiceManager::Get())
-    arc_bridge_service_->crash_collector()->RemoveObserver(this);
+  arc_bridge_service_->crash_collector()->RemoveObserver(this);
 }
 
 void ArcCrashCollectorBridge::OnInstanceReady() {

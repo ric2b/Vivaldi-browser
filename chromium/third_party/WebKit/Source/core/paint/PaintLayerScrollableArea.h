@@ -278,8 +278,6 @@ class CORE_EXPORT PaintLayerScrollableArea final
   IntSize MaximumScrollOffsetInt() const override;
   IntRect VisibleContentRect(
       IncludeScrollbarsInRect = kExcludeScrollbars) const override;
-  int VisibleHeight() const override;
-  int VisibleWidth() const override;
   IntSize ContentsSize() const override;
   void ContentsResized() override;
   bool IsScrollable() const override;
@@ -298,16 +296,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
   ScrollBehavior ScrollBehaviorStyle() const override;
   CompositorAnimationHost* GetCompositorAnimationHost() const override;
   CompositorAnimationTimeline* GetCompositorAnimationTimeline() const override;
-
-  // These are temporary convenience methods.  They delegate to Box() methods,
-  // which will be up-to-date when UpdateAfterLayout runs.  By contrast,
-  // VisibleContentRect() is based on layer_.Size(), which isn't updated
-  // until later, when UpdateLayerPosition runs.  A future patch will cause
-  // layer_.Size() to be updated effectively simultaneously with Box()
-  // sizing.  When that lands, these methods should be removed in favor of
-  // using VisibleContentRect() and/or layer_.Size() everywhere.
-  LayoutSize ClientSize() const;
-  IntSize PixelSnappedClientSize() const;
+  void GetTickmarks(Vector<IntRect>&) const override;
 
   void VisibleSizeChanged();
 
@@ -388,14 +377,6 @@ class CORE_EXPORT PaintLayerScrollableArea final
   bool HitTestResizerInFragments(const PaintLayerFragments&,
                                  const HitTestLocation&) const;
 
-  // Returns the new offset, after scrolling, of the given rect in parents
-  // coordinates.
-  LayoutRect ScrollLocalRectIntoView(const LayoutRect&,
-                                     const ScrollAlignment& align_x,
-                                     const ScrollAlignment& align_y,
-                                     bool is_smooth,
-                                     ScrollType = kProgrammaticScroll,
-                                     bool is_for_scroll_sequence = false);
   // Returns the new offset, after scrolling, of the given rect in absolute
   // coordinates, clipped by the parent's client rect.
   LayoutRect ScrollIntoView(const LayoutRect&,
@@ -415,9 +396,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
   // Rectangle encompassing the scroll corner and resizer rect.
   IntRect ScrollCornerAndResizerRect() const final;
 
-  enum LCDTextMode { kConsiderLCDText, kIgnoreLCDText };
-
-  void UpdateNeedsCompositedScrolling(LCDTextMode = kConsiderLCDText);
+  void UpdateNeedsCompositedScrolling(bool layer_has_been_composited = false);
   bool NeedsCompositedScrolling() const { return needs_composited_scrolling_; }
 
   // These are used during compositing updates to determine if the overflow
@@ -541,6 +520,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
 
   void UpdateScrollCornerStyle();
   LayoutSize MinimumSizeForResizing(float zoom_factor);
+  LayoutRect LayoutContentRect(IncludeScrollbarsInRect) const;
 
   // See comments on isPointInResizeControl.
   void UpdateResizerAreaSet();
@@ -560,7 +540,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
     return *rare_data_.get();
   }
 
-  bool ComputeNeedsCompositedScrolling(const LCDTextMode, const PaintLayer*);
+  bool ComputeNeedsCompositedScrolling(const bool, const PaintLayer*);
   PaintLayer& layer_;
 
   PaintLayer* next_topmost_scroll_child_;

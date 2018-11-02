@@ -37,8 +37,8 @@
 #include "platform/weborigin/KURL.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Functional.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/RefCounted.h"
+#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/text/StringBuilder.h"
 #include "public/platform/WebAddressSpace.h"
 #include "public/platform/WebURLRequest.h"
@@ -56,7 +56,7 @@ class CORE_EXPORT WorkerScriptLoader final
   USING_FAST_MALLOC(WorkerScriptLoader);
 
  public:
-  static PassRefPtr<WorkerScriptLoader> Create() {
+  static RefPtr<WorkerScriptLoader> Create() {
     return AdoptRef(new WorkerScriptLoader());
   }
 
@@ -72,8 +72,8 @@ class CORE_EXPORT WorkerScriptLoader final
                           WebURLRequest::FetchRequestMode,
                           WebURLRequest::FetchCredentialsMode,
                           WebAddressSpace,
-                          std::unique_ptr<WTF::Closure> response_callback,
-                          std::unique_ptr<WTF::Closure> finished_callback);
+                          WTF::Closure response_callback,
+                          WTF::Closure finished_callback);
 
   // This will immediately invoke |finishedCallback| if loadAsynchronously()
   // is in progress.
@@ -131,8 +131,8 @@ class CORE_EXPORT WorkerScriptLoader final
   void ProcessContentSecurityPolicy(const ResourceResponse&);
 
   // Callbacks for loadAsynchronously().
-  std::unique_ptr<WTF::Closure> response_callback_;
-  std::unique_ptr<WTF::Closure> finished_callback_;
+  WTF::Closure response_callback_;
+  WTF::Closure finished_callback_;
 
   Persistent<ThreadableLoader> threadable_loader_;
   String response_encoding_;

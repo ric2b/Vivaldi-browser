@@ -11,7 +11,8 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/base/switches.h"
 #include "cc/output/texture_mailbox_deleter.h"
-#include "cc/scheduler/begin_frame_source.h"
+#include "components/viz/common/display/renderer_settings.h"
+#include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/gpu/in_process_context_provider.h"
 #include "components/viz/service/display/display.h"
 #include "components/viz/service/display/display_scheduler.h"
@@ -22,6 +23,7 @@
 #include "gpu/command_buffer/service/image_factory.h"
 #include "gpu/ipc/service/gpu_channel_manager.h"
 #include "gpu/ipc/service/gpu_memory_buffer_factory.h"
+#include "ui/base/ui_base_switches.h"
 
 #if defined(USE_OZONE)
 #include "components/viz/service/display_embedder/display_output_surface_ozone.h"
@@ -54,10 +56,11 @@ GpuDisplayProvider::~GpuDisplayProvider() = default;
 std::unique_ptr<Display> GpuDisplayProvider::CreateDisplay(
     const FrameSinkId& frame_sink_id,
     gpu::SurfaceHandle surface_handle,
-    std::unique_ptr<cc::BeginFrameSource>* begin_frame_source) {
+    const RendererSettings& renderer_settings,
+    std::unique_ptr<BeginFrameSource>* begin_frame_source) {
   auto synthetic_begin_frame_source =
-      base::MakeUnique<cc::DelayBasedBeginFrameSource>(
-          base::MakeUnique<cc::DelayBasedTimeSource>(task_runner_.get()));
+      base::MakeUnique<DelayBasedBeginFrameSource>(
+          base::MakeUnique<DelayBasedTimeSource>(task_runner_.get()));
 
   scoped_refptr<InProcessContextProvider> context_provider =
       new InProcessContextProvider(gpu_service_, surface_handle,
@@ -91,17 +94,12 @@ std::unique_ptr<Display> GpuDisplayProvider::CreateDisplay(
       synthetic_begin_frame_source.get(), task_runner_.get(),
       max_frames_pending);
 
-  RendererSettings settings;
-  settings.show_overdraw_feedback =
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          cc::switches::kShowOverdrawFeedback);
-
   // The ownership of the BeginFrameSource is transfered to the caller.
   *begin_frame_source = std::move(synthetic_begin_frame_source);
 
   return base::MakeUnique<Display>(
       ServerSharedBitmapManager::current(), gpu_memory_buffer_manager_.get(),
-      settings, frame_sink_id, std::move(display_output_surface),
+      renderer_settings, frame_sink_id, std::move(display_output_surface),
       std::move(scheduler),
       base::MakeUnique<cc::TextureMailboxDeleter>(task_runner_.get()));
 }

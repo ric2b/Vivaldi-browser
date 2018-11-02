@@ -6,8 +6,8 @@
 #define MojoInterfaceInterceptor_h
 
 #include "core/dom/ContextLifecycleObserver.h"
-#include "core/events/EventListener.h"
-#include "core/events/EventTarget.h"
+#include "core/dom/events/EventListener.h"
+#include "core/dom/events/EventTarget.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/bindings/ScriptWrappable.h"
@@ -65,6 +65,7 @@ class MojoInterfaceInterceptor final
 
   service_manager::InterfaceProvider* GetInterfaceProvider() const;
   void OnInterfaceRequest(mojo::ScopedMessagePipeHandle);
+  void DispatchInterfaceRequestEvent(mojo::ScopedMessagePipeHandle);
 
   const String interface_name_;
   bool started_ = false;

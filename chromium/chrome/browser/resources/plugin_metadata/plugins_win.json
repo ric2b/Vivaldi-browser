@@ -1,5 +1,5 @@
 {
-  "x-version": 38,
+  "x-version": 40,
   "google-talk": {
     "mime_types": [
     ],
@@ -137,9 +137,9 @@
     ],
     "versions": [
       {
-        "version": "26.0.0.126",
+        "version": "27.0.0.170",
         "status": "requires_authorization",
-        "reference": "https://helpx.adobe.com/security/products/flash-player/apsb17-17.html"
+        "reference": "https://helpx.adobe.com/security/products/flash-player/apsb17-32.html"
       }
     ],
     "lang": "en-US",
@@ -358,6 +358,32 @@
     ],
     "name": "Chromium PDF Viewer",
     "group_name_matcher": "*Chromium PDF Viewer*"
+  },
+  "google-chrome-pdf-plugin": {
+    "mime_types": [
+    ],
+    "versions": [
+      {
+        "version": "0",
+        "status": "fully_trusted",
+        "comment": "Google Chrome PDF Plugin has no version information."
+      }
+    ],
+    "name": "Chrome PDF Plugin",
+    "group_name_matcher": "*Chrome PDF Plugin*"
+  },
+  "chromium-pdf-plugin": {
+    "mime_types": [
+    ],
+    "versions": [
+      {
+        "version": "0",
+        "status": "fully_trusted",
+        "comment": "Chromium PDF Plugin has no version information."
+      }
+    ],
+    "name": "Chromium PDF Plugin",
+    "group_name_matcher": "*Chromium PDF Plugin*"
   },
   "google-update": {
     "mime-types": [

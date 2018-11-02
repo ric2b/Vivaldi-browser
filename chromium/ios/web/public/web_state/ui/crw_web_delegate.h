@@ -11,7 +11,6 @@
 
 #import "base/ios/block_types.h"
 #include "ios/web/public/favicon_url.h"
-#import "ios/web/public/navigation_manager.h"
 #include "ios/web/public/ssl_status.h"
 #import "ios/web/public/web_state/ui/crw_native_content.h"
 #import "ios/web/public/web_state/web_state.h"
@@ -48,12 +47,10 @@ class GURL;
 // TODO(rohitrao): Eliminate as many of the following delegate methods as
 // possible.  They only exist because the Tab and CRWWebController logic was
 // very intertwined. We should streamline the logic to jump between classes
-// less, then remove any delegate method that becomes unneccessary as a result.
+// less, then remove any delegate method that becomes unnecessary as a result.
 
 // Called when a page is loaded using loadWithParams.
-- (void)webDidUpdateSessionForLoadWithParams:
-            (const web::NavigationManager::WebLoadParams&)params
-                        wasInitialNavigation:(BOOL)initialNavigation;
+- (void)webDidUpdateSessionForLoadWithURL:(const GURL&)URL;
 
 @optional
 

@@ -10,6 +10,7 @@
 #include "ash/system/network/network_icon_animation_observer.h"
 #include "ash/system/tray/tray_constants.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chromeos/network/device_state.h"
 #include "chromeos/network/network_connection_handler.h"
@@ -44,6 +45,16 @@ namespace ash {
 namespace network_icon {
 
 namespace {
+
+SkPath CreateArcPath(gfx::RectF oval, float start_angle, float sweep_angle) {
+  SkPath path;
+  path.setIsVolatile(true);
+  path.setFillType(SkPath::kWinding_FillType);
+  path.moveTo(oval.CenterPoint().x(), oval.CenterPoint().y());
+  path.arcTo(gfx::RectFToSkRect(oval), start_angle, sweep_angle, false);
+  path.close();
+  return path;
+}
 
 // Constants for offseting the badge displayed on top of the signal strength
 // icon. The badge will extend outside of the base icon bounds by these amounts.
@@ -218,8 +229,10 @@ class NetworkIconImageSource : public gfx::CanvasImageSource {
   static gfx::ImageSkia CreateImage(const gfx::ImageSkia& icon,
                                     const Badges& badges) {
     auto* source = new NetworkIconImageSource(icon, badges);
-    return gfx::ImageSkia(source, source->size());
+    return gfx::ImageSkia(base::WrapUnique(source), source->size());
   }
+
+  ~NetworkIconImageSource() override {}
 
   // gfx::CanvasImageSource:
   void Draw(gfx::Canvas* canvas) override {
@@ -270,7 +283,6 @@ class NetworkIconImageSource : public gfx::CanvasImageSource {
       : CanvasImageSource(GetSizeForBaseIconSize(icon.size()), false),
         icon_(icon),
         badges_(badges) {}
-  ~NetworkIconImageSource() override {}
 
   static gfx::Size GetSizeForBaseIconSize(const gfx::Size& base_icon_size) {
     gfx::Size size = base_icon_size;
@@ -321,7 +333,7 @@ gfx::ImageSkia GetImageForIndex(ImageType image_type,
                                 int index) {
   gfx::CanvasImageSource* source =
       new SignalStrengthImageSource(image_type, icon_type, index);
-  return gfx::ImageSkia(source, source->size());
+  return gfx::ImageSkia(base::WrapUnique(source), source->size());
 }
 
 // Returns an image to represent either a fully connected network or a
@@ -703,8 +715,8 @@ void SignalStrengthImageSource::DrawArcs(gfx::Canvas* canvas) {
   // Background. Skip drawing for full signal.
   if (signal_strength_ != kNumNetworkImages - 1) {
     flags.setColor(SkColorSetA(color_, kSignalStrengthImageBgAlpha));
-    canvas->sk_canvas()->drawArc(gfx::RectFToSkRect(oval_bounds), kStartAngle,
-                                 kSweepAngle, true, flags);
+    canvas->sk_canvas()->drawPath(
+        CreateArcPath(oval_bounds, kStartAngle, kSweepAngle), flags);
   }
   // Foreground (signal strength).
   if (signal_strength_ != 0) {
@@ -716,8 +728,8 @@ void SignalStrengthImageSource::DrawArcs(gfx::Canvas* canvas) {
     const float wedge_percent = kWedgeHeightPercentages[signal_strength_];
     oval_bounds.Inset(
         gfx::InsetsF((oval_bounds.height() / 2) * (1.f - wedge_percent)));
-    canvas->sk_canvas()->drawArc(gfx::RectFToSkRect(oval_bounds), kStartAngle,
-                                 kSweepAngle, true, flags);
+    canvas->sk_canvas()->drawPath(
+        CreateArcPath(oval_bounds, kStartAngle, kSweepAngle), flags);
   }
 }
 
@@ -804,7 +816,8 @@ gfx::ImageSkia GetImageForNewWifiNetwork(SkColor icon_color,
       new SignalStrengthImageSource(ImageTypeForNetworkType(shill::kTypeWifi),
                                     ICON_TYPE_LIST, kNumNetworkImages - 1);
   source->set_color(icon_color);
-  gfx::ImageSkia icon = gfx::ImageSkia(source, source->size());
+  gfx::ImageSkia icon =
+      gfx::ImageSkia(base::WrapUnique(source), source->size());
   Badges badges;
   badges.bottom_right = {&kNetworkBadgeAddOtherIcon, badge_color};
   return NetworkIconImageSource::CreateImage(icon, badges);

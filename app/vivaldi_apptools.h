@@ -37,12 +37,7 @@ CommandLineAppendSwitchNoDup(base::CommandLine& cmd_line,
   CommandLineAppendSwitchNoDup(&cmd_line, switch_string);
 };
 
-std::string VivaldiLastChange();
-
 GURL GetVivaldiNewTabURL();
-
-// Returns a version string to be displayed in "About Vivaldi" dialog.
-std::string GetVivaldiVersionString();
 
 }  // namespace vivaldi
 

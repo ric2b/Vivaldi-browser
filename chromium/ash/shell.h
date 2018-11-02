@@ -85,6 +85,7 @@ class WindowModalityController;
 namespace ash {
 
 class AcceleratorController;
+class AccessibilityController;
 class AccessibilityDelegate;
 class AshDisplayController;
 class AppListDelegateImpl;
@@ -112,7 +113,6 @@ class ImmersiveHandlerFactoryAsh;
 class KeyboardBrightnessControlDelegate;
 class KeyboardUI;
 class LaserPointerController;
-class LinkHandlerModelFactory;
 class LocaleNotificationController;
 class LockStateController;
 class LogoutConfirmationController;
@@ -120,6 +120,7 @@ class LockScreenController;
 class MagnificationController;
 class TabletModeController;
 class MediaController;
+class MessageCenterController;
 class MouseCursorEventFilter;
 class MruWindowTracker;
 class NewWindowController;
@@ -155,7 +156,6 @@ class SystemGestureEventFilter;
 class SystemModalContainerEventFilter;
 class SystemTray;
 class SystemTrayController;
-class SystemTrayDelegate;
 class SystemTrayNotifier;
 class ToplevelWindowEventHandler;
 class ToastManager;
@@ -261,7 +261,11 @@ class ASH_EXPORT Shell : public SessionObserver,
   static void RegisterLocalStatePrefs(PrefRegistrySimple* registry);
 
   // Registers all ash related user profile prefs to the given |registry|.
-  static void RegisterProfilePrefs(PrefRegistrySimple* registry);
+  // Can be called before Shell is initialized. When |for_test| is true this
+  // registers foreign user profile prefs (e.g. chrome prefs) as if they are
+  // owned by ash. This allows test code to read the pref values.
+  static void RegisterProfilePrefs(PrefRegistrySimple* registry,
+                                   bool for_test = false);
 
   // Creates a default views::NonClientFrameView for use by windows in the
   // Ash environment.
@@ -294,6 +298,9 @@ class ASH_EXPORT Shell : public SessionObserver,
   AcceleratorController* accelerator_controller() {
     return accelerator_controller_.get();
   }
+  AccessibilityController* accessibility_controller() {
+    return accessibility_controller_.get();
+  }
   AccessibilityDelegate* accessibility_delegate() {
     return accessibility_delegate_.get();
   }
@@ -309,6 +316,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   DisplayConfigurationController* display_configuration_controller() {
     return display_configuration_controller_.get();
   }
+  EventClientImpl* event_client() { return event_client_.get(); }
   ::wm::CompoundEventFilter* env_filter() { return env_filter_.get(); }
   FocusCycler* focus_cycler() { return focus_cycler_.get(); }
   ImeController* ime_controller() { return ime_controller_.get(); }
@@ -325,9 +333,6 @@ class ASH_EXPORT Shell : public SessionObserver,
   LockScreenController* lock_screen_controller() {
     return lock_screen_controller_.get();
   }
-  TabletModeController* tablet_mode_controller() {
-    return tablet_mode_controller_.get();
-  }
   MediaController* media_controller() { return media_controller_.get(); }
   MruWindowTracker* mru_window_tracker() { return mru_window_tracker_.get(); }
   NewWindowController* new_window_controller() {
@@ -343,11 +348,11 @@ class ASH_EXPORT Shell : public SessionObserver,
   SystemTrayController* system_tray_controller() {
     return system_tray_controller_.get();
   }
-  SystemTrayDelegate* system_tray_delegate() {
-    return system_tray_delegate_.get();
-  }
   SystemTrayNotifier* system_tray_notifier() {
     return system_tray_notifier_.get();
+  }
+  TabletModeController* tablet_mode_controller() {
+    return tablet_mode_controller_.get();
   }
   views::corewm::TooltipController* tooltip_controller() {
     return tooltip_controller_.get();
@@ -361,13 +366,6 @@ class ASH_EXPORT Shell : public SessionObserver,
     return window_selector_controller_.get();
   }
   OverlayEventFilter* overlay_filter() { return overlay_filter_.get(); }
-  LinkHandlerModelFactory* link_handler_model_factory() {
-    return link_handler_model_factory_;
-  }
-  void set_link_handler_model_factory(
-      LinkHandlerModelFactory* link_handler_model_factory) {
-    link_handler_model_factory_ = link_handler_model_factory;
-  }
   PowerButtonController* power_button_controller() {
     return power_button_controller_.get();
   }
@@ -429,16 +427,6 @@ class ASH_EXPORT Shell : public SessionObserver,
   // Force the shelf to query for it's current visibility state.
   // TODO(jamescook): Move to Shelf.
   void UpdateShelfVisibility();
-
-  // Gets the current active user pref service.
-  // In classic ash, it will be null if there's no active user.
-  // In the case of mash, it can be null if it failed to or hasn't yet
-  // connected to the pref service.
-  //
-  // NOTE: Code that uses PrefChangeRegistrar or otherwise observes the
-  // PrefService must use ShellObserver::OnActiveUserPrefServiceChanged() to
-  // reset its observers on user switch.
-  PrefService* GetActiveUserPrefService() const;
 
   // Gets the local state pref service. It can be null in mash if connecting to
   // local state pref service has not completed successfully.
@@ -550,15 +538,10 @@ class ASH_EXPORT Shell : public SessionObserver,
   void AddShellObserver(ShellObserver* observer);
   void RemoveShellObserver(ShellObserver* observer);
 
+  // TODO(minch), move applist related functions to AppList.
+  // http://crbug.com/759909.
   // Shows the app list on the active root window.
   void ShowAppList(app_list::AppListShowSource toggle_method);
-
-  // Updates y position and opacity of app list. |is_end_gesture| means it is
-  // the end of the gesture dragging of app list from shelf and should restore
-  // the opacity of the app list.
-  void UpdateAppListYPositionAndOpacity(int y_position_in_screen,
-                                        float app_list_background_opacity,
-                                        bool is_end_gesture);
 
   // Dismisses the app list.
   void DismissAppList();
@@ -620,6 +603,8 @@ class ASH_EXPORT Shell : public SessionObserver,
 
   void NotifyAppListVisibilityChanged(bool visible, aura::Window* root_window);
 
+  // TODO(kaznacheev) Move voice interaction related methods to a separate
+  // controller (crbug.com/758650)
   void NotifyVoiceInteractionStatusChanged(VoiceInteractionState state);
 
   void NotifyVoiceInteractionEnabled(bool enabled);
@@ -645,6 +630,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   FRIEND_TEST_ALL_PREFIXES(WindowManagerTest, MouseEventCursors);
   FRIEND_TEST_ALL_PREFIXES(WindowManagerTest, TransformActivate);
   friend class AcceleratorControllerTest;
+  friend class AshTestHelper;
   friend class RootWindowController;
   friend class ScopedRootWindowForNewWindows;
   friend class ShellTestApi;
@@ -658,9 +644,6 @@ class ASH_EXPORT Shell : public SessionObserver,
 
   // Initializes the root window so that it can host browser windows.
   void InitRootWindow(aura::Window* root_window);
-
-  void SetSystemTrayDelegate(std::unique_ptr<SystemTrayDelegate> delegate);
-  void DeleteSystemTrayDelegate();
 
   // Destroys all child windows including widgets across all roots.
   void CloseAllRootWindowChildWindows();
@@ -680,7 +663,6 @@ class ASH_EXPORT Shell : public SessionObserver,
                          aura::Window* lost_active) override;
 
   // SessionObserver:
-  void OnActiveUserSessionChanged(const AccountId& account_id) override;
   void OnSessionStateChanged(session_manager::SessionState state) override;
   void OnLoginStatusChanged(LoginStatus login_status) override;
   void OnLockStateChanged(bool locked) override;
@@ -689,9 +671,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   // the profile is available.
   void InitializeShelf();
 
-  // Callbacks for prefs::ConnectToPrefService.
-  void OnProfilePrefServiceInitialized(
-      std::unique_ptr<::PrefService> pref_service);
+  // Callback for prefs::ConnectToPrefService.
   void OnLocalStatePrefServiceInitialized(
       std::unique_ptr<::PrefService> pref_service);
 
@@ -714,6 +694,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<WindowPositioner> window_positioner_;
 
   std::unique_ptr<AcceleratorController> accelerator_controller_;
+  std::unique_ptr<AccessibilityController> accessibility_controller_;
   std::unique_ptr<AccessibilityDelegate> accessibility_delegate_;
   std::unique_ptr<AshDisplayController> ash_display_controller_;
   std::unique_ptr<BrightnessControlDelegate> brightness_control_delegate_;
@@ -741,7 +722,6 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<ShellDelegate> shell_delegate_;
   std::unique_ptr<ShutdownController> shutdown_controller_;
   std::unique_ptr<SystemTrayController> system_tray_controller_;
-  std::unique_ptr<SystemTrayDelegate> system_tray_delegate_;
   std::unique_ptr<SystemTrayNotifier> system_tray_notifier_;
   std::unique_ptr<ToastManager> toast_manager_;
   std::unique_ptr<TrayAction> tray_action_;
@@ -754,15 +734,8 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<::wm::VisibilityController> visibility_controller_;
   std::unique_ptr<::wm::WindowModalityController> window_modality_controller_;
   std::unique_ptr<app_list::AppList> app_list_;
-
-  // Only initialized for mash. Can be null in ash_standalone (when chrome is
-  // not running) or when reconnecting to the mojo pref service after
-  // multiuser profile switch.
-  std::unique_ptr<::PrefService> profile_pref_service_;
-  std::unique_ptr<::PrefService> local_state_;
-
+  std::unique_ptr<PrefService> local_state_;
   std::unique_ptr<views::corewm::TooltipController> tooltip_controller_;
-  LinkHandlerModelFactory* link_handler_model_factory_;
   std::unique_ptr<PowerButtonController> power_button_controller_;
   std::unique_ptr<LockStateController> lock_state_controller_;
   std::unique_ptr<ui::UserActivityDetector> user_activity_detector_;
@@ -885,6 +858,8 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<ImmersiveHandlerFactoryAsh> immersive_handler_factory_;
 
   std::unique_ptr<AppListDelegateImpl> app_list_delegate_impl_;
+
+  std::unique_ptr<MessageCenterController> message_center_controller_;
 
   base::ObserverList<ShellObserver> shell_observers_;
 

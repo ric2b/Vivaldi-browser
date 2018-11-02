@@ -9,5 +9,6 @@ source_set("clientparts") {
     "//components/prefs:prefs",
     "//content/public/browser",
     "//skia",
+    "//vivaldi/prefs",
   ]
 }

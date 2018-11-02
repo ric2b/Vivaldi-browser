@@ -27,6 +27,7 @@ namespace blink {
 namespace scheduler {
 
 class RendererSchedulerImpl;
+class MainThreadTaskQueue;
 class TaskQueue;
 class WebTaskRunnerImpl;
 class WebViewSchedulerImpl;
@@ -44,13 +45,14 @@ class WebFrameSchedulerImpl : public WebFrameScheduler {
   void RemoveThrottlingObserver(ObserverType, Observer*) override;
   void SetFrameVisible(bool frame_visible) override;
   void SetPageVisible(bool page_visible) override;
-  void SetSuspended(bool frame_suspended) override;
+  void SetPaused(bool frame_paused) override;
   void SetCrossOrigin(bool cross_origin) override;
   RefPtr<WebTaskRunner> LoadingTaskRunner() override;
-  RefPtr<WebTaskRunner> TimerTaskRunner() override;
-  RefPtr<WebTaskRunner> SuspendableTaskRunner() override;
-  RefPtr<WebTaskRunner> UnthrottledTaskRunner() override;
-  RefPtr<WebTaskRunner> UnthrottledButBlockableTaskRunner() override;
+  RefPtr<WebTaskRunner> LoadingControlTaskRunner() override;
+  RefPtr<WebTaskRunner> ThrottleableTaskRunner() override;
+  RefPtr<WebTaskRunner> DeferrableTaskRunner() override;
+  RefPtr<WebTaskRunner> PausableTaskRunner() override;
+  RefPtr<WebTaskRunner> UnpausableTaskRunner() override;
   WebViewScheduler* GetWebViewScheduler() override;
   void WillNavigateBackForwardSoon() override;
   void DidStartProvisionalLoad(bool is_main_frame) override;
@@ -82,37 +84,42 @@ class WebFrameSchedulerImpl : public WebFrameScheduler {
   };
 
   void DetachFromWebViewScheduler();
-  void RemoveTimerQueueFromBackgroundCPUTimeBudgetPool();
-  void ApplyPolicyToTimerQueue();
+  void RemoveThrottleableQueueFromBackgroundCPUTimeBudgetPool();
+  void ApplyPolicyToThrottleableQueue();
   bool ShouldThrottleTimers() const;
-  void UpdateTimerThrottling(bool was_throttled);
+  void UpdateThrottling(bool was_throttled);
 
   void DidOpenActiveConnection();
   void DidCloseActiveConnection();
 
   base::WeakPtr<WebFrameSchedulerImpl> AsWeakPtr();
 
-  scoped_refptr<TaskQueue> loading_task_queue_;
-  scoped_refptr<TaskQueue> timer_task_queue_;
-  scoped_refptr<TaskQueue> unthrottled_task_queue_;
-  scoped_refptr<TaskQueue> suspendable_task_queue_;
-  scoped_refptr<TaskQueue> unthrottled_but_blockable_task_queue_;
+  scoped_refptr<MainThreadTaskQueue> loading_task_queue_;
+  scoped_refptr<MainThreadTaskQueue> loading_control_task_queue_;
+  scoped_refptr<MainThreadTaskQueue> throttleable_task_queue_;
+  scoped_refptr<MainThreadTaskQueue> deferrable_task_queue_;
+  scoped_refptr<MainThreadTaskQueue> pausable_task_queue_;
+  scoped_refptr<MainThreadTaskQueue> unpausable_task_queue_;
   std::unique_ptr<TaskQueue::QueueEnabledVoter> loading_queue_enabled_voter_;
-  std::unique_ptr<TaskQueue::QueueEnabledVoter> timer_queue_enabled_voter_;
   std::unique_ptr<TaskQueue::QueueEnabledVoter>
-      suspendable_queue_enabled_voter_;
+      loading_control_queue_enabled_voter_;
+  std::unique_ptr<TaskQueue::QueueEnabledVoter>
+      throttleable_queue_enabled_voter_;
+  std::unique_ptr<TaskQueue::QueueEnabledVoter> deferrable_queue_enabled_voter_;
+  std::unique_ptr<TaskQueue::QueueEnabledVoter> pausable_queue_enabled_voter_;
   RefPtr<WebTaskRunnerImpl> loading_web_task_runner_;
-  RefPtr<WebTaskRunnerImpl> timer_web_task_runner_;
-  RefPtr<WebTaskRunnerImpl> unthrottled_web_task_runner_;
-  RefPtr<WebTaskRunnerImpl> suspendable_web_task_runner_;
-  RefPtr<WebTaskRunnerImpl> unthrottled_but_blockable_web_task_runner_;
+  RefPtr<WebTaskRunnerImpl> loading_control_web_task_runner_;
+  RefPtr<WebTaskRunnerImpl> throttleable_web_task_runner_;
+  RefPtr<WebTaskRunnerImpl> deferrable_web_task_runner_;
+  RefPtr<WebTaskRunnerImpl> pausable_web_task_runner_;
+  RefPtr<WebTaskRunnerImpl> unpausable_web_task_runner_;
   RendererSchedulerImpl* renderer_scheduler_;        // NOT OWNED
   WebViewSchedulerImpl* parent_web_view_scheduler_;  // NOT OWNED
   base::trace_event::BlameContext* blame_context_;   // NOT OWNED
   std::set<Observer*> loader_observers_;             // NOT OWNED
   bool frame_visible_;
   bool page_visible_;
-  bool frame_suspended_;
+  bool frame_paused_;
   bool cross_origin_;
   int active_connection_count_;
 

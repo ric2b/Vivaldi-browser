@@ -12,6 +12,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/test/histogram_tester.h"
 #include "base/test/scoped_command_line.h"
+#include "components/security_state/core/insecure_input_event_data.h"
 #include "components/security_state/core/switches.h"
 #include "net/cert/x509_certificate.h"
 #include "net/ssl/ssl_cipher_suite_names.h"
@@ -91,6 +92,10 @@ class TestSecurityStateHelper {
   }
   void set_is_incognito(bool is_incognito) { is_incognito_ = is_incognito; }
 
+  void set_insecure_field_edit(bool insecure_field_edit) {
+    insecure_input_events_.insecure_field_edited = insecure_field_edit;
+  }
+
   void SetUrl(const GURL& url) { url_ = url; }
 
   std::unique_ptr<VisibleSecurityState> GetVisibleSecurityState() const {
@@ -109,6 +114,7 @@ class TestSecurityStateHelper {
     state->displayed_credit_card_field_on_http =
         displayed_credit_card_field_on_http_;
     state->is_incognito = is_incognito_;
+    state->insecure_input_events = insecure_input_events_;
     return state;
   }
 
@@ -131,6 +137,7 @@ class TestSecurityStateHelper {
   bool displayed_password_field_on_http_;
   bool displayed_credit_card_field_on_http_;
   bool is_incognito_;
+  InsecureInputEventData insecure_input_events_;
 };
 
 }  // namespace
@@ -455,12 +462,66 @@ TEST(SecurityStateTest, MarkHttpAsStatusHistogram) {
     histograms.ExpectUniqueSample(
         kHistogramName, 5 /* NON_SECURE_WHILE_INCOGNITO_OR_EDITING */, 1);
 
-    // Ensure histogram recorded correctly even without the Incognito flag.
+    // Ensure histogram recorded correctly when the Insecure Field Edit flag
+    // is set.
     helper.set_is_incognito(false);
+    helper.set_insecure_field_edit(true);
     helper.GetSecurityInfo(&security_info);
     EXPECT_FALSE(security_info.incognito_downgraded_security_level);
     histograms.ExpectUniqueSample(
         kHistogramName, 5 /* NON_SECURE_WHILE_INCOGNITO_OR_EDITING */, 2);
+
+    // Ensure histogram recorded correctly even when neither flag is set.
+    helper.set_is_incognito(false);
+    helper.set_insecure_field_edit(false);
+    helper.GetSecurityInfo(&security_info);
+    EXPECT_FALSE(security_info.incognito_downgraded_security_level);
+    histograms.ExpectUniqueSample(
+        kHistogramName, 5 /* NON_SECURE_WHILE_INCOGNITO_OR_EDITING */, 3);
+  }
+
+  {
+    // Test the "non-secure-after-editing" configuration.
+    base::test::ScopedCommandLine scoped_command_line;
+    scoped_command_line.GetProcessCommandLine()->AppendSwitchASCII(
+        security_state::switches::kMarkHttpAs,
+        security_state::switches::kMarkHttpAsNonSecureAfterEditing);
+
+    base::HistogramTester histograms;
+    TestSecurityStateHelper helper;
+    helper.SetUrl(GURL(kHttpUrl));
+
+    // Ensure histogram recorded correctly when the editing flag is present.
+    helper.set_insecure_field_edit(true);
+    SecurityInfo security_info;
+    histograms.ExpectTotalCount(kHistogramName, 0);
+    helper.GetSecurityInfo(&security_info);
+    histograms.ExpectUniqueSample(kHistogramName,
+                                  3 /*  NON_SECURE_AFTER_EDITING */, 1);
+
+    // Ensure histogram recorded correctly even without the editing flag.
+    helper.set_insecure_field_edit(false);
+    helper.GetSecurityInfo(&security_info);
+    histograms.ExpectUniqueSample(kHistogramName,
+                                  3 /*  NON_SECURE_AFTER_EDITING */, 2);
+  }
+
+  {
+    // Test the "dangerous" configuration.
+    base::test::ScopedCommandLine scoped_command_line;
+    scoped_command_line.GetProcessCommandLine()->AppendSwitchASCII(
+        security_state::switches::kMarkHttpAs,
+        security_state::switches::kMarkHttpAsDangerous);
+
+    base::HistogramTester histograms;
+    TestSecurityStateHelper helper;
+    helper.SetUrl(GURL(kHttpUrl));
+
+    // Ensure histogram recorded correctly.
+    SecurityInfo security_info;
+    histograms.ExpectTotalCount(kHistogramName, 0);
+    helper.GetSecurityInfo(&security_info);
+    histograms.ExpectUniqueSample(kHistogramName, 1 /* NON_SECURE */, 1);
   }
 }
 
@@ -507,6 +568,57 @@ TEST(SecurityStateTest, MixedForm) {
   EXPECT_EQ(CONTENT_STATUS_RAN,
             mixed_form_and_active_security_info.mixed_content_status);
   EXPECT_EQ(DANGEROUS, mixed_form_and_active_security_info.security_level);
+}
+
+// Tests that a field edit is reflected in the SecurityInfo.
+TEST(SecurityStateTest, FieldEdit) {
+  TestSecurityStateHelper helper;
+  helper.SetUrl(GURL(kHttpUrl));
+
+  SecurityInfo no_field_edit_security_info;
+  helper.GetSecurityInfo(&no_field_edit_security_info);
+  EXPECT_FALSE(
+      no_field_edit_security_info.insecure_input_events.insecure_field_edited);
+
+  helper.set_insecure_field_edit(true);
+
+  SecurityInfo security_info;
+  helper.GetSecurityInfo(&security_info);
+  EXPECT_TRUE(security_info.insecure_input_events.insecure_field_edited);
+
+  {
+    // Test that no warning is raised in the "non-secure-while-incognito"
+    // configuration.
+    base::test::ScopedCommandLine scoped_command_line;
+    scoped_command_line.GetProcessCommandLine()->AppendSwitchASCII(
+        security_state::switches::kMarkHttpAs,
+        security_state::switches::kMarkHttpAsNonSecureWhileIncognito);
+
+    helper.GetSecurityInfo(&security_info);
+    EXPECT_EQ(NONE, security_info.security_level);
+  }
+
+  {
+    // Test the "non-secure-after-editing" configuration.
+    base::test::ScopedCommandLine scoped_command_line;
+    scoped_command_line.GetProcessCommandLine()->AppendSwitchASCII(
+        security_state::switches::kMarkHttpAs,
+        security_state::switches::kMarkHttpAsNonSecureAfterEditing);
+
+    helper.GetSecurityInfo(&security_info);
+    EXPECT_EQ(HTTP_SHOW_WARNING, security_info.security_level);
+  }
+
+  {
+    // Test the "non-secure-while-incognito-or-editing" configuration.
+    base::test::ScopedCommandLine scoped_command_line;
+    scoped_command_line.GetProcessCommandLine()->AppendSwitchASCII(
+        security_state::switches::kMarkHttpAs,
+        security_state::switches::kMarkHttpAsNonSecureWhileIncognitoOrEditing);
+
+    helper.GetSecurityInfo(&security_info);
+    EXPECT_EQ(HTTP_SHOW_WARNING, security_info.security_level);
+  }
 }
 
 }  // namespace security_state

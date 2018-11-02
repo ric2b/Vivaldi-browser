@@ -118,6 +118,9 @@ Audits2.Audits2Panel = class extends UI.Panel {
     if (/^about:/.test(inspectedURL))
       return Common.UIString('Cannot audit about:* pages. Navigate to a different page to start an audit.');
 
+    if (!Runtime.queryParam('can_dock'))
+      return Common.UIString('Can only audit tabs. Navigate to this page in a separate tab to start an audit.');
+
     return null;
   }
 
@@ -248,16 +251,23 @@ Audits2.Audits2Panel = class extends UI.Panel {
 
     // Evaluate location.href for a more specific URL than inspectedURL provides so that SPA hash navigation routes
     // will be respected and audited.
-    return new Promise(resolve => {
-      executionContext.evaluate('window.location.href', 'audits', false, false, true, false, false, (object, err) => {
-        if (!err && object) {
-          this._inspectedURL = object.value;
-          object.release();
-        }
-
-        resolve();
-      });
-    });
+    return executionContext
+        .evaluate(
+            {
+              expression: 'window.location.href',
+              objectGroup: 'audits',
+              includeCommandLineAPI: false,
+              silent: false,
+              returnByValue: true,
+              generatePreview: false
+            },
+            /* userGesture */ false, /* awaitPromise */ false)
+        .then(result => {
+          if (!result.exceptionDetails && result.object) {
+            this._inspectedURL = result.object.value;
+            result.object.release();
+          }
+        });
   }
 
   _start() {
@@ -279,6 +289,7 @@ Audits2.Audits2Panel = class extends UI.Panel {
       if (preset.setting.get())
         categoryIDs.push(preset.configID);
     }
+    Host.userMetrics.actionTaken(Host.UserMetrics.Action.Audits2Started);
 
     return Promise.resolve()
         .then(_ => this._updateInspectedURL())
@@ -369,6 +380,7 @@ Audits2.Audits2Panel = class extends UI.Panel {
     emulationModel.toolbarControlsEnabledSetting().set(true);
     Emulation.InspectedPagePlaceholder.instance().update(true);
 
+    Host.userMetrics.actionTaken(Host.UserMetrics.Action.Audits2Finished);
     var resourceTreeModel = SDK.targetManager.mainTarget().model(SDK.ResourceTreeModel);
     // reload to reset the page state
     await resourceTreeModel.navigate(this._inspectedURL);

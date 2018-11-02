@@ -72,6 +72,8 @@ class PDFiumEngine : public PDFEngine,
   void RotateClockwise() override;
   void RotateCounterclockwise() override;
   std::string GetSelectedText() override;
+  bool CanEditText() override;
+  void ReplaceSelection(const std::string& text) override;
   std::string GetLinkAtPosition(const pp::Point& point) override;
   bool HasPermission(DocumentPermission permission) const override;
   void SelectAll() override;
@@ -106,6 +108,10 @@ class PDFiumEngine : public PDFEngine,
 #endif
   bool IsProgressiveLoad() override;
   std::string GetMetadata(const std::string& key) override;
+  void SetCaretPosition(const pp::Point& position) override;
+  void MoveRangeSelectionExtent(const pp::Point& extent) override;
+  void SetSelectionBounds(const pp::Point& base,
+                          const pp::Point& extent) override;
 
   // DocumentLoader::Client implementation.
   pp::Instance* GetPluginInstance() override;
@@ -301,6 +307,8 @@ class PDFiumEngine : public PDFEngine,
   bool OnKeyUp(const pp::KeyboardInputEvent& event);
   bool OnChar(const pp::KeyboardInputEvent& event);
 
+  bool ExtendSelection(int page_index, int char_index);
+
   FPDF_DOCUMENT CreateSinglePageRasterPdf(
       double source_page_width,
       double source_page_height,
@@ -326,13 +334,8 @@ class PDFiumEngine : public PDFEngine,
   // the plugin's text selection.
   void SetFormSelectedText(FPDF_FORMHANDLE form_handle, FPDF_PAGE page);
 
-  // Given a mouse event, returns which page and character location it's closest
-  // to.
-  PDFiumPage::Area GetCharIndex(const pp::MouseInputEvent& event,
-                                int* page_index,
-                                int* char_index,
-                                int* form_type,
-                                PDFiumPage::LinkTarget* target);
+  // Given |point|, returns which page and character location it's closest to,
+  // as well as extra information about objects at that point.
   PDFiumPage::Area GetCharIndex(const pp::Point& point,
                                 int* page_index,
                                 int* char_index,
@@ -341,6 +344,9 @@ class PDFiumEngine : public PDFEngine,
 
   void OnSingleClick(int page_index, int char_index);
   void OnMultipleClick(int click_count, int page_index, int char_index);
+  bool OnLeftMouseDown(const pp::MouseInputEvent& event);
+  bool OnMiddleMouseDown(const pp::MouseInputEvent& event);
+  bool OnRightMouseDown(const pp::MouseInputEvent& event);
 
   // Starts a progressive paint operation given a rectangle in screen
   // coordinates. Returns the index in progressive_rects_.
@@ -403,7 +409,9 @@ class PDFiumEngine : public PDFEngine,
   // visible, an empty rectangle is returned.
   pp::Rect GetScreenRect(const pp::Rect& rect) const;
 
-  // Highlights the given rectangle.
+  // Given an image |buffer| with |stride|, highlights |rect|.
+  // |highlighted_rects| contains the already highlighted rectangles and will be
+  // updated to include |rect| if |rect| has not already been highlighted.
   void Highlight(void* buffer,
                  int stride,
                  const pp::Rect& rect,
@@ -455,6 +463,13 @@ class PDFiumEngine : public PDFEngine,
 
   // Sets whether or not left mouse button is currently being held down.
   void SetMouseLeftButtonDown(bool is_mouse_left_button_down);
+
+  // Given coordinates on |page| has a form of |form_type| which is known to be
+  // a form text area, check if it is an editable form text area.
+  bool IsPointInEditableFormTextArea(FPDF_PAGE page,
+                                     double page_x,
+                                     double page_y,
+                                     int form_type);
 
   bool PageIndexInBounds(int index) const;
 
@@ -670,6 +685,10 @@ class PDFiumEngine : public PDFEngine,
   // True if focus is in form text field or form combobox text field.
   bool in_form_text_area_;
 
+  // True if the form text area currently in focus is not read only, and is a
+  // form text field or user-editable form combobox text field.
+  bool editable_form_text_area_;
+
   // True if left mouse button is currently being held down.
   bool mouse_left_button_down_;
 
@@ -763,6 +782,11 @@ class PDFiumEngine : public PDFEngine,
   // Set to true if the user is being prompted for their password. Will be set
   // to false after the user finishes getting their password.
   bool getting_password_;
+
+  enum class RangeSelectionDirection { Left, Right };
+  RangeSelectionDirection range_selection_direction_;
+
+  pp::Point range_selection_base_;
 
   DISALLOW_COPY_AND_ASSIGN(PDFiumEngine);
 };

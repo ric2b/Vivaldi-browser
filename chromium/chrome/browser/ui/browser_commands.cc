@@ -24,7 +24,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_service_factory.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
-#include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/ui/accelerator_utils.h"
 #include "chrome/browser/ui/autofill/save_card_bubble_controller_impl.h"
@@ -52,6 +51,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/translate/translate_bubble_view_state_transition.h"
 #include "chrome/browser/upgrade_detector.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/content_restriction.h"
 #include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
@@ -61,7 +61,6 @@
 #include "components/favicon/content/content_favicon_driver.h"
 #include "components/google/core/browser/google_util.h"
 #include "components/prefs/pref_service.h"
-#include "components/security_state/core/security_state.h"
 #include "components/sessions/core/live_tab_context.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/signin/core/browser/signin_header_helper.h"
@@ -762,9 +761,12 @@ void PinTab(Browser* browser) {
 }
 
 void MuteTab(Browser* browser) {
+  TabStripModel::ContextMenuCommand command_id =
+      base::FeatureList::IsEnabled(features::kSoundContentSetting)
+          ? TabStripModel::ContextMenuCommand::CommandToggleSiteMuted
+          : TabStripModel::ContextMenuCommand::CommandToggleTabAudioMuted;
   browser->tab_strip_model()->ExecuteContextMenuCommand(
-      browser->tab_strip_model()->active_index(),
-      TabStripModel::ContextMenuCommand::CommandToggleTabAudioMuted);
+      browser->tab_strip_model()->active_index(), command_id);
 }
 
 void ConvertPopupToTabbedBrowser(Browser* browser) {
@@ -920,23 +922,6 @@ bool CanSavePage(const Browser* browser) {
 
 void ShowFindBar(Browser* browser) {
   browser->GetFindBarController()->Show();
-}
-
-bool ShowPageInfo(Browser* browser, content::WebContents* web_contents) {
-  content::NavigationEntry* entry =
-      web_contents->GetController().GetVisibleEntry();
-  if (!entry)
-    return false;
-
-  SecurityStateTabHelper* helper =
-      SecurityStateTabHelper::FromWebContents(web_contents);
-  security_state::SecurityInfo security_info;
-  helper->GetSecurityInfo(&security_info);
-
-  browser->window()->ShowPageInfo(
-      Profile::FromBrowserContext(web_contents->GetBrowserContext()),
-      web_contents, entry->GetVirtualURL(), security_info);
-  return true;
 }
 
 void Print(Browser* browser) {

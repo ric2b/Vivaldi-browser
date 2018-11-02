@@ -25,9 +25,9 @@
         "type": "object",
         "description": "A structure containing parameters for the captureUI call.",
         "properties": {
-          "appWindowId": {
-            "type": "string",
-            "description": "App window id to capture."
+          "windowId": {
+            "type": "integer",
+            "description": "Window id to capture."
           },
           "posX": {
             "type": "integer",

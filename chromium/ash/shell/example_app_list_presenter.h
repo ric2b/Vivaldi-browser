@@ -29,8 +29,9 @@ class ExampleAppListPresenter : public app_list::mojom::AppListPresenter {
   void StartVoiceInteractionSession() override;
   void ToggleVoiceInteractionSession() override;
   void UpdateYPositionAndOpacity(int new_y_position,
-                                 float background_opacity,
-                                 bool is_end_gesture) override;
+                                 float background_opacity) override;
+  void EndDragFromShelf(app_list::mojom::AppListState app_list_state) override;
+  void ProcessMouseWheelOffset(int offset) override;
 
  private:
   mojo::Binding<app_list::mojom::AppListPresenter> binding_;

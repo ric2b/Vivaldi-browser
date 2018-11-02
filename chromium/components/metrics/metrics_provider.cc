@@ -4,6 +4,8 @@
 
 #include "components/metrics/metrics_provider.h"
 
+#include "components/metrics/proto/chrome_user_metrics_extension.pb.h"
+
 namespace metrics {
 
 MetricsProvider::MetricsProvider() {
@@ -13,6 +15,10 @@ MetricsProvider::~MetricsProvider() {
 }
 
 void MetricsProvider::Init() {
+}
+
+void MetricsProvider::AsyncInit(const base::Closure& done_callback) {
+  done_callback.Run();
 }
 
 void MetricsProvider::OnDidCreateMetricsLog() {
@@ -37,12 +43,18 @@ void MetricsProvider::ProvideSystemProfileMetrics(
     SystemProfileProto* system_profile_proto) {
 }
 
-bool MetricsProvider::HasInitialStabilityMetrics() {
+bool MetricsProvider::HasPreviousSessionData() {
   return false;
 }
 
-void MetricsProvider::ProvideInitialStabilityMetrics(
-    SystemProfileProto* system_profile_proto) {
+void MetricsProvider::ProvidePreviousSessionData(
+    ChromeUserMetricsExtension* uma_proto) {
+  ProvideStabilityMetrics(uma_proto->mutable_system_profile());
+}
+
+void MetricsProvider::ProvideCurrentSessionData(
+    ChromeUserMetricsExtension* uma_proto) {
+  ProvideStabilityMetrics(uma_proto->mutable_system_profile());
 }
 
 void MetricsProvider::ProvideStabilityMetrics(
@@ -50,10 +62,6 @@ void MetricsProvider::ProvideStabilityMetrics(
 }
 
 void MetricsProvider::ClearSavedStabilityMetrics() {
-}
-
-void MetricsProvider::ProvideGeneralMetrics(
-    ChromeUserMetricsExtension* uma_proto) {
 }
 
 void MetricsProvider::RecordHistogramSnapshots(

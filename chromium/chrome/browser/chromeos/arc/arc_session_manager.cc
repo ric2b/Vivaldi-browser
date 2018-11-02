@@ -26,6 +26,7 @@
 #include "chrome/browser/chromeos/arc/policy/arc_android_management_checker.h"
 #include "chrome/browser/chromeos/arc/policy/arc_policy_util.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
+#include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/policy/profile_policy_connector_factory.h"
@@ -45,6 +46,7 @@
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
+#include "ui/display/types/display_constants.h"
 
 namespace arc {
 
@@ -192,16 +194,36 @@ void ArcSessionManager::RegisterProfilePrefs(
 
 // static
 bool ArcSessionManager::IsOobeOptInActive() {
-  // ARC OOBE OptIn is optional for now. Test if it exists and login host is
-  // active.
+  // Check if Chrome OS OOBE or OPA OptIn flow is currently showing.
+  // TODO(b/65861628): Rename the method since it is no longer accurate.
+  // Redesign the OptIn flow since there is no longer reason to have two
+  // different OptIn flows.
+  chromeos::LoginDisplayHost* host = chromeos::LoginDisplayHost::default_host();
+  if (!host)
+    return false;
+
+  // Make sure the wizard controller is active and have the ARC ToS screen
+  // showing for the voice interaction OptIn flow.
+  if (host->IsVoiceInteractionOobe()) {
+    const chromeos::WizardController* wizard_controller =
+        host->GetWizardController();
+    if (!wizard_controller)
+      return false;
+    const chromeos::BaseScreen* screen = wizard_controller->current_screen();
+    if (!screen)
+      return false;
+    return screen->screen_id() ==
+           chromeos::OobeScreen::SCREEN_ARC_TERMS_OF_SERVICE;
+  }
+
+  // Use the legacy logic for first sign-in OOBE OptIn flow. Make sure the user
+  // is new and the swtich is appended.
   if (!user_manager::UserManager::Get()->IsCurrentUserNew())
     return false;
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
           chromeos::switches::kEnableArcOOBEOptIn)) {
     return false;
   }
-  if (!chromeos::LoginDisplayHost::default_host())
-    return false;
   return true;
 }
 
@@ -236,6 +258,11 @@ void ArcSessionManager::OnSessionStopped(ArcStopReason reason,
     observer.OnArcSessionStopped(reason);
 
   MaybeStartArcDataRemoval();
+}
+
+void ArcSessionManager::OnSessionRestarting() {
+  for (auto& observer : observer_list_)
+    observer.OnArcSessionRestarting();
 }
 
 void ArcSessionManager::OnProvisioningFinished(ProvisioningResult result) {
@@ -327,7 +354,7 @@ void ArcSessionManager::OnProvisioningFinished(ProvisioningResult result) {
           profile_, kPlayStoreAppId,
           GetLaunchIntent(kPlayStorePackage, kPlayStoreActivity,
                           {kInitialStartParam}),
-          true, false);
+          false /* deferred_launch_allowed */, display::kInvalidDisplayId);
     }
 
     for (auto& observer : observer_list_)
@@ -449,7 +476,8 @@ void ArcSessionManager::Initialize() {
 
 void ArcSessionManager::Shutdown() {
   enable_requested_ = false;
-  ShutdownSession();
+  ResetArcState();
+  arc_session_runner_->OnShutdown();
   if (support_host_) {
     support_host_->SetErrorDelegate(nullptr);
     support_host_->Close();
@@ -466,10 +494,7 @@ void ArcSessionManager::Shutdown() {
 }
 
 void ArcSessionManager::ShutdownSession() {
-  arc_sign_in_timer_.Stop();
-  playstore_launcher_.reset();
-  terms_of_service_negotiator_.reset();
-  android_management_checker_.reset();
+  ResetArcState();
   switch (state_) {
     case State::NOT_INITIALIZED:
       // Ignore in NOT_INITIALIZED case. This is called in initial SetProfile
@@ -503,6 +528,13 @@ void ArcSessionManager::ShutdownSession() {
       // Now ARC is stopping. Do nothing here.
       break;
   }
+}
+
+void ArcSessionManager::ResetArcState() {
+  arc_sign_in_timer_.Stop();
+  playstore_launcher_.reset();
+  terms_of_service_negotiator_.reset();
+  android_management_checker_.reset();
 }
 
 void ArcSessionManager::AddObserver(Observer* observer) {
@@ -647,6 +679,10 @@ bool ArcSessionManager::RequestEnableImpl() {
 
   if (start_arc_directly) {
     StartArc();
+    // When in ARC kiosk mode, there's no Chrome tabs to restore. Remove the
+    // cgroups now.
+    if (IsArcKioskMode())
+      SetArcCpuRestriction(false /* do_restrict */);
     // Check Android management in parallel.
     // Note: StartBackgroundAndroidManagementCheck() may call
     // OnBackgroundAndroidManagementChecked() synchronously (or
@@ -863,6 +899,9 @@ void ArcSessionManager::OnAndroidManagementChecked(
           base::Bind(&ArcSessionManager::OnArcSignInTimeout,
                      weak_ptr_factory_.GetWeakPtr()));
       StartArc();
+      // Since opt-in is an explicit user (or admin) action, relax the
+      // cgroups restriction now.
+      SetArcCpuRestriction(false /* do_restrict */);
       break;
     case policy::AndroidManagementClient::Result::MANAGED:
       ShowArcSupportHostError(
@@ -952,7 +991,9 @@ void ArcSessionManager::MaybeStartArcDataRemoval() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(profile_);
   // Data removal cannot run in parallel with ARC session.
-  DCHECK(arc_session_runner_->IsStopped());
+  // LoginScreen instance does not use data directory, so removing should work.
+  DCHECK(arc_session_runner_->IsStopped() ||
+         arc_session_runner_->IsLoginScreenInstanceStarting());
   DCHECK_EQ(state_, State::STOPPED);
 
   // TODO(hidehiko): Extract the implementation of data removal, so that

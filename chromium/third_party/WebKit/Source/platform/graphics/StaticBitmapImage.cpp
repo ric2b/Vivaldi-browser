@@ -15,12 +15,19 @@
 
 namespace blink {
 
-PassRefPtr<StaticBitmapImage> StaticBitmapImage::Create(sk_sp<SkImage> image) {
-  if (!image)
-    return nullptr;
-  if (image->isTextureBacked())
-    return AcceleratedStaticBitmapImage::CreateFromSharedContextImage(
-        std::move(image));
+RefPtr<StaticBitmapImage> StaticBitmapImage::Create(
+    sk_sp<SkImage> image,
+    WeakPtr<WebGraphicsContext3DProviderWrapper>&& context_provider_wrapper) {
+  if (image->isTextureBacked()) {
+    CHECK(context_provider_wrapper);
+    return AcceleratedStaticBitmapImage::CreateFromSkImage(
+        image, std::move(context_provider_wrapper));
+  }
+  return UnacceleratedStaticBitmapImage::Create(image);
+}
+
+RefPtr<StaticBitmapImage> StaticBitmapImage::Create(PaintImage image) {
+  DCHECK(!image.GetSkImage()->isTextureBacked());
   return UnacceleratedStaticBitmapImage::Create(std::move(image));
 }
 
@@ -31,13 +38,31 @@ void StaticBitmapImage::DrawHelper(PaintCanvas* canvas,
                                    ImageClampingMode clamp_mode,
                                    const PaintImage& image) {
   FloatRect adjusted_src_rect = src_rect;
-  adjusted_src_rect.Intersect(SkRect::Make(image.sk_image()->bounds()));
+  adjusted_src_rect.Intersect(SkRect::MakeWH(image.width(), image.height()));
 
   if (dst_rect.IsEmpty() || adjusted_src_rect.IsEmpty())
     return;  // Nothing to draw.
 
   canvas->drawImageRect(image, adjusted_src_rect, dst_rect, &flags,
                         WebCoreClampingModeToSkiaRectConstraint(clamp_mode));
+}
+
+RefPtr<StaticBitmapImage> StaticBitmapImage::ConvertToColorSpace(
+    sk_sp<SkColorSpace> target,
+    SkTransferFunctionBehavior premulBehavior) {
+  sk_sp<SkImage> skia_image = PaintImageForCurrentFrame().GetSkImage();
+  sk_sp<SkImage> converted_skia_image =
+      skia_image->makeColorSpace(target, premulBehavior);
+
+  if (skia_image == converted_skia_image)
+    return this;
+
+  return StaticBitmapImage::Create(converted_skia_image,
+                                   ContextProviderWrapper());
+}
+
+gpu::SyncToken StaticBitmapImage::GetSyncToken() {
+  return gpu::SyncToken();
 }
 
 }  // namespace blink

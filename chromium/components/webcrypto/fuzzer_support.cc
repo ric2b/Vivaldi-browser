@@ -10,6 +10,7 @@
 #include "components/webcrypto/algorithm_dispatch.h"
 #include "components/webcrypto/crypto_data.h"
 #include "components/webcrypto/status.h"
+#include "mojo/edk/embedder/embedder.h"
 #include "third_party/WebKit/public/platform/Platform.h"
 #include "third_party/WebKit/public/platform/WebCryptoAlgorithmParams.h"
 #include "third_party/WebKit/public/web/WebKit.h"
@@ -19,10 +20,11 @@ namespace webcrypto {
 namespace {
 
 // This mock is used to initialize blink.
-class InitOnce : NON_EXPORTED_BASE(public blink::Platform) {
+class InitOnce : public blink::Platform {
  public:
   InitOnce() {
     base::CommandLine::Init(0, nullptr);
+    mojo::edk::Init();
     blink::Platform::Initialize(this);
   }
   ~InitOnce() override {}

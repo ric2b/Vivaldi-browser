@@ -16,6 +16,9 @@ import android.os.RemoteException;
 import org.junit.Assert;
 
 import org.chromium.base.Log;
+import org.chromium.base.ThreadUtils;
+import org.chromium.net.X509Util;
+import org.chromium.net.test.util.CertTestUtil;
 
 import java.io.File;
 
@@ -60,6 +63,12 @@ public class EmbeddedTestServer {
     private Context mContext;
     private final Object mImplMonitor = new Object();
 
+    // Whether the server should use HTTP or HTTPS.
+    public enum ServerHTTPSSetting {
+        USE_HTTP,
+        USE_HTTPS,
+    }
+
     /**
      * Exception class raised on failure in the EmbeddedTestServer.
      */
@@ -73,12 +82,61 @@ public class EmbeddedTestServer {
         }
     }
 
+    /**
+     * Connection listener class, to be notified of new connections and sockets reads.
+     *
+     * Notifications are asynchronous and delivered to the UI thread.
+     */
+    public static class ConnectionListener {
+        private final IConnectionListener mListener = new IConnectionListener.Stub() {
+            @Override
+            public void acceptedSocket(final long socketId) {
+                ThreadUtils.runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        ConnectionListener.this.acceptedSocket(socketId);
+                    }
+                });
+            }
+
+            @Override
+            public void readFromSocket(final long socketId) {
+                ThreadUtils.runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        ConnectionListener.this.readFromSocket(socketId);
+                    }
+                });
+            }
+        };
+
+        /**
+         * A new socket connection has been opened on the server.
+         *
+         * @param socketId Socket unique identifier. Unique as long as the socket stays open.
+         */
+        public void acceptedSocket(long socketId) {}
+
+        /**
+         * Data  has been read from a socket.
+         *
+         * @param socketId Socket unique identifier. Unique as long as the socket stays open.
+         */
+        public void readFromSocket(long socketId) {}
+
+        private IConnectionListener getListener() {
+            return mListener;
+        }
+    }
+
     /** Bind the service that will run the native server object.
      *
      *  @param context The context to use to bind the service. This will also be used to unbind
      *          the service at server destruction time.
+     *  @param httpsSetting Whether the server should use HTTPS.
      */
-    public void initializeNative(Context context) throws InterruptedException {
+    public void initializeNative(Context context, ServerHTTPSSetting httpsSetting)
+            throws InterruptedException {
         mContext = context;
 
         Intent intent = new Intent(EMBEDDED_TEST_SERVER_SERVICE);
@@ -96,7 +154,7 @@ public class EmbeddedTestServer {
             Log.i(TAG, "EmbeddedTestServer service connected.");
             boolean initialized = false;
             try {
-                initialized = mImpl.initializeNative();
+                initialized = mImpl.initializeNative(httpsSetting == ServerHTTPSSetting.USE_HTTPS);
             } catch (RemoteException e) {
                 Log.e(TAG, "Failed to initialize native server.", e);
                 initialized = false;
@@ -104,6 +162,16 @@ public class EmbeddedTestServer {
 
             if (!initialized) {
                 throw new EmbeddedTestServerFailure("Failed to initialize native server.");
+            }
+
+            if (httpsSetting == ServerHTTPSSetting.USE_HTTPS) {
+                try {
+                    String rootCertPemPath = mImpl.getRootCertPemPath();
+                    X509Util.addTestRootCertificate(CertTestUtil.pemToDer(rootCertPemPath));
+                } catch (Exception e) {
+                    throw new EmbeddedTestServerFailure(
+                            "Failed to install root certificate from native server.", e);
+                }
             }
         }
     }
@@ -146,6 +214,22 @@ public class EmbeddedTestServer {
         }
     }
 
+    /** Configure the server to use a particular type of SSL certificate.
+     *
+     * @param serverCertificate The type of certificate the server should use.
+     */
+    public void setSSLConfig(int serverCertificate) {
+        try {
+            synchronized (mImplMonitor) {
+                checkServiceLocked();
+                mImpl.setSSLConfig(serverCertificate);
+            }
+        } catch (RemoteException e) {
+            throw new EmbeddedTestServerFailure(
+                    "Failed to set server certificate: " + e.toString());
+        }
+    }
+
     /** Serve files from the provided directory.
      *
      *  @param directory The directory from which files should be served.
@@ -167,6 +251,23 @@ public class EmbeddedTestServer {
         } catch (RemoteException e) {
             throw new EmbeddedTestServerFailure(
                     "Failed to start serving files from " + directoryPath + ": " + e.toString());
+        }
+    }
+
+    /**
+     * Sets a connection listener. Must be called after the server has been initialized, but
+     * before calling {@link start()}.
+     *
+     * @param listener The listener to set.
+     */
+    public void setConnectionListener(ConnectionListener listener) {
+        try {
+            synchronized (mImplMonitor) {
+                checkServiceLocked();
+                mImpl.setConnectionListener(listener.getListener());
+            }
+        } catch (RemoteException e) {
+            throw new EmbeddedTestServerFailure("Cannot set the listener");
         }
     }
 
@@ -244,6 +345,25 @@ public class EmbeddedTestServer {
         return initializeAndStartServer(server, context);
     }
 
+    /** Create and initialize an HTTPS server with the default handlers.
+     *
+     *  This handles native object initialization, server configuration, and server initialization.
+     *  On returning, the server is ready for use.
+     *
+     *  @param context The context in which the server will run.
+     *  @param serverCertificate The certificate option that the server will use.
+     *  @return The created server.
+     */
+    public static EmbeddedTestServer createAndStartHTTPSServer(
+            Context context, int serverCertificate) throws InterruptedException {
+        Assert.assertNotEquals("EmbeddedTestServer should not be created on UiThread, "
+                        + "the instantiation will hang forever waiting for tasks"
+                        + " to post to UI thread",
+                Looper.getMainLooper(), Looper.myLooper());
+        EmbeddedTestServer server = new EmbeddedTestServer();
+        return initializeAndStartHTTPSServer(server, context, serverCertificate);
+    }
+
     /** Initialize a server with the default handlers.
      *
      *  This handles native object initialization, server configuration, and server initialization.
@@ -255,8 +375,30 @@ public class EmbeddedTestServer {
      */
     public static <T extends EmbeddedTestServer> T initializeAndStartServer(
             T server, Context context) throws InterruptedException {
-        server.initializeNative(context);
+        server.initializeNative(context, ServerHTTPSSetting.USE_HTTP);
         server.addDefaultHandlers("");
+        if (!server.start()) {
+            throw new EmbeddedTestServerFailure("Failed to start serving using default handlers.");
+        }
+        return server;
+    }
+
+    /** Initialize a server with the default handlers that uses HTTPS with the given certificate
+     * option.
+     *
+     *  This handles native object initialization, server configuration, and server initialization.
+     *  On returning, the server is ready for use.
+     *
+     *  @param server The server instance that will be initialized.
+     *  @param context The context in which the server will run.
+     *  @param serverCertificate The certificate option that the server will use.
+     *  @return The created server.
+     */
+    public static <T extends EmbeddedTestServer> T initializeAndStartHTTPSServer(
+            T server, Context context, int serverCertificate) throws InterruptedException {
+        server.initializeNative(context, ServerHTTPSSetting.USE_HTTPS);
+        server.addDefaultHandlers("");
+        server.setSSLConfig(serverCertificate);
         if (!server.start()) {
             throw new EmbeddedTestServerFailure("Failed to start serving using default handlers.");
         }

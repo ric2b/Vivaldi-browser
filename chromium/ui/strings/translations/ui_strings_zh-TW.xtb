@@ -32,6 +32,7 @@
 <translation id="2190355936436201913">(空白)</translation>
 <translation id="2289052229480071835">輕觸畫面上的觸控目標。</translation>
 <translation id="2297836609126180313"><ph name="QUANTITY" /> TB/秒</translation>
+<translation id="24452542372838207">展開通知</translation>
 <translation id="2482878487686419369">通知</translation>
 <translation id="2497284189126895209">所有檔案</translation>
 <translation id="2522350507219695259">校正完成</translation>
@@ -162,6 +163,7 @@
 <translation id="9002566407876343676">開啟</translation>
 <translation id="9038489124413477075">未命名的資料夾</translation>
 <translation id="9044832324875206639">{SECONDS,plural, =1{1 秒}other{# 秒}}</translation>
+<translation id="9059834730836941392">收合通知</translation>
 <translation id="9150735707954472829">分頁</translation>
 <translation id="9161053988251441839">建議使用的應用程式</translation>
 <translation id="9170848237812810038">取消(&amp;U)</translation>

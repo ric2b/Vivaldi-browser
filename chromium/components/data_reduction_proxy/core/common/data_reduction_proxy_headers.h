@@ -25,6 +25,7 @@ namespace data_reduction_proxy {
 
 // Transform directives that may be parsed out of http headers.
 enum TransformDirective {
+  TRANSFORM_UNKNOWN,
   TRANSFORM_NONE,
   TRANSFORM_LITE_PAGE,
   TRANSFORM_EMPTY_IMAGE,
@@ -107,9 +108,9 @@ const char* lite_page_directive();
 // compressed video.
 const char* compressed_video_directive();
 
-// Gets the Chrome-Proxy directive used by data reduction proxy lite page
-// preview requests and responses.
-const char* chrome_proxy_lite_page_directive();
+// Gets the directive used by the data reduction proxy to tell the client to use
+// a specific page policy.
+const char* page_policies_directive();
 
 // Gets the Chrome-Proxy experiment ("exp") value to force a lite page preview
 // for requests that accept lite pages.
@@ -118,12 +119,6 @@ const char* chrome_proxy_experiment_force_lite_page();
 // Gets the Chrome-Proxy experiment ("exp") value to force an empty image
 // preview for requests that enable server provided previews.
 const char* chrome_proxy_experiment_force_empty_image();
-
-// Requests a transformation only if the server determines that the page is
-// otherwise heavy (i.e., the associated page load ordinarily requires the
-// network to transfer of a lot of bytes). Added to a previews directive. E.g.,
-// "lite-page;if-heavy".
-const char* if_heavy_qualifier();
 
 // Returns true if the Chrome-Proxy-Content-Transform response header indicates
 // that an empty image has been provided.

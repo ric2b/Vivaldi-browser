@@ -20,7 +20,7 @@ bool IsRegisterJob(const ServiceWorkerRegisterJobBase& job) {
   return job.GetType() == ServiceWorkerRegisterJobBase::REGISTRATION_JOB;
 }
 
-}
+}  // namespace
 
 ServiceWorkerJobCoordinator::JobQueue::JobQueue() = default;
 

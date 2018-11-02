@@ -8,7 +8,6 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/scoped_task_environment.h"
@@ -69,7 +68,7 @@ class TestPaginationModelObserver : public PaginationModelObserver {
     ++selection_count_;
     if (expected_page_selection_ &&
         selection_count_ == expected_page_selection_) {
-      base::MessageLoop::current()->QuitWhenIdle();
+      base::RunLoop::QuitCurrentWhenIdleDeprecated();
     }
   }
 
@@ -88,7 +87,7 @@ class TestPaginationModelObserver : public PaginationModelObserver {
          transition_start_count_ == expected_transition_start_) ||
         (expected_transition_end_ &&
          transition_end_count_ == expected_transition_end_)) {
-      base::MessageLoop::current()->QuitWhenIdle();
+      base::RunLoop::QuitCurrentWhenIdleDeprecated();
     }
   }
 
@@ -438,6 +437,25 @@ TEST_F(PaginationModelTest, SelectedPageIsLost) {
   // it automatically switches to the last page.
   pagination_.SetTotalPages(1);
   EXPECT_EQ(0, pagination_.selected_page());
+}
+
+TEST_F(PaginationModelTest, SelectPageRelativeBeginning) {
+  // Test starts with 5 pages. Select Page 1.
+  pagination_.SelectPage(1, false);
+
+  pagination_.SelectPageRelative(-1, false);
+  EXPECT_EQ(0, pagination_.selected_page());
+}
+
+TEST_F(PaginationModelTest, SelectPageRelativeMiddle) {
+  // Test starts with 5 pages. Select page 2.
+  pagination_.SelectPage(2, false);
+
+  pagination_.SelectPageRelative(-1, false);
+  EXPECT_EQ(1, pagination_.selected_page());
+
+  pagination_.SelectPageRelative(1, false);
+  EXPECT_EQ(2, pagination_.selected_page());
 }
 
 }  // namespace test

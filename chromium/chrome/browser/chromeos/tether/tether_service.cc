@@ -29,10 +29,10 @@
 
 namespace {
 
-// TODO (hansberry): Experiment with intervals to determine ideal advertising
-//                   interval parameters. See crbug.com/753215.
 constexpr int64_t kMinAdvertisingIntervalMilliseconds = 100;
 constexpr int64_t kMaxAdvertisingIntervalMilliseconds = 100;
+
+constexpr int64_t kBleNotPresentTruePositiveSeconds = 2;
 
 }  // namespace
 
@@ -69,7 +69,9 @@ void TetherService::RegisterProfilePrefs(PrefRegistrySimple* registry) {
 
 // static
 bool TetherService::IsFeatureFlagEnabled() {
-  return base::FeatureList::IsEnabled(features::kInstantTethering);
+  return base::FeatureList::IsEnabled(features::kInstantTethering) &&
+         base::CommandLine::ForCurrentProcess()->HasSwitch(
+             chromeos::switches::kEnableInstantTethering);
 }
 
 // static.
@@ -119,6 +121,7 @@ TetherService::TetherService(
               profile_,
               message_center::MessageCenter::Get(),
               chromeos::NetworkConnect::Get())),
+      timer_(base::MakeUnique<base::OneShotTimer>()),
       weak_ptr_factory_(this) {
   power_manager_client_->AddObserver(this);
   session_manager_client_->AddObserver(this);
@@ -181,11 +184,6 @@ void TetherService::StopTetherIfNecessary() {
 void TetherService::Shutdown() {
   if (shut_down_)
     return;
-
-  // Record to UMA Tether's last feature state before it is shutdown.
-  // Tether's feature state at the end of its life is the most likely to
-  // accurately represent how it has been used by the user.
-  RecordTetherFeatureState();
 
   shut_down_ = true;
 
@@ -350,6 +348,8 @@ TetherService::GetTetherTechnologyState() {
                  << ", Old state: "
                  << TetherFeatureStateToString(previous_feature_state_);
     previous_feature_state_ = new_feature_state;
+
+    RecordTetherFeatureStateIfPossible();
   }
 
   switch (new_feature_state) {
@@ -481,9 +481,6 @@ TetherService::TetherFeatureState TetherService::GetTetherFeatureState() {
   if (!GetIsBleAdvertisingSupportedPref())
     return BLE_ADVERTISING_NOT_SUPPORTED;
 
-  if (session_manager_client_->IsScreenLocked())
-    return SCREEN_LOCKED;
-
   if (!HasSyncedTetherHosts())
     return NO_AVAILABLE_HOSTS;
 
@@ -496,9 +493,6 @@ TetherService::TetherFeatureState TetherService::GetTetherFeatureState() {
   if (!IsAllowedByPolicy())
     return PROHIBITED;
 
-  // TODO (hansberry): When !IsBluetoothPowered(), this results in a weird
-  // UI state for Settings where the toggle is clickable but immediately
-  // becomes disabled after enabling it. See crbug.com/753195.
   if (!IsBluetoothPowered())
     return BLUETOOTH_DISABLED;
 
@@ -511,13 +505,50 @@ TetherService::TetherFeatureState TetherService::GetTetherFeatureState() {
 void TetherService::RecordTetherFeatureState() {
   TetherFeatureState tether_feature_state = GetTetherFeatureState();
   DCHECK(tether_feature_state != TetherFeatureState::TETHER_FEATURE_STATE_MAX);
-  UMA_HISTOGRAM_ENUMERATION("InstantTethering.FinalFeatureState",
+  UMA_HISTOGRAM_ENUMERATION("InstantTethering.FeatureState",
                             tether_feature_state,
                             TetherFeatureState::TETHER_FEATURE_STATE_MAX);
+}
+
+void TetherService::RecordTetherFeatureStateIfPossible() {
+  TetherFeatureState tether_feature_state = GetTetherFeatureState();
+  if (tether_feature_state == TetherFeatureState::BLE_NOT_PRESENT &&
+      !ble_not_present_false_positive_encountered_) {
+    // On session startup, we will always hit a
+    // TetherFeatureState::BLE_NOT_PRESENT as Bluetooth starts up. We do not
+    // want to record this initial false positive, so we delay recording it.
+    // If no other TetherFeatureState value is reported before the delay runs
+    // out, it was not a false positive.
+
+    ble_not_present_false_positive_encountered_ = true;
+
+    // If this BLE_NOT_PRESENT report is a false positive, it will be canceled
+    // on the next call to this method, which should be much sooner than
+    // kBleNotPresentTruePositiveSeconds.
+    timer_->Start(
+        FROM_HERE,
+        base::TimeDelta::FromSeconds(kBleNotPresentTruePositiveSeconds),
+        base::Bind(&TetherService::RecordTetherFeatureState,
+                   weak_ptr_factory_.GetWeakPtr()));
+
+    return;
+  }
+
+  // If the timer meant to record the initial
+  // TetherFeatureState::BLE_NOT_PRESENT value is running, cancel it -- it is a
+  // false positive report.
+  if (timer_->IsRunning())
+    timer_->Stop();
+
+  RecordTetherFeatureState();
 }
 
 void TetherService::SetNotificationPresenterForTest(
     std::unique_ptr<chromeos::tether::NotificationPresenter>
         notification_presenter) {
   notification_presenter_ = std::move(notification_presenter);
+}
+
+void TetherService::SetTimerForTest(std::unique_ptr<base::Timer> timer) {
+  timer_ = std::move(timer);
 }

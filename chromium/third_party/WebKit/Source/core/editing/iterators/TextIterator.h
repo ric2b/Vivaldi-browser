@@ -95,11 +95,9 @@ class CORE_TEMPLATE_CLASS_EXPORT TextIteratorAlgorithm {
   // Calculate the minimum |actualLength >= minLength| such that code units
   // with offset range [position, position + actualLength) are whole code
   // points. Append these code points to |output| and return |actualLength|.
-  // TODO(xiaochengh): Use (start, end) instead of (start, length).
   int CopyTextTo(ForwardsTextBuffer* output,
                  int position,
                  int min_length) const;
-  // TODO(xiaochengh): Avoid default parameters.
   int CopyTextTo(ForwardsTextBuffer* output, int position = 0) const;
 
   // Computes the length of the given range using a text iterator according to
@@ -147,8 +145,8 @@ class CORE_TEMPLATE_CLASS_EXPORT TextIteratorAlgorithm {
   void SpliceBuffer(UChar,
                     Node* text_node,
                     Node* offset_base_node,
-                    int text_start_offset,
-                    int text_end_offset);
+                    unsigned text_start_offset,
+                    unsigned text_end_offset);
 
   // Used by selection preservation code. There should be one character emitted
   // between every VisiblePosition in the Range used to create the TextIterator.
@@ -192,19 +190,19 @@ class CORE_TEMPLATE_CLASS_EXPORT TextIteratorAlgorithm {
 
   bool ForInnerText() const { return behavior_.ForInnerText(); }
 
-  bool IsBetweenSurrogatePair(int position) const;
+  bool IsBetweenSurrogatePair(unsigned position) const;
 
   // Append code units with offset range [position, position + copyLength)
   // to the output buffer.
   void CopyCodeUnitsTo(ForwardsTextBuffer* output,
-                       int position,
-                       int copy_length) const;
+                       unsigned position,
+                       unsigned copy_length) const;
 
   // The range.
   const Member<Node> start_container_;
-  const int start_offset_;
+  const unsigned start_offset_;
   const Member<Node> end_container_;
-  const int end_offset_;
+  const unsigned end_offset_;
   // |m_endNode| stores |Strategy::childAt(*m_endContainer, m_endOffset - 1)|,
   // if it exists, or |nullptr| otherwise.
   const Member<Node> end_node_;
@@ -215,7 +213,7 @@ class CORE_TEMPLATE_CLASS_EXPORT TextIteratorAlgorithm {
   Member<Node> node_;
   IterationProgress iteration_progress_;
   FullyClippedStateStackAlgorithm<Strategy> fully_clipped_stack_;
-  int shadow_depth_;
+  unsigned shadow_depth_;
 
   // Used when there is still some pending text from the current node; when
   // these are false, we go back to normal iterating.

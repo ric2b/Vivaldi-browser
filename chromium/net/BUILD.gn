@@ -45,6 +45,10 @@ enable_net_mojo = !is_ios && !is_proto_quic
 use_byte_certs =
     is_mac || is_android || is_nacl || is_ios || is_win || is_fuchsia
 
+# Android and Fuchsia can't run testserver.py directly, so they use remote
+# test server.
+use_remote_test_server = is_android || is_fuchsia
+
 buildflag_header("features") {
   header = "net_features.h"
   flags = [
@@ -193,6 +197,8 @@ component("net") {
     "cert/internal/cert_issuer_source_static.h",
     "cert/internal/certificate_policies.cc",
     "cert/internal/certificate_policies.h",
+    "cert/internal/common_cert_errors.cc",
+    "cert/internal/common_cert_errors.h",
     "cert/internal/extended_key_usage.cc",
     "cert/internal/extended_key_usage.h",
     "cert/internal/name_constraints.cc",
@@ -209,8 +215,8 @@ component("net") {
     "cert/internal/path_builder.h",
     "cert/internal/signature_algorithm.cc",
     "cert/internal/signature_algorithm.h",
-    "cert/internal/signature_policy.cc",
-    "cert/internal/signature_policy.h",
+    "cert/internal/simple_path_builder_delegate.cc",
+    "cert/internal/simple_path_builder_delegate.h",
     "cert/internal/trust_store.cc",
     "cert/internal/trust_store.h",
     "cert/internal/trust_store_collection.cc",
@@ -240,6 +246,8 @@ component("net") {
     "cert/sth_distributor.h",
     "cert/sth_observer.h",
     "cert/sth_reporter.h",
+    "cert/symantec_certs.cc",
+    "cert/symantec_certs.h",
     "cert/x509_cert_types.cc",
     "cert/x509_cert_types.h",
     "cert/x509_certificate.cc",
@@ -271,6 +279,8 @@ component("net") {
     "http/http_byte_range.h",
     "http/http_log_util.cc",
     "http/http_log_util.h",
+    "http/http_raw_request_headers.cc",
+    "http/http_raw_request_headers.h",
     "http/http_request_headers.cc",
     "http/http_request_headers.h",
     "http/http_response_headers.cc",
@@ -384,14 +394,11 @@ component("net") {
       "android/cert_verify_result_android.cc",
       "android/cert_verify_result_android.h",
       "android/gurl_utils.cc",
-      "android/gurl_utils.h",
       "android/http_auth_negotiate_android.cc",
       "android/http_auth_negotiate_android.h",
       "android/keystore.cc",
       "android/keystore.h",
       "android/legacy_openssl.h",
-      "android/net_jni_registrar.cc",
-      "android/net_jni_registrar.h",
       "android/network_change_notifier_android.cc",
       "android/network_change_notifier_android.h",
       "android/network_change_notifier_delegate_android.cc",
@@ -428,6 +435,8 @@ component("net") {
       "base/filename_util.h",
       "base/filename_util_internal.cc",
       "base/filename_util_internal.h",
+      "base/hex_utils.cc",
+      "base/hex_utils.h",
       "base/host_mapping_rules.cc",
       "base/host_mapping_rules.h",
       "base/int128.cc",
@@ -444,8 +453,6 @@ component("net") {
       "base/load_states_list.h",
       "base/logging_network_change_observer.cc",
       "base/logging_network_change_observer.h",
-      "base/mime_extension_chromeos.cc",
-      "base/mime_extension_chromeos.h",
       "base/mime_sniffer.cc",
       "base/mime_sniffer.h",
       "base/mime_util.cc",
@@ -607,7 +614,6 @@ component("net") {
       "cert/x509_certificate_openssl.cc",
       "cert/x509_certificate_win.cc",
       "cert/x509_util_android.cc",
-      "cert/x509_util_android.h",
       "cert/x509_util_ios.cc",
       "cert/x509_util_ios.h",
       "cert/x509_util_ios_and_mac.cc",
@@ -636,6 +642,8 @@ component("net") {
       "cookies/cookie_util.h",
       "cookies/parsed_cookie.cc",
       "cookies/parsed_cookie.h",
+      "disk_cache/backend_cleanup_tracker.cc",
+      "disk_cache/backend_cleanup_tracker.h",
       "disk_cache/blockfile/addr.cc",
       "disk_cache/blockfile/addr.h",
       "disk_cache/blockfile/backend_impl.cc",
@@ -943,6 +951,8 @@ component("net") {
       "http2/decoder/payload_decoders/window_update_payload_decoder.h",
       "http2/hpack/decoder/hpack_block_decoder.cc",
       "http2/hpack/decoder/hpack_block_decoder.h",
+      "http2/hpack/decoder/hpack_decoder.cc",
+      "http2/hpack/decoder/hpack_decoder.h",
       "http2/hpack/decoder/hpack_decoder_listener.cc",
       "http2/hpack/decoder/hpack_decoder_listener.h",
       "http2/hpack/decoder/hpack_decoder_state.cc",
@@ -967,15 +977,13 @@ component("net") {
       "http2/hpack/decoder/hpack_whole_entry_buffer.h",
       "http2/hpack/decoder/hpack_whole_entry_listener.cc",
       "http2/hpack/decoder/hpack_whole_entry_listener.h",
-      "http2/hpack/decoder/http2_hpack_decoder.cc",
-      "http2/hpack/decoder/http2_hpack_decoder.h",
       "http2/hpack/hpack_static_table_entries.inc",
       "http2/hpack/hpack_string.cc",
       "http2/hpack/hpack_string.h",
       "http2/hpack/http2_hpack_constants.cc",
       "http2/hpack/http2_hpack_constants.h",
-      "http2/hpack/huffman/http2_hpack_huffman_decoder.cc",
-      "http2/hpack/huffman/http2_hpack_huffman_decoder.h",
+      "http2/hpack/huffman/hpack_huffman_decoder.cc",
+      "http2/hpack/huffman/hpack_huffman_decoder.h",
       "http2/http2_constants.cc",
       "http2/http2_constants.h",
       "http2/http2_structures.cc",
@@ -1016,12 +1024,15 @@ component("net") {
       "nqe/network_quality_estimator_params.h",
       "nqe/network_quality_estimator_util.cc",
       "nqe/network_quality_estimator_util.h",
+      "nqe/network_quality_observation.cc",
       "nqe/network_quality_observation.h",
+      "nqe/network_quality_observation_source.cc",
       "nqe/network_quality_observation_source.h",
       "nqe/network_quality_provider.cc",
       "nqe/network_quality_provider.h",
       "nqe/network_quality_store.cc",
       "nqe/network_quality_store.h",
+      "nqe/observation_buffer.cc",
       "nqe/observation_buffer.h",
       "nqe/rtt_throughput_estimates_observer.h",
       "nqe/socket_watcher.cc",
@@ -1041,6 +1052,8 @@ component("net") {
       "ntlm/ntlm_buffer_reader.h",
       "ntlm/ntlm_buffer_writer.cc",
       "ntlm/ntlm_buffer_writer.h",
+      "ntlm/ntlm_client.cc",
+      "ntlm/ntlm_client.h",
       "ntlm/ntlm_constants.h",
       "proxy/dhcp_proxy_script_adapter_fetcher_win.cc",
       "proxy/dhcp_proxy_script_adapter_fetcher_win.h",
@@ -1139,6 +1152,8 @@ component("net") {
       "quic/chromium/quic_http_stream.h",
       "quic/chromium/quic_http_utils.cc",
       "quic/chromium/quic_http_utils.h",
+      "quic/chromium/quic_proxy_client_socket.cc",
+      "quic/chromium/quic_proxy_client_socket.h",
       "quic/chromium/quic_server_info.cc",
       "quic/chromium/quic_server_info.h",
       "quic/chromium/quic_stream_factory.cc",
@@ -1197,6 +1212,7 @@ component("net") {
       "quic/core/crypto/crypto_handshake.h",
       "quic/core/crypto/crypto_handshake_message.cc",
       "quic/core/crypto/crypto_handshake_message.h",
+      "quic/core/crypto/crypto_message_parser.h",
       "quic/core/crypto/crypto_protocol.h",
       "quic/core/crypto/crypto_secret_boxer.cc",
       "quic/core/crypto/crypto_secret_boxer.h",
@@ -1273,8 +1289,6 @@ component("net") {
       "quic/core/quic_client_promised_info.h",
       "quic/core/quic_client_push_promise_index.cc",
       "quic/core/quic_client_push_promise_index.h",
-      "quic/core/quic_client_session_base.cc",
-      "quic/core/quic_client_session_base.h",
       "quic/core/quic_config.cc",
       "quic/core/quic_config.h",
       "quic/core/quic_connection.cc",
@@ -1284,8 +1298,14 @@ component("net") {
       "quic/core/quic_connection_stats.h",
       "quic/core/quic_constants.cc",
       "quic/core/quic_constants.h",
+      "quic/core/quic_crypto_client_handshaker.cc",
+      "quic/core/quic_crypto_client_handshaker.h",
       "quic/core/quic_crypto_client_stream.cc",
       "quic/core/quic_crypto_client_stream.h",
+      "quic/core/quic_crypto_handshaker.cc",
+      "quic/core/quic_crypto_handshaker.h",
+      "quic/core/quic_crypto_server_handshaker.cc",
+      "quic/core/quic_crypto_server_handshaker.h",
       "quic/core/quic_crypto_server_stream.cc",
       "quic/core/quic_crypto_server_stream.h",
       "quic/core/quic_crypto_stream.cc",
@@ -1329,6 +1349,8 @@ component("net") {
       "quic/core/quic_simple_buffer_allocator.h",
       "quic/core/quic_socket_address_coder.cc",
       "quic/core/quic_socket_address_coder.h",
+      "quic/core/quic_spdy_client_session_base.cc",
+      "quic/core/quic_spdy_client_session_base.h",
       "quic/core/quic_spdy_session.cc",
       "quic/core/quic_spdy_session.h",
       "quic/core/quic_spdy_stream.cc",
@@ -1557,9 +1579,8 @@ component("net") {
       "spdy/core/fuzzing/hpack_fuzz_util.h",
       "spdy/core/hpack/hpack_constants.cc",
       "spdy/core/hpack/hpack_constants.h",
-      "spdy/core/hpack/hpack_decoder3.cc",
-      "spdy/core/hpack/hpack_decoder3.h",
-      "spdy/core/hpack/hpack_decoder_interface.h",
+      "spdy/core/hpack/hpack_decoder_adapter.cc",
+      "spdy/core/hpack/hpack_decoder_adapter.h",
       "spdy/core/hpack/hpack_encoder.cc",
       "spdy/core/hpack/hpack_encoder.h",
       "spdy/core/hpack/hpack_entry.cc",
@@ -1585,8 +1606,6 @@ component("net") {
       "spdy/core/spdy_frame_reader.h",
       "spdy/core/spdy_framer.cc",
       "spdy/core/spdy_framer.h",
-      "spdy/core/spdy_framer_decoder_adapter.cc",
-      "spdy/core/spdy_framer_decoder_adapter.h",
       "spdy/core/spdy_header_block.cc",
       "spdy/core/spdy_header_block.h",
       "spdy/core/spdy_headers_handler_interface.h",
@@ -1641,6 +1660,8 @@ component("net") {
       "url_request/data_protocol_handler.cc",
       "url_request/data_protocol_handler.h",
       "url_request/http_user_agent_settings.h",
+      "url_request/network_error_logging_delegate.cc",
+      "url_request/network_error_logging_delegate.h",
       "url_request/redirect_info.cc",
       "url_request/redirect_info.h",
       "url_request/report_sender.cc",
@@ -1789,6 +1810,8 @@ component("net") {
         "ntlm/ntlm_buffer_reader.h",
         "ntlm/ntlm_buffer_writer.cc",
         "ntlm/ntlm_buffer_writer.h",
+        "ntlm/ntlm_client.cc",
+        "ntlm/ntlm_client.h",
         "ntlm/ntlm_constants.h",
       ]
     }
@@ -1806,7 +1829,10 @@ component("net") {
         sources -= [ "cert/x509_certificate_ios.cc" ]
       }
       if (is_mac) {
-        sources -= [ "cert/x509_certificate_mac.cc" ]
+        sources -= [
+          "cert/x509_cert_types_mac.cc",
+          "cert/x509_certificate_mac.cc",
+        ]
       }
       if (use_nss_certs) {
         sources -= [ "cert/x509_certificate_nss.cc" ]
@@ -1815,7 +1841,10 @@ component("net") {
         sources -= [ "cert/x509_certificate_openssl.cc" ]
       }
       if (is_win) {
-        sources -= [ "cert/x509_certificate_win.cc" ]
+        sources -= [
+          "cert/x509_cert_types_win.cc",
+          "cert/x509_certificate_win.cc",
+        ]
       }
     } else {
       sources -= [ "cert/x509_certificate_bytes.cc" ]
@@ -2328,7 +2357,6 @@ bundle_data("test_support_bundle_data") {
     "data/ssl/certificates/client_6.pk8",
     "data/ssl/certificates/client_6_ca.pem",
     "data/ssl/certificates/client_root_ca.pem",
-    "data/ssl/certificates/comodo.chain.pem",
     "data/ssl/certificates/crit-codeSigning-chain.pem",
     "data/ssl/certificates/crlset_by_intermediate_serial.raw",
     "data/ssl/certificates/crlset_by_leaf_spki.raw",
@@ -2505,6 +2533,8 @@ static_library("test_support") {
     "dns/mock_host_resolver.h",
     "dns/mock_mdns_socket_factory.cc",
     "dns/mock_mdns_socket_factory.h",
+    "filter/filter_source_stream_test_util.cc",
+    "filter/filter_source_stream_test_util.h",
     "filter/mock_source_stream.cc",
     "filter/mock_source_stream.h",
     "http/http_stream_factory_test_util.cc",
@@ -2615,7 +2645,9 @@ static_library("test_support") {
     "//url",
   ]
 
-  deps = []
+  deps = [
+    "//third_party/zlib",
+  ]
 
   data = [
     "data/",
@@ -2631,10 +2663,14 @@ static_library("test_support") {
     public_deps += [ "//crypto:platform" ]
   }
 
-  if (is_android) {
+  if (use_remote_test_server) {
     sources += [
       "test/spawned_test_server/remote_test_server.cc",
       "test/spawned_test_server/remote_test_server.h",
+      "test/spawned_test_server/remote_test_server_config.cc",
+      "test/spawned_test_server/remote_test_server_config.h",
+      "test/spawned_test_server/remote_test_server_proxy.cc",
+      "test/spawned_test_server/remote_test_server_proxy.h",
       "test/spawned_test_server/spawner_communicator.cc",
       "test/spawned_test_server/spawner_communicator.h",
     ]
@@ -2987,6 +3023,8 @@ if (is_linux) {
       "tools/quic/platform/impl/quic_socket_utils.h",
       "tools/quic/quic_client.cc",
       "tools/quic/quic_client.h",
+      "tools/quic/quic_client_epoll_network_helper.cc",
+      "tools/quic/quic_client_epoll_network_helper.h",
       "tools/quic/quic_default_packet_writer.cc",
       "tools/quic/quic_default_packet_writer.h",
       "tools/quic/quic_epoll_alarm_factory.cc",
@@ -3143,6 +3181,8 @@ source_set("quic_test_tools") {
     "quic/test_tools/quic_spdy_stream_peer.h",
     "quic/test_tools/quic_stream_peer.cc",
     "quic/test_tools/quic_stream_peer.h",
+    "quic/test_tools/quic_stream_send_buffer_peer.cc",
+    "quic/test_tools/quic_stream_send_buffer_peer.h",
     "quic/test_tools/quic_stream_sequencer_buffer_peer.cc",
     "quic/test_tools/quic_stream_sequencer_buffer_peer.h",
     "quic/test_tools/quic_stream_sequencer_peer.cc",
@@ -3232,8 +3272,8 @@ source_set("simple_quic_tools") {
     "tools/quic/chlo_extractor.h",
     "tools/quic/quic_client_base.cc",
     "tools/quic/quic_client_base.h",
-    "tools/quic/quic_client_session.cc",
-    "tools/quic/quic_client_session.h",
+    "tools/quic/quic_client_message_loop_network_helper.cc",
+    "tools/quic/quic_client_message_loop_network_helper.h",
     "tools/quic/quic_dispatcher.cc",
     "tools/quic/quic_dispatcher.h",
     "tools/quic/quic_http_response_cache.cc",
@@ -3259,6 +3299,10 @@ source_set("simple_quic_tools") {
     "tools/quic/quic_simple_server_session_helper.h",
     "tools/quic/quic_simple_server_stream.cc",
     "tools/quic/quic_simple_server_stream.h",
+    "tools/quic/quic_spdy_client_base.cc",
+    "tools/quic/quic_spdy_client_base.h",
+    "tools/quic/quic_spdy_client_session.cc",
+    "tools/quic/quic_spdy_client_session.h",
     "tools/quic/quic_spdy_client_stream.cc",
     "tools/quic/quic_spdy_client_stream.h",
     "tools/quic/quic_spdy_server_stream_base.cc",
@@ -3477,6 +3521,10 @@ bundle_data("net_unittests_bundle_data") {
     "data/name_constraints_unittest/uri-permitted.pem",
     "data/name_constraints_unittest/x400address-excluded.pem",
     "data/name_constraints_unittest/x400address-permitted.pem",
+    "data/parse_certificate_unittest/bad_key_usage.pem",
+    "data/parse_certificate_unittest/bad_policy_qualifiers.pem",
+    "data/parse_certificate_unittest/bad_signature_algorithm_oid.pem",
+    "data/parse_certificate_unittest/bad_validity.pem",
     "data/parse_certificate_unittest/basic_constraints_ca_false.pem",
     "data/parse_certificate_unittest/basic_constraints_ca_no_path.pem",
     "data/parse_certificate_unittest/basic_constraints_ca_path_9.pem",
@@ -3495,6 +3543,10 @@ bundle_data("net_unittests_bundle_data") {
     "data/parse_certificate_unittest/cert_signature_not_bit_string.pem",
     "data/parse_certificate_unittest/cert_skeleton.pem",
     "data/parse_certificate_unittest/cert_version3.pem",
+    "data/parse_certificate_unittest/crldp_1uri_noissuer.pem",
+    "data/parse_certificate_unittest/crldp_3uri_noissuer.pem",
+    "data/parse_certificate_unittest/crldp_full_name_as_dirname.pem",
+    "data/parse_certificate_unittest/crldp_issuer_as_dirname.pem",
     "data/parse_certificate_unittest/extended_key_usage.pem",
     "data/parse_certificate_unittest/extension_critical.pem",
     "data/parse_certificate_unittest/extension_critical_0.pem",
@@ -3505,23 +3557,38 @@ bundle_data("net_unittests_bundle_data") {
     "data/parse_certificate_unittest/extensions_empty_sequence.pem",
     "data/parse_certificate_unittest/extensions_not_sequence.pem",
     "data/parse_certificate_unittest/extensions_real.pem",
+    "data/parse_certificate_unittest/failed_signature_algorithm.pem",
     "data/parse_certificate_unittest/inhibit_any_policy.pem",
+    "data/parse_certificate_unittest/issuer_bad_printable_string.pem",
     "data/parse_certificate_unittest/key_usage.pem",
+    "data/parse_certificate_unittest/name_constraints_bad_ip.pem",
     "data/parse_certificate_unittest/policies.pem",
     "data/parse_certificate_unittest/policy_constraints_empty.pem",
     "data/parse_certificate_unittest/policy_constraints_inhibit.pem",
     "data/parse_certificate_unittest/policy_constraints_inhibit_require.pem",
     "data/parse_certificate_unittest/policy_constraints_require.pem",
+    "data/parse_certificate_unittest/policy_qualifiers_empty_sequence.pem",
     "data/parse_certificate_unittest/serial_37_bytes.pem",
     "data/parse_certificate_unittest/serial_negative.pem",
+    "data/parse_certificate_unittest/serial_not_minimal.pem",
+    "data/parse_certificate_unittest/serial_not_number.pem",
+    "data/parse_certificate_unittest/serial_zero.pem",
     "data/parse_certificate_unittest/serial_zero_padded.pem",
     "data/parse_certificate_unittest/serial_zero_padded_21_bytes.pem",
     "data/parse_certificate_unittest/signature_algorithm_null.pem",
     "data/parse_certificate_unittest/subject_alt_name.pem",
+    "data/parse_certificate_unittest/subject_blank_subjectaltname_not_critical.pem",
+    "data/parse_certificate_unittest/subject_not_ascii.pem",
+    "data/parse_certificate_unittest/subject_not_printable_string.pem",
+    "data/parse_certificate_unittest/subject_printable_string_containing_utf8_client_cert.pem",
     "data/parse_certificate_unittest/subject_t61string.pem",
     "data/parse_certificate_unittest/subject_t61string_1-32.pem",
     "data/parse_certificate_unittest/subject_t61string_126-160.pem",
     "data/parse_certificate_unittest/subject_t61string_actual.pem",
+    "data/parse_certificate_unittest/subjectaltname_bad_ip.pem",
+    "data/parse_certificate_unittest/subjectaltname_dns_not_ascii.pem",
+    "data/parse_certificate_unittest/subjectaltname_general_names_empty_sequence.pem",
+    "data/parse_certificate_unittest/subjectaltname_trailing_data.pem",
     "data/parse_certificate_unittest/tbs_explicit_v1.pem",
     "data/parse_certificate_unittest/tbs_v1.pem",
     "data/parse_certificate_unittest/tbs_v1_extensions.pem",
@@ -3541,6 +3608,8 @@ bundle_data("net_unittests_bundle_data") {
     "data/parse_certificate_unittest/tbs_validity_generalized_time_and_utc_time.pem",
     "data/parse_certificate_unittest/tbs_validity_relaxed.pem",
     "data/parse_certificate_unittest/tbs_validity_utc_time_and_generalized_time.pem",
+    "data/parse_certificate_unittest/v1_explicit_version.pem",
+    "data/parse_certificate_unittest/v3_certificate_template.pk8",
     "data/parse_ocsp_unittest/bad_ocsp_type.pem",
     "data/parse_ocsp_unittest/bad_signature.pem",
     "data/parse_ocsp_unittest/bad_status.pem",
@@ -3655,6 +3724,14 @@ bundle_data("net_unittests_bundle_data") {
     "data/verify_certificate_chain_unittest/intermediate-eku-clientauth/chain.pem",
     "data/verify_certificate_chain_unittest/intermediate-eku-clientauth/clientauth.test",
     "data/verify_certificate_chain_unittest/intermediate-eku-clientauth/serverauth.test",
+    "data/verify_certificate_chain_unittest/intermediate-eku-server-gated-crypto/sha1-chain.pem",
+    "data/verify_certificate_chain_unittest/intermediate-eku-server-gated-crypto/sha1-eku-any.test",
+    "data/verify_certificate_chain_unittest/intermediate-eku-server-gated-crypto/sha1-eku-clientAuth.test",
+    "data/verify_certificate_chain_unittest/intermediate-eku-server-gated-crypto/sha1-eku-serverAuth.test",
+    "data/verify_certificate_chain_unittest/intermediate-eku-server-gated-crypto/sha256-chain.pem",
+    "data/verify_certificate_chain_unittest/intermediate-eku-server-gated-crypto/sha256-eku-any.test",
+    "data/verify_certificate_chain_unittest/intermediate-eku-server-gated-crypto/sha256-eku-clientAuth.test",
+    "data/verify_certificate_chain_unittest/intermediate-eku-server-gated-crypto/sha256-eku-serverAuth.test",
     "data/verify_certificate_chain_unittest/intermediate-lacks-basic-constraints/chain.pem",
     "data/verify_certificate_chain_unittest/intermediate-lacks-basic-constraints/main.test",
     "data/verify_certificate_chain_unittest/intermediate-lacks-signing-key-usage/chain.pem",
@@ -3793,6 +3870,8 @@ bundle_data("net_unittests_bundle_data") {
     "data/verify_certificate_chain_unittest/target-eku-none/chain.pem",
     "data/verify_certificate_chain_unittest/target-eku-none/clientauth.test",
     "data/verify_certificate_chain_unittest/target-eku-none/serverauth.test",
+    "data/verify_certificate_chain_unittest/target-has-512bit-rsa-key/chain.pem",
+    "data/verify_certificate_chain_unittest/target-has-512bit-rsa-key/main.test",
     "data/verify_certificate_chain_unittest/target-has-keycertsign-but-not-ca/chain.pem",
     "data/verify_certificate_chain_unittest/target-has-keycertsign-but-not-ca/main.test",
     "data/verify_certificate_chain_unittest/target-has-pathlen-but-not-ca/chain.pem",
@@ -4555,6 +4634,7 @@ test("net_unittests") {
     "base/expiring_cache_unittest.cc",
     "base/file_stream_unittest.cc",
     "base/filename_util_unittest.cc",
+    "base/hex_utils_test.cc",
     "base/host_mapping_rules_unittest.cc",
     "base/host_port_pair_unittest.cc",
     "base/int128_unittest.cc",
@@ -4622,6 +4702,7 @@ test("net_unittests") {
     "cert/internal/path_builder_unittest.cc",
     "cert/internal/path_builder_verify_certificate_chain_unittest.cc",
     "cert/internal/signature_algorithm_unittest.cc",
+    "cert/internal/simple_path_builder_delegate_unittest.cc",
     "cert/internal/test_helpers.cc",
     "cert/internal/test_helpers.h",
     "cert/internal/trust_store_collection_unittest.cc",
@@ -4643,10 +4724,12 @@ test("net_unittests") {
     "cert/pem_tokenizer_unittest.cc",
     "cert/signed_certificate_timestamp_unittest.cc",
     "cert/sth_distributor_unittest.cc",
+    "cert/symantec_certs_unittest.cc",
     "cert/test_root_certs_unittest.cc",
     "cert/x509_cert_types_unittest.cc",
     "cert/x509_certificate_unittest.cc",
     "cert/x509_util_ios_and_mac_unittest.cc",
+    "cert/x509_util_nss_unittest.cc",
     "cert/x509_util_unittest.cc",
     "cert_net/cert_net_fetcher_impl_unittest.cc",
     "cert_net/nss_ocsp_unittest.cc",
@@ -4660,6 +4743,7 @@ test("net_unittests") {
     "der/input_unittest.cc",
     "der/parse_values_unittest.cc",
     "der/parser_unittest.cc",
+    "disk_cache/backend_cleanup_tracker_unittest.cc",
     "disk_cache/backend_unittest.cc",
     "disk_cache/blockfile/addr_unittest.cc",
     "disk_cache/blockfile/bitmap_unittest.cc",
@@ -4701,8 +4785,6 @@ test("net_unittests") {
     "extras/sqlite/sqlite_channel_id_store_unittest.cc",
     "extras/sqlite/sqlite_persistent_cookie_store_unittest.cc",
     "filter/brotli_source_stream_unittest.cc",
-    "filter/filter_source_stream_test_util.cc",
-    "filter/filter_source_stream_test_util.h",
     "filter/filter_source_stream_unittest.cc",
     "filter/gzip_source_stream_unittest.cc",
     "filter/sdch_policy_delegate_unittest.cc",
@@ -4802,6 +4884,7 @@ test("net_unittests") {
     "http2/hpack/decoder/hpack_decoder_state_test.cc",
     "http2/hpack/decoder/hpack_decoder_string_buffer_test.cc",
     "http2/hpack/decoder/hpack_decoder_tables_test.cc",
+    "http2/hpack/decoder/hpack_decoder_test.cc",
     "http2/hpack/decoder/hpack_entry_collector.cc",
     "http2/hpack/decoder/hpack_entry_collector.h",
     "http2/hpack/decoder/hpack_entry_decoder_test.cc",
@@ -4811,10 +4894,9 @@ test("net_unittests") {
     "http2/hpack/decoder/hpack_string_decoder_test.cc",
     "http2/hpack/decoder/hpack_varint_decoder_test.cc",
     "http2/hpack/decoder/hpack_whole_entry_buffer_test.cc",
-    "http2/hpack/decoder/http2_hpack_decoder_test.cc",
     "http2/hpack/hpack_string_test.cc",
     "http2/hpack/http2_hpack_constants_test.cc",
-    "http2/hpack/huffman/http2_hpack_huffman_decoder_test.cc",
+    "http2/hpack/huffman/hpack_huffman_decoder_test.cc",
     "http2/hpack/tools/hpack_block_builder.cc",
     "http2/hpack/tools/hpack_block_builder.h",
     "http2/hpack/tools/hpack_block_builder_test.cc",
@@ -4859,8 +4941,10 @@ test("net_unittests") {
     "nqe/socket_watcher_unittest.cc",
     "nqe/throughput_analyzer_unittest.cc",
     "ntlm/des_unittest.cc",
+    "ntlm/md4_unittest.cc",
     "ntlm/ntlm_buffer_reader_unittest.cc",
     "ntlm/ntlm_buffer_writer_unittest.cc",
+    "ntlm/ntlm_client_unittest.cc",
     "ntlm/ntlm_test_data.h",
     "ntlm/ntlm_unittest.cc",
     "proxy/dhcp_proxy_script_adapter_fetcher_win_unittest.cc",
@@ -4910,6 +4994,7 @@ test("net_unittests") {
     "quic/chromium/quic_http_stream_test.cc",
     "quic/chromium/quic_http_utils_test.cc",
     "quic/chromium/quic_network_transaction_unittest.cc",
+    "quic/chromium/quic_proxy_client_socket_unittest.cc",
     "quic/chromium/quic_stream_factory_peer.cc",
     "quic/chromium/quic_stream_factory_peer.h",
     "quic/chromium/quic_stream_factory_test.cc",
@@ -5058,7 +5143,7 @@ test("net_unittests") {
     "spdy/core/array_output_buffer.h",
     "spdy/core/array_output_buffer_test.cc",
     "spdy/core/fuzzing/hpack_fuzz_util_test.cc",
-    "spdy/core/hpack/hpack_decoder3_test.cc",
+    "spdy/core/hpack/hpack_decoder_adapter_test.cc",
     "spdy/core/hpack/hpack_encoder_test.cc",
     "spdy/core/hpack/hpack_entry_test.cc",
     "spdy/core/hpack/hpack_header_table_test.cc",
@@ -5235,7 +5320,6 @@ test("net_unittests") {
       "tools/quic/end_to_end_test.cc",
       "tools/quic/platform/impl/quic_epoll_clock_test.cc",
       "tools/quic/platform/impl/quic_socket_utils_test.cc",
-      "tools/quic/quic_client_session_test.cc",
       "tools/quic/quic_client_test.cc",
       "tools/quic/quic_dispatcher_test.cc",
       "tools/quic/quic_epoll_alarm_factory_test.cc",
@@ -5246,6 +5330,7 @@ test("net_unittests") {
       "tools/quic/quic_simple_server_session_test.cc",
       "tools/quic/quic_simple_server_stream_test.cc",
       "tools/quic/quic_simple_server_test.cc",
+      "tools/quic/quic_spdy_client_session_test.cc",
       "tools/quic/quic_spdy_client_stream_test.cc",
       "tools/quic/quic_spdy_server_stream_base_test.cc",
       "tools/quic/quic_time_wait_list_manager_test.cc",
@@ -5277,17 +5362,29 @@ test("net_unittests") {
     sources -= [
       "http/http_auth_handler_ntlm_portable_unittest.cc",
       "ntlm/des_unittest.cc",
+      "ntlm/md4_unittest.cc",
       "ntlm/ntlm_buffer_reader_unittest.cc",
       "ntlm/ntlm_buffer_writer_unittest.cc",
+      "ntlm/ntlm_client_unittest.cc",
       "ntlm/ntlm_test_data.h",
       "ntlm/ntlm_unittest.cc",
     ]
+  }
+
+  if (use_remote_test_server) {
+    sources +=
+        [ "test/spawned_test_server/remote_test_server_proxy_unittests.cc" ]
+  }
+
+  if (is_fuchsia) {
+    use_test_server = true
   }
 
   if (!use_nss_certs) {
     sources -= [
       "cert/internal/trust_store_nss_unittest.cc",
       "cert/nss_cert_database_unittest.cc",
+      "cert/x509_util_nss_unittest.cc",
       "ssl/client_cert_store_nss_unittest.cc",
       "ssl/ssl_platform_key_nss_unittest.cc",
     ]
@@ -5839,6 +5936,21 @@ fuzzer_test("net_http_stream_parser_fuzzer") {
     "//net",
   ]
   dict = "data/fuzzer_dictionaries/net_http_stream_parser_fuzzer.dict"
+}
+
+fuzzer_test("net_ntlm_ntlm_client_fuzzer") {
+  sources = [
+    "ntlm/ntlm_client_fuzzer.cc",
+  ]
+  deps = [
+    ":net_fuzzer_test_support",
+    ":test_support",
+    "//base",
+    "//net",
+    "//net:net_unittests",
+  ]
+  dict = "data/fuzzer_dictionaries/net_ntlm_ntlm_client_fuzzer.dict"
+  seed_corpus = "data/fuzzer_data/ntlm_client_fuzzer/"
 }
 
 if (!disable_brotli_filter) {

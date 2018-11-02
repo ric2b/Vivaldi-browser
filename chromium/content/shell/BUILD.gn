@@ -39,8 +39,6 @@ static_library("content_shell_lib") {
   testonly = true
   sources = [
     "android/shell_descriptors.h",
-    "android/shell_jni_registrar.cc",
-    "android/shell_jni_registrar.h",
     "android/shell_manager.cc",
     "android/shell_manager.h",
     "app/blink_test_platform_support.h",
@@ -94,6 +92,8 @@ static_library("content_shell_lib") {
     "browser/layout_test/layout_test_resource_dispatcher_host_delegate.h",
     "browser/layout_test/layout_test_url_request_context_getter.cc",
     "browser/layout_test/layout_test_url_request_context_getter.h",
+    "browser/layout_test/mojo_layout_test_helper.cc",
+    "browser/layout_test/mojo_layout_test_helper.h",
     "browser/layout_test/secondary_test_window_observer.cc",
     "browser/layout_test/secondary_test_window_observer.h",
     "browser/layout_test/test_info_extractor.cc",
@@ -226,7 +226,7 @@ static_library("content_shell_lib") {
     "//cc",
     "//components/cdm/renderer",
     "//components/keyed_service/content",
-    "//components/network_session_configurator/common",
+    "//components/network_session_configurator/browser",
     "//components/plugins/renderer",
     "//components/url_formatter",
     "//components/web_cache/renderer",
@@ -434,8 +434,8 @@ group("resources") {
 
 repack("pak") {
   sources = [
-    "$root_gen_dir/blink/public/resources/blink_image_resources_100_percent.pak",
     "$root_gen_dir/blink/public/resources/blink_resources.pak",
+    "$root_gen_dir/blink/public/resources/blink_scaled_resources_100_percent.pak",
     "$root_gen_dir/content/app/resources/content_resources_100_percent.pak",
     "$root_gen_dir/content/app/strings/content_strings_en-US.pak",
     "$root_gen_dir/content/browser/tracing/tracing_resources.pak",
@@ -455,8 +455,8 @@ repack("pak") {
     "//content/app/strings",
     "//content/browser/tracing:resources",
     "//net:net_resources",
-    "//third_party/WebKit/public:image_resources",
     "//third_party/WebKit/public:resources",
+    "//third_party/WebKit/public:scaled_resources_100_percent",
     "//ui/resources",
     "//ui/strings",
   ]
@@ -544,6 +544,14 @@ if (is_android) {
       ":pak",
     ]
 
+    public_deps = [
+      "//tools/v8_context_snapshot:v8_context_snapshot",
+    ]
+
+    data = [
+      "$root_out_dir/v8_context_snapshot.bin",
+    ]
+
     if (is_win) {
       deps += [ "//sandbox" ]
 
@@ -608,11 +616,13 @@ if (is_mac) {
   bundle_data("content_shell_framework_resources") {
     sources = [
       "$root_out_dir/content_shell.pak",
+      "$root_out_dir/v8_context_snapshot.bin",
       "resources/missingImage.png",
     ]
 
     public_deps = [
       ":pak",
+      "//tools/v8_context_snapshot:v8_context_snapshot",
     ]
 
     if (icu_use_data_file) {

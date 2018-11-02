@@ -38,6 +38,7 @@ extern const base::Feature kDisplayTitleForCurrentUrl;
 extern const base::Feature kUIExperimentElideSuggestionUrlAfterHost;
 extern const base::Feature kUIExperimentHideSuggestionUrlScheme;
 extern const base::Feature kUIExperimentHideSuggestionUrlTrivialSubdomains;
+extern const base::Feature kUIExperimentShowSuggestionFavicons;
 extern const base::Feature kUIExperimentMaxAutocompleteMatches;
 extern const base::Feature kUIExperimentNarrowDropdown;
 extern const base::Feature kUIExperimentVerticalLayout;
@@ -109,9 +110,7 @@ struct HUPScoringParams {
     bool use_decay_factor_;
   };
 
-  HUPScoringParams() : experimental_scoring_enabled(false) {}
-
-  bool experimental_scoring_enabled;
+  HUPScoringParams() {}
 
   ScoreBuckets typed_count_buckets;
 
@@ -200,6 +199,13 @@ class OmniboxFieldTrial {
   static bool InZeroSuggestPersonalizedFieldTrial();
 
   // ---------------------------------------------------------
+  // For the Zero Suggest Redirect to Chrome field trial.
+
+  // Returns the server-side experiment ID to use for contextual suggestions.
+  // Returns -1 if there is no associated experiment ID.
+  static int GetZeroSuggestRedirectToChromeExperimentId();
+
+  // ---------------------------------------------------------
   // For the ShortcutsScoringMaxRelevance experiment that's part of the
   // bundled omnibox field trial.
 
@@ -255,8 +261,7 @@ class OmniboxFieldTrial {
   // bundled omnibox field trial.
 
   // Initializes the HUP |scoring_params| based on the active HUP scoring
-  // experiment.  If there is no such experiment, this function simply sets
-  // |scoring_params|->experimental_scoring_enabled to false.
+  // experiment.
   static void GetDefaultHUPScoringParams(HUPScoringParams* scoring_params);
   static void GetExperimentalHUPScoringParams(HUPScoringParams* scoring_params);
 
@@ -311,7 +316,7 @@ class OmniboxFieldTrial {
   static std::string HQPExperimentalScoringBuckets();
 
   // Returns the topicality threshold for HQP experiments. Returns a default
-  // value of 0.8 if no threshold is specified in the field trial.
+  // value of 0.5 if no threshold is specified in the field trial.
   static float HQPExperimentalTopicalityThreshold();
 
   // ---------------------------------------------------------
@@ -327,25 +332,18 @@ class OmniboxFieldTrial {
   // For the HQPFixFrequencyScoring experiment that's part of the
   // bundled omnibox field trial.
 
-  // Returns true if HQP should apply the bug fix to discount the visits to
-  // pages visited less than ten times.
-  static bool HQPFixFewVisitsBug();
-
-  // Returns true if HQP should use the weighted sum when computing frequency
-  // scores.  False means to use the weighted average.  Returns false if the
-  // experiment isn't active.
-  static bool HQPFreqencyUsesSum();
-
   // Returns the number of visits HQP should use when computing frequency
   // scores.  Returns 10 if the epxeriment isn't active.
   static size_t HQPMaxVisitsToScore();
 
   // Returns the score that should be given to typed transitions.  (The score
-  // of non-typed transitions is 1.)  Returns 20 if the experiment isn't active.
+  // of non-typed transitions is 1.)  Returns 1.5 if the experiment isn't
+  // active.
   static float HQPTypedValue();
 
   // Returns NumMatchesScores; see comment by the declaration of it.
-  // Returns an empty NumMatchesScores if the experiment isn't active.
+  // If the experiment isn't active, returns an NumMatchesScores of
+  // {{1, 3}, {2, 2.5}, {3, 2}, {4, 1.5}}.
   static NumMatchesScores HQPNumMatchesScores();
 
   // ---------------------------------------------------------
@@ -427,26 +425,6 @@ class OmniboxFieldTrial {
   static int GetPhysicalWebAfterTypingBaseRelevance();
 
   // ---------------------------------------------------------
-  // For experiment redirecting zero suggest requests to a service provided by
-  // the Chrome team.
-
-  // Returns true whether the user is in the field trial which redirects zero
-  // suggest requests to the service provided by the Chrome team.
-  static bool InZeroSuggestRedirectToChromeFieldTrial();
-
-  // Returns a string representing the address of the server where the zero
-  // suggest requests are being redirected. The return value is a URL
-  // (https://example.com/test) and it doesn't include any query component
-  // (no "?").
-  static std::string ZeroSuggestRedirectToChromeServerAddress();
-
-  // Returns a string representing the parameters that are sent to the
-  // alternative service providing zero suggestions. The returned value is
-  // properly escaped. It can be appended to the string representaiton of a
-  // request URL.
-  static std::string ZeroSuggestRedirectToChromeAdditionalFields();
-
-  // ---------------------------------------------------------
   // Clipboard URL suggestions:
 
   // The parameter "ClipboardURLMaximumAge" doesn't live in this file; instead
@@ -466,7 +444,6 @@ class OmniboxFieldTrial {
   static const char kDemoteByTypeRule[];
   static const char kHQPBookmarkValueRule[];
   static const char kHQPTypedValueRule[];
-  static const char kHQPDiscountFrecencyWhenFewVisitsRule[];
   static const char kHQPAllowMatchInTLDRule[];
   static const char kHQPAllowMatchInSchemeRule[];
   static const char kZeroSuggestRule[];
@@ -475,8 +452,6 @@ class OmniboxFieldTrial {
   static const char kDisableResultsCachingRule[];
   static const char kMeasureSuggestPollingDelayFromLastKeystrokeRule[];
   static const char kSuggestPollingDelayMsRule[];
-  static const char kHQPFixFewVisitsBugRule[];
-  static const char kHQPFreqencyUsesSumRule[];
   static const char kHQPMaxVisitsToScoreRule[];
   static const char kHQPNumMatchesScoresRule[];
   static const char kHQPNumTitleWordsRule[];
@@ -492,7 +467,6 @@ class OmniboxFieldTrial {
   static const char kPhysicalWebAfterTypingRule[];
 
   // Parameter names used by the HUP new scoring experiments.
-  static const char kHUPNewScoringEnabledParam[];
   static const char kHUPNewScoringTypedCountRelevanceCapParam[];
   static const char kHUPNewScoringTypedCountHalfLifeTimeParam[];
   static const char kHUPNewScoringTypedCountScoreBucketsParam[];
@@ -515,14 +489,12 @@ class OmniboxFieldTrial {
   static const char kPhysicalWebZeroSuggestBaseRelevanceParam[];
   static const char kPhysicalWebAfterTypingBaseRelevanceParam[];
 
-  // Parameter names used by the experiment redirecting Zero Suggestion requests
-  // to a service provided by the Chrome team.
-  static const char kZeroSuggestRedirectToChromeServerAddressParam[];
-  static const char kZeroSuggestRedirectToChromeAdditionalFieldsParam[];
-
   // Parameter names used by UI experiments.
   static const char kUIMaxAutocompleteMatchesParam[];
   static const char kUIVerticalMarginParam[];
+
+  // Parameter names used by Zero Suggest Redirect to Chrome.
+  static const char kZeroSuggestRedirectToChromeExperimentIdParam[];
 
   // The amount of time to wait before sending a new suggest request after the
   // previous one unless overridden by a field trial parameter.

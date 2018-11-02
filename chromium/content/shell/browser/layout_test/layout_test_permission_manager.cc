@@ -133,6 +133,18 @@ blink::mojom::PermissionStatus LayoutTestPermissionManager::GetPermissionStatus(
       PermissionDescription(permission, requesting_origin, embedding_origin));
   if (it == permissions_.end())
     return blink::mojom::PermissionStatus::DENIED;
+
+  // Immitates the behaviour of the NotificationPermissionContext in that
+  // permission cannot be requested from cross-origin iframes, which the current
+  // permission status should reflect when it's status is ASK.
+  if (permission == PermissionType::NOTIFICATIONS ||
+      permission == PermissionType::PUSH_MESSAGING) {
+    if (requesting_origin != embedding_origin &&
+        it->second == blink::mojom::PermissionStatus::ASK) {
+      return blink::mojom::PermissionStatus::DENIED;
+    }
+  }
+
   return it->second;
 }
 
@@ -166,11 +178,12 @@ void LayoutTestPermissionManager::UnsubscribePermissionStatusChange(
 void LayoutTestPermissionManager::SetPermission(
     PermissionType permission,
     blink::mojom::PermissionStatus status,
-    const GURL& origin,
-    const GURL& embedding_origin) {
+    const GURL& url,
+    const GURL& embedding_url) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  PermissionDescription description(permission, origin, embedding_origin);
+  PermissionDescription description(permission, url.GetOrigin(),
+                                    embedding_url.GetOrigin());
 
   base::AutoLock lock(permissions_lock_);
 

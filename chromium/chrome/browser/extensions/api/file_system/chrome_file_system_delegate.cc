@@ -43,6 +43,9 @@
 #include "storage/common/fileapi/file_system_util.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
 
+#include "app/vivaldi_apptools.h"
+#include "browser/vivaldi_browser_finder.h"
+
 #if defined(OS_MACOSX)
 #include <CoreFoundation/CoreFoundation.h>
 #include "base/mac/foundation_util.h"
@@ -254,7 +257,9 @@ bool ChromeFileSystemDelegate::ShowSelectFileDialog(
     content::WebContents* candidate = content::WebContents::FromRenderFrameHost(
         extension_function->render_frame_host());
     // Make sure there is an app window associated with the web contents.
-    if (AppWindowRegistry::Get(extension_function->browser_context())
+    if ((vivaldi::IsVivaldiRunning() &&
+         vivaldi::FindBrowserForEmbedderWebContents(candidate)) ||
+        AppWindowRegistry::Get(extension_function->browser_context())
             ->GetAppWindowForWebContents(candidate)) {
       web_contents = candidate;
     }

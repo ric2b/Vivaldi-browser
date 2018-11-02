@@ -42,7 +42,6 @@ schema_sources = [
   "downloads_internal.idl",
   "easy_unlock_private.idl",
   "experience_sampling_private.json",
-  "feedback_private.idl",
   "font_settings.json",
   "gcm.json",
   "history.json",
@@ -178,7 +177,6 @@ json_schema_api("api") {
     "proxy.json",
     "tts_engine.json",
     "tts.json",
-    "types_private.json",
     "webstore.json",
   ]
   if (is_chromeos) {

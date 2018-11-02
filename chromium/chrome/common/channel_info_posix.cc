@@ -40,7 +40,7 @@ version_info::Channel GetChannelImpl(std::string* modifier_out,
     data_dir_suffix = "-beta";
 #if defined(VIVALDI_BUILD)
   } else if (modifier == "snapshot") {
-    channel = version_info::Channel::DEV;
+    channel = version_info::Channel::STABLE;
     data_dir_suffix = "-snapshot";
 #endif
   } else {

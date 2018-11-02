@@ -226,6 +226,7 @@ class DefaultBindingsDelegate : public DevToolsUIBindings::Delegate {
   void ReadyForTest() override {}
   InfoBarService* GetInfoBarService() override;
   void RenderProcessGone(bool crashed) override {}
+  void ShowCertificateViewer(const std::string& cert_chain) override{};
 
   content::WebContents* web_contents_;
   DISALLOW_COPY_AND_ASSIGN(DefaultBindingsDelegate);
@@ -313,12 +314,11 @@ int ResponseWriter::Finish(int net_error,
   return net::OK;
 }
 
-GURL SanitizeFrontendURL(
-    const GURL& url,
-    const std::string& scheme,
-    const std::string& host,
-    const std::string& path,
-    bool allow_query);
+GURL SanitizeFrontendURL(const GURL& url,
+                         const std::string& scheme,
+                         const std::string& host,
+                         const std::string& path,
+                         bool allow_query_and_fragment);
 
 std::string SanitizeRevision(const std::string& revision) {
   for (size_t i = 0; i < revision.length(); i++) {
@@ -390,7 +390,7 @@ std::string SanitizeFrontendQueryParam(
   // Convert boolean flags to true.
   if (key == "can_dock" || key == "debugFrontend" || key == "experiments" ||
       key == "isSharedWorker" || key == "v8only" || key == "remoteFrontend" ||
-      key == "nodeFrontend")
+      key == "nodeFrontend" || key == "hasOtherClients")
     return "true";
 
   // Pass connection endpoints as is.
@@ -413,14 +413,14 @@ std::string SanitizeFrontendQueryParam(
   return std::string();
 }
 
-GURL SanitizeFrontendURL(
-    const GURL& url,
-    const std::string& scheme,
-    const std::string& host,
-    const std::string& path,
-    bool allow_query) {
+GURL SanitizeFrontendURL(const GURL& url,
+                         const std::string& scheme,
+                         const std::string& host,
+                         const std::string& path,
+                         bool allow_query_and_fragment) {
   std::vector<std::string> query_parts;
-  if (allow_query) {
+  std::string fragment;
+  if (allow_query_and_fragment) {
     for (net::QueryIterator it(url); !it.IsAtEnd(); it.Advance()) {
       std::string value = SanitizeFrontendQueryParam(it.GetKey(),
           it.GetValue());
@@ -429,11 +429,14 @@ GURL SanitizeFrontendURL(
             base::StringPrintf("%s=%s", it.GetKey().c_str(), value.c_str()));
       }
     }
+    if (url.has_ref())
+      fragment = '#' + url.ref();
   }
   std::string query =
       query_parts.empty() ? "" : "?" + base::JoinString(query_parts, "&");
-  std::string constructed = base::StringPrintf("%s://%s%s%s",
-      scheme.c_str(), host.c_str(), path.c_str(), query.c_str());
+  std::string constructed =
+      base::StringPrintf("%s://%s%s%s%s", scheme.c_str(), host.c_str(),
+                         path.c_str(), query.c_str(), fragment.c_str());
   GURL result = GURL(constructed);
   if (!result.is_valid())
     return GURL();
@@ -660,6 +663,13 @@ void DevToolsUIBindings::SendMessageAck(int request_id,
                      &id_value, arg, nullptr);
 }
 
+void DevToolsUIBindings::InnerAttach() {
+  DCHECK(agent_host_.get());
+  // Note: we could use ForceAttachClient here to disconnect other clients
+  // if any problems arise.
+  agent_host_->AttachClient(this);
+}
+
 // DevToolsEmbedderMessageDispatcher::Delegate implementation -----------------
 
 void DevToolsUIBindings::ActivateWindow() {
@@ -721,7 +731,7 @@ void DevToolsUIBindings::LoadNetworkResource(const DispatchCallback& callback,
           destination: WEBSITE
         }
         policy {
-          cookies_allowed: true
+          cookies_allowed: YES
           cookies_store: "user"
           setting:
             "It's not possible to disable this feature from settings."
@@ -864,49 +874,7 @@ void DevToolsUIBindings::SetEyeDropperActive(bool active) {
 }
 
 void DevToolsUIBindings::ShowCertificateViewer(const std::string& cert_chain) {
-  std::unique_ptr<base::Value> value =
-      base::JSONReader::Read(cert_chain);
-  if (!value || value->GetType() != base::Value::Type::LIST) {
-    NOTREACHED();
-    return;
-  }
-
-  std::unique_ptr<base::ListValue> list =
-      base::ListValue::From(std::move(value));
-  std::vector<std::string> decoded;
-  for (size_t i = 0; i < list->GetSize(); ++i) {
-    base::Value* item;
-    if (!list->Get(i, &item) || item->GetType() != base::Value::Type::STRING) {
-      NOTREACHED();
-      return;
-    }
-    std::string temp;
-    if (!item->GetAsString(&temp)) {
-      NOTREACHED();
-      return;
-    }
-    if (!base::Base64Decode(temp, &temp)) {
-      NOTREACHED();
-      return;
-    }
-    decoded.push_back(temp);
-  }
-
-  std::vector<base::StringPiece> cert_string_piece;
-  for (const auto& str : decoded)
-    cert_string_piece.push_back(str);
-  scoped_refptr<net::X509Certificate> cert =
-       net::X509Certificate::CreateFromDERCertChain(cert_string_piece);
-  if (!cert) {
-    NOTREACHED();
-    return;
-  }
-
-  if (!agent_host_ || !agent_host_->GetWebContents())
-    return;
-  content::WebContents* inspected_wc = agent_host_->GetWebContents();
-  web_contents_->GetDelegate()->ShowCertificateViewerInDevTools(
-      inspected_wc, cert.get());
+  delegate_->ShowCertificateViewer(cert_chain);
 }
 
 void DevToolsUIBindings::ZoomIn() {
@@ -1067,7 +1035,7 @@ void DevToolsUIBindings::SetPreference(const std::string& name,
                                    const std::string& value) {
   DictionaryPrefUpdate update(profile_->GetPrefs(),
                               prefs::kDevToolsPreferences);
-  update.Get()->SetStringWithoutPathExpansion(name, value);
+  update.Get()->SetKey(name, base::Value(value));
 }
 
 void DevToolsUIBindings::RemovePreference(const std::string& name) {
@@ -1085,7 +1053,7 @@ void DevToolsUIBindings::ClearPreferences() {
 void DevToolsUIBindings::Reattach(const DispatchCallback& callback) {
   if (agent_host_.get()) {
     agent_host_->DetachClient(this);
-    agent_host_->AttachClient(this);
+    InnerAttach();
   }
   callback.Run(nullptr);
 }
@@ -1338,9 +1306,7 @@ void DevToolsUIBindings::AttachTo(
   if (agent_host_.get())
     Detach();
   agent_host_ = agent_host;
-  // DevToolsUIBindings terminates existing debugging connections and starts
-  // debugging.
-  agent_host_->ForceAttachClient(this);
+  InnerAttach();
 }
 
 void DevToolsUIBindings::Reload() {
@@ -1417,7 +1383,7 @@ void DevToolsUIBindings::DocumentAvailableInMainFrame() {
     return;
   reloading_ = false;
   if (agent_host_.get())
-    agent_host_->AttachClient(this);
+    InnerAttach();
 }
 
 void DevToolsUIBindings::DocumentOnLoadCompletedInMainFrame() {

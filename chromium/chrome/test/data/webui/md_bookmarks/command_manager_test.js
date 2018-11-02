@@ -7,12 +7,21 @@ suite('<bookmarks-command-manager>', function() {
   var store;
   var lastCommand;
   var lastCommandIds;
+  var bmpCopyFunction;
+  var bmpPasteFunction;
 
   suiteSetup(function() {
     // Overwrite bookmarkManagerPrivate APIs which will crash if called with
     // fake data.
+    bmpCopyFunction = chrome.bookmarkManagerPrivate.copy;
+    bmpPasteFunction = chrome.bookmarkManagerPrivate.paste;
     chrome.bookmarkManagerPrivate.copy = function() {};
     chrome.bookmarkManagerPrivate.removeTrees = function() {};
+  });
+
+  suiteTeardown(function() {
+    chrome.bookmarkManagerPrivate.copy = bmpCopyFunction;
+    chrome.bookmarkManagerPrivate.paste = bmpPasteFunction;
   });
 
   setup(function() {
@@ -94,7 +103,7 @@ suite('<bookmarks-command-manager>', function() {
     store.notifyObservers();
 
     MockInteractions.pressAndReleaseKeyOn(document.body, '', [], key);
-    commandManager.assertLastCommand('edit', ['13']);
+    commandManager.assertLastCommand(Command.EDIT, ['13']);
 
     // Doesn't trigger when multiple items are selected.
     store.data.selection.items = new Set(['11', '13']);
@@ -116,7 +125,7 @@ suite('<bookmarks-command-manager>', function() {
     store.notifyObservers();
 
     MockInteractions.pressAndReleaseKeyOn(document.body, 46, '', 'Delete');
-    commandManager.assertLastCommand('delete', ['12', '13']);
+    commandManager.assertLastCommand(Command.DELETE, ['12', '13']);
   });
 
   test('copy command triggers', function() {
@@ -126,7 +135,7 @@ suite('<bookmarks-command-manager>', function() {
     store.notifyObservers();
 
     MockInteractions.pressAndReleaseKeyOn(document.body, '', modifier, 'c');
-    commandManager.assertLastCommand('copy', ['11', '13']);
+    commandManager.assertLastCommand(Command.COPY, ['11', '13']);
   });
 
   test('cut/paste commands trigger', function() {
@@ -139,11 +148,10 @@ suite('<bookmarks-command-manager>', function() {
       lastPaste = selectedFolder;
     };
 
-    var modifier = cr.isMac ? 'meta' : 'ctrl';
-
     store.data.selection.items = new Set(['11', '13']);
     store.notifyObservers();
 
+    var modifier = cr.isMac ? 'meta' : 'ctrl';
     MockInteractions.pressAndReleaseKeyOn(document.body, '', modifier, 'x');
     assertDeepEquals(['11', '13'], lastCut);
     MockInteractions.pressAndReleaseKeyOn(document.body, '', modifier, 'v');
@@ -158,11 +166,11 @@ suite('<bookmarks-command-manager>', function() {
 
     MockInteractions.pressAndReleaseKeyOn(
         document.body, '', undoModifier, undoKey);
-    commandManager.assertLastCommand('undo');
+    commandManager.assertLastCommand(Command.UNDO);
 
     MockInteractions.pressAndReleaseKeyOn(
         document.body, '', redoModifier, redoKey);
-    commandManager.assertLastCommand('redo');
+    commandManager.assertLastCommand(Command.REDO);
   });
 
   test('Show In Folder is only available during search', function() {
@@ -172,8 +180,8 @@ suite('<bookmarks-command-manager>', function() {
     commandManager.openCommandMenuAtPosition(0, 0, MenuSource.LIST);
     Polymer.dom.flush();
 
-    var showInFolderItem =
-        commandManager.root.querySelector('[command=show-in-folder]');
+    var showInFolderItem = commandManager.root.querySelector(
+        `[command='${Command.SHOW_IN_FOLDER}']`);
 
     // Show in folder hidden when search is inactive.
     assertTrue(showInFolderItem.hidden);
@@ -412,6 +420,12 @@ suite('<bookmarks-item> CommandManager integration', function() {
     customClick(element, config);
   }
 
+  function simulateMiddleClick(element, config) {
+    config = config || {};
+    config.button = 1;
+    customClick(element, config, 'auxclick');
+  }
+
   test('double click opens folders in bookmark manager', function() {
     simulateDoubleClick(items[0]);
     assertEquals(store.data.selectedFolder, '11');
@@ -436,5 +450,105 @@ suite('<bookmarks-item> CommandManager integration', function() {
     simulateDoubleClick(items[2], {ctrlKey: true});
 
     assertOpenedTabs(['http://111/', 'http://13/']);
+  });
+
+  test('middle-click opens clicked item in new tab', function() {
+    // Select multiple items.
+    customClick(items[1]);
+    customClick(items[2], {shiftKey: true});
+
+    // Only the middle-clicked item is opened.
+    simulateMiddleClick(items[2]);
+    assertDeepEquals(['13'], normalizeIterable(store.data.selection.items));
+    assertOpenedTabs(['http://13/']);
+    assertFalse(openedTabs[0].active);
+  });
+
+  test('middle-click does not open folders', function() {
+    simulateMiddleClick(items[0]);
+    assertDeepEquals(['11'], normalizeIterable(store.data.selection.items));
+    assertOpenedTabs([]);
+  });
+
+  test('shift-middle click opens in foreground tab', function() {
+    simulateMiddleClick(items[1], {shiftKey: true});
+    assertOpenedTabs(['http://12/']);
+    assertTrue(openedTabs[0].active);
+  });
+});
+
+suite('<bookmarks-command-manager> whole page integration', function() {
+  var app;
+  var store;
+  var commandManager;
+
+  var testFolderId;
+
+  function create(bookmark) {
+    return new Promise(function(resolve) {
+      chrome.bookmarks.create(bookmark, resolve);
+    });
+  }
+
+  suiteSetup(function() {
+    var testFolder = {
+      parentId: '1',
+      title: 'Test',
+    };
+    return create(testFolder).then(function(testFolderNode) {
+      testFolderId = testFolderNode.id;
+      var testItem = {
+        parentId: testFolderId,
+        title: 'Test bookmark',
+        url: 'https://www.example.com/',
+      };
+      return Promise.all([
+        create(testItem),
+        create(testItem),
+      ]);
+    });
+  });
+
+  setup(function() {
+    store = new bookmarks.TestStore({});
+    store.replaceSingleton();
+    store.setReducersEnabled(true);
+    var promise = store.acceptInitOnce();
+    var app = document.createElement('bookmarks-app');
+    replaceBody(app);
+
+    commandManager = bookmarks.CommandManager.getInstance();
+
+    return promise.then(() => {
+      store.dispatch(bookmarks.actions.selectFolder(testFolderId));
+    });
+  });
+
+  test('paste selects newly created items', function() {
+    var displayedIdsBefore = bookmarks.util.getDisplayedList(store.data);
+    commandManager.handle(Command.SELECT_ALL, new Set());
+    commandManager.handle(Command.COPY, new Set(displayedIdsBefore));
+
+    store.expectAction('select-items');
+    commandManager.handle(Command.PASTE, new Set());
+
+    return store.waitForAction('select-items').then(function(action) {
+      var displayedIdsAfter = bookmarks.util.getDisplayedList(store.data);
+      assertEquals(4, displayedIdsAfter.length);
+
+      // The start of the list shouldn't change.
+      assertEquals(displayedIdsBefore[0], displayedIdsAfter[0]);
+      assertEquals(displayedIdsBefore[1], displayedIdsAfter[1]);
+
+      // The two pasted items should be selected at the end of the list.
+      assertEquals(action.items[0], displayedIdsAfter[2]);
+      assertEquals(action.items[1], displayedIdsAfter[3]);
+      assertEquals(2, action.items.length);
+      assertEquals(action.anchor, displayedIdsAfter[2]);
+    });
+  });
+
+  suiteTeardown(function(done) {
+    chrome.bookmarks.removeTree(testFolderId, () => done());
   });
 });

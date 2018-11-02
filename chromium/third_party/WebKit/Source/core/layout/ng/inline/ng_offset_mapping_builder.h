@@ -6,14 +6,13 @@
 #define NGOffsetMappingBuilder_h
 
 #include "core/CoreExport.h"
-#include "core/layout/LayoutText.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Vector.h"
-#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
-struct NGOffsetMappingResult;
+class LayoutText;
+class NGOffsetMappingResult;
 
 // This is the helper class for constructing the DOM-to-TextContent offset
 // mapping. It holds an offset mapping, and provides APIs to modify the mapping

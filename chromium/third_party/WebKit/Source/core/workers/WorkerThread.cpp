@@ -220,8 +220,7 @@ ThreadableLoadingContext* WorkerThread::GetLoadingContext() {
   return loading_context_;
 }
 
-void WorkerThread::AppendDebuggerTask(
-    std::unique_ptr<CrossThreadClosure> task) {
+void WorkerThread::AppendDebuggerTask(CrossThreadClosure task) {
   DCHECK(IsMainThread());
   if (requested_to_terminate_)
     return;
@@ -246,12 +245,12 @@ void WorkerThread::StartRunningDebuggerTasksOnPauseOnWorkerThread() {
     worker_inspector_controller_->FlushProtocolNotifications();
   paused_in_debugger_ = true;
   ThreadDebugger::IdleStarted(GetIsolate());
-  std::unique_ptr<CrossThreadClosure> task;
+  CrossThreadClosure task;
   do {
     task =
         inspector_task_runner_->TakeNextTask(InspectorTaskRunner::kWaitForTask);
     if (task)
-      (*task)();
+      task();
     // Keep waiting until execution is resumed.
   } while (task && paused_in_debugger_);
   ThreadDebugger::IdleFinished(GetIsolate());
@@ -404,14 +403,61 @@ void WorkerThread::InitializeOnWorkerThread(
   DCHECK_EQ(ThreadState::kNotStarted, thread_state_);
 
   KURL script_url = global_scope_creation_params->script_url;
-  String given_source_code = global_scope_creation_params->source_code;
-  std::unique_ptr<Vector<char>> given_cached_meta_data =
-      std::move(global_scope_creation_params->cached_meta_data);
   // TODO(nhiroki): Rename WorkerThreadStartMode to GlobalScopeStartMode.
   // (https://crbug.com/710364)
   WorkerThreadStartMode start_mode = global_scope_creation_params->start_mode;
   V8CacheOptions v8_cache_options =
       global_scope_creation_params->v8_cache_options;
+
+  String source_code;
+  std::unique_ptr<Vector<char>> cached_meta_data;
+  bool should_terminate = false;
+  if (RuntimeEnabledFeatures::ServiceWorkerScriptStreamingEnabled() &&
+      GetInstalledScriptsManager() &&
+      GetInstalledScriptsManager()->IsScriptInstalled(script_url)) {
+    // GetScriptData blocks until the script is received from the browser.
+    InstalledScriptsManager::ScriptData script_data;
+    InstalledScriptsManager::ScriptStatus status =
+        GetInstalledScriptsManager()->GetScriptData(script_url, &script_data);
+
+    // If an error occurred in the browser process while trying to read the
+    // installed script, the worker thread will terminate after initialization
+    // of the global scope since PrepareForShutdownOnWorkerThread() assumes the
+    // global scope has already been initialized.
+    switch (status) {
+      case InstalledScriptsManager::ScriptStatus::kTaken:
+        // InstalledScriptsManager::ScriptStatus::kTaken should not be returned
+        // since requesting the main script should be the first and no script
+        // has been taken until here.
+        NOTREACHED();
+      case InstalledScriptsManager::ScriptStatus::kFailed:
+        should_terminate = true;
+        break;
+      case InstalledScriptsManager::ScriptStatus::kSuccess:
+        DCHECK(source_code.IsEmpty());
+        DCHECK(!cached_meta_data);
+        source_code = script_data.TakeSourceText();
+        cached_meta_data = script_data.TakeMetaData();
+
+        global_scope_creation_params->content_security_policy_raw_headers =
+            script_data.GetContentSecurityPolicyResponseHeaders();
+        global_scope_creation_params->referrer_policy =
+            script_data.GetReferrerPolicy();
+        global_scope_creation_params->origin_trial_tokens =
+            script_data.CreateOriginTrialTokens();
+        // This may block until CSP and referrer policy are set on the main
+        // thread.
+        worker_reporting_proxy_.DidLoadInstalledScript(
+            global_scope_creation_params->content_security_policy_raw_headers
+                .value(),
+            global_scope_creation_params->referrer_policy);
+        break;
+    }
+  } else {
+    source_code = std::move(global_scope_creation_params->source_code);
+    cached_meta_data =
+        std::move(global_scope_creation_params->cached_meta_data);
+  }
 
   {
     MutexLocker lock(thread_state_mutex_);
@@ -446,52 +492,20 @@ void WorkerThread::InitializeOnWorkerThread(
   if (start_mode == kPauseWorkerGlobalScopeOnStart)
     StartRunningDebuggerTasksOnPauseOnWorkerThread();
 
-  if (CheckRequestedToTerminateOnWorkerThread()) {
+  if (CheckRequestedToTerminateOnWorkerThread() || should_terminate) {
     // Stop further worker tasks from running after this point. WorkerThread
     // was requested to terminate before initialization or during running
-    // debugger tasks. performShutdownOnWorkerThread() will be called soon.
+    // debugger tasks, or loading the installed main script
+    // failed. PerformShutdownOnWorkerThread() will be called soon.
     PrepareForShutdownOnWorkerThread();
     return;
   }
 
-  if (!GlobalScope()->IsWorkerGlobalScope())
-    return;
-
-  String source_code;
-  std::unique_ptr<Vector<char>> cached_meta_data;
-  if (RuntimeEnabledFeatures::ServiceWorkerScriptStreamingEnabled() &&
-      GetInstalledScriptsManager() &&
-      GetInstalledScriptsManager()->IsScriptInstalled(script_url)) {
-    // TODO(shimazu): Set ContentSecurityPolicy, ReferrerPolicy and
-    // OriginTrialTokens to |global_scope_creation_params|.
-    // TODO(shimazu): Add a post task to the main thread for setting
-    // ContentSecurityPolicy and ReferrerPolicy.
-
-    // GetScriptData blocks until the script is received from the browser.
-    auto script_data = GetInstalledScriptsManager()->GetScriptData(script_url);
-    DCHECK(script_data);
-    DCHECK(source_code.IsEmpty());
-    DCHECK(!cached_meta_data);
-    source_code = std::move(script_data->source_text);
-    cached_meta_data = std::move(script_data->meta_data);
-    worker_reporting_proxy_.DidLoadInstalledScript();
-  } else {
-    source_code = std::move(given_source_code);
-    cached_meta_data = std::move(given_cached_meta_data);
-  }
-  DCHECK(!source_code.IsNull());
-
-  WorkerGlobalScope* worker_global_scope = ToWorkerGlobalScope(GlobalScope());
-  CachedMetadataHandler* handler =
-      worker_global_scope->CreateWorkerScriptCachedMetadataHandler(
-          script_url, cached_meta_data.get());
-  worker_reporting_proxy_.WillEvaluateWorkerScript(
-      source_code.length(),
-      cached_meta_data.get() ? cached_meta_data->size() : 0);
-  bool success = worker_global_scope->ScriptController()->Evaluate(
-      ScriptSourceCode(source_code, script_url), nullptr, handler,
-      v8_cache_options);
-  worker_reporting_proxy_.DidEvaluateWorkerScript(success);
+  // TODO(nhiroki): Start module loading for workers here.
+  // (https://crbug.com/680046)
+  GlobalScope()->EvaluateClassicScript(script_url, std::move(source_code),
+                                       std::move(cached_meta_data),
+                                       v8_cache_options);
 }
 
 void WorkerThread::PrepareForShutdownOnWorkerThread() {
@@ -514,8 +528,10 @@ void WorkerThread::PrepareForShutdownOnWorkerThread() {
     worker_inspector_controller_->Dispose();
     worker_inspector_controller_.Clear();
   }
-  GlobalScope()->Dispose();
   global_scope_scheduler_->Dispose();
+  GlobalScope()->Dispose();
+  global_scope_ = nullptr;
+
   console_message_storage_.Clear();
   loading_context_.Clear();
   GetWorkerBackingThread().BackingThread().RemoveTaskObserver(this);
@@ -525,13 +541,6 @@ void WorkerThread::PerformShutdownOnWorkerThread() {
   DCHECK(IsCurrentThread());
   DCHECK(CheckRequestedToTerminateOnWorkerThread());
   DCHECK_EQ(ThreadState::kReadyToShutdown, thread_state_);
-
-  // The below assignment will destroy the context, which will in turn notify
-  // messaging proxy. We cannot let any objects survive past thread exit,
-  // because no other thread will run GC or otherwise destroy them. If Oilpan
-  // is enabled, we detach of the context/global scope, with the final heap
-  // cleanup below sweeping it out.
-  global_scope_ = nullptr;
 
   if (IsOwningBackingThread())
     GetWorkerBackingThread().ShutdownOnBackingThread();
@@ -545,8 +554,7 @@ void WorkerThread::PerformShutdownOnWorkerThread() {
   shutdown_event_->Signal();
 }
 
-void WorkerThread::PerformDebuggerTaskOnWorkerThread(
-    std::unique_ptr<CrossThreadClosure> task) {
+void WorkerThread::PerformDebuggerTaskOnWorkerThread(CrossThreadClosure task) {
   DCHECK(IsCurrentThread());
   InspectorTaskRunner::IgnoreInterruptsScope scope(
       inspector_task_runner_.get());
@@ -561,28 +569,21 @@ void WorkerThread::PerformDebuggerTaskOnWorkerThread(
         CustomCountHistogram, scoped_us_counter,
         ("WorkerThread.DebuggerTask.Time", 0, 10000000, 50));
     ScopedUsHistogramTimer timer(scoped_us_counter);
-    (*task)();
+    task();
   }
   ThreadDebugger::IdleStarted(GetIsolate());
   {
     MutexLocker lock(thread_state_mutex_);
     running_debugger_task_ = false;
-    if (!requested_to_terminate_)
-      return;
-    // termiante() was called while a debugger task is running. Shutdown
-    // sequence will start soon.
   }
-  // Stop further debugger tasks from running after this point.
-  inspector_task_runner_->Kill();
 }
 
 void WorkerThread::PerformDebuggerTaskDontWaitOnWorkerThread() {
   DCHECK(IsCurrentThread());
-  std::unique_ptr<CrossThreadClosure> task =
-      inspector_task_runner_->TakeNextTask(
-          InspectorTaskRunner::kDontWaitForTask);
+  CrossThreadClosure task = inspector_task_runner_->TakeNextTask(
+      InspectorTaskRunner::kDontWaitForTask);
   if (task)
-    (*task)();
+    task();
 }
 
 void WorkerThread::SetThreadState(const MutexLocker& lock,

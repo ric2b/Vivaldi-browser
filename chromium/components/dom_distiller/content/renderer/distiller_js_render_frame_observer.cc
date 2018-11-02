@@ -19,26 +19,29 @@ namespace dom_distiller {
 
 DistillerJsRenderFrameObserver::DistillerJsRenderFrameObserver(
     content::RenderFrame* render_frame,
-    const int distiller_isolated_world_id)
+    const int distiller_isolated_world_id,
+    service_manager::BinderRegistry* registry)
     : RenderFrameObserver(render_frame),
       distiller_isolated_world_id_(distiller_isolated_world_id),
       is_distiller_page_(false),
-      weak_factory_(this) {}
+      weak_factory_(this) {
+  registry->AddInterface(base::Bind(
+      &DistillerJsRenderFrameObserver::CreateDistillerPageNotifierService,
+      weak_factory_.GetWeakPtr()));
+}
 
 DistillerJsRenderFrameObserver::~DistillerJsRenderFrameObserver() {}
 
 void DistillerJsRenderFrameObserver::DidStartProvisionalLoad(
-    blink::WebDataSource* data_source) {
-  RegisterMojoInterface();
+    blink::WebDocumentLoader* document_loader) {
+  load_active_ = true;
 }
 
 void DistillerJsRenderFrameObserver::DidFinishLoad() {
   // If no message about the distilled page was received at this point, there
-  // will not be one; remove the mojom::DistillerPageNotifierService from the
-  // registry.
-  render_frame()
-      ->GetInterfaceRegistry()
-      ->RemoveInterface<mojom::DistillerPageNotifierService>();
+  // will not be one; stop binding requests for
+  // mojom::DistillerPageNotifierService.
+  load_active_ = false;
 }
 
 void DistillerJsRenderFrameObserver::DidCreateScriptContext(
@@ -53,14 +56,10 @@ void DistillerJsRenderFrameObserver::DidCreateScriptContext(
   native_javascript_handle_->AddJavaScriptObjectToFrame(context);
 }
 
-void DistillerJsRenderFrameObserver::RegisterMojoInterface() {
-  render_frame()->GetInterfaceRegistry()->AddInterface(base::Bind(
-      &DistillerJsRenderFrameObserver::CreateDistillerPageNotifierService,
-      weak_factory_.GetWeakPtr()));
-}
-
 void DistillerJsRenderFrameObserver::CreateDistillerPageNotifierService(
     mojom::DistillerPageNotifierServiceRequest request) {
+  if (!load_active_)
+    return;
   mojo::MakeStrongBinding(
       base::MakeUnique<DistillerPageNotifierServiceImpl>(this),
       std::move(request));

@@ -51,6 +51,14 @@ Polymer({
       }
     },
 
+    /** @private */
+    enableSoundContentSetting_: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.getBoolean('enableSoundContentSetting');
+      }
+    },
+
     /** @type {!Map<string, string>} */
     focusConfig: {
       type: Object,
@@ -77,8 +85,8 @@ Polymer({
      [R.SITE_SETTINGS_MICROPHONE, 'microphone'],
      [R.SITE_SETTINGS_NOTIFICATIONS, 'notifications'],
      [R.SITE_SETTINGS_JAVASCRIPT, 'javascript'],
-     [R.SITE_SETTINGS_FLASH, 'flash'], [R.SITE_SETTINGS_IMAGES, 'images'],
-     [R.SITE_SETTINGS_POPUPS, 'popups'],
+     [R.SITE_SETTINGS_SOUND, 'sound'], [R.SITE_SETTINGS_FLASH, 'flash'],
+     [R.SITE_SETTINGS_IMAGES, 'images'], [R.SITE_SETTINGS_POPUPS, 'popups'],
      [R.SITE_SETTINGS_BACKGROUND_SYNC, 'background-sync'],
      [R.SITE_SETTINGS_AUTOMATIC_DOWNLOADS, 'automatic-downloads'],
      [R.SITE_SETTINGS_UNSANDBOXED_PLUGINS, 'unsandboxed-plugins'],
@@ -88,11 +96,11 @@ Polymer({
      [R.SITE_SETTINGS_USB_DEVICES, 'usb-devices'],
      [R.SITE_SETTINGS_PDF_DOCUMENTS, 'pdf-documents'],
      [R.SITE_SETTINGS_PROTECTED_CONTENT, 'protected-content'],
-    ].forEach(function(pair) {
+    ].forEach(pair => {
       var route = pair[0];
       var id = pair[1];
       this.focusConfig.set(route.path, '* /deep/ #' + id + ' .subpage-arrow');
-    }.bind(this));
+    });
   },
 
   /** @override */
@@ -146,11 +154,11 @@ Polymer({
    */
   updateDefaultValueLabel_: function(category) {
     this.browserProxy.getDefaultValueForContentType(category).then(
-        function(defaultValue) {
+        defaultValue => {
           this.set(
               'default_.' + Polymer.CaseMap.dashToCamelCase(category),
               defaultValue.setting);
-        }.bind(this));
+        });
   },
 
   /**

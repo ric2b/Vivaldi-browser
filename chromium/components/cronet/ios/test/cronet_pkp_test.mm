@@ -4,9 +4,9 @@
 
 #import <Cronet/Cronet.h>
 
+#include "components/cronet/ios/test/cronet_test_base.h"
 #include "components/cronet/ios/test/start_cronet.h"
 #include "components/grpc_support/test/quic_test_server.h"
-#include "cronet_test_base.h"
 #include "net/base/mac/url_conversions.h"
 #include "net/cert/mock_cert_verifier.h"
 #include "net/test/cert_test_util.h"
@@ -95,8 +95,8 @@ class PkpTest : public CronetTestBase {
   // certificate.
   static NSData* NonMatchingHash() {
     const int length = 32;
-    const char* hash = std::string(length, '\077').c_str();
-    return [NSData dataWithBytes:hash length:length];
+    std::string hash(length, '\077');
+    return [NSData dataWithBytes:hash.c_str() length:length];
   }
 
   // Returns hash value that matches the hash of the public key certificate used
@@ -210,6 +210,7 @@ TEST_F(PkpTest, TestPinsAreNotPersisted) {
 
 // Tests that an error is returned when PKP hash size is not equal to 256 bits.
 TEST_F(PkpTest, TestHashLengthError) {
+  [Cronet setEnablePublicKeyPinningBypassForLocalTrustAnchors:NO];
   char hash[31];
   NSData* shortHash = [NSData dataWithBytes:hash length:sizeof(hash)];
   NSSet* hashes = [NSSet setWithObject:shortHash];
@@ -235,6 +236,7 @@ TEST_F(PkpTest, TestHashLengthError) {
 // Tests that setting pins for the same host second time overrides the previous
 // pins.
 TEST_F(PkpTest, TestPkpOverrideNonMatchingToMatching) {
+  [Cronet setEnablePublicKeyPinningBypassForLocalTrustAnchors:NO];
   // Add non-matching pin.
   BOOL success =
       [Cronet addPublicKeyPinsForHost:server_host_
@@ -252,6 +254,7 @@ TEST_F(PkpTest, TestPkpOverrideNonMatchingToMatching) {
 // Tests that setting pins for the same host second time overrides the previous
 // pins.
 TEST_F(PkpTest, TestPkpOverrideMatchingToNonMatching) {
+  [Cronet setEnablePublicKeyPinningBypassForLocalTrustAnchors:NO];
   // Add matching pin.
   BOOL success =
       [Cronet addPublicKeyPinsForHost:server_host_

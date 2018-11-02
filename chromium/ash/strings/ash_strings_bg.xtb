@@ -9,6 +9,7 @@
 <translation id="1195412055398077112">допълнителна област</translation>
 <translation id="1247372569136754018">Микрофон (вътрешен)</translation>
 <translation id="1252999807265626933">Зарежда се от <ph name="POWER_SOURCE" /></translation>
+<translation id="1267032506238418139">Промяна на клавишната комбинация</translation>
 <translation id="1270290102613614947">Екранната клавиатура е деактивирана</translation>
 <translation id="1272079795634619415">Стоп</translation>
 <translation id="1279938420744323401">„<ph name="DISPLAY_NAME" />“ (<ph name="ANNOTATION" />)</translation>
@@ -22,7 +23,6 @@
 <translation id="15373452373711364">Голям курсор на мишката</translation>
 <translation id="1550523713251050646">Кликнете за още опции</translation>
 <translation id="1621499497873603021">Оставащо време до изразходването на батерията: <ph name="TIME_LEFT" /></translation>
-<translation id="164969095109328410">Устройство с Chrome</translation>
 <translation id="1677472565718498478">Оставащо време: <ph name="TIME" /></translation>
 <translation id="1698760176351776263">IPv6 адрес: <ph name="ADDRESS" /></translation>
 <translation id="1734367976349034509">Това устройство се управлява корпоративно</translation>
@@ -92,6 +92,7 @@
 <translation id="315116470104423982">Мобилни данни</translation>
 <translation id="3236488194889173876">Няма мобилни мрежи</translation>
 <translation id="3294437725009624529">Гост</translation>
+<translation id="332587331255250389">Моля, заменете батерията</translation>
 <translation id="3364721542077212959">Инструменти за писане</translation>
 <translation id="3368922792935385530">Установена е връзка</translation>
 <translation id="3371140690572404006">устройство с USB-C (предният десен порт)</translation>
@@ -110,6 +111,7 @@
 <translation id="3712407551474845318">Заснемане на област</translation>
 <translation id="371370241367527062">Преден микрофон</translation>
 <translation id="3742055079367172538">Направена бе екранна снимка</translation>
+<translation id="3771549900096082774">Режим на висок контраст</translation>
 <translation id="3775358506042162758">В централизирания вход можете да имате най-много три профила.</translation>
 <translation id="3783640748446814672">alt</translation>
 <translation id="3784455785234192852">Заключване</translation>
@@ -142,14 +144,12 @@
 <translation id="4729904664295161097">Асистент е налице само за основния потребителски профил.</translation>
 <translation id="479989351350248267">search</translation>
 <translation id="4804818685124855865">Изключване</translation>
-<translation id="4821830640883629383">Моля, заредете или заменете батериите.</translation>
 <translation id="4849058404725798627">Открояване на обекта, върху който е фокусът от клавиатурата</translation>
 <translation id="4872237917498892622">„Alt + търсене“ или „Shift“</translation>
 <translation id="4895488851634969361">Батерията е пълна.</translation>
 <translation id="4905614135390995787">Клавишната комбинация за превключване на режима на висок контраст е променена. Моля, използвайте <ph name="NEW_SHORTCUT" /> вместо <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="4918086044614829423">Приемам</translation>
 <translation id="4961318399572185831">Предаване на екрана</translation>
-<translation id="5011233892417813670">Chromebook</translation>
 <translation id="5168181903108465623">Налице са устройства Cast</translation>
 <translation id="5170568018924773124">Показване в папката</translation>
 <translation id="5207949376430453814">Открояване на точката на вмъкване в текста</translation>
@@ -175,7 +175,6 @@
 <translation id="5901316534475909376">Shift + Esc</translation>
 <translation id="5916664084637901428">Включено</translation>
 <translation id="5927132638760172455">Предава се към неизвестен приемник</translation>
-<translation id="5932901536148835538">Chromebit</translation>
 <translation id="5947494881799873997">Възстановяване</translation>
 <translation id="595202126637698455">Проследяването на ефективността е активирано</translation>
 <translation id="5957083217255311415">Мобилните данни са изключени.</translation>
@@ -218,7 +217,6 @@
 <translation id="683971173229319003">търсене + L</translation>
 <translation id="6857811139397017780">Активиране на <ph name="NETWORKSERVICE" /></translation>
 <translation id="6911468394164995108">Присъединяване другаде...</translation>
-<translation id="6915678159055240887">Chromebox</translation>
 <translation id="6981982820502123353">Достъпност</translation>
 <translation id="7029814467594812963">Изход от сесията</translation>
 <translation id="7034339000180558234">„<ph name="TAB_NAME" />“ се предава към „<ph name="RECEIVER_NAME" />“</translation>
@@ -226,7 +224,6 @@
 <translation id="7066646422045619941">Тази мрежа е деактивирана от администратора ви.</translation>
 <translation id="7067196344162293536">Автоматично завъртане</translation>
 <translation id="7098389117866926363">Устройство с USB-C (левият порт на гърба)</translation>
-<translation id="714034171374937760">Chromebase</translation>
 <translation id="7165278925115064263">Alt + Shift + K</translation>
 <translation id="7168224885072002358">Старата разделителна способност ще се възстанови след <ph name="TIMEOUT_SECONDS" /></translation>
 <translation id="7246339268451149667">Да се активира ли отключването с отпечатък?</translation>

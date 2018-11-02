@@ -8,7 +8,6 @@
 #include "base/trace_event/trace_event.h"
 #include "cc/base/math_util.h"
 #include "cc/base/render_surface_filters.h"
-#include "cc/output/copy_output_request.h"
 #include "cc/output/output_surface.h"
 #include "cc/output/output_surface_frame.h"
 #include "cc/output/software_output_device.h"
@@ -20,6 +19,7 @@
 #include "cc/quads/tile_draw_quad.h"
 #include "cc/resources/scoped_resource.h"
 #include "components/viz/common/display/renderer_settings.h"
+#include "components/viz/common/quads/copy_output_request.h"
 #include "skia/ext/opacity_filter_canvas.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -55,7 +55,7 @@ bool IsScaleAndIntegerTranslate(const SkMatrix& matrix) {
 
 SoftwareRenderer::SoftwareRenderer(const viz::RendererSettings* settings,
                                    OutputSurface* output_surface,
-                                   ResourceProvider* resource_provider)
+                                   DisplayResourceProvider* resource_provider)
     : DirectRenderer(settings, output_surface, resource_provider),
       output_device_(output_surface->software_device()) {}
 
@@ -119,10 +119,10 @@ bool SoftwareRenderer::BindFramebufferToTexture(
   // same texture again.
   current_framebuffer_lock_ = nullptr;
   current_framebuffer_lock_ =
-      base::MakeUnique<ResourceProvider::ScopedWriteLockSoftware>(
+      std::make_unique<ResourceProvider::ScopedWriteLockSoftware>(
           resource_provider_, texture->id());
   current_framebuffer_canvas_ =
-      base::MakeUnique<SkCanvas>(current_framebuffer_lock_->sk_bitmap());
+      std::make_unique<SkCanvas>(current_framebuffer_lock_->sk_bitmap());
   current_canvas_ = current_framebuffer_canvas_.get();
   return true;
 }
@@ -193,7 +193,7 @@ void SoftwareRenderer::PrepareSurfaceForPass(
   }
 }
 
-bool SoftwareRenderer::IsSoftwareResource(ResourceId resource_id) const {
+bool SoftwareRenderer::IsSoftwareResource(viz::ResourceId resource_id) const {
   switch (resource_provider_->GetResourceType(resource_id)) {
     case ResourceProvider::RESOURCE_TYPE_GPU_MEMORY_BUFFER:
     case ResourceProvider::RESOURCE_TYPE_GL_TEXTURE:
@@ -346,13 +346,6 @@ void SoftwareRenderer::DrawPictureQuad(const PictureDrawQuad* quad) {
 
   RasterSource::PlaybackSettings playback_settings;
   playback_settings.playback_to_shared_canvas = true;
-  // Indicates whether content rasterization should happen through an
-  // ImageHijackCanvas, which causes image decodes to be managed by an
-  // ImageDecodeCache. PictureDrawQuads are used for resourceless software
-  // draws, while a GPU ImageDecodeCache may be in use by the compositor
-  // providing the RasterSource. So we disable the image hijack canvas to avoid
-  // trying to use the GPU ImageDecodeCache while doing a software draw.
-  playback_settings.use_image_hijack_canvas = false;
   if (needs_transparency || disable_image_filtering) {
     // TODO(aelias): This isn't correct in all cases. We should detect these
     // cases and fall back to a persistent bitmap backing
@@ -394,8 +387,8 @@ void SoftwareRenderer::DrawTextureQuad(const TextureDrawQuad* quad) {
   }
 
   // TODO(skaslev): Add support for non-premultiplied alpha.
-  ResourceProvider::ScopedReadLockSkImage lock(resource_provider_,
-                                               quad->resource_id());
+  DisplayResourceProvider::ScopedReadLockSkImage lock(resource_provider_,
+                                                      quad->resource_id());
   if (!lock.valid())
     return;
   const SkImage* image = lock.sk_image();
@@ -437,8 +430,8 @@ void SoftwareRenderer::DrawTileQuad(const TileDrawQuad* quad) {
   DCHECK(resource_provider_);
   DCHECK(IsSoftwareResource(quad->resource_id()));
 
-  ResourceProvider::ScopedReadLockSkImage lock(resource_provider_,
-                                               quad->resource_id());
+  DisplayResourceProvider::ScopedReadLockSkImage lock(resource_provider_,
+                                                      quad->resource_id());
   if (!lock.valid())
     return;
 
@@ -463,8 +456,8 @@ void SoftwareRenderer::DrawRenderPassQuad(const RenderPassDrawQuad* quad) {
   DCHECK(content_texture->id());
   DCHECK(IsSoftwareResource(content_texture->id()));
 
-  ResourceProvider::ScopedReadLockSoftware lock(resource_provider_,
-                                                content_texture->id());
+  DisplayResourceProvider::ScopedReadLockSoftware lock(resource_provider_,
+                                                       content_texture->id());
   if (!lock.valid())
     return;
 
@@ -516,11 +509,12 @@ void SoftwareRenderer::DrawRenderPassQuad(const RenderPassDrawQuad* quad) {
                                       SkShader::kClamp_TileMode, &content_mat);
   }
 
-  std::unique_ptr<ResourceProvider::ScopedReadLockSoftware> mask_lock;
+  std::unique_ptr<DisplayResourceProvider::ScopedReadLockSoftware> mask_lock;
   if (quad->mask_resource_id()) {
-    mask_lock = std::unique_ptr<ResourceProvider::ScopedReadLockSoftware>(
-        new ResourceProvider::ScopedReadLockSoftware(resource_provider_,
-                                                     quad->mask_resource_id()));
+    mask_lock =
+        std::unique_ptr<DisplayResourceProvider::ScopedReadLockSoftware>(
+            new DisplayResourceProvider::ScopedReadLockSoftware(
+                resource_provider_, quad->mask_resource_id()));
 
     if (!mask_lock->valid())
       return;
@@ -571,7 +565,7 @@ void SoftwareRenderer::DrawUnsupportedQuad(const DrawQuad* quad) {
 }
 
 void SoftwareRenderer::CopyCurrentRenderPassToBitmap(
-    std::unique_ptr<CopyOutputRequest> request) {
+    std::unique_ptr<viz::CopyOutputRequest> request) {
   gfx::Rect copy_rect = current_frame()->current_render_pass->output_rect;
   if (request->has_area())
     copy_rect.Intersect(request->area());

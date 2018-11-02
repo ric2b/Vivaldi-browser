@@ -11,6 +11,7 @@
 #include "cc/layers/solid_color_layer.h"
 #include "cc/paint/paint_flags.h"
 #include "cc/paint/paint_image.h"
+#include "cc/paint/paint_image_builder.h"
 #include "cc/paint/paint_op_buffer.h"
 #include "cc/test/fake_picture_layer.h"
 #include "cc/test/layer_tree_pixel_resource_test.h"
@@ -40,13 +41,13 @@ class MaskContentLayerClient : public ContentLayerClient {
   scoped_refptr<DisplayItemList> PaintContentsToDisplayList(
       PaintingControlSetting picture_control) override {
     auto display_list = make_scoped_refptr(new DisplayItemList);
-    PaintOpBuffer* buffer = display_list->StartPaint();
+    display_list->StartPaint();
 
-    buffer->push<SaveOp>();
-    buffer->push<ClipRectOp>(gfx::RectToSkRect(PaintableRegion()),
-                             SkClipOp::kIntersect, false);
+    display_list->push<SaveOp>();
+    display_list->push<ClipRectOp>(gfx::RectToSkRect(PaintableRegion()),
+                                   SkClipOp::kIntersect, false);
     SkColor color = SK_ColorTRANSPARENT;
-    buffer->push<DrawColorOp>(color, SkBlendMode::kSrc);
+    display_list->push<DrawColorOp>(color, SkBlendMode::kSrc);
 
     PaintFlags flags;
     flags.setStyle(PaintFlags::kStroke_Style);
@@ -56,11 +57,11 @@ class MaskContentLayerClient : public ContentLayerClient {
     gfx::Rect inset_rect(bounds_);
     while (!inset_rect.IsEmpty()) {
       inset_rect.Inset(3, 3, 2, 2);
-      buffer->push<DrawRectOp>(gfx::RectToSkRect(inset_rect), flags);
+      display_list->push<DrawRectOp>(gfx::RectToSkRect(inset_rect), flags);
       inset_rect.Inset(3, 3, 2, 2);
     }
 
-    buffer->push<RestoreOp>();
+    display_list->push<RestoreOp>();
     display_list->EndPaintOfUnpaired(PaintableRegion());
     display_list->Finalize();
     return display_list;
@@ -109,8 +110,10 @@ TEST_P(LayerTreeHostMasksPixelTest, ImageMaskOfLayer) {
       client.PaintContentsToDisplayList(
           ContentLayerClient::PAINTING_BEHAVIOR_NORMAL);
   mask_display_list->Raster(canvas);
-  mask->SetImage(
-      PaintImage(PaintImage::GetNextId(), surface->makeImageSnapshot()));
+  mask->SetImage(PaintImageBuilder()
+                     .set_id(PaintImage::GetNextId())
+                     .set_image(surface->makeImageSnapshot())
+                     .TakePaintImage());
 
   scoped_refptr<SolidColorLayer> green = CreateSolidColorLayerWithBorder(
       gfx::Rect(25, 25, 50, 50), kCSSGreen, 1, SK_ColorBLACK);
@@ -184,13 +187,13 @@ class CheckerContentLayerClient : public ContentLayerClient {
   scoped_refptr<DisplayItemList> PaintContentsToDisplayList(
       PaintingControlSetting picture_control) override {
     auto display_list = make_scoped_refptr(new DisplayItemList);
-    PaintOpBuffer* buffer = display_list->StartPaint();
+    display_list->StartPaint();
 
-    buffer->push<SaveOp>();
-    buffer->push<ClipRectOp>(gfx::RectToSkRect(PaintableRegion()),
-                             SkClipOp::kIntersect, false);
+    display_list->push<SaveOp>();
+    display_list->push<ClipRectOp>(gfx::RectToSkRect(PaintableRegion()),
+                                   SkClipOp::kIntersect, false);
     SkColor color = SK_ColorTRANSPARENT;
-    buffer->push<DrawColorOp>(color, SkBlendMode::kSrc);
+    display_list->push<DrawColorOp>(color, SkBlendMode::kSrc);
 
     PaintFlags flags;
     flags.setStyle(PaintFlags::kStroke_Style);
@@ -200,17 +203,17 @@ class CheckerContentLayerClient : public ContentLayerClient {
       for (int i = 4; i < bounds_.width(); i += 16) {
         gfx::PointF p1(i, 0.f);
         gfx::PointF p2(i, bounds_.height());
-        buffer->push<DrawLineOp>(p1.x(), p1.y(), p2.x(), p2.y(), flags);
+        display_list->push<DrawLineOp>(p1.x(), p1.y(), p2.x(), p2.y(), flags);
       }
     } else {
       for (int i = 4; i < bounds_.height(); i += 16) {
         gfx::PointF p1(0.f, i);
         gfx::PointF p2(bounds_.width(), i);
-        buffer->push<DrawLineOp>(p1.x(), p1.y(), p2.x(), p2.y(), flags);
+        display_list->push<DrawLineOp>(p1.x(), p1.y(), p2.x(), p2.y(), flags);
       }
     }
 
-    buffer->push<RestoreOp>();
+    display_list->push<RestoreOp>();
     display_list->EndPaintOfUnpaired(PaintableRegion());
     display_list->Finalize();
     return display_list;
@@ -233,21 +236,25 @@ class CircleContentLayerClient : public ContentLayerClient {
   scoped_refptr<DisplayItemList> PaintContentsToDisplayList(
       PaintingControlSetting picture_control) override {
     auto display_list = make_scoped_refptr(new DisplayItemList);
-    PaintOpBuffer* buffer = display_list->StartPaint();
+    display_list->StartPaint();
 
-    buffer->push<SaveOp>();
-    buffer->push<ClipRectOp>(gfx::RectToSkRect(PaintableRegion()),
-                             SkClipOp::kIntersect, false);
+    display_list->push<SaveOp>();
+    display_list->push<ClipRectOp>(gfx::RectToSkRect(PaintableRegion()),
+                                   SkClipOp::kIntersect, false);
     SkColor color = SK_ColorTRANSPARENT;
-    buffer->push<DrawColorOp>(color, SkBlendMode::kSrc);
+    display_list->push<DrawColorOp>(color, SkBlendMode::kSrc);
 
     PaintFlags flags;
     flags.setStyle(PaintFlags::kFill_Style);
     flags.setColor(SK_ColorWHITE);
-    buffer->push<DrawCircleOp>(bounds_.width() / 2.f, bounds_.height() / 2.f,
-                               bounds_.width() / 4.f, flags);
-
-    buffer->push<RestoreOp>();
+    float radius = bounds_.width() / 4.f;
+    float circle_x = bounds_.width() / 2.f;
+    float circle_y = bounds_.height() / 2.f;
+    display_list->push<DrawOvalOp>(
+        SkRect::MakeLTRB(circle_x - radius, circle_y - radius,
+                         circle_x + radius, circle_y + radius),
+        flags);
+    display_list->push<RestoreOp>();
     display_list->EndPaintOfUnpaired(PaintableRegion());
     display_list->Finalize();
     return display_list;

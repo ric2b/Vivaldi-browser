@@ -15,7 +15,7 @@
 #include "cc/animation/animation_player.h"
 #include "cc/animation/animation_timeline.h"
 #include "cc/animation/element_animations.h"
-#include "cc/output/begin_frame_args.h"
+#include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_delegate.h"
@@ -919,11 +919,12 @@ LayerAnimatorCollection* LayerAnimator::GetLayerAnimatorCollection() {
   return delegate_ ? delegate_->GetLayerAnimatorCollection() : NULL;
 }
 
-void LayerAnimator::NotifyAnimationStarted(
-    base::TimeTicks monotonic_time,
-    cc::TargetProperty::Type target_property,
-    int group) {
-  OnThreadedAnimationStarted(monotonic_time, target_property, group);
+void LayerAnimator::NotifyAnimationStarted(base::TimeTicks monotonic_time,
+                                           int target_property,
+                                           int group) {
+  OnThreadedAnimationStarted(
+      monotonic_time, static_cast<cc::TargetProperty::Type>(target_property),
+      group);
 }
 
 LayerAnimator::RunningAnimation::RunningAnimation(

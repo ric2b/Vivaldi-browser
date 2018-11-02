@@ -24,8 +24,13 @@ class InstantAppsInfoBarDelegate : public ConfirmInfoBarDelegate,
 
   base::android::ScopedJavaGlobalRef<jobject> data() { return data_; }
 
+  // ConfirmInfoBarDelegate:
+  bool ShouldExpire(const NavigationDetails& details) const override;
+
   // WebContentsObserver:
   void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override;
+  void DidStartNavigation(
       content::NavigationHandle* navigation_handle) override;
 
  private:
@@ -43,6 +48,7 @@ class InstantAppsInfoBarDelegate : public ConfirmInfoBarDelegate,
   base::android::ScopedJavaGlobalRef<jobject> java_delegate_;
   base::android::ScopedJavaGlobalRef<jobject> data_;
   std::string url_;
+  bool has_navigated_away_from_launch_url_;
 
   DISALLOW_COPY_AND_ASSIGN(InstantAppsInfoBarDelegate);
 };

@@ -40,6 +40,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_switches.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
+#include "gpu/ipc/host/gpu_switches.h"
 #include "gpu/ipc/service/switches.h"
 #include "media/base/media_switches.h"
 #include "media/media_features.h"
@@ -112,6 +113,8 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kEnableGpuRasterization,
     ::switches::kEnableLogging,
     ::switches::kEnableLowResTiling,
+    ::switches::kEnableNativeGpuMemoryBuffers,
+    ::switches::kEnableOOPRasterization,
     ::switches::kDisablePartialRaster,
     ::switches::kEnablePartialRaster,
     ::switches::kEnablePinch,
@@ -124,12 +127,10 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kEnableUseZoomForDSF,
     ::switches::kEnableViewport,
     ::switches::kEnableZeroCopy,
-#if defined(USE_OZONE)
     ::switches::kEnableDrmAtomic,
     ::switches::kEnableHardwareOverlays,
     ::switches::kExtraTouchNoiseFiltering,
     ::switches::kEdgeTouchFiltering,
-#endif
     ::switches::kHostWindowBounds,
     ::switches::kMainFrameResizesAreOrientationChanges,
     ::switches::kForceDeviceScaleFactor,
@@ -149,9 +150,7 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kRemoteDebuggingPort,
     ::switches::kRendererStartupDialog,
     ::switches::kRootLayerScrolls,
-#if defined(USE_X11) || defined(USE_OZONE)
     ::switches::kTouchCalibration,
-#endif
     ::switches::kTouchDevices,
     ::switches::kTouchEventFeatureDetection,
     ::switches::kTopChromeMD,
@@ -174,12 +173,10 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kDisableWebRtcHWEncoding,
 #endif
     ::switches::kDisableVaapiAcceleratedVideoEncode,
-#if defined(USE_OZONE)
     ::switches::kOzonePlatform,
-#endif
     app_list::switches::kDisableSyncAppList,
     app_list::switches::kEnableSyncAppList,
-    ash::switches::kAshEnableTouchView,
+    ash::switches::kAshEnableTabletMode,
     ash::switches::kAshForceEnableStylusTools,
     ash::switches::kAshEnablePaletteOnAllDisplays,
     ash::switches::kAshTouchHud,
@@ -249,10 +246,6 @@ void ReLaunch(const base::CommandLine& command_line) {
   chrome::AttemptUserExit();
 }
 
-// Empty function that run by the local state task runner to ensure last
-// commit goes through.
-void EnsureLocalStateIsWritten() {}
-
 // Wraps the work of sending chrome restart request to session manager.
 // If local state is present, try to commit it first. The request is fired when
 // the commit goes through or some time (3 seconds) has elapsed.
@@ -291,29 +284,13 @@ void ChromeRestartRequest::Start() {
   // Write exit_cleanly and other stuff to the disk here.
   g_browser_process->EndSession();
 
-  PrefService* local_state = g_browser_process->local_state();
-  if (!local_state) {
-    RestartJob();
-    return;
-  }
-
   // XXX: normally this call must not be needed, however RestartJob
   // just kills us so settings may be lost. See http://crosbug.com/13102
-  local_state->CommitPendingWrite();
+  g_browser_process->FlushLocalStateAndReply(
+      base::BindOnce(&ChromeRestartRequest::RestartJob, AsWeakPtr()));
   timer_.Start(
       FROM_HERE, base::TimeDelta::FromSeconds(3), this,
       &ChromeRestartRequest::RestartJob);
-
-  // Post a task to local state task runner thus it occurs last on the task
-  // queue, so it would be executed after committing pending write on that
-  // thread.
-  scoped_refptr<base::SequencedTaskRunner> local_state_task_runner =
-      JsonPrefStore::GetTaskRunnerForFile(
-          base::FilePath(chrome::kLocalStorePoolName),
-          BrowserThread::GetBlockingPool());
-  local_state_task_runner->PostTaskAndReply(
-      FROM_HERE, base::BindOnce(&EnsureLocalStateIsWritten),
-      base::BindOnce(&ChromeRestartRequest::RestartJob, AsWeakPtr()));
 }
 
 void ChromeRestartRequest::RestartJob() {

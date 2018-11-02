@@ -13,10 +13,10 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
 
-#if defined(USE_X11) && !defined(OS_CHROMEOS)
+#if defined(USE_X11)
 #include "chrome/browser/ui/views/javascript_app_modal_dialog_views_x11.h"
 #else
-#include "chrome/browser/ui/blocked_content/app_modal_dialog_helper.h"
+#include "chrome/browser/ui/blocked_content/popunder_preventer.h"
 #include "components/app_modal/javascript_app_modal_dialog.h"
 #include "components/app_modal/views/javascript_app_modal_dialog_views.h"
 #endif
@@ -32,18 +32,18 @@
 
 namespace {
 
-#if !defined(USE_X11) || defined(OS_CHROMEOS)
+#if !defined(USE_X11)
 class ChromeJavaScriptAppModalDialogViews
     : public app_modal::JavaScriptAppModalDialogViews {
  public:
   explicit ChromeJavaScriptAppModalDialogViews(
       app_modal::JavaScriptAppModalDialog* parent)
       : app_modal::JavaScriptAppModalDialogViews(parent),
-        helper_(new AppModalDialogHelper(parent->web_contents())) {}
+        popunder_preventer_(new PopunderPreventer(parent->web_contents())) {}
   ~ChromeJavaScriptAppModalDialogViews() override {}
 
  private:
-  std::unique_ptr<AppModalDialogHelper> helper_;
+  std::unique_ptr<PopunderPreventer> popunder_preventer_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeJavaScriptAppModalDialogViews);
 };
@@ -59,7 +59,7 @@ class ChromeJavaScriptNativeDialogViewsFactory
   app_modal::NativeAppModalDialog* CreateNativeJavaScriptDialog(
       app_modal::JavaScriptAppModalDialog* dialog) override {
     app_modal::JavaScriptAppModalDialogViews* d = nullptr;
-#if defined(USE_X11) && !defined(OS_CHROMEOS)
+#if defined(USE_X11)
     d = new JavaScriptAppModalDialogViewsX11(dialog);
 #else
     d = new ChromeJavaScriptAppModalDialogViews(dialog);

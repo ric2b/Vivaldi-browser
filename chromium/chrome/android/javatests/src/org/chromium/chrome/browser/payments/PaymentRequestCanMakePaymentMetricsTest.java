@@ -68,33 +68,18 @@ public class PaymentRequestCanMakePaymentMetricsTest implements MainActivityStar
 
         // Press the back button.
         int callCount = mPaymentRequestTestRule.getDismissed().getCallCount();
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                mPaymentRequestTestRule.getPaymentRequestUI().getDialogForTest().onBackPressed();
-            }
-        });
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> mPaymentRequestTestRule.getPaymentRequestUI().getDialogForTest()
+                        .onBackPressed());
         mPaymentRequestTestRule.getDismissed().waitForCallback(callCount);
         mPaymentRequestTestRule.expectResultContains(new String[] {"Request cancelled"});
 
-        // CanMakePayment was queried.
+        // Make sure the canMakePayment events were logged correctly.
+        int expectedSample = Event.SHOWN | Event.USER_ABORTED | Event.CAN_MAKE_PAYMENT_FALSE
+                | Event.REQUEST_METHOD_BASIC_CARD | Event.REQUEST_METHOD_OTHER;
         Assert.assertEquals(1,
                 RecordHistogram.getHistogramValueCountForTesting(
-                        "PaymentRequest.CanMakePayment.Usage",
-                        CanMakePaymentUsage.CAN_MAKE_PAYMENT_USED));
-
-        // The CanMakePayment effect on show should be recorded as being false and shown.
-        Assert.assertEquals(1,
-                RecordHistogram.getHistogramValueCountForTesting(
-                        "PaymentRequest.CanMakePayment.Used.EffectOnShow",
-                        CanMakePaymentEffectOnShow.DID_SHOW));
-
-        // There should be a record for an abort when CanMakePayment is false but the PR is shown to
-        // the user.
-        Assert.assertEquals(1,
-                RecordHistogram.getHistogramValueCountForTesting(
-                        "PaymentRequest.CanMakePayment.Used.FalseWithShowEffectOnCompletion",
-                        CompletionStatus.USER_ABORTED));
+                        "PaymentRequest.Events", expectedSample));
     }
 
     /**
@@ -129,24 +114,13 @@ public class PaymentRequestCanMakePaymentMetricsTest implements MainActivityStar
         mPaymentRequestTestRule.clickCardUnmaskButtonAndWait(
                 DialogInterface.BUTTON_POSITIVE, mPaymentRequestTestRule.getDismissed());
 
-        // CanMakePayment was queried.
+        // Make sure the canMakePayment events were logged correctly.
+        int expectedSample = Event.SHOWN | Event.PAY_CLICKED | Event.RECEIVED_INSTRUMENT_DETAILS
+                | Event.COMPLETED | Event.CAN_MAKE_PAYMENT_FALSE | Event.REQUEST_METHOD_BASIC_CARD
+                | Event.REQUEST_METHOD_OTHER | Event.SELECTED_CREDIT_CARD;
         Assert.assertEquals(1,
                 RecordHistogram.getHistogramValueCountForTesting(
-                        "PaymentRequest.CanMakePayment.Usage",
-                        CanMakePaymentUsage.CAN_MAKE_PAYMENT_USED));
-
-        // The CanMakePayment effect on show should be recorded as being false and shown.
-        Assert.assertEquals(1,
-                RecordHistogram.getHistogramValueCountForTesting(
-                        "PaymentRequest.CanMakePayment.Used.EffectOnShow",
-                        CanMakePaymentEffectOnShow.DID_SHOW));
-
-        // There should be a record for a completion when CanMakePayment is false but the PR is
-        // shown to the user.
-        Assert.assertEquals(1,
-                RecordHistogram.getHistogramValueCountForTesting(
-                        "PaymentRequest.CanMakePayment.Used.FalseWithShowEffectOnCompletion",
-                        CompletionStatus.COMPLETED));
+                        "PaymentRequest.Events", expectedSample));
     }
 
     /**
@@ -170,25 +144,13 @@ public class PaymentRequestCanMakePaymentMetricsTest implements MainActivityStar
         mPaymentRequestTestRule.clickNodeAndWait("abort", mPaymentRequestTestRule.getDismissed());
         mPaymentRequestTestRule.expectResultContains(new String[] {"Abort"});
 
-        // CanMakePayment was queried.
+        // Make sure the canMakePayment events were logged correctly.
+        int expectedSample = Event.SHOWN | Event.OTHER_ABORTED | Event.HAD_INITIAL_FORM_OF_PAYMENT
+                | Event.HAD_NECESSARY_COMPLETE_SUGGESTIONS | Event.CAN_MAKE_PAYMENT_TRUE
+                | Event.REQUEST_METHOD_BASIC_CARD | Event.REQUEST_METHOD_OTHER;
         Assert.assertEquals(1,
                 RecordHistogram.getHistogramValueCountForTesting(
-                        "PaymentRequest.CanMakePayment.Usage",
-                        CanMakePaymentUsage.CAN_MAKE_PAYMENT_USED));
-
-        // The CanMakePayment effect on show should be recorded as being false and shown.
-        Assert.assertEquals(1,
-                RecordHistogram.getHistogramValueCountForTesting(
-                        "PaymentRequest.CanMakePayment.Used.EffectOnShow",
-                        CanMakePaymentEffectOnShow.DID_SHOW
-                                | CanMakePaymentEffectOnShow.COULD_MAKE_PAYMENT));
-
-        // There should be a record for an abort when CanMakePayment is false but the PR is shown to
-        // the user.
-        Assert.assertEquals(1,
-                RecordHistogram.getHistogramValueCountForTesting(
-                        "PaymentRequest.CanMakePayment.Used.TrueWithShowEffectOnCompletion",
-                        CompletionStatus.OTHER_ABORTED));
+                        "PaymentRequest.Events", expectedSample));
     }
 
     /**
@@ -210,25 +172,15 @@ public class PaymentRequestCanMakePaymentMetricsTest implements MainActivityStar
         mPaymentRequestTestRule.clickAndWait(
                 R.id.button_primary, mPaymentRequestTestRule.getDismissed());
 
-        // CanMakePayment was queried.
+        // Make sure the canMakePayment events were logged correctly.
+        int expectedSample = Event.SHOWN | Event.PAY_CLICKED | Event.RECEIVED_INSTRUMENT_DETAILS
+                | Event.COMPLETED | Event.HAD_INITIAL_FORM_OF_PAYMENT
+                | Event.HAD_NECESSARY_COMPLETE_SUGGESTIONS | Event.CAN_MAKE_PAYMENT_TRUE
+                | Event.REQUEST_METHOD_BASIC_CARD | Event.REQUEST_METHOD_OTHER
+                | Event.SELECTED_OTHER;
         Assert.assertEquals(1,
                 RecordHistogram.getHistogramValueCountForTesting(
-                        "PaymentRequest.CanMakePayment.Usage",
-                        CanMakePaymentUsage.CAN_MAKE_PAYMENT_USED));
-
-        // The CanMakePayment effect on show should be recorded as being false and shown.
-        Assert.assertEquals(1,
-                RecordHistogram.getHistogramValueCountForTesting(
-                        "PaymentRequest.CanMakePayment.Used.EffectOnShow",
-                        CanMakePaymentEffectOnShow.DID_SHOW
-                                | CanMakePaymentEffectOnShow.COULD_MAKE_PAYMENT));
-
-        // There should be a record for an abort when CanMakePayment is false but the PR is shown to
-        // the user.
-        Assert.assertEquals(1,
-                RecordHistogram.getHistogramValueCountForTesting(
-                        "PaymentRequest.CanMakePayment.Used.TrueWithShowEffectOnCompletion",
-                        CompletionStatus.COMPLETED));
+                        "PaymentRequest.Events", expectedSample));
     }
 
     /**
@@ -246,27 +198,18 @@ public class PaymentRequestCanMakePaymentMetricsTest implements MainActivityStar
 
         // Press the back button.
         int callCount = mPaymentRequestTestRule.getDismissed().getCallCount();
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                mPaymentRequestTestRule.getPaymentRequestUI().getDialogForTest().onBackPressed();
-            }
-        });
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> mPaymentRequestTestRule.getPaymentRequestUI().getDialogForTest()
+                        .onBackPressed());
         mPaymentRequestTestRule.getDismissed().waitForCallback(callCount);
         mPaymentRequestTestRule.expectResultContains(new String[] {"Request cancelled"});
 
-        // CanMakePayment was not queried.
+        // Make sure no canMakePayment events were logged.
+        int expectedSample = Event.SHOWN | Event.USER_ABORTED | Event.REQUEST_METHOD_BASIC_CARD
+                | Event.REQUEST_METHOD_OTHER;
         Assert.assertEquals(1,
                 RecordHistogram.getHistogramValueCountForTesting(
-                        "PaymentRequest.CanMakePayment.Usage",
-                        CanMakePaymentUsage.CAN_MAKE_PAYMENT_NOT_USED));
-
-        // There should be a record for an abort when CanMakePayment is not called but the PR is
-        // shown to the user.
-        Assert.assertEquals(1,
-                RecordHistogram.getHistogramValueCountForTesting(
-                        "PaymentRequest.CanMakePayment.NotUsed.WithShowEffectOnCompletion",
-                        CompletionStatus.USER_ABORTED));
+                        "PaymentRequest.Events", expectedSample));
     }
 
     /**
@@ -287,17 +230,13 @@ public class PaymentRequestCanMakePaymentMetricsTest implements MainActivityStar
         mPaymentRequestTestRule.clickAndWait(
                 R.id.button_primary, mPaymentRequestTestRule.getDismissed());
 
-        // CanMakePayment was not queried.
+        // Make sure no canMakePayment events were logged.
+        int expectedSample = Event.SHOWN | Event.PAY_CLICKED | Event.RECEIVED_INSTRUMENT_DETAILS
+                | Event.COMPLETED | Event.HAD_INITIAL_FORM_OF_PAYMENT
+                | Event.HAD_NECESSARY_COMPLETE_SUGGESTIONS | Event.REQUEST_METHOD_BASIC_CARD
+                | Event.REQUEST_METHOD_OTHER | Event.SELECTED_OTHER;
         Assert.assertEquals(1,
                 RecordHistogram.getHistogramValueCountForTesting(
-                        "PaymentRequest.CanMakePayment.Usage",
-                        CanMakePaymentUsage.CAN_MAKE_PAYMENT_NOT_USED));
-
-        // There should be a record for a completion when CanMakePayment is not called but the PR is
-        // shown to the user.
-        Assert.assertEquals(1,
-                RecordHistogram.getHistogramValueCountForTesting(
-                        "PaymentRequest.CanMakePayment.NotUsed.WithShowEffectOnCompletion",
-                        CompletionStatus.COMPLETED));
+                        "PaymentRequest.Events", expectedSample));
     }
 }

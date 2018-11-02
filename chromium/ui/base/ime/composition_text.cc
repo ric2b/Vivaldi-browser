@@ -14,19 +14,4 @@ CompositionText::CompositionText(const CompositionText& other) = default;
 CompositionText::~CompositionText() {
 }
 
-void CompositionText::Clear() {
-  text.clear();
-  underlines.clear();
-  selection = gfx::Range();
-}
-
-void CompositionText::CopyFrom(const CompositionText& obj) {
-  Clear();
-  text = obj.text;
-  for (size_t i = 0; i < obj.underlines.size(); i++) {
-    underlines.push_back(obj.underlines[i]);
-  }
-  selection = obj.selection;
-}
-
 }  // namespace ui

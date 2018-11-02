@@ -12,14 +12,12 @@
 <translation id="1403254041219632970">Le versioni future di Chromium non supporteranno più Mac OS X 10.6, 10.7 o 10.8.</translation>
 <translation id="1414495520565016063">Hai eseguito l'accesso a Chromium.</translation>
 <translation id="1444754455097148408">Licenze open source di Chromium</translation>
-<translation id="1480489203462860648">Provalo, è già installato</translation>
 <translation id="1502360822835740515">Imposta Chromium come browser predefinito</translation>
 <translation id="151962892725702025">Impossibile sincronizzare i dati in Chromium OS perché la sincronizzazione non è disponibile per il tuo dominio.</translation>
 <translation id="1559451348202814456">Chromium potrebbe non funzionare correttamente perché non è più supportato su Mac OS X 10.6, 10.7 o 10.8.</translation>
 <translation id="1653828314016431939">OK - Riavvia ora</translation>
 <translation id="1668054258064581266">Dopo avere rimosso il tuo account da Chromium, potresti dover ricaricare le schede aperte perché le modifiche vengano applicate.</translation>
 <translation id="1688750314291223739">Configura la sincronizzazione per salvare le funzioni personalizzate del browser sul Web e accedervi da Chromium su qualsiasi computer.</translation>
-<translation id="1699664235656412242">Chiudi tutte le finestre di Chromium (incluse quelle in modalità Windows 8) e riprova.</translation>
 <translation id="1708666629004767631">È disponibile una nuova versione più sicura di Chromium.</translation>
 <translation id="1774152462503052664">Lascia Chromium in esecuzione in background</translation>
 <translation id="1779356040007214683">Per rendere Chromium più sicuro, abbiamo disattivato alcune estensioni che non sono elencate nel <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> e potrebbero essere state aggiunte a tua insaputa.</translation>
@@ -101,6 +99,7 @@
 <translation id="4271805377592243930">Ricevi assistenza per Chromium</translation>
 <translation id="4285930937574705105">Installazione non riuscita a causa di un errore imprecisato. Se Chromium è in esecuzione, chiudilo e riprova.</translation>
 <translation id="4330585738697551178">Questo modulo risulta in conflitto con Chromium.</translation>
+<translation id="4421155425831608516">L'accesso a Chromium è disattivato dall'amministratore del dispositivo.</translation>
 <translation id="4423735387467980091">Personalizza e controlla Chromium</translation>
 <translation id="4458285410772214805">Esci ed esegui di nuovo l'accesso per applicare la modifica.</translation>
 <translation id="4469812139324097969">Chromium non è aggiornato perché non viene riavviato da un po'. È disponibile un aggiornamento che verrà applicato non appena riavvierai.</translation>
@@ -177,7 +176,6 @@
 Alcune funzioni potrebbero non essere disponibili. Specifica un'altra directory per il profilo o utilizza una versione più recente di Chromium.</translation>
 <translation id="6734080038664603509">Aggiorna &amp;Chromium</translation>
 <translation id="6734291798041940871">Chromium è già installato per tutti gli utenti sul computer.</translation>
-<translation id="6757767188268205357">Non mi interessa</translation>
 <translation id="6810143991807788455">Contribuisci a migliorare Chromium indicando le impostazioni attuali</translation>
 <translation id="6857782730669500492">Chromium - <ph name="PAGE_TITLE" /></translation>
 <translation id="6883876366448858277">invia una parola e il contesto circostante alla Ricerca Google affinché possano essere restituiti definizioni, immagini e altri risultati di ricerca.</translation>
@@ -190,7 +188,6 @@ Alcune funzioni potrebbero non essere disponibili. Specifica un'altra directory 
 <translation id="707471633328071618">Google Payments (copiato in Chromium)</translation>
 <translation id="7138853919861947730">Chromium potrebbe utilizzare servizi web per migliorare la navigazione.</translation>
 <translation id="7162152143154757523">Chromium può offrire una funzione di controllo ortografico migliore inviando il testo digitato nel browser ai server di Google. Puoi, così, usufruire della stessa tecnologia di controllo ortografico utilizzata dalla Ricerca Google.</translation>
-<translation id="7196020411877309443">Perché visualizzo questo avviso?</translation>
 <translation id="7205698830395646142">Nascondi in menu Chromium</translation>
 <translation id="7223968959479464213">Task Manager - Chromium</translation>
 <translation id="722928257909516027">Mostra il menu Chromium</translation>

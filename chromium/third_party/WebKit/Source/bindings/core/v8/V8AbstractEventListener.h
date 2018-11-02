@@ -32,7 +32,7 @@
 #define V8AbstractEventListener_h
 
 #include "core/CoreExport.h"
-#include "core/events/EventListener.h"
+#include "core/dom/events/EventListener.h"
 #include "platform/bindings/DOMWrapperWorld.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/bindings/TraceWrapperV8Reference.h"
@@ -52,8 +52,7 @@ class WorkerGlobalScope;
 // Why does this matter?
 // WebKit does not allow duplicated HTML event handlers of the same type,
 // but ALLOWs duplicated non-HTML event handlers.
-class CORE_EXPORT V8AbstractEventListener : public EventListener,
-                                            public TraceWrapperBase {
+class CORE_EXPORT V8AbstractEventListener : public EventListener {
  public:
   ~V8AbstractEventListener() override;
 

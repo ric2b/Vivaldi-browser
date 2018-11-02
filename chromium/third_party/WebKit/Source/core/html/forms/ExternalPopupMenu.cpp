@@ -33,10 +33,10 @@
 #include "build/build_config.h"
 #include "core/dom/NodeComputedStyle.h"
 #include "core/dom/TaskRunnerHelper.h"
-#include "core/exported/WebViewBase.h"
+#include "core/exported/WebViewImpl.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "core/html/HTMLOptionElement.h"
 #include "core/html/HTMLSelectElement.h"
 #include "core/layout/LayoutBox.h"
@@ -92,8 +92,8 @@ bool ExternalPopupMenu::ShowInternal() {
   GetPopupMenuInfo(info, *owner_element_);
   if (info.items.empty())
     return false;
-  WebLocalFrameBase* webframe =
-      WebLocalFrameBase::FromFrame(local_frame_.Get());
+  WebLocalFrameImpl* webframe =
+      WebLocalFrameImpl::FromFrame(local_frame_.Get());
   web_external_popup_menu_ =
       webframe->Client()->CreateExternalPopupMenu(info, this);
   if (web_external_popup_menu_) {
@@ -119,10 +119,7 @@ void ExternalPopupMenu::Show() {
   if (!ShowInternal())
     return;
 #if defined(OS_MACOSX)
-  // TODO(sashab): Change this back to WebViewBase::CurrentInputEvent() once
-  // WebViewImpl is in core/.
-  const WebInputEvent* current_event =
-      local_frame_->GetPage()->GetChromeClient().GetCurrentInputEvent();
+  const WebInputEvent* current_event = WebViewImpl::CurrentInputEvent();
   if (current_event && current_event->GetType() == WebInputEvent::kMouseDown) {
     synthetic_event_ = WTF::WrapUnique(new WebMouseEvent);
     *synthetic_event_ = *static_cast<const WebMouseEvent*>(current_event);
@@ -164,7 +161,7 @@ void ExternalPopupMenu::UpdateFromElement(UpdateReason reason) {
       break;
 
     case kByStyleChange:
-      // TOOD(tkent): We should update the popup location/content in some
+      // TODO(tkent): We should update the popup location/content in some
       // cases.  e.g. Updating ComputedStyle of the SELECT element affects
       // popup position and OPTION style.
       break;

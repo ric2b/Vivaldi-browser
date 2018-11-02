@@ -6,8 +6,8 @@
 #define COMPONENTS_GUEST_VIEW_BROWSER_GUEST_VIEW_BASE_H_
 
 #include <memory>
-#include <queue>
 
+#include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
@@ -20,8 +20,11 @@
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
 
+#include "extensions/features/features.h"
+
 namespace guest_view {
 
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 // Vivaldi helper functions that is declared here and defined multiple places.
 
 // Returns true if a Browser object owns and manage the lifecycle of the
@@ -32,6 +35,7 @@ bool HandOverToBrowser(content::WebContents* contents);
 void AttachWebContentsObservers(content::WebContents* contents);
 
 // end Vivaldi helpers
+#endif
 
 class GuestViewEvent;
 class GuestViewManager;
@@ -458,7 +462,7 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
 
   // This is a queue of Events that are destined to be sent to the embedder once
   // the guest is attached to a particular embedder.
-  std::deque<std::unique_ptr<GuestViewEvent>> pending_events_;
+  base::circular_deque<std::unique_ptr<GuestViewEvent>> pending_events_;
 
   // The opener guest view.
   base::WeakPtr<GuestViewBase> opener_;

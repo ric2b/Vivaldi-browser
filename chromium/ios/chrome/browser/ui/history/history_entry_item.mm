@@ -14,9 +14,8 @@
 #include "ios/chrome/browser/favicon/ios_chrome_large_icon_service_factory.h"
 #import "ios/chrome/browser/ui/history/favicon_view.h"
 #import "ios/chrome/browser/ui/history/favicon_view_provider.h"
-#import "ios/chrome/browser/ui/history/history_entry.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
-#import "ios/chrome/browser/ui/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/third_party/material_components_ios/src/components/Palettes/src/MaterialPalettes.h"
 #import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
@@ -91,7 +90,8 @@ NSString* FormattedTitle(const base::string16& title, const GURL& url) {
 @synthesize timestamp = _timestamp;
 
 - (instancetype)initWithType:(NSInteger)type
-                historyEntry:(const history::HistoryEntry&)entry
+                historyEntry:
+                    (const history::BrowsingHistoryService::HistoryEntry&)entry
                 browserState:(ios::ChromeBrowserState*)browserState
                     delegate:(id<HistoryEntryItemDelegate>)delegate {
   self = [super initWithType:type];

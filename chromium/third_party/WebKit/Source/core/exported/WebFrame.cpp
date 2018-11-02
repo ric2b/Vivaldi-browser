@@ -9,13 +9,13 @@
 #include "core/HTMLNames.h"
 #include "core/dom/IncrementLoadEventDelayCount.h"
 #include "core/dom/UserGestureIndicator.h"
+#include "core/exported/WebRemoteFrameImpl.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/OpenedFrameTracker.h"
 #include "core/frame/RemoteFrame.h"
 #include "core/frame/RemoteFrameOwner.h"
-#include "core/frame/WebLocalFrameBase.h"
-#include "core/frame/WebRemoteFrameBase.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "core/html/HTMLFrameElementBase.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/page/Page.h"
@@ -48,7 +48,7 @@ bool WebFrame::Swap(WebFrame* frame) {
   std::unique_ptr<IncrementLoadEventDelayCount> delay_parent_load =
       parent_ && parent_->IsWebLocalFrame()
           ? IncrementLoadEventDelayCount::Create(
-                *ToWebLocalFrameBase(parent_)->GetFrame()->GetDocument())
+                *ToWebLocalFrameImpl(parent_)->GetFrame()->GetDocument())
           : nullptr;
 
   if (parent_) {
@@ -101,7 +101,7 @@ bool WebFrame::Swap(WebFrame* frame) {
     // placeholder for loading state when swapping to a local frame.
     // In this case, the core LocalFrame is already initialized, so just
     // update a bit of state.
-    LocalFrame& local_frame = *ToWebLocalFrameBase(frame)->GetFrame();
+    LocalFrame& local_frame = *ToWebLocalFrameImpl(frame)->GetFrame();
     DCHECK_EQ(owner, local_frame.Owner());
     if (owner) {
       owner->SetContentFrame(local_frame);
@@ -117,11 +117,11 @@ bool WebFrame::Swap(WebFrame* frame) {
                            TRACE_EVENT_SCOPE_THREAD, "frame", &local_frame);
     }
   } else {
-    ToWebRemoteFrameBase(frame)->InitializeCoreFrame(*page, owner, name);
+    ToWebRemoteFrameImpl(frame)->InitializeCoreFrame(*page, owner, name);
   }
 
   if (parent_ && old_frame->HasReceivedUserGesture())
-    ToCoreFrame(*frame)->SetDocumentHasReceivedUserGesture();
+    ToCoreFrame(*frame)->UpdateUserActivationInFrameTree();
 
   ToCoreFrame(*frame)->GetWindowProxyManager()->SetGlobalProxies(
       global_proxies);
@@ -180,7 +180,6 @@ void WebFrame::SetFrameOwnerProperties(
   owner->SetAllowPaymentRequest(properties.allow_payment_request);
   owner->SetIsDisplayNone(properties.is_display_none);
   owner->SetCsp(properties.required_csp);
-  owner->SetAllowedFeatures(properties.allowed_features);
 }
 
 void WebFrame::Collapse(bool collapsed) {
@@ -304,8 +303,8 @@ WebFrame* WebFrame::FromFrame(Frame* frame) {
     return 0;
 
   if (frame->IsLocalFrame())
-    return WebLocalFrameBase::FromFrame(ToLocalFrame(*frame));
-  return WebRemoteFrameBase::FromFrame(ToRemoteFrame(*frame));
+    return WebLocalFrameImpl::FromFrame(ToLocalFrame(*frame));
+  return WebRemoteFrameImpl::FromFrame(ToRemoteFrame(*frame));
 }
 
 WebFrame::WebFrame(WebTreeScopeType scope)
@@ -327,9 +326,9 @@ void WebFrame::TraceFrame(Visitor* visitor, WebFrame* frame) {
     return;
 
   if (frame->IsWebLocalFrame())
-    visitor->Trace(ToWebLocalFrameBase(frame));
+    visitor->Trace(ToWebLocalFrameImpl(frame));
   else
-    visitor->Trace(ToWebRemoteFrameBase(frame));
+    visitor->Trace(ToWebRemoteFrameImpl(frame));
 }
 
 void WebFrame::TraceFrames(Visitor* visitor, WebFrame* frame) {
@@ -355,9 +354,9 @@ void WebFrame::DetachFromParent() {
 
 Frame* WebFrame::ToCoreFrame(const WebFrame& frame) {
   if (frame.IsWebLocalFrame())
-    return ToWebLocalFrameBase(frame).GetFrame();
+    return ToWebLocalFrameImpl(frame).GetFrame();
   if (frame.IsWebRemoteFrame())
-    return ToWebRemoteFrameBase(frame).GetFrame();
+    return ToWebRemoteFrameImpl(frame).GetFrame();
   NOTREACHED();
   return nullptr;
 }

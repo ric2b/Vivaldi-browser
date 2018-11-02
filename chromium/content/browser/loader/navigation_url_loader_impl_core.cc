@@ -48,8 +48,8 @@ void NavigationURLLoaderImplCore::Start(
 
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(&NavigationURLLoaderImpl::NotifyRequestStarted, loader_,
-                 base::TimeTicks::Now()));
+      base::BindOnce(&NavigationURLLoaderImpl::NotifyRequestStarted, loader_,
+                     base::TimeTicks::Now()));
 
   // The ResourceDispatcherHostImpl can be null in unit tests.
   if (ResourceDispatcherHostImpl::Get()) {
@@ -95,8 +95,8 @@ void NavigationURLLoaderImplCore::NotifyRequestRedirected(
   // response. https://crbug.com/416050
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(&NavigationURLLoaderImpl::NotifyRequestRedirected, loader_,
-                 redirect_info, response->DeepCopy()));
+      base::BindOnce(&NavigationURLLoaderImpl::NotifyRequestRedirected, loader_,
+                     redirect_info, response->DeepCopy()));
 
   // TODO(carlosk): extend this trace to support non-PlzNavigate navigations.
   // For the trace below we're using the NavigationURLLoaderImplCore as the
@@ -130,14 +130,17 @@ void NavigationURLLoaderImplCore::NotifyResponseStarted(
   // response. https://crbug.com/416050
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(&NavigationURLLoaderImpl::NotifyResponseStarted, loader_,
-                 response->DeepCopy(), base::Passed(&body), ssl_status,
-                 base::Passed(&navigation_data), request_id, is_download,
-                 is_stream));
+      base::BindOnce(&NavigationURLLoaderImpl::NotifyResponseStarted, loader_,
+                     response->DeepCopy(), base::Passed(&body), ssl_status,
+                     base::Passed(&navigation_data), request_id, is_download,
+                     is_stream));
 }
 
-void NavigationURLLoaderImplCore::NotifyRequestFailed(bool in_cache,
-                                                      int net_error) {
+void NavigationURLLoaderImplCore::NotifyRequestFailed(
+    bool in_cache,
+    int net_error,
+    const base::Optional<net::SSLInfo>& ssl_info,
+    bool should_ssl_errors_be_fatal) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   TRACE_EVENT_ASYNC_END0("navigation", "Navigation redirectDelay", this);
   TRACE_EVENT_ASYNC_END2("navigation", "Navigation timeToResponseStarted", this,
@@ -146,8 +149,9 @@ void NavigationURLLoaderImplCore::NotifyRequestFailed(bool in_cache,
 
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(&NavigationURLLoaderImpl::NotifyRequestFailed, loader_,
-                 in_cache, net_error));
+      base::BindOnce(&NavigationURLLoaderImpl::NotifyRequestFailed, loader_,
+                     in_cache, net_error, ssl_info,
+                     should_ssl_errors_be_fatal));
 }
 
 }  // namespace content

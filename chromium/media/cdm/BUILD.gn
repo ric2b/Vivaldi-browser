@@ -4,58 +4,50 @@
 
 import("//media/media_options.gni")
 
-source_set("cdm_api") {
-  sources = [
-    "api/content_decryption_module.h",
-  ]
+if (enable_library_cdms) {
+  source_set("cdm_api") {
+    sources = [
+      "api/content_decryption_module.h",
+    ]
+  }
 }
 
 source_set("cdm") {
-  visibility = [ "//media/*" ]
+  # Do not expand the visibility here without double-checking with OWNERS, this
+  # is a roll-up target which is part of the //media component. Most other DEPs
+  # should be using //media and not directly DEP this roll-up target.
+  visibility = [
+    "//media",
+
+    # TODO(crbug.com/583067): These files should not be in //media/base.
+    "//media/base/android",
+
+    "//media/filters",
+  ]
 
   sources = [
     "aes_decryptor.cc",
     "aes_decryptor.h",
-    "cdm_adapter.cc",
-    "cdm_adapter.h",
-    "cdm_allocator.cc",
-    "cdm_allocator.h",
-    "cdm_file_adapter.cc",
-    "cdm_file_adapter.h",
-    "cdm_file_io.cc",
-    "cdm_file_io.h",
-    "cdm_helpers.cc",
-    "cdm_helpers.h",
-    "cdm_wrapper.h",
     "default_cdm_factory.cc",
     "default_cdm_factory.h",
     "json_web_key.cc",
     "json_web_key.h",
     "player_tracker_impl.cc",
     "player_tracker_impl.h",
-    "supported_cdm_versions.cc",
-    "supported_cdm_versions.h",
   ]
 
-  # TODO(wolenetz): Fix size_t to int truncation in win64.
-  # See http://crbug.com/171009
+  # TODO(crbug.com/167187): Fix size_t to int truncations.
   configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
 
   deps = [
-    ":cdm_api",
     "//crypto",
-    "//media:media_features",
-    "//media:shared_memory_support",
+    "//media/base",
+    "//media/formats",
     "//ui/gfx/geometry",
     "//url",
   ]
 
-  public_deps = [
-    "//media/formats",
-  ]
-
-  configs += [ "//media:media_implementation" ]
-  all_dependent_configs = [ "//media:media_dependent_config" ]
+  configs += [ "//media:subcomponent_config" ]
 
   if (proprietary_codecs) {
     sources += [
@@ -64,9 +56,9 @@ source_set("cdm") {
     ]
   }
 
-  # TODO(xhwang): Move other library CDM related files to this block as well.
-  if (enable_pepper_cdms) {
+  if (enable_library_cdms) {
     deps += [
+      ":cdm_api",
       ":cdm_paths",
 
       # TODO(xhwang): Remove this after Widevine specific logic is removed in
@@ -74,8 +66,27 @@ source_set("cdm") {
       "//third_party/widevine/cdm:headers",
     ]
     sources += [
+      "cdm_adapter.cc",
+      "cdm_adapter.h",
       "cdm_adapter_factory.cc",
       "cdm_adapter_factory.h",
+      "cdm_allocator.cc",
+      "cdm_allocator.h",
+      "cdm_auxiliary_helper.cc",
+      "cdm_auxiliary_helper.h",
+      "cdm_file_adapter.cc",
+      "cdm_file_adapter.h",
+      "cdm_file_io.cc",
+      "cdm_file_io.h",
+      "cdm_helpers.cc",
+      "cdm_helpers.h",
+      "cdm_module.cc",
+      "cdm_module.h",
+      "cdm_wrapper.h",
+      "output_protection.h",
+      "platform_verification.h",
+      "supported_cdm_versions.cc",
+      "supported_cdm_versions.h",
     ]
   }
 }
@@ -113,4 +124,55 @@ static_library("cdm_paths") {
   deps = [
     "//base",
   ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "aes_decryptor_unittest.cc",
+    "json_web_key_unittest.cc",
+  ]
+
+  deps = [
+    "//base/test:test_support",
+    "//media:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//ui/gfx:test_support",
+    "//url",
+  ]
+
+  configs += [
+    # TODO(crbug.com/167187): Fix size_t to int truncations.
+    "//build/config/compiler:no_size_t_to_int_warning",
+    "//media:media_config",
+  ]
+
+  data_deps = []
+
+  # If ExternalClearKey is built, we can test CdmAdapter.
+  if (enable_library_cdms) {
+    sources += [
+      "cdm_adapter_unittest.cc",
+      "external_clear_key_test_helper.cc",
+      "external_clear_key_test_helper.h",
+      "mock_helpers.cc",
+      "mock_helpers.h",
+      "simple_cdm_allocator.cc",
+      "simple_cdm_allocator.h",
+      "simple_cdm_allocator_unittest.cc",
+      "simple_cdm_buffer.cc",
+      "simple_cdm_buffer.h",
+    ]
+    data_deps += [ "//media/cdm/ppapi:clearkeycdm" ]
+
+    deps += [
+      ":cdm_api",
+      ":cdm_paths",
+    ]
+  }
+
+  if (proprietary_codecs) {
+    sources += [ "cenc_utils_unittest.cc" ]
+  }
 }

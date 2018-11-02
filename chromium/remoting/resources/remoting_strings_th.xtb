@@ -23,11 +23,10 @@
 <translation id="1520828917794284345">ปรับขนาดเดสก์ท็อปให้พอดี</translation>
 <translation id="154040539590487450">ไม่สามารถเริ่มบริการเข้าถึงระยะไกล</translation>
 <translation id="1546934824884762070">เกิดข้อผิดพลาดที่ไม่คาดคิด โปรดรายงานปัญหานี้ให้นักพัฒนาซอฟต์แวร์ทราบ</translation>
-<translation id="1619813076098775562">ปิดการเชื่อมต่อกับเครื่องส่งแล้ว</translation>
 <translation id="1643640058022401035">การออกจากหน้าเว็บนี้จะเป็นการสิ้นสุดเซสชัน Chromoting ของคุณ</translation>
 <translation id="1654128982815600832">กำลังเปิดใช้งานการเชื่อมต่อระยะไกลสำหรับคอมพิวเตอร์เครื่องนี้…</translation>
 <translation id="170207782578677537">ไม่สามารถลงทะเบียนคอมพิวเตอร์เครื่องนี้</translation>
-<translation id="1704090719919187045">Chromoting Host Preferences</translation>
+<translation id="1727412735341161734">Chrome Remote Desktop</translation>
 <translation id="174018511426417793">คุณไม่มีคอมพิวเตอร์ที่ได้ลงทะเบียนไว้ หากต้องการเปิดใช้งานการเชื่อมต่อระยะไกลกับคอมพิวเตอร์ ให้ติดตั้ง Chrome Remote Desktop ที่คอมพิวเตอร์ที่ต้องการใช้งานและคลิก "<ph name="BUTTON_NAME" />"</translation>
 <translation id="1742469581923031760">กำลังเชื่อมต่อ…</translation>
 <translation id="1770394049404108959">ฉันไม่สามารถเปิดแอปพลิเคชันนี้</translation>
@@ -42,10 +41,6 @@
 <translation id="2013996867038862849">ไคลเอ็นต์ที่ได้รับการจับคู่ทั้งหมดถูกลบแล้ว</translation>
 <translation id="2038229918502634450">โฮสต์กำลังเริ่มต้นใหม่ เพื่อนำการเปลี่ยนแปลงนโยบายมาใช้</translation>
 <translation id="2046651113449445291">ไคลเอ็นต์ต่อไปนี้ถูกจับคู่กับคอมพิวเตอร์เครื่องนี้และสามารถเชื่อมต่อโดยไม่ต้องใส่รหัส PIN คุณสามารถยกเลิกสิทธิ์นี้ได้ทุกเมื่อ ไม่ว่าจะเป็นทีละไคลเอ็นต์หรือสำหรับไคลเอ็นต์ทั้งหมด</translation>
-<translation id="2053901200959289492">• เพิ่มการรองรับหลายหน้าต่างสำหรับ Android Nougat
-• ปรับปรุงคุณภาพของรูปภาพบนเดสก์ท็อป การตอบสนอง และการใช้แบตเตอรี่
-• ปรับปรุงการตอบสนองของการคลิกแล้วลาก
-• ปรับปรุงเอฟเฟ็กต์ภาพเคลื่อนไหวของ UI หลายรายการ</translation>
 <translation id="2078880767960296260">Host Process</translation>
 <translation id="20876857123010370">โหมดแทร็กแพด</translation>
 <translation id="2089514346391228378">การเชื่อมต่อระยะไกลสำหรับคอมพิวเตอร์เครื่องนี้ถูกเปิดใช้งานแล้ว</translation>
@@ -81,6 +76,7 @@
 <translation id="2676780859508944670">กำลังทำงาน…</translation>
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2747641796667576127">โดยปกติการอัปเดตซอฟต์แวร์จะทำงานโดยอัตโนมัติ แต่อาจล้มเหลวในบางกรณีซึ่งพบไม่บ่อย การอัปเดตซอฟต์แวร์จะใช้เวลาไม่เกินสองสามนาที และสามารถดำเนินการขณะเชื่อมต่อคอมพิวเตอร์จากระยะไกล</translation>
+<translation id="2758123043070977469">มีปัญหาในการตรวจสอบสิทธิ์ โปรดเข้าสู่ระบบอีกครั้ง</translation>
 <translation id="2803375539583399270">ป้อน PIN</translation>
 <translation id="2841013758207633010">เวลา</translation>
 <translation id="2851754573186462851">Chromium App Streaming</translation>
@@ -99,8 +95,15 @@
 <translation id="3150823315463303127">โฮสต์ไม่สามารถอ่านนโยบายได้</translation>
 <translation id="3194245623920924351">Chrome Remote Desktop</translation>
 <translation id="3197730452537982411">Remote Desktop</translation>
+<translation id="321944585103975186">• ออกแบบอินเทอร์เฟซผู้ใช้ใหม่
+• ปรับปรุงประสิทธิภาพ การตอบสนอง และความน่าเชื่อถือ
+• รองรับการเล่นไฟล์เสียงจากคอมพิวเตอร์ Windows หรือ Linux
+• ปรับปรุงการรองรับแป้นพิมพ์</translation>
+<translation id="324272851072175193">ส่งอีเมลวิธีการเหล่านี้</translation>
 <translation id="3258789396564295715">คุณสามารถเข้าถึงคอมพิวเตอร์เครื่องนี้ได้อย่างปลอดภัยโดยใช้ Chrome Remote Desktop</translation>
 <translation id="3286521253923406898">Chromoting Host Controller</translation>
+<translation id="3305934114213025800"><ph name="PRODUCT_NAME" /> ต้องการทำการเปลี่ยนแปลง</translation>
+<translation id="331779822864701136">• เพิ่มการรองรับ Android 8.0 Oreo</translation>
 <translation id="332624996707057614">แก้ไขชื่อคอมพิวเตอร์</translation>
 <translation id="3339299787263251426">เข้าถึงคอมพิวเตอร์ผ่านอินเทอร์เน็ตอย่างปลอดภัย</translation>
 <translation id="3360306038446926262">หน้าต่าง</translation>
@@ -109,6 +112,12 @@
 <translation id="3385242214819933234">เจ้าของโฮสต์ไม่ถูกต้อง</translation>
 <translation id="3403830762023901068">การตั้งค่านโยบายไม่อนุญาตให้แชร์คอมพิวเตอร์นี้เป็นโฮสต์ Chromoting โปรดติดต่อขอรับความช่วยเหลือจากผู้ดูแลระบบของคุณ</translation>
 <translation id="3423542133075182604">กระบวนการทำงานระยะไกลของคีย์ความปลอดภัย</translation>
+<translation id="3426467947138417795">Chrome Remote Desktop
+Remote Desktop
+พีซีระยะไกล
+คอมพิวเตอร์ระยะไกล
+การเข้าถึงระยะไกล
+การสนับสนุนระยะไกล</translation>
 <translation id="3581045510967524389">ไม่สามารถเชื่อมต่อเครือข่าย โปรดตรวจสอบว่าอุปกรณ์ออนไลน์อยู่</translation>
 <translation id="3596628256176442606">บริการนี้จะช่วยให้สามารถใช้การเชื่อมต่อขาเข้าจากไคลเอ็นต์ Chromoting</translation>
 <translation id="3606997049964069799">คุณยังไม่ได้ลงชื่อเข้าใช้ Chromium โปรดลงชื่อเข้าใช้และลองอีกครั้ง</translation>
@@ -117,8 +126,13 @@
 <translation id="3695446226812920698">เรียนรู้วิธี</translation>
 <translation id="3718805989288361841">การตั้งค่านโยบายของ Chrome Remote Desktop มีข้อผิดพลาด โปรดติดต่อขอรับความช่วยเหลือจากผู้ดูแลระบบของคุณ</translation>
 <translation id="3776024066357219166">เซสชัน Chrome Remote Desktop ของคุณสิ้นสุดแล้ว</translation>
-<translation id="3785447812627779171">Chromoting
-Host</translation>
+<translation id="3788372335219293587">เข้าถึงคอมพิวเตอร์จากอุปกรณ์ iOS อย่างปลอดภัย รวดเร็ว ง่ายดาย และฟรี
+
+• ในคอมพิวเตอร์ที่ต้องการเข้าถึงจากระยะไกล ให้ค้นหาแอป Chrome Remote Desktop จาก Chrome เว็บสโตร์ที่ https://chrome.google.com/remotedesktop
+• ติดตั้งซอฟต์แวร์ Chrome Remote Desktop และทำตามวิธีการตั้งค่าให้เสร็จสมบูรณ์
+• ในอุปกรณ์ iOS ให้เปิดแอปและแตะคอมพิวเตอร์เครื่องที่ออนไลน์อยู่เพื่อเชื่อมต่อ
+
+สำหรับข้อมูลเกี่ยวกับความเป็นส่วนตัว โปรดดูนโยบายความเป็นส่วนตัวของ Google (http://goo.gl/SyrVzj)</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">โปรดยืนยันบัญชีและ PIN ของคุณด้านล่างเพื่ออนุญาตให้ Chrome Remote Desktop สามารถเข้าถึง</translation>
 <translation id="3897092660631435901">เมนู</translation>
@@ -132,9 +146,9 @@ Host</translation>
 <translation id="405887016757208221">คอมพิวเตอร์ระยะไกลไม่สามารถเริ่มต้นเซสชัน หากปัญหายังคงอยู่ โปรดลองกำหนดค่าโฮสต์อีกครั้ง</translation>
 <translation id="4068946408131579958">การเชื่อมต่อทั้งหมด</translation>
 <translation id="409800995205263688">หมายเหตุ: การตั้งค่านโยบายอนุญาตเฉพาะการเชื่อมต่อระหว่างคอมพิวเตอร์ภายในเครือข่ายของคุณเท่านั้น</translation>
+<translation id="4145029455188493639">ลงชื่อเข้าใช้ด้วย <ph name="EMAIL_ADDRESS" /></translation>
 <translation id="4155497795971509630">คอมโพเนนต์ที่จำเป็นบางอย่างขาดหายไป โปรดตรวจสอบว่าคุณได้ติดตั้งซอฟต์แวร์เวอร์ชันล่าสุดและลองอีกครั้ง</translation>
 <translation id="4156740505453712750">หากต้องการป้องกันการเข้าถึงคอมพิวเตอร์เครื่องนี้ โปรดเลือก PIN <ph name="BOLD_START" />อย่างน้อยหกหลัก<ph name="BOLD_END" /> โดยจะต้องป้อน PIN นี้เมื่อเชื่อมต่อจากตำแหน่งอื่น</translation>
-<translation id="4156741816461781891">ลงชื่อเข้าใช้ด้วย <ph name="EMAIL_ADDRESS" /></translation>
 <translation id="4176825807642096119">รหัสการเข้าถึง</translation>
 <translation id="4207623512727273241">โปรดเรียกใช้ตัวติดตั้งก่อนดำเนินการต่อ</translation>
 <translation id="4227991223508142681">ยูทิลิตีของการจัดสรรการโฮสต์</translation>
@@ -152,8 +166,7 @@ Host</translation>
 <translation id="4517233780764084060">หมายเหตุ: เพื่อให้มั่นใจว่าทุกแป้นพิมพ์ลัดพร้อมใช้งาน คุณสามารถกำหนดค่า Chromoting เป็น "เปิดเป็นหน้าต่าง"</translation>
 <translation id="4563926062592110512">ไคลเอ็นต์ที่ยกเลิกการเชื่อมต่อ: <ph name="CLIENT_USERNAME" /></translation>
 <translation id="4572065712096155137">เข้าถึง</translation>
-<translation id="4573676252416618192">Chrome Remote
-Desktop Host</translation>
+<translation id="4592037108270173918">อาจมีค่าบริการอินเทอร์เน็ตเมื่อเชื่อมต่ออุปกรณ์ผ่านเครือข่ายมือถือ คุณต้องการดำเนินการต่อไหม</translation>
 <translation id="4619978527973181021">ยอมรับและติดตั้ง</translation>
 <translation id="4635770493235256822">อุปกรณ์ระยะไกล</translation>
 <translation id="4660011489602794167">แสดงแป้นพิมพ์</translation>
@@ -192,20 +205,19 @@ Desktop Host</translation>
 <translation id="5419418238395129586">ออนไลน์ครั้งล่าสุด: <ph name="DATE" /></translation>
 <translation id="544077782045763683">โฮสต์ปิดตัวลงแล้ว</translation>
 <translation id="5510035215749041527">ยกเลิกการเชื่อมต่อเลย</translation>
-<translation id="5537725057119320332">ส่ง</translation>
 <translation id="5593560073513909978">ไม่สามารถให้บริการนี้ได้ชั่วคราว โปรดลองอีกครั้งในภายหลัง</translation>
 <translation id="5601503069213153581">PIN</translation>
 <translation id="5619148062500147964">กับคอมพิวเตอร์เครื่องนี้</translation>
 <translation id="5625493749705183369">เข้าถึงคอมพิวเตอร์เครื่องอื่นหรืออนุญาตให้ผู้ใช้อื่นเข้าถึงคอมพิวเตอร์ของคุณอย่างปลอดภัยผ่านทางอินเทอร์เน็ต</translation>
 <translation id="5702987232842159181">เชื่อมต่อแล้ว:</translation>
 <translation id="5708869785009007625">ขณะนี้มีการแชร์เดสก์ท็อปของคุณกับ <ph name="USER" /></translation>
+<translation id="5750083143895808682">ลงชื่อเข้าใช้ด้วย <ph name="EMAIL_ADDRESS" /></translation>
 <translation id="5773590752998175013">วันที่จับคู่</translation>
 <translation id="579702532610384533">เชื่อมต่อใหม่</translation>
+<translation id="5810269635982033450">หน้าจอทำหน้าที่เหมือนแทร็กแพด</translation>
 <translation id="5841343754884244200">ตัวเลือกการแสดงผล</translation>
 <translation id="5843054235973879827">เหตุใดการดำเนินการนี้จึงปลอดภัย</translation>
 <translation id="5859141382851488196">หน้าต่างใหม่…</translation>
-<translation id="5885438903806970186">ออนไลน์</translation>
-<translation id="6001953797859482435">Chrome Remote Desktop Host Preferences</translation>
 <translation id="6011539954251327702">Chromoting ช่วยให้คุณแชร์คอมพิวเตอร์ผ่านเว็บได้อย่างปลอดภัย ผู้ใช้ทั้งสองฝ่ายจะต้องใช้งานแอปพลิเคชัน Chromoting ซึ่งสามารถรับได้ที่ <ph name="URL" /></translation>
 <translation id="6033507038939587647">ตัวเลือกแป้นพิมพ์</translation>
 <translation id="6040143037577758943">ปิด</translation>
@@ -254,10 +266,14 @@ Desktop Host</translation>
 <translation id="7019153418965365059">ข้อผิดพลาดของโฮสต์ที่ไม่รู้จัก: <ph name="HOST_OFFLINE_REASON" /></translation>
 <translation id="701976023053394610">ความช่วยเหลือจากระยะไกล</translation>
 <translation id="7038683108611689168">ช่วยเราปรับปรุง Chromoting ให้ดีขึ้นด้วยการอนุญาตให้เรารวบรวมสถิติการใช้งานและรายงานข้อขัดข้อง</translation>
-<translation id="712467900648340229">ไม่สามารถเชื่อมต่อเครื่องส่งได้</translation>
+<translation id="7067321367069083429">หน้าจอทำหน้าที่เหมือนหน้าจอสัมผัส</translation>
+<translation id="7116737094673640201">ยินดีต้อนรับสู่ Chrome Remote Desktop</translation>
 <translation id="7144878232160441200">ลองอีกครั้ง</translation>
 <translation id="7149517134817561223">แอปพลิเคชันที่จะออกคำสั่งให้โฮสต์ของ Chrome Remote Desktop</translation>
 <translation id="7215059001581613786">โปรดป้อน PIN ที่ประกอบด้วยตัวเลขอย่างน้อยหกหลัก</translation>
+<translation id="7237767047212540055">ในคอมพิวเตอร์ที่ต้องการเข้าถึงจากระยะไกล ให้เปิด Chrome แล้วไปที่ <ph name="INSTALLATION_LINK" />
+ติดตั้งซอฟต์แวร์ Chrome Remote Desktop แล้วทำตามวิธีการตั้งค่าให้เสร็จสมบูรณ์
+หลังจากตั้งค่าเสร็จแล้ว คุณสามารถเข้าถึงคอมพิวเตอร์ได้จากหน้านี้โดยป้อน PIN หรือรหัสการเข้าถึง</translation>
 <translation id="7312846573060934304">โฮสต์ออฟไลน์</translation>
 <translation id="7319983568955948908">หยุดการแชร์</translation>
 <translation id="7401733114166276557">Chrome Remote Desktop</translation>
@@ -271,6 +287,7 @@ Desktop Host</translation>
 <translation id="7658239707568436148">ยกเลิก</translation>
 <translation id="7665369617277396874">เพิ่มบัญชี</translation>
 <translation id="7672203038394118626">การเชื่อมต่อระยะไกลสำหรับคอมพิวเตอร์เครื่องนี้ถูกปิดใช้งานแล้ว</translation>
+<translation id="7678209621226490279">จัดวางไว้ทางซ้าย</translation>
 <translation id="7693372326588366043">รีเฟรชรายการโฮสต์</translation>
 <translation id="7782471917492991422">โปรดตรวจสอบการตั้งค่าการจัดการพลังงานของคอมพิวเตอร์ที่ใช้ และตรวจสอบให้แน่ใจว่าไม่ได้กำหนดค่าให้เข้าสู่โหมดสลีปเมื่อไม่มีการใช้งาน</translation>
 <translation id="7810127880729796595">แสดงสถิติ (การเชื่อมต่อ: <ph name="QUALITY" />)</translation>
@@ -278,6 +295,7 @@ Desktop Host</translation>
 <translation id="7868137160098754906">โปรดป้อน PIN สำหรับคอมพิวเตอร์ระยะไกล</translation>
 <translation id="7869445566579231750">คุณไม่มีสิทธิ์ในการเรียกใช้แอปพลิเคชันนี้</translation>
 <translation id="7895403300744144251">นโยบายการรักษาความปลอดภัยของคอมพิวเตอร์ระยะไกลไม่อนุญาตให้มีการเชื่อมต่อจากบัญชีของคุณ</translation>
+<translation id="7936528439960309876">จัดวางไว้ทางขวา</translation>
 <translation id="7948001860594368197">ตัวเลือกหน้าจอ</translation>
 <translation id="7970576581263377361">การตรวจสอบสิทธิ์ล้มเหลว โปรดลงชื่อเข้าใช้ Chromium อีกครั้ง</translation>
 <translation id="7981525049612125370">เซสชันระยะไกลหมดอายุลงแล้ว</translation>

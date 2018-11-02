@@ -47,13 +47,13 @@
 #include "core/dom/SinkDocument.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/UserGestureIndicator.h"
+#include "core/dom/events/DOMWindowEventQueue.h"
+#include "core/dom/events/ScopedEventQueue.h"
 #include "core/editing/Editor.h"
-#include "core/events/DOMWindowEventQueue.h"
 #include "core/events/HashChangeEvent.h"
 #include "core/events/MessageEvent.h"
 #include "core/events/PageTransitionEvent.h"
 #include "core/events/PopStateEvent.h"
-#include "core/events/ScopedEventQueue.h"
 #include "core/frame/BarProp.h"
 #include "core/frame/DOMVisualViewport.h"
 #include "core/frame/EventHandlerRegistry.h"
@@ -108,7 +108,7 @@ class PostMessageTimer final
  public:
   PostMessageTimer(LocalDOMWindow& window,
                    MessageEvent* event,
-                   PassRefPtr<SecurityOrigin> target_origin,
+                   RefPtr<SecurityOrigin> target_origin,
                    std::unique_ptr<SourceLocation> location,
                    UserGestureToken* user_gesture_token)
       : SuspendableTimer(window.document(), TaskType::kPostedMessage),
@@ -249,15 +249,12 @@ static void UntrackAllBeforeUnloadEventListeners(LocalDOMWindow* dom_window) {
 
 LocalDOMWindow::LocalDOMWindow(LocalFrame& frame)
     : DOMWindow(frame),
-      document_(this, nullptr),
       visualViewport_(DOMVisualViewport::Create(this)),
       unused_preloads_timer_(
           TaskRunnerHelper::Get(TaskType::kUnspecedTimer, &frame),
           this,
           &LocalDOMWindow::WarnUnusedPreloads),
-      should_print_when_finished_loading_(false),
-      custom_elements_(this, nullptr),
-      modulator_(this, nullptr) {}
+      should_print_when_finished_loading_(false) {}
 
 void LocalDOMWindow::ClearDocument() {
   if (!document_)
@@ -411,7 +408,7 @@ void LocalDOMWindow::EnqueueHashchangeEvent(const String& old_url,
 }
 
 void LocalDOMWindow::EnqueuePopstateEvent(
-    PassRefPtr<SerializedScriptValue> state_object) {
+    RefPtr<SerializedScriptValue> state_object) {
   // FIXME: https://bugs.webkit.org/show_bug.cgi?id=36202 Popstate event needs
   // to fire asynchronously
   DispatchEvent(PopStateEvent::Create(std::move(state_object), history()));
@@ -607,7 +604,7 @@ Navigator* LocalDOMWindow::navigator() const {
 }
 
 void LocalDOMWindow::SchedulePostMessage(MessageEvent* event,
-                                         PassRefPtr<SecurityOrigin> target,
+                                         RefPtr<SecurityOrigin> target,
                                          Document* source) {
   // Allowing unbounded amounts of messages to build up for a suspended context
   // is problematic; consider imposing a limit or other restriction if this
@@ -627,8 +624,10 @@ void LocalDOMWindow::PostMessageTimerFired(PostMessageTimer* timer) {
 
   MessageEvent* event = timer->Event();
 
-  UserGestureIndicator gesture_indicator(
-      UserGestureToken::Adopt(document(), timer->GetUserGestureToken()));
+  UserGestureToken* token = timer->GetUserGestureToken();
+  UserGestureIndicator gesture_indicator(token);
+  if (token && token->HasGestures() && document() && document()->GetFrame())
+    document()->GetFrame()->NotifyUserActivation();
 
   event->EntangleMessagePorts(document());
 
@@ -1086,19 +1085,7 @@ void LocalDOMWindow::setName(const AtomicString& name) {
   if (!IsCurrentlyDisplayedInFrame())
     return;
 
-  // Avoid calling out to notify the embedder if the browsing context name
-  // didn't change. This is important to avoid violating the browser assumption
-  // that the unique name doesn't change if the browsing context name doesn't
-  // change.
-  // TODO(dcheng): This comment is indicative of a problematic layering
-  // violation. The browser should not be relying on the renderer to get this
-  // correct; unique name calculation should be moved up into the browser.
-  if (name == GetFrame()->Tree().GetName())
-    return;
-
-  GetFrame()->Tree().SetName(name);
-  DCHECK(GetFrame()->Client());
-  GetFrame()->Client()->DidChangeName(name);
+  GetFrame()->Tree().SetName(name, FrameTree::kReplicate);
 }
 
 void LocalDOMWindow::setStatus(const String& string) {

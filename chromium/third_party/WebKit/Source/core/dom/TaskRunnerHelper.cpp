@@ -21,11 +21,14 @@ RefPtr<WebTaskRunner> TaskRunnerHelper::Get(TaskType type, LocalFrame* frame) {
   // TODO(haraken): Optimize the mapping from TaskTypes to task runners.
   switch (type) {
     case TaskType::kTimer:
-      return frame ? frame->FrameScheduler()->TimerTaskRunner()
+      return frame ? frame->FrameScheduler()->ThrottleableTaskRunner()
                    : Platform::Current()->CurrentThread()->GetWebTaskRunner();
     case TaskType::kUnspecedLoading:
     case TaskType::kNetworking:
       return frame ? frame->FrameScheduler()->LoadingTaskRunner()
+                   : Platform::Current()->CurrentThread()->GetWebTaskRunner();
+    case TaskType::kNetworkingControl:
+      return frame ? frame->FrameScheduler()->LoadingControlTaskRunner()
                    : Platform::Current()->CurrentThread()->GetWebTaskRunner();
     // Throttling following tasks may break existing web pages, so tentatively
     // these are unthrottled.
@@ -33,12 +36,9 @@ RefPtr<WebTaskRunner> TaskRunnerHelper::Get(TaskType type, LocalFrame* frame) {
     // or provide a mechanism that web pages can opt-out it if throttling is not
     // desirable.
     case TaskType::kDatabaseAccess:
-      return frame ? frame->FrameScheduler()->SuspendableTaskRunner()
-                   : Platform::Current()->CurrentThread()->GetWebTaskRunner();
     case TaskType::kDOMManipulation:
     case TaskType::kHistoryTraversal:
     case TaskType::kEmbed:
-    case TaskType::kMediaElementEvent:
     case TaskType::kCanvasBlobSerialization:
     case TaskType::kRemoteEvent:
     case TaskType::kWebSocket:
@@ -51,18 +51,21 @@ RefPtr<WebTaskRunner> TaskRunnerHelper::Get(TaskType type, LocalFrame* frame) {
     case TaskType::kWebGL:
     case TaskType::kUnspecedTimer:
     case TaskType::kMiscPlatformAPI:
-      // TODO(altimin): Move all these tasks to suspendable or unthrottled
-      // task runner.
-      return frame
-                 ? frame->FrameScheduler()->UnthrottledButBlockableTaskRunner()
-                 : Platform::Current()->CurrentThread()->GetWebTaskRunner();
-    // PostedMessage can be used for navigation, so we shouldn't block it
+      // TODO(altimin): Move appropriate tasks to throttleable task queue.
+      return frame ? frame->FrameScheduler()->DeferrableTaskRunner()
+                   : Platform::Current()->CurrentThread()->GetWebTaskRunner();
+    // PostedMessage can be used for navigation, so we shouldn't defer it
     // when expecting a user gesture.
     case TaskType::kPostedMessage:
     // UserInteraction tasks should be run even when expecting a user gesture.
     case TaskType::kUserInteraction:
+    // Media events should not be deferred to ensure that media playback is
+    // smooth.
+    case TaskType::kMediaElementEvent:
+      return frame ? frame->FrameScheduler()->PausableTaskRunner()
+                   : Platform::Current()->CurrentThread()->GetWebTaskRunner();
     case TaskType::kUnthrottled:
-      return frame ? frame->FrameScheduler()->UnthrottledTaskRunner()
+      return frame ? frame->FrameScheduler()->UnpausableTaskRunner()
                    : Platform::Current()->CurrentThread()->GetWebTaskRunner();
   }
   NOTREACHED();
@@ -80,10 +83,6 @@ RefPtr<WebTaskRunner> TaskRunnerHelper::Get(
     return Get(type, ToDocument(execution_context));
   if (execution_context->IsDocument())
     return Get(type, ToDocument(execution_context));
-  if (execution_context->IsMainThreadWorkletGlobalScope()) {
-    return Get(type,
-               ToMainThreadWorkletGlobalScope(execution_context)->GetFrame());
-  }
   if (execution_context->IsWorkerOrWorkletGlobalScope())
     return Get(type, ToWorkerOrWorkletGlobalScope(execution_context));
   execution_context = nullptr;
@@ -101,6 +100,12 @@ RefPtr<WebTaskRunner> TaskRunnerHelper::Get(
     WorkerOrWorkletGlobalScope* global_scope) {
   DCHECK(global_scope);
   DCHECK(global_scope->IsContextThread());
+  if (global_scope->IsMainThreadWorkletGlobalScope()) {
+    // MainThreadWorkletGlobalScope lives on the main thread and its GetThread()
+    // doesn't return a valid worker thread. Instead, retrieve a task runner
+    // from the frame.
+    return Get(type, ToMainThreadWorkletGlobalScope(global_scope)->GetFrame());
+  }
   return Get(type, global_scope->GetThread());
 }
 
@@ -110,6 +115,7 @@ RefPtr<WebTaskRunner> TaskRunnerHelper::Get(TaskType type,
     case TaskType::kDOMManipulation:
     case TaskType::kUserInteraction:
     case TaskType::kNetworking:
+    case TaskType::kNetworkingControl:
     case TaskType::kHistoryTraversal:
     case TaskType::kEmbed:
     case TaskType::kMediaElementEvent:

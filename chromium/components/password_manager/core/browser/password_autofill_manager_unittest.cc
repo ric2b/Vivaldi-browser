@@ -12,6 +12,7 @@
 #include "base/test/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/user_action_tester.h"
+#include "build/build_config.h"
 #include "components/autofill/core/browser/popup_item_ids.h"
 #include "components/autofill/core/browser/suggestion_test_helpers.h"
 #include "components/autofill/core/browser/test_autofill_client.h"
@@ -20,14 +21,22 @@
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/password_form_fill_data.h"
+#include "components/password_manager/core/browser/password_manager.h"
+#include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/stub_password_manager_client.h"
 #include "components/password_manager/core/browser/stub_password_manager_driver.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 #include "components/security_state/core/security_state.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/ukm/test_ukm_recorder.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/geometry/rect_f.h"
+
+#if defined(OS_ANDROID)
+#include "base/android/build_info.h"
+#endif
 
 // The name of the username/password element in the form.
 const char kUsernameName[] = "username";
@@ -51,20 +60,28 @@ namespace password_manager {
 
 namespace {
 
+constexpr char kMainFrameUrl[] = "https://example.com/";
+
 class MockPasswordManagerDriver : public StubPasswordManagerDriver {
  public:
   MOCK_METHOD2(FillSuggestion,
                void(const base::string16&, const base::string16&));
   MOCK_METHOD2(PreviewSuggestion,
                void(const base::string16&, const base::string16&));
+  MOCK_METHOD0(GetPasswordManager, PasswordManager*());
 };
 
 class TestPasswordManagerClient : public StubPasswordManagerClient {
  public:
+  TestPasswordManagerClient() : main_frame_url_(kMainFrameUrl) {}
+  ~TestPasswordManagerClient() override = default;
+
   MockPasswordManagerDriver* mock_driver() { return &driver_; }
+  const GURL& GetMainFrameURL() const override { return main_frame_url_; }
 
  private:
   MockPasswordManagerDriver driver_;
+  GURL main_frame_url_;
 };
 
 class MockAutofillClient : public autofill::TestAutofillClient {
@@ -75,8 +92,17 @@ class MockAutofillClient : public autofill::TestAutofillClient {
                     const std::vector<Suggestion>& suggestions,
                     base::WeakPtr<autofill::AutofillPopupDelegate> delegate));
   MOCK_METHOD0(HideAutofillPopup, void());
-  MOCK_METHOD0(ShowHttpNotSecureExplanation, void());
+  MOCK_METHOD1(ExecuteCommand, void(int));
 };
+
+bool IsPreLollipopAndroid() {
+#if defined(OS_ANDROID)
+  return (base::android::BuildInfo::GetInstance()->sdk_int() <
+          base::android::SDK_VERSION_LOLLIPOP);
+#else
+  return false;
+#endif
+}
 
 }  // namespace
 
@@ -103,8 +129,8 @@ class PasswordAutofillManagerTest : public testing::Test {
   void InitializePasswordAutofillManager(
       TestPasswordManagerClient* client,
       autofill::AutofillClient* autofill_client) {
-    password_autofill_manager_.reset(
-        new PasswordAutofillManager(client->mock_driver(), autofill_client));
+    password_autofill_manager_.reset(new PasswordAutofillManager(
+        client->mock_driver(), autofill_client, client));
     password_autofill_manager_->OnAddPasswordFormMapping(fill_data_id_,
                                                          fill_data_);
   }
@@ -116,6 +142,22 @@ class PasswordAutofillManagerTest : public testing::Test {
   void SetHttpWarningEnabled() {
     scoped_feature_list_.InitAndEnableFeature(
         security_state::kHttpFormWarningFeature);
+  }
+
+  void SetManualFallbacksForFilling(bool enabled) {
+    if (enabled) {
+      scoped_feature_list_.InitAndEnableFeature(
+          password_manager::features::kEnableManualFallbacksFilling);
+    } else {
+      scoped_feature_list_.InitAndDisableFeature(
+          password_manager::features::kEnableManualFallbacksFilling);
+    }
+  }
+
+  static bool IsManualFallbackForFillingEnabled() {
+    return base::FeatureList::IsEnabled(
+               password_manager::features::kEnableManualFallbacksFilling) &&
+           !IsPreLollipopAndroid();
   }
 
   std::unique_ptr<PasswordAutofillManager> password_autofill_manager_;
@@ -203,16 +245,22 @@ TEST_F(PasswordAutofillManagerTest, ExternalDelegatePasswordSuggestions) {
     EXPECT_CALL(*client->mock_driver(),
                 FillSuggestion(test_username_, test_password_));
 
-    // The enums must be cast to ints to prevent compile errors on linux_rel.
-    auto suggestion_ids_matcher =
-        is_suggestion_on_password_field
-            ? SuggestionVectorIdsAre(
-                  testing::ElementsAre(autofill::POPUP_ITEM_ID_TITLE,
-                                       autofill::POPUP_ITEM_ID_PASSWORD_ENTRY))
-            : SuggestionVectorIdsAre(
-                  testing::ElementsAre(autofill::POPUP_ITEM_ID_USERNAME_ENTRY));
-    EXPECT_CALL(*autofill_client,
-                ShowAutofillPopup(_, _, suggestion_ids_matcher, _));
+    std::vector<autofill::PopupItemId> ids = {
+        autofill::POPUP_ITEM_ID_USERNAME_ENTRY};
+    if (is_suggestion_on_password_field) {
+      ids = {autofill::POPUP_ITEM_ID_TITLE,
+             autofill::POPUP_ITEM_ID_PASSWORD_ENTRY};
+      if (IsManualFallbackForFillingEnabled()) {
+#if !defined(OS_ANDROID)
+        ids.push_back(autofill::POPUP_ITEM_ID_SEPARATOR);
+#endif
+        ids.push_back(autofill::POPUP_ITEM_ID_ALL_SAVED_PASSWORDS_ENTRY);
+      }
+    }
+    EXPECT_CALL(
+        *autofill_client,
+        ShowAutofillPopup(
+            _, _, SuggestionVectorIdsAre(testing::ElementsAreArray(ids)), _));
 
     int show_suggestion_options =
         is_suggestion_on_password_field ? autofill::IS_PASSWORD_FIELD : 0;
@@ -373,13 +421,23 @@ TEST_F(PasswordAutofillManagerTest, FillSuggestionPasswordField) {
   // field is a password field.
   base::string16 title = l10n_util::GetStringUTF16(
       IDS_AUTOFILL_PASSWORD_FIELD_SUGGESTIONS_TITLE);
-  EXPECT_CALL(*autofill_client,
-              ShowAutofillPopup(
-                  element_bounds, _,
-                  SuggestionVectorValuesAre(testing::UnorderedElementsAre(
-                      title,
-                      test_username_)),
-                  _));
+  std::vector<base::string16> elements = {title, test_username_};
+  if (IsManualFallbackForFillingEnabled()) {
+    elements = {
+      title,
+      test_username_,
+#if !defined(OS_ANDROID)
+      base::string16(),
+#endif
+      l10n_util::GetStringUTF16(IDS_AUTOFILL_SHOW_ALL_SAVED_FALLBACK)
+    };
+  }
+
+  EXPECT_CALL(
+      *autofill_client,
+      ShowAutofillPopup(
+          element_bounds, _,
+          SuggestionVectorValuesAre(testing::ElementsAreArray(elements)), _));
   password_autofill_manager_->OnShowPasswordSuggestions(
       dummy_key, base::i18n::RIGHT_TO_LEFT, test_username_,
       autofill::IS_PASSWORD_FIELD, element_bounds);
@@ -633,7 +691,9 @@ TEST_F(PasswordAutofillManagerTest, ShowStandaloneNotSecureWarning) {
 
   // Accepting the warning message should trigger a call to open an explanation
   // of the message and hide the popup.
-  EXPECT_CALL(*autofill_client, ShowHttpNotSecureExplanation());
+  EXPECT_CALL(
+      *autofill_client,
+      ExecuteCommand(autofill::POPUP_ITEM_ID_HTTP_NOT_SECURE_WARNING_MESSAGE));
   EXPECT_CALL(*autofill_client, HideAutofillPopup());
   password_autofill_manager_->DidAcceptSuggestion(
       base::string16(), autofill::POPUP_ITEM_ID_HTTP_NOT_SECURE_WARNING_MESSAGE,
@@ -664,12 +724,22 @@ TEST_F(PasswordAutofillManagerTest, NonSecurePasswordFieldHttpWarningMessage) {
   base::string16 title =
       l10n_util::GetStringUTF16(IDS_AUTOFILL_PASSWORD_FIELD_SUGGESTIONS_TITLE);
 
+  base::string16 show_all_saved_row_text =
+      l10n_util::GetStringUTF16(IDS_AUTOFILL_SHOW_ALL_SAVED_FALLBACK);
+  std::vector<base::string16> elements = {title, test_username_};
+  if (IsManualFallbackForFillingEnabled()) {
+#if !defined(OS_ANDROID)
+    elements.push_back(base::string16());
+#endif
+    elements.push_back(show_all_saved_row_text);
+  }
+
   // Http warning message won't show with switch flag off.
-  EXPECT_CALL(*autofill_client,
-              ShowAutofillPopup(element_bounds, _,
-                                SuggestionVectorValuesAre(testing::ElementsAre(
-                                    title, test_username_)),
-                                _));
+  EXPECT_CALL(
+      *autofill_client,
+      ShowAutofillPopup(
+          element_bounds, _,
+          SuggestionVectorValuesAre(testing::ElementsAreArray(elements)), _));
   password_autofill_manager_->OnShowPasswordSuggestions(
       dummy_key, base::i18n::RIGHT_TO_LEFT, test_username_,
       autofill::IS_PASSWORD_FIELD, element_bounds);
@@ -679,22 +749,35 @@ TEST_F(PasswordAutofillManagerTest, NonSecurePasswordFieldHttpWarningMessage) {
   // Http warning message shows for non-secure context and switch flag on, so
   // there are 3 suggestions (+ 1 separator on desktop) in total, and the
   // message comes first among suggestions.
-  auto elements = testing::ElementsAre(warning_message,
+  elements = {
+    warning_message,
 #if !defined(OS_ANDROID)
-                                       base::string16(),
+    base::string16(),
 #endif
-                                       title, test_username_);
+    title,
+    test_username_
+  };
+  if (IsManualFallbackForFillingEnabled()) {
+#if !defined(OS_ANDROID)
+    elements.push_back(base::string16());
+#endif
+    elements.push_back(show_all_saved_row_text);
+  }
 
-  EXPECT_CALL(*autofill_client,
-              ShowAutofillPopup(element_bounds, _,
-                                SuggestionVectorValuesAre(elements), _));
+  EXPECT_CALL(
+      *autofill_client,
+      ShowAutofillPopup(
+          element_bounds, _,
+          SuggestionVectorValuesAre(testing::ElementsAreArray(elements)), _));
   password_autofill_manager_->OnShowPasswordSuggestions(
       dummy_key, base::i18n::RIGHT_TO_LEFT, test_username_,
       autofill::IS_PASSWORD_FIELD, element_bounds);
 
   // Accepting the warning message should trigger a call to open an explanation
   // of the message and hide the popup.
-  EXPECT_CALL(*autofill_client, ShowHttpNotSecureExplanation());
+  EXPECT_CALL(
+      *autofill_client,
+      ExecuteCommand(autofill::POPUP_ITEM_ID_HTTP_NOT_SECURE_WARNING_MESSAGE));
   EXPECT_CALL(*autofill_client, HideAutofillPopup());
   password_autofill_manager_->DidAcceptSuggestion(
       base::string16(), autofill::POPUP_ITEM_ID_HTTP_NOT_SECURE_WARNING_MESSAGE,
@@ -750,7 +833,9 @@ TEST_F(PasswordAutofillManagerTest, NonSecureUsernameFieldHttpWarningMessage) {
 
   // Accepting the warning message should trigger a call to open an explanation
   // of the message and hide the popup.
-  EXPECT_CALL(*autofill_client, ShowHttpNotSecureExplanation());
+  EXPECT_CALL(
+      *autofill_client,
+      ExecuteCommand(autofill::POPUP_ITEM_ID_HTTP_NOT_SECURE_WARNING_MESSAGE));
   EXPECT_CALL(*autofill_client, HideAutofillPopup());
   password_autofill_manager_->DidAcceptSuggestion(
       base::string16(), autofill::POPUP_ITEM_ID_HTTP_NOT_SECURE_WARNING_MESSAGE,
@@ -776,12 +861,23 @@ TEST_F(PasswordAutofillManagerTest, SecurePasswordFieldHttpWarningMessage) {
   base::string16 title =
       l10n_util::GetStringUTF16(IDS_AUTOFILL_PASSWORD_FIELD_SUGGESTIONS_TITLE);
 
+  std::vector<base::string16> elements = {title, test_username_};
+  if (IsManualFallbackForFillingEnabled()) {
+    elements = {
+      title,
+      test_username_,
+#if !defined(OS_ANDROID)
+      base::string16(),
+#endif
+      l10n_util::GetStringUTF16(IDS_AUTOFILL_SHOW_ALL_SAVED_FALLBACK)
+    };
+  }
   // Http warning message won't show with switch flag off.
-  EXPECT_CALL(*autofill_client,
-              ShowAutofillPopup(element_bounds, _,
-                                SuggestionVectorValuesAre(testing::ElementsAre(
-                                    title, test_username_)),
-                                _));
+  EXPECT_CALL(
+      *autofill_client,
+      ShowAutofillPopup(
+          element_bounds, _,
+          SuggestionVectorValuesAre(testing::ElementsAreArray(elements)), _));
   password_autofill_manager_->OnShowPasswordSuggestions(
       dummy_key, base::i18n::RIGHT_TO_LEFT, test_username_,
       autofill::IS_PASSWORD_FIELD, element_bounds);
@@ -790,29 +886,14 @@ TEST_F(PasswordAutofillManagerTest, SecurePasswordFieldHttpWarningMessage) {
 
   // Http warning message won't show for secure context, even with switch flag
   // on.
-  EXPECT_CALL(*autofill_client,
-              ShowAutofillPopup(element_bounds, _,
-                                SuggestionVectorValuesAre(testing::ElementsAre(
-                                    title, test_username_)),
-                                _));
+  EXPECT_CALL(
+      *autofill_client,
+      ShowAutofillPopup(
+          element_bounds, _,
+          SuggestionVectorValuesAre(testing::ElementsAreArray(elements)), _));
   password_autofill_manager_->OnShowPasswordSuggestions(
       dummy_key, base::i18n::RIGHT_TO_LEFT, test_username_,
       autofill::IS_PASSWORD_FIELD, element_bounds);
-}
-
-// Test that a user action is logged when the user selects the Form-Not-Secure
-// warning to receive more information about the warning.
-TEST_F(PasswordAutofillManagerTest, FormNotSecureUserAction) {
-  std::unique_ptr<TestPasswordManagerClient> client(
-      new TestPasswordManagerClient);
-  std::unique_ptr<MockAutofillClient> autofill_client(new MockAutofillClient);
-  InitializePasswordAutofillManager(client.get(), autofill_client.get());
-  base::UserActionTester user_action_tester;
-  password_autofill_manager_->DidAcceptSuggestion(
-      test_username_, autofill::POPUP_ITEM_ID_HTTP_NOT_SECURE_WARNING_MESSAGE,
-      0);
-  EXPECT_EQ(1, user_action_tester.GetActionCount(
-                   "PasswordManager_ShowedHttpNotSecureExplanation"));
 }
 
 // Tests that the Form-Not-Secure warning is recorded in UMA, at most once per
@@ -830,6 +911,7 @@ TEST_F(PasswordAutofillManagerTest, ShowedFormNotSecureHistogram) {
   // Test that the standalone warning (with no autofill suggestions) records the
   // histogram.
   gfx::RectF element_bounds;
+  EXPECT_CALL(*autofill_client, ShowAutofillPopup(element_bounds, _, _, _));
   password_autofill_manager_->OnShowNotSecureWarning(base::i18n::RIGHT_TO_LEFT,
                                                      element_bounds);
   histograms.ExpectUniqueSample(kHistogram, true, 1);
@@ -847,15 +929,279 @@ TEST_F(PasswordAutofillManagerTest, ShowedFormNotSecureHistogram) {
   data.origin = GURL("http://foo.test");
   password_autofill_manager_->OnAddPasswordFormMapping(dummy_key, data);
 
+  EXPECT_CALL(*autofill_client, ShowAutofillPopup(element_bounds, _, _, _));
   password_autofill_manager_->OnShowPasswordSuggestions(
       dummy_key, base::i18n::RIGHT_TO_LEFT, test_username_,
       autofill::IS_PASSWORD_FIELD, element_bounds);
   histograms.ExpectUniqueSample(kHistogram, true, 2);
 
   // The histogram should not be recorded again on the same navigation.
+  EXPECT_CALL(*autofill_client, ShowAutofillPopup(element_bounds, _, _, _));
   password_autofill_manager_->OnShowNotSecureWarning(base::i18n::RIGHT_TO_LEFT,
                                                      element_bounds);
   histograms.ExpectUniqueSample(kHistogram, true, 2);
+}
+
+// Tests that the "Show all passwords" suggestion isn't shown along with
+// "Use password for" in the popup when the feature which controls its
+// appearance is disabled.
+TEST_F(PasswordAutofillManagerTest,
+       NotShowAllPasswordsOptionOnPasswordFieldWhenFeatureDisabled) {
+  auto client = base::MakeUnique<TestPasswordManagerClient>();
+  auto autofill_client = base::MakeUnique<MockAutofillClient>();
+  InitializePasswordAutofillManager(client.get(), autofill_client.get());
+
+  gfx::RectF element_bounds;
+  autofill::PasswordFormFillData data;
+  data.username_field.value = test_username_;
+  data.password_field.value = test_password_;
+  data.origin = GURL("https://foo.test");
+
+  int dummy_key = 0;
+  password_autofill_manager_->OnAddPasswordFormMapping(dummy_key, data);
+
+  // String "Use password for:" shown when displaying suggestions matching a
+  // username and specifying that the field is a password field.
+  base::string16 title =
+      l10n_util::GetStringUTF16(IDS_AUTOFILL_PASSWORD_FIELD_SUGGESTIONS_TITLE);
+
+  SetManualFallbacksForFilling(false);
+
+  // No "Show all passwords row" when feature is disabled.
+  EXPECT_CALL(*autofill_client,
+              ShowAutofillPopup(element_bounds, _,
+                                SuggestionVectorValuesAre(testing::ElementsAre(
+                                    title, test_username_)),
+                                _));
+  password_autofill_manager_->OnShowPasswordSuggestions(
+      dummy_key, base::i18n::RIGHT_TO_LEFT, test_username_,
+      autofill::IS_PASSWORD_FIELD, element_bounds);
+}
+
+// Tests that the "Show all passwords" suggestion is shown along with
+// "Use password for" in the popup when the feature which controls its
+// appearance is enabled.
+TEST_F(PasswordAutofillManagerTest, ShowAllPasswordsOptionOnPasswordField) {
+  const char kShownContextHistogram[] =
+      "PasswordManager.ShowAllSavedPasswordsShownContext";
+  const char kAcceptedContextHistogram[] =
+      "PasswordManager.ShowAllSavedPasswordsAcceptedContext";
+  base::HistogramTester histograms;
+  ukm::TestAutoSetUkmRecorder test_ukm_recorder;
+
+  auto client = base::MakeUnique<TestPasswordManagerClient>();
+  auto autofill_client = base::MakeUnique<MockAutofillClient>();
+  auto manager =
+      base::MakeUnique<password_manager::PasswordManager>(client.get());
+  InitializePasswordAutofillManager(client.get(), autofill_client.get());
+
+  ON_CALL(*(client->mock_driver()), GetPasswordManager())
+      .WillByDefault(testing::Return(manager.get()));
+
+  gfx::RectF element_bounds;
+  autofill::PasswordFormFillData data;
+  data.username_field.value = test_username_;
+  data.password_field.value = test_password_;
+  data.origin = GURL("https://foo.test");
+
+  int dummy_key = 0;
+  password_autofill_manager_->OnAddPasswordFormMapping(dummy_key, data);
+
+  // String "Use password for:" shown when displaying suggestions matching a
+  // username and specifying that the field is a password field.
+  base::string16 title =
+      l10n_util::GetStringUTF16(IDS_AUTOFILL_PASSWORD_FIELD_SUGGESTIONS_TITLE);
+
+  SetManualFallbacksForFilling(true);
+
+  std::vector<base::string16> elements = {title, test_username_};
+  if (!IsPreLollipopAndroid()) {
+    elements = {
+      title,
+      test_username_,
+#if !defined(OS_ANDROID)
+      base::string16(),
+#endif
+      l10n_util::GetStringUTF16(IDS_AUTOFILL_SHOW_ALL_SAVED_FALLBACK)
+    };
+  }
+
+  EXPECT_CALL(
+      *autofill_client,
+      ShowAutofillPopup(
+          element_bounds, _,
+          SuggestionVectorValuesAre(testing::ElementsAreArray(elements)), _));
+
+  password_autofill_manager_->OnShowPasswordSuggestions(
+      dummy_key, base::i18n::RIGHT_TO_LEFT, test_username_,
+      autofill::IS_PASSWORD_FIELD, element_bounds);
+
+  if (!IsPreLollipopAndroid()) {
+    // Expect a sample only in the shown histogram.
+    histograms.ExpectUniqueSample(
+        kShownContextHistogram,
+        metrics_util::SHOW_ALL_SAVED_PASSWORDS_CONTEXT_PASSWORD, 1);
+    // Clicking at the "Show all passwords row" should trigger a call to open
+    // the Password Manager settings page and hide the popup.
+    EXPECT_CALL(
+        *autofill_client,
+        ExecuteCommand(autofill::POPUP_ITEM_ID_ALL_SAVED_PASSWORDS_ENTRY));
+    EXPECT_CALL(*autofill_client, HideAutofillPopup());
+    password_autofill_manager_->DidAcceptSuggestion(
+        base::string16(), autofill::POPUP_ITEM_ID_ALL_SAVED_PASSWORDS_ENTRY, 0);
+    // Expect a sample in both the shown and accepted histogram.
+    histograms.ExpectUniqueSample(
+        kShownContextHistogram,
+        metrics_util::SHOW_ALL_SAVED_PASSWORDS_CONTEXT_PASSWORD, 1);
+    histograms.ExpectUniqueSample(
+        kAcceptedContextHistogram,
+        metrics_util::SHOW_ALL_SAVED_PASSWORDS_CONTEXT_PASSWORD, 1);
+    // Trigger UKM reporting, which happens at destruction time.
+    manager.reset();
+    autofill_client.reset();
+    client.reset();
+    const ukm::UkmSource* source =
+        test_ukm_recorder.GetSourceForUrl(kMainFrameUrl);
+    ASSERT_TRUE(source);
+
+    test_ukm_recorder.ExpectMetric(
+        *source, "PageWithPassword", password_manager::kUkmPageLevelUserAction,
+        static_cast<int64_t>(
+            password_manager::PasswordManagerMetricsRecorder::
+                PageLevelUserAction::kShowAllPasswordsWhileSomeAreSuggested));
+
+  } else {
+    EXPECT_THAT(histograms.GetAllSamples(kShownContextHistogram),
+                testing::IsEmpty());
+    EXPECT_THAT(histograms.GetAllSamples(kAcceptedContextHistogram),
+                testing::IsEmpty());
+  }
+}
+
+TEST_F(PasswordAutofillManagerTest, ShowStandaloneShowAllPasswords) {
+  const char kShownContextHistogram[] =
+      "PasswordManager.ShowAllSavedPasswordsShownContext";
+  const char kAcceptedContextHistogram[] =
+      "PasswordManager.ShowAllSavedPasswordsAcceptedContext";
+  base::HistogramTester histograms;
+  ukm::TestAutoSetUkmRecorder test_ukm_recorder;
+
+  auto client = base::MakeUnique<TestPasswordManagerClient>();
+  auto autofill_client = base::MakeUnique<MockAutofillClient>();
+  auto manager =
+      base::MakeUnique<password_manager::PasswordManager>(client.get());
+  InitializePasswordAutofillManager(client.get(), autofill_client.get());
+
+  ON_CALL(*(client->mock_driver()), GetPasswordManager())
+      .WillByDefault(testing::Return(manager.get()));
+
+  gfx::RectF element_bounds;
+  autofill::PasswordFormFillData data;
+  data.username_field.value = test_username_;
+  data.password_field.value = test_password_;
+  data.origin = GURL("http://foo.test");
+
+  // String for the "Show all passwords" fallback.
+  base::string16 show_all_saved_row_text =
+      l10n_util::GetStringUTF16(IDS_AUTOFILL_SHOW_ALL_SAVED_FALLBACK);
+
+  SetManualFallbacksForFilling(true);
+
+  EXPECT_CALL(
+      *autofill_client,
+      ShowAutofillPopup(element_bounds, _,
+                        SuggestionVectorValuesAre(testing::ElementsAreArray(
+                            {show_all_saved_row_text})),
+                        _))
+      .Times(IsPreLollipopAndroid() ? 0 : 1);
+  password_autofill_manager_->OnShowManualFallbackSuggestion(
+      base::i18n::RIGHT_TO_LEFT, element_bounds);
+
+  if (IsPreLollipopAndroid()) {
+    EXPECT_THAT(histograms.GetAllSamples(kShownContextHistogram),
+                testing::IsEmpty());
+  } else {
+    // Expect a sample only in the shown histogram.
+    histograms.ExpectUniqueSample(
+        kShownContextHistogram,
+        metrics_util::SHOW_ALL_SAVED_PASSWORDS_CONTEXT_MANUAL_FALLBACK, 1);
+  }
+
+  if (!IsPreLollipopAndroid()) {
+    // Clicking at the "Show all passwords row" should trigger a call to open
+    // the Password Manager settings page and hide the popup.
+    EXPECT_CALL(
+        *autofill_client,
+        ExecuteCommand(autofill::POPUP_ITEM_ID_ALL_SAVED_PASSWORDS_ENTRY));
+    EXPECT_CALL(*autofill_client, HideAutofillPopup());
+    password_autofill_manager_->DidAcceptSuggestion(
+        base::string16(), autofill::POPUP_ITEM_ID_ALL_SAVED_PASSWORDS_ENTRY, 0);
+    // Expect a sample in both the shown and accepted histogram.
+    histograms.ExpectUniqueSample(
+        kShownContextHistogram,
+        metrics_util::SHOW_ALL_SAVED_PASSWORDS_CONTEXT_MANUAL_FALLBACK, 1);
+    histograms.ExpectUniqueSample(
+        kAcceptedContextHistogram,
+        metrics_util::SHOW_ALL_SAVED_PASSWORDS_CONTEXT_MANUAL_FALLBACK, 1);
+    // Trigger UKM reporting, which happens at destruction time.
+    manager.reset();
+    autofill_client.reset();
+    client.reset();
+    const ukm::UkmSource* source =
+        test_ukm_recorder.GetSourceForUrl(kMainFrameUrl);
+    ASSERT_TRUE(source);
+
+    test_ukm_recorder.ExpectMetric(
+        *source, "PageWithPassword", password_manager::kUkmPageLevelUserAction,
+        static_cast<int64_t>(
+            password_manager::PasswordManagerMetricsRecorder::
+                PageLevelUserAction::kShowAllPasswordsWhileNoneAreSuggested));
+  } else {
+    EXPECT_THAT(histograms.GetAllSamples(kShownContextHistogram),
+                testing::IsEmpty());
+    EXPECT_THAT(histograms.GetAllSamples(kAcceptedContextHistogram),
+                testing::IsEmpty());
+  }
+}
+
+// Tests that the "Show all passwords" fallback doesn't shows up in non-password
+// fields of login forms.
+TEST_F(PasswordAutofillManagerTest,
+       NotShowAllPasswordsOptionOnNonPasswordField) {
+  auto client = base::MakeUnique<TestPasswordManagerClient>();
+  auto autofill_client = base::MakeUnique<MockAutofillClient>();
+  InitializePasswordAutofillManager(client.get(), autofill_client.get());
+
+  gfx::RectF element_bounds;
+  autofill::PasswordFormFillData data;
+  data.username_field.value = test_username_;
+  data.password_field.value = test_password_;
+  data.origin = GURL("https://foo.test");
+
+  int dummy_key = 0;
+  password_autofill_manager_->OnAddPasswordFormMapping(dummy_key, data);
+
+  SetManualFallbacksForFilling(true);
+
+  EXPECT_CALL(
+      *autofill_client,
+      ShowAutofillPopup(
+          element_bounds, _,
+          SuggestionVectorValuesAre(testing::ElementsAre(test_username_)), _));
+  password_autofill_manager_->OnShowPasswordSuggestions(
+      dummy_key, base::i18n::RIGHT_TO_LEFT, test_username_, 0, element_bounds);
+}
+
+// SimpleWebviewDialog doesn't have an autofill client. Nothing should crash if
+// the filling fallback is invoked.
+TEST_F(PasswordAutofillManagerTest, ShowAllPasswordsWithoutAutofillClient) {
+  auto client = base::MakeUnique<TestPasswordManagerClient>();
+  InitializePasswordAutofillManager(client.get(), nullptr);
+
+  SetManualFallbacksForFilling(true);
+
+  password_autofill_manager_->OnShowManualFallbackSuggestion(
+      base::i18n::RIGHT_TO_LEFT, gfx::RectF());
 }
 
 }  // namespace password_manager

@@ -11,18 +11,18 @@
 #include <vector>
 
 #import "components/signin/ios/browser/manage_accounts_delegate.h"
+#import "ios/chrome/browser/web/page_placeholder_tab_helper_delegate.h"
 #import "ios/chrome/browser/web/sad_tab_tab_helper_delegate.h"
 #include "ios/net/request_tracker.h"
 #include "ios/web/public/user_agent.h"
-#import "ios/web/public/web_state/ui/crw_web_delegate.h"
 #include "ui/base/page_transition_types.h"
 
 @protocol ApplicationCommands;
 @class AutofillController;
 @class AutoReloadBridge;
 @protocol BrowserCommands;
+@protocol IOSCaptivePortalBlockingPageDelegate;
 @class CastController;
-@class CRWWebController;
 @class ExternalAppLauncher;
 @class FormInputAccessoryViewController;
 @class FullScreenController;
@@ -44,23 +44,13 @@ class GURL;
 @protocol TabSnapshottingDelegate;
 @protocol FindInPageControllerDelegate;
 
-namespace infobars {
-class InfoBarManager;
-}
-
 namespace ios {
 class ChromeBrowserState;
-}
-
-namespace sessions {
-class SerializedNavigationEntry;
-struct SessionTab;
 }
 
 namespace web {
 class NavigationItem;
 class NavigationManager;
-class NavigationManagerImpl;
 class WebState;
 }
 
@@ -92,12 +82,13 @@ extern NSString* const kTabUrlKey;
 extern NSString* const kProxyPassthroughHeaderName;
 extern NSString* const kProxyPassthroughHeaderValue;
 
-// Information related to a single tab. The CRWWebController is similar to
-// desktop Chrome's TabContents in that it encapsulates rendering. Acts as the
-// delegate for the CRWWebController in order to process info about pages having
+// Information related to a single tab. The WebState is similar to desktop
+// Chrome's WebContents in that it encapsulates rendering. Acts as the
+// delegate for the WebState in order to process info about pages having
 // loaded.
-@interface Tab
-    : NSObject<CRWWebDelegate, ManageAccountsDelegate, SadTabTabHelperDelegate>
+@interface Tab : NSObject<ManageAccountsDelegate,
+                          PagePlaceholderTabHelperDelegate,
+                          SadTabTabHelperDelegate>
 
 // Browser state associated with this Tab.
 @property(nonatomic, readonly) ios::ChromeBrowserState* browserState;
@@ -128,8 +119,6 @@ extern NSString* const kProxyPassthroughHeaderValue;
 // The Webstate associated with this Tab.
 @property(nonatomic, readonly) web::WebState* webState;
 
-@property(nonatomic, readonly) CRWWebController* webController;
-
 // Handles saving and autofill of passwords.
 @property(nonatomic, readonly) PasswordController* passwordController;
 @property(nonatomic, readonly) BOOL canGoBack;
@@ -143,6 +132,8 @@ extern NSString* const kProxyPassthroughHeaderValue;
 // Whether or not desktop user agent is used for the currently visible page.
 @property(nonatomic, readonly) BOOL usesDesktopUserAgent;
 
+@property(nonatomic, weak) id<IOSCaptivePortalBlockingPageDelegate>
+    iOSCaptivePortalBlockingPageDelegate;
 @property(nonatomic, weak) id<FullScreenControllerDelegate>
     fullScreenControllerDelegate;
 @property(nonatomic, readonly)
@@ -177,9 +168,6 @@ extern NSString* const kProxyPassthroughHeaderValue;
 // TODO(crbug.com/228575): Create a delegate interface and remove this.
 - (void)setParentTabModel:(TabModel*)model;
 
-// Replace the content of the tab with the content described by |SessionTab|.
-- (void)loadSessionTab:(const sessions::SessionTab*)sessionTab;
-
 // Triggers the asynchronous loading of the tab's favicon. This will be done
 // automatically when a page loads, but this can be used to trigger favicon
 // fetch earlier (e.g., for a tab that will be shown without loading).
@@ -207,23 +195,14 @@ extern NSString* const kProxyPassthroughHeaderValue;
 
 // Returns the NavigationManager for this tab's WebState. Requires WebState to
 // be populated. Can return null.
-// TODO(crbug.com/620465): remove navigationManagerImpl once Tab no longer uses
-// nor exposes private ios/web/ API.
 - (web::NavigationManager*)navigationManager;
-- (web::NavigationManagerImpl*)navigationManagerImpl;
-
-// Update the tab's history by replacing all previous navigations with
-// |navigations|.
-- (void)replaceHistoryWithNavigations:
-            (const std::vector<sessions::SerializedNavigationEntry>&)navigations
-                         currentIndex:(NSInteger)currentIndex;
 
 // Navigate forwards or backwards to |item|.
 - (void)goToItem:(const web::NavigationItem*)item;
 
 // Navigates forwards or backwards.
-// TODO(crbug.com/661664): These are passthroughs to CRWWebController. Convert
-// all callers and remove these methods.
+// TODO(crbug.com/661664): These are passthroughs to the Tab's WebState's
+// NavigationManager. Convert all callers and remove these methods.
 - (void)goBack;
 - (void)goForward;
 
@@ -232,16 +211,6 @@ extern NSString* const kProxyPassthroughHeaderValue;
 
 // Updates the timestamp of the last time the tab is visited.
 - (void)updateLastVisitedTimestamp;
-
-// Returns the infobars::InfoBarManager object for this tab.
-- (infobars::InfoBarManager*)infoBarManager;
-
-// Whether the content of the current tab is compatible with reader mode.
-- (BOOL)canSwitchToReaderMode;
-
-// Asks the tab to enter into reader mode, presenting a streamlined view of the
-// current content.
-- (void)switchToReaderMode;
 
 // Loads the original url of the last non-redirect item (including non-history
 // items). Used by request desktop/mobile site so that the updated user agent is

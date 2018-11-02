@@ -13,6 +13,7 @@ namespace ios {
 class ChromeBrowserState;
 }
 
+@protocol ApplicationCommands;
 @class DeviceSharingManager;
 @class GenericChromeCommand;
 @class MainController;
@@ -47,7 +48,7 @@ NSUInteger GetRegisteredKeyCommandsCount();
 id<BrowserCommands> BrowserCommandDispatcherForMainBVC();
 
 // Returns the dispatcher for the active view controller.
-id<BrowserCommands> DispatcherForActiveViewController();
+id<ApplicationCommands, BrowserCommands> DispatcherForActiveViewController();
 
 // Runs |command| using the active view controller.
 void RunCommandWithActiveViewController(GenericChromeCommand* command);
@@ -57,9 +58,6 @@ void RemoveAllInfoBars();
 
 // Dismisses all presented views and modal dialogs.
 void ClearPresentedState();
-
-// Purges and recreates all web views.
-void ResetAllWebViews();
 
 // Sets the value of a boolean local state pref.
 // TODO(crbug.com/647022): Clean up other tests that use this helper function.

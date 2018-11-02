@@ -128,8 +128,12 @@ component("chromeos") {
     "cryptohome/homedir_methods.h",
     "cryptohome/system_salt_getter.cc",
     "cryptohome/system_salt_getter.h",
+    "dbus/arc_midis_client.cc",
+    "dbus/arc_midis_client.h",
     "dbus/arc_obb_mounter_client.cc",
     "dbus/arc_obb_mounter_client.h",
+    "dbus/arc_oemcrypto_client.cc",
+    "dbus/arc_oemcrypto_client.h",
     "dbus/audio_node.cc",
     "dbus/audio_node.h",
     "dbus/auth_policy_client.cc",
@@ -159,8 +163,12 @@ component("chromeos") {
     "dbus/debug_daemon_client.h",
     "dbus/easy_unlock_client.cc",
     "dbus/easy_unlock_client.h",
+    "dbus/fake_arc_midis_client.cc",
+    "dbus/fake_arc_midis_client.h",
     "dbus/fake_arc_obb_mounter_client.cc",
     "dbus/fake_arc_obb_mounter_client.h",
+    "dbus/fake_arc_oemcrypto_client.cc",
+    "dbus/fake_arc_oemcrypto_client.h",
     "dbus/fake_auth_policy_client.cc",
     "dbus/fake_auth_policy_client.h",
     "dbus/fake_cras_audio_client.cc",
@@ -491,6 +499,7 @@ component("chromeos") {
 
 copy("dbus_service_files") {
   sources = [
+    "dbus/services/org.chromium.DisplayService.conf",
     "dbus/services/org.chromium.KioskAppService.conf",
     "dbus/services/org.chromium.LibCrosService.conf",
     "dbus/services/org.chromium.LivenessService.conf",

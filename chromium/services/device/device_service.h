@@ -7,7 +7,6 @@
 
 #include "base/memory/ref_counted.h"
 #include "device/screen_orientation/public/interfaces/screen_orientation.mojom.h"
-#include "device/sensors/public/interfaces/motion.mojom.h"
 #include "device/sensors/public/interfaces/orientation.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/device/public/interfaces/battery_monitor.mojom.h"
@@ -15,6 +14,7 @@
 #include "services/device/public/interfaces/nfc_provider.mojom.h"
 #include "services/device/public/interfaces/power_monitor.mojom.h"
 #include "services/device/public/interfaces/sensor_provider.mojom.h"
+#include "services/device/public/interfaces/serial.mojom.h"
 #include "services/device/public/interfaces/time_zone_monitor.mojom.h"
 #include "services/device/public/interfaces/vibration_manager.mojom.h"
 #include "services/device/public/interfaces/wake_lock_provider.mojom.h"
@@ -73,8 +73,6 @@ class DeviceService : public service_manager::Service {
 
   void BindFingerprintRequest(mojom::FingerprintRequest request);
 
-  void BindMotionSensorRequest(mojom::MotionSensorRequest request);
-
   void BindOrientationSensorRequest(mojom::OrientationSensorRequest request);
 
   void BindOrientationAbsoluteSensorRequest(
@@ -96,6 +94,11 @@ class DeviceService : public service_manager::Service {
   void BindTimeZoneMonitorRequest(mojom::TimeZoneMonitorRequest request);
 
   void BindWakeLockProviderRequest(mojom::WakeLockProviderRequest request);
+
+  void BindSerialDeviceEnumeratorRequest(
+      mojom::SerialDeviceEnumeratorRequest request);
+
+  void BindSerialIoHandlerRequest(mojom::SerialIoHandlerRequest request);
 
   std::unique_ptr<PowerMonitorMessageBroadcaster>
       power_monitor_message_broadcaster_;

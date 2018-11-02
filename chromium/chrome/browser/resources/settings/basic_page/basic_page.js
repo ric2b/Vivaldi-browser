@@ -37,6 +37,14 @@ Polymer({
       },
     },
 
+    showChangePassword: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.valueExists('changePasswordEnabled') &&
+            loadTimeData.getBoolean('changePasswordEnabled');
+      },
+    },
+
     /**
      * Dictionary defining page visibility.
      * @type {!GuestModePageVisibility}
@@ -99,9 +107,13 @@ Polymer({
   attached: function() {
     this.currentRoute_ = settings.getCurrentRoute();
 
-    this.addEventListener('chrome-cleanup-dismissed', function(e) {
+    this.addEventListener('chrome-cleanup-dismissed', e => {
       this.showChromeCleanup = false;
-    }.bind(this));
+    });
+
+    this.addEventListener('change-password-clicked', e => {
+      this.showChangePassword = false;
+    });
 
     if (settings.AndroidAppsBrowserProxyImpl) {
       cr.addWebUIListener(
@@ -247,9 +259,9 @@ Polymer({
    */
   advancedToggleExpandedChanged_: function() {
     if (this.advancedToggleExpanded) {
-      this.async(function() {
+      this.async(() => {
         this.$$('#advancedPageTemplate').get();
-      }.bind(this));
+      });
     }
   },
 

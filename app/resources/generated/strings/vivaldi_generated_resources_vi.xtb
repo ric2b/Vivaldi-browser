@@ -23,7 +23,6 @@
 <translation id="1278049586634282054">Kiểm tra:</translation>
 <translation id="1297175357211070620">Máy in đích</translation>
 <translation id="1303101771013849280">Tập tin dấu trang HTML</translation>
-<translation id="1303319084542230573">Thêm máy in</translation>
 <translation id="1317502925920562130">Đây Có phải là Trang chủ Bạn Muốn?</translation>
 <translation id="1368832886055348810">Trái sang Phải</translation>
 <translation id="1430915738399379752">In</translation>
@@ -98,7 +97,6 @@
 <translation id="2439110203301358333">Một chương trình khác trên máy tính của bạn đã thêm một tiện ích có thể thay đổi cách Vivaldi hoạt động.</translation>
 <translation id="2445081178310039857">Thư mục gốc của tiện ích là bắt buộc.</translation>
 <translation id="2470702053775288986">Tiện ích không được hỗ trợ đã bị tắt</translation>
-<translation id="2498436043474441766">Thêm Máy in</translation>
 <translation id="2501797496290880632">Nhập phím tắt</translation>
 <translation id="2509495747794740764">Số tỷ lệ phải là một số giữa 10 và 200.</translation>
 <translation id="253557089021624350">Số lượng giữ kết nối</translation>
@@ -215,10 +213,6 @@
 <translation id="4240511609794012987">Bộ nhớ dùng chung</translation>
 <translation id="4256316378292851214">Lưu &amp;Video Thành...</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K hiện có)</translation>
-<translation id="431291515148403474">Việc thêm máy in vào Google Cloud Print sẽ cho phép bạn in từ
-        bất kỳ đâu, in ra bất kỳ nơi đâu. Chia sẻ máy in với bất cứ ai bạn chọn và
-        in nội dung cho họ từ Vivaldi, điện thoại, máy tính bảng, PC hoặc bất kỳ
-        thiết bị kết nối web nào khác.</translation>
 <translation id="4345587454538109430">Định cấu hình...</translation>
 <translation id="4348766275249686434">Thu thập lỗi</translation>
 <translation id="4363771538994847871">Không tìm thấy đích Truyền nào. Bạn cần trợ giúp?</translation>
@@ -262,9 +256,6 @@
 <translation id="5116628073786783676">Lư&amp;u Âm thanh Thành...</translation>
 <translation id="5143374789336132547">Tiện ích "<ph name="EXTENSION_NAME" />" đã thay đổi trang nào sẽ hiển thị khi bạn nhấp vào nút Trang chủ.</translation>
 <translation id="5154108062446123722">Thiết lập nâng cao cho <ph name="PRINTING_DESTINATION" /></translation>
-<translation id="5154383699530644092">Bạn có thể thêm máy in vào máy tính bằng cách nhấp vào nút "Thêm máy in"
-        bên dưới. Nếu bạn không có máy in nào để thêm, bạn vẫn có thể lưu
-        một bản PDF hoặc lưu vào Google Drive.</translation>
 <translation id="5154917547274118687">Bộ nhớ</translation>
 <translation id="5171343362375269016">Đã hoán đổi Bộ nhớ</translation>
 <translation id="5233019165164992427">Cổng gỡ lỗi NaCl</translation>

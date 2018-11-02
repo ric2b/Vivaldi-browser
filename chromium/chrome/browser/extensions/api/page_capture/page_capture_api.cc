@@ -11,6 +11,8 @@
 #include "base/bind_helpers.h"
 #include "base/files/file_util.h"
 #include "base/memory/ptr_util.h"
+#include "base/task_scheduler/post_task.h"
+#include "base/threading/thread_restrictions.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -46,6 +48,17 @@ const char kTabClosedError[] = "Cannot find the tab for this request.";
 #if defined(OS_CHROMEOS)
 const char kUserDenied[] = "User denied request.";
 #endif
+
+constexpr base::TaskTraits kCreateTemporaryFileTaskTraits = {
+    // Requires IO.
+    base::MayBlock(),
+
+    // TaskPriority: Inherit.
+
+    // TaskShutdownBehavior: TemporaryFileCreated*() called from
+    // CreateTemporaryFile() might access global variable, so use
+    // SKIP_ON_SHUTDOWN. See ShareableFileReference::GetOrCreate().
+    base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN};
 
 void ClearFileReferenceOnIOThread(
     scoped_refptr<storage::ShareableFileReference>) {}
@@ -100,8 +113,8 @@ bool PageCaptureSaveAsMHTMLFunction::RunAsync() {
   }
 #endif
 
-  BrowserThread::PostTask(
-      BrowserThread::FILE, FROM_HERE,
+  base::PostTaskWithTraits(
+      FROM_HERE, kCreateTemporaryFileTaskTraits,
       base::BindOnce(&PageCaptureSaveAsMHTMLFunction::CreateTemporaryFile,
                      this));
   return true;
@@ -133,8 +146,8 @@ bool PageCaptureSaveAsMHTMLFunction::OnMessageReceived(
 void PageCaptureSaveAsMHTMLFunction::ResolvePermissionRequest(
     const PermissionIDSet& allowed_permissions) {
   if (allowed_permissions.ContainsID(APIPermission::kPageCapture)) {
-    BrowserThread::PostTask(
-        BrowserThread::FILE, FROM_HERE,
+    base::PostTaskWithTraits(
+        FROM_HERE, kCreateTemporaryFileTaskTraits,
         base::BindOnce(&PageCaptureSaveAsMHTMLFunction::CreateTemporaryFile,
                        this));
   } else {
@@ -144,30 +157,41 @@ void PageCaptureSaveAsMHTMLFunction::ResolvePermissionRequest(
 #endif
 
 void PageCaptureSaveAsMHTMLFunction::CreateTemporaryFile() {
-  DCHECK_CURRENTLY_ON(BrowserThread::FILE);
+  base::ThreadRestrictions::AssertIOAllowed();
   bool success = base::CreateTemporaryFile(&mhtml_path_);
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&PageCaptureSaveAsMHTMLFunction::TemporaryFileCreated,
+      base::BindOnce(&PageCaptureSaveAsMHTMLFunction::TemporaryFileCreatedOnIO,
                      this, success));
 }
 
-void PageCaptureSaveAsMHTMLFunction::TemporaryFileCreated(bool success) {
-  if (BrowserThread::CurrentlyOn(BrowserThread::IO)) {
-    if (success) {
-      // Setup a ShareableFileReference so the temporary file gets deleted
-      // once it is no longer used.
-      mhtml_file_ = ShareableFileReference::GetOrCreate(
-          mhtml_path_, ShareableFileReference::DELETE_ON_FINAL_RELEASE,
-          BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE).get());
-    }
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
-        base::BindOnce(&PageCaptureSaveAsMHTMLFunction::TemporaryFileCreated,
-                       this, success));
-    return;
-  }
+void PageCaptureSaveAsMHTMLFunction::TemporaryFileCreatedOnIO(bool success) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  if (success) {
+    // Setup a ShareableFileReference so the temporary file gets deleted
+    // once it is no longer used.
+    mhtml_file_ = ShareableFileReference::GetOrCreate(
+        mhtml_path_, ShareableFileReference::DELETE_ON_FINAL_RELEASE,
+        base::CreateSequencedTaskRunnerWithTraits(
+            {// Requires IO.
+             base::MayBlock(),
 
+             // TaskPriority: Inherit.
+
+             // Because we are using DELETE_ON_FINAL_RELEASE here, the
+             // storage::ScopedFile inside ShareableFileReference requires
+             // a shutdown blocking task runner to ensure that its deletion
+             // task runs.
+             base::TaskShutdownBehavior::BLOCK_SHUTDOWN})
+            .get());
+  }
+  BrowserThread::PostTask(
+      BrowserThread::UI, FROM_HERE,
+      base::BindOnce(&PageCaptureSaveAsMHTMLFunction::TemporaryFileCreatedOnUI,
+                     this, success));
+}
+
+void PageCaptureSaveAsMHTMLFunction::TemporaryFileCreatedOnUI(bool success) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (!success) {
     ReturnFailure(kTemporaryFileError);

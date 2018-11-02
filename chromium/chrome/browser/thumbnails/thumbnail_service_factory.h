@@ -16,6 +16,10 @@ namespace thumbnails {
 class ThumbnailService;
 }
 
+namespace content {
+class BrowserContext;
+}
+
 class ThumbnailServiceFactory
     : public RefcountedBrowserContextKeyedServiceFactory {
  public:
@@ -40,6 +44,11 @@ class ThumbnailServiceFactory
   // BrowserContextKeyedServiceFactory:
   scoped_refptr<RefcountedKeyedService> BuildServiceInstanceFor(
       content::BrowserContext* profile) const override;
+
+  // NOTE(pettern@vivaldi.com):
+  // Vivaldi needs to be able to retrieve thumbnails even in private windows.
+  content::BrowserContext* GetBrowserContextToUse(
+      content::BrowserContext* context) const override;
 
   DISALLOW_COPY_AND_ASSIGN(ThumbnailServiceFactory);
 };

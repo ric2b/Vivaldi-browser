@@ -1,6 +1,7 @@
 include_rules = [
     "+base/callback.h",
     "+base/callback_forward.h",
+    "+base/containers/flat_set.h",
     "+base/location.h",
     "+base/logging.h",
     "+base/metrics",
@@ -12,21 +13,18 @@ include_rules = [
     "+cc",
     "-cc/blink",
     "+components/viz/common",
-    "-core",
-    "-modules",
-    # TODO(toyoshim): Remove following media/midi direct dependency in public
-    # interface once Web MIDI starts calling the Mojo service inside Blink.
-    # http://crbug.com/582327
-    "+media/midi/midi_service.mojom-shared.h",
     "+mojo/public",
     "+net/http",
-    "+platform",
-    "+platform/weborigin",
     "+public/platform",
     "-public/web",
+    "+services/network/public/interfaces",
     "+services/service_manager/public/interfaces",
+    "+storage/public/interfaces",
     "+third_party/skia",
     "+ui/gfx",
     "+url",
     "-web",
+
+    # Allowed only inside INSIDE_BLINK
+    "+platform",
 ]

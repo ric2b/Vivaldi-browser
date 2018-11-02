@@ -61,6 +61,7 @@
 #include "chrome/browser/chromeos/policy/device_policy_builder.h"
 #include "chrome/browser/chromeos/policy/device_policy_cros_browser_test.h"
 #include "chrome/browser/chromeos/policy/proto/chrome_device_policy.pb.h"
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/extensions/crx_installer.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/updater/chromeos_extension_cache_delegate.h"
@@ -833,6 +834,9 @@ class ExtensionInstallObserver : public content::NotificationObserver,
     DCHECK_EQ(chrome::NOTIFICATION_PROFILE_CREATED, type);
 
     Profile* profile = content::Source<Profile>(source).ptr();
+    // Ignore lock screen apps profile.
+    if (chromeos::ProfileHelper::IsLockScreenAppProfile(profile))
+      return;
     registry_ = extensions::ExtensionRegistry::Get(profile);
 
     // Check if extension is already installed with newly created profile.
@@ -1043,7 +1047,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, StartSession) {
       SigninManagerFactory::GetForProfile(profile)->IsAuthenticated());
 }
 
-IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, FullscreenDisallowed) {
+IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, FullscreenAllowed) {
   UploadAndInstallDeviceLocalAccountPolicy();
   AddPublicSessionToDevicePolicy(kAccountId1);
 
@@ -1059,10 +1063,10 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, FullscreenDisallowed) {
   BrowserWindow* browser_window = browser->window();
   ASSERT_TRUE(browser_window);
 
-  // Verify that an attempt to enter fullscreen mode is denied.
+  // Verify that an attempt to enter fullscreen mode is allowed.
   EXPECT_FALSE(browser_window->IsFullscreen());
   chrome::ToggleFullscreenMode(browser);
-  EXPECT_FALSE(browser_window->IsFullscreen());
+  EXPECT_TRUE(browser_window->IsFullscreen());
 }
 
 IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, ExtensionsUncached) {
@@ -1407,7 +1411,7 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, ExternalData) {
       PolicyNamespace(POLICY_DOMAIN_CHROME, std::string()));
   policy_entry = policies.Get(key::kUserAvatarImage);
   ASSERT_TRUE(policy_entry);
-  EXPECT_TRUE(base::Value::Equals(metadata.get(), policy_entry->value.get()));
+  EXPECT_EQ(*metadata, *policy_entry->value);
   ASSERT_TRUE(policy_entry->external_data_fetcher);
 
   // Retrieve the external data via the ProfilePolicyConnector. The retrieval
@@ -2279,9 +2283,8 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, PolicyForExtensions) {
 
   // Verify that the app policy was set.
   base::Value expected_value("policy test value one");
-  EXPECT_TRUE(base::Value::Equals(
-      &expected_value,
-      policy_service->GetPolicies(ns).GetValue("string")));
+  EXPECT_EQ(expected_value,
+            *policy_service->GetPolicies(ns).GetValue("string"));
 
   // Now update the policy at the server.
   ASSERT_TRUE(test_server_.UpdatePolicyData(
@@ -2304,9 +2307,8 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, PolicyForExtensions) {
 
   // Verify that the app policy was updated.
   base::Value expected_new_value("policy test value two");
-  EXPECT_TRUE(base::Value::Equals(
-      &expected_new_value,
-      policy_service->GetPolicies(ns).GetValue("string")));
+  EXPECT_EQ(expected_new_value,
+            *policy_service->GetPolicies(ns).GetValue("string"));
 }
 
 class TermsOfServiceDownloadTest : public DeviceLocalAccountTest,

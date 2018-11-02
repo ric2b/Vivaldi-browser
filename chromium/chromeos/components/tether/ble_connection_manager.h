@@ -17,6 +17,7 @@
 #include "chromeos/components/tether/ble_advertisement_device_queue.h"
 #include "chromeos/components/tether/ble_advertiser.h"
 #include "chromeos/components/tether/ble_scanner.h"
+#include "chromeos/components/tether/connection_priority.h"
 #include "chromeos/components/tether/proto/tether.pb.h"
 #include "components/cryptauth/remote_device.h"
 #include "components/cryptauth/secure_channel.h"
@@ -24,6 +25,10 @@
 namespace cryptauth {
 class CryptAuthService;
 }  // namespace cryptauth
+
+namespace device {
+class BluetoothDevice;
+}  // namespace device
 
 namespace chromeos {
 
@@ -114,8 +119,8 @@ class BleConnectionManager : public BleScanner::Observer {
 
   // BleScanner::Observer:
   void OnReceivedAdvertisementFromDevice(
-      const std::string& device_address,
-      const cryptauth::RemoteDevice& remote_device) override;
+      const cryptauth::RemoteDevice& remote_device,
+      device::BluetoothDevice* bluetooth_device) override;
 
  protected:
   void SendMessageReceivedEvent(cryptauth::RemoteDevice remote_device,
@@ -146,12 +151,14 @@ class BleConnectionManager : public BleScanner::Observer {
 
     void RegisterConnectionReason(const MessageType& connection_reason);
     void UnregisterConnectionReason(const MessageType& connection_reason);
+    ConnectionPriority GetConnectionPriority();
     bool HasReasonForConnection() const;
 
     bool HasEstablishedConnection() const;
     cryptauth::SecureChannel::Status GetStatus() const;
 
     void StartConnectionAttemptTimer(bool use_short_error_timeout);
+    void StopConnectionAttemptTimer();
     bool HasSecureChannel();
     void SetSecureChannel(
         std::unique_ptr<cryptauth::SecureChannel> secure_channel);
@@ -191,6 +198,7 @@ class BleConnectionManager : public BleScanner::Observer {
   void UpdateAdvertisementQueue();
 
   void StartConnectionAttempt(const cryptauth::RemoteDevice& remote_device);
+  void EndUnsuccessfulAttempt(const cryptauth::RemoteDevice& remote_device);
   void StopConnectionAttemptAndMoveToEndOfQueue(
       const cryptauth::RemoteDevice& remote_device);
 

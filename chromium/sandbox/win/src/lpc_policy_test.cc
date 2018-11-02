@@ -22,6 +22,19 @@
 
 namespace sandbox {
 
+namespace {
+
+bool CsrssDisconnectSupported() {
+  // This functionality has not been verified on versions before Win10.
+  if (base::win::GetVersion() < base::win::VERSION_WIN10)
+    return false;
+
+  // Does not work on 32-bit on x64 (ie Wow64).
+  return (base::win::OSInfo::GetInstance()->wow64_status() !=
+          base::win::OSInfo::WOW64_ENABLED);
+}
+
+}  // namespace
 // Converts LCID to std::wstring for passing to sbox tests.
 std::wstring LcidToWString(LCID lcid) {
   wchar_t buff[10] = {0};
@@ -187,8 +200,7 @@ TEST(LpcPolicyTest, TestValidProcessHeaps) {
 // All processes should have a shared heap with csrss.exe. This test ensures
 // that this heap can be found.
 TEST(LpcPolicyTest, TestCanFindCsrPortHeap) {
-  if (base::win::GetVersion() < base::win::VERSION_WIN10) {
-    // This functionality has not been verified on versions before Win10.
+  if (!CsrssDisconnectSupported()) {
     return;
   }
   HANDLE csr_port_handle = sandbox::FindCsrPortHeap();
@@ -196,7 +208,7 @@ TEST(LpcPolicyTest, TestCanFindCsrPortHeap) {
 }
 
 TEST(LpcPolicyTest, TestHeapFlags) {
-  if (base::win::GetVersion() < base::win::VERSION_WIN10) {
+  if (!CsrssDisconnectSupported()) {
     // This functionality has not been verified on versions before Win10.
     return;
   }

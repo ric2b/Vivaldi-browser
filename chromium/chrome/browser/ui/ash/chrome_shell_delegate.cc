@@ -47,12 +47,11 @@
 #include "chrome/browser/sync/sync_error_notifier_factory_ash.h"
 #include "chrome/browser/ui/ash/chrome_keyboard_ui.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
-#include "chrome/browser/ui/ash/launcher/launcher_context_menu.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
+#include "chrome/browser/ui/ash/networking_config_delegate_chromeos.h"
 #include "chrome/browser/ui/ash/palette_delegate_chromeos.h"
 #include "chrome/browser/ui/ash/session_controller_client.h"
 #include "chrome/browser/ui/ash/session_util.h"
-#include "chrome/browser/ui/ash/system_tray_delegate_chromeos.h"
 #include "chrome/browser/ui/aura/accessibility/automation_manager_aura.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -75,14 +74,11 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/url_constants.h"
+#include "services/ui/public/cpp/input_devices/input_device_controller_client.h"
 #include "ui/aura/window.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "url/url_constants.h"
-
-#if defined(USE_OZONE)
-#include "services/ui/public/cpp/input_devices/input_device_controller_client.h"
-#endif
 
 using chromeos::AccessibilityManager;
 
@@ -144,29 +140,9 @@ class AccessibilityDelegateImpl : public ash::AccessibilityDelegate {
     return chromeos::MagnificationManager::Get()->SetMagnifierEnabled(enabled);
   }
 
-  void SetMagnifierType(ash::MagnifierType type) override {
-    DCHECK(chromeos::MagnificationManager::Get());
-    return chromeos::MagnificationManager::Get()->SetMagnifierType(type);
-  }
-
   bool IsMagnifierEnabled() const override {
     DCHECK(chromeos::MagnificationManager::Get());
     return chromeos::MagnificationManager::Get()->IsMagnifierEnabled();
-  }
-
-  ash::MagnifierType GetMagnifierType() const override {
-    DCHECK(chromeos::MagnificationManager::Get());
-    return chromeos::MagnificationManager::Get()->GetMagnifierType();
-  }
-
-  void SetLargeCursorEnabled(bool enabled) override {
-    DCHECK(AccessibilityManager::Get());
-    return AccessibilityManager::Get()->EnableLargeCursor(enabled);
-  }
-
-  bool IsLargeCursorEnabled() const override {
-    DCHECK(AccessibilityManager::Get());
-    return AccessibilityManager::Get()->IsLargeCursorEnabled();
   }
 
   void SetAutoclickEnabled(bool enabled) override {
@@ -398,7 +374,9 @@ class AccessibilityDelegateImpl : public ash::AccessibilityDelegate {
 
 }  // namespace
 
-ChromeShellDelegate::ChromeShellDelegate() {
+ChromeShellDelegate::ChromeShellDelegate()
+    : networking_config_delegate_(
+          base::MakeUnique<chromeos::NetworkingConfigDelegateChromeos>()) {
   PlatformInit();
 }
 
@@ -505,23 +483,6 @@ void ChromeShellDelegate::ShelfShutdown() {
   launcher_controller_.reset();
 }
 
-ui::MenuModel* ChromeShellDelegate::CreateContextMenu(
-    ash::Shelf* shelf,
-    const ash::ShelfItem* item) {
-  // Don't show context menu for exclusive app runtime mode.
-  if (chrome::IsRunningInAppMode())
-    return nullptr;
-
-  // No context menu before |launcher_controller_| is created. This is possible
-  // now because ShelfInit() is called by session state change via mojo
-  // asynchronously. Context menu could be triggered when the mojo message is
-  // still in-fly and crashes.
-  if (!launcher_controller_)
-    return nullptr;
-
-  return LauncherContextMenu::Create(launcher_controller_.get(), item, shelf);
-}
-
 ash::GPUSupport* ChromeShellDelegate::CreateGPUSupport() {
   // Chrome uses real GPU support.
   return new ash::GPUSupportImpl;
@@ -553,36 +514,17 @@ gfx::Image ChromeShellDelegate::GetDeprecatedAcceleratorImage() const {
       IDR_BLUETOOTH_KEYBOARD);
 }
 
-PrefService* ChromeShellDelegate::GetActiveUserPrefService() const {
-  const user_manager::User* const user =
-      user_manager::UserManager::Get()->GetActiveUser();
-  if (!user)
-    return nullptr;
-
-  // The user's profile might not be ready yet, so we must check for that too.
-  Profile* profile = chromeos::ProfileHelper::Get()->GetProfileByUser(user);
-  return profile ? profile->GetPrefs() : nullptr;
+bool ChromeShellDelegate::GetTouchscreenEnabled(
+    ash::TouchscreenEnabledSource source) const {
+  return chromeos::system::InputDeviceSettings::Get()->GetTouchscreenEnabled(
+      source);
 }
 
-PrefService* ChromeShellDelegate::GetLocalStatePrefService() const {
-  return g_browser_process->local_state();
-}
-
-bool ChromeShellDelegate::IsTouchscreenEnabledInPrefs(
-    bool use_local_state) const {
-  return chromeos::system::InputDeviceSettings::Get()
-      ->IsTouchscreenEnabledInPrefs(use_local_state);
-}
-
-void ChromeShellDelegate::SetTouchscreenEnabledInPrefs(bool enabled,
-                                                       bool use_local_state) {
-  chromeos::system::InputDeviceSettings::Get()->SetTouchscreenEnabledInPrefs(
-      enabled, use_local_state);
-}
-
-void ChromeShellDelegate::UpdateTouchscreenStatusFromPrefs() {
-  chromeos::system::InputDeviceSettings::Get()
-      ->UpdateTouchscreenStatusFromPrefs();
+void ChromeShellDelegate::SetTouchscreenEnabled(
+    bool enabled,
+    ash::TouchscreenEnabledSource source) {
+  chromeos::system::InputDeviceSettings::Get()->SetTouchscreenEnabled(enabled,
+                                                                      source);
 }
 
 void ChromeShellDelegate::ToggleTouchpad() {
@@ -610,8 +552,9 @@ ChromeShellDelegate::CreatePaletteDelegate() {
   return base::MakeUnique<chromeos::PaletteDelegateChromeOS>();
 }
 
-ash::SystemTrayDelegate* ChromeShellDelegate::CreateSystemTrayDelegate() {
-  return chromeos::CreateSystemTrayDelegate();
+ash::NetworkingConfigDelegate*
+ChromeShellDelegate::GetNetworkingConfigDelegate() {
+  return networking_config_delegate_.get();
 }
 
 std::unique_ptr<ash::WallpaperDelegate>
@@ -619,12 +562,10 @@ ChromeShellDelegate::CreateWallpaperDelegate() {
   return base::WrapUnique(chromeos::CreateWallpaperDelegate());
 }
 
-#if defined(USE_OZONE)
 ui::InputDeviceControllerClient*
 ChromeShellDelegate::GetInputDeviceControllerClient() {
   return g_browser_process->platform_part()->GetInputDeviceControllerClient();
 }
-#endif
 
 void ChromeShellDelegate::Observe(int type,
                                   const content::NotificationSource& source,

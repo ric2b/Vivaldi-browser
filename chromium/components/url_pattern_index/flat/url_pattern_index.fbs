@@ -79,13 +79,21 @@ table UrlRule {
   anchor_right : AnchorType = NONE;
 
   // The list of domains to be included/excluded from the filter's affected set.
-  // Kept sorted for fast matching. Should either be null or have at least a
-  // single element.
+  // Should either be null or have at least a single element. The domains
+  // should be in lower-case and kept sorted as defined by
+  // url_pattern_index::CompareDomains.
   domains_included : [string];
   domains_excluded : [string];
 
   // A URL pattern in the format defined by |url_pattern_type|.
   url_pattern : string;
+
+  // An id which uniquely identifies the rule. Clients must ensure uniqueness if
+  // they use this field.
+  id : uint;
+
+  // Priority of the rule. Larger the value, greater the priority.
+  priority : uint;
 }
 
 // Contains an N-gram (acting as a key in a hash table) and a list of URL rules

@@ -33,9 +33,11 @@
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_mediator.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_collection_cells.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_collection_view_background.h"
+#import "ios/chrome/browser/ui/bookmarks/bookmark_home_waiting_view.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_promo_cell.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_signin_promo_cell.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
+#import "ios/chrome/browser/ui/sync/synced_sessions_bridge.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
@@ -78,16 +80,11 @@ CGFloat rowMarginTablet = 24.0;
 CGFloat rowHeight = 48.0;
 // Minimal acceptable favicon size, in points.
 CGFloat minFaviconSizePt = 16;
-
-// Delay in seconds to which the empty background view will be shown when the
-// collection view is empty.
-// This delay should not be too small to let enough time to load bookmarks
-// from network.
-const NSTimeInterval kShowEmptyBookmarksBackgroundRefreshDelay = 1.0;
 }
 
 @interface BookmarkCollectionView ()<BookmarkPromoCellDelegate,
                                      SigninPromoViewConsumer,
+                                     SyncedSessionsObserver,
                                      UICollectionViewDataSource,
                                      UICollectionViewDelegateFlowLayout,
                                      UIGestureRecognizerDelegate> {
@@ -98,6 +95,9 @@ const NSTimeInterval kShowEmptyBookmarksBackgroundRefreshDelay = 1.0;
 
   // True if the promo is visible.
   BOOL _promoVisible;
+
+  // True if the loading spinner background is visible.
+  BOOL _spinnerVisible;
 
   // Mediator, helper for the sign-in promo view.
   SigninPromoViewMediator* _signinPromoViewMediator;
@@ -111,6 +111,9 @@ const NSTimeInterval kShowEmptyBookmarksBackgroundRefreshDelay = 1.0;
   std::map<IntegerPair, base::CancelableTaskTracker::TaskId> _faviconLoadTasks;
   // Task tracker used for async favicon loads.
   base::CancelableTaskTracker _faviconTaskTracker;
+  // Observer to keep track of the signin and syncing status.
+  std::unique_ptr<synced_sessions::SyncedSessionsObserverBridge>
+      _syncedSessionsObserver;
 }
 
 // Redefined to be readwrite.
@@ -226,6 +229,8 @@ const NSTimeInterval kShowEmptyBookmarksBackgroundRefreshDelay = 1.0;
 
     [self setupViews];
     [self updateCollectionView];
+    _syncedSessionsObserver.reset(
+        new synced_sessions::SyncedSessionsObserverBridge(self, _browserState));
   }
   return self;
 }
@@ -259,7 +264,7 @@ const NSTimeInterval kShowEmptyBookmarksBackgroundRefreshDelay = 1.0;
     return self.collectionView.contentOffset.y;
 
   // In short landscape mode and portrait mode, there are 2 cells per row.
-  if ([self wideLandscapeMode])
+  if (![self wideLandscapeMode])
     return self.collectionView.contentOffset.y;
 
   // In wide landscape mode, there are 3 cells per row.
@@ -733,35 +738,29 @@ const NSTimeInterval kShowEmptyBookmarksBackgroundRefreshDelay = 1.0;
 // The size of the cell at |indexPath|.
 - (CGSize)cellSizeForIndexPath:(NSIndexPath*)indexPath {
   if ([self isPromoSection:indexPath.section]) {
-    UICollectionViewCell* cell =
-        [self.collectionView cellForItemAtIndexPath:indexPath];
-    if (!base::ios::IsRunningOnIOS10OrLater() &&
-        [cell isKindOfClass:[BookmarkSigninPromoCell class]]) {
-      // With iOS 9, UICollectionView keeps asking the size of the cell, if the
-      // current cell size is updated in this method. To avoid this, a new cell
-      // should be created to not change the current cell.
-      // See crbug.com/754874
-      cell = nil;
+    UICollectionViewCell* cellToMeasureHeight = nil;
+    // -[UICollectionView
+    // dequeueReusableCellWithReuseIdentifier:forIndexPath:] cannot be used
+    // here since this method is called by -[id<UICollectionViewDelegate>
+    // collectionView:layout:sizeForItemAtIndexPath:]. This would generate
+    // crash: SIGFPE, EXC_I386_DIV.
+    // The cell used currently by UICollectionView should not be used to compute
+    // the size. There is an issue with iOS 9 to modify the height of the
+    // current cell while being asked for its size. This leads to an infinite
+    // loop.
+    if (experimental_flags::IsSigninPromoEnabled()) {
+      DCHECK(_signinPromoViewMediator);
+      BookmarkSigninPromoCell* signinPromoCell =
+          [[BookmarkSigninPromoCell alloc]
+              initWithFrame:CGRectMake(0, 0, 1000, 1000)];
+      [[_signinPromoViewMediator createConfigurator]
+          configureSigninPromoView:signinPromoCell.signinPromoView];
+      cellToMeasureHeight = signinPromoCell;
+    } else {
+      cellToMeasureHeight = [[BookmarkPromoCell alloc] init];
     }
-    if (!cell) {
-      // -[UICollectionView
-      // dequeueReusableCellWithReuseIdentifier:forIndexPath:] cannot be used
-      // here since this method is called by -[id<UICollectionViewDelegate>
-      // collectionView:layout:sizeForItemAtIndexPath:]. This would generate
-      // crash: SIGFPE, EXC_I386_DIV.
-      if (experimental_flags::IsSigninPromoEnabled()) {
-        DCHECK(_signinPromoViewMediator);
-        BookmarkSigninPromoCell* signinPromoCell =
-            [[BookmarkSigninPromoCell alloc]
-                initWithFrame:CGRectMake(0, 0, 1000, 1000)];
-        [[_signinPromoViewMediator createConfigurator]
-            configureSigninPromoView:signinPromoCell.signinPromoView];
-        cell = signinPromoCell;
-      } else {
-        cell = [[BookmarkPromoCell alloc] init];
-      }
-    }
-    return PreferredCellSizeForWidth(cell, CGRectGetWidth(self.bounds));
+    return PreferredCellSizeForWidth(cellToMeasureHeight,
+                                     CGRectGetWidth(self.bounds));
   }
   DCHECK(![self isPromoSection:indexPath.section]);
   UIEdgeInsets insets = [self insetForSectionAtIndex:indexPath.section];
@@ -774,6 +773,11 @@ const NSTimeInterval kShowEmptyBookmarksBackgroundRefreshDelay = 1.0;
   // section.
   if (section == 0)
     return NO;
+
+  if (section - 1 == self.promoSection &&
+      experimental_flags::IsSigninPromoEnabled()) {
+    return NO;
+  }
 
   if ([self numberOfItemsInSection:(section - 1)] == 0)
     return NO;
@@ -911,21 +915,6 @@ const NSTimeInterval kShowEmptyBookmarksBackgroundRefreshDelay = 1.0;
 
 #pragma mark - empty background
 
-// Schedules showing or hiding the empty bookmarks background view if the
-// collection view is empty by calling showEmptyBackgroundIfNeeded after
-// kShowEmptyBookmarksBackgroundRefreshDelay.
-// Multiple call to this method will cancel previous scheduled call to
-// showEmptyBackgroundIfNeeded before scheduling a new one.
-- (void)scheduleEmptyBackgroundVisibilityUpdate {
-  [NSObject cancelPreviousPerformRequestsWithTarget:self
-                                           selector:@selector
-                                           (updateEmptyBackgroundVisibility)
-                                             object:nil];
-  [self performSelector:@selector(updateEmptyBackgroundVisibility)
-             withObject:nil
-             afterDelay:kShowEmptyBookmarksBackgroundRefreshDelay];
-}
-
 - (BOOL)isCollectionViewEmpty {
   BOOL collectionViewIsEmpty = YES;
   const NSInteger numberOfSections = [self numberOfSections];
@@ -938,18 +927,60 @@ const NSTimeInterval kShowEmptyBookmarksBackgroundRefreshDelay = 1.0;
   return collectionViewIsEmpty;
 }
 
-// Shows/hides empty bookmarks background view if the collections view is empty.
-- (void)updateEmptyBackgroundVisibility {
-  const BOOL showEmptyBackground =
-      [self isCollectionViewEmpty] && ![self shouldShowPromoCell];
-  [self setEmptyBackgroundVisible:showEmptyBackground];
-}
-
 // Shows/hides empty bookmarks background view with an animation.
 - (void)setEmptyBackgroundVisible:(BOOL)emptyBackgroundVisible {
   [UIView beginAnimations:@"alpha" context:NULL];
   self.emptyCollectionBackgroundView.alpha = emptyBackgroundVisible ? 1 : 0;
   [UIView commitAnimations];
+}
+
+// If the collection view is not empty, hide the empty bookmarks and loading
+// spinner background. If the collection view is empty, shows the loading
+// spinner background (if syncing) or the empty bookmarks background (if not
+// syncing).
+- (void)showEmptyOrLoadingSpinnerBackgroundIfNeeded {
+  const BOOL isEmpty =
+      [self isCollectionViewEmpty] && ![self shouldShowPromoCell];
+  if (!isEmpty) {
+    [self hideLoadingSpinnerBackground];
+    [self hideEmptyBackground];
+    return;
+  }
+  if (_syncedSessionsObserver->IsSyncing()) {
+    [self showLoadingSpinnerBackground];
+    return;
+  }
+  [self showEmptyBackground];
+}
+
+// Shows loading spinner background view
+- (void)showLoadingSpinnerBackground {
+  if (!_spinnerVisible) {
+    BookmarkHomeWaitingView* spinnerView = [[BookmarkHomeWaitingView alloc]
+        initWithFrame:self.collectionView.bounds];
+    [spinnerView startWaiting];
+    self.collectionView.backgroundView = spinnerView;
+    [self setEmptyBackgroundVisible:NO];
+    _spinnerVisible = YES;
+  }
+}
+
+// Hides loading spinner background view
+- (void)hideLoadingSpinnerBackground {
+  if (_spinnerVisible) {
+    self.collectionView.backgroundView = self.emptyCollectionBackgroundView;
+    _spinnerVisible = NO;
+  }
+}
+
+- (void)showEmptyBackground {
+  [self hideLoadingSpinnerBackground];
+  [self setEmptyBackgroundVisible:YES];
+  self.collectionView.backgroundView = self.emptyCollectionBackgroundView;
+}
+
+- (void)hideEmptyBackground {
+  [self setEmptyBackgroundVisible:NO];
 }
 
 #pragma mark - UICollectionViewDataSource
@@ -960,12 +991,7 @@ const NSTimeInterval kShowEmptyBookmarksBackgroundRefreshDelay = 1.0;
       [self numberOfItemsInSection:section];
   const BOOL isCollectionViewEmpty = [self isCollectionViewEmpty];
   self.collectionView.scrollEnabled = !isCollectionViewEmpty;
-  if (isCollectionViewEmpty) {
-    [self scheduleEmptyBackgroundVisibilityUpdate];
-  } else {
-    // Hide empty bookmarks now.
-    [self setEmptyBackgroundVisible:NO];
-  }
+  [self showEmptyOrLoadingSpinnerBackgroundIfNeeded];
   return numberOfItemsInSection;
 }
 
@@ -974,12 +1000,7 @@ const NSTimeInterval kShowEmptyBookmarksBackgroundRefreshDelay = 1.0;
   const NSInteger numberOfSections = [self numberOfSections];
   const BOOL collectionViewIsEmpty = 0 == numberOfSections;
   self.collectionView.scrollEnabled = !collectionViewIsEmpty;
-  if (collectionViewIsEmpty) {
-    [self scheduleEmptyBackgroundVisibilityUpdate];
-  } else {
-    // Hide empty bookmarks now.
-    [self setEmptyBackgroundVisible:NO];
-  }
+  [self showEmptyOrLoadingSpinnerBackgroundIfNeeded];
   return numberOfSections;
 }
 
@@ -1294,6 +1315,15 @@ const NSTimeInterval kShowEmptyBookmarksBackgroundRefreshDelay = 1.0;
 
 - (BOOL)isPromoActive {
   return NO;
+}
+
+#pragma mark - Exposed to the SyncedSessionsObserver
+
+- (void)reloadSessions {
+}
+
+- (void)onSyncStateChanged {
+  [self showEmptyOrLoadingSpinnerBackgroundIfNeeded];
 }
 
 @end

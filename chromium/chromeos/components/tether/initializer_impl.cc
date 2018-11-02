@@ -8,8 +8,8 @@
 #include "chromeos/components/tether/active_host.h"
 #include "chromeos/components/tether/active_host_network_state_updater.h"
 #include "chromeos/components/tether/ble_advertisement_device_queue.h"
-#include "chromeos/components/tether/ble_advertiser.h"
 #include "chromeos/components/tether/ble_connection_manager.h"
+#include "chromeos/components/tether/ble_synchronizer.h"
 #include "chromeos/components/tether/crash_recovery_manager.h"
 #include "chromeos/components/tether/device_id_tether_network_guid_map.h"
 #include "chromeos/components/tether/disconnect_tethering_request_sender.h"
@@ -168,6 +168,10 @@ void InitializerImpl::RequestShutdown() {
   StartAsynchronousShutdown();
 }
 
+void InitializerImpl::OnAllAdvertisementsUnregistered() {
+  FinishAsynchronousShutdownIfPossible();
+}
+
 void InitializerImpl::OnPendingDisconnectRequestsComplete() {
   FinishAsynchronousShutdownIfPossible();
 }
@@ -189,11 +193,12 @@ void InitializerImpl::CreateComponent() {
           cryptauth_service_->GetCryptAuthDeviceManager());
   ble_advertisement_device_queue_ =
       base::MakeUnique<BleAdvertisementDeviceQueue>();
+  ble_synchronizer_ = base::MakeUnique<BleSynchronizer>(adapter_);
   ble_advertiser_ = base::MakeUnique<BleAdvertiser>(
-      adapter_, local_device_data_provider_.get(),
-      remote_beacon_seed_fetcher_.get());
-  ble_scanner_ =
-      base::MakeUnique<BleScanner>(adapter_, local_device_data_provider_.get());
+      local_device_data_provider_.get(), remote_beacon_seed_fetcher_.get(),
+      ble_synchronizer_.get());
+  ble_scanner_ = base::MakeUnique<BleScanner>(
+      adapter_, local_device_data_provider_.get(), ble_synchronizer_.get());
   ble_connection_manager_ = base::MakeUnique<BleConnectionManager>(
       cryptauth_service_, adapter_, ble_advertisement_device_queue_.get(),
       ble_advertiser_.get(), ble_scanner_.get());
@@ -276,6 +281,11 @@ void InitializerImpl::CreateComponent() {
 }
 
 bool InitializerImpl::IsAsyncShutdownRequired() {
+  // All of the asynchronous shutdown procedures depend on Bluetooth. If
+  // Bluetooth is off, there is no way to complete these tasks.
+  if (!adapter_->IsPowered())
+    return false;
+
   // If there are pending disconnection requests, they must be sent before the
   // component shuts down.
   if (disconnect_tethering_request_sender_ &&
@@ -288,6 +298,10 @@ bool InitializerImpl::IsAsyncShutdownRequired() {
                           ble_scanner_->IsDiscoverySessionActive()) {
     return true;
   }
+
+  // The BLE advertiser must unregister all of its advertisements.
+  if (ble_advertiser_ && ble_advertiser_->AreAdvertisementsRegistered())
+    return true;
 
   return false;
 }
@@ -308,6 +322,7 @@ void InitializerImpl::StartAsynchronousShutdown() {
   // asynchronous shutdowns, so start observering these objects. Once they
   // notify observers that they are finished shutting down, asynchronous
   // shutdown will complete.
+  ble_advertiser_->AddObserver(this);
   ble_scanner_->AddObserver(this);
   disconnect_tethering_request_sender_->AddObserver(this);
 
@@ -345,6 +360,7 @@ void InitializerImpl::FinishAsynchronousShutdownIfPossible() {
   if (IsAsyncShutdownRequired())
     return;
 
+  ble_advertiser_->RemoveObserver(this);
   ble_scanner_->RemoveObserver(this);
   disconnect_tethering_request_sender_->RemoveObserver(this);
 
@@ -356,6 +372,7 @@ void InitializerImpl::FinishAsynchronousShutdownIfPossible() {
   ble_connection_manager_.reset();
   ble_scanner_.reset();
   ble_advertiser_.reset();
+  ble_synchronizer_.reset();
   ble_advertisement_device_queue_.reset();
   remote_beacon_seed_fetcher_.reset();
   local_device_data_provider_.reset();

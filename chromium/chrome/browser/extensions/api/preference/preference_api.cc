@@ -50,6 +50,12 @@
 #include "extensions/common/permissions/permissions_data.h"
 #include "media/media_features.h"
 
+#if defined(OS_CHROMEOS)
+#include "ash/public/cpp/ash_pref_names.h"  // nogncheck
+#endif
+
+#include "app/vivaldi_apptools.h"
+
 namespace keys = extensions::preference_api_constants;
 namespace helpers = extensions::preference_helpers;
 
@@ -146,25 +152,25 @@ PrefMappingEntry kPrefMapping[] = {
      APIPermission::kAccessibilityFeaturesRead,
      APIPermission::kAccessibilityFeaturesModify},
 #if defined(OS_CHROMEOS)
-    {"autoclick", prefs::kAccessibilityAutoclickEnabled,
+    {"autoclick", ash::prefs::kAccessibilityAutoclickEnabled,
      APIPermission::kAccessibilityFeaturesRead,
      APIPermission::kAccessibilityFeaturesModify},
-    {"highContrast", prefs::kAccessibilityHighContrastEnabled,
+    {"highContrast", ash::prefs::kAccessibilityHighContrastEnabled,
      APIPermission::kAccessibilityFeaturesRead,
      APIPermission::kAccessibilityFeaturesModify},
-    {"largeCursor", prefs::kAccessibilityLargeCursorEnabled,
+    {"largeCursor", ash::prefs::kAccessibilityLargeCursorEnabled,
      APIPermission::kAccessibilityFeaturesRead,
      APIPermission::kAccessibilityFeaturesModify},
-    {"screenMagnifier", prefs::kAccessibilityScreenMagnifierEnabled,
+    {"screenMagnifier", ash::prefs::kAccessibilityScreenMagnifierEnabled,
      APIPermission::kAccessibilityFeaturesRead,
      APIPermission::kAccessibilityFeaturesModify},
-    {"spokenFeedback", prefs::kAccessibilitySpokenFeedbackEnabled,
+    {"spokenFeedback", ash::prefs::kAccessibilitySpokenFeedbackEnabled,
      APIPermission::kAccessibilityFeaturesRead,
      APIPermission::kAccessibilityFeaturesModify},
-    {"stickyKeys", prefs::kAccessibilityStickyKeysEnabled,
+    {"stickyKeys", ash::prefs::kAccessibilityStickyKeysEnabled,
      APIPermission::kAccessibilityFeaturesRead,
      APIPermission::kAccessibilityFeaturesModify},
-    {"virtualKeyboard", prefs::kAccessibilityVirtualKeyboardEnabled,
+    {"virtualKeyboard", ash::prefs::kAccessibilityVirtualKeyboardEnabled,
      APIPermission::kAccessibilityFeaturesRead,
      APIPermission::kAccessibilityFeaturesModify},
 #endif
@@ -725,6 +731,8 @@ ExtensionFunction::ResponseAction SetPreferenceFunction::Run() {
   } else if (browser_context()->IsOffTheRecord()) {
     // Incognito profiles can't access regular mode ever, they only exist in
     // split mode.
+    // We make an exception for Vivaldi.
+    if (!vivaldi::IsVivaldiApp(extension()->id()))
     return RespondNow(
         Error("Can't modify regular settings from an incognito context."));
   }

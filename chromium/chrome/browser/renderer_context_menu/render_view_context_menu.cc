@@ -46,7 +46,6 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_window.h"
 #include "chrome/browser/renderer_context_menu/context_menu_content_type_factory.h"
-#include "chrome/browser/renderer_context_menu/open_with_menu_factory.h"
 #include "chrome/browser/renderer_context_menu/spelling_menu_observer.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
@@ -151,6 +150,10 @@
 #if defined(GOOGLE_CHROME_BUILD)
 #include "chrome/grit/theme_resources.h"
 #include "ui/base/resource/resource_bundle.h"
+#endif
+
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/arc/intent_helper/open_with_menu.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -808,7 +811,11 @@ void RenderViewContextMenu::InitMenu() {
     AppendPrintItem();
   }
 
-  if (editable && params_.misspelled_word.empty()) {
+  // Spell check and writing direction options are not currently supported by
+  // pepper plugins.
+  if (editable && params_.misspelled_word.empty() &&
+      !content_type_->SupportsGroup(
+          ContextMenuContentType::ITEM_GROUP_MEDIA_PLUGIN)) {
     menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
     AppendLanguageSettings();
     AppendPlatformEditableItems();
@@ -1107,11 +1114,12 @@ void RenderViewContextMenu::AppendLinkItems() {
 }
 
 void RenderViewContextMenu::AppendOpenWithLinkItems() {
-  open_with_menu_observer_.reset(OpenWithMenuFactory::CreateMenu(this));
-  if (open_with_menu_observer_) {
-    observers_.AddObserver(open_with_menu_observer_.get());
-    open_with_menu_observer_->InitMenu(params_);
-  }
+#if defined(OS_CHROMEOS)
+  open_with_menu_observer_ =
+      std::make_unique<arc::OpenWithMenu>(browser_context_, this);
+  observers_.AddObserver(open_with_menu_observer_.get());
+  open_with_menu_observer_->InitMenu(params_);
+#endif
 }
 
 void RenderViewContextMenu::AppendImageItems() {
@@ -1209,9 +1217,12 @@ void RenderViewContextMenu::AppendPluginItems() {
        (!embedder_web_contents_ || !embedder_web_contents_->IsSavable()))) {
     // Both full page and embedded plugins are hosted as guest now,
     // the difference is a full page plugin is not considered as savable.
-    // For full page plugin, we show page menu items.
-    if (params_.link_url.is_empty() && params_.selection_text.empty())
+    // For full page plugin, we show page menu items so long as focus is not
+    // within an editable text area.
+    if (params_.link_url.is_empty() && params_.selection_text.empty() &&
+        !params_.is_editable) {
       AppendPageItems();
+    }
   } else {
     menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVEAVAS,
                                     IDS_CONTENT_CONTEXT_SAVEPAGEAS);
@@ -1721,6 +1732,12 @@ bool RenderViewContextMenu::IsCommandIdChecked(int id) const {
     return extension_items_.IsCommandIdChecked(id);
 
   return false;
+}
+
+bool RenderViewContextMenu::IsCommandIdVisible(int id) const {
+  if (ContextMenuMatcher::IsExtensionsCustomCommandId(id))
+    return extension_items_.IsCommandIdVisible(id);
+  return RenderViewContextMenuBase::IsCommandIdVisible(id);
 }
 
 void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
@@ -2298,7 +2315,7 @@ void RenderViewContextMenu::ExecSaveLinkAs() {
           destination: WEBSITE
         }
         policy {
-          cookies_allowed: true
+          cookies_allowed: YES
           cookies_store: "user"
           setting:
             "This feature cannot be disabled by settings. The request is made "

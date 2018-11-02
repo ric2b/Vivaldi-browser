@@ -5,17 +5,6 @@ import("//vivaldi/gn/config/features.gni")
 # Blink : /media/blink/BUILD.gn
 # ------------------
 
-#if (system_proprietary_codecs) {
-#post_process_target("//media/blink:blink") {
-#  sources += [
-#    "//vivaldi/platform_media/renderer/data_source/buffered_data_source.cc",
-#    "//vivaldi/platform_media/renderer/data_source/buffered_data_source.h",
-#    "//vivaldi/platform_media/renderer/data_source/buffered_resource_loader.cc",
-#    "//vivaldi/platform_media/renderer/data_source/buffered_resource_loader.h",
-#  ]
-#}
-#}
-
 if (system_proprietary_codecs) {
 
 # ------------------
@@ -123,7 +112,7 @@ post_process_target("//content/common:common") {
 # ------------------
 
 post_process_target("//media:media") {
-  sources += [
+  sources = [
     "//vivaldi/platform_media/gpu/data_source/ipc_data_source.h",
     "//vivaldi/platform_media/gpu/pipeline/platform_media_pipeline.h",
     "//vivaldi/platform_media/gpu/pipeline/platform_media_pipeline_create.h",
@@ -154,7 +143,7 @@ post_process_target("//media:media") {
       "//vivaldi/platform_media/gpu/pipeline/mac/platform_media_pipeline_mac.cc",
     ]
 
-    defines += [ "GPU_IMPLEMENTATION" ]
+    defines = [ "GPU_IMPLEMENTATION" ]
 
     libs += [
       "AudioToolbox.framework",
@@ -166,10 +155,12 @@ post_process_target("//media:media") {
       "CoreServices.framework",
     ]
 
+    cflags = []
+
     if (!is_debug) {
       # VB-18038 audio doesn't work with -O2
       configs -= [ "//build/config/compiler:default_optimization" ]
-      cflags = [ "-O1" ]
+      cflags += [ "-O1" ]
     }
 
     # VB-24641 dispatch_get_current_queue is deprecated
@@ -238,6 +229,10 @@ post_process_target("//media:media") {
    deps += [ "//net" ]  # For GetMimeTypeFromFile
 
    if (is_mac) {
+      defines += [
+        "MEDIA_IMPLEMENTATION",
+      ]
+
       sources += [
        "//vivaldi/platform_media/common/mac/platform_media_pipeline_types_mac.h",
        "//vivaldi/platform_media/common/mac/platform_media_pipeline_types_mac.mm",
@@ -256,6 +251,10 @@ post_process_target("//media:media") {
    }
 
    if (is_win) {
+      defines = [
+        "MEDIA_IMPLEMENTATION",
+      ]
+
       sources += [
        "//vivaldi/platform_media/renderer/decoders/win/wmf_audio_decoder.cc",
        "//vivaldi/platform_media/renderer/decoders/win/wmf_audio_decoder.h",
@@ -310,9 +309,10 @@ post_process_target("//media/base:base") {
    }
 
    if (is_win) {
-    configs += [
-      "//media:media_implementation",
+    defines = [
+      "MEDIA_IMPLEMENTATION",
     ]
+
     sources += [
       "//vivaldi/platform_media/common/win/mf_util.cc",
       "//vivaldi/platform_media/common/win/mf_util.h",

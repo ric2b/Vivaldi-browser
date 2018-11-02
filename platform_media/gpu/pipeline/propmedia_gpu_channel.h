@@ -7,7 +7,7 @@
 #ifndef PLATFORM_MEDIA_GPU_PIPELINE_PROPMEDIA_GPU_CHANNEL_H_
 #define PLATFORM_MEDIA_GPU_PIPELINE_PROPMEDIA_GPU_CHANNEL_H_
 
-#include "base/id_map.h"
+#include "base/containers/id_map.h"
 
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
@@ -41,8 +41,7 @@ class ProprietaryMediaGpuChannel : public IPC::Listener, public IPC::Sender
   bool AllowHardwareDecode();
 
   gpu::GpuChannel* const channel_;
-  typedef IDMap<std::unique_ptr<content::IPCMediaPipeline>> MediaPipelineMap;
-  MediaPipelineMap media_pipelines_;
+  base::IDMap<std::unique_ptr<content::IPCMediaPipeline>> media_pipelines_;
 
   DISALLOW_COPY_AND_ASSIGN(ProprietaryMediaGpuChannel);
 };

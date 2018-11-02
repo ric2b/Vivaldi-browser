@@ -38,7 +38,6 @@ ExtensionHelper::~ExtensionHelper() {
 bool ExtensionHelper::OnMessageReceived(const IPC::Message& message) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(ExtensionHelper, message)
-    IPC_MESSAGE_HANDLER(ExtensionMsg_SetFrameName, OnSetFrameName)
     IPC_MESSAGE_HANDLER(ExtensionMsg_AppWindowClosed,
                         OnAppWindowClosed)
     IPC_MESSAGE_HANDLER(ExtensionMsg_ZoomVivaldiUI,
@@ -51,12 +50,6 @@ bool ExtensionHelper::OnMessageReceived(const IPC::Message& message) {
 
 void ExtensionHelper::OnDestruct() {
   delete this;
-}
-
-void ExtensionHelper::OnSetFrameName(const std::string& name) {
-  blink::WebView* web_view = render_view()->GetWebView();
-  if (web_view)
-    web_view->MainFrame()->SetName(blink::WebString::FromUTF8(name));
 }
 
 void ExtensionHelper::OnZoomVivaldiUI(double zoom_factor) {

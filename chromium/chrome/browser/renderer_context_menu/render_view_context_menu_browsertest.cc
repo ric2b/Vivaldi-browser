@@ -115,9 +115,9 @@ class ContextMenuBrowserTest : public InProcessBrowserTest {
     params.writing_direction_default = 0;
     params.writing_direction_left_to_right = 0;
     params.writing_direction_right_to_left = 0;
-#endif  // OS_MACOSX
-    std::unique_ptr<TestRenderViewContextMenu> menu(
-        new TestRenderViewContextMenu(web_contents->GetMainFrame(), params));
+#endif
+    auto menu = base::MakeUnique<TestRenderViewContextMenu>(
+        web_contents->GetMainFrame(), params);
     menu->Init();
     return menu;
   }
@@ -135,7 +135,8 @@ class ContextMenuBrowserTest : public InProcessBrowserTest {
 
 class PdfPluginContextMenuBrowserTest : public InProcessBrowserTest {
  public:
-  PdfPluginContextMenuBrowserTest() {}
+  PdfPluginContextMenuBrowserTest() = default;
+  ~PdfPluginContextMenuBrowserTest() override = default;
 
   void SetUpOnMainThread() override {
     guest_view::GuestViewManager::set_factory_for_testing(&factory_);
@@ -203,7 +204,33 @@ class PdfPluginContextMenuBrowserTest : public InProcessBrowserTest {
 };
 
 IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
-                       OpenEntryPresentForNormalURLs) {
+                       NonExtensionMenuItemsAlwaysVisible) {
+  std::unique_ptr<TestRenderViewContextMenu> menu1 =
+      CreateContextMenuMediaTypeNone(GURL("http://www.google.com/"),
+                                     GURL("http://www.google.com/"));
+
+  EXPECT_TRUE(menu1->IsCommandIdVisible(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB));
+  EXPECT_TRUE(menu1->IsCommandIdVisible(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW));
+  EXPECT_TRUE(menu1->IsCommandIdVisible(IDC_CONTENT_CONTEXT_COPYLINKLOCATION));
+  EXPECT_TRUE(menu1->IsCommandIdVisible(IDC_CONTENT_CONTEXT_OPENLINKINPROFILE));
+
+  std::unique_ptr<TestRenderViewContextMenu> menu2 =
+      CreateContextMenuMediaTypeNone(GURL("chrome://history"), GURL());
+
+  EXPECT_TRUE(menu2->IsCommandIdVisible(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB));
+  EXPECT_TRUE(menu2->IsCommandIdVisible(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW));
+  EXPECT_TRUE(menu2->IsCommandIdVisible(IDC_CONTENT_CONTEXT_COPYLINKLOCATION));
+  EXPECT_TRUE(menu2->IsCommandIdVisible(IDC_CONTENT_CONTEXT_OPENLINKINPROFILE));
+
+  std::unique_ptr<TestRenderViewContextMenu> menu3 = CreateContextMenu(
+      GURL("http://www.google.com/"), GURL("http://www.google.com/"),
+      base::ASCIIToUTF16(""), blink::WebContextMenuData::kMediaTypeNone,
+      ui::MENU_SOURCE_TOUCH);
+
+  EXPECT_TRUE(menu3->IsCommandIdVisible(IDC_CONTENT_CONTEXT_COPYLINKTEXT));
+}
+
+IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, OpenEntryPresentForNormalURLs) {
   std::unique_ptr<TestRenderViewContextMenu> menu =
       CreateContextMenuMediaTypeNone(GURL("http://www.google.com/"),
                                      GURL("http://www.google.com/"));
@@ -648,8 +675,8 @@ class SearchByImageBrowserTest : public InProcessBrowserTest {
 
   void AttemptImageSearch() {
     // |menu_observer_| will cause the search-by-image menu item to be clicked.
-    menu_observer_.reset(new ContextMenuNotificationObserver(
-        IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE));
+    menu_observer_ = base::MakeUnique<ContextMenuNotificationObserver>(
+        IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE);
     RightClickImage();
   }
 
@@ -818,7 +845,7 @@ class LoadImageRequestInterceptor : public net::URLRequestInterceptor {
       return;
 
     requests_to_wait_for_ = requests_to_wait_for;
-    run_loop_.reset(new base::RunLoop());
+    run_loop_ = base::MakeUnique<base::RunLoop>();
     run_loop_->Run();
     run_loop_.reset();
     requests_to_wait_for_ = -1;
@@ -882,8 +909,8 @@ class LoadImageBrowserTest : public InProcessBrowserTest {
   void AttemptLoadImage() {
     // Right-click where the image should be.
     // |menu_observer_| will cause the "Load image" menu item to be clicked.
-    menu_observer_.reset(new ContextMenuNotificationObserver(
-        IDC_CONTENT_CONTEXT_LOAD_ORIGINAL_IMAGE));
+    menu_observer_ = base::MakeUnique<ContextMenuNotificationObserver>(
+        IDC_CONTENT_CONTEXT_LOAD_ORIGINAL_IMAGE);
     content::WebContents* tab =
         browser()->tab_strip_model()->GetActiveWebContents();
     content::SimulateMouseClickAt(tab, 0, blink::WebMouseEvent::Button::kRight,

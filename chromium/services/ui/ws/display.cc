@@ -14,6 +14,7 @@
 #include "services/ui/common/types.h"
 #include "services/ui/display/viewport_metrics.h"
 #include "services/ui/public/interfaces/cursor/cursor.mojom.h"
+#include "services/ui/ws/debug_utils.h"
 #include "services/ui/ws/display_binding.h"
 #include "services/ui/ws/display_manager.h"
 #include "services/ui/ws/focus_controller.h"
@@ -138,6 +139,8 @@ const WindowManagerDisplayRoot* Display::GetActiveWindowManagerDisplayRoot()
 }
 
 bool Display::SetFocusedWindow(ServerWindow* new_focused_window) {
+  DVLOG(3) << "Display::SetFocusedWindow id="
+           << DebugWindowId(new_focused_window);
   ServerWindow* old_focused_window = focus_controller_->GetFocusedWindow();
   if (old_focused_window == new_focused_window)
     return true;
@@ -147,20 +150,6 @@ bool Display::SetFocusedWindow(ServerWindow* new_focused_window) {
 
 ServerWindow* Display::GetFocusedWindow() {
   return focus_controller_->GetFocusedWindow();
-}
-
-void Display::ActivateNextWindow() {
-  // TODO(sky): this is wrong, needs to figure out the next window to activate
-  // and then route setting through WindowServer.
-  focus_controller_->ActivateNextWindow();
-}
-
-void Display::AddActivationParent(ServerWindow* window) {
-  activation_parents_.Add(window);
-}
-
-void Display::RemoveActivationParent(ServerWindow* window) {
-  activation_parents_.Remove(window);
 }
 
 void Display::UpdateTextInputState(ServerWindow* window,
@@ -274,7 +263,7 @@ void Display::CreateRootWindow(const gfx::Size& size) {
       mojom::EventTargetingPolicy::DESCENDANTS_ONLY);
   root_->SetBounds(gfx::Rect(size), allocator_.GenerateId());
   root_->SetVisible(true);
-  focus_controller_ = base::MakeUnique<FocusController>(this, root_.get());
+  focus_controller_ = base::MakeUnique<FocusController>(root_.get());
   focus_controller_->AddObserver(this);
 }
 
@@ -337,10 +326,6 @@ ServerWindow* Display::GetActiveRootWindow() {
   if (display_root)
     return display_root->root();
   return nullptr;
-}
-
-bool Display::CanHaveActiveChildren(ServerWindow* window) const {
-  return window && activation_parents_.Contains(window);
 }
 
 void Display::OnActivationChanged(ServerWindow* old_active_window,
@@ -408,8 +393,10 @@ void Display::OnFocusChanged(FocusControllerChangeSource change_source,
     }
   }
 
-  UpdateTextInputState(new_focused_window,
-                       new_focused_window->text_input_state());
+  if (new_focused_window) {
+    UpdateTextInputState(new_focused_window,
+                         new_focused_window->text_input_state());
+  }
 }
 
 void Display::OnUserIdRemoved(const UserId& id) {

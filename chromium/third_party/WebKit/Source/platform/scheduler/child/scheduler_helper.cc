@@ -42,15 +42,6 @@ void SchedulerHelper::Shutdown() {
   task_queue_manager_delegate_->RestoreDefaultTaskRunner();
 }
 
-void SchedulerHelper::SetRecordTaskDelayHistograms(
-    bool record_task_delay_histograms) {
-  if (!task_queue_manager_)
-    return;
-
-  task_queue_manager_->SetRecordTaskDelayHistograms(
-      record_task_delay_histograms);
-}
-
 size_t SchedulerHelper::GetNumberOfPendingTasks() const {
   return task_queue_manager_->GetNumberOfPendingTasks();
 }
@@ -137,6 +128,11 @@ void SchedulerHelper::UnregisterTimeDomain(TimeDomain* time_domain) {
 void SchedulerHelper::OnTriedToExecuteBlockedTask() {
   if (observer_)
     observer_->OnTriedToExecuteBlockedTask();
+}
+
+void SchedulerHelper::OnBeginNestedRunLoop() {
+  if (observer_)
+    observer_->OnBeginNestedRunLoop();
 }
 
 }  // namespace scheduler

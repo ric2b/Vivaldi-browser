@@ -42,6 +42,17 @@ AudioSinkManager* AudioSinkManager::Get() {
   return g_sink_manager_instance.Pointer();
 }
 
+// static
+AudioSinkAndroid::SinkType AudioSinkManager::GetDefaultSinkType() {
+  return AudioSinkAndroid::kSinkTypeJavaBased;
+}
+
+// static
+bool AudioSinkManager::GetSessionIds(int* media_id, int* communication_id) {
+  return AudioSinkAndroid::GetSessionIds(GetDefaultSinkType(), media_id,
+                                         communication_id);
+}
+
 AudioSinkManager::AudioSinkManager() {}
 AudioSinkManager::~AudioSinkManager() {}
 

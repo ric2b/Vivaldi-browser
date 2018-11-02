@@ -6,8 +6,9 @@
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/single_thread_task_runner.h"
+#include "base/sys_info.h"
 #include "base/threading/thread_checker.h"
+#include "build/build_config.h"
 #include "gpu/command_buffer/common/constants.h"
 #include "net/base/cache_type.h"
 #include "net/base/io_buffer.h"
@@ -418,9 +419,7 @@ void ShaderClearHelper::DoClearShaderCache(int rv) {
 ////////////////////////////////////////////////////////////////////////////////
 // ShaderCacheFactory
 
-ShaderCacheFactory::ShaderCacheFactory(
-    scoped_refptr<base::SingleThreadTaskRunner> cache_task_runner)
-    : cache_task_runner_(std::move(cache_task_runner)) {}
+ShaderCacheFactory::ShaderCacheFactory() {}
 
 ShaderCacheFactory::~ShaderCacheFactory() {}
 
@@ -451,7 +450,7 @@ scoped_refptr<ShaderDiskCache> ShaderCacheFactory::GetByPath(
     return iter->second;
 
   ShaderDiskCache* cache = new ShaderDiskCache(this, path);
-  cache->Init(cache_task_runner_);
+  cache->Init();
   return cache;
 }
 
@@ -544,8 +543,7 @@ ShaderDiskCache::~ShaderDiskCache() {
   factory_->RemoveFromCache(cache_path_);
 }
 
-void ShaderDiskCache::Init(
-    scoped_refptr<base::SingleThreadTaskRunner> cache_task_runner) {
+void ShaderDiskCache::Init() {
   if (is_initialized_) {
     NOTREACHED();  // can't initialize disk cache twice.
     return;
@@ -554,8 +552,7 @@ void ShaderDiskCache::Init(
 
   int rv = disk_cache::CreateCacheBackend(
       net::SHADER_CACHE, net::CACHE_BACKEND_DEFAULT,
-      cache_path_.Append(kGpuCachePath),
-      gpu::kDefaultMaxProgramCacheMemoryBytes, true, cache_task_runner, NULL,
+      cache_path_.Append(kGpuCachePath), CacheSizeBytes(), true, nullptr,
       &backend_, base::Bind(&ShaderDiskCache::CacheCreatedCallback, this));
 
   if (rv == net::OK)
@@ -635,6 +632,18 @@ int ShaderDiskCache::SetCacheCompleteCallback(
   }
   cache_complete_callback_ = callback;
   return net::ERR_IO_PENDING;
+}
+
+// static
+size_t ShaderDiskCache::CacheSizeBytes() {
+#if !defined(OS_ANDROID)
+  return kDefaultMaxProgramCacheMemoryBytes;
+#else   // !defined(OS_ANDROID)
+  if (!base::SysInfo::IsLowEndDevice())
+    return kDefaultMaxProgramCacheMemoryBytes;
+  else
+    return kLowEndMaxProgramCacheMemoryBytes;
+#endif  // !defined(OS_ANDROID)
 }
 
 }  // namespace gpu

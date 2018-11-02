@@ -79,15 +79,6 @@ class CC_PAINT_EXPORT SkiaPaintCanvas final : public PaintCanvas {
   void drawDRRect(const SkRRect& outer,
                   const SkRRect& inner,
                   const PaintFlags& flags) override;
-  void drawCircle(SkScalar cx,
-                  SkScalar cy,
-                  SkScalar radius,
-                  const PaintFlags& flags) override;
-  void drawArc(const SkRect& oval,
-               SkScalar start_angle,
-               SkScalar sweep_angle,
-               bool use_center,
-               const PaintFlags& flags) override;
   void drawRoundRect(const SkRect& rect,
                      SkScalar rx,
                      SkScalar ry,
@@ -107,15 +98,6 @@ class CC_PAINT_EXPORT SkiaPaintCanvas final : public PaintCanvas {
                   SkScalar top,
                   const PaintFlags* flags) override;
 
-  void drawText(const void* text,
-                size_t byte_length,
-                SkScalar x,
-                SkScalar y,
-                const PaintFlags& flags) override;
-  void drawPosText(const void* text,
-                   size_t byte_length,
-                   const SkPoint pos[],
-                   const PaintFlags& flags) override;
   void drawTextBlob(sk_sp<SkTextBlob> blob,
                     SkScalar x,
                     SkScalar y,

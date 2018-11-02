@@ -10,7 +10,6 @@
 #include "third_party/skia/include/core/SkMatrix44.h"
 #include "ui/display/display_layout.h"
 #include "ui/display/manager/chromeos/display_configurator.h"
-#include "ui/display/manager/chromeos/touch_device_transform.h"
 #include "ui/display/manager/chromeos/touch_transform_setter.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/manager/managed_display_info.h"
@@ -18,6 +17,7 @@
 #include "ui/display/types/display_constants.h"
 #include "ui/display/types/display_snapshot.h"
 #include "ui/events/devices/input_device_manager.h"
+#include "ui/events/devices/touch_device_transform.h"
 
 namespace display {
 
@@ -197,16 +197,10 @@ double TouchTransformController::GetTouchResolutionScale(
 gfx::Transform TouchTransformController::GetTouchTransform(
     const ManagedDisplayInfo& display,
     const ManagedDisplayInfo& touch_display,
-    const ui::TouchscreenDevice& touchscreen,
-    const gfx::Size& framebuffer_size) const {
+    const ui::TouchscreenDevice& touchscreen) const {
   auto current_size = gfx::SizeF(display.bounds_in_native().size());
   auto touch_native_size = gfx::SizeF(touch_display.GetNativeModeSize());
-#if defined(USE_OZONE)
   auto touch_area = gfx::SizeF(touchscreen.size);
-#elif defined(USE_X11)
-  // On X11 touches are reported in the framebuffer coordinate space.
-  auto touch_area = gfx::SizeF(framebuffer_size);
-#endif
 
   gfx::Transform ctm;
 
@@ -214,14 +208,12 @@ gfx::Transform TouchTransformController::GetTouchTransform(
       touch_area.IsEmpty() || touchscreen.id == ui::InputDevice::kInvalidId)
     return ctm;
 
-#if defined(USE_OZONE)
   // Translate the touch so that it falls within the display bounds. This
   // should not be performed if the displays are mirrored.
   if (display.id() == touch_display.id()) {
     ctm.Translate(display.bounds_in_native().x(),
                   display.bounds_in_native().y());
   }
-#endif
 
   // If the device is currently under calibration, then do not return any
   // transform as we want to use the raw native touch input data for calibration
@@ -300,8 +292,7 @@ TouchTransformController::~TouchTransformController() {}
 void TouchTransformController::UpdateTouchTransforms() const {
   UpdateData update_data;
   UpdateTouchTransforms(&update_data);
-  setter_->ConfigureTouchDevices(update_data.device_to_scale,
-                                 update_data.touch_device_transforms);
+  setter_->ConfigureTouchDevices(update_data.touch_device_transforms);
 }
 
 void TouchTransformController::UpdateTouchRadius(
@@ -319,13 +310,15 @@ void TouchTransformController::UpdateTouchTransform(
     const ManagedDisplayInfo& touch_display,
     const ManagedDisplayInfo& target_display,
     UpdateData* update_data) const {
-  TouchDeviceTransform touch_device_transform;
+  ui::TouchDeviceTransform touch_device_transform;
   touch_device_transform.display_id = target_display_id;
-  gfx::Size fb_size = display_configurator_->framebuffer_size();
   for (const auto& device_id : touch_display.input_devices()) {
     touch_device_transform.device_id = device_id;
     touch_device_transform.transform = GetTouchTransform(
-        target_display, touch_display, FindTouchscreenById(device_id), fb_size);
+        target_display, touch_display, FindTouchscreenById(device_id));
+    auto device_to_scale_iter = update_data->device_to_scale.find(device_id);
+    if (device_to_scale_iter != update_data->device_to_scale.end())
+      touch_device_transform.radius_scale = device_to_scale_iter->second;
     update_data->touch_device_transforms.push_back(touch_device_transform);
   }
 }

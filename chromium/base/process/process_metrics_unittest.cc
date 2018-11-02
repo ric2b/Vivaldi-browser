@@ -9,6 +9,7 @@
 
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -16,6 +17,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
+#include "base/memory/shared_memory.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/sys_info.h"
 #include "base/test/multiprocess_test.h"
@@ -402,6 +404,43 @@ TEST_F(SystemMetricsTest, TestNoNegativeCpuUsage) {
 
 #endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
+#if defined(OS_CHROMEOS)
+TEST_F(SystemMetricsTest, ParseZramMmStat) {
+  SwapInfo swapinfo;
+
+  const char invalid_input1[] = "aaa";
+  const char invalid_input2[] = "1 2 3 4 5 6";
+  const char invalid_input3[] = "a 2 3 4 5 6 7";
+  EXPECT_FALSE(ParseZramMmStat(invalid_input1, &swapinfo));
+  EXPECT_FALSE(ParseZramMmStat(invalid_input2, &swapinfo));
+  EXPECT_FALSE(ParseZramMmStat(invalid_input3, &swapinfo));
+
+  const char valid_input1[] =
+      "17715200 5008166 566062  0 1225715712  127 183842";
+  EXPECT_TRUE(ParseZramMmStat(valid_input1, &swapinfo));
+  EXPECT_EQ(17715200ULL, swapinfo.orig_data_size);
+  EXPECT_EQ(5008166ULL, swapinfo.compr_data_size);
+  EXPECT_EQ(566062ULL, swapinfo.mem_used_total);
+}
+
+TEST_F(SystemMetricsTest, ParseZramStat) {
+  SwapInfo swapinfo;
+
+  const char invalid_input1[] = "aaa";
+  const char invalid_input2[] = "1 2 3 4 5 6 7 8 9 10";
+  const char invalid_input3[] = "a 2 3 4 5 6 7 8 9 10 11";
+  EXPECT_FALSE(ParseZramStat(invalid_input1, &swapinfo));
+  EXPECT_FALSE(ParseZramStat(invalid_input2, &swapinfo));
+  EXPECT_FALSE(ParseZramStat(invalid_input3, &swapinfo));
+
+  const char valid_input1[] =
+      "299    0    2392    0    1    0    8    0    0    0    0";
+  EXPECT_TRUE(ParseZramStat(valid_input1, &swapinfo));
+  EXPECT_EQ(299ULL, swapinfo.num_reads);
+  EXPECT_EQ(1ULL, swapinfo.num_writes);
+}
+#endif  // defined(OS_CHROMEOS)
+
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX) || \
     defined(OS_ANDROID)
 TEST(SystemMetrics2Test, GetSystemMemoryInfo) {
@@ -563,17 +602,45 @@ TEST(ProcessMetricsTest, GetOpenFdCount) {
   const FilePath temp_path = temp_dir.GetPath();
   CommandLine child_command_line(GetMultiProcessTestChildBaseCommandLine());
   child_command_line.AppendSwitchPath(kTempDirFlag, temp_path);
-  SpawnChildResult spawn_child = SpawnMultiProcessTestChild(
+  Process child = SpawnMultiProcessTestChild(
       ChildMainString, child_command_line, LaunchOptions());
-  ASSERT_TRUE(spawn_child.process.IsValid());
+  ASSERT_TRUE(child.IsValid());
   WaitForEvent(temp_path, kSignalClosed);
 
   std::unique_ptr<ProcessMetrics> metrics(
-      ProcessMetrics::CreateProcessMetrics(spawn_child.process.Handle()));
+      ProcessMetrics::CreateProcessMetrics(child.Handle()));
   EXPECT_EQ(0, metrics->GetOpenFdCount());
-  ASSERT_TRUE(spawn_child.process.Terminate(0, true));
+  ASSERT_TRUE(child.Terminate(0, true));
 }
 #endif  // defined(OS_LINUX)
+
+#if defined(OS_ANDROID) || defined(OS_LINUX)
+TEST(ProcessMetricsTestLinux, GetPageFaultCounts) {
+  std::unique_ptr<base::ProcessMetrics> process_metrics(
+      base::ProcessMetrics::CreateProcessMetrics(
+          base::GetCurrentProcessHandle()));
+
+  PageFaultCounts counts;
+  ASSERT_TRUE(process_metrics->GetPageFaultCounts(&counts));
+  ASSERT_GT(counts.minor, 0);
+  ASSERT_GE(counts.major, 0);
+
+  {
+    // Allocate and touch memory. Touching it is required to make sure that the
+    // page fault count goes up, as memory is typically mapped lazily.
+    const size_t kMappedSize = 4 * (1 << 20);
+    SharedMemory memory;
+    ASSERT_TRUE(memory.CreateAndMapAnonymous(kMappedSize));
+    memset(memory.memory(), 42, kMappedSize);
+    memory.Unmap();
+  }
+
+  PageFaultCounts counts_after;
+  ASSERT_TRUE(process_metrics->GetPageFaultCounts(&counts_after));
+  ASSERT_GT(counts_after.minor, counts.minor);
+  ASSERT_GE(counts_after.major, counts.major);
+}
+#endif  // defined(OS_ANDROID) || defined(OS_LINUX)
 
 }  // namespace debug
 }  // namespace base

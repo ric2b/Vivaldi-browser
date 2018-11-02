@@ -33,7 +33,7 @@
 #include "core/HTMLNames.h"
 #include "core/InputTypeNames.h"
 #include "core/dom/Document.h"
-#include "core/events/Event.h"
+#include "core/dom/events/Event.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/FormData.h"
 #include "core/html/HTMLFormControlElement.h"
@@ -147,7 +147,7 @@ inline FormSubmission::FormSubmission(SubmitMethod method,
                                       const AtomicString& target,
                                       const AtomicString& content_type,
                                       HTMLFormElement* form,
-                                      PassRefPtr<EncodedFormData> data,
+                                      RefPtr<EncodedFormData> data,
                                       const String& boundary,
                                       Event* event)
     : method_(method),

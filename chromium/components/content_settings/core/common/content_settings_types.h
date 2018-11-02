@@ -71,9 +71,33 @@ enum ContentSettingsType {
   // specific origin.
   CONTENT_SETTINGS_TYPE_MEDIA_ENGAGEMENT,
 
-  // Website setting which stores whether or not the site can play audible
+  // Content setting which stores whether or not the site can play audible
   // sound. This will not block playback but instead the user will not hear it.
   CONTENT_SETTINGS_TYPE_SOUND,
+
+  // Website setting which stores the list of client hints (and the preference
+  // expiration time for each of the client hints) that the origin requested
+  // the browser to remember. Spec:
+  // http://httpwg.org/http-extensions/client-hints.html#accept-ch-lifetime.
+  // The setting is stored as a dictionary that includes the mapping from
+  // different client hints to their respective expiration times (seconds since
+  // epoch). The browser is expected to send all the unexpired client hints in
+  // the HTTP request headers for every resource requested from that origin.
+  CONTENT_SETTINGS_TYPE_CLIENT_HINTS,
+
+  // Generic Sensor API covering ambient-light-sensor, accelerometer, gyroscope
+  // and magnetometer are all mapped to a single content_settings_type.
+  // Setting for the Generic Sensor API covering ambient-light-sensor,
+  // accelerometer, gyroscope and magnetometer. These are all mapped to a single
+  // ContentSettingsType.
+  CONTENT_SETTINGS_TYPE_SENSORS,
+
+  // Content setting which stores whether or not the user has granted the site
+  // permission to respond to accessibility events, which can be used to
+  // provide a custom accessibility experience. Requires explicit user consent
+  // because some users may not want sites to know they're using assistive
+  // technology.
+  CONTENT_SETTINGS_TYPE_ACCESSIBILITY_EVENTS,
 
   CONTENT_SETTINGS_NUM_TYPES,
 };

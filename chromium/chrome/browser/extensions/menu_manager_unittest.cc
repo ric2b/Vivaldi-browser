@@ -70,7 +70,8 @@ class MenuManagerTest : public testing::Test {
     const MenuItem::ExtensionKey key(extension->id());
     MenuItem::Id id(incognito, key);
     id.uid = next_id_++;
-    return base::MakeUnique<MenuItem>(id, "test", false, true, type, contexts);
+    return base::MakeUnique<MenuItem>(id, "test", false, true, true, type,
+                                      contexts);
   }
 
   // Returns a test item with the given string ID.
@@ -81,7 +82,8 @@ class MenuManagerTest : public testing::Test {
     const MenuItem::ExtensionKey key(extension->id());
     MenuItem::Id id(false, key);
     id.string_uid = string_id;
-    return base::MakeUnique<MenuItem>(id, "test", false, true, type, contexts);
+    return base::MakeUnique<MenuItem>(id, "test", false, true, true, type,
+                                      contexts);
   }
 
   // Creates and returns a test Extension. The caller does *not* own the return
@@ -225,6 +227,7 @@ TEST_F(MenuManagerTest, PopulateFromValue) {
   int type = MenuItem::CHECKBOX;
   std::string title("TITLE");
   bool checked = true;
+  bool visible = true;
   bool enabled = true;
   MenuItem::ContextList contexts;
   contexts.Add(MenuItem::PAGE);
@@ -246,6 +249,7 @@ TEST_F(MenuManagerTest, PopulateFromValue) {
   value.SetInteger("type", type);
   value.SetString("title", title);
   value.SetBoolean("checked", checked);
+  value.SetBoolean("visible", visible);
   value.SetBoolean("enabled", enabled);
   value.SetInteger("contexts", contexts_value);
   std::string error;
@@ -267,6 +271,7 @@ TEST_F(MenuManagerTest, PopulateFromValue) {
   EXPECT_EQ(title, item->title());
   EXPECT_EQ(checked, item->checked());
   EXPECT_EQ(item->checked(), item->checked());
+  EXPECT_EQ(visible, item->visible());
   EXPECT_EQ(enabled, item->enabled());
   EXPECT_EQ(contexts, item->contexts());
 
@@ -663,14 +668,24 @@ TEST_F(MenuManagerTest, SanitizeRadioButtons) {
   ASSERT_TRUE(item1_ptr->checked());
   ASSERT_FALSE(item2_ptr->checked());
 
-  // If multiple items are checked, only the last item should get checked.
+  // If multiple items are checked and one of the items is updated to be
+  // checked, then all other items should be unchecked.
+  //
+  // Note, this case of multiple checked items (i.e. SetChecked() called more
+  // than once) followed by a call to ItemUpdated() would never happen in
+  // practice. In this hypothetical scenario, the item that was updated the
+  // latest via ItemUpdated() should remain checked.
+  //
+  // Begin with two items checked.
   item1_ptr->SetChecked(true);
   item2_ptr->SetChecked(true);
   ASSERT_TRUE(item1_ptr->checked());
   ASSERT_TRUE(item2_ptr->checked());
+  // Updating item1 to be checked should result in item2 being unchecked.
   manager_.ItemUpdated(item1_ptr->id());
-  ASSERT_FALSE(item1_ptr->checked());
-  ASSERT_TRUE(item2_ptr->checked());
+  // Item 1 should be selected as it was updated the latest.
+  ASSERT_TRUE(item1_ptr->checked());
+  ASSERT_FALSE(item2_ptr->checked());
 
   // If the checked item is removed, the new first item should get checked.
   item1_ptr->SetChecked(false);
@@ -733,6 +748,50 @@ TEST_F(MenuManagerTest, SanitizeRadioButtons) {
   parent_ptr = NULL;
   ASSERT_FALSE(new_item_ptr->checked());
   ASSERT_TRUE(child1_ptr->checked());
+}
+
+// If a context menu has multiple radio lists, then they should all be properly
+// sanitized. More specifically, on initialization of the context menu, the
+// first item of each list should be checked.
+TEST_F(MenuManagerTest, SanitizeContextMenuWithMultipleRadioLists) {
+  Extension* extension = AddExtension("test");
+
+  // Create a radio list with two radio buttons.
+  // Create first radio button.
+  std::unique_ptr<MenuItem> radio1 = CreateTestItem(extension);
+  MenuItem* radio1_ptr = radio1.get();
+  radio1_ptr->set_type(MenuItem::RADIO);
+  manager_.AddContextItem(extension, std::move(radio1));
+  // Create second radio button.
+  std::unique_ptr<MenuItem> radio2 = CreateTestItem(extension);
+  MenuItem* radio2_ptr = radio2.get();
+  radio2_ptr->set_type(MenuItem::RADIO);
+  manager_.AddContextItem(extension, std::move(radio2));
+  // Ensure that in the first radio list, only radio1 is checked.
+  ASSERT_TRUE(radio1_ptr->checked());
+  ASSERT_FALSE(radio2_ptr->checked());
+
+  // Add a normal item to separate the first radio list from the second radio
+  // list to created next.
+  std::unique_ptr<MenuItem> normal_item1 = CreateTestItem(extension);
+  normal_item1->set_type(MenuItem::NORMAL);
+  manager_.AddContextItem(extension, std::move(normal_item1));
+
+  // Create another radio list of two radio items.
+  // Create first radio button.
+  std::unique_ptr<MenuItem> radio3 = CreateTestItem(extension);
+  MenuItem* radio3_ptr = radio3.get();
+  radio3_ptr->set_type(MenuItem::RADIO);
+  manager_.AddContextItem(extension, std::move(radio3));
+  // Create second radio button.
+  std::unique_ptr<MenuItem> radio4 = CreateTestItem(extension);
+  MenuItem* radio4_ptr = radio4.get();
+  radio4_ptr->set_type(MenuItem::RADIO);
+  manager_.AddContextItem(extension, std::move(radio4));
+
+  // Ensure that in the second radio list, only radio3 is checked.
+  ASSERT_TRUE(radio3_ptr->checked());
+  ASSERT_FALSE(radio4_ptr->checked());
 }
 
 // Tests the RemoveAllIncognitoContextItems functionality.

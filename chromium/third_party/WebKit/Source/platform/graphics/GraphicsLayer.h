@@ -36,7 +36,6 @@
 #include "platform/geometry/IntRect.h"
 #include "platform/graphics/Color.h"
 #include "platform/graphics/CompositorElementId.h"
-#include "platform/graphics/ContentLayerDelegate.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/GraphicsLayerClient.h"
 #include "platform/graphics/GraphicsLayerDebugInfo.h"
@@ -48,6 +47,7 @@
 #include "platform/transforms/TransformationMatrix.h"
 #include "platform/wtf/Vector.h"
 #include "public/platform/WebContentLayer.h"
+#include "public/platform/WebContentLayerClient.h"
 #include "public/platform/WebImageLayer.h"
 #include "public/platform/WebLayerStickyPositionConstraint.h"
 #include "public/platform/WebScrollBoundaryBehavior.h"
@@ -70,7 +70,8 @@ typedef Vector<GraphicsLayer*, 64> GraphicsLayerVector;
 // GraphicsLayer is an abstraction for a rendering surface with backing store,
 // which may have associated transformation and animations.
 class PLATFORM_EXPORT GraphicsLayer : public cc::LayerClient,
-                                      public DisplayItemClient {
+                                      public DisplayItemClient,
+                                      private WebContentLayerClient {
   WTF_MAKE_NONCOPYABLE(GraphicsLayer);
   USING_FAST_MALLOC(GraphicsLayer);
 
@@ -165,6 +166,7 @@ class PLATFORM_EXPORT GraphicsLayer : public cc::LayerClient,
   // For special cases, e.g. drawing missing tiles on Android.
   // The compositor should never paint this color in normal cases because the
   // Layer will paint the background by itself.
+  Color BackgroundColor() const { return background_color_; }
   void SetBackgroundColor(const Color&);
 
   // opaque means that we know the layer contents have no alpha
@@ -181,6 +183,7 @@ class PLATFORM_EXPORT GraphicsLayer : public cc::LayerClient,
   void SetIsRootForIsolatedGroup(bool);
 
   void SetShouldHitTest(bool);
+  bool GetShouldHitTestForTesting() { return should_hit_test_; }
 
   void SetFilters(CompositorFilterOperations);
   void SetBackdropFilters(CompositorFilterOperations);
@@ -242,7 +245,7 @@ class PLATFORM_EXPORT GraphicsLayer : public cc::LayerClient,
   unsigned NumLinkHighlights() { return link_highlights_.size(); }
   LinkHighlight* GetLinkHighlight(int i) { return link_highlights_[i]; }
 
-  void SetScrollableArea(ScrollableArea*, bool is_visual_viewport);
+  void SetScrollableArea(ScrollableArea*);
   ScrollableArea* GetScrollableArea() const { return scrollable_area_; }
 
   WebContentLayer* ContentLayer() const { return layer_.get(); }
@@ -260,7 +263,7 @@ class PLATFORM_EXPORT GraphicsLayer : public cc::LayerClient,
   void didUpdateMainThreadScrollingReasons() override;
   void didChangeScrollbarsHidden(bool);
 
-  PaintController& GetPaintController();
+  PaintController& GetPaintController() const;
 
   // Exposed for tests.
   WebLayer* ContentsLayer() const { return contents_layer_; }
@@ -270,9 +273,7 @@ class PLATFORM_EXPORT GraphicsLayer : public cc::LayerClient,
 
   void SetCompositorMutableProperties(uint32_t);
 
-  ContentLayerDelegate* ContentLayerDelegateForTesting() const {
-    return content_layer_delegate_.get();
-  }
+  WebContentLayerClient& WebContentLayerClientForTesting() { return *this; }
 
   // DisplayItemClient methods
   String DebugName() const final { return client_->DebugName(this); }
@@ -281,6 +282,7 @@ class PLATFORM_EXPORT GraphicsLayer : public cc::LayerClient,
   void SetHasWillChangeTransformHint(bool);
 
   void SetScrollBoundaryBehavior(const WebScrollBoundaryBehavior&);
+  void SetIsResizedByBrowserControls(bool);
 
  protected:
   String DebugName(cc::Layer*) const;
@@ -292,6 +294,12 @@ class PLATFORM_EXPORT GraphicsLayer : public cc::LayerClient,
   friend class PaintControllerPaintTestBase;
 
  private:
+  // WebContentLayerClient implementation.
+  gfx::Rect PaintableRegion() final { return InterestRect(); }
+  void PaintContents(WebDisplayItemList*,
+                     PaintingControlSetting = kPaintDefaultBehavior) final;
+  size_t ApproximateUnsharedMemoryUsage() const final;
+
   // Returns true if PaintController::paintArtifact() changed and needs commit.
   bool PaintWithoutCommit(
       const IntRect* interest_rect,
@@ -321,12 +329,12 @@ class PLATFORM_EXPORT GraphicsLayer : public cc::LayerClient,
   std::unique_ptr<JSONObject> LayerTreeAsJSONInternal(
       LayerTreeFlags,
       RenderingContextMap&) const;
-  // Outputs the layer tree rooted at |this| as a JSON array, in paint order.
-  void LayersAsJSONArray(LayerTreeFlags,
-                         RenderingContextMap&,
-                         JSONArray*) const;
-  std::unique_ptr<JSONObject> LayerAsJSONInternal(LayerTreeFlags,
-                                                  RenderingContextMap&) const;
+  std::unique_ptr<JSONObject> LayerAsJSONInternal(
+      LayerTreeFlags,
+      RenderingContextMap&,
+      const FloatPoint& = FloatPoint()) const;
+  void AddTransformJSONProperties(JSONObject&, RenderingContextMap&) const;
+  class LayersAsJSONArray;
 
   sk_sp<PaintRecord> CaptureRecord();
 
@@ -388,13 +396,11 @@ class PLATFORM_EXPORT GraphicsLayer : public cc::LayerClient,
 
   Vector<LinkHighlight*> link_highlights_;
 
-  std::unique_ptr<ContentLayerDelegate> content_layer_delegate_;
-
   WeakPersistent<ScrollableArea> scrollable_area_;
   GraphicsLayerDebugInfo debug_info_;
   int rendering_context3d_;
 
-  std::unique_ptr<PaintController> paint_controller_;
+  mutable std::unique_ptr<PaintController> paint_controller_;
 
   IntRect previous_interest_rect_;
 };

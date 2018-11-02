@@ -14,7 +14,7 @@ URLLoaderFactoryGetter::URLLoaderFactoryGetter() {}
 
 void URLLoaderFactoryGetter::Initialize(StoragePartitionImpl* partition) {
   mojom::URLLoaderFactoryPtr network_factory;
-  partition->network_context()->CreateURLLoaderFactory(
+  partition->GetNetworkContext()->CreateURLLoaderFactory(
       MakeRequest(&network_factory), 0);
 
   mojom::URLLoaderFactoryPtr blob_factory;
@@ -40,13 +40,19 @@ mojom::URLLoaderFactoryPtr* URLLoaderFactoryGetter::GetBlobFactory() {
 
 void URLLoaderFactoryGetter::SetNetworkFactoryForTesting(
     mojom::URLLoaderFactoryPtr test_factory) {
-  // Since the URLLoaderFactory pointers are bound on the IO thread, and this
-  // method is called on the UI thread, we are not able to unbind and return the
-  // old value. As such this class keeps two separate pointers, one for test.
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&URLLoaderFactoryGetter::SetTestNetworkFactoryOnIOThread,
-                     this, test_factory.PassInterface()));
+  if (content::BrowserThread::CurrentlyOn(BrowserThread::IO)) {
+    URLLoaderFactoryGetter::SetTestNetworkFactoryOnIOThread(
+        test_factory.PassInterface());
+  } else {
+    // Since the URLLoaderFactory pointers are bound on the IO thread, and this
+    // method is called on the UI thread, we are not able to unbind and return
+    // the old value. As such this class keeps two separate pointers, one for
+    // test.
+    BrowserThread::PostTask(
+        BrowserThread::IO, FROM_HERE,
+        base::BindOnce(&URLLoaderFactoryGetter::SetTestNetworkFactoryOnIOThread,
+                       this, test_factory.PassInterface()));
+  }
 }
 
 URLLoaderFactoryGetter::~URLLoaderFactoryGetter() {}

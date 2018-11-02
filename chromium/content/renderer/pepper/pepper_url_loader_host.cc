@@ -123,7 +123,7 @@ int32_t PepperURLLoaderHost::OnResourceMessageReceived(
 }
 
 bool PepperURLLoaderHost::WillFollowRedirect(
-    const WebURLRequest& new_request,
+    const WebURL& new_url,
     const WebURLResponse& redirect_response) {
   DCHECK(out_of_order_replies_.empty());
   if (!request_data_.follow_redirects) {
@@ -177,7 +177,7 @@ void PepperURLLoaderHost::DidFinishLoading(double finish_time) {
 void PepperURLLoaderHost::DidFail(const WebURLError& error) {
   // Note that |loader| will be NULL for document loads.
   int32_t pp_error = PP_ERROR_FAILED;
-  if (error.domain.Equals(WebString::FromUTF8(net::kErrorDomain))) {
+  if (error.domain == WebURLError::Domain::kNet) {
     // TODO(bbudge): Extend pp_errors.h to cover interesting network errors
     // from the net error domain.
     switch (error.reason) {
@@ -186,10 +186,10 @@ void PepperURLLoaderHost::DidFail(const WebURLError& error) {
         pp_error = PP_ERROR_NOACCESS;
         break;
     }
-  } else {
-    // It's a WebKit error.
-    pp_error = PP_ERROR_NOACCESS;
   }
+
+  if (error.is_web_security_violation)
+    pp_error = PP_ERROR_NOACCESS;
   SendUpdateToPlugin(
       base::MakeUnique<PpapiPluginMsg_URLLoader_FinishedLoading>(pp_error));
 }

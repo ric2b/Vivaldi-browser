@@ -6,12 +6,15 @@
 
 #include <stddef.h>
 
+#include "base/allocator/allocator_shim.h"
+#include "base/allocator/features.h"
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/mac/foundation_util.h"
 #include "base/mac/mac_util.h"
+#include "base/mac/scoped_objc_class_swizzler.h"
 #include "base/mac/sdk_forward_declarations.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -291,6 +294,33 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer {
 
   DISALLOW_COPY_AND_ASSIGN(AppControllerProfileObserver);
 };
+
+#if BUILDFLAG(USE_ALLOCATOR_SHIM)
+// On macOS 10.12, the IME system attempts to allocate a 2^64 size buffer,
+// which would typically cause an OOM crash. To avoid this, the problematic
+// method is swizzled out and the make-OOM-fatal bit is disabled for the
+// duration of the original call. https://crbug.com/654695
+static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
+
+@interface OOMDisabledIMKInputSession : NSObject
+@end
+
+@implementation OOMDisabledIMKInputSession
+
+- (void)_coreAttributesFromRange:(NSRange)range
+                 whichAttributes:(long long)attributes
+               completionHandler:(void (^)(void))block {
+  // The allocator flag is per-process, so other threads may temporarily
+  // not have fatal OOM occur while this method executes, but it is better
+  // than crashing when using IME.
+  base::allocator::SetCallNewHandlerOnMallocFailure(false);
+  g_swizzle_imk_input_session->GetOriginalImplementation()(self, _cmd, range,
+                                                           attributes, block);
+  base::allocator::SetCallNewHandlerOnMallocFailure(true);
+}
+
+@end
+#endif  // BUILDFLAG(USE_ALLOCATOR_SHIM)
 
 @implementation AppController
 
@@ -727,7 +757,9 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer {
 
   // If enabled, keep Chrome alive when apps are open instead of quitting all
   // apps.
+  if (!vivaldi::IsVivaldiRunning()) {
   quitWithAppsController_ = new QuitWithAppsController();
+  }
 
   // Dynamically update shortcuts for "Close Window" and "Close Tab" menu items.
   [[closeTabMenuItem_ menu] setDelegate:self];
@@ -772,6 +804,16 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer {
 
   handoff_active_url_observer_bridge_.reset(
       new HandoffActiveURLObserverBridge(self));
+
+#if BUILDFLAG(USE_ALLOCATOR_SHIM)
+  // Disable fatal OOM to hack around an OS bug https://crbug.com/654695.
+  if (base::mac::IsOS10_12()) {
+    g_swizzle_imk_input_session = new base::mac::ScopedObjCClassSwizzler(
+        NSClassFromString(@"IMKInputSession"),
+        [OOMDisabledIMKInputSession class],
+        @selector(_coreAttributesFromRange:whichAttributes:completionHandler:));
+  }
+#endif
 }
 
 // Helper function for populating and displaying the in progress downloads at

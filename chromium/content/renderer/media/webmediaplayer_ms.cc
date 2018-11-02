@@ -20,6 +20,8 @@
 #include "content/public/renderer/media_stream_audio_renderer.h"
 #include "content/public/renderer/media_stream_renderer_factory.h"
 #include "content/public/renderer/media_stream_video_renderer.h"
+#include "content/renderer/media/media_stream_audio_track.h"
+#include "content/renderer/media/media_stream_video_track.h"
 #include "content/renderer/media/web_media_element_source_utils.h"
 #include "content/renderer/media/webmediaplayer_ms_compositor.h"
 #include "content/renderer/media/webrtc_logging.h"
@@ -38,6 +40,14 @@
 #include "third_party/WebKit/public/platform/WebRect.h"
 #include "third_party/WebKit/public/platform/WebSize.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
+
+namespace {
+enum class RendererReloadAction {
+  KEEP_RENDERER,
+  REMOVE_RENDERER,
+  NEW_RENDERER
+};
+}  // namespace
 
 namespace content {
 
@@ -89,20 +99,20 @@ class WebMediaPlayerMS::FrameDeliverer {
       last_frame_opaque_ = is_opaque;
       last_frame_rotation_ = video_rotation;
       main_task_runner_->PostTask(
-          FROM_HERE, base::Bind(&WebMediaPlayerMS::OnFirstFrameReceived,
-                                player_, video_rotation, is_opaque));
+          FROM_HERE, base::BindOnce(&WebMediaPlayerMS::OnFirstFrameReceived,
+                                    player_, video_rotation, is_opaque));
     } else {
       if (last_frame_opaque_ != is_opaque) {
         last_frame_opaque_ = is_opaque;
         main_task_runner_->PostTask(
-            FROM_HERE, base::Bind(&WebMediaPlayerMS::OnOpacityChanged, player_,
-                                  is_opaque));
+            FROM_HERE, base::BindOnce(&WebMediaPlayerMS::OnOpacityChanged,
+                                      player_, is_opaque));
       }
       if (last_frame_rotation_ != video_rotation) {
         last_frame_rotation_ = video_rotation;
         main_task_runner_->PostTask(
-            FROM_HERE, base::Bind(&WebMediaPlayerMS::OnRotationChanged, player_,
-                                  video_rotation, is_opaque));
+            FROM_HERE, base::BindOnce(&WebMediaPlayerMS::OnRotationChanged,
+                                      player_, video_rotation, is_opaque));
       }
     }
 
@@ -191,6 +201,9 @@ WebMediaPlayerMS::~WebMediaPlayerMS() {
   DVLOG(1) << __func__;
   DCHECK(thread_checker_.CalledOnValidThread());
 
+  if (!web_stream_.IsNull())
+    web_stream_.RemoveObserver(this);
+
   // Destruct compositor resources in the proper order.
   get_client()->SetWebLayer(nullptr);
   if (video_weblayer_)
@@ -224,41 +237,47 @@ void WebMediaPlayerMS::Load(LoadType load_type,
   // TODO(acolwell): Change this to DCHECK_EQ(load_type, LoadTypeMediaStream)
   // once Blink-side changes land.
   DCHECK_NE(load_type, kLoadTypeMediaSource);
-  blink::WebMediaStream web_stream =
-      GetWebMediaStreamFromWebMediaPlayerSource(source);
+  web_stream_ = GetWebMediaStreamFromWebMediaPlayerSource(source);
+  if (!web_stream_.IsNull())
+    web_stream_.AddObserver(this);
 
   compositor_ = new WebMediaPlayerMSCompositor(
-      compositor_task_runner_, io_task_runner_, web_stream, AsWeakPtr());
+      compositor_task_runner_, io_task_runner_, web_stream_, AsWeakPtr());
 
   SetNetworkState(WebMediaPlayer::kNetworkStateLoading);
   SetReadyState(WebMediaPlayer::kReadyStateHaveNothing);
   std::string stream_id =
-      web_stream.IsNull() ? std::string() : web_stream.Id().Utf8();
+      web_stream_.IsNull() ? std::string() : web_stream_.Id().Utf8();
   media_log_->AddEvent(media_log_->CreateLoadEvent(stream_id));
 
   frame_deliverer_.reset(new WebMediaPlayerMS::FrameDeliverer(
       AsWeakPtr(),
       base::Bind(&WebMediaPlayerMSCompositor::EnqueueFrame, compositor_)));
   video_frame_provider_ = renderer_factory_->GetVideoRenderer(
-      web_stream, media::BindToCurrentLoop(base::Bind(
-                      &WebMediaPlayerMS::OnSourceError, AsWeakPtr())),
+      web_stream_,
+      media::BindToCurrentLoop(
+          base::Bind(&WebMediaPlayerMS::OnSourceError, AsWeakPtr())),
       frame_deliverer_->GetRepaintCallback(), io_task_runner_,
       media_task_runner_, worker_task_runner_, gpu_factories_);
 
   RenderFrame* const frame = RenderFrame::FromWebFrame(frame_);
 
+  int routing_id = MSG_ROUTING_NONE;
+  GURL url = source.IsURL() ? GURL(source.GetAsURL()) : GURL();
+
   if (frame) {
     // Report UMA and RAPPOR metrics.
-    GURL url = source.IsURL() ? GURL(source.GetAsURL()) : GURL();
     media::ReportMetrics(load_type, url, frame_->GetSecurityOrigin(),
                          media_log_.get());
-
-    audio_renderer_ = renderer_factory_->GetAudioRenderer(
-        web_stream, frame->GetRoutingID(), initial_audio_output_device_id_,
-        initial_security_origin_);
-    if (!audio_renderer_)
-      WebRtcLogMessage("Warning: Failed to instantiate audio renderer.");
+    routing_id = frame->GetRoutingID();
   }
+
+  audio_renderer_ = renderer_factory_->GetAudioRenderer(
+      web_stream_, routing_id, initial_audio_output_device_id_,
+      initial_security_origin_);
+
+  if (!audio_renderer_)
+    WebRtcLogMessage("Warning: Failed to instantiate audio renderer.");
 
   if (!video_frame_provider_ && !audio_renderer_) {
     SetNetworkState(WebMediaPlayer::kNetworkStateNetworkError);
@@ -268,13 +287,143 @@ void WebMediaPlayerMS::Load(LoadType load_type,
   if (audio_renderer_) {
     audio_renderer_->SetVolume(volume_);
     audio_renderer_->Start();
+
+    // Store the ID of audio track being played in |current_video_track_id_|
+    blink::WebVector<blink::WebMediaStreamTrack> audio_tracks;
+    if (!web_stream_.IsNull()) {
+      web_stream_.AudioTracks(audio_tracks);
+      DCHECK_GT(audio_tracks.size(), 0U);
+      current_audio_track_id_ = audio_tracks[0].Id();
+    }
   }
-  if (video_frame_provider_)
+
+  if (video_frame_provider_) {
     video_frame_provider_->Start();
-  if (audio_renderer_ && !video_frame_provider_) {
+
+    // Store the ID of video track being played in |current_video_track_id_|
+    if (!web_stream_.IsNull()) {
+      blink::WebVector<blink::WebMediaStreamTrack> video_tracks;
+      web_stream_.VideoTracks(video_tracks);
+      DCHECK_GT(video_tracks.size(), 0U);
+      current_video_track_id_ = video_tracks[0].Id();
+    }
+  }
+  // When associated with an <audio> element, we don't want to wait for the
+  // first video fram to become available as we do for <video> elements
+  // (<audio> elements can also be assigned video tracks).
+  // For more details, see crbug.com/738379
+  if (audio_renderer_ &&
+      (client_->IsAudioElement() || !video_frame_provider_)) {
     // This is audio-only mode.
     SetReadyState(WebMediaPlayer::kReadyStateHaveMetadata);
     SetReadyState(WebMediaPlayer::kReadyStateHaveEnoughData);
+  }
+}
+
+void WebMediaPlayerMS::TrackAdded(const blink::WebMediaStreamTrack& track) {
+  Reload();
+}
+
+void WebMediaPlayerMS::TrackRemoved(const blink::WebMediaStreamTrack& track) {
+  Reload();
+}
+
+void WebMediaPlayerMS::Reload() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  if (web_stream_.IsNull())
+    return;
+
+  ReloadVideo();
+  ReloadAudio();
+}
+
+void WebMediaPlayerMS::ReloadVideo() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(!web_stream_.IsNull());
+  blink::WebVector<blink::WebMediaStreamTrack> video_tracks;
+  // VideoTracks() is a getter.
+  web_stream_.VideoTracks(video_tracks);
+
+  RendererReloadAction renderer_action = RendererReloadAction::KEEP_RENDERER;
+  if (video_tracks.IsEmpty()) {
+    if (video_frame_provider_)
+      renderer_action = RendererReloadAction::REMOVE_RENDERER;
+    current_video_track_id_ = blink::WebString();
+  } else if (video_tracks[0].Id() != current_video_track_id_) {
+    renderer_action = RendererReloadAction::NEW_RENDERER;
+    current_video_track_id_ = video_tracks[0].Id();
+  }
+
+  switch (renderer_action) {
+    case RendererReloadAction::NEW_RENDERER:
+      if (video_frame_provider_)
+        video_frame_provider_->Stop();
+
+      video_frame_provider_ = renderer_factory_->GetVideoRenderer(
+          web_stream_,
+          media::BindToCurrentLoop(
+              base::Bind(&WebMediaPlayerMS::OnSourceError, AsWeakPtr())),
+          frame_deliverer_->GetRepaintCallback(), io_task_runner_,
+          media_task_runner_, worker_task_runner_, gpu_factories_);
+      DCHECK(video_frame_provider_);
+      video_frame_provider_->Start();
+      break;
+
+    case RendererReloadAction::REMOVE_RENDERER:
+      video_frame_provider_->Stop();
+      video_frame_provider_ = nullptr;
+      break;
+
+    default:
+      return;
+  }
+
+  DCHECK_NE(renderer_action, RendererReloadAction::KEEP_RENDERER);
+  if (!paused_)
+    delegate_->DidPlayerSizeChange(delegate_id_, NaturalSize());
+}
+
+void WebMediaPlayerMS::ReloadAudio() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(!web_stream_.IsNull());
+  RenderFrame* const frame = RenderFrame::FromWebFrame(frame_);
+  if (!frame)
+    return;
+
+  blink::WebVector<blink::WebMediaStreamTrack> audio_tracks;
+  // AudioTracks() is a getter.
+  web_stream_.AudioTracks(audio_tracks);
+
+  RendererReloadAction renderer_action = RendererReloadAction::KEEP_RENDERER;
+  if (audio_tracks.IsEmpty()) {
+    if (audio_renderer_)
+      renderer_action = RendererReloadAction::REMOVE_RENDERER;
+    current_audio_track_id_ = blink::WebString();
+  } else if (audio_tracks[0].Id() != current_video_track_id_) {
+    renderer_action = RendererReloadAction::NEW_RENDERER;
+    current_audio_track_id_ = audio_tracks[0].Id();
+  }
+
+  switch (renderer_action) {
+    case RendererReloadAction::NEW_RENDERER:
+      if (audio_renderer_)
+        audio_renderer_->Stop();
+
+      audio_renderer_ = renderer_factory_->GetAudioRenderer(
+          web_stream_, frame->GetRoutingID(), initial_audio_output_device_id_,
+          initial_security_origin_);
+      audio_renderer_->SetVolume(volume_);
+      audio_renderer_->Start();
+      audio_renderer_->Play();
+      break;
+
+    case RendererReloadAction::REMOVE_RENDERER:
+      audio_renderer_->Stop();
+      audio_renderer_ = nullptr;
+      break;
+
+    default:
+      break;
   }
 }
 
@@ -296,13 +445,19 @@ void WebMediaPlayerMS::Play() {
 
   if (HasVideo())
     delegate_->DidPlayerSizeChange(delegate_id_, NaturalSize());
-  // TODO(perkj, magjed): We use OneShot focus type here so that it takes
-  // audio focus once it starts, and then will not respond to further audio
-  // focus changes. See http://crbug.com/596516 for more details.
-  delegate_->DidPlay(delegate_id_, HasVideo(), HasAudio(),
-                     media::MediaContentType::OneShot);
-  delegate_->SetIdle(delegate_id_, false);
 
+  // |delegate_| expects the notification only if there is at least one track
+  // actually playing. A media stream might have none since tracks can be
+  // removed from the stream.
+  if (HasAudio() || HasVideo()) {
+    // TODO(perkj, magjed): We use OneShot focus type here so that it takes
+    // audio focus once it starts, and then will not respond to further audio
+    // focus changes. See http://crbug.com/596516 for more details.
+    delegate_->DidPlay(delegate_id_, HasVideo(), HasAudio(),
+                       media::MediaContentType::OneShot);
+  }
+
+  delegate_->SetIdle(delegate_id_, false);
   paused_ = false;
 }
 
@@ -384,12 +539,30 @@ bool WebMediaPlayerMS::HasAudio() const {
 
 blink::WebSize WebMediaPlayerMS::NaturalSize() const {
   DCHECK(thread_checker_.CalledOnValidThread());
+  if (!video_frame_provider_)
+    return blink::WebSize();
+
   if (video_rotation_ == media::VIDEO_ROTATION_90 ||
       video_rotation_ == media::VideoRotation::VIDEO_ROTATION_270) {
     const gfx::Size& current_size = compositor_->GetCurrentSize();
     return blink::WebSize(current_size.height(), current_size.width());
   }
   return blink::WebSize(compositor_->GetCurrentSize());
+}
+
+blink::WebSize WebMediaPlayerMS::VisibleRect() const {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  scoped_refptr<media::VideoFrame> video_frame =
+      compositor_->GetCurrentFrameWithoutUpdatingStatistics();
+  if (!video_frame)
+    return blink::WebSize();
+
+  const gfx::Rect& visible_rect = video_frame->visible_rect();
+  if (video_rotation_ == media::VIDEO_ROTATION_90 ||
+      video_rotation_ == media::VideoRotation::VIDEO_ROTATION_270) {
+    return blink::WebSize(visible_rect.height(), visible_rect.width());
+  }
+  return blink::WebSize(visible_rect.width(), visible_rect.height());
 }
 
 bool WebMediaPlayerMS::Paused() const {
@@ -725,7 +898,8 @@ void WebMediaPlayerMS::ResetCanvasCache() {
 }
 
 void WebMediaPlayerMS::TriggerResize() {
-  get_client()->SizeChanged();
+  if (HasVideo())
+    get_client()->SizeChanged();
 
   delegate_->DidPlayerSizeChange(delegate_id_, NaturalSize());
 }

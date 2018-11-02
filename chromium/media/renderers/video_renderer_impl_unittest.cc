@@ -33,8 +33,8 @@
 #include "media/base/test_helpers.h"
 #include "media/base/video_frame.h"
 #include "media/base/wall_clock_time_source.h"
-#include "media/renderers/mock_gpu_memory_buffer_video_frame_pool.h"
 #include "media/renderers/video_renderer_impl.h"
+#include "media/video/mock_gpu_memory_buffer_video_frame_pool.h"
 #include "testing/gmock_mutant.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -433,13 +433,14 @@ class VideoRendererImplTest : public testing::Test {
       EXPECT_CALL(mock_cb_, OnStatisticsUpdate(_)).Times(AnyNumber());
       EXPECT_CALL(mock_cb_, OnBufferingStateChange(BUFFERING_HAVE_ENOUGH))
           .WillOnce(RunClosure(event.GetClosure()));
+
       // Note: In the normal underflow case we queue 5 frames here instead of
       // four since the underflow increases the number of required frames to
       // reach the have enough state.
       if (type == UnderflowTestType::NORMAL)
         QueueFrames("80 100 120 140 160");
       else
-        QueueFrames("40 60 80 90");
+        QueueFrames("40 60 80 90 100");
       SatisfyPendingDecode();
       event.RunAndWait();
     }

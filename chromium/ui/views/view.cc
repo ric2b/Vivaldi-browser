@@ -642,19 +642,6 @@ void View::SetLayoutManager(LayoutManager* layout_manager) {
     layout_manager_->Installed(this);
 }
 
-void View::SnapLayerToPixelBoundary() {
-  if (!layer())
-    return;
-
-  if (snap_layer_to_pixel_boundary_ && layer()->parent() &&
-      layer()->GetCompositor()) {
-    ui::SnapLayerToPhysicalPixelBoundary(layer()->parent(), layer());
-  } else {
-    // Reset the offset.
-    layer()->SetSubpixelPositionOffset(gfx::Vector2dF());
-  }
-}
-
 // Attributes ------------------------------------------------------------------
 
 const char* View::GetClassName() const {
@@ -845,36 +832,46 @@ void View::SchedulePaintInRect(const gfx::Rect& rect) {
   }
 }
 
-void View::Paint(const ui::PaintContext& parent_context) {
+void View::Paint(const PaintInfo& parent_paint_info) {
   if (!ShouldPaint())
     return;
 
-  ui::PaintContext context(parent_context, GetPaintContextOffset());
+  const gfx::Rect& parent_bounds = !parent()
+                                       ? GetPaintRecordingBounds()
+                                       : parent()->GetPaintRecordingBounds();
 
+  PaintInfo paint_info = PaintInfo::CreateChildPaintInfo(
+      parent_paint_info, GetPaintRecordingBounds(), parent_bounds.size(),
+      GetPaintScaleType());
+
+  const ui::PaintContext& context = paint_info.context();
   bool is_invalidated = true;
-  if (context.CanCheckInvalid()) {
+  if (paint_info.context().CanCheckInvalid()) {
 #if DCHECK_IS_ON()
-    gfx::Vector2d offset;
-    context.Visited(this);
-    View* view = this;
-    while (view->parent() && !view->layer()) {
-      DCHECK(view->GetTransform().IsIdentity());
-      offset += view->GetMirroredPosition().OffsetFromOrigin();
-      view = view->parent();
+    if (!context.is_pixel_canvas()) {
+      gfx::Vector2d offset;
+      context.Visited(this);
+      View* view = this;
+      while (view->parent() && !view->layer()) {
+        DCHECK(view->GetTransform().IsIdentity());
+        offset += view->GetMirroredPosition().OffsetFromOrigin();
+        view = view->parent();
+      }
+      // The offset in the PaintContext should be the offset up to the paint
+      // root, which we compute and verify here.
+      DCHECK_EQ(context.PaintOffset().x(), offset.x());
+      DCHECK_EQ(context.PaintOffset().y(), offset.y());
+      // The above loop will stop when |view| is the paint root, which should be
+      // the root of the current paint walk, as verified by storing the root in
+      // the PaintContext.
+      DCHECK_EQ(context.RootVisited(), view);
     }
-    // The offset in the PaintContext should be the offset up to the paint root,
-    // which we compute and verify here.
-    DCHECK_EQ(context.PaintOffset().x(), offset.x());
-    DCHECK_EQ(context.PaintOffset().y(), offset.y());
-    // The above loop will stop when |view| is the paint root, which should be
-    // the root of the current paint walk, as verified by storing the root in
-    // the PaintContext.
-    DCHECK_EQ(context.RootVisited(), view);
 #endif
 
     // If the View wasn't invalidated, don't waste time painting it, the output
     // would be culled.
-    is_invalidated = context.IsRectInvalid(GetLocalBounds());
+    is_invalidated =
+        context.IsRectInvalid(gfx::Rect(paint_info.paint_recording_size()));
   }
 
   TRACE_EVENT1("views", "View::Paint", "class", GetClassName());
@@ -883,29 +880,44 @@ void View::Paint(const ui::PaintContext& parent_context) {
   // rather than relative to its parent.
   // TODO(danakj): Rework clip and transform recorder usage here to use
   // std::optional once we can do so.
-  ui::ClipRecorder clip_recorder(parent_context);
+  ui::ClipRecorder clip_recorder(parent_paint_info.context());
   if (!layer()) {
     // Set the clip rect to the bounds of this View, or |clip_path_| if it's
     // been set. Note that the X (or left) position we pass to ClipRect takes
     // into consideration whether or not the View uses a right-to-left layout so
     // that we paint the View in its mirrored position if need be.
     if (clip_path_.isEmpty()) {
-      clip_recorder.ClipRect(GetMirroredBounds());
+      clip_recorder.ClipRect(gfx::Rect(paint_info.paint_recording_size()) +
+                             paint_info.offset_from_parent());
     } else {
       gfx::Path clip_path_in_parent = clip_path_;
-      clip_path_in_parent.offset(GetMirroredX(), y());
+
+      // Transform |clip_path_| from local space to parent recording space.
+      gfx::Transform to_parent_recording_space;
+
+      to_parent_recording_space.Translate(paint_info.offset_from_parent());
+      to_parent_recording_space.Scale(
+          SkFloatToScalar(paint_info.paint_recording_scale_x()),
+          SkFloatToScalar(paint_info.paint_recording_scale_y()));
+
+      clip_path_in_parent.transform(to_parent_recording_space.matrix());
       clip_recorder.ClipPathWithAntiAliasing(clip_path_in_parent);
     }
   }
 
   ui::TransformRecorder transform_recorder(context);
-  SetupTransformRecorderForPainting(&transform_recorder);
+  SetupTransformRecorderForPainting(paint_info.offset_from_parent(),
+                                    &transform_recorder);
 
   // Note that the cache is not aware of the offset of the view
   // relative to the parent since painting is always done relative to
   // the top left of the individual view.
-  if (is_invalidated || !paint_cache_.UseCache(context, size())) {
-    ui::PaintRecorder recorder(context, size(), &paint_cache_);
+  if (is_invalidated ||
+      !paint_cache_.UseCache(context, paint_info.paint_recording_size())) {
+    ui::PaintRecorder recorder(context, paint_info.paint_recording_size(),
+                               paint_info.paint_recording_scale_x(),
+                               paint_info.paint_recording_scale_y(),
+                               &paint_cache_);
     gfx::Canvas* canvas = recorder.canvas();
     gfx::ScopedRTLFlipCanvas scoped_canvas(canvas, width(),
                                            flip_canvas_on_paint_for_rtl_ui_);
@@ -915,7 +927,7 @@ void View::Paint(const ui::PaintContext& parent_context) {
   }
 
   // View::Paint() recursion over the subtree.
-  PaintChildren(context);
+  PaintChildren(paint_info);
 }
 
 void View::SetBackground(std::unique_ptr<Background> b) {
@@ -1543,9 +1555,9 @@ void View::RemovedFromWidget() {}
 
 // Painting --------------------------------------------------------------------
 
-void View::PaintChildren(const ui::PaintContext& context) {
+void View::PaintChildren(const PaintInfo& paint_info) {
   TRACE_EVENT1("views", "View::PaintChildren", "class", GetClassName());
-  RecursivePaintHelper(&View::Paint, context);
+  RecursivePaintHelper(&View::Paint, paint_info);
 }
 
 void View::OnPaint(gfx::Canvas* canvas) {
@@ -1570,18 +1582,20 @@ void View::OnPaintBorder(gfx::Canvas* canvas) {
 
 // Accelerated Painting --------------------------------------------------------
 
-gfx::Vector2d View::CalculateOffsetToAncestorWithLayer(
+View::LayerOffsetData View::CalculateOffsetToAncestorWithLayer(
     ui::Layer** layer_parent) {
   if (layer()) {
     if (layer_parent)
       *layer_parent = layer();
-    return gfx::Vector2d();
+    return LayerOffsetData(layer()->device_scale_factor());
   }
   if (!parent_)
-    return gfx::Vector2d();
+    return LayerOffsetData();
 
-  return gfx::Vector2d(GetMirroredX(), y()) +
+  LayerOffsetData offset_data =
       parent_->CalculateOffsetToAncestorWithLayer(layer_parent);
+
+  return offset_data + GetMirroredPosition().OffsetFromOrigin();
 }
 
 void View::UpdateParentLayer() {
@@ -1591,25 +1605,27 @@ void View::UpdateParentLayer() {
   ui::Layer* parent_layer = NULL;
   gfx::Vector2d offset(GetMirroredX(), y());
 
-  if (parent_)
-    offset += parent_->CalculateOffsetToAncestorWithLayer(&parent_layer);
+  if (parent_) {
+    offset +=
+        parent_->CalculateOffsetToAncestorWithLayer(&parent_layer).offset();
+  }
 
   ReparentLayer(offset, parent_layer);
 }
 
 void View::MoveLayerToParent(ui::Layer* parent_layer,
-                             const gfx::Point& point) {
-  gfx::Point local_point(point);
+                             const LayerOffsetData& offset_data) {
+  LayerOffsetData local_offset_data(offset_data);
   if (parent_layer != layer())
-    local_point.Offset(GetMirroredX(), y());
+    local_offset_data += GetMirroredPosition().OffsetFromOrigin();
+
   if (layer() && parent_layer != layer()) {
     parent_layer->Add(layer());
-    SetLayerBounds(gfx::Rect(local_point.x(), local_point.y(),
-                             width(), height()));
+    SetLayerBounds(size(), local_offset_data);
   } else {
     internal::ScopedChildrenLock lock(this);
     for (auto* child : children_)
-      child->MoveLayerToParent(parent_layer, local_point);
+      child->MoveLayerToParent(parent_layer, local_offset_data);
   }
 }
 
@@ -1674,14 +1690,14 @@ void View::NotifyParentsOfLayerChange() {
   }
 }
 
-void View::UpdateChildLayerBounds(const gfx::Vector2d& offset) {
+void View::UpdateChildLayerBounds(const LayerOffsetData& offset_data) {
   if (layer()) {
-    SetLayerBounds(GetLocalBounds() + offset);
+    SetLayerBounds(size(), offset_data);
   } else {
     internal::ScopedChildrenLock lock(this);
     for (auto* child : children_) {
       child->UpdateChildLayerBounds(
-          offset + gfx::Vector2d(child->GetMirroredX(), child->y()));
+          offset_data + child->GetMirroredPosition().OffsetFromOrigin());
     }
   }
 }
@@ -1697,8 +1713,23 @@ void View::OnDelegatedFrameDamage(
 void View::OnDeviceScaleFactorChanged(float device_scale_factor) {
   snap_layer_to_pixel_boundary_ =
       (device_scale_factor - std::floor(device_scale_factor)) != 0.0f;
-  SnapLayerToPixelBoundary();
-  // Repainting with new scale factor will paint the content at the right scale.
+
+  if (!layer())
+    return;
+
+  // There can be no subpixel offset if the layer has no parent.
+  if (!parent() || !layer()->parent())
+    return;
+
+  if (layer()->parent() && layer()->GetCompositor() &&
+      layer()->GetCompositor()->is_pixel_canvas()) {
+    LayerOffsetData offset_data(
+        parent()->CalculateOffsetToAncestorWithLayer(nullptr));
+    offset_data += GetMirroredPosition().OffsetFromOrigin();
+    SnapLayerToPixelBoundary(offset_data);
+  } else {
+    SnapLayerToPixelBoundary(LayerOffsetData());
+  }
 }
 
 void View::ReorderLayers() {
@@ -1815,6 +1846,10 @@ int View::GetVerticalDragThreshold() {
   // TODO(jennyz): This value may need to be adjusted for different platforms
   // and for different display density.
   return kDefaultVerticalDragThreshold;
+}
+
+PaintInfo::ScaleType View::GetPaintScaleType() const {
+  return PaintInfo::ScaleType::kScaleWithEdgeSnapping;
 }
 
 // Debugging -------------------------------------------------------------------
@@ -1969,14 +2004,16 @@ bool View::ShouldPaint() const {
   return visible_ && !size().IsEmpty();
 }
 
-gfx::Vector2d View::GetPaintContextOffset() const {
-  // If the View has a layer() then it is a paint root. Otherwise, we need to
-  // add the offset from the parent into the total offset from the paint root.
+gfx::Rect View::GetPaintRecordingBounds() const {
+  // If the View has a layer() then it is a paint root and no offset information
+  // is needed. Otherwise, we need bounds that includes an offset from the
+  // parent to add to the total offset from the paint root.
   DCHECK(layer() || parent() || origin() == gfx::Point());
-  return layer() ? gfx::Vector2d() : GetMirroredPosition().OffsetFromOrigin();
+  return layer() ? GetLocalBounds() : GetMirroredBounds();
 }
 
 void View::SetupTransformRecorderForPainting(
+    const gfx::Vector2d& offset_from_parent,
     ui::TransformRecorder* recorder) const {
   // If the view is backed by a layer, it should paint with itself as the origin
   // rather than relative to its parent.
@@ -1986,42 +2023,54 @@ void View::SetupTransformRecorderForPainting(
   // Translate the graphics such that 0,0 corresponds to where this View is
   // located relative to its parent.
   gfx::Transform transform_from_parent;
-  gfx::Vector2d offset_from_parent = GetMirroredPosition().OffsetFromOrigin();
   transform_from_parent.Translate(offset_from_parent.x(),
                                   offset_from_parent.y());
-  transform_from_parent.PreconcatTransform(GetTransform());
   recorder->Transform(transform_from_parent);
 }
 
-void View::RecursivePaintHelper(void (View::*func)(const ui::PaintContext&),
-                                const ui::PaintContext& context) {
+void View::RecursivePaintHelper(void (View::*func)(const PaintInfo&),
+                                const PaintInfo& info) {
   View::Views children = GetChildrenInZOrder();
   DCHECK_EQ(child_count(), static_cast<int>(children.size()));
   for (auto* child : children) {
     if (!child->layer())
-      (child->*func)(context);
+      (child->*func)(info);
   }
 }
 
 void View::PaintFromPaintRoot(const ui::PaintContext& parent_context) {
-  Paint(parent_context);
+  PaintInfo paint_info = PaintInfo::CreateRootPaintInfo(
+      parent_context, layer() ? layer()->size() : size());
+  Paint(paint_info);
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDrawViewBoundsRects))
-    PaintDebugRects(parent_context);
+    PaintDebugRects(paint_info);
 }
 
-void View::PaintDebugRects(const ui::PaintContext& parent_context) {
+void View::PaintDebugRects(const PaintInfo& parent_paint_info) {
   if (!ShouldPaint())
     return;
 
-  ui::PaintContext context(parent_context, GetPaintContextOffset());
-  ui::TransformRecorder transform_recorder(context);
-  SetupTransformRecorderForPainting(&transform_recorder);
+  const gfx::Rect& parent_bounds = (layer() || !parent())
+                                       ? GetPaintRecordingBounds()
+                                       : parent()->GetPaintRecordingBounds();
+  PaintInfo paint_info = PaintInfo::CreateChildPaintInfo(
+      parent_paint_info, GetPaintRecordingBounds(), parent_bounds.size(),
+      GetPaintScaleType());
 
-  RecursivePaintHelper(&View::PaintDebugRects, context);
+  const ui::PaintContext& context = paint_info.context();
+
+  ui::TransformRecorder transform_recorder(context);
+  SetupTransformRecorderForPainting(paint_info.offset_from_parent(),
+                                    &transform_recorder);
+
+  RecursivePaintHelper(&View::PaintDebugRects, paint_info);
 
   // Draw outline rects for debugging.
-  ui::PaintRecorder recorder(context, size());
+  ui::PaintRecorder recorder(context, paint_info.paint_recording_size(),
+                             paint_info.paint_recording_scale_x(),
+                             paint_info.paint_recording_scale_y(),
+                             &paint_cache_);
   gfx::Canvas* canvas = recorder.canvas();
   const float scale = canvas->UndoDeviceScaleFactor();
   gfx::RectF outline_rect(ScaleToEnclosedRect(GetLocalBounds(), scale));
@@ -2180,6 +2229,23 @@ void View::VisibilityChangedImpl(View* starting_from, bool is_visible) {
   VisibilityChanged(starting_from, is_visible);
 }
 
+void View::SnapLayerToPixelBoundary(const LayerOffsetData& offset_data) {
+  if (!layer())
+    return;
+
+  if (snap_layer_to_pixel_boundary_ && layer()->parent() &&
+      layer()->GetCompositor()) {
+    if (layer()->GetCompositor()->is_pixel_canvas()) {
+      layer()->SetSubpixelPositionOffset(offset_data.GetSubpixelOffset());
+    } else {
+      ui::SnapLayerToPhysicalPixelBoundary(layer()->parent(), layer());
+    }
+  } else {
+    // Reset the offset.
+    layer()->SetSubpixelPositionOffset(gfx::Vector2dF());
+  }
+}
+
 void View::BoundsChanged(const gfx::Rect& previous_bounds) {
   if (visible_) {
     // Paint the new bounds.
@@ -2190,11 +2256,13 @@ void View::BoundsChanged(const gfx::Rect& previous_bounds) {
 
   if (layer()) {
     if (parent_) {
-      SetLayerBounds(GetLocalBounds() +
-                     gfx::Vector2d(GetMirroredX(), y()) +
-                     parent_->CalculateOffsetToAncestorWithLayer(NULL));
+      LayerOffsetData offset_data(
+          parent_->CalculateOffsetToAncestorWithLayer(nullptr));
+      offset_data += GetMirroredPosition().OffsetFromOrigin();
+      SetLayerBounds(size(), offset_data);
     } else {
-      SetLayerBounds(bounds_);
+      SetLayerBounds(bounds_.size(),
+                     LayerOffsetData() + bounds_.OffsetFromOrigin());
     }
 
     // In RTL mode, if our width has changed, our children's mirrored bounds
@@ -2204,7 +2272,8 @@ void View::BoundsChanged(const gfx::Rect& previous_bounds) {
       for (int i = 0; i < child_count(); ++i) {
         View* child = child_at(i);
         child->UpdateChildLayerBounds(
-            gfx::Vector2d(child->GetMirroredX(), child->y()));
+            LayerOffsetData(layer()->device_scale_factor(),
+                            child->GetMirroredPosition().OffsetFromOrigin()));
       }
     }
   } else {
@@ -2284,9 +2353,10 @@ void View::RemoveDescendantToNotify(View* view) {
     descendants_to_notify_.reset();
 }
 
-void View::SetLayerBounds(const gfx::Rect& bounds) {
-  layer()->SetBounds(bounds);
-  SnapLayerToPixelBoundary();
+void View::SetLayerBounds(const gfx::Size& size,
+                          const LayerOffsetData& offset_data) {
+  layer()->SetBounds(gfx::Rect(size) + offset_data.offset());
+  SnapLayerToPixelBoundary(offset_data);
 }
 
 // Transformations -------------------------------------------------------------
@@ -2423,7 +2493,7 @@ void View::ReparentLayer(const gfx::Vector2d& offset, ui::Layer* parent_layer) {
   if (parent_layer)
     parent_layer->Add(layer());
   layer()->SchedulePaint(GetLocalBounds());
-  MoveLayerToParent(layer(), gfx::Point());
+  MoveLayerToParent(layer(), LayerOffsetData(layer()->device_scale_factor()));
 }
 
 // Input -----------------------------------------------------------------------
@@ -2618,15 +2688,6 @@ void View::PropagateThemeChanged() {
       child->PropagateThemeChanged();
   }
   OnThemeChanged();
-}
-
-void View::PropagateLocaleChanged() {
-  {
-    internal::ScopedChildrenLock lock(this);
-    for (auto* child : base::Reversed(children_))
-      child->PropagateLocaleChanged();
-  }
-  OnLocaleChanged();
 }
 
 void View::PropagateDeviceScaleFactorChanged(float device_scale_factor) {

@@ -12,7 +12,6 @@
 #include <memory>
 #include <set>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "base/gtest_prod_util.h"
@@ -22,10 +21,10 @@
 #include "base/time/time.h"
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/common/content_export.h"
+#include "content/common/service_worker/service_worker_container.mojom.h"
+#include "content/common/service_worker/service_worker_event_dispatcher.mojom.h"
 #include "content/common/service_worker/service_worker_provider_host_info.h"
-#include "content/common/service_worker/service_worker_provider_interfaces.mojom.h"
 #include "content/common/service_worker/service_worker_types.h"
-#include "content/common/worker_url_loader_factory_provider.mojom.h"
 #include "content/public/common/request_context_frame_type.h"
 #include "content/public/common/request_context_type.h"
 #include "content/public/common/resource_type.h"
@@ -44,6 +43,7 @@ class ServiceWorkerContextCore;
 class ServiceWorkerDispatcherHost;
 class ServiceWorkerRequestHandler;
 class ServiceWorkerVersion;
+class BrowserSideServiceWorkerEventDispatcher;
 class WebContents;
 
 // This class is the browser-process representation of a service worker
@@ -59,21 +59,27 @@ class WebContents;
 // For providers hosting a running service worker, this class will observe
 // resource loads made directly by the service worker.
 //
-// A ServiceWorkerProviderHost instance is created when a
-// ServiceWorkerNetworkProvider is created on the renderer process, which
-// happens 1) when a document or worker (i.e., a service worker client) is
-// created, or 2) during service worker startup. Mojo's connection from
-// ServiceWorkerNetworkProvider is established on the creation time, and the
-// instance is destroyed on disconnection from the renderer side.
-// If PlzNavigate is turned on, an instance is pre-created on the browser
+// A ServiceWorkerProviderHost is created in the following situations:
+// 1) When it's for a document or worker (i.e., a service
+// worker client), the provider host is created when
+// ServiceWorkerNetworkProvider is created on the renderer process. Mojo's
+// connection from ServiceWorkerNetworkProvider is established on the creation
+// time.
+// 2) When it's for a running service worker, the provider host is created on
+// the browser process before launching the service worker's thread. Mojo's
+// connection to the renderer is established with the StartWorker message.
+// 3) When PlzNavigate is turned on, an instance is pre-created on the browser
 // before ServiceWorkerNetworkProvider is created on the renderer because
 // navigation is initiated on the browser side. In that case, establishment of
 // Mojo's connection will be deferred until ServiceWorkerNetworkProvider is
 // created on the renderer.
+// Destruction of the ServiceWorkerProviderHost instance happens on
+// disconnection of the Mojo's pipe from the renderer side regardless of what
+// the provider is for.
 class CONTENT_EXPORT ServiceWorkerProviderHost
-    : public NON_EXPORTED_BASE(ServiceWorkerRegistration::Listener),
+    : public ServiceWorkerRegistration::Listener,
       public base::SupportsWeakPtr<ServiceWorkerProviderHost>,
-      public NON_EXPORTED_BASE(mojom::ServiceWorkerProviderHost) {
+      public mojom::ServiceWorkerContainerHost {
  public:
   using GetRegistrationForReadyCallback =
       base::Callback<void(ServiceWorkerRegistration* reigstration)>;
@@ -92,6 +98,12 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
       bool are_ancestors_secure,
       const WebContentsGetter& web_contents_getter);
 
+  // Creates a ServiceWorkerProviderHost for hosting a running service worker.
+  // Information about this provider host is passed down to the service worker
+  // via StartWorker message.
+  static std::unique_ptr<ServiceWorkerProviderHost> PreCreateForController(
+      base::WeakPtr<ServiceWorkerContextCore> context);
+
   // Used to create a ServiceWorkerProviderHost when the renderer-side provider
   // is created. This ProviderHost will be created for the process specified by
   // |process_id|.
@@ -99,7 +111,7 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
       int process_id,
       ServiceWorkerProviderHostInfo info,
       base::WeakPtr<ServiceWorkerContextCore> context,
-      ServiceWorkerDispatcherHost* dispatcher_host);
+      base::WeakPtr<ServiceWorkerDispatcherHost> dispatcher_host);
 
   ~ServiceWorkerProviderHost() override;
 
@@ -126,7 +138,7 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   bool IsContextSecureForServiceWorker() const;
 
   bool IsHostToRunningServiceWorker() {
-    return running_hosted_version_.get() != NULL;
+    return running_hosted_version_.get() != nullptr;
   }
 
   // Returns this provider's controller. The controller is typically the same as
@@ -137,29 +149,31 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   // to an exceptional circumstance (here also it is not "using" the
   // registration).
   // (3) During algorithms such as the update, skipWaiting(), and claim() steps,
-  // the active_version and controlling_version may temporarily differ. For
-  // example, to perform skipWaiting(), the registration's active version is
-  // updated first and then the provider host's controlling version is updated
-  // to match it.
-  ServiceWorkerVersion* controlling_version() const {
+  // the active version and controller may temporarily differ. For example, to
+  // perform skipWaiting(), the registration's active version is updated first
+  // and then the provider host's controlling version is updated to match it.
+  ServiceWorkerVersion* controller() const {
     // Only clients can have controllers.
-    DCHECK(!controlling_version_ || IsProviderForClient());
-    return controlling_version_.get();
+    DCHECK(!controller_ || IsProviderForClient());
+    return controller_.get();
   }
 
   ServiceWorkerVersion* active_version() const {
-    return associated_registration_.get() ?
-        associated_registration_->active_version() : NULL;
+    return associated_registration_.get()
+               ? associated_registration_->active_version()
+               : nullptr;
   }
 
   ServiceWorkerVersion* waiting_version() const {
-    return associated_registration_.get() ?
-        associated_registration_->waiting_version() : NULL;
+    return associated_registration_.get()
+               ? associated_registration_->waiting_version()
+               : nullptr;
   }
 
   ServiceWorkerVersion* installing_version() const {
-    return associated_registration_.get() ?
-        associated_registration_->installing_version() : NULL;
+    return associated_registration_.get()
+               ? associated_registration_->installing_version()
+               : nullptr;
   }
 
   // Returns the associated registration. The provider host listens to this
@@ -201,15 +215,7 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   // Clears the associated registration and stop listening to it.
   void DisassociateRegistration();
 
-  void SetHostedVersion(ServiceWorkerVersion* version);
-
-  // Creates a per-controller-worker URLLoaderFactory for script loading.
-  // The created factory is kept alive while the controller worker is alive.
-  // Used only when IsServicificationEnabled is true.
-  void CreateScriptURLLoaderFactory(
-      mojom::URLLoaderFactoryAssociatedRequest script_loader_factory_request);
-
-  // Returns a handler for a request, the handler may return NULL if
+  // Returns a handler for a request, the handler may return nullptr if
   // the request doesn't require special handling.
   std::unique_ptr<ServiceWorkerRequestHandler> CreateRequestHandler(
       FetchRequestMode request_mode,
@@ -268,7 +274,7 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   std::unique_ptr<ServiceWorkerProviderHost> PrepareForCrossSiteTransfer();
   void CompleteCrossSiteTransfer(ServiceWorkerProviderHost* provisional_host);
   ServiceWorkerDispatcherHost* dispatcher_host() const {
-    return dispatcher_host_;
+    return dispatcher_host_.get();
   }
 
   // PlzNavigate
@@ -276,7 +282,17 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   void CompleteNavigationInitialized(
       int process_id,
       ServiceWorkerProviderHostInfo info,
-      ServiceWorkerDispatcherHost* dispatcher_host);
+      base::WeakPtr<ServiceWorkerDispatcherHost> dispatcher_host);
+
+  // Completes initialization of provider hosts for controllers and returns the
+  // value to create ServiceWorkerNetworkProvider on the renderer which will be
+  // connected to this instance.
+  // This instance will keep the reference to |hosted_version|, so please be
+  // careful not to create a reference cycle.
+  mojom::ServiceWorkerProviderInfoForStartWorkerPtr
+  CompleteStartWorkerPreparation(
+      int process_id,
+      scoped_refptr<ServiceWorkerVersion> hosted_version);
 
   // Sends event messages to the renderer. Events for the worker are queued up
   // until the worker thread id is known via SetReadyToSendMessagesToWorker().
@@ -306,12 +322,6 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   // exceptional condition like it could no longer be read from the script
   // cache.
   void NotifyControllerLost();
-
-  // Binds the ServiceWorkerWorkerClient of a dedicated (or shared) worker to
-  // the parent frame's ServiceWorkerProviderHost. (This is used only when
-  // off-main-thread-fetch is enabled.)
-  void BindWorkerFetchContext(
-      mojom::ServiceWorkerWorkerClientAssociatedPtrInfo client_ptr_info);
 
  private:
   friend class ForeignFetchRequestHandlerTest;
@@ -343,10 +353,11 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
     ~OneShotGetReadyCallback();
   };
 
-  ServiceWorkerProviderHost(int process_id,
-                            ServiceWorkerProviderHostInfo info,
-                            base::WeakPtr<ServiceWorkerContextCore> context,
-                            ServiceWorkerDispatcherHost* dispatcher_host);
+  ServiceWorkerProviderHost(
+      int process_id,
+      ServiceWorkerProviderHostInfo info,
+      base::WeakPtr<ServiceWorkerContextCore> context,
+      base::WeakPtr<ServiceWorkerDispatcherHost> dispatcher_host);
 
   // ServiceWorkerRegistration::Listener overrides.
   void OnVersionAttributesChanged(
@@ -358,9 +369,9 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
       ServiceWorkerRegistration* registration) override;
   void OnSkippedWaiting(ServiceWorkerRegistration* registration) override;
 
-  // Sets the controller version field to |version| or if |version| is NULL,
-  // clears the field. If |notify_controllerchange| is true, instructs the
-  // renderer to dispatch a 'controller' change event.
+  // Sets the controller field to |version| or if |version| is nullptr, clears
+  // the field. If |notify_controllerchange| is true, instructs the renderer to
+  // dispatch a 'controller' change event.
   void SetControllerVersionAttribute(ServiceWorkerVersion* version,
                                      bool notify_controllerchange);
 
@@ -381,18 +392,18 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   bool IsReadyToSendMessages() const;
   void Send(IPC::Message* message) const;
 
-  // Notifies the information about the controller and associated registration
-  // to the provider on the renderer. This is for cross site transfer and
-  // browser side navigation which need to decide which process will handle the
-  // request later.
-  void NotifyControllerToAssociatedProvider();
+  // Sends information about the controller to the providers of the service
+  // worker clients in the renderer. If |notify_controllerchange| is true,
+  // instructs the renderer to dispatch a 'controllerchange' event.  If
+  // |version| is non-null, it must be the same as |controller_|. |version| can
+  // be null while |controller_| is non-null in the strange case of cross-site
+  // transfer, which will be removed when the non-PlzNavigate code path is
+  // removed.
+  void SendSetControllerServiceWorker(ServiceWorkerVersion* version,
+                                      bool notify_controllerchange);
 
-  // Clears the information of the ServiceWorkerWorkerClient of dedicated (or
-  // shared) worker, when the connection to the worker is disconnected.
-  void UnregisterWorkerFetchContext(mojom::ServiceWorkerWorkerClient*);
-
-  std::string client_uuid_;
-  base::TimeTicks create_time_;
+  const std::string client_uuid_;
+  const base::TimeTicks create_time_;
   int render_process_id_;
 
   // For provider hosts that are hosting a running service worker, the id of the
@@ -416,35 +427,45 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   scoped_refptr<ServiceWorkerRegistration> associated_registration_;
 
   // Keyed by registration scope URL length.
-  typedef std::map<size_t, scoped_refptr<ServiceWorkerRegistration>>
-      ServiceWorkerRegistrationMap;
+  using ServiceWorkerRegistrationMap =
+      std::map<size_t, scoped_refptr<ServiceWorkerRegistration>>;
   // Contains all living registrations whose pattern this document's URL
   // starts with. It is empty if IsContextSecureForServiceWorker() is
   // false.
   ServiceWorkerRegistrationMap matching_registrations_;
 
   std::unique_ptr<OneShotGetReadyCallback> get_ready_callback_;
-  scoped_refptr<ServiceWorkerVersion> controlling_version_;
+  scoped_refptr<ServiceWorkerVersion> controller_;
+  std::unique_ptr<BrowserSideServiceWorkerEventDispatcher>
+      controller_event_dispatcher_;
+
   scoped_refptr<ServiceWorkerVersion> running_hosted_version_;
   base::WeakPtr<ServiceWorkerContextCore> context_;
-  ServiceWorkerDispatcherHost* dispatcher_host_;
+
+  // |dispatcher_host_| can be null in several cases:
+  // 1) In some tests.
+  // 2) PlzNavigate and service worker startup pre-create a
+  // ServiceWorkerProviderHost instance before there is a renderer assigned to
+  // it. The dispatcher host is set once the instance starts hosting a
+  // renderer.
+  // 3) During cross-site transfer.
+  // 4) The dispatcher host can be destructed/removed before the provider host.
+  base::WeakPtr<ServiceWorkerDispatcherHost> dispatcher_host_;
+
   bool allow_association_;
 
-  // |provider_| is the renderer-side Mojo endpoint for provider.
-  mojom::ServiceWorkerProviderAssociatedPtr provider_;
+  // |container_| is the Mojo endpoint to the renderer-side
+  // ServiceWorkerContainer that |this| is a ServiceWorkerContainerHost for.
+  mojom::ServiceWorkerContainerAssociatedPtr container_;
   // |binding_| is the Mojo binding that keeps the connection to the
   // renderer-side counterpart (content::ServiceWorkerNetworkProvider). When the
-  // connection bound on |binding_| gets killed from the renderer side, this
+  // connection bound on |binding_| gets killed from the renderer side, or the
+  // bound |ServiceWorkerProviderInfoForStartWorker::host_ptr_info| is otherwise
+  // destroyed before being passed to the renderer, this
   // content::ServiceWorkerProviderHost will be destroyed.
-  mojo::AssociatedBinding<mojom::ServiceWorkerProviderHost> binding_;
+  mojo::AssociatedBinding<mojom::ServiceWorkerContainerHost> binding_;
 
   std::vector<base::Closure> queued_events_;
-
-  // Keeps ServiceWorkerWorkerClient pointers of dedicated or shared workers
-  // which are associated with the ServiceWorkerProviderHost.
-  std::unordered_map<mojom::ServiceWorkerWorkerClient*,
-                     mojom::ServiceWorkerWorkerClientAssociatedPtr>
-      worker_clients_;
 
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerProviderHost);
 };

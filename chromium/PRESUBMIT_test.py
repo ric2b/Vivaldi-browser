@@ -742,7 +742,6 @@ class PydepsNeedsUpdatingTest(unittest.TestCase):
     self.assertTrue('File is stale' in str(results[0]))
     self.assertTrue('File is stale' in str(results[1]))
 
-
 class AndroidDeprecatedTestAnnotationTest(unittest.TestCase):
   def testCheckAndroidTestAnnotationUsage(self):
     mock_input_api = MockInputApi()
@@ -788,7 +787,95 @@ class AndroidDeprecatedTestAnnotationTest(unittest.TestCase):
     self.assertTrue('UsedDeprecatedSmokeAnnotation.java:1' in msgs[0].items,
                     'UsedDeprecatedSmokeAnnotation not found in errors')
 
+class AndroidDeprecatedJUnitFrameworkTest(unittest.TestCase):
+  def testCheckAndroidTestAnnotationUsage(self):
+    mock_input_api = MockInputApi()
+    mock_output_api = MockOutputApi()
 
+    mock_input_api.files = [
+        MockAffectedFile('LalaLand.java', [
+          'random stuff'
+        ]),
+        MockAffectedFile('CorrectUsage.java', [
+          'import org.junit.ABC',
+          'import org.junit.XYZ;',
+        ]),
+        MockAffectedFile('UsedDeprecatedJUnit.java', [
+          'import junit.framework.*;',
+        ]),
+        MockAffectedFile('UsedDeprecatedJUnitAssert.java', [
+          'import junit.framework.Assert;',
+        ]),
+    ]
+    msgs = PRESUBMIT._CheckAndroidTestJUnitFrameworkImport(
+        mock_input_api, mock_output_api)
+    self.assertEqual(1, len(msgs),
+                     'Expected %d items, found %d: %s'
+                     % (1, len(msgs), msgs))
+    self.assertEqual(2, len(msgs[0].items),
+                     'Expected %d items, found %d: %s'
+                     % (2, len(msgs[0].items), msgs[0].items))
+    self.assertTrue('UsedDeprecatedJUnit.java:1' in msgs[0].items,
+                    'UsedDeprecatedJUnit.java not found in errors')
+    self.assertTrue('UsedDeprecatedJUnitAssert.java:1'
+                    in msgs[0].items,
+                    'UsedDeprecatedJUnitAssert not found in errors')
+
+class AndroidJUnitBaseClass(unittest.TestCase):
+  def testCheckAndroidTestAnnotationUsage(self):
+    mock_input_api = MockInputApi()
+    mock_output_api = MockOutputApi()
+
+    mock_input_api.files = [
+        MockAffectedFile('LalaLand.java', [
+          'random stuff'
+        ]),
+        MockAffectedFile('CorrectTest.java', [
+          '@RunWith(ABC.class);'
+          'public class CorrectTest {',
+          '}',
+        ]),
+        MockAffectedFile('HistoricallyIncorrectTest.java', [
+          'public class Test extends BaseCaseA {',
+          '}',
+          ], old_contents=[
+          'public class Test extends BaseCaseB {',
+          '}',
+        ]),
+        MockAffectedFile('CorrectTestWithInterface.java', [
+          '@RunWith(ABC.class);'
+          'public class CorrectTest implement Interface {',
+          '}',
+        ]),
+        MockAffectedFile('IncorrectTest.java', [
+          'public class IncorrectTest extends TestCase {',
+          '}',
+        ]),
+        MockAffectedFile('IncorrectTestWithInterface.java', [
+          'public class Test implements X extends BaseClass {',
+          '}',
+        ]),
+        MockAffectedFile('IncorrectTestMultiLine.java', [
+          'public class Test implements X, Y, Z',
+          '        extends TestBase {',
+          '}',
+        ]),
+    ]
+    msgs = PRESUBMIT._CheckAndroidTestJUnitInheritance(
+        mock_input_api, mock_output_api)
+    self.assertEqual(1, len(msgs),
+                     'Expected %d items, found %d: %s'
+                     % (1, len(msgs), msgs))
+    self.assertEqual(3, len(msgs[0].items),
+                     'Expected %d items, found %d: %s'
+                     % (3, len(msgs[0].items), msgs[0].items))
+    self.assertTrue('IncorrectTest.java:1' in msgs[0].items,
+                    'IncorrectTest not found in errors')
+    self.assertTrue('IncorrectTestWithInterface.java:1'
+                    in msgs[0].items,
+                    'IncorrectTestWithInterface not found in errors')
+    self.assertTrue('IncorrectTestMultiLine.java:2' in msgs[0].items,
+                    'IncorrectTestMultiLine not found in errors')
 
 class LogUsageTest(unittest.TestCase):
 
@@ -1084,6 +1171,18 @@ class RiskyJsTest(unittest.TestCase):
         mock_input_api, MockOutputApi())
     self.assertEqual(0, len(warnings))
 
+  def testConstLetWarningIos9Code(self):
+    mock_input_api = MockInputApi()
+    mock_output_api = MockOutputApi()
+
+    mock_input_api.files = [
+      MockAffectedFile('components/blah.js', [" const foo = 'bar';"]),
+      MockAffectedFile('ui/webui/resources/blah.js', [" let foo = 3;"]),
+    ]
+    warnings = PRESUBMIT._CheckForRiskyJsFeatures(
+        mock_input_api, mock_output_api)
+    self.assertEqual(2, len(warnings))
+
 class RelativeIncludesTest(unittest.TestCase):
   def testThirdPartyNotWebKitIgnored(self):
     mock_input_api = MockInputApi()
@@ -1147,6 +1246,48 @@ class RelativeIncludesTest(unittest.TestCase):
     errors = PRESUBMIT._CheckForRelativeIncludes(
         mock_input_api, mock_output_api)
     self.assertEqual(1, len(errors))
+
+
+class MojoManifestOwnerTest(unittest.TestCase):
+  def testMojoManifestChangeNeedsSecurityOwner(self):
+    mock_input_api = MockInputApi()
+    mock_input_api.files = [
+      MockAffectedFile('services/goat/manifest.json',
+                       [
+                         '{',
+                         '  "name": "teleporter",',
+                         '  "display_name": "Goat Teleporter",'
+                         '  "interface_provider_specs": {',
+                         '  }',
+                         '}',
+                       ])
+    ]
+    mock_output_api = MockOutputApi()
+    errors = PRESUBMIT._CheckIpcOwners(
+        mock_input_api, mock_output_api)
+    self.assertEqual(1, len(errors))
+    self.assertEqual(
+        'Found OWNERS files that need to be updated for IPC security review ' +
+        'coverage.\nPlease update the OWNERS files below:', errors[0].message)
+
+    # No warning if already covered by an OWNERS rule.
+
+  def testNonManifestChangesDoNotRequireSecurityOwner(self):
+    mock_input_api = MockInputApi()
+    mock_input_api.files = [
+      MockAffectedFile('services/goat/species.json',
+                       [
+                         '[',
+                         '  "anglo-nubian",',
+                         '  "angora"',
+                         ']',
+                       ])
+    ]
+    mock_output_api = MockOutputApi()
+    errors = PRESUBMIT._CheckIpcOwners(
+        mock_input_api, mock_output_api)
+    self.assertEqual([], errors)
+
 
 if __name__ == '__main__':
   unittest.main()

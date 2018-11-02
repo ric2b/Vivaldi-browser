@@ -72,7 +72,7 @@ const SkColor kCardBackgroundColor = SK_ColorWHITE;
 const SkColor kCardBackgroundColorFullscreen = SkColorSetRGB(0xFA, 0xFA, 0xFC);
 
 // Duration in milliseconds for page transition.
-const int kPageTransitionDurationInMs = 180;
+const int kPageTransitionDurationInMs = 250;
 
 // Duration in milliseconds for over scroll page transition.
 const int kOverscrollPageTransitionDurationMs = 50;
@@ -137,9 +137,9 @@ const int kReorderDroppingCircleRadius = 35;
 const int kAppsGridPadding = 24;
 
 // The left and right side padding of the apps grid in fullscreen mode. The
-// space is used for page switcher on the right side. Left side should have the
-// same space to keep the apps grid horizontally centered.
-const int kAppsGridLeftRightPaddingFullscreen = 28;
+// space is used for page switcher and its padding on the right side. Left side
+// should have the same space to keep the apps grid horizontally centered.
+const int kAppsGridLeftRightPaddingFullscreen = 40;
 
 // The left and right padding from the folder name bottom separator to the edge
 // of the left or right edge of the left most and right most app item.

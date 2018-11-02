@@ -26,6 +26,8 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/browsing_data_remover.h"
 #include "content/public/browser/content_browser_client.h"
+#include "content/public/browser/global_request_id.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/resource_context.h"
 #include "content/public/browser/site_instance.h"
@@ -52,22 +54,10 @@ using ProtocolCookieArray = Array<Network::Cookie>;
 using GetCookiesCallback = Network::Backend::GetCookiesCallback;
 using GetAllCookiesCallback = Network::Backend::GetAllCookiesCallback;
 using SetCookieCallback = Network::Backend::SetCookieCallback;
-using DeleteCookieCallback = Network::Backend::DeleteCookieCallback;
+using SetCookiesCallback = Network::Backend::SetCookiesCallback;
+using DeleteCookiesCallback = Network::Backend::DeleteCookiesCallback;
 using ClearBrowserCookiesCallback =
     Network::Backend::ClearBrowserCookiesCallback;
-
-net::URLRequestContext* GetRequestContextOnIO(
-    ResourceContext* resource_context,
-    net::URLRequestContextGetter* context_getter,
-    const GURL& url) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  net::URLRequestContext* context =
-      GetContentClient()->browser()->OverrideRequestContextForURL(
-          url, resource_context);
-  if (!context)
-    context = context_getter->GetURLRequestContext();
-  return context;
-}
 
 class CookieRetriever : public base::RefCountedThreadSafe<CookieRetriever> {
   public:
@@ -80,7 +70,6 @@ class CookieRetriever : public base::RefCountedThreadSafe<CookieRetriever> {
           all_callback_(std::move(callback)) {}
 
     void RetrieveCookiesOnIO(
-        ResourceContext* resource_context,
         net::URLRequestContextGetter* context_getter,
         const std::vector<GURL>& urls) {
       DCHECK_CURRENTLY_ON(BrowserThread::IO);
@@ -93,14 +82,13 @@ class CookieRetriever : public base::RefCountedThreadSafe<CookieRetriever> {
 
       for (const GURL& url : urls) {
         net::URLRequestContext* request_context =
-            GetRequestContextOnIO(resource_context, context_getter, url);
-        request_context->cookie_store()->GetAllCookiesForURLAsync(url,
-            base::Bind(&CookieRetriever::GotCookies, this));
+            context_getter->GetURLRequestContext();
+        request_context->cookie_store()->GetAllCookiesForURLAsync(
+            url, base::BindOnce(&CookieRetriever::GotCookies, this));
       }
     }
 
     void RetrieveAllCookiesOnIO(
-        ResourceContext* resource_context,
         net::URLRequestContextGetter* context_getter) {
       DCHECK_CURRENTLY_ON(BrowserThread::IO);
       callback_count_ = 1;
@@ -108,7 +96,7 @@ class CookieRetriever : public base::RefCountedThreadSafe<CookieRetriever> {
       net::URLRequestContext* request_context =
           context_getter->GetURLRequestContext();
       request_context->cookie_store()->GetAllCookiesAsync(
-          base::Bind(&CookieRetriever::GotCookies, this));
+          base::BindOnce(&CookieRetriever::GotCookies, this));
     }
   protected:
     virtual ~CookieRetriever() {}
@@ -133,11 +121,9 @@ class CookieRetriever : public base::RefCountedThreadSafe<CookieRetriever> {
         master_cookie_list.push_back(pair.second);
 
       BrowserThread::PostTask(
-          BrowserThread::UI,
-          FROM_HERE,
-          base::Bind(&CookieRetriever::SendCookiesResponseOnUI,
-                     this,
-                     master_cookie_list));
+          BrowserThread::UI, FROM_HERE,
+          base::BindOnce(&CookieRetriever::SendCookiesResponseOnUI, this,
+                         master_cookie_list));
     }
 
     void SendCookiesResponseOnUI(const net::CookieList& cookie_list) {
@@ -146,28 +132,28 @@ class CookieRetriever : public base::RefCountedThreadSafe<CookieRetriever> {
           ProtocolCookieArray::create();
 
       for (const net::CanonicalCookie& cookie : cookie_list) {
-       std::unique_ptr<Network::Cookie> devtools_cookie =
+        std::unique_ptr<Network::Cookie> devtools_cookie =
             Network::Cookie::Create()
-            .SetName(cookie.Name())
-            .SetValue(cookie.Value())
-            .SetDomain(cookie.Domain())
-            .SetPath(cookie.Path())
-            .SetExpires(cookie.ExpiryDate().ToDoubleT() * 1000)
-            .SetSize(cookie.Name().length() + cookie.Value().length())
-            .SetHttpOnly(cookie.IsHttpOnly())
-            .SetSecure(cookie.IsSecure())
-            .SetSession(!cookie.IsPersistent())
-            .Build();
+                .SetName(cookie.Name())
+                .SetValue(cookie.Value())
+                .SetDomain(cookie.Domain())
+                .SetPath(cookie.Path())
+                .SetExpires(cookie.ExpiryDate().ToDoubleT())
+                .SetSize(cookie.Name().length() + cookie.Value().length())
+                .SetHttpOnly(cookie.IsHttpOnly())
+                .SetSecure(cookie.IsSecure())
+                .SetSession(!cookie.IsPersistent())
+                .Build();
 
-       switch (cookie.SameSite()) {
-         case net::CookieSameSite::STRICT_MODE:
-           devtools_cookie->SetSameSite(Network::CookieSameSiteEnum::Strict);
-           break;
-         case net::CookieSameSite::LAX_MODE:
-           devtools_cookie->SetSameSite(Network::CookieSameSiteEnum::Lax);
-           break;
-         case net::CookieSameSite::NO_RESTRICTION:
-           break;
+        switch (cookie.SameSite()) {
+          case net::CookieSameSite::STRICT_MODE:
+            devtools_cookie->SetSameSite(Network::CookieSameSiteEnum::Strict);
+            break;
+          case net::CookieSameSite::LAX_MODE:
+            devtools_cookie->SetSameSite(Network::CookieSameSiteEnum::Lax);
+            break;
+          case net::CookieSameSite::NO_RESTRICTION:
+            break;
        }
 
        cookies->addItem(std::move(devtools_cookie));
@@ -193,81 +179,172 @@ class CookieRetriever : public base::RefCountedThreadSafe<CookieRetriever> {
 void ClearedCookiesOnIO(std::unique_ptr<ClearBrowserCookiesCallback> callback,
                         uint32_t num_deleted) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                          base::Bind(&ClearBrowserCookiesCallback::sendSuccess,
-                                     base::Passed(std::move(callback))));
+  BrowserThread::PostTask(
+      BrowserThread::UI, FROM_HERE,
+      base::BindOnce(&ClearBrowserCookiesCallback::sendSuccess,
+                     std::move(callback)));
 }
 
-void ClearCookiesOnIO(ResourceContext* resource_context,
-                      net::URLRequestContextGetter* context_getter,
+void ClearCookiesOnIO(net::URLRequestContextGetter* context_getter,
                       std::unique_ptr<ClearBrowserCookiesCallback> callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   net::URLRequestContext* request_context =
       context_getter->GetURLRequestContext();
   request_context->cookie_store()->DeleteAllAsync(
-      base::Bind(&ClearedCookiesOnIO, base::Passed(std::move(callback))));
+      base::BindOnce(&ClearedCookiesOnIO, base::Passed(std::move(callback))));
 }
 
-void DeletedCookieOnIO(std::unique_ptr<DeleteCookieCallback> callback) {
+void DeletedCookiesOnIO(base::OnceClosure callback, uint32_t num_deleted) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  BrowserThread::PostTask(
-      BrowserThread::UI,
-      FROM_HERE,
-      base::Bind(&DeleteCookieCallback::sendSuccess,
-                 base::Passed(std::move(callback))));
+  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE, std::move(callback));
 }
 
-void DeleteCookieOnIO(
-    ResourceContext* resource_context,
-    net::URLRequestContextGetter* context_getter,
-    const GURL& url,
-    const std::string& cookie_name,
-    std::unique_ptr<DeleteCookieCallback> callback) {
+void DeleteSelectedCookiesOnIO(net::URLRequestContextGetter* context_getter,
+                               const std::string& name,
+                               const std::string& url_spec,
+                               const std::string& domain,
+                               const std::string& path,
+                               base::OnceClosure callback,
+                               const net::CookieList& cookie_list) {
+  net::URLRequestContext* request_context =
+      context_getter->GetURLRequestContext();
+  std::string normalized_domain = domain;
+  if (normalized_domain.empty()) {
+    GURL url(url_spec);
+    if (!url.SchemeIsHTTPOrHTTPS()) {
+      std::move(callback).Run();
+      return;
+    }
+    normalized_domain = url.host();
+  }
+
+  net::CookieList filtered_list;
+  for (const auto& cookie : cookie_list) {
+    if (cookie.Name() != name)
+      continue;
+    if (cookie.Domain() != normalized_domain)
+      continue;
+    if (!path.empty() && cookie.Path() != path)
+      continue;
+    filtered_list.push_back(cookie);
+  }
+
+  for (size_t i = 0; i < filtered_list.size(); ++i) {
+    const auto& cookie = filtered_list[i];
+    base::OnceCallback<void(uint32_t)> once_callback;
+    if (i == filtered_list.size() - 1)
+      once_callback = base::BindOnce(&DeletedCookiesOnIO, std::move(callback));
+    request_context->cookie_store()->DeleteCanonicalCookieAsync(
+        cookie, std::move(once_callback));
+  }
+  if (!filtered_list.size())
+    std::move(callback).Run();
+}
+
+void DeleteCookiesOnIO(net::URLRequestContextGetter* context_getter,
+                       const std::string& name,
+                       const std::string& url,
+                       const std::string& domain,
+                       const std::string& path,
+                       base::OnceClosure callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   net::URLRequestContext* request_context =
-      GetRequestContextOnIO(resource_context, context_getter, url);
-  request_context->cookie_store()->DeleteCookieAsync(
-      url, cookie_name, base::Bind(&DeletedCookieOnIO,
-                                   base::Passed(std::move(callback))));
+      context_getter->GetURLRequestContext();
+
+  request_context->cookie_store()->GetAllCookiesAsync(base::BindOnce(
+      &DeleteSelectedCookiesOnIO, base::Unretained(context_getter), name, url,
+      domain, path, std::move(callback)));
 }
 
 void CookieSetOnIO(std::unique_ptr<SetCookieCallback> callback, bool success) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  BrowserThread::PostTask(
-      BrowserThread::UI,
-      FROM_HERE,
-      base::Bind(&SetCookieCallback::sendSuccess,
-                 base::Passed(std::move(callback)),
-                 success));
+  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                          base::BindOnce(&SetCookieCallback::sendSuccess,
+                                         std::move(callback), success));
 }
 
-void SetCookieOnIO(
-    ResourceContext* resource_context,
-    net::URLRequestContextGetter* context_getter,
-    const GURL& url,
-    const std::string& name,
-    const std::string& value,
-    const std::string& domain,
-    const std::string& path,
-    bool secure,
-    bool http_only,
-    net::CookieSameSite same_site,
-    base::Time expires,
-    std::unique_ptr<SetCookieCallback> callback) {
+void SetCookieOnIO(net::URLRequestContextGetter* context_getter,
+                   const std::string& name,
+                   const std::string& value,
+                   const std::string& url_spec,
+                   const std::string& domain,
+                   const std::string& path,
+                   bool secure,
+                   bool http_only,
+                   const std::string& same_site,
+                   double expires,
+                   base::OnceCallback<void(bool)> callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   net::URLRequestContext* request_context =
-      GetRequestContextOnIO(resource_context, context_getter, url);
+      context_getter->GetURLRequestContext();
+
+  if (url_spec.empty() && domain.empty()) {
+    std::move(callback).Run(false);
+    return;
+  }
+
+  std::string normalized_domain = domain;
+  if (!url_spec.empty()) {
+    GURL source_url = GURL(url_spec);
+    if (!source_url.SchemeIsHTTPOrHTTPS()) {
+      std::move(callback).Run(false);
+      return;
+    }
+
+    secure = secure || source_url.SchemeIsCryptographic();
+    if (normalized_domain.empty())
+      normalized_domain = source_url.host();
+  }
+
+  GURL url = GURL((secure ? "https://" : "http://") + normalized_domain);
+  if (!normalized_domain.empty() && normalized_domain[0] != '.')
+    normalized_domain = "";
+
+  base::Time expiration_date;
+  if (expires >= 0) {
+    expiration_date =
+        expires ? base::Time::FromDoubleT(expires) : base::Time::UnixEpoch();
+  }
+
+  net::CookieSameSite css = net::CookieSameSite::NO_RESTRICTION;
+  if (same_site == Network::CookieSameSiteEnum::Lax)
+    css = net::CookieSameSite::LAX_MODE;
+  if (same_site == Network::CookieSameSiteEnum::Strict)
+    css = net::CookieSameSite::STRICT_MODE;
 
   request_context->cookie_store()->SetCookieWithDetailsAsync(
-      url, name, value, domain, path,
-      base::Time(),
-      expires,
-      base::Time(),
-      secure,
-      http_only,
-      same_site,
-      net::COOKIE_PRIORITY_DEFAULT,
-      base::Bind(&CookieSetOnIO, base::Passed(std::move(callback))));
+      url, name, value, normalized_domain, path, base::Time(), expiration_date,
+      base::Time(), secure, http_only, css, net::COOKIE_PRIORITY_DEFAULT,
+      std::move(callback));
+}
+
+void CookiesSetOnIO(std::unique_ptr<SetCookiesCallback> callback,
+                    bool success) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  BrowserThread::PostTask(
+      BrowserThread::UI, FROM_HERE,
+      base::BindOnce(&SetCookiesCallback::sendSuccess, std::move(callback)));
+}
+
+void SetCookiesOnIO(
+    net::URLRequestContextGetter* context_getter,
+    std::unique_ptr<protocol::Array<Network::CookieParam>> cookies,
+    base::OnceCallback<void(bool)> callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  for (size_t i = 0; i < cookies->length(); i++) {
+    Network::CookieParam* cookie = cookies->get(i);
+
+    base::OnceCallback<void(bool)> once_callback;
+    if (i == cookies->length() - 1)
+      once_callback = std::move(callback);
+
+    SetCookieOnIO(context_getter, cookie->GetName(), cookie->GetValue(),
+                  cookie->GetUrl(""), cookie->GetDomain(""),
+                  cookie->GetPath(""), cookie->GetSecure(false),
+                  cookie->GetHttpOnly(false), cookie->GetSameSite(""),
+                  cookie->GetExpires(-1), std::move(once_callback));
+  }
 }
 
 std::vector<GURL> ComputeCookieURLs(RenderFrameHostImpl* frame_host,
@@ -376,7 +453,8 @@ String securityState(const GURL& url, const net::CertStatus& cert_status) {
   return Security::SecurityStateEnum::Secure;
 }
 
-net::Error NetErrorFromString(const std::string& error) {
+net::Error NetErrorFromString(const std::string& error, bool* ok) {
+  *ok = true;
   if (error == Network::ErrorReasonEnum::Failed)
     return net::ERR_FAILED;
   if (error == Network::ErrorReasonEnum::Aborted)
@@ -401,6 +479,7 @@ net::Error NetErrorFromString(const std::string& error) {
     return net::ERR_INTERNET_DISCONNECTED;
   if (error == Network::ErrorReasonEnum::AddressUnreachable)
     return net::ERR_ADDRESS_UNREACHABLE;
+  *ok = false;
   return net::ERR_FAILED;
 }
 
@@ -472,6 +551,34 @@ String getProtocol(const GURL& url, const ResourceResponseHead& head) {
   return protocol;
 }
 
+class NetworkNavigationThrottle : public content::NavigationThrottle {
+ public:
+  NetworkNavigationThrottle(
+      base::WeakPtr<protocol::NetworkHandler> network_handler,
+      content::NavigationHandle* navigation_handle)
+      : content::NavigationThrottle(navigation_handle),
+        network_handler_(network_handler) {}
+
+  ~NetworkNavigationThrottle() override {}
+
+  // content::NavigationThrottle implementation:
+  NavigationThrottle::ThrottleCheckResult WillProcessResponse() override {
+    if (network_handler_ && network_handler_->ShouldCancelNavigation(
+                                navigation_handle()->GetGlobalRequestID())) {
+      return ThrottleCheckResult::CANCEL_AND_IGNORE;
+    }
+    return ThrottleCheckResult::PROCEED;
+  }
+
+  const char* GetNameForLogging() override {
+    return "DevToolsNetworkNavigationThrottle";
+  }
+
+ private:
+  base::WeakPtr<protocol::NetworkHandler> network_handler_;
+  DISALLOW_COPY_AND_ASSIGN(NetworkNavigationThrottle);
+};
+
 }  // namespace
 
 NetworkHandler::NetworkHandler()
@@ -509,7 +616,7 @@ Response NetworkHandler::Enable(Maybe<int> max_total_size,
 Response NetworkHandler::Disable() {
   enabled_ = false;
   user_agent_ = std::string();
-  SetRequestInterceptionEnabled(false);
+  SetRequestInterceptionEnabled(false, Maybe<protocol::Array<String>>());
   return Response::FallThrough();
 }
 
@@ -535,14 +642,11 @@ void NetworkHandler::ClearBrowserCookies(
 
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&ClearCookiesOnIO,
-                 base::Unretained(host_->GetSiteInstance()
-                                      ->GetBrowserContext()
-                                      ->GetResourceContext()),
-                 base::Unretained(host_->GetProcess()
-                                      ->GetStoragePartition()
-                                      ->GetURLRequestContext()),
-                 base::Passed(std::move(callback))));
+      base::BindOnce(&ClearCookiesOnIO,
+                     base::Unretained(host_->GetProcess()
+                                          ->GetStoragePartition()
+                                          ->GetURLRequestContext()),
+                     std::move(callback)));
 }
 
 void NetworkHandler::GetCookies(Maybe<Array<String>> protocol_urls,
@@ -558,15 +662,11 @@ void NetworkHandler::GetCookies(Maybe<Array<String>> protocol_urls,
 
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&CookieRetriever::RetrieveCookiesOnIO,
-                 retriever,
-                 base::Unretained(host_->GetSiteInstance()
-                                       ->GetBrowserContext()
-                                       ->GetResourceContext()),
-                 base::Unretained(host_->GetProcess()
-                                       ->GetStoragePartition()
-                                       ->GetURLRequestContext()),
-                 urls));
+      base::BindOnce(&CookieRetriever::RetrieveCookiesOnIO, retriever,
+                     base::Unretained(host_->GetProcess()
+                                          ->GetStoragePartition()
+                                          ->GetURLRequestContext()),
+                     urls));
 }
 
 void NetworkHandler::GetAllCookies(
@@ -581,75 +681,88 @@ void NetworkHandler::GetAllCookies(
 
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&CookieRetriever::RetrieveAllCookiesOnIO,
-                 retriever,
-                 base::Unretained(host_->GetSiteInstance()
-                                       ->GetBrowserContext()
-                                       ->GetResourceContext()),
-                 base::Unretained(host_->GetProcess()
-                                       ->GetStoragePartition()
-                                       ->GetURLRequestContext())));
+      base::BindOnce(&CookieRetriever::RetrieveAllCookiesOnIO, retriever,
+                     base::Unretained(host_->GetProcess()
+                                          ->GetStoragePartition()
+                                          ->GetURLRequestContext())));
 }
 
-void NetworkHandler::SetCookie(
-    const std::string& url,
+void NetworkHandler::SetCookie(const std::string& name,
+                               const std::string& value,
+                               Maybe<std::string> url,
+                               Maybe<std::string> domain,
+                               Maybe<std::string> path,
+                               Maybe<bool> secure,
+                               Maybe<bool> http_only,
+                               Maybe<std::string> same_site,
+                               Maybe<double> expires,
+                               std::unique_ptr<SetCookieCallback> callback) {
+  if (!host_) {
+    callback->sendFailure(Response::InternalError());
+    return;
+  }
+
+  if (!url.isJust() && !domain.isJust()) {
+    callback->sendFailure(Response::InvalidParams(
+        "At least one of the url and domain needs to be specified"));
+  }
+
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::BindOnce(&SetCookieOnIO,
+                     base::Unretained(host_->GetProcess()
+                                          ->GetStoragePartition()
+                                          ->GetURLRequestContext()),
+                     name, value, url.fromMaybe(""), domain.fromMaybe(""),
+                     path.fromMaybe(""), secure.fromMaybe(false),
+                     http_only.fromMaybe(false), same_site.fromMaybe(""),
+                     expires.fromMaybe(-1),
+                     base::BindOnce(&CookieSetOnIO, std::move(callback))));
+}
+
+void NetworkHandler::SetCookies(
+    std::unique_ptr<protocol::Array<Network::CookieParam>> cookies,
+    std::unique_ptr<SetCookiesCallback> callback) {
+  if (!host_) {
+    callback->sendFailure(Response::InternalError());
+    return;
+  }
+
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::BindOnce(&SetCookiesOnIO,
+                     base::Unretained(host_->GetProcess()
+                                          ->GetStoragePartition()
+                                          ->GetURLRequestContext()),
+                     std::move(cookies),
+                     base::BindOnce(&CookiesSetOnIO, std::move(callback))));
+}
+
+void NetworkHandler::DeleteCookies(
     const std::string& name,
-    const std::string& value,
+    Maybe<std::string> url,
     Maybe<std::string> domain,
     Maybe<std::string> path,
-    Maybe<bool> secure,
-    Maybe<bool> http_only,
-    Maybe<std::string> same_site,
-    Maybe<double> expires,
-    std::unique_ptr<SetCookieCallback> callback) {
+    std::unique_ptr<DeleteCookiesCallback> callback) {
   if (!host_) {
     callback->sendFailure(Response::InternalError());
     return;
   }
 
-  net::CookieSameSite same_site_enum = net::CookieSameSite::DEFAULT_MODE;
-  if (same_site.isJust()) {
-    if (same_site.fromJust() == Network::CookieSameSiteEnum::Lax)
-      same_site_enum = net::CookieSameSite::LAX_MODE;
-    else if (same_site.fromJust() == Network::CookieSameSiteEnum::Strict)
-      same_site_enum = net::CookieSameSite::STRICT_MODE;
+  if (!url.isJust() && !domain.isJust()) {
+    callback->sendFailure(Response::InvalidParams(
+        "At least one of the url and domain needs to be specified"));
   }
-
-  base::Time expiration_date;
-  if (expires.isJust()) {
-    expiration_date = expires.fromJust() == 0
-            ? base::Time::UnixEpoch()
-            : base::Time::FromDoubleT(expires.fromJust());
-  }
-
-  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE, base::Bind(
-      &SetCookieOnIO,
-      base::Unretained(host_->GetSiteInstance()->GetBrowserContext()->
-                       GetResourceContext()),
-      base::Unretained(host_->GetProcess()->GetStoragePartition()->
-                       GetURLRequestContext()),
-      GURL(url), name, value, domain.fromMaybe(""), path.fromMaybe(""),
-      secure.fromMaybe(false), http_only.fromMaybe(false), same_site_enum,
-      expiration_date, base::Passed(std::move(callback))));
-}
-
-void NetworkHandler::DeleteCookie(
-    const std::string& cookie_name,
-    const std::string& url,
-    std::unique_ptr<DeleteCookieCallback> callback) {
-  if (!host_) {
-    callback->sendFailure(Response::InternalError());
-    return;
-  }
-  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE, base::Bind(
-      &DeleteCookieOnIO,
-      base::Unretained(host_->GetSiteInstance()->GetBrowserContext()->
-                       GetResourceContext()),
-      base::Unretained(host_->GetProcess()->GetStoragePartition()->
-                       GetURLRequestContext()),
-      GURL(url),
-      cookie_name,
-      base::Passed(std::move(callback))));
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::BindOnce(&DeleteCookiesOnIO,
+                     base::Unretained(host_->GetProcess()
+                                          ->GetStoragePartition()
+                                          ->GetURLRequestContext()),
+                     name, url.fromMaybe(""), domain.fromMaybe(""),
+                     path.fromMaybe(""),
+                     base::BindOnce(&DeleteCookiesCallback::sendSuccess,
+                                    std::move(callback))));
 }
 
 Response NetworkHandler::SetUserAgentOverride(const std::string& user_agent) {
@@ -827,28 +940,39 @@ std::string NetworkHandler::UserAgentOverride() const {
   return enabled_ ? user_agent_ : std::string();
 }
 
-DispatchResponse NetworkHandler::SetRequestInterceptionEnabled(bool enabled) {
-  if (interception_enabled_ == enabled)
-    return Response::OK();  // Nothing to do.
-
+DispatchResponse NetworkHandler::SetRequestInterceptionEnabled(
+    bool enabled,
+    Maybe<protocol::Array<std::string>> patterns) {
   WebContents* web_contents = WebContents::FromRenderFrameHost(host_);
   if (!web_contents)
-    return Response::OK();
+    return Response::InternalError();
 
   DevToolsURLRequestInterceptor* devtools_url_request_interceptor =
       DevToolsURLRequestInterceptor::FromBrowserContext(
           web_contents->GetBrowserContext());
   if (!devtools_url_request_interceptor)
-    return Response::OK();
+    return Response::Error("Interception not supported");
 
+  std::vector<std::string> new_patterns;
   if (enabled) {
+    if (patterns.isJust()) {
+      for (size_t i = 0; i < patterns.fromJust()->length(); i++)
+        new_patterns.push_back(patterns.fromJust()->get(i));
+    } else {
+      new_patterns.push_back("*");
+    }
+  }
+  interception_enabled_ = new_patterns.size();
+
+  if (interception_enabled_) {
     devtools_url_request_interceptor->state()->StartInterceptingRequests(
-        web_contents, weak_factory_.GetWeakPtr());
+        web_contents, weak_factory_.GetWeakPtr(), new_patterns);
   } else {
     devtools_url_request_interceptor->state()->StopInterceptingRequests(
         web_contents);
+    navigation_requests_.clear();
+    canceled_navigation_requests_.clear();
   }
-  interception_enabled_ = enabled;
   return Response::OK();
 }
 
@@ -895,10 +1019,6 @@ void NetworkHandler::ContinueInterceptedRequest(
     return;
   }
 
-  base::Optional<net::Error> error;
-  if (error_reason.isJust())
-    error = NetErrorFromString(error_reason.fromJust());
-
   base::Optional<std::string> raw_response;
   if (base64_raw_response.isJust()) {
     std::string decoded;
@@ -907,6 +1027,27 @@ void NetworkHandler::ContinueInterceptedRequest(
       return;
     }
     raw_response = decoded;
+  }
+
+  base::Optional<net::Error> error;
+  if (error_reason.isJust()) {
+    bool ok;
+    error = NetErrorFromString(error_reason.fromJust(), &ok);
+    if (!ok) {
+      callback->sendFailure(Response::InvalidParams("Invalid errorReason."));
+      return;
+    }
+
+    if (error_reason.fromJust() == Network::ErrorReasonEnum::Aborted) {
+      auto it = navigation_requests_.find(interception_id);
+      if (it != navigation_requests_.end()) {
+        canceled_navigation_requests_.insert(it->second);
+        // To successfully cancel navigation the request must succeed. We
+        // provide simple mock response to avoid pointless network fetch.
+        error.reset();
+        raw_response = std::string("HTTP/1.1 200 OK\r\n\r\n");
+      }
+    }
   }
 
   devtools_url_request_interceptor->state()->ContinueInterceptedRequest(
@@ -938,6 +1079,35 @@ std::unique_ptr<Network::Request> NetworkHandler::CreateRequestFromURLRequest(
   if (GetPostData(request, &post_data))
     request_object->SetPostData(std::move(post_data));
   return request_object;
+}
+
+std::unique_ptr<NavigationThrottle> NetworkHandler::CreateThrottleForNavigation(
+    NavigationHandle* navigation_handle) {
+  if (!interception_enabled_)
+    return nullptr;
+  std::unique_ptr<NavigationThrottle> throttle(new NetworkNavigationThrottle(
+      weak_factory_.GetWeakPtr(), navigation_handle));
+  return throttle;
+}
+
+void NetworkHandler::InterceptedNavigationRequest(
+    const GlobalRequestID& global_request_id,
+    const std::string& interception_id) {
+  navigation_requests_[interception_id] = global_request_id;
+}
+
+void NetworkHandler::InterceptedNavigationRequestFinished(
+    const std::string& interception_id) {
+  navigation_requests_.erase(interception_id);
+}
+
+bool NetworkHandler::ShouldCancelNavigation(
+    const GlobalRequestID& global_request_id) {
+  auto it = canceled_navigation_requests_.find(global_request_id);
+  if (it == canceled_navigation_requests_.end())
+    return false;
+  canceled_navigation_requests_.erase(it);
+  return true;
 }
 
 }  // namespace protocol

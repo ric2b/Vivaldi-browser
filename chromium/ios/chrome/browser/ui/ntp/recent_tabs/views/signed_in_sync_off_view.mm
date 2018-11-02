@@ -10,7 +10,7 @@
 #import "ios/chrome/browser/ui/ntp/recent_tabs/views/views_utils.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
 #import "ios/chrome/browser/ui/sync/sync_util.h"
-#import "ios/chrome/browser/ui/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
@@ -74,8 +74,7 @@ const CGFloat kDesiredHeight = 180;
 }
 
 - (void)showSyncSettings {
-  [self chromeExecuteCommand:ios_internal::sync::GetSyncCommandForBrowserState(
-                                 _browserState)];
+  [self chromeExecuteCommand:GetSyncCommandForBrowserState(_browserState)];
 }
 
 @end

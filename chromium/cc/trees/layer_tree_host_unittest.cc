@@ -25,16 +25,12 @@
 #include "cc/layers/picture_layer.h"
 #include "cc/layers/solid_color_layer.h"
 #include "cc/layers/video_layer.h"
-#include "cc/output/begin_frame_args.h"
-#include "cc/output/copy_output_request.h"
-#include "cc/output/copy_output_result.h"
 #include "cc/output/output_surface.h"
 #include "cc/output/swap_promise.h"
 #include "cc/quads/draw_quad.h"
 #include "cc/quads/render_pass_draw_quad.h"
 #include "cc/quads/tile_draw_quad.h"
 #include "cc/resources/ui_resource_manager.h"
-#include "cc/test/begin_frame_args_test.h"
 #include "cc/test/fake_content_layer_client.h"
 #include "cc/test/fake_layer_tree_host_client.h"
 #include "cc/test/fake_output_surface.h"
@@ -63,6 +59,10 @@
 #include "cc/trees/single_thread_proxy.h"
 #include "cc/trees/swap_promise_manager.h"
 #include "cc/trees/transform_node.h"
+#include "components/viz/common/frame_sinks/begin_frame_args.h"
+#include "components/viz/common/quads/copy_output_request.h"
+#include "components/viz/common/quads/copy_output_result.h"
+#include "components/viz/test/begin_frame_args_test.h"
 #include "components/viz/test/test_layer_tree_frame_sink.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -447,13 +447,13 @@ class LayerTreeHostContextCacheTest : public LayerTreeHostTest {
       scoped_refptr<viz::ContextProvider> compositor_context_provider,
       scoped_refptr<viz::ContextProvider> worker_context_provider) override {
     // Create the main viz::ContextProvider with a MockContextSupport.
-    auto main_support = base::MakeUnique<MockContextSupport>();
+    auto main_support = std::make_unique<MockContextSupport>();
     mock_main_context_support_ = main_support.get();
     auto test_main_context_provider = TestContextProvider::Create(
         TestWebGraphicsContext3D::Create(), std::move(main_support));
 
     // Create the main viz::ContextProvider with a MockContextSupport.
-    auto worker_support = base::MakeUnique<MockContextSupport>();
+    auto worker_support = std::make_unique<MockContextSupport>();
     mock_worker_context_support_ = worker_support.get();
     auto test_worker_context_provider = TestContextProvider::Create(
         TestWebGraphicsContext3D::Create(), std::move(worker_support));
@@ -562,7 +562,7 @@ class LayerTreeHostFreeContextResourcesOnDestroy
     : public LayerTreeHostContextCacheTest {
  public:
   void WillBeginImplFrameOnThread(LayerTreeHostImpl* host_impl,
-                                  const BeginFrameArgs& args) override {
+                                  const viz::BeginFrameArgs& args) override {
     // Ensure that our initialization expectations have completed.
     Mock::VerifyAndClearExpectations(mock_main_context_support_);
     Mock::VerifyAndClearExpectations(mock_worker_context_support_);
@@ -584,7 +584,7 @@ class LayerTreeHostCacheBehaviorOnLayerTreeFrameSinkRecreated
     : public LayerTreeHostContextCacheTest {
  public:
   void WillBeginImplFrameOnThread(LayerTreeHostImpl* host_impl,
-                                  const BeginFrameArgs& args) override {
+                                  const viz::BeginFrameArgs& args) override {
     // This code is run once, to trigger recreation of our LayerTreeFrameSink.
     if (test_state_ != TestState::INIT)
       return;
@@ -2568,12 +2568,12 @@ class LayerTreeHostTestFrameTimeUpdatesAfterActivationFails
   }
 
   void WillBeginImplFrameOnThread(LayerTreeHostImpl* impl,
-                                  const BeginFrameArgs& args) override {
+                                  const viz::BeginFrameArgs& args) override {
     if (impl->pending_tree())
       frame_count_with_pending_tree_++;
 
     if (frame_count_with_pending_tree_ == 1) {
-      EXPECT_EQ(first_frame_time_.ToInternalValue(), 0);
+      EXPECT_EQ(base::TimeTicks(), first_frame_time_);
       first_frame_time_ = impl->CurrentBeginFrameArgs().frame_time;
     } else if (frame_count_with_pending_tree_ == 2) {
       impl->BlockNotifyReadyToActivateForTesting(false);
@@ -2582,9 +2582,8 @@ class LayerTreeHostTestFrameTimeUpdatesAfterActivationFails
 
   void DrawLayersOnThread(LayerTreeHostImpl* impl) override {
     EXPECT_GT(frame_count_with_pending_tree_, 1);
-    EXPECT_NE(first_frame_time_.ToInternalValue(), 0);
-    EXPECT_NE(first_frame_time_.ToInternalValue(),
-              impl->CurrentBeginFrameArgs().frame_time.ToInternalValue());
+    EXPECT_NE(base::TimeTicks(), first_frame_time_);
+    EXPECT_NE(first_frame_time_, impl->CurrentBeginFrameArgs().frame_time);
     EndTest();
   }
 
@@ -2982,7 +2981,7 @@ class LayerTreeHostTestDeferCommits : public LayerTreeHostTest {
   }
 
   void WillBeginImplFrameOnThread(LayerTreeHostImpl* host_impl,
-                                  const BeginFrameArgs& args) override {
+                                  const viz::BeginFrameArgs& args) override {
     // Impl frames happen while commits are deferred.
     num_will_begin_impl_frame_++;
     switch (num_will_begin_impl_frame_) {
@@ -3011,20 +3010,22 @@ class LayerTreeHostTestDeferCommits : public LayerTreeHostTest {
   }
 
   void WillBeginMainFrame() override {
-    EXPECT_TRUE(allow_commits_);
+    EXPECT_TRUE(IsCommitAllowed());
     num_send_begin_main_frame_++;
     EndTest();
-  }
-
-  void AllowCommits() {
-    allow_commits_ = true;
-    layer_tree_host()->SetDeferCommits(false);
   }
 
   void AfterTest() override {
     EXPECT_GE(num_will_begin_impl_frame_, 5);
     EXPECT_EQ(1, num_send_begin_main_frame_);
   }
+
+  virtual void AllowCommits() {
+    allow_commits_ = true;
+    layer_tree_host()->SetDeferCommits(false);
+  }
+
+  virtual bool IsCommitAllowed() const { return allow_commits_; }
 
  private:
   bool allow_commits_ = false;
@@ -3033,6 +3034,37 @@ class LayerTreeHostTestDeferCommits : public LayerTreeHostTest {
 };
 
 SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestDeferCommits);
+
+// This verifies that changing the size of a LayerTreeHost without providing a
+// LocalSurfaceId defers commits.
+class LayerTreeHostInvalidLocalSurfaceIdDefersCommit
+    : public LayerTreeHostTestDeferCommits {
+ public:
+  LayerTreeHostInvalidLocalSurfaceIdDefersCommit() = default;
+  void InitializeSettings(LayerTreeSettings* settings) override {
+    // With surface synchronization turned on, commits are deferred until a
+    // LocalSurfaceId has been assigned. The set up code sets the size of the
+    // LayerTreeHost (using SetViewportSize()), without providing a
+    // LocalSurfaceId. So, commits should be deferred until we set an id later
+    // during the test (in AllowCommits() override below).
+    settings->enable_surface_synchronization = true;
+  }
+
+  void BeginTest() override { PostSetNeedsCommitToMainThread(); }
+
+  void AllowCommits() override {
+    local_surface_id_ = allocator_.GenerateId();
+    PostSetLocalSurfaceIdToMainThread(local_surface_id_);
+  }
+
+  bool IsCommitAllowed() const override { return local_surface_id_.is_valid(); }
+
+ private:
+  viz::LocalSurfaceIdAllocator allocator_;
+  viz::LocalSurfaceId local_surface_id_;
+};
+
+SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostInvalidLocalSurfaceIdDefersCommit);
 
 // This verifies that we can abort a commit inside the main frame, and
 // we don't leave any weird states around if we never allow the commit
@@ -3161,7 +3193,7 @@ class LayerTreeHostTestCompositeImmediatelyStateTransitions
   }
 
   void WillBeginImplFrameOnThread(LayerTreeHostImpl* host_impl,
-                                  const BeginFrameArgs& args) override {
+                                  const viz::BeginFrameArgs& args) override {
     EXPECT_EQ(current_state_, kStartedTest);
     current_state_ = kStartedImplFrame;
 
@@ -3173,7 +3205,7 @@ class LayerTreeHostTestCompositeImmediatelyStateTransitions
     EXPECT_EQ(current_state_, kStartedImplFrame);
     current_state_ = kStartedMainFrame;
   }
-  void BeginMainFrame(const BeginFrameArgs& args) override {
+  void BeginMainFrame(const viz::BeginFrameArgs& args) override {
     EXPECT_EQ(current_state_, kStartedMainFrame);
     EXPECT_EQ(args.frame_time, current_begin_frame_args_.frame_time);
   }
@@ -3198,7 +3230,7 @@ class LayerTreeHostTestCompositeImmediatelyStateTransitions
 
  private:
   int current_state_;
-  BeginFrameArgs current_begin_frame_args_;
+  viz::BeginFrameArgs current_begin_frame_args_;
 };
 
 SINGLE_THREAD_TEST_F(LayerTreeHostTestCompositeImmediatelyStateTransitions);
@@ -3413,7 +3445,7 @@ class LayerTreeHostTestAbortedCommitDoesntStallSynchronousCompositor
         &LayerTreeHostTestAbortedCommitDoesntStallSynchronousCompositor::
             CallOnDraw,
         base::Unretained(this));
-    auto frame_sink = base::MakeUnique<OnDrawLayerTreeFrameSink>(
+    auto frame_sink = std::make_unique<OnDrawLayerTreeFrameSink>(
         compositor_context_provider, std::move(worker_context_provider),
         shared_bitmap_manager(), gpu_memory_buffer_manager(), renderer_settings,
         ImplThreadTaskRunner(), false /* synchronous_composite */, refresh_rate,
@@ -4917,12 +4949,12 @@ class PinnedLayerTreeSwapPromise : public LayerTreeHostTest {
     int frame = host_impl->active_tree()->source_frame_number();
     if (frame == -1) {
       host_impl->active_tree()->QueuePinnedSwapPromise(
-          base::MakeUnique<TestSwapPromise>(
+          std::make_unique<TestSwapPromise>(
               &pinned_active_swap_promise_result_));
       host_impl->pending_tree()->QueueSwapPromise(
-          base::MakeUnique<TestSwapPromise>(&pending_swap_promise_result_));
+          std::make_unique<TestSwapPromise>(&pending_swap_promise_result_));
       host_impl->active_tree()->QueueSwapPromise(
-          base::MakeUnique<TestSwapPromise>(&active_swap_promise_result_));
+          std::make_unique<TestSwapPromise>(&active_swap_promise_result_));
     }
   }
 
@@ -5075,7 +5107,7 @@ class LayerTreeHostTestKeepSwapPromise : public LayerTreeHostTest {
       case 1:
         layer_->SetBounds(gfx::Size(10, 11));
         layer_tree_host()->GetSwapPromiseManager()->QueueSwapPromise(
-            base::MakeUnique<TestSwapPromise>(&swap_promise_result_));
+            std::make_unique<TestSwapPromise>(&swap_promise_result_));
         break;
       case 2:
         break;
@@ -5190,7 +5222,7 @@ class LayerTreeHostTestKeepSwapPromiseMFBA : public LayerTreeHostTest {
         // Make no changes so that we abort the next commit caused by queuing
         // the swap promise.
         layer_tree_host()->GetSwapPromiseManager()->QueueSwapPromise(
-            base::MakeUnique<TestSwapPromise>(&swap_promise_result_));
+            std::make_unique<TestSwapPromise>(&swap_promise_result_));
         layer_tree_host()->SetNeedsUpdateLayers();
         break;
       case 2:
@@ -5269,7 +5301,7 @@ class LayerTreeHostTestBreakSwapPromiseForVisibility
   }
 
   void WillBeginImplFrameOnThread(LayerTreeHostImpl* impl,
-                                  const BeginFrameArgs& args) override {
+                                  const viz::BeginFrameArgs& args) override {
     MainThreadTaskRunner()->PostTask(
         FROM_HERE,
         base::BindOnce(&LayerTreeHostTestBreakSwapPromiseForVisibility::
@@ -5325,6 +5357,63 @@ class SimpleSwapPromiseMonitor : public SwapPromiseMonitor {
  private:
   int* set_needs_commit_count_;
 };
+
+class LayerTreeHostTestSwapPromiseDuringCommit : public LayerTreeHostTest {
+ protected:
+  LayerTreeHostTestSwapPromiseDuringCommit() {}
+
+  void WillBeginMainFrame() override {
+    if (TestEnded())
+      return;
+
+    std::unique_ptr<SwapPromise> swap_promise(
+        new TestSwapPromise(&swap_promise_result_[0]));
+    int set_needs_commit_count = 0;
+    int set_needs_redraw_count = 0;
+
+    {
+      std::unique_ptr<SimpleSwapPromiseMonitor> swap_promise_monitor(
+          new SimpleSwapPromiseMonitor(layer_tree_host(), NULL,
+                                       &set_needs_commit_count,
+                                       &set_needs_redraw_count));
+      layer_tree_host()->QueueSwapPromise(std::move(swap_promise));
+      // Queueing a swap promise from WillBeginMainFrame should not cause
+      // another commit to be scheduled.
+      EXPECT_EQ(0, set_needs_commit_count);
+    }
+  }
+
+  void BeginTest() override { PostSetNeedsCommitToMainThread(); }
+
+  void DidBeginMainFrame() override {
+    if (TestEnded())
+      return;
+
+    std::unique_ptr<SwapPromise> swap_promise(
+        new TestSwapPromise(&swap_promise_result_[1]));
+    int set_needs_commit_count = 0;
+    int set_needs_redraw_count = 0;
+
+    {
+      std::unique_ptr<SimpleSwapPromiseMonitor> swap_promise_monitor(
+          new SimpleSwapPromiseMonitor(layer_tree_host(), NULL,
+                                       &set_needs_commit_count,
+                                       &set_needs_redraw_count));
+      layer_tree_host()->QueueSwapPromise(std::move(swap_promise));
+      // Queueing a swap promise from DidBeginMainFrame should cause a
+      // subsequent main frame to be scheduled.
+      EXPECT_EQ(1, set_needs_commit_count);
+    }
+
+    EndTest();
+  }
+
+  void AfterTest() override {}
+
+  TestSwapPromiseResult swap_promise_result_[2];
+};
+
+MULTI_THREAD_TEST_F(LayerTreeHostTestSwapPromiseDuringCommit);
 
 class LayerTreeHostTestSimpleSwapPromiseMonitor : public LayerTreeHostTest {
  public:
@@ -5817,7 +5906,7 @@ class LayerTreeHostTestWillBeginImplFrameHasDidFinishImplFrame
   }
 
   void WillBeginImplFrameOnThread(LayerTreeHostImpl* host_impl,
-                                  const BeginFrameArgs& args) override {
+                                  const viz::BeginFrameArgs& args) override {
     EXPECT_EQ(will_begin_impl_frame_count_, did_finish_impl_frame_count_);
     EXPECT_FALSE(TestEnded());
     will_begin_impl_frame_count_++;
@@ -5861,8 +5950,8 @@ SINGLE_AND_MULTI_THREAD_TEST_F(
 ::testing::AssertionResult AssertFrameTimeContained(
     const char* haystack_expr,
     const char* needle_expr,
-    const std::vector<BeginFrameArgs> haystack,
-    const BeginFrameArgs needle) {
+    const std::vector<viz::BeginFrameArgs> haystack,
+    const viz::BeginFrameArgs needle) {
   auto failure = ::testing::AssertionFailure()
                  << needle.frame_time << " (" << needle_expr
                  << ") not found in " << haystack_expr;
@@ -5896,7 +5985,7 @@ class LayerTreeHostTestBeginMainFrameTimeIsAlsoImplTime
   }
 
   void WillBeginImplFrameOnThread(LayerTreeHostImpl* impl,
-                                  const BeginFrameArgs& args) override {
+                                  const viz::BeginFrameArgs& args) override {
     impl_frame_args_.push_back(args);
 
     will_begin_impl_frame_count_++;
@@ -5904,7 +5993,7 @@ class LayerTreeHostTestBeginMainFrameTimeIsAlsoImplTime
       PostSetNeedsCommitToMainThread();
   }
 
-  void BeginMainFrame(const BeginFrameArgs& args) override {
+  void BeginMainFrame(const viz::BeginFrameArgs& args) override {
     ASSERT_GT(impl_frame_args_.size(), 0U)
         << "BeginMainFrame called before BeginImplFrame called!";
     EXPECT_PRED_FORMAT2(AssertFrameTimeContained, impl_frame_args_, args);
@@ -5918,7 +6007,7 @@ class LayerTreeHostTestBeginMainFrameTimeIsAlsoImplTime
   }
 
  private:
-  std::vector<BeginFrameArgs> impl_frame_args_;
+  std::vector<viz::BeginFrameArgs> impl_frame_args_;
   int will_begin_impl_frame_count_;
 };
 
@@ -6074,7 +6163,7 @@ class LayerTreeHostTestSynchronousCompositeSwapPromise
     bool synchronous_composite =
         !HasImplThread() &&
         !layer_tree_host()->GetSettings().single_thread_proxy_scheduler;
-    return base::MakeUnique<viz::TestLayerTreeFrameSink>(
+    return std::make_unique<viz::TestLayerTreeFrameSink>(
         compositor_context_provider, std::move(worker_context_provider),
         shared_bitmap_manager(), gpu_memory_buffer_manager(), renderer_settings,
         ImplThreadTaskRunner(), synchronous_composite, disable_display_vsync,
@@ -6169,7 +6258,7 @@ class LayerTreeHostAcceptsDeltasFromImplWithoutRootLayer
     PostSetNeedsCommitToMainThread();
   }
 
-  void BeginMainFrame(const BeginFrameArgs& args) override {
+  void BeginMainFrame(const viz::BeginFrameArgs& args) override {
     EXPECT_EQ(nullptr, layer_tree_host()->root_layer());
 
     layer_tree_host()->ApplyScrollAndScale(&info_);
@@ -6658,8 +6747,8 @@ class LayerTreeHostTestContinuousDrawWhenCreatingVisibleTiles
       // get any more draws after that. End the test after a timeout to watch
       // for any extraneous draws.
       // TODO(brianderson): We could remove this delay and instead wait until
-      // the BeginFrameSource decides it doesn't need to send frames anymore,
-      // or test that it already doesn't here.
+      // the viz::BeginFrameSource decides it doesn't need to send frames
+      // anymore, or test that it already doesn't here.
       EndTestAfterDelayMs(16 * 4);
     }
   }
@@ -6835,7 +6924,8 @@ class LayerTreeHostTestUpdateCopyRequests : public LayerTreeHostTest {
     LayerTreeHostTest::SetupTree();
   }
 
-  static void CopyOutputCallback(std::unique_ptr<CopyOutputResult> result) {}
+  static void CopyOutputCallback(
+      std::unique_ptr<viz::CopyOutputResult> result) {}
 
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
 
@@ -6851,7 +6941,7 @@ class LayerTreeHostTestUpdateCopyRequests : public LayerTreeHostTest {
     gfx::Transform transform;
     switch (layer_tree_host()->SourceFrameNumber()) {
       case 1:
-        child->RequestCopyOfOutput(CopyOutputRequest::CreateBitmapRequest(
+        child->RequestCopyOfOutput(viz::CopyOutputRequest::CreateBitmapRequest(
             base::BindOnce(CopyOutputCallback)));
         transform.Scale(2.0, 2.0);
         child->SetTransform(transform);
@@ -7519,7 +7609,7 @@ class GpuRasterizationSucceedsWithLargeImage : public LayerTreeHostTest {
         FakeRecordingSource::CreateFilledRecordingSource(
             gfx::Size(10000, 10000));
 
-    recording->add_draw_image(CreateDiscardableImage(large_image_size_),
+    recording->add_draw_image(CreateDiscardablePaintImage(large_image_size_),
                               gfx::Point(0, 0));
     recording->Rerecord();
 
@@ -7679,7 +7769,7 @@ class LayerTreeHostTestBeginFrameAcks : public LayerTreeHostTest {
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
 
   void WillBeginImplFrameOnThread(LayerTreeHostImpl* impl,
-                                  const BeginFrameArgs& args) override {
+                                  const viz::BeginFrameArgs& args) override {
     EXPECT_TRUE(args.IsValid());
     current_begin_frame_args_ = args;
   }
@@ -7697,9 +7787,10 @@ class LayerTreeHostTestBeginFrameAcks : public LayerTreeHostTest {
       return;
     compositor_frame_submitted_ = true;
 
-    EXPECT_EQ(BeginFrameAck(current_begin_frame_args_.source_id,
-                            current_begin_frame_args_.sequence_number, true),
-              frame.metadata.begin_frame_ack);
+    EXPECT_EQ(
+        viz::BeginFrameAck(current_begin_frame_args_.source_id,
+                           current_begin_frame_args_.sequence_number, true),
+        frame.metadata.begin_frame_ack);
   }
 
   void DrawLayersOnThread(LayerTreeHostImpl* impl) override {
@@ -7709,9 +7800,10 @@ class LayerTreeHostTestBeginFrameAcks : public LayerTreeHostTest {
 
     EXPECT_TRUE(frame_data_);
     EXPECT_TRUE(compositor_frame_submitted_);
-    EXPECT_EQ(BeginFrameAck(current_begin_frame_args_.source_id,
-                            current_begin_frame_args_.sequence_number, true),
-              frame_data_->begin_frame_ack);
+    EXPECT_EQ(
+        viz::BeginFrameAck(current_begin_frame_args_.source_id,
+                           current_begin_frame_args_.sequence_number, true),
+        frame_data_->begin_frame_ack);
     EndTest();
   }
 
@@ -7720,7 +7812,7 @@ class LayerTreeHostTestBeginFrameAcks : public LayerTreeHostTest {
  private:
   bool compositor_frame_submitted_ = false;
   bool layers_drawn_ = false;
-  BeginFrameArgs current_begin_frame_args_;
+  viz::BeginFrameArgs current_begin_frame_args_;
   LayerTreeHostImpl::FrameData* frame_data_;
 };
 
@@ -7732,6 +7824,7 @@ class LayerTreeHostTestQueueImageDecode : public LayerTreeHostTest {
 
   void InitializeSettings(LayerTreeSettings* settings) override {
     settings->enable_checker_imaging = true;
+    settings->min_image_bytes_to_checker = 512 * 1024;
   }
 
   void WillBeginMainFrame() override {
@@ -7739,8 +7832,7 @@ class LayerTreeHostTestQueueImageDecode : public LayerTreeHostTest {
       return;
     first_ = false;
 
-    image_ = DrawImage(PaintImage(PaintImage::GetNextId(),
-                                  CreateDiscardableImage(gfx::Size(400, 400))),
+    image_ = DrawImage(CreateDiscardablePaintImage(gfx::Size(400, 400)),
                        SkIRect::MakeWH(400, 400), kNone_SkFilterQuality,
                        SkMatrix::I(), gfx::ColorSpace());
     auto callback =
@@ -7752,20 +7844,24 @@ class LayerTreeHostTestQueueImageDecode : public LayerTreeHostTest {
   }
 
   void ReadyToCommitOnThread(LayerTreeHostImpl* impl) override {
+    const bool required_for_activation = true;
+
     if (one_commit_done_)
       return;
     EXPECT_TRUE(
         impl->tile_manager()->checker_image_tracker().ShouldCheckerImage(
-            image_, WhichTree::PENDING_TREE));
+            image_, WhichTree::PENDING_TREE, required_for_activation));
     // Reset the tracker as if it has never seen this image.
     impl->tile_manager()->checker_image_tracker().ClearTracker(true);
   }
 
   void CommitCompleteOnThread(LayerTreeHostImpl* impl) override {
+    const bool required_for_activation = true;
+
     one_commit_done_ = true;
     EXPECT_FALSE(
         impl->tile_manager()->checker_image_tracker().ShouldCheckerImage(
-            image_, WhichTree::PENDING_TREE));
+            image_, WhichTree::PENDING_TREE, required_for_activation));
   }
 
   void ImageDecodeFinished(bool decode_succeeded) {
@@ -7797,7 +7893,10 @@ class LayerTreeHostTestQueueImageDecodeNonLazy : public LayerTreeHostTest {
     first_ = false;
 
     bitmap_.allocN32Pixels(10, 10);
-    PaintImage image(PaintImage::GetNextId(), SkImage::MakeFromBitmap(bitmap_));
+    PaintImage image = PaintImageBuilder()
+                           .set_id(PaintImage::GetNextId())
+                           .set_image(SkImage::MakeFromBitmap(bitmap_))
+                           .TakePaintImage();
     auto callback = base::Bind(
         &LayerTreeHostTestQueueImageDecodeNonLazy::ImageDecodeFinished,
         base::Unretained(this));

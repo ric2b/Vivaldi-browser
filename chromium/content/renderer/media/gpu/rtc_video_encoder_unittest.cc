@@ -10,7 +10,7 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread.h"
 #include "content/renderer/media/gpu/rtc_video_encoder.h"
-#include "media/renderers/mock_gpu_video_accelerator_factories.h"
+#include "media/video/mock_gpu_video_accelerator_factories.h"
 #include "media/video/mock_video_encode_accelerator.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/libyuv/include/libyuv/planar_functions.h"
@@ -64,9 +64,9 @@ class RTCVideoEncoderTest
     : public ::testing::TestWithParam<webrtc::VideoCodecType> {
  public:
   RTCVideoEncoderTest()
-      : mock_gpu_factories_(
+      : encoder_thread_("vea_thread"),
+        mock_gpu_factories_(
             new media::MockGpuVideoAcceleratorFactories(nullptr)),
-        encoder_thread_("vea_thread"),
         idle_waiter_(base::WaitableEvent::ResetPolicy::AUTOMATIC,
                      base::WaitableEvent::InitialState::NOT_SIGNALED) {}
 
@@ -106,14 +106,26 @@ class RTCVideoEncoderTest
   void RunUntilIdle() {
     DVLOG(3) << __func__;
     encoder_thread_.task_runner()->PostTask(
-        FROM_HERE, base::Bind(&base::WaitableEvent::Signal,
-                              base::Unretained(&idle_waiter_)));
+        FROM_HERE, base::BindOnce(&base::WaitableEvent::Signal,
+                                  base::Unretained(&idle_waiter_)));
     idle_waiter_.Wait();
   }
 
   void CreateEncoder(webrtc::VideoCodecType codec_type) {
     DVLOG(3) << __func__;
-    rtc_encoder_ = base::MakeUnique<RTCVideoEncoder>(codec_type,
+    media::VideoCodecProfile media_profile;
+    switch (codec_type) {
+      case webrtc::kVideoCodecVP8:
+        media_profile = media::VP8PROFILE_ANY;
+        break;
+      case webrtc::kVideoCodecH264:
+        media_profile = media::H264PROFILE_BASELINE;
+        break;
+      default:
+        ADD_FAILURE() << "Unexpected codec type: " << codec_type;
+        media_profile = media::VIDEO_CODEC_PROFILE_UNKNOWN;
+    }
+    rtc_encoder_ = base::MakeUnique<RTCVideoEncoder>(media_profile,
                                                      mock_gpu_factories_.get());
   }
 
@@ -183,12 +195,12 @@ class RTCVideoEncoderTest
  protected:
   media::MockVideoEncodeAccelerator* mock_vea_;
   std::unique_ptr<RTCVideoEncoder> rtc_encoder_;
+  media::VideoEncodeAccelerator::Client* client_;
+  base::Thread encoder_thread_;
 
  private:
   std::unique_ptr<media::MockGpuVideoAcceleratorFactories> mock_gpu_factories_;
-  media::VideoEncodeAccelerator::Client* client_;
   std::unique_ptr<EncodedImageCallbackWrapper> callback_wrapper_;
-  base::Thread encoder_thread_;
   base::WaitableEvent idle_waiter_;
 };
 
@@ -209,6 +221,46 @@ TEST_P(RTCVideoEncoderTest, RepeatedInitSucceeds) {
 
   ExpectCreateInitAndDestroyVEA();
   EXPECT_EQ(WEBRTC_VIDEO_CODEC_OK, rtc_encoder_->InitEncode(&codec, 1, 12345));
+}
+
+INSTANTIATE_TEST_CASE_P(CodecProfiles,
+                        RTCVideoEncoderTest,
+                        Values(webrtc::kVideoCodecVP8,
+                               webrtc::kVideoCodecH264));
+
+// Checks that WEBRTC_VIDEO_CODEC_FALLBACK_SOFTWARE is returned when there is
+// platform error.
+TEST_F(RTCVideoEncoderTest, SoftwareFallbackAfterError) {
+  const webrtc::VideoCodecType codec_type = webrtc::kVideoCodecVP8;
+  CreateEncoder(codec_type);
+  webrtc::VideoCodec codec = GetDefaultCodec();
+  codec.codecType = codec_type;
+  EXPECT_EQ(WEBRTC_VIDEO_CODEC_OK, rtc_encoder_->InitEncode(&codec, 1, 12345));
+
+  EXPECT_CALL(*mock_vea_, Encode(_, _))
+      .WillOnce(Invoke([this](const scoped_refptr<media::VideoFrame>&, bool) {
+        encoder_thread_.task_runner()->PostTask(
+            FROM_HERE,
+            base::Bind(&media::VideoEncodeAccelerator::Client::NotifyError,
+                       base::Unretained(client_),
+                       media::VideoEncodeAccelerator::kPlatformFailureError));
+      }));
+
+  const rtc::scoped_refptr<webrtc::I420Buffer> buffer =
+      webrtc::I420Buffer::Create(kInputFrameWidth, kInputFrameHeight);
+  FillFrameBuffer(buffer);
+  std::vector<webrtc::FrameType> frame_types;
+  EXPECT_EQ(WEBRTC_VIDEO_CODEC_OK,
+            rtc_encoder_->Encode(
+                webrtc::VideoFrame(buffer, 0, 0, webrtc::kVideoRotation_0),
+                nullptr, &frame_types));
+  RunUntilIdle();
+
+  // Expect the next frame to return SW fallback.
+  EXPECT_EQ(WEBRTC_VIDEO_CODEC_FALLBACK_SOFTWARE,
+            rtc_encoder_->Encode(
+                webrtc::VideoFrame(buffer, 0, 0, webrtc::kVideoRotation_0),
+                nullptr, &frame_types));
 }
 
 TEST_F(RTCVideoEncoderTest, EncodeScaledFrame) {
@@ -273,8 +325,4 @@ TEST_F(RTCVideoEncoderTest, MAYBE_PreserveTimestamps) {
             rtc_encoder_->Encode(rtc_frame, nullptr, &frame_types));
 }
 
-INSTANTIATE_TEST_CASE_P(CodecProfiles,
-                        RTCVideoEncoderTest,
-                        Values(webrtc::kVideoCodecVP8,
-                               webrtc::kVideoCodecH264));
 }  // namespace content

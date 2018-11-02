@@ -11,7 +11,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "cc/layers/layer_impl.h"
-#include "cc/output/copy_output_request.h"
 #include "cc/trees/clip_node.h"
 #include "cc/trees/effect_node.h"
 #include "cc/trees/layer_tree_host_common.h"
@@ -20,6 +19,7 @@
 #include "cc/trees/property_tree.h"
 #include "cc/trees/scroll_node.h"
 #include "cc/trees/transform_node.h"
+#include "components/viz/common/quads/copy_output_request.h"
 #include "ui/gfx/geometry/vector2d_conversions.h"
 
 namespace cc {
@@ -118,7 +118,6 @@ void TransformTree::clear() {
   page_scale_factor_ = 1.f;
   device_scale_factor_ = 1.f;
   device_transform_scale_factor_ = 1.f;
-  nodes_affected_by_inner_viewport_bounds_delta_.clear();
   nodes_affected_by_outer_viewport_bounds_delta_.clear();
   cached_data_.clear();
   cached_data_.push_back(TransformCachedNodeData());
@@ -500,18 +499,12 @@ void TransformTree::UpdateLocalTransform(TransformNode* node) {
   }
 
   gfx::Vector2dF fixed_position_adjustment;
-  gfx::Vector2dF inner_viewport_bounds_delta =
-      property_trees()->inner_viewport_container_bounds_delta();
   gfx::Vector2dF outer_viewport_bounds_delta =
       property_trees()->outer_viewport_container_bounds_delta();
-  if (node->moved_by_inner_viewport_bounds_delta_x)
-    fixed_position_adjustment.set_x(inner_viewport_bounds_delta.x());
-  else if (node->moved_by_outer_viewport_bounds_delta_x)
+  if (node->moved_by_outer_viewport_bounds_delta_x)
     fixed_position_adjustment.set_x(outer_viewport_bounds_delta.x());
 
-  if (node->moved_by_inner_viewport_bounds_delta_y)
-    fixed_position_adjustment.set_y(inner_viewport_bounds_delta.y());
-  else if (node->moved_by_outer_viewport_bounds_delta_y)
+  if (node->moved_by_outer_viewport_bounds_delta_y)
     fixed_position_adjustment.set_y(outer_viewport_bounds_delta.y());
 
   transform.Translate(node->source_to_parent.x() - node->scroll_offset.x() +
@@ -677,15 +670,6 @@ void TransformTree::SetRootTransformsAndScales(
   }
 }
 
-void TransformTree::UpdateInnerViewportContainerBoundsDelta() {
-  if (nodes_affected_by_inner_viewport_bounds_delta_.empty())
-    return;
-
-  set_needs_update(true);
-  for (int i : nodes_affected_by_inner_viewport_bounds_delta_)
-    Node(i)->needs_local_transform_update = true;
-}
-
 void TransformTree::UpdateOuterViewportContainerBoundsDelta() {
   if (nodes_affected_by_outer_viewport_bounds_delta_.empty())
     return;
@@ -695,16 +679,8 @@ void TransformTree::UpdateOuterViewportContainerBoundsDelta() {
     Node(i)->needs_local_transform_update = true;
 }
 
-void TransformTree::AddNodeAffectedByInnerViewportBoundsDelta(int node_id) {
-  nodes_affected_by_inner_viewport_bounds_delta_.push_back(node_id);
-}
-
 void TransformTree::AddNodeAffectedByOuterViewportBoundsDelta(int node_id) {
   nodes_affected_by_outer_viewport_bounds_delta_.push_back(node_id);
-}
-
-bool TransformTree::HasNodesAffectedByInnerViewportBoundsDelta() const {
-  return !nodes_affected_by_inner_viewport_bounds_delta_.empty();
 }
 
 bool TransformTree::HasNodesAffectedByOuterViewportBoundsDelta() const {
@@ -741,8 +717,6 @@ bool TransformTree::operator==(const TransformTree& other) const {
          device_scale_factor_ == other.device_scale_factor() &&
          device_transform_scale_factor_ ==
              other.device_transform_scale_factor() &&
-         nodes_affected_by_inner_viewport_bounds_delta_ ==
-             other.nodes_affected_by_inner_viewport_bounds_delta() &&
          nodes_affected_by_outer_viewport_bounds_delta_ ==
              other.nodes_affected_by_outer_viewport_bounds_delta() &&
          cached_data_ == other.cached_data();
@@ -915,8 +889,9 @@ void EffectTree::UpdateEffects(int id) {
   UpdateSurfaceContentsScale(node);
 }
 
-void EffectTree::AddCopyRequest(int node_id,
-                                std::unique_ptr<CopyOutputRequest> request) {
+void EffectTree::AddCopyRequest(
+    int node_id,
+    std::unique_ptr<viz::CopyOutputRequest> request) {
   copy_requests_.insert(std::make_pair(node_id, std::move(request)));
 }
 
@@ -948,7 +923,7 @@ void EffectTree::PushCopyRequestsTo(EffectTree* other_tree) {
 
 void EffectTree::TakeCopyRequestsAndTransformToSurface(
     int node_id,
-    std::vector<std::unique_ptr<CopyOutputRequest>>* requests) {
+    std::vector<std::unique_ptr<viz::CopyOutputRequest>>* requests) {
   EffectNode* effect_node = Node(node_id);
   DCHECK(effect_node->has_render_surface);
   DCHECK(effect_node->has_copy_request);
@@ -1026,7 +1001,7 @@ void EffectTree::UpdateRenderSurfaces(LayerTreeImpl* layer_tree_impl) {
       continue;
 
     if (needs_render_surface) {
-      render_surfaces_[id] = base::MakeUnique<RenderSurfaceImpl>(
+      render_surfaces_[id] = std::make_unique<RenderSurfaceImpl>(
           layer_tree_impl, effect_node->stable_id);
       render_surfaces_[id]->set_effect_tree_index(id);
     } else {
@@ -1102,7 +1077,7 @@ bool EffectTree::CreateOrReuseRenderSurfaces(
 
     if ((*surfaces_list_it)->id() > id_list_it->first) {
       int new_node_id = id_list_it->second;
-      render_surfaces_[new_node_id] = base::MakeUnique<RenderSurfaceImpl>(
+      render_surfaces_[new_node_id] = std::make_unique<RenderSurfaceImpl>(
           layer_tree_impl, id_list_it->first);
       render_surfaces_[new_node_id]->set_effect_tree_index(new_node_id);
       id_list_it++;
@@ -1119,7 +1094,7 @@ bool EffectTree::CreateOrReuseRenderSurfaces(
   while (id_list_it != stable_id_node_id_list.end()) {
     int new_node_id = id_list_it->second;
     render_surfaces_[new_node_id] =
-        base::MakeUnique<RenderSurfaceImpl>(layer_tree_impl, id_list_it->first);
+        std::make_unique<RenderSurfaceImpl>(layer_tree_impl, id_list_it->first);
     render_surfaces_[new_node_id]->set_effect_tree_index(new_node_id);
     id_list_it++;
   }
@@ -1280,7 +1255,7 @@ void ScrollTree::OnScrollOffsetAnimated(ElementId id,
 
   ScrollNode* scroll_node = Node(scroll_tree_index);
   if (SetScrollOffset(id,
-                      ClampScrollOffsetToLimits(scroll_offset, scroll_node)))
+                      ClampScrollOffsetToLimits(scroll_offset, *scroll_node)))
     layer_tree_impl->DidUpdateScrollOffset(id);
   layer_tree_impl->DidAnimateScrollOffset();
 }
@@ -1438,13 +1413,22 @@ void ScrollTree::PushScrollUpdatesFromMainThread(
     SyncedScrollOffset* synced_scroll_offset =
         GetOrCreateSyncedScrollOffset(id);
 
-    bool changed = synced_scroll_offset->PushFromMainThread(map_entry.second);
-    // If we are committing directly to the active tree, push pending to active
-    // here.
-    if (property_trees()->is_active)
-      changed |= synced_scroll_offset->PushPendingToActive();
+    // If the value on the main thread differs from the value on the pending
+    // tree after state sync, we need to update the scroll state on the newly
+    // committed PropertyTrees.
+    bool needs_scroll_update =
+        synced_scroll_offset->PushMainToPending(map_entry.second);
 
-    if (changed)
+    // If we are committing directly to the active tree, push pending to active
+    // here. If the value differs between the pending and active trees, we need
+    // to update the scroll state on the newly activated PropertyTrees.
+    // In the case of pushing to the active tree, even if the pending and active
+    // tree state match but the value on the active tree changed, we need to
+    // update the scrollbar geometries.
+    if (property_trees()->is_active)
+      needs_scroll_update |= synced_scroll_offset->PushPendingToActive();
+
+    if (needs_scroll_update)
       sync_tree->DidUpdateScrollOffset(id);
   }
 }
@@ -1474,17 +1458,17 @@ void ScrollTree::ApplySentScrollDeltasFromAbortedCommit() {
     map_entry.second->AbortCommit();
 }
 
-bool ScrollTree::SetBaseScrollOffset(ElementId id,
+void ScrollTree::SetBaseScrollOffset(ElementId id,
                                      const gfx::ScrollOffset& scroll_offset) {
   if (property_trees()->is_main_thread) {
     scroll_offset_map_[id] = scroll_offset;
-    return true;
+    return;
   }
 
   // Scroll offset updates on the impl thread should only be for layers which
   // were created on the main thread. But this method is called when we build
   // PropertyTrees on the impl thread from LayerTreeImpl.
-  return GetOrCreateSyncedScrollOffset(id)->PushFromMainThread(scroll_offset);
+  GetOrCreateSyncedScrollOffset(id)->PushMainToPending(scroll_offset);
 }
 
 bool ScrollTree::SetScrollOffset(ElementId id,
@@ -1508,7 +1492,7 @@ bool ScrollTree::UpdateScrollOffsetBaseForTesting(
     const gfx::ScrollOffset& offset) {
   DCHECK(!property_trees()->is_main_thread);
   SyncedScrollOffset* synced_scroll_offset = GetOrCreateSyncedScrollOffset(id);
-  bool changed = synced_scroll_offset->PushFromMainThread(offset);
+  bool changed = synced_scroll_offset->PushMainToPending(offset);
   if (property_trees()->is_active)
     changed |= synced_scroll_offset->PushPendingToActive();
   return changed;
@@ -1573,7 +1557,7 @@ gfx::Vector2dF ScrollTree::ScrollBy(ScrollNode* scroll_node,
   DCHECK(scroll_node->scrollable);
   gfx::ScrollOffset old_offset = current_scroll_offset(scroll_node->element_id);
   gfx::ScrollOffset new_offset =
-      ClampScrollOffsetToLimits(old_offset + adjusted_scroll, scroll_node);
+      ClampScrollOffsetToLimits(old_offset + adjusted_scroll, *scroll_node);
   if (SetScrollOffset(scroll_node->element_id, new_offset))
     layer_tree_impl->DidUpdateScrollOffset(scroll_node->element_id);
 
@@ -1584,8 +1568,8 @@ gfx::Vector2dF ScrollTree::ScrollBy(ScrollNode* scroll_node,
 
 gfx::ScrollOffset ScrollTree::ClampScrollOffsetToLimits(
     gfx::ScrollOffset offset,
-    ScrollNode* scroll_node) const {
-  offset.SetToMin(MaxScrollOffset(scroll_node->id));
+    const ScrollNode& scroll_node) const {
+  offset.SetToMin(MaxScrollOffset(scroll_node.id));
   offset.SetToMax(gfx::ScrollOffset());
   return offset;
 }
@@ -1696,7 +1680,6 @@ void PropertyTrees::SetInnerViewportContainerBoundsDelta(
     return;
 
   inner_viewport_container_bounds_delta_ = bounds_delta;
-  transform_tree.UpdateInnerViewportContainerBoundsDelta();
 }
 
 void PropertyTrees::SetOuterViewportContainerBoundsDelta(

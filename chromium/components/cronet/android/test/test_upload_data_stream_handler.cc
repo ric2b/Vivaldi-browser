@@ -172,7 +172,7 @@ void TestUploadDataStreamHandler::NotifyJavaReadCompleted() {
     data_read = std::string(read_buffer_->data(), bytes_read_);
   cronet::Java_TestUploadDataStreamHandler_onReadCompleted(
       env, jtest_upload_data_stream_handler_, bytes_read_,
-      base::android::ConvertUTF8ToJavaString(env, data_read).obj());
+      base::android::ConvertUTF8ToJavaString(env, data_read));
 }
 
 static jlong CreateTestUploadDataStreamHandler(
@@ -186,10 +186,6 @@ static jlong CreateTestUploadDataStreamHandler(
       std::move(upload_data_stream), env, jtest_upload_data_stream_handler,
       jcontext_adapter);
   return reinterpret_cast<jlong>(handler);
-}
-
-bool TestUploadDataStreamHandlerRegisterJni(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 }  // namespace cronet

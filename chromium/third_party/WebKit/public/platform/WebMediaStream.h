@@ -36,13 +36,19 @@ class MediaStreamDescriptor;
 class WebMediaStreamTrack;
 class WebString;
 
+class BLINK_PLATFORM_EXPORT WebMediaStreamObserver {
+ public:
+  // TrackAdded is called when |track| is added to the observed MediaStream.
+  virtual void TrackAdded(const blink::WebMediaStreamTrack&) = 0;
+  // TrackRemoved is called when |track| is added to the observed MediaStream.
+  virtual void TrackRemoved(const blink::WebMediaStreamTrack&) = 0;
+
+ protected:
+  virtual ~WebMediaStreamObserver() {}
+};
+
 class WebMediaStream {
  public:
-  class ExtraData {
-   public:
-    virtual ~ExtraData() {}
-  };
-
   WebMediaStream() {}
   WebMediaStream(const WebMediaStream& other) { Assign(other); }
   ~WebMediaStream() { Reset(); }
@@ -66,11 +72,12 @@ class WebMediaStream {
   bool IsNull() const { return private_.IsNull(); }
 
   BLINK_PLATFORM_EXPORT WebString Id() const;
+  BLINK_PLATFORM_EXPORT int UniqueId() const;
 
   BLINK_PLATFORM_EXPORT void AudioTracks(WebVector<WebMediaStreamTrack>&) const;
   BLINK_PLATFORM_EXPORT void VideoTracks(WebVector<WebMediaStreamTrack>&) const;
   // If a track is not found with the specified id, the returned track's
-  // |isNull| will return true.
+  // |IsNull| will return true.
   BLINK_PLATFORM_EXPORT WebMediaStreamTrack
   GetAudioTrack(const WebString& track_id) const;
   BLINK_PLATFORM_EXPORT WebMediaStreamTrack
@@ -79,12 +86,13 @@ class WebMediaStream {
   BLINK_PLATFORM_EXPORT void AddTrack(const WebMediaStreamTrack&);
   BLINK_PLATFORM_EXPORT void RemoveTrack(const WebMediaStreamTrack&);
 
-  // Extra data associated with this WebMediaStream.
-  // If non-null, the extra data pointer will be deleted when the object is
-  // destroyed.  Setting the extra data pointer will cause any existing non-null
-  // extra data pointer to be deleted.
-  BLINK_PLATFORM_EXPORT ExtraData* GetExtraData() const;
-  BLINK_PLATFORM_EXPORT void SetExtraData(ExtraData*);
+  // These methods add/remove an observer to/from this WebMediaStream. The
+  // caller is responsible for removing the observer before the destruction of
+  // the WebMediaStream. Observers cannot be null, cannot be added or removed
+  // more than once, and cannot invoke AddObserver/RemoveObserver in their
+  // TrackAdded/TrackRemoved callbacks.
+  BLINK_PLATFORM_EXPORT void AddObserver(WebMediaStreamObserver*);
+  BLINK_PLATFORM_EXPORT void RemoveObserver(WebMediaStreamObserver*);
 
 #if INSIDE_BLINK
   BLINK_PLATFORM_EXPORT WebMediaStream(MediaStreamDescriptor*);

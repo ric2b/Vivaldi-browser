@@ -67,6 +67,8 @@ TrackRunInfo::TrackRunInfo()
 TrackRunInfo::~TrackRunInfo() {}
 
 base::TimeDelta TimeDeltaFromRational(int64_t numer, int64_t denom) {
+  DCHECK_NE(denom, 0);
+
   // To avoid overflow, split the following calculation:
   // (numer * base::Time::kMicrosecondsPerSecond) / denom
   // into:
@@ -212,7 +214,6 @@ static const CencSampleEncryptionInfoEntry* GetSampleEncryptionInfoEntry(
   }
 
   // |group_description_index| is 1-based.
-  DCHECK_LE(group_description_index, entries->size());
   return (group_description_index > entries->size())
              ? nullptr
              : &(*entries)[group_description_index - 1];

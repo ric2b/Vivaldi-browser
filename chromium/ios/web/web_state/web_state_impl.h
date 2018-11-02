@@ -162,10 +162,10 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
 
   // Returns whether the navigation corresponding to |request| should be allowed
   // to continue by asking its policy deciders. Defaults to true.
-  bool ShouldAllowRequest(NSURLRequest* request);
+  bool ShouldAllowRequest(NSURLRequest* request, ui::PageTransition transition);
   // Returns whether the navigation corresponding to |response| should be
   // allowed to continue by asking its policy deciders. Defaults to true.
-  bool ShouldAllowResponse(NSURLResponse* response);
+  bool ShouldAllowResponse(NSURLResponse* response, bool for_main_frame);
 
   // WebState:
   WebStateDelegate* GetDelegate() override;
@@ -175,6 +175,8 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   bool ShouldSuppressDialogs() const override;
   void SetShouldSuppressDialogs(bool should_suppress) override;
   UIView* GetView() override;
+  void WasShown() override;
+  void WasHidden() override;
   BrowserState* GetBrowserState() const override;
   void OpenURL(const WebState::OpenURLParams& params) override;
   void Stop() override;
@@ -188,12 +190,14 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   void ExecuteJavaScript(const base::string16& javascript) override;
   void ExecuteJavaScript(const base::string16& javascript,
                          const JavaScriptResultCallback& callback) override;
-  const std::string& GetContentLanguageHeader() const override;
+  void ExecuteUserJavaScript(NSString* javaScript) override;
   const std::string& GetContentsMimeType() const override;
   bool ContentIsHTML() const override;
   const base::string16& GetTitle() const override;
   bool IsLoading() const override;
   double GetLoadingProgress() const override;
+  bool IsCrashed() const override;
+  bool IsEvicted() const override;
   bool IsBeingDestroyed() const override;
   const GURL& GetVisibleURL() const override;
   const GURL& GetLastCommittedURL() const override;
@@ -208,6 +212,9 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   void RemoveScriptCommandCallback(const std::string& command_prefix) override;
   id<CRWWebViewProxy> GetWebViewProxy() const override;
   WebStateInterfaceProvider* GetWebStateInterfaceProvider() override;
+  void BindInterfaceRequestFromMainFrame(
+      const std::string& interface_name,
+      mojo::ScopedMessagePipeHandle interface_pipe) override;
   bool HasOpener() const override;
   void TakeSnapshot(const SnapshotCallback& callback,
                     CGSize target_size) const override;
@@ -216,13 +223,10 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   // Adds |interstitial|'s view to the web controller's content view.
   void ShowWebInterstitial(WebInterstitialImpl* interstitial);
 
-  // Called to dismiss the currently-displayed transient content view.
-  void ClearTransientContentView();
-
   // Notifies the delegate that the load progress was updated.
   void SendChangeLoadProgress(double progress);
   // Notifies the delegate that a context menu needs handling.
-  bool HandleContextMenu(const ContextMenuParams& params);
+  void HandleContextMenu(const ContextMenuParams& params);
 
   // Notifies the delegate that a Form Repost dialog needs to be presented.
   void ShowRepostFormWarningDialog(const base::Callback<void(bool)>& callback);
@@ -256,8 +260,13 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   void CancelDialogs();
 
   // NavigationManagerDelegate:
-  void GoToIndex(int index) override;
-  void LoadURLWithParams(const NavigationManager::WebLoadParams&) override;
+  void ClearTransientContent() override;
+  void RecordPageStateInNavigationItem() override;
+  void UpdateHtml5HistoryState() override;
+  void WillChangeUserAgentType() override;
+  void WillLoadCurrentItemWithUrl(const GURL&) override;
+  void LoadCurrentItem() override;
+  void LoadIfNecessary() override;
   void Reload() override;
   void OnNavigationItemsPruned(size_t pruned_item_count) override;
   void OnNavigationItemChanged() override;
@@ -330,7 +339,6 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
       response_headers_map_;
   scoped_refptr<net::HttpResponseHeaders> http_response_headers_;
   std::string mime_type_;
-  std::string content_language_header_;
 
   // Weak pointer to the interstitial page being displayed, if any.
   WebInterstitialImpl* interstitial_;

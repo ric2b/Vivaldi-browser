@@ -114,15 +114,8 @@ class CC_ANIMATION_EXPORT ElementAnimations
     has_element_in_pending_list_ = has_element_in_pending_list;
   }
 
-  bool HasFilterAnimationThatInflatesBounds() const;
   bool HasTransformAnimationThatInflatesBounds() const;
-  bool HasAnimationThatInflatesBounds() const {
-    return HasTransformAnimationThatInflatesBounds() ||
-           HasFilterAnimationThatInflatesBounds();
-  }
 
-  bool FilterAnimationBoundsForBox(const gfx::BoxF& box,
-                                   gfx::BoxF* bounds) const;
   bool TransformAnimationBoundsForBox(const gfx::BoxF& box,
                                       gfx::BoxF* bounds) const;
 
@@ -148,14 +141,18 @@ class CC_ANIMATION_EXPORT ElementAnimations
   void UpdateClientAnimationState();
   void SetNeedsUpdateImplClientState();
 
-  void NotifyClientOpacityAnimated(float opacity,
-                                   Animation* animation) override;
+  void NotifyClientFloatAnimated(float opacity,
+                                 int target_property_id,
+                                 Animation* animation) override;
   void NotifyClientFilterAnimated(const FilterOperations& filter,
+                                  int target_property_id,
                                   Animation* animation) override;
   void NotifyClientTransformOperationsAnimated(
       const TransformOperations& operations,
+      int target_property_id,
       Animation* animation) override;
   void NotifyClientScrollOffsetAnimated(const gfx::ScrollOffset& scroll_offset,
+                                        int target_property_id,
                                         Animation* animation) override;
 
   gfx::ScrollOffset ScrollOffsetForAnimation() const;

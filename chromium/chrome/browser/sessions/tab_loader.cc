@@ -92,22 +92,24 @@ void TabLoader::RestoreTabs(const std::vector<RestoredTab>& tabs,
     Profile* current_profile = g_browser_process->profile_manager()
                                    ->GetLastUsedProfileAllowedByPolicy();
     PrefService* prefs = current_profile->GetPrefs();
+    bool always_load_pinned =
+        prefs->GetBoolean(vivaldiprefs::kAlwaysLoadPinnedTabAfterRestore);
     if (prefs->GetBoolean(vivaldiprefs::kDeferredTabLoadingAfterRestore)) {
-      if (prefs->GetBoolean(vivaldiprefs::kAlwaysLoadPinnedTabAfterRestore)) {
-        std::vector<RestoredTab> pinned_tabs;
-        for (auto& restored_tab : tabs) {
-          if (restored_tab.is_pinned()) {
-            pinned_tabs.push_back(restored_tab);
-          } else {
-            // if we do not load it mark it as discarded
-            g_browser_process->GetTabManager()->SetIsDiscarded(
-                restored_tab.contents());
-          }
+      std::vector<RestoredTab> tabs_to_load;
+      for (auto& restored_tab : tabs) {
+        // We want to always start loading of internal pages.
+        if ((always_load_pinned && restored_tab.is_pinned()) ||
+            restored_tab.is_internal_page()) {
+          tabs_to_load.push_back(restored_tab);
+        } else {
+          // If we do not load it mark it as discarded.
+          g_browser_process->GetTabManager()->SetIsDiscarded(
+              restored_tab.contents());
         }
-        if (!shared_tab_loader_)
-          shared_tab_loader_ = new TabLoader(restore_started);
-        shared_tab_loader_->StartLoading(pinned_tabs);
       }
+      if (!shared_tab_loader_)
+        shared_tab_loader_ = new TabLoader(restore_started);
+      shared_tab_loader_->StartLoading(tabs_to_load);
       return;
     }
   }
@@ -167,8 +169,10 @@ void TabLoader::StartLoading(const std::vector<RestoredTab>& tabs) {
           favicon::ContentFaviconDriver::FromWebContents(
               restored_tab.contents());
       // |favicon_driver| might be null when testing.
-      if (favicon_driver)
-        favicon_driver->FetchFavicon(favicon_driver->GetActiveURL());
+      if (favicon_driver) {
+        favicon_driver->FetchFavicon(favicon_driver->GetActiveURL(),
+                                     /*is_same_document=*/false);
+      }
     } else {
       ++started_to_load_count_;
       tabs_loading_.insert(&restored_tab.contents()->GetController());

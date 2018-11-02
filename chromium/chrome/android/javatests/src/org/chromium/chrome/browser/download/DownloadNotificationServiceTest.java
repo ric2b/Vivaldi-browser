@@ -32,9 +32,8 @@ import java.util.UUID;
 /**
  * Tests of {@link DownloadNotificationService}.
  */
-public class DownloadNotificationServiceTest extends
-        ServiceTestCase<MockDownloadNotificationService> {
-
+public class DownloadNotificationServiceTest
+        extends ServiceTestCase<MockDownloadNotificationService> {
     private static class MockDownloadManagerService extends DownloadManagerService {
         final List<DownloadItem> mDownloads = new ArrayList<DownloadItem>();
 
@@ -172,8 +171,8 @@ public class DownloadNotificationServiceTest extends
     @SmallTest
     @Feature({"Download"})
     public void testResumptionScheduledWithoutDownloadOperationIntent() throws Exception {
-        MockDownloadResumptionScheduler scheduler = new MockDownloadResumptionScheduler(
-                getSystemContext().getApplicationContext());
+        MockDownloadResumptionScheduler scheduler =
+                new MockDownloadResumptionScheduler(getSystemContext().getApplicationContext());
         DownloadResumptionScheduler.setDownloadResumptionScheduler(scheduler);
         setupService();
         Set<String> notifications = new HashSet<>();
@@ -195,8 +194,8 @@ public class DownloadNotificationServiceTest extends
     @SmallTest
     @Feature({"Download"})
     public void testResumptionNotScheduledWithDownloadOperationIntent() {
-        MockDownloadResumptionScheduler scheduler = new MockDownloadResumptionScheduler(
-                getSystemContext().getApplicationContext());
+        MockDownloadResumptionScheduler scheduler =
+                new MockDownloadResumptionScheduler(getSystemContext().getApplicationContext());
         DownloadResumptionScheduler.setDownloadResumptionScheduler(scheduler);
         setupService();
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
@@ -217,8 +216,8 @@ public class DownloadNotificationServiceTest extends
     @SmallTest
     @Feature({"Download"})
     public void testResumptionNotScheduledWithoutAutoResumableDownload() throws Exception {
-        MockDownloadResumptionScheduler scheduler = new MockDownloadResumptionScheduler(
-                getSystemContext().getApplicationContext());
+        MockDownloadResumptionScheduler scheduler =
+                new MockDownloadResumptionScheduler(getSystemContext().getApplicationContext());
         DownloadResumptionScheduler.setDownloadResumptionScheduler(scheduler);
         setupService();
         Set<String> notifications = new HashSet<>();
@@ -244,8 +243,7 @@ public class DownloadNotificationServiceTest extends
         Set<String> notifications = new HashSet<>();
         notifications.add(buildEntryString(1, "test1", true, true));
         notifications.add(buildEntryString(2, "test2", true, true));
-        SharedPreferences sharedPrefs =
-                ContextUtils.getAppSharedPreferences();
+        SharedPreferences sharedPrefs = ContextUtils.getAppSharedPreferences();
         SharedPreferences.Editor editor = sharedPrefs.edit();
         editor.putStringSet(
                 DownloadSharedPreferenceHelper.KEY_PENDING_DOWNLOAD_NOTIFICATIONS, notifications);
@@ -409,8 +407,7 @@ public class DownloadNotificationServiceTest extends
         Set<String> notifications = new HashSet<>();
         String uuid = UUID.randomUUID().toString();
         notifications.add(buildEntryStringWithGuid(uuid, 1, "test1", true, true, true));
-        SharedPreferences sharedPrefs =
-                ContextUtils.getAppSharedPreferences();
+        SharedPreferences sharedPrefs = ContextUtils.getAppSharedPreferences();
         SharedPreferences.Editor editor = sharedPrefs.edit();
         editor.putStringSet(
                 DownloadSharedPreferenceHelper.KEY_PENDING_DOWNLOAD_NOTIFICATIONS, notifications);

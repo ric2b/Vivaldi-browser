@@ -37,7 +37,7 @@
 #include "core/plugins/PluginView.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Compiler.h"
-#include "platform/wtf/PassRefPtr.h"
+#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/WTFString.h"
 #include "public/platform/WebCoalescedInputEvent.h"
@@ -56,6 +56,7 @@ class MouseEvent;
 class ResourceError;
 class ResourceResponse;
 class TouchEvent;
+class WebKeyboardEvent;
 class WebPlugin;
 class WheelEvent;
 struct WebPrintParams;
@@ -64,7 +65,7 @@ struct WebPrintPresetOptions;
 class CORE_EXPORT WebPluginContainerImpl final
     : public GarbageCollectedFinalized<WebPluginContainerImpl>,
       public PluginView,
-      NON_EXPORTED_BASE(public WebPluginContainer),
+      public WebPluginContainer,
       public ContextClient {
   USING_GARBAGE_COLLECTED_MIXIN(WebPluginContainerImpl);
   USING_PRE_FINALIZER(WebPluginContainerImpl, PreFinalize);
@@ -74,6 +75,9 @@ class CORE_EXPORT WebPluginContainerImpl final
                                         WebPlugin* web_plugin) {
     return new WebPluginContainerImpl(element, web_plugin);
   }
+  // Check if plugins support a given command |name|.
+  static bool SupportsCommand(const WebString& name);
+
   ~WebPluginContainerImpl() override;
 
   // PluginView methods
@@ -209,6 +213,7 @@ class CORE_EXPORT WebPluginContainerImpl final
   void HandleDragEvent(MouseEvent*);
   void HandleWheelEvent(WheelEvent*);
   void HandleKeyboardEvent(KeyboardEvent*);
+  bool HandleCutCopyPasteKeyboardEvent(const WebKeyboardEvent&);
   void HandleTouchEvent(TouchEvent*);
   void HandleGestureEvent(GestureEvent*);
 

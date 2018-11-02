@@ -14,7 +14,7 @@
 #include <vector>
 
 #include "base/callback.h"
-#include "base/id_map.h"
+#include "base/containers/id_map.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string16.h"
@@ -22,11 +22,13 @@
 #include "content/child/webmessageportchannel_impl.h"
 #include "content/common/service_worker/embedded_worker.mojom.h"
 #include "content/common/service_worker/service_worker_event_dispatcher.mojom.h"
+#include "content/common/service_worker/service_worker_provider.mojom.h"
 #include "content/common/service_worker/service_worker_status_code.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/public/common/service_worker_modes.h"
 #include "ipc/ipc_listener.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "storage/public/interfaces/blobs.mojom.h"
 #include "third_party/WebKit/public/platform/WebMessagePortChannel.h"
 #include "third_party/WebKit/public/platform/modules/payments/payment_app.mojom.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerError.h"
@@ -58,16 +60,20 @@ namespace content {
 struct PlatformNotificationData;
 struct PushEventPayload;
 struct ServiceWorkerClientInfo;
+class ServiceWorkerNetworkProvider;
 class ServiceWorkerProviderContext;
-class ServiceWorkerContextClient;
 class ThreadSafeSender;
 class EmbeddedWorkerInstanceClientImpl;
 class WebWorkerFetchContext;
 
 // ServiceWorkerContextClient is a "client" of a service worker execution
-// context.  This class enables communication between the embedder and Blink's
-// ServiceWorker's WorkerGlobalScope. Unless otherwise noted, all methods are
-// called on the worker thread.
+// context. It enables communication between the embedder and Blink's
+// ServiceWorkerGlobalScope. It is created when the service worker begins
+// starting up, and destroyed when the service worker stops. It is owned by
+// EmbeddedWorkerInstanceClientImpl's internal WorkerWrapper class.
+//
+// Unless otherwise noted (here or in the superclass documentation), all methods
+// are called on the worker thread.
 class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
                                    public mojom::ServiceWorkerEventDispatcher {
  public:
@@ -83,13 +89,17 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
   static ServiceWorkerContextClient* ThreadSpecificInstance();
 
   // Called on the main thread.
+  // |is_script_streaming| is true if the script is already installed and will
+  // be streamed from the browser process.
   ServiceWorkerContextClient(
       int embedded_worker_id,
       int64_t service_worker_version_id,
       const GURL& service_worker_scope,
       const GURL& script_url,
+      bool is_script_streaming,
       mojom::ServiceWorkerEventDispatcherRequest dispatcher_request,
       mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo instance_host,
+      mojom::ServiceWorkerProviderInfoForStartWorkerPtr provider_info,
       std::unique_ptr<EmbeddedWorkerInstanceClientImpl> embedded_worker_client);
   ~ServiceWorkerContextClient() override;
 
@@ -109,7 +119,7 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
   // WebServiceWorkerContextClient overrides.
   blink::WebURL Scope() const override;
   void GetClient(
-      const blink::WebString&,
+      const blink::WebString& client_id,
       std::unique_ptr<blink::WebServiceWorkerClientCallbacks>) override;
   void GetClients(
       const blink::WebServiceWorkerClientQueryOptions&,
@@ -125,10 +135,7 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
                          size_t size) override;
   void ClearCachedMetadata(const blink::WebURL&) override;
   void WorkerReadyForInspection() override;
-
-  // Called on the main thread.
   void WorkerContextFailedToStart() override;
-  bool HasAssociatedRegistration() override;
   void WorkerScriptLoaded() override;
   void WorkerContextStarted(
       blink::WebServiceWorkerContextProxy* proxy) override;
@@ -201,6 +208,18 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
   void DidHandleSyncEvent(int request_id,
                           blink::WebServiceWorkerEventResult result,
                           double dispatch_event_time) override;
+  void RespondToAbortPaymentEvent(int event_id,
+                                  bool payment_aborted,
+                                  double dispatch_event_time) override;
+  void DidHandleAbortPaymentEvent(int event_id,
+                                  blink::WebServiceWorkerEventResult result,
+                                  double dispatch_event_time) override;
+  void RespondToCanMakePaymentEvent(int event_id,
+                                    bool can_make_payment,
+                                    double dispatch_event_time) override;
+  void DidHandleCanMakePaymentEvent(int event_id,
+                                    blink::WebServiceWorkerEventResult result,
+                                    double dispatch_event_time) override;
   void RespondToPaymentRequestEvent(
       int payment_request_id,
       const blink::WebPaymentHandlerResponse& response,
@@ -208,15 +227,12 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
   void DidHandlePaymentRequestEvent(int payment_request_id,
                                     blink::WebServiceWorkerEventResult result,
                                     double dispatch_event_time) override;
-
-  // Called on the main thread.
   std::unique_ptr<blink::WebServiceWorkerNetworkProvider>
   CreateServiceWorkerNetworkProvider() override;
   std::unique_ptr<blink::WebWorkerFetchContext>
   CreateServiceWorkerFetchContext() override;
   std::unique_ptr<blink::WebServiceWorkerProvider> CreateServiceWorkerProvider()
       override;
-
   void PostMessageToClient(const blink::WebString& uuid,
                            const blink::WebString& message,
                            blink::WebMessagePortChannelArray channels) override;
@@ -294,6 +310,15 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
       const std::string& tag,
       blink::mojom::BackgroundSyncEventLastChance last_chance,
       DispatchSyncEventCallback callback) override;
+  void DispatchAbortPaymentEvent(
+      int payment_request_id,
+      payments::mojom::PaymentHandlerResponseCallbackPtr response_callback,
+      DispatchAbortPaymentEventCallback callback) override;
+  void DispatchCanMakePaymentEvent(
+      int payment_request_id,
+      payments::mojom::CanMakePaymentEventDataPtr event_data,
+      payments::mojom::PaymentHandlerResponseCallbackPtr response_callback,
+      DispatchCanMakePaymentEventCallback callback) override;
   void DispatchPaymentRequestEvent(
       int payment_request_id,
       payments::mojom::PaymentRequestEventDataPtr event_data,
@@ -326,7 +351,7 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
   void OnDidSkipWaiting(int request_id);
   void OnDidClaimClients(int request_id);
   void OnClaimClientsError(int request_id,
-                           blink::WebServiceWorkerError::ErrorType error_type,
+                           blink::mojom::ServiceWorkerErrorType error_type,
                            const base::string16& message);
   // Called to resolve the FetchEvent.preloadResponse promise.
   void OnNavigationPreloadResponse(
@@ -353,7 +378,7 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
   const int64_t service_worker_version_id_;
   const GURL service_worker_scope_;
   const GURL script_url_;
-  int network_provider_id_ = kInvalidServiceWorkerProviderId;
+
   scoped_refptr<ThreadSafeSender> sender_;
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
   scoped_refptr<base::TaskRunner> worker_task_runner_;
@@ -370,9 +395,15 @@ class ServiceWorkerContextClient : public blink::WebServiceWorkerContextClient,
   scoped_refptr<mojom::ThreadSafeEmbeddedWorkerInstanceHostAssociatedPtr>
       instance_host_;
 
+  // This is passed to ServiceWorkerNetworkProvider when
+  // createServiceWorkerNetworkProvider is called.
+  std::unique_ptr<ServiceWorkerNetworkProvider> pending_network_provider_;
+
   // Renderer-side object corresponding to WebEmbeddedWorkerInstance.
   // This is valid from the ctor to workerContextDestroyed.
   std::unique_ptr<EmbeddedWorkerInstanceClientImpl> embedded_worker_client_;
+
+  storage::mojom::BlobRegistryPtr blob_registry_;
 
   // Initialized on the worker thread in workerContextStarted and
   // destructed on the worker thread in willDestroyWorkerContext.

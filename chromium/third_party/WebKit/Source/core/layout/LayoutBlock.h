@@ -128,7 +128,7 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
       bool first_line,
       LineDirectionMode,
       LinePositionMode = kPositionOnContainingLine) const final;
-  int BaselinePosition(
+  LayoutUnit BaselinePosition(
       FontBaseline,
       bool first_line,
       LineDirectionMode,
@@ -215,8 +215,6 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
 
   LayoutUnit BlockDirectionOffset(const LayoutSize& offset_from_block) const;
   LayoutUnit InlineDirectionOffset(const LayoutSize& offset_from_block) const;
-
-  void SetSelectionState(SelectionState) override;
 
   static LayoutBlock* CreateAnonymousWithParentAndDisplay(
       const LayoutObject*,
@@ -370,7 +368,7 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
 
   LayoutUnit MarginIntrinsicLogicalWidthForChild(const LayoutBox& child) const;
 
-  int BeforeMarginInLineDirection(LineDirectionMode) const;
+  LayoutUnit BeforeMarginInLineDirection(LineDirectionMode) const;
 
   void Paint(const PaintInfo&, const LayoutPoint&) const override;
 
@@ -393,8 +391,8 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
       LayoutUnit& min_preferred_logical_width,
       LayoutUnit& max_preferred_logical_width) const;
 
-  int FirstLineBoxBaseline() const override;
-  int InlineBlockBaseline(LineDirectionMode) const override;
+  LayoutUnit FirstLineBoxBaseline() const override;
+  LayoutUnit InlineBlockBaseline(LineDirectionMode) const override;
 
   // This function disables the 'overflow' check in inlineBlockBaseline.
   // For 'inline-block', CSS says that the baseline is the bottom margin edge

@@ -7,15 +7,14 @@
 
 #include <stddef.h>
 
-#include <deque>
 #include <memory>
 #include <set>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/containers/circular_deque.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -152,7 +151,7 @@ class TaskQueue {
   std::unique_ptr<net::BackoffEntry> backoff_entry_;
   // The number of tasks currently being handled.
   int num_in_progress_;
-  std::deque<T> queue_;
+  base::circular_deque<T> queue_;
   // The set of tasks in queue_ or currently being handled.
   std::set<T> tasks_;
   base::Closure dispatch_closure_;
@@ -188,10 +187,10 @@ TaskQueue<T>::TaskQueue(const HandleTaskCallback& callback,
   backoff_policy_.maximum_backoff_ms = max_backoff_delay.InMilliseconds();
   backoff_policy_.entry_lifetime_ms = -1;
   backoff_policy_.always_use_initial_delay = false;
-  backoff_entry_ = base::MakeUnique<net::BackoffEntry>(&backoff_policy_);
+  backoff_entry_ = std::make_unique<net::BackoffEntry>(&backoff_policy_);
   dispatch_closure_ =
       base::Bind(&TaskQueue::Dispatch, weak_ptr_factory_.GetWeakPtr());
-  backoff_timer_ = base::MakeUnique<base::Timer>(false, false);
+  backoff_timer_ = std::make_unique<base::Timer>(false, false);
 }
 
 template <typename T>

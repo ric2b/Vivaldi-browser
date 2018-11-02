@@ -3,8 +3,7 @@
 // found in the LICENSE file.
 
 // TODO(nektar): Migrate entire file to Mojoq.
-// These should be kept in sync with third_party/WebKit/public/web/WebAXEnums.h
-// until the Chromium and Blink trees are merged.
+// Must also be kept in sync with chrome/common/extensions/api/automation.idl.
 [camel_case_enum_to_string=true] namespace ui {
 
   // For new entries to the following four enums, also add to
@@ -87,8 +86,6 @@
     audio,
     banner,
     blockquote,
-    // TODO(nektar): Remove busy_indicator because it's used nowhere.
-    busy_indicator,
     button,
     button_drop_down,  // Not used on Web.
     canvas,
@@ -128,7 +125,6 @@
     iframe,
     iframe_presentational,
     ignored,
-    image_map_link,
     image_map,
     image,
     inline_text_box,
@@ -159,7 +155,6 @@
     meter,
     navigation,
     note,
-    outline,
     pane,
     paragraph,
     pop_up_button,
@@ -173,11 +168,8 @@
     row_header,
     row,
     ruby,
-    ruler,
     svg_root,
-    scroll_area,
     scroll_bar,
-    seamless_web_area,
     search,
     search_box,
     slider,
@@ -188,7 +180,6 @@
     static_text,
     status,
     switch,
-    tab_group,
     tab_list,
     tab_panel,
     tab,
@@ -213,7 +204,6 @@
   };
 
   enum AXState {
-    busy,
     collapsed,
     default,
     editable,
@@ -264,9 +254,23 @@
     // Increment a slider or range control by one step value.
     increment,
 
+    // Load inline text boxes for this subtree, providing information
+    // about word boundaries, line layout, and individual character
+    // bounding boxes.
+    load_inline_text_boxes,
+
     // Delete any selected text in the control's text value and
     // insert |AXActionData::value| in its place, like when typing or pasting.
     replace_selected_text,
+
+    // Scrolls by approximately one screen in a specific direction. Should be
+    // called on a node that has scrollable boolean set to true.
+    scroll_backward,
+    scroll_forward,
+    scroll_up,
+    scroll_down,
+    scroll_left,
+    scroll_right,
 
     // Scroll any scrollable containers to make the target object visible
     // on the screen.  Optionally pass a subfocus rect in
@@ -277,7 +281,6 @@
     // global screen coordinates. Pass a point in AXActionData.target_point.
     scroll_to_point,
 
-    set_accessibility_focus,
     set_scroll_offset,
     set_selection,
 
@@ -462,11 +465,16 @@
   };
 
   [cpp_enum_prefix_override="ax_attr"] enum AXBoolAttribute {
+    // Generic busy state, does not have to be on a live region.
+    busy,
+    // The object is at the root of an editable field, such as a content
+    // editable.
+    editable_root,
+
     // Live region attributes.
     container_live_atomic,
     container_live_busy,
     live_atomic,
-    live_busy,
 
     // If a dialog box is marked as explicitly modal
     modal,
@@ -476,7 +484,10 @@
     update_location_only,
 
     // Set on a canvas element if it has fallback content.
-    canvas_has_fallback
+    canvas_has_fallback,
+
+    // Indicates this node is scrollable (Android only).
+    scrollable
   };
 
   [cpp_enum_prefix_override="ax_attr"] enum AXIntListAttribute {
@@ -566,7 +577,24 @@
     text_match_active_suggestion = 20,
     spelling_text_match_active_suggestion = 21,
     grammar_text_match_active_suggestion = 22,
-    spelling_grammar_text_match_active_suggestion = 23
+    spelling_grammar_text_match_active_suggestion = 23,
+    suggestion = 32,
+    spelling_suggestion = 33,
+    grammar_suggestion = 34,
+    spelling_grammar_suggestion = 35,
+    text_match_suggestion = 36,
+    spelling_text_match_suggestion = 37,
+    grammar_text_match_suggestion = 38,
+    spelling_grammar_text_match_suggestion = 39,
+    // We again skip over DocumentMarker::MarkerType::Composition = 8 here
+    active_suggestion_suggestion = 48,
+    spelling_active_suggestion_suggestion = 49,
+    grammar_active_suggestion_suggestion = 50,
+    spelling_grammar_active_suggestion_suggestion = 51,
+    text_match_active_suggestion_suggestion = 52,
+    spelling_text_match_active_suggestion_suggestion = 53,
+    grammar_text_match_active_suggestion_suggestion = 54,
+    spelling_grammar_text_match_active_suggestion_suggestion = 55
   };
 
   enum AXTextDirection {

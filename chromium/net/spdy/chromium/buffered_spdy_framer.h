@@ -14,6 +14,7 @@
 #include "net/base/net_export.h"
 #include "net/log/net_log_source.h"
 #include "net/spdy/chromium/header_coalescer.h"
+#include "net/spdy/core/http2_frame_decoder_adapter.h"
 #include "net/spdy/core/spdy_alt_svc_wire_format.h"
 #include "net/spdy/core/spdy_framer.h"
 #include "net/spdy/core/spdy_header_block.h"
@@ -28,7 +29,8 @@ class NET_EXPORT_PRIVATE BufferedSpdyFramerVisitorInterface {
   BufferedSpdyFramerVisitorInterface() {}
 
   // Called if an error is detected in the SpdySerializedFrame protocol.
-  virtual void OnError(SpdyFramer::SpdyFramerError spdy_framer_error) = 0;
+  virtual void OnError(
+      Http2DecoderAdapter::SpdyFramerError spdy_framer_error) = 0;
 
   // Called if an error is detected in a HTTP2 stream.
   virtual void OnStreamError(SpdyStreamId stream_id,
@@ -121,7 +123,8 @@ class NET_EXPORT_PRIVATE BufferedSpdyFramerVisitorInterface {
 class NET_EXPORT_PRIVATE BufferedSpdyFramer
     : public SpdyFramerVisitorInterface {
  public:
-  explicit BufferedSpdyFramer(const NetLogWithSource& net_log);
+  BufferedSpdyFramer(uint32_t max_header_list_size,
+                     const NetLogWithSource& net_log);
   BufferedSpdyFramer() = delete;
   ~BufferedSpdyFramer() override;
 
@@ -137,7 +140,7 @@ class NET_EXPORT_PRIVATE BufferedSpdyFramer
   void set_debug_visitor(SpdyFramerDebugVisitorInterface* debug_visitor);
 
   // SpdyFramerVisitorInterface
-  void OnError(SpdyFramer* spdy_framer) override;
+  void OnError(Http2DecoderAdapter::SpdyFramerError spdy_framer_error) override;
   void OnHeaders(SpdyStreamId stream_id,
                  bool has_priority,
                  int weight,
@@ -174,15 +177,18 @@ class NET_EXPORT_PRIVATE BufferedSpdyFramer
                          size_t length,
                          bool fin) override;
   void OnContinuation(SpdyStreamId stream_id, bool end) override;
+  void OnPriority(SpdyStreamId stream_id,
+                  SpdyStreamId parent_stream_id,
+                  int weight,
+                  bool exclusive) override {}
   bool OnUnknownFrame(SpdyStreamId stream_id, uint8_t frame_type) override;
 
   // SpdyFramer methods.
   size_t ProcessInput(const char* data, size_t len);
   void UpdateHeaderDecoderTableSize(uint32_t value);
-  void set_max_decode_buffer_size_bytes(size_t max_decode_buffer_size_bytes);
   void Reset();
-  SpdyFramer::SpdyFramerError spdy_framer_error() const;
-  SpdyFramer::SpdyState state() const;
+  Http2DecoderAdapter::SpdyFramerError spdy_framer_error() const;
+  Http2DecoderAdapter::SpdyState state() const;
   bool MessageFullyRead();
   bool HasError();
   std::unique_ptr<SpdySerializedFrame> CreateRstStream(
@@ -212,18 +218,6 @@ class NET_EXPORT_PRIVATE BufferedSpdyFramer
 
   SpdyPriority GetHighestPriority() const;
 
-  size_t GetDataFrameMinimumSize() const {
-    return spdy_framer_.GetDataFrameMinimumSize();
-  }
-
-  size_t GetFrameHeaderSize() const {
-    return spdy_framer_.GetFrameHeaderSize();
-  }
-
-  size_t GetFrameMinimumSize() const {
-    return spdy_framer_.GetFrameMinimumSize();
-  }
-
   size_t GetFrameMaximumSize() const {
     return spdy_framer_.GetFrameMaximumSize();
   }
@@ -239,6 +233,7 @@ class NET_EXPORT_PRIVATE BufferedSpdyFramer
 
  private:
   SpdyFramer spdy_framer_;
+  Http2DecoderAdapter deframer_;
   BufferedSpdyFramerVisitorInterface* visitor_;
 
   int frames_received_;
@@ -273,6 +268,7 @@ class NET_EXPORT_PRIVATE BufferedSpdyFramer
 
   std::unique_ptr<HeaderCoalescer> coalescer_;
 
+  const uint32_t max_header_list_size_;
   NetLogWithSource net_log_;
 
   DISALLOW_COPY_AND_ASSIGN(BufferedSpdyFramer);

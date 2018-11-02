@@ -6,54 +6,78 @@
 #define CHROME_PROFILING_MEMLOG_CONNECTION_MANAGER_H_
 
 #include <string>
+#include <vector>
 
 #include "base/containers/flat_map.h"
+#include "base/files/file.h"
+#include "base/files/platform_file.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
+#include "base/process/process_handle.h"
+#include "base/synchronization/lock.h"
+#include "base/values.h"
 #include "build/build_config.h"
+#include "chrome/common/profiling/memlog.mojom.h"
 #include "chrome/profiling/backtrace_storage.h"
-#include "chrome/profiling/memlog_control_receiver.h"
-#include "chrome/profiling/memlog_receiver_pipe_server.h"
+#include "services/resource_coordinator/public/interfaces/memory_instrumentation/memory_instrumentation.mojom.h"
 
 namespace base {
-class SingleThreadTaskRunner;
-}
+
+class SequencedTaskRunner;
+
+}  // namespace base
 
 namespace profiling {
 
 // Manages all connections and logging for each process. Pipes are supplied by
 // the pipe server and this class will connect them to a parser and logger.
-class MemlogConnectionManager : public MemlogControlReceiver {
+//
+// Note |backtrace_storage| must outlive MemlogConnectionManager.
+//
+// This object is constructed on the UI thread, but the rest of the usage
+// (including deletion) is on the IO thread.
+class MemlogConnectionManager {
  public:
   MemlogConnectionManager();
-  ~MemlogConnectionManager() override;
+  ~MemlogConnectionManager();
 
-  // Starts listening for connections.
-  void StartConnections(const std::string& pipe_id);
+  // Dumps the memory log for the given process into |output_file|.  This must
+  // be provided the memory map for the given process since that is not tracked
+  // as part of the normal allocation process.
+  // Returns true if the dump is successfully produced, false otherwise.
+  bool DumpProcess(
+      base::ProcessId pid,
+      std::unique_ptr<base::DictionaryValue> metadata,
+      const std::vector<memory_instrumentation::mojom::VmRegionPtr>& maps,
+      base::File output_file);
+  void DumpProcessForTracing(
+      base::ProcessId pid,
+      mojom::Memlog::DumpProcessForTracingCallback callback,
+      const std::vector<memory_instrumentation::mojom::VmRegionPtr>& maps);
+
+  void OnNewConnection(base::ScopedPlatformFile file, base::ProcessId pid);
 
  private:
   struct Connection;
-
-  // MemlogControlReceiver implementation.
-  void OnStartMojoControl() override;
-
-  // Called by the pipe server when a new pipe is created.
-  void OnNewConnection(scoped_refptr<MemlogReceiverPipe> new_pipe,
-                       int sender_pid);
 
   // Notification that a connection is complete. Unlike OnNewConnection which
   // is signaled by the pipe server, this is signaled by the allocation tracker
   // to ensure that the pipeline for this process has been flushed of all
   // messages.
-  void OnConnectionComplete(int process_id);
+  void OnConnectionComplete(base::ProcessId pid);
 
   void OnConnectionCompleteThunk(
-      scoped_refptr<base::SingleThreadTaskRunner> main_loop,
-      int process_id);
+      scoped_refptr<base::SequencedTaskRunner> main_loop,
+      base::ProcessId process_id);
 
-  scoped_refptr<MemlogReceiverPipeServer> server_;
+  BacktraceStorage backtrace_storage_;
 
   // Maps process ID to the connection information for it.
-  base::flat_map<int, std::unique_ptr<Connection>> connections_;
+  base::flat_map<base::ProcessId, std::unique_ptr<Connection>> connections_;
+  base::Lock connections_lock_;
+
+  // Must be last.
+  base::WeakPtrFactory<MemlogConnectionManager> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(MemlogConnectionManager);
 };

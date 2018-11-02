@@ -50,15 +50,24 @@ class WebWorkerFetchContext {
   virtual void SetDataSaverEnabled(bool) = 0;
   virtual bool IsDataSaverEnabled() const = 0;
 
+  // This flag is used to block all mixed content in subframes.
+  virtual void SetIsOnSubframe(bool) {}
+  virtual bool IsOnSubframe() const { return false; }
+
   // The URL that should be consulted for the third-party cookie blocking
   // policy, as defined in Section 2.1.1 and 2.1.2 of
-  // https://tools.ietf.org/html/draft-west-first-party-cookies.
-  // See content::URLRequest::first_party_for_cookies() for details.
-  virtual WebURL FirstPartyForCookies() const = 0;
+  // https://tools.ietf.org/html/draft-ietf-httpbis-cookie-same-site.
+  // See content::URLRequest::site_for_cookies() for details.
+  virtual WebURL SiteForCookies() const = 0;
 
   // Reports the certificate error to the browser process.
   virtual void DidRunContentWithCertificateErrors(const WebURL& url) {}
   virtual void DidDisplayContentWithCertificateErrors(const WebURL& url) {}
+
+  // Reports that the security origin has run active content from an insecure
+  // source.
+  virtual void DidRunInsecureContent(const WebSecurityOrigin&,
+                                     const WebURL& insecure_url) {}
 
   virtual void SetApplicationCacheHostID(int id) {}
   virtual int ApplicationCacheHostID() const {

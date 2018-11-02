@@ -53,7 +53,6 @@ class Pasteboard;
 class SpellChecker;
 class StylePropertySet;
 class TextEvent;
-class TypingCommand;
 class UndoStack;
 class UndoStep;
 
@@ -79,7 +78,6 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
   EditorClient& Client() const;
 
   CompositeEditCommand* LastEditCommand() { return last_edit_command_.Get(); }
-  TypingCommand* LastTypingCommandIfStillOpenForTyping() const;
 
   void HandleKeyboardEvent(KeyboardEvent*);
   bool HandleTextEvent(TextEvent*);
@@ -104,8 +102,6 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
 
   static void CountEvent(ExecutionContext*, const Event*);
   void CopyImage(const HitTestResult&);
-
-  void Transpose();
 
   void RespondToChangedContents(const Position&);
 
@@ -218,7 +214,7 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
 
   void Clear();
 
-  VisibleSelection SelectionForCommand(Event*);
+  SelectionInDOMTree SelectionForCommand(Event*);
 
   KillRing& GetKillRing() const { return *kill_ring_; }
 
@@ -357,7 +353,7 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
       const ScrollAlignment& = ScrollAlignment::kAlignCenterIfNeeded,
       RevealExtentOption = kDoNotRevealExtent);
   void ChangeSelectionAfterCommand(const SelectionInDOMTree&,
-                                   FrameSelection::SetSelectionOptions);
+                                   const SetSelectionOptions&);
 
   SpellChecker& GetSpellChecker() const;
 
@@ -391,6 +387,10 @@ inline void Editor::ClearTypingStyle() {
 inline void Editor::SetTypingStyle(EditingStyle* style) {
   typing_style_ = style;
 }
+
+// TODO(yosin): We should move |Transpose()| into |ExecuteTranspose()| in
+// "EditorCommand.cpp"
+void Transpose(LocalFrame&);
 
 }  // namespace blink
 

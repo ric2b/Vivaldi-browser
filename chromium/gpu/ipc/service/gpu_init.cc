@@ -10,10 +10,13 @@
 #include "base/third_party/dynamic_annotations/dynamic_annotations.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
+#include "gpu/command_buffer/service/service_utils.h"
 #include "gpu/config/gpu_driver_bug_list.h"
 #include "gpu/config/gpu_info_collector.h"
 #include "gpu/config/gpu_switches.h"
+#include "gpu/config/gpu_switching.h"
 #include "gpu/config/gpu_util.h"
 #include "gpu/ipc/service/gpu_watchdog_thread.h"
 #include "gpu/ipc/service/switches.h"
@@ -28,80 +31,34 @@
 #endif
 
 #if defined(OS_WIN)
-#include "gpu/ipc/service/child_window_surface_win.h"
 #include "gpu/ipc/service/direct_composition_surface_win.h"
 #endif
 
 namespace gpu {
 
 namespace {
-
-void GetGpuInfoFromCommandLine(gpu::GPUInfo& gpu_info,
-                               const base::CommandLine& command_line) {
-  if (!command_line.HasSwitch(switches::kGpuVendorID) ||
-      !command_line.HasSwitch(switches::kGpuDeviceID) ||
-      !command_line.HasSwitch(switches::kGpuDriverVersion))
-    return;
-  bool success = base::HexStringToUInt(
-      command_line.GetSwitchValueASCII(switches::kGpuVendorID),
-      &gpu_info.gpu.vendor_id);
-  DCHECK(success);
-  success = base::HexStringToUInt(
-      command_line.GetSwitchValueASCII(switches::kGpuDeviceID),
-      &gpu_info.gpu.device_id);
-  DCHECK(success);
-  gpu_info.driver_vendor =
-      command_line.GetSwitchValueASCII(switches::kGpuDriverVendor);
-  gpu_info.driver_version =
-      command_line.GetSwitchValueASCII(switches::kGpuDriverVersion);
-  gpu_info.driver_date =
-      command_line.GetSwitchValueASCII(switches::kGpuDriverDate);
-  gpu::ParseSecondaryGpuDevicesFromCommandLine(command_line, &gpu_info);
-
-  // Set active gpu device.
-  if (command_line.HasSwitch(switches::kGpuActiveVendorID) &&
-      command_line.HasSwitch(switches::kGpuActiveDeviceID)) {
-    uint32_t active_vendor_id = 0;
-    uint32_t active_device_id = 0;
-    success = base::HexStringToUInt(
-        command_line.GetSwitchValueASCII(switches::kGpuActiveVendorID),
-        &active_vendor_id);
-    DCHECK(success);
-    success = base::HexStringToUInt(
-        command_line.GetSwitchValueASCII(switches::kGpuActiveDeviceID),
-        &active_device_id);
-    DCHECK(success);
-    if (gpu_info.gpu.vendor_id == active_vendor_id &&
-        gpu_info.gpu.device_id == active_device_id) {
-      gpu_info.gpu.active = true;
-    } else {
-      for (size_t i = 0; i < gpu_info.secondary_gpus.size(); ++i) {
-        if (gpu_info.secondary_gpus[i].vendor_id == active_vendor_id &&
-            gpu_info.secondary_gpus[i].device_id == active_device_id) {
-          gpu_info.secondary_gpus[i].active = true;
-          break;
-        }
-      }
-    }
-  }
-}
-
 #if !defined(OS_MACOSX)
-void CollectGraphicsInfo(gpu::GPUInfo& gpu_info) {
+void CollectGraphicsInfo(GPUInfo* gpu_info) {
+  DCHECK(gpu_info);
+#if defined(OS_FUCHSIA)
+  // TODO(crbug.com/707031): Implement this.
+  NOTIMPLEMENTED();
+  return;
+#else
   TRACE_EVENT0("gpu,startup", "Collect Graphics Info");
-
-  gpu::CollectInfoResult result = gpu::CollectContextGraphicsInfo(&gpu_info);
+  base::TimeTicks before_collect_context_graphics_info = base::TimeTicks::Now();
+  CollectInfoResult result = CollectContextGraphicsInfo(gpu_info);
   switch (result) {
-    case gpu::kCollectInfoFatalFailure:
+    case kCollectInfoFatalFailure:
       LOG(ERROR) << "gpu::CollectGraphicsInfo failed (fatal).";
       break;
-    case gpu::kCollectInfoNonFatalFailure:
+    case kCollectInfoNonFatalFailure:
       DVLOG(1) << "gpu::CollectGraphicsInfo failed (non-fatal).";
       break;
-    case gpu::kCollectInfoNone:
+    case kCollectInfoNone:
       NOTREACHED();
       break;
-    case gpu::kCollectInfoSuccess:
+    case kCollectInfoSuccess:
       break;
   }
 
@@ -109,12 +66,19 @@ void CollectGraphicsInfo(gpu::GPUInfo& gpu_info) {
   if (gl::GetGLImplementation() == gl::kGLImplementationEGLGLES2 &&
       gl::GLSurfaceEGL::IsDirectCompositionSupported() &&
       DirectCompositionSurfaceWin::AreOverlaysSupported()) {
-    gpu_info.supports_overlays = true;
+    gpu_info->supports_overlays = true;
   }
   if (DirectCompositionSurfaceWin::IsHDRSupported()) {
-    gpu_info.hdr = true;
+    gpu_info->hdr = true;
   }
 #endif  // defined(OS_WIN)
+
+  if (result != kCollectInfoFatalFailure) {
+    base::TimeDelta collect_context_time =
+        base::TimeTicks::Now() - before_collect_context_graphics_info;
+    UMA_HISTOGRAM_TIMES("GPU.CollectContextGraphicsInfo", collect_context_time);
+  }
+#endif  // defined(OS_FUCHSIA)
 }
 #endif  // defined(OS_MACOSX)
 
@@ -134,23 +98,46 @@ bool CanAccessNvidiaDeviceFile() {
 
 GpuInit::GpuInit() {}
 
-GpuInit::~GpuInit() {}
+GpuInit::~GpuInit() {
+  gpu::StopForceDiscreteGPU();
+}
 
-bool GpuInit::InitializeAndStartSandbox(const base::CommandLine& command_line) {
-  if (command_line.HasSwitch(switches::kSupportsDualGpus)) {
-    std::set<int> workarounds;
-    gpu::GpuDriverBugList::AppendWorkaroundsFromCommandLine(&workarounds,
-                                                            command_line);
-    gpu::InitializeDualGpusIfSupported(workarounds);
+bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
+                                        bool in_process_gpu) {
+#if defined(OS_ANDROID)
+  // Android doesn't have PCI vendor/device IDs, so collecting GL strings early
+  // is necessary.
+  CollectGraphicsInfo(&gpu_info_);
+  if (gpu_info_.context_info_state == gpu::kCollectInfoFatalFailure)
+    return false;
+#else
+  // Get vendor_id, device_id, driver_version from browser process through
+  // commandline switches.
+  // TODO(zmo): Collect basic GPU info (without a context) here instead of
+  // passing from browser process.
+  GetGpuInfoFromCommandLine(*command_line, &gpu_info_);
+#endif  // OS_ANDROID
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+  if (gpu_info_.gpu.vendor_id == 0x10de &&  // NVIDIA
+      gpu_info_.driver_vendor == "NVIDIA" && !CanAccessNvidiaDeviceFile())
+    return false;
+#endif
+  gpu_info_.in_process_gpu = in_process_gpu;
+
+  // Compute blacklist and driver bug workaround decisions based on basic GPU
+  // info.
+  gpu_feature_info_ = gpu::ComputeGpuFeatureInfo(gpu_info_, command_line);
+  if (gpu::SwitchableGPUsSupported(gpu_info_, *command_line)) {
+    gpu::InitializeSwitchableGPUs(
+        gpu_feature_info_.enabled_gpu_driver_bug_workarounds);
   }
 
   // In addition to disabling the watchdog if the command line switch is
   // present, disable the watchdog on valgrind because the code is expected
   // to run slowly in that case.
   bool enable_watchdog =
-      !command_line.HasSwitch(switches::kDisableGpuWatchdog) &&
-      !command_line.HasSwitch(switches::kHeadless) &&
-      !RunningOnValgrind();
+      !command_line->HasSwitch(switches::kDisableGpuWatchdog) &&
+      !command_line->HasSwitch(switches::kHeadless) && !RunningOnValgrind();
 
   // Disable the watchdog in debug builds because they tend to only be run by
   // developers who will not appreciate the watchdog killing the GPU process.
@@ -185,31 +172,18 @@ bool GpuInit::InitializeAndStartSandbox(const base::CommandLine& command_line) {
 #endif  // OS_WIN
   }
 
-  // Get vendor_id, device_id, driver_version from browser process through
-  // commandline switches.
-  GetGpuInfoFromCommandLine(gpu_info_, command_line);
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
-  if (gpu_info_.gpu.vendor_id == 0x10de &&  // NVIDIA
-      gpu_info_.driver_vendor == "NVIDIA" && !CanAccessNvidiaDeviceFile())
-    return false;
-#endif
-  gpu_info_.in_process_gpu = false;
-
-  gpu_info_.passthrough_cmd_decoder =
-      gl::UsePassthroughCommandDecoder(&command_line);
-
   sandbox_helper_->PreSandboxStartup();
 
   bool attempted_startsandbox = false;
 #if defined(OS_LINUX)
   // On Chrome OS ARM Mali, GPU driver userspace creates threads when
   // initializing a GL context, so start the sandbox early.
-  if (command_line.HasSwitch(switches::kGpuSandboxStartEarly)) {
+  // TODO(zmo): Need to collect OS version before this.
+  if (command_line->HasSwitch(switches::kGpuSandboxStartEarly)) {
     gpu_info_.sandboxed =
         sandbox_helper_->EnsureSandboxInitialized(watchdog_thread_.get());
     attempted_startsandbox = true;
   }
-
 #endif  // defined(OS_LINUX)
 
   base::TimeTicks before_initialize_one_off = base::TimeTicks::Now();
@@ -218,7 +192,7 @@ bool GpuInit::InitializeAndStartSandbox(const base::CommandLine& command_line) {
   // Initialize Ozone GPU after the watchdog in case it hangs. The sandbox
   // may also have started at this point.
   ui::OzonePlatform::InitParams params;
-  params.single_process = false;
+  params.single_process = in_process_gpu;
   ui::OzonePlatform::InitializeForGPU(params);
 #endif
 
@@ -227,10 +201,10 @@ bool GpuInit::InitializeAndStartSandbox(const base::CommandLine& command_line) {
   // browser process, for example.
   bool gl_initialized = gl::GetGLImplementation() != gl::kGLImplementationNone;
   if (!gl_initialized)
-    gl_initialized = gl::init::InitializeGLOneOff();
+    gl_initialized = gl::init::InitializeGLNoExtensionsOneOff();
 
   if (!gl_initialized) {
-    VLOG(1) << "gl::init::InitializeGLOneOff failed";
+    VLOG(1) << "gl::init::InitializeGLNoExtensionsOneOff failed";
     return false;
   }
 
@@ -240,31 +214,22 @@ bool GpuInit::InitializeAndStartSandbox(const base::CommandLine& command_line) {
   // multiple seconds to finish, which in turn cause the GPU process to crash.
   // By skipping the following code on Mac, we don't really lose anything,
   // because the basic GPU information is passed down from the host process.
-  base::TimeTicks before_collect_context_graphics_info = base::TimeTicks::Now();
-#if !defined(OS_MACOSX)
-  CollectGraphicsInfo(gpu_info_);
+#if !defined(OS_MACOSX) && !defined(OS_ANDROID)
+  CollectGraphicsInfo(&gpu_info_);
   if (gpu_info_.context_info_state == gpu::kCollectInfoFatalFailure)
     return false;
+  gpu_feature_info_ = gpu::ComputeGpuFeatureInfo(gpu_info_, command_line);
+#endif
 
-  // Recompute gpu driver bug workarounds.
-  // This is necessary on systems where vendor_id/device_id aren't available
-  // (Chrome OS, Android) or where workarounds may be dependent on GL_VENDOR
-  // and GL_RENDERER strings which are lazily computed (Linux).
-  if (!command_line.HasSwitch(switches::kDisableGpuDriverBugWorkarounds)) {
-    // TODO: this can not affect disabled extensions, since they're already
-    // initialized in the bindings. This should be moved before bindings
-    // initialization. However, populating GPUInfo fully works only on Android.
-    // Other platforms would need the bindings to query GL strings.
-    gpu::ApplyGpuDriverBugWorkarounds(
-        gpu_info_, const_cast<base::CommandLine*>(&command_line));
+  if (!gpu_feature_info_.disabled_extensions.empty()) {
+    gl::init::SetDisabledExtensionsPlatform(
+        gpu_feature_info_.disabled_extensions);
   }
-#endif  // !defined(OS_MACOSX)
-
-  gpu_feature_info_ = gpu::GetGpuFeatureInfo(gpu_info_, command_line);
-
-  base::TimeDelta collect_context_time =
-      base::TimeTicks::Now() - before_collect_context_graphics_info;
-  UMA_HISTOGRAM_TIMES("GPU.CollectContextGraphicsInfo", collect_context_time);
+  gl_initialized = gl::init::InitializeExtensionSettingsOneOffPlatform();
+  if (!gl_initialized) {
+    VLOG(1) << "gl::init::InitializeExtensionSettingsOneOffPlatform failed";
+    return false;
+  }
 
   base::TimeDelta initialize_one_off_time =
       base::TimeTicks::Now() - before_initialize_one_off;
@@ -285,6 +250,12 @@ bool GpuInit::InitializeAndStartSandbox(const base::CommandLine& command_line) {
     gpu_info_.sandboxed =
         sandbox_helper_->EnsureSandboxInitialized(watchdog_thread_.get());
   }
+  UMA_HISTOGRAM_BOOLEAN("GPU.Sandbox.InitializedSuccessfully",
+                        gpu_info_.sandboxed);
+
+  gpu_info_.passthrough_cmd_decoder =
+      gl::UsePassthroughCommandDecoder(command_line) &&
+      gles2::PassthroughCommandDecoderSupported();
 
   return true;
 }

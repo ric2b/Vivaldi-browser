@@ -111,14 +111,14 @@ ScopedJavaLocalRef<jstring> ConvertOriginToJavaString(
 
 typedef void (*InfoListInsertionFunction)(
     JNIEnv*,
-    const base::android::JavaRefOrBare<jobject>&,
-    const base::android::JavaRefOrBare<jstring>&,
-    const base::android::JavaRefOrBare<jstring>&);
+    const base::android::JavaRef<jobject>&,
+    const base::android::JavaRef<jstring>&,
+    const base::android::JavaRef<jstring>&);
 
 void GetOrigins(JNIEnv* env,
                 ContentSettingsType content_type,
                 InfoListInsertionFunction insertionFunc,
-                jobject list,
+                const JavaRef<jobject>& list,
                 jboolean managedOnly) {
   HostContentSettingsMap* content_settings_map =
       GetHostContentSettingsMap(false);  // is_incognito
@@ -173,8 +173,28 @@ void GetOrigins(JNIEnv* env,
 
     if (auto_blocker->GetEmbargoResult(GURL(origin), content_type)
             .content_setting == CONTENT_SETTING_BLOCK) {
+      seen_origins.push_back(origin);
       insertionFunc(env, list, ConvertOriginToJavaString(env, origin),
                     jembedder);
+    }
+  }
+
+  // Add the DSE origin if it allows geolocation.
+  if (content_type == CONTENT_SETTINGS_TYPE_GEOLOCATION) {
+    SearchGeolocationService* search_helper =
+        SearchGeolocationService::Factory::GetForBrowserContext(
+            GetActiveUserProfile(false /* is_incognito */));
+    if (search_helper) {
+      const url::Origin& dse_origin = search_helper->GetDSEOriginIfEnabled();
+      if (!dse_origin.unique()) {
+        std::string dse_origin_string = dse_origin.Serialize();
+        if (!base::ContainsValue(seen_origins, dse_origin_string)) {
+          seen_origins.push_back(dse_origin_string);
+          insertionFunc(env, list,
+                        ConvertOriginToJavaString(env, dse_origin_string),
+                        jembedder);
+        }
+      }
     }
   }
 }
@@ -568,7 +588,7 @@ class SiteDataDeleteHelper :
     RecursivelyFindSiteAndDelete(cookies_tree_model_->GetRoot());
 
     // This will result in this class getting deleted.
-    Release();
+    BrowserThread::ReleaseSoon(BrowserThread::UI, FROM_HERE, this);
   }
 
   void RecursivelyFindSiteAndDelete(CookieTreeNode* node) {

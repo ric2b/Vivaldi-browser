@@ -16,6 +16,7 @@
 #include "chrome/browser/ui/tab_contents/chrome_web_contents_view_delegate.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "ui/base/ui_features.h"
 
 #include "app/vivaldi_apptools.h"
 #include "ui/dragging/drag_tab_handler.h"
@@ -130,6 +131,7 @@ ChromeWebContentsViewDelegateMac::GetActiveRenderWidgetHostView() {
       web_contents_->GetTopLevelRenderWidgetHostView();
 }
 
+#if !BUILDFLAG(MAC_VIEWS_BROWSER)
 namespace chrome {
 
 content::WebContentsViewDelegate* CreateWebContentsViewDelegate(
@@ -138,3 +140,4 @@ content::WebContentsViewDelegate* CreateWebContentsViewDelegate(
 }
 
 }  // namespace chrome
+#endif  // MAC_VIEWS_BROWSER

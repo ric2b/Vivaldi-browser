@@ -4,9 +4,14 @@
 
 #include "chrome/browser/offline_pages/prefetch/offline_prefetch_download_client.h"
 
+#include <map>
+#include <set>
+#include <utility>
+
 #include "base/logging.h"
 #include "chrome/browser/download/download_service_factory.h"
 #include "chrome/browser/offline_pages/prefetch/prefetch_service_factory.h"
+#include "components/download/public/download_metadata.h"
 #include "components/offline_pages/core/prefetch/prefetch_downloader.h"
 #include "components/offline_pages/core/prefetch/prefetch_service.h"
 
@@ -20,13 +25,31 @@ OfflinePrefetchDownloadClient::~OfflinePrefetchDownloadClient() = default;
 
 void OfflinePrefetchDownloadClient::OnServiceInitialized(
     bool state_lost,
-    const std::vector<std::string>& outstanding_download_guids) {
-  // TODO(jianli): Remove orphaned downloads.
-  // TODO(jianli, dtrainor): Handle service corruption and recovery if
-  // |state_lost| is |true|.
+    const std::vector<download::DownloadMetaData>& downloads) {
+  std::set<std::string> outstanding_download_guids;
+  std::map<std::string, std::pair<base::FilePath, int64_t>> success_downloads;
+  for (const auto& download : downloads) {
+    if (!download.completion_info.has_value()) {
+      outstanding_download_guids.emplace(download.guid);
+      continue;
+    }
+
+    // Offline pages prefetch uses int64_t for file size. Check for overflow and
+    // skip it.
+    uint64_t file_size = download.completion_info->bytes_downloaded;
+    if (file_size > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()))
+      continue;
+
+    success_downloads.emplace(download.guid,
+                              std::make_pair(download.completion_info->path,
+                                             static_cast<int64_t>(file_size)));
+  }
+
   PrefetchDownloader* downloader = GetPrefetchDownloader();
-  if (downloader)
-    downloader->OnDownloadServiceReady();
+  if (downloader) {
+    downloader->OnDownloadServiceReady(outstanding_download_guids,
+                                       success_downloads);
+  }
 }
 
 void OfflinePrefetchDownloadClient::OnServiceUnavailable() {
@@ -56,11 +79,23 @@ void OfflinePrefetchDownloadClient::OnDownloadFailed(
 
 void OfflinePrefetchDownloadClient::OnDownloadSucceeded(
     const std::string& guid,
-    const base::FilePath& path,
-    uint64_t size) {
+    const download::CompletionInfo& completion_info) {
+  // Offline pages prefetch uses int64_t for file size. Check for overflow and
+  // skip it.
+  uint64_t file_size = completion_info.bytes_downloaded;
+  if (file_size > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()))
+    return;
+
   PrefetchDownloader* downloader = GetPrefetchDownloader();
   if (downloader)
-    downloader->OnDownloadSucceeded(guid, path, size);
+    downloader->OnDownloadSucceeded(guid, completion_info.path,
+                                    completion_info.bytes_downloaded);
+}
+
+bool OfflinePrefetchDownloadClient::CanServiceRemoveDownloadedFile(
+    const std::string& guid,
+    bool force_delete) {
+  return true;
 }
 
 PrefetchDownloader* OfflinePrefetchDownloadClient::GetPrefetchDownloader()

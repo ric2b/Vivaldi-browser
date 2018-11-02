@@ -11,13 +11,16 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/optional.h"
+#include "base/test/scoped_task_environment.h"
 #include "chrome/browser/search/one_google_bar/one_google_bar_data.h"
 #include "chrome/browser/search/one_google_bar/one_google_bar_fetcher.h"
 #include "components/signin/core/browser/account_tracker_service.h"
-#include "components/signin/core/browser/fake_profile_oauth2_token_service.h"
-#include "components/signin/core/browser/fake_signin_manager.h"
+#include "components/signin/core/browser/fake_gaia_cookie_manager_service.h"
 #include "components/signin/core/browser/test_signin_client.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
+#include "google_apis/gaia/fake_oauth2_token_service.h"
+#include "google_apis/gaia/gaia_constants.h"
+#include "net/url_request/test_url_fetcher_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -47,32 +50,53 @@ class FakeOneGoogleBarFetcher : public OneGoogleBarFetcher {
 
 class MockOneGoogleBarServiceObserver : public OneGoogleBarServiceObserver {
  public:
-  MOCK_METHOD0(OnOneGoogleBarDataChanged, void());
-  MOCK_METHOD0(OnOneGoogleBarFetchFailed, void());
+  MOCK_METHOD0(OnOneGoogleBarDataUpdated, void());
 };
 
 class OneGoogleBarServiceTest : public testing::Test {
  public:
   OneGoogleBarServiceTest()
       : signin_client_(&pref_service_),
-        signin_manager_(&signin_client_, &account_tracker_) {
-    SigninManagerBase::RegisterProfilePrefs(pref_service_.registry());
-    SigninManagerBase::RegisterPrefs(pref_service_.registry());
+        fetcher_factory_(/*default_factory=*/nullptr),
+        cookie_service_(&token_service_,
+                        GaiaConstants::kChromeSource,
+                        &signin_client_) {
+    // GaiaCookieManagerService calls static methods of AccountTrackerService
+    // which access prefs.
+    AccountTrackerService::RegisterPrefs(pref_service_.registry());
+
+    cookie_service_.Init(&fetcher_factory_);
 
     auto fetcher = base::MakeUnique<FakeOneGoogleBarFetcher>();
     fetcher_ = fetcher.get();
-    service_ = base::MakeUnique<OneGoogleBarService>(&signin_manager_,
+    service_ = base::MakeUnique<OneGoogleBarService>(&cookie_service_,
                                                      std::move(fetcher));
   }
 
   FakeOneGoogleBarFetcher* fetcher() { return fetcher_; }
   OneGoogleBarService* service() { return service_.get(); }
 
+  void SignIn() {
+    cookie_service_.SetListAccountsResponseOneAccount("user@gmail.com",
+                                                      "gaia_id");
+    cookie_service_.TriggerListAccounts(GaiaConstants::kChromeSource);
+    task_environment_.RunUntilIdle();
+  }
+
+  void SignOut() {
+    cookie_service_.SetListAccountsResponseNoAccounts();
+    cookie_service_.TriggerListAccounts(GaiaConstants::kChromeSource);
+    task_environment_.RunUntilIdle();
+  }
+
  private:
+  base::test::ScopedTaskEnvironment task_environment_;
+
   sync_preferences::TestingPrefServiceSyncable pref_service_;
   TestSigninClient signin_client_;
-  AccountTrackerService account_tracker_;
-  FakeSigninManagerBase signin_manager_;
+  FakeOAuth2TokenService token_service_;
+  net::FakeURLFetcherFactory fetcher_factory_;
+  FakeGaiaCookieManagerService cookie_service_;
 
   // Owned by the service.
   FakeOneGoogleBarFetcher* fetcher_;
@@ -115,43 +139,36 @@ TEST_F(OneGoogleBarServiceTest, NotifiesObserverOnChanges) {
   StrictMock<MockOneGoogleBarServiceObserver> observer;
   service()->AddObserver(&observer);
 
-  // Empty result from a fetch should result in a "fetch failed" notification.
-  // However, the actual data doesn't change anything (it's already empty), so
-  // it should not result in a "data changed".
+  // Empty result from a fetch should result in a notification.
   service()->Refresh();
-  EXPECT_CALL(observer, OnOneGoogleBarFetchFailed());
+  EXPECT_CALL(observer, OnOneGoogleBarDataUpdated());
   fetcher()->RespondToAllCallbacks(OneGoogleBarFetcher::Status::OK,
                                    base::nullopt);
+  EXPECT_THAT(service()->one_google_bar_data(), Eq(base::nullopt));
 
   // Non-empty response should result in a notification.
   service()->Refresh();
   OneGoogleBarData data;
   data.bar_html = "<div></div>";
-  EXPECT_CALL(observer, OnOneGoogleBarDataChanged());
+  EXPECT_CALL(observer, OnOneGoogleBarDataUpdated());
   fetcher()->RespondToAllCallbacks(OneGoogleBarFetcher::Status::OK, data);
   EXPECT_THAT(service()->one_google_bar_data(), Eq(data));
 
-  // Non-empty but identical response should not result in another notification.
+  // Identical response should still result in a notification.
   service()->Refresh();
   OneGoogleBarData identical_data = data;
+  EXPECT_CALL(observer, OnOneGoogleBarDataUpdated());
   fetcher()->RespondToAllCallbacks(OneGoogleBarFetcher::Status::OK,
                                    identical_data);
+  EXPECT_THAT(service()->one_google_bar_data(), Eq(data));
 
   // Different response should result in a notification.
   service()->Refresh();
   OneGoogleBarData other_data;
   data.bar_html = "<div>Different</div>";
-  EXPECT_CALL(observer, OnOneGoogleBarDataChanged());
+  EXPECT_CALL(observer, OnOneGoogleBarDataUpdated());
   fetcher()->RespondToAllCallbacks(OneGoogleBarFetcher::Status::OK, other_data);
   EXPECT_THAT(service()->one_google_bar_data(), Eq(other_data));
-
-  // Finally, an empty response should result in a notification now.
-  service()->Refresh();
-  EXPECT_CALL(observer, OnOneGoogleBarDataChanged());
-  EXPECT_CALL(observer, OnOneGoogleBarFetchFailed());
-  fetcher()->RespondToAllCallbacks(OneGoogleBarFetcher::Status::OK,
-                                   base::nullopt);
-  EXPECT_THAT(service()->one_google_bar_data(), Eq(base::nullopt));
 
   service()->RemoveObserver(&observer);
 }
@@ -169,8 +186,7 @@ TEST_F(OneGoogleBarServiceTest, KeepsCacheOnTransientError) {
 
   // Request a refresh and respond with a transient error.
   service()->Refresh();
-  // Note: No OnOneGoogleBarDataChanged, since the cached data remains.
-  EXPECT_CALL(observer, OnOneGoogleBarFetchFailed());
+  EXPECT_CALL(observer, OnOneGoogleBarDataUpdated());
   fetcher()->RespondToAllCallbacks(OneGoogleBarFetcher::Status::TRANSIENT_ERROR,
                                    base::nullopt);
   // Cached data should still be there.
@@ -192,8 +208,7 @@ TEST_F(OneGoogleBarServiceTest, ClearsCacheOnFatalError) {
 
   // Request a refresh and respond with a fatal error.
   service()->Refresh();
-  EXPECT_CALL(observer, OnOneGoogleBarDataChanged());
-  EXPECT_CALL(observer, OnOneGoogleBarFetchFailed());
+  EXPECT_CALL(observer, OnOneGoogleBarDataUpdated());
   fetcher()->RespondToAllCallbacks(OneGoogleBarFetcher::Status::FATAL_ERROR,
                                    base::nullopt);
   // Cached data should be gone now.
@@ -202,50 +217,7 @@ TEST_F(OneGoogleBarServiceTest, ClearsCacheOnFatalError) {
   service()->RemoveObserver(&observer);
 }
 
-#if !defined(OS_CHROMEOS)
-
-// Like OneGoogleBarServiceTest, but it has a FakeSigninManager (rather than
-// FakeSigninManagerBase), so it can simulate sign-in and sign-out.
-class OneGoogleBarServiceSignInTest : public testing::Test {
- public:
-  OneGoogleBarServiceSignInTest()
-      : signin_client_(&pref_service_),
-        signin_manager_(&signin_client_,
-                        &token_service_,
-                        &account_tracker_,
-                        nullptr) {
-    SigninManagerBase::RegisterProfilePrefs(pref_service_.registry());
-    SigninManagerBase::RegisterPrefs(pref_service_.registry());
-    AccountTrackerService::RegisterPrefs(pref_service_.registry());
-
-    account_tracker_.Initialize(&signin_client_);
-
-    auto fetcher = base::MakeUnique<FakeOneGoogleBarFetcher>();
-    fetcher_ = fetcher.get();
-    service_ = base::MakeUnique<OneGoogleBarService>(&signin_manager_,
-                                                     std::move(fetcher));
-  }
-
-  void SignIn() { signin_manager_.SignIn("account", "username", "pass"); }
-  void SignOut() { signin_manager_.ForceSignOut(); }
-
-  FakeOneGoogleBarFetcher* fetcher() { return fetcher_; }
-  OneGoogleBarService* service() { return service_.get(); }
-
- private:
-  sync_preferences::TestingPrefServiceSyncable pref_service_;
-  TestSigninClient signin_client_;
-  FakeProfileOAuth2TokenService token_service_;
-  AccountTrackerService account_tracker_;
-  FakeSigninManager signin_manager_;
-
-  // Owned by the service.
-  FakeOneGoogleBarFetcher* fetcher_;
-
-  std::unique_ptr<OneGoogleBarService> service_;
-};
-
-TEST_F(OneGoogleBarServiceSignInTest, ResetsOnSignIn) {
+TEST_F(OneGoogleBarServiceTest, ResetsOnSignIn) {
   // Load some data.
   service()->Refresh();
   OneGoogleBarData data;
@@ -253,12 +225,18 @@ TEST_F(OneGoogleBarServiceSignInTest, ResetsOnSignIn) {
   fetcher()->RespondToAllCallbacks(OneGoogleBarFetcher::Status::OK, data);
   ASSERT_THAT(service()->one_google_bar_data(), Eq(data));
 
-  // Sign in. This should clear the cached data.
+  StrictMock<MockOneGoogleBarServiceObserver> observer;
+  service()->AddObserver(&observer);
+
+  // Sign in. This should clear the cached data and notify the observer.
+  EXPECT_CALL(observer, OnOneGoogleBarDataUpdated());
   SignIn();
   EXPECT_THAT(service()->one_google_bar_data(), Eq(base::nullopt));
+
+  service()->RemoveObserver(&observer);
 }
 
-TEST_F(OneGoogleBarServiceSignInTest, ResetsOnSignOut) {
+TEST_F(OneGoogleBarServiceTest, ResetsOnSignOut) {
   SignIn();
 
   // Load some data.
@@ -268,9 +246,27 @@ TEST_F(OneGoogleBarServiceSignInTest, ResetsOnSignOut) {
   fetcher()->RespondToAllCallbacks(OneGoogleBarFetcher::Status::OK, data);
   ASSERT_THAT(service()->one_google_bar_data(), Eq(data));
 
-  // Sign out. This should clear the cached data.
+  StrictMock<MockOneGoogleBarServiceObserver> observer;
+  service()->AddObserver(&observer);
+
+  // Sign in. This should clear the cached data and notify the observer.
+  EXPECT_CALL(observer, OnOneGoogleBarDataUpdated());
   SignOut();
   EXPECT_THAT(service()->one_google_bar_data(), Eq(base::nullopt));
+
+  service()->RemoveObserver(&observer);
 }
 
-#endif  // OS_CHROMEOS
+TEST_F(OneGoogleBarServiceTest, DoesNotNotifyObserverOnSignInIfNoCachedData) {
+  ASSERT_THAT(service()->one_google_bar_data(), Eq(base::nullopt));
+
+  StrictMock<MockOneGoogleBarServiceObserver> observer;
+  service()->AddObserver(&observer);
+
+  // Sign in. This should *not* notify the observer, since there was no cached
+  // data before.
+  SignIn();
+  EXPECT_THAT(service()->one_google_bar_data(), Eq(base::nullopt));
+
+  service()->RemoveObserver(&observer);
+}

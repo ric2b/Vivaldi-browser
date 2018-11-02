@@ -12,7 +12,7 @@
 #include "ui/views/view.h"
 #include "ui/views/widget/widget_observer.h"
 
-class NewTabPromo;
+class NewTabPromoBubbleView;
 
 ///////////////////////////////////////////////////////////////////////////////
 // NewTabButton
@@ -38,8 +38,13 @@ class NewTabButton : public views::ImageButton,
   // button's visible region begins.
   static int GetTopOffset();
 
+  // Retrieves the last active BrowserView instance to display the NewTabPromo.
+  static void ShowPromoForLastActiveBrowser();
+
   // Shows the NewTabPromo when the NewTabFeatureEngagementTracker calls for it.
   void ShowPromo();
+
+  NewTabPromoBubbleView* new_tab_promo() { return new_tab_promo_; }
 
  private:
 // views::ImageButton:
@@ -80,6 +85,10 @@ class NewTabButton : public views::ImageButton,
 
   // Tab strip that contains this button.
   TabStrip* tab_strip_;
+
+  // Promotional UI that appears next to the NewTabButton and encourages its
+  // use. Owned by its NativeWidget.
+  NewTabPromoBubbleView* new_tab_promo_;
 
   // The offset used to paint the background image.
   gfx::Point background_offset_;

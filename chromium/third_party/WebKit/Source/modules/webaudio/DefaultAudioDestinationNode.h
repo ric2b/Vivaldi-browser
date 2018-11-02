@@ -68,7 +68,16 @@ class DefaultAudioDestinationHandler final : public AudioDestinationHandler {
                                           const WebAudioLatencyHint&);
   void CreateDestination();
 
-  std::unique_ptr<AudioDestination> destination_;
+  // Starts platform/AudioDestination. If the runtime flag for AudioWorklet is
+  // set, uses the AudioWorkletThread's backing thread for the rendering.
+  void StartDestination();
+
+  void StopDestination();
+
+  // Uses |RefPtr| to keep the AudioDestination alive until all the cross-thread
+  // tasks are completed.
+  RefPtr<AudioDestination> destination_;
+
   String input_device_id_;
   unsigned number_of_input_channels_;
   const WebAudioLatencyHint latency_hint_;

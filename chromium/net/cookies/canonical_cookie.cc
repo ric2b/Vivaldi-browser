@@ -92,6 +92,7 @@ int PartialCookieOrdering(const CanonicalCookie& a, const CanonicalCookie& b) {
 
 }  // namespace
 
+// Keep defaults here in sync with content/public/common/cookie_manager.mojom.
 CanonicalCookie::CanonicalCookie()
     : secure_(false),
       httponly_(false),
@@ -241,7 +242,7 @@ std::unique_ptr<CanonicalCookie> CanonicalCookie::Create(
     return nullptr;
   }
 
-  std::unique_ptr<CanonicalCookie> cc(base::MakeUnique<CanonicalCookie>(
+  std::unique_ptr<CanonicalCookie> cc(std::make_unique<CanonicalCookie>(
       parsed_cookie.Name(), parsed_cookie.Value(), cookie_domain, cookie_path,
       creation_time, cookie_expires, creation_time, parsed_cookie.IsSecure(),
       parsed_cookie.IsHttpOnly(), parsed_cookie.SameSite(),

@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/run_loop.h"
 #include "base/strings/string_split.h"
 #include "base/test/scoped_task_environment.h"
 #include "mojo/common/data_pipe_drainer.h"
@@ -88,7 +89,10 @@ class CoordinatorTest : public testing::Test,
 
   void StopAndFlush() {
     mojo::DataPipe data_pipe;
-    coordinator_->StopAndFlush(std::move(data_pipe.producer_handle));
+    auto dummy_callback = [](std::unique_ptr<base::DictionaryValue> metadata) {
+    };
+    coordinator_->StopAndFlush(std::move(data_pipe.producer_handle),
+                               base::BindRepeating(dummy_callback));
     drainer_.reset(new mojo::common::DataPipeDrainer(
         this, std::move(data_pipe.consumer_handle)));
   }

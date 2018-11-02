@@ -183,6 +183,9 @@ class VisitDatabase {
   void GetVisitsSource(const VisitVector& visits,
                        VisitSourceMap* sources);
 
+  // NOTE(arnar): Quickly drops history and visits db tables
+  bool DropHistoryTables();
+
  protected:
   // Returns the database for the functions in this interface.
   virtual sql::Connection& GetDB() = 0;

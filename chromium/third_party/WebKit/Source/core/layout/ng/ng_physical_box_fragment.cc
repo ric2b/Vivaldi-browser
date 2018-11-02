@@ -4,14 +4,11 @@
 
 #include "core/layout/ng/ng_physical_box_fragment.h"
 
-#include "core/layout/ng/ng_layout_result.h"
-#include "core/layout/ng/ng_positioned_float.h"
-#include "core/layout/ng/ng_unpositioned_float.h"
-
 namespace blink {
 
 NGPhysicalBoxFragment::NGPhysicalBoxFragment(
     LayoutObject* layout_object,
+    const ComputedStyle& style,
     NGPhysicalSize size,
     NGPhysicalSize overflow,
     Vector<RefPtr<NGPhysicalFragment>>& children,
@@ -19,6 +16,7 @@ NGPhysicalBoxFragment::NGPhysicalBoxFragment(
     unsigned border_edges,  // NGBorderEdges::Physical
     RefPtr<NGBreakToken> break_token)
     : NGPhysicalFragment(layout_object,
+                         style,
                          size,
                          kFragmentBox,
                          std::move(break_token)),
@@ -40,9 +38,10 @@ const NGBaseline* NGPhysicalBoxFragment::Baseline(
 RefPtr<NGPhysicalFragment> NGPhysicalBoxFragment::CloneWithoutOffset() const {
   Vector<RefPtr<NGPhysicalFragment>> children_copy(children_);
   Vector<NGBaseline> baselines_copy(baselines_);
-  RefPtr<NGPhysicalFragment> physical_fragment = AdoptRef(
-      new NGPhysicalBoxFragment(layout_object_, size_, overflow_, children_copy,
-                                baselines_copy, border_edge_, break_token_));
+  RefPtr<NGPhysicalFragment> physical_fragment =
+      AdoptRef(new NGPhysicalBoxFragment(
+          layout_object_, Style(), size_, overflow_, children_copy,
+          baselines_copy, border_edge_, break_token_));
   return physical_fragment;
 }
 

@@ -4,25 +4,22 @@
 
 package org.chromium.chrome.browser.ntp;
 
+import static org.chromium.chrome.test.util.browser.suggestions.FakeMostVisitedSites.createSiteSuggestion;
+
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.graphics.Color;
-import android.support.test.InstrumentationRegistry;
-
-import org.junit.Assert;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.UrlUtils;
-import org.chromium.chrome.R;
 import org.chromium.chrome.browser.favicon.LargeIconBridge;
 import org.chromium.chrome.browser.ntp.snippets.KnownCategories;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
 import org.chromium.chrome.browser.ntp.snippets.SuggestionsSource;
-import org.chromium.chrome.browser.suggestions.FakeMostVisitedSites;
 import org.chromium.chrome.browser.suggestions.MostVisitedSites;
-import org.chromium.chrome.browser.suggestions.TileSource;
+import org.chromium.chrome.browser.suggestions.SiteSuggestion;
 import org.chromium.chrome.test.util.browser.suggestions.ContentSuggestionsTestUtils;
 import org.chromium.chrome.test.util.browser.suggestions.DummySuggestionsEventReporter;
+import org.chromium.chrome.test.util.browser.suggestions.FakeMostVisitedSites;
 import org.chromium.chrome.test.util.browser.suggestions.FakeSuggestionsSource;
 import org.chromium.chrome.test.util.browser.suggestions.SuggestionsDependenciesRule;
 
@@ -35,22 +32,39 @@ import java.util.Map;
  * Interface for providing test data
  */
 public class NtpUiCaptureTestData {
-    private static final String[] FAKE_MOST_VISITED_TITLES =
-            new String[] {"Queries", "Football, cricket, hockey, and more | Sports", "Meme Feed",
-                    "Facts", "The Morning News", "Tech", "Shop.rr", "Now Entertainment"};
+    private static final SiteSuggestion[] SITE_SUGGESTIONS = {
+            createSiteSuggestion("Queries", "queries"),
+            createSiteSuggestion("Football, cricket, hockey, and more | Sports", "sports"),
+            createSiteSuggestion("Meme Feed", "meme"),
+            createSiteSuggestion("Facts", "facts"),
+            createSiteSuggestion("The Morning News", "news"),
+            createSiteSuggestion("Tech", "tech"),
+            createSiteSuggestion("Shop.rr", "shop"),
+            createSiteSuggestion("Now Entertainment", "movies")};
 
-    private static final String[] FAKE_MOST_VISITED_WHITELIST_ICON_PATHS =
-            new String[] {"", "", "", "", "", "", "", ""};
+    private static final int[] FAKE_MOST_VISITED_COLORS = {
+            0xff306090, // Muted blue.
+            0xff903060, // Muted purplish red.
+            0xff309060, // Muted green.
+            0xff603090, // Muted purple.
+            0xff906030, // Muted brown.
+            0xff303090, // Muted dark blue.
+            0xff609060, // Muted brownish green.
+            0xff903030 // Muted red.
+    };
 
-    private static final int[] FAKE_MOST_VISITED_SOURCES = new int[] {TileSource.TOP_SITES,
-            TileSource.TOP_SITES, TileSource.TOP_SITES, TileSource.TOP_SITES, TileSource.TOP_SITES,
-            TileSource.TOP_SITES, TileSource.TOP_SITES, TileSource.TOP_SITES};
-
-    private static final String[] FAKE_MOST_VISITED_URLS =
-            new String[] {"queries", "sports", "meme", "facts", "news", "tech", "shop", "movies"};
-
-    private static final int[] FAKE_MOST_VISITED_COLORS = {Color.RED, Color.BLUE, Color.GREEN,
-            Color.BLACK, Color.CYAN, Color.DKGRAY, Color.BLUE, Color.YELLOW};
+    private static final Bitmap QUERIES_ICON =
+            BitmapFactory.decodeFile(UrlUtils.getTestFilePath("/android/UiCapture/dots.png"));
+    private static final Bitmap SPORTS_ICON =
+            BitmapFactory.decodeFile(UrlUtils.getTestFilePath("/android/UiCapture/landscape.png"));
+    private static final Bitmap MEME_ICON =
+            BitmapFactory.decodeFile(UrlUtils.getTestFilePath("/android/UiCapture/hot.png"));
+    private static final Bitmap NEWS_ICON =
+            BitmapFactory.decodeFile(UrlUtils.getTestFilePath("/android/UiCapture/train.png"));
+    private static final Bitmap SHOP_ICON =
+            BitmapFactory.decodeFile(UrlUtils.getTestFilePath("/android/UiCapture/heart.png"));
+    private static final Bitmap ENTERTAINMENT_ICON =
+            BitmapFactory.decodeFile(UrlUtils.getTestFilePath("/android/UiCapture/cloud.png"));
 
     private static final SnippetArticle[] FAKE_ARTICLE_SUGGESTIONS = new SnippetArticle[] {
             new SnippetArticle(KnownCategories.ARTICLES, "suggestion0",
@@ -77,6 +91,29 @@ public class NtpUiCaptureTestData {
                     "http://example.com", getTimestamp(2017, Calendar.MARCH, 30), 0.0f, 0L, false),
     };
 
+    public static void registerArticleSamples(FakeSuggestionsSource suggestionsSource) {
+        ContentSuggestionsTestUtils.registerCategory(suggestionsSource, KnownCategories.ARTICLES);
+        suggestionsSource.setSuggestionsForCategory(
+                KnownCategories.ARTICLES, Arrays.asList(FAKE_ARTICLE_SUGGESTIONS));
+        suggestionsSource.setFaviconForId("suggestion0", NEWS_ICON);
+        suggestionsSource.setThumbnailForId("suggestion0",
+                BitmapFactory.decodeFile(
+                        UrlUtils.getTestFilePath("/android/UiCapture/conductor.jpg")));
+        suggestionsSource.setThumbnailForId("suggestion1",
+                BitmapFactory.decodeFile(UrlUtils.getTestFilePath("/android/UiCapture/goat.jpg")));
+        suggestionsSource.setFaviconForId("suggestion2", ENTERTAINMENT_ICON);
+        suggestionsSource.setThumbnailForId("suggestion2",
+                BitmapFactory.decodeFile(UrlUtils.getTestFilePath("/android/UiCapture/gig.jpg")));
+    }
+
+    public static void registerBookmarkSamples(FakeSuggestionsSource suggestionsSource) {
+        ContentSuggestionsTestUtils.registerCategory(suggestionsSource, KnownCategories.BOOKMARKS);
+        suggestionsSource.setSuggestionsForCategory(
+                KnownCategories.BOOKMARKS, Arrays.asList(FAKE_BOOKMARK_SUGGESTIONS));
+        suggestionsSource.setThumbnailForId("bookmark1",
+                BitmapFactory.decodeFile(UrlUtils.getTestFilePath("/android/UiCapture/fire.jpg")));
+    }
+
     private static long getTimestamp(int year, int month, int day) {
         Calendar c = Calendar.getInstance();
         c.set(year, month, day);
@@ -85,49 +122,29 @@ public class NtpUiCaptureTestData {
 
     private static SuggestionsSource createSuggestionsSource() {
         FakeSuggestionsSource fakeSuggestionsSource = new FakeSuggestionsSource();
-        ContentSuggestionsTestUtils.registerCategory(
-                fakeSuggestionsSource, KnownCategories.ARTICLES, 2);
-        ContentSuggestionsTestUtils.registerCategory(
-                fakeSuggestionsSource, KnownCategories.BOOKMARKS, 2);
-        fakeSuggestionsSource.setSuggestionsForCategory(
-                KnownCategories.ARTICLES, Arrays.asList(FAKE_ARTICLE_SUGGESTIONS));
-        fakeSuggestionsSource.setSuggestionsForCategory(
-                KnownCategories.BOOKMARKS, Arrays.asList(FAKE_BOOKMARK_SUGGESTIONS));
-        final Bitmap favicon = BitmapFactory.decodeFile(
-                UrlUtils.getTestFilePath("/android/UiCapture/favicon.ico"));
-        Assert.assertNotNull(favicon);
-        fakeSuggestionsSource.setFaviconForId("suggestion0", favicon);
-        fakeSuggestionsSource.setThumbnailForId("suggestion0",
-                BitmapFactory.decodeFile(
-                        UrlUtils.getTestFilePath("/android/UiCapture/conductor.jpg")));
-        fakeSuggestionsSource.setThumbnailForId("suggestion1",
-                BitmapFactory.decodeFile(UrlUtils.getTestFilePath("/android/UiCapture/goat.jpg")));
-        fakeSuggestionsSource.setThumbnailForId("suggestion2",
-                BitmapFactory.decodeFile(UrlUtils.getTestFilePath("/android/UiCapture/gig.jpg")));
-        fakeSuggestionsSource.setThumbnailForId("bookmark1",
-                BitmapFactory.decodeFile(UrlUtils.getTestFilePath("/android/UiCapture/fire.jpg")));
+        registerArticleSamples(fakeSuggestionsSource);
+        registerBookmarkSamples(fakeSuggestionsSource);
         return fakeSuggestionsSource;
     }
 
     private static MostVisitedSites createMostVisitedSites() {
         FakeMostVisitedSites result = new FakeMostVisitedSites();
-        result.setTileSuggestions(FAKE_MOST_VISITED_TITLES, FAKE_MOST_VISITED_URLS,
-                FAKE_MOST_VISITED_WHITELIST_ICON_PATHS, FAKE_MOST_VISITED_SOURCES);
+        result.setTileSuggestions(SITE_SUGGESTIONS);
         return result;
     }
 
     private static LargeIconBridge createLargeIconBridge() {
         final Map<String, Bitmap> iconMap = new HashMap<>();
-        iconMap.put(FAKE_MOST_VISITED_URLS[0],
-                BitmapFactory.decodeFile(UrlUtils.getTestFilePath("/android/google.png")));
-        iconMap.put(FAKE_MOST_VISITED_URLS[1],
-                BitmapFactory.decodeResource(
-                        InstrumentationRegistry.getTargetContext().getResources(),
-                        R.drawable.star_green));
+        iconMap.put(SITE_SUGGESTIONS[0].url, QUERIES_ICON);
+        iconMap.put(SITE_SUGGESTIONS[1].url, SPORTS_ICON);
+        iconMap.put(SITE_SUGGESTIONS[2].url, MEME_ICON);
+        iconMap.put(SITE_SUGGESTIONS[4].url, NEWS_ICON);
+        iconMap.put(SITE_SUGGESTIONS[6].url, SHOP_ICON);
+        iconMap.put(SITE_SUGGESTIONS[7].url, ENTERTAINMENT_ICON);
 
         final Map<String, Integer> colorMap = new HashMap<>();
-        for (int i = 0; i < FAKE_MOST_VISITED_URLS.length; i++) {
-            colorMap.put(FAKE_MOST_VISITED_URLS[i], FAKE_MOST_VISITED_COLORS[i]);
+        for (int i = 0; i < SITE_SUGGESTIONS.length; i++) {
+            colorMap.put(SITE_SUGGESTIONS[i].url, FAKE_MOST_VISITED_COLORS[i]);
         }
         return new LargeIconBridge() {
             @Override

@@ -70,18 +70,19 @@ def main(args):
   group.add_argument('--additional-apk-incremental', action='append',
                      dest='additional_apks_incremental', default=[])
   group.add_argument('--apk-under-test')
-  group.add_argument('--apk-under-test-incremental-install-script')
+  group.add_argument('--apk-under-test-incremental-install-json')
   group.add_argument('--executable-dist-dir')
   group.add_argument('--isolate-file-path')
   group.add_argument('--output-directory')
   group.add_argument('--runtime-deps-path')
   group.add_argument('--test-apk')
   group.add_argument('--test-jar')
-  group.add_argument('--test-apk-incremental-install-script')
+  group.add_argument('--test-apk-incremental-install-json')
   group.add_argument('--coverage-dir')
   group.add_argument('--android-manifest-path')
   group.add_argument('--resource-zips')
   group.add_argument('--robolectric-runtime-deps-dir')
+  group.add_argument('--enable-relocation-packing')
   args, test_runner_args = parser.parse_known_args(
       build_utils.ExpandFileArgs(args))
 
@@ -94,6 +95,8 @@ def main(args):
   test_runner_path = RelativizePathToScript(test_runner_path)
 
   test_runner_path_args = []
+  if args.enable_relocation_packing and args.enable_relocation_packing == "1":
+    test_runner_args.append('--enable-relocation-packing')
   if args.additional_apk_list:
     args.additional_apks.extend(
         build_utils.ParseGnList(args.additional_apk_list))
@@ -109,11 +112,11 @@ def main(args):
   if args.apk_under_test:
     test_runner_path_args.append(
         ('--apk-under-test', RelativizePathToScript(args.apk_under_test)))
-  if args.apk_under_test_incremental_install_script:
+  if args.apk_under_test_incremental_install_json:
     test_runner_path_args.append(
-        ('--apk-under-test-incremental-install-script',
+        ('--apk-under-test-incremental-install-json',
          RelativizePathToScript(
-             args.apk_under_test_incremental_install_script)))
+             args.apk_under_test_incremental_install_json)))
   if args.executable_dist_dir:
     test_runner_path_args.append(
         ('--executable-dist-dir',
@@ -133,10 +136,10 @@ def main(args):
   if args.test_jar:
     test_runner_path_args.append(
         ('--test-jar', RelativizePathToScript(args.test_jar)))
-  if args.test_apk_incremental_install_script:
+  if args.test_apk_incremental_install_json:
     test_runner_path_args.append(
-        ('--test-apk-incremental-install-script',
-         RelativizePathToScript(args.test_apk_incremental_install_script)))
+        ('--test-apk-incremental-install-json',
+         RelativizePathToScript(args.test_apk_incremental_install_json)))
   if args.coverage_dir:
     test_runner_path_args.append(
         ('--coverage-dir', RelativizePathToScript(args.coverage_dir)))

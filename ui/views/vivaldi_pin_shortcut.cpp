@@ -16,7 +16,7 @@
 #include "base/win/shortcut.h"
 #include "base/win/windows_version.h"
 #include "chrome/browser/web_applications/web_app_win.h"
-#include "extensions/browser/app_window/app_window.h"
+#include "ui/vivaldi_browser_window.h"
 
 namespace vivaldi {
 
@@ -25,8 +25,7 @@ void VivaldiShortcutPinToTaskbar(const base::string16& app_id) {
   const wchar_t kVivaldiPinToTaskbarValue[] = L"EnablePinToTaskbar";
 
   if (base::win::GetVersion() >= base::win::VERSION_WIN7 &&
-      base::win::GetVersion() < base::win::VERSION_WIN10 &&
-      vivaldi::IsVivaldiRunning()) {
+      base::win::GetVersion() < base::win::VERSION_WIN10) {
     base::win::RegKey key_ptt(HKEY_CURRENT_USER, kVivaldiKey, KEY_ALL_ACCESS);
     if (!key_ptt.Valid())
       return;
@@ -59,10 +58,10 @@ void VivaldiShortcutPinToTaskbar(const base::string16& app_id) {
   }
 }
 
-void StartPinShortcutToTaskbar(extensions::AppWindow* app_window) {
-  DCHECK(app_window);
+void StartPinShortcutToTaskbar(VivaldiBrowserWindow* window) {
+  DCHECK(window);
   std::string app_name = web_app::GenerateApplicationNameFromExtensionId(
-      app_window->extension_id());
+      window->extension()->id());
   base::string16 app_name_wide;
   app_name_wide.assign(app_name.begin(), app_name.end());
   base::PostTask(

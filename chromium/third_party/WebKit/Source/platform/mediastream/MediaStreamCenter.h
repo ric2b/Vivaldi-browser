@@ -44,6 +44,7 @@ namespace blink {
 class AudioSourceProvider;
 class MediaStreamComponent;
 class MediaStreamDescriptor;
+class MediaStreamSource;
 class WebMediaStream;
 class WebMediaStreamCenter;
 
@@ -66,11 +67,10 @@ class PLATFORM_EXPORT MediaStreamCenter final
   std::unique_ptr<AudioSourceProvider> CreateWebAudioSourceFromMediaStreamTrack(
       MediaStreamComponent*);
 
-  void DidCreateMediaStream(MediaStreamDescriptor*);
   void DidCreateMediaStreamAndTracks(MediaStreamDescriptor*);
-  bool DidAddMediaStreamTrack(MediaStreamDescriptor*, MediaStreamComponent*);
-  bool DidRemoveMediaStreamTrack(MediaStreamDescriptor*, MediaStreamComponent*);
   void DidStopLocalMediaStream(MediaStreamDescriptor*);
+
+  void DidStopMediaStreamSource(MediaStreamSource*);
 
   // blink::WebMediaStreamCenterClient
   void StopLocalMediaStream(const WebMediaStream&) override;

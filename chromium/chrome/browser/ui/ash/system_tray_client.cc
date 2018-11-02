@@ -28,7 +28,6 @@
 #include "chrome/browser/lifetime/termination_notification.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/ash_util.h"
-#include "chrome/browser/ui/ash/system_tray_delegate_chromeos.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/ui/singleton_tabs.h"
@@ -405,11 +404,13 @@ void SystemTrayClient::ShowNetworkSettings(const std::string& network_id) {
 
 void SystemTrayClient::ShowNetworkSettingsHelper(const std::string& network_id,
                                                  bool show_configure) {
-  if (!LoginState::Get()->IsUserLoggedIn() ||
-      session_manager::SessionManager::Get()->IsInSecondaryLoginScreen()) {
+  if (session_manager::SessionManager::Get()->IsInSecondaryLoginScreen())
+    return;
+  if (!LoginState::Get()->IsUserLoggedIn()) {
+    DCHECK(!network_id.empty());
+    chromeos::LoginDisplayHost::default_host()->OpenProxySettings(network_id);
     return;
   }
-
   std::string page = chrome::kInternetSubPage;
   if (!network_id.empty()) {
     page = chrome::kNetworkDetailSubPage;
@@ -427,7 +428,7 @@ void SystemTrayClient::ShowProxySettings() {
   // User is not logged in.
   CHECK(!login_state->IsUserLoggedIn() ||
         login_state->GetLoggedInUserType() == LoginState::LOGGED_IN_USER_NONE);
-  chromeos::LoginDisplayHost::default_host()->OpenProxySettings();
+  chromeos::LoginDisplayHost::default_host()->OpenProxySettings("");
 }
 
 void SystemTrayClient::SignOut() {
@@ -468,10 +469,6 @@ void SystemTrayClient::HandleUpdateAvailable() {
                                update_type);
 }
 
-void SystemTrayClient::HandleUpdateOverCellularAvailable() {
-  system_tray_->ShowUpdateOverCellularAvailableIcon();
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // chromeos::system::SystemClockObserver:
 
@@ -483,7 +480,13 @@ void SystemTrayClient::OnSystemClockChanged(
 ////////////////////////////////////////////////////////////////////////////////
 // UpgradeDetector::UpgradeObserver:
 void SystemTrayClient::OnUpdateOverCellularAvailable() {
-  HandleUpdateOverCellularAvailable();
+  // Requests that ash show the update over cellular available icon.
+  system_tray_->SetUpdateOverCellularAvailableIconVisible(true);
+}
+
+void SystemTrayClient::OnUpdateOverCellularOneTimePermissionGranted() {
+  // Requests that ash hide the update over cellular available icon.
+  system_tray_->SetUpdateOverCellularAvailableIconVisible(false);
 }
 
 void SystemTrayClient::OnUpgradeRecommended() {

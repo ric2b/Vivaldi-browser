@@ -14,6 +14,7 @@ class BookmarkNode;
 
 @class ActionSheetCoordinator;
 @class BookmarkCollectionView;
+@class BookmarkContextBar;
 @class BookmarkEditingBar;
 @class BookmarkEditViewController;
 @class BookmarkFolderEditorViewController;
@@ -24,8 +25,9 @@ class BookmarkNode;
 @class BookmarkNavigationBar;
 @class BookmarkPanelView;
 @class BookmarkPromoController;
+@class BookmarkTableView;
 
-// BookmarkHomeViewController class extention for protected read/write
+// BookmarkHomeViewController class extension for protected read/write
 // properties and methods for subclasses.
 @interface BookmarkHomeViewController ()
 
@@ -37,6 +39,10 @@ class BookmarkNode;
 
 // The main view showing all the bookmarks.
 @property(nonatomic, strong) BookmarkCollectionView* folderView;
+
+// The main view showing all the bookmarks. (Used only when
+// features::kBookmarkNewGeneration is enabled)
+@property(nonatomic, strong) BookmarkTableView* bookmarksTableView;
 
 // The view controller used to pick a folder in which to move the selected
 // bookmarks.
@@ -50,6 +56,10 @@ class BookmarkNode;
 
 // The navigation bar sits on top of the main content.
 @property(nonatomic, strong) BookmarkNavigationBar* navigationBar;
+
+// The context bar at the bottom of the bookmarks. (Used only when
+// features::kBookmarkNewGeneration is enabled)
+@property(nonatomic, strong) BookmarkContextBar* contextBar;
 
 // At any point in time, there is exactly one collection view whose view is part
 // of the view hierarchy. This property determines what data is visible in the
@@ -109,9 +119,6 @@ class BookmarkNode;
 - (void)updatePrimaryMenuItem:(BookmarkMenuItem*)menuItem
                      animated:(BOOL)animated;
 
-// The active collection view that corresponds to primaryMenuItem.
-- (UIView<BookmarkHomePrimaryView>*)primaryView;
-
 // Caches the position in the collection view.
 - (void)cachePosition;
 
@@ -119,10 +126,6 @@ class BookmarkNode;
 - (BOOL)shouldShowBackButtonOnNavigationBar;
 
 #pragma mark - Subclass overrides
-
-// Navigates to the bookmark URL that was tapped. MUST be overridden
-// by subclasses.
-- (void)navigateToBookmarkURL:(const GURL&)url;
 
 // Creates and returns actionSheetCoordinator. MUST
 // be overridden by subclass.
@@ -140,6 +143,9 @@ class BookmarkNode;
 - (CGRect)editingBarFrame;
 
 #pragma mark - Navigation bar.
+
+// Callback for when navigation bar is cancelled.
+- (void)navigationBarCancel:(id)sender;
 
 // Updates the UI of the navigation bar with the primaryMenuItem.
 // This method should be called anytime:

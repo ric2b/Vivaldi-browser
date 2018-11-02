@@ -45,6 +45,7 @@ source_set("graphics") {
 
     deps += [
       ":libcast_graphics_1.0",
+      "//chromecast/base",
       "//chromecast/public",
       "//ui/aura",
       "//ui/display",
@@ -82,6 +83,7 @@ if (use_aura && !is_cast_audio_only) {
     deps = [
       ":graphics",
       "//base/test:test_support",
+      "//mojo/edk/system",
       "//testing/gtest",
       "//ui/aura",
       "//ui/aura:test_support",

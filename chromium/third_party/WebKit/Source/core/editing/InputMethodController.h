@@ -26,10 +26,11 @@
 #ifndef InputMethodController_h
 #define InputMethodController_h
 
+#include "base/gtest_prod_util.h"
 #include "core/CoreExport.h"
 #include "core/dom/SynchronousMutationObserver.h"
-#include "core/editing/CompositionUnderline.h"
 #include "core/editing/EphemeralRange.h"
+#include "core/editing/ImeTextSpan.h"
 #include "core/editing/PlainTextRange.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Vector.h"
@@ -62,10 +63,10 @@ class CORE_EXPORT InputMethodController final
   // international text input composition
   bool HasComposition() const;
   void SetComposition(const String& text,
-                      const Vector<CompositionUnderline>& underlines,
+                      const Vector<ImeTextSpan>& ime_text_spans,
                       int selection_start,
                       int selection_end);
-  void SetCompositionFromExistingText(const Vector<CompositionUnderline>& text,
+  void SetCompositionFromExistingText(const Vector<ImeTextSpan>& ime_text_spans,
                                       unsigned composition_start,
                                       unsigned composition_end);
 
@@ -73,7 +74,7 @@ class CORE_EXPORT InputMethodController final
   // changes the selection according to relativeCaretPosition, which is
   // relative to the end of the inserting text.
   bool CommitText(const String& text,
-                  const Vector<CompositionUnderline>& underlines,
+                  const Vector<ImeTextSpan>& ime_text_spans,
                   int relative_caret_position);
 
   // Inserts ongoing composing text; changes the selection to the end of
@@ -100,6 +101,10 @@ class CORE_EXPORT InputMethodController final
   void DeleteSurroundingText(int before, int after);
   void DeleteSurroundingTextInCodePoints(int before, int after);
   WebTextInputInfo TextInputInfo() const;
+  // For finding NEXT/PREVIOUS everytime during frame update is a costly
+  // operation, so making it specific whenever needed by splitting from
+  // TextInputFlags()
+  int ComputeWebTextInputNextPreviousFlags() const;
   WebTextInputType TextInputType() const;
 
   // Call this when we will change focus.
@@ -129,14 +134,14 @@ class CORE_EXPORT InputMethodController final
   // Returns true if selection offsets were successfully set.
   bool SetSelectionOffsets(const PlainTextRange&);
 
-  void AddCompositionUnderlines(const Vector<CompositionUnderline>& underlines,
-                                ContainerNode* base_element,
-                                unsigned offset_in_plain_chars);
+  void AddImeTextSpans(const Vector<ImeTextSpan>& ime_text_spans,
+                       ContainerNode* base_element,
+                       unsigned offset_in_plain_chars);
 
   bool InsertText(const String&);
   bool InsertTextAndMoveCaret(const String&,
                               int relative_caret_position,
-                              const Vector<CompositionUnderline>& underlines);
+                              const Vector<ImeTextSpan>& ime_text_spans);
 
   // Inserts the given text string in the place of the existing composition.
   // Returns true if did replace.
@@ -146,7 +151,7 @@ class CORE_EXPORT InputMethodController final
   bool ReplaceCompositionAndMoveCaret(
       const String&,
       int relative_caret_position,
-      const Vector<CompositionUnderline>& underlines);
+      const Vector<ImeTextSpan>& ime_text_spans);
 
   // Returns true if moved caret successfully.
   bool MoveCaret(int new_caret_position);
@@ -166,6 +171,9 @@ class CORE_EXPORT InputMethodController final
 
   // Returns true if selection offsets were successfully set.
   bool SetSelectionOffsets(const PlainTextRange&, TypingContinuation);
+
+  FRIEND_TEST_ALL_PREFIXES(InputMethodControllerTest,
+                           InputModeOfFocusedElement);
 };
 
 }  // namespace blink

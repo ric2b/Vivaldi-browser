@@ -14,6 +14,20 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
+namespace {
+
+bool EqualClassifications(const ACMatchClassifications& lhs,
+                          const ACMatchClassifications& rhs) {
+  if (lhs.size() != rhs.size())
+    return false;
+  for (size_t n = 0; n < lhs.size(); ++n)
+    if (lhs[n].style != rhs[n].style || lhs[n].offset != rhs[n].offset)
+      return false;
+  return true;
+}
+
+}  // namespace
+
 TEST(AutocompleteMatchTest, MoreRelevant) {
   struct RelevantCases {
     int r1;
@@ -111,6 +125,89 @@ TEST(AutocompleteMatchTest, MergeClassifications) {
                   "0,2," "1,0," "5,7," "6,1," "17,0"))));
 }
 
+TEST(AutocompleteMatchTest, InlineNontailPrefix) {
+  struct TestData {
+    std::string contents;
+    ACMatchClassifications before_contents_class, after_contents_class;
+  } cases[] = {
+      {"1234567890123456",
+       // should just shift the NONE
+       {{0, ACMatchClassification::NONE}},
+       {{0, ACMatchClassification::DIM}, {8, ACMatchClassification::NONE}}},
+      {"1234567890123456",
+       // should just shift the NONE
+       {{0, ACMatchClassification::NONE}, {10, ACMatchClassification::MATCH}},
+       {{0, ACMatchClassification::DIM},
+        {8, ACMatchClassification::NONE},
+        {10, ACMatchClassification::MATCH}}},
+      {"1234567890123456",
+       // should nuke NONE
+       {{0, ACMatchClassification::NONE}, {8, ACMatchClassification::MATCH}},
+       {{0, ACMatchClassification::DIM}, {8, ACMatchClassification::MATCH}}},
+      {"1234567890123456",
+       // should nuke NONE and shift MATCH
+       {{0, ACMatchClassification::NONE}, {4, ACMatchClassification::MATCH}},
+       {{0, ACMatchClassification::DIM}, {8, ACMatchClassification::MATCH}}},
+      {"1234567890123456",
+       // should nuke NONE, shift MATCH and preserve NONE
+       {{0, ACMatchClassification::NONE},
+        {4, ACMatchClassification::MATCH},
+        {12, ACMatchClassification::NONE}},
+       {{0, ACMatchClassification::DIM},
+        {8, ACMatchClassification::MATCH},
+        {12, ACMatchClassification::NONE}}},
+      {"12345678",
+       // should have only DIM when done
+       {{0, ACMatchClassification::NONE}, {4, ACMatchClassification::MATCH}},
+       {{0, ACMatchClassification::DIM}}},
+      {"1234567890123456",
+       // should nuke several classifications and shift MATCH
+       {{0, ACMatchClassification::NONE},
+        {1, ACMatchClassification::NONE},
+        {2, ACMatchClassification::NONE},
+        {4, ACMatchClassification::MATCH}},
+       {{0, ACMatchClassification::DIM}, {8, ACMatchClassification::MATCH}}},
+      {"1234567190123456",
+       // should do nothing since prefix doesn't match
+       {{0, ACMatchClassification::NONE}, {4, ACMatchClassification::MATCH}},
+       {{0, ACMatchClassification::NONE}, {4, ACMatchClassification::MATCH}}},
+  };
+  for (const auto& test_case : cases) {
+    AutocompleteMatch match;
+    match.type = AutocompleteMatchType::SEARCH_WHAT_YOU_TYPED;
+    match.contents = base::UTF8ToUTF16(test_case.contents);
+    match.contents_class = test_case.before_contents_class;
+    match.InlineTailPrefix(base::UTF8ToUTF16("12345678"));
+    EXPECT_TRUE(EqualClassifications(match.contents_class,
+                                     test_case.after_contents_class));
+  }
+}
+
+TEST(AutocompleteMatchTest, InlineTailPrefix) {
+  struct TestData {
+    std::string before_contents, after_contents;
+    ACMatchClassifications before_contents_class, after_contents_class;
+  } cases[] = {
+      {"90123456",
+       "1234567890123456",
+       // should prepend DIM and offset rest
+       {{0, ACMatchClassification::NONE}, {2, ACMatchClassification::MATCH}},
+       {{0, ACMatchClassification::DIM},
+        {8, ACMatchClassification::NONE},
+        {10, ACMatchClassification::MATCH}}},
+  };
+  for (const auto& test_case : cases) {
+    AutocompleteMatch match;
+    match.type = AutocompleteMatchType::SEARCH_SUGGEST_TAIL;
+    match.contents = base::UTF8ToUTF16(test_case.before_contents);
+    match.contents_class = test_case.before_contents_class;
+    match.InlineTailPrefix(base::UTF8ToUTF16("12345678"));
+    EXPECT_EQ(match.contents, base::UTF8ToUTF16(test_case.after_contents));
+    EXPECT_TRUE(EqualClassifications(match.contents_class,
+                                     test_case.after_contents_class));
+  }
+}
+
 TEST(AutocompleteMatchTest, FormatUrlForSuggestionDisplay) {
   // This test does not need to verify url_formatter's functionality in-depth,
   // since url_formatter has its own unit tests. This test is to validate that
@@ -118,14 +215,19 @@ TEST(AutocompleteMatchTest, FormatUrlForSuggestionDisplay) {
   // correct behavior within AutocompleteMatch::GetFormatTypes.
   struct FormatUrlTestData {
     const std::string url;
-    bool trim_scheme;
+    bool preserve_scheme;
+    bool preserve_subdomain;
+    bool preserve_after_host;
     const wchar_t* expected_result;
 
     void Validate() {
       SCOPED_TRACE(testing::Message()
-                   << " url= " << url << " trim_scheme=" << trim_scheme
+                   << " url=" << url << " preserve_scheme=" << preserve_scheme
+                   << " preserve_subdomain=" << preserve_subdomain
+                   << " preserve_after_host=" << preserve_after_host
                    << " expected_result=" << expected_result);
-      auto format_types = AutocompleteMatch::GetFormatTypes(trim_scheme);
+      auto format_types = AutocompleteMatch::GetFormatTypes(
+          preserve_scheme, preserve_subdomain, preserve_after_host);
       EXPECT_EQ(base::WideToUTF16(expected_result),
                 url_formatter::FormatUrl(GURL(url), format_types,
                                          net::UnescapeRule::SPACES, nullptr,
@@ -135,16 +237,17 @@ TEST(AutocompleteMatchTest, FormatUrlForSuggestionDisplay) {
 
   FormatUrlTestData normal_cases[] = {
       // Test trim_scheme parameter without any feature flags.
-      {"http://google.com", true, L"google.com"},
-      {"https://google.com", true, L"https://google.com"},
-      {"http://google.com", false, L"http://google.com"},
-      {"https://google.com", false, L"https://google.com"},
-
-      // Test that paths are preserved in the default case.
-      {"http://google.com/foobar", true, L"google.com/foobar"},
+      {"http://google.com", false, true, true, L"google.com"},
+      {"https://google.com", false, true, true, L"https://google.com"},
+      {"http://google.com", true, true, true, L"http://google.com"},
+      {"https://google.com", true, true, true, L"https://google.com"},
 
       // Verify that trivial subdomains are preserved in the normal case.
-      {"http://www.google.com", false, L"http://www.google.com"}};
+      {"http://www.google.com", false, false, false, L"www.google.com"},
+
+      // Test that paths are preserved in the default case.
+      {"http://google.com/foobar", false, false, false, L"google.com/foobar"},
+  };
   for (FormatUrlTestData& test_case : normal_cases)
     test_case.Validate();
 
@@ -155,23 +258,12 @@ TEST(AutocompleteMatchTest, FormatUrlForSuggestionDisplay) {
       omnibox::kUIExperimentHideSuggestionUrlScheme);
 
   FormatUrlTestData omit_scheme_cases[] = {
-      {"http://google.com", true, L"google.com"},
-      {"https://google.com", true, L"google.com"},
-      {"http://google.com", false, L"http://google.com"},
-      {"https://google.com", false, L"https://google.com"},
+      {"http://google.com", false, false, false, L"google.com"},
+      {"https://google.com", false, false, false, L"google.com"},
+      {"http://google.com", true, false, false, L"http://google.com"},
+      {"https://google.com", true, false, false, L"https://google.com"},
   };
   for (FormatUrlTestData& test_case : omit_scheme_cases)
-    test_case.Validate();
-
-  // Test the elide-after-host feature flag.
-  feature_list.reset(new base::test::ScopedFeatureList);
-  feature_list->InitAndEnableFeature(
-      omnibox::kUIExperimentElideSuggestionUrlAfterHost);
-  FormatUrlTestData hide_path_cases[] = {
-      {"http://google.com/foobar", true, L"google.com/\x2026\x0000"},
-      {"http://google.com/foobar", false, L"http://google.com/\x2026\x0000"},
-  };
-  for (FormatUrlTestData& test_case : hide_path_cases)
     test_case.Validate();
 
   // Test the trim trivial subdomains feature flag.
@@ -179,9 +271,26 @@ TEST(AutocompleteMatchTest, FormatUrlForSuggestionDisplay) {
   feature_list->InitAndEnableFeature(
       omnibox::kUIExperimentHideSuggestionUrlTrivialSubdomains);
 
-  FormatUrlTestData trim_trivial_subdomains_case = {
-      "http://www.m.google.com", false, L"http://google.com"};
-  trim_trivial_subdomains_case.Validate();
+  FormatUrlTestData trim_trivial_subdomains_cases[] = {
+      {"http://www.m.google.com", false, false, false, L"google.com"},
+      {"http://www.m.google.com", false, true, false, L"www.m.google.com"},
+  };
+
+  for (FormatUrlTestData& test_case : trim_trivial_subdomains_cases)
+    test_case.Validate();
+
+  // Test the elide-after-host feature flag.
+  feature_list.reset(new base::test::ScopedFeatureList);
+  feature_list->InitAndEnableFeature(
+      omnibox::kUIExperimentElideSuggestionUrlAfterHost);
+
+  FormatUrlTestData hide_path_cases[] = {
+      {"http://google.com/foobar", false, false, false,
+       L"google.com/\x2026\x0000"},
+      {"http://google.com/foobar", false, false, true, L"google.com/foobar"},
+  };
+  for (FormatUrlTestData& test_case : hide_path_cases)
+    test_case.Validate();
 }
 
 TEST(AutocompleteMatchTest, SupportsDeletion) {

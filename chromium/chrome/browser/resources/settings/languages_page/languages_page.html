@@ -28,7 +28,6 @@
 </if>
 
 <if expr="chromeos">
-<link rel="import" href="chrome://resources/html/chromeos/ui_account_tweaks.html">
 <link rel="import" href="manage_input_methods_page.html">
 </if>
 
@@ -63,7 +62,7 @@
       }
 
       paper-checkbox.dropdown-item {
-        --checkbox-margin-start: 0;
+        -webkit-margin-start: 0;
       }
 
       button[is='paper-icon-button-light'].icon-external {
@@ -145,12 +144,10 @@
               </a>
             </div>
           </div>
-          <div class="settings-box first">
-            <settings-toggle-button id="offerTranslateOtherLangs" class="start"
-                pref="{{prefs.translate.enabled}}"
-                label="$i18n{offerToEnableTranslate}">
-            </settings-toggle-button>
-          </div>
+          <settings-toggle-button id="offerTranslateOtherLanguages"
+              class="first" pref="{{prefs.translate.enabled}}"
+              label="$i18n{offerToEnableTranslate}">
+          </settings-toggle-button>
         </iron-collapse>
 <if expr="chromeos">
         <div id="manageInputMethodsSubpageTrigger"
@@ -198,12 +195,10 @@
                   aria-describedby="customSpelling"></button>
             </div>
           </div>
-          <div class="settings-box">
-            <settings-toggle-button class="start"
-                pref="{{prefs.settings.language.ime_menu_activated}}"
-                label="$i18n{showImeMenu}">
-            </settings-toggle-button>
-          </div>
+          <settings-toggle-button
+              pref="{{prefs.settings.language.ime_menu_activated}}"
+              label="$i18n{showImeMenu}">
+          </settings-toggle-button>
         </iron-collapse>
 </if>
 <if expr="not is_macosx">

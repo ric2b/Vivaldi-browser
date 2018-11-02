@@ -54,19 +54,19 @@ class UtilitySandboxedProcessLauncherDelegate
  public:
   UtilitySandboxedProcessLauncherDelegate(const base::FilePath& exposed_dir,
                                           bool launch_elevated,
-                                          bool no_sandbox,
+                                          SandboxType sandbox_type,
                                           const base::EnvironmentMap& env)
       : exposed_dir_(exposed_dir),
 #if defined(OS_WIN)
-        launch_elevated_(launch_elevated)
+        launch_elevated_(launch_elevated),
 #elif defined(OS_POSIX)
-        env_(env)
-#if !defined(OS_MACOSX) && !defined(OS_ANDROID)
-        ,
-        no_sandbox_(no_sandbox)
-#endif  // !defined(OS_MACOSX)  && !defined(OS_ANDROID)
+        env_(env),
 #endif  // OS_WIN
-  {}
+        sandbox_type_(sandbox_type) {
+    DCHECK(sandbox_type_ == SANDBOX_TYPE_NO_SANDBOX ||
+           sandbox_type_ == SANDBOX_TYPE_UTILITY ||
+           sandbox_type_ == SANDBOX_TYPE_NETWORK);
+  }
 
   ~UtilitySandboxedProcessLauncherDelegate() override {}
 
@@ -93,19 +93,17 @@ class UtilitySandboxedProcessLauncherDelegate
 
 #elif defined(OS_POSIX)
 
-#if !defined(OS_MACOSX) && !defined(OS_ANDROID)
+#if !defined(OS_MACOSX) && !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
   ZygoteHandle GetZygote() override {
-    if (no_sandbox_ || !exposed_dir_.empty())
+    if (IsUnsandboxedSandboxType(sandbox_type_) || !exposed_dir_.empty())
       return nullptr;
     return GetGenericZygote();
   }
-#endif  // !defined(OS_MACOSX) && !defined(OS_ANDROID)
+#endif  // !defined(OS_MACOSX) && !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
   base::EnvironmentMap GetEnvironment() override { return env_; }
 #endif  // OS_WIN
 
-  SandboxType GetSandboxType() override {
-    return SANDBOX_TYPE_UTILITY;
-  }
+  SandboxType GetSandboxType() override { return sandbox_type_; }
 
  private:
   base::FilePath exposed_dir_;
@@ -114,10 +112,8 @@ class UtilitySandboxedProcessLauncherDelegate
   bool launch_elevated_;
 #elif defined(OS_POSIX)
   base::EnvironmentMap env_;
-#if !defined(OS_MACOSX) && !defined(OS_ANDROID)
-  bool no_sandbox_;
-#endif  // !defined(OS_MACOSX) && !defined(OS_ANDROID)
 #endif  // OS_WIN
+  SandboxType sandbox_type_;
 };
 
 UtilityMainThreadFactoryFunction g_utility_main_thread_factory = NULL;
@@ -138,7 +134,7 @@ UtilityProcessHostImpl::UtilityProcessHostImpl(
     const scoped_refptr<base::SequencedTaskRunner>& client_task_runner)
     : client_(client),
       client_task_runner_(client_task_runner),
-      no_sandbox_(false),
+      sandbox_type_(SANDBOX_TYPE_UTILITY),
       run_elevated_(false),
 #if defined(OS_LINUX)
       child_flags_(ChildProcessHost::CHILD_ALLOW_SELF),
@@ -173,14 +169,12 @@ void UtilityProcessHostImpl::SetExposedDir(const base::FilePath& dir) {
 
 void UtilityProcessHostImpl::SetSandboxType(SandboxType sandbox_type) {
   DCHECK(sandbox_type != SANDBOX_TYPE_INVALID);
-
-  // TODO(tsepez): Store sandbox type itself.
-  no_sandbox_ = IsUnsandboxedSandboxType(sandbox_type);
+  sandbox_type_ = sandbox_type;
 }
 
 #if defined(OS_WIN)
 void UtilityProcessHostImpl::ElevatePrivileges() {
-  no_sandbox_ = true;
+  sandbox_type_ = SANDBOX_TYPE_NO_SANDBOX;
   run_elevated_ = true;
 }
 #endif
@@ -282,7 +276,7 @@ bool UtilityProcessHostImpl::StartProcess() {
       vivaldi::CommandLineAppendSwitchNoDup(cmd_line.get(),
                                             switches::kDebugVivaldi);
 
-    if (no_sandbox_)
+    if (IsUnsandboxedSandboxType(sandbox_type_))
       cmd_line->AppendSwitch(switches::kNoSandbox);
 
     // Browser command-line switches to propagate to the utility process.
@@ -297,6 +291,7 @@ bool UtilityProcessHostImpl::StartProcess() {
 #endif
       switches::kUseFakeDeviceForMediaStream,
       switches::kUseFileForFakeVideoCapture,
+      switches::kUtilityStartupDialog,
     };
     cmd_line->CopySwitchesFrom(browser_command_line, kSwitchNames,
                                arraysize(kSwitchNames));
@@ -323,7 +318,7 @@ bool UtilityProcessHostImpl::StartProcess() {
 #endif
 
     process_->Launch(base::MakeUnique<UtilitySandboxedProcessLauncherDelegate>(
-                         exposed_dir_, run_elevated_, no_sandbox_, env_),
+                         exposed_dir_, run_elevated_, sandbox_type_, env_),
                      std::move(cmd_line), true);
   }
 

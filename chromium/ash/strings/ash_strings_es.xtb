@@ -9,6 +9,7 @@
 <translation id="1195412055398077112">reajustar</translation>
 <translation id="1247372569136754018">Micrófono (interno)</translation>
 <translation id="1252999807265626933">Cargando a través de <ph name="POWER_SOURCE" /></translation>
+<translation id="1267032506238418139">Cambio de la combinación de teclas</translation>
 <translation id="1270290102613614947">Teclado en pantalla inhabilitado</translation>
 <translation id="1272079795634619415">Interrumpir</translation>
 <translation id="1279938420744323401"><ph name="DISPLAY_NAME" /> (<ph name="ANNOTATION" />)</translation>
@@ -22,7 +23,6 @@
 <translation id="15373452373711364">Cursor del ratón grande</translation>
 <translation id="1550523713251050646">Haz clic aquí para obtener más opciones</translation>
 <translation id="1621499497873603021">Tiempo restante hasta que se agote la batería: <ph name="TIME_LEFT" /></translation>
-<translation id="164969095109328410">Dispositivo Chrome</translation>
 <translation id="1677472565718498478">Queda: <ph name="TIME" /></translation>
 <translation id="1698760176351776263">Dirección IPv6: <ph name="ADDRESS" /></translation>
 <translation id="1734367976349034509">Este es un dispositivo administrado por la empresa</translation>
@@ -92,6 +92,7 @@
 <translation id="315116470104423982">Redes móviles</translation>
 <translation id="3236488194889173876">No hay ninguna red móvil disponible</translation>
 <translation id="3294437725009624529">Invitado</translation>
+<translation id="332587331255250389">Cambia la batería</translation>
 <translation id="3364721542077212959">Herramientas del lápiz óptico</translation>
 <translation id="3368922792935385530">Con conexión</translation>
 <translation id="3371140690572404006">Dispositivo USB tipo C (puerto frontal derecho)</translation>
@@ -110,6 +111,7 @@
 <translation id="3712407551474845318">Capturar parte de la pantalla</translation>
 <translation id="371370241367527062">Micrófono delantero</translation>
 <translation id="3742055079367172538">Captura de pantalla hecha</translation>
+<translation id="3771549900096082774">Modo de contraste alto</translation>
 <translation id="3775358506042162758">Solo puedes utilizar un máximo de tres cuentas en el inicio de sesión múltiple.</translation>
 <translation id="3783640748446814672">alt</translation>
 <translation id="3784455785234192852">Bloquear</translation>
@@ -142,14 +144,12 @@
 <translation id="4729904664295161097">El Asistente solo está disponible en el perfil principal.</translation>
 <translation id="479989351350248267">buscar</translation>
 <translation id="4804818685124855865">Desvincular</translation>
-<translation id="4821830640883629383">Carga o cambia las pilas.</translation>
 <translation id="4849058404725798627">Resaltar el objeto con el foco del teclado</translation>
 <translation id="4872237917498892622">Alt+tecla de búsqueda o Mayús</translation>
 <translation id="4895488851634969361">La batería está llena.</translation>
 <translation id="4905614135390995787">La combinación de teclas para activar el modo de contraste alto ha cambiado. Utiliza <ph name="NEW_SHORTCUT" /> en lugar de <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="4918086044614829423">Aceptar</translation>
 <translation id="4961318399572185831">Enviar pantalla</translation>
-<translation id="5011233892417813670">Chromebook</translation>
 <translation id="5168181903108465623">Dispositivos de transmisión disponibles</translation>
 <translation id="5170568018924773124">Mostrar en carpeta</translation>
 <translation id="5207949376430453814">Resaltar el símbolo de intercalación del texto</translation>
@@ -175,7 +175,6 @@
 <translation id="5901316534475909376">Mayús+Esc</translation>
 <translation id="5916664084637901428">Activar</translation>
 <translation id="5927132638760172455">Enviando contenido a un receptor desconocido</translation>
-<translation id="5932901536148835538">Chromebit</translation>
 <translation id="5947494881799873997">Deshacer</translation>
 <translation id="595202126637698455">Se ha habilitado el control del rendimiento</translation>
 <translation id="5957083217255311415">Los datos móviles están desactivados.</translation>
@@ -218,7 +217,6 @@
 <translation id="683971173229319003">Buscar+L</translation>
 <translation id="6857811139397017780">Activar <ph name="NETWORKSERVICE" /></translation>
 <translation id="6911468394164995108">Conectarse a otra red...</translation>
-<translation id="6915678159055240887">Chromebox</translation>
 <translation id="6981982820502123353">Accesibilidad</translation>
 <translation id="7029814467594812963">Cerrar sesión</translation>
 <translation id="7034339000180558234">Enviando <ph name="TAB_NAME" /> a <ph name="RECEIVER_NAME" /></translation>
@@ -226,7 +224,6 @@
 <translation id="7066646422045619941">El administrador ha inhabilitado esta red.</translation>
 <translation id="7067196344162293536">Rotación automática</translation>
 <translation id="7098389117866926363">Dispositivo USB tipo C (puerto izquierdo situado en la parte trasera)</translation>
-<translation id="714034171374937760">Chromebase</translation>
 <translation id="7165278925115064263">Alt + Mayús + K</translation>
 <translation id="7168224885072002358">Restableciendo la resolución anterior en <ph name="TIMEOUT_SECONDS" /></translation>
 <translation id="7246339268451149667">¿Habilitar el desbloqueo con huella digital?</translation>

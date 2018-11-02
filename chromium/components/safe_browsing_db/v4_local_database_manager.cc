@@ -17,9 +17,11 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/task_scheduler/post_task.h"
+#include "components/safe_browsing_db/notification_types.h"
 #include "components/safe_browsing_db/v4_feature_list.h"
 #include "components/safe_browsing_db/v4_protocol_manager_util.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/notification_service.h"
 #include "crypto/sha2.h"
 
 using content::BrowserThread;
@@ -173,21 +175,46 @@ V4LocalDatabaseManager::PendingCheck::PendingCheck(
 V4LocalDatabaseManager::PendingCheck::~PendingCheck() {}
 
 // static
+const V4LocalDatabaseManager*
+    V4LocalDatabaseManager::current_local_database_manager_;
+
+// static
 scoped_refptr<V4LocalDatabaseManager> V4LocalDatabaseManager::Create(
     const base::FilePath& base_path,
     ExtendedReportingLevelCallback extended_reporting_level_callback) {
-  return make_scoped_refptr(
-      new V4LocalDatabaseManager(base_path, extended_reporting_level_callback));
+  return make_scoped_refptr(new V4LocalDatabaseManager(
+      base_path, extended_reporting_level_callback, nullptr));
+}
+
+void V4LocalDatabaseManager::CollectDatabaseManagerInfo(
+    DatabaseManagerInfo* database_manager_info,
+    FullHashCacheInfo* full_hash_cache_info) const {
+  if (v4_update_protocol_manager_) {
+    v4_update_protocol_manager_->CollectUpdateInfo(
+        database_manager_info->mutable_update_info());
+  }
+  if (v4_database_) {
+    v4_database_->CollectDatabaseInfo(
+        database_manager_info->mutable_database_info());
+  }
+  if (v4_get_hash_protocol_manager_) {
+    v4_get_hash_protocol_manager_->CollectFullHashCacheInfo(
+        full_hash_cache_info);
+  }
 }
 
 V4LocalDatabaseManager::V4LocalDatabaseManager(
     const base::FilePath& base_path,
-    ExtendedReportingLevelCallback extended_reporting_level_callback)
+    ExtendedReportingLevelCallback extended_reporting_level_callback,
+    scoped_refptr<base::SequencedTaskRunner> task_runner_for_tests)
     : base_path_(base_path),
       extended_reporting_level_callback_(extended_reporting_level_callback),
       list_infos_(GetListInfos()),
-      task_runner_(base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})),
+      task_runner_(task_runner_for_tests
+                       ? task_runner_for_tests
+                       : base::CreateSequencedTaskRunnerWithTraits(
+                             {base::MayBlock(),
+                              base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})),
       weak_factory_(this) {
   DCHECK(!base_path_.empty());
   DCHECK(!list_infos_.empty());
@@ -465,12 +492,16 @@ void V4LocalDatabaseManager::StartOnIOThread(
   SetupDatabase();
 
   enabled_ = true;
+
+  current_local_database_manager_ = this;
 }
 
 void V4LocalDatabaseManager::StopOnIOThread(bool shutdown) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   enabled_ = false;
+
+  current_local_database_manager_ = NULL;
 
   pending_checks_.clear();
 
@@ -536,7 +567,24 @@ void V4LocalDatabaseManager::DatabaseUpdated() {
     v4_database_->RecordFileSizeHistograms();
     v4_update_protocol_manager_->ScheduleNextUpdate(
         v4_database_->GetStoreStateMap());
+
+    BrowserThread::PostTask(
+        BrowserThread::UI, FROM_HERE,
+        base::Bind(&V4LocalDatabaseManager::PostUpdateNotificationOnUIThread,
+                   content::Source<SafeBrowsingDatabaseManager>(this)));
   }
+}
+
+// static
+void V4LocalDatabaseManager::PostUpdateNotificationOnUIThread(
+    const content::NotificationSource& source) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  // The notification needs to be posted on the UI thread because the extension
+  // checker is observing UI thread's notification service.
+  content::NotificationService::current()->Notify(
+      NOTIFICATION_SAFE_BROWSING_UPDATE_COMPLETE, source,
+      content::NotificationService::NoDetails());
 }
 
 void V4LocalDatabaseManager::DeleteUnusedStoreFiles() {

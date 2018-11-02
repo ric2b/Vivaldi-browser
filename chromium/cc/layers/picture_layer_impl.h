@@ -27,9 +27,8 @@ class AppendQuadsData;
 class MicroBenchmarkImpl;
 class Tile;
 
-class CC_EXPORT PictureLayerImpl
-    : public LayerImpl,
-      NON_EXPORTED_BASE(public PictureLayerTilingClient) {
+class CC_EXPORT PictureLayerImpl : public LayerImpl,
+                                   public PictureLayerTilingClient {
  public:
   static std::unique_ptr<PictureLayerImpl>
   Create(LayerTreeImpl* tree_impl, int id, Layer::LayerMaskType mask_type) {
@@ -76,7 +75,7 @@ class CC_EXPORT PictureLayerImpl
   WhichTree GetTree() const;
 
   // Mask-related functions.
-  void GetContentsResourceId(ResourceId* resource_id,
+  void GetContentsResourceId(viz::ResourceId* resource_id,
                              gfx::Size* resource_size,
                              gfx::SizeF* resource_uv_size) const override;
 

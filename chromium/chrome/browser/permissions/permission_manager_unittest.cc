@@ -20,6 +20,11 @@
 #include "device/vr/features/features.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+#if defined(OS_ANDROID)
+#include "chrome/browser/android/mock_location_settings.h"
+#include "chrome/browser/geolocation/geolocation_permission_context_android.h"
+#endif  // defined(OS_ANDROID)
+
 using blink::mojom::PermissionStatus;
 using content::PermissionType;
 
@@ -39,7 +44,7 @@ class PermissionManagerTestingProfile final : public TestingProfile {
   DISALLOW_COPY_AND_ASSIGN(PermissionManagerTestingProfile);
 };
 
-}  // anonymous namespace
+}  // namespace
 
 class PermissionManagerTest : public ChromeRenderViewHostTestHarness {
  public:
@@ -110,6 +115,17 @@ class PermissionManagerTest : public ChromeRenderViewHostTestHarness {
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
     profile_.reset(new PermissionManagerTestingProfile());
+#if defined(OS_ANDROID)
+    GeolocationPermissionContextAndroid* geolocation_permission_context_ =
+        static_cast<GeolocationPermissionContextAndroid*>(
+            GetPermissionManager()->GetPermissionContext(
+                CONTENT_SETTINGS_TYPE_GEOLOCATION));
+    geolocation_permission_context_->SetLocationSettingsForTesting(
+        std::unique_ptr<LocationSettings>(new MockLocationSettings()));
+    MockLocationSettings::SetLocationStatus(
+        true /* has_android_location_permission */,
+        true /* is_system_location_setting_enabled */);
+#endif
   }
 
   void TearDown() override {
@@ -156,7 +172,7 @@ TEST_F(PermissionManagerTest, GetPermissionStatusAfterSet) {
 #endif
 }
 
-TEST_F(PermissionManagerTest, CheckPersmissionResultDefault) {
+TEST_F(PermissionManagerTest, CheckPermissionResultDefault) {
   CheckPermissionResult(CONTENT_SETTINGS_TYPE_MIDI_SYSEX, CONTENT_SETTING_ASK,
                         PermissionStatusSource::UNSPECIFIED);
   CheckPermissionResult(CONTENT_SETTINGS_TYPE_PUSH_MESSAGING,
@@ -455,4 +471,27 @@ TEST_F(PermissionManagerTest, PermissionIgnoredCleanup) {
 
   EXPECT_FALSE(callback_called());
   EXPECT_TRUE(PendingRequestsEmpty());
+}
+
+// Check PermissionResult shows requests denied due to insecure origins.
+TEST_F(PermissionManagerTest, InsecureOrigin) {
+  GURL insecure_frame("http://www.example.com/geolocation");
+  NavigateAndCommit(insecure_frame);
+
+  PermissionResult result = GetPermissionManager()->GetPermissionStatusForFrame(
+      CONTENT_SETTINGS_TYPE_GEOLOCATION, web_contents()->GetMainFrame(),
+      insecure_frame);
+
+  EXPECT_EQ(CONTENT_SETTING_BLOCK, result.content_setting);
+  EXPECT_EQ(PermissionStatusSource::INSECURE_ORIGIN, result.source);
+
+  GURL secure_frame("https://www.example.com/geolocation");
+  NavigateAndCommit(secure_frame);
+
+  result = GetPermissionManager()->GetPermissionStatusForFrame(
+      CONTENT_SETTINGS_TYPE_GEOLOCATION, web_contents()->GetMainFrame(),
+      secure_frame);
+
+  EXPECT_EQ(CONTENT_SETTING_ASK, result.content_setting);
+  EXPECT_EQ(PermissionStatusSource::UNSPECIFIED, result.source);
 }

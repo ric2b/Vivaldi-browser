@@ -32,6 +32,7 @@
 <translation id="2190355936436201913">(leer)</translation>
 <translation id="2289052229480071835">Tippen Sie auf die Zielelemente auf dem Bildschirm.</translation>
 <translation id="2297836609126180313"><ph name="QUANTITY" /> TB/s</translation>
+<translation id="24452542372838207">Benachrichtigung erweitern</translation>
 <translation id="2482878487686419369">Benachrichtigungen</translation>
 <translation id="2497284189126895209">Alle Dateien</translation>
 <translation id="2522350507219695259">Die Kalibrierung ist abgeschlossen</translation>
@@ -162,6 +163,7 @@
 <translation id="9002566407876343676">Öffnen</translation>
 <translation id="9038489124413477075">Unbenannter Ordner</translation>
 <translation id="9044832324875206639">{SECONDS,plural, =1{1 Sek.}other{# Sek.}}</translation>
+<translation id="9059834730836941392">Benachrichtigung minimieren</translation>
 <translation id="9150735707954472829">Tab</translation>
 <translation id="9161053988251441839">VORGESCHLAGENE APPS</translation>
 <translation id="9170848237812810038">&amp;Rückgängig</translation>

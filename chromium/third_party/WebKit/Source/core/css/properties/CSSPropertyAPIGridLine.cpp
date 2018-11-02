@@ -4,4 +4,18 @@
 
 #include "core/css/properties/CSSPropertyAPIGridLine.h"
 
-namespace blink {}  // namespace blink
+#include "core/css/properties/CSSPropertyGridUtils.h"
+#include "platform/RuntimeEnabledFeatures.h"
+
+namespace blink {
+
+const CSSValue* CSSPropertyAPIGridLine::ParseSingleValue(
+    CSSPropertyID,
+    CSSParserTokenRange& range,
+    const CSSParserContext&,
+    const CSSParserLocalContext&) const {
+  DCHECK(RuntimeEnabledFeatures::CSSGridLayoutEnabled());
+  return CSSPropertyGridUtils::ConsumeGridLine(range);
+}
+
+}  // namespace blink

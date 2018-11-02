@@ -11,6 +11,7 @@
 #include "base/optional.h"
 #include "media/base/android/android_overlay.h"
 #include "media/gpu/media_gpu_export.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace media {
 
@@ -19,9 +20,13 @@ class MEDIA_GPU_EXPORT AndroidVideoSurfaceChooser {
  public:
   // Input state used for choosing the surface type.
   struct State {
+    // Is an overlay required?
+    bool is_required = false;
+
+    // Is the player currently in fullscreen?
     bool is_fullscreen = false;
 
-    // Does playback require a secure surface?
+    // Should the overlay be marked as secure?
     bool is_secure = false;
 
     // Is the player's frame hidden / closed?
@@ -29,6 +34,12 @@ class MEDIA_GPU_EXPORT AndroidVideoSurfaceChooser {
 
     // Is the compositor willing to promote this?
     bool is_compositor_promotable = false;
+
+    // Are we expecting a relayout soon?
+    bool is_expecting_relayout = false;
+
+    // Hint to use for the initial position when transitioning to an overlay.
+    gfx::Rect initial_position;
   };
 
   // Notify the client that |overlay| is ready for use.  The client may get

@@ -15,7 +15,7 @@
     "window_panel": {
       "friendly_name": "Window panel",
       "description": "Enables Window Panel",
-      "value": "false",
+      "value": "true",
       "internal_value": "true"
     }
   }

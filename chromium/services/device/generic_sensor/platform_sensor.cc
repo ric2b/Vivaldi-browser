@@ -6,9 +6,12 @@
 
 #include <utility>
 
+#include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "services/device/generic_sensor/platform_sensor_provider.h"
 #include "services/device/public/cpp/generic_sensor/platform_sensor_configuration.h"
+#include "services/device/public/cpp/generic_sensor/sensor_reading_shared_buffer_reader.h"
 
 namespace device {
 
@@ -22,7 +25,8 @@ PlatformSensor::PlatformSensor(mojom::SensorType type,
       weak_factory_(this) {}
 
 PlatformSensor::~PlatformSensor() {
-  provider_->RemoveSensor(GetType());
+  if (provider_)
+    provider_->RemoveSensor(GetType(), this);
 }
 
 mojom::SensorType PlatformSensor::GetType() const {
@@ -90,8 +94,18 @@ void PlatformSensor::RemoveClient(Client* client) {
   }
 }
 
-void PlatformSensor::UpdateSensorReading(const SensorReading& reading,
-                                         bool notify_clients) {
+bool PlatformSensor::GetLatestReading(SensorReading* result) {
+  if (!shared_buffer_reader_) {
+    const auto* buffer = static_cast<const device::SensorReadingSharedBuffer*>(
+        shared_buffer_mapping_.get());
+    shared_buffer_reader_ =
+        base::MakeUnique<SensorReadingSharedBufferReader>(buffer);
+  }
+
+  return shared_buffer_reader_->GetReading(result);
+}
+
+void PlatformSensor::UpdateSensorReading(const SensorReading& reading) {
   ReadingBuffer* buffer =
       static_cast<ReadingBuffer*>(shared_buffer_mapping_.get());
   auto& seqlock = buffer->seqlock.value();
@@ -99,16 +113,15 @@ void PlatformSensor::UpdateSensorReading(const SensorReading& reading,
   buffer->reading = reading;
   seqlock.WriteEnd();
 
-  if (notify_clients)
-    task_runner_->PostTask(
-        FROM_HERE, base::Bind(&PlatformSensor::NotifySensorReadingChanged,
-                              weak_factory_.GetWeakPtr()));
+  task_runner_->PostTask(FROM_HERE,
+                         base::Bind(&PlatformSensor::NotifySensorReadingChanged,
+                                    weak_factory_.GetWeakPtr()));
 }
 
 void PlatformSensor::NotifySensorReadingChanged() {
   for (auto& client : clients_) {
     if (!client.IsSuspended())
-      client.OnSensorReadingChanged();
+      client.OnSensorReadingChanged(type_);
   }
 }
 

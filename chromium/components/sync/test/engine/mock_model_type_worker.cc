@@ -33,6 +33,8 @@ void MockModelTypeWorker::EnqueueForCommit(const CommitRequestDataList& list) {
   pending_commits_.push_back(list);
 }
 
+void MockModelTypeWorker::NudgeForCommit() {}
+
 size_t MockModelTypeWorker::GetNumPendingCommits() const {
   return pending_commits_.size();
 }
@@ -237,6 +239,12 @@ void MockModelTypeWorker::UpdateWithEncryptionKey(
     const UpdateResponseDataList& update) {
   model_type_state_.set_encryption_key_name(ekn);
   processor_->OnUpdateReceived(model_type_state_, update);
+}
+
+void MockModelTypeWorker::UpdateWithGarbageConllection(
+    const sync_pb::GarbageCollectionDirective& gcd) {
+  *model_type_state_.mutable_progress_marker()->mutable_gc_directive() = gcd;
+  processor_->OnUpdateReceived(model_type_state_, UpdateResponseDataList());
 }
 
 std::string MockModelTypeWorker::GenerateId(const std::string& tag_hash) {

@@ -22,6 +22,10 @@ void DrmThreadProxy::BindThreadIntoMessagingProxy(
   messaging_proxy->SetDrmThread(&drm_thread_);
 }
 
+void DrmThreadProxy::StartDrmThread() {
+  drm_thread_.Start();
+}
+
 std::unique_ptr<DrmWindowProxy> DrmThreadProxy::CreateDrmWindowProxy(
     gfx::AcceleratedWidget widget) {
   return base::MakeUnique<DrmWindowProxy>(widget, &drm_thread_);
@@ -63,11 +67,20 @@ void DrmThreadProxy::GetScanoutFormats(
                  widget, scanout_formats));
 }
 
-void DrmThreadProxy::AddBinding(ozone::mojom::DeviceCursorRequest request) {
+void DrmThreadProxy::AddBindingCursorDevice(
+    ozone::mojom::DeviceCursorRequest request) {
   drm_thread_.task_runner()->PostTask(
       FROM_HERE,
-      base::Bind(&DrmThread::AddBinding, base::Unretained(&drm_thread_),
-                 base::Passed(&request)));
+      base::Bind(&DrmThread::AddBindingCursorDevice,
+                 base::Unretained(&drm_thread_), base::Passed(&request)));
+}
+
+void DrmThreadProxy::AddBindingDrmDevice(
+    ozone::mojom::DrmDeviceRequest request) {
+  drm_thread_.task_runner()->PostTask(
+      FROM_HERE,
+      base::Bind(&DrmThread::AddBindingDrmDevice,
+                 base::Unretained(&drm_thread_), base::Passed(&request)));
 }
 
 }  // namespace ui

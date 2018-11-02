@@ -181,6 +181,15 @@ class URL_EXPORT GURL {
   // will be the empty URL.
   GURL GetWithEmptyPath() const;
 
+  // A helper function to return a GURL without the filename, query values, and
+  // fragment. For example,
+  // GURL("https://www.foo.com/index.html?q=test").GetWithoutFilename().spec()
+  // will return "https://www.foo.com/".
+  // GURL("https://www.foo.com/bar/").GetWithoutFilename().spec()
+  // will return "https://www.foo.com/bar/". If the GURL is invalid or missing a
+  // scheme, authority or path, it will return an empty, invalid GURL.
+  GURL GetWithoutFilename() const;
+
   // A helper function to return a GURL containing just the scheme, host,
   // and port from a URL. Equivalent to clearing any username and password,
   // replacing the path with a slash, and clearing everything after that. If
@@ -388,11 +397,13 @@ class URL_EXPORT GURL {
   // "www.google.com", this will return true for "com", "google.com", and
   // "www.google.com".
   //
-  // The input domain should be lower-case ASCII to match the canonicalized
-  // scheme. This call is more efficient than getting the host and check
-  // whether host has the specific domain or not because no copies or
-  // object constructions are done.
-  bool DomainIs(base::StringPiece lower_ascii_domain) const;
+  // The input domain should match host canonicalization rules. i.e. the input
+  // show be lowercase except for escape chars.
+  //
+  // This call is more efficient than getting the host and checking whether the
+  // host has the specific domain or not because no copies or object
+  // constructions are done.
+  bool DomainIs(base::StringPiece canonical_domain) const;
 
   // Checks whether or not two URLs are differing only in the ref (the part
   // after the # character).

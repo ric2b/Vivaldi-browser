@@ -14,15 +14,13 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/appcache/appcache_group.h"
 #include "content/browser/appcache/appcache_histograms.h"
+#include "content/browser/appcache/appcache_update_request_base.h"
+#include "content/browser/appcache/appcache_update_url_fetcher.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/base/io_buffer.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
 #include "net/base/request_priority.h"
-#include "net/http/http_request_headers.h"
-#include "net/http/http_response_headers.h"
-#include "net/traffic_annotation/network_traffic_annotation.h"
-#include "net/url_request/url_request_context.h"
 #include "url/origin.h"
 
 namespace content {
@@ -31,7 +29,6 @@ namespace {
 
 const int kBufferSize = 32768;
 const size_t kMaxConcurrentUrlFetches = 2;
-const int kMax503Retries = 3;
 
 std::string FormatUrlErrorMessage(
       const char* format, const GURL& url,
@@ -68,38 +65,32 @@ bool IsEvictableError(AppCacheUpdateJob::ResultType result,
   }
 }
 
+bool CanUseExistingResource(const net::HttpResponseInfo* http_info) {
+  // Check HTTP caching semantics based on max-age and expiration headers.
+  if (!http_info->headers || http_info->headers->RequiresValidation(
+                                 http_info->request_time,
+                                 http_info->response_time, base::Time::Now())) {
+    return false;
+  }
+
+  // Responses with a "vary" header generally get treated as expired,
+  // but we special case the "Origin" header since we know it's invariant.
+  // Also, content decoding is handled by the network library, the appcache
+  // stores decoded response bodies, so we can safely ignore varying on
+  // the "Accept-Encoding" header.
+  std::string value;
+  size_t iter = 0;
+  while (http_info->headers->EnumerateHeader(&iter, "vary", &value)) {
+    if (!base::EqualsCaseInsensitiveASCII(value, "Accept-Encoding") &&
+        !base::EqualsCaseInsensitiveASCII(value, "Origin")) {
+      return false;
+    }
+  }
+  return true;
+}
+
 void EmptyCompletionCallback(int result) {}
 
-constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
-    net::DefineNetworkTrafficAnnotation("appcache_update_job", R"(
-      semantics {
-        sender: "HTML5 AppCache System"
-        description:
-          "Web pages can include a link to a manifest file which lists "
-          "resources to be cached for offline access. The AppCache system"
-          "retrieves those resources in the background."
-        trigger:
-          "User visits a web page containing a <html manifest=manifestUrl> "
-          "tag, or navigates to a document retrieved from an existing appcache "
-          "and some resource should be updated."
-        data: "None"
-        destination: WEBSITE
-      }
-      policy {
-        cookies_allowed: true
-        cookies_store: "user"
-        setting:
-          "Users can control this feature via the 'Cookies' setting under "
-          "'Privacy, Content settings'. If cookies are disabled for a single "
-          "site, appcaches are disabled for the site only. If they are totally "
-          "disabled, all appcache requests will be stopped."
-        chrome_policy {
-            DefaultCookiesSetting {
-              policy_options {mode: MANDATORY}
-              DefaultCookiesSetting: 2
-            }
-          }
-      })");
 }  // namespace
 
 // Helper class for collecting hosts per frontend when sending notifications
@@ -176,260 +167,6 @@ AppCacheUpdateJob::UrlToFetch::UrlToFetch(const GURL& url,
 AppCacheUpdateJob::UrlToFetch::UrlToFetch(const UrlToFetch& other) = default;
 
 AppCacheUpdateJob::UrlToFetch::~UrlToFetch() {
-}
-
-// Helper class to fetch resources. Depending on the fetch type,
-// can either fetch to an in-memory string or write the response
-// data out to the disk cache.
-AppCacheUpdateJob::URLFetcher::URLFetcher(const GURL& url,
-                                          FetchType fetch_type,
-                                          AppCacheUpdateJob* job)
-    : url_(url),
-      job_(job),
-      fetch_type_(fetch_type),
-      retry_503_attempts_(0),
-      buffer_(new net::IOBuffer(kBufferSize)),
-      request_(
-          job->service_->request_context()->CreateRequest(url,
-                                                          net::DEFAULT_PRIORITY,
-                                                          this,
-                                                          kTrafficAnnotation)),
-      result_(UPDATE_OK),
-      redirect_response_code_(-1) {}
-
-AppCacheUpdateJob::URLFetcher::~URLFetcher() {
-  // To defend against URLRequest calling delegate methods during
-  // destruction, we test for a !request_ in those methods.
-  std::unique_ptr<net::URLRequest> temp = std::move(request_);
-}
-
-void AppCacheUpdateJob::URLFetcher::Start() {
-  request_->set_first_party_for_cookies(job_->manifest_url_);
-  request_->set_initiator(url::Origin(job_->manifest_url_));
-  if (fetch_type_ == MANIFEST_FETCH && job_->doing_full_update_check_)
-    request_->SetLoadFlags(request_->load_flags() | net::LOAD_BYPASS_CACHE);
-  else if (existing_response_headers_.get())
-    AddConditionalHeaders(existing_response_headers_.get());
-  request_->Start();
-}
-
-void AppCacheUpdateJob::URLFetcher::OnReceivedRedirect(
-    net::URLRequest* request,
-    const net::RedirectInfo& redirect_info,
-    bool* defer_redirect) {
-  if (!request_)
-    return;
-  DCHECK_EQ(request_.get(), request);
-  // Redirect is not allowed by the update process.
-  job_->MadeProgress();
-  redirect_response_code_ = request->GetResponseCode();
-  request->Cancel();
-  result_ = REDIRECT_ERROR;
-  OnResponseCompleted(net::ERR_ABORTED);
-}
-
-void AppCacheUpdateJob::URLFetcher::OnResponseStarted(net::URLRequest* request,
-                                                      int net_error) {
-  if (!request_)
-    return;
-  DCHECK_EQ(request_.get(), request);
-  DCHECK_NE(net::ERR_IO_PENDING, net_error);
-
-  int response_code = -1;
-  if (net_error == net::OK) {
-    response_code = request->GetResponseCode();
-    job_->MadeProgress();
-  }
-
-  if ((response_code / 100) != 2) {
-    if (response_code > 0)
-      result_ = SERVER_ERROR;
-    else
-      result_ = NETWORK_ERROR;
-    OnResponseCompleted(net_error);
-    return;
-  }
-
-  if (url_.SchemeIsCryptographic()) {
-    // Do not cache content with cert errors.
-    // Also, we willfully violate the HTML5 spec at this point in order
-    // to support the appcaching of cross-origin HTTPS resources.
-    // We've opted for a milder constraint and allow caching unless
-    // the resource has a "no-store" header. A spec change has been
-    // requested on the whatwg list.
-    // See http://code.google.com/p/chromium/issues/detail?id=69594
-    // TODO(michaeln): Consider doing this for cross-origin HTTP too.
-    const net::HttpNetworkSession::Params* session_params =
-        request->context()->GetNetworkSessionParams();
-    bool ignore_cert_errors = session_params &&
-                              session_params->ignore_certificate_errors;
-    if ((net::IsCertStatusError(request->ssl_info().cert_status) &&
-            !ignore_cert_errors) ||
-        (url_.GetOrigin() != job_->manifest_url_.GetOrigin() &&
-            request->response_headers()->
-                HasHeaderValue("cache-control", "no-store"))) {
-      DCHECK_EQ(-1, redirect_response_code_);
-      request->Cancel();
-      result_ = SECURITY_ERROR;
-      OnResponseCompleted(net::ERR_ABORTED);
-      return;
-    }
-  }
-
-  // Write response info to storage for URL fetches. Wait for async write
-  // completion before reading any response data.
-  if (fetch_type_ == URL_FETCH || fetch_type_ == MASTER_ENTRY_FETCH) {
-    response_writer_.reset(job_->CreateResponseWriter());
-    scoped_refptr<HttpResponseInfoIOBuffer> io_buffer(
-        new HttpResponseInfoIOBuffer(
-            new net::HttpResponseInfo(request->response_info())));
-    response_writer_->WriteInfo(
-        io_buffer.get(),
-        base::Bind(&URLFetcher::OnWriteComplete, base::Unretained(this)));
-  } else {
-    ReadResponseData();
-  }
-}
-
-void AppCacheUpdateJob::URLFetcher::OnReadCompleted(
-    net::URLRequest* request, int bytes_read) {
-  if (!request_)
-    return;
-  DCHECK_NE(net::ERR_IO_PENDING, bytes_read);
-  DCHECK_EQ(request_.get(), request);
-  bool data_consumed = true;
-  if (bytes_read > 0) {
-    job_->MadeProgress();
-    data_consumed = ConsumeResponseData(bytes_read);
-    if (data_consumed) {
-      while (true) {
-        bytes_read = request->Read(buffer_.get(), kBufferSize);
-        if (bytes_read <= 0)
-          break;
-        data_consumed = ConsumeResponseData(bytes_read);
-        if (!data_consumed)
-          break;
-      }
-    }
-  }
-
-  if (data_consumed && bytes_read != net::ERR_IO_PENDING) {
-    DCHECK_EQ(UPDATE_OK, result_);
-    OnResponseCompleted(bytes_read);
-  }
-}
-
-void AppCacheUpdateJob::URLFetcher::AddConditionalHeaders(
-    const net::HttpResponseHeaders* headers) {
-  DCHECK(request_);
-  DCHECK(headers);
-  net::HttpRequestHeaders extra_headers;
-
-  // Add If-Modified-Since header if response info has Last-Modified header.
-  const std::string last_modified = "Last-Modified";
-  std::string last_modified_value;
-  headers->EnumerateHeader(nullptr, last_modified, &last_modified_value);
-  if (!last_modified_value.empty()) {
-    extra_headers.SetHeader(net::HttpRequestHeaders::kIfModifiedSince,
-                            last_modified_value);
-  }
-
-  // Add If-None-Match header if response info has ETag header.
-  const std::string etag = "ETag";
-  std::string etag_value;
-  headers->EnumerateHeader(nullptr, etag, &etag_value);
-  if (!etag_value.empty()) {
-    extra_headers.SetHeader(net::HttpRequestHeaders::kIfNoneMatch,
-                            etag_value);
-  }
-  if (!extra_headers.IsEmpty())
-    request_->SetExtraRequestHeaders(extra_headers);
-}
-
-void  AppCacheUpdateJob::URLFetcher::OnWriteComplete(int result) {
-  if (result < 0) {
-    request_->Cancel();
-    result_ = DISKCACHE_ERROR;
-    OnResponseCompleted(net::ERR_ABORTED);
-    return;
-  }
-  ReadResponseData();
-}
-
-void AppCacheUpdateJob::URLFetcher::ReadResponseData() {
-  InternalUpdateState state = job_->internal_state_;
-  if (state == CACHE_FAILURE || state == CANCELLED || state == COMPLETED)
-    return;
-  int bytes_read = request_->Read(buffer_.get(), kBufferSize);
-  if (bytes_read != net::ERR_IO_PENDING)
-    OnReadCompleted(request_.get(), bytes_read);
-}
-
-// Returns false if response data is processed asynchronously, in which
-// case ReadResponseData will be invoked when it is safe to continue
-// reading more response data from the request.
-bool AppCacheUpdateJob::URLFetcher::ConsumeResponseData(int bytes_read) {
-  DCHECK_GT(bytes_read, 0);
-  switch (fetch_type_) {
-    case MANIFEST_FETCH:
-    case MANIFEST_REFETCH:
-      manifest_data_.append(buffer_->data(), bytes_read);
-      break;
-    case URL_FETCH:
-    case MASTER_ENTRY_FETCH:
-      DCHECK(response_writer_.get());
-      response_writer_->WriteData(
-          buffer_.get(),
-          bytes_read,
-          base::Bind(&URLFetcher::OnWriteComplete, base::Unretained(this)));
-      return false;  // wait for async write completion to continue reading
-    default:
-      NOTREACHED();
-  }
-  return true;
-}
-
-void AppCacheUpdateJob::URLFetcher::OnResponseCompleted(int net_error) {
-  if (net_error == net::OK)
-    job_->MadeProgress();
-
-  // Retry for 503s where retry-after is 0.
-  if (net_error == net::OK && request_->GetResponseCode() == 503 &&
-      MaybeRetryRequest()) {
-    return;
-  }
-
-  switch (fetch_type_) {
-    case MANIFEST_FETCH:
-      job_->HandleManifestFetchCompleted(this, net_error);
-      break;
-    case URL_FETCH:
-      job_->HandleUrlFetchCompleted(this, net_error);
-      break;
-    case MASTER_ENTRY_FETCH:
-      job_->HandleMasterEntryFetchCompleted(this, net_error);
-      break;
-    case MANIFEST_REFETCH:
-      job_->HandleManifestRefetchCompleted(this, net_error);
-      break;
-    default:
-      NOTREACHED();
-  }
-
-  delete this;
-}
-
-bool AppCacheUpdateJob::URLFetcher::MaybeRetryRequest() {
-  if (retry_503_attempts_ >= kMax503Retries ||
-      !request_->response_headers()->HasHeaderValue("retry-after", "0")) {
-    return false;
-  }
-  ++retry_503_attempts_;
-  result_ = UPDATE_OK;
-  request_ = job_->service_->request_context()->CreateRequest(
-      url_, net::DEFAULT_PRIORITY, this, kTrafficAnnotation);
-  Start();
-  return true;
 }
 
 AppCacheUpdateJob::AppCacheUpdateJob(AppCacheServiceImpl* service,
@@ -538,8 +275,8 @@ void AppCacheUpdateJob::StartUpdate(AppCacheHost* host,
 
   BrowserThread::PostAfterStartupTask(
       FROM_HERE, base::ThreadTaskRunnerHandle::Get(),
-      base::Bind(&AppCacheUpdateJob::FetchManifest, weak_factory_.GetWeakPtr(),
-                 true));
+      base::BindOnce(&AppCacheUpdateJob::FetchManifest,
+                     weak_factory_.GetWeakPtr(), true));
 }
 
 AppCacheResponseWriter* AppCacheUpdateJob::CreateResponseWriter() {
@@ -597,11 +334,11 @@ void AppCacheUpdateJob::HandleCacheFailure(
 
 void AppCacheUpdateJob::FetchManifest(bool is_first_fetch) {
   DCHECK(!manifest_fetcher_);
-  manifest_fetcher_ = new URLFetcher(
-     manifest_url_,
-     is_first_fetch ? URLFetcher::MANIFEST_FETCH :
-                      URLFetcher::MANIFEST_REFETCH,
-     this);
+  manifest_fetcher_ =
+      new URLFetcher(manifest_url_,
+                     is_first_fetch ? URLFetcher::MANIFEST_FETCH
+                                    : URLFetcher::MANIFEST_REFETCH,
+                     this, kBufferSize);
 
   if (is_first_fetch) {
     // Maybe load the cached headers to make a condiditional request.
@@ -630,22 +367,21 @@ void AppCacheUpdateJob::HandleManifestFetchCompleted(URLFetcher* fetcher,
 
   manifest_fetcher_ = NULL;
 
-  net::URLRequest* request = fetcher->request();
+  UpdateRequestBase* request = fetcher->request();
   int response_code = -1;
   bool is_valid_response_code = false;
   if (net_error == net::OK) {
     response_code = request->GetResponseCode();
     is_valid_response_code = (response_code / 100 == 2);
 
-    std::string mime_type;
-    request->GetMimeType(&mime_type);
+    std::string mime_type = request->GetMimeType();
     manifest_has_valid_mime_type_ = (mime_type == "text/cache-manifest");
   }
 
   if (is_valid_response_code) {
     manifest_data_ = fetcher->manifest_data();
     manifest_response_info_.reset(
-        new net::HttpResponseInfo(request->response_info()));
+        new net::HttpResponseInfo(request->GetResponseInfo()));
     if (update_type_ == UPGRADE_ATTEMPT)
       CheckIfManifestChanged();  // continues asynchronously
     else
@@ -772,8 +508,8 @@ void AppCacheUpdateJob::HandleUrlFetchCompleted(URLFetcher* fetcher,
                                                 int net_error) {
   DCHECK(internal_state_ == DOWNLOADING);
 
-  net::URLRequest* request = fetcher->request();
-  const GURL& url = request->original_url();
+  UpdateRequestBase* request = fetcher->request();
+  const GURL& url = request->GetURL();
   pending_url_fetches_.erase(url);
   NotifyAllProgress(url);
   ++url_fetches_completed_;
@@ -873,8 +609,8 @@ void AppCacheUpdateJob::HandleMasterEntryFetchCompleted(URLFetcher* fetcher,
   // master entry fetches when entering cache failure state so this will never
   // be called in CACHE_FAILURE state.
 
-  net::URLRequest* request = fetcher->request();
-  const GURL& url = request->original_url();
+  UpdateRequestBase* request = fetcher->request();
+  const GURL& url = request->GetURL();
   master_entry_fetches_.erase(url);
   ++master_entries_completed_;
 
@@ -926,13 +662,10 @@ void AppCacheUpdateJob::HandleMasterEntryFetchCompleted(URLFetcher* fetcher,
 
     const char kFormatString[] = "Manifest fetch failed (%d) %s";
     std::string message = FormatUrlErrorMessage(
-        kFormatString, request->url(), fetcher->result(), response_code);
-    host_notifier.SendErrorNotifications(
-        AppCacheErrorDetails(message,
-                     APPCACHE_MANIFEST_ERROR,
-                     request->url(),
-                     response_code,
-                     false /*is_cross_origin*/));
+        kFormatString, request->GetURL(), fetcher->result(), response_code);
+    host_notifier.SendErrorNotifications(AppCacheErrorDetails(
+        message, APPCACHE_MANIFEST_ERROR, request->GetURL(), response_code,
+        false /*is_cross_origin*/));
 
     // In downloading case, update result is different if all master entries
     // failed vs. only some failing.
@@ -943,13 +676,11 @@ void AppCacheUpdateJob::HandleMasterEntryFetchCompleted(URLFetcher* fetcher,
 
       // Section 6.9.4, step 22.3.
       if (update_type_ == CACHE_ATTEMPT && pending_master_entries_.empty()) {
-        HandleCacheFailure(AppCacheErrorDetails(message,
-                                        APPCACHE_MANIFEST_ERROR,
-                                        request->url(),
-                                        response_code,
-                                        false /*is_cross_origin*/),
-                           fetcher->result(),
-                           GURL());
+        HandleCacheFailure(
+            AppCacheErrorDetails(message, APPCACHE_MANIFEST_ERROR,
+                                 request->GetURL(), response_code,
+                                 false /*is_cross_origin*/),
+            fetcher->result(), GURL());
         return;
       }
     }
@@ -1304,7 +1035,7 @@ void AppCacheUpdateJob::FetchUrls() {
       // Continues asynchronously after data is loaded from newest cache.
     } else {
       URLFetcher* fetcher = new URLFetcher(
-          url_to_fetch.url, URLFetcher::URL_FETCH, this);
+          url_to_fetch.url, URLFetcher::URL_FETCH, this, kBufferSize);
       if (url_to_fetch.existing_response_info.get() &&
           group_->newest_complete_cache()) {
         AppCacheEntry* existing_entry =
@@ -1426,8 +1157,8 @@ void AppCacheUpdateJob::FetchMasterEntries() {
         }
       }
     } else {
-      URLFetcher* fetcher = new URLFetcher(
-          url, URLFetcher::MASTER_ENTRY_FETCH, this);
+      URLFetcher* fetcher = new URLFetcher(url, URLFetcher::MASTER_ENTRY_FETCH,
+                                           this, kBufferSize);
       fetcher->Start();
       master_entry_fetches_.insert(PendingUrlFetches::value_type(url, fetcher));
     }
@@ -1515,36 +1246,25 @@ void AppCacheUpdateJob::OnResponseInfoLoaded(
 
   if (!http_info) {
     LoadFromNewestCacheFailed(url, NULL);  // no response found
+  } else if (!CanUseExistingResource(http_info)) {
+    LoadFromNewestCacheFailed(url, response_info);
   } else {
-    // Check if response can be re-used according to HTTP caching semantics.
-    // Responses with a "vary" header get treated as expired.
-    const std::string name = "vary";
-    std::string value;
-    size_t iter = 0;
-    if (!http_info->headers.get() ||
-        http_info->headers->RequiresValidation(http_info->request_time,
-                                               http_info->response_time,
-                                               base::Time::Now()) ||
-        http_info->headers->EnumerateHeader(&iter, name, &value)) {
-      LoadFromNewestCacheFailed(url, response_info);
-    } else {
-      DCHECK(group_->newest_complete_cache());
-      AppCacheEntry* copy_me = group_->newest_complete_cache()->GetEntry(url);
-      DCHECK(copy_me);
-      DCHECK(copy_me->response_id() == response_id);
+    DCHECK(group_->newest_complete_cache());
+    AppCacheEntry* copy_me = group_->newest_complete_cache()->GetEntry(url);
+    DCHECK(copy_me);
+    DCHECK_EQ(copy_me->response_id(), response_id);
 
-      AppCache::EntryMap::iterator it = url_file_list_.find(url);
-      DCHECK(it != url_file_list_.end());
-      AppCacheEntry& entry = it->second;
-      entry.set_response_id(response_id);
-      entry.set_response_size(copy_me->response_size());
-      inprogress_cache_->AddOrModifyEntry(url, entry);
-      NotifyAllProgress(url);
-      ++url_fetches_completed_;
-    }
+    AppCache::EntryMap::iterator it = url_file_list_.find(url);
+    DCHECK(it != url_file_list_.end());
+    AppCacheEntry& entry = it->second;
+    entry.set_response_id(response_id);
+    entry.set_response_size(copy_me->response_size());
+    inprogress_cache_->AddOrModifyEntry(url, entry);
+    NotifyAllProgress(url);
+    ++url_fetches_completed_;
   }
-  loading_responses_.erase(found);
 
+  loading_responses_.erase(found);
   MaybeCompleteUpdate();
 }
 

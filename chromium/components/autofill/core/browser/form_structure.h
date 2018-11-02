@@ -34,10 +34,6 @@ namespace base {
 class TimeTicks;
 }
 
-namespace rappor {
-class RapporServiceImpl;
-}
-
 namespace ukm {
 class UkmRecorder;
 }
@@ -78,10 +74,8 @@ class FormStructure {
 
   // Parses the field types from the server query response. |forms| must be the
   // same as the one passed to EncodeQueryRequest when constructing the query.
-  // |rappor_service| may be null.
   static void ParseQueryResponse(std::string response,
-                                 const std::vector<FormStructure*>& forms,
-                                 rappor::RapporServiceImpl* rappor_service);
+                                 const std::vector<FormStructure*>& forms);
 
   // Returns predictions using the details from the given |form_structures| and
   // their fields' predicted types.
@@ -139,7 +133,6 @@ class FormStructure {
       const base::TimeTicks& load_time,
       const base::TimeTicks& interaction_time,
       const base::TimeTicks& submission_time,
-      rappor::RapporServiceImpl* rappor_service,
       AutofillMetrics::FormInteractionsUkmLogger* form_interactions_ukm_logger,
       bool did_show_suggestions,
       bool observed_submission) const;
@@ -231,6 +224,13 @@ class FormStructure {
   }
   UploadRequired upload_required() const { return upload_required_; }
 
+  void set_form_parsed_timestamp(const base::TimeTicks form_parsed_timestamp) {
+    form_parsed_timestamp_ = form_parsed_timestamp;
+  }
+  base::TimeTicks form_parsed_timestamp() const {
+    return form_parsed_timestamp_;
+  }
+
   bool all_fields_are_passwords() const { return all_fields_are_passwords_; }
 
   bool is_signin_upload() const { return is_signin_upload_; }
@@ -251,6 +251,11 @@ class FormStructure {
   friend class FormStructureTest;
   FRIEND_TEST_ALL_PREFIXES(AutofillDownloadTest, QueryAndUploadTest);
   FRIEND_TEST_ALL_PREFIXES(FormStructureTest, FindLongestCommonPrefix);
+
+  // A helper function to avoid suggesting field types in cases where they are
+  // highly unlikely. For example: lone credit card fields in an otherwise
+  // non-credit-card related form.
+  void RationalizeFieldTypePredictions();
 
   // Encodes information about this form and its fields into |query_form|.
   void EncodeFormForQuery(
@@ -344,6 +349,9 @@ class FormStructure {
   // The unique signature for this form, composed of the target url domain,
   // the form name, and the form field names in a 64-bit hash.
   FormSignature form_signature_;
+
+  // When a form is parsed on this page.
+  base::TimeTicks form_parsed_timestamp_;
 
   DISALLOW_COPY_AND_ASSIGN(FormStructure);
 };

@@ -10,11 +10,10 @@
 #include "base/android/jni_android.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_task_environment.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #include "components/autofill/core/common/form_field_data.h"
-#include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/base/l10n/l10n_util_android.h"
 
 using autofill::AutofillWebDataService;
 using autofill::FormFieldData;
@@ -25,27 +24,26 @@ namespace android_webview {
 
 class AwFormDatabaseServiceTest : public Test {
  public:
-  AwFormDatabaseServiceTest()
-      : test_browser_thread_bundle_(
-            content::TestBrowserThreadBundle::REAL_DB_THREAD) {}
+  AwFormDatabaseServiceTest() {}
 
  protected:
   void SetUp() override {
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
     env_ = AttachCurrentThread();
     ASSERT_TRUE(env_ != NULL);
-    ASSERT_TRUE(l10n_util::RegisterLocalizationUtil(env_));
 
     service_.reset(new AwFormDatabaseService(temp_dir_.GetPath()));
   }
 
-  void TearDown() override { service_->Shutdown(); }
+  void TearDown() override {
+    service_->Shutdown();
+    scoped_task_environment_.RunUntilIdle();
+  }
 
   // The path to the temporary directory used for the test operations.
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   base::ScopedTempDir temp_dir_;
-  content::TestBrowserThreadBundle test_browser_thread_bundle_;
   JNIEnv* env_;
-
   std::unique_ptr<AwFormDatabaseService> service_;
 };
 

@@ -36,6 +36,8 @@
 #include "core/dom/ElementData.h"
 #include "core/dom/SpaceSplitString.h"
 #include "core/dom/WhitespaceAttacher.h"
+#include "core/resize_observer/ResizeObserver.h"
+#include "platform/bindings/TraceWrapperMember.h"
 #include "platform/heap/Handle.h"
 #include "platform/scroll/ScrollTypes.h"
 #include "public/platform/WebFocusType.h"
@@ -65,7 +67,6 @@ class ElementIntersectionObserverData;
 class PseudoElement;
 class PseudoStyleRequest;
 class ResizeObservation;
-class ResizeObserver;
 class ScrollIntoViewOptions;
 class ScrollIntoViewOptionsOrBoolean;
 class ScrollState;
@@ -104,6 +105,14 @@ enum class SelectionBehaviorOnFocus {
   kNone,
 };
 
+// https://html.spec.whatwg.org/multipage/dom.html#dom-document-nameditem-filter
+enum class NamedItemType {
+  kNone,
+  kName,
+  kNameOrId,
+  kNameOrIdWithName,
+};
+
 struct FocusParams {
   STACK_ALLOCATED();
 
@@ -121,7 +130,7 @@ struct FocusParams {
   Member<InputDeviceCapabilities> source_capabilities = nullptr;
 };
 
-typedef HeapVector<Member<Attr>> AttrNodeList;
+typedef HeapVector<TraceWrapperMember<Attr>> AttrNodeList;
 
 class CORE_EXPORT Element : public ContainerNode {
   DEFINE_WRAPPERTYPEINFO();
@@ -454,8 +463,6 @@ class CORE_EXPORT Element : public ContainerNode {
 
   void SetNeedsCompositingUpdate();
 
-  bool SupportsStyleSharing() const;
-
   ElementShadow* Shadow() const;
   ElementShadow& EnsureShadow();
   // If type of ShadowRoot (either closed or open) is explicitly specified,
@@ -473,7 +480,7 @@ class CORE_EXPORT Element : public ContainerNode {
                            ExceptionState&);
   ShadowRoot* CreateShadowRootInternal(ShadowRootType, ExceptionState&);
 
-  ShadowRoot* openShadowRoot() const;
+  ShadowRoot* OpenShadowRoot() const;
   ShadowRoot* ClosedShadowRoot() const;
   ShadowRoot* AuthorShadowRoot() const;
   ShadowRoot* UserAgentShadowRoot() const;
@@ -501,7 +508,7 @@ class CORE_EXPORT Element : public ContainerNode {
   }
 
   bool ShouldStoreNonLayoutObjectComputedStyle(const ComputedStyle&) const;
-  void StoreNonLayoutObjectComputedStyle(PassRefPtr<ComputedStyle>);
+  void StoreNonLayoutObjectComputedStyle(RefPtr<ComputedStyle>);
 
   // Methods for indicating the style is affected by dynamic updates (e.g.,
   // children changing, our position changing in our sibling list, etc.)
@@ -656,7 +663,7 @@ class CORE_EXPORT Element : public ContainerNode {
 
   ComputedStyle* PseudoStyle(const PseudoStyleRequest&,
                              const ComputedStyle* parent_style = nullptr);
-  PassRefPtr<ComputedStyle> GetUncachedPseudoStyle(
+  RefPtr<ComputedStyle> GetUncachedPseudoStyle(
       const PseudoStyleRequest&,
       const ComputedStyle* parent_style = nullptr);
   bool CanGeneratePseudoElement(PseudoId) const;
@@ -743,7 +750,7 @@ class CORE_EXPORT Element : public ContainerNode {
   bool IsSpellCheckingEnabled() const;
 
   // FIXME: public for LayoutTreeBuilder, we shouldn't expose this though.
-  PassRefPtr<ComputedStyle> StyleForLayoutObject();
+  RefPtr<ComputedStyle> StyleForLayoutObject();
 
   bool HasID() const;
   bool HasClass() const;
@@ -790,9 +797,9 @@ class CORE_EXPORT Element : public ContainerNode {
   ElementIntersectionObserverData* IntersectionObserverData() const;
   ElementIntersectionObserverData& EnsureIntersectionObserverData();
 
-  HeapHashMap<Member<ResizeObserver>, Member<ResizeObservation>>*
+  HeapHashMap<TraceWrapperMember<ResizeObserver>, Member<ResizeObservation>>*
   ResizeObserverData() const;
-  HeapHashMap<Member<ResizeObserver>, Member<ResizeObservation>>&
+  HeapHashMap<TraceWrapperMember<ResizeObserver>, Member<ResizeObservation>>&
   EnsureResizeObserverData();
   void SetNeedsResizeObserverUpdate();
 
@@ -823,10 +830,11 @@ class CORE_EXPORT Element : public ContainerNode {
 
   virtual void WillRecalcStyle(StyleRecalcChange);
   virtual void DidRecalcStyle();
-  virtual PassRefPtr<ComputedStyle> CustomStyleForLayoutObject();
+  virtual RefPtr<ComputedStyle> CustomStyleForLayoutObject();
 
-  virtual bool ShouldRegisterAsNamedItem() const { return false; }
-  virtual bool ShouldRegisterAsExtraNamedItem() const { return false; }
+  virtual NamedItemType GetNamedItemType() const {
+    return NamedItemType::kNone;
+  }
 
   bool SupportsSpatialNavigationFocus() const;
 
@@ -848,7 +856,7 @@ class CORE_EXPORT Element : public ContainerNode {
 
   static bool AttributeValueIsJavaScriptURL(const Attribute&);
 
-  PassRefPtr<ComputedStyle> OriginalStyleForLayoutObject();
+  RefPtr<ComputedStyle> OriginalStyleForLayoutObject();
 
   Node* InsertAdjacent(const String& where, Node* new_child, ExceptionState&);
 
@@ -886,7 +894,7 @@ class CORE_EXPORT Element : public ContainerNode {
   // these changes can be directly propagated to this element (the child).
   // If these conditions are met, propagates the changes to the current style
   // and returns the new style. Otherwise, returns null.
-  PassRefPtr<ComputedStyle> PropagateInheritedProperties(StyleRecalcChange);
+  RefPtr<ComputedStyle> PropagateInheritedProperties(StyleRecalcChange);
 
   StyleRecalcChange RecalcOwnStyle(StyleRecalcChange);
   void RebuildPseudoElementLayoutTree(PseudoId, WhitespaceAttacher&);
@@ -896,7 +904,8 @@ class CORE_EXPORT Element : public ContainerNode {
   void UpdatePseudoElement(PseudoId, StyleRecalcChange);
   bool UpdateFirstLetter(Element*);
 
-  inline void CreatePseudoElementIfNeeded(PseudoId);
+  inline PseudoElement* CreatePseudoElementIfNeeded(PseudoId);
+  void CreateAndAttachPseudoElementIfNeeded(PseudoId, AttachContext&);
 
   ShadowRoot* GetShadowRoot() const;
 
@@ -964,10 +973,12 @@ class CORE_EXPORT Element : public ContainerNode {
 
   QualifiedName tag_name_;
 
-  void UpdateNamedItemRegistration(const AtomicString& old_name,
+  void UpdateNamedItemRegistration(NamedItemType,
+                                   const AtomicString& old_name,
                                    const AtomicString& new_name);
-  void UpdateExtraNamedItemRegistration(const AtomicString& old_name,
-                                        const AtomicString& new_name);
+  void UpdateIdNamedItemRegistration(NamedItemType,
+                                     const AtomicString& old_name,
+                                     const AtomicString& new_name);
 
   void CreateUniqueElementData();
 
@@ -1022,6 +1033,26 @@ template <typename T>
 inline const T* ToElement(const Node* node) {
   SECURITY_DCHECK(!node || IsElementOfType<const T>(*node));
   return static_cast<const T*>(node);
+}
+
+template <typename T>
+inline T* ToElementOrNull(Node& node) {
+  return IsElementOfType<const T>(node) ? static_cast<T*>(&node) : nullptr;
+}
+template <typename T>
+inline T* ToElementOrNull(Node* node) {
+  return (node && IsElementOfType<const T>(*node)) ? static_cast<T*>(node)
+                                                   : nullptr;
+}
+template <typename T>
+inline const T* ToElementOrNull(const Node& node) {
+  return IsElementOfType<const T>(node) ? static_cast<const T*>(&node)
+                                        : nullptr;
+}
+template <typename T>
+inline const T* ToElementOrNull(const Node* node) {
+  return (node && IsElementOfType<const T>(*node)) ? static_cast<const T*>(node)
+                                                   : nullptr;
 }
 
 template <typename T>

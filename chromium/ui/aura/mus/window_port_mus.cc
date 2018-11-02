@@ -10,6 +10,7 @@
 #include "ui/aura/client/transient_window_client.h"
 #include "ui/aura/env.h"
 #include "ui/aura/mus/client_surface_embedder.h"
+#include "ui/aura/mus/hit_test_data_provider_aura.h"
 #include "ui/aura/mus/property_converter.h"
 #include "ui/aura/mus/window_tree_client.h"
 #include "ui/aura/mus/window_tree_client_delegate.h"
@@ -107,11 +108,11 @@ std::unique_ptr<viz::ClientLayerTreeFrameSink>
 WindowPortMus::RequestLayerTreeFrameSink(
     scoped_refptr<viz::ContextProvider> context_provider,
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager) {
-  cc::mojom::CompositorFrameSinkPtrInfo sink_info;
-  cc::mojom::CompositorFrameSinkRequest sink_request =
+  viz::mojom::CompositorFrameSinkPtrInfo sink_info;
+  viz::mojom::CompositorFrameSinkRequest sink_request =
       mojo::MakeRequest(&sink_info);
-  cc::mojom::CompositorFrameSinkClientPtr client;
-  cc::mojom::CompositorFrameSinkClientRequest client_request =
+  viz::mojom::CompositorFrameSinkClientPtr client;
+  viz::mojom::CompositorFrameSinkClientRequest client_request =
       mojo::MakeRequest(&client);
   constexpr bool enable_surface_synchronization = true;
   auto layer_tree_frame_sink = base::MakeUnique<viz::ClientLayerTreeFrameSink>(
@@ -119,11 +120,18 @@ WindowPortMus::RequestLayerTreeFrameSink(
       gpu_memory_buffer_manager, nullptr /* shared_bitmap_manager */,
       nullptr /* synthetic_begin_frame_source */, std::move(sink_info),
       std::move(client_request),
+      base::MakeUnique<HitTestDataProviderAura>(window_),
       base::MakeUnique<viz::DefaultLocalSurfaceIdProvider>(),
       enable_surface_synchronization);
   window_tree_client_->AttachCompositorFrameSink(
       server_id(), std::move(sink_request), std::move(client));
   return layer_tree_frame_sink;
+}
+
+viz::FrameSinkId WindowPortMus::GetFrameSinkId() const {
+  if (embed_frame_sink_id_.is_valid())
+    return embed_frame_sink_id_;
+  return viz::FrameSinkId(0, server_id());
 }
 
 WindowPortMus::ServerChangeIdType WindowPortMus::ScheduleChange(
@@ -293,7 +301,7 @@ void WindowPortMus::SetFrameSinkIdFromServer(
     const viz::FrameSinkId& frame_sink_id) {
   DCHECK(window_mus_type() == WindowMusType::TOP_LEVEL_IN_WM ||
          window_mus_type() == WindowMusType::EMBED_IN_OWNER);
-  frame_sink_id_ = frame_sink_id;
+  embed_frame_sink_id_ = frame_sink_id;
   UpdatePrimarySurfaceInfo();
 }
 
@@ -311,7 +319,7 @@ const viz::LocalSurfaceId& WindowPortMus::GetOrAllocateLocalSurfaceId(
   // The newly generated frame by the embedder will block in the display
   // compositor until the child submits a corresponding CompositorFrame or a
   // deadline hits.
-  if (frame_sink_id_.is_valid())
+  if (embed_frame_sink_id_.is_valid())
     UpdatePrimarySurfaceInfo();
 
   if (local_layer_tree_frame_sink_)
@@ -322,19 +330,21 @@ const viz::LocalSurfaceId& WindowPortMus::GetOrAllocateLocalSurfaceId(
 
 void WindowPortMus::SetFallbackSurfaceInfo(
     const viz::SurfaceInfo& surface_info) {
-  if (!frame_sink_id_.is_valid()) {
+  if (!embed_frame_sink_id_.is_valid()) {
     // |primary_surface_info_| shold not be valid, since we didn't know the
-    // |frame_sink_id_|.
+    // |embed_frame_sink_id_|.
     DCHECK(!primary_surface_info_.is_valid());
-    frame_sink_id_ = surface_info.id().frame_sink_id();
+    embed_frame_sink_id_ = surface_info.id().frame_sink_id();
     UpdatePrimarySurfaceInfo();
   }
 
   // The frame sink id should never be changed.
-  DCHECK_EQ(surface_info.id().frame_sink_id(), frame_sink_id_);
+  DCHECK_EQ(surface_info.id().frame_sink_id(), embed_frame_sink_id_);
 
   fallback_surface_info_ = surface_info;
   UpdateClientSurfaceEmbedder();
+  if (window_->delegate())
+    window_->delegate()->OnFirstSurfaceActivation(fallback_surface_info_);
 }
 
 void WindowPortMus::DestroyFromServer() {
@@ -390,6 +400,10 @@ WindowPortMus::ChangeSource WindowPortMus::OnTransientChildRemoved(
                                    change_data)
              ? ChangeSource::SERVER
              : ChangeSource::LOCAL;
+}
+
+void WindowPortMus::AllocateLocalSurfaceId() {
+  local_surface_id_ = local_surface_id_allocator_.GenerateId();
 }
 
 const viz::LocalSurfaceId& WindowPortMus::GetLocalSurfaceId() {
@@ -451,6 +465,16 @@ void WindowPortMus::OnPreInit(Window* window) {
 }
 
 void WindowPortMus::OnDeviceScaleFactorChanged(float device_scale_factor) {
+  // TODO(fsamuel): If we don't have a LayerTreeFrameSinkLocal then we should
+  // let the window server know about the device scale factor change and
+  // the new LocalSurfaceId allocated.
+  if (last_device_scale_factor_ != device_scale_factor &&
+      local_surface_id_.is_valid() && local_layer_tree_frame_sink_) {
+    last_device_scale_factor_ = device_scale_factor;
+    local_surface_id_ = local_surface_id_allocator_.GenerateId();
+    local_layer_tree_frame_sink_->SetLocalSurfaceId(local_surface_id_);
+  }
+
   if (window_->delegate())
     window_->delegate()->OnDeviceScaleFactorChanged(device_scale_factor);
 }
@@ -546,12 +570,20 @@ WindowPortMus::CreateLayerTreeFrameSink() {
       nullptr,
       aura::Env::GetInstance()->context_factory()->GetGpuMemoryBufferManager());
   local_layer_tree_frame_sink_ = frame_sink->GetWeakPtr();
+  local_surface_id_ = local_surface_id_allocator_.GenerateId();
   return std::move(frame_sink);
 }
 
 viz::SurfaceId WindowPortMus::GetSurfaceId() const {
-  // This is only used by WindowPortLocal in unit tests.
-  return viz::SurfaceId();
+  return viz::SurfaceId(embed_frame_sink_id_, local_surface_id_);
+}
+
+void WindowPortMus::OnWindowAddedToRootWindow() {}
+
+void WindowPortMus::OnWillRemoveWindowFromRootWindow() {}
+
+void WindowPortMus::OnEventTargetingPolicyChanged() {
+  SetEventTargetingPolicy(window_->event_targeting_policy());
 }
 
 void WindowPortMus::UpdatePrimarySurfaceInfo() {
@@ -562,15 +594,13 @@ void WindowPortMus::UpdatePrimarySurfaceInfo() {
     return;
   }
 
-  if (!frame_sink_id_.is_valid() || !local_surface_id_.is_valid())
+  if (!embed_frame_sink_id_.is_valid() || !local_surface_id_.is_valid())
     return;
 
   primary_surface_info_ = viz::SurfaceInfo(
-      viz::SurfaceId(frame_sink_id_, local_surface_id_),
+      viz::SurfaceId(embed_frame_sink_id_, local_surface_id_),
       ScaleFactorForDisplay(window_), last_surface_size_in_pixels_);
   UpdateClientSurfaceEmbedder();
-  if (window_->delegate())
-    window_->delegate()->OnWindowSurfaceChanged(primary_surface_info_);
 }
 
 void WindowPortMus::UpdateClientSurfaceEmbedder() {

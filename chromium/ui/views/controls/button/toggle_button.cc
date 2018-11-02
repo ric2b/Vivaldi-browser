@@ -110,10 +110,7 @@ class ToggleButton::ThumbView : public InkDropHostView {
 const char ToggleButton::kViewClassName[] = "ToggleButton";
 
 ToggleButton::ToggleButton(ButtonListener* listener)
-    : CustomButton(listener),
-      is_on_(false),
-      slide_animation_(this),
-      thumb_view_(new ThumbView()) {
+    : Button(listener), thumb_view_(new ThumbView()) {
   slide_animation_.SetSlideDuration(80 /* ms */);
   slide_animation_.SetTweenType(gfx::Tween::LINEAR);
   AddChildView(thumb_view_);
@@ -185,6 +182,10 @@ const char* ToggleButton::GetClassName() const {
   return kViewClassName;
 }
 
+bool ToggleButton::CanAcceptEvent(const ui::Event& event) {
+  return accepts_events_ && Button::CanAcceptEvent(event);
+}
+
 void ToggleButton::OnBoundsChanged(const gfx::Rect& previous_bounds) {
   UpdateThumb();
 }
@@ -194,7 +195,7 @@ void ToggleButton::OnNativeThemeChanged(const ui::NativeTheme* theme) {
 }
 
 void ToggleButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  CustomButton::GetAccessibleNodeData(node_data);
+  Button::GetAccessibleNodeData(node_data);
 
   node_data->role = ui::AX_ROLE_SWITCH;
   const ui::AXCheckedState checked_state =
@@ -202,9 +203,32 @@ void ToggleButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->AddIntAttribute(ui::AX_ATTR_CHECKED_STATE, checked_state);
 }
 
+void ToggleButton::OnFocus() {
+  Button::OnFocus();
+  AnimateInkDrop(views::InkDropState::ACTION_PENDING, nullptr);
+}
+
+void ToggleButton::OnBlur() {
+  Button::OnBlur();
+
+  // The ink drop may have already gone away if the user clicked after focusing.
+  if (GetInkDrop()->GetTargetInkDropState() ==
+      views::InkDropState::ACTION_PENDING) {
+    AnimateInkDrop(views::InkDropState::ACTION_TRIGGERED, nullptr);
+  }
+}
+
 void ToggleButton::NotifyClick(const ui::Event& event) {
   SetIsOn(!is_on(), true);
-  CustomButton::NotifyClick(event);
+
+  // Skip over Button::NotifyClick, to customize the ink drop animation.
+  // Leave the ripple in place when the button is activated via the keyboard.
+  if (!event.IsKeyEvent()) {
+    AnimateInkDrop(InkDropState::ACTION_TRIGGERED,
+                   ui::LocatedEvent::FromIfValid(&event));
+  }
+
+  Button::NotifyClick(event);
 }
 
 void ToggleButton::PaintButtonContents(gfx::Canvas* canvas) {
@@ -234,8 +258,7 @@ void ToggleButton::RemoveInkDropLayer(ui::Layer* ink_drop_layer) {
 }
 
 std::unique_ptr<InkDrop> ToggleButton::CreateInkDrop() {
-  std::unique_ptr<InkDropImpl> ink_drop =
-      CustomButton::CreateDefaultInkDropImpl();
+  std::unique_ptr<InkDropImpl> ink_drop = Button::CreateDefaultInkDropImpl();
   ink_drop->SetShowHighlightOnHover(false);
   return std::move(ink_drop);
 }
@@ -247,7 +270,7 @@ std::unique_ptr<InkDropRipple> ToggleButton::CreateInkDropRipple() const {
 }
 
 SkColor ToggleButton::GetInkDropBaseColor() const {
-  return GetTrackColor(is_on());
+  return GetTrackColor(is_on() || HasFocus());
 }
 
 void ToggleButton::AnimationProgressed(const gfx::Animation* animation) {
@@ -258,7 +281,7 @@ void ToggleButton::AnimationProgressed(const gfx::Animation* animation) {
     SchedulePaint();
     return;
   }
-  CustomButton::AnimationProgressed(animation);
+  Button::AnimationProgressed(animation);
 }
 
 }  // namespace views

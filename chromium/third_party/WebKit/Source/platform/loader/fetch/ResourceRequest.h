@@ -94,7 +94,6 @@ class PLATFORM_EXPORT ResourceRequest final {
   std::unique_ptr<CrossThreadResourceRequestData> CopyData() const;
 
   bool IsNull() const;
-  bool IsEmpty() const;
 
   const KURL& Url() const;
   void SetURL(const KURL&);
@@ -107,8 +106,8 @@ class PLATFORM_EXPORT ResourceRequest final {
   double TimeoutInterval() const;  // May return 0 when using platform default.
   void SetTimeoutInterval(double);
 
-  const KURL& FirstPartyForCookies() const;
-  void SetFirstPartyForCookies(const KURL&);
+  const KURL& SiteForCookies() const;
+  void SetSiteForCookies(const KURL&);
 
   RefPtr<SecurityOrigin> RequestorOrigin() const;
   void SetRequestorOrigin(RefPtr<SecurityOrigin>);
@@ -141,9 +140,6 @@ class PLATFORM_EXPORT ResourceRequest final {
   const AtomicString& HttpOrigin() const {
     return HttpHeaderField(HTTPNames::Origin);
   }
-  const AtomicString& HttpSuborigin() const {
-    return HttpHeaderField(HTTPNames::Suborigin);
-  }
   // Note that these will also set and clear, respectively, the
   // Suborigin header, if appropriate.
   void SetHTTPOrigin(const SecurityOrigin*);
@@ -152,9 +148,6 @@ class PLATFORM_EXPORT ResourceRequest final {
   void AddHTTPOriginIfNeeded(const SecurityOrigin*);
   void AddHTTPOriginIfNeeded(const String&);
 
-  const AtomicString& HttpUserAgent() const {
-    return HttpHeaderField(HTTPNames::User_Agent);
-  }
   void SetHTTPUserAgent(const AtomicString& http_user_agent) {
     SetHTTPHeaderField(HTTPNames::User_Agent, http_user_agent);
   }
@@ -241,7 +234,7 @@ class PLATFORM_EXPORT ResourceRequest final {
   }
 
   // True if corresponding AppCache group should be resetted.
-  bool ShouldResetAppCache() { return should_reset_app_cache_; }
+  bool ShouldResetAppCache() const { return should_reset_app_cache_; }
   void SetShouldResetAppCache(bool should_reset_app_cache) {
     should_reset_app_cache_ = should_reset_app_cache;
   }
@@ -351,7 +344,7 @@ class PLATFORM_EXPORT ResourceRequest final {
   KURL url_;
   double timeout_interval_;  // 0 is a magic value for platform default on
                              // platforms that have one.
-  KURL first_party_for_cookies_;
+  KURL site_for_cookies_;
   RefPtr<SecurityOrigin> requestor_origin_;
   AtomicString http_method_;
   HTTPHeaderMap http_header_fields_;
@@ -415,7 +408,7 @@ struct CrossThreadResourceRequestData {
 
   WebCachePolicy cache_policy_;
   double timeout_interval_;
-  KURL first_party_for_cookies_;
+  KURL site_for_cookies_;
   RefPtr<SecurityOrigin> requestor_origin_;
 
   String http_method_;

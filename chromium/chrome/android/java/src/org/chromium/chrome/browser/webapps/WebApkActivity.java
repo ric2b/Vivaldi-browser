@@ -13,7 +13,6 @@ import android.os.SystemClock;
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ApplicationStatus;
-import org.chromium.base.ContextUtils;
 import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.externalnav.ExternalNavigationParams;
@@ -29,7 +28,6 @@ import org.chromium.components.navigation_interception.NavigationParams;
 import org.chromium.content.browser.ChildProcessCreationParams;
 import org.chromium.net.NetError;
 import org.chromium.net.NetworkChangeNotifier;
-import org.chromium.webapk.lib.client.WebApkServiceConnectionManager;
 import org.chromium.webapk.lib.common.WebApkConstants;
 
 import java.util.concurrent.TimeUnit;
@@ -211,13 +209,6 @@ public class WebApkActivity extends WebappActivity {
     }
 
     @Override
-    public void onStop() {
-        super.onStop();
-        WebApkServiceConnectionManager.getInstance().disconnect(
-                ContextUtils.getApplicationContext(), getWebApkPackageName());
-    }
-
-    @Override
     public void onStartWithNative() {
         super.onStartWithNative();
         // If WebappStorage is available, check whether to show a disclosure notification. If it's
@@ -299,7 +290,8 @@ public class WebApkActivity extends WebappActivity {
      */
     private void maybeShowDisclosure(WebappDataStorage storage) {
         if (!getWebApkPackageName().startsWith(WEBAPK_PACKAGE_PREFIX)
-                && !storage.hasDismissedDisclosure() && !mNotificationShowing) {
+                && !storage.hasDismissedDisclosure() && !mNotificationShowing
+                && !WebappActionsNotificationManager.isEnabled()) {
             int activityState = ApplicationStatus.getStateForActivity(this);
             if (activityState == ActivityState.STARTED || activityState == ActivityState.RESUMED
                     || activityState == ActivityState.PAUSED) {
@@ -352,8 +344,10 @@ public class WebApkActivity extends WebappActivity {
         if (isForWebApk) {
             boolean isExternalService = false;
             boolean bindToCaller = false;
+            boolean ignoreVisibilityForImportance = false;
             params = new ChildProcessCreationParams(getWebappInfo().webApkPackageName(),
-                    isExternalService, LibraryProcessType.PROCESS_CHILD, bindToCaller);
+                    isExternalService, LibraryProcessType.PROCESS_CHILD, bindToCaller,
+                    ignoreVisibilityForImportance);
         }
         ChildProcessCreationParams.registerDefault(params);
     }

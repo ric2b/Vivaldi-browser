@@ -82,7 +82,11 @@ GLImplementation GetNamedGLImplementation(const std::string& name) {
 }
 
 GLImplementation GetSoftwareGLImplementation() {
+#if defined(OS_WIN)
+  return kGLImplementationSwiftShaderGL;
+#else
   return kGLImplementationOSMesaGL;
+#endif
 }
 
 const char* GetGLImplementationName(GLImplementation implementation) {
@@ -223,14 +227,6 @@ bool WillUseGLGetStringForExtensions(GLApi* api) {
   GLVersionInfo::ParseVersionString(version_str, &major_version, &minor_version,
                                     &is_es, &is_es2, &is_es3);
   return is_es || major_version < 3;
-}
-
-std::unique_ptr<GLVersionInfo> GetVersionInfoFromContext(GLApi* api) {
-  std::string extensions = GetGLExtensionsFromCurrentContext(api);
-  return base::MakeUnique<GLVersionInfo>(
-      reinterpret_cast<const char*>(api->glGetStringFn(GL_VERSION)),
-      reinterpret_cast<const char*>(api->glGetStringFn(GL_RENDERER)),
-      extensions.c_str());
 }
 
 base::NativeLibrary LoadLibraryAndPrintError(

@@ -6,7 +6,7 @@
 
 #include "core/dom/Document.h"
 #include "core/paint/AppliedDecorationPainter.h"
-#include "core/paint/BoxPainter.h"
+#include "core/paint/BoxPainterBase.h"
 #include "core/paint/PaintInfo.h"
 #include "core/style/ComputedStyle.h"
 #include "core/style/ShadowList.h"
@@ -41,11 +41,17 @@ void TextPainterBase::SetEmphasisMark(const AtomicString& emphasis_mark,
 
   if (!font_data || emphasis_mark.IsNull()) {
     emphasis_mark_offset_ = 0;
-  } else if (position == TextEmphasisPosition::kOver) {
+  } else if ((horizontal_ && (position == TextEmphasisPosition::kOverRight ||
+                              position == TextEmphasisPosition::kOverLeft)) ||
+             (!horizontal_ &&
+              (position == TextEmphasisPosition::kOverRight ||
+               position == TextEmphasisPosition::kUnderRight))) {
     emphasis_mark_offset_ = -font_data->GetFontMetrics().Ascent() -
                             font_.EmphasisMarkDescent(emphasis_mark);
   } else {
-    DCHECK(position == TextEmphasisPosition::kUnder);
+    DCHECK(position == TextEmphasisPosition::kUnderRight ||
+           position == TextEmphasisPosition::kUnderLeft ||
+           position == TextEmphasisPosition::kOverLeft);
     emphasis_mark_offset_ = font_data->GetFontMetrics().Descent() +
                             font_.EmphasisMarkAscent(emphasis_mark);
   }
@@ -125,7 +131,8 @@ TextPainterBase::Style TextPainterBase::TextPaintingStyle(
     DCHECK(document.Printing() == is_printing ||
            RuntimeEnabledFeatures::PrintBrowserEnabled());
     bool force_background_to_white =
-        BoxPainter::ShouldForceWhiteBackgroundForPrintEconomy(document, style);
+        BoxPainterBase::ShouldForceWhiteBackgroundForPrintEconomy(document,
+                                                                  style);
     if (force_background_to_white) {
       text_style.fill_color =
           TextColorForWhiteBackground(text_style.fill_color);
@@ -293,6 +300,25 @@ void TextPainterBase::ComputeDecorationInfo(
 
   // Offset between lines - always non-zero, so lines never cross each other.
   decoration_info.double_offset = decoration_info.thickness + 1.f;
+}
+
+void TextPainterBase::PaintDecorationUnderOrOverLine(
+    GraphicsContext& context,
+    const DecorationInfo& decoration_info,
+    const AppliedTextDecoration& decoration,
+    int line_offset,
+    float decoration_offset) {
+  AppliedDecorationPainter decoration_painter(
+      context, decoration_info, line_offset, decoration, decoration_offset, 1);
+  if (EnumHasFlags(decoration_info.style->GetTextDecorationSkip(),
+                   TextDecorationSkip::kInk)) {
+    FloatRect decoration_bounds = decoration_painter.Bounds();
+    ClipDecorationsStripe(-decoration_info.baseline + decoration_bounds.Y() -
+                              decoration_info.local_origin.Y(),
+                          decoration_bounds.Height(),
+                          decoration_info.thickness);
+  }
+  decoration_painter.Paint();
 }
 
 }  // namespace blink

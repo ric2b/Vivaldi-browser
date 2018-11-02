@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -17,10 +18,9 @@
 #include "chrome/browser/extensions/extension_function_test_utils.h"
 #include "chrome/browser/notifications/notification.h"
 #include "chrome/browser/notifications/notification_common.h"
-#include "chrome/browser/notifications/notification_display_service_factory.h"
+#include "chrome/browser/notifications/notification_display_service_tester.h"
 #include "chrome/browser/notifications/notifier_state_tracker.h"
 #include "chrome/browser/notifications/notifier_state_tracker_factory.h"
-#include "chrome/browser/notifications/stub_notification_display_service.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
@@ -33,8 +33,8 @@
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/app_window/native_app_window.h"
 #include "extensions/browser/notification_types.h"
+#include "extensions/common/extension_builder.h"
 #include "extensions/common/features/feature.h"
-#include "extensions/common/test_util.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "extensions/test/result_catcher.h"
 #include "ui/message_center/notifier_settings.h"
@@ -92,7 +92,7 @@ class UserGestureCatcher : public content::NotificationObserver {
             .ptr()
             ->user_gesture());
     if (waiting_)
-      base::MessageLoopForUI::current()->QuitWhenIdle();
+      base::RunLoop::QuitCurrentWhenIdleDeprecated();
   }
 
   content::NotificationRegistrar registrar_;
@@ -165,11 +165,6 @@ class NotificationsApiTest : public ExtensionApiTest {
     return ExtensionNotificationDisplayHelperFactory::GetForProfile(profile());
   }
 
-  StubNotificationDisplayService* GetDisplayService() {
-    return reinterpret_cast<StubNotificationDisplayService*>(
-        NotificationDisplayServiceFactory::GetForProfile(profile()));
-  }
-
   NotifierStateTracker* GetNotifierStateTracker() {
     return NotifierStateTrackerFactory::GetForProfile(profile());
   }
@@ -179,8 +174,13 @@ class NotificationsApiTest : public ExtensionApiTest {
     ExtensionApiTest::SetUpOnMainThread();
 
     DCHECK(profile());
-    NotificationDisplayServiceFactory::GetInstance()->SetTestingFactory(
-        profile(), &StubNotificationDisplayService::FactoryForTests);
+    display_service_tester_ =
+        base::MakeUnique<NotificationDisplayServiceTester>(profile());
+  }
+
+  void TearDownOnMainThread() override {
+    display_service_tester_.reset();
+    ExtensionApiTest::TearDownOnMainThread();
   }
 
   // Returns the notification that's being displayed for |extension|, or nullptr
@@ -210,16 +210,16 @@ class NotificationsApiTest : public ExtensionApiTest {
   }
 
   void EnableFullscreenNotifications() {
-    feature_list_.InitWithFeatures({
-      features::kPreferHtmlOverPlugins,
-      extensions::kAllowFullscreenAppNotificationsFeature}, {});
+    feature_list_.InitAndEnableFeature(
+        extensions::kAllowFullscreenAppNotificationsFeature);
   }
 
   void DisableFullscreenNotifications() {
-    feature_list_.InitWithFeatures(
-        {features::kPreferHtmlOverPlugins},
-        {extensions::kAllowFullscreenAppNotificationsFeature});
+    feature_list_.InitAndDisableFeature(
+        extensions::kAllowFullscreenAppNotificationsFeature);
   }
+
+  std::unique_ptr<NotificationDisplayServiceTester> display_service_tester_;
 
  private:
   base::test::ScopedFeatureList feature_list_;
@@ -256,7 +256,7 @@ IN_PROC_BROWSER_TEST_F(NotificationsApiTest, TestByUser) {
     ResultCatcher catcher;
     const std::string notification_id =
         GetNotificationIdFromDelegateId(extension->id() + "-FOO");
-    GetDisplayService()->RemoveNotification(
+    display_service_tester_->RemoveNotification(
         NotificationCommon::EXTENSION, notification_id, false /* by_user */);
     EXPECT_TRUE(catcher.GetNextResult()) << catcher.message();
   }
@@ -265,21 +265,21 @@ IN_PROC_BROWSER_TEST_F(NotificationsApiTest, TestByUser) {
     ResultCatcher catcher;
     const std::string notification_id =
         GetNotificationIdFromDelegateId(extension->id() + "-BAR");
-    GetDisplayService()->RemoveNotification(
+    display_service_tester_->RemoveNotification(
         NotificationCommon::EXTENSION, notification_id, true /* by_user */);
     EXPECT_TRUE(catcher.GetNextResult()) << catcher.message();
   }
 
   {
     ResultCatcher catcher;
-    GetDisplayService()->RemoveAllNotifications(NotificationCommon::EXTENSION,
-                                                false /* by_user */);
+    display_service_tester_->RemoveAllNotifications(
+        NotificationCommon::EXTENSION, false /* by_user */);
     EXPECT_TRUE(catcher.GetNextResult()) << catcher.message();
   }
   {
     ResultCatcher catcher;
-    GetDisplayService()->RemoveAllNotifications(NotificationCommon::EXTENSION,
-                                                true /* by_user */);
+    display_service_tester_->RemoveAllNotifications(
+        NotificationCommon::EXTENSION, true /* by_user */);
     EXPECT_TRUE(catcher.GetNextResult()) << catcher.message();
   }
 }
@@ -309,7 +309,7 @@ IN_PROC_BROWSER_TEST_F(NotificationsApiTest, TestPartialUpdate) {
 
 IN_PROC_BROWSER_TEST_F(NotificationsApiTest, TestGetPermissionLevel) {
   scoped_refptr<Extension> empty_extension(
-      extensions::test_util::CreateEmptyExtension());
+      extensions::ExtensionBuilder("Test").Build());
 
   // Get permission level for the extension whose notifications are enabled.
   {

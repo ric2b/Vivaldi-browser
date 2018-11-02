@@ -89,8 +89,7 @@ class BackgroundHTMLParser {
     String unparsed_input;
   };
 
-  void AppendRawBytesFromMainThread(std::unique_ptr<Vector<char>>,
-                                    double bytes_received_time);
+  void AppendRawBytesFromMainThread(std::unique_ptr<Vector<char>>);
   void SetDecoder(std::unique_ptr<TextResourceDecoder>);
   void Flush();
   void ResumeFrom(std::unique_ptr<Checkpoint>);
@@ -130,8 +129,6 @@ class BackgroundHTMLParser {
   std::unique_ptr<CompactHTMLTokenStream> pending_tokens_;
   const size_t pending_token_limit_;
   PreloadRequestStream pending_preloads_;
-  // Indices into |m_pendingTokens|.
-  Vector<int> likely_document_write_script_indices_;
   ViewportDescriptionWrapper viewport_description_;
   XSSInfoStream pending_xss_infos_;
 

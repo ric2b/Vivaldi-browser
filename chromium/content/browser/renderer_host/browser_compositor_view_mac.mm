@@ -104,7 +104,8 @@ RecyclableCompositorMac::RecyclableCompositorMac()
                   content::GetContextFactory(),
                   content::GetContextFactoryPrivate(),
                   ui::WindowResizeHelperMac::Get()->task_runner(),
-                  false /* enable_surface_synchronization */) {
+                  false /* enable_surface_synchronization */,
+                  false /* enable_pixel_canvas */) {
   compositor_.SetAcceleratedWidget(
       accelerated_widget_mac_->accelerated_widget());
   Suspend();
@@ -215,6 +216,17 @@ DelegatedFrameHost* BrowserCompositorMac::GetDelegatedFrameHost() {
   return delegated_frame_host_.get();
 }
 
+void BrowserCompositorMac::ClearCompositorFrame() {
+  // Make sure that we no longer hold a compositor lock by un-suspending the
+  // compositor. This ensures that we are able to swap in a new blank frame to
+  // replace any old content.
+  // https://crbug.com/739621
+  if (recyclable_compositor_)
+    recyclable_compositor_->Unsuspend();
+  if (delegated_frame_host_)
+    delegated_frame_host_->ClearDelegatedFrame();
+}
+
 void BrowserCompositorMac::CopyCompleted(
     base::WeakPtr<BrowserCompositorMac> browser_compositor,
     const ReadbackRequestCallback& callback,
@@ -272,7 +284,7 @@ void BrowserCompositorMac::CopyFromCompositingSurfaceToVideoFrame(
 }
 
 void BrowserCompositorMac::DidCreateNewRendererCompositorFrameSink(
-    cc::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink) {
+    viz::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink) {
   renderer_compositor_frame_sink_ = renderer_compositor_frame_sink;
   delegated_frame_host_->DidCreateNewRendererCompositorFrameSink(
       renderer_compositor_frame_sink_);
@@ -295,7 +307,7 @@ void BrowserCompositorMac::SubmitCompositorFrame(
                                                std::move(frame));
 }
 
-void BrowserCompositorMac::OnDidNotProduceFrame(const cc::BeginFrameAck& ack) {
+void BrowserCompositorMac::OnDidNotProduceFrame(const viz::BeginFrameAck& ack) {
   delegated_frame_host_->DidNotProduceFrame(ack);
 }
 
@@ -447,6 +459,12 @@ void BrowserCompositorMac::OnBeginFrame() {
 bool BrowserCompositorMac::IsAutoResizeEnabled() const {
   NOTREACHED();
   return false;
+}
+
+ui::Compositor* BrowserCompositorMac::CompositorForTesting() const {
+  if (recyclable_compositor_)
+    return recyclable_compositor_->compositor();
+  return nullptr;
 }
 
 }  // namespace content

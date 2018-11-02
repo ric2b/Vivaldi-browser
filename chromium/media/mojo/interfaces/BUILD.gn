@@ -17,18 +17,17 @@ mojom("interfaces") {
     "media_service.mojom",
     "media_types.mojom",
     "output_protection.mojom",
+    "platform_verification.mojom",
     "provision_fetcher.mojom",
     "renderer.mojom",
+    "video_decode_stats_recorder.mojom",
     "video_decoder.mojom",
     "video_encode_accelerator.mojom",
+    "watch_time_recorder.mojom",
   ]
 
   if (is_android) {
     sources += [ "media_drm_storage.mojom" ]
-  }
-
-  if (is_chromeos) {
-    sources += [ "platform_verification.mojom" ]
   }
 
   if (is_android) {

@@ -6,13 +6,13 @@
 #define CHROME_BROWSER_UI_VIEWS_PAYMENTS_PAYMENT_REQUEST_ROW_VIEW_H_
 
 #include "base/macros.h"
-#include "ui/views/controls/button/custom_button.h"
+#include "ui/views/controls/button/button.h"
 
 namespace payments {
 
 // This class implements a clickable row of the Payment Request dialog that
 // darkens on hover and displays a horizontal ruler on its lower bound.
-class PaymentRequestRowView : public views::CustomButton {
+class PaymentRequestRowView : public views::Button {
  public:
   // Creates a row view. If |clickable| is true, the row will be shaded on hover
   // and handle click events. |insets| are used as padding around the content.
@@ -20,6 +20,10 @@ class PaymentRequestRowView : public views::CustomButton {
                         bool clickable,
                         const gfx::Insets& insets);
   ~PaymentRequestRowView() override;
+
+  void set_previous_row(PaymentRequestRowView* previous_row) {
+    previous_row_ = previous_row;
+  }
 
  protected:
   bool clickable() { return clickable_; }
@@ -39,7 +43,7 @@ class PaymentRequestRowView : public views::CustomButton {
   // colored background color.
   void SetIsHighlighted(bool highlighted);
 
-  // views::CustomButton:
+  // views::Button:
   void StateChanged(ButtonState old_state) override;
 
   // views::View:
@@ -48,6 +52,10 @@ class PaymentRequestRowView : public views::CustomButton {
 
   bool clickable_;
   gfx::Insets insets_;
+
+  // A non-owned pointer to the previous row object in the UI. Used to hide the
+  // bottom border of the previous row when highlighting this one. May be null.
+  PaymentRequestRowView* previous_row_;
 
   DISALLOW_COPY_AND_ASSIGN(PaymentRequestRowView);
 };

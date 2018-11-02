@@ -5,10 +5,10 @@
 import json
 import optparse
 
-from webkitpy.common.net.buildbot import Build
-from webkitpy.common.net.git_cl import GitCL
-from webkitpy.common.net.git_cl import TryJobStatus
 from webkitpy.common.checkout.git_mock import MockGit
+from webkitpy.common.net.buildbot import Build
+from webkitpy.common.net.git_cl import TryJobStatus
+from webkitpy.common.net.git_cl_mock import MockGitCL
 from webkitpy.common.net.layout_test_results import LayoutTestResults
 from webkitpy.common.system.log_testing import LoggingTestCase
 from webkitpy.layout_tests.builder_list import BuilderList
@@ -18,6 +18,7 @@ from webkitpy.tool.commands.rebaseline_unittest import BaseTestCase
 
 
 class RebaselineCLTest(BaseTestCase, LoggingTestCase):
+
     command_constructor = RebaselineCL
 
     def setUp(self):
@@ -30,11 +31,7 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
             Build('MOCK Try Linux', 6000): TryJobStatus('COMPLETED', 'FAILURE'),
         }
 
-        # TODO(qyearsley): Add a MockGitCL class to reduce repetition below.
-        git_cl = GitCL(self.tool)
-        git_cl.get_issue_number = lambda: '11112222'
-        git_cl.latest_try_jobs = lambda _: builds
-        self.command.git_cl = lambda: git_cl
+        self.command.git_cl = MockGitCL(self.tool, builds)
 
         git = MockGit(filesystem=self.tool.filesystem, executive=self.tool.executive)
         git.changed_files = lambda **_: [
@@ -101,7 +98,8 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
                 self.mac_port.layout_tests_dir(), test)
             self._write(path, 'contents')
 
-        self.mac_port.host.filesystem.write_text_file('/test.checkout/LayoutTests/external/wpt/MANIFEST.json', '{}')
+        self.mac_port.host.filesystem.write_text_file(
+            '/test.checkout/LayoutTests/external/wpt/MANIFEST.json', '{}')
 
     def tearDown(self):
         BaseTestCase.tearDown(self)
@@ -113,7 +111,7 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
             'dry_run': False,
             'only_changed_tests': False,
             'trigger_jobs': True,
-            'fill_missing': False,
+            'fill_missing': None,
             'optimize': True,
             'results_directory': None,
             'verbose': False,
@@ -137,9 +135,7 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
 
     def test_execute_with_no_issue_number_aborts(self):
         # If the user hasn't uploaded a CL, an error message is printed.
-        git_cl = GitCL(self.tool)
-        git_cl.get_issue_number = lambda: 'None'
-        self.command.git_cl = lambda: git_cl
+        self.command.git_cl = MockGitCL(self.tool, issue_number='None')
         exit_code = self.command.execute(self.command_options(), [], self.tool)
         self.assertEqual(exit_code, 1)
         self.assertLog(['ERROR: No issue number for current branch.\n'])
@@ -160,10 +156,7 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
     def test_execute_no_try_jobs_started_triggers_jobs(self):
         # If there are no try jobs started yet, by default the tool will
         # trigger new try jobs.
-        git_cl = GitCL(self.tool)
-        git_cl.get_issue_number = lambda: '11112222'
-        git_cl.latest_try_jobs = lambda _: {}
-        self.command.git_cl = lambda: git_cl
+        self.command.git_cl = MockGitCL(self.tool, {})
         exit_code = self.command.execute(self.command_options(), [], self.tool)
         self.assertEqual(exit_code, 1)
         self.assertLog([
@@ -179,10 +172,7 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
     def test_execute_no_try_jobs_started_and_no_trigger_jobs(self):
         # If there are no try jobs started yet and --no-trigger-jobs is passed,
         # then we just abort immediately.
-        git_cl = GitCL(self.tool)
-        git_cl.get_issue_number = lambda: '11112222'
-        git_cl.latest_try_jobs = lambda _: {}
-        self.command.git_cl = lambda: git_cl
+        self.command.git_cl = MockGitCL(self.tool, {})
         exit_code = self.command.execute(
             self.command_options(trigger_jobs=False), [], self.tool)
         self.assertEqual(exit_code, 1)
@@ -196,10 +186,7 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
             Build('MOCK Try Win', 5000): TryJobStatus('COMPLETED', 'FAILURE'),
             Build('MOCK Try Mac', 4000): TryJobStatus('COMPLETED', 'FAILURE'),
         }
-        git_cl = GitCL(self.tool)
-        git_cl.get_issue_number = lambda: '11112222'
-        git_cl.latest_try_jobs = lambda _: builds
-        self.command.git_cl = lambda: git_cl
+        self.command.git_cl = MockGitCL(self.tool, builds)
         exit_code = self.command.execute(self.command_options(), [], self.tool)
         self.assertEqual(exit_code, 1)
         self.assertLog([
@@ -218,10 +205,7 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
             Build('MOCK Try Mac', 4000): TryJobStatus('STARTED'),
             Build('MOCK Try Linux', 6000): TryJobStatus('SCHEDULED'),
         }
-        git_cl = GitCL(self.tool)
-        git_cl.get_issue_number = lambda: '11112222'
-        git_cl.latest_try_jobs = lambda _: builds
-        self.command.git_cl = lambda: git_cl
+        self.command.git_cl = MockGitCL(self.tool, builds)
         exit_code = self.command.execute(self.command_options(), [], self.tool)
         self.assertEqual(exit_code, 1)
         self.assertLog([
@@ -233,10 +217,7 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
             'INFO: There are some builders with no results:\n',
             'INFO:   MOCK Try Linux\n',
             'INFO:   MOCK Try Mac\n',
-            'INFO: Would you like to try to fill in missing results with\n'
-            'available results? This assumes that layout test results\n'
-            'for the platforms with missing results are the same as\n'
-            'results on other platforms.\n',
+            'INFO: Would you like to continue?\n',
             'INFO: Aborting.\n',
         ])
 
@@ -246,20 +227,14 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
             Build('MOCK Try Mac', 4000): TryJobStatus('COMPLETED', 'FAILURE'),
             Build('MOCK Try Linux', 6000): TryJobStatus('COMPLETED', 'CANCELED'),
         }
-        git_cl = GitCL(self.tool)
-        git_cl.get_issue_number = lambda: '11112222'
-        git_cl.latest_try_jobs = lambda _: builds
-        self.command.git_cl = lambda: git_cl
+        self.command.git_cl = MockGitCL(self.tool, builds)
         exit_code = self.command.execute(self.command_options(), [], self.tool)
         self.assertEqual(exit_code, 1)
         self.assertLog([
             'INFO: Finished try jobs found for all try bots.\n',
             'INFO: There are some builders with no results:\n',
             'INFO:   MOCK Try Linux\n',
-            'INFO: Would you like to try to fill in missing results with\n'
-            'available results? This assumes that layout test results\n'
-            'for the platforms with missing results are the same as\n'
-            'results on other platforms.\n',
+            'INFO: Would you like to continue?\n',
             'INFO: Aborting.\n',
         ])
 
@@ -269,10 +244,7 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
             Build('MOCK Try Mac', 4000): TryJobStatus('COMPLETED', 'SUCCESS'),
             Build('MOCK Try Linux', 6000): TryJobStatus('COMPLETED', 'SUCCESS'),
         }
-        git_cl = GitCL(self.tool)
-        git_cl.get_issue_number = lambda: '11112222'
-        git_cl.latest_try_jobs = lambda _: builds
-        self.command.git_cl = lambda: git_cl
+        self.command.git_cl = MockGitCL(self.tool, builds)
         exit_code = self.command.execute(self.command_options(), [], self.tool)
         self.assertEqual(exit_code, 0)
         self.assertLog([
@@ -289,10 +261,7 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
             Build('MOCK Try Win', 5000): TryJobStatus('COMPLETED', 'FAILURE'),
             Build('MOCK Try Mac', 4000): TryJobStatus('COMPLETED', 'FAILURE'),
         }
-        git_cl = GitCL(self.tool)
-        git_cl.get_issue_number = lambda: '11112222'
-        git_cl.latest_try_jobs = lambda _: builds
-        self.command.git_cl = lambda: git_cl
+        self.command.git_cl = MockGitCL(self.tool, builds)
         exit_code = self.command.execute(
             self.command_options(trigger_jobs=False), [], self.tool)
         self.assertEqual(exit_code, 1)
@@ -302,11 +271,8 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
             'INFO:   MOCK Try Win\n',
             'INFO: There are some builders with no results:\n',
             'INFO:   MOCK Try Linux\n',
-            'INFO: Would you like to try to fill in missing results with\n'
-            'available results? This assumes that layout test results\n'
-            'for the platforms with missing results are the same as\n'
-            'results on other platforms.\n',
-            'INFO: Aborting.\n'
+            'INFO: Would you like to continue?\n',
+            'INFO: Aborting.\n',
         ])
 
     def test_execute_with_only_changed_tests_option(self):
@@ -399,7 +365,7 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
         # the given builders.
         self.command.trigger_try_jobs(['MOCK Try Linux', 'MOCK Try Win'])
         self.assertEqual(
-            self.tool.executive.calls,
+            self.command.git_cl.calls,
             [['git', 'cl', 'try', '-m', 'tryserver.blink',
               '-b', 'MOCK Try Linux', '-b', 'MOCK Try Win']])
         self.assertLog([
@@ -410,7 +376,7 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
             'webkit-patch rebaseline-cl to fetch new baselines.\n',
         ])
 
-    def test_execute_missing_results_aborts(self):
+    def test_execute_missing_results_with_no_fill_missing_prompts(self):
         self.tool.buildbot.set_results(Build('MOCK Try Win', 5000), None)
         exit_code = self.command.execute(self.command_options(), [], self.tool)
         self.assertEqual(exit_code, 1)
@@ -421,11 +387,8 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
              '/MOCK_Try_Win/5000/layout-test-results/results.html\n'),
             'INFO: There are some builders with no results:\n',
             'INFO:   MOCK Try Win\n',
-            'INFO: Would you like to try to fill in missing results with\n'
-            'available results? This assumes that layout test results\n'
-            'for the platforms with missing results are the same as\n'
-            'results on other platforms.\n',
-            'INFO: Aborting.\n'
+            'INFO: Would you like to continue?\n',
+            'INFO: Aborting.\n',
         ])
 
     def test_execute_missing_results_with_fill_missing_continues(self):

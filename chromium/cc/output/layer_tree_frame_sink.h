@@ -13,9 +13,9 @@
 #include "base/threading/thread_checker.h"
 #include "cc/cc_export.h"
 #include "cc/output/overlay_candidate_validator.h"
-#include "cc/output/vulkan_context_provider.h"
-#include "cc/resources/returned_resource.h"
 #include "components/viz/common/gpu/context_provider.h"
+#include "components/viz/common/gpu/vulkan_context_provider.h"
+#include "components/viz/common/resources/returned_resource.h"
 #include "gpu/command_buffer/common/texture_in_use_response.h"
 #include "ui/gfx/color_space.h"
 
@@ -26,11 +26,11 @@ class GpuMemoryBufferManager;
 namespace viz {
 class LocalSurfaceId;
 class SharedBitmapManager;
+struct BeginFrameAck;
 }
 
 namespace cc {
 
-struct BeginFrameAck;
 class CompositorFrame;
 class LayerTreeFrameSinkClient;
 
@@ -72,7 +72,7 @@ class CC_EXPORT LayerTreeFrameSink {
 
   // Constructor for Vulkan-based resources.
   explicit LayerTreeFrameSink(
-      scoped_refptr<VulkanContextProvider> vulkan_context_provider);
+      scoped_refptr<viz::VulkanContextProvider> vulkan_context_provider);
 
   virtual ~LayerTreeFrameSink();
 
@@ -103,7 +103,7 @@ class CC_EXPORT LayerTreeFrameSink {
   viz::ContextProvider* worker_context_provider() const {
     return worker_context_provider_.get();
   }
-  VulkanContextProvider* vulkan_context_provider() const {
+  viz::VulkanContextProvider* vulkan_context_provider() const {
     return vulkan_context_provider_.get();
   }
   gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager() const {
@@ -127,9 +127,9 @@ class CC_EXPORT LayerTreeFrameSink {
   // processed in order to unthrottle the next frame.
   virtual void SubmitCompositorFrame(CompositorFrame frame) = 0;
 
-  // Signals that a BeginFrame issued by the BeginFrameSource provided to the
-  // client did not lead to a CompositorFrame submission.
-  virtual void DidNotProduceFrame(const BeginFrameAck& ack) = 0;
+  // Signals that a BeginFrame issued by the viz::BeginFrameSource provided to
+  // the client did not lead to a CompositorFrame submission.
+  virtual void DidNotProduceFrame(const viz::BeginFrameAck& ack) = 0;
 
  protected:
   // Bound to the viz::ContextProvider to hear about when it is lost and inform
@@ -141,7 +141,7 @@ class CC_EXPORT LayerTreeFrameSink {
   struct LayerTreeFrameSink::Capabilities capabilities_;
   scoped_refptr<viz::ContextProvider> context_provider_;
   scoped_refptr<viz::ContextProvider> worker_context_provider_;
-  scoped_refptr<VulkanContextProvider> vulkan_context_provider_;
+  scoped_refptr<viz::VulkanContextProvider> vulkan_context_provider_;
   gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager_;
   viz::SharedBitmapManager* shared_bitmap_manager_;
 

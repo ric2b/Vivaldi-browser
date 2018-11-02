@@ -215,9 +215,9 @@ void ApplyGlobalAutoconnectPolicy(
   else
     NOTREACHED();
 
-  auto_connect_dictionary->SetBooleanWithoutPathExpansion(policy_source, false);
-  auto_connect_dictionary->SetStringWithoutPathExpansion(
-      ::onc::kAugmentationEffectiveSetting, policy_source);
+  auto_connect_dictionary->SetKey(policy_source, base::Value(false));
+  auto_connect_dictionary->SetKey(::onc::kAugmentationEffectiveSetting,
+                                  base::Value(policy_source));
 }
 
 }  // namespace
@@ -296,8 +296,8 @@ void SetShillPropertiesForGlobalPolicy(
 
   // If autoconnect is not explicitly set yet, it might automatically be enabled
   // by Shill. To prevent that, disable it explicitly.
-  shill_properties_to_update->SetBooleanWithoutPathExpansion(
-      shill::kAutoConnectProperty, false);
+  shill_properties_to_update->SetKey(shill::kAutoConnectProperty,
+                                     base::Value(false));
 }
 
 std::unique_ptr<base::DictionaryValue> CreateShillConfiguration(
@@ -338,7 +338,7 @@ std::unique_ptr<base::DictionaryValue> CreateShillConfiguration(
   RemoveFakeCredentials(onc::kNetworkConfigurationSignature,
                         effective.get());
 
-  effective->SetStringWithoutPathExpansion(::onc::network_config::kGUID, guid);
+  effective->SetKey(::onc::network_config::kGUID, base::Value(guid));
 
   // Remove irrelevant fields.
   onc::Normalizer normalizer(true /* remove recommended fields */);
@@ -349,8 +349,7 @@ std::unique_ptr<base::DictionaryValue> CreateShillConfiguration(
       onc::TranslateONCObjectToShill(&onc::kNetworkConfigurationSignature,
                                      *effective));
 
-  shill_dictionary->SetStringWithoutPathExpansion(shill::kProfileProperty,
-                                                  profile.path);
+  shill_dictionary->SetKey(shill::kProfileProperty, base::Value(profile.path));
 
   // If AutoConnect is enabled by policy, set the ManagedCredentials property to
   // indicate to Shill that this network can be used for autoconnect even
@@ -363,8 +362,8 @@ std::unique_ptr<base::DictionaryValue> CreateShillConfiguration(
   if (network_policy && IsAutoConnectEnabledInPolicy(*network_policy)) {
     VLOG(1) << "Enable ManagedCredentials for managed network with GUID "
             << guid;
-    shill_dictionary->SetBooleanWithoutPathExpansion(
-        shill::kManagedCredentialsProperty, true);
+    shill_dictionary->SetKey(shill::kManagedCredentialsProperty,
+                             base::Value(true));
   }
 
   if (!network_policy && global_policy) {

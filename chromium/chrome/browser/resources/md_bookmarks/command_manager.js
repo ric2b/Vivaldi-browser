@@ -66,9 +66,9 @@ cr.define('bookmarks', function() {
       document.addEventListener('open-item-menu', this.boundOnOpenItemMenu_);
 
       /** @private {function()} */
-      this.boundOnCommandUndo_ = function() {
+      this.boundOnCommandUndo_ = () => {
         this.handle(Command.UNDO, new Set());
-      }.bind(this);
+      };
       document.addEventListener('command-undo', this.boundOnCommandUndo_);
 
       /** @private {function(!Event)} */
@@ -83,8 +83,8 @@ cr.define('bookmarks', function() {
        */
       this.menuSource_ = MenuSource.NONE;
 
-      /** @private {Object<Command, cr.ui.KeyboardShortcutList>} */
-      this.shortcuts_ = {};
+      /** @private {!Map<Command, cr.ui.KeyboardShortcutList>} */
+      this.shortcuts_ = new Map();
 
       this.addShortcut_(Command.EDIT, 'F2', 'Enter');
       this.addShortcut_(Command.DELETE, 'Delete', 'Delete Backspace');
@@ -268,7 +268,7 @@ cr.define('bookmarks', function() {
         case Command.COPY_URL:
         case Command.COPY:
           var idList = Array.from(itemIds);
-          chrome.bookmarkManagerPrivate.copy(idList, function() {
+          chrome.bookmarkManagerPrivate.copy(idList, () => {
             var labelPromise;
             if (command == Command.COPY_URL) {
               labelPromise =
@@ -283,12 +283,14 @@ cr.define('bookmarks', function() {
 
             this.showTitleToast_(
                 labelPromise, state.nodes[idList[0]].title, false);
-          }.bind(this));
+          });
           break;
         case Command.SHOW_IN_FOLDER:
           var id = Array.from(itemIds)[0];
           this.dispatch(bookmarks.actions.selectFolder(
               assert(state.nodes[id].parentId), state.nodes));
+          bookmarks.DialogFocusManager.getInstance().clearFocus();
+          this.fire('highlight-items', [id]);
           break;
         case Command.DELETE:
           var idList = Array.from(this.minimizeDeletionSet_(itemIds));
@@ -303,9 +305,9 @@ cr.define('bookmarks', function() {
                 'getPluralString', 'toastItemsDeleted', idList.length);
           }
 
-          chrome.bookmarkManagerPrivate.removeTrees(idList, function() {
+          chrome.bookmarkManagerPrivate.removeTrees(idList, () => {
             this.showTitleToast_(labelPromise, title, true);
-          }.bind(this));
+          });
           break;
         case Command.UNDO:
           chrome.bookmarkManagerPrivate.undo();
@@ -345,12 +347,17 @@ cr.define('bookmarks', function() {
         case Command.PASTE:
           var selectedFolder = state.selectedFolder;
           var selectedItems = state.selection.items;
+          bookmarks.ApiListener.trackUpdatedItems();
           chrome.bookmarkManagerPrivate.paste(
-              selectedFolder, Array.from(selectedItems));
+              selectedFolder, Array.from(selectedItems),
+              bookmarks.ApiListener.highlightUpdatedItems);
           break;
         default:
           assert(false);
       }
+
+      bookmarks.util.recordEnumHistogram(
+          'BookmarkManager.CommandExecuted', command, Command.MAX_VALUE);
     },
 
     /**
@@ -360,11 +367,16 @@ cr.define('bookmarks', function() {
      *     shortcut.
      */
     handleKeyEvent: function(e, itemIds) {
-      for (var commandName in this.shortcuts_) {
-        var shortcut = this.shortcuts_[commandName];
-        if (shortcut.matchesEvent(e) && this.canExecute(commandName, itemIds)) {
-          this.handle(commandName, itemIds);
+      for (var commandTuple of this.shortcuts_) {
+        var command = /** @type {Command} */ (commandTuple[0]);
+        var shortcut =
+            /** @type {cr.ui.KeyboardShortcutList} */ (commandTuple[1]);
+        if (shortcut.matchesEvent(e) && this.canExecute(command, itemIds)) {
+          this.handle(command, itemIds);
 
+          bookmarks.util.recordEnumHistogram(
+              'BookmarkManager.CommandExecutedFromKeyboard', command,
+              Command.MAX_VALUE);
           e.stopPropagation();
           e.preventDefault();
           return true;
@@ -387,7 +399,7 @@ cr.define('bookmarks', function() {
      */
     addShortcut_: function(command, shortcut, macShortcut) {
       var shortcut = (cr.isMac && macShortcut) ? macShortcut : shortcut;
-      this.shortcuts_[command] = new cr.ui.KeyboardShortcutList(shortcut);
+      this.shortcuts_.set(command, new cr.ui.KeyboardShortcutList(shortcut));
     },
 
     /**
@@ -450,7 +462,7 @@ cr.define('bookmarks', function() {
 
       this.confirmOpenCallback_ = openUrlsCallback;
       var dialog = this.$.openDialog.get();
-      dialog.querySelector('.body').textContent =
+      dialog.querySelector('[slot=body]').textContent =
           loadTimeData.getStringF('openDialogBody', urls.length);
 
       bookmarks.DialogFocusManager.getInstance().showDialog(
@@ -579,9 +591,8 @@ cr.define('bookmarks', function() {
       if (!this.menuIds_)
         return;
 
-      this.hasAnySublabel_ = this.menuCommands_.some(function(command) {
-        return this.getCommandSublabel_(command) != '';
-      }.bind(this));
+      this.hasAnySublabel_ = this.menuCommands_.some(
+          (command) => this.getCommandSublabel_(command) != '');
     },
 
     /**
@@ -638,7 +649,9 @@ cr.define('bookmarks', function() {
      */
     onCommandClick_: function(e) {
       this.handle(
-          e.currentTarget.getAttribute('command'), assert(this.menuIds_));
+          /** @type {Command} */ (
+              Number(e.currentTarget.getAttribute('command'))),
+          assert(this.menuIds_));
       this.closeCommandMenu();
     },
 

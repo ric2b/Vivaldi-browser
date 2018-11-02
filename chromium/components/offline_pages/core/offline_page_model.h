@@ -44,15 +44,6 @@ struct ClientId;
 // * how to cancel requests and what to expect
 class OfflinePageModel : public base::SupportsUserData {
  public:
-  // Controls how to search on differnt URLs for pages.
-  enum class URLSearchMode {
-    // Match against the last committed URL only.
-    SEARCH_BY_FINAL_URL_ONLY,
-    // Match against all stored URLs, including the last committed URL and
-    // the original request URL.
-    SEARCH_BY_ALL_URLS
-  };
-
   // Describes the parameters to control how to save a page.
   struct SavePageParams {
     SavePageParams();
@@ -161,6 +152,11 @@ class OfflinePageModel : public base::SupportsUserData {
   // Retrieves all pages associated with any of |client_ids|.
   virtual void GetPagesByClientIds(
       const std::vector<ClientId>& client_ids,
+      const MultipleOfflinePageItemCallback& callback) = 0;
+
+  // Retrieves all pages associated with the |request_origin|.
+  virtual void GetPagesByRequestOrigin(
+      const std::string& request_origin,
       const MultipleOfflinePageItemCallback& callback) = 0;
 
   // Deletes cached offline pages matching the URL predicate.

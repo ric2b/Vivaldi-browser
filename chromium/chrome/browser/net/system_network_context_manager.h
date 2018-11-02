@@ -7,17 +7,16 @@
 
 #include <memory>
 
-#include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "content/public/common/network_service.mojom.h"
 
-// Global object that lives on the UI thread. Responsible for creating and
-// managing access to the system NetworkContext. This NetworkContext is intended
-// for requests not associated with a profile. It stores no data on disk, and
-// has no HTTP cache, but it does have ephemeral cookie and channel ID stores.
-// It also does not have access to HTTP proxy auth information the user has
-// entered or that comes from extensions, and similarly, has no
-// extension-provided per-profile proxy configuration information.
+// Responsible for creating and managing access to the system NetworkContext.
+// Lives on the UI thread. The NetworkContext this owns is intended for requests
+// not associated with a profile. It stores no data on disk, and has no HTTP
+// cache, but it does have ephemeral cookie and channel ID stores. It also does
+// not have access to HTTP proxy auth information the user has entered or that
+// comes from extensions, and similarly, has no extension-provided per-profile
+// proxy configuration information.
 //
 // The "system" NetworkContext will either share a URLRequestContext with
 // IOThread's SystemURLRequestContext and be part of IOThread's NetworkService
@@ -30,6 +29,9 @@
 // to being compatible with the network service.
 class SystemNetworkContextManager {
  public:
+  SystemNetworkContextManager();
+  ~SystemNetworkContextManager();
+
   // Initializes |network_context_params| as needed to set up a system
   // NetworkContext. If the network service is disabled,
   // |network_context_request| will be for the NetworkContext used by the
@@ -39,24 +41,22 @@ class SystemNetworkContextManager {
   // NetworkContext will not be used by the SystemNetworkContextManager.
   //
   // Must be called before the system NetworkContext is first used.
-  static void SetUp(
-      content::mojom::NetworkContextRequest* network_context_request,
-      content::mojom::NetworkContextParamsPtr* network_context_params);
+  //
+  // |is_quic_allowed| is set to true if policy allows QUIC to be enabled.
+  void SetUp(content::mojom::NetworkContextRequest* network_context_request,
+             content::mojom::NetworkContextParamsPtr* network_context_params,
+             bool* is_quic_allowed);
 
-  // Returns the System NetworkContext. May only be called after SetUp().
-  static content::mojom::NetworkContext* Context();
-
- private:
-  static SystemNetworkContextManager* GetInstance();
-
-  friend struct base::LazyInstanceTraitsBase<SystemNetworkContextManager>;
-
-  SystemNetworkContextManager();
-  ~SystemNetworkContextManager();
-
-  // Gets the system NetworkContext, creating it if needed.
+  // Returns the System NetworkContext. May only be called after SetUp(). Does
+  // any initialization of the NetworkService that may be needed when first
+  // called.
   content::mojom::NetworkContext* GetContext();
 
+  // Permanently disables QUIC, both for NetworkContexts using the IOThread's
+  // NetworkService, and for those using the network service (if enabled).
+  void DisableQuic();
+
+ private:
   // NetworkContext using the network service, if the/ network service is
   // enabled. nullptr, otherwise.
   content::mojom::NetworkContextPtr network_service_network_context_;
@@ -65,6 +65,8 @@ class SystemNetworkContextManager {
   // Always initialized in SetUp, but it's only returned by Context() when the
   // network service is disabled.
   content::mojom::NetworkContextPtr io_thread_network_context_;
+
+  bool is_quic_allowed_ = true;
 
   DISALLOW_COPY_AND_ASSIGN(SystemNetworkContextManager);
 };

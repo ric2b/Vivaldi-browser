@@ -20,11 +20,12 @@ VivaldiAPIPermissions::GetAllPermissions() const {
       {APIPermission::kBookmarksPrivate, "bookmarksPrivate"},
       {APIPermission::kCalendar, "calendar"},
       {APIPermission::kDevtoolsPrivate, "devtoolsPrivate"},
-      {APIPermission::kEditCommand, "editcommand" },
+      {APIPermission::kEditCommand, "editcommand"},
       {APIPermission::kExtensionActionUtils, "extensionActionUtils"},
       {APIPermission::kHistoryPrivate, "historyPrivate"},
       {APIPermission::kImportData, "importData"},
       {APIPermission::kNotes, "notes"},
+      {APIPermission::kPrefs, "prefs"},
       {APIPermission::kRuntimePrivate, "runtimePrivate"},
       {APIPermission::kSessionsPrivate, "sessionsPrivate"},
       {APIPermission::kSettings, "settings"},
@@ -33,9 +34,10 @@ VivaldiAPIPermissions::GetAllPermissions() const {
       {APIPermission::kSync, "sync"},
       {APIPermission::kTabsPrivate, "tabsPrivate"},
       {APIPermission::kThumbnails, "thumbnails"},
-      {APIPermission::kZoom, "zoom"},
       {APIPermission::kUtilities, "utilities"},
       {APIPermission::kWebViewPrivate, "webViewPrivate"},
+      {APIPermission::kWindowPrivate, "windowPrivate"},
+      {APIPermission::kZoom, "zoom"},
   };
 
   std::vector<std::unique_ptr<APIPermissionInfo>> permissions;

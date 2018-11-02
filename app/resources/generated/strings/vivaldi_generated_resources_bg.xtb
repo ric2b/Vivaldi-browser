@@ -10,6 +10,7 @@
 <translation id="1054153489933238809">Отвори оригиналната карт&amp;ина в нов раздел</translation>
 <translation id="1056898198331236512">Внимание</translation>
 <translation id="1084824384139382525">Копирай &amp;адреса на препратката</translation>
+<translation id="1128109161498068552">Не позволявай на никой сайт да ползва монополни за системата съобщения за достъп до устройства MIDI</translation>
 <translation id="114140604515785785">Главна директория на разширение:</translation>
 <translation id="1163931534039071049">&amp;Покажи кода на рамката</translation>
 <translation id="1165039591588034296">Грешка</translation>
@@ -19,17 +20,20 @@
 <translation id="1187722533808055681">Брой събуждания</translation>
 <translation id="119944043368869598">Изчисти всичко</translation>
 <translation id="1221825588892235038">Само избраното</translation>
+<translation id="1238150413700645698">Защитено съдържание</translation>
 <translation id="1244303850296295656">Грешка в разширението</translation>
+<translation id="1274977772557788323">Настройки на съхраняване на плеър Flash на Adobe</translation>
 <translation id="1278049586634282054">Обследван изглед:</translation>
 <translation id="1297175357211070620">Назначение</translation>
 <translation id="1303101771013849280">Файл HTML с отметки</translation>
-<translation id="1303319084542230573">Добави принтер</translation>
 <translation id="1317502925920562130">Тази ли начална страница очаквате?</translation>
 <translation id="1368832886055348810">Отляво надясно</translation>
 <translation id="1430915738399379752">Отпечатване</translation>
+<translation id="1433811987160647649">Питай преди достъп</translation>
 <translation id="1451375123200651445">Страницата в един файл</translation>
 <translation id="1465176863081977902">Копирай &amp;адреса на звука</translation>
 <translation id="1476607407192946488">Настройки на &amp;езика</translation>
+<translation id="150411034776756821">Премахване на <ph name="SITE" /></translation>
 <translation id="1507705801791187716">Страхотно, няма грешки!</translation>
 <translation id="1515163294334130951">Пусни</translation>
 <translation id="1546280085599573572">Разширение промени страницата, показвана при щракване върху бутон „Начална страница“.</translation>
@@ -40,10 +44,13 @@
 <translation id="1601560923496285236">Приложи</translation>
 <translation id="1603914832182249871">(частно)</translation>
 <translation id="1616206807336925449">Разширението не изисква специални разрешения.</translation>
+<translation id="1620510694547887537">Камера</translation>
 <translation id="1627276047960621195">Описатели на файл</translation>
 <translation id="1635033183663317347">Инсталирано от попечителя.</translation>
 <translation id="1681120471812444678">Настройване за добавяне на принтери…</translation>
 <translation id="1682548588986054654">Създай частен прозорец</translation>
+<translation id="1698122934742150150">Само за текущата частна сесия</translation>
+<translation id="1706625117072057435">Увеличаване</translation>
 <translation id="1708338024780164500">(неразрешено)</translation>
 <translation id="1708713382908678956"><ph name="NAME_PH" /> (ИД: <ph name="ID_PH" />)</translation>
 <translation id="1723824996674794290">Създай &amp;прозорец</translation>
@@ -53,19 +60,23 @@
 <translation id="1744108098763830590">фонова страница</translation>
 <translation id="176587472219019965">Създай &amp;прозорец</translation>
 <translation id="1769104665586091481">Отвори препратката в нов &amp;прозорец</translation>
+<translation id="1789575671122666129">Изскачащи</translation>
 <translation id="1815083418640426271">Постави като текст</translation>
 <translation id="1828901632669367785">Отпечатай чрез системата…</translation>
 <translation id="1838288018605456492">Щракнете за настройване</translation>
 <translation id="1846308012215045257">Щракнете с [CTRL] за изпълнение на <ph name="PLUGIN_NAME" /></translation>
 <translation id="1850508293116537636">Завърти по &amp;часовника</translation>
 <translation id="1859234291848436338">Посока на писане</translation>
+<translation id="1886996562706621347">Позволи запитване от сайтовете дали да бъдат обработчик по подразбиране на даден протокол (препоръчително)</translation>
 <translation id="1901303067676059328">&amp;Избери всичко</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> тни</translation>
+<translation id="1963227389609234879">Премахни всички</translation>
 <translation id="1965328510789761112">Частна памет</translation>
 <translation id="1974060860693918893">Разширени</translation>
 <translation id="1979718561647571293">Тази ли пускова решетка очаквате?</translation>
 <translation id="1989112275319619282">Прелисти</translation>
 <translation id="1992397118740194946">Незададен</translation>
+<translation id="1994173015038366702">Адрес на сайта</translation>
 <translation id="2019718679933488176">&amp;Отвори звука в нов раздел</translation>
 <translation id="2050339315714019657">портретно</translation>
 <translation id="2076269580855484719">Скрий приставката</translation>
@@ -83,11 +94,14 @@
 <translation id="220138918934036434">Скрий бутона</translation>
 <translation id="2218515861914035131">Постави като текст</translation>
 <translation id="2249605167705922988">т.е. 1-5, 8, 11-13</translation>
+<translation id="225240747099314620">Позволи идентификатори на защитено съдържание (вероятно ще изисква повторен пуск на компютъра)</translation>
 <translation id="2263497240924215535">(забранена)</translation>
+<translation id="2277255602909579701">Бисквитки и данни на сайтове</translation>
 <translation id="2280486287150724112">Дясно поле</translation>
 <translation id="2282146716419988068">Процес на ГПУ</translation>
 <translation id="2301382460326681002">Главната директория на разширението е недействителна.</translation>
 <translation id="2318143611928805047">Размер на листа</translation>
+<translation id="2318923050469484167">Текуща частна сесия (<ph name="EMBEDDING" />)</translation>
 <translation id="2322193970951063277">Ползвай колонтитули</translation>
 <translation id="2326931316514688470">Пре&amp;зареди приложението</translation>
 <translation id="2327492829706409234">Разреши приложението</translation>
@@ -96,20 +110,23 @@
 <translation id="2357949918965361754">Ползвайте възможността, за да показвате съдържание от Chrome на вашия телевизор или други устройства.</translation>
 <translation id="2378982052244864789">Изберете директория на разширението.</translation>
 <translation id="2379281330731083556">Отпечатай чрез системата… <ph name="SHORTCUT_KEY" /></translation>
+<translation id="2381756643783702095">Питай преди преди изпращане (препоръчително)</translation>
 <translation id="241082044617551207">Неизвестна приставка</translation>
 <translation id="2423578206845792524">Запи&amp;ши картината като…</translation>
 <translation id="2424091190911472304">Изпълнявай винаги за <ph name="ORIGIN" /></translation>
 <translation id="2436707352762155834">минимални</translation>
 <translation id="2439110203301358333">Друга програма в компютъра добави разширение, вероятно променящо начина на работа на Vivaldi.</translation>
-<translation id="2445081178310039857">Изисква се главна директория на разширението.</translation>
+<translation id="2445081178310039857">Задължително въведете главна директория на разширението.</translation>
 <translation id="2470702053775288986">Забранени неподдържани разширения</translation>
-<translation id="2498436043474441766">Добави принтери</translation>
+<translation id="2476578072172137802">Настройки на сайта</translation>
+<translation id="2482878487686419369">Известия</translation>
 <translation id="2501797496290880632">Въведете бърз клавиш</translation>
 <translation id="2509495747794740764">Мащабът е число между 10 и 200.</translation>
 <translation id="253557089021624350">Брой жизнепризиви</translation>
 <translation id="2550212893339833758">Разменна памет</translation>
 <translation id="2553440850688409052">Скрий приставката</translation>
 <translation id="2580924999637585241">Всичко: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
+<translation id="26224892172169984">Не позволявай на никой сайт да обработва протоколи</translation>
 <translation id="2662876636500006917">Магазин на Chrome</translation>
 <translation id="2678063897982469759">Разреши повторно</translation>
 <translation id="2679385451463308372">Отпечатай чрез системата…</translation>
@@ -118,6 +135,7 @@
 <translation id="2726934403674109201">(всичко: <ph name="COUNT" />)</translation>
 <translation id="2785873697295365461">Описатели на файл</translation>
 <translation id="2809586584051668049">и още <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
+<translation id="2812989263793994277">Не показвай картини</translation>
 <translation id="2844111009524261443">Изпълни след щракване</translation>
 <translation id="2847759467426165163">Прехвърли към</translation>
 <translation id="2850541429955027218">Добави темата</translation>
@@ -126,6 +144,8 @@
 <translation id="2889064240420137087">Отвори препратката в…</translation>
 <translation id="2890678560483811744">Страницата е извън границите</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> не можа да се свърже с принтера. Уверете се, че принтерът е свързан и опитайте отново.</translation>
+<translation id="2904456025988372123">Питай при опит на сайт за автоматично изтегляне на още файлове след първия файл</translation>
+<translation id="2913331724188855103">Позволи на сайтовете да записват и четат данните в бисквитките (препоръчително)</translation>
 <translation id="2914303854539667666">Генерирай парола</translation>
 <translation id="2916745397441987255">Търсене на разширения</translation>
 <translation id="2932883381142163287">Докладвай злоупотреба</translation>
@@ -135,21 +155,25 @@
 <translation id="299483336428448530">Инсталирано от родителя.</translation>
 <translation id="3003623123441819449">Кеш за CSS</translation>
 <translation id="3012631534724231212">(в iframe)</translation>
+<translation id="3013291976881901233">Устройства MIDI</translation>
 <translation id="3021678814754966447">&amp;Покажи кода на рамката</translation>
 <translation id="302620147503052030">Покажи бутона</translation>
 <translation id="3031601332414921114">Поднови отпечатването</translation>
 <translation id="3036546437875325427">Разреши Flash</translation>
+<translation id="3038675903128704560">Не позволявай на никой сайт да ползва приставка за достъп до компютъра</translation>
 <translation id="3046910703532196514">Страницата с всичко</translation>
 <translation id="3067198360141518313">Изпълни приставката</translation>
 <translation id="3080207940057008665">Друга програма в компютъра добави тема, вероятно променяща начина на работа на Vivaldi.</translation>
 <translation id="3084548735795614657">Влачете тук за инсталиране</translation>
 <translation id="3122464029669770682">ЦПУ</translation>
 <translation id="3124111068741548686">Потребителски държала</translation>
+<translation id="3127156390846601284">С това изтривате съхраняваните в устройството ви данни на всички показани сайтове. Продължаване?</translation>
 <translation id="3129173833825111527">Ляво поле</translation>
 <translation id="3144647712221361880">Отвори препратката като</translation>
 <translation id="3149510190863420837">Приложения на Chrome</translation>
 <translation id="3154429428035006212">Извън линия повече от 1 месец</translation>
 <translation id="3222066309010235055">Предрендиран: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
+<translation id="3227137524299004712">Микрофон</translation>
 <translation id="32279126412636473">Презареди (⌘R)</translation>
 <translation id="3241680850019875542">Изберете главната директория на разширението за пакетиране. Ако обновявате, изберете и файл с частен ключ.</translation>
 <translation id="3269093882174072735">Зареди картината</translation>
@@ -169,33 +193,42 @@
 <translation id="3347086966102161372">Копирай &amp;адреса на картината</translation>
 <translation id="335985608243443814">Прелисти…</translation>
 <translation id="3360297538363969800">Провалено отпечатване. Моля, проверете принтера и опитайте отново.</translation>
+<translation id="3378503599595235699">Пази локално данните само до изход от браузъра</translation>
 <translation id="3378572629723696641">Вероятно разширението е повредено.</translation>
 <translation id="3396331542604645348">Избраният принтер е недостъпен или е инсталиран неправилно. Проверете принтера или опитайте да изберете друг.</translation>
+<translation id="3432227430032737297">Премахни показаните</translation>
 <translation id="3435896845095436175">Разреши</translation>
 <translation id="3439970425423980614">Отваряне на PDF в Preview</translation>
+<translation id="3440761377721825626">Питай при опит на сайт да ползва приставка за достъп до компютъра</translation>
 <translation id="345693547134384690">Отвори &amp;картината в нов раздел</translation>
 <translation id="3467267818798281173">Питай Google за предложения</translation>
 <translation id="3468745736289470383">Споделяне на екрана</translation>
 <translation id="3487007233252413104">безименна функция</translation>
+<translation id="3494769164076977169">Питай при опит на сайт за автоматично изтегляне на още файлове след първия файл (препоръчително)</translation>
 <translation id="3505030558724226696">Оттегли достъпа до устройства</translation>
 <translation id="3511307672085573050">Копирай &amp;адреса на препратката</translation>
+<translation id="3523642406908660543">Питай при опит на сайт да ползва приставка за достъп до компютъра (препоръчително)</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; споделя принтер &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; с вашата група: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. В случай че приемете, всички членове на групата ще могат да печатат на принтера.</translation>
 <translation id="3587482841069643663">всички</translation>
 <translation id="3618849550573277856">Провери „<ph name="LOOKUP_STRING" />“</translation>
 <translation id="3627588569887975815">Отвори препратката в &amp;частен прозорец</translation>
 <translation id="3640006360782160348">Прекрати настройването</translation>
+<translation id="3668823961463113931">Обработчици</translation>
 <translation id="3678156199662914018">Разширение: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Заявка за споделяне на екрана от <ph name="APP_NAME" /></translation>
 <translation id="370665806235115550">Зареждане…</translation>
 <translation id="3725367690636977613">страници</translation>
 <translation id="3727187387656390258">Обследвай изскачащия елемент</translation>
 <translation id="3730639321086573427">Локални назначения</translation>
+<translation id="3744111561329211289">Фоново сверяване</translation>
 <translation id="3760460896538743390">Обследвай &amp;фоновата страница</translation>
 <translation id="3763401818161139108">Изпълнявай винаги за <ph name="ORIGIN" /></translation>
 <translation id="3797900183766075808">&amp;Потърси за „<ph name="SEARCH_TERMS" />“ чрез <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3798449238516105146">Версия</translation>
+<translation id="3800806661949714323">Показвай всички (препоръчително)</translation>
+<translation id="383891835335927981">Няма увеличени или намалени сайтове</translation>
 <translation id="385051799172605136">Назад</translation>
-<translation id="3855441664322950881">Пакетирай разширението</translation>
+<translation id="3855441664322950881">Пакетиране на разширение</translation>
 <translation id="3862134173397075045">Добре дошли в прехвърляне по Chrome!</translation>
 <translation id="3866249974567520381">Описание</translation>
 <translation id="3899879303189199559">Извън линия повече от 1 година</translation>
@@ -208,6 +241,7 @@
 <translation id="3936390757709632190">&amp;Отвори звука в нов раздел</translation>
 <translation id="3943582379552582368">&amp;Назад</translation>
 <translation id="3948116654032448504">&amp;Потърси картината в <ph name="SEARCH_ENGINE" /></translation>
+<translation id="3955193568934677022">Позволи на сайтовете да пускат защитено съдържание (препоръчително)</translation>
 <translation id="3978267865113951599">(забило)</translation>
 <translation id="3979395879372752341">Добавено ново разширение (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
@@ -222,6 +256,7 @@
 <translation id="4091434297613116013">листа хартия</translation>
 <translation id="4096508467498758490">Забрани разширенията в режим на разработка</translation>
 <translation id="4100839878934973028">Друга програма в компютъра добави приложение, вероятно променящо начина на работа на Vivaldi.</translation>
+<translation id="4115080753528843955">Определени услуги за съдържание ползват уникални идентификатори за удостоверен достъп до защитено съдържание</translation>
 <translation id="411666854932687641">Частна памет</translation>
 <translation id="4130207949184424187">Разширение промени страницата, показвана при търсене от омнибокса.</translation>
 <translation id="4131410914670010031">черно-бяло</translation>
@@ -231,11 +266,8 @@
 <translation id="4206944295053515692">Питай Google за предложения</translation>
 <translation id="4240511609794012987">Споделена памет</translation>
 <translation id="4256316378292851214">Запи&amp;ши клипа като…</translation>
+<translation id="4278390842282768270">Позволи</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> КБ (<ph name="NUM_KILOBYTES_LIVE" /> КБ на живо)</translation>
-<translation id="431291515148403474">Добавянето на принтери към Отпечатване в облак ви позволява да отпечатвате
-          навсякъде от всякъде. Споделете принтерите си с когото решите
-          отпечатвайте на тях през Vivaldi от своя телефон, таблет,
-          компютър или от всяко свързано с интернет устройство.</translation>
 <translation id="4345587454538109430">Конфигурирай…</translation>
 <translation id="4348766275249686434">Събирай грешките</translation>
 <translation id="4363771538994847871">Няма намерени назначения за прехвърляне. Трябва ви помощ?</translation>
@@ -269,23 +301,26 @@
 <translation id="4839303808932127586">Запи&amp;ши клипа като…</translation>
 <translation id="4850258771229959924">Покажи с инструменти за разработка</translation>
 <translation id="488785315393301722">Покажи подробности</translation>
+<translation id="4907306957610201395">Категория на разрешение</translation>
 <translation id="4911714727432509308">Няма разширение, за което да е присвоен бързият клавиш.</translation>
 <translation id="4912643508233590958">Брой събуждания</translation>
 <translation id="4918086044614829423">Приеми</translation>
-<translation id="4927301649992043040">Пакетирай разширението</translation>
+<translation id="4927301649992043040">Пакетиране на разширение</translation>
 <translation id="4927753642311223124">Нататък, тук няма нищо.</translation>
 <translation id="4988526792673242964">Страници</translation>
 <translation id="49896407730300355">Завърти срещу ча&amp;совника</translation>
 <translation id="4989966318180235467">Обследвай &amp;фоновата страница</translation>
+<translation id="4994474651455208930">Позволи запитване от сайтовете дали да бъдат обработчик по подразбиране на даден протокол</translation>
+<translation id="5000922062037820727">Блокирай (препоръчително)</translation>
 <translation id="5027562294707732951">Добави разширението</translation>
+<translation id="5036662165765606524">Не позволявай на никой сайт да изтегля автоматично множество файлове</translation>
 <translation id="5039804452771397117">Позволи</translation>
+<translation id="5063480226653192405">Използване</translation>
+<translation id="5068918910148307423">Не позволявай на последно затворени сайтове да приключват изпращането и получаването на данни</translation>
 <translation id="5087249366037322692">Добавено от трета страна</translation>
 <translation id="5116628073786783676">Запи&amp;ши звука като…</translation>
 <translation id="5143374789336132547">Разширение „<ph name="EXTENSION_NAME" />“ промени страницата, показвана при щракване върху бутон „Начална страница“.</translation>
 <translation id="5154108062446123722">Разширени настройки на „<ph name="PRINTING_DESTINATION" />“</translation>
-<translation id="5154383699530644092">Можете да добавяте принтери към компютъра с щракване по „Добави принтер“
-          по-долу. Ако нямате такива, пак ще можете да запишете файла като PDF
-          или да го запишете в Диск на Google.</translation>
 <translation id="5154917547274118687">Памет</translation>
 <translation id="5171343362375269016">Разменна памет</translation>
 <translation id="5233019165164992427">Дебъгващ порт в NaCl</translation>
@@ -323,29 +358,37 @@
 <translation id="5581700288664681403">Зареждане на <ph name="CLOUD_PRINT_NAME" />…</translation>
 <translation id="5623842676595125836">Дневник</translation>
 <translation id="5627086634964711283">Контролира и страницата, показвана при щракване върху бутон „Начална страница“.</translation>
+<translation id="563535393368633106">Питай преди достъп (препоръчително)</translation>
 <translation id="5646376287012673985">Местоположение</translation>
+<translation id="5649053991847567735">Автоизтегляниe</translation>
+<translation id="5677928146339483299">Блокирай</translation>
 <translation id="5707185214361380026">Провалено зареждане на разширение от:</translation>
 <translation id="5715711091495208045">Приставков брокер: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5729996640881880439">Не сме в състояние да покажем кода на грешката — за съжаление.</translation>
 <translation id="5746169159649715125">Запиши като PDF</translation>
 <translation id="5759728514498647443">Изпратените за печат документи чрез <ph name="APP_NAME" /> могат да бъдат прочетени с <ph name="APP_NAME" />.</translation>
 <translation id="5764483294734785780">Запи&amp;ши звука като…</translation>
+<translation id="577624874850706961">Търсене в бисквитките</translation>
 <translation id="5780973441651030252">Приоритет на процеса</translation>
 <translation id="5804241973901381774">Разрешения</translation>
 <translation id="5828633471261496623">Отпечатване…</translation>
 <translation id="5829401023154985950">Организирай…</translation>
 <translation id="583281660410589416">Неизвестен</translation>
+<translation id="5838456317242088717">За текущата частна сесия</translation>
 <translation id="5848934677402291689">Записване на PDF в ход…</translation>
 <translation id="5849869942539715694">Пакетирай разширение...</translation>
+<translation id="5908769186679515905">Блокирай изпълнение на Flash от сайтовете</translation>
 <translation id="5910363049092958439">Запи&amp;ши картината като…</translation>
 <translation id="59174027418879706">Разрешено</translation>
 <translation id="5956585768868398362">Тази ли страница за търсене очаквате?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (пик <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="5965661248935608907">Контролира и страницата, показвана при щракване върху бутон „Начална страница“ или при търсене от омнибокса.</translation>
 <translation id="5979421442488174909">Преве&amp;ди на <ph name="LANGUAGE" /></translation>
+<translation id="6011449291337289699">Изчистване на данните на сайта</translation>
 <translation id="6025215716629925253">Проследяване на стек</translation>
 <translation id="6040143037577758943">Затвори</translation>
 <translation id="6042308850641462728">Още</translation>
+<translation id="6059925163896151826">Устройства USB</translation>
 <translation id="6082651258230788217">Показвай в лентата</translation>
 <translation id="6086814797483779854">Изпълни след щракване</translation>
 <translation id="6086846494333236931">Инсталирано от администратора</translation>
@@ -354,8 +397,10 @@
 <translation id="6124650939968185064">Следните разширения зависят от разширението:</translation>
 <translation id="6147020289383635445">Провален предизглед.</translation>
 <translation id="6156863943908443225">Кеш за скриптове</translation>
+<translation id="6165508094623778733">Повече</translation>
 <translation id="6169666352732958425">Прехвърляне на работния плот е невъзможно.</translation>
 <translation id="6171948306033499786">Задръж отпечатването</translation>
+<translation id="6196640612572343990">Блокирай бисквитките на трети страни</translation>
 <translation id="6196854373336333322">Разширение „<ph name="EXTENSION_NAME" />“ пое контрол над настройките на сървър посредник, което значи, че може да променя, прекъсва и дори да следи всичко, докато сте на линия. Ако не сте сигурен на какво се дължи, вероятно не искате промяната да остане в сила.</translation>
 <translation id="6206311232642889873">&amp;Копирай картината</translation>
 <translation id="6220413761270491930">Грешка при зареждане на разширението</translation>
@@ -368,12 +413,14 @@
 <translation id="6268252012308737255">Отвори в <ph name="APP" /></translation>
 <translation id="6272643420381259437">Възникна грешка (<ph name="ERROR" />) при изтегляне на приставката</translation>
 <translation id="6273677812470008672">Качество</translation>
+<translation id="6295158916970320988">Всички сайтове</translation>
 <translation id="6295855836753816081">Записване…</translation>
 <translation id="6308937455967653460">Запиши пр&amp;епратката като…</translation>
 <translation id="6314335155547195432">Генерирай парола</translation>
 <translation id="6326855256003666642">Брой жизнепризиви</translation>
 <translation id="6348109281845364640">Провалено настройване на принтера</translation>
 <translation id="6370021412472292592">Зареждане на манифест е невъзможно.</translation>
+<translation id="6385543213911723544">Сайтовете могат да записват и четат данните в бисквитките</translation>
 <translation id="6398765197997659313">Изход от цял екран</translation>
 <translation id="6406303162637086258">Симулирай повторен пуск на браузъра</translation>
 <translation id="6412931879992742813">Създай частен прозорец</translation>
@@ -392,14 +439,17 @@
 <translation id="6655190889273724601">Разреши режим на разработка</translation>
 <translation id="6691936601825168937">Н&amp;апред</translation>
 <translation id="6706210727756204531">Обхват</translation>
+<translation id="6782111308708962316">Препятствай третостранни сайтове да записват и четат данните в бисквитките</translation>
 <translation id="6786747875388722282">Разширения</translation>
 <translation id="6787839852456839824">Бързи клавиши</translation>
 <translation id="6788210894632713004">Непакетирано разширение</translation>
 <translation id="6798954102094737107">Приставка: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6807889908376551050">Покажи всички…</translation>
 <translation id="6812841287760418429">Запази промените</translation>
+<translation id="6817174620439930047">Питай при опит на сайт да ползва монополни за системата съобщения за достъп до устройства MIDI (препоръчително)</translation>
 <translation id="682123305478866682">Прехвърли работния плот</translation>
 <translation id="6824564591481349393">Копирай адреса за &amp;е-поща</translation>
+<translation id="6840155290835956714">Питай преди преди изпращане</translation>
 <translation id="6841186874966388268">Грешки</translation>
 <translation id="6886871292305414135">Отвори препратката в нов &amp;раздел</translation>
 <translation id="6892812721183419409">Отвори препратката като <ph name="USER" /></translation>
@@ -418,16 +468,20 @@
 <translation id="7006634003215061422">Долно поле</translation>
 <translation id="7013485839273047434">Получи още разширения</translation>
 <translation id="7030031465713069059">Запиши паролата</translation>
+<translation id="7053983685419859001">Блокирай</translation>
 <translation id="708060913198414444">Копирай &amp;адреса на звука</translation>
+<translation id="7084192839369222683">Изпълнявай само важното съдържание</translation>
 <translation id="7144878232160441200">Повтори</translation>
 <translation id="7175353351958621980">Заредено от:</translation>
 <translation id="7186088072322679094">Съхрани в лентата</translation>
 <translation id="7206693748120342859">Изтегляне на <ph name="PLUGIN_NAME" />…</translation>
 <translation id="7223775956298141902">Ууф… Нямате разширения :-(</translation>
+<translation id="7270858098575133036">Питай при опит на сайт да ползва монополни за системата съобщения за достъп до устройства MIDI</translation>
 <translation id="7287143125007575591">Достъпът е отказан.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> тни</translation>
 <translation id="7293919849802650062">Добре дошли в прехвърляне по Vivaldi!</translation>
 <translation id="7309257895202129721">Покажи &amp;контролите</translation>
+<translation id="7311079019872751559">Неограничен достъп на приставки</translation>
 <translation id="7339898014177206373">Създай прозорец</translation>
 <translation id="7346909386216857016">ДА, ясно</translation>
 <translation id="7361297102842600584">Щракнете с десен за изпълнение на <ph name="PLUGIN_NAME" /></translation>
@@ -435,6 +489,7 @@
 <translation id="7401543881546089382">Изтриване на бързия клавиш</translation>
 <translation id="7412226954991670867">Памет на ГПУ</translation>
 <translation id="7421925624202799674">&amp;Покажи кода на страницата</translation>
+<translation id="7423098979219808738">Питай първо</translation>
 <translation id="7427348830195639090">Фонова страница: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7438940380767210568">Настройване на принтера…</translation>
 <translation id="7453008956351770337">С избирането на принтера правите допълнение към разрешението за достъп до вашия принтер:</translation>
@@ -447,6 +502,7 @@
 <translation id="7576690715254076113">Свързване</translation>
 <translation id="7629827748548208700">Раздел: <ph name="TAB_NAME" /></translation>
 <translation id="7658239707568436148">Отказ</translation>
+<translation id="7661259717474717992">Позволи на сайтовете да записват и четат данните в бисквитките</translation>
 <translation id="7663719505383602579">Получател: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Инсталирано от администратора</translation>
 <translation id="7685049629764448582">Памет на JavaScript</translation>
@@ -455,6 +511,7 @@
 <translation id="7704305437604973648">Задача</translation>
 <translation id="7705600705238488017">Защо не посетите <ph name="BEGIN_LINK" />Магазина на Chrome<ph name="END_LINK" />?</translation>
 <translation id="7710568461918838723">Пре&amp;хвърли…</translation>
+<translation id="7751260505918304024">Показвай всички</translation>
 <translation id="7760004034676677601">Тази ли пускова решетка очаквате?</translation>
 <translation id="7771452384635174008">Оформление</translation>
 <translation id="7782102568078991263">Няма други предложения от Google</translation>
@@ -488,6 +545,7 @@
 
 Дръжте файла с ключ на сигурно място. Ще ви потрябва за създаване на нови версии на разширението.</translation>
 <translation id="8004582292198964060">Браузър</translation>
+<translation id="8018313076035239964">Контрол над показваното съдържание и ползваната от сайтовете информация</translation>
 <translation id="8023801379949507775">Обнови разширенията</translation>
 <translation id="8032244173881942855">Прехвърляне на раздела е невъзможно.</translation>
 <translation id="8069615408251337349">Отпечатване в облак</translation>
@@ -498,13 +556,17 @@
 <translation id="8188120771410500975">&amp;Проверявай текстовите полета</translation>
 <translation id="8259581864063078725">Щракнете за намиране на отпечатващо приложение, което да ползвате с принтера.</translation>
 <translation id="8261378640211443080">Разширението не е в списъка на <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> и може да е било добавено без ваше знание.</translation>
+<translation id="8261506727792406068">Изтрий</translation>
+<translation id="8270242299912238708">Документи PDF</translation>
 <translation id="8294431847097064396">Източник</translation>
 <translation id="8335587457941836791">Откачи от лавицата</translation>
 <translation id="8338952601723052325">Сайт на разработчика</translation>
+<translation id="8339059274628563283">Локално съхранявани данни на <ph name="SITE" /></translation>
 <translation id="8351419472474436977">Разширение пое контрол над настройките на сървър посредник, което значи, че може да променя, прекъсва и дори да следи всичко, докато сте на линия. Ако не сте сигурен на какво се дължи, вероятно не искате промяната да остане в сила.</translation>
 <translation id="8357224663288891423">Бързи клавиши за разширения и приложения</translation>
 <translation id="8382913212082956454">Копирай адреса за &amp;е-поща</translation>
 <translation id="839736845446313156">Регистрирай</translation>
+<translation id="8413385045638830869">Питай първо (препоръчително)</translation>
 <translation id="8434480141477525001">Дебъгващ порт в NaCl</translation>
 <translation id="8437331208797669910">Достъп до страницата</translation>
 <translation id="8449008133205184768">Постави и оформи</translation>
@@ -516,6 +578,7 @@
 <translation id="8523849605371521713">Добавено от фирмено правило</translation>
 <translation id="8546306075665861288">Кеш за картини</translation>
 <translation id="8569682776816196752">Няма намерени назначения</translation>
+<translation id="857943718398505171">Позволи (препоръчително)</translation>
 <translation id="8584280235376696778">&amp;Отвори клипа в нов раздел</translation>
 <translation id="8605428685123651449">Памет на SQLite</translation>
 <translation id="8615618338313291042">Частно приложение: <ph name="APP_NAME" /></translation>
@@ -525,6 +588,7 @@
 <translation id="8658595122208653918">Променяне на настройките на принтера…</translation>
 <translation id="8661290697478713397">Отвори препратката в &amp;частен прозорец</translation>
 <translation id="8664389313780386848">&amp;Покажи кода на страницата</translation>
+<translation id="8708000541097332489">Изчиствай при изход</translation>
 <translation id="8714838604780058252">Включи фоновите графики</translation>
 <translation id="8719653885894320876">Провалено изтегляне на <ph name="PLUGIN_NAME" /></translation>
 <translation id="873545264931343897">Презаредете страницата след обновяване на <ph name="PLUGIN_NAME" /> за задействане на приставката</translation>
@@ -550,6 +614,7 @@
 <translation id="8944779739948852228">Установен принтер</translation>
 <translation id="895944840846194039">Памет на JavaScript</translation>
 <translation id="8962083179518285172">Скрий подробностите</translation>
+<translation id="8973557916016709913">Премахване на увеличаването</translation>
 <translation id="8996526648899750015">Добави профил…</translation>
 <translation id="9003647077635673607">Позволи за всички сайтове</translation>
 <translation id="9027459031423301635">Отвори препратката в нов &amp;раздел</translation>
@@ -559,6 +624,7 @@
 <translation id="9153341767479566106">Други разширения с провалено зареждане:</translation>
 <translation id="9170848237812810038">&amp;Отмени</translation>
 <translation id="9215293857209265904"><ph name="EXTENSION_NAME" /> е добавено</translation>
+<translation id="9218430445555521422">Задай по подразбиране</translation>
 <translation id="9219103736887031265">Картини</translation>
 <translation id="93766956588638423">Поправи разширението</translation>
 <translation id="98515147261107953">пейзажно</translation>

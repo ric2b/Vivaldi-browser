@@ -31,9 +31,13 @@ namespace blink {
 
 namespace {
 
-std::pair<unsigned, unsigned> GetMarkerPaintOffsets(
+// If an inline text box is truncated by an ellipsis, text box markers paint
+// over the ellipsis and other marker types don't. Other marker types that want
+// the normal behavior should use MarkerPaintStartAndEnd().
+std::pair<unsigned, unsigned> GetTextMatchMarkerPaintOffsets(
     const DocumentMarker& marker,
     const InlineTextBox& text_box) {
+  DCHECK_EQ(DocumentMarker::kTextMatch, marker.GetType());
   const unsigned start_offset = marker.StartOffset() > text_box.Start()
                                     ? marker.StartOffset() - text_box.Start()
                                     : 0U;
@@ -266,14 +270,15 @@ void InlineTextBoxPainter::Paint(const PaintInfo& paint_info,
   LayoutUnit logical_extent = logical_visual_overflow.Width();
 
   // We round the y-axis to ensure consistent line heights.
-  LayoutPoint adjusted_paint_offset =
-      LayoutPoint(paint_offset.X(), LayoutUnit(paint_offset.Y().Round()));
+  LayoutPoint adjusted_paint_offset(paint_offset);
 
   if (inline_text_box_.IsHorizontal()) {
+    adjusted_paint_offset.SetY(LayoutUnit(adjusted_paint_offset.Y().Round()));
     if (!paint_info.GetCullRect().IntersectsHorizontalRange(
             logical_start, logical_start + logical_extent))
       return;
   } else {
+    adjusted_paint_offset.SetX(LayoutUnit(adjusted_paint_offset.X().Round()));
     if (!paint_info.GetCullRect().IntersectsVerticalRange(
             logical_start, logical_start + logical_extent))
       return;
@@ -318,8 +323,14 @@ void InlineTextBoxPainter::Paint(const PaintInfo& paint_info,
       inline_text_box_.GetLineLayoutItem().StyleRef(
           inline_text_box_.IsFirstLineStyle());
 
-  LayoutPoint box_origin(inline_text_box_.PhysicalLocation());
-  box_origin.Move(adjusted_paint_offset.X(), adjusted_paint_offset.Y());
+  LayoutPoint box_origin(inline_text_box_.PhysicalLocation() + paint_offset);
+
+  if (inline_text_box_.IsHorizontal()) {
+    box_origin.SetY(LayoutUnit(box_origin.Y().Round()));
+  } else {
+    box_origin.SetX(LayoutUnit(box_origin.X().Round()));
+  }
+
   LayoutRect box_rect(box_origin, LayoutSize(inline_text_box_.LogicalWidth(),
                                              inline_text_box_.LogicalHeight()));
 
@@ -328,8 +339,19 @@ void InlineTextBoxPainter::Paint(const PaintInfo& paint_info,
       inline_text_box_.GetLineLayoutItem().GetText();
   // TODO(szager): Figure out why this CHECK sometimes fails, it shouldn't.
   CHECK(inline_text_box_.Start() + length <= layout_item_string.length());
+  String first_line_string;
+  if (inline_text_box_.IsFirstLineStyle()) {
+    first_line_string = layout_item_string;
+    ApplyTextTransform(
+        inline_text_box_.GetLineLayoutItem().Style(
+            inline_text_box_.IsFirstLineStyle()),
+        first_line_string,
+        inline_text_box_.GetLineLayoutItem().PreviousCharacter());
+  }
   StringView string =
-      StringView(layout_item_string, inline_text_box_.Start(), length);
+      StringView(inline_text_box_.IsFirstLineStyle() ? first_line_string
+                                                     : layout_item_string,
+                 inline_text_box_.Start(), length);
   int maximum_length = inline_text_box_.GetLineLayoutItem().TextLength() -
                        inline_text_box_.Start();
 
@@ -392,12 +414,14 @@ void InlineTextBoxPainter::Paint(const PaintInfo& paint_info,
   int ascent = font_data ? font_data->GetFontMetrics().Ascent() : 0;
   LayoutPoint text_origin(box_origin.X(), box_origin.Y() + ascent);
 
+  const DocumentMarkerVector& markers_to_paint = ComputeMarkersToPaint();
+
   // 1. Paint backgrounds behind text if needed. Examples of such backgrounds
   // include selection and composition highlights.
   if (paint_info.phase != kPaintPhaseSelection &&
       paint_info.phase != kPaintPhaseTextClip && !is_printing) {
-    PaintDocumentMarkers(paint_info, box_origin, style_to_use, font,
-                         DocumentMarkerPaintPhase::kBackground);
+    PaintDocumentMarkers(markers_to_paint, paint_info, box_origin, style_to_use,
+                         font, DocumentMarkerPaintPhase::kBackground);
     if (have_selection) {
       if (combined_text)
         PaintSelection<InlineTextBoxPainter::PaintOptions::kCombinedText>(
@@ -426,17 +450,15 @@ void InlineTextBoxPainter::Paint(const PaintInfo& paint_info,
                          .ContainingBlock()
                          .Style()
                          ->IsLeftToRightDirection();
+
+  const PaintOffsets& selection_offsets =
+      ApplyTruncationToPaintOffsets({static_cast<unsigned>(selection_start),
+                                     static_cast<unsigned>(selection_end)});
+  selection_start = selection_offsets.start;
+  selection_end = selection_offsets.end;
   if (inline_text_box_.Truncation() != kCNoTruncation) {
     // In a mixed-direction flow the ellipsis is at the start of the text
     // rather than at the end of it.
-    selection_start =
-        ltr == flow_is_ltr
-            ? std::min<int>(selection_start, inline_text_box_.Truncation())
-            : std::max<int>(selection_start, inline_text_box_.Truncation());
-    selection_end =
-        ltr == flow_is_ltr
-            ? std::min<int>(selection_end, inline_text_box_.Truncation())
-            : std::max<int>(selection_end, inline_text_box_.Truncation());
     length =
         ltr == flow_is_ltr ? inline_text_box_.Truncation() : text_run.length();
   }
@@ -517,9 +539,10 @@ void InlineTextBoxPainter::Paint(const PaintInfo& paint_info,
     text_painter.Paint(selection_start, selection_end, length, selection_style);
   }
 
-  if (paint_info.phase == kPaintPhaseForeground)
-    PaintDocumentMarkers(paint_info, box_origin, style_to_use, font,
-                         DocumentMarkerPaintPhase::kForeground);
+  if (paint_info.phase == kPaintPhaseForeground) {
+    PaintDocumentMarkers(markers_to_paint, paint_info, box_origin, style_to_use,
+                         font, DocumentMarkerPaintPhase::kForeground);
+  }
 
   if (should_rotate) {
     context.ConcatCTM(TextPainterBase::Rotation(
@@ -544,38 +567,61 @@ bool InlineTextBoxPainter::ShouldPaintTextBox(const PaintInfo& paint_info) {
   return true;
 }
 
-unsigned InlineTextBoxPainter::MarkerPaintStart(const DocumentMarker& marker) {
+InlineTextBoxPainter::PaintOffsets
+InlineTextBoxPainter::ApplyTruncationToPaintOffsets(
+    const InlineTextBoxPainter::PaintOffsets& offsets) {
+  const unsigned short truncation = inline_text_box_.Truncation();
+  if (truncation == kCNoTruncation)
+    return offsets;
+
+  // If we're in mixed-direction mode (LTR text in an RTL box or vice-versa),
+  // the truncation ellipsis is at the *start* of the text box rather than the
+  // end.
+  bool ltr = inline_text_box_.IsLeftToRightDirection();
+  bool flow_is_ltr = inline_text_box_.GetLineLayoutItem()
+                         .ContainingBlock()
+                         .Style()
+                         ->IsLeftToRightDirection();
+
+  // truncation is relative to the start of the InlineTextBox, not the text
+  // node.
+  if (ltr == flow_is_ltr) {
+    return {std::min<unsigned>(offsets.start, truncation),
+            std::min<unsigned>(offsets.end, truncation)};
+  }
+
+  return {std::max<unsigned>(offsets.start, truncation),
+          std::max<unsigned>(offsets.end, truncation)};
+}
+
+InlineTextBoxPainter::PaintOffsets InlineTextBoxPainter::MarkerPaintStartAndEnd(
+    const DocumentMarker& marker) {
+  // Text match markers are painted differently (in an inline text box truncated
+  // by an ellipsis, they paint over the ellipsis) and so should not use this
+  // function.
+  DCHECK_NE(DocumentMarker::kTextMatch, marker.GetType());
   DCHECK(inline_text_box_.Truncation() != kCFullTruncation);
   DCHECK(inline_text_box_.Len());
 
   // Start painting at the beginning of the text or the specified underline
-  // start offset, whichever is higher.
+  // start offset, whichever is greater.
   unsigned paint_start =
       std::max(inline_text_box_.Start(), marker.StartOffset());
-  // Cap the maximum paint start to (if no truncation) the last character,
-  // else the last character before the truncation ellipsis.
-  return std::min(paint_start, (inline_text_box_.Truncation() == kCNoTruncation)
-                                   ? inline_text_box_.end()
-                                   : inline_text_box_.Start() +
-                                         inline_text_box_.Truncation() - 1);
-}
-
-unsigned InlineTextBoxPainter::MarkerPaintEnd(const DocumentMarker& marker) {
-  DCHECK(inline_text_box_.Truncation() != kCFullTruncation);
-  DCHECK(inline_text_box_.Len());
+  // Cap the maximum paint start to the last character in the text box.
+  paint_start = std::min(paint_start, inline_text_box_.end());
 
   // End painting just past the end of the text or the specified underline end
-  // offset, whichever is lower.
+  // offset, whichever is less.
   unsigned paint_end = std::min(
       inline_text_box_.end() + 1,
       marker.EndOffset());  // end() points at the last char, not past it.
-  // Cap the maximum paint end to (if no truncation) one past the last
-  // character, else one past the last character before the truncation
-  // ellipsis.
-  return std::min(paint_end, (inline_text_box_.Truncation() == kCNoTruncation)
-                                 ? inline_text_box_.end() + 1
-                                 : inline_text_box_.Start() +
-                                       inline_text_box_.Truncation());
+
+  // paint_start and paint_end are currently relative to the start of the text
+  // node. Subtract to make them relative to the start of the InlineTextBox.
+  paint_start -= inline_text_box_.Start();
+  paint_end -= inline_text_box_.Start();
+
+  return ApplyTruncationToPaintOffsets({paint_start, paint_end});
 }
 
 void InlineTextBoxPainter::PaintSingleMarkerBackgroundRun(
@@ -587,13 +633,6 @@ void InlineTextBoxPainter::PaintSingleMarkerBackgroundRun(
     int start_pos,
     int end_pos) {
   if (background_color == Color::kTransparent)
-    return;
-
-  int s_pos =
-      std::max(start_pos - static_cast<int>(inline_text_box_.Start()), 0);
-  int e_pos = std::min(end_pos - static_cast<int>(inline_text_box_.Start()),
-                       static_cast<int>(inline_text_box_.Len()));
-  if (s_pos >= e_pos)
     return;
 
   int delta_y =
@@ -608,10 +647,95 @@ void InlineTextBoxPainter::PaintSingleMarkerBackgroundRun(
                           box_origin.Y().ToFloat() - delta_y);
   context.DrawHighlightForText(font, inline_text_box_.ConstructTextRun(style),
                                local_origin, sel_height, background_color,
-                               s_pos, e_pos);
+                               start_pos, end_pos);
+}
+
+DocumentMarkerVector InlineTextBoxPainter::ComputeMarkersToPaint() const {
+  // We don't render composition or spelling markers that overlap suggestion
+  // markers.
+
+  Node* const node = inline_text_box_.GetLineLayoutItem().GetNode();
+  if (!node)
+    return DocumentMarkerVector();
+
+  DocumentMarkerController& document_marker_controller =
+      inline_text_box_.GetLineLayoutItem().GetDocument().Markers();
+
+  // Note: DocumentMarkerController::MarkersFor() returns markers sorted by
+  // start offset.
+  const DocumentMarkerVector& suggestion_markers =
+      document_marker_controller.MarkersFor(node, DocumentMarker::kSuggestion);
+  if (suggestion_markers.IsEmpty()) {
+    // If there are no suggestion markers, we can return early as a minor
+    // performance optimization.
+    DocumentMarker::MarkerTypes remaining_types = DocumentMarker::AllMarkers();
+    remaining_types.Remove(DocumentMarker::kSuggestion);
+    return document_marker_controller.MarkersFor(node, remaining_types);
+  }
+
+  const DocumentMarkerVector& markers_overridden_by_suggestion_markers =
+      document_marker_controller.MarkersFor(
+          node, DocumentMarker::kComposition | DocumentMarker::kSpelling);
+
+  Vector<unsigned> suggestion_starts;
+  Vector<unsigned> suggestion_ends;
+  for (const DocumentMarker* suggestion_marker : suggestion_markers) {
+    suggestion_starts.push_back(suggestion_marker->StartOffset());
+    suggestion_ends.push_back(suggestion_marker->EndOffset());
+  }
+
+  std::sort(suggestion_starts.begin(), suggestion_starts.end());
+  std::sort(suggestion_ends.begin(), suggestion_ends.end());
+
+  unsigned suggestion_starts_index = 0;
+  unsigned suggestion_ends_index = 0;
+  unsigned number_suggestions_currently_inside = 0;
+
+  DocumentMarkerVector markers_to_paint;
+  for (DocumentMarker* marker : markers_overridden_by_suggestion_markers) {
+    while (suggestion_starts_index < suggestion_starts.size() &&
+           suggestion_starts[suggestion_starts_index] <=
+               marker->StartOffset()) {
+      ++suggestion_starts_index;
+      ++number_suggestions_currently_inside;
+    }
+    while (suggestion_ends_index < suggestion_ends.size() &&
+           suggestion_ends[suggestion_ends_index] <= marker->StartOffset()) {
+      ++suggestion_ends_index;
+      --number_suggestions_currently_inside;
+    }
+
+    // At this point, number_suggestions_currently_inside should be equal to the
+    // number of suggestion markers overlapping the point marker->StartOffset()
+    // (marker endpoints don't count as overlapping).
+
+    // Marker is overlapped by a suggestion marker, do not paint.
+    if (number_suggestions_currently_inside)
+      continue;
+
+    // Verify that no suggestion marker starts before the current marker ends.
+    if (suggestion_starts_index < suggestion_starts.size() &&
+        suggestion_starts[suggestion_starts_index] < marker->EndOffset())
+      continue;
+
+    markers_to_paint.push_back(marker);
+  }
+
+  markers_to_paint.AppendVector(suggestion_markers);
+
+  DocumentMarker::MarkerTypes remaining_types = DocumentMarker::AllMarkers();
+  remaining_types.Remove(DocumentMarker::kComposition |
+                         DocumentMarker::kSpelling |
+                         DocumentMarker::kSuggestion);
+
+  markers_to_paint.AppendVector(
+      document_marker_controller.MarkersFor(node, remaining_types));
+
+  return markers_to_paint;
 }
 
 void InlineTextBoxPainter::PaintDocumentMarkers(
+    const DocumentMarkerVector& markers_to_paint,
     const PaintInfo& paint_info,
     const LayoutPoint& box_origin,
     const ComputedStyle& style,
@@ -623,31 +747,13 @@ void InlineTextBoxPainter::PaintDocumentMarkers(
   DCHECK(inline_text_box_.Truncation() != kCFullTruncation);
   DCHECK(inline_text_box_.Len());
 
-  DocumentMarkerVector markers =
-      inline_text_box_.GetLineLayoutItem().GetDocument().Markers().MarkersFor(
-          inline_text_box_.GetLineLayoutItem().GetNode());
-  DocumentMarkerVector::const_iterator marker_it = markers.begin();
-
+  DocumentMarkerVector::const_iterator marker_it = markers_to_paint.begin();
   // Give any document markers that touch this run a chance to draw before the
   // text has been drawn.  Note end() points at the last char, not one past it
   // like endOffset and ranges do.
-  for (; marker_it != markers.end(); ++marker_it) {
+  for (; marker_it != markers_to_paint.end(); ++marker_it) {
     DCHECK(*marker_it);
     const DocumentMarker& marker = **marker_it;
-
-    // Paint either the background markers or the foreground markers, but not
-    // both.
-    switch (marker.GetType()) {
-      case DocumentMarker::kGrammar:
-      case DocumentMarker::kSpelling:
-        if (marker_paint_phase == DocumentMarkerPaintPhase::kBackground)
-          continue;
-        break;
-      case DocumentMarker::kTextMatch:
-      case DocumentMarker::kComposition:
-      case DocumentMarker::kActiveSuggestion:
-        break;
-    }
 
     if (marker.EndOffset() <= inline_text_box_.Start()) {
       // marker is completely before this run.  This might be a marker that sits
@@ -663,10 +769,14 @@ void InlineTextBoxPainter::PaintDocumentMarkers(
     // marker intersects this run.  Paint it.
     switch (marker.GetType()) {
       case DocumentMarker::kSpelling:
+        if (marker_paint_phase == DocumentMarkerPaintPhase::kBackground)
+          continue;
         inline_text_box_.PaintDocumentMarker(paint_info.context, box_origin,
                                              marker, style, font, false);
         break;
       case DocumentMarker::kGrammar:
+        if (marker_paint_phase == DocumentMarkerPaintPhase::kBackground)
+          continue;
         inline_text_box_.PaintDocumentMarker(paint_info.context, box_origin,
                                              marker, style, font, true);
         break;
@@ -680,21 +790,24 @@ void InlineTextBoxPainter::PaintDocumentMarkers(
         }
         break;
       case DocumentMarker::kComposition:
-      case DocumentMarker::kActiveSuggestion: {
+      case DocumentMarker::kActiveSuggestion:
+      case DocumentMarker::kSuggestion: {
         const StyleableMarker& styleable_marker = ToStyleableMarker(marker);
         if (marker_paint_phase == DocumentMarkerPaintPhase::kBackground) {
-          PaintSingleMarkerBackgroundRun(paint_info.context, box_origin, style,
-                                         font,
-                                         styleable_marker.BackgroundColor(),
-                                         MarkerPaintStart(styleable_marker),
-                                         MarkerPaintEnd(styleable_marker));
+          const PaintOffsets marker_offsets =
+              MarkerPaintStartAndEnd(styleable_marker);
+          PaintSingleMarkerBackgroundRun(
+              paint_info.context, box_origin, style, font,
+              styleable_marker.BackgroundColor(), marker_offsets.start,
+              marker_offsets.end);
         } else {
           PaintStyleableMarkerUnderline(paint_info.context, box_origin,
-                                        styleable_marker);
+                                        styleable_marker, style, font);
         }
       } break;
       default:
-        NOTREACHED();
+        // Marker is not painted, or painting code has not been added yet
+        break;
     }
   }
 }
@@ -781,8 +894,8 @@ sk_sp<PaintRecord> RecordMarker(DocumentMarker::MarkerType marker_type) {
       pts, colors, nullptr, ARRAY_SIZE(colors), SkShader::kClamp_TileMode));
   PaintRecorder recorder;
   recorder.beginRecording(kMarkerWidth, kMarkerHeight);
-  recorder.getRecordingCanvas()->drawCircle(kR, kR, kR, flags);
-
+  recorder.getRecordingCanvas()->drawOval(SkRect::MakeWH(2 * kR, 2 * kR),
+                                          flags);
   return recorder.finishRecordingAsPicture();
 }
 
@@ -862,12 +975,7 @@ void InlineTextBoxPainter::PaintDocumentMarker(GraphicsContext& context,
     marker_spans_whole_box = false;
 
   if (!marker_spans_whole_box || grammar) {
-    int start_position, end_position;
-    std::tie(start_position, end_position) =
-        GetMarkerPaintOffsets(marker, inline_text_box_);
-
-    if (inline_text_box_.Truncation() != kCNoTruncation)
-      end_position = std::min<int>(end_position, inline_text_box_.Truncation());
+    const PaintOffsets& marker_offsets = MarkerPaintStartAndEnd(marker);
 
     // Calculate start & width
     int delta_y = (inline_text_box_.GetLineLayoutItem()
@@ -885,7 +993,7 @@ void InlineTextBoxPainter::PaintDocumentMarker(GraphicsContext& context,
     // FIXME: Convert the document markers to float rects.
     IntRect marker_rect = EnclosingIntRect(
         font.SelectionRectForText(run, FloatPoint(start_point), sel_height,
-                                  start_position, end_position));
+                                  marker_offsets.start, marker_offsets.end));
     start = marker_rect.X() - start_point.X();
     width = LayoutUnit(marker_rect.Width());
   }
@@ -1039,54 +1147,31 @@ void InlineTextBoxPainter::ExpandToIncludeNewlineForSelection(
 void InlineTextBoxPainter::PaintStyleableMarkerUnderline(
     GraphicsContext& context,
     const LayoutPoint& box_origin,
-    const StyleableMarker& marker) {
+    const StyleableMarker& marker,
+    const ComputedStyle& style,
+    const Font& font) {
   if (marker.UnderlineColor() == Color::kTransparent)
     return;
 
   if (inline_text_box_.Truncation() == kCFullTruncation)
     return;
 
-  unsigned paint_start = MarkerPaintStart(marker);
-  unsigned paint_end = MarkerPaintEnd(marker);
-  DCHECK_LT(paint_start, paint_end);
+  const PaintOffsets marker_offsets = MarkerPaintStartAndEnd(marker);
 
-  // start of line to draw
-  float start =
-      paint_start == inline_text_box_.Start()
-          ? 0
-          : inline_text_box_.GetLineLayoutItem().Width(
-                inline_text_box_.Start(),
-                paint_start - inline_text_box_.Start(),
-                inline_text_box_.TextPos(),
-                inline_text_box_.IsLeftToRightDirection() ? TextDirection::kLtr
-                                                          : TextDirection::kRtl,
-                inline_text_box_.IsFirstLineStyle());
-  // how much line to draw
-  float width;
-  bool ltr = inline_text_box_.IsLeftToRightDirection();
-  bool flow_is_ltr =
-      inline_text_box_.GetLineLayoutItem().Style()->IsLeftToRightDirection();
-  if (paint_start == inline_text_box_.Start() &&
-      paint_end == inline_text_box_.end() + 1) {
-    width = inline_text_box_.LogicalWidth().ToFloat();
-  } else {
-    unsigned paint_from = ltr == flow_is_ltr ? paint_start : paint_end;
-    unsigned paint_length =
-        ltr == flow_is_ltr
-            ? paint_end - paint_start
-            : inline_text_box_.Start() + inline_text_box_.Len() - paint_end;
-    width = inline_text_box_.GetLineLayoutItem().Width(
-        paint_from, paint_length,
-        LayoutUnit(inline_text_box_.TextPos() + start),
-        flow_is_ltr ? TextDirection::kLtr : TextDirection::kRtl,
-        inline_text_box_.IsFirstLineStyle());
-  }
-  // In RTL mode, start and width are computed from the right end of the text
-  // box: starting at |logicalWidth| - |start| and continuing left by |width| to
-  // |logicalWidth| - |start| - |width|. We will draw that line, but backwards:
-  // |logicalWidth| - |start| - |width| to |logicalWidth| - |start|.
-  if (!flow_is_ltr)
-    start = inline_text_box_.LogicalWidth().ToFloat() - width - start;
+  const TextRun& run = inline_text_box_.ConstructTextRun(style);
+  // Pass 0 for height since we only care about the width
+  const FloatRect& marker_rect = font.SelectionRectForText(
+      run, FloatPoint(), 0, marker_offsets.start, marker_offsets.end);
+  // start of line to draw, relative to box_origin.X()
+  LayoutUnit start = LayoutUnit(marker_rect.X());
+  LayoutUnit width = LayoutUnit(marker_rect.Width());
+
+  // We need to have some space between underlines of subsequent clauses,
+  // because some input methods do not use different underline styles for those.
+  // We make each line shorter, which has a harmless side effect of shortening
+  // the first and last clauses, too.
+  start += 1;
+  width -= 2;
 
   // Thick marked text underlines are 2px thick as long as there is room for the
   // 2px line under the baseline.  All other marked text underlines are 1px
@@ -1102,13 +1187,6 @@ void InlineTextBoxPainter::PaintStyleableMarkerUnderline(
   int baseline = font_data ? font_data->GetFontMetrics().Ascent() : 0;
   if (marker.IsThick() && inline_text_box_.LogicalHeight() - baseline >= 2)
     line_thickness = 2;
-
-  // We need to have some space between underlines of subsequent clauses,
-  // because some input methods do not use different underline styles for those.
-  // We make each line shorter, which has a harmless side effect of shortening
-  // the first and last clauses, too.
-  start += 1;
-  width -= 2;
 
   context.SetStrokeColor(marker.UnderlineColor());
   context.SetStrokeThickness(line_thickness);
@@ -1132,7 +1210,8 @@ void InlineTextBoxPainter::PaintTextMatchMarkerForeground(
            .MarkedTextMatchesAreHighlighted())
     return;
 
-  const auto paint_offsets = GetMarkerPaintOffsets(marker, inline_text_box_);
+  const auto paint_offsets =
+      GetTextMatchMarkerPaintOffsets(marker, inline_text_box_);
   TextRun run = inline_text_box_.ConstructTextRun(style);
 
   Color text_color =
@@ -1174,7 +1253,8 @@ void InlineTextBoxPainter::PaintTextMatchMarkerBackground(
            .MarkedTextMatchesAreHighlighted())
     return;
 
-  const auto paint_offsets = GetMarkerPaintOffsets(marker, inline_text_box_);
+  const auto paint_offsets =
+      GetTextMatchMarkerPaintOffsets(marker, inline_text_box_);
   TextRun run = inline_text_box_.ConstructTextRun(style);
 
   Color color = LayoutTheme::GetTheme().PlatformTextSearchHighlightColor(

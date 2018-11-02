@@ -104,6 +104,9 @@ class MenuDelegate;
 // Sets the current tab alert state and updates the views.
 - (void)setAlertState:(TabAlertState)alertState;
 
+// Sets the tab to display that it needs attention from the user.
+- (void)setNeedsAttention;
+
 // Closes the associated TabView by relaying the message to |target_| to
 // perform the close.
 - (void)closeTab:(id)sender;
@@ -123,6 +126,9 @@ class MenuDelegate;
 
 // Update the title color to match the tabs current state.
 - (void)updateTitleColor;
+
+// Returns the accessibility title that should be used for this tab.
+- (NSString*)accessibilityTitle;
 @end
 
 @interface TabController(TestingAPI)

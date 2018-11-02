@@ -13,10 +13,7 @@ Polymer({
   behaviors: [CrScrollableBehavior, WebUIListenerBehavior],
 
   properties: {
-    prefs: {
-      type: Object,
-      notify: true,
-    },
+    prefs: Object,
 
     /**
      * Pages to load upon browser startup.
@@ -32,23 +29,6 @@ Polymer({
 
     /** @private {Object}*/
     lastFocused_: Object,
-
-    /** @private {?NtpExtension} */
-    ntpExtension_: Object,
-
-    /**
-     * Enum values for the 'session.restore_on_startup' preference.
-     * @private {!Object<string, number>}
-     */
-    prefValues_: {
-      readOnly: true,
-      type: Object,
-      value: {
-        CONTINUE: 1,
-        OPEN_NEW_TAB: 5,
-        OPEN_SPECIFIC: 4,
-      },
-    },
   },
 
   /** @private {?settings.StartupUrlsPageBrowserProxy} */
@@ -62,37 +42,23 @@ Polymer({
 
   /** @override */
   attached: function() {
-    this.getNtpExtension_();
-    this.addWebUIListener('update-ntp-extension', function(ntpExtension) {
-      // Note that |ntpExtension| is empty if there is no NTP extension.
-      this.ntpExtension_ = ntpExtension;
-    }.bind(this));
-
     this.browserProxy_ = settings.StartupUrlsPageBrowserProxyImpl.getInstance();
-    this.addWebUIListener('update-startup-pages', function(startupPages) {
+    this.addWebUIListener('update-startup-pages', startupPages => {
       // If an "edit" URL dialog was open, close it, because the underlying page
       // might have just been removed (and model indices have changed anyway).
       if (this.startupUrlDialogModel_)
         this.destroyUrlDialog_();
       this.startupPages_ = startupPages;
       this.updateScrollableContents();
-    }.bind(this));
+    });
     this.browserProxy_.loadStartupPages();
 
-    this.addEventListener(settings.EDIT_STARTUP_URL_EVENT, function(event) {
+    this.addEventListener(settings.EDIT_STARTUP_URL_EVENT, event => {
       this.startupUrlDialogModel_ = event.detail.model;
       this.startupUrlDialogAnchor_ = event.detail.anchor;
       this.showStartupUrlDialog_ = true;
       event.stopPropagation();
-    }.bind(this));
-  },
-
-  /** @private */
-  getNtpExtension_: function() {
-    settings.OnStartupBrowserProxyImpl.getInstance().getNtpExtension().then(
-        function(ntpExtension) {
-          this.ntpExtension_ = ntpExtension;
-        }.bind(this));
+    });
   },
 
   /**
@@ -129,25 +95,5 @@ Polymer({
   shouldAllowUrlsEdit_: function() {
     return this.get('prefs.session.startup_urls.enforcement') !=
         chrome.settingsPrivate.Enforcement.ENFORCED;
-  },
-
-  /**
-   * @param {?NtpExtension} ntpExtension
-   * @param {number} restoreOnStartup Value of prefs.session.restore_on_startup.
-   * @return {boolean}
-   * @private
-   */
-  showIndicator_: function(ntpExtension, restoreOnStartup) {
-    return !!ntpExtension && restoreOnStartup == this.prefValues_.OPEN_NEW_TAB;
-  },
-
-  /**
-   * Determine whether to show the user defined startup pages.
-   * @param {number} restoreOnStartup Enum value from prefValues_.
-   * @return {boolean} Whether the open specific pages is selected.
-   * @private
-   */
-  showStartupUrls_: function(restoreOnStartup) {
-    return restoreOnStartup == this.prefValues_.OPEN_SPECIFIC;
   },
 });

@@ -16,6 +16,7 @@
 #include "ios/chrome/browser/signin/authentication_service.h"
 #include "ios/chrome/browser/signin/authentication_service_factory.h"
 #include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
+#import "ios/chrome/browser/ui/authentication/signin_promo_view.h"
 #import "ios/chrome/browser/ui/settings/settings_collection_view_controller.h"
 #include "ios/chrome/browser/ui/tools_menu/tools_menu_constants.h"
 #import "ios/chrome/browser/ui/tools_menu/tools_popup_controller.h"
@@ -42,6 +43,8 @@
 #error "This file requires ARC support."
 #endif
 
+using chrome_test_util::NavigationBarDoneButton;
+
 namespace {
 
 // Constant for timeout while waiting for asynchronous sync operations.
@@ -54,35 +57,16 @@ ChromeIdentity* GetFakeIdentity1() {
                                           name:@"Fake Foo"];
 }
 
-// Opens the signin screen from the settings page. Must be called from the NTP.
-// User must not be signed in.
-// TODO(crbug.com/638674): Evaluate if this can move to shared code.
-void OpenSignInFromSettings() {
-  [ChromeEarlGreyUI openSettingsMenu];
-  id<GREYMatcher> matcher =
-      grey_allOf(grey_accessibilityID(kSettingsSignInCellId),
-                 grey_sufficientlyVisible(), nil);
-  [[EarlGrey selectElementWithMatcher:matcher] performAction:grey_tap()];
-}
-
 // Signs in the identity for the specific |userEmail|. This is performed via the
 // UI and must be called from the NTP.
 void SignInIdentity(NSString* userEmail) {
-  OpenSignInFromSettings();
-  [[EarlGrey
-      selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabel(
-                                   userEmail)] performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:
-                 chrome_test_util::ButtonWithAccessibilityLabelId(
-                     IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_SIGNIN_BUTTON)]
+  [ChromeEarlGreyUI openSettingsMenu];
+  [ChromeEarlGreyUI
+      tapSettingsMenuButton:chrome_test_util::SecondarySignInButton()];
+  [ChromeEarlGreyUI signInToIdentityByEmail:userEmail];
+  [ChromeEarlGreyUI confirmSigninConfirmationDialog];
+  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
       performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:
-                 chrome_test_util::ButtonWithAccessibilityLabelId(
-                     IDS_IOS_ACCOUNT_CONSISTENCY_CONFIRMATION_OK_BUTTON)]
-      performAction:grey_tap()];
-  [[EarlGrey
-      selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabelId(
-                                   IDS_DONE)] performAction:grey_tap()];
 }
 
 // Waits for sync to be initialized or not, based on |isSyncInitialized| and

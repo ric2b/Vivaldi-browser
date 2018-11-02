@@ -74,7 +74,9 @@ bool OverlayUserPrefStore::GetValue(const std::string& key,
                                     const base::Value** result) const {
   // If the |key| shall NOT be stored in the overlay store, there must not
   // be an entry.
-  DCHECK(ShallBeStoredInOverlay(key) || !overlay_->GetValue(key, NULL));
+  // TODO(crbug.com/761123): Put back this DCHECK. It should be fixed by:
+  // https://chromium-review.googlesource.com/c/chromium/src/+/624772
+  // DCHECK(ShallBeStoredInOverlay(key) || !overlay_->GetValue(key, NULL));
 
   if (overlay_->GetValue(key, result))
     return true;
@@ -195,6 +197,10 @@ void OverlayUserPrefStore::ClearMutableValues() {
   for (const auto& key : written_overlay_names_) {
     overlay_->RemoveValue(key, WriteablePrefStore::DEFAULT_PREF_WRITE_FLAGS);
   }
+}
+
+void OverlayUserPrefStore::OnStoreDeletionFromDisk() {
+  underlay_->OnStoreDeletionFromDisk();
 }
 
 OverlayUserPrefStore::~OverlayUserPrefStore() {

@@ -13,6 +13,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
@@ -26,6 +27,7 @@
 #include "chrome/browser/search/one_google_bar/one_google_bar_service_factory.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "chrome/browser/search_provider_logos/logo_service_factory.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
@@ -34,12 +36,17 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/browser_resources.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/search_engines/search_terms_data.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/search_engines/template_url_service_observer.h"
+#include "components/search_provider_logos/logo_common.h"
+#include "components/search_provider_logos/logo_service.h"
+#include "components/search_provider_logos/logo_tracker.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/browser_thread.h"
 #include "crypto/secure_hash.h"
 #include "net/base/hash_value.h"
+#include "net/base/url_util.h"
 #include "net/url_request/url_request.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -57,10 +64,7 @@ const char kConfigDataFilename[] = "config.js";
 const char kThemeCSSFilename[] = "theme.css";
 const char kMainHtmlFilename[] = "local-ntp.html";
 const char kOneGoogleBarScriptFilename[] = "one-google.js";
-const char kOneGoogleBarInHeadStyleFilename[] = "one-google/in-head.css";
-const char kOneGoogleBarInHeadScriptFilename[] = "one-google/in-head.js";
-const char kOneGoogleBarAfterBarScriptFilename[] = "one-google/after-bar.js";
-const char kOneGoogleBarEndOfBodyScriptFilename[] = "one-google/end-of-body.js";
+const char kDoodleScriptFilename[] = "doodle.js";
 
 const char kIntegrityFormat[] = "integrity=\"sha256-%s\"";
 
@@ -71,16 +75,15 @@ const struct Resource{
 } kResources[] = {
     {kMainHtmlFilename, kLocalResource, "text/html"},
     {"local-ntp.js", IDR_LOCAL_NTP_JS, "application/javascript"},
+    {"voice.js", IDR_LOCAL_NTP_VOICE_JS, "application/javascript"},
     {kConfigDataFilename, kLocalResource, "application/javascript"},
     {kThemeCSSFilename, kLocalResource, "text/css"},
     {"local-ntp.css", IDR_LOCAL_NTP_CSS, "text/css"},
+    {"voice.css", IDR_LOCAL_NTP_VOICE_CSS, "text/css"},
     {"images/close_3_mask.png", IDR_CLOSE_3_MASK, "image/png"},
     {"images/ntp_default_favicon.png", IDR_NTP_DEFAULT_FAVICON, "image/png"},
     {kOneGoogleBarScriptFilename, kLocalResource, "text/javascript"},
-    {kOneGoogleBarInHeadStyleFilename, kLocalResource, "text/css"},
-    {kOneGoogleBarInHeadScriptFilename, kLocalResource, "text/javascript"},
-    {kOneGoogleBarAfterBarScriptFilename, kLocalResource, "text/javascript"},
-    {kOneGoogleBarEndOfBodyScriptFilename, kLocalResource, "text/javascript"},
+    {kDoodleScriptFilename, kLocalResource, "text/javascript"},
 };
 
 // Strips any query parameters from the specified path.
@@ -114,16 +117,45 @@ std::unique_ptr<base::DictionaryValue> GetTranslatedStrings(bool is_google) {
   if (is_google) {
     AddString(translated_strings.get(), "searchboxPlaceholder",
               IDS_GOOGLE_SEARCH_BOX_EMPTY_HINT);
+
+    // Voice Search
+    AddString(translated_strings.get(), "audioError",
+              IDS_NEW_TAB_VOICE_AUDIO_ERROR);
+    AddString(translated_strings.get(), "details", IDS_NEW_TAB_VOICE_DETAILS);
+    AddString(translated_strings.get(), "fakeboxMicrophoneTooltip",
+              IDS_TOOLTIP_MIC_SEARCH);
+    AddString(translated_strings.get(), "languageError",
+              IDS_NEW_TAB_VOICE_LANGUAGE_ERROR);
+    AddString(translated_strings.get(), "learnMore",
+              IDS_NEW_TAB_VOICE_LEARN_MORE);
+    AddString(translated_strings.get(), "listening",
+              IDS_NEW_TAB_VOICE_LISTENING);
+    AddString(translated_strings.get(), "networkError",
+              IDS_NEW_TAB_VOICE_NETWORK_ERROR);
+    AddString(translated_strings.get(), "noTranslation",
+              IDS_NEW_TAB_VOICE_NO_TRANSLATION);
+    AddString(translated_strings.get(), "noVoice", IDS_NEW_TAB_VOICE_NO_VOICE);
+    AddString(translated_strings.get(), "permissionError",
+              IDS_NEW_TAB_VOICE_PERMISSION_ERROR);
+    AddString(translated_strings.get(), "ready", IDS_NEW_TAB_VOICE_READY);
+    AddString(translated_strings.get(), "tryAgain",
+              IDS_NEW_TAB_VOICE_TRY_AGAIN);
+    AddString(translated_strings.get(), "waiting", IDS_NEW_TAB_VOICE_WAITING);
   }
 
   return translated_strings;
 }
 
 // Returns a JS dictionary of configuration data for the local NTP.
-std::string GetConfigData(bool is_google) {
+std::string GetConfigData(bool is_google, const GURL& google_base_url) {
   base::DictionaryValue config_data;
   config_data.Set("translatedStrings", GetTranslatedStrings(is_google));
   config_data.SetBoolean("isGooglePage", is_google);
+  config_data.SetString("googleBaseUrl", google_base_url.spec());
+
+  bool is_voice_search_enabled =
+      base::FeatureList::IsEnabled(features::kVoiceSearchOnLocalNtp);
+  config_data.SetBoolean("isVoiceSearchEnabled", is_voice_search_enabled);
 
   // Serialize the dictionary.
   std::string js_text;
@@ -172,10 +204,22 @@ std::string GetLocalNtpPath() {
 std::unique_ptr<base::DictionaryValue> ConvertOGBDataToDict(
     const OneGoogleBarData& og) {
   auto result = base::MakeUnique<base::DictionaryValue>();
-  // Only provide the html parts here. The js and css are injected separately
-  // via <script src=...> and <link rel="stylesheet" href=...>.
-  result->SetString("html", og.bar_html);
-  result->SetString("end_of_body_html", og.end_of_body_html);
+  result->SetString("barHtml", og.bar_html);
+  result->SetString("inHeadScript", og.in_head_script);
+  result->SetString("inHeadStyle", og.in_head_style);
+  result->SetString("afterBarScript", og.after_bar_script);
+  result->SetString("endOfBodyHtml", og.end_of_body_html);
+  result->SetString("endOfBodyScript", og.end_of_body_script);
+  return result;
+}
+
+std::unique_ptr<base::DictionaryValue> ConvertLogoMetadataToDict(
+    const search_provider_logos::LogoMetadata& meta) {
+  auto result = base::MakeUnique<base::DictionaryValue>();
+  result->SetString("onClickUrl", meta.on_click_url.spec());
+  result->SetString("altText", meta.alt_text);
+  result->SetString("mimeType", meta.mime_type);
+  result->SetString("animatedUrl", meta.animated_url.spec());
   return result;
 }
 
@@ -187,13 +231,21 @@ class LocalNtpSource::GoogleSearchProviderTracker
   using SearchProviderIsGoogleChangedCallback =
       base::Callback<void(bool is_google)>;
 
+  using GoogleBaseUrlChangedCallback =
+      base::Callback<void(const GURL& google_base_url)>;
+
   GoogleSearchProviderTracker(
       TemplateURLService* service,
-      const SearchProviderIsGoogleChangedCallback& callback)
-      : service_(service), callback_(callback), is_google_(false) {
+      const SearchProviderIsGoogleChangedCallback& is_google_callback,
+      const GoogleBaseUrlChangedCallback& google_base_url_callback)
+      : service_(service),
+        is_google_callback_(is_google_callback),
+        google_base_url_callback_(google_base_url_callback),
+        is_google_(false) {
     DCHECK(service_);
     service_->AddObserver(this);
     is_google_ = search::DefaultSearchProviderIsGoogle(service_);
+    google_base_url_ = GURL(service_->search_terms_data().GoogleBaseURLValue());
   }
 
   ~GoogleSearchProviderTracker() override {
@@ -203,12 +255,19 @@ class LocalNtpSource::GoogleSearchProviderTracker
 
   bool DefaultSearchProviderIsGoogle() const { return is_google_; }
 
+  const GURL& GetGoogleBaseUrl() const { return google_base_url_; }
+
  private:
   void OnTemplateURLServiceChanged() override {
     bool old_is_google = is_google_;
     is_google_ = search::DefaultSearchProviderIsGoogle(service_);
     if (is_google_ != old_is_google)
-      callback_.Run(is_google_);
+      is_google_callback_.Run(is_google_);
+
+    const GURL old_google_base_url = google_base_url_;
+    google_base_url_ = GURL(service_->search_terms_data().GoogleBaseURLValue());
+    if (google_base_url_ != old_google_base_url)
+      google_base_url_callback_.Run(google_base_url_);
   }
 
   void OnTemplateURLServiceShuttingDown() override {
@@ -217,29 +276,135 @@ class LocalNtpSource::GoogleSearchProviderTracker
   }
 
   TemplateURLService* service_;
-  SearchProviderIsGoogleChangedCallback callback_;
+  SearchProviderIsGoogleChangedCallback is_google_callback_;
+  GoogleBaseUrlChangedCallback google_base_url_callback_;
 
   bool is_google_;
+  GURL google_base_url_;
+};
+
+class LocalNtpSource::DesktopLogoObserver
+    : public search_provider_logos::LogoObserver {
+ public:
+  DesktopLogoObserver() = default;
+
+  // Get the cached logo.
+  void GetCachedLogo(search_provider_logos::LogoService* service,
+                     const content::URLDataSource::GotDataCallback& callback) {
+    cached_requests_.push_back(callback);
+    if (!observing_) {
+      StartGetLogo(service);
+    }
+  }
+
+  // Get the fresh logo corresponding to a previous request for a cached logo.
+  // If that previous request is still ongoing, then schedule the callback to be
+  // called when the fresh logo comes in. If it's not, then start a new request
+  // and schedule the cached logo to be handed back.
+  //
+  // Strictly speaking, it's not a "fresh" logo anymore, but it should be the
+  // same logo that would have been fresh relative to the corresponding cached
+  // request, or perhaps one newer.
+  void GetFreshLogo(search_provider_logos::LogoService* service,
+                    int requested_version,
+                    const content::URLDataSource::GotDataCallback& callback) {
+    if (observing_) {
+      if (requested_version == version_) {
+        fresh_requests_.push_back(callback);
+      } else {
+        DCHECK_LT(requested_version, version_);
+        cached_requests_.push_back(callback);
+      }
+    } else {
+      cached_requests_.push_back(callback);
+      StartGetLogo(service);
+    }
+  }
+
+  void OnLogoAvailable(const search_provider_logos::Logo* logo,
+                       bool from_cache) override {
+    DCHECK(observing_);
+
+    scoped_refptr<base::RefCountedString> response;
+    if (logo) {
+      std::string js;
+      auto ddl = base::MakeUnique<base::DictionaryValue>();
+      ddl->SetInteger("version", version_);
+      ddl->Set("data", ConvertLogoMetadataToDict(logo->metadata));
+      base::JSONWriter::Write(*ddl, &js);
+      js = "var ddl = " + js + ";";
+      response = base::RefCountedString::TakeString(&js);
+    } else {
+      response = EmptyResponse();
+    }
+
+    std::vector<content::URLDataSource::GotDataCallback> requests;
+    if (from_cache) {
+      cached_requests_.swap(requests);
+    } else {
+      fresh_requests_.swap(requests);
+    }
+    for (const auto& request : requests) {
+      request.Run(response);
+    }
+  }
+
+  void OnObserverRemoved() override {
+    DCHECK(observing_);
+
+    auto response = EmptyResponse();
+    for (auto* requests : {&cached_requests_, &fresh_requests_}) {
+      for (const auto& request : *requests) {
+        request.Run(response);
+      }
+      requests->clear();
+    }
+    observing_ = false;
+  }
+
+ private:
+  void StartGetLogo(search_provider_logos::LogoService* service) {
+    DCHECK(!observing_);
+
+    service->GetLogo(this);
+    observing_ = true;
+    ++version_;
+  }
+
+  static scoped_refptr<base::RefCountedString> EmptyResponse() {
+    std::string s("{}");
+    return base::RefCountedString::TakeString(&s);
+  }
+
+  bool observing_ = false;
+  int version_ = 0;
+
+  std::vector<content::URLDataSource::GotDataCallback> cached_requests_;
+  std::vector<content::URLDataSource::GotDataCallback> fresh_requests_;
+
+  DISALLOW_COPY_AND_ASSIGN(DesktopLogoObserver);
 };
 
 LocalNtpSource::LocalNtpSource(Profile* profile)
     : profile_(profile),
-      one_google_bar_service_(nullptr),
+      one_google_bar_service_(
+          OneGoogleBarServiceFactory::GetForProfile(profile_)),
       one_google_bar_service_observer_(this),
+      logo_service_(nullptr),
       default_search_provider_is_google_(false),
       default_search_provider_is_google_io_thread_(false),
       weak_ptr_factory_(this) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  if (base::FeatureList::IsEnabled(features::kOneGoogleBarOnLocalNtp)) {
-    one_google_bar_service_ =
-        OneGoogleBarServiceFactory::GetForProfile(profile_);
-  }
-
   // |one_google_bar_service_| is null in incognito, or when the feature is
   // disabled.
   if (one_google_bar_service_)
     one_google_bar_service_observer_.Add(one_google_bar_service_);
+
+  if (base::FeatureList::IsEnabled(features::kDoodlesOnLocalNtp)) {
+    logo_service_ = LogoServiceFactory::GetForProfile(profile_);
+    logo_observer_ = base::MakeUnique<DesktopLogoObserver>();
+  }
 
   TemplateURLService* template_url_service =
       TemplateURLServiceFactory::GetForProfile(profile_);
@@ -247,9 +412,12 @@ LocalNtpSource::LocalNtpSource(Profile* profile)
     google_tracker_ = base::MakeUnique<GoogleSearchProviderTracker>(
         template_url_service,
         base::Bind(&LocalNtpSource::DefaultSearchProviderIsGoogleChanged,
+                   base::Unretained(this)),
+        base::Bind(&LocalNtpSource::GoogleBaseUrlChanged,
                    base::Unretained(this)));
     DefaultSearchProviderIsGoogleChanged(
         google_tracker_->DefaultSearchProviderIsGoogle());
+    GoogleBaseUrlChanged(google_tracker_->GetGoogleBaseUrl());
   }
 }
 
@@ -268,7 +436,7 @@ void LocalNtpSource::StartDataRequest(
   std::string stripped_path = StripParameters(path);
   if (stripped_path == kConfigDataFilename) {
     std::string config_data_js =
-        GetConfigData(default_search_provider_is_google_);
+        GetConfigData(default_search_provider_is_google_, google_base_url_);
     callback.Run(base::RefCountedString::TakeString(&config_data_js));
     return;
   }
@@ -278,43 +446,35 @@ void LocalNtpSource::StartDataRequest(
     return;
   }
 
-  if (base::StartsWith(stripped_path, "one-google",
-                       base::CompareCase::SENSITIVE)) {
+  if (stripped_path == kOneGoogleBarScriptFilename) {
     if (!one_google_bar_service_) {
       callback.Run(nullptr);
       return;
     }
 
-    const base::Optional<OneGoogleBarData>& data =
-        one_google_bar_service_->one_google_bar_data();
+    one_google_bar_requests_.emplace_back(base::TimeTicks::Now(), callback);
+    // TODO(treib): Figure out if there are cases where we can safely serve
+    // cached data. crbug.com/742937
+    one_google_bar_service_->Refresh();
 
-    // The OneGoogleBar injector helper.
-    if (stripped_path == kOneGoogleBarScriptFilename) {
-      one_google_bar_requests_.emplace_back(base::TimeTicks::Now(), callback);
+    return;
+  }
 
-      // If there already is (cached) OGB data, serve it immediately.
-      if (data.has_value())
-        ServeOneGoogleBar(data);
-
-      // In any case, request a refresh.
-      one_google_bar_service_->Refresh();
-    } else {
-      // The actual OneGoogleBar sources.
-      std::string result;
-      if (data.has_value()) {
-        if (stripped_path == kOneGoogleBarInHeadStyleFilename) {
-          result = data->in_head_style;
-        } else if (stripped_path == kOneGoogleBarInHeadScriptFilename) {
-          result = data->in_head_script;
-        } else if (stripped_path == kOneGoogleBarAfterBarScriptFilename) {
-          result = data->after_bar_script;
-        } else if (stripped_path == kOneGoogleBarEndOfBodyScriptFilename) {
-          result = data->end_of_body_script;
-        }
-      }
-      callback.Run(base::RefCountedString::TakeString(&result));
+  if (stripped_path == kDoodleScriptFilename) {
+    if (!logo_service_) {
+      callback.Run(nullptr);
+      return;
     }
 
+    std::string version_string;
+    int version = 0;
+    GURL url = GURL(chrome::kChromeSearchLocalNtpUrl).Resolve(path);
+    if (net::GetValueForKeyInQuery(url, "v", &version_string) &&
+        base::StringToInt(version_string, &version)) {
+      logo_observer_->GetFreshLogo(logo_service_, version, callback);
+    } else {
+      logo_observer_->GetCachedLogo(logo_service_, callback);
+    }
     return;
   }
 
@@ -322,7 +482,8 @@ void LocalNtpSource::StartDataRequest(
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(switches::kLocalNtpReload)) {
     if (stripped_path == "local-ntp.html" || stripped_path == "local-ntp.js" ||
-        stripped_path == "local-ntp.css") {
+        stripped_path == "local-ntp.css" || stripped_path == "voice.js" ||
+        stripped_path == "voice.css") {
       base::ReplaceChars(stripped_path, "-", "_", &stripped_path);
       local_ntp::SendLocalFileResource(stripped_path, callback);
       return;
@@ -335,15 +496,21 @@ void LocalNtpSource::StartDataRequest(
                            .GetRawDataResource(IDR_LOCAL_NTP_HTML)
                            .as_string();
     std::string config_integrity = base::StringPrintf(
-        kIntegrityFormat, GetIntegritySha256Value(
-                              GetConfigData(default_search_provider_is_google_))
-                              .c_str());
+        kIntegrityFormat,
+        GetIntegritySha256Value(
+            GetConfigData(default_search_provider_is_google_, google_base_url_))
+            .c_str());
     base::ReplaceFirstSubstringAfterOffset(&html, 0, "{{CONFIG_INTEGRITY}}",
                                            config_integrity);
     std::string local_ntp_integrity =
         base::StringPrintf(kIntegrityFormat, LOCAL_NTP_JS_INTEGRITY);
     base::ReplaceFirstSubstringAfterOffset(&html, 0, "{{LOCAL_NTP_INTEGRITY}}",
                                            local_ntp_integrity);
+
+    std::string local_ntp_voice_integrity =
+        base::StringPrintf(kIntegrityFormat, VOICE_JS_INTEGRITY);
+    base::ReplaceFirstSubstringAfterOffset(
+        &html, 0, "{{LOCAL_NTP_VOICE_INTEGRITY}}", local_ntp_voice_integrity);
     callback.Run(base::RefCountedString::TakeString(&html));
     return;
   }
@@ -419,11 +586,12 @@ std::string LocalNtpSource::GetContentSecurityPolicyScriptSrc() const {
 #endif  // !defined(GOOGLE_CHROME_BUILD)
 
   return base::StringPrintf(
-      "script-src 'strict-dynamic' 'sha256-%s' 'sha256-%s';",
+      "script-src 'strict-dynamic' 'sha256-%s' 'sha256-%s' 'sha256-%s';",
       GetIntegritySha256Value(
-          GetConfigData(default_search_provider_is_google_io_thread_))
+          GetConfigData(default_search_provider_is_google_io_thread_,
+                        google_base_url_io_thread_))
           .c_str(),
-      LOCAL_NTP_JS_INTEGRITY);
+      LOCAL_NTP_JS_INTEGRITY, VOICE_JS_INTEGRITY);
 }
 
 std::string LocalNtpSource::GetContentSecurityPolicyChildSrc() const {
@@ -440,14 +608,8 @@ std::string LocalNtpSource::GetContentSecurityPolicyChildSrc() const {
                             chrome::kChromeSearchMostVisitedUrl);
 }
 
-void LocalNtpSource::OnOneGoogleBarDataChanged() {
-  const base::Optional<OneGoogleBarData>& data =
-      one_google_bar_service_->one_google_bar_data();
-  ServeOneGoogleBar(data);
-}
-
-void LocalNtpSource::OnOneGoogleBarFetchFailed() {
-  ServeOneGoogleBar(base::nullopt);
+void LocalNtpSource::OnOneGoogleBarDataUpdated() {
+  ServeOneGoogleBar(one_google_bar_service_->one_google_bar_data());
 }
 
 void LocalNtpSource::OnOneGoogleBarServiceShuttingDown() {
@@ -502,6 +664,22 @@ void LocalNtpSource::SetDefaultSearchProviderIsGoogleOnIOThread(
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
   default_search_provider_is_google_io_thread_ = is_google;
+}
+
+void LocalNtpSource::GoogleBaseUrlChanged(const GURL& google_base_url) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  google_base_url_ = google_base_url;
+  content::BrowserThread::PostTask(
+      content::BrowserThread::IO, FROM_HERE,
+      base::BindOnce(&LocalNtpSource::SetGoogleBaseUrlOnIOThread,
+                     weak_ptr_factory_.GetWeakPtr(), google_base_url));
+}
+
+void LocalNtpSource::SetGoogleBaseUrlOnIOThread(const GURL& google_base_url) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+
+  google_base_url_io_thread_ = google_base_url;
 }
 
 LocalNtpSource::OneGoogleBarRequest::OneGoogleBarRequest(

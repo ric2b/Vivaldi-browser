@@ -4,12 +4,11 @@
 
 #include "extensions/shell/browser/shell_desktop_controller_mac.h"
 
+#include "base/run_loop.h"
+#include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/native_app_window.h"
-#include "extensions/shell/browser/shell_app_delegate.h"
 #include "extensions/shell/browser/shell_app_window_client.h"
-#include "ui/display/display.h"
-#include "ui/display/screen.h"
-#include "ui/gfx/geometry/size.h"
+#include "ui/base/base_window.h"
 
 namespace extensions {
 
@@ -19,27 +18,19 @@ ShellDesktopControllerMac::ShellDesktopControllerMac()
 }
 
 ShellDesktopControllerMac::~ShellDesktopControllerMac() {
-  // TOOD(yoz): This is actually too late to close app windows (for tests).
+  // TODO(yoz): This is actually too late to close app windows (for tests).
   // Maybe this is useful for non-tests.
   CloseAppWindows();
 }
 
-gfx::Size ShellDesktopControllerMac::GetWindowSize() {
-  // This is the full screen size.
-  return display::Screen::GetScreen()->GetPrimaryDisplay().bounds().size();
+void ShellDesktopControllerMac::Run() {
+  base::RunLoop run_loop;
+  run_loop.Run();
 }
 
-AppWindow* ShellDesktopControllerMac::CreateAppWindow(
-    content::BrowserContext* context,
-    const Extension* extension) {
-  app_window_ = new AppWindow(context, new ShellAppDelegate, extension);
-  return app_window_;
-}
-
-void ShellDesktopControllerMac::AddAppWindow(gfx::NativeWindow window) {
-}
-
-void ShellDesktopControllerMac::RemoveAppWindow(AppWindow* window) {
+void ShellDesktopControllerMac::AddAppWindow(AppWindow* app_window,
+                                             gfx::NativeWindow window) {
+  app_window_ = app_window;
 }
 
 void ShellDesktopControllerMac::CloseAppWindows() {

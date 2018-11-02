@@ -12,23 +12,31 @@
 #include "base/memory/weak_ptr.h"
 #include "content/common/content_export.h"
 #include "content/public/common/url_loader.mojom.h"
-#include "mojo/public/cpp/bindings/associated_binding.h"
+#include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "mojo/public/cpp/system/simple_watcher.h"
+#include "net/http/http_raw_request_headers.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_request.h"
+
+namespace net {
+class HttpResponseHeaders;
+}
+
+namespace network {
+class NetToMojoPendingBuffer;
+}
 
 namespace content {
 
 class NetworkContext;
-class NetToMojoPendingBuffer;
 struct ResourceResponse;
 
 class CONTENT_EXPORT URLLoaderImpl : public mojom::URLLoader,
                                      public net::URLRequest::Delegate {
  public:
   URLLoaderImpl(NetworkContext* context,
-                mojom::URLLoaderAssociatedRequest url_loader_request,
+                mojom::URLLoaderRequest url_loader_request,
                 int32_t options,
                 const ResourceRequest& request,
                 mojom::URLLoaderClientPtr url_loader_client,
@@ -62,16 +70,21 @@ class CONTENT_EXPORT URLLoaderImpl : public mojom::URLLoader,
   void OnResponseBodyStreamReady(MojoResult result);
   void DeleteIfNeeded();
   void SendResponseToClient();
+  void CompletePendingWrite();
+  void SetRawResponseHeaders(scoped_refptr<const net::HttpResponseHeaders>);
 
   NetworkContext* context_;
   int32_t options_;
   bool connected_;
   std::unique_ptr<net::URLRequest> url_request_;
-  mojo::AssociatedBinding<mojom::URLLoader> binding_;
+  mojo::Binding<mojom::URLLoader> binding_;
   mojom::URLLoaderClientPtr url_loader_client_;
+  int64_t total_written_bytes_ = 0;
 
   mojo::ScopedDataPipeProducerHandle response_body_stream_;
-  scoped_refptr<NetToMojoPendingBuffer> pending_write_;
+  scoped_refptr<network::NetToMojoPendingBuffer> pending_write_;
+  uint32_t pending_write_buffer_size_ = 0;
+  uint32_t pending_write_buffer_offset_ = 0;
   mojo::SimpleWatcher writable_handle_watcher_;
   mojo::SimpleWatcher peer_closed_handle_watcher_;
 
@@ -79,6 +92,10 @@ class CONTENT_EXPORT URLLoaderImpl : public mojom::URLLoader,
   // finished.
   scoped_refptr<ResourceResponse> response_;
   mojo::ScopedDataPipeConsumerHandle consumer_handle_;
+
+  bool report_raw_headers_;
+  net::HttpRawRequestHeaders raw_request_headers_;
+  scoped_refptr<const net::HttpResponseHeaders> raw_response_headers_;
 
   base::WeakPtrFactory<URLLoaderImpl> weak_ptr_factory_;
 

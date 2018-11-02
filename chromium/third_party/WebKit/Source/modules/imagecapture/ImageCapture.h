@@ -8,7 +8,7 @@
 #include <memory>
 #include "bindings/core/v8/ScriptPromise.h"
 #include "core/dom/ContextLifecycleObserver.h"
-#include "core/events/EventTarget.h"
+#include "core/dom/events/EventTarget.h"
 #include "media/capture/mojo/image_capture.mojom-blink.h"
 #include "modules/EventTargetModules.h"
 #include "modules/ModulesExport.h"
@@ -80,8 +80,7 @@ class MODULES_EXPORT ImageCapture final
   DECLARE_VIRTUAL_TRACE();
 
  private:
-  using PromiseResolverFunction =
-      std::unique_ptr<Function<void(ScriptPromiseResolver*)>>;
+  using PromiseResolverFunction = Function<void(ScriptPromiseResolver*)>;
 
   ImageCapture(ExecutionContext*, MediaStreamTrack*);
 
@@ -101,7 +100,7 @@ class MODULES_EXPORT ImageCapture final
   void ResolveWithNothing(ScriptPromiseResolver*);
   void ResolveWithPhotoSettings(ScriptPromiseResolver*);
   void ResolveWithPhotoCapabilities(ScriptPromiseResolver*);
-  void ResolveWithMediaTrackConstraints(MediaTrackConstraints,
+  void ResolveWithMediaTrackConstraints(ScriptValue constraints,
                                         ScriptPromiseResolver*);
 
   Member<MediaStreamTrack> stream_track_;

@@ -18,6 +18,7 @@
 #include "cc/trees/layer_tree_host_client.h"
 #include "cc/trees/layer_tree_host_single_thread_client.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
+#include "components/viz/host/host_frame_sink_client.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/android/compositor.h"
 #include "gpu/command_buffer/common/capabilities.h"
@@ -36,7 +37,6 @@ class AnimationHost;
 class Layer;
 class LayerTreeHost;
 class OutputSurface;
-class VulkanContextProvider;
 }
 
 namespace viz {
@@ -44,6 +44,7 @@ class Display;
 class FrameSinkId;
 class FrameSinkManagerImpl;
 class HostFrameSinkManager;
+class VulkanContextProvider;
 }
 
 namespace content {
@@ -57,7 +58,8 @@ class CONTENT_EXPORT CompositorImpl
       public cc::LayerTreeHostClient,
       public cc::LayerTreeHostSingleThreadClient,
       public ui::UIResourceProvider,
-      public ui::WindowAndroidCompositor {
+      public ui::WindowAndroidCompositor,
+      public viz::HostFrameSinkClient {
  public:
   CompositorImpl(CompositorClient* client, gfx::NativeWindow root_window);
   ~CompositorImpl() override;
@@ -87,7 +89,7 @@ class CONTENT_EXPORT CompositorImpl
   // LayerTreeHostClient implementation.
   void WillBeginMainFrame() override {}
   void DidBeginMainFrame() override {}
-  void BeginMainFrame(const cc::BeginFrameArgs& args) override {}
+  void BeginMainFrame(const viz::BeginFrameArgs& args) override {}
   void BeginMainFrameNotExpectedSoon() override {}
   void BeginMainFrameNotExpectedUntil(base::TimeTicks time) override {}
   void UpdateLayerTreeHost() override;
@@ -115,11 +117,14 @@ class CONTENT_EXPORT CompositorImpl
   // WindowAndroidCompositor implementation.
   void AttachLayerForReadback(scoped_refptr<cc::Layer> layer) override;
   void RequestCopyOfOutputOnRootLayer(
-      std::unique_ptr<cc::CopyOutputRequest> request) override;
+      std::unique_ptr<viz::CopyOutputRequest> request) override;
   void SetNeedsAnimate() override;
   viz::FrameSinkId GetFrameSinkId() override;
   void AddChildFrameSink(const viz::FrameSinkId& frame_sink_id) override;
   void RemoveChildFrameSink(const viz::FrameSinkId& frame_sink_id) override;
+
+  // viz::HostFrameSinkClient implementation.
+  void OnFirstSurfaceActivation(const viz::SurfaceInfo& surface_info) override;
 
   void SetVisible(bool visible);
   void CreateLayerTreeHost();
@@ -134,7 +139,7 @@ class CONTENT_EXPORT CompositorImpl
   void OnGpuChannelTimeout();
   void InitializeDisplay(
       std::unique_ptr<cc::OutputSurface> display_output_surface,
-      scoped_refptr<cc::VulkanContextProvider> vulkan_context_provider,
+      scoped_refptr<viz::VulkanContextProvider> vulkan_context_provider,
       scoped_refptr<viz::ContextProvider> context_provider);
   void DidSwapBuffers();
 

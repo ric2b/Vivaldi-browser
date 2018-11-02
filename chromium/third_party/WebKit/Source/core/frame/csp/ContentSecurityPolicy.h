@@ -110,6 +110,7 @@ class CORE_EXPORT ContentSecurityPolicy
     kTreatAsPublicAddress,
     kUpgradeInsecureRequests,
     kWorkerSrc,
+    kReportTo,
   };
 
   // CheckHeaderType can be passed to Allow*FromSource methods to control which
@@ -358,6 +359,7 @@ class CORE_EXPORT ContentSecurityPolicy
                        const String& console_message,
                        const KURL& blocked_url,
                        const Vector<String>& report_endpoints,
+                       bool use_reporting_api,
                        const String& header,
                        ContentSecurityPolicyHeaderType,
                        ViolationType,
@@ -430,8 +432,8 @@ class CORE_EXPORT ContentSecurityPolicy
   FRIEND_TEST_ALL_PREFIXES(ContentSecurityPolicyTest, NonceInline);
   FRIEND_TEST_ALL_PREFIXES(ContentSecurityPolicyTest, NonceSinglePolicy);
   FRIEND_TEST_ALL_PREFIXES(ContentSecurityPolicyTest, NonceMultiplePolicy);
-  FRIEND_TEST_ALL_PREFIXES(BaseFetchContextTest,
-                           RedirectChecksReportedAndEnforcedCSP);
+  FRIEND_TEST_ALL_PREFIXES(BaseFetchContextTest, CanRequest);
+  FRIEND_TEST_ALL_PREFIXES(BaseFetchContextTest, CheckCSPForRequest);
   FRIEND_TEST_ALL_PREFIXES(BaseFetchContextTest,
                            AllowResponseChecksReportedAndEnforcedCSP);
   FRIEND_TEST_ALL_PREFIXES(FrameFetchContextTest,
@@ -455,7 +457,8 @@ class CORE_EXPORT ContentSecurityPolicy
                                Element*);
   void PostViolationReport(const SecurityPolicyViolationEventInit&,
                            LocalFrame*,
-                           const Vector<String>& report_endpoints);
+                           const Vector<String>& report_endpoints,
+                           bool use_reporting_api);
 
   static void FillInCSPHashValues(const String& source,
                                   uint8_t hash_algorithms_used,

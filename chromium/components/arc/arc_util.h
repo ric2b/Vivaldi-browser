@@ -51,6 +51,9 @@ bool ShouldArcAlwaysStart();
 // Store UI is added.
 void SetArcAlwaysStartForTesting(bool play_store_available);
 
+// Returns true if ARC should only start after the user has logged in.
+bool ShouldArcOnlyStartAfterLogin();
+
 // Returns true if ARC is installed and running ARC kiosk apps on the current
 // device is officially supported.
 // It doesn't follow that ARC is available for user sessions and
@@ -93,6 +96,7 @@ bool IsArcAppWindow(aura::Window* window);
 // Adjusts the amount of CPU the ARC instance is allowed to use. When
 // |do_restrict| is true, the limit is adjusted so ARC can only use tightly
 // restricted CPU resources.
+// TODO(yusukes): Use enum instead of bool.
 void SetArcCpuRestriction(bool do_restrict);
 
 }  // namespace arc

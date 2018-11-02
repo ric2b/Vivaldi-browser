@@ -93,14 +93,15 @@ static void RecordLaunch(JNIEnv* env,
       break;
   }
 
-  UMA_HISTOGRAM_ENUMERATION("Launch.HomeScreenSource", histogram_source,
+  UMA_HISTOGRAM_ENUMERATION("Launch.HomeScreenSource",
+                            static_cast<ShortcutInfo::Source>(histogram_source),
                             ShortcutInfo::SOURCE_COUNT);
 
   rappor::SampleDomainAndRegistryFromGURL(g_browser_process->rappor_service(),
                                           rappor_metric_source, url);
 
-  int action = standalone ? HOME_SCREEN_LAUNCH_STANDALONE
-                          : HOME_SCREEN_LAUNCH_SHORTCUT;
+  HomeScreenLaunch action =
+      standalone ? HOME_SCREEN_LAUNCH_STANDALONE : HOME_SCREEN_LAUNCH_SHORTCUT;
   std::string rappor_metric_action = standalone ? "Launch.HomeScreen.Standalone"
                                                 : "Launch.HomeScreen.Shortcut";
 

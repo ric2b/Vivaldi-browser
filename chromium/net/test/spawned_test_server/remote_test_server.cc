@@ -13,63 +13,21 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/json/json_writer.h"
-#include "base/lazy_instance.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/values.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/net_errors.h"
+#include "net/test/spawned_test_server/remote_test_server_config.h"
+#include "net/test/spawned_test_server/remote_test_server_proxy.h"
 #include "net/test/spawned_test_server/spawner_communicator.h"
 #include "url/gurl.h"
 
 namespace net {
 
 namespace {
-
-// Based on how the Android runner sets things up, it is only valid for one
-// RemoteTestServer to be active on the device at a time.
-class RemoteTestServerTracker {
- public:
-  void StartingServer() {
-    base::AutoLock lock(lock_);
-    CHECK_EQ(count_, 0);
-    count_++;
-  }
-
-  void StoppingServer() {
-    base::AutoLock lock(lock_);
-    CHECK_EQ(count_, 1);
-    count_--;
-  }
-
- private:
-  // |lock_| protects access to |count_|.
-  base::Lock lock_;
-  int count_ = 0;
-};
-
-base::LazyInstance<RemoteTestServerTracker>::Leaky tracker =
-    LAZY_INSTANCE_INITIALIZER;
-
-// To reduce the running time of tests, tests may be sharded across several
-// devices. This means that it may be necessary to support multiple instances
-// of the test server spawner and the Python test server simultaneously on the
-// same host. Each pair of (test server spawner, Python test server) correspond
-// to a single testing device.
-// The mapping between the test server spawner and the individual Python test
-// servers is written to a file on the device prior to executing any tests.
-base::FilePath GetTestServerPortInfoFile() {
-#if !defined(OS_ANDROID)
-  return base::FilePath("/tmp/net-test-server-ports");
-#else
-  base::FilePath test_data_dir;
-  PathService::Get(base::DIR_ANDROID_EXTERNAL_STORAGE, &test_data_dir);
-  return test_data_dir.Append("net-test-server-ports");
-#endif
-}
 
 // Please keep it sync with dictionary SERVER_TYPES in testserver.py
 std::string GetServerTypeString(BaseTestServer::Type type) {
@@ -95,10 +53,8 @@ std::string GetServerTypeString(BaseTestServer::Type type) {
 }  // namespace
 
 RemoteTestServer::RemoteTestServer(Type type,
-                                   const std::string& host,
                                    const base::FilePath& document_root)
-    : BaseTestServer(type, host),
-      spawner_server_port_(0) {
+    : BaseTestServer(type), io_thread_("RemoteTestServer IO Thread") {
   if (!Init(document_root))
     NOTREACHED();
 }
@@ -107,7 +63,7 @@ RemoteTestServer::RemoteTestServer(Type type,
                                    const SSLOptions& ssl_options,
                                    const base::FilePath& document_root)
     : BaseTestServer(type, ssl_options),
-      spawner_server_port_(0) {
+      io_thread_("RemoteTestServer IO Thread") {
   if (!Init(document_root))
     NOTREACHED();
 }
@@ -120,15 +76,15 @@ bool RemoteTestServer::Start() {
   if (spawner_communicator_.get())
     return true;
 
-  tracker.Get().StartingServer();
+  RemoteTestServerConfig config = RemoteTestServerConfig::Load();
 
-  spawner_communicator_.reset(new SpawnerCommunicator(spawner_server_port_));
+  spawner_communicator_ = std::make_unique<SpawnerCommunicator>(config);
 
   base::DictionaryValue arguments_dict;
   if (!GenerateArguments(&arguments_dict))
     return false;
 
-  arguments_dict.Set("on-remote-server", base::MakeUnique<base::Value>());
+  arguments_dict.Set("on-remote-server", std::make_unique<base::Value>());
 
   // Append the 'server-type' argument which is used by spawner server to
   // pass right server type to Python test server.
@@ -141,25 +97,26 @@ bool RemoteTestServer::Start() {
     return false;
 
   // Start the Python test server on the remote machine.
-  uint16_t test_server_port;
-  if (!spawner_communicator_->StartServer(arguments_string,
-                                          &test_server_port)) {
-    return false;
-  }
-  if (0 == test_server_port)
+  std::string server_data;
+  if (!spawner_communicator_->StartServer(arguments_string, &server_data))
     return false;
 
-  // Construct server data to initialize BaseTestServer::server_data_.
-  base::DictionaryValue server_data_dict;
-  // At this point, the test server should be spawned on the host. Update the
-  // local port to real port of Python test server, which will be forwarded to
-  // the remote server.
-  server_data_dict.SetInteger("port", test_server_port);
-  std::string server_data;
-  base::JSONWriter::Write(server_data_dict, &server_data);
-  if (server_data.empty() || !ParseServerData(server_data)) {
+  // Parse server_data.
+  int server_port;
+  if (server_data.empty() ||
+      !SetAndParseServerData(server_data, &server_port)) {
     LOG(ERROR) << "Could not parse server_data: " << server_data;
     return false;
+  }
+
+  // If the server is not on localhost then start a proxy on localhost to
+  // forward connections to the server.
+  if (config.address() != IPAddress::IPv4Localhost()) {
+    test_server_proxy_ = std::make_unique<RemoteTestServerProxy>(
+        IPEndPoint(config.address(), server_port), io_thread_.task_runner());
+    SetPort(test_server_proxy_->local_port());
+  } else {
+    SetPort(server_port);
   }
 
   return SetupWhenServerStarted();
@@ -176,19 +133,18 @@ bool RemoteTestServer::BlockUntilStarted() {
 }
 
 bool RemoteTestServer::Stop() {
-  if (!spawner_communicator_.get())
+  if (!spawner_communicator_)
     return true;
 
-  tracker.Get().StoppingServer();
-
+  uint16_t port = GetPort();
   CleanUpWhenStoppingServer();
-  bool stopped = spawner_communicator_->StopServer();
+  bool stopped = spawner_communicator_->StopServer(port);
 
   if (!stopped)
     LOG(ERROR) << "Failed stopping RemoteTestServer";
 
   // Explicitly reset |spawner_communicator_| to avoid reusing the stopped one.
-  spawner_communicator_.reset(NULL);
+  spawner_communicator_.reset();
   return stopped;
 }
 
@@ -206,45 +162,20 @@ bool RemoteTestServer::Init(const base::FilePath& document_root) {
   if (document_root.IsAbsolute())
     return false;
 
-  // Gets ports information used by test server spawner and Python test server.
-  int test_server_port = 0;
-
-  // Parse file to extract the ports information.
-  std::string port_info;
-  if (!base::ReadFileToString(GetTestServerPortInfoFile(), &port_info) ||
-      port_info.empty()) {
-    return false;
-  }
-
-  std::vector<std::string> ports = base::SplitString(
-      port_info, ":", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
-  if (ports.size() != 2u)
-    return false;
-
-  // Verify the ports information.
-  base::StringToInt(ports[0], &spawner_server_port_);
-  if (!spawner_server_port_ ||
-      static_cast<uint32_t>(spawner_server_port_) >=
-          std::numeric_limits<uint16_t>::max())
-    return false;
-
-  // Allow the test_server_port to be 0, which means the test server spawner
-  // will pick up a random port to run the test server.
-  base::StringToInt(ports[1], &test_server_port);
-  if (static_cast<uint32_t>(test_server_port) >=
-      std::numeric_limits<uint16_t>::max())
-    return false;
-  SetPort(test_server_port);
+  bool thread_started = io_thread_.StartWithOptions(
+      base::Thread::Options(base::MessageLoop::TYPE_IO, 0));
+  CHECK(thread_started);
 
   // Unlike LocalTestServer, RemoteTestServer passes relative paths to the test
   // server. The test server fails on empty strings in some configurations.
   base::FilePath fixed_root = document_root;
   if (fixed_root.empty())
     fixed_root = base::FilePath(base::FilePath::kCurrentDirectory);
-  SetResourcePath(fixed_root, base::FilePath().AppendASCII("net")
-                                           .AppendASCII("data")
-                                           .AppendASCII("ssl")
-                                           .AppendASCII("certificates"));
+  SetResourcePath(fixed_root, base::FilePath()
+                                  .AppendASCII("net")
+                                  .AppendASCII("data")
+                                  .AppendASCII("ssl")
+                                  .AppendASCII("certificates"));
   return true;
 }
 

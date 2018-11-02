@@ -44,7 +44,7 @@ class FrameInputHandlerImpl : public mojom::FrameInputHandler {
   void SetCompositionFromExistingText(
       int32_t start,
       int32_t end,
-      const std::vector<ui::CompositionUnderline>& underlines) override;
+      const std::vector<ui::ImeTextSpan>& ime_text_spans) override;
   void ExtendSelectionAndDelete(int32_t before, int32_t after) override;
   void DeleteSurroundingText(int32_t before, int32_t after) override;
   void DeleteSurroundingTextInCodePoints(int32_t before,
@@ -69,6 +69,8 @@ class FrameInputHandlerImpl : public mojom::FrameInputHandler {
   void MoveRangeSelectionExtent(const gfx::Point& extent) override;
   void ScrollFocusedEditableNodeIntoRect(const gfx::Rect& rect) override;
   void MoveCaret(const gfx::Point& point) override;
+  void GetWidgetInputHandler(
+      mojom::WidgetInputHandlerAssociatedRequest interface_request) override;
 
  private:
   ~FrameInputHandlerImpl() override;

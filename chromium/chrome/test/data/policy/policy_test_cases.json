@@ -319,6 +319,45 @@
     ]
   },
 
+  "NativePrintersBulkConfiguration": {
+    "os": ["chromeos"],
+    "test_policy": {
+      "NativePrintersBulkConfiguration": {
+        "url": "https://example.com/policyfile",
+        "hash": "deadbeefdeadbeefdeadbeef"
+      }
+    }
+  },
+
+  "NativePrintersBulkAccessMode": {
+    "os": ["chromeos"],
+    "test_policy": {
+      "NativePrintersBulkAccessMode": 1
+    },
+    "pref_mappings": [
+      { "pref": "native_printing.recommended_printers_access_mode" }
+    ]
+  },
+
+  "NativePrintersBulkBlacklist": {
+    "os": ["chromeos"],
+    "test_policy": {
+      "NativePrintersBulkBlacklist": ["id4", "id7", "id10"]
+    },
+    "pref_mappings": [
+      { "pref": "native_printing.recommended_printers_blacklist" }
+    ]
+  },
+  "NativePrintersBulkWhitelist": {
+    "os": ["chromeos"],
+    "test_policy": {
+      "NativePrintersBulkWhitelist":  ["id4", "id7", "id10"]
+    },
+    "pref_mappings": [
+      { "pref": "native_printing.recommended_printers_whitelist" }
+    ]
+  },
+
   "SafeBrowsingEnabled": {
     "os": ["win", "linux", "mac", "chromeos"],
     "can_be_recommended": true,
@@ -2800,6 +2839,17 @@
     ]
   },
 
+  "CloudPolicyOverridesMachinePolicy": {
+    "os": ["win", "linux", "mac"],
+    "test_policy": { "CloudPolicyOverridesMachinePolicy": false },
+    "pref_mappings": [
+      { "pref": "policy.cloud_override",
+        "local_state": true
+      }
+    ]
+  },
+
+
   "----- Chrome OS device policies ---------------------------------------": {},
 
   "DevicePolicyRefreshRate": {
@@ -3139,6 +3189,34 @@
     ]
   },
 
+  "CastReceiverEnabled": {
+    "os": ["chromeos"],
+    "test_policy": { "CastReceiverEnabled": true },
+    "pref_mappings": [
+      { "pref": "cast_receiver.enabled" }
+    ]
+  },
+
+  "CastReceiverName": {
+    "os": ["chromeos"],
+    "test_policy": { "CastReceiverName": "Hallway" },
+    "pref_mappings": [
+      { "pref": "cast_receiver.name",
+        "local_state": true }
+    ]
+  },
+
+  "TPMFirmwareUpdateSettings": {
+    "os": ["chromeos"],
+    "test_policy": {
+      "allow-user-initiated-powerwash": true
+    },
+    "pref_mappings": [
+      { "pref": "cros.tpm_firmware_update_settings" }
+    ]
+  },
+
+
   "----- Chrome Frame policies -------------------------------------------": {},
 
   "ChromeFrameRendererSettings": {
@@ -3163,5 +3241,10 @@
   },
 
   "SkipMetadataCheck": {
+  },
+
+  "DeviceOffHours": {
+    "os": ["chromeos"],
+    "test_policy": {"DeviceOffHours": {"intervals": [{"start" : {"day_of_week" : 1, "time": 12840000}, "end": {"day_of_week" : 1, "time": 21720000}}], "timezone" : "GMT", "ignored_policies": ["allow_new_users", "guest_mode_enabled"]}}
   }
 }

@@ -474,7 +474,7 @@ class DeveloperPrivatePackDirectoryFunction
   ResponseAction Run() override;
 
  private:
-  scoped_refptr<PackExtensionJob> pack_job_;
+  std::unique_ptr<PackExtensionJob> pack_job_;
   std::string item_path_str_;
   std::string key_path_str_;
 };
@@ -517,7 +517,7 @@ class DeveloperPrivateLoadDirectoryFunction
       const base::FilePath& project_path,
       const base::FilePath& destination_path,
       base::File::Error result,
-      const storage::FileSystemOperation::FileEntryList& file_list,
+      storage::FileSystemOperation::FileEntryList file_list,
       bool has_more);
 
   void SnapshotFileCallback(
@@ -525,7 +525,7 @@ class DeveloperPrivateLoadDirectoryFunction
       base::File::Error result,
       const base::File::Info& file_info,
       const base::FilePath& platform_path,
-      const scoped_refptr<storage::ShareableFileReference>& file_ref);
+      scoped_refptr<storage::ShareableFileReference> file_ref);
 
   void CopyFile(const base::FilePath& src_path,
                 const base::FilePath& dest_path);

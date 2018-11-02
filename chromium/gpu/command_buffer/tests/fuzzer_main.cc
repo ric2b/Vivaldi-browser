@@ -122,12 +122,12 @@ class CommandBufferSetup {
     command_line->AppendSwitchASCII(switches::kUseANGLE,
                                     gl::kANGLEImplementationNullName);
     CHECK(gl::init::InitializeGLOneOffImplementation(
-        gl::kGLImplementationEGLGLES2, false, false, false));
+        gl::kGLImplementationEGLGLES2, false, false, false, true));
 #elif defined(GPU_FUZZER_USE_SWIFTSHADER)
     command_line->AppendSwitchASCII(switches::kUseGL,
                                     gl::kGLImplementationSwiftShaderName);
     CHECK(gl::init::InitializeGLOneOffImplementation(
-        gl::kGLImplementationSwiftShaderGL, false, false, false));
+        gl::kGLImplementationSwiftShaderGL, false, false, false, true));
 #endif
 
 #if !defined(GPU_FUZZER_USE_STUB)
@@ -152,7 +152,7 @@ class CommandBufferSetup {
     scoped_refptr<gles2::FeatureInfo> feature_info =
         new gles2::FeatureInfo();
     scoped_refptr<gles2::ContextGroup> context_group = new gles2::ContextGroup(
-        gpu_preferences_, &mailbox_manager_, nullptr /* memory_tracker */,
+        gpu_preferences_, true, &mailbox_manager_, nullptr /* memory_tracker */,
         &translator_cache_, &completeness_cache_, feature_info,
         true /* bind_generates_resource */, &image_manager_,
         nullptr /* image_factory */, nullptr /* progress_reporter */,

@@ -29,6 +29,8 @@ class UpgradeObserver;
 class UpgradeDetector {
  public:
   // The Homeland Security Upgrade Advisory System.
+  // These values are logged in a histogram and shouldn't be renumbered or
+  // removed.
   enum UpgradeNotificationAnnoyanceLevel {
     UPGRADE_ANNOYANCE_NONE = 0,  // What? Me worry?
     UPGRADE_ANNOYANCE_LOW,       // Green.
@@ -36,7 +38,12 @@ class UpgradeDetector {
     UPGRADE_ANNOYANCE_HIGH,      // Red.
     UPGRADE_ANNOYANCE_SEVERE,    // Orange.
     UPGRADE_ANNOYANCE_CRITICAL,  // Red exclamation mark.
+    UPGRADE_ANNOYANCE_LAST = UPGRADE_ANNOYANCE_CRITICAL  // The last value
   };
+
+  // The number of UpgradeNotificationAnnoyanceLevel enum values.
+  static constexpr int kUpgradeNotificationAnnoyanceLevelCount =
+      UPGRADE_ANNOYANCE_LAST + 1;
 
   // Returns the singleton implementation instance.
   static UpgradeDetector* GetInstance();
@@ -127,6 +134,10 @@ class UpgradeDetector {
   // over cellular connection.
   void NotifyUpdateOverCellularAvailable();
 
+  // Notifies that the user's one time permission on update over cellular
+  // connection has been granted.
+  void NotifyUpdateOverCellularOneTimePermissionGranted();
+
   // Triggers a critical update, which starts a timer that checks the machine
   // idle state. Protected and virtual so that it could be overridden by tests.
   virtual void TriggerCriticalUpdate();
@@ -162,6 +173,7 @@ class UpgradeDetector {
  private:
   FRIEND_TEST_ALL_PREFIXES(AppMenuModelTest, Basics);
   FRIEND_TEST_ALL_PREFIXES(SystemTrayClientTest, UpdateTrayIcon);
+  friend class UpgradeMetricsProviderTest;
 
   // Initiates an Idle check. See IdleCallback below.
   void CheckIdle();

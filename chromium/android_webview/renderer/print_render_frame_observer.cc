@@ -5,7 +5,7 @@
 #include "android_webview/renderer/print_render_frame_observer.h"
 
 #include "components/printing/common/print_messages.h"
-#include "components/printing/renderer/print_web_view_helper.h"
+#include "components/printing/renderer/print_render_frame_helper.h"
 #include "content/public/renderer/render_frame.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 
@@ -32,8 +32,8 @@ bool PrintRenderFrameObserver::OnMessageReceived(
 }
 
 void PrintRenderFrameObserver::OnPrintNodeUnderContextMenu() {
-  printing::PrintWebViewHelper* helper =
-      printing::PrintWebViewHelper::Get(render_frame());
+  printing::PrintRenderFrameHelper* helper =
+      printing::PrintRenderFrameHelper::Get(render_frame());
   if (helper)
     helper->PrintNode(render_frame()->GetWebFrame()->ContextMenuNode());
 }

@@ -38,12 +38,11 @@ ContentPasswordManagerDriver::ContentPasswordManagerDriver(
     : render_frame_host_(render_frame_host),
       client_(client),
       password_generation_manager_(client, this),
-      password_autofill_manager_(this, autofill_client),
+      password_autofill_manager_(this, autofill_client, client),
       next_free_key_(0),
       is_main_frame_(render_frame_host->GetParent() == nullptr),
       password_manager_binding_(this),
       weak_factory_(this) {
-
   // For some frames |this| may be instantiated before log manager creation, so
   // here we can not send logging state to renderer process for them. For such
   // cases, after the log manager got ready later,
@@ -137,6 +136,19 @@ void ContentPasswordManagerDriver::ForceSavePassword() {
                  weak_factory_.GetWeakPtr()));
 }
 
+void ContentPasswordManagerDriver::ShowManualFallbackForSaving(
+    const autofill::PasswordForm& password_form) {
+  if (!CheckChildProcessSecurityPolicy(
+          password_form.origin,
+          BadMessageReason::CPMD_BAD_ORIGIN_SHOW_FALLBACK_FOR_SAVING))
+    return;
+  GetPasswordManager()->ShowManualFallbackForSaving(this, password_form);
+}
+
+void ContentPasswordManagerDriver::HideManualFallbackForSaving() {
+  GetPasswordManager()->HideManualFallbackForSaving();
+}
+
 void ContentPasswordManagerDriver::GeneratePassword() {
   GetPasswordGenerationAgent()->UserTriggeredGeneratePassword();
 }
@@ -157,6 +169,10 @@ autofill::AutofillDriver* ContentPasswordManagerDriver::GetAutofillDriver() {
 
 bool ContentPasswordManagerDriver::IsMainFrame() const {
   return is_main_frame_;
+}
+
+void ContentPasswordManagerDriver::MatchingBlacklistedFormFound() {
+  GetPasswordAutofillAgent()->BlacklistedFormFound();
 }
 
 PasswordGenerationManager*
@@ -290,6 +306,13 @@ void ContentPasswordManagerDriver::ShowNotSecureWarning(
     base::i18n::TextDirection text_direction,
     const gfx::RectF& bounds) {
   password_autofill_manager_.OnShowNotSecureWarning(
+      text_direction, TransformToRootCoordinates(bounds));
+}
+
+void ContentPasswordManagerDriver::ShowManualFallbackSuggestion(
+    base::i18n::TextDirection text_direction,
+    const gfx::RectF& bounds) {
+  password_autofill_manager_.OnShowManualFallbackSuggestion(
       text_direction, TransformToRootCoordinates(bounds));
 }
 

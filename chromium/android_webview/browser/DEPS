@@ -28,10 +28,12 @@ include_rules = [
   "+components/spellcheck/common",
   "+components/url_formatter",
   "+components/user_prefs",
+  "+components/variations",
   "+components/visitedlink/browser",
   "+components/viz/common",
   "+components/viz/service/display",
   "+components/viz/service/frame_sinks",
+  "+components/viz/test",
   "+components/webdata/common",
 
   "+content/public/browser",

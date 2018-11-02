@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved
+// Copyright (c) 2017 Vivaldi Technologies AS. All rights reserved
 
 [
   {
@@ -52,7 +52,41 @@
               }
             }
           },
-          "preferenceType": { "$ref": "preferenceTypeEnum"}
+          "preferenceType": { "$ref": "preferenceTypeEnum" }
+        }
+      },
+      {
+        "id": "ContentSettingsTypeEnum",
+        "type": "string",
+        "description": "ContentSettingsType, see /components/content_settings/core/common/content_settings_types.h",
+        "enum": [ "plugins", "popups", "geolocation", "notifications" ]
+      },
+      {
+        "id": "ContentSettingEnum",
+        "type": "string",
+        "description": "ContentSetting, see /components/content_settings/core/common/content_settings_types.h",
+        "enum": [ "allow", "block", "ask", "session_only", "detect_important_content", "num_settings" ]
+      },
+
+      {
+        "id": "ContentSettingItem",
+        "type": "object",
+        "description": "A full content setting description.",
+        "properties": {
+          "primary_pattern": {
+            "type": "string",
+            "description": "URL pattern to match for the setting."
+          },
+          "secondary_pattern": {
+            "type": "string",
+            "description": "This is only used for certain types. See https://developer.chrome.com/extensions/contentSettings#patterns"
+          },
+          "type": {
+            "$ref": "ContentSettingsTypeEnum"
+          },
+          "setting": {
+            "$ref": "ContentSettingEnum"
+          }
         }
       }
     ],
@@ -127,6 +161,28 @@
                 "name": "results",
                 "type": "array",
                 "items": { "$ref": "PreferenceItem" }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "setContentSetting",
+        "type": "function",
+        "description": "Set a contentSetting outside the extension space.",
+        "parameters": [
+          {
+            "name": "settingsItem",
+            "$ref": "ContentSettingItem"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "result",
+                "type": "boolean"
               }
             ]
           }

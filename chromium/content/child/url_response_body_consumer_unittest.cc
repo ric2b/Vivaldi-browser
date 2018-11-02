@@ -64,7 +64,6 @@ class TestRequestPeer : public RequestPeer {
   void OnTransferSizeUpdated(int transfer_size_diff) override {}
 
   void OnCompletedRequest(int error_code,
-                          bool was_ignored_by_handler,
                           bool stale_copy_in_cache,
                           const base::TimeTicks& completion_time,
                           int64_t total_transfer_size,
@@ -138,7 +137,7 @@ class URLResponseBodyConsumerTest : public ::testing::Test,
   int SetUpRequestPeer(std::unique_ptr<ResourceRequest> request,
                        TestRequestPeer::Context* context) {
     return dispatcher_->StartAsync(
-        std::move(request), 0, nullptr, url::Origin(),
+        std::move(request), 0, nullptr, url::Origin(), false,
         base::MakeUnique<TestRequestPeer>(context, message_loop_.task_runner()),
         blink::WebURLRequest::LoadingIPCType::kChromeIPC, nullptr,
         std::vector<std::unique_ptr<URLLoaderThrottle>>(),
@@ -171,8 +170,7 @@ TEST_F(URLResponseBodyConsumerTest, ReceiveData) {
       std::move(data_pipe.producer_handle);
   std::string buffer = "hello";
   uint32_t size = buffer.size();
-  MojoResult result =
-      mojo::WriteDataRaw(writer.get(), buffer.c_str(), &size, kNone);
+  MojoResult result = writer->WriteData(buffer.c_str(), &size, kNone);
   ASSERT_EQ(MOJO_RESULT_OK, result);
   ASSERT_EQ(buffer.size(), size);
 
@@ -198,8 +196,7 @@ TEST_F(URLResponseBodyConsumerTest, OnCompleteThenClose) {
       std::move(data_pipe.producer_handle);
   std::string buffer = "hello";
   uint32_t size = buffer.size();
-  MojoResult result =
-      mojo::WriteDataRaw(writer.get(), buffer.c_str(), &size, kNone);
+  MojoResult result = writer->WriteData(buffer.c_str(), &size, kNone);
   ASSERT_EQ(MOJO_RESULT_OK, result);
   ASSERT_EQ(buffer.size(), size);
 
@@ -234,8 +231,7 @@ TEST_F(URLResponseBodyConsumerTest, OnCompleteThenCloseWithAsyncRelease) {
       std::move(data_pipe.producer_handle);
   std::string buffer = "hello";
   uint32_t size = buffer.size();
-  MojoResult result =
-      mojo::WriteDataRaw(writer.get(), buffer.c_str(), &size, kNone);
+  MojoResult result = writer->WriteData(buffer.c_str(), &size, kNone);
   ASSERT_EQ(MOJO_RESULT_OK, result);
   ASSERT_EQ(buffer.size(), size);
 
@@ -288,8 +284,7 @@ TEST_F(URLResponseBodyConsumerTest, TooBigChunkShouldBeSplit) {
       std::move(data_pipe.producer_handle);
   void* buffer = nullptr;
   uint32_t size = 0;
-  MojoResult result =
-      mojo::BeginWriteDataRaw(writer.get(), &buffer, &size, kNone);
+  MojoResult result = writer->BeginWriteData(&buffer, &size, kNone);
 
   ASSERT_EQ(MOJO_RESULT_OK, result);
   ASSERT_EQ(options.capacity_num_bytes, size);
@@ -298,7 +293,7 @@ TEST_F(URLResponseBodyConsumerTest, TooBigChunkShouldBeSplit) {
   memset(static_cast<char*>(buffer) + kMaxNumConsumedBytesInTask, 'b',
          kMaxNumConsumedBytesInTask);
 
-  result = mojo::EndWriteDataRaw(writer.get(), size);
+  result = writer->EndWriteData(size);
   ASSERT_EQ(MOJO_RESULT_OK, result);
 
   scoped_refptr<URLResponseBodyConsumer> consumer(new URLResponseBodyConsumer(

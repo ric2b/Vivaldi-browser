@@ -111,8 +111,7 @@ copy("deb_packaging_files") {
     "debian/changelog.template",
     "debian/control.template",
     "debian/debian.menu",
-    "debian/expected_deps_ia32_jessie",
-    "debian/expected_deps_x64_jessie",
+    "debian/expected_deps_x64",
     "debian/postinst",
     "debian/postrm",
     "debian/prerm",
@@ -150,8 +149,8 @@ if (!is_chromeos) {
     visibility = [ ":*" ]
     sources = [
       "rpm/build.sh",
-      "rpm/expected_deps_i386",
       "rpm/expected_deps_x86_64",
+      "//vivaldi/installer/linux/rpm/expected_deps_i386",
       "//vivaldi/installer/linux/rpm/vivaldi.spec.template",
     ]
     outputs = [
@@ -244,7 +243,7 @@ template("linux_package") {
     packaging_files_binaries += [ "$root_out_dir/nacl_irt_x86_32.nexe" ]
   } else if (false && current_cpu == "x64") {
     packaging_files_binaries += [ "$root_out_dir/nacl_irt_x86_64.nexe" ]
-  } else if (current_cpu == "arm") {
+  } else if (false && current_cpu == "arm") {
     packaging_files_binaries += [ "$root_out_dir/nacl_irt_arm.nexe" ]
   }
 
@@ -271,6 +270,8 @@ template("linux_package") {
       deb_arch = "amd64"
     } else if (current_cpu == "arm") {
       deb_arch = "arm"
+    } else if (current_cpu == "arm64") {
+      deb_arch = "arm64"
     } else {
       assert(false, "Linux installer not configured for this architecture.")
     }
@@ -307,7 +308,7 @@ template("linux_package") {
     ]
   }
 
-  if (!is_chromeos) {
+  if (!is_chromeos && !(is_linux && (current_cpu == "arm" || current_cpu == "arm64"))) {
     rpm_target_name = "${target_name}_rpm"
     action(rpm_target_name) {
       visibility = [ ":*" ]
@@ -319,13 +320,15 @@ template("linux_package") {
         rpm_arch = "x86_64"
       } else if (current_cpu == "arm") {
         rpm_arch = "arm"
+      } else if (current_cpu == "arm64") {
+        rpm_arch = "arm64"
       } else {
         assert(false, "Linux installer not configured for this architecture.")
       }
 
       inputs = packaging_files_binaries
       outputs = [
-        "$root_out_dir/vivaldi-${channel}_${vivaldi_version_full}-1.${rpm_arch}.rpm",
+        "$root_out_dir/vivaldi-${channel}-${vivaldi_version_full}-1.${rpm_arch}.rpm",
       ]
 
       args = [
@@ -352,7 +355,7 @@ template("linux_package") {
     deps = [
       ":$deb_target_name",
     ]
-    if (!is_chromeos) {
+    if (!is_chromeos && !(is_linux && (current_cpu == "arm" || current_cpu == "arm64"))) {
       deps += [ ":$rpm_target_name" ]
     }
   }

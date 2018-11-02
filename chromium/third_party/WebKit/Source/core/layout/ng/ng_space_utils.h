@@ -6,21 +6,13 @@
 #define NGSpaceUtils_h
 
 #include "core/CoreExport.h"
-#include "core/style/ComputedStyleConstants.h"
 #include "platform/LayoutUnit.h"
 #include "platform/wtf/Optional.h"
 
 namespace blink {
 
 class ComputedStyle;
-struct NGExclusions;
-struct NGLogicalOffset;
-
-// Gets the clearance offset based on the provided {@code clear_type} and list
-// of exclusions that represent left/right float.
-CORE_EXPORT WTF::Optional<LayoutUnit> GetClearanceOffset(
-    const std::shared_ptr<NGExclusions>& exclusions,
-    EClear clear_type);
+struct NGBfcOffset;
 
 // Whether child's constraint space should shrink to its intrinsic width.
 // This is needed for buttons, select, input, floats and orthogonal children.
@@ -31,7 +23,7 @@ bool ShouldShrinkToFit(const ComputedStyle& parent_style,
 // Adjusts {@code offset} to the clearance line.
 CORE_EXPORT bool AdjustToClearance(
     const WTF::Optional<LayoutUnit>& clearance_offset,
-    NGLogicalOffset* offset);
+    NGBfcOffset* offset);
 
 }  // namespace blink
 

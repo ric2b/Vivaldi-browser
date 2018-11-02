@@ -75,22 +75,31 @@ constexpr size_t kVivaldiSpeedDialItems = 9;
 // was too slow.
 constexpr int kUpdatesToSkipUnderHeavyLoad = 10;
 
-// The delay before updating the JumpList to prevent update storms.
-constexpr base::TimeDelta kDelayForJumplistUpdate =
-    base::TimeDelta::FromMilliseconds(3500);
+// The delay before updating the JumpList for users who haven't used it in a
+// session. A delay of 2000 ms is chosen to coalesce more updates when tabs are
+// closed rapidly.
+constexpr base::TimeDelta kLongDelayForUpdate =
+    base::TimeDelta::FromMilliseconds(2000);
+
+// The delay before updating the JumpList for users who have used it in a
+// session. A delay of 500 ms is used to not only make the update happen almost
+// immediately, but also prevent update storms when tabs are closed rapidly via
+// Ctrl-W.
+constexpr base::TimeDelta kShortDelayForUpdate =
+    base::TimeDelta::FromMilliseconds(500);
 
 // The maximum allowed time for JumpListUpdater::BeginUpdate. Updates taking
 // longer than this are discarded to prevent bogging down slow machines.
-constexpr base::TimeDelta kTimeOutForJumplistBeginUpdate =
+constexpr base::TimeDelta kTimeOutForBeginUpdate =
     base::TimeDelta::FromMilliseconds(500);
 
-// The maximum allowed time for updating both "most visited" and "recently
-// closed" categories via JumpListUpdater::AddCustomCategory.
+// The maximum allowed time for adding most visited pages custom category via
+// JumpListUpdater::AddCustomCategory.
 constexpr base::TimeDelta kTimeOutForAddCustomCategory =
-    base::TimeDelta::FromMilliseconds(500);
+    base::TimeDelta::FromMilliseconds(320);
 
 // The maximum allowed time for JumpListUpdater::CommitUpdate.
-constexpr base::TimeDelta kTimeOutForJumplistCommitUpdate =
+constexpr base::TimeDelta kTimeOutForCommitUpdate =
     base::TimeDelta::FromMilliseconds(1000);
 
 // Appends the common switches to each shell link.
@@ -128,9 +137,10 @@ bool CreateIconFile(const gfx::ImageSkia& image_skia,
     std::vector<float> supported_scales = image_skia.GetSupportedScales();
     for (auto& scale : supported_scales) {
       gfx::ImageSkiaRep image_skia_rep = image_skia.GetRepresentation(scale);
-      if (!image_skia_rep.is_null())
+      if (!image_skia_rep.is_null()) {
         image_family.Add(
             gfx::Image::CreateFrom1xBitmap(image_skia_rep.sk_bitmap()));
+      }
     }
   }
 
@@ -381,26 +391,20 @@ void JumpList::InitializeTimerForUpdate() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (timer_.IsRunning()) {
-    // TODO(chengx): Remove the UMA histogram below after fixing crbug/733034.
-    UMA_HISTOGRAM_COUNTS_10000(
-        "WinJumplist.NotificationTimeInterval2",
-        (timer_.desired_run_time() - base::TimeTicks::Now()).InMilliseconds());
     timer_.Reset();
   } else {
-    // TODO(chengx): Remove the UMA histogram below after fixing crbug/733034.
-    // If the notification interval is larger than 3500 ms, add a "0" to the
-    // histogram so that we know how many notifications get coalesced.
-    UMA_HISTOGRAM_COUNTS_10000("WinJumplist.NotificationTimeInterval2", 0);
     // base::Unretained is safe since |this| is guaranteed to outlive timer_.
     timer_.Start(
-        FROM_HERE, kDelayForJumplistUpdate,
+        FROM_HERE,
+        profile_->GetUserData(chrome::kJumpListIconDirname)
+            ? kShortDelayForUpdate
+            : kLongDelayForUpdate,
         base::Bind(&JumpList::ProcessNotifications, base::Unretained(this)));
   }
 }
 
 void JumpList::ProcessNotifications() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(!update_in_progress_);
 
   if (updates_to_skip_ > 0) {
     --updates_to_skip_;
@@ -435,7 +439,6 @@ void JumpList::ProcessNotifications() {
 
 void JumpList::ProcessTopSitesNotification() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(!update_in_progress_);
 
   // Opening the first tab in one session triggers a TopSite history sync.
   // Delay this sync till the first tab is closed to allow the "recently closed"
@@ -460,7 +463,6 @@ void JumpList::ProcessTopSitesNotification() {
 
 void JumpList::ProcessTabRestoreServiceNotification() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(!update_in_progress_);
 
   // Create a list of ShellLinkItems from the "Recently Closed" pages.
   // As noted above, we create a ShellLinkItem objects with the following
@@ -808,16 +810,18 @@ void JumpList::CreateNewJumpListAndNotifyOS(
 
   base::ElapsedTimer begin_update_timer;
 
-  if (!jumplist_updater.BeginUpdate())
-    return;
+  bool begin_success = jumplist_updater.BeginUpdate();
 
-  // Discard this JumpList update if JumpListUpdater::BeginUpdate takes longer
-  // than the maximum allowed time, as it's very likely the following update
-  // steps will also take a long time.
-  if (begin_update_timer.Elapsed() >= kTimeOutForJumplistBeginUpdate) {
+  // If JumpListUpdater::BeginUpdate takes longer than the maximum allowed time,
+  // abort the current update as it's very likely the following steps will also
+  // take a long time, and skip the next |kUpdatesToSkipUnderHeavyLoad| updates.
+  if (begin_update_timer.Elapsed() >= kTimeOutForBeginUpdate) {
     update_transaction->update_timeout = true;
     return;
   }
+
+  if (!begin_success)
+    return;
 
   // Record the desired number of icons created in this JumpList update.
   int icons_created = 0;
@@ -853,14 +857,31 @@ void JumpList::CreateNewJumpListAndNotifyOS(
   // Update the "Most Visited" category of the JumpList if it exists.
   // This update request is applied into the JumpList when we commit this
   // transaction.
-  if (!jumplist_updater.AddCustomCategory(
-          l10n_util::GetStringUTF16(IDS_NEW_TAB_MOST_VISITED),
-          most_visited_pages, kMostVisitedItems)) {
+  bool add_category_success = jumplist_updater.AddCustomCategory(
+      l10n_util::GetStringUTF16(IDS_NEW_TAB_MOST_VISITED), most_visited_pages,
+      kMostVisitedItems);
+
+  // If AddCustomCategory takes longer than the maximum allowed time, abort the
+  // current update and skip the next |kUpdatesToSkipUnderHeavyLoad| updates.
+  //
+  // We only time adding custom category for most visited pages because
+  // 1. If processing the first category times out or fails, there is no need to
+  //    process the second category. In this case, we are not able to time both
+  //    categories. Then we need to select one category from the two.
+  // 2. Most visited category is selected because it always has 5 items except
+  //    for a new Chrome user who has not closed 5 distinct websites yet. In
+  //    comparison, the number of items in recently closed category is much less
+  //    stable. It has 3 items only after an user closes 3 websites in one
+  //    session. This means the runtime of AddCustomCategory API should be fixed
+  //    for most visited category, but not for recently closed category. So a
+  //    fixed timeout threshold is only valid for most visited category.
+  if (add_custom_category_timer.Elapsed() >= kTimeOutForAddCustomCategory) {
+    update_transaction->update_timeout = true;
     return;
   }
 
-  base::TimeDelta most_visited_category_time =
-      add_custom_category_timer.Elapsed();
+  if (!add_category_success)
+    return;
 
   // Update the "Recently Closed" category of the JumpList.
   if (!jumplist_updater.AddCustomCategory(
@@ -877,29 +898,6 @@ void JumpList::CreateNewJumpListAndNotifyOS(
     return;
   }
 
-  base::TimeDelta add_category_total_time = add_custom_category_timer.Elapsed();
-
-  if (recently_closed_pages.size() == kRecentlyClosedItems &&
-      most_visited_pages.size() == kMostVisitedItems) {
-    // TODO(chengx): Remove the UMA histogram after fixing crbug/736530.
-    double most_visited_over_recently_closed =
-        most_visited_category_time.InMillisecondsF() /
-        (add_category_total_time - most_visited_category_time)
-            .InMillisecondsF();
-
-    // The ratio above is typically between 1 and 10. Multiply it by 10 to
-    // retain decimal precision.
-    UMA_HISTOGRAM_COUNTS_100("WinJumplist.RatioAddCategoryTime",
-                             most_visited_over_recently_closed * 10);
-  }
-
-  // If AddCustomCategory takes longer than the maximum allowed time, abort the
-  // current update and skip the next |kUpdatesToSkipUnderHeavyLoad| updates.
-  if (add_category_total_time >= kTimeOutForAddCustomCategory) {
-    update_transaction->update_timeout = true;
-    return;
-  }
-
   // Update the "Tasks" category of the JumpList.
   if (!UpdateTaskCategory(&jumplist_updater, incognito_availability))
     return;
@@ -911,7 +909,7 @@ void JumpList::CreateNewJumpListAndNotifyOS(
 
   // If CommitUpdate call takes longer than the maximum allowed time, skip the
   // next |kUpdatesToSkipUnderHeavyLoad| updates.
-  if (commit_update_timer.Elapsed() >= kTimeOutForJumplistCommitUpdate)
+  if (commit_update_timer.Elapsed() >= kTimeOutForCommitUpdate)
     update_transaction->update_timeout = true;
 
   if (commit_success) {

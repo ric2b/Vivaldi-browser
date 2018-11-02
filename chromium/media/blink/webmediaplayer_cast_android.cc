@@ -15,6 +15,7 @@
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/skia/include/core/SkCanvas.h"
+#include "third_party/skia/include/core/SkFontStyle.h"
 #include "third_party/skia/include/core/SkPaint.h"
 #include "third_party/skia/include/core/SkTypeface.h"
 
@@ -64,8 +65,7 @@ scoped_refptr<VideoFrame> MakeTextFrameForCast(
   paint.setAntiAlias(true);
   paint.setFilterQuality(kHigh_SkFilterQuality);
   paint.setColor(SK_ColorWHITE);
-  paint.setTypeface(SkTypeface::MakeFromName(
-      "sans", SkFontStyle::FromOldStyle(SkTypeface::kBold)));
+  paint.setTypeface(SkTypeface::MakeFromName("sans", SkFontStyle::Bold()));
   paint.setTextSize(kTextSize);
 
   // Calculate the vertical margin from the top
@@ -169,7 +169,7 @@ void WebMediaPlayerCast::Initialize(const GURL& url,
                                     blink::WebLocalFrame* frame,
                                     int delegate_id) {
   player_manager_->Initialize(MEDIA_PLAYER_TYPE_REMOTE_ONLY, player_id_, url,
-                              frame->GetDocument().FirstPartyForCookies(),
+                              frame->GetDocument().SiteForCookies(),
                               frame->GetDocument().Url(), true, delegate_id);
   is_player_initialized_ = true;
 }
@@ -255,12 +255,11 @@ void WebMediaPlayerCast::OnConnectedToRemoteDevice(
   client_->ConnectedToRemoteDevice();
 }
 
-double WebMediaPlayerCast::currentTime() const {
+base::TimeDelta WebMediaPlayerCast::currentTime() const {
   base::TimeDelta ret = remote_time_;
-  if (!paused_ && !initializing_) {
+  if (!paused_ && !initializing_)
     ret += base::TimeTicks::Now() - remote_time_at_;
-  }
-  return ret.InSecondsF();
+  return ret;
 }
 
 void WebMediaPlayerCast::play() {
@@ -283,15 +282,16 @@ void WebMediaPlayerCast::seek(base::TimeDelta t) {
 
 void WebMediaPlayerCast::OnDisconnectedFromRemoteDevice() {
   DVLOG(1) << __func__;
-  if (!paused_) {
+  if (!paused_)
     paused_ = true;
-  }
+
   is_remote_ = false;
-  double t = currentTime();
-  if (t + media::kTimeUpdateInterval * 2 / 1000 > webmediaplayer_->Duration()) {
-    t = webmediaplayer_->Duration();
-  }
-  webmediaplayer_->OnDisconnectedFromRemoteDevice(t);
+  auto t = currentTime();
+  auto d = base::TimeDelta::FromSecondsD(webmediaplayer_->Duration());
+  if (t + base::TimeDelta::FromMilliseconds(media::kTimeUpdateInterval * 2) > d)
+    t = d;
+
+  webmediaplayer_->OnDisconnectedFromRemoteDevice(t.InSecondsF());
 }
 
 void WebMediaPlayerCast::OnCancelledRemotePlaybackRequest() {

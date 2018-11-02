@@ -115,6 +115,12 @@ void ArcBridgeHostImpl::OnBootPhaseMonitorInstanceReady(
                   std::move(boot_phase_monitor_ptr));
 }
 
+void ArcBridgeHostImpl::OnCastReceiverInstanceReady(
+    mojom::CastReceiverInstancePtr cast_receiver_ptr) {
+  OnInstanceReady(arc_bridge_service_->cast_receiver(),
+                  std::move(cast_receiver_ptr));
+}
+
 void ArcBridgeHostImpl::OnClipboardInstanceReady(
     mojom::ClipboardInstancePtr clipboard_ptr) {
   OnInstanceReady(arc_bridge_service_->clipboard(), std::move(clipboard_ptr));
@@ -178,6 +184,11 @@ void ArcBridgeHostImpl::OnObbMounterInstanceReady(
     mojom::ObbMounterInstancePtr obb_mounter_ptr) {
   OnInstanceReady(arc_bridge_service_->obb_mounter(),
                   std::move(obb_mounter_ptr));
+}
+
+void ArcBridgeHostImpl::OnOemCryptoInstanceReady(
+    mojom::OemCryptoInstancePtr oemcrypto_ptr) {
+  OnInstanceReady(arc_bridge_service_->oemcrypto(), std::move(oemcrypto_ptr));
 }
 
 void ArcBridgeHostImpl::OnPolicyInstanceReady(

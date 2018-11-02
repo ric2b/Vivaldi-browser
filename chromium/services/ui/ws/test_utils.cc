@@ -8,7 +8,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
-#include "cc/output/copy_output_request.h"
+#include "components/viz/common/quads/copy_output_request.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "services/service_manager/public/interfaces/connector.mojom.h"
 #include "services/ui/common/image_cursors_set.h"
@@ -16,8 +16,7 @@
 #include "services/ui/ws/display_binding.h"
 #include "services/ui/ws/display_creation_config.h"
 #include "services/ui/ws/display_manager.h"
-#include "services/ui/ws/frame_sink_manager_client_binding.h"
-#include "services/ui/ws/gpu_host.h"
+#include "services/ui/ws/test_gpu_host.h"
 #include "services/ui/ws/threaded_image_cursors.h"
 #include "services/ui/ws/threaded_image_cursors_factory.h"
 #include "services/ui/ws/window_manager_access_policy.h"
@@ -35,8 +34,7 @@ ClientWindowId NextUnusedClientWindowId(WindowTree* tree) {
   ClientWindowId client_id;
   for (ClientSpecificId id = 1;; ++id) {
     // Used the id of the client in the upper bits to simplify things.
-    const ClientWindowId client_id =
-        ClientWindowId(WindowIdToTransportId(WindowId(tree->id(), id)));
+    const ClientWindowId client_id = ClientWindowId(tree->id(), id);
     if (!tree->GetWindowByClientId(client_id))
       return client_id;
   }
@@ -209,7 +207,7 @@ TestWindowManager::TestWindowManager() {}
 
 TestWindowManager::~TestWindowManager() {}
 
-void TestWindowManager::OnConnect(uint16_t client_id) {
+void TestWindowManager::OnConnect() {
   connect_count_++;
 }
 
@@ -278,6 +276,10 @@ void TestWindowManager::OnAccelerator(uint32_t ack_id,
   on_accelerator_id_ = accelerator_id;
 }
 
+void TestWindowManager::OnCursorTouchVisibleChanged(bool enabled) {}
+
+void TestWindowManager::OnEventBlockedByModalWindow(uint32_t window_id) {}
+
 // TestWindowTreeClient -------------------------------------------------------
 
 TestWindowTreeClient::TestWindowTreeClient()
@@ -290,7 +292,6 @@ void TestWindowTreeClient::Bind(
 }
 
 void TestWindowTreeClient::OnEmbed(
-    uint16_t client_id,
     mojom::WindowDataPtr root,
     ui::mojom::WindowTreePtr tree,
     int64_t display_id,
@@ -298,7 +299,7 @@ void TestWindowTreeClient::OnEmbed(
     bool drawn,
     const base::Optional<viz::LocalSurfaceId>& local_surface_id) {
   // TODO(sky): add test coverage of |focused_window_id|.
-  tracker_.OnEmbed(client_id, std::move(root), drawn);
+  tracker_.OnEmbed(std::move(root), drawn);
 }
 
 void TestWindowTreeClient::OnEmbeddedAppDisconnected(uint32_t window) {
@@ -547,15 +548,8 @@ WindowServerTestHelper::WindowServerTestHelper()
     message_loop_ = base::MakeUnique<base::MessageLoop>();
   PlatformDisplay::set_factory_for_testing(&platform_display_factory_);
   window_server_ = base::MakeUnique<WindowServer>(&window_server_delegate_);
-  // TODO(staraz): Replace DefaultGpuHost and FrameSinkManagerClientBinding with
-  // test implementations.
-  std::unique_ptr<GpuHost> gpu_host =
-      base::MakeUnique<DefaultGpuHost>(window_server_.get());
+  std::unique_ptr<GpuHost> gpu_host = base::MakeUnique<TestGpuHost>();
   window_server_->SetGpuHost(std::move(gpu_host));
-  std::unique_ptr<FrameSinkManagerClientBinding> frame_sink_manager =
-      base::MakeUnique<FrameSinkManagerClientBinding>(
-          window_server_.get(), window_server_->gpu_host());
-  window_server_->SetFrameSinkManager(std::move(frame_sink_manager));
   window_server_delegate_.set_window_server(window_server_.get());
 }
 
@@ -583,8 +577,8 @@ ServerWindow* WindowEventTargetingHelper::CreatePrimaryTree(
     const gfx::Rect& root_window_bounds,
     const gfx::Rect& window_bounds) {
   WindowTree* wm_tree = window_server()->GetTreeWithId(1);
-  const ClientWindowId embed_window_id(WindowIdToTransportId(
-      WindowId(wm_tree->id(), next_primary_tree_window_id_++)));
+  const ClientWindowId embed_window_id(wm_tree->id(),
+                                       next_primary_tree_window_id_++);
   EXPECT_TRUE(wm_tree->NewWindow(embed_window_id, ServerWindow::Properties()));
   EXPECT_TRUE(wm_tree->SetWindowVisibility(embed_window_id, true));
   EXPECT_TRUE(wm_tree->AddWindow(FirstRootId(wm_tree), embed_window_id));
@@ -615,14 +609,13 @@ void WindowEventTargetingHelper::CreateSecondaryTree(
     ServerWindow** window) {
   WindowTree* tree1 = window_server()->GetTreeWithRoot(embed_window);
   ASSERT_TRUE(tree1 != nullptr);
-  const ClientWindowId child1_id(
-      WindowIdToTransportId(WindowId(tree1->id(), 1)));
+  const ClientWindowId child1_id(tree1->id(), 1);
   ASSERT_TRUE(tree1->NewWindow(child1_id, ServerWindow::Properties()));
   ServerWindow* child1 = tree1->GetWindowByClientId(child1_id);
   ASSERT_TRUE(child1);
   EXPECT_TRUE(tree1->AddWindow(ClientWindowIdForWindow(tree1, embed_window),
                                child1_id));
-  tree1->GetDisplay(embed_window)->AddActivationParent(embed_window);
+  embed_window->set_is_activation_parent(true);
 
   child1->SetVisible(true);
   child1->SetBounds(window_bounds, base::nullopt);
@@ -701,6 +694,9 @@ void TestPlatformDisplay::SetCursor(const ui::CursorData& cursor) {
   *cursor_storage_ = cursor;
 }
 void TestPlatformDisplay::SetCursorSize(const ui::CursorSize& cursor_size) {}
+void TestPlatformDisplay::ConfineCursorToBounds(const gfx::Rect& pixel_bounds) {
+  confine_cursor_bounds_ = pixel_bounds;
+}
 void TestPlatformDisplay::MoveCursorTo(
     const gfx::Point& window_pixel_location) {}
 void TestPlatformDisplay::UpdateTextInputState(
@@ -709,6 +705,9 @@ void TestPlatformDisplay::SetImeVisibility(bool visible) {}
 void TestPlatformDisplay::UpdateViewportMetrics(
     const display::ViewportMetrics& metrics) {
   metrics_ = metrics;
+}
+const display::ViewportMetrics& TestPlatformDisplay::GetViewportMetrics() {
+  return metrics_;
 }
 gfx::AcceleratedWidget TestPlatformDisplay::GetAcceleratedWidget() const {
   return gfx::kNullAcceleratedWidget;

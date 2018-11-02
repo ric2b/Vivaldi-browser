@@ -229,7 +229,7 @@ void NodeController::SendBrokerClientInvitation(
 void NodeController::AcceptBrokerClientInvitation(
     ConnectionParams connection_params) {
   DCHECK(!GetConfiguration().is_broker_process);
-#if !defined(OS_MACOSX) && !defined(OS_NACL_SFI)
+#if !defined(OS_MACOSX) && !defined(OS_NACL_SFI) && !defined(OS_FUCHSIA)
   // Use the bootstrap channel for the broker and receive the node's channel
   // synchronously as the first message from the broker.
   base::ElapsedTimer timer;
@@ -328,7 +328,7 @@ int NodeController::MergeLocalPorts(const ports::PortRef& port0,
 
 scoped_refptr<PlatformSharedBuffer> NodeController::CreateSharedBuffer(
     size_t num_bytes) {
-#if !defined(OS_MACOSX) && !defined(OS_NACL_SFI)
+#if !defined(OS_MACOSX) && !defined(OS_NACL_SFI) && !defined(OS_FUCHSIA)
   // Shared buffer creation failure is fatal, so always use the broker when we
   // have one; unless of course the embedder forces us not to.
   if (!GetConfiguration().force_direct_shared_memory_allocation && broker_)
@@ -361,7 +361,7 @@ void NodeController::SendBrokerClientInvitationOnIOThread(
     const ProcessErrorCallback& process_error_callback) {
   DCHECK(io_task_runner_->RunsTasksInCurrentSequence());
 
-#if !defined(OS_MACOSX) && !defined(OS_NACL)
+#if !defined(OS_MACOSX) && !defined(OS_NACL) && !defined(OS_FUCHSIA)
   PlatformChannelPair node_channel;
   ScopedPlatformHandle server_handle = node_channel.PassServerHandle();
   // BrokerHost owns itself.
@@ -602,6 +602,8 @@ void NodeController::DropPeer(const ports::NodeName& name,
 void NodeController::SendPeerEvent(const ports::NodeName& name,
                                    ports::ScopedEvent event) {
   Channel::MessagePtr event_message = SerializeEventMessage(std::move(event));
+  if (!event_message)
+    return;
   scoped_refptr<NodeChannel> peer = GetPeerChannel(name);
 #if defined(OS_WIN)
   if (event_message->has_handles()) {
@@ -728,7 +730,7 @@ void NodeController::ForwardEvent(const ports::NodeName& node,
 
 void NodeController::BroadcastEvent(ports::ScopedEvent event) {
   Channel::MessagePtr channel_message = SerializeEventMessage(std::move(event));
-  DCHECK(!channel_message->has_handles());
+  DCHECK(channel_message && !channel_message->has_handles());
 
   scoped_refptr<NodeChannel> broker = GetBrokerChannel();
   if (broker)

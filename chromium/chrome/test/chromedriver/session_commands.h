@@ -40,6 +40,10 @@ struct InitSessionParams {
   PortManager* port_manager;
 };
 
+bool MergeCapabilities(const base::DictionaryValue* always_match,
+                       const base::DictionaryValue* first_match,
+                       base::DictionaryValue* merged);
+
 bool MatchCapabilities(base::DictionaryValue* capabilities);
 
 // Initializes a session.
@@ -85,6 +89,11 @@ Status ExecuteSwitchToWindow(Session* session,
 Status ExecuteSetTimeout(Session* session,
                          const base::DictionaryValue& params,
                          std::unique_ptr<base::Value>* value);
+
+// Get the implicit, script and page load timeouts in milliseconds.
+Status ExecuteGetTimeouts(Session* session,
+                          const base::DictionaryValue& params,
+                          std::unique_ptr<base::Value>* value);
 
 // Set the timeout for asynchronous scripts.
 Status ExecuteSetScriptTimeout(Session* session,
@@ -139,6 +148,10 @@ Status ExecuteSetWindowSize(Session* session,
 Status ExecuteMaximizeWindow(Session* session,
                              const base::DictionaryValue& params,
                              std::unique_ptr<base::Value>* value);
+
+Status ExecuteFullScreenWindow(Session* session,
+                               const base::DictionaryValue& params,
+                               std::unique_ptr<base::Value>* value);
 
 Status ExecuteGetAvailableLogTypes(Session* session,
                                    const base::DictionaryValue& params,

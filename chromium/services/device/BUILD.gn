@@ -11,6 +11,8 @@ if (is_android) {
   import("//build/config/android/rules.gni")
 }
 
+is_serial_enabled_platform = is_win || (is_linux && use_udev) || is_mac
+
 source_set("lib") {
   # This should be visible only to embedders of the Device Service, and the
   # dependence should only be for the purpose of embedding the Device Service.
@@ -40,16 +42,16 @@ source_set("lib") {
   ]
 
   if (is_android) {
-    sources += [
-      "//services/device/android/register_jni.cc",
-      "//services/device/android/register_jni.h",
-    ]
     deps += [ ":device_service_jni_headers" ]
   } else {
     deps += [
       "//services/device/battery",
       "//services/device/vibration",
     ]
+  }
+
+  if (is_serial_enabled_platform) {
+    deps += [ "//services/device/serial" ]
   }
 }
 
@@ -61,9 +63,17 @@ source_set("tests") {
   sources = [
     "battery/battery_status_manager_win_unittest.cc",
     "battery/battery_status_service_unittest.cc",
+    "generic_sensor/absolute_orientation_euler_angles_fusion_algorithm_using_accelerometer_and_magnetometer_unittest.cc",
+    "generic_sensor/fake_platform_sensor_fusion.cc",
+    "generic_sensor/fake_platform_sensor_fusion.h",
     "generic_sensor/generic_sensor_service_unittest.cc",
+    "generic_sensor/linear_acceleration_fusion_algorithm_using_accelerometer_unittest.cc",
+    "generic_sensor/orientation_euler_angles_fusion_algorithm_using_quaternion_unittest.cc",
+    "generic_sensor/orientation_quaternion_fusion_algorithm_using_euler_angles_unittest.cc",
+    "generic_sensor/orientation_test_data.h",
     "generic_sensor/platform_sensor_and_provider_unittest_win.cc",
     "generic_sensor/platform_sensor_provider_unittest_android.cc",
+    "generic_sensor/relative_orientation_euler_angles_fusion_algorithm_using_accelerometer_unittest.cc",
     "power_monitor/power_monitor_message_broadcaster_unittest.cc",
     "public/cpp/power_monitor/power_monitor_broadcast_source_unittest.cc",
     "vibration/vibration_manager_impl_unittest.cc",
@@ -117,6 +127,14 @@ source_set("tests") {
       "//services/device/battery",
       "//services/device/vibration",
     ]
+  }
+
+  if (is_serial_enabled_platform) {
+    sources += [
+      "serial/serial_device_enumerator_impl_unittest.cc",
+      "serial/serial_io_handler_impl_unittest.cc",
+    ]
+    deps += [ "//services/device/serial" ]
   }
 
   if (is_win) {

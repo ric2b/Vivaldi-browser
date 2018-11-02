@@ -19,14 +19,14 @@
         ]
       },
       "requires": {
-        "content_browser": [ "memory_instrumentation", "renderer" ],
+        "*": [ "app" ],
+        "content_browser": [ "renderer" ],
         "device": [
           "device:battery_monitor",
           "device:power_monitor",
           "device:screen_orientation",
           "device:sensors",
-          "device:time_zone_monitor",
-          "device:vibration"
+          "device:time_zone_monitor"
         ],
         "ui": [
           "discardable_memory",
@@ -41,8 +41,10 @@
           "blink::mojom::EngagementClient",
           "blink::mojom::InstallationService",
           "blink::mojom::ManifestManager",
+          "blink::mojom::TextSuggestionBackend",
           "content::mojom::ImageDownloader",
           "content::mojom::FrameInputHandler",
+          "content::mojom::MediaStreamDispatcher",
           "content::mojom::Widget",
           "mojom::MediaDevicesListener"
         ]
@@ -74,6 +76,12 @@
     "v8_snapshot_64_data" : [{
       "path": "assets/snapshot_blob_64.bin",
       "platform": "android"
-    }]
+    }],
+    "v8_context_snapshot_data" : [
+      {
+        "path": "v8_context_snapshot.bin",
+        "platform": "linux"
+      }
+    ]
   }
 }

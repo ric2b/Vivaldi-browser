@@ -283,18 +283,15 @@ public class PaymentRequestNoShippingTest implements MainActivityStartCallback {
 
         // Quickly press on "add card" and then [X].
         int callCount = mPaymentRequestTestRule.getReadyToEdit().getCallCount();
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                mPaymentRequestTestRule.getPaymentRequestUI()
-                        .getPaymentMethodSectionForTest()
-                        .findViewById(R.id.payments_add_option_button)
-                        .performClick();
-                mPaymentRequestTestRule.getPaymentRequestUI()
-                        .getDialogForTest()
-                        .findViewById(R.id.close_button)
-                        .performClick();
-            }
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            mPaymentRequestTestRule.getPaymentRequestUI()
+                    .getPaymentMethodSectionForTest()
+                    .findViewById(R.id.payments_add_option_button)
+                    .performClick();
+            mPaymentRequestTestRule.getPaymentRequestUI()
+                    .getDialogForTest()
+                    .findViewById(R.id.close_button)
+                    .performClick();
         });
         mPaymentRequestTestRule.getReadyToEdit().waitForCallback(callCount);
 
@@ -317,18 +314,15 @@ public class PaymentRequestNoShippingTest implements MainActivityStartCallback {
 
         // Quickly press on [X] and then "add card."
         int callCount = mPaymentRequestTestRule.getDismissed().getCallCount();
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                mPaymentRequestTestRule.getPaymentRequestUI()
-                        .getDialogForTest()
-                        .findViewById(R.id.close_button)
-                        .performClick();
-                mPaymentRequestTestRule.getPaymentRequestUI()
-                        .getPaymentMethodSectionForTest()
-                        .findViewById(R.id.payments_add_option_button)
-                        .performClick();
-            }
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            mPaymentRequestTestRule.getPaymentRequestUI()
+                    .getDialogForTest()
+                    .findViewById(R.id.close_button)
+                    .performClick();
+            mPaymentRequestTestRule.getPaymentRequestUI()
+                    .getPaymentMethodSectionForTest()
+                    .findViewById(R.id.payments_add_option_button)
+                    .performClick();
         });
         mPaymentRequestTestRule.getDismissed().waitForCallback(callCount);
 
@@ -347,18 +341,15 @@ public class PaymentRequestNoShippingTest implements MainActivityStartCallback {
 
         // Quickly press on "add card" and then "cancel."
         int callCount = mPaymentRequestTestRule.getReadyToEdit().getCallCount();
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                mPaymentRequestTestRule.getPaymentRequestUI()
-                        .getPaymentMethodSectionForTest()
-                        .findViewById(R.id.payments_add_option_button)
-                        .performClick();
-                mPaymentRequestTestRule.getPaymentRequestUI()
-                        .getDialogForTest()
-                        .findViewById(R.id.button_secondary)
-                        .performClick();
-            }
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            mPaymentRequestTestRule.getPaymentRequestUI()
+                    .getPaymentMethodSectionForTest()
+                    .findViewById(R.id.payments_add_option_button)
+                    .performClick();
+            mPaymentRequestTestRule.getPaymentRequestUI()
+                    .getDialogForTest()
+                    .findViewById(R.id.button_secondary)
+                    .performClick();
         });
         mPaymentRequestTestRule.getReadyToEdit().waitForCallback(callCount);
 
@@ -381,18 +372,15 @@ public class PaymentRequestNoShippingTest implements MainActivityStartCallback {
 
         // Quickly press on "cancel" and then "add card."
         int callCount = mPaymentRequestTestRule.getDismissed().getCallCount();
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                mPaymentRequestTestRule.getPaymentRequestUI()
-                        .getDialogForTest()
-                        .findViewById(R.id.button_secondary)
-                        .performClick();
-                mPaymentRequestTestRule.getPaymentRequestUI()
-                        .getPaymentMethodSectionForTest()
-                        .findViewById(R.id.payments_add_option_button)
-                        .performClick();
-            }
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            mPaymentRequestTestRule.getPaymentRequestUI()
+                    .getDialogForTest()
+                    .findViewById(R.id.button_secondary)
+                    .performClick();
+            mPaymentRequestTestRule.getPaymentRequestUI()
+                    .getPaymentMethodSectionForTest()
+                    .findViewById(R.id.payments_add_option_button)
+                    .performClick();
         });
         mPaymentRequestTestRule.getDismissed().waitForCallback(callCount);
 
@@ -412,15 +400,12 @@ public class PaymentRequestNoShippingTest implements MainActivityStartCallback {
 
         // Quickly dismiss and then press on "pay."
         int callCount = mPaymentRequestTestRule.getDismissed().getCallCount();
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                mPaymentRequestTestRule.getPaymentRequestUI().getDialogForTest().onBackPressed();
-                mPaymentRequestTestRule.getPaymentRequestUI()
-                        .getDialogForTest()
-                        .findViewById(R.id.button_primary)
-                        .performClick();
-            }
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            mPaymentRequestTestRule.getPaymentRequestUI().getDialogForTest().onBackPressed();
+            mPaymentRequestTestRule.getPaymentRequestUI()
+                    .getDialogForTest()
+                    .findViewById(R.id.button_primary)
+                    .performClick();
         });
         mPaymentRequestTestRule.getDismissed().waitForCallback(callCount);
 
@@ -440,15 +425,12 @@ public class PaymentRequestNoShippingTest implements MainActivityStartCallback {
 
         // Quickly dismiss and then press on [X].
         int callCount = mPaymentRequestTestRule.getDismissed().getCallCount();
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                mPaymentRequestTestRule.getPaymentRequestUI().getDialogForTest().onBackPressed();
-                mPaymentRequestTestRule.getPaymentRequestUI()
-                        .getDialogForTest()
-                        .findViewById(R.id.close_button)
-                        .performClick();
-            }
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            mPaymentRequestTestRule.getPaymentRequestUI().getDialogForTest().onBackPressed();
+            mPaymentRequestTestRule.getPaymentRequestUI()
+                    .getDialogForTest()
+                    .findViewById(R.id.close_button)
+                    .performClick();
         });
         mPaymentRequestTestRule.getDismissed().waitForCallback(callCount);
 
@@ -468,15 +450,12 @@ public class PaymentRequestNoShippingTest implements MainActivityStartCallback {
 
         // Quickly press on [X] and then dismiss.
         int callCount = mPaymentRequestTestRule.getDismissed().getCallCount();
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                mPaymentRequestTestRule.getPaymentRequestUI()
-                        .getDialogForTest()
-                        .findViewById(R.id.close_button)
-                        .performClick();
-                mPaymentRequestTestRule.getPaymentRequestUI().getDialogForTest().onBackPressed();
-            }
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            mPaymentRequestTestRule.getPaymentRequestUI()
+                    .getDialogForTest()
+                    .findViewById(R.id.close_button)
+                    .performClick();
+            mPaymentRequestTestRule.getPaymentRequestUI().getDialogForTest().onBackPressed();
         });
         mPaymentRequestTestRule.getDismissed().waitForCallback(callCount);
 
@@ -485,13 +464,13 @@ public class PaymentRequestNoShippingTest implements MainActivityStartCallback {
 
     /**
      * Test that ending a payment request that requires user information except for the payment
-     * results in the appropriate metric being logged in the PaymentRequest.RequestedInformation
+     * results in the appropriate metric being logged in PaymentRequest.Events.
      * histogram.
      */
     @Test
     @MediumTest
     @Feature({"Payments"})
-    public void testRequestedInformationMetric()
+    public void testPaymentRequestEventsMetric()
             throws InterruptedException, ExecutionException, TimeoutException {
         // Start and cancel the Payment Request.
         mPaymentRequestTestRule.triggerUIAndWait(mPaymentRequestTestRule.getReadyToPay());
@@ -499,11 +478,10 @@ public class PaymentRequestNoShippingTest implements MainActivityStartCallback {
                 R.id.close_button, mPaymentRequestTestRule.getDismissed());
         mPaymentRequestTestRule.expectResultContains(new String[] {"Request cancelled"});
 
-        // Make sure that only the appropriate enum value was logged.
-        for (int i = 0; i < RequestedInformation.MAX; ++i) {
-            Assert.assertEquals((i == RequestedInformation.NONE ? 1 : 0),
-                    RecordHistogram.getHistogramValueCountForTesting(
-                            "PaymentRequest.RequestedInformation", i));
-        }
+        int expectedSample = Event.SHOWN | Event.USER_ABORTED | Event.HAD_INITIAL_FORM_OF_PAYMENT
+                | Event.HAD_NECESSARY_COMPLETE_SUGGESTIONS | Event.REQUEST_METHOD_BASIC_CARD;
+        Assert.assertEquals(1,
+                RecordHistogram.getHistogramValueCountForTesting(
+                        "PaymentRequest.Events", expectedSample));
     }
 }

@@ -201,7 +201,7 @@ bool IsCertificateIssuedBy(const std::vector<CERTCertificate*>& cert_chain,
 
 }  // namespace
 
-bool X509Certificate::Initialize() {
+bool X509Certificate::Initialize(UnsafeCreateOptions) {
   serial_number_ = ParseSerialNumber(cert_handle_);
 
   return (!serial_number_.empty() &&
@@ -209,58 +209,6 @@ bool X509Certificate::Initialize() {
           ParsePrincipal(&cert_handle_->issuer, &issuer_) &&
           ParseDate(&cert_handle_->validity.notBefore, &valid_start_) &&
           ParseDate(&cert_handle_->validity.notAfter, &valid_expiry_));
-}
-
-std::string X509Certificate::GetDefaultNickname(CertType type) const {
-  std::string result;
-  if (type == USER_CERT && cert_handle_->slot) {
-    // Find the private key for this certificate and see if it has a
-    // nickname.  If there is a private key, and it has a nickname, then
-    // return that nickname.
-    SECKEYPrivateKey* private_key = PK11_FindPrivateKeyFromCert(
-        cert_handle_->slot,
-        cert_handle_,
-        NULL);  // wincx
-    if (private_key) {
-      char* private_key_nickname = PK11_GetPrivateKeyNickname(private_key);
-      if (private_key_nickname) {
-        result = private_key_nickname;
-        PORT_Free(private_key_nickname);
-        SECKEY_DestroyPrivateKey(private_key);
-        return result;
-      }
-      SECKEY_DestroyPrivateKey(private_key);
-    }
-  }
-
-  switch (type) {
-    case CA_CERT: {
-      char* nickname = CERT_MakeCANickname(cert_handle_);
-      result = nickname;
-      PORT_Free(nickname);
-      break;
-    }
-    case USER_CERT: {
-      std::string subject_name = subject_.GetDisplayName();
-      if (subject_name.empty()) {
-        const char* email = CERT_GetFirstEmailAddress(cert_handle_);
-        if (email)
-          subject_name = email;
-      }
-      // TODO(gspencer): Internationalize this. It's wrong to assume English
-      // here.
-      result = base::StringPrintf("%s's %s ID", subject_name.c_str(),
-                                  issuer_.GetDisplayName().c_str());
-      break;
-    }
-    case SERVER_CERT:
-      result = subject_.GetDisplayName();
-      break;
-    case OTHER_CERT:
-    default:
-      break;
-  }
-  return result;
 }
 
 bool X509Certificate::GetSubjectAltName(
@@ -336,49 +284,22 @@ bool X509Certificate::IsIssuedByEncoded(
 // static
 bool X509Certificate::GetDEREncoded(X509Certificate::OSCertHandle cert_handle,
                                     std::string* encoded) {
-  if (!cert_handle || !cert_handle->derCert.len)
-    return false;
-  encoded->assign(reinterpret_cast<char*>(cert_handle->derCert.data),
-                  cert_handle->derCert.len);
-  return true;
+  return x509_util::GetDEREncoded(cert_handle, encoded);
 }
 
 // static
 bool X509Certificate::IsSameOSCert(X509Certificate::OSCertHandle a,
                                    X509Certificate::OSCertHandle b) {
-  DCHECK(a && b);
-  if (a == b)
-    return true;
-  return a->derCert.len == b->derCert.len &&
-      memcmp(a->derCert.data, b->derCert.data, a->derCert.len) == 0;
+  return x509_util::IsSameCertificate(a, b);
 }
 
 // static
 X509Certificate::OSCertHandle X509Certificate::CreateOSCertHandleFromBytes(
     const char* data,
     size_t length) {
-  return CreateOSCertHandleFromBytesWithNickname(data, length, NULL);
-}
-
-// static
-X509Certificate::OSCertHandle
-X509Certificate::CreateOSCertHandleFromBytesWithNickname(const char* data,
-                                                         size_t length,
-                                                         const char* nickname) {
-  crypto::EnsureNSSInit();
-
-  if (!NSS_IsInitialized())
-    return NULL;
-
-  SECItem der_cert;
-  der_cert.data = reinterpret_cast<unsigned char*>(const_cast<char*>(data));
-  der_cert.len = base::checked_cast<unsigned>(length);
-  der_cert.type = siDERCertBuffer;
-
-  // Parse into a certificate structure.
-  return CERT_NewTempCertificate(CERT_GetDefaultCertDB(), &der_cert,
-                                 const_cast<char*>(nickname),
-                                 PR_FALSE, PR_TRUE);
+  return x509_util::CreateCERTCertificateFromBytes(
+             reinterpret_cast<const uint8_t*>(data), length)
+      .release();
 }
 
 // static

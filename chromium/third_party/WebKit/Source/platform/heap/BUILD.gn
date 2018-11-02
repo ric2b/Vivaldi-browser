@@ -52,10 +52,7 @@ source_set("heap") {
     "Visitor.cpp",
     "Visitor.h",
     "VisitorImpl.h",
-    "WrapperVisitor.h",
   ]
-
-  defines = [ "BLINK_PLATFORM_IMPLEMENTATION=1" ]
 
   configs += [
     "//third_party/WebKit/Source:blink_pch",
@@ -63,6 +60,7 @@ source_set("heap") {
     "//third_party/WebKit/Source:non_test_config",
     "//third_party/WebKit/Source:inside_blink",
     "//third_party/WebKit/Source:features",
+    "//third_party/WebKit/Source/platform:blink_platform_implementation",
     "//build/config/compiler:no_size_t_to_int_warning",
   ]
 

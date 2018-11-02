@@ -20,7 +20,6 @@
 #include "base/task_scheduler/post_task.h"
 #include "base/task_scheduler/task_scheduler.h"
 #include "base/test/scoped_task_environment.h"
-#include "base/test/scoped_task_scheduler.h"
 #include "base/threading/platform_thread.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -446,9 +445,9 @@ static void ThreadSafeObserverHarness(int num_threads,
   threaded_observer.reserve(num_threads);
   ready.reserve(num_threads);
   for (int index = 0; index < num_threads; index++) {
-    ready.push_back(
-        MakeUnique<WaitableEvent>(WaitableEvent::ResetPolicy::MANUAL,
-                                  WaitableEvent::InitialState::NOT_SIGNALED));
+    ready.push_back(std::make_unique<WaitableEvent>(
+        WaitableEvent::ResetPolicy::MANUAL,
+        WaitableEvent::InitialState::NOT_SIGNALED));
     threaded_observer.push_back(new AddRemoveThread(
         observer_list.get(), cross_thread_notifies, ready.back().get()));
     EXPECT_TRUE(
@@ -512,7 +511,7 @@ class SequenceVerificationObserver : public Foo {
   ~SequenceVerificationObserver() override = default;
 
   void Observe(int x) override {
-    called_on_valid_sequence_ = task_runner_->RunsTasksOnCurrentThread();
+    called_on_valid_sequence_ = task_runner_->RunsTasksInCurrentSequence();
   }
 
   bool called_on_valid_sequence() const { return called_on_valid_sequence_; }

@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/command_line.h"
 #include "base/files/file.h"
 #include "base/memory/shared_memory.h"
@@ -25,6 +26,7 @@
 #include "content/browser/renderer_host/media/audio_input_sync_writer.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
 #include "content/browser/webrtc/webrtc_internals.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents_media_capture_id.h"
 #include "media/audio/audio_device_description.h"
 #include "media/base/audio_bus.h"
@@ -51,6 +53,18 @@ void LogMessage(int stream_id, const std::string& msg, bool add_prefix) {
   DVLOG(1) << message;
 }
 
+void NotifyProcessHostStreamAdded(int render_process_id) {
+  auto* process_host = RenderProcessHost::FromID(render_process_id);
+  if (process_host)
+    process_host->OnMediaStreamAdded();
+}
+
+void NotifyProcessHostStreamRemoved(int render_process_id) {
+  auto* process_host = RenderProcessHost::FromID(render_process_id);
+  if (process_host)
+    process_host->OnMediaStreamRemoved();
+}
+
 }  // namespace
 
 struct AudioInputRendererHost::AudioEntry {
@@ -74,15 +88,13 @@ struct AudioInputRendererHost::AudioEntry {
   // Set to true after we called Close() for the controller.
   bool pending_close;
 
-  // If this entry's layout has a keyboard mic channel.
-  bool has_keyboard_mic;
+#if defined(OS_CHROMEOS)
+  AudioInputDeviceManager::KeyboardMicRegistration keyboard_mic_registration;
+#endif
 };
 
 AudioInputRendererHost::AudioEntry::AudioEntry()
-    : stream_id(0),
-      pending_close(false),
-      has_keyboard_mic(false) {
-}
+    : stream_id(0), pending_close(false) {}
 
 AudioInputRendererHost::AudioEntry::~AudioEntry() {
 }
@@ -163,8 +175,8 @@ void AudioInputRendererHost::OnMuted(media::AudioInputController* controller,
                                      bool is_muted) {
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&AudioInputRendererHost::DoNotifyMutedState, this,
-                 base::RetainedRef(controller), is_muted));
+      base::BindOnce(&AudioInputRendererHost::DoNotifyMutedState, this,
+                     base::RetainedRef(controller), is_muted));
 }
 
 void AudioInputRendererHost::set_renderer_pid(int32_t renderer_pid) {
@@ -287,7 +299,8 @@ void AudioInputRendererHost::OnCreateStream(
             base::BindOnce(&AudioInputRendererHost::DoCreateStream, this,
                            stream_id, render_frame_id, session_id, config));
   } else {
-    DoCreateStream(stream_id, render_frame_id, session_id, config);
+    DoCreateStream(stream_id, render_frame_id, session_id, config,
+                   AudioInputDeviceManager::KeyboardMicRegistration());
   }
 #else
   DoCreateStream(stream_id, render_frame_id, session_id, config);
@@ -298,7 +311,12 @@ void AudioInputRendererHost::DoCreateStream(
     int stream_id,
     int render_frame_id,
     int session_id,
-    const AudioInputHostMsg_CreateStream_Config& config) {
+    const AudioInputHostMsg_CreateStream_Config& config
+#if defined(OS_CHROMEOS)
+    ,
+    AudioInputDeviceManager::KeyboardMicRegistration keyboard_mic_registration
+#endif
+    ) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   DCHECK_GT(render_frame_id, 0);
@@ -306,7 +324,6 @@ void AudioInputRendererHost::DoCreateStream(
   // media::AudioParameters is validated in the deserializer.
   if (LookupById(stream_id)) {
     SendErrorMessage(stream_id, STREAM_ALREADY_EXISTS);
-    MaybeUnregisterKeyboardMicStream(config);
     return;
   }
 
@@ -318,7 +335,6 @@ void AudioInputRendererHost::DoCreateStream(
     SendErrorMessage(stream_id, PERMISSION_DENIED);
     DLOG(WARNING) << "No permission has been granted to input stream with "
                   << "session_id=" << session_id;
-    MaybeUnregisterKeyboardMicStream(config);
     return;
   }
 
@@ -345,7 +361,6 @@ void AudioInputRendererHost::DoCreateStream(
 
   if (!entry->writer) {
     SendErrorMessage(stream_id, SYNC_WRITER_INIT_FAILED);
-    MaybeUnregisterKeyboardMicStream(config);
     return;
   }
 
@@ -384,15 +399,11 @@ void AudioInputRendererHost::DoCreateStream(
 
   if (!entry->controller.get()) {
     SendErrorMessage(stream_id, STREAM_CREATE_ERROR);
-    MaybeUnregisterKeyboardMicStream(config);
     return;
   }
 
 #if defined(OS_CHROMEOS)
-  if (config.params.channel_layout() ==
-          media::CHANNEL_LAYOUT_STEREO_AND_KEYBOARD_MIC) {
-    entry->has_keyboard_mic = true;
-  }
+  entry->keyboard_mic_registration = std::move(keyboard_mic_registration);
 #endif
 
   const std::string log_message = oss.str();
@@ -406,6 +417,11 @@ void AudioInputRendererHost::DoCreateStream(
   audio_log_->OnCreated(stream_id, audio_params, device_id);
   MediaInternals::GetInstance()->SetWebContentsTitleForAudioLogEntry(
       stream_id, render_process_id_, render_frame_id, audio_log_.get());
+
+  // Prevent process backgrounding while audio input is active:
+  BrowserThread::PostTask(
+      BrowserThread::UI, FROM_HERE,
+      base::BindOnce(&NotifyProcessHostStreamAdded, render_process_id_));
 
 #if BUILDFLAG(ENABLE_WEBRTC)
   BrowserThread::PostTask(
@@ -485,19 +501,16 @@ void AudioInputRendererHost::CloseAndDeleteStream(AudioEntry* entry) {
         base::BindOnce(&AudioInputRendererHost::DeleteEntry, this, entry));
     entry->pending_close = true;
     audio_log_->OnClosed(entry->stream_id);
+
+    BrowserThread::PostTask(
+        BrowserThread::UI, FROM_HERE,
+        base::BindOnce(&NotifyProcessHostStreamRemoved, render_process_id_));
   }
 }
 
 void AudioInputRendererHost::DeleteEntry(AudioEntry* entry) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   LogMessage(entry->stream_id, "DeleteEntry: stream is now closed", true);
-
-#if defined(OS_CHROMEOS)
-  if (entry->has_keyboard_mic) {
-    media_stream_manager_->audio_input_device_manager()
-        ->UnregisterKeyboardMicStream();
-  }
-#endif
 
   // Delete the entry when this method goes out of scope.
   std::unique_ptr<AudioEntry> entry_deleter(entry);
@@ -538,17 +551,6 @@ AudioInputRendererHost::AudioEntry* AudioInputRendererHost::LookupByController(
       return i->second;
   }
   return nullptr;
-}
-
-void AudioInputRendererHost::MaybeUnregisterKeyboardMicStream(
-    const AudioInputHostMsg_CreateStream_Config& config) {
-#if defined(OS_CHROMEOS)
-  if (config.params.channel_layout() ==
-      media::CHANNEL_LAYOUT_STEREO_AND_KEYBOARD_MIC) {
-    media_stream_manager_->audio_input_device_manager()
-        ->UnregisterKeyboardMicStream();
-  }
-#endif
 }
 
 #if BUILDFLAG(ENABLE_WEBRTC)

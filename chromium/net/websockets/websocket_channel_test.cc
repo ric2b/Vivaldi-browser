@@ -485,7 +485,7 @@ class ReadableFakeWebSocketStream : public FakeWebSocketStream {
                          int error,
                          const InitFrame (&frames)[N]) {
     responses_.push_back(
-        base::MakeUnique<Response>(async, error, CreateFrameVector(frames)));
+        std::make_unique<Response>(async, error, CreateFrameVector(frames)));
   }
 
   // An alternate version of PrepareReadFrames for when we need to construct
@@ -495,12 +495,12 @@ class ReadableFakeWebSocketStream : public FakeWebSocketStream {
       int error,
       std::vector<std::unique_ptr<WebSocketFrame>> frames) {
     responses_.push_back(
-        base::MakeUnique<Response>(async, error, std::move(frames)));
+        std::make_unique<Response>(async, error, std::move(frames)));
   }
 
   // Prepares a fake error response (ie. there is no data).
   void PrepareReadFramesError(IsSync async, int error) {
-    responses_.push_back(base::MakeUnique<Response>(
+    responses_.push_back(std::make_unique<Response>(
         async, error, std::vector<std::unique_ptr<WebSocketFrame>>()));
   }
 
@@ -721,7 +721,7 @@ struct WebSocketStreamCreationCallbackArgumentSaver {
       const GURL& socket_url,
       std::unique_ptr<WebSocketHandshakeStreamCreateHelper> create_helper,
       const url::Origin& origin,
-      const GURL& first_party_for_cookies,
+      const GURL& site_for_cookies,
       const std::string& additional_headers,
       URLRequestContext* url_request_context,
       const NetLogWithSource& net_log,
@@ -729,7 +729,7 @@ struct WebSocketStreamCreationCallbackArgumentSaver {
     this->socket_url = socket_url;
     this->create_helper = std::move(create_helper);
     this->origin = origin;
-    this->first_party_for_cookies = first_party_for_cookies;
+    this->site_for_cookies = site_for_cookies;
     this->url_request_context = url_request_context;
     this->net_log = net_log;
     this->connect_delegate = std::move(connect_delegate);
@@ -739,7 +739,7 @@ struct WebSocketStreamCreationCallbackArgumentSaver {
   GURL socket_url;
   std::unique_ptr<WebSocketHandshakeStreamCreateHelper> create_helper;
   url::Origin origin;
-  GURL first_party_for_cookies;
+  GURL site_for_cookies;
   URLRequestContext* url_request_context;
   NetLogWithSource net_log;
   std::unique_ptr<WebSocketStream::ConnectDelegate> connect_delegate;
@@ -777,7 +777,7 @@ class WebSocketChannelTest : public ::testing::Test {
                                         &connect_data_.url_request_context));
     channel_->SendAddChannelRequestForTesting(
         connect_data_.socket_url, connect_data_.requested_subprotocols,
-        connect_data_.origin, connect_data_.first_party_for_cookies, "",
+        connect_data_.origin, connect_data_.site_for_cookies, "",
         base::Bind(&WebSocketStreamCreationCallbackArgumentSaver::Create,
                    base::Unretained(&connect_data_.argument_saver)));
   }
@@ -814,7 +814,7 @@ class WebSocketChannelTest : public ::testing::Test {
     ConnectData()
         : socket_url("ws://ws/"),
           origin(GURL("http://ws")),
-          first_party_for_cookies("http://ws/") {}
+          site_for_cookies("http://ws/") {}
 
     // URLRequestContext object.
     URLRequestContext url_request_context;
@@ -826,7 +826,7 @@ class WebSocketChannelTest : public ::testing::Test {
     // Origin of the request
     url::Origin origin;
     // First party for cookies for the request.
-    GURL first_party_for_cookies;
+    GURL site_for_cookies;
 
     WebSocketStreamCreationCallbackArgumentSaver argument_saver;
   };
@@ -947,7 +947,7 @@ class ChannelDeletingFakeWebSocketEventInterface
 
 std::unique_ptr<WebSocketEventInterface>
 WebSocketChannelDeletingTest::CreateEventInterface() {
-  return base::MakeUnique<ChannelDeletingFakeWebSocketEventInterface>(this);
+  return std::make_unique<ChannelDeletingFakeWebSocketEventInterface>(this);
 }
 
 // Base class for tests which verify that EventInterface methods are called
@@ -1042,7 +1042,7 @@ class WebSocketChannelReceiveUtf8Test : public WebSocketChannelStreamTest {
 TEST_F(WebSocketChannelTest, EverythingIsPassedToTheCreatorFunction) {
   connect_data_.socket_url = GURL("ws://example.com/test");
   connect_data_.origin = url::Origin(GURL("http://example.com"));
-  connect_data_.first_party_for_cookies = GURL("http://example.com/");
+  connect_data_.site_for_cookies = GURL("http://example.com/");
   connect_data_.requested_subprotocols.push_back("Sinbad");
 
   CreateChannelAndConnect();
@@ -1054,8 +1054,7 @@ TEST_F(WebSocketChannelTest, EverythingIsPassedToTheCreatorFunction) {
 
   EXPECT_EQ(connect_data_.socket_url, actual.socket_url);
   EXPECT_EQ(connect_data_.origin.Serialize(), actual.origin.Serialize());
-  EXPECT_EQ(connect_data_.first_party_for_cookies,
-            actual.first_party_for_cookies);
+  EXPECT_EQ(connect_data_.site_for_cookies, actual.site_for_cookies);
 }
 
 // Verify that calling SendFlowControl before the connection is established does
@@ -1216,7 +1215,7 @@ TEST_F(WebSocketChannelDeletingTest, OnNotifyFinishOpeningHandshakeError) {
   scoped_refptr<HttpResponseHeaders> response_headers(
       new HttpResponseHeaders(""));
   channel_->OnFinishOpeningHandshake(
-      base::MakeUnique<WebSocketHandshakeResponseInfo>(
+      std::make_unique<WebSocketHandshakeResponseInfo>(
           GURL("http://www.example.com/"), 200, "OK", response_headers,
           base::Time()));
   base::RunLoop().RunUntilIdle();
@@ -1387,7 +1386,7 @@ TEST_F(WebSocketChannelEventInterfaceTest, ProtocolPassed) {
   CreateChannelAndConnect();
 
   connect_data_.argument_saver.connect_delegate->OnSuccess(
-      base::MakeUnique<FakeWebSocketStream>("Bob", ""));
+      std::make_unique<FakeWebSocketStream>("Bob", ""));
 }
 
 TEST_F(WebSocketChannelEventInterfaceTest, ExtensionsPassed) {
@@ -1398,7 +1397,7 @@ TEST_F(WebSocketChannelEventInterfaceTest, ExtensionsPassed) {
   CreateChannelAndConnect();
 
   connect_data_.argument_saver.connect_delegate->OnSuccess(
-      base::MakeUnique<FakeWebSocketStream>("", "extension1, extension2"));
+      std::make_unique<FakeWebSocketStream>("", "extension1, extension2"));
 }
 
 // The first frames from the server can arrive together with the handshake, in

@@ -7,18 +7,27 @@
 
 namespace flag_descriptions {
 
-// Title for the flag to control redirection to the task scheduler.
-extern const char kBrowserTaskScheduler[];
+// Title and description for the flag to enable the new bookmark UI.
+extern const char kBookmarkNewGenerationName[];
+extern const char kBookmarkNewGenerationDescription[];
 
-// Description of about:flag option to control redirection to the task
+// Title and description for the flag to control redirection to the task
 // scheduler.
+extern const char kBrowserTaskScheduler[];
 extern const char kBrowserTaskSchedulerDescription[];
 
-// Title for the flag to enable Contextual Search.
-extern const char kContextualSearch[];
+// Title and description for the flag to enable Captive Portal Login.
+extern const char kCaptivePortalName[];
+extern const char kCaptivePortalDescription[];
 
-// Description for the flag to enable Contextual Search.
+// Title and description for the flag to enable Contextual Search.
+extern const char kContextualSearch[];
 extern const char kContextualSearchDescription[];
+
+// Title and description for the flag to enable feature_engagement::Tracker
+// demo mode.
+extern const char kInProductHelpDemoModeName[];
+extern const char kInProductHelpDemoModeDescription[];
 
 // Title, description, and options for the MarkHttpAs setting that controls
 // display of omnibox warnings about non-secure pages.
@@ -29,19 +38,48 @@ extern const char kMarkHttpAsNonSecureAfterEditing[];
 extern const char kMarkHttpAsNonSecureWhileIncognito[];
 extern const char kMarkHttpAsNonSecureWhileIncognitoOrEditing[];
 
-// Title for the flag to enable Physical Web in the omnibox.
-extern const char kPhysicalWeb[];
+// Title and descript for the flag to enable a prompt asking user to choose
+// which mail client app to use to handle mailto:// URLs.
+extern const char kMailtoPromptForUserChoiceName[];
+extern const char kMailtoPromptForUserChoiceDescription[];
 
-// Description for the flag to enable Physical Web in the omnibox.
+// Title and description for the flag to enable elision of the URL path, query,
+// and ref in omnibox URL suggestions.
+extern const char kOmniboxUIElideSuggestionUrlAfterHostName[];
+extern const char kOmniboxUIElideSuggestionUrlAfterHostDescription[];
+
+// Title and description for the flag to enable hiding the URL scheme in
+// omnibox URL suggestions.
+extern const char kOmniboxUIHideSuggestionUrlSchemeName[];
+extern const char kOmniboxUIHideSuggestionUrlSchemeDescription[];
+
+// Title and description for the flag to enable hiding trivial subdomains
+// (www, m) in omnibox URL suggestions.
+extern const char kOmniboxUIHideSuggestionUrlTrivialSubdomainsName[];
+extern const char kOmniboxUIHideSuggestionUrlTrivialSubdomainsDescription[];
+
+// Title and description for the flag to enable Physical Web in the omnibox.
+extern const char kPhysicalWeb[];
 extern const char kPhysicalWebDescription[];
+
+// Title and description for the flag to enable the ddljson Doodle API.
+extern const char kUseDdljsonApiName[];
+extern const char kUseDdljsonApiDescription[];
 
 // Title and description for the flag to enable Web Payments.
 extern const char kWebPaymentsName[];
 extern const char kWebPaymentsDescription[];
 
-// Title and description for the flag to enable Captive Portal Login.
-extern const char kIosCaptivePortalName[];
-extern const char kIosCaptivePortalDescription[];
+// Title and description for the flag to enable third party payment app
+// integration with Web Payments.
+extern const char kWebPaymentsNativeAppsName[];
+extern const char kWebPaymentsNativeAppsDescription[];
+
+// Please insert your name/description above in alphabetical order.
+
+// Title and description for the flag to enable drag and drop.
+extern const char kDragAndDropName[];
+extern const char kDragAndDropDescription[];
 
 }  // namespace flag_descriptions
 

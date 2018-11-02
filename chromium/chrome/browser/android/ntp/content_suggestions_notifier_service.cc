@@ -9,11 +9,10 @@
 #include "base/android/application_status_listener.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
-#include "chrome/browser/android/ntp/content_suggestions_notification_helper.h"
+#include "chrome/browser/android/ntp/content_suggestions_notifier.h"
 #include "chrome/browser/notifications/notification.h"
 #include "chrome/browser/notifications/notification_handler.h"
 #include "chrome/browser/ntp_snippets/ntp_snippets_metrics.h"
-#include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "components/ntp_snippets/content_suggestions_service.h"
@@ -30,7 +29,6 @@
 using ntp_snippets::Category;
 using ntp_snippets::CategoryStatus;
 using ntp_snippets::ContentSuggestion;
-using ntp_snippets::ContentSuggestionsNotificationHelper;
 using ntp_snippets::ContentSuggestionsService;
 using ntp_snippets::KnownCategories;
 using ntp_snippets::kNotificationsDailyLimit;
@@ -43,6 +41,9 @@ using ntp_snippets::kNotificationsPriorityParam;
 using ntp_snippets::kNotificationsTextParam;
 using ntp_snippets::kNotificationsTextValueAndMore;
 using ntp_snippets::kNotificationsTextValueSnippet;
+
+base::android::ApplicationState*
+    g_content_suggestions_notification_application_state_for_testing = nullptr;
 
 namespace {
 
@@ -62,6 +63,9 @@ gfx::Image CropSquare(const gfx::Image& image) {
 }
 
 bool ShouldNotifyInState(base::android::ApplicationState state) {
+  if (g_content_suggestions_notification_application_state_for_testing) {
+    state = *g_content_suggestions_notification_application_state_for_testing;
+  }
   switch (state) {
     case base::android::APPLICATION_STATE_UNKNOWN:
     case base::android::APPLICATION_STATE_HAS_RUNNING_ACTIVITIES:
@@ -110,9 +114,12 @@ void ConsumeQuota(PrefService* prefs) {
 class ContentSuggestionsNotifierService::NotifyingObserver
     : public ContentSuggestionsService::Observer {
  public:
-  NotifyingObserver(ContentSuggestionsService* service, Profile* profile)
+  NotifyingObserver(ContentSuggestionsService* service,
+                    PrefService* prefs,
+                    ContentSuggestionsNotifier* notifier)
       : service_(service),
-        profile_(profile),
+        prefs_(prefs),
+        notifier_(notifier),
         app_status_listener_(base::Bind(&NotifyingObserver::AppStatusChanged,
                                         base::Unretained(this))),
         weak_ptr_factory_(this) {}
@@ -121,11 +128,10 @@ class ContentSuggestionsNotifierService::NotifyingObserver
     if (!ShouldNotifyInState(app_status_listener_.GetState())) {
       DVLOG(1) << "Suppressed notification because Chrome is frontmost";
       return;
-    } else if (ContentSuggestionsNotificationHelper::IsDisabledForProfile(
-                   profile_)) {
+    } else if (!ContentSuggestionsNotifier::ShouldSendNotifications(prefs_)) {
       DVLOG(1) << "Suppressed notification due to opt-out";
       return;
-    } else if (!HaveQuotaForToday(profile_->GetPrefs())) {
+    } else if (!HaveQuotaForToday(prefs_)) {
       DVLOG(1) << "Notification suppressed due to daily limit";
       return;
     }
@@ -169,25 +175,21 @@ class ContentSuggestionsNotifierService::NotifyingObserver
       return;
     }
     if (!ntp_snippets::IsCategoryStatusAvailable(new_status)) {
-      ContentSuggestionsNotificationHelper::HideAllNotifications(
-          CONTENT_SUGGESTIONS_HIDE_DISABLED);
+      notifier_->HideAllNotifications(CONTENT_SUGGESTIONS_HIDE_DISABLED);
     }
   }
 
   void OnSuggestionInvalidated(
       const ContentSuggestion::ID& suggestion_id) override {
-    ContentSuggestionsNotificationHelper::HideNotification(
-        suggestion_id, CONTENT_SUGGESTIONS_HIDE_EXPIRY);
+    notifier_->HideNotification(suggestion_id, CONTENT_SUGGESTIONS_HIDE_EXPIRY);
   }
 
   void OnFullRefreshRequired() override {
-    ContentSuggestionsNotificationHelper::HideAllNotifications(
-        CONTENT_SUGGESTIONS_HIDE_EXPIRY);
+    notifier_->HideAllNotifications(CONTENT_SUGGESTIONS_HIDE_EXPIRY);
   }
 
   void ContentSuggestionsServiceShutdown() override {
-    ContentSuggestionsNotificationHelper::HideAllNotifications(
-        CONTENT_SUGGESTIONS_HIDE_SHUTDOWN);
+    notifier_->HideAllNotifications(CONTENT_SUGGESTIONS_HIDE_SHUTDOWN);
   }
 
  private:
@@ -208,8 +210,7 @@ class ContentSuggestionsNotifierService::NotifyingObserver
       return;
     }
     if (!ShouldNotifyInState(state)) {
-      ContentSuggestionsNotificationHelper::HideAllNotifications(
-          CONTENT_SUGGESTIONS_HIDE_FRONTMOST);
+      notifier_->HideAllNotifications(CONTENT_SUGGESTIONS_HIDE_FRONTMOST);
     }
   }
 
@@ -225,12 +226,12 @@ class ContentSuggestionsNotifierService::NotifyingObserver
     // check if suggestion is still valid.
     DVLOG(1) << "Fetched " << image.Size().width() << "x"
              << image.Size().height() << " image for " << url.spec();
-    ConsumeQuota(profile_->GetPrefs());
+    ConsumeQuota(prefs_);
     int priority = variations::GetVariationParamByFeatureAsInt(
         kNotificationsFeature, kNotificationsPriorityParam,
         kNotificationsDefaultPriority);
-    if (ContentSuggestionsNotificationHelper::SendNotification(
-            id, url, title, text, CropSquare(image), timeout_at, priority)) {
+    if (notifier_->SendNotification(id, url, title, text, CropSquare(image),
+                                    timeout_at, priority)) {
       RecordContentSuggestionsNotificationImpression(
           id.category().IsKnownCategory(KnownCategories::ARTICLES)
               ? CONTENT_SUGGESTIONS_ARTICLE
@@ -239,7 +240,8 @@ class ContentSuggestionsNotifierService::NotifyingObserver
   }
 
   ContentSuggestionsService* const service_;
-  Profile* const profile_;
+  PrefService* const prefs_;
+  ContentSuggestionsNotifier* const notifier_;
   base::android::ApplicationStatusListener app_status_listener_;
 
   base::WeakPtrFactory<NotifyingObserver> weak_ptr_factory_;
@@ -248,11 +250,29 @@ class ContentSuggestionsNotifierService::NotifyingObserver
 };
 
 ContentSuggestionsNotifierService::ContentSuggestionsNotifierService(
-    Profile* profile,
-    ContentSuggestionsService* suggestions)
-    : profile_(profile), suggestions_service_(suggestions) {
-  ContentSuggestionsNotificationHelper::FlushCachedMetrics();
-  UpdateObserverRegistrationState();
+    PrefService* prefs,
+    ContentSuggestionsService* suggestions,
+    std::unique_ptr<ContentSuggestionsNotifier> notifier)
+    : prefs_(prefs),
+      suggestions_service_(suggestions),
+      notifier_(std::move(notifier)) {
+  notifier_->FlushCachedMetrics();
+
+  if (notifier_->RegisterChannel(
+          prefs_->GetBoolean(prefs::kContentSuggestionsNotificationsEnabled))) {
+    // Once there is a notification channel, this setting is no longer relevant
+    // and the UI to control it is gone. Set it to true so that notifications
+    // are sent unconditionally. If the channel is disabled, then notifications
+    // will be blocked at the system level, and the user can re-enable them in
+    // the system notification settings.
+    prefs_->SetBoolean(prefs::kContentSuggestionsNotificationsEnabled, true);
+  }
+
+  if (IsEnabled()) {
+    Enable();
+  } else {
+    Disable();
+  }
 }
 
 ContentSuggestionsNotifierService::~ContentSuggestionsNotifierService() =
@@ -274,22 +294,30 @@ void ContentSuggestionsNotifierService::RegisterProfilePrefs(
 }
 
 void ContentSuggestionsNotifierService::SetEnabled(bool enabled) {
-  profile_->GetPrefs()->SetBoolean(
-      prefs::kContentSuggestionsNotificationsEnabled, enabled);
-  UpdateObserverRegistrationState();
+  prefs_->SetBoolean(prefs::kContentSuggestionsNotificationsEnabled, enabled);
+  if (enabled) {
+    Enable();
+  } else {
+    Disable();
+    RecordContentSuggestionsNotificationOptOut(CONTENT_SUGGESTIONS_EXPLICIT);
+  }
 }
 
 bool ContentSuggestionsNotifierService::IsEnabled() const {
-  return profile_->GetPrefs()->GetBoolean(
-      prefs::kContentSuggestionsNotificationsEnabled);
+  return prefs_->GetBoolean(prefs::kContentSuggestionsNotificationsEnabled);
 }
 
-void ContentSuggestionsNotifierService::UpdateObserverRegistrationState() {
-  if (observer_ && !IsEnabled()) {
+void ContentSuggestionsNotifierService::Enable() {
+  if (!observer_) {
+    observer_.reset(
+        new NotifyingObserver(suggestions_service_, prefs_, notifier_.get()));
+    suggestions_service_->AddObserver(observer_.get());
+  }
+}
+
+void ContentSuggestionsNotifierService::Disable() {
+  if (observer_) {
     suggestions_service_->RemoveObserver(observer_.get());
     observer_.reset();
-  } else if (IsEnabled() && !observer_) {
-    observer_.reset(new NotifyingObserver(suggestions_service_, profile_));
-    suggestions_service_->AddObserver(observer_.get());
   }
 }

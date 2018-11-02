@@ -8,10 +8,10 @@
 #include <memory>
 #include <set>
 
-#include "WebCompositionUnderline.h"
 #include "WebFrame.h"
 #include "WebFrameLoadType.h"
 #include "WebHistoryItem.h"
+#include "WebImeTextSpan.h"
 #include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebFocusType.h"
 #include "public/platform/WebSize.h"
@@ -32,7 +32,7 @@ class WebAssociatedURLLoader;
 class WebAutofillClient;
 class WebContentSettingsClient;
 class WebData;
-class WebDataSource;
+class WebDocumentLoader;
 class WebDevToolsAgent;
 class WebDevToolsAgentClient;
 class WebDocument;
@@ -42,11 +42,13 @@ class WebFrameClient;
 class WebFrameWidget;
 class WebFrameScheduler;
 class WebInputMethodController;
+class WebPerformance;
 class WebRange;
 class WebSecurityOrigin;
 class WebScriptExecutionCallback;
 class WebSharedWorkerRepositoryClient;
 class WebSpellCheckPanelHostClient;
+class WebString;
 class WebTextCheckClient;
 class WebURL;
 class WebURLLoader;
@@ -150,6 +152,12 @@ class WebLocalFrame : public WebFrame {
 
   virtual WebDocument GetDocument() const = 0;
 
+  // The name of this frame. If no name is given, empty string is returned.
+  virtual WebString AssignedName() const = 0;
+
+  // Sets the name of this frame.
+  virtual void SetName(const WebString&) = 0;
+
   // Hierarchy ----------------------------------------------------------
 
   // Get the highest-level LocalFrame in this frame's in-process subtree.
@@ -199,7 +207,7 @@ class WebLocalFrame : public WebFrame {
   // Loads the given data with specific mime type and optional text
   // encoding.  For HTML data, baseURL indicates the security origin of
   // the document and is used to resolve links.  If specified,
-  // unreachableURL is reported via WebDataSource::unreachableURL.  If
+  // unreachableURL is reported via WebDocumentLoader::unreachableURL.  If
   // replace is false, then this data will be loaded as a normal
   // navigation.  Otherwise, the current history item will be replaced.
   virtual void LoadData(const WebData&,
@@ -213,11 +221,16 @@ class WebLocalFrame : public WebFrame {
                         WebHistoryLoadType = kWebHistoryDifferentDocumentLoad,
                         bool is_client_redirect = false) = 0;
 
-  // Returns the data source that is currently loading.  May be null.
-  virtual WebDataSource* ProvisionalDataSource() const = 0;
+  // Returns the document loader that is currently loading.  May be null.
+  virtual WebDocumentLoader* GetProvisionalDocumentLoader() const = 0;
 
-  // Returns the data source that is currently loaded.
-  virtual WebDataSource* DataSource() const = 0;
+  // View-source rendering mode.  Set this before loading an URL to cause
+  // it to be rendered in view-source mode.
+  virtual void EnableViewSourceMode(bool) = 0;
+  virtual bool IsViewSourceModeEnabled() const = 0;
+
+  // Returns the document loader that is currently loaded.
+  virtual WebDocumentLoader* GetDocumentLoader() const = 0;
 
   enum FallbackContentResult {
     // An error page should be shown instead of fallback.
@@ -508,7 +521,7 @@ class WebLocalFrame : public WebFrame {
   virtual bool SetCompositionFromExistingText(
       int composition_start,
       int composition_end,
-      const WebVector<WebCompositionUnderline>& underlines) = 0;
+      const WebVector<WebImeTextSpan>& ime_text_spans) = 0;
   virtual void ExtendSelectionAndDelete(int before, int after) = 0;
 
   virtual void SetCaretVisible(bool) = 0;
@@ -684,6 +697,11 @@ class WebLocalFrame : public WebFrame {
   // This will be removed following the deprecation.
   virtual void UsageCountChromeLoadTimes(const WebString& metric) = 0;
 
+  // Media engagement -------------------------------------------------------
+
+  // Sets the high media engagement bit for this frame's document.
+  virtual void SetHasHighMediaEngagement(bool has_high_media_engagement) = 0;
+
   // Scheduling ---------------------------------------------------------------
 
   virtual WebFrameScheduler* Scheduler() const = 0;
@@ -782,6 +800,10 @@ class WebLocalFrame : public WebFrame {
   // Shift + TAB. (Will be extended to other form controls like select element,
   // checkbox, radio etc.)
   virtual void AdvanceFocusInForm(WebFocusType) = 0;
+
+  // Performance --------------------------------------------------------
+
+  virtual WebPerformance Performance() const = 0;
 
   // Testing ------------------------------------------------------------------
 

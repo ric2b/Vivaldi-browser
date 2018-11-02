@@ -210,13 +210,13 @@ bool AppCacheHost::MarkAsForeignEntry(const GURL& document_url,
   return true;
 }
 
-void AppCacheHost::GetStatusWithCallback(const GetStatusCallback& callback,
+void AppCacheHost::GetStatusWithCallback(GetStatusCallback callback,
                                          void* callback_param) {
   DCHECK(pending_start_update_callback_.is_null() &&
          pending_swap_cache_callback_.is_null() &&
          pending_get_status_callback_.is_null());
 
-  pending_get_status_callback_ = callback;
+  pending_get_status_callback_ = std::move(callback);
   pending_callback_param_ = callback_param;
   if (is_selection_pending())
     return;
@@ -227,18 +227,18 @@ void AppCacheHost::GetStatusWithCallback(const GetStatusCallback& callback,
 void AppCacheHost::DoPendingGetStatus() {
   DCHECK_EQ(false, pending_get_status_callback_.is_null());
 
-  pending_get_status_callback_.Run(GetStatus(), pending_callback_param_);
-  pending_get_status_callback_.Reset();
+  std::move(pending_get_status_callback_)
+      .Run(GetStatus(), pending_callback_param_);
   pending_callback_param_ = NULL;
 }
 
-void AppCacheHost::StartUpdateWithCallback(const StartUpdateCallback& callback,
+void AppCacheHost::StartUpdateWithCallback(StartUpdateCallback callback,
                                            void* callback_param) {
   DCHECK(pending_start_update_callback_.is_null() &&
          pending_swap_cache_callback_.is_null() &&
          pending_get_status_callback_.is_null());
 
-  pending_start_update_callback_ = callback;
+  pending_start_update_callback_ = std::move(callback);
   pending_callback_param_ = callback_param;
   if (is_selection_pending())
     return;
@@ -259,18 +259,18 @@ void AppCacheHost::DoPendingStartUpdate() {
     }
   }
 
-  pending_start_update_callback_.Run(success, pending_callback_param_);
-  pending_start_update_callback_.Reset();
+  std::move(pending_start_update_callback_)
+      .Run(success, pending_callback_param_);
   pending_callback_param_ = NULL;
 }
 
-void AppCacheHost::SwapCacheWithCallback(const SwapCacheCallback& callback,
+void AppCacheHost::SwapCacheWithCallback(SwapCacheCallback callback,
                                          void* callback_param) {
   DCHECK(pending_start_update_callback_.is_null() &&
          pending_swap_cache_callback_.is_null() &&
          pending_get_status_callback_.is_null());
 
-  pending_swap_cache_callback_ = callback;
+  pending_swap_cache_callback_ = std::move(callback);
   pending_callback_param_ = callback_param;
   if (is_selection_pending())
     return;
@@ -295,8 +295,7 @@ void AppCacheHost::DoPendingSwapCache() {
     }
   }
 
-  pending_swap_cache_callback_.Run(success, pending_callback_param_);
-  pending_swap_cache_callback_.Reset();
+  std::move(pending_swap_cache_callback_).Run(success, pending_callback_param_);
   pending_callback_param_ = NULL;
 }
 
@@ -332,7 +331,7 @@ std::unique_ptr<AppCacheRequestHandler> AppCacheHost::CreateRequestHandler(
   if (AppCacheRequestHandler::IsMainResourceType(resource_type)) {
     // Store the first party origin so that it can be used later in SelectCache
     // for checking whether the creation of the appcache is allowed.
-    first_party_url_ = request->GetFirstPartyForCookies();
+    first_party_url_ = request->GetSiteForCookies();
     return base::WrapUnique(new AppCacheRequestHandler(
         this, resource_type, should_reset_appcache, std::move(request)));
   }

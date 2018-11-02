@@ -22,11 +22,9 @@ class LoginDatabase;
 class PasswordStoreWin : public password_manager::PasswordStoreDefault {
  public:
   // The |login_db| must not have been Init()-ed yet. It will be initialized in
-  // a deferred manner on the DB thread. The |web_data_service| is only used for
-  // IE7 password fetching.
+  // a deferred manner on the background sequence. The |web_data_service| is
+  // only used for IE7 password fetching.
   PasswordStoreWin(
-      scoped_refptr<base::SequencedTaskRunner> main_thread_runner,
-      scoped_refptr<base::SequencedTaskRunner> db_thread_runner,
       std::unique_ptr<password_manager::LoginDatabase> login_db,
       const scoped_refptr<PasswordWebDataService>& web_data_service);
 
@@ -38,8 +36,8 @@ class PasswordStoreWin : public password_manager::PasswordStoreDefault {
 
   ~PasswordStoreWin() override;
 
-  // Invoked from ShutdownOnUIThread, but run on the DB thread.
-  void ShutdownOnDBThread();
+  // Invoked from ShutdownOnUIThread(), but run on the background sequence.
+  void ShutdownOnBackgroundSequence();
 
   // password_manager::PasswordStore:
   void GetLoginsImpl(const password_manager::PasswordStore::FormDigest& form,

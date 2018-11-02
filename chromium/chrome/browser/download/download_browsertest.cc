@@ -25,6 +25,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
+#include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -58,6 +59,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_browsertest_util.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
+#include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -82,7 +84,7 @@
 #include "components/infobars/core/infobar.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
-#include "components/safe_browsing/csd.pb.h"
+#include "components/safe_browsing/proto/csd.pb.h"
 #include "content/public/browser/download_danger_type.h"
 #include "content/public/browser/download_interrupt_reasons.h"
 #include "content/public/browser/download_item.h"
@@ -118,8 +120,8 @@
 #include "ui/base/page_transition_types.h"
 
 #if defined(FULL_SAFE_BROWSING)
-#include "chrome/browser/safe_browsing/download_feedback_service.h"
-#include "chrome/browser/safe_browsing/download_protection_service.h"
+#include "chrome/browser/safe_browsing/download_protection/download_feedback_service.h"
+#include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
 #include "chrome/browser/safe_browsing/test_safe_browsing_service.h"
 #endif
 
@@ -163,7 +165,7 @@ class CreatedObserver : public content::DownloadManager::Observer {
                          content::DownloadItem* item) override {
     DCHECK_EQ(manager_, manager);
     if (waiting_)
-      base::MessageLoopForUI::current()->QuitWhenIdle();
+      base::RunLoop::QuitCurrentWhenIdleDeprecated();
   }
 
   content::DownloadManager* manager_;
@@ -205,10 +207,10 @@ class PercentWaiter : public content::DownloadItem::Observer {
           (item_->PercentComplete() != 100)))) {
       error_ = true;
       if (waiting_)
-        base::MessageLoopForUI::current()->QuitWhenIdle();
+        base::RunLoop::QuitCurrentWhenIdleDeprecated();
     }
     if (item_->GetState() == DownloadItem::COMPLETE && waiting_)
-      base::MessageLoopForUI::current()->QuitWhenIdle();
+      base::RunLoop::QuitCurrentWhenIdleDeprecated();
   }
 
   void OnDownloadDestroyed(content::DownloadItem* item) override {
@@ -291,7 +293,7 @@ class DownloadsHistoryDataCollector {
       std::unique_ptr<std::vector<history::DownloadRow>> entries) {
     result_valid_ = true;
     results_ = std::move(entries);
-    base::MessageLoopForUI::current()->QuitWhenIdle();
+    base::RunLoop::QuitCurrentWhenIdleDeprecated();
   }
 
   Profile* profile_;
@@ -375,7 +377,7 @@ class HistoryObserver : public DownloadHistory::Observer {
 
     seen_stored_ = true;
     if (waiting_)
-      base::MessageLoopForUI::current()->QuitWhenIdle();
+      base::RunLoop::QuitCurrentWhenIdleDeprecated();
   }
 
   void OnDownloadHistoryDestroyed() override {
@@ -916,8 +918,7 @@ class DownloadTest : public InProcessBrowserTest {
     }
 
     // Wait till the |DownloadFile|s are destroyed.
-    content::RunAllPendingInMessageLoop(content::BrowserThread::FILE);
-    content::RunAllPendingInMessageLoop(content::BrowserThread::UI);
+    content::RunAllBlockingPoolTasksUntilIdle();
 
     // Validate that the correct files were downloaded.
     download_items.clear();
@@ -1088,10 +1089,10 @@ class FakeDownloadProtectionService
   FakeDownloadProtectionService()
       : safe_browsing::DownloadProtectionService(nullptr) {}
 
-  void CheckClientDownload(DownloadItem* download_item,
-      const CheckDownloadCallback& callback) override {
-    callback.Run(
-      safe_browsing::DownloadProtectionService::UNCOMMON);
+  void CheckClientDownload(
+      DownloadItem* download_item,
+      const safe_browsing::CheckDownloadCallback& callback) override {
+    callback.Run(safe_browsing::DownloadCheckResult::UNCOMMON);
   }
 };
 
@@ -2990,27 +2991,27 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, DownloadTest_Renaming) {
 #define MAYBE_DownloadTest_CrazyFilenames DownloadTest_CrazyFilenames
 #endif
 IN_PROC_BROWSER_TEST_F(DownloadTest, MAYBE_DownloadTest_CrazyFilenames) {
-  const wchar_t* kCrazyFilenames[] = {
-    L"a_file_name.zip",
-    L"\u89c6\u9891\u76f4\u64ad\u56fe\u7247.zip",  // chinese chars
-    L"\u0412\u043e \u0424\u043b\u043e\u0440\u0438\u0434\u0435\u043e\u0431\u044a"
+  static constexpr const wchar_t* kCrazyFilenames[] = {
+      L"a_file_name.zip",
+      L"\u89c6\u9891\u76f4\u64ad\u56fe\u7247.zip",  // chinese chars
+      L"\u0412\u043e "
+      L"\u0424\u043b\u043e\u0440\u0438\u0434\u0435\u043e\u0431\u044a"
       L"\u044f\u0432\u043b\u0435\u043d\u0440\u0435\u0436\u0438\u043c \u0427"
       L"\u041f \u0438\u0437-\u0437\u0430 \u0443\u0442\u0435\u0447\u043a\u0438 "
       L"\u043d\u0435\u0444\u0442\u0438.zip",  // russian
-    L"Desocupa\xe7\xe3o est\xe1vel.zip",
-    // arabic:
-    L"\u0638\u2026\u0638\u02c6\u0637\xa7\u0638\u201a\u0637\xb9 \u0638\u201e"
+      L"Desocupa\xe7\xe3o est\xe1vel.zip",
+      // arabic:
+      L"\u0638\u2026\u0638\u02c6\u0637\xa7\u0638\u201a\u0637\xb9 \u0638\u201e"
       L"\u0638\u201e\u0637\xb2\u0638\u0679\u0637\xa7\u0637\xb1\u0637\xa9.zip",
-    L"\u05d4\u05e2\u05d3\u05e4\u05d5\u05ea.zip",  // hebrew
-    L"\u092d\u093e\u0930\u0924.zip",  // hindi
-    L"d\xe9stabilis\xe9.zip",  // french
-    // korean
-    L"\u97d3-\u4e2d \uc815\uc0c1, \ucc9c\uc548\ud568 \uc758\uacac.zip",
-    L"jiho....tiho...miho.zip",
-    L"jiho!@#$tiho$%^&-()_+=miho copy.zip",  // special chars
-    L"Wohoo-to hoo+I.zip",
-    L"Picture 1.zip",
-    L"This is a very very long english sentence with spaces and , and +.zip",
+      L"\u05d4\u05e2\u05d3\u05e4\u05d5\u05ea.zip",  // hebrew
+      L"\u092d\u093e\u0930\u0924.zip",              // hindi
+      L"d\xe9stabilis\xe9.zip",                     // french
+      // korean
+      L"\u97d3-\u4e2d \uc815\uc0c1, \ucc9c\uc548\ud568 \uc758\uacac.zip",
+      L"jiho....tiho...miho.zip",
+      L"jiho!@#$tiho$%^&-()_+=miho copy.zip",  // special chars
+      L"Wohoo-to hoo+I.zip", L"Picture 1.zip",
+      L"This is a very very long english sentence with spaces and , and +.zip",
   };
 
   std::vector<DownloadItem*> download_items;
@@ -3023,7 +3024,7 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, MAYBE_DownloadTest_CrazyFilenames) {
     SCOPED_TRACE(testing::Message() << "Index " << index);
     base::string16 crazy16;
     std::string crazy8;
-    const wchar_t* crazy_w = kCrazyFilenames[index];
+    const wchar_t* const crazy_w = kCrazyFilenames[index];
     ASSERT_TRUE(base::WideToUTF8(crazy_w, wcslen(crazy_w), &crazy8));
     ASSERT_TRUE(base::WideToUTF16(crazy_w, wcslen(crazy_w), &crazy16));
     base::FilePath file_path(origin_directory.Append(
@@ -3497,8 +3498,8 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, FeedbackServiceDiscardDownload) {
   safe_browsing::DownloadProtectionService* download_protection_service =
       sb_service->download_protection_service();
   download_protection_service->feedback_service()->MaybeStorePingsForDownload(
-      safe_browsing::DownloadProtectionService::UNCOMMON,
-      true /* upload_requested */, downloads[0], ping_request, ping_response);
+      safe_browsing::DownloadCheckResult::UNCOMMON, true /* upload_requested */,
+      downloads[0], ping_request, ping_response);
   ASSERT_TRUE(safe_browsing::DownloadFeedbackService::IsEnabledForDownload(
       *(downloads[0])));
 
@@ -3553,8 +3554,8 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, FeedbackServiceKeepDownload) {
   safe_browsing::DownloadProtectionService* download_protection_service =
       sb_service->download_protection_service();
   download_protection_service->feedback_service()->MaybeStorePingsForDownload(
-      safe_browsing::DownloadProtectionService::UNCOMMON,
-      true /* upload_requested */, downloads[0], ping_request, ping_response);
+      safe_browsing::DownloadCheckResult::UNCOMMON, true /* upload_requested */,
+      downloads[0], ping_request, ping_response);
   ASSERT_TRUE(safe_browsing::DownloadFeedbackService::IsEnabledForDownload(
       *(downloads[0])));
 
@@ -3792,9 +3793,7 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, PRE_DownloadTest_History) {
   observer.WaitForStored();
   HistoryServiceFactory::GetForProfile(browser()->profile(),
                                        ServiceAccessType::IMPLICIT_ACCESS)
-      ->FlushForTest(base::Bind(
-          &base::MessageLoop::QuitWhenIdle,
-          base::Unretained(base::MessageLoop::current()->current())));
+      ->FlushForTest(base::Bind(&base::RunLoop::QuitCurrentWhenIdleDeprecated));
   content::RunMessageLoop();
 }
 

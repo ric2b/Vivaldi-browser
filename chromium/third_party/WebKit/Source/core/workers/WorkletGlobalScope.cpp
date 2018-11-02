@@ -5,29 +5,56 @@
 #include "core/workers/WorkletGlobalScope.h"
 
 #include <memory>
+#include "bindings/core/v8/ScriptSourceCode.h"
 #include "bindings/core/v8/SourceLocation.h"
 #include "bindings/core/v8/WorkerOrWorkletScriptController.h"
 #include "core/dom/Modulator.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/inspector/MainThreadDebugger.h"
+#include "core/loader/modulescript/ModuleScriptFetchRequest.h"
 #include "core/probe/CoreProbes.h"
+#include "core/workers/WorkerReportingProxy.h"
+#include "core/workers/WorkletModuleResponsesMap.h"
+#include "core/workers/WorkletModuleTreeClient.h"
+#include "core/workers/WorkletPendingTasks.h"
 #include "platform/bindings/TraceWrapperMember.h"
 
 namespace blink {
 
-WorkletGlobalScope::WorkletGlobalScope(
-    const KURL& url,
-    const String& user_agent,
-    PassRefPtr<SecurityOrigin> security_origin,
-    v8::Isolate* isolate,
-    WorkerClients* worker_clients)
-    : WorkerOrWorkletGlobalScope(isolate, worker_clients),
+WorkletGlobalScope::WorkletGlobalScope(const KURL& url,
+                                       const String& user_agent,
+                                       RefPtr<SecurityOrigin> security_origin,
+                                       v8::Isolate* isolate,
+                                       WorkerClients* worker_clients,
+                                       WorkerReportingProxy& reporting_proxy)
+    : WorkerOrWorkletGlobalScope(isolate, worker_clients, reporting_proxy),
       url_(url),
-      user_agent_(user_agent),
-      modulator_(this, nullptr) {
+      user_agent_(user_agent) {
   SetSecurityOrigin(std::move(security_origin));
 }
 
-WorkletGlobalScope::~WorkletGlobalScope() {}
+WorkletGlobalScope::~WorkletGlobalScope() = default;
+
+// TODO(nhiroki): Remove this function after module loading for threaded
+// worklets is enabled.
+void WorkletGlobalScope::EvaluateClassicScript(
+    const KURL& script_url,
+    String source_code,
+    std::unique_ptr<Vector<char>> cached_meta_data,
+    V8CacheOptions v8_cache_options) {
+  if (source_code.IsNull()) {
+    // |source_code| is null when this is called during worker thread startup.
+    // Worklet will evaluate the script later via Worklet.addModule().
+    return;
+  }
+  DCHECK(!cached_meta_data);
+  // TODO(nhiroki): Call WorkerReportingProxy::WillEvaluateWorkerScript() or
+  // something like that (e.g., WillEvaluateModuleScript()).
+  bool success = ScriptController()->Evaluate(
+      ScriptSourceCode(source_code, script_url), nullptr /* error_event */,
+      nullptr /* cache_handler */, v8_cache_options);
+  ReportingProxy().DidEvaluateModuleScript(success);
+}
 
 v8::Local<v8::Object> WorkletGlobalScope::Wrap(
     v8::Isolate*,
@@ -68,6 +95,55 @@ bool WorkletGlobalScope::IsSecureContext(String& error_message) const {
   return false;
 }
 
+// Implementation of the first half of the "fetch and invoke a worklet script"
+// algorithm:
+// https://drafts.css-houdini.org/worklets/#fetch-and-invoke-a-worklet-script
+void WorkletGlobalScope::FetchAndInvokeScript(
+    const KURL& module_url_record,
+    WorkletModuleResponsesMap* module_responses_map,
+    WebURLRequest::FetchCredentialsMode credentials_mode,
+    RefPtr<WebTaskRunner> outside_settings_task_runner,
+    WorkletPendingTasks* pending_tasks) {
+  DCHECK(IsContextThread());
+  if (!module_responses_map_proxy_) {
+    // |kUnspecedLoading| is used here because this is a part of script module
+    // loading and this usage is not explicitly spec'ed.
+    module_responses_map_proxy_ = WorkletModuleResponsesMapProxy::Create(
+        module_responses_map, outside_settings_task_runner,
+        TaskRunnerHelper::Get(TaskType::kUnspecedLoading, this));
+  }
+
+  // Step 1: "Let insideSettings be the workletGlobalScope's associated
+  // environment settings object."
+  // Step 2: "Let script by the result of fetch a worklet script given
+  // moduleURLRecord, moduleResponsesMap, credentialOptions, outsideSettings,
+  // and insideSettings when it asynchronously completes."
+  String nonce = "";
+  ParserDisposition parser_state = kNotParserInserted;
+  Modulator* modulator = Modulator::From(ScriptController()->GetScriptState());
+  ModuleScriptFetchRequest module_request(module_url_record, nonce,
+                                          parser_state, credentials_mode);
+
+  // Step 3 to 5 are implemented in
+  // WorkletModuleTreeClient::NotifyModuleTreeLoadFinished.
+  WorkletModuleTreeClient* client = new WorkletModuleTreeClient(
+      modulator, std::move(outside_settings_task_runner), pending_tasks);
+  modulator->FetchTree(module_request, client);
+}
+
+WorkletModuleResponsesMapProxy* WorkletGlobalScope::ModuleResponsesMapProxy()
+    const {
+  DCHECK(IsContextThread());
+  DCHECK(module_responses_map_proxy_);
+  return module_responses_map_proxy_;
+}
+
+void WorkletGlobalScope::SetModuleResponsesMapProxyForTesting(
+    WorkletModuleResponsesMapProxy* proxy) {
+  DCHECK(!module_responses_map_proxy_);
+  module_responses_map_proxy_ = proxy;
+}
+
 void WorkletGlobalScope::SetModulator(Modulator* modulator) {
   modulator_ = modulator;
 }
@@ -83,6 +159,7 @@ KURL WorkletGlobalScope::VirtualCompleteURL(const String& url) const {
 }
 
 DEFINE_TRACE(WorkletGlobalScope) {
+  visitor->Trace(module_responses_map_proxy_);
   visitor->Trace(modulator_);
   ExecutionContext::Trace(visitor);
   SecurityContext::Trace(visitor);

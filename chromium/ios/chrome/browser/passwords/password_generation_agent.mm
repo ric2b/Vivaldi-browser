@@ -22,8 +22,7 @@
 #include "ios/chrome/browser/experimental_flags.h"
 #import "ios/chrome/browser/passwords/js_password_manager.h"
 #import "ios/chrome/browser/passwords/password_generation_edit_view.h"
-#import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
-#include "ios/chrome/browser/ui/commands/ios_command_ids.h"
+#import "ios/chrome/browser/ui/commands/application_commands.h"
 #include "ios/web/public/url_scheme_util.h"
 #import "ios/web/public/web_state/js/crw_js_injection_receiver.h"
 #include "ios/web/public/web_state/web_state.h"
@@ -103,12 +102,12 @@ bool IsTextField(const autofill::FormFieldData& field) {
 // Initializes PasswordGenerationAgent, which observes the specified web state,
 // and allows injecting JavaScript managers.
 - (instancetype)
-         initWithWebState:(web::WebState*)webState
-          passwordManager:(password_manager::PasswordManager*)passwordManager
-    passwordManagerDriver:(password_manager::PasswordManagerDriver*)driver
-        JSPasswordManager:(JsPasswordManager*)JSPasswordManager
-      JSSuggestionManager:(JsSuggestionManager*)JSSuggestionManager
-      passwordsUiDelegate:(id<PasswordsUiDelegate>)UIDelegate
+     initWithWebState:(web::WebState*)webState
+      passwordManager:(password_manager::PasswordManager*)passwordManager
+passwordManagerDriver:(password_manager::PasswordManagerDriver*)driver
+    JSPasswordManager:(JsPasswordManager*)JSPasswordManager
+  JSSuggestionManager:(JsSuggestionManager*)JSSuggestionManager
+  passwordsUiDelegate:(id<PasswordsUiDelegate>)delegate
     NS_DESIGNATED_INITIALIZER;
 
 @end
@@ -152,6 +151,8 @@ bool IsTextField(const autofill::FormFieldData& field) {
   // The password that was generated and accepted by the user.
   NSString* _generatedPassword;
 }
+
+@synthesize dispatcher = _dispatcher;
 
 - (instancetype)init {
   NOTREACHED();
@@ -287,10 +288,8 @@ passwordManagerDriver:(password_manager::PasswordManagerDriver*)driver
   // If the form origin hasn't been cleared by both the autofill and the
   // password manager, wait.
   GURL origin = _possibleAccountCreationForm->origin;
-  if (!experimental_flags::UseOnlyLocalHeuristicsForPasswordGeneration()) {
-    if (!base::ContainsValue(_allowedGenerationFormOrigins, origin))
-      return;
-  }
+  if (!base::ContainsValue(_allowedGenerationFormOrigins, origin))
+    return;
 
   // Use the first password field in the form as the generation field.
   _passwordGenerationField.reset(
@@ -367,9 +366,7 @@ passwordManagerDriver:(password_manager::PasswordManagerDriver*)driver
 
 - (void)showSavedPasswords:(id)sender {
   [self hideAlert];
-  GenericChromeCommand* command = [[GenericChromeCommand alloc]
-      initWithTag:IDC_SHOW_SAVE_PASSWORDS_SETTINGS];
-  [command executeOnMainWindow];
+  [self.dispatcher showSavePasswordsSettings];
 }
 
 #pragma mark -

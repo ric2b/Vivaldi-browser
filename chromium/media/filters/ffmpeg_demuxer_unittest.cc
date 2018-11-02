@@ -19,13 +19,14 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/test/mock_callback.h"
-#include "base/test/scoped_task_scheduler.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "media/base/decrypt_config.h"
 #include "media/base/media_log.h"
 #include "media/base/media_tracks.h"
 #include "media/base/mock_demuxer_host.h"
+#include "media/base/mock_media_log.h"
 #include "media/base/test_helpers.h"
 #include "media/base/timestamp_constants.h"
 #include "media/ffmpeg/ffmpeg_common.h"
@@ -55,6 +56,27 @@ MATCHER(IsEndOfStreamBuffer,
   return arg->end_of_stream();
 }
 
+// This does not verify any of the codec parameters that may be included in the
+// log entry.
+MATCHER_P(SimpleCreatedFFmpegDemuxerStream, stream_type, "") {
+  return CONTAINS_STRING(arg, "\"info\":\"FFmpegDemuxer: created " +
+                                  std::string(stream_type) +
+                                  " stream, config codec:");
+}
+
+MATCHER_P(FailedToCreateValidDecoderConfigFromStream, stream_type, "") {
+  return CONTAINS_STRING(
+      arg, "\"debug\":\"Warning, FFmpegDemuxer failed to create a valid " +
+               std::string(stream_type) +
+               " decoder configuration from muxed stream");
+}
+
+MATCHER_P(SkippingUnsupportedStream, stream_type, "") {
+  return CONTAINS_STRING(
+      arg, "\"info\":\"FFmpegDemuxer: skipping invalid or unsupported " +
+               std::string(stream_type) + " track");
+}
+
 namespace {
 void OnStreamStatusChanged(base::WaitableEvent* event,
                            DemuxerStream* stream,
@@ -63,8 +85,10 @@ void OnStreamStatusChanged(base::WaitableEvent* event,
   event->Signal();
 }
 
-void CheckStreamStatusNotifications(MediaResource* media_resource,
-                                    FFmpegDemuxerStream* stream) {
+void CheckStreamStatusNotifications(
+    MediaResource* media_resource,
+    FFmpegDemuxerStream* stream,
+    base::test::ScopedTaskEnvironment* scoped_task_environment) {
   base::WaitableEvent event(base::WaitableEvent::ResetPolicy::AUTOMATIC,
                             base::WaitableEvent::InitialState::NOT_SIGNALED);
 
@@ -73,12 +97,12 @@ void CheckStreamStatusNotifications(MediaResource* media_resource,
       base::Bind(&OnStreamStatusChanged, base::Unretained(&event)));
 
   stream->SetEnabled(false, base::TimeDelta());
-  base::RunLoop().RunUntilIdle();
+  scoped_task_environment->RunUntilIdle();
   ASSERT_TRUE(event.IsSignaled());
 
   event.Reset();
   stream->SetEnabled(true, base::TimeDelta());
-  base::RunLoop().RunUntilIdle();
+  scoped_task_environment->RunUntilIdle();
   ASSERT_TRUE(event.IsSignaled());
 }
 
@@ -124,26 +148,18 @@ class FFmpegDemuxerTest : public testing::Test {
     if (demuxer_)
       demuxer_->Stop();
     demuxer_.reset();
-    base::RunLoop().RunUntilIdle();
+    scoped_task_environment_.RunUntilIdle();
     data_source_.reset();
   }
 
+  // TODO(wolenetz): Combine with CreateDemuxer() and expand coverage of all of
+  // these tests to use strict media log. See https://crbug.com/749178.
+  void CreateDemuxerWithStrictMediaLog(const std::string& name) {
+    CreateDemuxerInternal(name, &media_log_);
+  }
+
   void CreateDemuxer(const std::string& name) {
-    CHECK(!demuxer_);
-
-    EXPECT_CALL(host_, OnBufferedTimeRangesChanged(_)).Times(AnyNumber());
-
-    CreateDataSource(name);
-
-    Demuxer::EncryptedMediaInitDataCB encrypted_media_init_data_cb = base::Bind(
-        &FFmpegDemuxerTest::OnEncryptedMediaInitData, base::Unretained(this));
-
-    Demuxer::MediaTracksUpdatedCB tracks_updated_cb = base::Bind(
-        &FFmpegDemuxerTest::OnMediaTracksUpdated, base::Unretained(this));
-
-    demuxer_.reset(new FFmpegDemuxer(
-        base::ThreadTaskRunnerHandle::Get(), data_source_.get(),
-        encrypted_media_init_data_cb, tracks_updated_cb, &media_log_));
+    CreateDemuxerInternal(name, &dummy_media_log_);
   }
 
   DemuxerStream* GetStream(DemuxerStream::Type type) {
@@ -280,8 +296,14 @@ class FFmpegDemuxerTest : public testing::Test {
 
   // Fixture members.
 
-  base::test::ScopedTaskScheduler task_scheduler_;
-  MediaLog media_log_;
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
+
+  // TODO(wolenetz): Consider expanding MediaLog verification coverage here
+  // using StrictMock<MockMediaLog> for all FFmpegDemuxerTests. See
+  // https://crbug.com/749178.
+  StrictMock<MockMediaLog> media_log_;
+  MediaLog dummy_media_log_;
+
   std::unique_ptr<FileDataSource> data_source_;
   std::unique_ptr<FFmpegDemuxer> demuxer_;
   StrictMock<MockDemuxerHost> host_;
@@ -313,6 +335,24 @@ class FFmpegDemuxerTest : public testing::Test {
   }
 
  private:
+  void CreateDemuxerInternal(const std::string& name, MediaLog* media_log) {
+    CHECK(!demuxer_);
+
+    EXPECT_CALL(host_, OnBufferedTimeRangesChanged(_)).Times(AnyNumber());
+
+    CreateDataSource(name);
+
+    Demuxer::EncryptedMediaInitDataCB encrypted_media_init_data_cb = base::Bind(
+        &FFmpegDemuxerTest::OnEncryptedMediaInitData, base::Unretained(this));
+
+    Demuxer::MediaTracksUpdatedCB tracks_updated_cb = base::Bind(
+        &FFmpegDemuxerTest::OnMediaTracksUpdated, base::Unretained(this));
+
+    demuxer_.reset(new FFmpegDemuxer(
+        base::ThreadTaskRunnerHandle::Get(), data_source_.get(),
+        encrypted_media_init_data_cb, tracks_updated_cb, media_log));
+  }
+
   void CreateDataSource(const std::string& name) {
     CHECK(!data_source_);
 
@@ -490,10 +530,12 @@ TEST_F(FFmpegDemuxerTest, AbortPendingReads) {
   audio->Read(NewReadCB(FROM_HERE, 29, 0, true, DemuxerStream::kAborted));
   demuxer_->AbortPendingReads();
   base::RunLoop().Run();
+  scoped_task_environment_.RunUntilIdle();
 
   // Additional reads should also be aborted (until a Seek()).
   audio->Read(NewReadCB(FROM_HERE, 29, 0, true, DemuxerStream::kAborted));
   base::RunLoop().Run();
+  scoped_task_environment_.RunUntilIdle();
 
   // Ensure blocking thread has completed outstanding work.
   demuxer_->Stop();
@@ -517,6 +559,7 @@ TEST_F(FFmpegDemuxerTest, Read_Audio) {
 
   audio->Read(NewReadCB(FROM_HERE, 27, 3000, true));
   base::RunLoop().Run();
+  scoped_task_environment_.RunUntilIdle();
 
   EXPECT_EQ(166866, demuxer_->GetMemoryUsage());
 }
@@ -534,6 +577,7 @@ TEST_F(FFmpegDemuxerTest, Read_Video) {
 
   video->Read(NewReadCB(FROM_HERE, 1057, 33000, false));
   base::RunLoop().Run();
+  scoped_task_environment_.RunUntilIdle();
 
   EXPECT_EQ(148778, demuxer_->GetMemoryUsage());
 }
@@ -1107,7 +1151,8 @@ TEST_F(FFmpegDemuxerTest, Stop) {
 
   // Attempt the read...
   audio->Read(callback.Get());
-  base::RunLoop().RunUntilIdle();
+  scoped_task_environment_.RunUntilIdle();
+  ;
 
   // Don't let the test call Stop() again.
   demuxer_.reset();
@@ -1167,7 +1212,15 @@ TEST_F(FFmpegDemuxerTest, NoID3TagData) {
 // will hand us a video stream to the data which will likely be in a format we
 // don't accept as video; e.g. PNG.
 TEST_F(FFmpegDemuxerTest, Mp3WithVideoStreamID3TagData) {
-  CreateDemuxer("id3_png_test.mp3");
+  CreateDemuxerWithStrictMediaLog("id3_png_test.mp3");
+
+  EXPECT_MEDIA_LOG(SimpleCreatedFFmpegDemuxerStream("audio"));
+  EXPECT_MEDIA_LOG(FailedToCreateValidDecoderConfigFromStream("video"));
+
+  // TODO(wolenetz): Use a matcher that verifies more of the event parameters
+  // than FoundStream. See https://crbug.com/749178.
+  EXPECT_MEDIA_LOG(FoundStream("audio"));
+  EXPECT_MEDIA_LOG(SkippingUnsupportedStream("video"));
   InitializeDemuxer();
 
   // Ensure the expected streams are present.
@@ -1179,7 +1232,15 @@ TEST_F(FFmpegDemuxerTest, Mp3WithVideoStreamID3TagData) {
 // Ensure a video with an unsupported audio track still results in the video
 // stream being demuxed.
 TEST_F(FFmpegDemuxerTest, UnsupportedAudioSupportedVideoDemux) {
-  CreateDemuxer("speex_audio_vorbis_video.ogv");
+  CreateDemuxerWithStrictMediaLog("speex_audio_vorbis_video.ogv");
+
+  EXPECT_MEDIA_LOG(SimpleCreatedFFmpegDemuxerStream("video"));
+  EXPECT_MEDIA_LOG(FailedToCreateValidDecoderConfigFromStream("audio"));
+  EXPECT_MEDIA_LOG(SkippingUnsupportedStream("audio"));
+
+  // TODO(wolenetz): Use a matcher that verifies more of the event parameters
+  // than FoundStream. See https://crbug.com/749178.
+  EXPECT_MEDIA_LOG(FoundStream("video"));
   InitializeDemuxer();
 
   // Ensure the expected streams are present.
@@ -1423,18 +1484,18 @@ TEST_F(FFmpegDemuxerTest, Read_Mp4_Media_Track_Info) {
 
   EXPECT_EQ(media_tracks_->tracks().size(), 2u);
 
-  const MediaTrack& audio_track = *(media_tracks_->tracks()[0]);
+  const MediaTrack& audio_track = *(media_tracks_->tracks()[1]);
   EXPECT_EQ(audio_track.type(), MediaTrack::Audio);
-  EXPECT_EQ(audio_track.bytestream_track_id(), 1);
+  EXPECT_EQ(audio_track.bytestream_track_id(), 2);
   EXPECT_EQ(audio_track.kind(), "main");
-  EXPECT_EQ(audio_track.label(), "GPAC ISO Audio Handler");
+  EXPECT_EQ(audio_track.label(), "SoundHandler");
   EXPECT_EQ(audio_track.language(), "und");
 
-  const MediaTrack& video_track = *(media_tracks_->tracks()[1]);
+  const MediaTrack& video_track = *(media_tracks_->tracks()[0]);
   EXPECT_EQ(video_track.type(), MediaTrack::Video);
-  EXPECT_EQ(video_track.bytestream_track_id(), 2);
+  EXPECT_EQ(video_track.bytestream_track_id(), 1);
   EXPECT_EQ(video_track.kind(), "main");
-  EXPECT_EQ(video_track.label(), "GPAC ISO Video Handler");
+  EXPECT_EQ(video_track.label(), "VideoHandler");
   EXPECT_EQ(video_track.language(), "und");
 }
 
@@ -1578,6 +1639,22 @@ TEST_F(FFmpegDemuxerTest, UTCDateToTime_Invalid) {
   }
 }
 
+static void VerifyFlacStream(DemuxerStream* stream,
+                             int expected_bits_per_channel,
+                             ChannelLayout expected_channel_layout,
+                             int expected_samples_per_second,
+                             SampleFormat expected_sample_format) {
+  ASSERT_TRUE(stream);
+  EXPECT_EQ(DemuxerStream::AUDIO, stream->type());
+
+  const AudioDecoderConfig& audio_config = stream->audio_decoder_config();
+  EXPECT_EQ(kCodecFLAC, audio_config.codec());
+  EXPECT_EQ(expected_bits_per_channel, audio_config.bits_per_channel());
+  EXPECT_EQ(expected_channel_layout, audio_config.channel_layout());
+  EXPECT_EQ(expected_samples_per_second, audio_config.samples_per_second());
+  EXPECT_EQ(expected_sample_format, audio_config.sample_format());
+}
+
 TEST_F(FFmpegDemuxerTest, Read_Flac) {
   CreateDemuxer("sfx.flac");
   InitializeDemuxer();
@@ -1585,18 +1662,33 @@ TEST_F(FFmpegDemuxerTest, Read_Flac) {
   // Video stream should not be present.
   EXPECT_EQ(nullptr, GetStream(DemuxerStream::VIDEO));
 
-  // Audio stream should be present.
-  DemuxerStream* stream = GetStream(DemuxerStream::AUDIO);
-  ASSERT_TRUE(stream);
-  EXPECT_EQ(DemuxerStream::AUDIO, stream->type());
-
-  const AudioDecoderConfig& audio_config = stream->audio_decoder_config();
-  EXPECT_EQ(kCodecFLAC, audio_config.codec());
-  EXPECT_EQ(32, audio_config.bits_per_channel());
-  EXPECT_EQ(CHANNEL_LAYOUT_MONO, audio_config.channel_layout());
-  EXPECT_EQ(44100, audio_config.samples_per_second());
-  EXPECT_EQ(kSampleFormatS32, audio_config.sample_format());
+  VerifyFlacStream(GetStream(DemuxerStream::AUDIO), 32, CHANNEL_LAYOUT_MONO,
+                   44100, kSampleFormatS32);
 }
+
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
+TEST_F(FFmpegDemuxerTest, Read_Flac_Mp4) {
+  CreateDemuxer("bear-flac.mp4");
+  InitializeDemuxer();
+
+  // Video stream should not be present.
+  EXPECT_EQ(nullptr, GetStream(DemuxerStream::VIDEO));
+
+  VerifyFlacStream(GetStream(DemuxerStream::AUDIO), 32, CHANNEL_LAYOUT_STEREO,
+                   44100, kSampleFormatS32);
+}
+
+TEST_F(FFmpegDemuxerTest, Read_Flac_192kHz_Mp4) {
+  CreateDemuxer("bear-flac-192kHz.mp4");
+  InitializeDemuxer();
+
+  // Video stream should not be present.
+  EXPECT_EQ(nullptr, GetStream(DemuxerStream::VIDEO));
+
+  VerifyFlacStream(GetStream(DemuxerStream::AUDIO), 32, CHANNEL_LAYOUT_STEREO,
+                   192000, kSampleFormatS32);
+}
+#endif  // USE_PROPRIETARY_CODECS
 
 // Verify that FFmpeg demuxer falls back to choosing disabled streams for
 // seeking if there's no suitable enabled stream found.
@@ -1645,8 +1737,10 @@ TEST_F(FFmpegDemuxerTest, StreamStatusNotifications) {
   EXPECT_NE(nullptr, video_stream);
 
   // Verify stream status notifications delivery without pending read first.
-  CheckStreamStatusNotifications(demuxer_.get(), audio_stream);
-  CheckStreamStatusNotifications(demuxer_.get(), video_stream);
+  CheckStreamStatusNotifications(demuxer_.get(), audio_stream,
+                                 &scoped_task_environment_);
+  CheckStreamStatusNotifications(demuxer_.get(), video_stream,
+                                 &scoped_task_environment_);
 
   // Verify that stream notifications are delivered properly when stream status
   // changes with a pending read. Call FlushBuffers before reading, to ensure
@@ -1654,10 +1748,12 @@ TEST_F(FFmpegDemuxerTest, StreamStatusNotifications) {
   // ensuring that status changes occur while an async read is pending.
   audio_stream->FlushBuffers();
   audio_stream->Read(base::Bind(&media::OnReadDone_ExpectEos));
-  CheckStreamStatusNotifications(demuxer_.get(), audio_stream);
+  CheckStreamStatusNotifications(demuxer_.get(), audio_stream,
+                                 &scoped_task_environment_);
   video_stream->FlushBuffers();
   video_stream->Read(base::Bind(&media::OnReadDone_ExpectEos));
-  CheckStreamStatusNotifications(demuxer_.get(), video_stream);
+  CheckStreamStatusNotifications(demuxer_.get(), video_stream,
+                                 &scoped_task_environment_);
 }
 
 TEST_F(FFmpegDemuxerTest, MultitrackMemoryUsage) {
@@ -1672,6 +1768,7 @@ TEST_F(FFmpegDemuxerTest, MultitrackMemoryUsage) {
   // shouldn't be too high.
   audio->Read(NewReadCB(FROM_HERE, 304, 0, true));
   base::RunLoop().Run();
+  scoped_task_environment_.RunUntilIdle();
   EXPECT_EQ(22134, demuxer_->GetMemoryUsage());
 
   // Now enable all demuxer streams in the file and perform another read, this
@@ -1683,6 +1780,7 @@ TEST_F(FFmpegDemuxerTest, MultitrackMemoryUsage) {
 
   audio->Read(NewReadCB(FROM_HERE, 166, 21000, true));
   base::RunLoop().Run();
+  scoped_task_environment_.RunUntilIdle();
   // With newly enabled demuxer streams the amount of memory used by the demuxer
   // is much higher.
   EXPECT_EQ(156011, demuxer_->GetMemoryUsage());

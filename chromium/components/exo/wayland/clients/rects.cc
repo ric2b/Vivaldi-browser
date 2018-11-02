@@ -12,13 +12,13 @@
 #include <wayland-client-protocol.h>
 
 #include <cmath>
-#include <deque>
 #include <iostream>
 #include <string>
 #include <vector>
 
 #include "base/at_exit.h"
 #include "base/command_line.h"
+#include "base/containers/circular_deque.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -149,7 +149,7 @@ struct Frame {
 };
 
 struct Presentation {
-  std::deque<std::unique_ptr<Frame>> scheduled_frames;
+  base::circular_deque<std::unique_ptr<Frame>> scheduled_frames;
   base::TimeDelta wall_time;
   base::TimeDelta cpu_time;
   base::TimeDelta latency_time;
@@ -261,7 +261,7 @@ int RectsClient::Run(const ClientBase::InitParams& params,
   wl_callback_listener frame_listener = {FrameCallback};
 
   Presentation presentation;
-  std::deque<std::unique_ptr<Frame>> pending_frames;
+  base::circular_deque<std::unique_ptr<Frame>> pending_frames;
 
   size_t num_benchmark_runs_left = num_benchmark_runs;
   base::TimeTicks benchmark_start_time;
@@ -343,9 +343,10 @@ int RectsClient::Run(const ClientBase::InitParams& params,
         // since last frame. Latest event at the top.
         int y = 0;
         // Note: Rounding up to ensure we cover the whole canvas.
-        int h = (height_ + (event_times.size() / 2)) / event_times.size();
+        int h =
+            (size_.height() + (event_times.size() / 2)) / event_times.size();
         while (!event_times.empty()) {
-          SkIRect rect = SkIRect::MakeXYWH(0, y, width_, h);
+          SkIRect rect = SkIRect::MakeXYWH(0, y, size_.width(), h);
           SkPaint paint;
           paint.setColor(SkColorSetRGB((event_times.back() & 0x0000ff) >> 0,
                                        (event_times.back() & 0x00ff00) >> 8,
@@ -361,8 +362,8 @@ int RectsClient::Run(const ClientBase::InitParams& params,
       }
 
       // Draw rotating rects.
-      SkScalar half_width = SkScalarHalf(width_);
-      SkScalar half_height = SkScalarHalf(height_);
+      SkScalar half_width = SkScalarHalf(size_.width());
+      SkScalar half_height = SkScalarHalf(size_.height());
       SkIRect rect = SkIRect::MakeXYWH(-SkScalarHalf(half_width),
                                        -SkScalarHalf(half_height), half_width,
                                        half_height);
@@ -383,7 +384,7 @@ int RectsClient::Run(const ClientBase::InitParams& params,
       // Draw FPS counter.
       if (show_fps_counter) {
         canvas->drawText(fps_counter_text.c_str(), fps_counter_text.length(),
-                         width_ - 48, 32, text_paint);
+                         size_.width() - 48, 32, text_paint);
       }
       GrContext* gr_context = gr_context_.get();
       if (gr_context) {
@@ -417,7 +418,9 @@ int RectsClient::Run(const ClientBase::InitParams& params,
 
       wl_surface* surface = surface_.get();
       wl_surface_set_buffer_scale(surface, scale_);
-      wl_surface_damage(surface, 0, 0, width_ / scale_, height_ / scale_);
+      wl_surface_set_buffer_transform(surface_.get(), transform_);
+      wl_surface_damage(surface_.get(), 0, 0, surface_size_.width(),
+                        surface_size_.height());
       wl_surface_attach(surface, frame->buffer->buffer.get(), 0, 0);
 
 #if defined(OZONE_PLATFORM_GBM)

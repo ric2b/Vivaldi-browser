@@ -5,7 +5,9 @@
 #include "core/paint/BoxPaintInvalidator.h"
 
 #include "core/HTMLNames.h"
+#include "core/frame/FrameTestHelpers.h"
 #include "core/frame/LocalFrameView.h"
+#include "core/html/HTMLFrameOwnerElement.h"
 #include "core/layout/LayoutTestHelper.h"
 #include "core/layout/LayoutView.h"
 #include "core/paint/PaintInvalidator.h"
@@ -98,6 +100,11 @@ class BoxPaintInvalidatorTest : public ::testing::WithParamInterface<bool>,
         "    border-style: solid;"
         "    border-color: red;"
         "  }"
+        "  .solid-composited-scroller {"
+        "    overflow: scroll;"
+        "    will-change: transform;"
+        "    background: #ccc;"
+        "  }"
         "  .local-background {"
         "    background-attachment: local;"
         "    overflow: scroll;"
@@ -114,6 +121,33 @@ class BoxPaintInvalidatorTest : public ::testing::WithParamInterface<bool>,
 };
 
 INSTANTIATE_TEST_CASE_P(All, BoxPaintInvalidatorTest, ::testing::Bool());
+
+TEST_P(BoxPaintInvalidatorTest, SlowMapToVisualRectInAncestorSpaceLayoutView) {
+  SetBodyInnerHTML(
+      "<!doctype html>"
+      "<style>"
+      "#parent {"
+      "    display: inline-block;"
+      "    width: 300px;"
+      "    height: 300px;"
+      "    margin-top: 200px;"
+      "    filter: blur(3px);"  // Forces the slow path in
+                                // SlowMapToVisualRectInAncestorSpace.
+      "    border: 1px solid rebeccapurple;"
+      "}"
+      "</style>"
+      "<div id=parent>"
+      "  <iframe id='target' src='data:text/html,<body style='background: "
+      "blue;'></body>'></iframe>"
+      "</div>");
+
+  auto& target = *GetDocument().getElementById("target");
+  EXPECT_RECT_EQ(IntRect(2, 202, 318, 168),
+                 EnclosingIntRect(ToHTMLFrameOwnerElement(target)
+                                      .contentDocument()
+                                      ->GetLayoutView()
+                                      ->VisualRect()));
+}
 
 TEST_P(BoxPaintInvalidatorTest, ComputePaintInvalidationReasonPaintingNothing) {
   ScopedSlimmingPaintV2ForTest spv2(true);
@@ -752,6 +786,35 @@ TEST_P(BoxPaintInvalidatorTest, NonCompositedBackgroundAttachmentLocalResize) {
             raster_invalidations[0].client);
   EXPECT_EQ(PaintInvalidationReason::kIncremental,
             raster_invalidations[0].reason);
+  GetDocument().View()->SetTracksPaintInvalidations(false);
+}
+
+TEST_P(BoxPaintInvalidatorTest, CompositedSolidBackgroundResize) {
+  EnableCompositing();
+  Element* target = GetDocument().getElementById("target");
+  target->setAttribute(HTMLNames::classAttr, "solid-composited-scroller");
+  target->setInnerHTML("<div style='height: 500px'></div>",
+                       ASSERT_NO_EXCEPTION);
+  GetDocument().View()->UpdateAllLifecyclePhases();
+
+  // Resize the scroller.
+  GetDocument().View()->SetTracksPaintInvalidations(true);
+  target->setAttribute(HTMLNames::styleAttr, "width: 100px");
+  GetDocument().View()->UpdateAllLifecyclePhases();
+
+  LayoutBoxModelObject* target_object =
+      ToLayoutBoxModelObject(target->GetLayoutObject());
+  GraphicsLayer* scrolling_contents_layer =
+      target_object->Layer()->GraphicsLayerBacking();
+  const auto& invalidations =
+      scrolling_contents_layer->GetRasterInvalidationTracking()->invalidations;
+
+  ASSERT_EQ(1u, invalidations.size());
+  EXPECT_EQ(IntRect(50, 0, 50, 500), invalidations[0].rect);
+  EXPECT_EQ(static_cast<const DisplayItemClient*>(target_object),
+            invalidations[0].client);
+  EXPECT_EQ(PaintInvalidationReason::kBackgroundOnScrollingContentsLayer,
+            invalidations[0].reason);
   GetDocument().View()->SetTracksPaintInvalidations(false);
 }
 

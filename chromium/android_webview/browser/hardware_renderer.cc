@@ -120,10 +120,8 @@ void HardwareRenderer::DrawGL(AwDrawGLInfo* draw_info) {
     std::unique_ptr<cc::CompositorFrame> child_compositor_frame =
         std::move(child_frame_->frame);
 
-    float device_scale_factor =
-        child_compositor_frame->metadata.device_scale_factor;
-    gfx::Size frame_size =
-        child_compositor_frame->render_pass_list.back()->output_rect.size();
+    float device_scale_factor = child_compositor_frame->device_scale_factor();
+    gfx::Size frame_size = child_compositor_frame->size_in_pixels();
     if (!child_id_.is_valid() || surface_size_ != frame_size ||
         device_scale_factor_ != device_scale_factor) {
       if (child_id_.is_valid())
@@ -178,17 +176,17 @@ void HardwareRenderer::DestroySurface() {
 }
 
 void HardwareRenderer::DidReceiveCompositorFrameAck(
-    const std::vector<cc::ReturnedResource>& resources) {
+    const std::vector<viz::ReturnedResource>& resources) {
   ReturnResourcesToCompositor(resources, compositor_id_,
                               last_submitted_layer_tree_frame_sink_id_);
 }
 
-void HardwareRenderer::OnBeginFrame(const cc::BeginFrameArgs& args) {
+void HardwareRenderer::OnBeginFrame(const viz::BeginFrameArgs& args) {
   // TODO(tansell): Hook this up.
 }
 
 void HardwareRenderer::ReclaimResources(
-    const std::vector<cc::ReturnedResource>& resources) {
+    const std::vector<viz::ReturnedResource>& resources) {
   ReturnResourcesToCompositor(resources, compositor_id_,
                               last_submitted_layer_tree_frame_sink_id_);
 }
@@ -241,8 +239,8 @@ void HardwareRenderer::ReturnChildFrame(
   if (!child_frame || !child_frame->frame)
     return;
 
-  std::vector<cc::ReturnedResource> resources_to_return =
-      cc::TransferableResource::ReturnResources(
+  std::vector<viz::ReturnedResource> resources_to_return =
+      viz::TransferableResource::ReturnResources(
           child_frame->frame->resource_list);
 
   // The child frame's compositor id is not necessarily same as
@@ -252,7 +250,7 @@ void HardwareRenderer::ReturnChildFrame(
 }
 
 void HardwareRenderer::ReturnResourcesToCompositor(
-    const std::vector<cc::ReturnedResource>& resources,
+    const std::vector<viz::ReturnedResource>& resources,
     const CompositorID& compositor_id,
     uint32_t layer_tree_frame_sink_id) {
   if (layer_tree_frame_sink_id != last_committed_layer_tree_frame_sink_id_)
@@ -263,12 +261,11 @@ void HardwareRenderer::ReturnResourcesToCompositor(
 
 void HardwareRenderer::CreateNewCompositorFrameSinkSupport() {
   constexpr bool is_root = false;
-  constexpr bool handles_frame_sink_id_invalidation = false;
   constexpr bool needs_sync_points = true;
   support_.reset();
   support_ = viz::CompositorFrameSinkSupport::Create(
       this, surfaces_->GetFrameSinkManager(), frame_sink_id_, is_root,
-      handles_frame_sink_id_invalidation, needs_sync_points);
+      needs_sync_points);
 }
 
 }  // namespace android_webview

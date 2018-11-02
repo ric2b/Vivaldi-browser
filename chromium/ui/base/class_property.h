@@ -11,6 +11,7 @@
 #include <memory>
 #include <set>
 
+#include "base/time/time.h"
 #include "ui/base/property_data.h"
 #include "ui/base/ui_base_export.h"
 #include "ui/base/ui_base_types.h"
@@ -45,8 +46,9 @@
 //  // outside all namespaces:
 //  DECLARE_EXPORTED_UI_CLASS_PROPERTY_TYPE(FOO_EXPORT, MyType)
 //
-// If a property type is not exported, use DECLARE_CLASS_PROPERTY_TYPE(MyType)
-// which is a shorthand for DECLARE_EXPORTED_CLASS_PROPERTY_TYPE(, MyType).
+// If a property type is not exported, use
+// DECLARE_UI_CLASS_PROPERTY_TYPE(MyType) which is a shorthand for
+// DECLARE_EXPORTED_UI_CLASS_PROPERTY_TYPE(, MyType).
 
 namespace ui {
 
@@ -143,6 +145,14 @@ class ClassPropertyCaster<bool> {
  public:
   static int64_t ToInt64(bool x) { return static_cast<int64_t>(x); }
   static bool FromInt64(int64_t x) { return x != 0; }
+};
+template <>
+class ClassPropertyCaster<base::TimeDelta> {
+ public:
+  static int64_t ToInt64(base::TimeDelta x) { return x.InMicroseconds(); }
+  static base::TimeDelta FromInt64(int64_t x) {
+    return base::TimeDelta::FromMicroseconds(x);
+  }
 };
 
 }  // namespace

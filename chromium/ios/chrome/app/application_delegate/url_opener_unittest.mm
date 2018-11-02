@@ -6,6 +6,7 @@
 
 #import <Foundation/Foundation.h>
 
+#include "base/test/scoped_task_environment.h"
 #include "ios/chrome/app/application_delegate/app_state.h"
 #include "ios/chrome/app/application_delegate/app_state_testing.h"
 #include "ios/chrome/app/application_delegate/mock_tab_opener.h"
@@ -19,6 +20,7 @@
 #import "ios/chrome/test/base/scoped_block_swizzler.h"
 #import "ios/testing/ocmock_complex_type_helper.h"
 #import "net/base/mac/url_conversions.h"
+#include "testing/gtest_mac.h"
 #include "testing/platform_test.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
 #include "third_party/ocmock/gtest_support.h"
@@ -151,6 +153,7 @@ class URLOpenerTest : public PlatformTest {
   }
 
  private:
+  base::test::ScopedTaskEnvironment task_environment_;
   MainController* main_controller_;
 };
 
@@ -333,8 +336,9 @@ TEST_F(URLOpenerTest, HandleOpenURL) {
             else
               EXPECT_EQ(nil, controller.startupParameters);
           } else if (result) {
-            EXPECT_EQ(nil, controller.startupParameters);
             EXPECT_EQ([params externalURL], [tabOpener url]);
+            tabOpener.completionBlock();
+            EXPECT_EQ(nil, controller.startupParameters);
           }
         }
       }
@@ -365,9 +369,9 @@ TEST_F(URLOpenerTest, VerifyLaunchOptions) {
       id self, NSURL* urlArg, BOOL applicationActive, NSDictionary* options,
       id<TabOpening> tabOpener, id<StartupInformation> startupInformation) {
     hasBeenCalled = YES;
-    EXPECT_EQ([url absoluteString], [urlArg absoluteString]);
-    EXPECT_EQ(@"com.apple.mobilesafari",
-              options[UIApplicationOpenURLOptionsSourceApplicationKey]);
+    EXPECT_NSEQ([url absoluteString], [urlArg absoluteString]);
+    EXPECT_NSEQ(@"com.apple.mobilesafari",
+                options[UIApplicationOpenURLOptionsSourceApplicationKey]);
     EXPECT_EQ(startupInformationMock, startupInformation);
     EXPECT_EQ(tabOpenerMock, tabOpener);
     return YES;
@@ -477,9 +481,9 @@ TEST_F(URLOpenerTest, VerifyLaunchOptionsWithBadURL) {
       id self, NSURL* urlArg, BOOL applicationActive, NSDictionary* options,
       id<TabOpening> tabOpener, id<StartupInformation> startupInformation) {
     hasBeenCalled = YES;
-    EXPECT_EQ([url absoluteString], [urlArg absoluteString]);
-    EXPECT_EQ(@"com.apple.mobilesafari",
-              options[UIApplicationOpenURLOptionsSourceApplicationKey]);
+    EXPECT_NSEQ([url absoluteString], [urlArg absoluteString]);
+    EXPECT_NSEQ(@"com.apple.mobilesafari",
+                options[UIApplicationOpenURLOptionsSourceApplicationKey]);
     EXPECT_EQ(startupInformationMock, startupInformation);
     EXPECT_EQ(tabOpenerMock, tabOpener);
     return YES;

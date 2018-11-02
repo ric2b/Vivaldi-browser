@@ -193,7 +193,6 @@ class AppListViewFullscreenTest : public AppListViewTest {
     gfx::NativeView parent = GetContext();
     delegate_.reset(new AppListTestViewDelegate);
     view_ = new AppListView(delegate_.get());
-
     view_->Initialize(parent, initial_apps_page, is_tablet_mode, is_side_shelf);
     // Initialize around a point that ensures the window is wholly shown.
     const gfx::Size size = view_->bounds().size();
@@ -336,6 +335,24 @@ TEST_F(AppListViewFullscreenTest, EmptySearchTextStillPeeking) {
   search_box_view->search_box()->SetText(base::string16());
 
   ASSERT_EQ(view_->app_list_state(), AppListView::PEEKING);
+}
+
+TEST_F(AppListViewFullscreenTest, MouseWheelScrollTransitionsToFullscreen) {
+  Initialize(0, false, false);
+  delegate_->GetTestModel()->PopulateApps(kInitialItems);
+  Show();
+
+  view_->HandleScroll(-30, ui::ET_MOUSEWHEEL);
+  EXPECT_EQ(AppListView::FULLSCREEN_ALL_APPS, view_->app_list_state());
+}
+
+TEST_F(AppListViewFullscreenTest, GestureScrollTransitionsToFullscreen) {
+  Initialize(0, false, false);
+  delegate_->GetTestModel()->PopulateApps(kInitialItems);
+  Show();
+
+  view_->HandleScroll(-30, ui::ET_SCROLL);
+  EXPECT_EQ(AppListView::FULLSCREEN_ALL_APPS, view_->app_list_state());
 }
 
 // Tests that typing text after opening transitions from peeking to half.
@@ -520,7 +537,12 @@ TEST_F(AppListViewFullscreenTest, TapAndClickWithinAppsGridView) {
 
 // Tests displaying the app list and performs a standard set of checks on its
 // top level views. Then closes the window.
-TEST_F(AppListViewTest, DISABLED_DisplayTest) {
+TEST_F(AppListViewTest, DisplayTest) {
+  // TODO(newcomer): this test needs to be reevaluated for the fullscreen app
+  // list (http://crbug.com/759779).
+  if (features::IsFullscreenAppListEnabled())
+    return;
+
   EXPECT_FALSE(view_->GetWidget()->IsVisible());
   EXPECT_EQ(-1, GetPaginationModel()->total_pages());
   delegate_->GetTestModel()->PopulateApps(kInitialItems);
@@ -547,7 +569,12 @@ TEST_F(AppListViewTest, DISABLED_DisplayTest) {
 
 // Tests that the main grid view is shown after hiding and reshowing the app
 // list with a folder view open. This is a regression test for crbug.com/357058.
-TEST_F(AppListViewTest, DISABLED_ReshowWithOpenFolderTest) {
+TEST_F(AppListViewTest, ReshowWithOpenFolderTest) {
+  // TODO(newcomer): this test needs to be reevaluated for the fullscreen app
+  // list (http://crbug.com/759779).
+  if (features::IsFullscreenAppListEnabled())
+    return;
+
   EXPECT_FALSE(view_->GetWidget()->IsVisible());
   EXPECT_EQ(-1, GetPaginationModel()->total_pages());
 
@@ -590,7 +617,12 @@ TEST_F(AppListViewTest, DISABLED_ReshowWithOpenFolderTest) {
 }
 
 // Tests that the start page view operates correctly.
-TEST_F(AppListViewTest, DISABLED_StartPageTest) {
+TEST_F(AppListViewTest, StartPageTest) {
+  // TODO(newcomer): this test needs to be reevaluated for the fullscreen app
+  // list (http://crbug.com/759779).
+  if (features::IsFullscreenAppListEnabled())
+    return;
+
   EXPECT_FALSE(view_->GetWidget()->IsVisible());
   EXPECT_EQ(-1, GetPaginationModel()->total_pages());
   AppListTestModel* model = delegate_->GetTestModel();
@@ -674,7 +706,12 @@ TEST_F(AppListViewTest, PageSwitchingAnimationTest) {
 }
 
 // Tests that the correct views are displayed for showing search results.
-TEST_F(AppListViewTest, DISABLED_SearchResultsTest) {
+TEST_F(AppListViewTest, SearchResultsTest) {
+  // TODO(newcomer): this test needs to be reevaluated for the fullscreen app
+  // list (http://crbug.com/759779).
+  if (features::IsFullscreenAppListEnabled())
+    return;
+
   EXPECT_FALSE(view_->GetWidget()->IsVisible());
   EXPECT_EQ(-1, GetPaginationModel()->total_pages());
   AppListTestModel* model = delegate_->GetTestModel();
@@ -734,7 +771,12 @@ TEST_F(AppListViewTest, DISABLED_SearchResultsTest) {
 }
 
 // Tests that the back button navigates through the app list correctly.
-TEST_F(AppListViewTest, DISABLED_BackTest) {
+TEST_F(AppListViewTest, BackTest) {
+  // TODO(newcomer): this test needs to be reevaluated for the fullscreen app
+  // list (http://crbug.com/759779).
+  if (features::IsFullscreenAppListEnabled())
+    return;
+
   EXPECT_FALSE(view_->GetWidget()->IsVisible());
   EXPECT_EQ(-1, GetPaginationModel()->total_pages());
 
@@ -785,7 +827,12 @@ TEST_F(AppListViewTest, DISABLED_BackTest) {
 }
 
 // Tests that the correct views are displayed for showing search results.
-TEST_F(AppListViewTest, DISABLED_AppListOverlayTest) {
+TEST_F(AppListViewTest, AppListOverlayTest) {
+  // TODO(newcomer): this test needs to be reevaluated for the fullscreen app
+  // list (http://crbug.com/759779).
+  if (features::IsFullscreenAppListEnabled())
+    return;
+
   Show();
 
   AppListMainView* main_view = view_->app_list_main_view();
@@ -804,7 +851,12 @@ TEST_F(AppListViewTest, DISABLED_AppListOverlayTest) {
 
 // Tests that even if initialize is called again with a different initial page,
 // that different initial page is respected.
-TEST_F(AppListViewTest, DISABLED_MultiplePagesReinitializeOnInputPage) {
+TEST_F(AppListViewTest, MultiplePagesReinitializeOnInputPage) {
+  // TODO(newcomer): this test needs to be reevaluated for the fullscreen app
+  // list (http://crbug.com/759779).
+  if (features::IsFullscreenAppListEnabled())
+    return;
+
   delegate_->GetTestModel()->PopulateApps(kInitialItems);
 
   // Show and close the widget once.

@@ -47,7 +47,7 @@ class WebCoalescedInputEvent;
 class WebDragData;
 class WebPluginContainer;
 class WebURLResponse;
-struct WebCompositionUnderline;
+struct WebImeTextSpan;
 struct WebCursorInfo;
 struct WebPrintParams;
 struct WebPrintPresetOptions;
@@ -159,6 +159,8 @@ class WebPlugin {
   virtual WebString SelectionAsText() const { return WebString(); }
   virtual WebString SelectionAsMarkup() const { return WebString(); }
 
+  virtual bool CanEditText() const { return false; }
+
   virtual bool ExecuteEditCommand(const WebString& name) { return false; }
   virtual bool ExecuteEditCommand(const WebString& name,
                                   const WebString& value) {
@@ -168,12 +170,11 @@ class WebPlugin {
   // Sets composition text from input method, and returns true if the
   // composition is set successfully. If |replacementRange| is not null, the
   // text inside |replacementRange| will be replaced by |text|
-  virtual bool SetComposition(
-      const WebString& text,
-      const WebVector<WebCompositionUnderline>& underlines,
-      const WebRange& replacement_range,
-      int selection_start,
-      int selection_end) {
+  virtual bool SetComposition(const WebString& text,
+                              const WebVector<WebImeTextSpan>& ime_text_spans,
+                              const WebRange& replacement_range,
+                              int selection_start,
+                              int selection_end) {
     return false;
   }
 
@@ -181,7 +182,7 @@ class WebPlugin {
   // moves the caret according to relativeCaretPosition. If |replacementRange|
   // is not null, the text inside |replacementRange| will be replaced by |text|.
   virtual bool CommitText(const WebString& text,
-                          const WebVector<WebCompositionUnderline>& underlines,
+                          const WebVector<WebImeTextSpan>& ime_text_spans,
                           const WebRange& replacement_range,
                           int relative_caret_position) {
     return false;
@@ -247,7 +248,7 @@ class WebPlugin {
   virtual bool IsErrorPlaceholder() { return false; }
 
  protected:
-  ~WebPlugin() {}
+  virtual ~WebPlugin() {}
 };
 
 }  // namespace blink

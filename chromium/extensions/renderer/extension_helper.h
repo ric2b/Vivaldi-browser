@@ -30,7 +30,6 @@ class ExtensionHelper : public content::RenderViewObserver {
   void OnUpdateBrowserWindowId(int window_id);
 
   void OnAppWindowClosed();
-  void OnSetFrameName(const std::string& name);
 
   typedef base::Callback<void(content::WebContents*)> CallbackWithWebcontents;
 

@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/sync/base/bind_to_task_runner.h"
 #include "components/sync/base/data_type_histogram.h"
@@ -144,11 +143,6 @@ void AsyncDirectoryTypeController::Stop() {
   state_ = NOT_RUNNING;
 }
 
-std::string AsyncDirectoryTypeController::name() const {
-  // For logging only.
-  return ModelTypeToString(type());
-}
-
 DataTypeController::State AsyncDirectoryTypeController::state() const {
   return state_;
 }
@@ -207,8 +201,10 @@ void AsyncDirectoryTypeController::StartDone(
 
 void AsyncDirectoryTypeController::RecordStartFailure(ConfigureResult result) {
   DCHECK(CalledOnValidThread());
+  // TODO(wychen): enum uma should be strongly typed. crbug.com/661401
   UMA_HISTOGRAM_ENUMERATION("Sync.DataTypeStartFailures",
-                            ModelTypeToHistogramInt(type()), MODEL_TYPE_COUNT);
+                            ModelTypeToHistogramInt(type()),
+                            static_cast<int>(MODEL_TYPE_COUNT));
 #define PER_DATA_TYPE_MACRO(type_str)                                    \
   UMA_HISTOGRAM_ENUMERATION("Sync." type_str "ConfigureFailure", result, \
                             MAX_CONFIGURE_RESULT);
@@ -263,7 +259,7 @@ void AsyncDirectoryTypeController::StopSyncableService() {
 std::unique_ptr<DataTypeErrorHandler>
 AsyncDirectoryTypeController::CreateErrorHandler() {
   DCHECK(CalledOnValidThread());
-  return base::MakeUnique<DataTypeErrorHandlerImpl>(
+  return std::make_unique<DataTypeErrorHandlerImpl>(
       base::ThreadTaskRunnerHandle::Get(), dump_stack_,
       base::Bind(&AsyncDirectoryTypeController::DisableImpl,
                  base::AsWeakPtr(this)));

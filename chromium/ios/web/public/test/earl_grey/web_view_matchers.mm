@@ -26,12 +26,13 @@
 using testing::kWaitForDownloadTimeout;
 using testing::WaitUntilConditionOrTimeout;
 
+// TODO(crbug.com/757982): Remove this class, after LoadImage() is removed.
 // A helper delegate class that allows downloading responses with invalid
 // SSL certs.
-@interface TestURLSessionDelegate : NSObject<NSURLSessionDelegate>
+@interface TestURLSessionDelegateDeprecated : NSObject<NSURLSessionDelegate>
 @end
 
-@implementation TestURLSessionDelegate
+@implementation TestURLSessionDelegateDeprecated
 
 - (void)URLSession:(NSURLSession*)session
     didReceiveChallenge:(NSURLAuthenticationChallenge*)challenge
@@ -54,18 +55,12 @@ enum ImageState {
   IMAGE_STATE_LOADED,
 };
 
-// Script that returns document.body as a string.
-char kGetDocumentBodyJavaScript[] =
-    "document.body ? document.body.textContent : null";
-// Script that tests presence of css selector.
-char kTestCssSelectorJavaScriptTemplate[] = "!!document.querySelector(\"%s\");";
-
 // Fetches the image from |image_url|.
 UIImage* LoadImage(const GURL& image_url) {
   __block UIImage* image;
   __block NSError* error;
-  TestURLSessionDelegate* session_delegate =
-      [[TestURLSessionDelegate alloc] init];
+  TestURLSessionDelegateDeprecated* session_delegate =
+      [[TestURLSessionDelegateDeprecated alloc] init];
   NSURLSessionConfiguration* session_config =
       [NSURLSessionConfiguration defaultSessionConfiguration];
   NSURLSession* session =
@@ -88,37 +83,6 @@ UIImage* LoadImage(const GURL& image_url) {
   GREYAssert(image_loaded, @"Failed to download image");
 
   return image;
-}
-
-// Helper function for matching web views containing or not containing |text|,
-// depending on the value of |should_contain_text|.
-id<GREYMatcher> WebViewWithText(std::string text,
-                                web::WebState* web_state,
-                                bool should_contain_text) {
-  MatchesBlock matches = ^BOOL(WKWebView*) {
-    return WaitUntilConditionOrTimeout(testing::kWaitForUIElementTimeout, ^{
-      std::unique_ptr<base::Value> value =
-          web::test::ExecuteJavaScript(web_state, kGetDocumentBodyJavaScript);
-      std::string body;
-      if (value && value->GetAsString(&body)) {
-        BOOL contains_text = body.find(text) != std::string::npos;
-        return contains_text == should_contain_text;
-      }
-      return false;
-    });
-  };
-
-  DescribeToBlock describe = ^(id<GREYDescription> description) {
-    [description appendText:should_contain_text ? @"web view containing "
-                                                : @"web view not containing "];
-    [description appendText:base::SysUTF8ToNSString(text)];
-  };
-
-  return grey_allOf(
-      WebViewInWebState(web_state),
-      [[GREYElementMatcherBlock alloc] initWithMatchesBlock:matches
-                                           descriptionBlock:describe],
-      nil);
 }
 
 // Matcher for WKWebView containing loaded or blocked image with |image_id|.
@@ -215,15 +179,6 @@ id<GREYMatcher> WebViewInWebState(WebState* web_state) {
                                               descriptionBlock:describe];
 }
 
-id<GREYMatcher> WebViewContainingText(std::string text, WebState* web_state) {
-  return WebViewWithText(text, web_state, true);
-}
-
-id<GREYMatcher> WebViewNotContainingText(std::string text,
-                                         WebState* web_state) {
-  return WebViewWithText(text, web_state, false);
-}
-
 id<GREYMatcher> WebViewContainingBlockedImage(std::string image_id,
                                               WebState* web_state) {
   return WebViewContainingImage(image_id, web_state, IMAGE_STATE_BLOCKED);
@@ -232,33 +187,6 @@ id<GREYMatcher> WebViewContainingBlockedImage(std::string image_id,
 id<GREYMatcher> WebViewContainingLoadedImage(std::string image_id,
                                              WebState* web_state) {
   return WebViewContainingImage(image_id, web_state, IMAGE_STATE_LOADED);
-}
-
-id<GREYMatcher> WebViewCssSelector(std::string selector, WebState* web_state) {
-  MatchesBlock matches = ^BOOL(WKWebView*) {
-    std::string script = base::StringPrintf(kTestCssSelectorJavaScriptTemplate,
-                                            selector.c_str());
-    return WaitUntilConditionOrTimeout(testing::kWaitForUIElementTimeout, ^{
-      bool did_succeed = false;
-      std::unique_ptr<base::Value> value =
-          web::test::ExecuteJavaScript(web_state, script);
-      if (value) {
-        value->GetAsBoolean(&did_succeed);
-      }
-      return did_succeed;
-    });
-  };
-
-  DescribeToBlock describe = ^(id<GREYDescription> description) {
-    [description appendText:@"web view selector "];
-    [description appendText:base::SysUTF8ToNSString(selector)];
-  };
-
-  return grey_allOf(
-      WebViewInWebState(web_state),
-      [[GREYElementMatcherBlock alloc] initWithMatchesBlock:matches
-                                           descriptionBlock:describe],
-      nil);
 }
 
 id<GREYMatcher> WebViewScrollView(WebState* web_state) {
@@ -290,28 +218,6 @@ id<GREYMatcher> Interstitial(WebState* web_state) {
 
   return grey_allOf(
       WebViewInWebState(web_state),
-      [[GREYElementMatcherBlock alloc] initWithMatchesBlock:matches
-                                           descriptionBlock:describe],
-      nil);
-}
-
-id<GREYMatcher> InterstitialContainingText(NSString* text,
-                                           WebState* web_state) {
-  MatchesBlock matches = ^BOOL(WKWebView* view) {
-    return WaitUntilConditionOrTimeout(testing::kWaitForUIElementTimeout, ^{
-      NSString* script = base::SysUTF8ToNSString(kGetDocumentBodyJavaScript);
-      id body = ExecuteScriptOnInterstitial(web_state, script);
-      return [body containsString:text] ? true : false;
-    });
-  };
-
-  DescribeToBlock describe = ^(id<GREYDescription> description) {
-    [description appendText:@"interstitial containing "];
-    [description appendText:text];
-  };
-
-  return grey_allOf(
-      Interstitial(web_state),
       [[GREYElementMatcherBlock alloc] initWithMatchesBlock:matches
                                            descriptionBlock:describe],
       nil);

@@ -6,6 +6,8 @@
 
 #include <string>
 
+#include "base/containers/flat_tree.h"
+#include "base/test/move_only_int.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace base {
@@ -91,4 +93,5 @@ static_assert(!base::is_trivially_copyable<TrivialCopyButWithDestructor>::value,
               "trivially copyable");
 
 }  // namespace
+
 }  // namespace base

@@ -9,10 +9,11 @@
 
 namespace blink {
 
-const CSSValue* CSSPropertyAPIAnimationFillMode::parseSingleValue(
+const CSSValue* CSSPropertyAPIAnimationFillMode::ParseSingleValue(
+    CSSPropertyID,
     CSSParserTokenRange& range,
     const CSSParserContext&,
-    const CSSParserLocalContext&) {
+    const CSSParserLocalContext&) const {
   return CSSPropertyParserHelpers::ConsumeCommaSeparatedList(
       CSSPropertyParserHelpers::ConsumeIdent<CSSValueNone, CSSValueForwards,
                                              CSSValueBackwards, CSSValueBoth>,

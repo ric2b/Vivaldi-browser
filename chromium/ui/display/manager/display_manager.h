@@ -70,7 +70,7 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
     // |clear_focus| is true, the implementation should deactivate the active
     // window and set the focus window to NULL.
     virtual void PreDisplayConfigurationChange(bool clear_focus) = 0;
-    virtual void PostDisplayConfigurationChange(bool must_clear_window) = 0;
+    virtual void PostDisplayConfigurationChange() = 0;
 
 #if defined(OS_CHROMEOS)
     // Get the DisplayConfigurator.
@@ -126,6 +126,9 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
 
   // Initialize default display.
   void InitDefaultDisplay();
+
+  // Update the internal display's display info.
+  void UpdateInternalDisplay(const ManagedDisplayInfo& display_info);
 
   // Initializes font related params that depends on display configuration.
   void RefreshFontParams();
@@ -190,7 +193,6 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
       const gfx::Insets* overscan_insets,
       const gfx::Size& resolution_in_pixels,
       float device_scale_factor,
-      ColorCalibrationProfile color_profile,
       const TouchCalibrationData* touch_calibration_data);
 
   // Register stored rotation properties for the internal display.
@@ -232,10 +234,6 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   // Returns an empty insets (0, 0, 0, 0) if no insets are specified for the
   // display.
   gfx::Insets GetOverscanInsets(int64_t display_id) const;
-
-  // Sets the color calibration of the display to |profile|.
-  void SetColorCalibrationProfile(int64_t display_id,
-                                  ColorCalibrationProfile profile);
 
   // Called when display configuration has changed. The new display
   // configurations is passed as a vector of Display object, which contains each
@@ -412,9 +410,6 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   // be different from |new_info| (due to overscan state), so you must use
   // |GetDisplayInfo| to get the correct ManagedDisplayInfo for a display.
   void InsertAndUpdateDisplayInfo(const ManagedDisplayInfo& new_info);
-
-  // Called when the display info is updated through InsertAndUpdateDisplayInfo.
-  void OnDisplayInfoUpdated(const ManagedDisplayInfo& display_info);
 
   // Creates a display object from the ManagedDisplayInfo for
   // |display_id|.

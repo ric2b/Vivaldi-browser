@@ -41,7 +41,6 @@
 #include "platform/Timer.h"
 #include "platform/exported/WrappedResourceRequest.h"
 #include "platform/exported/WrappedResourceResponse.h"
-#include "platform/loader/fetch/CrossOriginAccessControl.h"
 #include "platform/loader/fetch/FetchUtils.h"
 #include "platform/loader/fetch/ResourceError.h"
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
@@ -50,12 +49,12 @@
 #include "platform/wtf/HashSet.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/text/WTFString.h"
+#include "public/platform/WebCORS.h"
 #include "public/platform/WebHTTPHeaderVisitor.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebURLError.h"
 #include "public/platform/WebURLRequest.h"
 #include "public/web/WebAssociatedURLLoaderClient.h"
-#include "public/web/WebDataSource.h"
 
 namespace blink {
 
@@ -116,8 +115,8 @@ class WebAssociatedURLLoaderImpl::ClientAdapter final
 
   // DocumentThreadableLoaderClient
   bool WillFollowRedirect(
-      const ResourceRequest& /*newRequest*/,
-      const ResourceResponse& /*redirectResponse*/) override;
+      const KURL& /*new_url*/,
+      const ResourceResponse& /*redirect_response*/) override;
 
   // Sets an error to be reported back to the client, asychronously.
   void SetDelayedError(const ResourceError&);
@@ -185,14 +184,14 @@ WebAssociatedURLLoaderImpl::ClientAdapter::ClientAdapter(
 }
 
 bool WebAssociatedURLLoaderImpl::ClientAdapter::WillFollowRedirect(
-    const ResourceRequest& new_request,
+    const KURL& new_url,
     const ResourceResponse& redirect_response) {
   if (!client_)
     return true;
 
-  WrappedResourceRequest wrapped_new_request(new_request);
+  WebURL wrapped_new_url(new_url);
   WrappedResourceResponse wrapped_redirect_response(redirect_response);
-  return client_->WillFollowRedirect(wrapped_new_request,
+  return client_->WillFollowRedirect(wrapped_new_url,
                                      wrapped_redirect_response);
 }
 
@@ -223,19 +222,19 @@ void WebAssociatedURLLoaderImpl::ClientAdapter::DidReceiveResponse(
     return;
   }
 
-  HTTPHeaderSet exposed_headers;
-  CrossOriginAccessControl::ExtractCorsExposedHeaderNamesList(response,
-                                                              exposed_headers);
-  HTTPHeaderSet blocked_headers;
+  WebHTTPHeaderSet exposed_headers;
+  WebCORS::ExtractCorsExposedHeaderNamesList(WrappedResourceResponse(response),
+                                             exposed_headers);
+  WebHTTPHeaderSet blocked_headers;
   for (const auto& header : response.HttpHeaderFields()) {
     if (FetchUtils::IsForbiddenResponseHeaderName(header.key) ||
-        (!CrossOriginAccessControl::IsOnAccessControlResponseHeaderWhitelist(
-             header.key) &&
-         !exposed_headers.Contains(header.key)))
-      blocked_headers.insert(header.key);
+        (!WebCORS::IsOnAccessControlResponseHeaderWhitelist(header.key) &&
+         exposed_headers.find(header.key.Ascii().data()) ==
+             exposed_headers.end()))
+      blocked_headers.insert(header.key.Ascii().data());
   }
 
-  if (blocked_headers.IsEmpty()) {
+  if (blocked_headers.empty()) {
     // Use the original ResourceResponse.
     client_->DidReceiveResponse(WrappedResourceResponse(response));
     return;
@@ -244,7 +243,7 @@ void WebAssociatedURLLoaderImpl::ClientAdapter::DidReceiveResponse(
   // If there are blocked headers, copy the response so we can remove them.
   WebURLResponse validated_response = WrappedResourceResponse(response);
   for (const auto& header : blocked_headers)
-    validated_response.ClearHTTPHeaderField(header);
+    validated_response.ClearHTTPHeaderField(WebString::FromASCII(header));
   client_->DidReceiveResponse(validated_response);
 }
 
@@ -420,8 +419,8 @@ void WebAssociatedURLLoaderImpl::LoadAsynchronously(
   }
 
   if (!loader_) {
-    // FIXME: return meaningful error codes.
-    client_adapter_->DidFail(ResourceError());
+    client_adapter_->DidFail(ResourceError::CancelledDueToAccessCheckError(
+        request.Url(), ResourceRequestBlockedReason::kOther));
   }
   client_adapter_->EnableErrorNotifications();
 }
@@ -467,7 +466,7 @@ void WebAssociatedURLLoaderImpl::DocumentDestroyed() {
   if (!client_)
     return;
 
-  ReleaseClient()->DidFail(ResourceError());
+  ReleaseClient()->DidFail(ResourceError::CancelledError(KURL()));
   // |this| may be dead here.
 }
 

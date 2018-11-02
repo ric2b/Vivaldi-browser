@@ -27,6 +27,9 @@ int FrameTreeNodeIdFromHostIds(int render_process_host_id,
   return render_frame_host ? render_frame_host->GetFrameTreeNodeId() : -1;
 }
 
+// static
+const void* const kResourceRequestInfoImplKey = &kResourceRequestInfoImplKey;
+
 }  // namespace
 
 // ----------------------------------------------------------------------------
@@ -116,7 +119,8 @@ bool ResourceRequestInfo::OriginatedFromServiceWorker(
 // static
 ResourceRequestInfoImpl* ResourceRequestInfoImpl::ForRequest(
     net::URLRequest* request) {
-  return static_cast<ResourceRequestInfoImpl*>(request->GetUserData(NULL));
+  return static_cast<ResourceRequestInfoImpl*>(
+      request->GetUserData(kResourceRequestInfoImplKey));
 }
 
 // static
@@ -169,7 +173,6 @@ ResourceRequestInfoImpl::ResourceRequestInfoImpl(
       enable_load_timing_(enable_load_timing),
       enable_upload_progress_(enable_upload_progress),
       do_not_prompt_for_login_(do_not_prompt_for_login),
-      was_ignored_by_handler_(false),
       counted_as_in_flight_request_(false),
       resource_type_(resource_type),
       transition_type_(transition_type),
@@ -289,10 +292,6 @@ bool ResourceRequestInfoImpl::HasUserGesture() const {
   return has_user_gesture_;
 }
 
-bool ResourceRequestInfoImpl::WasIgnoredByHandler() const {
-  return was_ignored_by_handler_;
-}
-
 bool ResourceRequestInfoImpl::GetAssociatedRenderFrame(
     int* render_process_id,
     int* render_frame_id) const {
@@ -322,7 +321,7 @@ NavigationUIData* ResourceRequestInfoImpl::GetNavigationUIData() const {
 }
 
 void ResourceRequestInfoImpl::AssociateWithRequest(net::URLRequest* request) {
-  request->SetUserData(nullptr, base::WrapUnique(this));
+  request->SetUserData(kResourceRequestInfoImplKey, base::WrapUnique(this));
   int render_process_id;
   int render_frame_id;
   if (GetAssociatedRenderFrame(&render_process_id, &render_frame_id)) {
@@ -346,7 +345,7 @@ void ResourceRequestInfoImpl::UpdateForTransfer(
     int origin_pid,
     int request_id,
     ResourceRequesterInfo* requester_info,
-    mojom::URLLoaderAssociatedRequest url_loader_request,
+    mojom::URLLoaderRequest url_loader_request,
     mojom::URLLoaderClientPtr url_loader_client) {
   route_id_ = route_id;
   render_frame_id_ = render_frame_id;

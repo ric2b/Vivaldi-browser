@@ -23,16 +23,15 @@
 #include "components/zoom/zoom_controller.h"
 #include "extensions/browser/app_window/app_delegate.h"
 #include "ui/gfx/image/image_skia_operations.h"
+#include "ui/gfx/skia_util.h"
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/widget/widget.h"
 
-#include "app/vivaldi_apptools.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "content/public/browser/browser_thread.h"
-#include "ui/views/vivaldi_pin_shortcut.h"
 #include "ui/wm/core/easy_resize_window_targeter.h"
 
 #if !defined(OS_MACOSX)
@@ -54,12 +53,9 @@ struct AcceleratorMapping {
   int command_id;
 };
 
-// NOTE(daniel@vivaldi): Vivaldi handles ctrl+w and ctrl+shift+w by itself
 const AcceleratorMapping kAppWindowAcceleratorMap[] = {
-#if !defined(VIVALDI_BUILD)
   { ui::VKEY_W, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN, IDC_CLOSE_WINDOW },
   { ui::VKEY_W, ui::EF_CONTROL_DOWN, IDC_CLOSE_WINDOW },
-#endif
   { ui::VKEY_ESCAPE, ui::EF_SHIFT_DOWN, IDC_TASK_MANAGER },
 };
 
@@ -138,9 +134,6 @@ void ChromeNativeAppWindowViews::OnBeforePanelWidgetInit(
 
 void ChromeNativeAppWindowViews::InitializeDefaultWindow(
     const AppWindow::CreateParams& create_params) {
-#if defined(OS_WIN)
-  vivaldi::StartPinShortcutToTaskbar(app_window());
-#endif
   views::Widget::InitParams init_params(views::Widget::InitParams::TYPE_WINDOW);
   init_params.delegate = this;
   init_params.remove_standard_frame = IsFrameless() || has_frame_color_;
@@ -163,11 +156,6 @@ void ChromeNativeAppWindowViews::InitializeDefaultWindow(
 
   OnBeforeWidgetInit(create_params, &init_params, widget());
   widget()->Init(init_params);
-
-  if (vivaldi::IsVivaldiRunning()) {
-    // This will be used as window state for the first Show()
-    widget()->SetSavedShowState(create_params.state);
-  }
 
   // The frame insets are required to resolve the bounds specifications
   // correctly. So we set the window bounds and constraints now.
@@ -404,9 +392,20 @@ bool ChromeNativeAppWindowViews::IsFullscreenOrPending() const {
   return widget()->IsFullscreen();
 }
 
-void ChromeNativeAppWindowViews::UpdateShape(std::unique_ptr<SkRegion> region) {
+void ChromeNativeAppWindowViews::UpdateShape(
+    std::unique_ptr<ShapeRects> rects) {
+  shape_rects_ = std::move(rects);
+
+  // Build a region from the list of rects when it is supplied.
+  std::unique_ptr<SkRegion> region;
+  if (shape_rects_) {
+    region = base::MakeUnique<SkRegion>();
+    for (const gfx::Rect& input_rect : *shape_rects_.get())
+      region->op(gfx::RectToSkIRect(input_rect), SkRegion::kUnion_Op);
+  }
   shape_ = std::move(region);
-  widget()->SetShape(shape() ? base::MakeUnique<SkRegion>(*shape()) : nullptr);
+  widget()->SetShape(shape() ? base::MakeUnique<ShapeRects>(*shape_rects_)
+                             : nullptr);
   widget()->OnSizeConstraintsChanged();
 }
 

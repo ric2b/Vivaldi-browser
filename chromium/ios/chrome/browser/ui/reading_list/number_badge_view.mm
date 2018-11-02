@@ -7,8 +7,8 @@
 #import <Foundation/Foundation.h>
 
 #include "base/format_macros.h"
+#import "ios/chrome/browser/ui/reading_list/text_badge_view.h"
 #import "ios/chrome/common/material_timing.h"
-#import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -16,101 +16,67 @@
 
 namespace {
 const CGFloat kAnimationDuration = ios::material::kDuration3;
-const CGFloat labelMargin = 2.5f;
+// The margin on all sides of the label.
+const CGFloat kLabelMargin = 2.5f;
 }  // namespace
 
 @interface NumberBadgeView ()
-@property(nonatomic, readonly, weak) UILabel* label;
-// This is a pill-shaped (rounded corners) view used in the background of the
-// badge.
-@property(nonatomic, readonly, weak) UIView* backgroundCircleView;
 @property(nonatomic, assign) NSInteger displayNumber;
+// The pill-shaped badge that displays |displayNumber|.
+@property(nonatomic, readonly, strong) TextBadgeView* textBadge;
+// Indicate whether |textBadge| has been added as a subview of the
+// |NumberBadgeView|.
+@property(nonatomic, assign) BOOL didAddSubviews;
 @end
 
 @implementation NumberBadgeView
-#pragma mark - properties
-@synthesize label = _label;
-@synthesize backgroundCircleView = _backgroundCircleView;
-@synthesize displayNumber = _displayNumber;
 
-#pragma mark - lifecycle
+@synthesize displayNumber = _displayNumber;
+@synthesize textBadge = _textBadge;
+@synthesize didAddSubviews = _didAddSubviews;
+
+#pragma mark - Lifecycle
 - (instancetype)initWithFrame:(CGRect)frame {
   self = [super initWithFrame:frame];
   if (self) {
-    self.backgroundColor = [UIColor clearColor];
-
-    UIView* backgroundCircleView = [[UIView alloc] initWithFrame:CGRectZero];
-    _backgroundCircleView = backgroundCircleView;
-    [backgroundCircleView setTranslatesAutoresizingMaskIntoConstraints:NO];
-    [self addSubview:backgroundCircleView];
-
-    UILabel* label = [[UILabel alloc] initWithFrame:CGRectZero];
-    _label = label;
-    [label setFont:[[MDCTypography fontLoader] boldFontOfSize:10]];
-    [label setTranslatesAutoresizingMaskIntoConstraints:NO];
-    [label setTextColor:[UIColor whiteColor]];
-    [self addSubview:label];
-
-    [NSLayoutConstraint activateConstraints:@[
-      // Position bubble.
-      [backgroundCircleView.trailingAnchor
-          constraintEqualToAnchor:self.trailingAnchor],
-      [backgroundCircleView.centerYAnchor
-          constraintEqualToAnchor:self.centerYAnchor],
-
-      // Position label on bubble.
-      [label.centerXAnchor
-          constraintEqualToAnchor:backgroundCircleView.centerXAnchor],
-      [label.centerYAnchor
-          constraintEqualToAnchor:backgroundCircleView.centerYAnchor],
-
-      // Make bubble fit label.
-      [backgroundCircleView.heightAnchor
-          constraintEqualToAnchor:label.heightAnchor
-                         constant:labelMargin * 2],
-      [backgroundCircleView.widthAnchor
-          constraintGreaterThanOrEqualToAnchor:backgroundCircleView
-                                                   .heightAnchor],
-      [backgroundCircleView.widthAnchor
-          constraintGreaterThanOrEqualToAnchor:label.widthAnchor
-                                      constant:labelMargin * 2]
-    ]];
-
-    // Start hidden.
-    self.alpha = 0.0;
+    _didAddSubviews = NO;
   }
   return self;
 }
 
-#pragma mark - UIView
-- (void)layoutSubviews {
-  [super layoutSubviews];
-  self.backgroundCircleView.layer.cornerRadius =
-      self.backgroundCircleView.bounds.size.height / 2.0f;
-}
+#pragma mark - Public methods
 
-#pragma mark - public
 - (void)setNumber:(NSInteger)number animated:(BOOL)animated {
   // If the previous number and current number match, do nothing.
   if (self.displayNumber != number) {
     self.displayNumber = number;
     if (animated) {
+      // If the view is being animated in, then |hidden| needs to be set to
+      // |NO|. Otherwise the view is being animated out, in which case |hidden|
+      // is already |NO|.
+      self.hidden = NO;
       [UIView animateWithDuration:kAnimationDuration
-                       animations:^{
-                         if (number > 0) {
-                           self.alpha = 1.0;
-                           // Only setting when > 0 as this makes the animation
-                           // look better than switching to 0 then fading out.
-                           self.label.text =
-                               [NSString stringWithFormat:@"%" PRIdNS, number];
-                         } else {
-                           self.alpha = 0.0;
-                         }
-                         [self setNeedsLayout];
-                         [self layoutIfNeeded];
-                       }];
+          animations:^{
+            if (number > 0) {
+              self.alpha = 1.0;
+              // Only setting when > 0 as this makes the animation
+              // look better than switching to 0 then fading out.
+              [self.textBadge
+                  setText:[NSString stringWithFormat:@"%" PRIdNS, number]];
+            } else {
+              self.alpha = 0.0;
+            }
+            [self setNeedsLayout];
+            [self layoutIfNeeded];
+          }
+          completion:^(BOOL finished) {
+            if (finished && self.alpha == 0.0) {
+              self.hidden = YES;
+            }
+          }];
     } else {
-      self.label.text = [NSString stringWithFormat:@"%" PRIdNS, number];
+      [self.textBadge setText:[NSString stringWithFormat:@"%" PRIdNS, number]];
+      self.hidden = (number > 0 ? NO : YES);
     }
   }
 }
@@ -119,12 +85,52 @@ const CGFloat labelMargin = 2.5f;
   if (animated) {
     [UIView animateWithDuration:kAnimationDuration
                      animations:^{
-                       [self.backgroundCircleView
-                           setBackgroundColor:backgroundColor];
+                       [self.textBadge setBackgroundColor:backgroundColor];
                      }];
   } else {
-    [self.backgroundCircleView setBackgroundColor:backgroundColor];
+    [self.textBadge setBackgroundColor:backgroundColor];
   }
+}
+
+#pragma mark - UIView overrides
+
+// Override |willMoveToSuperview| to add |textBadge| to the view hierarchy and
+// perform additional setup operations.
+- (void)willMoveToSuperview:(UIView*)newSuperview {
+  if (!self.didAddSubviews) {
+    [self addSubview:self.textBadge];
+    self.didAddSubviews = YES;
+    [self activateConstraints];
+    self.backgroundColor = [UIColor clearColor];
+    // Start hidden.
+    self.alpha = 0.0;
+    self.hidden = YES;
+  }
+  [super willMoveToSuperview:newSuperview];
+}
+
+#pragma mark - Private properties
+
+// Lazily load |textBadge|.
+- (TextBadgeView*)textBadge {
+  if (!_textBadge) {
+    _textBadge = [[TextBadgeView alloc] initWithText:@"0"
+                               labelHorizontalMargin:kLabelMargin];
+    [_textBadge setTranslatesAutoresizingMaskIntoConstraints:NO];
+  }
+  return _textBadge;
+}
+
+#pragma mark - Private methods
+
+// Activate constraints to properly position |textBadge| within NumberBadgeView.
+- (void)activateConstraints {
+  [NSLayoutConstraint activateConstraints:@[
+    [self.textBadge.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+    [self.textBadge.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
+    [self.widthAnchor constraintEqualToAnchor:self.textBadge.widthAnchor],
+    [self.heightAnchor constraintEqualToAnchor:self.textBadge.heightAnchor]
+  ]];
 }
 
 @end

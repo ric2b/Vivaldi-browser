@@ -7,7 +7,7 @@
 #include <set>
 #include <vector>
 
-#include "components/payments/content/payments_validators.h"
+#include "components/payments/core/payments_validators.h"
 #include "third_party/WebKit/public/platform/modules/payments/payment_request.mojom.h"
 
 namespace payments {
@@ -40,13 +40,13 @@ bool validateShippingOptionOrPaymentItem(
     return false;
   }
 
-  if (!payments::PaymentsValidators::isValidCurrencyCodeFormat(
+  if (!payments::PaymentsValidators::IsValidCurrencyCodeFormat(
           item->amount->currency, item->amount->currency_system,
           error_message)) {
     return false;
   }
 
-  if (!payments::PaymentsValidators::isValidAmountFormat(item->amount->value,
+  if (!payments::PaymentsValidators::IsValidAmountFormat(item->amount->value,
                                                          error_message)) {
     return false;
   }
@@ -160,7 +160,7 @@ bool validatePaymentDetails(const mojom::PaymentDetailsPtr& details,
                                          error_message))
       return false;
   }
-  if (!PaymentsValidators::isValidErrorMsgFormat(details->error, error_message))
+  if (!PaymentsValidators::IsValidErrorMsgFormat(details->error, error_message))
     return false;
   return true;
 }

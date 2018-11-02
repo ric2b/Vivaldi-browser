@@ -6,7 +6,9 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/android/event_forwarder.h"
 #include "ui/android/view_android.h"
+#include "ui/android/view_android_observer.h"
 #include "ui/android/view_client.h"
+#include "ui/android/window_android.h"
 #include "ui/events/android/motion_event_android.h"
 
 namespace ui {
@@ -18,8 +20,7 @@ class TestViewClient : public ViewClient {
   TestViewClient() : handle_event_(true), called_(false) {}
 
   void SetHandleEvent(bool handle_event) { handle_event_ = handle_event; }
-  bool OnTouchEvent(const MotionEventAndroid& event,
-                    bool for_touch_handle) override {
+  bool OnTouchEvent(const MotionEventAndroid& event) override {
     called_ = true;
     return handle_event_;
   }
@@ -54,9 +55,9 @@ class ViewAndroidBoundsTest : public testing::Test {
     ui::MotionEventAndroid::Pointer pointer0(0, x, y, 0, 0, 0, 0, 0);
     ui::MotionEventAndroid::Pointer pointer1(0, 0, 0, 0, 0, 0, 0, 0);
     ui::MotionEventAndroid event(nullptr, JavaParamRef<jobject>(nullptr), 1.f,
-                                 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, false,
                                  &pointer0, &pointer1);
-    root_.OnTouchEvent(event, false);
+    root_.OnTouchEvent(event);
   }
 
   void ExpectHit(const TestViewClient& hitClient) {
@@ -198,6 +199,62 @@ TEST(ViewAndroidTest, ChecksMultipleEventForwarders) {
 
   // Additional event forwarder will cause failure.
   EXPECT_DCHECK_DEATH(rwhv2.GetEventForwarder());
+}
+
+class Observer : public ViewAndroidObserver {
+ public:
+  Observer() : attached_(false) {}
+
+  void OnAttachedToWindow() override { attached_ = true; }
+
+  void OnDetachedFromWindow() override { attached_ = false; }
+
+  bool attached_;
+};
+
+TEST(ViewAndroidTest, Observer) {
+  std::unique_ptr<WindowAndroid> window(WindowAndroid::CreateForTesting());
+  ViewAndroid top;
+  ViewAndroid bottom;
+
+  Observer top_observer;
+  Observer bottom_observer;
+
+  top.AddObserver(&top_observer);
+  bottom.AddObserver(&bottom_observer);
+
+  top.AddChild(&bottom);
+
+  EXPECT_FALSE(top_observer.attached_);
+  EXPECT_FALSE(bottom_observer.attached_);
+
+  // Views in a tree all get notified of 'attached' event.
+  window->AddChild(&top);
+  EXPECT_TRUE(top_observer.attached_);
+  EXPECT_TRUE(bottom_observer.attached_);
+
+  // Observer, upon addition, does not get notified of the current
+  // attached state.
+  Observer top_observer2;
+  top.AddObserver(&top_observer2);
+  EXPECT_FALSE(top_observer2.attached_);
+
+  bottom.RemoveFromParent();
+  EXPECT_FALSE(bottom_observer.attached_);
+  top.RemoveFromParent();
+  EXPECT_FALSE(top_observer.attached_);
+
+  window->AddChild(&top);
+  EXPECT_TRUE(top_observer.attached_);
+
+  // View, upon addition to a tree in the attached state, should be notified.
+  top.AddChild(&bottom);
+  EXPECT_TRUE(bottom_observer.attached_);
+
+  // Views in a tree all get notified of 'detached' event.
+  top.RemoveFromParent();
+  EXPECT_FALSE(top_observer.attached_);
+  EXPECT_FALSE(bottom_observer.attached_);
 }
 
 }  // namespace ui

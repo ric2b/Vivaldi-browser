@@ -7,11 +7,16 @@
 #include <string>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
+#include "base/callback.h"
 #include "base/command_line.h"
+#include "base/location.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/account_tracker_service_factory.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
@@ -21,9 +26,12 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
+#include "components/signin/core/browser/scoped_account_consistency.h"
 #include "components/signin/core/browser/signin_header_helper.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/common/profile_management_switches.h"
+#include "components/sync/base/sync_prefs.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "google_apis/gaia/gaia_switches.h"
@@ -39,6 +47,7 @@
 using net::test_server::BasicHttpResponse;
 using net::test_server::HttpRequest;
 using net::test_server::HttpResponse;
+using signin::AccountConsistencyMethod;
 
 namespace {
 
@@ -57,6 +66,7 @@ const char kDiceResponseHeader[] = "X-Chrome-ID-Consistency-Response";
 const char kGoogleSignoutResponseHeader[] = "Google-Accounts-SignOut";
 const char kMainEmail[] = "main_email@example.com";
 const char kMainGaiaID[] = "main_gaia_id";
+const char kNoDiceRequestHeader[] = "NoDiceHeader";
 const char kOAuth2TokenExchangeURL[] = "/oauth2/v4/token";
 const char kOAuth2TokenRevokeURL[] = "/o/oauth2/revoke";
 const char kSecondaryEmail[] = "secondary_email@example.com";
@@ -76,7 +86,7 @@ std::unique_ptr<HttpResponse> HandleSigninURL(const HttpRequest& request) {
   if (!net::test_server::ShouldHandle(request, kSigninURL))
     return nullptr;
 
-  std::string header_value = "None";
+  std::string header_value = kNoDiceRequestHeader;
   auto it = request.headers.find(signin::kDiceRequestHeader);
   if (it != request.headers.end())
     header_value = it->second;
@@ -178,15 +188,37 @@ std::unique_ptr<HttpResponse> HandleOAuth2TokenRevokeURL(
   return std::move(http_response);
 }
 
+// Handler for ServiceLogin on the embedded test server.
+// Calls the callback with the dice request header, or kNoDiceRequestHeader if
+// there is no Dice header.
+std::unique_ptr<HttpResponse> HandleServiceLoginURL(
+    base::Callback<void(const std::string&)> callback,
+    const HttpRequest& request) {
+  if (!net::test_server::ShouldHandle(request, "/ServiceLogin"))
+    return nullptr;
+
+  std::string dice_request_header(kNoDiceRequestHeader);
+  auto it = request.headers.find(signin::kDiceRequestHeader);
+  if (it != request.headers.end())
+    dice_request_header = it->second;
+  callback.Run(dice_request_header);
+
+  std::unique_ptr<BasicHttpResponse> http_response(new BasicHttpResponse);
+  http_response->AddCustomHeader("Cache-Control", "no-store");
+  return std::move(http_response);
+}
+
 }  // namespace FakeGaia
 
-class DiceBrowserTest : public InProcessBrowserTest,
-                        public OAuth2TokenService::Observer {
+class DiceBrowserTestBase : public InProcessBrowserTest,
+                            public OAuth2TokenService::Observer {
  protected:
-  ~DiceBrowserTest() override {}
+  ~DiceBrowserTestBase() override {}
 
-  DiceBrowserTest()
+  explicit DiceBrowserTestBase(
+      AccountConsistencyMethod account_consistency_method)
       : https_server_(net::EmbeddedTestServer::TYPE_HTTPS),
+        account_consistency_method_(account_consistency_method),
         token_requested_(false),
         refresh_token_available_(false),
         token_revoked_notification_count_(0),
@@ -199,6 +231,10 @@ class DiceBrowserTest : public InProcessBrowserTest,
         base::Bind(&FakeGaia::HandleOAuth2TokenExchangeURL, &token_requested_));
     https_server_.RegisterDefaultHandler(base::Bind(
         &FakeGaia::HandleOAuth2TokenRevokeURL, &token_revoked_count_));
+    https_server_.RegisterDefaultHandler(
+        base::Bind(&FakeGaia::HandleServiceLoginURL,
+                   base::Bind(&DiceBrowserTestBase::OnServiceLoginRequest,
+                              base::Unretained(this))));
   }
 
   // Navigates to the given path on the test server.
@@ -276,11 +312,13 @@ class DiceBrowserTest : public InProcessBrowserTest,
     command_line->AppendSwitchASCII(switches::kGaiaUrl, base_url.spec());
     command_line->AppendSwitchASCII(switches::kGoogleApisUrl, base_url.spec());
     command_line->AppendSwitchASCII(switches::kLsoUrl, base_url.spec());
-    switches::EnableAccountConsistencyDiceForTesting(command_line);
   }
 
   void SetUpOnMainThread() override {
     InProcessBrowserTest::SetUpOnMainThread();
+    scoped_account_consistency_ =
+        base::MakeUnique<signin::ScopedAccountConsistency>(
+            account_consistency_method_);
     https_server_.StartAcceptingConnections();
     GetTokenService()->AddObserver(this);
   }
@@ -299,11 +337,32 @@ class DiceBrowserTest : public InProcessBrowserTest,
     ++token_revoked_notification_count_;
   }
 
+  void OnServiceLoginRequest(const std::string& dice_request_header) {
+    dice_request_header_ = dice_request_header;
+    content::BrowserThread::PostTask(content::BrowserThread::UI, FROM_HERE,
+                                     runloop_quit_closure_);
+  }
+
   net::EmbeddedTestServer https_server_;
+  AccountConsistencyMethod account_consistency_method_;
+  std::unique_ptr<signin::ScopedAccountConsistency> scoped_account_consistency_;
   bool token_requested_;
   bool refresh_token_available_;
   int token_revoked_notification_count_;
   int token_revoked_count_;
+  std::string dice_request_header_;
+  base::Closure runloop_quit_closure_;
+};
+
+class DiceBrowserTest : public DiceBrowserTestBase {
+ public:
+  DiceBrowserTest() : DiceBrowserTestBase(AccountConsistencyMethod::kDice) {}
+};
+
+class DiceFixAuthErrorsBrowserTest : public DiceBrowserTestBase {
+ public:
+  DiceFixAuthErrorsBrowserTest()
+      : DiceBrowserTestBase(AccountConsistencyMethod::kDiceFixAuthErrors) {}
 };
 
 // This test is flaky on Windows, see https://crbug.com/741652
@@ -419,4 +478,141 @@ IN_PROC_BROWSER_TEST_F(DiceBrowserTest, SignoutAllAccounts) {
       GetTokenService()->RefreshTokenIsAvailable(GetSecondaryAccountID()));
   EXPECT_EQ(2, token_revoked_notification_count_);
   EXPECT_EQ(2, token_revoked_count_);
+}
+
+// Checks that Dice request header is not set from request from WebUI.
+// See https://crbug.com/428396
+IN_PROC_BROWSER_TEST_F(DiceBrowserTest, NoDiceFromWebUI) {
+  base::RunLoop loop;
+  runloop_quit_closure_ = loop.QuitClosure();
+
+  // Navigate to Gaia and from the native tab, which uses an extension.
+  ui_test_utils::NavigateToURL(browser(), GURL("chrome:chrome-signin"));
+
+  // Check that the request had no Dice request header.
+  loop.Run();
+  EXPECT_EQ(kNoDiceRequestHeader, dice_request_header_);
+}
+
+// Checks that signin on Gaia does not trigger the fetch of refresh token when
+// there is no authentication error.
+IN_PROC_BROWSER_TEST_F(DiceFixAuthErrorsBrowserTest, SigninNoAuthError) {
+  // Start from a signed-in state.
+  SetupSignedInAccounts();
+
+  // Navigate to Gaia and sign in.
+  NavigateToURL(kSigninURL);
+
+  // Check that the Dice request header was not sent.
+  std::string header_value;
+  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
+      browser()->tab_strip_model()->GetActiveWebContents(),
+      "window.domAutomationController.send(document.body.textContent);",
+      &header_value));
+  EXPECT_EQ(kNoDiceRequestHeader, header_value);
+}
+
+// Checks that signin on Gaia does not triggers the fetch for a refresh token
+// when the user is not signed into Chrome.
+IN_PROC_BROWSER_TEST_F(DiceFixAuthErrorsBrowserTest, NotSignedInChrome) {
+  // Setup authentication error.
+  syncer::SyncPrefs(browser()->profile()->GetPrefs()).SetSyncAuthError(true);
+
+  // Navigate to Gaia and sign in.
+  NavigateToURL(kSigninURL);
+
+  // Check that the Dice request header was not sent.
+  std::string header_value;
+  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
+      browser()->tab_strip_model()->GetActiveWebContents(),
+      "window.domAutomationController.send(document.body.textContent);",
+      &header_value));
+  EXPECT_EQ(kNoDiceRequestHeader, header_value);
+}
+
+// Checks that a refresh token is not requested when accounts don't match.
+IN_PROC_BROWSER_TEST_F(DiceFixAuthErrorsBrowserTest, SigninAccountMismatch) {
+  // Sign in to Chrome with secondary account, with authentication error.
+  SigninManager* signin_manager = GetSigninManager();
+  signin_manager->StartSignInWithRefreshToken(
+      "existing_refresh_token", kSecondaryGaiaID, kSecondaryEmail, "password",
+      SigninManager::OAuthTokenFetchedCallback());
+  ASSERT_TRUE(
+      GetTokenService()->RefreshTokenIsAvailable(GetSecondaryAccountID()));
+  ASSERT_EQ(GetSecondaryAccountID(),
+            signin_manager->GetAuthenticatedAccountId());
+  syncer::SyncPrefs(browser()->profile()->GetPrefs()).SetSyncAuthError(true);
+
+  // Navigate to Gaia and sign in with the main account (account mismatch).
+  NavigateToURL(kSigninURL);
+
+  // Check that the Dice request header was sent.
+  std::string header_value;
+  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
+      browser()->tab_strip_model()->GetActiveWebContents(),
+      "window.domAutomationController.send(document.body.textContent);",
+      &header_value));
+  EXPECT_EQ(base::StringPrintf(
+                "client_id=%s",
+                GaiaUrls::GetInstance()->oauth2_chrome_client_id().c_str()),
+            header_value);
+
+  // Check that the token was not requested and the authenticated account did
+  // not change.
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(token_requested_);
+  EXPECT_FALSE(refresh_token_available_);
+  EXPECT_EQ(GetSecondaryAccountID(),
+            GetSigninManager()->GetAuthenticatedAccountId());
+}
+
+// Checks that signin on Gaia triggers the fetch for a refresh token when there
+// is an authentication error and the user is re-authenticating on the web.
+// This test is similar to DiceBrowserTest.Reauth.
+IN_PROC_BROWSER_TEST_F(DiceFixAuthErrorsBrowserTest, ReauthFixAuthError) {
+  // Start from a signed-in state with authentication error.
+  SetupSignedInAccounts();
+  syncer::SyncPrefs(browser()->profile()->GetPrefs()).SetSyncAuthError(true);
+
+  // Navigate to Gaia and sign in again with the main account.
+  NavigateToURL(kSigninURL);
+
+  // Check that the Dice request header was sent.
+  std::string header_value;
+  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
+      browser()->tab_strip_model()->GetActiveWebContents(),
+      "window.domAutomationController.send(document.body.textContent);",
+      &header_value));
+  EXPECT_EQ(base::StringPrintf(
+                "client_id=%s",
+                GaiaUrls::GetInstance()->oauth2_chrome_client_id().c_str()),
+            header_value);
+
+  // Check that the token was requested and added to the token service.
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(token_requested_);
+  EXPECT_TRUE(refresh_token_available_);
+  EXPECT_EQ(GetMainAccountID(),
+            GetSigninManager()->GetAuthenticatedAccountId());
+  // Old token must be revoked silently.
+  EXPECT_EQ(0, token_revoked_notification_count_);
+  EXPECT_EQ(1, token_revoked_count_);
+}
+
+// Checks that the Dice signout flow is disabled.
+IN_PROC_BROWSER_TEST_F(DiceFixAuthErrorsBrowserTest, Signout) {
+  // Start from a signed-in state.
+  SetupSignedInAccounts();
+
+  // Signout from main account on the web.
+  SignOutWithDice(kMainAccount);
+
+  // Check that the user is still signed in Chrome.
+  EXPECT_EQ(GetMainAccountID(),
+            GetSigninManager()->GetAuthenticatedAccountId());
+  EXPECT_TRUE(GetTokenService()->RefreshTokenIsAvailable(GetMainAccountID()));
+  EXPECT_TRUE(
+      GetTokenService()->RefreshTokenIsAvailable(GetSecondaryAccountID()));
+  EXPECT_EQ(0, token_revoked_notification_count_);
+  EXPECT_EQ(0, token_revoked_count_);
 }

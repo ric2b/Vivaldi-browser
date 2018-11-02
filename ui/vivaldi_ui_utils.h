@@ -11,6 +11,8 @@
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/common/api/extension_types.h"
 
+class VivaldiBrowserWindow;
+
 namespace vivaldi {
 namespace ui_tools {
 
@@ -24,9 +26,9 @@ extern extensions::WebViewGuest* GetActiveWebViewGuest();
 extern extensions::WebViewGuest* GetActiveWebViewGuest(
     extensions::NativeAppWindow* app_window);
 
-// Returns the active AppWindow, currently used by progress updates to the
+// Returns the active BrowserWindow, currently used by progress updates to the
 // taskbar on Windows.
-extern extensions::AppWindow* GetActiveAppWindow();
+extern VivaldiBrowserWindow* GetActiveAppWindow();
 
 extern extensions::WebViewGuest* GetActiveWebGuestFromBrowser(Browser* browser);
 
@@ -48,8 +50,6 @@ extern bool EncodeBitmap(
 extern SkBitmap SmartCropAndSize(const SkBitmap& capture,
                                  int target_width,
                                  int target_height);
-
-Browser* GetBrowserFromWebContents(content::WebContents* web_contents);
 
 }  // namespace ui_tools
 }  // namespace vivaldi

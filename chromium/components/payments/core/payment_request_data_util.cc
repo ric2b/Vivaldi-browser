@@ -19,7 +19,6 @@
 #include "components/payments/core/payment_address.h"
 #include "components/payments/core/payment_method_data.h"
 #include "third_party/libphonenumber/phonenumber_api.h"
-#include "url/gurl.h"
 #include "url/url_constants.h"
 
 namespace payments {
@@ -54,21 +53,18 @@ PaymentAddress GetPaymentAddressFromAutofillProfile(
   PaymentAddress address;
   address.country = profile.GetRawInfo(autofill::ADDRESS_HOME_COUNTRY);
   address.address_line = base::SplitString(
-      profile.GetInfo(
-          autofill::AutofillType(autofill::ADDRESS_HOME_STREET_ADDRESS),
-          app_locale),
+      profile.GetInfo(autofill::ADDRESS_HOME_STREET_ADDRESS, app_locale),
       base::ASCIIToUTF16("\n"), base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
-  address.region = profile.GetRawInfo(autofill::ADDRESS_HOME_STATE);
-  address.city = profile.GetRawInfo(autofill::ADDRESS_HOME_CITY);
+  address.region = profile.GetInfo(autofill::ADDRESS_HOME_STATE, app_locale);
+  address.city = profile.GetInfo(autofill::ADDRESS_HOME_CITY, app_locale);
   address.dependent_locality =
-      profile.GetRawInfo(autofill::ADDRESS_HOME_DEPENDENT_LOCALITY);
-  address.postal_code = profile.GetRawInfo(autofill::ADDRESS_HOME_ZIP);
+      profile.GetInfo(autofill::ADDRESS_HOME_DEPENDENT_LOCALITY, app_locale);
+  address.postal_code = profile.GetInfo(autofill::ADDRESS_HOME_ZIP, app_locale);
   address.sorting_code =
-      profile.GetRawInfo(autofill::ADDRESS_HOME_SORTING_CODE);
+      profile.GetInfo(autofill::ADDRESS_HOME_SORTING_CODE, app_locale);
   address.language_code = base::UTF8ToUTF16(profile.language_code());
-  address.organization = profile.GetRawInfo(autofill::COMPANY_NAME);
-  address.recipient =
-      profile.GetInfo(autofill::AutofillType(autofill::NAME_FULL), app_locale);
+  address.organization = profile.GetInfo(autofill::COMPANY_NAME, app_locale);
+  address.recipient = profile.GetInfo(autofill::NAME_FULL, app_locale);
   address.phone = profile.GetRawInfo(autofill::PHONE_HOME_WHOLE_NUMBER);
 
   return address;
@@ -97,7 +93,7 @@ void ParseSupportedMethods(
     const std::vector<PaymentMethodData>& method_data,
     std::vector<std::string>* out_supported_networks,
     std::set<std::string>* out_basic_card_specified_networks,
-    std::vector<std::string>* out_url_payment_method_identifiers) {
+    std::vector<GURL>* out_url_payment_method_identifiers) {
   DCHECK(out_supported_networks->empty());
   DCHECK(out_basic_card_specified_networks->empty());
   DCHECK(out_url_payment_method_identifiers->empty());
@@ -168,7 +164,7 @@ void ParseSupportedMethods(
             !url.has_username() && !url.has_password()) {
           const auto result = url_payment_method_identifiers.insert(url);
           if (result.second)
-            out_url_payment_method_identifiers->push_back(method);
+            out_url_payment_method_identifiers->push_back(url);
         }
       }
     }

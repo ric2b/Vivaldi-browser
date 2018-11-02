@@ -4,8 +4,12 @@
 
 #include "chrome/installer/zucchini/buffer_view.h"
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <iterator>
 #include <type_traits>
+#include <vector>
 
 #include "base/test/gtest_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -66,6 +70,14 @@ TEST_F(BufferViewTest, Subscript) {
   EXPECT_EQ(42, mutable_view[0]);
 }
 
+TEST_F(BufferViewTest, SubRegion) {
+  ConstBufferView view(std::begin(bytes_), kLen);
+
+  ConstBufferView sub_view = view[{2, 4}];
+  EXPECT_EQ(view.begin() + 2, sub_view.begin());
+  EXPECT_EQ(size_t(4), sub_view.size());
+}
+
 TEST_F(BufferViewTest, Shrink) {
   ConstBufferView buffer =
       ConstBufferView::FromRange(std::begin(bytes_), std::end(bytes_));
@@ -75,6 +87,76 @@ TEST_F(BufferViewTest, Shrink) {
   buffer.shrink(2);
   EXPECT_EQ(size_t(2), buffer.size());
   EXPECT_DCHECK_DEATH(buffer.shrink(kLen));
+}
+
+TEST_F(BufferViewTest, Read) {
+  ConstBufferView buffer =
+      ConstBufferView::FromRange(std::begin(bytes_), std::end(bytes_));
+
+  EXPECT_EQ(0x10U, buffer.read<uint8_t>(0));
+  EXPECT_EQ(0x54U, buffer.read<uint8_t>(2));
+
+  EXPECT_EQ(0x3210U, buffer.read<uint16_t>(0));
+  EXPECT_EQ(0x7654U, buffer.read<uint16_t>(2));
+
+  EXPECT_EQ(0x76543210U, buffer.read<uint32_t>(0));
+  EXPECT_EQ(0xBA987654U, buffer.read<uint32_t>(2));
+
+  EXPECT_EQ(0xFEDCBA9876543210ULL, buffer.read<uint64_t>(0));
+
+  EXPECT_EQ(0x00, buffer.read<uint8_t>(9));
+  EXPECT_DEATH(buffer.read<uint8_t>(10), "");
+
+  EXPECT_EQ(0x0010FEDCU, buffer.read<uint32_t>(6));
+  EXPECT_DEATH(buffer.read<uint32_t>(7), "");
+}
+
+TEST_F(BufferViewTest, Write) {
+  MutableBufferView buffer =
+      MutableBufferView::FromRange(std::begin(bytes_), std::end(bytes_));
+
+  buffer.write<uint32_t>(0, 0x01234567);
+  buffer.write<uint32_t>(4, 0x89ABCDEF);
+  EXPECT_EQ(std::vector<uint8_t>(
+                {0x67, 0x45, 0x23, 0x01, 0xEF, 0xCD, 0xAB, 0x89, 0x10, 0x00}),
+            std::vector<uint8_t>(buffer.begin(), buffer.end()));
+
+  buffer.write<uint8_t>(9, 0xFF);
+  EXPECT_DEATH(buffer.write<uint8_t>(10, 0xFF), "");
+
+  buffer.write<uint32_t>(6, 0xFFFFFFFF);
+  EXPECT_DEATH(buffer.write<uint32_t>(7, 0xFFFFFFFF), "");
+}
+
+TEST_F(BufferViewTest, Region) {
+  ConstBufferView view(std::begin(bytes_), kLen);
+
+  BufferRegion region = view.region();
+  EXPECT_EQ(0U, region.offset);
+  EXPECT_EQ(kLen, region.size);
+}
+
+TEST_F(BufferViewTest, Covers) {
+  EXPECT_FALSE(ConstBufferView().covers({0, 0}));
+  EXPECT_FALSE(ConstBufferView().covers({0, 1}));
+
+  ConstBufferView view(std::begin(bytes_), kLen);
+
+  EXPECT_TRUE(view.covers({0, 0}));
+  EXPECT_TRUE(view.covers({0, 1}));
+  EXPECT_TRUE(view.covers({0, kLen}));
+  EXPECT_FALSE(view.covers({0, kLen + 1}));
+  EXPECT_FALSE(view.covers({1, kLen}));
+
+  EXPECT_TRUE(view.covers({kLen - 1, 0}));
+  EXPECT_TRUE(view.covers({kLen - 1, 1}));
+  EXPECT_FALSE(view.covers({kLen - 1, 2}));
+  EXPECT_FALSE(view.covers({kLen, 0}));
+  EXPECT_FALSE(view.covers({kLen, 1}));
+
+  EXPECT_FALSE(view.covers({1, size_t(-1)}));
+  EXPECT_FALSE(view.covers({size_t(-1), 1}));
+  EXPECT_FALSE(view.covers({size_t(-1), size_t(-1)}));
 }
 
 }  // namespace zucchini

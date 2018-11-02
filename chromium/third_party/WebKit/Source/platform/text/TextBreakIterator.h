@@ -116,7 +116,7 @@ class PLATFORM_EXPORT LazyLineBreakIterator final {
       ReleaseLineBreakIterator(iterator_);
   }
 
-  String GetString() const { return string_; }
+  const String& GetString() const { return string_; }
 
   UChar LastCharacter() const {
     static_assert(WTF_ARRAY_LENGTH(prior_context_) == 2,
@@ -217,6 +217,7 @@ class PLATFORM_EXPORT LazyLineBreakIterator final {
   // When 'white-space:pre-wrap', or when in editing, leaging/trailing spaces
   // need to be preserved, and this optimization needs to be disabled. This mode
   // is compatible with UAX#14/ICU. http://unicode.org/reports/tr14/
+  bool BreakAfterSpace() const { return break_after_space_; }
   void SetBreakAfterSpace(bool break_after_space) {
     break_after_space_ = break_after_space;
   }

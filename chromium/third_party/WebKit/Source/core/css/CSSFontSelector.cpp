@@ -27,10 +27,9 @@
 #include "core/css/CSSFontSelector.h"
 
 #include "build/build_config.h"
-#include "core/css/CSSFontSelectorClient.h"
 #include "core/css/CSSSegmentedFontFace.h"
 #include "core/css/CSSValueList.h"
-#include "core/css/FontFaceSet.h"
+#include "core/css/FontFaceSetDocument.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/Document.h"
 #include "core/frame/LocalFrame.h"
@@ -39,6 +38,7 @@
 #include "core/loader/FrameLoader.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/fonts/FontCache.h"
+#include "platform/fonts/FontSelectorClient.h"
 #include "platform/fonts/SimpleFontData.h"
 #include "platform/wtf/text/AtomicString.h"
 
@@ -54,26 +54,27 @@ CSSFontSelector::CSSFontSelector(Document* document)
   DCHECK(document_);
   DCHECK(document_->GetFrame());
   FontCache::GetFontCache()->AddClient(this);
-  FontFaceSet::From(*document)->AddFontFacesToFontFaceCache(&font_face_cache_);
+  FontFaceSetDocument::From(*document)->AddFontFacesToFontFaceCache(
+      &font_face_cache_);
 }
 
 CSSFontSelector::~CSSFontSelector() {}
 
 void CSSFontSelector::RegisterForInvalidationCallbacks(
-    CSSFontSelectorClient* client) {
+    FontSelectorClient* client) {
   CHECK(client);
   clients_.insert(client);
 }
 
 void CSSFontSelector::UnregisterForInvalidationCallbacks(
-    CSSFontSelectorClient* client) {
+    FontSelectorClient* client) {
   clients_.erase(client);
 }
 
 void CSSFontSelector::DispatchInvalidationCallbacks() {
   font_face_cache_.IncrementVersion();
 
-  HeapVector<Member<CSSFontSelectorClient>> clients;
+  HeapVector<Member<FontSelectorClient>> clients;
   CopyToVector(clients_, clients);
   for (auto& client : clients)
     client->FontsNeedUpdate(this);
@@ -87,41 +88,7 @@ void CSSFontSelector::FontCacheInvalidated() {
   DispatchInvalidationCallbacks();
 }
 
-static AtomicString FamilyNameFromSettings(
-    const GenericFontFamilySettings& settings,
-    const FontDescription& font_description,
-    const AtomicString& generic_family_name) {
-#if defined(OS_ANDROID)
-  if (font_description.GenericFamily() == FontDescription::kStandardFamily)
-    return FontCache::GetGenericFamilyNameForScript(
-        FontFamilyNames::webkit_standard, font_description);
-
-  if (generic_family_name.StartsWith("-webkit-"))
-    return FontCache::GetGenericFamilyNameForScript(generic_family_name,
-                                                    font_description);
-#else
-  UScriptCode script = font_description.GetScript();
-  if (font_description.GenericFamily() == FontDescription::kStandardFamily)
-    return settings.Standard(script);
-  if (generic_family_name == FontFamilyNames::webkit_serif)
-    return settings.Serif(script);
-  if (generic_family_name == FontFamilyNames::webkit_sans_serif)
-    return settings.SansSerif(script);
-  if (generic_family_name == FontFamilyNames::webkit_cursive)
-    return settings.Cursive(script);
-  if (generic_family_name == FontFamilyNames::webkit_fantasy)
-    return settings.Fantasy(script);
-  if (generic_family_name == FontFamilyNames::webkit_monospace)
-    return settings.Fixed(script);
-  if (generic_family_name == FontFamilyNames::webkit_pictograph)
-    return settings.Pictograph(script);
-  if (generic_family_name == FontFamilyNames::webkit_standard)
-    return settings.Standard(script);
-#endif
-  return g_empty_atom;
-}
-
-PassRefPtr<FontData> CSSFontSelector::GetFontData(
+RefPtr<FontData> CSSFontSelector::GetFontData(
     const FontDescription& font_description,
     const AtomicString& family_name) {
   if (CSSSegmentedFontFace* face =

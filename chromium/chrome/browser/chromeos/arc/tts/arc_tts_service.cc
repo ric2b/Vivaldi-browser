@@ -37,6 +37,11 @@ class ArcTtsServiceFactory
 }  // namespace
 
 // static
+BrowserContextKeyedServiceFactory* ArcTtsService::GetFactory() {
+  return ArcTtsServiceFactory::GetInstance();
+}
+
+// static
 ArcTtsService* ArcTtsService::GetForBrowserContext(
     content::BrowserContext* context) {
   return ArcTtsServiceFactory::GetForBrowserContext(context);
@@ -44,17 +49,14 @@ ArcTtsService* ArcTtsService::GetForBrowserContext(
 
 ArcTtsService::ArcTtsService(content::BrowserContext* context,
                              ArcBridgeService* bridge_service)
-    : arc_bridge_service_(bridge_service), binding_(this) {
+    : arc_bridge_service_(bridge_service),
+      binding_(this),
+      tts_controller_(nullptr) {
   arc_bridge_service_->tts()->AddObserver(this);
 }
 
 ArcTtsService::~ArcTtsService() {
-  // TODO(hidehiko): Currently, the lifetime of ArcBridgeService and
-  // BrowserContextKeyedService is not nested.
-  // If ArcServiceManager::Get() returns nullptr, it is already destructed,
-  // so do not touch it.
-  if (ArcServiceManager::Get())
-    arc_bridge_service_->tts()->RemoveObserver(this);
+  arc_bridge_service_->tts()->RemoveObserver(this);
 }
 
 void ArcTtsService::OnInstanceReady() {
@@ -70,8 +72,15 @@ void ArcTtsService::OnTtsEvent(uint32_t id,
                                mojom::TtsEventType event_type,
                                uint32_t char_index,
                                const std::string& error_msg) {
-  if (!TtsController::GetInstance())
-    return;
+  if (!tts_controller_) {
+    // GetInstance() returns a base::Singleton<> object which always outlives
+    // |this| object.
+    tts_controller_ = TtsController::GetInstance();
+    if (!tts_controller_) {
+      LOG(WARNING) << "TtsController is not available.";
+      return;
+    }
+  }
 
   TtsEventType chrome_event_type;
   switch (event_type) {
@@ -88,8 +97,7 @@ void ArcTtsService::OnTtsEvent(uint32_t id,
       chrome_event_type = TTS_EVENT_ERROR;
       break;
   }
-  TtsController::GetInstance()->OnTtsEvent(id, chrome_event_type, char_index,
-                                           error_msg);
+  tts_controller_->OnTtsEvent(id, chrome_event_type, char_index, error_msg);
 }
 
 }  // namespace arc

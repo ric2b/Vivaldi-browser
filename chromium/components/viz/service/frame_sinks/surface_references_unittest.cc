@@ -9,12 +9,12 @@
 
 #include "base/containers/flat_set.h"
 #include "base/memory/ptr_util.h"
-#include "cc/surfaces/surface.h"
-#include "cc/surfaces/surface_manager.h"
-#include "cc/test/compositor_frame_helpers.h"
 #include "components/viz/common/surfaces/surface_id.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
+#include "components/viz/service/surfaces/surface.h"
+#include "components/viz/service/surfaces/surface_manager.h"
+#include "components/viz/test/compositor_frame_helpers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -34,12 +34,10 @@ constexpr FrameSinkId kFrameSink3(3, 0);
 }  // namespace
 
 // Tests for reference tracking in CompositorFrameSinkSupport and
-// cc::SurfaceManager.
+// SurfaceManager.
 class SurfaceReferencesTest : public testing::Test {
  public:
-  cc::SurfaceManager& GetSurfaceManager() {
-    return *manager_->surface_manager();
-  }
+  SurfaceManager& GetSurfaceManager() { return *manager_->surface_manager(); }
 
   // Creates a new Surface with the provided |frame_sink_id| and |local_id|.
   // Will first create a Surfacesupport for |frame_sink_id| if necessary.
@@ -47,8 +45,7 @@ class SurfaceReferencesTest : public testing::Test {
     LocalSurfaceId local_surface_id(local_id,
                                     base::UnguessableToken::Deserialize(0, 1u));
     GetCompositorFrameSinkSupport(frame_sink_id)
-        .SubmitCompositorFrame(local_surface_id,
-                               cc::test::MakeCompositorFrame());
+        .SubmitCompositorFrame(local_surface_id, MakeCompositorFrame());
     return SurfaceId(frame_sink_id, local_surface_id);
   }
 
@@ -62,12 +59,11 @@ class SurfaceReferencesTest : public testing::Test {
       const FrameSinkId& frame_sink_id) {
     auto& support_ptr = supports_[frame_sink_id];
     if (!support_ptr) {
+      manager_->RegisterFrameSinkId(frame_sink_id);
       constexpr bool is_root = false;
-      constexpr bool handles_frame_sink_id_invalidation = true;
       constexpr bool needs_sync_points = true;
       support_ptr = CompositorFrameSinkSupport::Create(
-          nullptr, manager_.get(), frame_sink_id, is_root,
-          handles_frame_sink_id_invalidation, needs_sync_points);
+          nullptr, manager_.get(), frame_sink_id, is_root, needs_sync_points);
     }
     return *support_ptr;
   }
@@ -76,18 +72,19 @@ class SurfaceReferencesTest : public testing::Test {
     auto support_ptr = supports_.find(frame_sink_id);
     ASSERT_NE(support_ptr, supports_.end());
     supports_.erase(support_ptr);
+    manager_->InvalidateFrameSinkId(frame_sink_id);
   }
 
   void RemoveSurfaceReference(const SurfaceId& parent_id,
                               const SurfaceId& child_id) {
     manager_->surface_manager()->RemoveSurfaceReferences(
-        {cc::SurfaceReference(parent_id, child_id)});
+        {SurfaceReference(parent_id, child_id)});
   }
 
   void AddSurfaceReference(const SurfaceId& parent_id,
                            const SurfaceId& child_id) {
     manager_->surface_manager()->AddSurfaceReferences(
-        {cc::SurfaceReference(parent_id, child_id)});
+        {SurfaceReference(parent_id, child_id)});
   }
 
   // Returns all the references where |surface_id| is the parent.
@@ -102,7 +99,7 @@ class SurfaceReferencesTest : public testing::Test {
     return GetSurfaceManager().GetSurfacesThatReferenceChild(surface_id);
   }
 
-  // Temporary references are stored as a map in cc::SurfaceManager. This method
+  // Temporary references are stored as a map in SurfaceManager. This method
   // converts the map to a vector.
   std::vector<SurfaceId> GetAllTempReferences() {
     std::vector<SurfaceId> temp_references;
@@ -114,10 +111,8 @@ class SurfaceReferencesTest : public testing::Test {
  protected:
   // testing::Test:
   void SetUp() override {
-    // Start each test with a fresh cc::SurfaceManager instance.
-    manager_ = base::MakeUnique<FrameSinkManagerImpl>(
-        nullptr /* display_provider */,
-        cc::SurfaceManager::LifetimeType::REFERENCES);
+    // Start each test with a fresh SurfaceManager instance.
+    manager_ = std::make_unique<FrameSinkManagerImpl>();
   }
   void TearDown() override {
     for (auto& support : supports_)
@@ -271,6 +266,37 @@ TEST_F(SurfaceReferencesTest, GarbageCollectionWorksRecusively) {
   EXPECT_EQ(nullptr, GetSurfaceManager().GetSurfaceForId(id1));
   EXPECT_EQ(nullptr, GetSurfaceManager().GetSurfaceForId(id2));
   EXPECT_EQ(nullptr, GetSurfaceManager().GetSurfaceForId(id3));
+}
+
+// Verify that surfaces marked as live are not garbage collected and amy
+// dependencies are also not garbage collected.
+TEST_F(SurfaceReferencesTest, LiveSurfaceStillReachable) {
+  SurfaceId id1 = CreateSurface(kFrameSink1, 1);
+  SurfaceId id2 = CreateSurface(kFrameSink2, 1);
+  SurfaceId id3 = CreateSurface(kFrameSink3, 1);
+
+  AddSurfaceReference(GetSurfaceManager().GetRootSurfaceId(), id1);
+  AddSurfaceReference(id1, id2);
+  AddSurfaceReference(id2, id3);
+  ASSERT_THAT(GetAllTempReferences(), IsEmpty());
+
+  // Marking |id3| for destruction shouldn't cause it be garbage collected
+  // because |id2| is still reachable from the root.
+  DestroySurface(id3);
+  EXPECT_NE(nullptr, GetSurfaceManager().GetSurfaceForId(id3));
+
+  // Removing the surface reference to |id2| makes it not reachable from the
+  // root, however it's not marked as destroyed and is still live. Make sure we
+  // also don't delete any dependencies, such as |id3|, as well.
+  RemoveSurfaceReference(id1, id2);
+  EXPECT_NE(nullptr, GetSurfaceManager().GetSurfaceForId(id3));
+  EXPECT_NE(nullptr, GetSurfaceManager().GetSurfaceForId(id2));
+
+  // |id2| is unreachable and destroyed. Garbage collection should delete both
+  // |id2| and |id3| now.
+  DestroySurface(id2);
+  EXPECT_EQ(nullptr, GetSurfaceManager().GetSurfaceForId(id3));
+  EXPECT_EQ(nullptr, GetSurfaceManager().GetSurfaceForId(id2));
 }
 
 TEST_F(SurfaceReferencesTest, TryAddReferenceSameReferenceTwice) {

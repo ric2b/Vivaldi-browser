@@ -43,6 +43,7 @@ class TestMenuItemViewShown;
 
 class MenuController;
 class MenuDelegate;
+class TestMenuItemView;
 class SubmenuView;
 
 // MenuItemView --------------------------------------------------------------
@@ -351,6 +352,7 @@ class VIEWS_EXPORT MenuItemView : public View {
  private:
   friend class internal::MenuRunnerImpl;  // For access to ~MenuItemView.
   friend class test::TestMenuItemViewShown;  // for access to |submenu_|;
+  friend class TestMenuItemView;             // For access to AddEmptyMenus();
 
   enum PaintButtonMode { PB_NORMAL, PB_FOR_DRAG };
 
@@ -535,6 +537,12 @@ class VIEWS_EXPORT MenuItemView : public View {
   // If set to false, the right margin will be removed for menu lines
   // containing other elements.
   bool use_right_margin_;
+
+  // Contains an image for the checkbox or radio icon.
+  ImageView* radio_check_image_view_;
+
+  // The submenu indicator arrow icon in case the menu item has a Submenu.
+  ImageView* submenu_arrow_image_view_;
 
   DISALLOW_COPY_AND_ASSIGN(MenuItemView);
 };

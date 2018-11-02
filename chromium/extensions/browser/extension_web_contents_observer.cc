@@ -8,7 +8,6 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
-#include "content/public/browser/render_view_host.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/url_constants.h"
@@ -16,7 +15,7 @@
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extensions_browser_client.h"
-#include "extensions/browser/mojo/service_registration.h"
+#include "extensions/browser/mojo/interface_registration.h"
 #include "extensions/browser/process_manager.h"
 #include "extensions/browser/renderer_startup_helper.h"
 #include "extensions/browser/view_type_utils.h"
@@ -75,8 +74,8 @@ void ExtensionWebContentsObserver::InitializeRenderFrame(
   render_frame_host->Send(new ExtensionMsg_NotifyRenderViewType(
       render_frame_host->GetRoutingID(), GetViewType(web_contents())));
 
-  ExtensionsBrowserClient::Get()->RegisterMojoServices(render_frame_host,
-                                                       frame_extension);
+  ExtensionsBrowserClient::Get()->RegisterExtensionInterfaces(
+      &registry_, render_frame_host, frame_extension);
   ProcessManager::Get(browser_context_)
       ->RegisterRenderFrameHost(web_contents(), render_frame_host,
                                 frame_extension);
@@ -87,39 +86,47 @@ content::WebContents* ExtensionWebContentsObserver::GetAssociatedWebContents()
   return web_contents();
 }
 
-void ExtensionWebContentsObserver::RenderViewCreated(
-    content::RenderViewHost* render_view_host) {
-  // TODO(devlin): Most/all of this should move to RenderFrameCreated.
-  const Extension* extension = GetExtension(render_view_host);
+void ExtensionWebContentsObserver::RenderFrameCreated(
+    content::RenderFrameHost* render_frame_host) {
+  const Extension* extension = GetExtensionFromFrame(render_frame_host, false);
   if (!extension)
     return;
 
   Manifest::Type type = extension->GetType();
 
   // Some extensions use file:// URLs.
+  //
+  // Note: this particular grant isn't relevant for hosted apps, but in the
+  // future we should be careful about granting privileges to hosted app
+  // subframes in places like this, since they currently stay in process with
+  // their parent. A malicious site shouldn't be able to gain a hosted app's
+  // privileges just by embedding a subframe to a popular hosted app.
   if (type == Manifest::TYPE_EXTENSION ||
       type == Manifest::TYPE_LEGACY_PACKAGED_APP) {
     ExtensionPrefs* prefs = ExtensionPrefs::Get(browser_context_);
     if (prefs->AllowFileAccess(extension->id())) {
       content::ChildProcessSecurityPolicy::GetInstance()->GrantScheme(
-          render_view_host->GetProcess()->GetID(), url::kFileScheme);
+          render_frame_host->GetProcess()->GetID(), url::kFileScheme);
     }
   }
 
-  // Tells the new view that it's hosted in an extension process.
+  // Tells the new frame that it's hosted in an extension process.
   //
-  // This will often be a rendant IPC, because activating extensions happens at
-  // the process level, not at the view level. However, without some mild
+  // This will often be a redundant IPC, because activating extensions happens
+  // at the process level, not at the frame level. However, without some mild
   // refactoring this isn't trivial to do, and this way is simpler.
   //
   // Plus, we can delete the concept of activating an extension once site
   // isolation is turned on.
-  RendererStartupHelperFactory::GetForBrowserContext(browser_context_)
-      ->ActivateExtensionInProcess(*extension, render_view_host->GetProcess());
-}
+  //
+  // TODO(devlin,alexmos): Do this for subframes as well. See
+  // https://crbug.com/760341.
+  if (!render_frame_host->GetParent()) {
+    RendererStartupHelperFactory::GetForBrowserContext(browser_context_)
+        ->ActivateExtensionInProcess(*extension,
+                                     render_frame_host->GetProcess());
+  }
 
-void ExtensionWebContentsObserver::RenderFrameCreated(
-    content::RenderFrameHost* render_frame_host) {
   InitializeRenderFrame(render_frame_host);
 
   // Optimization: Look up the extension API frame ID to force the mapping to be
@@ -153,6 +160,13 @@ void ExtensionWebContentsObserver::DidFinishNavigation(
     pm->RegisterRenderFrameHost(web_contents(), render_frame_host,
                                 frame_extension);
   }
+}
+
+void ExtensionWebContentsObserver::OnInterfaceRequestFromFrame(
+    content::RenderFrameHost* render_frame_host,
+    const std::string& interface_name,
+    mojo::ScopedMessagePipeHandle* interface_pipe) {
+  registry_.TryBindInterface(interface_name, interface_pipe, render_frame_host);
 }
 
 bool ExtensionWebContentsObserver::OnMessageReceived(
@@ -191,22 +205,20 @@ void ExtensionWebContentsObserver::PepperInstanceDeleted() {
 
 std::string ExtensionWebContentsObserver::GetExtensionIdFromFrame(
     content::RenderFrameHost* render_frame_host) const {
-  // The second argument is false because |render_frame_host| need not be an
-  // active RenderFrameHost (crbug.com/567277).
-  // TODO(robwu): If there is a method to check whether |render_frame_host| is
-  // an active host, use it.
-  const Extension* extension = GetExtensionFromFrame(render_frame_host, false);
-  return extension ? extension->id() : std::string();
+  const GURL& site = render_frame_host->GetSiteInstance()->GetSiteURL();
+  if (!site.SchemeIs(kExtensionScheme))
+    return std::string();
+
+  return site.host();
 }
 
 const Extension* ExtensionWebContentsObserver::GetExtensionFromFrame(
     content::RenderFrameHost* render_frame_host,
     bool verify_url) const {
-  const GURL site_url(render_frame_host->GetSiteInstance()->GetSiteURL());
-  if (!site_url.SchemeIs(kExtensionScheme))
+  std::string extension_id = GetExtensionIdFromFrame(render_frame_host);
+  if (extension_id.empty())
     return nullptr;
 
-  const std::string& extension_id = site_url.host();
   content::BrowserContext* browser_context =
       render_frame_host->GetProcess()->GetBrowserContext();
   const Extension* extension = ExtensionRegistry::Get(browser_context)
@@ -220,6 +232,7 @@ const Extension* ExtensionWebContentsObserver::GetExtensionFromFrame(
     // Without site isolation, this check is needed to eliminate non-extension
     // schemes. With site isolation, this is still needed to exclude sandboxed
     // extension frames with a unique origin.
+    const GURL site_url(render_frame_host->GetSiteInstance()->GetSiteURL());
     if (origin.unique() ||
         site_url != content::SiteInstance::GetSiteForURL(browser_context,
                                                          origin.GetURL()))
@@ -227,32 +240,6 @@ const Extension* ExtensionWebContentsObserver::GetExtensionFromFrame(
   }
 
   return extension;
-}
-
-const Extension* ExtensionWebContentsObserver::GetExtension(
-    content::RenderViewHost* render_view_host) {
-  std::string extension_id = GetExtensionId(render_view_host);
-  if (extension_id.empty())
-    return NULL;
-
-  // May be null if the extension doesn't exist, for example if somebody typos
-  // a chrome-extension:// URL.
-  return ExtensionRegistry::Get(browser_context_)
-      ->GetExtensionById(extension_id, ExtensionRegistry::ENABLED);
-}
-
-// static
-std::string ExtensionWebContentsObserver::GetExtensionId(
-    content::RenderViewHost* render_view_host) {
-  // Note that due to ChromeContentBrowserClient::GetEffectiveURL(), hosted apps
-  // (excluding bookmark apps) will have a chrome-extension:// URL for their
-  // site, so we can ignore that wrinkle here.
-  const GURL& site = render_view_host->GetSiteInstance()->GetSiteURL();
-
-  if (!site.SchemeIs(kExtensionScheme))
-    return std::string();
-
-  return site.host();
 }
 
 void ExtensionWebContentsObserver::OnRequest(

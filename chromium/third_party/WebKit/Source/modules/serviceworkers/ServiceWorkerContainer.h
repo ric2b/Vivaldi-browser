@@ -35,7 +35,7 @@
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseProperty.h"
 #include "core/dom/ContextLifecycleObserver.h"
-#include "core/events/EventTarget.h"
+#include "core/dom/events/EventTarget.h"
 #include "modules/ModulesExport.h"
 #include "modules/serviceworkers/RegistrationOptions.h"
 #include "modules/serviceworkers/ServiceWorker.h"
@@ -56,7 +56,7 @@ class WebServiceWorkerProvider;
 class MODULES_EXPORT ServiceWorkerContainer final
     : public EventTargetWithInlineData,
       public ContextLifecycleObserver,
-      NON_EXPORTED_BASE(public WebServiceWorkerProviderClient) {
+      public WebServiceWorkerProviderClient {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(ServiceWorkerContainer);
 

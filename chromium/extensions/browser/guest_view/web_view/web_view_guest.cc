@@ -24,10 +24,6 @@
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
-#include "content/public/browser/notification_details.h"
-#include "content/public/browser/notification_service.h"
-#include "content/public/browser/notification_source.h"
-#include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
@@ -47,6 +43,7 @@
 #include "extensions/browser/api/extensions_api_client.h"
 #include "extensions/browser/api/guest_view/web_view/web_view_internal_api.h"
 #include "extensions/browser/api/web_request/web_request_api.h"
+#include "extensions/browser/bad_message.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/extensions_browser_client.h"
 #include "extensions/browser/guest_view/web_view/web_view_constants.h"
@@ -73,6 +70,7 @@
 #include "chrome/browser/devtools/devtools_contents_resizing_strategy.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
+#include "chrome/browser/task_manager/web_contents_tags.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -84,8 +82,10 @@
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
+#include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
 #include "prefs/vivaldi_pref_names.h"
 #include "ui/vivaldi_ui_utils.h"
+#include "ui/vivaldi_browser_window.h"
 
 using vivaldi::IsVivaldiApp;
 using vivaldi::IsVivaldiRunning;
@@ -358,9 +358,8 @@ void WebViewGuest::CreateWebContents(
   // creation. If the validation fails, treat it as a bad message and kill the
   // renderer process.
   if (!base::IsStringUTF8(storage_partition_id)) {
-    base::RecordAction(base::UserMetricsAction("BadMessageTerminate_BPGM"));
-    owner_render_process_host->Shutdown(content::RESULT_CODE_KILLED_BAD_MESSAGE,
-                                        false);
+    bad_message::ReceivedBadMessage(owner_render_process_host,
+                                    bad_message::WVG_PARTITION_ID_NOT_UTF8);
     callback.Run(nullptr);
     return;
   }
@@ -424,25 +423,8 @@ void WebViewGuest::CreateWebContents(
       content::WebContentsImpl* contentsimpl =
           static_cast<content::WebContentsImpl*>(new_contents);
 
-      // This is a temporary solution for moving PDF documents between windows.
-      // See bug# VB-23855.
-      bool replace_webcontents =
-          contentsimpl->GetContentsMimeType() == "application/pdf";
-      if (replace_webcontents) {
-        WebContents::CreateParams params =
-            GetWebContentsCreateParams(browser->profile(), guest_site);
-        new_contents = WebContents::Create(params);
-        new_contents->SetExtData(tabstrip_contents->GetExtData());
-        new_contents->GetController().CopyStateFrom(
-            tabstrip_contents->GetController(), false);
-        TabStripModel* tab_strip = browser->tab_strip_model();
-        new_contents->SetDelegate(this);
-        tab_strip->ReplaceWebContentsAt(tab_index, new_contents);
-        delete tabstrip_contents;
-      } else {
-        content::BrowserPluginGuest::Create(contentsimpl, this);
-        contentsimpl->RecreateViewAsGuest(this);
-      }
+      content::BrowserPluginGuest::Create(contentsimpl, this);
+      contentsimpl->RecreateViewAsGuest(this);
 
     } else {
       // NOTE(jarle): Get the |new_contents| using the original Chromium way.
@@ -500,22 +482,8 @@ void WebViewGuest::CreateWebContents(
       }
     }
   } else {
-    // Look up the correct Browser object to use as the Profile owner.
     std::string window_id;
-
-    if (create_params.GetString("vivaldi_window_id", &window_id)) {
-      std::string windowId;
-      BrowserList* list = BrowserList::GetInstance();
-      for (size_t i = 0; i < list->size(); i++) {
-        if (ExtensionActionUtil::GetWindowIdFromExtData(
-                list->get(i)->ext_data(), &windowId)) {
-          if (windowId == window_id) {
-            context = list->get(i)->profile();
-            break;
-          }
-        }
-      }
-    } else if (create_params.GetString("window_id", &window_id)) {
+    if (create_params.GetString("window_id", &window_id)) {
       int windowId = atoi(window_id.c_str());
       BrowserList* list = BrowserList::GetInstance();
       for (size_t i = 0; i < list->size(); i++) {
@@ -528,6 +496,7 @@ void WebViewGuest::CreateWebContents(
           break;
         }
       }
+      task_manager::WebContentsTags::CreateForTabContents(new_contents);
     }
     WebContents::CreateParams params =
         GetWebContentsCreateParams(context, guest_site);
@@ -554,52 +523,71 @@ void WebViewGuest::CreateWebContents(
   callback.Run(new_contents);
 }
 
+bool ReloadIfThereIsAMimeHandlerViewGuest(WebViewGuest* owner,
+                                          WebContents* in_guest_contents) {
+  auto* guest_view =
+      extensions::MimeHandlerViewGuest::FromWebContents(in_guest_contents);
+  if (guest_view) {
+    owner->Reload();
+    // Only do this for one level.
+    return true;
+  }
+  return false;
+}
+
 void WebViewGuest::DidAttachToEmbedder() {
   ApplyAttributes(*attach_params());
-  if(delayed_open_url_.get()) {
+  if (delayed_open_url_.get()) {
     NavigateGuest(*delayed_open_url_.get(), false);
     delayed_open_url_.reset(nullptr);
-  }
 
+  } else {
+    // NOTE(andre@vivaldi.com): Here we do a new navigation to set up the
+    // hierarchy with regards to RenderWidgetHost. See
+    // RenderWidgetHostInputEventRouter::FindEventTarget , where hittesting is
+    // now done via the compositor and surfaces. (We basically have to rebuild
+    // the RenderView-hierarchy.
+    guest_view::GuestViewManager* manager =
+        guest_view::GuestViewManager::FromBrowserContext(browser_context());
+    if (manager) {
+      manager->ForEachGuest(web_contents(),
+                            base::Bind(&ReloadIfThereIsAMimeHandlerViewGuest,
+                                       this));
+    }
+  }
   // Make sure we re-draw the page if needed. This was added because of
-  // VB-20658. If the web_contents was already fully loaded when here, we would
-  // not get the page painted.
+  // VB-20658. If the web_contents was already fully loaded when here, we
+  // would not get the page painted.
   auto* render_widget_host = content::RenderWidgetHostImpl::From(
       web_contents()->GetRenderViewHost()->GetWidget());
   render_widget_host->ScheduleComposite();
 }
 
 void WebViewGuest::DidDropLink(const GURL& url) {
-  auto args = base::MakeUnique<base::DictionaryValue>();
+  auto args = std::make_unique<base::DictionaryValue>();
   args->SetString(guest_view::kUrl, url.spec());
-  DispatchEventToView(base::MakeUnique<GuestViewEvent>(webview::kEventDropLink,
+  DispatchEventToView(std::make_unique<GuestViewEvent>(webview::kEventDropLink,
                                                        std::move(args)));
 }
 
 void WebViewGuest::DidInitialize(const base::DictionaryValue& create_params) {
   script_executor_ =
-      base::MakeUnique<ScriptExecutor>(web_contents(), &script_observers_);
-
-  notification_registrar_.Add(this,
-                              content::NOTIFICATION_LOAD_COMPLETED_MAIN_FRAME,
-                              content::Source<WebContents>(web_contents()));
-
-  notification_registrar_.Add(this,
-                              content::NOTIFICATION_RESOURCE_RECEIVED_REDIRECT,
-                              content::Source<WebContents>(web_contents()));
+      std::make_unique<ScriptExecutor>(web_contents(), &script_observers_);
 
   ExtensionsAPIClient::Get()->AttachWebContentsHelpers(web_contents());
-  web_view_permission_helper_ = base::MakeUnique<WebViewPermissionHelper>(this);
+  web_view_permission_helper_ = std::make_unique<WebViewPermissionHelper>(this);
 
 #ifdef VIVALDI_BUILD
   web_modal::WebContentsModalDialogManager::CreateForWebContents(
       web_contents());
 
-  extensions::AppWindow* app_win = GetAppWindow();
-
-  web_modal::WebContentsModalDialogManager::FromWebContents(web_contents())->
-      SetDelegate(app_win);
-
+  Browser* browser = ::vivaldi::FindBrowserWithWebContents(web_contents());
+  if (browser) {
+    VivaldiBrowserWindow* app_win =
+        static_cast<VivaldiBrowserWindow*>(browser->window());
+    web_modal::WebContentsModalDialogManager::FromWebContents(web_contents())
+        ->SetDelegate(app_win);
+  }
   InitListeners();
 
 #endif
@@ -663,8 +651,8 @@ void WebViewGuest::ClearDataInternal(base::Time remove_since,
 }
 
 void WebViewGuest::GuestViewDidStopLoading() {
-  auto args = base::MakeUnique<base::DictionaryValue>();
-  DispatchEventToView(base::MakeUnique<GuestViewEvent>(webview::kEventLoadStop,
+  auto args = std::make_unique<base::DictionaryValue>();
+  DispatchEventToView(std::make_unique<GuestViewEvent>(webview::kEventLoadStop,
                                                        std::move(args)));
 }
 
@@ -698,13 +686,12 @@ int WebViewGuest::GetTaskPrefix() const {
 
 void WebViewGuest::GuestDestroyed() {
   if (IsVivaldiRunning()) {
-    // Make sure the client is informed about the mediastate.
-    UpdateMediaState(TabAlertState::NONE);
-
     if (web_contents() == nullptr) {
       // Skip the call to RemoveWebViewStateFromIOThread.
       return;
     }
+    // Make sure the client is informed about the mediastate.
+    UpdateMediaState(TabAlertState::NONE);
   }
   RemoveWebViewStateFromIOThread(web_contents());
 }
@@ -715,8 +702,9 @@ void WebViewGuest::GuestReady() {
 #ifndef VIVALDI_BUILD
   CHECK(web_contents()->GetRenderProcessHost()->IsForGuestsOnly());
 #endif // VIVALDI_BUILD
-  Send(new ExtensionMsg_SetFrameName(
-      web_contents()->GetRenderViewHost()->GetRoutingID(), name_));
+  content::RenderFrameHost* main_frame = web_contents()->GetMainFrame();
+  main_frame->Send(
+      new ExtensionMsg_SetFrameName(main_frame->GetRoutingID(), name_));
 
   if (IsVivaldiRunning() &&
       !web_contents()->GetRenderViewHost()->GetWidget()->GetView()) {
@@ -734,7 +722,7 @@ void WebViewGuest::GuestReady() {
 
 void WebViewGuest::GuestSizeChangedDueToAutoSize(const gfx::Size& old_size,
                                                  const gfx::Size& new_size) {
-  auto args = base::MakeUnique<base::DictionaryValue>();
+  auto args = std::make_unique<base::DictionaryValue>();
   args->SetInteger(webview::kOldHeight, old_size.height());
   args->SetInteger(webview::kOldWidth, old_size.width());
   // NOTE(andre@vivaldi.com): The value in is not scaled, comes directly from
@@ -745,7 +733,7 @@ void WebViewGuest::GuestSizeChangedDueToAutoSize(const gfx::Size& old_size,
   // from the embedder. Hence the actual px-value will be reverse.
   args->SetInteger(webview::kNewHeight, new_size.height() / GetZoom());
   args->SetInteger(webview::kNewWidth, new_size.width() / GetZoom());
-  DispatchEventToView(base::MakeUnique<GuestViewEvent>(
+  DispatchEventToView(std::make_unique<GuestViewEvent>(
       webview::kEventSizeChanged, std::move(args)));
 }
 
@@ -758,19 +746,16 @@ void WebViewGuest::GuestZoomChanged(double old_zoom_level,
   // Dispatch the zoomchange event.
   double old_zoom_factor = ConvertZoomLevelToZoomFactor(old_zoom_level);
   double new_zoom_factor = ConvertZoomLevelToZoomFactor(new_zoom_level);
-  auto args = base::MakeUnique<base::DictionaryValue>();
+  auto args = std::make_unique<base::DictionaryValue>();
   args->SetDouble(webview::kOldZoomFactor, old_zoom_factor);
   args->SetDouble(webview::kNewZoomFactor, new_zoom_factor);
-  DispatchEventToView(base::MakeUnique<GuestViewEvent>(
+  DispatchEventToView(std::make_unique<GuestViewEvent>(
       webview::kEventZoomChange, std::move(args)));
 }
 
 void WebViewGuest::WillDestroy() {
   if (!attached() && GetOpener())
     GetOpener()->pending_new_windows_.erase(this);
-
-  // Vivaldi: Need to remove notifications since webcontents might be changed.
-  notification_registrar_.RemoveAll();
 
   web_contents()->GetRenderViewHost()->GetWidget()->RemoveMouseEventCallback(
       mouseevent_callback_);
@@ -786,21 +771,28 @@ bool WebViewGuest::DidAddMessageToConsole(WebContents* source,
                                           const base::string16& message,
                                           int32_t line_no,
                                           const base::string16& source_id) {
-  auto args = base::MakeUnique<base::DictionaryValue>();
+  auto args = std::make_unique<base::DictionaryValue>();
   // Log levels are from base/logging.h: LogSeverity.
   args->SetInteger(webview::kLevel, level);
   args->SetString(webview::kMessage, message);
   args->SetInteger(webview::kLine, line_no);
   args->SetString(webview::kSourceId, source_id);
-  DispatchEventToView(base::MakeUnique<GuestViewEvent>(
+  DispatchEventToView(std::make_unique<GuestViewEvent>(
       webview::kEventConsoleMessage, std::move(args)));
   return false;
 }
 
 void WebViewGuest::CloseContents(WebContents* source) {
-  auto args = base::MakeUnique<base::DictionaryValue>();
+  auto args = std::make_unique<base::DictionaryValue>();
   DispatchEventToView(
-      base::MakeUnique<GuestViewEvent>(webview::kEventClose, std::move(args)));
+      std::make_unique<GuestViewEvent>(webview::kEventClose, std::move(args)));
+
+  // Call the Browser class as it already has an instance of the
+  // active unload controller needed for beforeunload handling.
+  Browser* browser = chrome::FindBrowserWithWebContents(source);
+  if (browser) {
+    browser->DoCloseContents(source);
+  }
 }
 
 void WebViewGuest::FindReply(WebContents* source,
@@ -813,6 +805,13 @@ void WebViewGuest::FindReply(WebContents* source,
                            selection_rect, active_match_ordinal, final_update);
   find_helper_.FindReply(request_id, number_of_matches, selection_rect,
                          active_match_ordinal, final_update);
+}
+
+void WebViewGuest::OnAudioStateChanged(bool audible) {
+  auto args = std::make_unique<base::DictionaryValue>();
+  args->Set(webview::kAudible, std::make_unique<base::Value>(audible));
+  DispatchEventToView(std::make_unique<GuestViewEvent>(
+      webview::kEventAudioStateChanged, std::move(args)));
 }
 
 double WebViewGuest::GetZoom() const {
@@ -848,10 +847,10 @@ bool WebViewGuest::PreHandleGestureEvent(WebContents* source,
 void WebViewGuest::LoadProgressChanged(WebContents* source, double progress) {
 #if 0  // NOTE(pettern): Ignore as we get the extended event handled by
        // WebViewGuest::ExtendedLoadProgressChanged
-  auto args = base::MakeUnique<base::DictionaryValue>();
+  auto args = std::make_unique<base::DictionaryValue>();
   args->SetString(guest_view::kUrl, web_contents()->GetURL().spec());
   args->SetDouble(webview::kProgress, progress);
-  DispatchEventToView(base::MakeUnique<GuestViewEvent>(
+  DispatchEventToView(std::make_unique<GuestViewEvent>(
       webview::kEventLoadProgress, std::move(args)));
 #endif
 }
@@ -859,12 +858,12 @@ void WebViewGuest::LoadProgressChanged(WebContents* source, double progress) {
 void WebViewGuest::LoadAbort(bool is_top_level,
                              const GURL& url,
                              int error_code) {
-  auto args = base::MakeUnique<base::DictionaryValue>();
+  auto args = std::make_unique<base::DictionaryValue>();
   args->SetBoolean(guest_view::kIsTopLevel, is_top_level);
   args->SetString(guest_view::kUrl, url.possibly_invalid_spec());
   args->SetInteger(guest_view::kCode, error_code);
   args->SetString(guest_view::kReason, net::ErrorToShortString(error_code));
-  DispatchEventToView(base::MakeUnique<GuestViewEvent>(webview::kEventLoadAbort,
+  DispatchEventToView(std::make_unique<GuestViewEvent>(webview::kEventLoadAbort,
                                                        std::move(args)));
 }
 
@@ -888,22 +887,6 @@ void WebViewGuest::CreateNewGuestWebViewWindow(
   // gisli@vivaldi.com:  Add the url so we can create the right site instance
   // when creating the webcontents.
   create_params.SetString(webview::kNewURL, params.url.spec());
-
-  // Vivaldi; in private mode we need to make sure the correct Browser is used
-  // as the Profile follows this object correctly.
-  if (params.source_site_instance &&
-      params.source_site_instance->GetBrowserContext()->IsOffTheRecord()) {
-    Profile* current_profile = Profile::FromBrowserContext(
-        params.source_site_instance->GetBrowserContext());
-    Browser* current_browser = chrome::FindLastActiveWithProfile(
-        current_profile);
-    std::string window_id;
-    current_browser->ext_data();
-    if (ExtensionActionUtil::GetWindowIdFromExtData(current_browser->ext_data(),
-                                                    &window_id)) {
-      create_params.SetString("vivaldi_window_id", window_id);
-    }
-  }
 
   guest_manager->CreateGuest(WebViewGuest::Type,
                              embedder_web_contents(),
@@ -947,48 +930,21 @@ void WebViewGuest::NewGuestWebViewCallback(const content::OpenURLParams& params,
 // TODO(fsamuel): Find a reliable way to test the 'responsive' and
 // 'unresponsive' events.
 void WebViewGuest::RendererResponsive(WebContents* source) {
-  auto args = base::MakeUnique<base::DictionaryValue>();
+  auto args = std::make_unique<base::DictionaryValue>();
   args->SetInteger(webview::kProcessId,
                    web_contents()->GetRenderProcessHost()->GetID());
-  DispatchEventToView(base::MakeUnique<GuestViewEvent>(
+  DispatchEventToView(std::make_unique<GuestViewEvent>(
       webview::kEventResponsive, std::move(args)));
 }
 
 void WebViewGuest::RendererUnresponsive(
     WebContents* source,
     const content::WebContentsUnresponsiveState& unresponsive_state) {
-  auto args = base::MakeUnique<base::DictionaryValue>();
+  auto args = std::make_unique<base::DictionaryValue>();
   args->SetInteger(webview::kProcessId,
                    web_contents()->GetRenderProcessHost()->GetID());
-  DispatchEventToView(base::MakeUnique<GuestViewEvent>(
+  DispatchEventToView(std::make_unique<GuestViewEvent>(
       webview::kEventUnresponsive, std::move(args)));
-}
-
-void WebViewGuest::Observe(int type,
-                           const content::NotificationSource& source,
-                           const content::NotificationDetails& details) {
-  switch (type) {
-    case content::NOTIFICATION_LOAD_COMPLETED_MAIN_FRAME: {
-      DCHECK_EQ(content::Source<WebContents>(source).ptr(), web_contents());
-      if (content::Source<WebContents>(source).ptr() == web_contents())
-        LoadHandlerCalled();
-      break;
-    }
-    case content::NOTIFICATION_RESOURCE_RECEIVED_REDIRECT: {
-      DCHECK_EQ(content::Source<WebContents>(source).ptr(), web_contents());
-      content::ResourceRedirectDetails* resource_redirect_details =
-          content::Details<content::ResourceRedirectDetails>(details).ptr();
-      bool is_top_level = resource_redirect_details->resource_type ==
-                          content::RESOURCE_TYPE_MAIN_FRAME;
-      LoadRedirect(resource_redirect_details->url,
-                   resource_redirect_details->new_url,
-                   is_top_level);
-      break;
-    }
-    default:
-      NOTREACHED() << "Unexpected notification sent.";
-      break;
-  }
 }
 
 void WebViewGuest::StartFind(
@@ -1131,7 +1087,7 @@ void WebViewGuest::DidFinishNavigation(
       pending_zoom_factor_ = 0.0;
     }
   }
-  auto args = base::MakeUnique<base::DictionaryValue>();
+  auto args = std::make_unique<base::DictionaryValue>();
   args->SetString(guest_view::kUrl, src_.spec());
   args->SetBoolean(guest_view::kIsTopLevel, navigation_handle->IsInMainFrame());
   args->SetString(webview::kInternalBaseURLForDataURL,
@@ -1146,10 +1102,16 @@ void WebViewGuest::DidFinishNavigation(
                    web_contents()->GetController().GetEntryCount());
   args->SetInteger(webview::kInternalProcessId,
                    web_contents()->GetRenderProcessHost()->GetID());
-  DispatchEventToView(base::MakeUnique<GuestViewEvent>(
+  DispatchEventToView(std::make_unique<GuestViewEvent>(
       webview::kEventLoadCommit, std::move(args)));
 
   find_helper_.CancelAllFindSessions();
+}
+
+void WebViewGuest::DocumentOnLoadCompletedInMainFrame() {
+  auto args = std::make_unique<base::DictionaryValue>();
+  DispatchEventToView(std::make_unique<GuestViewEvent>(
+      webview::kEventContentLoad, std::move(args)));
 }
 
 void WebViewGuest::DidStartNavigation(
@@ -1158,10 +1120,10 @@ void WebViewGuest::DidStartNavigation(
   if (navigation_handle->IsSameDocument())
     return;
 
-  auto args = base::MakeUnique<base::DictionaryValue>();
+  auto args = std::make_unique<base::DictionaryValue>();
   args->SetString(guest_view::kUrl, navigation_handle->GetURL().spec());
   args->SetBoolean(guest_view::kIsTopLevel, navigation_handle->IsInMainFrame());
-  DispatchEventToView(base::MakeUnique<GuestViewEvent>(webview::kEventLoadStart,
+  DispatchEventToView(std::make_unique<GuestViewEvent>(webview::kEventLoadStart,
                                                        std::move(args)));
 }
 
@@ -1169,12 +1131,24 @@ void WebViewGuest::RenderProcessGone(base::TerminationStatus status) {
   // Cancel all find sessions in progress.
   find_helper_.CancelAllFindSessions();
 
-  auto args = base::MakeUnique<base::DictionaryValue>();
+  auto args = std::make_unique<base::DictionaryValue>();
   args->SetInteger(webview::kProcessId,
                    web_contents()->GetRenderProcessHost()->GetID());
   args->SetString(webview::kReason, TerminationStatusToString(status));
   DispatchEventToView(
-      base::MakeUnique<GuestViewEvent>(webview::kEventExit, std::move(args)));
+      std::make_unique<GuestViewEvent>(webview::kEventExit, std::move(args)));
+}
+
+void WebViewGuest::DidGetRedirectForResourceRequest(
+    const content::ResourceRedirectDetails& details) {
+  const bool is_top_level =
+      details.resource_type == content::RESOURCE_TYPE_MAIN_FRAME;
+  auto args = std::make_unique<base::DictionaryValue>();
+  args->SetBoolean(guest_view::kIsTopLevel, is_top_level);
+  args->SetString(webview::kNewURL, details.new_url.spec());
+  args->SetString(webview::kOldURL, details.url.spec());
+  DispatchEventToView(std::make_unique<GuestViewEvent>(
+      webview::kEventLoadRedirect, std::move(args)));
 }
 
 void WebViewGuest::UserAgentOverrideSet(const std::string& user_agent) {
@@ -1199,27 +1173,10 @@ void WebViewGuest::FrameNameChanged(RenderFrameHost* render_frame_host,
 
 void WebViewGuest::ReportFrameNameChange(const std::string& name) {
   name_ = name;
-  auto args = base::MakeUnique<base::DictionaryValue>();
+  auto args = std::make_unique<base::DictionaryValue>();
   args->SetString(webview::kName, name);
-  DispatchEventToView(base::MakeUnique<GuestViewEvent>(
+  DispatchEventToView(std::make_unique<GuestViewEvent>(
       webview::kEventFrameNameChanged, std::move(args)));
-}
-
-void WebViewGuest::LoadHandlerCalled() {
-  auto args = base::MakeUnique<base::DictionaryValue>();
-  DispatchEventToView(base::MakeUnique<GuestViewEvent>(
-      webview::kEventContentLoad, std::move(args)));
-}
-
-void WebViewGuest::LoadRedirect(const GURL& old_url,
-                                const GURL& new_url,
-                                bool is_top_level) {
-  auto args = base::MakeUnique<base::DictionaryValue>();
-  args->SetBoolean(guest_view::kIsTopLevel, is_top_level);
-  args->SetString(webview::kNewURL, new_url.spec());
-  args->SetString(webview::kOldURL, old_url.spec());
-  DispatchEventToView(base::MakeUnique<GuestViewEvent>(
-      webview::kEventLoadRedirect, std::move(args)));
 }
 
 void WebViewGuest::PushWebViewStateToIOThread() {
@@ -1365,14 +1322,14 @@ bool WebViewGuest::HandleKeyboardShortcuts(
     return false;
   }
 
-  if (event.GetType() != blink::WebInputEvent::kRawKeyDown)
-    return false;
-
   // We need to go out of fullscreen mode here since the window is forced out of
   // fullscreen and we want the document as well. "fullscreen pseudo"
   if (event.windows_key_code == ui::VKEY_ESCAPE) {
     ExitFullscreenModeForTab(web_contents());
   }
+
+  if (event.GetType() != blink::WebInputEvent::kRawKeyDown)
+    return false;
 
   // If the user hits the escape key without any modifiers then unlock the
   // mouse if necessary.
@@ -1502,7 +1459,9 @@ void WebViewGuest::SetName(const std::string& name) {
     return;
   name_ = name;
 
-  Send(new ExtensionMsg_SetFrameName(routing_id(), name_));
+  content::RenderFrameHost* main_frame = web_contents()->GetMainFrame();
+  main_frame->Send(
+      new ExtensionMsg_SetFrameName(main_frame->GetRoutingID(), name_));
 }
 
 void WebViewGuest::SetZoom(double zoom_factor) {
@@ -1944,8 +1903,8 @@ void WebViewGuest::SetFullscreenState(bool is_fullscreen) {
   if (was_fullscreen && GuestMadeEmbedderFullscreen()) {
     // Dispatch a message so we can call document.webkitCancelFullscreen()
     // on the embedder.
-    auto args = base::MakeUnique<base::DictionaryValue>();
-    DispatchEventToView(base::MakeUnique<GuestViewEvent>(
+    auto args = std::make_unique<base::DictionaryValue>();
+    DispatchEventToView(std::make_unique<GuestViewEvent>(
         webview::kEventExitFullscreen, std::move(args)));
   }
   // Since we changed fullscreen state, sending a Resize message ensures that

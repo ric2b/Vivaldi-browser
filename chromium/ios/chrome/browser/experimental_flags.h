@@ -39,17 +39,11 @@ std::string GetOriginServerHost();
 // If |WHATS_NEW_DEFAULT| is returned, no promo is force enabled.
 WhatsNewPromoStatus GetWhatsNewPromoStatus();
 
-// Whether background crash report upload should generate a local notification.
-bool IsAlertOnBackgroundUploadEnabled();
-
 // Whether auto-reload is enabled.
 bool IsAutoReloadEnabled();
 
 // Whether the lru snapshot cache experiment is enabled.
 bool IsLRUSnapshotCacheEnabled();
-
-// Whether the iOS MDM integration is enabled.
-bool IsMDMIntegrationEnabled();
 
 // Whether memory debugging tools are enabled.
 bool IsMemoryDebuggingEnabled();
@@ -66,27 +60,14 @@ bool IsPasswordGenerationEnabled();
 // Whether the Physical Web feature is enabled.
 bool IsPhysicalWebEnabled();
 
-// Whether reader mode is enabled.
-bool IsReaderModeEnabled();
-
-// Whether request mobile site is enabled.
-bool IsRequestMobileSiteEnabled();
-
 // Whether the Sign In Flow via SFSafariViewController is enabled.
 bool IsSafariVCSignInEnabled();
 
 // Whether startup crash is enabled.
 bool IsStartupCrashEnabled();
 
-// Whether or not the tab strip scrolls new tabs to be visible.
-bool IsTabStripAutoScrollNewTabsEnabled();
-
 // Whether viewing and copying passwords is enabled.
 bool IsViewCopyPasswordsEnabled();
-
-// Whether password generation fields are determined using local heuristics
-// only.
-bool UseOnlyLocalHeuristicsForPasswordGeneration();
 
 // Whether the Suggestions UI is enabled.
 bool IsSuggestionsUIEnabled();
@@ -94,14 +75,8 @@ bool IsSuggestionsUIEnabled();
 // Whether Sign-in promo is enabled.
 bool IsSigninPromoEnabled();
 
-// Whether Bookmark reordering is enabled.
-bool IsBookmarkReorderingEnabled();
-
 // Whether a new version of FeedbackKit is the preferred feedback UI provider.
 bool IsNewFeedbackKitEnabled();
-
-// Whether the keyboard accessory view with camera search is enabled.
-bool IsKeyboardAccessoryViewWithCameraSearchEnabled();
 
 // Whether the WKBackForwardList based navigation manager is enabled.
 bool IsSlimNavigationManagerEnabled();

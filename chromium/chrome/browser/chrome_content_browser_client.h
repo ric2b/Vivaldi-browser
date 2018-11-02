@@ -19,6 +19,7 @@
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "content/public/browser/content_browser_client.h"
+#include "content/public/common/network_service.mojom.h"
 #include "extensions/features/features.h"
 #include "media/media_features.h"
 #include "ppapi/features/features.h"
@@ -75,6 +76,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
                             const scoped_refptr<base::TaskRunner>& task_runner,
                             base::OnceClosure task) override;
   bool IsBrowserStartupComplete() override;
+  void SetBrowserStartupIsCompleteForTesting() override;
   std::string GetStoragePartitionIdForSite(
       content::BrowserContext* browser_context,
       const GURL& site) override;
@@ -239,7 +241,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
                                      const GURL& url) override;
   std::unique_ptr<content::VpnServiceProxy> GetVpnServiceProxy(
       content::BrowserContext* browser_context) override;
-  ui::SelectFilePolicy* CreateSelectFilePolicy(
+  std::unique_ptr<ui::SelectFilePolicy> CreateSelectFilePolicy(
       content::WebContents* web_contents) override;
   void GetAdditionalAllowedSchemesForFileSystem(
       std::vector<std::string>* additional_schemes) override;
@@ -268,7 +270,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   void GetAdditionalMappedFilesForChildProcess(
       const base::CommandLine& command_line,
       int child_process_id,
-      content::FileDescriptorInfo* mappings) override;
+      content::PosixFileDescriptorInfo* mappings) override;
 #endif  // defined(OS_POSIX) && !defined(OS_MACOSX)
 #if defined(OS_WIN)
   bool PreSpawnRenderer(sandbox::TargetPolicy* policy) override;
@@ -320,6 +322,10 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   std::unique_ptr<content::MemoryCoordinatorDelegate>
   GetMemoryCoordinatorDelegate() override;
   ::rappor::RapporService* GetRapporService() override;
+  content::mojom::NetworkContextPtr CreateNetworkContext(
+      content::BrowserContext* context,
+      bool in_memory,
+      const base::FilePath& relative_partition_path) override;
 
 #if BUILDFLAG(ENABLE_MEDIA_REMOTING)
   void CreateMediaRemoter(content::RenderFrameHost* render_frame_host,
@@ -333,6 +339,10 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   std::vector<std::unique_ptr<content::URLLoaderThrottle>>
   CreateURLLoaderThrottles(
       const base::Callback<content::WebContents*()>& wc_getter) override;
+  bool OverrideLegacySymantecCertConsoleMessage(
+      const GURL& url,
+      const scoped_refptr<net::X509Certificate>& cert,
+      std::string* console_messsage) override;
 
  protected:
   static bool HandleWebUI(GURL* url, content::BrowserContext* browser_context);

@@ -6,20 +6,20 @@
 #define NGBlockNode_h
 
 #include "core/CoreExport.h"
-#include "core/layout/LayoutBox.h"
+#include "core/layout/ng/geometry/ng_physical_offset.h"
 #include "core/layout/ng/ng_layout_input_node.h"
-#include "core/layout/ng/ng_physical_box_fragment.h"
-#include "platform/heap/Handle.h"
 
 namespace blink {
 
-class LayoutObject;
+class LayoutBox;
 class NGBreakToken;
 class NGConstraintSpace;
 class NGFragmentBuilder;
 class NGLayoutResult;
+class NGPhysicalFragment;
+struct MinMaxSize;
+struct NGBaselineRequest;
 struct NGLogicalOffset;
-struct MinMaxContentSize;
 
 // Represents a node to be laid out.
 class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
@@ -27,17 +27,17 @@ class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
  public:
   explicit NGBlockNode(LayoutBox*);
 
-  RefPtr<NGLayoutResult> Layout(NGConstraintSpace* constraint_space,
+  RefPtr<NGLayoutResult> Layout(const NGConstraintSpace& constraint_space,
                                 NGBreakToken* break_token = nullptr);
   NGLayoutInputNode NextSibling() const;
 
   // Computes the value of min-content and max-content for this box.
-  // If the underlying layout algorithm's ComputeMinMaxContentSize returns
+  // If the underlying layout algorithm's ComputeMinMaxSize returns
   // no value, this function will synthesize these sizes using Layout with
   // special constraint spaces -- infinite available size for max content, zero
   // available size for min content, and percentage resolution size zero for
   // both.
-  MinMaxContentSize ComputeMinMaxContentSize();
+  MinMaxSize ComputeMinMaxSize();
 
   NGLayoutInputNode FirstChild();
 

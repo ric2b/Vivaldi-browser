@@ -21,20 +21,19 @@ class MEDIA_EXPORT AudioSystemImpl : public AudioSystem {
   ~AudioSystemImpl() override;
 
   // AudioSystem implementation.
-  void GetInputStreamParameters(
-      const std::string& device_id,
-      OnAudioParamsCallback on_params_cb) const override;
+  void GetInputStreamParameters(const std::string& device_id,
+                                OnAudioParamsCallback on_params_cb) override;
 
-  void GetOutputStreamParameters(
-      const std::string& device_id,
-      OnAudioParamsCallback on_params_cb) const override;
+  void GetOutputStreamParameters(const std::string& device_id,
+                                 OnAudioParamsCallback on_params_cb) override;
 
-  void HasInputDevices(OnBoolCallback on_has_devices_cb) const override;
+  void HasInputDevices(OnBoolCallback on_has_devices_cb) override;
 
-  void HasOutputDevices(OnBoolCallback on_has_devices_cb) const override;
+  void HasOutputDevices(OnBoolCallback on_has_devices_cb) override;
 
-  void GetDeviceDescriptions(OnDeviceDescriptionsCallback on_descriptions_cp,
-                             bool for_input) override;
+  void GetDeviceDescriptions(
+      bool for_input,
+      OnDeviceDescriptionsCallback on_descriptions_cp) override;
 
   void GetAssociatedOutputDeviceID(const std::string& input_device_id,
                                    OnDeviceIdCallback on_device_id_cb) override;
@@ -43,14 +42,10 @@ class MEDIA_EXPORT AudioSystemImpl : public AudioSystem {
       const std::string& input_device_id,
       OnInputDeviceInfoCallback on_input_device_info_cb) override;
 
-  base::SingleThreadTaskRunner* GetTaskRunner() const override;
-
  protected:
   AudioSystemImpl(AudioManager* audio_manager);
 
  private:
-  AudioManager* const audio_manager_;
-
   static AudioParameters GetInputParametersOnDeviceThread(
       AudioManager* audio_manager,
       const std::string& device_id);
@@ -67,6 +62,10 @@ class MEDIA_EXPORT AudioSystemImpl : public AudioSystem {
       AudioManager* audio_manager,
       const std::string& input_device_id,
       AudioSystem::OnInputDeviceInfoCallback on_input_device_info_cb);
+
+  base::SingleThreadTaskRunner* GetTaskRunner() const;
+
+  AudioManager* const audio_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(AudioSystemImpl);
 };

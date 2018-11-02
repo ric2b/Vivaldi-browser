@@ -212,7 +212,7 @@ Color LayoutThemeMac::PlatformInactiveListBoxSelectionBackgroundColor() const {
   return PlatformInactiveSelectionBackgroundColor();
 }
 
-static FontWeight ToFontWeight(NSInteger app_kit_font_weight) {
+static FontSelectionValue ToFontWeight(NSInteger app_kit_font_weight) {
   DCHECK_GT(app_kit_font_weight, 0);
   DCHECK_LT(app_kit_font_weight, 15);
   if (app_kit_font_weight > 14)
@@ -220,11 +220,12 @@ static FontWeight ToFontWeight(NSInteger app_kit_font_weight) {
   else if (app_kit_font_weight < 1)
     app_kit_font_weight = 1;
 
-  static FontWeight font_weights[] = {
-      kFontWeight100, kFontWeight100, kFontWeight200, kFontWeight300,
-      kFontWeight400, kFontWeight500, kFontWeight600, kFontWeight600,
-      kFontWeight700, kFontWeight800, kFontWeight800, kFontWeight900,
-      kFontWeight900, kFontWeight900};
+  static FontSelectionValue font_weights[] = {
+      FontSelectionValue(100), FontSelectionValue(100), FontSelectionValue(200),
+      FontSelectionValue(300), FontSelectionValue(400), FontSelectionValue(500),
+      FontSelectionValue(600), FontSelectionValue(600), FontSelectionValue(700),
+      FontSelectionValue(800), FontSelectionValue(800), FontSelectionValue(900),
+      FontSelectionValue(900), FontSelectionValue(900)};
   return font_weights[app_kit_font_weight - 1];
 }
 
@@ -252,8 +253,8 @@ static inline NSFont* SystemNSFont(CSSValueID system_font_id) {
 }
 
 void LayoutThemeMac::SystemFont(CSSValueID system_font_id,
-                                FontStyle& font_style,
-                                FontWeight& font_weight,
+                                FontSelectionValue& font_slope,
+                                FontSelectionValue& font_weight,
                                 float& font_size,
                                 AtomicString& font_family) const {
   NSFont* font = SystemNSFont(system_font_id);
@@ -261,9 +262,9 @@ void LayoutThemeMac::SystemFont(CSSValueID system_font_id,
     return;
 
   NSFontManager* font_manager = [NSFontManager sharedFontManager];
-  font_style = ([font_manager traitsOfFont:font] & NSItalicFontMask)
-                   ? kFontStyleItalic
-                   : kFontStyleNormal;
+  font_slope = ([font_manager traitsOfFont:font] & NSItalicFontMask)
+                   ? ItalicSlopeValue()
+                   : NormalSlopeValue();
   font_weight = ToFontWeight([font_manager weightOfFont:font]);
   font_size = [font pointSize];
   font_family = FontFamilyNames::system_ui;
@@ -382,10 +383,7 @@ Color LayoutThemeMac::SystemColor(CSSValueID css_value_id) const {
       needs_fallback = true;
       break;
     case CSSValueButtonface:
-      // We use this value instead of NSColor's controlColor to avoid website
-      // incompatibilities. We may want to change this to use the NSColor in
-      // future.
-      color = 0xFFC0C0C0;
+      color = ConvertNSColorToColor([NSColor controlBackgroundColor]);
       break;
     case CSSValueButtonhighlight:
       color = ConvertNSColorToColor([NSColor controlHighlightColor]);
@@ -979,17 +977,26 @@ NSSearchFieldCell* LayoutThemeMac::Search() const {
     [search_.Get() setBezeled:YES];
     [search_.Get() setEditable:YES];
     [search_.Get() setFocusRingType:NSFocusRingTypeExterior];
-    SEL sel = @selector(setCenteredLook:);
-    if ([search_.Get() respondsToSelector:sel]) {
-      BOOL bool_value = NO;
-      NSMethodSignature* signature =
-          [NSSearchFieldCell instanceMethodSignatureForSelector:sel];
-      NSInvocation* invocation =
-          [NSInvocation invocationWithMethodSignature:signature];
-      [invocation setTarget:search_.Get()];
-      [invocation setSelector:sel];
-      [invocation setArgument:&bool_value atIndex:2];
-      [invocation invoke];
+
+    // Suppress NSSearchFieldCell's default placeholder text. Prior to OS10.11,
+    // this is achieved by calling |setCenteredLook| with NO. In OS10.11 and
+    // later, instead call |setPlaceholderString| with an empty string.
+    // See https://crbug.com/752362.
+    if (IsOS10_9() || IsOS10_10()) {
+      SEL sel = @selector(setCenteredLook:);
+      if ([search_.Get() respondsToSelector:sel]) {
+        BOOL bool_value = NO;
+        NSMethodSignature* signature =
+            [NSSearchFieldCell instanceMethodSignatureForSelector:sel];
+        NSInvocation* invocation =
+            [NSInvocation invocationWithMethodSignature:signature];
+        [invocation setTarget:search_.Get()];
+        [invocation setSelector:sel];
+        [invocation setArgument:&bool_value atIndex:2];
+        [invocation invoke];
+      }
+    } else {
+      [search_.Get() setPlaceholderString:@""];
     }
   }
 
@@ -1048,7 +1055,7 @@ LayoutTheme& LayoutTheme::NativeTheme() {
   return *layout_theme;
 }
 
-PassRefPtr<LayoutTheme> LayoutThemeMac::Create() {
+RefPtr<LayoutTheme> LayoutThemeMac::Create() {
   return AdoptRef(new LayoutThemeMac);
 }
 

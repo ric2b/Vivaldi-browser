@@ -83,7 +83,7 @@ class BrowserNonClientFrameViewAsh : public BrowserNonClientFrameView,
                            ToggleTabletModeRelayout);
   FRIEND_TEST_ALL_PREFIXES(BrowserNonClientFrameViewAshTest,
                            AvatarDisplayOnTeleportedWindow);
-  FRIEND_TEST_ALL_PREFIXES(ImmersiveModeControllerAshTestTabletMode,
+  FRIEND_TEST_ALL_PREFIXES(ImmersiveModeControllerAshTestHostedApp,
                            FrameLayout);
 
   friend class BrowserHeaderPainterAsh;
@@ -105,8 +105,6 @@ class BrowserNonClientFrameViewAsh : public BrowserNonClientFrameView,
   // Returns true if there is anything to paint. Some fullscreen windows do not
   // need their frames painted.
   bool ShouldPaint() const;
-
-  void PaintToolbarBackground(gfx::Canvas* canvas);
 
   // View which contains the window controls.
   ash::FrameCaptionButtonContainerView* caption_button_container_;

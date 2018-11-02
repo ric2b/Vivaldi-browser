@@ -108,7 +108,7 @@ void ReadingListDistillerPage::FetchFavicon(const GURL& page_url) {
   favicon::WebFaviconDriver* favicon_driver =
       favicon::WebFaviconDriver::FromWebState(CurrentWebState());
   DCHECK(favicon_driver);
-  favicon_driver->FetchFavicon(page_url);
+  favicon_driver->FetchFavicon(page_url, /*is_same_document=*/false);
 }
 
 void ReadingListDistillerPage::OnDistillationDone(const GURL& page_url,
@@ -161,7 +161,7 @@ void ReadingListDistillerPage::OnLoadURLDone(
         original_url_, CurrentWebState()->GetContentsMimeType());
   }
   if (!CurrentWebState()->ContentIsHTML()) {
-    // If content is not HTML, distillation will fail immediatly.
+    // If content is not HTML, distillation will fail immediately.
     // Call the handler to make sure cleaning methods are called correctly.
     // There is no need to wait for rendering either.
     DistillerPageIOS::OnLoadURLDone(load_completion_status);

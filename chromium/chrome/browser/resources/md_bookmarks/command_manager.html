@@ -28,14 +28,13 @@
       }
     </style>
     <template is="cr-lazy-render" id="dropdown">
-      <dialog is="cr-action-menu" on-mousedown="onMenuMousedown_" role="menu">
+      <dialog is="cr-action-menu" on-mousedown="onMenuMousedown_">
         <template is="dom-repeat" items="[[menuCommands_]]" as="command">
           <button class="dropdown-item"
               command$="[[command]]"
               hidden$="[[!isCommandVisible_(command, menuIds_)]]"
               disabled$="[[!isCommandEnabled_(command, menuIds_)]]"
-              on-click="onCommandClick_"
-              role="menuitem">
+              on-click="onCommandClick_">
             <span class="label">
               [[getCommandLabel_(command, menuIds_)]]
             </span>
@@ -43,7 +42,9 @@
               [[getCommandSublabel_(command, menuIds_)]]
             </span>
           </button>
-          <hr hidden$="[[!showDividerAfter_(command, menuIds_)]]"></hr>
+          <hr hidden$="[[!showDividerAfter_(command, menuIds_)]]"
+              aria-hidden="true">
+          </hr>
         </template>
       </dialog>
     </template>
@@ -52,9 +53,9 @@
     </template>
     <template is="cr-lazy-render" id="openDialog">
       <dialog is="cr-dialog">
-        <div class="title" slot="title">$i18n{openDialogTitle}</div>
-        <div class="body" slot="body"></div>
-        <div class="button-container" slot="button-container">
+        <div slot="title">$i18n{openDialogTitle}</div>
+        <div slot="body"></div>
+        <div slot="button-container">
           <paper-button class="cancel-button" on-tap="onOpenCancelTap_">
             $i18n{cancel}
           </paper-button>

@@ -18,9 +18,11 @@ class Notes_Model;
 
 class NotesModelFactory : public BrowserContextKeyedServiceFactory {
  public:
-  static Notes_Model* GetForProfile(Profile* profile);
+  static Notes_Model* GetForBrowserContext(
+    content::BrowserContext* browser_context);
 
-  static Notes_Model* GetForProfileIfExists(Profile* profile);
+  static Notes_Model* GetForBrowserContextIfExists(
+    content::BrowserContext* browser_context);
 
   static NotesModelFactory* GetInstance();
 
@@ -40,6 +42,7 @@ class NotesModelFactory : public BrowserContextKeyedServiceFactory {
   content::BrowserContext* GetBrowserContextToUse(
       content::BrowserContext* context) const override;
   bool ServiceIsNULLWhileTesting() const override;
+  static const bool kServiceRedirectedInIncognito = true;
 
   int64_t current_max_id_;
 

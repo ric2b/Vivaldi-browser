@@ -25,6 +25,7 @@
 #include "content/browser/service_worker/service_worker_response_info.h"
 #include "content/browser/ssl/ssl_client_auth_handler.h"
 #include "content/browser/ssl/ssl_manager.h"
+#include "content/common/loader_util.h"
 #include "content/public/browser/resource_dispatcher_host_login_delegate.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_client.h"
@@ -47,9 +48,12 @@ using base::TimeTicks;
 namespace content {
 namespace {
 
-void PopulateResourceResponse(ResourceRequestInfoImpl* info,
-                              net::URLRequest* request,
-                              ResourceResponse* response) {
+void PopulateResourceResponse(
+    ResourceRequestInfoImpl* info,
+    net::URLRequest* request,
+    ResourceResponse* response,
+    const net::HttpRawRequestHeaders& raw_request_headers,
+    const net::HttpResponseHeaders* raw_response_headers) {
   response->head.request_time = request->request_time();
   response->head.response_time = request->response_time();
   response->head.headers = request->response_headers();
@@ -67,6 +71,10 @@ void PopulateResourceResponse(ResourceRequestInfoImpl* info,
       content::ResourceRequestInfo::ForRequest(request);
   if (request_info)
     response->head.previews_state = request_info->GetPreviewsState();
+  if (info->ShouldReportRawHeaders()) {
+    response->head.devtools_info =
+        BuildDevToolsInfo(*request, raw_request_headers, raw_response_headers);
+  }
 
   response->head.effective_connection_type =
       net::EFFECTIVE_CONNECTION_TYPE_UNKNOWN;
@@ -145,11 +153,6 @@ class ResourceLoader::Controller : public ResourceController {
   void Cancel() override {
     MarkAsUsed();
     resource_loader_->Cancel();
-  }
-
-  void CancelAndIgnore() override {
-    MarkAsUsed();
-    resource_loader_->CancelAndIgnore();
   }
 
   void CancelWithError(int error_code) override {
@@ -251,12 +254,6 @@ void ResourceLoader::CancelRequest(bool from_renderer) {
   CancelRequestInternal(net::ERR_ABORTED, from_renderer);
 }
 
-void ResourceLoader::CancelAndIgnore() {
-  ResourceRequestInfoImpl* info = GetRequestInfo();
-  info->set_was_ignored_by_handler(true);
-  CancelRequest(false);
-}
-
 void ResourceLoader::CancelWithError(int error_code) {
   TRACE_EVENT_WITH_FLOW0("loading", "ResourceLoader::CancelWithError", this,
                          TRACE_EVENT_FLAG_FLOW_IN);
@@ -345,7 +342,11 @@ void ResourceLoader::OnReceivedRedirect(net::URLRequest* unused,
   }
 
   scoped_refptr<ResourceResponse> response = new ResourceResponse();
-  PopulateResourceResponse(info, request_.get(), response.get());
+  PopulateResourceResponse(info, request_.get(), response.get(),
+                           raw_request_headers_, raw_response_headers_.get());
+  raw_request_headers_ = net::HttpRawRequestHeaders();
+  raw_response_headers_ = nullptr;
+
   delegate_->DidReceiveRedirect(this, redirect_info.new_url, response.get());
 
   // Can't used ScopedDeferral here, because on sync completion, need to set
@@ -360,7 +361,7 @@ void ResourceLoader::OnReceivedRedirect(net::URLRequest* unused,
   } else {
     *defer = false;
     if (delegate_->HandleExternalProtocol(this, redirect_info.new_url))
-      CancelAndIgnore();
+      Cancel();
   }
 }
 
@@ -510,9 +511,9 @@ void ResourceLoader::Resume(bool called_from_resource_controller) {
       // Always post a task, as synchronous resumes don't go through this
       // method.
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE,
-          base::Bind(&ResourceLoader::ReadMore, weak_ptr_factory_.GetWeakPtr(),
-                     false /* handle_result_asynchronously */));
+          FROM_HERE, base::BindOnce(&ResourceLoader::ReadMore,
+                                    weak_ptr_factory_.GetWeakPtr(),
+                                    false /* handle_result_asynchronously */));
       break;
     case DEFERRED_READ:
       if (called_from_resource_controller) {
@@ -521,8 +522,8 @@ void ResourceLoader::Resume(bool called_from_resource_controller) {
         // ResumeReading does check for cancellation. Should other paths do that
         // as well?
         base::ThreadTaskRunnerHandle::Get()->PostTask(
-            FROM_HERE, base::Bind(&ResourceLoader::ResumeReading,
-                                  weak_ptr_factory_.GetWeakPtr()));
+            FROM_HERE, base::BindOnce(&ResourceLoader::ResumeReading,
+                                      weak_ptr_factory_.GetWeakPtr()));
       } else {
         // If this was called as a result of a handler succeeding synchronously,
         // force the result of the next read to be handled asynchronously, to
@@ -533,8 +534,8 @@ void ResourceLoader::Resume(bool called_from_resource_controller) {
     case DEFERRED_RESPONSE_COMPLETE:
       if (called_from_resource_controller) {
         base::ThreadTaskRunnerHandle::Get()->PostTask(
-            FROM_HERE, base::Bind(&ResourceLoader::ResponseCompleted,
-                                  weak_ptr_factory_.GetWeakPtr()));
+            FROM_HERE, base::BindOnce(&ResourceLoader::ResponseCompleted,
+                                      weak_ptr_factory_.GetWeakPtr()));
       } else {
         ResponseCompleted();
       }
@@ -543,8 +544,8 @@ void ResourceLoader::Resume(bool called_from_resource_controller) {
       if (called_from_resource_controller) {
         // Delay self-destruction since we don't know how we were reached.
         base::ThreadTaskRunnerHandle::Get()->PostTask(
-            FROM_HERE, base::Bind(&ResourceLoader::CallDidFinishLoading,
-                                  weak_ptr_factory_.GetWeakPtr()));
+            FROM_HERE, base::BindOnce(&ResourceLoader::CallDidFinishLoading,
+                                      weak_ptr_factory_.GetWeakPtr()));
       } else {
         CallDidFinishLoading();
       }
@@ -566,11 +567,19 @@ void ResourceLoader::StartRequestInternal() {
   }
 
   if (delegate_->HandleExternalProtocol(this, request_->url())) {
-    CancelAndIgnore();
+    Cancel();
     return;
   }
 
   started_request_ = true;
+
+  if (GetRequestInfo()->ShouldReportRawHeaders()) {
+    request_->SetRequestHeadersCallback(
+        base::Bind(&net::HttpRawRequestHeaders::Assign,
+                   base::Unretained(&raw_request_headers_)));
+    request_->SetResponseHeadersCallback(base::Bind(
+        &ResourceLoader::SetRawResponseHeaders, base::Unretained(this)));
+  }
   request_->Start();
 
   delegate_->DidStartRequest(this);
@@ -617,8 +626,8 @@ void ResourceLoader::CancelRequestInternal(int error, bool from_renderer) {
     // notification from the request, so we have to signal ourselves to finish
     // this request.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&ResourceLoader::ResponseCompleted,
-                              weak_ptr_factory_.GetWeakPtr()));
+        FROM_HERE, base::BindOnce(&ResourceLoader::ResponseCompleted,
+                                  weak_ptr_factory_.GetWeakPtr()));
   }
 }
 
@@ -627,7 +636,7 @@ void ResourceLoader::FollowDeferredRedirectInternal() {
   GURL redirect_url = deferred_redirect_url_;
   deferred_redirect_url_ = GURL();
   if (delegate_->HandleExternalProtocol(this, redirect_url)) {
-    CancelAndIgnore();
+    Cancel();
   } else {
     request_->FollowDeferredRedirect();
   }
@@ -636,7 +645,10 @@ void ResourceLoader::FollowDeferredRedirectInternal() {
 void ResourceLoader::CompleteResponseStarted() {
   ResourceRequestInfoImpl* info = GetRequestInfo();
   scoped_refptr<ResourceResponse> response = new ResourceResponse();
-  PopulateResourceResponse(info, request_.get(), response.get());
+  PopulateResourceResponse(info, request_.get(), response.get(),
+                           raw_request_headers_, raw_response_headers_.get());
+  raw_request_headers_ = net::HttpRawRequestHeaders();
+  raw_response_headers_ = nullptr;
 
   delegate_->DidReceiveResponse(this, response.get());
 
@@ -702,8 +714,8 @@ void ResourceLoader::ReadMore(bool handle_result_async) {
     // thread in case the URLRequest can provide data synchronously.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
-        base::Bind(&ResourceLoader::OnReadCompleted,
-                   weak_ptr_factory_.GetWeakPtr(), request_.get(), result));
+        base::BindOnce(&ResourceLoader::OnReadCompleted,
+                       weak_ptr_factory_.GetWeakPtr(), request_.get(), result));
   }
 }
 
@@ -815,6 +827,11 @@ void ResourceLoader::RecordHistograms() {
     TimeDelta total_time = base::TimeTicks::Now() - request_->creation_time();
     UMA_HISTOGRAM_TIMES("Net.Prefetch.TimeSpentOnPrefetchHit", total_time);
   }
+}
+
+void ResourceLoader::SetRawResponseHeaders(
+    scoped_refptr<const net::HttpResponseHeaders> headers) {
+  raw_response_headers_ = headers;
 }
 
 }  // namespace content

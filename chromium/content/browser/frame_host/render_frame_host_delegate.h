@@ -81,6 +81,12 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
       const std::string& interface_name,
       mojo::ScopedInterfaceEndpointHandle handle) {}
 
+  // Allows the delegate to filter incoming interface requests.
+  virtual void OnInterfaceRequest(
+      RenderFrameHost* render_frame_host,
+      const std::string& interface_name,
+      mojo::ScopedMessagePipeHandle* interface_pipe) {}
+
   // Gets the last committed URL. See WebContents::GetLastCommittedURL for a
   // description of the semantics.
   virtual const GURL& GetMainFrameLastCommittedURL() const;
@@ -173,11 +179,11 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   virtual std::string GetDefaultMediaDeviceID(MediaStreamType type);
 
   // Get the accessibility mode for the WebContents that owns this frame.
-  virtual AccessibilityMode GetAccessibilityMode() const;
+  virtual ui::AXMode GetAccessibilityMode() const;
 
   // Called when accessibility events or location changes are received
   // from a render frame, when the accessibility mode has the
-  // AccessibilityMode::kWebContents flag set.
+  // ui::AXMode::kWebContents flag set.
   virtual void AccessibilityEventReceived(
       const std::vector<AXEventNotificationDetails>& details) {}
   virtual void AccessibilityLocationChangesReceived(

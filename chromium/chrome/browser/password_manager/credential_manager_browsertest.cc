@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/command_line.h"
 #include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
@@ -19,6 +20,8 @@
 #include "components/password_manager/core/browser/test_password_store.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "content/public/common/content_features.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "net/dns/mock_host_resolver.h"
@@ -38,6 +41,14 @@ class CredentialManagerBrowserTest : public PasswordManagerBrowserTestBase {
   bool IsShowingAccountChooser() {
     return PasswordsModelDelegateFromWebContents(WebContents())->GetState() ==
            password_manager::ui::CREDENTIAL_REQUEST_STATE;
+  }
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    // To permit using webauthentication features.
+    command_line->AppendSwitch(
+        switches::kEnableExperimentalWebPlatformFeatures);
+    command_line->AppendSwitchASCII(switches::kEnableFeatures,
+                                    features::kWebAuth.name);
   }
 
   // Similarly to PasswordManagerBrowserTestBase::NavigateToFile this is a
@@ -68,6 +79,54 @@ class CredentialManagerBrowserTest : public PasswordManagerBrowserTestBase {
     ASSERT_EQ(expect_has_results, result);
   }
 
+  // Triggers a call to `navigator.credentials.create` to generate a
+  // publicKeyCredential, waits for rejection, and ASSERTs that
+  // |expect_has_results| is satisfied.
+  void CreatePublicKeyCredentialAndExpectNotImplemented(
+      content::WebContents* web_contents) {
+    std::string result;
+    std::string script =
+        "navigator.credentials.create({ publicKey: {"
+        "  challenge: new TextEncoder().encode('climb a mountain'),"
+        "  rp: { id: '1098237235409872', name: 'Acme' },"
+        "  user: { "
+        "    id: '1098237235409872',"
+        "    name: 'avery.a.jones@example.com',"
+        "    displayName: 'Avery A. Jones', "
+        "    icon: 'https://pics.acme.com/00/p/aBjjjpqPb.png'},"
+        "  parameters: [{ type: 'public-key', algorithm: '-7'}],"
+        "  timeout: 60000,"
+        "  excludeList: [] }"
+        "}).catch(c => window.domAutomationController.send(c.toString()));";
+    ASSERT_TRUE(
+        content::ExecuteScriptAndExtractString(web_contents, script, &result));
+    ASSERT_EQ("NotAllowedError: The operation is not implemented.", result);
+  }
+
+  // Attempt to create a publicKeyCredential with an unsupported algorithm type.
+  void CreatePublicKeyCredentialWithUnsupportedAlgorithmAndExpectNotSupported(
+      content::WebContents* web_contents) {
+    std::string result;
+    std::string script =
+        "navigator.credentials.create({ publicKey: {"
+        "  challenge: new TextEncoder().encode('climb a mountain'),"
+        "  rp: { id: '1098237235409872', name: 'Acme' },"
+        "  user: { "
+        "    id: '1098237235409872',"
+        "    name: 'avery.a.jones@example.com',"
+        "    displayName: 'Avery A. Jones', "
+        "    icon: 'https://pics.acme.com/00/p/aBjjjpqPb.png'},"
+        "  parameters: [{ type: 'public-key', algorithm: '123'}],"
+        "  timeout: 60000,"
+        "  excludeList: [] }"
+        "}).catch(c => window.domAutomationController.send(c.toString()));";
+    ASSERT_TRUE(
+        content::ExecuteScriptAndExtractString(web_contents, script, &result));
+    ASSERT_EQ(
+        "NotSupportedError: Parameters for this operation are not supported.",
+        result);
+  }
+
   // Schedules a call to be made to navigator.credentials.store() in the
   // `unload` handler to save a credential with |username| and |password|.
   void ScheduleNavigatorStoreCredentialAtUnload(
@@ -89,9 +148,9 @@ class CredentialManagerBrowserTest : public PasswordManagerBrowserTestBase {
   // be serviced in the context of the initial document.
   //
   // If |preestablish_mojo_pipe| is set, then the CredentialManagerClient will
-  // establish the Mojo connection to the CredentialManagerImpl ahead of time,
-  // instead of letting the Mojo connection be established on-demand when the
-  // call to store() triggered from the unload handler.
+  // establish the Mojo connection to the ContentCredentialManager ahead of
+  // time, instead of letting the Mojo connection be established on-demand when
+  // the call to store() triggered from the unload handler.
   void TestStoreInUnloadHandlerForSameSiteNavigation(
       bool preestablish_mojo_pipe) {
     // Use URLs that differ on subdomains so we can tell which one was used for
@@ -124,7 +183,7 @@ class CredentialManagerBrowserTest : public PasswordManagerBrowserTestBase {
     ASSERT_EQ(old_rfh, WebContents()->GetMainFrame());
 
     // Ensure that the old document no longer has a Mojo connection to the
-    // CredentialManagerImpl, nor can it get one later.
+    // ContentCredentialManager, nor can it get one later.
     //
     // The sequence of events for same-RFH navigations is as follows:
     //  1.) FrameHostMsg_DidStartProvisionalLoad
@@ -138,10 +197,10 @@ class CredentialManagerBrowserTest : public PasswordManagerBrowserTestBase {
     //
     // After Step 2.1, the old Document cannot issue a new Mojo InterfaceRequest
     // anymore. Plus, because the AssociatedInterfaceRegistry, through which the
-    // associated interface to the CredentialManagerImpl is retrieved, is itself
-    // Channel-associated, any InterfaceRequest messages that may have been
-    // issued before or during Step 2.1, will be guaranteed to arrive to the
-    // browser side before FrameHostMsg_DidCommitProvisionalLoad in Step 3.
+    // associated interface to the ContentCredentialManager is retrieved, is
+    // itself Channel-associated, any InterfaceRequest messages that may have
+    // been issued before or during Step 2.1, will be guaranteed to arrive to
+    // the browser side before FrameHostMsg_DidCommitProvisionalLoad in Step 3.
     //
     // Hence it is sufficient to check that the Mojo connection is closed now.
     EXPECT_FALSE(client->has_binding_for_credential_manager());
@@ -157,8 +216,8 @@ class CredentialManagerBrowserTest : public PasswordManagerBrowserTestBase {
     ASSERT_TRUE(client->was_store_ever_called());
 
     BubbleObserver prompt_observer(WebContents());
-    prompt_observer.WaitForSavePrompt();
-    ASSERT_TRUE(prompt_observer.IsShowingSavePrompt());
+    prompt_observer.WaitForAutomaticSavePrompt();
+    ASSERT_TRUE(prompt_observer.IsSavePromptShownAutomatically());
     prompt_observer.AcceptSavePrompt();
 
     WaitForPasswordStore();
@@ -181,9 +240,9 @@ class CredentialManagerBrowserTest : public PasswordManagerBrowserTestBase {
   // handler before a cross-site transfer navigation, the request is ignored.
   //
   // If |preestablish_mojo_pipe| is set, then the CredentialManagerClient will
-  // establish the Mojo connection to the CredentialManagerImpl ahead of time,
-  // instead of letting the Mojo connection be established on-demand when the
-  // call to store() triggered from the unload handler.
+  // establish the Mojo connection to the ContentCredentialManager ahead of
+  // time, instead of letting the Mojo connection be established on-demand when
+  // the call to store() triggered from the unload handler.
   void TestStoreInUnloadHandlerForCrossSiteNavigation(
       bool preestablish_mojo_pipe) {
     const GURL a_url = https_test_server().GetURL("a.com", "/title1.html");
@@ -216,8 +275,9 @@ class CredentialManagerBrowserTest : public PasswordManagerBrowserTestBase {
     // Ensure that the navigator.credentials.store() call is never serviced.
     // The sufficient conditions for this are:
     //  -- The swapped out RFH is destroyed, so the RenderFrame cannot
-    //     establish a new Mojo connection to CredentialManagerImpl anymore.
-    //  -- There is no already existing Mojo connection to CredentialManagerImpl
+    //     establish a new Mojo connection to ContentCredentialManager anymore.
+    //  -- There is no already existing Mojo connection to
+    //  ContentCredentialManager
     //     either, which could be used to call store() in the future.
     //  -- There have not been any calls to store() in the past.
     rfh_destruction_observer.WaitUntilDeleted();
@@ -329,8 +389,8 @@ IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest,
   // after the store replies.
   WaitForPasswordStore();
   BubbleObserver prompt_observer(WebContents());
-  EXPECT_FALSE(prompt_observer.IsShowingSavePrompt());
-  EXPECT_FALSE(prompt_observer.IsShowingUpdatePrompt());
+  EXPECT_FALSE(prompt_observer.IsSavePromptShownAutomatically());
+  EXPECT_FALSE(prompt_observer.IsUpdatePromptShownAutomatically());
 
   // There should be an entry for both psl.example.com and www.example.com.
   password_manager::TestPasswordStore::PasswordMap passwords =
@@ -421,7 +481,7 @@ IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest,
   BubbleObserver prompt_observer(WebContents());
   // The autofill password manager shouldn't react to the successful login
   // because it was suppressed when the site got the credential back.
-  EXPECT_FALSE(prompt_observer.IsShowingSavePrompt());
+  EXPECT_FALSE(prompt_observer.IsSavePromptShownAutomatically());
 }
 
 // Regression test for https://crbug.com/736357.
@@ -479,8 +539,8 @@ IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest,
       "navigator.credentials.store(c);"));
 
   BubbleObserver prompt_observer(WebContents());
-  prompt_observer.WaitForSavePrompt();
-  ASSERT_TRUE(prompt_observer.IsShowingSavePrompt());
+  prompt_observer.WaitForAutomaticSavePrompt();
+  ASSERT_TRUE(prompt_observer.IsSavePromptShownAutomatically());
   prompt_observer.AcceptSavePrompt();
   WaitForPasswordStore();
 
@@ -546,7 +606,7 @@ IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest, SaveViaAPIAndAutofill) {
 
   WaitForPasswordStore();
   BubbleObserver prompt_observer(WebContents());
-  ASSERT_TRUE(prompt_observer.IsShowingSavePrompt());
+  ASSERT_TRUE(prompt_observer.IsSavePromptShownAutomatically());
   prompt_observer.AcceptSavePrompt();
 
   WaitForPasswordStore();
@@ -604,8 +664,8 @@ IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest, UpdateViaAPIAndAutofill) {
   // after the store replies.
   WaitForPasswordStore();
   BubbleObserver prompt_observer(WebContents());
-  EXPECT_FALSE(prompt_observer.IsShowingSavePrompt());
-  EXPECT_FALSE(prompt_observer.IsShowingUpdatePrompt());
+  EXPECT_FALSE(prompt_observer.IsSavePromptShownAutomatically());
+  EXPECT_FALSE(prompt_observer.IsUpdatePromptShownAutomatically());
   signin_form.skip_zero_click = false;
   signin_form.times_used = 1;
   signin_form.password_value = base::ASCIIToUTF16("API");
@@ -623,7 +683,7 @@ IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest, CredentialsAutofilled) {
       "var c = new PasswordCredential({ id: 'user', password: '12345' });"
       "navigator.credentials.store(c);"));
   BubbleObserver bubble_observer(WebContents());
-  bubble_observer.WaitForSavePrompt();
+  bubble_observer.WaitForAutomaticSavePrompt();
   bubble_observer.AcceptSavePrompt();
 
   // Reload the page and make sure it's autofilled.
@@ -632,6 +692,33 @@ IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest, CredentialsAutofilled) {
   content::SimulateMouseClickAt(
       WebContents(), 0, blink::WebMouseEvent::Button::kLeft, gfx::Point(1, 1));
   WaitForElementValue("password_field", "12345");
+}
+
+// Tests that when navigator.credentials.create() for a public key is called,
+// we get a NotAllowedError as the implementation is still unfinished.
+IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest,
+                       CreatePublicKeyCredentialNotImplemented) {
+  const GURL a_url1 = https_test_server().GetURL("a.com", "/title1.html");
+
+  // Navigate to a mostly empty page.
+  ui_test_utils::NavigateToURL(browser(), a_url1);
+
+  ASSERT_NO_FATAL_FAILURE(
+      CreatePublicKeyCredentialAndExpectNotImplemented(WebContents()));
+}
+
+// Tests that when navigator.credentials.create() is called with an unsupported
+// algorithm, we get a NotSupportedError.
+IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest,
+                       CreatePublicKeyCredentialAlgorithmNotSupported) {
+  const GURL a_url1 = https_test_server().GetURL("a.com", "/title1.html");
+
+  // Navigate to a mostly empty page.
+  ui_test_utils::NavigateToURL(browser(), a_url1);
+
+  ASSERT_NO_FATAL_FAILURE(
+      CreatePublicKeyCredentialWithUnsupportedAlgorithmAndExpectNotSupported(
+          WebContents()));
 }
 
 }  // namespace

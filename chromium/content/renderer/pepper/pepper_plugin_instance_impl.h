@@ -78,7 +78,7 @@ class WebLayer;
 class WebMouseEvent;
 class WebPluginContainer;
 class WebURLResponse;
-struct WebCompositionUnderline;
+struct WebImeTextSpan;
 struct WebCursorInfo;
 struct WebURLError;
 struct WebPrintParams;
@@ -126,11 +126,11 @@ class RenderFrameImpl;
 // ResourceTracker.
 class CONTENT_EXPORT PepperPluginInstanceImpl
     : public base::RefCounted<PepperPluginInstanceImpl>,
-      public NON_EXPORTED_BASE(PepperPluginInstance),
+      public PepperPluginInstance,
       public ppapi::PPB_Instance_Shared,
-      public NON_EXPORTED_BASE(cc::TextureLayerClient),
+      public cc::TextureLayerClient,
       public RenderFrameObserver,
-      public NON_EXPORTED_BASE(PluginInstanceThrottler::Observer) {
+      public PluginInstanceThrottler::Observer {
  public:
   // Create and return a PepperPluginInstanceImpl object which supports the most
   // recent version of PPP_Instance possible by querying the given
@@ -240,7 +240,7 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   bool HandleCompositionStart(const base::string16& text);
   bool HandleCompositionUpdate(
       const base::string16& text,
-      const std::vector<blink::WebCompositionUnderline>& underlines,
+      const std::vector<blink::WebImeTextSpan>& ime_text_spans,
       int selection_start,
       int selection_end);
   bool HandleCompositionEnd(const base::string16& text);
@@ -416,6 +416,12 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   void SetLinkUnderCursor(const std::string& url) override;
   void SetTextInputType(ui::TextInputType type) override;
   void PostMessageToJavaScript(PP_Var message) override;
+  void SetCaretPosition(const gfx::PointF& position) override;
+  void MoveRangeSelectionExtent(const gfx::PointF& extent) override;
+  void SetSelectionBounds(const gfx::PointF& base,
+                          const gfx::PointF& extent) override;
+  bool CanEditText() override;
+  void ReplaceSelection(const std::string& text) override;
 
   // PPB_Instance_API implementation.
   PP_Bool BindGraphics(PP_Instance instance, PP_Resource device) override;
@@ -487,6 +493,9 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
 
   // PPB_ContentDecryptor_Private implementation.
   void PromiseResolved(PP_Instance instance, uint32_t promise_id) override;
+  void PromiseResolvedWithKeyStatus(PP_Instance instance,
+                                    uint32_t promise_id,
+                                    PP_CdmKeyStatus key_status) override;
   void PromiseResolvedWithSession(PP_Instance instance,
                                   uint32_t promise_id,
                                   PP_Var session_id_var) override;
@@ -552,7 +561,7 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   // cc::TextureLayerClient implementation.
   bool PrepareTextureMailbox(
       viz::TextureMailbox* mailbox,
-      std::unique_ptr<cc::SingleReleaseCallback>* release_callback) override;
+      std::unique_ptr<viz::SingleReleaseCallback>* release_callback) override;
 
   // RenderFrameObserver
   void AccessibilityModeChanged() override;
@@ -679,10 +688,10 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   // Internal helper functions for HandleCompositionXXX().
   bool SendCompositionEventToPlugin(PP_InputEvent_Type type,
                                     const base::string16& text);
-  bool SendCompositionEventWithUnderlineInformationToPlugin(
+  bool SendCompositionEventWithImeTextSpanInformationToPlugin(
       PP_InputEvent_Type type,
       const base::string16& text,
-      const std::vector<blink::WebCompositionUnderline>& underlines,
+      const std::vector<blink::WebImeTextSpan>& ime_text_spans,
       int selection_start,
       int selection_end);
 
@@ -845,7 +854,7 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   // print only a subset of all the pages, it is impossible to know if a call
   // to PrintPage() is the last call. Thus in PrintPage(), just store the page
   // number in |ranges_|. The hack is in PrintEnd(), where a valid |metafile_|
-  // is preserved in PrintWebViewHelper::PrintPages. This makes it possible
+  // is preserved in PrintWebFrameHelper::PrintPages. This makes it possible
   // to generate the entire PDF given the variables below:
   //
   // The most recently used metafile_, guaranteed to be valid.

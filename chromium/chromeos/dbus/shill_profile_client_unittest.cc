@@ -145,7 +145,7 @@ TEST_F(ShillProfileClientTest, GetEntry) {
 
   // Create the expected value.
   base::DictionaryValue value;
-  value.SetStringWithoutPathExpansion(shill::kTypeProperty, shill::kTypeWifi);
+  value.SetKey(shill::kTypeProperty, base::Value(shill::kTypeWifi));
   // Set expectations.
   PrepareForMethodCall(shill::kGetEntryFunction,
                        base::Bind(&ExpectStringArgument, kExampleEntryPath),
@@ -167,7 +167,7 @@ TEST_F(ShillProfileClientTest, DeleteEntry) {
 
   // Create the expected value.
   base::DictionaryValue value;
-  value.SetBooleanWithoutPathExpansion(shill::kOfflineModeProperty, true);
+  value.SetKey(shill::kOfflineModeProperty, base::Value(true));
   // Set expectations.
   PrepareForMethodCall(shill::kDeleteEntryFunction,
                        base::Bind(&ExpectStringArgument, kExampleEntryPath),

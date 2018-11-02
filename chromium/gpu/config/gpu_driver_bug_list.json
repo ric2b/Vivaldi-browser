@@ -1,6 +1,6 @@
 {
   "name": "gpu driver bug list",
-  "version": "10.29",
+  "version": "10.30",
   "entries": [
     {
       "id": 1,
@@ -164,17 +164,6 @@
                     "0x0a04", "0x0a16", "0x0a22", "0x0a26", "0x0a2a"],
       "features": [
         "swizzle_rgba_for_async_readpixels"
-      ]
-    },
-    {
-      "id": 30,
-      "cr_bugs": [237931],
-      "description": "Multisampling is buggy on OSX when multiple monitors are connected",
-      "os": {
-        "type": "macosx"
-      },
-      "features": [
-        "disable_multimonitor_multisampling"
       ]
     },
     {
@@ -835,9 +824,13 @@
     {
       "id": 100,
       "description": "Disable Direct3D11 on systems with AMD switchable graphics",
-      "cr_bugs": [451420],
+      "cr_bugs": [451420, 755722],
       "os": {
         "type": "win"
+      },
+      "driver_date": {
+        "op": "<",
+        "value": "2016.6"
       },
       "multi_gpu_style": "amd_switchable",
       "features": [
@@ -2571,6 +2564,21 @@
       ]
     },
     {
+      "id": 237,
+      "description": "eglSwapBuffers intermittently fails on Android when app goes to background",
+      "cr_bugs": [744678],
+      "os": {
+        "type": "android",
+        "version": {
+          "op": "<",
+          "value": "9.0"
+        }
+      },
+      "features": [
+        "dont_disable_webgl_when_compositor_context_lost"
+      ]
+    },
+    {
       "id": 238,
       "description": "On Intel GPUs MSAA performance is not acceptable for GPU rasterization",
       "cr_bugs": [527565, 751919],
@@ -2581,6 +2589,39 @@
       "multi_gpu_category": "any",
       "features": [
         "msaa_is_slow"
+      ]
+    },
+    {
+      "id": 239,
+      "description": "Reset TexImage2D base level to 0 on Intel Mac 10.12.4",
+      "cr_bugs": [705865],
+      "os": {
+        "type": "macosx",
+        "version": {
+          "op": ">=",
+          "value": "10.12.4"
+        }
+      },
+      "vendor_id": "0x8086",
+      "features": [
+        "reset_teximage2d_base_level"
+      ]
+    },
+    {
+      "id": 240,
+      "cr_bugs": [750306, 764526],
+      "description": "glGetQueryObject(GL_QUERY_RESULT_AVAILABLE) blocks unexpectedly on Adreno",
+      "os": {
+        "type": "android",
+        "version": {
+          "op": "<",
+          "value": "9.0"
+        }
+      },
+      "gl_renderer": "Adreno \\(TM\\) 5[34]0",
+      "disabled_extensions": [
+        "GL_EXT_disjoint_timer_query",
+        "GL_EXT_disjoint_timer_query_webgl2"
       ]
     },
     {

@@ -16,6 +16,7 @@
 #include "base/macros.h"
 #include "base/scoped_observer.h"
 #include "ui/aura/window_observer.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace views {
 class Widget;
@@ -52,7 +53,8 @@ class ASH_EXPORT WindowGrid : public aura::WindowObserver,
  public:
   WindowGrid(aura::Window* root_window,
              const std::vector<aura::Window*>& window_list,
-             WindowSelector* window_selector);
+             WindowSelector* window_selector,
+             const gfx::Rect& bounds_in_screen);
   ~WindowGrid() override;
 
   // Exits overview mode, fading out the |shield_widget_| if necessary.
@@ -74,7 +76,10 @@ class ASH_EXPORT WindowGrid : public aura::WindowObserver,
   // row height which is equivalent assuming fixed height), balanced rows and
   // minimal wasted space.
   // Optionally animates the windows to their targets when |animate| is true.
-  void PositionWindows(bool animate);
+  // If |ignored_item| is not null and is an item in |window_list_|, that item
+  // is not positioned. This is for split screen.
+  void PositionWindows(bool animate,
+                       WindowSelectorItem* ignored_item = nullptr);
 
   // Updates |selected_index_| according to the specified |direction| and calls
   // MoveSelectionWidget(). Returns |true| if the new selection index is out of
@@ -88,6 +93,9 @@ class ASH_EXPORT WindowGrid : public aura::WindowObserver,
   // this grid owns.
   bool Contains(const aura::Window* window) const;
 
+  // Removes |selector_item| from the grid.
+  void RemoveItem(WindowSelectorItem* selector_item);
+
   // Dims the items whose titles do not contain |pattern| and prevents their
   // selection. The pattern has its accents removed and is converted to
   // lowercase in a l10n sensitive context.
@@ -98,6 +106,12 @@ class ASH_EXPORT WindowGrid : public aura::WindowObserver,
   // selected the implementation fades out |selection_widget_| to transparent
   // opacity, effectively hiding the selector widget.
   void WindowClosing(WindowSelectorItem* window);
+
+  // Sets bounds for the window grid and positions all windows in the grid.
+  void SetBoundsAndUpdatePositions(const gfx::Rect& bounds_in_screen);
+  void SetBoundsAndUpdatePositionsIgnoringWindow(
+      const gfx::Rect& bounds,
+      WindowSelectorItem* ignored_item);
 
   // Returns true if the grid has no more windows.
   bool empty() const { return window_list_.empty(); }
@@ -189,6 +203,9 @@ class ASH_EXPORT WindowGrid : public aura::WindowObserver,
 
   // True only after all windows have been prepared for overview.
   bool prepared_for_overview_;
+
+  // This WindowGrid's total bounds in screen coordinates.
+  gfx::Rect bounds_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowGrid);
 };

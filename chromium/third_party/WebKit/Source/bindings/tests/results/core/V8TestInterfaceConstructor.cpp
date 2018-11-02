@@ -73,11 +73,16 @@ static_assert(
 namespace TestInterfaceConstructorV8Internal {
 
 static void constructor1(const v8::FunctionCallbackInfo<v8::Value>& info) {
-  ExceptionState exceptionState(info.GetIsolate(), ExceptionState::kConstructionContext, "TestInterfaceConstructor");
-  ScriptState* scriptState = ScriptState::ForReceiverObject(info);
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceConstructor_ConstructorCallback");
 
-  ExecutionContext* executionContext = CurrentExecutionContext(info.GetIsolate());
-  Document& document = *ToDocument(CurrentExecutionContext(info.GetIsolate()));
+  ExceptionState exceptionState(info.GetIsolate(), ExceptionState::kConstructionContext, "TestInterfaceConstructor");
+  ScriptState* scriptState = ScriptState::From(
+      info.NewTarget().As<v8::Object>()->CreationContext());
+
+  ExecutionContext* executionContext = ToExecutionContext(
+      info.NewTarget().As<v8::Object>()->CreationContext());
+  Document& document = *ToDocument(ToExecutionContext(
+      info.NewTarget().As<v8::Object>()->CreationContext()));
   TestInterfaceConstructor* impl = TestInterfaceConstructor::Create(scriptState, executionContext, document, exceptionState);
   if (exceptionState.HadException()) {
     return;
@@ -88,8 +93,11 @@ static void constructor1(const v8::FunctionCallbackInfo<v8::Value>& info) {
 }
 
 static void constructor2(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceConstructor_ConstructorCallback");
+
   ExceptionState exceptionState(info.GetIsolate(), ExceptionState::kConstructionContext, "TestInterfaceConstructor");
-  ScriptState* scriptState = ScriptState::ForReceiverObject(info);
+  ScriptState* scriptState = ScriptState::From(
+      info.NewTarget().As<v8::Object>()->CreationContext());
 
   double doubleArg;
   V8StringResource<> stringArg;
@@ -152,8 +160,10 @@ static void constructor2(const v8::FunctionCallbackInfo<v8::Value>& info) {
     return;
   }
 
-  ExecutionContext* executionContext = CurrentExecutionContext(info.GetIsolate());
-  Document& document = *ToDocument(CurrentExecutionContext(info.GetIsolate()));
+  ExecutionContext* executionContext = ToExecutionContext(
+      info.NewTarget().As<v8::Object>()->CreationContext());
+  Document& document = *ToDocument(ToExecutionContext(
+      info.NewTarget().As<v8::Object>()->CreationContext()));
   TestInterfaceConstructor* impl = TestInterfaceConstructor::Create(scriptState, executionContext, document, doubleArg, stringArg, testInterfaceEmptyArg, dictionaryArg, sequenceStringArg, sequenceDictionaryArg, sequenceLongOrTestDictionaryArg, optionalDictionaryArg, optionalTestInterfaceEmptyArg, exceptionState);
   if (exceptionState.HadException()) {
     return;
@@ -164,8 +174,11 @@ static void constructor2(const v8::FunctionCallbackInfo<v8::Value>& info) {
 }
 
 static void constructor3(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceConstructor_ConstructorCallback");
+
   ExceptionState exceptionState(info.GetIsolate(), ExceptionState::kConstructionContext, "TestInterfaceConstructor");
-  ScriptState* scriptState = ScriptState::ForReceiverObject(info);
+  ScriptState* scriptState = ScriptState::From(
+      info.NewTarget().As<v8::Object>()->CreationContext());
 
   V8StringResource<> arg;
   V8StringResource<> optArg;
@@ -180,8 +193,10 @@ static void constructor3(const v8::FunctionCallbackInfo<v8::Value>& info) {
     return;
 
   if (UNLIKELY(numArgsPassed <= 1)) {
-    ExecutionContext* executionContext = CurrentExecutionContext(info.GetIsolate());
-    Document& document = *ToDocument(CurrentExecutionContext(info.GetIsolate()));
+    ExecutionContext* executionContext = ToExecutionContext(
+        info.NewTarget().As<v8::Object>()->CreationContext());
+    Document& document = *ToDocument(ToExecutionContext(
+        info.NewTarget().As<v8::Object>()->CreationContext()));
     TestInterfaceConstructor* impl = TestInterfaceConstructor::Create(scriptState, executionContext, document, arg, exceptionState);
     if (exceptionState.HadException()) {
       return;
@@ -195,8 +210,10 @@ static void constructor3(const v8::FunctionCallbackInfo<v8::Value>& info) {
   if (!optArg.Prepare())
     return;
 
-  ExecutionContext* executionContext = CurrentExecutionContext(info.GetIsolate());
-  Document& document = *ToDocument(CurrentExecutionContext(info.GetIsolate()));
+  ExecutionContext* executionContext = ToExecutionContext(
+      info.NewTarget().As<v8::Object>()->CreationContext());
+  Document& document = *ToDocument(ToExecutionContext(
+      info.NewTarget().As<v8::Object>()->CreationContext()));
   TestInterfaceConstructor* impl = TestInterfaceConstructor::Create(scriptState, executionContext, document, arg, optArg, exceptionState);
   if (exceptionState.HadException()) {
     return;
@@ -207,8 +224,11 @@ static void constructor3(const v8::FunctionCallbackInfo<v8::Value>& info) {
 }
 
 static void constructor4(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceConstructor_ConstructorCallback");
+
   ExceptionState exceptionState(info.GetIsolate(), ExceptionState::kConstructionContext, "TestInterfaceConstructor");
-  ScriptState* scriptState = ScriptState::ForReceiverObject(info);
+  ScriptState* scriptState = ScriptState::From(
+      info.NewTarget().As<v8::Object>()->CreationContext());
 
   V8StringResource<> arg;
   V8StringResource<> arg2;
@@ -225,8 +245,10 @@ static void constructor4(const v8::FunctionCallbackInfo<v8::Value>& info) {
   if (!arg3.Prepare())
     return;
 
-  ExecutionContext* executionContext = CurrentExecutionContext(info.GetIsolate());
-  Document& document = *ToDocument(CurrentExecutionContext(info.GetIsolate()));
+  ExecutionContext* executionContext = ToExecutionContext(
+      info.NewTarget().As<v8::Object>()->CreationContext());
+  Document& document = *ToDocument(ToExecutionContext(
+      info.NewTarget().As<v8::Object>()->CreationContext()));
   TestInterfaceConstructor* impl = TestInterfaceConstructor::Create(scriptState, executionContext, document, arg, arg2, arg3, exceptionState);
   if (exceptionState.HadException()) {
     return;
@@ -318,6 +340,8 @@ const WrapperTypeInfo V8TestInterfaceConstructorConstructor::wrapperTypeInfo = {
 #endif
 
 static void V8TestInterfaceConstructorConstructorCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceConstructor_ConstructorCallback");
+
   if (!info.IsConstructCall()) {
     V8ThrowException::ThrowTypeError(info.GetIsolate(), ExceptionMessages::ConstructorNotCallableAsFunction("Audio"));
     return;
@@ -329,7 +353,8 @@ static void V8TestInterfaceConstructorConstructorCallback(const v8::FunctionCall
   }
 
   ExceptionState exceptionState(info.GetIsolate(), ExceptionState::kConstructionContext, "TestInterfaceConstructor");
-  ScriptState* scriptState = ScriptState::ForReceiverObject(info);
+  ScriptState* scriptState = ScriptState::From(
+      info.NewTarget().As<v8::Object>()->CreationContext());
 
   if (UNLIKELY(info.Length() < 1)) {
     exceptionState.ThrowTypeError(ExceptionMessages::NotEnoughArguments(1, info.Length()));
@@ -349,8 +374,10 @@ static void V8TestInterfaceConstructorConstructorCallback(const v8::FunctionCall
     return;
 
   if (UNLIKELY(numArgsPassed <= 1)) {
-    ExecutionContext* executionContext = CurrentExecutionContext(info.GetIsolate());
-    Document& document = *ToDocument(CurrentExecutionContext(info.GetIsolate()));
+    ExecutionContext* executionContext = ToExecutionContext(
+        info.NewTarget().As<v8::Object>()->CreationContext());
+    Document& document = *ToDocument(ToExecutionContext(
+        info.NewTarget().As<v8::Object>()->CreationContext()));
     TestInterfaceConstructor* impl = TestInterfaceConstructor::CreateForJSConstructor(scriptState, executionContext, document, arg, exceptionState);
     if (exceptionState.HadException()) {
       return;
@@ -364,8 +391,10 @@ static void V8TestInterfaceConstructorConstructorCallback(const v8::FunctionCall
   if (!optArg.Prepare())
     return;
 
-  ExecutionContext* executionContext = CurrentExecutionContext(info.GetIsolate());
-  Document& document = *ToDocument(CurrentExecutionContext(info.GetIsolate()));
+  ExecutionContext* executionContext = ToExecutionContext(
+      info.NewTarget().As<v8::Object>()->CreationContext());
+  Document& document = *ToDocument(ToExecutionContext(
+      info.NewTarget().As<v8::Object>()->CreationContext()));
   TestInterfaceConstructor* impl = TestInterfaceConstructor::CreateForJSConstructor(scriptState, executionContext, document, arg, optArg, exceptionState);
   if (exceptionState.HadException()) {
     return;
@@ -394,6 +423,8 @@ v8::Local<v8::FunctionTemplate> V8TestInterfaceConstructorConstructor::domTempla
 void V8TestInterfaceConstructorConstructor::NamedConstructorAttributeGetter(
     v8::Local<v8::Name> propertyName,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceConstructor_NamedConstructorAttributeGetter");
+
   v8::Local<v8::Context> creationContext = info.Holder()->CreationContext();
   V8PerContextData* perContextData = V8PerContextData::From(creationContext);
   if (!perContextData) {
@@ -421,6 +452,8 @@ void V8TestInterfaceConstructorConstructor::NamedConstructorAttributeGetter(
 }
 
 void V8TestInterfaceConstructor::constructorCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceConstructor_Constructor");
+
   UseCounter::Count(CurrentExecutionContext(info.GetIsolate()), WebFeature::kTestFeature);
   if (!info.IsConstructCall()) {
     V8ThrowException::ThrowTypeError(info.GetIsolate(), ExceptionMessages::ConstructorNotCallableAsFunction("TestInterfaceConstructor"));

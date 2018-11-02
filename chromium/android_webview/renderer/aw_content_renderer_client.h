@@ -35,7 +35,7 @@ class AwContentRendererClient : public content::ContentRendererClient {
   void RenderThreadStarted() override;
   void RenderFrameCreated(content::RenderFrame* render_frame) override;
   void RenderViewCreated(content::RenderView* render_view) override;
-  bool HasErrorPage(int http_status_code, std::string* error_domain) override;
+  bool HasErrorPage(int http_status_code) override;
   void GetNavigationErrorStrings(content::RenderFrame* render_frame,
                                  const blink::WebURLRequest& failed_request,
                                  const blink::WebURLError& error,
@@ -49,6 +49,12 @@ class AwContentRendererClient : public content::ContentRendererClient {
       override;
   std::unique_ptr<blink::WebSocketHandshakeThrottle>
   CreateWebSocketHandshakeThrottle() override;
+  bool WillSendRequest(
+      blink::WebLocalFrame* frame,
+      ui::PageTransition transition_type,
+      const blink::WebURL& url,
+      std::vector<std::unique_ptr<content::URLLoaderThrottle>>* throttles,
+      GURL* new_url) override;
 
   bool HandleNavigation(content::RenderFrame* render_frame,
                         bool is_content_initiated,

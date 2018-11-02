@@ -152,7 +152,7 @@ Polymer({
 
   /** @private */
   onOpenMenu_: function(e) {
-    var menu = /** @type {CrActionMenuElement} */ this.$.menu.get();
+    var menu = /** @type {CrActionMenuElement} */ (this.$.menu.get());
     this.actionMenuModel_ = e.detail.tag;
     menu.showAt(e.detail.target);
     md_history.BrowserService.getInstance().recordHistogram(
@@ -187,9 +187,9 @@ Polymer({
                 return prev.concat(cur.createFocusRows());
               },
               [])
-          .forEach(function(row) {
+          .forEach((row) => {
             this.focusGrid_.addRow(row);
-          }.bind(this));
+          });
       this.focusGrid_.ensureRowActive(1);
     });
   },
@@ -277,11 +277,11 @@ Polymer({
     }
 
     var devices = [];
-    sessionList.forEach(function(session) {
+    sessionList.forEach((session) => {
       var device = this.createInternalDevice_(session);
       if (device.tabs.length != 0)
         devices.push(device);
-    }.bind(this));
+    });
 
     this.syncedDevices_ = devices;
   },

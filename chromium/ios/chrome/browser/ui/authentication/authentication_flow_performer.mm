@@ -134,10 +134,6 @@ const int64_t kAuthenticationFlowTimeoutSeconds = 10;
 
 - (void)fetchManagedStatus:(ios::ChromeBrowserState*)browserState
                forIdentity:(ChromeIdentity*)identity {
-  if (!experimental_flags::IsMDMIntegrationEnabled()) {
-    [_delegate didFetchManagedStatus:nil];
-    return;
-  }
   if (gaia::ExtractDomainName(gaia::CanonicalizeEmail(
           base::SysNSStringToUTF8(identity.userEmail))) == "gmail.com") {
     // Do nothing for @gmail.com addresses as they can't have a hosted domain.
@@ -361,8 +357,7 @@ const int64_t kAuthenticationFlowTimeoutSeconds = 10;
                  viewController:(UIViewController*)viewController {
   DCHECK(!_alertCoordinator);
 
-  _alertCoordinator =
-      ios_internal::ErrorCoordinatorNoItem(error, viewController);
+  _alertCoordinator = ErrorCoordinatorNoItem(error, viewController);
 
   __weak AuthenticationFlowPerformer* weakSelf = self;
   __weak AlertCoordinator* weakAlert = _alertCoordinator;
@@ -438,10 +433,6 @@ const int64_t kAuthenticationFlowTimeoutSeconds = 10;
 }
 
 - (void)closeSettingsAndOpenNewIncognitoTab {
-  NOTREACHED();
-}
-
-- (void)closeSettingsAndOpenUrl:(OpenUrlCommand*)command {
   NOTREACHED();
 }
 

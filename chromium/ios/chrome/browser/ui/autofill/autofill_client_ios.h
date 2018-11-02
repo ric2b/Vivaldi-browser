@@ -58,7 +58,6 @@ class AutofillClientIOS : public AutofillClient {
   PrefService* GetPrefs() override;
   syncer::SyncService* GetSyncService() override;
   IdentityProvider* GetIdentityProvider() override;
-  rappor::RapporServiceImpl* GetRapporServiceImpl() override;
   ukm::UkmRecorder* GetUkmRecorder() override;
   SaveCardBubbleController* GetSaveCardBubbleController() override;
   void ShowAutofillSettings() override;
@@ -97,9 +96,8 @@ class AutofillClientIOS : public AutofillClient {
   scoped_refptr<AutofillWebDataService> GetDatabase() override;
   bool IsContextSecure() override;
   bool ShouldShowSigninPromo() override;
-  void StartSigninFlow() override;
-  void ShowHttpNotSecureExplanation() override;
   bool IsAutofillSupported() override;
+  void ExecuteCommand(int id) override;
 
  private:
   ios::ChromeBrowserState* browser_state_;

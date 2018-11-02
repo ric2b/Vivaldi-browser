@@ -10,8 +10,10 @@
 
 #include <list>
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/callback.h"
@@ -30,7 +32,6 @@
 #include "content/browser/loader/global_routing_id.h"
 #include "content/browser/site_instance_impl.h"
 #include "content/browser/webui/web_ui_impl.h"
-#include "content/common/accessibility_mode.h"
 #include "content/common/ax_content_node_data.h"
 #include "content/common/content_export.h"
 #include "content/common/content_security_policy/csp_context.h"
@@ -51,12 +52,14 @@
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "net/http/http_response_headers.h"
 #include "services/device/public/interfaces/wake_lock_context.mojom.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 #include "third_party/WebKit/public/platform/WebFocusType.h"
 #include "third_party/WebKit/public/platform/WebInsecureRequestPolicy.h"
 #include "third_party/WebKit/public/platform/WebSuddenTerminationDisablerType.h"
 #include "third_party/WebKit/public/platform/modules/bluetooth/web_bluetooth.mojom.h"
 #include "third_party/WebKit/public/web/WebTextDirection.h"
 #include "third_party/WebKit/public/web/WebTreeScopeType.h"
+#include "ui/accessibility/ax_modes.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/mojo/window_open_disposition.mojom.h"
 #include "ui/base/page_transition_types.h"
@@ -94,6 +97,7 @@ class LegacyIPCFrameInputHandler;
 class FeaturePolicy;
 class FrameTree;
 class FrameTreeNode;
+class GeolocationServiceImpl;
 class MediaInterfaceProxy;
 class NavigationHandleImpl;
 class PermissionServiceContext;
@@ -106,6 +110,7 @@ class RenderWidgetHostImpl;
 class RenderWidgetHostView;
 class RenderWidgetHostViewBase;
 class ResourceRequestBody;
+class SensorProviderProxyImpl;
 class StreamHandle;
 class TimeoutMonitor;
 class WebBluetoothServiceImpl;
@@ -118,11 +123,11 @@ struct ResourceResponse;
 class CONTENT_EXPORT RenderFrameHostImpl
     : public RenderFrameHost,
       public base::SupportsUserData,
-      NON_EXPORTED_BASE(public mojom::FrameHost),
-      NON_EXPORTED_BASE(public mojom::FrameHostInterfaceBroker),
+      public mojom::FrameHost,
+      public mojom::FrameHostInterfaceBroker,
       public BrowserAccessibilityDelegate,
       public SiteInstanceImpl::Observer,
-      public NON_EXPORTED_BASE(service_manager::mojom::InterfaceProvider),
+      public service_manager::mojom::InterfaceProvider,
       public CSPContext {
  public:
   using AXTreeSnapshotCallback =
@@ -177,7 +182,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void CopyImageAt(int x, int y) override;
   void SaveImageAt(int x, int y) override;
   RenderViewHost* GetRenderViewHost() override;
-  service_manager::BinderRegistry* GetInterfaceRegistry() override;
   service_manager::InterfaceProvider* GetRemoteInterfaces() override;
   AssociatedInterfaceProvider* GetRemoteAssociatedInterfaces() override;
   blink::WebPageVisibilityState GetVisibilityState() override;
@@ -285,9 +289,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Allows FrameTreeNode::SetCurrentURL to update this frame's last committed
   // URL.  Do not call this directly, since we rely on SetCurrentURL to track
   // whether a real load has committed or not.
-  void set_last_committed_url(const GURL& url) {
-    last_committed_url_ = url;
-  }
+  void SetLastCommittedUrl(const GURL& url);
 
   // The most recent non-net-error URL to commit in this frame.  In almost all
   // cases, use GetLastCommittedURL instead.
@@ -592,7 +594,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Returns the Mojo ImageDownloader service.
   const content::mojom::ImageDownloaderPtr& GetMojoImageDownloader();
 
-  // Returns the interface to the Global Resource Coordinator
   resource_coordinator::ResourceCoordinatorInterface*
   GetFrameResourceCoordinator() override;
 
@@ -646,6 +647,11 @@ class CONTENT_EXPORT RenderFrameHostImpl
   service_manager::InterfaceProvider* GetJavaInterfaces() override;
 #endif
 
+  // Propagates the visibility state along the immediate local roots by calling
+  // RenderWidgetHostViewChildFrame::Show()/Hide(). Calling this on a pending
+  // or speculative RenderFrameHost (that has not committed) should be avoided.
+  void SetVisibilityForChildViews(bool visible);
+
   // Returns an unguessable token for this RFHI.  This provides a temporary way
   // to identify a RenderFrameHost that's compatible with IPC.  Else, one needs
   // to send pid + RoutingID, but one cannot send pid.  One can get it from the
@@ -696,6 +702,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
                            WebUIJavascriptDisallowedAfterSwapOut);
   FRIEND_TEST_ALL_PREFIXES(RenderFrameHostManagerTest, LastCommittedOrigin);
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest, CrashSubframe);
+  FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest, FindImmediateLocalRoots);
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest,
                            RenderViewHostIsNotReusedAfterDelayedSwapOutACK);
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest,
@@ -723,11 +730,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
       const base::TimeTicks& navigation_start);
   void OnDidFailProvisionalLoadWithError(
       const FrameHostMsg_DidFailProvisionalLoadWithError_Params& params);
-  void OnDidFailLoadWithError(
-      const GURL& url,
-      int error_code,
-      const base::string16& error_description,
-      bool was_ignored_by_handler);
+  void OnDidFailLoadWithError(const GURL& url,
+                              int error_code,
+                              const base::string16& error_description);
   void OnDidCommitProvisionalLoad(const IPC::Message& msg);
   void OnUpdateState(const PageState& state);
   void OnBeforeUnloadACK(
@@ -772,6 +777,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void OnUpdateTitle(const base::string16& title,
                      blink::WebTextDirection title_direction);
   void OnUpdateEncoding(const std::string& encoding);
+  void OnDidBlockFramebust(const GURL& url);
   void OnBeginNavigation(const CommonNavigationParams& common_params,
                          const BeginNavigationParams& begin_params);
   void OnAbortNavigation();
@@ -977,6 +983,28 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // can be released.
   void OnStreamHandleConsumed(const GURL& stream_url);
 
+  // TODO(ekaramad): One major purpose behind the API is to traverse the frame
+  // tree top-down to visit the  RenderWidgetHostViews of interest in the most
+  // efficient way. We might want to revisit this API, remove it from RFHImpl,
+  // and perhaps consolidate it with some of the existing ones such as
+  // WebContentsImpl::GetRenderWidgetHostViewsInTree() into a new more
+  // appropriate API for dealing with (virtual) RenderWidgetHost(View) tree.
+  // (see https://crbug.com/754726).
+  // Runs |callback| for all the local roots immediately under this frame, i.e.
+  // local roots which are under this frame and their first ancestor which is a
+  // local root is either this frame or this frame's local root. For instance,
+  // in a frame tree such as:
+  //                    A0
+  //                 /  |   \
+  //                B   A1   E
+  //               /   /  \   \
+  //              D  A2    C   F
+  // RFHs at nodes B, E, D, C, and F are all local roots in the given frame tree
+  // under the root at A0, but only B, C, and E are considered immediate local
+  // roots of A0. Note that this will exclude any speculative or pending RFHs.
+  void ForEachImmediateLocalRoot(
+      const base::Callback<void(RenderFrameHostImpl*)>& callback);
+
   // For now, RenderFrameHosts indirectly keep RenderViewHosts alive via a
   // refcount that calls Shutdown when it reaches zero.  This allows each
   // RenderFrameHostManager to just care about RenderFrameHosts, while ensuring
@@ -1113,9 +1141,15 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // SiteInstance.  May be null in tests.
   std::unique_ptr<TimeoutMonitor> swapout_event_monitor_timeout_;
 
+  // GeolocationService which provides Geolocation.
+  std::unique_ptr<GeolocationServiceImpl> geolocation_service_;
+
+  // SensorProvider proxy which acts as a gatekeeper to the real SensorProvider.
+  std::unique_ptr<SensorProviderProxyImpl> sensor_provider_proxy_;
+
   std::unique_ptr<AssociatedInterfaceRegistryImpl> associated_registry_;
 
-  std::unique_ptr<service_manager::BinderRegistry> interface_registry_;
+  std::unique_ptr<service_manager::BinderRegistry> registry_;
   std::unique_ptr<service_manager::InterfaceProvider> remote_interfaces_;
 
   std::list<std::unique_ptr<WebBluetoothServiceImpl>> web_bluetooth_services_;

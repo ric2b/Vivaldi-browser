@@ -23,6 +23,7 @@
 #include "content/renderer/media/media_stream_constraints_util.h"
 #include "content/renderer/media/media_stream_source.h"
 #include "media/base/audio_parameters.h"
+#include "third_party/webrtc/modules/audio_processing/aec_dump/aec_dump_factory.h"
 #include "third_party/webrtc/modules/audio_processing/include/audio_processing.h"
 #include "third_party/webrtc/modules/audio_processing/typing_detection.h"
 
@@ -291,9 +292,9 @@ void AudioProcessingProperties::DisableDefaultPropertiesForTesting() {
 // static
 AudioProcessingProperties AudioProcessingProperties::FromConstraints(
     const blink::WebMediaConstraints& constraints,
-    const MediaStreamDevice::AudioDeviceParameters& input_params) {
+    const media::AudioParameters& input_params) {
   DCHECK(IsOldAudioConstraints());
-  MediaAudioConstraints audio_constraints(constraints, input_params.effects);
+  MediaAudioConstraints audio_constraints(constraints, input_params.effects());
   AudioProcessingProperties properties;
   properties.enable_sw_echo_cancellation =
       audio_constraints.GetEchoCancellationProperty();
@@ -468,22 +469,27 @@ void EnableTypingDetection(AudioProcessing* audio_processing,
 }
 
 void StartEchoCancellationDump(AudioProcessing* audio_processing,
-                               base::File aec_dump_file) {
+                               base::File aec_dump_file,
+                               rtc::TaskQueue* worker_queue) {
   DCHECK(aec_dump_file.IsValid());
 
   FILE* stream = base::FileToFILE(std::move(aec_dump_file), "w");
   if (!stream) {
-    LOG(ERROR) << "Failed to open AEC dump file";
+    LOG(DFATAL) << "Failed to open AEC dump file";
     return;
   }
 
-  if (audio_processing->StartDebugRecording(stream))
-    DLOG(ERROR) << "Fail to start AEC debug recording";
+  auto aec_dump = webrtc::AecDumpFactory::Create(
+      stream, -1 /* max_log_size_bytes */, worker_queue);
+  if (!aec_dump) {
+    LOG(ERROR) << "Failed to start AEC debug recording";
+    return;
+  }
+  audio_processing->AttachAecDump(std::move(aec_dump));
 }
 
 void StopEchoCancellationDump(AudioProcessing* audio_processing) {
-  if (audio_processing->StopDebugRecording())
-    DLOG(ERROR) << "Fail to stop AEC debug recording";
+  audio_processing->DetachAecDump();
 }
 
 void EnableAutomaticGainControl(AudioProcessing* audio_processing) {
@@ -518,14 +524,14 @@ void GetAudioProcessingStats(
 
 std::vector<media::Point> GetArrayGeometryPreferringConstraints(
     const MediaAudioConstraints& audio_constraints,
-    const MediaStreamDevice::AudioDeviceParameters& input_params) {
+    const media::AudioParameters& input_params) {
   const std::string constraints_geometry =
       audio_constraints.GetGoogArrayGeometry();
 
   // Give preference to the audio constraint over the device-supplied mic
   // positions. This is mainly for testing purposes.
   return constraints_geometry.empty()
-             ? input_params.mic_positions
+             ? input_params.mic_positions()
              : media::ParsePointsFromString(constraints_geometry);
 }
 

@@ -9,10 +9,10 @@
 #include "base/logging.h"
 
 #import "ios/chrome/browser/ui/browser_view_controller.h"
+#import "ios/chrome/browser/ui/history_popup/requirements/tab_history_constants.h"
 #import "ios/chrome/browser/ui/overscroll_actions/overscroll_actions_controller.h"
 #import "ios/chrome/browser/ui/tabs/tab_strip_controller.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_controller.h"
-#import "ios/chrome/browser/ui/toolbar/web_toolbar_controller.h"
 #import "ios/chrome/browser/ui/voice/voice_search_notification_names.h"
 #include "ios/web/public/navigation_item.h"
 #import "ios/web/public/navigation_manager.h"
@@ -257,22 +257,20 @@ BOOL CGFloatEquals(CGFloat a, CGFloat b) {
                  object:nil];
     [center addObserver:self
                selector:@selector(incrementFullScreenLock)
-                   name:ios_internal::kPageInfoWillShowNotification
+                   name:kPageInfoWillShowNotification
                  object:nil];
     [center addObserver:self
                selector:@selector(decrementFullScreenLock)
-                   name:ios_internal::kPageInfoWillHideNotification
+                   name:kPageInfoWillHideNotification
                  object:nil];
-    [center
-        addObserver:self
-           selector:@selector(incrementFullScreenLock)
-               name:ios_internal::kLocationBarBecomesFirstResponderNotification
-             object:nil];
-    [center
-        addObserver:self
-           selector:@selector(decrementFullScreenLock)
-               name:ios_internal::kLocationBarResignsFirstResponderNotification
-             object:nil];
+    [center addObserver:self
+               selector:@selector(incrementFullScreenLock)
+                   name:kLocationBarBecomesFirstResponderNotification
+                 object:nil];
+    [center addObserver:self
+               selector:@selector(decrementFullScreenLock)
+                   name:kLocationBarResignsFirstResponderNotification
+                 object:nil];
     [center addObserver:self
                selector:@selector(incrementFullScreenLock)
                    name:kTabStripDragStarted
@@ -283,11 +281,11 @@ BOOL CGFloatEquals(CGFloat a, CGFloat b) {
                  object:nil];
     [center addObserver:self
                selector:@selector(incrementFullScreenLock)
-                   name:ios_internal::kSideSwipeWillStartNotification
+                   name:kSideSwipeWillStartNotification
                  object:nil];
     [center addObserver:self
                selector:@selector(decrementFullScreenLock)
-                   name:ios_internal::kSideSwipeDidStopNotification
+                   name:kSideSwipeDidStopNotification
                  object:nil];
     // TODO(crbug.com/451373): Evaluate using listeners instead of
     // notifications.

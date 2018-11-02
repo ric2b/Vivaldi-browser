@@ -21,6 +21,12 @@ post_process_target("//chrome:browser_dependencies") {
   ]
 }
 
+post_process_target("//chrome:chrome_android_core") {
+  deps += [
+    "//vivaldi/browser:browser",
+  ]
+}
+
 post_process_template("//chrome/browser/ui:ui") {
   public_deps += [
     "//components/sessions:sessions",

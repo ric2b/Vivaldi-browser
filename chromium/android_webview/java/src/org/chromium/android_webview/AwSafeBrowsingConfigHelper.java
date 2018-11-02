@@ -27,6 +27,7 @@ public class AwSafeBrowsingConfigHelper {
 
     private static Boolean sSafeBrowsingUserOptIn;
 
+    @SuppressWarnings("unchecked")
     public static void maybeInitSafeBrowsingFromSettings(final Context appContext) {
         AwContentsStatics.setSafeBrowsingEnabledByManifest(
                 CommandLine.getInstance().hasSwitch(AwSwitches.WEBVIEW_ENABLE_SAFEBROWSING_SUPPORT)
@@ -39,12 +40,9 @@ public class AwSafeBrowsingConfigHelper {
                     Class.forName("com.android.webview.chromium.AwSafeBrowsingApiHandler");
             Method getUserOptInPreference = awSafeBrowsingApiHelperClass.getDeclaredMethod(
                     getUserOptInPreferenceMethodName, Context.class, ValueCallback.class);
-            getUserOptInPreference.invoke(null, appContext, new ValueCallback<Boolean>() {
-                @Override
-                public void onReceiveValue(Boolean optin) {
-                    setSafeBrowsingUserOptIn(optin == null ? false : optin);
-                }
-            });
+            getUserOptInPreference.invoke(null, appContext,
+                    (ValueCallback<Boolean>) optin -> setSafeBrowsingUserOptIn(
+                            optin == null ? false : optin));
         } catch (ClassNotFoundException e) {
             // This is not an error; it just means this device doesn't have specialized services.
         } catch (IllegalAccessException | IllegalArgumentException | NoSuchMethodException e) {

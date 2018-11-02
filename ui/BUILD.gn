@@ -1,9 +1,5 @@
 static_library("ui") {
   sources = [
-    "devtools/devtools_connector.cc",
-    "devtools/devtools_connector.h",
-    "dragging/drag_tab_handler.cc",
-    "dragging/drag_tab_handler.h",
     "views/vivaldi_pin_shortcut.cpp",
     "views/vivaldi_pin_shortcut.h",
     "webgui/notes_ui.cpp",
@@ -20,10 +16,20 @@ static_library("ui") {
   public_configs = [ "//third_party/protobuf:using_proto" ]
   deps = [
     "//base:base",
-    "//chrome/browser/extensions:extensions",
     "//components/translate/content/browser",
     "//content/public/browser",
     "//skia",
-    "//vivaldi/extensions/schema:api"
   ]
+  if (!is_android) {
+    sources += [
+      "devtools/devtools_connector.cc",
+      "devtools/devtools_connector.h",
+      "dragging/drag_tab_handler.cc",
+      "dragging/drag_tab_handler.h",
+    ]
+    deps += [
+      "//chrome/browser/extensions:extensions",
+      "//vivaldi/extensions/schema:api"
+    ]
+  }
 }

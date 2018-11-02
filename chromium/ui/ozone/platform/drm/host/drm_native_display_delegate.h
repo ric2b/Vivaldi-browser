@@ -17,7 +17,7 @@ class DrmDisplayHostManager;
 
 class DrmNativeDisplayDelegate : public display::NativeDisplayDelegate {
  public:
-  DrmNativeDisplayDelegate(DrmDisplayHostManager* display_manager);
+  explicit DrmNativeDisplayDelegate(DrmDisplayHostManager* display_manager);
   ~DrmNativeDisplayDelegate() override;
 
   void OnConfigurationChanged();
@@ -25,34 +25,20 @@ class DrmNativeDisplayDelegate : public display::NativeDisplayDelegate {
 
   // display::NativeDisplayDelegate overrides:
   void Initialize() override;
-  void GrabServer() override;
-  void UngrabServer() override;
   void TakeDisplayControl(
       const display::DisplayControlCallback& callback) override;
   void RelinquishDisplayControl(
       const display::DisplayControlCallback& callback) override;
-  void SyncWithServer() override;
-  void SetBackgroundColor(uint32_t color_argb) override;
-  void ForceDPMSOn() override;
   void GetDisplays(const display::GetDisplaysCallback& callback) override;
-  void AddMode(const display::DisplaySnapshot& output,
-               const display::DisplayMode* mode) override;
   void Configure(const display::DisplaySnapshot& output,
                  const display::DisplayMode* mode,
                  const gfx::Point& origin,
                  const display::ConfigureCallback& callback) override;
-  void CreateFrameBuffer(const gfx::Size& size) override;
   void GetHDCPState(const display::DisplaySnapshot& output,
                     const display::GetHDCPStateCallback& callback) override;
   void SetHDCPState(const display::DisplaySnapshot& output,
                     display::HDCPState state,
                     const display::SetHDCPStateCallback& callback) override;
-  std::vector<display::ColorCalibrationProfile>
-  GetAvailableColorCalibrationProfiles(
-      const display::DisplaySnapshot& output) override;
-  bool SetColorCalibrationProfile(
-      const display::DisplaySnapshot& output,
-      display::ColorCalibrationProfile new_profile) override;
   bool SetColorCorrection(
       const display::DisplaySnapshot& output,
       const std::vector<display::GammaRampRGBEntry>& degamma_lut,

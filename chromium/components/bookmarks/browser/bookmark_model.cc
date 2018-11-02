@@ -34,7 +34,6 @@
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_resources.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/grit/generated_resources.h"
 
 using base::Time;
 

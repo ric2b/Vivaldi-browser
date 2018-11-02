@@ -11,6 +11,7 @@ class WebContents;
 
 namespace vivaldi {
 
+Browser* FindBrowserForEmbedderWebContents(const content::WebContents* contents);
 Browser* FindBrowserWithWebContents(content::WebContents* web_contents);
 
 }  // namespace vivaldi

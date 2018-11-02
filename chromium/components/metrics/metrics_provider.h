@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_METRICS_METRICS_PROVIDER_H_
 #define COMPONENTS_METRICS_METRICS_PROVIDER_H_
 
+#include "base/callback.h"
 #include "base/macros.h"
 
 namespace base {
@@ -25,6 +26,11 @@ class MetricsProvider {
 
   // Called after initialiazation of MetricsService and field trials.
   virtual void Init();
+
+  // Called during service initialization to allow the provider to start any
+  // async initialization tasks.  The service will wait for the provider to
+  // call |done_callback| before generating logs for the current session.
+  virtual void AsyncInit(const base::Closure& done_callback);
 
   // Called when a new MetricsLog is created.
   virtual void OnDidCreateMetricsLog();
@@ -54,19 +60,23 @@ class MetricsProvider {
   virtual void ProvideSystemProfileMetrics(
       SystemProfileProto* system_profile_proto);
 
-  // Called once at startup to see whether this provider has critical stability
-  // events to share in an initial stability log.
-  // Returning true can trigger ProvideInitialStabilityMetrics and
-  // ProvideStabilityMetrics on all other registered metrics providers.
+  // Called once at startup to see whether this provider has critical data
+  // to provide about the previous session.
+  // Returning true will trigger ProvidePreviousSessionData on all other
+  // registered metrics providers.
   // Default implementation always returns false.
-  virtual bool HasInitialStabilityMetrics();
+  virtual bool HasPreviousSessionData();
 
-  // Called at most once at startup when an initial stability log is created.
-  // It provides critical statiblity metrics that need to be reported in an
-  // initial stability log.
-  // Default implementation is a no-op.
-  virtual void ProvideInitialStabilityMetrics(
-      SystemProfileProto* system_profile_proto);
+  // Called when building a log about the previous session, so the provider
+  // can provide data about it.  Stability metrics can be provided
+  // directly into |stability_proto| fields or by logging stability histograms
+  // via the UMA_STABILITY_HISTOGRAM_ENUMERATION() macro.
+  virtual void ProvidePreviousSessionData(
+      ChromeUserMetricsExtension* uma_proto);
+
+  // Called when building a log about the current session, so the provider
+  // can provide data about it.
+  virtual void ProvideCurrentSessionData(ChromeUserMetricsExtension* uma_proto);
 
   // Provides additional stability metrics. Stability metrics can be provided
   // directly into |stability_proto| fields or by logging stability histograms
@@ -77,12 +87,6 @@ class MetricsProvider {
   // Called to indicate that saved stability prefs should be cleared, e.g.
   // because they are from an old version and should not be kept.
   virtual void ClearSavedStabilityMetrics();
-
-  // Provides general metrics that are neither system profile nor stability
-  // metrics. May also be used to add histograms when final metrics are
-  // collected right before upload.
-  virtual void ProvideGeneralMetrics(
-      ChromeUserMetricsExtension* uma_proto);
 
   // Called during regular collection to explicitly load histogram snapshots
   // using a snapshot manager. PrepareDeltas() will have already been called

@@ -71,8 +71,9 @@ VisibleSelectionTemplate<Strategy> ExpandUsingGranularity(
       granularity);
 }
 
+// TODO(editing-dev): We should move this test to "SelectionControllerTest.cpp"
 // For http://crbug.com/700368
-TEST_F(VisibleSelectionTest, appendTrailingWhitespaceWithAfterAnchor) {
+TEST_F(VisibleSelectionTest, AdjustSelectionWithTrailingWhitespace) {
   SetBodyContent(
       "<input type=checkbox>"
       "<div style='user-select:none'>abc</div>");
@@ -82,16 +83,19 @@ TEST_F(VisibleSelectionTest, appendTrailingWhitespaceWithAfterAnchor) {
   // TODO(editing-dev): We should remove above comment once we fix [1].
   // [1] http://crbug.com/701657 double-click on user-select:none should not
   // compute selection.
-  const VisibleSelection selection = CreateVisibleSelectionWithGranularity(
-      SelectionInDOMTree::Builder()
-          .Collapse(Position::BeforeNode(*input))
-          .Extend(Position::AfterNode(*input))
-          .Build(),
-      TextGranularity::kWord);
-  const VisibleSelection result = selection.AppendTrailingWhitespace();
+  const VisibleSelectionInFlatTree& selection =
+      CreateVisibleSelectionWithGranularity(
+          SelectionInFlatTree::Builder()
+              .Collapse(PositionInFlatTree::BeforeNode(*input))
+              .Extend(PositionInFlatTree::AfterNode(*input))
+              .Build(),
+          TextGranularity::kWord);
+  const SelectionInFlatTree& result =
+      AdjustSelectionWithTrailingWhitespace(selection.AsSelection());
 
-  EXPECT_EQ(Position::BeforeNode(*input), result.Start());
-  EXPECT_EQ(Position::AfterNode(*input), result.End());
+  EXPECT_EQ(PositionInFlatTree::BeforeNode(*input),
+            result.ComputeStartPosition());
+  EXPECT_EQ(PositionInFlatTree::AfterNode(*input), result.ComputeEndPosition());
 }
 
 TEST_F(VisibleSelectionTest, expandUsingGranularity) {
@@ -259,7 +263,93 @@ TEST_F(VisibleSelectionTest, Initialisation) {
 
   const VisibleSelection no_selection =
       CreateVisibleSelection(SelectionInDOMTree::Builder().Build());
-  EXPECT_EQ(kNoSelection, no_selection.GetSelectionType());
+  EXPECT_TRUE(no_selection.IsNone());
+}
+
+TEST_F(VisibleSelectionTest, FirstLetter) {
+  SetBodyContent(
+      "<style>p::first-letter { font-color: red; }</style>"
+      "<p>abc def</p>");
+  const Element* sample = GetDocument().QuerySelector("p");
+  const SelectionInDOMTree selection =
+      SelectionInDOMTree::Builder()
+          .Collapse(Position(sample->firstChild(), 0))
+          .Extend(Position(sample->firstChild(), 3))
+          .Build();
+  const VisibleSelection visible_selection = CreateVisibleSelection(selection);
+
+  EXPECT_EQ(selection, visible_selection.AsSelection());
+}
+
+TEST_F(VisibleSelectionTest, FirstLetterCollapsedWhitespace) {
+  SetBodyContent(
+      "<style>p::first-letter { font-color: red; }</style>"
+      "<p>  abc def</p>");
+  const Element* sample = GetDocument().QuerySelector("p");
+  const SelectionInDOMTree selection =
+      SelectionInDOMTree::Builder()
+          .Collapse(Position(sample->firstChild(), 0))
+          .Extend(Position(sample->firstChild(), 5))
+          .Build();
+  const VisibleSelection visible_selection = CreateVisibleSelection(selection);
+
+  EXPECT_EQ(SelectionInDOMTree::Builder()
+                .Collapse(Position(sample->firstChild(), 2))
+                .Extend(Position(sample->firstChild(), 5))
+                .Build(),
+            visible_selection.AsSelection())
+      << "VisibleSelection doesn't contains collapsed whitespaces";
+}
+
+TEST_F(VisibleSelectionTest, FirstLetterPartial) {
+  SetBodyContent(
+      "<style>p::first-letter { font-color: red; }</style>"
+      "<p>((a))bc def</p>");
+  const Element* sample = GetDocument().QuerySelector("p");
+  const SelectionInDOMTree selection =
+      SelectionInDOMTree::Builder()
+          .Collapse(Position(sample->firstChild(), 1))
+          .Extend(Position(sample->firstChild(), 4))
+          .Build();
+  const VisibleSelection visible_selection = CreateVisibleSelection(selection);
+
+  EXPECT_EQ(selection, visible_selection.AsSelection())
+      << "Select '(a)' of '((a))";
+}
+
+TEST_F(VisibleSelectionTest, FirstLetterTextTransform) {
+  SetBodyContent(
+      "<style>p::first-letter { text-transform: uppercase; }</style>"
+      "<p>\u00DFbc def</p>");  // uppercase(U+00DF) = "SS"
+  const Element* sample = GetDocument().QuerySelector("p");
+  const SelectionInDOMTree selection =
+      SelectionInDOMTree::Builder()
+          .Collapse(Position(sample->firstChild(), 0))
+          .Extend(Position(sample->firstChild(), 3))
+          .Build();
+  const VisibleSelection visible_selection = CreateVisibleSelection(selection);
+
+  EXPECT_EQ(selection, visible_selection.AsSelection());
+}
+
+TEST_F(VisibleSelectionTest, FirstLetterVisibilityHidden) {
+  SetBodyContent(
+      "<style>p::first-letter { visibility: hidden; }</style>"
+      "<p>abc def</p>");
+  const Element* sample = GetDocument().QuerySelector("p");
+  const SelectionInDOMTree selection =
+      SelectionInDOMTree::Builder()
+          .Collapse(Position(sample->firstChild(), 0))
+          .Extend(Position(sample->firstChild(), 3))
+          .Build();
+  const VisibleSelection visible_selection = CreateVisibleSelection(selection);
+
+  EXPECT_EQ(SelectionInDOMTree::Builder()
+                .Collapse(Position(sample->firstChild(), 1))
+                .Extend(Position(sample->firstChild(), 3))
+                .Build(),
+            visible_selection.AsSelection())
+      << "Exclude first-letter part since it is visibility::hidden";
 }
 
 // For http://crbug.com/695317
@@ -269,18 +359,19 @@ TEST_F(VisibleSelectionTest, SelectAllWithInputElement) {
   Element* const input = GetDocument().QuerySelector("input");
   Node* const last_child = GetDocument().body()->lastChild();
 
-  const VisibleSelection& visible_selectin_in_dom_tree = CreateVisibleSelection(
-      SelectionInDOMTree::Builder()
-          .Collapse(Position::FirstPositionInNode(*html_element))
-          .Extend(Position::LastPositionInNode(*html_element))
-          .Build());
+  const VisibleSelection& visible_selection_in_dom_tree =
+      CreateVisibleSelection(
+          SelectionInDOMTree::Builder()
+              .Collapse(Position::FirstPositionInNode(*html_element))
+              .Extend(Position::LastPositionInNode(*html_element))
+              .Build());
   EXPECT_EQ(SelectionInDOMTree::Builder()
                 .Collapse(Position::BeforeNode(*input))
                 .Extend(Position(last_child, 3))
                 .Build(),
-            visible_selectin_in_dom_tree.AsSelection());
+            visible_selection_in_dom_tree.AsSelection());
 
-  const VisibleSelectionInFlatTree& visible_selectin_in_flat_tree =
+  const VisibleSelectionInFlatTree& visible_selection_in_flat_tree =
       CreateVisibleSelection(
           SelectionInFlatTree::Builder()
               .Collapse(PositionInFlatTree::FirstPositionInNode(*html_element))
@@ -290,7 +381,7 @@ TEST_F(VisibleSelectionTest, SelectAllWithInputElement) {
                 .Collapse(PositionInFlatTree::BeforeNode(*input))
                 .Extend(PositionInFlatTree(last_child, 3))
                 .Build(),
-            visible_selectin_in_flat_tree.AsSelection());
+            visible_selection_in_flat_tree.AsSelection());
 }
 
 TEST_F(VisibleSelectionTest, ShadowCrossing) {
@@ -321,7 +412,7 @@ TEST_F(VisibleSelectionTest, ShadowCrossing) {
 
   EXPECT_EQ(Position(host, PositionAnchorType::kBeforeAnchor),
             selection.Start());
-  EXPECT_EQ(Position(one->firstChild(), 0), selection.End());
+  EXPECT_EQ(Position(host, PositionAnchorType::kBeforeAnchor), selection.End());
   EXPECT_EQ(PositionInFlatTree(one->firstChild(), 0),
             selection_in_flat_tree.Start());
   EXPECT_EQ(PositionInFlatTree(six->firstChild(), 2),
@@ -402,7 +493,7 @@ TEST_F(VisibleSelectionTest, ShadowNested) {
 
   EXPECT_EQ(Position(host, PositionAnchorType::kBeforeAnchor),
             selection.Start());
-  EXPECT_EQ(Position(one->firstChild(), 0), selection.End());
+  EXPECT_EQ(Position(host, PositionAnchorType::kBeforeAnchor), selection.End());
   EXPECT_EQ(PositionInFlatTree(eight->firstChild(), 2),
             selection_in_flat_tree.Start());
   EXPECT_EQ(PositionInFlatTree(eight->firstChild(), 2),

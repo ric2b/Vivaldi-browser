@@ -13,7 +13,7 @@
 
 #include "base/macros.h"
 #include "build/build_config.h"
-#include "content/browser/frame_host/render_widget_host_view_child_frame.h"
+#include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
 #include "content/common/content_export.h"
 #include "content/common/cursors/webcursor.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
@@ -24,7 +24,7 @@
 #include "ui/gfx/geometry/vector2d_f.h"
 #include "ui/gfx/native_widget_types.h"
 
-#include "cc/resources/single_release_callback.h"
+#include "components/viz/common/quads/single_release_callback.h"
 
 namespace content {
 class BrowserPluginGuest;
@@ -119,11 +119,10 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
       std::unique_ptr<RenderWidgetHostViewFrameSubscriber> subscriber) override;
   void EndFrameSubscription() override;
 
-
   bool LockMouse() override;
   void UnlockMouse() override;
   void DidCreateNewRendererCompositorFrameSink(
-      cc::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink)
+      viz::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink)
       override;
 
 #if defined(OS_MACOSX)
@@ -153,12 +152,12 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
   static void ReadBackDone(
     scoped_refptr<media::VideoFrame> video_frame,
     const base::Callback<void(bool)>& callback,
-    std::unique_ptr<cc::SingleReleaseCallback> release_callback, bool result);
+    std::unique_ptr<viz::SingleReleaseCallback> release_callback, bool result);
 
   static void DidCopyOutput(
     scoped_refptr<media::VideoFrame> video_frame,
     const base::Callback<void(const gfx::Rect&, bool)>& capture_frame_cb,
-    std::unique_ptr<cc::CopyOutputResult> result);
+    std::unique_ptr<viz::CopyOutputResult> result);
 
  private:
   friend class RenderWidgetHostView;

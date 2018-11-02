@@ -60,7 +60,7 @@ NotesChangeProcessor::~NotesChangeProcessor() {
 void NotesChangeProcessor::StartImpl() {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!notes_model_);
-  notes_model_ = NotesModelFactory::GetForProfile(sync_client_->GetProfile());
+  notes_model_ = sync_client_->GetNotesModel();
   DCHECK(notes_model_->loaded());
   notes_model_->AddObserver(this);
 }

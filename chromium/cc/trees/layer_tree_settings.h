@@ -16,7 +16,7 @@
 #include "cc/scheduler/scheduler_settings.h"
 #include "cc/tiles/tile_manager_settings.h"
 #include "components/viz/common/display/renderer_settings.h"
-#include "components/viz/common/quads/resource_format.h"
+#include "components/viz/common/resources/resource_format.h"
 #include "components/viz/common/resources/resource_settings.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/size.h"
@@ -55,6 +55,8 @@ class CC_EXPORT LayerTreeSettings {
   base::TimeDelta scrollbar_fade_delay;
   base::TimeDelta scrollbar_fade_duration;
   base::TimeDelta scrollbar_thinning_duration;
+  bool scrollbar_flash_after_any_scroll_update = false;
+  bool scrollbar_flash_when_mouse_enter = false;
   SkColor solid_color_scrollbar_color = SK_ColorWHITE;
   bool timeout_and_draw_when_animation_checkerboards = true;
   bool layer_transforms_should_scale_layer_contents = false;
@@ -99,6 +101,13 @@ class CC_EXPORT LayerTreeSettings {
   // ready.
   bool enable_checker_imaging = false;
 
+  // The minimum size of an image we should considering decoding using the
+  // deferred path.
+  size_t min_image_bytes_to_checker = 1 * 1024 * 1024;  // 1MB.
+
+  // Disables checkering of images when not using gpu rasterization.
+  bool only_checker_images_with_gpu_raster = false;
+
   LayerTreeDebugState initial_debug_state;
 
   // Indicates that the LayerTreeHost should defer commits unless it has a valid
@@ -113,6 +122,29 @@ class CC_EXPORT LayerTreeSettings {
   // in ResourcePool. Only used for layout or pixel tests, as non-deterministic
   // resource sizes can lead to floating point error and noise in these tests.
   bool disallow_non_exact_resource_reuse = false;
+
+  // Whether the Scheduler should wait for all pipeline stages before attempting
+  // to draw. If |true|, they will block indefinitely until all stages have
+  // completed the current BeginFrame before triggering their own BeginFrame
+  // deadlines.
+  bool wait_for_all_pipeline_stages_before_draw = false;
+
+  // On a low-end android devices where the GPU memory is low, we are reducing
+  // the tile width to half in the cases where the content width > screen width.
+  // This doesn't impact CPU tile size, and we should see an obvious GPU memory
+  // saving.
+  bool use_half_width_tiles_for_gpu_rasterization = false;
+
+  // Whether layer tree commits should be made directly to the active
+  // tree on the impl thread. If |false| LayerTreeHostImpl creates a
+  // pending layer tree and produces that as the 'sync tree' with
+  // which LayerTreeHost synchronizes. If |true| LayerTreeHostImpl
+  // produces the active tree as its 'sync tree'.
+  bool commit_to_active_tree = true;
+
+  // Whether to use out of process raster.  If true, whenever gpu raster
+  // would have been used, out of process gpu raster will be used instead.
+  bool enable_oop_rasterization = false;
 };
 
 }  // namespace cc

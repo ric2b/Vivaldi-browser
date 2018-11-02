@@ -110,9 +110,9 @@
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebURLError.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
-#include "third_party/WebKit/public/web/WebCompositionUnderline.h"
-#include "third_party/WebKit/public/web/WebDataSource.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
+#include "third_party/WebKit/public/web/WebDocumentLoader.h"
+#include "third_party/WebKit/public/web/WebImeTextSpan.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebPluginContainer.h"
 #include "third_party/WebKit/public/web/WebPluginScriptForbiddenScope.h"
@@ -782,8 +782,8 @@ void PepperPluginInstanceImpl::PassCommittedTextureToTextureLayer() {
   if (!committed_texture_.IsValid())
     return;
 
-  std::unique_ptr<cc::SingleReleaseCallback> callback(
-      cc::SingleReleaseCallback::Create(base::Bind(
+  std::unique_ptr<viz::SingleReleaseCallback> callback(
+      viz::SingleReleaseCallback::Create(base::Bind(
           &PepperPluginInstanceImpl::FinishedConsumingCommittedTexture,
           weak_factory_.GetWeakPtr(), committed_texture_,
           committed_texture_graphics_3d_)));
@@ -945,22 +945,19 @@ bool PepperPluginInstanceImpl::HandleDocumentLoad(
 bool PepperPluginInstanceImpl::SendCompositionEventToPlugin(
     PP_InputEvent_Type type,
     const base::string16& text) {
-  std::vector<blink::WebCompositionUnderline> empty;
-  return SendCompositionEventWithUnderlineInformationToPlugin(
-      type,
-      text,
-      empty,
-      static_cast<int>(text.size()),
+  std::vector<blink::WebImeTextSpan> empty;
+  return SendCompositionEventWithImeTextSpanInformationToPlugin(
+      type, text, empty, static_cast<int>(text.size()),
       static_cast<int>(text.size()));
 }
 
-bool
-PepperPluginInstanceImpl::SendCompositionEventWithUnderlineInformationToPlugin(
-    PP_InputEvent_Type type,
-    const base::string16& text,
-    const std::vector<blink::WebCompositionUnderline>& underlines,
-    int selection_start,
-    int selection_end) {
+bool PepperPluginInstanceImpl::
+    SendCompositionEventWithImeTextSpanInformationToPlugin(
+        PP_InputEvent_Type type,
+        const base::string16& text,
+        const std::vector<blink::WebImeTextSpan>& ime_text_spans,
+        int selection_start,
+        int selection_end) {
   // Keep a reference on the stack. See NOTE above.
   scoped_refptr<PepperPluginInstanceImpl> ref(this);
 
@@ -981,9 +978,9 @@ PepperPluginInstanceImpl::SendCompositionEventWithUnderlineInformationToPlugin(
   std::vector<size_t> utf16_offsets;
   utf16_offsets.push_back(selection_start);
   utf16_offsets.push_back(selection_end);
-  for (size_t i = 0; i < underlines.size(); ++i) {
-    utf16_offsets.push_back(underlines[i].start_offset);
-    utf16_offsets.push_back(underlines[i].end_offset);
+  for (size_t i = 0; i < ime_text_spans.size(); ++i) {
+    utf16_offsets.push_back(ime_text_spans[i].start_offset);
+    utf16_offsets.push_back(ime_text_spans[i].end_offset);
   }
   std::vector<size_t> utf8_offsets(utf16_offsets);
   event.character_text = base::UTF16ToUTF8AndAdjustOffsets(text, &utf8_offsets);
@@ -1006,8 +1003,8 @@ PepperPluginInstanceImpl::SendCompositionEventWithUnderlineInformationToPlugin(
                                            offset_set.end());
 
   // Set the composition target.
-  for (size_t i = 0; i < underlines.size(); ++i) {
-    if (underlines[i].thick) {
+  for (size_t i = 0; i < ime_text_spans.size(); ++i) {
+    if (ime_text_spans[i].thick) {
       std::vector<uint32_t>::iterator it =
           std::find(event.composition_segment_offsets.begin(),
                     event.composition_segment_offsets.end(),
@@ -1049,15 +1046,12 @@ bool PepperPluginInstanceImpl::HandleCompositionStart(
 
 bool PepperPluginInstanceImpl::HandleCompositionUpdate(
     const base::string16& text,
-    const std::vector<blink::WebCompositionUnderline>& underlines,
+    const std::vector<blink::WebImeTextSpan>& ime_text_spans,
     int selection_start,
     int selection_end) {
-  return SendCompositionEventWithUnderlineInformationToPlugin(
-      PP_INPUTEVENT_TYPE_IME_COMPOSITION_UPDATE,
-      text,
-      underlines,
-      selection_start,
-      selection_end);
+  return SendCompositionEventWithImeTextSpanInformationToPlugin(
+      PP_INPUTEVENT_TYPE_IME_COMPOSITION_UPDATE, text, ime_text_spans,
+      selection_start, selection_end);
 }
 
 bool PepperPluginInstanceImpl::HandleCompositionEnd(
@@ -1184,7 +1178,7 @@ bool PepperPluginInstanceImpl::HandleInputEvent(
             ppapi::TimeTicksToPPTimeTicks(base::TimeTicks::Now());
         pending_user_gesture_token_ =
             WebUserGestureIndicator::CurrentUserGestureToken();
-        pending_user_gesture_token_.SetOutOfProcess();
+        WebUserGestureIndicator::ExtendTimeout();
       }
 
       // Each input event may generate more than one PP_InputEvent.
@@ -1465,6 +1459,54 @@ base::string16 PepperPluginInstanceImpl::GetLinkAtPosition(
   return link;
 }
 
+void PepperPluginInstanceImpl::SetCaretPosition(const gfx::PointF& position) {
+  if (!LoadPdfInterface())
+    return;
+
+  PP_FloatPoint p;
+  p.x = position.x();
+  p.y = position.y();
+  plugin_pdf_interface_->SetCaretPosition(pp_instance(), &p);
+}
+
+void PepperPluginInstanceImpl::MoveRangeSelectionExtent(
+    const gfx::PointF& extent) {
+  if (!LoadPdfInterface())
+    return;
+
+  PP_FloatPoint p;
+  p.x = extent.x();
+  p.y = extent.y();
+  plugin_pdf_interface_->MoveRangeSelectionExtent(pp_instance(), &p);
+}
+
+void PepperPluginInstanceImpl::SetSelectionBounds(const gfx::PointF& base,
+                                                  const gfx::PointF& extent) {
+  if (!LoadPdfInterface())
+    return;
+
+  PP_FloatPoint p_base;
+  p_base.x = base.x();
+  p_base.y = base.y();
+
+  PP_FloatPoint p_extent;
+  p_extent.x = extent.x();
+  p_extent.y = extent.y();
+  plugin_pdf_interface_->SetSelectionBounds(pp_instance(), &p_base, &p_extent);
+}
+
+bool PepperPluginInstanceImpl::CanEditText() {
+  if (!LoadPdfInterface())
+    return false;
+  return PP_ToBool(plugin_pdf_interface_->CanEditText(pp_instance()));
+}
+
+void PepperPluginInstanceImpl::ReplaceSelection(const std::string& text) {
+  if (!LoadPdfInterface())
+    return;
+  plugin_pdf_interface_->ReplaceSelection(pp_instance(), text.c_str());
+}
+
 void PepperPluginInstanceImpl::RequestSurroundingText(
     size_t desired_number_of_characters) {
   // Keep a reference on the stack. See NOTE above.
@@ -1695,8 +1737,9 @@ void PepperPluginInstanceImpl::ScheduleAsyncDidChangeView() {
   if (view_change_weak_ptr_factory_.HasWeakPtrs())
     return;  // Already scheduled.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&PepperPluginInstanceImpl::SendAsyncDidChangeView,
-                            view_change_weak_ptr_factory_.GetWeakPtr()));
+      FROM_HERE,
+      base::BindOnce(&PepperPluginInstanceImpl::SendAsyncDidChangeView,
+                     view_change_weak_ptr_factory_.GetWeakPtr()));
 }
 
 void PepperPluginInstanceImpl::SendAsyncDidChangeView() {
@@ -2170,7 +2213,7 @@ void PepperPluginInstanceImpl::UpdateLayer(bool force_creation) {
 
 bool PepperPluginInstanceImpl::PrepareTextureMailbox(
     viz::TextureMailbox* mailbox,
-    std::unique_ptr<cc::SingleReleaseCallback>* release_callback) {
+    std::unique_ptr<viz::SingleReleaseCallback>* release_callback) {
   if (!bound_graphics_2d_platform_)
     return false;
   return bound_graphics_2d_platform_->PrepareTextureMailbox(mailbox,
@@ -2286,7 +2329,7 @@ bool PepperPluginInstanceImpl::SimulateIMEEvent(
         return false;
       render_frame_->SimulateImeCommitText(
           base::UTF8ToUTF16(input_event.character_text),
-          std::vector<blink::WebCompositionUnderline>(), gfx::Range());
+          std::vector<blink::WebImeTextSpan>(), gfx::Range());
       break;
     default:
       return false;
@@ -2309,18 +2352,18 @@ void PepperPluginInstanceImpl::SimulateImeSetCompositionEvent(
   base::string16 utf16_text =
       base::UTF8ToUTF16AndAdjustOffsets(input_event.character_text, &offsets);
 
-  std::vector<blink::WebCompositionUnderline> underlines;
+  std::vector<blink::WebImeTextSpan> ime_text_spans;
   for (size_t i = 2; i + 1 < offsets.size(); ++i) {
-    blink::WebCompositionUnderline underline;
-    underline.start_offset = offsets[i];
-    underline.end_offset = offsets[i + 1];
+    blink::WebImeTextSpan ime_text_span;
+    ime_text_span.start_offset = offsets[i];
+    ime_text_span.end_offset = offsets[i + 1];
     if (input_event.composition_target_segment == static_cast<int32_t>(i - 2))
-      underline.thick = true;
-    underlines.push_back(underline);
+      ime_text_span.thick = true;
+    ime_text_spans.push_back(ime_text_span);
   }
 
-  render_frame_->SimulateImeSetComposition(
-      utf16_text, underlines, offsets[0], offsets[1]);
+  render_frame_->SimulateImeSetComposition(utf16_text, ime_text_spans,
+                                           offsets[0], offsets[1]);
 }
 
 ContentDecryptorDelegate*
@@ -2547,6 +2590,14 @@ PP_Var PepperPluginInstanceImpl::GetDefaultCharSet(PP_Instance instance) {
 void PepperPluginInstanceImpl::PromiseResolved(PP_Instance instance,
                                                uint32_t promise_id) {
   content_decryptor_delegate_->OnPromiseResolved(promise_id);
+}
+
+void PepperPluginInstanceImpl::PromiseResolvedWithKeyStatus(
+    PP_Instance instance,
+    uint32_t promise_id,
+    PP_CdmKeyStatus key_status) {
+  content_decryptor_delegate_->OnPromiseResolvedWithKeyStatus(promise_id,
+                                                              key_status);
 }
 
 void PepperPluginInstanceImpl::PromiseResolvedWithSession(
@@ -2918,9 +2969,10 @@ void PepperPluginInstanceImpl::SelectionChanged(PP_Instance instance) {
   // refcounted because we don't actually want this operation to affect the
   // lifetime of the instance.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&PepperPluginInstanceImpl::RequestSurroundingText,
-                            weak_factory_.GetWeakPtr(),
-                            static_cast<size_t>(kExtraCharsForTextInput)));
+      FROM_HERE,
+      base::BindOnce(&PepperPluginInstanceImpl::RequestSurroundingText,
+                     weak_factory_.GetWeakPtr(),
+                     static_cast<size_t>(kExtraCharsForTextInput)));
 }
 
 void PepperPluginInstanceImpl::UpdateSurroundingText(PP_Instance instance,
@@ -3003,7 +3055,7 @@ PP_Var PepperPluginInstanceImpl::GetPluginReferrerURL(
   WebLocalFrame* frame = document.GetFrame();
   if (!frame)
     return PP_MakeUndefined();
-  const WebURLRequest& request = frame->DataSource()->OriginalRequest();
+  const WebURLRequest& request = frame->GetDocumentLoader()->OriginalRequest();
   WebString referer = request.HttpHeaderField("Referer");
   if (referer.IsEmpty())
     return PP_MakeUndefined();
@@ -3214,7 +3266,7 @@ bool PepperPluginInstanceImpl::FlashSetFullscreen(bool fullscreen,
     } else {
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE,
-          base::Bind(&PepperPluginInstanceImpl::ReportGeometry, this));
+          base::BindOnce(&PepperPluginInstanceImpl::ReportGeometry, this));
     }
   }
 
@@ -3247,7 +3299,7 @@ int32_t PepperPluginInstanceImpl::Navigate(
           pp_instance_, &completed_request, frame, &web_request)) {
     return PP_ERROR_FAILED;
   }
-  web_request.SetFirstPartyForCookies(document.FirstPartyForCookies());
+  web_request.SetSiteForCookies(document.SiteForCookies());
   if (IsProcessingUserGesture())
     web_request.SetHasUserGesture(true);
 

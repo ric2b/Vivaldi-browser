@@ -17,7 +17,6 @@
 #include "chrome/browser/chromeos/enrollment_dialog_view.h"
 #include "chrome/browser/chromeos/net/shill_error.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/common/net/x509_certificate_model.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/login/login_state.h"
 #include "chromeos/network/network_configuration_handler.h"
@@ -362,14 +361,11 @@ bool VPNConfigView::Login() {
   if (service_path_.empty()) {
     base::DictionaryValue properties;
     // Identifying properties
-    properties.SetStringWithoutPathExpansion(
-        shill::kTypeProperty, shill::kTypeVPN);
-    properties.SetStringWithoutPathExpansion(
-        shill::kNameProperty, GetService());
-    properties.SetStringWithoutPathExpansion(
-        shill::kProviderHostProperty, GetServer());
-    properties.SetStringWithoutPathExpansion(
-        shill::kProviderTypeProperty, GetProviderTypeString());
+    properties.SetKey(shill::kTypeProperty, base::Value(shill::kTypeVPN));
+    properties.SetKey(shill::kNameProperty, base::Value(GetService()));
+    properties.SetKey(shill::kProviderHostProperty, base::Value(GetServer()));
+    properties.SetKey(shill::kProviderTypeProperty,
+                      base::Value(GetProviderTypeString()));
 
     SetConfigProperties(&properties);
     bool shared = false;
@@ -379,8 +375,7 @@ bool VPNConfigView::Login() {
     bool only_policy_autoconnect =
         onc::PolicyAllowsOnlyPolicyNetworksToAutoconnect(!shared);
     if (only_policy_autoconnect) {
-      properties.SetBooleanWithoutPathExpansion(shill::kAutoConnectProperty,
-                                                false);
+      properties.SetKey(shill::kAutoConnectProperty, base::Value(false));
     }
 
     NetworkConnect::Get()->CreateConfigurationAndConnect(&properties, shared);
@@ -839,20 +834,20 @@ void VPNConfigView::SetConfigProperties(
     case PROVIDER_TYPE_INDEX_L2TP_IPSEC_PSK: {
       std::string psk_passphrase = GetPSKPassphrase();
       if (!psk_passphrase.empty()) {
-        properties->SetStringWithoutPathExpansion(
-            shill::kL2tpIpsecPskProperty, GetPSKPassphrase());
+        properties->SetKey(shill::kL2tpIpsecPskProperty,
+                           base::Value(GetPSKPassphrase()));
       }
       if (!group_name.empty()) {
-        properties->SetStringWithoutPathExpansion(
-            shill::kL2tpIpsecTunnelGroupProperty, group_name);
+        properties->SetKey(shill::kL2tpIpsecTunnelGroupProperty,
+                           base::Value(group_name));
       }
       if (!user_name.empty()) {
-        properties->SetStringWithoutPathExpansion(
-            shill::kL2tpIpsecUserProperty, user_name);
+        properties->SetKey(shill::kL2tpIpsecUserProperty,
+                           base::Value(user_name));
       }
       if (!user_passphrase.empty()) {
-        properties->SetStringWithoutPathExpansion(
-            shill::kL2tpIpsecPasswordProperty, user_passphrase);
+        properties->SetKey(shill::kL2tpIpsecPasswordProperty,
+                           base::Value(user_passphrase));
       }
       break;
     }
@@ -867,16 +862,16 @@ void VPNConfigView::SetConfigProperties(
       }
       SetUserCertProperties(client_cert::CONFIG_TYPE_IPSEC, properties);
       if (!group_name.empty()) {
-        properties->SetStringWithoutPathExpansion(
-            shill::kL2tpIpsecTunnelGroupProperty, GetGroupName());
+        properties->SetKey(shill::kL2tpIpsecTunnelGroupProperty,
+                           base::Value(GetGroupName()));
       }
       if (!user_name.empty()) {
-        properties->SetStringWithoutPathExpansion(
-            shill::kL2tpIpsecUserProperty, user_name);
+        properties->SetKey(shill::kL2tpIpsecUserProperty,
+                           base::Value(user_name));
       }
       if (!user_passphrase.empty()) {
-        properties->SetStringWithoutPathExpansion(
-            shill::kL2tpIpsecPasswordProperty, user_passphrase);
+        properties->SetKey(shill::kL2tpIpsecPasswordProperty,
+                           base::Value(user_passphrase));
       }
       break;
     }
@@ -890,16 +885,15 @@ void VPNConfigView::SetConfigProperties(
                                             std::move(pem_list));
       }
       SetUserCertProperties(client_cert::CONFIG_TYPE_OPENVPN, properties);
-      properties->SetStringWithoutPathExpansion(
-          shill::kOpenVPNUserProperty, GetUsername());
+      properties->SetKey(shill::kOpenVPNUserProperty,
+                         base::Value(GetUsername()));
       if (!user_passphrase.empty()) {
-        properties->SetStringWithoutPathExpansion(
-            shill::kOpenVPNPasswordProperty, user_passphrase);
+        properties->SetKey(shill::kOpenVPNPasswordProperty,
+                           base::Value(user_passphrase));
       }
       std::string otp = GetOTP();
       if (!otp.empty()) {
-        properties->SetStringWithoutPathExpansion(
-            shill::kOpenVPNOTPProperty, otp);
+        properties->SetKey(shill::kOpenVPNOTPProperty, base::Value(otp));
       }
       break;
     }
@@ -907,8 +901,8 @@ void VPNConfigView::SetConfigProperties(
       NOTREACHED();
       break;
   }
-  properties->SetBooleanWithoutPathExpansion(
-      shill::kSaveCredentialsProperty, GetSaveCredentials());
+  properties->SetKey(shill::kSaveCredentialsProperty,
+                     base::Value(GetSaveCredentials()));
 }
 
 void VPNConfigView::Refresh() {

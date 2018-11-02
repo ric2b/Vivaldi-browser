@@ -12,6 +12,7 @@
 #include "base/memory/ref_counted_memory.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_piece.h"
+#include "base/task_scheduler/post_task.h"
 #include "content/browser/blob_storage/blob_internals_url_loader.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/frame_host/frame_tree_node.h"
@@ -93,9 +94,8 @@ void ReadData(scoped_refptr<ResourceResponse> headers,
 
   void* buffer = nullptr;
   uint32_t num_bytes = output_size;
-  MojoResult result =
-      BeginWriteDataRaw(data_pipe.producer_handle.get(), &buffer, &num_bytes,
-                        MOJO_WRITE_DATA_FLAG_NONE);
+  MojoResult result = data_pipe.producer_handle->BeginWriteData(
+      &buffer, &num_bytes, MOJO_WRITE_DATA_FLAG_NONE);
   CHECK_EQ(result, MOJO_RESULT_OK);
   CHECK_EQ(num_bytes, output_size);
 
@@ -105,7 +105,7 @@ void ReadData(scoped_refptr<ResourceResponse> headers,
   } else {
     memcpy(buffer, bytes->front(), output_size);
   }
-  result = EndWriteDataRaw(data_pipe.producer_handle.get(), num_bytes);
+  result = data_pipe.producer_handle->EndWriteData(num_bytes);
   CHECK_EQ(result, MOJO_RESULT_OK);
 
   client->OnStartLoadingResponseBody(std::move(data_pipe.consumer_handle));
@@ -119,16 +119,14 @@ void DataAvailable(scoped_refptr<ResourceResponse> headers,
                    mojom::URLLoaderClientPtrInfo client_info,
                    scoped_refptr<base::RefCountedMemory> bytes) {
   // Since the bytes are from the memory mapped resource file, copying the
-  // data can lead to disk access.
-  // TODO(jam): once http://crbug.com/678155 is fixed, use task scheduler:
-  // base::PostTaskWithTraits(
-  //     FROM_HERE,
-  //     {base::TaskPriority::USER_BLOCKING,
-  //       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-  BrowserThread::PostTask(
-      BrowserThread::FILE_USER_BLOCKING, FROM_HERE,
-      base::BindOnce(ReadData, headers, replacements, gzipped, source,
-                     std::move(client_info), bytes));
+  // data can lead to disk access. Needs to be posted to a SequencedTaskRunner
+  // as Mojo requires a SequencedTaskRunnerHandle in scope.
+  base::CreateSequencedTaskRunnerWithTraits(
+      {base::TaskPriority::USER_BLOCKING, base::MayBlock(),
+       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})
+      ->PostTask(FROM_HERE,
+                 base::BindOnce(ReadData, headers, replacements, gzipped,
+                                source, std::move(client_info), bytes));
 }
 
 void StartURLLoader(const ResourceRequest& request,
@@ -224,7 +222,7 @@ class WebUIURLLoaderFactory : public mojom::URLLoaderFactory,
   }
 
   // mojom::URLLoaderFactory implementation:
-  void CreateLoaderAndStart(mojom::URLLoaderAssociatedRequest loader,
+  void CreateLoaderAndStart(mojom::URLLoaderRequest loader,
                             int32_t routing_id,
                             int32_t request_id,
                             uint32_t options,
@@ -234,7 +232,7 @@ class WebUIURLLoaderFactory : public mojom::URLLoaderFactory,
                                 traffic_annotation) override {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     if (request.url.host_piece() == kChromeUINetworkViewCacheHost) {
-      storage_partition_->network_context()->HandleViewCacheRequest(
+      storage_partition_->GetNetworkContext()->HandleViewCacheRequest(
           request.url, std::move(client));
       return;
     }
@@ -268,11 +266,8 @@ class WebUIURLLoaderFactory : public mojom::URLLoaderFactory,
             storage_partition_->browser_context()->GetResourceContext()));
   }
 
-  void SyncLoad(int32_t routing_id,
-                int32_t request_id,
-                const ResourceRequest& request,
-                SyncLoadCallback callback) override {
-    NOTREACHED();
+  void Clone(mojom::URLLoaderFactoryRequest request) override {
+    loader_factory_bindings_.AddBinding(this, std::move(request));
   }
 
   // FrameTreeNode::Observer implementation:

@@ -13,7 +13,6 @@
 #include "base/strings/string16.h"
 
 class GURL;
-class PrefService;
 
 namespace aura {
 class Window;
@@ -32,21 +31,17 @@ class Connector;
 }
 
 namespace ui {
-#if defined(USE_OZONE)
 class InputDeviceControllerClient;
-#endif
-class MenuModel;
 }
 
 namespace ash {
 
 class AccessibilityDelegate;
 class GPUSupport;
+class NetworkingConfigDelegate;
 class PaletteDelegate;
-class Shelf;
-struct ShelfItem;
-class SystemTrayDelegate;
 class WallpaperDelegate;
+enum class TouchscreenEnabledSource;
 
 // Delegate of the Shell.
 class ASH_EXPORT ShellDelegate {
@@ -98,8 +93,8 @@ class ASH_EXPORT ShellDelegate {
   virtual void ShelfInit() = 0;
   virtual void ShelfShutdown() = 0;
 
-  // Creates a system-tray delegate. Shell takes ownership of the delegate.
-  virtual SystemTrayDelegate* CreateSystemTrayDelegate() = 0;
+  // Returns the delegate. May be null in tests.
+  virtual NetworkingConfigDelegate* GetNetworkingConfigDelegate() = 0;
 
   // Creates a wallpaper delegate. Shell takes ownership of the delegate.
   virtual std::unique_ptr<WallpaperDelegate> CreateWallpaperDelegate() = 0;
@@ -108,11 +103,6 @@ class ASH_EXPORT ShellDelegate {
   virtual AccessibilityDelegate* CreateAccessibilityDelegate() = 0;
 
   virtual std::unique_ptr<PaletteDelegate> CreatePaletteDelegate() = 0;
-
-  // Creates a menu model for the |shelf| and optional shelf |item|.
-  // If |item| is null, this creates a context menu for the wallpaper or shelf.
-  virtual ui::MenuModel* CreateContextMenu(Shelf* shelf,
-                                           const ShelfItem* item) = 0;
 
   // Creates a GPU support object. Shell takes ownership of the object.
   virtual GPUSupport* CreateGPUSupport() = 0;
@@ -124,22 +114,16 @@ class ASH_EXPORT ShellDelegate {
 
   virtual gfx::Image GetDeprecatedAcceleratorImage() const = 0;
 
-  virtual PrefService* GetActiveUserPrefService() const = 0;
+  // Returns the current touchscreen enabled status as specified by |source|.
+  // Note that the actual state of the touchscreen device is automatically
+  // determined based on the requests of multiple sources.
+  virtual bool GetTouchscreenEnabled(TouchscreenEnabledSource source) const = 0;
 
-  virtual PrefService* GetLocalStatePrefService() const = 0;
-
-  // If |use_local_state| is true, returns the touchscreen status from local
-  // state, otherwise from user prefs.
-  virtual bool IsTouchscreenEnabledInPrefs(bool use_local_state) const = 0;
-
-  // Sets the status of touchscreen to |enabled| in prefs. If |use_local_state|,
-  // pref is set in local state, otherwise in user prefs.
-  virtual void SetTouchscreenEnabledInPrefs(bool enabled,
-                                            bool use_local_state) = 0;
-
-  // Updates the enabled/disabled status of the touchscreen from prefs. Enabled
-  // if both local state and user prefs are enabled, otherwise disabled.
-  virtual void UpdateTouchscreenStatusFromPrefs() = 0;
+  // Sets |source|'s requested touchscreen enabled status to |enabled|. Note
+  // that the actual state of the touchscreen device is automatically determined
+  // based on the requests of multiple sources.
+  virtual void SetTouchscreenEnabled(bool enabled,
+                                     TouchscreenEnabledSource source) = 0;
 
   // Toggles the status of touchpad between enabled and disabled.
   virtual void ToggleTouchpad() {}
@@ -147,10 +131,8 @@ class ASH_EXPORT ShellDelegate {
   // Suspends all WebContents-associated media sessions to stop managed players.
   virtual void SuspendMediaSessions() {}
 
-#if defined(USE_OZONE)
   // Creator of Shell owns this; it's assumed this outlives Shell.
   virtual ui::InputDeviceControllerClient* GetInputDeviceControllerClient() = 0;
-#endif
 };
 
 }  // namespace ash

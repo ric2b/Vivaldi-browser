@@ -10,6 +10,7 @@
 #include "third_party/skia/include/core/SkAnnotation.h"
 #include "third_party/skia/include/core/SkColorSpaceXformCanvas.h"
 #include "third_party/skia/include/core/SkMetaData.h"
+#include "third_party/skia/include/core/SkRegion.h"
 #include "third_party/skia/include/utils/SkNWayCanvas.h"
 
 namespace cc {
@@ -192,23 +193,6 @@ void SkiaPaintCanvas::drawDRRect(const SkRRect& outer,
   canvas_->drawDRRect(outer, inner, paint);
 }
 
-void SkiaPaintCanvas::drawCircle(SkScalar cx,
-                                 SkScalar cy,
-                                 SkScalar radius,
-                                 const PaintFlags& flags) {
-  SkPaint paint = flags.ToSkPaint();
-  canvas_->drawCircle(cx, cy, radius, paint);
-}
-
-void SkiaPaintCanvas::drawArc(const SkRect& oval,
-                              SkScalar start_angle,
-                              SkScalar sweep_angle,
-                              bool use_center,
-                              const PaintFlags& flags) {
-  SkPaint paint = flags.ToSkPaint();
-  canvas_->drawArc(oval, start_angle, sweep_angle, use_center, paint);
-}
-
 void SkiaPaintCanvas::drawRoundRect(const SkRect& rect,
                                     SkScalar rx,
                                     SkScalar ry,
@@ -229,7 +213,7 @@ void SkiaPaintCanvas::drawImage(const PaintImage& image,
   SkPaint paint;
   if (flags)
     paint = flags->ToSkPaint();
-  canvas_->drawImage(image.sk_image().get(), left, top,
+  canvas_->drawImage(image.GetSkImage().get(), left, top,
                      flags ? &paint : nullptr);
 }
 
@@ -241,7 +225,7 @@ void SkiaPaintCanvas::drawImageRect(const PaintImage& image,
   SkPaint paint;
   if (flags)
     paint = flags->ToSkPaint();
-  canvas_->drawImageRect(image.sk_image().get(), src, dst,
+  canvas_->drawImageRect(image.GetSkImage().get(), src, dst,
                          flags ? &paint : nullptr,
                          static_cast<SkCanvas::SrcRectConstraint>(constraint));
 }
@@ -256,23 +240,6 @@ void SkiaPaintCanvas::drawBitmap(const SkBitmap& bitmap,
   } else {
     canvas_->drawBitmap(bitmap, left, top, nullptr);
   }
-}
-
-void SkiaPaintCanvas::drawText(const void* text,
-                               size_t byte_length,
-                               SkScalar x,
-                               SkScalar y,
-                               const PaintFlags& flags) {
-  SkPaint paint = flags.ToSkPaint();
-  canvas_->drawText(text, byte_length, x, y, paint);
-}
-
-void SkiaPaintCanvas::drawPosText(const void* text,
-                                  size_t byte_length,
-                                  const SkPoint pos[],
-                                  const PaintFlags& flags) {
-  SkPaint paint = flags.ToSkPaint();
-  canvas_->drawPosText(text, byte_length, pos, paint);
 }
 
 void SkiaPaintCanvas::drawTextBlob(sk_sp<SkTextBlob> blob,

@@ -37,12 +37,14 @@ namespace blink {
 
 class FontData;
 class FontDescription;
+class FontSelectorClient;
+class GenericFontFamilySettings;
 
 class PLATFORM_EXPORT FontSelector : public FontCacheClient {
  public:
   virtual ~FontSelector() {}
-  virtual PassRefPtr<FontData> GetFontData(const FontDescription&,
-                                           const AtomicString& family_name) = 0;
+  virtual RefPtr<FontData> GetFontData(const FontDescription&,
+                                       const AtomicString& family_name) = 0;
 
   // TODO crbug.com/542629 - The String variant of this method shouldbe replaced
   // with a better approach, now that we only have complex text.
@@ -56,6 +58,15 @@ class PLATFORM_EXPORT FontSelector : public FontCacheClient {
   virtual unsigned Version() const = 0;
 
   virtual void ReportNotDefGlyph() const = 0;
+
+  virtual void RegisterForInvalidationCallbacks(FontSelectorClient*) = 0;
+  virtual void UnregisterForInvalidationCallbacks(FontSelectorClient*) = 0;
+
+ protected:
+  static AtomicString FamilyNameFromSettings(
+      const GenericFontFamilySettings&,
+      const FontDescription&,
+      const AtomicString& generic_family_name);
 };
 
 }  // namespace blink

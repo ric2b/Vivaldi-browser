@@ -82,6 +82,11 @@ ScopedJavaLocalRef<jobject> Shell::GetContentVideoViewEmbedder() {
   return Java_Shell_getContentVideoViewEmbedder(env, java_object_);
 }
 
+void Shell::SetOverlayMode(bool use_overlay_mode) {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  return Java_Shell_setOverlayMode(env, java_object_, use_overlay_mode);
+}
+
 void Shell::PlatformToggleFullscreenModeForTab(WebContents* web_contents,
                                                bool enter_fullscreen) {
   JNIEnv* env = AttachCurrentThread();
@@ -97,11 +102,6 @@ bool Shell::PlatformIsFullscreenForTabOrPending(
 void Shell::Close() {
   RemoveShellView(java_object_);
   delete this;
-}
-
-// static
-bool Shell::Register(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 // static

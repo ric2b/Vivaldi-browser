@@ -27,7 +27,7 @@ namespace content {
 // intended for rendering. This copied data is received on OnAudioBus() and sent
 // to all the registered Tracks.
 class CONTENT_EXPORT HtmlAudioElementCapturerSource final
-    : NON_EXPORTED_BASE(public MediaStreamAudioSource) {
+    : public MediaStreamAudioSource {
  public:
   static HtmlAudioElementCapturerSource*
   CreateFromWebMediaPlayerImpl(blink::WebMediaPlayer* player);
@@ -40,6 +40,7 @@ class CONTENT_EXPORT HtmlAudioElementCapturerSource final
   // MediaStreamAudioSource implementation.
   bool EnsureSourceIsStarted() final;
   void EnsureSourceIsStopped() final;
+  void SetAudioCallback();
 
   // To act as an WebAudioSourceProviderImpl::CopyAudioCB.
   void OnAudioBus(std::unique_ptr<media::AudioBus> audio_bus,
@@ -54,6 +55,8 @@ class CONTENT_EXPORT HtmlAudioElementCapturerSource final
   int last_bus_frames_;
 
   base::ThreadChecker thread_checker_;
+
+  base::WeakPtrFactory<HtmlAudioElementCapturerSource> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(HtmlAudioElementCapturerSource);
 };

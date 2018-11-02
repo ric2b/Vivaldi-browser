@@ -29,10 +29,14 @@ TEST(BrowserMainLoopTest, CreateThreadsInSingleProcess) {
     browser_main_loop.MainMessageLoopStart();
     browser_main_loop.CreateThreads();
     EXPECT_GE(base::TaskScheduler::GetInstance()
-                  ->GetMaxConcurrentTasksWithTraitsDeprecated(
+                  ->GetMaxConcurrentNonBlockedTasksWithTraitsDeprecated(
                       {base::TaskPriority::USER_VISIBLE}),
               base::SysInfo::NumberOfProcessors());
     browser_main_loop.ShutdownThreadsAndCleanUp();
+  }
+  for (int id = BrowserThread::UI; id < BrowserThread::ID_COUNT; ++id) {
+    BrowserThreadImpl::ResetGlobalsForTesting(
+        static_cast<BrowserThread::ID>(id));
   }
   base::TaskScheduler::GetInstance()->JoinForTesting();
   base::TaskScheduler::SetInstance(nullptr);

@@ -167,20 +167,13 @@ InterfaceEndpointClient::InterfaceEndpointClient(
 
 InterfaceEndpointClient::~InterfaceEndpointClient() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  // TODO(crbug.com/741047): Remove these checks.
-  CheckObjectIsValid();
-  CHECK(task_runner_->RunsTasksInCurrentSequence());
-
-  if (controller_) {
-    CHECK(handle_.group_controller());
+  if (controller_)
     handle_.group_controller()->DetachEndpointClient(handle_);
-  }
 }
 
 AssociatedGroup* InterfaceEndpointClient::associated_group() {
   if (!associated_group_)
-    associated_group_ = base::MakeUnique<AssociatedGroup>(handle_);
+    associated_group_ = std::make_unique<AssociatedGroup>(handle_);
   return associated_group_.get();
 }
 
@@ -284,7 +277,7 @@ bool InterfaceEndpointClient::AcceptWithResponder(
 
   bool response_received = false;
   sync_responses_.insert(std::make_pair(
-      request_id, base::MakeUnique<SyncResponseInfo>(&response_received)));
+      request_id, std::make_unique<SyncResponseInfo>(&response_received)));
 
   base::WeakPtr<InterfaceEndpointClient> weak_self =
       weak_ptr_factory_.GetWeakPtr();
@@ -386,7 +379,7 @@ bool InterfaceEndpointClient::HandleValidatedMessage(Message* message) {
 
   if (message->has_flag(Message::kFlagExpectsResponse)) {
     std::unique_ptr<MessageReceiverWithStatus> responder =
-        base::MakeUnique<ResponderThunk>(weak_ptr_factory_.GetWeakPtr(),
+        std::make_unique<ResponderThunk>(weak_ptr_factory_.GetWeakPtr(),
                                          task_runner_);
     if (mojo::internal::ControlMessageHandler::IsControlMessage(message)) {
       return control_message_handler_.AcceptWithResponder(message,

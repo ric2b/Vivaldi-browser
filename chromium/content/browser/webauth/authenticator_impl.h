@@ -20,8 +20,7 @@ namespace content {
 class RenderFrameHost;
 
 // Implementation of the public Authenticator interface.
-class CONTENT_EXPORT AuthenticatorImpl
-    : public NON_EXPORTED_BASE(webauth::mojom::Authenticator) {
+class CONTENT_EXPORT AuthenticatorImpl : public webauth::mojom::Authenticator {
  public:
   static void Create(RenderFrameHost* render_frame_host,
                      webauth::mojom::AuthenticatorRequest request);
@@ -37,6 +36,10 @@ class CONTENT_EXPORT AuthenticatorImpl
   // mojom:Authenticator
   void MakeCredential(webauth::mojom::MakeCredentialOptionsPtr options,
                       MakeCredentialCallback callback) override;
+
+  bool HasValidAlgorithm(
+      const std::vector<webauth::mojom::PublicKeyCredentialParametersPtr>&
+          parameters);
 
   base::Closure connection_error_handler_;
   base::CancelableClosure timeout_callback_;

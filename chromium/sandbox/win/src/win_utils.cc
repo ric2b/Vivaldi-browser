@@ -23,6 +23,11 @@
 
 namespace {
 
+const size_t kDriveLetterLen = 3;
+
+constexpr wchar_t kNTDotPrefix[] = L"\\\\.\\";
+const size_t kNTDotPrefixLen = arraysize(kNTDotPrefix) - 1;
+
 // Holds the information about a known registry key.
 struct KnownReservedKey {
   const wchar_t* name;
@@ -65,9 +70,9 @@ bool EqualPath(const base::string16& first, size_t first_offset,
 
 // Returns true if |path| starts with "\??\" and returns a path without that
 // component.
-bool IsNTPath(const base::string16& path, base::string16* trimmed_path ) {
+bool IsNTPath(const base::string16& path, base::string16* trimmed_path) {
   if ((path.size() < sandbox::kNTPrefixLen) ||
-      (0 != path.compare(0, sandbox::kNTPrefixLen, sandbox::kNTPrefix))) {
+      !EqualPath(path, sandbox::kNTPrefix, sandbox::kNTPrefixLen)) {
     *trimmed_path = path;
     return false;
   }
@@ -78,7 +83,7 @@ bool IsNTPath(const base::string16& path, base::string16* trimmed_path ) {
 
 // Returns true if |path| starts with "\Device\" and returns a path without that
 // component.
-bool IsDevicePath(const base::string16& path, base::string16* trimmed_path ) {
+bool IsDevicePath(const base::string16& path, base::string16* trimmed_path) {
   if ((path.size() < sandbox::kNTDevicePrefixLen) ||
       (!EqualPath(path, sandbox::kNTDevicePrefix,
                   sandbox::kNTDevicePrefixLen))) {
@@ -90,8 +95,38 @@ bool IsDevicePath(const base::string16& path, base::string16* trimmed_path ) {
   return true;
 }
 
+// Returns the offset to the path seperator following
+// "\Device\HarddiskVolumeX" in |path|.
+size_t PassHarddiskVolume(const base::string16& path) {
+  static constexpr wchar_t pattern[] = L"\\Device\\HarddiskVolume";
+  const size_t patternLen = arraysize(pattern) - 1;
+
+  // First, check for |pattern|.
+  if ((path.size() < patternLen) || (!EqualPath(path, pattern, patternLen)))
+    return base::string16::npos;
+
+  // Find the next path separator, after the pattern match.
+  return path.find_first_of(L'\\', patternLen - 1);
+}
+
+// Returns true if |path| starts with "\Device\HarddiskVolumeX\" and returns a
+// path without that component.  |removed| will hold the prefix removed.
+bool IsDeviceHarddiskPath(const base::string16& path,
+                          base::string16* trimmed_path,
+                          base::string16* removed) {
+  size_t offset = PassHarddiskVolume(path);
+  if (offset == base::string16::npos)
+    return false;
+
+  // Remove up to and including the path separator.
+  *removed = path.substr(0, offset + 1);
+  // Remaining path starts after the path separator.
+  *trimmed_path = path.substr(offset + 1);
+  return true;
+}
+
 bool StartsWithDriveLetter(const base::string16& path) {
-  if (path.size() < 3)
+  if (path.size() < kDriveLetterLen)
     return false;
 
   if (path[1] != L':' || path[2] != L'\\')
@@ -100,52 +135,10 @@ bool StartsWithDriveLetter(const base::string16& path) {
   return base::IsAsciiAlpha(path[0]);
 }
 
-const wchar_t kNTDotPrefix[] = L"\\\\.\\";
-const size_t kNTDotPrefixLen = arraysize(kNTDotPrefix) - 1;
-
 // Removes "\\\\.\\" from the path.
 void RemoveImpliedDevice(base::string16* path) {
-  if (0 == path->compare(0, kNTDotPrefixLen, kNTDotPrefix))
+  if (EqualPath(*path, kNTDotPrefix, kNTDotPrefixLen))
     *path = path->substr(kNTDotPrefixLen);
-}
-
-// Get the native path to the process.
-bool GetProcessPath(HANDLE process, base::string16* path) {
-  wchar_t process_name[MAX_PATH];
-  DWORD size = MAX_PATH;
-  if (::QueryFullProcessImageNameW(process, PROCESS_NAME_NATIVE, process_name,
-                                   &size)) {
-    *path = process_name;
-    return true;
-  }
-  // Process name is potentially greater than MAX_PATH, try larger max size.
-  std::vector<wchar_t> process_name_buffer(SHRT_MAX);
-  size = SHRT_MAX;
-  if (::QueryFullProcessImageNameW(process, PROCESS_NAME_NATIVE,
-                                   &process_name_buffer[0], &size)) {
-    *path = &process_name_buffer[0];
-    return true;
-  }
-  return false;
-}
-
-// Get the native path for a mapped file.
-bool GetImageFilePath(HANDLE process,
-                      void* base_address,
-                      base::string16* path) {
-  wchar_t mapped_path[MAX_PATH];
-  if (::GetMappedFileNameW(process, base_address, mapped_path, MAX_PATH)) {
-    *path = mapped_path;
-    return true;
-  }
-  // Image name is potentially greater than MAX_PATH, try larger max size.
-  std::vector<wchar_t> mapped_path_buffer(SHRT_MAX);
-  if (::GetMappedFileNameW(process, base_address, &mapped_path_buffer[0],
-                           SHRT_MAX)) {
-    *path = &mapped_path_buffer[0];
-    return true;
-  }
-  return false;
 }
 
 }  // namespace
@@ -155,7 +148,7 @@ namespace sandbox {
 // Returns true if the provided path points to a pipe.
 bool IsPipe(const base::string16& path) {
   size_t start = 0;
-  if (0 == path.compare(0, sandbox::kNTPrefixLen, sandbox::kNTPrefix))
+  if (EqualPath(path, sandbox::kNTPrefix, sandbox::kNTPrefixLen))
     start = sandbox::kNTPrefixLen;
 
   const wchar_t kPipe[] = L"pipe\\";
@@ -319,21 +312,42 @@ bool SameObject(HANDLE handle, const wchar_t* full_path) {
   return true;
 }
 
-// Paths like \Device\HarddiskVolume0\some\foo\bar are assumed to be already
-// expanded.
-bool ConvertToLongPath(base::string16* path) {
-  if (IsPipe(*path))
+// Just make a best effort here.  There are lots of corner cases that we're
+// not expecting - and will fail to make long.
+bool ConvertToLongPath(base::string16* native_path,
+                       const base::string16* drive_letter) {
+  if (IsPipe(*native_path))
     return true;
 
-  base::string16 temp_path;
-  if (IsDevicePath(*path, &temp_path))
-    return false;
-
-  bool is_nt_path = IsNTPath(temp_path, &temp_path);
+  bool is_device_harddisk_path = false;
+  bool is_nt_path = false;
   bool added_implied_device = false;
-  if (!StartsWithDriveLetter(temp_path) && is_nt_path) {
-    temp_path = base::string16(kNTDotPrefix) + temp_path;
-    added_implied_device = true;
+  base::string16 temp_path;
+  base::string16 to_restore;
+
+  // Process a few prefix types.
+  if (IsNTPath(*native_path, &temp_path)) {
+    // "\??\"
+    if (!StartsWithDriveLetter(temp_path)) {
+      // Prepend with "\\.\".
+      temp_path = base::string16(kNTDotPrefix) + temp_path;
+      added_implied_device = true;
+    }
+    is_nt_path = true;
+  } else if (IsDeviceHarddiskPath(*native_path, &temp_path, &to_restore)) {
+    // "\Device\HarddiskVolumeX\" - hacky attempt making ::GetLongPathName
+    // work for native device paths.  Remove "\Device\HarddiskVolumeX\" and
+    // replace with drive letter.
+
+    // Nothing we can do if we don't have a drive letter.  Leave |native_path|
+    // as is.
+    if (!drive_letter || drive_letter->empty())
+      return false;
+    temp_path = *drive_letter + temp_path;
+    is_device_harddisk_path = true;
+  } else if (IsDevicePath(*native_path, &temp_path)) {
+    // "\Device\" - there's nothing we can do to convert to long here.
+    return false;
   }
 
   DWORD size = MAX_PATH;
@@ -369,15 +383,21 @@ bool ConvertToLongPath(base::string16* path) {
     temp_path = long_path_buf.get();
   }
 
+  // If successful, re-apply original namespace prefix before returning.
   if (return_value != 0) {
     if (added_implied_device)
       RemoveImpliedDevice(&temp_path);
 
     if (is_nt_path) {
-      *path = kNTPrefix;
-      *path += temp_path;
+      *native_path = kNTPrefix;
+      *native_path += temp_path;
+    } else if (is_device_harddisk_path) {
+      // Remove the added drive letter.
+      temp_path = temp_path.substr(kDriveLetterLen);
+      *native_path = to_restore;
+      *native_path += temp_path;
     } else {
-      *path = temp_path;
+      *native_path = temp_path;
     }
 
     return true;
@@ -454,46 +474,40 @@ DWORD GetLastErrorFromNtStatus(NTSTATUS status) {
   return NtStatusToDosError(status);
 }
 
-// This function walks the virtual memory map using VirtualQueryEx to find
-// the main executable's image section. We attempt to find the first image
-// section which matches the path returned for the process.  This shouldn't
-// be a major performance problem because a new process has a very limited
-// amount of memory allocated so the majority of the valid range should be
-// skipped immediately. However if it turns out to be the case it could be
-// optimized in the specific case of the process being the same as the
-// current process, which due to ASLR rules the image load address will almost
-// always match the current process's load address.
+// This function uses the undocumented PEB ImageBaseAddress field to extract
+// the base address of the new process.
 void* GetProcessBaseAddress(HANDLE process) {
-  MEMORY_BASIC_INFORMATION mem_info = {};
-  // Start 64KiB above zero page.
-  void* current = reinterpret_cast<void*>(0x10000);
-  base::string16 process_path;
-
-  if (!GetProcessPath(process, &process_path))
+  NtQueryInformationProcessFunction query_information_process = NULL;
+  ResolveNTFunctionPtr("NtQueryInformationProcess", &query_information_process);
+  if (!query_information_process)
+    return nullptr;
+  PROCESS_BASIC_INFORMATION process_basic_info = {};
+  NTSTATUS status = query_information_process(
+      process, ProcessBasicInformation, &process_basic_info,
+      sizeof(process_basic_info), nullptr);
+  if (STATUS_SUCCESS != status)
     return nullptr;
 
-  // Walk the virtual memory mappings trying to find image sections.
-  // VirtualQueryEx will return false if it encounters a location outside of
-  // the user memory range.
-  while (::VirtualQueryEx(process, current, &mem_info, sizeof(mem_info))) {
-    base::string16 image_path;
-    if (mem_info.Type == MEM_IMAGE &&
-        GetImageFilePath(process, mem_info.BaseAddress, &image_path) &&
-        EqualPath(process_path, image_path)) {
-      return mem_info.BaseAddress;
-    }
-    // VirtualQueryEx should fail before overflow, but just in case we'll check
-    // to prevent an infinite loop.
-    base::CheckedNumeric<uintptr_t> next_base =
-        reinterpret_cast<uintptr_t>(mem_info.BaseAddress);
-    next_base += mem_info.RegionSize;
-    if (!next_base.IsValid())
-      return nullptr;
-    current =
-        reinterpret_cast<void*>(static_cast<uintptr_t>(next_base.ValueOrDie()));
+  PEB peb = {};
+  SIZE_T bytes_read = 0;
+  if (!::ReadProcessMemory(process, process_basic_info.PebBaseAddress, &peb,
+                           sizeof(peb), &bytes_read) ||
+      (sizeof(peb) != bytes_read)) {
+    return nullptr;
   }
 
-  return nullptr;
+  void* base_address = peb.ImageBaseAddress;
+  char magic[2] = {};
+  if (!::ReadProcessMemory(process, base_address, magic, sizeof(magic),
+                           &bytes_read) ||
+      (sizeof(magic) != bytes_read)) {
+    return nullptr;
+  }
+
+  if (magic[0] != 'M' || magic[1] != 'Z')
+    return nullptr;
+
+  return base_address;
 }
 
 };  // namespace sandbox

@@ -46,6 +46,17 @@ hooks = [
     ],
   },
   {
+    # Check out Android specific submodules based on chromium/DEPS if android is enabled
+    # Use build/enable_android_build.sh to enable Android build specific actions
+    # Use build/disable_android_build.sh to disable Android build
+    'name': 'checkout_android_submodules',
+    'pattern': '.',
+    'action': [
+      'python',
+      'vivaldi/scripts/android_submodules.py',
+    ],
+  },
+  {
     # Downloads the current stable linux sysroot to build/linux/ if needed.
     # This sysroot updates at about the same rate that the chrome build deps
     # change. This script is a no-op except for linux users who are doing
@@ -264,13 +275,276 @@ hooks = [
                 'vivaldi/chromium/third_party/catapult/telemetry/bin/fetch_telemetry_binary_dependencies',
     ],
   },
-  {
-    'name': 'bootstrap-gn',
-    'pattern': '.',
-    'action': [
-      'python',
-      'vivaldi/scripts/rungn.py',
-      '--refresh',
-    ],
-  },
 ]
+
+
+# Note: These are keyed off target os, not host os. So don't move things here
+# that depend on the target os.
+hooks_os = {
+  'android': [
+    {
+      # This downloads SDK extras and puts them in the
+      # third_party/android_tools/sdk/extras directory.
+      'name': 'sdkextras',
+      'pattern': '.',
+      # When adding a new sdk extras package to download, add the package
+      # directory and zip file to .gitignore in third_party/android_tools.
+      'action': ['python',
+                 'vivaldi/chromium/build/android/play_services/update.py',
+                 'download'
+      ],
+    },
+    {
+      'name': 'android_system_sdk',
+      'pattern': '.',
+      'action': ['python',
+                 'vivaldi/chromium/build/android/update_deps/update_third_party_deps.py',
+                 'download',
+                 '-b', 'android_system_stubs',
+                 '-l', 'third_party/android_system_sdk'
+      ],
+    },
+    {
+      'name': 'intellij',
+      'pattern': '.',
+      'action': ['python',
+                 'vivaldi/chromium/build/android/update_deps/update_third_party_deps.py',
+                 'download',
+                 '-b', 'chromium-intellij',
+                 '-l', 'third_party/intellij'
+      ],
+    },
+    {
+      'name': 'javax_inject',
+      'pattern': '.',
+      'action': ['python',
+                 'vivaldi/chromium/build/android/update_deps/update_third_party_deps.py',
+                 'download',
+                 '-b', 'chromium-javax-inject',
+                 '-l', 'third_party/javax_inject'
+      ],
+    },
+    {
+      'name': 'hamcrest',
+      'pattern': '.',
+      'action': ['python',
+                 'vivaldi/chromium/build/android/update_deps/update_third_party_deps.py',
+                 'download',
+                 '-b', 'chromium-hamcrest',
+                 '-l', 'third_party/hamcrest'
+      ],
+    },
+    {
+      'name': 'guava',
+      'pattern': '.',
+      'action': ['python',
+                 'vivaldi/chromium/build/android/update_deps/update_third_party_deps.py',
+                 'download',
+                 '-b', 'chromium-guava',
+                 '-l', 'third_party/guava'
+      ],
+    },
+    {
+      'name': 'android_support_test_runner',
+      'pattern': '.',
+      'action': ['python',
+                 'vivaldi/chromium/build/android/update_deps/update_third_party_deps.py',
+                 'download',
+                 '-b', 'chromium-android-support-test-runner',
+                 '-l', 'third_party/android_support_test_runner'
+      ],
+    },
+    {
+      'name': 'byte_buddy',
+      'pattern': '.',
+      'action': ['python',
+                 'vivaldi/chromium/build/android/update_deps/update_third_party_deps.py',
+                 'download',
+                 '-b', 'chromium-byte-buddy',
+                 '-l', 'third_party/byte_buddy'
+      ],
+    },
+    {
+      'name': 'espresso',
+      'pattern': '.',
+      'action': ['python',
+                 'vivaldi/chromium/build/android/update_deps/update_third_party_deps.py',
+                 'download',
+                 '-b', 'chromium-espresso',
+                 '-l', 'third_party/espresso'
+      ],
+    },
+    {
+      'name': 'robolectric_libs',
+      'pattern': '.',
+      'action': ['python',
+                 'vivaldi/chromium/build/android/update_deps/update_third_party_deps.py',
+                 'download',
+                 '-b', 'chromium-robolectric',
+                 '-l', 'third_party/robolectric'
+      ],
+    },
+    {
+      'name': 'apache_velocity',
+      'pattern': '.',
+      'action': ['python',
+                 'vivaldi/chromium/build/android/update_deps/update_third_party_deps.py',
+                 'download',
+                 '-b', 'chromium-apache-velocity',
+                 '-l', 'third_party/apache_velocity'
+      ],
+    },
+    {
+      'name': 'ow2_asm',
+      'pattern': '.',
+      'action': ['python',
+                 'vivaldi/chromium/build/android/update_deps/update_third_party_deps.py',
+                 'download',
+                 '-b', 'chromium-ow2-asm',
+                 '-l', 'third_party/ow2_asm'
+      ],
+    },
+    {
+      'name': 'desugar',
+      'pattern': '.',
+      'action': ['python',
+                 'vivaldi/chromium/build/android/update_deps/update_third_party_deps.py',
+                 'download',
+                 '-b', 'chromium-android-tools/bazel/desugar',
+                 '-l', 'third_party/bazel/desugar'
+      ],
+    },
+    {
+      'name': 'apk-patch-size-estimator',
+      'pattern': '.',
+      'action': ['python',
+                 'vivaldi/chromium/build/android/update_deps/update_third_party_deps.py',
+                 'download',
+                 '-b', 'chromium-android-tools/apk-patch-size-estimator',
+                 '-l', 'third_party/apk-patch-size-estimator/lib'
+      ],
+    },
+    {
+      'name': 'icu4j',
+      'pattern': '.',
+      'action': ['python',
+                 'vivaldi/chromium/build/android/update_deps/update_third_party_deps.py',
+                 'download',
+                 '-b', 'chromium-icu4j',
+                 '-l', 'third_party/icu4j'
+      ],
+    },
+    {
+      'name': 'accessibility_test_framework',
+      'pattern': '.',
+      'action': ['python',
+                 'vivaldi/chromium/build/android/update_deps/update_third_party_deps.py',
+                 'download',
+                 '-b', 'chromium-accessibility-test-framework',
+                 '-l', 'third_party/accessibility_test_framework'
+      ],
+    },
+    {
+      'name': 'bouncycastle',
+      'pattern': '.',
+      'action': ['python',
+                 'vivaldi/chromium/build/android/update_deps/update_third_party_deps.py',
+                 'download',
+                 '-b', 'chromium-bouncycastle',
+                 '-l', 'third_party/bouncycastle'
+      ],
+    },
+    {
+      'name': 'sqlite4java',
+      'pattern': '.',
+      'action': ['python',
+                 'vivaldi/chromium/build/android/update_deps/update_third_party_deps.py',
+                 'download',
+                 '-b', 'chromium-sqlite4java',
+                 '-l', 'third_party/sqlite4java'
+      ],
+    },
+    {
+      'name': 'gson',
+      'pattern': '.',
+      'action': ['python',
+                 'vivaldi/chromium/build/android/update_deps/update_third_party_deps.py',
+                 'download',
+                 '-b', 'chromium-gson',
+                 '-l', 'third_party/gson',
+      ],
+    },
+    {
+      'name': 'objenesis',
+      'pattern': '.',
+      'action': ['python',
+                 'vivaldi/chromium/build/android/update_deps/update_third_party_deps.py',
+                 'download',
+                 '-b', 'chromium-objenesis',
+                 '-l', 'third_party/objenesis'
+      ],
+    },
+    {
+      'name': 'xstream',
+      'pattern': '.',
+      'action': ['python',
+                 'vivaldi/chromium/build/android/update_deps/update_third_party_deps.py',
+                 'download',
+                 '-b', 'chromium-robolectric',
+                 '-l', 'third_party/xstream'
+      ],
+    },
+    {
+      'name': 'gvr_static_shim_android_arm',
+      'pattern': '\\.sha1',
+    'action': [   'python',
+                  'vivaldi/chromium/third_party/depot_tools/download_from_google_storage.py',
+                  '--no_resume',
+                  '--platform=linux*',
+                  '--no_auth',
+                  '--bucket', 'chromium-gvr-static-shim',
+                  '-s', 'vivaldi/chromium/third_party/gvr-android-sdk/libgvr_shim_static_arm.a.sha1',
+      ],
+    },
+    {
+      'name': 'gvr_static_shim_android_arm64',
+      'pattern': '\\.sha1',
+    'action': [   'python',
+                  'vivaldi/chromium/third_party/depot_tools/download_from_google_storage.py',
+                  '--no_resume',
+                  '--platform=linux*',
+                  '--no_auth',
+                  '--bucket', 'chromium-gvr-static-shim',
+                  '-s', 'vivaldi/chromium/third_party/gvr-android-sdk/libgvr_shim_static_arm64.a.sha1',
+      ],
+    },
+    {
+      'name': 'vr_controller_test_api',
+      'pattern': '\\.sha1',
+      'action': [   'python',
+                  'vivaldi/chromium/third_party/depot_tools/download_from_google_storage.py',
+                  '--no_resume',
+                  '--platform=linux*',
+                  '--no_auth',
+                  '--bucket', 'chromium-gvr-static-shim/controller_test_api',
+                  '-s', 'vivaldi/chromium/third_party/gvr-android-sdk/test-libraries/controller_test_api.aar.sha1',
+      ],
+    },
+    # Download VR test APKs only if the environment variable is set
+    {
+      'name': 'vr_test_apks',
+      'pattern': '.',
+      'action': [ 'python',
+                 'vivaldi/chromium/third_party/gvr-android-sdk/test-apks/update.py',
+      ],
+    },
+    {
+      # Pull doclava binaries if building for Android.
+      'name': 'doclava',
+      'pattern': '.',
+      'action': ['python',
+                 'vivaldi/chromium/build/android/download_doclava.py',
+      ],
+    },
+  ],
+}

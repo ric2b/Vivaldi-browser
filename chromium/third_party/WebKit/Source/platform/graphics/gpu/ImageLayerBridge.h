@@ -22,7 +22,7 @@ class WebExternalTextureLayer;
 
 class PLATFORM_EXPORT ImageLayerBridge
     : public GarbageCollectedFinalized<ImageLayerBridge>,
-      NON_EXPORTED_BASE(public cc::TextureLayerClient) {
+      public cc::TextureLayerClient {
   WTF_MAKE_NONCOPYABLE(ImageLayerBridge);
 
  public:
@@ -34,7 +34,7 @@ class PLATFORM_EXPORT ImageLayerBridge
 
   // cc::TextureLayerClient implementation.
   bool PrepareTextureMailbox(viz::TextureMailbox* out_mailbox,
-                             std::unique_ptr<cc::SingleReleaseCallback>*
+                             std::unique_ptr<viz::SingleReleaseCallback>*
                                  out_release_callback) override;
 
   void MailboxReleasedGpu(RefPtr<StaticBitmapImage>,

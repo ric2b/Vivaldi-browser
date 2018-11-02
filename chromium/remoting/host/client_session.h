@@ -161,6 +161,10 @@ class ClientSession : public protocol::HostStub,
                           const webrtc::DesktopSize& size,
                           const webrtc::DesktopVector& dpi) override;
 
+  void CreateFileTransferMessageHandler(
+      const std::string& channel_name,
+      std::unique_ptr<protocol::MessagePipe> pipe);
+
   EventHandler* event_handler_;
 
   // The connection to the client.

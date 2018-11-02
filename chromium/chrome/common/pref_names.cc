@@ -127,9 +127,6 @@ const char kLastProfileResetTimestamp[] = "profile.last_reset_timestamp";
 const char kChromeCleanerResetPending[] = "chrome_cleaner.reset_pending";
 #endif
 
-// Used to determine if the New Tab in-product help has been shown or not.
-extern const char kNewTabInProductHelp[] = "newtab_in_product_help";
-
 // The URL to open the new tab page to. Only set by Group Policy.
 const char kNewTabPageLocationOverride[] = "newtab_page_location_override";
 
@@ -150,8 +147,9 @@ const char kSessionExitedCleanly[] = "profile.exited_cleanly";
 // shutdown. Used to determine the exit type the last time the profile was open.
 const char kSessionExitType[] = "profile.exit_type";
 
-// Stores the total amount of active session time for the user.
-const char kSessionTimeTotal[] = "profile.total_time";
+// Stores the total amount of observed active session time for the user.
+// Observed time is active session time.
+const char kObservedSessionTime[] = "profile.observed_time";
 
 // The last time that the site engagement service recorded an engagement event
 // for this profile for any URL. Recorded only during shutdown. Used to prevent
@@ -541,6 +539,10 @@ const char kNaturalScroll[] = "settings.touchpad.natural_scroll";
 // A boolean pref set to true if primary mouse button is the left button.
 const char kPrimaryMouseButtonRight[] = "settings.mouse.primary_right";
 
+// A boolean pref set to true if turning the mouse wheel toward the user should
+// result in scrolling up instead of the more common scrolling down.
+const char kMouseReverseScroll[] = "settings.mouse.reverse_scroll";
+
 // A integer pref for the touchpad sensitivity.
 const char kMouseSensitivity[] = "settings.mouse.sensitivity2";
 
@@ -549,6 +551,9 @@ const char kTouchpadSensitivity[] = "settings.touchpad.sensitivity2";
 
 // A boolean pref set to true if time should be displayed in 24-hour clock.
 const char kUse24HourClock[] = "settings.clock.use_24hour_clock";
+
+// A string pref containing Timezone ID for this user.
+const char kUserTimezone[] = "settings.timezone";
 
 // This setting disables manual timezone selection and starts periodic timezone
 // refresh.
@@ -608,71 +613,6 @@ const char kLanguageXkbAutoRepeatInterval[] =
 // preferences to not be user-configurable or sync with the cloud. The prefs are
 // now user-configurable and syncable again, but we don't want to overwrite the
 // current values with the old synced values, so we continue to use this suffix.
-
-// A boolean pref which determines whether the large cursor feature is enabled.
-const char kAccessibilityLargeCursorEnabled[] =
-    "settings.a11y.large_cursor_enabled";
-
-// A integer pref that specifies the size of large cursor for accessibility.
-const char kAccessibilityLargeCursorDipSize[] =
-    "settings.a11y.large_cursor_dip_size";
-
-// A boolean pref which determines whether the sticky keys feature is enabled.
-const char kAccessibilityStickyKeysEnabled[] =
-    "settings.a11y.sticky_keys_enabled";
-// A boolean pref which determines whether spoken feedback is enabled.
-const char kAccessibilitySpokenFeedbackEnabled[] = "settings.accessibility";
-// A boolean pref which determines whether high conrast is enabled.
-const char kAccessibilityHighContrastEnabled[] =
-    "settings.a11y.high_contrast_enabled";
-// A boolean pref which determines whether screen magnifier is enabled.
-const char kAccessibilityScreenMagnifierEnabled[] =
-    "settings.a11y.screen_magnifier";
-// A boolean pref which determines whether screen magnifier should center
-// the text input focus.
-const char kAccessibilityScreenMagnifierCenterFocus[] =
-    "settings.a11y.screen_magnifier_center_focus";
-// A integer pref which determines what type of screen magnifier is enabled.
-// Note that: 'screen_magnifier_type' had been used as string pref. Hence,
-// we are using another name pref here.
-const char kAccessibilityScreenMagnifierType[] =
-    "settings.a11y.screen_magnifier_type2";
-// A double pref which determines a zooming scale of the screen magnifier.
-const char kAccessibilityScreenMagnifierScale[] =
-    "settings.a11y.screen_magnifier_scale";
-// A boolean pref which determines whether the virtual keyboard is enabled for
-// accessibility.  This feature is separate from displaying an onscreen keyboard
-// due to lack of a physical keyboard.
-const char kAccessibilityVirtualKeyboardEnabled[] =
-    "settings.a11y.virtual_keyboard";
-// A boolean pref which determines whether the mono audio output is enabled for
-// accessibility.
-const char kAccessibilityMonoAudioEnabled[] =
-    "settings.a11y.mono_audio";
-// A boolean pref which determines whether autoclick is enabled.
-const char kAccessibilityAutoclickEnabled[] = "settings.a11y.autoclick";
-// An integer pref which determines time in ms between when the mouse cursor
-// stops and when an autoclick is triggered.
-const char kAccessibilityAutoclickDelayMs[] =
-    "settings.a11y.autoclick_delay_ms";
-// A boolean pref which determines whether caret highlighting is enabled.
-const char kAccessibilityCaretHighlightEnabled[] =
-    "settings.a11y.caret_highlight";
-// A boolean pref which determines whether cursor highlighting is enabled.
-const char kAccessibilityCursorHighlightEnabled[] =
-    "settings.a11y.cursor_highlight";
-// A boolean pref which determines whether focus highlighting is enabled.
-const char kAccessibilityFocusHighlightEnabled[] =
-    "settings.a11y.focus_highlight";
-// A boolean pref which determines whether select-to-speak is enabled.
-const char kAccessibilitySelectToSpeakEnabled[] =
-    "settings.a11y.select_to_speak";
-// A boolean pref which determines whether switch access is enabled.
-const char kAccessibilitySwitchAccessEnabled[] =
-    "settings.a11y.switch_access";
-// A boolean pref which determines whether the accessibility menu shows
-// regardless of the state of a11y features.
-const char kShouldAlwaysShowAccessibilityMenu[] = "settings.a11y.enable_menu";
 
 // A boolean pref which turns on Advanced Filesystem
 // (USB support, SD card, etc).
@@ -1011,6 +951,13 @@ const char kInstantTetheringEnabled[] = "tether.enabled";
 const char kInstantTetheringBleAdvertisingSupported[] =
     "tether.ble_advertising_supported";
 
+// Boolean pref indicating whether someone can cast to the device.
+const char kCastReceiverEnabled[] = "cast_receiver.enabled";
+
+// String pref indicating what name should be advertised for casting to.
+// If the string is empty or blank the system name will be used.
+const char kCastReceiverName[] = "cast_receiver.name";
+
 // Integer pref indicating the ecryptfs to ext4 migration strategy. One of
 // options: forbidden = 0, migrate = 1, wipe = 2 or ask the user = 3.
 const char kEcryptfsMigrationStrategy[] = "ecryptfs_migration_strategy";
@@ -1279,6 +1226,22 @@ const char kPrintingDevices[] = "printing.devices";
 // List of printers configured by policy.
 const char kRecommendedNativePrinters[] =
     "native_printing.recommended_printers";
+
+// External resource containing all printer configurations for an enterprise.
+const char kRecommendedNativePrintersFile[] =
+    "native_printing.recommended_printers_file";
+
+// Enum designating the type of restrictions bulk printers are using.
+const char kRecommendedNativePrintersAccessMode[] =
+    "native_printing.recommended_printers_access_mode";
+
+// List of printer ids which are explicitly disallowed.  List of strings.
+const char kRecommendedNativePrintersBlacklist[] =
+    "native_printing.recommended_printers_blacklist";
+
+// List of printer ids that are allowed.  List of strings.
+const char kRecommendedNativePrintersWhitelist[] =
+    "native_printing.recommended_printers_whitelist";
 #endif  // OS_CHROMEOS
 
 // An integer pref specifying the fallback behavior for sites outside of content
@@ -1339,6 +1302,12 @@ const char kLocalDiscoveryNotificationsEnabled[] =
 #if defined(OS_ANDROID)
 // Enable vibration for web notifications.
 const char kNotificationsVibrateEnabled[] = "notifications.vibrate_enabled";
+
+// Boolean pref indicating whether notification permissions were migrated to
+// notification channels (on Android O+ we use channels to store notification
+// permission, so any existing permissions must be migrated).
+const char kMigratedToSiteNotificationChannels[] =
+    "notifications.migrated_to_channels";
 
 // Cached information about GPU driver.
 const char kGLExtensionsString[] = "gl_extensions_string";
@@ -1454,29 +1423,6 @@ const char kStabilityKernelCrashCount[] =
 // last report.
 const char kStabilitySystemUncleanShutdownCount[] =
     "user_experience_metrics.stability.system_unclean_shutdowns";
-
-#if defined(OS_ANDROID)
-// Activity type that is currently in the foreground for the UMA session.
-// Uses the ActivityTypeIds::Type enum.
-const char kStabilityForegroundActivityType[] =
-    "user_experience_metrics.stability.current_foreground_activity_type";
-
-// Tracks which Activities were launched during the last session.
-// See |metrics_service_android.cc| for its usage.
-const char kStabilityLaunchedActivityFlags[] =
-    "user_experience_metrics.stability.launched_activity_flags";
-
-// List pref: Counts how many times each Activity was launched.
-// Indexed into by ActivityTypeIds::Type.
-const char kStabilityLaunchedActivityCounts[] =
-    "user_experience_metrics.stability.launched_activity_counts";
-
-// List pref: Counts how many times each Activity type was in the foreground
-// when a UMA session failed to be shut down properly.
-// Indexed into by ActivityTypeIds::Type.
-const char kStabilityCrashedActivityCounts[] =
-    "user_experience_metrics.stability.crashed_activity_counts";
-#endif  // defined(OS_ANDROID)
 
 // The keys below are used for the dictionaries in the
 // kStabilityPluginStats list.
@@ -1996,9 +1942,6 @@ const char kReportArcStatusEnabled[] = "arc.status_reporting_enabled";
 // and download rate in kbits/s to throttle to)
 const char kNetworkThrottlingEnabled[] = "net.throttling_enabled";
 
-// Boolean prefs for the local status of the touchscreen.
-const char kTouchscreenEnabledLocal[] = "events.touch_screen.enabled_local";
-
 #endif  // defined(OS_CHROMEOS)
 
 // Whether there is a Flash version installed that supports clearing LSO data.
@@ -2033,10 +1976,19 @@ const char kTabStripStackedLayout[] = "tab-strip-stacked-layout";
 // Indicates that factory reset was requested from options page or reset screen.
 const char kFactoryResetRequested[] = "FactoryResetRequested";
 
+// Indicates that a TPM firmware update should be requested when triggering a
+// factory reset.
+const char kFactoryResetTPMFirmwareUpdateRequested[] =
+    "FactoryResetTPMFirmwareUpdateRequested";
+
 // Indicates that debugging features were requested from oobe screen.
 const char kDebuggingFeaturesRequested[] = "DebuggingFeaturesRequested";
 
 #if defined(OS_CHROMEOS)
+// This setting controls initial device timezone that is used before user
+// session started. It is controlled by device owner.
+const char kSigninScreenTimezone[] = "settings.signin_screen_timezone";
+
 // This setting starts periodic timezone refresh when not in user session.
 // (user session is controlled by user profile preference
 // kResolveTimezoneByGeolocation
@@ -2170,42 +2122,17 @@ const char kMediaGalleriesRememberedGalleries[] =
     "media_galleries.remembered_galleries";
 #endif  // !defined(OS_ANDROID)
 
-#if defined(USE_AURA)
-// |kShelfAlignment| and |kShelfAutoHideBehavior| have a local variant. The
-// local variant is not synced and is used if set. If the local variant is not
-// set its value is set from the synced value (once prefs have been
-// synced). This gives a per-machine setting that is initialized from the last
-// set value.
-// These values are default on the machine but can be overridden by per-display
-// values in kShelfPreferences (unless overridden by managed policy).
-// String value corresponding to ash::Shell::ShelfAlignment.
-const char kShelfAlignment[] = "shelf_alignment";
-const char kShelfAlignmentLocal[] = "shelf_alignment_local";
-// String value corresponding to ash::Shell::ShelfAutoHideBehavior.
-const char kShelfAutoHideBehavior[] = "auto_hide_behavior";
-const char kShelfAutoHideBehaviorLocal[] = "auto_hide_behavior_local";
+#if defined(OS_CHROMEOS)
 // This value stores chrome icon's index in the launcher. This should be handled
 // separately with app shortcut's index because of ShelfModel's backward
 // compatibility. If we add chrome icon index to |kPinnedLauncherApps|, its
 // index is also stored in the |kPinnedLauncherApp| pref. It may causes
 // creating two chrome icons.
 const char kShelfChromeIconIndex[] = "shelf_chrome_icon_index";
-// Dictionary value that holds per-display preference of shelf alignment and
-// auto-hide behavior. Key of the dictionary is the id of the display, and
-// its value is a dictionary whose keys are kShelfAlignment and
-// kShelfAutoHideBehavior.
-const char kShelfPreferences[] = "shelf_preferences";
 
-// Integer value in milliseconds indicating the length of time for which a
-// confirmation dialog should be shown when the user presses the logout button.
-// A value of 0 indicates that logout should happen immediately, without showing
-// a confirmation dialog.
-const char kLogoutDialogDurationMs[] = "logout_dialog_duration_ms";
 const char kPinnedLauncherApps[] = "pinned_launcher_apps";
 const char kPolicyPinnedLauncherApps[] = "policy_pinned_launcher_apps";
-// Boolean value indicating whether to show a logout button in the ash tray.
-const char kShowLogoutButtonInTray[] = "show_logout_button_in_tray";
-#endif
+#endif  // defined(OS_CHROMEOS)
 
 #if defined(OS_WIN)
 // Counts how many more times the 'profile on a network share' warning should be
@@ -2375,6 +2302,10 @@ const char kRecoveryComponentNeedsElevation[] =
 // (name and a list of clients that registered the whitelist).
 const char kRegisteredSupervisedUserWhitelists[] =
     "supervised_users.whitelists";
+
+// Boolean that specifies whether the cloud policy will override conflicting
+// machine policy.
+const char kCloudPolicyOverridesMachinePolicy[] = "policy.cloud_override";
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 // Policy that indicates how to handle animated images.
@@ -2615,5 +2546,10 @@ const char kOfflineUsageOfflineCount[] = "offline_pages.offline_count";
 const char kOfflineUsageOnlineCount[] = "offline_pages.online_count";
 const char kOfflineUsageMixedCount[] = "offline_pages.mixed_count";
 #endif
+
+// Stores the Media Engagement Index schema version. If the stored value
+// is lower than the value in MediaEngagementService then the MEI data
+// will be wiped.
+const char kMediaEngagementSchemaVersion[] = "media.engagement.schema_version";
 
 }  // namespace prefs

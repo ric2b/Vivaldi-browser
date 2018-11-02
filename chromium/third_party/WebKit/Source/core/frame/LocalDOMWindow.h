@@ -28,7 +28,7 @@
 #define LocalDOMWindow_h
 
 #include "core/CoreExport.h"
-#include "core/events/EventTarget.h"
+#include "core/dom/events/EventTarget.h"
 #include "core/frame/DOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "platform/Supplementable.h"
@@ -113,7 +113,7 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
 
   Document* InstallNewDocument(const String& mime_type,
                                const DocumentInit&,
-                               bool force_xhtml = false);
+                               bool force_xhtml);
 
   // EventTarget overrides:
   ExecutionContext* GetExecutionContext() const override;
@@ -302,7 +302,7 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   void EnqueueDocumentEvent(Event*);
   void EnqueuePageshowEvent(PageshowEventPersistence);
   void EnqueueHashchangeEvent(const String& old_url, const String& new_url);
-  void EnqueuePopstateEvent(PassRefPtr<SerializedScriptValue>);
+  void EnqueuePopstateEvent(RefPtr<SerializedScriptValue>);
   void DispatchWindowLoadEvent();
   void DocumentWasClosed();
   void StatePopped(PassRefPtr<SerializedScriptValue>);
@@ -324,7 +324,7 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
 
   // Protected DOMWindow overrides.
   void SchedulePostMessage(MessageEvent*,
-                           PassRefPtr<SecurityOrigin> target,
+                           RefPtr<SecurityOrigin> target,
                            Document* source) override;
 
  private:

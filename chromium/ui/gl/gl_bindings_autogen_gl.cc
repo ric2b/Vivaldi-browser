@@ -237,6 +237,7 @@ void DriverGL::InitializeStaticBindings() {
   fn.glGetIntegervRobustANGLEFn = 0;
   fn.glGetInternalformativFn = 0;
   fn.glGetInternalformativRobustANGLEFn = 0;
+  fn.glGetMultisamplefvFn = 0;
   fn.glGetMultisamplefvRobustANGLEFn = 0;
   fn.glGetnUniformfvRobustANGLEFn = 0;
   fn.glGetnUniformivRobustANGLEFn = 0;
@@ -368,6 +369,7 @@ void DriverGL::InitializeStaticBindings() {
   fn.glPixelStoreiFn =
       reinterpret_cast<glPixelStoreiProc>(GetGLProcAddress("glPixelStorei"));
   fn.glPointParameteriFn = 0;
+  fn.glPolygonModeFn = 0;
   fn.glPolygonOffsetFn = reinterpret_cast<glPolygonOffsetProc>(
       GetGLProcAddress("glPolygonOffset"));
   fn.glPopDebugGroupFn = 0;
@@ -431,6 +433,8 @@ void DriverGL::InitializeStaticBindings() {
   fn.glStencilThenCoverStrokePathNVFn = 0;
   fn.glTestFenceAPPLEFn = 0;
   fn.glTestFenceNVFn = 0;
+  fn.glTexBufferFn = 0;
+  fn.glTexBufferRangeFn = 0;
   fn.glTexImage2DFn =
       reinterpret_cast<glTexImage2DProc>(GetGLProcAddress("glTexImage2D"));
   fn.glTexImage2DRobustANGLEFn = 0;
@@ -543,140 +547,128 @@ void DriverGL::InitializeStaticBindings() {
   fn.glWaitSyncFn = 0;
 }
 
-void DriverGL::InitializeDynamicBindings(
-    const GLVersionInfo* ver,
-    const std::string& context_extensions) {
-  std::string extensions = context_extensions + " ";
-  ALLOW_UNUSED_LOCAL(extensions);
-
+void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
+                                         const ExtensionSet& extensions) {
   ext.b_GL_ANGLE_framebuffer_blit =
-      extensions.find("GL_ANGLE_framebuffer_blit ") != std::string::npos;
+      HasExtension(extensions, "GL_ANGLE_framebuffer_blit");
   ext.b_GL_ANGLE_framebuffer_multisample =
-      extensions.find("GL_ANGLE_framebuffer_multisample ") != std::string::npos;
+      HasExtension(extensions, "GL_ANGLE_framebuffer_multisample");
   ext.b_GL_ANGLE_instanced_arrays =
-      extensions.find("GL_ANGLE_instanced_arrays ") != std::string::npos;
+      HasExtension(extensions, "GL_ANGLE_instanced_arrays");
   ext.b_GL_ANGLE_request_extension =
-      extensions.find("GL_ANGLE_request_extension ") != std::string::npos;
+      HasExtension(extensions, "GL_ANGLE_request_extension");
   ext.b_GL_ANGLE_robust_client_memory =
-      extensions.find("GL_ANGLE_robust_client_memory ") != std::string::npos;
+      HasExtension(extensions, "GL_ANGLE_robust_client_memory");
   ext.b_GL_ANGLE_translated_shader_source =
-      extensions.find("GL_ANGLE_translated_shader_source ") !=
-      std::string::npos;
-  ext.b_GL_APPLE_fence =
-      extensions.find("GL_APPLE_fence ") != std::string::npos;
+      HasExtension(extensions, "GL_ANGLE_translated_shader_source");
+  ext.b_GL_APPLE_fence = HasExtension(extensions, "GL_APPLE_fence");
   ext.b_GL_APPLE_vertex_array_object =
-      extensions.find("GL_APPLE_vertex_array_object ") != std::string::npos;
+      HasExtension(extensions, "GL_APPLE_vertex_array_object");
   ext.b_GL_ARB_blend_func_extended =
-      extensions.find("GL_ARB_blend_func_extended ") != std::string::npos;
-  ext.b_GL_ARB_draw_buffers =
-      extensions.find("GL_ARB_draw_buffers ") != std::string::npos;
+      HasExtension(extensions, "GL_ARB_blend_func_extended");
+  ext.b_GL_ARB_draw_buffers = HasExtension(extensions, "GL_ARB_draw_buffers");
   ext.b_GL_ARB_draw_instanced =
-      extensions.find("GL_ARB_draw_instanced ") != std::string::npos;
+      HasExtension(extensions, "GL_ARB_draw_instanced");
   ext.b_GL_ARB_get_program_binary =
-      extensions.find("GL_ARB_get_program_binary ") != std::string::npos;
+      HasExtension(extensions, "GL_ARB_get_program_binary");
   ext.b_GL_ARB_instanced_arrays =
-      extensions.find("GL_ARB_instanced_arrays ") != std::string::npos;
+      HasExtension(extensions, "GL_ARB_instanced_arrays");
+  ext.b_GL_ARB_internalformat_query =
+      HasExtension(extensions, "GL_ARB_internalformat_query");
   ext.b_GL_ARB_map_buffer_range =
-      extensions.find("GL_ARB_map_buffer_range ") != std::string::npos;
+      HasExtension(extensions, "GL_ARB_map_buffer_range");
   ext.b_GL_ARB_occlusion_query =
-      extensions.find("GL_ARB_occlusion_query ") != std::string::npos;
+      HasExtension(extensions, "GL_ARB_occlusion_query");
   ext.b_GL_ARB_program_interface_query =
-      extensions.find("GL_ARB_program_interface_query ") != std::string::npos;
-  ext.b_GL_ARB_robustness =
-      extensions.find("GL_ARB_robustness ") != std::string::npos;
+      HasExtension(extensions, "GL_ARB_program_interface_query");
+  ext.b_GL_ARB_robustness = HasExtension(extensions, "GL_ARB_robustness");
   ext.b_GL_ARB_sampler_objects =
-      extensions.find("GL_ARB_sampler_objects ") != std::string::npos;
+      HasExtension(extensions, "GL_ARB_sampler_objects");
   ext.b_GL_ARB_shader_image_load_store =
-      extensions.find("GL_ARB_shader_image_load_store ") != std::string::npos;
-  ext.b_GL_ARB_sync = extensions.find("GL_ARB_sync ") != std::string::npos;
+      HasExtension(extensions, "GL_ARB_shader_image_load_store");
+  ext.b_GL_ARB_sync = HasExtension(extensions, "GL_ARB_sync");
+  ext.b_GL_ARB_texture_multisample =
+      HasExtension(extensions, "GL_ARB_texture_multisample");
   ext.b_GL_ARB_texture_storage =
-      extensions.find("GL_ARB_texture_storage ") != std::string::npos;
-  ext.b_GL_ARB_timer_query =
-      extensions.find("GL_ARB_timer_query ") != std::string::npos;
+      HasExtension(extensions, "GL_ARB_texture_storage");
+  ext.b_GL_ARB_timer_query = HasExtension(extensions, "GL_ARB_timer_query");
   ext.b_GL_ARB_transform_feedback2 =
-      extensions.find("GL_ARB_transform_feedback2 ") != std::string::npos;
+      HasExtension(extensions, "GL_ARB_transform_feedback2");
   ext.b_GL_ARB_vertex_array_object =
-      extensions.find("GL_ARB_vertex_array_object ") != std::string::npos;
+      HasExtension(extensions, "GL_ARB_vertex_array_object");
   ext.b_GL_CHROMIUM_bind_uniform_location =
-      extensions.find("GL_CHROMIUM_bind_uniform_location ") !=
-      std::string::npos;
+      HasExtension(extensions, "GL_CHROMIUM_bind_uniform_location");
   ext.b_GL_CHROMIUM_compressed_copy_texture =
-      extensions.find("GL_CHROMIUM_compressed_copy_texture ") !=
-      std::string::npos;
+      HasExtension(extensions, "GL_CHROMIUM_compressed_copy_texture");
   ext.b_GL_CHROMIUM_copy_compressed_texture =
-      extensions.find("GL_CHROMIUM_copy_compressed_texture ") !=
-      std::string::npos;
+      HasExtension(extensions, "GL_CHROMIUM_copy_compressed_texture");
   ext.b_GL_CHROMIUM_copy_texture =
-      extensions.find("GL_CHROMIUM_copy_texture ") != std::string::npos;
+      HasExtension(extensions, "GL_CHROMIUM_copy_texture");
   ext.b_GL_CHROMIUM_gles_depth_binding_hack =
-      extensions.find("GL_CHROMIUM_gles_depth_binding_hack ") !=
-      std::string::npos;
+      HasExtension(extensions, "GL_CHROMIUM_gles_depth_binding_hack");
   ext.b_GL_CHROMIUM_glgetstringi_hack =
-      extensions.find("GL_CHROMIUM_glgetstringi_hack ") != std::string::npos;
+      HasExtension(extensions, "GL_CHROMIUM_glgetstringi_hack");
   ext.b_GL_EXT_blend_func_extended =
-      extensions.find("GL_EXT_blend_func_extended ") != std::string::npos;
-  ext.b_GL_EXT_debug_marker =
-      extensions.find("GL_EXT_debug_marker ") != std::string::npos;
+      HasExtension(extensions, "GL_EXT_blend_func_extended");
+  ext.b_GL_EXT_debug_marker = HasExtension(extensions, "GL_EXT_debug_marker");
   ext.b_GL_EXT_direct_state_access =
-      extensions.find("GL_EXT_direct_state_access ") != std::string::npos;
+      HasExtension(extensions, "GL_EXT_direct_state_access");
   ext.b_GL_EXT_discard_framebuffer =
-      extensions.find("GL_EXT_discard_framebuffer ") != std::string::npos;
+      HasExtension(extensions, "GL_EXT_discard_framebuffer");
   ext.b_GL_EXT_disjoint_timer_query =
-      extensions.find("GL_EXT_disjoint_timer_query ") != std::string::npos;
-  ext.b_GL_EXT_draw_buffers =
-      extensions.find("GL_EXT_draw_buffers ") != std::string::npos;
+      HasExtension(extensions, "GL_EXT_disjoint_timer_query");
+  ext.b_GL_EXT_draw_buffers = HasExtension(extensions, "GL_EXT_draw_buffers");
   ext.b_GL_EXT_framebuffer_blit =
-      extensions.find("GL_EXT_framebuffer_blit ") != std::string::npos;
+      HasExtension(extensions, "GL_EXT_framebuffer_blit");
   ext.b_GL_EXT_framebuffer_multisample =
-      extensions.find("GL_EXT_framebuffer_multisample ") != std::string::npos;
+      HasExtension(extensions, "GL_EXT_framebuffer_multisample");
   ext.b_GL_EXT_framebuffer_object =
-      extensions.find("GL_EXT_framebuffer_object ") != std::string::npos;
-  ext.b_GL_EXT_gpu_shader4 =
-      extensions.find("GL_EXT_gpu_shader4 ") != std::string::npos;
+      HasExtension(extensions, "GL_EXT_framebuffer_object");
+  ext.b_GL_EXT_gpu_shader4 = HasExtension(extensions, "GL_EXT_gpu_shader4");
+  ext.b_GL_EXT_instanced_arrays =
+      HasExtension(extensions, "GL_EXT_instanced_arrays");
   ext.b_GL_EXT_map_buffer_range =
-      extensions.find("GL_EXT_map_buffer_range ") != std::string::npos;
+      HasExtension(extensions, "GL_EXT_map_buffer_range");
   ext.b_GL_EXT_multisampled_render_to_texture =
-      extensions.find("GL_EXT_multisampled_render_to_texture ") !=
-      std::string::npos;
+      HasExtension(extensions, "GL_EXT_multisampled_render_to_texture");
   ext.b_GL_EXT_occlusion_query_boolean =
-      extensions.find("GL_EXT_occlusion_query_boolean ") != std::string::npos;
-  ext.b_GL_EXT_robustness =
-      extensions.find("GL_EXT_robustness ") != std::string::npos;
+      HasExtension(extensions, "GL_EXT_occlusion_query_boolean");
+  ext.b_GL_EXT_robustness = HasExtension(extensions, "GL_EXT_robustness");
   ext.b_GL_EXT_shader_image_load_store =
-      extensions.find("GL_EXT_shader_image_load_store ") != std::string::npos;
+      HasExtension(extensions, "GL_EXT_shader_image_load_store");
+  ext.b_GL_EXT_texture_buffer =
+      HasExtension(extensions, "GL_EXT_texture_buffer");
+  ext.b_GL_EXT_texture_buffer_object =
+      HasExtension(extensions, "GL_EXT_texture_buffer_object");
   ext.b_GL_EXT_texture_storage =
-      extensions.find("GL_EXT_texture_storage ") != std::string::npos;
-  ext.b_GL_EXT_timer_query =
-      extensions.find("GL_EXT_timer_query ") != std::string::npos;
+      HasExtension(extensions, "GL_EXT_texture_storage");
+  ext.b_GL_EXT_timer_query = HasExtension(extensions, "GL_EXT_timer_query");
   ext.b_GL_EXT_transform_feedback =
-      extensions.find("GL_EXT_transform_feedback ") != std::string::npos;
+      HasExtension(extensions, "GL_EXT_transform_feedback");
   ext.b_GL_EXT_unpack_subimage =
-      extensions.find("GL_EXT_unpack_subimage ") != std::string::npos;
+      HasExtension(extensions, "GL_EXT_unpack_subimage");
   ext.b_GL_IMG_multisampled_render_to_texture =
-      extensions.find("GL_IMG_multisampled_render_to_texture ") !=
-      std::string::npos;
+      HasExtension(extensions, "GL_IMG_multisampled_render_to_texture");
   ext.b_GL_INTEL_framebuffer_CMAA =
-      extensions.find("GL_INTEL_framebuffer_CMAA ") != std::string::npos;
+      HasExtension(extensions, "GL_INTEL_framebuffer_CMAA");
   ext.b_GL_KHR_blend_equation_advanced =
-      extensions.find("GL_KHR_blend_equation_advanced ") != std::string::npos;
-  ext.b_GL_KHR_debug = extensions.find("GL_KHR_debug ") != std::string::npos;
-  ext.b_GL_KHR_robustness =
-      extensions.find("GL_KHR_robustness ") != std::string::npos;
+      HasExtension(extensions, "GL_KHR_blend_equation_advanced");
+  ext.b_GL_KHR_debug = HasExtension(extensions, "GL_KHR_debug");
+  ext.b_GL_KHR_robustness = HasExtension(extensions, "GL_KHR_robustness");
   ext.b_GL_NV_blend_equation_advanced =
-      extensions.find("GL_NV_blend_equation_advanced ") != std::string::npos;
-  ext.b_GL_NV_fence = extensions.find("GL_NV_fence ") != std::string::npos;
+      HasExtension(extensions, "GL_NV_blend_equation_advanced");
+  ext.b_GL_NV_fence = HasExtension(extensions, "GL_NV_fence");
   ext.b_GL_NV_framebuffer_mixed_samples =
-      extensions.find("GL_NV_framebuffer_mixed_samples ") != std::string::npos;
-  ext.b_GL_NV_path_rendering =
-      extensions.find("GL_NV_path_rendering ") != std::string::npos;
-  ext.b_GL_OES_EGL_image =
-      extensions.find("GL_OES_EGL_image ") != std::string::npos;
+      HasExtension(extensions, "GL_NV_framebuffer_mixed_samples");
+  ext.b_GL_NV_path_rendering = HasExtension(extensions, "GL_NV_path_rendering");
+  ext.b_GL_OES_EGL_image = HasExtension(extensions, "GL_OES_EGL_image");
   ext.b_GL_OES_get_program_binary =
-      extensions.find("GL_OES_get_program_binary ") != std::string::npos;
-  ext.b_GL_OES_mapbuffer =
-      extensions.find("GL_OES_mapbuffer ") != std::string::npos;
+      HasExtension(extensions, "GL_OES_get_program_binary");
+  ext.b_GL_OES_mapbuffer = HasExtension(extensions, "GL_OES_mapbuffer");
+  ext.b_GL_OES_texture_buffer =
+      HasExtension(extensions, "GL_OES_texture_buffer");
   ext.b_GL_OES_vertex_array_object =
-      extensions.find("GL_OES_vertex_array_object ") != std::string::npos;
+      HasExtension(extensions, "GL_OES_vertex_array_object");
 
   if (ext.b_GL_INTEL_framebuffer_CMAA) {
     fn.glApplyFramebufferAttachmentCMAAINTELFn =
@@ -1453,7 +1445,8 @@ void DriverGL::InitializeDynamicBindings(
             GetGLProcAddress("glGetIntegervRobustANGLE"));
   }
 
-  if (ver->IsAtLeastGL(4u, 2u) || ver->IsAtLeastGLES(3u, 0u)) {
+  if (ver->IsAtLeastGL(4u, 2u) || ver->IsAtLeastGLES(3u, 0u) ||
+      ext.b_GL_ARB_internalformat_query) {
     fn.glGetInternalformativFn = reinterpret_cast<glGetInternalformativProc>(
         GetGLProcAddress("glGetInternalformativ"));
   }
@@ -1462,6 +1455,12 @@ void DriverGL::InitializeDynamicBindings(
     fn.glGetInternalformativRobustANGLEFn =
         reinterpret_cast<glGetInternalformativRobustANGLEProc>(
             GetGLProcAddress("glGetInternalformativRobustANGLE"));
+  }
+
+  if (ver->IsAtLeastGL(3u, 2u) || ver->IsAtLeastGLES(3u, 1u) ||
+      ext.b_GL_ARB_texture_multisample) {
+    fn.glGetMultisamplefvFn = reinterpret_cast<glGetMultisamplefvProc>(
+        GetGLProcAddress("glGetMultisamplefv"));
   }
 
   if (ext.b_GL_ANGLE_robust_client_memory) {
@@ -2020,6 +2019,11 @@ void DriverGL::InitializeDynamicBindings(
         GetGLProcAddress("glPointParameteri"));
   }
 
+  if (!ver->is_es) {
+    fn.glPolygonModeFn =
+        reinterpret_cast<glPolygonModeProc>(GetGLProcAddress("glPolygonMode"));
+  }
+
   if (ver->IsAtLeastGL(4u, 3u) || ver->IsAtLeastGLES(3u, 2u)) {
     fn.glPopDebugGroupFn = reinterpret_cast<glPopDebugGroupProc>(
         GetGLProcAddress("glPopDebugGroup"));
@@ -2271,6 +2275,29 @@ void DriverGL::InitializeDynamicBindings(
         reinterpret_cast<glTestFenceNVProc>(GetGLProcAddress("glTestFenceNV"));
   }
 
+  if (ver->IsAtLeastGLES(3u, 2u) || ver->IsAtLeastGL(3u, 1u)) {
+    fn.glTexBufferFn =
+        reinterpret_cast<glTexBufferProc>(GetGLProcAddress("glTexBuffer"));
+  } else if (ext.b_GL_OES_texture_buffer) {
+    fn.glTexBufferFn =
+        reinterpret_cast<glTexBufferProc>(GetGLProcAddress("glTexBufferOES"));
+  } else if (ext.b_GL_EXT_texture_buffer_object ||
+             ext.b_GL_EXT_texture_buffer) {
+    fn.glTexBufferFn =
+        reinterpret_cast<glTexBufferProc>(GetGLProcAddress("glTexBufferEXT"));
+  }
+
+  if (ver->IsAtLeastGL(4u, 3u) || ver->IsAtLeastGLES(3u, 2u)) {
+    fn.glTexBufferRangeFn = reinterpret_cast<glTexBufferRangeProc>(
+        GetGLProcAddress("glTexBufferRange"));
+  } else if (ext.b_GL_OES_texture_buffer) {
+    fn.glTexBufferRangeFn = reinterpret_cast<glTexBufferRangeProc>(
+        GetGLProcAddress("glTexBufferRangeOES"));
+  } else if (ext.b_GL_EXT_texture_buffer) {
+    fn.glTexBufferRangeFn = reinterpret_cast<glTexBufferRangeProc>(
+        GetGLProcAddress("glTexBufferRangeEXT"));
+  }
+
   if (ext.b_GL_ANGLE_robust_client_memory) {
     fn.glTexImage2DRobustANGLEFn =
         reinterpret_cast<glTexImage2DRobustANGLEProc>(
@@ -2449,6 +2476,10 @@ void DriverGL::InitializeDynamicBindings(
     fn.glVertexAttribDivisorANGLEFn =
         reinterpret_cast<glVertexAttribDivisorANGLEProc>(
             GetGLProcAddress("glVertexAttribDivisorANGLE"));
+  } else if (ext.b_GL_EXT_instanced_arrays) {
+    fn.glVertexAttribDivisorANGLEFn =
+        reinterpret_cast<glVertexAttribDivisorANGLEProc>(
+            GetGLProcAddress("glVertexAttribDivisorEXT"));
   }
 
   if (ver->IsAtLeastGL(3u, 0u) || ver->IsAtLeastGLES(3u, 0u)) {
@@ -3560,6 +3591,10 @@ void GLApiBase::glGetInternalformativRobustANGLEFn(GLenum target,
                                                  bufSize, length, params);
 }
 
+void GLApiBase::glGetMultisamplefvFn(GLenum pname, GLuint index, GLfloat* val) {
+  driver_->fn.glGetMultisamplefvFn(pname, index, val);
+}
+
 void GLApiBase::glGetMultisamplefvRobustANGLEFn(GLenum pname,
                                                 GLuint index,
                                                 GLsizei bufSize,
@@ -4271,6 +4306,10 @@ void GLApiBase::glPointParameteriFn(GLenum pname, GLint param) {
   driver_->fn.glPointParameteriFn(pname, param);
 }
 
+void GLApiBase::glPolygonModeFn(GLenum face, GLenum mode) {
+  driver_->fn.glPolygonModeFn(face, mode);
+}
+
 void GLApiBase::glPolygonOffsetFn(GLfloat factor, GLfloat units) {
   driver_->fn.glPolygonOffsetFn(factor, units);
 }
@@ -4628,6 +4667,20 @@ GLboolean GLApiBase::glTestFenceAPPLEFn(GLuint fence) {
 
 GLboolean GLApiBase::glTestFenceNVFn(GLuint fence) {
   return driver_->fn.glTestFenceNVFn(fence);
+}
+
+void GLApiBase::glTexBufferFn(GLenum target,
+                              GLenum internalformat,
+                              GLuint buffer) {
+  driver_->fn.glTexBufferFn(target, internalformat, buffer);
+}
+
+void GLApiBase::glTexBufferRangeFn(GLenum target,
+                                   GLenum internalformat,
+                                   GLuint buffer,
+                                   GLintptr offset,
+                                   GLsizeiptr size) {
+  driver_->fn.glTexBufferRangeFn(target, internalformat, buffer, offset, size);
 }
 
 void GLApiBase::glTexImage2DFn(GLenum target,
@@ -5121,10 +5174,8 @@ void GLApiBase::glViewportFn(GLint x, GLint y, GLsizei width, GLsizei height) {
   driver_->fn.glViewportFn(x, y, width, height);
 }
 
-GLenum GLApiBase::glWaitSyncFn(GLsync sync,
-                               GLbitfield flags,
-                               GLuint64 timeout) {
-  return driver_->fn.glWaitSyncFn(sync, flags, timeout);
+void GLApiBase::glWaitSyncFn(GLsync sync, GLbitfield flags, GLuint64 timeout) {
+  driver_->fn.glWaitSyncFn(sync, flags, timeout);
 }
 
 void TraceGLApi::glActiveTextureFn(GLenum texture) {
@@ -6390,6 +6441,13 @@ void TraceGLApi::glGetInternalformativRobustANGLEFn(GLenum target,
                                               bufSize, length, params);
 }
 
+void TraceGLApi::glGetMultisamplefvFn(GLenum pname,
+                                      GLuint index,
+                                      GLfloat* val) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glGetMultisamplefv")
+  gl_api_->glGetMultisamplefvFn(pname, index, val);
+}
+
 void TraceGLApi::glGetMultisamplefvRobustANGLEFn(GLenum pname,
                                                  GLuint index,
                                                  GLsizei bufSize,
@@ -7231,6 +7289,11 @@ void TraceGLApi::glPointParameteriFn(GLenum pname, GLint param) {
   gl_api_->glPointParameteriFn(pname, param);
 }
 
+void TraceGLApi::glPolygonModeFn(GLenum face, GLenum mode) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glPolygonMode")
+  gl_api_->glPolygonModeFn(face, mode);
+}
+
 void TraceGLApi::glPolygonOffsetFn(GLfloat factor, GLfloat units) {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glPolygonOffset")
   gl_api_->glPolygonOffsetFn(factor, units);
@@ -7653,6 +7716,22 @@ GLboolean TraceGLApi::glTestFenceAPPLEFn(GLuint fence) {
 GLboolean TraceGLApi::glTestFenceNVFn(GLuint fence) {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glTestFenceNV")
   return gl_api_->glTestFenceNVFn(fence);
+}
+
+void TraceGLApi::glTexBufferFn(GLenum target,
+                               GLenum internalformat,
+                               GLuint buffer) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glTexBuffer")
+  gl_api_->glTexBufferFn(target, internalformat, buffer);
+}
+
+void TraceGLApi::glTexBufferRangeFn(GLenum target,
+                                    GLenum internalformat,
+                                    GLuint buffer,
+                                    GLintptr offset,
+                                    GLsizeiptr size) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glTexBufferRange")
+  gl_api_->glTexBufferRangeFn(target, internalformat, buffer, offset, size);
 }
 
 void TraceGLApi::glTexImage2DFn(GLenum target,
@@ -8222,11 +8301,9 @@ void TraceGLApi::glViewportFn(GLint x, GLint y, GLsizei width, GLsizei height) {
   gl_api_->glViewportFn(x, y, width, height);
 }
 
-GLenum TraceGLApi::glWaitSyncFn(GLsync sync,
-                                GLbitfield flags,
-                                GLuint64 timeout) {
+void TraceGLApi::glWaitSyncFn(GLsync sync, GLbitfield flags, GLuint64 timeout) {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glWaitSync")
-  return gl_api_->glWaitSyncFn(sync, flags, timeout);
+  gl_api_->glWaitSyncFn(sync, flags, timeout);
 }
 
 void DebugGLApi::glActiveTextureFn(GLenum texture) {
@@ -9891,6 +9968,15 @@ void DebugGLApi::glGetInternalformativRobustANGLEFn(GLenum target,
                                               bufSize, length, params);
 }
 
+void DebugGLApi::glGetMultisamplefvFn(GLenum pname,
+                                      GLuint index,
+                                      GLfloat* val) {
+  GL_SERVICE_LOG("glGetMultisamplefv"
+                 << "(" << GLEnums::GetStringEnum(pname) << ", " << index
+                 << ", " << static_cast<const void*>(val) << ")");
+  gl_api_->glGetMultisamplefvFn(pname, index, val);
+}
+
 void DebugGLApi::glGetMultisamplefvRobustANGLEFn(GLenum pname,
                                                  GLuint index,
                                                  GLsizei bufSize,
@@ -11015,6 +11101,13 @@ void DebugGLApi::glPointParameteriFn(GLenum pname, GLint param) {
   gl_api_->glPointParameteriFn(pname, param);
 }
 
+void DebugGLApi::glPolygonModeFn(GLenum face, GLenum mode) {
+  GL_SERVICE_LOG("glPolygonMode"
+                 << "(" << GLEnums::GetStringEnum(face) << ", "
+                 << GLEnums::GetStringEnum(mode) << ")");
+  gl_api_->glPolygonModeFn(face, mode);
+}
+
 void DebugGLApi::glPolygonOffsetFn(GLfloat factor, GLfloat units) {
   GL_SERVICE_LOG("glPolygonOffset"
                  << "(" << factor << ", " << units << ")");
@@ -11579,6 +11672,28 @@ GLboolean DebugGLApi::glTestFenceNVFn(GLuint fence) {
   GLboolean result = gl_api_->glTestFenceNVFn(fence);
   GL_SERVICE_LOG("GL_RESULT: " << result);
   return result;
+}
+
+void DebugGLApi::glTexBufferFn(GLenum target,
+                               GLenum internalformat,
+                               GLuint buffer) {
+  GL_SERVICE_LOG("glTexBuffer"
+                 << "(" << GLEnums::GetStringEnum(target) << ", "
+                 << GLEnums::GetStringEnum(internalformat) << ", " << buffer
+                 << ")");
+  gl_api_->glTexBufferFn(target, internalformat, buffer);
+}
+
+void DebugGLApi::glTexBufferRangeFn(GLenum target,
+                                    GLenum internalformat,
+                                    GLuint buffer,
+                                    GLintptr offset,
+                                    GLsizeiptr size) {
+  GL_SERVICE_LOG("glTexBufferRange"
+                 << "(" << GLEnums::GetStringEnum(target) << ", "
+                 << GLEnums::GetStringEnum(internalformat) << ", " << buffer
+                 << ", " << offset << ", " << size << ")");
+  gl_api_->glTexBufferRangeFn(target, internalformat, buffer, offset, size);
 }
 
 void DebugGLApi::glTexImage2DFn(GLenum target,
@@ -12325,14 +12440,10 @@ void DebugGLApi::glViewportFn(GLint x, GLint y, GLsizei width, GLsizei height) {
   gl_api_->glViewportFn(x, y, width, height);
 }
 
-GLenum DebugGLApi::glWaitSyncFn(GLsync sync,
-                                GLbitfield flags,
-                                GLuint64 timeout) {
+void DebugGLApi::glWaitSyncFn(GLsync sync, GLbitfield flags, GLuint64 timeout) {
   GL_SERVICE_LOG("glWaitSync"
                  << "(" << sync << ", " << flags << ", " << timeout << ")");
-  GLenum result = gl_api_->glWaitSyncFn(sync, flags, timeout);
-  GL_SERVICE_LOG("GL_RESULT: " << result);
-  return result;
+  gl_api_->glWaitSyncFn(sync, flags, timeout);
 }
 
 void NoContextGLApi::glActiveTextureFn(GLenum texture) {
@@ -13743,6 +13854,15 @@ void NoContextGLApi::glGetInternalformativRobustANGLEFn(GLenum target,
                 "current GL context";
 }
 
+void NoContextGLApi::glGetMultisamplefvFn(GLenum pname,
+                                          GLuint index,
+                                          GLfloat* val) {
+  NOTREACHED()
+      << "Trying to call glGetMultisamplefv() without current GL context";
+  LOG(ERROR)
+      << "Trying to call glGetMultisamplefv() without current GL context";
+}
+
 void NoContextGLApi::glGetMultisamplefvRobustANGLEFn(GLenum pname,
                                                      GLuint index,
                                                      GLsizei bufSize,
@@ -14711,6 +14831,11 @@ void NoContextGLApi::glPointParameteriFn(GLenum pname, GLint param) {
   LOG(ERROR) << "Trying to call glPointParameteri() without current GL context";
 }
 
+void NoContextGLApi::glPolygonModeFn(GLenum face, GLenum mode) {
+  NOTREACHED() << "Trying to call glPolygonMode() without current GL context";
+  LOG(ERROR) << "Trying to call glPolygonMode() without current GL context";
+}
+
 void NoContextGLApi::glPolygonOffsetFn(GLfloat factor, GLfloat units) {
   NOTREACHED() << "Trying to call glPolygonOffset() without current GL context";
   LOG(ERROR) << "Trying to call glPolygonOffset() without current GL context";
@@ -15183,6 +15308,23 @@ GLboolean NoContextGLApi::glTestFenceNVFn(GLuint fence) {
   NOTREACHED() << "Trying to call glTestFenceNV() without current GL context";
   LOG(ERROR) << "Trying to call glTestFenceNV() without current GL context";
   return GL_FALSE;
+}
+
+void NoContextGLApi::glTexBufferFn(GLenum target,
+                                   GLenum internalformat,
+                                   GLuint buffer) {
+  NOTREACHED() << "Trying to call glTexBuffer() without current GL context";
+  LOG(ERROR) << "Trying to call glTexBuffer() without current GL context";
+}
+
+void NoContextGLApi::glTexBufferRangeFn(GLenum target,
+                                        GLenum internalformat,
+                                        GLuint buffer,
+                                        GLintptr offset,
+                                        GLsizeiptr size) {
+  NOTREACHED()
+      << "Trying to call glTexBufferRange() without current GL context";
+  LOG(ERROR) << "Trying to call glTexBufferRange() without current GL context";
 }
 
 void NoContextGLApi::glTexImage2DFn(GLenum target,
@@ -15814,12 +15956,11 @@ void NoContextGLApi::glViewportFn(GLint x,
   LOG(ERROR) << "Trying to call glViewport() without current GL context";
 }
 
-GLenum NoContextGLApi::glWaitSyncFn(GLsync sync,
-                                    GLbitfield flags,
-                                    GLuint64 timeout) {
+void NoContextGLApi::glWaitSyncFn(GLsync sync,
+                                  GLbitfield flags,
+                                  GLuint64 timeout) {
   NOTREACHED() << "Trying to call glWaitSync() without current GL context";
   LOG(ERROR) << "Trying to call glWaitSync() without current GL context";
-  return static_cast<GLenum>(0);
 }
 
 }  // namespace gl

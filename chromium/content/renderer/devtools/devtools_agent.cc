@@ -90,7 +90,6 @@ DevToolsAgent::DevToolsAgent(RenderFrameImpl* frame)
       is_devtools_client_(false),
       paused_(false),
       frame_(frame),
-      cpu_throttler_(new DevToolsCPUThrottler()),
       weak_factory_(this) {
   g_agent_for_routing_id.Get()[routing_id()] = this;
   frame_->GetWebFrame()->SetDevToolsAgentClient(this);
@@ -189,7 +188,7 @@ void DevToolsAgent::DisableTracing() {
 }
 
 void DevToolsAgent::SetCPUThrottlingRate(double rate) {
-  cpu_throttler_->SetThrottlingRate(rate);
+  DevToolsCPUThrottler::GetInstance()->SetThrottlingRate(rate);
 }
 
 // static
@@ -261,9 +260,9 @@ void DevToolsAgent::OnDispatchOnInspectorBackend(int session_id,
   TRACE_EVENT0("devtools", "DevToolsAgent::OnDispatchOnInspectorBackend");
   if (method == kPageGetAppManifest) {
     ManifestManager* manager = frame_->manifest_manager();
-    manager->GetManifest(
-        base::Bind(&DevToolsAgent::GotManifest,
-        weak_factory_.GetWeakPtr(), session_id, call_id));
+    manager->GetManifest(base::BindOnce(&DevToolsAgent::GotManifest,
+                                        weak_factory_.GetWeakPtr(), session_id,
+                                        call_id));
     return;
   }
   GetWebAgent()->DispatchOnInspectorBackend(session_id, call_id,

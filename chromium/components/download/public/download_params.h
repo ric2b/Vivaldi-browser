@@ -9,6 +9,7 @@
 #include "base/time/time.h"
 #include "components/download/public/clients.h"
 #include "net/http/http_request_headers.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "url/gurl.h"
 
 namespace download {
@@ -143,8 +144,6 @@ struct DownloadParams {
   DownloadClient client;
 
   // A unique GUID that represents this download.  See |base::GenerateGUID()|.
-  // TODO(xingliu): guid in content download must be upper case, see
-  // http://crbug.com/734818.
   std::string guid;
 
   // A callback that will be notified if this download has been accepted and
@@ -157,6 +156,9 @@ struct DownloadParams {
 
   // The parameters that define the actual download request to make.
   RequestParams request_params;
+
+  // Traffic annotation for the network request.
+  net::MutableNetworkTrafficAnnotationTag traffic_annotation;
 };
 
 }  // namespace download

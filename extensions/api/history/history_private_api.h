@@ -68,6 +68,7 @@ class HistoryPrivateAPI : public BrowserContextKeyedAPI,
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "HistoryPrivateAPI"; }
   static const bool kServiceIsNULLWhileTesting = true;
+  static const bool kServiceRedirectedInIncognito = true;
 
   // Created lazily upon OnListenerAdded.
   std::unique_ptr<HistoryPrivateEventRouter> history_event_router_;

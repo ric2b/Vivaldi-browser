@@ -13,6 +13,10 @@
 #include "components/version_info/version_info.h"
 #include "content/public/common/content_switches.h"
 
+#if defined(OS_MACOSX)
+#include "base/mac/mac_util.h"
+#endif
+
 namespace {
 
 base::LazyInstance<StackSamplingConfiguration>::Leaky g_configuration =
@@ -32,9 +36,9 @@ bool IsProfilerSupported() {
 #elif defined(OS_MACOSX)
   // Only run on canary for now.
   #if defined(GOOGLE_CHROME_BUILD)
-    return chrome::GetChannel() == version_info::Channel::CANARY;
+  return chrome::GetChannel() == version_info::Channel::CANARY;
   #else
-    return true;
+  return true;
   #endif
 #else
   return false;
@@ -209,6 +213,13 @@ StackSamplingConfiguration::GenerateConfiguration() {
                                   {PROFILE_DISABLED, 10}});
 #elif defined(OS_MACOSX)
     case version_info::Channel::CANARY:
+      return ChooseConfiguration({{PROFILE_BROWSER_PROCESS, 0},
+                                  {PROFILE_GPU_PROCESS, 0},
+                                  {PROFILE_BROWSER_AND_GPU_PROCESS, 50},
+                                  {PROFILE_CONTROL, 50},
+                                  {PROFILE_DISABLED, 0}});
+
+    case version_info::Channel::DEV:
       return ChooseConfiguration({{PROFILE_BROWSER_PROCESS, 0},
                                   {PROFILE_GPU_PROCESS, 0},
                                   {PROFILE_BROWSER_AND_GPU_PROCESS, 10},

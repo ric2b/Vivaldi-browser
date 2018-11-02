@@ -102,6 +102,13 @@ static void ClearBrowsingData(
         remove_mask |=
             ChromeBrowsingDataRemoverDelegate::DATA_TYPE_CONTENT_SETTINGS;
         break;
+      case browsing_data::BrowsingDataType::MEDIA_LICENSES:
+        remove_mask |= BrowsingDataRemover::DATA_TYPE_MEDIA_LICENSES;
+        break;
+      case browsing_data::BrowsingDataType::DOWNLOADS:
+      case browsing_data::BrowsingDataType::HOSTED_APPS_DATA:
+        // Only implemented on Desktop.
+        NOTREACHED();
       case browsing_data::BrowsingDataType::NUM_TYPES:
         NOTREACHED();
     }
@@ -210,8 +217,8 @@ static void FetchImportantSites(JNIEnv* env,
       base::android::ToJavaArrayOfStrings(env, important_domain_examples);
 
   Java_ImportantSitesCallback_onImportantRegisterableDomainsReady(
-      env, java_callback.obj(), java_domains.obj(), java_origins.obj(),
-      java_reasons.obj(), dialog_disabled);
+      env, java_callback, java_domains, java_origins, java_reasons,
+      dialog_disabled);
 }
 
 // This value should not change during a sessions, as it's used for UMA metrics.

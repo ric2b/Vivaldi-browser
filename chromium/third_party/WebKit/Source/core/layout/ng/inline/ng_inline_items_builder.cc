@@ -5,10 +5,7 @@
 #include "core/layout/ng/inline/ng_inline_items_builder.h"
 
 #include "core/layout/LayoutObject.h"
-#include "core/layout/ng/inline/ng_inline_node.h"
 #include "core/layout/ng/inline/ng_offset_mapping_builder.h"
-#include "core/layout/ng/ng_layout_result.h"
-#include "core/layout/ng/ng_unpositioned_float.h"
 #include "core/style/ComputedStyle.h"
 
 namespace blink {
@@ -309,7 +306,6 @@ void NGInlineItemsBuilderTemplate<OffsetMappingBuilder>::Append(
     const ComputedStyle* style,
     LayoutObject* layout_object) {
   DCHECK_NE(character, kSpaceCharacter);
-  DCHECK_NE(character, kZeroWidthSpaceCharacter);
 
   text_.Append(character);
   mapping_builder_.AppendIdentityMapping(1);
@@ -325,12 +321,14 @@ void NGInlineItemsBuilderTemplate<OffsetMappingBuilder>::Append(
 template <typename OffsetMappingBuilder>
 void NGInlineItemsBuilderTemplate<OffsetMappingBuilder>::AppendOpaque(
     NGInlineItem::NGInlineItemType type,
-    UChar character) {
+    UChar character,
+    const ComputedStyle* style,
+    LayoutObject* layout_object) {
   text_.Append(character);
   mapping_builder_.AppendIdentityMapping(1);
   concatenated_mapping_builder_.AppendIdentityMapping(1);
   unsigned end_offset = text_.length();
-  AppendItem(items_, type, end_offset - 1, end_offset, nullptr, nullptr);
+  AppendItem(items_, type, end_offset - 1, end_offset, style, layout_object);
 
   is_empty_inline_ &= IsItemEmpty(type, nullptr);
 }
@@ -390,7 +388,8 @@ void NGInlineItemsBuilderTemplate<
     if (ch == kNewlineCharacter)
       return;
   }
-  NOTREACHED();
+  // We could still reach here because the initial value is kSpace, in order to
+  // collapse leading spaces.
 }
 
 // Removes the collapsible space at the specified index.

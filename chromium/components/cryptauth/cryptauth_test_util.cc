@@ -12,6 +12,8 @@ const char kTestRemoteDeviceName[] = "remote device";
 const char kTestRemoteDevicePublicKey[] = "public key";
 const char kTestRemoteDeviceBluetoothAddress[] = "AA:BB:CC:DD:EE:FF";
 const char kTestRemoteDevicePSK[] = "remote device psk";
-const char kTestRemoteDeviceSignInChallenge[] = "sign-in challenge";
+const bool kTestRemoteDeviceUnlockKey = true;
+const bool kTestRemoteDeviceSupportsMobileHotspot = true;
+const int64_t kTestRemoteDeviceLastUpdateTimeMillis = 0L;
 
 }  // namespace cryptauth

@@ -23,8 +23,9 @@ class HidServiceLinux : public HidService {
   ~HidServiceLinux() override;
 
   // HidService:
-  void Connect(const HidDeviceId& device_id,
+  void Connect(const std::string& device_id,
                const ConnectCallback& callback) override;
+  base::WeakPtr<HidService> GetWeakPtr() override;
 
  private:
   struct ConnectParams;

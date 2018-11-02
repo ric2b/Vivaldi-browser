@@ -171,7 +171,7 @@ net::URLRequestJob* ServiceWorkerControlleeRequestHandler::MaybeCreateJob(
   resource_context_ = resource_context;
 
   if (is_main_resource_load_)
-    PrepareForMainResource(request->url(), request->first_party_for_cookies());
+    PrepareForMainResource(request->url(), request->site_for_cookies());
   else
     PrepareForSubResource();
 
@@ -228,7 +228,7 @@ void ServiceWorkerControlleeRequestHandler::MaybeCreateLoader(
   resource_context_ = resource_context;
 
   PrepareForMainResource(resource_request.url,
-                         resource_request.first_party_for_cookies);
+                         resource_request.site_for_cookies);
 
   if (url_job_->ShouldFallbackToNetwork()) {
     // We're falling back to the next URLLoaderRequestHandler, forward
@@ -243,7 +243,7 @@ void ServiceWorkerControlleeRequestHandler::MaybeCreateLoader(
 
 void ServiceWorkerControlleeRequestHandler::PrepareForMainResource(
     const GURL& url,
-    const GURL& first_party_for_cookies) {
+    const GURL& site_for_cookies) {
   DCHECK(!JobWasCanceled());
   DCHECK(context_);
   DCHECK(provider_host_);
@@ -261,7 +261,7 @@ void ServiceWorkerControlleeRequestHandler::PrepareForMainResource(
 
   stripped_url_ = net::SimplifyUrlForRequest(url);
   provider_host_->SetDocumentUrl(stripped_url_);
-  provider_host_->SetTopmostFrameUrl(first_party_for_cookies);
+  provider_host_->SetTopmostFrameUrl(site_for_cookies);
   context_->storage()->FindRegistrationForDocument(
       stripped_url_, base::Bind(&self::DidLookupRegistrationForMainResource,
                                 weak_factory_.GetWeakPtr()));
@@ -349,7 +349,7 @@ void ServiceWorkerControlleeRequestHandler::
   if (active_version.get() &&
       active_version->status() == ServiceWorkerVersion::ACTIVATING) {
     provider_host_->SetAllowAssociation(false);
-    registration->active_version()->RegisterStatusChangeCallback(base::Bind(
+    registration->active_version()->RegisterStatusChangeCallback(base::BindOnce(
         &self::OnVersionStatusChanged, weak_factory_.GetWeakPtr(),
         base::RetainedRef(registration), base::RetainedRef(active_version)));
     TRACE_EVENT_ASYNC_END2(
@@ -451,7 +451,7 @@ void ServiceWorkerControlleeRequestHandler::DidUpdateRegistration(
       original_registration->installing_version();
   new_version->ReportForceUpdateToDevTools();
   new_version->set_skip_waiting(true);
-  new_version->RegisterStatusChangeCallback(base::Bind(
+  new_version->RegisterStatusChangeCallback(base::BindOnce(
       &self::OnUpdatedVersionStatusChanged, weak_factory_.GetWeakPtr(),
       original_registration, new_version));
 }
@@ -478,8 +478,8 @@ void ServiceWorkerControlleeRequestHandler::OnUpdatedVersionStatusChanged(
     return;
   }
   version->RegisterStatusChangeCallback(
-      base::Bind(&self::OnUpdatedVersionStatusChanged,
-                 weak_factory_.GetWeakPtr(), registration, version));
+      base::BindOnce(&self::OnUpdatedVersionStatusChanged,
+                     weak_factory_.GetWeakPtr(), registration, version));
 }
 
 void ServiceWorkerControlleeRequestHandler::PrepareForSubResource() {
@@ -493,8 +493,8 @@ void ServiceWorkerControlleeRequestHandler::PrepareForSubResource() {
   // because a permanent failure occurred when trying to start it.
   //
   // As this is an exceptional case, just error out.
-  // TODO(falken): Figure out if |active_version| can change to
-  // |controlling_version| and do it or document the findings.
+  // TODO(falken): Figure out if |active_version| can change to |controller| and
+  // do it or document the findings.
   if (!provider_host_->active_version()) {
     url_job_->FailDueToLostController();
     return;

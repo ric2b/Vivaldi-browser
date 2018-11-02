@@ -49,6 +49,8 @@ class NET_EXPORT_PRIVATE URLRequestHttpJob : public URLRequestJob {
   // Record Sdch specific packet stats. Public so that SdchPolicyDelegate can
   // access it.
   void RecordPacketStats(SdchPolicyDelegate::StatisticSelector statistic) const;
+  void SetRequestHeadersCallback(RequestHeadersCallback callback) override;
+  void SetResponseHeadersCallback(ResponseHeadersCallback callback) override;
 
  protected:
   URLRequestHttpJob(URLRequest* request,
@@ -101,6 +103,11 @@ class NET_EXPORT_PRIVATE URLRequestHttpJob : public URLRequestJob {
   // Processes the Report-To header, if one exists. This header configures where
   // the Reporting API (in //net/reporting) will send reports for the origin.
   void ProcessReportToHeader();
+
+  // Processes the NEL header, if one exists. This header configures whether
+  // network errors will be reported to a specified group of endpoints using the
+  // Reporting API.
+  void ProcessNetworkErrorLoggingHeader();
 
   // |result| should be OK, or the request is canceled.
   void OnHeadersReceivedCallback(int result);
@@ -263,6 +270,9 @@ class NET_EXPORT_PRIVATE URLRequestHttpJob : public URLRequestJob {
   // Keeps track of total sent bytes over the network from transactions used by
   // this job that have already been destroyed.
   int64_t total_sent_bytes_from_previous_transactions_;
+
+  RequestHeadersCallback request_headers_callback_;
+  ResponseHeadersCallback response_headers_callback_;
 
   base::WeakPtrFactory<URLRequestHttpJob> weak_factory_;
 

@@ -359,7 +359,6 @@ Status LaunchDesktopChrome(URLRequestContextGetter* context_getter,
 #endif
 
 #if defined(OS_POSIX)
-  base::FileHandleMappingVector no_stderr;
   base::ScopedFD devnull;
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch("verbose")) {
     // Redirect stderr to /dev/null, so that Chrome log spew doesn't confuse
@@ -367,8 +366,8 @@ Status LaunchDesktopChrome(URLRequestContextGetter* context_getter,
     devnull.reset(HANDLE_EINTR(open("/dev/null", O_WRONLY)));
     if (!devnull.is_valid())
       return Status(kUnknownError, "couldn't open /dev/null");
-    no_stderr.push_back(std::make_pair(devnull.get(), STDERR_FILENO));
-    options.fds_to_remap = &no_stderr;
+    options.fds_to_remap.push_back(
+        std::make_pair(devnull.get(), STDERR_FILENO));
   }
 #elif defined(OS_WIN)
   if (!SwitchToUSKeyboardLayout())
@@ -774,21 +773,8 @@ Status ProcessExtensions(const std::vector<std::string>& extensions,
     if (switches->HasSwitch("disable-extensions")) {
       UpdateExtensionSwitch(switches, "disable-extensions-except",
                             automation_extension.value());
-      // TODO(samuong): Stop using --load-component-extension when ChromeDriver
-      // stops supporting Chrome 56. For backwards compatibility, Chrome 57 and
-      // 58 interprets --load-component-extension as --load-extension.
-      UpdateExtensionSwitch(switches, "load-component-extension",
-                            automation_extension.value());
     } else {
-#if defined(OS_WIN) || defined(OS_MACOSX)
-      // On Chrome 56 for Windows and Mac, a "Disable developer
-      // mode extensions" dialog appears for the automation extension. Suppress
-      // this by loading it as a component extension.
-      UpdateExtensionSwitch(switches, "load-component-extension",
-                            automation_extension.value());
-#else
       extension_paths.push_back(automation_extension.value());
-#endif
     }
   }
 
@@ -819,7 +805,7 @@ Status WritePrefsFile(
   if (custom_prefs) {
     for (base::DictionaryValue::Iterator it(*custom_prefs); !it.IsAtEnd();
          it.Advance()) {
-      prefs->Set(it.key(), base::MakeUnique<base::Value>(it.value()));
+      prefs->Set(it.key(), base::MakeUnique<base::Value>(it.value().Clone()));
     }
   }
 

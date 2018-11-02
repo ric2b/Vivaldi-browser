@@ -78,10 +78,6 @@ IdentityProvider* AwAutofillClient::GetIdentityProvider() {
   return nullptr;
 }
 
-rappor::RapporServiceImpl* AwAutofillClient::GetRapporServiceImpl() {
-  return nullptr;
-}
-
 ukm::UkmRecorder* AwAutofillClient::GetUkmRecorder() {
   return nullptr;
 }
@@ -213,9 +209,9 @@ bool AwAutofillClient::ShouldShowSigninPromo() {
   return false;
 }
 
-void AwAutofillClient::StartSigninFlow() {}
-
-void AwAutofillClient::ShowHttpNotSecureExplanation() {}
+void AwAutofillClient::ExecuteCommand(int id) {
+  NOTIMPLEMENTED();
+}
 
 bool AwAutofillClient::IsAutofillSupported() {
   return true;
@@ -282,10 +278,6 @@ bool AwAutofillClient::HasCreditCardScanFeature() {
 
 void AwAutofillClient::ScanCreditCard(const CreditCardScanCallback& callback) {
   NOTIMPLEMENTED();
-}
-
-bool RegisterAwAutofillClient(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 }  // namespace android_webview

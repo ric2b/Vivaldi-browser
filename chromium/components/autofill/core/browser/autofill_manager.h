@@ -5,7 +5,6 @@
 #ifndef COMPONENTS_AUTOFILL_CORE_BROWSER_AUTOFILL_MANAGER_H_
 #define COMPONENTS_AUTOFILL_CORE_BROWSER_AUTOFILL_MANAGER_H_
 
-#include <deque>
 #include <map>
 #include <memory>
 #include <string>
@@ -13,6 +12,7 @@
 
 #include "base/callback_forward.h"
 #include "base/compiler_specific.h"
+#include "base/containers/circular_deque.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -149,6 +149,9 @@ class AutofillManager : public AutofillHandler,
   }
 
   payments::FullCardRequest* GetOrCreateFullCardRequest();
+
+  payments::FullCardRequest* CreateFullCardRequest(
+      const base::TimeTicks& form_parsed_timestamp);
 
   base::WeakPtr<payments::FullCardRequest::UIDelegate>
   GetAsFullCardRequestUIDelegate() {
@@ -297,8 +300,10 @@ class AutofillManager : public AutofillHandler,
       std::unique_ptr<base::DictionaryValue> legal_message) override;
 
   // payments::FullCardRequest::ResultDelegate:
-  void OnFullCardRequestSucceeded(const CreditCard& card,
-                                  const base::string16& cvc) override;
+  void OnFullCardRequestSucceeded(
+      const payments::FullCardRequest& full_card_request,
+      const CreditCard& card,
+      const base::string16& cvc) override;
   void OnFullCardRequestFailed() override;
 
   // payments::FullCardRequest::UIDelegate:
@@ -350,6 +355,9 @@ class AutofillManager : public AutofillHandler,
                                 const FormFieldData& field,
                                 const AutofillProfile& profile);
 
+  // TODO(rogerm) here to see if these can be merged. FormData should be a
+  // subset of the data in FormStructure and FormFieldData a subset of that in
+  // AutofillField.
   // Fills or previews |data_model| in the |form|.
   void FillOrPreviewDataModelForm(AutofillDriver::RendererFormDataAction action,
                                   int query_id,
@@ -358,6 +366,15 @@ class AutofillManager : public AutofillHandler,
                                   const AutofillDataModel& data_model,
                                   bool is_credit_card,
                                   const base::string16& cvc);
+  void FillOrPreviewDataModelForm(AutofillDriver::RendererFormDataAction action,
+                                  int query_id,
+                                  const FormData& form,
+                                  const FormFieldData& field,
+                                  const AutofillDataModel& data_model,
+                                  bool is_credit_card,
+                                  const base::string16& cvc,
+                                  FormStructure* form_structure,
+                                  AutofillField* autofill_field);
 
   // Creates a FormStructure using the FormData received from the renderer. Will
   // return an empty scoped_ptr if the data should not be processed for upload
@@ -415,21 +432,15 @@ class AutofillManager : public AutofillHandler,
   // Imports the form data, submitted by the user, into |personal_data_|.
   void ImportFormData(const FormStructure& submitted_form);
 
-  // Logs |metric_name| with RAPPOR, for the specific form |source_url|.
-  void CollectRapporSample(const GURL& source_url,
-                           const std::string& metric_name) const;
-
   // Examines |card| and the stored profiles and if a candidate set of profiles
   // is found that matches the client-side validation rules, assigns the values
   // to |upload_request.profiles| and returns 0. If no valid set can be found,
-  // returns the failure reasons and, if applicable, the RAPPOR metric to log to
-  // |rappor_metric_name|. Appends any experiments that were triggered to
+  // returns the failure reasons. Appends any experiments that were triggered to
   // |upload_request.active_experiments|. The return value is a bitmask of
   // |AutofillMetrics::CardUploadDecisionMetric|.
   int SetProfilesForCreditCardUpload(
       const CreditCard& card,
-      payments::PaymentsClient::UploadRequestDetails* upload_request,
-      std::string* rappor_metric_name) const;
+      payments::PaymentsClient::UploadRequestDetails* upload_request) const;
 
   // Returns metric relevant to the CVC field based on values in
   // |found_cvc_field_|, |found_value_in_cvc_field_| and
@@ -499,7 +510,7 @@ class AutofillManager : public AutofillHandler,
   // May be NULL.  NULL indicates OTR.
   PersonalDataManager* personal_data_;
 
-  std::deque<std::string> autofilled_form_signatures_;
+  base::circular_deque<std::string> autofilled_form_signatures_;
 
   // Handles queries and uploads to Autofill servers. Will be NULL if
   // the download manager functionality is disabled.

@@ -10,6 +10,7 @@
 #include "base/command_line.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
+#include "base/run_loop.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "chrome/browser/background/background_mode_manager.h"
@@ -618,9 +619,16 @@ IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest,
   EXPECT_TRUE(BrowserList::GetInstance()->empty());
 }
 
+// Flaky on Windows 7 (dbg) trybot, see https://crbug.com/751081.
+#if defined(OS_WIN) && !defined(NDEBUG)
+#define MAYBE_TestAddWindowDuringShutdown DISABLED_TestAddWindowDuringShutdown
+#else
+#define MAYBE_TestAddWindowDuringShutdown TestAddWindowDuringShutdown
+#endif
+
 // Test that a window created during shutdown is closed.
 IN_PROC_BROWSER_TEST_P(BrowserCloseManagerBrowserTest,
-                       TestAddWindowDuringShutdown) {
+                       MAYBE_TestAddWindowDuringShutdown) {
   ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_NO_FATAL_FAILURE(ui_test_utils::NavigateToURL(
       browsers_[0], embedded_test_server()->GetURL("/beforeunload.html")));
@@ -1215,9 +1223,10 @@ IN_PROC_BROWSER_TEST_P(BrowserCloseManagerWithDownloadsBrowserTest,
     EXPECT_EQ(0, DownloadCoreService::NonMaliciousDownloadCountAllProfiles());
 }
 
+// Fails on ChromeOS and Linux, times out on Win. crbug.com/749098
 // Test shutdown with downloads in progress and beforeunload handlers.
 IN_PROC_BROWSER_TEST_P(BrowserCloseManagerWithDownloadsBrowserTest,
-                       TestBeforeUnloadAndDownloads) {
+                       DISABLED_TestBeforeUnloadAndDownloads) {
   ASSERT_TRUE(embedded_test_server()->Start());
   SetDownloadPathForProfile(browser()->profile());
   ASSERT_NO_FATAL_FAILURE(CreateStalledDownload(browser()));

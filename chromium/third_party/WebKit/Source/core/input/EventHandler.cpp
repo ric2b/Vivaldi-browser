@@ -42,11 +42,11 @@
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/TouchList.h"
 #include "core/dom/UserGestureIndicator.h"
+#include "core/dom/events/EventPath.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/Editor.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/SelectionController.h"
-#include "core/events/EventPath.h"
 #include "core/events/GestureEvent.h"
 #include "core/events/KeyboardEvent.h"
 #include "core/events/MouseEvent.h"
@@ -414,6 +414,9 @@ OptionalCursor EventHandler::SelectCursor(const HitTestResult& result) {
   if (scroll_manager_->MiddleClickAutoscrollInProgress())
     return kNoCursorChange;
 
+  if (result.GetScrollbar())
+    return PointerCursor();
+
   Node* node = result.InnerPossiblyPseudoNode();
   if (!node)
     return SelectAutoCursor(result, node, IBeamCursor());
@@ -550,9 +553,6 @@ OptionalCursor EventHandler::SelectCursor(const HitTestResult& result) {
 OptionalCursor EventHandler::SelectAutoCursor(const HitTestResult& result,
                                               Node* node,
                                               const Cursor& i_beam) {
-  if (result.GetScrollbar())
-    return PointerCursor();
-
   const bool is_over_link =
       !GetSelectionController().MouseDownMayStartSelect() &&
       result.IsOverLink();
@@ -563,6 +563,12 @@ OptionalCursor EventHandler::SelectAutoCursor(const HitTestResult& result,
     return i_beam;
 
   return PointerCursor();
+}
+
+WebInputEventResult EventHandler::HandlePointerEvent(
+    const WebPointerEvent& web_pointer_event,
+    Node* target) {
+  return pointer_event_manager_->HandlePointerEvent(web_pointer_event, target);
 }
 
 WebInputEventResult EventHandler::HandleMousePressEvent(
@@ -618,8 +624,8 @@ WebInputEventResult EventHandler::HandleMousePressEvent(
     return result;
   }
 
-  UserGestureIndicator gesture_indicator(
-      UserGestureToken::Create(frame_->GetDocument()));
+  std::unique_ptr<UserGestureIndicator> gesture_indicator =
+      LocalFrame::CreateUserGesture(frame_);
   frame_->LocalFrameRoot()
       .GetEventHandler()
       .last_mouse_down_user_gesture_token_ =
@@ -1001,8 +1007,7 @@ WebInputEventResult EventHandler::HandleMouseReleaseEvent(
                       .GetEventHandler()
                       .last_mouse_down_user_gesture_token_)));
   } else {
-    gesture_indicator = WTF::WrapUnique(new UserGestureIndicator(
-        UserGestureToken::Create(frame_->GetDocument())));
+    gesture_indicator = LocalFrame::CreateUserGesture(frame_);
   }
 
   WebInputEventResult event_result = UpdatePointerTargetAndDispatchEvents(
@@ -1776,8 +1781,12 @@ WebInputEventResult EventHandler::SendContextMenuEvent(
 }
 
 static bool ShouldShowContextMenuAtSelection(const FrameSelection& selection) {
+  // TODO(editing-dev): The use of UpdateStyleAndLayoutIgnorePendingStylesheets
+  // needs to be audited.  See http://crbug.com/590369 for more details.
+  selection.GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
+
   const VisibleSelection& visible_selection =
-      selection.ComputeVisibleSelectionInDOMTreeDeprecated();
+      selection.ComputeVisibleSelectionInDOMTree();
   if (!visible_selection.IsRange() && !visible_selection.RootEditableElement())
     return false;
   return selection.SelectionHasFocus();
@@ -1809,9 +1818,7 @@ WebInputEventResult EventHandler::ShowNonLocatedContextMenu(
   VisualViewport& visual_viewport = frame_->GetPage()->GetVisualViewport();
 
   if (!override_target_element && ShouldShowContextMenuAtSelection(selection)) {
-    // TODO(editing-dev): Use of updateStyleAndLayoutIgnorePendingStylesheets
-    // needs to be audited.  See http://crbug.com/590369 for more details.
-    doc->UpdateStyleAndLayoutIgnorePendingStylesheets();
+    DCHECK(!doc->NeedsLayoutTreeUpdate());
 
     IntRect first_rect = frame_->GetEditor().FirstRectForRange(
         selection.ComputeVisibleSelectionInDOMTree()

@@ -1,0 +1,235 @@
+// Copyright (c) 2017 Vivaldi Technologies AS. All rights reserved
+
+[
+  {
+    "namespace": "windowPrivate",
+    "description": "Use the <code>vivaldi.windowPrivate</code> API for vivaldi windows.",
+    "compiler_options": {
+      "implemented_in": "extensions/api/window/window_private_api.h"
+    },
+    "types": [
+      {
+        "id": "CreateWindowOptions",
+        "type": "object",
+        "description": "Object passed to the |create| function.",
+        "properties": {
+          "bounds" : {
+            "type": "object",
+            "properties": {
+              "left": {
+                "type": "integer",
+                "optional": true
+              },
+              "top": {
+                "type": "integer",
+                "optional": true
+              },
+              "width": {
+                "type": "integer"
+              },
+              "height": {
+                "type": "integer"
+              },
+              "minWidth": {
+                "type": "integer",
+                "optional": true
+              },
+              "minHeight": {
+                "type": "integer",
+                "optional": true
+              }
+            }
+          },
+          "windowDecoration" : {
+            "type": "boolean",
+            "optional": true,
+            "description": "Enable window decoration. Defaults to false."
+          },
+          "incognito" : {
+            "type": "boolean",
+            "optional": true,
+            "description": "Incogito window. Default is false."
+          },
+          "focused" : {
+            "type": "boolean",
+            "optional": true,
+            "description": "If true, opens a active window. Default is true."
+          },
+          "tabUrl" : {
+            "type": "string",
+            "optional": true,
+            "description": "The url to be added as a new tab, this will be added to the tab model. Not used for settings, popups, etc."
+          },
+          "extData" : {
+            "type": "string",
+            "optional": true,
+            "description": "Extra data to attach to the window."
+          }
+        }
+      },
+      {
+        "id": "WindowState",
+        "type": "string",
+        "description": "The state of this browser window.",
+        "enum": [{
+          "name": "normal",
+          "description": "Normal window state (i.e. not minimized, maximized, or fullscreen)."
+        }, {
+          "name": "minimized",
+          "description": "Minimized window state."
+        }, {
+          "name": "maximized",
+          "description": "Maximized window state."
+        }, {
+          "name": "fullscreen",
+          "description": "Fullscreen window state."
+        }]
+      },
+      {
+        "id": "WindowType",
+        "type": "string",
+        "description": "The type of this browser window.",
+        "enum": [{
+          "name": "normal",
+          "description": "This is a normal window."
+        }, {
+          "name": "settings",
+          "description": "This is a settings window."
+        }]
+      }
+    ],
+    "functions": [
+      {
+        "name": "create",
+        "type": "function",
+        "description": "Create a window with additional Vivaldi specific properties.",
+        "parameters": [
+          {
+            "name": "url",
+            "type": "string",
+            "description": "Url to page to show as the full window UI of the new window."
+          },
+          {
+            "name": "options",
+            "$ref": "CreateWindowOptions"
+          },
+          {
+            "name": "type",
+            "optional": true,
+            "$ref": "WindowType"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "windowId",
+                "type": "integer",
+                "description": "The window id of the created window if successful."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "getCurrentId",
+        "type": "function",
+        "description": "Returns the window id of the window we are currently running inside.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "windowId",
+                "type": "integer",
+                "description": "The window id of the current window if successful."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "setState",
+        "type": "function",
+        "description": "Sets the window state.",
+        "parameters": [
+          {
+            "name": "windowId",
+            "type": "integer",
+            "description": "The window id of the window to change the state for."
+          },
+          {
+            "name": "state",
+            "$ref": "WindowState",
+            "description": "The state to set the window to."
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "success",
+                "type": "boolean",
+                "description": "true if successful, false otherwise."
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "onMinimized",
+        "type": "function",
+        "description": "Fired when the window becomes minimized.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "windowId"
+          }
+        ]
+      },
+      {
+        "name": "onMaximized",
+        "type": "function",
+        "description": "Fired when the window becomes maximized.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "windowId"
+          }
+        ]
+      },
+      {
+        "name": "onRestored",
+        "type": "function",
+        "description": "Fired when the window becomes restored.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "windowId"
+          }
+        ]
+      },
+      {
+        "name": "onFullscreen",
+        "type": "function",
+        "description": "Fired when the window changes full screen status.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "windowId"
+          },
+          {
+            "type": "boolean",
+            "name": "enabled",
+            "description": "true if the window became full screen, otherwise false."
+          }
+        ]
+      }
+    ]
+  }
+]

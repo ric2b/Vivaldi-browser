@@ -64,8 +64,8 @@ bool SuggestedArticlesObserver::GetCurrentSuggestions(
                      : content_suggestions_service_->GetSuggestionsForCategory(
                            ArticlesCategory());
   for (const ContentSuggestion& suggestion : suggestions) {
-    prefetch_urls.push_back(
-        {suggestion.id().id_within_category(), suggestion.url()});
+    prefetch_urls.push_back({suggestion.id().id_within_category(),
+                             suggestion.url(), suggestion.title()});
   }
 
   *result = prefetch_urls;
@@ -105,6 +105,11 @@ void SuggestedArticlesObserver::OnCategoryStatusChanged(
 
 void SuggestedArticlesObserver::OnSuggestionInvalidated(
     const ContentSuggestion::ID& suggestion_id) {
+  // TODO(dewittj): Change this to check whether a given category is not
+  // a _remote_ category.
+  if (suggestion_id.category() != ArticlesCategory())
+    return;
+
   prefetch_service_->GetPrefetchDispatcher()->RemovePrefetchURLsByClientId(
       ClientId(kSuggestedArticlesNamespace,
                suggestion_id.id_within_category()));

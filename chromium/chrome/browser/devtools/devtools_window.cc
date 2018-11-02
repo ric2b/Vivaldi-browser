@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/base64.h"
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
 #include "base/macros.h"
@@ -471,20 +472,14 @@ void DevToolsWindow::OpenDevToolsWindowForWorker(
     const scoped_refptr<DevToolsAgentHost>& worker_agent) {
   DevToolsWindow* window = FindDevToolsWindow(worker_agent.get());
   if (!window) {
-    window = DevToolsWindow::CreateDevToolsWindowForWorker(profile);
+    base::RecordAction(base::UserMetricsAction("DevTools_InspectWorker"));
+    window = Create(profile, nullptr, kFrontendWorker, std::string(), false, "",
+                    "", worker_agent->IsAttached());
     if (!window)
       return;
     window->bindings_->AttachTo(worker_agent);
   }
   window->ScheduleShow(DevToolsToggleAction::Show());
-}
-
-// static
-DevToolsWindow* DevToolsWindow::CreateDevToolsWindowForWorker(
-    Profile* profile) {
-  base::RecordAction(base::UserMetricsAction("DevTools_InspectWorker"));
-  return Create(profile, nullptr, kFrontendWorker, std::string(), false, "",
-                "");
 }
 
 // static
@@ -551,7 +546,7 @@ void DevToolsWindow::OpenDevToolsWindowForFrame(
   if (!window) {
     window = DevToolsWindow::Create(profile, nullptr, kFrontendDefault,
                                     std::string(), false, std::string(),
-                                    std::string());
+                                    std::string(), agent_host->IsAttached());
     if (!window)
       return;
     window->bindings_->AttachTo(agent_host);
@@ -585,7 +580,7 @@ void DevToolsWindow::OpenExternalFrontend(
   if (!window) {
     window = Create(profile, nullptr, frontend_type,
                     DevToolsUI::GetProxyURL(frontend_url).spec(), false,
-                    std::string(), std::string());
+                    std::string(), std::string(), agent_host->IsAttached());
     if (!window)
       return;
     window->bindings_->AttachTo(agent_host);
@@ -606,7 +601,7 @@ void DevToolsWindow::OpenNodeFrontendWindow(Profile* profile) {
 
   DevToolsWindow* window =
       Create(profile, nullptr, kFrontendNode, std::string(), false,
-             std::string(), std::string());
+             std::string(), std::string(), false);
   if (!window)
     return;
   window->bindings_->AttachTo(DevToolsAgentHost::CreateForDiscovery());
@@ -643,7 +638,7 @@ void DevToolsWindow::ToggleDevToolsWindow(
         break;
     }
     window = Create(profile, inspected_web_contents, kFrontendDefault,
-                    std::string(), true, settings, panel);
+                    std::string(), true, settings, panel, agent->IsAttached());
     if (!window)
       return;
     window->bindings_->AttachTo(agent.get());
@@ -782,9 +777,6 @@ void DevToolsWindow::Show(const DevToolsToggleAction& action) {
 
     api->SendOnUndockedEvent(profile_, tab_id, should_show_window);
 
-    if (!browser_) {
-      CreateDevToolsBrowserForVivaldi();
-    }
     if (toolbox_web_contents_) {
       UpdateBrowserWindow();
     }
@@ -964,7 +956,8 @@ DevToolsWindow* DevToolsWindow::Create(
     const std::string& frontend_url,
     bool can_dock,
     const std::string& settings,
-    const std::string& panel) {
+    const std::string& panel,
+    bool has_other_clients) {
   if (profile->GetPrefs()->GetBoolean(prefs::kDevToolsDisabled) ||
       base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kKioskMode))
     return nullptr;
@@ -981,8 +974,8 @@ DevToolsWindow* DevToolsWindow::Create(
   }
 
   // Create WebContents with devtools.
-  GURL url(
-      GetDevToolsURL(profile, frontend_type, frontend_url, can_dock, panel));
+  GURL url(GetDevToolsURL(profile, frontend_type, frontend_url, can_dock, panel,
+                          has_other_clients));
   std::unique_ptr<WebContents> main_web_contents(
       WebContents::Create(WebContents::CreateParams(profile)));
   main_web_contents->GetController().LoadURL(
@@ -1003,7 +996,8 @@ GURL DevToolsWindow::GetDevToolsURL(Profile* profile,
                                     FrontendType frontend_type,
                                     const std::string& frontend_url,
                                     bool can_dock,
-                                    const std::string& panel) {
+                                    const std::string& panel,
+                                    bool has_other_clients) {
   std::string url(!frontend_url.empty() ? frontend_url
                                         : chrome::kChromeUIDevToolsURL);
   std::string url_string(url +
@@ -1032,6 +1026,8 @@ GURL DevToolsWindow::GetDevToolsURL(Profile* profile,
     url_string += "&can_dock=true";
   if (panel.size())
     url_string += "&panel=" + panel;
+  if (has_other_clients)
+    url_string += "&hasOtherClients=true";
   return DevToolsUIBindings::SanitizeFrontendURL(GURL(url_string));
 }
 
@@ -1069,23 +1065,14 @@ WebContents* DevToolsWindow::OpenURLFromTab(
   DCHECK(source == main_web_contents_);
   if (!params.url.SchemeIs(content::kChromeDevToolsScheme)) {
     WebContents* inspected_web_contents = GetInspectedWebContents();
-    return inspected_web_contents ?
-        inspected_web_contents->OpenURL(params) : NULL;
+    if (!inspected_web_contents)
+      return nullptr;
+    content::OpenURLParams modified = params;
+    modified.referrer = content::Referrer();
+    return inspected_web_contents->OpenURL(modified);
   }
   bindings_->Reload();
   return main_web_contents_;
-}
-
-void DevToolsWindow::ShowCertificateViewer(
-    scoped_refptr<net::X509Certificate> certificate) {
-  WebContents* inspected_contents = is_docked_ ?
-      GetInspectedWebContents() : main_web_contents_;
-  Browser* browser = NULL;
-  int tab = 0;
-  if (!FindInspectedBrowserAndTabIndex(inspected_contents, &browser, &tab))
-    return;
-  gfx::NativeWindow parent = browser->window()->GetNativeWindow();
-  ::ShowCertificateViewer(inspected_contents, parent, certificate.get());
 }
 
 void DevToolsWindow::ActivateContents(WebContents* contents) {
@@ -1149,7 +1136,9 @@ void DevToolsWindow::WebContentsCreated(WebContents* source_contents,
 }
 
 void DevToolsWindow::CloseContents(WebContents* source) {
-  CHECK(is_docked_);
+  // NOTE(pettern@vivaldi.com): Until we can move devtools to
+  // a native UI again, don't have a CHECK crash us here.
+  // CHECK(is_docked_);
   life_stage_ = kClosing;
   UpdateBrowserWindow();
   // In case of docked main_web_contents_, we own it so delete here.
@@ -1233,12 +1222,6 @@ bool DevToolsWindow::PreHandleGestureEvent(
   return blink::WebInputEvent::IsPinchGestureEventType(event.GetType());
 }
 
-void DevToolsWindow::ShowCertificateViewerInDevTools(
-    content::WebContents* web_contents,
-    scoped_refptr<net::X509Certificate> certificate) {
-  ShowCertificateViewer(certificate);
-}
-
 void DevToolsWindow::ActivateWindow() {
   if (life_stage_ != kLoadCompleted)
     return;
@@ -1303,7 +1286,7 @@ void DevToolsWindow::SetIsDocked(bool dock_requested) {
   if (dock_requested == was_docked)
     return;
 
-  if (dock_requested && !was_docked) {
+  if (dock_requested && !was_docked && browser_) {
     // Detach window from the external devtools browser. It will lead to
     // the browser object's close and delete. Remove observer first.
     TabStripModel* tab_strip_model = browser_->tab_strip_model();
@@ -1382,6 +1365,56 @@ void DevToolsWindow::RenderProcessGone(bool crashed) {
   }
 }
 
+void DevToolsWindow::ShowCertificateViewer(const std::string& cert_chain) {
+  std::unique_ptr<base::Value> value = base::JSONReader::Read(cert_chain);
+  if (!value || value->GetType() != base::Value::Type::LIST) {
+    NOTREACHED();
+    return;
+  }
+
+  std::unique_ptr<base::ListValue> list =
+      base::ListValue::From(std::move(value));
+  std::vector<std::string> decoded;
+  for (size_t i = 0; i < list->GetSize(); ++i) {
+    base::Value* item;
+    if (!list->Get(i, &item) || item->GetType() != base::Value::Type::STRING) {
+      NOTREACHED();
+      return;
+    }
+    std::string temp;
+    if (!item->GetAsString(&temp)) {
+      NOTREACHED();
+      return;
+    }
+    if (!base::Base64Decode(temp, &temp)) {
+      NOTREACHED();
+      return;
+    }
+    decoded.push_back(temp);
+  }
+
+  std::vector<base::StringPiece> cert_string_piece;
+  for (const auto& str : decoded)
+    cert_string_piece.push_back(str);
+  scoped_refptr<net::X509Certificate> cert =
+      net::X509Certificate::CreateFromDERCertChain(cert_string_piece);
+  if (!cert) {
+    NOTREACHED();
+    return;
+  }
+
+  WebContents* inspected_contents =
+      vivaldi::IsVivaldiRunning()
+          ? GetInspectedWebContents()
+          : (is_docked_ ? GetInspectedWebContents() : main_web_contents_);
+  Browser* browser = NULL;
+  int tab = 0;
+  if (!FindInspectedBrowserAndTabIndex(inspected_contents, &browser, &tab))
+    return;
+  gfx::NativeWindow parent = browser->window()->GetNativeWindow();
+  ::ShowCertificateViewer(inspected_contents, parent, cert.get());
+}
+
 void DevToolsWindow::OnLoadCompleted() {
   // First seed inspected tab id for extension APIs.
   WebContents* inspected_web_contents = GetInspectedWebContents();
@@ -1450,19 +1483,6 @@ WebContents* DevToolsWindow::GetDevtoolsWebContentsForInspectedWebContents(
       return (*it)->main_web_contents_;
   }
   return nullptr;
-}
-
-
-void DevToolsWindow::CreateDevToolsBrowserForVivaldi() {
-  // Creates a dummy window that uses VivaldiBrowserWindow instead of
-  // BrowserView so it remains invisible. Undocked devtools for tab inspection
-  // is handled on the js side instead.
-  browser_ =
-      new Browser(Browser::CreateParams::CreateForDevToolsForVivaldi(profile_));
-  browser_->tab_strip_model()->AddWebContents(
-    main_web_contents_, -1, ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
-    TabStripModel::ADD_ACTIVE);
-  main_web_contents_->GetRenderViewHost()->SyncRendererPrefs();
 }
 
 void DevToolsWindow::ForceCloseWindow() {

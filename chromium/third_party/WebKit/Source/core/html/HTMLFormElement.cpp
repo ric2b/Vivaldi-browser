@@ -35,8 +35,8 @@
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/NodeListsNodeData.h"
 #include "core/dom/UserGestureIndicator.h"
-#include "core/events/Event.h"
-#include "core/events/ScopedEventQueue.h"
+#include "core/dom/events/Event.h"
+#include "core/dom/events/ScopedEventQueue.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameClient.h"
@@ -360,8 +360,8 @@ void HTMLFormElement::submitFromJavaScript() {
 
 void HTMLFormElement::SubmitDialog(FormSubmission* form_submission) {
   for (Node* node = this; node; node = node->ParentOrShadowHostNode()) {
-    if (isHTMLDialogElement(*node)) {
-      toHTMLDialogElement(*node).CloseDialog(form_submission->Result());
+    if (auto* dialog = ToHTMLDialogElementOrNull(*node)) {
+      dialog->CloseDialog(form_submission->Result());
       return;
     }
   }
@@ -457,7 +457,8 @@ void HTMLFormElement::ScheduleFormSubmission(FormSubmission* submission) {
   }
 
   Frame* target_frame = GetDocument().GetFrame()->FindFrameForNavigation(
-      submission->Target(), *GetDocument().GetFrame());
+      submission->Target(), *GetDocument().GetFrame(),
+      submission->RequestURL());
   if (!target_frame) {
     target_frame = GetDocument().GetFrame();
   } else {

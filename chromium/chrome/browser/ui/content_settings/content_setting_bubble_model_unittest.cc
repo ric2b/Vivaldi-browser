@@ -17,6 +17,7 @@
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/blocked_content/popup_blocker_tab_helper.h"
 #include "chrome/browser/ui/content_settings/content_setting_bubble_model.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
@@ -41,11 +42,6 @@ class ContentSettingBubbleModelTest : public ChromeRenderViewHostTestHarness {
  protected:
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
-
-    // Although this is redundant with the Field Trial testing configuration,
-    // the
-    // official builders don't use those, so enable it here.
-    feature_list.InitAndEnableFeature(features::kPreferHtmlOverPlugins);
 
     TabSpecificContentSettings::CreateForWebContents(web_contents());
     InfoBarService::CreateForWebContents(web_contents());
@@ -739,7 +735,7 @@ TEST_F(ContentSettingBubbleModelTest, Plugins) {
   EXPECT_FALSE(bubble_content.custom_link.empty());
   EXPECT_TRUE(bubble_content.custom_link_enabled);
   EXPECT_FALSE(bubble_content.manage_text.empty());
-  EXPECT_FALSE(bubble_content.learn_more_link.empty());
+  EXPECT_TRUE(bubble_content.show_learn_more);
 }
 
 TEST_F(ContentSettingBubbleModelTest, PepperBroker) {
@@ -943,13 +939,39 @@ TEST_F(ContentSettingBubbleModelTest, SubresourceFilter) {
             l10n_util::GetStringUTF16(IDS_BLOCKED_ADS_PROMPT_EXPLANATION));
   EXPECT_EQ(0U, bubble_content.radio_group.radio_items.size());
   EXPECT_EQ(0, bubble_content.radio_group.default_item);
-  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_LEARN_MORE),
-            bubble_content.learn_more_link);
+  EXPECT_TRUE(bubble_content.show_learn_more);
   EXPECT_TRUE(bubble_content.custom_link.empty());
   EXPECT_FALSE(bubble_content.custom_link_enabled);
   EXPECT_EQ(bubble_content.manage_text,
             l10n_util::GetStringUTF16(IDS_ALLOW_ADS));
   EXPECT_EQ(0U, bubble_content.media_menus.size());
+}
+
+TEST_F(ContentSettingBubbleModelTest, PopupBubbleModelListItems) {
+  const GURL url("https://www.example.test/");
+  WebContentsTester::For(web_contents())->NavigateAndCommit(url);
+  TabSpecificContentSettings* content_settings =
+      TabSpecificContentSettings::FromWebContents(web_contents());
+  content_settings->OnContentBlocked(CONTENT_SETTINGS_TYPE_POPUPS);
+
+  PopupBlockerTabHelper::CreateForWebContents(web_contents());
+  std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
+      ContentSettingBubbleModel::CreateContentSettingBubbleModel(
+          nullptr, web_contents(), profile(), CONTENT_SETTINGS_TYPE_POPUPS));
+  const auto& list_items =
+      content_setting_bubble_model->bubble_content().list_items;
+  EXPECT_EQ(0U, list_items.size());
+
+  BlockedWindowParams params(GURL("about:blank"), content::Referrer(),
+                             std::string(), WindowOpenDisposition::NEW_POPUP,
+                             blink::mojom::WindowFeatures(), false, true);
+  constexpr size_t kItemCount = 3;
+  for (size_t i = 1; i <= kItemCount; i++) {
+    EXPECT_TRUE(PopupBlockerTabHelper::MaybeBlockPopup(
+        web_contents(), url, params.CreateNavigateParams(web_contents()),
+        nullptr /*=open_url_params*/, params.features()));
+    EXPECT_EQ(i, list_items.size());
+  }
 }
 
 TEST_F(ContentSettingBubbleModelTest, ValidUrl) {

@@ -6,7 +6,6 @@
 
 #include "base/callback_helpers.h"
 #include "base/logging.h"
-#include "content/browser/loader/netlog_observer.h"
 #include "content/browser/loader/resource_controller.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/loader/resource_request_info_impl.h"
@@ -46,7 +45,6 @@ void SyncResourceHandler::OnRequestRedirected(
         response);
   }
 
-  NetLogObserver::PopulateResponseInfo(request(), response);
   // TODO(darin): It would be much better if this could live in WebCore, but
   // doing so requires API changes at all levels.  Similar code exists in
   // WebCore/platform/network/cf/ResourceHandleCFNet.cpp :-(
@@ -76,8 +74,6 @@ void SyncResourceHandler::OnResponseStarted(
                                         response);
   }
 
-  NetLogObserver::PopulateResponseInfo(request(), response);
-
   // We don't care about copying the status here.
   result_.headers = response->head.headers;
   result_.mime_type = response->head.mime_type;
@@ -87,6 +83,7 @@ void SyncResourceHandler::OnResponseStarted(
   result_.response_time = response->head.response_time;
   result_.load_timing = response->head.load_timing;
   result_.devtools_info = response->head.devtools_info;
+  result_.socket_address = response->head.socket_address;
   controller->Resume();
 }
 

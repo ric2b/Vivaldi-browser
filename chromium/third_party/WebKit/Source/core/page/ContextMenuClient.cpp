@@ -41,13 +41,13 @@
 #include "core/editing/markers/DocumentMarkerController.h"
 #include "core/editing/markers/SpellCheckMarker.h"
 #include "core/editing/spellcheck/SpellChecker.h"
-#include "core/exported/WebDataSourceImpl.h"
+#include "core/exported/WebDocumentLoaderImpl.h"
 #include "core/exported/WebPluginContainerImpl.h"
-#include "core/exported/WebViewBase.h"
+#include "core/exported/WebViewImpl.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/frame/VisualViewport.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "core/html/HTMLAnchorElement.h"
 #include "core/html/HTMLFormElement.h"
 #include "core/html/HTMLFrameElementBase.h"
@@ -95,74 +95,16 @@ static WebURL UrlFromFrame(LocalFrame* frame) {
   if (frame) {
     DocumentLoader* dl = frame->Loader().GetDocumentLoader();
     if (dl) {
-      WebDataSource* ds = WebDataSourceImpl::FromDocumentLoader(dl);
-      if (ds) {
-        return ds->HasUnreachableURL() ? ds->UnreachableURL()
-                                       : ds->GetRequest().Url();
+      WebDocumentLoader* document_loader =
+          WebDocumentLoaderImpl::FromDocumentLoader(dl);
+      if (document_loader) {
+        return document_loader->HasUnreachableURL()
+                   ? document_loader->UnreachableURL()
+                   : document_loader->GetRequest().Url();
       }
     }
   }
   return WebURL();
-}
-
-static bool IsWhiteSpaceOrPunctuation(UChar c) {
-  return IsSpaceOrNewline(c) || WTF::Unicode::IsPunct(c);
-}
-
-static String SelectMisspellingAsync(LocalFrame* selected_frame,
-                                     String& description) {
-  VisibleSelection selection =
-      selected_frame->Selection().ComputeVisibleSelectionInDOMTree();
-  if (selection.IsNone())
-    return String();
-
-  // Caret and range selections always return valid normalized ranges.
-  const EphemeralRange& selection_range =
-      selection.ToNormalizedEphemeralRange();
-
-  Node* const selection_start_container =
-      selection_range.StartPosition().ComputeContainerNode();
-  Node* const selection_end_container =
-      selection_range.EndPosition().ComputeContainerNode();
-
-  // We don't currently support the case where a misspelling spans multiple
-  // nodes
-  if (selection_start_container != selection_end_container)
-    return String();
-
-  const unsigned selection_start_offset =
-      selection_range.StartPosition().ComputeOffsetInContainerNode();
-  const unsigned selection_end_offset =
-      selection_range.EndPosition().ComputeOffsetInContainerNode();
-
-  const DocumentMarkerVector& markers_in_node =
-      selected_frame->GetDocument()->Markers().MarkersFor(
-          selection_start_container, DocumentMarker::MisspellingMarkers());
-
-  const auto marker_it =
-      std::find_if(markers_in_node.begin(), markers_in_node.end(),
-                   [=](const DocumentMarker* marker) {
-                     return marker->StartOffset() < selection_end_offset &&
-                            marker->EndOffset() > selection_start_offset;
-                   });
-  if (marker_it == markers_in_node.end())
-    return String();
-
-  const SpellCheckMarker* const found_marker = ToSpellCheckMarker(*marker_it);
-  description = found_marker->Description();
-
-  Range* const marker_range =
-      Range::Create(*selected_frame->GetDocument(), selection_start_container,
-                    found_marker->StartOffset(), selection_start_container,
-                    found_marker->EndOffset());
-
-  if (marker_range->GetText().StripWhiteSpace(&IsWhiteSpaceOrPunctuation) !=
-      CreateRange(selection_range)
-          ->GetText()
-          .StripWhiteSpace(&IsWhiteSpaceOrPunctuation))
-    return String();
-
-  return marker_range->GetText();
 }
 
 // static
@@ -273,8 +215,8 @@ bool ContextMenuClient::ShowContextMenu(const ContextMenu* default_menu,
   r.SetToShadowHostIfInRestrictedShadowRoot();
 
   LocalFrame* selected_frame = r.InnerNodeFrame();
-  WebLocalFrameBase* selected_web_frame =
-      WebLocalFrameBase::FromFrame(selected_frame);
+  WebLocalFrameImpl* selected_web_frame =
+      WebLocalFrameImpl::FromFrame(selected_frame);
 
   WebContextMenuData data;
   data.mouse_position = selected_frame->View()->ContentsToViewport(
@@ -308,6 +250,8 @@ bool ContextMenuClient::ShowContextMenu(const ContextMenu* default_menu,
     // An image can be null for many reasons, like being blocked, no image
     // data received from server yet.
     data.has_image_contents = r.GetImage() && !r.GetImage()->IsNull();
+    data.is_placeholder_image =
+        r.GetImage() && r.GetImage()->IsPlaceholderImage();
     if (data.has_image_contents &&
         isHTMLImageElement(r.InnerNodeOrImageMapImage())) {
       HTMLImageElement* image_element =
@@ -356,24 +300,42 @@ bool ContextMenuClient::ShowContextMenu(const ContextMenu* default_menu,
       PluginView* plugin_view = ToLayoutEmbeddedContent(object)->Plugin();
       if (plugin_view && plugin_view->IsPluginContainer()) {
         data.media_type = WebContextMenuData::kMediaTypePlugin;
-        WebPluginContainerImpl* plugin = ToWebPluginContainerImpl(plugin_view);
-        WebString text = plugin->Plugin()->SelectionAsText();
-        if (!text.IsEmpty()) {
-          data.selected_text = text;
-          data.edit_flags |= WebContextMenuData::kCanCopy;
-        }
-        data.edit_flags &= ~WebContextMenuData::kCanTranslate;
-        data.link_url = plugin->Plugin()->LinkAtPosition(data.mouse_position);
-        if (plugin->Plugin()->SupportsPaginatedPrint())
-          data.media_flags |= WebContextMenuData::kMediaCanPrint;
+
+        WebPlugin* plugin = ToWebPluginContainerImpl(plugin_view)->Plugin();
+        data.link_url = plugin->LinkAtPosition(data.mouse_position);
 
         HTMLPlugInElement* plugin_element = ToHTMLPlugInElement(r.InnerNode());
         data.src_url =
             plugin_element->GetDocument().CompleteURL(plugin_element->Url());
+
+        // Figure out the text selection and text edit flags.
+        WebString text = plugin->SelectionAsText();
+        if (!text.IsEmpty()) {
+          data.selected_text = text;
+          data.edit_flags |= WebContextMenuData::kCanCopy;
+        }
+        bool plugin_can_edit_text = plugin->CanEditText();
+        if (plugin_can_edit_text) {
+          data.is_editable = true;
+          if (!!(data.edit_flags & WebContextMenuData::kCanCopy))
+            data.edit_flags |= WebContextMenuData::kCanCut;
+          data.edit_flags |= WebContextMenuData::kCanPaste;
+          // TODO(bug 753216): Implement "SelectAll" command and enable when
+          // focus is within an editable text area.
+          data.edit_flags &= ~WebContextMenuData::kCanSelectAll;
+        }
+        // Disable translation for plugins.
+        data.edit_flags &= ~WebContextMenuData::kCanTranslate;
+
+        // Figure out the media flags.
         data.media_flags |= WebContextMenuData::kMediaCanSave;
+        if (plugin->SupportsPaginatedPrint())
+          data.media_flags |= WebContextMenuData::kMediaCanPrint;
 
         // Add context menu commands that are supported by the plugin.
-        if (plugin->Plugin()->CanRotateView())
+        // Only show rotate view options if focus is not in an editable text
+        // area.
+        if (!plugin_can_edit_text && plugin->CanRotateView())
           data.media_flags |= WebContextMenuData::kMediaCanRotate;
       }
     }
@@ -418,8 +380,10 @@ bool ContextMenuClient::ShowContextMenu(const ContextMenu* default_menu,
     // suggestions to these markers in the background. Therefore, when a
     // user right-clicks a mouse on a word, Chrome just needs to find a
     // spelling marker on the word instead of spellchecking it.
-    String description;
-    data.misspelled_word = SelectMisspellingAsync(selected_frame, description);
+    std::pair<String, String> misspelled_word_and_description =
+        selected_frame->GetSpellChecker().SelectMisspellingAsync();
+    data.misspelled_word = misspelled_word_and_description.first;
+    const String& description = misspelled_word_and_description.second;
     if (description.length()) {
       Vector<String> suggestions;
       description.Split('\n', suggestions);
@@ -537,8 +501,8 @@ void ContextMenuClient::ClearContextMenu() {
   if (!selected_frame)
     return;
 
-  WebLocalFrameBase* selected_web_frame =
-      WebLocalFrameBase::FromFrame(selected_frame);
+  WebLocalFrameImpl* selected_web_frame =
+      WebLocalFrameImpl::FromFrame(selected_frame);
   selected_web_frame->ClearContextMenuNode();
 }
 

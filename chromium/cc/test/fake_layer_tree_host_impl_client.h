@@ -5,8 +5,8 @@
 #ifndef CC_TEST_FAKE_LAYER_TREE_HOST_IMPL_CLIENT_H_
 #define CC_TEST_FAKE_LAYER_TREE_HOST_IMPL_CLIENT_H_
 
-#include "cc/output/begin_frame_args.h"
 #include "cc/trees/layer_tree_host_impl.h"
+#include "components/viz/common/frame_sinks/begin_frame_args.h"
 
 namespace cc {
 
@@ -14,7 +14,7 @@ class FakeLayerTreeHostImplClient : public LayerTreeHostImplClient {
  public:
   // LayerTreeHostImplClient implementation.
   void DidLoseLayerTreeFrameSinkOnImplThread() override {}
-  void SetBeginFrameSource(BeginFrameSource* source) override {}
+  void SetBeginFrameSource(viz::BeginFrameSource* source) override {}
   void DidReceiveCompositorFrameAckOnImplThread() override {}
   void OnCanDrawStateChanged(bool can_draw) override {}
   void NotifyReadyToActivate() override;
@@ -35,7 +35,7 @@ class FakeLayerTreeHostImplClient : public LayerTreeHostImplClient {
   void DidPrepareTiles() override {}
   void DidCompletePageScaleAnimationOnImplThread() override {}
   void OnDrawForLayerTreeFrameSink(bool resourceless_software_draw) override {}
-  void NeedsImplSideInvalidation() override;
+  void NeedsImplSideInvalidation(bool needs_first_draw_on_activation) override;
   void RequestBeginMainFrameNotExpected(bool new_state) override {}
   void NotifyImageDecodeRequestFinished() override {}
 

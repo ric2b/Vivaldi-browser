@@ -20,11 +20,13 @@
 #include "media/base/encryption_scheme.h"
 #include "media/base/media_log_event.h"
 #include "media/base/output_device_info.h"
+#include "media/base/pipeline_status.h"
 #include "media/base/sample_format.h"
 #include "media/base/subsample_entry.h"
 #include "media/base/video_codecs.h"
 #include "media/base/video_color_space.h"
 #include "media/base/video_types.h"
+#include "media/base/watch_time_keys.h"
 #include "ui/gfx/ipc/color/gfx_param_traits_macros.h"
 
 // Enum traits.
@@ -47,7 +49,7 @@ IPC_ENUM_TRAITS_MAX_VALUE(media::CdmMessageType,
                           media::CdmMessageType::MESSAGE_TYPE_MAX)
 
 IPC_ENUM_TRAITS_MAX_VALUE(media::CdmPromise::Exception,
-                          media::CdmPromise::EXCEPTION_MAX)
+                          media::CdmPromise::Exception::EXCEPTION_MAX)
 
 IPC_ENUM_TRAITS_MAX_VALUE(media::CdmSessionType,
                           media::CdmSessionType::SESSION_TYPE_MAX)
@@ -76,15 +78,24 @@ IPC_ENUM_TRAITS_MAX_VALUE(media::EmeInitDataType, media::EmeInitDataType::MAX)
 IPC_ENUM_TRAITS_MAX_VALUE(media::EncryptionScheme::CipherMode,
                           media::EncryptionScheme::CipherMode::CIPHER_MODE_MAX)
 
+IPC_ENUM_TRAITS_MAX_VALUE(media::HdcpVersion,
+                          media::HdcpVersion::kHdcpVersionMax)
+
 IPC_ENUM_TRAITS_MAX_VALUE(media::MediaLogEvent::Type,
                           media::MediaLogEvent::TYPE_LAST)
 
 IPC_ENUM_TRAITS_MAX_VALUE(media::OutputDeviceStatus,
                           media::OUTPUT_DEVICE_STATUS_MAX)
 
+IPC_ENUM_TRAITS_MAX_VALUE(media::PipelineStatus,
+                          media::PipelineStatus::PIPELINE_STATUS_MAX);
+
 IPC_ENUM_TRAITS_MAX_VALUE(media::SampleFormat, media::kSampleFormatMax)
 
 IPC_ENUM_TRAITS_MAX_VALUE(media::VideoCodec, media::kVideoCodecMax)
+
+IPC_ENUM_TRAITS_MAX_VALUE(media::WatchTimeKey,
+                          media::WatchTimeKey::kWatchTimeKeyMax);
 
 IPC_ENUM_TRAITS_MIN_MAX_VALUE(media::VideoCodecProfile,
                               media::VIDEO_CODEC_PROFILE_MIN,

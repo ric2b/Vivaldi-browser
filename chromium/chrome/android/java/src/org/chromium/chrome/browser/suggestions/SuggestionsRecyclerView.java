@@ -49,6 +49,8 @@ import java.util.Set;
 public class SuggestionsRecyclerView extends RecyclerView {
     private static final Interpolator DISMISS_INTERPOLATOR = new FastOutLinearInInterpolator();
     private static final int DISMISS_ANIMATION_TIME_MS = 300;
+    private static final int NEW_CONTENT_HIGHLIGHT_DURATION_MS = 3000;
+
     /**
      * A single instance of {@link ResetForDismissCallback} that can be reused as it has no
      * state.
@@ -77,6 +79,7 @@ public class SuggestionsRecyclerView extends RecyclerView {
      * Whether the {@link SuggestionsRecyclerView} and its children should react to touch events.
      */
     private boolean mTouchEnabled = true;
+    private boolean mScrollEnabled = true;
 
     /** The ui config for this view. */
     private UiConfig mUiConfig;
@@ -138,6 +141,24 @@ public class SuggestionsRecyclerView extends RecyclerView {
         return super.onInterceptTouchEvent(ev);
     }
 
+    /**
+     * Toggle whether scrolling is enabled.
+     */
+    public void setScrollEnabled(boolean enabled) {
+        mScrollEnabled = enabled;
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        if (ev.getActionMasked() == MotionEvent.ACTION_DOWN && !mScrollEnabled) {
+            setLayoutFrozen(true);
+        } else if (ev.getActionMasked() == MotionEvent.ACTION_UP
+                || ev.getActionMasked() == MotionEvent.ACTION_CANCEL) {
+            setLayoutFrozen(false);
+        }
+        return super.dispatchTouchEvent(ev);
+    }
+
     @Override
     public boolean onTouchEvent(MotionEvent ev) {
         if (!mTouchEnabled) return false;
@@ -179,23 +200,27 @@ public class SuggestionsRecyclerView extends RecyclerView {
         mContextMenuManager.closeContextMenu();
     }
 
+    /** Highlights the current length of the view by temporarily showing the scrollbar. */
+    public void highlightContentLength() {
+        int defaultDelay = getScrollBarDefaultDelayBeforeFade();
+        setScrollBarDefaultDelayBeforeFade(NEW_CONTENT_HIGHLIGHT_DURATION_MS);
+        awakenScrollBars();
+        setScrollBarDefaultDelayBeforeFade(defaultDelay);
+    }
+
     @Override
     protected void onLayout(boolean changed, int l, int t, int r, int b) {
         int numberViews = getChildCount();
         for (int i = 0; i < numberViews; ++i) {
             View view = getChildAt(i);
-            NewTabPageViewHolder viewHolder = (NewTabPageViewHolder) getChildViewHolder(view);
-            if (viewHolder == null) return;
-            viewHolder.updateLayoutParams();
+            ((NewTabPageViewHolder) getChildViewHolder(view)).updateLayoutParams();
         }
         super.onLayout(changed, l, t, r, b);
     }
 
-    public void init(
-            UiConfig uiConfig, ContextMenuManager contextMenuManager, NewTabPageAdapter adapter) {
+    public void init(UiConfig uiConfig, ContextMenuManager contextMenuManager) {
         mUiConfig = uiConfig;
         mContextMenuManager = contextMenuManager;
-        setAdapter(adapter);
     }
 
     public NewTabPageAdapter getNewTabPageAdapter() {
@@ -360,8 +385,6 @@ public class SuggestionsRecyclerView extends RecyclerView {
 
         @Override
         public int getMovementFlags(RecyclerView recyclerView, ViewHolder viewHolder) {
-            assert viewHolder instanceof NewTabPageViewHolder;
-
             int swipeFlags = 0;
             if (((NewTabPageViewHolder) viewHolder).isDismissable()) {
                 swipeFlags = ItemTouchHelper.START | ItemTouchHelper.END;
@@ -406,7 +429,6 @@ public class SuggestionsRecyclerView extends RecyclerView {
     private static class ResetForDismissCallback extends NewTabPageViewHolder.PartialBindCallback {
         @Override
         public void onResult(NewTabPageViewHolder holder) {
-            assert holder instanceof CardViewHolder;
             ((CardViewHolder) holder).getRecyclerView().updateViewStateForDismiss(0, holder);
         }
     }

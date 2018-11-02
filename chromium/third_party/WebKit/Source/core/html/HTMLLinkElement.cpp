@@ -26,11 +26,12 @@
 #include "core/html/HTMLLinkElement.h"
 
 #include "bindings/core/v8/ScriptEventListener.h"
+#include "core/CoreInitializer.h"
 #include "core/HTMLNames.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/Document.h"
 #include "core/dom/TaskRunnerHelper.h"
-#include "core/events/Event.h"
+#include "core/dom/events/Event.h"
 #include "core/frame/LocalFrameClient.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/CrossOriginAttribute.h"
@@ -53,7 +54,7 @@ inline HTMLLinkElement::HTMLLinkElement(Document& document,
       link_loader_(LinkLoader::Create(this)),
       referrer_policy_(kReferrerPolicyDefault),
       sizes_(DOMTokenList::Create(*this, HTMLNames::sizesAttr)),
-      rel_list_(this, RelList::Create(this)),
+      rel_list_(RelList::Create(this)),
       created_by_parser_(created_by_parser) {}
 
 HTMLLinkElement* HTMLLinkElement::Create(Document& document,
@@ -150,9 +151,8 @@ LinkResource* HTMLLinkElement::LinkResourceToProcess() {
     } else if (rel_attribute_.IsServiceWorker() &&
                OriginTrials::linkServiceWorkerEnabled(GetExecutionContext())) {
       if (GetDocument().GetFrame()) {
-        link_ =
-            GetDocument().GetFrame()->Client()->CreateServiceWorkerLinkResource(
-                this);
+        link_ = CoreInitializer::GetInstance().CreateServiceWorkerLinkResource(
+            this);
       }
     } else {
       LinkStyle* link = LinkStyle::Create(this);

@@ -414,6 +414,7 @@ installer::MasterPreferences* LoadMasterPrefs() {
 // Makes chrome the user's default browser according to policy or
 // |make_chrome_default_for_user| if no policy is set.
 void ProcessDefaultBrowserPolicy(bool make_chrome_default_for_user) {
+#if !defined(OS_ANDROID)
   // Only proceed if chrome can be made default unattended. In other cases, this
   // is handled by the first run default browser prompt (on Windows 8+).
   if (shell_integration::GetDefaultWebClientSetPermission() ==
@@ -429,6 +430,7 @@ void ProcessDefaultBrowserPolicy(bool make_chrome_default_for_user) {
       shell_integration::SetAsDefaultBrowser();
     }
   }
+#endif
 }
 
 }  // namespace

@@ -12,8 +12,6 @@ assert(is_android)
 
 source_set("android") {
   sources = [
-    "capture_jni_registrar.cc",
-    "capture_jni_registrar.h",
     "photo_capabilities.cc",
     "photo_capabilities.h",
     "video_capture_device_android.cc",
@@ -21,15 +19,14 @@ source_set("android") {
     "video_capture_device_factory_android.cc",
     "video_capture_device_factory_android.h",
   ]
-  configs += [
-    "//media:media_config",
-    "//media:media_implementation",
-  ]
+  configs += [ "//media:media_config" ]
   deps = [
     ":capture_jni_headers",
+    "//media/capture:capture_device_specific",
     "//media/capture/mojo:image_capture",
     "//third_party/libyuv",
     "//ui/gfx:color_space",
+    "//ui/gfx/geometry",
   ]
 }
 

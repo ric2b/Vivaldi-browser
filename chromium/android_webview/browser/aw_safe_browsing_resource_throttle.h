@@ -6,9 +6,11 @@
 #define ANDROID_WEBVIEW_BROWSER_AW_SAFE_BROWSING_RESOURCE_THROTTLE_H_
 
 #include "android_webview/browser/aw_safe_browsing_ui_manager.h"
+#include "android_webview/browser/aw_url_checker_delegate_impl.h"
 #include "android_webview/browser/net/aw_web_resource_request.h"
 #include "base/macros.h"
 #include "components/safe_browsing/base_resource_throttle.h"
+#include "components/safe_browsing/browser/base_parallel_resource_throttle.h"
 #include "components/safe_browsing_db/database_manager.h"
 #include "components/security_interstitials/content/unsafe_resource.h"
 #include "content/public/common/resource_type.h"
@@ -24,21 +26,28 @@ namespace android_webview {
 
 class AwSafeBrowsingWhitelistManager;
 
+// Contructs a resource throttle for SafeBrowsing. It returns an
+// AwSafeBrowsingParallelResourceThrottle instance if
+// --enable-features=S13nSafeBrowsingParallelUrlCheck is specified; returns
+// an AwSafeBrowsingResourceThrottle otherwise.
+//
+// It returns nullptr if GMS doesn't exist on device or support SafeBrowsing.
+content::ResourceThrottle* MaybeCreateAwSafeBrowsingResourceThrottle(
+    net::URLRequest* request,
+    content::ResourceType resource_type,
+    scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager> database_manager,
+    scoped_refptr<AwSafeBrowsingUIManager> ui_manager,
+    AwSafeBrowsingWhitelistManager* whitelist_manager);
+
+bool IsCancelledBySafeBrowsing(const net::URLRequest* request);
+
 class AwSafeBrowsingResourceThrottle
     : public safe_browsing::BaseResourceThrottle {
- public:
-  // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.android_webview
-  enum class SafeBrowsingAction {
-    SHOW_INTERSTITIAL,
-    PROCEED,
-    BACK_TO_SAFETY,
-  };
+ protected:
+  bool CheckUrl(const GURL& url) override;
 
-  static const void* kUserDataKey;
-
-  // Will construct an AwSafeBrowsingResourceThrottle if GMS exists on device
-  // and supports safebrowsing.
-  static AwSafeBrowsingResourceThrottle* MaybeCreate(
+ private:
+  friend content::ResourceThrottle* MaybeCreateAwSafeBrowsingResourceThrottle(
       net::URLRequest* request,
       content::ResourceType resource_type,
       scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager>
@@ -46,10 +55,6 @@ class AwSafeBrowsingResourceThrottle
       scoped_refptr<AwSafeBrowsingUIManager> ui_manager,
       AwSafeBrowsingWhitelistManager* whitelist_manager);
 
- protected:
-  bool CheckUrl(const GURL& url) override;
-
- private:
   AwSafeBrowsingResourceThrottle(
       net::URLRequest* request,
       content::ResourceType resource_type,
@@ -63,30 +68,47 @@ class AwSafeBrowsingResourceThrottle
   void StartDisplayingBlockingPageHelper(
       security_interstitials::UnsafeResource resource) override;
 
-  static void StartApplicationResponse(
-      const base::WeakPtr<BaseResourceThrottle>& throttle,
-      scoped_refptr<safe_browsing::BaseUIManager> ui_manager,
-      const security_interstitials::UnsafeResource& resource,
-      const AwWebResourceRequest& request);
-
-  // Follow the application's response to WebViewClient#onSafeBrowsingHit(). If
-  // the action is PROCEED or BACK_TO_SAFETY, then |reporting| will determine if
-  // we should send an extended report. Otherwise, |reporting| determines if we
-  // should allow showing the reporting checkbox or not.
-  static void DoApplicationResponse(
-      const base::WeakPtr<BaseResourceThrottle>& throttle,
-      scoped_refptr<safe_browsing::BaseUIManager> ui_manager,
-      const security_interstitials::UnsafeResource& resource,
-      SafeBrowsingAction action,
-      bool reporting);
-
+  // safe_browsing::BaseResourceThrottle overrides:
   void CancelResourceLoad() override;
 
   net::URLRequest* request_;
 
-  AwSafeBrowsingWhitelistManager* whitelist_manager_;
+  scoped_refptr<safe_browsing::UrlCheckerDelegate> url_checker_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(AwSafeBrowsingResourceThrottle);
+};
+
+// Unlike AwSafeBrowsingResourceThrottle, this class never defers starting the
+// URL request or following redirects. If any of the checks for the original URL
+// and redirect chain are not complete by the time the response headers are
+// available, the request is deferred until all the checks are done.
+class AwSafeBrowsingParallelResourceThrottle
+    : public safe_browsing::BaseParallelResourceThrottle {
+ private:
+  friend content::ResourceThrottle* MaybeCreateAwSafeBrowsingResourceThrottle(
+      net::URLRequest* request,
+      content::ResourceType resource_type,
+      scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager>
+          database_manager,
+      scoped_refptr<AwSafeBrowsingUIManager> ui_manager,
+      AwSafeBrowsingWhitelistManager* whitelist_manager);
+
+  AwSafeBrowsingParallelResourceThrottle(
+      net::URLRequest* request,
+      content::ResourceType resource_type,
+      scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager>
+          database_manager,
+      scoped_refptr<AwSafeBrowsingUIManager> ui_manager,
+      AwSafeBrowsingWhitelistManager* whitelist_manager);
+
+  ~AwSafeBrowsingParallelResourceThrottle() override;
+
+  // safe_browsing::BaseParallelResourceThrottle overrides:
+  void CancelResourceLoad() override;
+
+  net::URLRequest* request_;
+
+  DISALLOW_COPY_AND_ASSIGN(AwSafeBrowsingParallelResourceThrottle);
 };
 
 }  // namespace android_webview

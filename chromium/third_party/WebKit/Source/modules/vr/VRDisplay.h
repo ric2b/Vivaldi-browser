@@ -8,7 +8,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/FrameRequestCallback.h"
 #include "core/dom/SuspendableObject.h"
-#include "core/events/EventTarget.h"
+#include "core/dom/events/EventTarget.h"
 #include "device/vr/vr_service.mojom-blink.h"
 #include "modules/vr/VRDisplayCapabilities.h"
 #include "modules/vr/VRLayer.h"
@@ -204,7 +204,6 @@ class VRDisplay final : public EventTargetWithInlineData,
   int pending_vsync_id_ = -1;
   bool in_animation_frame_ = false;
   bool did_submit_this_frame_ = false;
-  bool in_display_activate_ = false;
   bool display_blurred_ = false;
   bool pending_previous_frame_render_ = false;
   bool pending_submit_frame_ = false;

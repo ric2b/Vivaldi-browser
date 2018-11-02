@@ -53,12 +53,15 @@ class CC_EXPORT CheckerImageTracker {
 
   CheckerImageTracker(ImageController* image_controller,
                       CheckerImageTrackerClient* client,
-                      bool enable_checker_imaging);
+                      bool enable_checker_imaging,
+                      size_t min_image_bytes_to_checker);
   ~CheckerImageTracker();
 
   // Returns true if the decode for |image| will be deferred to the image decode
   // service and it should be be skipped during raster.
-  bool ShouldCheckerImage(const DrawImage& image, WhichTree tree);
+  bool ShouldCheckerImage(const DrawImage& image,
+                          WhichTree tree,
+                          bool required_for_activation);
 
   // Provides a prioritized queue of images to decode.
   using ImageDecodeQueue = std::vector<ImageDecodeRequest>;
@@ -90,6 +93,10 @@ class CC_EXPORT CheckerImageTracker {
   // do so. This call is meant to be issued prior to the image appearing during
   // raster.
   void DisallowCheckeringForImage(const PaintImage& image);
+
+  void set_force_disabled(bool force_disabled) {
+    force_disabled_ = force_disabled;
+  }
 
   bool has_locked_decodes_for_testing() const {
     return !image_id_to_decode_.empty();
@@ -155,6 +162,11 @@ class CC_EXPORT CheckerImageTracker {
   ImageController* image_controller_;
   CheckerImageTrackerClient* client_;
   const bool enable_checker_imaging_;
+  const size_t min_image_bytes_to_checker_;
+
+  // Disables checkering of all images if set. As opposed to
+  // |enable_checker_imaging_|, this setting can be toggled.
+  bool force_disabled_ = false;
 
   // A set of images which have been decoded and are pending invalidation for
   // raster on the checkered tiles.

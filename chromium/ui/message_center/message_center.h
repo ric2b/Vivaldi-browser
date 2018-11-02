@@ -63,6 +63,10 @@ class MESSAGE_CENTER_EXPORT MessageCenter {
   // Destroys the global message_center object.
   static void Shutdown();
 
+  // Returns if new style notification is enabled, i.e. NotificationViewMD is
+  // used instead of NotificationView.
+  static bool IsNewStyleNotificationEnabled();
+
   // Management of the observer list.
   virtual void AddObserver(MessageCenterObserver* observer) = 0;
   virtual void RemoveObserver(MessageCenterObserver* observer) = 0;
@@ -188,6 +192,11 @@ class MESSAGE_CENTER_EXPORT MessageCenter {
   // UI classes should call this when the popup timers should restart (for
   // example, after the mouse leaves the popup.)
   virtual void RestartPopupTimers() = 0;
+
+  // "Chromium OS" or "Chrome OS" in the current locale.
+  // Return empty string if not on these platforms.
+  virtual const base::string16& GetProductOSName() const = 0;
+  virtual void SetProductOSName(const base::string16& product_os_name) = 0;
 
  protected:
   friend class ::DownloadNotification;

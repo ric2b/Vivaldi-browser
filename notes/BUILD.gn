@@ -6,18 +6,10 @@ static_library("notes") {
     "notes_attachment.h",
     "notes_codec.cpp",
     "notes_codec.h",
-    "notes_factory.cpp",
-    "notes_factory.h",
     "notes_model.cpp",
     "notes_model.h",
-    "notes_model_observer.h",
-    "notes_model_loaded_observer.cpp",
-    "notes_model_loaded_observer.h",
-    "notes_model_observer.h",
     "notes_storage.cpp",
     "notes_storage.h",
-    "notes_submenu_observer.cc",
-    "notes_submenu_observer.h",
     "notesnode.cpp",
     "notesnode.h",
     "scoped_group_notes_actions.cpp",
@@ -26,8 +18,8 @@ static_library("notes") {
   deps = [
     "//base:base",
     "//base:i18n",
-    "//chrome:strings",
-    "//chrome/common/importer:interfaces",
+    #"//chrome:strings",
+    #"//chrome/common/importer:interfaces",
     "//components/keyed_service/core:core",
     "//components/keyed_service/content:content",
     "//components/renderer_context_menu:renderer_context_menu",
@@ -48,6 +40,32 @@ static_library("notes") {
   ]
 }
 
+static_library("browser") {
+  sources = [
+    "notes_factory.cpp",
+    "notes_factory.h",
+    "notes_model_loaded_observer.cpp",
+    "notes_model_loaded_observer.h",
+    "notes_model_observer.h",
+    "notes_submenu_observer.cc",
+    "notes_submenu_observer.h",
+  ]
+  deps = [
+    "//base:base",
+    "//base:i18n",
+    "//chrome:strings",
+    "//components/keyed_service/core:core",
+    "//components/keyed_service/content:content",
+    "//components/renderer_context_menu:renderer_context_menu",
+    "//content/public/browser",
+    "//skia",
+  ]
+  public_deps = [
+    ":notes",
+    "//components/bookmarks/browser",
+  ]
+}
+
 source_set("unit_tests") {
   testonly = true
   sources = [
@@ -55,6 +73,7 @@ source_set("unit_tests") {
   ]
   deps = [
     "//testing/gtest",
+    "//third_party/boringssl",
   ]
   public_deps = [
     ":notes",

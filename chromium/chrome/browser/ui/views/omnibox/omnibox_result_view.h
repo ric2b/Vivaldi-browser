@@ -69,6 +69,9 @@ class OmniboxResultView : public views::View,
   // views::View:
   gfx::Size CalculatePreferredSize() const override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
+  bool OnMousePressed(const ui::MouseEvent& event) override;
+  void OnMouseMoved(const ui::MouseEvent& event) override;
+  void OnMouseExited(const ui::MouseEvent& event) override;
   void OnNativeThemeChanged(const ui::NativeTheme* theme) override;
 
   ResultViewState GetState() const;
@@ -79,6 +82,9 @@ class OmniboxResultView : public views::View,
 
   // Returns the display width required for the match contents.
   int GetMatchContentsWidth() const;
+
+  // Stores a custom icon as a local data member and schedules a repaint.
+  void SetCustomIcon(const gfx::ImageSkia& icon);
 
   // Stores the image in a local data member and schedules a repaint.
   void SetAnswerImage(const gfx::ImageSkia& image);
@@ -151,13 +157,6 @@ class OmniboxResultView : public views::View,
   // gfx::AnimationDelegate:
   void AnimationProgressed(const gfx::Animation* animation) override;
 
-  // Returns the offset at which the contents of the |match| should be displayed
-  // within the text bounds. The directionality of UI and match contents is used
-  // to determine the offset relative to the correct edge.
-  int GetDisplayOffset(const AutocompleteMatch& match,
-                       bool is_ui_rtl,
-                       bool is_match_contents_rtl) const;
-
   // Returns the font to use for the description section of answer suggestions.
   const gfx::FontList& GetAnswerFont() const;
 
@@ -187,10 +186,17 @@ class OmniboxResultView : public views::View,
                               int text_type,
                               bool is_bold) const;
 
+  // Sets the hovered state of this result.
+  void SetHovered(bool hovered);
+
   // This row's model and model index.
   OmniboxPopupContentsView* model_;
   size_t model_index_;
 
+  // Whether this view is in the hovered state.
+  bool is_hovered_;
+
+  // Font settings for this view.
   const gfx::FontList font_list_;
   int font_height_;
 
@@ -207,6 +213,8 @@ class OmniboxResultView : public views::View,
   std::unique_ptr<views::ImageView> keyword_icon_;
 
   std::unique_ptr<gfx::SlideAnimation> animation_;
+
+  gfx::ImageSkia custom_icon_;
 
   // If the answer has an icon, cache the image.
   gfx::ImageSkia answer_image_;

@@ -40,6 +40,12 @@ class UIElement {
   // Move |child| to position new_index in |children_|.
   void ReorderChild(UIElement* child, int new_index);
 
+  template <class T>
+  int FindUIElementIdForBackendElement(T* element) const;
+
+  // Return a vector of pairs of attributes' names and values.
+  virtual std::vector<std::pair<std::string, std::string>> GetCustomAttributes()
+      const = 0;
   virtual void GetBounds(gfx::Rect* bounds) const = 0;
   virtual void SetBounds(const gfx::Rect& bounds) = 0;
   virtual void GetVisible(bool* visible) const = 0;
@@ -51,7 +57,7 @@ class UIElement {
       const = 0;
 
   template <typename BackingT, typename T>
-  static BackingT* GetBackingElement(UIElement* element) {
+  static BackingT* GetBackingElement(const UIElement* element) {
     return T::From(element);
   };
 

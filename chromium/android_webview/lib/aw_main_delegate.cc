@@ -31,11 +31,12 @@
 #include "base/threading/thread_restrictions.h"
 #include "cc/base/switches.h"
 #include "components/crash/content/app/breakpad_linux.h"
-#include "components/safe_browsing_db/android/safe_browsing_api_handler_bridge.h"
+#include "components/safe_browsing/android/safe_browsing_api_handler_bridge.h"
 #include "components/spellcheck/common/spellcheck_features.h"
 #include "content/public/browser/android/browser_media_player_manager_register.h"
 #include "content/public/browser/browser_main_runner.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/common/content_descriptor_keys.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
@@ -134,15 +135,22 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
 #endif  // V8_USE_EXTERNAL_STARTUP_DATA
 
   if (cl->HasSwitch(switches::kWebViewSandboxedRenderer)) {
+    content::RenderProcessHost::SetMaxRendererProcessCount(1u);
     cl->AppendSwitch(switches::kInProcessGPU);
-    cl->AppendSwitchASCII(switches::kRendererProcessLimit, "1");
-    cl->AppendSwitch(switches::kDisableRendererPriorityManagement);
   }
 
   CommandLineHelper::AddEnabledFeature(
       *cl, spellcheck::kAndroidSpellCheckerNonLowEnd.name);
 
   CommandLineHelper::AddDisabledFeature(*cl, features::kWebPayments.name);
+
+  // WebView does not support AndroidOverlay yet for video overlays.
+  CommandLineHelper::AddDisabledFeature(*cl, media::kUseAndroidOverlay.name);
+
+  // WebView does not support EME persistent license yet, because it's not
+  // clear on how user can remove persistent media licenses from UI.
+  CommandLineHelper::AddDisabledFeature(*cl,
+                                        media::kMediaDrmPersistentLicense.name);
 
   android_webview::RegisterPathProvider();
 
@@ -247,11 +255,22 @@ gpu::SyncPointManager* GetSyncPointManager() {
   DCHECK(DeferredGpuCommandService::GetInstance());
   return DeferredGpuCommandService::GetInstance()->sync_point_manager();
 }
+
+const gpu::GPUInfo& GetGPUInfo() {
+  DCHECK(DeferredGpuCommandService::GetInstance());
+  return DeferredGpuCommandService::GetInstance()->gpu_info();
+}
+
+const gpu::GpuFeatureInfo& GetGpuFeatureInfo() {
+  DCHECK(DeferredGpuCommandService::GetInstance());
+  return DeferredGpuCommandService::GetInstance()->gpu_feature_info();
+}
 }  // namespace
 
 content::ContentGpuClient* AwMainDelegate::CreateContentGpuClient() {
-  content_gpu_client_.reset(
-      new AwContentGpuClient(base::Bind(&GetSyncPointManager)));
+  content_gpu_client_.reset(new AwContentGpuClient(
+      base::Bind(&GetSyncPointManager), base::Bind(&GetGPUInfo),
+      base::Bind(&GetGpuFeatureInfo)));
   return content_gpu_client_.get();
 }
 

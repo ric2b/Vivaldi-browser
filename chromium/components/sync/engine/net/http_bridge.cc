@@ -10,7 +10,6 @@
 
 #include "base/bit_cast.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/single_thread_task_runner.h"
@@ -228,7 +227,7 @@ void HttpBridge::MakeAsynchronousPost() {
   // on, and on which the url fetcher lives).
   DCHECK(!fetch_state_.http_request_timeout_timer.get());
   fetch_state_.http_request_timeout_timer =
-      base::MakeUnique<base::Timer>(false, false);
+      std::make_unique<base::Timer>(false, false);
   fetch_state_.http_request_timeout_timer->Start(
       FROM_HERE, base::TimeDelta::FromSeconds(kMaxHttpRequestTimeSeconds),
       base::Bind(&HttpBridge::OnURLFetchTimedOut, this));
@@ -251,7 +250,7 @@ void HttpBridge::MakeAsynchronousPost() {
           destination: GOOGLE_OWNED_SERVICE
         }
         policy {
-          cookies_allowed: false
+          cookies_allowed: NO
           setting:
             "Users can disable Chrome Sync by going into the profile settings "
             "and choosing to Sign Out."

@@ -29,6 +29,7 @@
 #include "base/logging.h"
 #include "base/threading/thread_local.h"
 #include "build/build_config.h"
+#include "ui/gl/extension_set.h"
 #include "ui/gl/gl_export.h"
 
 // The standard OpenGL native extension headers are also included.
@@ -162,6 +163,15 @@
 // GL_CHROMIUM_subscribe_uniforms
 #define GL_SUBSCRIBED_VALUES_BUFFER_CHROMIUM             0x924B
 #define GL_MOUSE_POSITION_CHROMIUM                       0x924C
+
+// GL_CHROMIUM_texture_filtering_hint
+#define GL_TEXTURE_FILTERING_HINT_CHROMIUM               0x8AF0
+
+// GL_CHROMIUM_resize
+#define GL_COLOR_SPACE_UNSPECIFIED_CHROMIUM 0x8AF1
+#define GL_COLOR_SPACE_SCRGB_LINEAR_CHROMIUM 0x8AF2
+#define GL_COLOR_SPACE_SRGB_CHROMIUM 0x8AF3
+#define GL_COLOR_SPACE_DISPLAY_P3_CHROMIUM 0x8AF4
 
 // GL_OES_texure_3D
 #define GL_SAMPLER_3D_OES                                0x8B5F
@@ -415,7 +425,7 @@ struct GLVersionInfo;
 struct GL_EXPORT DriverGL {
   void InitializeStaticBindings();
   void InitializeDynamicBindings(const GLVersionInfo* ver,
-                                 const std::string& context_extensions);
+                                 const ExtensionSet& extensions);
   void ClearBindings();
 
   ProcsGL fn;
@@ -460,6 +470,7 @@ struct GL_EXPORT DriverEGL {
   void InitializeClientExtensionBindings();
   void InitializeExtensionBindings();
   void ClearBindings();
+  void UpdateConditionalExtensionBindings();
 
   ProcsEGL fn;
   ExtensionsEGL ext;

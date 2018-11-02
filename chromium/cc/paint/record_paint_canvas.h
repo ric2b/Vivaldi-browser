@@ -19,12 +19,12 @@
 
 namespace cc {
 
-class PaintOpBuffer;
+class DisplayItemList;
 class PaintFlags;
 
 class CC_PAINT_EXPORT RecordPaintCanvas final : public PaintCanvas {
  public:
-  explicit RecordPaintCanvas(PaintOpBuffer* buffer, const SkRect& bounds);
+  RecordPaintCanvas(DisplayItemList* list, const SkRect& bounds);
   ~RecordPaintCanvas() override;
 
   SkMetaData& getMetaData() override;
@@ -71,15 +71,6 @@ class CC_PAINT_EXPORT RecordPaintCanvas final : public PaintCanvas {
   void drawDRRect(const SkRRect& outer,
                   const SkRRect& inner,
                   const PaintFlags& flags) override;
-  void drawCircle(SkScalar cx,
-                  SkScalar cy,
-                  SkScalar radius,
-                  const PaintFlags& flags) override;
-  void drawArc(const SkRect& oval,
-               SkScalar start_angle,
-               SkScalar sweep_angle,
-               bool use_center,
-               const PaintFlags& flags) override;
   void drawRoundRect(const SkRect& rect,
                      SkScalar rx,
                      SkScalar ry,
@@ -99,15 +90,6 @@ class CC_PAINT_EXPORT RecordPaintCanvas final : public PaintCanvas {
                   SkScalar top,
                   const PaintFlags* flags) override;
 
-  void drawText(const void* text,
-                size_t byte_length,
-                SkScalar x,
-                SkScalar y,
-                const PaintFlags& flags) override;
-  void drawPosText(const void* text,
-                   size_t byte_length,
-                   const SkPoint pos[],
-                   const PaintFlags& flags) override;
   void drawTextBlob(sk_sp<SkTextBlob> blob,
                     SkScalar x,
                     SkScalar y,
@@ -136,7 +118,7 @@ class CC_PAINT_EXPORT RecordPaintCanvas final : public PaintCanvas {
   const SkNoDrawCanvas* GetCanvas() const;
   SkNoDrawCanvas* GetCanvas();
 
-  PaintOpBuffer* buffer_;
+  DisplayItemList* list_;
 
   // TODO(enne): Although RecordPaintCanvas is mostly a write-only interface
   // where paint commands are stored, occasionally users of PaintCanvas want

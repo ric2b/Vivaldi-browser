@@ -180,7 +180,6 @@ cr.define('ntp', function() {
 
   /**
    * Fired as each section of pages becomes ready.
-   * @param {Event} e Each page's synthetic DOM event.
    */
   document.addEventListener('sectionready', function(e) {
     if (--sectionsToWaitFor <= 0) {
@@ -261,6 +260,19 @@ cr.define('ntp', function() {
 
   function setBookmarkBarAttached(attached) {
     document.documentElement.setAttribute('bookmarkbarattached', attached);
+  }
+
+  /**
+   * Set the dominant color for a node. This will be called in response to
+   * getFaviconDominantColor. The node represented by |id| better have a setter
+   * for stripeColor.
+   * @param {string} id The ID of a node.
+   * @param {string} color The color represented as a CSS string.
+   */
+  function setFaviconDominantColor(id, color) {
+    var node = $(id);
+    if (node)
+      node.stripeColor = color;
   }
 
   /**
@@ -434,6 +446,7 @@ cr.define('ntp', function() {
     saveAppPageName: saveAppPageName,
     setAppToBeHighlighted: setAppToBeHighlighted,
     setBookmarkBarAttached: setBookmarkBarAttached,
+    setFaviconDominantColor: setFaviconDominantColor,
     themeChanged: themeChanged,
     updateLogin: updateLogin
   };

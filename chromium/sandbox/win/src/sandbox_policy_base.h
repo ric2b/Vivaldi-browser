@@ -58,7 +58,7 @@ class PolicyBase final : public TargetPolicy {
   MitigationFlags GetProcessMitigations() override;
   ResultCode SetDelayedProcessMitigations(MitigationFlags flags) override;
   MitigationFlags GetDelayedProcessMitigations() const override;
-  void SetDisconnectCsrss() override;
+  ResultCode SetDisconnectCsrss() override;
   void SetStrictInterceptions() override;
   ResultCode SetStdoutHandle(HANDLE handle) override;
   ResultCode SetStderrHandle(HANDLE handle) override;
@@ -160,6 +160,7 @@ class PolicyBase final : public TargetPolicy {
 
   static HDESK alternate_desktop_handle_;
   static HWINSTA alternate_winstation_handle_;
+  static HDESK alternate_desktop_local_winstation_handle_;
   static IntegrityLevel alternate_desktop_integrity_level_label_;
 
   // Contains the list of handles being shared with the target process.

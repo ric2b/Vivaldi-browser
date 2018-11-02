@@ -11,6 +11,7 @@
 #include <vector>
 
 @protocol UrlLoader;
+class GURL;
 
 namespace ios {
 class ChromeBrowserState;
@@ -20,6 +21,16 @@ namespace bookmarks {
 class BookmarkModelBridge;
 class BookmarkNode;
 }  // namespace bookmarks
+
+@class BookmarkHomeViewController;
+
+@protocol BookmarkHomeViewControllerDelegate
+// The view controller wants to be dismissed.
+// If |url| != GURL(), then the user has selected |url| for navigation.
+- (void)bookmarkHomeViewControllerWantsDismissal:
+            (BookmarkHomeViewController*)controller
+                                 navigationToUrl:(const GURL&)url;
+@end
 
 // Class to navigate the bookmark hierarchy, needs subclassing for tablet /
 // handset case.
@@ -35,6 +46,13 @@ class BookmarkNode;
 
   // Bridge to register for bookmark changes.
   std::unique_ptr<bookmarks::BookmarkModelBridge> _bridge;
+
+  // The root node, whose child nodes are shown in the bookmark table view.
+  const bookmarks::BookmarkNode* _rootNode;
+
+  // Container for bookmarksTableView and contextBar to enable the use of
+  // autolayout contraints.
+  UIView* _containerView;
 }
 
 - (instancetype)initWithNibName:(NSString*)nibNameOrNil
@@ -44,6 +62,20 @@ class BookmarkNode;
 - (instancetype)initWithLoader:(id<UrlLoader>)loader
                   browserState:(ios::ChromeBrowserState*)browserState
     NS_DESIGNATED_INITIALIZER;
+
+// Setter to set _rootNode value.
+- (void)setRootNode:(const bookmarks::BookmarkNode*)rootNode;
+
+// Delegate for presenters. Note that this delegate is currently being set only
+// in case of handset, and not tablet. In the future it will be used by both
+// cases.
+@property(nonatomic, weak) id<BookmarkHomeViewControllerDelegate> homeDelegate;
+
+// Dismisses any modal interaction elements. Note that this
+// method is currently used in case of handset only. In the future it
+// will be used by both cases.
+- (void)dismissModals;
+- (void)setRootNode:(const bookmarks::BookmarkNode*)rootNode;
 
 @end
 

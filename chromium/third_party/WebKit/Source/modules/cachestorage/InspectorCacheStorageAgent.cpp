@@ -7,9 +7,20 @@
 #include <algorithm>
 #include <memory>
 #include <utility>
+#include "core/dom/Document.h"
+#include "core/dom/ExecutionContext.h"
+#include "core/fileapi/FileReaderLoader.h"
+#include "core/fileapi/FileReaderLoaderClient.h"
+#include "core/frame/LocalFrame.h"
+#include "core/inspector/InspectedFrames.h"
+#include "core/typed_arrays/DOMArrayBuffer.h"
+#include "platform/SharedBuffer.h"
+#include "platform/blob/BlobData.h"
 #include "platform/heap/Handle.h"
+#include "platform/network/HTTPHeaderMap.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityOrigin.h"
+#include "platform/wtf/Functional.h"
 #include "platform/wtf/Noncopyable.h"
 #include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/PtrUtil.h"
@@ -17,7 +28,7 @@
 #include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Time.h"
 #include "platform/wtf/Vector.h"
-#include "platform/wtf/text/StringBuilder.h"
+#include "platform/wtf/text/Base64.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebSecurityOrigin.h"
 #include "public/platform/WebString.h"
@@ -32,19 +43,24 @@
 using blink::protocol::Array;
 // Renaming Cache since there is another blink::Cache.
 using ProtocolCache = blink::protocol::CacheStorage::Cache;
+using blink::protocol::CacheStorage::Cache;
+using blink::protocol::CacheStorage::CachedResponse;
 using blink::protocol::CacheStorage::DataEntry;
+using blink::protocol::CacheStorage::Header;
 // Renaming Response since there is another blink::Response.
 using ProtocolResponse = blink::protocol::Response;
 
-typedef blink::protocol::CacheStorage::Backend::DeleteCacheCallback
-    DeleteCacheCallback;
-typedef blink::protocol::CacheStorage::Backend::DeleteEntryCallback
-    DeleteEntryCallback;
-typedef blink::protocol::CacheStorage::Backend::RequestCacheNamesCallback
-    RequestCacheNamesCallback;
-typedef blink::protocol::CacheStorage::Backend::RequestEntriesCallback
-    RequestEntriesCallback;
-typedef blink::WebServiceWorkerCache::BatchOperation BatchOperation;
+using DeleteCacheCallback =
+    blink::protocol::CacheStorage::Backend::DeleteCacheCallback;
+using DeleteEntryCallback =
+    blink::protocol::CacheStorage::Backend::DeleteEntryCallback;
+using RequestCacheNamesCallback =
+    blink::protocol::CacheStorage::Backend::RequestCacheNamesCallback;
+using RequestEntriesCallback =
+    blink::protocol::CacheStorage::Backend::RequestEntriesCallback;
+using RequestCachedResponseCallback =
+    blink::protocol::CacheStorage::Backend::RequestCachedResponseCallback;
+using BatchOperation = blink::WebServiceWorkerCache::BatchOperation;
 
 namespace blink {
 
@@ -70,7 +86,7 @@ ProtocolResponse ParseCacheId(const String& id,
 
 ProtocolResponse AssertCacheStorage(
     const String& security_origin,
-    std::unique_ptr<WebServiceWorkerCacheStorage>& result) {
+    std::unique_ptr<WebServiceWorkerCacheStorage>* result) {
   RefPtr<SecurityOrigin> sec_origin =
       SecurityOrigin::CreateFromString(security_origin);
 
@@ -84,14 +100,14 @@ ProtocolResponse AssertCacheStorage(
       Platform::Current()->CreateCacheStorage(WebSecurityOrigin(sec_origin));
   if (!cache)
     return ProtocolResponse::Error("Could not find cache storage.");
-  result = std::move(cache);
+  *result = std::move(cache);
   return ProtocolResponse::OK();
 }
 
 ProtocolResponse AssertCacheStorageAndNameForId(
     const String& cache_id,
     String* cache_name,
-    std::unique_ptr<WebServiceWorkerCacheStorage>& result) {
+    std::unique_ptr<WebServiceWorkerCacheStorage>* result) {
   String security_origin;
   ProtocolResponse response =
       ParseCacheId(cache_id, &security_origin, cache_name);
@@ -120,6 +136,28 @@ CString ServiceWorkerCacheErrorString(WebServiceWorkerCacheError error) {
   }
   NOTREACHED();
   return "";
+}
+
+ProtocolResponse GetExecutionContext(InspectedFrames* frames,
+                                     const String& cache_id,
+                                     ExecutionContext** context) {
+  String origin;
+  String id;
+  ProtocolResponse res = ParseCacheId(cache_id, &origin, &id);
+  if (!res.isSuccess())
+    return res;
+
+  LocalFrame* frame = frames->FrameWithSecurityOrigin(origin);
+  if (!frame)
+    return ProtocolResponse::Error("No frame with origin " + origin);
+
+  blink::Document* document = frame->GetDocument();
+  if (!document)
+    return ProtocolResponse::Error("No execution context found");
+
+  *context = document;
+
+  return ProtocolResponse::OK();
 }
 
 class RequestCacheNames
@@ -167,12 +205,13 @@ struct DataRequestParams {
 };
 
 struct RequestResponse {
-  RequestResponse() {}
-  RequestResponse(const String& request, const String& response)
-      : request(request), response(response) {}
-  String request;
-  String response;
+  String request_url;
+  String request_method;
+  HTTPHeaderMap request_headers;
+  int response_status;
+  String response_status_text;
   double response_time;
+  HTTPHeaderMap response_headers;
 };
 
 class ResponsesAccumulator : public RefCounted<ResponsesAccumulator> {
@@ -192,16 +231,22 @@ class ResponsesAccumulator : public RefCounted<ResponsesAccumulator> {
     DCHECK_GT(num_responses_left_, 0);
     RequestResponse& request_response =
         responses_.at(responses_.size() - num_responses_left_);
-    request_response.request = request.Url().GetString();
-    request_response.response = response.StatusText();
+
+    request_response.request_url = request.Url().GetString();
+    request_response.request_method = request.Method();
+    request_response.request_headers = request.Headers();
+    request_response.response_status = response.Status();
+    request_response.response_status_text = response.StatusText();
     request_response.response_time = response.ResponseTime().ToDoubleT();
+    request_response.response_headers = response.Headers();
 
     if (--num_responses_left_ != 0)
       return;
 
     std::sort(responses_.begin(), responses_.end(),
               [](const RequestResponse& a, const RequestResponse& b) {
-                return WTF::CodePointCompareLessThan(a.request, b.request);
+                return WTF::CodePointCompareLessThan(a.request_url,
+                                                     b.request_url);
               });
     if (params_.skip_count > 0)
       responses_.erase(0, params_.skip_count);
@@ -215,9 +260,15 @@ class ResponsesAccumulator : public RefCounted<ResponsesAccumulator> {
     for (const auto& request_response : responses_) {
       std::unique_ptr<DataEntry> entry =
           DataEntry::create()
-              .setRequest(request_response.request)
-              .setResponse(request_response.response)
+              .setRequestURL(request_response.request_url)
+              .setRequestMethod(request_response.request_method)
+              .setRequestHeaders(
+                  SerializeHeaders(request_response.request_headers))
+              .setResponseStatus(request_response.response_status)
+              .setResponseStatusText(request_response.response_status_text)
               .setResponseTime(request_response.response_time)
+              .setResponseHeaders(
+                  SerializeHeaders(request_response.response_headers))
               .build();
       array->addItem(std::move(entry));
     }
@@ -226,6 +277,18 @@ class ResponsesAccumulator : public RefCounted<ResponsesAccumulator> {
 
   void SendFailure(const ProtocolResponse& error) {
     callback_->sendFailure(error);
+  }
+
+  std::unique_ptr<Array<Header>> SerializeHeaders(
+      const HTTPHeaderMap& headers) {
+    std::unique_ptr<Array<Header>> result = Array<Header>::create();
+    for (HTTPHeaderMap::const_iterator it = headers.begin(),
+                                       end = headers.end();
+         it != end; ++it) {
+      result->addItem(
+          Header::create().setName(it->key).setValue(it->value).build());
+    }
+    return result;
   }
 
  private:
@@ -342,7 +405,7 @@ class DeleteCache : public WebServiceWorkerCacheStorage::CacheStorageCallbacks {
   WTF_MAKE_NONCOPYABLE(DeleteCache);
 
  public:
-  DeleteCache(std::unique_ptr<DeleteCacheCallback> callback)
+  explicit DeleteCache(std::unique_ptr<DeleteCacheCallback> callback)
       : callback_(std::move(callback)) {}
   ~DeleteCache() override {}
 
@@ -362,7 +425,7 @@ class DeleteCacheEntry : public WebServiceWorkerCache::CacheBatchCallbacks {
   WTF_MAKE_NONCOPYABLE(DeleteCacheEntry);
 
  public:
-  DeleteCacheEntry(std::unique_ptr<DeleteEntryCallback> callback)
+  explicit DeleteCacheEntry(std::unique_ptr<DeleteEntryCallback> callback)
       : callback_(std::move(callback)) {}
   ~DeleteCacheEntry() override {}
 
@@ -416,13 +479,103 @@ class GetCacheForDeleteEntry
   std::unique_ptr<DeleteEntryCallback> callback_;
 };
 
+class CachedResponseFileReaderLoaderClient final
+    : private FileReaderLoaderClient {
+  WTF_MAKE_NONCOPYABLE(CachedResponseFileReaderLoaderClient);
+
+ public:
+  static void Load(ExecutionContext* context,
+                   PassRefPtr<BlobDataHandle> blob,
+                   std::unique_ptr<RequestCachedResponseCallback> callback) {
+    new CachedResponseFileReaderLoaderClient(context, std::move(blob),
+                                             std::move(callback));
+  }
+
+  void DidStartLoading() override {}
+
+  void DidFinishLoading() override {
+    std::unique_ptr<CachedResponse> response =
+        CachedResponse::create()
+            .setBody(Base64Encode(data_->Data(), data_->size()))
+            .build();
+    callback_->sendSuccess(std::move(response));
+    dispose();
+  }
+
+  void DidFail(FileError::ErrorCode error) {
+    callback_->sendFailure(ProtocolResponse::Error(String::Format(
+        "Unable to read the cached response, error code: %d", error)));
+    dispose();
+  }
+
+  void DidReceiveDataForClient(const char* data,
+                               unsigned data_length) override {
+    data_->Append(data, data_length);
+  }
+
+ private:
+  CachedResponseFileReaderLoaderClient(
+      ExecutionContext* context,
+      PassRefPtr<BlobDataHandle>&& blob,
+      std::unique_ptr<RequestCachedResponseCallback>&& callback)
+      : loader_(
+            FileReaderLoader::Create(FileReaderLoader::kReadByClient, this)),
+        callback_(std::move(callback)),
+        data_(SharedBuffer::Create()) {
+    loader_->Start(context, std::move(blob));
+  }
+
+  ~CachedResponseFileReaderLoaderClient() {}
+
+  void dispose() { delete this; }
+
+  std::unique_ptr<FileReaderLoader> loader_;
+  std::unique_ptr<RequestCachedResponseCallback> callback_;
+  RefPtr<SharedBuffer> data_;
+};
+
+class CachedResponseMatchCallback
+    : public WebServiceWorkerCacheStorage::CacheStorageMatchCallbacks {
+  WTF_MAKE_NONCOPYABLE(CachedResponseMatchCallback);
+
+ public:
+  CachedResponseMatchCallback(
+      ExecutionContext* context,
+      std::unique_ptr<RequestCachedResponseCallback> callback)
+      : callback_(std::move(callback)), context_(context) {}
+
+  void OnSuccess(const WebServiceWorkerResponse& response) override {
+    std::unique_ptr<protocol::DictionaryValue> headers =
+        protocol::DictionaryValue::create();
+    if (!response.GetBlobDataHandle()) {
+      callback_->sendSuccess(CachedResponse::create()
+                                 .setBody("")
+                                 .build());
+      return;
+    }
+    CachedResponseFileReaderLoaderClient::Load(
+        context_, response.GetBlobDataHandle(), std::move(callback_));
+  }
+
+  void OnError(WebServiceWorkerCacheError error) override {
+    callback_->sendFailure(ProtocolResponse::Error(
+        String::Format("Unable to read cached response: %s",
+                       ServiceWorkerCacheErrorString(error).data())));
+  }
+
+ private:
+  std::unique_ptr<RequestCachedResponseCallback> callback_;
+  Persistent<ExecutionContext> context_;
+};
 }  // namespace
 
-InspectorCacheStorageAgent::InspectorCacheStorageAgent() = default;
+InspectorCacheStorageAgent::InspectorCacheStorageAgent(InspectedFrames* frames)
+    : frames_(frames) {}
 
 InspectorCacheStorageAgent::~InspectorCacheStorageAgent() = default;
 
 DEFINE_TRACE(InspectorCacheStorageAgent) {
+  visitor->Trace(frames_);
   InspectorBaseAgent::Trace(visitor);
 }
 
@@ -441,7 +594,7 @@ void InspectorCacheStorageAgent::requestCacheNames(
   }
 
   std::unique_ptr<WebServiceWorkerCacheStorage> cache;
-  ProtocolResponse response = AssertCacheStorage(security_origin, cache);
+  ProtocolResponse response = AssertCacheStorage(security_origin, &cache);
   if (!response.isSuccess()) {
     callback->sendFailure(response);
     return;
@@ -458,7 +611,7 @@ void InspectorCacheStorageAgent::requestEntries(
   String cache_name;
   std::unique_ptr<WebServiceWorkerCacheStorage> cache;
   ProtocolResponse response =
-      AssertCacheStorageAndNameForId(cache_id, &cache_name, cache);
+      AssertCacheStorageAndNameForId(cache_id, &cache_name, &cache);
   if (!response.isSuccess()) {
     callback->sendFailure(response);
     return;
@@ -478,7 +631,7 @@ void InspectorCacheStorageAgent::deleteCache(
   String cache_name;
   std::unique_ptr<WebServiceWorkerCacheStorage> cache;
   ProtocolResponse response =
-      AssertCacheStorageAndNameForId(cache_id, &cache_name, cache);
+      AssertCacheStorageAndNameForId(cache_id, &cache_name, &cache);
   if (!response.isSuccess()) {
     callback->sendFailure(response);
     return;
@@ -494,7 +647,7 @@ void InspectorCacheStorageAgent::deleteEntry(
   String cache_name;
   std::unique_ptr<WebServiceWorkerCacheStorage> cache;
   ProtocolResponse response =
-      AssertCacheStorageAndNameForId(cache_id, &cache_name, cache);
+      AssertCacheStorageAndNameForId(cache_id, &cache_name, &cache);
   if (!response.isSuccess()) {
     callback->sendFailure(response);
     return;
@@ -504,4 +657,27 @@ void InspectorCacheStorageAgent::deleteEntry(
                       WebString(cache_name));
 }
 
+void InspectorCacheStorageAgent::requestCachedResponse(
+    const String& cache_id,
+    const String& request_url,
+    std::unique_ptr<RequestCachedResponseCallback> callback) {
+  String cache_name;
+  std::unique_ptr<WebServiceWorkerCacheStorage> cache;
+  ProtocolResponse response =
+      AssertCacheStorageAndNameForId(cache_id, &cache_name, &cache);
+  if (!response.isSuccess()) {
+    callback->sendFailure(response);
+    return;
+  }
+  WebServiceWorkerRequest request;
+  request.SetURL(KURL(kParsedURLString, request_url));
+  ExecutionContext* context = nullptr;
+  response = GetExecutionContext(frames_, cache_id, &context);
+  if (!response.isSuccess())
+    return callback->sendFailure(response);
+
+  cache->DispatchMatch(WTF::MakeUnique<CachedResponseMatchCallback>(
+                           context, std::move(callback)),
+                       request, WebServiceWorkerCache::QueryParams());
+}
 }  // namespace blink

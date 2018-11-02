@@ -144,6 +144,7 @@ class ShowMenuAPI : public BrowserContextKeyedAPI,
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "ShowMenuAPI"; }
   static const bool kServiceIsNULLWhileTesting = true;
+  static const bool kServiceRedirectedInIncognito = true;
 
   // Created lazily upon OnListenerAdded.
   std::unique_ptr<CommandEventRouter> command_event_router_;

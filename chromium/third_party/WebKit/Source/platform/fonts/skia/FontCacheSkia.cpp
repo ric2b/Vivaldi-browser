@@ -53,7 +53,7 @@
 #include "public/platform/Platform.h"
 #include "public/platform/linux/WebSandboxSupport.h"
 
-#if !defined(OS_WIN) && !defined(OS_ANDROID)
+#if !defined(OS_WIN) && !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
 #include "SkFontConfigInterface.h"
 
 static sk_sp<SkTypeface> typefaceForFontconfigInterfaceIdAndTtcIndex(
@@ -125,8 +125,8 @@ PassRefPtr<SimpleFontData> FontCache::FallbackOnStandardFontStyle(
     const FontDescription& font_description,
     UChar32 character) {
   FontDescription substitute_description(font_description);
-  substitute_description.SetStyle(kFontStyleNormal);
-  substitute_description.SetWeight(kFontWeightNormal);
+  substitute_description.SetStyle(NormalSlopeValue());
+  substitute_description.SetWeight(NormalWeightValue());
 
   FontFaceCreationParams creation_params(
       substitute_description.Family().Family());
@@ -136,10 +136,10 @@ PassRefPtr<SimpleFontData> FontCache::FallbackOnStandardFontStyle(
       substitute_platform_data->FontContainsCharacter(character)) {
     FontPlatformData platform_data =
         FontPlatformData(*substitute_platform_data);
-    platform_data.SetSyntheticBold(font_description.Weight() >= kFontWeight600);
-    platform_data.SetSyntheticItalic(
-        font_description.Style() == kFontStyleItalic ||
-        font_description.Style() == kFontStyleOblique);
+    platform_data.SetSyntheticBold(font_description.Weight() >=
+                                   BoldThreshold());
+    platform_data.SetSyntheticItalic(font_description.Style() ==
+                                     ItalicSlopeValue());
     return FontDataFromFontPlatformData(&platform_data, kDoNotRetain);
   }
 
@@ -228,7 +228,9 @@ sk_sp<SkTypeface> FontCache::CreateTypeface(
     const FontDescription& font_description,
     const FontFaceCreationParams& creation_params,
     CString& name) {
-#if !defined(OS_WIN) && !defined(OS_ANDROID)
+#if !defined(OS_WIN) && !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
+  // TODO(fuchsia): Revisit this and other font code for Fuchsia.
+
   if (creation_params.CreationType() == kCreateFontByFciIdAndTtcIndex) {
     if (Platform::Current()->GetSandboxSupport())
       return typefaceForFontconfigInterfaceIdAndTtcIndex(
@@ -287,16 +289,15 @@ std::unique_ptr<FontPlatformData> FontCache::CreateFontPlatformData(
   if (!tf)
     return nullptr;
 
-  return WTF::WrapUnique(
-      new FontPlatformData(tf, name.data(), font_size,
-                           (NumericFontWeight(font_description.Weight()) >
-                            200 + tf->fontStyle().weight()) ||
-                               font_description.IsSyntheticBold(),
-                           ((font_description.Style() == kFontStyleItalic ||
-                             font_description.Style() == kFontStyleOblique) &&
-                            !tf->isItalic()) ||
-                               font_description.IsSyntheticItalic(),
-                           font_description.Orientation()));
+  return WTF::WrapUnique(new FontPlatformData(
+      tf, name.data(), font_size,
+      (font_description.Weight() >
+           FontSelectionValue(200) +
+               FontSelectionValue(tf->fontStyle().weight()) ||
+       font_description.IsSyntheticBold()),
+      ((font_description.Style() == ItalicSlopeValue()) && !tf->isItalic()) ||
+          font_description.IsSyntheticItalic(),
+      font_description.Orientation()));
 }
 #endif  // !defined(OS_WIN)
 

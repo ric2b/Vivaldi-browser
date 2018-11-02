@@ -7,13 +7,13 @@
 
 #include <stdint.h>
 
-#include <deque>
 #include <memory>
 #include <set>
 #include <string>
 #include <vector>
 
 #include "base/callback.h"
+#include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "components/offline_pages/core/background/cleanup_task_factory.h"
@@ -31,7 +31,7 @@ class CleanupTaskFactory;
 class RequestQueueStore;
 
 // Class responsible for managing save page requests.
-class RequestQueue {
+class RequestQueue : public TaskQueue::Delegate {
  public:
   // Callback used for |GetRequests|.
   typedef base::Callback<void(GetRequestsResult,
@@ -50,7 +50,10 @@ class RequestQueue {
   typedef base::Callback<void(UpdateRequestResult)> UpdateRequestCallback;
 
   explicit RequestQueue(std::unique_ptr<RequestQueueStore> store);
-  ~RequestQueue();
+  ~RequestQueue() override;
+
+  // TaskQueue::Delegate
+  void OnTaskQueueIsIdle() override;
 
   // Gets all of the active requests from the store. Calling this method may
   // schedule purging of the request queue.
@@ -97,7 +100,7 @@ class RequestQueue {
       PickRequestTask::RequestCountCallback request_count_callback,
       DeviceConditions& conditions,
       std::set<int64_t>& disabled_requests,
-      std::deque<int64_t>& prioritized_requests);
+      base::circular_deque<int64_t>& prioritized_requests);
 
   // Reconcile any requests that were active the last time chrome exited.
   void ReconcileRequests(const UpdateCallback& callback);

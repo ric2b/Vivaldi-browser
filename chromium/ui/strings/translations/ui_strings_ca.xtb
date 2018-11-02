@@ -32,6 +32,7 @@
 <translation id="2190355936436201913">(buit)</translation>
 <translation id="2289052229480071835">Toca els elements tàctils a la pantalla.</translation>
 <translation id="2297836609126180313"><ph name="QUANTITY" /> TB/s</translation>
+<translation id="24452542372838207">Desplega la notificació</translation>
 <translation id="2482878487686419369">Notificacions</translation>
 <translation id="2497284189126895209">Tots els fitxers</translation>
 <translation id="2522350507219695259">S'ha acabat de calibrar</translation>
@@ -162,6 +163,7 @@
 <translation id="9002566407876343676">obrir</translation>
 <translation id="9038489124413477075">Carpeta sense nom</translation>
 <translation id="9044832324875206639">{SECONDS,plural, =1{1 s}other{# s}}</translation>
+<translation id="9059834730836941392">Replega la notificació</translation>
 <translation id="9150735707954472829">Pestanya</translation>
 <translation id="9161053988251441839">APLICACIONS SUGGERIDES</translation>
 <translation id="9170848237812810038">&amp;Desfés</translation>

@@ -21,6 +21,7 @@
 #include "core/dom/ExecutionContext.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "platform/bindings/RuntimeCallStats.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/bindings/V8ObjectConstructor.h"
 #include "platform/wtf/GetPtr.h"
@@ -256,7 +257,7 @@ static void keysMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
 
   TestInterface2* impl = V8TestInterface2::toImpl(info.Holder());
 
-  ScriptState* scriptState = ScriptState::ForReceiverObject(info);
+  ScriptState* scriptState = ScriptState::ForRelevantRealm(info);
 
   Iterator* result = impl->keysForBinding(scriptState, exceptionState);
   if (exceptionState.HadException()) {
@@ -270,7 +271,7 @@ static void entriesMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
 
   TestInterface2* impl = V8TestInterface2::toImpl(info.Holder());
 
-  ScriptState* scriptState = ScriptState::ForReceiverObject(info);
+  ScriptState* scriptState = ScriptState::ForRelevantRealm(info);
 
   Iterator* result = impl->entriesForBinding(scriptState, exceptionState);
   if (exceptionState.HadException()) {
@@ -284,7 +285,7 @@ static void forEachMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
 
   TestInterface2* impl = V8TestInterface2::toImpl(info.Holder());
 
-  ScriptState* scriptState = ScriptState::ForReceiverObject(info);
+  ScriptState* scriptState = ScriptState::ForRelevantRealm(info);
 
   if (UNLIKELY(info.Length() < 1)) {
     exceptionState.ThrowTypeError(ExceptionMessages::NotEnoughArguments(1, info.Length()));
@@ -313,7 +314,7 @@ static void hasMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
 
   TestInterface2* impl = V8TestInterface2::toImpl(info.Holder());
 
-  ScriptState* scriptState = ScriptState::ForReceiverObject(info);
+  ScriptState* scriptState = ScriptState::ForRelevantRealm(info);
 
   if (UNLIKELY(info.Length() < 1)) {
     exceptionState.ThrowTypeError(ExceptionMessages::NotEnoughArguments(1, info.Length()));
@@ -346,7 +347,7 @@ static void iteratorMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
 
   TestInterface2* impl = V8TestInterface2::toImpl(info.Holder());
 
-  ScriptState* scriptState = ScriptState::ForReceiverObject(info);
+  ScriptState* scriptState = ScriptState::ForRelevantRealm(info);
 
   Iterator* result = impl->GetIterator(scriptState, exceptionState);
   if (exceptionState.HadException()) {
@@ -356,6 +357,8 @@ static void iteratorMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
 }
 
 static void constructor(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface2_ConstructorCallback");
+
   TestInterface2* impl = TestInterface2::Create();
   v8::Local<v8::Object> wrapper = info.Holder();
   wrapper = impl->AssociateWithWrapper(info.GetIsolate(), &V8TestInterface2::wrapperTypeInfo, wrapper);
@@ -418,6 +421,9 @@ static void namedPropertyQuery(const AtomicString& name, const v8::PropertyCallb
   // https://heycam.github.io/webidl/#LegacyPlatformObjectGetOwnProperty
   // 2.7. If |O| implements an interface with a named property setter, then set
   //      desc.[[Writable]] to true, otherwise set it to false.
+  // 2.8. If |O| implements an interface with the
+  //      [LegacyUnenumerableNamedProperties] extended attribute, then set
+  //      desc.[[Enumerable]] to false, otherwise set it to true.
   V8SetReturnValueInt(info, v8::None);
 }
 
@@ -506,66 +512,98 @@ static void indexedPropertyDeleter(uint32_t index, const v8::PropertyCallbackInf
 } // namespace TestInterface2V8Internal
 
 void V8TestInterface2::sizeAttributeGetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface2_size_Getter");
+
   TestInterface2V8Internal::sizeAttributeGetter(info);
 }
 
 void V8TestInterface2::legacyCallerMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface2_legacyCaller");
+
   TestInterface2V8Internal::legacyCallerMethod(info);
 }
 
 void V8TestInterface2::itemMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface2_item");
+
   TestInterface2V8Internal::itemMethod(info);
 }
 
 void V8TestInterface2::setItemMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface2_setItem");
+
   TestInterface2V8Internal::setItemMethod(info);
 }
 
 void V8TestInterface2::deleteItemMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface2_deleteItem");
+
   TestInterface2V8Internal::deleteItemMethod(info);
 }
 
 void V8TestInterface2::namedItemMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface2_namedItem");
+
   TestInterface2V8Internal::namedItemMethod(info);
 }
 
 void V8TestInterface2::setNamedItemMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface2_setNamedItem");
+
   TestInterface2V8Internal::setNamedItemMethod(info);
 }
 
 void V8TestInterface2::deleteNamedItemMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface2_deleteNamedItem");
+
   TestInterface2V8Internal::deleteNamedItemMethod(info);
 }
 
 void V8TestInterface2::stringifierMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface2_stringifierMethod");
+
   TestInterface2V8Internal::stringifierMethodMethod(info);
 }
 
 void V8TestInterface2::keysMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface2_keys");
+
   TestInterface2V8Internal::keysMethod(info);
 }
 
 void V8TestInterface2::entriesMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface2_entries");
+
   TestInterface2V8Internal::entriesMethod(info);
 }
 
 void V8TestInterface2::forEachMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface2_forEach");
+
   TestInterface2V8Internal::forEachMethod(info);
 }
 
 void V8TestInterface2::hasMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface2_has");
+
   TestInterface2V8Internal::hasMethod(info);
 }
 
 void V8TestInterface2::toStringMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface2_toString");
+
   TestInterface2V8Internal::toStringMethod(info);
 }
 
 void V8TestInterface2::iteratorMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface2_iterator");
+
   TestInterface2V8Internal::iteratorMethod(info);
 }
 
 void V8TestInterface2::namedPropertyGetterCallback(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface2_NamedPropertyGetter");
+
   if (!name->IsString())
     return;
   const AtomicString& propertyName = ToCoreAtomicString(name.As<v8::String>());
@@ -574,6 +612,8 @@ void V8TestInterface2::namedPropertyGetterCallback(v8::Local<v8::Name> name, con
 }
 
 void V8TestInterface2::namedPropertySetterCallback(v8::Local<v8::Name> name, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface2_NamedPropertySetter");
+
   if (!name->IsString())
     return;
   const AtomicString& propertyName = ToCoreAtomicString(name.As<v8::String>());
@@ -590,6 +630,8 @@ void V8TestInterface2::namedPropertyDeleterCallback(v8::Local<v8::Name> name, co
 }
 
 void V8TestInterface2::namedPropertyQueryCallback(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Integer>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface2_NamedPropertyQuery");
+
   if (!name->IsString())
     return;
   const AtomicString& propertyName = ToCoreAtomicString(name.As<v8::String>());
@@ -602,6 +644,8 @@ void V8TestInterface2::namedPropertyEnumeratorCallback(const v8::PropertyCallbac
 }
 
 void V8TestInterface2::indexedPropertyGetterCallback(uint32_t index, const v8::PropertyCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface2_IndexedPropertyGetter");
+
   TestInterface2V8Internal::indexedPropertyGetter(index, info);
 }
 
@@ -640,7 +684,7 @@ void V8TestInterface2::indexedPropertyDefinerCallback(
 }
 
 static const V8DOMConfiguration::AccessorConfiguration V8TestInterface2Accessors[] = {
-    { "size", V8TestInterface2::sizeAttributeGetterCallback, nullptr, nullptr, nullptr, static_cast<v8::PropertyAttribute>(v8::DontEnum | v8::ReadOnly), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds },
+    { "size", V8TestInterface2::sizeAttributeGetterCallback, nullptr, nullptr, V8PrivateProperty::kNoCachedAccessor, static_cast<v8::PropertyAttribute>(v8::DontEnum | v8::ReadOnly), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds },
 };
 
 static const V8DOMConfiguration::MethodConfiguration V8TestInterface2Methods[] = {
@@ -660,6 +704,8 @@ static const V8DOMConfiguration::MethodConfiguration V8TestInterface2Methods[] =
 };
 
 void V8TestInterface2::constructorCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface2_Constructor");
+
   if (!info.IsConstructCall()) {
     V8ThrowException::ThrowTypeError(info.GetIsolate(), ExceptionMessages::ConstructorNotCallableAsFunction("TestInterface2"));
     return;

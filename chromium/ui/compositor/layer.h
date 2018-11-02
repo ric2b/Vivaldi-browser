@@ -24,7 +24,6 @@
 #include "components/viz/common/quads/texture_mailbox.h"
 #include "components/viz/common/surfaces/sequence_surface_reference_factory.h"
 #include "third_party/skia/include/core/SkColor.h"
-#include "third_party/skia/include/core/SkRegion.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/layer_animation_delegate.h"
 #include "ui/compositor/layer_delegate.h"
@@ -34,12 +33,15 @@
 #include "ui/gfx/transform.h"
 
 namespace cc {
-class CopyOutputRequest;
 class Layer;
 class NinePatchLayer;
 class SolidColorLayer;
 class SurfaceLayer;
 class TextureLayer;
+}
+
+namespace viz {
+class CopyOutputRequest;
 }
 
 namespace ui {
@@ -60,12 +62,12 @@ class LayerThreadedAnimationDelegate;
 // NOTE: Unlike Views, each Layer does *not* own its child Layers. If you
 // delete a Layer and it has children, the parent of each child Layer is set to
 // NULL, but the children are not deleted.
-class COMPOSITOR_EXPORT Layer
-    : public LayerAnimationDelegate,
-      NON_EXPORTED_BASE(public cc::ContentLayerClient),
-      NON_EXPORTED_BASE(public cc::TextureLayerClient),
-      NON_EXPORTED_BASE(public cc::LayerClient) {
+class COMPOSITOR_EXPORT Layer : public LayerAnimationDelegate,
+                                public cc::ContentLayerClient,
+                                public cc::TextureLayerClient,
+                                public cc::LayerClient {
  public:
+  using ShapeRects = std::vector<gfx::Rect>;
   Layer();
   explicit Layer(LayerType type);
   ~Layer() override;
@@ -233,8 +235,8 @@ class COMPOSITOR_EXPORT Layer
   void SetBackgroundZoom(float zoom, int inset);
 
   // Set the shape of this layer.
-  SkRegion* alpha_shape() const { return alpha_shape_.get(); }
-  void SetAlphaShape(std::unique_ptr<SkRegion> region);
+  const ShapeRects* alpha_shape() const { return alpha_shape_.get(); }
+  void SetAlphaShape(std::unique_ptr<ShapeRects> shape);
 
   // Invert the layer.
   bool layer_inverted() const { return layer_inverted_; }
@@ -299,7 +301,7 @@ class COMPOSITOR_EXPORT Layer
   // shared memory resource or an actual mailbox for a texture.
   void SetTextureMailbox(
       const viz::TextureMailbox& mailbox,
-      std::unique_ptr<cc::SingleReleaseCallback> release_callback,
+      std::unique_ptr<viz::SingleReleaseCallback> release_callback,
       gfx::Size texture_size_in_dip);
   void SetTextureSize(gfx::Size texture_size_in_dip);
   void SetTextureFlipped(bool flipped);
@@ -313,6 +315,9 @@ class COMPOSITOR_EXPORT Layer
   // In the event that the primary surface is not yet available in the
   // display compositor, the fallback surface will be used.
   void SetFallbackSurface(const viz::SurfaceInfo& surface_info);
+
+  // Returns the primary SurfaceInfo set by SetShowPrimarySurface.
+  const viz::SurfaceInfo* GetPrimarySurfaceInfo() const;
 
   // Returns the fallback SurfaceInfo set by SetFallbackSurface.
   const viz::SurfaceInfo* GetFallbackSurfaceInfo() const;
@@ -366,12 +371,15 @@ class COMPOSITOR_EXPORT Layer
   void OnDelegatedFrameDamage(const gfx::Rect& damage_rect_in_dip);
 
   // Requets a copy of the layer's output as a texture or bitmap.
-  void RequestCopyOfOutput(std::unique_ptr<cc::CopyOutputRequest> request);
+  void RequestCopyOfOutput(std::unique_ptr<viz::CopyOutputRequest> request);
 
   // Invoked when scrolling performed by the cc::InputHandler is committed. This
   // will only occur if the Layer has set scroll container bounds.
   void SetDidScrollCallback(
-      base::Callback<void(const gfx::ScrollOffset&)> callback);
+      base::Callback<void(const gfx::ScrollOffset&, const cc::ElementId&)>
+          callback);
+
+  cc::ElementId element_id() const { return cc_layer_->element_id(); }
 
   // Marks this layer as scrollable inside the provided bounds. This size only
   // affects scrolling so if clipping is desired, a separate clipping layer
@@ -394,7 +402,7 @@ class COMPOSITOR_EXPORT Layer
   // TextureLayerClient
   bool PrepareTextureMailbox(
       viz::TextureMailbox* mailbox,
-      std::unique_ptr<cc::SingleReleaseCallback>* release_callback) override;
+      std::unique_ptr<viz::SingleReleaseCallback>* release_callback) override;
 
   float device_scale_factor() const { return device_scale_factor_; }
 
@@ -419,7 +427,13 @@ class COMPOSITOR_EXPORT Layer
   // occlusion culling in favor of efficient caching. This should
   // only be used when paying the cost of creating a render
   // surface even if layer is invisible is not a problem.
-  void SetCacheRenderSurface(bool cache_render_surface);
+  void AddCacheRenderSurfaceRequest();
+  void RemoveCacheRenderSurfaceRequest();
+
+  // The back link from the mask layer to it's associated masked layer.
+  // We keep this reference for the case that if the mask layer gets deleted
+  // while attached to the main layer before the main layer is deleted.
+  const Layer* layer_mask_back_link() const { return layer_mask_back_link_; }
 
  private:
   friend class LayerOwner;
@@ -453,6 +467,7 @@ class COMPOSITOR_EXPORT Layer
   SkColor GetColorForAnimation() const override;
   float GetTemperatureFromAnimation() const override;
   float GetDeviceScaleFactor() const override;
+  ui::Layer* GetLayer() override;
   cc::Layer* GetCcLayer() const override;
   LayerThreadedAnimationDelegate* GetThreadedAnimationDelegate() override;
   LayerAnimatorCollection* GetLayerAnimatorCollection() override;
@@ -546,7 +561,7 @@ class COMPOSITOR_EXPORT Layer
   int zoom_inset_;
 
   // Shape of the window.
-  std::unique_ptr<SkRegion> alpha_shape_;
+  std::unique_ptr<ShapeRects> alpha_shape_;
 
   std::string name_;
 
@@ -580,11 +595,16 @@ class COMPOSITOR_EXPORT Layer
 
   // The callback to release the mailbox. This is only set after
   // SetTextureMailbox is called, before we give it to the TextureLayer.
-  std::unique_ptr<cc::SingleReleaseCallback> mailbox_release_callback_;
+  std::unique_ptr<viz::SingleReleaseCallback> mailbox_release_callback_;
 
   // The size of the frame or texture in DIP, set when SetShowDelegatedContent
   // or SetTextureMailbox was called.
   gfx::Size frame_size_in_dip_;
+
+  // The counter to maintain how many cache render surface requests we have. If
+  // the value > 0, means we need to cache the render surface. If the value
+  // == 0, means we should not cache the render surface.
+  unsigned cache_render_surface_requests_;
 
   DISALLOW_COPY_AND_ASSIGN(Layer);
 };

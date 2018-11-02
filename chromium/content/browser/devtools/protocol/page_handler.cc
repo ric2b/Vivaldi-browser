@@ -17,18 +17,22 @@
 #include "base/memory/ref_counted_memory.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string16.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/devtools/devtools_session.h"
-#include "content/browser/devtools/page_navigation_throttle.h"
+#include "content/browser/devtools/protocol/devtools_download_manager_delegate.h"
+#include "content/browser/devtools/protocol/devtools_download_manager_helper.h"
 #include "content/browser/devtools/protocol/emulation_handler.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/web_contents/web_contents_view.h"
 #include "content/common/view_messages.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/download_manager.h"
 #include "content/public/browser/javascript_dialog_manager.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
@@ -46,19 +50,18 @@
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_util.h"
 #include "ui/snapshot/snapshot.h"
-#include "url/gurl.h"
 
 namespace content {
 namespace protocol {
 
 namespace {
 
-static const char kPng[] = "png";
-static const char kJpeg[] = "jpeg";
-static int kDefaultScreenshotQuality = 80;
-static int kFrameRetryDelayMs = 100;
-static int kCaptureRetryLimit = 2;
-static int kMaxScreencastFramesInFlight = 2;
+constexpr const char* kPng = "png";
+constexpr const char* kJpeg = "jpeg";
+constexpr int kDefaultScreenshotQuality = 80;
+constexpr int kFrameRetryDelayMs = 100;
+constexpr int kCaptureRetryLimit = 2;
+constexpr int kMaxScreencastFramesInFlight = 2;
 
 std::string EncodeImage(const gfx::Image& image,
                         const std::string& format,
@@ -107,8 +110,6 @@ PageHandler::PageHandler(EmulationHandler* emulation_handler)
       session_id_(0),
       frame_counter_(0),
       frames_in_flight_(0),
-      navigation_throttle_enabled_(false),
-      next_navigation_id_(0),
       host_(nullptr),
       emulation_handler_(emulation_handler),
       weak_factory_(this) {
@@ -116,6 +117,21 @@ PageHandler::PageHandler(EmulationHandler* emulation_handler)
 }
 
 PageHandler::~PageHandler() {
+}
+
+// static
+std::vector<PageHandler*> PageHandler::EnabledForWebContents(
+    WebContentsImpl* contents) {
+  if (!DevToolsAgentHost::HasFor(contents))
+    return std::vector<PageHandler*>();
+  std::vector<PageHandler*> result;
+  for (auto* handler :
+       PageHandler::ForAgentHost(static_cast<DevToolsAgentHostImpl*>(
+           DevToolsAgentHost::GetOrCreateFor(contents).get()))) {
+    if (handler->enabled_)
+      result.push_back(handler);
+  }
+  return result;
 }
 
 // static
@@ -201,6 +217,45 @@ void PageHandler::DidDetachInterstitialPage() {
   frontend_->InterstitialHidden();
 }
 
+void PageHandler::DidRunJavaScriptDialog(
+    const GURL& url,
+    const base::string16& message,
+    const base::string16& default_prompt,
+    JavaScriptDialogType dialog_type,
+    const JavaScriptDialogCallback& callback) {
+  if (!enabled_)
+    return;
+  DCHECK(pending_dialog_.is_null());
+  pending_dialog_ = callback;
+  std::string type = Page::DialogTypeEnum::Alert;
+  if (dialog_type == JAVASCRIPT_DIALOG_TYPE_CONFIRM)
+    type = Page::DialogTypeEnum::Confirm;
+  if (dialog_type == JAVASCRIPT_DIALOG_TYPE_PROMPT)
+    type = Page::DialogTypeEnum::Prompt;
+  frontend_->JavascriptDialogOpening(url.spec(), base::UTF16ToUTF8(message),
+                                     type, base::UTF16ToUTF8(default_prompt));
+}
+
+void PageHandler::DidRunBeforeUnloadConfirm(
+    const GURL& url,
+    const JavaScriptDialogCallback& callback) {
+  if (!enabled_)
+    return;
+  DCHECK(pending_dialog_.is_null());
+  pending_dialog_ = callback;
+  frontend_->JavascriptDialogOpening(url.spec(), std::string(),
+                                     Page::DialogTypeEnum::Beforeunload,
+                                     std::string());
+}
+
+void PageHandler::DidCloseJavaScriptDialog(bool success,
+                                           const base::string16& user_input) {
+  if (!enabled_)
+    return;
+  pending_dialog_.Reset();
+  frontend_->JavascriptDialogClosed(success, base::UTF16ToUTF8(user_input));
+}
+
 Response PageHandler::Enable() {
   enabled_ = true;
   if (GetWebContents() && GetWebContents()->ShowingInterstitialPage())
@@ -211,7 +266,10 @@ Response PageHandler::Enable() {
 Response PageHandler::Disable() {
   enabled_ = false;
   screencast_enabled_ = false;
-  SetControlNavigations(false);
+  if (!pending_dialog_.is_null())
+    pending_dialog_.Run(false, base::string16());
+  pending_dialog_.Reset();
+  download_manager_delegate_ = nullptr;
   return Response::FallThrough();
 }
 
@@ -364,56 +422,98 @@ void PageHandler::CaptureScreenshot(
   }
 
   RenderWidgetHostImpl* widget_host = host_->GetRenderWidgetHost();
-  bool emulation_enabled = emulation_handler_->device_emulation_enabled();
-  gfx::Size original_view_size =
-      emulation_enabled ? widget_host->GetView()->GetViewBounds().size()
-                        : gfx::Size();
-  blink::WebDeviceEmulationParams original_params =
-      emulation_handler_->GetDeviceEmulationParams();
-
-  if (emulation_enabled && from_surface.fromMaybe(true)) {
-    blink::WebDeviceEmulationParams modified_params = original_params;
-    gfx::Size emulated_view_size = modified_params.view_size;
-    if (!modified_params.view_size.width)
-      emulated_view_size = original_view_size;
-
-    ScreenInfo screen_info;
-    widget_host->GetScreenInfo(&screen_info);
-    double dpfactor =
-        modified_params.device_scale_factor / screen_info.device_scale_factor;
-    modified_params.scale = dpfactor;
-    modified_params.view_size.width = emulated_view_size.width();
-    modified_params.view_size.height = emulated_view_size.height();
-    if (clip.isJust()) {
-      // TODO(pfeldman): Modifying here to save on the extra
-      // RenderWidgetScreenMetricsEmulator / DevToolsEmulator delegate back
-      // and forth.
-      modified_params.viewport_offset.x = clip.fromJust()->GetX() * dpfactor;
-      modified_params.viewport_offset.y = clip.fromJust()->GetY() * dpfactor;
-      modified_params.viewport_scale = clip.fromJust()->GetScale();
-    }
-
-    emulation_handler_->SetDeviceEmulationParams(modified_params);
-
-    if (clip.isJust()) {
-      double scale = dpfactor * clip.fromJust()->GetScale();
-      widget_host->GetView()->SetSize(
-          gfx::Size(gfx::ToRoundedInt(clip.fromJust()->GetWidth() * scale),
-                    gfx::ToRoundedInt(clip.fromJust()->GetHeight() * scale)));
-    } else {
-      widget_host->GetView()->SetSize(
-          gfx::ScaleToFlooredSize(emulated_view_size, dpfactor));
-    }
-  }
-
   std::string screenshot_format = format.fromMaybe(kPng);
   int screenshot_quality = quality.fromMaybe(kDefaultScreenshotQuality);
+
+  // We don't support clip/emulation when capturing from window, bail out.
+  if (!from_surface.fromMaybe(true)) {
+    widget_host->GetSnapshotFromBrowser(
+        base::Bind(&PageHandler::ScreenshotCaptured, weak_factory_.GetWeakPtr(),
+                   base::Passed(std::move(callback)), screenshot_format,
+                   screenshot_quality, gfx::Size(),
+                   blink::WebDeviceEmulationParams()),
+        false);
+    return;
+  }
+
+  // Welcome to the neural net of capturing screenshot while emulating device
+  // metrics!
+  bool emulation_enabled = emulation_handler_->device_emulation_enabled();
+  blink::WebDeviceEmulationParams original_params =
+      emulation_handler_->GetDeviceEmulationParams();
+  blink::WebDeviceEmulationParams modified_params = original_params;
+
+  // Capture original view size if we know we are going to destroy it. We use
+  // it in ScreenshotCaptured to restore.
+  gfx::Size original_view_size =
+      emulation_enabled || clip.isJust()
+          ? widget_host->GetView()->GetViewBounds().size()
+          : gfx::Size();
+  gfx::Size emulated_view_size = modified_params.view_size;
+
+  double dpfactor = 1;
+  if (emulation_enabled) {
+    ScreenInfo screen_info;
+    widget_host->GetScreenInfo(&screen_info);
+    // When emulating, emulate again and scale to make resulting image match
+    // physical DP resolution. If view_size is not overriden, use actual view
+    // size.
+    float original_scale =
+        original_params.scale > 0 ? original_params.scale : 1;
+    if (!modified_params.view_size.width) {
+      emulated_view_size.set_width(
+          ceil(original_view_size.width() / original_scale));
+    }
+    if (!modified_params.view_size.height) {
+      emulated_view_size.set_height(
+          ceil(original_view_size.height() / original_scale));
+    }
+
+    dpfactor = modified_params.device_scale_factor
+                   ? modified_params.device_scale_factor /
+                         screen_info.device_scale_factor
+                   : 1;
+    // When clip is specified, we scale viewport via clip, otherwise we use
+    // scale.
+    modified_params.scale = clip.isJust() ? 1 : dpfactor;
+    modified_params.view_size.width = emulated_view_size.width();
+    modified_params.view_size.height = emulated_view_size.height();
+  } else if (clip.isJust()) {
+    // When not emulating, still need to emulate the page size.
+    modified_params.view_size.width = original_view_size.width();
+    modified_params.view_size.height = original_view_size.height();
+    modified_params.screen_size.width = 0;
+    modified_params.screen_size.height = 0;
+    modified_params.device_scale_factor = 0;
+    modified_params.scale = 1;
+  }
+
+  // Set up viewport in renderer.
+  if (clip.isJust()) {
+    modified_params.viewport_offset.x = clip.fromJust()->GetX();
+    modified_params.viewport_offset.y = clip.fromJust()->GetY();
+    modified_params.viewport_scale = clip.fromJust()->GetScale() * dpfactor;
+  }
+
+  // We use WebDeviceEmulationParams to either emulate, set viewport or both.
+  emulation_handler_->SetDeviceEmulationParams(modified_params);
+
+  // Set view size for the screenshot right after emulating.
+  if (clip.isJust()) {
+    double scale = dpfactor * clip.fromJust()->GetScale();
+    widget_host->GetView()->SetSize(
+        gfx::Size(gfx::ToRoundedInt(clip.fromJust()->GetWidth() * scale),
+                  gfx::ToRoundedInt(clip.fromJust()->GetHeight() * scale)));
+  } else if (emulation_enabled) {
+    widget_host->GetView()->SetSize(
+        gfx::ScaleToFlooredSize(emulated_view_size, dpfactor));
+  }
 
   widget_host->GetSnapshotFromBrowser(
       base::Bind(&PageHandler::ScreenshotCaptured, weak_factory_.GetWeakPtr(),
                  base::Passed(std::move(callback)), screenshot_format,
                  screenshot_quality, original_view_size, original_params),
-      from_surface.fromMaybe(true));
+      true);
 }
 
 void PageHandler::PrintToPDF(Maybe<bool> landscape,
@@ -481,23 +581,28 @@ Response PageHandler::ScreencastFrameAck(int session_id) {
 
 Response PageHandler::HandleJavaScriptDialog(bool accept,
                                              Maybe<std::string> prompt_text) {
-  base::string16 prompt_override;
-  if (prompt_text.isJust())
-    prompt_override = base::UTF8ToUTF16(prompt_text.fromJust());
-
   WebContentsImpl* web_contents = GetWebContents();
   if (!web_contents)
     return Response::InternalError();
 
+  if (pending_dialog_.is_null())
+    return Response::InvalidParams("No dialog is showing");
+
+  base::string16 prompt_override;
+  if (prompt_text.isJust())
+    prompt_override = base::UTF8ToUTF16(prompt_text.fromJust());
+  pending_dialog_.Run(accept, prompt_override);
+
+  // Clean up the dialog UI if any.
   JavaScriptDialogManager* manager =
       web_contents->GetDelegate()->GetJavaScriptDialogManager(web_contents);
-  if (manager && manager->HandleJavaScriptDialog(
-          web_contents, accept,
-          prompt_text.isJust() ? &prompt_override : nullptr)) {
-    return Response::OK();
+  if (manager) {
+    manager->HandleJavaScriptDialog(
+        web_contents, accept,
+        prompt_text.isJust() ? &prompt_override : nullptr);
   }
 
-  return Response::Error("Could not handle JavaScript dialog");
+  return Response::OK();
 }
 
 Response PageHandler::RequestAppBanner() {
@@ -508,62 +613,54 @@ Response PageHandler::RequestAppBanner() {
   return Response::OK();
 }
 
-Response PageHandler::SetControlNavigations(bool enabled) {
-  navigation_throttle_enabled_ = enabled;
-  // We don't own the page PageNavigationThrottles so we can't delete them, but
-  // we can turn them into NOPs.
-  for (auto& pair : navigation_throttles_) {
-    pair.second->AlwaysProceed();
+Response PageHandler::BringToFront() {
+  WebContentsImpl* wc = GetWebContents();
+  if (wc) {
+    wc->Activate();
+    return Response::OK();
   }
-  navigation_throttles_.clear();
+  return Response::InternalError();
+}
+
+Response PageHandler::SetDownloadBehavior(const std::string& behavior,
+                                          Maybe<std::string> download_path) {
+  WebContentsImpl* web_contents = GetWebContents();
+  if (!web_contents)
+    return Response::InternalError();
+
+  if (behavior == Page::SetDownloadBehavior::BehaviorEnum::Allow &&
+      !download_path.isJust())
+    return Response::Error("downloadPath not provided");
+
+  if (behavior == Page::SetDownloadBehavior::BehaviorEnum::Default) {
+    DevToolsDownloadManagerHelper::RemoveFromWebContents(web_contents);
+    download_manager_delegate_ = nullptr;
+    return Response::OK();
+  }
+
+  // Override download manager delegate.
+  content::BrowserContext* browser_context = web_contents->GetBrowserContext();
+  DCHECK(browser_context);
+  content::DownloadManager* download_manager =
+      content::BrowserContext::GetDownloadManager(browser_context);
+  download_manager_delegate_ =
+      DevToolsDownloadManagerDelegate::TakeOver(download_manager);
+
+  // Ensure that there is one helper attached. If there's already one, we reuse
+  // it.
+  DevToolsDownloadManagerHelper::CreateForWebContents(web_contents);
+  DevToolsDownloadManagerHelper* download_helper =
+      DevToolsDownloadManagerHelper::FromWebContents(web_contents);
+
+  download_helper->SetDownloadBehavior(
+      DevToolsDownloadManagerHelper::DownloadBehavior::DENY);
+  if (behavior == Page::SetDownloadBehavior::BehaviorEnum::Allow) {
+    download_helper->SetDownloadBehavior(
+        DevToolsDownloadManagerHelper::DownloadBehavior::ALLOW);
+    download_helper->SetDownloadPath(download_path.fromJust());
+  }
+
   return Response::OK();
-}
-
-Response PageHandler::ProcessNavigation(const std::string& response,
-                                        int navigation_id) {
-  auto it = navigation_throttles_.find(navigation_id);
-  if (it == navigation_throttles_.end())
-    return Response::InvalidParams("Unknown navigation id");
-
-  if (response == Page::NavigationResponseEnum::Proceed) {
-    it->second->Resume();
-    return Response::OK();
-  } else if (response == Page::NavigationResponseEnum::Cancel) {
-    it->second->CancelDeferredNavigation(content::NavigationThrottle::CANCEL);
-    return Response::OK();
-  } else if (response == Page::NavigationResponseEnum::CancelAndIgnore) {
-    it->second->CancelDeferredNavigation(
-        content::NavigationThrottle::CANCEL_AND_IGNORE);
-    return Response::OK();
-  }
-
-  return Response::InvalidParams("Unrecognized response");
-}
-
-std::unique_ptr<PageNavigationThrottle>
-PageHandler::CreateThrottleForNavigation(NavigationHandle* navigation_handle) {
-  if (!navigation_throttle_enabled_)
-    return nullptr;
-
-  std::unique_ptr<PageNavigationThrottle> throttle(new PageNavigationThrottle(
-      weak_factory_.GetWeakPtr(), next_navigation_id_, navigation_handle));
-  navigation_throttles_[next_navigation_id_++] = throttle.get();
-  return throttle;
-}
-
-void PageHandler::OnPageNavigationThrottleDisposed(int navigation_id) {
-  DCHECK(navigation_throttles_.find(navigation_id) !=
-         navigation_throttles_.end());
-  navigation_throttles_.erase(navigation_id);
-}
-
-void PageHandler::NavigationRequested(const PageNavigationThrottle* throttle) {
-  NavigationHandle* navigation_handle = throttle->navigation_handle();
-  frontend_->NavigationRequested(
-      navigation_handle->IsInMainFrame(),
-      navigation_handle->WasServerRedirect(),
-      throttle->navigation_id(),
-      navigation_handle->GetURL().spec());
 }
 
 WebContentsImpl* PageHandler::GetWebContents() {
@@ -639,8 +736,9 @@ void PageHandler::ScreencastFrameCaptured(cc::CompositorFrameMetadata metadata,
     if (capture_retry_count_) {
       --capture_retry_count_;
       base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-          FROM_HERE, base::Bind(&PageHandler::InnerSwapCompositorFrame,
-                                weak_factory_.GetWeakPtr()),
+          FROM_HERE,
+          base::BindOnce(&PageHandler::InnerSwapCompositorFrame,
+                         weak_factory_.GetWeakPtr()),
           base::TimeDelta::FromMilliseconds(kFrameRetryDelayMs));
     }
     --frames_in_flight_;

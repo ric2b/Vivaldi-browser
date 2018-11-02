@@ -20,13 +20,12 @@ import org.junit.runner.RunWith;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.components.background_task_scheduler.BackgroundTask.TaskFinishedCallback;
 import org.chromium.components.background_task_scheduler.BackgroundTaskScheduler;
-import org.chromium.components.background_task_scheduler.BackgroundTaskSchedulerDelegate;
 import org.chromium.components.background_task_scheduler.TaskIds;
 import org.chromium.components.background_task_scheduler.TaskInfo;
 import org.chromium.components.background_task_scheduler.TaskParameters;
@@ -42,8 +41,7 @@ import java.util.concurrent.TimeUnit;
         "enable-features=OfflinePagesPrefetching"})
 public class PrefetchBackgroundTaskTest {
     @Rule
-    public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
-            new ChromeActivityTestRule<>(ChromeActivity.class);
+    public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
     private static final double BACKOFF_JITTER_FACTOR = 0.33;
     private static final int SEMAPHORE_TIMEOUT_MS = 5000;
@@ -114,26 +112,11 @@ public class PrefetchBackgroundTaskTest {
         }
     }
 
-    private static class NoopBackgroundTaskSchedulerDelegate
-            implements BackgroundTaskSchedulerDelegate {
-        @Override
-        public boolean schedule(Context context, TaskInfo taskInfo) {
-            return true;
-        }
-
-        @Override
-        public void cancel(Context context, int taskId) {}
-    }
-
-    private static class TestBackgroundTaskScheduler extends BackgroundTaskScheduler {
+    private static class TestBackgroundTaskScheduler implements BackgroundTaskScheduler {
         private HashMap<Integer, TestPrefetchBackgroundTask> mTasks = new HashMap<>();
         private Semaphore mStartSemaphore = new Semaphore(0);
         private int mAddCount = 0;
         private int mRemoveCount = 0;
-
-        public TestBackgroundTaskScheduler() {
-            super(new NoopBackgroundTaskSchedulerDelegate());
-        }
 
         @Override
         public boolean schedule(final Context context, final TaskInfo taskInfo) {
@@ -159,6 +142,12 @@ public class PrefetchBackgroundTaskTest {
         public void cancel(Context context, int taskId) {
             removeTask(taskId);
         }
+
+        @Override
+        public void checkForOSUpgrade(Context context) {}
+
+        @Override
+        public void reschedule(Context context) {}
 
         public void waitForTaskStarted() throws Exception {
             assertTrue(mStartSemaphore.tryAcquire(SEMAPHORE_TIMEOUT_MS, TimeUnit.MILLISECONDS));
@@ -221,7 +210,8 @@ public class PrefetchBackgroundTaskTest {
     @Test
     @SmallTest
     public void testSchedule() throws Exception {
-        PrefetchBackgroundTask.scheduleTask(0);
+        PrefetchBackgroundTask.skipConditionCheckingForTesting();
+        PrefetchBackgroundTask.scheduleTask(0, true);
         mScheduler.waitForTaskStarted();
         TestPrefetchBackgroundTask task = validateAndGetScheduledTask(0);
         task.signalTaskFinished();
@@ -233,7 +223,8 @@ public class PrefetchBackgroundTaskTest {
     @SmallTest
     public void testScheduleWithAdditionalDelay() throws Exception {
         final int additionalDelaySeconds = 15;
-        PrefetchBackgroundTask.scheduleTask(additionalDelaySeconds);
+        PrefetchBackgroundTask.skipConditionCheckingForTesting();
+        PrefetchBackgroundTask.scheduleTask(additionalDelaySeconds, true);
         mScheduler.waitForTaskStarted();
         TestPrefetchBackgroundTask task = validateAndGetScheduledTask(additionalDelaySeconds);
         task.signalTaskFinished();
@@ -244,7 +235,8 @@ public class PrefetchBackgroundTaskTest {
     @Test
     @SmallTest
     public void testReschedule() throws Exception {
-        PrefetchBackgroundTask.scheduleTask(0);
+        PrefetchBackgroundTask.skipConditionCheckingForTesting();
+        PrefetchBackgroundTask.scheduleTask(0, true);
         mScheduler.waitForTaskStarted();
         TestPrefetchBackgroundTask task = validateAndGetScheduledTask(0);
 

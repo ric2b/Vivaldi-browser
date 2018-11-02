@@ -23,6 +23,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/thumbnails/thumbnail_service.h"
 #include "chrome/browser/thumbnails/thumbnail_service_factory.h"
+#include "chrome/browser/ui/browser_list.h"
 #include "chrome/common/chrome_paths.h"
 #include "content/browser/renderer_host/render_view_host_delegate_view.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -33,8 +34,6 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/api/tabs/tabs_private_api.h"
-#include "extensions/browser/app_window/app_window.h"
-#include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/common/api/extension_types.h"
 #include "extensions/common/error_utils.h"
 #include "extensions/schema/thumbnails.h"
@@ -45,6 +44,7 @@
 #include "ui/display/screen.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/vivaldi_ui_utils.h"
+#include "ui/vivaldi_browser_window.h"
 
 using content::BrowserThread;
 using content::RenderWidgetHost;
@@ -186,19 +186,22 @@ bool ThumbnailsCaptureUIFunction::RunAsync() {
   if (params->params.copy_to_clipboard.get()) {
     copy_to_clipboard_ = *params->params.copy_to_clipboard;
   }
-  std::string app_window_id = params->params.app_window_id;
-  AppWindowRegistry* registry = AppWindowRegistry::Get(GetProfile());
-  for (AppWindow* app_window : registry->app_windows()) {
-    if (app_window->window_key() == app_window_id) {
+  int window_id = params->params.window_id;
+  for (Browser* browser : *BrowserList::GetInstance()) {
+    if (browser->session_id().id() == window_id) {
       gfx::Rect rect(params->params.pos_x, params->params.pos_y,
                      params->params.width, params->params.height);
-      content::WebContents* contents = app_window->web_contents();
+      content::WebContents* contents =
+          static_cast<VivaldiBrowserWindow*>(browser->window())
+              ->web_contents();
       return CaptureAsync(
           contents, rect,
           base::Bind(&ThumbnailsCaptureUIFunction::CopyFromBackingStoreComplete,
                      this));
     }
   }
+  // Wrong id given.
+  NOTREACHED();
   return false;
 }
 

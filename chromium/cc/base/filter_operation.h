@@ -6,15 +6,16 @@
 #define CC_BASE_FILTER_OPERATION_H_
 
 #include <memory>
+#include <vector>
 
 #include "base/logging.h"
 #include "cc/base/base_export.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkImageFilter.h"
-#include "third_party/skia/include/core/SkRegion.h"
 #include "third_party/skia/include/core/SkScalar.h"
 #include "third_party/skia/include/effects/SkBlurImageFilter.h"
 #include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace base {
 namespace trace_event {
@@ -22,14 +23,12 @@ class TracedValue;
 }
 }
 
-namespace gfx {
-class Rect;
-}
-
 namespace cc {
 
 class CC_BASE_EXPORT FilterOperation {
  public:
+  using Matrix = SkScalar[20];
+  using ShapeRects = std::vector<gfx::Rect>;
   enum FilterType {
     GRAYSCALE,
     SEPIA,
@@ -83,7 +82,7 @@ class CC_BASE_EXPORT FilterOperation {
     return image_filter_;
   }
 
-  const SkScalar* matrix() const {
+  const Matrix& matrix() const {
     DCHECK_EQ(type_, COLOR_MATRIX);
     return matrix_;
   }
@@ -93,9 +92,9 @@ class CC_BASE_EXPORT FilterOperation {
     return zoom_inset_;
   }
 
-  const SkRegion& region() const {
+  const ShapeRects& shape() const {
     DCHECK_EQ(type_, ALPHA_THRESHOLD);
-    return region_;
+    return shape_;
   }
 
   SkBlurImageFilter::TileMode blur_tile_mode() const {
@@ -148,7 +147,7 @@ class CC_BASE_EXPORT FilterOperation {
     return FilterOperation(DROP_SHADOW, offset, std_deviation, color);
   }
 
-  static FilterOperation CreateColorMatrixFilter(SkScalar matrix[20]) {
+  static FilterOperation CreateColorMatrixFilter(const Matrix& matrix) {
     return FilterOperation(COLOR_MATRIX, matrix);
   }
 
@@ -165,10 +164,10 @@ class CC_BASE_EXPORT FilterOperation {
     return FilterOperation(SATURATING_BRIGHTNESS, amount);
   }
 
-  static FilterOperation CreateAlphaThresholdFilter(const SkRegion& region,
+  static FilterOperation CreateAlphaThresholdFilter(const ShapeRects& shape,
                                                     float inner_threshold,
                                                     float outer_threshold) {
-    return FilterOperation(ALPHA_THRESHOLD, region, inner_threshold,
+    return FilterOperation(ALPHA_THRESHOLD, shape, inner_threshold,
                            outer_threshold);
   }
 
@@ -211,7 +210,7 @@ class CC_BASE_EXPORT FilterOperation {
     image_filter_ = std::move(image_filter);
   }
 
-  void set_matrix(const SkScalar matrix[20]) {
+  void set_matrix(const Matrix& matrix) {
     DCHECK_EQ(type_, COLOR_MATRIX);
     for (unsigned i = 0; i < 20; ++i)
       matrix_[i] = matrix[i];
@@ -222,9 +221,9 @@ class CC_BASE_EXPORT FilterOperation {
     zoom_inset_ = inset;
   }
 
-  void set_region(const SkRegion& region) {
+  void set_shape(const ShapeRects& shape) {
     DCHECK_EQ(type_, ALPHA_THRESHOLD);
-    region_ = region;
+    shape_ = shape;
   }
 
   void set_blur_tile_mode(SkBlurImageFilter::TileMode tile_mode) {
@@ -264,14 +263,14 @@ class CC_BASE_EXPORT FilterOperation {
                   float stdDeviation,
                   SkColor color);
 
-  FilterOperation(FilterType, SkScalar matrix[20]);
+  FilterOperation(FilterType, const Matrix& matrix);
 
   FilterOperation(FilterType type, float amount, int inset);
 
   FilterOperation(FilterType type, sk_sp<SkImageFilter> image_filter);
 
   FilterOperation(FilterType type,
-                  const SkRegion& region,
+                  const ShapeRects& shape,
                   float inner_threshold,
                   float outer_threshold);
 
@@ -281,9 +280,11 @@ class CC_BASE_EXPORT FilterOperation {
   gfx::Point drop_shadow_offset_;
   SkColor drop_shadow_color_;
   sk_sp<SkImageFilter> image_filter_;
-  SkScalar matrix_[20];
+  Matrix matrix_;
   int zoom_inset_;
-  SkRegion region_;
+
+  // Use a collection of |gfx::Rect| to make serialization simpler.
+  ShapeRects shape_;
   SkBlurImageFilter::TileMode blur_tile_mode_;
 };
 

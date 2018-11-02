@@ -197,7 +197,7 @@ void PermissionRequestCreatorApiary::OnGetTokenSuccess(
           destination: GOOGLE_OWNED_SERVICE
         }
         policy {
-          cookies_allowed: false
+          cookies_allowed: NO
           setting:
             "This feature cannot be disabled in settings and is only enabled "
             "for child accounts. If sign-in is restricted to accounts from a "
@@ -224,9 +224,9 @@ void PermissionRequestCreatorApiary::OnGetTokenSuccess(
       base::StringPrintf(kAuthorizationHeaderFormat, access_token.c_str()));
 
   base::DictionaryValue dict;
-  dict.SetStringWithoutPathExpansion(kEventTypeKey, (*it)->request_type);
-  dict.SetStringWithoutPathExpansion(kObjectRefKey, (*it)->object_ref);
-  dict.SetStringWithoutPathExpansion(kStateKey, kState);
+  dict.SetKey(kEventTypeKey, base::Value((*it)->request_type));
+  dict.SetKey(kObjectRefKey, base::Value((*it)->object_ref));
+  dict.SetKey(kStateKey, base::Value(kState));
 
   std::string body;
   base::JSONWriter::Write(dict, &body);

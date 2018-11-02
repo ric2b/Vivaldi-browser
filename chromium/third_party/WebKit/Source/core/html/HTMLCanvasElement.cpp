@@ -37,10 +37,12 @@
 #include "build/build_config.h"
 #include "core/HTMLNames.h"
 #include "core/InputTypeNames.h"
+#include "core/css/CSSFontSelector.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/ExceptionCode.h"
+#include "core/dom/StyleEngine.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/fileapi/File.h"
 #include "core/frame/LocalFrame.h"
@@ -61,19 +63,18 @@
 #include "core/layout/HitTestCanvasResult.h"
 #include "core/layout/LayoutHTMLCanvas.h"
 #include "core/layout/api/LayoutViewItem.h"
-#include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/page/ChromeClient.h"
 #include "core/paint/PaintLayer.h"
 #include "core/paint/PaintTiming.h"
+#include "core/paint/compositing/PaintLayerCompositor.h"
 #include "core/probe/CoreProbes.h"
 #include "platform/Histogram.h"
 #include "platform/RuntimeEnabledFeatures.h"
-#include "platform/graphics/Canvas2DImageBufferSurface.h"
 #include "platform/graphics/CanvasHeuristicParameters.h"
 #include "platform/graphics/CanvasMetrics.h"
+#include "platform/graphics/GraphicsLayer.h"
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/RecordingImageBufferSurface.h"
-#include "platform/graphics/StaticBitmapImage.h"
 #include "platform/graphics/UnacceleratedImageBufferSurface.h"
 #include "platform/graphics/gpu/AcceleratedImageBufferSurface.h"
 #include "platform/graphics/gpu/SharedGpuContext.h"
@@ -119,17 +120,14 @@ const int kMaxGlobalGPUMemoryUsage =
 // misinterpreted as a user-input value
 const int kUndefinedQualityValue = -1.0;
 
-sk_sp<SkImage> CreateTransparentSkImage(const IntSize& size) {
+RefPtr<Image> CreateTransparentImage(const IntSize& size) {
   if (!ImageBuffer::CanCreateImageBuffer(size))
     return nullptr;
   sk_sp<SkSurface> surface =
       SkSurface::MakeRasterN32Premul(size.Width(), size.Height());
-  return surface ? surface->makeImageSnapshot() : nullptr;
-}
-
-PassRefPtr<Image> CreateTransparentImage(const IntSize& size) {
-  sk_sp<SkImage> image = CreateTransparentSkImage(size);
-  return image ? StaticBitmapImage::Create(image) : nullptr;
+  if (!surface)
+    return nullptr;
+  return StaticBitmapImage::Create(surface->makeImageSnapshot());
 }
 
 }  // namespace
@@ -139,12 +137,12 @@ inline HTMLCanvasElement::HTMLCanvasElement(Document& document)
       ContextLifecycleObserver(&document),
       PageVisibilityObserver(document.GetPage()),
       size_(kDefaultWidth, kDefaultHeight),
-      context_(this, nullptr),
       ignore_reset_(false),
       externally_allocated_memory_(0),
       origin_clean_(true),
       did_fail_to_create_image_buffer_(false),
-      image_buffer_is_clear_(false) {
+      image_buffer_is_clear_(false),
+      surface_layer_bridge_(nullptr) {
   CanvasMetrics::CountCanvasContextUsage(CanvasMetrics::kCanvasCreated);
   UseCounter::Count(document, WebFeature::kHTMLCanvasElement);
 }
@@ -152,6 +150,10 @@ inline HTMLCanvasElement::HTMLCanvasElement(Document& document)
 DEFINE_NODE_FACTORY(HTMLCanvasElement)
 
 HTMLCanvasElement::~HTMLCanvasElement() {
+  if (surface_layer_bridge_ && surface_layer_bridge_->GetWebLayer()) {
+    GraphicsLayer::UnregisterContentsLayer(
+        surface_layer_bridge_->GetWebLayer());
+  }
   v8::Isolate::GetCurrent()->AdjustAmountOfExternalAllocatedMemory(
       -externally_allocated_memory_);
 }
@@ -193,10 +195,22 @@ Node::InsertionNotificationRequest HTMLCanvasElement::InsertedInto(
 }
 
 void HTMLCanvasElement::setHeight(int value, ExceptionState& exception_state) {
+  if (IsPlaceholderRegistered()) {
+    exception_state.ThrowDOMException(
+        kInvalidStateError,
+        "Cannot resize canvas after call to transferControlToOffscreen().");
+    return;
+  }
   SetIntegralAttribute(heightAttr, value);
 }
 
 void HTMLCanvasElement::setWidth(int value, ExceptionState& exception_state) {
+  if (IsPlaceholderRegistered()) {
+    exception_state.ThrowDOMException(
+        kInvalidStateError,
+        "Cannot resize canvas after call to transferControlToOffscreen().");
+    return;
+  }
   SetIntegralAttribute(widthAttr, value);
 }
 
@@ -541,7 +555,8 @@ void HTMLCanvasElement::NotifyListenersCanvasChanged() {
         FloatSize());
     if (status != kNormalSourceImageStatus)
       return;
-    sk_sp<SkImage> image = source_image->ImageForCurrentFrame();
+    sk_sp<SkImage> image =
+        source_image->PaintImageForCurrentFrame().GetSkImage();
     for (CanvasDrawListener* listener : listeners_) {
       if (listener->NeedsNewFrame()) {
         listener->SendNewFrame(image);
@@ -653,13 +668,14 @@ ImageData* HTMLCanvasElement::ToImageData(SourceDrawingBuffer source_buffer,
     context_->PaintRenderingResultsToCanvas(source_buffer);
     image_data = ImageData::Create(size_);
     if (image_data && GetImageBuffer()) {
-      sk_sp<SkImage> snapshot =
-          GetImageBuffer()->NewSkImageSnapshot(kPreferNoAcceleration, reason);
+      RefPtr<StaticBitmapImage> snapshot =
+          GetImageBuffer()->NewImageSnapshot(kPreferNoAcceleration, reason);
       if (snapshot) {
         SkImageInfo image_info = SkImageInfo::Make(
             width(), height(), kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);
-        snapshot->readPixels(image_info, image_data->data()->Data(),
-                             image_info.minRowBytes(), 0, 0);
+        snapshot->PaintImageForCurrentFrame().GetSkImage()->readPixels(
+            image_info, image_data->data()->Data(), image_info.minRowBytes(), 0,
+            0);
       }
     }
     return image_data;
@@ -671,20 +687,20 @@ ImageData* HTMLCanvasElement::ToImageData(SourceDrawingBuffer source_buffer,
     return image_data;
 
   DCHECK(Is2d() || PlaceholderFrame());
-  sk_sp<SkImage> snapshot;
+  RefPtr<StaticBitmapImage> snapshot;
   if (GetImageBuffer()) {
     snapshot =
-        GetImageBuffer()->NewSkImageSnapshot(kPreferNoAcceleration, reason);
+        GetImageBuffer()->NewImageSnapshot(kPreferNoAcceleration, reason);
   } else if (PlaceholderFrame()) {
     DCHECK(PlaceholderFrame()->OriginClean());
-    snapshot = PlaceholderFrame()->ImageForCurrentFrame();
+    snapshot = PlaceholderFrame();
   }
 
   if (snapshot) {
     SkImageInfo image_info = SkImageInfo::Make(
         width(), height(), kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);
-    snapshot->readPixels(image_info, image_data->data()->Data(),
-                         image_info.minRowBytes(), 0, 0);
+    snapshot->PaintImageForCurrentFrame().GetSkImage()->readPixels(
+        image_info, image_data->data()->Data(), image_info.minRowBytes(), 0, 0);
   }
 
   return image_data;
@@ -926,19 +942,19 @@ HTMLCanvasElement::CreateAcceleratedImageBufferSurface(OpacityMode opacity_mode,
 
   // Avoid creating |contextProvider| until we're sure we want to try use it,
   // since it costs us GPU memory.
-  std::unique_ptr<WebGraphicsContext3DProvider> context_provider(
-      Platform::Current()->CreateSharedOffscreenGraphicsContext3DProvider());
-  if (!context_provider) {
+  WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider_wrapper =
+      SharedGpuContext::ContextProviderWrapper();
+  if (!context_provider_wrapper) {
     CanvasMetrics::CountCanvasContextUsage(
         CanvasMetrics::kAccelerated2DCanvasGPUContextLost);
     return nullptr;
   }
 
-  if (context_provider->IsSoftwareRendering())
+  if (context_provider_wrapper->ContextProvider()->IsSoftwareRendering())
     return nullptr;  // Don't use accelerated canvas with swiftshader.
 
-  auto surface = WTF::MakeUnique<Canvas2DImageBufferSurface>(
-      std::move(context_provider), Size(), *msaa_sample_count, opacity_mode,
+  auto surface = WTF::MakeUnique<Canvas2DLayerBridge>(
+      Size(), *msaa_sample_count, opacity_mode,
       Canvas2DLayerBridge::kEnableAcceleration, GetCanvasColorParams());
   if (!surface->IsValid()) {
     CanvasMetrics::CountCanvasContextUsage(
@@ -970,8 +986,9 @@ HTMLCanvasElement::CreateUnacceleratedImageBufferSurface(
     // here.
   }
 
-  auto surface = WTF::MakeUnique<UnacceleratedImageBufferSurface>(
-      Size(), opacity_mode, kInitializeImagePixels, GetCanvasColorParams());
+  auto surface = WTF::MakeUnique<Canvas2DLayerBridge>(
+      Size(), 0, opacity_mode, Canvas2DLayerBridge::kDisableAcceleration,
+      GetCanvasColorParams());
   if (surface->IsValid()) {
     CanvasMetrics::CountCanvasContextUsage(
         CanvasMetrics::kUnaccelerated2DCanvasImageBufferCreated);
@@ -1079,9 +1096,9 @@ void HTMLCanvasElement::UpdateExternallyAllocatedMemory() const {
   if (copied_image_)
     buffer_count++;
 
-  // Four bytes per pixel per buffer.
+  // Multiplying number of buffers by bytes per pixel
   CheckedNumeric<intptr_t> checked_externally_allocated_memory =
-      4 * buffer_count;
+      buffer_count * GetCanvasColorParams().BytesPerPixel();
   if (Is3d()) {
     checked_externally_allocated_memory +=
         context_->ExternallyAllocatedBytesPerPixel();
@@ -1145,10 +1162,9 @@ void HTMLCanvasElement::EnsureUnacceleratedImageBuffer() {
   did_fail_to_create_image_buffer_ = !image_buffer_;
 }
 
-PassRefPtr<Image> HTMLCanvasElement::CopiedImage(
-    SourceDrawingBuffer source_buffer,
-    AccelerationHint hint,
-    SnapshotReason snapshot_reason) {
+RefPtr<Image> HTMLCanvasElement::CopiedImage(SourceDrawingBuffer source_buffer,
+                                             AccelerationHint hint,
+                                             SnapshotReason snapshot_reason) {
   if (!IsPaintable())
     return nullptr;
   if (!context_)
@@ -1231,7 +1247,8 @@ void HTMLCanvasElement::DidMoveToNewDocument(Document& old_document) {
 void HTMLCanvasElement::WillDrawImageTo2DContext(CanvasImageSource* source) {
   if (CanvasHeuristicParameters::kEnableAccelerationToAvoidReadbacks &&
       SharedGpuContext::AllowSoftwareToAcceleratedCanvasUpgrade() &&
-      source->IsAccelerated() && !GetOrCreateImageBuffer()->IsAccelerated() &&
+      source->IsAccelerated() && GetOrCreateImageBuffer() &&
+      !GetImageBuffer()->IsAccelerated() &&
       ShouldAccelerate(kIgnoreResourceLimitCriteria)) {
     OpacityMode opacity_mode =
         context_->CreationAttributes().alpha() ? kNonOpaque : kOpaque;
@@ -1245,7 +1262,7 @@ void HTMLCanvasElement::WillDrawImageTo2DContext(CanvasImageSource* source) {
   }
 }
 
-PassRefPtr<Image> HTMLCanvasElement::GetSourceImageForCanvas(
+RefPtr<Image> HTMLCanvasElement::GetSourceImageForCanvas(
     SourceImageStatus* status,
     AccelerationHint hint,
     SnapshotReason reason,
@@ -1274,10 +1291,14 @@ PassRefPtr<Image> HTMLCanvasElement::GetSourceImageForCanvas(
   if (context_->GetContextType() ==
       CanvasRenderingContext::kContextImageBitmap) {
     *status = kNormalSourceImageStatus;
-    return context_->GetImage(hint, reason);
+    RefPtr<Image> result = context_->GetImage(hint, reason);
+    if (!result)
+      result = CreateTransparentImage(Size());
+    *status = result ? kNormalSourceImageStatus : kInvalidSourceImageStatus;
+    return result;
   }
 
-  sk_sp<SkImage> sk_image;
+  RefPtr<Image> image;
   // TODO(ccameron): Canvas should produce sRGB images.
   // https://crbug.com/672299
   if (Is3d()) {
@@ -1286,9 +1307,9 @@ PassRefPtr<Image> HTMLCanvasElement::GetSourceImageForCanvas(
     // cached copy of the backing in the canvas's ImageBuffer.
     RenderingContext()->PaintRenderingResultsToCanvas(kBackBuffer);
     if (GetImageBuffer()) {
-      sk_image = GetImageBuffer()->NewSkImageSnapshot(hint, reason);
+      image = GetImageBuffer()->NewImageSnapshot(hint, reason);
     } else {
-      sk_image = CreateTransparentSkImage(Size());
+      image = CreateTransparentImage(Size());
     }
   } else {
     if (CanvasHeuristicParameters::kDisableAccelerationToAvoidReadbacks &&
@@ -1297,21 +1318,18 @@ PassRefPtr<Image> HTMLCanvasElement::GetSourceImageForCanvas(
         GetImageBuffer()->IsAccelerated()) {
       GetImageBuffer()->DisableAcceleration();
     }
-    RefPtr<Image> image = RenderingContext()->GetImage(hint, reason);
-    if (image) {
-      sk_image = image->ImageForCurrentFrame();
-    } else {
-      sk_image = CreateTransparentSkImage(Size());
+    image = RenderingContext()->GetImage(hint, reason);
+    if (!image) {
+      image = CreateTransparentImage(Size());
     }
   }
 
-  if (sk_image) {
+  if (image) {
     *status = kNormalSourceImageStatus;
-    return StaticBitmapImage::Create(std::move(sk_image));
+  } else {
+    *status = kInvalidSourceImageStatus;
   }
-
-  *status = kInvalidSourceImageStatus;
-  return nullptr;
+  return image;
 }
 
 bool HTMLCanvasElement::WouldTaintOrigin(SecurityOrigin*) const {
@@ -1340,21 +1358,11 @@ ScriptPromise HTMLCanvasElement::CreateImageBitmap(
     ScriptState* script_state,
     EventTarget& event_target,
     Optional<IntRect> crop_rect,
-    const ImageBitmapOptions& options,
-    ExceptionState& exception_state) {
+    const ImageBitmapOptions& options) {
   DCHECK(event_target.ToLocalDOMWindow());
-  if ((crop_rect &&
-       !ImageBitmap::IsSourceSizeValid(crop_rect->Width(), crop_rect->Height(),
-                                       exception_state)) ||
-      !ImageBitmap::IsSourceSizeValid(BitmapSourceSize().Width(),
-                                      BitmapSourceSize().Height(),
-                                      exception_state))
-    return ScriptPromise();
-  if (!ImageBitmap::IsResizeOptionValid(options, exception_state))
-    return ScriptPromise();
+
   return ImageBitmapSource::FulfillImageBitmap(
-      script_state,
-      IsPaintable() ? ImageBitmap::Create(this, crop_rect, options) : nullptr);
+      script_state, ImageBitmap::Create(this, crop_rect, options));
 }
 
 void HTMLCanvasElement::SetPlaceholderFrame(
@@ -1365,6 +1373,8 @@ void HTMLCanvasElement::SetPlaceholderFrame(
   OffscreenCanvasPlaceholder::SetPlaceholderFrame(
       std::move(image), std::move(dispatcher), std::move(task_runner),
       resource_id);
+  IntSize new_size(PlaceholderFrame()->width(), PlaceholderFrame()->height());
+  SetSize(new_size);
   NotifyListenersCanvasChanged();
 }
 
@@ -1463,14 +1473,19 @@ void HTMLCanvasElement::CreateLayer() {
     layer_tree_view =
         frame->GetPage()->GetChromeClient().GetWebLayerTreeView(frame);
     surface_layer_bridge_ =
-        WTF::MakeUnique<::blink::SurfaceLayerBridge>(this, layer_tree_view);
+        WTF::MakeUnique<::blink::SurfaceLayerBridge>(layer_tree_view, this);
     // Creates a placeholder layer first before Surface is created.
     surface_layer_bridge_->CreateSolidColorLayer();
   }
 }
 
 void HTMLCanvasElement::OnWebLayerReplaced() {
+  GraphicsLayer::RegisterContentsLayer(surface_layer_bridge_->GetWebLayer());
   SetNeedsCompositingUpdate();
+}
+
+FontSelector* HTMLCanvasElement::GetFontSelector() {
+  return GetDocument().GetStyleEngine().GetFontSelector();
 }
 
 }  // namespace blink

@@ -105,13 +105,13 @@
 #endif
 
 #if BUILDFLAG(ENABLE_OFFLINE_PAGES)
+#include "chrome/browser/offline_pages/downloads/resource_throttle.h"
 #include "chrome/browser/offline_pages/offliner_user_data.h"
 #include "chrome/browser/offline_pages/resource_loading_observer.h"
 #endif
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/android/download/intercept_download_resource_throttle.h"
-#include "chrome/browser/android/offline_pages/downloads/resource_throttle.h"
 #include "chrome/browser/loader/data_reduction_proxy_resource_throttle_android.h"
 #include "components/navigation_interception/intercept_navigation_delegate.h"
 #endif
@@ -418,7 +418,8 @@ void NotifyUIThreadOfRequestComplete(
     int64_t raw_body_bytes,
     int64_t original_content_length,
     base::TimeTicks request_creation_time,
-    base::TimeDelta request_loading_time) {
+    base::TimeDelta request_loading_time,
+    std::unique_ptr<net::LoadTimingInfo> load_timing_info) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   content::WebContents* web_contents = web_contents_getter.Run();
   if (!web_contents)
@@ -460,7 +461,8 @@ void NotifyUIThreadOfRequestComplete(
           url, host_port_pair, frame_tree_node_id_getter.Run(), request_id,
           render_frame_host_or_null, resource_type, was_cached,
           std::move(data_reduction_proxy_data), raw_body_bytes,
-          original_content_length, request_creation_time, net_error);
+          original_content_length, request_creation_time, net_error,
+          std::move(load_timing_info));
     }
   }
 }
@@ -578,8 +580,7 @@ void ChromeResourceDispatcherHostDelegate::RequestBeginning(
     io_data->policy_header_helper()->AddPolicyHeaders(request->url(), request);
 
   signin::FixAccountConsistencyRequestHeader(request, GURL() /* redirect_url */,
-                                             io_data, info->GetChildID(),
-                                             info->GetRouteID());
+                                             io_data);
 
   AppendStandardResourceThrottles(request,
                                   resource_context,
@@ -725,7 +726,7 @@ void ChromeResourceDispatcherHostDelegate::AppendStandardResourceThrottles(
 
 #if defined(SAFE_BROWSING_DB_LOCAL) || defined(SAFE_BROWSING_DB_REMOTE)
   if (!first_throttle && io_data->safe_browsing_enabled()->GetValue()) {
-    first_throttle = SafeBrowsingResourceThrottle::MaybeCreate(
+    first_throttle = MaybeCreateSafeBrowsingResourceThrottle(
         request, resource_type, safe_browsing_.get());
   }
 #endif  // defined(SAFE_BROWSING_DB_LOCAL) || defined(SAFE_BROWSING_DB_REMOTE)
@@ -888,8 +889,6 @@ void ChromeResourceDispatcherHostDelegate::OnRequestRedirected(
     content::ResourceResponse* response) {
   ProfileIOData* io_data = ProfileIOData::FromResourceContext(resource_context);
 
-  const ResourceRequestInfo* info = ResourceRequestInfo::ForRequest(request);
-
   // Chrome tries to ensure that the identity is consistent between Chrome and
   // the content area.
   //
@@ -897,14 +896,13 @@ void ChromeResourceDispatcherHostDelegate::OnRequestRedirected(
   // identity is mirrored into the content area. To do so, Chrome appends a
   // X-Chrome-Connected header to all Gaia requests from a connected profile so
   // Gaia could return a 204 response and let Chrome handle the action with
-  // native UI. The only exception is requests from gaia webview, since the
-  // native profile management UI is built on top of it.
-  signin::FixAccountConsistencyRequestHeader(
-      request, redirect_url, io_data, info->GetChildID(), info->GetRouteID());
+  // native UI.
+  signin::FixAccountConsistencyRequestHeader(request, redirect_url, io_data);
   signin::ProcessAccountConsistencyResponseHeaders(request, redirect_url,
                                                    io_data->IsOffTheRecord());
 
   if (io_data->loading_predictor_observer()) {
+    const ResourceRequestInfo* info = ResourceRequestInfo::ForRequest(request);
     io_data->loading_predictor_observer()->OnRequestRedirected(
         request, redirect_url, info->GetWebContentsGetterForRequest());
   }
@@ -950,6 +948,9 @@ void ChromeResourceDispatcherHostDelegate::RequestComplete(
     }
   }
 
+  auto load_timing_info = base::MakeUnique<net::LoadTimingInfo>();
+  url_request->GetLoadTimingInfo(load_timing_info.get());
+
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
       base::BindOnce(
@@ -958,11 +959,12 @@ void ChromeResourceDispatcherHostDelegate::RequestComplete(
           info->GetFrameTreeNodeIdGetterForRequest(), url_request->url(),
           request_host_port, info->GetGlobalRequestID(), info->GetChildID(),
           info->GetRenderFrameID(), info->GetResourceType(), info->IsDownload(),
-          url_request->was_cached(), base::Passed(&data_reduction_proxy_data),
+          url_request->was_cached(), std::move(data_reduction_proxy_data),
           net_error, url_request->GetTotalReceivedBytes(),
           url_request->GetRawBodyBytes(), original_content_length,
           url_request->creation_time(),
-          base::TimeTicks::Now() - url_request->creation_time()));
+          base::TimeTicks::Now() - url_request->creation_time(),
+          std::move(load_timing_info)));
 }
 
 content::PreviewsState ChromeResourceDispatcherHostDelegate::GetPreviewsState(

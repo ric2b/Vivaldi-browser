@@ -109,25 +109,25 @@ void RecentTabSuggestionsProvider::DismissSuggestion(
 
 void RecentTabSuggestionsProvider::FetchSuggestionImage(
     const ContentSuggestion::ID& suggestion_id,
-    const ImageFetchedCallback& callback) {
+    ImageFetchedCallback callback) {
   // TODO(vitaliii): Fetch proper thumbnail from OfflinePageModel once it's
   // available there.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(callback, gfx::Image()));
+      FROM_HERE, base::BindOnce(std::move(callback), gfx::Image()));
 }
 
 void RecentTabSuggestionsProvider::Fetch(
     const Category& category,
     const std::set<std::string>& known_suggestion_ids,
-    const FetchDoneCallback& callback) {
+    FetchDoneCallback callback) {
   LOG(DFATAL) << "RecentTabSuggestionsProvider has no |Fetch| functionality!";
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
-      base::Bind(
-          callback,
+      base::BindOnce(
+          std::move(callback),
           Status(StatusCode::PERMANENT_ERROR,
                  "RecentTabSuggestionsProvider has no |Fetch| functionality!"),
-          base::Passed(std::vector<ContentSuggestion>())));
+          std::vector<ContentSuggestion>()));
 }
 
 void RecentTabSuggestionsProvider::ClearHistory(
@@ -144,7 +144,7 @@ void RecentTabSuggestionsProvider::ClearCachedSuggestions(Category category) {
 
 void RecentTabSuggestionsProvider::GetDismissedSuggestionsForDebugging(
     Category category,
-    const DismissedSuggestionsCallback& callback) {
+    DismissedSuggestionsCallback callback) {
   DCHECK_EQ(provided_category_, category);
 
   std::vector<const DownloadUIItem*> items =
@@ -161,7 +161,7 @@ void RecentTabSuggestionsProvider::GetDismissedSuggestionsForDebugging(
 
     suggestions.push_back(ConvertUIItem(*item));
   }
-  callback.Run(std::move(suggestions));
+  std::move(callback).Run(std::move(suggestions));
 }
 
 void RecentTabSuggestionsProvider::ClearDismissedSuggestionsForDebugging(

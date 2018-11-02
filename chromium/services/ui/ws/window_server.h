@@ -14,7 +14,7 @@
 
 #include "base/macros.h"
 #include "base/optional.h"
-#include "cc/ipc/frame_sink_manager.mojom.h"
+#include "components/viz/host/host_frame_sink_manager.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/ui/public/interfaces/window_manager_window_tree_factory.mojom.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
@@ -23,6 +23,7 @@
 #include "services/ui/ws/operation.h"
 #include "services/ui/ws/server_window_delegate.h"
 #include "services/ui/ws/server_window_observer.h"
+#include "services/ui/ws/server_window_tracker.h"
 #include "services/ui/ws/user_display_manager_delegate.h"
 #include "services/ui/ws/user_id_tracker.h"
 #include "services/ui/ws/user_id_tracker_observer.h"
@@ -51,8 +52,7 @@ class WindowServer : public ServerWindowDelegate,
                      public ServerWindowObserver,
                      public GpuHostDelegate,
                      public UserDisplayManagerDelegate,
-                     public UserIdTrackerObserver,
-                     public cc::mojom::FrameSinkManagerClient {
+                     public UserIdTrackerObserver {
  public:
   explicit WindowServer(WindowServerDelegate* delegate);
   ~WindowServer() override;
@@ -73,12 +73,6 @@ class WindowServer : public ServerWindowDelegate,
   DisplayCreationConfig display_creation_config() const {
     return display_creation_config_;
   }
-
-  // Pass the FrameSinkManager to WindowServer. This is needed because
-  // FrameSinkManagerClientBinding (the FrameSinkManager implementation being
-  // used) requires WindowServer's GpuHost to create.
-  void SetFrameSinkManager(
-      std::unique_ptr<cc::mojom::FrameSinkManager> frame_sink_manager);
 
   void SetGpuHost(std::unique_ptr<GpuHost> gpu_host);
 
@@ -251,7 +245,9 @@ class WindowServer : public ServerWindowDelegate,
   WindowManagerState* GetWindowManagerStateForUser(const UserId& user_id);
 
   // ServerWindowDelegate:
-  cc::mojom::FrameSinkManager* GetFrameSinkManager() override;
+  viz::HostFrameSinkManager* GetHostFrameSinkManager() override;
+  void OnFirstSurfaceActivation(const viz::SurfaceInfo& surface_info,
+                                ServerWindow* window) override;
 
   // UserDisplayManagerDelegate:
   bool GetFrameDecorationsForUser(
@@ -314,8 +310,10 @@ class WindowServer : public ServerWindowDelegate,
   void HandleTemporaryReferenceForNewSurface(const viz::SurfaceId& surface_id,
                                              ServerWindow* window);
 
+  void CreateFrameSinkManager();
+
   // Overridden from ServerWindowDelegate:
-  ServerWindow* GetRootWindow(const ServerWindow* window) override;
+  ServerWindow* GetRootWindowForDrawn(const ServerWindow* window) override;
 
   // Overridden from ServerWindowObserver:
   void OnWindowDestroyed(ServerWindow* window) override;
@@ -357,13 +355,11 @@ class WindowServer : public ServerWindowDelegate,
                               ServerWindow* transient_child) override;
   void OnTransientWindowRemoved(ServerWindow* window,
                                 ServerWindow* transient_child) override;
+  void OnWindowModalTypeChanged(ServerWindow* window,
+                                ModalType old_modal_type) override;
 
   // GpuHostDelegate:
   void OnGpuServiceInitialized() override;
-
-  // cc::mojom::FrameSinkManagerClient:
-  void OnSurfaceCreated(const viz::SurfaceInfo& surface_info) override;
-  void OnClientConnectionClosed(const viz::FrameSinkId& frame_sink_id) override;
 
   // UserIdTrackerObserver:
   void OnActiveUserIdChanged(const UserId& previously_active_id,
@@ -410,7 +406,11 @@ class WindowServer : public ServerWindowDelegate,
   viz::SurfaceId root_surface_id_;
 
   // Provides interfaces to create and manage FrameSinks.
-  std::unique_ptr<cc::mojom::FrameSinkManager> frame_sink_manager_;
+  std::unique_ptr<viz::HostFrameSinkManager> host_frame_sink_manager_;
+
+  // System modal windows not attached to a display are added here. Once
+  // attached to a display they are removed.
+  ServerWindowTracker pending_system_modal_windows_;
 
   DisplayCreationConfig display_creation_config_;
 

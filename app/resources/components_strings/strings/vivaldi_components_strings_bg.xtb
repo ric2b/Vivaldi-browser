@@ -19,7 +19,7 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Опитайте да изпълните Диагностика на мрежата на Windows<ph name="END_LINK" />.</translation>
 <translation id="194030505837763158">Премини към <ph name="LINK" /></translation>
 <translation id="1974060860693918893">Разширени</translation>
-<translation id="2030481566774242610">Може би имате предвид <ph name="LINK" />?</translation>
+<translation id="2030481566774242610">Имате предвид <ph name="LINK" />?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Да проверите посредника и защитната стена<ph name="END_LINK" /></translation>
 <translation id="2065985942032347596">Задължително удостоверяване</translation>
 <translation id="2166378884831602661">Сайт без защитено свързване</translation>
@@ -33,7 +33,7 @@
 <translation id="2705137772291741111">Прочитане на записано (кеширано) копие на сайта е невъзможно.</translation>
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />Да изпълните Диагностика на свързаността<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Свързването е нулирано.</translation>
-<translation id="2856444702002559011">Вероятно злоумишленици правят опит да откраднат информацията ви на <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (пароли, съобщения или кредитни карти например). <ph name="BEGIN_LEARN_MORE_LINK" />Научете повече<ph name="END_LEARN_MORE_LINK" /></translation>
+<translation id="2856444702002559011">Вероятно злоумишленици правят опит да откраднат информацията ви на <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (пароли, съобщения или кредитни карти например). <ph name="BEGIN_LEARN_MORE_LINK" />Повече<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Установена е промяна в мрежата.</translation>
 <translation id="2948083400971632585">Можете да забраните конфигурираните за свързване посредници от страницата с настройки.</translation>
 <translation id="2991571918955627853">Посещаване на <ph name="SITE" /> в момента е невъзможно, защото сайтът ползва механизъм HSTS. Мрежовите сривове и атаки обикновено са временно явление, така че по всяка вероятност по-късно страницата ще заработи отново.</translation>
@@ -69,17 +69,19 @@
 <translation id="4506599922270137252">Да се свържете със системния администратор</translation>
 <translation id="4522570452068850558">Подробности</translation>
 <translation id="4558551763791394412">Опитайте да забраните разширенията.</translation>
+<translation id="4611292653554630842">Впиши ме</translation>
 <translation id="4708268264240856090">Прекъснато свързване</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Да изпълните Диагностика на мрежата на Windows<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">Изпълним файл</translation>
 <translation id="4764776831041365478">Страницата <ph name="URL" /> е вероятно временно недостъпна или е постоянно преместена на нов адрес.</translation>
 <translation id="4807049035289105102">Посещаване на <ph name="SITE" /> в момента е невъзможно, защото сайтът изпрати зашифровани идентификационни данни, които Vivaldi не е в състояние да обработи. Мрежовите сривове и атаки обикновено са временно явление, така че по всяка вероятност по-късно страницата ще заработи отново.</translation>
+<translation id="4913131542719409934">Задължително удостоверяване</translation>
 <translation id="5023310440958281426">Проверете правилата на администратора</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Да проверите адреса на посредника<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-битово приложение)</translation>
 <translation id="5355557959165512791">Посещаване на <ph name="SITE" /> в момента е невъзможно, защото сертификатът му е оттеглен. Мрежовите сривове и атаки обикновено са временно явление, така че по всяка вероятност по-късно страницата ще заработи отново.</translation>
 <translation id="5431657950005405462">Няма намерен файл</translation>
-<translation id="5452270690849572955">Невъзможно намиране на страницата в <ph name="HOST_NAME" /></translation>
+<translation id="5452270690849572955">Няма намерена страница в <ph name="HOST_NAME" /></translation>
 <translation id="5492298309214877701">Сайтът в интранета на фирмата, организацията или училището има същия адрес като външния сайт.
 <ph name="LINE_BREAK" />
 Опитайте да се свържете със системния администратор.</translation>
@@ -94,7 +96,7 @@
 <translation id="6051221802930200923">Посещаване на <ph name="SITE" /> в момента е невъзможно, защото сайтът ползва прикачане на сертификатите. Мрежовите сривове и атаки обикновено са временно явление, така че по всяка вероятност по-късно страницата ще заработи отново.</translation>
 <translation id="6146055958333702838">Проверете всички кабели и презаредете всички маршрутизатори, модеми или други мрежови устройства, които вероятно ползвате.</translation>
 <translation id="614940544461990577">Опитайте следното:</translation>
-<translation id="6165508094623778733">Научете повече</translation>
+<translation id="6165508094623778733">Повече</translation>
 <translation id="6203231073485539293">Проверете свързването с интернет</translation>
 <translation id="6264485186158353794">Изведи ме от тук</translation>
 <translation id="6305205051461490394"><ph name="URL" /> е недостъпен.</translation>
@@ -102,10 +104,12 @@
 <translation id="6328639280570009161">Опитайте да забраните предсказването в мрежата</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> отказва свързване.</translation>
 <translation id="6569060085658103619">Преглеждате страница на разширение</translation>
+<translation id="6657585470893396449">Парола</translation>
 <translation id="6685834062052613830">Да се отпишете и да завършите инсталирането</translation>
 <translation id="6711464428925977395">Нещо се обърка със сървъра посредник или адресът е неправилен.</translation>
 <translation id="6757797048963528358">Устройството премина в режим на заспиване.</translation>
 <translation id="6897140037006041989">Потребителски агент</translation>
+<translation id="7090678807593890770">Потърсете „<ph name="LINK" />“ в Google</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> не се придържа към стандартите за сигурност.</translation>
 <translation id="7353601530677266744">Команден ред</translation>
 <translation id="7419106976560586862">Потребителски профил</translation>
@@ -124,6 +128,7 @@
 <translation id="8289355894181816810">Свържете се с мрежовия администратор, ако не сте сигурен какво означава.</translation>
 <translation id="8332188693563227489">Отказан достъп до <ph name="HOST_NAME" /></translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> отговаря след твърде дълго време.</translation>
+<translation id="8503813439785031346">Потребител</translation>
 <translation id="8740359287975076522">Намиране на &lt;abbr id="dnsDefinition"&gt;адрес DNS&lt;/abbr&gt; на <ph name="HOST_NAME" /> е невъзможно. Проблемът се диагностицира.</translation>
 <translation id="9001074447101275817">Посредникът <ph name="DOMAIN" /> изисква потребител и парола.</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> ползва неподдържан протокол.</translation>

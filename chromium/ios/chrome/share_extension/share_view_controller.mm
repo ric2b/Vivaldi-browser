@@ -60,7 +60,7 @@ const CGFloat kMediumAlpha = 0.5;
 // Loads all the shared elements from the extension context and update the UI.
 - (void)loadElementsFromContext;
 
-// Sets constaints to the widget so that margin are at least
+// Sets constraints to the widget so that margin are at least
 // kShareExtensionMargin points and widget width is closest up to
 // kShareExtensionMaxWidth points.
 - (void)constrainWidgetWidth;
@@ -294,7 +294,7 @@ const CGFloat kMediumAlpha = 0.5;
   if (title)
     [dict setObject:title forKey:app_group::kShareItemTitle];
   [dict setObject:date forKey:app_group::kShareItemDate];
-  [dict setObject:app_group::kShareItemShareExtensionSource
+  [dict setObject:app_group::kShareItemSourceShareExtension
            forKey:app_group::kShareItemSource];
 
   if (!cancel) {

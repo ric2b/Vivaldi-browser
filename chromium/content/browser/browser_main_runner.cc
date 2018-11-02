@@ -26,6 +26,7 @@
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/browser_shutdown_profile_dumper.h"
 #include "content/browser/notification_service_impl.h"
+#include "content/common/content_switches_internal.h"
 #include "content/public/browser/tracing_controller.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/main_function_params.h"
@@ -88,6 +89,9 @@ class BrowserMainRunnerImpl : public BrowserMainRunner {
       if (parameters.command_line.HasSwitch(switches::kWaitForDebugger))
         base::debug::WaitForDebugger(60, true);
 
+      if (parameters.command_line.HasSwitch(switches::kBrowserStartupDialog))
+        WaitForDebugger("Browser");
+
       base::StatisticsRecorder::Initialize();
 
       notification_service_.reset(new NotificationServiceImpl);
@@ -135,6 +139,12 @@ class BrowserMainRunnerImpl : public BrowserMainRunner {
     // Return -1 to indicate no early termination.
     return -1;
   }
+
+#if defined(OS_ANDROID)
+  void SynchronouslyFlushStartupTasks() override {
+    main_loop_->SynchronouslyFlushStartupTasks();
+  }
+#endif
 
   int Run() override {
     DCHECK(initialization_started_);
@@ -210,7 +220,7 @@ class BrowserMainRunnerImpl : public BrowserMainRunner {
       // proper shutdown for content_browsertests. Shutdown() is not used by
       // the actual browser.
       if (base::RunLoop::IsRunningOnCurrentThread())
-        base::MessageLoop::current()->QuitNow();
+        base::RunLoop::QuitCurrentDeprecated();
   #endif
       main_loop_.reset(NULL);
 

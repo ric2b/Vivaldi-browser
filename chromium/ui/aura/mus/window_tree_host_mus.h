@@ -80,6 +80,9 @@ class AURA_EXPORT WindowTreeHostMus : public aura::WindowTreeHostPlatform {
   // PerformWindowMove().
   void CancelWindowMove();
 
+  // Tells the window manager to confine the cursor to these specific bounds.
+  void ConfineCursorToBounds(const gfx::Rect& pixel_bounds);
+
   // Used during initial setup. Returns the DisplayInitParams
   // supplied to the constructor.
   std::unique_ptr<DisplayInitParams> ReleaseDisplayInitParams();
@@ -98,6 +101,7 @@ class AURA_EXPORT WindowTreeHostMus : public aura::WindowTreeHostPlatform {
   void OnCloseRequest() override;
   void MoveCursorToScreenLocationInPixels(
       const gfx::Point& location_in_pixels) override;
+  gfx::Transform GetRootTransformForLocalEventCoordinates() const override;
 
  private:
   int64_t display_id_;

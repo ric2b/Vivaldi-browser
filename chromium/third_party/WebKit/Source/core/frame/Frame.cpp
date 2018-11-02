@@ -33,7 +33,7 @@
 #include "bindings/core/v8/WindowProxyManager.h"
 #include "core/dom/DocumentType.h"
 #include "core/dom/UserGestureIndicator.h"
-#include "core/events/Event.h"
+#include "core/dom/events/Event.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
@@ -49,6 +49,9 @@
 #include "platform/InstanceCounters.h"
 #include "platform/feature_policy/FeaturePolicy.h"
 #include "platform/loader/fetch/ResourceError.h"
+#include "platform/wtf/Assertions.h"
+#include "public/web/WebFrameClient.h"
+#include "public/web/WebRemoteFrameClient.h"
 
 namespace blink {
 
@@ -177,10 +180,10 @@ void Frame::DidChangeVisibilityState() {
     child_frames[i]->DidChangeVisibilityState();
 }
 
-void Frame::SetDocumentHasReceivedUserGesture() {
+void Frame::UpdateUserActivationInFrameTree() {
   has_received_user_gesture_ = true;
   if (Frame* parent = Tree().Parent())
-    parent->SetDocumentHasReceivedUserGesture();
+    parent->UpdateUserActivationInFrameTree();
 }
 
 bool Frame::IsFeatureEnabled(WebFeaturePolicyFeature feature) const {
@@ -223,5 +226,13 @@ Frame::Frame(FrameClient* client,
   else
     page_->SetMainFrame(this);
 }
+
+STATIC_ASSERT_ENUM(FrameDetachType::kRemove,
+                   WebFrameClient::DetachType::kRemove);
+STATIC_ASSERT_ENUM(FrameDetachType::kSwap, WebFrameClient::DetachType::kSwap);
+STATIC_ASSERT_ENUM(FrameDetachType::kRemove,
+                   WebRemoteFrameClient::DetachType::kRemove);
+STATIC_ASSERT_ENUM(FrameDetachType::kSwap,
+                   WebRemoteFrameClient::DetachType::kSwap);
 
 }  // namespace blink

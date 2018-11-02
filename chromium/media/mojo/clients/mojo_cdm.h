@@ -27,6 +27,10 @@ namespace base {
 class SingleThreadTaskRunner;
 }
 
+namespace url {
+class Origin;
+}
+
 namespace media {
 
 class MojoDecryptor;
@@ -42,7 +46,7 @@ class MojoCdm : public ContentDecryptionModule,
 
   static void Create(
       const std::string& key_system,
-      const GURL& security_origin,
+      const url::Origin& security_origin,
       const CdmConfig& cdm_config,
       mojom::ContentDecryptionModulePtr remote_cdm,
       const SessionMessageCB& session_message_cb,
@@ -54,6 +58,8 @@ class MojoCdm : public ContentDecryptionModule,
   // ContentDecryptionModule implementation.
   void SetServerCertificate(const std::vector<uint8_t>& certificate,
                             std::unique_ptr<SimpleCdmPromise> promise) final;
+  void GetStatusForPolicy(HdcpVersion min_hdcp_version,
+                          std::unique_ptr<KeyStatusCdmPromise> promise) final;
   void CreateSessionAndGenerateRequest(
       CdmSessionType session_type,
       EmeInitDataType init_data_type,
@@ -86,7 +92,7 @@ class MojoCdm : public ContentDecryptionModule,
   ~MojoCdm() final;
 
   void InitializeCdm(const std::string& key_system,
-                     const GURL& security_origin,
+                     const url::Origin& security_origin,
                      const CdmConfig& cdm_config,
                      std::unique_ptr<CdmInitializedPromise> promise);
 
@@ -116,6 +122,9 @@ class MojoCdm : public ContentDecryptionModule,
   // Callbacks to handle CDM promises.
   void OnSimpleCdmPromiseResult(uint32_t promise_id,
                                 mojom::CdmPromiseResultPtr result);
+  void OnKeyStatusCdmPromiseResult(uint32_t promise_id,
+                                   mojom::CdmPromiseResultPtr result,
+                                   CdmKeyInformation::KeyStatus key_status);
   void OnNewSessionCdmPromiseResult(uint32_t promise_id,
                                     mojom::CdmPromiseResultPtr result,
                                     const std::string& session_id);

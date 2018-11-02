@@ -5,7 +5,9 @@
 #include "chrome/browser/ui/views/frame/opaque_browser_frame_view.h"
 
 #include "build/build_config.h"
+#include "build/buildflag.h"
 #include "chrome/browser/themes/theme_properties.h"
+#include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/frame/browser_frame.h"
@@ -16,6 +18,8 @@
 #include "chrome/browser/ui/views/tab_icon_view.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+#include "chrome/common/chrome_features.h"
+#include "chrome/common/features.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/strings/grit/components_strings.h"
@@ -30,12 +34,12 @@
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/path.h"
-#include "ui/gfx/scoped_canvas.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/resources/grit/views_resources.h"
 #include "ui/views/views_delegate.h"
 #include "ui/views/window/frame_background.h"
+#include "ui/views/window/nav_button_provider.h"
 #include "ui/views/window/window_shape.h"
 
 #if defined(OS_LINUX)
@@ -120,13 +124,30 @@ OpaqueBrowserFrameView::OpaqueBrowserFrameView(BrowserFrame* frame,
   platform_observer_.reset(OpaqueBrowserFrameViewPlatformSpecific::Create(
       this, layout_,
       ThemeServiceFactory::GetForProfile(browser_view->browser()->profile())));
+
+#if BUILDFLAG(ENABLE_NATIVE_WINDOW_NAV_BUTTONS)
+  if (views::LinuxUI::instance()) {
+    nav_button_provider_ =
+        views::LinuxUI::instance()->CreateNavButtonProvider();
+  }
+#endif
 }
 
-OpaqueBrowserFrameView::~OpaqueBrowserFrameView() {
-}
+OpaqueBrowserFrameView::~OpaqueBrowserFrameView() {}
 
 ///////////////////////////////////////////////////////////////////////////////
 // OpaqueBrowserFrameView, BrowserNonClientFrameView implementation:
+
+void OpaqueBrowserFrameView::OnBrowserViewInitViewsComplete() {
+  // After views are initialized, we know the top area height for the
+  // first time, so redraw the frame buttons at the appropriate size.
+  MaybeRedrawFrameButtons();
+}
+
+void OpaqueBrowserFrameView::OnMaximizedStateChanged() {
+  // The top area height can change depending on the maximized state.
+  MaybeRedrawFrameButtons();
+}
 
 gfx::Rect OpaqueBrowserFrameView::GetBoundsForTabStrip(
     views::View* tabstrip) const {
@@ -247,9 +268,9 @@ void OpaqueBrowserFrameView::GetWindowMask(const gfx::Size& size,
 }
 
 void OpaqueBrowserFrameView::ResetWindowControls() {
-  restore_button_->SetState(views::CustomButton::STATE_NORMAL);
-  minimize_button_->SetState(views::CustomButton::STATE_NORMAL);
-  maximize_button_->SetState(views::CustomButton::STATE_NORMAL);
+  restore_button_->SetState(views::Button::STATE_NORMAL);
+  minimize_button_->SetState(views::Button::STATE_NORMAL);
+  maximize_button_->SetState(views::Button::STATE_NORMAL);
   // The close button isn't affected by this constraint.
 }
 
@@ -263,7 +284,11 @@ void OpaqueBrowserFrameView::UpdateWindowTitle() {
     window_title_->SchedulePaint();
 }
 
-void OpaqueBrowserFrameView::SizeConstraintsChanged() {
+void OpaqueBrowserFrameView::SizeConstraintsChanged() {}
+
+void OpaqueBrowserFrameView::ActivationChanged(bool active) {
+  BrowserNonClientFrameView::ActivationChanged(active);
+  MaybeRedrawFrameButtons();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -271,6 +296,11 @@ void OpaqueBrowserFrameView::SizeConstraintsChanged() {
 
 void OpaqueBrowserFrameView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->role = ui::AX_ROLE_TITLE_BAR;
+}
+
+void OpaqueBrowserFrameView::OnNativeThemeChanged(
+    const ui::NativeTheme* native_theme) {
+  MaybeRedrawFrameButtons();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -402,6 +432,37 @@ gfx::Size OpaqueBrowserFrameView::GetTabstripPreferredSize() const {
   return s;
 }
 
+bool OpaqueBrowserFrameView::ShouldRenderNativeNavButtons() const {
+#if BUILDFLAG(ENABLE_NATIVE_WINDOW_NAV_BUTTONS)
+  if (!nav_button_provider_)
+    return false;
+  if (!base::FeatureList::IsEnabled(features::kNativeWindowNavButtons))
+    return false;
+  return ThemeServiceFactory::GetForProfile(
+             browser_view()->browser()->profile())
+      ->UsingSystemTheme();
+#else
+  return false;
+#endif
+}
+
+int OpaqueBrowserFrameView::GetTopAreaHeight() const {
+  const gfx::ImageSkia frame_image = GetFrameImage();
+  int top_area_height =
+      std::max(frame_image.height(), layout_->NonClientTopHeight(false));
+  if (browser_view()->IsTabStripVisible()) {
+    top_area_height =
+        std::max(top_area_height,
+                 GetBoundsForTabStrip(browser_view()->tabstrip()).bottom());
+  }
+  return top_area_height;
+}
+
+const views::NavButtonProvider* OpaqueBrowserFrameView::GetNavButtonProvider()
+    const {
+  return nav_button_provider_.get();
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // OpaqueBrowserFrameView, protected:
 
@@ -462,11 +523,11 @@ views::ImageButton* OpaqueBrowserFrameView::InitWindowCaptionButton(
     ViewID view_id) {
   views::ImageButton* button = new views::ImageButton(this);
   const ui::ThemeProvider* tp = frame()->GetThemeProvider();
-  button->SetImage(views::CustomButton::STATE_NORMAL,
+  button->SetImage(views::Button::STATE_NORMAL,
                    tp->GetImageSkiaNamed(normal_image_id));
-  button->SetImage(views::CustomButton::STATE_HOVERED,
+  button->SetImage(views::Button::STATE_HOVERED,
                    tp->GetImageSkiaNamed(hot_image_id));
-  button->SetImage(views::CustomButton::STATE_PRESSED,
+  button->SetImage(views::Button::STATE_PRESSED,
                    tp->GetImageSkiaNamed(pushed_image_id));
   if (browser_view()->IsBrowserTypeNormal()) {
     button->SetBackgroundImage(
@@ -506,18 +567,6 @@ bool OpaqueBrowserFrameView::ShouldShowWindowTitleBar() const {
       IsMaximized());
 }
 
-int OpaqueBrowserFrameView::GetTopAreaHeight() const {
-  const gfx::ImageSkia frame_image = GetFrameImage();
-  int top_area_height =
-      std::max(frame_image.height(), layout_->NonClientTopHeight(false));
-  if (browser_view()->IsTabStripVisible()) {
-    top_area_height =
-        std::max(top_area_height,
-                 GetBoundsForTabStrip(browser_view()->tabstrip()).bottom());
-  }
-  return top_area_height;
-}
-
 void OpaqueBrowserFrameView::PaintRestoredFrameBorder(
     gfx::Canvas* canvas) const {
   const ui::ThemeProvider* tp = GetThemeProvider();
@@ -544,48 +593,6 @@ void OpaqueBrowserFrameView::PaintMaximizedFrameBorder(
   frame_background_->set_maximized_top_inset(
       GetTopInset(true) - GetTopInset(false));
   frame_background_->PaintMaximized(canvas, this);
-}
-
-void OpaqueBrowserFrameView::PaintToolbarBackground(gfx::Canvas* canvas) const {
-  // TODO(estade): can this be shared with OpaqueBrowserFrameView?
-  gfx::Rect toolbar_bounds(browser_view()->GetToolbarBounds());
-  if (toolbar_bounds.IsEmpty())
-    return;
-  gfx::Point toolbar_origin(toolbar_bounds.origin());
-  ConvertPointToTarget(browser_view(), this, &toolbar_origin);
-  toolbar_bounds.set_origin(toolbar_origin);
-
-  const ui::ThemeProvider* tp = GetThemeProvider();
-  const int x = toolbar_bounds.x();
-  const int y = toolbar_bounds.y();
-  const int w = toolbar_bounds.width();
-
-  // Background.
-  if (tp->HasCustomImage(IDR_THEME_TOOLBAR)) {
-    canvas->TileImageInt(*tp->GetImageSkiaNamed(IDR_THEME_TOOLBAR),
-                         x + GetThemeBackgroundXInset(),
-                         y - GetTopInset(false) - GetLayoutInsets(TAB).top(), x,
-                         y, w, toolbar_bounds.height());
-  } else {
-    canvas->FillRect(toolbar_bounds,
-                     tp->GetColor(ThemeProperties::COLOR_TOOLBAR));
-  }
-
-  // Top stroke.
-  gfx::Rect separator_rect(x, y, w, 0);
-  gfx::ScopedCanvas scoped_canvas(canvas);
-  gfx::Rect tabstrip_bounds =
-      GetMirroredRect(GetBoundsForTabStrip(browser_view()->tabstrip()));
-  canvas->sk_canvas()->clipRect(gfx::RectToSkRect(tabstrip_bounds),
-                                SkClipOp::kDifference);
-  separator_rect.set_y(tabstrip_bounds.bottom());
-  BrowserView::Paint1pxHorizontalLine(canvas, GetToolbarTopSeparatorColor(),
-                                      separator_rect, true);
-
-  // Toolbar/content separator.
-  BrowserView::Paint1pxHorizontalLine(
-      canvas, tp->GetColor(ThemeProperties::COLOR_TOOLBAR_BOTTOM_SEPARATOR),
-      toolbar_bounds, true);
 }
 
 void OpaqueBrowserFrameView::PaintClientEdge(gfx::Canvas* canvas) const {
@@ -669,4 +676,41 @@ void OpaqueBrowserFrameView::FillClientEdgeRects(int x,
   }
   side.Offset(w + kClientEdgeThickness, 0);
   canvas->FillRect(side, color);
+}
+
+views::ImageButton* OpaqueBrowserFrameView::GetButtonFromDisplayType(
+    chrome::FrameButtonDisplayType type) {
+  switch (type) {
+    case chrome::FrameButtonDisplayType::kMinimize:
+      return minimize_button_;
+    case chrome::FrameButtonDisplayType::kMaximize:
+      return maximize_button_;
+    case chrome::FrameButtonDisplayType::kRestore:
+      return restore_button_;
+    case chrome::FrameButtonDisplayType::kClose:
+      return close_button_;
+    default:
+      NOTREACHED();
+      return nullptr;
+  }
+}
+
+void OpaqueBrowserFrameView::MaybeRedrawFrameButtons() {
+  if (ShouldRenderNativeNavButtons()) {
+    nav_button_provider_->RedrawImages(GetTopAreaHeight(), IsMaximized(),
+                                       ShouldPaintAsActive());
+    for (auto type : {
+             chrome::FrameButtonDisplayType::kMinimize,
+             IsMaximized() ? chrome::FrameButtonDisplayType::kRestore
+                           : chrome::FrameButtonDisplayType::kMaximize,
+             chrome::FrameButtonDisplayType::kClose,
+         }) {
+      for (size_t state = 0; state < views::Button::STATE_COUNT; state++) {
+        views::Button::ButtonState button_state =
+            static_cast<views::Button::ButtonState>(state);
+        GetButtonFromDisplayType(type)->SetImage(
+            button_state, nav_button_provider_->GetImage(type, button_state));
+      }
+    }
+  }
 }

@@ -16,8 +16,7 @@
 
 namespace mojo {
 
-class MOJO_CPP_BINDINGS_EXPORT FilterChain
-    : NON_EXPORTED_BASE(public MessageReceiver) {
+class MOJO_CPP_BINDINGS_EXPORT FilterChain : public MessageReceiver {
  public:
   // Doesn't take ownership of |sink|. Therefore |sink| has to stay alive while
   // this object is alive.
@@ -49,7 +48,7 @@ class MOJO_CPP_BINDINGS_EXPORT FilterChain
 
 template <typename FilterType, typename... Args>
 inline void FilterChain::Append(Args&&... args) {
-  Append(base::MakeUnique<FilterType>(std::forward<Args>(args)...));
+  Append(std::make_unique<FilterType>(std::forward<Args>(args)...));
 }
 
 template <>

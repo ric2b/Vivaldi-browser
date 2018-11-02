@@ -21,6 +21,7 @@
 #include "base/threading/thread_checker.h"
 #include "content/common/content_export.h"
 #include "content/renderer/media/webrtc/media_stream_track_metrics.h"
+#include "content/renderer/media/webrtc/rtc_rtp_sender.h"
 #include "content/renderer/media/webrtc/webrtc_media_stream_adapter_map.h"
 #include "content/renderer/media/webrtc/webrtc_media_stream_track_adapter_map.h"
 #include "ipc/ipc_platform_file.h"
@@ -46,8 +47,7 @@ class RemoteMediaStreamImpl;
 class RtcDataChannelHandler;
 
 // Mockable wrapper for blink::WebRTCStatsResponse
-class CONTENT_EXPORT LocalRTCStatsResponse
-    : public NON_EXPORTED_BASE(rtc::RefCountInterface) {
+class CONTENT_EXPORT LocalRTCStatsResponse : public rtc::RefCountInterface {
  public:
   explicit LocalRTCStatsResponse(const blink::WebRTCStatsResponse& impl)
       : impl_(impl) {
@@ -66,8 +66,7 @@ class CONTENT_EXPORT LocalRTCStatsResponse
 };
 
 // Mockable wrapper for blink::WebRTCStatsRequest
-class CONTENT_EXPORT LocalRTCStatsRequest
-    : public NON_EXPORTED_BASE(rtc::RefCountInterface) {
+class CONTENT_EXPORT LocalRTCStatsRequest : public rtc::RefCountInterface {
  public:
   explicit LocalRTCStatsRequest(blink::WebRTCStatsRequest impl);
   // Constructor for testing.
@@ -92,7 +91,7 @@ class CONTENT_EXPORT LocalRTCStatsRequest
 // Callbacks to the webrtc::PeerConnectionObserver implementation also occur on
 // the main render thread.
 class CONTENT_EXPORT RTCPeerConnectionHandler
-    : NON_EXPORTED_BASE(public blink::WebRTCPeerConnectionHandler) {
+    : public blink::WebRTCPeerConnectionHandler {
  public:
   RTCPeerConnectionHandler(
       blink::WebRTCPeerConnectionHandlerClient* client,
@@ -200,7 +199,9 @@ class CONTENT_EXPORT RTCPeerConnectionHandler
   void OnIceGatheringChange(
       webrtc::PeerConnectionInterface::IceGatheringState new_state);
   void OnRenegotiationNeeded();
-  void OnAddStream(std::unique_ptr<RemoteMediaStreamImpl> stream);
+  void OnAddStream(
+      std::unique_ptr<RemoteMediaStreamImpl> stream,
+      std::vector<std::unique_ptr<blink::WebRTCRtpReceiver>> web_receivers);
   void OnRemoveStream(
       const scoped_refptr<webrtc::MediaStreamInterface>& stream);
   void OnDataChannel(std::unique_ptr<RtcDataChannelHandler> handler);
@@ -236,6 +237,9 @@ class CONTENT_EXPORT RTCPeerConnectionHandler
   void ReportFirstSessionDescriptions(
       const FirstSessionDescription& local,
       const FirstSessionDescription& remote);
+
+  std::unique_ptr<blink::WebRTCRtpReceiver> GetWebRTCRtpReceiver(
+      rtc::scoped_refptr<webrtc::RtpReceiverInterface> webrtc_receiver);
 
   scoped_refptr<base::SingleThreadTaskRunner> signaling_thread() const;
 
@@ -284,6 +288,16 @@ class CONTENT_EXPORT RTCPeerConnectionHandler
   // peer connection using |AddStream| and |RemoveStream|.
   std::vector<std::unique_ptr<WebRtcMediaStreamAdapterMap::AdapterRef>>
       local_streams_;
+  // Maps |RTCRtpSender::getId|s of |webrtc::RtpSenderInterface| to the
+  // corresponding content layer sender. This is needed to retain the senders'
+  // associated set of streams for senders created by |AddTrack|.
+  std::map<uintptr_t, std::unique_ptr<RTCRtpSender>> rtp_senders_;
+  // We don't need an "rtp_receivers_" map as long as the blink layer receivers
+  // are not GC'd (protecting the relevant adapters from destruction). These can
+  // be constructed anew on every |GetReceivers| call.
+  // TODO(hbos): When receivers can be created separately from remote streams we
+  // should add an "rtp_receivers_" map too to get rid of the requirement for
+  // the blink layer to keep a receiver reference. https://crbug.com/741619
 
   base::WeakPtr<PeerConnectionTracker> peer_connection_tracker_;
 

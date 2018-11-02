@@ -68,6 +68,7 @@ source_set("payments") {
     "//components/payments/core",
     "//components/signin/core/browser",
     "//components/strings",
+    "//components/url_formatter",
     "//ios/chrome/app/strings",
     "//ios/chrome/app/theme",
     "//ios/chrome/browser",
@@ -137,8 +138,10 @@ source_set("payments_ui") {
     "//ios/chrome/browser/ui/collection_view",
     "//ios/chrome/browser/ui/colors",
     "//ios/chrome/browser/ui/icons",
+    "//ios/chrome/browser/ui/material_components",
     "//ios/chrome/browser/ui/payments/cells",
     "//ios/third_party/material_components_ios",
+    "//third_party/libaddressinput:strings_grit",
     "//ui/base",
   ]
   libs = [ "UIKit.framework" ]
@@ -149,6 +152,7 @@ source_set("unit_tests") {
   testonly = true
   sources = [
     "address_edit_coordinator_unittest.mm",
+    "address_edit_mediator_unittest.mm",
     "billing_address_selection_coordinator_unittest.mm",
     "billing_address_selection_mediator_unittest.mm",
     "contact_info_edit_coordinator_unittest.mm",
@@ -157,6 +161,7 @@ source_set("unit_tests") {
     "contact_info_selection_mediator_unittest.mm",
     "country_selection_coordinator_unittest.mm",
     "credit_card_edit_coordinator_unittest.mm",
+    "credit_card_edit_mediator_unittest.mm",
     "full_card_requester_unittest.mm",
     "payment_items_display_coordinator_unittest.mm",
     "payment_items_display_view_controller_unittest.mm",
@@ -221,7 +226,19 @@ source_set("eg_tests") {
   configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
-    "payments_accessibility_egtest.mm",
+    "payment_request_accessibility_egtest.mm",
+    "payment_request_can_make_payment_egtest.mm",
+    "payment_request_cancel_pay_abort_egtest.mm",
+    "payment_request_data_url_egtest.mm",
+    "payment_request_debit_egtest.mm",
+    "payment_request_egtest_base.h",
+    "payment_request_egtest_base.mm",
+    "payment_request_journey_logger_egtest.mm",
+    "payment_request_misc_egtest.mm",
+    "payment_request_payment_app_egtest.mm",
+    "payment_request_payment_method_identifier_egtest.mm",
+    "payment_request_payment_response_egtest.mm",
+    "payment_request_use_stats_egtest.mm",
   ]
 
   deps = [
@@ -229,18 +246,26 @@ source_set("eg_tests") {
     "//base",
     "//components/autofill/core/browser",
     "//components/autofill/core/browser:test_support",
+    "//components/image_fetcher/core",
     "//components/payments/core",
     "//components/strings",
     "//ios/chrome/app:app_internal",
     "//ios/chrome/browser/autofill",
     "//ios/chrome/browser/payments",
+    "//ios/chrome/browser/ui/autofill",
     "//ios/chrome/browser/ui/payments/cells",
     "//ios/chrome/browser/ui/tools_menu",
     "//ios/chrome/test/app:test_support",
     "//ios/chrome/test/earl_grey:test_support",
+    "//ios/testing:ios_test_support",
     "//ios/testing/earl_grey:earl_grey_support",
     "//ios/third_party/material_components_ios",
+    "//ios/web/public/test",
     "//ios/web/public/test/http_server",
+    "//testing/gtest",
+    "//third_party/libaddressinput:strings_grit",
+    "//ui/base",
+    "//url",
   ]
   libs = [
     "UIKit.framework",

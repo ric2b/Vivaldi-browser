@@ -9,6 +9,9 @@ about:version template page
     <meta charset="utf-8">
     <title>$i18n{title}</title>
     <link rel="stylesheet" href="chrome://resources/css/text_defaults.css">
+<if expr="is_android or is_ios">
+    <meta name="viewport" content="width=device-width">
+</if>
     <link rel="stylesheet" href="chrome://version/about_version.css">
 
     <script src="chrome://resources/js/cr.js"></script>
@@ -23,8 +26,14 @@ about:version template page
   <body>
     <div id="outer">
       <div id="logo">
+<if expr="not is_android and not is_ios">
         <!-- Version for themes. -->
         <img src="chrome://theme/IDR_PRODUCT_LOGO">
+</if>
+<if expr="is_ios or is_android">
+        <!-- TODO: make this dependant on build type. Using icon for final for now. -->
+        <img src="../../components_scaled/default_100_percent/vivaldi_final/product_icon_128.png">
+</if>
         <div id="company">$i18n{company}</div>
         <div id="slogan">A Browser For Our Friends</div>
         <div id="copyright">$i18n{copyright}</div>
@@ -50,6 +59,9 @@ about:version template page
           <td class="label">$i18n{os_name}</td>
           <td class="version" id="os_type">
             <span>$i18n{os_type}</span>
+<if expr="is_android">
+            <span>$i18n{os_version}</span>
+</if>
           </td>
         </tr>
         <tr><td class="label">JavaScript</td>
@@ -58,9 +70,11 @@ about:version template page
             <span>$i18n{js_version}</span>
           </td>
         </tr>
+<if expr="not is_android and not is_ios">
         <tr><td class="label" i18n-content="flash_plugin"></td>
           <td class="version" id="flash_version">$i18n{flash_version}</td>
         </tr>
+</if>
         <tr><td class="label">$i18n{user_agent_name}</td>
           <td class="version" id="useragent">$i18n{useragent}</td>
         </tr>

@@ -14,6 +14,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "services/service_manager/public/interfaces/connector.mojom.h"
 #include "services/ui/common/accelerator_util.h"
+#include "services/ui/common/switches.h"
 #include "services/ui/ws/accelerator.h"
 #include "services/ui/ws/display.h"
 #include "services/ui/ws/display_manager.h"
@@ -189,7 +190,7 @@ class WindowManagerStateTestAsync : public WindowManagerStateTest {
   // WindowManagerStateTest:
   void SetUp() override {
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        "enable-async-event-targeting");
+        switches::kUseAsyncEventTargeting);
     WindowManagerStateTest::SetUp();
   }
 
@@ -249,7 +250,7 @@ TEST_F(WindowManagerStateTest, PreTargetConsumed) {
   window_tree()->AddWindow(FirstRootId(window_tree()), child_window_id);
   child_window->SetVisible(true);
   SetCanFocusUp(child_window);
-  tree()->GetDisplay(child_window)->AddActivationParent(child_window->parent());
+  child_window->parent()->set_is_activation_parent(true);
   ASSERT_TRUE(window_tree()->SetFocus(child_window_id));
 
   // Register a pre-accelerator.
@@ -305,7 +306,7 @@ TEST_F(WindowManagerStateTest, AckWithProperties) {
   window_tree()->AddWindow(FirstRootId(window_tree()), child_window_id);
   child_window->SetVisible(true);
   SetCanFocusUp(child_window);
-  tree()->GetDisplay(child_window)->AddActivationParent(child_window->parent());
+  child_window->parent()->set_is_activation_parent(true);
   ASSERT_TRUE(window_tree()->SetFocus(child_window_id));
 
   // Register a pre-accelerator.
@@ -481,7 +482,9 @@ TEST_F(WindowManagerStateTest, DeleteNonRootTree) {
   DispatchInputEventToWindow(target, display->GetId(), key, accelerator.get());
   TestChangeTracker* tracker = embed_connection->tracker();
   ASSERT_EQ(1u, tracker->changes()->size());
-  EXPECT_EQ("InputEvent window=2,1 event_action=7",
+  // clients that created this window is receiving the event, so client_id part
+  // would be reset to 0 before sending back to clients.
+  EXPECT_EQ("InputEvent window=0,1 event_action=7",
             ChangesToDescription1(*tracker->changes())[0]);
   EXPECT_TRUE(wm_client()->tracker()->changes()->empty());
 
@@ -541,13 +544,13 @@ TEST_F(WindowManagerStateTest, AckTimeout) {
 TEST_F(WindowManagerStateTest, InterceptingEmbedderReceivesEvents) {
   WindowTree* embedder_tree = tree();
   ServerWindow* embedder_root = window();
-  const ClientWindowId embed_window_id(
-      WindowIdToTransportId(WindowId(embedder_tree->id(), 12)));
+  const ClientWindowId embed_window_id(embedder_tree->id(), 12);
   embedder_tree->NewWindow(embed_window_id, ServerWindow::Properties());
   ServerWindow* embedder_window =
       embedder_tree->GetWindowByClientId(embed_window_id);
+  WindowId embedder_root_id = embedder_root->id();
   ASSERT_TRUE(embedder_tree->AddWindow(
-      ClientWindowId(WindowIdToTransportId(embedder_root->id())),
+      ClientWindowId(embedder_root_id.client_id, embedder_root_id.window_id),
       embed_window_id));
 
   TestWindowTreeClient* embedder_client = wm_client();
@@ -603,11 +606,11 @@ TEST_F(WindowManagerStateTest, InterceptingEmbedderReceivesEvents) {
     embedder_client->tracker()->changes()->clear();
 
     // Embed another tree in the embedded tree.
-    const ClientWindowId nested_embed_window_id(
-        WindowIdToTransportId(WindowId(embed_tree->id(), 23)));
+    const ClientWindowId nested_embed_window_id(embed_tree->id(), 23);
     embed_tree->NewWindow(nested_embed_window_id, ServerWindow::Properties());
-    const ClientWindowId embed_root_id(
-        WindowIdToTransportId((*embed_tree->roots().begin())->id()));
+    WindowId embed_root_window_id = (*embed_tree->roots().begin())->id();
+    const ClientWindowId embed_root_id(embed_root_window_id.client_id,
+                                       embed_root_window_id.window_id);
     ASSERT_TRUE(embed_tree->AddWindow(embed_root_id, nested_embed_window_id));
 
     WindowTree* nested_embed_tree = nullptr;
@@ -726,8 +729,13 @@ TEST_F(WindowManagerStateTestAsync, CursorResetOverNoTargetAsync) {
       window_tree()->GetWindowByClientId(child_window_id);
   window_tree()->AddWindow(FirstRootId(window_tree()), child_window_id);
   // Setup steps already do hit-test for mouse cursor update so this should go
-  // to the queue in EventDispatcher.
-  EXPECT_TRUE(window_manager_state()->event_dispatcher()->IsProcessingEvent());
+  // to the queue in EventTargeter.
+  EventTargeterTestApi event_targeter_test_api(
+      EventDispatcherTestApi(window_manager_state()->event_dispatcher())
+          .event_targeter());
+  EXPECT_TRUE(event_targeter_test_api.HasPendingQueries());
+  // But no events have been generated, so IsProcessingEvent() should be false.
+  EXPECT_FALSE(window_manager_state()->event_dispatcher()->IsProcessingEvent());
   child_window->SetVisible(true);
   child_window->SetBounds(gfx::Rect(0, 0, 20, 20));
   child_window->parent()->SetCursor(ui::CursorData(ui::CursorType::kCopy));
@@ -740,12 +748,9 @@ TEST_F(WindowManagerStateTestAsync, CursorResetOverNoTargetAsync) {
   WindowManagerStateTestApi test_api(window_manager_state());
   EXPECT_TRUE(test_api.is_event_queue_empty());
   window_manager_state()->ProcessEvent(move, 0);
-  // There's no event dispatching in flight but there's hit-test in flight in
-  // EventDispatcher so we still put event processing request into the queue
-  // in WindowManagerState.
   EXPECT_FALSE(test_api.tree_awaiting_input_ack());
   EXPECT_TRUE(window_manager_state()->event_dispatcher()->IsProcessingEvent());
-  EXPECT_FALSE(test_api.is_event_queue_empty());
+  EXPECT_TRUE(test_api.is_event_queue_empty());
   task_runner_->RunUntilIdle();
   EXPECT_TRUE(test_api.is_event_queue_empty());
   // The event isn't over a valid target, which should trigger resetting the

@@ -6,13 +6,7 @@
   },
   "Android Builder": {
     "additional_compile_targets": [
-      "cronet_test_instrumentation_apk",
-      "system_webview_apk"
-    ]
-  },
-  "Android Builder (dbg)": {
-    "additional_compile_targets": [
-      "system_webview_apk"
+      "cronet_test_instrumentation_apk"
     ]
   },
   "Android Clang Builder (dbg)": {
@@ -22,45 +16,6 @@
   },
   "Android Tests": {
     "gtest_tests": [
-      {
-        "merge": {
-          "args": [
-            "--bucket",
-            "chromium-result-details",
-            "--test-name",
-            "android_webview_unittests"
-          ],
-          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "cipd_packages": [
-            {
-              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
-              "location": "bin",
-              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
-            }
-          ],
-          "dimension_sets": [
-            {
-              "android_devices": "1",
-              "device_os": "KTU84P",
-              "device_type": "hammerhead"
-            }
-          ],
-          "output_links": [
-            {
-              "link": [
-                "https://luci-logdog.appspot.com/v/?s",
-                "=android%2Fswarming%2Flogcats%2F",
-                "${TASK_ID}%2F%2B%2Funified_logcats"
-              ],
-              "name": "shard #${SHARD_INDEX} logcats"
-            }
-          ]
-        },
-        "test": "android_webview_unittests"
-      },
       {
         "merge": {
           "args": [
@@ -408,7 +363,7 @@
               "device_type": "hammerhead"
             }
           ],
-          "hard_timeout": 600,
+          "hard_timeout": 960,
           "output_links": [
             {
               "link": [
@@ -539,7 +494,7 @@
               "name": "shard #${SHARD_INDEX} logcats"
             }
           ],
-          "shards": 6
+          "shards": 8
         },
         "test": "content_browsertests"
       },
@@ -572,7 +527,7 @@
               "device_type": "hammerhead"
             }
           ],
-          "hard_timeout": 600,
+          "hard_timeout": 960,
           "output_links": [
             {
               "link": [
@@ -613,7 +568,7 @@
               "device_type": "hammerhead"
             }
           ],
-          "hard_timeout": 600,
+          "hard_timeout": 960,
           "output_links": [
             {
               "link": [
@@ -1564,50 +1519,6 @@
           ]
         },
         "test": "viz_unittests"
-      },
-      {
-        "args": [
-          "--gs-results-bucket=chromium-result-details"
-        ],
-        "merge": {
-          "args": [
-            "--bucket",
-            "chromium-result-details",
-            "--test-name",
-            "webview_instrumentation_test_apk"
-          ],
-          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "cipd_packages": [
-            {
-              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
-              "location": "bin",
-              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
-            }
-          ],
-          "dimension_sets": [
-            {
-              "android_devices": "1",
-              "device_os": "KTU84P",
-              "device_type": "hammerhead"
-            }
-          ],
-          "hard_timeout": 960,
-          "output_links": [
-            {
-              "link": [
-                "https://luci-logdog.appspot.com/v/?s",
-                "=android%2Fswarming%2Flogcats%2F",
-                "${TASK_ID}%2F%2B%2Funified_logcats"
-              ],
-              "name": "shard #${SHARD_INDEX} logcats"
-            }
-          ],
-          "shards": 8
-        },
-        "test": "webview_instrumentation_test_apk"
       }
     ],
     "junit_tests": [
@@ -1663,45 +1574,6 @@
   },
   "Android Tests (dbg)": {
     "gtest_tests": [
-      {
-        "merge": {
-          "args": [
-            "--bucket",
-            "chromium-result-details",
-            "--test-name",
-            "android_webview_unittests"
-          ],
-          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "cipd_packages": [
-            {
-              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
-              "location": "bin",
-              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
-            }
-          ],
-          "dimension_sets": [
-            {
-              "android_devices": "1",
-              "device_os": "KTU84P",
-              "device_type": "hammerhead"
-            }
-          ],
-          "output_links": [
-            {
-              "link": [
-                "https://luci-logdog.appspot.com/v/?s",
-                "=android%2Fswarming%2Flogcats%2F",
-                "${TASK_ID}%2F%2B%2Funified_logcats"
-              ],
-              "name": "shard #${SHARD_INDEX} logcats"
-            }
-          ]
-        },
-        "test": "android_webview_unittests"
-      },
       {
         "merge": {
           "args": [
@@ -2049,7 +1921,7 @@
               "device_type": "hammerhead"
             }
           ],
-          "hard_timeout": 600,
+          "hard_timeout": 960,
           "output_links": [
             {
               "link": [
@@ -2181,7 +2053,7 @@
               "name": "shard #${SHARD_INDEX} logcats"
             }
           ],
-          "shards": 6
+          "shards": 8
         },
         "test": "content_browsertests"
       },
@@ -2214,7 +2086,7 @@
               "device_type": "hammerhead"
             }
           ],
-          "hard_timeout": 600,
+          "hard_timeout": 960,
           "output_links": [
             {
               "link": [
@@ -2255,7 +2127,7 @@
               "device_type": "hammerhead"
             }
           ],
-          "hard_timeout": 600,
+          "hard_timeout": 960,
           "output_links": [
             {
               "link": [
@@ -3206,50 +3078,6 @@
           ]
         },
         "test": "viz_unittests"
-      },
-      {
-        "args": [
-          "--gs-results-bucket=chromium-result-details"
-        ],
-        "merge": {
-          "args": [
-            "--bucket",
-            "chromium-result-details",
-            "--test-name",
-            "webview_instrumentation_test_apk"
-          ],
-          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "cipd_packages": [
-            {
-              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
-              "location": "bin",
-              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
-            }
-          ],
-          "dimension_sets": [
-            {
-              "android_devices": "1",
-              "device_os": "KTU84P",
-              "device_type": "hammerhead"
-            }
-          ],
-          "hard_timeout": 960,
-          "output_links": [
-            {
-              "link": [
-                "https://luci-logdog.appspot.com/v/?s",
-                "=android%2Fswarming%2Flogcats%2F",
-                "${TASK_ID}%2F%2B%2Funified_logcats"
-              ],
-              "name": "shard #${SHARD_INDEX} logcats"
-            }
-          ],
-          "shards": 8
-        },
-        "test": "webview_instrumentation_test_apk"
       }
     ],
     "junit_tests": [
@@ -3496,7 +3324,7 @@
     "gtest_tests": [
       {
         "swarming": {
-          "can_use_on_swarming_builders": false
+          "can_use_on_swarming_builders": true
         },
         "test": "base_unittests"
       },
@@ -3514,37 +3342,43 @@
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": false
+          "can_use_on_swarming_builders": true
         },
         "test": "cacheinvalidation_unittests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": false
+          "can_use_on_swarming_builders": true
         },
         "test": "capture_unittests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": false
+          "can_use_on_swarming_builders": true
         },
         "test": "cast_alsa_cma_backend_unittests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": false
+          "can_use_on_swarming_builders": true
         },
         "test": "cast_base_unittests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": false
+          "can_use_on_swarming_builders": true
         },
         "test": "cast_crash_unittests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": false
+          "can_use_on_swarming_builders": true
+        },
+        "test": "cast_graphics_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
         },
         "test": "cast_media_unittests"
       },
@@ -3562,7 +3396,7 @@
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": false
+          "can_use_on_swarming_builders": true
         },
         "test": "cast_shell_unittests"
       },
@@ -3577,100 +3411,120 @@
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": false
+          "can_use_on_swarming_builders": true
         },
         "test": "content_unittests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": false
+          "can_use_on_swarming_builders": true
         },
         "test": "crypto_unittests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": false
+          "can_use_on_swarming_builders": true
         },
         "test": "gpu_ipc_service_unittests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": false
+          "can_use_on_swarming_builders": true
         },
         "test": "gpu_unittests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": false
+          "can_use_on_swarming_builders": true
         },
         "test": "ipc_tests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": false
+          "can_use_on_swarming_builders": true
         },
         "test": "jingle_unittests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": false
+          "can_use_on_swarming_builders": true
         },
         "test": "libjingle_xmpp_unittests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": false
+          "can_use_on_swarming_builders": true
         },
         "test": "media_blink_unittests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": false
+          "can_use_on_swarming_builders": true
         },
         "test": "media_unittests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": false
+          "can_use_on_swarming_builders": true
         },
         "test": "midi_unittests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": false
+          "can_use_on_swarming_builders": true
         },
         "test": "net_unittests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": false
+          "can_use_on_swarming_builders": true
         },
         "test": "sandbox_linux_unittests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": false
+          "can_use_on_swarming_builders": true
         },
         "test": "sql_unittests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": false
+          "can_use_on_swarming_builders": true
         },
         "test": "storage_unittests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": false
+          "can_use_on_swarming_builders": true
         },
         "test": "ui_base_unittests"
       },
       {
         "swarming": {
-          "can_use_on_swarming_builders": false
+          "can_use_on_swarming_builders": true
         },
         "test": "url_unittests"
       }
+    ]
+  },
+  "Fuchsia Compile": {
+    "additional_compile_targets": [
+      "base_unittests",
+      "content_unittests",
+      "crypto_unittests",
+      "gl_unittests",
+      "headless_shell",
+      "ipc_tests",
+      "media_unittests",
+      "mojo_common_unittests",
+      "mojo_js_unittests",
+      "mojo_public_bindings_unittests",
+      "mojo_public_system_unittests",
+      "mojo_system_unittests",
+      "net_unittests",
+      "skia_unittests",
+      "service_manager_unittests",
+      "ui_base_unittests"
     ]
   },
   "Linux Builder": {
@@ -3750,8 +3604,7 @@
           "can_use_on_swarming_builders": true,
           "shards": 5
         },
-        "test": "browser_tests",
-        "upload_to_flake_predictor": true
+        "test": "browser_tests"
       },
       {
         "args": [
@@ -4346,16 +4199,7 @@
         "isolate_name": "webkit_layout_tests_exparchive",
         "merge": {
           "args": [
-            "--verbose",
-            "--results-json-override-with-build-property",
-            "build_number",
-            "buildnumber",
-            "--results-json-override-with-build-property",
-            "builder_name",
-            "buildername",
-            "--results-json-override-with-build-property",
-            "chromium_revision",
-            "got_revision_cp"
+            "--verbose"
           ],
           "script": "//third_party/WebKit/Tools/Scripts/merge-layout-test-results"
         },
@@ -4378,12 +4222,16 @@
         "script": "checkdeps.py"
       },
       {
-        "name": "checkperms",
-        "script": "checkperms.py"
+        "name": "webkit_lint",
+        "script": "webkit_lint.py"
       },
       {
-        "name": "nacl_integration",
-        "script": "nacl_integration.py"
+        "name": "webkit_python_tests",
+        "script": "webkit_python_tests.py"
+      },
+      {
+        "name": "checkperms",
+        "script": "checkperms.py"
       }
     ]
   },
@@ -4980,12 +4828,6 @@
           "can_use_on_swarming_builders": true,
           "shards": 4
         }
-      }
-    ],
-    "scripts": [
-      {
-        "name": "nacl_integration",
-        "script": "nacl_integration.py"
       }
     ]
   },

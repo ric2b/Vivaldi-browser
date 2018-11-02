@@ -10,6 +10,7 @@
 #include "base/i18n/rtl.h"
 #include "base/mac/bundle_locations.h"
 #include "base/metrics/user_metrics.h"
+#include "base/strings/sys_string_conversions.h"
 #import "chrome/browser/themes/theme_properties.h"
 #import "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/ui/cocoa/l10n_util.h"
@@ -234,7 +235,7 @@ static const CGFloat kTabElementYOrigin = 6;
   [tabView setTitle:title];
 
   if ([self pinned] && ![self active]) {
-    [tabView startAlert];
+    [tabView startOnceAlert];
   }
   [super setTitle:title];
 }
@@ -288,6 +289,10 @@ static const CGFloat kTabElementYOrigin = 6;
                                withAction:@selector(toggleMute:)];
   }
   [alertIndicatorButton_ transitionToAlertState:alertState];
+}
+
+- (void)setNeedsAttention {
+  [[self tabView] startInfiniteAlert];
 }
 
 - (HoverCloseButton*)closeButton {
@@ -473,6 +478,16 @@ static const CGFloat kTabElementYOrigin = 6;
   [[self tabView] setTitleColor:titleColor ? titleColor : [NSColor textColor]];
 }
 
+- (NSString*)accessibilityTitle {
+  // TODO(ellyjones): the Cocoa tab strip code doesn't keep track of network
+  // error state, so it can't get surfaced here. It should, and then this could
+  // pass in the network error state.
+  return base::SysUTF16ToNSString(chrome::AssembleTabAccessibilityLabel(
+      base::SysNSStringToUTF16([self title]),
+      [self loadingState] == kTabCrashed, false,
+      [[self alertIndicatorButton] showingAlertState]));
+}
+
 - (void)themeChangedNotification:(NSNotification*)notification {
   [self updateTitleColor];
 }
@@ -491,6 +506,10 @@ static const CGFloat kTabElementYOrigin = 6;
 }
 
 - (void)keyUp:(NSEvent*)event {
+  // Ignore dead keys.
+  if ([[event characters] length] == 0)
+    return;
+
   unichar keyChar = [[event characters] characterAtIndex:0];
   if (keyChar == '\r' || keyChar == '\n')
     [self selectTab:self];

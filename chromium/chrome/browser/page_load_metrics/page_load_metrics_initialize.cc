@@ -10,10 +10,8 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/timer/timer.h"
+#include "build/build_config.h"
 #include "chrome/browser/page_load_metrics/metrics_web_contents_observer.h"
-#if defined(OS_ANDROID)
-#include "chrome/browser/page_load_metrics/observers/android_page_load_metrics_observer.h"
-#endif  // OS_ANDROID
 #include "chrome/browser/page_load_metrics/observers/aborts_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/ads_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/amp_page_load_metrics_observer.h"
@@ -40,6 +38,7 @@
 #include "chrome/browser/page_load_metrics/observers/subresource_filter_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/tab_restore_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/ukm_page_load_metrics_observer.h"
+#include "chrome/browser/page_load_metrics/observers/use_counter_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_embedder_interface.h"
 #include "chrome/browser/page_load_metrics/page_load_tracker.h"
 #include "chrome/browser/prerender/prerender_contents.h"
@@ -48,6 +47,12 @@
 #include "components/rappor/rappor_service_impl.h"
 #include "content/public/browser/web_contents.h"
 #include "url/gurl.h"
+
+#if defined(OS_ANDROID)
+#include "chrome/browser/page_load_metrics/observers/android_page_load_metrics_observer.h"
+#else
+#include "chrome/browser/page_load_metrics/observers/session_restore_page_load_metrics_observer.h"
+#endif
 
 namespace chrome {
 
@@ -109,6 +114,7 @@ void PageLoadMetricsEmbedder::RegisterObservers(
     tracker->AddObserver(base::MakeUnique<CssScanningMetricsObserver>());
     tracker->AddObserver(base::MakeUnique<ProtocolPageLoadMetricsObserver>());
     tracker->AddObserver(base::MakeUnique<TabRestorePageLoadMetricsObserver>());
+    tracker->AddObserver(base::MakeUnique<UseCounterPageLoadMetricsObserver>());
     std::unique_ptr<AdsPageLoadMetricsObserver> ads_observer =
         AdsPageLoadMetricsObserver::CreateIfNeeded();
     if (ads_observer)
@@ -135,6 +141,10 @@ void PageLoadMetricsEmbedder::RegisterObservers(
                 web_contents_);
     if (loading_predictor_observer)
       tracker->AddObserver(std::move(loading_predictor_observer));
+#if !defined(OS_ANDROID)
+    tracker->AddObserver(
+        base::MakeUnique<SessionRestorePageLoadMetricsObserver>());
+#endif
     tracker->AddObserver(
         base::MakeUnique<LocalNetworkRequestsPageLoadMetricsObserver>());
   } else {

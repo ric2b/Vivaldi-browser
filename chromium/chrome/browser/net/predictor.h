@@ -72,7 +72,7 @@ class PredictorObserver {
   virtual ~PredictorObserver() {}
 
   virtual void OnPreconnectUrl(const GURL& original_url,
-                               const GURL& first_party_for_cookies,
+                               const GURL& site_for_cookies,
                                UrlInfo::ResolutionMotivation motivation,
                                int count) {}
   virtual void OnLearnFromNavigation(const GURL& referring_url,
@@ -150,7 +150,7 @@ class Predictor {
 
   // Preconnect a URL and all of its subresource domains.
   void PreconnectUrlAndSubresources(const GURL& url,
-                                    const GURL& first_party_for_cookies);
+                                    const GURL& site_for_cookies);
 
   static std::vector<GURL> GetPredictedUrlListAtStartup(
       PrefService* user_prefs);
@@ -247,13 +247,13 @@ class Predictor {
   // May be called from either the IO or UI thread and will PostTask
   // to the IO thread if necessary.
   void PreconnectUrl(const GURL& url,
-                     const GURL& first_party_for_cookies,
+                     const GURL& site_for_cookies,
                      UrlInfo::ResolutionMotivation motivation,
                      bool allow_credentials,
                      int count);
 
   void PreconnectUrlOnIOThread(const GURL& url,
-                               const GURL& first_party_for_cookies,
+                               const GURL& site_for_cookies,
                                UrlInfo::ResolutionMotivation motivation,
                                bool allow_credentials,
                                int count);
@@ -267,8 +267,7 @@ class Predictor {
   // more-embedded resources on a page).  This method will actually post a task
   // to do the actual work, so as not to jump ahead of the frame navigation that
   // instigated this activity.
-  void PredictFrameSubresources(const GURL& url,
-                                const GURL& first_party_for_cookies);
+  void PredictFrameSubresources(const GURL& url, const GURL& site_for_cookies);
 
   // Put URL in canonical form, including a scheme, host, and port.
   // Returns GURL::EmptyGURL() if the scheme is not http/https or if the url
@@ -372,8 +371,7 @@ class Predictor {
   // Perform actual resolution or preconnection to subresources now.  This is
   // an internal worker method that is reached via a post task from
   // PredictFrameSubresources().
-  void PrepareFrameSubresources(const GURL& url,
-                                const GURL& first_party_for_cookies);
+  void PrepareFrameSubresources(const GURL& url, const GURL& site_for_cookies);
 
   // Access method for use by async lookup request to pass resolution result.
   void OnLookupFinished(const GURL& url, int result);
@@ -381,26 +379,24 @@ class Predictor {
   // Underlying method for both async and synchronous lookup to update state.
   void LookupFinished(const GURL& url, bool found);
 
-  // Queues hostname for resolution.  If queueing was done, return the pointer
-  // to the queued instance, otherwise return nullptr. If the proxy advisor is
-  // enabled, and |url| is likely to be proxied, the hostname will not be
-  // queued as the browser is not expected to fetch it directly.
-  UrlInfo* AppendToResolutionQueue(const GURL& url,
-                                   UrlInfo::ResolutionMotivation motivation);
+  // Queues hostname for resolution. If the proxy advisor is enabled, and
+  // |url| is likely to be proxied, the hostname will not be queued as the
+  // browser is not expected to fetch it directly.
+  void AppendToResolutionQueue(const GURL& url,
+                               UrlInfo::ResolutionMotivation motivation);
 
   // Check to see if too much queuing delay has been noted for the given info,
   // which indicates that there is "congestion" or growing delay in handling the
   // resolution of names.  Rather than letting this congestion potentially grow
   // without bounds, we abandon our queued efforts at pre-resolutions in such a
   // case.
-  // To do this, we will recycle |info|, as well as all queued items, back to
-  // the state they had before they were queued up.  We can't do anything about
-  // the resolutions we've already sent off for processing on another thread, so
-  // we just let them complete.  On a slow system, subject to congestion, this
-  // will greatly reduce the number of resolutions done, but it will assure that
-  // any resolutions that are done, are in a timely and hence potentially
-  // helpful manner.
-  bool CongestionControlPerformed(UrlInfo* info);
+  // To do this, we will recycle |info_it|, as well as all queued items.
+  // We can't do anything about the resolutions we've already sent off for
+  // processing on another thread, so we just let them complete.  On a slow
+  // system, subject to congestion, this will greatly reduce the number of
+  // resolutions done, but it will assure that any resolutions that are done,
+  // are in a timely and hence potentially helpful manner.
+  bool CongestionControlPerformed(Results::iterator info_it);
 
   // Take lookup requests from work_queue_ and tell HostResolver to look them up
   // asynchronously, provided we don't exceed concurrent resolution limit.

@@ -17,6 +17,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "components/domain_reliability/clear_mode.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
+#include "content/public/common/network_service.mojom.h"
 #include "extensions/features/features.h"
 
 #if defined(OS_CHROMEOS)
@@ -199,15 +200,6 @@ class TestingProfile : public Profile {
   // for testing error conditions. Returns true on success.
   bool CreateHistoryService(bool delete_file, bool no_db) WARN_UNUSED_RESULT;
 
-  // !!!!!!!! WARNING: THIS IS GENERALLY NOT SAFE TO CALL! !!!!!!!!
-  // This bypasses the BrowserContextDependencyManager and thus may leave other
-  // KeyedServices with dangling pointers; see above. It's also usually not
-  // necessary to explicitly destroy the HistoryService; it'll be destroyed
-  // along with the TestingProfile anyway.
-  // !!!!!!!! WARNING: THIS IS GENERALLY NOT SAFE TO CALL! !!!!!!!!
-  // Shuts down and nulls out the reference to HistoryService.
-  void DestroyHistoryService();
-
   // Creates the BookmarkBarModel. If not invoked the bookmark bar model is
   // NULL. If |delete_file| is true, the bookmarks file is deleted first, then
   // the model is created. As TestingProfile deletes the directory containing
@@ -327,6 +319,7 @@ class TestingProfile : public Profile {
   bool IsGuestSession() const override;
   void SetExitType(ExitType exit_type) override {}
   ExitType GetLastSessionExitType() override;
+  content::mojom::NetworkContextPtr CreateMainNetworkContext() override;
 #if defined(OS_CHROMEOS)
   void ChangeAppLocale(const std::string&, AppLocaleChangedVia) override {}
   void OnLogin() override {}

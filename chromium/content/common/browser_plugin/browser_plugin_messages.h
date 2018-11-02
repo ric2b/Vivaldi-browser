@@ -7,7 +7,6 @@
 #include <string>
 
 #include "base/process/process.h"
-#include "cc/surfaces/surface.h"
 #include "components/viz/common/surfaces/surface_info.h"
 #include "content/common/content_export.h"
 #include "content/common/content_param_traits.h"
@@ -19,8 +18,8 @@
 #include "ipc/ipc_message_utils.h"
 #include "third_party/WebKit/public/platform/WebDragOperation.h"
 #include "third_party/WebKit/public/platform/WebFocusType.h"
-#include "third_party/WebKit/public/web/WebCompositionUnderline.h"
 #include "third_party/WebKit/public/web/WebDragStatus.h"
+#include "third_party/WebKit/public/web/WebImeTextSpan.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
@@ -46,7 +45,7 @@ IPC_STRUCT_END()
 
 IPC_STRUCT_BEGIN(BrowserPluginHostMsg_SetComposition_Params)
   IPC_STRUCT_MEMBER(base::string16, text)
-  IPC_STRUCT_MEMBER(std::vector<blink::WebCompositionUnderline>, underlines)
+  IPC_STRUCT_MEMBER(std::vector<blink::WebImeTextSpan>, ime_text_spans)
   IPC_STRUCT_MEMBER(gfx::Range, replacement_range)
   IPC_STRUCT_MEMBER(int, selection_start)
   IPC_STRUCT_MEMBER(int, selection_end)
@@ -82,13 +81,12 @@ IPC_MESSAGE_CONTROL2(BrowserPluginHostMsg_ImeSetComposition,
 
 // This message is sent from BrowserPlugin to BrowserPluginGuest to notify that
 // deleting the current composition and inserting specified text is requested.
-IPC_MESSAGE_CONTROL5(
-    BrowserPluginHostMsg_ImeCommitText,
-    int /* browser_plugin_instance_id */,
-    base::string16 /* text */,
-    std::vector<blink::WebCompositionUnderline> /* underlines */,
-    gfx::Range /* replacement_range */,
-    int /* relative_cursor_pos */)
+IPC_MESSAGE_CONTROL5(BrowserPluginHostMsg_ImeCommitText,
+                     int /* browser_plugin_instance_id */,
+                     base::string16 /* text */,
+                     std::vector<blink::WebImeTextSpan> /* ime_text_spans */,
+                     gfx::Range /* replacement_range */,
+                     int /* relative_cursor_pos */)
 
 // This message is sent from BrowserPlugin to BrowserPluginGuest to notify that
 // inserting the current composition is requested.

@@ -59,6 +59,9 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
 
+#include "app/vivaldi_apptools.h"
+#include "browser/vivaldi_browser_finder.h"
+
 #if defined(OS_MACOSX)
 #include <CoreFoundation/CoreFoundation.h>
 #include "base/mac/foundation_util.h"
@@ -201,7 +204,9 @@ content::WebContents* GetWebContentsForRenderFrameHost(
       content::WebContents::FromRenderFrameHost(render_frame_host);
   // Check if there is an app window associated with the web contents; if not,
   // return null.
-  return AppWindowRegistry::Get(browser_context)
+  return (vivaldi::IsVivaldiRunning() &&
+          vivaldi::FindBrowserForEmbedderWebContents(web_contents)) ||
+         AppWindowRegistry::Get(browser_context)
                  ->GetAppWindowForWebContents(web_contents)
              ? web_contents
              : nullptr;
@@ -247,7 +252,7 @@ ExtensionFunction::ResponseAction FileSystemGetDisplayPathFunction::Run() {
 
   file_path = path_util::PrettifyPath(file_path);
   return RespondNow(
-      OneArgument(base::MakeUnique<base::Value>(file_path.value())));
+      OneArgument(std::make_unique<base::Value>(file_path.value())));
 }
 
 FileSystemEntryFunction::FileSystemEntryFunction()
@@ -284,7 +289,7 @@ void FileSystemEntryFunction::RegisterFileSystemsAndSendResponse(
 
 std::unique_ptr<base::DictionaryValue> FileSystemEntryFunction::CreateResult() {
   std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue());
-  result->Set("entries", base::MakeUnique<base::ListValue>());
+  result->Set("entries", std::make_unique<base::ListValue>());
   result->SetBoolean("multiple", multiple_);
   return result;
 }
@@ -377,7 +382,7 @@ ExtensionFunction::ResponseAction FileSystemIsWritableEntryFunction::Run() {
   int renderer_id = render_frame_host()->GetProcess()->GetID();
   bool is_writable = policy->CanReadWriteFileSystem(renderer_id, filesystem_id);
 
-  return RespondNow(OneArgument(base::MakeUnique<base::Value>(is_writable)));
+  return RespondNow(OneArgument(std::make_unique<base::Value>(is_writable)));
 }
 
 void FileSystemChooseEntryFunction::ShowPicker(
@@ -870,7 +875,7 @@ ExtensionFunction::ResponseAction FileSystemIsRestorableFunction::Run() {
       delegate->GetSavedFilesService(browser_context());
   DCHECK(saved_files_service);
 
-  return RespondNow(OneArgument(base::MakeUnique<base::Value>(
+  return RespondNow(OneArgument(std::make_unique<base::Value>(
       saved_files_service->IsRegistered(extension_->id(), entry_id))));
 }
 

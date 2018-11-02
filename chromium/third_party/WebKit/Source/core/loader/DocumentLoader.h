@@ -37,8 +37,8 @@
 #include "core/dom/WeakIdentifierMap.h"
 #include "core/frame/FrameTypes.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
+#include "core/html/parser/ParserSynchronizationPolicy.h"
 #include "core/loader/DocumentLoadTiming.h"
-#include "core/loader/DocumentWriter.h"
 #include "core/loader/FrameLoaderTypes.h"
 #include "core/loader/LinkLoader.h"
 #include "core/loader/NavigationPolicy.h"
@@ -60,7 +60,8 @@ namespace blink {
 class ApplicationCacheHost;
 class SubresourceFilter;
 class ResourceFetcher;
-class DocumentInit;
+class Document;
+class DocumentParser;
 class HistoryItem;
 class LocalFrame;
 class LocalFrameClient;
@@ -95,8 +96,11 @@ class CORE_EXPORT DocumentLoader
 
   unsigned long MainResourceIdentifier() const;
 
-  void ReplaceDocumentWhileExecutingJavaScriptURL(const DocumentInit&,
-                                                  const String& source);
+  void ReplaceDocumentWhileExecutingJavaScriptURL(
+      const KURL&,
+      Document* owner_document,
+      bool should_reuse_default_view,
+      const String& source);
 
   const AtomicString& MimeType() const;
 
@@ -117,13 +121,11 @@ class CORE_EXPORT DocumentLoader
   const KURL& UnreachableURL() const;
   const KURL& UrlForHistory() const;
 
-  const AtomicString& ResponseMIMEType() const;
-
   void DidChangePerformanceTiming();
   void DidObserveLoadingBehavior(WebLoadingBehaviorFlag);
   void UpdateForSameDocumentNavigation(const KURL&,
                                        SameDocumentNavigationSource,
-                                       PassRefPtr<SerializedScriptValue>,
+                                       RefPtr<SerializedScriptValue>,
                                        HistoryScrollRestorationType,
                                        FrameLoadType,
                                        Document*);
@@ -229,22 +231,24 @@ class CORE_EXPORT DocumentLoader
 
  private:
   // installNewDocument() does the work of creating a Document and
-  // DocumentWriter, as well as creating a new LocalDOMWindow if needed. It also
+  // DocumentParser, as well as creating a new LocalDOMWindow if needed. It also
   // initalizes a bunch of state on the Document (e.g., the state based on
   // response headers).
   enum class InstallNewDocumentReason { kNavigation, kJavascriptURL };
-  void InstallNewDocument(const DocumentInit&,
+  void InstallNewDocument(const KURL&,
+                          Document* owner_document,
+                          bool should_reuse_default_view,
                           const AtomicString& mime_type,
                           const AtomicString& encoding,
                           InstallNewDocumentReason,
                           ParserSynchronizationPolicy,
                           const KURL& overriding_url);
-  void DidInstallNewDocument(Document*, InstallNewDocumentReason);
+  void DidInstallNewDocument(Document*);
+  void WillCommitNavigation();
   void DidCommitNavigation();
 
-  void EnsureWriter(const AtomicString& mime_type,
-                    const KURL& overriding_url = KURL());
-  void EndWriting();
+  void CommitNavigation(const AtomicString& mime_type,
+                        const KURL& overriding_url = KURL());
 
   // Use these method only where it's guaranteed that |m_frame| hasn't been
   // cleared.
@@ -295,7 +299,10 @@ class CORE_EXPORT DocumentLoader
   Member<RawResource> main_resource_;
   Member<HistoryItem> history_item_;
 
-  Member<DocumentWriter> writer_;
+  // The parser that was created when the current Document was installed.
+  // document.open() may create a new parser at a later point, but this
+  // will not be updated.
+  Member<DocumentParser> parser_;
 
   Member<SubresourceFilter> subresource_filter_;
 

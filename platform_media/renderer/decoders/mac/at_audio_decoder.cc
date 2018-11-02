@@ -199,8 +199,8 @@ void ATAudioDecoder::ScopedAudioConverterRefTraits::Release(
   const OSStatus status = AudioConverterDispose(converter);
   if (status != noErr)
     OSSTATUS_VLOG(1, status) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                             << " " << FourCCToString(status)
-                             << ": Failed to dispose of AudioConverter";
+                             << ": Failed to dispose of AudioConverter"
+                             << " Error Status : " << status;
 }
 
 AudioConverterRef ATAudioDecoder::ScopedAudioConverterRefTraits::InvalidValue() {
@@ -301,8 +301,8 @@ void ATAudioDecoder::Reset(const base::Closure& closure) {
     const OSStatus status = AudioConverterReset(converter_);
     if (status != noErr)
       OSSTATUS_VLOG(1, status) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                               << " " << FourCCToString(status)
-                               << ": Failed to reset AudioConverter";
+                               << ": Failed to reset AudioConverter"
+                               << " Error Status : " << status;
   }
 
   ResetTimestampState();
@@ -323,8 +323,8 @@ bool ATAudioDecoder::InitializeConverter(
                                       converter_.InitializeInto());
   if (status != noErr) {
     OSSTATUS_VLOG(1, status) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                             << " " << FourCCToString(status)
-                             << ": Failed to create AudioConverter";
+                             << ": Failed to create AudioConverter"
+                             << " Error Status : " << status;
     return false;
   }
 
@@ -333,8 +333,8 @@ bool ATAudioDecoder::InitializeConverter(
       sizeof(*input_channel_layout), input_channel_layout.get());
   if (status != noErr) {
     OSSTATUS_VLOG(1, status) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                             << " " << FourCCToString(status)
-                             << ": Failed to set input channel layout";
+                             << ": Failed to set input channel layout"
+                             << " Error Status : " << status;
     return false;
   }
 
@@ -408,8 +408,8 @@ bool ATAudioDecoder::ConvertAudio(const scoped_refptr<DecoderBuffer>& input,
 
   if (status != noErr && status != kDataConsumed) {
     OSSTATUS_VLOG(1, status) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                             << " " << FourCCToString(status)
-                             << ": Failed to convert audio";
+                             << ": Failed to convert audio"
+                             << " Error Status : " << status;
     return false;
   }
 

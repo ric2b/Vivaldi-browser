@@ -14,6 +14,7 @@ from webkitpy.tool.commands.rebaseline import AbstractParallelRebaselineCommand
 from webkitpy.tool.commands.rebaseline import TestBaselineSet
 from webkitpy.w3c.wpt_manifest import WPTManifest
 
+
 _log = logging.getLogger(__name__)
 
 
@@ -41,16 +42,22 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
                 help='Do not trigger any try jobs.'),
             optparse.make_option(
                 '--fill-missing', dest='fill_missing', action='store_true',
-                default=False,
+                default=None,
                 help='If some platforms have no try job results, use results '
                      'from try job results of other platforms.'),
+            optparse.make_option(
+                '--no-fill-missing', dest='fill_missing', action='store_false'),
             self.no_optimize_option,
             self.results_directory_option,
         ])
+        self.git_cl = None
 
     def execute(self, options, args, tool):
         self._tool = tool
+        self.git_cl = self.git_cl or GitCL(tool)
 
+        # The WPT manifest is required when iterating through tests
+        # TestBaselineSet if there are any tests in web-platform-tests.
         # TODO(qyearsley): Consider calling ensure_manifest in WebKitPatch.
         # See: crbug.com/698294
         WPTManifest.ensure_manifest(tool)
@@ -58,7 +65,7 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
         if not self.check_ok_to_run():
             return 1
 
-        jobs = self.git_cl().latest_try_jobs(self._try_bots())
+        jobs = self.git_cl.latest_try_jobs(self._try_bots())
         self._log_jobs(jobs)
         builders_with_no_jobs = self._try_bots() - {b.builder_name for b in jobs}
 
@@ -78,16 +85,19 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
             _log.info('There are some builders with no results:')
             self._log_builder_list(builders_without_results)
 
-        if not options.fill_missing and builders_without_results:
-            options.fill_missing = self._tool.user.confirm(
-                'Would you like to try to fill in missing results with\n'
-                'available results? This assumes that layout test results\n'
-                'for the platforms with missing results are the same as\n'
-                'results on other platforms.',
+        if options.fill_missing is None and builders_without_results:
+            should_continue = self._tool.user.confirm(
+                'Would you like to continue?',
                 default=self._tool.user.DEFAULT_NO)
-            if not options.fill_missing:
+            if not should_continue:
                 _log.info('Aborting.')
                 return 1
+            options.fill_missing = self._tool.user.confirm(
+                'Would you like to try to fill in missing results with\n'
+                'available results?\n'
+                'Note: This will generally yield correct results\n'
+                'as long as the results are not platform-specific.',
+                default=self._tool.user.DEFAULT_NO)
 
         if args:
             test_baseline_set = self._make_test_baseline_set_for_tests(
@@ -119,21 +129,17 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
 
     def _get_issue_number(self):
         """Returns the current CL issue number, or None."""
-        issue = self.git_cl().get_issue_number()
+        issue = self.git_cl.get_issue_number()
         if not issue.isdigit():
             return None
         return int(issue)
-
-    def git_cl(self):
-        """Returns a GitCL instance. Can be overridden for tests."""
-        return GitCL(self._tool)
 
     def trigger_try_jobs(self, builders):
         """Triggers try jobs for the given builders."""
         _log.info('Triggering try jobs:')
         for builder in sorted(builders):
             _log.info('  %s', builder)
-        self.git_cl().trigger_try_jobs(builders)
+        self.git_cl.trigger_try_jobs(builders)
         _log.info('Once all pending try jobs have finished, please re-run\n'
                   'webkit-patch rebaseline-cl to fetch new baselines.')
 

@@ -133,17 +133,6 @@ base::SimpleTestTickClock* OverridePrerenderManagerTimeTicks(
   return tick_clock_ptr;
 }
 
-bool OverridePrerenderManagerTime(const char* utc_time,
-                                  PrerenderManager* prerender_manager) {
-  auto test_clock = base::MakeUnique<base::SimpleTestClock>();
-  base::Time test_time;
-  if (!base::Time::FromUTCString(utc_time, &test_time))
-    return false;
-  test_clock->SetNow(test_time);
-  prerender_manager->SetClockForTesting(std::move(test_clock));
-  return true;
-}
-
 }  // namespace
 
 class UnitTestPrerenderManager : public PrerenderManager {
@@ -332,12 +321,13 @@ class PrerenderTest : public testing::Test {
             new PrerenderLinkManager(prerender_manager_.get())),
         last_prerender_id_(0),
         field_trial_list_(nullptr) {
+    prerender::PrerenderManager::SetMode(
+        prerender::PrerenderManager::PRERENDER_MODE_ENABLED);
+    prerender::PrerenderManager::SetInstantMode(
+        prerender::PrerenderManager::PRERENDER_MODE_ENABLED);
+    prerender::PrerenderManager::SetOmniboxMode(
+        prerender::PrerenderManager::PRERENDER_MODE_ENABLED);
     prerender_manager()->SetIsLowEndDevice(false);
-
-    // Enable omnibox prerendering.
-    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-        switches::kPrerenderFromOmnibox,
-        switches::kPrerenderFromOmniboxSwitchValueEnabled);
   }
 
   ~PrerenderTest() override {
@@ -458,26 +448,23 @@ class PrerenderTest : public testing::Test {
   // An instance of base::FieldTrialList is necessary in order to initialize
   // global state.
   base::FieldTrialList field_trial_list_;
+
+  // Restore prerender mode after this test finishes running.
+  test_utils::RestorePrerenderMode restore_prerender_mode_;
 };
 
 TEST_F(PrerenderTest, PrerenderRespectsDisableFlag) {
   test_utils::RestorePrerenderMode restore_prerender_mode;
-  ASSERT_TRUE(PrerenderManager::IsAnyPrerenderingPossible());
-  ASSERT_EQ(PrerenderManager::PRERENDER_MODE_ENABLED,
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kNoStatePrefetchFeature);
+  prerender::ConfigurePrerender();
+  EXPECT_FALSE(PrerenderManager::IsAnyPrerenderingPossible());
+  EXPECT_EQ(PrerenderManager::PRERENDER_MODE_DISABLED,
             PrerenderManager::GetMode(ORIGIN_NONE));
-
-  {
-    base::test::ScopedFeatureList scoped_feature_list;
-    scoped_feature_list.InitAndDisableFeature(kNoStatePrefetchFeature);
-    prerender::ConfigurePrerender();
-    EXPECT_FALSE(PrerenderManager::IsAnyPrerenderingPossible());
-    EXPECT_EQ(PrerenderManager::PRERENDER_MODE_DISABLED,
-              PrerenderManager::GetMode(ORIGIN_NONE));
-    EXPECT_EQ(PrerenderManager::PRERENDER_MODE_DISABLED,
-              PrerenderManager::GetMode(ORIGIN_OMNIBOX));
-    EXPECT_EQ(PrerenderManager::PRERENDER_MODE_DISABLED,
-              PrerenderManager::GetMode(ORIGIN_INSTANT));
-  }
+  EXPECT_EQ(PrerenderManager::PRERENDER_MODE_DISABLED,
+            PrerenderManager::GetMode(ORIGIN_OMNIBOX));
+  EXPECT_EQ(PrerenderManager::PRERENDER_MODE_DISABLED,
+            PrerenderManager::GetMode(ORIGIN_INSTANT));
 }
 
 TEST_F(PrerenderTest, PrerenderRespectsFieldTrialParameters) {
@@ -602,7 +589,6 @@ TEST_F(PrerenderTest, PrerenderRespectsFieldTrialParametersDefaultNone) {
 
 TEST_F(PrerenderTest, PrerenderRespectsThirdPartyCookiesPref) {
   GURL url("http://www.google.com/");
-  test_utils::RestorePrerenderMode restore_prerender_mode;
   ASSERT_TRUE(PrerenderManager::IsAnyPrerenderingPossible());
 
   profile()->GetPrefs()->SetBoolean(prefs::kBlockThirdPartyCookies, true);
@@ -613,7 +599,6 @@ TEST_F(PrerenderTest, PrerenderRespectsThirdPartyCookiesPref) {
 
 TEST_F(PrerenderTest, OfflinePrerenderIgnoresThirdPartyCookiesPref) {
   GURL url("http://www.google.com/");
-  test_utils::RestorePrerenderMode restore_prerender_mode;
   ASSERT_TRUE(PrerenderManager::IsAnyPrerenderingPossible());
 
   profile()->GetPrefs()->SetBoolean(prefs::kBlockThirdPartyCookies, true);
@@ -1254,36 +1239,6 @@ TEST_F(PrerenderTest, SourceRenderViewClosed) {
   EXPECT_FALSE(LauncherHasRunningPrerender(100, last_prerender_id()));
 }
 
-// Tests that prerendering doesn't launch rel=next prerenders without the field
-// trial.
-TEST_F(PrerenderTest, NoRelNextByDefault) {
-  GURL url("http://www.google.com/");
-  prerender_manager()->CreateNextPrerenderContents(
-      url, FINAL_STATUS_MANAGER_SHUTDOWN);
-
-  prerender_link_manager()->OnAddPrerender(
-      kDefaultChildId, GetNextPrerenderID(), url, PrerenderRelTypeNext,
-      Referrer(), kSize, kDefaultRenderViewRouteId);
-  EXPECT_FALSE(prerender_manager()->FindEntry(url));
-}
-
-// Tests that prerendering does launch rel=next prerenders with the field trial.
-TEST_F(PrerenderTest, RelNextByFieldTrial) {
-  ASSERT_TRUE(base::FieldTrialList::CreateFieldTrial("PrerenderRelNextTrial",
-                                                     "Yes"));
-  GURL url("http://www.google.com/");
-  DummyPrerenderContents* prerender_contents =
-      prerender_manager()->CreateNextPrerenderContents(
-          url, ORIGIN_LINK_REL_NEXT, FINAL_STATUS_USED);
-
-  prerender_link_manager()->OnAddPrerender(
-      kDefaultChildId, GetNextPrerenderID(), url, PrerenderRelTypeNext,
-      Referrer(), kSize, kDefaultRenderViewRouteId);
-  std::unique_ptr<PrerenderContents> entry =
-      prerender_manager()->FindAndUseEntry(url);
-  EXPECT_EQ(prerender_contents, entry.get());
-}
-
 // Tests that prerendering is cancelled when we launch a second prerender of
 // the same target within a short time interval.
 TEST_F(PrerenderTest, RecentlyVisited) {
@@ -1448,101 +1403,6 @@ TEST_F(PrerenderTest, PrerenderNotAllowedOnCellularWithExternalOrigin) {
   EXPECT_FALSE(prerender_contents->prerendering_has_started());
   histogram_tester().ExpectUniqueSample("Prerender.FinalStatus",
                                         FINAL_STATUS_CELLULAR_NETWORK, 1);
-}
-
-// Checks that the "PrerenderSilence" experiment does not disable offline
-// prerendering.
-TEST_F(PrerenderTest, PrerenderSilenceAllowsOffline) {
-  // Set the time to 30 seconds before the experiment expires.
-  ASSERT_TRUE(base::FieldTrialList::CreateFieldTrial(
-      "PrerenderSilence", "ExperimentYes_expires_2016-12-20T00:01:00Z"));
-  ASSERT_TRUE(OverridePrerenderManagerTime("2016-12-20T00:00:30Z",
-                                           prerender_manager()));
-  GURL url("http://www.google.com/");
-  DummyPrerenderContents* prerender_contents =
-      prerender_manager()->CreateNextPrerenderContents(
-          url, ORIGIN_OFFLINE, FINAL_STATUS_MANAGER_SHUTDOWN);
-  std::unique_ptr<PrerenderHandle> prerender_handle =
-      prerender_manager()->AddPrerenderForOffline(url, nullptr, kSize);
-  EXPECT_TRUE(prerender_handle);
-  EXPECT_TRUE(prerender_handle->IsPrerendering());
-  EXPECT_TRUE(prerender_contents->prerendering_has_started());
-  EXPECT_EQ(prerender_contents, prerender_handle->contents());
-  EXPECT_EQ(ORIGIN_OFFLINE, prerender_handle->contents()->origin());
-}
-
-// Checks that the "PrerenderSilence" experiment does not disable
-// forced-cellular prerendering.
-TEST_F(PrerenderTest, PrerenderSilenceAllowsForcedCellular) {
-  // Set the time to 30 seconds before the experiment expires.
-  ASSERT_TRUE(base::FieldTrialList::CreateFieldTrial(
-      "PrerenderSilence", "ExperimentYes_expires_2016-12-20T00:01:00Z"));
-  ASSERT_TRUE(OverridePrerenderManagerTime("2016-12-20T00:00:30Z",
-                                           prerender_manager()));
-  GURL url("http://www.google.com/");
-  DummyPrerenderContents* prerender_contents =
-      prerender_manager()->CreateNextPrerenderContents(
-          url, ORIGIN_EXTERNAL_REQUEST_FORCED_PRERENDER,
-          FINAL_STATUS_MANAGER_SHUTDOWN);
-  std::unique_ptr<PrerenderHandle> prerender_handle =
-      prerender_manager()->AddForcedPrerenderFromExternalRequest(
-          url, content::Referrer(), nullptr, gfx::Rect(kSize));
-  EXPECT_TRUE(prerender_handle);
-  EXPECT_TRUE(prerender_handle->IsPrerendering());
-  EXPECT_TRUE(prerender_contents->prerendering_has_started());
-  EXPECT_EQ(prerender_contents, prerender_handle->contents());
-  EXPECT_EQ(ORIGIN_EXTERNAL_REQUEST_FORCED_PRERENDER,
-            prerender_handle->contents()->origin());
-}
-
-// Checks that the "PrerenderSilence" experiment disables prerendering and
-// re-enables it after expiration.
-TEST_F(PrerenderTest, PrerenderSilenceDisallowsNonOffline) {
-  ASSERT_TRUE(base::FieldTrialList::CreateFieldTrial(
-      "PrerenderSilence", "ExperimentYes_expires_2016-12-20T00:02:00Z"));
-  Origin prerender_silence_origins[] = {
-      ORIGIN_GWS_PRERENDER,
-      ORIGIN_OMNIBOX,
-      ORIGIN_NONE,
-      ORIGIN_LINK_REL_PRERENDER_SAMEDOMAIN,
-      ORIGIN_LINK_REL_PRERENDER_CROSSDOMAIN,
-      ORIGIN_EXTERNAL_REQUEST,
-      ORIGIN_INSTANT,
-      ORIGIN_LINK_REL_NEXT,
-  };
-
-  // Prerender before expiration of the experiment.
-  ASSERT_TRUE(OverridePrerenderManagerTime("2016-12-20T00:01:00Z",
-                                           prerender_manager()));
-  for (const Origin& origin : prerender_silence_origins) {
-    EXPECT_TRUE(
-        prerender_manager()->IsPrerenderSilenceExperimentForTesting(origin));
-  }
-
-  // Prerender after expiration of the experiment.
-  ASSERT_TRUE(OverridePrerenderManagerTime("2016-12-20T00:03:00Z",
-                                           prerender_manager()));
-  for (const Origin& origin : prerender_silence_origins) {
-    EXPECT_FALSE(
-        prerender_manager()->IsPrerenderSilenceExperimentForTesting(origin));
-  }
-}
-
-// Checks that prerendering is enabled after expiration of the
-// "PrerenderSilence" experiment.
-TEST_F(PrerenderTest, PrerenderSilenceAllowsAfterExpiration) {
-  ASSERT_TRUE(base::FieldTrialList::CreateFieldTrial(
-      "PrerenderSilence", "ExperimentYes_expires_2016-12-20T00:02:00Z"));
-  ASSERT_TRUE(OverridePrerenderManagerTime("2016-12-20T00:01:60Z",
-                                           prerender_manager()));
-  GURL url("http://www.google.com/");
-  DummyPrerenderContents* prerender_contents =
-      prerender_manager()->CreateNextPrerenderContents(url, FINAL_STATUS_USED);
-  EXPECT_TRUE(AddSimplePrerender(url));
-  EXPECT_TRUE(prerender_contents->prerendering_has_started());
-  std::unique_ptr<PrerenderContents> entry =
-      prerender_manager()->FindAndUseEntry(url);
-  ASSERT_EQ(prerender_contents, entry.get());
 }
 
 TEST_F(PrerenderTest, PrerenderAllowedForOfflineAndForcedCellular) {
@@ -2086,36 +1946,6 @@ TEST_F(PrerenderTest, LinkManagerExpireRevealingLaunch) {
   std::unique_ptr<PrerenderContents> entry =
       prerender_manager()->FindAndUseEntry(second_url);
   EXPECT_EQ(second_prerender_contents, entry.get());
-}
-
-TEST_F(PrerenderTest, InstantSearchNotAllowedWhenDisabled) {
-  ASSERT_TRUE(base::FieldTrialList::CreateFieldTrial(
-      "EmbeddedSearch",
-      "Group82 espv:8 use_cacheable_ntp:1 prefetch_results:1"));
-  DisablePrerender();
-  EXPECT_FALSE(prerender_manager()->AddPrerenderForInstant(
-      GURL("http://www.example.com/instant_search"), nullptr, gfx::Size()));
-}
-
-TEST_F(PrerenderTest, PrerenderContentsForInstantSearch) {
-  ASSERT_TRUE(base::FieldTrialList::CreateFieldTrial(
-      "EmbeddedSearch",
-      "Group82 espv:8 use_cacheable_ntp:1 prefetch_results:1"));
-  GURL url("http://www.example.com/instant_search");
-  DummyPrerenderContents* prerender_contents =
-      prerender_manager()->CreateNextPrerenderContents(url, ORIGIN_INSTANT,
-                                                       FINAL_STATUS_USED);
-  std::unique_ptr<PrerenderHandle> prerender_handle(
-      prerender_manager()->AddPrerenderForInstant(url, nullptr, kSize));
-  CHECK(prerender_handle);
-  EXPECT_TRUE(prerender_handle->IsPrerendering());
-  EXPECT_TRUE(prerender_contents->prerendering_has_started());
-  EXPECT_EQ(prerender_contents, prerender_handle->contents());
-  EXPECT_EQ(ORIGIN_INSTANT, prerender_handle->contents()->origin());
-  std::unique_ptr<PrerenderContents> entry =
-      prerender_manager()->FindAndUseEntry(url);
-  ASSERT_EQ(prerender_contents, entry.get());
-  EXPECT_FALSE(prerender_handle->IsPrerendering());
 }
 
 TEST_F(PrerenderTest, PrerenderContentsIsValidHttpMethod) {

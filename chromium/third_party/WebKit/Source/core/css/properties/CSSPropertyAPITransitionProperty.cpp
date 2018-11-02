@@ -10,10 +10,11 @@
 
 namespace blink {
 
-const CSSValue* CSSPropertyAPITransitionProperty::parseSingleValue(
+const CSSValue* CSSPropertyAPITransitionProperty::ParseSingleValue(
+    CSSPropertyID,
     CSSParserTokenRange& range,
     const CSSParserContext&,
-    const CSSParserLocalContext&) {
+    const CSSParserLocalContext&) const {
   CSSValueList* list = CSSPropertyParserHelpers::ConsumeCommaSeparatedList(
       CSSPropertyTransitionPropertyUtils::ConsumeTransitionProperty, range);
   if (!list || !CSSPropertyTransitionPropertyUtils::IsValidPropertyList(*list))

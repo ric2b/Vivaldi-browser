@@ -33,7 +33,6 @@
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
-#include "components/mime_util/mime_util.h"
 #include "components/rappor/public/rappor_utils.h"
 #include "components/url_formatter/url_formatter.h"
 #include "content/browser/accessibility/browser_accessibility_state_impl.h"
@@ -41,6 +40,7 @@
 #include "content/browser/browser_plugin/browser_plugin_embedder.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/child_process_security_policy_impl.h"
+#include "content/browser/devtools/protocol/page_handler.h"
 #include "content/browser/devtools/render_frame_devtools_agent_host.h"
 #include "content/browser/dom_storage/dom_storage_context_wrapper.h"
 #include "content/browser/dom_storage/session_storage_namespace_impl.h"
@@ -56,7 +56,6 @@
 #include "content/browser/frame_host/navigator_impl.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/frame_host/render_frame_proxy_host.h"
-#include "content/browser/frame_host/render_widget_host_view_child_frame.h"
 #include "content/browser/loader/loader_io_thread_notifier.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/manifest/manifest_manager_host.h"
@@ -71,6 +70,7 @@
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
+#include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
 #include "content/browser/renderer_host/text_input_manager.h"
 #include "content/browser/screen_orientation/screen_orientation_provider.h"
 #include "content/browser/site_instance_impl.h"
@@ -131,6 +131,7 @@
 #include "ppapi/features/features.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
+#include "third_party/WebKit/common/mime_util/mime_util.h"
 #include "third_party/WebKit/public/platform/WebSecurityStyle.h"
 #include "third_party/WebKit/public/web/WebSandboxFlags.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -280,6 +281,30 @@ FrameTreeNode* FindOpener(const WebContents::CreateParams& params) {
   }
   return opener_node;
 }
+
+// Ensures that OnDialogClosed is only called once.
+class CloseDialogCallbackWrapper
+    : public base::RefCountedThreadSafe<CloseDialogCallbackWrapper> {
+ public:
+  CloseDialogCallbackWrapper(
+      const base::Callback<void(bool, bool, const base::string16&)> callback)
+      : callback_(callback) {}
+
+  void Run(bool dialog_was_suppressed,
+           bool success,
+           const base::string16& user_input) {
+    if (already_fired_)
+      return;
+    already_fired_ = true;
+    callback_.Run(dialog_was_suppressed, success, user_input);
+  }
+
+ private:
+  friend class base::RefCountedThreadSafe<CloseDialogCallbackWrapper>;
+  ~CloseDialogCallbackWrapper() {}
+  bool already_fired_ = false;
+  base::Callback<void(bool, bool, const base::string16&)> callback_;
+};
 
 }  // namespace
 
@@ -498,6 +523,7 @@ WebContentsImpl::WebContentsImpl(BrowserContext* browser_context)
       did_first_visually_non_empty_paint_(false),
       capturer_count_(0),
       should_normally_be_visible_(true),
+      should_normally_be_occluded_(false),
       did_first_set_visible_(false),
       is_being_destroyed_(false),
       is_notifying_observers_(false),
@@ -757,8 +783,9 @@ bool WebContentsImpl::OnMessageReceived(RenderViewHostImpl* render_view_host,
   }
 
   for (auto& observer : observers_) {
-    // TODO(nick, creis): Replace all uses of this variant of OnMessageReceived
-    // with the version that takes a RenderFrameHost, and delete it.
+    // TODO(nick, creis): https://crbug.com/758026: Replace all uses of this
+    // variant of OnMessageReceived with the version that takes a
+    // RenderFrameHost, and then delete it.
     if (observer.OnMessageReceived(message))
       return true;
   }
@@ -1029,7 +1056,7 @@ SkColor WebContentsImpl::GetThemeColor() const {
   return theme_color_;
 }
 
-void WebContentsImpl::SetAccessibilityMode(AccessibilityMode mode) {
+void WebContentsImpl::SetAccessibilityMode(ui::AXMode mode) {
   if (mode == accessibility_mode_)
     return;
 
@@ -1049,8 +1076,8 @@ void WebContentsImpl::SetAccessibilityMode(AccessibilityMode mode) {
   }
 }
 
-void WebContentsImpl::AddAccessibilityMode(AccessibilityMode mode) {
-  AccessibilityMode new_mode(accessibility_mode_);
+void WebContentsImpl::AddAccessibilityMode(ui::AXMode mode) {
+  ui::AXMode new_mode(accessibility_mode_);
   new_mode |= mode;
   SetAccessibilityMode(new_mode);
 }
@@ -1208,16 +1235,16 @@ void WebContentsImpl::EnableWebContentsOnlyAccessibilityMode() {
     for (RenderFrameHost* rfh : GetAllFrames())
       ResetAccessibility(rfh);
   } else {
-    AddAccessibilityMode(kAccessibilityModeWebContentsOnly);
+    AddAccessibilityMode(ui::kAXModeWebContentsOnly);
   }
 }
 
 bool WebContentsImpl::IsWebContentsOnlyAccessibilityModeForTesting() const {
-  return accessibility_mode_ == kAccessibilityModeWebContentsOnly;
+  return accessibility_mode_ == ui::kAXModeWebContentsOnly;
 }
 
 bool WebContentsImpl::IsFullAccessibilityModeForTesting() const {
-  return accessibility_mode_ == kAccessibilityModeComplete;
+  return accessibility_mode_ == ui::kAXModeComplete;
 }
 
 void WebContentsImpl::SetExtData(const std::string& ext_data) {
@@ -1225,12 +1252,10 @@ void WebContentsImpl::SetExtData(const std::string& ext_data) {
   for (auto& observer : observers_)
     observer.ExtDataSet(this);
 
-  // TODO(jarle@vivaldi.com):
-  // Rewrite to use WebContentsObserver for this notification:
   NotificationService::current()->Notify(
-    NOTIFICATION_EXTDATA_UPDATED,
-    Source<WebContents>(this),
-    NotificationService::NoDetails());
+      NOTIFICATION_EXTDATA_UPDATED,
+      Source<WebContents>(this),
+      NotificationService::NoDetails());
 }
 
 const std::string& WebContentsImpl::GetExtData() const {
@@ -1354,7 +1379,7 @@ void WebContentsImpl::IncrementCapturerCount(const gfx::Size& capture_size) {
   }
 
   // Ensure that all views are un-occluded before capture begins.
-  WasUnOccluded();
+  DoWasUnOccluded();
 }
 
 void WebContentsImpl::DecrementCapturerCount() {
@@ -1370,11 +1395,14 @@ void WebContentsImpl::DecrementCapturerCount() {
     const gfx::Size old_size = preferred_size_for_capture_;
     preferred_size_for_capture_ = gfx::Size();
     OnPreferredSizeChanged(old_size);
-  }
 
-  if (IsHidden()) {
-    DVLOG(1) << "Executing delayed WasHidden().";
-    WasHidden();
+    if (IsHidden()) {
+      DVLOG(1) << "Executing delayed WasHidden().";
+      WasHidden();
+    }
+
+    if (should_normally_be_occluded_)
+      WasOccluded();
   }
 }
 
@@ -1405,7 +1433,12 @@ void WebContentsImpl::SetAudioMuted(bool mute) {
   for (auto& observer : observers_)
     observer.DidUpdateAudioMutingState(mute);
 
-  OnAudioStateChanged(!mute && audio_stream_monitor_.IsCurrentlyAudible());
+  // Notification for UI updates in response to the changed muting state.
+  NotifyNavigationStateChanged(INVALIDATE_TYPE_TAB);
+}
+
+bool WebContentsImpl::IsCurrentlyAudible() {
+  return audio_stream_monitor()->IsCurrentlyAudible();
 }
 
 bool WebContentsImpl::IsConnectedToBluetoothDevice() const {
@@ -1469,6 +1502,9 @@ void WebContentsImpl::OnAudioStateChanged(bool is_audible) {
 
   // Notification for UI updates in response to the changed audio state.
   NotifyNavigationStateChanged(INVALIDATE_TYPE_TAB);
+
+  if (delegate_)
+    delegate_->OnAudioStateChanged(is_audible);
 }
 
 base::TimeTicks WebContentsImpl::GetLastActiveTime() const {
@@ -1486,12 +1522,15 @@ base::TimeTicks WebContentsImpl::GetLastHiddenTime() const {
 void WebContentsImpl::WasShown() {
   controller_.SetActive(true);
 
-  for (RenderWidgetHostView* view : GetRenderWidgetHostViewsInTree()) {
+  if (auto* view = GetRenderWidgetHostView()) {
     view->Show();
 #if defined(OS_MACOSX)
     view->SetActive(true);
 #endif
   }
+
+  if (!ShowingInterstitialPage())
+    SetVisibilityForChildViews(true);
 
   SendPageMessage(new PageMsg_WasShown(MSG_ROUTING_NONE));
 
@@ -1513,8 +1552,11 @@ void WebContentsImpl::WasHidden() {
     // removes the |GetRenderViewHost()|; then when we actually destroy the
     // window, OnWindowPosChanged() notices and calls WasHidden() (which
     // calls us).
-    for (RenderWidgetHostView* view : GetRenderWidgetHostViewsInTree())
+    if (auto* view = GetRenderWidgetHostView())
       view->Hide();
+
+    if (!ShowingInterstitialPage())
+      SetVisibilityForChildViews(true);
 
     SendPageMessage(new PageMsg_WasHidden(MSG_ROUTING_NONE));
   }
@@ -1527,19 +1569,49 @@ void WebContentsImpl::WasHidden() {
   should_normally_be_visible_ = false;
 }
 
+#if defined(OS_ANDROID)
+void WebContentsImpl::SetImportance(ChildProcessImportance importance) {
+  // Not calling GetRenderWidgetHostView since importance should be set on both
+  // the interstitial and underlying page.
+  std::set<RenderWidgetHostImpl*> set;
+  if (ShowingInterstitialPage()) {
+    set.insert(
+        static_cast<RenderFrameHostImpl*>(interstitial_page_->GetMainFrame())
+            ->GetRenderWidgetHost());
+  }
+  for (RenderFrameHost* rfh : GetAllFrames())
+    set.insert(static_cast<RenderFrameHostImpl*>(rfh)->GetRenderWidgetHost());
+  for (RenderWidgetHostImpl* host : set) {
+    DCHECK(host);
+    host->SetImportance(importance);
+  }
+  // TODO(boliu): If this is ever used on platforms other than Android, make
+  // sure to also update inner WebContents.
+}
+#endif
+
 bool WebContentsImpl::IsVisible() const {
   return should_normally_be_visible_;
 }
 
 void WebContentsImpl::WasOccluded() {
-  if (capturer_count_ > 0)
-    return;
+  if (capturer_count_ == 0) {
+    for (RenderWidgetHostView* view : GetRenderWidgetHostViewsInTree())
+      view->WasOccluded();
+  }
 
-  for (RenderWidgetHostView* view : GetRenderWidgetHostViewsInTree())
-    view->WasOccluded();
+  should_normally_be_occluded_ = true;
 }
 
 void WebContentsImpl::WasUnOccluded() {
+  if (capturer_count_ == 0)
+    DoWasUnOccluded();
+
+  should_normally_be_occluded_ = false;
+}
+
+void WebContentsImpl::DoWasUnOccluded() {
+  // TODO(fdoray): Only call WasUnOccluded on frames in the active viewport.
   for (RenderWidgetHostView* view : GetRenderWidgetHostViewsInTree())
     view->WasUnOccluded();
 }
@@ -1710,10 +1782,9 @@ void WebContentsImpl::Init(const WebContents::CreateParams& params) {
         site_instance->GetProcess()->GetNextRoutingID();
   }
 
-  GetRenderManager()->Init(site_instance.get(), view_routing_id,
-                           params.main_frame_routing_id,
-                           main_frame_widget_routing_id,
-                           params.renderer_initiated_creation);
+  GetRenderManager()->Init(
+      site_instance.get(), view_routing_id, params.main_frame_routing_id,
+      main_frame_widget_routing_id, params.renderer_initiated_creation);
 
   // blink::FrameTree::setName always keeps |unique_name| empty in case of a
   // main frame - let's do the same thing here.
@@ -1830,6 +1901,11 @@ void WebContentsImpl::RecreateViewAsGuest(WebContentsDelegate* delegate) {
   NotifySwappedFromRenderManager(
       old_frame_host, GetRenderManager()->current_frame_host(), true);
 
+  // NOTE(andre@vivaldi.com): The loading of the PDF is not initiated before the
+  // onload handler of the embedding document has fired.
+  if (GetContentsMimeType() == "application/pdf") {
+    controller_.Reload(content::ReloadType::NORMAL, false);
+  }
 }
 
 void WebContentsImpl::OnWebContentsDestroyed(WebContentsImpl* web_contents) {
@@ -2041,9 +2117,6 @@ void WebContentsImpl::ReplicatePageFocus(bool is_focused) {
 
 RenderWidgetHostImpl* WebContentsImpl::GetFocusedRenderWidgetHost(
     RenderWidgetHostImpl* receiving_widget) {
-  if (!SiteIsolationPolicy::AreCrossProcessFramesPossible())
-    return receiving_widget;
-
   // Events for widgets other than the main frame (e.g., popup menus) should be
   // forwarded directly to the widget they arrived on.
   if (receiving_widget != GetMainFrame()->GetRenderWidgetHost())
@@ -2404,6 +2477,11 @@ void WebContentsImpl::CreateNewWindow(
     }
   }
 
+  // Any new WebContents opened while this WebContents is in fullscreen can be
+  // used to confuse the user, so drop fullscreen.
+  if (IsFullscreenForCurrentTab())
+    ExitFullscreen(true);
+
   if (params.opener_suppressed) {
     // When the opener is suppressed, the original renderer cannot access the
     // new window.  As a result, we need to show and navigate the window here.
@@ -2482,8 +2560,8 @@ void WebContentsImpl::CreateNewWidget(int32_t render_process_id,
     return;
   }
 
-  RenderWidgetHostImpl* widget_host =
-      new RenderWidgetHostImpl(this, process, route_id, IsHidden());
+  RenderWidgetHostImpl* widget_host = new RenderWidgetHostImpl(
+      this, process, route_id, std::move(widget), IsHidden());
 
   RenderWidgetHostViewBase* widget_view =
       static_cast<RenderWidgetHostViewBase*>(
@@ -2719,7 +2797,7 @@ bool WebContentsImpl::ShouldIgnoreUnresponsiveRenderer() {
   return DevToolsAgentHost::IsDebuggerAttached(this);
 }
 
-AccessibilityMode WebContentsImpl::GetAccessibilityMode() const {
+ui::AXMode WebContentsImpl::GetAccessibilityMode() const {
   return accessibility_mode_;
 }
 
@@ -2809,6 +2887,15 @@ void WebContentsImpl::OnMoveValidationMessage(
   // TODO(nick): Should we consider |source| here or pass it to the delegate?
   if (delegate_)
     delegate_->MoveValidationMessage(this, anchor_in_root_view);
+}
+
+void WebContentsImpl::SetNotWaitingForResponse() {
+  if (waiting_for_response_ == false)
+    return;
+
+  waiting_for_response_ = false;
+  if (delegate_)
+    delegate_->LoadingStateChanged(this, is_load_to_different_document_);
 }
 
 void WebContentsImpl::SendScreenRects() {
@@ -3013,6 +3100,13 @@ void WebContentsImpl::AttachInterstitialPage(
       GetRenderManager()->SetRWHViewForInnerContents(view);
     }
   }
+
+#if defined(OS_ANDROID)
+  // Update importance of the interstitial.
+  static_cast<RenderFrameHostImpl*>(interstitial_page_->GetMainFrame())
+      ->GetRenderWidgetHost()
+      ->SetImportance(GetMainFrame()->GetRenderWidgetHost()->importance());
+#endif
 }
 
 void WebContentsImpl::DidProceedOnInterstitial() {
@@ -3293,7 +3387,7 @@ bool WebContentsImpl::IsSavable() {
          contents_mime_type_ == "application/xhtml+xml" ||
          contents_mime_type_ == "text/plain" ||
          contents_mime_type_ == "text/css" ||
-         mime_util::IsSupportedJavascriptMimeType(contents_mime_type_);
+         blink::IsSupportedJavascriptMimeType(contents_mime_type_);
 }
 
 void WebContentsImpl::OnSavePage() {
@@ -3367,7 +3461,7 @@ void WebContentsImpl::SaveFrameWithHeaders(const GURL& url,
           destination: WEBSITE
         }
         policy {
-          cookies_allowed: true
+          cookies_allowed: YES
           cookies_store: "user"
           setting:
             "This feature cannot be disabled by settings, but it's is only "
@@ -3459,6 +3553,7 @@ void WebContentsImpl::LoadStateChanged(
 
 void WebContentsImpl::DidGetResourceResponseStart(
   const ResourceRequestDetails& details) {
+  SetNotWaitingForResponse();
   controller_.ssl_manager()->DidStartResourceResponse(
       details.url, details.has_certificate, details.ssl_cert_status);
 
@@ -3470,12 +3565,6 @@ void WebContentsImpl::DidGetRedirectForResourceRequest(
   const ResourceRedirectDetails& details) {
   for (auto& observer : observers_)
     observer.DidGetRedirectForResourceRequest(details);
-
-  // TODO(avi): Remove. http://crbug.com/170921
-  NotificationService::current()->Notify(
-      NOTIFICATION_RESOURCE_RECEIVED_REDIRECT,
-      Source<WebContents>(this),
-      Details<const ResourceRedirectDetails>(&details));
 }
 
 void WebContentsImpl::NotifyWebContentsFocused(
@@ -3787,11 +3876,9 @@ void WebContentsImpl::DidFailLoadWithError(
     RenderFrameHostImpl* render_frame_host,
     const GURL& url,
     int error_code,
-    const base::string16& error_description,
-    bool was_ignored_by_handler) {
+    const base::string16& error_description) {
   for (auto& observer : observers_) {
-    observer.DidFailLoad(render_frame_host, url, error_code, error_description,
-                         was_ignored_by_handler);
+    observer.DidFailLoad(render_frame_host, url, error_code, error_description);
   }
 }
 
@@ -4512,6 +4599,19 @@ void WebContentsImpl::NotifyViewSwapped(RenderViewHost* old_host,
 
 void WebContentsImpl::NotifyFrameSwapped(RenderFrameHost* old_host,
                                          RenderFrameHost* new_host) {
+#if defined(OS_ANDROID)
+  // Try to copy importance from either |old_host| or parent of |new_host|.
+  // If both are null, then this is the very first frame host created from Init.
+  // There is no need to pass importance in this case because there is no chance
+  // for anything to call SetImportance yet.
+  RenderFrameHostImpl* importance_host = static_cast<RenderFrameHostImpl*>(
+      old_host ? old_host : new_host->GetParent());
+  if (importance_host) {
+    static_cast<RenderFrameHostImpl*>(new_host)
+        ->GetRenderWidgetHost()
+        ->SetImportance(importance_host->GetRenderWidgetHost()->importance());
+  }
+#endif
   for (auto& observer : observers_)
     observer.RenderFrameHostChanged(old_host, new_host);
 }
@@ -4535,6 +4635,18 @@ void WebContentsImpl::NotifyNavigationEntryCommitted(
     observer.NavigationEntryCommitted(load_details);
 }
 
+void WebContentsImpl::NotifyNavigationEntryChanged(
+    const EntryChangedDetails& change_details) {
+  for (auto& observer : observers_)
+    observer.NavigationEntryChanged(change_details);
+}
+
+void WebContentsImpl::NotifyNavigationListPruned(
+    const PrunedDetails& pruned_details) {
+  for (auto& observer : observers_)
+    observer.NavigationListPruned(pruned_details);
+}
+
 void WebContentsImpl::OnAssociatedInterfaceRequest(
     RenderFrameHost* render_frame_host,
     const std::string& interface_name,
@@ -4542,6 +4654,18 @@ void WebContentsImpl::OnAssociatedInterfaceRequest(
   auto it = binding_sets_.find(interface_name);
   if (it != binding_sets_.end())
     it->second->OnRequestForFrame(render_frame_host, std::move(handle));
+}
+
+void WebContentsImpl::OnInterfaceRequest(
+    RenderFrameHost* render_frame_host,
+    const std::string& interface_name,
+    mojo::ScopedMessagePipeHandle* interface_pipe) {
+  for (auto& observer : observers_) {
+    observer.OnInterfaceRequestFromFrame(render_frame_host, interface_name,
+                                         interface_pipe);
+    if (!interface_pipe->is_valid())
+      break;
+  }
 }
 
 const GURL& WebContentsImpl::GetMainFrameLastCommittedURL() const {
@@ -4601,31 +4725,48 @@ void WebContentsImpl::RunJavaScriptDialog(RenderFrameHost* render_frame_host,
   if (IsFullscreenForCurrentTab())
     ExitFullscreen(true);
 
+  base::Callback<void(bool, bool, const base::string16&)> callback =
+      base::Bind(&WebContentsImpl::OnDialogClosed, base::Unretained(this),
+                 render_frame_host->GetProcess()->GetID(),
+                 render_frame_host->GetRoutingID(), reply_msg);
+
   // Suppress JavaScript dialogs when requested. Also suppress messages when
   // showing an interstitial as it's shown over the previous page and we don't
   // want the hidden page's dialogs to interfere with the interstitial.
-  bool suppress_this_message =
-      ShowingInterstitialPage() || !delegate_ ||
-      delegate_->ShouldSuppressDialogs(this) ||
-      !delegate_->GetJavaScriptDialogManager(this);
-
-  if (!suppress_this_message) {
-    is_showing_javascript_dialog_ = true;
+  bool suppress_this_message = ShowingInterstitialPage() || !delegate_ ||
+                               delegate_->ShouldSuppressDialogs(this);
+  if (delegate_)
     dialog_manager_ = delegate_->GetJavaScriptDialogManager(this);
+
+  std::vector<protocol::PageHandler*> page_handlers =
+      protocol::PageHandler::EnabledForWebContents(this);
+
+  if (suppress_this_message || (!dialog_manager_ && !page_handlers.size())) {
+    callback.Run(true, false, base::string16());
+    return;
+  }
+
+  scoped_refptr<CloseDialogCallbackWrapper> wrapper =
+      new CloseDialogCallbackWrapper(callback);
+  callback = base::Bind(&CloseDialogCallbackWrapper::Run, wrapper);
+
+  is_showing_javascript_dialog_ = true;
+
+  for (auto* handler : page_handlers) {
+    handler->DidRunJavaScriptDialog(frame_url, message, default_prompt,
+                                    dialog_type, base::Bind(callback, false));
+  }
+
+  if (dialog_manager_) {
     dialog_manager_->RunJavaScriptDialog(
         this, frame_url, dialog_type, message, default_prompt,
-        base::Bind(&WebContentsImpl::OnDialogClosed,  weak_factory_.GetWeakPtr(),
-                   render_frame_host->GetProcess()->GetID(),
-                   render_frame_host->GetRoutingID(), reply_msg, false),
-        &suppress_this_message);
+        base::Bind(callback, false), &suppress_this_message);
   }
 
   if (suppress_this_message) {
     // If we are suppressing messages, just reply as if the user immediately
     // pressed "Cancel", passing true to |dialog_was_suppressed|.
-    OnDialogClosed(render_frame_host->GetProcess()->GetID(),
-                   render_frame_host->GetRoutingID(), reply_msg,
-                   true, false, base::string16());
+    callback.Run(true, false, base::string16());
   }
 }
 
@@ -4643,25 +4784,41 @@ void WebContentsImpl::RunBeforeUnloadConfirm(
   if (delegate_)
     delegate_->WillRunBeforeUnloadConfirm();
 
-  bool suppress_this_message =
-      !rfhi->is_active() ||
-      ShowingInterstitialPage() || !delegate_ ||
-      delegate_->ShouldSuppressDialogs(this) ||
-      !delegate_->GetJavaScriptDialogManager(this) ||
-      vivaldi::IsVivaldiRunning();
-  if (suppress_this_message) {
-    rfhi->JavaScriptDialogClosed(reply_msg, true, base::string16());
+  base::Callback<void(bool, bool, const base::string16&)> callback =
+      base::Bind(&WebContentsImpl::OnDialogClosed, base::Unretained(this),
+                 render_frame_host->GetProcess()->GetID(),
+                 render_frame_host->GetRoutingID(), reply_msg);
+
+  bool suppress_this_message = !rfhi->is_active() ||
+                               ShowingInterstitialPage() || !delegate_ ||
+                               delegate_->ShouldSuppressDialogs(this) ||
+                               vivaldi::IsVivaldiRunning();
+  if (delegate_)
+    dialog_manager_ = delegate_->GetJavaScriptDialogManager(this);
+
+  std::vector<protocol::PageHandler*> page_handlers =
+      protocol::PageHandler::EnabledForWebContents(this);
+
+  if (suppress_this_message || (!dialog_manager_ && !page_handlers.size())) {
+    callback.Run(false, true, base::string16());
     return;
   }
 
   is_showing_before_unload_dialog_ = true;
-  dialog_manager_ = delegate_->GetJavaScriptDialogManager(this);
-  dialog_manager_->RunBeforeUnloadDialog(
-      this, is_reload,
-      base::Bind(&WebContentsImpl::OnDialogClosed, base::Unretained(this),
-                 render_frame_host->GetProcess()->GetID(),
-                 render_frame_host->GetRoutingID(), reply_msg,
-                 false));
+
+  scoped_refptr<CloseDialogCallbackWrapper> wrapper =
+      new CloseDialogCallbackWrapper(callback);
+  callback = base::Bind(&CloseDialogCallbackWrapper::Run, wrapper);
+
+  GURL frame_url = rfhi->GetLastCommittedURL();
+  for (auto* handler : page_handlers) {
+    handler->DidRunBeforeUnloadConfirm(frame_url, base::Bind(callback, false));
+  }
+
+  if (dialog_manager_) {
+    dialog_manager_->RunBeforeUnloadDialog(this, is_reload,
+                                           base::Bind(callback, false));
+  }
 }
 
 void WebContentsImpl::RunFileChooser(RenderFrameHost* render_frame_host,
@@ -5642,6 +5799,12 @@ void WebContentsImpl::OnDialogClosed(int render_process_id,
 
   if (rfh) {
     rfh->JavaScriptDialogClosed(reply_msg, success, user_input);
+
+    std::vector<protocol::PageHandler*> page_handlers =
+        protocol::PageHandler::EnabledForWebContents(this);
+    for (auto* handler : page_handlers)
+      handler->DidCloseJavaScriptDialog(success, user_input);
+
   } else {
     // Don't leak the sync IPC reply if the RFH or process is gone.
     delete reply_msg;
@@ -5870,9 +6033,12 @@ void WebContentsImpl::MediaResized(
     observer.MediaResized(size, id);
 }
 
-const WebContents::VideoSizeMap&
-WebContentsImpl::GetCurrentlyPlayingVideoSizes() {
-  return cached_video_sizes_;
+base::Optional<gfx::Size> WebContentsImpl::GetFullscreenVideoSize() {
+  base::Optional<WebContentsObserver::MediaPlayerId> id =
+      media_web_contents_observer_->GetFullscreenVideoMediaPlayerId();
+  if (id && cached_video_sizes_.count(id.value()))
+    return base::Optional<gfx::Size>(cached_video_sizes_[id.value()]);
+  return base::Optional<gfx::Size>();
 }
 
 int WebContentsImpl::GetCurrentlyPlayingVideoCount() {
@@ -6038,6 +6204,10 @@ void WebContentsImpl::MediaMutedStatusChanged(
     bool muted) {
   for (auto& observer : observers_)
     observer.MediaMutedStatusChanged(id, muted);
+}
+
+void WebContentsImpl::SetVisibilityForChildViews(bool visible) {
+  GetMainFrame()->SetVisibilityForChildViews(visible);
 }
 
 }  // namespace content

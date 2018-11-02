@@ -58,9 +58,9 @@ class HTMLImportsController final
   HTMLImportTreeRoot* Root() const { return root_; }
 
   bool ShouldBlockScriptExecution(const Document&) const;
-  HTMLImportChild* Load(HTMLImport* parent,
+  HTMLImportChild* Load(const Document&,
                         HTMLImportChildClient*,
-                        FetchParameters);
+                        FetchParameters&);
 
   Document* Master() const;
 

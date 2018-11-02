@@ -61,7 +61,7 @@ WebContents* GetWebContentsFromFrameTreeNodeID(int frame_tree_node_id) {
   return WebContentsImpl::FromFrameTreeNode(frame_tree_node);
 }
 
-net::NetworkTrafficAnnotationTag kTrafficAnnotation =
+const net::NetworkTrafficAnnotationTag kTrafficAnnotation =
     net::DefineNetworkTrafficAnnotation("navigation_url_loader", R"(
       semantics {
         sender: "Navigation URL Loader"
@@ -78,13 +78,25 @@ net::NetworkTrafficAnnotationTag kTrafficAnnotation =
         destination: WEBSITE
       }
       policy {
-        cookies_allowed: true
+        cookies_allowed: YES
         cookies_store: "user"
         setting: "This feature cannot be disabled."
-        policy_exception_justification:
-          "Not implemented, without this type of request, Chrome would be "
-          "unable to navigate to websites."
-      })");
+        chrome_policy {
+          URLBlacklist {
+            URLBlacklist: { entries: '*' }
+          }
+        }
+        chrome_policy {
+          URLWhitelist {
+            URLWhitelist { }
+          }
+        }
+      }
+      comments:
+        "Chrome would be unable to navigate to websites without this type of "
+        "request. Using either URLBlacklist or URLWhitelist policies (or a "
+        "combination of both) limits the scope of these requests."
+      )");
 
 }  // namespace
 
@@ -105,7 +117,8 @@ class NavigationURLLoaderNetworkService::URLLoaderRequestController
       : resource_request_(std::move(resource_request)),
         resource_context_(resource_context),
         default_url_loader_factory_getter_(default_url_loader_factory_getter),
-        owner_(owner) {}
+        owner_(owner),
+        response_loader_binding_(this) {}
 
   ~URLLoaderRequestController() override {
     DCHECK_CURRENTLY_ON(BrowserThread::IO);
@@ -177,6 +190,7 @@ class NavigationURLLoaderNetworkService::URLLoaderRequestController
   // This could be called multiple times.
   void Restart() {
     handler_index_ = 0;
+    received_response_ = false;
     MaybeStartLoader(StartLoaderCallback());
   }
 
@@ -213,6 +227,7 @@ class NavigationURLLoaderNetworkService::URLLoaderRequestController
       factory = default_url_loader_factory_getter_->GetBlobFactory()->get();
     } else {
       factory = default_url_loader_factory_getter_->GetNetworkFactory()->get();
+      default_loader_used_ = true;
     }
     url_loader_ = ThrottlingURLLoader::CreateLoaderAndStart(
         factory,
@@ -226,6 +241,8 @@ class NavigationURLLoaderNetworkService::URLLoaderRequestController
   void FollowRedirect() {
     DCHECK_CURRENTLY_ON(BrowserThread::IO);
     DCHECK(url_loader_);
+
+    DCHECK(!response_url_loader_);
 
     url_loader_->FollowRedirect();
   }
@@ -242,18 +259,43 @@ class NavigationURLLoaderNetworkService::URLLoaderRequestController
       const ResourceResponseHead& head,
       const base::Optional<net::SSLInfo>& ssl_info,
       mojom::DownloadedTempFilePtr downloaded_file) override {
+    received_response_ = true;
+    // If the default loader (network) was used to handle the URL load request
+    // we need to see if the handlers want to potentially create a new loader
+    // for the response. e.g. AppCache.
+    if (MaybeCreateLoaderForResponse(head))
+      return;
+    scoped_refptr<ResourceResponse> response(new ResourceResponse());
+    response->head = head;
+
+    // Make a copy of the ResourceResponse before it is passed to another
+    // thread.
+    //
+    // TODO(davidben): This copy could be avoided if ResourceResponse weren't
+    // reference counted and the loader stack passed unique ownership of the
+    // response. https://crbug.com/416050
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(&NavigationURLLoaderNetworkService::OnReceiveResponse,
-                   owner_, head, ssl_info, base::Passed(&downloaded_file)));
+        base::BindOnce(&NavigationURLLoaderNetworkService::OnReceiveResponse,
+                       owner_, response->DeepCopy(), ssl_info,
+                       base::Passed(&downloaded_file)));
   }
 
   void OnReceiveRedirect(const net::RedirectInfo& redirect_info,
                          const ResourceResponseHead& head) override {
+    scoped_refptr<ResourceResponse> response(new ResourceResponse());
+    response->head = head;
+
+    // Make a copy of the ResourceResponse before it is passed to another
+    // thread.
+    //
+    // TODO(davidben): This copy could be avoided if ResourceResponse weren't
+    // reference counted and the loader stack passed unique ownership of the
+    // response. https://crbug.com/416050
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(&NavigationURLLoaderNetworkService::OnReceiveRedirect,
-                   owner_, redirect_info, head));
+        base::BindOnce(&NavigationURLLoaderNetworkService::OnReceiveRedirect,
+                       owner_, redirect_info, response->DeepCopy()));
   }
 
   void OnDataDownloaded(int64_t data_length, int64_t encoded_length) override {}
@@ -270,17 +312,56 @@ class NavigationURLLoaderNetworkService::URLLoaderRequestController
       mojo::ScopedDataPipeConsumerHandle body) override {
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(
+        base::BindOnce(
             &NavigationURLLoaderNetworkService::OnStartLoadingResponseBody,
             owner_, base::Passed(&body)));
   }
 
   void OnComplete(
       const ResourceRequestCompletionStatus& completion_status) override {
+    if (completion_status.error_code != net::OK && !received_response_) {
+      // If the default loader (network) was used to handle the URL load
+      // request we need to see if the handlers want to potentially create a
+      // new loader for the response. e.g. AppCache.
+      if (MaybeCreateLoaderForResponse(ResourceResponseHead()))
+        return;
+    }
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(&NavigationURLLoaderNetworkService::OnComplete, owner_,
-                   completion_status));
+        base::BindOnce(&NavigationURLLoaderNetworkService::OnComplete, owner_,
+                       completion_status));
+  }
+
+  // Returns true if a handler wants to handle the response, i.e. return a
+  // different response. For e.g. AppCache may have fallback content to be
+  // returned for a TLD.
+  bool MaybeCreateLoaderForResponse(const ResourceResponseHead& response) {
+    if (!default_loader_used_)
+      return false;
+
+    // URLLoaderClient request pointer for response loaders, i.e loaders created
+    // for handing responses received from the network URLLoader.
+    mojom::URLLoaderClientRequest response_client_request;
+
+    for (size_t index = 0; index < handlers_.size(); ++index) {
+      if (handlers_[index]->MaybeCreateLoaderForResponse(
+              response, &response_url_loader_, &response_client_request)) {
+        OnResponseHandlerFound(std::move(response_client_request));
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Called if we find a handler who delivers different content for the URL.
+  void OnResponseHandlerFound(
+      mojom::URLLoaderClientRequest response_client_request) {
+    response_loader_binding_.Bind(std::move(response_client_request));
+    // We reset this flag as we expect a new response from the handler.
+    default_loader_used_ = false;
+    // Disconnect from the network loader to stop receiving further data
+    // or notifications for the URL.
+    url_loader_->DisconnectClient();
   }
 
   std::vector<std::unique_ptr<URLLoaderRequestHandler>> handlers_;
@@ -304,6 +385,22 @@ class NavigationURLLoaderNetworkService::URLLoaderRequestController
 
   // This is referenced only on the UI thread.
   base::WeakPtr<NavigationURLLoaderNetworkService> owner_;
+
+  // Set to true if the default URLLoader (network service) was used for the
+  // current navigation.
+  bool default_loader_used_ = false;
+
+  // URLLoaderClient binding for loaders created for responses received from the
+  // network loader.
+  mojo::Binding<mojom::URLLoaderClient> response_loader_binding_;
+
+  // URLLoader instance for response loaders, i.e loaders created for handing
+  // responses received from the network URLLoader.
+  mojom::URLLoaderPtr response_url_loader_;
+
+  // Set to true if we receive a valid response from a URLLoader, i.e.
+  // URLLoaderClient::OnReceivedResponse() is called.
+  bool received_response_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(URLLoaderRequestController);
 };
@@ -329,7 +426,7 @@ NavigationURLLoaderNetworkService::NavigationURLLoaderNetworkService(
 
   new_request->method = request_info->common_params.method;
   new_request->url = request_info->common_params.url;
-  new_request->first_party_for_cookies = request_info->first_party_for_cookies;
+  new_request->site_for_cookies = request_info->site_for_cookies;
   new_request->priority = net::HIGHEST;
 
   // The code below to set fields like request_initiator, referrer, etc has
@@ -353,6 +450,7 @@ NavigationURLLoaderNetworkService::NavigationURLLoaderNetworkService(
   new_request->load_flags = load_flags;
 
   new_request->request_body = request_info->common_params.post_data.get();
+  new_request->report_raw_headers = request_info->report_raw_headers;
 
   int frame_tree_node_id = request_info->frame_tree_node_id;
 
@@ -376,7 +474,7 @@ NavigationURLLoaderNetworkService::NavigationURLLoaderNetworkService(
       weak_factory_.GetWeakPtr());
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(
+      base::BindOnce(
           &URLLoaderRequestController::Start,
           base::Unretained(request_controller_.get()),
           service_worker_navigation_handle
@@ -399,14 +497,14 @@ NavigationURLLoaderNetworkService::~NavigationURLLoaderNetworkService() {
 void NavigationURLLoaderNetworkService::FollowRedirect() {
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&URLLoaderRequestController::FollowRedirect,
-                 base::Unretained(request_controller_.get())));
+      base::BindOnce(&URLLoaderRequestController::FollowRedirect,
+                     base::Unretained(request_controller_.get())));
 }
 
 void NavigationURLLoaderNetworkService::ProceedWithResponse() {}
 
 void NavigationURLLoaderNetworkService::OnReceiveResponse(
-    const ResourceResponseHead& head,
+    scoped_refptr<ResourceResponse> response,
     const base::Optional<net::SSLInfo>& ssl_info,
     mojom::DownloadedTempFilePtr downloaded_file) {
   // TODO(scottmg): This needs to do more of what
@@ -414,19 +512,17 @@ void NavigationURLLoaderNetworkService::OnReceiveResponse(
   // OnStartLoadingResponseBody().
   if (ssl_info && ssl_info->cert)
     NavigationResourceHandler::GetSSLStatusForRequest(*ssl_info, &ssl_status_);
-  response_ = base::MakeRefCounted<ResourceResponse>();
-  response_->head = head;
+  response_ = std::move(response);
+  ssl_info_ = ssl_info;
 }
 
 void NavigationURLLoaderNetworkService::OnReceiveRedirect(
     const net::RedirectInfo& redirect_info,
-    const ResourceResponseHead& head) {
+    scoped_refptr<ResourceResponse> response) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   // TODO(kinuko): Perform the necessary check and call
   // URLLoaderRequestController::Restart with the new URL??
-  scoped_refptr<ResourceResponse> response(new ResourceResponse());
-  response->head = head;
-  delegate_->OnRequestRedirected(redirect_info, response);
+  delegate_->OnRequestRedirected(redirect_info, std::move(response));
 }
 
 void NavigationURLLoaderNetworkService::OnStartLoadingResponseBody(
@@ -449,14 +545,20 @@ void NavigationURLLoaderNetworkService::OnStartLoadingResponseBody(
 
 void NavigationURLLoaderNetworkService::OnComplete(
     const ResourceRequestCompletionStatus& completion_status) {
-  if (completion_status.error_code != net::OK) {
-    TRACE_EVENT_ASYNC_END2("navigation", "Navigation timeToResponseStarted",
-                           this, "&NavigationURLLoaderNetworkService", this,
-                           "success", false);
+  if (completion_status.error_code == net::OK)
+    return;
 
-    delegate_->OnRequestFailed(completion_status.exists_in_cache,
-                               completion_status.error_code);
-  }
+  TRACE_EVENT_ASYNC_END2("navigation", "Navigation timeToResponseStarted", this,
+                         "&NavigationURLLoaderNetworkService", this, "success",
+                         false);
+
+  // TODO(https://crbug.com/757633): Pass real values in the case of cert
+  // errors.
+  bool should_ssl_errors_be_fatal = true;
+
+  delegate_->OnRequestFailed(completion_status.exists_in_cache,
+                             completion_status.error_code, ssl_info_,
+                             should_ssl_errors_be_fatal);
 }
 
 }  // namespace content

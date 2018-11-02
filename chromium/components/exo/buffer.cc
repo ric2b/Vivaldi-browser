@@ -21,11 +21,11 @@
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
-#include "cc/resources/single_release_callback.h"
 #include "components/exo/layer_tree_frame_sink_holder.h"
 #include "components/viz/common/gpu/context_provider.h"
-#include "components/viz/common/quads/resource_format.h"
+#include "components/viz/common/quads/single_release_callback.h"
 #include "components/viz/common/quads/texture_mailbox.h"
+#include "components/viz/common/resources/resource_format.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "ui/aura/env.h"
@@ -414,15 +414,10 @@ Buffer::~Buffer() {}
 
 bool Buffer::ProduceTransferableResource(
     LayerTreeFrameSinkHolder* layer_tree_frame_sink_holder,
-    cc::ResourceId resource_id,
     bool secure_output_only,
-    bool client_usage,
-    cc::TransferableResource* resource) {
+    viz::TransferableResource* resource) {
   TRACE_EVENT0("exo", "Buffer::ProduceTransferableResource");
-
   DCHECK(attach_count_);
-  DLOG_IF(WARNING, !release_contents_callback_.IsCancelled() && client_usage)
-      << "Producing a texture mailbox for a buffer that has not been released";
 
   // If textures are lost, destroy them to ensure that we create new ones below.
   if (contents_texture_ && contents_texture_->IsLost())
@@ -442,7 +437,7 @@ bool Buffer::ProduceTransferableResource(
     return false;
   }
 
-  resource->id = resource_id;
+  resource->id = layer_tree_frame_sink_holder->AllocateResourceId();
   resource->format = viz::RGBA_8888;
   resource->filter = GL_LINEAR;
   resource->size = gpu_memory_buffer_->GetSize();
@@ -476,7 +471,7 @@ bool Buffer::ProduceTransferableResource(
     // The contents texture will be released when no longer used by the
     // compositor.
     layer_tree_frame_sink_holder->SetResourceReleaseCallback(
-        resource_id,
+        resource->id,
         base::Bind(&Buffer::Texture::ReleaseTexImage,
                    base::Unretained(contents_texture),
                    base::Bind(&Buffer::ReleaseContentsTexture, AsWeakPtr(),
@@ -506,7 +501,7 @@ bool Buffer::ProduceTransferableResource(
   // The mailbox texture will be released when no longer used by the
   // compositor.
   layer_tree_frame_sink_holder->SetResourceReleaseCallback(
-      resource_id,
+      resource->id,
       base::Bind(&Buffer::Texture::Release, base::Unretained(texture),
                  base::Bind(&Buffer::ReleaseTexture, AsWeakPtr(),
                             base::Passed(&texture_))));

@@ -225,9 +225,9 @@ def ConvertTestFilterFileIntoGTestFilterArgument(input_lines):
   Returns:
     a string suitable for feeding as an argument of --gtest_filter parameter.
   """
-  # Strip whitespace + skip empty lines and lines beginning with '#'.
-  stripped_lines = (l.strip() for l in input_lines)
-  filter_lines = list(l for l in stripped_lines if l and l[0] != '#')
+  # Strip comments and whitespace from each line and filter non-empty lines.
+  stripped_lines = (l.split('#', 1)[0].strip() for l in input_lines)
+  filter_lines = list(l for l in stripped_lines if l)
 
   # Split the tests into positive and negative patterns (gtest treats
   # every pattern after the first '-' sign as an exclusion).
@@ -281,14 +281,14 @@ class GtestTestInstance(test_instance.TestInstance):
         self._exe_dist_dir = exe_dist_dir
 
     incremental_part = ''
-    if args.test_apk_incremental_install_script:
+    if args.test_apk_incremental_install_json:
       incremental_part = '_incremental'
 
     apk_path = os.path.join(
         constants.GetOutDirectory(), '%s_apk' % self._suite,
         '%s-debug%s.apk' % (self._suite, incremental_part))
-    self._test_apk_incremental_install_script = (
-        args.test_apk_incremental_install_script)
+    self._test_apk_incremental_install_json = (
+        args.test_apk_incremental_install_json)
     if not os.path.exists(apk_path):
       self._apk_helper = None
     else:
@@ -423,8 +423,8 @@ class GtestTestInstance(test_instance.TestInstance):
     return self._suite
 
   @property
-  def test_apk_incremental_install_script(self):
-    return self._test_apk_incremental_install_script
+  def test_apk_incremental_install_json(self):
+    return self._test_apk_incremental_install_json
 
   @property
   def total_external_shards(self):

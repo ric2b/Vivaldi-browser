@@ -63,9 +63,7 @@ class ProxyAuthOnUserBoardScreenTest : public LoginManagerTest {
   ProxyAuthOnUserBoardScreenTest()
       : LoginManagerTest(true /* should_launch_browser */),
         proxy_server_(net::SpawnedTestServer::TYPE_BASIC_AUTH_PROXY,
-                      net::SpawnedTestServer::kLocalhost,
-                      base::FilePath()) {
-  }
+                      base::FilePath()) {}
 
   ~ProxyAuthOnUserBoardScreenTest() override {}
 
@@ -123,7 +121,9 @@ IN_PROC_BROWSER_TEST_F(ProxyAuthOnUserBoardScreenTest,
     screen_waiter.Wait();
     auth_dialog_waiter.Wait();
     ASSERT_TRUE(auth_dialog_waiter.login_handler());
+    auth_dialog_waiter.login_handler()->CancelAuth();
   }
+  base::RunLoop().RunUntilIdle();
 }
 
 }  // namespace chromeos

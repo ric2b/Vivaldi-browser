@@ -33,8 +33,6 @@
 #include "base/gtest_prod_util.h"
 #include "platform/PlatformExport.h"
 #include "platform/heap/Handle.h"
-#include "platform/heap/SelfKeepAlive.h"
-#include "platform/loader/fetch/CrossOriginAccessControl.h"
 #include "platform/loader/fetch/Resource.h"
 #include "platform/loader/fetch/ResourceLoadScheduler.h"
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
@@ -89,17 +87,22 @@ class PLATFORM_EXPORT ResourceLoader final
   // WebURLLoaderClient
   //
   // A succesful load will consist of:
-  // 0+  willFollowRedirect()
-  // 0+  didSendData()
-  // 1   didReceiveResponse()
-  // 0-1 didReceiveCachedMetadata()
-  // 0+  didReceiveData() or didDownloadData(), but never both
-  // 1   didFinishLoading()
-  // A failed load is indicated by 1 didFail(), which can occur at any time
-  // before didFinishLoading(), including synchronous inside one of the other
+  // 0+  WillFollowRedirect()
+  // 0+  DidSendData()
+  // 1   DidReceiveResponse()
+  // 0-1 DidReceiveCachedMetadata()
+  // 0+  DidReceiveData() or DidDownloadData(), but never both
+  // 1   DidFinishLoading()
+  // A failed load is indicated by 1 DidFail(), which can occur at any time
+  // before DidFinishLoading(), including synchronous inside one of the other
   // callbacks via ResourceLoader::cancel()
-  bool WillFollowRedirect(WebURLRequest&,
-                          const WebURLResponse& redirect_response) override;
+  bool WillFollowRedirect(const WebURL& new_url,
+                          const WebURL& new_site_for_cookies,
+                          const WebString& new_referrer,
+                          WebReferrerPolicy new_referrer_policy,
+                          const WebString& new_method,
+                          const WebURLResponse& passed_redirect_response,
+                          bool& report_raw_headers) override;
   void DidSendData(unsigned long long bytes_sent,
                    unsigned long long total_bytes_to_be_sent) override;
   void DidReceiveResponse(const WebURLResponse&) override;
@@ -117,6 +120,7 @@ class PLATFORM_EXPORT ResourceLoader final
                int64_t encoded_data_length,
                int64_t encoded_body_length,
                int64_t decoded_body_length) override;
+
   void HandleError(const ResourceError&);
 
   void DidFinishLoadingFirstPartInMultipart();
@@ -142,9 +146,6 @@ class PLATFORM_EXPORT ResourceLoader final
   void Restart(const ResourceRequest&);
 
   FetchContext& Context() const;
-  ResourceRequestBlockedReason CanAccessResponse(Resource*,
-                                                 const ResourceResponse&,
-                                                 const String&) const;
 
   CORSStatus DetermineCORSStatus(const ResourceResponse&, StringBuilder&) const;
 
@@ -158,10 +159,6 @@ class PLATFORM_EXPORT ResourceLoader final
   Member<ResourceFetcher> fetcher_;
   Member<ResourceLoadScheduler> scheduler_;
   Member<Resource> resource_;
-
-  // Set when the request's "keepalive" is specified (e.g., for SendBeacon).
-  // https://fetch.spec.whatwg.org/#request-keepalive-flag
-  SelfKeepAlive<ResourceLoader> keepalive_;
 
   bool is_cache_aware_loading_activated_;
 };

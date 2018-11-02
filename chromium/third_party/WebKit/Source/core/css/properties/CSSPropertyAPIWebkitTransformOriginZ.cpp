@@ -7,13 +7,13 @@
 #include "core/css/parser/CSSParserContext.h"
 #include "core/css/parser/CSSPropertyParserHelpers.h"
 
-class CSSParserLocalContext;
 namespace blink {
 
-const CSSValue* CSSPropertyAPIWebkitTransformOriginZ::parseSingleValue(
+const CSSValue* CSSPropertyAPIWebkitTransformOriginZ::ParseSingleValue(
+    CSSPropertyID,
     CSSParserTokenRange& range,
     const CSSParserContext& context,
-    const CSSParserLocalContext&) {
+    const CSSParserLocalContext&) const {
   return CSSPropertyParserHelpers::ConsumeLength(range, context.Mode(),
                                                  kValueRangeAll);
 }

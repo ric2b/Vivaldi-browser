@@ -9,6 +9,7 @@
 #include "core/events/PointerEvent.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/HashMap.h"
+#include "public/platform/WebPointerEvent.h"
 #include "public/platform/WebPointerProperties.h"
 
 namespace blink {
@@ -41,6 +42,8 @@ class CORE_EXPORT PointerEventFactory {
                        LocalFrame*,
                        DOMWindow*);
 
+  PointerEvent* CreatePointerCancelEvent(const WebPointerEvent&);
+
   PointerEvent* CreatePointerCancelEvent(
       const int pointer_id,
       const WebPointerProperties::PointerType,
@@ -62,8 +65,8 @@ class CORE_EXPORT PointerEventFactory {
   // the same id before.
   bool Remove(const int);
 
-  // Returns all ids of the given pointerType.
-  Vector<int> GetPointerIdsOfType(WebPointerProperties::PointerType) const;
+  // Returns all ids of pointers that are capable or scrolling.
+  Vector<int> GetPointerIdsOfScrollCapablePointers() const;
 
   // Returns whether a pointer id exists and active.
   bool IsActive(const int) const;
@@ -96,16 +99,25 @@ class CORE_EXPORT PointerEventFactory {
   typedef struct PointerAttributes {
     IncomingId incoming_id;
     bool is_active_buttons;
-    PointerAttributes() : incoming_id(), is_active_buttons(false) {}
-    PointerAttributes(IncomingId incoming_id, unsigned is_active_buttons)
-        : incoming_id(incoming_id), is_active_buttons(is_active_buttons) {}
+    bool can_scroll;
+    PointerAttributes()
+        : incoming_id(), is_active_buttons(false), can_scroll(false) {}
+    PointerAttributes(IncomingId incoming_id,
+                      bool is_active_buttons,
+                      bool can_scroll)
+        : incoming_id(incoming_id),
+          is_active_buttons(is_active_buttons),
+          can_scroll(can_scroll) {}
   } PointerAttributes;
 
-  int AddIdAndActiveButtons(const IncomingId, bool is_active_buttons);
+  int AddIdAndActiveButtons(const IncomingId,
+                            bool is_active_buttons,
+                            bool can_scroll);
   bool IsPrimary(const int) const;
   void SetIdTypeButtons(PointerEventInit&,
                         const WebPointerProperties&,
-                        unsigned buttons);
+                        unsigned buttons,
+                        bool can_scroll);
   void SetEventSpecificFields(PointerEventInit&, const AtomicString& type);
 
   // Creates pointerevents like boundary and capture events from another

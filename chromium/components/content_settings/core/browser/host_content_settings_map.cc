@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <algorithm>
 #include <utility>
 
 #include "base/command_line.h"
@@ -28,6 +29,7 @@
 #include "components/content_settings/core/browser/content_settings_registry.h"
 #include "components/content_settings/core/browser/content_settings_rule.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
+#include "components/content_settings/core/browser/user_modifiable_provider.h"
 #include "components/content_settings/core/browser/website_settings_registry.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_utils.h"
@@ -60,6 +62,8 @@ const ProviderNamesSourceMapEntry kProviderNamesSourceMap[] = {
     {"notification_android", content_settings::SETTING_SOURCE_USER},
     {"preference", content_settings::SETTING_SOURCE_USER},
     {"default", content_settings::SETTING_SOURCE_USER},
+    {"tests", content_settings::SETTING_SOURCE_USER},
+    {"tests_other", content_settings::SETTING_SOURCE_USER},
 };
 
 // Enum describing the status of domain to origin migration of content settings.
@@ -202,6 +206,7 @@ HostContentSettingsMap::HostContentSettingsMap(PrefService* prefs,
   pref_provider_ = new content_settings::PrefProvider(prefs_, is_incognito_,
                                                       store_last_modified_);
   content_settings_providers_[PREF_PROVIDER] = base::WrapUnique(pref_provider_);
+  user_modifiable_providers_.push_back(pref_provider_);
   pref_provider_->AddObserver(this);
 
   // This ensures that content settings are cleared for the guest profile. This
@@ -233,6 +238,13 @@ void HostContentSettingsMap::RegisterProfilePrefs(
   content_settings::DefaultProvider::RegisterProfilePrefs(registry);
   content_settings::PrefProvider::RegisterProfilePrefs(registry);
   content_settings::PolicyProvider::RegisterProfilePrefs(registry);
+}
+
+void HostContentSettingsMap::RegisterUserModifiableProvider(
+    ProviderType type,
+    std::unique_ptr<content_settings::UserModifiableProvider> provider) {
+  user_modifiable_providers_.push_back(provider.get());
+  RegisterProvider(type, std::move(provider));
 }
 
 void HostContentSettingsMap::RegisterProvider(
@@ -669,8 +681,13 @@ base::Time HostContentSettingsMap::GetSettingLastModifiedDate(
     const ContentSettingsPattern& primary_pattern,
     const ContentSettingsPattern& secondary_pattern,
     ContentSettingsType content_type) const {
-  return pref_provider_->GetWebsiteSettingLastModified(
-      primary_pattern, secondary_pattern, content_type, std::string());
+  base::Time most_recent_time;
+  for (auto* provider : user_modifiable_providers_) {
+    base::Time time = provider->GetWebsiteSettingLastModified(
+        primary_pattern, secondary_pattern, content_type, std::string());
+    most_recent_time = std::max(time, most_recent_time);
+  }
+  return most_recent_time;
 }
 
 void HostContentSettingsMap::ClearSettingsForOneTypeWithPredicate(
@@ -688,13 +705,15 @@ void HostContentSettingsMap::ClearSettingsForOneTypeWithPredicate(
     if (pattern_predicate.is_null() ||
         pattern_predicate.Run(setting.primary_pattern,
                               setting.secondary_pattern)) {
-      base::Time last_modified = pref_provider_->GetWebsiteSettingLastModified(
-          setting.primary_pattern, setting.secondary_pattern, content_type,
-          std::string());
-      if (last_modified >= begin_time) {
-        pref_provider_->SetWebsiteSetting(setting.primary_pattern,
-                                          setting.secondary_pattern,
-                                          content_type, std::string(), nullptr);
+      for (auto* provider : user_modifiable_providers_) {
+        base::Time last_modified = provider->GetWebsiteSettingLastModified(
+            setting.primary_pattern, setting.secondary_pattern, content_type,
+            std::string());
+        if (last_modified >= begin_time) {
+          provider->SetWebsiteSetting(setting.primary_pattern,
+                                      setting.secondary_pattern, content_type,
+                                      std::string(), nullptr);
+        }
       }
     }
   }
@@ -738,22 +757,9 @@ void HostContentSettingsMap::AddSettingsForOneType(
 
   while (rule_iterator->HasNext()) {
     const content_settings::Rule& rule = rule_iterator->Next();
-    std::unique_ptr<base::Value> setting_value;
-    // TODO(bauerb): Return rules as a list of values, not content settings.
-    // Handle the case using base::Values for its exceptions and default
-    // setting. Here we assume all the exceptions are granted as
-    // |CONTENT_SETTING_ALLOW|.
-    if (!content_settings::ContentSettingsRegistry::GetInstance()->Get(
-            content_type) &&
-        rule.value.get() &&
-        rule.primary_pattern != ContentSettingsPattern::Wildcard()) {
-      setting_value =
-          content_settings::ContentSettingToValue(CONTENT_SETTING_ALLOW);
-    } else {
-      setting_value = base::MakeUnique<base::Value>(*(rule.value));
-    }
     settings->push_back(ContentSettingPatternSource(
-        rule.primary_pattern, rule.secondary_pattern, std::move(setting_value),
+        rule.primary_pattern, rule.secondary_pattern,
+        base::MakeUnique<base::Value>(rule.value->Clone()),
         kProviderNamesSourceMap[provider_type].provider_name, incognito));
   }
 }

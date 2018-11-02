@@ -508,11 +508,11 @@ void TraceLog::CreateFiltersForTraceConfig() {
     std::unique_ptr<TraceEventFilter> new_filter;
     const std::string& predicate_name = filter_config.predicate_name();
     if (predicate_name == EventNameFilter::kName) {
-      auto whitelist = MakeUnique<std::unordered_set<std::string>>();
+      auto whitelist = std::make_unique<std::unordered_set<std::string>>();
       CHECK(filter_config.GetArgAsSet("event_name_whitelist", &*whitelist));
-      new_filter = MakeUnique<EventNameFilter>(std::move(whitelist));
+      new_filter = std::make_unique<EventNameFilter>(std::move(whitelist));
     } else if (predicate_name == HeapProfilerEventFilter::kName) {
-      new_filter = MakeUnique<HeapProfilerEventFilter>();
+      new_filter = std::make_unique<HeapProfilerEventFilter>();
     } else {
       if (filter_factory_for_testing_)
         new_filter = filter_factory_for_testing_(predicate_name);
@@ -1015,7 +1015,7 @@ TraceEventHandle TraceLog::AddTraceEvent(
     const char* scope,
     unsigned long long id,
     int num_args,
-    const char** arg_names,
+    const char* const* arg_names,
     const unsigned char* arg_types,
     const unsigned long long* arg_values,
     std::unique_ptr<ConvertableToTraceFormat>* convertable_values,
@@ -1047,7 +1047,7 @@ TraceEventHandle TraceLog::AddTraceEventWithBindId(
     unsigned long long id,
     unsigned long long bind_id,
     int num_args,
-    const char** arg_names,
+    const char* const* arg_names,
     const unsigned char* arg_types,
     const unsigned long long* arg_values,
     std::unique_ptr<ConvertableToTraceFormat>* convertable_values,
@@ -1079,7 +1079,7 @@ TraceEventHandle TraceLog::AddTraceEventWithProcessId(
     unsigned long long id,
     int process_id,
     int num_args,
-    const char** arg_names,
+    const char* const* arg_names,
     const unsigned char* arg_types,
     const unsigned long long* arg_values,
     std::unique_ptr<ConvertableToTraceFormat>* convertable_values,
@@ -1113,7 +1113,7 @@ TraceEventHandle TraceLog::AddTraceEventWithThreadIdAndTimestamp(
     int thread_id,
     const TimeTicks& timestamp,
     int num_args,
-    const char** arg_names,
+    const char* const* arg_names,
     const unsigned char* arg_types,
     const unsigned long long* arg_values,
     std::unique_ptr<ConvertableToTraceFormat>* convertable_values,
@@ -1145,7 +1145,7 @@ TraceEventHandle TraceLog::AddTraceEventWithThreadIdAndTimestamp(
     int thread_id,
     const TimeTicks& timestamp,
     int num_args,
-    const char** arg_names,
+    const char* const* arg_names,
     const unsigned char* arg_types,
     const unsigned long long* arg_values,
     std::unique_ptr<ConvertableToTraceFormat>* convertable_values,
@@ -1295,7 +1295,7 @@ void TraceLog::AddMetadataEvent(
     const unsigned char* category_group_enabled,
     const char* name,
     int num_args,
-    const char** arg_names,
+    const char* const* arg_names,
     const unsigned char* arg_types,
     const unsigned long long* arg_values,
     std::unique_ptr<ConvertableToTraceFormat>* convertable_values,

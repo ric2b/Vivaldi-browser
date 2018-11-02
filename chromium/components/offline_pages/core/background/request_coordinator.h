@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -34,6 +35,7 @@ class OfflinerPolicy;
 class Offliner;
 class SavePageRequest;
 class ClientPolicyController;
+class OfflinePagesUkmReporter;
 
 // Coordinates queueing and processing save page later requests.
 class RequestCoordinator : public KeyedService,
@@ -110,7 +112,8 @@ class RequestCoordinator : public KeyedService,
                      std::unique_ptr<RequestQueue> queue,
                      std::unique_ptr<Scheduler> scheduler,
                      net::NetworkQualityEstimator::NetworkQualityProvider*
-                         network_quality_estimator);
+                         network_quality_estimator,
+                     std::unique_ptr<OfflinePagesUkmReporter> ukm_reporter);
 
   ~RequestCoordinator() override;
 
@@ -447,6 +450,8 @@ class RequestCoordinator : public KeyedService,
   // Unowned pointer to the Network Quality Estimator.
   net::NetworkQualityEstimator::NetworkQualityProvider*
       network_quality_estimator_;
+  // Object that can record Url Keyed Metrics (UKM).
+  std::unique_ptr<OfflinePagesUkmReporter> ukm_reporter_;
   net::EffectiveConnectionType network_quality_at_request_start_;
   // Holds an ID of the currently active request.
   int64_t active_request_id_;
@@ -479,7 +484,7 @@ class RequestCoordinator : public KeyedService,
   //   it was completed or cancelled), the task will remove it.
   // Currently it's used as LIFO.
   // TODO(romax): see if LIFO is a good idea or change to FIFO. crbug.com/705106
-  std::deque<int64_t> prioritized_requests_;
+  base::circular_deque<int64_t> prioritized_requests_;
   // Allows us to pass a weak pointer to callbacks.
   base::WeakPtrFactory<RequestCoordinator> weak_ptr_factory_;
 

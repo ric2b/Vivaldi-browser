@@ -73,10 +73,6 @@ ScriptPromise PaymentRequestEvent::openWindow(ScriptState* script_state,
   ScriptPromise promise = resolver->Promise();
   ExecutionContext* context = ExecutionContext::From(script_state);
 
-  // TODO(gogerald): Check payment request state so as to reject promise with
-  // "InvalidStateError" appropriately (refer
-  // https://w3c.github.io/payment-handler/#dfn-open-window-algorithm).
-
   KURL parsed_url_to_open = context->CompleteURL(url);
   if (!parsed_url_to_open.IsValid()) {
     resolver->Reject(V8ThrowException::CreateTypeError(
@@ -84,18 +80,12 @@ ScriptPromise PaymentRequestEvent::openWindow(ScriptState* script_state,
     return promise;
   }
 
-  // TODO(gogerald): Once the issue of the spec is resolved, we should apply the
-  // changes. Refer https://github.com/w3c/payment-handler/issues/168.
   if (!context->GetSecurityOrigin()->IsSameSchemeHostPortAndSuborigin(
           SecurityOrigin::Create(parsed_url_to_open).Get())) {
-    resolver->Reject(DOMException::Create(
-        kSecurityError,
-        "'" + parsed_url_to_open.ElidedString() + "' is not allowed."));
+    resolver->Resolve(v8::Null(script_state->GetIsolate()));
     return promise;
   }
 
-  // TODO(gogerald): Once the issue of the spec is resolved, we should apply the
-  // changes. Refer https://github.com/w3c/payment-handler/issues/169.
   if (!context->IsWindowInteractionAllowed()) {
     resolver->Reject(DOMException::Create(kInvalidAccessError,
                                           "Not allowed to open a window."));

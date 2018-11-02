@@ -30,7 +30,6 @@ import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.media.RouterTestUtils;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.chrome.test.util.ChromeRestriction;
 import org.chromium.content.browser.test.util.ClickUtils;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
@@ -38,6 +37,7 @@ import org.chromium.content.browser.test.util.JavaScriptUtils;
 import org.chromium.content.common.ContentSwitches;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.net.test.EmbeddedTestServer;
+import org.chromium.ui.test.util.UiRestriction;
 
 import java.io.StringWriter;
 import java.util.concurrent.TimeoutException;
@@ -87,7 +87,7 @@ public class MediaRouterIntegrationTest {
 
     @Before
     public void setUp() throws Exception {
-        ChromeMediaRouter.setRouteProviderBuilderForTest(new MockMediaRouteProvider.Builder());
+        ChromeMediaRouter.setRouteProviderFactoryForTest(new MockMediaRouteProvider.Factory());
         mActivityTestRule.startMainActivityOnBlankPage();
         // Temporary until support library is updated, see http://crbug.com/576393.
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
@@ -210,7 +210,7 @@ public class MediaRouterIntegrationTest {
     }
 
     @Test
-    @Restriction({ChromeRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
+    @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
     @Feature({"MediaRouter"})
     @LargeTest
     public void testBasic() throws InterruptedException, TimeoutException {
@@ -232,7 +232,7 @@ public class MediaRouterIntegrationTest {
     }
 
     @Test
-    @Restriction({ChromeRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
+    @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
     @Feature({"MediaRouter"})
     @LargeTest
     public void testSendAndOnMessage() throws InterruptedException, TimeoutException {
@@ -252,12 +252,12 @@ public class MediaRouterIntegrationTest {
     }
 
     @Test
-    @Restriction({ChromeRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
+    @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
     @Feature({"MediaRouter"})
     @LargeTest
     @RetryOnFailure
     public void testOnClose() throws InterruptedException, TimeoutException {
-        MockMediaRouteProvider.Builder.sProvider.setCloseRouteWithErrorOnSend(true);
+        MockMediaRouteProvider.Factory.sProvider.setCloseRouteWithErrorOnSend(true);
         mActivityTestRule.loadUrl(mTestServer.getURL(TEST_PAGE));
         WebContents webContents = mActivityTestRule.getActivity().getActivityTab().getWebContents();
         executeJavaScriptApi(webContents, WAIT_DEVICE_SCRIPT);
@@ -274,12 +274,12 @@ public class MediaRouterIntegrationTest {
     }
 
     @Test
-    @Restriction({ChromeRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
+    @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
     @Feature({"MediaRouter"})
     @LargeTest
     @RetryOnFailure
     public void testFailNoProvider() throws InterruptedException, TimeoutException {
-        MockMediaRouteProvider.Builder.sProvider.setIsSupportsSource(false);
+        MockMediaRouteProvider.Factory.sProvider.setIsSupportsSource(false);
         mActivityTestRule.loadUrl(mTestServer.getURL(TEST_PAGE));
         WebContents webContents = mActivityTestRule.getActivity().getActivityTab().getWebContents();
         executeJavaScriptApi(webContents, WAIT_DEVICE_SCRIPT);
@@ -293,11 +293,11 @@ public class MediaRouterIntegrationTest {
     }
 
     @Test
-    @Restriction({ChromeRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
+    @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
     @Feature({"MediaRouter"})
     @LargeTest
     public void testFailCreateRoute() throws InterruptedException, TimeoutException {
-        MockMediaRouteProvider.Builder.sProvider.setCreateRouteErrorMessage("Unknown sink");
+        MockMediaRouteProvider.Factory.sProvider.setCreateRouteErrorMessage("Unknown sink");
         mActivityTestRule.loadUrl(mTestServer.getURL(TEST_PAGE));
         WebContents webContents = mActivityTestRule.getActivity().getActivityTab().getWebContents();
         executeJavaScriptApi(webContents, WAIT_DEVICE_SCRIPT);
@@ -311,7 +311,7 @@ public class MediaRouterIntegrationTest {
     }
 
     @Test
-    @Restriction({ChromeRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
+    @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
     @Feature({"MediaRouter"})
     @LargeTest
     @RetryOnFailure
@@ -339,7 +339,7 @@ public class MediaRouterIntegrationTest {
     }
 
     @Test
-    @Restriction({ChromeRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
+    @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
     @Feature({"MediaRouter"})
     @LargeTest
     @RetryOnFailure
@@ -355,7 +355,7 @@ public class MediaRouterIntegrationTest {
         executeJavaScriptApi(webContents, CHECK_SESSION_SCRIPT);
         String sessionId = getJavaScriptVariable(webContents, "startedConnection.id");
 
-        MockMediaRouteProvider.Builder.sProvider.setJoinRouteErrorMessage("Unknown route");
+        MockMediaRouteProvider.Factory.sProvider.setJoinRouteErrorMessage("Unknown route");
         mActivityTestRule.loadUrlInNewTab(mTestServer.getURL(TEST_PAGE_RECONNECT_FAIL));
         WebContents newWebContents =
                 mActivityTestRule.getActivity().getActivityTab().getWebContents();
@@ -365,7 +365,7 @@ public class MediaRouterIntegrationTest {
     }
 
     @Test
-    @Restriction({ChromeRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
+    @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
     @Feature({"MediaRouter"})
     @LargeTest
     @RetryOnFailure

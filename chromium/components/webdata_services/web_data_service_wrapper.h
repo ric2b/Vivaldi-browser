@@ -69,8 +69,7 @@ class WebDataServiceWrapper : public KeyedService {
   WebDataServiceWrapper(
       const base::FilePath& context_path,
       const std::string& application_locale,
-      const scoped_refptr<base::SingleThreadTaskRunner>& ui_thread,
-      const scoped_refptr<base::SingleThreadTaskRunner>& db_thread,
+      const scoped_refptr<base::SingleThreadTaskRunner>& ui_task_runner,
       const syncer::SyncableService::StartSyncFlare& flare,
       const ShowErrorCallback& show_error_callback);
   ~WebDataServiceWrapper() override;

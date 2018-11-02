@@ -9,9 +9,8 @@
 #include "base/metrics/user_metrics_action.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/toolbar/toolbar_model.h"
-#import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
-#import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
-#include "ios/chrome/browser/ui/commands/ios_command_ids.h"
+#import "ios/chrome/browser/ui/commands/application_commands.h"
+#import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/ntp/google_landing_data_source.h"
 #import "ios/chrome/browser/ui/rtl_geometry.h"
 #include "ios/chrome/browser/ui/toolbar/toolbar_resource_macros.h"
@@ -150,6 +149,10 @@ enum {
     SetA11yLabelAndUiAutomationName(_backButton, IDS_ACCNAME_BACK, @"Back");
     SetA11yLabelAndUiAutomationName(_forwardButton, IDS_ACCNAME_FORWARD,
                                     @"Forward");
+
+    [[self stackButton] addTarget:dispatcher
+                           action:@selector(displayTabSwitcher)
+                 forControlEvents:UIControlEventTouchUpInside];
   }
   return self;
 }
@@ -215,13 +218,9 @@ enum {
     return;
 
   if (gesture.view == _backButton) {
-    GenericChromeCommand* command =
-        [[GenericChromeCommand alloc] initWithTag:IDC_SHOW_BACK_HISTORY];
-    [_backButton chromeExecuteCommand:command];
+    [self.dispatcher showTabHistoryPopupForBackwardHistory];
   } else if (gesture.view == _forwardButton) {
-    GenericChromeCommand* command =
-        [[GenericChromeCommand alloc] initWithTag:IDC_SHOW_FORWARD_HISTORY];
-    [_forwardButton chromeExecuteCommand:command];
+    [self.dispatcher showTabHistoryPopupForForwardHistory];
   }
 }
 
@@ -236,10 +235,6 @@ enum {
 
 - (void)focusOmnibox:(id)sender {
   [self.dispatcher focusFakebox];
-}
-
-- (IBAction)stackButtonTouchDown:(id)sender {
-  [self.dispatcher prepareToEnterTabSwitcher:self];
 }
 
 @end

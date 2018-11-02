@@ -401,6 +401,24 @@ class HomePrefNotificationBridge {
   backForwardControl_.reset([control retain]);
 }
 
+- (void)updateReloadStopButton {
+  const gfx::VectorIcon& icon =
+      isPageLoading_ ? kNavigateStopIcon : vector_icons::kReloadIcon;
+  int commandId = isPageLoading_ ? IDC_STOP : IDC_RELOAD;
+  int tooltipId = isPageLoading_ ? IDS_TOOLTIP_STOP : IDS_TOOLTIP_RELOAD;
+
+  if (!reloadStopButton_) {
+    reloadStopButton_.reset(
+        [CreateTouchBarButton(icon, self, commandId, tooltipId) retain]);
+    return;
+  }
+
+  [reloadStopButton_
+      setImage:CreateNSImageFromIcon(icon, kTouchBarDefaultIconColor)];
+  [reloadStopButton_ setTag:commandId];
+  [reloadStopButton_ setAccessibilityLabel:l10n_util::GetNSString(tooltipId)];
+}
+
 - (void)updateBackForwardControl {
   if (!backForwardControl_)
     [self setupBackForwardControl];
@@ -447,7 +465,7 @@ class HomePrefNotificationBridge {
   NSImage* image;
   if (isGoogle) {
     image = NSImageFromImageSkiaWithColorSpace(
-        gfx::CreateVectorIcon(kGoogleSearchMacTouchbarIcon, kTouchBarIconSize,
+        gfx::CreateVectorIcon(kGoogleGLogoIcon, kTouchBarIconSize,
                               gfx::kPlaceholderColor),
         base::mac::GetSRGBColorSpace());
   } else {
@@ -488,24 +506,6 @@ class HomePrefNotificationBridge {
   int command = [sender tag];
   ui::LogTouchBarUMA(TouchBarActionFromCommand(command));
   commandUpdater_->ExecuteCommand(command);
-}
-
-- (void)updateReloadStopButton {
-  const gfx::VectorIcon& icon =
-      isPageLoading_ ? kNavigateStopIcon : kNavigateReloadIcon;
-  int commandId = isPageLoading_ ? IDC_STOP : IDC_RELOAD;
-  int tooltipId = isPageLoading_ ? IDS_TOOLTIP_STOP : IDS_TOOLTIP_RELOAD;
-
-  if (!reloadStopButton_) {
-    reloadStopButton_.reset(
-        [CreateTouchBarButton(icon, self, commandId, tooltipId) retain]);
-    return;
-  }
-
-  [reloadStopButton_
-      setImage:CreateNSImageFromIcon(icon, kTouchBarDefaultIconColor)];
-  [reloadStopButton_ setTag:commandId];
-  [reloadStopButton_ setAccessibilityLabel:l10n_util::GetNSString(tooltipId)];
 }
 
 - (void)setIsPageLoading:(BOOL)isPageLoading {

@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/guid.h"
 #include "base/logging.h"
@@ -13,15 +14,19 @@
 #include "content/public/browser/client_certificate_delegate.h"
 #include "content/public/browser/memory_coordinator_delegate.h"
 #include "content/public/browser/navigation_ui_data.h"
+#include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/vpn_service_proxy.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/sandbox_type.h"
 #include "content/public/common/url_loader_throttle.h"
 #include "media/audio/audio_manager.h"
 #include "media/base/cdm_factory.h"
 #include "media/media_features.h"
+#include "mojo/public/cpp/bindings/associated_interface_ptr.h"
 #include "net/ssl/client_cert_identity.h"
 #include "storage/browser/quota/quota_manager.h"
 #include "ui/gfx/image/image_skia.h"
+#include "ui/shell_dialogs/select_file_policy.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -42,6 +47,8 @@ void ContentBrowserClient::PostAfterStartupTask(
 bool ContentBrowserClient::IsBrowserStartupComplete() {
   return true;
 }
+
+void ContentBrowserClient::SetBrowserStartupIsCompleteForTesting() {}
 
 WebContentsViewDelegate* ContentBrowserClient::GetWebContentsViewDelegate(
     WebContents* web_contents) {
@@ -366,9 +373,9 @@ std::unique_ptr<VpnServiceProxy> ContentBrowserClient::GetVpnServiceProxy(
   return nullptr;
 }
 
-ui::SelectFilePolicy* ContentBrowserClient::CreateSelectFilePolicy(
-    WebContents* web_contents) {
-  return nullptr;
+std::unique_ptr<ui::SelectFilePolicy>
+ContentBrowserClient::CreateSelectFilePolicy(WebContents* web_contents) {
+  return std::unique_ptr<ui::SelectFilePolicy>();
 }
 
 DevToolsManagerDelegate* ContentBrowserClient::GetDevToolsManagerDelegate() {
@@ -481,6 +488,30 @@ std::vector<std::unique_ptr<URLLoaderThrottle>>
 ContentBrowserClient::CreateURLLoaderThrottles(
     const base::Callback<WebContents*()>& wc_getter) {
   return std::vector<std::unique_ptr<URLLoaderThrottle>>();
+}
+
+mojom::NetworkContextPtr ContentBrowserClient::CreateNetworkContext(
+    BrowserContext* context,
+    bool in_memory,
+    const base::FilePath& relative_partition_path) {
+  if (!base::FeatureList::IsEnabled(features::kNetworkService))
+    return nullptr;
+
+  mojom::NetworkContextPtr network_context;
+  mojom::NetworkContextParamsPtr context_params =
+      mojom::NetworkContextParams::New();
+  context_params->enable_data_url_support = true;
+  context_params->enable_file_url_support = true;
+  GetNetworkService()->CreateNetworkContext(MakeRequest(&network_context),
+                                            std::move(context_params));
+  return network_context;
+}
+
+bool ContentBrowserClient::OverrideLegacySymantecCertConsoleMessage(
+    const GURL& url,
+    const scoped_refptr<net::X509Certificate>& cert,
+    std::string* console_messsage) {
+  return false;
 }
 
 }  // namespace content

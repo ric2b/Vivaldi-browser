@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.test.crash;
 
+import android.support.test.filters.SmallTest;
+
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
@@ -28,40 +30,48 @@ public class IntentionalCrashTest {
             new ChromeActivityTestRule<>(ChromeActivity.class);
 
     @DisabledTest
+    @SmallTest
     @Test
     public void testRendererCrash() {
         try {
-            mActivityTestRule.startMainActivityWithURL("chrome://crash");
+            mActivityTestRule.startMainActivityFromLauncher();
+            mActivityTestRule.loadUrl("chrome://crash");
         } catch (InterruptedException e) {
             Assert.fail(e.toString());
         }
     }
 
     @DisabledTest
+    @SmallTest
     @Test
     public void testBrowserCrash() {
         try {
-            mActivityTestRule.startMainActivityWithURL("chrome://inducebrowsercrashforrealz");
+            mActivityTestRule.startMainActivityFromLauncher();
+            mActivityTestRule.loadUrl("chrome://inducebrowsercrashforrealz");
         } catch (InterruptedException e) {
             Assert.fail(e.toString());
         }
     }
 
     @DisabledTest
+    @SmallTest
     @Test
     public void testJavaCrash() {
         try {
-            mActivityTestRule.startMainActivityWithURL("chrome://java-crash");
+            mActivityTestRule.startMainActivityFromLauncher();
+            mActivityTestRule.loadUrl("chrome://java-crash/");
         } catch (InterruptedException e) {
             Assert.fail(e.toString());
         }
     }
 
     @DisabledTest
+    @SmallTest
     @Test
     public void testGpuCrash() {
         try {
-            mActivityTestRule.startMainActivityWithURL("chrome://gpucrash");
+            mActivityTestRule.startMainActivityFromLauncher();
+            mActivityTestRule.loadUrl("chrome://gpucrash");
         } catch (InterruptedException e) {
             Assert.fail(e.toString());
         }

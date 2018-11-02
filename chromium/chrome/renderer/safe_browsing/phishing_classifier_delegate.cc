@@ -16,7 +16,7 @@
 #include "chrome/renderer/safe_browsing/phishing_classifier.h"
 #include "chrome/renderer/safe_browsing/scorer.h"
 #include "components/safe_browsing/common/safebrowsing_messages.h"
-#include "components/safe_browsing/csd.pb.h"
+#include "components/safe_browsing/proto/csd.pb.h"
 #include "content/public/renderer/document_state.h"
 #include "content/public/renderer/navigation_state.h"
 #include "content/public/renderer/render_frame.h"
@@ -155,7 +155,7 @@ void PhishingClassifierDelegate::DidCommitProvisionalLoad(
   // to swap out the page text while the term feature extractor is still
   // running.
   DocumentState* document_state =
-      DocumentState::FromDataSource(frame->DataSource());
+      DocumentState::FromDocumentLoader(frame->GetDocumentLoader());
   NavigationState* navigation_state = document_state->navigation_state();
   CancelPendingClassification(navigation_state->WasWithinSameDocument()
                                   ? NAVIGATE_WITHIN_PAGE

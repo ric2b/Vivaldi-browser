@@ -5,6 +5,7 @@
 #include "components/ntp_snippets/breaking_news/subscription_manager_impl.h"
 
 #include "base/message_loop/message_loop.h"
+#include "base/test/histogram_tester.h"
 #include "build/build_config.h"
 #include "components/ntp_snippets/pref_names.h"
 #include "components/ntp_snippets/remote/test_utils.h"
@@ -13,9 +14,13 @@
 #include "components/signin/core/browser/fake_signin_manager.h"
 #include "components/signin/core/browser/test_signin_client.h"
 #include "google_apis/gaia/fake_oauth2_token_service_delegate.h"
+#include "net/base/net_errors.h"
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "net/url_request/url_request_test_util.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+using testing::ElementsAre;
 
 namespace ntp_snippets {
 
@@ -149,10 +154,12 @@ class SubscriptionManagerImplTest : public testing::Test {
 
 TEST_F(SubscriptionManagerImplTest, SubscribeSuccessfully) {
   std::string subscription_token = "1234567890";
-  SubscriptionManagerImpl manager(GetRequestContext(), GetPrefService(),
-                                  GetSigninManager(), GetOAuth2TokenService(),
-                                  kAPIKey, GURL(kSubscriptionUrl),
-                                  GURL(kUnsubscriptionUrl));
+  // TODO(vitaliii): Add a helper to build the manager.
+  SubscriptionManagerImpl manager(
+      GetRequestContext(), GetPrefService(),
+      /*variations_service=*/nullptr, GetSigninManager(),
+      GetOAuth2TokenService(),
+      /*locale=*/"", kAPIKey, GURL(kSubscriptionUrl), GURL(kUnsubscriptionUrl));
   manager.Subscribe(subscription_token);
   RespondToSubscriptionRequestSuccessfully(/*is_signed_in=*/false);
   ASSERT_TRUE(manager.IsSubscribed());
@@ -174,10 +181,10 @@ TEST_F(SubscriptionManagerImplTest,
 
   // Create manager and subscribe.
   std::string subscription_token = "1234567890";
-  SubscriptionManagerImpl manager(GetRequestContext(), GetPrefService(),
-                                  GetSigninManager(), auth_token_service,
-                                  kAPIKey, GURL(kSubscriptionUrl),
-                                  GURL(kUnsubscriptionUrl));
+  SubscriptionManagerImpl manager(
+      GetRequestContext(), GetPrefService(),
+      /*variations_service=*/nullptr, GetSigninManager(), auth_token_service,
+      /*locale=*/"", kAPIKey, GURL(kSubscriptionUrl), GURL(kUnsubscriptionUrl));
   manager.Subscribe(subscription_token);
 
   // Make sure that subscription is pending an access token.
@@ -200,10 +207,11 @@ TEST_F(SubscriptionManagerImplTest,
 
 TEST_F(SubscriptionManagerImplTest, ShouldNotSubscribeIfError) {
   std::string subscription_token = "1234567890";
-  SubscriptionManagerImpl manager(GetRequestContext(), GetPrefService(),
-                                  GetSigninManager(), GetOAuth2TokenService(),
-                                  kAPIKey, GURL(kSubscriptionUrl),
-                                  GURL(kUnsubscriptionUrl));
+  SubscriptionManagerImpl manager(
+      GetRequestContext(), GetPrefService(),
+      /*variations_service=*/nullptr, GetSigninManager(),
+      GetOAuth2TokenService(),
+      /*locale=*/"", kAPIKey, GURL(kSubscriptionUrl), GURL(kUnsubscriptionUrl));
 
   manager.Subscribe(subscription_token);
   RespondToSubscriptionWithError(/*is_signed_in=*/false, net::ERR_TIMED_OUT);
@@ -212,10 +220,11 @@ TEST_F(SubscriptionManagerImplTest, ShouldNotSubscribeIfError) {
 
 TEST_F(SubscriptionManagerImplTest, UnsubscribeSuccessfully) {
   std::string subscription_token = "1234567890";
-  SubscriptionManagerImpl manager(GetRequestContext(), GetPrefService(),
-                                  GetSigninManager(), GetOAuth2TokenService(),
-                                  kAPIKey, GURL(kSubscriptionUrl),
-                                  GURL(kUnsubscriptionUrl));
+  SubscriptionManagerImpl manager(
+      GetRequestContext(), GetPrefService(),
+      /*variations_service=*/nullptr, GetSigninManager(),
+      GetOAuth2TokenService(),
+      /*locale=*/"", kAPIKey, GURL(kSubscriptionUrl), GURL(kUnsubscriptionUrl));
   manager.Subscribe(subscription_token);
   RespondToSubscriptionRequestSuccessfully(/*is_signed_in=*/false);
   ASSERT_TRUE(manager.IsSubscribed());
@@ -229,10 +238,11 @@ TEST_F(SubscriptionManagerImplTest, UnsubscribeSuccessfully) {
 TEST_F(SubscriptionManagerImplTest,
        ShouldRemainSubscribedIfErrorDuringUnsubscribe) {
   std::string subscription_token = "1234567890";
-  SubscriptionManagerImpl manager(GetRequestContext(), GetPrefService(),
-                                  GetSigninManager(), GetOAuth2TokenService(),
-                                  kAPIKey, GURL(kSubscriptionUrl),
-                                  GURL(kUnsubscriptionUrl));
+  SubscriptionManagerImpl manager(
+      GetRequestContext(), GetPrefService(),
+      /*variations_service=*/nullptr, GetSigninManager(),
+      GetOAuth2TokenService(),
+      /*locale=*/"", kAPIKey, GURL(kSubscriptionUrl), GURL(kUnsubscriptionUrl));
   manager.Subscribe(subscription_token);
   RespondToSubscriptionRequestSuccessfully(/*is_signed_in=*/false);
   ASSERT_TRUE(manager.IsSubscribed());
@@ -251,10 +261,10 @@ TEST_F(SubscriptionManagerImplTest,
   // Create manager and subscribe.
   FakeProfileOAuth2TokenService* auth_token_service = GetOAuth2TokenService();
   std::string subscription_token = "1234567890";
-  SubscriptionManagerImpl manager(GetRequestContext(), GetPrefService(),
-                                  GetSigninManager(), auth_token_service,
-                                  kAPIKey, GURL(kSubscriptionUrl),
-                                  GURL(kUnsubscriptionUrl));
+  SubscriptionManagerImpl manager(
+      GetRequestContext(), GetPrefService(),
+      /*variations_service=*/nullptr, GetSigninManager(), auth_token_service,
+      /*locale=*/"", kAPIKey, GURL(kSubscriptionUrl), GURL(kUnsubscriptionUrl));
   manager.Subscribe(subscription_token);
   RespondToSubscriptionRequestSuccessfully(/*is_signed_in=*/false);
   ASSERT_FALSE(manager.NeedsToResubscribe());
@@ -283,10 +293,10 @@ TEST_F(SubscriptionManagerImplTest,
   SignIn();
   IssueRefreshToken(auth_token_service);
   std::string subscription_token = "1234567890";
-  SubscriptionManagerImpl manager(GetRequestContext(), GetPrefService(),
-                                  GetSigninManager(), auth_token_service,
-                                  kAPIKey, GURL(kSubscriptionUrl),
-                                  GURL(kUnsubscriptionUrl));
+  SubscriptionManagerImpl manager(
+      GetRequestContext(), GetPrefService(),
+      /*variations_service=*/nullptr, GetSigninManager(), auth_token_service,
+      /*locale=*/"", kAPIKey, GURL(kSubscriptionUrl), GURL(kUnsubscriptionUrl));
   manager.Subscribe(subscription_token);
   ASSERT_EQ(1u, auth_token_service->GetPendingRequests().size());
   IssueAccessToken(auth_token_service);
@@ -307,10 +317,11 @@ TEST_F(SubscriptionManagerImplTest,
        ShouldUpdateTokenInPrefWhenResubscribeWithChangeInToken) {
   // Create manager and subscribe.
   std::string old_subscription_token = "1234567890";
-  SubscriptionManagerImpl manager(GetRequestContext(), GetPrefService(),
-                                  GetSigninManager(), GetOAuth2TokenService(),
-                                  kAPIKey, GURL(kSubscriptionUrl),
-                                  GURL(kUnsubscriptionUrl));
+  SubscriptionManagerImpl manager(
+      GetRequestContext(), GetPrefService(),
+      /*variations_service=*/nullptr, GetSigninManager(),
+      GetOAuth2TokenService(),
+      /*locale=*/"", kAPIKey, GURL(kSubscriptionUrl), GURL(kUnsubscriptionUrl));
   manager.Subscribe(old_subscription_token);
   RespondToSubscriptionRequestSuccessfully(/*is_signed_in=*/false);
   EXPECT_EQ(
@@ -329,6 +340,51 @@ TEST_F(SubscriptionManagerImplTest,
   EXPECT_EQ(
       new_subscription_token,
       GetPrefService()->GetString(prefs::kBreakingNewsSubscriptionDataToken));
+}
+
+TEST_F(SubscriptionManagerImplTest, ShouldReportSubscriptionResult) {
+  base::HistogramTester histogram_tester;
+  // Create manager and subscribe.
+  const std::string subscription_token = "token";
+  SubscriptionManagerImpl manager(
+      GetRequestContext(), GetPrefService(),
+      /*variations_service=*/nullptr, GetSigninManager(),
+      GetOAuth2TokenService(),
+      /*locale=*/"", kAPIKey, GURL(kSubscriptionUrl), GURL(kUnsubscriptionUrl));
+  manager.Subscribe(subscription_token);
+  // TODO(vitaliii): Mock subscription request to avoid this low level errors.
+  RespondToSubscriptionWithError(/*is_signed_in=*/false,
+                                 /*error_code=*/net::ERR_INVALID_RESPONSE);
+
+  EXPECT_THAT(
+      histogram_tester.GetAllSamples("NewTabPage.ContentSuggestions."
+                                     "BreakingNews.SubscriptionRequestStatus"),
+      ElementsAre(base::Bucket(
+          /*min=*/static_cast<int>(StatusCode::TEMPORARY_ERROR),
+          /*count=*/1)));
+}
+
+TEST_F(SubscriptionManagerImplTest, ShouldReportUnsubscriptionResult) {
+  base::HistogramTester histogram_tester;
+  // Create manager and subscribe.
+  const std::string subscription_token = "token";
+  SubscriptionManagerImpl manager(
+      GetRequestContext(), GetPrefService(),
+      /*variations_service=*/nullptr, GetSigninManager(),
+      GetOAuth2TokenService(),
+      /*locale=*/"", kAPIKey, GURL(kSubscriptionUrl), GURL(kUnsubscriptionUrl));
+  manager.Subscribe(subscription_token);
+  RespondToSubscriptionRequestSuccessfully(/*is_signed_in=*/false);
+  manager.Unsubscribe();
+
+  RespondToUnsubscriptionWithError(/*is_signed_in=*/false,
+                                   /*error_code=*/net::ERR_INVALID_RESPONSE);
+  EXPECT_THAT(histogram_tester.GetAllSamples("NewTabPage.ContentSuggestions."
+                                             "BreakingNews."
+                                             "UnsubscriptionRequestStatus"),
+              ElementsAre(base::Bucket(
+                  /*min=*/static_cast<int>(StatusCode::TEMPORARY_ERROR),
+                  /*count=*/1)));
 }
 
 }  // namespace ntp_snippets

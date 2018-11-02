@@ -1,10 +1,9 @@
+<link rel="import" href="chrome://resources/html/polymer.html">
+
 <link rel="import" href="chrome://resources/cr_elements/hidden_style_css.html">
 <link rel="import" href="chrome://resources/html/cr.html">
-<link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-list/iron-list.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-resizable-behavior/iron-resizable-behavior.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable-behavior.html">
-<link rel="import" href="chrome://extensions/animation_helper.html">
 <link rel="import" href="chrome://extensions/item.html">
 
 <dom-module id="extensions-item-list">
@@ -20,12 +19,11 @@
       }
 
       .empty-list-message {
-        align-items: center;
         color: #6e6e6e;
-        display: flex;
-        flex: 1;
+        font-size: 123%;  /* Should be 16px when 100% is 13px. */
         font-weight: 500;
-        justify-content: center;
+        margin-top: 80px;
+        text-align: center;
       }
 
       .wrapper {

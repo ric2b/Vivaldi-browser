@@ -85,8 +85,8 @@ scoped_refptr<HidDeviceInfo> CreateDeviceInfo(
       GetIntProperty(service, CFSTR(kIOHIDProductIDKey)),
       GetStringProperty(service, CFSTR(kIOHIDProductKey)),
       GetStringProperty(service, CFSTR(kIOHIDSerialNumberKey)),
-      kHIDBusTypeUSB,  // TODO(reillyg): Detect Bluetooth. crbug.com/443335
-      report_descriptor);
+      // TODO(reillyg): Detect Bluetooth. crbug.com/443335
+      device::mojom::HidBusType::kHIDBusTypeUSB, report_descriptor);
 }
 
 }  // namespace
@@ -127,11 +127,11 @@ HidServiceMac::HidServiceMac() : weak_factory_(this) {
 
 HidServiceMac::~HidServiceMac() {}
 
-void HidServiceMac::Connect(const HidDeviceId& device_id,
+void HidServiceMac::Connect(const std::string& device_guid,
                             const ConnectCallback& callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  const auto& map_entry = devices().find(device_id);
+  const auto& map_entry = devices().find(device_guid);
   if (map_entry == devices().end()) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::Bind(callback, nullptr));
@@ -145,14 +145,18 @@ void HidServiceMac::Connect(const HidDeviceId& device_id,
                  map_entry->second, callback));
 }
 
+base::WeakPtr<HidService> HidServiceMac::GetWeakPtr() {
+  return weak_factory_.GetWeakPtr();
+}
+
 // static
 base::ScopedCFTypeRef<IOHIDDeviceRef> HidServiceMac::OpenOnBlockingThread(
     scoped_refptr<HidDeviceInfo> device_info) {
   base::ScopedCFTypeRef<CFDictionaryRef> matching_dict(
-      IORegistryEntryIDMatching(device_info->device_id()));
+      IORegistryEntryIDMatching(device_info->platform_device_id()));
   if (!matching_dict.get()) {
     HID_LOG(EVENT) << "Failed to create matching dictionary for ID: "
-                   << device_info->device_id();
+                   << device_info->platform_device_id();
     return base::ScopedCFTypeRef<IOHIDDeviceRef>();
   }
 
@@ -162,7 +166,7 @@ base::ScopedCFTypeRef<IOHIDDeviceRef> HidServiceMac::OpenOnBlockingThread(
       kIOMasterPortDefault, matching_dict.release()));
   if (!service.get()) {
     HID_LOG(EVENT) << "IOService not found for ID: "
-                   << device_info->device_id();
+                   << device_info->platform_device_id();
     return base::ScopedCFTypeRef<IOHIDDeviceRef>();
   }
 

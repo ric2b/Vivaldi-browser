@@ -12,12 +12,11 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/time/time.h"
-#include "base/timer/timer.h"
 #include "cc/paint/paint_record.h"
 #include "chrome/browser/ui/views/tabs/tab_renderer_data.h"
 #include "ui/base/layout.h"
 #include "ui/gfx/animation/animation_delegate.h"
+#include "ui/gfx/animation/linear_animation.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/paint_throbber.h"
@@ -103,9 +102,9 @@ class Tab : public gfx::AnimationDelegate,
   void StartPulse();
   void StopPulse();
 
-  // Sets the visibility of the indicator shown when the tab title changes of
-  // an inactive pinned tab.
-  void SetPinnedTabTitleChangedIndicatorVisible(bool value);
+  // Sets the visibility of the indicator shown when the tab needs to indicate
+  // to the user that it needs their attention.
+  void SetTabNeedsAttention(bool value);
 
   // Set the background offset used to match the image in the inactive tab
   // to the frame image.
@@ -251,12 +250,11 @@ class Tab : public gfx::AnimationDelegate,
                                 bool active,
                                 SkColor color);
 
-  // Paints the pinned tab title changed indicator and |favicon_|. |favicon_|
-  // may be null. |favicon_draw_bounds| is |favicon_bounds_| adjusted for rtl
-  // and clipped to the bounds of the tab.
-  void PaintPinnedTabTitleChangedIndicatorAndIcon(
-      gfx::Canvas* canvas,
-      const gfx::Rect& favicon_draw_bounds);
+  // Paints the attention indicator and |favicon_|. |favicon_| may be null.
+  // |favicon_draw_bounds| is |favicon_bounds_| adjusted for rtl and clipped to
+  // the bounds of the tab.
+  void PaintAttentionIndicatorAndIcon(gfx::Canvas* canvas,
+                                      const gfx::Rect& favicon_draw_bounds);
 
   // Paints the favicon, mirrored for RTL if needed.
   void PaintIcon(gfx::Canvas* canvas);
@@ -323,20 +321,26 @@ class Tab : public gfx::AnimationDelegate,
 
   bool should_display_crashed_favicon_;
 
-  bool showing_pinned_tab_title_changed_indicator_ = false;
+  bool showing_attention_indicator_ = false;
 
   // Whole-tab throbbing "pulse" animation.
-  std::unique_ptr<gfx::ThrobAnimation> pulse_animation_;
+  gfx::ThrobAnimation pulse_animation_;
 
   // Crash icon animation (in place of favicon).
-  std::unique_ptr<gfx::LinearAnimation> crash_icon_animation_;
+  std::unique_ptr<FaviconCrashAnimation> crash_icon_animation_;
 
   scoped_refptr<gfx::AnimationContainer> animation_container_;
 
   ThrobberView* throbber_;
   AlertIndicatorButton* alert_indicator_button_;
   views::ImageButton* close_button_;
+
   views::Label* title_;
+  // The title's bounds are animated when switching between showing and hiding
+  // the tab's favicon/throbber.
+  gfx::Rect start_title_bounds_;
+  gfx::Rect target_title_bounds_;
+  gfx::LinearAnimation title_animation_;
 
   bool tab_activated_with_last_tap_down_;
 
@@ -367,15 +371,6 @@ class Tab : public gfx::AnimationDelegate,
   // data().favicon and may be modified for theming. It is created on demand
   // and thus may be null.
   gfx::ImageSkia favicon_;
-
-  // This timer allows us to delay updating the visibility of the loading
-  // indicator so that state changes of a very brief duration aren't visually
-  // apparent to the user.
-  base::OneShotTimer delayed_throbber_show_timer_;
-
-  // The last time the throbber was visible to the user. See notes in
-  // UpdateThrobber().
-  base::TimeTicks last_throbber_show_time_;
 
   class BackgroundCache {
    public:

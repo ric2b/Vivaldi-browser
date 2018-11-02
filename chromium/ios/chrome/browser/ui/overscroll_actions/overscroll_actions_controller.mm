@@ -10,11 +10,11 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #import "ios/chrome/browser/ui/browser_view_controller.h"
+#import "ios/chrome/browser/ui/history_popup/requirements/tab_history_constants.h"
 #import "ios/chrome/browser/ui/overscroll_actions/overscroll_actions_gesture_recognizer.h"
 #import "ios/chrome/browser/ui/overscroll_actions/overscroll_actions_view.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_controller.h"
-#import "ios/chrome/browser/ui/toolbar/web_toolbar_controller.h"
 #include "ios/chrome/browser/ui/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/voice/voice_search_notification_names.h"
 #import "ios/web/public/web_state/ui/crw_web_view_proxy.h"
@@ -157,7 +157,7 @@ NSString* const kOverscrollActionsDidEnd = @"OverscrollActionsDidStop";
   // Overscroll actions locking and unlocking works by listening to balanced
   // notifications. One notification lock and it's counterpart unlock. This
   // dictionary is used to retrieve the notification name from it's notification
-  // counterpart name. Exemple:
+  // counterpart name. Example:
   // UIKeyboardWillShowNotification trigger a lock. Its counterpart notification
   // name is UIKeyboardWillHideNotification.
   NSDictionary* _lockNotificationsCounterparts;
@@ -264,12 +264,10 @@ NSString* const kOverscrollActionsDidEnd = @"OverscrollActionsDidStop";
       kVoiceSearchWillHideNotification : kVoiceSearchWillShowNotification,
       kVoiceSearchBarViewButtonDeselectedNotification :
           kVoiceSearchBarViewButtonSelectedNotification,
-      ios_internal::kPageInfoWillHideNotification :
-          ios_internal::kPageInfoWillShowNotification,
-      ios_internal::kLocationBarResignsFirstResponderNotification :
-          ios_internal::kLocationBarBecomesFirstResponderNotification,
-      ios_internal::kSideSwipeDidStopNotification :
-          ios_internal::kSideSwipeWillStartNotification
+      kPageInfoWillHideNotification : kPageInfoWillShowNotification,
+      kLocationBarResignsFirstResponderNotification :
+          kLocationBarBecomesFirstResponderNotification,
+      kSideSwipeDidStopNotification : kSideSwipeWillStartNotification
     };
     [self registerNotifications];
   }
@@ -580,7 +578,7 @@ NSString* const kOverscrollActionsDidEnd = @"OverscrollActionsDidStop";
 
 - (void)setup {
   UIPanGestureRecognizer* panGesture;
-  // Workaround a bug occuring when Speak Selection is enabled.
+  // Workaround a bug occurring when Speak Selection is enabled.
   // See crbug.com/699655.
   if (UIAccessibilityIsSpeakSelectionEnabled()) {
     panGesture = [[OverscrollActionsGestureRecognizer alloc]

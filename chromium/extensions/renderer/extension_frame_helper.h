@@ -97,7 +97,8 @@ class ExtensionFrameHelper
       const blink::WebVector<blink::WebString>& newly_matching_selectors,
       const blink::WebVector<blink::WebString>& stopped_matching_selectors)
           override;
-  void DidStartProvisionalLoad(blink::WebDataSource* data_source) override;
+  void DidStartProvisionalLoad(
+      blink::WebDocumentLoader* document_loader) override;
   void DidCreateScriptContext(v8::Local<v8::Context>,
                               int world_id) override;
   void WillReleaseScriptContext(v8::Local<v8::Context>, int world_id) override;
@@ -128,6 +129,7 @@ class ExtensionFrameHelper
                                 const std::string& module_name,
                                 const std::string& function_name,
                                 const base::ListValue& args);
+  void OnSetFrameName(const std::string& name);
 
   // Type of view associated with the RenderFrame.
   ViewType view_type_;

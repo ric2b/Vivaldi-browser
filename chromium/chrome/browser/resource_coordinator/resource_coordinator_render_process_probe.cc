@@ -8,8 +8,6 @@
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
-#include "base/metrics/field_trial_params.h"
-#include "base/strings/string_number_conversions.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "content/public/browser/browser_thread.h"
@@ -54,9 +52,10 @@ class ResourceCoordinatorRenderProcessMetricsHandler
       const RenderProcessInfoMap& render_process_info_map) override {
     for (auto& render_process_info_map_entry : render_process_info_map) {
       auto& render_process_info = render_process_info_map_entry.second;
+      // TODO(oysteine): Move the multiplier used to avoid precision loss
+      // into a shared location, when this property gets used.
       render_process_info.host->GetProcessResourceCoordinator()->SetProperty(
-          mojom::PropertyType::kCPUUsage,
-          base::MakeUnique<base::Value>(render_process_info.cpu_usage));
+          mojom::PropertyType::kCPUUsage, render_process_info.cpu_usage * 1000);
     }
 
     return true;
@@ -67,7 +66,9 @@ ResourceCoordinatorRenderProcessProbe::ResourceCoordinatorRenderProcessProbe()
     : metrics_handler_(
           base::MakeUnique<ResourceCoordinatorRenderProcessMetricsHandler>()),
       interval_ms_(
-          base::TimeDelta::FromSeconds(kDefaultMeasurementIntervalInSeconds)) {}
+          base::TimeDelta::FromSeconds(kDefaultMeasurementIntervalInSeconds)) {
+  UpdateWithFieldTrialParams();
+}
 
 ResourceCoordinatorRenderProcessProbe::
     ~ResourceCoordinatorRenderProcessProbe() = default;
@@ -183,6 +184,14 @@ bool ResourceCoordinatorRenderProcessProbe::
     }
   }
   return true;
+}
+
+void ResourceCoordinatorRenderProcessProbe::UpdateWithFieldTrialParams() {
+  int64_t interval_ms = GetGRCRenderProcessCPUProfilingIntervalInMs();
+
+  if (interval_ms > 0) {
+    interval_ms_ = base::TimeDelta::FromMilliseconds(interval_ms);
+  }
 }
 
 }  // namespace resource_coordinator

@@ -57,12 +57,12 @@
 #if defined(SAFE_BROWSING_DB_LOCAL)
 #include "chrome/browser/safe_browsing/local_database_manager.h"
 #elif defined(SAFE_BROWSING_DB_REMOTE)
-#include "components/safe_browsing_db/remote_database_manager.h"
+#include "components/safe_browsing/db/remote_database_manager.h"
 #endif
 
 #if defined(FULL_SAFE_BROWSING)
 #include "chrome/browser/safe_browsing/client_side_detection_service.h"
-#include "chrome/browser/safe_browsing/download_protection_service.h"
+#include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
 #include "chrome/browser/safe_browsing/incident_reporting/binary_integrity_analyzer.h"
 #include "chrome/browser/safe_browsing/incident_reporting/blacklist_load_analyzer.h"
 #include "chrome/browser/safe_browsing/incident_reporting/incident_reporting_service.h"
@@ -323,7 +323,6 @@ void SafeBrowsingService::RegisterAllDelayedAnalysis() {
 #if defined(FULL_SAFE_BROWSING)
   RegisterBinaryIntegrityAnalysis();
   RegisterBlacklistLoadAnalysis();
-  RegisterModuleLoadAnalysis(database_manager());
   RegisterVariationsSeedSignatureAnalysis();
 #endif
 }

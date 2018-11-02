@@ -9,17 +9,25 @@
 #include "build/build_config.h"
 #include "chrome/browser/media/media_engagement_service.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/associated_interface_provider.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_entry_builder.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
+#include "third_party/WebKit/public/platform/media_engagement.mojom.h"
 
 namespace {
 
-constexpr base::TimeDelta kSignificantMediaPlaybackTime =
-    base::TimeDelta::FromSeconds(7);
-
 int ConvertScoreToPercentage(double score) {
   return round(score * 100);
+}
+
+void SendEngagementLevelToFrame(const url::Origin& origin,
+                                content::RenderFrameHost* render_frame_host) {
+  blink::mojom::MediaEngagementClientAssociatedPtr client;
+  render_frame_host->GetRemoteAssociatedInterfaces()->GetInterface(&client);
+  client->SetHasHighMediaEngagement(origin);
 }
 
 }  // namespace.
@@ -29,38 +37,29 @@ int ConvertScoreToPercentage(double score) {
 const gfx::Size MediaEngagementContentsObserver::kSignificantSize =
     gfx::Size(200, 140);
 
-const char* MediaEngagementContentsObserver::kHistogramScoreAtPlaybackName =
-    "Media.Engagement.ScoreAtPlayback";
+const char* const
+    MediaEngagementContentsObserver::kHistogramScoreAtPlaybackName =
+        "Media.Engagement.ScoreAtPlayback";
 
-const char* MediaEngagementContentsObserver::kUkmEntryName =
-    "Media.Engagement.SessionFinished";
-
-const char* MediaEngagementContentsObserver::kUkmMetricPlaybacksTotalName =
-    "Playbacks.Total";
-
-const char* MediaEngagementContentsObserver::kUkmMetricVisitsTotalName =
-    "Visits.Total";
-
-const char* MediaEngagementContentsObserver::kUkmMetricEngagementScoreName =
-    "Engagement.Score";
-
-const char* MediaEngagementContentsObserver::kUkmMetricPlaybacksDeltaName =
-    "Playbacks.Delta";
-
-const char* MediaEngagementContentsObserver::
+const char* const MediaEngagementContentsObserver::
     kHistogramSignificantNotAddedFirstTimeName =
         "Media.Engagement.SignificantPlayers.PlayerNotAdded.FirstTime";
 
-const char* MediaEngagementContentsObserver::
+const char* const MediaEngagementContentsObserver::
     kHistogramSignificantNotAddedAfterFirstTimeName =
         "Media.Engagement.SignificantPlayers.PlayerNotAdded.AfterFirstTime";
 
-const char* MediaEngagementContentsObserver::kHistogramSignificantRemovedName =
-    "Media.Engagement.SignificantPlayers.PlayerRemoved";
+const char* const
+    MediaEngagementContentsObserver::kHistogramSignificantRemovedName =
+        "Media.Engagement.SignificantPlayers.PlayerRemoved";
 
 const int MediaEngagementContentsObserver::kMaxInsignificantPlaybackReason =
     static_cast<int>(MediaEngagementContentsObserver::
                          InsignificantPlaybackReason::kReasonMax);
+
+const base::TimeDelta
+    MediaEngagementContentsObserver::kSignificantMediaPlaybackTime =
+        base::TimeDelta::FromSeconds(7);
 
 MediaEngagementContentsObserver::MediaEngagementContentsObserver(
     content::WebContents* web_contents,
@@ -96,21 +95,14 @@ void MediaEngagementContentsObserver::RecordUkmMetrics() {
   ukm::SourceId source_id = ukm_recorder->GetNewSourceID();
   ukm_recorder->UpdateSourceURL(source_id, url);
 
-  std::unique_ptr<ukm::UkmEntryBuilder> builder = ukm_recorder->GetEntryBuilder(
-      source_id, MediaEngagementContentsObserver::kUkmEntryName);
-
   MediaEngagementScore score = service_->CreateEngagementScore(url);
-  builder->AddMetric(
-      MediaEngagementContentsObserver::kUkmMetricPlaybacksTotalName,
-      score.media_playbacks());
-  builder->AddMetric(MediaEngagementContentsObserver::kUkmMetricVisitsTotalName,
-                     score.visits());
-  builder->AddMetric(
-      MediaEngagementContentsObserver::kUkmMetricEngagementScoreName,
-      ConvertScoreToPercentage(score.GetTotalScore()));
-  builder->AddMetric(
-      MediaEngagementContentsObserver::kUkmMetricPlaybacksDeltaName,
-      significant_playback_recorded_);
+  ukm::builders::Media_Engagement_SessionFinished(source_id)
+      .SetPlaybacks_Total(score.media_playbacks())
+      .SetVisits_Total(score.visits())
+      .SetEngagement_Score(ConvertScoreToPercentage(score.actual_score()))
+      .SetPlaybacks_Delta(significant_playback_recorded_)
+      .SetEngagement_IsHigh(score.high_score())
+      .Record(ukm_recorder);
 }
 
 void MediaEngagementContentsObserver::DidFinishNavigation(
@@ -372,7 +364,8 @@ void MediaEngagementContentsObserver::UpdateTimer() {
       return;
 
     playback_timer_->Start(
-        FROM_HERE, kSignificantMediaPlaybackTime,
+        FROM_HERE,
+        MediaEngagementContentsObserver::kSignificantMediaPlaybackTime,
         base::Bind(
             &MediaEngagementContentsObserver::OnSignificantMediaPlaybackTime,
             base::Unretained(this)));
@@ -386,4 +379,14 @@ void MediaEngagementContentsObserver::UpdateTimer() {
 void MediaEngagementContentsObserver::SetTimerForTest(
     std::unique_ptr<base::Timer> timer) {
   playback_timer_ = std::move(timer);
+}
+
+void MediaEngagementContentsObserver::ReadyToCommitNavigation(
+    content::NavigationHandle* handle) {
+  // TODO(beccahughes): Convert MEI API to using origin.
+  GURL url = handle->GetWebContents()->GetURL();
+  if (service_->HasHighEngagement(url)) {
+    SendEngagementLevelToFrame(url::Origin(handle->GetURL()),
+                               handle->GetRenderFrameHost());
+  }
 }

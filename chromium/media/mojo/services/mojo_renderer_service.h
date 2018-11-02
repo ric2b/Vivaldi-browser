@@ -34,9 +34,8 @@ class VideoRendererSink;
 
 // A mojom::Renderer implementation that use a media::Renderer to render
 // media streams.
-class MEDIA_MOJO_EXPORT MojoRendererService
-    : NON_EXPORTED_BASE(public mojom::Renderer),
-      public RendererClient {
+class MEDIA_MOJO_EXPORT MojoRendererService : public mojom::Renderer,
+                                              public RendererClient {
  public:
   using InitiateSurfaceRequestCB = base::Callback<base::UnguessableToken()>;
 
@@ -65,7 +64,7 @@ class MEDIA_MOJO_EXPORT MojoRendererService
   void Initialize(mojom::RendererClientAssociatedPtrInfo client,
                   base::Optional<std::vector<mojom::DemuxerStreamPtr>> streams,
                   const base::Optional<GURL>& media_url,
-                  const base::Optional<GURL>& first_party_for_cookies,
+                  const base::Optional<GURL>& site_for_cookies,
                   InitializeCallback callback) final;
   void Flush(FlushCallback callback) final;
   void StartPlayingFrom(base::TimeDelta time_delta) final;

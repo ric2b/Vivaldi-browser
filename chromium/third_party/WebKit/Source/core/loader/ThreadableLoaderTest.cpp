@@ -648,8 +648,8 @@ TEST_P(ThreadableLoaderTest, DidFailInStart) {
   CreateLoader();
   CallCheckpoint(1);
 
-  EXPECT_CALL(*Client(), DidFail(ResourceError(
-                             kErrorDomainBlinkInternal, 0, ErrorURL(),
+  EXPECT_CALL(*Client(), DidFail(ResourceError::CancelledDueToAccessCheckError(
+                             ErrorURL(), ResourceRequestBlockedReason::kOther,
                              "Cross origin requests are not supported.")));
   EXPECT_CALL(GetCheckpoint(), Call(2));
 

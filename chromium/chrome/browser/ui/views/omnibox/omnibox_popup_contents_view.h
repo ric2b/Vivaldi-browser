@@ -17,7 +17,6 @@
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/image/image.h"
 #include "ui/views/view.h"
-#include "ui/views/view_targeter_delegate.h"
 
 struct AutocompleteMatch;
 class LocationBarView;
@@ -28,7 +27,6 @@ class OmniboxView;
 // A view representing the contents of the autocomplete popup.
 class OmniboxPopupContentsView : public views::View,
                                  public OmniboxPopupView,
-                                 public views::ViewTargeterDelegate,
                                  public gfx::AnimationDelegate {
  public:
   // Factory method for creating the AutocompletePopupView.
@@ -48,6 +46,7 @@ class OmniboxPopupContentsView : public views::View,
   void InvalidateLine(size_t line) override;
   void OnLineSelected(size_t line) override;
   void UpdatePopupAppearance() override;
+  void SetMatchIcon(size_t match_index, const gfx::Image& icon) override;
   gfx::Rect GetTargetBounds() override;
   void PaintUpdatesNow() override;
   void OnDragCanceled() override;
@@ -61,18 +60,11 @@ class OmniboxPopupContentsView : public views::View,
   bool OnMousePressed(const ui::MouseEvent& event) override;
   bool OnMouseDragged(const ui::MouseEvent& event) override;
   void OnMouseReleased(const ui::MouseEvent& event) override;
-  void OnMouseCaptureLost() override;
-  void OnMouseMoved(const ui::MouseEvent& event) override;
-  void OnMouseEntered(const ui::MouseEvent& event) override;
-  void OnMouseExited(const ui::MouseEvent& event) override;
   void OnGestureEvent(ui::GestureEvent* event) override;
 
   bool IsSelectedIndex(size_t index) const;
-  bool IsHoveredIndex(size_t index) const;
   gfx::Image GetIconIfExtensionMatch(size_t index) const;
   bool IsStarredMatch(const AutocompleteMatch& match) const;
-
-  int max_match_contents_width() const { return max_match_contents_width_; }
 
  protected:
   OmniboxPopupContentsView(const gfx::FontList& font_list,
@@ -94,10 +86,7 @@ class OmniboxPopupContentsView : public views::View,
   // views::View:
   const char* GetClassName() const override;
   void OnPaint(gfx::Canvas* canvas) override;
-  void PaintChildren(const ui::PaintContext& context) override;
-
-  // views::ViewTargeterDelegate:
-  views::View* TargetForRect(views::View* root, const gfx::Rect& rect) override;
+  void PaintChildren(const views::PaintInfo& paint_info) override;
 
   // Call immediately after construction.
   void Init();
@@ -113,10 +102,8 @@ class OmniboxPopupContentsView : public views::View,
   // the specified point.
   size_t GetIndexForPoint(const gfx::Point& point);
 
-  // Processes a located event (e.g. mouse/gesture) and sets the selection/hover
-  // state of a line in the list.
-  void UpdateLineEvent(const ui::LocatedEvent& event,
-                       bool should_set_selected_line);
+  // Sets the line corresponding to |event| as selected.
+  void SetSelectedLine(const ui::LocatedEvent& event);
 
   // Opens an entry from the list depending on the event and the selected
   // disposition.
@@ -141,14 +128,6 @@ class OmniboxPopupContentsView : public views::View,
   // The font list used for result rows, based on the omnibox font list.
   gfx::FontList font_list_;
 
-  // If the user cancels a dragging action (i.e. by pressing ESC), we don't have
-  // a convenient way to release mouse capture. Instead we use this flag to
-  // simply ignore all remaining drag events, and the eventual mouse release
-  // event. Since OnDragCanceled() can be called when we're not dragging, this
-  // flag is reset to false on a mouse pressed event, to make sure we don't
-  // erroneously ignore the next drag.
-  bool ignore_mouse_drag_;
-
   // The popup sizes vertically using an animation when the popup is getting
   // shorter (not larger, that makes it look "slow").
   gfx::SlideAnimation size_animation_;
@@ -157,11 +136,6 @@ class OmniboxPopupContentsView : public views::View,
 
   int start_margin_;
   int end_margin_;
-
-  // When the dropdown is not wide enough while displaying tail suggestions,
-  // we use the width of widest match contents to shift the suggestions so that
-  // the widest suggestion just reaches the end edge.
-  int max_match_contents_width_;
 
   DISALLOW_COPY_AND_ASSIGN(OmniboxPopupContentsView);
 };

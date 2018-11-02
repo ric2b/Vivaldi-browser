@@ -14,6 +14,7 @@ static_library("apis") {
     "//components/bookmarks/browser:browser",
     "//components/favicon/core:core",
     "//components/search_engines",
+    "//components/version_info",
     "//components/zoom:zoom",
     "//content/public/browser",
 
@@ -24,6 +25,7 @@ static_library("apis") {
     "//vivaldi/app/resources",
     "//vivaldi/extensions/schema:api",
     "//vivaldi/extensions/schema:api_registration",
+    "//vivaldi/prefs:prefs_files_generator",
   ]
   sources = [
     "auto_update/auto_update_api_linux.cc",
@@ -50,6 +52,8 @@ static_library("apis") {
     "import_data/import_data_api.h",
     "notes/notes_api.cc",
     "notes/notes_api.h",
+    "prefs/prefs_api.cc",
+    "prefs/prefs_api.h",
     "runtime/runtime_api.cpp",
     "runtime/runtime_api.h",
     "savedpasswords/savedpasswords_api.cc",
@@ -71,6 +75,8 @@ static_library("apis") {
     "vivaldi_utilities/vivaldi_utilities_api_mac.mm",
     "vivaldi_utilities/vivaldi_utilities_api_win.cc",
     "vivaldi_utilities/vivaldi_utilities_api.h",
+    "window/window_private_api.cc",
+    "window/window_private_api.h",
     "zoom/zoom_api.cc",
     "zoom/zoom_api.h",
   ]

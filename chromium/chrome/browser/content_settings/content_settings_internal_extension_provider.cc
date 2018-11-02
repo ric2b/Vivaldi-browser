@@ -26,6 +26,8 @@
 #include "extensions/common/features/simple_feature.h"
 #include "extensions/common/manifest_handlers/plugins_handler.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace content_settings {
 
 namespace {
@@ -90,8 +92,11 @@ void InternalExtensionProvider::Observe(
   const extensions::ExtensionHost* host =
       content::Details<extensions::ExtensionHost>(details).ptr();
   if (host->extension()->is_platform_app()) {
+    // NOTE(andre@vivaldi.com) : We cannot set this to blocked for Vivaldi,
+    // otherwise plugin settings will not be editable.
+    if (!vivaldi::IsVivaldiApp(host->extension()->id())) {
     SetContentSettingForExtension(host->extension(), CONTENT_SETTING_BLOCK);
-
+    }
     // White-list CRD's v2 app, until crbug.com/134216 is complete.
     const char* const kAppWhitelist[] = {
         "2775E568AC98F9578791F1EAB65A1BF5F8CEF414",

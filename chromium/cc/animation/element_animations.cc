@@ -17,6 +17,7 @@
 #include "cc/animation/keyframed_animation_curve.h"
 #include "cc/animation/transform_operations.h"
 #include "cc/base/filter_operations.h"
+#include "cc/base/math_util.h"
 #include "cc/trees/mutator_host_client.h"
 #include "ui/gfx/geometry/box_f.h"
 
@@ -195,25 +196,11 @@ void ElementAnimations::NotifyAnimationAborted(const AnimationEvent& event) {
   UpdateClientAnimationState();
 }
 
-bool ElementAnimations::HasFilterAnimationThatInflatesBounds() const {
-  for (auto& player : players_list_) {
-    if (player.HasFilterAnimationThatInflatesBounds())
-      return true;
-  }
-  return false;
-}
-
 bool ElementAnimations::HasTransformAnimationThatInflatesBounds() const {
   for (auto& player : players_list_) {
     if (player.HasTransformAnimationThatInflatesBounds())
       return true;
   }
-  return false;
-}
-
-bool ElementAnimations::FilterAnimationBoundsForBox(const gfx::BoxF& box,
-                                                    gfx::BoxF* bounds) const {
-  // TODO(avallee): Implement.
   return false;
 }
 
@@ -296,8 +283,11 @@ void ElementAnimations::SetNeedsUpdateImplClientState() {
   SetNeedsPushProperties();
 }
 
-void ElementAnimations::NotifyClientOpacityAnimated(float opacity,
-                                                    Animation* animation) {
+void ElementAnimations::NotifyClientFloatAnimated(float opacity,
+                                                  int target_property_id,
+                                                  Animation* animation) {
+  DCHECK(animation->target_property_id() == TargetProperty::OPACITY);
+  opacity = MathUtil::ClampToRange(opacity, 0.0f, 1.0f);
   if (AnimationAffectsActiveElements(animation))
     OnOpacityAnimated(ElementListType::ACTIVE, opacity);
   if (AnimationAffectsPendingElements(animation))
@@ -306,6 +296,7 @@ void ElementAnimations::NotifyClientOpacityAnimated(float opacity,
 
 void ElementAnimations::NotifyClientFilterAnimated(
     const FilterOperations& filters,
+    int target_property_id,
     Animation* animation) {
   if (AnimationAffectsActiveElements(animation))
     OnFilterAnimated(ElementListType::ACTIVE, filters);
@@ -315,6 +306,7 @@ void ElementAnimations::NotifyClientFilterAnimated(
 
 void ElementAnimations::NotifyClientTransformOperationsAnimated(
     const TransformOperations& operations,
+    int target_property_id,
     Animation* animation) {
   gfx::Transform transform = operations.Apply();
   if (AnimationAffectsActiveElements(animation))
@@ -325,6 +317,7 @@ void ElementAnimations::NotifyClientTransformOperationsAnimated(
 
 void ElementAnimations::NotifyClientScrollOffsetAnimated(
     const gfx::ScrollOffset& scroll_offset,
+    int target_property_id,
     Animation* animation) {
   if (AnimationAffectsActiveElements(animation))
     OnScrollOffsetAnimated(ElementListType::ACTIVE, scroll_offset);

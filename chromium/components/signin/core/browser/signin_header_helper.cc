@@ -24,8 +24,9 @@
 
 namespace signin {
 
-extern const char kChromeConnectedHeader[] = "X-Chrome-Connected";
-extern const char kDiceRequestHeader[] = "X-Chrome-ID-Consistency-Request";
+const char kChromeConnectedHeader[] = "X-Chrome-Connected";
+const char kDiceRequestHeader[] = "X-Chrome-ID-Consistency-Request";
+const char kDiceResponseHeader[] = "X-Chrome-ID-Consistency-Response";
 
 ManageAccountsParams::ManageAccountsParams()
     : service_type(GAIA_SERVICE_TYPE_NONE),
@@ -125,16 +126,17 @@ bool SigninHeaderHelper::ShouldBuildRequestHeader(
   return true;
 }
 
-void AppendOrRemoveAccountConsistentyRequestHeader(
+void AppendOrRemoveAccountConsistencyRequestHeader(
     net::URLRequest* request,
     const GURL& redirect_url,
     const std::string& account_id,
     bool sync_enabled,
+    bool sync_has_auth_error,
     const content_settings::CookieSettings* cookie_settings,
     int profile_mode_mask) {
   const GURL& url = redirect_url.is_empty() ? request->url() : redirect_url;
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
-  DiceHeaderHelper dice_helper;
+  DiceHeaderHelper dice_helper(!account_id.empty() && sync_has_auth_error);
   std::string dice_header_value;
   if (dice_helper.ShouldBuildRequestHeader(url, cookie_settings)) {
     dice_header_value =

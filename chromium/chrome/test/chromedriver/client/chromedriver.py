@@ -53,6 +53,12 @@ class NoAlertOpen(ChromeDriverException):
   pass
 class NoSuchCookie(ChromeDriverException):
   pass
+class InvalidArgument(ChromeDriverException):
+  pass
+class ElementNotInteractable(ChromeDriverException):
+  pass
+class UnsupportedOperation(ChromeDriverException):
+  pass
 
 def _ExceptionForLegacyResponse(response):
   exception_class_map = {
@@ -64,6 +70,9 @@ def _ExceptionForLegacyResponse(response):
     11: ElementNotVisible,
     12: InvalidElementState,
     13: UnknownError,
+    14: InvalidArgument,
+    15: ElementNotInteractable,
+    16: UnsupportedOperation,
     17: JavaScriptError,
     19: XPathLookupError,
     21: Timeout,
@@ -100,11 +109,14 @@ def _ExceptionForStandardResponse(response):
     'asynchronous script timeout': ScriptTimeout,
     'invalid selector': InvalidSelector,
     'session not created exception': SessionNotCreatedException,
-    'no such cookie': NoSuchCookie
+    'no such cookie': NoSuchCookie,
+    'invalid argument': InvalidArgument,
+    'element not interactable': ElementNotInteractable,
+    'unsupported operation': UnsupportedOperation,
   }
 
-  error = response['error']
-  msg = response['message']
+  error = response['value']['error']
+  msg = response['value']['message']
   return exception_map.get(error, ChromeDriverException)(msg)
 
 class ChromeDriver(object):
@@ -121,6 +133,7 @@ class ChromeDriver(object):
                page_load_strategy=None, unexpected_alert_behaviour=None,
                devtools_events_to_log=None):
     self._executor = command_executor.CommandExecutor(server_url)
+    self.w3c_compliant = False
 
     options = {}
 
@@ -215,16 +228,16 @@ class ChromeDriver(object):
       params = {'desiredCapabilities': params}
 
     response = self._ExecuteCommand(Command.NEW_SESSION, params)
-    if isinstance(response['status'], basestring):
+    if len(response.keys()) == 1 and 'value' in response.keys():
       self.w3c_compliant = True
+      self._session_id = response['value']['sessionId']
+      self.capabilities = self._UnwrapValue(response['value']['capabilities'])
     elif isinstance(response['status'], int):
       self.w3c_compliant = False
+      self._session_id = response['sessionId']
+      self.capabilities = self._UnwrapValue(response['value'])
     else:
       raise UnknownError("unexpected response")
-
-    self._session_id = response['sessionId']
-    self.capabilities = self._UnwrapValue(response['value'])
-
 
   def _WrapValue(self, value):
     """Wrap value from client side for chromedriver side."""
@@ -266,10 +279,10 @@ class ChromeDriver(object):
   def _ExecuteCommand(self, command, params={}):
     params = self._WrapValue(params)
     response = self._executor.Execute(command, params)
-    if ('status' in response and isinstance(response['status'], int) and
-        response['status'] != 0):
+    if (not self.w3c_compliant and 'status' in response
+        and response['status'] != 0):
       raise _ExceptionForLegacyResponse(response)
-    elif 'error' in response:
+    elif self.w3c_compliant and 'error' in response['value']:
       raise _ExceptionForStandardResponse(response)
     return response
 
@@ -454,6 +467,9 @@ class ChromeDriver(object):
 
   def MaximizeWindow(self):
     self.ExecuteCommand(Command.MAXIMIZE_WINDOW, {'windowHandle': 'current'})
+
+  def FullScreenWindow(self):
+    self.ExecuteCommand(Command.FULLSCREEN_WINDOW)
 
   def Quit(self):
     """Quits the browser and ends the session."""

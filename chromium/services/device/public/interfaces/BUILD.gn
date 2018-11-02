@@ -12,6 +12,7 @@ mojom("interfaces") {
     "nfc.mojom",
     "nfc_provider.mojom",
     "power_monitor.mojom",
+    "serial.mojom",
     "time_zone_monitor.mojom",
     "vibration_manager.mojom",
     "wake_lock.mojom",
@@ -24,7 +25,7 @@ mojom("interfaces") {
   ]
 
   # TODO(crbug.com/699569): Convert to use the new JS bindings.
-  use_new_js_bindings = false
+  js_bindings_mode = "both"
 }
 
 mojom("generic_sensor") {

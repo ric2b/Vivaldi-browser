@@ -19,6 +19,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/permission_bubble/mock_permission_prompt_factory.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
 #include "chrome/browser/ui/test/test_browser_dialog.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -28,7 +29,9 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
+#include "media/base/media_switches.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 
 namespace test {
@@ -88,6 +91,12 @@ class PermissionRequestManagerBrowserTest : public InProcessBrowserTest {
     mock_permission_prompt_factory_.reset();
   }
 
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    // Enable fake devices so we can test getUserMedia() on devices without
+    // physical media devices.
+    command_line->AppendSwitch(switches::kUseFakeDeviceForMediaStream);
+  }
+
   PermissionRequestManager* GetPermissionRequestManager() {
     return PermissionRequestManager::FromWebContents(
         browser()->tab_strip_model()->GetActiveWebContents());
@@ -128,7 +137,6 @@ class PermissionDialogTest
     ui_test_utils::NavigateToURL(browser(), GetUrl());
   }
 
- private:
   GURL GetUrl() { return GURL("https://example.com"); }
 
   PermissionRequest* MakeRegisterProtocolHandlerRequest();
@@ -142,6 +150,7 @@ class PermissionDialogTest
   // Holds requests that do not delete themselves.
   std::vector<std::unique_ptr<PermissionRequest>> owned_requests_;
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(PermissionDialogTest);
 };
 
@@ -389,6 +398,95 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestManagerBrowserTest, InPageNavigation) {
   EXPECT_EQ(1, bubble_factory()->TotalRequestCount());
 }
 
+// Prompts are only shown for active tabs and (on Desktop) hidden on tab
+// switching
+IN_PROC_BROWSER_TEST_F(PermissionRequestManagerBrowserTest, MultipleTabs) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(
+      browser(), embedded_test_server()->GetURL("/empty.html"), 1);
+
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), embedded_test_server()->GetURL("/empty.html"),
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+
+  // SetUp() only creates a mock prompt factory for the first tab.
+  MockPermissionPromptFactory* bubble_factory_0 = bubble_factory();
+  std::unique_ptr<MockPermissionPromptFactory> bubble_factory_1(
+      base::MakeUnique<MockPermissionPromptFactory>(
+          GetPermissionRequestManager()));
+
+  TabStripModel* tab_strip_model = browser()->tab_strip_model();
+  ASSERT_EQ(2, tab_strip_model->count());
+  ASSERT_EQ(1, tab_strip_model->active_index());
+
+  // Request geolocation in foreground tab, prompt should be shown.
+  ExecuteScriptAndGetValue(
+      tab_strip_model->GetWebContentsAt(1)->GetMainFrame(),
+      "navigator.geolocation.getCurrentPosition(function(){});");
+  EXPECT_EQ(1, bubble_factory_1->show_count());
+  EXPECT_FALSE(bubble_factory_0->is_visible());
+  EXPECT_TRUE(bubble_factory_1->is_visible());
+
+  tab_strip_model->ActivateTabAt(0, false);
+  EXPECT_FALSE(bubble_factory_0->is_visible());
+  EXPECT_FALSE(bubble_factory_1->is_visible());
+
+  tab_strip_model->ActivateTabAt(1, false);
+  EXPECT_EQ(2, bubble_factory_1->show_count());
+  EXPECT_FALSE(bubble_factory_0->is_visible());
+  EXPECT_TRUE(bubble_factory_1->is_visible());
+
+  // Request notification in background tab. No prompt is shown until the tab
+  // itself is activated.
+  ExecuteScriptAndGetValue(tab_strip_model->GetWebContentsAt(0)->GetMainFrame(),
+                           "Notification.requestPermission()");
+  EXPECT_FALSE(bubble_factory_0->is_visible());
+  EXPECT_EQ(2, bubble_factory_1->show_count());
+
+  tab_strip_model->ActivateTabAt(0, false);
+  EXPECT_TRUE(bubble_factory_0->is_visible());
+  EXPECT_EQ(1, bubble_factory()->show_count());
+  EXPECT_EQ(2, bubble_factory_1->show_count());
+}
+
+IN_PROC_BROWSER_TEST_F(PermissionRequestManagerBrowserTest,
+                       BackgroundTabNavigation) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(
+      browser(), embedded_test_server()->GetURL("/empty.html"), 1);
+
+  // Request camera, prompt should be shown.
+  ExecuteScriptAndGetValue(
+      browser()->tab_strip_model()->GetWebContentsAt(0)->GetMainFrame(),
+      "navigator.getUserMedia({video: true}, ()=>{}, ()=>{})");
+  bubble_factory()->WaitForPermissionBubble();
+  EXPECT_TRUE(bubble_factory()->is_visible());
+  EXPECT_EQ(1, bubble_factory()->show_count());
+
+  // SetUp() only creates a mock prompt factory for the first tab but this test
+  // doesn't request any permissions in the second tab so it doesn't need one.
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), embedded_test_server()->GetURL("/empty.html"),
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+
+  // Navigate background tab, prompt should be removed.
+  ExecuteScriptAndGetValue(
+      browser()->tab_strip_model()->GetWebContentsAt(0)->GetMainFrame(),
+      "window.location = 'simple.html'");
+  content::TestNavigationObserver observer(
+      browser()->tab_strip_model()->GetWebContentsAt(0));
+  observer.Wait();
+  EXPECT_FALSE(bubble_factory()->is_visible());
+
+  browser()->tab_strip_model()->ActivateTabAt(0, false);
+  EXPECT_FALSE(bubble_factory()->is_visible());
+  EXPECT_EQ(1, bubble_factory()->show_count());
+}
+
 // Bubble requests should not be shown when the killswitch is on.
 IN_PROC_BROWSER_TEST_F(PermissionRequestManagerBrowserTest,
                        KillSwitchGeolocation) {
@@ -398,20 +496,15 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestManagerBrowserTest,
       browser(),
       embedded_test_server()->GetURL("/permissions/killswitch_tester.html"));
 
-  // Now enable the geolocation killswitch.
-  EnableKillSwitch(CONTENT_SETTINGS_TYPE_GEOLOCATION);
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
+  EXPECT_TRUE(content::ExecuteScript(web_contents, "requestGeolocation();"));
+  bubble_factory()->WaitForPermissionBubble();
+  EXPECT_EQ(1, bubble_factory()->show_count());
+  EXPECT_EQ(1, bubble_factory()->TotalRequestCount());
 
-  std::string result;
-  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-      web_contents, "requestGeolocation();", &result));
-  EXPECT_EQ("denied", result);
-  EXPECT_EQ(0, bubble_factory()->show_count());
-  EXPECT_EQ(0, bubble_factory()->TotalRequestCount());
-
-  // Disable the trial.
-  variations::testing::ClearAllVariationParams();
+  // Now enable the geolocation killswitch.
+  EnableKillSwitch(CONTENT_SETTINGS_TYPE_GEOLOCATION);
 
   // Reload the page to get around blink layer caching for geolocation
   // requests.
@@ -419,8 +512,10 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestManagerBrowserTest,
       browser(),
       embedded_test_server()->GetURL("/permissions/killswitch_tester.html"));
 
-  EXPECT_TRUE(content::ExecuteScript(web_contents, "requestGeolocation();"));
-  bubble_factory()->WaitForPermissionBubble();
+  std::string result;
+  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
+      web_contents, "requestGeolocation();", &result));
+  EXPECT_EQ("denied", result);
   EXPECT_EQ(1, bubble_factory()->show_count());
   EXPECT_EQ(1, bubble_factory()->TotalRequestCount());
 }
@@ -434,25 +529,49 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestManagerBrowserTest,
       browser(),
       embedded_test_server()->GetURL("/permissions/killswitch_tester.html"));
 
-  // Now enable the notifications killswitch.
-  EnableKillSwitch(CONTENT_SETTINGS_TYPE_NOTIFICATIONS);
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
+  EXPECT_TRUE(content::ExecuteScript(web_contents, "requestNotification();"));
+  bubble_factory()->WaitForPermissionBubble();
+  EXPECT_EQ(1, bubble_factory()->show_count());
+  EXPECT_EQ(1, bubble_factory()->TotalRequestCount());
+
+  // Now enable the notifications killswitch.
+  EnableKillSwitch(CONTENT_SETTINGS_TYPE_NOTIFICATIONS);
 
   std::string result;
   EXPECT_TRUE(content::ExecuteScriptAndExtractString(
       web_contents, "requestNotification();", &result));
   EXPECT_EQ("denied", result);
-  EXPECT_EQ(0, bubble_factory()->show_count());
-  EXPECT_EQ(0, bubble_factory()->TotalRequestCount());
-
-  // Disable the trial.
-  variations::testing::ClearAllVariationParams();
-
-  EXPECT_TRUE(content::ExecuteScript(web_contents, "requestNotification();"));
-  bubble_factory()->WaitForPermissionBubble();
   EXPECT_EQ(1, bubble_factory()->show_count());
   EXPECT_EQ(1, bubble_factory()->TotalRequestCount());
+}
+
+// Test bubbles showing when tabs move between windows. Simulates a situation
+// that could result in permission bubbles not being dismissed, and a problem
+// referencing a temporary drag window. See http://crbug.com/754552.
+IN_PROC_BROWSER_TEST_F(PermissionDialogTest, SwitchBrowserWindow) {
+  ShowDialog("geolocation");
+  TabStripModel* strip = browser()->tab_strip_model();
+
+  // Drag out into a dragging window. E.g. see steps in [BrowserWindowController
+  // detachTabsToNewWindow:..].
+  std::vector<TabStripModelDelegate::NewStripContents> contentses(1);
+  contentses.back().web_contents = strip->GetWebContentsAt(0);
+  strip->DetachWebContentsAt(0);
+  Browser* dragging_browser = strip->delegate()->CreateNewStripWithContents(
+      contentses, gfx::Rect(100, 100, 640, 480), false);
+
+  // Attach the tab back to the original window. E.g. See steps in
+  // [BrowserWindowController moveTabViews:..].
+  TabStripModel* drag_strip = dragging_browser->tab_strip_model();
+  drag_strip->DetachWebContentsAt(0);
+  strip->InsertWebContentsAt(0, contentses.back().web_contents,
+                             TabStripModel::ADD_ACTIVE);
+
+  // Clear the request. There should be no crash.
+  GetPermissionRequestManager()->CancelRequest(owned_requests_.back().get());
+  owned_requests_.clear();
 }
 
 // Host wants to run flash.

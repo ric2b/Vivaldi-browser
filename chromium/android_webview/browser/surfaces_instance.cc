@@ -15,8 +15,8 @@
 #include "cc/output/texture_mailbox_deleter.h"
 #include "cc/quads/solid_color_draw_quad.h"
 #include "cc/quads/surface_draw_quad.h"
-#include "cc/scheduler/begin_frame_source.h"
 #include "components/viz/common/display/renderer_settings.h"
+#include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/surfaces/local_surface_id_allocator.h"
 #include "components/viz/service/display/display.h"
 #include "components/viz/service/display/display_scheduler.h"
@@ -54,17 +54,17 @@ SurfacesInstance::SurfacesInstance()
   // Webview does not own the surface so should not clear it.
   settings.should_clear_root_render_pass = false;
 
-  frame_sink_manager_.reset(new viz::FrameSinkManagerImpl);
+  frame_sink_manager_ = std::make_unique<viz::FrameSinkManagerImpl>(
+      viz::SurfaceManager::LifetimeType::SEQUENCES);
   local_surface_id_allocator_.reset(new viz::LocalSurfaceIdAllocator());
 
   constexpr bool is_root = true;
-  constexpr bool handles_frame_sink_id_invalidation = true;
   constexpr bool needs_sync_points = true;
   support_ = viz::CompositorFrameSinkSupport::Create(
       this, frame_sink_manager_.get(), frame_sink_id_, is_root,
-      handles_frame_sink_id_invalidation, needs_sync_points);
+      needs_sync_points);
 
-  begin_frame_source_.reset(new cc::StubBeginFrameSource);
+  begin_frame_source_.reset(new viz::StubBeginFrameSource);
   std::unique_ptr<cc::TextureMailboxDeleter> texture_mailbox_deleter(
       new cc::TextureMailboxDeleter(nullptr));
   std::unique_ptr<ParentOutputSurface> output_surface_holder(
@@ -130,7 +130,7 @@ void SurfacesInstance::DrawAndSwap(const gfx::Size& viewport,
   render_pass->SetNew(1, gfx::Rect(viewport), clip, gfx::Transform());
   render_pass->has_transparent_background = false;
 
-  cc::SharedQuadState* quad_state =
+  viz::SharedQuadState* quad_state =
       render_pass->CreateAndAppendSharedQuadState();
   quad_state->quad_to_target_transform = transform;
   quad_state->quad_layer_rect = gfx::Rect(frame_size);
@@ -148,7 +148,7 @@ void SurfacesInstance::DrawAndSwap(const gfx::Size& viewport,
   cc::CompositorFrame frame;
   // We draw synchronously, so acknowledge a manual BeginFrame.
   frame.metadata.begin_frame_ack =
-      cc::BeginFrameAck::CreateManualAckWithDamage();
+      viz::BeginFrameAck::CreateManualAckWithDamage();
   frame.render_pass_list.push_back(std::move(render_pass));
   frame.metadata.device_scale_factor = 1.f;
   frame.metadata.referenced_surfaces = child_ids_;
@@ -186,7 +186,7 @@ void SurfacesInstance::SetSolidColorRootFrame() {
   gfx::Rect rect(surface_size_);
   std::unique_ptr<cc::RenderPass> render_pass = cc::RenderPass::Create();
   render_pass->SetNew(1, rect, rect, gfx::Transform());
-  cc::SharedQuadState* quad_state =
+  viz::SharedQuadState* quad_state =
       render_pass->CreateAndAppendSharedQuadState();
   quad_state->SetAll(gfx::Transform(), rect, rect, rect, false, 1.f,
                      SkBlendMode::kSrcOver, 0);
@@ -197,7 +197,7 @@ void SurfacesInstance::SetSolidColorRootFrame() {
   frame.render_pass_list.push_back(std::move(render_pass));
   // We draw synchronously, so acknowledge a manual BeginFrame.
   frame.metadata.begin_frame_ack =
-      cc::BeginFrameAck::CreateManualAckWithDamage();
+      viz::BeginFrameAck::CreateManualAckWithDamage();
   frame.metadata.referenced_surfaces = child_ids_;
   frame.metadata.device_scale_factor = 1;
   bool result = support_->SubmitCompositorFrame(root_id_, std::move(frame));
@@ -205,18 +205,18 @@ void SurfacesInstance::SetSolidColorRootFrame() {
 }
 
 void SurfacesInstance::DidReceiveCompositorFrameAck(
-    const std::vector<cc::ReturnedResource>& resources) {
+    const std::vector<viz::ReturnedResource>& resources) {
   ReclaimResources(resources);
 }
 
-void SurfacesInstance::OnBeginFrame(const cc::BeginFrameArgs& args) {}
+void SurfacesInstance::OnBeginFrame(const viz::BeginFrameArgs& args) {}
 
 void SurfacesInstance::WillDrawSurface(
     const viz::LocalSurfaceId& local_surface_id,
     const gfx::Rect& damage_rect) {}
 
 void SurfacesInstance::ReclaimResources(
-    const std::vector<cc::ReturnedResource>& resources) {
+    const std::vector<viz::ReturnedResource>& resources) {
   // Root surface should have no resources to return.
   CHECK(resources.empty());
 }

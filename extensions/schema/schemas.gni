@@ -16,6 +16,7 @@ sources = [
   "import_data.json",
   "mousegestures.json",
   "notes.json",
+  "prefs.json",
   "runtime_private.json",
   "savedpasswords.json",
   "settings.json",
@@ -26,6 +27,7 @@ sources = [
   "vivaldi_sessions.json",
   "vivaldi_utilities.json",
   "web_view_private.json",
+  "window_private.json",
   "zoom.json",
 ]
 

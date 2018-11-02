@@ -1,5 +1,9 @@
 include_rules = [
-  "+components/viz/common",
-  "+cc/surfaces/surface_observer.h",
-  "+services/viz/hit_test/public/interfaces",
+  "+components/viz/service/surfaces",
 ]
+
+specific_include_rules = {
+  "hit_test_aggregator_unittest.cc": [
+    "+components/viz/host/host_frame_sink_manager.h",
+  ]
+}

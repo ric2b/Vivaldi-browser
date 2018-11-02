@@ -10,17 +10,45 @@
 
 namespace blink {
 
+class CrossThreadAudioParamInfo;
+class CrossThreadAudioWorkletProcessorInfo;
 class ExecutionContext;
 class WorkerThread;
 
+// AudioWorkletMessagingProxy is a main thread interface for
+// AudioWorkletGlobalScope. The proxy communicates with the associated global
+// scope via AudioWorkletObjectProxy.
 class AudioWorkletMessagingProxy final : public ThreadedWorkletMessagingProxy {
  public:
   AudioWorkletMessagingProxy(ExecutionContext*, WorkerClients*);
 
+  // Invoked by AudioWorkletObjectProxy on AudioWorkletThread to fetch the
+  // information from AudioWorkletGlobalScope to AudioWorkletMessagingProxy
+  // after the script code evaluation. It copies the information about newly
+  // added AudioWorkletProcessor since the previous synchronization. (e.g.
+  // processor name and AudioParam list)
+  void SynchronizeWorkletProcessorInfoList(
+      std::unique_ptr<Vector<CrossThreadAudioWorkletProcessorInfo>>);
+
+  // Returns true if the processor with given name is registered in
+  // AudioWorkletGlobalScope.
+  bool IsProcessorRegistered(const String& name) const;
+
+  const Vector<CrossThreadAudioParamInfo> GetParamInfoListForProcessor(
+      const String& name) const;
+
  private:
   ~AudioWorkletMessagingProxy() override;
 
+  // Implements ThreadedWorkletMessagingProxy.
+  std::unique_ptr<ThreadedWorkletObjectProxy> CreateObjectProxy(
+      ThreadedWorkletMessagingProxy*,
+      ParentFrameTaskRunners*) override;
+
   std::unique_ptr<WorkerThread> CreateWorkerThread() override;
+
+  // Each entry consists of processor name and associated AudioParam list.
+  HashMap<String, Vector<CrossThreadAudioParamInfo>> processor_info_map_;
 };
 
 }  // namespace blink

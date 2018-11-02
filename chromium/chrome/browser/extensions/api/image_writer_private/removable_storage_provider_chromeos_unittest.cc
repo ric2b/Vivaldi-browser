@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_task_environment.h"
 #include "chrome/browser/extensions/api/image_writer_private/removable_storage_provider.h"
 #include "chromeos/disks/mock_disk_mount_manager.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -27,12 +28,16 @@ const char kVendorName[] = "Test Vendor";
 const char kProductName[] = "Test Product";
 const uint64_t kDeviceSize = 1024 * 1024 * 1024;
 const bool kOnRemovableDevice = true;
+const char kDiskFileSystemType[] = "vfat";
 
 const char kUnknownSDDiskModel[] = "SD Card";
 const char kUnknownUSBDiskModel[] = "USB Drive";
 
 class RemovableStorageProviderChromeOsUnitTest : public testing::Test {
  public:
+  RemovableStorageProviderChromeOsUnitTest()
+      : scoped_task_environment_(
+            base::test::ScopedTaskEnvironment::MainThreadType::UI) {}
   void SetUp() override {
     disk_mount_manager_mock_ = new MockDiskMountManager();
     DiskMountManager::InitializeForTesting(disk_mount_manager_mock_);
@@ -41,7 +46,7 @@ class RemovableStorageProviderChromeOsUnitTest : public testing::Test {
 
   void TearDown() override { DiskMountManager::Shutdown(); }
 
-  void DevicesCallback(scoped_refptr<StorageDeviceList> devices, bool success) {
+  void DevicesCallback(scoped_refptr<StorageDeviceList> devices) {
     devices_ = devices;
   }
 
@@ -71,17 +76,10 @@ class RemovableStorageProviderChromeOsUnitTest : public testing::Test {
         kMountPath,
         chromeos::MOUNT_TYPE_DEVICE,
         chromeos::disks::MOUNT_CONDITION_NONE);
-    disk_mount_manager_mock_->CreateDiskEntryForMountDevice(mount_info,
-                                                            kDeviceId,
-                                                            kDeviceName,
-                                                            vendor_name,
-                                                            product_name,
-                                                            device_type,
-                                                            kDeviceSize,
-                                                            is_parent,
-                                                            has_media,
-                                                            on_boot_device,
-                                                            kOnRemovableDevice);
+    disk_mount_manager_mock_->CreateDiskEntryForMountDevice(
+        mount_info, kDeviceId, kDeviceName, vendor_name, product_name,
+        device_type, kDeviceSize, is_parent, has_media, on_boot_device,
+        kOnRemovableDevice, kDiskFileSystemType);
   }
 
   // Checks if the DeviceList has a specific entry.
@@ -109,6 +107,7 @@ class RemovableStorageProviderChromeOsUnitTest : public testing::Test {
     EXPECT_EQ(capacity, device->capacity);
   }
 
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   MockDiskMountManager* disk_mount_manager_mock_;
   scoped_refptr<StorageDeviceList> devices_;
 
@@ -132,7 +131,7 @@ TEST_F(RemovableStorageProviderChromeOsUnitTest, GetAllDevices) {
       base::Bind(&RemovableStorageProviderChromeOsUnitTest::DevicesCallback,
                  base::Unretained(this)));
 
-  base::RunLoop().RunUntilIdle();
+  scoped_task_environment_.RunUntilIdle();
 
   ASSERT_EQ(2U, devices_->data.size());
 
@@ -153,7 +152,7 @@ TEST_F(RemovableStorageProviderChromeOsUnitTest, EmptyProductAndModel) {
       base::Bind(&RemovableStorageProviderChromeOsUnitTest::DevicesCallback,
                  base::Unretained(this)));
 
-  base::RunLoop().RunUntilIdle();
+  scoped_task_environment_.RunUntilIdle();
 
   ASSERT_EQ(2U, devices_->data.size());
 

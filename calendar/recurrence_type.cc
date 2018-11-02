@@ -10,15 +10,42 @@
 
 #include <limits>
 #include "base/stl_util.h"
+#include "calendar/event_type.h"
 
 namespace calendar {
 
-RecurrenceEvent::RecurrenceEvent() {}
+EventRecurrence::EventRecurrence()
+    : interval(RecurrenceInterval::NONE),
+      number_of_occurrences(0),
+      skip_count(0),
+      day_of_week(0),
+      week_of_month(0),
+      day_of_month(0),
+      month_of_year(0),
+      updateFields(0) {}
 
-RecurrenceEvent::RecurrenceEvent(const RecurrenceEvent& event)
-    : event_id(event.event_id), reccurence_type(event.reccurence_type) {}
+EventRecurrence::EventRecurrence(const EventRecurrence& event_recurrence)
+    : interval(event_recurrence.interval),
+      number_of_occurrences(event_recurrence.number_of_occurrences),
+      skip_count(event_recurrence.skip_count),
+      day_of_week(event_recurrence.day_of_week),
+      week_of_month(event_recurrence.week_of_month),
+      day_of_month(event_recurrence.day_of_month),
+      month_of_year(event_recurrence.month_of_year),
+      updateFields(event_recurrence.updateFields) {}
 
-RecurrenceRow::RecurrenceRow() {}
+EventRecurrence::~EventRecurrence() {}
+
+RecurrenceRow::RecurrenceRow()
+    : id_(0),
+      event_id_(0),
+      recurrence_interval_(RecurrenceInterval::NONE),
+      number_of_ocurrences_(0),
+      skip_count_(0),
+      day_of_week_(0),
+      week_of_month_(0),
+      day_of_month_(0),
+      month_of_year_(0) {}
 
 RecurrenceRow::RecurrenceRow(RecurrenceID id,
                              EventID event_id,

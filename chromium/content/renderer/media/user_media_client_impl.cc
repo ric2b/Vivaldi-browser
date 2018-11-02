@@ -19,7 +19,6 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/renderer/media/local_media_stream_audio_source.h"
-#include "content/renderer/media/media_stream.h"
 #include "content/renderer/media/media_stream_constraints_util.h"
 #include "content/renderer/media/media_stream_constraints_util_audio.h"
 #include "content/renderer/media/media_stream_constraints_util_video_content.h"
@@ -413,6 +412,12 @@ void UserMediaClientImpl::RequestUserMedia(
   }
 
   int request_id = g_next_request_id++;
+  WebRtcLogMessage(base::StringPrintf(
+      "UMCI::RequestUserMedia. request_id=%d, audio constraints=%s, "
+      "video constraints=%s",
+      request_id,
+      user_media_request.AudioConstraints().ToString().Utf8().c_str(),
+      user_media_request.VideoConstraints().ToString().Utf8().c_str()));
 
   // The value returned by isProcessingUserGesture() is used by the browser to
   // make decisions about the permissions UI. Its value can be lost while
@@ -425,8 +430,9 @@ void UserMediaClientImpl::RequestUserMedia(
   pending_request_infos_.push_back(std::move(request_info));
   if (!current_request_info_) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&UserMediaClientImpl::MaybeProcessNextRequestInfo,
-                              weak_factory_.GetWeakPtr()));
+        FROM_HERE,
+        base::BindOnce(&UserMediaClientImpl::MaybeProcessNextRequestInfo,
+                       weak_factory_.GetWeakPtr()));
   }
 }
 
@@ -477,9 +483,9 @@ void UserMediaClientImpl::LegacySetupAudioInput() {
     GetMediaDevicesDispatcher()->EnumerateDevices(
         true /* audio_input */, false /* video_input */,
         false /* audio_output */,
-        base::Bind(&UserMediaClientImpl::LegacySelectAudioInputDevice,
-                   weak_factory_.GetWeakPtr(),
-                   current_request_info_->request()));
+        base::BindOnce(&UserMediaClientImpl::LegacySelectAudioInputDevice,
+                       weak_factory_.GetWeakPtr(),
+                       current_request_info_->request()));
     return;
   }
 
@@ -523,7 +529,7 @@ void UserMediaClientImpl::SetupAudioInput() {
   InitializeTrackControls(current_request_info_->request().AudioConstraints(),
                           &audio_controls);
   if (IsDeviceSource(audio_controls.stream_source)) {
-    GetMediaDevicesDispatcher()->GetAudioInputCapabilities(base::Bind(
+    GetMediaDevicesDispatcher()->GetAudioInputCapabilities(base::BindOnce(
         &UserMediaClientImpl::SelectAudioSettings, weak_factory_.GetWeakPtr(),
         current_request_info_->request()));
   } else {
@@ -595,7 +601,7 @@ void UserMediaClientImpl::SetupVideoInput() {
   InitializeTrackControls(current_request_info_->request().VideoConstraints(),
                           &video_controls);
   if (IsDeviceSource(video_controls.stream_source)) {
-    GetMediaDevicesDispatcher()->GetVideoInputCapabilities(base::Bind(
+    GetMediaDevicesDispatcher()->GetVideoInputCapabilities(base::BindOnce(
         &UserMediaClientImpl::SelectVideoDeviceSettings,
         weak_factory_.GetWeakPtr(), current_request_info_->request()));
   } else {
@@ -701,11 +707,9 @@ void UserMediaClientImpl::FinalizeSelectVideoContentSettings(
 void UserMediaClientImpl::GenerateStreamForCurrentRequestInfo() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(current_request_info_);
-
   WebRtcLogMessage(base::StringPrintf(
-      "MSI::requestUserMedia. request_id=%d"
-      ", audio source id=%s"
-      ", video source id=%s",
+      "UMCI::GenerateStreamForCurrentRequestInfo. request_id=%d, "
+      "audio device id=\"%s\", video device id=\"%s\"",
       current_request_info_->request_id(),
       current_request_info_->stream_controls()->audio.device_id.c_str(),
       current_request_info_->stream_controls()->video.device_id.c_str()));
@@ -722,6 +726,11 @@ void UserMediaClientImpl::GenerateStreamForCurrentRequestInfo() {
 void UserMediaClientImpl::CancelUserMediaRequest(
     const blink::WebUserMediaRequest& user_media_request) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (IsCurrentRequestInfo(user_media_request)) {
+    WebRtcLogMessage(
+        base::StringPrintf("UMCI::CancelUserMediaRequest. request_id=%d",
+                           current_request_info_->request_id()));
+  }
   if (DeleteRequestInfo(user_media_request)) {
     // We can't abort the stream generation process.
     // Instead, erase the request. Once the stream is generated we will stop the
@@ -736,8 +745,8 @@ void UserMediaClientImpl::RequestMediaDevices(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   GetMediaDevicesDispatcher()->EnumerateDevices(
       true /* audio input */, true /* video input */, true /* audio output */,
-      base::Bind(&UserMediaClientImpl::FinalizeEnumerateDevices,
-                 weak_factory_.GetWeakPtr(), media_devices_request));
+      base::BindOnce(&UserMediaClientImpl::FinalizeEnumerateDevices,
+                     weak_factory_.GetWeakPtr(), media_devices_request));
 }
 
 void UserMediaClientImpl::SetMediaDeviceChangeObserver(
@@ -783,9 +792,10 @@ void UserMediaClientImpl::OnStreamGenerated(
 
   for (const auto* array : {&audio_array, &video_array}) {
     for (const auto& info : *array) {
-      WebRtcLogMessage(base::StringPrintf("Request %d for device \"%s\"",
-                                          request_id,
-                                          info.device.name.c_str()));
+      WebRtcLogMessage(base::StringPrintf(
+          "UMCI::OnStreamGenerated. request_id=%d, device id=\"%s\", "
+          "device name=\"%s\"",
+          request_id, info.device.id.c_str(), info.device.name.c_str()));
     }
   }
 
@@ -803,7 +813,6 @@ void UserMediaClientImpl::OnStreamGenerated(
   blink::WebString blink_id = blink::WebString::FromUTF8(label);
   current_request_info_->web_stream()->Initialize(blink_id, audio_track_vector,
                                                   video_track_vector);
-  current_request_info_->web_stream()->SetExtraData(new MediaStream());
 
   // Wait for the tracks to be started successfully or to fail.
   current_request_info_->CallbackOnTracksStarted(
@@ -835,9 +844,9 @@ void UserMediaClientImpl::OnAudioSourceStartedOnAudioThread(
     MediaStreamSource* source,
     MediaStreamRequestResult result,
     const blink::WebString& result_name) {
-  task_runner->PostTask(FROM_HERE,
-                        base::Bind(&UserMediaClientImpl::OnAudioSourceStarted,
-                                   weak_ptr, source, result, result_name));
+  task_runner->PostTask(
+      FROM_HERE, base::BindOnce(&UserMediaClientImpl::OnAudioSourceStarted,
+                                weak_ptr, source, result, result_name));
 }
 
 void UserMediaClientImpl::OnAudioSourceStarted(
@@ -1076,7 +1085,7 @@ void UserMediaClientImpl::CreateAudioTracks(
     for (auto& device_info : overridden_audio_array) {
       device_info.device.matched_output_device_id = "";
       device_info.device.matched_output =
-          MediaStreamDevice::AudioDeviceParameters();
+          media::AudioParameters::UnavailableDeviceParams();
     }
   }
 
@@ -1149,14 +1158,19 @@ void UserMediaClientImpl::DevicesChanged(
 void UserMediaClientImpl::GetUserMediaRequestSucceeded(
     const blink::WebMediaStream& stream,
     blink::WebUserMediaRequest request) {
+  DCHECK(IsCurrentRequestInfo(request));
+  WebRtcLogMessage(
+      base::StringPrintf("UMCI::GetUserMediaRequestSucceeded. request_id=%d",
+                         current_request_info_->request_id()));
+
   // Completing the getUserMedia request can lead to that the RenderFrame and
   // the UserMediaClientImpl is destroyed if the JavaScript code request the
   // frame to be destroyed within the scope of the callback. Therefore,
   // post a task to complete the request with a clean stack.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
-      base::Bind(&UserMediaClientImpl::DelayedGetUserMediaRequestSucceeded,
-                 weak_factory_.GetWeakPtr(), stream, request));
+      base::BindOnce(&UserMediaClientImpl::DelayedGetUserMediaRequestSucceeded,
+                     weak_factory_.GetWeakPtr(), stream, request));
 }
 
 void UserMediaClientImpl::DelayedGetUserMediaRequestSucceeded(
@@ -1172,15 +1186,19 @@ void UserMediaClientImpl::GetUserMediaRequestFailed(
     MediaStreamRequestResult result,
     const blink::WebString& result_name) {
   DCHECK(current_request_info_);
+  WebRtcLogMessage(
+      base::StringPrintf("UMCI::GetUserMediaRequestFailed. request_id=%d",
+                         current_request_info_->request_id()));
+
   // Completing the getUserMedia request can lead to that the RenderFrame and
   // the UserMediaClientImpl is destroyed if the JavaScript code request the
   // frame to be destroyed within the scope of the callback. Therefore,
   // post a task to complete the request with a clean stack.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
-      base::Bind(&UserMediaClientImpl::DelayedGetUserMediaRequestFailed,
-                 weak_factory_.GetWeakPtr(), current_request_info_->request(),
-                 result, result_name));
+      base::BindOnce(&UserMediaClientImpl::DelayedGetUserMediaRequestFailed,
+                     weak_factory_.GetWeakPtr(),
+                     current_request_info_->request(), result, result_name));
 }
 
 void UserMediaClientImpl::DelayedGetUserMediaRequestFailed(
@@ -1332,8 +1350,8 @@ bool UserMediaClientImpl::DeleteRequestInfo(
     if (!pending_request_infos_.empty()) {
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE,
-          base::Bind(&UserMediaClientImpl::MaybeProcessNextRequestInfo,
-                     weak_factory_.GetWeakPtr()));
+          base::BindOnce(&UserMediaClientImpl::MaybeProcessNextRequestInfo,
+                         weak_factory_.GetWeakPtr()));
     }
     return true;
   }

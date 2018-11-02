@@ -45,9 +45,9 @@ namespace content {
 class BlobRegistryWrapper;
 class BlobURLLoaderFactory;
 
-class CONTENT_EXPORT  StoragePartitionImpl
+class CONTENT_EXPORT StoragePartitionImpl
     : public StoragePartition,
-      public NON_EXPORTED_BASE(mojom::StoragePartitionService) {
+      public mojom::StoragePartitionService {
  public:
   // It is guaranteed that storage partitions are destructed before the
   // browser context starts shutting down its corresponding IO thread residents
@@ -73,6 +73,7 @@ class CONTENT_EXPORT  StoragePartitionImpl
   base::FilePath GetPath() override;
   net::URLRequestContextGetter* GetURLRequestContext() override;
   net::URLRequestContextGetter* GetMediaURLRequestContext() override;
+  mojom::NetworkContext* GetNetworkContext() override;
   storage::QuotaManager* GetQuotaManager() override;
   ChromeAppCacheService* GetAppCacheService() override;
   storage::FileSystemContext* GetFileSystemContext() override;
@@ -127,10 +128,6 @@ class CONTENT_EXPORT  StoragePartitionImpl
       const url::Origin& origin,
       mojo::InterfaceRequest<mojom::LevelDBWrapper> request) override;
 
-  // Returns the NetworkContext associated with this storage partition. Only
-  // used when the network service is enabled.
-  mojom::NetworkContext* network_context() { return network_context_.get(); }
-
   scoped_refptr<URLLoaderFactoryGetter> url_loader_factory_getter() {
     return url_loader_factory_getter_;
   }
@@ -139,12 +136,15 @@ class CONTENT_EXPORT  StoragePartitionImpl
   BrowserContext* browser_context() const;
 
   // Called by each renderer process once.
-  void Bind(mojo::InterfaceRequest<mojom::StoragePartitionService> request);
+  void Bind(int process_id,
+            mojo::InterfaceRequest<mojom::StoragePartitionService> request);
 
   struct DataDeletionHelper;
   struct QuotaManagedDataDeletionHelper;
 
  private:
+  class NetworkContextOwner;
+
   friend class BackgroundSyncManagerTest;
   friend class BackgroundSyncServiceImplTest;
   friend class PaymentAppContentUnitTestBase;
@@ -255,8 +255,22 @@ class CONTENT_EXPORT  StoragePartitionImpl
   scoped_refptr<BlobURLLoaderFactory> blob_url_loader_factory_;
   scoped_refptr<BlobRegistryWrapper> blob_registry_;
 
-  mojo::BindingSet<mojom::StoragePartitionService> bindings_;
+  // BindingSet for StoragePartitionService, using the process id as the
+  // binding context type. The process id can subsequently be used during
+  // interface method calls to enforce security checks.
+  mojo::BindingSet<mojom::StoragePartitionService, int> bindings_;
+
+  // This is the NetworkContext used to
+  // make requests for the StoragePartition. When the network service is
+  // enabled, the underlying NetworkContext will be owned by the network
+  // service. When it's disabled, the underlying NetworkContext may either be
+  // provided by the embedder, or is created by the StoragePartition and owned
+  // by |network_context_owner_|.
   mojom::NetworkContextPtr network_context_;
+
+  // When the network service is disabled, a NetworkContext is created on the IO
+  // thread that wraps access to the URLRequestContext.
+  std::unique_ptr<NetworkContextOwner> network_context_owner_;
 
   // Raw pointer that should always be valid. The BrowserContext owns the
   // StoragePartitionImplMap which then owns StoragePartitionImpl. When the

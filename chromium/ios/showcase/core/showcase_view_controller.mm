@@ -58,7 +58,7 @@ NSString* const kUseCaseKey = @"useCase";
 - (void)viewDidLoad {
   [super viewDidLoad];
 
-  self.title = @"Showcase";
+  self.title = @"SC";
   self.tableView.tableFooterView = [[UIView alloc] init];
   self.tableView.rowHeight = 70.0;
   self.tableView.accessibilityIdentifier = @"showcase_home_collection";
@@ -68,6 +68,7 @@ NSString* const kUseCaseKey = @"useCase";
   self.searchController.searchResultsUpdater = self;
   self.searchController.dimsBackgroundDuringPresentation = NO;
   self.tableView.tableHeaderView = self.searchController.searchBar;
+  self.navigationController.navigationBar.translucent = NO;
 
   // Presentation of searchController will walk up the view controller hierarchy
   // until it finds the root view controller or one that defines a presentation

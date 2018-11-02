@@ -6,7 +6,7 @@
 <translation id="1728549374069268714">貼り付けて移動</translation>
 <translation id="1756026472674246267">新しいタブで開く</translation>
 <translation id="1759842336958782510">Chrome</translation>
-<translation id="1769904678986817931">画像の詳細</translation>
+<translation id="1769904678986817931">画像の詳細...</translation>
 <translation id="1920297417712412573">メモへコピー</translation>
 <translation id="1921101374471252440">画像を再読み込み (&amp;R)</translation>
 <translation id="2444387452209867610">メモを挿入</translation>
@@ -44,6 +44,7 @@
 <translation id="5716238312826274098">通知を無効にする</translation>
 <translation id="588258955323874662">全画面表示</translation>
 <translation id="5916080360077521750">残念ですが、ブラウザーが起動中のためChromeの設定を利用できません。Vivaldiにこれらの設定をインポートするには、作業中の処理を保存して全てのChromeのウィンドウを閉じ、継続をクリックしてください。</translation>
+<translation id="6229528619562190452">クリックしてVivaldiを更新。</translation>
 <translation id="6234173136417926046">画像をスタートページの背景に使用する</translation>
 <translation id="6259156558325130047">並べ替えをやり直す (&amp;R)</translation>
 <translation id="630690498669249215">Operaのブックマークファイル</translation>

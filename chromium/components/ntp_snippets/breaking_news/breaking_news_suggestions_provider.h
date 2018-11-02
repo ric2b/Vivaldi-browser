@@ -7,6 +7,7 @@
 
 #include "components/ntp_snippets/category.h"
 #include "components/ntp_snippets/content_suggestions_provider.h"
+#include "components/ntp_snippets/remote/json_to_categories.h"
 #include "components/ntp_snippets/remote/remote_suggestions_database.h"
 #include "components/prefs/pref_registry_simple.h"
 
@@ -39,10 +40,10 @@ class BreakingNewsSuggestionsProvider final
   CategoryInfo GetCategoryInfo(Category category) override;
   void DismissSuggestion(const ContentSuggestion::ID& suggestion_id) override;
   void FetchSuggestionImage(const ContentSuggestion::ID& suggestion_id,
-                            const ImageFetchedCallback& callback) override;
+                            ImageFetchedCallback callback) override;
   void Fetch(const Category& category,
              const std::set<std::string>& known_suggestion_ids,
-             const FetchDoneCallback& callback) override;
+             FetchDoneCallback callback) override;
   void ClearHistory(
       base::Time begin,
       base::Time end,
@@ -50,13 +51,14 @@ class BreakingNewsSuggestionsProvider final
   void ClearCachedSuggestions(Category category) override;
   void GetDismissedSuggestionsForDebugging(
       Category category,
-      const DismissedSuggestionsCallback& callback) override;
+      DismissedSuggestionsCallback callback) override;
   void ClearDismissedSuggestionsForDebugging(Category category) override;
 
  private:
   // Callback called from the breaking news listener when new content has been
   // pushed from the server.
-  void OnNewContentSuggestion(std::unique_ptr<base::Value> content);
+  void OnNewRemoteSuggestion(
+      std::unique_ptr<RemoteSuggestion> remote_suggestion);
 
   // Callbacks for the RemoteSuggestionsDatabase.
   void OnDatabaseLoaded(

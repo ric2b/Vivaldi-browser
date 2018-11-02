@@ -34,6 +34,9 @@
 namespace blink {
 
 using cssvalue::ToCSSCrossfadeValue;
+using cssvalue::ToCSSConicGradientValue;
+using cssvalue::ToCSSLinearGradientValue;
+using cssvalue::ToCSSRadialGradientValue;
 
 CSSImageGeneratorValue::CSSImageGeneratorValue(ClassType class_type)
     : CSSValue(class_type) {}
@@ -112,11 +115,11 @@ Image* CSSImageGeneratorValue::GetImage(const ImageResourceObserver* client,
 }
 
 void CSSImageGeneratorValue::PutImage(const IntSize& size,
-                                      PassRefPtr<Image> image) {
+                                      RefPtr<Image> image) {
   images_.insert(size, std::move(image));
 }
 
-PassRefPtr<Image> CSSImageGeneratorValue::GetImage(
+RefPtr<Image> CSSImageGeneratorValue::GetImage(
     const ImageResourceObserver& client,
     const Document& document,
     const ComputedStyle& style,

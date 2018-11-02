@@ -28,7 +28,6 @@
 #include "ash/root_window_controller.h"
 #include "ash/root_window_settings.h"
 #include "ash/shell.h"
-#include "ash/system/tray/system_tray_delegate.h"
 #include "ash/virtual_keyboard_controller.h"
 #include "ash/wallpaper/wallpaper_delegate.h"
 #include "ash/wm/drag_window_resizer.h"
@@ -50,12 +49,9 @@
 #include "ui/aura/mus/window_tree_host_mus_init_params.h"
 #include "ui/aura/window.h"
 #include "ui/display/manager/display_manager.h"
+#include "ui/display/manager/forwarding_display_delegate.h"
 #include "ui/display/types/native_display_delegate.h"
 #include "ui/views/mus/pointer_watcher_event_router.h"
-
-#if defined(USE_OZONE)
-#include "ui/display/manager/forwarding_display_delegate.h"
-#endif
 
 namespace ash {
 namespace mus {
@@ -175,12 +171,20 @@ void ShellPortMash::SetGlobalOverrideCursor(
 }
 
 bool ShellPortMash::IsMouseEventsEnabled() {
-  if (GetAshConfig() == Config::MUS)
-    return Shell::Get()->cursor_manager()->IsMouseEventsEnabled();
+  if (GetAshConfig() == Config::MASH)
+    return cursor_touch_visible_;
 
-  // TODO: http://crbug.com/637853
-  NOTIMPLEMENTED();
-  return true;
+  return Shell::Get()->cursor_manager()->IsMouseEventsEnabled();
+}
+
+void ShellPortMash::SetCursorTouchVisible(bool enabled) {
+  DCHECK_EQ(GetAshConfig(), Config::MASH);
+  window_manager_->window_manager_client()->SetCursorTouchVisible(enabled);
+}
+
+void ShellPortMash::OnCursorTouchVisibleChanged(bool enabled) {
+  if (GetAshConfig() == Config::MASH)
+    cursor_touch_visible_ = enabled;
 }
 
 std::unique_ptr<WindowResizer> ShellPortMash::CreateDragWindowResizer(
@@ -337,6 +341,23 @@ void ShellPortMash::OnCreatedRootWindowContainers(
     window_manager_->window_manager_client()->AddActivationParent(
         root_window->GetChildById(kActivatableShellWindowIds[i]));
   }
+
+  UpdateSystemModalAndBlockingContainers();
+}
+
+void ShellPortMash::UpdateSystemModalAndBlockingContainers() {
+  std::vector<aura::BlockingContainers> all_blocking_containers;
+  for (RootWindowController* root_window_controller :
+       Shell::GetAllRootWindowControllers()) {
+    aura::BlockingContainers blocking_containers;
+    wm::GetBlockingContainersForRoot(
+        root_window_controller->GetRootWindow(),
+        &blocking_containers.min_container,
+        &blocking_containers.system_modal_container);
+    all_blocking_containers.push_back(blocking_containers);
+  }
+  window_manager_->window_manager_client()->SetBlockingContainers(
+      all_blocking_containers);
 }
 
 void ShellPortMash::OnHostsInitialized() {
@@ -346,7 +367,6 @@ void ShellPortMash::OnHostsInitialized() {
 
 std::unique_ptr<display::NativeDisplayDelegate>
 ShellPortMash::CreateNativeDisplayDelegate() {
-#if defined(USE_OZONE)
   display::mojom::NativeDisplayDelegatePtr native_display_delegate;
   if (window_manager_->connector()) {
     window_manager_->connector()->BindInterface(ui::mojom::kServiceName,
@@ -354,11 +374,6 @@ ShellPortMash::CreateNativeDisplayDelegate() {
   }
   return base::MakeUnique<display::ForwardingDisplayDelegate>(
       std::move(native_display_delegate));
-#else
-  // The bots compile this config, but it is never run.
-  CHECK(false);
-  return nullptr;
-#endif
 }
 
 std::unique_ptr<AcceleratorController>

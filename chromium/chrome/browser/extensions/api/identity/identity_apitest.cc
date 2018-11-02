@@ -61,8 +61,8 @@
 #include "content/public/browser/notification_source.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/api_test_utils.h"
+#include "extensions/common/extension_builder.h"
 #include "extensions/common/manifest_handlers/oauth2_manifest_handler.h"
-#include "extensions/common/test_util.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "google_apis/gaia/oauth2_mint_token_flow.h"
 #include "google_apis/gaia/oauth2_token_service.h"
@@ -101,7 +101,7 @@ class AsyncExtensionBrowserTest : public ExtensionBrowserTest {
 
     if (!function->extension()) {
       scoped_refptr<Extension> empty_extension(
-          test_util::CreateEmptyExtension());
+          ExtensionBuilder("Test").Build());
       function->set_extension(empty_extension.get());
     }
 
@@ -445,7 +445,8 @@ class IdentityTestWithSignin : public AsyncExtensionBrowserTest {
     SignIn(account_key, account_key);
   }
 
-  void SignIn(const std::string& email, const std::string& gaia) {
+  // Returns the account ID of the created account.
+  std::string SignIn(const std::string& email, const std::string& gaia) {
     AccountTrackerService* account_tracker =
         AccountTrackerServiceFactory::GetForProfile(profile());
     std::string account_id = account_tracker->SeedAccountInfo(gaia, email);
@@ -456,6 +457,8 @@ class IdentityTestWithSignin : public AsyncExtensionBrowserTest {
     signin_manager_->SignIn(gaia, email, "password");
 #endif
     token_service_->UpdateCredentials(account_id, "refresh_token");
+
+    return account_id;
   }
 
   void AddAccount(const std::string& email, const std::string& gaia) {
@@ -490,7 +493,8 @@ class IdentityGetAccountsFunctionTest : public IdentityTestWithSignin {
       const std::vector<std::string>& accounts) {
     scoped_refptr<IdentityGetAccountsFunction> func(
         new IdentityGetAccountsFunction);
-    func->set_extension(test_util::CreateEmptyExtension(kExtensionId).get());
+    func->set_extension(
+        ExtensionBuilder("Test").SetID(kExtensionId).Build().get());
     if (!utils::RunFunction(
             func.get(), std::string("[]"), browser(), utils::NONE)) {
       return GenerateFailureResult(accounts, NULL)
@@ -559,10 +563,22 @@ class IdentityGetAccountsFunctionTest : public IdentityTestWithSignin {
 };
 
 IN_PROC_BROWSER_TEST_F(IdentityGetAccountsFunctionTest, MultiAccountOn) {
-  EXPECT_TRUE(switches::IsExtensionsMultiAccount());
+  EXPECT_TRUE(signin::IsExtensionsMultiAccount());
 }
 
 IN_PROC_BROWSER_TEST_F(IdentityGetAccountsFunctionTest, NoneSignedIn) {
+  EXPECT_TRUE(ExpectGetAccounts(std::vector<std::string>()));
+}
+
+IN_PROC_BROWSER_TEST_F(IdentityGetAccountsFunctionTest, NoPrimaryAccount) {
+  AddAccount("secondary@example.com", "2");
+  EXPECT_TRUE(ExpectGetAccounts(std::vector<std::string>()));
+}
+
+IN_PROC_BROWSER_TEST_F(IdentityGetAccountsFunctionTest,
+                       PrimaryAccountHasNoRefreshToken) {
+  std::string primary_account_id = SignIn("primary@example.com", "1");
+  token_service_->RevokeCredentials(primary_account_id);
   EXPECT_TRUE(ExpectGetAccounts(std::vector<std::string>()));
 }
 
@@ -593,7 +609,7 @@ class IdentityOldProfilesGetAccountsFunctionTest
 
 IN_PROC_BROWSER_TEST_F(IdentityOldProfilesGetAccountsFunctionTest,
                        MultiAccountOff) {
-  EXPECT_FALSE(switches::IsExtensionsMultiAccount());
+  EXPECT_FALSE(signin::IsExtensionsMultiAccount());
 }
 
 IN_PROC_BROWSER_TEST_F(IdentityOldProfilesGetAccountsFunctionTest,
@@ -610,7 +626,8 @@ class IdentityGetProfileUserInfoFunctionTest : public IdentityTestWithSignin {
   std::unique_ptr<api::identity::ProfileUserInfo> RunGetProfileUserInfo() {
     scoped_refptr<IdentityGetProfileUserInfoFunction> func(
         new IdentityGetProfileUserInfoFunction);
-    func->set_extension(test_util::CreateEmptyExtension(kExtensionId).get());
+    func->set_extension(
+        ExtensionBuilder("Test").SetID(kExtensionId).Build().get());
     std::unique_ptr<base::Value> value(
         utils::RunFunctionAndReturnSingleResult(func.get(), "[]", browser()));
     return api::identity::ProfileUserInfo::FromValue(*value);
@@ -1819,7 +1836,8 @@ class RemoveCachedAuthTokenFunctionTest : public ExtensionBrowserTest {
   bool InvalidateDefaultToken() {
     scoped_refptr<IdentityRemoveCachedAuthTokenFunction> func(
         new IdentityRemoveCachedAuthTokenFunction);
-    func->set_extension(test_util::CreateEmptyExtension(kExtensionId).get());
+    func->set_extension(
+        ExtensionBuilder("Test").SetID(kExtensionId).Build().get());
     return utils::RunFunction(
         func.get(),
         std::string("[{\"token\": \"") + kAccessToken + "\"}]",
@@ -1897,7 +1915,7 @@ IN_PROC_BROWSER_TEST_F(LaunchWebAuthFlowFunctionTest, UserCloseWindow) {
 
   scoped_refptr<IdentityLaunchWebAuthFlowFunction> function(
       new IdentityLaunchWebAuthFlowFunction());
-  scoped_refptr<Extension> empty_extension(test_util::CreateEmptyExtension());
+  scoped_refptr<Extension> empty_extension(ExtensionBuilder("Test").Build());
   function->set_extension(empty_extension.get());
 
   WaitForGURLAndCloseWindow popup_observer(auth_url);
@@ -1921,7 +1939,7 @@ IN_PROC_BROWSER_TEST_F(LaunchWebAuthFlowFunctionTest, InteractionRequired) {
 
   scoped_refptr<IdentityLaunchWebAuthFlowFunction> function(
       new IdentityLaunchWebAuthFlowFunction());
-  scoped_refptr<Extension> empty_extension(test_util::CreateEmptyExtension());
+  scoped_refptr<Extension> empty_extension(ExtensionBuilder("Test").Build());
   function->set_extension(empty_extension.get());
 
   std::string args = "[{\"interactive\": false, \"url\": \"" +
@@ -1941,7 +1959,7 @@ IN_PROC_BROWSER_TEST_F(LaunchWebAuthFlowFunctionTest, LoadFailed) {
 
   scoped_refptr<IdentityLaunchWebAuthFlowFunction> function(
       new IdentityLaunchWebAuthFlowFunction());
-  scoped_refptr<Extension> empty_extension(test_util::CreateEmptyExtension());
+  scoped_refptr<Extension> empty_extension(ExtensionBuilder("Test").Build());
   function->set_extension(empty_extension.get());
 
   std::string args = "[{\"interactive\": true, \"url\": \"" +
@@ -1955,7 +1973,7 @@ IN_PROC_BROWSER_TEST_F(LaunchWebAuthFlowFunctionTest, LoadFailed) {
 IN_PROC_BROWSER_TEST_F(LaunchWebAuthFlowFunctionTest, NonInteractiveSuccess) {
   scoped_refptr<IdentityLaunchWebAuthFlowFunction> function(
       new IdentityLaunchWebAuthFlowFunction());
-  scoped_refptr<Extension> empty_extension(test_util::CreateEmptyExtension());
+  scoped_refptr<Extension> empty_extension(ExtensionBuilder("Test").Build());
   function->set_extension(empty_extension.get());
 
   function->InitFinalRedirectURLPrefixForTest("abcdefghij");
@@ -1975,7 +1993,7 @@ IN_PROC_BROWSER_TEST_F(
     LaunchWebAuthFlowFunctionTest, InteractiveFirstNavigationSuccess) {
   scoped_refptr<IdentityLaunchWebAuthFlowFunction> function(
       new IdentityLaunchWebAuthFlowFunction());
-  scoped_refptr<Extension> empty_extension(test_util::CreateEmptyExtension());
+  scoped_refptr<Extension> empty_extension(ExtensionBuilder("Test").Build());
   function->set_extension(empty_extension.get());
 
   function->InitFinalRedirectURLPrefixForTest("abcdefghij");
@@ -2001,7 +2019,7 @@ IN_PROC_BROWSER_TEST_F(LaunchWebAuthFlowFunctionTest,
 
   scoped_refptr<IdentityLaunchWebAuthFlowFunction> function(
       new IdentityLaunchWebAuthFlowFunction());
-  scoped_refptr<Extension> empty_extension(test_util::CreateEmptyExtension());
+  scoped_refptr<Extension> empty_extension(ExtensionBuilder("Test").Build());
   function->set_extension(empty_extension.get());
 
   function->InitFinalRedirectURLPrefixForTest("abcdefghij");
@@ -2015,6 +2033,185 @@ IN_PROC_BROWSER_TEST_F(LaunchWebAuthFlowFunctionTest,
   EXPECT_EQ(std::string("https://abcdefghij.chromiumapp.org/callback#test"),
             url);
 }
+
+class OnSignInChangedEventTest : public IdentityTestWithSignin {
+ protected:
+  void SetUpOnMainThread() override {
+    // TODO(blundell): Ideally we would test fully end-to-end by injecting a
+    // JavaScript extension listener and having that listener do the
+    // verification, but it's not clear how to set that up.
+    id_api()->set_on_signin_changed_callback_for_testing(
+        base::Bind(&OnSignInChangedEventTest::OnSignInEventChanged,
+                   base::Unretained(this)));
+    IdentityTestWithSignin::SetUpOnMainThread();
+  }
+
+  IdentityAPI* id_api() {
+    return IdentityAPI::GetFactoryInstance()->Get(browser()->profile());
+  }
+
+  // Adds an event that is expected to fire. Events are checked in the order of
+  // addition, i.e., the first event added is expected to be the first event to
+  // fire.
+  void AddExpectedEvent(std::unique_ptr<base::ListValue> args) {
+    expected_events_.push_back(
+        base::MakeUnique<Event>(events::IDENTITY_ON_SIGN_IN_CHANGED,
+                                api::identity::OnSignInChanged::kEventName,
+                                std::move(args), browser()->profile()));
+  }
+
+  bool HasExpectedEvent() { return expected_events_.size(); }
+
+ private:
+  void OnSignInEventChanged(Event* event) {
+    if (!HasExpectedEvent())
+      return;
+
+    // Check that |event| matches the first event expected to fire.
+    const auto& expected_event = expected_events_[0];
+    EXPECT_EQ(expected_event->histogram_value, event->histogram_value);
+    EXPECT_EQ(expected_event->event_name, event->event_name);
+    EXPECT_EQ(*(expected_event->event_args.get()), *(event->event_args.get()));
+
+    // Erase that first element whether it matched or not, since it's no longer
+    // expected.
+    expected_events_.erase(expected_events_.begin());
+  }
+
+  std::vector<std::unique_ptr<Event>> expected_events_;
+};
+
+// Test that an event is fired when the primary account signs in.
+IN_PROC_BROWSER_TEST_F(OnSignInChangedEventTest, FireOnPrimaryAccountSignIn) {
+  id_api()->SetAccountStateForTesting("primary", false);
+
+  api::identity::AccountInfo account_info;
+  account_info.id = "primary";
+  AddExpectedEvent(api::identity::OnSignInChanged::Create(account_info, true));
+
+  // Sign in and verify that the callback fires.
+  SignIn("primary", "primary");
+
+  EXPECT_FALSE(HasExpectedEvent());
+}
+
+#if !defined(OS_CHROMEOS)
+// Test that an event is fired when the primary account signs out.
+IN_PROC_BROWSER_TEST_F(OnSignInChangedEventTest, FireOnPrimaryAccountSignOut) {
+  id_api()->SetAccountStateForTesting("primary", true);
+
+  api::identity::AccountInfo account_info;
+  account_info.id = "primary";
+  AddExpectedEvent(api::identity::OnSignInChanged::Create(account_info, false));
+
+  // Sign out and verify that the callback fires.
+  signin_manager_->ForceSignOut();
+
+  EXPECT_FALSE(HasExpectedEvent());
+}
+#endif  // !defined(OS_CHROMEOS)
+
+// Test that an event is fired when the primary account has a refresh token
+// revoked.
+IN_PROC_BROWSER_TEST_F(OnSignInChangedEventTest,
+                       FireOnPrimaryAccountRefreshTokenRevoked) {
+  id_api()->SetAccountStateForTesting("primary", true);
+
+  api::identity::AccountInfo account_info;
+  account_info.id = "primary";
+  AddExpectedEvent(api::identity::OnSignInChanged::Create(account_info, false));
+
+  // Revoke the refresh token and verify that the callback fires.
+  token_service_->RevokeCredentials("primary");
+
+  EXPECT_FALSE(HasExpectedEvent());
+}
+
+// Test that an event is fired when the primary account has a refresh token
+// newly available.
+IN_PROC_BROWSER_TEST_F(OnSignInChangedEventTest,
+                       FireOnPrimaryAccountRefreshTokenAvailable) {
+  id_api()->SetAccountStateForTesting("primary", false);
+
+  SignIn("primary", "primary");
+  token_service_->RevokeCredentials("primary");
+
+  api::identity::AccountInfo account_info;
+  account_info.id = "primary";
+  AddExpectedEvent(api::identity::OnSignInChanged::Create(account_info, true));
+
+  // Make the primary account's refresh token available and check that the
+  // callback fires.
+  token_service_->UpdateCredentials("primary", "refresh_token");
+  EXPECT_FALSE(HasExpectedEvent());
+}
+
+// Test that an event is fired for changes to a secondary account when there is
+// a primary account available.
+IN_PROC_BROWSER_TEST_F(OnSignInChangedEventTest,
+                       FireForSecondaryAccountWhenPrimaryAccountExists) {
+  id_api()->SetAccountStateForTesting("primary", false);
+  id_api()->SetAccountStateForTesting("secondary", false);
+
+  SignIn("primary", "primary");
+
+  api::identity::AccountInfo account_info;
+  account_info.id = "secondary";
+  AddExpectedEvent(api::identity::OnSignInChanged::Create(account_info, true));
+
+  // Make a secondary account's refresh token available and check that the
+  // callback fires.
+  token_service_->UpdateCredentials("secondary", "refresh_token");
+  EXPECT_FALSE(HasExpectedEvent());
+
+  // Revoke the secondary account's refresh token and check that the callback
+  // fires.
+  AddExpectedEvent(api::identity::OnSignInChanged::Create(account_info, false));
+
+  token_service_->RevokeCredentials("secondary");
+  EXPECT_FALSE(HasExpectedEvent());
+}
+
+// Test that an event is not fired for changes to a secondary account when
+// there is no primary account available.
+IN_PROC_BROWSER_TEST_F(OnSignInChangedEventTest,
+                       DontFireForSecondaryAccountWhenNoPrimaryAccountExists) {
+  // Add an expected event to be able to verify that no event is fired.
+  api::identity::AccountInfo account_info;
+  account_info.id = "secondary";
+  AddExpectedEvent(api::identity::OnSignInChanged::Create(account_info, true));
+
+  // Check not firing on addition of secondary account.
+  AddAccount("secondary", "secondary");
+  EXPECT_TRUE(HasExpectedEvent());
+
+  // Check not firing on token revocation of secondary account.
+  token_service_->RevokeCredentials("primary");
+  EXPECT_TRUE(HasExpectedEvent());
+}
+
+#if !defined(OS_CHROMEOS)
+// Test that signout events are fired for all known accounts when the primary
+// account signs out, firing first for the primary account and then for any
+// secondary accounts.
+IN_PROC_BROWSER_TEST_F(OnSignInChangedEventTest,
+                       FireForAllAccountsOnPrimaryAccountSignOut) {
+  id_api()->SetAccountStateForTesting("primary", true);
+  id_api()->SetAccountStateForTesting("secondary", true);
+
+  api::identity::AccountInfo account_info;
+  account_info.id = "primary";
+  AddExpectedEvent(api::identity::OnSignInChanged::Create(account_info, false));
+
+  account_info.id = "secondary";
+  AddExpectedEvent(api::identity::OnSignInChanged::Create(account_info, false));
+
+  // Sign out and verify that both events fire.
+  signin_manager_->ForceSignOut();
+
+  EXPECT_FALSE(HasExpectedEvent());
+}
+#endif  // !defined(OS_CHROMEOS)
 
 }  // namespace extensions
 

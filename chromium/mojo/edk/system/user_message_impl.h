@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/macros.h"
 #include "base/optional.h"
@@ -31,8 +32,7 @@ namespace edk {
 // A UserMessageImpl may be either serialized or unserialized. Unserialized
 // instances are serialized lazily only when necessary, i.e., if and when
 // Serialize() is called to obtain a serialized message for wire transfer.
-class MOJO_SYSTEM_IMPL_EXPORT UserMessageImpl
-    : public NON_EXPORTED_BASE(ports::UserMessage) {
+class MOJO_SYSTEM_IMPL_EXPORT UserMessageImpl : public ports::UserMessage {
  public:
   static const TypeInfo kUserMessageTypeInfo;
 
@@ -96,6 +96,8 @@ class MOJO_SYSTEM_IMPL_EXPORT UserMessageImpl
     return !!channel_message_;
   }
 
+  bool IsTransmittable() const { return !IsSerialized() || is_committed_; }
+
   void* user_payload() {
     DCHECK(IsSerialized());
     return user_payload_;
@@ -111,7 +113,7 @@ class MOJO_SYSTEM_IMPL_EXPORT UserMessageImpl
     return user_payload_size_;
   }
 
-  size_t user_payload_buffer_size() const;
+  size_t user_payload_capacity() const;
 
   size_t num_handles() const;
 
@@ -124,7 +126,10 @@ class MOJO_SYSTEM_IMPL_EXPORT UserMessageImpl
   MojoResult AttachSerializedMessageBuffer(uint32_t payload_size,
                                            const MojoHandle* handles,
                                            uint32_t num_handles);
-  MojoResult ExtendSerializedMessagePayload(uint32_t new_payload_size);
+  MojoResult ExtendSerializedMessagePayload(uint32_t new_payload_size,
+                                            const MojoHandle* handles,
+                                            uint32_t num_handles);
+  MojoResult CommitSerializedContents(uint32_t final_payload_size);
 
   // If this message is not already serialized, this serializes it.
   MojoResult SerializeIfNecessary();
@@ -141,6 +146,14 @@ class MOJO_SYSTEM_IMPL_EXPORT UserMessageImpl
   // whose ownership is thereby transferred to the caller.
   MojoResult ExtractSerializedHandles(ExtractBadHandlePolicy bad_handle_policy,
                                       MojoHandle* handles);
+
+  // Forces all handle serialization to fail. Serialization can fail in
+  // production for a few different reasons (e.g. file descriptor exhaustion
+  // when duping data pipe buffer handles) which may be difficult to control in
+  // testing environments. This forces the common serialization code path to
+  // always behave as if the underlying implementation signaled failure,
+  // allowing tests to exercise those cases.
+  static void FailHandleSerializationForTesting(bool fail);
 
  private:
   // Creates an unserialized UserMessageImpl with an associated |context| and
@@ -179,6 +192,10 @@ class MOJO_SYSTEM_IMPL_EXPORT UserMessageImpl
   // yet to be extracted.
   bool has_serialized_handles_ = false;
 
+  // Indicates whether the serialized message's contents (if any) have been
+  // committed yet.
+  bool is_committed_ = false;
+
   // Only valid if |channel_message_| is non-null. |header_| is the address
   // of the UserMessageImpl's internal MessageHeader structure within the
   // serialized message buffer. |user_payload_| is the address of the first byte
@@ -188,6 +205,10 @@ class MOJO_SYSTEM_IMPL_EXPORT UserMessageImpl
   size_t header_size_ = 0;
   void* user_payload_ = nullptr;
   size_t user_payload_size_ = 0;
+
+  // Handles which have been attached to the serialized message but which have
+  // not yet been serialized.
+  std::vector<Dispatcher::DispatcherInTransit> pending_handle_attachments_;
 
   // The node name from which this message was received, iff it came from
   // out-of-process and the source is known.

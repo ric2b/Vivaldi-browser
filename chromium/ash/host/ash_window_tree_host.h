@@ -34,13 +34,8 @@ class ASH_EXPORT AshWindowTreeHost {
   static std::unique_ptr<AshWindowTreeHost> Create(
       const AshWindowTreeHostInitParams& init_params);
 
-  // Clips the cursor to the bounds of the root window until UnConfineCursor().
-  // We would like to be able to confine the cursor to that window. However,
-  // currently, we do not have such functionality in X. So we just confine
-  // to the root window. This is ok because this option is currently only
-  // being used in fullscreen mode, so root_window bounds = window bounds.
+  // Clips the cursor to the bounds of the root window.
   virtual bool ConfineCursorToRootWindow() = 0;
-  virtual void UnConfineCursor() = 0;
 
   virtual void SetRootWindowTransformer(
       std::unique_ptr<RootWindowTransformer> transformer) = 0;
@@ -54,11 +49,9 @@ class ASH_EXPORT AshWindowTreeHost {
 
   virtual void RegisterMirroringHost(AshWindowTreeHost* mirroring_ash_host) {}
 
-#if defined(USE_OZONE)
   virtual void SetCursorConfig(const display::Display& display,
                                display::Display::Rotation rotation) = 0;
   virtual void ClearCursorConfig() = 0;
-#endif
 
  protected:
   // Translates the native mouse location into screen coordinates.

@@ -6,12 +6,6 @@
 
 ; *** The contents of content/common/common.sb are implicitly included here. ***
 
-; Fix for https://bugs.vivaldi.com/browse/VB-32631
-; [Media][Mac]Some video do not play on Twitter on High Sierra
-(define high-sierra-or-later "HIGH_SIERRA_OR_LATER")
-(if (param-true? high-sierra-or-later)
-  (allow mach-lookup (xpc-service-name "com.apple.coremedia.videodecoder")))
-
 ; Allow communication between the GPU process and the UI server.
 (allow mach-lookup (global-name "com.apple.tsm.uiserver"))
 
@@ -32,3 +26,7 @@
 ; https://crbug.com/515280
 (if (param-true? elcap-or-later)
   (allow file-read* (subpath "/System/Library/Extensions")))
+
+; Needed for VideoToolbox usage - https://crbug.com/767037
+(if (param-true? macos-1013)
+  (allow mach-lookup (global-name "com.apple.coremedia.videodecoder")))

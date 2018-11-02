@@ -18,11 +18,11 @@
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/data_source.h"
 #include "media/base/decoder_buffer.h"
+#include "media/video/gpu_video_accelerator_factories.h"
 #include "platform_media/renderer/decoders/pass_through_decoder_texture.h"
 #include "platform_media/common/platform_logging_util.h"
 #include "platform_media/common/platform_media_pipeline_constants.h"
 #include "platform_media/common/platform_media_pipeline_types.h"
-#include "media/renderers/gpu_video_accelerator_factories.h"
 
 namespace {
 
@@ -119,7 +119,7 @@ IPCMediaPipelineHostImpl::PictureBufferManager::~PictureBufferManager() {
 const IPCPictureBuffer*
 IPCMediaPipelineHostImpl::PictureBufferManager::ProvidePictureBuffer(
     const gfx::Size& size) {
-  DCHECK(factories_->GetTaskRunner()->RunsTasksOnCurrentThread());
+  DCHECK(factories_->GetTaskRunner()->RunsTasksInCurrentSequence());
   DCHECK(!picture_buffer_in_use_);
 
   if (!available_picture_buffers_.empty()) {
@@ -301,7 +301,7 @@ IPCMediaPipelineHostImpl::IPCMediaPipelineHostImpl(
 IPCMediaPipelineHostImpl::~IPCMediaPipelineHostImpl() {
   // We use WeakPtrs which require that we (i.e. our |weak_ptr_factory_|) are
   // destroyed on the same thread they are used.
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   if (is_connected()) {
     LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
@@ -325,7 +325,7 @@ int32_t IPCMediaPipelineHostImpl::command_buffer_route_id() const {
 
 void IPCMediaPipelineHostImpl::Initialize(const std::string& mimetype,
                                           const InitializeCB& callback) {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK(!is_connected());
   DCHECK(init_callback_.is_null());
 
@@ -364,7 +364,7 @@ void IPCMediaPipelineHostImpl::OnInitialized(
     const media::PlatformMediaTimeInfo& time_info,
     const media::PlatformAudioConfig& audio_config,
     const media::PlatformVideoConfig& video_config) {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   if (init_callback_.is_null()) {
     LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
@@ -402,7 +402,7 @@ void IPCMediaPipelineHostImpl::OnInitialized(
 
 void IPCMediaPipelineHostImpl::OnRequestBufferForRawData(
     size_t requested_size) {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   if (shared_raw_data_->Prepare(requested_size)) {
     channel_->Send(new MediaPipelineMsg_BufferForRawDataReady(
@@ -418,7 +418,7 @@ void IPCMediaPipelineHostImpl::OnRequestBufferForRawData(
 void IPCMediaPipelineHostImpl::OnRequestBufferForDecodedData(
     media::PlatformMediaDataType type,
     size_t requested_size) {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   if (!is_read_in_progress(type)) {
     LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
@@ -444,7 +444,7 @@ void IPCMediaPipelineHostImpl::StartWaitingForSeek() {
 
 void IPCMediaPipelineHostImpl::Seek(base::TimeDelta time,
                                     const media::PipelineStatusCB& status_cb) {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK(is_connected());
   DCHECK(seek_callback_.is_null());
 
@@ -455,7 +455,7 @@ void IPCMediaPipelineHostImpl::Seek(base::TimeDelta time,
 }
 
 void IPCMediaPipelineHostImpl::OnSought(bool success) {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   if (seek_callback_.is_null()) {
     LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
@@ -474,7 +474,7 @@ void IPCMediaPipelineHostImpl::OnSought(bool success) {
 }
 
 void IPCMediaPipelineHostImpl::Stop() {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK(is_connected());
 
   TRACE_EVENT0("IPC_MEDIA", "Stop");
@@ -491,7 +491,7 @@ void IPCMediaPipelineHostImpl::Stop() {
 void IPCMediaPipelineHostImpl::ReadDecodedData(
     media::PlatformMediaDataType type,
     const DemuxerStream::ReadCB& read_cb) {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK(!is_read_in_progress(type)) << "Overlapping reads are not supported";
   DCHECK(is_connected());
 
@@ -524,7 +524,7 @@ void IPCMediaPipelineHostImpl::ReadDecodedData(
 }
 
 void IPCMediaPipelineHostImpl::OnReadRawData(int64_t position, int size) {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   TRACE_EVENT_ASYNC_BEGIN0("IPC_MEDIA", "ReadRawData", this);
 
@@ -545,7 +545,7 @@ void IPCMediaPipelineHostImpl::OnReadRawData(int64_t position, int size) {
 }
 
 void IPCMediaPipelineHostImpl::OnReadRawDataFinished(int size) {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK(shared_raw_data_->IsSufficient(size) ||
          size == media::DataSource::kReadError);
 
@@ -561,7 +561,7 @@ void IPCMediaPipelineHostImpl::OnReadRawDataFinished(int size) {
 bool IPCMediaPipelineHostImpl::OnMessageReceived(const IPC::Message& msg) {
   // GpuChannelHost gives us messages for handling on the thread that called
   // AddRoute().
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(IPCMediaPipelineHostImpl, msg)
@@ -584,13 +584,13 @@ bool IPCMediaPipelineHostImpl::OnMessageReceived(const IPC::Message& msg) {
 }
 
 bool IPCMediaPipelineHostImpl::is_connected() const {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   return routing_id_ != MSG_ROUTING_NONE;
 }
 
 void IPCMediaPipelineHostImpl::OnDecodedDataReady(
     const MediaPipelineMsg_DecodedDataReady_Params& params) {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK(!is_handling_accelerated_video_decode(params.type) ||
          picture_buffer_manager_);
 
@@ -674,7 +674,7 @@ void IPCMediaPipelineHostImpl::OnDecodedDataReady(
 
 void IPCMediaPipelineHostImpl::OnAudioConfigChanged(
     const media::PlatformAudioConfig& new_audio_config) {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   if (!is_read_in_progress(media::PLATFORM_MEDIA_AUDIO)) {
     LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
@@ -697,7 +697,7 @@ void IPCMediaPipelineHostImpl::OnAudioConfigChanged(
 
 void IPCMediaPipelineHostImpl::OnVideoConfigChanged(
     const media::PlatformVideoConfig& new_video_config) {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   if (!is_read_in_progress(media::PLATFORM_MEDIA_VIDEO)) {
     LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
@@ -725,12 +725,12 @@ void IPCMediaPipelineHostImpl::OnVideoConfigChanged(
 }
 
 media::PlatformAudioConfig IPCMediaPipelineHostImpl::audio_config() const {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   return audio_config_;
 }
 
 media::PlatformVideoConfig IPCMediaPipelineHostImpl::video_config() const {
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   return video_config_;
 }
 

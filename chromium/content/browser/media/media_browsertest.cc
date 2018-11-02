@@ -123,7 +123,7 @@ class MediaTest : public testing::WithParamInterface<bool>,
                  const std::string& media_file,
                  bool http) {
     base::StringPairs query_params;
-    query_params.push_back(std::make_pair(tag, media_file));
+    query_params.emplace_back(tag, media_file);
     RunMediaTestPage("player.html", query_params, kEnded, http);
   }
 
@@ -132,9 +132,9 @@ class MediaTest : public testing::WithParamInterface<bool>,
                            const std::string& expected_error_substring,
                            bool http) {
     base::StringPairs query_params;
-    query_params.push_back(std::make_pair(tag, media_file));
-    query_params.push_back(std::make_pair(
-        "error_substr", EncodeErrorMessage(expected_error_substring)));
+    query_params.emplace_back(tag, media_file);
+    query_params.emplace_back("error_substr",
+                              EncodeErrorMessage(expected_error_substring));
     RunMediaTestPage("player.html", query_params, kErrorEvent, http);
   }
 
@@ -144,7 +144,7 @@ class MediaTest : public testing::WithParamInterface<bool>,
     expected += " ";
     expected += base::IntToString(height);
     base::StringPairs query_params;
-    query_params.push_back(std::make_pair("video", media_file));
+    query_params.emplace_back("video", media_file);
     RunMediaTestPage("player.html", query_params, expected, false);
   }
 };
@@ -194,6 +194,14 @@ IN_PROC_BROWSER_TEST_P(MediaTest, VideoBearMp4) {
 
 IN_PROC_BROWSER_TEST_P(MediaTest, VideoBearMp4Vp9) {
   PlayVideo("bear-320x240-v_frag-vp9.mp4", GetParam());
+}
+
+IN_PROC_BROWSER_TEST_P(MediaTest, AudioBearFlacMp4) {
+  PlayAudio("bear-flac.mp4", GetParam());
+}
+
+IN_PROC_BROWSER_TEST_P(MediaTest, AudioBearFlac192kHzMp4) {
+  PlayAudio("bear-flac-192kHz.mp4", GetParam());
 }
 
 // Android devices usually only support baseline, main and high.

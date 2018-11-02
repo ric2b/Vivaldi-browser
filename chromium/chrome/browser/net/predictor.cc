@@ -128,7 +128,7 @@ const int Predictor::kMaxSpeculativeResolveQueueDelayMs =
     Predictor::kMaxSpeculativeParallelResolves;
 
 // The default value of the credentials flag when preconnecting.
-static bool kAllowCredentialsOnPreconnectByDefault = true;
+static constexpr bool kAllowCredentialsOnPreconnectByDefault = true;
 
 static int g_max_queueing_delay_ms =
     Predictor::kMaxSpeculativeResolveQueueDelayMs;
@@ -281,7 +281,7 @@ void Predictor::AnticipateOmniboxUrl(const GURL& url, bool preconnectable) {
 }
 
 void Predictor::PreconnectUrlAndSubresources(const GURL& url,
-    const GURL& first_party_for_cookies) {
+                                             const GURL& site_for_cookies) {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI) ||
          BrowserThread::CurrentlyOn(BrowserThread::IO));
   if (!PredictorEnabled())
@@ -293,10 +293,10 @@ void Predictor::PreconnectUrlAndSubresources(const GURL& url,
     return;
   UrlInfo::ResolutionMotivation motivation(UrlInfo::EARLY_LOAD_MOTIVATED);
   const int kConnectionsNeeded = 1;
-  PreconnectUrl(canonicalized_url, first_party_for_cookies, motivation,
+  PreconnectUrl(canonicalized_url, site_for_cookies, motivation,
                 kAllowCredentialsOnPreconnectByDefault, kConnectionsNeeded);
   PredictFrameSubresources(canonicalized_url.GetWithEmptyPath(),
-                           first_party_for_cookies);
+                           site_for_cookies);
 }
 
 std::vector<GURL> Predictor::GetPredictedUrlListAtStartup(
@@ -769,7 +769,7 @@ void Predictor::WriteDnsPrefetchState(base::ListValue* startup_list,
 }
 
 void Predictor::PreconnectUrl(const GURL& url,
-                              const GURL& first_party_for_cookies,
+                              const GURL& site_for_cookies,
                               UrlInfo::ResolutionMotivation motivation,
                               bool allow_credentials,
                               int count) {
@@ -778,20 +778,20 @@ void Predictor::PreconnectUrl(const GURL& url,
   DCHECK(url.is_valid());
 
   if (BrowserThread::CurrentlyOn(BrowserThread::IO)) {
-    PreconnectUrlOnIOThread(url, first_party_for_cookies, motivation,
+    PreconnectUrlOnIOThread(url, site_for_cookies, motivation,
                             allow_credentials, count);
   } else {
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
         base::BindOnce(&Predictor::PreconnectUrlOnIOThread,
-                       base::Unretained(this), url, first_party_for_cookies,
+                       base::Unretained(this), url, site_for_cookies,
                        motivation, allow_credentials, count));
   }
 }
 
 void Predictor::PreconnectUrlOnIOThread(
     const GURL& original_url,
-    const GURL& first_party_for_cookies,
+    const GURL& site_for_cookies,
     UrlInfo::ResolutionMotivation motivation,
     bool allow_credentials,
     int count) {
@@ -802,8 +802,7 @@ void Predictor::PreconnectUrlOnIOThread(
   // for the URLRequestContextGetter. The predictor tests should be fixed to
   // allow for this, as they currently expect a callback with no getter.
   if (observer_) {
-    observer_->OnPreconnectUrl(
-        url, first_party_for_cookies, motivation, count);
+    observer_->OnPreconnectUrl(url, site_for_cookies, motivation, count);
   }
 
   net::URLRequestContextGetter* getter = url_request_context_getter_.get();
@@ -833,12 +832,12 @@ void Predictor::PreconnectUrlOnIOThread(
   }
   UMA_HISTOGRAM_ENUMERATION("Net.PreconnectMotivation", motivation,
                             UrlInfo::MAX_MOTIVATED);
-  content::PreconnectUrl(getter, url, first_party_for_cookies, count,
+  content::PreconnectUrl(getter, url, site_for_cookies, count,
                          allow_credentials, request_motivation);
 }
 
 void Predictor::PredictFrameSubresources(const GURL& url,
-                                         const GURL& first_party_for_cookies) {
+                                         const GURL& site_for_cookies) {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI) ||
          BrowserThread::CurrentlyOn(BrowserThread::IO));
   if (!PredictorEnabled())
@@ -849,12 +848,12 @@ void Predictor::PredictFrameSubresources(const GURL& url,
   // Add one pass through the message loop to allow current navigation to
   // proceed.
   if (BrowserThread::CurrentlyOn(BrowserThread::IO)) {
-    PrepareFrameSubresources(url, first_party_for_cookies);
+    PrepareFrameSubresources(url, site_for_cookies);
   } else {
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
         base::BindOnce(&Predictor::PrepareFrameSubresources,
-                       base::Unretained(this), url, first_party_for_cookies));
+                       base::Unretained(this), url, site_for_cookies));
   }
 }
 
@@ -886,7 +885,7 @@ enum SubresourceValue {
 };
 
 void Predictor::PrepareFrameSubresources(const GURL& original_url,
-                                         const GURL& first_party_for_cookies) {
+                                         const GURL& site_for_cookies) {
   // Apply HSTS redirect early so it is taken into account when looking up
   // subresources.
   GURL url = GetHSTSRedirectOnIOThread(original_url);
@@ -903,7 +902,7 @@ void Predictor::PrepareFrameSubresources(const GURL& original_url,
     // size of the list with all the "Leaf" nodes in the tree (nodes that don't
     // load any subresources).  If we learn about this resource, we will instead
     // provide a more carefully estimated preconnection count.
-    PreconnectUrlOnIOThread(url, first_party_for_cookies,
+    PreconnectUrlOnIOThread(url, site_for_cookies,
                             UrlInfo::SELF_REFERAL_MOTIVATED,
                             kAllowCredentialsOnPreconnectByDefault, 2);
     return;
@@ -927,16 +926,12 @@ void Predictor::PrepareFrameSubresources(const GURL& original_url,
       int count = static_cast<int>(std::ceil(connection_expectation));
       if (url.host_piece() == future_url->first.host_piece())
         ++count;
-      PreconnectUrlOnIOThread(future_url->first, first_party_for_cookies,
-                              motivation,
+      PreconnectUrlOnIOThread(future_url->first, site_for_cookies, motivation,
                               kAllowCredentialsOnPreconnectByDefault, count);
     } else if (connection_expectation > kDNSPreresolutionWorthyExpectedValue) {
       evalution = PRERESOLUTION;
       future_url->second.preresolution_increment();
-      UrlInfo* queued_info = AppendToResolutionQueue(future_url->first,
-                                                     motivation);
-      if (queued_info)
-        queued_info->SetReferringHostname(url);
+      AppendToResolutionQueue(future_url->first, motivation);
     }
     // Remove future urls that are below the discardable threshold here. This is
     // the only place where the future urls of a referrer are iterated through,
@@ -966,16 +961,18 @@ void Predictor::OnLookupFinished(const GURL& url, int result) {
 
 void Predictor::LookupFinished(const GURL& url, bool found) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  UrlInfo* info = &results_[url];
+  auto info_it = results_.find(url);
+  UrlInfo* info = &info_it->second;
   DCHECK(info->HasUrl(url));
-  if (info->is_marked_to_delete()) {
-    results_.erase(url);
-  } else {
-    if (found)
-      info->SetFoundState();
-    else
-      info->SetNoSuchNameState();
-  }
+  bool is_marked_to_delete = info->is_marked_to_delete();
+
+  if (found)
+    info->SetFoundState();
+  else
+    info->SetNoSuchNameState();
+
+  if (is_marked_to_delete)
+    results_.erase(info_it);
 }
 
 bool Predictor::WouldLikelyProxyURL(const GURL& url) {
@@ -989,41 +986,38 @@ bool Predictor::WouldLikelyProxyURL(const GURL& url) {
   return synchronous_success && !info.is_direct();
 }
 
-UrlInfo* Predictor::AppendToResolutionQueue(
+void Predictor::AppendToResolutionQueue(
     const GURL& url,
     UrlInfo::ResolutionMotivation motivation) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(url.has_host());
 
   if (shutdown_)
-    return nullptr;
+    return;
 
   UrlInfo* info = &results_[url];
   info->SetUrl(url);  // Initialize or DCHECK.
-  // TODO(jar):  I need to discard names that have long since expired.
-  // Currently we only add to the domain map :-/
-
   DCHECK(info->HasUrl(url));
 
   if (!info->NeedsDnsUpdate()) {
     info->DLogResultsStats("DNS PrefetchNotUpdated");
-    return nullptr;
+    return;
   }
 
   if (WouldLikelyProxyURL(url)) {
     info->DLogResultsStats("DNS PrefetchForProxiedRequest");
-    return nullptr;
+    return;
   }
 
   info->SetQueuedState(motivation);
   work_queue_.Push(url, motivation);
 
   StartSomeQueuedResolutions();
-  return info;
 }
 
-bool Predictor::CongestionControlPerformed(UrlInfo* info) {
+bool Predictor::CongestionControlPerformed(Results::iterator info_it) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  UrlInfo* info = &info_it->second;
   // Note: queue_duration is ONLY valid after we go to assigned state.
   if (info->queue_duration() < max_dns_queue_delay_)
     return false;
@@ -1032,9 +1026,11 @@ bool Predictor::CongestionControlPerformed(UrlInfo* info) {
   // resolutions, and not have a bogged down system.
   while (true) {
     info->RemoveFromQueue();
+    results_.erase(info_it);
     if (work_queue_.IsEmpty())
       break;
-    info = &results_[work_queue_.Pop()];
+    info_it = results_.find(work_queue_.Pop());
+    info = &info_it->second;
     info->SetAssignedState();
   }
   return true;
@@ -1046,15 +1042,17 @@ void Predictor::StartSomeQueuedResolutions() {
   while (!work_queue_.IsEmpty() &&
          num_pending_lookups_ < max_concurrent_dns_lookups_) {
     const GURL url(work_queue_.Pop());
-    UrlInfo* info = &results_[url];
+    auto info_it = results_.find(url);
+    UrlInfo* info = &info_it->second;
     DCHECK(info->HasUrl(url));
     info->SetAssignedState();
 
-    if (CongestionControlPerformed(info)) {
+    if (CongestionControlPerformed(info_it)) {
       DCHECK(work_queue_.IsEmpty());
       return;
     }
 
+    info->SetPendingDeleteState();
     int status =
         content::PreresolveUrl(url_request_context_getter_.get(), url,
                                base::Bind(&Predictor::OnLookupFinished,

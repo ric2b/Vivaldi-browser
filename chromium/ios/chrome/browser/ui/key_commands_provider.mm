@@ -6,9 +6,8 @@
 
 #include "base/logging.h"
 #include "components/strings/grit/components_strings.h"
-#import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
-#include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
+#include "ios/chrome/browser/ui/commands/start_voice_search_command.h"
 #import "ios/chrome/browser/ui/keyboard/UIKeyCommand+Chrome.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
 #include "ios/chrome/grit/ios_strings.h"
@@ -26,12 +25,6 @@
                        editingText:(BOOL)editingText {
   __weak id<KeyCommandsPlumbing> weakConsumer = consumer;
   __weak id<ApplicationCommands, BrowserCommands> weakDispatcher = dispatcher;
-
-  // Block to execute a command from the |tag|.
-  void (^execute)(NSInteger) = ^(NSInteger tag) {
-    [weakConsumer
-        chromeExecuteCommand:[GenericChromeCommand commandWithTag:tag]];
-  };
 
   // Block to have the tab model open the tab at |index|, if there is one.
   void (^focusTab)(NSUInteger) = ^(NSUInteger index) {
@@ -139,20 +132,20 @@
                                      title:l10n_util::GetNSStringWithFixup(
                                                IDS_IOS_TOOLS_MENU_FIND_IN_PAGE)
                                     action:^{
-                                      execute(IDC_FIND);
+                                      [weakDispatcher showFindInPage];
                                     }],
       [UIKeyCommand cr_keyCommandWithInput:@"g"
                              modifierFlags:UIKeyModifierCommand
                                      title:nil
                                     action:^{
-                                      execute(IDC_FIND_NEXT);
+                                      [weakDispatcher findNextStringInPage];
                                     }],
       [UIKeyCommand
           cr_keyCommandWithInput:@"g"
                    modifierFlags:UIKeyModifierCommand | UIKeyModifierShift
                            title:nil
                           action:^{
-                            execute(IDC_FIND_PREVIOUS);
+                            [weakDispatcher findPreviousStringInPage];
                           }],
       [UIKeyCommand cr_keyCommandWithInput:@"r"
                              modifierFlags:UIKeyModifierCommand
@@ -188,14 +181,17 @@
                                      title:l10n_util::GetNSStringWithFixup(
                                                IDS_HISTORY_SHOW_HISTORY)
                                     action:^{
-                                      execute(IDC_SHOW_HISTORY);
+                                      [weakDispatcher showHistory];
                                     }],
       [UIKeyCommand
           cr_keyCommandWithInput:@"."
                    modifierFlags:UIKeyModifierCommand | UIKeyModifierShift
                            title:voiceSearchTitle
                           action:^{
-                            execute(IDC_VOICE_SEARCH);
+                            StartVoiceSearchCommand* command =
+                                [[StartVoiceSearchCommand alloc]
+                                    initWithOriginView:nil];
+                            [weakDispatcher startVoiceSearch:command];
                           }],
     ]];
   }
@@ -206,7 +202,7 @@
                            modifierFlags:Cr_UIKeyModifierNone
                                    title:nil
                                   action:^{
-                                    execute(IDC_CLOSE_MODALS);
+                                    [weakDispatcher dismissModalDialogs];
                                   }],
     [UIKeyCommand cr_keyCommandWithInput:@"n"
                            modifierFlags:UIKeyModifierCommand
@@ -242,7 +238,7 @@
                              modifierFlags:UIKeyModifierCommand
                                      title:nil
                                     action:^{
-                                      execute(IDC_HELP_PAGE_VIA_MENU);
+                                      [weakDispatcher showHelpPage];
                                     }],
       [UIKeyCommand cr_keyCommandWithInput:@"1"
                              modifierFlags:UIKeyModifierCommand

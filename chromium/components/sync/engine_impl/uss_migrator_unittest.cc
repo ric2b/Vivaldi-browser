@@ -8,9 +8,9 @@
 #include <string>
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/time/time.h"
+#include "components/sync/base/cancelation_signal.h"
 #include "components/sync/base/hash_util.h"
 #include "components/sync/engine_impl/cycle/non_blocking_type_debug_info_emitter.h"
 #include "components/sync/engine_impl/model_type_worker.h"
@@ -57,13 +57,13 @@ class UssMigratorTest : public ::testing::Test {
  public:
   UssMigratorTest() : debug_emitter_(kModelType, &debug_observers_) {
     test_user_share_.SetUp();
-    entry_factory_ = base::MakeUnique<TestEntryFactory>(directory());
+    entry_factory_ = std::make_unique<TestEntryFactory>(directory());
 
-    auto processor = base::MakeUnique<MockModelTypeProcessor>();
+    auto processor = std::make_unique<MockModelTypeProcessor>();
     processor_ = processor.get();
-    worker_ = base::MakeUnique<ModelTypeWorker>(
+    worker_ = std::make_unique<ModelTypeWorker>(
         kModelType, sync_pb::ModelTypeState(), false, nullptr, &nudge_handler_,
-        std::move(processor), &debug_emitter_);
+        std::move(processor), &debug_emitter_, &cancelation_signal_);
   }
 
   ~UssMigratorTest() override { test_user_share_.TearDown(); }
@@ -103,6 +103,7 @@ class UssMigratorTest : public ::testing::Test {
 
   base::MessageLoop message_loop_;
   TestUserShare test_user_share_;
+  CancelationSignal cancelation_signal_;
   std::unique_ptr<TestEntryFactory> entry_factory_;
   MockNudgeHandler nudge_handler_;
   base::ObserverList<TypeDebugInfoObserver> debug_observers_;

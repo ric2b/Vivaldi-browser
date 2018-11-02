@@ -65,6 +65,7 @@ class VivaldiInstallDialog {
   bool GetLastInstallValues();
   void SaveInstallValues();
   bool InternalSelectLanguage(const std::wstring& code);
+  std::wstring GetCurrentTranslation();
 
   void OnInstallTypeSelection();
   void OnLanguageSelection();

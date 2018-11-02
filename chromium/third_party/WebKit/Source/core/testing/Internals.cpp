@@ -102,8 +102,6 @@
 #include "core/layout/LayoutTreeAsText.h"
 #include "core/layout/api/LayoutMenuListItem.h"
 #include "core/layout/api/LayoutViewItem.h"
-#include "core/layout/compositing/CompositedLayerMapping.h"
-#include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/HistoryItem.h"
@@ -113,6 +111,8 @@
 #include "core/page/PrintContext.h"
 #include "core/page/scrolling/ScrollState.h"
 #include "core/paint/PaintLayer.h"
+#include "core/paint/compositing/CompositedLayerMapping.h"
+#include "core/paint/compositing/PaintLayerCompositor.h"
 #include "core/probe/CoreProbes.h"
 #include "core/svg/SVGImageElement.h"
 #include "core/testing/CallbackFunctionTest.h"
@@ -154,6 +154,7 @@
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/dtoa.h"
 #include "platform/wtf/text/StringBuffer.h"
+#include "platform/wtf/text/TextEncodingRegistry.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebConnectionType.h"
 #include "public/platform/WebGraphicsContext3DProvider.h"
@@ -338,14 +339,6 @@ unsigned Internals::needsLayoutCount(ExceptionState& exception_state) const {
   return needs_layout_objects;
 }
 
-unsigned Internals::forceLayoutCount(ExceptionState& exception_state) const {
-  if (document_)
-    return document_->ForceLayoutCountForTesting();
-  exception_state.ThrowDOMException(kInvalidAccessError,
-                                    "No context document is available.");
-  return 0;
-}
-
 unsigned Internals::hitTestCount(Document* doc,
                                  ExceptionState& exception_state) const {
   if (!doc) {
@@ -462,11 +455,6 @@ String Internals::getResourceHeader(const String& url,
   if (!resource)
     return String();
   return resource->GetResourceRequest().HttpHeaderField(header.Utf8().data());
-}
-
-bool Internals::isSharingStyle(Element* element1, Element* element2) const {
-  DCHECK(element1 && element2);
-  return element1->GetComputedStyle() == element2->GetComputedStyle();
 }
 
 bool Internals::isValidContentSelect(Element* insertion_point,
@@ -733,9 +721,15 @@ ShadowRoot* Internals::createUserAgentShadowRoot(Element* host) {
   return &host->EnsureUserAgentShadowRoot();
 }
 
-void Internals::setBrowserControlsState(float height, bool shrinks_layout) {
+void Internals::setBrowserControlsState(float top_height,
+                                        float bottom_height,
+                                        bool shrinks_layout) {
   document_->GetPage()->GetChromeClient().SetBrowserControlsState(
-      height, shrinks_layout);
+      top_height, bottom_height, shrinks_layout);
+}
+
+void Internals::setBrowserControlsShownRatio(float ratio) {
+  document_->GetPage()->GetChromeClient().SetBrowserControlsShownRatio(ratio);
 }
 
 ShadowRoot* Internals::shadowRoot(Element* host) {
@@ -812,6 +806,12 @@ String Internals::visiblePlaceholder(Element* element) {
   }
 
   return String();
+}
+
+bool Internals::isValidationMessageVisible(Element* element) {
+  DCHECK(element);
+  return IsHTMLFormControlElement(element) &&
+         ToHTMLFormControlElement(element)->IsValidationMessageVisible();
 }
 
 void Internals::selectColorInColorChooser(Element* element,
@@ -1158,6 +1158,33 @@ void Internals::addActiveSuggestionMarker(const Range* range,
           StyleableMarker::Thickness thickness, Color background_color) {
         document_marker_controller.AddActiveSuggestionMarker(
             range, underline_color, thickness, background_color);
+      });
+}
+
+void Internals::addSuggestionMarker(
+    const Range* range,
+    const Vector<String>& suggestions,
+    const String& suggestion_highlight_color_value,
+    const String& underline_color_value,
+    const String& thickness_value,
+    const String& background_color_value,
+    ExceptionState& exception_state) {
+  Color suggestion_highlight_color;
+  if (!ParseColor(suggestion_highlight_color_value, suggestion_highlight_color,
+                  exception_state, "Invalid suggestion highlight color."))
+    return;
+
+  DocumentMarkerController& document_marker_controller =
+      range->OwnerDocument().Markers();
+  addStyleableMarkerHelper(
+      range, underline_color_value, thickness_value, background_color_value,
+      exception_state,
+      [&document_marker_controller, &suggestions, &suggestion_highlight_color](
+          const EphemeralRange& range, Color underline_color,
+          StyleableMarker::Thickness thickness, Color background_color) {
+        document_marker_controller.AddSuggestionMarker(
+            range, suggestions, suggestion_highlight_color, underline_color,
+            thickness, background_color);
       });
 }
 
@@ -2746,7 +2773,7 @@ bool Internals::fakeMouseMovePending() const {
 }
 
 DOMArrayBuffer* Internals::serializeObject(
-    PassRefPtr<SerializedScriptValue> value) const {
+    RefPtr<SerializedScriptValue> value) const {
   StringView view = value->GetWireData();
   DCHECK(view.Is8Bit());
   DOMArrayBuffer* buffer =
@@ -2756,7 +2783,7 @@ DOMArrayBuffer* Internals::serializeObject(
   return buffer;
 }
 
-PassRefPtr<SerializedScriptValue> Internals::deserializeBuffer(
+RefPtr<SerializedScriptValue> Internals::deserializeBuffer(
     DOMArrayBuffer* buffer) const {
   String value(static_cast<const UChar*>(buffer->Data()),
                buffer->ByteLength() / sizeof(UChar));
@@ -3093,10 +3120,11 @@ String Internals::textSurroundingNode(Node* node,
     return String();
   blink::WebPoint point(x, y);
   SurroundingText surrounding_text(
-      CreateVisiblePosition(node->GetLayoutObject()->PositionForPoint(
-                                static_cast<IntPoint>(point)))
-          .DeepEquivalent()
-          .ParentAnchoredEquivalent(),
+      EphemeralRange(
+          CreateVisiblePosition(node->GetLayoutObject()->PositionForPoint(
+                                    static_cast<IntPoint>(point)))
+              .DeepEquivalent()
+              .ParentAnchoredEquivalent()),
       max_length);
   return surrounding_text.Content();
 }
@@ -3425,6 +3453,10 @@ void Internals::setIsLowEndDevice(bool is_low_end_device) {
 
 bool Internals::isLowEndDevice() const {
   return MemoryCoordinator::IsLowEndDevice();
+}
+
+Vector<String> Internals::supportedTextEncodingLabels() const {
+  return WTF::TextEncodingAliasesForTesting();
 }
 
 }  // namespace blink

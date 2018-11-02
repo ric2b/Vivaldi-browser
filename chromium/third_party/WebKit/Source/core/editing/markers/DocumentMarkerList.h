@@ -33,8 +33,14 @@ class CORE_EXPORT DocumentMarkerList
 
   // Returns all markers
   virtual const HeapVector<Member<DocumentMarker>>& GetMarkers() const = 0;
-  // Returns markers that have non-empty overlap with the range
-  // [start_offset, end_offset]
+  // Returns the first marker whose interior overlaps with the range
+  // [start_offset, end_offset], or null if there is no such marker.
+  virtual DocumentMarker* FirstMarkerIntersectingRange(
+      unsigned start_offset,
+      unsigned end_offset) const = 0;
+  // Returns markers whose interiors have non-empty overlap with the range
+  // [start_offset, end_offset]. Note that the range can be collapsed, in which
+  // case markers containing the offset in their interiors are returned.
   virtual HeapVector<Member<DocumentMarker>> MarkersIntersectingRange(
       unsigned start_offset,
       unsigned end_offset) const = 0;
@@ -45,8 +51,13 @@ class CORE_EXPORT DocumentMarkerList
   // Returns true if at least one marker is removed, false otherwise
   virtual bool RemoveMarkers(unsigned start_offset, int length) = 0;
 
-  // Returns true if at least one marker is shifted or removed, false otherwise
-  virtual bool ShiftMarkers(unsigned offset,
+  // Returns true if at least one marker is shifted or removed, false otherwise.
+  // Called in response to an edit replacing the range
+  // [offset, offset + old_length] by a string of length new_length.
+  // node_text is the full text of the affected node *after* the edit is
+  // applied.
+  virtual bool ShiftMarkers(const String& node_text,
+                            unsigned offset,
                             unsigned old_length,
                             unsigned new_length) = 0;
 

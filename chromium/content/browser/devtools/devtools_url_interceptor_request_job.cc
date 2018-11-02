@@ -17,6 +17,7 @@
 #include "net/cert/cert_status_flags.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_request_context.h"
 
 namespace content {
@@ -65,31 +66,51 @@ const char* ResourceTypeToString(ResourceType resource_type) {
   }
 }
 
-void SendRequestInterceptedEventOnUiThread(
+void UnregisterNavigationRequestOnUI(
     base::WeakPtr<protocol::NetworkHandler> network_handler,
-    std::string interception_id,
-    std::unique_ptr<protocol::Network::Request> network_request,
-    std::string resource_type) {
+    std::string interception_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (!network_handler)
     return;
+  network_handler->InterceptedNavigationRequestFinished(interception_id);
+}
+
+void SendRequestInterceptedEventOnUiThread(
+    base::WeakPtr<protocol::NetworkHandler> network_handler,
+    std::string interception_id,
+    GlobalRequestID global_request_id,
+    std::unique_ptr<protocol::Network::Request> network_request,
+    ResourceType resource_type) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  if (!network_handler)
+    return;
+  bool is_navigation_request = resource_type == RESOURCE_TYPE_MAIN_FRAME ||
+                               resource_type == RESOURCE_TYPE_SUB_FRAME;
+  if (is_navigation_request) {
+    network_handler->InterceptedNavigationRequest(global_request_id,
+                                                  interception_id);
+  }
   network_handler->frontend()->RequestIntercepted(
-      interception_id, std::move(network_request), resource_type);
+      interception_id, std::move(network_request),
+      ResourceTypeToString(resource_type), is_navigation_request);
 }
 
 void SendRedirectInterceptedEventOnUiThread(
     base::WeakPtr<protocol::NetworkHandler> network_handler,
     std::string interception_id,
     std::unique_ptr<protocol::Network::Request> network_request,
-    std::string resource_type,
+    ResourceType resource_type,
     std::unique_ptr<protocol::Object> headers_object,
     int http_status_code,
     std::string redirect_url) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (!network_handler)
     return;
-  return network_handler->frontend()->RequestIntercepted(
-      interception_id, std::move(network_request), resource_type,
+  bool is_navigation_request = resource_type == RESOURCE_TYPE_MAIN_FRAME ||
+                               resource_type == RESOURCE_TYPE_SUB_FRAME;
+  network_handler->frontend()->RequestIntercepted(
+      interception_id, std::move(network_request),
+      ResourceTypeToString(resource_type), is_navigation_request,
       std::move(headers_object), http_status_code, redirect_url);
 }
 
@@ -97,13 +118,16 @@ void SendAuthRequiredEventOnUiThread(
     base::WeakPtr<protocol::NetworkHandler> network_handler,
     std::string interception_id,
     std::unique_ptr<protocol::Network::Request> network_request,
-    std::string resource_type,
+    ResourceType resource_type,
     std::unique_ptr<protocol::Network::AuthChallenge> auth_challenge) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (!network_handler)
     return;
+  bool is_navigation_request = resource_type == RESOURCE_TYPE_MAIN_FRAME ||
+                               resource_type == RESOURCE_TYPE_SUB_FRAME;
   network_handler->frontend()->RequestIntercepted(
-      interception_id, std::move(network_request), resource_type,
+      interception_id, std::move(network_request),
+      ResourceTypeToString(resource_type), is_navigation_request,
       protocol::Maybe<protocol::Network::Headers>(), protocol::Maybe<int>(),
       protocol::Maybe<protocol::String>(), std::move(auth_challenge));
 }
@@ -190,10 +214,21 @@ DevToolsURLInterceptorRequestJob::DevToolsURLInterceptorRequestJob(
       resource_type_(resource_type),
       weak_ptr_factory_(this) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  if (const ResourceRequestInfo* info =
+          ResourceRequestInfo::ForRequest(original_request)) {
+    global_request_id_ = info->GetGlobalRequestID();
+  }
 }
 
 DevToolsURLInterceptorRequestJob::~DevToolsURLInterceptorRequestJob() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  bool is_navigation_request = resource_type_ == RESOURCE_TYPE_MAIN_FRAME ||
+                               resource_type_ == RESOURCE_TYPE_SUB_FRAME;
+  if (is_navigation_request) {
+    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                            base::BindOnce(UnregisterNavigationRequestOnUI,
+                                           network_handler_, interception_id_));
+  }
   devtools_url_request_interceptor_state_->JobFinished(interception_id_);
 }
 
@@ -219,9 +254,9 @@ void DevToolsURLInterceptorRequestJob::Start() {
         protocol::NetworkHandler::CreateRequestFromURLRequest(request());
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(SendRequestInterceptedEventOnUiThread, network_handler_,
-                   interception_id_, base::Passed(&network_request),
-                   ResourceTypeToString(resource_type_)));
+        base::BindOnce(SendRequestInterceptedEventOnUiThread, network_handler_,
+                       interception_id_, global_request_id_,
+                       base::Passed(&network_request), resource_type_));
   }
 }
 
@@ -328,6 +363,13 @@ void DevToolsURLInterceptorRequestJob::OnAuthRequired(
   DCHECK_EQ(request, sub_request_->request());
   auth_info_ = auth_info;
 
+  if (!intercepting_requests_) {
+    // This should trigger default auth behavior.
+    // See comment in ProcessAuthRespose.
+    NotifyHeadersComplete();
+    return;
+  }
+
   // This notification came from the sub requests URLRequest::Delegate and
   // depending on what the protocol user wants us to do we must either cancel
   // the auth, provide the credentials or proxy it the original
@@ -350,10 +392,9 @@ void DevToolsURLInterceptorRequestJob::OnAuthRequired(
 
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(SendAuthRequiredEventOnUiThread, network_handler_,
-                 interception_id_, base::Passed(&network_request),
-                 ResourceTypeToString(resource_type_),
-                 base::Passed(&auth_challenge)));
+      base::BindOnce(SendAuthRequiredEventOnUiThread, network_handler_,
+                     interception_id_, base::Passed(&network_request),
+                     resource_type_, base::Passed(&auth_challenge)));
 }
 
 void DevToolsURLInterceptorRequestJob::OnCertificateRequested(
@@ -443,11 +484,10 @@ void DevToolsURLInterceptorRequestJob::OnReceivedRedirect(
       protocol::Object::fromValue(headers_dict.get(), nullptr);
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(SendRedirectInterceptedEventOnUiThread, network_handler_,
-                 interception_id_, base::Passed(&network_request),
-                 ResourceTypeToString(resource_type_),
-                 base::Passed(&headers_object), redirectinfo.status_code,
-                 redirectinfo.new_url.spec()));
+      base::BindOnce(SendRedirectInterceptedEventOnUiThread, network_handler_,
+                     interception_id_, base::Passed(&network_request),
+                     resource_type_, base::Passed(&headers_object),
+                     redirectinfo.status_code, redirectinfo.new_url.spec()));
 }
 
 void DevToolsURLInterceptorRequestJob::StopIntercepting() {
@@ -455,12 +495,38 @@ void DevToolsURLInterceptorRequestJob::StopIntercepting() {
   intercepting_requests_ = false;
 
   // Allow the request to continue if we're waiting for user input.
-  ProcessInterceptionRespose(
-      base::MakeUnique<DevToolsURLRequestInterceptor::Modifications>(
-          base::nullopt, base::nullopt, protocol::Maybe<std::string>(),
-          protocol::Maybe<std::string>(), protocol::Maybe<std::string>(),
-          protocol::Maybe<protocol::Network::Headers>(),
-          protocol::Maybe<protocol::Network::AuthChallengeResponse>()));
+  switch (waiting_for_user_response_) {
+    case WaitingForUserResponse::NOT_WAITING:
+      return;
+
+    case WaitingForUserResponse::WAITING_FOR_INTERCEPTION_RESPONSE:
+      ProcessInterceptionRespose(
+          base::MakeUnique<DevToolsURLRequestInterceptor::Modifications>(
+              base::nullopt, base::nullopt, protocol::Maybe<std::string>(),
+              protocol::Maybe<std::string>(), protocol::Maybe<std::string>(),
+              protocol::Maybe<protocol::Network::Headers>(),
+              protocol::Maybe<protocol::Network::AuthChallengeResponse>()));
+      return;
+
+    case WaitingForUserResponse::WAITING_FOR_AUTH_RESPONSE: {
+      std::unique_ptr<protocol::Network::AuthChallengeResponse> auth_response =
+          protocol::Network::AuthChallengeResponse::Create()
+              .SetResponse(protocol::Network::AuthChallengeResponse::
+                               ResponseEnum::Default)
+              .Build();
+      ProcessAuthRespose(
+          base::MakeUnique<DevToolsURLRequestInterceptor::Modifications>(
+              base::nullopt, base::nullopt, protocol::Maybe<std::string>(),
+              protocol::Maybe<std::string>(), protocol::Maybe<std::string>(),
+              protocol::Maybe<protocol::Network::Headers>(),
+              std::move(auth_response)));
+      return;
+    }
+
+    default:
+      NOTREACHED();
+      return;
+  }
 }
 
 void DevToolsURLInterceptorRequestJob::ContinueInterceptedRequest(
@@ -669,9 +735,35 @@ DevToolsURLInterceptorRequestJob::SubRequest::SubRequest(
           devtools_url_request_interceptor_state),
       fetch_in_progress_(true) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  net::NetworkTrafficAnnotationTag traffic_annotation =
+      net::DefineNetworkTrafficAnnotation("devtools_interceptor", R"(
+        semantics {
+          sender: "Developer Tools"
+          description:
+            "When user is debugging a page, all actions resulting in a network "
+            "request are intercepted to enrich the debugging experience."
+          trigger:
+            "User triggers an action that requires network request (like "
+            "navigation, download, etc.) while debugging the page."
+          data:
+            "Any data that user action sends."
+          destination: WEBSITE
+        }
+        policy {
+          cookies_allowed: YES
+          cookies_store: "user"
+          setting:
+            "This feature cannot be disabled in settings, however it happens "
+            "only when user is debugging a page."
+          chrome_policy {
+            DeveloperToolsDisabled {
+              DeveloperToolsDisabled: true
+            }
+          }
+        })");
   request_ = request_details.url_request_context->CreateRequest(
       request_details.url, request_details.priority,
-      devtools_interceptor_request_job_),
+      devtools_interceptor_request_job_, traffic_annotation),
   request_->set_method(request_details.method);
   request_->SetExtraRequestHeaders(request_details.extra_request_headers);
 

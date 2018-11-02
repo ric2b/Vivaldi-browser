@@ -33,6 +33,7 @@ enum ProfileMode {
 
 extern const char kChromeConnectedHeader[];
 extern const char kDiceRequestHeader[];
+extern const char kDiceResponseHeader[];
 
 // The ServiceType specified by Gaia in the response header accompanying the 204
 // response. This indicates the action Chrome is supposed to lead the user to
@@ -159,11 +160,12 @@ std::string BuildMirrorRequestCookieIfPossible(
 // Adds account consistency header to all Gaia requests from a connected
 // profile, with the exception of requests from gaia webview.
 // Removes the header in case it should not be transfered to a redirected url.
-void AppendOrRemoveAccountConsistentyRequestHeader(
+void AppendOrRemoveAccountConsistencyRequestHeader(
     net::URLRequest* request,
     const GURL& redirect_url,
     const std::string& account_id,
     bool sync_enabled,
+    bool sync_has_auth_error,
     const content_settings::CookieSettings* cookie_settings,
     int profile_mode_mask);
 

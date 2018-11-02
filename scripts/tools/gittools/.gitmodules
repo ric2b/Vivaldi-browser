@@ -1,0 +1,3 @@
+[submodule "deps2git"]
+	path = deps2git
+	url = ../../chromium/tools/deps2git.git

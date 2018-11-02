@@ -33,7 +33,9 @@ InstantAppsInfoBarDelegate::InstantAppsInfoBarDelegate(
     content::WebContents* web_contents,
     const jobject jdata,
     const std::string& url)
-    : content::WebContentsObserver(web_contents), url_(url) {
+    : content::WebContentsObserver(web_contents),
+      url_(url),
+      has_navigated_away_from_launch_url_(false) {
   JNIEnv* env = base::android::AttachCurrentThread();
   java_delegate_.Reset(Java_InstantAppsInfoBarDelegate_create(env));
   data_.Reset(env, jdata);
@@ -53,9 +55,7 @@ bool InstantAppsInfoBarDelegate::Accept() {
   JNIEnv* env = base::android::AttachCurrentThread();
   base::RecordAction(base::UserMetricsAction(
       "Android.InstantApps.BannerOpen"));
-  Java_InstantAppsInfoBarDelegate_openInstantApp(env,
-                                                 java_delegate_.obj(),
-                                                 data_.obj());
+  Java_InstantAppsInfoBarDelegate_openInstantApp(env, java_delegate_, data_);
   return true;
 }
 
@@ -73,11 +73,25 @@ void InstantAppsInfoBarDelegate::InfoBarDismissed() {
       "Android.InstantApps.BannerDismissed"));
 }
 
+void InstantAppsInfoBarDelegate::DidStartNavigation(
+    content::NavigationHandle* navigation_handle) {
+  if (!GURL(url_).EqualsIgnoringRef(
+          navigation_handle->GetWebContents()->GetURL())) {
+    has_navigated_away_from_launch_url_ = true;
+  }
+}
+
 void InstantAppsInfoBarDelegate::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
   if (navigation_handle->IsErrorPage()) {
     infobar()->RemoveSelf();
   }
+}
+
+bool InstantAppsInfoBarDelegate::ShouldExpire(
+    const NavigationDetails& details) const {
+  return has_navigated_away_from_launch_url_ &&
+         ConfirmInfoBarDelegate::ShouldExpire(details);
 }
 
 void Launch(JNIEnv* env,

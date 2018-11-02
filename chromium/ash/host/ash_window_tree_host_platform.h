@@ -26,17 +26,14 @@ class ASH_EXPORT AshWindowTreeHostPlatform
 
   // AshWindowTreeHost:
   bool ConfineCursorToRootWindow() override;
-  void UnConfineCursor() override;
   void SetRootWindowTransformer(
       std::unique_ptr<RootWindowTransformer> transformer) override;
   gfx::Insets GetHostInsets() const override;
   aura::WindowTreeHost* AsWindowTreeHost() override;
   void PrepareForShutdown() override;
-#if defined(USE_OZONE)
   void SetCursorConfig(const display::Display& display,
                        display::Display::Rotation rotation) override;
   void ClearCursorConfig() override;
-#endif
 
   // aura::WindowTreeHostPlatform:
   void SetRootTransform(const gfx::Transform& transform) override;

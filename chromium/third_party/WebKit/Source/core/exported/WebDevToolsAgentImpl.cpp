@@ -35,30 +35,33 @@
 
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/V8BindingForCore.h"
+#include "core/CoreInitializer.h"
 #include "core/CoreProbeSink.h"
 #include "core/events/WebInputEventConversion.h"
 #include "core/exported/WebSettingsImpl.h"
-#include "core/exported/WebViewBase.h"
+#include "core/exported/WebViewImpl.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "core/inspector/DevToolsEmulator.h"
 #include "core/inspector/InspectedFrames.h"
 #include "core/inspector/InspectorAnimationAgent.h"
 #include "core/inspector/InspectorApplicationCacheAgent.h"
+#include "core/inspector/InspectorAuditsAgent.h"
 #include "core/inspector/InspectorCSSAgent.h"
 #include "core/inspector/InspectorDOMAgent.h"
 #include "core/inspector/InspectorDOMDebuggerAgent.h"
 #include "core/inspector/InspectorDOMSnapshotAgent.h"
 #include "core/inspector/InspectorEmulationAgent.h"
-#include "core/inspector/InspectorInputAgent.h"
+#include "core/inspector/InspectorIOAgent.h"
 #include "core/inspector/InspectorLayerTreeAgent.h"
 #include "core/inspector/InspectorLogAgent.h"
 #include "core/inspector/InspectorMemoryAgent.h"
 #include "core/inspector/InspectorNetworkAgent.h"
 #include "core/inspector/InspectorOverlayAgent.h"
 #include "core/inspector/InspectorPageAgent.h"
+#include "core/inspector/InspectorPerformanceAgent.h"
 #include "core/inspector/InspectorResourceContainer.h"
 #include "core/inspector/InspectorResourceContentLoader.h"
 #include "core/inspector/InspectorTaskRunner.h"
@@ -70,6 +73,7 @@
 #include "core/page/Page.h"
 #include "core/probe/CoreProbes.h"
 #include "platform/CrossThreadFunctional.h"
+#include "platform/LayoutTestSupport.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/paint/PaintController.h"
@@ -89,7 +93,7 @@ namespace blink {
 
 namespace {
 
-bool IsMainFrame(WebLocalFrameBase* frame) {
+bool IsMainFrame(WebLocalFrameImpl* frame) {
   // TODO(dgozman): sometimes view->mainFrameImpl() does return null, even
   // though |frame| is meant to be main frame.  See http://crbug.com/526162.
   return frame->ViewImpl() && !frame->Parent();
@@ -116,7 +120,7 @@ class ClientMessageLoopAdapter : public MainThreadDebugger::ClientMessageLoop {
       instance_->QuitNow();
   }
 
-  static void PauseForCreateWindow(WebLocalFrameBase* frame) {
+  static void PauseForCreateWindow(WebLocalFrameImpl* frame) {
     if (instance_)
       instance_->RunForCreateWindow(frame);
   }
@@ -141,10 +145,10 @@ class ClientMessageLoopAdapter : public MainThreadDebugger::ClientMessageLoop {
 
     running_for_debug_break_ = true;
     if (!running_for_create_window_)
-      RunLoop(WebLocalFrameBase::FromFrame(frame));
+      RunLoop(WebLocalFrameImpl::FromFrame(frame));
   }
 
-  void RunForCreateWindow(WebLocalFrameBase* frame) {
+  void RunForCreateWindow(WebLocalFrameImpl* frame) {
     if (running_for_create_window_)
       return;
 
@@ -153,14 +157,14 @@ class ClientMessageLoopAdapter : public MainThreadDebugger::ClientMessageLoop {
       RunLoop(frame);
   }
 
-  void RunLoop(WebLocalFrameBase* frame) {
+  void RunLoop(WebLocalFrameImpl* frame) {
     // 0. Flush pending frontend messages.
     WebDevToolsAgentImpl* agent = frame->DevToolsAgentImpl();
     agent->FlushProtocolNotifications();
 
     // 1. Disable input events.
     WebFrameWidgetBase::SetIgnoreInputEvents(true);
-    for (const auto view : WebViewBase::AllInstances())
+    for (const auto view : WebViewImpl::AllInstances())
       view->GetChromeClient().NotifyPopupOpeningObservers();
 
     // 2. Notify embedder about pausing.
@@ -207,7 +211,7 @@ class ClientMessageLoopAdapter : public MainThreadDebugger::ClientMessageLoop {
       return;
     // Otherwise, pass to the client (embedded workers do it differently).
     WebDevToolsAgentImpl* agent =
-        WebLocalFrameBase::FromFrame(frame)->DevToolsAgentImpl();
+        WebLocalFrameImpl::FromFrame(frame)->DevToolsAgentImpl();
     if (agent && agent->Client())
       agent->Client()->ResumeStartup();
   }
@@ -224,7 +228,7 @@ ClientMessageLoopAdapter* ClientMessageLoopAdapter::instance_ = nullptr;
 
 // static
 WebDevToolsAgentImpl* WebDevToolsAgentImpl::Create(
-    WebLocalFrameBase* frame,
+    WebLocalFrameImpl* frame,
     WebDevToolsAgentClient* client) {
   if (!IsMainFrame(frame)) {
     WebDevToolsAgentImpl* agent =
@@ -234,14 +238,14 @@ WebDevToolsAgentImpl* WebDevToolsAgentImpl::Create(
     return agent;
   }
 
-  WebViewBase* view = frame->ViewImpl();
+  WebViewImpl* view = frame->ViewImpl();
   WebDevToolsAgentImpl* agent = new WebDevToolsAgentImpl(frame, client, true);
   agent->LayerTreeViewChanged(view->LayerTreeView());
   return agent;
 }
 
 WebDevToolsAgentImpl::WebDevToolsAgentImpl(
-    WebLocalFrameBase* web_local_frame_impl,
+    WebLocalFrameImpl* web_local_frame_impl,
     WebDevToolsAgentClient* client,
     bool include_view_agents)
     : client_(client),
@@ -330,7 +334,9 @@ InspectorSession* WebDevToolsAgentImpl::InitializeSession(int session_id,
   session->Append(new InspectorAnimationAgent(inspected_frames_.Get(),
                                               css_agent, session->V8Session()));
 
-  session->Append(InspectorMemoryAgent::Create());
+  session->Append(InspectorMemoryAgent::Create(inspected_frames_.Get()));
+
+  session->Append(InspectorPerformanceAgent::Create(inspected_frames_.Get()));
 
   session->Append(
       InspectorApplicationCacheAgent::Create(inspected_frames_.Get()));
@@ -346,8 +352,6 @@ InspectorSession* WebDevToolsAgentImpl::InitializeSession(int session_id,
 
   session->Append(
       new InspectorDOMDebuggerAgent(isolate, dom_agent, session->V8Session()));
-
-  session->Append(InspectorInputAgent::Create(inspected_frames_.Get()));
 
   InspectorPageAgent* page_agent = InspectorPageAgent::Create(
       inspected_frames_.Get(), this, resource_content_loader_.Get(),
@@ -365,6 +369,10 @@ InspectorSession* WebDevToolsAgentImpl::InitializeSession(int session_id,
   overlay_agents_.Set(session_id, overlay_agent);
   session->Append(overlay_agent);
 
+  session->Append(new InspectorIOAgent(isolate, session->V8Session()));
+
+  session->Append(new InspectorAuditsAgent(network_agent));
+
   tracing_agent->SetLayerTreeId(layer_tree_id_);
   network_agent->SetHostId(host_id);
 
@@ -377,7 +385,7 @@ InspectorSession* WebDevToolsAgentImpl::InitializeSession(int session_id,
   }
 
   // Call session init callbacks registered from higher layers
-  InspectorAgent::CallSessionInitCallbacks(
+  CoreInitializer::GetInstance().InitInspectorAgentSession(
       session, include_view_agents_, dom_agent, inspected_frames_.Get(),
       web_local_frame_impl_->ViewImpl()->GetPage());
 
@@ -552,6 +560,10 @@ void WebDevToolsAgentImpl::SendProtocolMessage(int session_id,
                                                const String& response,
                                                const String& state) {
   DCHECK(Attached());
+  // Make tests more predictable by flushing all sessions before sending
+  // protocol response in any of them.
+  if (LayoutTestSupport::IsRunningLayoutTest() && call_id)
+    FlushProtocolNotifications();
   if (client_)
     client_->SendProtocolMessage(session_id, call_id, response, state);
 }
@@ -565,7 +577,7 @@ void WebDevToolsAgentImpl::WaitForCreateWindow(LocalFrame* frame) {
   if (!Attached())
     return;
   if (client_ &&
-      client_->RequestDevToolsForFrame(WebLocalFrameBase::FromFrame(frame)))
+      client_->RequestDevToolsForFrame(WebLocalFrameImpl::FromFrame(frame)))
     ClientMessageLoopAdapter::PauseForCreateWindow(web_local_frame_impl_);
 }
 

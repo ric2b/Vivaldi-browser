@@ -6,27 +6,23 @@
 #define CHROME_BROWSER_PROFILING_HOST_PROFILING_PROCESS_HOST_H_
 
 #include "base/macros.h"
+#include "base/memory/singleton.h"
 #include "base/process/process.h"
+#include "base/trace_event/memory_dump_provider.h"
 #include "build/build_config.h"
 #include "chrome/common/chrome_features.h"
-#include "chrome/common/profiling/profiling_control.mojom.h"
-#include "mojo/edk/embedder/scoped_platform_handle.h"
-
-// The .mojom include above may not be generated unless OOP heap profiling is
-// enabled.
-#if !BUILDFLAG(ENABLE_OOP_HEAP_PROFILING)
-#error profiling_process_host.h should only be included with OOP heap profiling
-#endif
+#include "chrome/common/profiling/memlog.mojom.h"
+#include "chrome/common/profiling/memlog_client.h"
+#include "chrome/common/profiling/memlog_client.mojom.h"
+#include "content/public/browser/browser_child_process_observer.h"
+#include "content/public/browser/child_process_data.h"
+#include "content/public/browser/notification_observer.h"
+#include "content/public/browser/notification_registrar.h"
+#include "services/service_manager/public/cpp/connector.h"
 
 namespace base {
-class CommandLine;
-}  // namespace base
-
-#if defined(OS_POSIX) && !defined(OS_MACOSX)
-namespace content {
-class FileDescriptorInfo;
-}  // namespace content
-#endif  // defined(OS_POSIX) && !defined(OS_MACOSX)
+class FilePath;
+}
 
 namespace profiling {
 
@@ -38,59 +34,109 @@ namespace profiling {
 //
 // Not thread safe. Should be used on the browser UI thread only.
 //
-// The profing process host can be started normally while Chrome is running,
+// The profiling process host can be started normally while Chrome is running,
 // but can also start in a partial mode where the memory logging connections
 // are active but the Mojo control channel has not yet been connected. This is
 // to support starting the profiling process very early in the startup
 // process (to get most memory events) before other infrastructure like the
 // I/O thread has been started.
-class ProfilingProcessHost {
+//
+// TODO(ajwong): This host class seems over kill at this point. Can this be
+// fully subsumed by the ProfilingService class?
+class ProfilingProcessHost : public content::BrowserChildProcessObserver,
+                             content::NotificationObserver,
+                             base::trace_event::MemoryDumpProvider {
  public:
+  enum class Mode {
+    // No profiling enabled.
+    kNone,
+
+    // Only profile the browser process.
+    kBrowser,
+
+    // Profile all processes.
+    kAll,
+  };
+
+  // Returns the mode set on the current process' command line.
+  static Mode GetCurrentMode();
+
   // Launches the profiling process if necessary and returns a pointer to it.
-  static ProfilingProcessHost* EnsureStarted();
+  static ProfilingProcessHost* EnsureStarted(
+      content::ServiceManagerConnection* connection,
+      Mode mode);
 
-  // Returns a pointer to the current global profiling process host or, if
-  // no profiling process is launched, nullptr.
-  static ProfilingProcessHost* Get();
+  // Returns a pointer to the current global profiling process host.
+  static ProfilingProcessHost* GetInstance();
 
-  // Appends necessary switches to a command line for a child process so it can
-  // be profiled. These switches will cause the child process to start in the
-  // same mode (either profiling or not) as the browser process.
-  static void AddSwitchesToChildCmdLine(base::CommandLine* child_cmd_line);
+  // Sends a message to the profiling process that it dump the given process'
+  // memory data to the given file.
+  void RequestProcessDump(base::ProcessId pid, const base::FilePath& dest);
 
-#if defined(OS_POSIX) && !defined(OS_MACOSX)
-  static void GetAdditionalMappedFilesForChildProcess(
-      const base::CommandLine& command_line,
-      int child_process_id,
-      content::FileDescriptorInfo* mappings);
-#endif  // defined(OS_POSIX) && !defined(OS_MACOSX)
+  // Sends a message to the profiling process that it report the given process'
+  // memory data to the crash server (slow-report).
+  void RequestProcessReport(base::ProcessId pid);
 
  private:
+  friend struct base::DefaultSingletonTraits<ProfilingProcessHost>;
   ProfilingProcessHost();
-  ~ProfilingProcessHost();
+  ~ProfilingProcessHost() override;
 
-  void Launch();
+  // Make and store a connector from |connection|.
+  void MakeConnector(content::ServiceManagerConnection* connection);
 
-  void EnsureControlChannelExists();
-  void ConnectControlChannelOnIO();
-  void AddNewSenderOnIO(mojo::edk::ScopedPlatformHandle handle,
-                        int child_process_id);
+  // BrowserChildProcessObserver
+  // Observe connection of non-renderer child processes.
+  void BrowserChildProcessLaunchedAndConnected(
+      const content::ChildProcessData& data) override;
 
-  // Use process_.IsValid() to determine if the child process has been launched.
-  base::Process process_;
-  std::string pipe_id_;
+  // NotificationObserver
+  // Observe connection of renderer child processes.
+  void Observe(int type,
+               const content::NotificationSource& source,
+               const content::NotificationDetails& details) override;
 
-  // IO thread only -----------------------------------------------------------
-  //
-  // Once the constructor is finished, the following variables must only be
-  // accessed on the IO thread.
+  // base::trace_event::MemoryDumpProvider
+  bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
+                    base::trace_event::ProcessMemoryDump* pmd) override;
 
-  // Holds the pending server handle for the Mojo control channel during
-  // the period between the profiling process launching and the Mojo channel
-  // being created. Will be invalid otherwise.
-  mojo::edk::ScopedPlatformHandle pending_control_connection_;
+  void OnDumpProcessForTracingCallback(mojo::ScopedSharedBufferHandle buffer,
+                                       uint32_t size);
 
-  mojom::ProfilingControlPtr profiling_control_;
+  // Starts the profiling process.
+  void LaunchAsService();
+
+  // Sends the receiving end of the data pipe to the profiling service.
+  void SendPipeToProfilingService(
+      profiling::mojom::MemlogClientPtr memlog_client,
+      base::ProcessId pid);
+  // Sends the sending end of the data pipe to the client process.
+  void SendPipeToClientProcess(profiling::mojom::MemlogClientPtr memlog_client,
+                               mojo::ScopedHandle handle);
+
+  void GetOutputFileOnBlockingThread(base::ProcessId pid,
+                                     const base::FilePath& dest,
+                                     bool upload);
+  void HandleDumpProcessOnIOThread(base::ProcessId pid,
+                                   base::FilePath file_path,
+                                   base::File file,
+                                   bool upload);
+  void OnProcessDumpComplete(base::FilePath file_path,
+                             bool upload,
+                             bool success);
+
+  void SetMode(Mode mode);
+
+  // Returns the metadata for the trace. This is the minimum amount of metadata
+  // needed to symbolize the trace.
+  std::unique_ptr<base::DictionaryValue> GetMetadataJSONForTrace();
+
+  content::NotificationRegistrar registrar_;
+  std::unique_ptr<service_manager::Connector> connector_;
+  mojom::MemlogPtr memlog_;
+
+  // The mode determines which processes should be profiled.
+  Mode mode_;
 
   DISALLOW_COPY_AND_ASSIGN(ProfilingProcessHost);
 };

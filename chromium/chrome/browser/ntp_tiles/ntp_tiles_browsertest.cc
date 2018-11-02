@@ -1,8 +1,11 @@
 // Copyright 2017 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-//
 
+#include <map>
+#include <string>
+
+#include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/ntp_tiles/chrome_most_visited_sites_factory.h"
@@ -50,8 +53,9 @@ class MostVisitedSitesWaiter : public MostVisitedSites::Observer {
     return tiles_;
   }
 
-  void OnMostVisitedURLsAvailable(const NTPTilesVector& tiles) override {
-    tiles_ = tiles;
+  void OnURLsAvailable(
+      const std::map<SectionType, NTPTilesVector>& sections) override {
+    tiles_ = sections.at(SectionType::PERSONALIZED);
     if (!quit_closure_.is_null()) {
       quit_closure_.Run();
     }
@@ -149,9 +153,7 @@ IN_PROC_BROWSER_TEST_F(NTPTilesTest, NavigateAfterSettingObserver) {
       browser(), page_url, WindowOpenDisposition::CURRENT_TAB,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
 
-  // TODO(crbug.com/741431): When Refresh calls SyncWithHistory() for signed
-  // out users, replace the call below with most_visited_sites_->Refresh().
-  most_visited_sites_->top_sites()->SyncWithHistory();
+  most_visited_sites_->Refresh();
   NTPTilesVector tiles = waiter.WaitForTiles();
   EXPECT_THAT(tiles, Contains(MatchesTile("OK", page_url.spec().c_str(),
                                           TileSource::TOP_SITES)));

@@ -23,7 +23,6 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
-#include "content/common/media/media_stream_messages.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
@@ -34,7 +33,6 @@
 #include "content/public/renderer/content_renderer_client.h"
 #include "content/renderer/media/gpu/rtc_video_decoder_factory.h"
 #include "content/renderer/media/gpu/rtc_video_encoder_factory.h"
-#include "content/renderer/media/media_stream.h"
 #include "content/renderer/media/media_stream_video_source.h"
 #include "content/renderer/media/media_stream_video_track.h"
 #include "content/renderer/media/rtc_peer_connection_handler.h"
@@ -55,7 +53,7 @@
 #include "jingle/glue/thread_wrapper.h"
 #include "media/base/media_permission.h"
 #include "media/filters/ffmpeg_glue.h"
-#include "media/renderers/gpu_video_accelerator_factories.h"
+#include "media/video/gpu_video_accelerator_factories.h"
 #include "third_party/WebKit/public/platform/WebMediaConstraints.h"
 #include "third_party/WebKit/public/platform/WebMediaStream.h"
 #include "third_party/WebKit/public/platform/WebMediaStreamSource.h"
@@ -183,17 +181,18 @@ void PeerConnectionDependencyFactory::CreatePeerConnectionFactory() {
       base::WaitableEvent::InitialState::NOT_SIGNALED);
   chrome_worker_thread_.task_runner()->PostTask(
       FROM_HERE,
-      base::Bind(&PeerConnectionDependencyFactory::InitializeWorkerThread,
-                 base::Unretained(this), &worker_thread_, &start_worker_event));
+      base::BindOnce(&PeerConnectionDependencyFactory::InitializeWorkerThread,
+                     base::Unretained(this), &worker_thread_,
+                     &start_worker_event));
 
   base::WaitableEvent create_network_manager_event(
       base::WaitableEvent::ResetPolicy::MANUAL,
       base::WaitableEvent::InitialState::NOT_SIGNALED);
   chrome_worker_thread_.task_runner()->PostTask(
       FROM_HERE,
-      base::Bind(&PeerConnectionDependencyFactory::
-                     CreateIpcNetworkManagerOnWorkerThread,
-                 base::Unretained(this), &create_network_manager_event));
+      base::BindOnce(&PeerConnectionDependencyFactory::
+                         CreateIpcNetworkManagerOnWorkerThread,
+                     base::Unretained(this), &create_network_manager_event));
 
   start_worker_event.Wait();
   create_network_manager_event.Wait();
@@ -212,10 +211,11 @@ void PeerConnectionDependencyFactory::CreatePeerConnectionFactory() {
       base::WaitableEvent::InitialState::NOT_SIGNALED);
   chrome_signaling_thread_.task_runner()->PostTask(
       FROM_HERE,
-      base::Bind(&PeerConnectionDependencyFactory::InitializeSignalingThread,
-                 base::Unretained(this),
-                 RenderThreadImpl::current()->GetGpuFactories(),
-                 &start_signaling_event));
+      base::BindOnce(
+          &PeerConnectionDependencyFactory::InitializeSignalingThread,
+          base::Unretained(this),
+          RenderThreadImpl::current()->GetGpuFactories(),
+          &start_signaling_event));
 
   start_signaling_event.Wait();
   CHECK(signaling_thread_);
@@ -266,6 +266,8 @@ void PeerConnectionDependencyFactory::InitializeSignalingThread(
       cmd_line->HasSwitch(switches::kDisableWebRtcEncryption);
   factory_options.crypto_options.enable_gcm_crypto_suites =
       cmd_line->HasSwitch(switches::kEnableWebRtcSrtpAesGcm);
+  factory_options.crypto_options.enable_encrypted_rtp_header_extensions =
+      cmd_line->HasSwitch(switches::kEnableWebRtcSrtpEncryptedHeaders);
   pc_factory_->SetOptions(factory_options);
 
   event->Signal();
@@ -470,8 +472,9 @@ void PeerConnectionDependencyFactory::TryScheduleStunProbeTrial() {
   if (!p2p_socket_dispatcher_->connected()) {
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE,
-        base::Bind(&PeerConnectionDependencyFactory::TryScheduleStunProbeTrial,
-                   base::Unretained(this)),
+        base::BindOnce(
+            &PeerConnectionDependencyFactory::TryScheduleStunProbeTrial,
+            base::Unretained(this)),
         base::TimeDelta::FromSeconds(1));
     return;
   }
@@ -487,7 +490,7 @@ void PeerConnectionDependencyFactory::TryScheduleStunProbeTrial() {
 
   chrome_worker_thread_.task_runner()->PostDelayedTask(
       FROM_HERE,
-      base::Bind(
+      base::BindOnce(
           &PeerConnectionDependencyFactory::StartStunProbeTrialOnWorkerThread,
           base::Unretained(this), params),
       base::TimeDelta::FromMilliseconds(kExperimentStartDelayMs));
@@ -523,8 +526,9 @@ void PeerConnectionDependencyFactory::CleanupPeerConnectionFactory() {
     if (chrome_worker_thread_.IsRunning()) {
       chrome_worker_thread_.task_runner()->PostTask(
           FROM_HERE,
-          base::Bind(&PeerConnectionDependencyFactory::DeleteIpcNetworkManager,
-                     base::Unretained(this)));
+          base::BindOnce(
+              &PeerConnectionDependencyFactory::DeleteIpcNetworkManager,
+              base::Unretained(this)));
       // Stopping the thread will wait until all tasks have been
       // processed before returning. We wait for the above task to finish before
       // letting the the function continue to avoid any potential race issues.

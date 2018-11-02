@@ -52,15 +52,6 @@ bool ChromeWebViewPermissionHelperDelegate::OnMessageReceived(
                         OnBlockedOutdatedPlugin)
     IPC_MESSAGE_HANDLER(ChromeViewHostMsg_BlockedUnauthorizedPlugin,
                         OnBlockedUnauthorizedPlugin)
-    IPC_MESSAGE_UNHANDLED(return false)
-  IPC_END_MESSAGE_MAP()
-
-  return true;
-}
-
-bool ChromeWebViewPermissionHelperDelegate::OnMessageReceived(
-    const IPC::Message& message) {
-  IPC_BEGIN_MESSAGE_MAP(ChromeWebViewPermissionHelperDelegate, message)
     IPC_MESSAGE_HANDLER(ChromeViewHostMsg_CouldNotLoadPlugin,
                         OnCouldNotLoadPlugin)
     IPC_MESSAGE_HANDLER(ChromeViewHostMsg_RemovePluginPlaceholderHost,
@@ -388,37 +379,6 @@ void ChromeWebViewPermissionHelperDelegate::FileSystemAccessedAsyncResponse(
       render_process_id, render_frame_id, url, !allowed);
   Send(new ChromeViewMsg_RequestFileSystemAccessAsyncResponse(
       render_frame_id, request_id, allowed));
-}
-
-void ChromeWebViewPermissionHelperDelegate::FileSystemAccessedSync(
-    int render_process_id,
-    int render_frame_id,
-    const GURL& url,
-    bool blocked_by_policy,
-    IPC::Message* reply_msg) {
-  RequestFileSystemPermission(
-      url,
-      !blocked_by_policy,
-      base::Bind(&ChromeWebViewPermissionHelperDelegate::
-                     FileSystemAccessedSyncResponse,
-                 weak_factory_.GetWeakPtr(),
-                 render_process_id,
-                 render_frame_id,
-                 url,
-                 reply_msg));
-}
-
-void ChromeWebViewPermissionHelperDelegate::FileSystemAccessedSyncResponse(
-    int render_process_id,
-    int render_frame_id,
-    const GURL& url,
-    IPC::Message* reply_msg,
-    bool allowed) {
-  TabSpecificContentSettings::FileSystemAccessed(
-      render_process_id, render_frame_id, url, !allowed);
-  ChromeViewHostMsg_RequestFileSystemAccessSync::WriteReplyParams(reply_msg,
-                                                                  allowed);
-  Send(reply_msg);
 }
 
 }  // namespace extensions

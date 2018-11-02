@@ -5,6 +5,7 @@
 #include "ui/aura/local/layer_tree_frame_sink_local.h"
 
 #include "cc/output/layer_tree_frame_sink_client.h"
+#include "components/viz/common/surfaces/surface_info.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
 #include "ui/aura/client/cursor_client.h"
@@ -21,9 +22,14 @@ LayerTreeFrameSinkLocal::LayerTreeFrameSinkLocal(
     viz::HostFrameSinkManager* host_frame_sink_manager)
     : cc::LayerTreeFrameSink(nullptr, nullptr, nullptr, nullptr),
       frame_sink_id_(frame_sink_id),
-      host_frame_sink_manager_(host_frame_sink_manager) {}
+      host_frame_sink_manager_(host_frame_sink_manager),
+      weak_factory_(this) {
+  host_frame_sink_manager_->RegisterFrameSinkId(frame_sink_id_, this);
+}
 
-LayerTreeFrameSinkLocal::~LayerTreeFrameSinkLocal() {}
+LayerTreeFrameSinkLocal::~LayerTreeFrameSinkLocal() {
+  host_frame_sink_manager_->InvalidateFrameSinkId(frame_sink_id_);
+}
 
 bool LayerTreeFrameSinkLocal::BindToClient(
     cc::LayerTreeFrameSinkClient* client) {
@@ -34,9 +40,8 @@ bool LayerTreeFrameSinkLocal::BindToClient(
 
   support_ = host_frame_sink_manager_->CreateCompositorFrameSinkSupport(
       this, frame_sink_id_, false /* is_root */,
-      true /* handles_frame_sink_id_invalidation */,
       true /* needs_sync_points */);
-  begin_frame_source_ = base::MakeUnique<cc::ExternalBeginFrameSource>(this);
+  begin_frame_source_ = base::MakeUnique<viz::ExternalBeginFrameSource>(this);
   client->SetBeginFrameSource(begin_frame_source_.get());
   return true;
 }
@@ -45,6 +50,10 @@ void LayerTreeFrameSinkLocal::SetSurfaceChangedCallback(
     const SurfaceChangedCallback& callback) {
   DCHECK(!surface_changed_callback_);
   surface_changed_callback_ = callback;
+}
+
+base::WeakPtr<LayerTreeFrameSinkLocal> LayerTreeFrameSinkLocal::GetWeakPtr() {
+  return weak_factory_.GetWeakPtr();
 }
 
 void LayerTreeFrameSinkLocal::DetachFromClient() {
@@ -58,42 +67,37 @@ void LayerTreeFrameSinkLocal::DetachFromClient() {
   cc::LayerTreeFrameSink::DetachFromClient();
 }
 
+void LayerTreeFrameSinkLocal::SetLocalSurfaceId(
+    const viz::LocalSurfaceId& local_surface_id) {
+  DCHECK(local_surface_id.is_valid());
+  local_surface_id_ = local_surface_id;
+}
+
 void LayerTreeFrameSinkLocal::SubmitCompositorFrame(cc::CompositorFrame frame) {
   DCHECK(thread_checker_);
   DCHECK(thread_checker_->CalledOnValidThread());
   DCHECK(frame.metadata.begin_frame_ack.has_damage);
-  DCHECK_LE(cc::BeginFrameArgs::kStartingFrameNumber,
+  DCHECK_LE(viz::BeginFrameArgs::kStartingFrameNumber,
             frame.metadata.begin_frame_ack.sequence_number);
 
-  viz::LocalSurfaceId old_local_surface_id = local_surface_id_;
-  const auto& frame_size = frame.render_pass_list.back()->output_rect.size();
-  if (frame_size != surface_size_ ||
-      frame.metadata.device_scale_factor != device_scale_factor_ ||
-      !local_surface_id_.is_valid()) {
-    surface_size_ = frame_size;
-    device_scale_factor_ = frame.metadata.device_scale_factor;
-    local_surface_id_ = id_allocator_.GenerateId();
-  }
+  DCHECK(local_surface_id_.is_valid());
+
   bool result =
       support_->SubmitCompositorFrame(local_surface_id_, std::move(frame));
   DCHECK(result);
-
-  if (local_surface_id_ != old_local_surface_id) {
-    surface_changed_callback_.Run(
-        viz::SurfaceId(frame_sink_id_, local_surface_id_), surface_size_);
-  }
 }
 
-void LayerTreeFrameSinkLocal::DidNotProduceFrame(const cc::BeginFrameAck& ack) {
+void LayerTreeFrameSinkLocal::DidNotProduceFrame(
+    const viz::BeginFrameAck& ack) {
   DCHECK(thread_checker_);
   DCHECK(thread_checker_->CalledOnValidThread());
   DCHECK(!ack.has_damage);
-  DCHECK_LE(cc::BeginFrameArgs::kStartingFrameNumber, ack.sequence_number);
+  DCHECK_LE(viz::BeginFrameArgs::kStartingFrameNumber, ack.sequence_number);
   support_->DidNotProduceFrame(ack);
 }
 
 void LayerTreeFrameSinkLocal::DidReceiveCompositorFrameAck(
-    const std::vector<cc::ReturnedResource>& resources) {
+    const std::vector<viz::ReturnedResource>& resources) {
   DCHECK(thread_checker_);
   DCHECK(thread_checker_->CalledOnValidThread());
   if (!client_)
@@ -103,7 +107,7 @@ void LayerTreeFrameSinkLocal::DidReceiveCompositorFrameAck(
   client_->DidReceiveCompositorFrameAck();
 }
 
-void LayerTreeFrameSinkLocal::OnBeginFrame(const cc::BeginFrameArgs& args) {
+void LayerTreeFrameSinkLocal::OnBeginFrame(const viz::BeginFrameArgs& args) {
   DCHECK(thread_checker_);
   DCHECK(thread_checker_->CalledOnValidThread());
   begin_frame_source_->OnBeginFrame(args);
@@ -116,7 +120,7 @@ void LayerTreeFrameSinkLocal::OnBeginFramePausedChanged(bool paused) {
 }
 
 void LayerTreeFrameSinkLocal::ReclaimResources(
-    const std::vector<cc::ReturnedResource>& resources) {
+    const std::vector<viz::ReturnedResource>& resources) {
   DCHECK(thread_checker_);
   DCHECK(thread_checker_->CalledOnValidThread());
   if (!client_)
@@ -128,6 +132,11 @@ void LayerTreeFrameSinkLocal::OnNeedsBeginFrames(bool needs_begin_frames) {
   DCHECK(thread_checker_);
   DCHECK(thread_checker_->CalledOnValidThread());
   support_->SetNeedsBeginFrame(needs_begin_frames);
+}
+
+void LayerTreeFrameSinkLocal::OnFirstSurfaceActivation(
+    const viz::SurfaceInfo& surface_info) {
+  surface_changed_callback_.Run(surface_info);
 }
 
 }  // namespace aura

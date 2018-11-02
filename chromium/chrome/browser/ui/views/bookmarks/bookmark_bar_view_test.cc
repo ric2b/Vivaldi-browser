@@ -448,7 +448,7 @@ class BookmarkBarViewTest1 : public BookmarkBarViewEventTestBase {
 
     // Button should be depressed.
     views::LabelButton* button = GetBookmarkButton(0);
-    ASSERT_TRUE(button->state() == views::CustomButton::STATE_PRESSED);
+    ASSERT_TRUE(button->state() == views::Button::STATE_PRESSED);
 
     // Click on the 2nd menu item (A URL).
     ASSERT_TRUE(menu->GetSubmenu());
@@ -467,7 +467,7 @@ class BookmarkBarViewTest1 : public BookmarkBarViewEventTestBase {
 
     // Make sure button is no longer pushed.
     views::LabelButton* button = GetBookmarkButton(0);
-    ASSERT_TRUE(button->state() == views::CustomButton::STATE_NORMAL);
+    ASSERT_TRUE(button->state() == views::Button::STATE_NORMAL);
 
     views::MenuItemView* menu = bb_view_->GetMenu();
     ASSERT_TRUE(menu == NULL || !menu->GetSubmenu()->IsShowing());
@@ -524,7 +524,7 @@ class BookmarkBarViewTest2 : public BookmarkBarViewEventTestBase {
 
     // Make sure button is no longer pushed.
     views::LabelButton* button = GetBookmarkButton(0);
-    ASSERT_TRUE(button->state() == views::CustomButton::STATE_NORMAL);
+    ASSERT_TRUE(button->state() == views::Button::STATE_NORMAL);
 
     Done();
   }
@@ -768,8 +768,9 @@ class BookmarkBarViewTest5 : public BookmarkBarViewEventTestBase {
 
   GURL url_dragging_;
 };
-
-#if !defined(OS_WIN)  // flaky http://crbug.com/400578
+// flaky on Windows: https://crbug.com/400578
+// flaky on ChromeOS: https://crbug.com/758210
+#if !defined(OS_WIN) && !defined(OS_CHROMEOS)
 VIEW_TEST(BookmarkBarViewTest5, DND)
 #endif
 
@@ -1612,7 +1613,7 @@ class BookmarkBarViewTest16 : public BookmarkBarViewEventTestBase {
 
     // Button should be depressed.
     views::LabelButton* button = GetBookmarkButton(0);
-    ASSERT_TRUE(button->state() == views::CustomButton::STATE_PRESSED);
+    ASSERT_TRUE(button->state() == views::Button::STATE_PRESSED);
 
     // Close the window.
     window_->Close();
@@ -1754,8 +1755,7 @@ class BookmarkBarViewTest18 : public BookmarkBarViewEventTestBase {
 
     // The menu for the first folder should be in the pressed state (since the
     // menu is showing for it)...
-    EXPECT_EQ(views::CustomButton::STATE_PRESSED,
-              GetBookmarkButton(0)->state());
+    EXPECT_EQ(views::Button::STATE_PRESSED, GetBookmarkButton(0)->state());
     // ... And the "other bookmarks" button should no longer be pressed.
     EXPECT_EQ(views::Button::STATE_NORMAL,
               bb_view_->other_bookmarks_button()->state());
@@ -2090,14 +2090,9 @@ class BookmarkBarViewTest22 : public BookmarkBarViewEventTestBase {
   }
 };
 
-#if defined(OS_WIN)
 // This test times out on Windows. TODO(pkotwicz): Find out why.
-#define MAYBE_CloseSourceBrowserDuringDrag DISABLED_CloseSourceBrowserDuringDrag
-#else
-#define MAYBE_CloseSourceBrowserDuringDrag CloseSourceBrowserDuringDrag
-#endif
-
-VIEW_TEST(BookmarkBarViewTest22, MAYBE_CloseSourceBrowserDuringDrag)
+// It also flakes on CrOS and Linux : http://crbug/754188.
+VIEW_TEST(BookmarkBarViewTest22, DISABLED_CloseSourceBrowserDuringDrag)
 
 // Tests opening a context menu for a bookmark node from the keyboard.
 class BookmarkBarViewTest23 : public BookmarkBarViewEventTestBase {

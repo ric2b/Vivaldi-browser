@@ -9,6 +9,9 @@ import os, re
 AX_IDL = 'ui/accessibility/ax_enums.idl'
 AUTOMATION_IDL = 'chrome/common/extensions/api/automation.idl'
 
+AX_JS_FILE = 'content/browser/resources/accessibility/accessibility.js'
+AX_MODE_HEADER = 'ui/accessibility/ax_modes.h'
+
 def InitialLowerCamelCase(unix_name):
   words = unix_name.split('_')
   return words[0] + ''.join(word.capitalize() for word in words[1:])
@@ -64,17 +67,31 @@ def CheckMatchingEnum(ax_enums,
   src = ax_enums[ax_enum_name]
   dst = automation_enums[automation_enum_name]
   for value in src:
-    if InitialLowerCamelCase(value) not in dst:
+    lower_value = InitialLowerCamelCase(value)
+    if lower_value in dst:
+      dst.remove(lower_value)  # Any remaining at end are extra and a mismatch.
+    else:
       errs.append(output_api.PresubmitError(
           'Found %s.%s in %s, but did not find %s.%s in %s' % (
               ax_enum_name, value, AX_IDL,
               automation_enum_name, InitialLowerCamelCase(value),
               AUTOMATION_IDL)))
+  #  Should be no remaining items
+  for value in dst:
+      errs.append(output_api.PresubmitError(
+          'Found %s.%s in %s, but did not find %s.%s in %s' % (
+              automation_enum_name, value, AUTOMATION_IDL,
+              ax_enum_name, InitialLowerCamelCase(value),
+              AX_IDL)))
 
 def CheckEnumsMatch(input_api, output_api):
   repo_root = input_api.change.RepositoryRoot()
   ax_enums = GetEnumsFromFile(os.path.join(repo_root, AX_IDL))
   automation_enums = GetEnumsFromFile(os.path.join(repo_root, AUTOMATION_IDL))
+
+  # Focused state only exists in automation.
+  automation_enums['StateType'].remove('focused')
+
   errs = []
   CheckMatchingEnum(ax_enums, 'AXRole', automation_enums, 'RoleType', errs,
                     output_api)
@@ -88,12 +105,95 @@ def CheckEnumsMatch(input_api, output_api):
                    'Restriction', errs, output_api)
   return errs
 
+# Given a full path to c++ header, return an array of the first static
+# constexpr defined. (Note there can be more than one defined in a C++
+# header)
+def GetConstexprFromFile(fullpath):
+  values = []
+  for line in open(fullpath).readlines():
+    # Strip out comments
+    line = re.sub('//.*', '', line)
+
+    # Look for lines of the form "static constexpr <type> NAME "
+    m = re.search('static constexpr [\w]+ ([\w]+)', line)
+    if m:
+      values.append(m.group(1))
+
+  return values
+
+# Given a full path to js file, return the AXMode consts
+# defined
+def GetAccessibilityModesFromFile(fullpath):
+  values = []
+  inside = False
+  for line in open(fullpath).readlines():
+    # Strip out comments
+    line = re.sub('//.*', '', line)
+
+    # Look for the block of code that defines AXMode
+    m = re.search('const AXMode = {', line)
+    if m:
+      inside = True
+      continue
+
+    # Look for a "}" character signifying the end of an enum
+    if line.find('};') >= 0:
+      return values
+
+    if not inside:
+      continue
+
+    m = re.search('([\w]+):', line)
+    if m:
+      values.append(m.group(1))
+      continue
+
+    # getters
+    m = re.search('get ([\w]+)\(\)', line)
+    if m:
+      values.append(m.group(1))
+  return values
+
+# Make sure that the modes defined in the C++ header match those defined in
+# the js file. Note that this doesn't guarantee that the values are the same,
+# but does make sure if we add or remove we can signal to the developer that
+# they should be aware that this dependency exists.
+def CheckModesMatch(input_api, output_api):
+  errs = []
+  repo_root = input_api.change.RepositoryRoot()
+
+  ax_modes_in_header = GetConstexprFromFile(
+    os.path.join(repo_root,AX_MODE_HEADER))
+  ax_modes_in_js = GetAccessibilityModesFromFile(
+    os.path.join(repo_root, AX_JS_FILE))
+
+  for value in ax_modes_in_header:
+    if value not in ax_modes_in_js:
+      errs.append(output_api.PresubmitError(
+          'Found %s in %s, but did not find %s in %s' % (
+              value, AX_MODE_HEADER, value, AX_JS_FILE)))
+  return errs
+
 def CheckChangeOnUpload(input_api, output_api):
-  if AX_IDL not in input_api.LocalPaths():
-    return []
-  return CheckEnumsMatch(input_api, output_api)
+  errs = []
+  for path in input_api.LocalPaths():
+    path = path.replace('\\', '/')
+    if AX_IDL == path:
+      errs.extend(CheckEnumsMatch(input_api, output_api))
+
+    if AX_MODE_HEADER == path:
+      errs.extend(CheckModesMatch(input_api, output_api))
+
+  return errs
 
 def CheckChangeOnCommit(input_api, output_api):
-  if AX_IDL not in input_api.LocalPaths():
-    return []
-  return CheckEnumsMatch(input_api, output_api)
+  errs = []
+  for path in input_api.LocalPaths():
+    path = path.replace('\\', '/')
+    if AX_IDL == path:
+      errs.extend(CheckEnumsMatch(input_api, output_api))
+
+    if AX_MODE_HEADER == path:
+      errs.extend(CheckModesMatch(input_api, output_api))
+
+  return errs

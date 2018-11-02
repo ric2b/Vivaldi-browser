@@ -14,6 +14,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "cc/animation/animation.h"
+#include "cc/trees/target_property.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/compositor/compositor_export.h"
 #include "ui/gfx/animation/tween.h"
@@ -76,6 +77,9 @@ class COMPOSITOR_EXPORT LayerAnimationElement {
                         base::TimeDelta duration);
 
   virtual ~LayerAnimationElement();
+
+  static std::string AnimatablePropertiesToString(
+      AnimatableProperties properties);
 
   // Creates an element that transitions to the given transform. The caller owns
   // the return value.
@@ -213,7 +217,11 @@ class COMPOSITOR_EXPORT LayerAnimationElement {
   // call made to {Progress, ProgressToEnd}.
   double last_progressed_fraction() const { return last_progressed_fraction_; }
 
+  std::string ToString() const;
+
  protected:
+  virtual std::string DebugName() const;
+
   // Called once each time the animation element is run before any call to
   // OnProgress.
   virtual void OnStart(LayerAnimationDelegate* delegate) = 0;

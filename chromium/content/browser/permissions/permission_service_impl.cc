@@ -54,6 +54,10 @@ PermissionType PermissionDescriptorToPermissionType(
       return PermissionType::VIDEO_CAPTURE;
     case PermissionName::BACKGROUND_SYNC:
       return PermissionType::BACKGROUND_SYNC;
+    case PermissionName::SENSORS:
+      return PermissionType::SENSORS;
+    case PermissionName::ACCESSIBILITY_EVENTS:
+      return PermissionType::ACCESSIBILITY_EVENTS;
   }
 
   NOTREACHED();
@@ -79,6 +83,8 @@ blink::WebFeaturePolicyFeature PermissionTypeToFeaturePolicyFeature(
     case PermissionType::DURABLE_STORAGE:
     case PermissionType::BACKGROUND_SYNC:
     case PermissionType::FLASH:
+    case PermissionType::SENSORS:
+    case PermissionType::ACCESSIBILITY_EVENTS:
     case PermissionType::NUM:
       // These aren't exposed by feature policy.
       return blink::WebFeaturePolicyFeature::kNotFound;
@@ -173,10 +179,12 @@ PermissionServiceImpl::PermissionServiceImpl(PermissionServiceContext* context)
     : context_(context), weak_factory_(this) {}
 
 PermissionServiceImpl::~PermissionServiceImpl() {
-  DCHECK(context_->GetBrowserContext());
+  BrowserContext* browser_context = context_->GetBrowserContext();
+  if (!browser_context)
+    return;
 
   PermissionManager* permission_manager =
-      context_->GetBrowserContext()->GetPermissionManager();
+      browser_context->GetPermissionManager();
   if (!permission_manager)
     return;
 
@@ -213,7 +221,9 @@ void PermissionServiceImpl::RequestPermissions(
   // any UI, we want to still return something relevant so the current
   // permission status is returned for each permission.
   BrowserContext* browser_context = context_->GetBrowserContext();
-  DCHECK(browser_context);
+  if (!browser_context)
+    return;
+
   if (!context_->render_frame_host() ||
       !browser_context->GetPermissionManager()) {
     std::vector<PermissionStatus> result(permissions.size());
@@ -329,7 +339,9 @@ PermissionStatus PermissionServiceImpl::GetPermissionStatusFromType(
     PermissionType type,
     const url::Origin& origin) {
   BrowserContext* browser_context = context_->GetBrowserContext();
-  DCHECK(browser_context);
+  if (!browser_context)
+    return PermissionStatus::DENIED;
+
   if (!browser_context->GetPermissionManager() ||
       !AllowedByFeaturePolicy(context_->render_frame_host(), type)) {
     return PermissionStatus::DENIED;
@@ -346,7 +358,9 @@ PermissionStatus PermissionServiceImpl::GetPermissionStatusFromType(
 void PermissionServiceImpl::ResetPermissionStatus(PermissionType type,
                                                   const url::Origin& origin) {
   BrowserContext* browser_context = context_->GetBrowserContext();
-  DCHECK(browser_context);
+  if (!browser_context)
+    return;
+
   if (!browser_context->GetPermissionManager())
     return;
 

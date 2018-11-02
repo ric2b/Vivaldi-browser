@@ -8,6 +8,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "net/base/address_list.h"
+#include "net/interfaces/ip_endpoint_struct_traits.h"
 
 namespace mojo {
 
@@ -60,24 +61,11 @@ bool StructTraits<net::interfaces::HostResolverRequestInfoDataView,
   if (!data.ReadAddressFamily(&address_family))
     return false;
 
-  *out = base::MakeUnique<net::HostResolver::RequestInfo>(
+  *out = std::make_unique<net::HostResolver::RequestInfo>(
       net::HostPortPair(host.as_string(), data.port()));
   net::HostResolver::RequestInfo& request = **out;
   request.set_address_family(address_family);
   request.set_is_my_ip_address(data.is_my_ip_address());
-  return true;
-}
-
-// static
-bool StructTraits<net::interfaces::IPEndPointDataView, net::IPEndPoint>::Read(
-    net::interfaces::IPEndPointDataView data,
-    net::IPEndPoint* out) {
-  std::vector<uint8_t> bytes;
-  if (!data.ReadAddress(&bytes))
-    return false;
-
-  *out =
-      net::IPEndPoint(net::IPAddress(bytes.data(), bytes.size()), data.port());
   return true;
 }
 

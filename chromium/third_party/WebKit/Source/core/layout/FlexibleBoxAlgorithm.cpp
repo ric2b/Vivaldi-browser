@@ -31,21 +31,95 @@
 #include "core/layout/FlexibleBoxAlgorithm.h"
 
 #include "core/layout/LayoutBox.h"
+#include "core/layout/MinMaxSize.h"
 
 namespace blink {
 
 FlexItem::FlexItem(LayoutBox* box,
                    LayoutUnit flex_base_content_size,
-                   LayoutUnit hypothetical_main_content_size,
+                   MinMaxSize min_max_sizes,
                    LayoutUnit main_axis_border_and_padding,
                    LayoutUnit main_axis_margin)
     : box(box),
       flex_base_content_size(flex_base_content_size),
-      hypothetical_main_content_size(hypothetical_main_content_size),
+      min_max_sizes(min_max_sizes),
+      hypothetical_main_content_size(
+          min_max_sizes.ClampSizeToMinAndMax(flex_base_content_size)),
       main_axis_border_and_padding(main_axis_border_and_padding),
       main_axis_margin(main_axis_margin),
       frozen(false) {
   DCHECK(!box->IsOutOfFlowPositioned());
+  DCHECK_GE(min_max_sizes.max_size, LayoutUnit())
+      << "Use LayoutUnit::Max() for no max size";
+}
+
+bool FlexItem::HasOrthogonalFlow() const {
+  return algorithm->IsHorizontalFlow() != box->IsHorizontalWritingMode();
+}
+
+LayoutUnit FlexItem::FlowAwareMarginStart() const {
+  if (algorithm->IsHorizontalFlow()) {
+    return algorithm->IsLeftToRightFlow() ? box->MarginLeft()
+                                          : box->MarginRight();
+  }
+  return algorithm->IsLeftToRightFlow() ? box->MarginTop()
+                                        : box->MarginBottom();
+}
+
+LayoutUnit FlexItem::FlowAwareMarginEnd() const {
+  if (algorithm->IsHorizontalFlow()) {
+    return algorithm->IsLeftToRightFlow() ? box->MarginRight()
+                                          : box->MarginLeft();
+  }
+  return algorithm->IsLeftToRightFlow() ? box->MarginBottom()
+                                        : box->MarginTop();
+}
+
+LayoutUnit FlexItem::FlowAwareMarginBefore() const {
+  switch (algorithm->GetTransformedWritingMode()) {
+    case TransformedWritingMode::kTopToBottomWritingMode:
+      return box->MarginTop();
+    case TransformedWritingMode::kBottomToTopWritingMode:
+      return box->MarginBottom();
+    case TransformedWritingMode::kLeftToRightWritingMode:
+      return box->MarginLeft();
+    case TransformedWritingMode::kRightToLeftWritingMode:
+      return box->MarginRight();
+  }
+  NOTREACHED();
+  return box->MarginTop();
+}
+
+LayoutUnit FlexItem::CrossAxisMarginExtent() const {
+  return algorithm->IsHorizontalFlow() ? box->MarginHeight()
+                                       : box->MarginWidth();
+}
+
+LayoutUnit FlexItem::MarginBoxAscent() const {
+  LayoutUnit ascent(box->FirstLineBoxBaseline());
+  if (ascent == -1)
+    ascent = cross_axis_size;
+  return ascent + FlowAwareMarginBefore();
+}
+
+LayoutUnit FlexItem::AvailableAlignmentSpace(
+    LayoutUnit line_cross_axis_extent) const {
+  LayoutUnit cross_extent = CrossAxisMarginExtent() + cross_axis_size;
+  return line_cross_axis_extent - cross_extent;
+}
+
+bool FlexItem::HasAutoMarginsInCrossAxis() const {
+  if (algorithm->IsHorizontalFlow()) {
+    return box->Style()->MarginTop().IsAuto() ||
+           box->Style()->MarginBottom().IsAuto();
+  }
+  return box->Style()->MarginLeft().IsAuto() ||
+         box->Style()->MarginRight().IsAuto();
+}
+
+ItemPosition FlexItem::Alignment() const {
+  return FlexLayoutAlgorithm::AlignmentForChild(*algorithm->Style(),
+                                                box->StyleRef());
 }
 
 void FlexLine::FreezeViolations(Vector<FlexItem*>& violations) {
@@ -99,16 +173,117 @@ void FlexLine::FreezeInflexibleItems() {
   initial_free_space = remaining_free_space;
 }
 
+bool FlexLine::ResolveFlexibleLengths() {
+  LayoutUnit total_violation;
+  LayoutUnit used_free_space;
+  Vector<FlexItem*> min_violations;
+  Vector<FlexItem*> max_violations;
+
+  FlexSign flex_sign = Sign();
+  double sum_flex_factors =
+      (flex_sign == kPositiveFlexibility) ? total_flex_grow : total_flex_shrink;
+  if (sum_flex_factors > 0 && sum_flex_factors < 1) {
+    LayoutUnit fractional(initial_free_space * sum_flex_factors);
+    if (fractional.Abs() < remaining_free_space.Abs())
+      remaining_free_space = fractional;
+  }
+
+  for (size_t i = 0; i < line_items.size(); ++i) {
+    FlexItem& flex_item = line_items[i];
+    LayoutBox* child = flex_item.box;
+
+    // This check also covers out-of-flow children.
+    if (flex_item.frozen)
+      continue;
+
+    LayoutUnit child_size = flex_item.flex_base_content_size;
+    double extra_space = 0;
+    if (remaining_free_space > 0 && total_flex_grow > 0 &&
+        flex_sign == kPositiveFlexibility && std::isfinite(total_flex_grow)) {
+      extra_space =
+          remaining_free_space * child->Style()->FlexGrow() / total_flex_grow;
+    } else if (remaining_free_space < 0 && total_weighted_flex_shrink > 0 &&
+               flex_sign == kNegativeFlexibility &&
+               std::isfinite(total_weighted_flex_shrink) &&
+               child->Style()->FlexShrink()) {
+      extra_space = remaining_free_space * child->Style()->FlexShrink() *
+                    flex_item.flex_base_content_size /
+                    total_weighted_flex_shrink;
+    }
+    if (std::isfinite(extra_space))
+      child_size += LayoutUnit::FromFloatRound(extra_space);
+
+    LayoutUnit adjusted_child_size = flex_item.ClampSizeToMinAndMax(child_size);
+    DCHECK_GE(adjusted_child_size, 0);
+    flex_item.flexed_content_size = adjusted_child_size;
+    used_free_space += adjusted_child_size - flex_item.flex_base_content_size;
+
+    LayoutUnit violation = adjusted_child_size - child_size;
+    if (violation > 0)
+      min_violations.push_back(&flex_item);
+    else if (violation < 0)
+      max_violations.push_back(&flex_item);
+    total_violation += violation;
+  }
+
+  if (total_violation) {
+    FreezeViolations(total_violation < 0 ? max_violations : min_violations);
+  } else {
+    remaining_free_space -= used_free_space;
+  }
+
+  return !total_violation;
+}
+
+LayoutUnit FlexLine::ApplyMainAxisAutoMarginAdjustment() {
+  if (remaining_free_space <= LayoutUnit())
+    return LayoutUnit();
+
+  int number_of_auto_margins = 0;
+  bool is_horizontal = algorithm->IsHorizontalFlow();
+  for (size_t i = 0; i < line_items.size(); ++i) {
+    LayoutBox* child = line_items[i].box;
+    DCHECK(!child->IsOutOfFlowPositioned());
+    if (is_horizontal) {
+      if (child->Style()->MarginLeft().IsAuto())
+        ++number_of_auto_margins;
+      if (child->Style()->MarginRight().IsAuto())
+        ++number_of_auto_margins;
+    } else {
+      if (child->Style()->MarginTop().IsAuto())
+        ++number_of_auto_margins;
+      if (child->Style()->MarginBottom().IsAuto())
+        ++number_of_auto_margins;
+    }
+  }
+  if (!number_of_auto_margins)
+    return LayoutUnit();
+
+  LayoutUnit size_of_auto_margin =
+      remaining_free_space / number_of_auto_margins;
+  remaining_free_space = LayoutUnit();
+  return size_of_auto_margin;
+}
+
 FlexLayoutAlgorithm::FlexLayoutAlgorithm(const ComputedStyle* style,
                                          LayoutUnit line_break_length,
-                                         const Vector<FlexItem>& all_items)
+                                         Vector<FlexItem>& all_items)
     : style_(style),
       line_break_length_(line_break_length),
       all_items_(all_items),
-      next_item_index_(0) {}
+      next_item_index_(0) {
+  for (FlexItem& item : all_items_)
+    item.algorithm = this;
+}
 
-FlexLine* FlexLayoutAlgorithm::ComputeNextFlexLine() {
-  FlexLine new_line;
+FlexLine* FlexLayoutAlgorithm::ComputeNextFlexLine(
+    LayoutUnit container_logical_width) {
+  Vector<FlexItem> line_items;
+  LayoutUnit sum_flex_base_size;
+  double total_flex_grow = 0;
+  double total_flex_shrink = 0;
+  double total_weighted_flex_shrink = 0;
+  LayoutUnit sum_hypothetical_main_size;
 
   bool line_has_in_flow_item = false;
 
@@ -116,28 +291,143 @@ FlexLine* FlexLayoutAlgorithm::ComputeNextFlexLine() {
     const FlexItem& flex_item = all_items_[next_item_index_];
     DCHECK(!flex_item.box->IsOutOfFlowPositioned());
     if (IsMultiline() &&
-        new_line.sum_hypothetical_main_size +
+        sum_hypothetical_main_size +
                 flex_item.HypotheticalMainAxisMarginBoxSize() >
             line_break_length_ &&
         line_has_in_flow_item)
       break;
-    new_line.line_items.push_back(flex_item);
+    line_items.push_back(flex_item);
     line_has_in_flow_item = true;
-    new_line.sum_flex_base_size += flex_item.FlexBaseMarginBoxSize();
-    new_line.total_flex_grow += flex_item.box->Style()->FlexGrow();
-    new_line.total_flex_shrink += flex_item.box->Style()->FlexShrink();
-    new_line.total_weighted_flex_shrink +=
+    sum_flex_base_size += flex_item.FlexBaseMarginBoxSize();
+    total_flex_grow += flex_item.box->Style()->FlexGrow();
+    total_flex_shrink += flex_item.box->Style()->FlexShrink();
+    total_weighted_flex_shrink +=
         flex_item.box->Style()->FlexShrink() * flex_item.flex_base_content_size;
-    new_line.sum_hypothetical_main_size +=
-        flex_item.HypotheticalMainAxisMarginBoxSize();
+    sum_hypothetical_main_size += flex_item.HypotheticalMainAxisMarginBoxSize();
   }
-  DCHECK(new_line.line_items.size() > 0 ||
-         next_item_index_ == all_items_.size());
-  if (new_line.line_items.size() > 0) {
-    flex_lines_.push_back(std::move(new_line));
-    return &flex_lines_.back();
+  DCHECK(line_items.size() > 0 || next_item_index_ == all_items_.size());
+  if (line_items.size() > 0) {
+    // This will std::move line_items.
+    return &flex_lines_.emplace_back(
+        this, line_items, container_logical_width, sum_flex_base_size,
+        total_flex_grow, total_flex_shrink, total_weighted_flex_shrink,
+        sum_hypothetical_main_size);
   }
   return nullptr;
+}
+
+bool FlexLayoutAlgorithm::IsHorizontalFlow() const {
+  return IsHorizontalFlow(*style_);
+}
+
+bool FlexLayoutAlgorithm::IsHorizontalFlow(const ComputedStyle& style) {
+  if (style.IsHorizontalWritingMode())
+    return !style.IsColumnFlexDirection();
+  return style.IsColumnFlexDirection();
+}
+
+bool FlexLayoutAlgorithm::IsLeftToRightFlow() const {
+  if (style_->IsColumnFlexDirection()) {
+    return blink::IsHorizontalWritingMode(style_->GetWritingMode()) ||
+           IsFlippedLinesWritingMode(style_->GetWritingMode());
+  }
+  return style_->IsLeftToRightDirection() ^
+         (style_->FlexDirection() == EFlexDirection::kRowReverse);
+}
+
+const StyleContentAlignmentData&
+FlexLayoutAlgorithm::ContentAlignmentNormalBehavior() {
+  // The justify-content property applies along the main axis, but since
+  // flexing in the main axis is controlled by flex, stretch behaves as
+  // flex-start (ignoring the specified fallback alignment, if any).
+  // https://drafts.csswg.org/css-align/#distribution-flex
+  static const StyleContentAlignmentData kNormalBehavior = {
+      kContentPositionNormal, kContentDistributionStretch};
+  return kNormalBehavior;
+}
+
+TransformedWritingMode FlexLayoutAlgorithm::GetTransformedWritingMode() const {
+  return GetTransformedWritingMode(*style_);
+}
+
+TransformedWritingMode FlexLayoutAlgorithm::GetTransformedWritingMode(
+    const ComputedStyle& style) {
+  WritingMode mode = style.GetWritingMode();
+  if (!style.IsColumnFlexDirection()) {
+    static_assert(
+        static_cast<TransformedWritingMode>(WritingMode::kHorizontalTb) ==
+                TransformedWritingMode::kTopToBottomWritingMode &&
+            static_cast<TransformedWritingMode>(WritingMode::kVerticalLr) ==
+                TransformedWritingMode::kLeftToRightWritingMode &&
+            static_cast<TransformedWritingMode>(WritingMode::kVerticalRl) ==
+                TransformedWritingMode::kRightToLeftWritingMode,
+        "WritingMode and TransformedWritingMode must match values.");
+    return static_cast<TransformedWritingMode>(mode);
+  }
+
+  switch (mode) {
+    case WritingMode::kHorizontalTb:
+      return style.IsLeftToRightDirection()
+                 ? TransformedWritingMode::kLeftToRightWritingMode
+                 : TransformedWritingMode::kRightToLeftWritingMode;
+    case WritingMode::kVerticalLr:
+    case WritingMode::kVerticalRl:
+      return style.IsLeftToRightDirection()
+                 ? TransformedWritingMode::kTopToBottomWritingMode
+                 : TransformedWritingMode::kBottomToTopWritingMode;
+  }
+  NOTREACHED();
+  return TransformedWritingMode::kTopToBottomWritingMode;
+}
+
+StyleContentAlignmentData FlexLayoutAlgorithm::ResolvedJustifyContent(
+    const ComputedStyle& style) {
+  ContentPosition position =
+      style.ResolvedJustifyContentPosition(ContentAlignmentNormalBehavior());
+  ContentDistributionType distribution =
+      style.ResolvedJustifyContentDistribution(
+          ContentAlignmentNormalBehavior());
+  OverflowAlignment overflow = style.JustifyContentOverflowAlignment();
+  // For flex, justify-content: stretch behaves as flex-start:
+  // https://drafts.csswg.org/css-align/#distribution-flex
+  if (distribution == kContentDistributionStretch) {
+    position = kContentPositionFlexStart;
+    distribution = kContentDistributionDefault;
+  }
+  return StyleContentAlignmentData(position, distribution, overflow);
+}
+
+StyleContentAlignmentData FlexLayoutAlgorithm::ResolvedAlignContent(
+    const ComputedStyle& style) {
+  ContentPosition position =
+      style.ResolvedAlignContentPosition(ContentAlignmentNormalBehavior());
+  ContentDistributionType distribution =
+      style.ResolvedAlignContentDistribution(ContentAlignmentNormalBehavior());
+  OverflowAlignment overflow = style.AlignContentOverflowAlignment();
+  return StyleContentAlignmentData(position, distribution, overflow);
+}
+
+ItemPosition FlexLayoutAlgorithm::AlignmentForChild(
+    const ComputedStyle& flexbox_style,
+    const ComputedStyle& child_style) {
+  ItemPosition align =
+      child_style.ResolvedAlignSelf(kItemPositionStretch, &flexbox_style)
+          .GetPosition();
+  DCHECK_NE(align, kItemPositionAuto);
+  DCHECK_NE(align, kItemPositionNormal);
+
+  if (align == kItemPositionBaseline &&
+      IsHorizontalFlow(flexbox_style) != child_style.IsHorizontalWritingMode())
+    align = kItemPositionFlexStart;
+
+  if (flexbox_style.FlexWrap() == EFlexWrap::kWrapReverse) {
+    if (align == kItemPositionFlexStart)
+      align = kItemPositionFlexEnd;
+    else if (align == kItemPositionFlexEnd)
+      align = kItemPositionFlexStart;
+  }
+
+  return align;
 }
 
 }  // namespace blink

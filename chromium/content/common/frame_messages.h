@@ -194,7 +194,6 @@ IPC_STRUCT_TRAITS_BEGIN(content::FrameOwnerProperties)
   IPC_STRUCT_TRAITS_MEMBER(allow_payment_request)
   IPC_STRUCT_TRAITS_MEMBER(is_display_none)
   IPC_STRUCT_TRAITS_MEMBER(required_csp)
-  IPC_STRUCT_TRAITS_MEMBER(allowed_features)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::PageImportanceSignals)
@@ -212,9 +211,6 @@ IPC_STRUCT_BEGIN(FrameHostMsg_DidFailProvisionalLoadWithError_Params)
   // True if the failure is the result of navigating to a POST again
   // and we're going to show the POST interstitial.
   IPC_STRUCT_MEMBER(bool, showing_repost_interstitial)
-  // True if the navigation was canceled because it was ignored by a handler,
-  // e.g. shouldOverrideUrlLoading.
-  IPC_STRUCT_MEMBER(bool, was_ignored_by_handler)
 IPC_STRUCT_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::FrameNavigateParams)
@@ -854,7 +850,7 @@ IPC_MESSAGE_ROUTED2(FrameMsg_ExtractSmartClipData,
                     gfx::Rect /* rect */)
 
 // Change the accessibility mode in the renderer process.
-IPC_MESSAGE_ROUTED1(FrameMsg_SetAccessibilityMode, content::AccessibilityMode)
+IPC_MESSAGE_ROUTED1(FrameMsg_SetAccessibilityMode, ui::AXMode)
 
 // Dispatch a load event in the iframe element containing this frame.
 IPC_MESSAGE_ROUTED0(FrameMsg_DispatchLoad)
@@ -893,6 +889,10 @@ IPC_MESSAGE_ROUTED1(FrameMsg_EnforceInsecureRequestPolicy,
 IPC_MESSAGE_ROUTED2(FrameMsg_DidUpdateOrigin,
                     url::Origin /* origin */,
                     bool /* is potentially trustworthy unique origin */)
+
+// Notifies RenderFrameProxy that its associated RenderWidgetHostView has
+// changed.
+IPC_MESSAGE_ROUTED1(FrameMsg_ViewChanged, viz::FrameSinkId /* frame_sink_id */)
 
 // Notifies this frame or proxy that it is now focused.  This is used to
 // support cross-process focused frame changes.
@@ -1142,11 +1142,10 @@ IPC_MESSAGE_ROUTED1(FrameHostMsg_DidCommitProvisionalLoad,
 // Notifies the browser that a document has been loaded.
 IPC_MESSAGE_ROUTED0(FrameHostMsg_DidFinishDocumentLoad)
 
-IPC_MESSAGE_ROUTED4(FrameHostMsg_DidFailLoadWithError,
+IPC_MESSAGE_ROUTED3(FrameHostMsg_DidFailLoadWithError,
                     GURL /* validated_url */,
                     int /* error_code */,
-                    base::string16 /* error_description */,
-                    bool /* was_ignored_by_handler */)
+                    base::string16 /* error_description */)
 
 // Sent when the renderer starts loading the page. |to_different_document| will
 // be true unless the load is a fragment navigation, or triggered by
@@ -1288,7 +1287,7 @@ IPC_MESSAGE_ROUTED1(FrameHostMsg_DomOperationResponse,
 IPC_SYNC_MESSAGE_CONTROL3_1(FrameHostMsg_CookiesEnabled,
                             int /* render_frame_id */,
                             GURL /* url */,
-                            GURL /* first_party_for_cookies */,
+                            GURL /* site_for_cookies */,
                             bool /* cookies_enabled */)
 
 // Sent by the renderer process to check whether client 3D APIs
@@ -1469,7 +1468,9 @@ IPC_MESSAGE_ROUTED0(FrameHostMsg_SwapOut_ACK)
 
 // Tells the parent that a child's frame rect has changed (or the rect/scroll
 // position of a child's ancestor has changed).
-IPC_MESSAGE_ROUTED1(FrameHostMsg_FrameRectChanged, gfx::Rect /* frame_rect */)
+IPC_MESSAGE_ROUTED2(FrameHostMsg_FrameRectChanged,
+                    gfx::Rect /* frame_rect */,
+                    viz::LocalSurfaceId /* local_surface_id */)
 
 // Sent by a parent frame to update its child's viewport intersection rect for
 // use by the IntersectionObserver API.
@@ -1578,6 +1579,10 @@ IPC_MESSAGE_ROUTED4(FrameHostMsg_DidLoadResourceFromMemoryCache,
                     std::string /* http method */,
                     std::string /* mime type */,
                     content::ResourceType /* resource type */)
+
+// This frame attempted to navigate the main frame to the given url, even
+// though this frame has never received a user gesture.
+IPC_MESSAGE_ROUTED1(FrameHostMsg_DidBlockFramebust, GURL /* url */)
 
 // PlzNavigate
 // Tells the browser to perform a navigation.

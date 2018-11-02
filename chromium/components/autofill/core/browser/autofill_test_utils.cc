@@ -183,6 +183,14 @@ inline void check_and_set(
     profile->SetRawInfo(type, base::UTF8ToUTF16(value));
 }
 
+AutofillProfile GetFullValidProfile() {
+  AutofillProfile profile(base::GenerateGUID(), "http://www.example.com/");
+  SetProfileInfo(&profile, "Alice", "", "Wonderland", "alice@wonderland.ca",
+                 "Fiction", "666 Notre-Dame Ouest", "Apt 8", "Montreal", "QC",
+                 "H3B 2T9", "CA", "15141112233");
+  return profile;
+}
+
 AutofillProfile GetFullProfile() {
   AutofillProfile profile(base::GenerateGUID(), "http://www.example.com/");
   SetProfileInfo(&profile,
@@ -334,7 +342,7 @@ void SetCreditCardInfo(CreditCard* credit_card,
 
 void DisableSystemServices(PrefService* prefs) {
   // Use a mock Keychain rather than the OS one to store credit card data.
-  OSCryptMocker::SetUpWithSingleton();
+  OSCryptMocker::SetUp();
 }
 
 void ReenableSystemServices() {

@@ -20,7 +20,9 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task_scheduler/post_task.h"
+#include "build/build_config.h"
 #include "content/public/app/content_main.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_switches.h"
 #include "headless/app/headless_shell.h"
 #include "headless/app/headless_shell_switches.h"
@@ -31,6 +33,7 @@
 #include "net/base/ip_address.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_util.h"
+#include "ui/base/ui_base_switches.h"
 #include "ui/gfx/geometry/size.h"
 
 #if defined(OS_WIN)
@@ -83,6 +86,11 @@ void HeadlessShell::OnStart(HeadlessBrowser* browser) {
       browser_->CreateBrowserContextBuilder();
   // TODO(eseckler): These switches should also affect BrowserContexts that
   // are created via DevTools later.
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(::switches::kLang)) {
+    context_builder.SetAcceptLanguage(
+        base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+            ::switches::kLang));
+  }
   DeterministicHttpProtocolHandler* http_handler = nullptr;
   DeterministicHttpProtocolHandler* https_handler = nullptr;
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -153,6 +161,10 @@ void HeadlessShell::Shutdown() {
       web_contents_->GetDevToolsTarget()->DetachClient(devtools_client_.get());
     }
   }
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kDeterministicFetch)) {
+    devtools_client_->GetNetwork()->GetExperimental()->RemoveObserver(this);
+  }
   web_contents_->RemoveObserver(this);
   web_contents_ = nullptr;
   browser_context_->Close();
@@ -160,6 +172,7 @@ void HeadlessShell::Shutdown() {
 }
 
 void HeadlessShell::DevToolsTargetReady() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   web_contents_->GetDevToolsTarget()->AttachClient(devtools_client_.get());
   devtools_client_->GetInspector()->GetExperimental()->AddObserver(this);
   devtools_client_->GetPage()->GetExperimental()->AddObserver(this);
@@ -169,10 +182,13 @@ void HeadlessShell::DevToolsTargetReady() {
 
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDeterministicFetch)) {
-    devtools_client_->GetPage()->GetExperimental()->SetControlNavigations(
-        headless::page::SetControlNavigationsParams::Builder()
-            .SetEnabled(true)
-            .Build());
+    devtools_client_->GetNetwork()->GetExperimental()->AddObserver(this);
+    devtools_client_->GetNetwork()
+        ->GetExperimental()
+        ->SetRequestInterceptionEnabled(
+            headless::network::SetRequestInterceptionEnabledParams::Builder()
+                .SetEnabled(true)
+                .Build());
   }
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDefaultBackgroundColor)) {
@@ -248,6 +264,7 @@ void HeadlessShell::OnTargetCrashed(
 }
 
 void HeadlessShell::PollReadyState() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   // We need to check the current location in addition to the ready state to
   // be sure the expected page is ready.
   devtools_client_->GetRuntime()->Evaluate(
@@ -288,11 +305,20 @@ void HeadlessShell::OnLoadEventFired(const page::LoadEventFiredParams& params) {
   OnPageReady();
 }
 
-void HeadlessShell::OnNavigationRequested(
-    const headless::page::NavigationRequestedParams& params) {
-  deterministic_dispatcher_->NavigationRequested(
-      base::MakeUnique<ShellNavigationRequest>(weak_factory_.GetWeakPtr(),
-                                               params));
+// network::Observer implementation:
+void HeadlessShell::OnRequestIntercepted(
+    const headless::network::RequestInterceptedParams& params) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (params.GetIsNavigationRequest()) {
+    deterministic_dispatcher_->NavigationRequested(
+        base::MakeUnique<ShellNavigationRequest>(weak_factory_.GetWeakPtr(),
+                                                 params.GetInterceptionId()));
+    return;
+  }
+  devtools_client_->GetNetwork()->GetExperimental()->ContinueInterceptedRequest(
+      headless::network::ContinueInterceptedRequestParams::Builder()
+          .SetInterceptionId(params.GetInterceptionId())
+          .Build());
 }
 
 void HeadlessShell::OnPageReady() {
@@ -319,15 +345,18 @@ void HeadlessShell::OnPageReady() {
 }
 
 void HeadlessShell::FetchDom() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   devtools_client_->GetRuntime()->Evaluate(
-      "document.body.outerHTML",
+      "(document.doctype ? new "
+      "XMLSerializer().serializeToString(document.doctype) + '\\n' : '') + "
+      "document.documentElement.outerHTML",
       base::Bind(&HeadlessShell::OnDomFetched, weak_factory_.GetWeakPtr()));
 }
 
 void HeadlessShell::OnDomFetched(
     std::unique_ptr<runtime::EvaluateResult> result) {
   if (result->HasExceptionDetails()) {
-    LOG(ERROR) << "Failed to evaluate document.body.outerHTML: "
+    LOG(ERROR) << "Failed to serialize document: "
                << result->GetExceptionDetails()->GetText();
   } else {
     std::string dom;
@@ -339,6 +368,7 @@ void HeadlessShell::OnDomFetched(
 }
 
 void HeadlessShell::InputExpression() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   // Note that a real system should read user input asynchronously, because
   // otherwise all other browser activity is suspended (e.g., page loading).
   printf(">>> ");
@@ -369,6 +399,7 @@ void HeadlessShell::OnExpressionResult(
 }
 
 void HeadlessShell::CaptureScreenshot() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   devtools_client_->GetPage()->GetExperimental()->CaptureScreenshot(
       page::CaptureScreenshotParams::Builder().Build(),
       base::Bind(&HeadlessShell::OnScreenshotCaptured,
@@ -387,6 +418,7 @@ void HeadlessShell::OnScreenshotCaptured(
 }
 
 void HeadlessShell::PrintToPDF() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   devtools_client_->GetPage()->GetExperimental()->PrintToPDF(
       page::PrintToPDFParams::Builder()
           .SetDisplayHeaderFooter(true)
@@ -408,6 +440,7 @@ void HeadlessShell::OnPDFCreated(
 void HeadlessShell::WriteFile(const std::string& file_path_switch,
                               const std::string& default_file_name,
                               const std::string& base64_data) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   base::FilePath file_name =
       base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
           file_path_switch);
@@ -427,6 +460,7 @@ void HeadlessShell::WriteFile(const std::string& file_path_switch,
 void HeadlessShell::OnFileOpened(const std::string& base64_data,
                                  const base::FilePath file_name,
                                  base::File::Error error_code) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (!file_proxy_->IsValid()) {
     LOG(ERROR) << "Writing to file " << file_name.value()
                << " was unsuccessful, could not open file: "
@@ -459,6 +493,7 @@ void HeadlessShell::OnFileWritten(const base::FilePath file_name,
                                   const size_t length,
                                   base::File::Error error_code,
                                   int write_result) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (write_result < static_cast<int>(length)) {
     // TODO(eseckler): Support recovering from partial writes.
     LOG(ERROR) << "Writing to file " << file_name.value()
@@ -553,7 +588,8 @@ int HeadlessShellMain(HINSTANCE instance,
           ::switches::kProcessType);
   if (process_type == crash_reporter::switches::kCrashpadHandler) {
     return crash_reporter::RunAsCrashpadHandler(
-        *base::CommandLine::ForCurrentProcess(), ::switches::kProcessType);
+        *base::CommandLine::ForCurrentProcess(), base::FilePath(),
+        ::switches::kProcessType, switches::kUserDataDir);
   }
 #endif  // defined(HEADLESS_USE_CRASPHAD)
   RunChildProcessIfNeeded(instance, sandbox_info);
@@ -568,8 +604,12 @@ int HeadlessShellMain(int argc, const char** argv) {
 #endif  // defined(OS_WIN)
   HeadlessShell shell;
 
-  const base::CommandLine& command_line(
-      *base::CommandLine::ForCurrentProcess());
+#if defined(OS_FUCHSIA)
+  // TODO(fuchsia): Remove this when GPU accelerated compositing is ready.
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(::switches::kDisableGpu);
+#endif
+
+  base::CommandLine& command_line(*base::CommandLine::ForCurrentProcess());
   if (!ValidateCommandLine(command_line))
     return EXIT_FAILURE;
 
@@ -624,6 +664,11 @@ int HeadlessShellMain(int argc, const char** argv) {
         command_line.GetSwitchValueASCII(switches::kProxyServer);
     std::unique_ptr<net::ProxyConfig> proxy_config(new net::ProxyConfig);
     proxy_config->proxy_rules().ParseFromString(proxy_server);
+    if (command_line.HasSwitch(switches::kProxyBypassList)) {
+      std::string bypass_list =
+          command_line.GetSwitchValueASCII(switches::kProxyBypassList);
+      proxy_config->proxy_rules().bypass_rules.ParseFromString(bypass_list);
+    }
     builder.SetProxyConfig(std::move(proxy_config));
   }
 

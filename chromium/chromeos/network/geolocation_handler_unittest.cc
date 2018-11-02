@@ -54,6 +54,7 @@ class GeolocationHandlerTest : public testing::Test {
   }
 
   // This should remain in sync with the format of shill (chromeos) dict entries
+  // Shill provides us Cell ID and LAC in hex, but all other fields in decimal.
   void AddAccessPoint(int idx) {
     base::DictionaryValue properties;
     std::string mac_address =
@@ -61,12 +62,9 @@ class GeolocationHandlerTest : public testing::Test {
                            idx, 0, 0, 0, 0, 0);
     std::string channel = base::IntToString(idx);
     std::string strength = base::IntToString(idx * 10);
-    properties.SetStringWithoutPathExpansion(shill::kGeoMacAddressProperty,
-                                             mac_address);
-    properties.SetStringWithoutPathExpansion(shill::kGeoChannelProperty,
-                                             channel);
-    properties.SetStringWithoutPathExpansion(shill::kGeoSignalStrengthProperty,
-                                             strength);
+    properties.SetKey(shill::kGeoMacAddressProperty, base::Value(mac_address));
+    properties.SetKey(shill::kGeoChannelProperty, base::Value(channel));
+    properties.SetKey(shill::kGeoSignalStrengthProperty, base::Value(strength));
     manager_test_->AddGeoNetwork(shill::kGeoWifiAccessPointsProperty,
                                  properties);
     base::RunLoop().RunUntilIdle();
@@ -75,20 +73,18 @@ class GeolocationHandlerTest : public testing::Test {
   // This should remain in sync with the format of shill (chromeos) dict entries
   void AddCellTower(int idx) {
     base::DictionaryValue properties;
-    // Multiplications are intended solely to differentiate the various fields
+    // Multiplications, additions, and string concatenations
+    // are intended solely to differentiate the various fields
     // in a predictable way, while preserving 3 digits for MCC and MNC.
-    std::string ci = base::IntToString(idx);
-    std::string lac = base::IntToString(idx * 10);
+    std::string ci = base::IntToString(idx) + "D3A15F2";
+    std::string lac = "7FF" + base::IntToString(idx);
     std::string mcc = base::IntToString(idx * 100);
     std::string mnc = base::IntToString(idx * 100 + 1);
 
-    properties.SetStringWithoutPathExpansion(shill::kGeoCellIdProperty, ci);
-    properties.SetStringWithoutPathExpansion(
-        shill::kGeoLocationAreaCodeProperty, lac);
-    properties.SetStringWithoutPathExpansion(
-        shill::kGeoMobileCountryCodeProperty, mcc);
-    properties.SetStringWithoutPathExpansion(
-        shill::kGeoMobileNetworkCodeProperty, mnc);
+    properties.SetKey(shill::kGeoCellIdProperty, base::Value(ci));
+    properties.SetKey(shill::kGeoLocationAreaCodeProperty, base::Value(lac));
+    properties.SetKey(shill::kGeoMobileCountryCodeProperty, base::Value(mcc));
+    properties.SetKey(shill::kGeoMobileNetworkCodeProperty, base::Value(mnc));
 
     manager_test_->AddGeoNetwork(shill::kGeoCellTowersProperty, properties);
     base::RunLoop().RunUntilIdle();
@@ -158,8 +154,8 @@ TEST_F(GeolocationHandlerTest, OneCellTower) {
   EXPECT_TRUE(GetCellTowers());
   EXPECT_FALSE(GetWifiAccessPoints());
   ASSERT_EQ(1u, cell_towers_.size());
-  EXPECT_EQ("1", cell_towers_[0].ci);
-  EXPECT_EQ("10", cell_towers_[0].lac);
+  EXPECT_EQ("490345970", cell_towers_[0].ci);
+  EXPECT_EQ("32753", cell_towers_[0].lac);
   EXPECT_EQ("100", cell_towers_[0].mcc);
   EXPECT_EQ("101", cell_towers_[0].mnc);
 }
@@ -178,7 +174,7 @@ TEST_F(GeolocationHandlerTest, MultipleCellTowers) {
   EXPECT_FALSE(GetWifiAccessPoints());
   EXPECT_TRUE(GetCellTowers());
   ASSERT_EQ(3u, cell_towers_.size());
-  EXPECT_EQ("20", cell_towers_[1].lac);
+  EXPECT_EQ("32754", cell_towers_[1].lac);
   EXPECT_EQ("301", cell_towers_[2].mnc);
 }
 
@@ -201,8 +197,8 @@ TEST_F(GeolocationHandlerTest, MultipleGeolocations) {
   EXPECT_EQ(1, wifi_access_points_[0].channel);
 
   ASSERT_EQ(2u, cell_towers_.size());
-  EXPECT_EQ("2", cell_towers_[1].ci);
-  EXPECT_EQ("10", cell_towers_[0].lac);
+  EXPECT_EQ("758781426", cell_towers_[1].ci);
+  EXPECT_EQ("32753", cell_towers_[0].lac);
   EXPECT_EQ("200", cell_towers_[1].mcc);
   EXPECT_EQ("101", cell_towers_[0].mnc);
 }

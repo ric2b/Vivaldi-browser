@@ -584,7 +584,8 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
     // object.
   };
 
-  PassRefPtr<Image> GetImage(AccelerationHint, SnapshotReason) const override;
+  RefPtr<StaticBitmapImage> GetImage(AccelerationHint,
+                                     SnapshotReason) const override;
   ImageData* ToImageData(SnapshotReason) override;
   void SetFilterQuality(SkFilterQuality) override;
   bool IsWebGL2OrHigher() { return Version() >= 2; }
@@ -596,6 +597,10 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   // For use by WebVR which doesn't use the normal compositing path.
   // This clears the backbuffer if preserveDrawingBuffer is false.
   void MarkCompositedAndClearBackbufferIfNeeded();
+
+  // For use by WebVR, commits the current canvas content similar
+  // to the "commit" JS API.
+  PassRefPtr<StaticBitmapImage> GetStaticBitmapImage();
 
  protected:
   friend class EXTDisjointTimerQuery;
@@ -872,8 +877,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
                           ExtensionFlags flags,
                           const char* const* prefixes)
         : ExtensionTracker(flags, prefixes),
-          extension_field_(extension_field),
-          extension_(this, nullptr) {}
+          extension_field_(extension_field) {}
 
     GC_PLUGIN_IGNORE("http://crbug.com/519953")
     Member<T>& extension_field_;
@@ -889,9 +893,8 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   void RegisterExtension(Member<T>& extension_ptr,
                          ExtensionFlags flags = kApprovedExtension,
                          const char* const* prefixes = nullptr) {
-    extensions_.push_back(TraceWrapperMember<ExtensionTracker>(
-        this,
-        TypedExtensionTracker<T>::Create(extension_ptr, flags, prefixes)));
+    extensions_.push_back(
+        TypedExtensionTracker<T>::Create(extension_ptr, flags, prefixes));
   }
 
   bool ExtensionSupportedAndAllowed(const ExtensionTracker*);
@@ -1674,7 +1677,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
                            GLint,
                            const IntRect&);
 
-  sk_sp<SkImage> MakeImageSnapshot(SkImageInfo&);
+  RefPtr<StaticBitmapImage> MakeImageSnapshot(SkImageInfo&);
   const unsigned version_;
 
   bool IsPaintable() const final { return GetDrawingBuffer(); }

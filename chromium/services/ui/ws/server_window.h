@@ -14,12 +14,14 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
-#include "cc/ipc/compositor_frame_sink.mojom.h"
-#include "cc/ipc/frame_sink_manager.mojom.h"
+#include "components/viz/host/host_frame_sink_client.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
 #include "services/ui/ws/ids.h"
+#include "services/viz/privileged/interfaces/compositing/frame_sink_manager.mojom.h"
+#include "services/viz/public/interfaces/compositing/compositor_frame_sink.mojom.h"
+#include "ui/base/window_tracker_template.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/vector2d.h"
@@ -31,7 +33,6 @@ namespace ws {
 
 class ServerWindowDelegate;
 class ServerWindowObserver;
-class ServerWindowCompositorFrameSinkManager;
 
 // Server side representation of a window. Delegate is informed of interesting
 // events.
@@ -44,7 +45,7 @@ class ServerWindowCompositorFrameSinkManager;
 // children the children are implicitly removed. Similarly if a window has a
 // parent and the window is deleted the deleted window is implicitly removed
 // from the parent.
-class ServerWindow {
+class ServerWindow : public viz::HostFrameSinkClient {
  public:
   using Properties = std::map<std::string, std::vector<uint8_t>>;
   using Windows = std::vector<ServerWindow*>;
@@ -53,7 +54,7 @@ class ServerWindow {
   ServerWindow(ServerWindowDelegate* delegate,
                const WindowId& id,
                const Properties& properties);
-  ~ServerWindow();
+  ~ServerWindow() override;
 
   void AddObserver(ServerWindowObserver* observer);
   void RemoveObserver(ServerWindowObserver* observer);
@@ -63,13 +64,13 @@ class ServerWindow {
   // existing.
   void CreateRootCompositorFrameSink(
       gfx::AcceleratedWidget widget,
-      cc::mojom::CompositorFrameSinkAssociatedRequest sink_request,
-      cc::mojom::CompositorFrameSinkClientPtr client,
-      cc::mojom::DisplayPrivateAssociatedRequest display_request);
+      viz::mojom::CompositorFrameSinkAssociatedRequest sink_request,
+      viz::mojom::CompositorFrameSinkClientPtr client,
+      viz::mojom::DisplayPrivateAssociatedRequest display_request);
 
   void CreateCompositorFrameSink(
-      cc::mojom::CompositorFrameSinkRequest request,
-      cc::mojom::CompositorFrameSinkClientPtr client);
+      viz::mojom::CompositorFrameSinkRequest request,
+      viz::mojom::CompositorFrameSinkClientPtr client);
 
   const WindowId& id() const { return id_; }
 
@@ -112,12 +113,14 @@ class ServerWindow {
   const ServerWindow* parent() const { return parent_; }
   ServerWindow* parent() { return parent_; }
 
+  // Returns the root window used in checking drawn status. This is not
+  // necessarily the same as the root window used in event dispatch.
   // NOTE: this returns null if the window does not have an ancestor associated
   // with a display.
-  const ServerWindow* GetRoot() const;
-  ServerWindow* GetRoot() {
+  const ServerWindow* GetRootForDrawn() const;
+  ServerWindow* GetRootForDrawn() {
     return const_cast<ServerWindow*>(
-        const_cast<const ServerWindow*>(this)->GetRoot());
+        const_cast<const ServerWindow*>(this)->GetRootForDrawn());
   }
 
   const Windows& children() const { return children_; }
@@ -136,8 +139,18 @@ class ServerWindow {
 
   const Windows& transient_children() const { return transient_children_; }
 
+  // Returns true if |this| is a transient descendant of |window|.
+  bool HasTransientAncestor(const ServerWindow* window) const;
+
   ModalType modal_type() const { return modal_type_; }
   void SetModalType(ModalType modal_type);
+
+  void SetChildModalParent(ServerWindow* modal_parent);
+  const ServerWindow* GetChildModalParent() const;
+  ServerWindow* GetChildModalParent() {
+    return const_cast<ServerWindow*>(
+        const_cast<const ServerWindow*>(this)->GetChildModalParent());
+  }
 
   // Returns true if this contains |window| or is |window|.
   bool Contains(const ServerWindow* window) const;
@@ -171,6 +184,13 @@ class ServerWindow {
   void set_can_focus(bool can_focus) { can_focus_ = can_focus; }
   bool can_focus() const { return can_focus_; }
 
+  void set_is_activation_parent(bool value) { is_activation_parent_ = value; }
+  bool is_activation_parent() const { return is_activation_parent_; }
+
+  bool has_created_compositor_frame_sink() const {
+    return has_created_compositor_frame_sink_;
+  }
+
   void set_event_targeting_policy(mojom::EventTargetingPolicy policy) {
     event_targeting_policy_ = policy;
   }
@@ -197,16 +217,6 @@ class ServerWindow {
     extended_touch_hit_test_region_ = touch_insets;
   }
 
-  ServerWindowCompositorFrameSinkManager*
-  GetOrCreateCompositorFrameSinkManager();
-  ServerWindowCompositorFrameSinkManager* compositor_frame_sink_manager() {
-    return compositor_frame_sink_manager_.get();
-  }
-  const ServerWindowCompositorFrameSinkManager* compositor_frame_sink_manager()
-      const {
-    return compositor_frame_sink_manager_.get();
-  }
-
   // Offset of the underlay from the the window bounds (used for shadows).
   const gfx::Vector2d& underlay_offset() const { return underlay_offset_; }
   void SetUnderlayOffset(const gfx::Vector2d& offset);
@@ -223,6 +233,9 @@ class ServerWindow {
 #endif
 
  private:
+  // viz::HostFrameSinkClient implementation.
+  void OnFirstSurfaceActivation(const viz::SurfaceInfo& surface_info) override;
+
   // Implementation of removing a window. Doesn't send any notification.
   void RemoveImpl(ServerWindow* window);
 
@@ -237,7 +250,7 @@ class ServerWindow {
   // RestackTransientDescendants.
   static ServerWindow** GetStackingTarget(ServerWindow* window);
 
-  ServerWindowDelegate* delegate_;
+  ServerWindowDelegate* const delegate_;
   const WindowId id_;
   viz::FrameSinkId frame_sink_id_;
   base::Optional<viz::LocalSurfaceId> current_local_surface_id_;
@@ -257,8 +270,6 @@ class ServerWindow {
   gfx::Rect bounds_;
   gfx::Insets client_area_;
   std::vector<gfx::Rect> additional_client_areas_;
-  std::unique_ptr<ServerWindowCompositorFrameSinkManager>
-      compositor_frame_sink_manager_;
   ui::CursorData cursor_;
   ui::CursorData non_client_cursor_;
   float opacity_;
@@ -286,6 +297,18 @@ class ServerWindow {
   bool accepts_drops_ = false;
 
   base::ObserverList<ServerWindowObserver> observers_;
+
+  // Used to track the modal parent of a child modal window.
+  std::unique_ptr<WindowTrackerTemplate<ServerWindow, ServerWindowObserver>>
+      child_modal_parent_tracker_;
+
+  // Whether the children of this window can be active. Also used to determine
+  // when a window is considered top level. That is, if true the children of
+  // this window are considered top level windows.
+  bool is_activation_parent_ = false;
+
+  // Used by tests to know whether clients have already drawn this window.
+  bool has_created_compositor_frame_sink_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(ServerWindow);
 };

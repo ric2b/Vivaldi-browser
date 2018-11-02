@@ -11,16 +11,17 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/output/output_surface_client.h"
 #include "cc/output/output_surface_frame.h"
-#include "cc/scheduler/begin_frame_source.h"
+#include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/gpu/context_provider.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
+#include "ui/gl/gl_utils.h"
 
 namespace viz {
 
 DisplayOutputSurface::DisplayOutputSurface(
     scoped_refptr<InProcessContextProvider> context_provider,
-    cc::SyntheticBeginFrameSource* synthetic_begin_frame_source)
+    SyntheticBeginFrameSource* synthetic_begin_frame_source)
     : cc::OutputSurface(context_provider),
       synthetic_begin_frame_source_(synthetic_begin_frame_source),
       weak_ptr_factory_(this) {
@@ -74,7 +75,8 @@ void DisplayOutputSurface::Reshape(const gfx::Size& size,
   size_ = size;
   has_set_draw_rectangle_since_last_resize_ = false;
   context_provider()->ContextGL()->ResizeCHROMIUM(
-      size.width(), size.height(), device_scale_factor, has_alpha);
+      size.width(), size.height(), device_scale_factor,
+      gl::GetGLColorSpace(color_space), has_alpha);
 }
 
 void DisplayOutputSurface::SwapBuffers(cc::OutputSurfaceFrame frame) {
@@ -146,7 +148,7 @@ void DisplayOutputSurface::OnVSyncParametersUpdated(base::TimeTicks timebase,
   // TODO(brianderson): We should not be receiving 0 intervals.
   synthetic_begin_frame_source_->OnUpdateVSyncParameters(
       timebase,
-      interval.is_zero() ? cc::BeginFrameArgs::DefaultInterval() : interval);
+      interval.is_zero() ? BeginFrameArgs::DefaultInterval() : interval);
 }
 
 }  // namespace viz

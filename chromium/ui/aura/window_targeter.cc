@@ -4,6 +4,7 @@
 
 #include "ui/aura/window_targeter.h"
 
+#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/client/event_client.h"
 #include "ui/aura/client/focus_client.h"
@@ -24,6 +25,26 @@ bool WindowTargeter::SubtreeShouldBeExploredForEvent(
     const ui::LocatedEvent& event) {
   return SubtreeCanAcceptEvent(window, event) &&
          EventLocationInsideBounds(window, event);
+}
+
+bool WindowTargeter::GetHitTestRects(Window* window,
+                                     gfx::Rect* hit_test_rect_mouse,
+                                     gfx::Rect* hit_test_rect_touch) const {
+  DCHECK(hit_test_rect_mouse);
+  DCHECK(hit_test_rect_touch);
+  *hit_test_rect_mouse = *hit_test_rect_touch = window->bounds();
+
+  if (ShouldUseExtendedBounds(window)) {
+    hit_test_rect_mouse->Inset(mouse_extend_);
+    hit_test_rect_touch->Inset(touch_extend_);
+  }
+
+  return true;
+}
+
+std::unique_ptr<WindowTargeter::HitTestRects>
+WindowTargeter::GetExtraHitTestShapeRects(Window* target) const {
+  return nullptr;
 }
 
 Window* WindowTargeter::FindTargetInRootWindow(Window* root_window,
@@ -83,8 +104,10 @@ ui::EventTarget* WindowTargeter::FindTargetForEvent(ui::EventTarget* root,
       // applying the host's transform.
       ui::LocatedEvent* located_event = static_cast<ui::LocatedEvent*>(event);
       located_event->ConvertLocationToTarget(target, new_root);
+      WindowTreeHost* window_tree_host = new_root->GetHost();
       located_event->UpdateForRootTransform(
-          new_root->GetHost()->GetRootTransform());
+          window_tree_host->GetRootTransform(),
+          window_tree_host->GetRootTransformForLocalEventCoordinates());
     }
     ignore_result(new_root->GetHost()->event_sink()->OnEventFromSource(event));
 
@@ -116,8 +139,12 @@ bool WindowTargeter::SubtreeCanAcceptEvent(
     const ui::LocatedEvent& event) const {
   if (!window->IsVisible())
     return false;
-  if (window->ignore_events())
+  if (window->event_targeting_policy() ==
+          ui::mojom::EventTargetingPolicy::NONE ||
+      window->event_targeting_policy() ==
+          ui::mojom::EventTargetingPolicy::TARGET_ONLY) {
     return false;
+  }
   client::EventClient* client = client::GetEventClient(window->GetRootWindow());
   if (client && !client->CanProcessEventsWithinSubtree(window))
     return false;
@@ -134,10 +161,48 @@ bool WindowTargeter::SubtreeCanAcceptEvent(
 bool WindowTargeter::EventLocationInsideBounds(
     Window* window,
     const ui::LocatedEvent& event) const {
+  gfx::Rect mouse_rect;
+  gfx::Rect touch_rect;
+  if (!GetHitTestRects(window, &mouse_rect, &touch_rect))
+    return false;
+
+  const gfx::Vector2d offset = -window->bounds().OffsetFromOrigin();
+  mouse_rect.Offset(offset);
+  touch_rect.Offset(offset);
   gfx::Point point = event.location();
   if (window->parent())
     Window::ConvertPointToTarget(window->parent(), window, &point);
-  return gfx::Rect(window->bounds().size()).Contains(point);
+
+  const bool point_in_rect = event.IsTouchEvent() || event.IsGestureEvent()
+                                 ? touch_rect.Contains(point)
+                                 : mouse_rect.Contains(point);
+  if (!point_in_rect)
+    return false;
+
+  auto shape_rects = GetExtraHitTestShapeRects(window);
+  if (!shape_rects)
+    return true;
+
+  for (const gfx::Rect& shape_rect : *shape_rects) {
+    if (shape_rect.Contains(point)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool WindowTargeter::ShouldUseExtendedBounds(const aura::Window* window) const {
+  return true;
+}
+
+void WindowTargeter::OnSetInsets() {}
+
+void WindowTargeter::SetInsets(const gfx::Insets& mouse_extend,
+                               const gfx::Insets& touch_extend) {
+  mouse_extend_ = mouse_extend;
+  touch_extend_ = touch_extend;
+  OnSetInsets();
 }
 
 Window* WindowTargeter::FindTargetForKeyEvent(Window* window,

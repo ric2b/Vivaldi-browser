@@ -50,6 +50,7 @@ MappedMemoryManager::MappedMemoryManager(CommandBufferHelper* helper,
 }
 
 MappedMemoryManager::~MappedMemoryManager() {
+  helper_->FlushLazy();
   CommandBuffer* cmd_buf = helper_->command_buffer();
   for (auto& chunk : chunks_) {
     cmd_buf->DestroyTransferBuffer(chunk->shm_id());
@@ -146,7 +147,9 @@ void MappedMemoryManager::FreeUnused() {
   while (iter != chunks_.end()) {
     MemoryChunk* chunk = (*iter).get();
     chunk->FreeUnused();
-    if (!chunk->InUse()) {
+    if (chunk->bytes_in_use() == 0u) {
+      if (chunk->InUseOrFreePending())
+        helper_->FlushLazy();
       cmd_buf->DestroyTransferBuffer(chunk->shm_id());
       allocated_memory_ -= chunk->GetSize();
       iter = chunks_.erase(iter);
@@ -186,21 +189,31 @@ bool MappedMemoryManager::OnMemoryDump(
     dump->AddScalar("free_size", MemoryAllocatorDump::kUnitsBytes,
                     chunk->GetFreeSize());
 
-    auto guid = GetBufferGUIDForTracing(tracing_process_id, chunk->shm_id());
-
     auto shared_memory_guid =
         chunk->shared_memory()->backing()->shared_memory_handle().GetGUID();
     const int kImportance = 2;
     if (!shared_memory_guid.is_empty()) {
-      pmd->CreateSharedMemoryOwnershipEdge(dump->guid(), guid,
-                                           shared_memory_guid, kImportance);
+      pmd->CreateSharedMemoryOwnershipEdge(dump->guid(), shared_memory_guid,
+                                           kImportance);
     } else {
+      auto guid = GetBufferGUIDForTracing(tracing_process_id, chunk->shm_id());
       pmd->CreateSharedGlobalAllocatorDump(guid);
       pmd->AddOwnershipEdge(dump->guid(), guid, kImportance);
     }
   }
 
   return true;
+}
+
+FencedAllocator::State MappedMemoryManager::GetPointerStatusForTest(
+    void* pointer,
+    int32_t* token_if_pending) {
+  for (auto& chunk : chunks_) {
+    if (chunk->IsInChunk(pointer)) {
+      return chunk->GetPointerStatusForTest(pointer, token_if_pending);
+    }
+  }
+  return FencedAllocator::FREE;
 }
 
 void ScopedMappedMemoryPtr::Release() {

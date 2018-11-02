@@ -23,11 +23,10 @@
 <translation id="1520828917794284345">데스크톱 크기 조정</translation>
 <translation id="154040539590487450">원격 액세스 서비스를 시작하지 못했습니다.</translation>
 <translation id="1546934824884762070">예기치 않은 오류가 발생했습니다. 개발자에게 문제를 신고해 주세요.</translation>
-<translation id="1619813076098775562">Cast 기기에 대한 연결이 종료되었습니다.</translation>
 <translation id="1643640058022401035">이 페이지를 닫으면 Chromoting 세션이 종료됩니다.</translation>
 <translation id="1654128982815600832">컴퓨터의 원격 연결을 사용하도록 설정 중...</translation>
 <translation id="170207782578677537">컴퓨터를 등록하는 데 실패했습니다.</translation>
-<translation id="1704090719919187045">Chromoting 호스트 환경설정</translation>
+<translation id="1727412735341161734">Chrome 원격 데스크톱</translation>
 <translation id="174018511426417793">등록된 컴퓨터가 없습니다. 컴퓨터에 원격 연결을 사용하려면 Chrome 원격 데스크톱을 설치하고 '<ph name="BUTTON_NAME" />' 버튼을 클릭하세요.</translation>
 <translation id="1742469581923031760">연결 중...</translation>
 <translation id="1770394049404108959">애플리케이션이 열리지 않음</translation>
@@ -42,10 +41,6 @@
 <translation id="2013996867038862849">페어링된 클라이언트가 모두 삭제되었습니다.</translation>
 <translation id="2038229918502634450">정책 변경 사항을 반영하기 위해 호스트를 다시 시작하는 중입니다.</translation>
 <translation id="2046651113449445291">다음 클라이언트는 이 컴퓨터와 페어링되었으며 PIN을 제공하지 않고도 연결할 수 있습니다. 언제든지 개별 클라이언트 또는 모든 클라이언트에 대해 이 권한을 취소할 수 있습니다.</translation>
-<translation id="2053901200959289492">• Android Nougat용 멀티 윈도우 지원 추가
-• 데스크톱 이미지 품질, 반응 속도, 배터리 사용량 개선
-• 클릭-드래그 작업 반응 속도 개선
-• 몇 가지 UI 애니메이션 효과 개선</translation>
 <translation id="2078880767960296260">호스트 프로세스</translation>
 <translation id="20876857123010370">트랙패드 모드</translation>
 <translation id="2089514346391228378">컴퓨터의 원격 연결을 사용하도록 설정했습니다.</translation>
@@ -81,6 +76,7 @@
 <translation id="2676780859508944670">처리 중…</translation>
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2747641796667576127">소프트웨어 업데이트는 보통 자동으로 시행되며, 드물지만 실패하는 경우도 있습니다. 소프트웨어 업데이트는 몇 분 정도 소요되며 컴퓨터가 원격으로 연결되어 있을 때 이루어집니다.</translation>
+<translation id="2758123043070977469">인증하는 중에 문제가 발생했습니다. 다시 로그인하세요.</translation>
 <translation id="2803375539583399270">PIN 입력</translation>
 <translation id="2841013758207633010">시간</translation>
 <translation id="2851754573186462851">Chromium 앱 스트리밍</translation>
@@ -99,8 +95,15 @@
 <translation id="3150823315463303127">호스트에서 정책을 확인하지 못했습니다.</translation>
 <translation id="3194245623920924351">Chrome 원격 데스크톱</translation>
 <translation id="3197730452537982411">원격 데스크톱</translation>
+<translation id="321944585103975186">• 사용자 인터페이스 디자인 변경
+• 성능, 응답 속도, 안정성 개선
+• Windows 또는 Linux 컴퓨터에서 오디오 재생 지원
+• 키보드 지원 향상</translation>
+<translation id="324272851072175193">이 도움말을 이메일로 보내기</translation>
 <translation id="3258789396564295715">Chrome 원격 데스크톱을 사용하여 컴퓨터에 안전하게 액세스할 수 있습니다.</translation>
 <translation id="3286521253923406898">Chromoting 호스트 컨트롤러</translation>
+<translation id="3305934114213025800"><ph name="PRODUCT_NAME" />에서 시스템을 변경하려고 합니다.</translation>
+<translation id="331779822864701136">• Android 8.0 Oreo가 지원됩니다.</translation>
 <translation id="332624996707057614">컴퓨터 이름 수정</translation>
 <translation id="3339299787263251426">인터넷을 통해 안전하게 컴퓨터에 액세스</translation>
 <translation id="3360306038446926262">Windows</translation>
@@ -109,6 +112,12 @@
 <translation id="3385242214819933234">호스트 소유자가 잘못되었습니다.</translation>
 <translation id="3403830762023901068">정책 설정에서 이 컴퓨터를 Chromoting 호스트로 공유하는 것을 허용하지 않습니다. 도움이 필요하면 시스템 관리자에게 문의하세요.</translation>
 <translation id="3423542133075182604">보안 키 원격 설정 프로세스</translation>
+<translation id="3426467947138417795">Chrome 원격 데스크톱
+원격 데스크톱
+원격 PC
+원격 컴퓨터
+원격 액세스
+원격 지원</translation>
 <translation id="3581045510967524389">네트워크에 연결할 수 없습니다. 기기가 온라인 상태인지 확인하시기 바랍니다.</translation>
 <translation id="3596628256176442606">이 서비스를 이용하면 Chromoting 클라이언트로부터의 연결을 수신할 수 있습니다.</translation>
 <translation id="3606997049964069799">Chromium에 로그인하지 않았습니다. 로그인 후 다시 시도하세요.</translation>
@@ -117,8 +126,13 @@
 <translation id="3695446226812920698">자세히 알아보기</translation>
 <translation id="3718805989288361841">Chrome 원격 데스크톱 관련 정책 설정에 오류가 있습니다. 시스템 관리자에게 도움을 요청하세요.</translation>
 <translation id="3776024066357219166">Chrome 원격 데스크톱 세션이 종료되었습니다.</translation>
-<translation id="3785447812627779171">Chromoting
-호스트</translation>
+<translation id="3788372335219293587">iOS 기기에서 컴퓨터에 안전하게 액세스하세요. 빠르고 간편하며 무료입니다.
+
+• 원격으로 액세스하려는 컴퓨터의 Chrome 웹 스토어에서 Chrome 원격 데스크톱 앱(https://chrome.google.com/remotedesktop)을 찾습니다.
+• Chrome 원격 데스크톱 소프트웨어를 설치하고 안내에 따라 설정을 완료합니다.
+• iOS 기기에서 앱을 열고 연결할 온라인 컴퓨터를 탭합니다.
+
+개인정보 보호에 관한 자세한 내용은 Google 개인정보처리방침(http://goo.gl/SyrVzj)을 참조하세요.</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">Chrome 원격 데스크톱스으로 액세스할 수 있도록 아래 계정 및 PIN을 확인하세요.</translation>
 <translation id="3897092660631435901">메뉴</translation>
@@ -132,9 +146,9 @@
 <translation id="405887016757208221">원격 컴퓨터가 세션을 초기화하는 데 실패했습니다. 문제가 지속되면 호스트를 다시 구성해 보시기 바랍니다.</translation>
 <translation id="4068946408131579958">모든 연결</translation>
 <translation id="409800995205263688">참고: 정책 설정에 따라 네트워크 내에 있는 컴퓨터 간의 연결만 허용됩니다.</translation>
+<translation id="4145029455188493639"><ph name="EMAIL_ADDRESS" /> 계정으로 로그인했습니다.</translation>
 <translation id="4155497795971509630">일부 필수 구성요소가 누락되었습니다. 소프트웨어의 최신 버전을 설치했는지 확인한 뒤 다시 시도해주세요.</translation>
 <translation id="4156740505453712750">액세스 제한을 통해 이 컴퓨터를 보호하려면 <ph name="BOLD_START" />최소 6자리<ph name="BOLD_END" />의 PIN을 선택하세요. 이 PIN은 다른 위치에서 연결할 때 필요합니다.</translation>
-<translation id="4156741816461781891"><ph name="EMAIL_ADDRESS" /> 계정으로 로그인했습니다.</translation>
 <translation id="4176825807642096119">액세스 코드</translation>
 <translation id="4207623512727273241">계속하기 전에 설치 프로그램을 실행하세요.</translation>
 <translation id="4227991223508142681">호스트 프로비저닝 유틸리티</translation>
@@ -152,8 +166,7 @@
 <translation id="4517233780764084060">참고: 모든 단축키를 사용하려면 Chromoting을 '창으로 열기'로 설정합니다.</translation>
 <translation id="4563926062592110512">연결 해제된 클라이언트: <ph name="CLIENT_USERNAME" /></translation>
 <translation id="4572065712096155137">액세스</translation>
-<translation id="4573676252416618192">Chrome 원격
-데스크톱 호스트</translation>
+<translation id="4592037108270173918">모바일 네트워크를 통해 기기에 연결하면 데이터 요금이 부과될 수도 있습니다. 계속하시겠습니까?</translation>
 <translation id="4619978527973181021">동의 및 설치</translation>
 <translation id="4635770493235256822">원격 기기</translation>
 <translation id="4660011489602794167">키보드 표시</translation>
@@ -192,20 +205,19 @@
 <translation id="5419418238395129586">최근 온라인 접속일: <ph name="DATE" /></translation>
 <translation id="544077782045763683">호스트가 꺼져 있습니다.</translation>
 <translation id="5510035215749041527">지금 연결 해제</translation>
-<translation id="5537725057119320332">전송</translation>
 <translation id="5593560073513909978">서비스를 일시적으로 이용할 수 없습니다. 잠시 후 다시 시도해 주세요.</translation>
 <translation id="5601503069213153581">PIN</translation>
 <translation id="5619148062500147964">이 컴퓨터로의 연결</translation>
 <translation id="5625493749705183369">다른 컴퓨터에 액세스하거나 다른 사용자가 인터넷을 통해 안전하게 내 컴퓨터에 액세스할 수 있습니다.</translation>
 <translation id="5702987232842159181">연결됨:</translation>
 <translation id="5708869785009007625">내 컴퓨터를 <ph name="USER" />님과 공유하고 있습니다.</translation>
+<translation id="5750083143895808682"><ph name="EMAIL_ADDRESS" /> 계정으로 로그인했습니다.</translation>
 <translation id="5773590752998175013">페어링 날짜</translation>
 <translation id="579702532610384533">다시 연결</translation>
+<translation id="5810269635982033450">화면이 트랙패드처럼 작동합니다</translation>
 <translation id="5841343754884244200">표시 옵션</translation>
 <translation id="5843054235973879827">안전한 이유</translation>
 <translation id="5859141382851488196">새 창…</translation>
-<translation id="5885438903806970186">온라인.</translation>
-<translation id="6001953797859482435">Chrome 원격 데스크톱 호스트 환경설정</translation>
 <translation id="6011539954251327702">Chromoting을 사용하면 컴퓨터를 웹에서 안전하게 공유할 수 있습니다. 양쪽 사용자 모두 <ph name="URL" />에 있는 Chromoting 앱을 실행해야 합니다.</translation>
 <translation id="6033507038939587647">키보드 옵션</translation>
 <translation id="6040143037577758943">닫기</translation>
@@ -254,10 +266,14 @@
 <translation id="7019153418965365059">알 수 없는 호스트 오류입니다. <ph name="HOST_OFFLINE_REASON" />.</translation>
 <translation id="701976023053394610">원격 지원</translation>
 <translation id="7038683108611689168">사용 통계 및 비정상 종료 보고서 수집을 허용하여 Chromoting 개선에 참여하겠습니다.</translation>
-<translation id="712467900648340229">Cast 기기에 연결하지 못했습니다.</translation>
+<translation id="7067321367069083429">화면이 터치스크린처럼 작동합니다</translation>
+<translation id="7116737094673640201">Chrome 원격 데스크톱에 오신 것을 환영합니다.</translation>
 <translation id="7144878232160441200">다시 시도</translation>
 <translation id="7149517134817561223">애플리케이션에서 Chrome 원격 데스크톱 호스트로 명령을 전송합니다.</translation>
 <translation id="7215059001581613786">6자리 이상의 숫자로 구성된 PIN을 입력하세요.</translation>
+<translation id="7237767047212540055">원격으로 액세스하려는 컴퓨터에서 Chrome을 열고 <ph name="INSTALLATION_LINK" /> 페이지를 방문합니다.
+Chrome 원격 데스크톱 소프트웨어를 설치하고 안내에 따라 설정을 완료합니다.
+설정이 완료되면 PIN 또는 액세스 코드를 입력하여 이 페이지에서 컴퓨터에 액세스할 수 있습니다.</translation>
 <translation id="7312846573060934304">호스트가 오프라인 상태입니다.</translation>
 <translation id="7319983568955948908">공유 중지</translation>
 <translation id="7401733114166276557">Chrome 원격 데스크톱</translation>
@@ -271,6 +287,7 @@
 <translation id="7658239707568436148">취소</translation>
 <translation id="7665369617277396874">계정 추가</translation>
 <translation id="7672203038394118626">컴퓨터의 원격 연결이 사용중지되었습니다.</translation>
+<translation id="7678209621226490279">왼쪽에 고정</translation>
 <translation id="7693372326588366043">호스트 목록 새로고침</translation>
 <translation id="7782471917492991422">컴퓨터의 전원 관리 설정을 확인하고 유휴 상태일 때 절전 모드로 전환되도록 설정되지 않았는지 확인하세요.</translation>
 <translation id="7810127880729796595">통계 보기(연결: <ph name="QUALITY" />)</translation>
@@ -278,6 +295,7 @@
 <translation id="7868137160098754906">원격 컴퓨터의 PIN을 입력하세요.</translation>
 <translation id="7869445566579231750">이 애플리케이션을 실행할 수 있는 권한이 없습니다.</translation>
 <translation id="7895403300744144251">원격 컴퓨터의 보안 정책으로 인해 내 계정에서 연결할 수 없습니다.</translation>
+<translation id="7936528439960309876">오른쪽에 고정</translation>
 <translation id="7948001860594368197">화면 옵션</translation>
 <translation id="7970576581263377361">인증에 실패했습니다. Chromium에 다시 로그인하세요.</translation>
 <translation id="7981525049612125370">원격 세션이 만료되었습니다.</translation>

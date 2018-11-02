@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/memory/weak_ptr.h"
+#include "base/time/time.h"
 #include "chromecast/browser/cast_content_window.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
@@ -22,6 +23,7 @@ class SiteInstance;
 
 namespace chromecast {
 
+class CastWebContentsManager;
 class CastWindowManager;
 
 // A simplified interface for loading and displaying WebContents in cast_shell.
@@ -42,6 +44,7 @@ class CastWebView : content::WebContentsObserver, content::WebContentsDelegate {
   // |delegate| and |browser_context| should outlive the lifetime of this
   // object.
   CastWebView(Delegate* delegate,
+              CastWebContentsManager* web_contents_manager,
               content::BrowserContext* browser_context,
               scoped_refptr<content::SiteInstance> site_instance,
               bool transparent);
@@ -57,8 +60,9 @@ class CastWebView : content::WebContentsObserver, content::WebContentsDelegate {
 
   // Begins the close process for this page (ie. triggering document.onunload).
   // A consumer of the class can be notified when the process has been finished
-  // via Delegate::OnPageStopped().
-  void ClosePage();
+  // via Delegate::OnPageStopped(). The page will be torn down after
+  // |shutdown_delay| has elapsed, or sooner if required.
+  void ClosePage(const base::TimeDelta& shutdown_delay);
 
   // Makes the page visible to the user.
   void Show(CastWindowManager* window_manager);
@@ -72,8 +76,7 @@ class CastWebView : content::WebContentsObserver, content::WebContentsDelegate {
   void DidFailLoad(content::RenderFrameHost* render_frame_host,
                    const GURL& validated_url,
                    int error_code,
-                   const base::string16& error_description,
-                   bool was_ignored_by_handler) override;
+                   const base::string16& error_description) override;
   void DidFirstVisuallyNonEmptyPaint() override;
   void DidStartNavigation(
       content::NavigationHandle* navigation_handle) override;
@@ -95,15 +98,15 @@ class CastWebView : content::WebContentsObserver, content::WebContentsDelegate {
       override;
 #endif  // defined(OS_ANDROID)
 
-  void DelayedCloseContents();
-
   Delegate* const delegate_;
+  CastWebContentsManager* const web_contents_manager_;
   content::BrowserContext* const browser_context_;
   const scoped_refptr<content::SiteInstance> site_instance_;
   const bool transparent_;
   std::unique_ptr<content::WebContents> web_contents_;
   std::unique_ptr<shell::CastContentWindow> window_;
   bool did_start_navigation_;
+  base::TimeDelta shutdown_delay_;
 
   base::WeakPtrFactory<CastWebView> weak_factory_;
 

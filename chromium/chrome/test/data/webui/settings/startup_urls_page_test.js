@@ -3,66 +3,60 @@
 // found in the LICENSE file.
 
 cr.define('settings_startup_urls_page', function() {
-  /**
-   * @constructor
-   * @implements {settings.StartupUrlsPageBrowserProxy}
-   * @extends {TestBrowserProxy}
-   */
-  function TestStartupUrlsPageBrowserProxy() {
-    TestBrowserProxy.call(this, [
-      'addStartupPage',
-      'editStartupPage',
-      'loadStartupPages',
-      'removeStartupPage',
-      'useCurrentPages',
-      'validateStartupPage',
-    ]);
+  /** @implements {settings.StartupUrlsPageBrowserProxy} */
+  class TestStartupUrlsPageBrowserProxy extends TestBrowserProxy {
+    constructor() {
+      super([
+        'addStartupPage',
+        'editStartupPage',
+        'loadStartupPages',
+        'removeStartupPage',
+        'useCurrentPages',
+        'validateStartupPage',
+      ]);
 
-    /** @private {boolean} */
-    this.urlIsValid_ = true;
-  }
-
-  TestStartupUrlsPageBrowserProxy.prototype = {
-    __proto__: TestBrowserProxy.prototype,
+      /** @private {boolean} */
+      this.urlIsValid_ = true;
+    }
 
     /** @param {boolean} isValid */
-    setUrlValidity: function(isValid) {
+    setUrlValidity(isValid) {
       this.urlIsValid_ = isValid;
-    },
+    }
 
     /** @override */
-    addStartupPage: function(url) {
+    addStartupPage(url) {
       this.methodCalled('addStartupPage', url);
       return Promise.resolve(this.urlIsValid_);
-    },
+    }
 
     /** @override */
-    editStartupPage: function(modelIndex, url) {
+    editStartupPage(modelIndex, url) {
       this.methodCalled('editStartupPage', [modelIndex, url]);
       return Promise.resolve(this.urlIsValid_);
-    },
+    }
 
     /** @override */
-    loadStartupPages: function() {
+    loadStartupPages() {
       this.methodCalled('loadStartupPages');
-    },
+    }
 
     /** @override */
-    removeStartupPage: function(modelIndex) {
+    removeStartupPage(modelIndex) {
       this.methodCalled('removeStartupPage', modelIndex);
-    },
+    }
 
     /** @override */
-    useCurrentPages: function() {
+    useCurrentPages() {
       this.methodCalled('useCurrentPages');
-    },
+    }
 
     /** @override */
-    validateStartupPage: function(url) {
+    validateStartupPage(url) {
       this.methodCalled('validateStartupPage', url);
       return Promise.resolve(this.urlIsValid_);
-    },
-  };
+    }
+  }
 
   suite('StartupUrlDialog', function() {
     /** @type {?SettingsStartupUrlDialogElement} */
@@ -202,16 +196,6 @@ cr.define('settings_startup_urls_page', function() {
   });
 
   suite('StartupUrlsPage', function() {
-    /**
-     * Radio button enum values for restore on startup.
-     * @enum
-     */
-    var RestoreOnStartupEnum = {
-      CONTINUE: 1,
-      OPEN_NEW_TAB: 5,
-      OPEN_SPECIFIC: 4,
-    };
-
     /** @type {?SettingsStartupUrlsPageElement} */
     var page = null;
 
@@ -241,39 +225,7 @@ cr.define('settings_startup_urls_page', function() {
       return browserProxy.whenCalled('loadStartupPages');
     });
 
-    function restoreOnStartupLabel() {
-      return page.$$('#onStartupRadioGroup')
-          .querySelector('.iron-selected')
-          .label;
-    }
-
-    test('open-continue', function() {
-      page.set(
-          'prefs.session.restore_on_startup.value',
-          RestoreOnStartupEnum.CONTINUE);
-      assertEquals('Continue where you left off', restoreOnStartupLabel());
-    });
-
-    test('open-ntp', function() {
-      page.set(
-          'prefs.session.restore_on_startup.value',
-          RestoreOnStartupEnum.OPEN_NEW_TAB);
-      assertEquals('Open the New Tab page', restoreOnStartupLabel());
-    });
-
-    test('open-specific', function() {
-      page.set(
-          'prefs.session.restore_on_startup.value',
-          RestoreOnStartupEnum.OPEN_SPECIFIC);
-      assertEquals(
-          'Open a specific page or set of pages', restoreOnStartupLabel());
-    });
-
     test('UseCurrentPages', function() {
-      page.set(
-          'prefs.session.restore_on_startup.value',
-          RestoreOnStartupEnum.OPEN_SPECIFIC);
-      Polymer.dom.flush();
       var useCurrentPagesButton = page.$$('#useCurrentPages > a');
       assertTrue(!!useCurrentPagesButton);
       MockInteractions.tap(useCurrentPagesButton);
@@ -281,10 +233,6 @@ cr.define('settings_startup_urls_page', function() {
     });
 
     test('AddPage_OpensDialog', function() {
-      page.set(
-          'prefs.session.restore_on_startup.value',
-          RestoreOnStartupEnum.OPEN_SPECIFIC);
-      Polymer.dom.flush();
       var addPageButton = page.$$('#addPage > a');
       assertTrue(!!addPageButton);
       assertFalse(!!page.$$('settings-startup-url-dialog'));
@@ -331,10 +279,6 @@ cr.define('settings_startup_urls_page', function() {
     });
 
     test('StartupPages_WhenExtensionControlled', function() {
-      page.set(
-          'prefs.session.restore_on_startup.value',
-          RestoreOnStartupEnum.OPEN_SPECIFIC);
-      Polymer.dom.flush();
       assertFalse(!!page.get('prefs.session.startup_urls.controlledBy'));
       assertFalse(!!page.$$('extension-controlled-indicator'));
       assertTrue(!!page.$$('#addPage'));

@@ -14,14 +14,12 @@ Nekatere funkcije morda niso na voljo in spremembe nastavitev ne bodo shranjene.
 <translation id="1403254041219632970">Prihodnje različice Chromiuma ne bodo več podpirale različic sistema Mac OS X 10.6, 10.7 ali 10.8.</translation>
 <translation id="1414495520565016063">Prijavljeni ste v Chromium.</translation>
 <translation id="1444754455097148408">Odprtokodne licence za Chromium</translation>
-<translation id="1480489203462860648">Preskusite ga, je že nameščen.</translation>
 <translation id="1502360822835740515">Nastavitev Chromiuma kot privzetega brskalnika</translation>
 <translation id="151962892725702025">Chromium OS ni mogel sinhronizirati podatkov, ker sinhronizacija ni na voljo za vašo domeno.</translation>
 <translation id="1559451348202814456">Chromium morda ne bo deloval pravilno, ker ni več podprt v različicah sistema Mac OS X 10.6, 10.7 ali 10.8.</translation>
 <translation id="1653828314016431939">V redu, znova zaženi zdaj</translation>
 <translation id="1668054258064581266">Ko odstranite račun iz Chromiuma, boste morali morda znova naložiti odprte zavihke, če želite uveljaviti spremembo.</translation>
 <translation id="1688750314291223739">Nastavite sinhronizacijo, da prilagojene funkcije brskalnika shranite v spletu in do njih v Chromiumu dostopate v katerem koli računalniku.</translation>
-<translation id="1699664235656412242">Zaprite vsa okna Chromiuma (tudi tista v načinu Windows 8) in poskusite znova.</translation>
 <translation id="1708666629004767631">Na voljo je nova, varnejša različica Chromiuma.</translation>
 <translation id="1774152462503052664">Naj se Chromium izvaja v ozadju</translation>
 <translation id="1779356040007214683">Zaradi večje varnosti smo v Chromiumu onemogočili nekatere razširitve, ki niso navedene v storitvi <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> in so bile morda dodane brez vaše vednosti.</translation>
@@ -104,6 +102,7 @@ Te storitve lahko po želji onemogočite. <ph name="BEGIN_LINK" />Več o tem<ph 
 <translation id="4271805377592243930">Pomoč za Chromium</translation>
 <translation id="4285930937574705105">Namestitev ni bila izvedena zaradi nedoločene napake. Če se Chromium trenutno izvaja, ga zaprite in poskusite znova.</translation>
 <translation id="4330585738697551178">Za ta modul je znano, da je v sporu s Chromiumom.</translation>
+<translation id="4421155425831608516">Prijavo v Chromium je onemogočil skrbnik te naprave.</translation>
 <translation id="4423735387467980091">Prilagajanje in nadziranje Chromiuma</translation>
 <translation id="4458285410772214805">Odjavite se in znova prijavite, da bodo te spremembe začele veljati.</translation>
 <translation id="4469812139324097969">Chromium je zastarel, ker ga že nekaj časa niste znova zagnali. Na voljo je posodobitev, ki bo nameščena, takoj ko ga znova zaženete.</translation>
@@ -180,7 +179,6 @@ Te storitve lahko po želji onemogočite. <ph name="BEGIN_LINK" />Več o tem<ph 
 Nekatere funkcije morda ne bodo na voljo. Določite drug imenik profila ali uporabite novejšo različico Chromiuma.</translation>
 <translation id="6734080038664603509">Posodobi &amp;Chromium</translation>
 <translation id="6734291798041940871">Chromium je že nameščen za vse uporabnike v računalniku.</translation>
-<translation id="6757767188268205357">Ne nadleguj me</translation>
 <translation id="6810143991807788455">Pomagajte izboljšati Chromium s poročanjem o trenutnih nastavitvah</translation>
 <translation id="6857782730669500492">Chromium – <ph name="PAGE_TITLE" /></translation>
 <translation id="6883876366448858277">pošlje besedo in njeno sobesedilo Iskanju Google ter vrne definicije, slike in druge rezultate iskanja.</translation>
@@ -193,7 +191,6 @@ Nekatere funkcije morda ne bodo na voljo. Določite drug imenik profila ali upor
 <translation id="707471633328071618">Google Payments (kopirano v Chromium)</translation>
 <translation id="7138853919861947730">Chromium lahko za boljšo izkušnjo brskanja uporablja spletne storitve.</translation>
 <translation id="7162152143154757523">Chromium omogoča pametnejše črkovanje, tako da vaše vnose v brskalnik pošilja v Googlove strežnike in s tem omogoči, da uporabljate isto tehnologijo preverjanja črkovanja, kot jo uporablja Googlovo iskanje.</translation>
-<translation id="7196020411877309443">Zakaj je to prikazano?</translation>
 <translation id="7205698830395646142">Skrij v meniju Chromiuma</translation>
 <translation id="7223968959479464213">Upravitelj opravil – Chromium</translation>
 <translation id="722928257909516027">Prikaz Chromiumovega menija</translation>

@@ -348,6 +348,11 @@ TaskQueueImpl::TaskDeque TaskQueueImpl::TakeImmediateIncomingQueue() {
   base::AutoLock immediate_incoming_queue_lock(immediate_incoming_queue_lock_);
   TaskQueueImpl::TaskDeque queue;
   queue.Swap(immediate_incoming_queue());
+  // Temporary check for crbug.com/752914. Ideally we'd check the entire queue
+  // but that would be too expensive.
+  // TODO(skyostil): Remove this.
+  if (!queue.empty())
+    CHECK(queue.front().task);
   return queue;
 }
 
@@ -901,6 +906,17 @@ bool TaskQueueImpl::HasPendingImmediateWork() {
   return !immediate_incoming_queue().empty();
 }
 
+void TaskQueueImpl::SetOnTaskStartedHandler(
+    TaskQueueImpl::OnTaskStartedHandler handler) {
+  main_thread_only().on_task_started_handler = std::move(handler);
+}
+
+void TaskQueueImpl::OnTaskStarted(const TaskQueue::Task& task,
+                                  base::TimeTicks start) {
+  if (!main_thread_only().on_task_started_handler.is_null())
+    main_thread_only().on_task_started_handler.Run(task, start);
+}
+
 void TaskQueueImpl::SetOnTaskCompletedHandler(
     TaskQueueImpl::OnTaskCompletedHandler handler) {
   main_thread_only().on_task_completed_handler = std::move(handler);
@@ -911,6 +927,11 @@ void TaskQueueImpl::OnTaskCompleted(const TaskQueue::Task& task,
                                     base::TimeTicks end) {
   if (!main_thread_only().on_task_completed_handler.is_null())
     main_thread_only().on_task_completed_handler.Run(task, start, end);
+}
+
+bool TaskQueueImpl::RequiresTaskTiming() const {
+  return !main_thread_only().on_task_started_handler.is_null() ||
+         !main_thread_only().on_task_completed_handler.is_null();
 }
 
 void TaskQueueImpl::SetQueueEnabledForTest(bool enabled) {

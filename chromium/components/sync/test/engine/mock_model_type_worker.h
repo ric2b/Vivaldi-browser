@@ -8,11 +8,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <deque>
 #include <map>
 #include <string>
 #include <vector>
 
+#include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "components/sync/engine/commit_queue.h"
 #include "components/sync/engine/model_type_processor.h"
@@ -35,6 +35,7 @@ class MockModelTypeWorker : public CommitQueue {
 
   // Implementation of ModelTypeWorker.
   void EnqueueForCommit(const CommitRequestDataList& list) override;
+  void NudgeForCommit() override;
 
   // Getters to inspect the requests sent to this object.
   size_t GetNumPendingCommits() const;
@@ -102,6 +103,9 @@ class MockModelTypeWorker : public CommitQueue {
   void UpdateWithEncryptionKey(const std::string& ekn,
                                const UpdateResponseDataList& update);
 
+  void UpdateWithGarbageConllection(
+      const sync_pb::GarbageCollectionDirective& gcd);
+
  private:
   // Generate an ID string.
   static std::string GenerateId(const std::string& tag_hash);
@@ -121,7 +125,7 @@ class MockModelTypeWorker : public CommitQueue {
   ModelTypeProcessor* processor_;
 
   // A record of past commits requests.
-  std::deque<CommitRequestDataList> pending_commits_;
+  base::circular_deque<CommitRequestDataList> pending_commits_;
 
   // Map of versions by client tag hash.
   // This is an essential part of the mocked server state.

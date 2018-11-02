@@ -80,12 +80,6 @@ void JourneyLoggerAndroid::SetCanMakePaymentValue(
   journey_logger_.SetCanMakePaymentValue(jvalue);
 }
 
-void JourneyLoggerAndroid::SetShowCalled(
-    JNIEnv* env,
-    const base::android::JavaParamRef<jobject>& jcaller) {
-  journey_logger_.SetShowCalled();
-}
-
 void JourneyLoggerAndroid::SetEventOccurred(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& jcaller,
@@ -93,17 +87,6 @@ void JourneyLoggerAndroid::SetEventOccurred(
   DCHECK_GE(jevent, 0);
   DCHECK_LT(jevent, JourneyLogger::Event::EVENT_ENUM_MAX);
   journey_logger_.SetEventOccurred(static_cast<JourneyLogger::Event>(jevent));
-}
-
-void JourneyLoggerAndroid::SetSelectedPaymentMethod(
-    JNIEnv* env,
-    const base::android::JavaParamRef<jobject>& jcaller,
-    jint jpayment_method) {
-  DCHECK_GE(jpayment_method, 0);
-  DCHECK_LT(jpayment_method,
-            JourneyLogger::SelectedPaymentMethod::SELECTED_PAYMENT_METHOD_MAX);
-  journey_logger_.SetSelectedPaymentMethod(
-      static_cast<JourneyLogger::SelectedPaymentMethod>(jpayment_method));
 }
 
 void JourneyLoggerAndroid::SetRequestedInformation(
@@ -115,6 +98,16 @@ void JourneyLoggerAndroid::SetRequestedInformation(
     jboolean requested_name) {
   journey_logger_.SetRequestedInformation(requested_shipping, requested_email,
                                           requested_phone, requested_name);
+}
+
+void JourneyLoggerAndroid::SetRequestedPaymentMethodTypes(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& jcaller,
+    jboolean requested_basic_card,
+    jboolean requested_method_google,
+    jboolean requested_method_other) {
+  journey_logger_.SetRequestedPaymentMethodTypes(
+      requested_basic_card, requested_method_google, requested_method_other);
 }
 
 void JourneyLoggerAndroid::SetCompleted(

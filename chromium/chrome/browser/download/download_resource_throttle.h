@@ -26,6 +26,13 @@ class DownloadResourceThrottle
  public:
   // Information passed between callbacks to check whether download can proceed.
   struct DownloadRequestInfo {
+    // Callback that is called on whether download can proceed.
+    // The action parameter configure open and ask as well as permission to
+    // start the download, and whether storage permission is granted.
+    typedef base::Callback<void(bool /* storage permission granted */,
+                                const content::DownloadItemAction&)>
+        Callback;
+
     DownloadRequestInfo(
         scoped_refptr<DownloadRequestLimiter> limiter,
         const content::ResourceRequestInfo::WebContentsGetter&
@@ -33,7 +40,7 @@ class DownloadResourceThrottle
         const GURL& url,
         const std::string& request_method,
         const content::DownloadInformation &download_info,
-        const DownloadRequestLimiter::Callback& continue_callback);
+        const Callback& continue_callback);
     ~DownloadRequestInfo();
 
     scoped_refptr<DownloadRequestLimiter> limiter;
@@ -41,7 +48,7 @@ class DownloadResourceThrottle
     GURL url;
     std::string request_method;
     content::DownloadInformation download_info;
-    DownloadRequestLimiter::Callback continue_callback;
+    Callback continue_callback;
    private:
     DISALLOW_COPY_AND_ASSIGN(DownloadRequestInfo);
   };
@@ -62,7 +69,8 @@ class DownloadResourceThrottle
   void WillProcessResponse(bool* defer) override;
   const char* GetNameForLogging() const override;
 
-  void ContinueDownload(const content::DownloadItemAction&);
+  void ContinueDownload(bool storage_permission_granted,
+                        const content::DownloadItemAction&);
 
  private:
   void WillDownload(bool* defer);

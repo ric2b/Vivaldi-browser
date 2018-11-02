@@ -16,8 +16,8 @@
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "base/observer_list.h"
 #include "base/strings/string16.h"
 #include "base/values.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
@@ -31,6 +31,7 @@ class Image;
 
 namespace base {
 class DictionaryValue;
+class SequencedTaskRunner;
 }
 
 class PrefService;
@@ -73,18 +74,15 @@ class ProfileInfoCache : public ProfileInfoInterface,
   size_t GetIndexOfProfileWithPath(
       const base::FilePath& profile_path) const override;
   base::string16 GetNameOfProfileAtIndex(size_t index) const override;
-  base::string16 GetShortcutNameOfProfileAtIndex(size_t index) const override;
+  // Will be removed SOON with ProfileInfoCache tests. Do not use!
   base::FilePath GetPathOfProfileAtIndex(size_t index) const override;
-  base::Time GetProfileActiveTimeAtIndex(size_t index) const override;
+  // Will be removed SOON with ProfileInfoCache tests. Do not use!
   base::string16 GetUserNameOfProfileAtIndex(size_t index) const override;
   const gfx::Image& GetAvatarIconOfProfileAtIndex(size_t index) const override;
-  std::string GetLocalAuthCredentialsOfProfileAtIndex(
-      size_t index) const override;
-  std::string GetPasswordChangeDetectionTokenAtIndex(
-      size_t index) const override;
   // Note that a return value of false could mean an error in collection or
   // that there are currently no background apps running. However, the action
   // which results is the same in both cases (thus far).
+  // Will be removed SOON with ProfileInfoCache tests. Do not use!
   bool GetBackgroundStatusOfProfileAtIndex(size_t index) const override;
   base::string16 GetGAIANameOfProfileAtIndex(size_t index) const override;
   base::string16 GetGAIAGivenNameOfProfileAtIndex(size_t index) const override;
@@ -100,29 +98,24 @@ class ProfileInfoCache : public ProfileInfoInterface,
   bool IsOmittedProfileAtIndex(size_t index) const override;
   bool ProfileIsSigninRequiredAtIndex(size_t index) const override;
   std::string GetSupervisedUserIdOfProfileAtIndex(size_t index) const override;
-  bool ProfileIsEphemeralAtIndex(size_t index) const override;
   bool ProfileIsUsingDefaultNameAtIndex(size_t index) const override;
-  bool ProfileIsAuthenticatedAtIndex(size_t index) const override;
   bool ProfileIsUsingDefaultAvatarAtIndex(size_t index) const override;
-  bool ProfileIsAuthErrorAtIndex(size_t index) const;
+
+  // Returns true if a GAIA picture has been loaded or has failed to load for
+  // profile at |index|.
+  bool IsGAIAPictureOfProfileAtIndexLoaded(size_t index) const;
 
   size_t GetAvatarIconIndexOfProfileAtIndex(size_t index) const;
 
-  void SetProfileActiveTimeAtIndex(size_t index);
   // Warning: This will re-sort profiles and thus may change indices!
   void SetNameOfProfileAtIndex(size_t index, const base::string16& name);
-  void SetShortcutNameOfProfileAtIndex(size_t index,
-                                       const base::string16& name);
   void SetAuthInfoOfProfileAtIndex(size_t index,
                                    const std::string& gaia_id,
                                    const base::string16& user_name);
   void SetAvatarIconOfProfileAtIndex(size_t index, size_t icon_index);
   void SetIsOmittedProfileAtIndex(size_t index, bool is_omitted);
   void SetSupervisedUserIdOfProfileAtIndex(size_t index, const std::string& id);
-  void SetLocalAuthCredentialsOfProfileAtIndex(size_t index,
-                                               const std::string& auth);
-  void SetPasswordChangeDetectionTokenAtIndex(size_t index,
-                                              const std::string& token);
+  // Will be removed SOON with ProfileInfoCache tests. Do not use!
   void SetBackgroundStatusOfProfileAtIndex(size_t index,
                                            bool running_background_apps);
   // Warning: This will re-sort profiles and thus may change indices!
@@ -133,10 +126,8 @@ class ProfileInfoCache : public ProfileInfoInterface,
   void SetGAIAPictureOfProfileAtIndex(size_t index, const gfx::Image* image);
   void SetIsUsingGAIAPictureOfProfileAtIndex(size_t index, bool value);
   void SetProfileSigninRequiredAtIndex(size_t index, bool value);
-  void SetProfileIsEphemeralAtIndex(size_t index, bool value);
   void SetProfileIsUsingDefaultNameAtIndex(size_t index, bool value);
   void SetProfileIsUsingDefaultAvatarAtIndex(size_t index, bool value);
-  void SetProfileIsAuthErrorAtIndex(size_t index, bool value);
 
   // Notify IsSignedInRequired to all observer
   void NotifyIsSigninRequiredChanged(const base::FilePath& profile_path);
@@ -159,9 +150,6 @@ class ProfileInfoCache : public ProfileInfoInterface,
                              const std::string& key,
                              const base::FilePath& image_path);
 
-  void AddObserver(ProfileInfoCacheObserver* obs) override;
-  void RemoveObserver(ProfileInfoCacheObserver* obs) override;
-
   void set_disable_avatar_download_for_testing(
       bool disable_avatar_download_for_testing) {
     disable_avatar_download_for_testing_ = disable_avatar_download_for_testing;
@@ -175,9 +163,7 @@ class ProfileInfoCache : public ProfileInfoInterface,
                   size_t icon_index,
                   const std::string& supervised_user_id) override;
   void RemoveProfile(const base::FilePath& profile_path) override;
-  // Returns a vector containing one attributes entry per known profile. They
-  // are not sorted in any particular order.
-  std::vector<ProfileAttributesEntry*> GetAllProfilesAttributes() override;
+
   bool GetProfileAttributesWithPath(const base::FilePath& path,
                                     ProfileAttributesEntry** entry) override;
 
@@ -236,8 +222,6 @@ class ProfileInfoCache : public ProfileInfoInterface,
 
   std::vector<std::string> sorted_keys_;
 
-  mutable base::ObserverList<ProfileInfoCacheObserver> observer_list_;
-
   // A cache of gaia/high res avatar profile pictures. This cache is updated
   // lazily so it needs to be mutable.
   mutable std::unordered_map<std::string, std::unique_ptr<gfx::Image>>
@@ -257,6 +241,9 @@ class ProfileInfoCache : public ProfileInfoInterface,
   // Determines of the ProfileAvatarDownloader should be created and executed
   // or not. Only set to true for tests.
   bool disable_avatar_download_for_testing_;
+
+  // Task runner used for file operation on avatar images.
+  scoped_refptr<base::SequencedTaskRunner> file_task_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(ProfileInfoCache);
 };

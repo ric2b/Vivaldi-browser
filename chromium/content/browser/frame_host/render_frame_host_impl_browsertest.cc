@@ -5,16 +5,19 @@
 #include "content/browser/frame_host/render_frame_host_impl.h"
 
 #include "base/macros.h"
+#include "content/browser/frame_host/navigation_handle_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/frame_messages.h"
 #include "content/public/browser/javascript_dialog_manager.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_client.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
+#include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
 #include "content/test/test_content_browser_client.h"
@@ -194,7 +197,7 @@ class TestJavaScriptDialogManager : public JavaScriptDialogManager,
   // JavaScriptDialogManager
 
   void RunJavaScriptDialog(WebContents* web_contents,
-                           const GURL& origin_url,
+                           const GURL& alerting_frame_url,
                            JavaScriptDialogType dialog_type,
                            const base::string16& message_text,
                            const base::string16& default_prompt_text,
@@ -333,35 +336,94 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
   wc->SetJavaScriptDialogManagerForTesting(nullptr);
 }
 
+namespace {
+
+// A helper to execute some script in a frame just before it is deleted, such
+// that no message loops are pumped and no sync IPC messages are processed
+// between script execution and the destruction of the RenderFrameHost  .
+class ExecuteScriptBeforeRenderFrameDeletedHelper
+    : public RenderFrameDeletedObserver {
+ public:
+  ExecuteScriptBeforeRenderFrameDeletedHelper(RenderFrameHost* observed_frame,
+                                              const std::string& script)
+      : RenderFrameDeletedObserver(observed_frame), script_(script) {}
+
+ protected:
+  // WebContentsObserver:
+  void RenderFrameDeleted(RenderFrameHost* render_frame_host) override {
+    const bool was_deleted = deleted();
+    RenderFrameDeletedObserver::RenderFrameDeleted(render_frame_host);
+    if (deleted() && !was_deleted)
+      ExecuteScriptAsync(render_frame_host, script_);
+  }
+
+ private:
+  std::string script_;
+
+  DISALLOW_COPY_AND_ASSIGN(ExecuteScriptBeforeRenderFrameDeletedHelper);
+};
+
+}  // namespace
+
 // Regression test for https://crbug.com/728171 where the sync IPC channel has a
 // connection error but we don't properly check for it. This occurs because we
 // send a sync window.open IPC after the RenderFrameHost is destroyed.
 //
-// This test reproduces the issue by calling window.close, and then
-// window.open in a task that runs immediately after window.close (which
-// internally posts a task to send the IPC). This ensures that the
-// RenderFrameHost is destroyed by the time the window.open IPC reaches the
-// browser process.
+// The test creates two WebContents rendered in the same process. The first is
+// is the window-opener of the second, so the first window can be used to relay
+// information collected during the destruction of the RenderFrame in the second
+// WebContents back to the browser process.
+//
+// The issue is then reproduced by asynchronously triggering a call to
+// window.open() in the main frame of the second WebContents in response to
+// WebContentsObserver::RenderFrameDeleted -- that is, just before the RFHI is
+// destroyed on the browser side. The test assumes that between these two
+// events, the UI message loop is not pumped, and no sync IPC messages are
+// processed on the UI thread.
+//
+// Note that if the second WebContents scheduled a call to window.close() to
+// close itself after it calls window.open(), the CreateNewWindow sync IPC could
+// be dispatched *before* ViewHostMsg_Close in the browser process, provided
+// that the browser happened to be in IPC::SyncChannel::WaitForReply on the UI
+// thread (most likely after sending GpuCommandBufferMsg_* messages), in which
+// case incoming sync IPCs to this thread are dispatched, but the message loop
+// is not pumped, so proxied non-sync IPCs are not delivered.
+//
+// Furthermore, on Android, exercising window.open() must be delayed until after
+// content::RemoveShellView returns, as that method calls into JNI to close the
+// view corresponding to the WebContents, which will then call back into native
+// code and may run nested message loops and send sync IPC messages.
 IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
                        FrameDetached_WindowOpenIPCFails) {
   NavigateToURL(shell(), GetTestUrl("", "title1.html"));
   EXPECT_EQ(1u, Shell::windows().size());
-  GURL test_url = GetTestUrl("render_frame_host", "window_open_and_close.html");
+  GURL test_url = GetTestUrl("render_frame_host", "window_open.html");
   std::string open_script =
       base::StringPrintf("popup = window.open('%s');", test_url.spec().c_str());
 
+  TestNavigationObserver second_contents_navigation_observer(nullptr, 1);
+  second_contents_navigation_observer.StartWatchingNewWebContents();
   EXPECT_TRUE(content::ExecuteScript(shell(), open_script));
-  ASSERT_EQ(2u, Shell::windows().size());
+  second_contents_navigation_observer.Wait();
 
+  ASSERT_EQ(2u, Shell::windows().size());
   Shell* new_shell = Shell::windows()[1];
-  RenderFrameDeletedObserver deleted_observer(
-      new_shell->web_contents()->GetMainFrame());
+  ExecuteScriptBeforeRenderFrameDeletedHelper deleted_observer(
+      new_shell->web_contents()->GetMainFrame(), "callWindowOpen();");
+  new_shell->Close();
   deleted_observer.WaitUntilDeleted();
 
-  bool is_closed = false;
+  bool did_call_window_open = false;
   EXPECT_TRUE(ExecuteScriptAndExtractBool(
-      shell(), "domAutomationController.send(popup.closed)", &is_closed));
-  EXPECT_TRUE(is_closed);
+      shell(), "domAutomationController.send(!!popup.didCallWindowOpen)",
+      &did_call_window_open));
+  EXPECT_TRUE(did_call_window_open);
+
+  std::string result_of_window_open;
+  EXPECT_TRUE(ExecuteScriptAndExtractString(
+      shell(), "domAutomationController.send(String(popup.resultOfWindowOpen))",
+      &result_of_window_open));
+  EXPECT_EQ("null", result_of_window_open);
 }
 
 // After a navigation, the StreamHandle must be released.
@@ -426,6 +488,188 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
 
   // The |stream_handle_| must have been released now.
   EXPECT_EQ(nullptr, main_frame->stream_handle_for_testing());
+}
+
+namespace {
+void PostRequestMonitor(int* post_counter,
+                        const net::test_server::HttpRequest& request) {
+  if (request.method != net::test_server::METHOD_POST)
+    return;
+  (*post_counter)++;
+  auto it = request.headers.find("Content-Type");
+  CHECK(it != request.headers.end());
+  CHECK(!it->second.empty());
+}
+}  // namespace
+
+// Verifies form submits and resubmits work.
+IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest, POSTNavigation) {
+  net::EmbeddedTestServer http_server;
+  base::FilePath content_test_data(FILE_PATH_LITERAL("content/test/data"));
+  http_server.AddDefaultHandlers(content_test_data);
+  int post_counter = 0;
+  http_server.RegisterRequestMonitor(
+      base::Bind(&PostRequestMonitor, &post_counter));
+  ASSERT_TRUE(http_server.Start());
+
+  GURL url(http_server.GetURL("/session_history/form.html"));
+  GURL post_url = http_server.GetURL("/echotitle");
+
+  // Navigate to a page with a form.
+  TestNavigationObserver observer(shell()->web_contents());
+  NavigateToURL(shell(), url);
+  EXPECT_EQ(url, observer.last_navigation_url());
+  EXPECT_TRUE(observer.last_navigation_succeeded());
+
+  // Submit the form.
+  GURL submit_url("javascript:submitForm('isubmit')");
+  NavigateToURL(shell(), submit_url);
+
+  // Check that a proper POST navigation was done.
+  EXPECT_EQ("text=&select=a",
+            base::UTF16ToASCII(shell()->web_contents()->GetTitle()));
+  EXPECT_EQ(post_url, shell()->web_contents()->GetLastCommittedURL());
+  EXPECT_TRUE(shell()
+                  ->web_contents()
+                  ->GetController()
+                  .GetActiveEntry()
+                  ->GetHasPostData());
+
+  // Reload and verify the form was submitted.
+  shell()->web_contents()->GetController().Reload(ReloadType::NORMAL, false);
+  EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
+  EXPECT_EQ("text=&select=a",
+            base::UTF16ToASCII(shell()->web_contents()->GetTitle()));
+  CHECK_EQ(2, post_counter);
+}
+
+namespace {
+
+class NavigationHandleGrabber : public WebContentsObserver {
+ public:
+  explicit NavigationHandleGrabber(WebContents* web_contents)
+      : WebContentsObserver(web_contents) {}
+
+  void ReadyToCommitNavigation(NavigationHandle* navigation_handle) override {
+    if (navigation_handle->GetURL().path() != "/title2.html")
+      return;
+    static_cast<NavigationHandleImpl*>(navigation_handle)
+        ->set_complete_callback_for_testing(
+            base::Bind(&NavigationHandleGrabber::SendingNavigationCommitted,
+                       base::Unretained(this), navigation_handle));
+  }
+
+  void SendingNavigationCommitted(
+      NavigationHandle* navigation_handle,
+      NavigationThrottle::ThrottleCheckResult result) {
+    if (navigation_handle->GetURL().path() != "/title2.html")
+      return;
+    ExecuteScriptAsync(web_contents(), "document.open();");
+  }
+
+  void DidFinishNavigation(NavigationHandle* navigation_handle) override {
+    if (navigation_handle->GetURL().path() != "/title2.html")
+      return;
+    if (navigation_handle->HasCommitted())
+      committed_title2_ = true;
+    run_loop_.QuitClosure().Run();
+  }
+
+  void WaitForTitle2() { run_loop_.Run(); }
+
+  bool committed_title2() { return committed_title2_; }
+
+ private:
+  bool committed_title2_ = false;
+  base::RunLoop run_loop_;
+};
+}  // namespace
+
+// Verifies that if a frame aborts a navigation right after it starts, it is
+// cancelled.
+IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest, FastNavigationAbort) {
+  GURL url(embedded_test_server()->GetURL("/title1.html"));
+  NavigateToURL(shell(), url);
+
+  // Now make a navigation.
+  NavigationHandleGrabber observer(shell()->web_contents());
+  const base::string16 title = base::ASCIIToUTF16("done");
+  EXPECT_TRUE(ExecuteScript(shell()->web_contents(),
+                            "window.location.href='/title2.html'"));
+  observer.WaitForTitle2();
+  // Flush IPCs to make sure the renderer didn't tell us to navigate. Need to
+  // make two round trips.
+  EXPECT_TRUE(ExecuteScript(shell()->web_contents(), ""));
+  EXPECT_TRUE(ExecuteScript(shell()->web_contents(), ""));
+  EXPECT_FALSE(observer.committed_title2());
+}
+
+IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
+                       TerminationDisablersClearedOnRendererCrash) {
+  EXPECT_TRUE(NavigateToURL(
+      shell(), GetTestUrl("render_frame_host", "beforeunload.html")));
+  EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
+
+  WebContentsImpl* wc = static_cast<WebContentsImpl*>(shell()->web_contents());
+  RenderFrameHostImpl* main_frame =
+      static_cast<RenderFrameHostImpl*>(wc->GetMainFrame());
+
+  EXPECT_TRUE(main_frame->GetSuddenTerminationDisablerState(
+      blink::kBeforeUnloadHandler));
+
+  // Make the renderer crash.
+  RenderProcessHost* renderer_process = main_frame->GetProcess();
+  RenderProcessHostWatcher crash_observer(
+      renderer_process, RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
+  renderer_process->Shutdown(0, false);
+  crash_observer.Wait();
+
+  EXPECT_FALSE(main_frame->GetSuddenTerminationDisablerState(
+      blink::kBeforeUnloadHandler));
+
+  // This should not trigger a DCHECK once the renderer sends up the termination
+  // disabler flags.
+  shell()->web_contents()->GetController().Reload(ReloadType::NORMAL, false);
+  EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
+
+  EXPECT_TRUE(main_frame->GetSuddenTerminationDisablerState(
+      blink::kBeforeUnloadHandler));
+}
+
+// Aborted renderer-initiated navigations that don't destroy the current
+// document (e.g. no error page is displayed) must not cancel pending
+// XMLHttpRequests.
+// See https://crbug.com/762945.
+IN_PROC_BROWSER_TEST_F(
+    RenderFrameHostImplBrowserTest,
+    AbortedRendererInitiatedNavigationDoNotCancelPendingXHR) {
+  GURL main_url(embedded_test_server()->GetURL("/title1.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+  EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
+
+  // 1) Send an XHR that is slow to complete.
+  const char* send_slow_XHR =
+      "var request = new XMLHttpRequest();"
+      "request.addEventListener('abort', () => document.title = 'XHR aborted');"
+      "request.addEventListener('load', () => document.title = 'XHR loaded');"
+      "request.open('GET', '%s');"
+      "request.send();";
+  const GURL slow_url = embedded_test_server()->GetURL("/slow?1");
+  EXPECT_TRUE(content::ExecuteScript(
+      shell(), base::StringPrintf(send_slow_XHR, slow_url.spec().c_str())));
+
+  // 2) In the meantime, create a renderer-initiated navigation. It will be
+  // aborted.
+  EXPECT_TRUE(content::ExecuteScript(
+      shell(), "window.location = 'customprotocol:aborted'"));
+
+  // 3) Wait for the XHR request to complete.
+  const base::string16 XHR_aborted = base::ASCIIToUTF16("XHR aborted");
+  const base::string16 XHR_loaded = base::ASCIIToUTF16("XHR loaded");
+  TitleWatcher watcher(shell()->web_contents(), XHR_loaded);
+  watcher.AlsoWaitForTitle(XHR_aborted);
+
+  EXPECT_EQ(XHR_loaded, watcher.WaitAndGetTitle());
 }
 
 }  // namespace content

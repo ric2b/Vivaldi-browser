@@ -13,43 +13,20 @@
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/crash_keys.h"
 #include "chrome/installer/util/google_update_settings.h"
+#include "components/crash/content/app/crash_export_thunks.h"
 #include "components/metrics/client_info.h"
 
 namespace child_process_logging {
 
 namespace {
 
-// exported in breakpad_win.cc/crashpad_win.cc:
-//    void __declspec(dllexport) __cdecl SetCrashKeyValueImpl.
-typedef void(__cdecl* SetCrashKeyValue)(const wchar_t*, const wchar_t*);
-
-// exported in breakpad_win.cc/crashpad_win.cc:
-//    void __declspec(dllexport) __cdecl ClearCrashKeyValueImpl.
-typedef void(__cdecl* ClearCrashKeyValue)(const wchar_t*);
-
 void SetCrashKeyValueTrampoline(const base::StringPiece& key,
                                 const base::StringPiece& value) {
-  static SetCrashKeyValue set_crash_key = []() {
-    HMODULE elf_module = GetModuleHandle(chrome::kChromeElfDllName);
-    return reinterpret_cast<SetCrashKeyValue>(
-        elf_module ? GetProcAddress(elf_module, "SetCrashKeyValueImpl")
-                   : nullptr);
-  }();
-  if (set_crash_key) {
-    (set_crash_key)(base::UTF8ToWide(key).data(),
-                    base::UTF8ToWide(value).data());
-  }
+  SetCrashKeyValueImplEx(key.data(), value.data());
 }
 
 void ClearCrashKeyValueTrampoline(const base::StringPiece& key) {
-  static ClearCrashKeyValue clear_crash_key = []() {
-    HMODULE elf_module = GetModuleHandle(chrome::kChromeElfDllName);
-    return reinterpret_cast<ClearCrashKeyValue>(
-        elf_module ? GetProcAddress(elf_module, "ClearCrashKeyValueImpl")
-                   : nullptr);
-  }();
-  if (clear_crash_key)
-    (clear_crash_key)(base::UTF8ToWide(key).data());
+  ClearCrashKeyValueImplEx(key.data());
 }
 
 }  // namespace

@@ -7,7 +7,7 @@
 
 #include "core/CoreExport.h"
 #include "core/frame/WebFrameWidgetBase.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "platform/heap/Handle.h"
 #include "platform/heap/SelfKeepAlive.h"
 #include "platform/wtf/Noncopyable.h"
@@ -15,7 +15,7 @@
 
 namespace blink {
 
-class WebViewBase;
+class WebViewImpl;
 class WebWidgetClient;
 
 // Shim class to help normalize the widget interfaces in the Blink public API.
@@ -29,7 +29,7 @@ class WebWidgetClient;
 // and just forwards almost everything to it.
 // After the embedder starts using a WebFrameWidget for the main frame,
 // WebView will be updated to no longer inherit WebWidget. The eventual goal is
-// to unfork the widget code duplicated in WebFrameWidgetImpl and WebViewBase
+// to unfork the widget code duplicated in WebFrameWidgetImpl and WebViewImpl
 // into one class.
 // A more detailed writeup of this transition can be read at
 // https://goo.gl/7yVrnb.
@@ -38,8 +38,8 @@ class CORE_EXPORT WebViewFrameWidget : public WebFrameWidgetBase {
 
  public:
   explicit WebViewFrameWidget(WebWidgetClient&,
-                              WebViewBase&,
-                              WebLocalFrameBase&);
+                              WebViewImpl&,
+                              WebLocalFrameImpl&);
   virtual ~WebViewFrameWidget();
 
   // WebFrameWidget overrides:
@@ -91,7 +91,7 @@ class CORE_EXPORT WebViewFrameWidget : public WebFrameWidgetBase {
   void SetBaseBackgroundColorOverride(WebColor) override;
   void ClearBaseBackgroundColorOverride() override;
   void SetBaseBackgroundColor(WebColor) override;
-  WebLocalFrameBase* LocalRoot() const override;
+  WebLocalFrameImpl* LocalRoot() const override;
   WebInputMethodController* GetActiveWebInputMethodController() const override;
 
   // WebFrameWidgetBase overrides:
@@ -109,9 +109,11 @@ class CORE_EXPORT WebViewFrameWidget : public WebFrameWidgetBase {
   DECLARE_VIRTUAL_TRACE();
 
  private:
+  PageWidgetEventHandler* GetPageWidgetEventHandler() override;
+
   WebWidgetClient* client_;
-  RefPtr<WebViewBase> web_view_;
-  Member<WebLocalFrameBase> main_frame_;
+  RefPtr<WebViewImpl> web_view_;
+  Member<WebLocalFrameImpl> main_frame_;
 
   SelfKeepAlive<WebViewFrameWidget> self_keep_alive_;
 };

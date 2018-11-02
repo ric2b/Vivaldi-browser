@@ -9,6 +9,7 @@
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/aligned_memory.h"
@@ -219,7 +220,6 @@ class MediaStreamAudioProcessorTest : public ::testing::Test {
 
   base::MessageLoop main_thread_message_loop_;
   media::AudioParameters params_;
-  MediaStreamDevice::AudioDeviceParameters input_device_params_;
 
   // TODO(guidou): Remove this field. http://crbug.com/706408
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -382,7 +382,7 @@ TEST_F(MediaStreamAudioProcessorTest, SelectsConstraintsArrayGeometryIfExists) {
   {
     // Both geometries empty.
     MockConstraintFactory constraint_factory;
-    MediaStreamDevice::AudioDeviceParameters input_params;
+    media::AudioParameters input_params;
 
     const auto& actual_geometry = GetArrayGeometryPreferringConstraints(
         MakeMediaAudioConstraints(constraint_factory), input_params);
@@ -391,9 +391,13 @@ TEST_F(MediaStreamAudioProcessorTest, SelectsConstraintsArrayGeometryIfExists) {
   {
     // Constraints geometry empty.
     MockConstraintFactory constraint_factory;
-    MediaStreamDevice::AudioDeviceParameters input_params;
-    input_params.mic_positions.push_back(media::Point(0, 0, 0));
-    input_params.mic_positions.push_back(media::Point(0, 0.05f, 0));
+
+    std::vector<media::Point> mic_positions;
+    mic_positions.push_back(media::Point(0, 0, 0));
+    mic_positions.push_back(media::Point(0, 0.05f, 0));
+
+    media::AudioParameters input_params;
+    input_params.set_mic_positions(mic_positions);
 
     const auto& actual_geometry = GetArrayGeometryPreferringConstraints(
         MakeMediaAudioConstraints(constraint_factory), input_params);
@@ -404,7 +408,7 @@ TEST_F(MediaStreamAudioProcessorTest, SelectsConstraintsArrayGeometryIfExists) {
     MockConstraintFactory constraint_factory;
     constraint_factory.AddAdvanced().goog_array_geometry.SetExact(
         blink::WebString::FromUTF8("-0.02 0 0 0.02 0 0"));
-    MediaStreamDevice::AudioDeviceParameters input_params;
+    media::AudioParameters input_params;
 
     const auto& actual_geometry = GetArrayGeometryPreferringConstraints(
         MakeMediaAudioConstraints(constraint_factory), input_params);
@@ -415,9 +419,13 @@ TEST_F(MediaStreamAudioProcessorTest, SelectsConstraintsArrayGeometryIfExists) {
     MockConstraintFactory constraint_factory;
     constraint_factory.AddAdvanced().goog_array_geometry.SetExact(
         blink::WebString::FromUTF8("-0.02 0 0 0.02 0 0"));
-    MediaStreamDevice::AudioDeviceParameters input_params;
-    input_params.mic_positions.push_back(media::Point(0, 0, 0));
-    input_params.mic_positions.push_back(media::Point(0, 0.05f, 0));
+
+    std::vector<media::Point> mic_positions;
+    mic_positions.push_back(media::Point(0, 0, 0));
+    mic_positions.push_back(media::Point(0, 0.05f, 0));
+
+    media::AudioParameters input_params;
+    input_params.set_mic_positions(mic_positions);
 
     // Constraints geometry is preferred.
     const auto& actual_geometry = GetArrayGeometryPreferringConstraints(
@@ -484,6 +492,40 @@ TEST_F(MediaStreamAudioProcessorTest, GetAecDumpMessageFilter) {
   // Stop |audio_processor| so that it removes itself from
   // |webrtc_audio_device| and clears its pointer to it.
   audio_processor->Stop();
+}
+
+TEST_F(MediaStreamAudioProcessorTest, StartStopAecDump) {
+  scoped_refptr<WebRtcAudioDeviceImpl> webrtc_audio_device(
+      new WebRtcAudioDeviceImpl());
+  AudioProcessingProperties properties;
+
+  base::ScopedTempDir temp_directory;
+  ASSERT_TRUE(temp_directory.CreateUniqueTempDir());
+  base::FilePath temp_file_path;
+  ASSERT_TRUE(base::CreateTemporaryFileInDir(temp_directory.GetPath(),
+                                             &temp_file_path));
+  {
+    scoped_refptr<MediaStreamAudioProcessor> audio_processor(
+        new rtc::RefCountedObject<MediaStreamAudioProcessor>(
+            properties, webrtc_audio_device.get()));
+
+    // Start and stop recording.
+    audio_processor->OnAecDumpFile(IPC::TakePlatformFileForTransit(base::File(
+        temp_file_path, base::File::FLAG_WRITE | base::File::FLAG_OPEN)));
+    audio_processor->OnDisableAecDump();
+
+    // Start and wait for d-tor.
+    audio_processor->OnAecDumpFile(IPC::TakePlatformFileForTransit(base::File(
+        temp_file_path, base::File::FLAG_WRITE | base::File::FLAG_OPEN)));
+  }
+
+  // Check that dump file is non-empty after audio processor has been
+  // destroyed. Note that this test fails when compiling WebRTC
+  // without protobuf support, rtc_enable_protobuf=false.
+  std::string output;
+  ASSERT_TRUE(base::ReadFileToString(temp_file_path, &output));
+  ASSERT_FALSE(output.empty());
+  // The tempory file is deleted when temp_directory exists scope.
 }
 
 TEST_F(MediaStreamAudioProcessorTest, TestStereoAudio) {

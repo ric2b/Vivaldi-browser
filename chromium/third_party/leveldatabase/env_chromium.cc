@@ -25,12 +25,15 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/sys_info.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/memory_dump_provider.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "third_party/leveldatabase/chromium_logger.h"
+#include "third_party/leveldatabase/src/include/leveldb/cache.h"
 #include "third_party/leveldatabase/src/include/leveldb/options.h"
 #include "third_party/re2/src/re2/re2.h"
 
@@ -93,17 +96,16 @@ static base::File::Error GetDirectoryEntries(const FilePath& dir_param,
   DIR* dir = opendir(dir_string.c_str());
   if (!dir)
     return base::File::OSErrorToFileError(errno);
-  struct dirent dent_buf;
   struct dirent* dent;
-  int readdir_result;
-  while ((readdir_result = readdir_r(dir, &dent_buf, &dent)) == 0 && dent) {
+  errno = 0;
+  while ((dent = readdir(dir))) {
     if (strcmp(dent->d_name, ".") == 0 || strcmp(dent->d_name, "..") == 0)
       continue;
     result->push_back(FilePath::FromUTF8Unsafe(dent->d_name));
   }
   int saved_errno = errno;
   closedir(dir);
-  if (readdir_result != 0)
+  if (saved_errno != 0)
     return base::File::OSErrorToFileError(saved_errno);
   return base::File::FILE_OK;
 #endif
@@ -362,7 +364,55 @@ Status ChromiumWritableFile::Sync() {
 
 base::LazyInstance<ChromiumEnv>::Leaky default_env = LAZY_INSTANCE_INITIALIZER;
 
+size_t DefaultBlockCacheSize() {
+  if (base::SysInfo::IsLowEndDevice())
+    return 1 << 20;  // 1MB
+  else
+    return 8 << 20;  // 8MB
+}
+
+leveldb::Cache* GetDefaultBlockCache() {
+  static leveldb::Cache* cache = leveldb::NewLRUCache(DefaultBlockCacheSize());
+  return cache;
+}
+
 }  // unnamed namespace
+
+// Returns a separate (from the default) block cache for use by web APIs.
+// This must be used when opening the databases accessible to Web-exposed APIs,
+// so rogue pages can't mount a denial of service attack by hammering the block
+// cache. Without separate caches, such an attack might slow down Chrome's UI to
+// the point where the user can't close the offending page's tabs.
+leveldb::Cache* SharedWebBlockCache() {
+  if (base::SysInfo::IsLowEndDevice())
+    return GetDefaultBlockCache();
+
+  const int block_cache_size = 8 << 20;  // 8MB
+  static leveldb::Cache* cache = leveldb::NewLRUCache(block_cache_size);
+  return cache;
+}
+
+Options::Options() {
+// Note: Ensure that these default values correspond to those in
+// components/leveldb/public/interfaces/leveldb.mojom.
+// TODO(cmumford) Create struct-trait for leveldb.mojom.OpenOptions to force
+// users to pass in a leveldb_env::Options instance (and it's defaults).
+//
+// Currently log reuse is an experimental feature in leveldb. More info at:
+// https://github.com/google/leveldb/commit/251ebf5dc70129ad3
+#if defined(OS_CHROMEOS)
+  // Reusing logs on Chrome OS resulted in an unacceptably high leveldb
+  // corruption rate (at least for Indexed DB). More info at
+  // https://crbug.com/460568
+  reuse_logs = false;
+#else
+  reuse_logs = true;
+#endif
+  // By default use a single shared block cache to conserve memory. The owner of
+  // this object can create their own, or set to NULL to have leveldb create a
+  // new db-specific block cache.
+  block_cache = GetDefaultBlockCache();
+}
 
 const char* MethodIDToString(MethodID method) {
   switch (method) {
@@ -551,7 +601,7 @@ bool IndicatesDiskFull(const leveldb::Status& status) {
 // There is no way to know the size of A, so minimizing the size of B will
 // maximize the likelihood of a successful compaction.
 size_t WriteBufferSize(int64_t disk_size) {
-  const leveldb::Options default_options;
+  const leveldb_env::Options default_options;
   const int64_t kMinBufferSize = 1024 * 1024;
   const int64_t kMaxBufferSize = default_options.write_buffer_size;
   const int64_t kDiskMinBuffSize = 10 * 1024 * 1024;
@@ -786,6 +836,7 @@ Status ChromiumEnv::LockFile(const std::string& fname, FileLock** lock) {
     return result;
   }
 
+#if !defined(OS_FUCHSIA)
   Retrier lock_retrier(kLockFile, this);
   do {
     error_code = file.Lock();
@@ -799,6 +850,7 @@ Status ChromiumEnv::LockFile(const std::string& fname, FileLock** lock) {
     RecordOSError(kLockFile, error_code);
     return result;
   }
+#endif  // !defined(OS_FUCHSIA)
 
   *lock = new ChromiumFileLock(std::move(file), fname);
   return result;
@@ -807,14 +859,17 @@ Status ChromiumEnv::LockFile(const std::string& fname, FileLock** lock) {
 Status ChromiumEnv::UnlockFile(FileLock* lock) {
   std::unique_ptr<ChromiumFileLock> my_lock(
       reinterpret_cast<ChromiumFileLock*>(lock));
-  Status result;
+  Status result = Status::OK();
 
+#if !defined(OS_FUCHSIA)
   base::File::Error error_code = my_lock->file_.Unlock();
   if (error_code != base::File::FILE_OK) {
     result =
         MakeIOError(my_lock->name_, "Could not unlock lock file.", kUnlockFile);
     RecordOSError(kUnlockFile, error_code);
   }
+#endif  // !defined(OS_FUCHSIA)
+
   bool removed = locks_.Remove(my_lock->name_);
   DCHECK(removed);
   return result;
@@ -1290,7 +1345,7 @@ void DBTracker::DatabaseDestroyed(TrackedDBImpl* database) {
   database->RemoveFromList();
 }
 
-leveldb::Status OpenDB(const leveldb::Options& options,
+leveldb::Status OpenDB(const leveldb_env::Options& options,
                        const std::string& name,
                        std::unique_ptr<leveldb::DB>* dbptr) {
   DBTracker::TrackedDB* tracked_db = nullptr;

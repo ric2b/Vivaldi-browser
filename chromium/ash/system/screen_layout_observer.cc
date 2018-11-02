@@ -12,10 +12,10 @@
 #include "ash/metrics/user_metrics_action.h"
 #include "ash/metrics/user_metrics_recorder.h"
 #include "ash/resources/grit/ash_resources.h"
+#include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
-#include "ash/system/devicetype_utils.h"
 #include "ash/system/system_notifier.h"
 #include "ash/system/tray/system_tray_controller.h"
 #include "ash/system/tray/tray_constants.h"
@@ -25,6 +25,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/chromeos/devicetype_utils.h"
 #include "ui/display/display.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/types/display_constants.h"
@@ -334,16 +335,21 @@ void ScreenLayoutObserver::CreateOrUpdateNotification(
   }
 
   ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
-  std::unique_ptr<Notification> notification(new Notification(
-      message_center::NOTIFICATION_TYPE_SIMPLE, kNotificationId, message,
-      additional_message, bundle.GetImageNamed(IDR_AURA_NOTIFICATION_DISPLAY),
-      base::string16(),  // display_source
-      GURL(),
-      message_center::NotifierId(message_center::NotifierId::SYSTEM_COMPONENT,
-                                 system_notifier::kNotifierDisplay),
-      message_center::RichNotificationData(),
-      new message_center::HandleNotificationClickedDelegate(
-          base::Bind(&OpenSettingsFromNotification))));
+  std::unique_ptr<Notification> notification =
+      system_notifier::CreateSystemNotification(
+          message_center::NOTIFICATION_TYPE_SIMPLE, kNotificationId, message,
+          additional_message,
+          bundle.GetImageNamed(IDR_AURA_NOTIFICATION_DISPLAY),
+          base::string16(),  // display_source
+          GURL(),
+          message_center::NotifierId(
+              message_center::NotifierId::SYSTEM_COMPONENT,
+              system_notifier::kNotifierDisplay),
+          message_center::RichNotificationData(),
+          new message_center::HandleNotificationClickedDelegate(
+              base::Bind(&OpenSettingsFromNotification)),
+          kNotificationScreenIcon,
+          message_center::SystemNotificationWarningLevel::NORMAL);
 
   Shell::Get()->metrics()->RecordUserMetricsAction(
       UMA_STATUS_AREA_DISPLAY_NOTIFICATION_CREATED);

@@ -208,7 +208,7 @@ class MojoAsyncResourceHandlerWithStubOperations
   MojoAsyncResourceHandlerWithStubOperations(
       net::URLRequest* request,
       ResourceDispatcherHostImpl* rdh,
-      mojom::URLLoaderAssociatedRequest mojo_request,
+      mojom::URLLoaderRequest mojo_request,
       mojom::URLLoaderClientPtr url_loader_client)
       : MojoAsyncResourceHandler(request,
                                  rdh,
@@ -291,7 +291,7 @@ class TestURLLoaderFactory final : public mojom::URLLoaderFactory {
   TestURLLoaderFactory() {}
   ~TestURLLoaderFactory() override {}
 
-  void CreateLoaderAndStart(mojom::URLLoaderAssociatedRequest request,
+  void CreateLoaderAndStart(mojom::URLLoaderRequest request,
                             int32_t routing_id,
                             int32_t request_id,
                             uint32_t options,
@@ -303,21 +303,16 @@ class TestURLLoaderFactory final : public mojom::URLLoaderFactory {
     client_ptr_ = std::move(client_ptr);
   }
 
-  mojom::URLLoaderAssociatedRequest PassLoaderRequest() {
+  mojom::URLLoaderRequest PassLoaderRequest() {
     return std::move(loader_request_);
   }
 
   mojom::URLLoaderClientPtr PassClientPtr() { return std::move(client_ptr_); }
 
-  void SyncLoad(int32_t routing_id,
-                int32_t request_id,
-                const ResourceRequest& url_request,
-                SyncLoadCallback callback) override {
-    NOTREACHED();
-  }
+  void Clone(mojom::URLLoaderFactoryRequest request) override { NOTREACHED(); }
 
  private:
-  mojom::URLLoaderAssociatedRequest loader_request_;
+  mojom::URLLoaderRequest loader_request_;
   mojom::URLLoaderClientPtr client_ptr_;
 
   DISALLOW_COPY_AND_ASSIGN(TestURLLoaderFactory);
@@ -422,7 +417,7 @@ class MojoAsyncResourceHandlerTestBase {
   TestResourceDispatcherHostDelegate rdh_delegate_;
   ResourceDispatcherHostImpl rdh_;
   mojom::URLLoaderFactoryPtr url_loader_factory_;
-  mojom::URLLoaderAssociatedPtr url_loader_proxy_;
+  mojom::URLLoaderPtr url_loader_proxy_;
   TestURLLoaderClient url_loader_client_;
   std::unique_ptr<TestBrowserContext> browser_context_;
   net::TestDelegate url_request_delegate_;
@@ -549,9 +544,8 @@ TEST_F(MojoAsyncResourceHandlerTest, OnWillReadAndOnReadCompleted) {
   while (contents.size() < 2) {
     char buffer[16];
     uint32_t read_size = sizeof(buffer);
-    MojoResult result =
-        mojo::ReadDataRaw(url_loader_client_.response_body(), buffer,
-                          &read_size, MOJO_READ_DATA_FLAG_NONE);
+    MojoResult result = url_loader_client_.response_body().ReadData(
+        buffer, &read_size, MOJO_READ_DATA_FLAG_NONE);
     if (result == MOJO_RESULT_SHOULD_WAIT) {
       base::RunLoop().RunUntilIdle();
       continue;
@@ -584,9 +578,8 @@ TEST_F(MojoAsyncResourceHandlerTest,
     base::RunLoop().RunUntilIdle();
     char buffer[16];
     uint32_t read_size = sizeof(buffer);
-    MojoResult result =
-        mojo::ReadDataRaw(url_loader_client_.response_body(), buffer,
-                          &read_size, MOJO_READ_DATA_FLAG_NONE);
+    MojoResult result = url_loader_client_.response_body().ReadData(
+        buffer, &read_size, MOJO_READ_DATA_FLAG_NONE);
     if (result == MOJO_RESULT_SHOULD_WAIT)
       continue;
     ASSERT_EQ(MOJO_RESULT_OK, result);
@@ -615,8 +608,6 @@ TEST_F(MojoAsyncResourceHandlerTest,
 TEST_F(MojoAsyncResourceHandlerTest, OnResponseCompleted) {
   ASSERT_TRUE(CallOnWillStartAndOnResponseStarted());
 
-  ResourceRequestInfoImpl::ForRequest(request_.get())
-      ->set_was_ignored_by_handler(false);
   net::URLRequestStatus status(net::URLRequestStatus::SUCCESS, net::OK);
 
   base::TimeTicks now1 = base::TimeTicks::Now();
@@ -627,7 +618,6 @@ TEST_F(MojoAsyncResourceHandlerTest, OnResponseCompleted) {
   url_loader_client_.RunUntilComplete();
   EXPECT_TRUE(url_loader_client_.has_received_completion());
   EXPECT_EQ(net::OK, url_loader_client_.completion_status().error_code);
-  EXPECT_FALSE(url_loader_client_.completion_status().was_ignored_by_handler);
   EXPECT_LE(now1, url_loader_client_.completion_status().completion_time);
   EXPECT_LE(url_loader_client_.completion_status().completion_time, now2);
   EXPECT_EQ(request_->GetTotalReceivedBytes(),
@@ -647,8 +637,6 @@ TEST_F(MojoAsyncResourceHandlerTest, OnResponseCompleted2) {
   ASSERT_FALSE(url_loader_client_.has_received_response());
   url_loader_client_.RunUntilResponseReceived();
 
-  ResourceRequestInfoImpl::ForRequest(request_.get())
-      ->set_was_ignored_by_handler(true);
   net::URLRequestStatus status(net::URLRequestStatus::CANCELED,
                                net::ERR_ABORTED);
 
@@ -661,7 +649,6 @@ TEST_F(MojoAsyncResourceHandlerTest, OnResponseCompleted2) {
   EXPECT_TRUE(url_loader_client_.has_received_completion());
   EXPECT_EQ(net::ERR_ABORTED,
             url_loader_client_.completion_status().error_code);
-  EXPECT_TRUE(url_loader_client_.completion_status().was_ignored_by_handler);
   EXPECT_LE(now1, url_loader_client_.completion_status().completion_time);
   EXPECT_LE(url_loader_client_.completion_status().completion_time, now2);
   EXPECT_EQ(request_->GetTotalReceivedBytes(),
@@ -716,9 +703,8 @@ TEST_F(MojoAsyncResourceHandlerTest, ResponseCompletionShouldCloseDataPipe) {
   while (true) {
     char buffer[16];
     uint32_t read_size = sizeof(buffer);
-    MojoResult result =
-        mojo::ReadDataRaw(url_loader_client_.response_body(), buffer,
-                          &read_size, MOJO_READ_DATA_FLAG_NONE);
+    MojoResult result = url_loader_client_.response_body().ReadData(
+        buffer, &read_size, MOJO_READ_DATA_FLAG_NONE);
     if (result == MOJO_RESULT_FAILED_PRECONDITION)
       break;
     ASSERT_TRUE(result == MOJO_RESULT_SHOULD_WAIT || result == MOJO_RESULT_OK);
@@ -750,9 +736,8 @@ TEST_F(MojoAsyncResourceHandlerTest, OutOfBandCancelDuringBodyTransmission) {
   while (true) {
     char buf[16];
     uint32_t read_size = sizeof(buf);
-    MojoResult result =
-        mojo::ReadDataRaw(url_loader_client_.response_body(), buf, &read_size,
-                          MOJO_READ_DATA_FLAG_NONE);
+    MojoResult result = url_loader_client_.response_body().ReadData(
+        buf, &read_size, MOJO_READ_DATA_FLAG_NONE);
     if (result == MOJO_RESULT_FAILED_PRECONDITION)
       break;
     if (result == MOJO_RESULT_SHOULD_WAIT) {
@@ -799,9 +784,8 @@ TEST_F(MojoAsyncResourceHandlerTest, BeginWriteReturnsShouldWaitOnWillRead) {
     while (true) {
       char buffer[16];
       uint32_t read_size = sizeof(buffer);
-      MojoResult result =
-          mojo::ReadDataRaw(url_loader_client_.response_body(), buffer,
-                            &read_size, MOJO_READ_DATA_FLAG_NONE);
+      MojoResult result = url_loader_client_.response_body().ReadData(
+          buffer, &read_size, MOJO_READ_DATA_FLAG_NONE);
       if (result != MOJO_RESULT_SHOULD_WAIT) {
         ASSERT_EQ(MOJO_RESULT_OK, result);
         ASSERT_EQ(1u, read_size);
@@ -863,9 +847,8 @@ TEST_F(MojoAsyncResourceHandlerTest,
     while (true) {
       char buffer[16];
       uint32_t read_size = sizeof(buffer);
-      MojoResult result =
-          mojo::ReadDataRaw(url_loader_client_.response_body(), buffer,
-                            &read_size, MOJO_READ_DATA_FLAG_NONE);
+      MojoResult result = url_loader_client_.response_body().ReadData(
+          buffer, &read_size, MOJO_READ_DATA_FLAG_NONE);
       if (result != MOJO_RESULT_SHOULD_WAIT) {
         ASSERT_EQ(MOJO_RESULT_OK, result);
         ASSERT_EQ(1u, read_size);
@@ -943,9 +926,8 @@ TEST_F(MojoAsyncResourceHandlerTest,
   while (true) {
     char buf[16];
     uint32_t read_size = sizeof(buf);
-    MojoResult result =
-        mojo::ReadDataRaw(url_loader_client_.response_body(), buf, &read_size,
-                          MOJO_READ_DATA_FLAG_NONE);
+    MojoResult result = url_loader_client_.response_body().ReadData(
+        buf, &read_size, MOJO_READ_DATA_FLAG_NONE);
     if (result == MOJO_RESULT_SHOULD_WAIT)
       break;
     ASSERT_EQ(MOJO_RESULT_OK, result);
@@ -1057,9 +1039,8 @@ TEST_P(MojoAsyncResourceHandlerWithAllocationSizeTest,
 
     char buf[16];
     uint32_t read_size = sizeof(buf);
-    MojoResult result =
-        mojo::ReadDataRaw(url_loader_client_.response_body(), buf, &read_size,
-                          MOJO_READ_DATA_FLAG_NONE);
+    MojoResult result = url_loader_client_.response_body().ReadData(
+        buf, &read_size, MOJO_READ_DATA_FLAG_NONE);
     if (result != MOJO_RESULT_SHOULD_WAIT) {
       ASSERT_EQ(MOJO_RESULT_OK, result);
       actual.append(buf, read_size);
@@ -1133,9 +1114,8 @@ TEST_P(MojoAsyncResourceHandlerWithAllocationSizeTest,
   while (mock_loader_->status() != MockResourceLoader::Status::CANCELED) {
     char buf[256];
     uint32_t read_size = sizeof(buf);
-    MojoResult result =
-        mojo::ReadDataRaw(url_loader_client_.response_body(), buf, &read_size,
-                          MOJO_READ_DATA_FLAG_NONE);
+    MojoResult result = url_loader_client_.response_body().ReadData(
+        buf, &read_size, MOJO_READ_DATA_FLAG_NONE);
     ASSERT_TRUE(result == MOJO_RESULT_OK || result == MOJO_RESULT_SHOULD_WAIT);
     base::RunLoop().RunUntilIdle();
   }
@@ -1182,9 +1162,8 @@ TEST_P(MojoAsyncResourceHandlerWithAllocationSizeTest, CancelWhileWaiting) {
   while (true) {
     char buffer[16];
     uint32_t read_size = sizeof(buffer);
-    MojoResult result =
-        mojo::ReadDataRaw(url_loader_client_.response_body(), buffer,
-                          &read_size, MOJO_READ_DATA_FLAG_NONE);
+    MojoResult result = url_loader_client_.response_body().ReadData(
+        buffer, &read_size, MOJO_READ_DATA_FLAG_NONE);
     if (result == MOJO_RESULT_FAILED_PRECONDITION)
       break;
     base::RunLoop().RunUntilIdle();
@@ -1298,9 +1277,8 @@ TEST_P(
   while (true) {
     char buffer[16];
     uint32_t read_size = sizeof(buffer);
-    MojoResult result =
-        mojo::ReadDataRaw(url_loader_client_.response_body(), buffer,
-                          &read_size, MOJO_READ_DATA_FLAG_NONE);
+    MojoResult result = url_loader_client_.response_body().ReadData(
+        buffer, &read_size, MOJO_READ_DATA_FLAG_NONE);
     if (result == MOJO_RESULT_FAILED_PRECONDITION)
       break;
     if (result == MOJO_RESULT_SHOULD_WAIT) {
@@ -1349,9 +1327,8 @@ TEST_P(
   while (true) {
     char buffer[16];
     uint32_t read_size = sizeof(buffer);
-    MojoResult result =
-        mojo::ReadDataRaw(url_loader_client_.response_body(), buffer,
-                          &read_size, MOJO_READ_DATA_FLAG_NONE);
+    MojoResult result = url_loader_client_.response_body().ReadData(
+        buffer, &read_size, MOJO_READ_DATA_FLAG_NONE);
     if (result == MOJO_RESULT_FAILED_PRECONDITION)
       break;
     if (result == MOJO_RESULT_SHOULD_WAIT) {

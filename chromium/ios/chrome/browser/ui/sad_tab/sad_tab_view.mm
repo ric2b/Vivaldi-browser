@@ -11,8 +11,7 @@
 #include "components/ui_metrics/sadtab_metrics_types.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
 #import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
-#import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
-#import "ios/chrome/browser/ui/commands/ios_command_ids.h"
+#import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/open_url_command.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
@@ -136,6 +135,7 @@ NSString* const kMessageTextViewBulletRTLFormat = @"\u202E%@\u202C";
 @synthesize actionButton = _actionButton;
 @synthesize mode = _mode;
 @synthesize navigationManager = _navigationManager;
+@synthesize dispatcher = _dispatcher;
 
 - (instancetype)initWithMode:(SadTabViewMode)mode
            navigationManager:(web::NavigationManager*)navigationManager {
@@ -324,7 +324,7 @@ NSString* const kMessageTextViewBulletRTLFormat = @"\u202E%@\u202C";
              action:^(const GURL& URL) {
                OpenUrlCommand* command =
                    [[OpenUrlCommand alloc] initWithURLFromChrome:URL];
-               [weakSelf chromeExecuteCommand:command];
+               [weakSelf.dispatcher openURL:command];
              }];
 
   _footerLabelLinkController.linkFont =
@@ -413,7 +413,8 @@ NSString* const kMessageTextViewBulletRTLFormat = @"\u202E%@\u202C";
                              forState:UIControlStateNormal];
     [_actionButton setBackgroundColor:[[MDCPalette greyPalette] tint500]
                              forState:UIControlStateDisabled];
-    [_actionButton setCustomTitleColor:[UIColor whiteColor]];
+    [_actionButton setTitleColor:[UIColor whiteColor]
+                        forState:UIControlStateNormal];
     [_actionButton setUnderlyingColorHint:[UIColor blackColor]];
     [_actionButton setInkColor:[UIColor colorWithWhite:1 alpha:0.2f]];
 
@@ -578,12 +579,11 @@ NSString* const kMessageTextViewBulletRTLFormat = @"\u202E%@\u202C";
       self.navigationManager->Reload(web::ReloadType::NORMAL, true);
       break;
     case SadTabViewMode::FEEDBACK: {
+      DCHECK(self.dispatcher);
       UMA_HISTOGRAM_ENUMERATION(ui_metrics::kSadTabFeedbackHistogramKey,
                                 ui_metrics::SadTabEvent::BUTTON_CLICKED,
                                 ui_metrics::SadTabEvent::MAX_SAD_TAB_EVENT);
-      GenericChromeCommand* command =
-          [[GenericChromeCommand alloc] initWithTag:IDC_REPORT_AN_ISSUE];
-      [self chromeExecuteCommand:command];
+      [self.dispatcher showReportAnIssue];
       break;
     }
   };

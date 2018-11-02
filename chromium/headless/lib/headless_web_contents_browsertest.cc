@@ -8,6 +8,8 @@
 
 #include "base/base64.h"
 #include "base/json/json_writer.h"
+#include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
 #include "content/public/browser/web_contents.h"
@@ -117,6 +119,8 @@ IN_PROC_BROWSER_TEST_F(HeadlessWebContentsTest, WindowOpen) {
   EXPECT_EQ(expected_bounds.size(),
             child->web_contents()->GetContainerBounds().size());
 #endif  // !defined(OS_MACOSX)
+
+  browser_context->RemoveObserver(&observer);
 }
 
 class HeadlessWindowOpenTabSocketTest : public HeadlessBrowserTest,
@@ -239,6 +243,8 @@ IN_PROC_BROWSER_TEST_F(HeadlessWindowOpenTabSocketTest,
 
   RunAsynchronousTest();
   EXPECT_EQ("Embedder sent us: One", message_);
+
+  browser_context->RemoveObserver(this);
 }
 
 class HeadlessNoDevToolsTabSocketTest : public HeadlessBrowserTest,
@@ -860,4 +866,51 @@ class HeadlessWebContentsRequestStorageQuotaTest
 
 HEADLESS_ASYNC_DEVTOOLED_TEST_F(HeadlessWebContentsRequestStorageQuotaTest);
 
+IN_PROC_BROWSER_TEST_F(HeadlessWebContentsTest, BrowserTabChangeContent) {
+  EXPECT_TRUE(embedded_test_server()->Start());
+
+  HeadlessBrowserContext* browser_context =
+      browser()->CreateBrowserContextBuilder().Build();
+
+  HeadlessWebContents* web_contents =
+      browser_context->CreateWebContentsBuilder().Build();
+  EXPECT_TRUE(WaitForLoad(web_contents));
+
+  std::string script = "window.location = '" +
+                       embedded_test_server()->GetURL("/hello.html").spec() +
+                       "';";
+  EXPECT_FALSE(EvaluateScript(web_contents, script)->HasExceptionDetails());
+
+  // This will time out if the previous script did not work.
+  EXPECT_TRUE(WaitForLoad(web_contents));
+}
+
+IN_PROC_BROWSER_TEST_F(HeadlessWebContentsTest, BrowserOpenInTab) {
+  EXPECT_TRUE(embedded_test_server()->Start());
+
+  HeadlessBrowserContext* browser_context =
+      browser()->CreateBrowserContextBuilder().Build();
+
+  MockHeadlessBrowserContextObserver observer;
+  browser_context->AddObserver(&observer);
+  EXPECT_CHILD_CONTENTS_CREATED(observer);
+
+  HeadlessWebContents* web_contents =
+      browser_context->CreateWebContentsBuilder()
+          .SetInitialURL(embedded_test_server()->GetURL("/link.html"))
+          .Build();
+  EXPECT_TRUE(WaitForLoad(web_contents));
+
+  EXPECT_EQ(1u, browser_context->GetAllWebContents().size());
+  // Simulates a middle-button click on a link to ensure that the
+  // link is opened in a new tab by the browser and not by the renderer.
+  std::string script =
+      "var event = new MouseEvent('click', {'button': 1});"
+      "document.getElementsByTagName('a')[0].dispatchEvent(event);";
+  EXPECT_FALSE(EvaluateScript(web_contents, script)->HasExceptionDetails());
+
+  // Check that we have a new tab.
+  EXPECT_EQ(2u, browser_context->GetAllWebContents().size());
+  browser_context->RemoveObserver(&observer);
+}
 }  // namespace headless

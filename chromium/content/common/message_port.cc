@@ -5,8 +5,11 @@
 #include "content/common/message_port.h"
 
 #include "base/bind.h"
+#include "base/containers/span.h"
 #include "base/logging.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "content/common/message_port.mojom.h"
+#include "content/common/message_port_message_struct_traits.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 
 namespace content {
@@ -43,67 +46,45 @@ std::vector<mojo::ScopedMessagePipeHandle> MessagePort::ReleaseHandles(
   return handles;
 }
 
-void MessagePort::PostMessage(const base::string16& encoded_message,
+void MessagePort::PostMessage(const uint8_t* encoded_message,
+                              size_t encoded_message_size,
                               std::vector<MessagePort> ports) {
   DCHECK(state_->handle().is_valid());
 
-  uint32_t num_bytes = encoded_message.size() * sizeof(base::char16);
-
-  // NOTE: It is OK to ignore the return value of mojo::WriteMessageRaw here.
+  // NOTE: It is OK to ignore the return value of mojo::WriteMessageNew here.
   // HTML MessagePorts have no way of reporting when the peer is gone.
 
-  if (ports.empty()) {
-    mojo::WriteMessageRaw(state_->handle().get(), encoded_message.data(),
-                          num_bytes, nullptr, 0, MOJO_WRITE_MESSAGE_FLAG_NONE);
-  } else {
-    uint32_t num_handles = static_cast<uint32_t>(ports.size());
-    std::unique_ptr<MojoHandle[]> handles(new MojoHandle[num_handles]);
-    for (uint32_t i = 0; i < num_handles; ++i)
-      handles[i] = ports[i].ReleaseHandle().release().value();
-    mojo::WriteMessageRaw(state_->handle().get(), encoded_message.data(),
-                          num_bytes, handles.get(), num_handles,
-                          MOJO_WRITE_MESSAGE_FLAG_NONE);
-  }
+  MessagePortMessage msg;
+  msg.encoded_message = base::make_span(encoded_message, encoded_message_size);
+  msg.ports.resize(ports.size());
+  for (size_t i = 0; i < ports.size(); ++i)
+    msg.ports[i] = ports[i].ReleaseHandle();
+  mojo::Message mojo_message =
+      mojom::MessagePortMessage::SerializeAsMessage(&msg);
+  mojo::WriteMessageNew(state_->handle().get(), mojo_message.TakeMojoMessage(),
+                        MOJO_WRITE_MESSAGE_FLAG_NONE);
 }
 
-bool MessagePort::GetMessage(base::string16* encoded_message,
+bool MessagePort::GetMessage(std::vector<uint8_t>* encoded_message,
                              std::vector<MessagePort>* ports) {
   DCHECK(state_->handle().is_valid());
-  mojo::ScopedMessageHandle message;
-  MojoResult rv = mojo::ReadMessageNew(state_->handle().get(), &message,
+  mojo::ScopedMessageHandle message_handle;
+  MojoResult rv = mojo::ReadMessageNew(state_->handle().get(), &message_handle,
                                        MOJO_READ_MESSAGE_FLAG_NONE);
   if (rv != MOJO_RESULT_OK)
     return false;
 
-  uint32_t num_bytes = 0;
-  uint32_t num_handles = 0;
-  void* buffer;
-  std::vector<mojo::ScopedHandle> handles;
-  rv = MojoGetSerializedMessageContents(
-      message->value(), &buffer, &num_bytes, nullptr, &num_handles,
-      MOJO_GET_SERIALIZED_MESSAGE_CONTENTS_FLAG_NONE);
-  if (rv == MOJO_RESULT_RESOURCE_EXHAUSTED) {
-    handles.resize(num_handles);
-    rv = MojoGetSerializedMessageContents(
-        message->value(), &buffer, &num_bytes,
-        reinterpret_cast<MojoHandle*>(handles.data()), &num_handles,
-        MOJO_GET_SERIALIZED_MESSAGE_CONTENTS_FLAG_NONE);
-  }
-  if (rv != MOJO_RESULT_OK)
+  mojo::Message message(std::move(message_handle));
+  MessagePortMessage msg;
+  bool success = mojom::MessagePortMessage::DeserializeFromMessage(
+      std::move(message), &msg);
+  if (!success)
     return false;
 
-  DCHECK_EQ(0u, num_bytes % sizeof(base::char16));
-  encoded_message->resize(num_bytes / sizeof(base::char16));
-  if (num_bytes)
-    memcpy(&encoded_message->at(0), buffer, num_bytes);
-
-  if (!handles.empty()) {
-    ports->resize(handles.size());
-    for (uint32_t i = 0; i < num_handles; ++i) {
-      ports->at(i) = MessagePort(
-          mojo::ScopedMessagePipeHandle::From(std::move(handles[i])));
-    }
-  }
+  *encoded_message = std::move(msg.owned_encoded_message);
+  ports->resize(msg.ports.size());
+  for (size_t i = 0; i < ports->size(); ++i)
+    ports->at(i) = MessagePort(std::move(msg.ports[i]));
 
   return true;
 }
@@ -189,7 +170,7 @@ void MessagePort::State::ArmWatcher() {
   if (ready_result == MOJO_RESULT_OK) {
     // The handle is already signaled, so we trigger a callback now.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&State::OnHandleReady, this, MOJO_RESULT_OK));
+        FROM_HERE, base::BindOnce(&State::OnHandleReady, this, MOJO_RESULT_OK));
     return;
   }
 

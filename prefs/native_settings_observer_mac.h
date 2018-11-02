@@ -4,19 +4,15 @@
 #define PREFS_NATIVE_SETTINGS_OBSERVER_MAC_H_
 
 #include "prefs/native_settings_observer.h"
-#include "prefs/native_settings_observer_delegate.h"
+
+class Profile;
 
 namespace vivaldi {
 
-// A class receiving the callback notification when a registered
-// native setting has changed.
 class NativeSettingsObserverMac : public NativeSettingsObserver {
  public:
-  explicit NativeSettingsObserverMac(NativeSettingsObserverDelegate* delegate);
+  explicit NativeSettingsObserverMac(Profile* profile);
   ~NativeSettingsObserverMac() override;
-
- private:
-  NativeSettingsObserverDelegate* delegate_;
 };
 
 }  // namespace vivaldi

@@ -7,15 +7,38 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/threading/thread_checker.h"
+#include "base/time/default_tick_clock.h"
+#include "base/time/tick_clock.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
+#include "build/buildflag.h"
+#include "media/media_features.h"
 #include "media/remoting/remoting_cdm.h"
 #include "media/remoting/remoting_cdm_context.h"
+
+#if defined(OS_ANDROID)
+#include "media/base/android/media_codec_util.h"
+#endif
 
 namespace media {
 namespace remoting {
 
+namespace {
+
+// The duration to delay the start of media remoting to ensure all preconditions
+// are held stable before switching to media remoting.
+constexpr base::TimeDelta kDelayedStart = base::TimeDelta::FromSeconds(5);
+
+// The maximum fraction of the transmission capacity that can safely be used by
+// Media Remoting to deliver the media contents.
+constexpr double kMaxMediaBitrateCapacityFraction = 0.9;
+
+}  // namespace
+
 RendererController::RendererController(scoped_refptr<SharedSession> session)
-    : session_(std::move(session)), weak_factory_(this) {
+    : session_(std::move(session)),
+      clock_(new base::DefaultTickClock()),
+      weak_factory_(this) {
   session_->AddClient(this);
 }
 
@@ -29,11 +52,10 @@ void RendererController::OnStarted(bool success) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (success) {
-    VLOG(1) << "Remoting started successively.";
     if (remote_rendering_started_) {
       metrics_recorder_.DidStartSession();
       DCHECK(client_);
-      client_->SwitchRenderer(true);
+      client_->SwitchToRemoteRenderer(session_->sink_name());
     } else {
       session_->StopRemoting(this);
     }
@@ -52,13 +74,10 @@ void RendererController::OnSessionStateChanged() {
 void RendererController::UpdateFromSessionState(StartTrigger start_trigger,
                                                 StopTrigger stop_trigger) {
   VLOG(1) << "UpdateFromSessionState: " << session_->state();
-  if (client_)
-    client_->ActivateViewportIntersectionMonitoring(IsRemoteSinkAvailable());
-
   UpdateAndMaybeSwitch(start_trigger, stop_trigger);
 }
 
-bool RendererController::IsRemoteSinkAvailable() {
+bool RendererController::IsRemoteSinkAvailable() const {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   switch (session_->state()) {
@@ -76,43 +95,11 @@ bool RendererController::IsRemoteSinkAvailable() {
   return false;  // To suppress compiler warning on Windows.
 }
 
-void RendererController::OnEnteredFullscreen() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-
-  is_fullscreen_ = true;
-  // See notes in OnBecameDominantVisibleContent() for why this is forced:
-  is_dominant_content_ = true;
-  UpdateAndMaybeSwitch(ENTERED_FULLSCREEN, UNKNOWN_STOP_TRIGGER);
-}
-
-void RendererController::OnExitedFullscreen() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-
-  is_fullscreen_ = false;
-  // See notes in OnBecameDominantVisibleContent() for why this is forced:
-  is_dominant_content_ = false;
-  UpdateAndMaybeSwitch(UNKNOWN_START_TRIGGER, EXITED_FULLSCREEN);
-}
-
 void RendererController::OnBecameDominantVisibleContent(bool is_dominant) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  // Two scenarios where "dominance" status mixes with fullscreen transitions:
-  //
-  //   1. Just before/after entering fullscreen, the element will, of course,
-  //      become the dominant on-screen content via automatic page layout.
-  //   2. Just before/after exiting fullscreen, the element may or may not
-  //      shrink in size enough to become non-dominant. However, exiting
-  //      fullscreen was caused by a user action that explicitly indicates a
-  //      desire to exit remoting, so even if the element is still dominant,
-  //      remoting should be shut down.
-  //
-  // Thus, to achieve the desired behaviors, |is_dominant_content_| is force-set
-  // in OnEnteredFullscreen() and OnExitedFullscreen(), and changes to it here
-  // are ignored while in fullscreen.
-  if (is_fullscreen_)
+  if (is_dominant_content_ == is_dominant)
     return;
-
   is_dominant_content_ = is_dominant;
   UpdateAndMaybeSwitch(BECAME_DOMINANT_CONTENT, BECAME_AUXILIARY_CONTENT);
 }
@@ -132,7 +119,6 @@ void RendererController::OnSetCdm(CdmContext* cdm_context) {
 }
 
 void RendererController::OnRemotePlaybackDisabled(bool disabled) {
-  VLOG(2) << __func__ << ": disabled = " << disabled;
   DCHECK(thread_checker_.CalledOnValidThread());
 
   is_remote_playback_disabled_ = disabled;
@@ -140,11 +126,13 @@ void RendererController::OnRemotePlaybackDisabled(bool disabled) {
   UpdateAndMaybeSwitch(ENABLED_BY_PAGE, DISABLED_BY_PAGE);
 }
 
+#if BUILDFLAG(ENABLE_MEDIA_REMOTING_RPC)
 base::WeakPtr<RpcBroker> RendererController::GetRpcBroker() const {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   return session_->rpc_broker()->GetWeakPtr();
 }
+#endif
 
 void RendererController::StartDataPipe(
     std::unique_ptr<mojo::DataPipe> audio_data_pipe,
@@ -188,17 +176,67 @@ void RendererController::OnMetadataChanged(const PipelineMetadata& metadata) {
                        ? UNSUPPORTED_AUDIO_AND_VIDEO_CODECS
                        : UNSUPPORTED_VIDEO_CODEC;
   }
+
+  UpdateRemotePlaybackAvailabilityMonitoringState();
+
   UpdateAndMaybeSwitch(start_trigger, stop_trigger);
 }
 
-bool RendererController::IsVideoCodecSupported() {
+void RendererController::OnDataSourceInitialized(
+    const GURL& url_after_redirects) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  if (url_after_redirects == url_after_redirects_)
+    return;
+
+  // TODO(avayvod): Does WMPI update MediaObserver when metadata becomes
+  // invalid or should we reset it here?
+  url_after_redirects_ = url_after_redirects;
+
+  UpdateRemotePlaybackAvailabilityMonitoringState();
+}
+
+void RendererController::UpdateRemotePlaybackAvailabilityMonitoringState() {
+  if (!client_)
+    return;
+
+// Currently RemotePlayback-initated media remoting only supports URL flinging
+// thus the source is supported when the URL is either http or https, video and
+// audio codecs are supported by the remote playback device; HLS is playable by
+// Chrome on Android (which is not detected by the pipeline metadata atm).
+#if defined(OS_ANDROID)
+  // TODO(tguilbert): Detect the presence of HLS based on demuxing results,
+  // rather than the URL string. See crbug.com/663503.
+  bool is_hls = MediaCodecUtil::IsHLSURL(url_after_redirects_);
+#else
+  bool is_hls = false;
+#endif
+  // TODO(avayvod): add a check for CORS.
+  bool is_source_supported = url_after_redirects_.has_scheme() &&
+                             (url_after_redirects_.SchemeIs("http") ||
+                              url_after_redirects_.SchemeIs("https")) &&
+                             (is_hls || IsAudioOrVideoSupported());
+
+  client_->UpdateRemotePlaybackCompatibility(is_source_supported);
+}
+
+bool RendererController::IsVideoCodecSupported() const {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(has_video());
 
   switch (pipeline_metadata_.video_decoder_config.codec()) {
     case VideoCodec::kCodecH264:
+      return session_->HasVideoCapability(
+          mojom::RemotingSinkVideoCapability::CODEC_H264);
     case VideoCodec::kCodecVP8:
-      return true;
+      return session_->HasVideoCapability(
+          mojom::RemotingSinkVideoCapability::CODEC_VP8);
+    case VideoCodec::kCodecVP9:
+      return session_->HasVideoCapability(
+          mojom::RemotingSinkVideoCapability::CODEC_VP9);
+    case VideoCodec::kCodecHEVC:
+      return session_->HasVideoCapability(
+          mojom::RemotingSinkVideoCapability::CODEC_HEVC);
     default:
       VLOG(2) << "Remoting does not support video codec: "
               << pipeline_metadata_.video_decoder_config.codec();
@@ -206,12 +244,17 @@ bool RendererController::IsVideoCodecSupported() {
   }
 }
 
-bool RendererController::IsAudioCodecSupported() {
+bool RendererController::IsAudioCodecSupported() const {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(has_audio());
 
   switch (pipeline_metadata_.audio_decoder_config.codec()) {
     case AudioCodec::kCodecAAC:
+      return session_->HasAudioCapability(
+          mojom::RemotingSinkAudioCapability::CODEC_AAC);
+    case AudioCodec::kCodecOpus:
+      return session_->HasAudioCapability(
+          mojom::RemotingSinkAudioCapability::CODEC_OPUS);
     case AudioCodec::kCodecMP3:
     case AudioCodec::kCodecPCM:
     case AudioCodec::kCodecVorbis:
@@ -222,12 +265,12 @@ bool RendererController::IsAudioCodecSupported() {
     case AudioCodec::kCodecGSM_MS:
     case AudioCodec::kCodecPCM_S16BE:
     case AudioCodec::kCodecPCM_S24BE:
-    case AudioCodec::kCodecOpus:
     case AudioCodec::kCodecEAC3:
     case AudioCodec::kCodecPCM_ALAW:
     case AudioCodec::kCodecALAC:
     case AudioCodec::kCodecAC3:
-      return true;
+      return session_->HasAudioCapability(
+          mojom::RemotingSinkAudioCapability::CODEC_BASELINE_SET);
     default:
       VLOG(2) << "Remoting does not support audio codec: "
               << pipeline_metadata_.audio_decoder_config.codec();
@@ -246,9 +289,11 @@ void RendererController::OnPaused() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   is_paused_ = true;
+  // Cancel the start if in the middle of delayed start.
+  CancelDelayedStart();
 }
 
-bool RendererController::ShouldBeRemoting() {
+bool RendererController::CanBeRemoting() const {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (!client_) {
@@ -286,41 +331,50 @@ bool RendererController::ShouldBeRemoting() {
       return false;  // Use local rendering after stopping remoting.
   }
 
-  switch (session_->sink_capabilities()) {
-    case mojom::RemotingSinkCapabilities::NONE:
-      return false;
-    case mojom::RemotingSinkCapabilities::RENDERING_ONLY:
-    case mojom::RemotingSinkCapabilities::CONTENT_DECRYPTION_AND_RENDERING:
-      break;  // The sink is capable of remote rendering.
-    default:
-      // TODO(xjz): Will be changed in a coming CL that passes the receiver's
-      // capabilities.
-      NOTREACHED();
-  }
+  if (!IsAudioOrVideoSupported())
+    return false;
 
+  if (is_remote_playback_disabled_)
+    return false;
+
+  return true;
+}
+
+bool RendererController::IsAudioOrVideoSupported() const {
   if ((!has_audio() && !has_video()) ||
       (has_video() && !IsVideoCodecSupported()) ||
       (has_audio() && !IsAudioCodecSupported())) {
     return false;
   }
 
-  if (is_remote_playback_disabled_)
-    return false;
-
-  // Normally, entering fullscreen or being the dominant visible content is the
-  // signal that starts remote rendering. However, current technical limitations
-  // require encrypted content be remoted without waiting for a user signal.
-  return is_fullscreen_ || is_dominant_content_;
+  return true;
 }
 
 void RendererController::UpdateAndMaybeSwitch(StartTrigger start_trigger,
                                               StopTrigger stop_trigger) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  bool should_be_remoting = ShouldBeRemoting();
+  bool should_be_remoting = CanBeRemoting();
+  if (!is_encrypted_ && client_)
+    client_->ActivateViewportIntersectionMonitoring(should_be_remoting);
 
-  if (remote_rendering_started_ == should_be_remoting)
+  // Normally, being the dominant visible content is the signal that starts
+  // remote rendering. However, current technical limitations require encrypted
+  // content be remoted without waiting for a user signal.
+  if (!is_encrypted_)
+    should_be_remoting &= is_dominant_content_;
+
+  if ((remote_rendering_started_ ||
+       delayed_start_stability_timer_.IsRunning()) == should_be_remoting)
     return;
+
+  DCHECK(client_);
+
+  if (is_encrypted_) {
+    DCHECK(should_be_remoting);
+    StartRemoting(start_trigger);
+    return;
+  }
 
   // Only switch to remoting when media is playing. Since the renderer is
   // created when video starts loading/playing, receiver will display a black
@@ -330,21 +384,13 @@ void RendererController::UpdateAndMaybeSwitch(StartTrigger start_trigger,
   if (should_be_remoting && is_paused_)
     return;
 
-  // Switch between local renderer and remoting renderer.
-  remote_rendering_started_ = should_be_remoting;
-
-  DCHECK(client_);
-  if (remote_rendering_started_) {
-    if (session_->state() == SharedSession::SESSION_PERMANENTLY_STOPPED) {
-      client_->SwitchRenderer(true);
-      return;
-    }
-    DCHECK_NE(start_trigger, UNKNOWN_START_TRIGGER);
-    metrics_recorder_.WillStartSession(start_trigger);
-    // |MediaObserverClient::SwitchRenderer()| will be called after remoting is
-    // started successfully.
-    session_->StartRemoting(this);
+  if (should_be_remoting) {
+    WaitForStabilityBeforeStart(start_trigger);
+  } else if (delayed_start_stability_timer_.IsRunning()) {
+    DCHECK(!remote_rendering_started_);
+    CancelDelayedStart();
   } else {
+    remote_rendering_started_ = false;
     // For encrypted content, it's only valid to switch to remoting renderer,
     // and never back to the local renderer. The RemotingCdmController will
     // force-stop the session when remoting has ended; so no need to call
@@ -352,13 +398,83 @@ void RendererController::UpdateAndMaybeSwitch(StartTrigger start_trigger,
     DCHECK(!is_encrypted_);
     DCHECK_NE(stop_trigger, UNKNOWN_STOP_TRIGGER);
     metrics_recorder_.WillStopSession(stop_trigger);
-    client_->SwitchRenderer(false);
+    client_->SwitchToLocalRenderer();
+    VLOG(2) << "Request to stop remoting: stop_trigger=" << stop_trigger;
     session_->StopRemoting(this);
   }
 }
 
+void RendererController::WaitForStabilityBeforeStart(
+    StartTrigger start_trigger) {
+  DCHECK(!delayed_start_stability_timer_.IsRunning());
+  DCHECK(!remote_rendering_started_);
+  DCHECK(!is_encrypted_);
+  delayed_start_stability_timer_.Start(
+      FROM_HERE, kDelayedStart,
+      base::Bind(
+          &RendererController::OnDelayedStartTimerFired, base::Unretained(this),
+          start_trigger,
+          client_->AudioDecodedByteCount() + client_->VideoDecodedByteCount(),
+          clock_->NowTicks()));
+
+  session_->EstimateTransmissionCapacity(
+      base::BindOnce(&RendererController::OnReceivedTransmissionCapacity,
+                     weak_factory_.GetWeakPtr()));
+}
+
+void RendererController::CancelDelayedStart() {
+  delayed_start_stability_timer_.Stop();
+  transmission_capacity_ = 0;
+}
+
+void RendererController::OnDelayedStartTimerFired(
+    StartTrigger start_trigger,
+    size_t decoded_bytes_before_delay,
+    base::TimeTicks delayed_start_time) {
+  DCHECK(is_dominant_content_);
+  DCHECK(!remote_rendering_started_);
+  DCHECK(!is_encrypted_);
+
+  base::TimeDelta elapsed = clock_->NowTicks() - delayed_start_time;
+  DCHECK(!elapsed.is_zero());
+  double kilobits_per_second =
+      (client_->AudioDecodedByteCount() + client_->VideoDecodedByteCount() -
+       decoded_bytes_before_delay) *
+      8.0 / elapsed.InSecondsF() / 1000.0;
+  DCHECK_GE(kilobits_per_second, 0);
+  const double capacity_kbps = transmission_capacity_ * 8.0 / 1000.0;
+  metrics_recorder_.RecordMediaBitrateVersusCapacity(kilobits_per_second,
+                                                     capacity_kbps);
+  if (kilobits_per_second <= kMaxMediaBitrateCapacityFraction * capacity_kbps) {
+    StartRemoting(start_trigger);
+  } else {
+    VLOG(1) << "Media remoting is not supported: bitrate(kbps)="
+            << kilobits_per_second
+            << " transmission_capacity(kbps)=" << capacity_kbps;
+    encountered_renderer_fatal_error_ = true;
+  }
+}
+
+void RendererController::StartRemoting(StartTrigger start_trigger) {
+  DCHECK(client_);
+  remote_rendering_started_ = true;
+  if (session_->state() == SharedSession::SESSION_PERMANENTLY_STOPPED) {
+    client_->SwitchToRemoteRenderer(session_->sink_name());
+    return;
+  }
+  DCHECK_NE(start_trigger, UNKNOWN_START_TRIGGER);
+  metrics_recorder_.WillStartSession(start_trigger);
+  // |MediaObserverClient::SwitchToRemoteRenderer()| will be called after
+  // remoting is started successfully.
+  session_->StartRemoting(this);
+}
+
+void RendererController::OnReceivedTransmissionCapacity(double rate) {
+  DCHECK_GE(rate, 0);
+  transmission_capacity_ = rate;
+}
+
 void RendererController::OnRendererFatalError(StopTrigger stop_trigger) {
-  VLOG(2) << __func__ << ": stop_trigger= " << stop_trigger;
   DCHECK(thread_checker_.CalledOnValidThread());
 
   // Do not act on errors caused by things like Mojo pipes being closed during
@@ -376,7 +492,8 @@ void RendererController::SetClient(MediaObserverClient* client) {
   DCHECK(!client_);
 
   client_ = client;
-  client_->ActivateViewportIntersectionMonitoring(IsRemoteSinkAvailable());
+  if (!is_encrypted_)
+    client_->ActivateViewportIntersectionMonitoring(CanBeRemoting());
 }
 
 }  // namespace remoting

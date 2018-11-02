@@ -17,7 +17,6 @@
 <translation id="1434626383986940139">Aplicații Chrome Canary</translation>
 <translation id="1457721931618994305">Se actualizează Google Chrome...</translation>
 <translation id="1469002951682717133">Lansatorul de aplicații Chrome</translation>
-<translation id="1480489203462860648">Încercați-l, este deja instalat</translation>
 <translation id="1553358976309200471">Actualizează Chrome</translation>
 <translation id="1587223624401073077">Google Chrome utilizează camera foto.</translation>
 <translation id="1587325591171447154"><ph name="FILE_NAME" /> este periculos, așadar Chrome l-a blocat.</translation>
@@ -94,6 +93,7 @@ Verifică e-mailul la <ph name="ACCOUNT_EMAIL" /> pentru instrucțiuni supliment
 <translation id="345171907106878721">Adăugați-vă la Chrome</translation>
 <translation id="3612333635265770873">Un modul cu același nume este cunoscut ca având conflicte cu Google Chrome.</translation>
 <translation id="3622797965165704966">Acum este mai ușor să folosiți Chrome cu Contul Google și pe computerele utilizate în comun.</translation>
+<translation id="3637702109597584617"><ph name="TERMS_OF_SERVICE_LINK" />Termenii și condițiile<ph name="END_TERMS_OF_SERVICE_LINK" /> sistemului de operare Google Chrome</translation>
 <translation id="3718181793972440140">Astfel, se va șterge 1 element de pe acest dispozitiv. Pentru a recupera datele mai târziu, conectează-te la Chrome ca <ph name="USER_EMAIL" />.</translation>
 <translation id="3735758079232443276">Extensia „<ph name="EXTENSION_NAME" />” a modificat ce pagină se afișează când pornești Chrome.</translation>
 <translation id="3738139272394829648">Atinge pentru a căuta</translation>
@@ -132,12 +132,12 @@ Verifică e-mailul la <ph name="ACCOUNT_EMAIL" /> pentru instrucțiuni supliment
 <translation id="4754614261631455953">Google Chrome Canary (mDNS-In)</translation>
 <translation id="4771048833395599659">Este posibil ca fișierul să fie periculos, așadar Chrome l-a blocat.</translation>
 <translation id="4794050651896644714">Salvați detaliile în Chrome</translation>
+<translation id="4804732725083176494">Conectarea la Chrome este dezactivată de administratorul acestui dispozitiv.</translation>
 <translation id="4891791193823137474">Permite ca Google Chrome să ruleze în fundal</translation>
 <translation id="4921569541910214635">Folosești un computer în comun? Acum poți să configurezi Chrome exact cum îți place.</translation>
 <translation id="4953650215774548573">Setați Google Chrome ca browser prestabilit</translation>
 <translation id="495931528404527476">În Chrome</translation>
 <translation id="4965682129423310439">Chrome a găsit software dăunător pe computer. Chrome poate să-l elimine și să restabilească setările pentru ca browserul să funcționeze normal din nou.</translation>
-<translation id="4987308747895123092">Închideți toate ferestrele Google Chrome (inclusiv pe cele în modul Windows 8) și încercați din nou.</translation>
 <translation id="4990567037958725628">Google Chrome Canary</translation>
 <translation id="5028489144783860647">Google Chrome nu a putut sincroniza datele. Actualizați expresia de acces pentru sincronizare.</translation>
 <translation id="5037239767309817516">Pentru ca această modificare să aibă efect, închide toate ferestrele Google Chrome și repornește-l.</translation>
@@ -195,7 +195,6 @@ Verifică e-mailul la <ph name="ACCOUNT_EMAIL" /> pentru instrucțiuni supliment
 <translation id="6634887557811630702">Google Chrome este actualizat.</translation>
 <translation id="6676384891291319759">Accesează internetul</translation>
 <translation id="6697947395630195233">Chrome are nevoie de acces la locația ta ca să permită accesul la locație pentru acest site.</translation>
-<translation id="6757767188268205357">Nu mă mai întreba</translation>
 <translation id="683440813066116847">Regula de intrare pentru Google Chrome Canary pentru a permite traficul mDNS.</translation>
 <translation id="686561893457936865">Ia Chrome pretutindeni</translation>
 <translation id="6883876366448858277">trimite un cuvânt și contextul aferent către Căutarea Google, afișând definiții, imagini, rezultate ale căutării.</translation>
@@ -210,7 +209,6 @@ Verifică e-mailul la <ph name="ACCOUNT_EMAIL" /> pentru instrucțiuni supliment
 <translation id="7161904924553537242">Bun venit la Google Chrome</translation>
 <translation id="7164397146364144019">Puteți contribui la un produs Chrome mai sigur și mai ușor de folosit raportând automat la Google detaliile eventualelor incidente privind securitatea.</translation>
 <translation id="7185038942300673794"><ph name="EXTENSION_NAME" /> a fost adăugată la Chrome.</translation>
-<translation id="7196020411877309443">De ce văd acest lucru?</translation>
 <translation id="7242029209006116544">Vă conectați cu un cont gestionat și îi permiteți administratorului acestuia controlul asupra profilului dvs. Google Chrome. Datele Chrome, cum ar fi aplicațiile, marcajele, istoricul, parolele și alte setări vor fi asociate definitiv cu <ph name="USER_NAME" />. Veți putea să ștergeți aceste date prin intermediul Tabloului de bord pentru Conturi Google, însă nu veți putea să asociați aceste date cu alt cont. Aveți opțiunea de a crea un profil nou, pentru a păstra separat datele Chrome existente. <ph name="LEARN_MORE" /></translation>
 <translation id="729375352412857283">În curând, acest computer nu va mai primi actualizări pentru Google Chrome, deoarece Windows XP și Windows Vista nu vor mai fi acceptate.</translation>
 <translation id="7330164299247909639">Eroare privind certificatul de autentificare. Conectează-te la Google Chrome din nou ca <ph name="USER_NAME" /> sau contactează administratorul pentru mai multe informații. <ph name="ADDITIONAL_EXPLANATION" /></translation>

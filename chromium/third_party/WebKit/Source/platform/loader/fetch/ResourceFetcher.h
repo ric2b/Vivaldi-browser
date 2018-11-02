@@ -30,6 +30,7 @@
 #include <memory>
 #include "platform/PlatformExport.h"
 #include "platform/Timer.h"
+#include "platform/heap/SelfKeepAlive.h"
 #include "platform/loader/fetch/FetchContext.h"
 #include "platform/loader/fetch/FetchInitiatorInfo.h"
 #include "platform/loader/fetch/FetchParameters.h"
@@ -84,7 +85,7 @@ class PLATFORM_EXPORT ResourceFetcher
 
   using DocumentResourceMap = HeapHashMap<String, WeakMember<Resource>>;
   const DocumentResourceMap& AllResources() const {
-    return document_resources_;
+    return cached_resources_map_;
   }
 
   // Binds the given Resource instance to this ResourceFetcher instance to
@@ -106,6 +107,7 @@ class PLATFORM_EXPORT ResourceFetcher
 
   int BlockingRequestCount() const;
   int NonblockingRequestCount() const;
+  int ActiveRequestCount() const;
 
   enum ClearPreloadsPolicy {
     kClearAllPreloads,
@@ -141,9 +143,6 @@ class PLATFORM_EXPORT ResourceFetcher
 
   WARN_UNUSED_RESULT static WebURLRequest::RequestContext
   DetermineRequestContext(Resource::Type, IsImageSet, bool is_main_frame);
-  WARN_UNUSED_RESULT WebURLRequest::RequestContext DetermineRequestContext(
-      Resource::Type,
-      IsImageSet) const;
 
   void UpdateAllImageResourcePriorities();
 
@@ -168,6 +167,10 @@ class PLATFORM_EXPORT ResourceFetcher
 
  private:
   friend class ResourceCacheValidationSuppressor;
+  enum class StopFetchingTarget {
+    kExcludingKeepaliveLoaders,
+    kIncludingKeepaliveLoaders,
+  };
 
   ResourceFetcher(FetchContext*, RefPtr<WebTaskRunner>);
 
@@ -204,15 +207,28 @@ class PLATFORM_EXPORT ResourceFetcher
                                   const FetchParameters& params,
                                   Resource::Type);
 
-  bool IsReusableAlsoForPreloading(const FetchParameters&,
-                                   Resource*,
-                                   bool is_static_data) const;
+  bool IsImageResourceDisallowedToBeReused(const Resource&) const;
+
+  void StopFetchingInternal(StopFetchingTarget);
+  void StopFetchingIncludingKeepaliveLoaders(TimerBase*);
+
   // RevalidationPolicy enum values are used in UMAs https://crbug.com/579496.
   enum RevalidationPolicy { kUse, kRevalidate, kReload, kLoad };
-  RevalidationPolicy DetermineRevalidationPolicy(Resource::Type,
-                                                 const FetchParameters&,
-                                                 Resource* existing_resource,
-                                                 bool is_static_data) const;
+
+  // A wrapper just for placing a trace_event macro.
+  RevalidationPolicy DetermineRevalidationPolicy(
+      Resource::Type,
+      const FetchParameters&,
+      const Resource& existing_resource,
+      bool is_static_data) const;
+  // Determines a RevalidationPolicy given a FetchParameters and an existing
+  // resource retrieved from the memory cache (can be a newly constructed one
+  // for a static data).
+  RevalidationPolicy DetermineRevalidationPolicyInternal(
+      Resource::Type,
+      const FetchParameters&,
+      const Resource& existing_resource,
+      bool is_static_data) const;
 
   void MakePreloadedResourceBlockOnloadIfNeeded(Resource*,
                                                 const FetchParameters&);
@@ -220,9 +236,6 @@ class PLATFORM_EXPORT ResourceFetcher
   void RemoveResourceLoader(ResourceLoader*);
   void HandleLoadCompletion(Resource*);
 
-  void InitializeResourceRequest(ResourceRequest&,
-                                 Resource::Type,
-                                 FetchParameters::DeferOption);
   void RequestLoadStarted(unsigned long identifier,
                           Resource*,
                           const FetchParameters&,
@@ -248,8 +261,8 @@ class PLATFORM_EXPORT ResourceFetcher
   Member<FetchContext> context_;
   Member<ResourceLoadScheduler> scheduler_;
 
-  HashSet<String> validated_urls_;
-  mutable DocumentResourceMap document_resources_;
+  DocumentResourceMap cached_resources_map_;
+  HeapHashSet<WeakMember<Resource>> document_resources_;
 
   HeapHashMap<PreloadKey, Member<Resource>> preloads_;
   HeapVector<Member<Resource>> matched_preloads_;
@@ -269,6 +282,10 @@ class PLATFORM_EXPORT ResourceFetcher
   HeapHashSet<Member<ResourceLoader>> non_blocking_loaders_;
 
   std::unique_ptr<HashSet<String>> preloaded_urls_for_test_;
+
+  // Timeout timer for keepalive requests.
+  TaskRunnerTimer<ResourceFetcher> keepalive_loaders_timer_;
+  SelfKeepAlive<ResourceFetcher> self_keep_alive_;
 
   // 28 bits left
   bool auto_load_images_ : 1;

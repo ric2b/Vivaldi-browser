@@ -16,30 +16,16 @@
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 
 using vivaldi::kVivaldiAppId;
-
-namespace extensions {
-
 using content::WebContents;
 
-// Returns the active web content for the app window so that we can access
-// any elemenent in the UI was well as the document area.
-static WebContents* webContents() {
-  Browser* browser = chrome::FindLastActive();
-  WebContents* web_contents =
-      browser ? browser->tab_strip_model()->GetActiveWebContents() : nullptr;
-  AppWindow* appWindow =
-      web_contents ? AppWindowRegistry::Get(web_contents->GetBrowserContext())
-                         ->GetCurrentAppWindowForApp(kVivaldiAppId)
-                   : nullptr;
-  return appWindow ? appWindow->web_contents() : nullptr;
-}
+namespace extensions {
 
 EditcommandExecuteFunction::EditcommandExecuteFunction() {}
 
 EditcommandExecuteFunction::~EditcommandExecuteFunction() {}
 
 bool EditcommandExecuteFunction::RunAsync() {
-  WebContents* web_contents = webContents();
+  WebContents* web_contents = GetAssociatedWebContents();
   if (web_contents) {
     std::unique_ptr<vivaldi::editcommand::Execute::Params> params(
         vivaldi::editcommand::Execute::Params::Create(*args_));

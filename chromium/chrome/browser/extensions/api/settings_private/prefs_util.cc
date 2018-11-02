@@ -40,6 +40,7 @@
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
+#include "chrome/browser/chromeos/system/timezone_util.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "ui/chromeos/events/pref_names.h"
 #endif
@@ -50,12 +51,22 @@ namespace {
 bool IsPrivilegedCrosSetting(const std::string& pref_name) {
   if (!chromeos::CrosSettings::IsCrosSettings(pref_name))
     return false;
-  // kSystemTimezone should be changeable by all users.
-  if (pref_name == chromeos::kSystemTimezone)
-    return false;
-  // All other Cros settings are considered privileged and are either policy
+  if (!chromeos::system::PerUserTimezoneEnabled()) {
+    // kSystemTimezone should be changeable by all users.
+    if (pref_name == chromeos::kSystemTimezone)
+      return false;
+  }
+  // Cros settings are considered privileged and are either policy
   // controlled or owner controlled.
   return true;
+}
+
+bool IsCrosSettingReadOnly(const std::string& pref_name) {
+  if (chromeos::system::PerUserTimezoneEnabled()) {
+    // System timezone is never directly changable by user.
+    return pref_name == chromeos::kSystemTimezone;
+  }
+  return false;
 }
 #endif
 
@@ -233,37 +244,37 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
 
   // Accessibility.
-  (*s_whitelist)[::prefs::kAccessibilitySpokenFeedbackEnabled] =
+  (*s_whitelist)[ash::prefs::kAccessibilitySpokenFeedbackEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)[::prefs::kAccessibilityAutoclickEnabled] =
+  (*s_whitelist)[ash::prefs::kAccessibilityAutoclickEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)[::prefs::kAccessibilityAutoclickDelayMs] =
+  (*s_whitelist)[ash::prefs::kAccessibilityAutoclickDelayMs] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)[::prefs::kAccessibilityCaretHighlightEnabled] =
+  (*s_whitelist)[ash::prefs::kAccessibilityCaretHighlightEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)[::prefs::kAccessibilityCursorHighlightEnabled] =
+  (*s_whitelist)[ash::prefs::kAccessibilityCursorHighlightEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)[::prefs::kShouldAlwaysShowAccessibilityMenu] =
+  (*s_whitelist)[ash::prefs::kShouldAlwaysShowAccessibilityMenu] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)[::prefs::kAccessibilityFocusHighlightEnabled] =
+  (*s_whitelist)[ash::prefs::kAccessibilityFocusHighlightEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)[::prefs::kAccessibilityHighContrastEnabled] =
+  (*s_whitelist)[ash::prefs::kAccessibilityHighContrastEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)[::prefs::kAccessibilityLargeCursorEnabled] =
+  (*s_whitelist)[ash::prefs::kAccessibilityLargeCursorEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)[::prefs::kAccessibilityLargeCursorDipSize] =
+  (*s_whitelist)[ash::prefs::kAccessibilityLargeCursorDipSize] =
       settings_private::PrefType::PREF_TYPE_NUMBER;
-  (*s_whitelist)[::prefs::kAccessibilityScreenMagnifierEnabled] =
+  (*s_whitelist)[ash::prefs::kAccessibilityScreenMagnifierEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)[::prefs::kAccessibilitySelectToSpeakEnabled] =
+  (*s_whitelist)[ash::prefs::kAccessibilitySelectToSpeakEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)[::prefs::kAccessibilityStickyKeysEnabled] =
+  (*s_whitelist)[ash::prefs::kAccessibilityStickyKeysEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)[::prefs::kAccessibilitySwitchAccessEnabled] =
+  (*s_whitelist)[ash::prefs::kAccessibilitySwitchAccessEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)[::prefs::kAccessibilityVirtualKeyboardEnabled] =
+  (*s_whitelist)[ash::prefs::kAccessibilityVirtualKeyboardEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)[::prefs::kAccessibilityMonoAudioEnabled] =
+  (*s_whitelist)[ash::prefs::kAccessibilityMonoAudioEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
 
   // Android Apps.
@@ -271,6 +282,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
 
   // Google Assistant.
+  (*s_whitelist)[::prefs::kArcVoiceInteractionValuePropAccepted] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[::prefs::kVoiceInteractionEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[::prefs::kVoiceInteractionContextEnabled] =
@@ -304,8 +317,12 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
 
   // Timezone settings.
   (*s_whitelist)[chromeos::kSystemTimezone] =
-      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+      settings_private::PrefType::PREF_TYPE_STRING;
+  (*s_whitelist)[prefs::kUserTimezone] =
+      settings_private::PrefType::PREF_TYPE_STRING;
   (*s_whitelist)[::prefs::kResolveTimezoneByGeolocation] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[chromeos::kPerUserTimezoneEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
 
   // Ash settings.
@@ -338,6 +355,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
   (*s_whitelist)[::prefs::kTouchpadSensitivity] =
       settings_private::PrefType::PREF_TYPE_NUMBER;
   (*s_whitelist)[::prefs::kPrimaryMouseButtonRight] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::prefs::kMouseReverseScroll] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[::prefs::kMouseSensitivity] =
       settings_private::PrefType::PREF_TYPE_NUMBER;
@@ -476,6 +495,21 @@ std::unique_ptr<settings_private::PrefObject> PrefsUtil::GetPref(
   }
 
 #if defined(OS_CHROMEOS)
+  // We first check for enterprise-managed, then for primary-user managed.
+  // Otherwise in multiprofile mode enterprise preference for the secondary
+  // user will appear primary-user-controlled, which looks strange, because
+  // primary user preference will be disabled with "enterprise controlled"
+  // status.
+  if (IsPrefEnterpriseManaged(name)) {
+    // Enterprise managed prefs are treated the same as device policy restricted
+    // prefs in the UI.
+    pref_object->controlled_by =
+        settings_private::ControlledBy::CONTROLLED_BY_DEVICE_POLICY;
+    pref_object->enforcement =
+        settings_private::Enforcement::ENFORCEMENT_ENFORCED;
+    return pref_object;
+  }
+
   if (IsPrefPrimaryUserControlled(name)) {
     pref_object->controlled_by =
         settings_private::ControlledBy::CONTROLLED_BY_PRIMARY_USER;
@@ -486,16 +520,6 @@ std::unique_ptr<settings_private::PrefObject> PrefsUtil::GetPref(
                             ->GetPrimaryUser()
                             ->GetAccountId()
                             .GetUserEmail()));
-    return pref_object;
-  }
-
-  if (IsPrefEnterpriseManaged(name)) {
-    // Enterprise managed prefs are treated the same as device policy restricted
-    // prefs in the UI.
-    pref_object->controlled_by =
-        settings_private::ControlledBy::CONTROLLED_BY_DEVICE_POLICY;
-    pref_object->enforcement =
-        settings_private::Enforcement::ENFORCEMENT_ENFORCED;
     return pref_object;
   }
 #endif
@@ -683,16 +707,26 @@ bool PrefsUtil::IsPrefTypeURL(const std::string& pref_name) {
 
 #if defined(OS_CHROMEOS)
 bool PrefsUtil::IsPrefEnterpriseManaged(const std::string& pref_name) {
-  if (IsPrivilegedCrosSetting(pref_name)) {
-    policy::BrowserPolicyConnectorChromeOS* connector =
-        g_browser_process->platform_part()->browser_policy_connector_chromeos();
-    if (connector->IsEnterpriseManaged())
-      return true;
+  policy::BrowserPolicyConnectorChromeOS* connector =
+      g_browser_process->platform_part()->browser_policy_connector_chromeos();
+  if (!connector->IsEnterpriseManaged())
+    return false;
+  if (IsPrivilegedCrosSetting(pref_name))
+    return true;
+  if (chromeos::system::PerUserTimezoneEnabled() &&
+      (pref_name == prefs::kUserTimezone ||
+       pref_name == prefs::kResolveTimezoneByGeolocation)) {
+    return chromeos::system::IsTimezonePrefsManaged(pref_name);
   }
   return false;
 }
 
 bool PrefsUtil::IsPrefOwnerControlled(const std::string& pref_name) {
+  // chromeos::kSystemTimezone is global display-only preference and
+  // it should appear as disabled, but not owned.
+  if (pref_name == chromeos::kSystemTimezone)
+    return false;
+
   if (IsPrivilegedCrosSetting(pref_name)) {
     if (!chromeos::ProfileHelper::IsOwnerProfile(profile_))
       return true;
@@ -701,13 +735,19 @@ bool PrefsUtil::IsPrefOwnerControlled(const std::string& pref_name) {
 }
 
 bool PrefsUtil::IsPrefPrimaryUserControlled(const std::string& pref_name) {
-  if (pref_name == prefs::kWakeOnWifiDarkConnect) {
+  // chromeos::kSystemTimezone is read-only, but for the non-primary users
+  // it should have "primary user controlled" attribute.
+  if (pref_name == prefs::kWakeOnWifiDarkConnect ||
+      pref_name == prefs::kResolveTimezoneByGeolocation ||
+      pref_name == prefs::kUserTimezone ||
+      pref_name == chromeos::kSystemTimezone) {
     user_manager::UserManager* user_manager = user_manager::UserManager::Get();
     const user_manager::User* user =
         chromeos::ProfileHelper::Get()->GetUserByProfile(profile_);
-    if (user &&
-        user->GetAccountId() != user_manager->GetPrimaryUser()->GetAccountId())
+    if (user && user->GetAccountId() !=
+                    user_manager->GetPrimaryUser()->GetAccountId()) {
       return true;
+    }
   }
   return false;
 }
@@ -722,6 +762,11 @@ bool PrefsUtil::IsPrefSupervisorControlled(const std::string& pref_name) {
 }
 
 bool PrefsUtil::IsPrefUserModifiable(const std::string& pref_name) {
+#if defined(OS_CHROMEOS)
+  if (IsCrosSettingReadOnly(pref_name))
+    return false;
+#endif
+
   const PrefService::Preference* profile_pref =
       profile_->GetPrefs()->FindPreference(pref_name);
   if (profile_pref)

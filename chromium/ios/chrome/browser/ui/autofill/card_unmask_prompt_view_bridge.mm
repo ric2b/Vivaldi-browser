@@ -31,9 +31,10 @@
 #error "This file requires ARC support."
 #endif
 
-namespace {
+NSString* const kCardUnmaskPromptCollectionViewAccessibilityID =
+    @"kCardUnmaskPromptCollectionViewAccessibilityID";
 
-const CGFloat kTitleVerticalSpacing = 2.0f;
+namespace {
 
 typedef NS_ENUM(NSInteger, SectionIdentifier) {
   SectionIdentifierMain = kSectionIdentifierEnumZero,
@@ -99,9 +100,9 @@ void CardUnmaskPromptViewBridge::GotVerificationResult(
   } else {
     if (allow_retry) {
       [view_controller_
-          showCVCInputFormWithError:SysUTF16ToNSString(error_message)];
+          showCVCInputFormWithError:base::SysUTF16ToNSString(error_message)];
     } else {
-      [view_controller_ showError:SysUTF16ToNSString(error_message)];
+      [view_controller_ showError:base::SysUTF16ToNSString(error_message)];
     }
   }
 }
@@ -150,6 +151,8 @@ void CardUnmaskPromptViewBridge::DeleteSelf() {
       [super initWithLayout:layout style:CollectionViewControllerStyleAppBar];
   if (self) {
     _bridge = bridge;
+    self.title =
+        base::SysUTF16ToNSString(_bridge->GetController()->GetWindowTitle());
   }
   return self;
 }
@@ -157,23 +160,10 @@ void CardUnmaskPromptViewBridge::DeleteSelf() {
 - (void)viewDidLoad {
   [super viewDidLoad];
 
+  self.collectionView.accessibilityIdentifier =
+      kCardUnmaskPromptCollectionViewAccessibilityID;
+
   self.styler.cellStyle = MDCCollectionViewCellStyleCard;
-
-  UILabel* titleLabel = [[UILabel alloc] initWithFrame:CGRectZero];
-  titleLabel.text =
-      SysUTF16ToNSString(_bridge->GetController()->GetWindowTitle());
-  titleLabel.font = [UIFont boldSystemFontOfSize:16];
-  titleLabel.accessibilityTraits |= UIAccessibilityTraitHeader;
-  [titleLabel sizeToFit];
-
-  UIView* titleView = [[UIView alloc] initWithFrame:CGRectZero];
-  [titleView addSubview:titleLabel];
-  CGRect titleBounds = titleView.bounds;
-  titleBounds.origin.y -= kTitleVerticalSpacing;
-  titleView.bounds = titleBounds;
-  titleView.autoresizingMask = UIViewAutoresizingFlexibleLeadingMargin() |
-                               UIViewAutoresizingFlexibleBottomMargin;
-  self.appBar.navigationBar.titleView = titleView;
 
   [self showCVCInputForm];
 
@@ -186,7 +176,7 @@ void CardUnmaskPromptViewBridge::DeleteSelf() {
   self.navigationItem.leftBarButtonItem = _cancelButton;
 
   NSString* verifyButtonText =
-      SysUTF16ToNSString(_bridge->GetController()->GetOkButtonLabel());
+      base::SysUTF16ToNSString(_bridge->GetController()->GetOkButtonLabel());
   _verifyButton =
       [[UIBarButtonItem alloc] initWithTitle:verifyButtonText
                                        style:UIBarButtonItemStylePlain
@@ -209,7 +199,8 @@ void CardUnmaskPromptViewBridge::DeleteSelf() {
   if ([self.collectionViewModel hasItemForItemType:ItemTypeCVC
                                  sectionIdentifier:SectionIdentifierMain]) {
     NSIndexPath* CVCIndexPath =
-        [self.collectionViewModel indexPathForItem:_CVCItem];
+        [self.collectionViewModel indexPathForItemType:ItemTypeCVC
+                                     sectionIdentifier:SectionIdentifierMain];
     CVCCell* CVC = base::mac::ObjCCastStrict<CVCCell>(
         [self.collectionView cellForItemAtIndexPath:CVCIndexPath]);
     [self focusInputIfNeeded:CVC];
@@ -225,7 +216,7 @@ void CardUnmaskPromptViewBridge::DeleteSelf() {
 
   autofill::CardUnmaskPromptController* controller = _bridge->GetController();
   NSString* instructions =
-      SysUTF16ToNSString(controller->GetInstructionsMessage());
+      base::SysUTF16ToNSString(controller->GetInstructionsMessage());
   int CVCImageResourceID = controller->GetCvcImageRid();
   _CVCItem = [[CVCItem alloc] initWithType:ItemTypeCVC];
   _CVCItem.instructionsText = instructions;
@@ -260,6 +251,8 @@ void CardUnmaskPromptViewBridge::DeleteSelf() {
   [_verifyButton setEnabled:NO];
 
   [self loadModel];
+  [self.collectionView reloadData];
+
   _CVCItem.errorMessage = errorMessage;
   // If the server requested a new expiration date, show the date input. If it
   // didn't and there was an error, show the "New card?" link which will show
@@ -483,8 +476,8 @@ void CardUnmaskPromptViewBridge::DeleteSelf() {
 
 - (void)onNewCardLinkTapped:(UIButton*)button {
   _bridge->GetController()->NewCardLinkClicked();
-  _CVCItem.instructionsText =
-      SysUTF16ToNSString(_bridge->GetController()->GetInstructionsMessage());
+  _CVCItem.instructionsText = base::SysUTF16ToNSString(
+      _bridge->GetController()->GetInstructionsMessage());
   _CVCItem.monthText = @"";
   _CVCItem.yearText = @"";
   _CVCItem.CVCText = @"";
@@ -533,8 +526,13 @@ void CardUnmaskPromptViewBridge::DeleteSelf() {
   if (item.type == ItemTypeStatus) {
     return [self statusCellHeight];
   }
+
+  UIEdgeInsets inset = [self collectionView:collectionView
+                                     layout:collectionView.collectionViewLayout
+                     insetForSectionAtIndex:indexPath.section];
   return [MDCCollectionViewCell
-      cr_preferredHeightForWidth:CGRectGetWidth(collectionView.bounds)
+      cr_preferredHeightForWidth:CGRectGetWidth(collectionView.bounds) -
+                                 inset.left - inset.right
                          forItem:item];
 }
 

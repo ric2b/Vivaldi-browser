@@ -110,7 +110,7 @@ class SpdyNetworkTransactionTest : public ::testing::Test {
         : request_(request),
           priority_(priority),
           session_deps_(session_deps.get() == nullptr
-                            ? base::MakeUnique<SpdySessionDependencies>()
+                            ? std::make_unique<SpdySessionDependencies>()
                             : std::move(session_deps)),
           log_(log) {
       session_deps_->net_log = log.net_log();
@@ -133,7 +133,7 @@ class SpdyNetworkTransactionTest : public ::testing::Test {
     void RunPreTestSetup() {
       // We're now ready to use SSL-npn SPDY.
       trans_ =
-          base::MakeUnique<HttpNetworkTransaction>(priority_, session_.get());
+          std::make_unique<HttpNetworkTransaction>(priority_, session_.get());
     }
 
     // Start the transaction, read some data, finish.
@@ -223,7 +223,7 @@ class SpdyNetworkTransactionTest : public ::testing::Test {
     }
 
     void AddData(SocketDataProvider* data) {
-      auto ssl_provider = base::MakeUnique<SSLSocketDataProvider>(ASYNC, OK);
+      auto ssl_provider = std::make_unique<SSLSocketDataProvider>(ASYNC, OK);
       ssl_provider->cert =
           ImportCertFromFile(GetTestCertsDirectory(), "spdy_pooling.pem");
       AddDataWithSSLSocketDataProvider(data, std::move(ssl_provider));
@@ -302,9 +302,9 @@ class SpdyNetworkTransactionTest : public ::testing::Test {
   const HttpRequestInfo& CreatePostRequest() {
     if (!post_request_initialized_) {
       std::vector<std::unique_ptr<UploadElementReader>> element_readers;
-      element_readers.push_back(base::MakeUnique<UploadBytesElementReader>(
+      element_readers.push_back(std::make_unique<UploadBytesElementReader>(
           kUploadData, kUploadDataSize));
-      upload_data_stream_ = base::MakeUnique<ElementsUploadDataStream>(
+      upload_data_stream_ = std::make_unique<ElementsUploadDataStream>(
           std::move(element_readers), 0);
 
       post_request_.method = "POST";
@@ -323,10 +323,10 @@ class SpdyNetworkTransactionTest : public ::testing::Test {
                base::WriteFile(file_path, kUploadData, kUploadDataSize));
 
       std::vector<std::unique_ptr<UploadElementReader>> element_readers;
-      element_readers.push_back(base::MakeUnique<UploadFileElementReader>(
+      element_readers.push_back(std::make_unique<UploadFileElementReader>(
           base::ThreadTaskRunnerHandle::Get().get(), file_path, 0,
           kUploadDataSize, base::Time()));
-      upload_data_stream_ = base::MakeUnique<ElementsUploadDataStream>(
+      upload_data_stream_ = std::make_unique<ElementsUploadDataStream>(
           std::move(element_readers), 0);
 
       post_request_.method = "POST";
@@ -348,10 +348,10 @@ class SpdyNetworkTransactionTest : public ::testing::Test {
     CHECK(base::MakeFileUnreadable(file_path));
 
     std::vector<std::unique_ptr<UploadElementReader>> element_readers;
-    element_readers.push_back(base::MakeUnique<UploadFileElementReader>(
+    element_readers.push_back(std::make_unique<UploadFileElementReader>(
         base::ThreadTaskRunnerHandle::Get().get(), file_path, 0,
         kUploadDataSize, base::Time()));
-    upload_data_stream_ = base::MakeUnique<ElementsUploadDataStream>(
+    upload_data_stream_ = std::make_unique<ElementsUploadDataStream>(
         std::move(element_readers), 0);
 
     post_request_.method = "POST";
@@ -373,15 +373,15 @@ class SpdyNetworkTransactionTest : public ::testing::Test {
                base::WriteFile(file_path, kUploadData, kUploadDataSize));
 
       std::vector<std::unique_ptr<UploadElementReader>> element_readers;
-      element_readers.push_back(base::MakeUnique<UploadBytesElementReader>(
+      element_readers.push_back(std::make_unique<UploadBytesElementReader>(
           kUploadData, kFileRangeOffset));
-      element_readers.push_back(base::MakeUnique<UploadFileElementReader>(
+      element_readers.push_back(std::make_unique<UploadFileElementReader>(
           base::ThreadTaskRunnerHandle::Get().get(), file_path,
           kFileRangeOffset, kFileRangeLength, base::Time()));
-      element_readers.push_back(base::MakeUnique<UploadBytesElementReader>(
+      element_readers.push_back(std::make_unique<UploadBytesElementReader>(
           kUploadData + kFileRangeOffset + kFileRangeLength,
           kUploadDataSize - (kFileRangeOffset + kFileRangeLength)));
-      upload_data_stream_ = base::MakeUnique<ElementsUploadDataStream>(
+      upload_data_stream_ = std::make_unique<ElementsUploadDataStream>(
           std::move(element_readers), 0);
 
       post_request_.method = "POST";
@@ -395,7 +395,7 @@ class SpdyNetworkTransactionTest : public ::testing::Test {
   const HttpRequestInfo& CreateChunkedPostRequest() {
     if (!chunked_post_request_initialized_) {
       upload_chunked_data_stream_ =
-          base::MakeUnique<ChunkedUploadDataStream>(0);
+          std::make_unique<ChunkedUploadDataStream>(0);
       chunked_post_request_.method = "POST";
       chunked_post_request_.url = default_url_;
       chunked_post_request_.upload_data_stream =
@@ -589,11 +589,11 @@ class SpdyNetworkTransactionTest : public ::testing::Test {
 
 // Verify HttpNetworkTransaction constructor.
 TEST_F(SpdyNetworkTransactionTest, Constructor) {
-  auto session_deps = base::MakeUnique<SpdySessionDependencies>();
+  auto session_deps = std::make_unique<SpdySessionDependencies>();
   std::unique_ptr<HttpNetworkSession> session(
       SpdySessionDependencies::SpdyCreateSession(session_deps.get()));
   auto trans =
-      base::MakeUnique<HttpNetworkTransaction>(DEFAULT_PRIORITY, session.get());
+      std::make_unique<HttpNetworkTransaction>(DEFAULT_PRIORITY, session.get());
 }
 
 TEST_F(SpdyNetworkTransactionTest, Get) {
@@ -1266,11 +1266,11 @@ TEST_F(SpdyNetworkTransactionTest, ThreeGetsWithMaxConcurrentDelete) {
                                      NetLogWithSource(), nullptr);
   helper.RunPreTestSetup();
   helper.AddData(&data);
-  auto trans1 = base::MakeUnique<HttpNetworkTransaction>(DEFAULT_PRIORITY,
+  auto trans1 = std::make_unique<HttpNetworkTransaction>(DEFAULT_PRIORITY,
                                                          helper.session());
-  auto trans2 = base::MakeUnique<HttpNetworkTransaction>(DEFAULT_PRIORITY,
+  auto trans2 = std::make_unique<HttpNetworkTransaction>(DEFAULT_PRIORITY,
                                                          helper.session());
-  auto trans3 = base::MakeUnique<HttpNetworkTransaction>(DEFAULT_PRIORITY,
+  auto trans3 = std::make_unique<HttpNetworkTransaction>(DEFAULT_PRIORITY,
                                                          helper.session());
 
   TestCompletionCallback callback1;
@@ -3012,7 +3012,8 @@ TEST_F(SpdyNetworkTransactionTest, ServerPushOnPushedStream) {
   SpdySerializedFrame stream2_priority(
       spdy_util_.ConstructSpdyPriority(2, 1, IDLE, true));
   SpdySerializedFrame goaway(spdy_util_.ConstructSpdyGoAway(
-      2, ERROR_CODE_PROTOCOL_ERROR, "Push on even stream id."));
+      2, ERROR_CODE_PROTOCOL_ERROR,
+      "Received pushed stream id 4 on invalid stream id 2 (must be odd)."));
   MockWrite writes[] = {
       CreateMockWrite(stream1_syn, 0), CreateMockWrite(stream2_priority, 3),
       CreateMockWrite(goaway, 5),
@@ -3089,7 +3090,8 @@ TEST_F(SpdyNetworkTransactionTest, ServerPushOnClosedPushedStream) {
   SpdySerializedFrame stream2_priority(
       spdy_util_.ConstructSpdyPriority(2, 1, IDLE, true));
   SpdySerializedFrame goaway(spdy_util_.ConstructSpdyGoAway(
-      2, ERROR_CODE_PROTOCOL_ERROR, "Push on even stream id."));
+      2, ERROR_CODE_PROTOCOL_ERROR,
+      "Received pushed stream id 4 on invalid stream id 2 (must be odd)."));
   MockWrite writes[] = {
       CreateMockWrite(stream1_syn, 0), CreateMockWrite(stream2_priority, 3),
       CreateMockWrite(goaway, 8),
@@ -4236,7 +4238,7 @@ TEST_F(SpdyNetworkTransactionTest, HTTP11RequiredRetry) {
   SequencedSocketData data0(reads0, arraysize(reads0), writes0,
                             arraysize(writes0));
 
-  auto ssl_provider0 = base::MakeUnique<SSLSocketDataProvider>(ASYNC, OK);
+  auto ssl_provider0 = std::make_unique<SSLSocketDataProvider>(ASYNC, OK);
   // Expect HTTP/2 protocols too in SSLConfig.
   ssl_provider0->next_protos_expected_in_ssl_config.push_back(kProtoHTTP2);
   ssl_provider0->next_protos_expected_in_ssl_config.push_back(kProtoHTTP11);
@@ -4256,7 +4258,7 @@ TEST_F(SpdyNetworkTransactionTest, HTTP11RequiredRetry) {
   SequencedSocketData data1(reads1, arraysize(reads1), writes1,
                             arraysize(writes1));
 
-  auto ssl_provider1 = base::MakeUnique<SSLSocketDataProvider>(ASYNC, OK);
+  auto ssl_provider1 = std::make_unique<SSLSocketDataProvider>(ASYNC, OK);
   // Expect only HTTP/1.1 protocol in SSLConfig.
   ssl_provider1->next_protos_expected_in_ssl_config.push_back(kProtoHTTP11);
   // Force HTTP/1.1.
@@ -4296,7 +4298,7 @@ TEST_F(SpdyNetworkTransactionTest, HTTP11RequiredProxyRetry) {
   HttpRequestInfo request;
   request.method = "GET";
   request.url = default_url_;
-  auto session_deps = base::MakeUnique<SpdySessionDependencies>(
+  auto session_deps = std::make_unique<SpdySessionDependencies>(
       ProxyService::CreateFixedFromPacResult("HTTPS myproxy:70"));
   // Do not force SPDY so that second socket can negotiate HTTP/1.1.
   NormalSpdyTransactionHelper helper(
@@ -4312,7 +4314,7 @@ TEST_F(SpdyNetworkTransactionTest, HTTP11RequiredProxyRetry) {
   SequencedSocketData data0(reads0, arraysize(reads0), writes0,
                             arraysize(writes0));
 
-  auto ssl_provider0 = base::MakeUnique<SSLSocketDataProvider>(ASYNC, OK);
+  auto ssl_provider0 = std::make_unique<SSLSocketDataProvider>(ASYNC, OK);
   // Expect HTTP/2 protocols too in SSLConfig.
   ssl_provider0->next_protos_expected_in_ssl_config.push_back(kProtoHTTP2);
   ssl_provider0->next_protos_expected_in_ssl_config.push_back(kProtoHTTP11);
@@ -4342,7 +4344,7 @@ TEST_F(SpdyNetworkTransactionTest, HTTP11RequiredProxyRetry) {
   SequencedSocketData data1(reads1, arraysize(reads1), writes1,
                             arraysize(writes1));
 
-  auto ssl_provider1 = base::MakeUnique<SSLSocketDataProvider>(ASYNC, OK);
+  auto ssl_provider1 = std::make_unique<SSLSocketDataProvider>(ASYNC, OK);
   // Expect only HTTP/1.1 protocol in SSLConfig.
   ssl_provider1->next_protos_expected_in_ssl_config.push_back(kProtoHTTP11);
   // Force HTTP/1.1.
@@ -4350,7 +4352,7 @@ TEST_F(SpdyNetworkTransactionTest, HTTP11RequiredProxyRetry) {
   helper.AddDataWithSSLSocketDataProvider(&data1, std::move(ssl_provider1));
 
   // A third socket is needed for the tunnelled connection.
-  auto ssl_provider2 = base::MakeUnique<SSLSocketDataProvider>(ASYNC, OK);
+  auto ssl_provider2 = std::make_unique<SSLSocketDataProvider>(ASYNC, OK);
   helper.session_deps()->socket_factory->AddSSLSocketDataProvider(
       ssl_provider2.get());
 
@@ -4383,7 +4385,7 @@ TEST_F(SpdyNetworkTransactionTest, HTTP11RequiredProxyRetry) {
 
 // Test to make sure we can correctly connect through a proxy.
 TEST_F(SpdyNetworkTransactionTest, ProxyConnect) {
-  auto session_deps = base::MakeUnique<SpdySessionDependencies>(
+  auto session_deps = std::make_unique<SpdySessionDependencies>(
       ProxyService::CreateFixedFromPacResult("PROXY myproxy:70"));
   NormalSpdyTransactionHelper helper(CreateGetRequest(), DEFAULT_PRIORITY,
                                      NetLogWithSource(),
@@ -4410,7 +4412,7 @@ TEST_F(SpdyNetworkTransactionTest, ProxyConnect) {
       CreateMockRead(resp, 3), CreateMockRead(body, 4),
       MockRead(ASYNC, 0, 0, 5),
   };
-  auto data = base::MakeUnique<SequencedSocketData>(reads, arraysize(reads),
+  auto data = std::make_unique<SequencedSocketData>(reads, arraysize(reads),
                                                     writes, arraysize(writes));
 
   helper.AddData(data.get());
@@ -4442,7 +4444,7 @@ TEST_F(SpdyNetworkTransactionTest, DirectConnectProxyReconnect) {
   // myproxy:70. For this test there will be no fallback, so it is equivalent
   // to simply DIRECT. The reason for appending the second proxy is to verify
   // that the session pool key used does is just "DIRECT".
-  auto session_deps = base::MakeUnique<SpdySessionDependencies>(
+  auto session_deps = std::make_unique<SpdySessionDependencies>(
       ProxyService::CreateFixedFromPacResult("DIRECT; PROXY myproxy:70"));
   // When setting up the first transaction, we store the SpdySessionPool so that
   // we can use the same pool in the second transaction.
@@ -4523,7 +4525,7 @@ TEST_F(SpdyNetworkTransactionTest, DirectConnectProxyReconnect) {
       MockRead(ASYNC, 0, 5)  // EOF
   };
 
-  auto data_proxy = base::MakeUnique<SequencedSocketData>(
+  auto data_proxy = std::make_unique<SequencedSocketData>(
       reads2, arraysize(reads2), writes2, arraysize(writes2));
 
   // Create another request to www.example.org, but this time through a proxy.
@@ -4531,7 +4533,7 @@ TEST_F(SpdyNetworkTransactionTest, DirectConnectProxyReconnect) {
   request_proxy.method = "GET";
   request_proxy.url = GURL(GetDefaultUrlWithPath("/foo.dat"));
   request_proxy.load_flags = 0;
-  auto session_deps_proxy = base::MakeUnique<SpdySessionDependencies>(
+  auto session_deps_proxy = std::make_unique<SpdySessionDependencies>(
       ProxyService::CreateFixedFromPacResult("PROXY myproxy:70"));
   NormalSpdyTransactionHelper helper_proxy(request_proxy, DEFAULT_PRIORITY,
                                            NetLogWithSource(),
@@ -5029,8 +5031,8 @@ TEST_F(SpdyNetworkTransactionTest, ServerPushCrossOriginCorrectness) {
 
     // Enable cross-origin push. Since we are not using a proxy, this should
     // not actually enable cross-origin SPDY push.
-    auto session_deps = base::MakeUnique<SpdySessionDependencies>();
-    auto proxy_delegate = base::MakeUnique<TestProxyDelegate>();
+    auto session_deps = std::make_unique<SpdySessionDependencies>();
+    auto proxy_delegate = std::make_unique<TestProxyDelegate>();
     proxy_delegate->set_trusted_spdy_proxy(net::ProxyServer::FromURI(
         "https://123.45.67.89:443", net::ProxyServer::SCHEME_HTTP));
     session_deps->proxy_delegate = std::move(proxy_delegate);
@@ -5235,13 +5237,13 @@ TEST_F(SpdyNetworkTransactionTest, ServerPushValidCrossOriginWithOpenSession) {
 
   // "spdy_pooling.pem" is valid for www.example.org, but not for
   // docs.example.org.
-  auto ssl_provider0 = base::MakeUnique<SSLSocketDataProvider>(ASYNC, OK);
+  auto ssl_provider0 = std::make_unique<SSLSocketDataProvider>(ASYNC, OK);
   ssl_provider0->cert =
       ImportCertFromFile(GetTestCertsDirectory(), "spdy_pooling.pem");
   helper.AddDataWithSSLSocketDataProvider(&data0, std::move(ssl_provider0));
 
   // "wildcard.pem" is valid for both www.example.org and docs.example.org.
-  auto ssl_provider1 = base::MakeUnique<SSLSocketDataProvider>(ASYNC, OK);
+  auto ssl_provider1 = std::make_unique<SSLSocketDataProvider>(ASYNC, OK);
   ssl_provider1->cert =
       ImportCertFromFile(GetTestCertsDirectory(), "wildcard.pem");
   helper.AddDataWithSSLSocketDataProvider(&data1, std::move(ssl_provider1));
@@ -5552,7 +5554,7 @@ TEST_F(SpdyNetworkTransactionTest, OutOfOrderHeaders) {
 // fail under specific circumstances.
 TEST_F(SpdyNetworkTransactionTest, WindowUpdateReceived) {
   static int kFrameCount = 2;
-  auto content = base::MakeUnique<SpdyString>(kMaxSpdyFrameChunkSize, 'a');
+  auto content = std::make_unique<SpdyString>(kMaxSpdyFrameChunkSize, 'a');
   SpdySerializedFrame req(spdy_util_.ConstructSpdyPost(
       kDefaultUrl, 1, kMaxSpdyFrameChunkSize * kFrameCount, LOWEST, nullptr,
       0));
@@ -5591,7 +5593,7 @@ TEST_F(SpdyNetworkTransactionTest, WindowUpdateReceived) {
 
   std::vector<std::unique_ptr<UploadElementReader>> element_readers;
   for (int i = 0; i < kFrameCount; ++i) {
-    element_readers.push_back(base::MakeUnique<UploadBytesElementReader>(
+    element_readers.push_back(std::make_unique<UploadBytesElementReader>(
         content->c_str(), content->size()));
   }
   ElementsUploadDataStream upload_data_stream(std::move(element_readers), 0);
@@ -5722,7 +5724,7 @@ TEST_F(SpdyNetworkTransactionTest, WindowUpdateSent) {
   SequencedSocketData data(reads.data(), reads.size(), writes.data(),
                            writes.size());
 
-  auto session_deps = base::MakeUnique<SpdySessionDependencies>();
+  auto session_deps = std::make_unique<SpdySessionDependencies>();
   session_deps->session_max_recv_window_size = session_max_recv_window_size;
   session_deps->http2_settings[SETTINGS_INITIAL_WINDOW_SIZE] =
       stream_max_recv_window_size;
@@ -5784,7 +5786,7 @@ TEST_F(SpdyNetworkTransactionTest, WindowUpdateOverflow) {
   // set content-length header correctly)
   static int kFrameCount = 3;
 
-  auto content = base::MakeUnique<SpdyString>(kMaxSpdyFrameChunkSize, 'a');
+  auto content = std::make_unique<SpdyString>(kMaxSpdyFrameChunkSize, 'a');
   SpdySerializedFrame req(spdy_util_.ConstructSpdyPost(
       kDefaultUrl, 1, kMaxSpdyFrameChunkSize * kFrameCount, LOWEST, nullptr,
       0));
@@ -5811,7 +5813,7 @@ TEST_F(SpdyNetworkTransactionTest, WindowUpdateOverflow) {
 
   std::vector<std::unique_ptr<UploadElementReader>> element_readers;
   for (int i = 0; i < kFrameCount; ++i) {
-    element_readers.push_back(base::MakeUnique<UploadBytesElementReader>(
+    element_readers.push_back(std::make_unique<UploadBytesElementReader>(
         content->c_str(), content->size()));
   }
   ElementsUploadDataStream upload_data_stream(std::move(element_readers), 0);
@@ -5952,7 +5954,7 @@ TEST_F(SpdyNetworkTransactionTest, FlowControlStallResume) {
   std::vector<std::unique_ptr<UploadElementReader>> element_readers;
   SpdyString upload_data_string(kBufferSize * num_upload_buffers, 'a');
   upload_data_string.append(kUploadData, kUploadDataSize);
-  element_readers.push_back(base::MakeUnique<UploadBytesElementReader>(
+  element_readers.push_back(std::make_unique<UploadBytesElementReader>(
       upload_data_string.c_str(), upload_data_string.size()));
   ElementsUploadDataStream upload_data_stream(std::move(element_readers), 0);
 
@@ -6111,7 +6113,7 @@ TEST_F(SpdyNetworkTransactionTest, FlowControlStallResumeAfterSettings) {
   std::vector<std::unique_ptr<UploadElementReader>> element_readers;
   SpdyString upload_data_string(kBufferSize * num_upload_buffers, 'a');
   upload_data_string.append(kUploadData, kUploadDataSize);
-  element_readers.push_back(base::MakeUnique<UploadBytesElementReader>(
+  element_readers.push_back(std::make_unique<UploadBytesElementReader>(
       upload_data_string.c_str(), upload_data_string.size()));
   ElementsUploadDataStream upload_data_stream(std::move(element_readers), 0);
 
@@ -6275,7 +6277,7 @@ TEST_F(SpdyNetworkTransactionTest, FlowControlNegativeSendWindowSize) {
   std::vector<std::unique_ptr<UploadElementReader>> element_readers;
   SpdyString upload_data_string(kBufferSize * num_upload_buffers, 'a');
   upload_data_string.append(kUploadData, kUploadDataSize);
-  element_readers.push_back(base::MakeUnique<UploadBytesElementReader>(
+  element_readers.push_back(std::make_unique<UploadBytesElementReader>(
       upload_data_string.c_str(), upload_data_string.size()));
   ElementsUploadDataStream upload_data_stream(std::move(element_readers), 0);
 
@@ -6332,7 +6334,8 @@ TEST_F(SpdyNetworkTransactionTest, GoAwayOnOddPushStreamId) {
   SpdySerializedFrame req(
       spdy_util_.ConstructSpdyGet(nullptr, 0, 1, LOWEST, true));
   SpdySerializedFrame goaway(spdy_util_.ConstructSpdyGoAway(
-      0, ERROR_CODE_PROTOCOL_ERROR, "Odd push stream id."));
+      0, ERROR_CODE_PROTOCOL_ERROR,
+      "Received invalid pushed stream id 3 (must be even) on stream id 1."));
   MockWrite writes[] = {
       CreateMockWrite(req, 0), CreateMockWrite(goaway, 2),
   };
@@ -6364,7 +6367,7 @@ TEST_F(SpdyNetworkTransactionTest,
       spdy_util_.ConstructSpdyPriority(4, 1, IDLE, true));
   SpdySerializedFrame goaway(spdy_util_.ConstructSpdyGoAway(
       4, ERROR_CODE_PROTOCOL_ERROR,
-      "New push stream id must be greater than the last accepted."));
+      "Received pushed stream id 2 must be larger than last accepted id 4."));
   MockWrite writes[] = {
       CreateMockWrite(req, 0), CreateMockWrite(priority_a, 2),
       CreateMockWrite(goaway, 4),
@@ -6670,7 +6673,7 @@ class SpdyNetworkTransactionTLSUsageCheckTest
 };
 
 TEST_F(SpdyNetworkTransactionTLSUsageCheckTest, TLSVersionTooOld) {
-  auto ssl_provider = base::MakeUnique<SSLSocketDataProvider>(ASYNC, OK);
+  auto ssl_provider = std::make_unique<SSLSocketDataProvider>(ASYNC, OK);
   SSLConnectionStatusSetVersion(SSL_CONNECTION_VERSION_SSL3,
                                 &ssl_provider->connection_status);
 
@@ -6678,7 +6681,7 @@ TEST_F(SpdyNetworkTransactionTLSUsageCheckTest, TLSVersionTooOld) {
 }
 
 TEST_F(SpdyNetworkTransactionTLSUsageCheckTest, TLSCipherSuiteSucky) {
-  auto ssl_provider = base::MakeUnique<SSLSocketDataProvider>(ASYNC, OK);
+  auto ssl_provider = std::make_unique<SSLSocketDataProvider>(ASYNC, OK);
   // Set to TLS_RSA_WITH_NULL_MD5
   SSLConnectionStatusSetCipherSuite(0x1, &ssl_provider->connection_status);
 
@@ -6690,7 +6693,7 @@ TEST_F(SpdyNetworkTransactionTLSUsageCheckTest, TLSCipherSuiteSucky) {
 // and makes sure that it results in an ERROR_CODE_INADEQUATE_SECURITY
 // even for a non-secure request URL.
 TEST_F(SpdyNetworkTransactionTest, InsecureUrlCreatesSecureSpdySession) {
-  auto ssl_provider = base::MakeUnique<SSLSocketDataProvider>(ASYNC, OK);
+  auto ssl_provider = std::make_unique<SSLSocketDataProvider>(ASYNC, OK);
   SSLConnectionStatusSetVersion(SSL_CONNECTION_VERSION_SSL3,
                                 &ssl_provider->connection_status);
 
@@ -6704,7 +6707,7 @@ TEST_F(SpdyNetworkTransactionTest, InsecureUrlCreatesSecureSpdySession) {
   request.url = GURL("http://www.example.org/");
 
   // Need secure proxy so that insecure URL can use HTTP/2.
-  auto session_deps = base::MakeUnique<SpdySessionDependencies>(
+  auto session_deps = std::make_unique<SpdySessionDependencies>(
       ProxyService::CreateFixedFromPacResult("HTTPS myproxy:70"));
   NormalSpdyTransactionHelper helper(
       request, DEFAULT_PRIORITY, NetLogWithSource(), std::move(session_deps));
@@ -6713,5 +6716,38 @@ TEST_F(SpdyNetworkTransactionTest, InsecureUrlCreatesSecureSpdySession) {
   TransactionHelperResult out = helper.output();
   EXPECT_THAT(out.rv, IsError(ERR_SPDY_INADEQUATE_TRANSPORT_SECURITY));
 };
+
+TEST_F(SpdyNetworkTransactionTest, RequestHeadersCallback) {
+  SpdySerializedFrame req(
+      spdy_util_.ConstructSpdyGet(nullptr, 0, 1, DEFAULT_PRIORITY, true));
+  MockWrite writes[] = {CreateMockWrite(req, 0)};
+
+  SpdySerializedFrame resp(spdy_util_.ConstructSpdyGetReply(nullptr, 0, 1));
+  SpdySerializedFrame body(spdy_util_.ConstructSpdyDataFrame(1, true));
+  MockRead reads[] = {
+      CreateMockRead(resp, 1), CreateMockRead(body, 2),
+      MockRead(ASYNC, 0, 3)  // EOF
+  };
+
+  HttpRawRequestHeaders raw_headers;
+
+  SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
+  HttpRequestInfo request_info(CreateGetRequest());
+  NormalSpdyTransactionHelper helper(request_info, DEFAULT_PRIORITY,
+                                     NetLogWithSource(), nullptr);
+  helper.RunPreTestSetup();
+  helper.AddData(&data);
+  helper.trans()->SetRequestHeadersCallback(base::Bind(
+      &HttpRawRequestHeaders::Assign, base::Unretained(&raw_headers)));
+  helper.StartDefaultTest();
+  helper.FinishDefaultTestWithoutVerification();
+  EXPECT_FALSE(raw_headers.headers().empty());
+  std::string value;
+  EXPECT_TRUE(raw_headers.FindHeaderForTest(":path", &value));
+  EXPECT_EQ("/", value);
+  EXPECT_TRUE(raw_headers.FindHeaderForTest(":method", &value));
+  EXPECT_EQ("GET", value);
+  EXPECT_TRUE(raw_headers.request_line().empty());
+}
 
 }  // namespace net

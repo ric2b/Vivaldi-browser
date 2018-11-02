@@ -9,7 +9,6 @@
 #include "content/public/common/service_names.mojom.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
-#include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
@@ -25,12 +24,13 @@ spellcheck::mojom::SpellCheckPanelHostPtr GetSpellCheckPanelHost() {
 }
 }
 
-SpellCheckPanel::SpellCheckPanel(content::RenderFrame* render_frame)
+SpellCheckPanel::SpellCheckPanel(content::RenderFrame* render_frame,
+                                 service_manager::BinderRegistry* registry)
     : content::RenderFrameObserver(render_frame),
       spelling_panel_visible_(false) {
   DCHECK(render_frame);
-  render_frame->GetInterfaceRegistry()->AddInterface(base::Bind(
-      &SpellCheckPanel::SpellCheckPanelRequest, base::Unretained(this)));
+  registry->AddInterface(base::Bind(&SpellCheckPanel::SpellCheckPanelRequest,
+                                    base::Unretained(this)));
   render_frame->GetWebFrame()->SetSpellCheckPanelHostClient(this);
 }
 

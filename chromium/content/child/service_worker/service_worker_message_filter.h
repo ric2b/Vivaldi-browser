@@ -13,15 +13,15 @@
 #include "content/common/content_export.h"
 
 struct ServiceWorkerMsg_MessageToDocument_Params;
+struct ServiceWorkerMsg_SetControllerServiceWorker_Params;
 
 namespace content {
 
-struct ServiceWorkerObjectInfo;
 struct ServiceWorkerRegistrationObjectInfo;
 struct ServiceWorkerVersionAttributes;
 
 class CONTENT_EXPORT ServiceWorkerMessageFilter
-    : public NON_EXPORTED_BASE(WorkerThreadMessageFilter) {
+    : public WorkerThreadMessageFilter {
  public:
   explicit ServiceWorkerMessageFilter(ThreadSafeSender* thread_safe_sender);
 
@@ -39,11 +39,6 @@ class CONTENT_EXPORT ServiceWorkerMessageFilter
   void OnStaleMessageReceived(const IPC::Message& msg) override;
 
   // Message handlers for stale messages.
-  void OnStaleAssociateRegistration(
-      int thread_id,
-      int provider_id,
-      const ServiceWorkerRegistrationObjectInfo& info,
-      const ServiceWorkerVersionAttributes& attrs);
   void OnStaleGetRegistration(int thread_id,
                               int request_id,
                               const ServiceWorkerRegistrationObjectInfo& info,
@@ -59,11 +54,7 @@ class CONTENT_EXPORT ServiceWorkerMessageFilter
       int changed_mask,
       const ServiceWorkerVersionAttributes& attrs);
   void OnStaleSetControllerServiceWorker(
-      int thread_id,
-      int provider_id,
-      const ServiceWorkerObjectInfo& info,
-      bool should_notify_controllerchange,
-      const std::set<uint32_t>& used_features);
+      const ServiceWorkerMsg_SetControllerServiceWorker_Params& params);
   void OnStaleMessageToDocument(
       const ServiceWorkerMsg_MessageToDocument_Params& params);
 

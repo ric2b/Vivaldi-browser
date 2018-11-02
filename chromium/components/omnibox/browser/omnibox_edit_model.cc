@@ -659,9 +659,6 @@ void OmniboxEditModel::OpenMatch(AutocompleteMatch match,
                               SEARCH_ENGINE_MAX);
   }
 
-  // Get the current text before we call RevertAll() which will clear it.
-  base::string16 current_text = view_->GetText();
-
   if (disposition != WindowOpenDisposition::NEW_BACKGROUND_TAB) {
     base::AutoReset<bool> tmp(&in_revert_, true);
     view_->RevertAll();  // Revert the box to its unedited state.
@@ -685,6 +682,8 @@ void OmniboxEditModel::OpenMatch(AutocompleteMatch match,
         ui::PageTransitionFromInt(
             match.transition | ui::PAGE_TRANSITION_FROM_ADDRESS_BAR),
         match.type);
+
+    // The observer should have been synchronously notified of a pending load.
     if (observer && observer->HasSeenPendingLoad())
       ignore_result(observer.release());  // The observer will delete itself.
   }
@@ -1361,12 +1360,11 @@ OmniboxEventProto::PageClassification OmniboxEditModel::ClassifyPage() const {
   const GURL& gurl = client_->GetURL();
   if (!gurl.is_valid())
     return OmniboxEventProto::INVALID_SPEC;
-  const std::string& url = gurl.spec();
-  if (client_->IsNewTabPage(url))
+  if (client_->IsNewTabPage(gurl))
     return OmniboxEventProto::NTP;
-  if (url == url::kAboutBlankURL)
+  if (gurl.spec() == url::kAboutBlankURL)
     return OmniboxEventProto::BLANK;
-  if (client_->IsHomePage(url))
+  if (client_->IsHomePage(gurl))
     return OmniboxEventProto::HOME_PAGE;
   if (client_->IsSearchResultsPage())
     return OmniboxEventProto::SEARCH_RESULT_PAGE_NO_SEARCH_TERM_REPLACEMENT;

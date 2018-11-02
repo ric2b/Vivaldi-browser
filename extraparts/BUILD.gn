@@ -20,6 +20,13 @@ source_set("extraparts") {
     "//third_party/WebKit/public:blink_headers",
     "//vivaldi/extensions/schema:api",
     "//vivaldi/calendar",
+    "//vivaldi/notes:browser",
   ]
+  if (!is_android) {
+    deps += [
+      "//vivaldi/extensions/schema:api",
+    ]
+  }
+
   configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
 }

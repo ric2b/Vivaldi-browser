@@ -60,6 +60,10 @@ class PepperWebPluginImpl : public blink::WebPlugin {
   bool HasSelection() const override;
   blink::WebString SelectionAsText() const override;
   blink::WebString SelectionAsMarkup() const override;
+  bool CanEditText() const override;
+  bool ExecuteEditCommand(const blink::WebString& name) override;
+  bool ExecuteEditCommand(const blink::WebString& name,
+                          const blink::WebString& value) override;
   blink::WebURL LinkAtPosition(const blink::WebPoint& position) const override;
   bool GetPrintPresetOptionsFromDocument(
       blink::WebPrintPresetOptions* preset_options) override;
@@ -82,14 +86,16 @@ class PepperWebPluginImpl : public blink::WebPlugin {
  private:
   friend class base::DeleteHelper<PepperWebPluginImpl>;
 
-  virtual ~PepperWebPluginImpl();
-  struct InitData;
+  ~PepperWebPluginImpl() override;
 
-  std::unique_ptr<InitData>
-      init_data_;  // Cleared upon successful initialization.
+  // Cleared upon successful initialization.
+  struct InitData;
+  std::unique_ptr<InitData> init_data_;
+
   // True if the instance represents the entire document in a frame instead of
   // being an embedded resource.
-  bool full_frame_;
+  const bool full_frame_;
+
   std::unique_ptr<PluginInstanceThrottlerImpl> throttler_;
   scoped_refptr<PepperPluginInstanceImpl> instance_;
   gfx::Rect plugin_rect_;

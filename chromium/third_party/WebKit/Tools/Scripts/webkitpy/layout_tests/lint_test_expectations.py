@@ -54,16 +54,7 @@ def lint(host, options):
     for port_to_lint in ports_to_lint:
         expectations_dict = port_to_lint.all_expectations_dict()
 
-        # There are some TestExpectations files that are not loaded by default
-        # in any Port, and are instead passed via --additional-expectations on
-        # some builders. We also want to inspect these files if they're present.
-        extra_files = (
-            'ASANExpectations',
-            'LeakExpectations',
-            'MSANExpectations',
-        )
-        for name in extra_files:
-            path = port_to_lint.layout_tests_dir() + '/' + name
+        for path in port_to_lint.extra_expectations_files():
             if host.filesystem.exists(path):
                 expectations_dict[path] = host.filesystem.read_text_file(path)
 
@@ -73,9 +64,10 @@ def lint(host, options):
                 continue
 
             try:
-                test_expectations.TestExpectations(port_to_lint,
-                                                   expectations_dict={expectations_file: expectations_dict[expectations_file]},
-                                                   is_lint_mode=True)
+                test_expectations.TestExpectations(
+                    port_to_lint,
+                    expectations_dict={expectations_file: expectations_dict[expectations_file]},
+                    is_lint_mode=True)
             except test_expectations.ParseError as error:
                 _log.error('')
                 for warning in error.warnings:
@@ -138,19 +130,20 @@ def run_checks(host, options, logging_stream):
         logger.removeHandler(handler)
 
 
-def main(argv, _, stderr):
+def main(argv, stderr, host=None):
     parser = optparse.OptionParser(option_list=platform_options(use_globs=True))
     parser.add_option('--json', help='Path to JSON output file')
     options, _ = parser.parse_args(argv)
 
-    if options.platform and 'test' in options.platform:
-        # It's a bit lame to import mocks into real code, but this allows the user
-        # to run tests against the test platform interactively, which is useful for
-        # debugging test failures.
-        from webkitpy.common.host_mock import MockHost
-        host = MockHost()
-    else:
-        host = Host()
+    if not host:
+        if options.platform and 'test' in options.platform:
+            # It's a bit lame to import mocks into real code, but this allows the user
+            # to run tests against the test platform interactively, which is useful for
+            # debugging test failures.
+            from webkitpy.common.host_mock import MockHost
+            host = MockHost()
+        else:
+            host = Host()
 
     # Need to generate MANIFEST.json since some expectations correspond to WPT
     # tests that aren't files and only exist in the manifest.

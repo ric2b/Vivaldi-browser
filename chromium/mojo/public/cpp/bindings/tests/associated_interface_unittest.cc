@@ -670,7 +670,7 @@ class CallbackFilter : public MessageReceiver {
   ~CallbackFilter() override {}
 
   static std::unique_ptr<CallbackFilter> Wrap(const base::Closure& callback) {
-    return base::MakeUnique<CallbackFilter>(callback);
+    return std::make_unique<CallbackFilter>(callback);
   }
 
   // MessageReceiver:
@@ -865,7 +865,7 @@ TEST_F(AssociatedInterfaceTest, BindingFlushForTestingWithClosedPeer) {
 TEST_F(AssociatedInterfaceTest, StrongBindingFlushForTesting) {
   IntegerSenderConnectionPtr ptr;
   auto binding =
-      MakeStrongBinding(base::MakeUnique<IntegerSenderConnectionImpl>(
+      MakeStrongBinding(std::make_unique<IntegerSenderConnectionImpl>(
                             IntegerSenderConnectionRequest{}),
                         MakeRequest(&ptr));
   bool called = false;
@@ -887,7 +887,7 @@ TEST_F(AssociatedInterfaceTest, StrongBindingFlushForTestingWithClosedPeer) {
   IntegerSenderConnectionPtr ptr;
   bool called = false;
   auto binding =
-      MakeStrongBinding(base::MakeUnique<IntegerSenderConnectionImpl>(
+      MakeStrongBinding(std::make_unique<IntegerSenderConnectionImpl>(
                             IntegerSenderConnectionRequest{}),
                         MakeRequest(&ptr));
   binding->set_connection_error_handler(base::Bind(&SetBool, &called));
@@ -1070,17 +1070,19 @@ TEST_F(AssociatedInterfaceTest, ThreadSafeAssociatedInterfacePtr) {
         auto done_callback = base::Bind(
             [](const scoped_refptr<base::TaskRunner>& main_task_runner,
                const base::Closure& quit_closure,
-               base::PlatformThreadId thread_id, int32_t result) {
+               scoped_refptr<base::SequencedTaskRunner> sender_sequence_runner,
+               int32_t result) {
               EXPECT_EQ(123, result);
-              // Validate the callback is invoked on the calling thread.
-              EXPECT_EQ(thread_id, base::PlatformThread::CurrentId());
+              // Validate the callback is invoked on the calling sequence.
+              EXPECT_TRUE(sender_sequence_runner->RunsTasksInCurrentSequence());
               // Notify the run_loop to quit.
               main_task_runner->PostTask(FROM_HERE, quit_closure);
             });
+        scoped_refptr<base::SequencedTaskRunner> current_sequence_runner =
+            base::SequencedTaskRunnerHandle::Get();
         (*thread_safe_sender)
-            ->Echo(123,
-                   base::Bind(done_callback, main_task_runner, quit_closure,
-                              base::PlatformThread::CurrentId()));
+            ->Echo(123, base::Bind(done_callback, main_task_runner,
+                                   quit_closure, current_sequence_runner));
       },
       base::SequencedTaskRunnerHandle::Get(), run_loop.QuitClosure(),
       thread_safe_sender);
@@ -1110,7 +1112,7 @@ TEST_F(AssociatedInterfaceTest,
   auto setup = [](base::WaitableEvent* sender_info_bound_event,
                   IntegerSenderAssociatedPtrInfo* sender_info,
                   ForwarderTestContext* context) {
-    context->interface_impl = base::MakeUnique<IntegerSenderConnectionImpl>(
+    context->interface_impl = std::make_unique<IntegerSenderConnectionImpl>(
         MakeRequest(&context->connection_ptr));
 
     auto sender_request = MakeRequest(sender_info);

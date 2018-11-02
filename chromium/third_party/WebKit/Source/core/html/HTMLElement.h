@@ -25,9 +25,11 @@
 
 #include "core/CoreExport.h"
 #include "core/dom/Element.h"
+#include "platform/text/TextDirection.h"
 
 namespace blink {
 
+struct AttributeTriggers;
 class DocumentFragment;
 class ExceptionState;
 class FormAssociated;
@@ -164,7 +166,6 @@ class CORE_EXPORT HTMLElement : public Element {
   DocumentFragment* TextToFragment(const String&, ExceptionState&);
 
   bool SelfOrAncestorHasDirAutoAttribute() const;
-  void DirAttributeChanged(const AtomicString&);
   void AdjustDirectionalityIfNeededAfterChildAttributeChanged(Element* child);
   void AdjustDirectionalityIfNeededAfterChildrenChanged(const ChildrenChange&);
   TextDirection Directionality(
@@ -173,6 +174,16 @@ class CORE_EXPORT HTMLElement : public Element {
   TranslateAttributeMode GetTranslateAttributeMode() const;
 
   void HandleKeypressEvent(KeyboardEvent*);
+
+  static AttributeTriggers* TriggersForAttributeName(
+      const QualifiedName& attr_name);
+
+  void OnDirAttrChanged(const AttributeModificationParams&);
+  void OnInertAttrChanged(const AttributeModificationParams&);
+  void OnLangAttrChanged(const AttributeModificationParams&);
+  void OnNonceAttrChanged(const AttributeModificationParams&);
+  void OnTabIndexAttrChanged(const AttributeModificationParams&);
+  void OnXMLLangAttrChanged(const AttributeModificationParams&);
 };
 
 DEFINE_ELEMENT_TYPE_CASTS(HTMLElement, IsHTMLElement());

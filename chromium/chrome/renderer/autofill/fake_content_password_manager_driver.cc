@@ -71,6 +71,12 @@ void FakeContentPasswordManagerDriver::ShowNotSecureWarning(
   called_show_not_secure_warning_ = true;
 }
 
+void FakeContentPasswordManagerDriver::ShowManualFallbackSuggestion(
+    base::i18n::TextDirection text_direction,
+    const gfx::RectF& bounds) {
+  called_manual_fallback_suggestion_ = true;
+}
+
 void FakeContentPasswordManagerDriver::RecordSavePasswordProgress(
     const std::string& log) {
   called_record_save_progress_ = true;
@@ -91,4 +97,13 @@ void FakeContentPasswordManagerDriver::CheckSafeBrowsingReputation(
     const GURL& form_action,
     const GURL& frame_url) {
   called_check_safe_browsing_reputation_cnt_++;
+}
+
+void FakeContentPasswordManagerDriver::ShowManualFallbackForSaving(
+    const autofill::PasswordForm& password_form) {
+  called_show_manual_fallback_for_saving_count_++;
+}
+
+void FakeContentPasswordManagerDriver::HideManualFallbackForSaving() {
+  called_show_manual_fallback_for_saving_count_ = 0;
 }

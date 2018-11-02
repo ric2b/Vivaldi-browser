@@ -52,27 +52,25 @@ void Registry::RememberFileSystem(
     const ProvidedFileSystemInfo& file_system_info,
     const Watchers& watchers) {
   auto file_system = base::MakeUnique<base::DictionaryValue>();
-  file_system->SetStringWithoutPathExpansion(kPrefKeyFileSystemId,
-                                             file_system_info.file_system_id());
-  file_system->SetStringWithoutPathExpansion(kPrefKeyDisplayName,
-                                             file_system_info.display_name());
-  file_system->SetBooleanWithoutPathExpansion(kPrefKeyWritable,
-                                              file_system_info.writable());
-  file_system->SetBooleanWithoutPathExpansion(
-      kPrefKeySupportsNotifyTag, file_system_info.supports_notify_tag());
-  file_system->SetIntegerWithoutPathExpansion(
-      kPrefKeyOpenedFilesLimit, file_system_info.opened_files_limit());
+  file_system->SetKey(kPrefKeyFileSystemId,
+                      base::Value(file_system_info.file_system_id()));
+  file_system->SetKey(kPrefKeyDisplayName,
+                      base::Value(file_system_info.display_name()));
+  file_system->SetKey(kPrefKeyWritable,
+                      base::Value(file_system_info.writable()));
+  file_system->SetKey(kPrefKeySupportsNotifyTag,
+                      base::Value(file_system_info.supports_notify_tag()));
+  file_system->SetKey(kPrefKeyOpenedFilesLimit,
+                      base::Value(file_system_info.opened_files_limit()));
 
   auto watchers_value = base::MakeUnique<base::DictionaryValue>();
 
   for (const auto& it : watchers) {
     auto watcher = base::MakeUnique<base::DictionaryValue>();
-    watcher->SetStringWithoutPathExpansion(kPrefKeyWatcherEntryPath,
-                                           it.second.entry_path.value());
-    watcher->SetBooleanWithoutPathExpansion(kPrefKeyWatcherRecursive,
-                                            it.second.recursive);
-    watcher->SetStringWithoutPathExpansion(kPrefKeyWatcherLastTag,
-                                           it.second.last_tag);
+    watcher->SetKey(kPrefKeyWatcherEntryPath,
+                    base::Value(it.second.entry_path.value()));
+    watcher->SetKey(kPrefKeyWatcherRecursive, base::Value(it.second.recursive));
+    watcher->SetKey(kPrefKeyWatcherLastTag, base::Value(it.second.last_tag));
     auto persistent_origins_value = base::MakeUnique<base::ListValue>();
     for (const auto& subscriber_it : it.second.subscribers) {
       // Only persistent subscribers should be stored in persistent storage.
@@ -277,8 +275,7 @@ void Registry::UpdateWatcherTag(const ProvidedFileSystemInfo& file_system_info,
     return;
   }
 
-  watcher_value->SetStringWithoutPathExpansion(kPrefKeyWatcherLastTag,
-                                               watcher.last_tag);
+  watcher_value->SetKey(kPrefKeyWatcherLastTag, base::Value(watcher.last_tag));
 }
 
 }  // namespace file_system_provider

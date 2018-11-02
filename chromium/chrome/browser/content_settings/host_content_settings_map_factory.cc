@@ -11,6 +11,7 @@
 #include "chrome/browser/profiles/off_the_record_profile_impl.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_features.h"
+#include "components/content_settings/core/browser/content_settings_pref_provider.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/sync_preferences/pref_service_syncable.h"
@@ -114,12 +115,19 @@ scoped_refptr<RefcountedKeyedService>
 #endif // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
 #if defined(OS_ANDROID)
-  if (base::FeatureList::IsEnabled(features::kSiteNotificationChannels)) {
     auto channels_provider =
         base::MakeUnique<NotificationChannelsProviderAndroid>();
-    settings_map->RegisterProvider(
-        HostContentSettingsMap::NOTIFICATION_ANDROID_PROVIDER,
-        std::move(channels_provider));
+    if (base::FeatureList::IsEnabled(features::kSiteNotificationChannels)) {
+      channels_provider->MigrateToChannelsIfNecessary(
+          profile->GetPrefs(), settings_map->GetPrefProvider());
+      settings_map->RegisterUserModifiableProvider(
+          HostContentSettingsMap::NOTIFICATION_ANDROID_PROVIDER,
+          std::move(channels_provider));
+    } else {
+      // TODO(crbug.com/758553): Remove this unmigration code and the feature
+      // flag once we're confident a kill-switch is no longer necessary (M63?).
+      channels_provider->UnmigrateChannelsIfNecessary(
+          profile->GetPrefs(), settings_map->GetPrefProvider());
   }
 #endif  // defined (OS_ANDROID)
   return settings_map;

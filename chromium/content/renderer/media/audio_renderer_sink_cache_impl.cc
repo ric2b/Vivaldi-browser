@@ -174,8 +174,9 @@ void AudioRendererSinkCacheImpl::DeleteLaterIfUnused(
     const media::AudioRendererSink* sink_ptr) {
   task_runner_->PostDelayedTask(
       FROM_HERE,
-      base::Bind(&AudioRendererSinkCacheImpl::DeleteSink, weak_this_,
-                 base::RetainedRef(sink_ptr), false /*do not delete if used*/),
+      base::BindOnce(&AudioRendererSinkCacheImpl::DeleteSink, weak_this_,
+                     base::RetainedRef(sink_ptr),
+                     false /*do not delete if used*/),
       delete_timeout_);
 }
 
@@ -201,7 +202,7 @@ void AudioRendererSinkCacheImpl::DeleteSink(
     // When |force_delete_used| is set, it's expected that we are deleting a
     // used sink.
     DCHECK((!force_delete_used) || (force_delete_used && cache_iter->used))
-        << "Attempt to delete a non-aquired sink.";
+        << "Attempt to delete a non-acquired sink.";
 
     if (!force_delete_used && cache_iter->used)
       return;

@@ -41,6 +41,12 @@ class WindowTreeHostMus;
 
 struct WindowTreeHostMusInitParams;
 
+// This mirrors ui::mojom::BlockingContainers. See it for details.
+struct BlockingContainers {
+  aura::Window* system_modal_container = nullptr;
+  aura::Window* min_container = nullptr;
+};
+
 // See the mojom with the same name for details on the functions in this
 // interface.
 class AURA_EXPORT WindowManagerClient {
@@ -56,7 +62,6 @@ class AURA_EXPORT WindowManagerClient {
   virtual void RemoveAccelerator(uint32_t id) = 0;
   virtual void AddActivationParent(Window* window) = 0;
   virtual void RemoveActivationParent(Window* window) = 0;
-  virtual void ActivateNextWindow() = 0;
   virtual void SetExtendedHitRegionForChildren(
       Window* window,
       const gfx::Insets& mouse_area,
@@ -80,6 +85,12 @@ class AURA_EXPORT WindowManagerClient {
   virtual void SetGlobalOverrideCursor(
       base::Optional<ui::CursorData> cursor) = 0;
 
+  // Sets whether the cursor is visible because the user touched the
+  // screen. This bit is separate from SetCursorVisible(), as it implicitly is
+  // set in the window server when a touch event occurs, and is implicitly
+  // cleared when the mouse moves.
+  virtual void SetCursorTouchVisible(bool enabled) = 0;
+
   // Sets the list of keys which don't hide the cursor.
   virtual void SetKeyEventsThatDontHideCursor(
       std::vector<ui::mojom::EventMatcherPtr> cursor_key_list) = 0;
@@ -88,6 +99,11 @@ class AURA_EXPORT WindowManagerClient {
   // applicable to top-level windows. If a client is not embedded in |window|,
   // this does nothing.
   virtual void RequestClose(Window* window) = 0;
+
+  // See mojom::WindowManager::SetBlockingContainers() and
+  // mojom::BlockingContainers for details on what this does.
+  virtual void SetBlockingContainers(
+      const std::vector<BlockingContainers>& all_blocking_containers) = 0;
 
   // Blocks until the initial displays have been received, or if displays are
   // not automatically created until the connection to mus has been
@@ -217,6 +233,10 @@ class AURA_EXPORT WindowManagerDelegate {
       const ui::Event& event,
       std::unordered_map<std::string, std::vector<uint8_t>>* properties);
 
+  // Called when the mouse cursor is shown or hidden in response to a touch
+  // event or window manager call.
+  virtual void OnCursorTouchVisibleChanged(bool enabled) = 0;
+
   virtual void OnWmPerformMoveLoop(
       Window* window,
       ui::mojom::MoveLoopSource source,
@@ -237,6 +257,10 @@ class AURA_EXPORT WindowManagerDelegate {
   // Called when a client requests that its activation be given to another
   // window.
   virtual void OnWmDeactivateWindow(Window* window) = 0;
+
+  // Called when an event is blocked by a modal window. |window| is the modal
+  // window that blocked the event.
+  virtual void OnEventBlockedByModalWindow(Window* window);
 
  protected:
   virtual ~WindowManagerDelegate() {}

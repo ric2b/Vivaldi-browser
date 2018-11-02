@@ -40,17 +40,34 @@ void OnGotAllPaymentApps(const JavaRef<jobject>& jweb_contents,
   JNIEnv* env = AttachCurrentThread();
 
   for (const auto& app_info : apps) {
+    // Sends related application Ids to java side if the app prefers related
+    // applications.
+    std::vector<std::string> preferred_related_application_ids;
+    if (app_info.second->prefer_related_applications) {
+      for (const auto& related_application :
+           app_info.second->related_applications) {
+        // Only consider related applications on Google play for Android.
+        if (related_application.platform == "play")
+          preferred_related_application_ids.emplace_back(
+              related_application.id);
+      }
+    }
+
     Java_ServiceWorkerPaymentAppBridge_onPaymentAppCreated(
         env, app_info.second->registration_id,
+        ConvertUTF8ToJavaString(env, app_info.second->scope.spec()),
         ConvertUTF8ToJavaString(env, app_info.second->name),
-        // Do not show duplicate information.
-        app_info.second->name.compare(app_info.second->origin.Serialize()) == 0
+        // Do not show duplicate information in sublabel as in label.
+        app_info.second->name.compare(
+            app_info.second->scope.GetOrigin().spec()) == 0
             ? nullptr
-            : ConvertUTF8ToJavaString(env, app_info.second->origin.Serialize()),
+            : ConvertUTF8ToJavaString(
+                  env, app_info.second->scope.GetOrigin().spec()),
         app_info.second->icon == nullptr
             ? nullptr
             : gfx::ConvertToJavaBitmap(app_info.second->icon.get()),
         ToJavaArrayOfStrings(env, app_info.second->enabled_methods),
+        ToJavaArrayOfStrings(env, preferred_related_application_ids),
         jweb_contents, jcallback);
   }
   Java_ServiceWorkerPaymentAppBridge_onAllPaymentAppsCreated(env, jcallback);
@@ -66,6 +83,15 @@ void OnPaymentAppInvoked(
       env, jcallback,
       ConvertUTF8ToJavaString(env, handler_response->method_name),
       ConvertUTF8ToJavaString(env, handler_response->stringified_details));
+}
+
+void OnPaymentAppAborted(const JavaRef<jobject>& jweb_contents,
+                         const JavaRef<jobject>& jcallback,
+                         bool result) {
+  JNIEnv* env = AttachCurrentThread();
+
+  Java_ServiceWorkerPaymentAppBridge_onPaymentAppAborted(env, jcallback,
+                                                         result);
 }
 
 }  // namespace
@@ -181,7 +207,22 @@ static void InvokePaymentApp(
 
   content::PaymentAppProvider::GetInstance()->InvokePaymentApp(
       web_contents->GetBrowserContext(), registration_id, std::move(event_data),
-      base::Bind(&OnPaymentAppInvoked,
-                 ScopedJavaGlobalRef<jobject>(env, jweb_contents),
-                 ScopedJavaGlobalRef<jobject>(env, jcallback)));
+      base::BindOnce(&OnPaymentAppInvoked,
+                     ScopedJavaGlobalRef<jobject>(env, jweb_contents),
+                     ScopedJavaGlobalRef<jobject>(env, jcallback)));
+}
+
+static void AbortPaymentApp(JNIEnv* env,
+                            const JavaParamRef<jclass>& jcaller,
+                            const JavaParamRef<jobject>& jweb_contents,
+                            jlong registration_id,
+                            const JavaParamRef<jobject>& jcallback) {
+  content::WebContents* web_contents =
+      content::WebContents::FromJavaWebContents(jweb_contents);
+
+  content::PaymentAppProvider::GetInstance()->AbortPayment(
+      web_contents->GetBrowserContext(), registration_id,
+      base::BindOnce(&OnPaymentAppAborted,
+                     ScopedJavaGlobalRef<jobject>(env, jweb_contents),
+                     ScopedJavaGlobalRef<jobject>(env, jcallback)));
 }

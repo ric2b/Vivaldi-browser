@@ -12,6 +12,7 @@
 #include "base/metrics/user_metrics.h"
 #include "base/path_service.h"
 #include "base/sequenced_task_runner.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/time/default_tick_clock.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
@@ -37,7 +38,6 @@
 #include "ios/chrome/browser/browser_state/chrome_browser_state_manager.h"
 #include "ios/chrome/browser/chrome_paths.h"
 #include "ios/chrome/browser/chrome_switches.h"
-#include "ios/chrome/browser/chrome_url_constants.h"
 #import "ios/chrome/browser/first_run/first_run.h"
 #include "ios/chrome/browser/install_time_util.h"
 #include "ios/chrome/browser/ios_chrome_field_trials.h"
@@ -94,11 +94,17 @@ void IOSChromeMainParts::PreCreateThreads() {
   // components used to handle those tasks are not yet available. This work
   // should be deferred to PreMainMessageLoopRunImpl.
 
+  // The initial read is done synchronously, the TaskPriority is thus only used
+  // for flushes to disks and BACKGROUND is therefore appropriate. Priority of
+  // remaining BACKGROUND+BLOCK_SHUTDOWN tasks is bumped by the TaskScheduler on
+  // shutdown.
+  scoped_refptr<base::SequencedTaskRunner> local_state_task_runner =
+      base::CreateSequencedTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::BACKGROUND,
+           base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
+
   base::FilePath local_state_path;
   CHECK(PathService::Get(ios::FILE_LOCAL_STATE, &local_state_path));
-  scoped_refptr<base::SequencedTaskRunner> local_state_task_runner =
-      JsonPrefStore::GetTaskRunnerForFile(local_state_path,
-                                          web::WebThread::GetBlockingPool());
   application_context_.reset(new ApplicationContextImpl(
       local_state_task_runner.get(), parsed_command_line_,
       l10n_util::GetLocaleOverride()));
@@ -148,8 +154,7 @@ void IOSChromeMainParts::PreMainMessageLoopRun() {
 
   // ContentSettingsPattern need to be initialized before creating the
   // ChromeBrowserState.
-  ContentSettingsPattern::SetNonWildcardDomainNonPortScheme(
-      kDummyExtensionScheme);
+  ContentSettingsPattern::SetNonWildcardDomainNonPortSchemes(nullptr, 0);
 
   // Ensure ClipboadRecentContentIOS is created.
   ClipboardRecentContent::SetInstance(CreateClipboardRecentContentIOS());
@@ -190,7 +195,7 @@ void IOSChromeMainParts::PreMainMessageLoopRun() {
   if (variations_service) {
     variations_service->set_policy_pref_service(
         last_used_browser_state->GetPrefs());
-    variations_service->StartRepeatedVariationsSeedFetch();
+    variations_service->PerformPreMainMessageLoopStartup();
   }
 
   translate::TranslateDownloadManager::RequestLanguageList(

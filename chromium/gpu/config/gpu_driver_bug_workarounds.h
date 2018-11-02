@@ -5,6 +5,8 @@
 #ifndef GPU_CONFIG_GPU_DRIVER_BUG_WORKAROUNDS_H_
 #define GPU_CONFIG_GPU_DRIVER_BUG_WORKAROUNDS_H_
 
+#include <vector>
+
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "gpu/config/gpu_driver_bug_workaround_type.h"
@@ -13,31 +15,32 @@
 // Forwardly declare a few GL types to avoid including GL header files.
 typedef int GLint;
 
-namespace base {
-class CommandLine;
-}
-
 namespace gpu {
 
 class GPU_EXPORT GpuDriverBugWorkarounds {
  public:
   GpuDriverBugWorkarounds();
-  explicit GpuDriverBugWorkarounds(const base::CommandLine* command_line);
+  explicit GpuDriverBugWorkarounds(const std::vector<int32_t>&);
 
   GpuDriverBugWorkarounds(const GpuDriverBugWorkarounds& other);
 
   ~GpuDriverBugWorkarounds();
 
-#define GPU_OP(type, name) bool name;
+  // For boolean members, || is applied.
+  // For int members, the min() is applied if both are non-zero; if one is
+  // zero, then the other is applied.
+  void Append(const GpuDriverBugWorkarounds& extra);
+
+#define GPU_OP(type, name) bool name = false;
   GPU_DRIVER_BUG_WORKAROUNDS(GPU_OP)
 #undef GPU_OP
 
   // Note: 0 here means use driver limit.
-  GLint max_texture_size;
-  GLint max_fragment_uniform_vectors;
-  GLint max_varying_vectors;
-  GLint max_vertex_uniform_vectors;
-  GLint max_copy_texture_chromium_size;
+  GLint max_texture_size = 0;
+  GLint max_fragment_uniform_vectors = 0;
+  GLint max_varying_vectors = 0;
+  GLint max_vertex_uniform_vectors = 0;
+  GLint max_copy_texture_chromium_size = 0;
 };
 
 }  // namespace gpu

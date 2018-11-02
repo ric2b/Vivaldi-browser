@@ -30,14 +30,7 @@
 #include "ui/aura/env.h"
 #include "ui/display/manager/chromeos/default_touch_transform_setter.h"
 #include "ui/display/types/native_display_delegate.h"
-
-#if defined(USE_X11)
-#include "ui/display/manager/chromeos/x11/native_display_delegate_x11.h"
-#endif
-
-#if defined(USE_OZONE)
 #include "ui/ozone/public/ozone_platform.h"
-#endif
 
 namespace ash {
 
@@ -96,6 +89,12 @@ void ShellPortClassic::SetGlobalOverrideCursor(
 
 bool ShellPortClassic::IsMouseEventsEnabled() {
   return Shell::Get()->cursor_manager()->IsMouseEventsEnabled();
+}
+
+void ShellPortClassic::SetCursorTouchVisible(bool enabled) {
+  // This is only implemented on the mash side; in classic ash we just use the
+  // ::wm::CursorManager.
+  NOTREACHED();
 }
 
 std::unique_ptr<WindowResizer> ShellPortClassic::CreateDragWindowResizer(
@@ -168,15 +167,13 @@ std::unique_ptr<AshWindowTreeHost> ShellPortClassic::CreateAshWindowTreeHost(
 void ShellPortClassic::OnCreatedRootWindowContainers(
     RootWindowController* root_window_controller) {}
 
+void ShellPortClassic::UpdateSystemModalAndBlockingContainers() {}
+
 void ShellPortClassic::OnHostsInitialized() {}
 
 std::unique_ptr<display::NativeDisplayDelegate>
 ShellPortClassic::CreateNativeDisplayDelegate() {
-#if defined(USE_OZONE)
   return ui::OzonePlatform::GetInstance()->CreateNativeDisplayDelegate();
-#else
-  return base::MakeUnique<display::NativeDisplayDelegateX11>();
-#endif
 }
 
 std::unique_ptr<AcceleratorController>

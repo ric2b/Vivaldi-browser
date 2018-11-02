@@ -31,6 +31,7 @@
 #include "core/CoreExport.h"
 #include "core/dom/SynchronousMutationObserver.h"
 #include "core/editing/EphemeralRange.h"
+#include "core/editing/SetSelectionOptions.h"
 #include "core/editing/VisiblePosition.h"
 #include "core/editing/VisibleSelection.h"
 #include "core/layout/ScrollAlignment.h"
@@ -51,16 +52,11 @@ class Range;
 class SelectionEditor;
 class LayoutSelection;
 enum class SelectionModifyAlteration;
+enum class SelectionModifyDirection;
 class TextIteratorBehavior;
 struct PaintInvalidatorContext;
 
-enum class CursorAlignOnScroll { kIfNeeded, kAlways };
-
-enum EUserTriggered { kNotUserTriggered = 0, kUserTriggered = 1 };
-
 enum RevealExtentOption { kRevealExtent, kDoNotRevealExtent };
-
-enum class SelectionDirectionalMode { kNonDirectional, kDirectional };
 
 enum class CaretVisibility;
 
@@ -77,20 +73,6 @@ class CORE_EXPORT FrameSelection final
     return new FrameSelection(frame);
   }
   ~FrameSelection();
-
-  enum SetSelectionOption {
-    // 1 << 0 is reserved for EUserTriggered
-    kCloseTyping = 1 << 1,
-    kClearTypingStyle = 1 << 2,
-    kDoNotSetFocus = 1 << 3,
-    kDoNotClearStrategy = 1 << 4,
-  };
-  // Union of values in SetSelectionOption and EUserTriggered
-  typedef unsigned SetSelectionOptions;
-  static inline EUserTriggered SelectionOptionsToUserTriggered(
-      SetSelectionOptions options) {
-    return static_cast<EUserTriggered>(options & kUserTriggered);
-  }
 
   bool IsAvailable() const { return LifecycleContext(); }
   // You should not call |document()| when |!isAvailable()|.
@@ -110,11 +92,15 @@ class CORE_EXPORT FrameSelection final
   // layout.
   const VisibleSelection& ComputeVisibleSelectionInDOMTreeDeprecated() const;
 
-  void SetSelection(const SelectionInDOMTree&,
-                    SetSelectionOptions = kCloseTyping | kClearTypingStyle,
-                    CursorAlignOnScroll = CursorAlignOnScroll::kIfNeeded,
-                    TextGranularity = TextGranularity::kCharacter);
-  void SelectAll(EUserTriggered = kNotUserTriggered);
+  void SetSelection(const SelectionInDOMTree&, const SetSelectionOptions&);
+
+  // TODO(editing-dev): We should rename this function to
+  // SetSelectionAndEndTyping()
+  // Set selection with end of typing processing == close typing and clear
+  // typing style.
+  void SetSelection(const SelectionInDOMTree&);
+  void SelectAll(SetSelectionBy);
+  void SelectAll();
   void Clear();
   bool IsHidden() const;
 
@@ -124,12 +110,8 @@ class CORE_EXPORT FrameSelection final
   // setSelectionDeprecated() returns true if didSetSelectionDeprecated() should
   // be called.
   bool SetSelectionDeprecated(const SelectionInDOMTree&,
-                              SetSelectionOptions = kCloseTyping |
-                                                    kClearTypingStyle,
-                              TextGranularity = TextGranularity::kCharacter);
-  void DidSetSelectionDeprecated(
-      SetSelectionOptions = kCloseTyping | kClearTypingStyle,
-      CursorAlignOnScroll = CursorAlignOnScroll::kIfNeeded);
+                              const SetSelectionOptions&);
+  void DidSetSelectionDeprecated(const SetSelectionOptions&);
 
   // Call this after doing user-triggered selections to make it easy to delete
   // the frame you entirely selected.
@@ -138,9 +120,9 @@ class CORE_EXPORT FrameSelection final
   bool Contains(const LayoutPoint&);
 
   bool Modify(SelectionModifyAlteration,
-              SelectionDirection,
+              SelectionModifyDirection,
               TextGranularity,
-              EUserTriggered = kNotUserTriggered);
+              SetSelectionBy);
 
   // Moves the selection extent based on the selection granularity strategy.
   // This function does not allow the selection to collapse. If the new
@@ -195,7 +177,7 @@ class CORE_EXPORT FrameSelection final
 
   void SetUseSecureKeyboardEntryWhenActive(bool);
 
-  bool IsHandleVisible() const;
+  bool IsHandleVisible() const { return is_handle_visible_; }
 
   void UpdateSecureKeyboardEntryIfActive();
 
@@ -207,7 +189,7 @@ class CORE_EXPORT FrameSelection final
 #endif
 
   void SetFocusedNodeIfNeeded();
-  void NotifyTextControlOfSelectionChange(EUserTriggered);
+  void NotifyTextControlOfSelectionChange(SetSelectionBy);
 
   String SelectedHTMLForClipboard() const;
   String SelectedText(const TextIteratorBehavior&) const;
@@ -237,7 +219,6 @@ class CORE_EXPORT FrameSelection final
 
   FrameCaret& FrameCaretForTesting() const { return *frame_caret_; }
 
-  std::pair<int, int> LayoutSelectionStartEnd();
   base::Optional<int> LayoutSelectionStart() const;
   base::Optional<int> LayoutSelectionEnd() const;
   void ClearLayoutSelection();
@@ -290,6 +271,7 @@ class CORE_EXPORT FrameSelection final
   LayoutUnit x_pos_for_vertical_arrow_navigation_;
 
   bool focused_ : 1;
+  bool is_handle_visible_ = false;
 
   // Controls text granularity used to adjust the selection's extent in
   // moveRangeSelectionExtent.

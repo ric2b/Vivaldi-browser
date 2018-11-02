@@ -49,57 +49,6 @@ namespace blink {
 
 using namespace HTMLNames;
 
-// -----------------------------------------------------------------
-
-static bool ContainsUncommonAttributeSelector(const CSSSelector&);
-
-static inline bool SelectorListContainsUncommonAttributeSelector(
-    const CSSSelector* selector) {
-  const CSSSelectorList* selector_list = selector->SelectorList();
-  if (!selector_list)
-    return false;
-  for (const CSSSelector* selector = selector_list->First(); selector;
-       selector = CSSSelectorList::Next(*selector)) {
-    if (ContainsUncommonAttributeSelector(*selector))
-      return true;
-  }
-  return false;
-}
-
-static inline bool IsCommonAttributeSelectorAttribute(
-    const QualifiedName& attribute) {
-  // These are explicitly tested for equality in canShareStyleWithElement.
-  return attribute == typeAttr || attribute == readonlyAttr;
-}
-
-static bool ContainsUncommonAttributeSelector(const CSSSelector& selector) {
-  const CSSSelector* current = &selector;
-  for (; current; current = current->TagHistory()) {
-    // Allow certain common attributes (used in the default style) in the
-    // selectors that match the current element.
-    if (current->IsAttributeSelector() &&
-        !IsCommonAttributeSelectorAttribute(current->Attribute()))
-      return true;
-    if (SelectorListContainsUncommonAttributeSelector(current))
-      return true;
-    if (current->RelationIsAffectedByPseudoContent() ||
-        current->GetPseudoType() == CSSSelector::kPseudoSlotted)
-      return false;
-    if (current->Relation() != CSSSelector::kSubSelector) {
-      current = current->TagHistory();
-      break;
-    }
-  }
-
-  for (; current; current = current->TagHistory()) {
-    if (current->IsAttributeSelector())
-      return true;
-    if (SelectorListContainsUncommonAttributeSelector(current))
-      return true;
-  }
-  return false;
-}
-
 static inline PropertyWhitelistType DeterminePropertyWhitelistType(
     const AddRuleFlags add_rule_flags,
     const CSSSelector& selector) {
@@ -124,8 +73,6 @@ RuleData::RuleData(StyleRule* rule,
       is_last_in_array_(false),
       position_(position),
       specificity_(Selector().Specificity()),
-      contains_uncommon_attribute_selector_(
-          blink::ContainsUncommonAttributeSelector(Selector())),
       link_match_type_(Selector().ComputeLinkMatchType()),
       has_document_security_origin_(add_rule_flags &
                                     kRuleHasDocumentSecurityOrigin),
@@ -250,7 +197,9 @@ bool RuleSet::FindBestRuleSetAndAdd(const CSSSelector& component,
       focus_pseudo_class_rules_.push_back(rule_data);
       return true;
     case CSSSelector::kPseudoPlaceholder:
-      placeholder_pseudo_rules_.push_back(rule_data);
+      AddToRuleSet(AtomicString("-webkit-input-placeholder"),
+                   EnsurePendingRules()->shadow_pseudo_element_rules,
+                   rule_data);
       return true;
     case CSSSelector::kPseudoHost:
     case CSSSelector::kPseudoHostContext:
@@ -404,7 +353,6 @@ void RuleSet::CompactRules() {
   link_pseudo_class_rules_.ShrinkToFit();
   cue_pseudo_rules_.ShrinkToFit();
   focus_pseudo_class_rules_.ShrinkToFit();
-  placeholder_pseudo_rules_.ShrinkToFit();
   universal_rules_.ShrinkToFit();
   shadow_host_rules_.ShrinkToFit();
   page_rules_.ShrinkToFit();
@@ -438,10 +386,8 @@ DEFINE_TRACE(RuleSet) {
   visitor->Trace(link_pseudo_class_rules_);
   visitor->Trace(cue_pseudo_rules_);
   visitor->Trace(focus_pseudo_class_rules_);
-  visitor->Trace(placeholder_pseudo_rules_);
   visitor->Trace(universal_rules_);
   visitor->Trace(shadow_host_rules_);
-  visitor->Trace(features_);
   visitor->Trace(page_rules_);
   visitor->Trace(font_face_rules_);
   visitor->Trace(keyframes_rules_);

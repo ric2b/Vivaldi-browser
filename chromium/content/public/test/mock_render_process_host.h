@@ -15,6 +15,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/persistent_memory_allocator.h"
 #include "base/observer_list.h"
+#include "build/build_config.h"
 #include "components/viz/service/display_embedder/shared_bitmap_allocation_notifier_impl.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_process_host_factory.h"
@@ -85,6 +86,11 @@ class MockRenderProcessHost : public RenderProcessHost {
   void RemovePendingView() override;
   void AddWidget(RenderWidgetHost* widget) override;
   void RemoveWidget(RenderWidgetHost* widget) override;
+#if defined(OS_ANDROID)
+  void UpdateWidgetImportance(ChildProcessImportance old_value,
+                              ChildProcessImportance new_value) override;
+  ChildProcessImportance ComputeEffectiveImportance() override;
+#endif
   void SetSuddenTerminationAllowed(bool allowed) override;
   bool SuddenTerminationAllowed() const override;
   BrowserContext* GetBrowserContext() const override;
@@ -115,13 +121,11 @@ class MockRenderProcessHost : public RenderProcessHost {
       override;
   const base::TimeTicks& GetInitTimeForNavigationMetrics() const override;
   bool IsProcessBackgrounded() const override;
-  size_t GetWorkerRefCount() const override;
-  void IncrementServiceWorkerRefCount() override;
-  void DecrementServiceWorkerRefCount() override;
-  void IncrementSharedWorkerRefCount() override;
-  void DecrementSharedWorkerRefCount() override;
-  void ForceReleaseWorkerRefCounts() override;
-  bool IsWorkerRefCountDisabled() override;
+  size_t GetKeepAliveRefCount() const;
+  void IncrementKeepAliveRefCount() override;
+  void DecrementKeepAliveRefCount() override;
+  void DisableKeepAliveRefCount() override;
+  bool IsKeepAliveRefCountDisabled() override;
   void PurgeAndSuspend() override;
   void Resume() override;
   mojom::Renderer* GetRendererInterface() override;
@@ -165,6 +169,10 @@ class MockRenderProcessHost : public RenderProcessHost {
   void OverrideBinderForTesting(const std::string& interface_name,
                                 const InterfaceBinder& binder);
 
+  void OverrideRendererInterfaceForTesting(
+      std::unique_ptr<mojo::AssociatedInterfacePtr<mojom::Renderer>>
+          renderer_interface);
+
  private:
   // Stores IPC messages that would have been sent to the renderer.
   IPC::TestSink sink_;
@@ -176,14 +184,14 @@ class MockRenderProcessHost : public RenderProcessHost {
   base::ObserverList<RenderProcessHostObserver> observers_;
 
   int prev_routing_id_;
-  IDMap<IPC::Listener*> listeners_;
+  base::IDMap<IPC::Listener*> listeners_;
   bool fast_shutdown_started_;
   bool deletion_callback_called_;
   bool is_for_guests_only_;
   bool is_process_backgrounded_;
   bool is_unused_;
   std::unique_ptr<base::ProcessHandle> process_handle;
-  int worker_ref_count_;
+  int keep_alive_ref_count_;
   std::unique_ptr<mojo::AssociatedInterfacePtr<mojom::Renderer>>
       renderer_interface_;
   std::map<std::string, InterfaceBinder> binder_overrides_;

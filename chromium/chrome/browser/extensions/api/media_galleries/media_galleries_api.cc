@@ -170,24 +170,21 @@ base::ListValue* ConstructFileSystemList(
 
     // Send the file system id so the renderer can create a valid FileSystem
     // object.
-    file_system_dict_value->SetStringWithoutPathExpansion(
-        "fsid", filesystems[i].fsid);
+    file_system_dict_value->SetKey("fsid", base::Value(filesystems[i].fsid));
 
-    file_system_dict_value->SetStringWithoutPathExpansion(
-        kNameKey, filesystems[i].name);
-    file_system_dict_value->SetStringWithoutPathExpansion(
+    file_system_dict_value->SetKey(kNameKey, base::Value(filesystems[i].name));
+    file_system_dict_value->SetKey(
         kGalleryIdKey,
-        base::Uint64ToString(filesystems[i].pref_id));
+        base::Value(base::Uint64ToString(filesystems[i].pref_id)));
     if (!filesystems[i].transient_device_id.empty()) {
-      file_system_dict_value->SetStringWithoutPathExpansion(
-          kDeviceIdKey, filesystems[i].transient_device_id);
+      file_system_dict_value->SetKey(
+          kDeviceIdKey, base::Value(filesystems[i].transient_device_id));
     }
-    file_system_dict_value->SetBooleanWithoutPathExpansion(
-        kIsRemovableKey, filesystems[i].removable);
-    file_system_dict_value->SetBooleanWithoutPathExpansion(
-        kIsMediaDeviceKey, filesystems[i].media_device);
-    file_system_dict_value->SetBooleanWithoutPathExpansion(
-        kIsAvailableKey, true);
+    file_system_dict_value->SetKey(kIsRemovableKey,
+                                   base::Value(filesystems[i].removable));
+    file_system_dict_value->SetKey(kIsMediaDeviceKey,
+                                   base::Value(filesystems[i].media_device));
+    file_system_dict_value->SetKey(kIsAvailableKey, base::Value(true));
 
     list->Append(std::move(file_system_dict_value));
 
@@ -220,7 +217,7 @@ class SelectDirectoryDialog : public ui::SelectFileDialog::Listener,
       : web_contents_(web_contents),
         callback_(callback) {
     select_file_dialog_ = ui::SelectFileDialog::Create(
-        this, new ChromeSelectFilePolicy(web_contents));
+        this, std::make_unique<ChromeSelectFilePolicy>(web_contents));
   }
 
   void Show(const base::FilePath& default_path) {
@@ -586,7 +583,7 @@ void MediaGalleriesAddUserSelectedFolderFunction::ReturnGalleriesAndId(
   }
   std::unique_ptr<base::DictionaryValue> results(new base::DictionaryValue);
   results->SetWithoutPathExpansion("mediaFileSystems", std::move(list));
-  results->SetIntegerWithoutPathExpansion("selectedFileSystemIndex", index);
+  results->SetKey("selectedFileSystemIndex", base::Value(index));
   SetResult(std::move(results));
   SendResponse(true);
 }

@@ -6,13 +6,17 @@
 #define COMPONENTS_OMNIBOX_BROWSER_OMNIBOX_POPUP_MODEL_H_
 
 #include <stddef.h>
+#include <vector>
 
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/task/cancelable_task_tracker.h"
 #include "components/omnibox/browser/autocomplete_controller.h"
 #include "components/omnibox/browser/autocomplete_result.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/gfx/image/image.h"
 
 class OmniboxPopupModelObserver;
 class OmniboxPopupView;
@@ -67,12 +71,6 @@ class OmniboxPopupModel {
   const AutocompleteResult& result() const {
     return autocomplete_controller()->result();
   }
-
-  size_t hovered_line() const { return hovered_line_; }
-
-  // Call to change the hovered line.  |line| should be within the range of
-  // valid lines (to enable hover) or kNoMatch (to disable hover).
-  void SetHoveredLine(size_t line);
 
   size_t selected_line() const { return selected_line_; }
 
@@ -140,20 +138,25 @@ class OmniboxPopupModel {
   void SetAnswerBitmap(const SkBitmap& bitmap);
   const SkBitmap& answer_bitmap() const { return answer_bitmap_; }
 
-  // The token value for selected_line_, hover_line_ and functions dealing with
-  // a "line number" that indicates "no line".
+  // The token value for selected_line_ and functions dealing with a "line
+  // number" that indicates "no line".
   static const size_t kNoMatch;
 
  private:
+  void OnPageFaviconFetched(size_t match_index,
+                            const GURL& page_url,
+                            const gfx::Image& icon);
+
   SkBitmap answer_bitmap_;
+
+  // The GURLs track which pages' favicon is displayed for each match view.
+  // An empty GURL means no favicon is displayed for that match view.
+  std::vector<GURL> displayed_page_favicons_;
+  base::CancelableTaskTracker favicon_task_tracker_;
 
   OmniboxPopupView* view_;
 
   OmniboxEditModel* edit_model_;
-
-  // The line that's currently hovered.  If we're not drawing a hover rect,
-  // this will be kNoMatch, even if the cursor is over the popup contents.
-  size_t hovered_line_;
 
   // The currently selected line.  This is kNoMatch when nothing is selected,
   // which should only be true when the popup is closed.
@@ -169,6 +172,8 @@ class OmniboxPopupModel {
 
   // Observers.
   base::ObserverList<OmniboxPopupModelObserver> observers_;
+
+  base::WeakPtrFactory<OmniboxPopupModel> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(OmniboxPopupModel);
 };

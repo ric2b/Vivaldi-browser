@@ -174,7 +174,8 @@ ImageResource* ImageResource::Fetch(FetchParameters& params,
           params.IsSpeculativePreload()
               ? SecurityViolationReportingPolicy::kSuppressReporting
               : SecurityViolationReportingPolicy::kReport,
-          params.GetOriginRestriction());
+          params.GetOriginRestriction(),
+          params.GetResourceRequest().GetRedirectStatus());
       if (block_reason == ResourceRequestBlockedReason::kNone)
         fetcher->Context().SendImagePing(request_url);
     }
@@ -246,13 +247,13 @@ DEFINE_TRACE(ImageResource) {
   MultipartImageResourceParser::Client::Trace(visitor);
 }
 
-void ImageResource::CheckNotify() {
+void ImageResource::NotifyFinished() {
   // Don't notify clients of completion if this ImageResource is
   // about to be reloaded.
   if (is_scheduling_reload_ || ShouldReloadBrokenPlaceholder())
     return;
 
-  Resource::CheckNotify();
+  Resource::NotifyFinished();
 }
 
 bool ImageResource::HasClientsOrObservers() const {
@@ -641,7 +642,7 @@ void ImageResource::OnePartInMultipartReceived(
     // We notify clients and observers of finish in checkNotify() and
     // updateImageAndClearBuffer(), respectively, and they will not be
     // notified again in Resource::finish()/error().
-    CheckNotify();
+    NotifyFinished();
     if (Loader())
       Loader()->DidFinishLoadingFirstPartInMultipart();
   }
@@ -682,7 +683,7 @@ ResourcePriority ImageResource::PriorityFromObservers() {
 }
 
 void ImageResource::UpdateImage(
-    PassRefPtr<SharedBuffer> shared_buffer,
+    RefPtr<SharedBuffer> shared_buffer,
     ImageResourceContent::UpdateImageOption update_image_option,
     bool all_data_received) {
   bool is_multipart = !!multipart_parser_;

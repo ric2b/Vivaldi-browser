@@ -6,8 +6,8 @@
 
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
-#include "ash/system/devicetype_utils.h"
 #include "ash/system/tray/system_tray.h"
+#include "ash/system/web_notification/web_notification_tray.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/strings/string16.h"
@@ -15,6 +15,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/chromeos/devicetype_utils.h"
 #include "ui/display/display.h"
 #include "ui/display/display_layout_builder.h"
 #include "ui/display/manager/display_manager.h"
@@ -31,6 +32,16 @@ class ScreenLayoutObserverTest : public AshTestBase {
   ~ScreenLayoutObserverTest() override;
 
  protected:
+  void SetUp() override {
+    AshTestBase::SetUp();
+    WebNotificationTray::DisableAnimationsForTest(true);
+  }
+
+  void TearDown() override {
+    WebNotificationTray::DisableAnimationsForTest(false);
+    AshTestBase::TearDown();
+  }
+
   ScreenLayoutObserver* GetScreenLayoutObserver();
   void CheckUpdate();
 

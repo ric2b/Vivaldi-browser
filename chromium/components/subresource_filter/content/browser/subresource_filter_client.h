@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef COMPONENTS_SUBRESOURCE_FILTER_CORE_BROWSER_SUBRESOURCE_FILTER_CLIENT_H_
-#define COMPONENTS_SUBRESOURCE_FILTER_CORE_BROWSER_SUBRESOURCE_FILTER_CLIENT_H_
+#ifndef COMPONENTS_SUBRESOURCE_FILTER_CONTENT_BROWSER_SUBRESOURCE_FILTER_CLIENT_H_
+#define COMPONENTS_SUBRESOURCE_FILTER_CONTENT_BROWSER_SUBRESOURCE_FILTER_CLIENT_H_
 
 #include "components/subresource_filter/content/browser/verified_ruleset_dealer.h"
 #include "content/public/browser/web_contents.h"
@@ -20,13 +20,12 @@ class SubresourceFilterClient {
  public:
   virtual ~SubresourceFilterClient() = default;
 
-  // Changes the visibility of the prompt that informs the user that potentially
-  // deceptive content has been blocked on the page according to the passed
-  // |visibility| parameter. When |visibility| is set to true, an icon on the
-  // right side of the omnibox is displayed. If the user clicks on the icon then
-  // a bubble is shown that explains the feature and alalows the user to turn it
-  // off.
-  virtual void ToggleNotificationVisibility(bool visibility) = 0;
+  // Informs the embedder to show some UI indicating that resources are being
+  // blocked.
+  virtual void ShowNotification() = 0;
+
+  // Called when the component is starting to observe a new navigation.
+  virtual void OnNewNavigationStarted() = 0;
 
   // Called when the activation decision is otherwise completely computed by the
   // subresource filter. At this point, the embedder still has a chance to
@@ -36,14 +35,19 @@ class SubresourceFilterClient {
   // Precondition: The navigation must be a main frame navigation.
   virtual bool OnPageActivationComputed(
       content::NavigationHandle* navigation_handle,
-      bool activated) = 0;
+      bool activated,
+      bool suppressing_notifications) = 0;
 
   // Adds |url| to a per-WebContents whitelist.
   virtual void WhitelistInCurrentWebContents(const GURL& url) = 0;
 
   virtual VerifiedRulesetDealer::Handle* GetRulesetDealer() = 0;
+
+  // Returns whether this navigation should be forced to be activated. This is
+  // currently only used for devtools.
+  virtual bool ForceActivationInCurrentWebContents() = 0;
 };
 
 }  // namespace subresource_filter
 
-#endif  // COMPONENTS_SUBRESOURCE_FILTER_CORE_BROWSER_SUBRESOURCE_FILTER_CLIENT_H_
+#endif  // COMPONENTS_SUBRESOURCE_FILTER_CONTENT_BROWSER_SUBRESOURCE_FILTER_CLIENT_H_

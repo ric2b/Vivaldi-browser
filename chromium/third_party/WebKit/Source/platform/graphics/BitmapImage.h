@@ -32,11 +32,11 @@
 #include "platform/Timer.h"
 #include "platform/geometry/IntSize.h"
 #include "platform/graphics/Color.h"
+#include "platform/graphics/DeferredImageDecoder.h"
 #include "platform/graphics/FrameData.h"
 #include "platform/graphics/Image.h"
 #include "platform/graphics/ImageAnimationPolicy.h"
 #include "platform/graphics/ImageOrientation.h"
-#include "platform/graphics/ImageSource.h"
 #include "platform/image-decoders/ImageAnimation.h"
 #include "platform/wtf/Forward.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
@@ -83,7 +83,6 @@ class PLATFORM_EXPORT BitmapImage final : public Image {
   ImageAnimationPolicy AnimationPolicy() override { return animation_policy_; }
   void AdvanceTime(double delta_time_in_seconds) override;
 
-  sk_sp<SkImage> ImageForCurrentFrame() override;
   PassRefPtr<Image> ImageForDefaultFrame() override;
 
   bool CurrentFrameKnownToBeOpaque(MetadataMode = kUseCurrentMetadata) override;
@@ -93,12 +92,10 @@ class PLATFORM_EXPORT BitmapImage final : public Image {
 
   ImageOrientation CurrentFrameOrientation();
 
-  // Construct a BitmapImage with the given orientation.
-  static PassRefPtr<BitmapImage> CreateWithOrientationForTesting(
-      const SkBitmap&,
-      ImageOrientation);
   // Advance the image animation by one frame.
   void AdvanceAnimationForTesting() override { InternalAdvanceAnimation(); }
+
+  PaintImage PaintImageForCurrentFrame() override;
 
  private:
   enum RepetitionCountStatus : uint8_t {
@@ -119,16 +116,14 @@ class PLATFORM_EXPORT BitmapImage final : public Image {
             RespectImageOrientationEnum,
             ImageClampingMode) override;
 
-  size_t CurrentFrame() const { return current_frame_; }
-
-  sk_sp<SkImage> FrameAtIndex(size_t);
+  PaintImage FrameAtIndex(size_t);
 
   bool FrameIsReceivedAtIndex(size_t) const;
   float FrameDurationAtIndex(size_t) const;
   bool FrameHasAlphaAtIndex(size_t);
   ImageOrientation FrameOrientationAtIndex(size_t);
 
-  sk_sp<SkImage> DecodeAndCacheFrame(size_t index);
+  PaintImage CreateAndCacheFrame(size_t index);
   void UpdateSize() const;
 
   // Returns the total number of bytes allocated for all framebuffers, i.e.
@@ -179,17 +174,17 @@ class PLATFORM_EXPORT BitmapImage final : public Image {
 
   void NotifyObserversOfAnimationAdvance(TimerBase*);
 
-  ImageSource source_;
+  std::unique_ptr<DeferredImageDecoder> decoder_;
   mutable IntSize size_;  // The size to use for the overall image (will just
                           // be the size of the first image).
   mutable IntSize size_respecting_orientation_;
 
-  size_t current_frame_;         // The index of the current frame of animation.
+  size_t current_frame_index_;   // The index of the current frame of animation.
   Vector<FrameData, 1> frames_;  // An array of the cached frames of the
                                  // animation. We have to ref frames to pin
                                  // them in the cache.
 
-  sk_sp<SkImage>
+  PaintImage
       cached_frame_;  // A cached copy of the most recently-accessed frame.
   size_t cached_frame_index_;  // Index of the frame that is cached.
 
@@ -206,7 +201,7 @@ class PLATFORM_EXPORT BitmapImage final : public Image {
                                 // final overall image size yet.
   bool size_available_ : 1;     // Whether we can obtain the size of the first
                                 // image frame from ImageIO yet.
-  mutable bool have_frame_count_ : 1;
+  bool have_frame_count_ : 1;
 
   RepetitionCountStatus repetition_count_status_;
   int repetition_count_;  // How many total animation loops we should do.  This

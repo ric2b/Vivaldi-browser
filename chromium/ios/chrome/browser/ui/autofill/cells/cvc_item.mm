@@ -31,8 +31,6 @@ const CGFloat kUICVCSpacing = 20;
 const CGFloat kTextFieldHeight = 50;
 // Width of the date text fields.
 const CGFloat kDateTextFieldWidth = 40;
-// Width of the CVC text field.
-const CGFloat kCVCTextFieldWidth = 60;
 }
 
 @interface CVCCell ()<UITextFieldDelegate>
@@ -140,6 +138,7 @@ const CGFloat kCVCTextFieldWidth = 60;
         ios::GetChromeBrowserProvider()->CreateStyledTextField(CGRectZero);
     _monthInput.placeholder = l10n_util::GetNSString(
         IDS_IOS_AUTOFILL_DIALOG_PLACEHOLDER_EXPIRY_MONTH);
+    _monthInput.accessibilityIdentifier = @"month_textField";
     _monthInput.keyboardType = UIKeyboardTypeNumberPad;
     _monthInput.delegate = self;
     _monthInput.translatesAutoresizingMaskIntoConstraints = NO;
@@ -155,6 +154,7 @@ const CGFloat kCVCTextFieldWidth = 60;
         ios::GetChromeBrowserProvider()->CreateStyledTextField(CGRectZero);
     _yearInput.placeholder =
         l10n_util::GetNSString(IDS_IOS_AUTOFILL_DIALOG_PLACEHOLDER_EXPIRY_YEAR);
+    _yearInput.accessibilityIdentifier = @"year_textField";
     _yearInput.keyboardType = UIKeyboardTypeNumberPad;
     _yearInput.delegate = self;
     _yearInput.translatesAutoresizingMaskIntoConstraints = NO;
@@ -168,6 +168,7 @@ const CGFloat kCVCTextFieldWidth = 60;
         ios::GetChromeBrowserProvider()->CreateStyledTextField(CGRectZero);
     _CVCInput.placeholder =
         l10n_util::GetNSString(IDS_AUTOFILL_DIALOG_PLACEHOLDER_CVC);
+    _CVCInput.accessibilityIdentifier = @"CVC_textField";
     _CVCInput.keyboardType = UIKeyboardTypeNumberPad;
     _CVCInput.delegate = self;
     _CVCInput.translatesAutoresizingMaskIntoConstraints = NO;
@@ -250,7 +251,6 @@ const CGFloat kCVCTextFieldWidth = 60;
       // CVC content - CVC input
       [_CVCInput.leadingAnchor
           constraintEqualToAnchor:_CVCContainerView.leadingAnchor],
-      [_CVCInput.widthAnchor constraintEqualToConstant:kCVCTextFieldWidth],
       [_CVCInput.firstBaselineAnchor
           constraintEqualToAnchor:_monthInput.firstBaselineAnchor],
       [_CVCInput.bottomAnchor

@@ -5,8 +5,10 @@
 source_set("commands") {
   sources = [
     "context_menu_commands.h",
+    "dialog_commands.h",
     "find_in_page_search_commands.h",
     "find_in_page_visibility_commands.h",
+    "java_script_dialog_commands.h",
     "navigation_commands.h",
     "ntp_commands.h",
     "settings_commands.h",
@@ -17,7 +19,7 @@ source_set("commands") {
   ]
   deps = [
     "//base",
-    "//ios/web:web_arc",
+    "//ios/web:web",
   ]
 
   configs += [ "//build/config/compiler:enable_arc" ]

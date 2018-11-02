@@ -18,6 +18,10 @@ class TemplateURLService;
 struct AutocompleteMatch;
 struct OmniboxLog;
 
+namespace base {
+class CancelableTaskTracker;
+}
+
 namespace bookmarks {
 class BookmarkModel;
 }
@@ -27,6 +31,7 @@ class Image;
 }
 
 typedef base::Callback<void(const SkBitmap& bitmap)> BitmapFetchedCallback;
+typedef base::Callback<void(const gfx::Image& favicon)> FaviconFetchedCallback;
 
 // Interface that allows the omnibox component to interact with its embedder
 // (e.g., getting information about the current page, retrieving objects
@@ -73,10 +78,10 @@ class OmniboxClient {
   virtual bool IsPasteAndGoEnabled() const;
 
   // Returns whether |url| corresponds to the new tab page.
-  virtual bool IsNewTabPage(const std::string& url) const;
+  virtual bool IsNewTabPage(const GURL& url) const;
 
   // Returns whether |url| corresponds to the user's home page.
-  virtual bool IsHomePage(const std::string& url) const;
+  virtual bool IsHomePage(const GURL& url) const;
 
   // Returns the session ID of the current page.
   virtual const SessionID& GetSessionID() const = 0;
@@ -116,6 +121,14 @@ class OmniboxClient {
                                bool default_match_changed,
                                const BitmapFetchedCallback& on_bitmap_fetched) {
   }
+
+  // Fetchs the favicon for |page_url|. If the embedder supports fetching
+  // favicons (not all embedders do), |on_favicon_fetched| will be be called
+  // once the favicon has been fetched.
+  virtual void GetFaviconForPageUrl(
+      base::CancelableTaskTracker* tracker,
+      const GURL& page_url,
+      const FaviconFetchedCallback& on_favicon_fetched) {}
 
   // Called when the current autocomplete match has changed.
   virtual void OnCurrentMatchChanged(const AutocompleteMatch& match) {}

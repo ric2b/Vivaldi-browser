@@ -7,7 +7,7 @@
 #include "base/run_loop.h"
 #include "base/threading/thread.h"
 #include "gpu/ipc/host/gpu_memory_buffer_support.h"
-#include "services/ui/gpu/interfaces/gpu_service.mojom.h"
+#include "services/viz/privileged/interfaces/gl/gpu_service.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/client_native_pixmap_factory.h"
 
@@ -15,7 +15,7 @@ namespace viz {
 
 namespace {
 
-class TestGpuService : public ui::mojom::GpuService {
+class TestGpuService : public mojom::GpuService {
  public:
   TestGpuService() {}
   ~TestGpuService() override {}
@@ -37,43 +37,42 @@ class TestGpuService : public ui::mojom::GpuService {
   }
 
   void SatisfyAllocationRequest(gfx::GpuMemoryBufferId id, int client_id) {
-    for (const auto& req : allocation_requests_) {
+    for (auto& req : allocation_requests_) {
       if (req.id == id && req.client_id == client_id) {
         gfx::GpuMemoryBufferHandle handle;
         handle.id = id;
         handle.type = gfx::SHARED_MEMORY_BUFFER;
-        req.callback.Run(handle);
+        DCHECK(req.callback);
+        std::move(req.callback).Run(handle);
         return;
       }
     }
     NOTREACHED();
   }
 
-  // ui::mojom::GpuService:
-  void EstablishGpuChannel(
-      int32_t client_id,
-      uint64_t client_tracing_id,
-      bool is_gpu_host,
-      const EstablishGpuChannelCallback& callback) override {}
+  // mojom::GpuService:
+  void EstablishGpuChannel(int32_t client_id,
+                           uint64_t client_tracing_id,
+                           bool is_gpu_host,
+                           EstablishGpuChannelCallback callback) override {}
 
   void CloseChannel(int32_t client_id) override {}
 
   void CreateJpegDecodeAccelerator(
       media::mojom::GpuJpegDecodeAcceleratorRequest jda_request) override {}
 
-  void CreateVideoEncodeAccelerator(
-      media::mojom::VideoEncodeAcceleratorRequest vea_request) override {}
+  void CreateVideoEncodeAcceleratorProvider(
+      media::mojom::VideoEncodeAcceleratorProviderRequest request) override {}
 
-  void CreateGpuMemoryBuffer(
-      gfx::GpuMemoryBufferId id,
-      const gfx::Size& size,
-      gfx::BufferFormat format,
-      gfx::BufferUsage usage,
-      int client_id,
-      gpu::SurfaceHandle surface_handle,
-      const CreateGpuMemoryBufferCallback& callback) override {
+  void CreateGpuMemoryBuffer(gfx::GpuMemoryBufferId id,
+                             const gfx::Size& size,
+                             gfx::BufferFormat format,
+                             gfx::BufferUsage usage,
+                             int client_id,
+                             gpu::SurfaceHandle surface_handle,
+                             CreateGpuMemoryBufferCallback callback) override {
     allocation_requests_.push_back(
-        {id, size, format, usage, client_id, callback});
+        {id, size, format, usage, client_id, std::move(callback)});
   }
 
   void DestroyGpuMemoryBuffer(gfx::GpuMemoryBufferId id,
@@ -83,16 +82,16 @@ class TestGpuService : public ui::mojom::GpuService {
   }
 
   void GetVideoMemoryUsageStats(
-      const GetVideoMemoryUsageStatsCallback& callback) override {}
+      GetVideoMemoryUsageStatsCallback callback) override {}
 
   void RequestCompleteGpuInfo(
-      const RequestCompleteGpuInfoCallback& callback) override {}
+      RequestCompleteGpuInfoCallback callback) override {}
 
   void LoadedShader(const std::string& key, const std::string& data) override {}
 
   void DestroyingVideoSurface(
       int32_t surface_id,
-      const DestroyingVideoSurfaceCallback& callback) override {}
+      DestroyingVideoSurfaceCallback callback) override {}
 
   void WakeUpGpu() override {}
 
@@ -106,7 +105,7 @@ class TestGpuService : public ui::mojom::GpuService {
 
   void ThrowJavaException() override {}
 
-  void Stop(const StopCallback& callback) override {}
+  void Stop(StopCallback callback) override {}
 
  private:
   struct AllocationRequest {
@@ -115,7 +114,7 @@ class TestGpuService : public ui::mojom::GpuService {
     const gfx::BufferFormat format;
     const gfx::BufferUsage usage;
     const int client_id;
-    const CreateGpuMemoryBufferCallback callback;
+    CreateGpuMemoryBufferCallback callback;
   };
   std::vector<AllocationRequest> allocation_requests_;
 
@@ -159,6 +158,28 @@ class ServerGpuMemoryBufferManagerTest : public ::testing::Test {
  public:
   ServerGpuMemoryBufferManagerTest() = default;
   ~ServerGpuMemoryBufferManagerTest() override = default;
+
+  std::unique_ptr<gfx::GpuMemoryBuffer> AllocateGpuMemoryBufferSync(
+      ServerGpuMemoryBufferManager* manager) {
+    base::Thread diff_thread("TestThread");
+    diff_thread.Start();
+    std::unique_ptr<gfx::GpuMemoryBuffer> buffer;
+    base::RunLoop run_loop;
+    diff_thread.task_runner()->PostTask(
+        FROM_HERE, base::Bind(
+                       [](ServerGpuMemoryBufferManager* manager,
+                          std::unique_ptr<gfx::GpuMemoryBuffer>* out_buffer,
+                          const base::Closure& callback) {
+                         *out_buffer = manager->CreateGpuMemoryBuffer(
+                             gfx::Size(64, 64), gfx::BufferFormat::YVU_420,
+                             gfx::BufferUsage::GPU_READ,
+                             gpu::kNullSurfaceHandle);
+                         callback.Run();
+                       },
+                       manager, &buffer, run_loop.QuitClosure()));
+    run_loop.Run();
+    return buffer;
+  }
 
   // ::testing::Test:
   void SetUp() override {
@@ -265,24 +286,25 @@ TEST_F(ServerGpuMemoryBufferManagerTest, GpuMemoryBufferDestroyed) {
   gfx::ClientNativePixmapFactory::ResetInstance();
   TestGpuService gpu_service;
   ServerGpuMemoryBufferManager manager(&gpu_service, 1);
-  base::Thread diff_thread("TestThread");
-  ASSERT_TRUE(diff_thread.Start());
-  std::unique_ptr<gfx::GpuMemoryBuffer> buffer;
-  base::RunLoop run_loop;
-  ASSERT_TRUE(diff_thread.task_runner()->PostTask(
-      FROM_HERE, base::Bind(
-                     [](ServerGpuMemoryBufferManager* manager,
-                        std::unique_ptr<gfx::GpuMemoryBuffer>* out_buffer,
-                        const base::Closure& callback) {
-                       *out_buffer = manager->CreateGpuMemoryBuffer(
-                           gfx::Size(64, 64), gfx::BufferFormat::YVU_420,
-                           gfx::BufferUsage::GPU_READ, gpu::kNullSurfaceHandle);
-                       callback.Run();
-                     },
-                     &manager, &buffer, run_loop.QuitClosure())));
-  run_loop.Run();
+  auto buffer = AllocateGpuMemoryBufferSync(&manager);
   EXPECT_TRUE(buffer);
   buffer.reset();
+}
+
+TEST_F(ServerGpuMemoryBufferManagerTest,
+       GpuMemoryBufferDestroyedOnDifferentThread) {
+  gfx::ClientNativePixmapFactory::ResetInstance();
+  TestGpuService gpu_service;
+  ServerGpuMemoryBufferManager manager(&gpu_service, 1);
+  auto buffer = AllocateGpuMemoryBufferSync(&manager);
+  EXPECT_TRUE(buffer);
+  // Destroy the buffer in a different thread.
+  base::Thread diff_thread("DestroyThread");
+  ASSERT_TRUE(diff_thread.Start());
+  diff_thread.task_runner()->PostTask(
+      FROM_HERE, base::Bind([](std::unique_ptr<gfx::GpuMemoryBuffer> buffer) {},
+                            base::Passed(&buffer)));
+  diff_thread.Stop();
 }
 
 }  // namespace viz

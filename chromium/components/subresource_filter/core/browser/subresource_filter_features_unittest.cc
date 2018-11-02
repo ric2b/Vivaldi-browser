@@ -252,6 +252,9 @@ TEST(SubresourceFilterFeaturesTest, ActivationList) {
       {true, "%$ garbage !%", ActivationList::NONE},
       {true, kActivationListSocialEngineeringAdsInterstitial,
        ActivationList::SOCIAL_ENG_ADS_INTERSTITIAL},
+      {true, kActivationListBetterAds, ActivationList::BETTER_ADS},
+      {true, kActivationListAbusiveAds, ActivationList::ABUSIVE_ADS},
+      {true, kActivationListAllAds, ActivationList::ALL_ADS},
       {true, kActivationListPhishingInterstitial,
        ActivationList::PHISHING_INTERSTITIAL},
       {true, socEngPhising.c_str(), ActivationList::NONE},
@@ -678,6 +681,23 @@ TEST(SubresourceFilterFeaturesTest,
           Configuration::MakePresetForPerformanceTestingDryRunOnAllSites()));
   EXPECT_EQ(kTestRulesetFlavor,
             config_list->lexicographically_greatest_ruleset_flavor());
+}
+
+TEST(SubresourceFilterFeaturesTest, ForcedActivation_NotConfigurable) {
+  ScopedExperimentalStateToggle scoped_experimental_state(
+      base::FeatureList::OVERRIDE_ENABLE_FEATURE,
+      {{kActivationLevelParameterName, kActivationLevelEnabled},
+       {kActivationScopeParameterName, kActivationScopeNoSites},
+       {"forced_activation", "true"}});
+
+  Configuration actual_configuration;
+  ExpectAndRetrieveExactlyOneEnabledConfig(&actual_configuration);
+  EXPECT_EQ(ActivationLevel::ENABLED,
+            actual_configuration.activation_options.activation_level);
+  EXPECT_EQ(ActivationScope::NO_SITES,
+            actual_configuration.activation_conditions.activation_scope);
+
+  EXPECT_FALSE(actual_configuration.activation_conditions.forced_activation);
 }
 
 }  // namespace subresource_filter

@@ -31,6 +31,7 @@
 
 #if !defined(OS_ANDROID)
 #include "chrome/browser/metrics/first_web_contents_profiler.h"
+#include "chrome/browser/metrics/tab_stats_tracker.h"
 #include "chrome/browser/metrics/tab_usage_recorder.h"
 #endif  // !defined(OS_ANDROID)
 
@@ -319,7 +320,7 @@ void RecordLinuxGlibcVersion() {
 #endif
 }
 
-#if defined(OS_LINUX) && defined(USE_X11) && !defined(OS_CHROMEOS)
+#if defined(USE_X11)
 UMALinuxWindowManager GetLinuxWindowManager() {
   switch (ui::GuessWindowManager()) {
     case ui::WM_OTHER:
@@ -502,7 +503,7 @@ void ChromeBrowserMainExtraPartsMetrics::PreBrowserStart() {
 
 void ChromeBrowserMainExtraPartsMetrics::PostBrowserStart() {
   RecordLinuxGlibcVersion();
-#if defined(OS_LINUX) && defined(USE_X11) && !defined(OS_CHROMEOS)
+#if defined(USE_X11)
   UMA_HISTOGRAM_ENUMERATION("Linux.WindowManager", GetLinuxWindowManager(),
                             UMA_LINUX_WINDOW_MANAGER_COUNT);
 #endif
@@ -561,6 +562,14 @@ void ChromeBrowserMainExtraPartsMetrics::PostBrowserStart() {
 #if !defined(OS_ANDROID)
   metrics::BeginFirstWebContentsProfiling();
   metrics::TabUsageRecorder::InitializeIfNeeded();
+  // Only instantiate the tab stats tracker if a local state exists. This is
+  // always the case for Chrome but not for the unittests.
+  if (g_browser_process != nullptr &&
+      g_browser_process->local_state() != nullptr) {
+    metrics::TabStatsTracker::SetInstance(
+        std::make_unique<metrics::TabStatsTracker>(
+            g_browser_process->local_state()));
+  }
 #endif  // !defined(OS_ANDROID)
 }
 

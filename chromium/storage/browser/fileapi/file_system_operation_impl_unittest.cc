@@ -19,6 +19,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "storage/browser/blob/shareable_file_reference.h"
 #include "storage/browser/fileapi/file_system_context.h"
@@ -53,7 +54,10 @@ namespace content {
 class FileSystemOperationImplTest
     : public testing::Test {
  public:
-  FileSystemOperationImplTest() : weak_factory_(this) {}
+  FileSystemOperationImplTest()
+      : scoped_task_environment_(
+            base::test::ScopedTaskEnvironment::MainThreadType::IO),
+        weak_factory_(this) {}
 
  protected:
   void SetUp() override {
@@ -66,7 +70,6 @@ class FileSystemOperationImplTest
     base::FilePath base_dir = base_.GetPath().AppendASCII("filesystem");
     quota_manager_ =
         new MockQuotaManager(false /* is_incognito */, base_dir,
-                             base::ThreadTaskRunnerHandle::Get().get(),
                              base::ThreadTaskRunnerHandle::Get().get(),
                              NULL /* special storage policy */);
     quota_manager_proxy_ = new MockQuotaManagerProxy(
@@ -179,12 +182,11 @@ class FileSystemOperationImplTest
   }
 
   FileSystemOperation::ReadDirectoryCallback RecordReadDirectoryCallback(
-      const base::Closure& closure,
+      base::RepeatingClosure closure,
       base::File::Error* status) {
-    return base::Bind(&FileSystemOperationImplTest::DidReadDirectory,
-                      weak_factory_.GetWeakPtr(),
-                      closure,
-                      status);
+    return base::BindRepeating(&FileSystemOperationImplTest::DidReadDirectory,
+                               weak_factory_.GetWeakPtr(), std::move(closure),
+                               status);
   }
 
   FileSystemOperation::GetMetadataCallback RecordMetadataCallback(
@@ -212,12 +214,12 @@ class FileSystemOperationImplTest
     closure.Run();
   }
 
-  void DidReadDirectory(const base::Closure& closure,
+  void DidReadDirectory(base::RepeatingClosure closure,
                         base::File::Error* status,
                         base::File::Error actual,
-                        const std::vector<storage::DirectoryEntry>& entries,
+                        std::vector<storage::DirectoryEntry> entries,
                         bool /* has_more */) {
-    entries_ = entries;
+    entries_ = std::move(entries);
     *status = actual;
     closure.Run();
   }
@@ -237,11 +239,11 @@ class FileSystemOperationImplTest
       base::File::Error actual,
       const base::File::Info& info,
       const base::FilePath& platform_path,
-      const scoped_refptr<ShareableFileReference>& shareable_file_ref) {
+      scoped_refptr<ShareableFileReference> shareable_file_ref) {
     info_ = info;
     path_ = platform_path;
     *status = actual;
-    shareable_file_ref_ = shareable_file_ref;
+    shareable_file_ref_ = std::move(shareable_file_ref);
     closure.Run();
   }
 
@@ -257,7 +259,7 @@ class FileSystemOperationImplTest
                                               sandbox_file_system_.type(),
                                               usage,
                                               quota);
-    base::RunLoop().RunUntilIdle();
+    scoped_task_environment_.RunUntilIdle();
     ASSERT_EQ(storage::kQuotaStatusOk, status);
   }
 
@@ -463,8 +465,9 @@ class FileSystemOperationImplTest
     return status;
   }
 
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
+
  private:
-  base::MessageLoopForIO message_loop_;
   scoped_refptr<QuotaManager> quota_manager_;
   scoped_refptr<QuotaManagerProxy> quota_manager_proxy_;
 

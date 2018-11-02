@@ -32,15 +32,6 @@ CSSTokenizer::CSSTokenizer(const String& string) : input_(string) {
   // To avoid resizing we err on the side of reserving too much space.
   // Most strings we tokenize have about 3.5 to 5 characters per token.
   tokens_.ReserveInitialCapacity(string.length() / 3);
-
-  while (true) {
-    CSSParserToken token = NextToken();
-    if (token.GetType() == kCommentToken)
-      continue;
-    if (token.GetType() == kEOFToken)
-      return;
-    tokens_.push_back(token);
-  }
 }
 
 CSSTokenizer::CSSTokenizer(const String& string,
@@ -49,6 +40,8 @@ CSSTokenizer::CSSTokenizer(const String& string,
   if (string.IsEmpty())
     return;
 
+  // TODO(shend): Do not tokenize all in one go. We should be tokenizing on the
+  // fly.
   unsigned offset = 0;
   while (true) {
     CSSParserToken token = NextToken();
@@ -67,11 +60,33 @@ CSSTokenizer::CSSTokenizer(const String& string,
   wrapper.FinalizeConstruction(tokens_.begin());
 }
 
+CSSParserToken CSSTokenizer::TokenizeSingle() {
+  while (true) {
+    const CSSParserToken token = NextToken();
+    if (token.GetType() == kCommentToken)
+      continue;
+    if (!token.IsEOF())
+      tokens_.push_back(token);
+    return token;
+  }
+}
+
+void CSSTokenizer::EnsureTokenizedToEOF() {
+  while (!TokenizeSingle().IsEOF()) {
+  }
+}
+
 CSSParserTokenRange CSSTokenizer::TokenRange() {
+  EnsureTokenizedToEOF();
   return tokens_;
 }
 
+unsigned CSSTokenizer::CurrentSize() const {
+  return tokens_.size();
+}
+
 unsigned CSSTokenizer::TokenCount() {
+  EnsureTokenizedToEOF();
   return tokens_.size();
 }
 

@@ -92,6 +92,13 @@ HeadlessBrowserContextImpl::HeadlessBrowserContextImpl(
 HeadlessBrowserContextImpl::~HeadlessBrowserContextImpl() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
+  // Inform observers that we're going away.
+  {
+    base::AutoLock lock(observers_lock_);
+    for (auto& observer : observers_)
+      observer.OnHeadlessBrowserContextDestruct();
+  }
+
   // Destroy all web contents before shutting down storage partitions.
   web_contents_map_.clear();
 
@@ -166,6 +173,19 @@ int HeadlessBrowserContextImpl::GetFrameTreeNodeId(int render_process_id,
   if (find_it == frame_tree_node_map_.end())
     return -1;
   return find_it->second;
+}
+
+int HeadlessBrowserContextImpl::GetFrameTreeNodeIdForDevToolsFrameId(
+    const std::string& devtools_id) const {
+  base::AutoLock lock(frame_tree_node_map_lock_);
+  for (const auto& pair : frame_tree_node_map_) {
+    std::string frame_devtools_id = content::DevToolsAgentHost::
+        GetUntrustedDevToolsFrameIdForFrameTreeNodeId(pair.first.first,
+                                                      pair.second);
+    if (frame_devtools_id == devtools_id)
+      return pair.second;
+  }
+  return -1;
 }
 
 void HeadlessBrowserContextImpl::Close() {
@@ -377,6 +397,19 @@ HeadlessBrowserContext::Builder&
 HeadlessBrowserContext::Builder::SetProductNameAndVersion(
     const std::string& product_name_and_version) {
   options_->product_name_and_version_ = product_name_and_version;
+  return *this;
+}
+
+HeadlessBrowserContext::Builder& HeadlessBrowserContext::Builder::SetUserAgent(
+    const std::string& user_agent) {
+  options_->user_agent_ = user_agent;
+  return *this;
+}
+
+HeadlessBrowserContext::Builder&
+HeadlessBrowserContext::Builder::SetAcceptLanguage(
+    const std::string& accept_language) {
+  options_->accept_language_ = accept_language;
   return *this;
 }
 

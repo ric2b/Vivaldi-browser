@@ -10,13 +10,12 @@
 
 namespace device {
 
-class GvrDeviceProvider;
-class GvrDelegate;
+class GvrDelegateProvider;
 class VRDisplayImpl;
 
 class DEVICE_VR_EXPORT GvrDevice : public VRDevice {
  public:
-  GvrDevice(GvrDeviceProvider* provider);
+  GvrDevice();
   ~GvrDevice() override;
 
   // VRDevice
@@ -26,7 +25,6 @@ class DEVICE_VR_EXPORT GvrDevice : public VRDevice {
   void RequestPresent(mojom::VRSubmitFrameClientPtr submit_client,
                       mojom::VRPresentationProviderRequest request,
                       const base::Callback<void(bool)>& callback) override;
-  void SetSecureOrigin(bool secure_origin) override;
   void ExitPresent() override;
   void GetNextMagicWindowPose(
       VRDisplayImpl* display,
@@ -35,13 +33,8 @@ class DEVICE_VR_EXPORT GvrDevice : public VRDevice {
   void OnDisplayRemoved(VRDisplayImpl* display) override;
   void OnListeningForActivateChanged(VRDisplayImpl* display) override;
 
-  void OnDelegateChanged();
-
  private:
-  GvrDelegate* GetGvrDelegate();
-
-  GvrDeviceProvider* gvr_provider_;
-  bool secure_origin_ = false;
+  GvrDelegateProvider* GetGvrDelegateProvider();
 
   DISALLOW_COPY_AND_ASSIGN(GvrDevice);
 };

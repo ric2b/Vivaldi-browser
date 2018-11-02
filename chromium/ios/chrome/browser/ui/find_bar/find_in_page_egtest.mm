@@ -176,7 +176,7 @@ const std::string kFindInPageResponse = "Find in page. Find in page.";
 
 - (void)typeFindInPageText:(NSString*)text {
   [[EarlGrey selectElementWithMatcher:[self findInPageInputField]]
-      performAction:grey_typeText(text)];
+      performAction:grey_replaceText(text)];
 }
 
 - (id<GREYMatcher>)findInPageInputField {

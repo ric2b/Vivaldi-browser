@@ -347,13 +347,7 @@ ArcNetHostImpl::~ArcNetHostImpl() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   if (observing_network_state_)
     GetStateHandler()->RemoveObserver(this, FROM_HERE);
-
-  // TODO(hidehiko): Currently, the lifetime of ArcBridgeService and
-  // BrowserContextKeyedService is not nested.
-  // If ArcServiceManager::Get() returns nullptr, it is already destructed,
-  // so do not touch it.
-  if (ArcServiceManager::Get())
-    arc_bridge_service_->net()->RemoveObserver(this);
+  arc_bridge_service_->net()->RemoveObserver(this);
 }
 
 void ArcNetHostImpl::OnInstanceReady() {
@@ -524,21 +518,18 @@ void ArcNetHostImpl::CreateNetwork(mojom::WifiConfigurationPtr cfg,
     return;
   }
 
-  properties->SetStringWithoutPathExpansion(onc::network_config::kType,
-                                            onc::network_config::kWiFi);
-  wifi_dict->SetStringWithoutPathExpansion(onc::wifi::kHexSSID,
-                                           cfg->hexssid.value());
-  wifi_dict->SetBooleanWithoutPathExpansion(onc::wifi::kAutoConnect,
-                                            details->autoconnect);
+  properties->SetKey(onc::network_config::kType,
+                     base::Value(onc::network_config::kWiFi));
+  wifi_dict->SetKey(onc::wifi::kHexSSID, base::Value(cfg->hexssid.value()));
+  wifi_dict->SetKey(onc::wifi::kAutoConnect, base::Value(details->autoconnect));
   if (cfg->security.empty()) {
-    wifi_dict->SetStringWithoutPathExpansion(onc::wifi::kSecurity,
-                                             onc::wifi::kSecurityNone);
+    wifi_dict->SetKey(onc::wifi::kSecurity,
+                      base::Value(onc::wifi::kSecurityNone));
   } else {
-    wifi_dict->SetStringWithoutPathExpansion(onc::wifi::kSecurity,
-                                             cfg->security);
+    wifi_dict->SetKey(onc::wifi::kSecurity, base::Value(cfg->security));
     if (details->passphrase.has_value()) {
-      wifi_dict->SetStringWithoutPathExpansion(onc::wifi::kPassphrase,
-                                               details->passphrase.value());
+      wifi_dict->SetKey(onc::wifi::kPassphrase,
+                        base::Value(details->passphrase.value()));
     }
   }
   properties->SetWithoutPathExpansion(onc::network_config::kWiFi,
@@ -660,7 +651,6 @@ void ArcNetHostImpl::GetDefaultNetwork(
     const GetDefaultNetworkCallback& callback) {
   const chromeos::NetworkState* default_network =
       GetShillBackedNetwork(GetStateHandler()->DefaultNetwork());
-
   if (!default_network) {
     VLOG(1) << "GetDefaultNetwork: no default network";
     callback.Run(nullptr, nullptr);

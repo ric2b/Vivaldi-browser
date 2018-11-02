@@ -13,9 +13,9 @@
 #include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "cc/test/test_context_provider.h"
-#include "cc/test/test_gpu_memory_buffer_manager.h"
 #include "cc/test/test_web_graphics_context_3d.h"
 #include "components/viz/common/gl_helper.h"
+#include "components/viz/test/test_gpu_memory_buffer_manager.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -59,7 +59,7 @@ class StubGpuMemoryBufferImpl : public gfx::GpuMemoryBuffer {
   size_t* set_color_space_count_;
 };
 
-class StubGpuMemoryBufferManager : public cc::TestGpuMemoryBufferManager {
+class StubGpuMemoryBufferManager : public TestGpuMemoryBufferManager {
  public:
   StubGpuMemoryBufferManager() : allocate_succeeds_(true) {}
 
@@ -139,7 +139,7 @@ class BufferQueueTest : public ::testing::Test {
   available_surfaces() {
     return output_surface_->available_surfaces_;
   }
-  std::deque<std::unique_ptr<BufferQueue::AllocatedSurface>>&
+  base::circular_deque<std::unique_ptr<BufferQueue::AllocatedSurface>>&
   in_flight_surfaces() {
     return output_surface_->in_flight_surfaces_;
   }
@@ -477,18 +477,35 @@ TEST_F(BufferQueueTest, CheckTripleBuffering) {
 }
 
 TEST_F(BufferQueueTest, CheckEmptySwap) {
-  // Check empty swap flow, in which the damage is empty.
+  // Check empty swap flow, in which the damage is empty and BindFramebuffer
+  // might not be called.
   EXPECT_EQ(0, CountBuffers());
   output_surface_->BindFramebuffer();
   EXPECT_EQ(1, CountBuffers());
   EXPECT_NE(0U, current_surface());
   EXPECT_FALSE(displayed_frame());
+
+  // This is the texture to scanout.
+  uint32_t texture_id = output_surface_->GetCurrentTextureId();
   SwapBuffers();
+  // Make sure we won't be drawing to the texture we just sent for scanout.
+  output_surface_->BindFramebuffer();
+  EXPECT_NE(texture_id, output_surface_->GetCurrentTextureId());
+
   EXPECT_EQ(1U, in_flight_surfaces().size());
-  EXPECT_EQ(nullptr, in_flight_surfaces().front());
+  output_surface_->PageFlipComplete();
+
+  // Test swapbuffers without calling BindFramebuffer. DirectRenderer skips
+  // BindFramebuffer if not necessary.
+  SwapBuffers();
+  SwapBuffers();
+  EXPECT_EQ(2U, in_flight_surfaces().size());
+
+  output_surface_->PageFlipComplete();
+  EXPECT_EQ(1U, in_flight_surfaces().size());
+
   output_surface_->PageFlipComplete();
   EXPECT_EQ(0U, in_flight_surfaces().size());
-  EXPECT_EQ(nullptr, displayed_frame());
 }
 
 TEST_F(BufferQueueTest, CheckCorrectBufferOrdering) {

@@ -19,10 +19,12 @@
 #include "media/gpu/android_video_surface_chooser.h"
 #include "media/gpu/avda_codec_allocator.h"
 #include "media/gpu/media_gpu_export.h"
+#include "services/service_manager/public/cpp/service_context_ref.h"
 
 namespace media {
 
 struct PendingDecode {
+  static PendingDecode CreateEos();
   PendingDecode(scoped_refptr<DecoderBuffer> buffer,
                 VideoDecoder::DecodeCB decode_cb);
   PendingDecode(PendingDecode&& other);
@@ -60,8 +62,8 @@ class MEDIA_GPU_EXPORT MediaCodecVideoDecoder : public VideoDecoder {
       DeviceInfo* device_info,
       AVDACodecAllocator* codec_allocator,
       std::unique_ptr<AndroidVideoSurfaceChooser> surface_chooser,
-      std::unique_ptr<VideoFrameFactory> video_frame_factory);
-  ~MediaCodecVideoDecoder() override;
+      std::unique_ptr<VideoFrameFactory> video_frame_factory,
+      std::unique_ptr<service_manager::ServiceContextRef> connection_ref);
 
   // VideoDecoder implementation:
   std::string GetDisplayName() const override;
@@ -81,7 +83,15 @@ class MEDIA_GPU_EXPORT MediaCodecVideoDecoder : public VideoDecoder {
   // set the first overlay.
   void SetOverlayInfo(const OverlayInfo& overlay_info);
 
+ protected:
+  // Protected for testing.
+  ~MediaCodecVideoDecoder() override;
+
  private:
+  // The test has access for PumpCodec().
+  friend class MediaCodecVideoDecoderTest;
+  friend class base::DeleteHelper<MediaCodecVideoDecoder>;
+
   enum class State {
     kOk,
     kError,
@@ -98,10 +108,12 @@ class MEDIA_GPU_EXPORT MediaCodecVideoDecoder : public VideoDecoder {
   };
 
   enum class DrainType {
-    kFlush,
-    kReset,
-    kDestroy,
+    kForReset,
+    kForDestroy,
   };
+
+  // Starts teardown.
+  void Destroy() override;
 
   // Finishes initialization.
   void StartLazyInit();
@@ -116,13 +128,32 @@ class MEDIA_GPU_EXPORT MediaCodecVideoDecoder : public VideoDecoder {
   // Sets |codecs_|'s output surface to |incoming_surface_|. Releases the codec
   // and both the current and incoming bundles on failure.
   void TransitionToIncomingSurface();
-  void StartCodecCreation();
+  void CreateCodec();
   void OnCodecCreated(std::unique_ptr<MediaCodecBridge> codec);
 
+  // Flushes the codec, or if flush() is not supported, releases it and creates
+  // a new one.
+  void FlushCodec();
+
+  // Attempts to queue input and dequeue output from the codec. If
+  // |force_start_timer| is true the timer idle timeout is reset.
   void PumpCodec(bool force_start_timer);
+  void ManageTimer(bool start_timer);
   bool QueueInput();
   bool DequeueOutput();
-  void ManageTimer(bool start_timer);
+
+  // Forwards |frame| via |output_cb_| if there hasn't been a Reset() since the
+  // frame was created (i.e., |reset_generation| matches |reset_generation_|).
+  void ForwardVideoFrame(int reset_generation,
+                         VideoFrameFactory::ReleaseMailboxCB release_cb,
+                         const scoped_refptr<VideoFrame>& frame);
+
+  // Starts draining the codec by queuing an EOS if required. It skips the drain
+  // if possible.
+  void StartDrainingCodec(DrainType drain_type);
+  void OnCodecDrained();
+
+  void ClearPendingDecodes(DecodeStatus status);
 
   // Sets |state_| and runs pending callbacks.
   void HandleError();
@@ -137,12 +168,25 @@ class MEDIA_GPU_EXPORT MediaCodecVideoDecoder : public VideoDecoder {
   AndroidOverlayFactoryCB CreateOverlayFactoryCb();
 
   State state_;
+
+  // Whether initialization still needs to be done on the first decode call.
   bool lazy_init_pending_;
   std::deque<PendingDecode> pending_decodes_;
-  VideoFrameFactory::OutputWithReleaseMailboxCB output_cb_;
 
-  // The ongoing drain operation, if any.
+  // The reason for the current drain operation if any.
   base::Optional<DrainType> drain_type_;
+
+  // The current reset cb if a Reset() is in progress.
+  base::Closure reset_cb_;
+
+  // A generation counter that's incremented every time Reset() is called.
+  int reset_generation_;
+
+  // The EOS decode cb for an EOS currently being processed by the codec. Called
+  // when the EOS is output.
+  VideoDecoder::DecodeCB eos_decode_cb_;
+
+  VideoFrameFactory::OutputWithReleaseMailboxCB output_cb_;
   VideoDecoderConfig decoder_config_;
 
   // The surface bundle that we're transitioning to, if any.
@@ -177,22 +221,34 @@ class MEDIA_GPU_EXPORT MediaCodecVideoDecoder : public VideoDecoder {
   // codec with.
   std::unique_ptr<AndroidVideoSurfaceChooser> surface_chooser_;
 
-  // The factory for creating VideoFrames from CodecOutputBuffers.
-  std::unique_ptr<VideoFrameFactory> video_frame_factory_;
-
   // Current state for the chooser.
   AndroidVideoSurfaceChooser::State chooser_state_;
+
+  // The factory for creating VideoFrames from CodecOutputBuffers.
+  std::unique_ptr<VideoFrameFactory> video_frame_factory_;
 
   // An optional factory callback for creating mojo AndroidOverlays.
   AndroidOverlayMojoFactoryCB overlay_factory_cb_;
 
   DeviceInfo* device_info_;
 
+  // If we're running in a service context this ref lets us keep the service
+  // thread alive until destruction.
+  std::unique_ptr<service_manager::ServiceContextRef> context_ref_;
   base::WeakPtrFactory<MediaCodecVideoDecoder> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaCodecVideoDecoder);
 };
 
 }  // namespace media
+
+namespace std {
+
+// Specialize std::default_delete to call Destroy().
+template <>
+struct MEDIA_GPU_EXPORT default_delete<media::MediaCodecVideoDecoder>
+    : public default_delete<media::VideoDecoder> {};
+
+}  // namespace std
 
 #endif  // MEDIA_GPU_ANDROID_MEDIA_CODEC_VIDEO_DECODER_H_

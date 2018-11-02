@@ -113,7 +113,7 @@ class VIEWS_EXPORT DesktopWindowTreeHostX11
   gfx::Rect GetRestoredBounds() const override;
   std::string GetWorkspace() const override;
   gfx::Rect GetWorkAreaBoundsInScreen() const override;
-  void SetShape(std::unique_ptr<SkRegion> native_region) override;
+  void SetShape(std::unique_ptr<Widget::ShapeRects> native_shape) override;
   void Activate() override;
   void Deactivate() override;
   bool IsActive() const override;
@@ -172,6 +172,9 @@ class VIEWS_EXPORT DesktopWindowTreeHostX11
   // Overridden from display::DisplayObserver via aura::WindowTreeHost:
   void OnDisplayMetricsChanged(const display::Display& display,
                                uint32_t changed_metrics) override;
+
+  // Called after the window is maximized or restored.
+  virtual void OnMaximizedStateChanged();
 
  private:
   friend class DesktopWindowTreeHostX11HighDPITest;

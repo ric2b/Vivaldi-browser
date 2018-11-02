@@ -6,6 +6,7 @@
 
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/V8BindingForCore.h"
+#include "bindings/core/v8/V8ScriptRunner.h"
 #include "core/dom/Modulator.h"
 #include "core/dom/ScriptModuleResolver.h"
 #include "core/probe/CoreProbes.h"
@@ -17,7 +18,7 @@ const char* ScriptModuleStateToString(ScriptModuleState state) {
     case ScriptModuleState::kUninstantiated:
       return "uninstantiated";
     case ScriptModuleState::kInstantiating:
-      return "instatinating";
+      return "instantinating";
     case ScriptModuleState::kInstantiated:
       return "instantiated";
     case ScriptModuleState::kEvaluating:
@@ -86,6 +87,7 @@ ScriptValue ScriptModule::Instantiate(ScriptState* script_state) {
 
   DCHECK(!IsNull());
   v8::Local<v8::Context> context = script_state->GetContext();
+  probe::ExecuteScript probe(ExecutionContext::From(script_state));
   bool success;
   if (!NewLocal(script_state->GetIsolate())
            ->InstantiateModule(context, &ResolveModuleCallback)
@@ -119,20 +121,11 @@ void ScriptModule::Evaluate(ScriptState* script_state) const {
 }
 
 void ScriptModule::ReportException(ScriptState* script_state,
-                                   v8::Local<v8::Value> exception,
-                                   const String& file_name,
-                                   const TextPosition& start_position) {
+                                   v8::Local<v8::Value> exception) {
   // We ensure module-related code is not executed without the flag.
   // https://crbug.com/715376
   CHECK(RuntimeEnabledFeatures::ModuleScriptsEnabled());
-
-  v8::Isolate* isolate = script_state->GetIsolate();
-
-  v8::TryCatch try_catch(isolate);
-  try_catch.SetVerbose(true);
-
-  V8ScriptRunner::ReportExceptionForModule(isolate, exception, file_name,
-                                           start_position);
+  V8ScriptRunner::ReportException(script_state->GetIsolate(), exception);
 }
 
 Vector<String> ScriptModule::ModuleRequests(ScriptState* script_state) {
@@ -185,6 +178,13 @@ v8::Local<v8::Value> ScriptModule::ErrorCompletion(ScriptState* script_state) {
   return module->GetException();
 }
 
+v8::Local<v8::Value> ScriptModule::V8Namespace(v8::Isolate* isolate) {
+  DCHECK(!IsNull());
+  v8::Local<v8::Module> module = module_->NewLocal(isolate);
+  DCHECK_EQ(ScriptModuleState::kEvaluated, module->GetStatus());
+  return module->GetModuleNamespace();
+}
+
 v8::MaybeLocal<v8::Module> ScriptModule::ResolveModuleCallback(
     v8::Local<v8::Context> context,
     v8::Local<v8::String> specifier,
@@ -202,13 +202,9 @@ v8::MaybeLocal<v8::Module> ScriptModule::ResolveModuleCallback(
                                  "ScriptModule", "resolveModuleCallback");
   ScriptModule resolved = modulator->GetScriptModuleResolver()->Resolve(
       ToCoreStringWithNullCheck(specifier), referrer_record, exception_state);
-  if (resolved.IsNull()) {
-    DCHECK(exception_state.HadException());
-    return v8::MaybeLocal<v8::Module>();
-  }
-
+  DCHECK(!resolved.IsNull());
   DCHECK(!exception_state.HadException());
-  return v8::MaybeLocal<v8::Module>(resolved.module_->NewLocal(isolate));
+  return resolved.module_->NewLocal(isolate);
 }
 
 }  // namespace blink

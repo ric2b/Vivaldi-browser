@@ -226,7 +226,7 @@ void PointerEventManager::SendMouseAndPointerBoundaryEvents(
   }
 
   ProcessCaptureAndPositionOfPointerEvent(dummy_pointer_event, entered_node,
-                                          canvas_region_id, mouse_event, true);
+                                          canvas_region_id, &mouse_event);
 }
 
 void PointerEventManager::SendBoundaryEvents(EventTarget* exited_target,
@@ -262,8 +262,8 @@ void PointerEventManager::BlockTouchPointers(TimeTicks platform_time_stamp) {
     return;
   in_canceled_state_for_pointer_type_touch_ = true;
 
-  Vector<int> touch_pointer_ids = pointer_event_factory_.GetPointerIdsOfType(
-      WebPointerProperties::PointerType::kTouch);
+  Vector<int> touch_pointer_ids =
+      pointer_event_factory_.GetPointerIdsOfScrollCapablePointers();
 
   for (int pointer_id : touch_pointer_ids) {
     PointerEvent* pointer_event =
@@ -331,15 +331,13 @@ WebInputEventResult PointerEventManager::HandleTouchEvents(
   // For the rare case of multi-finger scenarios spanning documents, it
   // seems extremely unlikely to matter which document the gesture is
   // associated with so just pick the first finger.
-  RefPtr<UserGestureToken> possible_gesture_token;
+  std::unique_ptr<UserGestureIndicator> holder;
   if (event.GetType() == WebInputEvent::kTouchEnd &&
       !in_canceled_state_for_pointer_type_touch_ && event.touches_length &&
       first_pointer_event_target.target_frame) {
-    possible_gesture_token = UserGestureToken::Create(
-        first_pointer_event_target.target_frame->GetDocument());
+    holder =
+        LocalFrame::CreateUserGesture(first_pointer_event_target.target_frame);
   }
-  UserGestureIndicator holder(possible_gesture_token);
-
 
   for (unsigned touch_point_idx = 0; touch_point_idx < event.touches_length;
        ++touch_point_idx) {
@@ -490,6 +488,32 @@ WebInputEventResult PointerEventManager::SendTouchPointerEvent(
   return result;
 }
 
+WebInputEventResult PointerEventManager::HandlePointerEvent(
+    const WebPointerEvent& web_pointer_event,
+    Node* target) {
+  // TODO(crbug.com/625841): This function only handles pointercancel for now.
+  // But we should extend it to handle any pointerevents.
+  DCHECK(web_pointer_event.GetType() == WebInputEvent::Type::kPointerCancel);
+  PointerEvent* pointer_event =
+      pointer_event_factory_.CreatePointerCancelEvent(web_pointer_event);
+
+  EventTarget* effective_target =
+      GetEffectiveTargetForPointerEvent(target, pointer_event->pointerId());
+  WebInputEventResult result =
+      DispatchPointerEvent(effective_target, pointer_event);
+
+  ReleasePointerCapture(pointer_event->pointerId());
+
+  // TODO(nzolghadr): Instead of |ProcessPendingPointerCapture| maybe we
+  // should have used ProcessCaptureAndPositionOfPointerEvent but that might
+  // be sending boundary events however we probably not want that all the
+  // time.
+  ProcessPendingPointerCapture(pointer_event);
+
+  RemovePointer(pointer_event);
+  return result;
+}
+
 WebInputEventResult PointerEventManager::SendMousePointerEvent(
     Node* target,
     const String& canvas_region_id,
@@ -514,7 +538,7 @@ WebInputEventResult PointerEventManager::SendMousePointerEvent(
   }
 
   EventTarget* pointer_event_target = ProcessCaptureAndPositionOfPointerEvent(
-      pointer_event, target, canvas_region_id, mouse_event, true);
+      pointer_event, target, canvas_region_id, &mouse_event);
 
   EventTarget* effective_target = GetEffectiveTargetForPointerEvent(
       pointer_event_target, pointer_event->pointerId());
@@ -524,7 +548,7 @@ WebInputEventResult PointerEventManager::SendMousePointerEvent(
   if ((mouse_event_type == EventTypeNames::mousemove) &&
       mouse_event.GetModifiers() &
           WebInputEvent::Modifiers::kRelativeMotionEvent) {
-    return WebInputEventResult::kNotHandled;
+    return WebInputEventResult::kHandledSuppressed;
   }
 
   WebInputEventResult result =
@@ -599,14 +623,11 @@ bool PointerEventManager::GetPointerCaptureState(
   return pointer_capture_target_temp != pending_pointercapture_target_temp;
 }
 
-// TODO(lanwei): Replace the last two parameters by a single WebMouseEvent
-// pointer which defaults to null, crbug.com/727333.
 EventTarget* PointerEventManager::ProcessCaptureAndPositionOfPointerEvent(
     PointerEvent* pointer_event,
     EventTarget* hit_test_target,
     const String& canvas_region_id,
-    const WebMouseEvent& mouse_event,
-    bool send_mouse_event) {
+    const WebMouseEvent* mouse_event) {
   ProcessPendingPointerCapture(pointer_event);
 
   PointerCapturingMap::const_iterator it =
@@ -616,10 +637,10 @@ EventTarget* PointerEventManager::ProcessCaptureAndPositionOfPointerEvent(
     hit_test_target = pointercapture_target;
 
   SetNodeUnderPointer(pointer_event, hit_test_target);
-  if (send_mouse_event) {
+  if (mouse_event) {
     mouse_event_manager_->SetNodeUnderMouse(
         hit_test_target ? hit_test_target->ToNode() : nullptr, canvas_region_id,
-        mouse_event);
+        *mouse_event);
   }
   return hit_test_target;
 }

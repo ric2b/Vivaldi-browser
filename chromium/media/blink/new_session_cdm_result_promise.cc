@@ -11,7 +11,26 @@
 
 namespace media {
 
+namespace {
+
 const char kTimeUMAPrefix[] = "TimeTo.";
+
+CdmResultForUMA ConvertStatusToUMAResult(SessionInitStatus status) {
+  switch (status) {
+    case SessionInitStatus::UNKNOWN_STATUS:
+      break;
+    case SessionInitStatus::NEW_SESSION:
+      return SUCCESS;
+    case SessionInitStatus::SESSION_NOT_FOUND:
+      return SESSION_NOT_FOUND;
+    case SessionInitStatus::SESSION_ALREADY_EXISTS:
+      return SESSION_ALREADY_EXISTS;
+  }
+  NOTREACHED();
+  return INVALID_STATE_ERROR;
+}
+
+}  // namespace
 
 static blink::WebContentDecryptionModuleResult::SessionStatus ConvertStatus(
     SessionInitStatus status) {
@@ -52,12 +71,14 @@ void NewSessionCdmResultPromise::resolve(const std::string& session_id) {
   new_session_created_cb_.Run(session_id, &status);
 
   if (status == SessionInitStatus::UNKNOWN_STATUS) {
-    reject(INVALID_STATE_ERROR, 0, "Cannot finish session initialization");
+    reject(Exception::INVALID_STATE_ERROR, 0,
+           "Cannot finish session initialization");
     return;
   }
 
   MarkPromiseSettled();
-  ReportCdmResultUMA(key_system_uma_prefix_ + uma_name_, SUCCESS);
+  ReportCdmResultUMA(key_system_uma_prefix_ + uma_name_,
+                     ConvertStatusToUMAResult(status));
 
   // Only report time for promise resolution (not rejection).
   base::UmaHistogramTimes(key_system_uma_prefix_ + kTimeUMAPrefix + uma_name_,

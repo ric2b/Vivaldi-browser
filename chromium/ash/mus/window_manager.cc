@@ -55,6 +55,7 @@
 #include "ui/views/mus/pointer_watcher_event_router.h"
 #include "ui/wm/core/capture_controller.h"
 #include "ui/wm/core/shadow_types.h"
+#include "ui/wm/core/window_animations.h"
 #include "ui/wm/core/wm_state.h"
 #include "ui/wm/public/activation_client.h"
 
@@ -113,6 +114,13 @@ void WindowManager::Init(
   // created by chrome, which creates InputDeviceClient.
   if (config_ == Config::MASH) {
     input_device_client_ = base::MakeUnique<ui::InputDeviceClient>();
+
+    // |connector_| can be nullptr in tests.
+    if (connector_) {
+      ui::mojom::InputDeviceServerPtr server;
+      connector_->BindInterface(ui::mojom::kServiceName, &server);
+      input_device_client_->Connect(std::move(server));
+    }
   } else {
     // In Config::MUS ash handles all drag and drop.
     window_tree_client->DisableDragDropClient();
@@ -290,10 +298,13 @@ void WindowManager::SetWindowManagerClient(aura::WindowManagerClient* client) {
 }
 
 void WindowManager::OnWmConnected() {
+  // InstallFrameDecorationValues() must be called before the shell is created,
+  // otherwise Mus attempts to notify clients with no frame decorations, which
+  // triggers validation errors.
+  InstallFrameDecorationValues();
   CreateShell();
   if (show_primary_host_on_connect_)
     Shell::GetPrimaryRootWindow()->GetHost()->Show();
-  InstallFrameDecorationValues();
 }
 
 void WindowManager::OnWmSetBounds(aura::Window* window,
@@ -457,6 +468,10 @@ ui::mojom::EventResult WindowManager::OnAccelerator(
   return iter->second->OnAccelerator(id, event, properties);
 }
 
+void WindowManager::OnCursorTouchVisibleChanged(bool enabled) {
+  ShellPortMash::Get()->OnCursorTouchVisibleChanged(enabled);
+}
+
 void WindowManager::OnWmSetClientArea(
     aura::Window* window,
     const gfx::Insets& insets,
@@ -474,6 +489,10 @@ bool WindowManager::IsWindowActive(aura::Window* window) {
 
 void WindowManager::OnWmDeactivateWindow(aura::Window* window) {
   Shell::Get()->activation_client()->DeactivateWindow(window);
+}
+
+void WindowManager::OnEventBlockedByModalWindow(aura::Window* window) {
+  AnimateWindow(window, ::wm::WINDOW_ANIMATION_TYPE_BOUNCE);
 }
 
 }  // namespace mus

@@ -24,7 +24,7 @@ class NetworkServiceURLLoaderFactoryImpl : public mojom::URLLoaderFactory {
   ~NetworkServiceURLLoaderFactoryImpl() override;
 
   // mojom::URLLoaderFactory implementation.
-  void CreateLoaderAndStart(mojom::URLLoaderAssociatedRequest request,
+  void CreateLoaderAndStart(mojom::URLLoaderRequest request,
                             int32_t routing_id,
                             int32_t request_id,
                             uint32_t options,
@@ -32,10 +32,7 @@ class NetworkServiceURLLoaderFactoryImpl : public mojom::URLLoaderFactory {
                             mojom::URLLoaderClientPtr client,
                             const net::MutableNetworkTrafficAnnotationTag&
                                 traffic_annotation) override;
-  void SyncLoad(int32_t routing_id,
-                int32_t request_id,
-                const ResourceRequest& request,
-                SyncLoadCallback callback) override;
+  void Clone(mojom::URLLoaderFactoryRequest request) override;
 
  private:
   // Not owned.

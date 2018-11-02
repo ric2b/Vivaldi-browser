@@ -11,19 +11,24 @@
 #include "base/i18n/rtl.h"
 #include "base/mac/bundle_locations.h"
 #include "base/mac/foundation_util.h"
-
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/sys_string_conversions.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#include "ios/chrome/browser/drag_and_drop/drag_and_drop_flag.h"
+#import "ios/chrome/browser/drag_and_drop/drop_and_navigate_delegate.h"
+#import "ios/chrome/browser/drag_and_drop/drop_and_navigate_interaction.h"
 #include "ios/chrome/browser/experimental_flags.h"
 #import "ios/chrome/browser/tabs/tab.h"
 #import "ios/chrome/browser/tabs/tab_model.h"
 #import "ios/chrome/browser/tabs/tab_model_observer.h"
-#import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
+#import "ios/chrome/browser/ui/bubble/bubble_util.h"
+#import "ios/chrome/browser/ui/bubble/bubble_view.h"
+#import "ios/chrome/browser/ui/bubble/bubble_view_anchor_point_provider.h"
+#import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
-#include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
+#import "ios/chrome/browser/ui/commands/open_url_command.h"
 #import "ios/chrome/browser/ui/fullscreen_controller.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
 #include "ios/chrome/browser/ui/tab_switcher/tab_switcher_tab_strip_placeholder_view.h"
@@ -118,8 +123,10 @@ const CGFloat kNewTabButtonBottomImageInset = 7.0;
 const CGFloat kNewTabButtonBottomOffsetHighRes = 2.0;
 }
 
-@interface TabStripController ()<TabModelObserver,
+@interface TabStripController ()<DropAndNavigateDelegate,
+                                 TabModelObserver,
                                  TabStripViewLayoutDelegate,
+                                 TabViewDelegate,
                                  UIGestureRecognizerDelegate,
                                  UIScrollViewDelegate> {
   TabModel* _tabModel;
@@ -178,7 +185,7 @@ const CGFloat kNewTabButtonBottomOffsetHighRes = 2.0;
 
   // Timer used to autoscroll when in reordering mode.  Is nil when not active.
   // Owned by its runloop.
-  NSTimer* _autoscrollTimer;  // weak
+  __weak NSTimer* _autoscrollTimer;  // weak
 
   // The distance to scroll for each autoscroll timer tick.  If negative, the
   // tabstrip will scroll to the left; if positive, to the right.
@@ -190,6 +197,10 @@ const CGFloat kNewTabButtonBottomOffsetHighRes = 2.0;
 
   // YES if this tab strip is representing an incognito TabModel.
   BOOL _isIncognito;
+
+#if defined(__IPHONE_11_0) && (__IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_11_0)
+  API_AVAILABLE(ios(11.0)) DropAndNavigateInteraction* _buttonNewTabInteraction;
+#endif
 }
 
 @property(nonatomic, readonly, retain) TabStripView* tabStripView;
@@ -331,7 +342,8 @@ const CGFloat kNewTabButtonBottomOffsetHighRes = 2.0;
 
 - (instancetype)initWithTabModel:(TabModel*)tabModel
                            style:(TabStrip::Style)style
-                      dispatcher:(id<BrowserCommands>)dispatcher {
+                      dispatcher:
+                          (id<ApplicationCommands, BrowserCommands>)dispatcher {
   if ((self = [super init])) {
     _tabArray = [[NSMutableArray alloc] initWithCapacity:10];
     _closingTabs = [[NSMutableSet alloc] initWithCapacity:5];
@@ -399,14 +411,23 @@ const CGFloat kNewTabButtonBottomOffsetHighRes = 2.0;
         _isIncognito ? IDS_IOS_TOOLS_MENU_NEW_INCOGNITO_TAB
                      : IDS_IOS_TOOLS_MENU_NEW_TAB,
         _isIncognito ? @"New Incognito Tab" : @"New Tab");
-    // Use a nil target to send |-chromeExecuteCommand:| down the responder
-    // chain.
     [_buttonNewTab addTarget:self
                       action:@selector(sendNewTabCommand)
             forControlEvents:UIControlEventTouchUpInside];
     [_buttonNewTab addTarget:self
                       action:@selector(recordUserMetrics:)
             forControlEvents:UIControlEventTouchUpInside];
+
+#if defined(__IPHONE_11_0) && (__IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_11_0)
+    if (DragAndDropIsEnabled()) {
+      if (@available(iOS 11.0, *)) {
+        _buttonNewTabInteraction =
+            [[DropAndNavigateInteraction alloc] initWithDelegate:self];
+        [_buttonNewTab addInteraction:_buttonNewTabInteraction];
+      }
+    }
+#endif
+
     [_tabStripView addSubview:_buttonNewTab];
 
     [self installTabSwitcherButton];
@@ -487,14 +508,6 @@ const CGFloat kNewTabButtonBottomOffsetHighRes = 2.0;
   [[view titleLabel] setText:[tab title]];
   [view setFavicon:[tab favicon]];
 
-  // Set the tab buttons' action messages.
-  [view addTarget:self
-                action:@selector(tabTapped:)
-      forControlEvents:UIControlEventTouchUpInside];
-  [[view closeButton] addTarget:self
-                         action:@selector(closeTab:)
-               forControlEvents:UIControlEventTouchUpInside];
-
   // Install a long press gesture recognizer to handle drag and drop.
   UILongPressGestureRecognizer* longPress =
       [[UILongPressGestureRecognizer alloc]
@@ -511,6 +524,8 @@ const CGFloat kNewTabButtonBottomOffsetHighRes = 2.0;
   // Setting the tab to be hidden marks it as a new tab.  The layout code will
   // make the tab visible and set up the appropriate animations.
   [view setHidden:YES];
+
+  view.delegate = self;
 
   return view;
 }
@@ -593,42 +608,6 @@ const CGFloat kNewTabButtonBottomOffsetHighRes = 2.0;
   [self.dispatcher openNewTab:command];
 }
 
-- (void)tabTapped:(id)sender {
-  DCHECK([sender isKindOfClass:[TabView class]]);
-
-  // Ignore taps while in reordering mode.
-  if ([self isReorderingTabs])
-    return;
-
-  NSUInteger index = [self modelIndexForTabView:(TabView*)sender];
-  DCHECK_NE(NSNotFound, static_cast<NSInteger>(index));
-  if (index == NSNotFound)
-    return;
-  Tab* tappedTab = [_tabModel tabAtIndex:index];
-  Tab* currentTab = [_tabModel currentTab];
-  if (IsIPadIdiom() && (currentTab != tappedTab)) {
-    [currentTab updateSnapshotWithOverlay:YES visibleFrameOnly:YES];
-  }
-  [_tabModel setCurrentTab:tappedTab];
-  [self updateContentOffsetForTabIndex:index isNewTab:NO];
-}
-
-- (void)closeTab:(id)sender {
-  // Ignore taps while in reordering mode.
-  // TODO(rohitrao): We should just hide the close buttons instead.
-  if ([self isReorderingTabs])
-    return;
-
-  base::RecordAction(UserMetricsAction("MobileTabStripCloseTab"));
-  DCHECK([sender isKindOfClass:[UIButton class]]);
-  UIView* superview = [sender superview];
-  DCHECK([superview isKindOfClass:[TabView class]]);
-  TabView* tab = (TabView*)superview;
-  NSUInteger modelIndex = [self modelIndexForTabView:tab];
-  if (modelIndex != NSNotFound)
-    [_tabModel closeTabAtIndex:modelIndex];
-}
-
 - (void)handleLongPress:(UILongPressGestureRecognizer*)gesture {
   switch ([gesture state]) {
     case UIGestureRecognizerStateBegan:
@@ -695,6 +674,16 @@ const CGFloat kNewTabButtonBottomOffsetHighRes = 2.0;
 
 - (NSUInteger)modelIndexForTabView:(TabView*)view {
   return [self modelIndexForIndex:[_tabArray indexOfObject:view]];
+}
+
+#pragma mark -
+#pragma mark BubbleViewAnchorPointProvider methods
+
+- (CGPoint)anchorPointForTabSwitcherButton:(BubbleArrowDirection)direction {
+  CGPoint anchorPoint =
+      bubble_util::AnchorPoint(_tabSwitcherButton.frame, direction);
+  return [_tabSwitcherButton.superview convertPoint:anchorPoint
+                                             toView:_tabSwitcherButton.window];
 }
 
 #pragma mark -
@@ -1050,11 +1039,9 @@ const CGFloat kNewTabButtonBottomOffsetHighRes = 2.0;
   [_tabSwitcherButton setExclusiveTouch:YES];
   [_tabSwitcherButton setImage:tabSwitcherButtonIcon
                       forState:UIControlStateNormal];
-  // Set target/action to bubble up with command id as tag.
-  [_tabSwitcherButton addTarget:nil
-                         action:@selector(chromeExecuteCommand:)
+  [_tabSwitcherButton addTarget:self.dispatcher
+                         action:@selector(displayTabSwitcher)
                forControlEvents:UIControlEventTouchUpInside];
-  [_tabSwitcherButton setTag:IDC_TOGGLE_TAB_SWITCHER];
   [_tabSwitcherButton addTarget:self
                          action:@selector(recordUserMetrics:)
                forControlEvents:UIControlEventTouchUpInside];
@@ -1205,7 +1192,7 @@ const CGFloat kNewTabButtonBottomOffsetHighRes = 2.0;
                               isNewTab:(BOOL)isNewTab {
   DCHECK_NE(NSNotFound, static_cast<NSInteger>(tabIndex));
 
-  if (experimental_flags::IsTabStripAutoScrollNewTabsEnabled() && isNewTab) {
+  if (isNewTab) {
     [self autoScrollForNewTab:tabIndex];
     return;
   }
@@ -1518,7 +1505,7 @@ const CGFloat kNewTabButtonBottomOffsetHighRes = 2.0;
     if ([self.fullscreenDelegate currentHeaderOffset] != 0) {
       // Move the toolbar to visible and wait for the end of that animation to
       // animate the appearance of the new tab.
-      delay = ios_internal::kToolbarAnimationDuration;
+      delay = kFullScreenControllerToolbarAnimationDuration;
       // Signal the FullscreenController that the toolbar needs to stay on
       // screen for a bit, so the animation is visible.
       [[NSNotificationCenter defaultCenter]
@@ -1553,6 +1540,64 @@ const CGFloat kNewTabButtonBottomOffsetHighRes = 2.0;
 - (void)setNeedsLayoutWithAnimation {
   _animateLayout = YES;
   [_tabStripView setNeedsLayout];
+}
+
+#pragma mark - DropAndNavigateDelegate
+
+- (void)URLWasDropped:(GURL const&)url {
+  // Called when a URL is dropped on the new tab button.
+  OpenUrlCommand* command = [[OpenUrlCommand alloc] initWithURL:url
+                                                       referrer:web::Referrer()
+                                                    inIncognito:_isIncognito
+                                                   inBackground:NO
+                                                       appendTo:kLastTab];
+  [self.dispatcher openURL:command];
+}
+
+#pragma mark - TabViewDelegate
+
+// Called when the TabView was tapped.
+- (void)tabViewTapped:(TabView*)tabView {
+  // Ignore taps while in reordering mode.
+  if ([self isReorderingTabs])
+    return;
+
+  NSUInteger index = [self modelIndexForTabView:tabView];
+  DCHECK_NE(NSNotFound, static_cast<NSInteger>(index));
+  if (index == NSNotFound)
+    return;
+  Tab* tappedTab = [_tabModel tabAtIndex:index];
+  Tab* currentTab = [_tabModel currentTab];
+  if (IsIPadIdiom() && (currentTab != tappedTab)) {
+    [currentTab updateSnapshotWithOverlay:YES visibleFrameOnly:YES];
+  }
+  [_tabModel setCurrentTab:tappedTab];
+  [self updateContentOffsetForTabIndex:index isNewTab:NO];
+}
+
+// Called when the TabView's close button was tapped.
+- (void)tabViewcloseButtonPressed:(TabView*)tabView {
+  // Ignore taps while in reordering mode.
+  // TODO(crbug.com/754287): We should just hide the close buttons instead.
+  if ([self isReorderingTabs])
+    return;
+
+  base::RecordAction(UserMetricsAction("MobileTabStripCloseTab"));
+  NSUInteger modelIndex = [self modelIndexForTabView:tabView];
+  if (modelIndex != NSNotFound)
+    [_tabModel closeTabAtIndex:modelIndex];
+}
+
+- (void)tabView:(TabView*)tabView receivedDroppedURL:(GURL)url {
+  NSUInteger index = [self modelIndexForTabView:tabView];
+  DCHECK_NE(NSNotFound, static_cast<NSInteger>(index));
+  if (index == NSNotFound)
+    return;
+  Tab* tab = [_tabModel tabAtIndex:index];
+
+  web::NavigationManager::WebLoadParams params(url);
+  params.transition_type = ui::PAGE_TRANSITION_GENERATED;
+  tab.navigationManager->LoadURLWithParams(params);
 }
 
 @end

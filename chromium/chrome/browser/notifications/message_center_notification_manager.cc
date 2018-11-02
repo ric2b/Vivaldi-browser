@@ -16,7 +16,6 @@
 #include "chrome/browser/notifications/message_center_settings_controller.h"
 #include "chrome/browser/notifications/notification.h"
 #include "chrome/browser/notifications/profile_notification.h"
-#include "chrome/browser/notifications/screen_lock_notification_blocker.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
@@ -30,13 +29,8 @@
 #include "ui/message_center/message_center_types.h"
 #include "ui/message_center/notifier_settings.h"
 
-#if defined(OS_CHROMEOS)
-#include "chrome/browser/notifications/login_state_notification_blocker_chromeos.h"
-#endif
-
-#if defined(USE_ASH)
-#include "ash/shell.h"
-#include "ash/system/web_notification/web_notification_tray.h"
+#if !defined(OS_CHROMEOS)
+#include "chrome/browser/notifications/screen_lock_notification_blocker.h"
 #endif
 
 using message_center::NotifierId;
@@ -51,10 +45,7 @@ MessageCenterNotificationManager::MessageCenterNotificationManager(
   message_center_->AddObserver(this);
   message_center_->SetNotifierSettingsProvider(settings_provider_.get());
 
-#if defined(OS_CHROMEOS)
-  blockers_.push_back(
-      base::MakeUnique<LoginStateNotificationBlockerChromeOS>(message_center));
-#else
+#if !defined(OS_CHROMEOS)
   blockers_.push_back(
       base::MakeUnique<ScreenLockNotificationBlocker>(message_center));
 #endif
@@ -65,7 +56,7 @@ MessageCenterNotificationManager::MessageCenterNotificationManager(
   || (defined(OS_LINUX) && !defined(OS_CHROMEOS))
   // On Windows, Linux and Mac, the notification manager owns the tray icon and
   // views.Other platforms have global ownership and Create will return NULL.
-  tray_.reset(message_center::CreateMessageCenterTray());
+  tray_.reset(CreateMessageCenterTrayDelegate());
 #endif
 }
 
@@ -272,31 +263,7 @@ void MessageCenterNotificationManager::StartShutdown() {
 void MessageCenterNotificationManager::OnNotificationRemoved(
     const std::string& id,
     bool by_user) {
-  auto iter = profile_notifications_.find(id);
-  if (iter != profile_notifications_.end())
-    RemoveProfileNotification(iter->first);
-}
-
-void MessageCenterNotificationManager::OnCenterVisibilityChanged(
-    message_center::Visibility visibility) {
-}
-
-void MessageCenterNotificationManager::OnNotificationUpdated(
-    const std::string& id) {
-}
-
-void MessageCenterNotificationManager::EnsureMessageCenterClosed() {
-  if (tray_.get() && tray_->GetMessageCenterTray())
-    tray_->GetMessageCenterTray()->HideMessageCenterBubble();
-
-#if defined(USE_ASH)
-  if (ash::Shell::HasInstance()) {
-    ash::WebNotificationTray* tray =
-        ash::Shell::Get()->GetWebNotificationTray();
-    if (tray)
-      tray->GetMessageCenterTray()->HideMessageCenterBubble();
-  }
-#endif
+  RemoveProfileNotification(id);
 }
 
 void MessageCenterNotificationManager::SetMessageCenterTrayDelegateForTest(

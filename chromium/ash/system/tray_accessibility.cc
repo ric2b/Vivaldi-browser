@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/accessibility_delegate.h"
 #include "ash/accessibility_types.h"
 #include "ash/ash_view_ids.h"
@@ -57,6 +58,8 @@ enum AccessibilityState {
 
 uint32_t GetAccessibilityState() {
   AccessibilityDelegate* delegate = Shell::Get()->accessibility_delegate();
+  AccessibilityController* controller =
+      Shell::Get()->accessibility_controller();
   uint32_t state = A11Y_NONE;
   if (delegate->IsSpokenFeedbackEnabled())
     state |= A11Y_SPOKEN_FEEDBACK;
@@ -64,7 +67,7 @@ uint32_t GetAccessibilityState() {
     state |= A11Y_HIGH_CONTRAST;
   if (delegate->IsMagnifierEnabled())
     state |= A11Y_SCREEN_MAGNIFIER;
-  if (delegate->IsLargeCursorEnabled())
+  if (controller->IsLargeCursorEnabled())
     state |= A11Y_LARGE_CURSOR;
   if (delegate->IsAutoclickEnabled())
     state |= A11Y_AUTOCLICK;
@@ -95,11 +98,15 @@ LoginStatus GetCurrentLoginStatus() {
 const gfx::VectorIcon& GetNotificationIcon(uint32_t enabled_accessibility) {
   if ((enabled_accessibility & A11Y_BRAILLE_DISPLAY_CONNECTED) &&
       (enabled_accessibility & A11Y_SPOKEN_FEEDBACK)) {
-    return kSystemMenuAccessibilityIcon;
+    return message_center::MessageCenter::IsNewStyleNotificationEnabled()
+               ? kNotificationAccessibilityIcon
+               : kSystemMenuAccessibilityIcon;
   }
   if (enabled_accessibility & A11Y_BRAILLE_DISPLAY_CONNECTED)
     return kNotificationAccessibilityBrailleIcon;
-  return kSystemMenuAccessibilityChromevoxIcon;
+  return message_center::MessageCenter::IsNewStyleNotificationEnabled()
+             ? kNotificationChromevoxIcon
+             : kSystemMenuAccessibilityChromevoxIcon;
 }
 
 }  // namespace
@@ -147,6 +154,8 @@ void AccessibilityDetailedView::AppendAccessibilityList() {
   CreateScrollableList();
 
   AccessibilityDelegate* delegate = Shell::Get()->accessibility_delegate();
+  AccessibilityController* controller =
+      Shell::Get()->accessibility_controller();
 
   spoken_feedback_enabled_ = delegate->IsSpokenFeedbackEnabled();
   spoken_feedback_view_ = AddScrollListCheckableItem(
@@ -187,7 +196,7 @@ void AccessibilityDetailedView::AppendAccessibilityList() {
 
   AddScrollListSubHeader(IDS_ASH_STATUS_TRAY_ACCESSIBILITY_ADDITIONAL_SETTINGS);
 
-  large_cursor_enabled_ = delegate->IsLargeCursorEnabled();
+  large_cursor_enabled_ = controller->IsLargeCursorEnabled();
   large_cursor_view_ = AddScrollListCheckableItem(
       l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_ACCESSIBILITY_LARGE_CURSOR),
       large_cursor_enabled_);
@@ -232,6 +241,8 @@ void AccessibilityDetailedView::AppendAccessibilityList() {
 
 void AccessibilityDetailedView::HandleViewClicked(views::View* view) {
   AccessibilityDelegate* delegate = Shell::Get()->accessibility_delegate();
+  AccessibilityController* controller =
+      Shell::Get()->accessibility_controller();
   using base::RecordAction;
   using base::UserMetricsAction;
   if (view == spoken_feedback_view_) {
@@ -250,10 +261,11 @@ void AccessibilityDetailedView::HandleViewClicked(views::View* view) {
                      : UserMetricsAction("StatusArea_MagnifierEnabled"));
     delegate->SetMagnifierEnabled(!delegate->IsMagnifierEnabled());
   } else if (large_cursor_view_ && view == large_cursor_view_) {
-    RecordAction(delegate->IsLargeCursorEnabled()
-                     ? UserMetricsAction("StatusArea_LargeCursorDisabled")
-                     : UserMetricsAction("StatusArea_LargeCursorEnabled"));
-    delegate->SetLargeCursorEnabled(!delegate->IsLargeCursorEnabled());
+    bool new_state = !controller->IsLargeCursorEnabled();
+    RecordAction(new_state
+                     ? UserMetricsAction("StatusArea_LargeCursorEnabled")
+                     : UserMetricsAction("StatusArea_LargeCursorDisabled"));
+    controller->SetLargeCursorEnabled(new_state);
   } else if (autoclick_view_ && view == autoclick_view_) {
     RecordAction(delegate->IsAutoclickEnabled()
                      ? UserMetricsAction("StatusArea_AutoClickDisabled")
@@ -422,7 +434,7 @@ void TrayAccessibility::UpdateAfterLoginStatusChange(LoginStatus status) {
   SetTrayIconVisible(GetInitialVisibility());
 }
 
-void TrayAccessibility::OnAccessibilityModeChanged(
+void TrayAccessibility::OnAccessibilityStatusChanged(
     AccessibilityNotificationVisibility notify) {
   SetTrayIconVisible(GetInitialVisibility());
 
@@ -472,16 +484,26 @@ void TrayAccessibility::OnAccessibilityModeChanged(
         l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_SPOKEN_FEEDBACK_ENABLED);
   }
 
-  std::unique_ptr<message_center::Notification> notification =
-      base::MakeUnique<message_center::Notification>(
-          message_center::NOTIFICATION_TYPE_SIMPLE, kNotificationId, title,
-          text,
-          gfx::Image(gfx::CreateVectorIcon(GetNotificationIcon(being_enabled),
-                                           kMenuIconSize, kMenuIconColor)),
-          base::string16(), GURL(),
-          message_center::NotifierId(message_center::NotifierId::APPLICATION,
-                                     system_notifier::kNotifierAccessibility),
-          message_center::RichNotificationData(), nullptr);
+  std::unique_ptr<message_center::Notification> notification;
+  if (message_center::MessageCenter::IsNewStyleNotificationEnabled()) {
+    notification = message_center::Notification::CreateSystemNotification(
+        message_center::NOTIFICATION_TYPE_SIMPLE, kNotificationId, title, text,
+        gfx::Image(), base::string16(), GURL(),
+        message_center::NotifierId(message_center::NotifierId::APPLICATION,
+                                   system_notifier::kNotifierAccessibility),
+        message_center::RichNotificationData(), nullptr,
+        GetNotificationIcon(being_enabled),
+        message_center::SystemNotificationWarningLevel::NORMAL);
+  } else {
+    notification = base::MakeUnique<message_center::Notification>(
+        message_center::NOTIFICATION_TYPE_SIMPLE, kNotificationId, title, text,
+        gfx::Image(gfx::CreateVectorIcon(GetNotificationIcon(being_enabled),
+                                         kMenuIconSize, kMenuIconColor)),
+        base::string16(), GURL(),
+        message_center::NotifierId(message_center::NotifierId::APPLICATION,
+                                   system_notifier::kNotifierAccessibility),
+        message_center::RichNotificationData(), nullptr);
+  }
   message_center->AddNotification(std::move(notification));
 }
 

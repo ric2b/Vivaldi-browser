@@ -19,7 +19,9 @@ class HTMLOptGroupElement;
 class HTMLOptionElement;
 class HTMLSelectElement;
 
-class CORE_EXPORT InternalPopupMenu final : NON_EXPORTED_BASE(public PopupMenu),
+// InternalPopupMenu is a PopupMenu implementation for platforms other than
+// macOS and Android. The UI is built with an HTML page inside a PagePopup.
+class CORE_EXPORT InternalPopupMenu final : public PopupMenu,
                                             public PagePopupClient {
  public:
   static InternalPopupMenu* Create(ChromeClient*, HTMLSelectElement&);

@@ -57,9 +57,7 @@ void QuicCryptoStream::OnDataAvailable() {
     }
     sequencer()->MarkConsumed(iov.iov_len);
     if (handshake_confirmed() &&
-        crypto_message_parser()->InputBytesRemaining() == 0 &&
-        FLAGS_quic_reloadable_flag_quic_release_crypto_stream_buffer) {
-      QUIC_FLAG_COUNT(quic_reloadable_flag_quic_release_crypto_stream_buffer);
+        crypto_message_parser()->InputBytesRemaining() == 0) {
       // If the handshake is complete and the current message has been fully
       // processed then no more handshake messages are likely to arrive soon
       // so release the memory in the stream sequencer.
@@ -92,41 +90,6 @@ bool QuicCryptoStream::ExportTokenBindingKeyingMaterial(string* result) const {
       crypto_negotiated_params().initial_subkey_secret,
       "EXPORTER-Token-Binding",
       /* context= */ "", 32, result);
-}
-
-QuicCryptoHandshaker::QuicCryptoHandshaker(QuicCryptoStream* stream,
-                                           QuicSession* session)
-    : stream_(stream), session_(session) {
-  crypto_framer_.set_visitor(this);
-}
-
-QuicCryptoHandshaker::~QuicCryptoHandshaker() {}
-
-void QuicCryptoHandshaker::SendHandshakeMessage(
-    const CryptoHandshakeMessage& message) {
-  QUIC_DVLOG(1) << ENDPOINT << "Sending "
-                << message.DebugString(session()->perspective());
-  session()->connection()->NeuterUnencryptedPackets();
-  session()->OnCryptoHandshakeMessageSent(message);
-  const QuicData& data = message.GetSerialized(session()->perspective());
-  stream_->WriteOrBufferData(QuicStringPiece(data.data(), data.length()), false,
-                             nullptr);
-}
-
-void QuicCryptoHandshaker::OnError(CryptoFramer* framer) {
-  QUIC_DLOG(WARNING) << "Error processing crypto data: "
-                     << QuicErrorCodeToString(framer->error());
-}
-
-void QuicCryptoHandshaker::OnHandshakeMessage(
-    const CryptoHandshakeMessage& message) {
-  QUIC_DVLOG(1) << ENDPOINT << "Received "
-                << message.DebugString(session()->perspective());
-  session()->OnCryptoHandshakeMessageReceived(message);
-}
-
-CryptoMessageParser* QuicCryptoHandshaker::crypto_message_parser() {
-  return &crypto_framer_;
 }
 
 }  // namespace net

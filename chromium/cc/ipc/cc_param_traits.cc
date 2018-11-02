@@ -9,6 +9,7 @@
 
 #include "base/numerics/safe_conversions.h"
 #include "base/time/time.h"
+#include "base/trace_event/trace_event.h"
 #include "base/unguessable_token.h"
 #include "cc/base/filter_operations.h"
 #include "cc/output/compositor_frame.h"
@@ -67,13 +68,17 @@ void ParamTraits<cc::FilterOperation>::GetSize(base::PickleSizer* s,
       GetParamSize(s, p.image_filter());
       break;
     case cc::FilterOperation::ALPHA_THRESHOLD:
-      NOTREACHED();
+      GetParamSize(s, p.amount());
+      GetParamSize(s, p.outer_threshold());
+      GetParamSize(s, p.shape());
       break;
   }
 }
 
 void ParamTraits<cc::FilterOperation>::Write(base::Pickle* m,
                                              const param_type& p) {
+  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug.ipc"),
+               "ParamTraits::FilterOperation::Write");
   WriteParam(m, p.type());
   switch (p.type()) {
     case cc::FilterOperation::GRAYSCALE:
@@ -108,7 +113,9 @@ void ParamTraits<cc::FilterOperation>::Write(base::Pickle* m,
       WriteParam(m, p.image_filter());
       break;
     case cc::FilterOperation::ALPHA_THRESHOLD:
-      NOTREACHED();
+      WriteParam(m, p.amount());
+      WriteParam(m, p.outer_threshold());
+      WriteParam(m, p.shape());
       break;
   }
 }
@@ -116,11 +123,15 @@ void ParamTraits<cc::FilterOperation>::Write(base::Pickle* m,
 bool ParamTraits<cc::FilterOperation>::Read(const base::Pickle* m,
                                             base::PickleIterator* iter,
                                             param_type* r) {
+  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug.ipc"),
+               "ParamTraits::FilterOperation::Read");
   cc::FilterOperation::FilterType type;
   float amount;
+  float outer_threshold;
   gfx::Point drop_shadow_offset;
   SkColor drop_shadow_color;
   SkScalar matrix[20];
+  cc::FilterOperation::ShapeRects shape;
   int zoom_inset;
   SkBlurImageFilter::TileMode tile_mode;
 
@@ -192,6 +203,14 @@ bool ParamTraits<cc::FilterOperation>::Read(const base::Pickle* m,
       break;
     }
     case cc::FilterOperation::ALPHA_THRESHOLD:
+      if (ReadParam(m, iter, &amount) && ReadParam(m, iter, &outer_threshold) &&
+          ReadParam(m, iter, &shape) && amount >= 0.f &&
+          outer_threshold >= 0.f) {
+        r->set_amount(amount);
+        r->set_outer_threshold(amount);
+        r->set_shape(shape);
+        success = true;
+      }
       break;
   }
   return success;
@@ -243,7 +262,11 @@ void ParamTraits<cc::FilterOperation>::Log(const param_type& p,
       LogParam(p.image_filter(), l);
       break;
     case cc::FilterOperation::ALPHA_THRESHOLD:
-      NOTREACHED();
+      LogParam(p.amount(), l);
+      l->append(", ");
+      LogParam(p.outer_threshold(), l);
+      l->append(", ");
+      LogParam(p.shape(), l);
       break;
   }
   l->append(")");
@@ -259,6 +282,8 @@ void ParamTraits<cc::FilterOperations>::GetSize(base::PickleSizer* s,
 
 void ParamTraits<cc::FilterOperations>::Write(base::Pickle* m,
                                               const param_type& p) {
+  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug.ipc"),
+               "ParamTraits::FilterOperations::Write");
   WriteParam(m, base::checked_cast<uint32_t>(p.size()));
   for (std::size_t i = 0; i < p.size(); ++i) {
     WriteParam(m, p.at(i));
@@ -268,6 +293,8 @@ void ParamTraits<cc::FilterOperations>::Write(base::Pickle* m,
 bool ParamTraits<cc::FilterOperations>::Read(const base::Pickle* m,
                                              base::PickleIterator* iter,
                                              param_type* r) {
+  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug.ipc"),
+               "ParamTraits::FilterOperations::Read");
   uint32_t count;
   if (!ReadParam(m, iter, &count))
     return false;
@@ -305,6 +332,8 @@ void ParamTraits<sk_sp<SkImageFilter>>::GetSize(base::PickleSizer* s,
 
 void ParamTraits<sk_sp<SkImageFilter>>::Write(base::Pickle* m,
                                               const param_type& p) {
+  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug.ipc"),
+               "ParamTraits::SkImageFilter::Write");
   SkImageFilter* filter = p.get();
   if (filter) {
     sk_sp<SkData> data(SkValidatingSerializeFlattenable(filter));
@@ -318,6 +347,8 @@ void ParamTraits<sk_sp<SkImageFilter>>::Write(base::Pickle* m,
 bool ParamTraits<sk_sp<SkImageFilter>>::Read(const base::Pickle* m,
                                              base::PickleIterator* iter,
                                              param_type* r) {
+  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug.ipc"),
+               "ParamTraits::SkImageFilter::Read");
   const char* data = 0;
   int length = 0;
   if (!iter->ReadData(&data, &length))
@@ -340,6 +371,8 @@ void ParamTraits<sk_sp<SkImageFilter>>::Log(const param_type& p,
 }
 
 void ParamTraits<cc::RenderPass>::Write(base::Pickle* m, const param_type& p) {
+  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug.ipc"),
+               "ParamTraits::RenderPass::Write");
   WriteParam(m, p.id);
   WriteParam(m, p.output_rect);
   WriteParam(m, p.damage_rect);
@@ -360,10 +393,6 @@ void ParamTraits<cc::RenderPass>::Write(base::Pickle* m, const param_type& p) {
     DCHECK(quad->rect.Contains(quad->visible_rect))
         << quad->material << " rect: " << quad->rect.ToString()
         << " visible_rect: " << quad->visible_rect.ToString();
-    DCHECK(quad->opaque_rect.IsEmpty() ||
-           quad->rect.Contains(quad->opaque_rect))
-        << quad->material << " rect: " << quad->rect.ToString()
-        << " opaque_rect: " << quad->opaque_rect.ToString();
 
     switch (quad->material) {
       case cc::DrawQuad::DEBUG_BORDER:
@@ -427,7 +456,7 @@ static size_t ReserveSizeForRenderPassWrite(const cc::RenderPass& p) {
 
   // Shared quad state is only written when a quad contains a shared quad state
   // that has not been written.
-  to_reserve += p.shared_quad_state_list.size() * sizeof(cc::SharedQuadState);
+  to_reserve += p.shared_quad_state_list.size() * sizeof(viz::SharedQuadState);
 
   // The largest quad type, verified by a unit test.
   to_reserve += p.quad_list.size() * cc::LargestDrawQuadSize();
@@ -444,6 +473,8 @@ template <typename QuadType>
 static cc::DrawQuad* ReadDrawQuad(const base::Pickle* m,
                                   base::PickleIterator* iter,
                                   cc::RenderPass* render_pass) {
+  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug.ipc"),
+               "ParamTraits::ReadDrawQuad");
   QuadType* quad = render_pass->CreateAndAppendDrawQuad<QuadType>();
   if (!ReadParam(m, iter, quad))
     return nullptr;
@@ -453,6 +484,8 @@ static cc::DrawQuad* ReadDrawQuad(const base::Pickle* m,
 bool ParamTraits<cc::RenderPass>::Read(const base::Pickle* m,
                                        base::PickleIterator* iter,
                                        param_type* p) {
+  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug.ipc"),
+               "ParamTraits::RenderPass::Read");
   uint64_t id;
   gfx::Rect output_rect;
   gfx::Rect damage_rect;
@@ -529,13 +562,6 @@ bool ParamTraits<cc::RenderPass>::Read(const base::Pickle* m,
                  << " visible_rect: " << draw_quad->visible_rect.ToString();
       return false;
     }
-    if (!draw_quad->opaque_rect.IsEmpty() &&
-        !draw_quad->rect.Contains(draw_quad->opaque_rect)) {
-      LOG(ERROR) << "Quad with invalid opaque rect " << draw_quad->material
-                 << " rect: " << draw_quad->rect.ToString()
-                 << " opaque_rect: " << draw_quad->opaque_rect.ToString();
-      return false;
-    }
 
     bool has_new_shared_quad_state;
     if (!ReadParam(m, iter, &has_new_shared_quad_state))
@@ -543,7 +569,7 @@ bool ParamTraits<cc::RenderPass>::Read(const base::Pickle* m,
 
     // If the quad has a new shared quad state, read it in.
     if (has_new_shared_quad_state) {
-      cc::SharedQuadState* state = p->CreateAndAppendSharedQuadState();
+      viz::SharedQuadState* state = p->CreateAndAppendSharedQuadState();
       if (!ReadParam(m, iter, state))
         return false;
     }
@@ -795,9 +821,11 @@ void ParamTraits<viz::SurfaceInfo>::Log(const param_type& p, std::string* l) {
 
 void ParamTraits<cc::CompositorFrame>::Write(base::Pickle* m,
                                              const param_type& p) {
+  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug.ipc"),
+               "ParamTraits::CompositorFrame::Write");
   WriteParam(m, p.metadata);
   size_t to_reserve = 0u;
-  to_reserve += p.resource_list.size() * sizeof(cc::TransferableResource);
+  to_reserve += p.resource_list.size() * sizeof(viz::TransferableResource);
   for (const auto& pass : p.render_pass_list) {
     to_reserve += sizeof(size_t) * 2;
     to_reserve += ReserveSizeForRenderPassWrite(*pass);
@@ -817,6 +845,8 @@ void ParamTraits<cc::CompositorFrame>::Write(base::Pickle* m,
 bool ParamTraits<cc::CompositorFrame>::Read(const base::Pickle* m,
                                             base::PickleIterator* iter,
                                             param_type* p) {
+  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug.ipc"),
+               "ParamTraits::CompositorFrame::Read");
   if (!ReadParam(m, iter, &p->metadata))
     return false;
 
@@ -885,6 +915,8 @@ void ParamTraits<cc::DrawQuad::Resources>::GetSize(base::PickleSizer* s,
 
 void ParamTraits<cc::DrawQuad::Resources>::Write(base::Pickle* m,
                                                  const param_type& p) {
+  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug.ipc"),
+               "ParamTraits::DrawQuad::Resources::Write");
   DCHECK_LE(p.count, cc::DrawQuad::Resources::kMaxResourceIdCount);
   WriteParam(m, p.count);
   for (size_t i = 0; i < p.count; ++i)
@@ -894,6 +926,8 @@ void ParamTraits<cc::DrawQuad::Resources>::Write(base::Pickle* m,
 bool ParamTraits<cc::DrawQuad::Resources>::Read(const base::Pickle* m,
                                                 base::PickleIterator* iter,
                                                 param_type* p) {
+  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug.ipc"),
+               "ParamTraits::DrawQuad::Resources::Read");
   if (!ReadParam(m, iter, &p->count))
     return false;
   if (p->count > cc::DrawQuad::Resources::kMaxResourceIdCount)
@@ -993,28 +1027,28 @@ void ParamTraits<cc::YUVVideoDrawQuad>::Log(const param_type& p,
   l->append("])");
 }
 
-void ParamTraits<cc::BeginFrameAck>::GetSize(base::PickleSizer* s,
-                                             const param_type& p) {
+void ParamTraits<viz::BeginFrameAck>::GetSize(base::PickleSizer* s,
+                                              const param_type& p) {
   GetParamSize(s, p.sequence_number);
   GetParamSize(s, p.source_id);
 }
 
-void ParamTraits<cc::BeginFrameAck>::Write(base::Pickle* m,
-                                           const param_type& p) {
+void ParamTraits<viz::BeginFrameAck>::Write(base::Pickle* m,
+                                            const param_type& p) {
   m->WriteUInt64(p.sequence_number);
   m->WriteUInt32(p.source_id);
   // |has_damage| is implicit through IPC message name, so not transmitted.
 }
 
-bool ParamTraits<cc::BeginFrameAck>::Read(const base::Pickle* m,
-                                          base::PickleIterator* iter,
-                                          param_type* p) {
+bool ParamTraits<viz::BeginFrameAck>::Read(const base::Pickle* m,
+                                           base::PickleIterator* iter,
+                                           param_type* p) {
   return iter->ReadUInt64(&p->sequence_number) &&
-         p->sequence_number >= cc::BeginFrameArgs::kStartingFrameNumber &&
+         p->sequence_number >= viz::BeginFrameArgs::kStartingFrameNumber &&
          iter->ReadUInt32(&p->source_id);
 }
 
-void ParamTraits<cc::BeginFrameAck>::Log(const param_type& p, std::string* l) {
+void ParamTraits<viz::BeginFrameAck>::Log(const param_type& p, std::string* l) {
   l->append("(");
   LogParam(p.sequence_number, l);
   l->append(", ");

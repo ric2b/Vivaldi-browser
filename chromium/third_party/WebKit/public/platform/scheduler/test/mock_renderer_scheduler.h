@@ -8,7 +8,7 @@
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "cc/output/begin_frame_args.h"
+#include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "public/platform/WebThread.h"
 #include "public/platform/scheduler/renderer/renderer_scheduler.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -33,7 +33,7 @@ class MockRendererScheduler : public RendererScheduler {
   MOCK_METHOD0(TimerTaskRunner, scoped_refptr<base::SingleThreadTaskRunner>());
   MOCK_METHOD0(NewRenderWidgetSchedulingState,
                std::unique_ptr<RenderWidgetSchedulingState>());
-  MOCK_METHOD1(WillBeginFrame, void(const cc::BeginFrameArgs&));
+  MOCK_METHOD1(WillBeginFrame, void(const viz::BeginFrameArgs&));
   MOCK_METHOD0(BeginFrameNotExpectedSoon, void());
   MOCK_METHOD1(BeginMainFrameNotExpectedUntil, void(base::TimeTicks));
   MOCK_METHOD0(DidCommitFrameToCompositor, void());
@@ -45,7 +45,7 @@ class MockRendererScheduler : public RendererScheduler {
   MOCK_METHOD0(DidAnimateForInputOnCompositorThread, void());
   MOCK_METHOD1(SetRendererHidden, void(bool));
   MOCK_METHOD1(SetRendererBackgrounded, void(bool));
-  MOCK_METHOD0(SuspendRenderer, void());
+  MOCK_METHOD0(PauseRenderer, void());
   MOCK_METHOD0(ResumeRenderer, void());
   MOCK_METHOD1(AddPendingNavigation, void(NavigatingFrameType));
   MOCK_METHOD1(RemovePendingNavigation, void(NavigatingFrameType));
@@ -56,14 +56,15 @@ class MockRendererScheduler : public RendererScheduler {
   MOCK_METHOD1(AddTaskObserver, void(base::MessageLoop::TaskObserver*));
   MOCK_METHOD1(RemoveTaskObserver, void(base::MessageLoop::TaskObserver*));
   MOCK_METHOD0(Shutdown, void());
-  MOCK_METHOD0(SuspendTimerQueue, void());
+  MOCK_METHOD0(PauseTimerQueue, void());
   MOCK_METHOD0(ResumeTimerQueue, void());
   MOCK_METHOD0(VirtualTimePaused, void());
   MOCK_METHOD0(VirtualTimeResumed, void());
-  MOCK_METHOD1(SetTimerQueueSuspensionWhenBackgroundedEnabled, void(bool));
+  MOCK_METHOD1(SetTimerQueueStoppingWhenBackgroundedEnabled, void(bool));
   MOCK_METHOD1(SetTopLevelBlameContext, void(base::trace_event::BlameContext*));
   MOCK_METHOD1(SetRAILModeObserver, void(RAILModeObserver*));
   MOCK_METHOD1(MainThreadSeemsUnresponsive, bool(base::TimeDelta));
+  MOCK_METHOD1(SetRendererProcessType, void(RendererProcessType));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockRendererScheduler);

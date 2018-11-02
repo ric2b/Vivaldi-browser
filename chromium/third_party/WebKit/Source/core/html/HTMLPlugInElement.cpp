@@ -28,7 +28,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/Node.h"
 #include "core/dom/ShadowRoot.h"
-#include "core/events/Event.h"
+#include "core/dom/events/Event.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameClient.h"
 #include "core/frame/LocalFrameView.h"
@@ -269,7 +269,7 @@ bool HTMLPlugInElement::ShouldAccelerate() const {
 }
 
 Vector<WebParsedFeaturePolicyDeclaration>
-HTMLPlugInElement::ConstructContainerPolicy() const {
+HTMLPlugInElement::ConstructContainerPolicy(Vector<String>*, bool*) const {
   // Plugin elements (<object> and <embed>) are not allowed to enable the
   // fullscreen feature. Add an empty whitelist for the fullscreen feature so
   // that the nested browsing context is unable to use the API, regardless of

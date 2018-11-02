@@ -7,14 +7,13 @@
 #include "base/lazy_instance.h"
 #include "base/macros.h"
 
-#include "components/version_info/version_info_values.h"
-
 namespace vivaldi {
 
 namespace {
 
 const char *vivaldi_extra_locales_array[] = {
   "be",
+  "en-AU",
   "eo",
   "es-PE",
   "eu",
@@ -28,9 +27,9 @@ const char *vivaldi_extra_locales_array[] = {
   "ka",
   "ku",
   "mk",
+  "nn",
   "sc",
   "sq",
-  "nn",
 };
 
 base::LazyInstance<std::set<std::string>>::DestructorAtExit
@@ -39,7 +38,7 @@ base::LazyInstance<std::set<std::string>>::DestructorAtExit
 }  // namespace
 
 bool IsVivaldiApp(const std::string &extension_id) {
-  return extension_id == kVivaldiAppId;
+  return extension_id == kVivaldiAppIdHex || extension_id == kVivaldiAppId;
 }
 
 const std::set<std::string> &GetVivaldiExtraLocales() {
@@ -56,14 +55,6 @@ const std::set<std::string> &GetVivaldiExtraLocales() {
 bool IsVivaldiExtraLocale(const std::string &locale) {
   auto &extra_locales = GetVivaldiExtraLocales();
   return extra_locales.find(locale) != extra_locales.end();
-}
-
-std::string GetVivaldiVersionString() {
-  return VIVALDI_VERSION;
-}
-
-std::string VivaldiLastChange() {
-  return LAST_CHANGE_VIVALDI;
 }
 
 }  // namespace vivaldi

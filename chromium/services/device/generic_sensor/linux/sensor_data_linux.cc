@@ -8,6 +8,7 @@
 #include "base/version.h"
 #include "services/device/generic_sensor/generic_sensor_consts.h"
 #include "services/device/public/cpp/generic_sensor/sensor_reading.h"
+#include "services/device/public/cpp/generic_sensor/sensor_traits.h"
 
 namespace device {
 
@@ -30,10 +31,10 @@ void InitAmbientLightSensorData(SensorPathsLinux* data) {
   data->sensor_scale_name = "in_intensity_scale";
   data->apply_scaling_func = base::Bind(
       [](double scaling_value, double offset, SensorReading& reading) {
-        reading.values[0] = scaling_value * (reading.values[0] + offset);
+        reading.als.value = scaling_value * (reading.als.value + offset);
       });
-  data->default_configuration =
-      PlatformSensorConfiguration(kDefaultAmbientLightFrequencyHz);
+  data->default_configuration = PlatformSensorConfiguration(
+      SensorTraits<SensorType::AMBIENT_LIGHT>::kDefaultFrequency);
 }
 
 // Depending on a kernel version, CrOS has a different axes plane.
@@ -79,9 +80,9 @@ void InitAccelerometerSensorData(SensorPathsLinux* data) {
   data->apply_scaling_func = base::Bind(
       [](double scaling_value, double offset, SensorReading& reading) {
         double scaling = kMeanGravity / scaling_value;
-        reading.values[0] = scaling * (reading.values[0] + offset);
-        reading.values[1] = scaling * (reading.values[1] + offset);
-        reading.values[2] = scaling * (reading.values[2] + offset);
+        reading.accel.x = scaling * (reading.accel.x + offset);
+        reading.accel.y = scaling * (reading.accel.y + offset);
+        reading.accel.z = scaling * (reading.accel.z + offset);
       });
 #else
   data->sensor_scale_name = "in_accel_scale";
@@ -90,16 +91,16 @@ void InitAccelerometerSensorData(SensorPathsLinux* data) {
   data->apply_scaling_func = base::Bind(
       [](double scaling_value, double offset, SensorReading& reading) {
         // Adapt Linux reading values to generic sensor api specs.
-        reading.values[0] = -scaling_value * (reading.values[0] + offset);
-        reading.values[1] = -scaling_value * (reading.values[1] + offset);
-        reading.values[2] = -scaling_value * (reading.values[2] + offset);
+        reading.accel.x = -scaling_value * (reading.accel.x + offset);
+        reading.accel.y = -scaling_value * (reading.accel.y + offset);
+        reading.accel.z = -scaling_value * (reading.accel.z + offset);
       });
 #endif
 
   MaybeCheckKernelVersionAndAssignFileNames(file_names_x, file_names_y,
                                             file_names_z, data);
-  data->default_configuration =
-      PlatformSensorConfiguration(kDefaultAccelerometerFrequencyHz);
+  data->default_configuration = PlatformSensorConfiguration(
+      SensorTraits<SensorType::ACCELEROMETER>::kDefaultFrequency);
 }
 
 void InitGyroscopeSensorData(SensorPathsLinux* data) {
@@ -116,9 +117,9 @@ void InitGyroscopeSensorData(SensorPathsLinux* data) {
       [](double scaling_value, double offset, SensorReading& reading) {
         double scaling = kMeanGravity * kRadiansInDegrees / scaling_value;
         // Adapt CrOS reading values to generic sensor api specs.
-        reading.values[0] = -scaling * (reading.values[0] + offset);
-        reading.values[1] = -scaling * (reading.values[1] + offset);
-        reading.values[2] = -scaling * (reading.values[2] + offset);
+        reading.gyro.x = -scaling * (reading.gyro.x + offset);
+        reading.gyro.y = -scaling * (reading.gyro.y + offset);
+        reading.gyro.z = -scaling * (reading.gyro.z + offset);
       });
 #else
   data->sensor_scale_name = "in_anglvel_scale";
@@ -126,16 +127,16 @@ void InitGyroscopeSensorData(SensorPathsLinux* data) {
   data->sensor_frequency_file_name = "in_anglvel_sampling_frequency";
   data->apply_scaling_func = base::Bind(
       [](double scaling_value, double offset, SensorReading& reading) {
-        reading.values[0] = scaling_value * (reading.values[0] + offset);
-        reading.values[1] = scaling_value * (reading.values[1] + offset);
-        reading.values[2] = scaling_value * (reading.values[2] + offset);
+        reading.gyro.x = scaling_value * (reading.gyro.x + offset);
+        reading.gyro.y = scaling_value * (reading.gyro.y + offset);
+        reading.gyro.z = scaling_value * (reading.gyro.z + offset);
       });
 #endif
 
   MaybeCheckKernelVersionAndAssignFileNames(file_names_x, file_names_y,
                                             file_names_z, data);
-  data->default_configuration =
-      PlatformSensorConfiguration(kDefaultGyroscopeFrequencyHz);
+  data->default_configuration = PlatformSensorConfiguration(
+      SensorTraits<SensorType::GYROSCOPE>::kDefaultFrequency);
 }
 
 // TODO(maksims): Verify magnitometer works correctly on a chromebook when
@@ -151,15 +152,15 @@ void InitMagnitometerSensorData(SensorPathsLinux* data) {
   data->apply_scaling_func = base::Bind(
       [](double scaling_value, double offset, SensorReading& reading) {
         double scaling = scaling_value * kMicroteslaInGauss;
-        reading.values[0] = scaling * (reading.values[0] + offset);
-        reading.values[1] = scaling * (reading.values[1] + offset);
-        reading.values[2] = scaling * (reading.values[2] + offset);
+        reading.magn.x = scaling * (reading.magn.x + offset);
+        reading.magn.y = scaling * (reading.magn.y + offset);
+        reading.magn.z = scaling * (reading.magn.z + offset);
       });
 
   MaybeCheckKernelVersionAndAssignFileNames(file_names_x, file_names_y,
                                             file_names_z, data);
-  data->default_configuration =
-      PlatformSensorConfiguration(kDefaultMagnetometerFrequencyHz);
+  data->default_configuration = PlatformSensorConfiguration(
+      SensorTraits<SensorType::MAGNETOMETER>::kDefaultFrequency);
 }
 
 }  // namespace

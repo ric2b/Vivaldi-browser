@@ -301,6 +301,7 @@ class ASH_EXPORT ShelfView : public views::View,
 
   // Overridden from ui::EventHandler:
   void OnGestureEvent(ui::GestureEvent* event) override;
+  bool OnMouseWheel(const ui::MouseWheelEvent& event) override;
 
   // Overridden from ShelfModelObserver:
   void ShelfItemAdded(int model_index) override;
@@ -309,6 +310,13 @@ class ASH_EXPORT ShelfView : public views::View,
   void ShelfItemMoved(int start_index, int target_index) override;
   void ShelfItemDelegateChanged(const ShelfID& id,
                                 ShelfItemDelegate* delegate) override;
+
+  // Handles the result when querying ShelfItemDelegates for context menu items.
+  // Shows a default shelf context menu with optional extra custom |menu_items|.
+  void AfterGetContextMenuItems(const ShelfID& shelf_id,
+                                const gfx::Point& point,
+                                ui::MenuSourceType source_type,
+                                std::vector<mojom::MenuItemPtr> menu_items);
 
   // Handles the result of an item selection, records the |action| taken and
   // optionally shows an application menu with the given |menu_items|.

@@ -39,9 +39,8 @@ void SensorImpl::GetDefaultConfiguration(
 }
 
 void SensorImpl::RemoveConfiguration(
-    const PlatformSensorConfiguration& configuration,
-    RemoveConfigurationCallback callback) {
-  std::move(callback).Run(sensor_->StopListening(this, configuration));
+    const PlatformSensorConfiguration& configuration) {
+  sensor_->StopListening(this, configuration);
 }
 
 void SensorImpl::Suspend() {
@@ -58,10 +57,12 @@ void SensorImpl::ConfigureReadingChangeNotifications(bool enabled) {
   reading_notification_enabled_ = enabled;
 }
 
-void SensorImpl::OnSensorReadingChanged() {
+void SensorImpl::OnSensorReadingChanged(mojom::SensorType type) {
   DCHECK(!suspended_);
-  if (client_ && reading_notification_enabled_)
+  if (client_ && reading_notification_enabled_ &&
+      sensor_->GetReportingMode() == mojom::ReportingMode::ON_CHANGE) {
     client_->SensorReadingChanged();
+  }
 }
 
 void SensorImpl::OnSensorError() {

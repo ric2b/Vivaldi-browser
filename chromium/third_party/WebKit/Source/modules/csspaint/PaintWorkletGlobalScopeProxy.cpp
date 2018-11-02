@@ -20,24 +20,27 @@ PaintWorkletGlobalScopeProxy* PaintWorkletGlobalScopeProxy::From(
 
 PaintWorkletGlobalScopeProxy::PaintWorkletGlobalScopeProxy(
     LocalFrame* frame,
-    PaintWorkletPendingGeneratorRegistry* pending_generator_registry) {
+    PaintWorkletPendingGeneratorRegistry* pending_generator_registry,
+    size_t global_scope_number) {
   DCHECK(IsMainThread());
   Document* document = frame->GetDocument();
+  reporting_proxy_ = WTF::MakeUnique<MainThreadWorkletReportingProxy>(document);
   global_scope_ = PaintWorkletGlobalScope::Create(
       frame, document->Url(), document->UserAgent(),
-      document->GetSecurityOrigin(), ToIsolate(document),
-      pending_generator_registry);
+      document->GetSecurityOrigin(), ToIsolate(document), *reporting_proxy_,
+      pending_generator_registry, global_scope_number);
 }
 
 void PaintWorkletGlobalScopeProxy::FetchAndInvokeScript(
     const KURL& module_url_record,
+    WorkletModuleResponsesMap* module_responses_map,
     WebURLRequest::FetchCredentialsMode credentials_mode,
     RefPtr<WebTaskRunner> outside_settings_task_runner,
     WorkletPendingTasks* pending_tasks) {
   DCHECK(IsMainThread());
-  global_scope_->FetchAndInvokeScript(module_url_record, credentials_mode,
-                                      std::move(outside_settings_task_runner),
-                                      pending_tasks);
+  global_scope_->FetchAndInvokeScript(
+      module_url_record, module_responses_map, credentials_mode,
+      std::move(outside_settings_task_runner), pending_tasks);
 }
 
 void PaintWorkletGlobalScopeProxy::WorkletObjectDestroyed() {
@@ -48,8 +51,9 @@ void PaintWorkletGlobalScopeProxy::WorkletObjectDestroyed() {
 void PaintWorkletGlobalScopeProxy::TerminateWorkletGlobalScope() {
   DCHECK(IsMainThread());
   global_scope_->Terminate();
-  // Nullify the global scope to cut a potential reference cycle.
+  // Nullify these fields to cut a potential reference cycle.
   global_scope_ = nullptr;
+  reporting_proxy_.reset();
 }
 
 CSSPaintDefinition* PaintWorkletGlobalScopeProxy::FindDefinition(

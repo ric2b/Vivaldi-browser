@@ -126,8 +126,12 @@ struct EnumTraits<gfx::mojom::BufferUsage, gfx::BufferUsage> {
         return gfx::mojom::BufferUsage::GPU_READ;
       case gfx::BufferUsage::SCANOUT:
         return gfx::mojom::BufferUsage::SCANOUT;
+      case gfx::BufferUsage::SCANOUT_CAMERA_READ_WRITE:
+        return gfx::mojom::BufferUsage::SCANOUT_CAMERA_READ_WRITE;
       case gfx::BufferUsage::SCANOUT_CPU_READ_WRITE:
         return gfx::mojom::BufferUsage::SCANOUT_CPU_READ_WRITE;
+      case gfx::BufferUsage::SCANOUT_VDA_WRITE:
+        return gfx::mojom::BufferUsage::SCANOUT_VDA_WRITE;
       case gfx::BufferUsage::GPU_READ_CPU_READ_WRITE:
         return gfx::mojom::BufferUsage::GPU_READ_CPU_READ_WRITE;
       case gfx::BufferUsage::GPU_READ_CPU_READ_WRITE_PERSISTENT:
@@ -145,8 +149,14 @@ struct EnumTraits<gfx::mojom::BufferUsage, gfx::BufferUsage> {
       case gfx::mojom::BufferUsage::SCANOUT:
         *out = gfx::BufferUsage::SCANOUT;
         return true;
+      case gfx::mojom::BufferUsage::SCANOUT_CAMERA_READ_WRITE:
+        *out = gfx::BufferUsage::SCANOUT_CAMERA_READ_WRITE;
+        return true;
       case gfx::mojom::BufferUsage::SCANOUT_CPU_READ_WRITE:
         *out = gfx::BufferUsage::SCANOUT_CPU_READ_WRITE;
+        return true;
+      case gfx::mojom::BufferUsage::SCANOUT_VDA_WRITE:
+        *out = gfx::BufferUsage::SCANOUT_VDA_WRITE;
         return true;
       case gfx::mojom::BufferUsage::GPU_READ_CPU_READ_WRITE:
         *out = gfx::BufferUsage::GPU_READ_CPU_READ_WRITE;
@@ -239,10 +249,6 @@ struct StructTraits<gfx::mojom::NativePixmapPlaneDataView,
 template <>
 struct StructTraits<gfx::mojom::NativePixmapHandleDataView,
                     gfx::NativePixmapHandle> {
-  static void* SetUpContext(const gfx::NativePixmapHandle& handle);
-  static void TearDownContext(const gfx::NativePixmapHandle& handle,
-                              void* context);
-
   static bool IsNull(const gfx::NativePixmapHandle& handle) {
 #if defined(OS_LINUX)
     return false;
@@ -251,9 +257,8 @@ struct StructTraits<gfx::mojom::NativePixmapHandleDataView,
     return true;
 #endif
   }
-  static std::vector<mojo::ScopedHandle>& fds(
-      const gfx::NativePixmapHandle& pixmap_handle,
-      void* context);
+  static std::vector<mojo::ScopedHandle> fds(
+      const gfx::NativePixmapHandle& pixmap_handle);
 
   static const std::vector<gfx::NativePixmapPlane>& planes(
       const gfx::NativePixmapHandle& pixmap_handle) {

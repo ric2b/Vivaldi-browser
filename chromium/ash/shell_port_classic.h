@@ -42,6 +42,7 @@ class ASH_EXPORT ShellPortClassic : public ShellPort {
   void SetCursorSize(ui::CursorSize cursor_size) override;
   void SetGlobalOverrideCursor(base::Optional<ui::CursorData> cursor) override;
   bool IsMouseEventsEnabled() override;
+  void SetCursorTouchVisible(bool enabled) override;
   std::unique_ptr<WindowResizer> CreateDragWindowResizer(
       std::unique_ptr<WindowResizer> next_window_resizer,
       wm::WindowState* window_state) override;
@@ -66,6 +67,7 @@ class ASH_EXPORT ShellPortClassic : public ShellPort {
       const AshWindowTreeHostInitParams& init_params) override;
   void OnCreatedRootWindowContainers(
       RootWindowController* root_window_controller) override;
+  void UpdateSystemModalAndBlockingContainers() override;
   void OnHostsInitialized() override;
   std::unique_ptr<display::NativeDisplayDelegate> CreateNativeDisplayDelegate()
       override;

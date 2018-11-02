@@ -112,10 +112,6 @@ bool DnsProbeStatusIsFinished(DnsProbeStatus status);
 // Record specific error page events.
 void RecordEvent(NetworkErrorPageEvent event);
 
-// The error domain used to pass DNS probe statuses to the localized error
-// code.
-extern const char kDnsProbeErrorDomain[];
-
 }  // namespace error_page
 
 #endif  // COMPONENTS_ERROR_PAGE_COMMON_NET_ERROR_INFO_H_

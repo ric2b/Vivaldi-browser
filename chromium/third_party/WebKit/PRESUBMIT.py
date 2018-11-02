@@ -198,12 +198,12 @@ def _CheckForForbiddenNamespace(input_api, output_api):
     # This list is not exhaustive, but covers likely ones.
     chromium_namespaces = ["base", "cc", "content", "gfx", "net", "ui"]
     chromium_forbidden_classes = ["scoped_refptr"]
-    chromium_allowed_classes = ["gfx::ColorSpace", "gfx::CubicBezier"]
+    chromium_allowed_classes = ["gfx::ColorSpace", "gfx::CubicBezier", "gfx::ICCProfile", "gfx::ScrollOffset"]
 
     def source_file_filter(path):
         return input_api.FilterSourceFile(path,
                                           white_list=[r'third_party/WebKit/Source/.*\.(h|cpp)$'],
-                                          black_list=[r'third_party/WebKit/Source/(platform|wtf|web)/'])
+                                          black_list=[r'third_party/WebKit/Source/(platform|wtf|web|controller)/'])
 
     comment_re = input_api.re.compile(r'^\s*//')
     result = []

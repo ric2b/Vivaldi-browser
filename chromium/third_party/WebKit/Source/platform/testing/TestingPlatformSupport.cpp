@@ -39,12 +39,14 @@
 #include "base/test/icu_test_util.h"
 #include "base/test/test_discardable_memory_allocator.h"
 #include "cc/blink/web_compositor_support_impl.h"
-#include "cc/test/ordered_simple_task_runner.h"
+#include "components/viz/test/ordered_simple_task_runner.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "platform/FontFamilyNames.h"
 #include "platform/HTTPNames.h"
 #include "platform/Language.h"
 #include "platform/heap/Heap.h"
+#include "platform/instrumentation/resource_coordinator/BlinkResourceCoordinatorBase.h"
+#include "platform/instrumentation/resource_coordinator/RendererResourceCoordinator.h"
 #include "platform/loader/fetch/FetchInitiatorTypeNames.h"
 #include "platform/network/mime/MockMimeRegistry.h"
 #include "platform/scheduler/base/real_time_domain.h"
@@ -322,6 +324,9 @@ class ScopedUnittestsEnvironmentSetup::DummyPlatform final
   };
 };
 
+class ScopedUnittestsEnvironmentSetup::DummyRendererResourceCoordinator final
+    : public blink::RendererResourceCoordinator {};
+
 ScopedUnittestsEnvironmentSetup::ScopedUnittestsEnvironmentSetup(int argc,
                                                                  char** argv) {
   base::CommandLine::Init(argc, argv);
@@ -346,6 +351,14 @@ ScopedUnittestsEnvironmentSetup::ScopedUnittestsEnvironmentSetup(int argc,
   testing_platform_support_ =
       WTF::WrapUnique(new TestingPlatformSupport(testing_platform_config_));
   Platform::SetCurrentPlatformForTesting(testing_platform_support_.get());
+
+  if (BlinkResourceCoordinatorBase::IsEnabled()) {
+    dummy_renderer_resource_coordinator_ =
+        WTF::WrapUnique(new DummyRendererResourceCoordinator);
+    RendererResourceCoordinator::
+        SetCurrentRendererResourceCoordinatorForTesting(
+            dummy_renderer_resource_coordinator_.get());
+  }
 
   ProcessHeap::Init();
   ThreadState::AttachMainThread();

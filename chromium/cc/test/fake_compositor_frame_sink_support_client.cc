@@ -4,7 +4,7 @@
 
 #include "cc/test/fake_compositor_frame_sink_support_client.h"
 
-#include "cc/surfaces/surface_manager.h"
+#include "components/viz/service/surfaces/surface_manager.h"
 
 namespace cc {
 
@@ -14,15 +14,15 @@ FakeCompositorFrameSinkSupportClient::~FakeCompositorFrameSinkSupportClient() =
     default;
 
 void FakeCompositorFrameSinkSupportClient::DidReceiveCompositorFrameAck(
-    const std::vector<ReturnedResource>& resources) {
+    const std::vector<viz::ReturnedResource>& resources) {
   returned_resources_ = resources;
 }
 
 void FakeCompositorFrameSinkSupportClient::OnBeginFrame(
-    const BeginFrameArgs& args) {}
+    const viz::BeginFrameArgs& args) {}
 
 void FakeCompositorFrameSinkSupportClient::ReclaimResources(
-    const std::vector<ReturnedResource>& resources) {
+    const std::vector<viz::ReturnedResource>& resources) {
   returned_resources_ = resources;
 }
 

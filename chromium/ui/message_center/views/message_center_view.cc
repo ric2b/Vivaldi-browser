@@ -179,7 +179,6 @@ void MessageCenterView::ClearAllClosableNotifications() {
 }
 
 void MessageCenterView::OnAllNotificationsCleared() {
-  is_clearing_all_notifications_ = false;
   SetViewHierarchyEnabled(scroller_, true);
   button_bar_->SetCloseAllButtonEnabled(false);
 
@@ -189,6 +188,7 @@ void MessageCenterView::OnAllNotificationsCleared() {
   message_center_->RemoveAllNotifications(
       true /* by_user */,
       message_center::MessageCenter::RemoveType::NON_PINNED);
+  is_clearing_all_notifications_ = false;
 }
 
 size_t MessageCenterView::NumMessageViewsForTest() const {
@@ -358,7 +358,10 @@ void MessageCenterView::OnNotificationRemoved(const std::string& id,
   MessageView* view = view_iter->second;
   int index = message_list_view_->GetIndexOf(view);
   DCHECK_LE(0, index);
-  if (by_user) {
+
+  // We skip repositioning during clear-all anomation, since we don't need keep
+  // positions.
+  if (by_user && !is_clearing_all_notifications_) {
     message_list_view_->SetRepositionTarget(view->bounds());
     // Moves the keyboard focus to the next notification if the removed
     // notification is focused so that the user can dismiss notifications
@@ -645,7 +648,7 @@ void MessageCenterView::EnableCloseAllIfAppropriate() {
   if (mode_ == Mode::NOTIFICATIONS) {
     bool no_closable_views = true;
     for (const auto& view : notification_views_) {
-      if (!view.second->pinned()) {
+      if (!view.second->GetPinned()) {
         no_closable_views = false;
         break;
       }
@@ -668,28 +671,27 @@ void MessageCenterView::UpdateNotification(const std::string& id) {
   if (view_iter == notification_views_.end())
     return;
 
-  // TODO(dimich): add MessageCenter::GetVisibleNotificationById(id)
   MessageView* view = view_iter->second;
-  const NotificationList::Notifications& notifications =
-      message_center_->GetVisibleNotifications();
-  for (NotificationList::Notifications::const_iterator iter =
-           notifications.begin();
-       iter != notifications.end(); ++iter) {
-    if ((*iter)->id() == id) {
-      int old_width = view->width();
-      int old_height = view->height();
-      bool old_pinned = view->pinned();
-      message_list_view_->UpdateNotification(view, **iter);
-      if (view->GetHeightForWidth(old_width) != old_height) {
-        Update(true /* animate */);
-      } else if (view->pinned() != old_pinned) {
-        // Animate flag is false, since the pinned flag transition doesn't need
-        // animation.
-        Update(false /* animate */);
-      }
-      break;
+  Notification* notification = message_center_->FindVisibleNotificationById(id);
+  if (notification) {
+    int old_width = view->width();
+    int old_height = view->height();
+    bool old_pinned = view->GetPinned();
+    message_list_view_->UpdateNotification(view, *notification);
+    if (view->GetHeightForWidth(old_width) != old_height) {
+      Update(true /* animate */);
+    } else if (view->GetPinned() != old_pinned) {
+      // Animate flag is false, since the pinned flag transition doesn't need
+      // animation.
+      Update(false /* animate */);
     }
   }
+
+  // Checks for investigation of the crash crbug.com/737858. It looks the view
+  // is stale, but we're not sure. These checks are to confirm that assumption.
+  // TODO(yoshiki): remove these after fixing the crash.
+  CHECK(notification_views_.find(id) != notification_views_.end());
+  CHECK(message_list_view_->Contains(view));
 
   // Notify accessibility that the contents have changed.
   view->NotifyAccessibilityEvent(ui::AX_EVENT_CHILDREN_CHANGED, false);

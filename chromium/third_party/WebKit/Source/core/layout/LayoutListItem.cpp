@@ -228,10 +228,10 @@ inline int LayoutListItem::CalcValue() const {
   // FIXME: This recurses to a possible depth of the length of the list.
   // That's not good -- we need to change this to an iterative algorithm.
   if (LayoutListItem* previous_item = PreviousListItem(list, this))
-    return SaturatedAddition(previous_item->Value(), value_step);
+    return ClampAdd(previous_item->Value(), value_step);
 
   if (o_list_element)
-    return o_list_element->start();
+    return o_list_element->StartConsideringItemCount();
 
   return 1;
 }
@@ -259,7 +259,7 @@ static LayoutObject* GetParentOfFirstLineBox(LayoutBlockFlow* curr,
 
     // Shouldn't add marker into Overflow box, instead, add marker
     // into listitem
-    if (curr_child->HasOverflowClip())
+    if (curr->HasOverflowClip())
       break;
 
     if (curr_child->IsInline() &&

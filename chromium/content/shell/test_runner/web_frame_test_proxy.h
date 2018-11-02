@@ -91,21 +91,11 @@ class WebFrameTestProxy : public Base, public WebFrameTestProxyBase {
     Base::DownloadURL(request, suggested_name);
   }
 
-  void LoadURLExternally(const blink::WebURLRequest& request,
-                         blink::WebNavigationPolicy policy,
-                         blink::WebTriggeringEventInfo triggering_event_info,
-                         bool replaces_current_history_item) override {
-    DCHECK_NE(policy, blink::kWebNavigationPolicyDownload);
-    test_client()->LoadURLExternally(request, policy, triggering_event_info,
-                                     replaces_current_history_item);
-    Base::LoadURLExternally(request, policy, triggering_event_info,
-                            replaces_current_history_item);
-  }
 
-  void DidStartProvisionalLoad(blink::WebDataSource* data_source,
+  void DidStartProvisionalLoad(blink::WebDocumentLoader* document_loader,
                                blink::WebURLRequest& request) override {
-    test_client()->DidStartProvisionalLoad(data_source, request);
-    Base::DidStartProvisionalLoad(data_source, request);
+    test_client()->DidStartProvisionalLoad(document_loader, request);
+    Base::DidStartProvisionalLoad(document_loader, request);
   }
 
   void DidReceiveServerRedirectForProvisionalLoad() override {
@@ -119,7 +109,7 @@ class WebFrameTestProxy : public Base, public WebFrameTestProxyBase {
     test_client()->DidFailProvisionalLoad(error, commit_type);
     // If the test finished, don't notify the embedder of the failed load,
     // as we already destroyed the document loader.
-    if (!web_frame()->ProvisionalDataSource())
+    if (!web_frame()->GetProvisionalDocumentLoader())
       return;
     Base::DidFailProvisionalLoad(error, commit_type);
   }

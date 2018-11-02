@@ -14,10 +14,10 @@
 #include "base/synchronization/lock.h"
 #include "base/trace_event/trace_log.h"
 #include "device/base/synchronization/shared_memory_seqlock_buffer.h"
+#include "platform/PlatformExport.h"
 #include "platform/scheduler/base/pollable_thread_safe_flag.h"
 #include "platform/scheduler/base/queueing_time_estimator.h"
 #include "platform/scheduler/base/task_time_observer.h"
-#include "platform/scheduler/base/thread_load_tracker.h"
 #include "platform/scheduler/child/idle_canceled_delayed_task_sweeper.h"
 #include "platform/scheduler/child/idle_helper.h"
 #include "platform/scheduler/renderer/deadline_task_runner.h"
@@ -25,10 +25,11 @@
 #include "platform/scheduler/renderer/main_thread_scheduler_helper.h"
 #include "platform/scheduler/renderer/main_thread_task_queue.h"
 #include "platform/scheduler/renderer/render_widget_signals.h"
+#include "platform/scheduler/renderer/renderer_metrics_helper.h"
 #include "platform/scheduler/renderer/task_cost_estimator.h"
-#include "platform/scheduler/renderer/task_duration_metric_reporter.h"
 #include "platform/scheduler/renderer/user_model.h"
 #include "platform/scheduler/renderer/web_view_scheduler_impl.h"
+#include "platform/scheduler/util/state_tracer.h"
 #include "public/platform/scheduler/renderer/renderer_scheduler.h"
 
 namespace base {
@@ -49,7 +50,6 @@ class PLATFORM_EXPORT RendererSchedulerImpl
       public IdleHelper::Delegate,
       public MainThreadSchedulerHelper::Observer,
       public RenderWidgetSignals::Observer,
-      public TaskTimeObserver,
       public QueueingTimeEstimator::Client,
       public base::trace_event::TraceLog::AsyncEnabledStateObserver {
  public:
@@ -93,7 +93,7 @@ class PLATFORM_EXPORT RendererSchedulerImpl
   scoped_refptr<SingleThreadIdleTaskRunner> IdleTaskRunner() override;
   std::unique_ptr<RenderWidgetSchedulingState> NewRenderWidgetSchedulingState()
       override;
-  void WillBeginFrame(const cc::BeginFrameArgs& args) override;
+  void WillBeginFrame(const viz::BeginFrameArgs& args) override;
   void BeginFrameNotExpectedSoon() override;
   void BeginMainFrameNotExpectedUntil(base::TimeTicks time) override;
   void DidCommitFrameToCompositor() override;
@@ -106,11 +106,10 @@ class PLATFORM_EXPORT RendererSchedulerImpl
   void DidAnimateForInputOnCompositorThread() override;
   void SetRendererHidden(bool hidden) override;
   void SetRendererBackgrounded(bool backgrounded) override;
-  void SuspendRenderer() override;
+  void PauseRenderer() override;
   void ResumeRenderer() override;
   void AddPendingNavigation(NavigatingFrameType type) override;
   void RemovePendingNavigation(NavigatingFrameType type) override;
-  void OnNavigate() override;
   bool IsHighPriorityWorkAnticipated() override;
   bool ShouldYieldForHighPriorityWork() override;
   bool CanExceedIdleDeadlineIfRequired() const override;
@@ -118,16 +117,17 @@ class PLATFORM_EXPORT RendererSchedulerImpl
   void RemoveTaskObserver(
       base::MessageLoop::TaskObserver* task_observer) override;
   void Shutdown() override;
-  void SuspendTimerQueue() override;
+  void PauseTimerQueue() override;
   void ResumeTimerQueue() override;
   void VirtualTimePaused() override;
   void VirtualTimeResumed() override;
-  void SetTimerQueueSuspensionWhenBackgroundedEnabled(bool enabled) override;
+  void SetTimerQueueStoppingWhenBackgroundedEnabled(bool enabled) override;
   void SetTopLevelBlameContext(
       base::trace_event::BlameContext* blame_context) override;
   void SetRAILModeObserver(RAILModeObserver* observer) override;
   bool MainThreadSeemsUnresponsive(
       base::TimeDelta main_thread_responsiveness_threshold) override;
+  void SetRendererProcessType(RendererProcessType type) override;
 
   // RenderWidgetSignals::Observer implementation:
   void SetAllRenderWidgetsHidden(bool hidden) override;
@@ -136,16 +136,11 @@ class PLATFORM_EXPORT RendererSchedulerImpl
 
   // SchedulerHelper::Observer implementation:
   void OnTriedToExecuteBlockedTask() override;
-
-  // TaskTimeObserver implementation:
-  void WillProcessTask(double start_time) override;
-  void DidProcessTask(double start_time, double end_time) override;
   void OnBeginNestedRunLoop() override;
 
   // QueueingTimeEstimator::Client implementation:
-  void OnQueueingTimeForWindowEstimated(
-      base::TimeDelta queueing_time,
-      base::TimeTicks window_start_time) override;
+  void OnQueueingTimeForWindowEstimated(base::TimeDelta queueing_time,
+                                        bool is_disjoint_window) override;
 
   scoped_refptr<MainThreadTaskQueue> DefaultTaskQueue();
   scoped_refptr<MainThreadTaskQueue> CompositorTaskQueue();
@@ -158,6 +153,7 @@ class PLATFORM_EXPORT RendererSchedulerImpl
 
   // Returns a new loading task queue. This queue is intended for tasks related
   // to resource dispatch, foreground HTML parsing, etc...
+  // Note: Tasks posted to FRAME_LOADING_CONTROL queues must execute quickly.
   scoped_refptr<MainThreadTaskQueue> NewLoadingTaskQueue(
       MainThreadTaskQueue::QueueType queue_type);
 
@@ -167,6 +163,9 @@ class PLATFORM_EXPORT RendererSchedulerImpl
 
   // Returns a task queue where tasks run at the highest possible priority.
   scoped_refptr<MainThreadTaskQueue> ControlTaskQueue();
+
+  // Returns a task queue where tasks run at the lowest priority.
+  scoped_refptr<MainThreadTaskQueue> BestEffortTaskQueue();
 
   // A control task queue which also respects virtual time. Only available if
   // virtual time has been enabled.
@@ -235,6 +234,10 @@ class PLATFORM_EXPORT RendererSchedulerImpl
 
   void OnUnregisterTaskQueue(const scoped_refptr<MainThreadTaskQueue>& queue);
 
+  void OnTaskStarted(MainThreadTaskQueue* queue,
+                     const TaskQueue::Task& task,
+                     base::TimeTicks start);
+
   void OnTaskCompleted(MainThreadTaskQueue* queue,
                        const TaskQueue::Task& task,
                        base::TimeTicks start,
@@ -253,9 +256,12 @@ class PLATFORM_EXPORT RendererSchedulerImpl
   scoped_refptr<base::SingleThreadTaskRunner> TimerTaskRunner() override;
 
  private:
-  friend class RendererSchedulerImplTest;
-  friend class RendererSchedulerImplForTest;
   friend class RenderWidgetSchedulingState;
+  friend class RendererMetricsHelper;
+
+  friend class RendererMetricsHelperTest;
+  friend class RendererSchedulerImplForTest;
+  friend class RendererSchedulerImplTest;
   FRIEND_TEST_ALL_PREFIXES(RendererSchedulerImplTest, Tracing);
 
   enum class ExpensiveTaskPolicy { RUN, BLOCK, THROTTLE };
@@ -273,16 +279,18 @@ class PLATFORM_EXPORT RendererSchedulerImpl
     // newly-created task queue.
     TaskQueuePolicy()
         : is_enabled(true),
-          is_suspended(false),
+          is_paused(false),
           is_throttled(false),
           is_blocked(false),
+          is_stopped(false),
           use_virtual_time(false),
           priority(TaskQueue::NORMAL_PRIORITY) {}
 
     bool is_enabled;
-    bool is_suspended;
+    bool is_paused;
     bool is_throttled;
     bool is_blocked;
+    bool is_stopped;
     bool use_virtual_time;
     TaskQueue::QueuePriority priority;
 
@@ -293,10 +301,9 @@ class PLATFORM_EXPORT RendererSchedulerImpl
     TimeDomainType GetTimeDomainType(MainThreadTaskQueue* task_queue) const;
 
     bool operator==(const TaskQueuePolicy& other) const {
-      return is_enabled == other.is_enabled &&
-             is_suspended == other.is_suspended &&
+      return is_enabled == other.is_enabled && is_paused == other.is_paused &&
              is_throttled == other.is_throttled &&
-             is_blocked == other.is_blocked &&
+             is_blocked == other.is_blocked && is_stopped == other.is_stopped &&
              use_virtual_time == other.use_virtual_time &&
              priority == other.priority;
     }
@@ -428,7 +435,7 @@ class PLATFORM_EXPORT RendererSchedulerImpl
   // The amount of time to wait before suspending shared timers after the
   // renderer has been backgrounded. This is used only if background suspension
   // of shared timers is enabled.
-  static const int kSuspendTimersWhenBackgroundedDelayMillis = 5 * 60 * 1000;
+  static const int kStopTimersWhenBackgroundedDelayMillis = 5 * 60 * 1000;
 
   // The time we should stay in a priority-escalated mode after a call to
   // DidAnimateForInputOnCompositorThread().
@@ -475,9 +482,9 @@ class PLATFORM_EXPORT RendererSchedulerImpl
   void UpdateForInputEventOnCompositorThread(WebInputEvent::Type type,
                                              InputEventState input_event_state);
 
-  // Helpers for safely suspending/resuming the timer queue after a
+  // Helpers for safely stopping/resuming the timer queue after a
   // background/foreground signal.
-  void SuspendTimerQueueWhenBackgrounded();
+  void PauseTimerQueueWhenBackgrounded();
   void ResumeTimerQueueWhenForegroundedOrResumed();
 
   // The task cost estimators and the UserModel need to be reset upon page
@@ -503,14 +510,6 @@ class PLATFORM_EXPORT RendererSchedulerImpl
   bool ShouldDisableThrottlingBecauseOfAudio(base::TimeTicks now);
 
   void AddQueueToWakeUpBudgetPool(MainThreadTaskQueue* queue);
-
-  void RecordTaskMetrics(MainThreadTaskQueue::QueueType queue_type,
-                         base::TimeTicks start_time,
-                         base::TimeTicks end_time);
-
-  void RecordMainThreadTaskLoad(base::TimeTicks time, double load);
-  void RecordForegroundMainThreadTaskLoad(base::TimeTicks time, double load);
-  void RecordBackgroundMainThreadTaskLoad(base::TimeTicks time, double load);
 
   MainThreadSchedulerHelper helper_;
   IdleHelper idle_helper_;
@@ -539,7 +538,6 @@ class PLATFORM_EXPORT RendererSchedulerImpl
   base::Closure update_policy_closure_;
   DeadlineTaskRunner delayed_update_policy_runner_;
   CancelableClosureHolder end_renderer_hidden_idle_period_closure_;
-  CancelableClosureHolder suspend_timers_when_backgrounded_closure_;
 
   using SeqLockQueueingTimeEstimator =
       device::SharedMemorySeqLockBuffer<QueueingTimeEstimator>;
@@ -560,27 +558,23 @@ class PLATFORM_EXPORT RendererSchedulerImpl
     TaskCostEstimator loading_task_cost_estimator;
     TaskCostEstimator timer_task_cost_estimator;
     IdleTimeEstimator idle_time_estimator;
-    ThreadLoadTracker main_thread_load_tracker;
-    ThreadLoadTracker background_main_thread_load_tracker;
-    ThreadLoadTracker foreground_main_thread_load_tracker;
     UseCase current_use_case;
     Policy current_policy;
     base::TimeTicks current_policy_expiration_time;
     base::TimeTicks estimated_next_frame_begin;
     base::TimeTicks current_task_start_time;
-    base::TimeTicks uma_last_queueing_time_report_window_start_time;
     base::TimeDelta most_recent_expected_queueing_time;
     base::TimeDelta compositor_frame_interval;
     base::TimeDelta longest_jank_free_task_duration;
     base::Optional<base::TimeTicks> last_audio_state_change;
-    int timer_queue_suspend_count;  // TIMER_TASK_QUEUE suspended if non-zero.
+    int timer_queue_pause_count;  // TIMER_TASK_QUEUE stopped if non-zero.
     int navigation_task_expected_count;
     ExpensiveTaskPolicy expensive_task_policy;
     bool renderer_hidden;
     bool renderer_backgrounded;
-    bool renderer_suspended;
-    bool timer_queue_suspension_when_backgrounded_enabled;
-    bool timer_queue_suspended_when_backgrounded;
+    bool renderer_paused;
+    bool timer_queue_stopping_when_backgrounded_enabled;
+    bool timer_queue_stopped_when_backgrounded;
     bool was_shutdown;
     bool loading_tasks_seem_expensive;
     bool timer_tasks_seem_expensive;
@@ -594,7 +588,7 @@ class PLATFORM_EXPORT RendererSchedulerImpl
     bool use_virtual_time;
     bool is_audio_playing;
     bool compositor_will_send_main_frame_not_expected;
-    bool virtual_time_paused;
+    bool virtual_time_stopped;
     bool has_navigated;
     std::unique_ptr<base::SingleSampleMetric> max_queueing_time_metric;
     base::TimeDelta max_queueing_time;
@@ -602,25 +596,10 @@ class PLATFORM_EXPORT RendererSchedulerImpl
     std::set<WebViewSchedulerImpl*> web_view_schedulers;  // Not owned.
     RAILModeObserver* rail_mode_observer;                 // Not owned.
     WakeUpBudgetPool* wake_up_budget_pool;                // Not owned.
-    base::Optional<base::TimeTicks> last_reported_task;
-    TaskDurationMetricReporter task_duration_reporter;
-    TaskDurationMetricReporter foreground_task_duration_reporter;
-    TaskDurationMetricReporter foreground_first_minute_task_duration_reporter;
-    TaskDurationMetricReporter foreground_second_minute_task_duration_reporter;
-    TaskDurationMetricReporter foreground_third_minute_task_duration_reporter;
-    TaskDurationMetricReporter
-        foreground_after_third_minute_task_duration_reporter;
-    TaskDurationMetricReporter background_task_duration_reporter;
-    TaskDurationMetricReporter background_first_minute_task_duration_reporter;
-    TaskDurationMetricReporter background_second_minute_task_duration_reporter;
-    TaskDurationMetricReporter background_third_minute_task_duration_reporter;
-    TaskDurationMetricReporter background_fourth_minute_task_duration_reporter;
-    TaskDurationMetricReporter background_fifth_minute_task_duration_reporter;
-    TaskDurationMetricReporter
-        background_after_fifth_minute_task_duration_reporter;
-    TaskDurationMetricReporter hidden_task_duration_reporter;
-    TaskDurationMetricReporter visible_task_duration_reporter;
-    TaskDurationMetricReporter hidden_music_task_duration_reporter;
+    RendererMetricsHelper metrics_helper;
+    RendererProcessType process_type;
+    StateTracer use_case_tracer;
+    StateTracer backgrounding_tracer;
   };
 
   struct AnyThread {
@@ -661,11 +640,11 @@ class PLATFORM_EXPORT RendererSchedulerImpl
 
   // Don't access main_thread_only_, instead use MainThreadOnly().
   MainThreadOnly main_thread_only_;
-  MainThreadOnly& GetMainThreadOnly() {
+  MainThreadOnly& main_thread_only() {
     helper_.CheckOnValidThread();
     return main_thread_only_;
   }
-  const struct MainThreadOnly& GetMainThreadOnly() const {
+  const struct MainThreadOnly& main_thread_only() const {
     helper_.CheckOnValidThread();
     return main_thread_only_;
   }
@@ -673,11 +652,11 @@ class PLATFORM_EXPORT RendererSchedulerImpl
   mutable base::Lock any_thread_lock_;
   // Don't access any_thread_, instead use AnyThread().
   AnyThread any_thread_;
-  AnyThread& GetAnyThread() {
+  AnyThread& any_thread() {
     any_thread_lock_.AssertAcquired();
     return any_thread_;
   }
-  const struct AnyThread& GetAnyThread() const {
+  const struct AnyThread& any_thread() const {
     any_thread_lock_.AssertAcquired();
     return any_thread_;
   }

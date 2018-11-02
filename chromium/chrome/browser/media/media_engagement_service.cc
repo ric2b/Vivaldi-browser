@@ -14,9 +14,11 @@
 #include "chrome/browser/media/media_engagement_score.h"
 #include "chrome/browser/media/media_engagement_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/common/pref_names.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/history/core/browser/history_service.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/web_contents.h"
 #include "media/base/media_switches.h"
 
@@ -59,6 +61,10 @@ bool MediaEngagementTimeFilterAdapter(
   return playback_time >= delete_begin && playback_time <= delete_end;
 }
 
+// The current schema version of the MEI data. If this value is higher
+// than the stored value, all MEI data will be wiped.
+static const int kSchemaVersion = 2;
+
 }  // namespace
 
 const char MediaEngagementService::kHistogramScoreAtStartupName[] =
@@ -87,6 +93,12 @@ void MediaEngagementService::CreateWebContentsObserver(
       new MediaEngagementContentsObserver(web_contents, service));
 }
 
+// static
+void MediaEngagementService::RegisterProfilePrefs(
+    user_prefs::PrefRegistrySyncable* registry) {
+  registry->RegisterIntegerPref(prefs::kMediaEngagementSchemaVersion, 0, 0);
+}
+
 MediaEngagementService::MediaEngagementService(Profile* profile)
     : MediaEngagementService(profile, base::MakeUnique<base::DefaultClock>()) {}
 
@@ -102,11 +114,28 @@ MediaEngagementService::MediaEngagementService(
   if (history)
     history->AddObserver(this);
 
+  // If kSchemaVersion is higher than what we have stored we should wipe
+  // all Media Engagement data.
+  if (GetSchemaVersion() < kSchemaVersion) {
+    HostContentSettingsMapFactory::GetForProfile(profile_)
+        ->ClearSettingsForOneType(CONTENT_SETTINGS_TYPE_MEDIA_ENGAGEMENT);
+    SetSchemaVersion(kSchemaVersion);
+  }
+
   // Record the stored scores to a histogram.
   RecordStoredScoresToHistogram();
 }
 
 MediaEngagementService::~MediaEngagementService() = default;
+
+int MediaEngagementService::GetSchemaVersion() const {
+  return profile_->GetPrefs()->GetInteger(prefs::kMediaEngagementSchemaVersion);
+}
+
+void MediaEngagementService::SetSchemaVersion(int version) {
+  return profile_->GetPrefs()->SetInteger(prefs::kMediaEngagementSchemaVersion,
+                                          version);
+}
 
 void MediaEngagementService::ClearDataBetweenTime(
     const base::Time& delete_begin,
@@ -155,7 +184,7 @@ void MediaEngagementService::OnURLsDeleted(
     // Remove the number of visits consistent with the number
     // of URLs from the same origin we are removing.
     MediaEngagementScore score = CreateEngagementScore(kv.first);
-    double original_score = score.GetTotalScore();
+    double original_score = score.actual_score();
     score.SetVisits(score.visits() - kv.second);
 
     // If this results in zero visits then clear the score.
@@ -179,7 +208,11 @@ void MediaEngagementService::Clear(const GURL& url) {
 }
 
 double MediaEngagementService::GetEngagementScore(const GURL& url) const {
-  return CreateEngagementScore(url).GetTotalScore();
+  return CreateEngagementScore(url).actual_score();
+}
+
+bool MediaEngagementService::HasHighEngagement(const GURL& url) const {
+  return CreateEngagementScore(url).high_score();
 }
 
 std::map<GURL, double> MediaEngagementService::GetScoreMapForTesting() const {

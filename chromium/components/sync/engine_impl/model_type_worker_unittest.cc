@@ -9,8 +9,9 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/threading/thread.h"
+#include "components/sync/base/cancelation_signal.h"
 #include "components/sync/base/fake_encryptor.h"
 #include "components/sync/base/hash_util.h"
 #include "components/sync/engine/model_type_processor.h"
@@ -142,9 +143,9 @@ class ModelTypeWorkerTest : public ::testing::Test {
       : foreign_encryption_key_index_(0),
         update_encryption_filter_index_(0),
         mock_type_processor_(nullptr),
-        mock_server_(base::MakeUnique<SingleTypeMockServer>(kModelType)),
+        mock_server_(std::make_unique<SingleTypeMockServer>(kModelType)),
         is_processor_disconnected_(false),
-        emitter_(base::MakeUnique<NonBlockingTypeDebugInfoEmitter>(
+        emitter_(std::make_unique<NonBlockingTypeDebugInfoEmitter>(
             kModelType,
             &type_observers_)) {}
 
@@ -187,8 +188,8 @@ class ModelTypeWorkerTest : public ::testing::Test {
   }
 
   void InitializeCommitOnly() {
-    mock_server_ = base::MakeUnique<SingleTypeMockServer>(USER_EVENTS);
-    emitter_ = base::MakeUnique<NonBlockingTypeDebugInfoEmitter>(
+    mock_server_ = std::make_unique<SingleTypeMockServer>(USER_EVENTS);
+    emitter_ = std::make_unique<NonBlockingTypeDebugInfoEmitter>(
         USER_EVENTS, &type_observers_);
 
     // Don't set progress marker, commit only types don't use them.
@@ -206,26 +207,27 @@ class ModelTypeWorkerTest : public ::testing::Test {
     DCHECK(!worker_);
 
     // We don't get to own this object. The |worker_| keeps a unique_ptr to it.
-    auto processor = base::MakeUnique<MockModelTypeProcessor>();
+    auto processor = std::make_unique<MockModelTypeProcessor>();
     mock_type_processor_ = processor.get();
     processor->SetDisconnectCallback(base::Bind(
         &ModelTypeWorkerTest::DisconnectProcessor, base::Unretained(this)));
 
     std::unique_ptr<Cryptographer> cryptographer_copy;
     if (cryptographer_) {
-      cryptographer_copy = base::MakeUnique<Cryptographer>(*cryptographer_);
+      cryptographer_copy = std::make_unique<Cryptographer>(*cryptographer_);
     }
 
     // TODO(maxbogue): crbug.com/529498: Inject pending updates somehow.
-    worker_ = base::MakeUnique<ModelTypeWorker>(
+    worker_ = std::make_unique<ModelTypeWorker>(
         type, state, !state.initial_sync_done(), std::move(cryptographer_copy),
-        &mock_nudge_handler_, std::move(processor), emitter_.get());
+        &mock_nudge_handler_, std::move(processor), emitter_.get(),
+        &cancelation_signal_);
   }
 
   // Introduce a new key that the local cryptographer can't decrypt.
   void AddPendingKey() {
     if (!cryptographer_) {
-      cryptographer_ = base::MakeUnique<Cryptographer>(&fake_encryptor_);
+      cryptographer_ = std::make_unique<Cryptographer>(&fake_encryptor_);
     }
 
     foreign_encryption_key_index_++;
@@ -265,14 +267,14 @@ class ModelTypeWorkerTest : public ::testing::Test {
     // Update the worker with the latest cryptographer.
     if (worker_) {
       worker_->UpdateCryptographer(
-          base::MakeUnique<Cryptographer>(*cryptographer_));
+          std::make_unique<Cryptographer>(*cryptographer_));
     }
   }
 
   // Update the local cryptographer with all relevant keys.
   void DecryptPendingKey() {
     if (!cryptographer_) {
-      cryptographer_ = base::MakeUnique<Cryptographer>(&fake_encryptor_);
+      cryptographer_ = std::make_unique<Cryptographer>(&fake_encryptor_);
     }
 
     KeyParams params = GetNthKeyParams(foreign_encryption_key_index_);
@@ -282,7 +284,7 @@ class ModelTypeWorkerTest : public ::testing::Test {
     // Update the worker with the latest cryptographer.
     if (worker_) {
       worker_->UpdateCryptographer(
-          base::MakeUnique<Cryptographer>(*cryptographer_));
+          std::make_unique<Cryptographer>(*cryptographer_));
     }
   }
 
@@ -467,6 +469,8 @@ class ModelTypeWorkerTest : public ::testing::Test {
   // The number of the encryption key used to encrypt incoming updates. A zero
   // value implies no encryption.
   int update_encryption_filter_index_;
+
+  CancelationSignal cancelation_signal_;
 
   // The ModelTypeWorker being tested.
   std::unique_ptr<ModelTypeWorker> worker_;
@@ -1224,6 +1228,99 @@ TEST_F(ModelTypeWorkerTest, CommitOnly) {
       processor()->GetCommitResponse(kHash1);
   EXPECT_EQ(kHash1, commit_response.client_tag_hash);
   EXPECT_FALSE(commit_response.specifics_hash.empty());
+}
+
+class GetLocalChangesRequestTest : public testing::Test {
+ public:
+  GetLocalChangesRequestTest();
+  ~GetLocalChangesRequestTest() override;
+
+  void SetUp() override;
+  void TearDown() override;
+
+  scoped_refptr<GetLocalChangesRequest> MakeRequest();
+
+  void BlockingWaitForResponse(scoped_refptr<GetLocalChangesRequest> request);
+  void ScheduleBlockingWait(scoped_refptr<GetLocalChangesRequest> request);
+
+ protected:
+  CancelationSignal cancelation_signal_;
+  base::Thread blocking_thread_;
+  base::WaitableEvent start_event_;
+  base::WaitableEvent done_event_;
+};
+
+GetLocalChangesRequestTest::GetLocalChangesRequestTest()
+    : blocking_thread_("BlockingThread"),
+      start_event_(base::WaitableEvent::ResetPolicy::MANUAL,
+                   base::WaitableEvent::InitialState::NOT_SIGNALED),
+      done_event_(base::WaitableEvent::ResetPolicy::MANUAL,
+                  base::WaitableEvent::InitialState::NOT_SIGNALED) {}
+
+GetLocalChangesRequestTest::~GetLocalChangesRequestTest() = default;
+
+void GetLocalChangesRequestTest::SetUp() {
+  blocking_thread_.Start();
+}
+
+void GetLocalChangesRequestTest::TearDown() {
+  blocking_thread_.Stop();
+}
+
+scoped_refptr<GetLocalChangesRequest>
+GetLocalChangesRequestTest::MakeRequest() {
+  return base::MakeRefCounted<GetLocalChangesRequest>(&cancelation_signal_);
+}
+
+void GetLocalChangesRequestTest::BlockingWaitForResponse(
+    scoped_refptr<GetLocalChangesRequest> request) {
+  start_event_.Signal();
+  request->WaitForResponse();
+  done_event_.Signal();
+}
+
+void GetLocalChangesRequestTest::ScheduleBlockingWait(
+    scoped_refptr<GetLocalChangesRequest> request) {
+  blocking_thread_.task_runner()->PostTask(
+      FROM_HERE,
+      base::Bind(&GetLocalChangesRequestTest::BlockingWaitForResponse,
+                 base::Unretained(this), request));
+}
+
+// Tests that request doesn't block when cancelation signal is already signaled.
+TEST_F(GetLocalChangesRequestTest, CancelationSignaledBeforeRequest) {
+  cancelation_signal_.Signal();
+  auto request = MakeRequest();
+  request->WaitForResponse();
+  EXPECT_TRUE(request->WasCancelled());
+}
+
+// Tests that signaling cancelation signal while request is blocked unblocks it.
+TEST_F(GetLocalChangesRequestTest, CancelationSignaledAfterRequest) {
+  auto request = MakeRequest();
+  ScheduleBlockingWait(request);
+  start_event_.Wait();
+  cancelation_signal_.Signal();
+  done_event_.Wait();
+  EXPECT_TRUE(request->WasCancelled());
+}
+
+// Tests that setting response unblocks request.
+TEST_F(GetLocalChangesRequestTest, SuccessfulRequest) {
+  auto request = MakeRequest();
+  ScheduleBlockingWait(request);
+  start_event_.Wait();
+  {
+    CommitRequestDataList response;
+    response.emplace_back();
+    response.back().specifics_hash = kHash1;
+    request->SetResponse(std::move(response));
+  }
+  done_event_.Wait();
+  EXPECT_FALSE(request->WasCancelled());
+  CommitRequestDataList response = request->ExtractResponse();
+  EXPECT_EQ(1U, response.size());
+  EXPECT_EQ(kHash1, response[0].specifics_hash);
 }
 
 }  // namespace syncer

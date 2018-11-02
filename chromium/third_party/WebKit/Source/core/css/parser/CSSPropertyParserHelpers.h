@@ -59,7 +59,7 @@ CSSPrimitiveValue* ConsumeLengthOrPercent(
     UnitlessQuirk = UnitlessQuirk::kForbid);
 
 CSSPrimitiveValue* ConsumeAngle(CSSParserTokenRange&,
-                                const CSSParserContext&,
+                                const CSSParserContext*,
                                 WTF::Optional<WebFeature> unitlessZeroFeature);
 CSSPrimitiveValue* ConsumeTime(CSSParserTokenRange&, ValueRange);
 CSSPrimitiveValue* ConsumeResolution(CSSParserTokenRange&);
@@ -128,29 +128,8 @@ void CountKeywordOnlyPropertyUsage(CSSPropertyID,
 const CSSValue* ParseLonghandViaAPI(CSSPropertyID unresolved_property,
                                     CSSPropertyID current_shorthand,
                                     const CSSParserContext&,
-                                    CSSParserTokenRange&,
-                                    bool& needs_legacy_parsing);
+                                    CSSParserTokenRange&);
 
-// ConsumeShorthandVia2LonghandAPIs is based on CSSPropertyParsers'
-// Consume2Values.
-// They both delegate parsing of a shorthand property to its respective longhand
-// components. The difference is the functions in this Helpers file expect
-// component longhands to have API implementations already because each
-// shorthand will call its component longhand APIs' parseShorthand method.
-// Consume2Values will be removed soon, when shorthand properties are ribbonised
-// (i.e. have their own APIs). Until then, there is a slight code duplication
-// between the two versions for the following reasons:
-// 1. An alternative to code duplicate is to have the old Consume*
-//    (e.g. Consume2Values) call the new Consume*
-//    (e.g. ConsumeShorthandVia2LonghandAPIs). However, the
-//    new Consume* expects ALL component longhands to have APIs and will parse
-///   all longhands via their APIs. In order to parse shorthands, where some
-//    component longhands do not have APIs, the new Consume* will need to return
-//    to the old Consume* which longhands have no APIs and thus are not parsed.
-//    The old Consume* will then have to parse these longhands separately.
-//    Hence there's added code complexity with little code reduction.
-// 2. All longhand & shorthand properties will have APIs soon, hence such code
-//    duplication is temporary only.
 bool ConsumeShorthandVia2LonghandAPIs(const StylePropertyShorthand&,
                                       bool important,
                                       const CSSParserContext&,
@@ -169,6 +148,11 @@ bool ConsumeShorthandGreedilyViaLonghandAPIs(
     const CSSParserContext&,
     CSSParserTokenRange&,
     HeapVector<CSSProperty, 256>& properties);
+
+void AddExpandedPropertyForValue(CSSPropertyID prop_id,
+                                 const CSSValue&,
+                                 bool,
+                                 HeapVector<CSSProperty, 256>& properties);
 
 // Template implementations are at the bottom of the file for readability.
 
@@ -195,10 +179,10 @@ CSSIdentifierValue* ConsumeIdent(CSSParserTokenRange& range) {
 template <typename Func, typename... Args>
 CSSValueList* ConsumeCommaSeparatedList(Func callback,
                                         CSSParserTokenRange& range,
-                                        Args... args) {
+                                        Args&&... args) {
   CSSValueList* list = CSSValueList::CreateCommaSeparated();
   do {
-    CSSValue* value = callback(range, args...);
+    CSSValue* value = callback(range, std::forward<Args>(args)...);
     if (!value)
       return nullptr;
     list->Append(*value);

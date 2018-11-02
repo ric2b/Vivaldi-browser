@@ -2,13 +2,18 @@ import("//vivaldi/vivaldi_init_settings.gni")
 
 assert(is_vivaldi)
 
-import("//build/config/compiler/compiler.gni")
-import("//build/config/features.gni")
-import("//build/config/sanitizers/sanitizers.gni")
+#import("//build/config/compiler/compiler.gni")
+#import("//build/config/features.gni")
+#import("//build/config/android/config.gni")
+#import("//build/config/arm.gni")
+#import("//build/config/dcheck_always_on.gni")
+#import("//build/config/mips.gni")
+#import("//build/config/sanitizers/sanitizers.gni")
+#import("//v8/snapshot_toolchain.gni")
 import("//build/config/ui.gni")
-import("//media/media_options.gni")
-import("//third_party/openh264/openh264_args.gni")
-import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
+#import("//media/media_options.gni")
+#import("//third_party/openh264/openh264_args.gni")
+#import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
 
 import("//vivaldi/gn/config/features.gni")
 import("//vivaldi/gn/config/product.gni")
@@ -28,10 +33,7 @@ group("All") {
     "//base:base_unittests",
     "//cc:cc_unittests",
     "//chrome/test:browser_tests",
-    "//chrome/test:interactive_ui_tests",
-    "//chrome/test:sync_integration_tests",
     "//chrome/test:unit_tests",
-    "//chrome/test/chromedriver:chromedriver_unittests",
     "//components:components_unittests",
     "//content/shell:content_shell",
     "//content/test:content_browsertests",
@@ -45,7 +47,6 @@ group("All") {
     "//media:media_unittests",
     "//media/cast:cast_unittests",
     "//net:net_unittests",
-    "//ppapi:ppapi_unittests",
     "//printing:printing_unittests",
     "//sql:sql_unittests",
     "//third_party/cacheinvalidation:cacheinvalidation_unittests",
@@ -53,6 +54,11 @@ group("All") {
     "//url:url_unittests",
     "//vivaldi/app:write_translation_xml_generation_script",
   ]
+  if (!is_android) {
+    deps += [
+      "//chrome/test/chromedriver:chromedriver_unittests",
+    ]
+  }
   if (is_win) {
     deps += [
       "//chrome/installer/mini_installer",
@@ -95,6 +101,13 @@ group("All") {
       deps += [ "//dbus" ]
     }
   }
+  if (!is_android) {
+    deps += [
+      "//chrome/test:interactive_ui_tests",
+      "//chrome/test:sync_integration_tests",
+      "//ppapi:ppapi_unittests",
+    ]
+  }
   if (use_aura) {
     deps += [
       "//ui/aura:aura_unittests",
@@ -117,6 +130,10 @@ group("vivaldi") {
     ":standalone",
     "//chrome:chrome",
   ]
+  if (is_android) {
+    deps -= [ "//chrome:chrome" ]
+    deps += [ "//chrome/android:chrome_public_apk" ]
+  }
   if (is_mac || is_win) {
     deps += [ "//third_party/crashpad/crashpad/handler:crashpad_handler" ]
   }

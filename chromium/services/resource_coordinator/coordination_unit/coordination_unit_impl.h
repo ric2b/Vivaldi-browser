@@ -24,6 +24,7 @@ namespace resource_coordinator {
 
 class CoordinationUnitGraphObserver;
 class FrameCoordinationUnitImpl;
+class WebContentsCoordinationUnitImpl;
 
 class CoordinationUnitImpl : public mojom::CoordinationUnit {
  public:
@@ -35,6 +36,13 @@ class CoordinationUnitImpl : public mojom::CoordinationUnit {
 
   static const FrameCoordinationUnitImpl* ToFrameCoordinationUnit(
       const CoordinationUnitImpl* coordination_unit);
+  static WebContentsCoordinationUnitImpl* ToWebContentsCoordinationUnit(
+      CoordinationUnitImpl* coordination_unit);
+  static const WebContentsCoordinationUnitImpl* ToWebContentsCoordinationUnit(
+      const CoordinationUnitImpl* coordination_unit);
+
+  static std::vector<CoordinationUnitImpl*> GetCoordinationUnitsOfType(
+      CoordinationUnitType type);
 
   static CoordinationUnitImpl* CreateCoordinationUnit(
       const CoordinationUnitID& id,
@@ -47,27 +55,24 @@ class CoordinationUnitImpl : public mojom::CoordinationUnit {
   void Bind(mojom::CoordinationUnitRequest request);
 
   // Overridden from mojom::CoordinationUnit:
-  void SendEvent(mojom::EventPtr event) override;
   void GetID(const GetIDCallback& callback) override;
   void AddBinding(mojom::CoordinationUnitRequest request) override;
   void AddChild(const CoordinationUnitID& child_id) override;
   void RemoveChild(const CoordinationUnitID& child_id) override;
-  void SetProperty(mojom::PropertyType property_type,
-                   std::unique_ptr<base::Value> value) override;
-  // TODO(crbug.com/691886) Consider removing this.
-  void SetCoordinationPolicyCallback(
-      mojom::CoordinationPolicyCallbackPtr callback) override;
+  void SendEvent(mojom::Event event) override;
+  void SetProperty(mojom::PropertyType property_type, int64_t value) override;
 
   // Return all of the reachable |CoordinationUnitImpl| instances
   // of type |CoordinationUnitType|. Note that a callee should
   // never be associated with itself.
   virtual std::set<CoordinationUnitImpl*> GetAssociatedCoordinationUnitsOfType(
-      CoordinationUnitType type);
+      CoordinationUnitType type) const;
   // Recalculate property internally.
   virtual void RecalculateProperty(const mojom::PropertyType property_type) {}
 
   // Operations performed on the internal key-value store.
-  base::Value GetProperty(const mojom::PropertyType property_type) const;
+  bool GetProperty(const mojom::PropertyType property_type,
+                   int64_t* result) const;
 
   // Methods utilized by the |CoordinationUnitGraphObserver| framework.
   void BeforeDestroyed();
@@ -78,60 +83,50 @@ class CoordinationUnitImpl : public mojom::CoordinationUnit {
   const CoordinationUnitID& id() const { return id_; }
   const std::set<CoordinationUnitImpl*>& children() const { return children_; }
   const std::set<CoordinationUnitImpl*>& parents() const { return parents_; }
-  const std::map<mojom::PropertyType, std::unique_ptr<base::Value>>&
-  properties_for_testing() const {
+  const std::map<mojom::PropertyType, int64_t>& properties_for_testing() const {
     return properties_;
   }
   mojo::Binding<mojom::CoordinationUnit>& binding() { return binding_; }
 
  protected:
+  friend class FrameCoordinationUnitImpl;
+
+  virtual void OnEventReceived(const mojom::Event event);
+  virtual void OnPropertyChanged(const mojom::PropertyType property_type,
+                                 int64_t value);
   // Propagate property change to relevant |CoordinationUnitImpl| instances.
   virtual void PropagateProperty(mojom::PropertyType property_type,
-                                 const base::Value& value) {}
+                                 int64_t value) {}
 
   // Coordination unit graph traversal helper functions.
   std::set<CoordinationUnitImpl*> GetChildCoordinationUnitsOfType(
-      CoordinationUnitType type);
+      CoordinationUnitType type) const;
   std::set<CoordinationUnitImpl*> GetParentCoordinationUnitsOfType(
-      CoordinationUnitType type);
+      CoordinationUnitType type) const;
+
+  const base::ObserverList<CoordinationUnitGraphObserver>& observers() const {
+    return observers_;
+  }
 
   const CoordinationUnitID id_;
   std::set<CoordinationUnitImpl*> children_;
   std::set<CoordinationUnitImpl*> parents_;
 
  private:
-  enum StateFlags : uint8_t {
-    kTestState,
-    kTabVisible,
-    kAudioPlaying,
-    kNetworkIdle,
-    kNumStateFlags
-  };
-
   bool AddChild(CoordinationUnitImpl* child);
   bool RemoveChild(CoordinationUnitImpl* child);
   void AddParent(CoordinationUnitImpl* parent);
   void RemoveParent(CoordinationUnitImpl* parent);
-  bool HasParent(CoordinationUnitImpl* unit);
-  bool HasChild(CoordinationUnitImpl* unit);
-  bool SelfOrParentHasFlagSet(StateFlags state);
-  // TODO(crbug.com/691886) Consider removing these.
-  void RecalcCoordinationPolicy();
-  void UnregisterCoordinationPolicyCallback();
+  bool HasAncestor(CoordinationUnitImpl* ancestor);
+  bool HasDescendant(CoordinationUnitImpl* descendant);
 
-  std::map<mojom::PropertyType, std::unique_ptr<base::Value>> properties_;
+  std::map<mojom::PropertyType, int64_t> properties_;
 
   std::unique_ptr<service_manager::ServiceContextRef> service_ref_;
   mojo::BindingSet<mojom::CoordinationUnit> bindings_;
 
-  mojom::CoordinationPolicyCallbackPtr policy_callback_;
-  mojom::CoordinationPolicyPtr current_policy_;
-
   base::ObserverList<CoordinationUnitGraphObserver> observers_;
   mojo::Binding<mojom::CoordinationUnit> binding_;
-
-  // TODO(crbug.com/691886) Consider switching properties_.
-  base::Optional<bool> state_flags_[kNumStateFlags];
 
   DISALLOW_COPY_AND_ASSIGN(CoordinationUnitImpl);
 };

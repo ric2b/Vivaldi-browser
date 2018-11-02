@@ -29,14 +29,9 @@
 
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 
-ExtensionIconManager::ExtensionIconManager()
-    : monochrome_(false),
-      context_(nullptr),
-      weak_ptr_factory_(this)  {
-}
+ExtensionIconManager::ExtensionIconManager() {}
 
-ExtensionIconManager::~ExtensionIconManager() {
-}
+ExtensionIconManager::~ExtensionIconManager() {}
 
 void ExtensionIconManager::LoadIcon(content::BrowserContext* context,
                                     const extensions::Extension* extension) {
@@ -74,36 +69,39 @@ void ExtensionIconManager::RemoveIcon(const std::string& extension_id) {
 
 void ExtensionIconManager::OnImageLoaded(const std::string& extension_id,
                                          const gfx::Image& image) {
-  if (image.IsEmpty())
-    return;
+  if (!image.IsEmpty()) {
+    // We may have removed the icon while waiting for it to load. In that case,
+    // do nothing.
+    if (pending_icons_.erase(extension_id) == 0)
+      return;
 
-  // We may have removed the icon while waiting for it to load. In that case,
-  // do nothing.
-  if (pending_icons_.erase(extension_id) == 0)
-    return;
+    gfx::Image modified_image = image;
+    if (monochrome_) {
+      color_utils::HSL shift = {-1, 0, 0.6};
+      modified_image =
+          gfx::Image(gfx::ImageSkiaOperations::CreateHSLShiftedImage(
+              image.AsImageSkia(), shift));
+    }
+    icons_[extension_id] = modified_image;
 
-  gfx::Image modified_image = image;
-  if (monochrome_) {
-    color_utils::HSL shift = {-1, 0, 0.6};
-    modified_image = gfx::Image(gfx::ImageSkiaOperations::CreateHSLShiftedImage(
-        image.AsImageSkia(), shift));
+    // Vivaldi specific below.
+    if (context_) {
+      extensions::vivaldi::extension_action_utils::ExtensionInfo info;
+
+      info.id = extension_id;
+      info.badge_icon.reset(
+          extensions::ExtensionActionUtil::EncodeBitmapToPng(image.ToSkBitmap()));
+      std::unique_ptr<base::ListValue> args =
+          extensions::vivaldi::extension_action_utils::OnIconLoaded::Create(info);
+
+      extensions::ExtensionActionUtil::BroadcastEvent(
+          extensions::vivaldi::extension_action_utils::OnIconLoaded::kEventName,
+          std::move(args), context_);
+    }
   }
-  icons_[extension_id] = modified_image;
 
-  // Vivaldi specific below.
-  if (context_) {
-    extensions::vivaldi::extension_action_utils::ExtensionInfo info;
-
-    info.id = extension_id;
-    info.badge_icon.reset(
-        extensions::ExtensionActionUtil::EncodeBitmapToPng(image.ToSkBitmap()));
-    std::unique_ptr<base::ListValue> args =
-        extensions::vivaldi::extension_action_utils::OnIconLoaded::Create(info);
-
-    extensions::ExtensionActionUtil::BroadcastEvent(
-        extensions::vivaldi::extension_action_utils::OnIconLoaded::kEventName,
-        std::move(args), context_);
-  }
+  if (observer_)
+    observer_->OnImageLoaded(extension_id);
 }
 
 void ExtensionIconManager::EnsureDefaultIcon() {

@@ -47,7 +47,11 @@ public class ImageFetcher {
     private static final int[] FAVICON_SERVICE_SUPPORTED_SIZES = {16, 24, 32, 48, 64};
     private static final String FAVICON_SERVICE_FORMAT =
             "https://s2.googleusercontent.com/s2/favicons?domain=%s&src=chrome_newtab_mobile&sz=%d&alt=404";
+    /** Min size for site attribution: only 16px as many sites do not have any other small icon. */
     private static final int PUBLISHER_FAVICON_MINIMUM_SIZE_PX = 16;
+
+    /** Desired size for site attribution: only 32px as larger icons are often too complex */
+    private static final int PUBLISHER_FAVICON_DESIRED_SIZE_PX = 32;
 
     private final boolean mUseFaviconService;
     private final NativePageHost mHost;
@@ -94,7 +98,11 @@ public class ImageFetcher {
     public void makeArticleThumbnailRequest(SnippetArticle suggestion, Callback<Bitmap> callback) {
         assert !mIsDestroyed;
 
-        mSuggestionsSource.fetchSuggestionImage(suggestion, callback);
+        if (suggestion.isContextual()) {
+            mSuggestionsSource.fetchContextualSuggestionImage(suggestion, callback);
+        } else {
+            mSuggestionsSource.fetchSuggestionImage(suggestion, callback);
+        }
     }
 
     /**
@@ -121,8 +129,9 @@ public class ImageFetcher {
         }
 
         if (!suggestion.isArticle() || !SnippetsConfig.isFaviconsFromNewServerEnabled()) {
-            // The old code path. Remove when the experiment is successful.
-            // Currently, we have to use this for non-articles, due to privacy.
+            // The old code path. Currently, we have to use this for non-articles, due to privacy.
+            // TODO(jkrcal): Remove this path when we completely switch to the new code on Stable.
+            // https://crbug.com/751628
             fetchFaviconFromLocalCache(pageUrl, true, faviconFetchStartTimeMs, faviconSizePx,
                     suggestion, faviconCallback);
         } else {
@@ -186,6 +195,10 @@ public class ImageFetcher {
                                     fallbackToService ? FaviconFetchResult.SUCCESS_CACHED
                                                       : FaviconFetchResult.SUCCESS_FETCHED,
                                     SystemClock.elapsedRealtime() - faviconFetchStartTimeMs);
+
+                            // Update the time when the icon was last requested therefore postponing
+                            // the automatic eviction of the favicon from the favicon database.
+                            getFaviconHelper().touchOnDemandFavicon(mProfile, iconUrl);
                         } else if (fallbackToService) {
                             if (!fetchFaviconFromService(suggestion, snippetUri,
                                         faviconFetchStartTimeMs, faviconSizePx, faviconCallback)) {
@@ -199,9 +212,10 @@ public class ImageFetcher {
 
     private void fetchFaviconFromLocalCacheOrGoogleServer(SnippetArticle suggestion,
             final long faviconFetchStartTimeMs, final Callback<Bitmap> faviconCallback) {
-        // Set the desired size to 0 to specify we do not want to resize in c++, we'll resize here.
+        // The bitmap will not be resized to desired size in c++, this only expresses preference
+        // as to what image to be fetched from the server.
         mSuggestionsSource.fetchSuggestionFavicon(suggestion, PUBLISHER_FAVICON_MINIMUM_SIZE_PX,
-                /* desiredSizePx */ 0, new Callback<Bitmap>() {
+                PUBLISHER_FAVICON_DESIRED_SIZE_PX, new Callback<Bitmap>() {
                     @Override
                     public void onResult(Bitmap image) {
                         SuggestionsMetrics.recordArticleFaviconFetchTime(
@@ -225,8 +239,7 @@ public class ImageFetcher {
         ensureIconIsAvailable(
                 getSnippetDomain(snippetUri), // Store to the cache for the whole domain.
                 String.format(FAVICON_SERVICE_FORMAT, snippetUri.getHost(), sizePx),
-                /* useLargeIcon = */ false, /* isTemporary = */ true,
-                new FaviconHelper.IconAvailabilityCallback() {
+                /* useLargeIcon = */ false, new FaviconHelper.IconAvailabilityCallback() {
                     @Override
                     public void onIconAvailabilityChecked(boolean newlyAvailable) {
                         if (!newlyAvailable) {
@@ -252,11 +265,10 @@ public class ImageFetcher {
      * @param callback The callback to be notified when the favicon has been checked.
      */
     private void ensureIconIsAvailable(String pageUrl, String iconUrl, boolean isLargeIcon,
-            boolean isTemporary, FaviconHelper.IconAvailabilityCallback callback) {
+            FaviconHelper.IconAvailabilityCallback callback) {
         if (mHost.getActiveTab() != null && mHost.getActiveTab().getWebContents() != null) {
             getFaviconHelper().ensureIconIsAvailable(mProfile,
-                    mHost.getActiveTab().getWebContents(), pageUrl, iconUrl, isLargeIcon,
-                    isTemporary, callback);
+                    mHost.getActiveTab().getWebContents(), pageUrl, iconUrl, isLargeIcon, callback);
         }
     }
 

@@ -130,9 +130,10 @@ PpapiBlinkPlatformImpl::~PpapiBlinkPlatformImpl() {
 
 void PpapiBlinkPlatformImpl::Shutdown() {
 #if !defined(OS_ANDROID) && !defined(OS_WIN)
-  // SandboxSupport contains a map of WebFontFamily objects, which hold
-  // WebCStrings, which become invalidated when blink is shut down. Hence, we
-  // need to clear that map now, just before blink::shutdown() is called.
+  // SandboxSupport contains a map of WebFallbackFont objects, which hold
+  // WebStrings and WebVectors, which become invalidated when blink is shut
+  // down. Hence, we need to clear that map now, just before blink::shutdown()
+  // is called.
   sandbox_support_.reset();
 #endif
 }
@@ -183,16 +184,15 @@ void PpapiBlinkPlatformImpl::CreateMessageChannel(
   *channel2 = nullptr;
 }
 
-void PpapiBlinkPlatformImpl::setCookies(
-    const blink::WebURL& url,
-    const blink::WebURL& first_party_for_cookies,
-    const blink::WebString& value) {
+void PpapiBlinkPlatformImpl::setCookies(const blink::WebURL& url,
+                                        const blink::WebURL& site_for_cookies,
+                                        const blink::WebString& value) {
   NOTREACHED();
 }
 
 blink::WebString PpapiBlinkPlatformImpl::cookies(
     const blink::WebURL& url,
-    const blink::WebURL& first_party_for_cookies) {
+    const blink::WebURL& site_for_cookies) {
   NOTREACHED();
   return blink::WebString();
 }

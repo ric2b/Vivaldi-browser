@@ -22,6 +22,7 @@ class VivaldiExtensionInit : public BrowserContextKeyedAPI {
   friend class BrowserContextKeyedAPIFactory<VivaldiExtensionInit>;
 
   static const char* service_name() { return "VivaldiExtensionInit"; }
+  static const bool kServiceRedirectedInIncognito = true;
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiExtensionInit);
 };

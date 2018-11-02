@@ -21,7 +21,6 @@
 <translation id="1278049586634282054">Zkontrolovat zobrazení:</translation>
 <translation id="1297175357211070620">Cíl</translation>
 <translation id="1303101771013849280">Soubor HTML záložek</translation>
-<translation id="1303319084542230573">Přidat tiskárnu</translation>
 <translation id="1317502925920562130">Je toto domovská stránka, kterou jste očekávali?</translation>
 <translation id="1368832886055348810">Zleva doprava</translation>
 <translation id="1430915738399379752">Tisk</translation>
@@ -80,6 +79,7 @@
 <translation id="220138918934036434">Skrýt tlačítko</translation>
 <translation id="2218515861914035131">Vložit jako prostý text</translation>
 <translation id="2249605167705922988">např. 1-5, 8, 11-13</translation>
+<translation id="225240747099314620">Povolit identifikátory chráněného obsahu (může být potřeba restart počítače)</translation>
 <translation id="2263497240924215535">Deaktivováno</translation>
 <translation id="2280486287150724112">Pravý okraj</translation>
 <translation id="2282146716419988068">Úloha GPU</translation>
@@ -100,7 +100,7 @@
 <translation id="2439110203301358333">Jiný program ve vašem počítači nainstaloval rozšíření, které může měnit funkce prohlížeče Vivaldi.</translation>
 <translation id="2445081178310039857">Je vyžadován kořenový adresář rozšíření.</translation>
 <translation id="2470702053775288986">Nepodporovaná rozšíření byla zakázána</translation>
-<translation id="2498436043474441766">Přidat tiskárny</translation>
+<translation id="2476578072172137802">Nastavení stránky</translation>
 <translation id="2501797496290880632">Zadejte zkratku</translation>
 <translation id="2509495747794740764">Hodnota měřítka musí být v intervalu 10 až 200.</translation>
 <translation id="2550212893339833758">Stránkovaná paměť</translation>
@@ -209,6 +209,7 @@
 <translation id="4091434297613116013">listy papíru</translation>
 <translation id="4096508467498758490">Zakázat rozšíření ve vývojářském režimu</translation>
 <translation id="4100839878934973028">Jiný program ve vašem počítači nainstaloval aplikaci, která může měnit funkce prohlížeče Vivaldi.</translation>
+<translation id="4115080753528843955">Některé služby obsahu používají unikátní identifikátory za účelem autorizace přístupu k chráněnému obsahu</translation>
 <translation id="411666854932687641">Vyhrazená paměť</translation>
 <translation id="4130207949184424187">Toto rozšíření změnilo stránku, která se zobrazí při vyhledávání z omniboxu.</translation>
 <translation id="4131410914670010031">Černobíle</translation>
@@ -219,10 +220,6 @@
 <translation id="4240511609794012987">Sdílená paměť</translation>
 <translation id="4256316378292851214">Uložit &amp;video jako...</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> kB (<ph name="NUM_KILOBYTES_LIVE" /> kB aktivních)</translation>
-<translation id="431291515148403474">Pokud své tiskárny přidáte do služby Google Cloud Print, budete moci tisknout odkudkoli na kterékoli z nich. 
-          Budete také moci sdílet své tiskárny s kýmkoli
-          a tisknout z Chromu, telefonu, tabletu, počítače 
-          a jakéhokoli jiného zařízení připojeného k internetu.</translation>
 <translation id="4345587454538109430">Nastavit…</translation>
 <translation id="4348766275249686434">Zaznamenávat chyby</translation>
 <translation id="4363771538994847871">Nebyly nalezeny žádné cíle odesílání. Potřebujete pomoci?</translation>
@@ -254,6 +251,7 @@
 <translation id="4839303808932127586">Uložit &amp;video jako...</translation>
 <translation id="4850258771229959924">Ukázat v Nástroji pro vývojáře</translation>
 <translation id="488785315393301722">Zobrazit podrobnosti</translation>
+<translation id="4907306957610201395">Třída oprávnění</translation>
 <translation id="4911714727432509308">K žádným rozšířením nejsou přiřazeny klávesové zkratky.</translation>
 <translation id="4912643508233590958">Probuzení z nečinnosti</translation>
 <translation id="4918086044614829423">Přijmout</translation>
@@ -268,9 +266,6 @@
 <translation id="5116628073786783676">Uložit &amp;zvuk jako...</translation>
 <translation id="5143374789336132547">Rozšíření <ph name="EXTENSION_NAME" /> změnilo stránku, která se zobrazí po kliknutí na tlačítko Domovská stránka.</translation>
 <translation id="5154108062446123722">Rozšířené nastavení tiskárny <ph name="PRINTING_DESTINATION" /></translation>
-<translation id="5154383699530644092">Kliknutím na tlačítko přidat tiskárnu níže můžete do počítače přidat tiskárny. 
-          Pokud žádné tiskárny k přidání nemáte, budete obsah moci alespoň uložit 
-          do souboru PDF nebo ve službě Google Drive.</translation>
 <translation id="5154917547274118687">Paměť</translation>
 <translation id="5171343362375269016">Stránkovaná paměť</translation>
 <translation id="5233019165164992427">Port ladění klienta NaCl</translation>
@@ -348,6 +343,7 @@
 <translation id="6264365405983206840">&amp;Vybrat vše</translation>
 <translation id="6272643420381259437">Při stahování zásuvného modulu došlo k chybě (<ph name="ERROR" />)</translation>
 <translation id="6273677812470008672">Kvalita</translation>
+<translation id="6295158916970320988">Všechny stránky</translation>
 <translation id="6295855836753816081">Ukládání…</translation>
 <translation id="6308937455967653460">Uložit od&amp;kaz jako...</translation>
 <translation id="6314335155547195432">Vygenerovat heslo</translation>
@@ -407,6 +403,7 @@
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7293919849802650062">Vítá vás služba Cast v prohlížeči Vivaldi!</translation>
 <translation id="7309257895202129721">Zobrazit &amp;ovládací prvky</translation>
+<translation id="7311079019872751559">Přístup doplňku mimo vyhrazený prostor</translation>
 <translation id="7339898014177206373">Nové okno</translation>
 <translation id="7346909386216857016">OK, rozumím</translation>
 <translation id="7361297102842600584">Zásuvný modul <ph name="PLUGIN_NAME" /> spustíte klepnutím pravým tlačítkem</translation>

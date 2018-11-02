@@ -8,7 +8,6 @@
 #include <memory>
 #include <vector>
 
-#include "android_webview/browser/aw_download_manager_delegate.h"
 #include "android_webview/browser/aw_safe_browsing_ui_manager.h"
 #include "android_webview/browser/aw_ssl_host_state_delegate.h"
 #include "base/compiler_specific.h"
@@ -16,7 +15,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "components/prefs/pref_change_registrar.h"
-#include "components/safe_browsing_db/remote_database_manager.h"
+#include "components/safe_browsing/db/remote_database_manager.h"
 #include "components/visitedlink/browser/visitedlink_delegate.h"
 #include "components/web_restrictions/browser/web_restrictions_client.h"
 #include "content/public/browser/browser_context.h"
@@ -76,8 +75,6 @@ class AwBrowserContext : public content::BrowserContext,
   static AwBrowserContext* FromWebContents(
       content::WebContents* web_contents);
 
-  static void SetLegacyCacheRemovalDelayForTest(int delay_ms);
-
   // Maps to BrowserMainParts::PreMainMessageLoopRun.
   void PreMainMessageLoopRun();
 
@@ -129,19 +126,12 @@ class AwBrowserContext : public content::BrowserContext,
   void InitUserPrefService();
   void OnWebRestrictionsAuthorityChanged();
 
-
-  // Delay, in milliseconds, before removing the legacy cache dir.
-  // This is non-const for testing purposes.
-  static int legacy_cache_removal_delay_ms_;
-
   // The file path where data for this context is persisted.
   base::FilePath context_storage_path_;
 
   scoped_refptr<AwURLRequestContextGetter> url_request_context_getter_;
   scoped_refptr<AwQuotaManagerBridge> quota_manager_bridge_;
   std::unique_ptr<AwFormDatabaseService> form_database_service_;
-
-  AwDownloadManagerDelegate download_manager_delegate_;
 
   std::unique_ptr<visitedlink::VisitedLinkMaster> visitedlink_master_;
   std::unique_ptr<content::ResourceContext> resource_context_;

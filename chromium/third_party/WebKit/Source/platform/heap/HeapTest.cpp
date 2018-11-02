@@ -196,13 +196,13 @@ struct PairWithWeakHandling : public StrongWeakPair {
   // deleted
   // with a pointer to -1 in the first field.
   PairWithWeakHandling(WTF::HashTableDeletedValueType)
-      : StrongWeakPair(reinterpret_cast<IntWrapper*>(-1), nullptr) {}
+      : StrongWeakPair(WTF::kHashTableDeletedValue, nullptr) {}
 
   // Used by the HashTable (via the HashTrait) to skip deleted slots in the
   // table. Recognizes objects that were 'constructed' using the above
   // constructor.
   bool IsHashTableDeletedValue() const {
-    return first == reinterpret_cast<IntWrapper*>(-1);
+    return first.IsHashTableDeletedValue();
   }
 
   // Since we don't allocate independent objects of this type, we don't need
@@ -3975,8 +3975,8 @@ TEST(HeapTest, CheckAndMarkPointer) {
   // to allocate anything again. We do this by forcing a GC after doing the
   // checkAndMarkPointer tests.
   {
-    TestGCScope scope(BlinkGC::kHeapPointersOnStack);
     ThreadState::GCForbiddenScope gc_scope(ThreadState::Current());
+    TestGCScope scope(BlinkGC::kHeapPointersOnStack);
     Visitor visitor(ThreadState::Current(), Visitor::kGlobalMarking);
     heap.FlushHeapDoesNotContainCache();
     for (size_t i = 0; i < object_addresses.size(); i++) {
@@ -3999,8 +3999,8 @@ TEST(HeapTest, CheckAndMarkPointer) {
   // however we don't rely on that below since we don't have any allocations.
   ClearOutOldGarbage();
   {
-    TestGCScope scope(BlinkGC::kHeapPointersOnStack);
     ThreadState::GCForbiddenScope gc_scope(ThreadState::Current());
+    TestGCScope scope(BlinkGC::kHeapPointersOnStack);
     Visitor visitor(ThreadState::Current(), Visitor::kGlobalMarking);
     heap.FlushHeapDoesNotContainCache();
     for (size_t i = 0; i < object_addresses.size(); i++) {
@@ -5082,11 +5082,11 @@ TEST(HeapTest, RegressNullIsStrongified) {
 }
 
 TEST(HeapTest, Bind) {
-  std::unique_ptr<WTF::Closure> closure =
+  WTF::Closure closure =
       WTF::Bind(static_cast<void (Bar::*)(Visitor*)>(&Bar::Trace),
                 WrapPersistent(Bar::Create()), nullptr);
   // OffHeapInt* should not make Persistent.
-  std::unique_ptr<WTF::Closure> closure2 =
+  WTF::Closure closure2 =
       WTF::Bind(&OffHeapInt::VoidFunction, OffHeapInt::Create(1));
   PreciselyCollectGarbage();
   // The closure should have a persistent handle to the Bar.
@@ -5094,7 +5094,7 @@ TEST(HeapTest, Bind) {
 
   UseMixin::trace_count_ = 0;
   Mixin* mixin = UseMixin::Create();
-  std::unique_ptr<WTF::Closure> mixin_closure =
+  WTF::Closure mixin_closure =
       WTF::Bind(static_cast<void (Mixin::*)(Visitor*)>(&Mixin::Trace),
                 WrapPersistent(mixin), nullptr);
   PreciselyCollectGarbage();
@@ -5819,12 +5819,9 @@ class AllocatesOnAssignment {
     value_ = new IntWrapper(other.value_->Value());
   }
 
-  AllocatesOnAssignment(DeletedMarker)
-      : value_(reinterpret_cast<IntWrapper*>(-1)) {}
+  AllocatesOnAssignment(DeletedMarker) : value_(WTF::kHashTableDeletedValue) {}
 
-  inline bool IsDeleted() const {
-    return value_ == reinterpret_cast<IntWrapper*>(-1);
-  }
+  inline bool IsDeleted() const { return value_.IsHashTableDeletedValue(); }
 
   DEFINE_INLINE_TRACE() { visitor->Trace(value_); }
 

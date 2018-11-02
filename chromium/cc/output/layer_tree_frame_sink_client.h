@@ -9,8 +9,8 @@
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 #include "cc/cc_export.h"
-#include "cc/resources/returned_resource.h"
 #include "components/viz/common/gpu/context_provider.h"
+#include "components/viz/common/resources/returned_resource.h"
 #include "gpu/command_buffer/common/texture_in_use_response.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -18,21 +18,24 @@ namespace gfx {
 class Transform;
 }
 
+namespace viz {
+class BeginFrameSource;
+}
+
 namespace cc {
 
-class BeginFrameSource;
 struct ManagedMemoryPolicy;
 
 class CC_EXPORT LayerTreeFrameSinkClient {
  public:
   // Pass the begin frame source for the client to observe.  Client does not own
-  // the BeginFrameSource. LayerTreeFrameSink should call this once after
+  // the viz::BeginFrameSource. LayerTreeFrameSink should call this once after
   // binding to the client and then call again with a null while detaching.
-  virtual void SetBeginFrameSource(BeginFrameSource* source) = 0;
+  virtual void SetBeginFrameSource(viz::BeginFrameSource* source) = 0;
 
   // Returns resources sent to SubmitCompositorFrame to be reused or freed.
   virtual void ReclaimResources(
-      const std::vector<ReturnedResource>& resources) = 0;
+      const std::vector<viz::ReturnedResource>& resources) = 0;
 
   // If set, |callback| will be called subsequent to each new tree activation,
   // regardless of the compositor visibility or damage. |callback| must remain

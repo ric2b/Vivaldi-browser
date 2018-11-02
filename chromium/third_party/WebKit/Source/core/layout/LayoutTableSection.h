@@ -112,7 +112,7 @@ class CORE_EXPORT LayoutTableSection final : public LayoutTableBoxComponent {
   void AddChild(LayoutObject* child,
                 LayoutObject* before_child = nullptr) override;
 
-  int FirstLineBoxBaseline() const override;
+  LayoutUnit FirstLineBoxBaseline() const override;
 
   void AddCell(LayoutTableCell*, LayoutTableRow*);
 
@@ -208,7 +208,7 @@ class CORE_EXPORT LayoutTableSection final : public LayoutTableBoxComponent {
   bool NeedsCellRecalc() const { return needs_cell_recalc_; }
   void SetNeedsCellRecalc();
 
-  int RowBaseline(unsigned row) { return grid_[row].baseline; }
+  LayoutUnit RowBaseline(unsigned row) { return grid_[row].baseline; }
 
   void RowLogicalHeightChanged(LayoutTableRow*);
 
@@ -265,6 +265,7 @@ class CORE_EXPORT LayoutTableSection final : public LayoutTableBoxComponent {
       VisualRectFlags = kDefaultVisualRectFlags) const override;
 
   bool IsRepeatingHeaderGroup() const { return is_repeating_header_group_; };
+  bool IsRepeatingFooterGroup() const { return is_repeating_footer_group_; };
 
   void UpdateLayout() override;
 
@@ -276,6 +277,18 @@ class CORE_EXPORT LayoutTableSection final : public LayoutTableBoxComponent {
   void DetermineIfHeaderGroupShouldRepeat() {
     is_repeating_header_group_ = HeaderGroupShouldRepeat();
   }
+
+  // Check whether row or row group has visibility:collapse.
+  bool RowHasVisibilityCollapse(unsigned row) const;
+
+  void DetermineIfFooterGroupShouldRepeat() {
+    is_repeating_footer_group_ = FooterGroupShouldRepeat();
+  }
+
+  // Update widths of cells affected by collapsed columns and sets whether cells
+  // are spanning any collapsed columns.
+  void UpdateLogicalWidthForCollapsedCells(
+      const Vector<int>& col_collapsed_width);
 
  protected:
   void StyleDidChange(StyleDifference, const ComputedStyle* old_style) override;
@@ -344,7 +357,7 @@ class CORE_EXPORT LayoutTableSection final : public LayoutTableBoxComponent {
 
   void UpdateBaselineForCell(LayoutTableCell*,
                              unsigned row,
-                             int& baseline_descent);
+                             LayoutUnit& baseline_descent);
 
   // These two functions take a rectangle as input that has been flipped by
   // logicalRectForWritingModeAndDirection.
@@ -366,7 +379,15 @@ class CORE_EXPORT LayoutTableSection final : public LayoutTableBoxComponent {
 
   bool PaintedOutputOfObjectHasNoEffectRegardlessOfSize() const override;
 
-  bool HeaderGroupShouldRepeat() const;
+  bool HeaderGroupShouldRepeat() const {
+    return Table()->Header() == this && GroupShouldRepeat();
+  }
+
+  bool FooterGroupShouldRepeat() const {
+    return Table()->Footer() == this && GroupShouldRepeat();
+  }
+
+  bool GroupShouldRepeat() const;
 
   struct TableGridRow {
     DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
@@ -378,7 +399,7 @@ class CORE_EXPORT LayoutTableSection final : public LayoutTableBoxComponent {
     // The index is effective column index.
     Vector<TableGridCell> grid_cells;
     LayoutTableRow* row = nullptr;
-    int baseline = -1;
+    LayoutUnit baseline = LayoutUnit(-1);
     Length logical_height;
   };
 
@@ -394,6 +415,15 @@ class CORE_EXPORT LayoutTableSection final : public LayoutTableBoxComponent {
   // To know a row's height at |rowIndex|, use the formula:
   // m_rowPos[rowIndex + 1] - m_rowPos[rowIndex]
   Vector<int> row_pos_;
+
+  // The amount of height collapsed in each row.
+  //
+  // This is used to adjust the padding of row-spanning cells. The padding
+  // should stay the same as if the row were not collapsed.
+  Vector<int> row_collapsed_height_;
+
+  // Whether any row in the table section is or has been collapsed.
+  bool is_any_row_collapsed_;
 
   // The current insertion position in the grid.
   // The position is used when inserting a new cell into the section to
@@ -428,6 +458,9 @@ class CORE_EXPORT LayoutTableSection final : public LayoutTableBoxComponent {
 
   // Header group should be painted on every page.
   bool is_repeating_header_group_;
+
+  // Footer group should be painted on every page.
+  bool is_repeating_footer_group_;
 };
 
 DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutTableSection, IsTableSection());

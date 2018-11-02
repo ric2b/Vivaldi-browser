@@ -21,11 +21,23 @@ class WebContentsCoordinationUnitImpl : public CoordinationUnitImpl {
 
   // CoordinationUnitImpl implementation.
   std::set<CoordinationUnitImpl*> GetAssociatedCoordinationUnitsOfType(
-      CoordinationUnitType type) override;
+      CoordinationUnitType type) const override;
   void RecalculateProperty(const mojom::PropertyType property_type) override;
 
+  bool IsVisible() const;
+
  private:
+  // CoordinationUnitImpl implementation.
+  void OnEventReceived(const mojom::Event event) override;
+  void OnPropertyChanged(const mojom::PropertyType property_type,
+                         int64_t value) override;
   double CalculateCPUUsage();
+
+  // Returns true for a valid value. Returns false otherwise.
+  bool CalculateExpectedTaskQueueingDuration(int64_t* output);
+
+  // Returns the main frame CU or nullptr if this tab has no main frame.
+  CoordinationUnitImpl* GetMainFrameCoordinationUnit();
 
   DISALLOW_COPY_AND_ASSIGN(WebContentsCoordinationUnitImpl);
 };

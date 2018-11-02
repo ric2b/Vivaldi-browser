@@ -31,9 +31,9 @@
 #include "core/animation/Animation.h"
 
 #include "core/animation/AnimationTimeline.h"
-#include "core/animation/CompositorPendingAnimations.h"
 #include "core/animation/DocumentTimeline.h"
 #include "core/animation/KeyframeEffectReadOnly.h"
+#include "core/animation/PendingAnimations.h"
 #include "core/animation/css/CSSAnimations.h"
 #include "core/dom/DOMNodeIds.h"
 #include "core/dom/Document.h"
@@ -827,7 +827,7 @@ Animation::CheckCanStartAnimationOnCompositorInternal(
         target_element->GetLayoutObject()->IsBoxModelObject() &&
         target_element->GetLayoutObject()->HasLayer()) {
       CompositorElementId target_element_id =
-          CompositorElementIdFromLayoutObjectId(
+          CompositorElementIdFromUniqueObjectId(
               target_element->GetLayoutObject()->UniqueId(),
               CompositorElementIdNamespace::kPrimary);
       if (composited_element_ids->Contains(target_element_id)) {
@@ -887,8 +887,7 @@ void Animation::SetCompositorPending(bool effect_changed) {
       compositor_state_->playback_rate != playback_rate_ ||
       compositor_state_->start_time != start_time_) {
     compositor_pending_ = true;
-    TimelineInternal()->GetDocument()->GetCompositorPendingAnimations().Add(
-        this);
+    TimelineInternal()->GetDocument()->GetPendingAnimations().Add(this);
   }
 }
 
@@ -1072,7 +1071,7 @@ void Animation::DetachCompositedLayers() {
 void Animation::NotifyAnimationStarted(double monotonic_time, int group) {
   TimelineInternal()
       ->GetDocument()
-      ->GetCompositorPendingAnimations()
+      ->GetPendingAnimations()
       .NotifyCompositorAnimationStarted(monotonic_time, group);
 }
 

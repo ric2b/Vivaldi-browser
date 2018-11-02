@@ -35,6 +35,7 @@
 #include "extensions/renderer/script_context.h"
 #include "extensions/renderer/script_context_set.h"
 #include "extensions/renderer/v8_helpers.h"
+#include "gin/converter.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebScopedUserGesture.h"
@@ -369,7 +370,7 @@ ExtensionPort* MessagingBindings::GetPortWithId(const PortId& id) {
 
 ExtensionPort* MessagingBindings::CreateNewPortWithId(const PortId& id) {
   int js_id = GetNextJsId();
-  auto port = base::MakeUnique<ExtensionPort>(context(), id, js_id);
+  auto port = std::make_unique<ExtensionPort>(context(), id, js_id);
   return ports_.insert(std::make_pair(js_id, std::move(port)))
       .first->second.get();
 }
@@ -387,11 +388,36 @@ void MessagingBindings::PostMessage(
 
   int js_port_id = args[0].As<v8::Int32>()->Value();
   auto iter = ports_.find(js_port_id);
-  if (iter != ports_.end()) {
-    iter->second->PostExtensionMessage(base::MakeUnique<Message>(
-        *v8::String::Utf8Value(args[1]),
-        blink::WebUserGestureIndicator::IsProcessingUserGesture()));
+
+  if (iter == ports_.end())
+    return;
+
+  ExtensionPort& port = *iter->second;
+
+  auto message = std::make_unique<Message>(
+      *v8::String::Utf8Value(args[1]),
+      blink::WebUserGestureIndicator::IsProcessingUserGesture());
+
+  size_t message_length = message->data.length();
+
+  // Max bucket at 512 MB - anything over that, and we don't care.
+  static constexpr int kMaxUmaLength = 1024 * 1024 * 512;
+  static constexpr int kMinUmaLength = 1;
+  static constexpr int kBucketCount = 50;
+  UMA_HISTOGRAM_CUSTOM_COUNTS("Extensions.Messaging.MessageSize",
+                              message_length, kMinUmaLength, kMaxUmaLength,
+                              kBucketCount);
+
+  // IPC messages will fail at > 128 MB. Restrict extension messages to 64 MB.
+  // A 64 MB JSON-ifiable object is scary enough as is.
+  static constexpr size_t kMaxMessageLength = 1024 * 1024 * 64;
+  if (message_length > kMaxMessageLength) {
+    args.GetReturnValue().Set(gin::StringToV8(
+        args.GetIsolate(), "Message length exceeded maximum allowed length."));
+    return;
   }
+
+  port.PostExtensionMessage(std::move(message));
 }
 
 void MessagingBindings::CloseChannel(
@@ -443,7 +469,7 @@ void MessagingBindings::OpenChannelToExtension(
 
   int js_id = GetNextJsId();
   PortId port_id(context_id_, js_id, true);
-  ports_[js_id] = base::MakeUnique<ExtensionPort>(context(), port_id, js_id);
+  ports_[js_id] = std::make_unique<ExtensionPort>(context(), port_id, js_id);
 
   ExtensionMsg_ExternalConnectionInfo info;
   // For messaging APIs, hosted apps should be considered a web page so hide
@@ -487,7 +513,7 @@ void MessagingBindings::OpenChannelToNativeApp(
 
   int js_id = GetNextJsId();
   PortId port_id(context_id_, js_id, true);
-  ports_[js_id] = base::MakeUnique<ExtensionPort>(context(), port_id, js_id);
+  ports_[js_id] = std::make_unique<ExtensionPort>(context(), port_id, js_id);
 
   {
     SCOPED_UMA_HISTOGRAM_TIMER(
@@ -520,7 +546,7 @@ void MessagingBindings::OpenChannelToTab(
 
   int js_id = GetNextJsId();
   PortId port_id(context_id_, js_id, true);
-  ports_[js_id] = base::MakeUnique<ExtensionPort>(context(), port_id, js_id);
+  ports_[js_id] = std::make_unique<ExtensionPort>(context(), port_id, js_id);
 
   ExtensionMsg_TabTargetConnectionInfo info;
   info.tab_id = args[0]->Int32Value();

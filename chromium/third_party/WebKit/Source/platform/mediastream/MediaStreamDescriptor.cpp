@@ -32,8 +32,20 @@
 #include "platform/mediastream/MediaStreamDescriptor.h"
 
 #include "platform/UUID.h"
+#include "public/platform/WebMediaStream.h"
 
 namespace blink {
+
+namespace {
+
+static int g_unique_id = 0;
+
+}  // namespace
+
+// static
+int MediaStreamDescriptor::GenerateUniqueId() {
+  return ++g_unique_id;
+}
 
 MediaStreamDescriptor* MediaStreamDescriptor::Create(
     const MediaStreamSourceVector& audio_sources,
@@ -67,6 +79,10 @@ void MediaStreamDescriptor::AddComponent(MediaStreamComponent* component) {
         video_components_.push_back(component);
       break;
   }
+
+  for (auto& observer : observers_) {
+    observer->TrackAdded(component);
+  }
 }
 
 void MediaStreamDescriptor::RemoveComponent(MediaStreamComponent* component) {
@@ -82,6 +98,10 @@ void MediaStreamDescriptor::RemoveComponent(MediaStreamComponent* component) {
       if (pos != kNotFound)
         video_components_.erase(pos);
       break;
+  }
+
+  for (auto& observer : observers_) {
+    observer->TrackRemoved(component);
   }
 }
 
@@ -99,11 +119,22 @@ void MediaStreamDescriptor::RemoveRemoteTrack(MediaStreamComponent* component) {
     RemoveComponent(component);
 }
 
+void MediaStreamDescriptor::AddObserver(WebMediaStreamObserver* observer) {
+  DCHECK_EQ(observers_.Find(observer), kNotFound);
+  observers_.push_back(observer);
+}
+
+void MediaStreamDescriptor::RemoveObserver(WebMediaStreamObserver* observer) {
+  size_t index = observers_.Find(observer);
+  DCHECK(index != kNotFound);
+  observers_.erase(index);
+}
+
 MediaStreamDescriptor::MediaStreamDescriptor(
     const String& id,
     const MediaStreamSourceVector& audio_sources,
     const MediaStreamSourceVector& video_sources)
-    : client_(nullptr), id_(id), active_(true) {
+    : client_(nullptr), id_(id), unique_id_(GenerateUniqueId()), active_(true) {
   DCHECK(id_.length());
   for (size_t i = 0; i < audio_sources.size(); i++)
     audio_components_.push_back(MediaStreamComponent::Create(audio_sources[i]));
@@ -116,7 +147,7 @@ MediaStreamDescriptor::MediaStreamDescriptor(
     const String& id,
     const MediaStreamComponentVector& audio_components,
     const MediaStreamComponentVector& video_components)
-    : client_(nullptr), id_(id), active_(true) {
+    : client_(nullptr), id_(id), unique_id_(GenerateUniqueId()), active_(true) {
   DCHECK(id_.length());
   for (MediaStreamComponentVector::const_iterator iter =
            audio_components.begin();

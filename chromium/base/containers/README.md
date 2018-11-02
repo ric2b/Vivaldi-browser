@@ -124,6 +124,77 @@ strategy and the memory access pattern. Assuming items are being linearly added,
 one would expect it to be 3/4 full, so per-item overhead will be 0.25 *
 sizeof(T).
 
+
+flat\_set/flat\_map support a notion of transparent comparisons. Therefore you
+can, for example, lookup base::StringPiece in a set of std::strings without
+constructing a temporary std::string. This functionality is based on C++14
+extensions to std::set/std::map interface.
+
+You can find more information about transparent comparisons here:
+http://en.cppreference.com/w/cpp/utility/functional/less_void
+
+Example, smart pointer set:
+
+```cpp
+// Define a custom comparator.
+struct UniquePtrComparator {
+  // Mark your comparison as transparent.
+  using is_transparent = int;
+
+  template <typename T>
+  bool operator()(const std::unique_ptr<T>& lhs,
+                  const std::unique_ptr<T>& rhs) const {
+    return lhs < rhs;
+  }
+
+  template <typename T>
+  bool operator()(const T* lhs, const std::unique_ptr<T>& rhs) const {
+    return lhs < rhs.get();
+  }
+
+  template <typename T>
+  bool operator()(const std::unique_ptr<T>& lhs, const T* rhs) const {
+    return lhs.get() < rhs;
+  }
+};
+
+// Declare a typedef.
+template <typename T>
+using UniquePtrSet = base::flat_set<std::unique_ptr<T>, UniquePtrComparator>;
+
+// ...
+// Collect data.
+std::vector<std::unique_ptr<int>> ptr_vec;
+ptr_vec.reserve(5);
+std::generate_n(std::back_inserter(ptr_vec), 5, []{
+  return std::make_unique<int>(0);
+});
+
+// Construct a set.
+UniquePtrSet<int> ptr_set(std::move(ptr_vec), base::KEEP_FIRST_OF_DUPES);
+
+// Use raw pointers to lookup keys.
+int* ptr = ptr_set.begin()->get();
+EXPECT_TRUE(ptr_set.find(ptr) == ptr_set.begin());
+```
+
+Example flat_map<std\::string, int>:
+
+```cpp
+base::flat_map<std::string, int> str_to_int({{"a", 1}, {"c", 2},{"b", 2}},
+                                            base::KEEP_FIRST_OF_DUPES);
+
+// Does not construct temporary strings.
+str_to_int.find("c")->second = 3;
+str_to_int.erase("c");
+EXPECT_EQ(str_to_int.end(), str_to_int.find("c")->second);
+
+// NOTE: This does construct a temporary string. This happens since if the
+// item is not in the container, then it needs to be constructed, which is
+// something that transparent comparators don't have to guarantee.
+str_to_int["c"] = 3;
+```
+
 ### base::small\_map
 
 A small inline buffer that is brute-force searched that overflows into a full
@@ -138,6 +209,55 @@ is larger.
 The initial size in the above table is assuming a very small inline table. The
 actual size will be sizeof(int) + min(sizeof(std::map), sizeof(T) *
 inline\_size).
+
+# Deque
+
+### Usage advice
+
+Chromium code should always use `base::circular_deque` or `base::queue` in
+preference to `std::deque` or `std::queue` due to memory usage and platform
+variation.
+
+The `base::deque` implementation (and the `base::queue` which uses it)
+provide performance consistent across platforms that better matches most
+programmer's expectations on performance (it doesn't waste as much space as
+libc++ and doesn't do as many heap allocations as MSVC).
+
+Since `base::deque` does not have stable iterators and it does not support
+random-access insert and erase, it may not be appropriate for all uses. If
+you need these, consider using a `std::list` which will provide constant
+time insert and erase.
+
+### std::deque and std::queue
+
+The implementation of `std::deque` varies considerably which makes it hard to
+reason about. All implementations use a sequence of data blocks referenced by
+an array of pointers. The standard guarantees random access, amortized
+constant operations at the ends, and linear mutations in the middle.
+
+In Microsoft's implementation, each block is 16 bytes or the size of the
+contained element. This means in practice that every expansion of the deque
+of non-trivial classes requires a heap allocation. libc++ (on Android and Mac)
+uses 4K blocks which elimiates the problem of many heap allocations, but
+generally wastes a large amount of space (an Android analysis revealed more
+than 2.5MB wasted space from deque alone, resulting in some optimizations).
+libstdc++ uses an intermediate-size 512 byte buffer.
+
+Microsoft's implementation never shrinks the deque capacity, so the capacity
+will always be the maximum number of elements ever contained. libstdc++
+deallocates blocks as they are freed. libc++ keeps up to two empty blocks.
+
+### base::circular_deque and base::queue
+
+A deque implemented as a circular buffer in an array. The underlying array will
+grow like a `std::vector` while the beginning and end of the deque will move
+around. The items will wrap around the underlying buffer so the storage will
+not be contiguous, but fast random access iterators are still possible.
+
+When the underlying buffer is filled, it will be reallocated and the constents
+moved (like a `std::vector`). The underlying buffer will also be shrunk if
+there is too much wasted space. As a result, iterators are not stable across
+mutations.
 
 ## Appendix
 

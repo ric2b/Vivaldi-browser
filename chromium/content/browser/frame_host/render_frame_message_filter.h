@@ -13,6 +13,7 @@
 #include "content/common/render_frame_message_filter.mojom.h"
 #include "content/public/browser/browser_associated_interface.h"
 #include "content/public/browser/browser_message_filter.h"
+#include "content/public/common/network_service.mojom.h"
 #include "content/public/common/three_d_api_types.h"
 #include "net/cookies/canonical_cookie.h"
 #include "ppapi/features/features.h"
@@ -52,7 +53,7 @@ struct WebPluginInfo;
 class CONTENT_EXPORT RenderFrameMessageFilter
     : public BrowserMessageFilter,
       public BrowserAssociatedInterface<mojom::RenderFrameMessageFilter>,
-      public NON_EXPORTED_BASE(mojom::RenderFrameMessageFilter) {
+      public mojom::RenderFrameMessageFilter {
  public:
   RenderFrameMessageFilter(int render_process_id,
                            PluginServiceImpl* plugin_service,
@@ -85,17 +86,19 @@ class CONTENT_EXPORT RenderFrameMessageFilter
 
   ~RenderFrameMessageFilter() override;
 
+  void InitializeOnIO(mojom::CookieManagerPtrInfo cookie_manager);
+
   void OnCreateChildFrame(const FrameHostMsg_CreateChildFrame_Params& params,
                           int* new_render_frame_id);
   void OnCookiesEnabled(int render_frame_id,
                         const GURL& url,
-                        const GURL& first_party_for_cookies,
+                        const GURL& site_for_cookies,
                         bool* cookies_enabled);
 
   // Check the policy for getting cookies. Gets the cookies if allowed.
   void CheckPolicyForCookies(int render_frame_id,
                              const GURL& url,
-                             const GURL& first_party_for_cookies,
+                             const GURL& site_for_cookies,
                              GetCookiesCallback callback,
                              const net::CookieList& cookie_list);
 
@@ -115,11 +118,11 @@ class CONTENT_EXPORT RenderFrameMessageFilter
   // mojom::RenderFrameMessageFilter:
   void SetCookie(int32_t render_frame_id,
                  const GURL& url,
-                 const GURL& first_party_for_cookies,
+                 const GURL& site_for_cookies,
                  const std::string& cookie) override;
   void GetCookies(int render_frame_id,
                   const GURL& url,
-                  const GURL& first_party_for_cookies,
+                  const GURL& site_for_cookies,
                   GetCookiesCallback callback) override;
 
 #if BUILDFLAG(ENABLE_PLUGINS)
@@ -171,6 +174,8 @@ class CONTENT_EXPORT RenderFrameMessageFilter
 
   // The ResourceContext which is to be used on the IO thread.
   ResourceContext* resource_context_;
+
+  mojom::CookieManagerPtr cookie_manager_;
 
   // Needed for issuing routing ids and surface ids.
   scoped_refptr<RenderWidgetHelper> render_widget_helper_;

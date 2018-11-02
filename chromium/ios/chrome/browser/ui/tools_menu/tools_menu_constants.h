@@ -27,8 +27,6 @@ extern NSString* const kToolsMenuHistoryId;
 extern NSString* const kToolsMenuReportAnIssueId;
 // Find in Page item accessibility Identifier.
 extern NSString* const kToolsMenuFindInPageId;
-// Reader Mode item accessibility Identifier.
-extern NSString* const kToolsMenuReaderMode;
 // Request desktop item accessibility Identifier.
 extern NSString* const kToolsMenuRequestDesktopId;
 // Settings item accessibility Identifier.
@@ -50,6 +48,15 @@ typedef NS_ENUM(int, ToolsMenuItemID) {
   TOOLS_SETTINGS_ITEM = -7,
   TOOLS_NEW_TAB_ITEM = -8,
   TOOLS_NEW_INCOGNITO_TAB_ITEM = -9,
+  TOOLS_READING_LIST = -10,
+  // -11 is deprecated.
+  TOOLS_SHOW_HISTORY = -12,
+  TOOLS_CLOSE_ALL_TABS = -13,
+  TOOLS_CLOSE_ALL_INCOGNITO_TABS = -14,
+  TOOLS_VIEW_SOURCE = -15,
+  TOOLS_REPORT_AN_ISSUE = -16,
+  TOOLS_SHOW_FIND_IN_PAGE = -17,
+  TOOLS_SHOW_HELP_PAGE = -18,
 };
 
 #endif  // IOS_CHROME_BROWSER_UI_TOOLS_MENU_TOOLS_MENU_CONSTANTS_H_

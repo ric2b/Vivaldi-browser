@@ -37,8 +37,7 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
                                 public base::SupportsUserData::Data {
  public:
   using TransferCallback =
-      base::Callback<void(mojom::URLLoaderAssociatedRequest,
-                          mojom::URLLoaderClientPtr)>;
+      base::Callback<void(mojom::URLLoaderRequest, mojom::URLLoaderClientPtr)>;
 
   // Returns the ResourceRequestInfoImpl associated with the given URLRequest.
   CONTENT_EXPORT static ResourceRequestInfoImpl* ForRequest(
@@ -95,7 +94,6 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
   blink::WebPageVisibilityState GetVisibilityState() const override;
   ui::PageTransition GetPageTransition() const override;
   bool HasUserGesture() const override;
-  bool WasIgnoredByHandler() const override;
   bool GetAssociatedRenderFrame(int* render_process_id,
                                 int* render_frame_id) const override;
   bool IsAsync() const override;
@@ -128,7 +126,7 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
                          int origin_pid,
                          int request_id,
                          ResourceRequesterInfo* requester_info,
-                         mojom::URLLoaderAssociatedRequest url_loader_request,
+                         mojom::URLLoaderRequest url_loader_request,
                          mojom::URLLoaderClientPtr url_loader_client);
 
   // Whether this request is part of a navigation that should replace the
@@ -155,10 +153,6 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
   // Whether this is a stream.
   bool is_stream() const { return is_stream_; }
   void set_is_stream(bool stream) { is_stream_ = stream; }
-
-  void set_was_ignored_by_handler(bool value) {
-    was_ignored_by_handler_ = value;
-  }
 
   // Whether this request has been counted towards the number of in flight
   // requests, which is only true for requests that require a file descriptor
@@ -244,7 +238,6 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
   bool enable_load_timing_;
   bool enable_upload_progress_;
   bool do_not_prompt_for_login_;
-  bool was_ignored_by_handler_;
   bool counted_as_in_flight_request_;
   ResourceType resource_type_;
   ui::PageTransition transition_type_;

@@ -14,6 +14,12 @@
 #include "ui/aura/client/drag_drop_client.h"
 #include "ui/views/views_export.h"
 
+namespace aura {
+namespace client {
+class DragDropClientObserver;
+}
+}  // namespace aura
+
 namespace ui {
 class DragSourceWin;
 }
@@ -37,6 +43,8 @@ class VIEWS_EXPORT DesktopDragDropClientWin
                        bool& cancelled) override;
   void DragCancel() override;
   bool IsDragDropInProgress() override;
+  void AddObserver(aura::client::DragDropClientObserver* observer) override;
+  void RemoveObserver(aura::client::DragDropClientObserver* observer) override;
 
   void OnNativeWidgetDestroying(HWND window);
 

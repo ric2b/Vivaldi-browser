@@ -4,9 +4,20 @@
 
 #import "ui/base/cocoa/hover_button.h"
 
+#include <cmath>
+
+namespace {
+
+// Distance to start a drag when a dragDelegate is assigned.
+constexpr CGFloat kDragDistance = 5;
+
+}  // namespace
+
 @implementation HoverButton
 
 @synthesize hoverState = hoverState_;
+@synthesize trackingEnabled = trackingEnabled_;
+@synthesize dragDelegate = dragDelegate_;
 
 - (id)initWithFrame:(NSRect)frameRect {
   if ((self = [super initWithFrame:frameRect])) {
@@ -20,14 +31,31 @@
 }
 
 - (void)commonInit {
-  [self setTrackingEnabled:YES];
   self.hoverState = kHoverStateNone;
-  [self updateTrackingAreas];
+  self.trackingEnabled = YES;
 }
 
 - (void)dealloc {
-  [self setTrackingEnabled:NO];
+  self.trackingEnabled = NO;
   [super dealloc];
+}
+
+- (NSRect)hitbox {
+  return NSZeroRect;
+}
+
+- (void)setTrackingEnabled:(BOOL)trackingEnabled {
+  if (trackingEnabled == trackingEnabled_)
+    return;
+  trackingEnabled_ = trackingEnabled;
+  [self updateTrackingAreas];
+}
+
+- (void)setEnabled:(BOOL)enabled {
+  if (enabled == self.enabled)
+    return;
+  super.enabled = enabled;
+  [self updateTrackingAreas];
 }
 
 - (void)mouseEntered:(NSEvent*)theEvent {
@@ -45,6 +73,8 @@
 }
 
 - (void)mouseDown:(NSEvent*)theEvent {
+  if (!self.enabled)
+    return;
   mouseDown_ = YES;
   self.hoverState = kHoverStateMouseDown;
 
@@ -64,12 +94,21 @@
                                    NSKeyDownMask | NSKeyUpMask);
 
     while ((nextEvent = [window nextEventMatchingMask:eventMask])) {
+      if ([nextEvent type] == NSLeftMouseUp)
+        break;
       // Update the image state, which will change if the user moves the mouse
       // into or out of the button.
       [self checkImageState];
-
-      if ([nextEvent type] == NSLeftMouseUp) {
-        break;
+      if (dragDelegate_ && [nextEvent type] == NSLeftMouseDragged) {
+        const NSPoint startPos = [theEvent locationInWindow];
+        const NSPoint pos = [nextEvent locationInWindow];
+        if (std::abs(startPos.x - pos.x) > kDragDistance ||
+            std::abs(startPos.y - pos.y) > kDragDistance) {
+          [dragDelegate_ beginDragFromHoverButton:self event:nextEvent];
+          mouseDown_ = NO;
+          self.hoverState = kHoverStateNone;
+          return;
+        }
       }
     }
   }
@@ -77,11 +116,12 @@
   // If the mouse is still over the button, it means the user clicked the
   // button.
   if (self.hoverState == kHoverStateMouseDown) {
-    [self performClick:nil];
+    [self sendAction:self.action to:self.target];
   }
 
   // Clean up.
   mouseDown_ = NO;
+  [self checkImageState];
 }
 
 - (void)setAccessibilityTitle:(NSString*)accessibilityTitle {
@@ -90,16 +130,22 @@
                          forAttribute:NSAccessibilityTitleAttribute];
 }
 
-- (void)setTrackingEnabled:(BOOL)enabled {
-  if (enabled) {
-    trackingArea_.reset(
-        [[CrTrackingArea alloc] initWithRect:NSZeroRect
-                                     options:NSTrackingMouseEnteredAndExited |
-                                             NSTrackingMouseMoved |
-                                             NSTrackingActiveAlways |
-                                             NSTrackingInVisibleRect
-                                       owner:self
-                                    userInfo:nil]);
+- (void)updateTrackingAreas {
+  if (trackingEnabled_ && self.enabled) {
+    NSRect hitbox = self.hitbox;
+    if (CrTrackingArea* trackingArea = trackingArea_.get()) {
+      if (NSEqualRects(trackingArea.rect, hitbox))
+        return;
+      [self removeTrackingArea:trackingArea];
+    }
+    trackingArea_.reset([[CrTrackingArea alloc]
+        initWithRect:hitbox
+             options:NSTrackingMouseEnteredAndExited |
+                     NSTrackingMouseMoved |
+                     NSTrackingActiveAlways |
+                     (NSIsEmptyRect(hitbox) ? NSTrackingInVisibleRect : 0)
+               owner:self
+            userInfo:nil]);
     [self addTrackingArea:trackingArea_.get()];
 
     // If you have a separate window that overlaps the close button, and you
@@ -119,9 +165,6 @@
       trackingArea_.reset(nil);
     }
   }
-}
-
-- (void)updateTrackingAreas {
   [super updateTrackingAreas];
   [self checkImageState];
 }
@@ -130,10 +173,14 @@
   if (!trackingArea_.get())
     return;
 
+  NSEvent* currentEvent = [NSApp currentEvent];
+  if (!currentEvent || currentEvent.window != self.window)
+    return;
+
   // Update the button's state if the button has moved.
-  NSPoint mouseLoc = [[self window] mouseLocationOutsideOfEventStream];
-  mouseLoc = [self convertPoint:mouseLoc fromView:nil];
-  BOOL mouseInBounds = NSPointInRect(mouseLoc, [self bounds]);
+  const NSPoint mouseLoc =
+      [self.superview convertPoint:currentEvent.locationInWindow fromView:nil];
+  BOOL mouseInBounds = [self hitTest:mouseLoc] != nil;
   if (mouseDown_ && mouseInBounds) {
     self.hoverState = kHoverStateMouseDown;
   } else {
@@ -141,10 +188,19 @@
   }
 }
 
-- (void)setHoverState:(HoverState)state {
-  BOOL stateChanged = (hoverState_ != state);
-  hoverState_ = state;
-  [self setNeedsDisplay:stateChanged];
+- (void)setHoverState:(HoverState)hoverState {
+  if (hoverState == hoverState_)
+    return;
+  hoverState_ = hoverState;
+  self.needsDisplay = YES;
+}
+
+- (NSView*)hitTest:(NSPoint)point {
+  if (NSPointInRect([self.superview convertPoint:point toView:self],
+                    self.hitbox)) {
+    return self;
+  }
+  return [super hitTest:point];
 }
 
 @end

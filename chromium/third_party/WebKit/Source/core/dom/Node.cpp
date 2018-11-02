@@ -62,12 +62,12 @@
 #include "core/dom/TreeScopeAdopter.h"
 #include "core/dom/UserActionElementSet.h"
 #include "core/dom/V0InsertionPoint.h"
+#include "core/dom/events/Event.h"
+#include "core/dom/events/EventDispatchMediator.h"
+#include "core/dom/events/EventDispatcher.h"
+#include "core/dom/events/EventListener.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/markers/DocumentMarkerController.h"
-#include "core/events/Event.h"
-#include "core/events/EventDispatchMediator.h"
-#include "core/events/EventDispatcher.h"
-#include "core/events/EventListener.h"
 #include "core/events/GestureEvent.h"
 #include "core/events/InputEvent.h"
 #include "core/events/KeyboardEvent.h"
@@ -313,13 +313,13 @@ Node::Node(TreeScope* tree_scope, ConstructionType type)
 #if !defined(NDEBUG) || (defined(DUMP_NODE_STATISTICS) && DUMP_NODE_STATISTICS)
   TrackForDebugging();
 #endif
-  InstanceCounters::IncrementNodeCounter();
+  InstanceCounters::IncrementCounter(InstanceCounters::kNodeCounter);
 }
 
 Node::~Node() {
   if (!HasRareData() && !data_.node_layout_data_->IsSharedEmptyData())
     delete data_.node_layout_data_;
-  InstanceCounters::DecrementNodeCounter();
+  InstanceCounters::DecrementCounter(InstanceCounters::kNodeCounter);
 }
 
 NodeRareData* Node::RareData() const {
@@ -338,7 +338,7 @@ NodeRareData& Node::EnsureRareData() {
 
   DCHECK(data_.rare_data_);
   SetFlag(kHasRareDataFlag);
-  ScriptWrappableVisitor::WriteBarrier(this, RareData());
+  ScriptWrappableVisitor::WriteBarrier(RareData());
   return *RareData();
 }
 
@@ -1030,9 +1030,6 @@ void Node::AttachLayoutTree(AttachContext& context) {
   ClearNeedsStyleRecalc();
   ClearNeedsReattachLayoutTree();
 
-  if (layout_object && !layout_object->IsFloatingOrOutOfFlowPositioned())
-    context.previous_in_flow = layout_object;
-
   if (AXObjectCache* cache = GetDocument().AxObjectCache())
     cache->UpdateCacheAfterNodeIsAttached(this);
 }
@@ -1069,12 +1066,13 @@ bool Node::CanStartSelection() const {
 
   if (GetLayoutObject()) {
     const ComputedStyle& style = GetLayoutObject()->StyleRef();
-    // We allow selections to begin within an element that has
-    // -webkit-user-select: none set, but if the element is draggable then
-    // dragging should take priority over selection.
-    if (style.UserDrag() == EUserDrag::kElement &&
-        style.UserSelect() == EUserSelect::kNone)
+    if (style.UserSelect() == EUserSelect::kNone)
       return false;
+    // We allow selections to begin within |user-select: text| sub trees
+    // but not if the element is draggable.
+    if (style.UserDrag() != EUserDrag::kElement &&
+        style.UserSelect() == EUserSelect::kText)
+      return true;
   }
   ContainerNode* parent = FlatTreeTraversal::Parent(*this);
   return parent ? parent->CanStartSelection() : true;
@@ -2001,7 +1999,8 @@ void Node::RemoveAllEventListenersRecursively() {
 }
 
 using EventTargetDataMap =
-    PersistentHeapHashMap<WeakMember<Node>, Member<EventTargetData>>;
+    PersistentHeapHashMap<WeakMember<Node>,
+                          TraceWrapperMember<EventTargetData>>;
 static EventTargetDataMap& GetEventTargetDataMap() {
   DEFINE_STATIC_LOCAL(EventTargetDataMap, map, ());
   return map;
@@ -2638,15 +2637,18 @@ DEFINE_TRACE(Node) {
     visitor->Trace(RareData());
 
   visitor->Trace(tree_scope_);
+  // EventTargetData is traced through EventTargetDataMap.
   EventTarget::Trace(visitor);
 }
 
 DEFINE_TRACE_WRAPPERS(Node) {
-  visitor->TraceWrappersWithManualWriteBarrier(parent_or_shadow_host_node_);
-  visitor->TraceWrappersWithManualWriteBarrier(previous_);
-  visitor->TraceWrappersWithManualWriteBarrier(next_);
+  visitor->TraceWrappers(parent_or_shadow_host_node_);
+  visitor->TraceWrappers(previous_);
+  visitor->TraceWrappers(next_);
   if (HasRareData())
     visitor->TraceWrappersWithManualWriteBarrier(RareData());
+  visitor->TraceWrappersWithManualWriteBarrier(
+      const_cast<Node*>(this)->GetEventTargetData());
   EventTarget::TraceWrappers(visitor);
 }
 

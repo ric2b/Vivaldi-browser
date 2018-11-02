@@ -108,8 +108,7 @@ void WebContentsObserverProxy::DidFailLoad(
     RenderFrameHost* render_frame_host,
     const GURL& validated_url,
     int error_code,
-    const base::string16& error_description,
-    bool was_ignored_by_handler) {
+    const base::string16& error_description) {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj(java_observer_);
   ScopedJavaLocalRef<jstring> jstring_error_description(
@@ -159,7 +158,8 @@ void WebContentsObserverProxy::DidFinishNavigation(
   }
 
   // TODO(shaktisahu): Provide appropriate error description (crbug/690784).
-  ScopedJavaLocalRef<jstring> jerror_description;
+  ScopedJavaLocalRef<jstring> jerror_description =
+      ConvertUTF8ToJavaString(env, "");
 
   Java_WebContentsObserverProxy_didFinishNavigation(
       env, obj, jstring_url, navigation_handle->IsInMainFrame(),
@@ -269,7 +269,4 @@ void WebContentsObserverProxy::SetToBaseURLForDataURLIfNeeded(
   }
 }
 
-bool RegisterWebContentsObserverProxy(JNIEnv* env) {
-  return RegisterNativesImpl(env);
-}
 }  // namespace content

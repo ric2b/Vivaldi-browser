@@ -27,6 +27,7 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/common/chrome_paths.h"
+#include "chrome/common/extensions/api/url_handlers/url_handlers_parser.h"
 #include "chrome/common/web_application_info.h"
 #include "crypto/sha2.h"
 #include "extensions/common/constants.h"
@@ -47,6 +48,7 @@ using base::Time;
 namespace {
 
 const char kIconsDirName[] = "icons";
+const char kScopeUrlHandlerId[] = "scope";
 
 // Create the public key for the converted web app.
 //
@@ -65,6 +67,54 @@ std::string GenerateKey(const GURL& app_url) {
 }
 
 }  // namespace
+
+std::unique_ptr<base::DictionaryValue> CreateURLHandlersForBookmarkApp(
+    const GURL& scope_url,
+    const base::string16& title) {
+  auto matches = base::MakeUnique<base::ListValue>();
+  matches->AppendString(scope_url.GetOrigin().Resolve(scope_url.path()).spec() +
+                        "*");
+
+  auto scope_handler = base::MakeUnique<base::DictionaryValue>();
+  scope_handler->SetList(keys::kMatches, std::move(matches));
+  // The URL handler title is not used anywhere but we set it to the
+  // web app's title just in case.
+  scope_handler->SetString(keys::kUrlHandlerTitle, base::UTF16ToUTF8(title));
+
+  auto url_handlers = base::MakeUnique<base::DictionaryValue>();
+  // Use "scope" as the url handler's identifier.
+  url_handlers->SetDictionary(kScopeUrlHandlerId, std::move(scope_handler));
+  return url_handlers;
+}
+
+GURL GetScopeURLFromBookmarkApp(const Extension* extension) {
+  DCHECK(extension->from_bookmark());
+  const std::vector<UrlHandlerInfo>* url_handlers =
+      UrlHandlers::GetUrlHandlers(extension);
+  if (!url_handlers)
+    return GURL();
+
+  // A Bookmark app created by us should only have a url_handler with id
+  // kScopeUrlHandlerId. This URL handler should have a single pattern which
+  // corresponds to the web manifest's scope. The URL handler's pattern should
+  // be the Web Manifest's scope's origin + path with a wildcard, '*', appended
+  // to it.
+  auto handler_it = std::find_if(
+      url_handlers->begin(), url_handlers->end(),
+      [](const UrlHandlerInfo& info) { return info.id == kScopeUrlHandlerId; });
+  if (handler_it == url_handlers->end()) {
+    return GURL();
+  }
+
+  const auto& patterns = handler_it->patterns;
+  DCHECK(patterns.size() == 1);
+  const auto& pattern_iter = patterns.begin();
+  // Remove the '*' character at the end (which was added when creating the URL
+  // handler, see CreateURLHandlersForBookmarkApp()).
+  const std::string& pattern_str = pattern_iter->GetAsString();
+  DCHECK_EQ(pattern_str.back(), '*');
+  return GURL(pattern_str.substr(0, pattern_str.size() - 1));
+}
 
 // Generates a version for the converted app using the current date. This isn't
 // really needed, but it seems like useful information.
@@ -92,6 +142,7 @@ scoped_refptr<Extension> ConvertWebAppToExtension(
     const WebApplicationInfo& web_app,
     const Time& create_time,
     const base::FilePath& extensions_dir) {
+  VLOG(1) << "Converting web app to extension";
   base::FilePath install_temp_dir =
       file_util::GetInstallTempDir(extensions_dir);
   if (install_temp_dir.empty()) {
@@ -105,6 +156,8 @@ scoped_refptr<Extension> ConvertWebAppToExtension(
     return NULL;
   }
 
+  VLOG(1) << "App URL " << web_app.app_url.spec();
+
   // Create the manifest
   std::unique_ptr<base::DictionaryValue> root(new base::DictionaryValue);
   root->SetString(keys::kPublicKey, GenerateKey(web_app.app_url));
@@ -117,6 +170,11 @@ scoped_refptr<Extension> ConvertWebAppToExtension(
                                              web_app.generated_icon_color));
   }
 
+  if (!web_app.scope.is_empty()) {
+    root->SetDictionary(keys::kUrlHandlers, CreateURLHandlersForBookmarkApp(
+                                                web_app.scope, web_app.title));
+  }
+
   // Add the icons and linked icon information.
   auto icons = base::MakeUnique<base::DictionaryValue>();
   auto linked_icons = base::MakeUnique<base::ListValue>();
@@ -126,12 +184,17 @@ scoped_refptr<Extension> ConvertWebAppToExtension(
                                                size.c_str());
     icons->SetString(size, icon_path);
 
+    VLOG(1) << "Adding icon of size " << size << ": " << icon_path;
+
     if (icon.url.is_valid()) {
+      VLOG(1) << "Adding linked icon URL " << icon.url.spec();
       std::unique_ptr<base::DictionaryValue> linked_icon(
           new base::DictionaryValue());
       linked_icon->SetString(keys::kLinkedAppIconURL, icon.url.spec());
       linked_icon->SetInteger(keys::kLinkedAppIconSize, icon.width);
       linked_icons->Append(std::move(linked_icon));
+    } else {
+      VLOG(1) << "Icon URL wasn't valid: " << icon.url.spec();
     }
   }
   root->Set(keys::kIcons, std::move(icons));

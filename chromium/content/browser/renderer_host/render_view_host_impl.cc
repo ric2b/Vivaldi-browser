@@ -231,9 +231,12 @@ RenderViewHostImpl::RenderViewHostImpl(
   if (ResourceDispatcherHostImpl::Get()) {
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(&ResourceDispatcherHostImpl::OnRenderViewHostCreated,
-                   base::Unretained(ResourceDispatcherHostImpl::Get()),
-                   GetProcess()->GetID(), GetRoutingID()));
+        base::BindOnce(
+            &ResourceDispatcherHostImpl::OnRenderViewHostCreated,
+            base::Unretained(ResourceDispatcherHostImpl::Get()),
+            GetProcess()->GetID(), GetRoutingID(),
+            base::RetainedRef(
+                GetProcess()->GetStoragePartition()->GetURLRequestContext())));
   }
 
   close_timeout_.reset(new TimeoutMonitor(base::Bind(
@@ -246,9 +249,9 @@ RenderViewHostImpl::~RenderViewHostImpl() {
   if (ResourceDispatcherHostImpl::Get()) {
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(&ResourceDispatcherHostImpl::OnRenderViewHostDeleted,
-                   base::Unretained(ResourceDispatcherHostImpl::Get()),
-                   GetProcess()->GetID(), GetRoutingID()));
+        base::BindOnce(&ResourceDispatcherHostImpl::OnRenderViewHostDeleted,
+                       base::Unretained(ResourceDispatcherHostImpl::Get()),
+                       GetProcess()->GetID(), GetRoutingID()));
   }
   delegate_->RenderViewDeleted(this);
   GetProcess()->RemoveObserver(this);
@@ -325,12 +328,6 @@ bool RenderViewHostImpl::CreateRenderView(
   params->page_zoom_level = delegate_->GetPendingPageZoomLevel();
 
   bool force_srgb_image_decode_color_space = false;
-  // Pretend that HDR displays are sRGB so that we do not have inconsistent
-  // coloring.
-  // TODO(ccameron): Disable this once color correct rasterization is functional
-  // https://crbug.com/701942
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kEnableHDR))
-    force_srgb_image_decode_color_space = true;
   // When color correct rendering is enabled, the image_decode_color_space
   // parameter should not be used (and all users of it should be using sRGB).
   if (base::FeatureList::IsEnabled(features::kColorCorrectRendering))
@@ -476,6 +473,13 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
   prefs.primary_hover_type =
       ui::GetPrimaryHoverType(prefs.available_hover_types);
 
+// TODO(dtapuska): Enable barrel button selection drag support on Android.
+// crbug.com/758042
+#if defined(OS_WIN)
+  prefs.barrel_button_for_drag_enabled =
+      base::FeatureList::IsEnabled(features::kDirectManipulationStylus);
+#endif  // defined(OS_WIN)
+
 #if defined(OS_ANDROID)
   prefs.video_fullscreen_orientation_lock_enabled =
       base::FeatureList::IsEnabled(media::kVideoFullscreenOrientationLock) &&
@@ -571,10 +575,10 @@ void RenderViewHostImpl::ClosePage() {
 
     // TODO(creis): Should this be moved to Shutdown?  It may not be called for
     // RenderViewHosts that have been swapped out.
-    NotificationService::current()->Notify(
-        NOTIFICATION_RENDER_VIEW_HOST_WILL_CLOSE_RENDER_VIEW,
-        Source<RenderViewHost>(this),
-        NotificationService::NoDetails());
+#if !defined(OS_ANDROID)
+    static_cast<HostZoomMapImpl*>(HostZoomMap::Get(GetSiteInstance()))
+        ->WillCloseRenderView(GetProcess()->GetID(), GetRoutingID());
+#endif
 
     Send(new ViewMsg_ClosePage(GetRoutingID()));
   } else {
@@ -670,13 +674,11 @@ void RenderViewHostImpl::DirectoryEnumerationFinished(
 void RenderViewHostImpl::RenderWidgetWillSetIsLoading(bool is_loading) {
   if (ResourceDispatcherHostImpl::Get()) {
     BrowserThread::PostTask(
-        BrowserThread::IO,
-        FROM_HERE,
-        base::Bind(&ResourceDispatcherHostImpl::OnRenderViewHostSetIsLoading,
-                   base::Unretained(ResourceDispatcherHostImpl::Get()),
-                   GetProcess()->GetID(),
-                   GetRoutingID(),
-                   is_loading));
+        BrowserThread::IO, FROM_HERE,
+        base::BindOnce(
+            &ResourceDispatcherHostImpl::OnRenderViewHostSetIsLoading,
+            base::Unretained(ResourceDispatcherHostImpl::Get()),
+            GetProcess()->GetID(), GetRoutingID(), is_loading));
   }
 }
 
@@ -883,6 +885,9 @@ void RenderViewHostImpl::OnWebkitPreferencesChanged() {
     return;
   updating_web_preferences_ = true;
   UpdateWebkitPreferences(ComputeWebkitPrefs());
+#if defined(OS_ANDROID)
+  GetWidget()->SetForceEnableZoom(web_preferences_->force_enable_zoom);
+#endif
   updating_web_preferences_ = false;
 }
 
@@ -934,7 +939,7 @@ void RenderViewHostImpl::SelectWordAroundCaret() {
 }
 
 void RenderViewHostImpl::PostRenderViewReady() {
-  GetProcess()->PostTaskWhenProcessIsReady(base::Bind(
+  GetProcess()->PostTaskWhenProcessIsReady(base::BindOnce(
       &RenderViewHostImpl::RenderViewReady, weak_factory_.GetWeakPtr()));
 }
 

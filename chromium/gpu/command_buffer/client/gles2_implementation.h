@@ -105,6 +105,7 @@ namespace gpu {
 class GpuControl;
 class IdAllocator;
 class ScopedTransferBufferPtr;
+struct SharedMemoryLimits;
 class TransferBufferInterface;
 
 namespace gles2 {
@@ -120,10 +121,10 @@ class QueryTracker;
 // GLES2CmdHelper but that entails changing your code to use and deal with
 // shared memory and synchronization issues.
 class GLES2_IMPL_EXPORT GLES2Implementation
-    : NON_EXPORTED_BASE(public GLES2Interface),
-      NON_EXPORTED_BASE(public ContextSupport),
-      NON_EXPORTED_BASE(public GpuControlClient),
-      NON_EXPORTED_BASE(public base::trace_event::MemoryDumpProvider) {
+    : public GLES2Interface,
+      public ContextSupport,
+      public GpuControlClient,
+      public base::trace_event::MemoryDumpProvider {
  public:
   // Stores GL state that never changes.
   struct GLES2_IMPL_EXPORT GLStaticState {
@@ -170,11 +171,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation
 
   ~GLES2Implementation() override;
 
-  bool Initialize(
-      unsigned int starting_transfer_buffer_size,
-      unsigned int min_transfer_buffer_size,
-      unsigned int max_transfer_buffer_size,
-      unsigned int mapped_memory_limit);
+  bool Initialize(const SharedMemoryLimits& limits);
 
   // The GLES2CmdHelper being used by this GLES2Implementation. You can use
   // this to issue cmds at a lower level for certain kinds of optimization.
@@ -192,8 +189,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   #include "gpu/command_buffer/client/gles2_implementation_autogen.h"
 
   // ContextSupport implementation.
-  int32_t GetStreamId() const override;
-  void FlushOrderingBarrierOnStream(int32_t stream_id) override;
+  void FlushPendingWork() override;
   void SignalSyncToken(const gpu::SyncToken& sync_token,
                        const base::Closure& callback) override;
   bool IsSyncTokenSignaled(const gpu::SyncToken& sync_token) override;
@@ -785,9 +781,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation
 
   // Maximum amount of extra memory from the mapped memory pool to use when
   // needing to transfer something exceeding the default transfer buffer.
-  // This should be 0 for low memory devices since they are already memory
-  // constrained.
-  const uint32_t max_extra_transfer_buffer_size_;
+  uint32_t max_extra_transfer_buffer_size_;
 
   // Set of strings returned from glGetString.  We need to cache these because
   // the pointer passed back to the client has to remain valid for eternity.

@@ -50,6 +50,13 @@ _DEVIL_STATIC_CONFIG_FILE = os.path.abspath(os.path.join(
     host_paths.DIR_SOURCE_ROOT, 'build', 'android', 'devil_config.json'))
 
 
+def _RealPath(arg):
+  if arg.startswith('//'):
+    arg = os.path.abspath(os.path.join(host_paths.DIR_SOURCE_ROOT,
+                                       arg[2:].replace('/', os.sep)))
+  return os.path.realpath(arg)
+
+
 def AddTestLauncherOptions(parser):
   """Adds arguments mirroring //base/test/launcher.
 
@@ -323,7 +330,7 @@ def AddGTestOptions(parser):
       dest='suite_name', nargs='+', metavar='SUITE_NAME', required=True,
       help='Executable name of the test suite to run.')
   parser.add_argument(
-      '--test-apk-incremental-install-script',
+      '--test-apk-incremental-install-json',
       type=os.path.realpath,
       help='Path to install script for the test apk.')
 
@@ -347,7 +354,7 @@ def AddInstrumentationTestOptions(parser):
   parser.add_argument(
       '--additional-apk',
       action='append', dest='additional_apks', default=[],
-      type=os.path.realpath,
+      type=_RealPath,
       help='Additional apk that must be installed on '
            'the device when the tests are run')
   parser.add_argument(
@@ -392,6 +399,11 @@ def AddInstrumentationTestOptions(parser):
       '--render-results-directory',
       dest='render_results_dir',
       help='Directory to pull render test result images off of the device to.')
+  parser.add_argument(
+      '--enable-relocation-packing',
+      dest='enable_relocation_packing',
+      action='store_true',
+      help='Whether relocation packing is enabled.')
   def package_replacement(arg):
     split_arg = arg.split(',')
     if len(split_arg) != 2:
@@ -401,7 +413,7 @@ def AddInstrumentationTestOptions(parser):
     PackageReplacement = collections.namedtuple('PackageReplacement',
                                                 ['package', 'replacement_apk'])
     return PackageReplacement(package=split_arg[0],
-                              replacement_apk=os.path.realpath(split_arg[1]))
+                              replacement_apk=_RealPath(split_arg[1]))
   parser.add_argument(
       '--replace-system-package',
       type=package_replacement, default=None,
@@ -420,7 +432,7 @@ def AddInstrumentationTestOptions(parser):
       help='Capture screenshots of test failures')
   parser.add_argument(
       '--shared-prefs-file',
-      dest='shared_prefs_file', type=os.path.realpath,
+      dest='shared_prefs_file', type=_RealPath,
       help='The relative path to a file containing JSON list of shared '
            'preference files to edit and how to do so. Example list: '
            '[{'
@@ -463,10 +475,10 @@ def AddInstrumentationTestOptions(parser):
   # These arguments are suppressed from the help text because they should
   # only ever be specified by an intermediate script.
   parser.add_argument(
-      '--apk-under-test-incremental-install-script',
+      '--apk-under-test-incremental-install-json',
       help=argparse.SUPPRESS)
   parser.add_argument(
-      '--test-apk-incremental-install-script',
+      '--test-apk-incremental-install-json',
       type=os.path.realpath,
       help=argparse.SUPPRESS)
 
@@ -774,13 +786,19 @@ def RunTestsInPlatformMode(args):
   # result for each test run in that iteration.
   all_iteration_results = []
 
+  global_results_tags = set()
+
   @contextlib.contextmanager
   def write_json_file():
     try:
       yield
+    except Exception:
+      global_results_tags.add('UNRELIABLE_RESULTS')
+      raise
     finally:
       json_results.GenerateJsonResultsFile(
-          all_raw_results, args.json_results_file)
+          all_raw_results, args.json_results_file,
+          global_tags=list(global_results_tags))
 
   json_writer = contextlib_ext.Optional(
       write_json_file(),

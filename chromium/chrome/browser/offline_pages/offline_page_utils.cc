@@ -14,10 +14,11 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "chrome/browser/offline_pages/offline_page_tab_helper.h"
 #include "chrome/browser/net/net_error_tab_helper.h"
 #include "chrome/browser/offline_pages/offline_page_mhtml_archiver.h"
 #include "chrome/browser/offline_pages/offline_page_model_factory.h"
+#include "chrome/browser/offline_pages/offline_page_origin_utils.h"
+#include "chrome/browser/offline_pages/offline_page_tab_helper.h"
 #include "chrome/browser/offline_pages/request_coordinator_factory.h"
 #include "components/offline_pages/core/background/request_coordinator.h"
 #include "components/offline_pages/core/background/save_page_request.h"
@@ -147,7 +148,7 @@ void DoCalculateSizeBetween(
 void OfflinePageUtils::SelectPageForURL(
     content::BrowserContext* browser_context,
     const GURL& url,
-    OfflinePageModel::URLSearchMode url_search_mode,
+    URLSearchMode url_search_mode,
     int tab_id,
     const base::Callback<void(const OfflinePageItem*)>& callback) {
   OfflinePageModel* offline_page_model =
@@ -275,7 +276,7 @@ void OfflinePageUtils::CheckDuplicateDownloads(
   };
 
   offline_page_model->GetPagesByURL(
-      url, OfflinePageModel::URLSearchMode::SEARCH_BY_ALL_URLS,
+      url, URLSearchMode::SEARCH_BY_ALL_URLS,
       base::Bind(continuation, browser_context, url, callback));
 }
 
@@ -283,14 +284,26 @@ void OfflinePageUtils::CheckDuplicateDownloads(
 void OfflinePageUtils::ScheduleDownload(content::WebContents* web_contents,
                                         const std::string& name_space,
                                         const GURL& url,
-                                        DownloadUIActionFlags ui_action) {
+                                        DownloadUIActionFlags ui_action,
+                                        const std::string& request_origin) {
   DCHECK(web_contents);
 
   OfflinePageTabHelper* tab_helper =
       OfflinePageTabHelper::FromWebContents(web_contents);
   if (!tab_helper)
     return;
-  tab_helper->ScheduleDownloadHelper(web_contents, name_space, url, ui_action);
+  tab_helper->ScheduleDownloadHelper(web_contents, name_space, url, ui_action,
+                                     request_origin);
+}
+
+// static
+void OfflinePageUtils::ScheduleDownload(content::WebContents* web_contents,
+                                        const std::string& name_space,
+                                        const GURL& url,
+                                        DownloadUIActionFlags ui_action) {
+  std::string origin =
+      OfflinePageOriginUtils::GetEncodedOriginAppFor(web_contents);
+  ScheduleDownload(web_contents, name_space, url, ui_action, origin);
 }
 
 // static

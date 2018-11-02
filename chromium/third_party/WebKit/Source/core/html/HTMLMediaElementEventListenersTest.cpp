@@ -35,7 +35,8 @@ class MediaStubLocalFrameClient : public EmptyLocalFrameClient {
   std::unique_ptr<WebMediaPlayer> CreateWebMediaPlayer(
       HTMLMediaElement&,
       const WebMediaPlayerSource&,
-      WebMediaPlayerClient*) override {
+      WebMediaPlayerClient*,
+      WebLayerTreeView*) override {
     return WTF::WrapUnique(new MockWebMediaPlayer());
   }
 };
@@ -153,8 +154,8 @@ TEST_F(HTMLMediaElementEventListenersTest,
   // Set ReadyState as HaveMetadata and go fullscreen, so the timer is fired.
   EXPECT_NE(Video(), nullptr);
   SimulateReadyState(HTMLMediaElement::kHaveMetadata);
-  UserGestureIndicator gesture_indicator(
-      UserGestureToken::Create(&GetDocument()));
+  std::unique_ptr<UserGestureIndicator> gesture_indicator =
+      LocalFrame::CreateUserGesture(GetDocument().GetFrame());
   Fullscreen::RequestFullscreen(*Video());
   Fullscreen::From(GetDocument()).DidEnterFullscreen();
 

@@ -22,6 +22,7 @@
 #include "content/public/renderer/render_frame_observer.h"
 #include "content/public/renderer/render_view_observer.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 #include "third_party/WebKit/public/web/WebInputElement.h"
 
 namespace blink {
@@ -42,7 +43,8 @@ class RendererSavePasswordProgressLogger;
 class PasswordAutofillAgent : public content::RenderFrameObserver,
                               public mojom::PasswordAutofillAgent {
  public:
-  explicit PasswordAutofillAgent(content::RenderFrame* render_frame);
+  PasswordAutofillAgent(content::RenderFrame* render_frame,
+                        service_manager::BinderRegistry* registry);
   ~PasswordAutofillAgent() override;
 
   void BindRequest(mojom::PasswordAutofillAgentRequest request);
@@ -59,6 +61,7 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
       const FormsPredictionsMap& predictions) override;
   void FindFocusedPasswordForm(
       FindFocusedPasswordFormCallback callback) override;
+  void BlacklistedFormFound() override;
 
   // WebFrameClient editor related calls forwarded by AutofillAgent.
   // If they return true, it indicates the event was consumed and should not
@@ -112,6 +115,11 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   // This UI is shown when a username or password field is autofilled or edited
   // on a non-secure page.
   void ShowNotSecureWarning(const blink::WebInputElement& element);
+
+  // Shows an Autofill-style popup with an option to go to settings and check
+  // all saved passwords. Returns true if the suggestion was shown, false
+  // otherwise.
+  bool ShowManualFallbackSuggestion(const blink::WebInputElement& element);
 
   // Called when new form controls are inserted.
   void OnDynamicFormsSeen();
@@ -204,7 +212,8 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   void DidFinishDocumentLoad() override;
   void DidFinishLoad() override;
   void FrameDetached() override;
-  void DidStartProvisionalLoad(blink::WebDataSource* data_source) override;
+  void DidStartProvisionalLoad(
+      blink::WebDocumentLoader* document_loader) override;
   void WillCommitProvisionalLoad() override;
   void DidCommitProvisionalLoad(bool is_new_navigation,
                                 bool is_same_document_navigation) override;
@@ -268,6 +277,8 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   WebInputToPasswordInfoMap web_input_to_password_info_;
   // A (sort-of) reverse map to |web_input_to_password_info_|.
   PasswordToLoginMap password_to_username_;
+  // The chronologically last insertion into |web_input_to_password_info_|.
+  WebInputToPasswordInfoMap::iterator last_supplied_password_info_iter_;
 
   // Set if the user might be submitting a password form on the current page,
   // but the submit may still fail (i.e. doesn't pass JavaScript validation).
@@ -311,6 +322,8 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   mojo::Binding<mojom::PasswordAutofillAgent> binding_;
 
   blink::WebFormElementObserver* form_element_observer_;
+
+  bool blacklisted_form_found_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(PasswordAutofillAgent);
 };

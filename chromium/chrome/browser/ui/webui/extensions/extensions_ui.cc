@@ -109,6 +109,8 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
 
   // Add common strings.
   source->AddLocalizedString("close", IDS_CLOSE);
+  source->AddLocalizedString("ok", IDS_OK);
+  source->AddLocalizedString("cancel", IDS_CANCEL);
 
   // Add extension-specific strings.
   source->AddLocalizedString("title",
@@ -207,6 +209,12 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
                              IDS_EXTENSIONS_ERROR_NO_ERRORS_CODE_MESSAGE);
   source->AddLocalizedString("packDialogTitle",
                              IDS_MD_EXTENSIONS_PACK_DIALOG_TITLE);
+  source->AddLocalizedString("packDialogWarningTitle",
+                             IDS_MD_EXTENSIONS_PACK_DIALOG_WARNING_TITLE);
+  source->AddLocalizedString("packDialogErrorTitle",
+                             IDS_MD_EXTENSIONS_PACK_DIALOG_ERROR_TITLE);
+  source->AddLocalizedString("packDialogProceedAnyway",
+                             IDS_MD_EXTENSIONS_PACK_DIALOG_PROCEED_ANYWAY);
   source->AddLocalizedString("packDialogBrowse",
                              IDS_MD_EXTENSIONS_PACK_DIALOG_BROWSE_BUTTON);
   source->AddLocalizedString(
@@ -252,10 +260,6 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
               GURL(extension_urls::GetWebstoreExtensionsCategoryURL()),
               g_browser_process->GetApplicationLocale()).spec()));
 
-  source->AddResourcePath("animation_helper.html",
-                          IDR_MD_EXTENSIONS_ANIMATION_HELPER_HTML);
-  source->AddResourcePath("animation_helper.js",
-                          IDR_MD_EXTENSIONS_ANIMATION_HELPER_JS);
   source->AddResourcePath("code_section.html",
                           IDR_MD_EXTENSIONS_CODE_SECTION_HTML);
   source->AddResourcePath("code_section.js", IDR_MD_EXTENSIONS_CODE_SECTION_JS);
@@ -298,6 +302,10 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
   source->AddResourcePath("pack_dialog.html",
                           IDR_MD_EXTENSIONS_PACK_DIALOG_HTML);
   source->AddResourcePath("pack_dialog.js", IDR_MD_EXTENSIONS_PACK_DIALOG_JS);
+  source->AddResourcePath("pack_dialog_alert.html",
+                          IDR_MD_EXTENSIONS_PACK_DIALOG_ALERT_HTML);
+  source->AddResourcePath("pack_dialog_alert.js",
+                          IDR_MD_EXTENSIONS_PACK_DIALOG_ALERT_JS);
   source->AddResourcePath("service.html", IDR_MD_EXTENSIONS_SERVICE_HTML);
   source->AddResourcePath("service.js", IDR_MD_EXTENSIONS_SERVICE_JS);
   source->AddResourcePath("shortcut_input.html",
@@ -312,6 +320,9 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
   source->AddResourcePath("strings.html", IDR_MD_EXTENSIONS_STRINGS_HTML);
   source->AddResourcePath("toolbar.html", IDR_MD_EXTENSIONS_TOOLBAR_HTML);
   source->AddResourcePath("toolbar.js", IDR_MD_EXTENSIONS_TOOLBAR_JS);
+  source->AddResourcePath("view_manager.html",
+                          IDR_MD_EXTENSIONS_VIEW_MANAGER_HTML);
+  source->AddResourcePath("view_manager.js", IDR_MD_EXTENSIONS_VIEW_MANAGER_JS);
   source->SetDefaultResource(IDR_MD_EXTENSIONS_EXTENSIONS_HTML);
 
   return source;

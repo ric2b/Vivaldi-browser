@@ -45,8 +45,6 @@ component("gl") {
   output_name = "gl_wrapper"  # Avoid colliding with OS X"s libGL.dylib.
 
   sources = [
-    "android/gl_jni_registrar.cc",
-    "android/gl_jni_registrar.h",
     "android/scoped_java_surface.cc",
     "android/scoped_java_surface.h",
     "android/surface_texture.cc",
@@ -57,6 +55,8 @@ component("gl") {
     "ca_renderer_layer_params.h",
     "dc_renderer_layer_params.cc",
     "dc_renderer_layer_params.h",
+    "extension_set.cc",
+    "extension_set.h",
     "gl_bindings.cc",
     "gl_bindings.h",
     "gl_bindings_autogen_gl.cc",
@@ -262,6 +262,7 @@ component("gl") {
       "//third_party/angle:libEGL",
       "//third_party/angle:libGLESv2",
       "//third_party/mesa:osmesa",
+      "//third_party/swiftshader",
     ]
 
     deps += [ "//third_party/angle:includes" ]
@@ -375,7 +376,11 @@ source_set("run_all_unittests") {
   ]
 
   if (use_ozone) {
-    deps += [ "//ui/ozone" ]
+    deps += [
+      "//mojo/edk/system",
+      "//services/service_manager/public/cpp/test:test_support",
+      "//ui/ozone",
+    ]
   }
 }
 

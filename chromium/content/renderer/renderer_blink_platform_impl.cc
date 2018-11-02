@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/guid.h"
 #include "base/lazy_instance.h"
@@ -26,10 +27,12 @@
 #include "build/build_config.h"
 #include "components/url_formatter/url_formatter.h"
 #include "content/child/blob_storage/webblobregistry_impl.h"
+#include "content/child/child_url_loader_factory_getter_impl.h"
 #include "content/child/database_util.h"
 #include "content/child/file_info_util.h"
 #include "content/child/fileapi/webfilesystem_impl.h"
 #include "content/child/indexed_db/webidbfactory_impl.h"
+#include "content/child/loader/cors_url_loader_factory.h"
 #include "content/child/quota_dispatcher.h"
 #include "content/child/quota_message_filter.h"
 #include "content/child/storage_util.h"
@@ -196,130 +199,12 @@ media::AudioParameters GetAudioHardwareParams() {
       .output_params();
 }
 
-// TODO(hintzed): Implement this.
-class CORSURLLoader : public mojom::URLLoader, public mojom::URLLoaderClient {
- public:
-  // Assumes network_loader_factory outlives this loader.
-  CORSURLLoader(
-      int32_t routing_id,
-      int32_t request_id,
-      uint32_t options,
-      const ResourceRequest& resource_request,
-      mojom::URLLoaderClientPtr client,
-      const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
-      mojom::URLLoaderFactory* network_loader_factory)
-      : network_loader_factory_(network_loader_factory),
-        network_client_binding_(this),
-        forwarding_client_(std::move(client)) {
-    mojom::URLLoaderClientPtr network_client;
-    network_client_binding_.Bind(mojo::MakeRequest(&network_client));
-    network_loader_factory_->CreateLoaderAndStart(
-        mojo::MakeRequest(&network_loader_), routing_id, request_id, options,
-        resource_request, std::move(network_client), traffic_annotation);
-  }
-  ~CORSURLLoader() override = default;
-
-  // mojom::URLLoader:
-  void FollowRedirect() override { network_loader_->FollowRedirect(); }
-  void SetPriority(net::RequestPriority priority,
-                   int32_t intra_priority_value) override {
-    network_loader_->SetPriority(priority, intra_priority_value);
-  }
-
-  // mojom::URLLoaderClient for simply proxying network for now:
-  void OnReceiveResponse(
-      const ResourceResponseHead& response_head,
-      const base::Optional<net::SSLInfo>& ssl_info,
-      mojom::DownloadedTempFilePtr downloaded_file) override {
-    forwarding_client_->OnReceiveResponse(response_head, ssl_info,
-                                          std::move(downloaded_file));
-  }
-  void OnReceiveRedirect(const net::RedirectInfo& redirect_info,
-                         const ResourceResponseHead& response_head) override {
-    forwarding_client_->OnReceiveRedirect(redirect_info, response_head);
-  }
-  void OnDataDownloaded(int64_t data_len, int64_t encoded_data_len) override {
-    forwarding_client_->OnDataDownloaded(data_len, encoded_data_len);
-  }
-  void OnUploadProgress(int64_t current_position,
-                        int64_t total_size,
-                        OnUploadProgressCallback ack_callback) override {
-    forwarding_client_->OnUploadProgress(current_position, total_size,
-                                         std::move(ack_callback));
-  }
-  void OnReceiveCachedMetadata(const std::vector<uint8_t>& data) override {
-    forwarding_client_->OnReceiveCachedMetadata(data);
-  }
-  void OnTransferSizeUpdated(int32_t transfer_size_diff) override {
-    forwarding_client_->OnTransferSizeUpdated(transfer_size_diff);
-  }
-  void OnStartLoadingResponseBody(
-      mojo::ScopedDataPipeConsumerHandle body) override {
-    forwarding_client_->OnStartLoadingResponseBody(std::move(body));
-  }
-  void OnComplete(const ResourceRequestCompletionStatus& status) override {
-    forwarding_client_->OnComplete(status);
-  }
-
- private:
-  // Used to initiate the actual request (or any preflight requests)
-  // with the default network loader factory.
-  mojom::URLLoaderFactory* network_loader_factory_;
-
-  // For the actual request.
-  mojom::URLLoaderAssociatedPtr network_loader_;
-  mojo::Binding<mojom::URLLoaderClient> network_client_binding_;
-
-  // To be a URLLoader for the client.
-  mojom::URLLoaderClientPtr forwarding_client_;
-
-  DISALLOW_COPY_AND_ASSIGN(CORSURLLoader);
-};
-
-class CORSURLLoaderFactory : public mojom::URLLoaderFactory {
- public:
-  static void CreateAndBind(PossiblyAssociatedInterfacePtr<
-                                mojom::URLLoaderFactory> network_loader_factory,
-                            mojom::URLLoaderFactoryRequest request) {
-    mojo::MakeStrongBinding(base::MakeUnique<CORSURLLoaderFactory>(
-                                std::move(network_loader_factory)),
-                            std::move(request));
-  }
-
-  explicit CORSURLLoaderFactory(
-      PossiblyAssociatedInterfacePtr<mojom::URLLoaderFactory>
-          network_loader_factory)
-      : network_loader_factory_(std::move(network_loader_factory)) {}
-  ~CORSURLLoaderFactory() override = default;
-
-  void CreateLoaderAndStart(mojom::URLLoaderAssociatedRequest request,
-                            int32_t routing_id,
-                            int32_t request_id,
-                            uint32_t options,
-                            const ResourceRequest& resource_request,
-                            mojom::URLLoaderClientPtr client,
-                            const net::MutableNetworkTrafficAnnotationTag&
-                                traffic_annotation) override {
-    mojo::MakeStrongAssociatedBinding(
-        base::MakeUnique<CORSURLLoader>(routing_id, request_id, options,
-                                        resource_request, std::move(client),
-                                        traffic_annotation,
-                                        network_loader_factory_.get()),
-        std::move(request));
-  }
-
-  void SyncLoad(int32_t routing_id,
-                int32_t request_id,
-                const ResourceRequest& resource_request,
-                SyncLoadCallback callback) override {
-    network_loader_factory_->SyncLoad(routing_id, request_id, resource_request,
-                                      std::move(callback));
-  }
-
- private:
-  PossiblyAssociatedInterfacePtr<mojom::URLLoaderFactory>
-      network_loader_factory_;
-};
+mojom::URLLoaderFactoryPtr GetBlobURLLoaderFactoryGetter() {
+  mojom::URLLoaderFactoryPtr blob_loader_factory;
+  RenderThreadImpl::current()->GetRendererHost()->GetBlobURLLoaderFactory(
+      mojo::MakeRequest(&blob_loader_factory));
+  return blob_loader_factory;
+}
 
 }  // namespace
 
@@ -336,7 +221,7 @@ class RendererBlinkPlatformImpl::FileUtilities : public WebFileUtilitiesImpl {
   scoped_refptr<ThreadSafeSender> thread_safe_sender_;
 };
 
-#if !defined(OS_ANDROID) && !defined(OS_WIN)
+#if !defined(OS_ANDROID) && !defined(OS_WIN) && !defined(OS_FUCHSIA)
 class RendererBlinkPlatformImpl::SandboxSupport
     : public blink::WebSandboxSupport {
  public:
@@ -368,8 +253,7 @@ class RendererBlinkPlatformImpl::SandboxSupport
 //------------------------------------------------------------------------------
 
 RendererBlinkPlatformImpl::RendererBlinkPlatformImpl(
-    blink::scheduler::RendererScheduler* renderer_scheduler,
-    base::WeakPtr<service_manager::Connector> connector)
+    blink::scheduler::RendererScheduler* renderer_scheduler)
     : BlinkPlatformImpl(renderer_scheduler->DefaultTaskRunner()),
       main_thread_(renderer_scheduler->CreateMainThread()),
       clipboard_delegate_(new RendererClipboardDelegate),
@@ -379,9 +263,8 @@ RendererBlinkPlatformImpl::RendererBlinkPlatformImpl(
       default_task_runner_(renderer_scheduler->DefaultTaskRunner()),
       loading_task_runner_(renderer_scheduler->LoadingTaskRunner()),
       web_scrollbar_behavior_(new WebScrollbarBehaviorImpl),
-      renderer_scheduler_(renderer_scheduler),
-      blink_interface_provider_(new BlinkInterfaceProviderImpl(connector)) {
-#if !defined(OS_ANDROID) && !defined(OS_WIN)
+      renderer_scheduler_(renderer_scheduler) {
+#if !defined(OS_ANDROID) && !defined(OS_WIN) && !defined(OS_FUCHSIA)
   if (g_sandbox_enabled && sandboxEnabled()) {
     sandbox_support_.reset(new RendererBlinkPlatformImpl::SandboxSupport);
   } else {
@@ -413,6 +296,8 @@ RendererBlinkPlatformImpl::RendererBlinkPlatformImpl(
     connector_ = service_manager::Connector::Create(&request);
   }
 
+  blink_interface_provider_.reset(
+      new BlinkInterfaceProviderImpl(connector_.get()));
   top_level_blame_context_.Initialize();
   renderer_scheduler_->SetTopLevelBlameContext(&top_level_blame_context_);
 }
@@ -424,10 +309,11 @@ RendererBlinkPlatformImpl::~RendererBlinkPlatformImpl() {
 }
 
 void RendererBlinkPlatformImpl::Shutdown() {
-#if !defined(OS_ANDROID) && !defined(OS_WIN)
-  // SandboxSupport contains a map of WebFontFamily objects, which hold
-  // WebCStrings, which become invalidated when blink is shut down. Hence, we
-  // need to clear that map now, just before blink::shutdown() is called.
+#if !defined(OS_ANDROID) && !defined(OS_WIN) && !defined(OS_FUCHSIA)
+  // SandboxSupport contains a map of WebFallbackFont objects, which hold
+  // WebStrings and WebVectors, which become invalidated when blink is shut
+  // down. Hence, we need to clear that map now, just before blink::shutdown()
+  // is called.
   sandbox_support_.reset();
 #endif
 }
@@ -439,32 +325,53 @@ std::unique_ptr<blink::WebURLLoader> RendererBlinkPlatformImpl::CreateURLLoader(
     base::SingleThreadTaskRunner* task_runner) {
   ChildThreadImpl* child_thread = ChildThreadImpl::current();
 
-  if (!url_loader_factory_ && child_thread) {
-    if (base::FeatureList::IsEnabled(features::kNetworkService)) {
-      mojom::URLLoaderFactoryPtr factory_ptr;
-      connector_->BindInterface(mojom::kBrowserServiceName, &factory_ptr);
-      url_loader_factory_ = std::move(factory_ptr);
-    } else {
-      mojom::URLLoaderFactoryAssociatedPtr factory_ptr;
-      child_thread->channel()->GetRemoteAssociatedInterface(&factory_ptr);
-      url_loader_factory_ = std::move(factory_ptr);
-    }
-
-    // Attach the CORS-enabled URLLoader if we use the default (non-custom)
-    // network URLLoader.
-    if (request.ShouldProcessCORSOutOfBlink()) {
-      mojom::URLLoaderFactoryPtr factory_ptr;
-      CORSURLLoaderFactory::CreateAndBind(std::move(url_loader_factory_),
-                                          mojo::MakeRequest(&factory_ptr));
-      url_loader_factory_ = std::move(factory_ptr);
-    }
-  }
+  if (!url_loader_factory_ && child_thread)
+    url_loader_factory_ = CreateNetworkURLLoaderFactory();
 
   // There may be no child thread in RenderViewTests.  These tests can still use
   // data URLs to bypass the ResourceDispatcher.
   return base::MakeUnique<WebURLLoaderImpl>(
       child_thread ? child_thread->resource_dispatcher() : nullptr, task_runner,
       url_loader_factory_.get());
+}
+
+scoped_refptr<ChildURLLoaderFactoryGetter>
+RendererBlinkPlatformImpl::CreateDefaultURLLoaderFactoryGetter() {
+  return base::MakeRefCounted<ChildURLLoaderFactoryGetterImpl>(
+      CreateNetworkURLLoaderFactory(),
+      base::FeatureList::IsEnabled(features::kNetworkService)
+          ? base::BindOnce(&GetBlobURLLoaderFactoryGetter)
+          : ChildURLLoaderFactoryGetterImpl::URLLoaderFactoryGetterCallback());
+}
+
+PossiblyAssociatedInterfacePtr<mojom::URLLoaderFactory>
+RendererBlinkPlatformImpl::CreateNetworkURLLoaderFactory() {
+  ChildThreadImpl* child_thread = ChildThreadImpl::current();
+  DCHECK(child_thread);
+  PossiblyAssociatedInterfacePtr<mojom::URLLoaderFactory> url_loader_factory;
+
+  if (base::FeatureList::IsEnabled(features::kNetworkService)) {
+    mojom::URLLoaderFactoryPtr factory_ptr;
+    connector_->BindInterface(mojom::kBrowserServiceName, &factory_ptr);
+    url_loader_factory = std::move(factory_ptr);
+  } else {
+    mojom::URLLoaderFactoryAssociatedPtr factory_ptr;
+    child_thread->channel()->GetRemoteAssociatedInterface(&factory_ptr);
+    url_loader_factory = std::move(factory_ptr);
+  }
+
+  // Attach the CORS-enabled URLLoader for the network URLLoaderFactory. To
+  // avoid thread hops and prevent jank on the main thread from affecting
+  // requests from other threads this object should live on the IO thread.
+  if (base::FeatureList::IsEnabled(features::kOutOfBlinkCORS)) {
+    mojom::URLLoaderFactoryPtr factory_ptr;
+    RenderThreadImpl::current()->GetIOTaskRunner()->PostTask(
+        FROM_HERE, base::BindOnce(&CORSURLLoaderFactory::CreateAndBind,
+                                  url_loader_factory.PassInterface(),
+                                  mojo::MakeRequest(&factory_ptr)));
+    url_loader_factory = std::move(factory_ptr);
+  }
+  return url_loader_factory;
 }
 
 blink::WebThread* RendererBlinkPlatformImpl::CurrentThread() {
@@ -494,7 +401,7 @@ blink::WebFileUtilities* RendererBlinkPlatformImpl::GetFileUtilities() {
 }
 
 blink::WebSandboxSupport* RendererBlinkPlatformImpl::GetSandboxSupport() {
-#if defined(OS_ANDROID) || defined(OS_WIN)
+#if defined(OS_ANDROID) || defined(OS_WIN) || defined(OS_FUCHSIA)
   // These platforms do not require sandbox support.
   return NULL;
 #else
@@ -703,7 +610,7 @@ bool RendererBlinkPlatformImpl::SandboxSupport::LoadFont(NSFont* src_font,
   return FontLoader::CGFontRefFromBuffer(font_data, font_data_size, out);
 }
 
-#elif defined(OS_POSIX) && !defined(OS_ANDROID)
+#elif defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
 
 void RendererBlinkPlatformImpl::SandboxSupport::GetFallbackFontForCharacter(
     blink::WebUChar32 character,

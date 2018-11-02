@@ -4,6 +4,9 @@
 
 #include <stddef.h>
 
+#include "base/bind.h"
+#include "base/bind_helpers.h"
+#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/values.h"
 #include "chrome/common/render_messages.h"
@@ -25,7 +28,8 @@ namespace {
 
 class MockContentSettingsObserver : public ContentSettingsObserver {
  public:
-  explicit MockContentSettingsObserver(content::RenderFrame* render_frame);
+  MockContentSettingsObserver(content::RenderFrame* render_frame,
+                              service_manager::BinderRegistry* registry);
 
   virtual bool Send(IPC::Message* message);
 
@@ -39,11 +43,11 @@ class MockContentSettingsObserver : public ContentSettingsObserver {
 };
 
 MockContentSettingsObserver::MockContentSettingsObserver(
-    content::RenderFrame* render_frame)
-    : ContentSettingsObserver(render_frame, NULL, false),
+    content::RenderFrame* render_frame,
+    service_manager::BinderRegistry* registry)
+    : ContentSettingsObserver(render_frame, NULL, false, registry),
       image_url_("http://www.foo.com/image.jpg"),
-      image_origin_("http://www.foo.com") {
-}
+      image_origin_("http://www.foo.com") {}
 
 bool MockContentSettingsObserver::Send(IPC::Message* message) {
   IPC_BEGIN_MESSAGE_MAP(MockContentSettingsObserver, *message)
@@ -57,10 +61,40 @@ bool MockContentSettingsObserver::Send(IPC::Message* message) {
   return RenderFrameObserver::Send(message);
 }
 
+// Evaluates a boolean |predicate| every time a provisional load is committed in
+// the given |frame| while the instance of this class is in scope, and verifies
+// that the result matches the |expectation|.
+class CommitTimeConditionChecker : public content::RenderFrameObserver {
+ public:
+  using Predicate = base::RepeatingCallback<bool()>;
+
+  CommitTimeConditionChecker(content::RenderFrame* frame,
+                             const Predicate& predicate,
+                             bool expectation)
+      : content::RenderFrameObserver(frame),
+        predicate_(predicate),
+        expectation_(expectation) {}
+
+ protected:
+  // RenderFrameObserver:
+  void OnDestruct() override {}
+  void DidCommitProvisionalLoad(bool is_new_navigation,
+                                bool is_same_document_navigation) override {
+    EXPECT_EQ(expectation_, predicate_.Run());
+  }
+
+ private:
+  Predicate predicate_;
+  bool expectation_;
+
+  DISALLOW_COPY_AND_ASSIGN(CommitTimeConditionChecker);
+};
+
 }  // namespace
 
 TEST_F(ChromeRenderViewTest, DidBlockContentType) {
-  MockContentSettingsObserver observer(view_->GetMainRenderFrame());
+  MockContentSettingsObserver observer(view_->GetMainRenderFrame(),
+                                       registry_.get());
   EXPECT_CALL(observer, OnContentBlocked(CONTENT_SETTINGS_TYPE_COOKIES,
                                          base::string16()));
   observer.DidBlockContentType(CONTENT_SETTINGS_TYPE_COOKIES);
@@ -75,7 +109,8 @@ TEST_F(ChromeRenderViewTest, DidBlockContentType) {
 TEST_F(ChromeRenderViewTest, DISABLED_AllowDOMStorage) {
   // Load some HTML, so we have a valid security origin.
   LoadHTML("<html></html>");
-  MockContentSettingsObserver observer(view_->GetMainRenderFrame());
+  MockContentSettingsObserver observer(view_->GetMainRenderFrame(),
+                                       registry_.get());
   ON_CALL(observer,
           OnAllowDOMStorage(_, _, _, _, _)).WillByDefault(DeleteArg<4>());
   EXPECT_CALL(observer,
@@ -118,27 +153,27 @@ TEST_F(ChromeRenderViewTest, JSBlockSentAfterPageLoad) {
   base::RunLoop().RunUntilIdle();
   render_thread_->sink().ClearMessages();
 
-  // 3. Reload page.
+  const auto HasSentChromeViewHostMsgContentBlocked =
+      [](content::MockRenderThread* render_thread) {
+        return !!render_thread->sink().GetFirstMessageMatching(
+            ChromeViewHostMsg_ContentBlocked::ID);
+      };
+
+  // 3. Reload page. Verify that the notification that javascript was blocked
+  // has not yet been sent at the time when the navigation commits.
+  CommitTimeConditionChecker checker(
+      view_->GetMainRenderFrame(),
+      base::Bind(HasSentChromeViewHostMsgContentBlocked,
+                 base::Unretained(render_thread_.get())),
+      false);
+
   std::string url_str = "data:text/html;charset=utf-8,";
   url_str.append(kHtml);
   GURL url(url_str);
   Reload(url);
   base::RunLoop().RunUntilIdle();
 
-  // 4. Verify that the notification that javascript was blocked is sent after
-  //    the navigation notification is sent.
-  int navigation_index = -1;
-  int block_index = -1;
-  for (size_t i = 0; i < render_thread_->sink().message_count(); ++i) {
-    const IPC::Message* msg = render_thread_->sink().GetMessageAt(i);
-    if (msg->type() == GetNavigationIPCType())
-      navigation_index = i;
-    if (msg->type() == ChromeViewHostMsg_ContentBlocked::ID)
-      block_index = i;
-  }
-  EXPECT_NE(-1, navigation_index);
-  EXPECT_NE(-1, block_index);
-  EXPECT_LT(navigation_index, block_index);
+  EXPECT_TRUE(HasSentChromeViewHostMsgContentBlocked(render_thread_.get()));
 }
 
 TEST_F(ChromeRenderViewTest, PluginsTemporarilyAllowed) {
@@ -174,7 +209,8 @@ TEST_F(ChromeRenderViewTest, PluginsTemporarilyAllowed) {
 }
 
 TEST_F(ChromeRenderViewTest, ImagesBlockedByDefault) {
-  MockContentSettingsObserver mock_observer(view_->GetMainRenderFrame());
+  MockContentSettingsObserver mock_observer(view_->GetMainRenderFrame(),
+                                            registry_.get());
 
   // Load some HTML.
   LoadHTML("<html>Foo</html>");
@@ -212,7 +248,8 @@ TEST_F(ChromeRenderViewTest, ImagesBlockedByDefault) {
 }
 
 TEST_F(ChromeRenderViewTest, ImagesAllowedByDefault) {
-  MockContentSettingsObserver mock_observer(view_->GetMainRenderFrame());
+  MockContentSettingsObserver mock_observer(view_->GetMainRenderFrame(),
+                                            registry_.get());
 
   // Load some HTML.
   LoadHTML("<html>Foo</html>");
@@ -386,7 +423,8 @@ TEST_F(ChromeRenderViewTest, ContentSettingsNoscriptTag) {
 // Checks that same document navigations don't update content settings for the
 // page.
 TEST_F(ChromeRenderViewTest, ContentSettingsSameDocumentNavigation) {
-  MockContentSettingsObserver mock_observer(view_->GetMainRenderFrame());
+  MockContentSettingsObserver mock_observer(view_->GetMainRenderFrame(),
+                                            registry_.get());
   // Load a page which contains a script.
   const char kHtml[] =
       "<html>"
@@ -427,7 +465,8 @@ TEST_F(ChromeRenderViewTest, ContentSettingsSameDocumentNavigation) {
 }
 
 TEST_F(ChromeRenderViewTest, ContentSettingsInterstitialPages) {
-  MockContentSettingsObserver mock_observer(view_->GetMainRenderFrame());
+  MockContentSettingsObserver mock_observer(view_->GetMainRenderFrame(),
+                                            registry_.get());
   // Block scripts.
   RendererContentSettingRules content_setting_rules;
   ContentSettingsForOneType& script_setting_rules =
@@ -477,7 +516,8 @@ TEST_F(ChromeRenderViewTest, ContentSettingsInterstitialPages) {
 }
 
 TEST_F(ChromeRenderViewTest, AutoplayContentSettings) {
-  MockContentSettingsObserver mock_observer(view_->GetMainRenderFrame());
+  MockContentSettingsObserver mock_observer(view_->GetMainRenderFrame(),
+                                            registry_.get());
 
   // Load some HTML.
   LoadHTML("<html>Foo</html>");

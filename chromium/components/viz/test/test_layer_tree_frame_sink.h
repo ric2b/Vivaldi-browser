@@ -8,8 +8,8 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "cc/output/layer_tree_frame_sink.h"
-#include "cc/scheduler/begin_frame_source.h"
 #include "components/viz/common/display/renderer_settings.h"
+#include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/surfaces/local_surface_id_allocator.h"
 #include "components/viz/service/display/display.h"
 #include "components/viz/service/display/display_client.h"
@@ -51,7 +51,7 @@ class TestLayerTreeFrameSinkClient {
 class TestLayerTreeFrameSink : public cc::LayerTreeFrameSink,
                                public CompositorFrameSinkSupportClient,
                                public DisplayClient,
-                               public cc::ExternalBeginFrameSourceClient {
+                               public ExternalBeginFrameSourceClient {
  public:
   // Pass true for |force_disable_reclaim_resources| to act like the Display
   // is out-of-process and can't return resources synchronously.
@@ -78,21 +78,21 @@ class TestLayerTreeFrameSink : public cc::LayerTreeFrameSink,
   Display* display() const { return display_.get(); }
 
   // Will be included with the next SubmitCompositorFrame.
-  void RequestCopyOfOutput(std::unique_ptr<cc::CopyOutputRequest> request);
+  void RequestCopyOfOutput(std::unique_ptr<CopyOutputRequest> request);
 
   // LayerTreeFrameSink implementation.
   bool BindToClient(cc::LayerTreeFrameSinkClient* client) override;
   void DetachFromClient() override;
   void SetLocalSurfaceId(const LocalSurfaceId& local_surface_id) override;
   void SubmitCompositorFrame(cc::CompositorFrame frame) override;
-  void DidNotProduceFrame(const cc::BeginFrameAck& ack) override;
+  void DidNotProduceFrame(const BeginFrameAck& ack) override;
 
   // CompositorFrameSinkSupportClient implementation.
   void DidReceiveCompositorFrameAck(
-      const std::vector<cc::ReturnedResource>& resources) override;
-  void OnBeginFrame(const cc::BeginFrameArgs& args) override;
+      const std::vector<ReturnedResource>& resources) override;
+  void OnBeginFrame(const BeginFrameArgs& args) override;
   void ReclaimResources(
-      const std::vector<cc::ReturnedResource>& resources) override;
+      const std::vector<ReturnedResource>& resources) override;
   void WillDrawSurface(const LocalSurfaceId& local_surface_id,
                        const gfx::Rect& damage_rect) override;
   void OnBeginFramePausedChanged(bool paused) override;
@@ -128,8 +128,8 @@ class TestLayerTreeFrameSink : public cc::LayerTreeFrameSink,
   // Uses surface_manager_.
   std::unique_ptr<CompositorFrameSinkSupport> support_;
 
-  std::unique_ptr<cc::SyntheticBeginFrameSource> begin_frame_source_;
-  cc::ExternalBeginFrameSource external_begin_frame_source_;
+  std::unique_ptr<SyntheticBeginFrameSource> begin_frame_source_;
+  ExternalBeginFrameSource external_begin_frame_source_;
 
   // Uses surface_manager_ and begin_frame_source_.
   std::unique_ptr<Display> display_;
@@ -137,7 +137,7 @@ class TestLayerTreeFrameSink : public cc::LayerTreeFrameSink,
   TestLayerTreeFrameSinkClient* test_client_ = nullptr;
   gfx::Size enlarge_pass_texture_amount_;
 
-  std::vector<std::unique_ptr<cc::CopyOutputRequest>> copy_requests_;
+  std::vector<std::unique_ptr<CopyOutputRequest>> copy_requests_;
 
   base::WeakPtrFactory<TestLayerTreeFrameSink> weak_ptr_factory_;
 };

@@ -72,6 +72,13 @@ void HardwareDisplayController::Disable() {
   for (const auto& controller : crtc_controllers_)
     controller->Disable();
 
+  for (const auto& planes : owned_hardware_planes_) {
+    DrmDevice* drm = planes.first;
+    HardwareDisplayPlaneList* plane_list = planes.second.get();
+    bool ret = drm->plane_manager()->DisableOverlayPlanes(plane_list);
+    LOG_IF(ERROR, !ret) << "Can't disable overlays when disabling HDC.";
+  }
+
   is_disabled_ = true;
 }
 
@@ -107,7 +114,7 @@ bool HardwareDisplayController::ActualSchedulePageFlip(
             [](const OverlayPlane& l, const OverlayPlane& r) {
               return l.z_order < r.z_order;
             });
-  if (pending_planes.front().z_order != 0) {
+  if (pending_planes.front().z_order < 0) {
     std::move(callback).Run(gfx::SwapResult::SWAP_FAILED);
     return false;
   }
@@ -283,8 +290,8 @@ gfx::Size HardwareDisplayController::GetModeSize() const {
                    crtc_controllers_[0]->mode().vdisplay);
 }
 
-uint64_t HardwareDisplayController::GetTimeOfLastFlip() const {
-  uint64_t time = 0;
+base::TimeTicks HardwareDisplayController::GetTimeOfLastFlip() const {
+  base::TimeTicks time;
   for (const auto& controller : crtc_controllers_) {
     if (time < controller->time_of_last_flip())
       time = controller->time_of_last_flip();

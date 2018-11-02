@@ -6,10 +6,9 @@
 #define NGAbsoluteUtils_h
 
 #include "core/CoreExport.h"
-#include "core/layout/ng/geometry/ng_box_strut.h"
+#include "core/layout/MinMaxSize.h"
+#include "core/layout/ng/geometry/ng_logical_size.h"
 #include "core/layout/ng/geometry/ng_physical_size.h"
-#include "core/layout/ng/geometry/ng_static_position.h"
-#include "core/layout/ng/ng_min_max_content_size.h"
 #include "platform/LayoutUnit.h"
 #include "platform/wtf/Optional.h"
 
@@ -17,6 +16,7 @@ namespace blink {
 
 class ComputedStyle;
 class NGConstraintSpace;
+struct NGStaticPosition;
 
 struct CORE_EXPORT NGAbsolutePhysicalPosition {
   NGPhysicalBoxStrut inset;
@@ -30,7 +30,7 @@ struct CORE_EXPORT NGAbsolutePhysicalPosition {
 // The size is computed as NGAbsolutePhysicalPosition.
 // It needs to be computed in 4 stages:
 // 1. If AbsoluteNeedsChildInlineSize compute estimated inline_size using
-//    MinMaxContentSize.ShrinkToFit.
+//    MinMaxSize.ShrinkToFit.
 // 2. Compute part of PhysicalPosition that depends upon child inline size
 //    with ComputePartialAbsoluteWithChildInlineSize.
 // 3. If AbsoluteNeedsChildBlockSize compute estimated block_size by
@@ -46,14 +46,16 @@ CORE_EXPORT bool AbsoluteNeedsChildInlineSize(const ComputedStyle&);
 // estimated block size.
 CORE_EXPORT bool AbsoluteNeedsChildBlockSize(const ComputedStyle&);
 
-// Compute part of position that depends on child's inline_size
-// returns partially filled position.
+// Compute part of position that depends on child's inline_size.
+// replaced_size should be set if and only if element is replaced element.
+// Returns partially filled position.
 CORE_EXPORT NGAbsolutePhysicalPosition
 ComputePartialAbsoluteWithChildInlineSize(
     const NGConstraintSpace& space,
     const ComputedStyle& style,
     const NGStaticPosition&,
-    const Optional<MinMaxContentSize>& child_minmax);
+    const Optional<MinMaxSize>& child_minmax,
+    const Optional<NGLogicalSize>& replaced_size);
 
 // Compute rest of NGPhysicalRect that depends on child's block_size.
 CORE_EXPORT void ComputeFullAbsoluteWithChildBlockSize(
@@ -61,11 +63,9 @@ CORE_EXPORT void ComputeFullAbsoluteWithChildBlockSize(
     const ComputedStyle& style,
     const NGStaticPosition&,
     const Optional<LayoutUnit>& child_block_size,
+    const Optional<NGLogicalSize>& replaced_size,
     NGAbsolutePhysicalPosition* position);
 
-// TODO(atotic) Absolute coordinates for replaced elements
-// ComputeAbsoluteReplaced.
-// https://www.w3.org/TR/css-position-3/#abs-replaced-width
 }  // namespace blink
 
 #endif  // NGAbsoluteUtils_h

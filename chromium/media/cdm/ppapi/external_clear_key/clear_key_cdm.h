@@ -26,8 +26,6 @@
 #define CLEAR_KEY_CDM_USE_FAKE_AUDIO_DECODER
 #endif
 
-class GURL;
-
 namespace media {
 class CdmVideoDecoder;
 class DecoderBuffer;
@@ -37,7 +35,7 @@ class FileIOTestRunner;
 // Clear key implementation of the cdm::ContentDecryptionModule interface.
 class ClearKeyCdm : public ClearKeyCdmInterface {
  public:
-  ClearKeyCdm(Host* host, const std::string& key_system, const GURL& origin);
+  ClearKeyCdm(Host* host, const std::string& key_system);
   ~ClearKeyCdm() override;
 
   // ClearKeyCdmInterface implementation.

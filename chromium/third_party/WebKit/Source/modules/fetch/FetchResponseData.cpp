@@ -7,8 +7,8 @@
 #include "core/typed_arrays/DOMArrayBuffer.h"
 #include "modules/fetch/BodyStreamBuffer.h"
 #include "modules/fetch/FetchHeaderList.h"
+#include "platform/HTTPNames.h"
 #include "platform/bindings/ScriptState.h"
-#include "platform/loader/fetch/CrossOriginAccessControl.h"
 #include "platform/loader/fetch/FetchUtils.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerResponse.h"
@@ -17,39 +17,40 @@ namespace blink {
 
 namespace {
 
-WebServiceWorkerResponseType FetchTypeToWebType(
+network::mojom::FetchResponseType FetchTypeToWebType(
     FetchResponseData::Type fetch_type) {
-  WebServiceWorkerResponseType web_type = kWebServiceWorkerResponseTypeDefault;
+  network::mojom::FetchResponseType web_type =
+      network::mojom::FetchResponseType::kDefault;
   switch (fetch_type) {
     case FetchResponseData::kBasicType:
-      web_type = kWebServiceWorkerResponseTypeBasic;
+      web_type = network::mojom::FetchResponseType::kBasic;
       break;
     case FetchResponseData::kCORSType:
-      web_type = kWebServiceWorkerResponseTypeCORS;
+      web_type = network::mojom::FetchResponseType::kCORS;
       break;
     case FetchResponseData::kDefaultType:
-      web_type = kWebServiceWorkerResponseTypeDefault;
+      web_type = network::mojom::FetchResponseType::kDefault;
       break;
     case FetchResponseData::kErrorType:
-      web_type = kWebServiceWorkerResponseTypeError;
+      web_type = network::mojom::FetchResponseType::kError;
       break;
     case FetchResponseData::kOpaqueType:
-      web_type = kWebServiceWorkerResponseTypeOpaque;
+      web_type = network::mojom::FetchResponseType::kOpaque;
       break;
     case FetchResponseData::kOpaqueRedirectType:
-      web_type = kWebServiceWorkerResponseTypeOpaqueRedirect;
+      web_type = network::mojom::FetchResponseType::kOpaqueRedirect;
       break;
   }
   return web_type;
 }
 
-WebVector<WebString> HeaderSetToWebVector(const HTTPHeaderSet& headers) {
+WebVector<WebString> HeaderSetToWebVector(const WebHTTPHeaderSet& headers) {
   // Can't just pass *headers to the WebVector constructor because HashSet
   // iterators are not stl iterator compatible.
   WebVector<WebString> result(static_cast<size_t>(headers.size()));
   int idx = 0;
   for (const auto& header : headers)
-    result[idx++] = header;
+    result[idx++] = WebString::FromASCII(header);
   return result;
 }
 
@@ -96,18 +97,18 @@ FetchResponseData* FetchResponseData::CreateBasicFilteredResponse() const {
 
 FetchResponseData* FetchResponseData::CreateCORSFilteredResponse() const {
   DCHECK_EQ(type_, kDefaultType);
-  HTTPHeaderSet access_control_expose_header_set;
+  WebHTTPHeaderSet access_control_expose_header_set;
   String access_control_expose_headers;
   if (header_list_->Get(HTTPNames::Access_Control_Expose_Headers,
                         access_control_expose_headers)) {
-    CrossOriginAccessControl::ParseAccessControlExposeHeadersAllowList(
+    WebCORS::ParseAccessControlExposeHeadersAllowList(
         access_control_expose_headers, access_control_expose_header_set);
   }
   return CreateCORSFilteredResponse(access_control_expose_header_set);
 }
 
 FetchResponseData* FetchResponseData::CreateCORSFilteredResponse(
-    const HTTPHeaderSet& exposed_headers) const {
+    const WebHTTPHeaderSet& exposed_headers) const {
   DCHECK_EQ(type_, kDefaultType);
   // "A CORS filtered response is a filtered response whose type is |CORS|,
   // header list excludes all headers in internal response's header list,
@@ -121,13 +122,15 @@ FetchResponseData* FetchResponseData::CreateCORSFilteredResponse(
   response->SetURLList(url_list_);
   for (const auto& header : header_list_->List()) {
     const String& name = header.first;
-    const bool explicitly_exposed = exposed_headers.Contains(name);
-    if (CrossOriginAccessControl::IsOnAccessControlResponseHeaderWhitelist(
-            name) ||
+    const bool explicitly_exposed =
+        exposed_headers.find(name.Ascii().data()) != exposed_headers.end();
+    if (WebCORS::IsOnAccessControlResponseHeaderWhitelist(name) ||
         (explicitly_exposed &&
          !FetchUtils::IsForbiddenResponseHeaderName(name))) {
-      if (explicitly_exposed)
-        response->cors_exposed_header_names_.insert(name);
+      if (explicitly_exposed) {
+        response->cors_exposed_header_names_.emplace(name.Ascii().data(),
+                                                     name.Ascii().length());
+      }
       response->header_list_->Append(name, header.second);
     }
   }

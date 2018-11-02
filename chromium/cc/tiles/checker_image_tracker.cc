@@ -12,39 +12,41 @@
 
 namespace cc {
 namespace {
-// The minimum size of an image that we should consider checkering.
-size_t kMinImageSizeToCheckerBytes = 512 * 1024;
-
 // The enum for recording checker-imaging decision UMA metric. Keep this
 // consistent with the ordering in CheckerImagingDecision in enums.xml.
 // Note that this enum is used to back a UMA histogram so should be treated as
 // append only.
 enum class CheckerImagingDecision {
-  kCanChecker,
+  kCanChecker = 0,
 
   // Animation State vetoes.
-  kVetoedAnimatedImage,
-  kVetoedVideoFrame,
-  kVetoedAnimationUnknown,
-  kVetoedMultipartImage,
+  kVetoedAnimatedImage = 1,
+  kVetoedVideoFrame = 2,
+  // TODO(vmpstr): 3 used to be kVetoedAnimationUnknown, remove it somehow?
+  kVetoedMultipartImage = 4,
 
   // Load state vetoes.
-  kVetoedPartiallyLoadedImage,
-  kVetoedLoadStateUnknown,
+  kVetoedPartiallyLoadedImage = 5,
+  // TODO(vmpstr): 6 used to be kVetoedLoadStateUnknown, remove it somehow?
 
   // Size associated vetoes.
-  kVetoedSmallerThanCheckeringSize,
-  kVetoedLargerThanCacheSize,
+  kVetoedSmallerThanCheckeringSize = 7,
+  kVetoedLargerThanCacheSize = 8,
+
+  // Vetoed because checkering of images has been disabled.
+  kVetoedForceDisable = 9,
+
+  // Vetoed because we only checker images on tiles required for activation.
+  kVetoedNotRequiredForActivation = 10,
 
   kCheckerImagingDecisionCount,
 };
 
 std::string ToString(PaintImage::Id paint_image_id,
-                     SkImageId sk_image_id,
                      CheckerImagingDecision decision) {
   std::ostringstream str;
-  str << "paint_image_id[" << paint_image_id << "] sk_image_id[" << sk_image_id
-      << "] decision[" << static_cast<int>(decision) << "]";
+  str << "paint_image_id[" << paint_image_id << "] decision["
+      << static_cast<int>(decision) << "]";
   return str.str();
 }
 
@@ -53,8 +55,6 @@ CheckerImagingDecision GetAnimationDecision(const PaintImage& image) {
     return CheckerImagingDecision::kVetoedMultipartImage;
 
   switch (image.animation_type()) {
-    case PaintImage::AnimationType::UNKNOWN:
-      return CheckerImagingDecision::kVetoedAnimationUnknown;
     case PaintImage::AnimationType::ANIMATED:
       return CheckerImagingDecision::kVetoedAnimatedImage;
     case PaintImage::AnimationType::VIDEO:
@@ -69,8 +69,6 @@ CheckerImagingDecision GetAnimationDecision(const PaintImage& image) {
 
 CheckerImagingDecision GetLoadDecision(const PaintImage& image) {
   switch (image.completion_state()) {
-    case PaintImage::CompletionState::UNKNOWN:
-      return CheckerImagingDecision::kVetoedLoadStateUnknown;
     case PaintImage::CompletionState::DONE:
       return CheckerImagingDecision::kCanChecker;
     case PaintImage::CompletionState::PARTIALLY_DONE:
@@ -81,14 +79,22 @@ CheckerImagingDecision GetLoadDecision(const PaintImage& image) {
   return CheckerImagingDecision::kCanChecker;
 }
 
-CheckerImagingDecision GetSizeDecision(const PaintImage& image,
+CheckerImagingDecision GetSizeDecision(const SkIRect& src_rect,
+                                       size_t min_bytes,
                                        size_t max_bytes) {
+  // Ideally we would use the original image rect here to estimate the decode
+  // duration for this image. But in the case of sprites/atlases, where small
+  // subsets of this image are used across multiple tiles, re-invalidating for
+  // replacing these images can incur heavy raster cost. So we use the src_rect
+  // here instead.
+  // TODO(khushalsagar): May be we should look at the invalidation rect for an
+  // image here to detect these cases instead?
   base::CheckedNumeric<size_t> checked_size = 4;
-  checked_size *= image.sk_image()->width();
-  checked_size *= image.sk_image()->height();
+  checked_size *= src_rect.width();
+  checked_size *= src_rect.height();
   size_t size = checked_size.ValueOrDefault(std::numeric_limits<size_t>::max());
 
-  if (size < kMinImageSizeToCheckerBytes)
+  if (size < min_bytes)
     return CheckerImagingDecision::kVetoedSmallerThanCheckeringSize;
   else if (size > max_bytes)
     return CheckerImagingDecision::kVetoedLargerThanCacheSize;
@@ -97,6 +103,8 @@ CheckerImagingDecision GetSizeDecision(const PaintImage& image,
 }
 
 CheckerImagingDecision GetCheckerImagingDecision(const PaintImage& image,
+                                                 const SkIRect& src_rect,
+                                                 size_t min_bytes,
                                                  size_t max_bytes) {
   CheckerImagingDecision decision = GetAnimationDecision(image);
   if (decision != CheckerImagingDecision::kCanChecker)
@@ -106,7 +114,7 @@ CheckerImagingDecision GetCheckerImagingDecision(const PaintImage& image,
   if (decision != CheckerImagingDecision::kCanChecker)
     return decision;
 
-  return GetSizeDecision(image, max_bytes);
+  return GetSizeDecision(src_rect, min_bytes, max_bytes);
 }
 
 }  // namespace
@@ -121,10 +129,12 @@ CheckerImageTracker::ImageDecodeRequest::ImageDecodeRequest(
 
 CheckerImageTracker::CheckerImageTracker(ImageController* image_controller,
                                          CheckerImageTrackerClient* client,
-                                         bool enable_checker_imaging)
+                                         bool enable_checker_imaging,
+                                         size_t min_image_bytes_to_checker)
     : image_controller_(image_controller),
       client_(client),
       enable_checker_imaging_(enable_checker_imaging),
+      min_image_bytes_to_checker_(min_image_bytes_to_checker),
       weak_factory_(this) {}
 
 CheckerImageTracker::~CheckerImageTracker() = default;
@@ -251,7 +261,8 @@ void CheckerImageTracker::DidFinishImageDecode(
 }
 
 bool CheckerImageTracker::ShouldCheckerImage(const DrawImage& draw_image,
-                                             WhichTree tree) {
+                                             WhichTree tree,
+                                             bool required_for_activation) {
   const PaintImage& image = draw_image.paint_image();
   PaintImage::Id image_id = image.stable_id();
   TRACE_EVENT1("cc", "CheckerImageTracker::ShouldCheckerImage", "image_id",
@@ -293,7 +304,19 @@ bool CheckerImageTracker::ShouldCheckerImage(const DrawImage& draw_image,
     // frames, checkering which would cause each video frame to flash and
     // therefore should not be checkered.
     CheckerImagingDecision decision = GetCheckerImagingDecision(
-        image, image_controller_->image_cache_max_limit_bytes());
+        image, draw_image.src_rect(), min_image_bytes_to_checker_,
+        image_controller_->image_cache_max_limit_bytes());
+    if (decision == CheckerImagingDecision::kCanChecker) {
+      if (force_disabled_) {
+        // Get the decision for all the veto reasons first, so we can UMA the
+        // images that were not checkered only because checker-imaging was force
+        // disabled.
+        decision = CheckerImagingDecision::kVetoedForceDisable;
+      } else if (!required_for_activation) {
+        decision = CheckerImagingDecision::kVetoedNotRequiredForActivation;
+      }
+    }
+
     it->second.policy = decision == CheckerImagingDecision::kCanChecker
                             ? DecodePolicy::ASYNC
                             : DecodePolicy::SYNC;
@@ -304,7 +327,7 @@ bool CheckerImageTracker::ShouldCheckerImage(const DrawImage& draw_image,
 
     TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                  "CheckerImageTracker::CheckerImagingDecision", "image_params",
-                 ToString(image_id, image.sk_image()->uniqueID(), decision));
+                 ToString(image_id, decision));
   }
 
   // Update the decode state from the latest image we have seen. Note that it
@@ -372,11 +395,12 @@ void CheckerImageTracker::ScheduleNextImageDecode() {
     if (it->second.policy != DecodePolicy::ASYNC)
       continue;
 
-    draw_image = DrawImage(candidate, candidate.sk_image()->bounds(),
-                           it->second.filter_quality,
-                           SkMatrix::MakeScale(it->second.scale.width(),
-                                               it->second.scale.height()),
-                           it->second.color_space);
+    draw_image = DrawImage(
+        candidate, SkIRect::MakeWH(candidate.width(), candidate.height()),
+        it->second.filter_quality,
+        SkMatrix::MakeScale(it->second.scale.width(),
+                            it->second.scale.height()),
+        it->second.color_space);
     outstanding_image_decode_.emplace(candidate);
     break;
   }
@@ -397,7 +421,7 @@ void CheckerImageTracker::ScheduleNextImageDecode() {
           draw_image, base::Bind(&CheckerImageTracker::DidFinishImageDecode,
                                  weak_factory_.GetWeakPtr(), image_id));
 
-  image_id_to_decode_.emplace(image_id, base::MakeUnique<ScopedDecodeHolder>(
+  image_id_to_decode_.emplace(image_id, std::make_unique<ScopedDecodeHolder>(
                                             image_controller_, request_id));
 }
 

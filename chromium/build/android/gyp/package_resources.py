@@ -45,7 +45,7 @@ _CHROME_TO_ANDROID_LOCALE_MAP = {
 #     unzip -l $FILE_AP_ | cut -c31- | grep res/draw | cut -d'/' -f 2 | sort \
 #     | uniq | grep -- -tvdpi- | cut -c10-
 # and then manually sorted.
-# Note that we can't just do a cross-product of dimentions because the filenames
+# Note that we can't just do a cross-product of dimensions because the filenames
 # become too big and aapt fails to create the files.
 # This leaves all default drawables (mdpi) in the main apk. Android gets upset
 # though if any drawables are missing from the default drawables/ directory.
@@ -106,10 +106,9 @@ def _ParseArgs(args):
                     help='path to the Android SDK jar.')
   parser.add_option('--aapt-path',
                     help='path to the Android aapt tool')
-
-  parser.add_option('--configuration-name',
-                    help='Gyp\'s configuration name (Debug or Release).')
-
+  parser.add_option('--debuggable',
+                    action='store_true',
+                    help='Whether to add android:debuggable="true"')
   parser.add_option('--android-manifest', help='AndroidManifest.xml path')
   parser.add_option('--version-code', help='Version code for apk.')
   parser.add_option('--version-name', help='Version name for apk.')
@@ -160,9 +159,8 @@ def _ParseArgs(args):
     parser.error('No positional arguments should be given.')
 
   # Check that required options have been provided.
-  required_options = ('android_sdk_jar', 'aapt_path', 'configuration_name',
-                      'android_manifest', 'version_code', 'version_name',
-                      'apk_path')
+  required_options = ('android_sdk_jar', 'aapt_path', 'android_manifest',
+                      'version_code', 'version_name', 'apk_path')
 
   build_utils.CheckOptions(options, parser, required=required_options)
 
@@ -308,7 +306,7 @@ def _ConstructMostAaptArgs(options):
     for lang in options.language_splits:
       package_command.extend(('--split', lang))
 
-  if 'Debug' in options.configuration_name:
+  if options.debuggable:
     package_command += ['--debug-mode']
 
   if options.locale_whitelist:

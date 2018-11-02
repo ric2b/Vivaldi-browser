@@ -20,7 +20,7 @@ struct HistogramValue {
 };
 
 // WARNING: The value specified here for a type should match exactly the value
-// specified in the ContentType enum in histograms.xml. Since these values are
+// specified in the ContentType enum in enums.xml. Since these values are
 // used for histograms, please do not reuse the same value for a different
 // content setting. Always append to the end and increment.
 //
@@ -28,7 +28,7 @@ struct HistogramValue {
 // content settings type name instead.
 //
 // The array size must be explicit for the static_asserts below.
-constexpr size_t kNumHistogramValues = 30;
+constexpr size_t kNumHistogramValues = 33;
 constexpr HistogramValue kHistogramValue[kNumHistogramValues] = {
     {CONTENT_SETTINGS_TYPE_COOKIES, 0},
     {CONTENT_SETTINGS_TYPE_IMAGES, 1},
@@ -60,6 +60,9 @@ constexpr HistogramValue kHistogramValue[kNumHistogramValues] = {
     {CONTENT_SETTINGS_TYPE_PASSWORD_PROTECTION, 34},
     {CONTENT_SETTINGS_TYPE_MEDIA_ENGAGEMENT, 35},
     {CONTENT_SETTINGS_TYPE_SOUND, 36},
+    {CONTENT_SETTINGS_TYPE_CLIENT_HINTS, 37},
+    {CONTENT_SETTINGS_TYPE_SENSORS, 38},
+    {CONTENT_SETTINGS_TYPE_ACCESSIBILITY_EVENTS, 39},
 };
 
 }  // namespace
@@ -119,7 +122,7 @@ ContentSettingPatternSource& ContentSettingPatternSource::operator=(
   primary_pattern = other.primary_pattern;
   secondary_pattern = other.secondary_pattern;
   if (other.setting_value)
-    setting_value = base::MakeUnique<base::Value>(*(other.setting_value));
+    setting_value = base::MakeUnique<base::Value>(other.setting_value->Clone());
   source = other.source;
   incognito = other.incognito;
   return *this;

@@ -99,6 +99,10 @@ class WebGLConformanceExpectations(GpuTestExpectations):
     self.Fail('conformance/extensions/webgl-draw-buffers-feedback-loop.html',
         bug=1619) # angle bug ID
 
+    # Timing out on multiple platforms right now.
+    self.Skip('conformance/glsl/bugs/sampler-array-struct-function-arg.html',
+        bug=757097)
+
     # We need to add WebGL 1 check in command buffer that format/type from
     # TexSubImage2D have to match the current texture's.
     self.Fail('conformance/textures/misc/tex-sub-image-2d-bad-args.html',
@@ -111,9 +115,10 @@ class WebGLConformanceExpectations(GpuTestExpectations):
     self.Fail('conformance/glsl/misc/uninitialized-local-global-variables.html',
         bug=1966) # angle bug ID
 
-    # Don't run performance tests on debug builds
+    # This test needs to be rewritten to measure its expected
+    # performance; it's currently too flaky even on release bots.
     self.Skip('conformance/rendering/texture-switch-performance.html',
-        ['debug', 'debug_x64'], bug=735483)
+        bug=735483)
 
     # Passthrough command decoder
     self.Fail('conformance/extensions/webgl-draw-buffers.html',
@@ -195,6 +200,8 @@ class WebGLConformanceExpectations(GpuTestExpectations):
         ['win', 'amd', 'passthrough', 'd3d11'], bug=685232)
 
     # Win / NVIDIA / Passthrough command decoder / D3D11
+    self.Flaky('conformance/extensions/oes-texture-half-float-with-video.html',
+        ['win7', 'nvidia', 'passthrough', 'd3d11', 'debug'], bug=751849)
     self.Flaky('conformance/programs/program-test.html',
         ['win', 'nvidia', 'passthrough', 'd3d11'], bug=737016)
 
@@ -225,12 +232,18 @@ class WebGLConformanceExpectations(GpuTestExpectations):
     self.Fail('conformance/canvas/' +
         'framebuffer-bindings-affected-by-to-data-url.html',
         ['win10', ('nvidia', 0x1cb3), 'd3d9'], bug=680754)
+    self.Flaky('conformance/extensions/oes-texture-float-with-video.html',
+        ['win10', ('nvidia', 0x1cb3), 'd3d9'], bug=750896)
     self.Fail('conformance/limits/gl-max-texture-dimensions.html',
         ['win10', ('nvidia', 0x1cb3)], bug=715001)
     self.Fail('conformance/ogles/GL/atan/atan_001_to_008.html',
         ['win10', ('nvidia', 0x1cb3), 'd3d9'], bug=737018)
     self.Fail('conformance/ogles/GL/cos/cos_001_to_006.html',
         ['win10', ('nvidia', 0x1cb3), 'd3d9'], bug=680754)
+    self.Flaky('conformance/textures/image_bitmap_from_video/*',
+        ['win10', ('nvidia', 0x1cb3), 'd3d9'], bug=750896)
+    self.Flaky('conformance/textures/video/*',
+        ['win10', ('nvidia', 0x1cb3), 'd3d9'], bug=750896)
 
     # Win10 / NVIDIA Quadro P400 failures
     self.Flaky('conformance/textures/image_bitmap_from_video/' +
@@ -372,6 +385,16 @@ class WebGLConformanceExpectations(GpuTestExpectations):
     self.Flaky('conformance/renderbuffers/framebuffer-state-restoration.html',
         ['win', 'intel', 'passthrough', 'd3d11'], bug=602688)
 
+    # Win 10 / Intel / Passthrough command decoder
+    self.Fail('conformance/extensions/oes-texture-float-with-video.html',
+        ['win10', 'intel', 'passthrough', 'd3d11'], bug=750813)
+    self.Fail('conformance/extensions/oes-texture-half-float-with-video.html',
+        ['win10', 'intel', 'passthrough', 'd3d11'], bug=750813)
+    self.Fail('conformance/textures/image_bitmap_from_video/*',
+        ['win10', 'intel', 'passthrough', 'd3d11'], bug=750813)
+    self.Fail('conformance/textures/video/*',
+        ['win10', 'intel', 'passthrough', 'd3d11'], bug=750813)
+
     # Mac failures
     self.Flaky('conformance/extensions/oes-texture-float-with-video.html',
         ['mac', 'no_passthrough'], bug=599272)
@@ -383,8 +406,10 @@ class WebGLConformanceExpectations(GpuTestExpectations):
         ['mac', 'amd', 'no_passthrough'], bug=625365)
     self.Fail('conformance/rendering/clipping-wide-points.html',
         ['mac', 'amd'], bug=642822)
-    self.Fail('conformance/rendering/texture-switch-performance.html',
-        ['mac', 'amd', 'release'], bug=735483)
+    # TODO(kbr): uncomment the following exepectation after test has
+    # been made more robust.
+    # self.Fail('conformance/rendering/texture-switch-performance.html',
+    #     ['mac', 'amd', 'release'], bug=735483)
 
     # Mac Retina NVidia failures
     self.Fail('conformance/attribs/gl-disabled-vertex-attrib.html',
@@ -539,6 +564,9 @@ class WebGLConformanceExpectations(GpuTestExpectations):
     self.Fail('conformance/glsl/bugs/' +
               'varying-arrays-should-not-be-reversed.html',
         ['android', ('qualcomm', 'Adreno (TM) 330')], bug=709704)
+    self.Flaky('conformance/textures/video/tex-2d-rgb-rgb-unsigned_byte.html',
+        ['android', 'android-chromium', ('qualcomm', 'Adreno (TM) 330')],
+        bug=752291)
 
     # Nexus 5X
     # This one is causing intermittent timeouts on the device, and it

@@ -300,6 +300,13 @@
       initial: true,
     },
 
+    // Determines whether the barrel on stylus input should be used for selecting
+    // text and dragging.
+    {
+      name: "barrelButtonForDragEnabled",
+      initial: false,
+    },
+
     {
       name: "syncXHRInDocumentsEnabled",
       initial: true,
@@ -603,6 +610,14 @@
       invalidate: "DOMWorlds",
     },
 
+    // Forces TouchEventFeatureDetection conditional feature for all main
+    // worlds in the page. Used by inspector to emulate touch on devices
+    // which don't support it naturally.
+    {
+      name: "forceTouchEventFeatureDetectionForInspector",
+      initial: false,
+    },
+
     // Compensates for poor text legibility on mobile devices. This value is
     // multiplied by the font scale factor when performing text autosizing of
     // websites that do not set an explicit viewport description.
@@ -860,13 +875,6 @@
       type: "PassiveListenerDefault",
     },
 
-    // Use default interpolation quality to scale bitmap images if quality is not determined
-    // in other ways. This can help us writing reftests containing scaled images.
-    {
-      name: "useDefaultImageInterpolationQuality",
-      initial: false,
-    },
-
     // Whether the CSSPreloadScanner is used for externally CSS preloads. NoPreload
     // indicates that the scanner will be used, but no preloads issued.
     {
@@ -965,8 +973,12 @@
       type: "HighContrastImagePolicy",
     },
     {
+      name: "mediaDownloadInProductHelpEnabled",
+      initial: false,
+    },
+    {
       name: "forceDisplayList2dCanvasEnabled",
       initial: false,
-    }
+    },
   ],
 }

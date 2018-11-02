@@ -89,18 +89,17 @@
 #endif  // defined(OS_CHROMEOS)
 
 #if defined(USE_NSS_CERTS)
-#include "chrome/browser/ui/webui/settings/certificates_handler.h"
+#include "chrome/browser/ui/webui/certificates_handler.h"
 #elif defined(OS_WIN) || defined(OS_MACOSX)
 #include "chrome/browser/ui/webui/settings/native_certificates_handler.h"
 #endif  // defined(USE_NSS_CERTS)
 
-namespace settings {
+#if defined(SAFE_BROWSING_DB_LOCAL)
+#include "chrome/browser/safe_browsing/chrome_password_protection_service.h"
+#include "chrome/browser/ui/webui/settings/change_password_handler.h"
+#endif
 
-bool IsValidOrigin(const GURL& url) {
-  const GURL origin = url.GetOrigin();
-  return origin == GURL(chrome::kChromeUISettingsURL).GetOrigin() ||
-         origin == GURL(chrome::kChromeUIMdSettingsURL).GetOrigin();
-}
+namespace settings {
 
 // static
 void MdSettingsUI::RegisterProfilePrefs(
@@ -112,7 +111,7 @@ void MdSettingsUI::RegisterProfilePrefs(
   registry->RegisterBooleanPref(prefs::kImportDialogSearchEngine, true);
 }
 
-MdSettingsUI::MdSettingsUI(content::WebUI* web_ui, const GURL& url)
+MdSettingsUI::MdSettingsUI(content::WebUI* web_ui)
     : content::WebUIController(web_ui),
       WebContentsObserver(web_ui->GetWebContents()) {
 #if BUILDFLAG(USE_VULCANIZE)
@@ -123,7 +122,8 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui, const GURL& url)
   AddSettingsPageUIHandler(base::MakeUnique<AppearanceHandler>(web_ui));
 
 #if defined(USE_NSS_CERTS)
-  AddSettingsPageUIHandler(base::MakeUnique<CertificatesHandler>(false));
+  AddSettingsPageUIHandler(
+      base::MakeUnique<certificate_manager::CertificatesHandler>());
 #elif defined(OS_WIN) || defined(OS_MACOSX)
   AddSettingsPageUIHandler(base::MakeUnique<NativeCertificatesHandler>());
 #endif  // defined(USE_NSS_CERTS)
@@ -186,13 +186,11 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui, const GURL& url)
   AddSettingsPageUIHandler(base::MakeUnique<SystemHandler>());
 #endif
 
-  // Host must be derived from the visible URL, since this might be serving
-  // either chrome://settings or chrome://md-settings.
-  CHECK(IsValidOrigin(url));
-
   content::WebUIDataSource* html_source =
-      content::WebUIDataSource::Create(url.host());
-  html_source->AddString("hostname", url.host());
+      content::WebUIDataSource::Create(chrome::kChromeUISettingsHost);
+  // This is used by a <base> tag in c/b/r/settings/BUILD.gn. TODO(dbeam): Is
+  // this still needed now that there's only 1 host name?
+  html_source->AddString("hostname", chrome::kChromeUISettingsHost);
 
 #if defined(OS_WIN)
   if (base::FeatureList::IsEnabled(safe_browsing::kInBrowserCleanerUIFeature)) {
@@ -216,6 +214,13 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui, const GURL& url)
   }
 #endif  // defined(OS_WIN)
 
+#if defined(SAFE_BROWSING_DB_LOCAL)
+  AddSettingsPageUIHandler(base::MakeUnique<ChangePasswordHandler>(profile));
+  html_source->AddBoolean("changePasswordEnabled",
+                          safe_browsing::ChromePasswordProtectionService::
+                              ShouldShowChangePasswordSettingUI(profile));
+#endif
+
 #if defined(OS_CHROMEOS)
   chromeos::settings::EasyUnlockSettingsHandler* easy_unlock_handler =
       chromeos::settings::EasyUnlockSettingsHandler::Create(html_source,
@@ -231,6 +236,9 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui, const GURL& url)
   html_source->AddBoolean(
       "quickUnlockEnabled",
       chromeos::quick_unlock::IsPinEnabled(profile->GetPrefs()));
+  html_source->AddBoolean(
+      "quickUnlockDisabledByPolicy",
+      chromeos::quick_unlock::IsPinDisabledByPolicy(profile->GetPrefs()));
   html_source->AddBoolean("fingerprintUnlockEnabled",
                           chromeos::quick_unlock::IsFingerprintEnabled());
   html_source->AddBoolean("hasInternalStylus",
@@ -302,9 +310,8 @@ MdSettingsUI::~MdSettingsUI() {
 }
 
 void MdSettingsUI::AddSettingsPageUIHandler(
-    std::unique_ptr<SettingsPageUIHandler> handler) {
+    std::unique_ptr<content::WebUIMessageHandler> handler) {
   DCHECK(handler);
-  handlers_.insert(handler.get());
   web_ui()->AddMessageHandler(std::move(handler));
 }
 

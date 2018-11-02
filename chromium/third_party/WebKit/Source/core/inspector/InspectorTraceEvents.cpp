@@ -15,7 +15,7 @@
 #include "core/css/invalidation/InvalidationSet.h"
 #include "core/dom/DOMNodeIds.h"
 #include "core/dom/StyleChangeReason.h"
-#include "core/events/Event.h"
+#include "core/dom/events/Event.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/html/HTMLFrameOwnerElement.h"
@@ -165,6 +165,7 @@ void InspectorTraceEvents::DidFinishLoading(unsigned long identifier,
 }
 
 void InspectorTraceEvents::DidFailLoading(unsigned long identifier,
+                                          DocumentLoader* loader,
                                           const ResourceError&) {
   TRACE_EVENT_INSTANT1(
       "devtools.timeline", "ResourceFinish", TRACE_EVENT_SCOPE_THREAD, "data",
@@ -211,6 +212,14 @@ void InspectorTraceEvents::Did(const probe::CallFunction& probe) {
   TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"),
                        "UpdateCounters", TRACE_EVENT_SCOPE_THREAD, "data",
                        InspectorUpdateCountersEvent::Data());
+}
+
+void InspectorTraceEvents::PaintTiming(Document* document,
+                                       const char* name,
+                                       double timestamp) {
+  TRACE_EVENT_MARK_WITH_TIMESTAMP1("loading,rail,devtools.timeline", name,
+                                   TraceEvent::ToTraceTimestamp(timestamp),
+                                   "frame", document->GetFrame());
 }
 
 namespace {
@@ -455,9 +464,6 @@ const char
 const char
     InspectorStyleInvalidatorInvalidateEvent::kInvalidationSetMatchedTagName[] =
         "Invalidation set matched tagName";
-const char
-    InspectorStyleInvalidatorInvalidateEvent::kPreventStyleSharingForParent[] =
-        "Prevent style sharing for parent";
 
 namespace InspectorStyleInvalidatorInvalidateEvent {
 std::unique_ptr<TracedValue> FillCommonPart(ContainerNode& node,
@@ -1056,11 +1062,21 @@ std::unique_ptr<TracedValue> InspectorFunctionCallEvent::Data(
 }
 
 std::unique_ptr<TracedValue> InspectorPaintImageEvent::Data(
-    const LayoutImage& layout_image) {
+    const LayoutImage& layout_image,
+    const FloatRect& src_rect,
+    const FloatRect& dest_rect) {
   std::unique_ptr<TracedValue> value = TracedValue::Create();
   SetGeneratingNodeInfo(value.get(), &layout_image, "nodeId");
   if (const ImageResourceContent* resource = layout_image.CachedImage())
     value->SetString("url", resource->Url().GetString());
+
+  value->SetInteger("x", dest_rect.X());
+  value->SetInteger("y", dest_rect.Y());
+  value->SetInteger("width", dest_rect.Width());
+  value->SetInteger("height", dest_rect.Height());
+  value->SetInteger("srcWidth", src_rect.Width());
+  value->SetInteger("srcHeight", src_rect.Height());
+
   return value;
 }
 
@@ -1076,12 +1092,22 @@ std::unique_ptr<TracedValue> InspectorPaintImageEvent::Data(
 
 std::unique_ptr<TracedValue> InspectorPaintImageEvent::Data(
     Node* node,
-    const StyleImage& style_image) {
+    const StyleImage& style_image,
+    const FloatRect& src_rect,
+    const FloatRect& dest_rect) {
   std::unique_ptr<TracedValue> value = TracedValue::Create();
   if (node)
     SetNodeInfo(value.get(), node, "nodeId", nullptr);
   if (const ImageResourceContent* resource = style_image.CachedImage())
     value->SetString("url", resource->Url().GetString());
+
+  value->SetInteger("x", dest_rect.X());
+  value->SetInteger("y", dest_rect.Y());
+  value->SetInteger("width", dest_rect.Width());
+  value->SetInteger("height", dest_rect.Height());
+  value->SetInteger("srcWidth", src_rect.Width());
+  value->SetInteger("srcHeight", src_rect.Height());
+
   return value;
 }
 

@@ -15,6 +15,10 @@
 #include "ui/views/mouse_watcher.h"
 #include "ui/views/views_export.h"
 
+namespace ui {
+class LayerOwner;
+}
+
 namespace views {
 class BoxLayout;
 class View;
@@ -22,10 +26,6 @@ class Widget;
 }
 
 namespace views {
-
-namespace internal {
-class TrayBubbleContentMask;
-}
 
 // Specialized bubble view for bubbles associated with a tray icon (e.g. the
 // Ash status area). Mostly this handles custom anchor location and arrow and
@@ -91,6 +91,8 @@ class VIEWS_EXPORT TrayBubbleView : public BubbleDialogDelegateView,
     int max_width = 0;
     int max_height = 0;
     bool close_on_deactivate = true;
+    // Indicates whether tray bubble view is shown by click on the tray view.
+    bool show_by_click = false;
     // If not provided, the bg color will be derived from the NativeTheme.
     base::Optional<SkColor> bg_color;
   };
@@ -200,7 +202,7 @@ class VIEWS_EXPORT TrayBubbleView : public BubbleDialogDelegateView,
   // the latter ensures we don't leak it before passing off ownership.
   BubbleBorder* bubble_border_;
   std::unique_ptr<views::BubbleBorder> owned_bubble_border_;
-  std::unique_ptr<internal::TrayBubbleContentMask> bubble_content_mask_;
+  std::unique_ptr<ui::LayerOwner> bubble_content_mask_;
   bool is_gesture_dragging_;
 
   // True once the mouse cursor was actively moved by the user over the bubble.

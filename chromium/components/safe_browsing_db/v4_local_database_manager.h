@@ -12,12 +12,14 @@
 #include <unordered_set>
 
 #include "base/memory/weak_ptr.h"
+#include "components/safe_browsing/proto/webui.pb.h"
 #include "components/safe_browsing_db/database_manager.h"
 #include "components/safe_browsing_db/hit_report.h"
 #include "components/safe_browsing_db/v4_database.h"
 #include "components/safe_browsing_db/v4_get_hash_protocol_manager.h"
 #include "components/safe_browsing_db/v4_protocol_manager_util.h"
 #include "components/safe_browsing_db/v4_update_protocol_manager.h"
+#include "content/public/browser/notification_service.h"
 #include "url/gurl.h"
 
 namespace safe_browsing {
@@ -33,6 +35,16 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
   static scoped_refptr<V4LocalDatabaseManager> Create(
       const base::FilePath& base_path,
       ExtendedReportingLevelCallback extended_reporting_level_callback);
+
+  // Populates the protobuf with the database data.
+  void CollectDatabaseManagerInfo(
+      DatabaseManagerInfo* v4_database_info,
+      FullHashCacheInfo* full_hash_cache_info) const;
+
+  // Return an instance of the V4LocalDatabaseManager object
+  static const V4LocalDatabaseManager* current_local_database_manager() {
+    return current_local_database_manager_;
+  }
 
   //
   // SafeBrowsingDatabaseManager implementation
@@ -80,14 +92,10 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
   // Must be initialized by calling StartOnIOThread() before using.
   V4LocalDatabaseManager(
       const base::FilePath& base_path,
-      ExtendedReportingLevelCallback extended_reporting_level_callback);
+      ExtendedReportingLevelCallback extended_reporting_level_callback,
+      scoped_refptr<base::SequencedTaskRunner> task_runner_for_tests);
 
   ~V4LocalDatabaseManager() override;
-
-  void SetTaskRunnerForTest(
-      const scoped_refptr<base::SequencedTaskRunner>& task_runner) {
-    task_runner_ = task_runner;
-  }
 
   enum class ClientCallbackType {
     // This represents the case when we're trying to determine if a URL is
@@ -183,6 +191,7 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
   friend class V4LocalDatabaseManagerTest;
   FRIEND_TEST_ALL_PREFIXES(V4LocalDatabaseManagerTest,
                            TestGetSeverestThreatTypeAndMetadata);
+  FRIEND_TEST_ALL_PREFIXES(V4LocalDatabaseManagerTest, NotificationOnUpdate);
 
   // The checks awaiting a full hash response from SafeBrowsing service.
   typedef std::unordered_set<const PendingCheck*> PendingChecks;
@@ -264,6 +273,12 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
                                     const FullHashToStoreAndHashPrefixesMap&
                                         full_hash_to_store_and_hash_prefixes);
 
+  // Post a notification about the completion of database update process.
+  // This is currently used by the extension blacklist checker to disable any
+  // installed extensions that have been blacklisted since.
+  static void PostUpdateNotificationOnUIThread(
+      const content::NotificationSource& source);
+
   // When the database is ready to use, process the checks that were queued
   // while the database was loading from disk.
   void ProcessQueuedChecks();
@@ -300,6 +315,9 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
 
   // The base directory under which to create the files that contain hashes.
   const base::FilePath base_path_;
+
+  // Instance of the V4LocalDatabaseManager object
+  static const V4LocalDatabaseManager* current_local_database_manager_;
 
   // Called when the V4Database has finished applying the latest update and is
   // ready to process next update.

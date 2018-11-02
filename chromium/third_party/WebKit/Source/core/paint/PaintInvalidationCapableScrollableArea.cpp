@@ -272,4 +272,10 @@ void PaintInvalidationCapableScrollableArea::DidScrollWithScrollbar(
   UseCounter::Count(GetLayoutBox()->GetDocument(), scrollbar_use_uma);
 }
 
+CompositorElementId
+PaintInvalidationCapableScrollableArea::GetCompositorElementId() const {
+  return CompositorElementIdFromUniqueObjectId(
+      GetLayoutBox()->UniqueId(), CompositorElementIdNamespace::kScroll);
+}
+
 }  // namespace blink

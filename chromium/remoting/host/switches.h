@@ -5,8 +5,12 @@
 #ifndef REMOTING_HOST_SWITCHES_H_
 #define REMOTING_HOST_SWITCHES_H_
 
+#include "build/build_config.h"
+
 namespace remoting {
 
+// "--elevate=<binary>" requests |binary| to be launched elevated (possibly
+// causing a UAC prompt).
 extern const char kElevateSwitchName[];
 
 // "--help" prints the usage message.
@@ -28,6 +32,15 @@ extern const char kProcessTypeDaemon[];
 extern const char kProcessTypeDesktop[];
 extern const char kProcessTypeHost[];
 extern const char kProcessTypeRdpDesktopSession[];
+extern const char kProcessTypeEvaluateCapability[];
+
+extern const char kEvaluateCapabilitySwitchName[];
+
+// Values for kEvaluateCapabilitySwitchName.
+#if defined(OS_WIN)
+// Executes EvaluateD3D() function.
+extern const char kEvaluateD3D[];
+#endif
 
 // Used to pass the HWND for the parent process to a child process.
 extern const char kParentWindowSwitchName[];

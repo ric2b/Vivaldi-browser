@@ -136,6 +136,7 @@ class Volume : public base::SupportsWeakPtr<Volume> {
   bool has_media() const { return has_media_; }
   bool configurable() const { return configurable_; }
   bool watchable() const { return watchable_; }
+  const std::string& file_system_type() const { return file_system_type_; }
 
  private:
   Volume();
@@ -206,6 +207,9 @@ class Volume : public base::SupportsWeakPtr<Volume> {
 
   // True if the volume notifies about changes via file/directory watchers.
   bool watchable_;
+
+  // Identifier for the file system type
+  std::string file_system_type_;
 
   DISALLOW_COPY_AND_ASSIGN(Volume);
 };
@@ -291,6 +295,9 @@ class VolumeManager : public KeyedService,
                         mount_info) override;
   void OnFormatEvent(chromeos::disks::DiskMountManager::FormatEvent event,
                      chromeos::FormatError error_code,
+                     const std::string& device_path) override;
+  void OnRenameEvent(chromeos::disks::DiskMountManager::RenameEvent event,
+                     chromeos::RenameError error_code,
                      const std::string& device_path) override;
 
   // chromeos::file_system_provider::Observer overrides.

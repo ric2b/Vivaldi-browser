@@ -7,7 +7,6 @@
 #include <string>
 
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
@@ -28,10 +27,6 @@
 #include "device/bluetooth/dbus/fake_bluetooth_gatt_service_client.h"
 #include "device/bluetooth/dbus/fake_bluetooth_input_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
-
-#if defined(USE_X11)
-#include "ui/events/devices/x11/device_data_manager_x11.h"
-#endif
 
 using bluez::BluetoothAdapterClient;
 using bluez::BluetoothAgentManagerClient;
@@ -60,9 +55,6 @@ class ChromeOSMetricsProviderTest : public testing::Test {
 
  protected:
   void SetUp() override {
-#if defined(USE_X11)
-    ui::DeviceDataManagerX11::CreateInstance();
-#endif
 
     // Set up the fake Bluetooth environment,
     std::unique_ptr<BluezDBusManagerSetter> bluez_dbus_setter =
@@ -133,7 +125,7 @@ class TestChromeOSMetricsProvider : public ChromeOSMetricsProvider {
   }
   void GetBluetoothAdapterCallback() {
     ASSERT_TRUE(base::RunLoop::IsRunningOnCurrentThread());
-    base::MessageLoop::current()->QuitWhenIdle();
+    base::RunLoop::QuitCurrentWhenIdleDeprecated();
   }
 };
 

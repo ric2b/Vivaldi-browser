@@ -19,6 +19,7 @@
     kEditCommand,
     kZoom,
     kNotes,
+    kPrefs,
     kRuntimePrivate,
     kSavedPasswords,
     kSessionsPrivate,
@@ -29,5 +30,6 @@
     kThumbnails,
     kUtilities,
     kWebViewPrivate,
+    kWindowPrivate,
 
 #endif  // EXTENSIONS_PERMISSIONS_VIVALDI_API_PERMISSION_ENUMS_H_

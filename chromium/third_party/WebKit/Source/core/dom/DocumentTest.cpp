@@ -319,8 +319,7 @@ class MockDocumentValidationMessageClient
   // DEFINE_INLINE_VIRTUAL_TRACE() { ValidationMessageClient::trace(visitor); }
 };
 
-class MockWebApplicationCacheHost
-    : NON_EXPORTED_BASE(public blink::WebApplicationCacheHost) {
+class MockWebApplicationCacheHost : public blink::WebApplicationCacheHost {
  public:
   MockWebApplicationCacheHost() {}
   ~MockWebApplicationCacheHost() override {}
@@ -677,7 +676,7 @@ TEST_F(DocumentTest, SynchronousMutationNotifierMoveTreeToNewDocument) {
   move_sample->appendChild(GetDocument().createTextNode("b456"));
   GetDocument().body()->AppendChild(move_sample);
 
-  Document& another_document = *Document::Create();
+  Document& another_document = *Document::CreateForTest();
   another_document.AppendChild(move_sample);
 
   EXPECT_EQ(1u, observer.MoveTreeToNewDocumentNodes().size());

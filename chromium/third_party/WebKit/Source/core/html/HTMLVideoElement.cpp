@@ -26,12 +26,11 @@
 #include "core/html/HTMLVideoElement.h"
 
 #include <memory>
-#include "bindings/core/v8/ExceptionState.h"
 #include "core/CSSPropertyNames.h"
 #include "core/HTMLNames.h"
 #include "core/dom/Attribute.h"
+#include "core/dom/DOMException.h"
 #include "core/dom/Document.h"
-#include "core/dom/ExceptionCode.h"
 #include "core/dom/ShadowRoot.h"
 #include "core/dom/UserGestureIndicator.h"
 #include "core/frame/LocalDOMWindow.h"
@@ -68,7 +67,6 @@ enum VideoPersistenceControlsType {
 
 inline HTMLVideoElement::HTMLVideoElement(Document& document)
     : HTMLMediaElement(videoTag, document),
-      media_remoting_status_(MediaRemotingStatus::kNotStarted),
       remoting_interstitial_(nullptr) {
   if (document.GetSettings()) {
     default_poster_url_ =
@@ -207,6 +205,11 @@ unsigned HTMLVideoElement::videoHeight() const {
   if (!GetWebMediaPlayer())
     return 0;
   return GetWebMediaPlayer()->NaturalSize().height;
+}
+
+IntSize HTMLVideoElement::videoVisibleSize() const {
+  return GetWebMediaPlayer() ? IntSize(GetWebMediaPlayer()->VisibleRect())
+                             : IntSize();
 }
 
 bool HTMLVideoElement::IsURLAttribute(const Attribute& attribute) const {
@@ -427,7 +430,7 @@ KURL HTMLVideoElement::PosterImageURL() const {
   return GetDocument().CompleteURL(url);
 }
 
-PassRefPtr<Image> HTMLVideoElement::GetSourceImageForCanvas(
+RefPtr<Image> HTMLVideoElement::GetSourceImageForCanvas(
     SourceImageStatus* status,
     AccelerationHint,
     SnapshotReason,
@@ -476,54 +479,42 @@ ScriptPromise HTMLVideoElement::CreateImageBitmap(
     ScriptState* script_state,
     EventTarget& event_target,
     Optional<IntRect> crop_rect,
-    const ImageBitmapOptions& options,
-    ExceptionState& exception_state) {
+    const ImageBitmapOptions& options) {
   DCHECK(event_target.ToLocalDOMWindow());
   if (getNetworkState() == HTMLMediaElement::kNetworkEmpty) {
-    exception_state.ThrowDOMException(
-        kInvalidStateError, "The provided element has not retrieved data.");
-    return ScriptPromise();
+    return ScriptPromise::RejectWithDOMException(
+        script_state,
+        DOMException::Create(kInvalidStateError,
+                             "The provided element has not retrieved data."));
   }
   if (getReadyState() <= HTMLMediaElement::kHaveMetadata) {
-    exception_state.ThrowDOMException(
-        kInvalidStateError,
-        "The provided element's player has no current data.");
-    return ScriptPromise();
+    return ScriptPromise::RejectWithDOMException(
+        script_state,
+        DOMException::Create(
+            kInvalidStateError,
+            "The provided element's player has no current data."));
   }
-  if ((crop_rect &&
-       !ImageBitmap::IsSourceSizeValid(crop_rect->Width(), crop_rect->Height(),
-                                       exception_state)) ||
-      !ImageBitmap::IsSourceSizeValid(BitmapSourceSize().Width(),
-                                      BitmapSourceSize().Height(),
-                                      exception_state))
-    return ScriptPromise();
-  if (!ImageBitmap::IsResizeOptionValid(options, exception_state))
-    return ScriptPromise();
+
   return ImageBitmapSource::FulfillImageBitmap(
       script_state, ImageBitmap::Create(
                         this, crop_rect,
                         event_target.ToLocalDOMWindow()->document(), options));
 }
 
-void HTMLVideoElement::MediaRemotingStarted() {
-  DCHECK(media_remoting_status_ == MediaRemotingStatus::kNotStarted);
-  media_remoting_status_ = MediaRemotingStatus::kStarted;
+void HTMLVideoElement::MediaRemotingStarted(
+    const WebString& remote_device_friendly_name) {
   if (!remoting_interstitial_) {
     remoting_interstitial_ = new MediaRemotingInterstitial(*this);
     ShadowRoot& shadow_root = EnsureUserAgentShadowRoot();
     shadow_root.InsertBefore(remoting_interstitial_, shadow_root.firstChild());
     HTMLMediaElement::AssertShadowRootChildren(shadow_root);
   }
-  remoting_interstitial_->Show();
+  remoting_interstitial_->Show(remote_device_friendly_name);
 }
 
 void HTMLVideoElement::MediaRemotingStopped() {
-  DCHECK(media_remoting_status_ == MediaRemotingStatus::kDisabled ||
-         media_remoting_status_ == MediaRemotingStatus::kStarted);
-  if (media_remoting_status_ != MediaRemotingStatus::kDisabled)
-    media_remoting_status_ = MediaRemotingStatus::kNotStarted;
-  DCHECK(remoting_interstitial_);
-  remoting_interstitial_->Hide();
+  if (remoting_interstitial_)
+    remoting_interstitial_->Hide();
 }
 
 WebMediaPlayer::DisplayType HTMLVideoElement::DisplayType() const {
@@ -533,9 +524,12 @@ WebMediaPlayer::DisplayType HTMLVideoElement::DisplayType() const {
 }
 
 void HTMLVideoElement::DisableMediaRemoting() {
-  media_remoting_status_ = MediaRemotingStatus::kDisabled;
   if (GetWebMediaPlayer())
     GetWebMediaPlayer()->RequestRemotePlaybackDisabled(true);
+}
+
+bool HTMLVideoElement::IsRemotingInterstitialVisible() const {
+  return remoting_interstitial_ && remoting_interstitial_->IsVisible();
 }
 
 }  // namespace blink

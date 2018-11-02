@@ -7,6 +7,7 @@
 
 #include <list>
 #include <map>
+#include <vector>
 
 #include "services/ui/ws/server_window_drawn_tracker_observer.h"
 #include "services/ui/ws/server_window_observer.h"
@@ -14,7 +15,6 @@
 namespace ui {
 namespace ws {
 
-class EventDispatcher;
 class ServerWindow;
 class ServerWindowDrawnTracker;
 
@@ -22,13 +22,25 @@ namespace test {
 class ModalWindowControllerTestApi;
 }
 
+// See mojom::BlockingContainers for details on this. |min_container| may
+// be null.
+struct BlockingContainers {
+  ServerWindow* system_modal_container = nullptr;
+  ServerWindow* min_container = nullptr;
+};
+
 // Used to keeps track of system modal windows and check whether windows are
 // blocked by modal windows or not to do appropriate retargetting of events.
 class ModalWindowController : public ServerWindowObserver,
                               public ServerWindowDrawnTrackerObserver {
  public:
-  explicit ModalWindowController(EventDispatcher* event_dispatcher);
+  ModalWindowController();
   ~ModalWindowController() override;
+
+  // See description in mojom::WindowManager::SetBlockingContainers() for
+  // details on this.
+  void SetBlockingContainers(
+      const std::vector<BlockingContainers>& all_containers);
 
   // Adds a system modal window. The window remains modal to system until it is
   // destroyed. There can exist multiple system modal windows, in which case the
@@ -36,40 +48,63 @@ class ModalWindowController : public ServerWindowObserver,
   // the active one.
   void AddSystemModalWindow(ServerWindow* window);
 
-  // Checks whether |modal_window| is a visible modal window that blocks
-  // |window|.
-  bool IsWindowBlockedBy(const ServerWindow* window,
-                         const ServerWindow* modal_window) const;
-
   // Checks whether |window| is blocked by any visible modal window.
   bool IsWindowBlocked(const ServerWindow* window) const;
 
-  // Returns the window that events targeted to |window| should be retargeted
-  // to; according to modal windows. If any modal window is blocking |window|
-  // (either system modal or window modal), returns the topmost one; otherwise,
-  // returns |window| itself.
-  const ServerWindow* GetTargetForWindow(const ServerWindow* window) const;
-  ServerWindow* GetTargetForWindow(ServerWindow* window) const {
+  // Returns the deepest modal window that is a transient descendants of the
+  // top-level window for |window|.
+  ServerWindow* GetModalTransient(ServerWindow* window) {
     return const_cast<ServerWindow*>(
-        GetTargetForWindow(static_cast<const ServerWindow*>(window)));
+        GetModalTransient(static_cast<const ServerWindow*>(window)));
   }
+  const ServerWindow* GetModalTransient(const ServerWindow* window) const;
 
- private:
-  friend class test::ModalWindowControllerTestApi;
+  ServerWindow* GetToplevelWindow(ServerWindow* window) {
+    return const_cast<ServerWindow*>(
+        GetToplevelWindow(static_cast<const ServerWindow*>(window)));
+  }
+  const ServerWindow* GetToplevelWindow(const ServerWindow* window) const;
 
   // Returns the system modal window that is visible and added/shown most
   // recently, if any.
-  ServerWindow* GetActiveSystemModalWindow() const;
+  ServerWindow* GetActiveSystemModalWindow() {
+    return const_cast<ServerWindow*>(
+        const_cast<const ModalWindowController*>(this)
+            ->GetActiveSystemModalWindow());
+  }
+  const ServerWindow* GetActiveSystemModalWindow() const;
+
+ private:
+  friend class test::ModalWindowControllerTestApi;
+  class TrackedBlockingContainers;
+
+  // Called when the window associated with a TrackedBlockingContainers is
+  // destroyed.
+  void DestroyTrackedBlockingContainers(TrackedBlockingContainers* containers);
+
+  // Returns true if the there is a system modal window and |window| is not
+  // associated with it, or |window| is not above the minimum container (if one
+  // has been set).
+  bool IsWindowBlockedBySystemModalOrMinContainer(
+      const ServerWindow* window) const;
+
+  // Returns true if |window| is in a container marked for system models.
+  bool IsWindowInSystemModalContainer(const ServerWindow* window) const;
+
+  const ServerWindow* GetMinContainer(const ServerWindow* window) const;
+
+  // Removes |window| from the data structures used by this class.
+  void RemoveWindow(ServerWindow* window);
 
   // ServerWindowObserver:
   void OnWindowDestroyed(ServerWindow* window) override;
+  void OnWindowModalTypeChanged(ServerWindow* window,
+                                ModalType old_modal_type) override;
 
   // ServerWindowDrawnTrackerObserver:
   void OnDrawnStateChanged(ServerWindow* ancestor,
                            ServerWindow* window,
                            bool is_drawn) override;
-
-  EventDispatcher* event_dispatcher_;
 
   // List of system modal windows in order they are added/shown.
   std::list<ServerWindow*> system_modal_windows_;
@@ -77,6 +112,9 @@ class ModalWindowController : public ServerWindowObserver,
   // Drawn trackers for system modal windows.
   std::map<ServerWindow*, std::unique_ptr<ServerWindowDrawnTracker>>
       window_drawn_trackers_;
+
+  std::vector<std::unique_ptr<TrackedBlockingContainers>>
+      all_blocking_containers_;
 
   DISALLOW_COPY_AND_ASSIGN(ModalWindowController);
 };

@@ -20,8 +20,10 @@
 #include "chrome/browser/renderer_preferences_util.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/zoom/chrome_zoom_level_prefs.h"
 #include "chrome/common/extensions/api/tabs.h"
+#include "chrome/common/extensions/command.h"
 #include "components/favicon/content/content_favicon_driver.h"
 #include "components/prefs/pref_service.h"
 #include "components/zoom/zoom_controller.h"
@@ -34,8 +36,6 @@
 #include "content/public/browser/web_contents_user_data.h"
 #include "content/public/common/drop_data.h"
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
-#include "extensions/browser/app_window/app_window.h"
-#include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/app_window/native_app_window.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extensions_browser_client.h"
@@ -45,7 +45,6 @@
 #include "renderer/vivaldi_render_messages.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
-#include "ui/content_accelerators/accelerator_util.h"
 #include "ui/display/screen.h"
 #include "ui/display/win/dpi.h"
 #include "ui/gfx/codec/jpeg_codec.h"
@@ -54,8 +53,8 @@
 #if defined(OS_WIN)
 #include "ui/display/win/screen_win.h"
 #endif  // defined(OS_WIN)
+#include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_ui_utils.h"
-
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(extensions::VivaldiPrivateTabObserver);
 
@@ -92,20 +91,71 @@ void TabsPrivateAPI::OnListenerAdded(const EventListenerInfo& details) {
   EventRouter::Get(browser_context_)->UnregisterObserver(this);
 }
 
+std::string TabsPrivateAPI::ShortcutText(
+    const content::NativeWebKeyboardEvent& event) {
+
+  // We'd just use Accelerator::GetShortcutText to get the shortcut text but
+  // it translates the modifiers when the system language is set to
+  // non-English (since it's used for display). We can't match something
+  // like 'Strg+G' however, so we do the modifiers manually.
+  //
+  // AcceleratorToString gets the shortcut text, but doesn't localize
+  // like Accelerator::GetShortcutText() does, so it's suitable for us.
+  // It doesn't handle all keys, however, and doesn't work with ctrl+alt
+  // shortcuts so we're left with doing a little tweaking.
+  ui::KeyboardCode key_code =
+      static_cast<ui::KeyboardCode>(event.windows_key_code);
+  ui::Accelerator accelerator =
+      ui::Accelerator(key_code, 0, ui::Accelerator::KeyState::PRESSED);
+
+  std::string shortcutText = "";
+  if (event.GetModifiers() & content::NativeWebKeyboardEvent::kControlKey) {
+    shortcutText += "Ctrl+";
+  }
+  if (event.GetModifiers() & content::NativeWebKeyboardEvent::kShiftKey) {
+    shortcutText += "Shift+";
+  }
+  if (event.GetModifiers() & content::NativeWebKeyboardEvent::kAltKey) {
+    shortcutText += "Alt+";
+  }
+  if (event.GetModifiers() & content::NativeWebKeyboardEvent::kMetaKey) {
+    shortcutText += "Meta+";
+  }
+
+  std::string key_from_accelerator =
+      extensions::Command::AcceleratorToString(accelerator);
+  if (!key_from_accelerator.empty()) {
+    shortcutText += key_from_accelerator;
+  } else if (event.windows_key_code >= ui::VKEY_F1 &&
+             event.windows_key_code <= ui::VKEY_F24) {
+    char buf[4];
+    base::snprintf(buf, 4, "F%d", event.windows_key_code - ui::VKEY_F1 + 1);
+    shortcutText += buf;
+
+  // Enter is somehow not covered anywhere else.
+  } else if (event.windows_key_code == ui::VKEY_RETURN) {
+    shortcutText += "Enter";
+  // GetShortcutText doesn't translate numbers and digits but
+  // 'does' translate backspace
+  } else if (event.windows_key_code == ui::VKEY_BACK) {
+    shortcutText += "Backspace";
+  } else {
+    shortcutText += base::UTF16ToUTF8(accelerator.GetShortcutText());
+  }
+  return shortcutText;
+}
+
 void TabsPrivateAPI::SendKeyboardShortcutEvent(
     const content::NativeWebKeyboardEvent& event) {
   int key_code = event.windows_key_code;
-  ui::Accelerator accelerator =
-      ui::GetAcceleratorFromNativeWebKeyboardEvent(event);
 
   // Don't send if event contains only modifiers.
   if (key_code != ui::VKEY_CONTROL && key_code != ui::VKEY_SHIFT &&
       key_code != ui::VKEY_MENU) {
     if (event.GetType() == blink::WebInputEvent::kRawKeyDown) {
-      std::string shortcutText =
-          base::UTF16ToUTF8(accelerator.GetShortcutText());
+
       std::unique_ptr<base::ListValue> args =
-          vivaldi::tabs_private::OnKeyboardShortcut::Create(shortcutText);
+          vivaldi::tabs_private::OnKeyboardShortcut::Create(ShortcutText(event));
 
       event_router_->DispatchEvent(
           extensions::events::VIVALDI_EXTENSION_EVENT,
@@ -680,9 +730,10 @@ bool TabsPrivateStartDragFunction::RunAsync() {
     image_offset.set_x(params->drag_image->cursor_x);
     image_offset.set_y(params->drag_image->cursor_y);
   }
-
-  AppWindow* window = AppWindowRegistry::Get(GetProfile())
-                          ->GetCurrentAppWindowForApp(::vivaldi::kVivaldiAppId);
+  Browser* browser = BrowserList::GetInstance()->GetLastActive();
+  DCHECK(browser);
+  VivaldiBrowserWindow* window =
+      static_cast<VivaldiBrowserWindow*>(browser->window());
   DCHECK(window);
   content::RenderViewHostImpl* rvh = static_cast<content::RenderViewHostImpl*>(
       window->web_contents()->GetRenderViewHost());

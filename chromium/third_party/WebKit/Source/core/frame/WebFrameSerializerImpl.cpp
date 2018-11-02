@@ -83,7 +83,7 @@
 #include "core/dom/Element.h"
 #include "core/editing/serializers/Serialization.h"
 #include "core/frame/FrameSerializer.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "core/html/HTMLAllCollection.h"
 #include "core/html/HTMLElement.h"
 #include "core/html/HTMLFormElement.h"
@@ -94,7 +94,6 @@
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
 #include "platform/wtf/text/TextEncoding.h"
-#include "public/platform/WebCString.h"
 #include "public/platform/WebVector.h"
 
 namespace blink {
@@ -270,7 +269,9 @@ void WebFrameSerializerImpl::EncodeAndFlushBuffer(
       param->text_encoding.Encode(content, WTF::kEntitiesForUnencodables);
 
   // Send result to the client.
-  client_->DidSerializeDataForFrame(WebCString(encoded_content), status);
+  client_->DidSerializeDataForFrame(
+      WebVector<char>(encoded_content.data(), encoded_content.length()),
+      status);
 }
 
 // TODO(yosin): We should utilize |MarkupFormatter| here to share code,
@@ -445,7 +446,7 @@ WebFrameSerializerImpl::WebFrameSerializerImpl(
       xml_entities_(true) {
   // Must specify available webframe.
   DCHECK(frame);
-  specified_web_local_frame_impl_ = ToWebLocalFrameBase(frame);
+  specified_web_local_frame_impl_ = ToWebLocalFrameImpl(frame);
   // Make sure we have non null client and delegate.
   DCHECK(client);
   DCHECK(delegate);
@@ -481,7 +482,7 @@ bool WebFrameSerializerImpl::Serialize() {
   } else {
     // Report empty contents for invalid URLs.
     client_->DidSerializeDataForFrame(
-        WebCString(), WebFrameSerializerClient::kCurrentFrameIsFinished);
+        WebVector<char>(), WebFrameSerializerClient::kCurrentFrameIsFinished);
   }
 
   DCHECK(data_buffer_.IsEmpty());

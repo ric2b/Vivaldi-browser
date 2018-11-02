@@ -30,11 +30,11 @@ DataUseAggregator::DataUseAggregator(
 #if defined(OS_ANDROID)
   mcc_mnc_ = net::android::GetTelephonySimOperator();
 #endif  // OS_ANDROID
-  net::NetworkChangeNotifier::AddConnectionTypeObserver(this);
+  net::NetworkChangeNotifier::AddNetworkChangeObserver(this);
 }
 
 DataUseAggregator::~DataUseAggregator() {
-  net::NetworkChangeNotifier::RemoveConnectionTypeObserver(this);
+  net::NetworkChangeNotifier::RemoveNetworkChangeObserver(this);
 }
 
 void DataUseAggregator::AddObserver(Observer* observer) {
@@ -57,7 +57,7 @@ void DataUseAggregator::ReportDataUse(net::URLRequest* request,
 
   std::unique_ptr<DataUse> data_use(
       new DataUse(request->url(), load_timing_info.request_start,
-                  request->first_party_for_cookies(), -1 /* tab_id */,
+                  request->site_for_cookies(), -1 /* tab_id */,
                   connection_type_, mcc_mnc_, tx_bytes, rx_bytes));
 
   if (!annotator_) {
@@ -89,7 +89,7 @@ base::WeakPtr<DataUseAggregator> DataUseAggregator::GetWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
 }
 
-void DataUseAggregator::OnConnectionTypeChanged(
+void DataUseAggregator::OnNetworkChanged(
     net::NetworkChangeNotifier::ConnectionType type) {
   DCHECK(thread_checker_.CalledOnValidThread());
 

@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="be">
 <translation id="1175364870820465910">&amp;Друк...</translation>
+<translation id="1278049586634282054">Інспектар:</translation>
 <translation id="1723824996674794290">&amp;Новае акно</translation>
 <translation id="176587472219019965">&amp;Новае акно</translation>
 <translation id="1901303067676059328">Выбраць у&amp;сё</translation>
@@ -12,8 +13,10 @@
 <translation id="2972581237482394796">&amp;Вярнуць</translation>
 <translation id="3280237271814976245">Захаваць &amp;як...</translation>
 <translation id="3678156199662914018">Пашырэнне: <ph name="EXTENSION_NAME" /></translation>
+<translation id="3760460896538743390">Інспектаваць &amp; Фонавая старонка</translation>
 <translation id="3909791450649380159">&amp;Выразаць</translation>
 <translation id="3943582379552582368">&amp;Назад</translation>
+<translation id="4989966318180235467">Інспектаваць &amp; фонавая старонка</translation>
 <translation id="5233638681132016545">Новая ўкладка</translation>
 <translation id="5233736638227740678">&amp;Уставіць</translation>
 <translation id="5329858601952122676">В&amp;ыдаліць</translation>
@@ -21,8 +24,10 @@
 <translation id="5509693895992845810">Захаваць &amp;як...</translation>
 <translation id="583281660410589416">Невядома</translation>
 <translation id="6040143037577758943">Закрыць</translation>
+<translation id="6171948306033499786">Прыпыніць друк</translation>
 <translation id="6691936601825168937">&amp;Наперад</translation>
 <translation id="682123305478866682">Трансліраваць працоўны стол</translation>
+<translation id="6943176775188458830">Скасаваць друк</translation>
 <translation id="7339898014177206373">Новае акно</translation>
 <translation id="7421925624202799674">&amp;Прагляд кода старонкі</translation>
 <translation id="7554791636758816595">Новая ўкладка</translation>

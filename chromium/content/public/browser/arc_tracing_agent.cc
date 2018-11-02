@@ -17,7 +17,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "base/memory/weak_ptr.h"
-#include "base/posix/unix_domain_socket_linux.h"
+#include "base/posix/unix_domain_socket.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -68,14 +68,18 @@ class ArcTracingReader {
     std::vector<base::ScopedFD> unused_fds;
     ssize_t n = base::UnixDomainSocket::RecvMsg(
         read_fd_.get(), buf, kArcTraceMessageLength, &unused_fds);
-    // When EOF, return and do nothing. The clean up is done in StopTracing.
-    if (n == 0)
-      return;
-
     if (n < 0) {
       DPLOG(WARNING) << "Unexpected error while reading trace from client.";
       // Do nothing here as StopTracing will do the clean up and the existing
       // trace logs will be returned.
+      return;
+    }
+
+    if (n == 0) {
+      // When EOF is reached, stop listening for changes since there's never
+      // going to be any more data to be read. The rest of the cleanup will be
+      // done in StopTracing.
+      fd_watcher_.reset();
       return;
     }
 
@@ -104,7 +108,7 @@ class ArcTracingReader {
 
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(callback, base::RefCountedString::TakeString(&data)));
+        base::BindOnce(callback, base::RefCountedString::TakeString(&data)));
   }
 
   base::WeakPtr<ArcTracingReader> GetWeakPtr() {
@@ -144,17 +148,24 @@ class ArcTracingAgentImpl : public ArcTracingAgent {
       // Use PostTask as the convention of TracingAgent. The caller expects
       // callback to be called after this function returns.
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::Bind(callback, GetTracingAgentName(), false));
+          FROM_HERE, base::BindOnce(callback, GetTracingAgentName(), false));
+      return;
+    }
+
+    success =
+        delegate_->StartTracing(trace_config, std::move(write_fd),
+                                base::Bind(callback, GetTracingAgentName()));
+
+    if (!success) {
+      // In the event of a failure, we don't use PostTask, because the
+      // delegate_->StartTracing call will have already done it.
       return;
     }
 
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(&ArcTracingReader::StartTracing, reader_.GetWeakPtr(),
-                   base::Passed(&read_fd)));
-
-    delegate_->StartTracing(trace_config, std::move(write_fd),
-                            base::Bind(callback, GetTracingAgentName()));
+        base::BindOnce(&ArcTracingReader::StartTracing, reader_.GetWeakPtr(),
+                       base::Passed(&read_fd)));
   }
 
   void StopAgentTracing(const StopAgentTracingCallback& callback) override {
@@ -203,9 +214,9 @@ class ArcTracingAgentImpl : public ArcTracingAgent {
     }
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(&ArcTracingReader::StopTracing, reader_.GetWeakPtr(),
-                   base::Bind(&ArcTracingAgentImpl::OnTracingReaderStopped,
-                              weak_ptr_factory_.GetWeakPtr(), callback)));
+        base::BindOnce(&ArcTracingReader::StopTracing, reader_.GetWeakPtr(),
+                       base::Bind(&ArcTracingAgentImpl::OnTracingReaderStopped,
+                                  weak_ptr_factory_.GetWeakPtr(), callback)));
   }
 
   void OnTracingReaderStopped(

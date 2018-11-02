@@ -15,10 +15,9 @@
 #include "components/variations/variations_seed_store.h"
 
 namespace variations {
-class VariationsServiceClient;
-}
 
-namespace variations {
+class VariationsServiceClient;
+class PlatformFieldTrials;
 
 // Used to setup field trials based on stored variations seed data.
 class VariationsFieldTrialCreator {
@@ -28,7 +27,7 @@ class VariationsFieldTrialCreator {
   VariationsFieldTrialCreator(PrefService* local_state,
                               VariationsServiceClient* client,
                               const UIStringOverrider& ui_string_overrider);
-  ~VariationsFieldTrialCreator();
+  virtual ~VariationsFieldTrialCreator();
 
   // Returns what variations will consider to be the latest country. Returns
   // empty if it is not available.
@@ -55,6 +54,27 @@ class VariationsFieldTrialCreator {
   // Exposed for testing.
   void SetCreateTrialsFromSeedCalledForTesting(bool called);
 
+  // Sets up field trials based on stored variations seed data.
+  // |kEnableGpuBenchmarking|, |kEnableFeatures|, |kDisableFeatures| are
+  // feature controlling flags not directly accesible from variations.
+  // |unforcable_field_trials| contains the list of trials that can not be
+  // overridden.
+  // |low_entropy_provider| allows for field trial randomization.
+  // |feature_list| contains the list of all active features for this client.
+  // |variation_ids| allows for forcing ids selected in chrome://flags and/or
+  // specified using the command-line flag.
+  // |platform_field_trials| provides the platform specific field trial set up
+  // for Chrome.
+  bool SetupFieldTrials(const char* kEnableGpuBenchmarking,
+                        const char* kEnableFeatures,
+                        const char* kDisableFeatures,
+                        const std::set<std::string>& unforceable_field_trials,
+                        std::unique_ptr<const base::FieldTrial::EntropyProvider>
+                            low_entropy_provider,
+                        std::unique_ptr<base::FeatureList> feature_list,
+                        std::vector<std::string>* variation_ids,
+                        PlatformFieldTrials* platform_field_trials);
+
   // Returns all of the client state used for filtering studies.
   // As a side-effect, may update the stored permanent consistency country.
   std::unique_ptr<ClientFilterableState> GetClientFilterableStateForVersion(
@@ -80,6 +100,10 @@ class VariationsFieldTrialCreator {
   // |seed| will contain the loaded data and true is returned. Set as virtual
   // so that it can be overridden by tests.
   virtual bool LoadSeed(VariationsSeed* seed);
+
+  // Allow the platform that is used to filter the set of active trials
+  // to be overridden.
+  void OverrideVariationsPlatform(Study::Platform platform_override);
 
  private:
   PrefService* local_state() { return seed_store_.local_state(); }
@@ -112,6 +136,14 @@ class VariationsFieldTrialCreator {
   // Tracks whether |CreateTrialsFromSeed| has been called, to ensure that
   // it gets called prior to |StartRepeatedVariationsSeedFetch|.
   bool create_trials_from_seed_called_;
+
+  // Indiciate if OverrideVariationsPlatform has been used to set
+  // |platform_override_|.
+  bool has_platform_override_;
+
+  // Platform to be used for variations filtering, overridding the current
+  // platform.
+  Study::Platform platform_override_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

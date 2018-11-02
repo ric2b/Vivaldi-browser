@@ -7,6 +7,7 @@
 #include "base/json/json_reader.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -345,7 +346,7 @@ IN_PROC_BROWSER_TEST_F(WebstoreInlineInstallerTest,
   ExtensionService* extension_service =
       ExtensionSystem::Get(browser()->profile())->extension_service();
   extension_service->DisableExtension(kTestExtensionId,
-                                      Extension::DISABLE_USER_ACTION);
+                                      disable_reason::DISABLE_USER_ACTION);
   EXPECT_TRUE(registry->disabled_extensions().GetByID(kTestExtensionId));
 
   // Revisit the inline install site and reinstall the extension. It should
@@ -360,8 +361,8 @@ IN_PROC_BROWSER_TEST_F(WebstoreInlineInstallerTest,
             ExtensionInstallPrompt::g_last_prompt_type_for_tests);
 
   // Disable the extension due to a permissions increase.
-  extension_service->DisableExtension(kTestExtensionId,
-                                      Extension::DISABLE_PERMISSIONS_INCREASE);
+  extension_service->DisableExtension(
+      kTestExtensionId, disable_reason::DISABLE_PERMISSIONS_INCREASE);
   EXPECT_TRUE(registry->disabled_extensions().GetByID(kTestExtensionId));
   ui_test_utils::NavigateToURL(
       browser(), GenerateTestServerUrl(kAppDomain, "install.html"));

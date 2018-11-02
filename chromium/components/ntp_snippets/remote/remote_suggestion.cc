@@ -4,6 +4,8 @@
 
 #include "components/ntp_snippets/remote/remote_suggestion.h"
 
+#include <limits>
+
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -87,6 +89,7 @@ RemoteSuggestion::RemoteSuggestion(const std::vector<std::string>& ids,
       score_(0),
       is_dismissed_(false),
       remote_category_id_(remote_category_id),
+      rank_(std::numeric_limits<int>::max()),
       should_notify_(false),
       content_type_(ContentType::UNKNOWN) {}
 
@@ -287,6 +290,31 @@ RemoteSuggestion::CreateFromContentSuggestionsDictionary(
 }
 
 // static
+std::unique_ptr<RemoteSuggestion>
+RemoteSuggestion::CreateFromContextualSuggestionsDictionary(
+    const base::DictionaryValue& dict) {
+  std::string id;
+  if (!dict.GetString("url", &id) || id.empty()) {
+    return nullptr;
+  }
+  // TODO(gaschler): Remove the unused kArticlesRemoteId argument when moving
+  // away from RemoteSuggestion.
+  auto remote_suggestion = MakeUnique({id}, kArticlesRemoteId);
+  GetURLValue(dict, "url", &remote_suggestion->url_);
+  if (!dict.GetString("title", &remote_suggestion->title_)) {
+    dict.GetString("source", &remote_suggestion->title_);
+  }
+  dict.GetString("snippet", &remote_suggestion->snippet_);
+  GetTimeValue(dict, "creationTime", &remote_suggestion->publish_date_);
+  GetTimeValue(dict, "expirationTime", &remote_suggestion->expiry_date_);
+  GetURLValue(dict, "imageUrl", &remote_suggestion->salient_image_url_);
+  if (!dict.GetString("attribution", &remote_suggestion->publisher_name_)) {
+    dict.GetString("source", &remote_suggestion->publisher_name_);
+  }
+  return remote_suggestion;
+}
+
+// static
 std::unique_ptr<RemoteSuggestion> RemoteSuggestion::CreateFromProto(
     const SnippetProto& proto) {
   // Need at least the id.
@@ -346,6 +374,9 @@ std::unique_ptr<RemoteSuggestion> RemoteSuggestion::CreateFromProto(
     snippet->content_type_ = ContentType::VIDEO;
   }
 
+  snippet->rank_ =
+      proto.has_rank() ? proto.rank() : std::numeric_limits<int>::max();
+
   return snippet;
 }
 
@@ -389,6 +420,9 @@ SnippetProto RemoteSuggestion::ToProto() const {
   if (content_type_ == ContentType::VIDEO) {
     result.set_content_type(SnippetProto_ContentType_VIDEO);
   }
+
+  result.set_rank(rank_);
+
   return result;
 }
 

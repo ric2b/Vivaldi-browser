@@ -9,14 +9,16 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/observer_list.h"
 #include "cc/output/output_surface_client.h"
-#include "cc/resources/returned_resource.h"
-#include "cc/scheduler/begin_frame_source.h"
-#include "cc/surfaces/surface_manager.h"
+#include "cc/resources/display_resource_provider.h"
+#include "components/viz/common/frame_sinks/begin_frame_source.h"
+#include "components/viz/common/resources/returned_resource.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/common/surfaces/surface_id.h"
 #include "components/viz/service/display/display_scheduler.h"
 #include "components/viz/service/display/surface_aggregator.h"
+#include "components/viz/service/surfaces/surface_manager.h"
 #include "components/viz/service/viz_service_export.h"
 #include "gpu/command_buffer/common/texture_in_use_response.h"
 #include "ui/gfx/color_space.h"
@@ -24,9 +26,9 @@
 
 namespace cc {
 class DirectRenderer;
+class DisplayResourceProvider;
 class OutputSurface;
 class RendererSettings;
-class ResourceProvider;
 class SoftwareRenderer;
 class TextureMailboxDeleter;
 }  // namespace cc
@@ -43,6 +45,13 @@ namespace viz {
 
 class DisplayClient;
 class SharedBitmapManager;
+
+class VIZ_SERVICE_EXPORT DisplayObserver {
+ public:
+  virtual ~DisplayObserver() {}
+
+  virtual void OnDisplayDidFinishFrame(const BeginFrameAck& ack) = 0;
+};
 
 // A Display produces a surface that can be used to draw to a physical display
 // (OutputSurface). The client is responsible for creating and sizing the
@@ -62,7 +71,10 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
 
   ~Display() override;
 
-  void Initialize(DisplayClient* client, cc::SurfaceManager* surface_manager);
+  void Initialize(DisplayClient* client, SurfaceManager* surface_manager);
+
+  void AddObserver(DisplayObserver* observer);
+  void RemoveObserver(DisplayObserver* observer);
 
   // device_scale_factor is used to communicate to the external window system
   // what scale this was rendered at.
@@ -79,8 +91,9 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   bool DrawAndSwap() override;
   bool SurfaceHasUndrawnFrame(const SurfaceId& surface_id) const override;
   bool SurfaceDamaged(const SurfaceId& surface_id,
-                      const cc::BeginFrameAck& ack) override;
+                      const BeginFrameAck& ack) override;
   void SurfaceDiscarded(const SurfaceId& surface_id) override;
+  void DidFinishFrame(const BeginFrameAck& ack) override;
 
   // OutputSurfaceClient implementation.
   void SetNeedsRedrawRect(const gfx::Rect& damage_rect) override;
@@ -106,7 +119,8 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   const RendererSettings settings_;
 
   DisplayClient* client_ = nullptr;
-  cc::SurfaceManager* surface_manager_ = nullptr;
+  base::ObserverList<DisplayObserver> observers_;
+  SurfaceManager* surface_manager_ = nullptr;
   const FrameSinkId frame_sink_id_;
   SurfaceId current_surface_id_;
   gfx::Size current_surface_size_;
@@ -119,7 +133,7 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
 
   std::unique_ptr<cc::OutputSurface> output_surface_;
   std::unique_ptr<DisplayScheduler> scheduler_;
-  std::unique_ptr<cc::ResourceProvider> resource_provider_;
+  std::unique_ptr<cc::DisplayResourceProvider> resource_provider_;
   std::unique_ptr<SurfaceAggregator> aggregator_;
   std::unique_ptr<cc::TextureMailboxDeleter> texture_mailbox_deleter_;
   std::unique_ptr<cc::DirectRenderer> renderer_;

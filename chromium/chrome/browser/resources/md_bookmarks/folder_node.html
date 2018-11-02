@@ -80,16 +80,20 @@
 
     <div id="container"
         class="v-centered"
-        draggable="true"
         on-tap="selectFolder_"
+        on-dblclick="toggleFolder_"
         on-contextmenu="onContextMenu_"
         tabindex$="[[getTabIndex_(isSelectedFolder_)]]"
         hidden="[[isRootFolder_(depth)]]"
         role="treeitem">
       <template is="dom-if" if="[[hasChildFolder_]]">
-        <button is="paper-icon-button-light" id="arrow"
-            on-tap="toggleFolder_" on-mousedown="preventDefault_" tabindex="-1">
-          <iron-icon icon="cr:arrow-drop-down" is-open$="[[!isClosed_]]">
+        <button is="paper-icon-button-light"
+            id="arrow"
+            on-tap="toggleFolder_"
+            on-mousedown="preventDefault_"
+            tabindex="-1"
+            aria-hidden="true">
+          <iron-icon icon="cr:arrow-drop-down" is-open$="[[isOpen]]">
           </iron-icon>
         </button>
       </template>
@@ -102,12 +106,13 @@
       </div>
     </div>
     <div id="descendants" role="group">
-      <template is="dom-if" if="[[!isClosed_]]">
+      <template is="dom-if" if="[[isOpen]]">
         <template is="dom-repeat"
             items="[[item_.children]]"
             as="child"
             filter="isFolder_">
           <bookmarks-folder-node item-id="[[child]]"
+              draggable="true"
               depth="[[getChildDepth_(depth)]]">
           </bookmarks-folder-node>
         </template>

@@ -8,7 +8,6 @@
 #include "core/css/parser/CSSParserContext.h"
 #include "core/css/parser/CSSPropertyParserHelpers.h"
 
-class CSSParserLocalContext;
 namespace blink {
 
 namespace {
@@ -24,10 +23,11 @@ CSSValue* ConsumeClipComponent(CSSParserTokenRange& range,
 
 }  // namespace
 
-const CSSValue* CSSPropertyAPIClip::parseSingleValue(
+const CSSValue* CSSPropertyAPIClip::ParseSingleValue(
+    CSSPropertyID,
     CSSParserTokenRange& range,
     const CSSParserContext& context,
-    const CSSParserLocalContext&) {
+    const CSSParserLocalContext&) const {
   if (range.Peek().Id() == CSSValueAuto)
     return CSSPropertyParserHelpers::ConsumeIdent(range);
 

@@ -78,7 +78,9 @@ class CONTENT_EXPORT InputEventFilter : public InputHandlerManagerClient,
       ui::WebScopedInputEvent event,
       const ui::LatencyInfo& latency_info) override;
   void SetWhiteListedTouchAction(int routing_id,
-                                 cc::TouchAction touch_action) override;
+                                 cc::TouchAction touch_action,
+                                 uint32_t unique_touch_event_id,
+                                 InputEventAckState ack_state) override;
 
   // IPC::MessageFilter methods:
   void OnFilterAdded(IPC::Channel* channel) override;
@@ -105,7 +107,8 @@ class CONTENT_EXPORT InputEventFilter : public InputHandlerManagerClient,
       int unique_touch_event_id,
       InputEventAckState ack_state,
       const ui::LatencyInfo& latency_info,
-      std::unique_ptr<ui::DidOverscrollParams> overscroll_params);
+      std::unique_ptr<ui::DidOverscrollParams> overscroll_params,
+      base::Optional<cc::TouchAction> touch_action);
   void SendMessage(std::unique_ptr<IPC::Message> message);
   void SendMessageOnIOThread(std::unique_ptr<IPC::Message> message);
 

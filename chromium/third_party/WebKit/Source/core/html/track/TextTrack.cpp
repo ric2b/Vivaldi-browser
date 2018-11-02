@@ -88,7 +88,6 @@ TextTrack::TextTrack(const AtomicString& kind,
                      const AtomicString& id,
                      TextTrackType type)
     : TrackBase(WebMediaPlayer::kTextTrack, kind, label, language, id),
-      cues_(this, nullptr),
       active_cues_(nullptr),
       track_list_(nullptr),
       mode_(DisabledKeyword()),
@@ -177,7 +176,9 @@ void TextTrack::RemoveAllCues() {
   for (size_t i = 0; i < cues_->length(); ++i)
     cues_->AnonymousIndexedGetter(i)->SetTrack(0);
 
-  cues_ = nullptr;
+  cues_->RemoveAll();
+  if (active_cues_)
+    active_cues_->RemoveAll();
 }
 
 void TextTrack::AddListOfCues(
@@ -334,7 +335,6 @@ bool TextTrack::CanBeRendered() const {
 TextTrackCueList* TextTrack::EnsureTextTrackCueList() {
   if (!cues_) {
     cues_ = TextTrackCueList::Create();
-    ScriptWrappableVisitor::WriteBarrier(this, cues_);
   }
 
   return cues_.Get();

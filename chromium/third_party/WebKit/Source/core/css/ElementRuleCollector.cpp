@@ -198,11 +198,6 @@ void ElementRuleCollector::CollectMatchingRules(
     CollectMatchingRulesForList(
         match_request.rule_set->ShadowPseudoElementRules(pseudo_id),
         cascade_order, match_request);
-    if (pseudo_id == "-webkit-input-placeholder") {
-      CollectMatchingRulesForList(
-          match_request.rule_set->PlaceholderPseudoRules(), cascade_order,
-          match_request);
-    }
   }
 
   if (element.IsVTTElement())
@@ -342,9 +337,6 @@ void ElementRuleCollector::DidMatchRule(
       return;
     style_->SetHasPseudoStyle(dynamic_pseudo);
   } else {
-    if (style_ && rule_data.ContainsUncommonAttributeSelector())
-      style_->SetUnique();
-
     matched_rules_.push_back(MatchedRule(
         &rule_data, result.specificity, cascade_order,
         match_request.style_sheet_index, match_request.style_sheet));
@@ -363,20 +355,6 @@ static inline bool CompareRules(const MatchedRule& matched_rule1,
 
 void ElementRuleCollector::SortMatchedRules() {
   std::sort(matched_rules_.begin(), matched_rules_.end(), CompareRules);
-}
-
-bool ElementRuleCollector::HasAnyMatchingRules(RuleSet* rule_set) {
-  ClearMatchedRules();
-
-  mode_ = SelectorChecker::kSharingRules;
-  // To check whether a given RuleSet has any rule matching a given element,
-  // should not see the element's treescope. Because RuleSet has no information
-  // about "scope".
-  MatchRequest match_request(rule_set);
-  CollectMatchingRules(match_request);
-  CollectMatchingShadowHostRules(match_request);
-
-  return !matched_rules_.IsEmpty();
 }
 
 void ElementRuleCollector::AddMatchedRulesToTracker(

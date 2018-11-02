@@ -5,6 +5,7 @@
 #include "platform/blob/BlobBytesProvider.h"
 
 #include "base/numerics/safe_conversions.h"
+#include "platform/WebTaskRunner.h"
 #include "platform/wtf/Functional.h"
 #include "public/platform/Platform.h"
 
@@ -38,9 +39,9 @@ class BlobBytesStreamer {
     while (true) {
       uint32_t num_bytes = base::saturated_cast<uint32_t>(
           data_[current_item_]->length() - current_item_offset_);
-      MojoResult write_result = mojo::WriteDataRaw(
-          pipe_.get(), data_[current_item_]->data() + current_item_offset_,
-          &num_bytes, MOJO_WRITE_DATA_FLAG_NONE);
+      MojoResult write_result =
+          pipe_->WriteData(data_[current_item_]->data() + current_item_offset_,
+                           &num_bytes, MOJO_WRITE_DATA_FLAG_NONE);
       if (write_result == MOJO_RESULT_OK) {
         current_item_offset_ += num_bytes;
         if (current_item_offset_ >= data_[current_item_]->length()) {
@@ -56,7 +57,7 @@ class BlobBytesStreamer {
       } else if (write_result == MOJO_RESULT_SHOULD_WAIT) {
         break;
       } else {
-        // TOOD(mek): Something went wrong, log this error somewhere.
+        // TODO(mek): Something went wrong, log this error somewhere.
         delete this;
         return;
       }
@@ -114,8 +115,9 @@ void BlobBytesProvider::RequestAsFile(uint64_t source_offset,
                                       base::File file,
                                       uint64_t file_offset,
                                       RequestAsFileCallback callback) {
-  // TODO(mek): Make sure this code runs on a thread that is allowed to do
-  // file IO.
+  DCHECK(!Platform::Current()->FileTaskRunner() ||
+         Platform::Current()->FileTaskRunner()->RunsTasksInCurrentSequence());
+
   if (!file.IsValid()) {
     std::move(callback).Run(WTF::nullopt);
     return;

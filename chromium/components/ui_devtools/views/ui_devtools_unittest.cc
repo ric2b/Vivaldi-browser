@@ -4,8 +4,10 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/utf_string_conversions.h"
 #include "components/ui_devtools/views/ui_devtools_css_agent.h"
 #include "components/ui_devtools/views/ui_devtools_dom_agent.h"
+#include "components/ui_devtools/views/ui_devtools_overlay_agent.h"
 #include "components/ui_devtools/views/ui_element.h"
 #include "components/ui_devtools/views/view_element.h"
 #include "components/ui_devtools/views/widget_element.h"
@@ -13,6 +15,8 @@
 #include "ui/aura/client/window_parenting_client.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/display/display.h"
+#include "ui/events/event_constants.h"
+#include "ui/events/test/event_generator.h"
 #include "ui/views/background.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/widget/native_widget_private.h"
@@ -25,7 +29,7 @@ namespace {
 using namespace ui_devtools::protocol;
 
 const int kDefaultChildNodeCount = -1;
-const SkColor kBackgroundColor = SK_ColorRED;
+const SkColor kBackgroundColor = 0;
 const SkColor kBorderColor = SK_ColorBLUE;
 
 class TestView : public views::View {
@@ -59,7 +63,7 @@ class FakeFrontendChannel : public FrontendChannel {
                       protocol_notification_messages_.end(), message);
   }
 
-  // FrontendChannel
+  // FrontendChannel:
   void sendProtocolResponse(int callId,
                             std::unique_ptr<Serializable> message) override {}
   void flushProtocolNotifications() override {}
@@ -125,8 +129,8 @@ DOM::Node* FindInRoot(aura::Window* window, DOM::Node* root) {
   return window_node;
 }
 
-int GetPropertyByName(const std::string& name,
-                      Array<CSS::CSSProperty>* properties) {
+int GetIntPropertyByName(const std::string& name,
+                         Array<CSS::CSSProperty>* properties) {
   for (size_t i = 0; i < properties->length(); i++) {
     CSS::CSSProperty* property = properties->get(i);
     if (property->getName() == name) {
@@ -139,12 +143,22 @@ int GetPropertyByName(const std::string& name,
   return -1;
 }
 
+std::string GetStringPropertyByName(const std::string& name,
+                                    Array<CSS::CSSProperty>* properties) {
+  for (size_t i = 0; i < properties->length(); i++) {
+    CSS::CSSProperty* property = properties->get(i);
+    if (property->getName() == name)
+      return property->getValue();
+  }
+  NOTREACHED();
+  return nullptr;
+}
+
 ui::Layer* GetHighlightingLayer(aura::Window* root_window) {
   for (auto* layer : root_window->layer()->children()) {
     if (layer->name() == "HighlightingLayer")
       return layer;
   }
-  NOTREACHED();
   return nullptr;
 }
 
@@ -157,20 +171,13 @@ std::unique_ptr<DOM::RGBA> SkColorToRGBA(const SkColor& color) {
       .build();
 }
 
-std::unique_ptr<DOM::HighlightConfig> CreateHighlightConfig(
+std::unique_ptr<Overlay::HighlightConfig> CreateHighlightConfig(
     const SkColor& background_color,
     const SkColor& border_color) {
-  return DOM::HighlightConfig::create()
+  return Overlay::HighlightConfig::create()
       .setContentColor(SkColorToRGBA(background_color))
       .setBorderColor(SkColorToRGBA(border_color))
       .build();
-}
-
-void ExpectHighlighted(const gfx::Rect& bounds, aura::Window* root_window) {
-  ui::Layer* highlighting_layer = GetHighlightingLayer(root_window);
-  EXPECT_TRUE(highlighting_layer->visible());
-  EXPECT_EQ(bounds, highlighting_layer->bounds());
-  EXPECT_EQ(kBackgroundColor, highlighting_layer->GetTargetColor());
 }
 
 }  // namespace
@@ -223,6 +230,10 @@ class UIDevToolsTest : public views::ViewsTestBase {
         base::MakeUnique<ui_devtools::UIDevToolsCSSAgent>(dom_agent_.get());
     css_agent_->Init(uber_dispatcher_.get());
     css_agent_->enable();
+    overlay_agent_ =
+        base::MakeUnique<ui_devtools::UIDevToolsOverlayAgent>(dom_agent_.get());
+    overlay_agent_->Init(uber_dispatcher_.get());
+    overlay_agent_->enable();
 
     // We need to create |dom_agent| first to observe creation of
     // WindowTreeHosts in ViewTestBase::SetUp().
@@ -239,6 +250,7 @@ class UIDevToolsTest : public views::ViewsTestBase {
     top_default_container_window.reset();
     top_window.reset();
     css_agent_.reset();
+    overlay_agent_.reset();
     dom_agent_.reset();
     uber_dispatcher_.reset();
     fake_frontend_channel_.reset();
@@ -268,15 +280,44 @@ class UIDevToolsTest : public views::ViewsTestBase {
                            node_id));
   }
 
+  int GetOverlayNodeHighlightRequestedCount(int node_id) {
+    return frontend_channel()->CountProtocolNotificationMessage(
+        base::StringPrintf(
+            "{\"method\":\"Overlay.nodeHighlightRequested\",\"params\":{"
+            "\"nodeId\":%d}}",
+            node_id));
+  }
+
+  int GetOverlayInspectNodeRequestedCount(int node_id) {
+    return frontend_channel()->CountProtocolNotificationMessage(
+        base::StringPrintf(
+            "{\"method\":\"Overlay.inspectNodeRequested\",\"params\":{"
+            "\"backendNodeId\":%d}}",
+            node_id));
+  }
+
   void CompareNodeBounds(DOM::Node* node, const gfx::Rect& bounds) {
     Maybe<CSS::CSSStyle> styles;
     css_agent_->getMatchedStylesForNode(node->getNodeId(), &styles);
     ASSERT_TRUE(styles.isJust());
     Array<CSS::CSSProperty>* properties = styles.fromJust()->getCssProperties();
-    EXPECT_EQ(bounds.height(), GetPropertyByName("height", properties));
-    EXPECT_EQ(bounds.width(), GetPropertyByName("width", properties));
-    EXPECT_EQ(bounds.x(), GetPropertyByName("x", properties));
-    EXPECT_EQ(bounds.y(), GetPropertyByName("y", properties));
+    EXPECT_EQ(bounds.height(), GetIntPropertyByName("height", properties));
+    EXPECT_EQ(bounds.width(), GetIntPropertyByName("width", properties));
+    EXPECT_EQ(bounds.x(), GetIntPropertyByName("x", properties));
+    EXPECT_EQ(bounds.y(), GetIntPropertyByName("y", properties));
+  }
+
+  void CompareViewAtrributes(DOM::Node* node, views::View* view) {
+    Maybe<CSS::CSSStyle> styles;
+    css_agent_->getMatchedStylesForNode(node->getNodeId(), &styles);
+    ASSERT_TRUE(styles.isJust());
+    Array<CSS::CSSProperty>* properties = styles.fromJust()->getCssProperties();
+
+    base::string16 description;
+    if (view->GetTooltipText(gfx::Point(), &description)) {
+      EXPECT_EQ(base::UTF16ToUTF8(description),
+                GetStringPropertyByName("tooltip", properties));
+    }
   }
 
   void SetStyleTexts(DOM::Node* node,
@@ -299,7 +340,7 @@ class UIDevToolsTest : public views::ViewsTestBase {
   }
 
   void HighlightNode(int node_id) {
-    dom_agent_->highlightNode(
+    overlay_agent_->highlightNode(
         CreateHighlightConfig(kBackgroundColor, kBorderColor), node_id);
   }
 
@@ -324,6 +365,9 @@ class UIDevToolsTest : public views::ViewsTestBase {
 
   ui_devtools::UIDevToolsCSSAgent* css_agent() { return css_agent_.get(); }
   ui_devtools::UIDevToolsDOMAgent* dom_agent() { return dom_agent_.get(); }
+  ui_devtools::UIDevToolsOverlayAgent* overlay_agent() {
+    return overlay_agent_.get();
+  }
 
   std::unique_ptr<aura::Window> top_overlay_window;
   std::unique_ptr<aura::Window> top_window;
@@ -334,9 +378,118 @@ class UIDevToolsTest : public views::ViewsTestBase {
   std::unique_ptr<FakeFrontendChannel> fake_frontend_channel_;
   std::unique_ptr<ui_devtools::UIDevToolsDOMAgent> dom_agent_;
   std::unique_ptr<ui_devtools::UIDevToolsCSSAgent> css_agent_;
+  std::unique_ptr<ui_devtools::UIDevToolsOverlayAgent> overlay_agent_;
 
   DISALLOW_COPY_AND_ASSIGN(UIDevToolsTest);
 };
+
+// Tests that FindElementIdTargetedByPoint() returns a non-zero id when a UI
+// element target exists.
+TEST_F(UIDevToolsTest, FindElementIdTargetedByPoint) {
+  std::unique_ptr<views::Widget> widget(
+      CreateTestWidget(gfx::Rect(1, 1, 1, 1)));
+  std::unique_ptr<ui_devtools::protocol::DOM::Node> root;
+  dom_agent()->getDocument(&root);
+  EXPECT_NE(0, dom_agent()->FindElementIdTargetedByPoint(
+                   gfx::Point(1, 1), GetPrimaryRootWindow()));
+}
+
+// Test case R1_CONTAINS_R2.
+TEST_F(UIDevToolsTest, OneUIElementContainsAnother) {
+  const gfx::Rect outside_rect(1, 1, 100, 100);
+  std::unique_ptr<views::Widget> widget_outside(CreateTestWidget(outside_rect));
+
+  const gfx::Rect inside_rect(2, 2, 50, 50);
+  std::unique_ptr<views::Widget> widget_inside(CreateTestWidget(inside_rect));
+
+  std::unique_ptr<ui_devtools::protocol::DOM::Node> root;
+  dom_agent()->getDocument(&root);
+
+  int outside_rect_id = dom_agent()->FindElementIdTargetedByPoint(
+      outside_rect.origin(), GetPrimaryRootWindow());
+  int inside_rect_id = dom_agent()->FindElementIdTargetedByPoint(
+      inside_rect.origin(), GetPrimaryRootWindow());
+  dom_agent()->ShowDistancesInHighlightOverlay(outside_rect_id, inside_rect_id);
+
+  HighlightRectsConfiguration highlight_rect_config =
+      dom_agent()->highlight_rect_config();
+
+  // Swapping R1 and R2 shouldn't change |highlight_rect_config|.
+  dom_agent()->ShowDistancesInHighlightOverlay(inside_rect_id, outside_rect_id);
+  DCHECK_EQ(highlight_rect_config, dom_agent()->highlight_rect_config());
+
+  const std::pair<aura::Window*, gfx::Rect> element_outside(
+      dom_agent()
+          ->GetElementFromNodeId(outside_rect_id)
+          ->GetNodeWindowAndBounds());
+
+  const std::pair<aura::Window*, gfx::Rect> element_inside(
+      dom_agent()
+          ->GetElementFromNodeId(inside_rect_id)
+          ->GetNodeWindowAndBounds());
+
+  EXPECT_TRUE(element_outside.second == outside_rect);
+  EXPECT_TRUE(element_inside.second == inside_rect);
+  DCHECK_EQ(dom_agent()->highlight_rect_config(),
+            HighlightRectsConfiguration::R1_CONTAINS_R2);
+}
+
+// Tests that the correct Overlay events are dispatched to the frontend when
+// hovering and clicking over a UI element in inspect mode.
+TEST_F(UIDevToolsTest, MouseEventsGenerateFEEventsInInspectMode) {
+  std::unique_ptr<views::Widget> widget(
+      CreateTestWidget(gfx::Rect(1, 1, 1, 1)));
+
+  std::unique_ptr<ui_devtools::protocol::DOM::Node> root;
+  dom_agent()->getDocument(&root);
+
+  gfx::Point p(1, 1);
+  int node_id =
+      dom_agent()->FindElementIdTargetedByPoint(p, GetPrimaryRootWindow());
+
+  EXPECT_EQ(0, GetOverlayInspectNodeRequestedCount(node_id));
+  EXPECT_EQ(0, GetOverlayNodeHighlightRequestedCount(node_id));
+  overlay_agent()->setInspectMode(
+      "searchForNode", protocol::Maybe<protocol::Overlay::HighlightConfig>());
+
+  // Moving the mouse cursor over the widget bounds should request a node
+  // highlight.
+  ui::test::EventGenerator generator(widget->GetNativeWindow());
+  generator.MoveMouseBy(p.x(), p.y());
+
+  // 2 mouse events ET_MOUSE_ENTERED and ET_MOUSE_MOVED are generated.
+  EXPECT_EQ(2, GetOverlayNodeHighlightRequestedCount(node_id));
+  EXPECT_EQ(0, GetOverlayInspectNodeRequestedCount(node_id));
+
+  // Clicking on the widget should pin that element.
+  generator.PressLeftButton();
+
+  int inspect_node_notification_count =
+      GetOverlayInspectNodeRequestedCount(node_id);
+
+  // Press escape to exit inspect mode.
+  generator.PressKey(ui::KeyboardCode::VKEY_ESCAPE, ui::EventFlags::EF_NONE);
+
+  // Upon exiting inspect mode, the element is inspected and highlighted.
+  EXPECT_EQ(inspect_node_notification_count + 1,
+            GetOverlayInspectNodeRequestedCount(node_id));
+  ui::Layer* highlighting_layer = GetHighlightingLayer(GetPrimaryRootWindow());
+  EXPECT_EQ(kBackgroundColor, highlighting_layer->GetTargetColor());
+  EXPECT_TRUE(highlighting_layer->visible());
+
+  int highlight_notification_count =
+      GetOverlayNodeHighlightRequestedCount(node_id);
+  inspect_node_notification_count =
+      GetOverlayInspectNodeRequestedCount(node_id);
+
+  // Since inspect mode is exited, a subsequent mouse move should generate no
+  // nodeHighlightRequested or inspectNodeRequested events.
+  generator.MoveMouseBy(p.x(), p.y());
+  EXPECT_EQ(highlight_notification_count,
+            GetOverlayNodeHighlightRequestedCount(node_id));
+  EXPECT_EQ(inspect_node_notification_count,
+            GetOverlayInspectNodeRequestedCount(node_id));
+}
 
 TEST_F(UIDevToolsTest, GetDocumentWithWindowWidgetView) {
   std::unique_ptr<views::Widget> widget(
@@ -686,7 +839,11 @@ TEST_F(UIDevToolsTest, WindowWidgetViewHighlight) {
   DOM::Node* root_view_node = widget_node->getChildren(nullptr)->get(0);
 
   HighlightNode(window_node->getNodeId());
-  ExpectHighlighted(window->GetBoundsInScreen(), GetPrimaryRootWindow());
+
+  ui::Layer* highlighting_layer = GetHighlightingLayer(GetPrimaryRootWindow());
+  EXPECT_TRUE(highlighting_layer->visible());
+  EXPECT_EQ(kBackgroundColor, highlighting_layer->GetTargetColor());
+
   ui_devtools::UIElement* element =
       dom_agent()->GetElementFromNodeId(window_node->getNodeId());
   ASSERT_EQ(ui_devtools::UIElementType::WINDOW, element->type());
@@ -695,9 +852,11 @@ TEST_F(UIDevToolsTest, WindowWidgetViewHighlight) {
             window->GetBoundsInScreen());
 
   HideHighlight(0);
-
   HighlightNode(widget_node->getNodeId());
-  ExpectHighlighted(widget->GetWindowBoundsInScreen(), GetPrimaryRootWindow());
+
+  highlighting_layer = GetHighlightingLayer(GetPrimaryRootWindow());
+  EXPECT_TRUE(highlighting_layer->visible());
+  EXPECT_EQ(kBackgroundColor, highlighting_layer->GetTargetColor());
 
   element = dom_agent()->GetElementFromNodeId(widget_node->getNodeId());
   ASSERT_EQ(ui_devtools::UIElementType::WIDGET, element->type());
@@ -706,9 +865,11 @@ TEST_F(UIDevToolsTest, WindowWidgetViewHighlight) {
             widget->GetWindowBoundsInScreen());
 
   HideHighlight(0);
-
   HighlightNode(root_view_node->getNodeId());
-  ExpectHighlighted(root_view->GetBoundsInScreen(), GetPrimaryRootWindow());
+
+  highlighting_layer = GetHighlightingLayer(GetPrimaryRootWindow());
+  EXPECT_TRUE(highlighting_layer->visible());
+  EXPECT_EQ(kBackgroundColor, highlighting_layer->GetTargetColor());
 
   element = dom_agent()->GetElementFromNodeId(root_view_node->getNodeId());
   ASSERT_EQ(ui_devtools::UIElementType::VIEW, element->type());
@@ -769,6 +930,8 @@ TEST_F(UIDevToolsTest, WindowWidgetViewGetMatchedStylesForNode) {
   CompareNodeBounds(parent_children->get(1), window_bounds);
   CompareNodeBounds(parent_children->get(0)->getChildren(nullptr)->get(0),
                     view_bounds);
+  CompareViewAtrributes(parent_children->get(0)->getChildren(nullptr)->get(0),
+                        widget->GetRootView());
 }
 
 TEST_F(UIDevToolsTest, WindowWidgetViewStyleSheetChanged) {

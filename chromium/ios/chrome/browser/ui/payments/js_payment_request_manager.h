@@ -10,12 +10,12 @@
 #import "ios/web/public/web_state/js/crw_js_injection_manager.h"
 
 namespace payments {
+class PaymentShippingOption;
 struct PaymentAddress;
 }  // namespace payments
 
 namespace web {
 class PaymentResponse;
-class PaymentShippingOption;
 }  // namespace web
 
 // Injects the JavaScript that implements the Payment Request API and provides
@@ -25,6 +25,16 @@ class PaymentShippingOption;
 // Executes a JS noop function. This is used to work around an issue where the
 // JS event queue is blocked while presenting the Payment Request UI.
 - (void)executeNoop;
+
+// Sets the JS isContextSecure global variable to |contextSecure|.
+- (void)setContextSecure:(BOOL)contextSecure
+       completionHandler:(ProceduralBlockWithBool)completionHandler;
+
+// Throws a DOMException with the supplied |errorName| and |errorMessage|.
+- (void)throwDOMExceptionWithErrorName:(NSString*)errorName
+                          errorMessage:(NSString*)errorMessage
+                     completionHandler:
+                         (ProceduralBlockWithBool)completionHandler;
 
 // Resolves the JavaScript promise associated with the current PaymentRequest
 // with the a JSON serialization of |paymentResponse|. If |completionHandler| is
@@ -36,12 +46,13 @@ class PaymentShippingOption;
                                    (ProceduralBlockWithBool)completionHandler;
 
 // Rejects the JavaScript promise associated with the current PaymentRequest
-// with the supplied |errorMessage|. If |completionHandler| is not nil, it will
-// be invoked with YES after the operation has completed successfully or with NO
-// otherwise.
-- (void)rejectRequestPromiseWithErrorMessage:(NSString*)errorMessage
-                           completionHandler:
-                               (ProceduralBlockWithBool)completionHandler;
+// with a DOMException with the supplied |errorName| and |errorMessage|. If
+// |completionHandler| is not nil, it will be invoked with YES after the
+// operation has completed successfully or with NO otherwise.
+- (void)rejectRequestPromiseWithErrorName:(NSString*)errorName
+                             errorMessage:(NSString*)errorMessage
+                        completionHandler:
+                            (ProceduralBlockWithBool)completionHandler;
 
 // Resolves the JavaScript promise returned by the call to canMakePayment on the
 // current PaymentRequest, with the specified |value|. If |completionHandler| is
@@ -52,12 +63,13 @@ class PaymentShippingOption;
                                 (ProceduralBlockWithBool)completionHandler;
 
 // Rejects the JavaScript promise returned by the call to canMakePayment on the
-// current PaymentRequest, with the supplied |errorMessage|. If
-// |completionHandler| is not nil, it will be invoked with YES after the
-// operation has completed successfully or with NO otherwise.
-- (void)rejectCanMakePaymentPromiseWithErrorMessage:(NSString*)errorMessage
-                                  completionHandler:(ProceduralBlockWithBool)
-                                                        completionHandler;
+// current PaymentRequest, with a DOMException with the supplied |errorName| and
+// |errorMessage|. If |completionHandler| is not nil, it will be invoked with
+// YES after the operation has completed successfully or with NO otherwise.
+- (void)rejectCanMakePaymentPromiseWithErrorName:(NSString*)errorName
+                                    errorMessage:(NSString*)errorMessage
+                               completionHandler:
+                                   (ProceduralBlockWithBool)completionHandler;
 
 // Resolves the promise returned by PaymentRequest.prototype.abort.
 - (void)resolveAbortPromiseWithCompletionHandler:
@@ -76,7 +88,8 @@ class PaymentShippingOption;
 
 // Updates the shippingOption property on the PaymentRequest object and
 // dispatches a shippingoptionchange event.
-- (void)updateShippingOption:(const web::PaymentShippingOption&)shippingOption
+- (void)updateShippingOption:
+            (const payments::PaymentShippingOption&)shippingOption
            completionHandler:(ProceduralBlockWithBool)completionHanlder;
 
 @end

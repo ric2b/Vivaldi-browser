@@ -18,6 +18,7 @@
 #include "base/test/histogram_tester.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/client/event_client.h"
@@ -1122,6 +1123,9 @@ TEST_P(WindowEventDispatcherTest, DoNotSynthesizeWhileButtonDown) {
 // Flaky on 32-bit Windows bots.  http://crbug.com/388272
 TEST_P(WindowEventDispatcherTest,
        MAYBE(SynthesizeMouseEventsOnWindowBoundsChanged)) {
+  test::TestCursorClient cursor_client(root_window());
+  cursor_client.ShowCursor();
+
   test::TestWindowDelegate delegate;
   std::unique_ptr<aura::Window> window(CreateTestWindowWithDelegate(
       &delegate, 1234, gfx::Rect(5, 5, 100, 100), root_window()));
@@ -1150,7 +1154,7 @@ TEST_P(WindowEventDispatcherTest,
   recorder.Reset();
 
   // Set window to ignore events.
-  window->set_ignore_events(true);
+  window->SetEventTargetingPolicy(ui::mojom::EventTargetingPolicy::NONE);
 
   // Update the window bounds so that cursor is back inside the window.
   // This should not trigger a synthetic event.
@@ -1161,7 +1165,8 @@ TEST_P(WindowEventDispatcherTest,
   recorder.Reset();
 
   // Set window to accept events but invisible.
-  window->set_ignore_events(false);
+  window->SetEventTargetingPolicy(
+      ui::mojom::EventTargetingPolicy::TARGET_AND_DESCENDANTS);
   window->Hide();
   recorder.Reset();
 
@@ -1170,6 +1175,31 @@ TEST_P(WindowEventDispatcherTest,
   window->SetBounds(bounds1);
   RunAllPendingInMessageLoop();
   EXPECT_TRUE(recorder.events().empty());
+
+  // Hide the cursor. None of the following scenario should trigger
+  // a synthetic event.
+  cursor_client.HideCursor();
+
+  window->Show();
+  RunAllPendingInMessageLoop();
+  EXPECT_TRUE(recorder.events().empty());
+
+  window->SetBounds(bounds2);
+  RunAllPendingInMessageLoop();
+  EXPECT_TRUE(recorder.events().empty());
+
+  window->SetBounds(bounds1);
+  RunAllPendingInMessageLoop();
+  EXPECT_TRUE(recorder.events().empty());
+
+  cursor_client.ShowCursor();
+  window->SetBounds(bounds2);
+  RunAllPendingInMessageLoop();
+  ASSERT_FALSE(recorder.events().empty());
+  ASSERT_FALSE(recorder.mouse_event_flags().empty());
+  EXPECT_EQ(ui::ET_MOUSE_MOVED, recorder.events().back());
+  EXPECT_EQ(ui::EF_IS_SYNTHESIZED, recorder.mouse_event_flags().back());
+  recorder.Reset();
 }
 
 // Tests that a mouse exit is dispatched to the last known cursor location
@@ -2053,7 +2083,7 @@ class ExitMessageLoopOnMousePress : public ui::test::TestEventHandler {
   void OnMouseEvent(ui::MouseEvent* event) override {
     ui::test::TestEventHandler::OnMouseEvent(event);
     if (event->type() == ui::ET_MOUSE_PRESSED)
-      base::MessageLoopForUI::current()->QuitWhenIdle();
+      base::RunLoop::QuitCurrentWhenIdleDeprecated();
   }
 
  private:
@@ -2875,6 +2905,65 @@ TEST_F(WindowEventDispatcherMusTest, UseDefaultTargeterToFindTarget2) {
   EXPECT_EQ(mouse_location,
             last_event_location_delegate1.last_mouse_location());
   EXPECT_EQ(gfx::Point(), last_event_location_delegate2.last_mouse_location());
+}
+
+namespace {
+
+class LocationRecordingEventHandler : public ui::EventHandler {
+ public:
+  LocationRecordingEventHandler() = default;
+  ~LocationRecordingEventHandler() override = default;
+
+  const gfx::Point& event_root_location() const { return event_root_location_; }
+
+  const gfx::Point& env_root_location() const { return env_root_location_; }
+
+  int mouse_event_count() const { return mouse_event_count_; }
+
+  // ui::EventHandler:
+  void OnMouseEvent(ui::MouseEvent* event) override {
+    ++mouse_event_count_;
+    event_root_location_ = event->root_location();
+    env_root_location_ = Env::GetInstance()->last_mouse_location();
+  }
+
+ private:
+  int mouse_event_count_ = 0;
+  gfx::Point event_root_location_;
+  gfx::Point env_root_location_;
+
+  DISALLOW_COPY_AND_ASSIGN(LocationRecordingEventHandler);
+};
+
+}  // namespace
+
+TEST_F(WindowEventDispatcherMusTest, RootLocationDoesntChange) {
+  std::unique_ptr<Window> window(
+      test::CreateTestWindowWithBounds(gfx::Rect(0, 0, 10, 20), root_window()));
+  std::unique_ptr<Window> child_window(
+      test::CreateTestWindowWithBounds(gfx::Rect(5, 6, 10, 20), window.get()));
+
+  test::EnvTestHelper().SetAlwaysUseLastMouseLocation(false);
+
+  LocationRecordingEventHandler event_handler;
+  root_window()->AddPreTargetHandler(&event_handler);
+
+  const gfx::Point mouse_location(1, 2);
+  gfx::Point root_location(mouse_location);
+
+  ui::MouseEvent mouse(ui::ET_MOUSE_PRESSED, mouse_location, root_location,
+                       ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON,
+                       ui::EF_LEFT_MOUSE_BUTTON);
+  ui::Event::DispatcherApi(&mouse).set_target(child_window.get());
+  DispatchEventUsingWindowDispatcher(&mouse);
+  EXPECT_EQ(1, event_handler.mouse_event_count());
+
+  // The root location during dispatch of the event and Env should match the
+  // one that was dispatched.
+  EXPECT_EQ(root_location, event_handler.event_root_location());
+  EXPECT_EQ(root_location, event_handler.env_root_location());
+
+  root_window()->RemovePreTargetHandler(&event_handler);
 }
 
 class NestedLocationDelegate : public test::TestWindowDelegate {

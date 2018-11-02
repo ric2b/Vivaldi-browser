@@ -13,6 +13,7 @@
 #include "base/files/scoped_file.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/path_service.h"
 #include "base/process/kill.h"
 #include "base/process/launch.h"
 #include "base/process/process_iterator.h"
@@ -126,8 +127,6 @@ bool LocalTestServer::LaunchPython(const base::FilePath& testserver_path) {
   // Save the read half. The write half is sent to the child.
   child_fd_.reset(pipefd[0]);
   base::ScopedFD write_closer(pipefd[1]);
-  base::FileHandleMappingVector map_write_fd;
-  map_write_fd.push_back(std::make_pair(pipefd[1], pipefd[1]));
 
   python_command.AppendArg("--startup-pipe=" + base::IntToString(pipefd[1]));
 
@@ -141,7 +140,13 @@ bool LocalTestServer::LaunchPython(const base::FilePath& testserver_path) {
   // Launch a new testserver process.
   base::LaunchOptions options;
 
-  options.fds_to_remap = &map_write_fd;
+  // Set CWD to source root.
+  if (!PathService::Get(base::DIR_SOURCE_ROOT, &options.current_directory)) {
+    LOG(ERROR) << "Failed to get DIR_SOURCE_ROOT";
+    return false;
+  }
+
+  options.fds_to_remap.push_back(std::make_pair(pipefd[1], pipefd[1]));
   process_ = base::LaunchProcess(python_command, options);
   if (!process_.IsValid()) {
     LOG(ERROR) << "Failed to launch " << python_command.GetCommandLineString();
@@ -171,10 +176,12 @@ bool LocalTestServer::WaitToStart() {
     return false;
   }
 
-  if (!ParseServerData(server_data)) {
+  int port;
+  if (!SetAndParseServerData(server_data, &port)) {
     LOG(ERROR) << "Could not parse server_data: " << server_data;
     return false;
   }
+  SetPort(port);
 
   return true;
 }

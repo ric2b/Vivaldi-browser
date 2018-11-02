@@ -47,14 +47,9 @@ const char kCompressedVideoDirective[] = "compressed-video";
 const char kIdentityDirective[] = "identity";
 const char kChromeProxyPagePoliciesDirective[] = "page-policies";
 
-// The legacy Chrome-Proxy response header directive for LoFi images.
-const char kLegacyChromeProxyLoFiResponseDirective[] = "q=low";
-
 const char kChromeProxyExperimentForceLitePage[] = "force_lite_page";
 const char kChromeProxyExperimentForceEmptyImage[] =
     "force_page_policies_empty_image";
-
-const char kIfHeavyQualifier[] = "if-heavy";
 
 const char kChromeProxyActionBlockOnce[] = "block-once";
 const char kChromeProxyActionBlock[] = "block";
@@ -184,16 +179,16 @@ const char* compressed_video_directive() {
   return kCompressedVideoDirective;
 }
 
+const char* page_policies_directive() {
+  return kChromeProxyPagePoliciesDirective;
+}
+
 const char* chrome_proxy_experiment_force_lite_page() {
   return kChromeProxyExperimentForceLitePage;
 }
 
 const char* chrome_proxy_experiment_force_empty_image() {
   return kChromeProxyExperimentForceEmptyImage;
-}
-
-const char* if_heavy_qualifier() {
-  return kIfHeavyQualifier;
 }
 
 TransformDirective ParseRequestTransform(
@@ -216,9 +211,9 @@ TransformDirective ParseRequestTransform(
   } else if (base::LowerCaseEqualsASCII(accept_transform_value,
                                         kIdentityDirective)) {
     return TRANSFORM_IDENTITY;
-  } else {
-    return TRANSFORM_NONE;
   }
+
+  return TRANSFORM_NONE;
 }
 
 TransformDirective ParseResponseTransform(
@@ -232,6 +227,7 @@ TransformDirective ParseResponseTransform(
                                     &chrome_proxy_header_value)) {
       return ParsePagePolicyDirective(chrome_proxy_header_value);
     }
+    return TRANSFORM_NONE;
   } else if (base::LowerCaseEqualsASCII(content_transform_value,
                                         lite_page_directive())) {
     return TRANSFORM_LITE_PAGE;
@@ -241,17 +237,15 @@ TransformDirective ParseResponseTransform(
   } else if (base::LowerCaseEqualsASCII(content_transform_value,
                                         kIdentityDirective)) {
     return TRANSFORM_IDENTITY;
-  } else {
-    NOTREACHED() << "Unexpected content transform header: "
-                 << content_transform_value;
+  } else if (base::LowerCaseEqualsASCII(content_transform_value,
+                                        compressed_video_directive())) {
+    return TRANSFORM_COMPRESSED_VIDEO;
   }
-  return TRANSFORM_NONE;
+  return TRANSFORM_UNKNOWN;
 }
 
 bool IsEmptyImagePreview(const net::HttpResponseHeaders& headers) {
-  return IsPreviewType(headers, kEmptyImageDirective) ||
-         headers.HasHeaderValue(kChromeProxyHeader,
-                                kLegacyChromeProxyLoFiResponseDirective);
+  return IsPreviewType(headers, kEmptyImageDirective);
 }
 
 bool IsEmptyImagePreview(const std::string& content_transform_value,
@@ -259,16 +253,6 @@ bool IsEmptyImagePreview(const std::string& content_transform_value,
   if (IsPreviewTypeInHeaderValue(content_transform_value, kEmptyImageDirective))
     return true;
 
-  // Look for "q=low" in the "Chrome-Proxy" response header.
-  net::HttpUtil::ValuesIterator values(chrome_proxy_value.begin(),
-                                       chrome_proxy_value.end(), ',');
-  while (values.GetNext()) {
-    base::StringPiece value(values.value_begin(), values.value_end());
-    if (base::LowerCaseEqualsASCII(value,
-                                   kLegacyChromeProxyLoFiResponseDirective)) {
-      return true;
-    }
-  }
   return false;
 }
 

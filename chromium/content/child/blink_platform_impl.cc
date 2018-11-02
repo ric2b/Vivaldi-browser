@@ -33,8 +33,8 @@
 #include "base/trace_event/trace_event.h"
 #include "blink/public/resources/grit/blink_image_resources.h"
 #include "blink/public/resources/grit/blink_resources.h"
+#include "blink/public/resources/grit/media_controls_resources.h"
 #include "build/build_config.h"
-#include "components/mime_util/mime_util.h"
 #include "content/app/resources/grit/content_resources.h"
 #include "content/app/strings/grit/content_strings.h"
 #include "content/child/child_thread_impl.h"
@@ -50,6 +50,7 @@
 #include "content/child/worker_thread_registry.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/service_manager_connection.h"
+#include "content/public/common/service_names.mojom.h"
 #include "net/base/net_errors.h"
 #include "third_party/WebKit/public/platform/WebData.h"
 #include "third_party/WebKit/public/platform/WebFloatPoint.h"
@@ -176,8 +177,6 @@ static int ToMessageID(WebLocalizedString::Name name) {
       return IDS_FORM_CALENDAR_TODAY;
     case WebLocalizedString::kDetailsLabel:
       return IDS_DETAILS_WITHOUT_SUMMARY_LABEL;
-    case WebLocalizedString::kDownloadButtonLabel:
-      return IDS_DOWNLOAD_BUTTON_LABEL;
     case WebLocalizedString::kFileButtonChooseFileLabel:
       return IDS_FORM_FILE_BUTTON_LABEL;
     case WebLocalizedString::kFileButtonChooseMultipleFilesLabel:
@@ -192,6 +191,8 @@ static int ToMessageID(WebLocalizedString::Name name) {
       return IDS_MEDIA_REMOTING_DISABLE_TEXT;
     case WebLocalizedString::kMediaRemotingCastText:
       return IDS_MEDIA_REMOTING_CAST_TEXT;
+    case WebLocalizedString::kMediaRemotingCastToUnknownDeviceText:
+      return IDS_MEDIA_REMOTING_CAST_TO_UNKNOWN_DEVICE_TEXT;
     case WebLocalizedString::kMultipleFileUploadText:
       return IDS_FORM_FILE_MULTIPLE_UPLOAD;
     case WebLocalizedString::kOtherColorLabel:
@@ -344,8 +345,9 @@ void BlinkPlatformImpl::WaitUntilWebThreadTLSUpdate(
                             base::WaitableEvent::InitialState::NOT_SIGNALED);
   thread->GetTaskRunner()->PostTask(
       FROM_HERE,
-      base::Bind(&BlinkPlatformImpl::UpdateWebThreadTLS, base::Unretained(this),
-                 base::Unretained(thread), base::Unretained(&event)));
+      base::BindOnce(&BlinkPlatformImpl::UpdateWebThreadTLS,
+                     base::Unretained(this), base::Unretained(thread),
+                     base::Unretained(&event)));
   event.Wait();
 }
 
@@ -374,6 +376,22 @@ std::unique_ptr<blink::WebThread> BlinkPlatformImpl::CreateThread(
   std::unique_ptr<blink::scheduler::WebThreadBase> thread =
       blink::scheduler::WebThreadBase::CreateWorkerThread(
           name, base::Thread::Options());
+  thread->Init();
+  WaitUntilWebThreadTLSUpdate(thread.get());
+  return std::move(thread);
+}
+
+std::unique_ptr<blink::WebThread> BlinkPlatformImpl::CreateWebAudioThread() {
+  base::Thread::Options thread_options;
+
+  // WebAudio uses a thread with |DISPLAY| priority to avoid glitch when the
+  // system is under the high pressure. Note that the main browser thread also
+  // runs with same priority. (see: crbug.com/734539)
+  thread_options.priority = base::ThreadPriority::DISPLAY;
+
+  std::unique_ptr<blink::scheduler::WebThreadBase> thread =
+      blink::scheduler::WebThreadBase::CreateWorkerThread(
+          "WebAudio Rendering Thread", thread_options);
   thread->Init();
   WaitUntilWebThreadTLSUpdate(thread.get());
   return std::move(thread);
@@ -682,6 +700,10 @@ blink::WebCrypto* BlinkPlatformImpl::Crypto() {
   return &web_crypto_;
 }
 
+const char* BlinkPlatformImpl::GetBrowserServiceName() const {
+  return mojom::kBrowserServiceName;
+}
+
 blink::WebNotificationManager* BlinkPlatformImpl::GetNotificationManager() {
   if (!thread_safe_sender_.get() || !notification_dispatcher_.get())
     return nullptr;
@@ -770,6 +792,10 @@ size_t BlinkPlatformImpl::MaxDecodedImageBytes() {
 #else
   return kNoDecodedImageByteLimit;
 #endif
+}
+
+bool BlinkPlatformImpl::IsLowEndDevice() {
+  return base::SysInfo::IsLowEndDevice();
 }
 
 uint32_t BlinkPlatformImpl::GetUniqueIdForProcess() {

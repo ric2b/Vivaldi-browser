@@ -175,14 +175,15 @@ LocationArbitrator::NewNetworkLocationProvider(
   // Android uses its own SystemLocationProvider.
   return nullptr;
 #else
-  return base::MakeUnique<NetworkLocationProvider>(access_token_store, context,
+  return std::make_unique<NetworkLocationProvider>(access_token_store, context,
                                                    url, access_token);
 #endif
 }
 
 std::unique_ptr<LocationProvider>
 LocationArbitrator::NewSystemLocationProvider() {
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
+#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX) || \
+    defined(OS_FUCHSIA)
   return nullptr;
 #else
   return device::NewSystemLocationProvider();

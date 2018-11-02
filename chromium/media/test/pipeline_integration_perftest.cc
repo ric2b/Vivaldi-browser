@@ -21,9 +21,7 @@ static void RunPlaybackBenchmark(const std::string& filename,
   for (int i = 0; i < iterations; ++i) {
     PipelineIntegrationTestBase pipeline;
 
-    ASSERT_EQ(
-        PIPELINE_OK,
-        pipeline.Start(filename, PipelineIntegrationTestBase::kClockless));
+    ASSERT_EQ(PIPELINE_OK, pipeline.Start(filename));
 
     base::TimeTicks start = base::TimeTicks::Now();
     pipeline.Play();
@@ -63,8 +61,10 @@ TEST(PipelineIntegrationPerfTest, AudioPlaybackBenchmark) {
   RunAudioPlaybackBenchmark("sfx_s24le.wav", "clockless_playback");
   RunAudioPlaybackBenchmark("sfx_s16le.wav", "clockless_playback");
   RunAudioPlaybackBenchmark("sfx_u8.wav", "clockless_playback");
+  RunAudioPlaybackBenchmark("sfx.flac", "clockless_playback");
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
   RunAudioPlaybackBenchmark("sfx.mp3", "clockless_playback");
+  RunAudioPlaybackBenchmark("sfx-flac.mp4", "clockless_playback");
 #endif
 }
 

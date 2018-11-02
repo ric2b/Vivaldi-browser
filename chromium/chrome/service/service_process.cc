@@ -166,8 +166,6 @@ bool ServiceProcess::Initialize(base::MessageLoopForUI* message_loop,
   }
 
   // Initialize TaskScheduler and redirect SequencedWorkerPool tasks to it.
-  using StandbyThreadPolicy =
-      base::SchedulerWorkerPoolParams::StandbyThreadPolicy;
   constexpr int kMaxBackgroundThreads = 1;
   constexpr int kMaxBackgroundBlockingThreads = 1;
   constexpr int kMaxForegroundThreads = 3;
@@ -177,14 +175,10 @@ bool ServiceProcess::Initialize(base::MessageLoopForUI* message_loop,
 
   base::TaskScheduler::Create("CloudPrintServiceProcess");
   base::TaskScheduler::GetInstance()->Start(
-      {{StandbyThreadPolicy::LAZY, kMaxBackgroundThreads,
-        kSuggestedReclaimTime},
-       {StandbyThreadPolicy::LAZY, kMaxBackgroundBlockingThreads,
-        kSuggestedReclaimTime},
-       {StandbyThreadPolicy::LAZY, kMaxForegroundThreads,
-        kSuggestedReclaimTime},
-       {StandbyThreadPolicy::LAZY, kMaxForegroundBlockingThreads,
-        kSuggestedReclaimTime,
+      {{kMaxBackgroundThreads, kSuggestedReclaimTime},
+       {kMaxBackgroundBlockingThreads, kSuggestedReclaimTime},
+       {kMaxForegroundThreads, kSuggestedReclaimTime},
+       {kMaxForegroundBlockingThreads, kSuggestedReclaimTime,
         base::SchedulerBackwardCompatibility::INIT_COM_STA}});
 
   base::SequencedWorkerPool::EnableWithRedirectionToTaskSchedulerForProcess();
@@ -249,9 +243,8 @@ bool ServiceProcess::Initialize(base::MessageLoopForUI* message_loop,
 
   ipc_server_.reset(new ServiceIPCServer(this /* client */, io_task_runner(),
                                          &shutdown_event_));
-  ipc_server_->AddMessageHandler(
-      base::MakeUnique<cloud_print::CloudPrintMessageHandler>(ipc_server_.get(),
-                                                              this));
+  ipc_server_->binder_registry().AddInterface(
+      base::Bind(&cloud_print::CloudPrintMessageHandler::Create, this));
   ipc_server_->Init();
 
   // After the IPC server has started we signal that the service process is

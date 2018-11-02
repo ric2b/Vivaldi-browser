@@ -21,7 +21,6 @@
 #include "chrome/common/importer/importer_bridge.h"
 #include "chrome/common/importer/importer_data_types.h"
 #include "chrome/common/ini_parser.h"
-#include "chrome/grit/generated_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 
 const char* ChromeBookmarkFileReader::kNameKey = "name";

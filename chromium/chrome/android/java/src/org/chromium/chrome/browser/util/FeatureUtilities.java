@@ -23,10 +23,11 @@ import org.chromium.base.FieldTrialList;
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeSwitches;
-import org.chromium.chrome.browser.firstrun.FirstRunGlueImpl;
+import org.chromium.chrome.browser.firstrun.FirstRunUtils;
 import org.chromium.chrome.browser.omnibox.OmniboxPlaceholderFieldTrial;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
 import org.chromium.chrome.browser.tabmodel.DocumentModeAssassin;
@@ -187,7 +188,7 @@ public class FeatureUtilities {
     public static void cacheNativeFlags() {
         cacheHerbFlavor();
         cacheChromeHomeEnabled();
-        FirstRunGlueImpl.cacheFirstRunPrefs();
+        FirstRunUtils.cacheFirstRunPrefs();
         OmniboxPlaceholderFieldTrial.cacheOmniboxPlaceholderGroup();
 
         // Propagate DONT_PREFETCH_LIBRARIES feature value to LibraryLoader. This can't
@@ -257,7 +258,10 @@ public class FeatureUtilities {
     /**
      * @return Whether or not chrome should attach the toolbar to the bottom of the screen.
      */
+    @CalledByNative
     public static boolean isChromeHomeEnabled() {
+        if (DeviceFormFactor.isTablet()) return false;
+
         if (sChromeHomeEnabled == null) {
             // Allow disk access for preferences while Chrome Home is in experimentation.
             StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
@@ -312,6 +316,27 @@ public class FeatureUtilities {
         }
 
         return sChromeHomeSwipeLogicType;
+    }
+
+    /**
+     * @return Whether or not the Chrome Home Modern layout is enabled.
+     */
+    public static boolean isChromeHomeModernEnabled() {
+        if (!isChromeHomeEnabled()) return false;
+
+        // Modern is enabled by default for Chrome Home, so return true if the feature list isn't
+        // yet initialized.
+        if (!ChromeFeatureList.isInitialized()) return true;
+
+        return ChromeFeatureList.isEnabled(ChromeFeatureList.CHROME_HOME_MODERN_LAYOUT);
+    }
+
+    /**
+     * @return Whether or not showing the Doodle in the Chrome Home NTP is enabled.
+     */
+    public static boolean isChromeHomeDoodleEnabled() {
+        return isChromeHomeEnabled()
+                && ChromeFeatureList.isEnabled(ChromeFeatureList.CHROME_HOME_DOODLE);
     }
 
     private static native void nativeSetCustomTabVisible(boolean visible);

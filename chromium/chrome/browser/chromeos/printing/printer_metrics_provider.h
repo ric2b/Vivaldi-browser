@@ -22,7 +22,7 @@ class PrinterMetricsProvider : public metrics::MetricsProvider {
   // metrics::MetricsProvider overrides:
   void OnRecordingEnabled() override;
   void OnRecordingDisabled() override;
-  void ProvideGeneralMetrics(
+  void ProvideCurrentSessionData(
       metrics::ChromeUserMetricsExtension* uma_proto) override;
 
  private:

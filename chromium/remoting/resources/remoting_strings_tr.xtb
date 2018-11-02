@@ -23,11 +23,10 @@ Gizlilikle ilgili daha fazla bilgi edinmek için lütfen Google Gizlilik Politik
 <translation id="1520828917794284345">Masaüstünü uygun şekilde yeniden boyutlandır</translation>
 <translation id="154040539590487450">Uzaktan erişim hizmeti başlatılamadı.</translation>
 <translation id="1546934824884762070">Beklenmeyen bir hata oluştu. Lütfen bu sorunu geliştiricilere bildirin.</translation>
-<translation id="1619813076098775562">Cast cihazına bağlantı kapatıldı.</translation>
 <translation id="1643640058022401035">Bu sayfadan ayrılırsanız Chromoting oturumunuz sonlandırılır.</translation>
 <translation id="1654128982815600832">Bu bilgisayara uzaktan bağlantılar etkinleştiriliyor…</translation>
 <translation id="170207782578677537">Bu bilgisayar kaydettirilemedi.</translation>
-<translation id="1704090719919187045">Chromoting Ana Makine Tercihleri</translation>
+<translation id="1727412735341161734">Chrome Uzaktan Masaüstü</translation>
 <translation id="174018511426417793">Kayıtlı bilgisayarınız yok. Bir bilgisayara uzaktan bağlantıları etkinleştirmek için Chrome Uzaktan Masaüstü uygulamasını o bilgisayara yükleyin ve “<ph name="BUTTON_NAME" />” düğmesini tıklayın.</translation>
 <translation id="1742469581923031760">Bağlanıyor...</translation>
 <translation id="1770394049404108959">Uygulamayı açamıyorum.</translation>
@@ -42,10 +41,6 @@ Gizlilikle ilgili daha fazla bilgi edinmek için lütfen Google Gizlilik Politik
 <translation id="2013996867038862849">Eşlenen tüm istemciler silindi.</translation>
 <translation id="2038229918502634450">Ana makine, bir politika değişikliğini dikkate almak için yeniden başlatılıyor.</translation>
 <translation id="2046651113449445291">Aşağıdaki istemciler bu bilgisayarla eşlendi ve bir PIN sağlamadan bağlanabilir. Bu izni, istediğiniz zaman tek tek veya tüm istemciler için iptal edebilirsiniz.</translation>
-<translation id="2053901200959289492">• Android Nougat için Çoklu Pencere desteği eklendi.
-• Masaüstü resim kalitesi, yanıt verme performansı ve pil tüketimi iyileştirildi.
-• Tıkla ve sürükle işlemlerinin yanıt verme performansı iyileştirildi.
-• Kullanıcı arayüzünde çok sayıda animasyon efekti iyileştirildi.</translation>
 <translation id="2078880767960296260">Ana Makine İşlemi</translation>
 <translation id="20876857123010370">Dokunmatik yüzey modu</translation>
 <translation id="2089514346391228378">Bu bilgisayar için uzaktan bağlantılar etkinleştirildi.</translation>
@@ -81,6 +76,7 @@ Gizlilikle ilgili daha fazla bilgi edinmek için lütfen Google Gizlilik Politik
 <translation id="2676780859508944670">Çalışıyor...</translation>
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2747641796667576127">Yazılım güncellemeleri genellikle otomatik olarak gerçekleştirilir, ancak bazı nadir durumlarda güncelleme başarısız olabilir. Yazılımın güncellenmesi birkaç dakikadan fazla sürmeyecektir ve bilgisayarınıza uzaktan bağlanılarak yapılabilir.</translation>
+<translation id="2758123043070977469">Kimlik doğrulanırken bir sorun oluştu, lütfen tekrar giriş yapın.</translation>
 <translation id="2803375539583399270">PIN girin</translation>
 <translation id="2841013758207633010">Zaman</translation>
 <translation id="2851754573186462851">Chromium Uygulama Akışı</translation>
@@ -99,8 +95,15 @@ Gizlilikle ilgili daha fazla bilgi edinmek için lütfen Google Gizlilik Politik
 <translation id="3150823315463303127">Ana makine politikayı okuyamadı.</translation>
 <translation id="3194245623920924351">Chrome Uzaktan Masaüstü</translation>
 <translation id="3197730452537982411">Uzaktan Masaüstü</translation>
+<translation id="321944585103975186">• Kullanıcı arayüzü yeniden tasarlandı.
+• Performans, yanıt verme hızı ve güvenilirlik iyileştirildi.
+• Windows veya Linux bilgisayarlardan ses çalma desteği getirildi.
+• Klavye desteği geliştirildi.</translation>
+<translation id="324272851072175193">Bu talimatları e-postayla gönder</translation>
 <translation id="3258789396564295715">Chrome Uzaktan Masaüstü uygulamasını kullanarak bu bilgisayara güvenli bir şekilde erişebilirsiniz.</translation>
 <translation id="3286521253923406898">Chromoting Ana Makine Denetleyicisi</translation>
+<translation id="3305934114213025800"><ph name="PRODUCT_NAME" /> değişiklik yapmak istiyor.</translation>
+<translation id="331779822864701136">• Android 8.0 Oreo desteği eklendi.</translation>
 <translation id="332624996707057614">Bilgisayarın adını düzenle</translation>
 <translation id="3339299787263251426">Bilgisayarınıza İnternet üzerinden güvenli bir şekilde erişin</translation>
 <translation id="3360306038446926262">Windows</translation>
@@ -109,6 +112,12 @@ Gizlilikle ilgili daha fazla bilgi edinmek için lütfen Google Gizlilik Politik
 <translation id="3385242214819933234">Ana makinenin sahibi geçersiz.</translation>
 <translation id="3403830762023901068">Politika ayarları bu bilgisayarın bir Chromoting ana bilgisayarı olarak paylaşılmasına izin vermiyor. Yardım için sistem yöneticinizle iletişim kurun.</translation>
 <translation id="3423542133075182604">Güvenlik Anahtarı Uzaktan Erişim İşlemi</translation>
+<translation id="3426467947138417795">Chrome Uzaktan Masaüstü
+Uzaktan Masaüstü
+Uzaktan PC
+Uzaktan Bilgisayar
+Uzaktan Erişim
+Uzaktan Destek</translation>
 <translation id="3581045510967524389">Ağa bağlanılamıyor. Lütfen cihazınızın çevrimiçi olduğunu kontrol edin.</translation>
 <translation id="3596628256176442606">Bu hizmet Chromoting istemcilerinden gelen bağlantıları etkinleştirir.</translation>
 <translation id="3606997049964069799">Chromium'da oturum açmadınız. Lütfen oturum açın ve tekrar deneyin.</translation>
@@ -117,8 +126,13 @@ Gizlilikle ilgili daha fazla bilgi edinmek için lütfen Google Gizlilik Politik
 <translation id="3695446226812920698">Nasıl yapacağınızı öğrenin</translation>
 <translation id="3718805989288361841">Chrome Uzaktan Masaüstü politika ayarında bir hata oluştu. Yardım için sistem yöneticinizle görüşün.</translation>
 <translation id="3776024066357219166">Chrome Uzaktan Masaüstü oturumunuz sonlandı.</translation>
-<translation id="3785447812627779171">Chromoting
-Ana Makinesi</translation>
+<translation id="3788372335219293587">iOS cihazınızdan bilgisayarınıza güvenle erişin. Hızlı, basit ve ücretsizdir.
+
+• Uzaktan erişmek istediğiniz bilgisayarda, Chrome Uzaktan Masaüstü uygulamasını bulun. Uygulamayı Chrome Web Mağazası'nda https://chrome.google.com/remotedesktop adresinde bulabilirsiniz.
+• Chrome Uzaktan Masaüstü yazılımını yükleyin ve kurulumu tamamlamak üzere talimatları uygulayın.
+• iOS cihazınızda uygulamayı açın ve bağlanmak için çevrimiçi bilgisayarlardan herhangi birine dokunun. 
+
+Gizlilikle ilgili daha fazla bilgi edinmek için lütfen Google Gizlilik Politikası'na (http://goo.gl/SyrVzj) bakın.</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">Chrome Uzaktan Masaüstü tarafından erişime izin vermek için lütfen aşağıda hesabınızı ve PIN kodunuzu onaylayın.</translation>
 <translation id="3897092660631435901">Menü</translation>
@@ -132,9 +146,9 @@ Ana Makinesi</translation>
 <translation id="405887016757208221">Uzak bilgisayar, oturumu ilk kullanıma hazırlayamadı. Sorun devam ederse lütfen ana makineyi tekrar yapılandırmayı deneyin.</translation>
 <translation id="4068946408131579958">Tüm bağlantılar</translation>
 <translation id="409800995205263688">NOT: Politika ayarları, yalnızca ağınızdaki bilgisayarlar arasındaki bağlantılara izin veriyor.</translation>
+<translation id="4145029455188493639"><ph name="EMAIL_ADDRESS" /> olarak oturum açtınız.</translation>
 <translation id="4155497795971509630">Bazı gerekli bileşenler eksik. Lütfen yazılımın en son sürümünü yüklediğinizden emin olun ve tekrar deneyin.</translation>
 <translation id="4156740505453712750">Bu bilgisayara erişimi korumak için lütfen <ph name="BOLD_START" />en az altı basamaklı<ph name="BOLD_END" /> bir PIN seçin. Başka bir yerden bağlanırken bu PIN gerekecektir.</translation>
-<translation id="4156741816461781891"><ph name="EMAIL_ADDRESS" /> olarak oturum açıldı.</translation>
 <translation id="4176825807642096119">Erişim kodu</translation>
 <translation id="4207623512727273241">Devam etmeden önce lütfen yükleyiciyi çalıştırın.</translation>
 <translation id="4227991223508142681">Ana Makine Temel Hazırlık Yardımcı Programı</translation>
@@ -152,8 +166,7 @@ Ana Makinesi</translation>
 <translation id="4517233780764084060">NOT: Tüm klavye kısayollarının kullanılabilir olduğundan emin olmak için, Chromoting'i 'Pencere olarak aç' şeklinde yapılandırabilirsiniz.</translation>
 <translation id="4563926062592110512">İstemcinin bağlantısı kesildi: <ph name="CLIENT_USERNAME" />.</translation>
 <translation id="4572065712096155137">Eriş</translation>
-<translation id="4573676252416618192">Chrome Uzaktan
-Masaüstü Ana Makinesi</translation>
+<translation id="4592037108270173918">Mobil ağ üzerinden bir cihaza bağlanırken veri ücretleri uygulanabilir. Devam etmek istiyor musunuz?</translation>
 <translation id="4619978527973181021">Kabul Et ve Yükle</translation>
 <translation id="4635770493235256822">Uzak cihazlar</translation>
 <translation id="4660011489602794167">Klavyeyi göster</translation>
@@ -192,20 +205,19 @@ Masaüstü Ana Makinesi</translation>
 <translation id="5419418238395129586">Son çevrimiçi olduğu tarih: <ph name="DATE" /></translation>
 <translation id="544077782045763683">Ana makine kapatıldı.</translation>
 <translation id="5510035215749041527">Bağlantıyı şimdi kes</translation>
-<translation id="5537725057119320332">Yayınla</translation>
 <translation id="5593560073513909978">Hizmet geçici olarak kullanılamıyor. Lütfen daha sonra tekrar deneyin.</translation>
 <translation id="5601503069213153581">PIN</translation>
 <translation id="5619148062500147964">Bu bilgisayara</translation>
 <translation id="5625493749705183369">İnternet üzerinden güvenli bir şekilde diğer bilgisayarlara erişin veya başka kullanıcıların bilgisayarınıza erişmesine izin verin.</translation>
 <translation id="5702987232842159181">Bağlı:</translation>
 <translation id="5708869785009007625">Masaüstünüz şu anda <ph name="USER" /> ile paylaşılıyor.</translation>
+<translation id="5750083143895808682"><ph name="EMAIL_ADDRESS" /> olarak oturum açtınız.</translation>
 <translation id="5773590752998175013">Eşleme tarihi</translation>
 <translation id="579702532610384533">Yeniden bağlan</translation>
+<translation id="5810269635982033450">Ekran dokunmatik yüzey gibi çalışır</translation>
 <translation id="5841343754884244200">Görüntüleme seçenekleri</translation>
 <translation id="5843054235973879827">Bu işlem neden güvenli?</translation>
 <translation id="5859141382851488196">Yeni pencere…</translation>
-<translation id="5885438903806970186">Çevrimiçi.</translation>
-<translation id="6001953797859482435">Chrome Uzaktan Masaüstü Ana Makine Tercihleri</translation>
 <translation id="6011539954251327702">Chromoting, bilgisayarınızı Web üzerinden güvenli şekilde paylaşmanıza olanak verir. Her iki kullanıcının da Chromoting uygulamasını çalıştırıyor olması gerekir; uygulamayı <ph name="URL" /> adresinde bulabilirsiniz.</translation>
 <translation id="6033507038939587647">Klavye seçenekleri</translation>
 <translation id="6040143037577758943">Kapat</translation>
@@ -254,10 +266,14 @@ Masaüstü Ana Makinesi</translation>
 <translation id="7019153418965365059">Tanınmayan ana makine hatası: <ph name="HOST_OFFLINE_REASON" />.</translation>
 <translation id="701976023053394610">Uzaktan Yardım</translation>
 <translation id="7038683108611689168">Kullanım istatistiklerini ve kilitlenme raporlarını toplamamıza izin vererek Chromoting'i daha iyi hale getirmemize yardımcı olun.</translation>
-<translation id="712467900648340229">Yayın cihazına bağlanamadı.</translation>
+<translation id="7067321367069083429">Ekran dokunmatik ekran gibi çalışır</translation>
+<translation id="7116737094673640201">Chrome Chrome Uzaktan Masaüstü'ne hoş geldiniz</translation>
 <translation id="7144878232160441200">Yeniden Dene</translation>
 <translation id="7149517134817561223">Chrome uzaktan masaüstü ana makinesine komutları verecek uygulama.</translation>
 <translation id="7215059001581613786">Lütfen altı veya daha fazla basamaklı bir PIN kodu girin.</translation>
+<translation id="7237767047212540055">Uzaktan erişmek istediğiniz bilgisayarda Chrome'u açın ve <ph name="INSTALLATION_LINK" /> bağlantısını ziyaret edin
+Chrome Uzaktan Masaüstü yazılımını yükleyin ve kurulumu tamamlamak üzere talimatları uygulayın
+Kurulum tamamlandıktan sonra PIN veya erişim kodunu girerek bilgisayara bu sayfadan erişebilirsiniz</translation>
 <translation id="7312846573060934304">Ana makine çevrimdışı.</translation>
 <translation id="7319983568955948908">Paylaşmayı Durdur</translation>
 <translation id="7401733114166276557">Chrome Uzaktan Masaüstü</translation>
@@ -271,6 +287,7 @@ Masaüstü Ana Makinesi</translation>
 <translation id="7658239707568436148">İptal</translation>
 <translation id="7665369617277396874">Hesap ekle</translation>
 <translation id="7672203038394118626">Bu bilgisayara uzaktan bağlantılar devre dışı bırakıldı.</translation>
+<translation id="7678209621226490279">Sola Yerleştir</translation>
 <translation id="7693372326588366043">Ana makine listesini yenile</translation>
 <translation id="7782471917492991422">Lütfen bilgisayarınızın güç yönetimi ayarlarını kontrol edin ve boşta kaldığında uyku moduna geçecek şekilde ayarlanmadığından emin olun.</translation>
 <translation id="7810127880729796595">İstatistikleri göster (bağlantı: <ph name="QUALITY" />)</translation>
@@ -278,6 +295,7 @@ Masaüstü Ana Makinesi</translation>
 <translation id="7868137160098754906">Lütfen uzak bilgisayara ilişkin PIN'inizi girin.</translation>
 <translation id="7869445566579231750">Bu uygulamayı çalıştırmak için izniniz yok.</translation>
 <translation id="7895403300744144251">Uzak bilgisayardaki güvenlik politikaları, hesabınızdan bağlantı yapılmasına izin vermiyor.</translation>
+<translation id="7936528439960309876">Sağa Yerleştir</translation>
 <translation id="7948001860594368197">Ekran seçenekleri</translation>
 <translation id="7970576581263377361">Kimlik doğrulama başarısız oldu. Lütfen Chromium'da tekrar oturum açın.</translation>
 <translation id="7981525049612125370">Uzak oturumun süresi sona erdi.</translation>

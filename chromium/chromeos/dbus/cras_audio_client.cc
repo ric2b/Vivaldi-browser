@@ -52,6 +52,16 @@ class CrasAudioClientImpl : public CrasAudioClient {
                    weak_ptr_factory_.GetWeakPtr(), callback));
   }
 
+  void GetDefaultOutputBufferSize(
+      const GetDefaultOutputBufferSizeCallback& callback) override {
+    dbus::MethodCall method_call(cras::kCrasControlInterface,
+                                 cras::kGetDefaultOutputBufferSize);
+    cras_proxy_->CallMethod(
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::Bind(&CrasAudioClientImpl::OnGetDefaultOutputBufferSize,
+                   weak_ptr_factory_.GetWeakPtr(), callback));
+  }
+
   void GetNodes(const GetNodesCallback& callback,
                 const ErrorCallback& error_callback) override {
     dbus::MethodCall method_call(cras::kCrasControlInterface,
@@ -266,6 +276,14 @@ class CrasAudioClientImpl : public CrasAudioClient {
                    weak_ptr_factory_.GetWeakPtr()),
         base::Bind(&CrasAudioClientImpl::SignalConnected,
                    weak_ptr_factory_.GetWeakPtr()));
+
+    // Monitor the D-Bus signal for hotword.
+    cras_proxy_->ConnectToSignal(
+        cras::kCrasControlInterface, cras::kHotwordTriggered,
+        base::Bind(&CrasAudioClientImpl::HotwordTriggeredReceived,
+                   weak_ptr_factory_.GetWeakPtr()),
+        base::Bind(&CrasAudioClientImpl::SignalConnected,
+                   weak_ptr_factory_.GetWeakPtr()));
   }
 
  private:
@@ -351,6 +369,23 @@ class CrasAudioClientImpl : public CrasAudioClient {
       observer.OutputNodeVolumeChanged(node_id, volume);
   }
 
+  void HotwordTriggeredReceived(dbus::Signal* signal) {
+    dbus::MessageReader reader(signal);
+    int64_t tv_sec, tv_nsec;
+
+    if (!reader.PopInt64(&tv_sec)) {
+      LOG(ERROR) << "Error reading signal from cras:" << signal->ToString();
+      return;
+    }
+
+    if (!reader.PopInt64(&tv_nsec)) {
+      LOG(ERROR) << "Error reading signal from cras:" << signal->ToString();
+      return;
+    }
+    for (auto& observer : observers_)
+      observer.HotwordTriggered(tv_sec, tv_nsec);
+  }
+
   void OnGetVolumeState(const GetVolumeStateCallback& callback,
                         dbus::Response* response) {
     bool success = true;
@@ -372,6 +407,27 @@ class CrasAudioClientImpl : public CrasAudioClient {
     }
 
     callback.Run(volume_state, success);
+  }
+
+  void OnGetDefaultOutputBufferSize(
+      const GetDefaultOutputBufferSizeCallback& callback,
+      dbus::Response* response) {
+    bool success = true;
+    int32_t buffer_size = 0;
+
+    if (response) {
+      dbus::MessageReader reader(response);
+      if (!reader.PopInt32(&buffer_size)) {
+        success = false;
+        LOG(ERROR) << "Error reading response from cras: "
+                   << response->ToString();
+      }
+    } else {
+      success = false;
+      LOG(ERROR) << "Error calling " << cras::kGetDefaultOutputBufferSize;
+    }
+
+    callback.Run(buffer_size, success);
   }
 
   void OnGetNodes(const GetNodesCallback& callback,
@@ -506,6 +562,9 @@ void CrasAudioClient::Observer::ActiveInputNodeChanged(uint64_t node_id) {}
 void CrasAudioClient::Observer::OutputNodeVolumeChanged(uint64_t node_id,
                                                         int volume) {
 }
+
+void CrasAudioClient::Observer::HotwordTriggered(uint64_t tv_sec,
+                                                 uint64_t tv_nsec) {}
 
 CrasAudioClient::CrasAudioClient() {
 }

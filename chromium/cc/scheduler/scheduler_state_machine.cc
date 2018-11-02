@@ -273,7 +273,7 @@ bool SchedulerStateMachine::PendingActivationsShouldBeForced() const {
   if (!visible_)
     return true;
 
-  // Force pending activations when BeginFrameSource is paused to avoid
+  // Force pending activations when viz::BeginFrameSource is paused to avoid
   // deadlocking the main thread.
   if (begin_frame_source_paused_)
     return true;
@@ -355,7 +355,7 @@ bool SchedulerStateMachine::ShouldDraw() const {
   return needs_redraw_;
 }
 
-bool SchedulerStateMachine::ShouldActivatePendingTree() const {
+bool SchedulerStateMachine::ShouldActivateSyncTree() const {
   // There is nothing to activate.
   if (!has_pending_tree_)
     return false;
@@ -392,7 +392,7 @@ bool SchedulerStateMachine::ShouldNotifyBeginMainFrameNotSent() const {
   if (!visible_)
     return false;
 
-  // There are no BeginImplFrames while BeginFrameSource is paused, meaning
+  // There are no BeginImplFrames while viz::BeginFrameSource is paused, meaning
   // the scheduler should send SendBeginMainFrameNotExpectedSoon instead,
   // indicating a longer period of inactivity.
   if (begin_frame_source_paused_)
@@ -421,7 +421,7 @@ bool SchedulerStateMachine::CouldSendBeginMainFrame() const {
   if (!visible_)
     return false;
 
-  // There are no BeginImplFrames while BeginFrameSource is paused,
+  // There are no BeginImplFrames while viz::BeginFrameSource is paused,
   // so should also stop BeginMainFrames.
   if (begin_frame_source_paused_)
     return false;
@@ -559,7 +559,7 @@ bool SchedulerStateMachine::ShouldInvalidateLayerTreeFrameSink() const {
 }
 
 SchedulerStateMachine::Action SchedulerStateMachine::NextAction() const {
-  if (ShouldActivatePendingTree())
+  if (ShouldActivateSyncTree())
     return ACTION_ACTIVATE_SYNC_TREE;
   if (ShouldCommit())
     return ACTION_COMMIT;
@@ -630,6 +630,9 @@ void SchedulerStateMachine::WillPerformImplSideInvalidationInternal() {
   needs_impl_side_invalidation_ = false;
   has_pending_tree_ = true;
   did_perform_impl_side_invalidation_ = true;
+  pending_tree_needs_first_draw_on_activation_ =
+      next_invalidation_needs_first_draw_on_activation_;
+  next_invalidation_needs_first_draw_on_activation_ = false;
   // TODO(eseckler): Track impl-side invalidations for pending/active tree and
   // CompositorFrame freshness computation.
 }
@@ -643,8 +646,8 @@ bool SchedulerStateMachine::CouldCreatePendingTree() const {
   if (!visible_)
     return false;
 
-  // If the BeginFrameSource is paused, we will not be able to make any impl
-  // frames.
+  // If the viz::BeginFrameSource is paused, we will not be able to make any
+  // impl frames.
   if (begin_frame_source_paused_)
     return false;
 
@@ -696,6 +699,7 @@ void SchedulerStateMachine::WillCommit(bool commit_has_no_updates) {
 
     // We have a new pending tree.
     has_pending_tree_ = true;
+    pending_tree_needs_first_draw_on_activation_ = true;
     pending_tree_is_ready_for_activation_ = false;
     // Wait for the new pending tree to become ready to draw, which may happen
     // before or after activation.
@@ -728,7 +732,8 @@ void SchedulerStateMachine::WillActivate() {
 
   has_pending_tree_ = false;
   pending_tree_is_ready_for_activation_ = false;
-  active_tree_needs_first_draw_ = true;
+  active_tree_needs_first_draw_ = pending_tree_needs_first_draw_on_activation_;
+  pending_tree_needs_first_draw_on_activation_ = false;
   needs_redraw_ = true;
 
   previous_pending_tree_was_impl_side_ = current_pending_tree_is_impl_side_;
@@ -760,7 +765,6 @@ void SchedulerStateMachine::DidDrawInternal(DrawResult draw_result) {
   switch (draw_result) {
     case INVALID_RESULT:
     case DRAW_ABORTED_CANT_DRAW:
-    case DRAW_ABORTED_CONTEXT_LOST:
       NOTREACHED() << "Invalid return DrawResult:" << draw_result;
       break;
     case DRAW_ABORTED_DRAINING_PIPELINE:
@@ -803,8 +807,11 @@ void SchedulerStateMachine::DidDraw(DrawResult draw_result) {
   DidDrawInternal(draw_result);
 }
 
-void SchedulerStateMachine::SetNeedsImplSideInvalidation() {
+void SchedulerStateMachine::SetNeedsImplSideInvalidation(
+    bool needs_first_draw_on_activation) {
   needs_impl_side_invalidation_ = true;
+  next_invalidation_needs_first_draw_on_activation_ |=
+      needs_first_draw_on_activation;
 }
 
 void SchedulerStateMachine::SetMainThreadWantsBeginMainFrameNotExpectedMessages(
@@ -1214,9 +1221,12 @@ void SchedulerStateMachine::DidLoseLayerTreeFrameSink() {
   needs_redraw_ = false;
 }
 
-void SchedulerStateMachine::NotifyReadyToActivate() {
-  if (has_pending_tree_)
-    pending_tree_is_ready_for_activation_ = true;
+bool SchedulerStateMachine::NotifyReadyToActivate() {
+  if (!has_pending_tree_ || pending_tree_is_ready_for_activation_)
+    return false;
+
+  pending_tree_is_ready_for_activation_ = true;
+  return true;
 }
 
 void SchedulerStateMachine::NotifyReadyToDraw() {

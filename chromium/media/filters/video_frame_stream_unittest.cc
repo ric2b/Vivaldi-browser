@@ -15,6 +15,7 @@
 #include "media/base/fake_demuxer_stream.h"
 #include "media/base/gmock_callback_support.h"
 #include "media/base/mock_filters.h"
+#include "media/base/mock_media_log.h"
 #include "media/base/test_helpers.h"
 #include "media/base/timestamp_constants.h"
 #include "media/filters/decoder_stream.h"
@@ -24,6 +25,8 @@
 using ::testing::_;
 using ::testing::AnyNumber;
 using ::testing::Assign;
+using ::testing::HasSubstr;
+using ::testing::InSequence;
 using ::testing::Invoke;
 using ::testing::InvokeWithoutArgs;
 using ::testing::NiceMock;
@@ -97,6 +100,11 @@ class VideoFrameStreamTest
       EXPECT_CALL(*cdm_context_, GetDecryptor())
           .WillRepeatedly(Return(decryptor_.get()));
     }
+
+    // Covering most MediaLog messages for now.
+    // TODO(wolenetz/xhwang): Fix tests to have better MediaLog checking.
+    EXPECT_MEDIA_LOG(HasSubstr("video")).Times(AnyNumber());
+    EXPECT_MEDIA_LOG(HasSubstr("decryptor")).Times(AnyNumber());
   }
 
   ~VideoFrameStreamTest() {
@@ -322,6 +330,7 @@ class VideoFrameStreamTest
 
       case DECRYPTOR_NO_KEY:
         if (GetParam().is_encrypted && GetParam().has_decryptor) {
+          EXPECT_MEDIA_LOG(HasSubstr("no key for key ID"));
           EXPECT_CALL(*this, OnWaitingForDecryptionKey());
           has_no_key_ = true;
         }
@@ -403,7 +412,7 @@ class VideoFrameStreamTest
 
   base::MessageLoop message_loop_;
 
-  MediaLog media_log_;
+  StrictMock<MockMediaLog> media_log_;
   std::unique_ptr<VideoFrameStream> video_frame_stream_;
   std::unique_ptr<FakeDemuxerStream> demuxer_stream_;
   std::unique_ptr<StrictMock<MockCdmContext>> cdm_context_;
@@ -463,6 +472,10 @@ INSTANTIATE_TEST_CASE_P(
     VideoFrameStreamTest,
     ::testing::Values(VideoFrameStreamTestParams(false, false, 0, 3),
                       VideoFrameStreamTestParams(false, false, 2, 3)));
+
+TEST_P(VideoFrameStreamTest, CanReadWithoutStallingAtAnyTime) {
+  ASSERT_FALSE(video_frame_stream_->CanReadWithoutStalling());
+}
 
 TEST_P(VideoFrameStreamTest, Initialization) {
   Initialize();
@@ -615,6 +628,25 @@ TEST_P(VideoFrameStreamTest, Read_DuringEndOfStreamDecode) {
   ASSERT_TRUE(frame_read_.get());
   EXPECT_TRUE(
       frame_read_->metadata()->IsTrue(VideoFrameMetadata::END_OF_STREAM));
+}
+
+TEST_P(VideoFrameStreamTest, Read_DemuxerStreamReadError) {
+  Initialize();
+  EnterPendingState(DEMUXER_READ_NORMAL);
+
+  InSequence s;
+
+  if (GetParam().is_encrypted && GetParam().has_decryptor) {
+    EXPECT_MEDIA_LOG(
+        HasSubstr("DecryptingDemuxerStream: demuxer stream read error"));
+  }
+  EXPECT_MEDIA_LOG(HasSubstr("video demuxer stream read error"));
+
+  demuxer_stream_->Error();
+  base::RunLoop().RunUntilIdle();
+
+  ASSERT_FALSE(pending_read_);
+  EXPECT_EQ(last_read_status_, VideoFrameStream::DECODE_ERROR);
 }
 
 // No Reset() before initialization is successfully completed.
@@ -912,6 +944,52 @@ TEST_P(VideoFrameStreamTest, FallbackDecoder_DecodeErrorTwice) {
   ASSERT_EQ(GetDecoderName(1), decoder_->GetDisplayName());
   EXPECT_FALSE(pending_read_);
   ASSERT_EQ(VideoFrameStream::DECODE_ERROR, last_read_status_);
+}
+
+// This tests verifies that we properly fallback to a new decoder if the first
+// decode after a config change fails.
+TEST_P(VideoFrameStreamTest,
+       FallbackDecoder_SelectedOnMidstreamDecodeErrorAfterReinitialization) {
+  // For simplicity of testing, this test applies only when there is no decoder
+  // delay and parallel decoding is disabled.
+  if (GetParam().decoding_delay != 0 || GetParam().parallel_decoding > 1)
+    return;
+
+  Initialize();
+
+  // Note: Completes decoding one frame, results in Decode() being called with
+  // second frame that is not completed.
+  ReadOneFrame();
+
+  // Verify that the first frame was decoded successfully.
+  EXPECT_FALSE(pending_read_);
+  EXPECT_GT(decoder_->total_bytes_decoded(), 0);
+  EXPECT_EQ(VideoFrameStream::OK, last_read_status_);
+
+  // Continue up to the point of reinitialization.
+  EnterPendingState(DEMUXER_READ_CONFIG_CHANGE);
+
+  // Hold decodes to prevent a frame from being outputed upon reinitialization.
+  decoder_->HoldDecode();
+  SatisfyPendingCallback(DEMUXER_READ_CONFIG_CHANGE);
+
+  // DecoderStream sends an EOS to flush the decoder during config changes.
+  // Let the EOS decode be satisfied to properly complete the decoder reinit.
+  decoder_->SatisfySingleDecode();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(pending_read_);
+
+  // Fail the first decode, before a frame can be outputed.
+  decoder_->SimulateError();
+  base::RunLoop().RunUntilIdle();
+
+  ReadOneFrame();
+
+  // Verify that fallback happened.
+  EXPECT_EQ(GetDecoderName(1), decoder_->GetDisplayName());
+  EXPECT_FALSE(pending_read_);
+  EXPECT_EQ(VideoFrameStream::OK, last_read_status_);
+  EXPECT_GT(decoder_->total_bytes_decoded(), 0);
 }
 
 TEST_P(VideoFrameStreamTest,

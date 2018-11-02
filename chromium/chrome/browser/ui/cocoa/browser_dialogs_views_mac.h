@@ -8,10 +8,11 @@
 #include "ui/gfx/native_widget_types.h"
 
 class Browser;
+class BubbleUi;
 class ContentSettingBubbleModel;
+class ExtensionInstalledBubble;
 class GURL;
 class LocationBarDecoration;
-class Profile;
 
 namespace bookmarks {
 class BookmarkBubbleObserver;
@@ -31,9 +32,8 @@ struct SecurityInfo;
 
 namespace chrome {
 
-// Shows a Views page info bubble on the given |browser_window|.
-void ShowPageInfoBubbleViews(gfx::NativeWindow browser_window,
-                             Profile* profile,
+// Shows a Views page info bubble on the given |browser|.
+void ShowPageInfoBubbleViews(Browser* browser,
                              content::WebContents* web_contents,
                              const GURL& virtual_url,
                              const security_state::SecurityInfo& security_info);
@@ -48,6 +48,10 @@ void ShowBookmarkBubbleViewsAtPoint(const gfx::Point& anchor_point,
                                     const GURL& url,
                                     bool newly_bookmarked,
                                     LocationBarDecoration* decoration);
+
+// Builds the Views version of an Extension installed bubble.
+std::unique_ptr<BubbleUi> BuildViewsExtensionInstalledBubbleUi(
+    ExtensionInstalledBubble* bubble);
 
 // Shows a views zoom bubble at the |anchor_point|. This occurs when the zoom
 // icon is clicked or when a shortcut key is pressed or whenever |web_contents|
@@ -85,6 +89,9 @@ class ContentSettingBubbleViewsBridge {
 void ShowImportLockDialogViews(gfx::NativeWindow parent,
                                const base::Callback<void(bool)>& callback,
                                base::string16 importer_locktext);
+
+// Shows the first run bubble.
+void ShowFirstRunBubbleViews(Browser* browser);
 
 }  // namespace chrome
 

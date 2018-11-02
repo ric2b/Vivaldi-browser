@@ -42,7 +42,14 @@ ToolbarActionsBarBubbleViews::ToolbarActionsBarBubbleViews(
 ToolbarActionsBarBubbleViews::~ToolbarActionsBarBubbleViews() {}
 
 void ToolbarActionsBarBubbleViews::Show() {
-  delegate_->OnBubbleShown();
+  // Passing the Widget pointer (via GetWidget()) below in the lambda is safe
+  // because the controller, which eventually invokes the callback passed to
+  // OnBubbleShown, will never outlive the bubble view. This is because the
+  // ToolbarActionsBarBubbleView owns the ToolbarActionsBarBubbleDelegate.
+  // The ToolbarActionsBarBubbleDelegate is an ExtensionMessageBubbleBridge,
+  // which owns the ExtensionMessageBubbleController.
+  delegate_->OnBubbleShown(
+      base::Bind([](views::Widget* widget) { widget->Close(); }, GetWidget()));
   GetWidget()->Show();
 }
 
@@ -158,8 +165,8 @@ int ToolbarActionsBarBubbleViews::GetDialogButtons() const {
 }
 
 int ToolbarActionsBarBubbleViews::GetDefaultDialogButton() const {
-  // TODO(estade): we should set a default where approprite. See
-  // http://crbug.com/621122
+  // TODO(estade): we should set a default where appropriate. See
+  // http://crbug.com/751279
   return ui::DIALOG_BUTTON_NONE;
 }
 

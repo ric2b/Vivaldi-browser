@@ -8,6 +8,7 @@
 #include "base/logging.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_params.h"
+#include "base/optional.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -17,15 +18,11 @@ namespace previews {
 
 namespace {
 
-// The group of client-side previews experiments. Actually, this group is only
-// expected to control one PreviewsType (OFFLINE) as well as the blacklist.
-// Other PreviewsType's will be control by different field trial groups.
+// The group of client-side previews experiments. This controls paramters of the
+// client side blacklist.
 const char kClientSidePreviewsFieldTrial[] = "ClientSidePreviews";
 
 const char kEnabled[] = "Enabled";
-
-// Allow offline pages to show for prohibitively slow networks.
-const char kOfflinePagesSlowNetwork[] = "show_offline_pages";
 
 // Name for the version parameter of a field trial. Version changes will
 // result in older blacklist entries being removed.
@@ -36,9 +33,6 @@ const char kVersion[] = "version";
 // See net/nqe/effective_connection_type.h for mapping from string to value.
 const char kEffectiveConnectionTypeThreshold[] =
     "max_allowed_effective_connection_type";
-
-// The string that corresponds to enabled for the variation param experiments.
-const char kExperimentEnabled[] = "true";
 
 const char kClientLoFiExperimentName[] = "PreviewsClientLoFi";
 
@@ -68,21 +62,9 @@ net::EffectiveConnectionType GetParamValueAsECT(
     const std::string& trial_name,
     const std::string& param_name,
     net::EffectiveConnectionType default_value) {
-  net::EffectiveConnectionType value;
-  if (!net::GetEffectiveConnectionTypeForName(
-          base::GetFieldTrialParamValue(trial_name, param_name), &value)) {
-    return default_value;
-  }
-  return value;
-}
-
-bool IsIncludedInClientSidePreviewsExperimentsFieldTrial() {
-  // By convention, an experiment in the client-side previews study enables use
-  // of at least one client-side previews optimization if its name begins with
-  // "Enabled."
-  return base::StartsWith(
-      base::FieldTrialList::FindFullName(kClientSidePreviewsFieldTrial),
-      kEnabled, base::CompareCase::SENSITIVE);
+  return net::GetEffectiveConnectionTypeForName(
+             base::GetFieldTrialParamValue(trial_name, param_name))
+      .value_or(default_value);
 }
 
 }  // namespace
@@ -111,7 +93,7 @@ int PerHostBlackListOptOutThreshold() {
 
 int HostIndifferentBlackListOptOutThreshold() {
   return GetParamValueAsInt(kClientSidePreviewsFieldTrial,
-                            "host_indifferent_opt_out_threshold", 4);
+                            "host_indifferent_opt_out_threshold", 6);
 }
 
 base::TimeDelta PerHostBlackListDuration() {
@@ -141,16 +123,11 @@ base::TimeDelta OfflinePreviewFreshnessDuration() {
 net::EffectiveConnectionType DefaultEffectiveConnectionTypeThreshold() {
   return GetParamValueAsECT(kClientSidePreviewsFieldTrial,
                             kEffectiveConnectionTypeThreshold,
-                            net::EFFECTIVE_CONNECTION_TYPE_SLOW_2G);
+                            net::EFFECTIVE_CONNECTION_TYPE_2G);
 }
 
 bool IsOfflinePreviewsEnabled() {
-  //  Check if "show_offline_pages" is set to "true".
-  return base::FeatureList::IsEnabled(features::kOfflinePreviews) ||
-         (IsIncludedInClientSidePreviewsExperimentsFieldTrial() &&
-          base::GetFieldTrialParamValue(kClientSidePreviewsFieldTrial,
-                                        kOfflinePagesSlowNetwork) ==
-              kExperimentEnabled);
+  return base::FeatureList::IsEnabled(features::kOfflinePreviews);
 }
 
 int OfflinePreviewsVersion() {

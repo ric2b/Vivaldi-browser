@@ -61,9 +61,8 @@ extern const char kChromeUIInspectURL[];
 extern const char kChromeUIInstantURL[];
 extern const char kChromeUIInterstitialURL[];
 extern const char kChromeUIInvalidationsURL[];
-extern const char kChromeUIMdPolicyURL[];
-extern const char kChromeUIMdSettingsURL[];
 extern const char kChromeUIMediaEngagementHost[];
+extern const char kChromeUIMemoryInternalsURL[];
 extern const char kChromeUINaClURL[];
 extern const char kChromeUINetInternalsURL[];
 extern const char kChromeUINewProfileURL[];
@@ -137,10 +136,6 @@ extern const char kChromeUIMetroFlowURL[];
 extern const char kChromeUITabModalConfirmDialogURL[];
 #endif
 
-#if BUILDFLAG(ENABLE_OOP_HEAP_PROFILING)
-extern const char kChromeUIMemoryInternalsURL[];
-#endif
-
 #if BUILDFLAG(ENABLE_WEBRTC)
 extern const char kChromeUIWebRtcLogsURL[];
 #endif
@@ -209,8 +204,7 @@ extern const char kChromeUIInvalidationsHost[];
 extern const char kChromeUIKillHost[];
 extern const char kChromeUILargeIconHost[];
 extern const char kChromeUILocalStateHost[];
-extern const char kChromeUIMdPolicyHost[];
-extern const char kChromeUIMdSettingsHost[];
+extern const char kChromeUIMemoryInternalsHost[];
 extern const char kChromeUINaClHost[];
 extern const char kChromeUINetExportHost[];
 extern const char kChromeUINetInternalsHost[];
@@ -328,10 +322,6 @@ extern const char kChromeUIMetroFlowHost[];
 
 #if (defined(OS_LINUX) && defined(TOOLKIT_VIEWS)) || defined(USE_AURA)
 extern const char kChromeUITabModalConfirmDialogHost[];
-#endif
-
-#if BUILDFLAG(ENABLE_OOP_HEAP_PROFILING)
-extern const char kChromeUIMemoryInternalsHost[];
 #endif
 
 #if BUILDFLAG(ENABLE_WEBRTC)

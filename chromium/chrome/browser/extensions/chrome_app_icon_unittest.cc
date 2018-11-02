@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/run_loop.h"
 #include "chrome/browser/extensions/chrome_app_icon.h"
 #include "chrome/browser/extensions/chrome_app_icon_delegate.h"
 #include "chrome/browser/extensions/chrome_app_icon_loader.h"
@@ -225,7 +226,7 @@ TEST_F(ChromeAppIconTest, IconLifeCycle) {
   const gfx::ImageSkia image_before_disable = reference_icon.image_skia();
   // Disable extension. This should update icon and provide grayed image inline.
   // Note update might be sent twice in CrOS.
-  service()->DisableExtension(kTestAppId, Extension::DISABLE_CORRUPTED);
+  service()->DisableExtension(kTestAppId, disable_reason::DISABLE_CORRUPTED);
   const size_t update_count_after_disable = reference_icon.icon_update_count();
   EXPECT_NE(2U, update_count_after_disable);
   EXPECT_FALSE(IsBlankImage(reference_icon.image_skia()));

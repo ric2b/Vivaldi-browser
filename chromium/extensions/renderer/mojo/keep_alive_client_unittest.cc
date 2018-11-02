@@ -6,7 +6,10 @@
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/run_loop.h"
+#include "extensions/common/extension_builder.h"
 #include "extensions/common/mojo/keep_alive.mojom.h"
+#include "extensions/common/value_builder.h"
 #include "extensions/grit/extensions_renderer_resources.h"
 #include "extensions/renderer/api_test_base.h"
 #include "extensions/renderer/string_source_map.h"
@@ -30,7 +33,7 @@ class TestKeepAlive : public KeepAlive {
   static void Create(const base::Closure& on_creation,
                      const base::Closure& on_destruction,
                      KeepAliveRequest keep_alive) {
-    mojo::MakeStrongBinding(base::MakeUnique<TestKeepAlive>(on_destruction),
+    mojo::MakeStrongBinding(std::make_unique<TestKeepAlive>(on_destruction),
                             std::move(keep_alive));
     on_creation.Run();
   }
@@ -77,6 +80,24 @@ class KeepAliveClientTest : public ApiTestBase {
     // We register fake custom bindings for the serial API to use
     // handleRequestWithPromiseDoNotUse().
     env()->source_map()->RegisterModule("serial", kFakeSerialBindings);
+  }
+
+  scoped_refptr<const Extension> CreateExtension() override {
+    // Create a platform app with the serial permission.
+    DictionaryBuilder background;
+    background.Set("scripts", ListBuilder().Append("test.js").Build());
+
+    std::unique_ptr<base::DictionaryValue> manifest =
+        DictionaryBuilder()
+            .Set("name", "test")
+            .Set("version", "1.0")
+            .Set("app", DictionaryBuilder()
+                            .Set("background", background.Build())
+                            .Build())
+            .Set("permissions", ListBuilder().Append("serial").Build())
+            .Set("manifest_version", 2)
+            .Build();
+    return ExtensionBuilder().SetManifest(std::move(manifest)).Build();
   }
 
   void WaitForKeepAlive() {

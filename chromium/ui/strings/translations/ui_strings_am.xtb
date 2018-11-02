@@ -32,6 +32,7 @@
 <translation id="2190355936436201913">(ባዶ)</translation>
 <translation id="2289052229480071835">በማያ ገጽዎ ላይ ያሉት የንክኪ ዒላማዎችን መታ ያድርጉ።</translation>
 <translation id="2297836609126180313"><ph name="QUANTITY" /> ቴባ/ሰ</translation>
+<translation id="24452542372838207">ማሳወቂያን ዘርጋ</translation>
 <translation id="2482878487686419369">ማስታወቂያዎች</translation>
 <translation id="2497284189126895209">ሁሉም ፋይሎች</translation>
 <translation id="2522350507219695259">ልኬት ማስተካከል ተጠናቅቋል</translation>
@@ -162,6 +163,7 @@
 <translation id="9002566407876343676">ክፈት</translation>
 <translation id="9038489124413477075">ያልተሰየመ አቃፊ</translation>
 <translation id="9044832324875206639">{SECONDS,plural, =1{1 ሰከን}one{# ሰከን}other{# ሰከን}}</translation>
+<translation id="9059834730836941392">ማሳወቂያን ሰብስብ</translation>
 <translation id="9150735707954472829">ትር</translation>
 <translation id="9161053988251441839">በአስተያየት የተጠቆሙ መተግበሪያዎች</translation>
 <translation id="9170848237812810038">&amp;ቀልብስ</translation>

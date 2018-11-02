@@ -25,13 +25,13 @@ class SerializedVarReceiveInput;
 class PPP_ContentDecryptor_Private_Proxy : public InterfaceProxy {
  public:
   explicit PPP_ContentDecryptor_Private_Proxy(Dispatcher* dispatcher);
-  virtual ~PPP_ContentDecryptor_Private_Proxy();
+  ~PPP_ContentDecryptor_Private_Proxy() override;
 
   static const PPP_ContentDecryptor_Private* GetProxyInterface();
 
  private:
   // InterfaceProxy implementation.
-  virtual bool OnMessageReceived(const IPC::Message& msg);
+  bool OnMessageReceived(const IPC::Message& msg) override;
 
   // Message handlers.
   void OnMsgInitialize(PP_Instance instance,
@@ -42,6 +42,9 @@ class PPP_ContentDecryptor_Private_Proxy : public InterfaceProxy {
   void OnMsgSetServerCertificate(PP_Instance instance,
                                  uint32_t promise_id,
                                  std::vector<uint8_t> server_certificate);
+  void OnMsgGetStatusForPolicy(PP_Instance instance,
+                               uint32_t promise_id,
+                               PP_HdcpVersion min_hdcp_version);
   void OnMsgCreateSessionAndGenerateRequest(
       PP_Instance instance,
       uint32_t promise_id,

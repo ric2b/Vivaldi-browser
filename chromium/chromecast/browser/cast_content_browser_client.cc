@@ -11,6 +11,7 @@
 
 #include "base/base_switches.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/files/scoped_file.h"
 #include "base/i18n/rtl.h"
 #include "base/json/json_reader.h"
@@ -22,6 +23,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chromecast/base/cast_constants.h"
+#include "chromecast/base/cast_features.h"
 #include "chromecast/base/cast_paths.h"
 #include "chromecast/base/chromecast_switches.h"
 #include "chromecast/browser/cast_browser_context.h"
@@ -72,7 +74,7 @@
 
 #if defined(OS_ANDROID)
 #include "components/cdm/browser/cdm_message_filter_android.h"
-#include "components/crash/content/browser/crash_dump_manager_android.h"
+#include "components/crash/content/browser/crash_dump_observer_android.h"
 #else
 #include "chromecast/browser/memory_pressure_controller_impl.h"
 #endif  // defined(OS_ANDROID)
@@ -112,10 +114,8 @@ CastContentBrowserClient::CastContentBrowserClient()
       url_request_context_factory_(new URLRequestContextFactory()) {}
 
 CastContentBrowserClient::~CastContentBrowserClient() {
-  content::BrowserThread::DeleteSoon(
-      content::BrowserThread::IO,
-      FROM_HERE,
-      url_request_context_factory_.release());
+  content::BrowserThread::DeleteSoon(content::BrowserThread::IO, FROM_HERE,
+                                     url_request_context_factory_.release());
 }
 
 void CastContentBrowserClient::AppendExtraCommandLineSwitches(
@@ -134,21 +134,17 @@ void CastContentBrowserClient::AppendExtraCommandLineSwitches(
       command_line->AppendSwitchASCII(switches::kCastInitialScreenHeight,
                                       base::IntToString(res.height()));
     }
-    base::CommandLine* browser_command_line =
-        base::CommandLine::ForCurrentProcess();
-    for (auto* const switch_name : {switches::kUseDoubleBuffering}) {
-      if (browser_command_line->HasSwitch(switch_name)) {
-        command_line->AppendSwitchASCII(
-            switch_name,
-            browser_command_line->GetSwitchValueASCII(switch_name));
-      }
+
+    if (base::FeatureList::IsEnabled(kSingleBuffer)) {
+      command_line->AppendSwitchASCII(switches::kGraphicsBufferCount, "1");
+    } else if (base::FeatureList::IsEnabled(chromecast::kTripleBuffer720)) {
+      command_line->AppendSwitchASCII(switches::kGraphicsBufferCount, "3");
     }
   }
 #endif  // defined(USE_AURA)
 }
 
-void CastContentBrowserClient::PreCreateThreads() {
-}
+void CastContentBrowserClient::PreCreateThreads() {}
 
 std::unique_ptr<CastService> CastContentBrowserClient::CreateCastService(
     content::BrowserContext* browser_context,
@@ -236,12 +232,10 @@ media::MediaCapsImpl* CastContentBrowserClient::media_caps() {
 }
 
 void CastContentBrowserClient::SetMetricsClientId(
-    const std::string& client_id) {
-}
+    const std::string& client_id) {}
 
 void CastContentBrowserClient::RegisterMetricsProviders(
-    ::metrics::MetricsService* metrics_service) {
-}
+    ::metrics::MetricsService* metrics_service) {}
 
 bool CastContentBrowserClient::EnableRemoteDebuggingImmediately() {
   return true;
@@ -262,24 +256,28 @@ void CastContentBrowserClient::RenderProcessWillLaunch(
   // getting HostResolver.
   content::BrowserThread::PostTaskAndReplyWithResult(
       content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&net::URLRequestContextGetter::GetURLRequestContext,
-                 base::Unretained(
-                    url_request_context_factory_->GetSystemGetter())),
+      base::Bind(
+          &net::URLRequestContextGetter::GetURLRequestContext,
+          base::Unretained(url_request_context_factory_->GetSystemGetter())),
       base::Bind(&CastContentBrowserClient::AddNetworkHintsMessageFilter,
                  base::Unretained(this), host->GetID()));
 
 #if defined(OS_ANDROID)
+  // Cast on Android always allows persisting data.
+  //
   // Cast on Android build always uses kForceVideoOverlays command line switch
   // such that secure codecs can always be rendered.
+  //
   // TODO(yucliu): On Clank, secure codecs support is tied to AndroidOverlay.
   // Remove kForceVideoOverlays and swtich to the Clank model for secure codecs
   // support.
-  host->AddFilter(new cdm::CdmMessageFilterAndroid(true));
+  host->AddFilter(new cdm::CdmMessageFilterAndroid(true, true));
 #endif  // defined(OS_ANDROID)
 }
 
 void CastContentBrowserClient::AddNetworkHintsMessageFilter(
-    int render_process_id, net::URLRequestContext* context) {
+    int render_process_id,
+    net::URLRequestContext* context) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   content::RenderProcessHost* host =
@@ -298,12 +296,9 @@ bool CastContentBrowserClient::IsHandledURL(const GURL& url) {
     return false;
 
   static const char* const kProtocolList[] = {
-    content::kChromeUIScheme,
-    content::kChromeDevToolsScheme,
-    kChromeResourceScheme,
-    url::kBlobScheme,
-    url::kDataScheme,
-    url::kFileSystemScheme,
+      content::kChromeUIScheme, content::kChromeDevToolsScheme,
+      kChromeResourceScheme,    url::kBlobScheme,
+      url::kDataScheme,         url::kFileSystemScheme,
   };
 
   const std::string& scheme = url.scheme();
@@ -475,8 +470,8 @@ void CastContentBrowserClient::SelectClientCertificateOnIOThread(
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   CastNetworkDelegate* network_delegate =
       url_request_context_factory_->app_network_delegate();
-  if (network_delegate->IsWhitelisted(requesting_url,
-                                      render_process_id, false)) {
+  if (network_delegate->IsWhitelisted(requesting_url, render_process_id,
+                                      false)) {
     original_runner->PostTask(
         FROM_HERE,
         base::Bind(continue_callback, CastNetworkDelegate::DeviceCert(),
@@ -485,8 +480,7 @@ void CastContentBrowserClient::SelectClientCertificateOnIOThread(
   } else {
     LOG(ERROR) << "Invalid host for client certificate request: "
                << requesting_url.host()
-               << " with render_process_id: "
-               << render_process_id;
+               << " with render_process_id: " << render_process_id;
   }
   original_runner->PostTask(FROM_HERE,
                             base::Bind(continue_callback, nullptr, nullptr));
@@ -560,7 +554,7 @@ CastContentBrowserClient::GetServiceManifestOverlay(
 void CastContentBrowserClient::GetAdditionalMappedFilesForChildProcess(
     const base::CommandLine& command_line,
     int child_process_id,
-    content::FileDescriptorInfo* mappings) {
+    content::PosixFileDescriptorInfo* mappings) {
 #if defined(OS_ANDROID)
   mappings->ShareWithRegion(
       kAndroidPakDescriptor,
@@ -569,7 +563,7 @@ void CastContentBrowserClient::GetAdditionalMappedFilesForChildProcess(
   breakpad::CrashDumpObserver::GetInstance()->BrowserChildProcessStarted(
       child_process_id, mappings);
 #else
-    int crash_signal_fd = GetCrashSignalFD(command_line);
+  int crash_signal_fd = GetCrashSignalFD(command_line);
   if (crash_signal_fd >= 0) {
     mappings->Share(kCrashDumpSignal, crash_signal_fd);
   }
@@ -617,8 +611,8 @@ CastContentBrowserClient::CreateCrashHandlerHost(
 
   // Alway set "upload" to false to use our own uploader.
   breakpad::CrashHandlerHostLinux* crash_handler =
-    new breakpad::CrashHandlerHostLinux(
-        process_type, dumps_path, false /* upload */);
+      new breakpad::CrashHandlerHostLinux(process_type, dumps_path,
+                                          false /* upload */);
   // StartUploaderThread() even though upload is diferred.
   // Breakpad-related memory is freed in the uploader thread.
   crash_handler->StartUploaderThread();

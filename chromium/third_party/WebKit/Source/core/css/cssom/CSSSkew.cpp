@@ -74,7 +74,7 @@ CSSSkew* CSSSkew::FromCSSValue(const CSSFunctionValue& value) {
   }
 }
 
-const DOMMatrix* CSSSkew::AsMatrix() const {
+const DOMMatrix* CSSSkew::AsMatrix(ExceptionState&) const {
   CSSUnitValue* ax = ax_->to(CSSPrimitiveValue::UnitType::kRadians);
   CSSUnitValue* ay = ay_->to(CSSPrimitiveValue::UnitType::kRadians);
   DCHECK(ax);
@@ -85,7 +85,7 @@ const DOMMatrix* CSSSkew::AsMatrix() const {
   return result;
 }
 
-CSSFunctionValue* CSSSkew::ToCSSValue() const {
+const CSSFunctionValue* CSSSkew::ToCSSValue() const {
   // TDOO(meade): Handle calc angles here.
   CSSUnitValue* ax = ToCSSUnitValue(ax_);
   CSSUnitValue* ay = ToCSSUnitValue(ay_);

@@ -151,7 +151,10 @@ bool SyncRefreshTokenFunction::RunAsync() {
 
   VivaldiSyncManager* sync_manager =
       VivaldiSyncManagerFactory::GetForProfileVivaldi(GetProfile());
-  DCHECK(sync_manager);
+  if (!sync_manager) {
+    error_ = "Sync manager is unavailable";
+    return false;
+  }
 
   sync_manager->SetToken(false, std::string(), std::string(),
                          params->token.token, params->token.expire,
@@ -164,7 +167,10 @@ bool SyncRefreshTokenFunction::RunAsync() {
 bool SyncIsFirstSetupFunction::RunAsync() {
   VivaldiSyncManager* sync_manager =
       VivaldiSyncManagerFactory::GetForProfileVivaldi(GetProfile());
-  DCHECK(sync_manager);
+  if (!sync_manager) {
+    error_ = "Sync manager is unavailable";
+    return false;
+  }
 
   results_ = vivaldi::sync::IsFirstSetup::Results::Create(
       !sync_manager->IsFirstSetupComplete());
@@ -176,7 +182,10 @@ bool SyncIsFirstSetupFunction::RunAsync() {
 bool SyncIsEncryptionPasswordSetUpFunction::RunAsync() {
   VivaldiSyncManager* sync_manager =
       VivaldiSyncManagerFactory::GetForProfileVivaldi(GetProfile());
-  DCHECK(sync_manager);
+  if (!sync_manager) {
+    error_ = "Sync manager is unavailable";
+    return false;
+  }
 
   results_ = vivaldi::sync::IsFirstSetup::Results::Create(
       sync_manager->IsUsingSecondaryPassphrase());
@@ -193,7 +202,10 @@ bool SyncSetEncryptionPasswordFunction::RunAsync() {
 
   VivaldiSyncManager* sync_manager =
       VivaldiSyncManagerFactory::GetForProfileVivaldi(GetProfile());
-  DCHECK(sync_manager);
+  if (!sync_manager) {
+    error_ = "Sync manager is unavailable";
+    return false;
+  }
 
   bool success = sync_manager->SetEncryptionPassword(params->password);
 
@@ -216,7 +228,10 @@ bool SyncSetTypesFunction::RunAsync() {
 
   VivaldiSyncManager* sync_manager =
       VivaldiSyncManagerFactory::GetForProfileVivaldi(GetProfile());
-  DCHECK(sync_manager);
+  if (!sync_manager) {
+    error_ = "Sync manager is unavailable";
+    return false;
+  }
 
   syncer::ModelTypeSet chosen_types;
   for (const auto& type : params->types) {
@@ -235,7 +250,10 @@ bool SyncSetTypesFunction::RunAsync() {
 bool SyncGetTypesFunction::RunAsync() {
   VivaldiSyncManager* sync_manager =
       VivaldiSyncManagerFactory::GetForProfileVivaldi(GetProfile());
-  DCHECK(sync_manager);
+  if (!sync_manager) {
+    error_ = "Sync manager is unavailable";
+    return false;
+  }
 
   PrefService* pref_service = GetProfile()->GetPrefs();
   syncer::SyncPrefs sync_prefs(pref_service);
@@ -247,6 +265,7 @@ bool SyncGetTypesFunction::RunAsync() {
   for (const auto& model_type : model_type_map) {
     // Skip the model types that don't make sense for us to synchronize.
     if (model_type.first == syncer::THEMES ||
+        model_type.first == syncer::APPS ||
         model_type.first == syncer::PROXY_TABS) {
       continue;
     }
@@ -266,7 +285,10 @@ bool SyncGetTypesFunction::RunAsync() {
 bool SyncGetStatusFunction::RunAsync() {
   VivaldiSyncManager* sync_manager =
       VivaldiSyncManagerFactory::GetForProfileVivaldi(GetProfile());
-  DCHECK(sync_manager);
+  if (!sync_manager) {
+    error_ = "Sync manager is unavailable";
+    return false;
+  }
 
   syncer::SyncCycleSnapshot cycle_snapshot =
       sync_manager->GetLastCycleSnapshot();
@@ -292,7 +314,10 @@ bool SyncGetStatusFunction::RunAsync() {
 bool SyncClearDataFunction::RunAsync() {
   VivaldiSyncManager* sync_manager =
       VivaldiSyncManagerFactory::GetForProfileVivaldi(GetProfile());
-  DCHECK(sync_manager);
+  if (!sync_manager) {
+    error_ = "Sync manager is unavailable";
+    return false;
+  }
 
   sync_manager->ClearSyncData();
 
@@ -303,7 +328,10 @@ bool SyncClearDataFunction::RunAsync() {
 bool SyncSetupCompleteFunction::RunAsync() {
   VivaldiSyncManager* sync_manager =
       VivaldiSyncManagerFactory::GetForProfileVivaldi(GetProfile());
-  DCHECK(sync_manager);
+  if (!sync_manager) {
+    error_ = "Sync manager is unavailable";
+    return false;
+  }
 
   sync_manager->SetupComplete();
 
@@ -314,7 +342,10 @@ bool SyncSetupCompleteFunction::RunAsync() {
 bool SyncLogoutFunction::RunAsync() {
   VivaldiSyncManager* sync_manager =
       VivaldiSyncManagerFactory::GetForProfileVivaldi(GetProfile());
-  DCHECK(sync_manager);
+  if (!sync_manager) {
+    error_ = "Sync manager is unavailable";
+    return false;
+  }
 
   sync_manager->Logout();
 
@@ -325,7 +356,10 @@ bool SyncLogoutFunction::RunAsync() {
 bool SyncPollServerFunction::RunAsync() {
   VivaldiSyncManager* sync_manager =
       VivaldiSyncManagerFactory::GetForProfileVivaldi(GetProfile());
-  DCHECK(sync_manager);
+  if (!sync_manager) {
+    error_ = "Sync manager is unavailable";
+    return false;
+  }
 
   sync_manager->PollServer();
 

@@ -28,19 +28,18 @@ class ComplexFeature : public Feature {
   ~ComplexFeature() override;
 
   // extensions::Feature:
-  Availability IsAvailableToManifest(const std::string& extension_id,
+  Availability IsAvailableToManifest(const HashedExtensionId& hashed_id,
                                      Manifest::Type type,
                                      Manifest::Location location,
                                      int manifest_version,
                                      Platform platform) const override;
-
   Availability IsAvailableToContext(const Extension* extension,
                                     Context context,
                                     const GURL& url,
                                     Platform platform) const override;
-
-  bool IsIdInBlacklist(const std::string& extension_id) const override;
-  bool IsIdInWhitelist(const std::string& extension_id) const override;
+  Availability IsAvailableToEnvironment() const override;
+  bool IsIdInBlacklist(const HashedExtensionId& hashed_id) const override;
+  bool IsIdInWhitelist(const HashedExtensionId& hashed_id) const override;
 
  protected:
   // Feature:

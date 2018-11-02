@@ -7,14 +7,18 @@ static_library("browser") {
     "//vivaldi/app/resources",
     "//vivaldi/app/resources",
     "//vivaldi/clientparts",
-    "//vivaldi/components/datasource",
-    "//vivaldi/extensions",
-    "//vivaldi/extensions/schema:api",
     "//vivaldi/importer:browser",
     "//vivaldi/notifications",
     "//vivaldi/ui",
     "//vivaldi/vivapp:vivaldi_app",
   ]
+  if (!is_android) {
+    public_deps += [
+      "//vivaldi/components/datasource",
+      "//vivaldi/extensions",
+      "//vivaldi/extensions/schema:api",
+    ]
+  }
   deps = [
     ":vivaldi_version_info",
     "//vivaldi/prefs:browser_prefs",
@@ -50,9 +54,15 @@ static_library("browser") {
     "../app/vivaldi_command_controller.cpp",
     "../app/vivaldi_command_controller.h",
     "../app/vivaldi_commands.h",
-    "vivaldi_browser_finder.cc",
-    "vivaldi_browser_finder.h",
+    "spoof/vivaldi_spoof_tools.cpp",
+    "spoof/vivaldi_spoof_tools.h",
   ]
+  if (!is_android) {
+    sources += [
+      "vivaldi_browser_finder.cc",
+      "vivaldi_browser_finder.h",
+    ]
+  }
   if (is_win) {
     sources += [
       "vivaldi_download_status.cpp",

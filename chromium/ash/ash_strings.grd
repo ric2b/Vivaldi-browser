@@ -482,23 +482,6 @@ This file contains the strings for ash.
         Toggle window overview
       </message>
 
-      <!-- Device types -->
-      <message name="IDS_ASH_CHROMEBASE" desc="The device name for a Chromebase (versus say Chromebox)">
-        Chromebase
-      </message>
-      <message name="IDS_ASH_CHROMEBIT" desc="The device name for a Chromebit (versus say Chromebox)">
-        Chromebit
-      </message>
-      <message name="IDS_ASH_CHROMEBOOK" desc="The device name for a Chromebook (versus say Chromebox)">
-        Chromebook
-      </message>
-      <message name="IDS_ASH_CHROMEBOX" desc="The device name for a Chromebox (versus say Chromebook)">
-        Chromebox
-      </message>
-      <message name="IDS_ASH_CHROMEDEVICE" desc="The device name for a generic Chrome device">
-        Chrome device
-      </message>
-
       <!-- Status tray charging strings. -->
       <message name="IDS_ASH_STATUS_TRAY_LOW_POWER_CHARGER_TITLE" desc="The title of a notification indicating that a low-current USB charger has been connected.">
         Low-power charger connected
@@ -975,7 +958,7 @@ This file contains the strings for ash.
        Stylus battery is low
      </message>
      <message name="IDS_ASH_LOW_STYLUS_BATTERY_NOTIFICATION_BODY" desc="The message of the notification which notifies user of the battery level of a stylus.">
-       Please charge or replace the batteries.
+       Please replace the battery
      </message>
       <message name="IDS_ASH_SCREENSHOT_NOTIFICATION_TITLE_SUCCESS" desc="The title of the notification when a screenshot was taken.">
         Screenshot taken
@@ -1083,8 +1066,15 @@ This file contains the strings for ash.
       <message name="IDS_DEPRECATED_TOGGLE_HIGH_CONTRAST_MSG" desc="Notification message to tell users about the deprecation of Search+Shift+H shortcut to toggle the high contrast display mode.">
         The shortcut to toggle High Contrast Mode has changed. Please use <ph name="NEW_SHORTCUT">$1<ex>Ctrl+Search+H</ex></ph> instead of <ph name="OLD_SHORTCUT">$2<ex>Search+Shift+H</ex></ph>.
       </message>
+      <message name="IDS_DEPRECATED_SHORTCUT_TITLE" desc="Notification title to tell users that the keyboard accelerator is deprecated.">
+        Shortcut change
+      </message>
 
       <!-- Notification that an accelerator was pressed, so the user knows how to toggle it back -->
+      <message name="IDS_HIGH_CONTRAST_ACCEL_TITLE"
+               desc="Notification title to tell users that they just pressed the Search+Shift+H shortcut to toggle High Contrast Mode, and that pressing it again will toggle it off.">
+        High Contrast Mode
+      </message>
       <message name="IDS_HIGH_CONTRAST_ACCEL_MSG"
                desc="Notification message to tell users that they just pressed the Search+Shift+H shortcut to toggle High Contrast Mode, and that pressing it again will toggle it off.">
         High Contrast Mode enabled. Press Ctrl+Search+H again to toggle it off.

@@ -41,17 +41,16 @@ String GetSha256String(const String& content) {
 }
 
 ContentSecurityPolicyHashAlgorithm ConvertHashAlgorithmToCSPHashAlgorithm(
-    HashAlgorithm algorithm) {
+    IntegrityAlgorithm algorithm) {
   switch (algorithm) {
-    case kHashAlgorithmSha1:
-      // Sha1 is not supported.
-      return kContentSecurityPolicyHashAlgorithmNone;
-    case kHashAlgorithmSha256:
+    case IntegrityAlgorithm::kSha256:
       return kContentSecurityPolicyHashAlgorithmSha256;
-    case kHashAlgorithmSha384:
+    case IntegrityAlgorithm::kSha384:
       return kContentSecurityPolicyHashAlgorithmSha384;
-    case kHashAlgorithmSha512:
+    case IntegrityAlgorithm::kSha512:
       return kContentSecurityPolicyHashAlgorithmSha512;
+    case IntegrityAlgorithm::kEd25519:
+      return kContentSecurityPolicyHashAlgorithmEd25519;
   }
   NOTREACHED();
   return kContentSecurityPolicyHashAlgorithmNone;
@@ -83,7 +82,8 @@ CSPDirectiveList::CSPDirectiveList(ContentSecurityPolicy* policy,
       strict_mixed_content_checking_enforced_(false),
       upgrade_insecure_requests_(false),
       treat_as_public_address_(false),
-      require_sri_for_(RequireSRIForToken::kNone) {}
+      require_sri_for_(RequireSRIForToken::kNone),
+      use_reporting_api_(false) {}
 
 CSPDirectiveList* CSPDirectiveList::Create(
     ContentSecurityPolicy* policy,
@@ -125,8 +125,8 @@ void CSPDirectiveList::ReportViolation(
   policy_->LogToConsole(ConsoleMessage::Create(kSecurityMessageSource,
                                                kErrorMessageLevel, message));
   policy_->ReportViolation(directive_text, effective_type, message, blocked_url,
-                           report_endpoints_, header_, header_type_,
-                           ContentSecurityPolicy::kURLViolation,
+                           report_endpoints_, use_reporting_api_, header_,
+                           header_type_, ContentSecurityPolicy::kURLViolation,
                            std::unique_ptr<SourceLocation>(),
                            nullptr,  // localFrame
                            redirect_status);
@@ -144,8 +144,8 @@ void CSPDirectiveList::ReportViolationWithFrame(
                                                kErrorMessageLevel, message),
                         frame);
   policy_->ReportViolation(directive_text, effective_type, message, blocked_url,
-                           report_endpoints_, header_, header_type_,
-                           ContentSecurityPolicy::kURLViolation,
+                           report_endpoints_, use_reporting_api_, header_,
+                           header_type_, ContentSecurityPolicy::kURLViolation,
                            std::unique_ptr<SourceLocation>(), frame);
 }
 
@@ -166,7 +166,8 @@ void CSPDirectiveList::ReportViolationWithLocation(
                                                kErrorMessageLevel, message,
                                                source_location->Clone()));
   policy_->ReportViolation(directive_text, effective_type, message, blocked_url,
-                           report_endpoints_, header_, header_type_,
+                           report_endpoints_, use_reporting_api_, header_,
+                           header_type_,
                            ContentSecurityPolicy::kInlineViolation,
                            std::move(source_location), nullptr,  // localFrame
                            RedirectStatus::kNoRedirect, element, source);
@@ -192,8 +193,8 @@ void CSPDirectiveList::ReportEvalViolation(
     policy_->LogToConsole(console_message);
   }
   policy_->ReportViolation(directive_text, effective_type, message, blocked_url,
-                           report_endpoints_, header_, header_type_,
-                           ContentSecurityPolicy::kEvalViolation,
+                           report_endpoints_, use_reporting_api_, header_,
+                           header_type_, ContentSecurityPolicy::kEvalViolation,
                            std::unique_ptr<SourceLocation>(), nullptr,
                            RedirectStatus::kFollowedRedirect, nullptr, content);
 }
@@ -212,7 +213,7 @@ bool CSPDirectiveList::AreAllMatchingHashesPresent(
     const IntegrityMetadataSet& hashes) const {
   if (!directive || hashes.IsEmpty())
     return false;
-  for (const std::pair<WTF::String, HashAlgorithm>& hash : hashes) {
+  for (const std::pair<String, IntegrityAlgorithm>& hash : hashes) {
     // Convert the hash from integrity metadata format to CSP format.
     CSPHashValue csp_hash;
     csp_hash.first = ConvertHashAlgorithmToCSPHashAlgorithm(hash.second);
@@ -247,7 +248,7 @@ void CSPDirectiveList::ReportMixedContent(
         ContentSecurityPolicy::GetDirectiveName(
             ContentSecurityPolicy::DirectiveType::kBlockAllMixedContent),
         ContentSecurityPolicy::DirectiveType::kBlockAllMixedContent, String(),
-        mixed_url, report_endpoints_, header_, header_type_,
+        mixed_url, report_endpoints_, use_reporting_api_, header_, header_type_,
         ContentSecurityPolicy::kURLViolation, std::unique_ptr<SourceLocation>(),
         nullptr,  // contextFrame,
         redirect_status);
@@ -959,7 +960,7 @@ void CSPDirectiveList::Parse(const UChar* begin, const UChar* end) {
   const UChar* position = begin;
   while (position < end) {
     const UChar* directive_begin = position;
-    skipUntil<UChar>(position, end, ';');
+    SkipUntil<UChar>(position, end, ';');
 
     String name, value;
     if (ParseDirective(directive_begin, position, name, value)) {
@@ -968,7 +969,7 @@ void CSPDirectiveList::Parse(const UChar* begin, const UChar* end) {
     }
 
     DCHECK(position == end || *position == ';');
-    skipExactly<UChar>(position, end, ';');
+    SkipExactly<UChar>(position, end, ';');
   }
 }
 
@@ -984,18 +985,18 @@ bool CSPDirectiveList::ParseDirective(const UChar* begin,
   DCHECK(value.IsEmpty());
 
   const UChar* position = begin;
-  skipWhile<UChar, IsASCIISpace>(position, end);
+  SkipWhile<UChar, IsASCIISpace>(position, end);
 
   // Empty directive (e.g. ";;;"). Exit early.
   if (position == end)
     return false;
 
   const UChar* name_begin = position;
-  skipWhile<UChar, IsCSPDirectiveNameCharacter>(position, end);
+  SkipWhile<UChar, IsCSPDirectiveNameCharacter>(position, end);
 
   // The directive-name must be non-empty.
   if (name_begin == position) {
-    skipWhile<UChar, IsNotASCIISpace>(position, end);
+    SkipWhile<UChar, IsNotASCIISpace>(position, end);
     policy_->ReportUnsupportedDirective(
         String(name_begin, position - name_begin));
     return false;
@@ -1006,17 +1007,17 @@ bool CSPDirectiveList::ParseDirective(const UChar* begin,
   if (position == end)
     return true;
 
-  if (!skipExactly<UChar, IsASCIISpace>(position, end)) {
-    skipWhile<UChar, IsNotASCIISpace>(position, end);
+  if (!SkipExactly<UChar, IsASCIISpace>(position, end)) {
+    SkipWhile<UChar, IsNotASCIISpace>(position, end);
     policy_->ReportUnsupportedDirective(
         String(name_begin, position - name_begin));
     return false;
   }
 
-  skipWhile<UChar, IsASCIISpace>(position, end);
+  SkipWhile<UChar, IsASCIISpace>(position, end);
 
   const UChar* value_begin = position;
-  skipWhile<UChar, IsCSPDirectiveValueCharacter>(position, end);
+  SkipWhile<UChar, IsCSPDirectiveValueCharacter>(position, end);
 
   if (position != end) {
     policy_->ReportInvalidDirectiveValueCharacter(
@@ -1047,10 +1048,10 @@ void CSPDirectiveList::ParseRequireSRIFor(const String& name,
   const UChar* end = position + characters.size();
 
   while (position < end) {
-    skipWhile<UChar, IsASCIISpace>(position, end);
+    SkipWhile<UChar, IsASCIISpace>(position, end);
 
     const UChar* token_begin = position;
-    skipWhile<UChar, IsNotASCIISpace>(position, end);
+    SkipWhile<UChar, IsNotASCIISpace>(position, end);
 
     if (token_begin < position) {
       String token = String(token_begin, position - token_begin);
@@ -1086,19 +1087,41 @@ void CSPDirectiveList::ParseRequireSRIFor(const String& name,
   policy_->ReportInvalidRequireSRIForTokens(invalid_tokens_error_message);
 }
 
+void CSPDirectiveList::ParseReportTo(const String& name, const String& value) {
+  if (!use_reporting_api_) {
+    use_reporting_api_ = true;
+    report_endpoints_.clear();
+  }
+
+  if (!report_endpoints_.IsEmpty()) {
+    policy_->ReportDuplicateDirective(name);
+    return;
+  }
+
+  ParseAndAppendReportEndpoints(value);
+}
+
 void CSPDirectiveList::ParseReportURI(const String& name, const String& value) {
+  // report-to supersedes report-uri
+  if (use_reporting_api_)
+    return;
+
   if (!report_endpoints_.IsEmpty()) {
     policy_->ReportDuplicateDirective(name);
     return;
   }
 
   // Remove report-uri in meta policies, per
-  // https://www.w3.org/TR/CSP2/#delivery-html-meta-element.
+  // https://html.spec.whatwg.org/#attr-meta-http-equiv-content-security-policy.
   if (header_source_ == kContentSecurityPolicyHeaderSourceMeta) {
     policy_->ReportInvalidDirectiveInMeta(name);
     return;
   }
 
+  ParseAndAppendReportEndpoints(value);
+}
+
+void CSPDirectiveList::ParseAndAppendReportEndpoints(const String& value) {
   Vector<UChar> characters;
   value.AppendTo(characters);
 
@@ -1106,14 +1129,14 @@ void CSPDirectiveList::ParseReportURI(const String& name, const String& value) {
   const UChar* end = position + characters.size();
 
   while (position < end) {
-    skipWhile<UChar, IsASCIISpace>(position, end);
+    SkipWhile<UChar, IsASCIISpace>(position, end);
 
-    const UChar* url_begin = position;
-    skipWhile<UChar, IsNotASCIISpace>(position, end);
+    const UChar* endpoint_begin = position;
+    SkipWhile<UChar, IsNotASCIISpace>(position, end);
 
-    if (url_begin < position) {
-      String url = String(url_begin, position - url_begin);
-      report_endpoints_.push_back(url);
+    if (endpoint_begin < position) {
+      String endpoint = String(endpoint_begin, position - endpoint_begin);
+      report_endpoints_.push_back(endpoint);
     }
   }
 
@@ -1281,6 +1304,9 @@ void CSPDirectiveList::AddDirective(const String& name, const String& value) {
   } else if (type == ContentSecurityPolicy::DirectiveType::kRequireSRIFor &&
              policy_->ExperimentalFeaturesEnabled()) {
     ParseRequireSRIFor(name, value);
+  } else if (type == ContentSecurityPolicy::DirectiveType::kReportTo &&
+             policy_->ExperimentalFeaturesEnabled()) {
+    ParseReportTo(name, value);
   } else {
     policy_->ReportUnsupportedDirective(name);
   }
@@ -1414,7 +1440,18 @@ WebContentSecurityPolicy CSPDirectiveList::ExposeForNavigationalChecks() const {
         WebContentSecurityPolicySourceList()});
   }
   policy.directives = directives;
-  policy.report_endpoints = ReportEndpoints();
+
+  // TODO(andypaicu): for now the content csp will not know about report-to
+  // endpoints, make it work.
+  std::vector<WebString> report_endpoints;
+  if (!use_reporting_api_) {
+    for (const auto& report_endpoint : ReportEndpoints()) {
+      report_endpoints.push_back(report_endpoint);
+    }
+  }
+
+  policy.report_endpoints = report_endpoints;
+
   policy.header = Header();
 
   return policy;

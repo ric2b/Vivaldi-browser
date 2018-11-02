@@ -11,7 +11,6 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sequenced_task_runner.h"
 #include "components/sync/engine/attachments/attachment_util.h"
@@ -360,9 +359,8 @@ AttachmentStore::Result OnDiskAttachmentStore::OpenOrCreate(
   base::FilePath leveldb_path = path.Append(kLeveldbDirectory);
 
   std::unique_ptr<leveldb::DB> db;
-  leveldb::Options options;
+  leveldb_env::Options options;
   options.create_if_missing = true;
-  options.reuse_logs = leveldb_env::kDefaultLogReuseOptionValue;
   // TODO(pavely): crbug/424287 Consider adding info_log, block_cache and
   // filter_policy to options.
   leveldb::Status status =
@@ -434,7 +432,7 @@ std::unique_ptr<Attachment> OnDiskAttachmentStore::ReadSingleAttachment(
       return attachment;
     }
   }
-  attachment = base::MakeUnique<Attachment>(
+  attachment = std::make_unique<Attachment>(
       Attachment::CreateFromParts(attachment_id, data));
   return attachment;
 }

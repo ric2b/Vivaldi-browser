@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "android_webview/test/embedded_test_server/aw_embedded_test_server.h"
-
 #include <jni.h>
 
 #include "android_webview/test/jni/AwEmbeddedTestServerImpl_jni.h"
@@ -229,11 +227,6 @@ ScopedJavaLocalRef<jlongArray> GetHandlers(JNIEnv* env,
       reinterpret_cast<int64_t>(&HandleSetImageResponse),
       reinterpret_cast<int64_t>(&HandleImageOnloadHtml)};
   return base::android::ToJavaLongArray(env, handlers);
-}
-
-// static
-bool RegisterCustomHandlers(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 }  // namespace test

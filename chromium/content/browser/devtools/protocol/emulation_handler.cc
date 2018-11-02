@@ -9,12 +9,14 @@
 #include "base/strings/string_number_conversions.h"
 #include "build/build_config.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
+#include "content/browser/renderer_host/input/touch_emulator.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/view_messages.h"
 #include "content/public/common/url_constants.h"
 #include "device/geolocation/geolocation_context.h"
 #include "device/geolocation/geoposition.h"
+#include "ui/events/gesture_detection/gesture_provider_config_helper.h"
 
 namespace content {
 namespace protocol {
@@ -42,11 +44,11 @@ ui::GestureProviderConfigType TouchEmulationConfigurationToType(
   ui::GestureProviderConfigType result =
       ui::GestureProviderConfigType::CURRENT_PLATFORM;
   if (protocol_value ==
-      Emulation::SetTouchEmulationEnabled::ConfigurationEnum::Mobile) {
+      Emulation::SetEmitTouchEventsForMouse::ConfigurationEnum::Mobile) {
     result = ui::GestureProviderConfigType::GENERIC_MOBILE;
   }
   if (protocol_value ==
-      Emulation::SetTouchEmulationEnabled::ConfigurationEnum::Desktop) {
+      Emulation::SetEmitTouchEventsForMouse::ConfigurationEnum::Desktop) {
     result = ui::GestureProviderConfigType::GENERIC_DESKTOP;
   }
   return result;
@@ -69,7 +71,8 @@ void EmulationHandler::SetRenderFrameHost(RenderFrameHostImpl* host) {
     return;
 
   host_ = host;
-  UpdateTouchEventEmulationState();
+  if (touch_emulation_enabled_)
+    UpdateTouchEventEmulationState();
   UpdateDeviceEmulationState();
 }
 
@@ -78,9 +81,11 @@ void EmulationHandler::Wire(UberDispatcher* dispatcher) {
 }
 
 Response EmulationHandler::Disable() {
-  touch_emulation_enabled_ = false;
+  if (touch_emulation_enabled_) {
+    touch_emulation_enabled_ = false;
+    UpdateTouchEventEmulationState();
+  }
   device_emulation_enabled_ = false;
-  UpdateTouchEventEmulationState();
   UpdateDeviceEmulationState();
   return Response::OK();
 }
@@ -117,12 +122,13 @@ Response EmulationHandler::ClearGeolocationOverride() {
   return Response::OK();
 }
 
-Response EmulationHandler::SetTouchEmulationEnabled(
-    bool enabled, Maybe<std::string> configuration) {
+Response EmulationHandler::SetEmitTouchEventsForMouse(
+    bool enabled,
+    Maybe<std::string> configuration) {
   touch_emulation_enabled_ = enabled;
   touch_emulation_configuration_ = configuration.fromMaybe("");
   UpdateTouchEventEmulationState();
-  return Response::FallThrough();
+  return Response::OK();
 }
 
 Response EmulationHandler::CanEmulate(bool* result) {
@@ -242,6 +248,7 @@ Response EmulationHandler::ClearDeviceMetricsOverride() {
     return Response::OK();
 
   device_emulation_enabled_ = false;
+  device_emulation_params_ = blink::WebDeviceEmulationParams();
   if (original_view_size_.width())
     widget_host->GetView()->SetSize(original_view_size_);
   original_view_size_ = gfx::Size();
@@ -269,6 +276,8 @@ blink::WebDeviceEmulationParams EmulationHandler::GetDeviceEmulationParams() {
 
 void EmulationHandler::SetDeviceEmulationParams(
     const blink::WebDeviceEmulationParams& params) {
+  bool enabled = params != blink::WebDeviceEmulationParams();
+  device_emulation_enabled_ = enabled;
   device_emulation_params_ = params;
   UpdateDeviceEmulationState();
 }
@@ -284,12 +293,17 @@ void EmulationHandler::UpdateTouchEventEmulationState() {
       host_ ? host_->GetRenderWidgetHost() : nullptr;
   if (!widget_host)
     return;
-  bool enabled = touch_emulation_enabled_;
-  ui::GestureProviderConfigType config_type =
-      TouchEmulationConfigurationToType(touch_emulation_configuration_);
-  widget_host->SetTouchEventEmulationEnabled(enabled, config_type);
-  if (GetWebContents())
-    GetWebContents()->SetForceDisableOverscrollContent(enabled);
+  if (touch_emulation_enabled_) {
+    widget_host->GetTouchEmulator()->Enable(
+        TouchEmulator::Mode::kEmulatingTouchFromMouse,
+        TouchEmulationConfigurationToType(touch_emulation_configuration_));
+  } else {
+    widget_host->GetTouchEmulator()->Disable();
+  }
+  if (GetWebContents()) {
+    GetWebContents()->SetForceDisableOverscrollContent(
+        touch_emulation_enabled_);
+  }
 }
 
 void EmulationHandler::UpdateDeviceEmulationState() {

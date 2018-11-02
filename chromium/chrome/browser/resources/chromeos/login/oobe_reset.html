@@ -71,12 +71,15 @@
           <paper-checkbox aria-labelledby="tpm-firmware-update-label"
               id="tpmFirmwareUpdateCheckbox"
               checked="{{tpmFirmwareUpdateChecked_}}"
+              disabled="{{!tpmFirmwareUpdateEditable_}}"
               on-change="onTPMFirmwareUpdateChanged_">
+            <div id="tpmFirmwareUpdateContainer">
+              <span i18n-content="resetTPMFirmwareUpdate"></span>
+              <a href="#" hidden="[[isHelpLinkHidden_(uiState_, isOfficial_)]]"
+                  on-tap="onTPMFirmwareUpdateLearnMore_"
+                  i18n-content="learnMore"></a>
+            </div>
           </paper-checkbox>
-          <div id="tpmFirmwareUpdateContainer">
-            <label id="tpm-firmare-upate-label"
-                i18n-content="resetTPMFirmwareUpdate"></label>
-          </div>
         </div>
       </div>
       <div class="bottom-buttons flex layout horizontal">

@@ -30,8 +30,8 @@
 #include "chrome/browser/download/drag_download_item.h"
 #include "chrome/browser/extensions/api/experience_sampling_private/experience_sampling.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/safe_browsing/download_feedback_service.h"
-#include "chrome/browser/safe_browsing/download_protection_service.h"
+#include "chrome/browser/safe_browsing/download_protection/download_feedback_service.h"
+#include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/views/download/download_feedback_dialog_view.h"
@@ -128,7 +128,12 @@ const int kDisabledOnOpenDuration = 3000;
 // The separator is drawn as a border. It's one dp wide.
 class SeparatorBorder : public views::FocusableBorder {
  public:
-  explicit SeparatorBorder(SkColor color) : color_(color) {}
+  explicit SeparatorBorder(SkColor separator_color)
+      : separator_color_(separator_color) {
+    // Set the color used by FocusableBorder::Paint(), which could otherwise
+    // change when FocusableBorder relies on FocusRings instead.
+    SetColorId(ui::NativeTheme::kColorId_FocusedBorderColor);
+  }
   ~SeparatorBorder() override {}
 
   void Paint(const views::View& view, gfx::Canvas* canvas) override {
@@ -138,7 +143,7 @@ class SeparatorBorder : public views::FocusableBorder {
     int end_x = base::i18n::IsRTL() ? 0 : view.width() - 1;
     canvas->DrawLine(gfx::Point(end_x, kTopBottomPadding),
                      gfx::Point(end_x, view.height() - kTopBottomPadding),
-                     color_);
+                     separator_color_);
   }
 
   gfx::Insets GetInsets() const override { return gfx::Insets(0, 0, 0, 1); }
@@ -148,7 +153,7 @@ class SeparatorBorder : public views::FocusableBorder {
   }
 
  private:
-  SkColor color_;
+  SkColor separator_color_;
 
   DISALLOW_COPY_AND_ASSIGN(SeparatorBorder);
 };
@@ -883,7 +888,7 @@ void DownloadItemView::SetDropdownState(State new_state) {
   // Avoid extra SchedulePaint()s if the state is going to be the same and
   // |dropdown_button_| has already been initialized.
   if (dropdown_state_ == new_state &&
-      !dropdown_button_->GetImage(views::CustomButton::STATE_NORMAL).isNull())
+      !dropdown_button_->GetImage(views::Button::STATE_NORMAL).isNull())
     return;
 
   if (new_state != dropdown_state_) {

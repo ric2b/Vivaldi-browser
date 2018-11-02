@@ -10,13 +10,24 @@
 
 #include "chrome/browser/media/router/discovery/dial/device_description_service.h"
 #include "chrome/browser/media/router/discovery/dial/dial_registry.h"
+#include "chrome/browser/media/router/discovery/media_sink_discovery_metrics.h"
 #include "chrome/browser/media/router/discovery/media_sink_service_base.h"
-#include "chrome/browser/media/router/media_router_metrics.h"
 
 namespace media_router {
 
 class DeviceDescriptionService;
 class DialRegistry;
+
+// An observer class registered with DialMediaSinkService to receive
+// notifications when DIAL sinks are added or removed from DialMediaSinkService
+class DialMediaSinkServiceObserver {
+ public:
+  virtual ~DialMediaSinkServiceObserver() {}
+
+  // Invoked when |sink| is added to DialMediaSinkServiceImpl instance.
+  // |sink|: must be a DIAL sink.
+  virtual void OnDialSinkAdded(const MediaSinkInternal& sink) = 0;
+};
 
 // A service which can be used to start background discovery and resolution of
 // DIAL devices (Smart TVs, Game Consoles, etc.).
@@ -27,6 +38,13 @@ class DialMediaSinkServiceImpl : public MediaSinkServiceBase,
   DialMediaSinkServiceImpl(const OnSinksDiscoveredCallback& callback,
                            net::URLRequestContextGetter* request_context);
   ~DialMediaSinkServiceImpl() override;
+
+  // Does not take ownership of |observer|. Caller should make sure |observer|
+  // object outlives |this|.
+  void SetObserver(DialMediaSinkServiceObserver* observer);
+
+  // Sets |observer_| to nullptr.
+  void ClearObserver(DialMediaSinkServiceObserver* observer);
 
   // MediaSinkService implementation
   void Start() override;
@@ -78,9 +96,11 @@ class DialMediaSinkServiceImpl : public MediaSinkServiceBase,
   // Device data list from current round of discovery.
   DialRegistry::DeviceList current_devices_;
 
+  DialMediaSinkServiceObserver* observer_;
+
   scoped_refptr<net::URLRequestContextGetter> request_context_;
 
-  MediaRouterMetrics metrics_;
+  DialDeviceCountMetrics metrics_;
 };
 
 }  // namespace media_router

@@ -4,6 +4,7 @@
 
 #include "modules/background_fetch/BackgroundFetchRegistration.h"
 
+#include "core/dom/DOMException.h"
 #include "modules/background_fetch/BackgroundFetchBridge.h"
 #include "modules/background_fetch/IconDefinition.h"
 #include "modules/serviceworkers/ServiceWorkerRegistration.h"
@@ -12,11 +13,11 @@
 namespace blink {
 
 BackgroundFetchRegistration::BackgroundFetchRegistration(
-    String tag,
+    String id,
     HeapVector<IconDefinition> icons,
     long long total_download_size,
     String title)
-    : tag_(tag),
+    : id_(id),
       icons_(icons),
       total_download_size_(total_download_size),
       title_(title) {}
@@ -29,8 +30,8 @@ void BackgroundFetchRegistration::SetServiceWorkerRegistration(
   registration_ = registration;
 }
 
-String BackgroundFetchRegistration::tag() const {
-  return tag_;
+String BackgroundFetchRegistration::id() const {
+  return id_;
 }
 
 HeapVector<IconDefinition> BackgroundFetchRegistration::icons() const {
@@ -51,8 +52,8 @@ ScriptPromise BackgroundFetchRegistration::abort(ScriptState* script_state) {
 
   DCHECK(registration_);
   BackgroundFetchBridge::From(registration_)
-      ->Abort(tag_, WTF::Bind(&BackgroundFetchRegistration::DidAbort,
-                              WrapPersistent(this), WrapPersistent(resolver)));
+      ->Abort(id_, WTF::Bind(&BackgroundFetchRegistration::DidAbort,
+                             WrapPersistent(this), WrapPersistent(resolver)));
 
   return promise;
 }
@@ -64,10 +65,14 @@ void BackgroundFetchRegistration::DidAbort(
     case mojom::blink::BackgroundFetchError::NONE:
       resolver->Resolve(true /* success */);
       return;
-    case mojom::blink::BackgroundFetchError::INVALID_TAG:
+    case mojom::blink::BackgroundFetchError::INVALID_ID:
       resolver->Resolve(false /* success */);
       return;
-    case mojom::blink::BackgroundFetchError::DUPLICATED_TAG:
+    case mojom::blink::BackgroundFetchError::STORAGE_ERROR:
+      resolver->Reject(DOMException::Create(
+          kAbortError, "Failed to abort registration due to I/O error."));
+      return;
+    case mojom::blink::BackgroundFetchError::DUPLICATED_ID:
     case mojom::blink::BackgroundFetchError::INVALID_ARGUMENT:
       // Not applicable for this callback.
       break;

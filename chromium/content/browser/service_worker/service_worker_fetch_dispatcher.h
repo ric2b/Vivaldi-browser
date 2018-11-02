@@ -23,6 +23,7 @@
 #include "content/public/common/url_loader_factory.mojom.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "net/log/net_log_with_source.h"
+#include "storage/public/interfaces/blobs.mojom.h"
 
 namespace net {
 class URLRequest;
@@ -40,6 +41,7 @@ class CONTENT_EXPORT ServiceWorkerFetchDispatcher {
                           ServiceWorkerFetchEventResult,
                           const ServiceWorkerResponse&,
                           blink::mojom::ServiceWorkerStreamHandlePtr,
+                          storage::mojom::BlobPtr,
                           const scoped_refptr<ServiceWorkerVersion>&)>;
 
   ServiceWorkerFetchDispatcher(
@@ -73,16 +75,19 @@ class CONTENT_EXPORT ServiceWorkerFetchDispatcher {
   void DidStartWorker();
   void DidFailToStartWorker(ServiceWorkerStatusCode status);
   void DispatchFetchEvent();
-  void DidFailToDispatch(ServiceWorkerStatusCode status);
+  void DidFailToDispatch(std::unique_ptr<ResponseCallback> callback,
+                         ServiceWorkerStatusCode status);
   void DidFail(ServiceWorkerStatusCode status);
   void DidFinish(int request_id,
                  ServiceWorkerFetchEventResult fetch_result,
                  const ServiceWorkerResponse& response,
-                 blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream);
+                 blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream,
+                 storage::mojom::BlobPtr body_as_blob);
   void Complete(ServiceWorkerStatusCode status,
                 ServiceWorkerFetchEventResult fetch_result,
                 const ServiceWorkerResponse& response,
-                blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream);
+                blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream,
+                storage::mojom::BlobPtr body_as_blob);
 
   static void OnFetchEventFinished(
       ServiceWorkerVersion* version,

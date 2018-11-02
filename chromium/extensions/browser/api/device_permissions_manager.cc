@@ -17,10 +17,9 @@
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "device/base/device_client.h"
-#include "device/hid/hid_device_info.h"
-#include "device/hid/hid_service.h"
 #include "device/usb/usb_device.h"
 #include "device/usb/usb_ids.h"
+#include "extensions/browser/api/hid/hid_device_manager.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extensions_browser_client.h"
@@ -32,7 +31,6 @@ namespace extensions {
 
 using content::BrowserContext;
 using content::BrowserThread;
-using device::HidDeviceInfo;
 using device::HidService;
 using device::UsbDevice;
 using device::UsbService;
@@ -278,14 +276,13 @@ DevicePermissionEntry::DevicePermissionEntry(scoped_refptr<UsbDevice> device)
 }
 
 DevicePermissionEntry::DevicePermissionEntry(
-    scoped_refptr<HidDeviceInfo> device)
-    : hid_device_(device),
+    const device::mojom::HidDeviceInfo& device)
+    : hid_device_guid_(device.guid),
       type_(Type::HID),
-      vendor_id_(device->vendor_id()),
-      product_id_(device->product_id()),
-      serial_number_(base::UTF8ToUTF16(device->serial_number())),
-      product_string_(base::UTF8ToUTF16(device->product_name())) {
-}
+      vendor_id_(device.vendor_id),
+      product_id_(device.product_id),
+      serial_number_(base::UTF8ToUTF16(device.serial_number)),
+      product_string_(base::UTF8ToUTF16(device.product_name)) {}
 
 DevicePermissionEntry::DevicePermissionEntry(
     Type type,
@@ -326,16 +323,16 @@ std::unique_ptr<base::Value> DevicePermissionEntry::ToValue() const {
           .Build());
 
   if (!manufacturer_string_.empty()) {
-    entry_dict->SetStringWithoutPathExpansion(kDeviceManufacturerString,
-                                              manufacturer_string_);
+    entry_dict->SetKey(kDeviceManufacturerString,
+                       base::Value(manufacturer_string_));
   }
   if (!product_string_.empty()) {
-    entry_dict->SetStringWithoutPathExpansion(kDeviceProductString,
-                                              product_string_);
+    entry_dict->SetKey(kDeviceProductString, base::Value(product_string_));
   }
   if (!last_used_.is_null()) {
-    entry_dict->SetStringWithoutPathExpansion(
-        kDeviceLastUsed, base::Int64ToString(last_used_.ToInternalValue()));
+    entry_dict->SetKey(
+        kDeviceLastUsed,
+        base::Value(base::Int64ToString(last_used_.ToInternalValue())));
   }
 
   return std::move(entry_dict);
@@ -373,21 +370,20 @@ scoped_refptr<DevicePermissionEntry> DevicePermissions::FindUsbDeviceEntry(
 }
 
 scoped_refptr<DevicePermissionEntry> DevicePermissions::FindHidDeviceEntry(
-    scoped_refptr<HidDeviceInfo> device) const {
-  const auto& ephemeral_device_entry =
-      ephemeral_hid_devices_.find(device.get());
+    const device::mojom::HidDeviceInfo& device) const {
+  const auto& ephemeral_device_entry = ephemeral_hid_devices_.find(device.guid);
   if (ephemeral_device_entry != ephemeral_hid_devices_.end()) {
     return ephemeral_device_entry->second;
   }
 
-  if (device->serial_number().empty()) {
+  if (device.serial_number.empty()) {
     return nullptr;
   }
 
-  base::string16 serial_number = base::UTF8ToUTF16(device->serial_number());
+  base::string16 serial_number = base::UTF8ToUTF16(device.serial_number);
   for (const auto& entry : entries_) {
-    if (entry->IsPersistent() && entry->vendor_id() == device->vendor_id() &&
-        entry->product_id() == device->product_id() &&
+    if (entry->IsPersistent() && entry->vendor_id() == device.vendor_id &&
+        entry->product_id() == device.product_id &&
         entry->serial_number() == serial_number) {
       return entry;
     }
@@ -562,7 +558,7 @@ void DevicePermissionsManager::AllowUsbDevice(const std::string& extension_id,
 
 void DevicePermissionsManager::AllowHidDevice(
     const std::string& extension_id,
-    scoped_refptr<HidDeviceInfo> device) {
+    const device::mojom::HidDeviceInfo& device) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DevicePermissions* device_permissions = GetForExtension(extension_id);
 
@@ -581,20 +577,19 @@ void DevicePermissionsManager::AllowHidDevice(
     device_permissions->entries_.insert(device_entry);
     SaveDevicePermissionEntry(context_, extension_id, device_entry);
   } else if (!ContainsKey(device_permissions->ephemeral_hid_devices_,
-                          device.get())) {
+                          device.guid)) {
     // Non-persistent devices cannot be reliably identified when they are
     // reconnected so such devices are only remembered until disconnect.
     // Register an observer here so that this set doesn't grow undefinitely.
     device_permissions->entries_.insert(device_entry);
-    device_permissions->ephemeral_hid_devices_[device.get()] = device_entry;
+    device_permissions->ephemeral_hid_devices_[device.guid] = device_entry;
 
-    // Only start observing when an ephemeral device has been added so that
-    // HidService is not automatically initialized on profile creation (which it
-    // would be if this call were in the constructor).
-    HidService* hid_service = device::DeviceClient::Get()->GetHidService();
-    if (!hid_service_observer_.IsObserving(hid_service)) {
-      hid_service_observer_.Add(hid_service);
-    }
+    // Make sure the HidDeviceManager is active. HidDeviceManager is
+    // responsible for removing the permission entry for an ephemeral hid
+    // device. Only do this when an ephemeral device has been added.
+    HidDeviceManager* device_manager = HidDeviceManager::Get(context_);
+    DCHECK(device_manager);
+    device_manager->LazyInitialize();
   }
 }
 
@@ -621,7 +616,7 @@ void DevicePermissionsManager::RemoveEntry(
   } else if (entry->type_ == DevicePermissionEntry::Type::USB) {
     device_permissions->ephemeral_usb_devices_.erase(entry->usb_device_.get());
   } else if (entry->type_ == DevicePermissionEntry::Type::HID) {
-    device_permissions->ephemeral_hid_devices_.erase(entry->hid_device_.get());
+    device_permissions->ephemeral_hid_devices_.erase(entry->hid_device_guid_);
   } else {
     NOTREACHED();
   }
@@ -640,10 +635,7 @@ void DevicePermissionsManager::Clear(const std::string& extension_id) {
 
 DevicePermissionsManager::DevicePermissionsManager(
     content::BrowserContext* context)
-    : context_(context),
-      usb_service_observer_(this),
-      hid_service_observer_(this) {
-}
+    : context_(context), usb_service_observer_(this) {}
 
 DevicePermissionsManager::~DevicePermissionsManager() {
   for (const auto& map_entry : extension_id_to_device_permissions_) {
@@ -679,15 +671,15 @@ void DevicePermissionsManager::OnDeviceRemovedCleanup(
   }
 }
 
-void DevicePermissionsManager::OnDeviceRemovedCleanup(
-    scoped_refptr<device::HidDeviceInfo> device) {
+void DevicePermissionsManager::RemoveEntryByHidDeviceGUID(
+    const std::string& guid) {
   DCHECK(thread_checker_.CalledOnValidThread());
   for (const auto& map_entry : extension_id_to_device_permissions_) {
     // An ephemeral device cannot be identified if it is reconnected and so
     // permission to access it is cleared on disconnect.
     DevicePermissions* device_permissions = map_entry.second;
     const auto& device_entry =
-        device_permissions->ephemeral_hid_devices_.find(device.get());
+        device_permissions->ephemeral_hid_devices_.find(guid);
     if (device_entry != device_permissions->ephemeral_hid_devices_.end()) {
       device_permissions->entries_.erase(device_entry->second);
       device_permissions->ephemeral_hid_devices_.erase(device_entry);

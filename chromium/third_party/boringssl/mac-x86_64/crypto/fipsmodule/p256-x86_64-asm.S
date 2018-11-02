@@ -516,6 +516,10 @@ __ecp_nistz256_sqr_montq:
 
 .p2align	5
 _ecp_nistz256_select_w5:
+	leaq	_OPENSSL_ia32cap_P(%rip),%rax
+	movq	8(%rax),%rax
+	testl	$32,%eax
+	jnz	L$avx2_select_w5
 	movdqa	L$One(%rip),%xmm0
 	movd	%edx,%xmm1
 
@@ -576,6 +580,10 @@ L$select_loop_sse_w5:
 
 .p2align	5
 _ecp_nistz256_select_w7:
+	leaq	_OPENSSL_ia32cap_P(%rip),%rax
+	movq	8(%rax),%rax
+	testl	$32,%eax
+	jnz	L$avx2_select_w7
 	movdqa	L$One(%rip),%xmm8
 	movd	%edx,%xmm1
 
@@ -617,12 +625,142 @@ L$select_loop_sse_w7:
 	movdqu	%xmm5,48(%rdi)
 	.byte	0xf3,0xc3
 
+
+
+
+.p2align	5
+ecp_nistz256_avx2_select_w5:
+L$avx2_select_w5:
+	vzeroupper
+	vmovdqa	L$Two(%rip),%ymm0
+
+	vpxor	%ymm2,%ymm2,%ymm2
+	vpxor	%ymm3,%ymm3,%ymm3
+	vpxor	%ymm4,%ymm4,%ymm4
+
+	vmovdqa	L$One(%rip),%ymm5
+	vmovdqa	L$Two(%rip),%ymm10
+
+	vmovd	%edx,%xmm1
+	vpermd	%ymm1,%ymm2,%ymm1
+
+	movq	$8,%rax
+L$select_loop_avx2_w5:
+
+	vmovdqa	0(%rsi),%ymm6
+	vmovdqa	32(%rsi),%ymm7
+	vmovdqa	64(%rsi),%ymm8
+
+	vmovdqa	96(%rsi),%ymm11
+	vmovdqa	128(%rsi),%ymm12
+	vmovdqa	160(%rsi),%ymm13
+
+	vpcmpeqd	%ymm1,%ymm5,%ymm9
+	vpcmpeqd	%ymm1,%ymm10,%ymm14
+
+	vpaddd	%ymm0,%ymm5,%ymm5
+	vpaddd	%ymm0,%ymm10,%ymm10
+	leaq	192(%rsi),%rsi
+
+	vpand	%ymm9,%ymm6,%ymm6
+	vpand	%ymm9,%ymm7,%ymm7
+	vpand	%ymm9,%ymm8,%ymm8
+	vpand	%ymm14,%ymm11,%ymm11
+	vpand	%ymm14,%ymm12,%ymm12
+	vpand	%ymm14,%ymm13,%ymm13
+
+	vpxor	%ymm6,%ymm2,%ymm2
+	vpxor	%ymm7,%ymm3,%ymm3
+	vpxor	%ymm8,%ymm4,%ymm4
+	vpxor	%ymm11,%ymm2,%ymm2
+	vpxor	%ymm12,%ymm3,%ymm3
+	vpxor	%ymm13,%ymm4,%ymm4
+
+	decq	%rax
+	jnz	L$select_loop_avx2_w5
+
+	vmovdqu	%ymm2,0(%rdi)
+	vmovdqu	%ymm3,32(%rdi)
+	vmovdqu	%ymm4,64(%rdi)
+	vzeroupper
+	.byte	0xf3,0xc3
+
+
+
+
 .globl	_ecp_nistz256_avx2_select_w7
 .private_extern _ecp_nistz256_avx2_select_w7
 
 .p2align	5
 _ecp_nistz256_avx2_select_w7:
-.byte	0x0f,0x0b
+L$avx2_select_w7:
+	vzeroupper
+	vmovdqa	L$Three(%rip),%ymm0
+
+	vpxor	%ymm2,%ymm2,%ymm2
+	vpxor	%ymm3,%ymm3,%ymm3
+
+	vmovdqa	L$One(%rip),%ymm4
+	vmovdqa	L$Two(%rip),%ymm8
+	vmovdqa	L$Three(%rip),%ymm12
+
+	vmovd	%edx,%xmm1
+	vpermd	%ymm1,%ymm2,%ymm1
+
+
+	movq	$21,%rax
+L$select_loop_avx2_w7:
+
+	vmovdqa	0(%rsi),%ymm5
+	vmovdqa	32(%rsi),%ymm6
+
+	vmovdqa	64(%rsi),%ymm9
+	vmovdqa	96(%rsi),%ymm10
+
+	vmovdqa	128(%rsi),%ymm13
+	vmovdqa	160(%rsi),%ymm14
+
+	vpcmpeqd	%ymm1,%ymm4,%ymm7
+	vpcmpeqd	%ymm1,%ymm8,%ymm11
+	vpcmpeqd	%ymm1,%ymm12,%ymm15
+
+	vpaddd	%ymm0,%ymm4,%ymm4
+	vpaddd	%ymm0,%ymm8,%ymm8
+	vpaddd	%ymm0,%ymm12,%ymm12
+	leaq	192(%rsi),%rsi
+
+	vpand	%ymm7,%ymm5,%ymm5
+	vpand	%ymm7,%ymm6,%ymm6
+	vpand	%ymm11,%ymm9,%ymm9
+	vpand	%ymm11,%ymm10,%ymm10
+	vpand	%ymm15,%ymm13,%ymm13
+	vpand	%ymm15,%ymm14,%ymm14
+
+	vpxor	%ymm5,%ymm2,%ymm2
+	vpxor	%ymm6,%ymm3,%ymm3
+	vpxor	%ymm9,%ymm2,%ymm2
+	vpxor	%ymm10,%ymm3,%ymm3
+	vpxor	%ymm13,%ymm2,%ymm2
+	vpxor	%ymm14,%ymm3,%ymm3
+
+	decq	%rax
+	jnz	L$select_loop_avx2_w7
+
+
+	vmovdqa	0(%rsi),%ymm5
+	vmovdqa	32(%rsi),%ymm6
+
+	vpcmpeqd	%ymm1,%ymm4,%ymm7
+
+	vpand	%ymm7,%ymm5,%ymm5
+	vpand	%ymm7,%ymm6,%ymm6
+
+	vpxor	%ymm5,%ymm2,%ymm2
+	vpxor	%ymm6,%ymm3,%ymm3
+
+	vmovdqu	%ymm2,0(%rdi)
+	vmovdqu	%ymm3,32(%rdi)
+	vzeroupper
 	.byte	0xf3,0xc3
 
 

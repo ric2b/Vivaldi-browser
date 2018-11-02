@@ -4,7 +4,7 @@
 
 #include "modules/media_controls/MediaControlsWindowEventListener.h"
 
-#include "core/events/Event.h"
+#include "core/dom/events/Event.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "modules/media_controls/MediaControlsImpl.h"
 #include "modules/media_controls/elements/MediaControlCastButtonElement.h"
@@ -29,14 +29,14 @@ LocalDOMWindow* GetTopLocalDOMWindow(LocalDOMWindow* window) {
 
 MediaControlsWindowEventListener* MediaControlsWindowEventListener::Create(
     MediaControlsImpl* media_controls,
-    std::unique_ptr<Callback> callback) {
+    Callback callback) {
   return new MediaControlsWindowEventListener(media_controls,
                                               std::move(callback));
 }
 
 MediaControlsWindowEventListener::MediaControlsWindowEventListener(
     MediaControlsImpl* media_controls,
-    std::unique_ptr<Callback> callback)
+    Callback callback)
     : EventListener(kCPPEventListenerType),
       media_controls_(media_controls),
       callback_(std::move(callback)),
@@ -112,7 +112,7 @@ void MediaControlsWindowEventListener::handleEvent(
 
   if (!is_active_)
     return;
-  (*callback_.get())();
+  callback_();
 }
 
 DEFINE_TRACE(MediaControlsWindowEventListener) {

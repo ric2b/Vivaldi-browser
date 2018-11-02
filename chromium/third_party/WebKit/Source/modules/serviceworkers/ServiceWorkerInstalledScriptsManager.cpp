@@ -21,14 +21,18 @@ bool ServiceWorkerInstalledScriptsManager::IsScriptInstalled(
   return manager_->IsScriptInstalled(script_url);
 }
 
-Optional<InstalledScriptsManager::ScriptData>
-ServiceWorkerInstalledScriptsManager::GetScriptData(const KURL& script_url) {
+InstalledScriptsManager::ScriptStatus
+ServiceWorkerInstalledScriptsManager::GetScriptData(
+    const KURL& script_url,
+    InstalledScriptsManager::ScriptData* out_script_data) {
   DCHECK(!IsMainThread());
   // This blocks until the script is received from the browser.
   std::unique_ptr<WebServiceWorkerInstalledScriptsManager::RawScriptData>
       raw_script_data = manager_->GetRawScriptData(script_url);
   if (!raw_script_data)
-    return WTF::nullopt;
+    return ScriptStatus::kTaken;
+  if (!raw_script_data->IsValid())
+    return ScriptStatus::kFailed;
 
   // This is from WorkerScriptLoader::DidReceiveData.
   std::unique_ptr<TextResourceDecoder> decoder;
@@ -41,26 +45,26 @@ ServiceWorkerInstalledScriptsManager::GetScriptData(const KURL& script_url) {
         TextResourceDecoderOptions::kPlainTextContent));
   }
 
-  InstalledScriptsManager::ScriptData script_data;
-  // TODO(shimazu): Read the headers for ContentSecurityPolicy, ReferrerPolicy,
-  // and OriginTrialTokens and set them to |script_data|.
   StringBuilder source_text_builder;
   for (const auto& chunk : raw_script_data->ScriptTextChunks())
     source_text_builder.Append(decoder->Decode(chunk.Data(), chunk.size()));
-  script_data.source_text = source_text_builder.ToString();
 
+  std::unique_ptr<Vector<char>> meta_data;
   if (raw_script_data->MetaDataChunks().size() > 0) {
     size_t total_metadata_size = 0;
     for (const auto& chunk : raw_script_data->MetaDataChunks())
       total_metadata_size += chunk.size();
-    script_data.meta_data = WTF::MakeUnique<Vector<char>>();
-    script_data.meta_data->ReserveInitialCapacity(total_metadata_size);
+    meta_data = WTF::MakeUnique<Vector<char>>();
+    meta_data->ReserveInitialCapacity(total_metadata_size);
     for (const auto& chunk : raw_script_data->MetaDataChunks())
-      script_data.meta_data->Append(chunk.Data(), chunk.size());
+      meta_data->Append(chunk.Data(), chunk.size());
   }
 
-  script_data.headers.Adopt(raw_script_data->TakeHeaders());
-  return Optional<ScriptData>(std::move(script_data));
+  InstalledScriptsManager::ScriptData script_data(
+      script_url, source_text_builder.ToString(), std::move(meta_data),
+      raw_script_data->TakeHeaders());
+  *out_script_data = std::move(script_data);
+  return ScriptStatus::kSuccess;
 }
 
 }  // namespace blink

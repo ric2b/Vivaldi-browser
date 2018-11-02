@@ -49,7 +49,8 @@ class InputHandlerProxyClient {
       const gfx::Vector2dF& accumulated_overscroll,
       const gfx::Vector2dF& latest_overscroll_delta,
       const gfx::Vector2dF& current_fling_velocity,
-      const gfx::PointF& causal_event_viewport_point) = 0;
+      const gfx::PointF& causal_event_viewport_point,
+      const cc::ScrollBoundaryBehavior& scroll_boundary_behavior) = 0;
 
   virtual void DidStopFlinging() = 0;
 
@@ -60,7 +61,10 @@ class InputHandlerProxyClient {
   virtual void GenerateScrollBeginAndSendToMainThread(
       const blink::WebGestureEvent& update_event) = 0;
 
-  virtual void SetWhiteListedTouchAction(cc::TouchAction touch_action) = 0;
+  virtual void SetWhiteListedTouchAction(
+      cc::TouchAction touch_action,
+      uint32_t unique_touch_event_id,
+      InputHandlerProxy::EventDisposition event_disposition) = 0;
 
  protected:
   virtual ~InputHandlerProxyClient() {}

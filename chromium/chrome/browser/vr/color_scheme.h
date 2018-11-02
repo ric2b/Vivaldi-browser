@@ -69,9 +69,9 @@ struct ColorScheme {
   // should respect these colors.
   SkColor secure;
   SkColor insecure;
-  SkColor warning;
   SkColor url_emphasized;
   SkColor url_deemphasized;
+  SkColor offline_page_warning;
 
   // The color used for disabled icons.
   SkColor disabled;
@@ -82,6 +82,7 @@ struct ColorScheme {
 
   // Splash screen colors.
   SkColor splash_screen_background;
+  SkColor splash_screen_text_color;
 };
 
 }  // namespace vr

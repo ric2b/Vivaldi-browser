@@ -5,6 +5,7 @@
 #include "ui/events/test/device_data_manager_test_api.h"
 
 #include "ui/events/devices/device_data_manager.h"
+#include "ui/gfx/transform.h"
 
 namespace ui {
 namespace test {

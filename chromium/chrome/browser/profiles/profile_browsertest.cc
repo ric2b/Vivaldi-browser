@@ -16,6 +16,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
+#include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task_scheduler/task_scheduler.h"
@@ -160,8 +161,6 @@ void SpinThreads() {
   // Should not be necessary anymore once Profile deletion is fixed
   // (see crbug.com/88586).
   content::RunAllPendingInMessageLoop();
-  content::RunAllPendingInMessageLoop(content::BrowserThread::DB);
-  content::RunAllPendingInMessageLoop(content::BrowserThread::FILE);
 
   // This prevents HistoryBackend from accessing its databases after the
   // directory that contains them has been deleted.
@@ -791,22 +790,13 @@ IN_PROC_BROWSER_TEST_F(ProfileBrowserTest, DiskCacheDirOverride) {
   ProfileImpl* profile_impl = static_cast<ProfileImpl*>(browser()->profile());
 
   {
-    profile_impl->GetPrefs()->SetFilePath(prefs::kDiskCacheDir,
-                                          base::FilePath());
-
-    base::FilePath cache_path = profile_path;
-    profile_impl->GetCacheParameters(false, &cache_path, &size);
-    EXPECT_EQ(profile_path, cache_path);
-  }
-
-  {
     base::ScopedTempDir temp_disk_cache_dir;
     ASSERT_TRUE(temp_disk_cache_dir.CreateUniqueTempDir());
     profile_impl->GetPrefs()->SetFilePath(prefs::kDiskCacheDir,
                                           temp_disk_cache_dir.GetPath());
 
     base::FilePath cache_path = profile_path;
-    profile_impl->GetCacheParameters(false, &cache_path, &size);
+    profile_impl->GetMediaCacheParameters(&cache_path, &size);
     EXPECT_EQ(temp_disk_cache_dir.GetPath().Append(profile_name), cache_path);
   }
 }

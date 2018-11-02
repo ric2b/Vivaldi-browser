@@ -32,13 +32,10 @@
 
 #include <memory>
 #include "bindings/core/v8/V8CacheOptions.h"
+#include "core/CoreInitializer.h"
 #include "core/dom/Document.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/events/MessageEvent.h"
-#include "core/exported/WebDataSourceImpl.h"
-#include "core/exported/WebFactory.h"
-#include "core/exported/WebViewBase.h"
-#include "core/frame/WebLocalFrameBase.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/loader/FrameLoader.h"
@@ -47,6 +44,7 @@
 #include "core/probe/CoreProbes.h"
 #include "core/workers/GlobalScopeCreationParams.h"
 #include "core/workers/ParentFrameTaskRunners.h"
+#include "core/workers/SharedWorkerContentSettingsProxy.h"
 #include "core/workers/SharedWorkerGlobalScope.h"
 #include "core/workers/SharedWorkerThread.h"
 #include "core/workers/WorkerContentSettingsClient.h"
@@ -72,38 +70,19 @@
 #include "public/platform/WebWorkerFetchContext.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerNetworkProvider.h"
 #include "public/web/WebDevToolsAgent.h"
-#include "public/web/WebFrame.h"
 #include "public/web/WebSettings.h"
-#include "public/web/WebView.h"
 
 namespace blink {
 
-// TODO(toyoshim): Share implementation with WebEmbeddedWorkerImpl as much as
-// possible.
-
-template class CORE_TEMPLATE_EXPORT
-    WorkerClientsInitializer<WebSharedWorkerImpl>;
-
 WebSharedWorkerImpl::WebSharedWorkerImpl(WebSharedWorkerClient* client)
-    : web_view_(nullptr),
-      main_frame_(nullptr),
-      asked_to_terminate_(false),
-      worker_inspector_proxy_(WorkerInspectorProxy::Create()),
+    : worker_inspector_proxy_(WorkerInspectorProxy::Create()),
       client_(client),
-      pause_worker_context_on_start_(false),
-      is_paused_on_start_(false),
       creation_address_space_(kWebAddressSpacePublic) {
   DCHECK(IsMainThread());
 }
 
 WebSharedWorkerImpl::~WebSharedWorkerImpl() {
   DCHECK(IsMainThread());
-  DCHECK(web_view_);
-  // Detach the client before closing the view to avoid getting called back.
-  main_frame_->SetClient(0);
-
-  web_view_->Close();
-  main_frame_->Close();
 }
 
 void WebSharedWorkerImpl::TerminateWorkerThread() {
@@ -123,36 +102,6 @@ void WebSharedWorkerImpl::TerminateWorkerThread() {
   worker_inspector_proxy_->WorkerThreadTerminated();
 }
 
-void WebSharedWorkerImpl::InitializeLoader(bool data_saver_enabled) {
-  DCHECK(IsMainThread());
-
-  // Create 'shadow page'. This page is never displayed, it is used to proxy the
-  // loading requests from the worker context to the rest of WebKit and Chromium
-  // infrastructure.
-  DCHECK(!web_view_);
-  web_view_ = WebFactory::GetInstance().CreateWebViewBase(
-      nullptr, kWebPageVisibilityStateVisible);
-  // FIXME: http://crbug.com/363843. This needs to find a better way to
-  // not create graphics layers.
-  web_view_->GetSettings()->SetAcceleratedCompositingEnabled(false);
-  web_view_->GetSettings()->SetDataSaverEnabled(data_saver_enabled);
-  // FIXME: Settings information should be passed to the Worker process from
-  // Browser process when the worker is created (similar to
-  // RenderThread::OnCreateNewView).
-  main_frame_ = WebFactory::GetInstance().CreateMainWebLocalFrameBase(
-      web_view_, this, nullptr);
-  main_frame_->SetDevToolsAgentClient(this);
-
-  // If we were asked to pause worker context on start and wait for debugger
-  // then it is the good time to do that.
-  client_->WorkerReadyForInspection();
-  if (pause_worker_context_on_start_) {
-    is_paused_on_start_ = true;
-    return;
-  }
-  LoadShadowPage();
-}
-
 std::unique_ptr<WebApplicationCacheHost>
 WebSharedWorkerImpl::CreateApplicationCacheHost(
     WebApplicationCacheHostClient* appcache_host_client) {
@@ -160,34 +109,12 @@ WebSharedWorkerImpl::CreateApplicationCacheHost(
   return client_->CreateApplicationCacheHost(appcache_host_client);
 }
 
-void WebSharedWorkerImpl::LoadShadowPage() {
+void WebSharedWorkerImpl::OnShadowPageInitialized() {
   DCHECK(IsMainThread());
-
-  // Construct substitute data source for the 'shadow page'. We only need it
-  // to have same origin as the worker so the loading checks work correctly.
-  CString content("");
-  RefPtr<SharedBuffer> buffer(
-      SharedBuffer::Create(content.data(), content.length()));
-  main_frame_->GetFrame()->Loader().Load(FrameLoadRequest(
-      0, ResourceRequest(url_),
-      SubstituteData(buffer, "text/html", "UTF-8", NullURL())));
-}
-
-void WebSharedWorkerImpl::FrameDetached(WebLocalFrame* frame, DetachType type) {
-  DCHECK(type == DetachType::kRemove && frame->Parent());
-  DCHECK(frame->FrameWidget());
-
-  frame->Close();
-}
-
-void WebSharedWorkerImpl::DidFinishDocumentLoad() {
-  DCHECK(IsMainThread());
-  DCHECK(!loading_document_);
   DCHECK(!main_script_loader_);
-  main_frame_->DataSource()->SetServiceWorkerNetworkProvider(
+  shadow_page_->DocumentLoader()->SetServiceWorkerNetworkProvider(
       client_->CreateServiceWorkerNetworkProvider());
   main_script_loader_ = WorkerScriptLoader::Create();
-  loading_document_ = main_frame_->GetFrame()->GetDocument();
 
   WebURLRequest::FetchRequestMode fetch_request_mode =
       WebURLRequest::kFetchRequestModeSameOrigin;
@@ -199,14 +126,14 @@ void WebSharedWorkerImpl::DidFinishDocumentLoad() {
   }
 
   main_script_loader_->LoadAsynchronously(
-      *loading_document_.Get(), url_,
+      *shadow_page_->GetDocument(), url_,
       WebURLRequest::kRequestContextSharedWorker, fetch_request_mode,
       fetch_credentials_mode, creation_address_space_,
       Bind(&WebSharedWorkerImpl::DidReceiveScriptLoaderResponse,
            WTF::Unretained(this)),
       Bind(&WebSharedWorkerImpl::OnScriptLoaderFinished,
            WTF::Unretained(this)));
-  // Do nothing here since onScriptLoaderFinished() might have been already
+  // Do nothing here since OnScriptLoaderFinished() might have been already
   // invoked and |this| might have been deleted at this point.
 }
 
@@ -222,8 +149,10 @@ void WebSharedWorkerImpl::ResumeStartup() {
   DCHECK(IsMainThread());
   bool is_paused_on_start = is_paused_on_start_;
   is_paused_on_start_ = false;
-  if (is_paused_on_start)
-    LoadShadowPage();
+  if (is_paused_on_start) {
+    // We'll continue in OnShadowPageInitialized().
+    shadow_page_->Initialize(url_);
+  }
 }
 
 WebDevToolsAgentClient::WebKitClientMessageLoop*
@@ -289,24 +218,40 @@ void WebSharedWorkerImpl::StartWorkerContext(
     const WebString& content_security_policy,
     WebContentSecurityPolicyType policy_type,
     WebAddressSpace creation_address_space,
-    bool data_saver_enabled) {
+    bool data_saver_enabled,
+    mojo::ScopedMessagePipeHandle content_settings_handle) {
   DCHECK(IsMainThread());
   url_ = url;
   name_ = name;
   creation_address_space_ = creation_address_space;
-  InitializeLoader(data_saver_enabled);
+  // Chrome doesn't use interface versioning.
+  content_settings_info_ = mojom::blink::WorkerContentSettingsProxyPtrInfo(
+      std::move(content_settings_handle), 0u);
+
+  shadow_page_ = WTF::MakeUnique<WorkerShadowPage>(this);
+  shadow_page_->GetSettings()->SetDataSaverEnabled(data_saver_enabled);
+
+  // If we were asked to pause worker context on start and wait for debugger
+  // then now is a good time to do that.
+  client_->WorkerReadyForInspection();
+  if (pause_worker_context_on_start_) {
+    is_paused_on_start_ = true;
+    return;
+  }
+
+  // We'll continue in OnShadowPageInitialized().
+  shadow_page_->Initialize(url_);
 }
 
 void WebSharedWorkerImpl::DidReceiveScriptLoaderResponse() {
   DCHECK(IsMainThread());
-  probe::didReceiveScriptResponse(loading_document_,
+  probe::didReceiveScriptResponse(shadow_page_->GetDocument(),
                                   main_script_loader_->Identifier());
   client_->SelectAppCacheID(main_script_loader_->AppCacheID());
 }
 
 void WebSharedWorkerImpl::OnScriptLoaderFinished() {
   DCHECK(IsMainThread());
-  DCHECK(loading_document_);
   DCHECK(main_script_loader_);
   if (asked_to_terminate_)
     return;
@@ -323,31 +268,33 @@ void WebSharedWorkerImpl::OnScriptLoaderFinished() {
   // FIXME: this document's origin is pristine and without any extra privileges
   // (e.g. GrantUniversalAccess) that can be overriden in regular documents
   // via WebPreference by embedders. (crbug.com/254993)
-  SecurityOrigin* starter_origin = loading_document_->GetSecurityOrigin();
+  Document* document = shadow_page_->GetDocument();
+  SecurityOrigin* starter_origin = document->GetSecurityOrigin();
 
   WorkerClients* worker_clients = WorkerClients::Create();
-  WorkerClientsInitializer<WebSharedWorkerImpl>::Run(worker_clients);
+  CoreInitializer::GetInstance().ProvideLocalFileSystemToWorker(
+      *worker_clients);
+  CoreInitializer::GetInstance().ProvideIndexedDBClientToWorker(
+      *worker_clients);
 
-  WebSecurityOrigin web_security_origin(loading_document_->GetSecurityOrigin());
   ProvideContentSettingsClientToWorker(
-      worker_clients,
-      client_->CreateWorkerContentSettingsClient(web_security_origin));
+      worker_clients, WTF::MakeUnique<SharedWorkerContentSettingsProxy>(
+                          std::move(content_settings_info_)));
 
   if (RuntimeEnabledFeatures::OffMainThreadFetchEnabled()) {
     std::unique_ptr<WebWorkerFetchContext> web_worker_fetch_context =
         client_->CreateWorkerFetchContext(
-            WebLocalFrameBase::FromFrame(main_frame_->GetFrame())
-                ->DataSource()
-                ->GetServiceWorkerNetworkProvider());
+            shadow_page_->DocumentLoader()->GetServiceWorkerNetworkProvider());
     DCHECK(web_worker_fetch_context);
     web_worker_fetch_context->SetApplicationCacheHostID(
-        main_frame_->GetFrame()
-            ->GetDocument()
+        shadow_page_->GetDocument()
             ->Fetcher()
             ->Context()
             .ApplicationCacheHostID());
-    web_worker_fetch_context->SetDataSaverEnabled(
-        main_frame_->GetFrame()->GetSettings()->GetDataSaverEnabled());
+    web_worker_fetch_context->SetDataSaverEnabled(shadow_page_->GetDocument()
+                                                      ->GetFrame()
+                                                      ->GetSettings()
+                                                      ->GetDataSaverEnabled());
     ProvideWorkerFetchContextToWorker(worker_clients,
                                       std::move(web_worker_fetch_context));
   }
@@ -355,13 +302,14 @@ void WebSharedWorkerImpl::OnScriptLoaderFinished() {
   ContentSecurityPolicy* content_security_policy =
       main_script_loader_->ReleaseContentSecurityPolicy();
   WorkerThreadStartMode start_mode =
-      worker_inspector_proxy_->WorkerStartMode(loading_document_);
-  std::unique_ptr<WorkerSettings> worker_settings = WTF::WrapUnique(
-      new WorkerSettings(main_frame_->GetFrame()->GetSettings()));
+      worker_inspector_proxy_->WorkerStartMode(document);
+  std::unique_ptr<WorkerSettings> worker_settings =
+      WTF::WrapUnique(new WorkerSettings(
+          shadow_page_->GetDocument()->GetFrame()->GetSettings()));
   auto global_scope_creation_params =
       WTF::MakeUnique<GlobalScopeCreationParams>(
-          url_, loading_document_->UserAgent(),
-          main_script_loader_->SourceText(), nullptr, start_mode,
+          url_, document->UserAgent(), main_script_loader_->SourceText(),
+          nullptr, start_mode,
           content_security_policy ? content_security_policy->Headers().get()
                                   : nullptr,
           main_script_loader_->GetReferrerPolicy(), starter_origin,
@@ -379,10 +327,8 @@ void WebSharedWorkerImpl::OnScriptLoaderFinished() {
 
   reporting_proxy_ = new SharedWorkerReportingProxy(this, task_runners);
   worker_thread_ = WTF::MakeUnique<SharedWorkerThread>(
-      name_,
-      ThreadableLoadingContext::Create(*ToDocument(loading_document_.Get())),
-      *reporting_proxy_);
-  probe::scriptImported(loading_document_, main_script_loader_->Identifier(),
+      name_, ThreadableLoadingContext::Create(*document), *reporting_proxy_);
+  probe::scriptImported(document, main_script_loader_->Identifier(),
                         main_script_loader_->SourceText());
   main_script_loader_.Clear();
 
@@ -392,8 +338,8 @@ void WebSharedWorkerImpl::OnScriptLoaderFinished() {
 
   GetWorkerThread()->Start(std::move(global_scope_creation_params),
                            thread_startup_data, task_runners);
-  worker_inspector_proxy_->WorkerThreadCreated(ToDocument(loading_document_),
-                                               GetWorkerThread(), url_);
+  worker_inspector_proxy_->WorkerThreadCreated(document, GetWorkerThread(),
+                                               url_);
   client_->WorkerScriptLoaded();
 }
 
@@ -408,7 +354,7 @@ void WebSharedWorkerImpl::PauseWorkerContextOnStart() {
 
 void WebSharedWorkerImpl::AttachDevTools(const WebString& host_id,
                                          int session_id) {
-  WebDevToolsAgent* devtools_agent = main_frame_->DevToolsAgent();
+  WebDevToolsAgent* devtools_agent = shadow_page_->DevToolsAgent();
   if (devtools_agent)
     devtools_agent->Attach(host_id, session_id);
 }
@@ -416,14 +362,14 @@ void WebSharedWorkerImpl::AttachDevTools(const WebString& host_id,
 void WebSharedWorkerImpl::ReattachDevTools(const WebString& host_id,
                                            int session_id,
                                            const WebString& saved_state) {
-  WebDevToolsAgent* devtools_agent = main_frame_->DevToolsAgent();
+  WebDevToolsAgent* devtools_agent = shadow_page_->DevToolsAgent();
   if (devtools_agent)
     devtools_agent->Reattach(host_id, session_id, saved_state);
   ResumeStartup();
 }
 
 void WebSharedWorkerImpl::DetachDevTools(int session_id) {
-  WebDevToolsAgent* devtools_agent = main_frame_->DevToolsAgent();
+  WebDevToolsAgent* devtools_agent = shadow_page_->DevToolsAgent();
   if (devtools_agent)
     devtools_agent->Detach(session_id);
 }
@@ -434,7 +380,7 @@ void WebSharedWorkerImpl::DispatchDevToolsMessage(int session_id,
                                                   const WebString& message) {
   if (asked_to_terminate_)
     return;
-  WebDevToolsAgent* devtools_agent = main_frame_->DevToolsAgent();
+  WebDevToolsAgent* devtools_agent = shadow_page_->DevToolsAgent();
   if (devtools_agent) {
     devtools_agent->DispatchOnInspectorBackend(session_id, call_id, method,
                                                message);

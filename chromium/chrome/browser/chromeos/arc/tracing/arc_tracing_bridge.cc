@@ -66,13 +66,7 @@ ArcTracingBridge::ArcTracingBridge(content::BrowserContext* context,
 
 ArcTracingBridge::~ArcTracingBridge() {
   content::ArcTracingAgent::GetInstance()->SetDelegate(nullptr);
-
-  // TODO(hidehiko): Currently, the lifetime of ArcBridgeService and
-  // BrowserContextKeyedService is not nested.
-  // If ArcServiceManager::Get() returns nullptr, it is already destructed,
-  // so do not touch it.
-  if (ArcServiceManager::Get())
-    arc_bridge_service_->tracing()->RemoveObserver(this);
+  arc_bridge_service_->tracing()->RemoveObserver(this);
 }
 
 void ArcTracingBridge::OnInstanceReady() {
@@ -101,7 +95,7 @@ void ArcTracingBridge::OnCategoriesReady(
   }
 }
 
-void ArcTracingBridge::StartTracing(
+bool ArcTracingBridge::StartTracing(
     const base::trace_event::TraceConfig& trace_config,
     base::ScopedFD write_fd,
     const StartTracingCallback& callback) {
@@ -114,7 +108,7 @@ void ArcTracingBridge::StartTracing(
     // callback to be called after this function returns.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::BindOnce(callback, false));
-    return;
+    return false;
   }
 
   std::vector<std::string> selected_categories;
@@ -126,6 +120,8 @@ void ArcTracingBridge::StartTracing(
   tracing_instance->StartTracing(selected_categories,
                                  mojo::WrapPlatformFile(write_fd.release()),
                                  callback);
+
+  return true;
 }
 
 void ArcTracingBridge::StopTracing(const StopTracingCallback& callback) {

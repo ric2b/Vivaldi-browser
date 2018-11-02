@@ -10,6 +10,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -63,7 +64,7 @@ void ProfileCreationComplete(Profile* profile, Profile::CreateStatus status) {
   EXPECT_EQ(chrome::GetBrowserCount(profile), 0U);
   EXPECT_EQ(chrome::GetTotalBrowserCount(), 1U);
   if (status == Profile::CREATE_STATUS_INITIALIZED)
-    base::MessageLoop::current()->QuitWhenIdle();
+    base::RunLoop::QuitCurrentWhenIdleDeprecated();
 }
 
 // An observer that returns back to test code after one or more profiles was
@@ -445,8 +446,8 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest,
   }
 }
 
-IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest,
-                       SwitchToProfile) {
+// Flakes on ChromiumOS: http://crbug.com/758930
+IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, DISABLED_SwitchToProfile) {
   // If multiprofile mode is not enabled, you can't switch between profiles.
   if (!profiles::IsMultipleProfilesEnabled())
     return;
@@ -501,12 +502,8 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest,
 }
 
 // Flakes on Windows: http://crbug.com/314905
-#if defined(OS_WIN)
-#define MAYBE_EphemeralProfile DISABLED_EphemeralProfile
-#else
-#define MAYBE_EphemeralProfile EphemeralProfile
-#endif
-IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, MAYBE_EphemeralProfile) {
+// Flakes on ChromiumOS: http://crbug.com/758930
+IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, DISABLED_EphemeralProfile) {
   // If multiprofile mode is not enabled, you can't switch between profiles.
   if (!profiles::IsMultipleProfilesEnabled())
     return;

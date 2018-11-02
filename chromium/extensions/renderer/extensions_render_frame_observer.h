@@ -11,6 +11,7 @@
 #include "content/public/renderer/render_frame_observer.h"
 #include "extensions/common/mojo/app_window.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 
 namespace extensions {
 
@@ -19,8 +20,8 @@ namespace extensions {
 class ExtensionsRenderFrameObserver : public content::RenderFrameObserver,
                                       public mojom::AppWindow {
  public:
-  explicit ExtensionsRenderFrameObserver(
-      content::RenderFrame* render_frame);
+  ExtensionsRenderFrameObserver(content::RenderFrame* render_frame,
+                                service_manager::BinderRegistry* registry);
   ~ExtensionsRenderFrameObserver() override;
 
  private:

@@ -36,21 +36,20 @@ import org.chromium.chrome.browser.ntp.snippets.ContentSuggestionsCardLayout;
 import org.chromium.chrome.browser.ntp.snippets.KnownCategories;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
 import org.chromium.chrome.browser.suggestions.ContentSuggestionsAdditionalAction;
-import org.chromium.chrome.browser.suggestions.FakeMostVisitedSites;
-import org.chromium.chrome.browser.suggestions.TileSource;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
-import org.chromium.chrome.test.util.ChromeRestriction;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.NewTabPageTestUtils;
 import org.chromium.chrome.test.util.browser.RecyclerViewTestUtils;
+import org.chromium.chrome.test.util.browser.suggestions.FakeMostVisitedSites;
 import org.chromium.chrome.test.util.browser.suggestions.FakeSuggestionsSource;
 import org.chromium.chrome.test.util.browser.suggestions.SuggestionsDependenciesRule;
 import org.chromium.content.browser.test.util.TestTouchUtils;
 import org.chromium.content.browser.test.util.TouchCommon;
 import org.chromium.net.test.EmbeddedTestServer;
+import org.chromium.ui.test.util.UiRestriction;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -74,9 +73,6 @@ public class NewTabPageRecyclerViewTest {
     public SuggestionsDependenciesRule mSuggestionsDeps = new SuggestionsDependenciesRule();
 
     private static final String TEST_PAGE = "/chrome/test/data/android/navigate/simple.html";
-    private static final String[] FAKE_MOST_VISITED_TITLES = new String[] {"Simple"};
-    private static final String[] FAKE_MOST_VISITED_WHITELIST_ICON_PATHS = new String[] {""};
-    private static final int[] FAKE_MOST_VISITED_SOURCES = new int[] {TileSource.TOP_SITES};
     private static final long FAKE_PUBLISH_TIMESTAMP = 1466614774;
     private static final long FAKE_FETCH_TIMESTAMP = 1466634774;
     private static final float FAKE_SNIPPET_SCORE = 10f;
@@ -89,8 +85,6 @@ public class NewTabPageRecyclerViewTest {
 
     private Tab mTab;
     private NewTabPage mNtp;
-    private String[] mSiteSuggestionUrls;
-    private FakeMostVisitedSites mMostVisitedSites;
     private EmbeddedTestServer mTestServer;
     private FakeSuggestionsSource mSource;
 
@@ -98,12 +92,10 @@ public class NewTabPageRecyclerViewTest {
     public void setUp() throws Exception {
         mTestServer = EmbeddedTestServer.createAndStartServer(
                 InstrumentationRegistry.getInstrumentation().getContext());
-        mSiteSuggestionUrls = mTestServer.getURLs(TEST_PAGE);
 
-        mMostVisitedSites = new FakeMostVisitedSites();
-        mMostVisitedSites.setTileSuggestions(FAKE_MOST_VISITED_TITLES, mSiteSuggestionUrls,
-                FAKE_MOST_VISITED_WHITELIST_ICON_PATHS, FAKE_MOST_VISITED_SOURCES);
-        mSuggestionsDeps.getFactory().mostVisitedSites = mMostVisitedSites;
+        FakeMostVisitedSites mostVisitedSites = new FakeMostVisitedSites();
+        mostVisitedSites.setTileSuggestions(mTestServer.getURL(TEST_PAGE));
+        mSuggestionsDeps.getFactory().mostVisitedSites = mostVisitedSites;
 
         mSource = new FakeSuggestionsSource();
         mSource.setInfoForCategory(TEST_CATEGORY,
@@ -111,7 +103,11 @@ public class NewTabPageRecyclerViewTest {
                         ContentSuggestionsCardLayout.FULL_CARD,
                         ContentSuggestionsAdditionalAction.FETCH, /*showIfEmpty=*/true,
                         "noSuggestionsMessage"));
-        mSource.setStatusForCategory(TEST_CATEGORY, CategoryStatus.INITIALIZING);
+
+        // Set the status as AVAILABLE so no spinner is shown. Showing the spinner during
+        // initialization can cause the test to hang because the message queue never becomes idle.
+        mSource.setStatusForCategory(TEST_CATEGORY, CategoryStatus.AVAILABLE);
+
         mSuggestionsDeps.getFactory().suggestionsSource = mSource;
 
         mActivityTestRule.startMainActivityWithURL(UrlConstants.NTP_URL);
@@ -245,7 +241,7 @@ public class NewTabPageRecyclerViewTest {
     @Test
     @MediumTest
     @Feature({"NewTabPage"})
-    @Restriction({ChromeRestriction.RESTRICTION_TYPE_PHONE})
+    @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE})
     @CommandLineFlags.Add({"disable-features=" + ChromeFeatureList.NTP_CONDENSED_LAYOUT})
     public void testSnapScroll_noCondensedLayout() {
         setSuggestionsAndWaitForUpdate(0);
@@ -282,7 +278,7 @@ public class NewTabPageRecyclerViewTest {
     @Test
     @MediumTest
     @Feature({"NewTabPage"})
-    @Restriction({ChromeRestriction.RESTRICTION_TYPE_PHONE})
+    @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE})
     @CommandLineFlags.Add({"enable-features=" + ChromeFeatureList.NTP_CONDENSED_LAYOUT})
     public void testSnapScroll_condensedLayout() {
         setSuggestionsAndWaitForUpdate(0);
@@ -311,7 +307,7 @@ public class NewTabPageRecyclerViewTest {
     @Test
     @MediumTest
     @Feature({"NewTabPage"})
-    @Restriction({ChromeRestriction.RESTRICTION_TYPE_TABLET})
+    @Restriction({UiRestriction.RESTRICTION_TYPE_TABLET})
     public void testSnapScroll_tablet() {
         setSuggestionsAndWaitForUpdate(0);
 
@@ -438,7 +434,6 @@ public class NewTabPageRecyclerViewTest {
         Assert.assertTrue(InstrumentationRegistry.getInstrumentation().invokeContextMenuAction(
                 mActivityTestRule.getActivity(), contextMenuItemId, 0));
     }
-
 
     private static void assertArrayEquals(int[] expected, int[] actual) {
         Assert.assertEquals(Arrays.toString(expected), Arrays.toString(actual));

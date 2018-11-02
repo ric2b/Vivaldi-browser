@@ -12,6 +12,7 @@
 #include "cc/cc_export.h"
 #include "cc/input/event_listener_properties.h"
 #include "cc/input/main_thread_scrolling_reason.h"
+#include "cc/input/scroll_boundary_behavior.h"
 #include "cc/input/scroll_state.h"
 #include "cc/input/scrollbar.h"
 #include "cc/input/touch_action.h"
@@ -45,6 +46,9 @@ struct CC_EXPORT InputHandlerScrollResult {
   // The amount of the scroll delta argument to this ScrollBy call that was not
   // used for scrolling.
   gfx::Vector2dF unused_scroll_delta;
+  // How the browser should handle the overscroll navigation based on the css
+  // property scroll-boundary-behavior.
+  ScrollBoundaryBehavior scroll_boundary_behavior;
 };
 
 class CC_EXPORT InputHandlerClient {
@@ -91,12 +95,14 @@ class CC_EXPORT InputHandler {
     ScrollStatus()
         : thread(SCROLL_ON_IMPL_THREAD),
           main_thread_scrolling_reasons(
-              MainThreadScrollingReason::kNotScrollingOnMain) {}
+              MainThreadScrollingReason::kNotScrollingOnMain),
+          bubble(false) {}
     ScrollStatus(ScrollThread thread, uint32_t main_thread_scrolling_reasons)
         : thread(thread),
           main_thread_scrolling_reasons(main_thread_scrolling_reasons) {}
     ScrollThread thread;
     uint32_t main_thread_scrolling_reasons;
+    bool bubble;
   };
 
   enum ScrollInputType {

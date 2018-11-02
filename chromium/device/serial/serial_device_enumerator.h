@@ -7,7 +7,7 @@
 
 #include <memory>
 
-#include "device/serial/serial.mojom.h"
+#include "services/device/public/interfaces/serial.mojom.h"
 
 namespace device {
 
@@ -19,7 +19,7 @@ class SerialDeviceEnumerator {
   SerialDeviceEnumerator();
   virtual ~SerialDeviceEnumerator();
 
-  virtual std::vector<serial::DeviceInfoPtr> GetDevices() = 0;
+  virtual std::vector<mojom::SerialDeviceInfoPtr> GetDevices() = 0;
 };
 
 }  // namespace device

@@ -15,8 +15,6 @@
 #include "chrome/browser/search/one_google_bar/one_google_bar_fetcher.h"
 
 class GoogleURLTracker;
-class OAuth2TokenService;
-class SigninManagerBase;
 
 namespace base {
 class Value;
@@ -29,20 +27,23 @@ class URLRequestContextGetter;
 
 struct OneGoogleBarData;
 
+// TODO(treib): This class uses cookies for authentication. After "Dice" account
+// consistency launches, we should switch to using OAuth2 instead.
+// See crbug.com/751534.
 class OneGoogleBarFetcherImpl : public OneGoogleBarFetcher {
  public:
-  OneGoogleBarFetcherImpl(SigninManagerBase* signin_manager,
-                          OAuth2TokenService* token_service,
-                          net::URLRequestContextGetter* request_context,
-                          GoogleURLTracker* google_url_tracker);
+  // |api_url_override| can be either absolute, or relative to the Google base
+  // URL.
+  OneGoogleBarFetcherImpl(net::URLRequestContextGetter* request_context,
+                          GoogleURLTracker* google_url_tracker,
+                          const std::string& application_locale,
+                          const base::Optional<std::string>& api_url_override);
   ~OneGoogleBarFetcherImpl() override;
 
   void Fetch(OneGoogleCallback callback) override;
 
  private:
   class AuthenticatedURLFetcher;
-
-  void IssueRequestIfNoneOngoing();
 
   void FetchDone(const net::URLFetcher* source);
 
@@ -51,10 +52,10 @@ class OneGoogleBarFetcherImpl : public OneGoogleBarFetcher {
 
   void Respond(Status status, const base::Optional<OneGoogleBarData>& data);
 
-  SigninManagerBase* signin_manager_;
-  OAuth2TokenService* token_service_;
   net::URLRequestContextGetter* request_context_;
   GoogleURLTracker* google_url_tracker_;
+  const std::string application_locale_;
+  const base::Optional<std::string> api_url_override_;
 
   std::vector<OneGoogleCallback> callbacks_;
   std::unique_ptr<AuthenticatedURLFetcher> pending_request_;

@@ -39,9 +39,30 @@ void TestPrefetchDispatcher::StopBackgroundTask() {}
 
 void TestPrefetchDispatcher::SetService(PrefetchService* service) {}
 
+void TestPrefetchDispatcher::SchedulePipelineProcessing() {
+  processing_schedule_count++;
+}
+
+void TestPrefetchDispatcher::EnsureTaskScheduled() {
+  task_schedule_count++;
+}
+
 void TestPrefetchDispatcher::GCMOperationCompletedMessageReceived(
     const std::string& operation_name) {
   operation_list.push_back(operation_name);
+}
+
+void TestPrefetchDispatcher::CleanupDownloads(
+    const std::set<std::string>& outstanding_download_ids,
+    const std::map<std::string, std::pair<base::FilePath, int64_t>>&
+        success_downloads) {}
+
+void TestPrefetchDispatcher::DownloadCompleted(
+    const PrefetchDownloadResult& download_result) {
+  download_results.push_back(download_result);
+}
+
+void TestPrefetchDispatcher::ImportCompleted(int64_t offline_id, bool success) {
 }
 
 void TestPrefetchDispatcher::RequestFinishBackgroundTaskForTest() {}

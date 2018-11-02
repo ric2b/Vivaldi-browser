@@ -43,12 +43,12 @@ Polymer({
 
   /** Open the dialog. */
   open: function() {
-    this.addWebUIListener('onIncognitoStatusChanged', function(hasIncognito) {
+    this.addWebUIListener('onIncognitoStatusChanged', hasIncognito => {
       this.$.incognito.checked = false;
       this.showIncognitoSessionOnly_ = hasIncognito &&
           !loadTimeData.getBoolean('isGuest') &&
           this.contentSetting != settings.ContentSetting.SESSION_ONLY;
-    }.bind(this));
+    });
     this.browserProxy.updateIncognitoStatus();
     this.$.dialog.showModal();
   },
@@ -66,10 +66,10 @@ Polymer({
       return;
     }
 
-    this.browserProxy.isPatternValid(this.site_).then(function(isValid) {
+    this.browserProxy.isPatternValid(this.site_).then(isValid => {
       this.$.site.invalid = !isValid;
       this.$.add.disabled = !isValid;
-    }.bind(this));
+    });
   },
 
   /** @private */
@@ -85,7 +85,7 @@ Polymer({
   onSubmit_: function() {
     if (this.$.add.disabled)
       return;  // Can happen when Enter is pressed.
-    this.browserProxy.setCategoryPermissionForOrigin(
+    this.browserProxy.setCategoryPermissionForPattern(
         this.site_, this.site_, this.category, this.contentSetting,
         this.$.incognito.checked);
     this.$.dialog.close();

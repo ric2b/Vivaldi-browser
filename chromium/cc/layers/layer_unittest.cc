@@ -15,8 +15,6 @@
 #include "cc/input/main_thread_scrolling_reason.h"
 #include "cc/layers/layer_impl.h"
 #include "cc/layers/solid_color_scrollbar_layer.h"
-#include "cc/output/copy_output_request.h"
-#include "cc/output/copy_output_result.h"
 #include "cc/test/animation_test_common.h"
 #include "cc/test/fake_impl_task_runner_provider.h"
 #include "cc/test/fake_layer_tree_host.h"
@@ -30,6 +28,8 @@
 #include "cc/trees/mutable_properties.h"
 #include "cc/trees/single_thread_proxy.h"
 #include "cc/trees/transform_node.h"
+#include "components/viz/common/quads/copy_output_request.h"
+#include "components/viz/common/quads/copy_output_result.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -605,14 +605,13 @@ TEST_F(LayerTest, DeleteRemovedScrollParent) {
   EXPECT_EQ(child1, parent->children()[0]);
   EXPECT_EQ(child2, parent->children()[1]);
 
-  EXPECT_SET_NEEDS_COMMIT(2, child1->SetScrollParent(child2.get()));
+  EXPECT_SET_NEEDS_COMMIT(1, child1->SetScrollParent(child2.get()));
 
   EXPECT_SET_NEEDS_FULL_TREE_SYNC(1, child2->RemoveFromParent());
 
   child1->ResetNeedsPushPropertiesForTesting();
 
-  EXPECT_SET_NEEDS_COMMIT(1, child2 = nullptr);
-
+  EXPECT_SET_NEEDS_COMMIT(1, child1->SetScrollParent(nullptr));
   EXPECT_TRUE(
       layer_tree_host_->LayerNeedsPushPropertiesForTesting(child1.get()));
 
@@ -635,17 +634,9 @@ TEST_F(LayerTest, DeleteRemovedScrollChild) {
   EXPECT_EQ(child1, parent->children()[0]);
   EXPECT_EQ(child2, parent->children()[1]);
 
-  EXPECT_SET_NEEDS_COMMIT(2, child1->SetScrollParent(child2.get()));
+  EXPECT_SET_NEEDS_COMMIT(1, child1->SetScrollParent(child2.get()));
 
   EXPECT_SET_NEEDS_FULL_TREE_SYNC(1, child1->RemoveFromParent());
-
-  child2->ResetNeedsPushPropertiesForTesting();
-
-  EXPECT_SET_NEEDS_COMMIT(1, child1 = nullptr);
-
-  EXPECT_TRUE(
-      layer_tree_host_->LayerNeedsPushPropertiesForTesting(child2.get()));
-
   EXPECT_SET_NEEDS_FULL_TREE_SYNC(1, layer_tree_host_->SetRootLayer(nullptr));
 }
 
@@ -994,6 +985,8 @@ TEST_F(LayerTest, PushPropertiesCausesLayerPropertyChangedForTransform) {
   test_layer->PushPropertiesTo(impl_layer.get());
 
   EXPECT_TRUE(impl_layer->LayerPropertyChanged());
+  EXPECT_FALSE(impl_layer->LayerPropertyChangedFromPropertyTrees());
+  EXPECT_TRUE(impl_layer->LayerPropertyChangedNotFromPropertyTrees());
 }
 
 TEST_F(LayerTest, PushPropertiesCausesLayerPropertyChangedForOpacity) {
@@ -1011,6 +1004,8 @@ TEST_F(LayerTest, PushPropertiesCausesLayerPropertyChangedForOpacity) {
   test_layer->PushPropertiesTo(impl_layer.get());
 
   EXPECT_TRUE(impl_layer->LayerPropertyChanged());
+  EXPECT_FALSE(impl_layer->LayerPropertyChangedFromPropertyTrees());
+  EXPECT_TRUE(impl_layer->LayerPropertyChangedNotFromPropertyTrees());
 }
 
 TEST_F(LayerTest, MaskHasParent) {
@@ -1314,7 +1309,7 @@ TEST_F(LayerTest, DrawsContentChangedInSetLayerTreeHost) {
 }
 
 void ReceiveCopyOutputResult(int* result_count,
-                             std::unique_ptr<CopyOutputResult> result) {
+                             std::unique_ptr<viz::CopyOutputResult> result) {
   ++(*result_count);
 }
 
@@ -1324,11 +1319,12 @@ TEST_F(LayerTest, DedupesCopyOutputRequestsBySource) {
 
   // Create identical requests without the source being set, and expect the
   // layer does not abort either one.
-  std::unique_ptr<CopyOutputRequest> request = CopyOutputRequest::CreateRequest(
-      base::BindOnce(&ReceiveCopyOutputResult, &result_count));
+  std::unique_ptr<viz::CopyOutputRequest> request =
+      viz::CopyOutputRequest::CreateRequest(
+          base::BindOnce(&ReceiveCopyOutputResult, &result_count));
   layer->RequestCopyOfOutput(std::move(request));
   EXPECT_EQ(0, result_count);
-  request = CopyOutputRequest::CreateRequest(
+  request = viz::CopyOutputRequest::CreateRequest(
       base::BindOnce(&ReceiveCopyOutputResult, &result_count));
   layer->RequestCopyOfOutput(std::move(request));
   EXPECT_EQ(0, result_count);
@@ -1344,27 +1340,27 @@ TEST_F(LayerTest, DedupesCopyOutputRequestsBySource) {
   // the first request using |kArbitrarySourceId1| aborts immediately when
   // the second request using |kArbitrarySourceId1| is made.
   int did_receive_first_result_from_this_source = 0;
-  request = CopyOutputRequest::CreateRequest(base::BindOnce(
+  request = viz::CopyOutputRequest::CreateRequest(base::BindOnce(
       &ReceiveCopyOutputResult, &did_receive_first_result_from_this_source));
   request->set_source(kArbitrarySourceId1);
   layer->RequestCopyOfOutput(std::move(request));
   EXPECT_EQ(0, did_receive_first_result_from_this_source);
   // Make a request from a different source.
   int did_receive_result_from_different_source = 0;
-  request = CopyOutputRequest::CreateRequest(base::BindOnce(
+  request = viz::CopyOutputRequest::CreateRequest(base::BindOnce(
       &ReceiveCopyOutputResult, &did_receive_result_from_different_source));
   request->set_source(kArbitrarySourceId2);
   layer->RequestCopyOfOutput(std::move(request));
   EXPECT_EQ(0, did_receive_result_from_different_source);
   // Make a request without specifying the source.
   int did_receive_result_from_anonymous_source = 0;
-  request = CopyOutputRequest::CreateRequest(base::BindOnce(
+  request = viz::CopyOutputRequest::CreateRequest(base::BindOnce(
       &ReceiveCopyOutputResult, &did_receive_result_from_anonymous_source));
   layer->RequestCopyOfOutput(std::move(request));
   EXPECT_EQ(0, did_receive_result_from_anonymous_source);
   // Make the second request from |kArbitrarySourceId1|.
   int did_receive_second_result_from_this_source = 0;
-  request = CopyOutputRequest::CreateRequest(base::BindOnce(
+  request = viz::CopyOutputRequest::CreateRequest(base::BindOnce(
       &ReceiveCopyOutputResult, &did_receive_second_result_from_this_source));
   request->set_source(kArbitrarySourceId1);
   layer->RequestCopyOfOutput(
@@ -1433,7 +1429,7 @@ TEST_F(LayerTest, ElementIdAndMutablePropertiesArePushed) {
   EXPECT_EQ(MutableProperty::kTransform, impl_layer->mutable_properties());
 }
 
-TEST_F(LayerTest, NotUsingLayerListsManagesElementId) {
+TEST_F(LayerTest, SetLayerTreeHostNotUsingLayerListsManagesElementId) {
   scoped_refptr<Layer> test_layer = Layer::Create();
   ElementId element_id = ElementId(2);
   test_layer->SetElementId(element_id);
@@ -1458,6 +1454,28 @@ TEST_F(LayerTest, NotUsingLayerListsManagesElementId) {
   EXPECT_EQ(nullptr, layer_tree_host_->LayerByElementId(element_id));
 }
 
+TEST_F(LayerTest, SetElementIdNotUsingLayerLists) {
+  scoped_refptr<Layer> test_layer = Layer::Create();
+  test_layer->SetLayerTreeHost(layer_tree_host_.get());
+
+  EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(2);
+  ElementId element_id = ElementId(2);
+  EXPECT_EQ(nullptr, layer_tree_host_->LayerByElementId(element_id));
+
+  test_layer->SetElementId(element_id);
+  // Layer should now be registered by element id.
+  EXPECT_EQ(test_layer, layer_tree_host_->LayerByElementId(element_id));
+
+  ElementId other_element_id = ElementId(3);
+  test_layer->SetElementId(other_element_id);
+  // The layer should have been unregistered from the original element
+  // id and registered with the new one.
+  EXPECT_EQ(nullptr, layer_tree_host_->LayerByElementId(element_id));
+  EXPECT_EQ(test_layer, layer_tree_host_->LayerByElementId(other_element_id));
+
+  test_layer->SetLayerTreeHost(nullptr);
+}
+
 class LayerTestWithLayerLists : public LayerTest {
  protected:
   void SetUp() override {
@@ -1466,7 +1484,8 @@ class LayerTestWithLayerLists : public LayerTest {
   }
 };
 
-TEST_F(LayerTestWithLayerLists, UsingLayerListsDoesNotManageElementId) {
+TEST_F(LayerTestWithLayerLists,
+       SetLayerTreeHostUsingLayerListsDoesNotManageElementId) {
   scoped_refptr<Layer> test_layer = Layer::Create();
   ElementId element_id = ElementId(2);
   test_layer->SetElementId(element_id);
@@ -1487,6 +1506,15 @@ TEST_F(LayerTestWithLayerLists, UsingLayerListsDoesNotManageElementId) {
   EXPECT_EQ(nullptr, layer_tree_host_->LayerByElementId(element_id));
 
   test_layer->SetLayerTreeHost(nullptr);
+  EXPECT_EQ(nullptr, layer_tree_host_->LayerByElementId(element_id));
+}
+
+TEST_F(LayerTestWithLayerLists, SetElementIdUsingLayerLists) {
+  scoped_refptr<Layer> test_layer = Layer::Create();
+  ElementId element_id = ElementId(2);
+  test_layer->SetElementId(element_id);
+
+  EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(0);
   EXPECT_EQ(nullptr, layer_tree_host_->LayerByElementId(element_id));
 }
 

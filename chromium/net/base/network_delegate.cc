@@ -26,6 +26,10 @@ int NetworkDelegate::NotifyBeforeURLRequest(
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(request);
   DCHECK(!callback.is_null());
+
+  // ClusterFuzz depends on the following VLOG. See: crbug.com/715656
+  VLOG(1) << "NetworkDelegate::NotifyBeforeURLRequest: " << request->url();
+
   // TODO(cbentzel): Remove ScopedTracker below once crbug.com/475753 is fixed.
   tracked_objects::ScopedTracker tracking_profile(
       FROM_HERE_WITH_EXPLICIT_FUNCTION(
@@ -169,12 +173,11 @@ bool NetworkDelegate::CanAccessFile(const URLRequest& request,
   return OnCanAccessFile(request, original_path, absolute_path);
 }
 
-bool NetworkDelegate::CanEnablePrivacyMode(
-    const GURL& url,
-    const GURL& first_party_for_cookies) const {
+bool NetworkDelegate::CanEnablePrivacyMode(const GURL& url,
+                                           const GURL& site_for_cookies) const {
   TRACE_EVENT0(kNetTracingCategory, "NetworkDelegate::CanEnablePrivacyMode");
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  return OnCanEnablePrivacyMode(url, first_party_for_cookies);
+  return OnCanEnablePrivacyMode(url, site_for_cookies);
 }
 
 bool NetworkDelegate::AreExperimentalCookieFeaturesEnabled() const {

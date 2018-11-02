@@ -97,7 +97,7 @@ void AwDevToolsServer::Start() {
   DevToolsAgentHost::StartRemoteDebuggingServer(
       std::move(factory),
       base::StringPrintf(kFrontEndURL, content::GetWebKitRevision().c_str()),
-      base::FilePath(), base::FilePath(), GetProduct(), GetUserAgent());
+      base::FilePath(), base::FilePath());
 }
 
 void AwDevToolsServer::Stop() {
@@ -107,10 +107,6 @@ void AwDevToolsServer::Stop() {
 
 bool AwDevToolsServer::IsStarted() const {
   return is_started_;
-}
-
-bool RegisterAwDevToolsServer(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 static jlong InitRemoteDebugging(JNIEnv* env,

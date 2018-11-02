@@ -219,6 +219,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "services_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "skia_unittests"
       },
       {
@@ -707,6 +713,30 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "ash_content_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "ash_unittests"
+      },
+      {
+        "args": [
+          "--mus",
+          "--test-launcher-filter-file=../../testing/buildbot/filters/ash_unittests_mus.filter"
+        ],
+        "name": "ash_unittests-mus",
+        "override_isolate_target": "ash_unittests",
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "ash_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "aura_unittests"
       },
       {
@@ -714,6 +744,16 @@
           "can_use_on_swarming_builders": true
         },
         "test": "base_unittests"
+      },
+      {
+        "args": [
+          "--test-launcher-filter-file=../../testing/buildbot/filters/browser_tests_cros_asan.filter"
+        ],
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "shards": 10
+        },
+        "test": "browser_tests"
       },
       {
         "swarming": {
@@ -825,6 +865,13 @@
       },
       {
         "swarming": {
+          "can_use_on_swarming_builders": true,
+          "shards": 2
+        },
+        "test": "interactive_ui_tests"
+      },
+      {
+        "swarming": {
           "can_use_on_swarming_builders": true
         },
         "test": "ipc_tests"
@@ -840,6 +887,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "latency_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "mash_unittests"
       },
       {
         "swarming": {
@@ -912,6 +965,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "services_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "skia_unittests"
       },
       {
@@ -949,6 +1008,15 @@
           "can_use_on_swarming_builders": true
         },
         "test": "ui_touch_selection_unittests"
+      },
+      {
+        "args": [
+          "--test-launcher-filter-file=../../testing/buildbot/filters/unit_tests_cros_asan.filter"
+        ],
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "unit_tests"
       },
       {
         "swarming": {

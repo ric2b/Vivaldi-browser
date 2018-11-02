@@ -8,6 +8,7 @@
 #import <Foundation/Foundation.h>
 
 #include "base/macros.h"
+#include "ui/base/page_transition_types.h"
 
 namespace web {
 
@@ -21,11 +22,15 @@ class WebStatePolicyDecider {
 
   // Asks the decider whether the navigation corresponding to |request| should
   // be allowed to continue. Defaults to true if not overriden.
-  virtual bool ShouldAllowRequest(NSURLRequest* request);
+  virtual bool ShouldAllowRequest(NSURLRequest* request,
+                                  ui::PageTransition transition);
 
   // Asks the decider whether the navigation corresponding to |response| should
   // be allowed to continue. Defaults to true if not overriden.
-  virtual bool ShouldAllowResponse(NSURLResponse* response);
+  // |for_main_frame| indicates whether the frame being navigated is the main
+  // frame.
+  virtual bool ShouldAllowResponse(NSURLResponse* response,
+                                   bool for_main_frame);
 
   // Notifies the policy decider that the web state is being destroyed.
   // Gives subclasses a chance to cleanup.

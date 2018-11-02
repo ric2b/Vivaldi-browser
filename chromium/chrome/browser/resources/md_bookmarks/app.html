@@ -23,7 +23,7 @@
         display: flex;
         flex-direction: column;
         height: 100%;
-        line-height: 154%;  /* 20px. */
+        line-height: 1.54;  /* 20px. */
       }
 
       #main-container {
@@ -68,9 +68,10 @@
         min-width: 550px;
       }
     </style>
-    <bookmarks-toolbar sidebar-width="[[sidebarWidth_]]"></bookmarks-toolbar>
+    <bookmarks-toolbar sidebar-width="[[sidebarWidth_]]" role="banner">
+    </bookmarks-toolbar>
     <div id="main-container">
-       <div id="sidebar" role="tree">
+       <div id="sidebar" role="navigation">
         <bookmarks-folder-node item-id="0" depth="-1"></bookmarks-folder-node>
       </div>
       <div id="splitter"></div>

@@ -9,6 +9,7 @@
 #include "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
+#import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_controller.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_popup_material_row.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_controller.h"
@@ -40,16 +41,16 @@ namespace {
 
 // Displays the |panel_type| new tab page.  On a phone this will send a command
 // to display a dialog, on tablet this calls -selectPanel to slide the NTP.
-void SelectNewTabPagePanel(NewTabPage::PanelIdentifier panel_type) {
+void SelectNewTabPagePanel(ntp_home::PanelIdentifier panel_type) {
   NewTabPageController* ntp_controller =
       chrome_test_util::GetCurrentNewTabPageController();
   if (IsIPadIdiom()) {
     [ntp_controller selectPanel:panel_type];
   } else {
     NSUInteger tag = 0;
-    if (panel_type == NewTabPage::PanelIdentifier::kBookmarksPanel) {
+    if (panel_type == ntp_home::BOOKMARKS_PANEL) {
       tag = IDC_SHOW_BOOKMARK_MANAGER;
-    } else if (panel_type == NewTabPage::PanelIdentifier::kOpenTabsPanel) {
+    } else if (panel_type == ntp_home::RECENT_TABS_PANEL) {
       tag = IDC_SHOW_OTHER_DEVICES;
     }
     if (tag) {
@@ -173,6 +174,12 @@ void SelectNewTabPagePanel(NewTabPage::PanelIdentifier panel_type) {
     EARL_GREY_TEST_SKIPPED(@"Test not support on iPhone");
   }
 
+  // TODO(crbug.com/753098): Re-enable this test on iOS 11 iPad once
+  // grey_typeText works on iOS 11.
+  if (base::ios::IsRunningOnIOS11OrLater()) {
+    EARL_GREY_TEST_DISABLED(@"Test disabled on iOS 11.");
+  }
+
   const GURL URL = web::test::HttpServer::MakeUrl("http://origin");
 
   [ChromeEarlGrey loadURL:URL];
@@ -282,6 +289,12 @@ void SelectNewTabPagePanel(NewTabPage::PanelIdentifier panel_type) {
     EARL_GREY_TEST_DISABLED(@"Disabled on iOS 9.");
   }
 
+  // Clear generalPasteboard before and after the test.
+  [UIPasteboard generalPasteboard].string = @"";
+  [self setTearDownHandler:^{
+    [UIPasteboard generalPasteboard].string = @"";
+  }];
+
   std::map<GURL, std::string> responses;
   const GURL URL = web::test::HttpServer::MakeUrl("http://testPage");
   const GURL secondURL = web::test::HttpServer::MakeUrl("http://pastePage");
@@ -291,11 +304,26 @@ void SelectNewTabPagePanel(NewTabPage::PanelIdentifier panel_type) {
   [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
       assertWithMatcher:chrome_test_util::OmniboxText(URL.GetContent())];
 
-  [ChromeEarlGreyUI openShareMenu];
+  if (base::ios::IsRunningOnIOS11OrLater()) {
+    // Can't access share menu from xctest on iOS 11+, so use the text field
+    // callout bar instead.
+    [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
+        performAction:grey_tap()];
+    // Tap twice to get the pre-edit label callout bar copy button.
+    [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
+        performAction:grey_tap()];
 
-  [[EarlGrey
-      selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabel(
-                                   @"Copy")] performAction:grey_tap()];
+    [[[EarlGrey selectElementWithMatcher:grey_accessibilityLabel(@"Copy")]
+        inRoot:grey_kindOfClass(NSClassFromString(@"UICalloutBarButton"))]
+        performAction:grey_tap()];
+    [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Typing Shield")]
+        performAction:grey_tap()];
+  } else {
+    [ChromeEarlGreyUI openShareMenu];
+    [[EarlGrey
+        selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabel(
+                                     @"Copy")] performAction:grey_tap()];
+  }
 
   [ChromeEarlGrey loadURL:secondURL];
 
@@ -314,6 +342,12 @@ void SelectNewTabPagePanel(NewTabPage::PanelIdentifier panel_type) {
 
 // Verifies that the clear text button clears any text in the omnibox.
 - (void)testOmniboxClearTextButton {
+  // TODO(crbug.com/753098): Re-enable this test on iOS 11 iPad once
+  // grey_typeText works on iOS 11.
+  if (base::ios::IsRunningOnIOS11OrLater() && IsIPadIdiom()) {
+    EARL_GREY_TEST_DISABLED(@"Test disabled on iOS 11.");
+  }
+
   const GURL URL = web::test::HttpServer::MakeUrl("http://origin");
 
   [ChromeEarlGrey loadURL:URL];
@@ -379,7 +413,7 @@ void SelectNewTabPagePanel(NewTabPage::PanelIdentifier panel_type) {
   if (IsIPadIdiom()) {
     EARL_GREY_TEST_DISABLED(@"Disabled for iPad due to a simulator bug.");
   }
-  SelectNewTabPagePanel(NewTabPage::kHomePanel);
+  SelectNewTabPagePanel(ntp_home::HOME_PANEL);
 
   id<GREYMatcher> locationbarButton = grey_allOf(
       grey_accessibilityLabel(l10n_util::GetNSString(IDS_OMNIBOX_EMPTY_HINT)),
@@ -468,7 +502,7 @@ void SelectNewTabPagePanel(NewTabPage::PanelIdentifier panel_type) {
   [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
       assertWithMatcher:chrome_test_util::OmniboxText("")];
 
-  SelectNewTabPagePanel(NewTabPage::kHomePanel);
+  SelectNewTabPagePanel(ntp_home::HOME_PANEL);
 }
 
 // Tests typing in the omnibox using the keyboard accessory view.

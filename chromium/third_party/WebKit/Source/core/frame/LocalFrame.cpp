@@ -33,17 +33,19 @@
 #include <memory>
 
 #include "bindings/core/v8/ScriptController.h"
+#include "core/CoreInitializer.h"
 #include "core/CoreProbeSink.h"
 #include "core/dom/ChildFrameDisconnector.h"
 #include "core/dom/DocumentType.h"
 #include "core/dom/StyleChangeReason.h"
+#include "core/dom/events/Event.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/Editor.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/InputMethodController.h"
 #include "core/editing/serializers/Serialization.h"
 #include "core/editing/spellcheck/SpellChecker.h"
-#include "core/events/Event.h"
+#include "core/editing/suggestion/TextSuggestionController.h"
 #include "core/frame/ContentSettingsClient.h"
 #include "core/frame/EventHandlerRegistry.h"
 #include "core/frame/FrameConsole.h"
@@ -61,7 +63,6 @@
 #include "core/layout/LayoutView.h"
 #include "core/layout/api/LayoutEmbeddedContentItem.h"
 #include "core/layout/api/LayoutViewItem.h"
-#include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/loader/NavigationScheduler.h"
@@ -70,6 +71,7 @@
 #include "core/page/scrolling/ScrollingCoordinator.h"
 #include "core/paint/ObjectPainter.h"
 #include "core/paint/TransformRecorder.h"
+#include "core/paint/compositing/PaintLayerCompositor.h"
 #include "core/plugins/PluginView.h"
 #include "core/probe/CoreProbes.h"
 #include "core/svg/SVGDocumentExtensions.h"
@@ -83,6 +85,7 @@
 #include "platform/graphics/paint/PaintCanvas.h"
 #include "platform/graphics/paint/PaintController.h"
 #include "platform/graphics/paint/TransformDisplayItem.h"
+#include "platform/instrumentation/resource_coordinator/BlinkResourceCoordinatorBase.h"
 #include "platform/instrumentation/resource_coordinator/FrameResourceCoordinator.h"
 #include "platform/json/JSONValues.h"
 #include "platform/loader/fetch/FetchParameters.h"
@@ -117,17 +120,11 @@ inline float ParentTextZoomFactor(LocalFrame* frame) {
   return ToLocalFrame(parent)->TextZoomFactor();
 }
 
-using FrameInitCallbackVector = WTF::Vector<LocalFrame::FrameInitCallback>;
-FrameInitCallbackVector& GetInitializationVector() {
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(FrameInitCallbackVector,
-                                  initialization_vector, ());
-  return initialization_vector;
-}
-
 }  // namespace
 
 template class CORE_TEMPLATE_EXPORT Supplement<LocalFrame>;
 
+// static
 LocalFrame* LocalFrame::Create(LocalFrameClient* client,
                                Page& page,
                                FrameOwner* owner,
@@ -141,10 +138,7 @@ LocalFrame* LocalFrame::Create(LocalFrameClient* client,
 }
 
 void LocalFrame::Init() {
-  DCHECK(!GetInitializationVector().IsEmpty());
-  for (auto& initilization_callback : GetInitializationVector()) {
-    initilization_callback(this);
-  }
+  CoreInitializer::GetInstance().InitLocalFrame(*this);
 
   loader_.Init();
 }
@@ -152,6 +146,8 @@ void LocalFrame::Init() {
 void LocalFrame::SetView(LocalFrameView* view) {
   DCHECK(!view_ || view_ != view);
   DCHECK(!GetDocument() || !GetDocument()->IsActive());
+  if (view_)
+    view_->WillBeRemovedFromFrame();
   view_ = view;
 }
 
@@ -230,7 +226,7 @@ DEFINE_TRACE(LocalFrame) {
   visitor->Trace(event_handler_);
   visitor->Trace(console_);
   visitor->Trace(input_method_controller_);
-  visitor->Trace(frame_resource_coordinator_);
+  visitor->Trace(text_suggestion_controller_);
   Frame::Trace(visitor);
   Supplementable<LocalFrame>::Trace(visitor);
 }
@@ -239,8 +235,8 @@ void LocalFrame::Navigate(Document& origin_document,
                           const KURL& url,
                           bool replace_current_item,
                           UserGestureStatus user_gesture_status) {
-  navigation_scheduler_->ScheduleLocationChange(&origin_document, url,
-                                                replace_current_item);
+  navigation_scheduler_->ScheduleFrameNavigation(&origin_document, url,
+                                                 replace_current_item);
 }
 
 void LocalFrame::Navigate(const FrameLoadRequest& request) {
@@ -393,12 +389,14 @@ void LocalFrame::DocumentAttached() {
   Selection().DocumentAttached(GetDocument());
   GetInputMethodController().DocumentAttached(GetDocument());
   GetSpellChecker().DocumentAttached(GetDocument());
+  GetTextSuggestionController().DocumentAttached(GetDocument());
 }
 
 Frame* LocalFrame::FindFrameForNavigation(const AtomicString& name,
-                                          LocalFrame& active_frame) {
+                                          LocalFrame& active_frame,
+                                          const KURL& destination_url) {
   Frame* frame = Tree().Find(name);
-  if (!frame || !active_frame.CanNavigate(*frame))
+  if (!frame || !active_frame.CanNavigate(*frame, destination_url))
     return nullptr;
   return frame;
 }
@@ -735,10 +733,6 @@ bool LocalFrame::ShouldThrottleRendering() const {
   return View() && View()->ShouldThrottleRendering();
 }
 
-void LocalFrame::RegisterInitializationCallback(FrameInitCallback callback) {
-  GetInitializationVector().push_back(callback);
-}
-
 inline LocalFrame::LocalFrame(LocalFrameClient* client,
                               Page& page,
                               FrameOwner* owner,
@@ -757,15 +751,12 @@ inline LocalFrame::LocalFrame(LocalFrameClient* client,
       event_handler_(new EventHandler(*this)),
       console_(FrameConsole::Create(*this)),
       input_method_controller_(InputMethodController::Create(*this)),
+      text_suggestion_controller_(new TextSuggestionController(*this)),
       navigation_disable_count_(0),
       page_zoom_factor_(ParentPageZoomFactor(this)),
       text_zoom_factor_(ParentTextZoomFactor(this)),
       in_view_source_mode_(false),
       interface_registry_(interface_registry) {
-  if (FrameResourceCoordinator::IsEnabled()) {
-    frame_resource_coordinator_ =
-        FrameResourceCoordinator::Create(client->GetInterfaceProvider());
-  }
   if (IsLocalRoot()) {
     probe_sink_ = new CoreProbeSink();
     performance_monitor_ = new PerformanceMonitor(this);
@@ -789,7 +780,8 @@ void LocalFrame::ScheduleVisualUpdateUnlessThrottled() {
   GetPage()->Animator().ScheduleVisualUpdate(this);
 }
 
-bool LocalFrame::CanNavigate(const Frame& target_frame) {
+bool LocalFrame::CanNavigate(const Frame& target_frame,
+                             const KURL& destination_url) {
   String error_reason;
   const bool is_allowed_navigation =
       CanNavigateWithoutFramebusting(target_frame, error_reason);
@@ -866,8 +858,7 @@ bool LocalFrame::CanNavigate(const Frame& target_frame) {
         "user gesture. See "
         "https://www.chromestatus.com/features/5851021045661696.";
     PrintNavigationErrorMessage(target_frame, error_reason.Latin1().data());
-    GetNavigationScheduler().SchedulePageBlock(GetDocument(),
-                                               ResourceError::ACCESS_DENIED);
+    Client()->DidBlockFramebust(destination_url);
     return false;
   }
   if (!is_allowed_navigation && !error_reason.IsNull())
@@ -1009,6 +1000,19 @@ ContentSettingsClient* LocalFrame::GetContentSettingsClient() {
   return Client() ? &Client()->GetContentSettingsClient() : nullptr;
 }
 
+FrameResourceCoordinator* LocalFrame::GetFrameResourceCoordinator() {
+  if (!BlinkResourceCoordinatorBase::IsEnabled())
+    return nullptr;
+  if (!frame_resource_coordinator_) {
+    auto local_frame_client = Client();
+    if (!local_frame_client)
+      return nullptr;
+    frame_resource_coordinator_.reset(FrameResourceCoordinator::Create(
+        local_frame_client->GetInterfaceProvider()));
+  }
+  return frame_resource_coordinator_.get();
+}
+
 PluginData* LocalFrame::GetPluginData() const {
   if (!Loader().AllowPlugins(kNotAboutToInstantiatePlugin))
     return nullptr;
@@ -1103,6 +1107,22 @@ void LocalFrame::SetViewportIntersectionFromParent(
     if (View())
       View()->ScheduleAnimation();
   }
+}
+
+void LocalFrame::NotifyUserActivation() {
+  bool had_gesture = HasReceivedUserGesture();
+  if (!had_gesture)
+    UpdateUserActivationInFrameTree();
+  Client()->SetHasReceivedUserGesture(had_gesture);
+}
+
+// static
+std::unique_ptr<UserGestureIndicator> LocalFrame::CreateUserGesture(
+    LocalFrame* frame,
+    UserGestureToken::Status status) {
+  if (frame)
+    frame->NotifyUserActivation();
+  return WTF::MakeUnique<UserGestureIndicator>(status);
 }
 
 }  // namespace blink

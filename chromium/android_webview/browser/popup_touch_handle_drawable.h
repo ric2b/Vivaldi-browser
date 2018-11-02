@@ -9,7 +9,6 @@
 
 #include <memory>
 
-#include "base/android/jni_android.h"
 #include "base/android/jni_weak_ref.h"
 #include "base/macros.h"
 
@@ -22,8 +21,6 @@ class PopupTouchHandleDrawable : public ui::TouchHandleDrawable {
                            jobject obj,
                            float horizontal_padding_ratio);
   ~PopupTouchHandleDrawable() override;
-
-  static bool RegisterPopupTouchHandleDrawable(JNIEnv* env);
 
   // ui::TouchHandleDrawable implementation.
   void SetEnabled(bool enabled) override;

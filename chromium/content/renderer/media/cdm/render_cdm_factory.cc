@@ -16,22 +16,22 @@
 #include "media/base/content_decryption_module.h"
 #include "media/base/key_systems.h"
 #include "media/cdm/aes_decryptor.h"
-#include "ppapi/features/features.h"
-#include "url/gurl.h"
+#include "media/media_features.h"
+#include "url/origin.h"
 
-#if BUILDFLAG(ENABLE_PEPPER_CDMS)
+#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
 #include "content/renderer/media/cdm/ppapi_decryptor.h"
-#endif  // BUILDFLAG(ENABLE_PEPPER_CDMS)
+#endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
 namespace content {
 
-#if BUILDFLAG(ENABLE_PEPPER_CDMS)
+#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
 RenderCdmFactory::RenderCdmFactory(
     const CreatePepperCdmCB& create_pepper_cdm_cb)
     : create_pepper_cdm_cb_(create_pepper_cdm_cb) {}
 #else
 RenderCdmFactory::RenderCdmFactory() {}
-#endif  // BUILDFLAG(ENABLE_PEPPER_CDMS)
+#endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
 RenderCdmFactory::~RenderCdmFactory() {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -39,7 +39,7 @@ RenderCdmFactory::~RenderCdmFactory() {
 
 void RenderCdmFactory::Create(
     const std::string& key_system,
-    const GURL& security_origin,
+    const url::Origin& security_origin,
     const media::CdmConfig& cdm_config,
     const media::SessionMessageCB& session_message_cb,
     const media::SessionClosedCB& session_closed_cb,
@@ -48,9 +48,9 @@ void RenderCdmFactory::Create(
     const media::CdmCreatedCB& cdm_created_cb) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  if (!security_origin.is_valid()) {
+  if (security_origin.unique()) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(cdm_created_cb, nullptr, "Invalid origin."));
+        FROM_HERE, base::BindOnce(cdm_created_cb, nullptr, "Invalid origin."));
     return;
   }
 
@@ -58,14 +58,14 @@ void RenderCdmFactory::Create(
     DCHECK(!cdm_config.allow_distinctive_identifier);
     DCHECK(!cdm_config.allow_persistent_state);
     scoped_refptr<media::ContentDecryptionModule> cdm(new media::AesDecryptor(
-        security_origin, session_message_cb, session_closed_cb,
-        session_keys_change_cb, session_expiration_update_cb));
+        session_message_cb, session_closed_cb, session_keys_change_cb,
+        session_expiration_update_cb));
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(cdm_created_cb, cdm, ""));
+        FROM_HERE, base::BindOnce(cdm_created_cb, cdm, ""));
     return;
   }
 
-#if BUILDFLAG(ENABLE_PEPPER_CDMS)
+#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
   DCHECK(!cdm_config.use_hw_secure_codecs);
   PpapiDecryptor::Create(
       key_system, security_origin, cdm_config.allow_distinctive_identifier,
@@ -77,7 +77,7 @@ void RenderCdmFactory::Create(
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::Bind(cdm_created_cb, nullptr, "Key system not supported."));
-#endif  // BUILDFLAG(ENABLE_PEPPER_CDMS)
+#endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 }
 
 }  // namespace content

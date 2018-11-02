@@ -16,8 +16,6 @@ class CORE_EXPORT ThreadedWorkletGlobalScope : public WorkletGlobalScope {
  public:
   ~ThreadedWorkletGlobalScope() override;
   void Dispose() override;
-  void ReportFeature(WebFeature) override;
-  void ReportDeprecation(WebFeature) override;
 
   // ExecutionContext
   bool IsThreadedWorkletGlobalScope() const final { return true; }
@@ -30,7 +28,7 @@ class CORE_EXPORT ThreadedWorkletGlobalScope : public WorkletGlobalScope {
  protected:
   ThreadedWorkletGlobalScope(const KURL&,
                              const String& user_agent,
-                             PassRefPtr<SecurityOrigin>,
+                             RefPtr<SecurityOrigin>,
                              v8::Isolate*,
                              WorkerThread*,
                              WorkerClients*);

@@ -4,6 +4,7 @@
 
 #import "ios/web/test/fakes/test_navigation_manager_delegate.h"
 #import "ios/web/web_state/ui/crw_web_view_navigation_proxy.h"
+#include "url/gurl.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -11,9 +12,13 @@
 
 namespace web {
 
-void TestNavigationManagerDelegate::GoToIndex(int index) {}
-void TestNavigationManagerDelegate::LoadURLWithParams(
-    const NavigationManager::WebLoadParams&) {}
+void TestNavigationManagerDelegate::ClearTransientContent() {}
+void TestNavigationManagerDelegate::RecordPageStateInNavigationItem() {}
+void TestNavigationManagerDelegate::UpdateHtml5HistoryState() {}
+void TestNavigationManagerDelegate::WillLoadCurrentItemWithUrl(const GURL&) {}
+void TestNavigationManagerDelegate::WillChangeUserAgentType() {}
+void TestNavigationManagerDelegate::LoadCurrentItem() {}
+void TestNavigationManagerDelegate::LoadIfNecessary() {}
 void TestNavigationManagerDelegate::Reload() {}
 void TestNavigationManagerDelegate::OnNavigationItemsPruned(
     size_t pruned_item_count) {}

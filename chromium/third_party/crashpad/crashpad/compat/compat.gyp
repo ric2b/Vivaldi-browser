@@ -87,10 +87,22 @@
         ['OS=="android"', {
           'include_dirs': [
             'android',
+            'linux',
           ],
           'direct_dependent_settings': {
             'include_dirs': [
               'android',
+              'linux',
+            ],
+          },
+        }],
+        ['OS=="linux"', {
+          'include_dirs': [
+            'linux',
+          ],
+          'direct_dependent_settings': {
+            'include_dirs': [
+              'linux',
             ],
           },
         }],

@@ -35,12 +35,12 @@
 #include "core/frame/RootFrameViewport.h"
 #include "core/layout/MapCoordinatesFlags.h"
 #include "core/layout/ScrollAnchor.h"
-#include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/paint/FirstMeaningfulPaintDetector.h"
 #include "core/paint/ObjectPaintProperties.h"
 #include "core/paint/PaintInvalidationCapableScrollableArea.h"
 #include "core/paint/PaintPhase.h"
 #include "core/paint/ScrollbarManager.h"
+#include "core/paint/compositing/PaintLayerCompositor.h"
 #include "platform/PlatformFrameView.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/animation/CompositorAnimationHost.h"
@@ -183,8 +183,15 @@ class CORE_EXPORT LocalFrameView final
   void UpdateGeometry() override;
 
   // Marks this frame, and ancestor frames, as needing one intersection
-  // observervation. This overrides throttling for one frame.
+  // observervation. This overrides throttling for one frame, up to
+  // kLayoutClean.
   void SetNeedsIntersectionObservation();
+  // Marks this frame, and ancestor frames, as needing a mandatory compositing
+  // update. This overrides throttling for one frame, up to kCompositingClean.
+  void SetNeedsForcedCompositingUpdate();
+  void ResetNeedsForcedCompositingUpdate() {
+    needs_forced_compositing_update_ = false;
+  }
 
   // Methods for getting/setting the size Blink should use to layout the
   // contents.
@@ -288,6 +295,10 @@ class CORE_EXPORT LocalFrameView final
 
   Color DocumentBackgroundColor() const;
 
+  // Called when this view is going to be removed from its owning
+  // LocalFrame.
+  void WillBeRemovedFromFrame();
+
   // Run all needed lifecycle stages. After calling this method, all frames will
   // be in the lifecycle state PaintClean.  If lifecycle throttling is allowed
   // (see DocumentLifecycle::AllowThrottlingScope), some frames may skip the
@@ -297,6 +308,11 @@ class CORE_EXPORT LocalFrameView final
 
   // Everything except paint (the last phase).
   void UpdateAllLifecyclePhasesExceptPaint();
+
+  // Printing needs everything up-to-date except paint (which will be done
+  // specially). We may also print a detached frame or a descendant of a
+  // detached frame and need special handling of the frame.
+  void UpdateLifecyclePhasesForPrinting();
 
   // Computes the style, layout and compositing lifecycle stages if needed.
   // After calling this method, all frames will be in a lifecycle
@@ -439,6 +455,7 @@ class CORE_EXPORT LocalFrameView final
   // ScrollableArea interface
   void GetTickmarks(Vector<IntRect>&) const override;
   IntRect ScrollableAreaBoundingBox() const override;
+  CompositorElementId GetCompositorElementId() const override;
   bool ScrollAnimatorEnabled() const override;
   bool UsesCompositedScrolling() const override;
   bool ShouldScrollOnMainThread() const override;
@@ -704,23 +721,24 @@ class CORE_EXPORT LocalFrameView final
   void BeginLifecycleUpdates();
 
   // Paint properties for SPv2 Only.
-  void SetPreTranslation(
-      PassRefPtr<TransformPaintPropertyNode> pre_translation) {
+  void SetPreTranslation(RefPtr<TransformPaintPropertyNode> pre_translation) {
     pre_translation_ = std::move(pre_translation);
   }
   TransformPaintPropertyNode* PreTranslation() const {
     return pre_translation_.Get();
   }
-
+  void SetScrollNode(RefPtr<ScrollPaintPropertyNode> scroll_node) {
+    scroll_node_ = std::move(scroll_node);
+  }
+  ScrollPaintPropertyNode* ScrollNode() const { return scroll_node_.Get(); }
   void SetScrollTranslation(
-      PassRefPtr<TransformPaintPropertyNode> scroll_translation) {
+      RefPtr<TransformPaintPropertyNode> scroll_translation) {
     scroll_translation_ = std::move(scroll_translation);
   }
   TransformPaintPropertyNode* ScrollTranslation() const {
     return scroll_translation_.Get();
   }
-
-  void SetContentClip(PassRefPtr<ClipPaintPropertyNode> content_clip) {
+  void SetContentClip(RefPtr<ClipPaintPropertyNode> content_clip) {
     content_clip_ = std::move(content_clip);
   }
   ClipPaintPropertyNode* ContentClip() const { return content_clip_.Get(); }
@@ -839,6 +857,18 @@ class CORE_EXPORT LocalFrameView final
   void VisualViewportScrollbarsChanged();
 
   LayoutUnit CaretWidth() const;
+
+  size_t PaintFrameCount() const { return paint_frame_count_; };
+
+  // Return the ScrollableArea in a FrameView with the given ElementId, if any.
+  // This is not recursive and will only return ScrollableAreas owned by this
+  // LocalFrameView (or possibly the LocalFrameView itself).
+  ScrollableArea* ScrollableAreaWithElementId(const CompositorElementId&);
+
+  PaintArtifactCompositor* GetPaintArtifactCompositorForTesting() {
+    DCHECK(RuntimeEnabledFeatures::SlimmingPaintV2Enabled());
+    return paint_artifact_compositor_.get();
+  }
 
  protected:
   // Scroll the content via the compositor.
@@ -1165,6 +1195,7 @@ class CORE_EXPORT LocalFrameView final
   // enabled.
   RefPtr<TransformPaintPropertyNode> pre_translation_;
   RefPtr<TransformPaintPropertyNode> scroll_translation_;
+  RefPtr<ScrollPaintPropertyNode> scroll_node_;
   // The content clip clips the document (= LayoutView) but not the scrollbars.
   // TODO(trchen): This will not be needed once settings->rootLayerScrolls() is
   // enabled.
@@ -1180,11 +1211,16 @@ class CORE_EXPORT LocalFrameView final
   // This is set on the local root frame view only.
   DocumentLifecycle::LifecycleState
       current_update_lifecycle_phases_target_state_;
+  bool past_layout_lifecycle_update_;
 
   ScrollAnchor scroll_anchor_;
   using AnchoringAdjustmentQueue =
       HeapLinkedHashSet<WeakMember<ScrollableArea>>;
   AnchoringAdjustmentQueue anchoring_adjustment_queue_;
+
+  // TODO(bokan): Temporary to get more information about crash in
+  // crbug.com/745686.
+  bool in_perform_scroll_anchoring_adjustments_;
 
   // ScrollbarManager holds the Scrollbar instances.
   ScrollbarManager scrollbar_manager_;
@@ -1194,6 +1230,7 @@ class CORE_EXPORT LocalFrameView final
   bool allows_layout_invalidation_after_layout_clean_;
   bool forcing_layout_parent_view_;
   bool needs_intersection_observation_;
+  bool needs_forced_compositing_update_;
 
   Member<ElementVisibilityObserver> visibility_observer_;
 
@@ -1218,6 +1255,11 @@ class CORE_EXPORT LocalFrameView final
   std::unique_ptr<CompositorAnimationHost> animation_host_;
 
   Member<PrintContext> print_context_;
+
+  // From the beginning of the document, how many frames have painted.
+  size_t paint_frame_count_;
+
+  UniqueObjectId unique_id_;
 
   FRIEND_TEST_ALL_PREFIXES(WebViewTest, DeviceEmulationResetScrollbars);
 };

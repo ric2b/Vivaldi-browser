@@ -7,28 +7,36 @@
 
 #import <UIKit/UIKit.h>
 
+// The fixed distance from the leading edge of the bubble to the anchor point if
+// leading aligned, and from the trailing edge of the bubble to the anchor point
+// if trailing aligned.
+extern const CGFloat kBubbleAlignmentOffset;
+
 // Direction for the bubble to point.
 typedef NS_ENUM(NSInteger, BubbleArrowDirection) {
   // Bubble is below the target UI element and the arrow is pointing up.
-  BubbleArrowDirectionUp = 0,
+  BubbleArrowDirectionUp,
   // Bubble is above the target UI element and the arrow is pointing down.
-  BubbleArrowDirectionDown = 1,
+  BubbleArrowDirectionDown,
 };
 
-// Alignment of the bubble relative to the arrow.
+// Alignment of the bubble's arrow relative to the rest of the bubble.
 typedef NS_ENUM(NSInteger, BubbleAlignment) {
-  BubbleAlignmentLeading = 0,
-  BubbleAlignmentCenter = 1,
-  BubbleAlignmentTrailing = 2,
+  // Arrow is aligned to the leading edge of the bubble.
+  BubbleAlignmentLeading,
+  // Arrow is center aligned on the bubble.
+  BubbleAlignmentCenter,
+  // Arrow is aligned to the trailing edge of the bubble.
+  BubbleAlignmentTrailing,
 };
 
 // Speech bubble shaped view that displays a message.
 @interface BubbleView : UIView
 
-// Initializes with the given text, direction that the bubble should point, and
+// Initialize with the given text, direction that the bubble should point, and
 // alignment of the bubble.
 - (instancetype)initWithText:(NSString*)text
-                   direction:(BubbleArrowDirection)arrowDirection
+              arrowDirection:(BubbleArrowDirection)direction
                    alignment:(BubbleAlignment)alignment
     NS_DESIGNATED_INITIALIZER;
 

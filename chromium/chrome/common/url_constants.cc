@@ -67,8 +67,7 @@ const char kChromeUIInspectURL[] = "chrome://inspect/";
 const char kChromeUIInstantURL[] = "chrome://instant/";
 const char kChromeUIInterstitialURL[] = "chrome://interstitials/";
 const char kChromeUIInvalidationsURL[] = "chrome://invalidations/";
-const char kChromeUIMdPolicyURL[] = "chrome://md-policy/";
-const char kChromeUIMdSettingsURL[] = "chrome://md-settings/";
+const char kChromeUIMemoryInternalsURL[] = "chrome://memory-internals/";
 const char kChromeUINaClURL[] = "chrome://nacl/";
 const char kChromeUINetInternalsURL[] = "chrome://net-internals/";
 const char kChromeUINewProfileURL[] = "chrome://newprofile/";
@@ -135,9 +134,7 @@ const char kChromeUISlowURL[] = "chrome://slow/";
 const char kChromeUISystemInfoURL[] = "chrome://system/";
 const char kChromeUITermsOemURL[] = "chrome://terms/oem";
 const char kChromeUIUserImageURL[] = "chrome://userimage/";
-// TODO(xdai): Change it to chrome://settings/cupsPrinters after M56 since MD
-// settings is going to launch in Chrome OS in M57.
-const char kChromeUIMdCupsSettingsURL[] = "chrome://md-settings/cupsPrinters";
+const char kChromeUIMdCupsSettingsURL[] = "chrome://settings/cupsPrinters";
 const char kCupsPrintLearnMoreURL[] =
     "https://support.google.com/chromebook?p=chromebook_printing";
 #endif  // defined(OS_CHROMEOS)
@@ -149,10 +146,6 @@ const char kChromeUIMetroFlowURL[] = "chrome://make-metro/";
 #if (defined(OS_LINUX) && defined(TOOLKIT_VIEWS)) || defined(USE_AURA)
 const char kChromeUITabModalConfirmDialogURL[] =
     "chrome://tab-modal-confirm-dialog/";
-#endif
-
-#if BUILDFLAG(ENABLE_OOP_HEAP_PROFILING)
-extern const char kChromeUIMemoryInternalsURL[] = "chrome://memory-internals/";
 #endif
 
 #if BUILDFLAG(ENABLE_WEBRTC)
@@ -222,9 +215,8 @@ const char kChromeUIInvalidationsHost[] = "invalidations";
 const char kChromeUIKillHost[] = "kill";
 const char kChromeUILargeIconHost[] = "large-icon";
 const char kChromeUILocalStateHost[] = "local-state";
-const char kChromeUIMdPolicyHost[] = "md-policy";
-const char kChromeUIMdSettingsHost[] = "md-settings";
 const char kChromeUIMediaEngagementHost[] = "media-engagement";
+const char kChromeUIMemoryInternalsHost[] = "memory-internals";
 const char kChromeUINaClHost[] = "nacl";
 const char kChromeUINetExportHost[] = "net-export";
 const char kChromeUINetInternalsHost[] = "net-internals";
@@ -348,10 +340,6 @@ const char kChromeUIMetroFlowHost[] = "make-metro";
 
 #if (defined(OS_LINUX) && defined(TOOLKIT_VIEWS)) || defined(USE_AURA)
 const char kChromeUITabModalConfirmDialogHost[] = "tab-modal-confirm-dialog";
-#endif
-
-#if BUILDFLAG(ENABLE_OOP_HEAP_PROFILING)
-extern const char kChromeUIMemoryInternalsHost[] = "memory-internals";
 #endif
 
 #if BUILDFLAG(ENABLE_WEBRTC)
@@ -723,7 +711,6 @@ const char* const kChromeHostURLs[] = {
     kChromeUIUberHost,
 #endif
 #if defined(OS_ANDROID)
-    kChromeUINetExportHost,
     kChromeUIOfflineInternalsHost,
     kChromeUISnippetsInternalsHost,
     kChromeUIWebApksHost,

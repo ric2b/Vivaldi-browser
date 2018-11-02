@@ -19,7 +19,9 @@
 #include "media/base/media_switches.h"
 #include "media/base/mock_filters.h"
 #include "media/cdm/cdm_file_io.h"
+#include "media/cdm/cdm_module.h"
 #include "media/cdm/external_clear_key_test_helper.h"
+#include "media/cdm/mock_helpers.h"
 #include "media/cdm/simple_cdm_allocator.h"
 #include "media/media_features.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -86,37 +88,38 @@ class CdmAdapterTest : public testing::Test {
  public:
   enum ExpectedResult { SUCCESS, FAILURE };
 
-  CdmAdapterTest() {}
-  ~CdmAdapterTest() override {}
-
- protected:
-  void SetUp() override {
+  CdmAdapterTest() {
     // Enable use of External Clear Key CDM.
     scoped_feature_list_.InitWithFeatures(
         {media::kExternalClearKeyForTesting,
          media::kSupportExperimentalCdmInterface},
         {});
+
+    CdmModule::GetInstance()->SetCdmPathForTesting(helper_.LibraryPath());
   }
 
+  ~CdmAdapterTest() override { CdmModule::ResetInstanceForTesting(); }
+
+ protected:
   // Initializes the adapter. |expected_result| tests that the call succeeds
   // or generates an error.
-  void InitializeAndExpect(base::FilePath library_path,
-                           ExpectedResult expected_result) {
+  void InitializeAndExpect(ExpectedResult expected_result) {
     CdmConfig cdm_config;  // default settings of false are sufficient.
     std::unique_ptr<CdmAllocator> allocator(new SimpleCdmAllocator());
-    CdmAdapter::Create(
-        helper_.KeySystemName(), library_path, cdm_config, std::move(allocator),
-        base::Bind(&CdmAdapterTest::CreateCdmFileIO, base::Unretained(this)),
-        base::Bind(&MockCdmClient::OnSessionMessage,
-                   base::Unretained(&cdm_client_)),
-        base::Bind(&MockCdmClient::OnSessionClosed,
-                   base::Unretained(&cdm_client_)),
-        base::Bind(&MockCdmClient::OnSessionKeysChange,
-                   base::Unretained(&cdm_client_)),
-        base::Bind(&MockCdmClient::OnSessionExpirationUpdate,
-                   base::Unretained(&cdm_client_)),
-        base::Bind(&CdmAdapterTest::OnCdmCreated, base::Unretained(this),
-                   expected_result));
+    std::unique_ptr<CdmAuxiliaryHelper> cdm_helper(
+        new MockCdmAuxiliaryHelper(std::move(allocator)));
+    CdmAdapter::Create(helper_.KeySystemName(), cdm_config,
+                       std::move(cdm_helper),
+                       base::Bind(&MockCdmClient::OnSessionMessage,
+                                  base::Unretained(&cdm_client_)),
+                       base::Bind(&MockCdmClient::OnSessionClosed,
+                                  base::Unretained(&cdm_client_)),
+                       base::Bind(&MockCdmClient::OnSessionKeysChange,
+                                  base::Unretained(&cdm_client_)),
+                       base::Bind(&MockCdmClient::OnSessionExpirationUpdate,
+                                  base::Unretained(&cdm_client_)),
+                       base::Bind(&CdmAdapterTest::OnCdmCreated,
+                                  base::Unretained(this), expected_result));
     RunUntilIdle();
   }
 
@@ -175,8 +178,6 @@ class CdmAdapterTest : public testing::Test {
     RunUntilIdle();
   }
 
-  base::FilePath ExternalClearKeyLibrary() { return helper_.LibraryPath(); }
-
   std::string SessionId() { return session_id_; }
 
  private:
@@ -184,10 +185,11 @@ class CdmAdapterTest : public testing::Test {
                     const scoped_refptr<ContentDecryptionModule>& cdm,
                     const std::string& error_message) {
     if (cdm) {
-      EXPECT_EQ(expected_result, SUCCESS) << "CDM should not have loaded.";
+      ASSERT_EQ(expected_result, SUCCESS)
+          << "CDM creation succeeded unexpectedly.";
       adapter_ = cdm;
     } else {
-      EXPECT_EQ(expected_result, FAILURE) << error_message;
+      ASSERT_EQ(expected_result, FAILURE) << error_message;
     }
   }
 
@@ -228,11 +230,6 @@ class CdmAdapterTest : public testing::Test {
 
   void RunUntilIdle() { base::RunLoop().RunUntilIdle(); }
 
-  std::unique_ptr<CdmFileIO> CreateCdmFileIO(cdm::FileIOClient* client) {
-    ADD_FAILURE() << "Should never be called";
-    return nullptr;
-  }
-
   // Methods used for promise resolved/rejected.
   MOCK_METHOD0(OnResolve, void());
   MOCK_METHOD1(OnResolveWithSession, void(const std::string& session_id));
@@ -259,23 +256,24 @@ class CdmAdapterTest : public testing::Test {
 };
 
 TEST_F(CdmAdapterTest, Initialize) {
-  InitializeAndExpect(ExternalClearKeyLibrary(), SUCCESS);
+  InitializeAndExpect(SUCCESS);
 }
 
 TEST_F(CdmAdapterTest, BadLibraryPath) {
-  InitializeAndExpect(base::FilePath(FILE_PATH_LITERAL("no_library_here")),
-                      FAILURE);
+  CdmModule::GetInstance()->SetCdmPathForTesting(
+      base::FilePath(FILE_PATH_LITERAL("no_library_here")));
+  InitializeAndExpect(FAILURE);
 }
 
 TEST_F(CdmAdapterTest, CreateWebmSession) {
-  InitializeAndExpect(ExternalClearKeyLibrary(), SUCCESS);
+  InitializeAndExpect(SUCCESS);
 
   std::vector<uint8_t> key_id(kKeyId, kKeyId + arraysize(kKeyId));
   CreateSessionAndExpect(EmeInitDataType::WEBM, key_id, SUCCESS);
 }
 
 TEST_F(CdmAdapterTest, CreateKeyIdsSession) {
-  InitializeAndExpect(ExternalClearKeyLibrary(), SUCCESS);
+  InitializeAndExpect(SUCCESS);
 
   // Don't include the trailing /0 from the string in the data passed in.
   std::vector<uint8_t> key_id(kKeyIdAsJWK,
@@ -284,7 +282,7 @@ TEST_F(CdmAdapterTest, CreateKeyIdsSession) {
 }
 
 TEST_F(CdmAdapterTest, CreateCencSession) {
-  InitializeAndExpect(ExternalClearKeyLibrary(), SUCCESS);
+  InitializeAndExpect(SUCCESS);
 
   std::vector<uint8_t> key_id(kKeyIdAsPssh,
                               kKeyIdAsPssh + arraysize(kKeyIdAsPssh));
@@ -296,7 +294,7 @@ TEST_F(CdmAdapterTest, CreateCencSession) {
 }
 
 TEST_F(CdmAdapterTest, CreateSessionWithBadData) {
-  InitializeAndExpect(ExternalClearKeyLibrary(), SUCCESS);
+  InitializeAndExpect(SUCCESS);
 
   // Use |kKeyId| but specify KEYIDS format.
   std::vector<uint8_t> key_id(kKeyId, kKeyId + arraysize(kKeyId));
@@ -304,7 +302,7 @@ TEST_F(CdmAdapterTest, CreateSessionWithBadData) {
 }
 
 TEST_F(CdmAdapterTest, LoadSession) {
-  InitializeAndExpect(ExternalClearKeyLibrary(), SUCCESS);
+  InitializeAndExpect(SUCCESS);
 
   // LoadSession() is not supported by AesDecryptor.
   std::vector<uint8_t> key_id(kKeyId, kKeyId + arraysize(kKeyId));
@@ -312,7 +310,7 @@ TEST_F(CdmAdapterTest, LoadSession) {
 }
 
 TEST_F(CdmAdapterTest, UpdateSession) {
-  InitializeAndExpect(ExternalClearKeyLibrary(), SUCCESS);
+  InitializeAndExpect(SUCCESS);
 
   std::vector<uint8_t> key_id(kKeyId, kKeyId + arraysize(kKeyId));
   CreateSessionAndExpect(EmeInitDataType::WEBM, key_id, SUCCESS);
@@ -321,7 +319,7 @@ TEST_F(CdmAdapterTest, UpdateSession) {
 }
 
 TEST_F(CdmAdapterTest, UpdateSessionWithBadData) {
-  InitializeAndExpect(ExternalClearKeyLibrary(), SUCCESS);
+  InitializeAndExpect(SUCCESS);
 
   std::vector<uint8_t> key_id(kKeyId, kKeyId + arraysize(kKeyId));
   CreateSessionAndExpect(EmeInitDataType::WEBM, key_id, SUCCESS);

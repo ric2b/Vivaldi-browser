@@ -36,7 +36,7 @@ def write_jumbo_files(inputs, outputs, written_input_set, written_output_set):
     while written_inputs < input_limit:
       filename = inputs[written_inputs]
       written_inputs += 1
-      out.write("#include \"%s\"\n" % os.path.normpath(filename))
+      out.write("#include \"%s\"\n" % filename)
       written_input_set.add(filename)
     new_jumbo_file = out.getvalue()
     out.close()

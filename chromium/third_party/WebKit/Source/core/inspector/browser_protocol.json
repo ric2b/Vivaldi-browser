@@ -49,6 +49,9 @@
                 ]
             },
             {
+                "name": "prepareForLeakDetection"
+            },
+            {
                 "name": "setPressureNotificationsSuppressed",
                 "description": "Enable/disable suppressing memory pressure notifications in all processes.",
                 "parameters": [
@@ -60,6 +63,48 @@
                 "description": "Simulate a memory pressure notification in all processes.",
                 "parameters": [
                     { "name": "level", "$ref": "PressureLevel", "description": "Memory pressure level of the notification." }
+                ]
+            }
+        ]
+    },
+    {
+        "domain": "Performance",
+        "experimental": true,
+        "types": [
+            {
+                "id": "Metric",
+                "type": "object",
+                "properties": [
+                    { "name": "name", "type": "string", "description": "Metric name." },
+                    { "name": "value", "type": "number", "description": "Metric value." }
+                ],
+                "description": "Run-time execution metric."
+            }
+        ],
+        "commands": [
+            {
+                "name": "enable",
+                "description": "Enable collecting and reporting metrics."
+            },
+            {
+                "name": "disable",
+                "description": "Disable collecting and reporting metrics."
+            },
+            {
+                "name": "getMetrics",
+                "returns": [
+                    { "name": "metrics", "type": "array", "items": { "$ref": "Metric" }, "description": "Current values for run-time metrics." }
+                ],
+                "description": "Retrieve current values of run-time metrics."
+            }
+        ],
+        "events": [
+            {
+                "name": "metrics",
+                "description": "Current values of the metrics.",
+                "parameters": [
+                    { "name": "metrics", "type": "array", "items": { "$ref": "Metric" }, "description": "Current values of the metrics." },
+                    { "name": "title", "type": "string", "description": "Timestamp title." }
                 ]
             }
         ]
@@ -92,7 +137,7 @@
                     { "name": "url", "type": "string", "description": "Frame document's URL." },
                     { "name": "securityOrigin", "type": "string", "description": "Frame document's security origin." },
                     { "name": "mimeType", "type": "string", "description": "Frame document's mimeType as determined by the browser." },
-                    { "name": "unreachableUrl", "type": "string", "optional": "true", "experimental": "true", "description": "If the frame failed to load, this contains the URL that could not be loaded." }
+                    { "name": "unreachableUrl", "type": "string", "optional": true, "experimental": true, "description": "If the frame failed to load, this contains the URL that could not be loaded." }
                ]
             },
             {
@@ -294,6 +339,14 @@
                 ],
                 "description": "Reloads given page optionally ignoring the cache."
             },
+	    {
+                "name": "setAdBlockingEnabled",
+                "description": "Enable Chrome's experimental ad filter on all sites.",
+                "parameters": [
+                    { "name": "enabled", "type": "boolean", "description": "Whether to block ads." }
+                ],
+		"experimental": true
+	    },
             {
                 "name": "navigate",
                 "parameters": [
@@ -542,23 +595,6 @@
                 "experimental": true
             },
             {
-                "name": "setControlNavigations",
-                "parameters": [
-                    { "name": "enabled", "type": "boolean" }
-                ],
-                "description": "Toggles navigation throttling which allows programatic control over navigation and redirect response.",
-                "experimental": true
-            },
-            {
-                "name": "processNavigation",
-                "parameters": [
-                    { "name": "response", "$ref": "NavigationResponse" },
-                    { "name": "navigationId", "type": "integer" }
-                ],
-                "description": "Should be sent in response to a navigationRequested or a redirectRequested event, telling the browser how to handle the navigation.",
-                "experimental": true
-            },
-            {
                 "name": "getLayoutMetrics",
                 "description": "Returns metrics relating to the layouting of the page, such as viewport bounds/scale.",
                 "experimental": true,
@@ -580,6 +616,19 @@
                 "returns": [
                     {  "name": "executionContextId", "$ref": "Runtime.ExecutionContextId", "description": "Execution context of the isolated world." }
                 ]
+            },
+            {
+                "name": "bringToFront",
+                "description": "Brings page to front (activates tab)."
+            },
+            {
+                "name": "setDownloadBehavior",
+                "description": "Set the behavior when downloading a file.",
+                "experimental": true,
+                "parameters": [
+                    { "name": "behavior", "type": "string", "enum": ["deny", "allow", "default"], "description": "Whether to allow all or deny all download requests, or use default Chrome behavior if available (otherwise deny)." },
+                    { "name": "downloadPath", "type": "string", "optional": true, "description": "The default path to save downloaded files to. This is requred if behavior is set to 'allow'" }
+                ]
             }
         ],
         "events": [
@@ -594,6 +643,14 @@
                 "parameters": [
                     { "name": "timestamp", "$ref": "Network.MonotonicTime" }
                 ]
+            },
+            {
+                "name": "lifecycleEvent",
+                "parameters": [
+                    { "name": "name", "type": "string" },
+                    { "name": "timestamp", "$ref": "Network.MonotonicTime" }
+                ],
+                "description": "Fired for top level page lifecycle events such as navigation, load, paint, etc."
             },
             {
                 "name": "frameAttached",
@@ -639,7 +696,9 @@
                 "description": "Fired when frame schedules a potential navigation.",
                 "parameters": [
                     { "name": "frameId", "$ref": "FrameId", "description": "Id of the frame that has scheduled a navigation." },
-                    { "name": "delay", "type": "number", "description": "Delay (in seconds) until the navigation is scheduled to begin. The navigation is not guaranteed to start." }
+                    { "name": "delay", "type": "number", "description": "Delay (in seconds) until the navigation is scheduled to begin. The navigation is not guaranteed to start." },
+                    { "name": "reason", "type": "string", "experimental": true, "enum": ["formSubmission", "httpHeaderRefresh", "scriptInitiated", "metaTagRefresh", "pageBlockInterstitial", "reload"], "description": "The reason for the navigation." },
+                    { "name": "url", "type": "string", "experimental": true, "description": "The destination URL for the scheduled navigation." }
                 ],
                 "experimental": true
             },
@@ -659,15 +718,18 @@
                 "name": "javascriptDialogOpening",
                 "description": "Fired when a JavaScript initiated dialog (alert, confirm, prompt, or onbeforeunload) is about to open.",
                 "parameters": [
+                    { "name": "url", "type": "string", "description": "Frame url." },
                     { "name": "message", "type": "string", "description": "Message that will be displayed by the dialog." },
-                    { "name": "type", "$ref": "DialogType", "description": "Dialog type." }
+                    { "name": "type", "$ref": "DialogType", "description": "Dialog type." },
+                    { "name": "defaultPrompt", "optional": true, "type": "string", "description": "Default dialog prompt." }
                 ]
             },
             {
                 "name": "javascriptDialogClosed",
                 "description": "Fired when a JavaScript initiated dialog (alert, confirm, prompt, or onbeforeunload) has been closed.",
                 "parameters": [
-                    { "name": "result", "type": "boolean", "description": "Whether dialog was confirmed." }
+                    { "name": "result", "type": "boolean", "description": "Whether dialog was confirmed." },
+                    { "name": "userInput", "type": "string", "description": "User input in case of prompt." }
                 ]
             },
             {
@@ -695,16 +757,6 @@
             {
                 "name": "interstitialHidden",
                 "description": "Fired when interstitial page was hidden"
-            },
-            {
-                "name": "navigationRequested",
-                "description": "Fired when a navigation is started if navigation throttles are enabled.  The navigation will be deferred until processNavigation is called.",
-                "parameters": [
-                    { "name": "isInMainFrame", "type": "boolean", "description": "Whether the navigation is taking place in the main frame or in a subframe." },
-                    { "name": "isRedirect", "type": "boolean", "description": "Whether the navigation has encountered a server redirect or not." },
-                    { "name": "navigationId", "type": "integer" },
-                    { "name": "url", "type": "string", "description": "URL of requested navigation." }
-                ]
             }
         ]
     },
@@ -729,7 +781,8 @@
                     { "name": "eventTargetColor", "$ref": "DOM.RGBA", "optional": true, "description": "The event target element highlight fill color (default: transparent)." },
                     { "name": "shapeColor", "$ref": "DOM.RGBA", "optional": true, "description": "The shape outside fill color (default: transparent)." },
                     { "name": "shapeMarginColor", "$ref": "DOM.RGBA", "optional": true, "description": "The shape margin fill color (default: transparent)." },
-                    { "name": "selectorList", "type": "string", "optional": true, "description": "Selectors to highlight relevant nodes."}
+                    { "name": "selectorList", "type": "string", "optional": true, "description": "Selectors to highlight relevant nodes."},
+                    { "name": "cssGridColor", "$ref": "DOM.RGBA", "optional": true, "description": "The grid layout color (default: transparent)." }
                 ],
                 "description": "Configuration data for the highlighting of page elements."
             },
@@ -876,6 +929,13 @@
                 "parameters": [
                     { "name": "backendNodeId", "$ref": "DOM.BackendNodeId", "description": "Id of the node to inspect." }
                 ]
+            },
+            {
+                "name": "screenshotRequested",
+                "description": "Fired when user asks to capture screenshot of some area on the page.",
+                "parameters": [
+                    { "name": "viewport", "$ref": "Page.Viewport", "description": "Viewport to capture, in CSS." }
+                ]
             }
         ]
     },
@@ -977,9 +1037,17 @@
                 "name": "setTouchEmulationEnabled",
                 "parameters": [
                     { "name": "enabled", "type": "boolean", "description": "Whether the touch event emulation should be enabled." },
+                    { "name": "maxTouchPoints", "type": "integer", "optional": true, "description": "Maximum touch points supported. Defaults to one." }
+                ],
+                "description": "Enables touch on platforms which do not support them."
+            },
+            {
+                "name": "setEmitTouchEventsForMouse",
+                "parameters": [
+                    { "name": "enabled", "type": "boolean", "description": "Whether touch emulation based on mouse input should be enabled." },
                     { "name": "configuration", "type": "string", "enum": ["mobile", "desktop"], "optional": true, "description": "Touch/gesture events configuration. Default: current platform." }
                 ],
-                "description": "Toggles mouse event-based touch event emulation."
+                "experimental": true
             },
             {
                 "name": "setEmulatedMedia",
@@ -1026,7 +1094,15 @@
             {
                 "name": "virtualTimeBudgetExpired",
                 "experimental": true,
-                "description": "Notification sent after the virual time budget for the current VirtualTimePolicy has run out."
+                "description": "Notification sent after the virtual time budget for the current VirtualTimePolicy has run out."
+            },
+            {
+                "name": "virtualTimePaused",
+                "experimental": true,
+                "parameters": [
+                    { "name": "virtualTimeElapsed", "type": "integer", "description": "The amount of virtual time that has elapsed in milliseconds since virtual time was first enabled." }
+                ],
+                "description": "Notification sent after the virtual time has paused."
             }
         ]
     },
@@ -1049,7 +1125,7 @@
             {
                 "id": "SecurityState",
                 "type": "string",
-                "enum": ["unknown", "neutral", "insecure", "warning", "secure", "info"],
+                "enum": ["unknown", "neutral", "insecure", "secure", "info"],
                 "description": "The security level of a page or resource."
             },
             {
@@ -1059,8 +1135,8 @@
                     { "name": "securityState", "$ref": "SecurityState", "description": "Security state representing the severity of the factor being explained." },
                     { "name": "summary", "type": "string", "description": "Short phrase describing the type of factor." },
                     { "name": "description", "type": "string", "description": "Full text explanation of the factor." },
-                    { "name": "hasCertificate", "type": "boolean", "description": "True if the page has a certificate." },
-                    { "name": "mixedContentType", "$ref": "MixedContentType", "description": "The type of mixed content described by the explanation." }
+                    { "name": "mixedContentType", "$ref": "MixedContentType", "description": "The type of mixed content described by the explanation." },
+                    { "name": "certificate", "type": "array", "items": { "type": "string" }, "description": "Page certificate." }
                 ],
                 "description": "An explanation of an factor contributing to the security state."
             },
@@ -1093,10 +1169,6 @@
             {
                 "name": "disable",
                 "description": "Disables tracking security state changes."
-            },
-            {
-                "name": "showCertificateViewer",
-                "description": "Displays native dialog with the certificate details."
             },
             {
                 "name": "handleCertificateError",
@@ -1133,6 +1205,29 @@
                     { "name": "eventId", "type": "integer", "description": "The ID of the event."},
                     { "name": "errorType", "type": "string", "description": "The type of the error."},
                     { "name": "requestURL", "type": "string", "description": "The url that was requested."}
+                ]
+            }
+        ]
+    },
+    {
+        "domain": "Audits",
+        "description": "Audits domain allows investigation of page violations and possible improvements.",
+        "dependencies": ["Network"],
+        "experimental": true,
+        "commands": [
+            {
+                "name": "getEncodedResponse",
+                "description": "Returns the response body and size if it were re-encoded with the specified settings. Only applies to images.",
+                "parameters": [
+                    { "name": "requestId", "$ref": "Network.RequestId", "description": "Identifier of the network request to get content for." },
+                    { "name": "encoding", "type": "string", "enum": ["webp", "jpeg", "png"], "description": "The encoding to use." },
+                    { "name": "quality", "type": "number", "optional": true, "description": "The quality of the encoding (0-1). (defaults to 1)" },
+                    { "name": "sizeOnly", "type": "boolean", "optional": true, "description": "Whether to only return the size information (defaults to false)." }
+                ],
+                "returns": [
+                    { "name": "body", "type": "string", "optional": true, "description": "The encoded body as a base64 string. Omitted if sizeOnly is true." },
+                    { "name": "originalSize", "type": "integer", "description": "Size before re-encoding." },
+                    { "name": "encodedSize", "type": "integer", "description": "Size after re-encoding." }
                 ]
             }
         ]
@@ -1376,6 +1471,23 @@
                 "experimental": true
             },
             {
+                "id": "CookieParam",
+                "type": "object",
+                "description": "Cookie parameter object",
+                "properties": [
+                    { "name": "name", "type": "string", "description": "Cookie name." },
+                    { "name": "value", "type": "string", "description": "Cookie value." },
+                    { "name": "url", "type": "string", "optional": true, "description": "The request-URI to associate with the setting of the cookie. This value can affect the default domain and path values of the created cookie." },
+                    { "name": "domain", "type": "string", "optional": true, "description": "Cookie domain." },
+                    { "name": "path", "type": "string", "optional": true, "description": "Cookie path." },
+                    { "name": "secure", "type": "boolean", "optional": true, "description": "True if cookie is secure." },
+                    { "name": "httpOnly", "type": "boolean", "optional": true, "description": "True if cookie is http-only." },
+                    { "name": "sameSite", "$ref": "CookieSameSite", "optional": true, "description": "Cookie SameSite type." },
+                    { "name": "expires", "$ref": "TimeSinceEpoch", "optional": true, "description": "Cookie expiration date, session cookie if not set" }
+                ],
+                "experimental": true
+            },
+            {
                 "id": "AuthChallenge",
                 "type": "object",
                 "description": "Authorization challenge for HTTP status code 401 or 407.",
@@ -1495,31 +1607,41 @@
                 "experimental": true
             },
             {
-                "name": "deleteCookie",
+                "name": "deleteCookies",
                 "parameters": [
-                    { "name": "cookieName", "type": "string", "description": "Name of the cookie to remove." },
-                    { "name": "url", "type": "string", "description": "URL to match cooke domain and path." }
+                    { "name": "name", "type": "string", "description": "Name of the cookies to remove." },
+                    { "name": "url", "type": "string", "optional": true, "description": "If specified, deletes all the cookies with the given name where domain and path match provided URL." },
+                    { "name": "domain", "type": "string", "optional": true, "description": "If specified, deletes only cookies with the exact domain." },
+                    { "name": "path", "type": "string", "optional": true, "description": "If specified, deletes only cookies with the exact path." }
                 ],
-                "description": "Deletes browser cookie with given name, domain and path.",
+                "description": "Deletes browser cookies with matching name and url or domain/path pair.",
                 "experimental": true
             },
             {
                 "name": "setCookie",
                 "parameters": [
-                    { "name": "url", "type": "string", "description": "The request-URI to associate with the setting of the cookie. This value can affect the default domain and path values of the created cookie." },
-                    { "name": "name", "type": "string", "description": "The name of the cookie." },
-                    { "name": "value", "type": "string", "description": "The value of the cookie." },
-                    { "name": "domain", "type": "string", "optional": true, "description": "If omitted, the cookie becomes a host-only cookie." },
-                    { "name": "path", "type": "string", "optional": true, "description": "Defaults to the path portion of the url parameter." },
-                    { "name": "secure", "type": "boolean", "optional": true, "description": "Defaults ot false." },
-                    { "name": "httpOnly", "type": "boolean", "optional": true, "description": "Defaults to false." },
-                    { "name": "sameSite", "$ref": "CookieSameSite", "optional": true, "description": "Defaults to browser default behavior." },
-                    { "name": "expirationDate", "$ref": "TimeSinceEpoch", "optional": true, "description": "If omitted, the cookie becomes a session cookie." }
+                    { "name": "name", "type": "string", "description": "Cookie name." },
+                    { "name": "value", "type": "string", "description": "Cookie value." },
+                    { "name": "url", "type": "string", "optional": true, "description": "The request-URI to associate with the setting of the cookie. This value can affect the default domain and path values of the created cookie." },
+                    { "name": "domain", "type": "string", "optional": true, "description": "Cookie domain." },
+                    { "name": "path", "type": "string", "optional": true, "description": "Cookie path." },
+                    { "name": "secure", "type": "boolean", "optional": true, "description": "True if cookie is secure." },
+                    { "name": "httpOnly", "type": "boolean", "optional": true, "description": "True if cookie is http-only." },
+                    { "name": "sameSite", "$ref": "CookieSameSite", "optional": true, "description": "Cookie SameSite type." },
+                    { "name": "expires", "$ref": "TimeSinceEpoch", "optional": true, "description": "Cookie expiration date, session cookie if not set" }
                 ],
                 "returns": [
                     { "name": "success", "type": "boolean", "description": "True if successfully set cookie." }
                 ],
                 "description": "Sets a cookie with the given cookie data; may overwrite equivalent cookies if they exist.",
+                "experimental": true
+            },
+            {
+                "name": "setCookies",
+                "parameters": [
+                    { "name": "cookies", "type": "array", "items": { "$ref": "CookieParam" }, "description": "Cookies to be set." }
+                ],
+                "description": "Sets given cookies.",
                 "experimental": true
             },
             {
@@ -1578,8 +1700,10 @@
             },
             {
                 "name": "setRequestInterceptionEnabled",
+                "description": "Sets the requests to intercept that match a the provided patterns.",
                 "parameters": [
-                    { "name": "enabled", "type": "boolean", "description": "Whether or not HTTP requests should be intercepted and Network.requestIntercepted events sent." }
+                    { "name": "enabled", "type": "boolean", "description": "Whether requests should be intercepted. If patterns is not set, matches all and resets any previously set patterns. Other parameters are ignored if false." },
+                    { "name": "patterns", "type": "array", "optional": true, "items": { "type": "string" }, "description": "URLs matching any of these patterns will be forwarded and wait for the corresponding continueInterceptedRequest call. Wildcards ('*' -> zero or more, '?' -> exactly one) are allowed. Escape character is backslash. If omitted equivalent to ['*'] (intercept all)." }
                 ],
                 "experimental": true
             },
@@ -1588,7 +1712,7 @@
                 "description": "Response to Network.requestIntercepted which either modifies the request to continue with any modifications, or blocks it, or completes it with the provided response bytes. If a network fetch occurs as a result which encounters a redirect an additional Network.requestIntercepted event will be sent with the same InterceptionId.",
                 "parameters": [
                     { "name": "interceptionId", "$ref": "InterceptionId" },
-                    { "name": "errorReason", "$ref": "ErrorReason", "optional": true, "description": "If set this causes the request to fail with the given reason. Must not be set in response to an authChallenge." },
+                    { "name": "errorReason", "$ref": "ErrorReason", "optional": true, "description": "If set this causes the request to fail with the given reason. Passing <code>Aborted</code> for requests marked with <code>isNavigationRequest</code> also cancels the navigation. Must not be set in response to an authChallenge." },
                     { "name": "rawResponse", "type": "string", "optional": true, "description": "If set the requests completes using with the provided base64 encoded raw response, including HTTP status line and headers etc... Must not be set in response to an authChallenge." },
                     { "name": "url", "type": "string", "optional": true, "description": "If set the request url will be modified in a way that's not observable by page. Must not be set in response to an authChallenge." },
                     { "name": "method", "type": "string", "optional": true, "description": "If set this allows the request method to be overridden. Must not be set in response to an authChallenge."},
@@ -1765,6 +1889,7 @@
                     { "name": "interceptionId", "$ref": "InterceptionId", "description": "Each request the page makes will have a unique id, however if any redirects are encountered while processing that fetch, they will be reported with the same id as the original fetch. Likewise if HTTP authentication is needed then the same fetch id will be used." },
                     { "name": "request", "$ref": "Request" },
                     { "name": "resourceType", "$ref": "Page.ResourceType", "description": "How the requested resource will be used." },
+                    { "name": "isNavigationRequest", "type": "boolean", "description": "Whether this is a navigation request, which can abort the navigation completely." },
                     { "name": "redirectHeaders", "$ref": "Headers", "optional": true, "description": "HTTP response headers, only sent if a redirect was intercepted." },
                     { "name": "redirectStatusCode", "type": "integer", "optional": true, "description": "HTTP response code, only sent if a redirect was intercepted." },
                     { "name": "redirectUrl", "optional": true, "type": "string", "description": "Redirect location, only sent if a redirect was intercepted."},
@@ -2011,9 +2136,13 @@
                 "type": "object",
                 "description": "Data entry.",
                 "properties": [
-                    { "name": "request", "type": "string", "description": "Request url spec." },
-                    { "name": "response", "type": "string", "description": "Response status text." },
-                    { "name": "responseTime", "type": "number", "description": "Number of seconds since epoch." }
+                    { "name": "requestURL", "type": "string", "description": "Request URL." },
+                    { "name": "requestMethod", "type": "string", "description": "Request method." },
+                    { "name": "requestHeaders", "type": "array", "items": { "$ref": "Header" }, "description": "Request headers" },
+                    { "name": "responseTime", "type": "number", "description": "Number of seconds since epoch." },
+                    { "name": "responseStatus", "type": "integer", "description": "HTTP response status code." },
+                    { "name": "responseStatusText", "type": "string", "description": "HTTP response status text." },
+                    { "name": "responseHeaders", "type": "array", "items": { "$ref": "Header" }, "description": "Response headers" }
                 ]
             },
             {
@@ -2024,6 +2153,22 @@
                     { "name": "cacheId", "$ref": "CacheId", "description": "An opaque unique id of the cache." },
                     { "name": "securityOrigin", "type": "string", "description": "Security origin of the cache." },
                     { "name": "cacheName", "type": "string", "description": "The name of the cache." }
+                ]
+            },
+            {
+                "id": "Header",
+                "type": "object",
+                "properties": [
+                    { "name": "name", "type": "string" },
+                    { "name": "value", "type": "string" }
+                ]
+            },
+            {
+                "id": "CachedResponse",
+                "type": "object",
+                "description": "Cached response",
+                "properties": [
+                    { "name": "body", "type": "string", "description": "Entry content, base64-encoded." }
                 ]
             }
         ],
@@ -2065,6 +2210,17 @@
                     { "name": "request", "type": "string", "description": "URL spec of the request." }
                 ],
                 "description": "Deletes a cache entry."
+            },
+            {
+                "name": "requestCachedResponse",
+                "parameters": [
+                    { "name": "cacheId", "$ref": "CacheId", "description": "Id of cache that contains the enty." },
+                    { "name": "requestURL", "type": "string", "description": "URL spec of the request." }
+                ],
+                "returns": [
+                    { "name": "response", "$ref": "CachedResponse", "description": "Response read from the cache."}
+                ],
+                "description": "Fetches cache entry."
             }
         ]
     },
@@ -2528,7 +2684,9 @@
             {
                 "name": "getOuterHTML",
                 "parameters": [
-                    { "name": "nodeId", "$ref": "NodeId", "description": "Id of the node to get markup for." }
+                    { "name": "nodeId", "$ref": "NodeId", "optional": true, "description": "Identifier of the node." },
+                    { "name": "backendNodeId", "$ref": "BackendNodeId", "optional": true, "description": "Identifier of the backend node." },
+                    { "name": "objectId", "$ref": "Runtime.RemoteObjectId", "optional": true, "description": "JavaScript object id of the node wrapper." }
                 ],
                 "returns": [
                     { "name": "outerHTML", "type": "string", "description": "Outer HTML markup." }
@@ -2751,6 +2909,20 @@
                 ],
                 "description": "Returns the id of the nearest ancestor that is a relayout boundary.",
                 "experimental": true
+            },
+            {
+                "name": "describeNode",
+                "parameters": [
+                    { "name": "nodeId", "$ref": "NodeId", "optional": true, "description": "Identifier of the node." },
+                    { "name": "backendNodeId", "$ref": "BackendNodeId", "optional": true, "description": "Identifier of the backend node." },
+                    { "name": "objectId", "$ref": "Runtime.RemoteObjectId", "optional": true, "description": "JavaScript object id of the node wrapper." },
+                    { "name": "depth", "type": "integer", "optional": true, "description": "The maximum depth at which children should be retrieved, defaults to 1. Use -1 for the entire subtree or provide an integer larger than 0.", "experimental": true },
+                    { "name": "pierce", "type": "boolean", "optional": true, "description": "Whether or not iframes and shadow roots should be traversed when returning the subtree (default is false).", "experimental": true }
+                ],
+                "returns": [
+                    { "name": "node", "$ref": "Node", "description": "Node description." }
+                ],
+                "description": "Describes node given its id, does not require domain to be enabled. Does not start tracking any objects, can be used for automation."
             }
         ],
         "events": [
@@ -3308,7 +3480,11 @@
                     { "name": "nodeId", "$ref": "DOM.NodeId", "description": "Id of the node to get background colors for." }
                 ],
                 "returns": [
-                    { "name": "backgroundColors", "type": "array", "items": { "type": "string" }, "description": "The range of background colors behind this element, if it contains any visible text. If no visible text is present, this will be undefined. In the case of a flat background color, this will consist of simply that color. In the case of a gradient, this will consist of each of the color stops. For anything more complicated, this will be an empty array. Images will be ignored (as if the image had failed to load).", "optional": true }
+                    { "name": "backgroundColors", "type": "array", "items": { "type": "string" }, "description": "The range of background colors behind this element, if it contains any visible text. If no visible text is present, this will be undefined. In the case of a flat background color, this will consist of simply that color. In the case of a gradient, this will consist of each of the color stops. For anything more complicated, this will be an empty array. Images will be ignored (as if the image had failed to load).", "optional": true },
+                    { "name": "computedFontSize", "type": "string", "description": "The computed font size for this node, as a CSS computed value string (e.g. '12px').", "optional": true },
+                    { "name": "computedFontWeight", "type": "string", "description": "The computed font weight for this node, as a CSS computed value string (e.g. 'normal' or '100').", "optional": true },
+
+                    { "name": "computedBodyFontSize", "type": "string", "description": "The computed font size for the document body, as a computed CSS value string (e.g. '16px').", "optional": true }
                 ],
                 "experimental": true
             },
@@ -3391,9 +3567,10 @@
                     { "name": "documentURL", "type": "string", "optional": true, "description": "Document URL that <code>Document</code> or <code>FrameOwner</code> node points to." },
                     { "name": "baseURL", "type": "string", "optional": true, "description": "Base URL that <code>Document</code> or <code>FrameOwner</code> node uses for URL completion." },
                     { "name": "contentLanguage", "type": "string", "optional": true, "description": "Only set for documents, contains the document's content language." },
+                    { "name": "documentEncoding", "type": "string", "optional": true, "description": "Only set for documents, contains the document's character set encoding." },
                     { "name": "publicId", "type": "string", "optional": true, "description": "<code>DocumentType</code> node's publicId." },
                     { "name": "systemId", "type": "string", "optional": true, "description": "<code>DocumentType</code> node's systemId." },
-                    { "name": "frameId", "$ref": "Page.FrameId", "optional": true, "description": "Frame ID for frame owner elements." },
+                    { "name": "frameId", "$ref": "Page.FrameId", "optional": true, "description": "Frame ID for frame owner elements and also for the document node." },
                     { "name": "contentDocumentIndex", "type": "integer", "optional": true, "description": "The index of a frame owner element's content document in the <code>domNodes</code> array returned by <code>getSnapshot</code>, if any." },
                     { "name": "importedDocumentIndex", "type": "integer", "optional": true, "description": "Index of the imported document's node of a link element in the <code>domNodes</code> array returned by <code>getSnapshot</code>, if any." },
                     { "name": "templateContentIndex", "type": "integer", "optional": true, "description": "Index of the content node of a template element in the <code>domNodes</code> array returned by <code>getSnapshot</code>." },
@@ -3454,7 +3631,8 @@
         "types": [
             {
                 "id": "StreamHandle",
-                "type": "string"
+                "type": "string",
+                "description": "This is either obtained from another method or specifed as <code>blob:&lt;uuid&gt;</code> where <code>&lt;uuid&gt</code> is an UUID of a Blob."
             }
         ],
         "commands": [
@@ -3467,6 +3645,7 @@
                     { "name": "size", "type": "integer", "optional": true,  "description": "Maximum number of bytes to read (left upon the agent discretion if not specified)." }
                 ],
                 "returns": [
+                    { "name": "base64Encoded", "type": "boolean", "optional": true, "description": "Set if the data is base64-encoded"},
                     { "name": "data", "type": "string", "description": "Data that were read." },
                     { "name": "eof", "type": "boolean", "description": "Set if the end-of-file condition occured while reading." }
                 ]
@@ -3477,6 +3656,16 @@
                 "parameters": [
                     { "name": "handle", "$ref": "StreamHandle", "description": "Handle of the stream to close." }
                 ]
+            },
+            {
+                "name": "resolveBlob",
+                "parameters": [
+                    { "name": "objectId", "$ref": "Runtime.RemoteObjectId", "description": "Object id of a Blob object wrapper." }
+                ],
+                "returns": [
+                    { "name": "uuid", "type": "string", "description": "UUID of the specified Blob." }
+                ],
+                "description": "Return UUID of Blob object specified by a remote object id."
             }
         ]
     },
@@ -3947,9 +4136,8 @@
                 "type": "object",
                 "experimental": true,
                 "properties": [
-                    { "name": "state", "type": "string", "enum": ["touchPressed", "touchReleased", "touchMoved", "touchStationary", "touchCancelled"], "description": "State of the touch point." },
-                    { "name": "x", "type": "integer", "description": "X coordinate of the event relative to the main frame's viewport."},
-                    { "name": "y", "type": "integer", "description": "Y coordinate of the event relative to the main frame's viewport. 0 refers to the top of the viewport and Y increases as it proceeds towards the bottom of the viewport."},
+                    { "name": "x", "type": "integer", "description": "X coordinate of the event relative to the main frame's viewport in CSS pixels."},
+                    { "name": "y", "type": "integer", "description": "Y coordinate of the event relative to the main frame's viewport in CSS pixels. 0 refers to the top of the viewport and Y increases as it proceeds towards the bottom of the viewport."},
                     { "name": "radiusX", "type": "integer", "optional": true, "description": "X radius of the touch area (default: 1)."},
                     { "name": "radiusY", "type": "integer", "optional": true, "description": "Y radius of the touch area (default: 1)."},
                     { "name": "rotationAngle", "type": "number", "optional": true, "description": "Rotation angle (default: 0.0)."},
@@ -3999,13 +4187,15 @@
             {
                 "name": "dispatchMouseEvent",
                 "parameters": [
-                    { "name": "type", "type": "string", "enum": ["mousePressed", "mouseReleased", "mouseMoved"], "description": "Type of the mouse event." },
+                    { "name": "type", "type": "string", "enum": ["mousePressed", "mouseReleased", "mouseMoved", "mouseWheel"], "description": "Type of the mouse event." },
                     { "name": "x", "type": "number", "description": "X coordinate of the event relative to the main frame's viewport in CSS pixels."},
                     { "name": "y", "type": "number", "description": "Y coordinate of the event relative to the main frame's viewport in CSS pixels. 0 refers to the top of the viewport and Y increases as it proceeds towards the bottom of the viewport."},
                     { "name": "modifiers", "type": "integer", "optional": true, "description": "Bit field representing pressed modifier keys. Alt=1, Ctrl=2, Meta/Command=4, Shift=8 (default: 0)." },
                     { "name": "timestamp", "$ref": "TimeSinceEpoch", "optional": true, "description": "Time at which the event occurred." },
                     { "name": "button", "type": "string", "enum": ["none", "left", "middle", "right"], "optional": true, "description": "Mouse button (default: \"none\")." },
-                    { "name": "clickCount", "type": "integer", "optional": true, "description": "Number of times the mouse button was clicked (default: 0)." }
+                    { "name": "clickCount", "type": "integer", "optional": true, "description": "Number of times the mouse button was clicked (default: 0)." },
+                    { "name": "deltaX", "type": "number", "optional": true, "description": "X delta in CSS pixels for mouse wheel event (default: 0)."},
+                    { "name": "deltaY", "type": "number", "optional": true, "description": "Y delta in CSS pixels for mouse wheel event (default: 0)."}
                 ],
                 "description": "Dispatches a mouse event to the page."
             },
@@ -4013,8 +4203,8 @@
                 "name": "dispatchTouchEvent",
                 "experimental": true,
                 "parameters": [
-                    { "name": "type", "type": "string", "enum": ["touchStart", "touchEnd", "touchMove"], "description": "Type of the touch event." },
-                    { "name": "touchPoints", "type": "array", "items": { "$ref": "TouchPoint" }, "description": "Touch points." },
+                    { "name": "type", "type": "string", "enum": ["touchStart", "touchEnd", "touchMove", "touchCancel"], "description": "Type of the touch event. TouchEnd and TouchCancel must not contain any touch points, while TouchStart and TouchMove must contains at least one." },
+                    { "name": "touchPoints", "type": "array", "items": { "$ref": "TouchPoint" }, "description": "Active touch points on the touch device. One event per any changed point (compared to previous touch event in a sequence) is generated, emulating pressing/moving/releasing points one by one." },
                     { "name": "modifiers", "type": "integer", "optional": true, "description": "Bit field representing pressed modifier keys. Alt=1, Ctrl=2, Meta/Command=4, Shift=8 (default: 0)." },
                     { "name": "timestamp", "$ref": "TimeSinceEpoch", "optional": true, "description": "Time at which the event occurred." }
                 ],
@@ -4107,6 +4297,17 @@
                 ]
             },
             {
+                "id": "StickyPositionConstraint",
+                "type": "object",
+                "description": "Sticky position constraints.",
+                "properties": [
+                    { "name": "stickyBoxRect", "$ref": "DOM.Rect", "description": "Layout rectangle of the sticky element before being shifted" },
+                    { "name": "containingBlockRect", "$ref": "DOM.Rect", "description": "Layout rectangle of the containing block of the sticky element" },
+                    { "name": "nearestLayerShiftingStickyBox", "$ref": "LayerId", "optional": true, "description": "The nearest sticky layer that shifts the sticky box" },
+                    { "name": "nearestLayerShiftingContainingBlock", "$ref": "LayerId", "optional": true, "description": "The nearest sticky layer that shifts the containing block" }
+                ]
+            },
+            {
                 "id": "PictureTile",
                 "type": "object",
                 "description": "Serialized fragment of layer picture along with its offset within the layer.",
@@ -4135,7 +4336,8 @@
                     { "name": "paintCount", "type": "integer", "description": "Indicates how many time this layer has painted." },
                     { "name": "drawsContent", "type": "boolean", "description": "Indicates whether this layer hosts any content, rather than being used for transform/scrolling purposes only." },
                     { "name": "invisible", "type": "boolean", "optional": true, "description": "Set if layer is not visible." },
-                    { "name": "scrollRects", "type": "array", "items": { "$ref": "ScrollRect"}, "optional": true, "description": "Rectangles scrolling on main thread only."}
+                    { "name": "scrollRects", "type": "array", "items": { "$ref": "ScrollRect"}, "optional": true, "description": "Rectangles scrolling on main thread only."},
+                    { "name": "stickyPositionConstraint", "$ref": "StickyPositionConstraint", "optional": true, "description": "Sticky position constraint information" }
                 ]
             },
             {
@@ -4588,13 +4790,13 @@
             {
                 "id": "AXGlobalStates",
                 "type": "string",
-                "enum": [ "disabled", "hidden", "hiddenRoot", "invalid", "keyshortcuts", "roledescription" ],
+                "enum": [ "busy", "disabled", "hidden", "hiddenRoot", "invalid", "keyshortcuts", "roledescription" ],
                 "description": "States which apply to every AX node."
             },
             {
                 "id": "AXLiveRegionAttributes",
                 "type": "string",
-                "enum": [ "live", "atomic", "relevant", "busy", "root" ],
+                "enum": [ "live", "atomic", "relevant", "root" ],
                 "description": "Attributes which apply to nodes in live regions."
             },
             {
@@ -4700,6 +4902,37 @@
                     { "name": "usageBreakdown", "type": "array", "items": { "$ref": "UsageForType" }, "description": "Storage usage per type (bytes)." }
                 ],
                 "description": "Returns usage and quota in bytes."
+            },
+            {
+                "name": "trackCacheStorageForOrigin",
+                "parameters": [
+                    { "name": "origin", "type": "string", "description": "Security origin." }
+                ],
+                "description": "Registers origin to be notified when an update occurs to its cache storage list."
+            },
+            {
+                "name": "untrackCacheStorageForOrigin",
+                "parameters": [
+                    { "name": "origin", "type": "string", "description": "Security origin." }
+                ],
+                "description": "Unregisters origin from receiving notifications for cache storage."
+            }
+        ],
+        "events": [
+            {
+                "name": "cacheStorageListUpdated",
+                "parameters": [
+                    { "name": "origin", "type": "string", "description": "Origin to update." }
+                ],
+                "description": "A cache has been added/deleted."
+            },
+            {
+                "name": "cacheStorageContentUpdated",
+                "parameters": [
+                    { "name": "origin", "type": "string", "description": "Origin to update." },
+                    { "name": "cacheName", "type": "string", "description": "Name of cache in origin." }
+                ],
+                "description": "A cache's contents have been modified."
             }
         ]
     },
@@ -4880,6 +5113,17 @@
                 "returns": [
                     { "name": "windowId", "$ref": "WindowID", "description": "Browser window id." },
                     { "name": "bounds", "$ref": "Bounds", "description": "Bounds information of the window. When window state is 'minimized', the restored window position and size are returned." }
+                ]
+            },
+            {
+                "name": "getVersion",
+                "description": "Returns version information.",
+                "returns": [
+                    { "name": "protocolVersion", "type": "string", "description": "Protocol version." },
+                    { "name": "product", "type": "string", "description": "Product name." },
+                    { "name": "revision", "type": "string", "description": "Product revision." },
+                    { "name": "userAgent", "type": "string", "description": "User-Agent." },
+                    { "name": "jsVersion", "type": "string", "description": "V8 version." }
                 ]
             },
             {

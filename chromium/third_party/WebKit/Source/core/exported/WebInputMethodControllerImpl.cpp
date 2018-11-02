@@ -7,16 +7,16 @@
 #include "core/InputTypeNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/UserGestureIndicator.h"
-#include "core/editing/CompositionUnderlineVectorBuilder.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/Editor.h"
 #include "core/editing/EphemeralRange.h"
 #include "core/editing/FrameSelection.h"
+#include "core/editing/ImeTextSpanVectorBuilder.h"
 #include "core/editing/InputMethodController.h"
 #include "core/editing/PlainTextRange.h"
 #include "core/exported/WebPluginContainerImpl.h"
 #include "core/frame/LocalFrame.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "core/page/FocusController.h"
 #include "core/page/Page.h"
 #include "public/platform/WebString.h"
@@ -26,7 +26,7 @@
 namespace blink {
 
 WebInputMethodControllerImpl::WebInputMethodControllerImpl(
-    WebLocalFrameBase& web_frame)
+    WebLocalFrameImpl& web_frame)
     : web_frame_(&web_frame) {}
 
 WebInputMethodControllerImpl::~WebInputMethodControllerImpl() {}
@@ -37,12 +37,12 @@ DEFINE_TRACE(WebInputMethodControllerImpl) {
 
 bool WebInputMethodControllerImpl::SetComposition(
     const WebString& text,
-    const WebVector<WebCompositionUnderline>& underlines,
+    const WebVector<WebImeTextSpan>& ime_text_spans,
     const WebRange& replacement_range,
     int selection_start,
     int selection_end) {
   if (WebPlugin* plugin = FocusedPluginIfInputMethodSupported()) {
-    return plugin->SetComposition(text, underlines, replacement_range,
+    return plugin->SetComposition(text, ime_text_spans, replacement_range,
                                   selection_start, selection_end);
   }
 
@@ -69,15 +69,11 @@ bool WebInputMethodControllerImpl::SetComposition(
       return false;
   }
 
-  UserGestureIndicator gesture_indicator(UserGestureToken::Create(
-      GetFrame()->GetDocument(), UserGestureToken::kNewGesture));
+  std::unique_ptr<UserGestureIndicator> gesture_indicator =
+      LocalFrame::CreateUserGesture(GetFrame(), UserGestureToken::kNewGesture);
 
-  // When the range of composition underlines overlap with the range between
-  // selectionStart and selectionEnd, WebKit somehow won't paint the selection
-  // at all (see InlineTextBox::paint() function in InlineTextBox.cpp).
-  // But the selection range actually takes effect.
   GetInputMethodController().SetComposition(
-      String(text), CompositionUnderlineVectorBuilder::Build(underlines),
+      String(text), ImeTextSpanVectorBuilder::Build(ime_text_spans),
       selection_start, selection_end);
 
   return text.IsEmpty() || GetInputMethodController().HasComposition();
@@ -107,14 +103,14 @@ bool WebInputMethodControllerImpl::FinishComposingText(
 
 bool WebInputMethodControllerImpl::CommitText(
     const WebString& text,
-    const WebVector<WebCompositionUnderline>& underlines,
+    const WebVector<WebImeTextSpan>& ime_text_spans,
     const WebRange& replacement_range,
     int relative_caret_position) {
-  UserGestureIndicator gesture_indicator(UserGestureToken::Create(
-      GetFrame()->GetDocument(), UserGestureToken::kNewGesture));
+  std::unique_ptr<UserGestureIndicator> gesture_indicator =
+      LocalFrame::CreateUserGesture(GetFrame(), UserGestureToken::kNewGesture);
 
   if (WebPlugin* plugin = FocusedPluginIfInputMethodSupported()) {
-    return plugin->CommitText(text, underlines, replacement_range,
+    return plugin->CommitText(text, ime_text_spans, replacement_range,
                               relative_caret_position);
   }
 
@@ -127,12 +123,18 @@ bool WebInputMethodControllerImpl::CommitText(
   GetFrame()->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
   return GetInputMethodController().CommitText(
-      text, CompositionUnderlineVectorBuilder::Build(underlines),
+      text, ImeTextSpanVectorBuilder::Build(ime_text_spans),
       relative_caret_position);
 }
 
 WebTextInputInfo WebInputMethodControllerImpl::TextInputInfo() {
   return GetFrame()->GetInputMethodController().TextInputInfo();
+}
+
+int WebInputMethodControllerImpl::ComputeWebTextInputNextPreviousFlags() {
+  return GetFrame()
+      ->GetInputMethodController()
+      .ComputeWebTextInputNextPreviousFlags();
 }
 
 WebTextInputType WebInputMethodControllerImpl::TextInputType() {

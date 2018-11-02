@@ -8,11 +8,11 @@ namespace subresource_filter {
 
 ActivationList GetListForThreatTypeAndMetadata(
     safe_browsing::SBThreatType threat_type,
-    safe_browsing::ThreatPatternType threat_type_metadata) {
+    const safe_browsing::ThreatMetadata& threat_type_metadata) {
   bool is_phishing_interstitial =
       (threat_type == safe_browsing::SB_THREAT_TYPE_URL_PHISHING);
   bool is_soc_engineering_ads_interstitial =
-      threat_type_metadata ==
+      threat_type_metadata.threat_pattern_type ==
       safe_browsing::ThreatPatternType::SOCIAL_ENGINEERING_ADS;
   bool subresource_filter =
       (threat_type == safe_browsing::SB_THREAT_TYPE_SUBRESOURCE_FILTER);
@@ -22,7 +22,18 @@ ActivationList GetListForThreatTypeAndMetadata(
     }
     return ActivationList::PHISHING_INTERSTITIAL;
   } else if (subresource_filter) {
-    return ActivationList::SUBRESOURCE_FILTER;
+    switch (threat_type_metadata.threat_pattern_type) {
+      case safe_browsing::ThreatPatternType::SUBRESOURCE_FILTER_BETTER_ADS:
+        return ActivationList::BETTER_ADS;
+      case safe_browsing::ThreatPatternType::SUBRESOURCE_FILTER_ABUSIVE_ADS:
+        return ActivationList::ABUSIVE_ADS;
+      case safe_browsing::ThreatPatternType::SUBRESOURCE_FILTER_ALL_ADS:
+        return ActivationList::ALL_ADS;
+      case safe_browsing::ThreatPatternType::NONE:
+        return ActivationList::SUBRESOURCE_FILTER;
+      default:
+        break;
+    }
   }
 
   return ActivationList::NONE;

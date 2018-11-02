@@ -21,11 +21,11 @@
 #include "core/html/forms/FormController.h"
 
 #include <memory>
-#include "core/events/ScopedEventQueue.h"
+#include "core/dom/events/ScopedEventQueue.h"
 #include "core/html/HTMLFormControlElementWithState.h"
 #include "core/html/HTMLFormElement.h"
 #include "core/html/HTMLInputElement.h"
-#include "platform/FileChooser.h"
+#include "core/html/forms/FileChooser.h"
 #include "platform/wtf/Deque.h"
 #include "platform/wtf/HashTableDeletedValueType.h"
 #include "platform/wtf/PtrUtil.h"

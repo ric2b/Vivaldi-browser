@@ -16,6 +16,7 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #import "base/test/ios/wait_util.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/values.h"
 #include "components/autofill/core/common/password_form_fill_data.h"
 #include "components/password_manager/core/browser/log_manager.h"
@@ -47,7 +48,9 @@
 
 using autofill::PasswordForm;
 using autofill::PasswordFormFillData;
+using testing::NiceMock;
 using testing::Return;
+using testing::_;
 
 namespace {
 
@@ -95,7 +98,7 @@ PasswordController* CreatePasswordController(
     web::WebState* web_state,
     password_manager::PasswordStore* store,
     MockPasswordManagerClient** weak_client) {
-  auto client = base::MakeUnique<MockPasswordManagerClient>(store);
+  auto client = base::MakeUnique<NiceMock<MockPasswordManagerClient>>(store);
   if (weak_client)
     *weak_client = client.get();
   return [[PasswordController alloc] initWithWebState:web_state
@@ -242,7 +245,7 @@ class PasswordControllerTest : public web::WebTestWithWebState {
   // PasswordController for testing.
   PasswordController* passwordController_;
 
-  scoped_refptr<password_manager::PasswordStore> store_;
+  scoped_refptr<password_manager::MockPasswordStore> store_;
 };
 
 struct PasswordFormTestData {
@@ -268,7 +271,7 @@ TEST_F(PasswordControllerTest, PopulatePasswordFormWithDictionary) {
     // to be stripped off. The password is recognized as an old password.
     {
       "http://john:doe@fakedomain.com/foo/bar?baz=quz#foobar",
-      "{ \"action\": \"some/action?to=be&or=not#tobe\","
+      "{ \"action\": \"http://fakedomain.com/foo/some/action\","
           "\"usernameElement\": \"account\","
           "\"usernameValue\": \"fakeaccount\","
           "\"name\": \"signup\","
@@ -289,7 +292,7 @@ TEST_F(PasswordControllerTest, PopulatePasswordFormWithDictionary) {
     // due to an origin mismatch.
     {
       "http://john:doe@fakedomain.com/foo/bar?baz=quz#foobar",
-      "{ \"action\": \"some/action?to=be&or=not#tobe\","
+      "{ \"action\": \"\","
           "\"usernameElement\": \"account\","
           "\"usernameValue\": \"fakeaccount\","
           "\"name\": \"signup\","
@@ -334,7 +337,7 @@ TEST_F(PasswordControllerTest, PopulatePasswordFormWithDictionary) {
     // to enter the old password and new password.
     {
       "http://fakedomain.com/foo",
-      "{ \"action\": \"\","
+      "{ \"action\": \"http://fakedomain.com/foo\","
           "\"usernameElement\": \"account\","
           "\"usernameValue\": \"fakeaccount\","
           "\"name\": \"signup\","
@@ -357,7 +360,7 @@ TEST_F(PasswordControllerTest, PopulatePasswordFormWithDictionary) {
     // does not make sense.
     {
       "http://fakedomain.com",
-      "{ \"action\": \"\","
+      "{ \"action\": \"http://fakedomain.com/\","
           "\"usernameElement\": \"account\","
           "\"usernameValue\": \"fakeaccount\","
           "\"name\": \"signup\","
@@ -381,7 +384,7 @@ TEST_F(PasswordControllerTest, PopulatePasswordFormWithDictionary) {
     // password is the old one.
     {
       "http://fakedomain.com",
-      "{ \"action\": \"\","
+      "{ \"action\": \"http://fakedomain.com/\","
           "\"usernameElement\": \"account\","
           "\"usernameValue\": \"fakeaccount\","
           "\"name\": \"signup\","
@@ -405,7 +408,7 @@ TEST_F(PasswordControllerTest, PopulatePasswordFormWithDictionary) {
     // password is the new one.
     {
       "http://fakedomain.com",
-      "{ \"action\": \"\","
+      "{ \"action\": \"http://fakedomain.com/\","
           "\"usernameElement\": \"account\","
           "\"usernameValue\": \"fakeaccount\","
           "\"name\": \"signup\","
@@ -1287,6 +1290,7 @@ TEST_F(PasswordControllerTest, CheckIncorrectData) {
 // The test case below does not need the heavy fixture from above, but it
 // needs to use MockWebState.
 TEST(PasswordControllerTestSimple, SaveOnNonHTMLLandingPage) {
+  base::test::ScopedTaskEnvironment task_environment;
   TestChromeBrowserState::Builder builder;
   std::unique_ptr<TestChromeBrowserState> browser_state(builder.Build());
   MockWebState web_state;
@@ -1360,4 +1364,57 @@ TEST_F(PasswordControllerTest, HTTPSPassword) {
       web_state()->GetNavigationManager()->GetLastCommittedItem()->GetSSL();
   EXPECT_FALSE(ssl_status.content_status &
                web::SSLStatus::DISPLAYED_PASSWORD_FIELD_ON_HTTP);
+}
+
+// Checks that when the user set a focus on a field of a password form which was
+// not sent to the store then the request the the store is sent.
+TEST_F(PasswordControllerTest, SendingToStoreDynamicallyAddedFormsOnFocus) {
+  LoadHtml(kHtmlWithoutPasswordForm);
+
+  // Add a password form dynamically.
+  NSString* kAddFormDynamicallyScript =
+      @"var dynamicForm = document.createElement('form');"
+       "dynamicForm.setAttribute('name', 'dynamic_form');"
+       "var inputUsername = document.createElement('input');"
+       "inputUsername.setAttribute('type', 'text');"
+       "inputUsername.setAttribute('id', 'username');"
+       "var inputPassword = document.createElement('input');"
+       "inputPassword.setAttribute('type', 'password');"
+       "inputPassword.setAttribute('id', 'password');"
+       "var submitButton = document.createElement('input');"
+       "submitButton.setAttribute('type', 'submit');"
+       "submitButton.setAttribute('value', 'Submit');"
+       "dynamicForm.appendChild(inputUsername);"
+       "dynamicForm.appendChild(inputPassword);"
+       "dynamicForm.appendChild(submitButton);"
+       "document.body.appendChild(dynamicForm);";
+  ExecuteJavaScript(kAddFormDynamicallyScript);
+
+  // The standard pattern is to use a __block variable WaitUntilCondition but
+  // __block variable can't be captured in C++ lambda, so as workaround it's
+  // used normal variable |get_logins_called| and pointer on it is used in a
+  // block.
+  bool get_logins_called = false;
+  bool* p_get_logins_called = &get_logins_called;
+
+  password_manager::PasswordStore::FormDigest expected_form_digest(
+      autofill::PasswordForm::SCHEME_HTML, "https://chromium.test/",
+      GURL("https://chromium.test/"));
+  EXPECT_CALL(*store_, GetLogins(expected_form_digest, _))
+      .WillOnce(testing::Invoke(
+          [&get_logins_called](
+              const password_manager::PasswordStore::FormDigest&,
+              password_manager::PasswordStoreConsumer*) {
+            get_logins_called = true;
+          }));
+
+  // Sets a focus on a username field.
+  NSString* kSetUsernameInFocusScript =
+      @"document.getElementById('username').focus();";
+  ExecuteJavaScript(kSetUsernameInFocusScript);
+
+  // Wait until GetLogins is called.
+  base::test::ios::WaitUntilCondition(^bool() {
+    return *p_get_logins_called;
+  });
 }

@@ -8,8 +8,11 @@
 
 #include "ash/ash_switches.h"
 #include "ash/public/cpp/config.h"
+#include "ash/public/cpp/shelf_prefs.h"
 #include "ash/root_window_controller.h"
 #include "ash/screen_util.h"
+#include "ash/session/session_controller.h"
+#include "ash/session/test_session_controller_client.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/shell_port.h"
@@ -38,6 +41,17 @@
 #include "ui/views/widget/widget.h"
 
 namespace ash {
+
+// A helper function to set the shelf auto-hide preference. This has the same
+// effect as the user toggling the shelf context menu option.
+void SetShelfAutoHideBehaviorPref(int64_t display_id,
+                                  ShelfAutoHideBehavior behavior) {
+  PrefService* prefs =
+      Shell::Get()->session_controller()->GetLastActiveUserPrefService();
+  if (!prefs)
+    return;
+  SetShelfAutoHideBehaviorPref(prefs, display_id, behavior);
+}
 
 class TabletModeWindowManagerTest : public AshTestBase {
  public:
@@ -105,7 +119,7 @@ class TabletModeWindowManagerTest : public AshTestBase {
     return window;
   }
 
-  // Create the Maximized mode window manager.
+  // Create the tablet mode window manager.
   TabletModeWindowManager* CreateTabletModeWindowManager() {
     EXPECT_FALSE(tablet_mode_window_manager());
     Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
@@ -119,7 +133,7 @@ class TabletModeWindowManagerTest : public AshTestBase {
     EXPECT_FALSE(tablet_mode_window_manager());
   }
 
-  // Get the maximze window manager.
+  // Get the tablet window manager.
   TabletModeWindowManager* tablet_mode_window_manager() {
     return Shell::Get()
         ->tablet_mode_controller()
@@ -171,7 +185,7 @@ TEST_F(TabletModeWindowManagerTest, SimpleStart) {
   DestroyTabletModeWindowManager();
 }
 
-// Test that existing windows will handled properly when going into maximized
+// Test that existing windows will handled properly when going into tablet
 // mode.
 TEST_F(TabletModeWindowManagerTest, PreCreateWindows) {
   // Bounds for windows we know can be controlled.
@@ -544,7 +558,7 @@ std::string GetPlacementOverride(aura::Window* window) {
 }
 
 // Test that the restore state will be kept at its original value for
-// session restauration purposes.
+// session restoration purposes.
 TEST_F(TabletModeWindowManagerTest, TestRestoreIntegrety) {
   gfx::Rect bounds(10, 10, 200, 50);
   gfx::Size empty_size;
@@ -883,8 +897,9 @@ TEST_F(TabletModeWindowManagerTest, KeepFullScreenModeOn) {
 
   Shelf* shelf = GetPrimaryShelf();
 
-  // Allow the shelf to hide.
-  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
+  // Allow the shelf to hide and set the pref.
+  SetShelfAutoHideBehaviorPref(GetPrimaryDisplay().id(),
+                               SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
   EXPECT_EQ(SHELF_AUTO_HIDE, shelf->GetVisibilityState());
 
   wm::WMEvent event(wm::WM_EVENT_TOGGLE_FULLSCREEN);
@@ -901,16 +916,14 @@ TEST_F(TabletModeWindowManagerTest, KeepFullScreenModeOn) {
   EXPECT_FALSE(window_state->IsMaximized());
   EXPECT_EQ(SHELF_HIDDEN, shelf->GetVisibilityState());
 
-  // With leaving the fullscreen mode, the tablet mode should return and the
-  // shelf should maintain its state from before tablet mode.
+  // When exiting fullscreen, tablet mode should still be enabled, and the shelf
+  // should be forced to visible for tablet mode.
   window_state->OnWMEvent(&event);
   EXPECT_FALSE(window_state->IsFullscreen());
   EXPECT_TRUE(window_state->IsMaximized());
-  EXPECT_EQ(SHELF_AUTO_HIDE, shelf->GetVisibilityState());
+  EXPECT_EQ(SHELF_VISIBLE, shelf->GetVisibilityState());
 
-  // We left fullscreen mode while in tablet mode, so the window should
-  // remain maximized and the shelf should not change state upon exiting
-  // tablet mode.
+  // The shelf auto-hide preference should be restored when exiting tablet mode.
   DestroyTabletModeWindowManager();
   EXPECT_FALSE(window_state->IsFullscreen());
   EXPECT_TRUE(window_state->IsMaximized());
@@ -934,8 +947,7 @@ TEST_F(TabletModeWindowManagerTest, KeepPinnedModeOn_Case1) {
   }
   EXPECT_TRUE(window_state->IsPinned());
 
-  // Enter to Maximized mode.
-  // The pinned mode should continue to be on.
+  // Enter tablet mode. The pinned mode should continue to be on.
   CreateTabletModeWindowManager();
   EXPECT_TRUE(window_state->IsPinned());
 
@@ -943,22 +955,20 @@ TEST_F(TabletModeWindowManagerTest, KeepPinnedModeOn_Case1) {
   window_state->Restore();
   EXPECT_FALSE(window_state->IsPinned());
 
-  // Exit from Maximized mode.
-  // The window should not be back to the pinned mode.
+  // Exit tablet mode. The window should not be back to the pinned mode.
   DestroyTabletModeWindowManager();
   EXPECT_FALSE(window_state->IsPinned());
 }
 
 TEST_F(TabletModeWindowManagerTest, KeepPinnedModeOn_Case2) {
-  // Scenario: in the tablet mode, pin a window, exit from the maximized
-  // mode, then unpin.
+  // Scenario: in the tablet mode, pin a window, exit tablet mode, then unpin.
   gfx::Rect rect(20, 140, 100, 100);
   std::unique_ptr<aura::Window> w1(
       CreateWindow(aura::client::WINDOW_TYPE_NORMAL, rect));
   wm::WindowState* window_state = wm::GetWindowState(w1.get());
   EXPECT_FALSE(window_state->IsPinned());
 
-  // Enter to Maximized mode.
+  // Enter tablet mode.
   CreateTabletModeWindowManager();
   EXPECT_FALSE(window_state->IsPinned());
 
@@ -969,8 +979,7 @@ TEST_F(TabletModeWindowManagerTest, KeepPinnedModeOn_Case2) {
   }
   EXPECT_TRUE(window_state->IsPinned());
 
-  // Exit from Maximized mode.
-  // The pinned mode should continue to be on.
+  // Exit tablet mode. The pinned mode should continue to be on.
   DestroyTabletModeWindowManager();
   EXPECT_TRUE(window_state->IsPinned());
 
@@ -978,12 +987,12 @@ TEST_F(TabletModeWindowManagerTest, KeepPinnedModeOn_Case2) {
   window_state->Restore();
   EXPECT_FALSE(window_state->IsPinned());
 
-  // Enter again to Maximized mode for verification.
-  // The window should not be back to the pinned mode.
+  // Enter tablet mode again for verification. The window should not be back to
+  // the pinned mode.
   CreateTabletModeWindowManager();
   EXPECT_FALSE(window_state->IsPinned());
 
-  // Exit from Maximized mode.
+  // Exit tablet mode.
   DestroyTabletModeWindowManager();
   EXPECT_FALSE(window_state->IsPinned());
 }
@@ -1004,13 +1013,11 @@ TEST_F(TabletModeWindowManagerTest, KeepPinnedModeOn_Case3) {
   }
   EXPECT_TRUE(window_state->IsPinned());
 
-  // Enter to Maximized mode.
-  // The pinned mode should continue to be on.
+  // Enter tablet mode. The pinned mode should continue to be on.
   CreateTabletModeWindowManager();
   EXPECT_TRUE(window_state->IsPinned());
 
-  // Exit from Maximized mode.
-  // The pinned mode should continue to be on, too.
+  // Exit tablet mode. The pinned mode should continue to be on, too.
   DestroyTabletModeWindowManager();
   EXPECT_TRUE(window_state->IsPinned());
 
@@ -1018,25 +1025,25 @@ TEST_F(TabletModeWindowManagerTest, KeepPinnedModeOn_Case3) {
   window_state->Restore();
   EXPECT_FALSE(window_state->IsPinned());
 
-  // Enter again to Maximized mode for verification.
-  // The window should not be back to the pinned mode.
+  // Enter tablet mode again for verification. The window should not be back to
+  // the pinned mode.
   CreateTabletModeWindowManager();
   EXPECT_FALSE(window_state->IsPinned());
 
-  // Exit from Maximized mode.
+  // Exit tablet mode.
   DestroyTabletModeWindowManager();
 }
 
 TEST_F(TabletModeWindowManagerTest, KeepPinnedModeOn_Case4) {
-  // Scenario: in the tablet mode, pin a window, exit from the maximized
-  // mode, enter back to the tablet mode, then unpin.
+  // Scenario: in tablet mode, pin a window, exit tablet mode, enter tablet mode
+  // again, then unpin.
   gfx::Rect rect(20, 140, 100, 100);
   std::unique_ptr<aura::Window> w1(
       CreateWindow(aura::client::WINDOW_TYPE_NORMAL, rect));
   wm::WindowState* window_state = wm::GetWindowState(w1.get());
   EXPECT_FALSE(window_state->IsPinned());
 
-  // Enter to Maximized mode.
+  // Enter tablet mode.
   CreateTabletModeWindowManager();
   EXPECT_FALSE(window_state->IsPinned());
 
@@ -1047,13 +1054,11 @@ TEST_F(TabletModeWindowManagerTest, KeepPinnedModeOn_Case4) {
   }
   EXPECT_TRUE(window_state->IsPinned());
 
-  // Exit from Maximized mode.
-  // The pinned mode should continue to be on.
+  // Exit tablet mode. The pinned mode should continue to be on.
   DestroyTabletModeWindowManager();
   EXPECT_TRUE(window_state->IsPinned());
 
-  // Enter again to Maximized mode.
-  // The pinned mode should continue to be on, too.
+  // Enter tablet mode again. The pinned mode should continue to be on, too.
   CreateTabletModeWindowManager();
   EXPECT_TRUE(window_state->IsPinned());
 
@@ -1061,8 +1066,7 @@ TEST_F(TabletModeWindowManagerTest, KeepPinnedModeOn_Case4) {
   window_state->Restore();
   EXPECT_FALSE(window_state->IsPinned());
 
-  // Exit from Maximized mode.
-  // The window should not be back to the pinned mode.
+  // Exit tablet mode. The window should not be back to the pinned mode.
   DestroyTabletModeWindowManager();
   EXPECT_FALSE(window_state->IsPinned());
 }
@@ -1095,6 +1099,19 @@ TEST_F(TabletModeWindowManagerTest, MinimizePreservedAfterLeavingFullscreen) {
   EXPECT_TRUE(window_state->IsMinimized());
 }
 
+// Tests that the auto-hide behavior is set to never auto-hide on tablet mode
+// and gets reset based on pref after exiting tablet mode.
+TEST_F(TabletModeWindowManagerTest, DisableAutoHideBehaviorOnTabletMode) {
+  Shelf* shelf = GetPrimaryShelf();
+  SetShelfAutoHideBehaviorPref(GetPrimaryDisplay().id(),
+                               SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
+  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf->auto_hide_behavior());
+  CreateTabletModeWindowManager();
+  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_NEVER, shelf->auto_hide_behavior());
+  DestroyTabletModeWindowManager();
+  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf->auto_hide_behavior());
+}
+
 // Check that full screen mode can be turned on in tablet mode and remains
 // upon coming back.
 TEST_F(TabletModeWindowManagerTest, AllowFullScreenMode) {
@@ -1105,8 +1122,9 @@ TEST_F(TabletModeWindowManagerTest, AllowFullScreenMode) {
 
   Shelf* shelf = GetPrimaryShelf();
 
-  // Allow the shelf to hide.
-  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
+  // Allow the shelf to hide and set the pref.
+  SetShelfAutoHideBehaviorPref(GetPrimaryDisplay().id(),
+                               SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
 
   EXPECT_FALSE(window_state->IsFullscreen());
   EXPECT_FALSE(window_state->IsMaximized());
@@ -1114,11 +1132,10 @@ TEST_F(TabletModeWindowManagerTest, AllowFullScreenMode) {
 
   CreateTabletModeWindowManager();
 
-  // Fullscreen mode should still be off and the shelf should maintain its
-  // state.
+  // Fullscreen should stay off, but the shelf is made visible in tablet mode.
   EXPECT_FALSE(window_state->IsFullscreen());
   EXPECT_TRUE(window_state->IsMaximized());
-  EXPECT_EQ(SHELF_AUTO_HIDE, shelf->GetVisibilityState());
+  EXPECT_EQ(SHELF_VISIBLE, shelf->GetVisibilityState());
 
   // After going into fullscreen mode, the shelf should be hidden.
   wm::WMEvent event(wm::WM_EVENT_TOGGLE_FULLSCREEN);
@@ -1615,6 +1632,25 @@ TEST_F(TabletModeWindowManagerTest, DontMaximizeClientManagedWindows) {
   EXPECT_EQ(0, manager->GetNumberOfManagedWindows());
 }
 
+// Verify that if tablet mode is started in the lock screen, windows will still
+// be maximized after leaving the lock screen.
+TEST_F(TabletModeWindowManagerTest, CreateManagerInLockScreen) {
+  gfx::Rect rect(10, 10, 200, 50);
+  std::unique_ptr<aura::Window> window(
+      CreateWindow(aura::client::WINDOW_TYPE_NORMAL, rect));
+  ASSERT_FALSE(wm::GetWindowState(window.get())->IsMaximized());
+
+  // Create the tablet mode window manager while inside the lock screen.
+  GetSessionControllerClient()->RequestLockScreen();
+  CreateTabletModeWindowManager();
+  GetSessionControllerClient()->UnlockScreen();
+
+  EXPECT_TRUE(wm::GetWindowState(window.get())->IsMaximized());
+
+  DestroyTabletModeWindowManager();
+  EXPECT_FALSE(wm::GetWindowState(window.get())->IsMaximized());
+}
+
 namespace {
 
 class TestObserver : public wm::WindowStateObserver {
@@ -1663,7 +1699,7 @@ class TestObserver : public wm::WindowStateObserver {
 
 }  // namespace
 
-TEST_F(TabletModeWindowManagerTest, StateTyepChange) {
+TEST_F(TabletModeWindowManagerTest, StateTypeChange) {
   TestObserver observer;
   gfx::Rect rect(10, 10, 200, 50);
   std::unique_ptr<aura::Window> window(

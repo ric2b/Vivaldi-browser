@@ -8,6 +8,8 @@
 #include <algorithm>
 
 #include "base/logging.h"
+#include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/resource_request_info.h"
@@ -22,6 +24,7 @@
 #include "net/cookies/cookie_store.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
+#include "net/url_request/http_user_agent_settings.h"
 #include "net/url_request/url_request_context.h"
 
 namespace headless {
@@ -55,19 +58,35 @@ void GenericURLRequestJob::SetExtraRequestHeaders(
     const net::HttpRequestHeaders& headers) {
   DCHECK(origin_task_runner_->RunsTasksInCurrentSequence());
   extra_request_headers_ = headers;
+
+  if (!request_->referrer().empty()) {
+    extra_request_headers_.SetHeader(net::HttpRequestHeaders::kReferer,
+                                     request_->referrer());
+  }
+
+  const net::HttpUserAgentSettings* user_agent_settings =
+      request()->context()->http_user_agent_settings();
+  if (user_agent_settings) {
+    // If set the |user_agent_settings| accept language is a fallback.
+    extra_request_headers_.SetHeaderIfMissing(
+        net::HttpRequestHeaders::kAcceptLanguage,
+        user_agent_settings->GetAcceptLanguage());
+    // If set the |user_agent_settings| user agent is an override.
+    if (!user_agent_settings->GetUserAgent().empty()) {
+      extra_request_headers_.SetHeader(net::HttpRequestHeaders::kUserAgent,
+                                       user_agent_settings->GetUserAgent());
+    }
+  }
 }
 
 void GenericURLRequestJob::Start() {
   PrepareCookies(request_->url(), request_->method(),
-                 url::Origin(request_->first_party_for_cookies()),
-                 base::Bind(&Delegate::OnPendingRequest,
-                            base::Unretained(delegate_), this));
+                 url::Origin(request_->site_for_cookies()));
 }
 
 void GenericURLRequestJob::PrepareCookies(const GURL& rewritten_url,
                                           const std::string& method,
-                                          const url::Origin& site_for_cookies,
-                                          const base::Closure& done_callback) {
+                                          const url::Origin& site_for_cookies) {
   DCHECK(origin_task_runner_->RunsTasksInCurrentSequence());
   net::CookieStore* cookie_store = request_->context()->cookie_store();
   net::CookieOptions options;
@@ -92,14 +111,12 @@ void GenericURLRequestJob::PrepareCookies(const GURL& rewritten_url,
   cookie_store->GetCookieListWithOptionsAsync(
       rewritten_url, options,
       base::Bind(&GenericURLRequestJob::OnCookiesAvailable,
-                 weak_factory_.GetWeakPtr(), rewritten_url, method,
-                 done_callback));
+                 weak_factory_.GetWeakPtr(), rewritten_url, method));
 }
 
 void GenericURLRequestJob::OnCookiesAvailable(
     const GURL& rewritten_url,
     const std::string& method,
-    const base::Closure& done_callback,
     const net::CookieList& cookie_list) {
   DCHECK(origin_task_runner_->RunsTasksInCurrentSequence());
   // TODO(alexclarke): Set user agent.
@@ -108,12 +125,7 @@ void GenericURLRequestJob::OnCookiesAvailable(
   if (!cookie.empty())
     extra_request_headers_.SetHeader(net::HttpRequestHeaders::kCookie, cookie);
 
-  if (!request_->referrer().empty()) {
-    extra_request_headers_.SetHeader(net::HttpRequestHeaders::kReferer,
-                                     request_->referrer());
-  }
-
-  done_callback.Run();
+  url_fetcher_->StartFetch(this, this);
 }
 
 void GenericURLRequestJob::OnFetchStartError(net::Error error) {
@@ -126,12 +138,13 @@ void GenericURLRequestJob::OnFetchComplete(
     const GURL& final_url,
     scoped_refptr<net::HttpResponseHeaders> response_headers,
     const char* body,
-    size_t body_size) {
+    size_t body_size,
+    const net::LoadTimingInfo& load_timing_info) {
   DCHECK(origin_task_runner_->RunsTasksInCurrentSequence());
-  response_time_ = base::TimeTicks::Now();
   response_headers_ = response_headers;
   body_ = body;
   body_size_ = body_size;
+  load_timing_info_ = load_timing_info;
 
   DispatchHeadersComplete();
 
@@ -155,6 +168,10 @@ int GenericURLRequestJob::ReadRawData(net::IOBuffer* buf, int buf_size) {
 
 void GenericURLRequestJob::GetResponseInfo(net::HttpResponseInfo* info) {
   info->headers = response_headers_;
+
+  // Important we need to set this so we can detect if a navigation request got
+  // canceled by DevTools.
+  info->network_accessed = true;
 }
 
 bool GenericURLRequestJob::GetMimeType(std::string* mime_type) const {
@@ -171,8 +188,7 @@ bool GenericURLRequestJob::GetCharset(std::string* charset) {
 
 void GenericURLRequestJob::GetLoadTimingInfo(
     net::LoadTimingInfo* load_timing_info) const {
-  // TODO(alexclarke): Investigate setting the other members too where possible.
-  load_timing_info->receive_headers_end = response_time_;
+  *load_timing_info = load_timing_info_;
 }
 
 uint64_t GenericURLRequestJob::GenericURLRequestJob::GetRequestId() const {
@@ -181,6 +197,11 @@ uint64_t GenericURLRequestJob::GenericURLRequestJob::GetRequestId() const {
 
 const net::URLRequest* GenericURLRequestJob::GetURLRequest() const {
   return request_;
+}
+
+const net::HttpRequestHeaders& GenericURLRequestJob::GetHttpRequestHeaders()
+    const {
+  return extra_request_headers_;
 }
 
 int GenericURLRequestJob::GetFrameTreeNodeId() const {
@@ -265,6 +286,13 @@ bool GenericURLRequestJob::IsAsync() const {
   return true;
 }
 
+namespace {
+void CompletionCallback(int* dest, base::Closure* quit_closure, int value) {
+  *dest = value;
+  quit_closure->Run();
+}
+}  // namespace
+
 std::string GenericURLRequestJob::GetPostData() const {
   if (!request_->has_upload())
     return "";
@@ -277,76 +305,80 @@ std::string GenericURLRequestJob::GetPostData() const {
     return "";
 
   DCHECK_EQ(1u, stream->GetElementReaders()->size());
-  const net::UploadBytesElementReader* reader =
-      (*stream->GetElementReaders())[0]->AsBytesReader();
-  if (!reader)
-    return "";
-  return std::string(reader->bytes(), reader->length());
-}
+  const std::unique_ptr<net::UploadElementReader>& reader =
+      (*stream->GetElementReaders())[0];
+  // If |reader| is actually an UploadBytesElementReader we can get the data
+  // directly (should be faster than the horrible stuff below).
+  const net::UploadBytesElementReader* bytes_reader = reader->AsBytesReader();
+  if (bytes_reader)
+    return std::string(bytes_reader->bytes(), bytes_reader->length());
 
-const Request* GenericURLRequestJob::GetRequest() const {
-  return this;
-}
+  // TODO(alexclarke): Consider changing the interface of
+  // GenericURLRequestJob::GetPostData to use a callback which would let us
+  // avoid the nested run loops below.
 
-void GenericURLRequestJob::AllowRequest() {
-  if (!origin_task_runner_->RunsTasksInCurrentSequence()) {
-    origin_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&GenericURLRequestJob::AllowRequest,
-                              weak_factory_.GetWeakPtr()));
-    return;
+  // Initialize the reader.
+  {
+    base::Closure quit_closure;
+    int init_result = reader->Init(
+        base::Bind(&CompletionCallback, &init_result, &quit_closure));
+    if (init_result == net::ERR_IO_PENDING) {
+      base::RunLoop nested_run_loop;
+      base::MessageLoop::ScopedNestableTaskAllower allow_nested(
+          base::MessageLoop::current());
+      quit_closure = nested_run_loop.QuitClosure();
+      nested_run_loop.Run();
+    }
+
+    if (init_result != net::OK)
+      return "";
   }
 
-  url_fetcher_->StartFetch(request_->url(), request_->method(), GetPostData(),
-                           extra_request_headers_, this);
-}
+  // Read the POST bytes.
+  uint64_t content_length = reader->GetContentLength();
+  std::string post_data;
+  post_data.reserve(content_length);
+  const size_t block_size = 1024;
+  scoped_refptr<net::IOBuffer> read_buffer(new net::IOBuffer(block_size));
+  while (post_data.size() < content_length) {
+    base::Closure quit_closure;
+    int bytes_read = reader->Read(
+        read_buffer.get(), block_size,
+        base::Bind(&CompletionCallback, &bytes_read, &quit_closure));
 
-void GenericURLRequestJob::BlockRequest(net::Error error) {
-  if (!origin_task_runner_->RunsTasksInCurrentSequence()) {
-    origin_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&GenericURLRequestJob::BlockRequest,
-                              weak_factory_.GetWeakPtr(), error));
-    return;
+    if (bytes_read == net::ERR_IO_PENDING) {
+      base::MessageLoop::ScopedNestableTaskAllower allow_nested(
+          base::MessageLoop::current());
+      base::RunLoop nested_run_loop;
+      quit_closure = nested_run_loop.QuitClosure();
+      nested_run_loop.Run();
+    }
+
+    // Bail out if an error occured.
+    if (bytes_read < 0)
+      return "";
+
+    post_data.append(read_buffer->data(), bytes_read);
   }
 
-  DispatchStartError(error);
+  return post_data;
 }
 
-void GenericURLRequestJob::ModifyRequest(
-    const GURL& url,
-    const std::string& method,
-    const std::string& post_data,
-    const net::HttpRequestHeaders& request_headers) {
-  if (!origin_task_runner_->RunsTasksInCurrentSequence()) {
-    origin_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&GenericURLRequestJob::ModifyRequest,
-                              weak_factory_.GetWeakPtr(), url, method,
-                              post_data, request_headers));
-    return;
-  }
+uint64_t GenericURLRequestJob::GetPostDataSize() const {
+  if (!request_->has_upload())
+    return 0;
 
-  extra_request_headers_ = request_headers;
-  PrepareCookies(
-      request_->url(), request_->method(),
-      url::Origin(request_->first_party_for_cookies()),
-      base::Bind(&URLFetcher::StartFetch, base::Unretained(url_fetcher_.get()),
-                 url, method, post_data, request_headers, this));
-}
+  const net::UploadDataStream* stream = request_->get_upload();
+  if (!stream->GetElementReaders())
+    return 0;
 
-void GenericURLRequestJob::MockResponse(
-    std::unique_ptr<MockResponseData> mock_response) {
-  if (!origin_task_runner_->RunsTasksInCurrentSequence()) {
-    origin_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&GenericURLRequestJob::MockResponse,
-                              weak_factory_.GetWeakPtr(),
-                              base::Passed(std::move(mock_response))));
-    return;
-  }
+  if (stream->GetElementReaders()->size() == 0)
+    return 0;
 
-  mock_response_ = std::move(mock_response);
-
-  OnFetchCompleteExtractHeaders(request_->url(),
-                                mock_response_->response_data.data(),
-                                mock_response_->response_data.size());
+  DCHECK_EQ(1u, stream->GetElementReaders()->size());
+  const std::unique_ptr<net::UploadElementReader>& reader =
+      (*stream->GetElementReaders())[0];
+  return reader->GetContentLength();
 }
 
 }  // namespace headless

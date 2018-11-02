@@ -91,6 +91,9 @@ class PaymentMethodListItem : public PaymentRequestItemList::Item {
             static_cast<AutofillPaymentInstrument*>(instrument_)
                 ->credit_card());
         return;
+      case PaymentInstrument::Type::NATIVE_MOBILE_APP:
+        // We cannot edit a native mobile app instrument.
+        return;
     }
     NOTREACHED();
   }
@@ -183,7 +186,8 @@ PaymentMethodViewController::PaymentMethodViewController(
     PaymentRequestSpec* spec,
     PaymentRequestState* state,
     PaymentRequestDialogView* dialog)
-    : PaymentRequestSheetController(spec, state, dialog) {
+    : PaymentRequestSheetController(spec, state, dialog),
+      payment_method_list_(dialog) {
   const std::vector<std::unique_ptr<PaymentInstrument>>& available_instruments =
       state->available_instruments();
   for (const auto& instrument : available_instruments) {
@@ -229,7 +233,7 @@ PaymentMethodViewController::CreateExtraFooterView() {
                            kPaymentRequestButtonSpacing));
 
   views::LabelButton* button = views::MdTextButton::CreateSecondaryUiButton(
-      this, l10n_util::GetStringUTF16(IDS_AUTOFILL_ADD_CREDITCARD_CAPTION));
+      this, l10n_util::GetStringUTF16(IDS_PAYMENTS_ADD_CARD));
   button->set_tag(static_cast<int>(
       PaymentMethodViewControllerTags::ADD_CREDIT_CARD_BUTTON));
   button->set_id(

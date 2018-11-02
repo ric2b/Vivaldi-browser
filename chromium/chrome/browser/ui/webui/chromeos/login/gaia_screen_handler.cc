@@ -4,7 +4,6 @@
 
 #include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
 
-#include "ash/system/devicetype_utils.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/feature_list.h"
@@ -28,6 +27,7 @@
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/io_thread.h"
+#include "chrome/browser/ui/webui/chromeos/login/active_directory_password_change_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/enrollment_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
 #include "chrome/browser/ui/webui/signin/signin_utils.h"
@@ -53,6 +53,8 @@
 #include "google_apis/gaia/gaia_urls.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 #include "ui/base/ime/chromeos/input_method_util.h"
+#include "ui/base/l10n/l10n_util.h"
+#include "ui/chromeos/devicetype_utils.h"
 
 using content::BrowserThread;
 namespace em = enterprise_management;
@@ -236,10 +238,14 @@ GaiaScreenHandler::GaiaContext::GaiaContext() {}
 
 GaiaScreenHandler::GaiaScreenHandler(
     CoreOobeView* core_oobe_view,
-    const scoped_refptr<NetworkStateInformer>& network_state_informer)
+    const scoped_refptr<NetworkStateInformer>& network_state_informer,
+    ActiveDirectoryPasswordChangeScreenHandler*
+        active_directory_password_change_screen_handler)
     : BaseScreenHandler(kScreenId),
       network_state_informer_(network_state_informer),
       core_oobe_view_(core_oobe_view),
+      active_directory_password_change_screen_handler_(
+          active_directory_password_change_screen_handler),
       weak_factory_(this) {
   DCHECK(network_state_informer_.get());
   set_call_js_prefix(kJsScreenPath);
@@ -436,7 +442,7 @@ void GaiaScreenHandler::DeclareLocalizedValues(
                IDS_LOGIN_FATAL_ERROR_TRY_AGAIN_BUTTON);
 
   builder->AddF("loginWelcomeMessage", IDS_LOGIN_WELCOME_MESSAGE,
-                ash::GetChromeOSDeviceTypeResourceId());
+                ui::GetChromeOSDeviceTypeResourceId());
   builder->Add("offlineLoginEmail", IDS_OFFLINE_LOGIN_EMAIL);
   builder->Add("offlineLoginPassword", IDS_OFFLINE_LOGIN_PASSWORD);
   builder->Add("offlineLoginInvalidEmail", IDS_OFFLINE_LOGIN_INVALID_EMAIL);
@@ -459,6 +465,19 @@ void GaiaScreenHandler::DeclareLocalizedValues(
   builder->Add("adAuthWelcomeMessage", IDS_AD_DOMAIN_AUTH_WELCOME_MESSAGE);
   builder->Add("adAuthLoginUsername", IDS_AD_AUTH_LOGIN_USER);
   builder->Add("adLoginPassword", IDS_AD_LOGIN_PASSWORD);
+
+  builder->Add("adPassChangeOldPasswordHint",
+               IDS_AD_PASSWORD_CHANGE_OLD_PASSWORD_HINT);
+  builder->Add("adPassChangeNewPasswordHint",
+               IDS_AD_PASSWORD_CHANGE_NEW_PASSWORD_HINT);
+  builder->Add("adPassChangeRepeatNewPasswordHint",
+               IDS_AD_PASSWORD_CHANGE_REPEAT_NEW_PASSWORD_HINT);
+  builder->Add("adPassChangeOldPasswordError",
+               IDS_AD_PASSWORD_CHANGE_INVALID_PASSWORD_ERROR);
+  builder->Add("adPassChangeNewPasswordRejected",
+               IDS_AD_PASSWORD_CHANGE_NEW_PASSWORD_REJECTED_SHORT_ERROR);
+  builder->Add("adPassChangePasswordsMismatch",
+               IDS_AD_PASSWORD_CHANGE_PASSWORDS_MISMATCH_ERROR);
 }
 
 void GaiaScreenHandler::Initialize() {
@@ -487,8 +506,6 @@ void GaiaScreenHandler::RegisterMessages() {
               &GaiaScreenHandler::HandleAuthExtensionLoaded);
   AddCallback("completeAdAuthentication",
               &GaiaScreenHandler::HandleCompleteAdAuthentication);
-  AddCallback("completeAdPasswordChange",
-              &GaiaScreenHandler::HandleCompleteAdPasswordChange);
   AddCallback("cancelAdAuthentication",
               &GaiaScreenHandler::HandleCancelActiveDirectoryAuth);
 }
@@ -579,6 +596,9 @@ void GaiaScreenHandler::DoAdAuth(
     const Key& key,
     authpolicy::ErrorType error,
     const authpolicy::ActiveDirectoryAccountInfo& account_info) {
+  if (error != authpolicy::ERROR_NONE)
+    authpolicy_login_helper_->CancelRequestsAndRestart();
+
   switch (error) {
     case authpolicy::ERROR_NONE: {
       DCHECK(account_info.has_account_id() &&
@@ -597,35 +617,25 @@ void GaiaScreenHandler::DoAdAuth(
       break;
     }
     case authpolicy::ERROR_PASSWORD_EXPIRED:
-      core_oobe_view_->ShowActiveDirectoryPasswordChangeScreen(username);
+      DCHECK(active_directory_password_change_screen_handler_);
+      active_directory_password_change_screen_handler_->ShowScreen(username,
+                                                                   Delegate());
       break;
     case authpolicy::ERROR_PARSE_UPN_FAILED:
     case authpolicy::ERROR_BAD_USER_NAME:
       CallJS("invalidateAd", username,
              static_cast<int>(ActiveDirectoryErrorState::BAD_USERNAME));
-      return;
+      break;
     case authpolicy::ERROR_BAD_PASSWORD:
       CallJS("invalidateAd", username,
              static_cast<int>(ActiveDirectoryErrorState::BAD_PASSWORD));
-    case authpolicy::ERROR_UNKNOWN:
-    case authpolicy::ERROR_DBUS_FAILURE:
-    case authpolicy::ERROR_CANNOT_RESOLVE_KDC:
-    case authpolicy::ERROR_KINIT_FAILED:
-    case authpolicy::ERROR_NET_FAILED:
-    case authpolicy::ERROR_SMBCLIENT_FAILED:
-    case authpolicy::ERROR_PARSE_FAILED:
-    case authpolicy::ERROR_PARSE_PREG_FAILED:
-    case authpolicy::ERROR_BAD_GPOS:
-    case authpolicy::ERROR_LOCAL_IO:
-    case authpolicy::ERROR_NOT_JOINED:
-    case authpolicy::ERROR_NOT_LOGGED_IN:
-    case authpolicy::ERROR_STORE_POLICY_FAILED:
-      LoadAuthExtension(true, false /* offline */);
       break;
     default:
-      // TODO(rsorokin): Proper error handling.
       DLOG(WARNING) << "Unhandled error code: " << error;
       LoadAuthExtension(true, false /* offline */);
+      core_oobe_view_->ShowSignInError(
+          0, l10n_util::GetStringUTF8(IDS_AD_AUTH_UNKNOWN_ERROR), std::string(),
+          HelpAppLauncher::HELP_CANT_ACCESS_ACCOUNT);
   }
 }
 
@@ -639,21 +649,6 @@ void GaiaScreenHandler::HandleCompleteAdAuthentication(
       username, std::string() /* object_guid */, password,
       base::BindOnce(&GaiaScreenHandler::DoAdAuth, weak_factory_.GetWeakPtr(),
                      username, Key(password)));
-}
-
-void GaiaScreenHandler::HandleCompleteAdPasswordChange(
-    const std::string& username,
-    const std::string& old_password,
-    const std::string& new_password) {
-  Delegate()->SetDisplayEmail(username);
-  set_populated_email(username);
-
-  DCHECK(authpolicy_login_helper_);
-  authpolicy_login_helper_->AuthenticateUser(
-      username, std::string() /* object_guid */,
-      old_password + "\n" + new_password + "\n" + new_password,
-      base::BindOnce(&GaiaScreenHandler::DoAdAuth, weak_factory_.GetWeakPtr(),
-                     username, Key(new_password)));
 }
 
 void GaiaScreenHandler::HandleCancelActiveDirectoryAuth() {

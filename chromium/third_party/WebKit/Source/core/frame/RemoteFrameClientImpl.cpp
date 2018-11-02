@@ -9,10 +9,10 @@
 #include "core/events/MouseEvent.h"
 #include "core/events/WebInputEventConversion.h"
 #include "core/events/WheelEvent.h"
+#include "core/exported/WebRemoteFrameImpl.h"
 #include "core/frame/RemoteFrame.h"
 #include "core/frame/RemoteFrameView.h"
-#include "core/frame/WebLocalFrameBase.h"
-#include "core/frame/WebRemoteFrameBase.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "core/layout/api/LayoutEmbeddedContentItem.h"
 #include "core/layout/api/LayoutItem.h"
 #include "platform/exported/WrappedResourceRequest.h"
@@ -38,11 +38,11 @@ Frame* ToCoreFrame(WebFrame* frame) {
 
 }  // namespace
 
-RemoteFrameClientImpl::RemoteFrameClientImpl(WebRemoteFrameBase* web_frame)
+RemoteFrameClientImpl::RemoteFrameClientImpl(WebRemoteFrameImpl* web_frame)
     : web_frame_(web_frame) {}
 
 RemoteFrameClientImpl* RemoteFrameClientImpl::Create(
-    WebRemoteFrameBase* web_frame) {
+    WebRemoteFrameImpl* web_frame) {
   return new RemoteFrameClientImpl(web_frame);
 }
 
@@ -118,9 +118,8 @@ void RemoteFrameClientImpl::Reload(
     ClientRedirectPolicy client_redirect_policy) {
   DCHECK(IsReloadLoadType(load_type));
   if (web_frame_->Client()) {
-    web_frame_->Client()->Reload(
-        static_cast<WebFrameLoadType>(load_type),
-        static_cast<WebClientRedirectPolicy>(client_redirect_policy));
+    web_frame_->Client()->Reload(static_cast<WebFrameLoadType>(load_type),
+                                 client_redirect_policy);
   }
 }
 
@@ -132,13 +131,12 @@ unsigned RemoteFrameClientImpl::BackForwardLength() {
   return 2;
 }
 
-void RemoteFrameClientImpl::ForwardPostMessage(
-    MessageEvent* event,
-    PassRefPtr<SecurityOrigin> target,
-    LocalFrame* source_frame) const {
+void RemoteFrameClientImpl::ForwardPostMessage(MessageEvent* event,
+                                               RefPtr<SecurityOrigin> target,
+                                               LocalFrame* source_frame) const {
   if (web_frame_->Client()) {
     web_frame_->Client()->ForwardPostMessage(
-        WebLocalFrameBase::FromFrame(source_frame), web_frame_,
+        WebLocalFrameImpl::FromFrame(source_frame), web_frame_,
         WebSecurityOrigin(std::move(target)), WebDOMMessageEvent(event));
   }
 }
@@ -155,7 +153,7 @@ void RemoteFrameClientImpl::UpdateRemoteViewportIntersection(
 void RemoteFrameClientImpl::AdvanceFocus(WebFocusType type,
                                          LocalFrame* source) {
   web_frame_->Client()->AdvanceFocus(type,
-                                     WebLocalFrameBase::FromFrame(source));
+                                     WebLocalFrameImpl::FromFrame(source));
 }
 
 void RemoteFrameClientImpl::VisibilityChanged(bool visible) {

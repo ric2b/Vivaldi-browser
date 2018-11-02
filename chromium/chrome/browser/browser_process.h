@@ -15,6 +15,7 @@
 #include <memory>
 #include <string>
 
+#include "base/callback_forward.h"
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process_platform_part.h"
@@ -36,6 +37,7 @@ class NotificationUIManager;
 class PrefService;
 class ProfileManager;
 class StatusTray;
+class SystemNetworkContextManager;
 class WatchDogThread;
 #if BUILDFLAG(ENABLE_WEBRTC)
 class WebRtcLogUploader;
@@ -138,9 +140,13 @@ class BrowserProcess {
 
   // Invoked when the user is logging out/shutting down. When logging off we may
   // not have enough time to do a normal shutdown. This method is invoked prior
-  // to normal shutdown and saves any state that must be saved before we are
-  // continue shutdown.
+  // to normal shutdown and saves any state that must be saved before system
+  // shutdown.
   virtual void EndSession() = 0;
+
+  // Ensures |local_state()| was flushed to disk and then posts |reply| back on
+  // the current sequence.
+  virtual void FlushLocalStateAndReply(base::OnceClosure reply) = 0;
 
   // Gets the manager for the various metrics-related services, constructing it
   // if necessary.
@@ -179,6 +185,12 @@ class BrowserProcess {
   // NOTE: If you want to post a task to the IO thread, use
   // BrowserThread::PostTask (or other variants).
   virtual IOThread* io_thread() = 0;
+
+  // Replacement for IOThread (And ChromeNetLog). It owns and manages the
+  // NetworkContext which will use the network service when the network service
+  // is enabled. When the network service is not enabled, its NetworkContext is
+  // backed by the IOThread's URLRequestContext.
+  virtual SystemNetworkContextManager* system_network_context_manager() = 0;
 
   // Returns the thread that is used for health check of all browser threads.
   virtual WatchDogThread* watchdog_thread() = 0;
@@ -270,8 +282,6 @@ class BrowserProcess {
   supervised_user_whitelist_installer() = 0;
 
   virtual MediaFileSystemRegistry* media_file_system_registry() = 0;
-
-  virtual bool created_local_state() const = 0;
 
 #if BUILDFLAG(ENABLE_WEBRTC)
   virtual WebRtcLogUploader* webrtc_log_uploader() = 0;

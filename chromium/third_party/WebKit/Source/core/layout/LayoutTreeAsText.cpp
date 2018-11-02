@@ -44,7 +44,6 @@
 #include "core/layout/LayoutTableCell.h"
 #include "core/layout/LayoutView.h"
 #include "core/layout/api/LayoutViewItem.h"
-#include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/layout/line/InlineTextBox.h"
 #include "core/layout/svg/LayoutSVGGradientStop.h"
 #include "core/layout/svg/LayoutSVGImage.h"
@@ -56,6 +55,7 @@
 #include "core/layout/svg/SVGLayoutTreeAsText.h"
 #include "core/page/PrintContext.h"
 #include "core/paint/PaintLayer.h"
+#include "core/paint/compositing/CompositedLayerMapping.h"
 #include "platform/LayoutUnit.h"
 #include "platform/wtf/HexNumber.h"
 #include "platform/wtf/Vector.h"
@@ -776,8 +776,8 @@ static void WriteSelection(TextStream& ts, const LayoutObject* o) {
   if (!frame)
     return;
 
-  VisibleSelection selection =
-      frame->Selection().ComputeVisibleSelectionInDOMTreeDeprecated();
+  const VisibleSelection& selection =
+      frame->Selection().ComputeVisibleSelectionInDOMTree();
   if (selection.IsCaret()) {
     ts << "caret: position " << selection.Start().ComputeEditingOffset()
        << " of " << NodePosition(selection.Start().AnchorNode());

@@ -295,6 +295,9 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   // accessed via data(), visible_data() etc.
   bool HasTextures() const;
 
+  // Returns the number of native textures.
+  size_t NumTextures() const;
+
   // Returns the color space of this frame's content.
   gfx::ColorSpace ColorSpace() const;
   void set_color_space(const gfx::ColorSpace& color_space);
@@ -390,11 +393,11 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
     timestamp_ = timestamp;
   }
 
-  // It uses |client| to insert a new sync point and potentially waits on a
-  // older sync point. The final sync point will be used to release this
-  // VideoFrame.
+  // It uses |client| to insert a new sync token and potentially waits on an
+  // older sync token. The final sync point will be used to release this
+  // VideoFrame. Also returns the new sync token.
   // This method is thread safe. Both blink and compositor threads can call it.
-  void UpdateReleaseSyncToken(SyncTokenClient* client);
+  gpu::SyncToken UpdateReleaseSyncToken(SyncTokenClient* client);
 
   // Returns a human-readable string describing |*this|.
   std::string AsHumanReadableString();

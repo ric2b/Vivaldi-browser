@@ -310,28 +310,41 @@ bool FormCache::ShowPredictions(const FormDataPredictions& form) {
       continue;
     }
 
-    static const size_t kMaxLabelSize = 100;
+    constexpr size_t kMaxLabelSize = 100;
     const base::string16 truncated_label = field_data.label.substr(
         0, std::min(field_data.label.length(), kMaxLabelSize));
 
     const FormFieldDataPredictions& field = form.fields[i];
-    std::vector<base::string16> replacements;
 
-    base::string16 overall_type = base::UTF8ToUTF16(field.overall_type);
+    // A rough estimate of the maximum title size is:
+    //    7 field titles at <17 chars each
+    //    + 6 values at <40 chars each
+    //    + 1 truncated label at <kMaxLabelSize;
+    //    = 459 chars, rounded up to the next multiple of 64 = 512
+    // A particularly large parseable name could blow through this and cause
+    // another allocation, but that's OK.
+    constexpr size_t kMaxTitleSize = 512;
+    std::string title;
+    title.reserve(kMaxTitleSize);
+    title += "overall type: ";
+    title += field.overall_type;
+    title += "\nserver type: ";
+    title += field.server_type;
+    title += "\nheuristic type: ";
+    title += field.heuristic_type;
+    title += "\nlabel: ";
+    title += base::UTF16ToUTF8(truncated_label);
+    title += "\nparseable name: ";
+    title += field.parseable_name;
+    title += "\nfield signature: ";
+    title += field.signature;
+    title += "\nform signature: ";
+    title += form.signature;
 
-    replacements.push_back(overall_type);
-    replacements.push_back(base::UTF8ToUTF16(field.server_type));
-    replacements.push_back(base::UTF8ToUTF16(field.heuristic_type));
-    replacements.push_back(truncated_label);
-    replacements.push_back(base::UTF8ToUTF16(field.parseable_name));
-    replacements.push_back(base::UTF8ToUTF16(field.signature));
-    replacements.push_back(base::UTF8ToUTF16(form.signature));
-    const base::string16 title = l10n_util::GetStringFUTF16(
-        IDS_AUTOFILL_SHOW_PREDICTIONS_TITLE, replacements, nullptr);
-    element.SetAttribute("title", WebString::FromUTF16(title));
+    element.SetAttribute("title", WebString::FromUTF8(title));
 
     element.SetAttribute("autofill-prediction",
-                         WebString::FromUTF16(overall_type));
+                         WebString::FromUTF8(field.overall_type));
   }
 
   return true;

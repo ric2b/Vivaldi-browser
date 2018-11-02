@@ -9,6 +9,7 @@
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "components/content_settings/core/common/content_settings.h"
+#include "extensions/features/features.h"
 
 namespace content {
 class WebContents;
@@ -41,7 +42,9 @@ class NotificationPermissionContextExtensions {
                                int bridge_id);
 
  private:
-  Profile* profile_;
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+   Profile* profile_;
+#endif
 
   DISALLOW_COPY_AND_ASSIGN(NotificationPermissionContextExtensions);
 };

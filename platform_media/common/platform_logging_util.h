@@ -7,6 +7,8 @@
 #ifndef PLATFORM_MEDIA_COMMON_UTIL_H_
 #define PLATFORM_MEDIA_COMMON_UTIL_H_
 
+#include "platform_media/common/platform_media_pipeline_types.h"
+
 #include "media/base/media_export.h"
 
 #include <string>
@@ -25,6 +27,8 @@ MEDIA_EXPORT std::string Loggable(const VideoDecoderConfig & config);
 MEDIA_EXPORT std::string Loggable(const AudioDecoderConfig & config);
 
 MEDIA_EXPORT std::string Loggable(const PlatformAudioConfig & config);
+
+MEDIA_EXPORT std::string LoggableMediaType(PlatformMediaDataType type);
 
 }
 

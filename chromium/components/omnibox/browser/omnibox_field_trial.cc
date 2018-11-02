@@ -126,6 +126,11 @@ const base::Feature kUIExperimentHideSuggestionUrlTrivialSubdomains{
     "OmniboxUIExperimentHideSuggestionUrlTrivialSubdomains",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Feature used for showing the URL suggestion favicons as a UI experiment.
+const base::Feature kUIExperimentShowSuggestionFavicons{
+    "OmniboxUIExperimentShowSuggestionFavicons",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Feature used for the omnibox narrow suggestions dropdown UI experiment.
 const base::Feature kUIExperimentNarrowDropdown{
     "OmniboxUIExperimentNarrowDropdown", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -317,6 +322,14 @@ bool OmniboxFieldTrial::InZeroSuggestPersonalizedFieldTrial() {
       kZeroSuggestVariantRule) == "Personalized";
 }
 
+// static
+int OmniboxFieldTrial::GetZeroSuggestRedirectToChromeExperimentId() {
+  return base::GetFieldTrialParamByFeatureAsInt(
+      omnibox::kZeroSuggestRedirectToChrome,
+      OmniboxFieldTrial::kZeroSuggestRedirectToChromeExperimentIdParam,
+      /*default_value=*/-1);
+}
+
 bool OmniboxFieldTrial::ShortcutsScoringMaxRelevance(
     OmniboxEventProto::PageClassification current_page_classification,
     int* max_relevance) {
@@ -420,19 +433,10 @@ void OmniboxFieldTrial::GetDefaultHUPScoringParams(
 
 void OmniboxFieldTrial::GetExperimentalHUPScoringParams(
     HUPScoringParams* scoring_params) {
-  scoring_params->experimental_scoring_enabled = false;
-
   VariationParams params;
   if (!variations::GetVariationParams(kBundledExperimentFieldTrialName,
                                       &params))
     return;
-
-  VariationParams::const_iterator it = params.find(kHUPNewScoringEnabledParam);
-  if (it != params.end()) {
-    int enabled = 0;
-    if (base::StringToInt(it->second, &enabled))
-      scoring_params->experimental_scoring_enabled = (enabled != 0);
-  }
 
   InitializeScoreBuckets(params, kHUPNewScoringTypedCountRelevanceCapParam,
       kHUPNewScoringTypedCountHalfLifeTimeParam,
@@ -508,7 +512,7 @@ float OmniboxFieldTrial::HQPExperimentalTopicalityThreshold() {
   double topicality_threshold;
   if (topicality_threshold_str.empty() ||
       !base::StringToDouble(topicality_threshold_str, &topicality_threshold))
-    return 0.8f;
+    return 0.5f;
 
   return static_cast<float>(topicality_threshold);
 }
@@ -524,17 +528,6 @@ int OmniboxFieldTrial::MaxNumHQPUrlsIndexedAtStartup() {
     return num_urls;
   // Default value is set to -1 for unlimited number of urls.
   return -1;
-}
-
-bool OmniboxFieldTrial::HQPFixFewVisitsBug() {
-  return variations::GetVariationParamValue(
-      kBundledExperimentFieldTrialName,
-      kHQPFixFewVisitsBugRule) == "true";
-}
-
-bool OmniboxFieldTrial::HQPFreqencyUsesSum() {
-  return variations::GetVariationParamValue(kBundledExperimentFieldTrialName,
-                                            kHQPFreqencyUsesSumRule) == "true";
 }
 
 size_t OmniboxFieldTrial::HQPMaxVisitsToScore() {
@@ -558,7 +551,7 @@ float OmniboxFieldTrial::HQPTypedValue() {
   std::string typed_value_str = variations::GetVariationParamValue(
       kBundledExperimentFieldTrialName, kHQPTypedValueRule);
   if (typed_value_str.empty())
-    return 20;
+    return 1.5;
   // This is a best-effort conversion; we trust the hand-crafted parameters
   // downloaded from the server to be perfect.  There's no need for handle
   // errors smartly.
@@ -570,8 +563,11 @@ float OmniboxFieldTrial::HQPTypedValue() {
 OmniboxFieldTrial::NumMatchesScores OmniboxFieldTrial::HQPNumMatchesScores() {
   std::string str = variations::GetVariationParamValue(
       kBundledExperimentFieldTrialName, kHQPNumMatchesScoresRule);
-  // The parameter is a comma-separated list of (number, value) pairs, e.g.
-  // "1:3,2:2.5,3:2,4:1.5".
+  static constexpr char kDefaultNumMatchesScores[] = "1:3,2:2.5,3:2,4:1.5";
+  if (str.empty())
+    str = kDefaultNumMatchesScores;
+  // The parameter is a comma-separated list of (number, value) pairs such as
+  // listed above.
   // This is a best-effort conversion; we trust the hand-crafted parameters
   // downloaded from the server to be perfect.  There's no need to handle
   // errors smartly.
@@ -713,25 +709,6 @@ int OmniboxFieldTrial::GetPhysicalWebAfterTypingBaseRelevance() {
   return 700;
 }
 
-// static
-bool OmniboxFieldTrial::InZeroSuggestRedirectToChromeFieldTrial() {
-  return base::FeatureList::IsEnabled(omnibox::kZeroSuggestRedirectToChrome);
-}
-
-// static
-std::string OmniboxFieldTrial::ZeroSuggestRedirectToChromeServerAddress() {
-  return base::GetFieldTrialParamValueByFeature(
-      omnibox::kZeroSuggestRedirectToChrome,
-      kZeroSuggestRedirectToChromeServerAddressParam);
-}
-
-// static
-std::string OmniboxFieldTrial::ZeroSuggestRedirectToChromeAdditionalFields() {
-  return base::GetFieldTrialParamValueByFeature(
-      omnibox::kZeroSuggestRedirectToChrome,
-      kZeroSuggestRedirectToChromeAdditionalFieldsParam);
-}
-
 const char OmniboxFieldTrial::kBundledExperimentFieldTrialName[] =
     "OmniboxBundledExperimentV1";
 const char OmniboxFieldTrial::kDisableProvidersRule[] = "DisableProviders";
@@ -755,8 +732,6 @@ OmniboxFieldTrial::kMeasureSuggestPollingDelayFromLastKeystrokeRule[] =
     "MeasureSuggestPollingDelayFromLastKeystroke";
 const char OmniboxFieldTrial::kSuggestPollingDelayMsRule[] =
     "SuggestPollingDelayMs";
-const char OmniboxFieldTrial::kHQPFixFewVisitsBugRule[] = "HQPFixFewVisitsBug";
-const char OmniboxFieldTrial::kHQPFreqencyUsesSumRule[] = "HQPFreqencyUsesSum";
 const char OmniboxFieldTrial::kHQPMaxVisitsToScoreRule[] =
     "HQPMaxVisitsToScoreRule";
 const char OmniboxFieldTrial::kHQPNumMatchesScoresRule[] =
@@ -778,8 +753,6 @@ const char OmniboxFieldTrial::kPhysicalWebZeroSuggestRule[] =
 const char OmniboxFieldTrial::kPhysicalWebAfterTypingRule[] =
     "PhysicalWebAfterTyping";
 
-const char OmniboxFieldTrial::kHUPNewScoringEnabledParam[] =
-    "HUPExperimentalScoringEnabled";
 const char OmniboxFieldTrial::kHUPNewScoringTypedCountRelevanceCapParam[] =
     "TypedCountRelevanceCap";
 const char OmniboxFieldTrial::kHUPNewScoringTypedCountHalfLifeTimeParam[] =
@@ -815,15 +788,12 @@ const char OmniboxFieldTrial::kPhysicalWebZeroSuggestBaseRelevanceParam[] =
 const char OmniboxFieldTrial::kPhysicalWebAfterTypingBaseRelevanceParam[] =
     "PhysicalWebAfterTypingBaseRelevanceParam";
 
-const char OmniboxFieldTrial::kZeroSuggestRedirectToChromeServerAddressParam[] =
-    "ZeroSuggestRedirectToChromeServerAddress";
-const char
-    OmniboxFieldTrial::kZeroSuggestRedirectToChromeAdditionalFieldsParam[] =
-        "ZeroSuggestRedirectToChromeAdditionalFields";
-
 const char OmniboxFieldTrial::kUIMaxAutocompleteMatchesParam[] =
     "UIMaxAutocompleteMatches";
 const char OmniboxFieldTrial::kUIVerticalMarginParam[] = "UIVerticalMargin";
+
+const char OmniboxFieldTrial::kZeroSuggestRedirectToChromeExperimentIdParam[] =
+    "ZeroSuggestRedirectToChromeExperimentID";
 
 // static
 int OmniboxFieldTrial::kDefaultMinimumTimeBetweenSuggestQueriesMs = 100;

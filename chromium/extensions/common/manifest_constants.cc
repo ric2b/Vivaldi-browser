@@ -32,6 +32,8 @@ const char kConvertedFromUserScript[] = "converted_from_user_script";
 const char kCss[] = "css";
 const char kCtrlKey[] = "ctrlKey";
 const char kCurrentLocale[] = "current_locale";
+const char kDeclarativeNetRequestKey[] = "declarative_net_request";
+const char kDeclarativeRuleResourcesKey[] = "rule_resources";
 const char kDefaultLocale[] = "default_locale";
 const char kDescription[] = "description";
 const char kDevToolsPage[] = "devtools_page";
@@ -296,8 +298,8 @@ const char kCannotScriptSigninPage[] =
     "The sign-in page cannot be scripted.";
 const char kChromeVersionTooLow[] =
     "This extension requires * version * or greater.";
-const char kDisabledByPolicy[] =
-    "This extension has been disabled by your administrator.";
+const char kDeclarativeNetRequestPermissionNeeded[] =
+    "The extension requires '*' permission for the '*' manifest key.";
 const char kExpectString[] = "Expect string value.";
 const char kFileNotFound[] = "File not found: *.";
 const char kInvalidAboutPage[] = "Invalid value for 'about_page'.";
@@ -357,6 +359,10 @@ const char kInvalidCss[] =
     "Invalid value for 'content_scripts[*].css[*]'.";
 const char kInvalidCssList[] =
     "Required value 'content_scripts[*].css' is invalid.";
+const char kInvalidDeclarativeNetRequestKey[] = "Invalid value for '*' key";
+const char kInvalidDeclarativeRulesFileKey[] =
+    "Invalid value for '*.*' key. It must be a list containing a single "
+    "string.";
 const char kInvalidDefaultLocale[] =
     "Invalid value for default locale - locale name must be a string.";
 const char kInvalidDescription[] =
@@ -732,9 +738,13 @@ const char kPermissionUnknownOrMalformed[] =
     "Permission '*' is unknown or URL pattern is malformed.";
 const char kReservedMessageFound[] =
     "Reserved key * found in message catalog.";
+const char kRulesFileIsInvalid[] =
+    "Invalid value for key '*.*': The provided path is invalid.";
 const char kUnrecognizedManifestKey[] = "Unrecognized manifest key '*'.";
 const char kUnrecognizedManifestProperty[] =
     "Unrecognized property '*' of manifest key '*'.";
+const char kUrlHandlersInHostedApps[] =
+    "'url_handlers' cannot be used in Hosted Apps.";
 const char kWebRequestConflictsWithLazyBackground[] =
     "The 'webRequest' API cannot be used with event pages.";
 #if defined(OS_CHROMEOS)

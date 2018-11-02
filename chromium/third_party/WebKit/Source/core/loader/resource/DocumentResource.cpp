@@ -57,14 +57,14 @@ DEFINE_TRACE(DocumentResource) {
   Resource::Trace(visitor);
 }
 
-void DocumentResource::CheckNotify() {
+void DocumentResource::NotifyFinished() {
   if (Data() && MimeTypeAllowed()) {
     // We don't need to create a new frame because the new document belongs to
     // the parent UseElement.
     document_ = CreateDocument(GetResponse().Url());
     document_->SetContent(DecodedText());
   }
-  Resource::CheckNotify();
+  Resource::NotifyFinished();
 }
 
 bool DocumentResource::MimeTypeAllowed() const {
@@ -79,7 +79,7 @@ bool DocumentResource::MimeTypeAllowed() const {
 Document* DocumentResource::CreateDocument(const KURL& url) {
   switch (GetType()) {
     case kSVGDocument:
-      return XMLDocument::CreateSVG(DocumentInit(url));
+      return XMLDocument::CreateSVG(DocumentInit::Create().WithURL(url));
     default:
       // FIXME: We'll add more types to support HTMLImports.
       NOTREACHED();

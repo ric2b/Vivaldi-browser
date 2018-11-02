@@ -1,0 +1,19 @@
+include_rules = [
+  "+gpu/command_buffer",
+  "+gpu/config",
+  "+gpu/ipc",
+  "+gpu/ipc/common",
+  "+gpu/ipc/service",
+  "+ipc",
+  "+media/gpu",
+  "+media/mojo",
+  "+mojo/public/cpp",
+  "+services/ui/gpu/interfaces",
+  "+ui/gl",
+]
+
+specific_include_rules = {
+  "gpu_service_impl_unittest\.cc": [
+    "+services/ui/public/interfaces",
+  ]
+}

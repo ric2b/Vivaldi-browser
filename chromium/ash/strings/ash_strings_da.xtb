@@ -9,6 +9,7 @@
 <translation id="1195412055398077112">overscan</translation>
 <translation id="1247372569136754018">Mikrofon (indbygget)</translation>
 <translation id="1252999807265626933">Oplader fra <ph name="POWER_SOURCE" /></translation>
+<translation id="1267032506238418139">Ændring af genvej</translation>
 <translation id="1270290102613614947">Skærmtastaturet er deaktiveret</translation>
 <translation id="1272079795634619415">Stop</translation>
 <translation id="1279938420744323401"><ph name="DISPLAY_NAME" /> (<ph name="ANNOTATION" />)</translation>
@@ -22,7 +23,6 @@
 <translation id="15373452373711364">Stor musemarkør</translation>
 <translation id="1550523713251050646">Klik for at se flere muligheder</translation>
 <translation id="1621499497873603021">Tid tilbage, indtil batteriet er tomt, <ph name="TIME_LEFT" /></translation>
-<translation id="164969095109328410">Chrome-enhed</translation>
 <translation id="1677472565718498478"><ph name="TIME" /> tilbage</translation>
 <translation id="1698760176351776263">IPv6-adresse: <ph name="ADDRESS" /></translation>
 <translation id="1734367976349034509">Denne enhed er virksomhedsadministreret</translation>
@@ -92,6 +92,7 @@
 <translation id="315116470104423982">Mobildata</translation>
 <translation id="3236488194889173876">Der er ingen tilgængelige mobilnetværk</translation>
 <translation id="3294437725009624529">Gæst</translation>
+<translation id="332587331255250389">Udskift batteriet</translation>
 <translation id="3364721542077212959">Penneværktøjer</translation>
 <translation id="3368922792935385530">Tilsluttet</translation>
 <translation id="3371140690572404006">USB-C-enhed (porten foran i højre side)</translation>
@@ -110,6 +111,7 @@
 <translation id="3712407551474845318">Tag et screenshot af området</translation>
 <translation id="371370241367527062">Mikrofon på forsiden</translation>
 <translation id="3742055079367172538">Screenshottet blev gemt</translation>
+<translation id="3771549900096082774">Tilstanden Høj kontrast</translation>
 <translation id="3775358506042162758">Du kan kun have op til tre konti i samlet login fra flere konti.</translation>
 <translation id="3783640748446814672">alt</translation>
 <translation id="3784455785234192852">Lås</translation>
@@ -142,14 +144,12 @@
 <translation id="4729904664295161097">Assistenten kan kun bruges via den primære profil.</translation>
 <translation id="479989351350248267">søg</translation>
 <translation id="4804818685124855865">Afbryd</translation>
-<translation id="4821830640883629383">Oplad eller udskift batterierne.</translation>
 <translation id="4849058404725798627">Fremhæv element med tastaturfokus</translation>
 <translation id="4872237917498892622">Alt+Søg eller Shift</translation>
 <translation id="4895488851634969361">Batteriet er helt opladet.</translation>
 <translation id="4905614135390995787">Genvejen til at aktivere eller deaktivere tilstanden Høj kontrast er ændret. Brug <ph name="NEW_SHORTCUT" /> i stedet for <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="4918086044614829423">Accepter</translation>
 <translation id="4961318399572185831">Cast skærm</translation>
-<translation id="5011233892417813670">Chromebook</translation>
 <translation id="5168181903108465623">Tilgængelige Cast-enheder</translation>
 <translation id="5170568018924773124">Vis i mappe</translation>
 <translation id="5207949376430453814">Fremhæv tekstmarkør</translation>
@@ -175,7 +175,6 @@
 <translation id="5901316534475909376">Shift+Esc</translation>
 <translation id="5916664084637901428">Til</translation>
 <translation id="5927132638760172455">Caster til en ukendt modtager</translation>
-<translation id="5932901536148835538">Chromebit</translation>
 <translation id="5947494881799873997">Fortryd</translation>
 <translation id="595202126637698455">Sporing af ydelsen er aktiveret</translation>
 <translation id="5957083217255311415">Mobildata er slået fra.</translation>
@@ -218,7 +217,6 @@
 <translation id="683971173229319003">Søg+L</translation>
 <translation id="6857811139397017780">Aktivér <ph name="NETWORKSERVICE" /></translation>
 <translation id="6911468394164995108">Vælg et andet...</translation>
-<translation id="6915678159055240887">Chromebox</translation>
 <translation id="6981982820502123353">Hjælpefunktioner</translation>
 <translation id="7029814467594812963">Afslut session</translation>
 <translation id="7034339000180558234">Caster <ph name="TAB_NAME" /> til <ph name="RECEIVER_NAME" /></translation>
@@ -226,7 +224,6 @@
 <translation id="7066646422045619941">Din administrator har deaktiveret dette netværk.</translation>
 <translation id="7067196344162293536">Automatisk rotering</translation>
 <translation id="7098389117866926363">USB-C-enhed (porten bagpå i venstre side)</translation>
-<translation id="714034171374937760">Chromebase</translation>
 <translation id="7165278925115064263">Alt+Shift+K</translation>
 <translation id="7168224885072002358">Fortryder og vender tilbage til den gamle opløsning om <ph name="TIMEOUT_SECONDS" /> sekunder.</translation>
 <translation id="7246339268451149667">Vil du aktivere oplåsning med fingeraftryk?</translation>

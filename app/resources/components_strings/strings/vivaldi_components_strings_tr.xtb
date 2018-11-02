@@ -55,6 +55,7 @@
 <translation id="4506599922270137252">Sistem yöneticisiyle iletişime geçin</translation>
 <translation id="4522570452068850558">Ayrıntılar</translation>
 <translation id="4558551763791394412">Uzantılarınızı devre dışı bırakmayı deneyin.</translation>
+<translation id="4611292653554630842">Giriş yap</translation>
 <translation id="4708268264240856090">Bağlantınız kesildi</translation>
 <translation id="4744603770635761495">Çalıştırılabilir Yol</translation>
 <translation id="4764776831041365478"><ph name="URL" /> adresindeki web sayfası, geçici olarak kullanılamıyor veya kalıcı olarak yeni bir web adresine taşınmış olabilir.</translation>
@@ -83,6 +84,7 @@
 <translation id="6328639280570009161">Ağ tahmin özelliğini devre dışı bırakmayı deneyin</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> bağlanmayı reddetti.</translation>
 <translation id="6569060085658103619">Bir uzantı sayfası görüntülüyorsunuz</translation>
+<translation id="6657585470893396449">Şifre</translation>
 <translation id="6685834062052613830">Çıkış yapın ve kurulumu tamamlayın</translation>
 <translation id="6711464428925977395">Proxy sunucusunda bir sorun var veya adres yanlış.</translation>
 <translation id="6757797048963528358">Cihazınız uyku moduna geçti.</translation>
@@ -104,9 +106,10 @@
 <translation id="8289355894181816810">Bunun ne anlama geldiğini bilmiyorsanız ağ yöneticinizle bağlantı kurun.</translation>
 <translation id="8332188693563227489"><ph name="HOST_NAME" /> ana makinesine erişim reddedildi</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> ana makinesinin yanıt vermesi çok uzun sürdü.</translation>
+<translation id="8503813439785031346">Kullanıcı adı</translation>
 <translation id="8740359287975076522"><ph name="HOST_NAME" /> ana makinesinin &lt;abbr id="dnsDefinition"&gt;DNS adresi&lt;/abbr&gt; bulunamadı. Sorun teşhis ediliyor.</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> desteklenmeyen bir protokol kullanıyor.</translation>
 <translation id="933612690413056017">İnternet bağlantısı yok</translation>
-<translation id="969892804517981540">Resmi Derleme</translation>
+<translation id="969892804517981540">Resmî Derleme</translation>
 <translation id="988159990683914416">Geliştirici Derlemesi</translation>
 </translationbundle>

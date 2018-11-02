@@ -15,7 +15,9 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
+#include "chrome/browser/android/vr_shell/android_vsync_helper.h"
 #include "chrome/browser/android/vr_shell/vr_controller.h"
+#include "chrome/browser/vr/content_input_delegate.h"
 #include "chrome/browser/vr/ui_input_manager.h"
 #include "chrome/browser/vr/ui_renderer.h"
 #include "chrome/browser/vr/vr_controller_model.h"
@@ -72,7 +74,7 @@ struct WebVrBounds {
 // This class manages all GLThread owned objects and GL rendering for VrShell.
 // It is not threadsafe and must only be used on the GL thread.
 class VrShellGl : public device::mojom::VRPresentationProvider,
-                  public vr::UiInputManagerDelegate {
+                  public vr::ContentInputDelegate {
  public:
   VrShellGl(GlBrowserInterface* browser,
             gvr_context* gvr_api,
@@ -104,9 +106,6 @@ class VrShellGl : public device::mojom::VRPresentationProvider,
 
   void SetControllerModel(std::unique_ptr<vr::VrControllerModel> model);
 
-  void UpdateVSyncInterval(base::TimeTicks vsync_timebase,
-                           base::TimeDelta vsync_interval);
-
   void CreateVRDisplayInfo(
       const base::Callback<void(device::mojom::VRDisplayInfoPtr)>& callback,
       uint32_t device_id);
@@ -128,21 +127,20 @@ class VrShellGl : public device::mojom::VRPresentationProvider,
   void DrawWebVr();
   bool WebVrPoseByteIsValid(int pose_index_byte);
 
-  void UpdateController(const gfx::Vector3dF& head_direction);
-  void HandleWebVrCompatibilityClick();
+  void UpdateController(const gfx::Transform& head_pose);
   std::unique_ptr<blink::WebMouseEvent> MakeMouseEvent(
       blink::WebInputEvent::Type type,
       const gfx::PointF& normalized_web_content_location);
   void UpdateGesture(const gfx::PointF& normalized_content_hit_point,
                      blink::WebGestureEvent& gesture);
 
-  // vr::UiInputManagerDelegate.
+  // vr::ContentInputDelegate.
   void OnContentEnter(const gfx::PointF& normalized_hit_point) override;
   void OnContentLeave() override;
   void OnContentMove(const gfx::PointF& normalized_hit_point) override;
   void OnContentDown(const gfx::PointF& normalized_hit_point) override;
   void OnContentUp(const gfx::PointF& normalized_hit_point) override;
-  void OnContentFlingBegin(std::unique_ptr<blink::WebGestureEvent> gesture,
+  void OnContentFlingStart(std::unique_ptr<blink::WebGestureEvent> gesture,
                            const gfx::PointF& normalized_hit_point) override;
   void OnContentFlingCancel(std::unique_ptr<blink::WebGestureEvent> gesture,
                             const gfx::PointF& normalized_hit_point) override;
@@ -159,11 +157,15 @@ class VrShellGl : public device::mojom::VRPresentationProvider,
       const gfx::Vector3dF& controller_direction);
   void SendGestureToContent(std::unique_ptr<blink::WebInputEvent> event);
   void CreateUiSurface();
+
   void OnContentFrameAvailable();
   void OnWebVRFrameAvailable();
+  void ScheduleWebVrFrameTimeout();
+  void OnWebVrFrameTimedOut();
+
   int64_t GetPredictedFrameTimeNanos();
 
-  void OnVSync();
+  void OnVSync(base::TimeTicks frame_time);
 
   void UpdateEyeInfos(const gfx::Transform& head_pose,
                       int viewport_offset,
@@ -181,7 +183,7 @@ class VrShellGl : public device::mojom::VRPresentationProvider,
 
   void ForceExitVr();
 
-  void SendVSync(base::TimeDelta time, GetVSyncCallback callback);
+  void SendVSync(base::TimeTicks time, GetVSyncCallback callback);
 
   void closePresentationBindings();
 
@@ -189,6 +191,9 @@ class VrShellGl : public device::mojom::VRPresentationProvider,
   int content_texture_id_ = 0;
   // samplerExternalOES texture data for WebVR content image.
   int webvr_texture_id_ = 0;
+
+  // Set from feature flag.
+  bool webvr_vsync_align_;
 
   scoped_refptr<gl::GLSurface> surface_;
   scoped_refptr<gl::GLContext> context_;
@@ -200,8 +205,8 @@ class VrShellGl : public device::mojom::VRPresentationProvider,
   std::unique_ptr<gvr::GvrApi> gvr_api_;
   std::unique_ptr<gvr::BufferViewportList> buffer_viewport_list_;
   std::unique_ptr<gvr::BufferViewport> buffer_viewport_;
-  std::unique_ptr<gvr::BufferViewport> headlocked_left_viewport_;
-  std::unique_ptr<gvr::BufferViewport> headlocked_right_viewport_;
+  std::unique_ptr<gvr::BufferViewport> webvr_browser_ui_left_viewport_;
+  std::unique_ptr<gvr::BufferViewport> webvr_browser_ui_right_viewport_;
   std::unique_ptr<gvr::BufferViewport> webvr_left_viewport_;
   std::unique_ptr<gvr::BufferViewport> webvr_right_viewport_;
   std::unique_ptr<gvr::SwapChain> swap_chain_;
@@ -210,18 +215,13 @@ class VrShellGl : public device::mojom::VRPresentationProvider,
   std::queue<uint16_t> pending_frames_;
   std::unique_ptr<MailboxToSurfaceBridge> mailbox_bridge_;
 
-  // Current sizes for the render buffers.
-  gfx::Size render_size_primary_;
-  gfx::Size render_size_headlocked_;
-
-  // Intended render_size_primary_ for use by VrShell, so that it
-  // can be restored after exiting WebVR mode.
-  gfx::Size render_size_vrshell_;
+  // The default size for the render buffers.
+  gfx::Size render_size_default_;
+  gfx::Size render_size_webvr_ui_;
 
   std::unique_ptr<vr::VrShellRenderer> vr_shell_renderer_;
 
   bool cardboard_ = false;
-  bool touch_pending_ = false;
   gfx::Quaternion controller_quat_;
 
   int content_tex_css_width_ = 0;
@@ -243,11 +243,8 @@ class VrShellGl : public device::mojom::VRPresentationProvider,
   std::unique_ptr<VrController> controller_;
 
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
-  base::CancelableClosure vsync_task_;
-  base::TimeTicks vsync_timebase_;
-  base::TimeDelta vsync_interval_;
 
-  base::TimeDelta pending_time_;
+  base::TimeTicks pending_time_;
   bool pending_vsync_ = false;
   GetVSyncCallback callback_;
   mojo::Binding<device::mojom::VRPresentationProvider> binding_;
@@ -260,6 +257,8 @@ class VrShellGl : public device::mojom::VRPresentationProvider,
   uint8_t frame_index_ = 0;
   // Larger than frame_index_ so it can be initialized out-of-band.
   uint16_t last_frame_index_ = -1;
+
+  uint64_t webvr_frames_received_ = 0;
 
   // Attributes for gesture detection while holding app button.
   gfx::Vector3dF controller_start_direction_;
@@ -276,7 +275,11 @@ class VrShellGl : public device::mojom::VRPresentationProvider,
 
   vr::ControllerInfo controller_info_;
   vr::RenderInfo render_info_primary_;
-  vr::RenderInfo render_info_headlocked_;
+  vr::RenderInfo render_info_webvr_browser_ui_;
+
+  AndroidVSyncHelper vsync_helper_;
+
+  base::CancelableCallback<void()> webvr_frame_timeout_;
 
   base::WeakPtrFactory<VrShellGl> weak_ptr_factory_;
 

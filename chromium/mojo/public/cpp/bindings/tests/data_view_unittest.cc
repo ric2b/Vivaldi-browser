@@ -26,22 +26,18 @@ class DataViewTest : public testing::Test {
 
 struct DataViewHolder {
   std::unique_ptr<TestStructDataView> data_view;
-  std::unique_ptr<mojo::internal::FixedBufferForTesting> buf;
+  mojo::Message message;
   mojo::internal::SerializationContext context;
 };
 
 std::unique_ptr<DataViewHolder> SerializeTestStruct(TestStructPtr input) {
-  std::unique_ptr<DataViewHolder> result(new DataViewHolder);
-
-  size_t size = mojo::internal::PrepareToSerialize<TestStructDataView>(
-      input, &result->context);
-
-  result->buf.reset(new mojo::internal::FixedBufferForTesting(size));
-  internal::TestStruct_Data* data = nullptr;
-  mojo::internal::Serialize<TestStructDataView>(input, result->buf.get(), &data,
-                                                &result->context);
-
-  result->data_view.reset(new TestStructDataView(data, &result->context));
+  auto result = std::make_unique<DataViewHolder>();
+  result->message = Message(0, 0, 0, 0, nullptr);
+  internal::TestStruct_Data::BufferWriter writer;
+  mojo::internal::Serialize<TestStructDataView>(
+      input, result->message.payload_buffer(), &writer, &result->context);
+  result->data_view =
+      std::make_unique<TestStructDataView>(writer.data(), &result->context);
   return result;
 }
 

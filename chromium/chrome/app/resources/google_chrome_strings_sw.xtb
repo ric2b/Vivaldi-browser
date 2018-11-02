@@ -19,7 +19,6 @@ Baadhi ya vipengele huenda visipatikane na mabadiliko katika mapendeleo hayatahi
 <translation id="1434626383986940139">Programu za Chrome Canary</translation>
 <translation id="1457721931618994305">Inasasisha Google Chrome...</translation>
 <translation id="1469002951682717133">Kizinduzi cha Programu za Chrome</translation>
-<translation id="1480489203462860648">Ijaribu, tayari imesakinishwa</translation>
 <translation id="1553358976309200471">Sasisha Chrome</translation>
 <translation id="1587223624401073077">Google Chrome inatumia kamera yako.</translation>
 <translation id="1587325591171447154"><ph name="FILE_NAME" /> ni hatari, kwa hivyo Chromium imeizuia.</translation>
@@ -98,6 +97,7 @@ Tafadhali angalia barua pepe yako katika <ph name="ACCOUNT_EMAIL" /> upate maagi
 <translation id="345171907106878721">Jiongeze kwenye Chrome</translation>
 <translation id="3612333635265770873">Kijenzi kilicho na jina sawa kimejulikana kuwa na ukinzani na Google Chrome.</translation>
 <translation id="3622797965165704966">Sasa ni rahisi zaidi kutumia Chrome pamoja na Akaunti yako ya Google na kwenye kompyuta zinazoshirikiwa.</translation>
+<translation id="3637702109597584617"><ph name="TERMS_OF_SERVICE_LINK" />Sheria na Masharti<ph name="END_TERMS_OF_SERVICE_LINK" /> ya Mfumo wa Uendeshaji wa Google Chrome</translation>
 <translation id="3718181793972440140">Hatua hii itafuta kipengee 1 kwenye kifaa hiki. Ili urejeshe data yako baadaye, ingia katika Chrome ukitumia <ph name="USER_EMAIL" />.</translation>
 <translation id="3735758079232443276">Kiendelezi hiki "<ph name="EXTENSION_NAME" />" kimebadilisha ukurasa unaoonyeshwa unapoanzisha Chrome.</translation>
 <translation id="3738139272394829648">Gusa ili Utafute</translation>
@@ -136,12 +136,12 @@ Tafadhali angalia barua pepe yako katika <ph name="ACCOUNT_EMAIL" /> upate maagi
 <translation id="4754614261631455953">Google Chrome Canary (mDNS-In)</translation>
 <translation id="4771048833395599659">Huenda faili hii ni hatari, kwa hivyo Chrome imeizuia.</translation>
 <translation id="4794050651896644714">Hifadhi maelezo katika Chrome</translation>
+<translation id="4804732725083176494">Msimamizi amezima kipengele cha kuingia katika akaunti ya Chrome kwenye kifaa hiki.</translation>
 <translation id="4891791193823137474">Ruhusu Google Chrome iendeshe katika mandharinyuma</translation>
 <translation id="4921569541910214635">Ungependa kushiriki kompyuta? Sasa unaweza kusanidi Chrome kama tu unavyoipenda.</translation>
 <translation id="4953650215774548573">Weka Google Chrome iwe kivinjari chako chaguo-msingi</translation>
 <translation id="495931528404527476">Katika Chrome</translation>
 <translation id="4965682129423310439">Chrome imegundua programu hatari kwenye kompyuta yako. Chrome inaweza kuiondoa na kurejesha mipangilio yako ili kuwezesha kivinjari chako kufanya kazi tena kama kawaida.</translation>
-<translation id="4987308747895123092">Tafadhali funga madirisha yako yote ya Google Chrome (pamoja na yaliyo kwenye modi ya Windows) na ujaribu tena.</translation>
 <translation id="4990567037958725628">Kanari ya Google Chrome</translation>
 <translation id="5028489144783860647">Google Chrome haikuweza kusawazisha data yako. Tafadhali sasisha kauli siri yako ya Usawazishaji.</translation>
 <translation id="5037239767309817516">Tafadhali funga madirisha yote ya Google Chrome na uianzishe upya ili mabadiliko haya yatekelezwe.</translation>
@@ -203,7 +203,6 @@ Google Chrome haiwezi kufufua mipangilio yako.</translation>
 <translation id="6634887557811630702">Google Chrome imesasishwa.</translation>
 <translation id="6676384891291319759">Fika kwenye wavuti</translation>
 <translation id="6697947395630195233">Chrome inahitaji kufikia maelezo ya mahali ulipo ili kuyashiriki na tovuti hii.</translation>
-<translation id="6757767188268205357">Usinisumbue</translation>
 <translation id="683440813066116847">Sheria ya ndani ya Google Chrome Canary ili kuruhusu trafiki ya mDNS.</translation>
 <translation id="686561893457936865">Nenda na Chrome kila mahali</translation>
 <translation id="6883876366448858277">hutuma neno na muktadha wake kwenye Tafuta na Google, kurejesha ufafanuzi, picha, na matokeo mengine ya utafutaji.</translation>
@@ -218,7 +217,6 @@ Google Chrome haiwezi kufufua mipangilio yako.</translation>
 <translation id="7161904924553537242">Karibu Google Chrome</translation>
 <translation id="7164397146364144019">Unaweza kusaidia kuifanya Chrome kuwa salama na rahisi zaidi kutumia kwa kuripoti maelezo ya uwezekano wa matukio yasiyo salama kwa Google kiotomatiki.</translation>
 <translation id="7185038942300673794"><ph name="EXTENSION_NAME" /> imeongezwa kwenye Chrome.</translation>
-<translation id="7196020411877309443">Ni kwa kwa nini ninaona hii?</translation>
 <translation id="7242029209006116544">Unaingia katika akaunti ykitumia akaunti inayodhibitiwa na kumpa msimamizi wa akaunti hiyo udhibiti wa wasifu wako kwenye Google Chrome. Data yako ya Chrome, kama vile programu zako, alamisho, historia, manenosiri, na mipangilio mingine itahishwa na <ph name="USER_NAME" /> daima. Utaweza kufuta data hii kupitia Dashibodi ya Akaunti za Google, lakini hutaweza kuhusisha data hii na akaunti nyingine. Unaweza kuunda kwa hiari wasifu mpya ili kuweka data yako ya Chrome iliyo kando. <ph name="LEARN_MORE" /></translation>
 <translation id="729375352412857283">Kompyuta hii itaacha kupokea sasisho za Google Chrome hivi karibuni kwa sababu Windows XP na Windows Vista hazitatumika tena.</translation>
 <translation id="7330164299247909639">Cheti hakijathibitishwa. Tafadhali ingia katika Google Chrome tena ukitumia <ph name="USER_NAME" /> au uwasiliane na msimamizi wako kwa maelezo zaidi. <ph name="ADDITIONAL_EXPLANATION" /></translation>

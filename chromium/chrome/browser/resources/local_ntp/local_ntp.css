@@ -2,6 +2,31 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. */
 
+html {
+  --column-count: 2;
+  --content-width: calc(
+      (var(--column-count) * (var(--tile-width) + var(--tile-margin)))
+      /* We add an extra pixel because rounding errors on different zooms can
+       * make the width shorter than it should be. */
+      + 1px);
+  --tile-margin: 16px;
+  --tile-width: 154px;
+}
+
+/* width >= (3 cols * (16px + 154px) - 16px + 200px) */
+@media (min-width: 694px) {
+  html {
+    --column-count: 3;
+  }
+}
+
+/* width >= (4 cols * (16px + 154px) - 16px + 200px) */
+@media (min-width: 864px) {
+  html {
+    --column-count: 4;
+  }
+}
+
 /* TODO: Need to discuss with NTP folks before we remove font-family from the
  * body tag. */
 body {
@@ -14,13 +39,15 @@ body {
 }
 
 #ntp-contents {
+  margin: 0 auto;
   text-align: -webkit-center;
+  width: var(--content-width);
 }
 
 .non-google-page #ntp-contents {
+  left: calc(50% - var(--content-width)/2);
   position: absolute;
   top: calc(50% - 155px);
-  width: 100%;
 }
 
 body.hide-fakebox-logo #logo,
@@ -28,20 +55,33 @@ body.hide-fakebox-logo #fakebox {
   visibility: hidden;
 }
 
+#search {
+  margin: 0 calc(var(--tile-margin) / 2);
+  width: calc(100% - var(--tile-margin));
+}
+
 #logo {
-  background-image: url(../../../../ui/webui/resources/images/google_logo.svg);
-  background-repeat: no-repeat;
-  height: 92px;
+  height: 249px;
   margin-bottom: 24px;
-  margin-top: 157px;
-  width: 272px;
+  position: relative;
 }
 
 .non-google-page #logo {
   display: none;
 }
 
-body.alternate-logo #logo {
+#logo-default {
+  background-image: url(../../../../ui/webui/resources/images/google_logo.svg);
+  background-repeat: no-repeat;
+  bottom: 0;
+  height: 92px;
+  left: calc(50% - 272px/2);
+  position: absolute;
+  transition: opacity 130ms;
+  width: 272px;
+}
+
+body.alternate-logo #logo-default {
   -webkit-mask-image:
       url(../../../../ui/webui/resources/images/google_logo.svg);
   -webkit-mask-repeat: no-repeat;
@@ -61,8 +101,6 @@ body.alternate-logo #logo {
   outline: none;
   position: relative;
   transition: box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1);
-  /* #fakebox width is set dynamically from JS. */
-  width: 300px;
 }
 
 .non-google-page #fakebox {
@@ -115,7 +153,7 @@ html[dir=rtl] #fakebox-text {
   right: 13px;
 }
 
-#cursor {
+#fakebox-cursor {
   background: #333;
   bottom: 12px;
   left: 13px;
@@ -125,9 +163,25 @@ html[dir=rtl] #fakebox-text {
   width: 1px;
 }
 
-html[dir=rtl] #cursor {
+html[dir=rtl] #fakebox-cursor {
   left: auto;
   right: 13px;
+}
+
+#fakebox-speech {
+  background: url(googlemic_clr_24px.svg) no-repeat center;
+  background-size: 24px 24px;
+  cursor: pointer;
+  height: 21px;
+  padding: 22px 12px 0;
+  position: absolute;
+  right: 0;
+  width: 17px;
+}
+
+html[dir=rtl] #fakebox-speech {
+  left: 0;
+  right: auto;
 }
 
 @keyframes blink {
@@ -144,19 +198,19 @@ body.fakebox-focused #fakebox-text {
   visibility: hidden;
 }
 
-body.fakebox-drag-focused #cursor {
+body.fakebox-drag-focused #fakebox-cursor {
   visibility: inherit;
 }
 
-body.fakebox-focused #cursor {
+body.fakebox-focused #fakebox-cursor {
   animation: blink 1.3s step-end infinite;
   visibility: inherit;
 }
 
 #most-visited {
-  -webkit-user-select: none;
   margin-top: 64px;
   text-align: -webkit-center;
+  user-select: none;
 }
 
 /* Non-Google pages have no Fakebox, so don't need top margin. */
@@ -253,7 +307,6 @@ html[dir=rtl] #mv-notice-x {
 }
 
 #attribution {
-  -webkit-user-select: none;
   bottom: 0;
   color: #fff;
   cursor: default;
@@ -263,6 +316,7 @@ html[dir=rtl] #mv-notice-x {
   position: fixed;
   right: 8px;
   text-align: left;
+  user-select: none;
   z-index: -1;
 }
 

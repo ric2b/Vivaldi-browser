@@ -8,13 +8,11 @@
 #include <GLES3/gl3.h>
 #include <stdint.h>
 
-#include "base/command_line.h"
 #include "gpu/command_buffer/service/context_group.h"
 #include "gpu/command_buffer/tests/gl_manager.h"
 #include "gpu/command_buffer/tests/gl_test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/gl/gl_switches.h"
 
 #define SHADER(Src) #Src
 
@@ -29,8 +27,7 @@ class ES3MapBufferRangeTest : public testing::Test {
     options.size = gfx::Size(kCanvasSize, kCanvasSize);
     options.context_type = gles2::CONTEXT_TYPE_OPENGLES3;
 
-    base::CommandLine cmd_line(base::CommandLine::NO_PROGRAM);
-    gl_.InitializeWithCommandLine(options, cmd_line);
+    gl_.Initialize(options);
   }
 
   bool ShouldSkipTest() const {
@@ -496,8 +493,65 @@ TEST_F(ES3MapBufferRangeTest, GetBufferParameteriv) {
   GLTestHelper::CheckGLError("no errors", __LINE__);
 }
 
-// TODO(zmo): add tests for uniform buffer mapping.
+TEST_F(ES3MapBufferRangeTest, CopyBufferSubData) {
+  if (ShouldSkipTest())
+    return;
 
-// TODO(zmo): add tests for CopyBufferSubData case.
+  const GLsizeiptr kSize = 64;
+  const GLsizeiptr kHalfSize = kSize / 2;
+  const GLintptr kReadOffset = 0;
+  const GLintptr kWriteOffset = kHalfSize;
+  const GLsizeiptr kCopySize = 5;
+  const uint8_t kValue0 = 3;
+  const uint8_t kValue1 = 21;
+
+  GLuint buffer;
+  glGenBuffers(1, &buffer);
+  EXPECT_NE(0u, buffer);
+  glBindBuffer(GL_ARRAY_BUFFER, buffer);
+  glBufferData(GL_ARRAY_BUFFER, kSize, nullptr, GL_STREAM_DRAW);
+
+  std::array<uint8_t, kHalfSize> data0;
+  data0.fill(kValue0);
+  glBufferSubData(GL_ARRAY_BUFFER, 0, kHalfSize, data0.data());
+
+  std::array<uint8_t, kHalfSize> data1;
+  data1.fill(kValue1);
+  glBufferSubData(GL_ARRAY_BUFFER, kHalfSize, kHalfSize, data1.data());
+
+  GLTestHelper::CheckGLError("no errors", __LINE__);
+
+  // Verify the data is initialized.
+  const uint8_t* map_ptr = static_cast<uint8_t*>(
+      glMapBufferRange(GL_ARRAY_BUFFER, 0, kSize, GL_MAP_READ_BIT));
+  ASSERT_NE(nullptr, map_ptr);
+
+  EXPECT_EQ(0, memcmp(map_ptr, data0.data(), kHalfSize));
+  EXPECT_EQ(0, memcmp(map_ptr + kHalfSize, data1.data(), kHalfSize));
+
+  glUnmapBuffer(GL_ARRAY_BUFFER);
+
+  glCopyBufferSubData(GL_ARRAY_BUFFER, GL_ARRAY_BUFFER, kReadOffset,
+                      kWriteOffset, kCopySize);
+  GLTestHelper::CheckGLError("no errors", __LINE__);
+
+  // Verify the data is copied.
+  map_ptr = static_cast<uint8_t*>(
+      glMapBufferRange(GL_ARRAY_BUFFER, 0, kSize, GL_MAP_READ_BIT));
+  ASSERT_NE(nullptr, map_ptr);
+
+  for (GLsizeiptr ii = 0; ii < kHalfSize; ++ii) {
+    EXPECT_EQ(kValue0, map_ptr[ii]);
+  }
+  for (GLsizeiptr ii = kHalfSize; ii < kSize; ++ii) {
+    if (ii >= kWriteOffset && ii < kWriteOffset + kCopySize) {
+      EXPECT_EQ(kValue0, map_ptr[ii]);
+    } else {
+      EXPECT_EQ(kValue1, map_ptr[ii]);
+    }
+  }
+}
+
+// TODO(zmo): add tests for uniform buffer mapping.
 
 }  // namespace gpu

@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 #include <ostream>
+#include <vector>
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
@@ -22,6 +23,7 @@ struct ParamTraits;
 namespace gfx {
 
 class ICCProfile;
+class ICCProfileCache;
 
 // Used to represet a color space for the purpose of color conversion.
 // This is designed to be safe and compact enough to send over IPC
@@ -124,6 +126,10 @@ class COLOR_SPACE_EXPORT ColorSpace {
              TransferID transfer,
              MatrixID matrix,
              RangeID full_range);
+  ColorSpace(PrimaryID primaries,
+             const SkColorSpaceTransferFn& fn,
+             MatrixID matrix,
+             RangeID full_range);
   ColorSpace(const ColorSpace& other);
   ColorSpace(ColorSpace&& other);
   ColorSpace& operator=(const ColorSpace& other);
@@ -143,6 +149,7 @@ class COLOR_SPACE_EXPORT ColorSpace {
   // Extended sRGB matches sRGB for values in [0, 1], and extends the transfer
   // function to all real values.
   static ColorSpace CreateExtendedSRGB();
+
   // scRGB uses the same primaries as sRGB but has a linear transfer function
   // for all real values.
   static ColorSpace CreateSCRGBLinear();
@@ -160,18 +167,28 @@ class COLOR_SPACE_EXPORT ColorSpace {
 
   // Returns true if the decoded values can be outside of the 0.0-1.0 range.
   bool IsHDR() const;
+
   // Returns true if the encoded values can be outside of the 0.0-1.0 range.
   bool FullRangeEncodedValues() const;
 
   // Returns true if this color space can be represented parametrically.
   bool IsParametric() const;
+
   // Return a parametric approximation of this color space (if it is not already
   // parametric).
-  gfx::ColorSpace GetParametricApproximation() const;
+  ColorSpace GetParametricApproximation() const;
 
   // Return this color space with any range adjust or YUV to RGB conversion
   // stripped off.
-  gfx::ColorSpace GetAsFullRangeRGB() const;
+  ColorSpace GetAsFullRangeRGB() const;
+
+  // If |this| is the final output color space, return the color space that
+  // would be appropriate for rasterization.
+  ColorSpace GetRasterColorSpace() const;
+
+  // If |this| is the final output color space, return the color space that
+  // would be appropriate for blending.
+  ColorSpace GetBlendingColorSpace() const;
 
   // This will return nullptr for non-RGB spaces, spaces with non-FULL
   // range, and unspecified spaces.
@@ -180,6 +197,7 @@ class COLOR_SPACE_EXPORT ColorSpace {
   // Populate |icc_profile| with an ICC profile that represents this color
   // space. Returns false if this space is not representable.
   bool GetICCProfile(ICCProfile* icc_profile) const;
+  bool GetICCProfileData(std::vector<char>* data) const;
 
   void GetPrimaryMatrix(SkMatrix44* to_XYZD50) const;
   bool GetTransferFunction(SkColorSpaceTransferFn* fn) const;
@@ -190,6 +208,8 @@ class COLOR_SPACE_EXPORT ColorSpace {
   void GetRangeAdjustMatrix(SkMatrix44* matrix) const;
 
  private:
+  void SetCustomTransferFunction(const SkColorSpaceTransferFn& fn);
+
   // Returns true if the transfer function is defined by an
   // SkColorSpaceTransferFn which is extended to all real values.
   bool HasExtendedSkTransferFn() const;
@@ -213,10 +233,11 @@ class COLOR_SPACE_EXPORT ColorSpace {
   sk_sp<SkColorSpace> icc_profile_sk_color_space_;
 
   friend class ICCProfile;
+  friend class ICCProfileCache;
   friend class ColorTransform;
   friend class ColorTransformInternal;
   friend class ColorSpaceWin;
-  friend struct IPC::ParamTraits<gfx::ColorSpace>;
+  friend struct IPC::ParamTraits<ColorSpace>;
   FRIEND_TEST_ALL_PREFIXES(SimpleColorSpace, GetColorSpace);
 };
 

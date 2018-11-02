@@ -35,10 +35,10 @@
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/Range.h"
 #include "core/dom/ShadowRoot.h"
+#include "core/dom/events/Event.h"
 #include "core/editing/EditingUtilities.h"  // For firstPositionInOrBeforeNode
 #include "core/editing/FrameSelection.h"
 #include "core/editing/InputMethodController.h"
-#include "core/events/Event.h"
 #include "core/frame/FrameClient.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
@@ -269,7 +269,6 @@ ScopedFocusNavigation ScopedFocusNavigation::OwnedByNonFocusableFocusScopeOwner(
   if (IsShadowInsertionPointFocusScopeOwner(element))
     return ScopedFocusNavigation::OwnedByShadowInsertionPoint(
         toHTMLShadowElement(element));
-  DCHECK(isHTMLSlotElement(element));
   return ScopedFocusNavigation::OwnedByHTMLSlotElement(
       toHTMLSlotElement(element));
 }
@@ -366,7 +365,7 @@ inline void DispatchEventsOnWindowAndFocusedElement(Document* document,
   // Do not fire events while modal dialogs are up.  See
   // https://bugs.webkit.org/show_bug.cgi?id=33962
   if (Page* page = document->GetPage()) {
-    if (page->Suspended())
+    if (page->Paused())
       return;
   }
 
@@ -1426,9 +1425,11 @@ bool FocusController::AdvanceFocusDirectionally(WebFocusType type) {
                                                     true /* ignore border */);
     } else if (isHTMLAreaElement(*focused_element)) {
       HTMLAreaElement& area = toHTMLAreaElement(*focused_element);
-      container = ScrollableEnclosingBoxOrParentFrameForNodeInDirection(
-          type, area.ImageElement());
-      starting_rect = VirtualRectForAreaElementAndDirection(area, type);
+      if (area.ImageElement()) {
+        container = ScrollableEnclosingBoxOrParentFrameForNodeInDirection(
+            type, area.ImageElement());
+        starting_rect = VirtualRectForAreaElementAndDirection(area, type);
+      }
     }
   }
 

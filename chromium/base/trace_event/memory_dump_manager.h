@@ -36,9 +36,10 @@ class MemoryDumpProvider;
 class HeapProfilerSerializationState;
 
 enum HeapProfilingMode {
-  kHeapProfilingModeNone,
+  kHeapProfilingModeDisabled,
   kHeapProfilingModePseudo,
   kHeapProfilingModeNative,
+  kHeapProfilingModeNoStack,
   kHeapProfilingModeTaskProfiler,
   kHeapProfilingModeInvalid
 };
@@ -135,8 +136,14 @@ class BASE_EXPORT MemoryDumpManager {
   // invalid mode is specified, then kHeapProfilingInvalid is returned.
   static HeapProfilingMode GetHeapProfilingModeFromCommandLine();
 
-  // Enable heap profiling if supported, and kEnableHeapProfiling is specified.
+  // Enable heap profiling if supported, and kEnableHeapProfiling command line
+  // is specified.
   void EnableHeapProfilingIfNeeded();
+
+  // Enable heap profiling with specified |profiling_mode|. Disabling heap
+  // profiler will disable it permanently and cannot be enabled again. Noop if
+  // heap profiling was already enabled or permanently disabled.
+  void EnableHeapProfiling(HeapProfilingMode profiling_mode);
 
   // Lets tests see if a dump provider is registered.
   bool IsDumpProviderRegisteredForTesting(MemoryDumpProvider*);
@@ -173,6 +180,8 @@ class BASE_EXPORT MemoryDumpManager {
   friend struct DefaultSingletonTraits<MemoryDumpManager>;
   friend class MemoryDumpManagerTest;
 
+  enum class HeapProfilingState { DISABLED, ENABLED, DISABLED_PERMANENTLY };
+
   // Holds the state of a process memory dump that needs to be carried over
   // across task runners in order to fulfill an asynchronous CreateProcessDump()
   // request. At any time exactly one task runner owns a
@@ -187,16 +196,8 @@ class BASE_EXPORT MemoryDumpManager {
         scoped_refptr<SequencedTaskRunner> dump_thread_task_runner);
     ~ProcessMemoryDumpAsyncState();
 
-    // Gets or creates the memory dump container for the given target process.
-    ProcessMemoryDump* GetOrCreateMemoryDumpContainerForProcess(
-        ProcessId pid,
-        const MemoryDumpArgs& dump_args);
-
-    // A map of ProcessId -> ProcessMemoryDump, one for each target process
-    // being dumped from the current process. Typically each process dumps only
-    // for itself, unless dump providers specify a different |target_process| in
-    // MemoryDumpProvider::Options.
-    std::map<ProcessId, std::unique_ptr<ProcessMemoryDump>> process_dumps;
+    // A ProcessMemoryDump to collect data from MemoryDumpProviders.
+    std::unique_ptr<ProcessMemoryDump> process_memory_dump;
 
     // The arguments passed to the initial CreateProcessDump() request.
     const MemoryDumpRequestArgs req_args;
@@ -214,9 +215,6 @@ class BASE_EXPORT MemoryDumpManager {
 
     // Callback passed to the initial call to CreateProcessDump().
     ProcessMemoryDumpCallback callback;
-
-    // The |success| field that will be passed as argument to the |callback|.
-    bool dump_successful;
 
     // The thread on which FinalizeDumpAndAddToTrace() (and hence |callback|)
     // should be invoked. This is the thread on which the initial
@@ -308,8 +306,10 @@ class BASE_EXPORT MemoryDumpManager {
   // When true, calling |RegisterMemoryDumpProvider| is a no-op.
   bool dumper_registrations_ignored_for_testing_;
 
-  // Whether new memory dump providers should be told to enable heap profiling.
-  bool heap_profiling_enabled_;
+  // Heap profiling can be enabled and disabled only once in the process.
+  // New memory dump providers should be told to enable heap profiling if state
+  // is ENABLED.
+  HeapProfilingState heap_profiling_state_;
 
   DISALLOW_COPY_AND_ASSIGN(MemoryDumpManager);
 };

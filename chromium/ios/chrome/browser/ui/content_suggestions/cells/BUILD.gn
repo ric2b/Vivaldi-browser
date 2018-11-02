@@ -4,6 +4,7 @@
 
 source_set("cells") {
   sources = [
+    "content_suggestions_gesture_commands.h",
     "content_suggestions_item.h",
     "content_suggestions_item.mm",
     "content_suggestions_most_visited_item.h",
@@ -31,6 +32,8 @@ source_set("cells_ui") {
     "content_suggestions_footer_item.mm",
     "content_suggestions_header_item.h",
     "content_suggestions_header_item.mm",
+    "content_suggestions_learn_more_item.h",
+    "content_suggestions_learn_more_item.mm",
     "content_suggestions_most_visited_cell.h",
     "content_suggestions_most_visited_cell.mm",
     "content_suggestions_text_item.h",
@@ -41,14 +44,19 @@ source_set("cells_ui") {
   ]
   deps = [
     "//base",
+    "//ios/chrome/app/strings",
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/collection_view",
     "//ios/chrome/browser/ui/colors",
     "//ios/chrome/browser/ui/content_suggestions/identifier",
     "//ios/chrome/browser/ui/favicon:favicon_ui",
+    "//ios/chrome/browser/ui/material_components",
     "//ios/chrome/browser/ui/util",
     "//ios/chrome/common",
     "//ui/base",
+  ]
+  public_deps = [
+    "//ios/third_party/material_components_ios",
   ]
   configs += [ "//build/config/compiler:enable_arc" ]
 }
@@ -59,6 +67,7 @@ source_set("unit_tests") {
     "content_suggestions_footer_item_unittest.mm",
     "content_suggestions_header_item_unittest.mm",
     "content_suggestions_item_unittest.mm",
+    "content_suggestions_learn_more_item_unittest.mm",
     "content_suggestions_most_visited_item_unittest.mm",
     "content_suggestions_whats_new_item_unittest.mm",
   ]

@@ -728,6 +728,7 @@ error::Error DoUnmapBuffer(GLenum target);
 error::Error DoResizeCHROMIUM(GLuint width,
                               GLuint height,
                               GLfloat scale_factor,
+                              GLenum color_space,
                               GLboolean alpha);
 error::Error DoGetRequestableExtensionsCHROMIUM(const char** extensions);
 error::Error DoRequestExtensionCHROMIUM(const char* extension);
@@ -849,6 +850,7 @@ error::Error DoScheduleDCLayerCHROMIUM(
     const GLfloat* contents_rect,
     GLuint background_color,
     GLuint edge_aa_mask,
+    GLenum filter,
     const GLfloat* bounds_rect);
 error::Error DoCommitOverlayPlanesCHROMIUM();
 error::Error DoSwapInterval(GLint interval);
@@ -978,9 +980,18 @@ error::Error DoUniformMatrix4fvStreamTextureMatrixCHROMIUM(
 error::Error DoOverlayPromotionHintCHROMIUM(GLuint texture,
                                             GLboolean promotion_hint,
                                             GLint display_x,
-                                            GLint display_y);
+                                            GLint display_y,
+                                            GLint display_width,
+                                            GLint display_height);
 error::Error DoSetDrawRectangleCHROMIUM(GLint x,
                                         GLint y,
                                         GLint width,
                                         GLint height);
 error::Error DoSetEnableDCLayersCHROMIUM(GLboolean enable);
+error::Error DoBeginRasterCHROMIUM(GLuint texture_id,
+                                   GLuint sk_color,
+                                   GLuint msaa_sample_count,
+                                   GLboolean can_use_lcd_text,
+                                   GLboolean use_distance_field_text,
+                                   GLint pixel_config);
+error::Error DoEndRasterCHROMIUM();

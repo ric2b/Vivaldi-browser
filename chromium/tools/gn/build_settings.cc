@@ -139,6 +139,9 @@ std::string BuildSettings::RemapActualToSourcePath(const std::string &path) {
           new_path.compare(2, it->prefix.length(), it->prefix) != 0  &&
           new_path[2+it->prefix.length()] == '/')) {
         new_path.replace(2, it->actual_path.length(), it->prefix);
+        if (new_path[2 + it->prefix.length()] != '/') {
+          new_path.insert(2+ it->prefix.length(), "/");
+        }
       } else if (it->actual_path.empty() && !(
           new_path.compare(2, it->prefix.length(), it->prefix) == 0  &&
           new_path[2+it->prefix.length()] == '/')) {

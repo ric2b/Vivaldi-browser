@@ -34,7 +34,17 @@ component("capture_base") {
   ]
 }
 
-component("capture_lib") {
+# Target which allows breakout of Android BUILD.gn files.
+source_set("capture_device_specific") {
+  visibility = [
+    ":capture_lib",
+    "//media/capture/content/android",
+    "//media/capture/video/android",
+  ]
+  if (is_win) {
+    # TODO(jschuh): https://crbug.com/167187 fix size_t to int truncations.
+    configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+  }
   defines = [ "CAPTURE_IMPLEMENTATION" ]
   sources = [
     "content/animated_content_sampler.cc",
@@ -57,6 +67,28 @@ component("capture_lib") {
     "video/file_video_capture_device.h",
     "video/file_video_capture_device_factory.cc",
     "video/file_video_capture_device_factory.h",
+    "video/video_capture_buffer_handle.h",
+    "video/video_capture_device.cc",
+    "video/video_capture_device.h",
+    "video/video_capture_device_factory.cc",
+    "video/video_capture_device_factory.h",
+  ]
+  public_deps = [
+    ":capture_base",
+  ]
+  deps = [
+    "//base",
+    "//base:i18n",
+    "//gpu/command_buffer/client",
+    "//media",
+    "//media/capture/mojo:image_capture",
+    "//ui/gfx",
+  ]
+}
+
+component("capture_lib") {
+  defines = [ "CAPTURE_IMPLEMENTATION" ]
+  sources = [
     "video/linux/camera_config_chromeos.cc",
     "video/linux/camera_config_chromeos.h",
     "video/linux/v4l2_capture_delegate.cc",
@@ -75,12 +107,10 @@ component("capture_lib") {
     "video/mac/video_capture_device_factory_mac.mm",
     "video/mac/video_capture_device_mac.h",
     "video/mac/video_capture_device_mac.mm",
-    "video/scoped_result_callback.h",
     "video/shared_memory_buffer_handle.cc",
     "video/shared_memory_buffer_handle.h",
     "video/shared_memory_buffer_tracker.cc",
     "video/shared_memory_buffer_tracker.h",
-    "video/video_capture_buffer_handle.h",
     "video/video_capture_buffer_pool.h",
     "video/video_capture_buffer_pool_impl.cc",
     "video/video_capture_buffer_pool_impl.h",
@@ -88,12 +118,8 @@ component("capture_lib") {
     "video/video_capture_buffer_tracker_factory.h",
     "video/video_capture_buffer_tracker_factory_impl.cc",
     "video/video_capture_buffer_tracker_factory_impl.h",
-    "video/video_capture_device.cc",
-    "video/video_capture_device.h",
     "video/video_capture_device_client.cc",
     "video/video_capture_device_client.h",
-    "video/video_capture_device_factory.cc",
-    "video/video_capture_device_factory.h",
     "video/video_capture_jpeg_decoder.h",
     "video/video_capture_system.h",
     "video/video_capture_system_impl.cc",
@@ -124,6 +150,7 @@ component("capture_lib") {
 
   public_deps = [
     ":capture_base",
+    ":capture_device_specific",
   ]
 
   deps = [
@@ -189,6 +216,7 @@ component("capture_lib") {
 
   if (is_chromeos) {
     sources += [
+      "video/chromeos/camera_buffer_factory.cc",
       "video/chromeos/camera_device_context.cc",
       "video/chromeos/camera_device_delegate.cc",
       "video/chromeos/camera_hal_delegate.cc",
@@ -226,9 +254,9 @@ test("capture_unittests") {
     ":capture",
     "//base/test:run_all_unittests",
     "//base/test:test_support",
-    "//media",
-    "//media/base:test_support",
+    "//media:test_support",
     "//media/capture/mojo:image_capture",
+    "//mojo/edk/system",
     "//testing/gmock",
     "//testing/gtest",
     "//ui/gfx:test_support",
@@ -251,14 +279,18 @@ test("capture_unittests") {
       "video/chromeos/camera_device_delegate_unittest.cc",
       "video/chromeos/camera_hal_delegate_unittest.cc",
       "video/chromeos/camera_hal_dispatcher_impl_unittest.cc",
+      "video/chromeos/local_gpu_memory_buffer_manager.cc",
       "video/chromeos/mock_camera_module.cc",
+      "video/chromeos/mock_gpu_memory_buffer_manager.cc",
       "video/chromeos/mock_video_capture_client.cc",
       "video/chromeos/stream_buffer_manager_unittest.cc",
     ]
     deps += [
       "//media/capture/video/chromeos/mojo:arc_camera3",
       "//mojo/edk/system",
+      "//third_party/libdrm",
       "//third_party/libsync",
+      "//third_party/minigbm",
     ]
   }
 }

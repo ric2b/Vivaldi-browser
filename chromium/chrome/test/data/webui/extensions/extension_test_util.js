@@ -125,7 +125,19 @@ cr.define('extension_test_util', function() {
   };
 
   /**
-   * Returns whether or not the element specified is visible.
+   * @param {!HTMLElement} element
+   * @return {boolean} whether or not the element passed in is visible
+   */
+  function isElementVisible(element) {
+    var rect = element.getBoundingClientRect();
+    return rect.width * rect.height > 0; // Width and height is never negative.
+  }
+
+  /**
+   * Returns whether or not the element specified is visible. This is different
+   * from isElementVisible in that this function attempts to search for the
+   * element within a parent element, which means you can use it to check if
+   * the element exists at all.
    * @param {!HTMLElement} parentEl
    * @param {string} selector
    * @param {boolean=} checkLightDom
@@ -166,41 +178,46 @@ cr.define('extension_test_util', function() {
     var id = opt_properties && opt_properties.hasOwnProperty('id') ?
         opt_properties[id] : 'a'.repeat(32);
     var baseUrl = 'chrome-extension://' + id + '/';
-    return Object.assign({
-      commands: [],
-      dependentExtensions: [],
-      description: 'This is an extension',
-      disableReasons: {
-        suspiciousInstall: false,
-        corruptInstall: false,
-        updateRequired: false,
-      },
-      homePage: {specified: false, url: ''},
-      iconUrl: 'chrome://extension-icon/' + id + '/24/0',
-      id: id,
-      incognitoAccess: {isEnabled: true, isActive: false},
-      location: 'FROM_STORE',
-      manifestErrors: [],
-      name: 'Wonderful Extension',
-      runtimeErrors: [],
-      permissions: [],
-      state: 'ENABLED',
-      type: 'EXTENSION',
-      version: '2.0',
-      views: [{url: baseUrl + 'foo.html'}, {url: baseUrl + 'bar.html'}],
-    }, opt_properties);
+    return Object.assign(
+        {
+          commands: [],
+          dependentExtensions: [],
+          description: 'This is an extension',
+          disableReasons: {
+            suspiciousInstall: false,
+            corruptInstall: false,
+            updateRequired: false,
+          },
+          homePage: {specified: false, url: ''},
+          iconUrl: 'chrome://extension-icon/' + id + '/24/0',
+          id: id,
+          incognitoAccess: {isEnabled: true, isActive: false},
+          location: 'FROM_STORE',
+          manifestErrors: [],
+          name: 'Wonderful Extension',
+          runtimeErrors: [],
+          permissions: [],
+          state: 'ENABLED',
+          type: 'EXTENSION',
+          userMayModify: true,
+          version: '2.0',
+          views: [{url: baseUrl + 'foo.html'}, {url: baseUrl + 'bar.html'}],
+        },
+        opt_properties);
   }
 
   /**
-   * Tests that any iron-icon child of an HTML element has a corresponding
-   * non-empty svg element.
+   * Tests that any visible iron-icon child of an HTML element has a
+   * corresponding non-empty svg element.
    * @param {HTMLElement} e The element to check the iron icons in.
    */
   function testIronIcons(e) {
     e.querySelectorAll('* /deep/ iron-icon').forEach(function(icon) {
-      var svg = icon.$$('svg');
-      expectTrue(!!svg && svg.innerHTML != '',
-                 'icon "' + icon.icon + '" is not present');
+      if(isElementVisible(icon)) {
+        var svg = icon.$$('svg');
+        expectTrue(!!svg && svg.innerHTML != '',
+                   'icon "' + icon.icon + '" is not present');
+      }
     });
   }
 
@@ -208,6 +225,7 @@ cr.define('extension_test_util', function() {
     ClickMock: ClickMock,
     ListenerMock: ListenerMock,
     MockItemDelegate: MockItemDelegate,
+    isElementVisible: isElementVisible,
     isVisible: isVisible,
     testVisible: testVisible,
     createExtensionInfo: createExtensionInfo,

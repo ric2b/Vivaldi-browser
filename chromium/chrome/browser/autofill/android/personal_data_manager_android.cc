@@ -51,6 +51,7 @@ using ::base::android::ConvertJavaStringToUTF8;
 using ::base::android::ConvertUTF16ToJavaString;
 using ::base::android::ConvertUTF8ToJavaString;
 using ::base::android::JavaParamRef;
+using ::base::android::JavaRef;
 using ::base::android::ScopedJavaGlobalRef;
 using ::base::android::ScopedJavaLocalRef;
 
@@ -157,7 +158,7 @@ ScopedJavaLocalRef<jobject> CreateJavaCreditCardFromNative(
       ConvertUTF8ToJavaString(env, card.server_id()));
 }
 
-void PopulateNativeCreditCardFromJava(const jobject& jcard,
+void PopulateNativeCreditCardFromJava(const JavaRef<jobject>& jcard,
                                       JNIEnv* env,
                                       CreditCard* card) {
   card->set_origin(
@@ -256,8 +257,10 @@ class FullCardRequester : public payments::FullCardRequest::ResultDelegate,
   ~FullCardRequester() override {}
 
   // payments::FullCardRequest::ResultDelegate:
-  void OnFullCardRequestSucceeded(const CreditCard& card,
-                                  const base::string16& cvc) override {
+  void OnFullCardRequestSucceeded(
+      const payments::FullCardRequest& /* full_card_request */,
+      const CreditCard& card,
+      const base::string16& cvc) override {
     JNIEnv* env = base::android::AttachCurrentThread();
     Java_FullCardRequestDelegate_onFullCardDetails(
         env, jdelegate_, CreateJavaCreditCardFromNative(env, card),

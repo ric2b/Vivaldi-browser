@@ -13,10 +13,12 @@ public_headers = [
   "//media/base/hdr_metadata.h",
   "//media/base/media_log_event.h",
   "//media/base/output_device_info.h",
+  "//media/base/pipeline_status.h",
   "//media/base/sample_format.h",
   "//media/base/subsample_entry.h",
   "//media/base/video_codecs.h",
   "//media/base/video_types.h",
+  "//media/base/watch_time_keys.h",
 ]
 
 traits_headers = [ "//media/base/ipc/media_param_traits_macros.h" ]
@@ -38,9 +40,11 @@ type_mappings = [
   "media.mojom.EncryptionScheme.CipherMode=media::EncryptionScheme::CipherMode",
   "media.mojom.MediaLogEvent=media::MediaLogEvent",
   "media.mojom.OutputDeviceStatus=media::OutputDeviceStatus",
+  "media.mojom.PipelineStatus=media::PipelineStatus",
   "media.mojom.SampleFormat=media::SampleFormat",
   "media.mojom.SubsampleEntry=media::SubsampleEntry",
   "media.mojom.VideoCodec=media::VideoCodec",
   "media.mojom.VideoCodecProfile=media::VideoCodecProfile",
   "media.mojom.VideoPixelFormat=media::VideoPixelFormat",
+  "media.mojom.WatchTimeKey=media::WatchTimeKey",
 ]

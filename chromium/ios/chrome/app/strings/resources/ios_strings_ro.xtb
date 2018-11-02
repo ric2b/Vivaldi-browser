@@ -18,6 +18,7 @@
 <translation id="1209206284964581585">Ascunde momentan</translation>
 <translation id="1219674500290482172">Nu se poate realiza conexiunea la internet.</translation>
 <translation id="1254117744268754948">Alegeți dosarul</translation>
+<translation id="1265739287306757398">Află cum</translation>
 <translation id="1272079795634619415">Oprește</translation>
 <translation id="129553762522093515">Închise recent</translation>
 <translation id="1323735185997015385">Șterge</translation>
@@ -60,13 +61,16 @@ De exemplu, unele site-uri pot răspunde la această solicitare afișând anunț
 <translation id="1952728750904661634">Conectează-te cu un cont gestionat</translation>
 <translation id="1974060860693918893">Avansate</translation>
 <translation id="1989112275319619282">Răsfoiește</translation>
+<translation id="2015722694326466240">Pentru a vedea parolele, trebuie mai întâi să setezi o parolă pe dispozitiv.</translation>
 <translation id="2068952045031577364">Din ultima săptămână</translation>
 <translation id="2079545284768500474">Anulează</translation>
 <translation id="209018056901015185">Site desktop</translation>
 <translation id="2103075008456228677">Deschide history.google.com</translation>
 <translation id="2116625576999540962">Elemente mutate: <ph name="NUMBER_OF_SELECTED_BOOKMARKS" /></translation>
+<translation id="213900355088104901">Pentru a naviga privat, deschide o filă incognito</translation>
 <translation id="2149973817440762519">Editați marcajul</translation>
 <translation id="2230173723195178503">Pagina web s-a încărcat</translation>
+<translation id="2256128224215992540">Sugestii de căutare și de site-uri</translation>
 <translation id="2267753748892043616">Adaugă un cont</translation>
 <translation id="2273327106802955778">Meniul Mai multe</translation>
 <translation id="2320166752086256636">Ascunde tastatura</translation>
@@ -134,6 +138,7 @@ De exemplu, unele site-uri pot răspunde la această solicitare afișând anunț
 <translation id="3474649192738347024">Formulare completate.</translation>
 <translation id="3478058380795961209">Lună expirare</translation>
 <translation id="3482959374254649722">Se sincronizează filele...</translation>
+<translation id="3493531032208478708"><ph name="BEGIN_LINK" />Află mai multe<ph name="END_LINK" /> despre conținutul sugerat</translation>
 <translation id="3494788280727468875">Confirmă ștergerea datelor de navigare</translation>
 <translation id="3519193562722059437">Deschide o filă pentru a naviga pe web.</translation>
 <translation id="3527085408025491307">Dosar</translation>
@@ -145,7 +150,6 @@ De exemplu, unele site-uri pot răspunde la această solicitare afișând anunț
 
 Pentru a ajusta termenii căutării, apasă lung pentru a selecta. Pentru a rafina căutarea, glisează panoul până în partea de sus și atinge caseta de căutare.</translation>
 <translation id="3607167657931203000">Datele de completare automată</translation>
-<translation id="3608436266458100337">Modul Cititor</translation>
 <translation id="3628119975092896051">Lista de lectură este disponibilă offline. Pentru a adăuga o pagină în lista de lectură, atinge <ph name="SHARE_OPENING_ICON" />.</translation>
 <translation id="3638472932233958418">Preîncarcă pagini</translation>
 <translation id="3691593122358196899">Marcaj adăugat în <ph name="FOLDER_TITLE" /></translation>
@@ -154,6 +158,7 @@ Pentru a ajusta termenii căutării, apasă lung pentru a selecta. Pentru a rafi
 <translation id="3779810277399252432">Nicio conexiune la internet.</translation>
 <translation id="3783017676699494206">Salvează imaginea</translation>
 <translation id="385051799172605136">Înapoi</translation>
+<translation id="3857761338463387655">Creează un e-mail folosind:</translation>
 <translation id="3897092660631435901">Meniu</translation>
 <translation id="3928666092801078803">Combină datele</translation>
 <translation id="3950820424414687140">Conectează-te</translation>
@@ -173,13 +178,17 @@ Pentru a ajusta termenii căutării, apasă lung pentru a selecta. Pentru a rafi
 <translation id="4272631900155121838">Pentru a scana un cod QR, activează camera foto din setări</translation>
 <translation id="4281844954008187215">Condiții de furnizare a serviciilor</translation>
 <translation id="430793432425771671">Sincronizează tot</translation>
+<translation id="4342284590510997375">Nou</translation>
+<translation id="434816576838749873">Alege aplicația de e-mail</translation>
 <translation id="4359125752503270327">Această pagină se va deschide în altă aplicație.</translation>
 <translation id="4375040482473363939">Căutare coduri QR</translation>
 <translation id="4378154925671717803">Telefon</translation>
 <translation id="441868831736628555">Notificare de confidențialitate</translation>
+<translation id="4460091562821778167">Întreabă de fiecare dată ce aplicație folosesc</translation>
 <translation id="4508750114462689118">Închide mesajul promoțional de conectare</translation>
 <translation id="4526249700380860531">Vezi și gestionează parolele salvate la <ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /></translation>
 <translation id="4536418791685807335">Încearcă să te conectezi din nou.</translation>
+<translation id="461440297010471931">Căutare cu Google</translation>
 <translation id="4620246317052452550">Paginile citite</translation>
 <translation id="4636930964841734540">Informații</translation>
 <translation id="4659667755519643272">Accesează comutatorul de file</translation>
@@ -188,6 +197,7 @@ Pentru a ajusta termenii căutării, apasă lung pentru a selecta. Pentru a rafi
 Datele sunt criptate cu expresia de acces pentru sincronizare. Introdu-o pentru a începe sincronizarea.</translation>
 <translation id="473775607612524610">Actualizează</translation>
 <translation id="481968316161811770">Cookie-urile, datele privind site-urile</translation>
+<translation id="4854345657858711387">Setează o parolă</translation>
 <translation id="4860895144060829044">Apelează</translation>
 <translation id="4875622588773761625">Dorești ca <ph name="PASSWORD_MANAGER_BRAND" /> să îți actualizeze parola pentru acest site?</translation>
 <translation id="4881695831933465202">Deschide</translation>
@@ -240,6 +250,7 @@ Trebuie să activezi Handoff în secțiunea General din Setări, iar dispozitive
 <translation id="5871497086027727873">Un element mutat</translation>
 <translation id="5911030830365207728">Google Traducere</translation>
 <translation id="5916664084637901428">Activat</translation>
+<translation id="5948291296578561264">Astfel, poți să salvezi fotografiile în fototecă.</translation>
 <translation id="5953603475187800576">Afișează adresele și cardurile de credit din Google Payments</translation>
 <translation id="5955891643922670672">Se afișează versiunea offline</translation>
 <translation id="5964480694698977962">Creează o filă incognito nouă.</translation>
@@ -247,6 +258,7 @@ Trebuie să activezi Handoff în secțiunea General din Setări, iar dispozitive
 <translation id="5982717868370722439">Adaugă datele existente în <ph name="USER_EMAIL" />.</translation>
 <translation id="6012140227487808125">Se criptează…</translation>
 <translation id="6021332621416007159">Deschide în…</translation>
+<translation id="6039429417015973673"><ph name="TITLE" />, <ph name="PUBLISHER_INFORMATION" />, <ph name="PUBLICATION_DATE" /></translation>
 <translation id="6039694632319341016">Dorești ca <ph name="PASSWORD_MANAGER_BRAND" /> să actualizeze parola pentru <ph name="USERNAME" /> pe acest site?</translation>
 <translation id="6040143037577758943">Închide</translation>
 <translation id="6042308850641462728">Mai multe</translation>
@@ -264,7 +276,6 @@ Trebuie să activezi Handoff în secțiunea General din Setări, iar dispozitive
 <translation id="6196207969502475924">Căutare vocală</translation>
 <translation id="6254066287920239840">Deschide linkurile în aplicație, nu în browser.</translation>
 <translation id="6255097610484507482">Editați cardul de credit</translation>
-<translation id="6273258929211277933"><ph name="TITLE" />, <ph name="PUBLISHER_INFORMATION" />, <ph name="PUBLICATION_DATE" />, <ph name="STATE" /></translation>
 <translation id="6308436439357671616">Astfel, poți să fotografiezi și să încarci fotografiile.</translation>
 <translation id="6314335155547195432">Generează o parolă</translation>
 <translation id="6324528485781869530">Schimbă contul de sincronizare</translation>
@@ -340,6 +351,7 @@ Datele au fost criptate cu expresia de acces pentru sincronizare la <ph name="TI
 <translation id="7649070708921625228">Ajutor</translation>
 <translation id="7658239707568436148">Anulează</translation>
 <translation id="7671141431838911305">INSTALEAZĂ</translation>
+<translation id="7677825787905683892">Alege aplicația de e-mail prestabilită</translation>
 <translation id="7765158879357617694">Mută</translation>
 <translation id="7769602470925380267">Acceptă și deconectează-te</translation>
 <translation id="7772032839648071052">Confirmă expresia de acces</translation>
@@ -367,7 +379,6 @@ Datele au fost criptate cu expresia de acces pentru sincronizare la <ph name="TI
 <translation id="842017693807136194">Conectat(ă) cu</translation>
 <translation id="8428045167754449968">Oraș</translation>
 <translation id="8428213095426709021">Setări</translation>
-<translation id="8433678324664858900">Afișează sugestii</translation>
 <translation id="8458397775385147834">Un element șters</translation>
 <translation id="8487700953926739672">Disponibil offline</translation>
 <translation id="8503813439785031346">Nume utilizator</translation>
@@ -404,6 +415,8 @@ Datele au fost criptate cu expresia de acces pentru sincronizare la <ph name="TI
 <translation id="9083392325882095631">Un element</translation>
 <translation id="9100610230175265781">Este necesară o expresie de acces</translation>
 <translation id="9148126808321036104">Conectează-te din nou</translation>
+<translation id="914898748153555155">Poți să modifici oricând această preferință din setările Chrome</translation>
+<translation id="91549621916703028">Creează mai multe file pentru toate activitățile</translation>
 <translation id="9157836665414082580">Închide casetele de dialog</translation>
 <translation id="9188680907066685419">Deconectează-te de la contul gestionat</translation>
 <translation id="9203116392574189331">Handoff</translation>

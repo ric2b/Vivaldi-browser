@@ -6,7 +6,7 @@
 <translation id="1728549374069268714">Indsæt og gå til</translation>
 <translation id="1756026472674246267">Åbn link i ny fane</translation>
 <translation id="1759842336958782510">Chrome</translation>
-<translation id="1769904678986817931">Billedegenskaber</translation>
+<translation id="1769904678986817931">Billedegenskaber...</translation>
 <translation id="1920297417712412573">Kopier til note</translation>
 <translation id="1921101374471252440">&amp;Genindlæs billede</translation>
 <translation id="2444387452209867610">Indsæt note</translation>
@@ -42,8 +42,9 @@
 <translation id="5615637589913244581">Opera version 15+ (Beta)</translation>
 <translation id="5648110075441906505">Åbn billede i nyt vindue</translation>
 <translation id="5716238312826274098">Deaktiverer notifikationer</translation>
-<translation id="588258955323874662">Fuld skærm</translation>
+<translation id="588258955323874662">Fuldskærm</translation>
 <translation id="5916080360077521750">Trist, dine Chrome-indstillinger er ikke tilgængelige mens den browser kører. For at importere disse indstillinger til Vivaldi skal du gamme dit arbejde og lukke alle Chrome-vinduer. Klik derefter på Fortsæt.</translation>
+<translation id="6229528619562190452">Klik her for at opdatere Vivaldi.</translation>
 <translation id="6234173136417926046">Brug billede som baggrund på Vivaldi-startsiden</translation>
 <translation id="6259156558325130047">&amp;Gentag omorganisering</translation>
 <translation id="630690498669249215">Opera bogmærker-fil</translation>

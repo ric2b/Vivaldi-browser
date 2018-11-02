@@ -4,6 +4,7 @@
 
 #include "cc/animation/animation_player.h"
 
+#include "base/strings/stringprintf.h"
 #include "cc/animation/animation_delegate.h"
 #include "cc/animation/animation_host.h"
 #include "cc/animation/animation_id_provider.h"
@@ -408,6 +409,38 @@ TEST_F(AnimationPlayerTest, SwitchToLayer) {
   EXPECT_EQ(player_impl_, GetImplPlayerForLayerId(new_element_id));
   EXPECT_TRUE(player_impl_->element_animations());
   EXPECT_EQ(player_impl_->element_id(), new_element_id);
+}
+
+TEST_F(AnimationPlayerTest, ToString) {
+  player_->AttachElement(element_id_);
+  EXPECT_EQ(
+      base::StringPrintf("AnimationPlayer{id=%d, element_id=%s, animations=[]}",
+                         player_->id(), element_id_.ToString().c_str()),
+      player_->ToString());
+
+  player_->AddAnimation(
+      Animation::Create(std::make_unique<FakeFloatAnimationCurve>(15), 42, 73,
+                        TargetProperty::OPACITY));
+  EXPECT_EQ(base::StringPrintf("AnimationPlayer{id=%d, element_id=%s, "
+                               "animations=[Animation{id=42, "
+                               "group=73, target_property_id=1, "
+                               "run_state=WAITING_FOR_TARGET_AVAILABILITY}]}",
+                               player_->id(), element_id_.ToString().c_str()),
+            player_->ToString());
+
+  player_->AddAnimation(
+      Animation::Create(std::make_unique<FakeFloatAnimationCurve>(18), 45, 76,
+                        TargetProperty::BOUNDS));
+  EXPECT_EQ(
+      base::StringPrintf(
+          "AnimationPlayer{id=%d, element_id=%s, "
+          "animations=[Animation{id=42, "
+          "group=73, target_property_id=1, "
+          "run_state=WAITING_FOR_TARGET_AVAILABILITY}, Animation{id=45, "
+          "group=76, "
+          "target_property_id=5, run_state=WAITING_FOR_TARGET_AVAILABILITY}]}",
+          player_->id(), element_id_.ToString().c_str()),
+      player_->ToString());
 }
 
 }  // namespace

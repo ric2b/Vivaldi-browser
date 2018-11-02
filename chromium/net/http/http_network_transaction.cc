@@ -31,6 +31,7 @@
 #include "net/base/net_errors.h"
 #include "net/base/upload_data_stream.h"
 #include "net/base/url_util.h"
+#include "net/cert/cert_status_flags.h"
 #include "net/filter/filter_source_stream.h"
 #include "net/http/bidirectional_stream_impl.h"
 #include "net/http/http_auth.h"
@@ -63,10 +64,17 @@
 #include "net/spdy/chromium/spdy_session_pool.h"
 #include "net/ssl/ssl_cert_request_info.h"
 #include "net/ssl/ssl_connection_status_flags.h"
+#include "net/ssl/ssl_info.h"
 #include "net/ssl/ssl_private_key.h"
 #include "net/ssl/token_binding.h"
 #include "url/gurl.h"
 #include "url/url_canon.h"
+
+namespace {
+// Max number of |retry_attempts| (excluding the initial request) after which
+// we give up and show an error page.
+const size_t kMaxRetryAttempts = 2;
+}  // namespace
 
 namespace net {
 
@@ -88,7 +96,8 @@ HttpNetworkTransaction::HttpNetworkTransaction(RequestPriority priority,
       enable_ip_based_pooling_(true),
       enable_alternative_services_(true),
       websocket_handshake_stream_base_create_helper_(NULL),
-      net_error_details_() {}
+      net_error_details_(),
+      retry_attempts_(0) {}
 
 HttpNetworkTransaction::~HttpNetworkTransaction() {
   if (stream_.get()) {
@@ -442,6 +451,18 @@ void HttpNetworkTransaction::SetBeforeHeadersSentCallback(
   before_headers_sent_callback_ = callback;
 }
 
+void HttpNetworkTransaction::SetRequestHeadersCallback(
+    RequestHeadersCallback callback) {
+  DCHECK(!stream_);
+  request_headers_callback_ = std::move(callback);
+}
+
+void HttpNetworkTransaction::SetResponseHeadersCallback(
+    ResponseHeadersCallback callback) {
+  DCHECK(!stream_);
+  response_headers_callback_ = std::move(callback);
+}
+
 int HttpNetworkTransaction::ResumeNetworkStart() {
   DCHECK_EQ(next_state_, STATE_CREATE_STREAM);
   return DoLoop(OK);
@@ -458,6 +479,7 @@ void HttpNetworkTransaction::OnStreamReady(const SSLConfig& used_ssl_config,
     total_sent_bytes_ += stream_->GetTotalSentBytes();
   }
   stream_ = std::move(stream);
+  stream_->SetRequestHeadersCallback(request_headers_callback_);
   server_ssl_config_ = used_ssl_config;
   proxy_info_ = used_proxy_info;
   response_.was_alpn_negotiated = stream_request_->was_alpn_negotiated();
@@ -488,13 +510,16 @@ void HttpNetworkTransaction::OnWebSocketHandshakeStreamReady(
   OnStreamReady(used_ssl_config, used_proxy_info, std::move(stream));
 }
 
-void HttpNetworkTransaction::OnStreamFailed(int result,
-                                            const SSLConfig& used_ssl_config) {
+void HttpNetworkTransaction::OnStreamFailed(
+    int result,
+    const NetErrorDetails& net_error_details,
+    const SSLConfig& used_ssl_config) {
   DCHECK_EQ(STATE_CREATE_STREAM_COMPLETE, next_state_);
   DCHECK_NE(OK, result);
   DCHECK(stream_request_.get());
   DCHECK(!stream_.get());
   server_ssl_config_ = used_ssl_config;
+  net_error_details_ = net_error_details;
 
   OnIOComplete(result);
 }
@@ -575,6 +600,7 @@ void HttpNetworkTransaction::OnHttpsProxyTunnelResponse(
     total_sent_bytes_ += stream_->GetTotalSentBytes();
   }
   stream_ = std::move(stream);
+  stream_->SetRequestHeadersCallback(request_headers_callback_);
   stream_request_.reset();  // we're done with the stream request
   OnIOComplete(ERR_HTTPS_PROXY_TUNNEL_RESPONSE);
 }
@@ -1260,6 +1286,8 @@ int HttpNetworkTransaction::DoReadHeadersComplete(int result) {
   net_log_.AddEvent(
       NetLogEventType::HTTP_TRANSACTION_READ_RESPONSE_HEADERS,
       base::Bind(&HttpResponseHeaders::NetLogCallback, response_.headers));
+  if (response_headers_callback_)
+    response_headers_callback_.Run(response_.headers);
 
   if (response_.headers->GetHttpVersion() < HttpVersion(1, 0)) {
     // HTTP/0.9 doesn't support the PUT method, so lack of response headers
@@ -1295,12 +1323,14 @@ int HttpNetworkTransaction::DoReadHeadersComplete(int result) {
   }
 
   if (IsSecureRequest()) {
-    session_->http_stream_factory()->ProcessAlternativeServices(
-        session_, response_.headers.get(), url::SchemeHostPort(request_->url));
-  }
-
-  if (IsSecureRequest())
     stream_->GetSSLInfo(&response_.ssl_info);
+    if (response_.ssl_info.is_valid() &&
+        !IsCertStatusError(response_.ssl_info.cert_status)) {
+      session_->http_stream_factory()->ProcessAlternativeServices(
+          session_, response_.headers.get(),
+          url::SchemeHostPort(request_->url));
+    }
+  }
 
   int rv = HandleAuthChallenge();
   if (rv != OK)
@@ -1535,8 +1565,11 @@ int HttpNetworkTransaction::HandleIOError(int error) {
     case ERR_SPDY_PING_FAILED:
     case ERR_SPDY_SERVER_REFUSED_STREAM:
     case ERR_QUIC_HANDSHAKE_FAILED:
+      if (HasExceededMaxRetries())
+        break;
       net_log_.AddEventWithNetErrorCode(
           NetLogEventType::HTTP_TRANSACTION_RESTART_AFTER_ERROR, error);
+      retry_attempts_++;
       ResetConnectionAndRequestForResend();
       error = OK;
       break;
@@ -1549,6 +1582,8 @@ int HttpNetworkTransaction::HandleIOError(int error) {
         // alternative service to be disabled.
         break;
       }
+      if (HasExceededMaxRetries())
+        break;
       if (session_->http_server_properties()->IsAlternativeServiceBroken(
               retried_alternative_service_)) {
         // If the alternative service was marked as broken while the request
@@ -1556,6 +1591,7 @@ int HttpNetworkTransaction::HandleIOError(int error) {
         // alternative service.
         net_log_.AddEventWithNetErrorCode(
             NetLogEventType::HTTP_TRANSACTION_RESTART_AFTER_ERROR, error);
+        retry_attempts_++;
         ResetConnectionAndRequestForResend();
         error = OK;
       } else if (session_->params().retry_without_alt_svc_on_quic_errors) {
@@ -1565,6 +1601,7 @@ int HttpNetworkTransaction::HandleIOError(int error) {
         enable_alternative_services_ = false;
         net_log_.AddEventWithNetErrorCode(
             NetLogEventType::HTTP_TRANSACTION_RESTART_AFTER_ERROR, error);
+        retry_attempts_++;
         ResetConnectionAndRequestForResend();
         error = OK;
       }
@@ -1620,6 +1657,10 @@ bool HttpNetworkTransaction::ShouldResendRequest() const {
   if (connection_is_proven && !has_received_headers)
     return true;
   return false;
+}
+
+bool HttpNetworkTransaction::HasExceededMaxRetries() const {
+  return (retry_attempts_ >= kMaxRetryAttempts);
 }
 
 void HttpNetworkTransaction::ResetConnectionAndRequestForResend() {

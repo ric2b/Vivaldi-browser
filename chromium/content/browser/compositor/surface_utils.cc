@@ -8,9 +8,9 @@
 #include "base/callback_helpers.h"
 #include "base/sequenced_task_runner.h"
 #include "build/build_config.h"
-#include "cc/output/copy_output_result.h"
-#include "cc/resources/single_release_callback.h"
 #include "components/viz/common/gl_helper.h"
+#include "components/viz/common/quads/copy_output_result.h"
+#include "components/viz/common/quads/single_release_callback.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "content/browser/browser_main_loop.h"
@@ -33,7 +33,7 @@ namespace {
 #if !defined(OS_ANDROID) || defined(USE_AURA)
 void CopyFromCompositingSurfaceFinished(
     const content::ReadbackRequestCallback& callback,
-    std::unique_ptr<cc::SingleReleaseCallback> release_callback,
+    std::unique_ptr<viz::SingleReleaseCallback> release_callback,
     std::unique_ptr<SkBitmap> bitmap,
     bool result) {
   gpu::SyncToken sync_token;
@@ -59,7 +59,7 @@ void PrepareTextureCopyOutputResult(
     const gfx::Size& dst_size_in_pixel,
     const SkColorType color_type,
     const content::ReadbackRequestCallback& callback,
-    std::unique_ptr<cc::CopyOutputResult> result) {
+    std::unique_ptr<viz::CopyOutputResult> result) {
 #if defined(OS_ANDROID) && !defined(USE_AURA)
   // TODO(wjmaclean): See if there's an equivalent pathway for Android and
   // implement it here.
@@ -67,7 +67,7 @@ void PrepareTextureCopyOutputResult(
 #else
   DCHECK(result->HasTexture());
   base::ScopedClosureRunner scoped_callback_runner(
-      base::Bind(callback, SkBitmap(), content::READBACK_FAILED));
+      base::BindOnce(callback, SkBitmap(), content::READBACK_FAILED));
 
   // TODO(siva.gunturi): We should be able to validate the format here using
   // GLHelper::IsReadbackConfigSupported before we processs the result.
@@ -76,7 +76,7 @@ void PrepareTextureCopyOutputResult(
   if (!bitmap->tryAllocPixels(SkImageInfo::Make(
           dst_size_in_pixel.width(), dst_size_in_pixel.height(), color_type,
           kOpaque_SkAlphaType))) {
-    scoped_callback_runner.ReplaceClosure(base::Bind(
+    scoped_callback_runner.ReplaceClosure(base::BindOnce(
         callback, SkBitmap(), content::READBACK_BITMAP_ALLOCATION_FAILURE));
     return;
   }
@@ -90,7 +90,7 @@ void PrepareTextureCopyOutputResult(
   uint8_t* pixels = static_cast<uint8_t*>(bitmap->getPixels());
 
   viz::TextureMailbox texture_mailbox;
-  std::unique_ptr<cc::SingleReleaseCallback> release_callback;
+  std::unique_ptr<viz::SingleReleaseCallback> release_callback;
   result->TakeTexture(&texture_mailbox, &release_callback);
   DCHECK(texture_mailbox.IsTexture());
 
@@ -109,7 +109,7 @@ void PrepareBitmapCopyOutputResult(
     const gfx::Size& dst_size_in_pixel,
     const SkColorType preferred_color_type,
     const content::ReadbackRequestCallback& callback,
-    std::unique_ptr<cc::CopyOutputResult> result) {
+    std::unique_ptr<viz::CopyOutputResult> result) {
   SkColorType color_type = preferred_color_type;
   if (color_type != kN32_SkColorType && color_type != kAlpha_8_SkColorType) {
     // Switch back to default colortype if format not supported.
@@ -190,7 +190,7 @@ void CopyFromCompositingSurfaceHasResult(
     const gfx::Size& dst_size_in_pixel,
     const SkColorType color_type,
     const ReadbackRequestCallback& callback,
-    std::unique_ptr<cc::CopyOutputResult> result) {
+    std::unique_ptr<viz::CopyOutputResult> result) {
   if (result->IsEmpty() || result->size().IsEmpty()) {
     callback.Run(SkBitmap(), READBACK_FAILED);
     return;
@@ -222,14 +222,14 @@ void ConnectWithInProcessFrameSinkManager(
     viz::FrameSinkManagerImpl* manager,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
   // A mojo pointer to |host| which is the FrameSinkManagerImpl's client.
-  cc::mojom::FrameSinkManagerClientPtr host_mojo;
+  viz::mojom::FrameSinkManagerClientPtr host_mojo;
   // A mojo pointer to |manager|.
-  cc::mojom::FrameSinkManagerPtr manager_mojo;
+  viz::mojom::FrameSinkManagerPtr manager_mojo;
 
   // A request to bind to each of the above interfaces.
-  cc::mojom::FrameSinkManagerClientRequest host_mojo_request =
+  viz::mojom::FrameSinkManagerClientRequest host_mojo_request =
       mojo::MakeRequest(&host_mojo);
-  cc::mojom::FrameSinkManagerRequest manager_mojo_request =
+  viz::mojom::FrameSinkManagerRequest manager_mojo_request =
       mojo::MakeRequest(&manager_mojo);
 
   // Sets |manager_mojo| which is given to the |host|.

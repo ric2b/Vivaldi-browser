@@ -16,10 +16,11 @@
 #include "cc/base/math_util.h"
 #include "cc/output/bsp_tree.h"
 #include "cc/output/bsp_walk_action.h"
-#include "cc/output/copy_output_request.h"
+#include "cc/output/output_surface.h"
 #include "cc/quads/draw_quad.h"
 #include "cc/resources/scoped_resource.h"
 #include "components/viz/common/display/renderer_settings.h"
+#include "components/viz/common/quads/copy_output_request.h"
 #include "ui/gfx/geometry/quad_f.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/transform.h"
@@ -77,7 +78,7 @@ DirectRenderer::DrawingFrame::~DrawingFrame() = default;
 
 DirectRenderer::DirectRenderer(const viz::RendererSettings* settings,
                                OutputSurface* output_surface,
-                               ResourceProvider* resource_provider)
+                               DisplayResourceProvider* resource_provider)
     : settings_(settings),
       output_surface_(output_surface),
       resource_provider_(resource_provider),
@@ -192,7 +193,7 @@ void DirectRenderer::DecideRenderPassAllocationsForFrame(
     render_passes_in_frame[pass->id] = RenderPassTextureSize(pass.get());
   }
 
-  std::vector<int> passes_to_delete;
+  std::vector<RenderPassId> passes_to_delete;
   for (const auto& pair : render_pass_textures_) {
     auto it = render_passes_in_frame.find(pair.first);
     if (it == render_passes_in_frame.end()) {
@@ -218,7 +219,7 @@ void DirectRenderer::DecideRenderPassAllocationsForFrame(
   for (auto& pass : render_passes_in_draw_order) {
     auto& resource = render_pass_textures_[pass->id];
     if (!resource) {
-      resource = base::MakeUnique<ScopedResource>(resource_provider_);
+      resource = std::make_unique<ScopedResource>(resource_provider_);
 
       // |has_damage_from_contributing_content| is used to determine if previous
       // contents can be reused when caching render pass and as a result needs
@@ -301,19 +302,12 @@ void DirectRenderer::DrawFrame(RenderPassList* render_passes_in_draw_order,
       render_pass_background_filters_[pass->id] = &pass->background_filters;
   }
 
-  // Draw all non-root render passes except for the root render pass.
-  for (const auto& pass : *render_passes_in_draw_order) {
-    if (pass.get() == root_render_pass)
-      break;
-    DrawRenderPassAndExecuteCopyRequests(pass.get());
-  }
-
   // Create the overlay candidate for the output surface, and mark it as
   // always handled.
   if (output_surface_->IsDisplayedAsOverlayPlane()) {
     OverlayCandidate output_surface_plane;
     output_surface_plane.display_rect =
-        gfx::RectF(root_render_pass->output_rect);
+        gfx::RectF(device_viewport_size.width(), device_viewport_size.height());
     output_surface_plane.format = output_surface_->GetOverlayBufferFormat();
     output_surface_plane.use_output_surface_for_resource = true;
     output_surface_plane.overlay_handled = true;
@@ -323,12 +317,20 @@ void DirectRenderer::DrawFrame(RenderPassList* render_passes_in_draw_order,
   // Attempt to replace some or all of the quads of the root render pass with
   // overlays.
   overlay_processor_->ProcessForOverlays(
-      resource_provider_, root_render_pass, render_pass_filters_,
+      resource_provider_, render_passes_in_draw_order, render_pass_filters_,
       render_pass_background_filters_, &current_frame()->overlay_list,
       &current_frame()->ca_layer_overlay_list,
       &current_frame()->dc_layer_overlay_list,
       &current_frame()->root_damage_rect,
       &current_frame()->root_content_bounds);
+
+  // Draw all non-root render passes except for the root render pass.
+  for (const auto& pass : *render_passes_in_draw_order) {
+    if (pass.get() == root_render_pass)
+      break;
+    DrawRenderPassAndExecuteCopyRequests(pass.get());
+  }
+
   bool was_using_dc_layers = using_dc_layers_;
   if (!current_frame()->dc_layer_overlay_list.empty()) {
     DCHECK(supports_dc_layers_);
@@ -343,8 +345,7 @@ void DirectRenderer::DrawFrame(RenderPassList* render_passes_in_draw_order,
     // The entire surface has to be redrawn if it was reshaped or if switching
     // from or to DirectComposition layers, because the previous contents are
     // discarded and some contents would otherwise be undefined.
-    current_frame()->root_damage_rect =
-        current_frame()->root_render_pass->output_rect;
+    current_frame()->root_damage_rect = gfx::Rect(device_viewport_size);
   }
 
   // We can skip all drawing if the damage rect is now empty.
@@ -354,7 +355,7 @@ void DirectRenderer::DrawFrame(RenderPassList* render_passes_in_draw_order,
   // If we have to draw but don't support partial swap, the whole output should
   // be considered damaged.
   if (!skip_drawing_root_render_pass && !use_partial_swap_)
-    current_frame()->root_damage_rect = root_render_pass->output_rect;
+    current_frame()->root_damage_rect = gfx::Rect(device_viewport_size);
 
   if (!skip_drawing_root_render_pass)
     DrawRenderPassAndExecuteCopyRequests(root_render_pass);
@@ -494,7 +495,10 @@ void DirectRenderer::DrawRenderPassAndExecuteCopyRequests(
     return;
   }
 
-  DrawRenderPass(render_pass);
+  // Repeated draw to simulate a slower device for the evaluation of performance
+  // improvements in UI effects.
+  for (int i = 0; i < settings_->slow_down_compositing_scale_factor; ++i)
+    DrawRenderPass(render_pass);
 
   bool first_request = true;
   for (auto& copy_request : render_pass->copy_requests) {
@@ -648,7 +652,8 @@ bool DirectRenderer::UseRenderPass(const RenderPass* render_pass) {
   return false;
 }
 
-bool DirectRenderer::HasAllocatedResourcesForTesting(int render_pass_id) const {
+bool DirectRenderer::HasAllocatedResourcesForTesting(
+    RenderPassId render_pass_id) const {
   auto iter = render_pass_textures_.find(render_pass_id);
   return iter != render_pass_textures_.end() && iter->second->id();
 }

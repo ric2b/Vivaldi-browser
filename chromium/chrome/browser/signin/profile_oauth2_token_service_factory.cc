@@ -42,7 +42,7 @@ ProfileOAuth2TokenServiceFactory::~ProfileOAuth2TokenServiceFactory() {
 
 ProfileOAuth2TokenService*
 ProfileOAuth2TokenServiceFactory::GetForProfile(Profile* profile) {
-#if defined(VIVALDI_BUILD)
+#if defined(VIVALDI_BUILD) && !defined(OS_ANDROID)
   if(vivaldi::IsVivaldiRunning())
     return vivaldi::VivaldiProfileOAuth2TokenServiceFactory::GetForProfile(
         profile);
@@ -54,7 +54,7 @@ ProfileOAuth2TokenServiceFactory::GetForProfile(Profile* profile) {
 // static
 ProfileOAuth2TokenServiceFactory*
     ProfileOAuth2TokenServiceFactory::GetInstance() {
-#if defined(VIVALDI_BUILD)
+#if defined(VIVALDI_BUILD) && !defined(OS_ANDROID)
   if(vivaldi::IsVivaldiRunning())
     return vivaldi::VivaldiProfileOAuth2TokenServiceFactory::GetInstance();
 #endif

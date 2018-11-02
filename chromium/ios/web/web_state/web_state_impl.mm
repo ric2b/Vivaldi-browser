@@ -44,6 +44,10 @@
 #include "net/http/http_response_headers.h"
 #include "ui/gfx/image/image.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace web {
 
 /* static */
@@ -173,7 +177,7 @@ CRWWebController* WebStateImpl::GetWebController() {
 
 void WebStateImpl::SetWebController(CRWWebController* web_controller) {
   [web_controller_ close];
-  web_controller_.reset([web_controller retain]);
+  web_controller_.reset(web_controller);
 }
 
 void WebStateImpl::OnTitleChanged() {
@@ -234,6 +238,14 @@ bool WebStateImpl::IsLoading() const {
 
 double WebStateImpl::GetLoadingProgress() const {
   return [web_controller_ loadingProgress];
+}
+
+bool WebStateImpl::IsCrashed() const {
+  return [web_controller_ isWebProcessCrashed];
+}
+
+bool WebStateImpl::IsEvicted() const {
+  return ![web_controller_ isViewAlive];
 }
 
 bool WebStateImpl::IsBeingDestroyed() const {
@@ -367,7 +379,6 @@ void WebStateImpl::UpdateHttpResponseHeaders(const GURL& url) {
   // Reset the state.
   http_response_headers_ = NULL;
   mime_type_.clear();
-  content_language_header_.clear();
 
   // Discard all the response headers except the ones for |main_page_url|.
   auto it = response_headers_map_.find(GURLByRemovingRefFromGURL(url));
@@ -382,16 +393,6 @@ void WebStateImpl::UpdateHttpResponseHeaders(const GURL& url) {
   std::string mime_type;
   http_response_headers_->GetMimeType(&mime_type);
   mime_type_ = mime_type;
-
-  // Content-Language
-  std::string content_language;
-  http_response_headers_->GetNormalizedHeader("content-language",
-                                              &content_language);
-  // Remove everything after the comma ',' if any.
-  size_t comma_index = content_language.find_first_of(',');
-  if (comma_index != std::string::npos)
-    content_language.resize(comma_index);
-  content_language_header_ = content_language;
 }
 
 void WebStateImpl::ShowWebInterstitial(WebInterstitialImpl* interstitial) {
@@ -401,32 +402,15 @@ void WebStateImpl::ShowWebInterstitial(WebInterstitialImpl* interstitial) {
   ShowTransientContentView(interstitial_->GetContentView());
 }
 
-void WebStateImpl::ClearTransientContentView() {
-  if (interstitial_) {
-    // Store the currently displayed interstitial in a local variable and reset
-    // |interstitial_| early.  This is to prevent an infinite loop, as
-    // |DontProceed()| internally calls |ClearTransientContentView()|.
-    web::WebInterstitial* interstitial = interstitial_;
-    interstitial_ = nullptr;
-    interstitial->DontProceed();
-    // Don't access |interstitial| after calling |DontProceed()|, as it triggers
-    // deletion.
-    for (auto& observer : observers_)
-      observer.InterstitialDismissed();
-  }
-  [web_controller_ clearTransientContentView];
-}
-
 void WebStateImpl::SendChangeLoadProgress(double progress) {
   for (auto& observer : observers_)
     observer.LoadProgressChanged(progress);
 }
 
-bool WebStateImpl::HandleContextMenu(const web::ContextMenuParams& params) {
+void WebStateImpl::HandleContextMenu(const web::ContextMenuParams& params) {
   if (delegate_) {
-    return delegate_->HandleContextMenu(this, params);
+    delegate_->HandleContextMenu(this, params);
   }
-  return false;
 }
 
 void WebStateImpl::ShowRepostFormWarningDialog(
@@ -510,17 +494,19 @@ void WebStateImpl::SetContentsMimeType(const std::string& mime_type) {
   mime_type_ = mime_type;
 }
 
-bool WebStateImpl::ShouldAllowRequest(NSURLRequest* request) {
+bool WebStateImpl::ShouldAllowRequest(NSURLRequest* request,
+                                      ui::PageTransition transition) {
   for (auto& policy_decider : policy_deciders_) {
-    if (!policy_decider.ShouldAllowRequest(request))
+    if (!policy_decider.ShouldAllowRequest(request, transition))
       return false;
   }
   return true;
 }
 
-bool WebStateImpl::ShouldAllowResponse(NSURLResponse* response) {
+bool WebStateImpl::ShouldAllowResponse(NSURLResponse* response,
+                                       bool for_main_frame) {
   for (auto& policy_decider : policy_deciders_) {
-    if (!policy_decider.ShouldAllowResponse(response))
+    if (!policy_decider.ShouldAllowResponse(response, for_main_frame))
       return false;
   }
   return true;
@@ -534,6 +520,16 @@ WebStateInterfaceProvider* WebStateImpl::GetWebStateInterfaceProvider() {
         base::MakeUnique<WebStateInterfaceProvider>();
   }
   return web_state_interface_provider_.get();
+}
+
+void WebStateImpl::BindInterfaceRequestFromMainFrame(
+    const std::string& interface_name,
+    mojo::ScopedMessagePipeHandle interface_pipe) {
+  if (!GetWebStateInterfaceProvider()->registry()->TryBindInterface(
+          interface_name, &interface_pipe)) {
+    GetWebClient()->BindInterfaceRequestFromMainFrame(
+        this, interface_name, std::move(interface_pipe));
+  }
 }
 
 base::WeakPtr<WebState> WebStateImpl::AsWeakPtr() {
@@ -562,13 +558,25 @@ UIView* WebStateImpl::GetView() {
   return [web_controller_ view];
 }
 
+void WebStateImpl::WasShown() {
+  [web_controller_ wasShown];
+  for (auto& observer : observers_)
+    observer.WasShown();
+}
+
+void WebStateImpl::WasHidden() {
+  [web_controller_ wasHidden];
+  for (auto& observer : observers_)
+    observer.WasHidden();
+}
+
 BrowserState* WebStateImpl::GetBrowserState() const {
   return navigation_manager_->GetBrowserState();
 }
 
 void WebStateImpl::OpenURL(const WebState::OpenURLParams& params) {
   DCHECK(Configured());
-  ClearTransientContentView();
+  ClearTransientContent();
   if (delegate_)
     delegate_->OpenURLFromWebState(this, params);
 }
@@ -625,8 +633,8 @@ void WebStateImpl::ExecuteJavaScript(const base::string16& javascript,
                    }];
 }
 
-const std::string& WebStateImpl::GetContentLanguageHeader() const {
-  return content_language_header_;
+void WebStateImpl::ExecuteUserJavaScript(NSString* javaScript) {
+  [web_controller_ executeUserJavaScript:javaScript completionHandler:nil];
 }
 
 const std::string& WebStateImpl::GetContentsMimeType() const {
@@ -710,13 +718,47 @@ void WebStateImpl::OnNavigationFinished(web::NavigationContext* context) {
 
 #pragma mark - NavigationManagerDelegate implementation
 
-void WebStateImpl::GoToIndex(int index) {
-  [web_controller_ goToItemAtIndex:index];
+void WebStateImpl::ClearTransientContent() {
+  if (interstitial_) {
+    // Store the currently displayed interstitial in a local variable and reset
+    // |interstitial_| early.  This is to prevent an infinite loop, as
+    // |DontProceed()| internally calls |ClearTransientContent()|.
+    web::WebInterstitial* interstitial = interstitial_;
+    interstitial_ = nullptr;
+    interstitial->DontProceed();
+    // Don't access |interstitial| after calling |DontProceed()|, as it triggers
+    // deletion.
+    for (auto& observer : observers_)
+      observer.InterstitialDismissed();
+  }
+  [web_controller_ clearTransientContentView];
 }
 
-void WebStateImpl::LoadURLWithParams(
-    const NavigationManager::WebLoadParams& params) {
-  [web_controller_ loadWithParams:params];
+void WebStateImpl::RecordPageStateInNavigationItem() {
+  [web_controller_ recordStateInHistory];
+}
+
+void WebStateImpl::UpdateHtml5HistoryState() {
+  [web_controller_ updateHTML5HistoryState];
+}
+
+void WebStateImpl::WillChangeUserAgentType() {
+  // TODO(crbug.com/736103): due to the bug, updating the user agent of web view
+  // requires reconstructing the whole web view, change the behavior to call
+  // [WKWebView setCustomUserAgent] once the bug is fixed.
+  [web_controller_ requirePageReconstruction];
+}
+
+void WebStateImpl::WillLoadCurrentItemWithUrl(const GURL& url) {
+  [web_controller_ willLoadCurrentItemWithURL:url];
+}
+
+void WebStateImpl::LoadCurrentItem() {
+  [web_controller_ loadCurrentURL];
+}
+
+void WebStateImpl::LoadIfNecessary() {
+  [web_controller_ loadCurrentURLIfNecessary];
 }
 
 void WebStateImpl::Reload() {

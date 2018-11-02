@@ -17,6 +17,8 @@
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/events/test/events_test_utils.h"
+#include "ui/events/test/test_event_target.h"
+#include "ui/gfx/transform.h"
 
 #if defined(USE_X11)
 #include <X11/Xlib.h>
@@ -1096,6 +1098,49 @@ TEST(EventTest, EventLatencyOSMouseWheelHistogram) {
 
   histogram_tester.ExpectTotalCount("Event.Latency.OS.MOUSE_WHEEL", 1);
 #endif
+}
+
+TEST(EventTest, UpdateForRootTransformation) {
+  gfx::Transform identity_transform;
+  const gfx::Point location(10, 10);
+  const gfx::Point root_location(20, 20);
+
+  // A mouse event that is untargeted should reset the root location when
+  // transformed. Though the events start out with different locations and
+  // root_locations, they should be equal afterwards.
+  ui::MouseEvent untargeted(ET_MOUSE_PRESSED, location, root_location,
+                            EventTimeForNow(), 0, 0);
+  untargeted.UpdateForRootTransform(identity_transform, identity_transform);
+  EXPECT_EQ(location, untargeted.location());
+  EXPECT_EQ(location, untargeted.root_location());
+
+  ui::test::TestEventTarget target;
+
+  // A mouse event that is targeted should not set the root location to the
+  // local location. They start with different locations and should stay
+  // unequal after a transform is applied.
+  {
+    ui::MouseEvent targeted(ET_MOUSE_PRESSED, location, root_location,
+                            EventTimeForNow(), 0, 0);
+    Event::DispatcherApi(&targeted).set_target(&target);
+    targeted.UpdateForRootTransform(identity_transform, identity_transform);
+    EXPECT_EQ(location, targeted.location());
+    EXPECT_EQ(root_location, targeted.root_location());
+  }
+
+  {
+    // Targeted event with 2x and 3x scales.
+    gfx::Transform transform2x;
+    transform2x.Scale(2, 2);
+    gfx::Transform transform3x;
+    transform3x.Scale(3, 3);
+    ui::MouseEvent targeted(ET_MOUSE_PRESSED, location, root_location,
+                            EventTimeForNow(), 0, 0);
+    Event::DispatcherApi(&targeted).set_target(&target);
+    targeted.UpdateForRootTransform(transform2x, transform3x);
+    EXPECT_EQ(gfx::Point(30, 30), targeted.location());
+    EXPECT_EQ(gfx::Point(40, 40), targeted.root_location());
+  }
 }
 
 }  // namespace ui

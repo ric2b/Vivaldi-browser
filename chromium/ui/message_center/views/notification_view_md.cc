@@ -24,6 +24,7 @@
 #include "ui/message_center/views/bounded_label.h"
 #include "ui/message_center/views/constants.h"
 #include "ui/message_center/views/message_center_controller.h"
+#include "ui/message_center/views/notification_control_buttons_view.h"
 #include "ui/message_center/views/notification_header_view.h"
 #include "ui/message_center/views/padded_button.h"
 #include "ui/message_center/views/proportional_image_view.h"
@@ -31,7 +32,6 @@
 #include "ui/views/animation/ink_drop_highlight.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
-#include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/progress_bar.h"
@@ -47,20 +47,21 @@ namespace message_center {
 namespace {
 
 // Dimensions.
-constexpr gfx::Insets kContentRowPadding(4, 12, 12, 12);
+constexpr gfx::Insets kContentRowPadding(2, 12, 12, 12);
 constexpr gfx::Insets kActionsRowPadding(8, 8, 8, 8);
 constexpr int kActionsRowHorizontalSpacing = 8;
 constexpr gfx::Insets kActionButtonPadding(0, 12, 0, 12);
-constexpr gfx::Size kActionButtonMinSize(88, 32);
-constexpr gfx::Size kIconViewSize(30, 30);
+constexpr gfx::Insets kStatusTextPadding(4, 0, 0, 0);
+constexpr gfx::Size kActionButtonMinSize(0, 32);
+// TODO(tetsui): Move |kIconViewSize| to message_center_style.h and merge with
+// contradicting |kNotificationIconSize|.
+constexpr gfx::Size kIconViewSize(36, 36);
 constexpr gfx::Insets kLargeImageContainerPadding(0, 12, 12, 12);
 constexpr gfx::Size kLargeImageMinSize(328, 0);
 constexpr gfx::Size kLargeImageMaxSize(328, 218);
+constexpr gfx::Insets kLeftContentPadding(0, 4, 0, 4);
+constexpr gfx::Insets kLeftContentPaddingWithIcon(0, 4, 0, 12);
 
-// Foreground of small icon image.
-constexpr SkColor kSmallImageBackgroundColor = SK_ColorWHITE;
-// Background of small icon image.
-const SkColor kSmallImageColor = SkColorSetRGB(0x43, 0x43, 0x43);
 // Background of inline actions area.
 const SkColor kActionsRowBackgroundColor = SkColorSetRGB(0xee, 0xee, 0xee);
 // Base ink drop color of action buttons.
@@ -74,6 +75,9 @@ const SkColor kActionButtonTextColor = SkColorSetRGB(0x33, 0x67, 0xD6);
 // Background color of the large image.
 const SkColor kLargeImageBackgroundColor = SkColorSetRGB(0xf5, 0xf5, 0xf5);
 
+const SkColor kRegularTextColorMD = SkColorSetRGB(0x21, 0x21, 0x21);
+const SkColor kDimTextColorMD = SkColorSetRGB(0x75, 0x75, 0x75);
+
 // Max number of lines for message_view_.
 constexpr int kMaxLinesForMessageView = 1;
 constexpr int kMaxLinesForExpandedMessageView = 4;
@@ -82,40 +86,66 @@ constexpr int kCompactTitleMessageViewSpacing = 12;
 
 constexpr int kProgressBarHeight = 4;
 
-constexpr int kMessageViewWidth =
+constexpr int kMessageViewWidthWithIcon =
     message_center::kNotificationWidth - kIconViewSize.width() -
+    kLeftContentPaddingWithIcon.left() - kLeftContentPaddingWithIcon.right() -
     kContentRowPadding.left() - kContentRowPadding.right();
 
-const gfx::ImageSkia CreateSolidColorImage(int width,
-                                           int height,
-                                           SkColor color) {
-  SkBitmap bitmap;
-  bitmap.allocN32Pixels(width, height);
-  bitmap.eraseColor(color);
-  return gfx::ImageSkia::CreateFrom1xBitmap(bitmap);
+constexpr int kMessageViewWidth =
+    message_center::kNotificationWidth - kLeftContentPadding.left() -
+    kLeftContentPadding.right() - kContentRowPadding.left() -
+    kContentRowPadding.right();
+
+// "Roboto-Regular, 13sp" is specified in the mock.
+constexpr int kTextFontSize = 13;
+
+// FontList for the texts except for the header.
+gfx::FontList GetTextFontList() {
+  gfx::Font default_font;
+  int font_size_delta = kTextFontSize - default_font.GetFontSize();
+  gfx::Font font = default_font.Derive(font_size_delta, gfx::Font::NORMAL,
+                                       gfx::Font::Weight::NORMAL);
+  DCHECK_EQ(kTextFontSize, font.GetFontSize());
+  return gfx::FontList(font);
 }
 
-// Take the alpha channel of icon, mask it with the foreground,
-// then add the masked foreground on top of the background
-const gfx::ImageSkia GetMaskedIcon(const gfx::ImageSkia& icon) {
-  int width = icon.width();
-  int height = icon.height();
-
-  // Background color grey
-  const gfx::ImageSkia background = CreateSolidColorImage(
-      width, height, message_center::kSmallImageBackgroundColor);
-  // Foreground color white
-  const gfx::ImageSkia foreground =
-      CreateSolidColorImage(width, height, message_center::kSmallImageColor);
-  const gfx::ImageSkia masked_small_image =
-      gfx::ImageSkiaOperations::CreateMaskedImage(foreground, icon);
-  return gfx::ImageSkiaOperations::CreateSuperimposedImage(background,
-                                                           masked_small_image);
+#if defined(OS_CHROMEOS)
+// Return true if the default |display_source| should be used for the
+// notifications from the notifier.
+//
+// Ideally, we shuold fix the callers to set appropriate |display_source|, but
+// string resource is frozen in M62. For now, we should use this to prevent
+// empty |display_source| in system notifications.
+// TODO(tetsui): Remove this hack after M62 is released.
+bool ShowDefaultDisplaySource(const NotifierId& notifier) {
+  // The string constants are written in plain to prevent circular dependencies.
+  // This should not be accepted usually but I think it's OK here, as this
+  // function has a clear plan to be removed soon.
+  return notifier.type == NotifierId::SYSTEM_COMPONENT &&
+         (
+             // ARC notification.
+             // chrome/browser/chromeos/arc/arc_auth_notification.cc
+             notifier.id == "arc_auth" ||
+             // chrome/browser/chromeos/arc/notification/
+             //   arc_boot_error_notification.cc
+             notifier.id == "arc_boot_error" ||
+             // chrome/browser/chromeos/arc/notification/
+             //   arc_provision_notification_service.cc
+             notifier.id == "arc_managed_provision" ||
+             // Happiness survey notification.
+             // chrome/browser/chromeos/hats/hats_notification_controller.cc
+             notifier.id == "ash.hats" ||
+             // Sign-in error notification.
+             // chrome/browser/signin/signin_error_notifier_ash.cc
+             // chrome/browser/chromeos/authpolicy/
+             //   auth_policy_credentials_manager.cc
+             notifier.id == "chrome://settings/signin/" ||
+             // CUPS printing notification.
+             // chrome/browser/chromeos/printing/cups_print_job_notification.cc
+             notifier.id ==
+                 "chrome://settings/printing/cups-print-job-notification");
 }
-
-const gfx::ImageSkia GetProductIcon() {
-  return gfx::CreateVectorIcon(kProductIcon, kSmallImageColor);
-}
+#endif
 
 // ItemView ////////////////////////////////////////////////////////////////////
 
@@ -136,18 +166,22 @@ ItemView::ItemView(const message_center::NotificationItem& item) {
   SetLayoutManager(
       new views::BoxLayout(views::BoxLayout::kHorizontal, gfx::Insets(), 0));
 
+  const gfx::FontList font_list = GetTextFontList();
+
   views::Label* title = new views::Label(item.title);
+  title->SetFontList(font_list);
   title->set_collapse_when_hidden(true);
   title->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  title->SetEnabledColor(message_center::kRegularTextColor);
+  title->SetEnabledColor(message_center::kRegularTextColorMD);
   title->SetBackgroundColor(message_center::kDimTextBackgroundColor);
   AddChildView(title);
 
   views::Label* message = new views::Label(l10n_util::GetStringFUTF16(
       IDS_MESSAGE_CENTER_LIST_NOTIFICATION_MESSAGE_WITH_DIVIDER, item.message));
+  message->SetFontList(font_list);
   message->set_collapse_when_hidden(true);
   message->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  message->SetEnabledColor(message_center::kDimTextColor);
+  message->SetEnabledColor(kDimTextColorMD);
   message->SetBackgroundColor(message_center::kDimTextBackgroundColor);
   AddChildView(message);
 }
@@ -193,19 +227,18 @@ const char* CompactTitleMessageView::GetClassName() const {
 CompactTitleMessageView::CompactTitleMessageView() {
   SetLayoutManager(new views::FillLayout());
 
-  const gfx::FontList& font_list = views::Label().font_list().Derive(
-      1, gfx::Font::NORMAL, gfx::Font::Weight::NORMAL);
+  const gfx::FontList& font_list = GetTextFontList();
 
   title_view_ = new views::Label();
   title_view_->SetFontList(font_list);
   title_view_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  title_view_->SetEnabledColor(message_center::kRegularTextColor);
+  title_view_->SetEnabledColor(kRegularTextColorMD);
   AddChildView(title_view_);
 
   message_view_ = new views::Label();
   message_view_->SetFontList(font_list);
   message_view_->SetHorizontalAlignment(gfx::ALIGN_RIGHT);
-  message_view_->SetEnabledColor(message_center::kDimTextColor);
+  message_view_->SetEnabledColor(kDimTextColorMD);
   AddChildView(message_view_);
 }
 
@@ -213,8 +246,7 @@ void CompactTitleMessageView::OnPaint(gfx::Canvas* canvas) {
   base::string16 title = title_;
   base::string16 message = message_;
 
-  const gfx::FontList& font_list = views::Label().font_list().Derive(
-      1, gfx::Font::NORMAL, gfx::Font::Weight::NORMAL);
+  const gfx::FontList& font_list = GetTextFontList();
 
   // Elides title and message. The behavior is based on Android's one.
   // * If the title is too long, only the title is shown.
@@ -237,61 +269,6 @@ void CompactTitleMessageView::OnPaint(gfx::Canvas* canvas) {
   message_view_->SetText(message);
 
   views::View::OnPaint(canvas);
-}
-
-// NotificationButtonMD ////////////////////////////////////////////////////////
-
-// This class is needed in addition to LabelButton mainly becuase we want to set
-// visible_opacity of InkDropHighlight.
-// This button capitalizes the given label string.
-class NotificationButtonMD : public views::LabelButton {
- public:
-  NotificationButtonMD(views::ButtonListener* listener,
-                       const base::string16& text);
-  ~NotificationButtonMD() override;
-
-  void SetText(const base::string16& text) override;
-  const char* GetClassName() const override;
-
-  std::unique_ptr<views::InkDropHighlight> CreateInkDropHighlight()
-      const override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(NotificationButtonMD);
-};
-
-NotificationButtonMD::NotificationButtonMD(views::ButtonListener* listener,
-                                           const base::string16& text)
-    : views::LabelButton(listener,
-                         base::i18n::ToUpper(text),
-                         views::style::CONTEXT_BUTTON_MD) {
-  SetHorizontalAlignment(gfx::ALIGN_CENTER);
-  SetInkDropMode(views::LabelButton::InkDropMode::ON);
-  set_has_ink_drop_action_on_click(true);
-  set_ink_drop_base_color(kActionButtonInkDropBaseColor);
-  set_ink_drop_visible_opacity(kActionButtonInkDropRippleVisibleOpacity);
-  SetEnabledTextColors(kActionButtonTextColor);
-  SetBorder(views::CreateEmptyBorder(kActionButtonPadding));
-  SetMinSize(kActionButtonMinSize);
-  SetFocusForPlatform();
-}
-
-NotificationButtonMD::~NotificationButtonMD() = default;
-
-void NotificationButtonMD::SetText(const base::string16& text) {
-  views::LabelButton::SetText(base::i18n::ToUpper(text));
-}
-
-const char* NotificationButtonMD::GetClassName() const {
-  return "NotificationButtonMD";
-}
-
-std::unique_ptr<views::InkDropHighlight>
-NotificationButtonMD::CreateInkDropHighlight() const {
-  std::unique_ptr<views::InkDropHighlight> highlight =
-      views::LabelButton::CreateInkDropHighlight();
-  highlight->set_visible_opacity(kActionButtonInkDropHighlightVisibleOpacity);
-  return highlight;
 }
 
 // LargeImageView //////////////////////////////////////////////////////////////
@@ -409,6 +386,42 @@ const char* LargeImageContainerView::GetClassName() const {
 
 }  // anonymous namespace
 
+// NotificationButtonMD ////////////////////////////////////////////////////////
+
+NotificationButtonMD::NotificationButtonMD(views::ButtonListener* listener,
+                                           const base::string16& text)
+    : views::LabelButton(listener,
+                         base::i18n::ToUpper(text),
+                         views::style::CONTEXT_BUTTON_MD) {
+  SetHorizontalAlignment(gfx::ALIGN_CENTER);
+  SetInkDropMode(views::LabelButton::InkDropMode::ON);
+  set_has_ink_drop_action_on_click(true);
+  set_ink_drop_base_color(kActionButtonInkDropBaseColor);
+  set_ink_drop_visible_opacity(kActionButtonInkDropRippleVisibleOpacity);
+  SetEnabledTextColors(kActionButtonTextColor);
+  SetBorder(views::CreateEmptyBorder(kActionButtonPadding));
+  SetMinSize(kActionButtonMinSize);
+  SetFocusForPlatform();
+}
+
+NotificationButtonMD::~NotificationButtonMD() = default;
+
+void NotificationButtonMD::SetText(const base::string16& text) {
+  views::LabelButton::SetText(base::i18n::ToUpper(text));
+}
+
+const char* NotificationButtonMD::GetClassName() const {
+  return "NotificationButtonMD";
+}
+
+std::unique_ptr<views::InkDropHighlight>
+NotificationButtonMD::CreateInkDropHighlight() const {
+  std::unique_ptr<views::InkDropHighlight> highlight =
+      views::LabelButton::CreateInkDropHighlight();
+  highlight->set_visible_opacity(kActionButtonInkDropHighlightVisibleOpacity);
+  return highlight;
+}
+
 // ////////////////////////////////////////////////////////////
 // NotificationViewMD
 // ////////////////////////////////////////////////////////////
@@ -426,10 +439,6 @@ views::View* NotificationViewMD::TargetForRect(views::View* root,
   // called. But buttons are exceptions, they'll have their own event handlings.
   std::vector<views::View*> buttons(action_buttons_.begin(),
                                     action_buttons_.end());
-  if (header_row_->settings_button())
-    buttons.push_back(header_row_->settings_button());
-  if (header_row_->close_button())
-    buttons.push_back(header_row_->close_button());
   if (header_row_->expand_button())
     buttons.push_back(header_row_->expand_button());
   buttons.push_back(header_row_);
@@ -450,12 +459,11 @@ void NotificationViewMD::CreateOrUpdateViews(const Notification& notification) {
   CreateOrUpdateMessageView(notification);
   CreateOrUpdateCompactTitleMessageView(notification);
   CreateOrUpdateProgressBarView(notification);
+  CreateOrUpdateProgressStatusView(notification);
   CreateOrUpdateListItemViews(notification);
   CreateOrUpdateIconView(notification);
   CreateOrUpdateSmallIconView(notification);
   CreateOrUpdateImageView(notification);
-  CreateOrUpdateCloseButtonView(notification);
-  CreateOrUpdateSettingsButtonView(notification);
   UpdateViewForExpandedState(expanded_);
   // Should be called at the last because SynthesizeMouseMoveEvent() requires
   // everything is in the right location when called.
@@ -469,8 +477,13 @@ NotificationViewMD::NotificationViewMD(MessageCenterController* controller,
   SetLayoutManager(
       new views::BoxLayout(views::BoxLayout::kVertical, gfx::Insets(), 0));
 
+  control_buttons_view_ =
+      base::MakeUnique<NotificationControlButtonsView>(this);
+  control_buttons_view_->set_owned_by_client();
+  control_buttons_view_->SetBackgroundColor(SK_ColorTRANSPARENT);
+
   // |header_row_| contains app_icon, app_name, control buttons, etc...
-  header_row_ = new NotificationHeaderView(this);
+  header_row_ = new NotificationHeaderView(control_buttons_view_.get(), this);
   AddChildView(header_row_);
 
   // |content_row_| contains title, message, image, progressbar, etc...
@@ -486,6 +499,7 @@ NotificationViewMD::NotificationViewMD(MessageCenterController* controller,
   left_content_ = new views::View();
   left_content_->SetLayoutManager(
       new views::BoxLayout(views::BoxLayout::kVertical, gfx::Insets(), 0));
+  left_content_->SetBorder(views::CreateEmptyBorder(kLeftContentPadding));
   content_row_->AddChildView(left_content_);
   content_row_layout->SetFlexForView(left_content_, 1);
 
@@ -505,9 +519,11 @@ NotificationViewMD::NotificationViewMD(MessageCenterController* controller,
   AddChildView(actions_row_);
 
   CreateOrUpdateViews(notification);
+  UpdateControlButtonsVisibilityWithNotification(notification);
 
   SetEventTargeter(
       std::unique_ptr<views::ViewTargeter>(new views::ViewTargeter(this)));
+  set_notify_enter_exit_on_child(true);
 }
 
 NotificationViewMD::~NotificationViewMD() {}
@@ -539,11 +555,6 @@ gfx::NativeCursor NotificationViewMD::GetCursor(const ui::MouseEvent& event) {
   return views::GetNativeHandCursor();
 }
 
-void NotificationViewMD::OnMouseMoved(const ui::MouseEvent& event) {
-  MessageView::OnMouseMoved(event);
-  UpdateControlButtonsVisibility();
-}
-
 void NotificationViewMD::OnMouseEntered(const ui::MouseEvent& event) {
   MessageView::OnMouseEntered(event);
   UpdateControlButtonsVisibility();
@@ -557,10 +568,21 @@ void NotificationViewMD::OnMouseExited(const ui::MouseEvent& event) {
 void NotificationViewMD::UpdateWithNotification(
     const Notification& notification) {
   MessageView::UpdateWithNotification(notification);
+  UpdateControlButtonsVisibilityWithNotification(notification);
 
   CreateOrUpdateViews(notification);
   Layout();
   SchedulePaint();
+}
+
+// TODO(yoshiki): Move this to the parent class (MessageView).
+void NotificationViewMD::UpdateControlButtonsVisibilityWithNotification(
+    const Notification& notification) {
+  control_buttons_view_->ShowSettingsButton(
+      notification.delegate() &&
+      notification.delegate()->ShouldDisplaySettingsButton());
+  control_buttons_view_->ShowCloseButton(!GetPinned());
+  UpdateControlButtonsVisibility();
 }
 
 void NotificationViewMD::ButtonPressed(views::Button* sender,
@@ -569,20 +591,6 @@ void NotificationViewMD::ButtonPressed(views::Button* sender,
   // we send to other parts of the code.
   // TODO(dewittj): Remove this hack.
   std::string id(notification_id());
-
-  if (header_row_->IsCloseButtonEnabled() &&
-      sender == header_row_->close_button()) {
-    // Warning: This causes the NotificationViewMD itself to be deleted, so
-    // don't do anything afterwards.
-    OnCloseButtonPressed();
-    return;
-  }
-
-  if (header_row_->IsSettingsButtonEnabled() &&
-      sender == header_row_->settings_button()) {
-    controller()->ClickOnSettingsButton(id);
-    return;
-  }
 
   // Tapping anywhere on |header_row_| can expand the notification, though only
   // |expand_button| can be focused by TAB.
@@ -603,22 +611,39 @@ void NotificationViewMD::ButtonPressed(views::Button* sender,
 }
 
 bool NotificationViewMD::IsCloseButtonFocused() const {
-  if (!header_row_->IsCloseButtonEnabled())
-    return false;
-
-  const views::FocusManager* focus_manager = GetFocusManager();
-  return focus_manager &&
-         focus_manager->GetFocusedView() == header_row_->close_button();
+  return control_buttons_view_->IsCloseButtonFocused();
 }
 
 void NotificationViewMD::RequestFocusOnCloseButton() {
-  if (header_row_->IsCloseButtonEnabled())
-    header_row_->close_button()->RequestFocus();
+  control_buttons_view_->RequestFocusOnCloseButton();
 }
 
 void NotificationViewMD::CreateOrUpdateContextTitleView(
     const Notification& notification) {
+#if defined(OS_CHROMEOS)
+  // If |origin_url| and |display_source| are both empty, assume it is
+  // system notification, and use default |display_source| and
+  // |accent_color| for system notification.
+  // TODO(tetsui): Remove this after all system notification transition is
+  // completed.
+  // All system notification should use Notification::CreateSystemNotification()
+  if ((notification.display_source().empty() &&
+       notification.origin_url().is_empty()) ||
+      ShowDefaultDisplaySource(notification.notifier_id())) {
+    header_row_->SetAppName(l10n_util::GetStringFUTF16(
+        IDS_MESSAGE_CENTER_NOTIFICATION_CHROMEOS_SYSTEM,
+        MessageCenter::Get()->GetProductOSName()));
+    header_row_->SetAccentColor(message_center::kSystemNotificationColorNormal);
+    header_row_->SetTimestamp(notification.timestamp());
+    return;
+  }
+#endif
+
   header_row_->SetAppName(notification.display_source());
+  header_row_->SetAccentColor(
+      notification.accent_color() == SK_ColorTRANSPARENT
+          ? message_center::kNotificationDefaultAccentColor
+          : notification.accent_color());
   header_row_->SetTimestamp(notification.timestamp());
 }
 
@@ -631,8 +656,6 @@ void NotificationViewMD::CreateOrUpdateTitleView(
     title_view_ = nullptr;
     return;
   }
-  const gfx::FontList& font_list = views::Label().font_list().Derive(
-      1, gfx::Font::NORMAL, gfx::Font::Weight::NORMAL);
 
   int title_character_limit =
       kNotificationWidth * kMaxTitleLines / kMinPixelsPerTitleCharacter;
@@ -640,10 +663,12 @@ void NotificationViewMD::CreateOrUpdateTitleView(
   base::string16 title = gfx::TruncateString(
       notification.title(), title_character_limit, gfx::WORD_BREAK);
   if (!title_view_) {
+    const gfx::FontList& font_list = GetTextFontList();
+
     title_view_ = new views::Label(title);
     title_view_->SetFontList(font_list);
     title_view_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    title_view_->SetEnabledColor(message_center::kRegularTextColor);
+    title_view_->SetEnabledColor(kRegularTextColorMD);
     left_content_->AddChildView(title_view_);
   } else {
     title_view_->SetText(title);
@@ -663,22 +688,12 @@ void NotificationViewMD::CreateOrUpdateMessageView(
   base::string16 text = gfx::TruncateString(
       notification.message(), kMessageCharacterLimit, gfx::WORD_BREAK);
 
-  const gfx::FontList& font_list = views::Label().font_list().Derive(
-      1, gfx::Font::NORMAL, gfx::Font::Weight::NORMAL);
+  const gfx::FontList& font_list = GetTextFontList();
 
   if (!message_view_) {
     message_view_ = new BoundedLabel(text, font_list);
     message_view_->SetLineLimit(kMaxLinesForMessageView);
-    message_view_->SetColors(message_center::kDimTextColor,
-                             kContextTextBackgroundColor);
-
-    // TODO(tetsui): Workaround https://crbug.com/682266 by explicitly setting
-    // the width.
-    // Ideally, we should fix the original bug, but it seems there's no obvious
-    // solution for the bug according to https://crbug.com/678337#c7, we should
-    // ensure that the change won't break any of the users of BoxLayout class.
-    DCHECK(right_content_);
-    message_view_->SizeToFit(kMessageViewWidth);
+    message_view_->SetColors(kDimTextColorMD, kContextTextBackgroundColor);
 
     left_content_->AddChildView(message_view_);
   } else {
@@ -730,7 +745,35 @@ void NotificationViewMD::CreateOrUpdateProgressBarView(
   progress_bar_view_->SetValue(notification.progress() / 100.0);
   progress_bar_view_->SetVisible(notification.items().empty());
 
-  header_row_->SetProgress(notification.progress());
+  if (0 <= notification.progress() && notification.progress() <= 100)
+    header_row_->SetProgress(notification.progress());
+  else
+    header_row_->ClearProgress();
+}
+
+void NotificationViewMD::CreateOrUpdateProgressStatusView(
+    const Notification& notification) {
+  if (notification.type() != NOTIFICATION_TYPE_PROGRESS ||
+      notification.progress_status().empty()) {
+    if (!status_view_)
+      return;
+    DCHECK(left_content_->Contains(status_view_));
+    delete status_view_;
+    status_view_ = nullptr;
+    return;
+  }
+
+  if (!status_view_) {
+    const gfx::FontList& font_list = GetTextFontList();
+    status_view_ = new views::Label();
+    status_view_->SetFontList(font_list);
+    status_view_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    status_view_->SetEnabledColor(kDimTextColorMD);
+    status_view_->SetBorder(views::CreateEmptyBorder(kStatusTextPadding));
+    left_content_->AddChildView(status_view_);
+  }
+
+  status_view_->SetText(notification.progress_status());
 }
 
 void NotificationViewMD::CreateOrUpdateListItemViews(
@@ -758,8 +801,7 @@ void NotificationViewMD::CreateOrUpdateListItemViews(
 void NotificationViewMD::CreateOrUpdateIconView(
     const Notification& notification) {
   if (notification.type() == NOTIFICATION_TYPE_PROGRESS ||
-      notification.type() == NOTIFICATION_TYPE_MULTIPLE ||
-      notification.type() == NOTIFICATION_TYPE_IMAGE) {
+      notification.type() == NOTIFICATION_TYPE_MULTIPLE) {
     DCHECK(!icon_view_ || right_content_->Contains(icon_view_));
     delete icon_view_;
     icon_view_ = nullptr;
@@ -771,17 +813,26 @@ void NotificationViewMD::CreateOrUpdateIconView(
     right_content_->AddChildView(icon_view_);
   }
 
-  gfx::ImageSkia icon = notification.icon().AsImageSkia();
+  // If |use_image_as_icon| is set, use |image| as the icon on the right
+  // side, instead of |icon|.
+  gfx::ImageSkia icon;
+  if (notification.use_image_as_icon())
+    icon = notification.image().AsImageSkia();
+  else
+    icon = notification.icon().AsImageSkia();
   icon_view_->SetImage(icon, icon.size());
+
+  // If |use_image_as_icon| is set, hide the icon on the right side when
+  // the notification is expanded.
+  hide_icon_on_expanded_ = notification.use_image_as_icon();
 }
 
 void NotificationViewMD::CreateOrUpdateSmallIconView(
     const Notification& notification) {
-  gfx::ImageSkia icon =
-      notification.small_image().IsEmpty()
-          ? GetProductIcon()
-          : GetMaskedIcon(notification.small_image().AsImageSkia());
-  header_row_->SetAppIcon(icon);
+  if (notification.small_image().IsEmpty())
+    header_row_->ClearAppIcon();
+  else
+    header_row_->SetAppIcon(notification.small_image().AsImageSkia());
 }
 
 void NotificationViewMD::CreateOrUpdateImageView(
@@ -829,6 +880,12 @@ void NotificationViewMD::CreateOrUpdateActionButtonViews(
       action_buttons_[i]->SchedulePaint();
       action_buttons_[i]->Layout();
     }
+
+    // Change action button color to the accent color.
+    action_buttons_[i]->SetEnabledTextColors(notification.accent_color() ==
+                                                     SK_ColorTRANSPARENT
+                                                 ? kActionButtonTextColor
+                                                 : notification.accent_color());
   }
 
   // Inherit mouse hover state when action button views reset.
@@ -843,24 +900,6 @@ void NotificationViewMD::CreateOrUpdateActionButtonViews(
       GetWidget()->SynthesizeMouseMoveEvent();
     }
   }
-}
-
-void NotificationViewMD::CreateOrUpdateCloseButtonView(
-    const Notification& notification) {
-  if (!notification.pinned()) {
-    header_row_->SetCloseButtonEnabled(true);
-  } else {
-    header_row_->SetCloseButtonEnabled(false);
-  }
-}
-
-void NotificationViewMD::CreateOrUpdateSettingsButtonView(
-    const Notification& notification) {
-  if (notification.delegate() &&
-      notification.delegate()->ShouldDisplaySettingsButton())
-    header_row_->SetSettingsButtonEnabled(true);
-  else
-    header_row_->SetSettingsButtonEnabled(false);
 }
 
 bool NotificationViewMD::IsExpandable() {
@@ -887,11 +926,7 @@ bool NotificationViewMD::IsExpandable() {
 }
 
 void NotificationViewMD::ToggleExpanded() {
-  expanded_ = !expanded_;
-  UpdateViewForExpandedState(expanded_);
-  content_row_->InvalidateLayout();
-  if (controller())
-    controller()->UpdateNotificationSize(notification_id());
+  SetExpanded(!expanded_);
 }
 
 void NotificationViewMD::UpdateViewForExpandedState(bool expanded) {
@@ -906,27 +941,61 @@ void NotificationViewMD::UpdateViewForExpandedState(bool expanded) {
   for (size_t i = kMaxLinesForMessageView; i < item_views_.size(); ++i) {
     item_views_[i]->SetVisible(expanded);
   }
+  if (status_view_)
+    status_view_->SetVisible(expanded);
   header_row_->SetOverflowIndicator(
       list_items_count_ -
       (expanded ? item_views_.size() : kMaxLinesForMessageView));
+
+  if (icon_view_)
+    icon_view_->SetVisible(!hide_icon_on_expanded_ || !expanded);
+
+  if (icon_view_ && icon_view_->visible()) {
+    left_content_->SetBorder(
+        views::CreateEmptyBorder(kLeftContentPaddingWithIcon));
+
+    // TODO(tetsui): Workaround https://crbug.com/682266 by explicitly setting
+    // the width.
+    // Ideally, we should fix the original bug, but it seems there's no obvious
+    // solution for the bug according to https://crbug.com/678337#c7, we should
+    // ensure that the change won't break any of the users of BoxLayout class.
+    if (message_view_)
+      message_view_->SizeToFit(kMessageViewWidthWithIcon);
+  } else {
+    left_content_->SetBorder(views::CreateEmptyBorder(kLeftContentPadding));
+    if (message_view_)
+      message_view_->SizeToFit(kMessageViewWidth);
+  }
 }
 
+// TODO(yoshiki): Move this to the parent class (MessageView) and share the code
+// among NotificationView and ArcNotificationView.
 void NotificationViewMD::UpdateControlButtonsVisibility() {
-  const bool target_visibility = IsMouseHovered() || HasFocus() ||
-                                 (header_row_->IsExpandButtonEnabled() &&
-                                  header_row_->expand_button()->HasFocus()) ||
-                                 (header_row_->IsCloseButtonEnabled() &&
-                                  header_row_->close_button()->HasFocus()) ||
-                                 (header_row_->IsSettingsButtonEnabled() &&
-                                  header_row_->settings_button()->HasFocus());
+  const bool target_visibility =
+      IsMouseHovered() || control_buttons_view_->IsCloseButtonFocused() ||
+      control_buttons_view_->IsSettingsButtonFocused();
 
-  header_row_->SetControlButtonsVisible(target_visibility);
+  control_buttons_view_->SetVisible(target_visibility);
 }
 
 NotificationControlButtonsView* NotificationViewMD::GetControlButtonsView()
     const {
-  // TODO(yoshiki): have this view use NotificationControlButtonsView.
-  return nullptr;
+  return control_buttons_view_.get();
+}
+
+bool NotificationViewMD::IsExpanded() const {
+  return expanded_;
+}
+
+void NotificationViewMD::SetExpanded(bool expanded) {
+  if (expanded_ == expanded)
+    return;
+  expanded_ = expanded;
+
+  UpdateViewForExpandedState(expanded_);
+  content_row_->InvalidateLayout();
+  if (controller())
+    controller()->UpdateNotificationSize(notification_id());
 }
 
 }  // namespace message_center

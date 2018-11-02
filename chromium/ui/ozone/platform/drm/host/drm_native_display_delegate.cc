@@ -34,12 +34,6 @@ void DrmNativeDisplayDelegate::Initialize() {
   display_manager_->AddDelegate(this);
 }
 
-void DrmNativeDisplayDelegate::GrabServer() {
-}
-
-void DrmNativeDisplayDelegate::UngrabServer() {
-}
-
 void DrmNativeDisplayDelegate::TakeDisplayControl(
     const display::DisplayControlCallback& callback) {
   display_manager_->TakeDisplayControl(callback);
@@ -50,22 +44,10 @@ void DrmNativeDisplayDelegate::RelinquishDisplayControl(
   display_manager_->RelinquishDisplayControl(callback);
 }
 
-void DrmNativeDisplayDelegate::SyncWithServer() {
-}
-
-void DrmNativeDisplayDelegate::SetBackgroundColor(uint32_t color_argb) {
-}
-
-void DrmNativeDisplayDelegate::ForceDPMSOn() {
-}
-
 void DrmNativeDisplayDelegate::GetDisplays(
     const display::GetDisplaysCallback& callback) {
   display_manager_->UpdateDisplays(callback);
 }
-
-void DrmNativeDisplayDelegate::AddMode(const display::DisplaySnapshot& output,
-                                       const display::DisplayMode* mode) {}
 
 void DrmNativeDisplayDelegate::Configure(
     const display::DisplaySnapshot& output,
@@ -74,9 +56,6 @@ void DrmNativeDisplayDelegate::Configure(
     const display::ConfigureCallback& callback) {
   DrmDisplayHost* display = display_manager_->GetDisplay(output.display_id());
   display->Configure(mode, origin, callback);
-}
-
-void DrmNativeDisplayDelegate::CreateFrameBuffer(const gfx::Size& size) {
 }
 
 void DrmNativeDisplayDelegate::GetHDCPState(
@@ -92,19 +71,6 @@ void DrmNativeDisplayDelegate::SetHDCPState(
     const display::SetHDCPStateCallback& callback) {
   DrmDisplayHost* display = display_manager_->GetDisplay(output.display_id());
   display->SetHDCPState(state, callback);
-}
-
-std::vector<display::ColorCalibrationProfile>
-DrmNativeDisplayDelegate::GetAvailableColorCalibrationProfiles(
-    const display::DisplaySnapshot& output) {
-  return std::vector<display::ColorCalibrationProfile>();
-}
-
-bool DrmNativeDisplayDelegate::SetColorCalibrationProfile(
-    const display::DisplaySnapshot& output,
-    display::ColorCalibrationProfile new_profile) {
-  NOTIMPLEMENTED();
-  return false;
 }
 
 bool DrmNativeDisplayDelegate::SetColorCorrection(

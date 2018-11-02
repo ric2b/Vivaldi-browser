@@ -30,6 +30,7 @@
 #include "core/dom/Node.h"
 #include "core/html/CollectionType.h"
 #include "platform/bindings/ScriptWrappableVisitor.h"
+#include "platform/bindings/TraceWrapperMember.h"
 #include "platform/wtf/Vector.h"
 #include "public/platform/WebFocusType.h"
 
@@ -264,8 +265,6 @@ class CORE_EXPORT ContainerNode : public Node {
   void RebuildChildrenLayoutTrees(WhitespaceAttacher&);
   void RebuildLayoutTreeForChild(Node* child, WhitespaceAttacher&);
 
-  bool ChildrenSupportStyleSharing() const { return !HasRestyleFlags(); }
-
   // -----------------------------------------------------------------------------
   // Notification of document structure changes (see core/dom/Node.h for more
   // notification methods)
@@ -350,11 +349,9 @@ class CORE_EXPORT ContainerNode : public Node {
 
   void SetFirstChild(Node* child) {
     first_child_ = child;
-    ScriptWrappableVisitor::WriteBarrier(this, first_child_);
   }
   void SetLastChild(Node* child) {
     last_child_ = child;
-    ScriptWrappableVisitor::WriteBarrier(this, last_child_);
   }
 
   // Utility functions for NodeListsNodeData API.
@@ -428,8 +425,8 @@ class CORE_EXPORT ContainerNode : public Node {
   bool GetUpperLeftCorner(FloatPoint&) const;
   bool GetLowerRightCorner(FloatPoint&) const;
 
-  Member<Node> first_child_;
-  Member<Node> last_child_;
+  TraceWrapperMember<Node> first_child_;
+  TraceWrapperMember<Node> last_child_;
 };
 
 #if DCHECK_IS_ON()

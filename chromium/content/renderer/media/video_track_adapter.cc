@@ -184,8 +184,8 @@ void VideoTrackAdapter::VideoFrameResolutionAdapter::RemoveCallback(
           new VideoCaptureDeliverFrameCB(it->second));
       callbacks_.erase(it);
       renderer_task_runner_->PostTask(
-          FROM_HERE, base::Bind(&ResetCallbackOnMainRenderThread,
-                                base::Passed(&callback)));
+          FROM_HERE, base::BindOnce(&ResetCallbackOnMainRenderThread,
+                                    base::Passed(&callback)));
 
       return;
     }
@@ -220,7 +220,6 @@ void VideoTrackAdapter::VideoFrameResolutionAdapter::DeliverFrame(
   scoped_refptr<media::VideoFrame> video_frame(frame);
 
   bool is_rotated = false;
-#if defined(OS_ANDROID)
   // TODO(guidou): Use actual device information instead of this heuristic to
   // detect frames from rotated devices. http://crbug.com/722748
   if (expected_native_size_ &&
@@ -228,7 +227,7 @@ void VideoTrackAdapter::VideoFrameResolutionAdapter::DeliverFrame(
       frame->natural_size().height() == expected_native_size_->width()) {
     is_rotated = true;
   }
-#endif
+
   gfx::Size desired_size;
   CalculateTargetSize(is_rotated, frame->natural_size(), max_frame_size_,
                       min_aspect_ratio_, max_aspect_ratio_, &desired_size);
@@ -245,7 +244,7 @@ void VideoTrackAdapter::VideoFrameResolutionAdapter::DeliverFrame(
     if (!video_frame)
       return;
     video_frame->AddDestructionObserver(
-        base::Bind(&ReleaseOriginalFrame, frame));
+        base::BindOnce(&ReleaseOriginalFrame, frame));
 
     DVLOG(3) << "desired size  " << desired_size.ToString()
              << " output natural size "
@@ -392,8 +391,8 @@ void VideoTrackAdapter::AddTrack(const MediaStreamVideoTrack* track,
   DCHECK(thread_checker_.CalledOnValidThread());
 
   io_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&VideoTrackAdapter::AddTrackOnIO, this, track,
-                            frame_callback, settings));
+      FROM_HERE, base::BindOnce(&VideoTrackAdapter::AddTrackOnIO, this, track,
+                                frame_callback, settings));
 }
 
 void VideoTrackAdapter::AddTrackOnIO(
@@ -419,7 +418,8 @@ void VideoTrackAdapter::AddTrackOnIO(
 void VideoTrackAdapter::RemoveTrack(const MediaStreamVideoTrack* track) {
   DCHECK(thread_checker_.CalledOnValidThread());
   io_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&VideoTrackAdapter::RemoveTrackOnIO, this, track));
+      FROM_HERE,
+      base::BindOnce(&VideoTrackAdapter::RemoveTrackOnIO, this, track));
 }
 
 void VideoTrackAdapter::StartFrameMonitoring(
@@ -431,14 +431,16 @@ void VideoTrackAdapter::StartFrameMonitoring(
       media::BindToCurrentLoop(on_muted_callback);
 
   io_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&VideoTrackAdapter::StartFrameMonitoringOnIO, this,
-                            bound_on_muted_callback, source_frame_rate));
+      FROM_HERE,
+      base::BindOnce(&VideoTrackAdapter::StartFrameMonitoringOnIO, this,
+                     bound_on_muted_callback, source_frame_rate));
 }
 
 void VideoTrackAdapter::StopFrameMonitoring() {
   DCHECK(thread_checker_.CalledOnValidThread());
   io_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&VideoTrackAdapter::StopFrameMonitoringOnIO, this));
+      FROM_HERE,
+      base::BindOnce(&VideoTrackAdapter::StopFrameMonitoringOnIO, this));
 }
 
 // static
@@ -506,8 +508,9 @@ void VideoTrackAdapter::StartFrameMonitoringOnIO(
   DVLOG(1) << "Monitoring frame creation, first (large) delay: "
       << (kFirstFrameTimeoutInFrameIntervals / source_frame_rate_) << "s";
   io_task_runner_->PostDelayedTask(
-      FROM_HERE, base::Bind(&VideoTrackAdapter::CheckFramesReceivedOnIO, this,
-                            on_muted_callback, frame_counter_),
+      FROM_HERE,
+      base::BindOnce(&VideoTrackAdapter::CheckFramesReceivedOnIO, this,
+                     on_muted_callback, frame_counter_),
       base::TimeDelta::FromSecondsD(kFirstFrameTimeoutInFrameIntervals /
                                     source_frame_rate_));
 }
@@ -557,8 +560,9 @@ void VideoTrackAdapter::CheckFramesReceivedOnIO(
   }
 
   io_task_runner_->PostDelayedTask(
-      FROM_HERE, base::Bind(&VideoTrackAdapter::CheckFramesReceivedOnIO, this,
-                            set_muted_state_callback, frame_counter_),
+      FROM_HERE,
+      base::BindOnce(&VideoTrackAdapter::CheckFramesReceivedOnIO, this,
+                     set_muted_state_callback, frame_counter_),
       base::TimeDelta::FromSecondsD(kNormalFrameTimeoutInFrameIntervals /
                                     source_frame_rate_));
 }

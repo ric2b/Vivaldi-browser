@@ -272,19 +272,19 @@ void SupervisedUserManagerImpl::GetPasswordInformation(
     base::DictionaryValue* result) {
   int value;
   if (GetUserIntegerValue(user_id, kSupervisedUserPasswordSchema, &value))
-    result->SetIntegerWithoutPathExpansion(kSchemaVersion, value);
+    result->SetKey(kSchemaVersion, base::Value(value));
   if (GetUserIntegerValue(user_id, kSupervisedUserPasswordRevision, &value))
-    result->SetIntegerWithoutPathExpansion(kPasswordRevision, value);
+    result->SetKey(kPasswordRevision, base::Value(value));
 
   bool flag;
   if (GetUserBooleanValue(user_id, kSupervisedUserNeedPasswordUpdate, &flag))
-    result->SetBooleanWithoutPathExpansion(kRequirePasswordUpdate, flag);
+    result->SetKey(kRequirePasswordUpdate, base::Value(flag));
   if (GetUserBooleanValue(user_id, kSupervisedUserIncompleteKey, &flag))
-    result->SetBooleanWithoutPathExpansion(kHasIncompleteKey, flag);
+    result->SetKey(kHasIncompleteKey, base::Value(flag));
 
   std::string salt;
   if (GetUserStringValue(user_id, kSupervisedUserPasswordSalt, &salt))
-    result->SetStringWithoutPathExpansion(kSalt, salt);
+    result->SetKey(kSalt, base::Value(salt));
 }
 
 void SupervisedUserManagerImpl::SetPasswordInformation(
@@ -342,7 +342,7 @@ void SupervisedUserManagerImpl::SetUserStringValue(
     const std::string& value) {
   PrefService* local_state = g_browser_process->local_state();
   DictionaryPrefUpdate update(local_state, key);
-  update->SetStringWithoutPathExpansion(user_id, value);
+  update->SetKey(user_id, base::Value(value));
 }
 
 void SupervisedUserManagerImpl::SetUserIntegerValue(
@@ -351,7 +351,7 @@ void SupervisedUserManagerImpl::SetUserIntegerValue(
     const int value) {
   PrefService* local_state = g_browser_process->local_state();
   DictionaryPrefUpdate update(local_state, key);
-  update->SetIntegerWithoutPathExpansion(user_id, value);
+  update->SetKey(user_id, base::Value(value));
 }
 
 void SupervisedUserManagerImpl::SetUserBooleanValue(const std::string& user_id,
@@ -359,7 +359,7 @@ void SupervisedUserManagerImpl::SetUserBooleanValue(const std::string& user_id,
                                                     const bool value) {
   PrefService* local_state = g_browser_process->local_state();
   DictionaryPrefUpdate update(local_state, key);
-  update->SetBooleanWithoutPathExpansion(user_id, value);
+  update->SetKey(user_id, base::Value(value));
 }
 
 const user_manager::User* SupervisedUserManagerImpl::FindByDisplayName(
@@ -440,8 +440,8 @@ void SupervisedUserManagerImpl::RollbackUserCreationTransaction() {
     return;
   }
 
-  if (gaia::ExtractDomainName(user_id) != user_manager::kSupervisedUserDomain) {
-    LOG(WARNING) << "Clean up transaction for  non-supervised user found :"
+  if (!owner_->IsSupervisedAccountId(AccountId::FromUserEmail(user_id))) {
+    LOG(WARNING) << "Clean up transaction for non-supervised user found:"
                  << user_id << ", will not remove data";
     prefs->ClearPref(kSupervisedUserCreationTransactionDisplayName);
     prefs->ClearPref(kSupervisedUserCreationTransactionUserId);

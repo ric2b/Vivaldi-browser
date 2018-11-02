@@ -8,6 +8,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/strings/stringprintf.h"
+#include "components/ntp_snippets/breaking_news/breaking_news_metrics.h"
 #include "components/ntp_snippets/breaking_news/subscription_json_request.h"
 #include "components/ntp_snippets/features.h"
 #include "components/ntp_snippets/ntp_snippets_constants.h"
@@ -16,6 +17,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/access_token_fetcher.h"
 #include "components/signin/core/browser/signin_manager_base.h"
+#include "components/variations/service/variations_service.h"
 #include "net/base/url_util.h"
 
 namespace ntp_snippets {
@@ -60,19 +62,23 @@ class SubscriptionManagerImpl::SigninObserver
 SubscriptionManagerImpl::SubscriptionManagerImpl(
     scoped_refptr<net::URLRequestContextGetter> url_request_context_getter,
     PrefService* pref_service,
+    variations::VariationsService* variations_service,
     SigninManagerBase* signin_manager,
     OAuth2TokenService* access_token_service,
+    const std::string& locale,
     const std::string& api_key,
     const GURL& subscribe_url,
     const GURL& unsubscribe_url)
     : url_request_context_getter_(std::move(url_request_context_getter)),
       pref_service_(pref_service),
+      variations_service_(variations_service),
       signin_manager_(signin_manager),
       signin_observer_(base::MakeUnique<SigninObserver>(
           signin_manager,
           base::Bind(&SubscriptionManagerImpl::SigninStatusChanged,
                      base::Unretained(this)))),
       access_token_service_(access_token_service),
+      locale_(locale),
       api_key_(api_key),
       subscribe_url_(subscribe_url),
       unsubscribe_url_(unsubscribe_url) {}
@@ -107,6 +113,11 @@ void SubscriptionManagerImpl::SubscribeInternal(
     builder.SetUrl(
         net::AppendQueryParameter(subscribe_url_, kApiKeyParamName, api_key_));
   }
+
+  builder.SetLocale(locale_);
+  builder.SetCountryCode(variations_service_
+                             ? variations_service_->GetStoredPermanentCountry()
+                             : "");
 
   request_ = builder.Build();
   request_->Start(base::BindOnce(&SubscriptionManagerImpl::DidSubscribe,
@@ -149,6 +160,8 @@ void SubscriptionManagerImpl::DidSubscribe(
     const std::string& subscription_token,
     bool is_authenticated,
     const Status& status) {
+  metrics::OnSubscriptionRequestCompleted(status);
+
   // Delete the request only after we leave this method (which is called from
   // the request itself).
   std::unique_ptr<internal::SubscriptionJsonRequest> request_deleter(
@@ -225,6 +238,8 @@ void SubscriptionManagerImpl::Resubscribe(const std::string& new_token) {
 
 void SubscriptionManagerImpl::DidUnsubscribe(const std::string& new_token,
                                              const Status& status) {
+  metrics::OnUnsubscriptionRequestCompleted(status);
+
   // Delete the request only after we leave this method (which is called from
   // the request itself).
   std::unique_ptr<internal::SubscriptionJsonRequest> request_deleter(
@@ -259,12 +274,20 @@ void SubscriptionManagerImpl::SigninStatusChanged() {
   }
 }
 
+// static
 void SubscriptionManagerImpl::RegisterProfilePrefs(
     PrefRegistrySimple* registry) {
   registry->RegisterStringPref(prefs::kBreakingNewsSubscriptionDataToken,
                                std::string());
   registry->RegisterBooleanPref(
       prefs::kBreakingNewsSubscriptionDataIsAuthenticated, false);
+}
+
+// TODO(vitaliii): Add a test to ensure that this clears everything.
+// static
+void SubscriptionManagerImpl::ClearProfilePrefs(PrefService* pref_service) {
+  pref_service->ClearPref(prefs::kBreakingNewsSubscriptionDataToken);
+  pref_service->ClearPref(prefs::kBreakingNewsSubscriptionDataIsAuthenticated);
 }
 
 }  // namespace ntp_snippets

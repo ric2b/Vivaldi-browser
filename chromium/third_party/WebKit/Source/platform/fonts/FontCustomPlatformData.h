@@ -34,6 +34,7 @@
 
 #include "platform/PlatformExport.h"
 #include "platform/fonts/FontOrientation.h"
+#include "platform/fonts/FontSelectionTypes.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/Noncopyable.h"
@@ -63,6 +64,8 @@ class PLATFORM_EXPORT FontCustomPlatformData
       float size,
       bool bold,
       bool italic,
+      const FontSelectionRequest&,
+      const FontSelectionCapabilities&,
       FontOrientation = FontOrientation::kHorizontal,
       const FontVariationSettings* = nullptr);
 
@@ -70,6 +73,16 @@ class PLATFORM_EXPORT FontCustomPlatformData
   static bool SupportsFormat(const String&);
 
  private:
+  // These values are written to logs.  New enum values can be added, but
+  // existing enums must never be renumbered or deleted and reused.
+  enum WebFontInstantiationResult {
+    kErrorInstantiatingVariableFont = 0,
+    kSuccessConventionalWebFont = 1,
+    kSuccessVariableWebFont = 2,
+    kMaxWebFontInstantiationResult = 3
+  };
+
+  static void ReportWebFontInstantiationResult(WebFontInstantiationResult);
   FontCustomPlatformData(sk_sp<SkTypeface>, size_t data_size);
   sk_sp<SkTypeface> base_typeface_;
   size_t data_size_;

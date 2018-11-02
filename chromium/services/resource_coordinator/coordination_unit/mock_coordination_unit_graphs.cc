@@ -54,6 +54,7 @@ MockSingleTabWithMultipleProcessesCoordinationUnitGraph::
     : child_frame(CreateCoordinationUnit(CoordinationUnitType::kFrame)),
       other_process(CreateCoordinationUnit(CoordinationUnitType::kProcess)) {
   frame->AddChild(child_frame->id());
+  tab->AddChild(child_frame->id());
   other_process->AddChild(child_frame->id());
 }
 
@@ -65,6 +66,7 @@ MockMultipleTabsWithMultipleProcessesCoordinationUnitGraph::
     : child_frame(CreateCoordinationUnit(CoordinationUnitType::kFrame)),
       other_process(CreateCoordinationUnit(CoordinationUnitType::kProcess)) {
   other_frame->AddChild(child_frame->id());
+  other_tab->AddChild(child_frame->id());
   other_process->AddChild(child_frame->id());
 }
 

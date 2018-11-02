@@ -35,7 +35,7 @@ class V8DetachedContextAgeInGC(perf_benchmark.PerfBenchmark):
   def GetExpectations(self):
     class StoryExpectations(story.expectations.StoryExpectations):
       def SetExpectations(self):
-        pass # Nothing not disabled.
+        pass # Nothing disabled.
     return StoryExpectations()
 
 
@@ -86,7 +86,6 @@ class _Top25RuntimeStats(perf_benchmark.PerfBenchmark):
     return False
 
 
-@benchmark.Disabled('android', 'win', 'reference')  # crbug.com/664318
 @benchmark.Owner(emails=['cbruni@chromium.org'])
 class V8Top25RuntimeStats(_Top25RuntimeStats):
   """Runtime Stats benchmark for a 25 top V8 web pages.
@@ -105,5 +104,7 @@ class V8Top25RuntimeStats(_Top25RuntimeStats):
   def GetExpectations(self):
     class StoryExpectations(story.expectations.StoryExpectations):
       def SetExpectations(self):
-        pass # blank_page.html not disabled.
+        self.DisableBenchmark(
+            [story.expectations.ALL_ANDROID, story.expectations.ALL_WIN],
+            'crbug.com/664318')
     return StoryExpectations()

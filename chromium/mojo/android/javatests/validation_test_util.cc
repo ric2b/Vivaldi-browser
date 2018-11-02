@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "mojo/android/javatests/validation_test_util.h"
-
 #include <stddef.h>
 #include <stdint.h>
 
@@ -19,10 +17,6 @@ using base::android::ScopedJavaLocalRef;
 
 namespace mojo {
 namespace android {
-
-bool RegisterValidationTestUtil(JNIEnv* env) {
-  return RegisterNativesImpl(env);
-}
 
 ScopedJavaLocalRef<jobject> ParseData(
     JNIEnv* env,
@@ -44,8 +38,8 @@ ScopedJavaLocalRef<jobject> ParseData(
     DCHECK(!data.size());
     data_ptr = &data;
   }
-  jobject byte_buffer =
-      env->NewDirectByteBuffer(data_ptr, data.size());
+  ScopedJavaLocalRef<jobject> byte_buffer(
+      env, env->NewDirectByteBuffer(data_ptr, data.size()));
   return Java_ValidationTestUtil_buildData(env, byte_buffer, num_handles,
                                            nullptr);
 }

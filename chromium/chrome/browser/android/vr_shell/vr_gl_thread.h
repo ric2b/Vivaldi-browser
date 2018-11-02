@@ -7,10 +7,10 @@
 
 #include <memory>
 
+#include "base/android/java_handler_thread.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
-#include "base/threading/thread.h"
 #include "chrome/browser/android/vr_shell/gl_browser_interface.h"
 #include "chrome/browser/vr/ui_browser_interface.h"
 #include "chrome/browser/vr/ui_interface.h"
@@ -26,7 +26,7 @@ namespace vr_shell {
 class VrShell;
 class VrShellGl;
 
-class VrGLThread : public base::Thread,
+class VrGLThread : public base::android::JavaHandlerThread,
                    public GlBrowserInterface,
                    public vr::UiBrowserInterface,
                    public vr::UiInterface {
@@ -58,8 +58,10 @@ class VrGLThread : public base::Thread,
       device::mojom::VRDisplayInfoPtr* info) override;
   void OnContentPaused(bool enabled) override;
   void ToggleCardboardGamepad(bool enabled) override;
-  void OnGLInitialized() override;
+  void OnGlInitialized(unsigned int content_texture_id) override;
   void OnWebVrFrameAvailable() override;
+  void OnWebVrTimedOut() override;
+  void OnProjMatrixChanged(const gfx::Transform& proj_matrix) override;
 
   // vr::UiBrowserInterface implementation (UI calling to VrShell).
   void ExitPresent() override;
@@ -69,6 +71,7 @@ class VrGLThread : public base::Thread,
   void OnUnsupportedMode(vr::UiUnsupportedMode mode) override;
   void OnExitVrPromptResult(vr::UiUnsupportedMode reason,
                             vr::ExitVrPromptChoice choice) override;
+  void OnContentScreenBoundsChanged(const gfx::SizeF& bounds) override;
 
   // vr::UiInterface implementation (VrShell and GL calling to the UI).
   void SetFullscreen(bool enabled) override;
@@ -85,7 +88,6 @@ class VrGLThread : public base::Thread,
   void SetBluetoothConnectedIndicator(bool enabled) override;
   void SetLocationAccessIndicator(bool enabled) override;
   void SetIsExiting() override;
-  void SetSplashScreenIcon(const SkBitmap& bitmap) override;
   void SetExitVrPromptEnabled(bool enabled,
                               vr::UiUnsupportedMode reason) override;
 

@@ -4,6 +4,7 @@
 
 #import <EarlGrey/EarlGrey.h>
 
+#include "base/ios/ios_util.h"
 #import "base/mac/foundation_util.h"
 #include "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ui/autofill/autofill_edit_accessory_view.h"
@@ -207,6 +208,13 @@ id<GREYMatcher> UIAlertViewMessageForDelegateCallWithArgument(
 // states depending on the focused textfield and that they can be used to
 // navigate between the textfields.
 - (void)testInputAccessoryViewNavigationButtons {
+  // TODO(crbug.com/753098): Re-enable this test on iOS 11 iPad once
+  // grey_typeText works on iOS 11.  The test failes on iOS 11 iPhone as well,
+  // but possibly for a different reason.
+  if (base::ios::IsRunningOnIOS11OrLater()) {
+    EARL_GREY_TEST_DISABLED(@"Test disabled on iOS 11.");
+  }
+
   // Initially, no error message is showing.
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
                                           kWarningMessageAccessibilityID)]
@@ -299,6 +307,11 @@ id<GREYMatcher> UIAlertViewMessageForDelegateCallWithArgument(
 // get focus except for the last textfield in which case causes the focus to go
 // away from the textfield.
 - (void)testNavigationByTappingReturn {
+  // TODO(crbug.com/759904): Reenable on iOS11 iPad when working on iPad iOS 11
+  // devices.
+  if (base::ios::IsRunningOnIOS11OrLater() && IsIPadIdiom()) {
+    EARL_GREY_TEST_DISABLED(@"Test disabled on iOS 11.");
+  }
   // Tap the name textfield.
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Name_textField")]
       performAction:grey_tap()];
@@ -316,8 +329,14 @@ id<GREYMatcher> UIAlertViewMessageForDelegateCallWithArgument(
 
   // The standard keyboard does not display for the province field. Instead, tap
   // the address textfield.
-  [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityID(@"Address_textField")]
+  id<GREYMatcher> matcher =
+      grey_allOf(grey_accessibilityID(@"Address_textField"),
+                 grey_interactable(), grey_sufficientlyVisible(), nil);
+  [[[EarlGrey selectElementWithMatcher:matcher]
+         usingSearchAction:grey_scrollInDirection(kGREYDirectionDown, 50)
+      onElementWithMatcher:
+          grey_accessibilityID(
+              @"kPaymentRequestEditCollectionViewAccessibilityID")]
       performAction:grey_tap()];
 
   // Assert the address textfield is focused.

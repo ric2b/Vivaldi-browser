@@ -33,7 +33,8 @@ class GPUTracer;
 
 struct MappedBuffer {
   GLsizeiptr size;
-  GLbitfield access;
+  GLbitfield original_access;
+  GLbitfield filtered_access;
   uint8_t* map_ptr;
   int32_t data_shm_id;
   uint32_t data_shm_offset;
@@ -68,7 +69,7 @@ struct PassthroughResources {
   std::unordered_map<GLuint, MappedBuffer> mapped_buffer_map;
 };
 
-class GLES2DecoderPassthroughImpl : public GLES2Decoder {
+class GPU_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {
  public:
   GLES2DecoderPassthroughImpl(GLES2DecoderClient* client,
                               CommandBufferServiceBase* command_buffer_service,
@@ -186,6 +187,7 @@ class GLES2DecoderPassthroughImpl : public GLES2Decoder {
 
   bool GetServiceTextureId(uint32_t client_texture_id,
                            uint32_t* service_texture_id) override;
+  TextureBase* GetTextureBase(uint32_t client_id) override;
 
   // Provides detail about a lost context if one occurred.
   // Clears a level sub area of a texture
@@ -246,6 +248,11 @@ class GLES2DecoderPassthroughImpl : public GLES2Decoder {
   const ContextState* GetContextState() override;
   scoped_refptr<ShaderTranslatorInterface> GetTranslator(GLenum type) override;
 
+  void BindImage(uint32_t client_texture_id,
+                 uint32_t texture_target,
+                 gl::GLImage* image,
+                 bool can_bind_to_sampler) override;
+
  private:
   const char* GetCommandName(unsigned int command_id) const;
 
@@ -288,6 +295,13 @@ class GLES2DecoderPassthroughImpl : public GLES2Decoder {
                                                       GLsizei length,
                                                       GLint* params);
 
+  template <typename T>
+  error::Error PatchGetBufferResults(GLenum target,
+                                     GLenum pname,
+                                     GLsizei bufsize,
+                                     GLsizei* length,
+                                     T* params);
+
   void InsertError(GLenum error, const std::string& message);
   GLenum PopError();
   bool FlushErrors();
@@ -299,11 +313,15 @@ class GLES2DecoderPassthroughImpl : public GLES2Decoder {
   error::Error ProcessQueries(bool did_finish);
   void RemovePendingQuery(GLuint service_id);
 
-  void UpdateTextureBinding(GLenum target, GLuint client_id, GLuint service_id);
+  void UpdateTextureBinding(GLenum target,
+                            GLuint client_id,
+                            TexturePassthrough* texture);
 
   error::Error BindTexImage2DCHROMIUMImpl(GLenum target,
                                           GLenum internalformat,
                                           GLint image_id);
+
+  void VerifyServiceTextureObjectsExist();
 
   GLES2DecoderClient* client_;
 
@@ -361,7 +379,19 @@ class GLES2DecoderPassthroughImpl : public GLES2Decoder {
 
   // State tracking of currently bound 2D textures (client IDs)
   size_t active_texture_unit_;
-  std::unordered_map<GLenum, std::vector<GLuint>> bound_textures_;
+
+  struct BoundTexture {
+    BoundTexture();
+    ~BoundTexture();
+    BoundTexture(const BoundTexture&);
+    BoundTexture(BoundTexture&&);
+    BoundTexture& operator=(const BoundTexture&);
+    BoundTexture& operator=(BoundTexture&&);
+
+    GLuint client_id = 0;
+    scoped_refptr<TexturePassthrough> texture;
+  };
+  std::unordered_map<GLenum, std::vector<BoundTexture>> bound_textures_;
 
   // State tracking of currently bound buffers
   std::unordered_map<GLenum, GLuint> bound_buffers_;
@@ -421,6 +451,8 @@ class GLES2DecoderPassthroughImpl : public GLES2Decoder {
 
   // Cache of scratch memory
   std::vector<uint8_t> scratch_memory_;
+
+  std::unique_ptr<DCLayerSharedState> dc_layer_shared_state_;
 
   base::WeakPtrFactory<GLES2DecoderPassthroughImpl> weak_ptr_factory_;
 

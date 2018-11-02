@@ -96,7 +96,8 @@ LoginPasswordView::LoginPasswordView(const OnPasswordSubmit& on_submit)
   row->AddChildView(submit_button_);
 
   // Separator on bottom.
-  AddChildView(new views::Separator());
+  auto* separator = new views::Separator();
+  AddChildView(separator);
 
   // Make sure the textfield always starts with focus.
   textfield_->RequestFocus();
@@ -130,6 +131,10 @@ gfx::Size LoginPasswordView::CalculatePreferredSize() const {
   gfx::Size size = views::View::CalculatePreferredSize();
   size.set_width(kPasswordTotalWidthDp);
   return size;
+}
+
+void LoginPasswordView::RequestFocus() {
+  textfield_->RequestFocus();
 }
 
 bool LoginPasswordView::OnKeyPressed(const ui::KeyEvent& event) {

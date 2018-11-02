@@ -21,10 +21,10 @@ namespace ash {
 enum class LoginStatus;
 class ScreenTrayItem;
 class SystemBubbleWrapper;
-class SystemTrayDelegate;
 class SystemTrayItem;
 class TrayAccessibility;
 class TrayAudio;
+class TrayCapsLock;
 class TrayCast;
 class TrayEnterprise;
 class TrayNetwork;
@@ -56,8 +56,7 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView {
 
   // Calls TrayBackgroundView::Initialize(), creates the tray items, and
   // adds them to SystemTrayNotifier.
-  void InitializeTrayItems(SystemTrayDelegate* delegate,
-                           WebNotificationTray* web_notification_tray);
+  void InitializeTrayItems(WebNotificationTray* web_notification_tray);
 
   // Resets internal pointers. This has to be called before deletion.
   void Shutdown();
@@ -69,7 +68,7 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView {
   std::vector<SystemTrayItem*> GetTrayItems() const;
 
   // Shows the default view of all items.
-  void ShowDefaultView(BubbleCreationType creation_type);
+  void ShowDefaultView(BubbleCreationType creation_type, bool show_by_click);
 
   // Shows default view that ingnores outside clicks and activation loss.
   void ShowPersistentDefaultView();
@@ -127,7 +126,7 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView {
   void ClickedOutsideBubble() override;
   bool PerformAction(const ui::Event& event) override;
   void CloseBubble() override;
-  void ShowBubble() override;
+  void ShowBubble(bool show_by_click) override;
   views::TrayBubbleView* GetBubbleView() override;
 
   // views::TrayBubbleView::Delegate:
@@ -151,8 +150,8 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView {
   // Activates the bubble and starts key navigation with the |key_event|.
   void ActivateAndStartNavigation(const ui::KeyEvent& key_event);
 
-  // Creates the default set of items for the sytem tray.
-  void CreateItems(SystemTrayDelegate* delegate);
+  // Creates the default set of items for the system tray.
+  void CreateItems();
 
   // Resets |system_bubble_| and clears any related state.
   void DestroySystemBubble();
@@ -164,7 +163,8 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView {
   // Constructs or re-constructs |system_bubble_| and populates it with |items|.
   // Specify |change_tray_status| to true if want to change the tray background
   // status. The bubble will be opened in inactive state. If |can_activate| is
-  // true, the bubble will be activated by one of following means.
+  // true, the bubble will be activated by one of following means. Specify
+  // |show_by_click| to true if |items| are shown by mouse or gesture click.
   // * When alt/alt-tab acclerator is used to start navigation.
   // * When the bubble is opened by accelerator.
   // * When the tray item is set to be focused.
@@ -172,7 +172,8 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView {
                  bool details,
                  bool can_activate,
                  BubbleCreationType creation_type,
-                 bool persistent);
+                 bool persistent,
+                 bool show_by_click);
 
   // Checks the current status of the system tray and updates the web
   // notification tray according to the current status.
@@ -209,6 +210,7 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView {
   // These objects are not owned by this class.
   TrayAccessibility* tray_accessibility_ = nullptr;
   TrayAudio* tray_audio_ = nullptr;
+  TrayCapsLock* tray_caps_lock_ = nullptr;
   TrayCast* tray_cast_ = nullptr;
   TrayEnterprise* tray_enterprise_ = nullptr;
   TrayNetwork* tray_network_ = nullptr;

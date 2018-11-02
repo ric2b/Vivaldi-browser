@@ -6,6 +6,8 @@
 #define IOS_CHROME_BROWSER_PAYMENTS_TEST_PAYMENT_REQUEST_H_
 
 #include "base/macros.h"
+#include "components/payments/core/address_normalization_manager.h"
+#include "components/payments/core/test_address_normalizer.h"
 #include "ios/chrome/browser/payments/payment_request.h"
 
 namespace autofill {
@@ -18,12 +20,12 @@ class ChromeBrowserState;
 }  // namespace ios
 
 namespace payments {
+class PaymentShippingOption;
 class PaymentsProfileComparator;
 }  // namespace payments
 
 namespace web {
 class PaymentRequest;
-class PaymentShippingOption;
 class WebState;
 }  // namespace web
 
@@ -46,6 +48,7 @@ class TestPaymentRequest : public PaymentRequest {
                        web_state,
                        personal_data_manager,
                        payment_request_ui_delegate),
+        address_normalization_manager_(&address_normalizer_, "US"),
         region_data_loader_(nullptr),
         pref_service_(nullptr),
         profile_comparator_(nullptr) {}
@@ -87,17 +90,27 @@ class TestPaymentRequest : public PaymentRequest {
   // Removes all the payment methods.
   void ClearPaymentMethods();
 
+  // Clears all url payment method identifiers, supported card networks,
+  // basic card specified networks, and supported card types and then resets
+  // them.
+  void ResetParsedPaymentMethodData();
+
   // Sets the currently selected shipping option for this PaymentRequest flow.
-  void set_selected_shipping_option(web::PaymentShippingOption* option) {
+  void set_selected_shipping_option(payments::PaymentShippingOption* option) {
     selected_shipping_option_ = option;
   }
 
   // PaymentRequest
+  AddressNormalizer* GetAddressNormalizer() override;
+  AddressNormalizationManager* GetAddressNormalizationManager() override;
   autofill::RegionDataLoader* GetRegionDataLoader() override;
   PrefService* GetPrefService() override;
   PaymentsProfileComparator* profile_comparator() override;
 
  private:
+  TestAddressNormalizer address_normalizer_;
+  AddressNormalizationManager address_normalization_manager_;
+
   // Not owned and must outlive this object.
   autofill::RegionDataLoader* region_data_loader_;
 

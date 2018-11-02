@@ -16,11 +16,12 @@
 #include "base/run_loop.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
-#include "cc/output/begin_frame_args.h"
-#include "cc/test/begin_frame_args_test.h"
-#include "cc/test/fake_external_begin_frame_source.h"
-#include "cc/test/ordered_simple_task_runner.h"
 #include "cc/test/scheduler_test_common.h"
+#include "components/viz/common/frame_sinks/begin_frame_args.h"
+#include "components/viz/test/begin_frame_args_test.h"
+#include "components/viz/test/fake_delay_based_time_source.h"
+#include "components/viz/test/fake_external_begin_frame_source.h"
+#include "components/viz/test/ordered_simple_task_runner.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -42,7 +43,7 @@ base::TimeDelta kSlowDuration = base::TimeDelta::FromSeconds(1);
 base::TimeDelta kFastDuration = base::TimeDelta::FromMilliseconds(1);
 
 class FakeSchedulerClient : public SchedulerClient,
-                            public FakeExternalBeginFrameSource::Client {
+                            public viz::FakeExternalBeginFrameSource::Client {
  public:
   FakeSchedulerClient()
       : inside_begin_impl_frame_(false),
@@ -59,8 +60,8 @@ class FakeSchedulerClient : public SchedulerClient,
     draw_will_happen_ = true;
     swap_will_happen_if_draw_happens_ = true;
     num_draws_ = 0;
-    last_begin_main_frame_args_ = BeginFrameArgs();
-    last_begin_frame_ack_ = BeginFrameAck();
+    last_begin_main_frame_args_ = viz::BeginFrameArgs();
+    last_begin_frame_ack_ = viz::BeginFrameAck();
   }
 
   void set_scheduler(TestScheduler* scheduler) { scheduler_ = scheduler; }
@@ -100,7 +101,7 @@ class FakeSchedulerClient : public SchedulerClient,
     automatic_ack_ = automatic_ack;
   }
   // SchedulerClient implementation.
-  void WillBeginImplFrame(const BeginFrameArgs& args) override {
+  void WillBeginImplFrame(const viz::BeginFrameArgs& args) override {
     EXPECT_FALSE(inside_begin_impl_frame_);
     inside_begin_impl_frame_ = true;
     PushAction("WillBeginImplFrame");
@@ -113,20 +114,23 @@ class FakeSchedulerClient : public SchedulerClient,
     EXPECT_TRUE(inside_begin_impl_frame_);
     inside_begin_impl_frame_ = false;
   }
-  void DidNotProduceFrame(const BeginFrameAck& ack) override {
+  void DidNotProduceFrame(const viz::BeginFrameAck& ack) override {
     last_begin_frame_ack_ = ack;
   }
 
-  void ScheduledActionSendBeginMainFrame(const BeginFrameArgs& args) override {
+  void ScheduledActionSendBeginMainFrame(
+      const viz::BeginFrameArgs& args) override {
     PushAction("ScheduledActionSendBeginMainFrame");
     last_begin_main_frame_args_ = args;
   }
 
-  const BeginFrameArgs& last_begin_main_frame_args() {
+  const viz::BeginFrameArgs& last_begin_main_frame_args() {
     return last_begin_main_frame_args_;
   }
 
-  const BeginFrameAck& last_begin_frame_ack() { return last_begin_frame_ack_; }
+  const viz::BeginFrameAck& last_begin_frame_ack() {
+    return last_begin_frame_ack_;
+  }
 
   DrawResult ScheduledActionDrawIfPossible() override {
     PushAction("ScheduledActionDrawIfPossible");
@@ -204,10 +208,10 @@ class FakeSchedulerClient : public SchedulerClient,
   }
 
   // FakeExternalBeginFrameSource::Client implementation.
-  void OnAddObserver(BeginFrameObserver* obs) override {
+  void OnAddObserver(viz::BeginFrameObserver* obs) override {
     PushAction("AddObserver(this)");
   }
-  void OnRemoveObserver(BeginFrameObserver* obs) override {
+  void OnRemoveObserver(viz::BeginFrameObserver* obs) override {
     PushAction("RemoveObserver(this)");
   }
 
@@ -223,8 +227,8 @@ class FakeSchedulerClient : public SchedulerClient,
   bool swap_will_happen_if_draw_happens_;
   bool automatic_ack_;
   int num_draws_;
-  BeginFrameArgs last_begin_main_frame_args_;
-  BeginFrameAck last_begin_frame_ack_;
+  viz::BeginFrameArgs last_begin_main_frame_args_;
+  viz::BeginFrameAck last_begin_frame_ack_;
   base::TimeTicks posted_begin_impl_frame_deadline_;
   std::vector<const char*> actions_;
   std::vector<std::unique_ptr<base::trace_event::ConvertableToTraceFormat>>
@@ -247,7 +251,7 @@ class SchedulerTest : public testing::Test {
         fake_compositor_timing_history_(nullptr) {
     now_src_->Advance(base::TimeDelta::FromMicroseconds(10000));
     // A bunch of tests require NowTicks()
-    // to be > BeginFrameArgs::DefaultInterval()
+    // to be > viz::BeginFrameArgs::DefaultInterval()
     now_src_->Advance(base::TimeDelta::FromMilliseconds(100));
     // Fail if we need to run 100 tasks in a row.
     task_runner_->SetRunTaskLimit(100);
@@ -257,16 +261,16 @@ class SchedulerTest : public testing::Test {
 
  protected:
   TestScheduler* CreateScheduler(BeginFrameSourceType bfs_type) {
-    BeginFrameSource* frame_source = nullptr;
-    unthrottled_frame_source_.reset(new BackToBackBeginFrameSource(
-        base::MakeUnique<TestDelayBasedTimeSource>(now_src_.get(),
-                                                   task_runner_.get())));
+    viz::BeginFrameSource* frame_source = nullptr;
+    unthrottled_frame_source_.reset(new viz::BackToBackBeginFrameSource(
+        std::make_unique<viz::FakeDelayBasedTimeSource>(now_src_.get(),
+                                                        task_runner_.get())));
     fake_external_begin_frame_source_.reset(
-        new FakeExternalBeginFrameSource(0.f, false));
+        new viz::FakeExternalBeginFrameSource(0.f, false));
     fake_external_begin_frame_source_->SetClient(client_.get());
-    synthetic_frame_source_.reset(new DelayBasedBeginFrameSource(
-        base::MakeUnique<TestDelayBasedTimeSource>(now_src_.get(),
-                                                   task_runner_.get())));
+    synthetic_frame_source_.reset(new viz::DelayBasedBeginFrameSource(
+        std::make_unique<viz::FakeDelayBasedTimeSource>(now_src_.get(),
+                                                        task_runner_.get())));
     switch (bfs_type) {
       case EXTERNAL_BFS:
         frame_source = fake_external_begin_frame_source_.get();
@@ -305,11 +309,11 @@ class SchedulerTest : public testing::Test {
   }
 
   void SetUpScheduler(BeginFrameSourceType bfs_type) {
-    SetUpScheduler(bfs_type, base::MakeUnique<FakeSchedulerClient>());
+    SetUpScheduler(bfs_type, std::make_unique<FakeSchedulerClient>());
   }
 
   void SetUpSchedulerWithNoLayerTreeFrameSink(BeginFrameSourceType bfs_type) {
-    client_ = base::MakeUnique<FakeSchedulerClient>();
+    client_ = std::make_unique<FakeSchedulerClient>();
     CreateScheduler(bfs_type);
   }
 
@@ -388,14 +392,15 @@ class SchedulerTest : public testing::Test {
 
     if (scheduler_->begin_frame_source() ==
         fake_external_begin_frame_source_.get()) {
-      // Expect the last BeginFrameAck to be for last BeginFrame, which didn't
-      // cause damage.
+      // Expect the last viz::BeginFrameAck to be for last BeginFrame, which
+      // didn't cause damage.
       uint64_t last_begin_frame_number =
           fake_external_begin_frame_source_->next_begin_frame_number() - 1;
       bool has_damage = false;
-      EXPECT_EQ(BeginFrameAck(fake_external_begin_frame_source_->source_id(),
-                              last_begin_frame_number, has_damage),
-                client_->last_begin_frame_ack());
+      EXPECT_EQ(
+          viz::BeginFrameAck(fake_external_begin_frame_source_->source_id(),
+                             last_begin_frame_number, has_damage),
+          client_->last_begin_frame_ack());
     }
 
     client_->Reset();
@@ -419,20 +424,20 @@ class SchedulerTest : public testing::Test {
     }
   }
 
-  BeginFrameArgs SendNextBeginFrame() {
+  viz::BeginFrameArgs SendNextBeginFrame() {
     DCHECK_EQ(scheduler_->begin_frame_source(),
               fake_external_begin_frame_source_.get());
-    // Creep the time forward so that any BeginFrameArgs is not equal to the
-    // last one otherwise we violate the BeginFrameSource contract.
-    now_src_->Advance(BeginFrameArgs::DefaultInterval());
-    BeginFrameArgs args =
+    // Creep the time forward so that any viz::BeginFrameArgs is not equal to
+    // the last one otherwise we violate the viz::BeginFrameSource contract.
+    now_src_->Advance(viz::BeginFrameArgs::DefaultInterval());
+    viz::BeginFrameArgs args =
         fake_external_begin_frame_source_->CreateBeginFrameArgs(
             BEGINFRAME_FROM_HERE, now_src());
     fake_external_begin_frame_source_->TestOnBeginFrame(args);
     return args;
   }
 
-  FakeExternalBeginFrameSource* fake_external_begin_frame_source() const {
+  viz::FakeExternalBeginFrameSource* fake_external_begin_frame_source() const {
     return fake_external_begin_frame_source_.get();
   }
 
@@ -448,10 +453,10 @@ class SchedulerTest : public testing::Test {
 
   std::unique_ptr<base::SimpleTestTickClock> now_src_;
   scoped_refptr<OrderedSimpleTaskRunner> task_runner_;
-  std::unique_ptr<FakeExternalBeginFrameSource>
+  std::unique_ptr<viz::FakeExternalBeginFrameSource>
       fake_external_begin_frame_source_;
-  std::unique_ptr<SyntheticBeginFrameSource> synthetic_frame_source_;
-  std::unique_ptr<SyntheticBeginFrameSource> unthrottled_frame_source_;
+  std::unique_ptr<viz::SyntheticBeginFrameSource> synthetic_frame_source_;
+  std::unique_ptr<viz::SyntheticBeginFrameSource> unthrottled_frame_source_;
   SchedulerSettings scheduler_settings_;
   std::unique_ptr<FakeSchedulerClient> client_;
   std::unique_ptr<TestScheduler> scheduler_;
@@ -1360,12 +1365,13 @@ TEST_F(SchedulerTest, MainFrameNotSkippedAfterLateBeginFrame) {
   scheduler_->SetNeedsBeginMainFrame();
 
   // Advance frame and create a begin frame.
-  now_src_->Advance(BeginFrameArgs::DefaultInterval());
-  BeginFrameArgs args = fake_external_begin_frame_source_->CreateBeginFrameArgs(
-      BEGINFRAME_FROM_HERE, now_src());
+  now_src_->Advance(viz::BeginFrameArgs::DefaultInterval());
+  viz::BeginFrameArgs args =
+      fake_external_begin_frame_source_->CreateBeginFrameArgs(
+          BEGINFRAME_FROM_HERE, now_src());
 
   // Deliver this begin frame super late.
-  now_src_->Advance(BeginFrameArgs::DefaultInterval() * 100);
+  now_src_->Advance(viz::BeginFrameArgs::DefaultInterval() * 100);
   fake_external_begin_frame_source_->TestOnBeginFrame(args);
 
   task_runner().RunTasksWhile(client_->InsideBeginImplFrame(true));
@@ -2166,7 +2172,7 @@ void SchedulerTest::BeginFramesNotFromClient_IsDrawThrottled(
   // factor that's an internal implementation detail.
   EXPECT_GT(after_deadline, before_deadline);
   EXPECT_LT(after_deadline,
-            before_deadline + BeginFrameArgs::DefaultInterval());
+            before_deadline + viz::BeginFrameArgs::DefaultInterval());
   EXPECT_FALSE(client_->IsInsideBeginImplFrame());
   client_->Reset();
 
@@ -2189,7 +2195,7 @@ void SchedulerTest::BeginFramesNotFromClient_IsDrawThrottled(
   // factor that's an internal implementation detail.
   EXPECT_GT(after_deadline, before_deadline);
   EXPECT_LT(after_deadline,
-            before_deadline + BeginFrameArgs::DefaultInterval());
+            before_deadline + viz::BeginFrameArgs::DefaultInterval());
   EXPECT_FALSE(client_->IsInsideBeginImplFrame());
   client_->Reset();
 }
@@ -2877,13 +2883,14 @@ TEST_F(SchedulerTest, SynchronousCompositorCommitAndVerifyBeginFrameAcks) {
   client_->Reset();
 
   // Next vsync.
-  BeginFrameArgs args = SendNextBeginFrame();
+  viz::BeginFrameArgs args = SendNextBeginFrame();
   EXPECT_ACTIONS("WillBeginImplFrame", "ScheduledActionSendBeginMainFrame");
   EXPECT_FALSE(client_->IsInsideBeginImplFrame());
 
   bool has_damage = false;
-  EXPECT_EQ(BeginFrameAck(args.source_id, args.sequence_number, has_damage),
-            client_->last_begin_frame_ack());
+  EXPECT_EQ(
+      viz::BeginFrameAck(args.source_id, args.sequence_number, has_damage),
+      client_->last_begin_frame_ack());
   client_->Reset();
 
   scheduler_->NotifyBeginMainFrameStarted(base::TimeTicks());
@@ -2895,8 +2902,9 @@ TEST_F(SchedulerTest, SynchronousCompositorCommitAndVerifyBeginFrameAcks) {
   EXPECT_FALSE(client_->IsInsideBeginImplFrame());
 
   has_damage = false;
-  EXPECT_EQ(BeginFrameAck(args.source_id, args.sequence_number, has_damage),
-            client_->last_begin_frame_ack());
+  EXPECT_EQ(
+      viz::BeginFrameAck(args.source_id, args.sequence_number, has_damage),
+      client_->last_begin_frame_ack());
   client_->Reset();
 
   scheduler_->NotifyReadyToCommit();
@@ -2918,8 +2926,9 @@ TEST_F(SchedulerTest, SynchronousCompositorCommitAndVerifyBeginFrameAcks) {
   // filtering this ack (in CompositorExternalBeginFrameSource) and instead
   // forwarding the one attached to the later submitted CompositorFrame.
   has_damage = false;
-  EXPECT_EQ(BeginFrameAck(args.source_id, args.sequence_number, has_damage),
-            client_->last_begin_frame_ack());
+  EXPECT_EQ(
+      viz::BeginFrameAck(args.source_id, args.sequence_number, has_damage),
+      client_->last_begin_frame_ack());
   client_->Reset();
 
   // Android onDraw.
@@ -2936,8 +2945,9 @@ TEST_F(SchedulerTest, SynchronousCompositorCommitAndVerifyBeginFrameAcks) {
   EXPECT_FALSE(client_->IsInsideBeginImplFrame());
 
   has_damage = false;
-  EXPECT_EQ(BeginFrameAck(args.source_id, args.sequence_number, has_damage),
-            client_->last_begin_frame_ack());
+  EXPECT_EQ(
+      viz::BeginFrameAck(args.source_id, args.sequence_number, has_damage),
+      client_->last_begin_frame_ack());
   client_->Reset();
 }
 
@@ -3209,7 +3219,8 @@ TEST_F(SchedulerTest, ImplSideInvalidationsInDeadline) {
 
   // Request an impl-side invalidation and trigger the deadline. Ensure that the
   // invalidation runs inside the deadline.
-  scheduler_->SetNeedsImplSideInvalidation();
+  bool needs_first_draw_on_activation = true;
+  scheduler_->SetNeedsImplSideInvalidation(needs_first_draw_on_activation);
   client_->Reset();
   EXPECT_SCOPED(AdvanceFrame());
   EXPECT_ACTIONS("WillBeginImplFrame");
@@ -3226,7 +3237,8 @@ TEST_F(SchedulerTest, ImplSideInvalidationsMergedWithCommit) {
   // Request a main frame and invalidation, the only action run should be
   // sending the main frame.
   scheduler_->SetNeedsBeginMainFrame();
-  scheduler_->SetNeedsImplSideInvalidation();
+  bool needs_first_draw_on_activation = true;
+  scheduler_->SetNeedsImplSideInvalidation(needs_first_draw_on_activation);
   client_->Reset();
   EXPECT_SCOPED(AdvanceFrame());
   EXPECT_ACTIONS("WillBeginImplFrame", "ScheduledActionSendBeginMainFrame");
@@ -3251,7 +3263,8 @@ TEST_F(SchedulerTest, AbortedCommitsTriggerImplSideInvalidations) {
 
   // Request a main frame and invalidation.
   scheduler_->SetNeedsBeginMainFrame();
-  scheduler_->SetNeedsImplSideInvalidation();
+  bool needs_first_draw_on_activation = true;
+  scheduler_->SetNeedsImplSideInvalidation(needs_first_draw_on_activation);
   client_->Reset();
   EXPECT_SCOPED(AdvanceFrame());
   EXPECT_ACTIONS("WillBeginImplFrame", "ScheduledActionSendBeginMainFrame");
@@ -3362,7 +3375,7 @@ TEST_F(SchedulerTest, BeginFrameAckForFinishedImplFrame) {
   scheduler_->SetNeedsRedraw();
   client_->Reset();
 
-  BeginFrameArgs args = SendNextBeginFrame();
+  viz::BeginFrameArgs args = SendNextBeginFrame();
   EXPECT_ACTIONS("WillBeginImplFrame");
   EXPECT_TRUE(client_->IsInsideBeginImplFrame());
   EXPECT_TRUE(scheduler_->begin_frames_expected());
@@ -3375,8 +3388,9 @@ TEST_F(SchedulerTest, BeginFrameAckForFinishedImplFrame) {
 
   // Successful draw caused damage.
   bool has_damage = true;
-  EXPECT_EQ(BeginFrameAck(args.source_id, args.sequence_number, has_damage),
-            client_->last_begin_frame_ack());
+  EXPECT_EQ(
+      viz::BeginFrameAck(args.source_id, args.sequence_number, has_damage),
+      client_->last_begin_frame_ack());
   client_->Reset();
 
   // Request another redraw, but fail it. Verify that a new ack is sent.
@@ -3399,8 +3413,9 @@ TEST_F(SchedulerTest, BeginFrameAckForFinishedImplFrame) {
 
   // Failed draw: no damage.
   has_damage = false;
-  EXPECT_EQ(BeginFrameAck(args.source_id, args.sequence_number, has_damage),
-            client_->last_begin_frame_ack());
+  EXPECT_EQ(
+      viz::BeginFrameAck(args.source_id, args.sequence_number, has_damage),
+      client_->last_begin_frame_ack());
   client_->Reset();
 }
 
@@ -3412,11 +3427,11 @@ TEST_F(SchedulerTest, BeginFrameAckForSkippedImplFrame) {
   fake_compositor_timing_history_->SetAllEstimatesTo(kFastDuration);
 
   // Run a successful redraw that submits a compositor frame but doesn't receive
-  // a swap ack. Verify that a BeginFrameAck is sent for it.
+  // a swap ack. Verify that a viz::BeginFrameAck is sent for it.
   scheduler_->SetNeedsRedraw();
   client_->Reset();
 
-  BeginFrameArgs args = SendNextBeginFrame();
+  viz::BeginFrameArgs args = SendNextBeginFrame();
   EXPECT_ACTIONS("WillBeginImplFrame");
   EXPECT_TRUE(client_->IsInsideBeginImplFrame());
   EXPECT_TRUE(scheduler_->begin_frames_expected());
@@ -3429,12 +3444,13 @@ TEST_F(SchedulerTest, BeginFrameAckForSkippedImplFrame) {
 
   // Successful draw caused damage.
   bool has_damage = true;
-  EXPECT_EQ(BeginFrameAck(args.source_id, args.sequence_number, has_damage),
-            client_->last_begin_frame_ack());
+  EXPECT_EQ(
+      viz::BeginFrameAck(args.source_id, args.sequence_number, has_damage),
+      client_->last_begin_frame_ack());
   client_->Reset();
 
   // Request another redraw that will be skipped because the swap ack is still
-  // missing. Verify that a new BeginFrameAck is sent.
+  // missing. Verify that a new viz::BeginFrameAck is sent.
   scheduler_->SetNeedsRedraw();
   client_->Reset();
 
@@ -3445,8 +3461,9 @@ TEST_F(SchedulerTest, BeginFrameAckForSkippedImplFrame) {
 
   // Skipped draw: no damage.
   has_damage = false;
-  EXPECT_EQ(BeginFrameAck(args.source_id, args.sequence_number, has_damage),
-            client_->last_begin_frame_ack());
+  EXPECT_EQ(
+      viz::BeginFrameAck(args.source_id, args.sequence_number, has_damage),
+      client_->last_begin_frame_ack());
   client_->Reset();
 }
 
@@ -3468,15 +3485,16 @@ TEST_F(SchedulerTest, BeginFrameAckForBeginFrameBeforeLastDeadline) {
   // This should trigger the previous BeginFrame's deadline synchronously,
   // during which tiles will be prepared. As a result of that, no further
   // BeginFrames will be needed, and the new BeginFrame should be dropped.
-  BeginFrameArgs args = SendNextBeginFrame();
+  viz::BeginFrameArgs args = SendNextBeginFrame();
   EXPECT_ACTIONS("ScheduledActionPrepareTiles", "RemoveObserver(this)");
   EXPECT_FALSE(client_->IsInsideBeginImplFrame());
   EXPECT_FALSE(scheduler_->begin_frames_expected());
 
   // Latest ack should be for the dropped BeginFrame.
   bool has_damage = false;
-  EXPECT_EQ(BeginFrameAck(args.source_id, args.sequence_number, has_damage),
-            client_->last_begin_frame_ack());
+  EXPECT_EQ(
+      viz::BeginFrameAck(args.source_id, args.sequence_number, has_damage),
+      client_->last_begin_frame_ack());
   client_->Reset();
 }
 
@@ -3489,7 +3507,7 @@ TEST_F(SchedulerTest, BeginFrameAckForDroppedBeginFrame) {
   client_->Reset();
 
   // First BeginFrame is handled by StateMachine.
-  BeginFrameArgs first_args = SendNextBeginFrame();
+  viz::BeginFrameArgs first_args = SendNextBeginFrame();
   EXPECT_ACTIONS("WillBeginImplFrame");
   EXPECT_TRUE(client_->IsInsideBeginImplFrame());
   // State machine is no longer interested in BeginFrames, but scheduler is
@@ -3501,13 +3519,13 @@ TEST_F(SchedulerTest, BeginFrameAckForDroppedBeginFrame) {
   // Send the next BeginFrame before the previous one's deadline was executed.
   // The BeginFrame should be dropped immediately, since the state machine is
   // not expecting any BeginFrames.
-  BeginFrameArgs second_args = SendNextBeginFrame();
+  viz::BeginFrameArgs second_args = SendNextBeginFrame();
   EXPECT_NO_ACTION();
 
   // Latest ack should be for the dropped BeginFrame.
   bool has_damage = false;
-  EXPECT_EQ(BeginFrameAck(second_args.source_id, second_args.sequence_number,
-                          has_damage),
+  EXPECT_EQ(viz::BeginFrameAck(second_args.source_id,
+                               second_args.sequence_number, has_damage),
             client_->last_begin_frame_ack());
   client_->Reset();
 
@@ -3516,8 +3534,8 @@ TEST_F(SchedulerTest, BeginFrameAckForDroppedBeginFrame) {
 
   // We'd expect an out-of-order ack for the prior BeginFrame.
   has_damage = false;
-  EXPECT_EQ(BeginFrameAck(first_args.source_id, first_args.sequence_number,
-                          has_damage),
+  EXPECT_EQ(viz::BeginFrameAck(first_args.source_id, first_args.sequence_number,
+                               has_damage),
             client_->last_begin_frame_ack());
   client_->Reset();
 }
@@ -3529,11 +3547,12 @@ TEST_F(SchedulerTest, BeginFrameAckForLateMissedBeginFrame) {
   client_->Reset();
 
   // Send a missed BeginFrame with a passed deadline.
-  now_src_->Advance(BeginFrameArgs::DefaultInterval());
-  BeginFrameArgs args = fake_external_begin_frame_source_->CreateBeginFrameArgs(
-      BEGINFRAME_FROM_HERE, now_src());
-  args.type = BeginFrameArgs::MISSED;
-  now_src_->Advance(BeginFrameArgs::DefaultInterval());
+  now_src_->Advance(viz::BeginFrameArgs::DefaultInterval());
+  viz::BeginFrameArgs args =
+      fake_external_begin_frame_source_->CreateBeginFrameArgs(
+          BEGINFRAME_FROM_HERE, now_src());
+  args.type = viz::BeginFrameArgs::MISSED;
+  now_src_->Advance(viz::BeginFrameArgs::DefaultInterval());
   EXPECT_GT(now_src_->NowTicks(), args.deadline);
   fake_external_begin_frame_source_->TestOnBeginFrame(args);
 
@@ -3543,9 +3562,64 @@ TEST_F(SchedulerTest, BeginFrameAckForLateMissedBeginFrame) {
   // Latest ack should be for the missed BeginFrame that was too late: no
   // damage.
   bool has_damage = false;
-  EXPECT_EQ(BeginFrameAck(args.source_id, args.sequence_number, has_damage),
-            client_->last_begin_frame_ack());
+  EXPECT_EQ(
+      viz::BeginFrameAck(args.source_id, args.sequence_number, has_damage),
+      client_->last_begin_frame_ack());
   client_->Reset();
+}
+
+TEST_F(SchedulerTest, CriticalBeginMainFrameToActivateIsFast) {
+  SetUpScheduler(EXTERNAL_BFS);
+
+  scheduler_->SetNeedsRedraw();
+  base::TimeDelta estimate_duration = base::TimeDelta::FromMilliseconds(1);
+  fake_compositor_timing_history_->SetAllEstimatesTo(estimate_duration);
+
+  // If we have a scroll handler but the critical main frame is slow, we should
+  // still prioritize impl thread latency.
+  scheduler_->SetTreePrioritiesAndScrollState(
+      SMOOTHNESS_TAKES_PRIORITY,
+      ScrollHandlerState::SCROLL_AFFECTS_SCROLL_HANDLER);
+  scheduler_->SetNeedsRedraw();
+  // An interval of 2ms makes sure that the main frame is considered slow.
+  base::TimeDelta interval = base::TimeDelta::FromMilliseconds(2);
+  now_src_->Advance(interval);
+  viz::BeginFrameArgs args = viz::BeginFrameArgs::Create(
+      BEGINFRAME_FROM_HERE, 0u, 1u, now_src_->NowTicks(),
+      now_src_->NowTicks() + interval, interval, viz::BeginFrameArgs::NORMAL);
+  fake_external_begin_frame_source_->TestOnBeginFrame(args);
+  EXPECT_TRUE(scheduler_->ImplLatencyTakesPriority());
+
+  task_runner().RunPendingTasks();  // Run posted deadline to finish the frame.
+  ASSERT_FALSE(client_->IsInsideBeginImplFrame());
+
+  // Set an interval of 10ms. The bmf_to_activate_interval should be 1*4 = 4ms,
+  // to account for queue + main_frame + pending_tree + activation durations.
+  // With a draw time of 1ms and fudge factor of 1ms, the interval available for
+  // the main frame to be activated is 8ms, so it should be considered fast.
+  scheduler_->SetNeedsRedraw();
+  interval = base::TimeDelta::FromMilliseconds(10);
+  now_src_->Advance(interval);
+  args = viz::BeginFrameArgs::Create(
+      BEGINFRAME_FROM_HERE, 0u, 2u, now_src_->NowTicks(),
+      now_src_->NowTicks() + interval, interval, viz::BeginFrameArgs::NORMAL);
+  fake_external_begin_frame_source_->TestOnBeginFrame(args);
+  EXPECT_FALSE(scheduler_->ImplLatencyTakesPriority());
+
+  task_runner().RunPendingTasks();  // Run posted deadline to finish the frame.
+  ASSERT_FALSE(client_->IsInsideBeginImplFrame());
+
+  // Increase the draw duration to decrease the time available for the main
+  // frame. This should prioritize the impl thread.
+  scheduler_->SetNeedsRedraw();
+  fake_compositor_timing_history_->SetDrawDurationEstimate(
+      base::TimeDelta::FromMilliseconds(7));
+  now_src_->Advance(interval);
+  args = viz::BeginFrameArgs::Create(
+      BEGINFRAME_FROM_HERE, 0u, 3u, now_src_->NowTicks(),
+      now_src_->NowTicks() + interval, interval, viz::BeginFrameArgs::NORMAL);
+  fake_external_begin_frame_source_->TestOnBeginFrame(args);
+  EXPECT_TRUE(scheduler_->ImplLatencyTakesPriority());
 }
 
 }  // namespace

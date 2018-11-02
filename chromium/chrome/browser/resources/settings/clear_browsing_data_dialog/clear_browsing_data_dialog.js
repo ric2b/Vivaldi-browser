@@ -5,6 +5,9 @@
 /**
  * @fileoverview 'settings-clear-browsing-data-dialog' allows the user to delete
  * browsing data that has been cached by Chromium.
+ *
+ * This file is forked as clear_browsing_data_dialog_tabs.js until the new
+ * CBD UI is launched.
  */
 Polymer({
   is: 'settings-clear-browsing-data-dialog',
@@ -105,14 +108,14 @@ Polymer({
   attached: function() {
     this.browserProxy_ =
         settings.ClearBrowsingDataBrowserProxyImpl.getInstance();
-    this.browserProxy_.initialize().then(function() {
+    this.browserProxy_.initialize().then(() => {
       this.$.clearBrowsingDataDialog.showModal();
-    }.bind(this));
+    });
 
     if (this.importantSitesFlagEnabled_) {
-      this.browserProxy_.getImportantSites().then(function(sites) {
+      this.browserProxy_.getImportantSites().then(sites => {
         this.importantSites_ = sites;
-      }.bind(this));
+      });
     }
   },
 
@@ -196,19 +199,23 @@ Polymer({
   clearBrowsingData_: function() {
     this.clearingInProgress_ = true;
 
-    this.browserProxy_.clearBrowsingData(this.importantSites_)
-        .then(
-            /**
-             * @param {boolean} shouldShowNotice Whether we should show the
-             * notice about other forms of browsing history before closing the
-             * dialog.
-             */
-            function(shouldShowNotice) {
-              this.clearingInProgress_ = false;
-              this.showHistoryDeletionDialog_ = shouldShowNotice;
-              if (!shouldShowNotice)
-                this.closeDialogs_();
-            }.bind(this));
+    var checkboxes = this.root.querySelectorAll('.browsing-data-checkbox');
+    var dataTypes = [];
+    checkboxes.forEach((checkbox) => {
+      if (checkbox.checked)
+        dataTypes.push(checkbox.pref.key);
+    });
+
+    var timePeriod = this.$.clearFrom.pref.value;
+
+    this.browserProxy_
+        .clearBrowsingData(dataTypes, timePeriod, this.importantSites_)
+        .then(shouldShowNotice => {
+          this.clearingInProgress_ = false;
+          this.showHistoryDeletionDialog_ = shouldShowNotice;
+          if (!shouldShowNotice)
+            this.closeDialogs_();
+        });
   },
 
   /**

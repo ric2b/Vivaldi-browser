@@ -662,11 +662,84 @@
     step1();
   };
 
+  TestSuite.prototype.testDispatchKeyEventShowsAutoFill = function() {
+    var test = this;
+    var receivedReady = false;
+
+    function signalToShowAutofill() {
+      SDK.targetManager.mainTarget().inputAgent().invoke_dispatchKeyEvent(
+          {type: 'rawKeyDown', key: 'Down', windowsVirtualKeyCode: 40, nativeVirtualKeyCode: 40});
+      SDK.targetManager.mainTarget().inputAgent().invoke_dispatchKeyEvent(
+          {type: 'keyUp', key: 'Down', windowsVirtualKeyCode: 40, nativeVirtualKeyCode: 40});
+    }
+
+    function selectTopAutoFill() {
+      SDK.targetManager.mainTarget().inputAgent().invoke_dispatchKeyEvent(
+          {type: 'rawKeyDown', key: 'Down', windowsVirtualKeyCode: 40, nativeVirtualKeyCode: 40});
+      SDK.targetManager.mainTarget().inputAgent().invoke_dispatchKeyEvent(
+          {type: 'keyUp', key: 'Down', windowsVirtualKeyCode: 40, nativeVirtualKeyCode: 40});
+      SDK.targetManager.mainTarget().inputAgent().invoke_dispatchKeyEvent(
+          {type: 'rawKeyDown', key: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13});
+      SDK.targetManager.mainTarget().inputAgent().invoke_dispatchKeyEvent(
+          {type: 'keyUp', key: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13});
+
+      test.evaluateInConsole_('document.getElementById("name").value', onResultOfInput);
+    }
+
+    function onResultOfInput(value) {
+      // Console adds "" around the response.
+      test.assertEquals('"Abbf"', value);
+      test.releaseControl();
+    }
+
+    function onConsoleMessage(event) {
+      var message = event.data.messageText;
+      if (message === 'ready' && !receivedReady) {
+        receivedReady = true;
+        signalToShowAutofill();
+      }
+      // This log comes from the browser unittest code.
+      if (message === 'didShowSuggestions')
+        selectTopAutoFill();
+    }
+
+    this.takeControl();
+
+    // It is possible for the ready console messagage to be already received but not handled
+    // or received later. This ensures we can catch both cases.
+    ConsoleModel.consoleModel.addEventListener(ConsoleModel.ConsoleModel.Events.MessageAdded, onConsoleMessage, this);
+
+    var messages = ConsoleModel.consoleModel.messages();
+    if (messages.length) {
+      var text = messages[0].messageText;
+      this.assertEquals('ready', text);
+      signalToShowAutofill();
+    }
+  };
+
   TestSuite.prototype.testDispatchKeyEventDoesNotCrash = function() {
     SDK.targetManager.mainTarget().inputAgent().invoke_dispatchKeyEvent(
         {type: 'rawKeyDown', windowsVirtualKeyCode: 0x23, key: 'End'});
     SDK.targetManager.mainTarget().inputAgent().invoke_dispatchKeyEvent(
         {type: 'keyUp', windowsVirtualKeyCode: 0x23, key: 'End'});
+  };
+
+  // Simple sanity check to make sure network throttling is wired up
+  // See crbug.com/747724
+  TestSuite.prototype.testOfflineNetworkConditions = async function() {
+    var test = this;
+    SDK.multitargetNetworkManager.setNetworkConditions(SDK.NetworkManager.OfflineConditions);
+
+    function finishRequest(request) {
+      test.assertEquals(
+          'net::ERR_INTERNET_DISCONNECTED', request.localizedFailDescription, 'Request should have failed');
+      test.releaseControl();
+    }
+
+    this.addSniffer(SDK.NetworkDispatcher.prototype, '_finishNetworkRequest', finishRequest);
+
+    test.takeControl();
+    test.evaluateInConsole_('window.location.reload(true);', function(resultText) {});
   };
 
   TestSuite.prototype.testEmulateNetworkConditions = function() {
@@ -854,6 +927,50 @@
       test.assertEquals('top', values[0]);
       test.assertEquals('Simple content script', values[1]);
       test.releaseControl();
+    }
+  };
+
+  TestSuite.prototype.testRawHeadersWithHSTS = function(url) {
+    var test = this;
+    test.takeControl();
+    SDK.targetManager.addModelListener(
+        SDK.NetworkManager, SDK.NetworkManager.Events.ResponseReceived, onResponseReceived);
+
+    this.evaluateInConsole_(`
+      var img = document.createElement('img');
+      img.src = "${url}";
+      document.body.appendChild(img);
+    `, () => {});
+
+    var count = 0;
+    function onResponseReceived(event) {
+      var networkRequest = event.data;
+      if (!networkRequest.url().startsWith('http'))
+        return;
+      switch (++count) {
+        case 1:  // Original redirect
+          test.assertEquals(301, networkRequest.statusCode);
+          test.assertEquals('Moved Permanently', networkRequest.statusText);
+          test.assertTrue(url.endsWith(networkRequest.responseHeaderValue('Location')));
+          break;
+
+        case 2:  // HSTS internal redirect
+          test.assertTrue(networkRequest.url().startsWith('http://'));
+          test.assertEquals(undefined, networkRequest.requestHeadersText());
+          test.assertEquals(307, networkRequest.statusCode);
+          test.assertEquals('Internal Redirect', networkRequest.statusText);
+          test.assertEquals('HSTS', networkRequest.responseHeaderValue('Non-Authoritative-Reason'));
+          test.assertTrue(networkRequest.responseHeaderValue('Location').startsWith('https://'));
+          break;
+
+        case 3:  // Final response
+          test.assertTrue(networkRequest.url().startsWith('https://'));
+          test.assertTrue(networkRequest.requestHeaderValue('Referer').startsWith('http://127.0.0.1'));
+          test.assertEquals(200, networkRequest.statusCode);
+          test.assertEquals('OK', networkRequest.statusText);
+          test.assertEquals('132', networkRequest.responseHeaderValue('Content-Length'));
+          test.releaseControl();
+      }
     }
   };
 

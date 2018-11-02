@@ -63,7 +63,10 @@ def main():
       required=True)
   parser.add_argument(
       '--isolated-script-test-chartjson-output', type=str,
-      required=True)
+      required=False)
+  parser.add_argument(
+      '--isolated-script-test-perf-output', type=str,
+      required=False)
   parser.add_argument('--xvfb', help='Start xvfb.', action='store_true')
 
   args, rest_args = parser.parse_known_args()
@@ -107,8 +110,14 @@ def main():
         results_processor = (
             generate_legacy_perf_dashboard_json.LegacyResultsProcessor())
         charts = results_processor.GenerateJsonResults(tempfile_path)
+        # TODO(eakuefner): Make isolated_script_test_perf_output mandatory
+        # after flipping flag in swarming.
+        if args.isolated_script_test_perf_output:
+          filename = args.isolated_script_test_perf_output
+        else:
+          filename = args.isolated_script_test_chartjson_output
         # Write the returned encoded json to a the charts output file
-        with open(args.isolated_script_test_chartjson_output, 'w') as f:
+        with open(filename, 'w') as f:
           f.write(charts)
     except Exception:
       traceback.print_exc()

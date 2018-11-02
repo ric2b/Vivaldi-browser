@@ -42,7 +42,7 @@ class WebContentsImpl;
 class WebDragDestDelegate;
 
 class CONTENT_EXPORT WebContentsViewAura
-    : NON_EXPORTED_BASE(public WebContentsView),
+    : public WebContentsView,
       public RenderViewHostDelegateView,
       public OverscrollControllerDelegate,
       public aura::WindowDelegate,
@@ -87,8 +87,6 @@ class CONTENT_EXPORT WebContentsViewAura
   // The navigation happens after an animation (either the overlay window
   // animates in, or the content window animates out).
   void CompleteOverscrollNavigation(OverscrollMode mode);
-
-  void OverscrollUpdateForWebContentsDelegate(float delta_y);
 
   ui::TouchSelectionController* GetSelectionController() const;
   TouchSelectionControllerClientAura* GetSelectionControllerClient() const;
@@ -153,7 +151,6 @@ class CONTENT_EXPORT WebContentsViewAura
 #endif
 
   // Overridden from OverscrollControllerDelegate:
-  gfx::Size GetVisibleSize() const override;
   gfx::Size GetDisplaySize() const override;
   bool OnOverscrollUpdate(float delta_x, float delta_y) override;
   void OnOverscrollComplete(OverscrollMode overscroll_mode) override;

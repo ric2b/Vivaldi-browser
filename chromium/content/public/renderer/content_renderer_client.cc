@@ -38,8 +38,7 @@ blink::WebPlugin* ContentRendererClient::CreatePluginReplacement(
   return nullptr;
 }
 
-bool ContentRendererClient::HasErrorPage(int http_status_code,
-                                         std::string* error_domain) {
+bool ContentRendererClient::HasErrorPage(int http_status_code) {
   return false;
 }
 
@@ -102,7 +101,7 @@ bool ContentRendererClient::RunIdleHandlerWhenWidgetsHidden() {
   return true;
 }
 
-bool ContentRendererClient::AllowTimerSuspensionWhenProcessBackgrounded() {
+bool ContentRendererClient::AllowStoppingTimersWhenProcessBackgrounded() {
   return false;
 }
 

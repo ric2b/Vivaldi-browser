@@ -29,6 +29,7 @@
 #include "mojo/public/cpp/system/platform_handle.h"
 
 #if defined(OS_POSIX)
+#include "base/posix/eintr_wrapper.h"
 #include "ipc/ipc_platform_file_attachment_posix.h"
 #endif
 
@@ -38,6 +39,10 @@
 
 #if defined(OS_WIN)
 #include "ipc/handle_attachment_win.h"
+#endif
+
+#if defined(OS_FUCHSIA)
+#include "ipc/handle_attachment_fuchsia.h"
 #endif
 
 namespace IPC {
@@ -92,7 +97,6 @@ MojoResult WrapPlatformHandle(base::PlatformFile handle,
 }
 
 #if defined(OS_MACOSX)
-
 MojoResult WrapMachPort(mach_port_t mach_port,
                         mojom::SerializedHandlePtr* serialized) {
   MojoPlatformHandle platform_handle = {
@@ -110,17 +114,32 @@ MojoResult WrapMachPort(mach_port_t mach_port,
       mojom::SerializedHandle::Type::MACH_PORT);
   return MOJO_RESULT_OK;
 }
+#elif defined(OS_FUCHSIA)
+MojoResult WrapMxHandle(mx_handle_t handle,
+                        mojom::SerializedHandlePtr* serialized) {
+  MojoPlatformHandle platform_handle = {
+      sizeof(MojoPlatformHandle), MOJO_PLATFORM_HANDLE_TYPE_FUCHSIA_HANDLE,
+      static_cast<uint64_t>(handle)};
 
-#endif
+  MojoHandle wrapped_handle;
+  MojoResult result = MojoWrapPlatformHandle(&platform_handle, &wrapped_handle);
+  if (result != MOJO_RESULT_OK)
+    return result;
+
+  *serialized = CreateSerializedHandle(
+      mojo::MakeScopedHandle(mojo::Handle(wrapped_handle)),
+      mojom::SerializedHandle::Type::FUCHSIA_HANDLE);
+  return MOJO_RESULT_OK;
+}
+#endif  // defined(OS_FUCHSIA)
 
 #if defined(OS_POSIX)
-
 base::ScopedFD TakeOrDupFile(internal::PlatformFileAttachment* attachment) {
-  return attachment->Owns() ? base::ScopedFD(attachment->TakePlatformFile())
-                            : base::ScopedFD(dup(attachment->file()));
+  return attachment->Owns()
+             ? base::ScopedFD(attachment->TakePlatformFile())
+             : base::ScopedFD(HANDLE_EINTR(dup(attachment->file())));
 }
-
-#endif
+#endif  // defined(OS_POSIX)
 
 MojoResult WrapAttachmentImpl(MessageAttachment* attachment,
                               mojom::SerializedHandlePtr* serialized) {
@@ -146,7 +165,7 @@ MojoResult WrapAttachmentImpl(MessageAttachment* attachment,
                               mojom::SerializedHandle::Type::PLATFORM_FILE,
                               serialized);
   }
-#endif
+#endif  // defined(OS_POSIX)
 #if defined(OS_MACOSX)
   DCHECK_EQ(attachment->GetType(), MessageAttachment::Type::MACH_PORT);
   internal::MachPortAttachmentMac& mach_port_attachment =
@@ -155,14 +174,19 @@ MojoResult WrapAttachmentImpl(MessageAttachment* attachment,
                                    serialized);
   mach_port_attachment.reset_mach_port_ownership();
   return result;
+#elif defined(OS_FUCHSIA)
+  DCHECK_EQ(attachment->GetType(), MessageAttachment::Type::FUCHSIA_HANDLE);
+  internal::HandleAttachmentFuchsia& handle_attachment =
+      static_cast<internal::HandleAttachmentFuchsia&>(*attachment);
+  MojoResult result = WrapMxHandle(handle_attachment.Take(), serialized);
+  return result;
 #elif defined(OS_WIN)
   DCHECK_EQ(attachment->GetType(), MessageAttachment::Type::WIN_HANDLE);
   internal::HandleAttachmentWin& handle_attachment =
       static_cast<internal::HandleAttachmentWin&>(*attachment);
-  MojoResult result = WrapPlatformHandle(
-      handle_attachment.get_handle(),
-      mojom::SerializedHandle::Type::WIN_HANDLE, serialized);
-  handle_attachment.reset_handle_ownership();
+  MojoResult result =
+      WrapPlatformHandle(handle_attachment.Take(),
+                         mojom::SerializedHandle::Type::WIN_HANDLE, serialized);
   return result;
 #else
   NOTREACHED();
@@ -212,8 +236,15 @@ MojoResult UnwrapAttachment(mojom::SerializedHandlePtr handle,
         mach_port, internal::MachPortAttachmentMac::FROM_WIRE);
     return MOJO_RESULT_OK;
   }
-#endif  // defined(OS_MACOSX)
-#if defined(OS_WIN)
+#elif defined(OS_FUCHSIA)
+  if (handle->type == mojom::SerializedHandle::Type::FUCHSIA_HANDLE) {
+    base::ScopedMxHandle handle;
+    if (platform_handle.type == MOJO_PLATFORM_HANDLE_TYPE_FUCHSIA_HANDLE)
+      handle.reset(static_cast<mx_handle_t>(platform_handle.value));
+    *attachment = new internal::HandleAttachmentFuchsia(std::move(handle));
+    return MOJO_RESULT_OK;
+  }
+#elif defined(OS_WIN)
   if (handle->type == mojom::SerializedHandle::Type::WIN_HANDLE) {
     base::PlatformFile handle = base::kInvalidPlatformFile;
     if (platform_handle.type == MOJO_PLATFORM_HANDLE_TYPE_WINDOWS_HANDLE)
@@ -257,7 +288,7 @@ std::unique_ptr<ChannelMojo> ChannelMojo::Create(
 std::unique_ptr<ChannelFactory> ChannelMojo::CreateServerFactory(
     mojo::ScopedMessagePipeHandle handle,
     const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner) {
-  return base::MakeUnique<MojoChannelFactory>(
+  return std::make_unique<MojoChannelFactory>(
       std::move(handle), Channel::MODE_SERVER, ipc_task_runner);
 }
 
@@ -265,7 +296,7 @@ std::unique_ptr<ChannelFactory> ChannelMojo::CreateServerFactory(
 std::unique_ptr<ChannelFactory> ChannelMojo::CreateClientFactory(
     mojo::ScopedMessagePipeHandle handle,
     const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner) {
-  return base::MakeUnique<MojoChannelFactory>(
+  return std::make_unique<MojoChannelFactory>(
       std::move(handle), Channel::MODE_CLIENT, ipc_task_runner);
 }
 
@@ -395,9 +426,10 @@ ChannelMojo::GetAssociatedInterfaceSupport() { return this; }
 
 std::unique_ptr<mojo::ThreadSafeForwarder<mojom::Channel>>
 ChannelMojo::CreateThreadSafeChannel() {
-  return base::MakeUnique<mojo::ThreadSafeForwarder<mojom::Channel>>(
-      task_runner_, base::Bind(&ChannelMojo::ForwardMessageFromThreadSafePtr,
-                               weak_factory_.GetWeakPtr()),
+  return std::make_unique<mojo::ThreadSafeForwarder<mojom::Channel>>(
+      task_runner_,
+      base::Bind(&ChannelMojo::ForwardMessageFromThreadSafePtr,
+                 weak_factory_.GetWeakPtr()),
       base::Bind(&ChannelMojo::ForwardMessageWithResponderFromThreadSafePtr,
                  weak_factory_.GetWeakPtr()),
       *bootstrap_->GetAssociatedGroup());

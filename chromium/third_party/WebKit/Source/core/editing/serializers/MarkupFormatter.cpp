@@ -205,23 +205,21 @@ void MarkupFormatter::AppendQuotedURLAttributeValue(
     const Element& element,
     const Attribute& attribute) {
   DCHECK(element.IsURLAttribute(attribute)) << element;
-  const String resolved_url_string =
-      ResolveURLIfNeeded(element, attribute.Value());
+  String resolved_url_string = ResolveURLIfNeeded(element, attribute.Value());
   UChar quote_char = '"';
-  String stripped_url_string = resolved_url_string.StripWhiteSpace();
-  if (ProtocolIsJavaScript(stripped_url_string)) {
+  if (ProtocolIsJavaScript(resolved_url_string)) {
     // minimal escaping for javascript urls
-    if (stripped_url_string.Contains('&'))
-      stripped_url_string.Replace('&', "&amp;");
+    if (resolved_url_string.Contains('&'))
+      resolved_url_string.Replace('&', "&amp;");
 
-    if (stripped_url_string.Contains('"')) {
-      if (stripped_url_string.Contains('\''))
-        stripped_url_string.Replace('"', "&quot;");
+    if (resolved_url_string.Contains('"')) {
+      if (resolved_url_string.Contains('\''))
+        resolved_url_string.Replace('"', "&quot;");
       else
         quote_char = '\'';
     }
     result.Append(quote_char);
-    result.Append(stripped_url_string);
+    result.Append(resolved_url_string);
     result.Append(quote_char);
     return;
   }
@@ -365,7 +363,7 @@ void MarkupFormatter::AppendAttribute(StringBuilder& result,
   QualifiedName prefixed_name = attribute.GetName();
   if (document_is_html && !AttributeIsInSerializedNamespace(attribute)) {
     result.Append(' ');
-    result.Append(attribute.GetName().LocalName());
+    result.Append(prefixed_name.ToString());
   } else {
     if (attribute.NamespaceURI() == XMLNSNames::xmlnsNamespaceURI) {
       if (!attribute.Prefix() && attribute.LocalName() != g_xmlns_atom)

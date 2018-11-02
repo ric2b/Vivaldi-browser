@@ -9,6 +9,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/UserGestureIndicator.h"
 #include "core/frame/LocalDOMWindow.h"
+#include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/fullscreen/Fullscreen.h"
@@ -16,6 +17,8 @@
 #include "core/html/HTMLVideoElement.h"
 #include "core/loader/EmptyClients.h"
 #include "core/testing/DummyPageHolder.h"
+#include "modules/device_orientation/DeviceOrientationController.h"
+#include "modules/device_orientation/DeviceOrientationData.h"
 #include "modules/media_controls/MediaControlsImpl.h"
 #include "modules/screen_orientation/ScreenOrientationControllerImpl.h"
 #include "platform/testing/EmptyWebMediaPlayer.h"
@@ -80,7 +83,8 @@ class StubLocalFrameClient : public EmptyLocalFrameClient {
   std::unique_ptr<WebMediaPlayer> CreateWebMediaPlayer(
       HTMLMediaElement&,
       const WebMediaPlayerSource&,
-      WebMediaPlayerClient*) override {
+      WebMediaPlayerClient*,
+      WebLayerTreeView*) override {
     return WTF::MakeUnique<MockVideoWebMediaPlayer>();
   }
 };
@@ -162,7 +166,8 @@ class MediaControlsRotateToFullscreenDelegateTest : public ::testing::Test {
   }
 
   void InitScreenAndVideo(WebScreenOrientationType initial_screen_orientation,
-                          WebSize video_size);
+                          WebSize video_size,
+                          bool with_device_orientation = true);
 
   void PlayVideo();
 
@@ -196,7 +201,8 @@ class MediaControlsRotateToFullscreenDelegateTest : public ::testing::Test {
 
 void MediaControlsRotateToFullscreenDelegateTest::InitScreenAndVideo(
     WebScreenOrientationType initial_screen_orientation,
-    WebSize video_size) {
+    WebSize video_size,
+    bool with_device_orientation /* = true */) {
   // Set initial screen orientation (called by `Attach` during `AppendChild`).
   WebScreenInfo screen_info;
   screen_info.orientation_type = initial_screen_orientation;
@@ -213,11 +219,24 @@ void MediaControlsRotateToFullscreenDelegateTest::InitScreenAndVideo(
   // Set video size.
   EXPECT_CALL(GetWebMediaPlayer(), NaturalSize())
       .WillRepeatedly(Return(video_size));
+
+  if (with_device_orientation) {
+    // Dispatch an arbitrary Device Orientation event to satisfy
+    // MediaControlsRotateToFullscreenDelegate's requirement that the device
+    // supports the API and can provide beta and gamma values. The orientation
+    // will be ignored.
+    DeviceOrientationController::From(GetDocument())
+        .SetOverride(DeviceOrientationData::Create(
+            0.0 /* alpha */, 90.0 /* beta */, 0.0 /* gamma */,
+            false /* absolute */));
+    testing::RunPendingTasks();
+  }
 }
 
 void MediaControlsRotateToFullscreenDelegateTest::PlayVideo() {
   {
-    UserGestureIndicator gesture(UserGestureToken::Create(&GetDocument()));
+    std::unique_ptr<UserGestureIndicator> gesture =
+        LocalFrame::CreateUserGesture(GetDocument().GetFrame());
     GetVideo().Play();
   }
   testing::RunPendingTasks();
@@ -303,7 +322,8 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
 
   // Should start observing visibility when played.
   {
-    UserGestureIndicator gesture(UserGestureToken::Create(&GetDocument()));
+    std::unique_ptr<UserGestureIndicator> gesture =
+        LocalFrame::CreateUserGesture(GetDocument().GetFrame());
     GetVideo().Play();
   }
   testing::RunPendingTasks();
@@ -323,7 +343,8 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
 
   // Should resume observing visibility when playback resumes.
   {
-    UserGestureIndicator gesture(UserGestureToken::Create(&GetDocument()));
+    std::unique_ptr<UserGestureIndicator> gesture =
+        LocalFrame::CreateUserGesture(GetDocument().GetFrame());
     GetVideo().Play();
   }
   testing::RunPendingTasks();
@@ -462,6 +483,63 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest, EnterFailNoControls) {
   EXPECT_FALSE(GetVideo().IsFullscreen());
 }
 
+TEST_F(MediaControlsRotateToFullscreenDelegateTest,
+       EnterFailNoDeviceOrientation) {
+  // Portrait screen, landscape video.
+  InitScreenAndVideo(kWebScreenOrientationPortraitPrimary, WebSize(640, 480),
+                     false /* with_device_orientation */);
+  EXPECT_EQ(SimpleOrientation::kPortrait, ObservedScreenOrientation());
+  EXPECT_EQ(SimpleOrientation::kLandscape, ComputeVideoOrientation());
+
+  // Dispatch an null Device Orientation event, as happens when the device lacks
+  // the necessary hardware to support the Device Orientation API.
+  DeviceOrientationController::From(GetDocument())
+      .SetOverride(DeviceOrientationData::Create());
+  testing::RunPendingTasks();
+
+  // Play video.
+  PlayVideo();
+  UpdateVisibilityObserver();
+
+  EXPECT_TRUE(ObservedVisibility());
+
+  // Rotate screen to landscape.
+  RotateTo(kWebScreenOrientationLandscapePrimary);
+
+  // Should not enter fullscreen since Device Orientation is not available.
+  EXPECT_FALSE(GetVideo().IsFullscreen());
+}
+
+TEST_F(MediaControlsRotateToFullscreenDelegateTest,
+       EnterFailZeroDeviceOrientation) {
+  // Portrait screen, landscape video.
+  InitScreenAndVideo(kWebScreenOrientationPortraitPrimary, WebSize(640, 480),
+                     false /* with_device_orientation */);
+  EXPECT_EQ(SimpleOrientation::kPortrait, ObservedScreenOrientation());
+  EXPECT_EQ(SimpleOrientation::kLandscape, ComputeVideoOrientation());
+
+  // Dispatch a Device Orientation event where all values are zero, as happens
+  // on poorly configured devices that lack the necessary hardware to support
+  // the Device Orientation API, but don't properly expose that lack.
+  DeviceOrientationController::From(GetDocument())
+      .SetOverride(
+          DeviceOrientationData::Create(0.0 /* alpha */, 0.0 /* beta */,
+                                        0.0 /* gamma */, false /* absolute */));
+  testing::RunPendingTasks();
+
+  // Play video.
+  PlayVideo();
+  UpdateVisibilityObserver();
+
+  EXPECT_TRUE(ObservedVisibility());
+
+  // Rotate screen to landscape.
+  RotateTo(kWebScreenOrientationLandscapePrimary);
+
+  // Should not enter fullscreen since Device Orientation is not available.
+  EXPECT_FALSE(GetVideo().IsFullscreen());
+}
+
 TEST_F(MediaControlsRotateToFullscreenDelegateTest, EnterFailPaused) {
   // Portrait screen, landscape video.
   InitScreenAndVideo(kWebScreenOrientationPortraitPrimary, WebSize(640, 480));
@@ -559,7 +637,8 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
   // Simulate the webpage requesting fullscreen on some other element than the
   // video (in this case document.body).
   {
-    UserGestureIndicator gesture(UserGestureToken::Create(&GetDocument()));
+    std::unique_ptr<UserGestureIndicator> gesture =
+        LocalFrame::CreateUserGesture(GetDocument().GetFrame());
     Fullscreen::RequestFullscreen(*GetDocument().body());
   }
   testing::RunPendingTasks();
@@ -589,7 +668,8 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
 
   // Start in fullscreen.
   {
-    UserGestureIndicator gesture(UserGestureToken::Create(&GetDocument()));
+    std::unique_ptr<UserGestureIndicator> gesture =
+        LocalFrame::CreateUserGesture(GetDocument().GetFrame());
     GetMediaControls().EnterFullscreen();
   }
   // n.b. omit to call Fullscreen::From(GetDocument()).DidEnterFullscreen() so
@@ -619,7 +699,8 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
 
   // Start in fullscreen.
   {
-    UserGestureIndicator gesture(UserGestureToken::Create(&GetDocument()));
+    std::unique_ptr<UserGestureIndicator> gesture =
+        LocalFrame::CreateUserGesture(GetDocument().GetFrame());
     GetMediaControls().EnterFullscreen();
   }
   // n.b. omit to call Fullscreen::From(GetDocument()).DidEnterFullscreen() so
@@ -650,7 +731,8 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
   // Simulate the webpage requesting fullscreen on some other element than the
   // video (in this case document.body).
   {
-    UserGestureIndicator gesture(UserGestureToken::Create(&GetDocument()));
+    std::unique_ptr<UserGestureIndicator> gesture =
+        LocalFrame::CreateUserGesture(GetDocument().GetFrame());
     Fullscreen::RequestFullscreen(*GetDocument().body());
   }
   testing::RunPendingTasks();

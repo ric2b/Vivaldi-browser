@@ -5,9 +5,6 @@
 #include "chrome/browser/chromeos/login/screens/reset_screen.h"
 
 #include "base/command_line.h"
-#include "base/feature_list.h"
-#include "base/files/file_path.h"
-#include "base/files/file_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/values.h"
@@ -18,7 +15,7 @@
 #include "chrome/browser/chromeos/login/screens/reset_view.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/reset/metrics.h"
-#include "chrome/common/chrome_features.h"
+#include "chrome/browser/chromeos/tpm_firmware_update.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
@@ -40,6 +37,8 @@ constexpr const char kUserActionResetShowConfirmationPressed[] =
     "show-confirmation";
 constexpr const char kUserActionResetResetConfirmationDismissed[] =
     "reset-confirm-dismissed";
+constexpr const char kUserActionTPMFirmwareUpdateLearnMore[] =
+    "tpm-firmware-update-learn-more-link";
 
 constexpr const char kContextKeyIsRollbackAvailable[] = "rollback-available";
 constexpr const char kContextKeyIsRollbackChecked[] = "rollback-checked";
@@ -47,12 +46,11 @@ constexpr const char kContextKeyIsTPMFirmwareUpdateAvailable[] =
     "tpm-firmware-update-available";
 constexpr const char kContextKeyIsTPMFirmwareUpdateChecked[] =
     "tpm-firmware-update-checked";
+constexpr const char kContextKeyIsTPMFirmwareUpdateEditable[] =
+    "tpm-firmware-update-editable";
 constexpr const char kContextKeyIsConfirmational[] = "is-confirmational-view";
 constexpr const char kContextKeyIsOfficialBuild[] = "is-official-build";
 constexpr const char kContextKeyScreenState[] = "screen-state";
-
-constexpr const base::FilePath::CharType kTPMFirmwareUpdateAvailableFlagFile[] =
-    FILE_PATH_LITERAL("/run/tpm_firmware_update_available");
 
 }  // namespace
 
@@ -69,6 +67,7 @@ ResetScreen::ResetScreen(BaseScreenDelegate* base_screen_delegate,
   context_.SetBoolean(kContextKeyIsRollbackChecked, false);
   context_.SetBoolean(kContextKeyIsTPMFirmwareUpdateAvailable, false);
   context_.SetBoolean(kContextKeyIsTPMFirmwareUpdateChecked, false);
+  context_.SetBoolean(kContextKeyIsTPMFirmwareUpdateEditable, true);
   context_.SetBoolean(kContextKeyIsConfirmational, false);
   context_.SetBoolean(kContextKeyIsOfficialBuild, false);
 #if defined(OFFICIAL_BUILD)
@@ -82,11 +81,19 @@ ResetScreen::~ResetScreen() {
   DBusThreadManager::Get()->GetUpdateEngineClient()->RemoveObserver(this);
 }
 
+// static
+void ResetScreen::RegisterPrefs(PrefRegistrySimple* registry) {
+  registry->RegisterBooleanPref(prefs::kFactoryResetRequested, false);
+  registry->RegisterBooleanPref(prefs::kFactoryResetTPMFirmwareUpdateRequested,
+                                false);
+}
+
 void ResetScreen::Show() {
   if (view_)
     view_->Show();
 
-  int dialog_type = -1;  // used by UMA metrics.
+  reset::DialogViewType dialog_type =
+      reset::DIALOG_VIEW_TYPE_SIZE;  // used by UMA metrics.
 
   ContextEditor context_editor = GetContextEditor();
 
@@ -111,23 +118,28 @@ void ResetScreen::Show() {
   }
 
   // Set availability of TPM firmware update.
-  if (base::FeatureList::IsEnabled(features::kTPMFirmwareUpdate)) {
-    base::PostTaskWithTraitsAndReplyWithResult(
-        FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-        base::Bind(&base::PathExists,
-                   base::FilePath(kTPMFirmwareUpdateAvailableFlagFile)),
-        base::Bind(&ResetScreen::OnTPMFirmwareUpdateAvailableCheck,
-                   weak_ptr_factory_.GetWeakPtr()));
-  }
+  tpm_firmware_update::ShouldOfferUpdateViaPowerwash(
+      base::Bind(&ResetScreen::OnTPMFirmwareUpdateAvailableCheck,
+                 weak_ptr_factory_.GetWeakPtr()));
 
-  if (dialog_type >= 0) {
+  if (dialog_type < reset::DIALOG_VIEW_TYPE_SIZE) {
     UMA_HISTOGRAM_ENUMERATION("Reset.ChromeOS.PowerwashDialogShown",
                               dialog_type,
                               reset::DIALOG_VIEW_TYPE_SIZE);
   }
 
   PrefService* prefs = g_browser_process->local_state();
-  prefs->SetBoolean(prefs::kFactoryResetRequested, false);
+  bool tpm_firmware_update_requested =
+      prefs->GetBoolean(prefs::kFactoryResetTPMFirmwareUpdateRequested);
+  context_editor.SetBoolean(kContextKeyIsTPMFirmwareUpdateChecked,
+                            tpm_firmware_update_requested);
+  context_editor.SetBoolean(kContextKeyIsTPMFirmwareUpdateEditable,
+                            !tpm_firmware_update_requested);
+
+  // Clear prefs so the reset screen isn't triggered again the next time the
+  // device is about to show the login screen.
+  prefs->ClearPref(prefs::kFactoryResetRequested);
+  prefs->ClearPref(prefs::kFactoryResetTPMFirmwareUpdateRequested);
   prefs->CommitPendingWrite();
 }
 
@@ -149,13 +161,15 @@ void ResetScreen::OnUserAction(const std::string& action_id) {
   else if (action_id == kUserActionResetPowerwashPressed)
     OnPowerwash();
   else if (action_id == kUserActionResetLearnMorePressed)
-    OnLearnMore();
+    ShowHelpArticle(HelpAppLauncher::HELP_POWERWASH);
   else if (action_id == kUserActionResetRollbackToggled)
     OnToggleRollback();
   else if (action_id == kUserActionResetShowConfirmationPressed)
     OnShowConfirm();
   else if (action_id == kUserActionResetResetConfirmationDismissed)
     OnConfirmationDismissed();
+  else if (action_id == kUserActionTPMFirmwareUpdateLearnMore)
+    ShowHelpArticle(HelpAppLauncher::HELP_TPM_FIRMWARE_UPDATE);
   else
     BaseScreen::OnUserAction(action_id);
 }
@@ -205,6 +219,7 @@ void ResetScreen::OnPowerwash() {
 void ResetScreen::OnRestart() {
   PrefService* prefs = g_browser_process->local_state();
   prefs->SetBoolean(prefs::kFactoryResetRequested, true);
+  prefs->ClearPref(prefs::kFactoryResetTPMFirmwareUpdateRequested);
   prefs->CommitPendingWrite();
 
   chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->RequestRestart();
@@ -233,9 +248,10 @@ void ResetScreen::OnToggleRollback() {
 }
 
 void ResetScreen::OnShowConfirm() {
-  int dialog_type = context_.GetBoolean(kContextKeyIsRollbackChecked) ?
-      reset::DIALOG_SHORTCUT_CONFIRMING_POWERWASH_AND_ROLLBACK :
-      reset::DIALOG_SHORTCUT_CONFIRMING_POWERWASH_ONLY;
+  reset::DialogViewType dialog_type =
+      context_.GetBoolean(kContextKeyIsRollbackChecked)
+          ? reset::DIALOG_SHORTCUT_CONFIRMING_POWERWASH_AND_ROLLBACK
+          : reset::DIALOG_SHORTCUT_CONFIRMING_POWERWASH_ONLY;
   UMA_HISTOGRAM_ENUMERATION(
       "Reset.ChromeOS.PowerwashDialogShown",
       dialog_type,
@@ -244,19 +260,19 @@ void ResetScreen::OnShowConfirm() {
   GetContextEditor().SetBoolean(kContextKeyIsConfirmational, true);
 }
 
-void ResetScreen::OnLearnMore() {
+void ResetScreen::OnConfirmationDismissed() {
+  GetContextEditor().SetBoolean(kContextKeyIsConfirmational, false);
+}
+
+void ResetScreen::ShowHelpArticle(HelpAppLauncher::HelpTopic topic) {
 #if defined(OFFICIAL_BUILD)
-  VLOG(1) << "Trying to view the help article about reset options.";
+  VLOG(1) << "Trying to view help article " << topic;
   if (!help_app_.get()) {
     help_app_ = new HelpAppLauncher(
         LoginDisplayHost::default_host()->GetNativeWindow());
   }
-  help_app_->ShowHelpTopic(HelpAppLauncher::HELP_POWERWASH);
+  help_app_->ShowHelpTopic(topic);
 #endif
-}
-
-void ResetScreen::OnConfirmationDismissed() {
-  GetContextEditor().SetBoolean(kContextKeyIsConfirmational, false);
 }
 
 void ResetScreen::UpdateStatusChanged(
@@ -278,9 +294,9 @@ void ResetScreen::UpdateStatusChanged(
 // Invoked from call to CanRollbackCheck upon completion of the DBus call.
 void ResetScreen::OnRollbackCheck(bool can_rollback) {
   VLOG(1) << "Callback from CanRollbackCheck, result " << can_rollback;
-  int dialog_type = can_rollback ?
-      reset::DIALOG_SHORTCUT_OFFERING_ROLLBACK_AVAILABLE :
-      reset::DIALOG_SHORTCUT_OFFERING_ROLLBACK_UNAVAILABLE;
+  reset::DialogViewType dialog_type =
+      can_rollback ? reset::DIALOG_SHORTCUT_OFFERING_ROLLBACK_AVAILABLE
+                   : reset::DIALOG_SHORTCUT_OFFERING_ROLLBACK_UNAVAILABLE;
   UMA_HISTOGRAM_ENUMERATION("Reset.ChromeOS.PowerwashDialogShown",
                             dialog_type,
                             reset::DIALOG_VIEW_TYPE_SIZE);

@@ -130,9 +130,10 @@ bool MediaCodecAudioDecoder::CreateMediaCodecLoop() {
   DVLOG(1) << __func__ << ": config:" << config_.AsHumanReadableString();
 
   codec_loop_.reset();
-  jobject media_crypto_obj = media_crypto_ ? media_crypto_->obj() : nullptr;
+  const base::android::JavaRef<jobject>& media_crypto =
+      media_crypto_ ? *media_crypto_ : nullptr;
   std::unique_ptr<MediaCodecBridge> audio_codec_bridge(
-      MediaCodecBridgeImpl::CreateAudioDecoder(config_, media_crypto_obj));
+      MediaCodecBridgeImpl::CreateAudioDecoder(config_, media_crypto));
   if (!audio_codec_bridge) {
     DLOG(ERROR) << __func__ << " failed: cannot create MediaCodecBridge";
     return false;
@@ -244,20 +245,20 @@ void MediaCodecAudioDecoder::OnKeyAdded() {
 
 void MediaCodecAudioDecoder::OnMediaCryptoReady(
     const InitCB& init_cb,
-    MediaDrmBridgeCdmContext::JavaObjectPtr media_crypto,
+    JavaObjectPtr media_crypto,
     bool /*requires_secure_video_codec*/) {
   DVLOG(1) << __func__;
 
   DCHECK(state_ == STATE_WAITING_FOR_MEDIA_CRYPTO);
+  DCHECK(media_crypto);
 
-  if (!media_crypto) {
+  if (media_crypto->is_null()) {
     LOG(ERROR) << "MediaCrypto is not available, can't play encrypted stream.";
     SetState(STATE_UNINITIALIZED);
     init_cb.Run(false);
     return;
   }
 
-  DCHECK(!media_crypto->is_null());
   media_crypto_ = std::move(media_crypto);
 
   // We assume this is a part of the initialization process, thus MediaCodec

@@ -32,6 +32,8 @@
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/latency/latency_info.h"
 
+#include "app/vivaldi_apptools.h"
+
 using blink::WebFloatPoint;
 using blink::WebFloatSize;
 using blink::WebGestureEvent;
@@ -175,59 +177,6 @@ cc::ScrollState CreateScrollStateForGesture(const WebGestureEvent& event) {
   return cc::ScrollState(scroll_state_data);
 }
 
-void ReportInputEventLatencyUma(const WebInputEvent& event,
-                                const ui::LatencyInfo& latency_info) {
-  if (!(event.GetType() == WebInputEvent::kGestureScrollBegin ||
-        event.GetType() == WebInputEvent::kGestureScrollUpdate ||
-        event.GetType() == WebInputEvent::kGesturePinchBegin ||
-        event.GetType() == WebInputEvent::kGesturePinchUpdate ||
-        event.GetType() == WebInputEvent::kGestureFlingStart)) {
-    return;
-  }
-
-  ui::LatencyInfo::LatencyMap::const_iterator it =
-      latency_info.latency_components().find(std::make_pair(
-          ui::INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT, 0));
-
-  if (it == latency_info.latency_components().end())
-    return;
-
-  base::TimeDelta delta = base::TimeTicks::Now() - it->second.event_time;
-  for (size_t i = 0; i < it->second.event_count; ++i) {
-    switch (event.GetType()) {
-      case blink::WebInputEvent::kGestureScrollBegin:
-        UMA_HISTOGRAM_CUSTOM_COUNTS(
-            "Event.Latency.RendererImpl.GestureScrollBegin",
-            delta.InMicroseconds(), 1, 1000000, 100);
-        break;
-      case blink::WebInputEvent::kGestureScrollUpdate:
-        UMA_HISTOGRAM_CUSTOM_COUNTS(
-            // So named for historical reasons.
-            "Event.Latency.RendererImpl.GestureScroll2",
-            delta.InMicroseconds(), 1, 1000000, 100);
-        break;
-      case blink::WebInputEvent::kGesturePinchBegin:
-        UMA_HISTOGRAM_CUSTOM_COUNTS(
-            "Event.Latency.RendererImpl.GesturePinchBegin",
-            delta.InMicroseconds(), 1, 1000000, 100);
-        break;
-      case blink::WebInputEvent::kGesturePinchUpdate:
-        UMA_HISTOGRAM_CUSTOM_COUNTS(
-            "Event.Latency.RendererImpl.GesturePinchUpdate",
-            delta.InMicroseconds(), 1, 1000000, 100);
-        break;
-      case blink::WebInputEvent::kGestureFlingStart:
-        UMA_HISTOGRAM_CUSTOM_COUNTS(
-            "Event.Latency.RendererImpl.GestureFlingStart",
-            delta.InMicroseconds(), 1, 1000000, 100);
-        break;
-      default:
-        NOTREACHED();
-        break;
-    }
-  }
-}
-
 cc::InputHandler::ScrollInputType GestureScrollInputType(
     blink::WebGestureDevice device) {
   return device == blink::kWebGestureDeviceTouchpad
@@ -266,7 +215,6 @@ InputHandlerProxy::InputHandlerProxy(
       disallow_vertical_fling_scroll_(false),
       has_fling_animation_started_(false),
       smooth_scroll_enabled_(false),
-      uma_latency_reporting_enabled_(base::TimeTicks::IsHighResolution()),
       touchpad_and_wheel_scroll_latching_enabled_(
           touchpad_and_wheel_scroll_latching_enabled),
       touch_result_(kEventDispositionUndefined),
@@ -302,9 +250,6 @@ void InputHandlerProxy::HandleInputEventWithLatencyInfo(
     const LatencyInfo& latency_info,
     EventDispositionCallback callback) {
   DCHECK(input_handler_);
-
-  if (uma_latency_reporting_enabled_)
-    ReportInputEventLatencyUma(*event, latency_info);
 
   TRACE_EVENT_WITH_FLOW1("input,benchmark", "LatencyInfo.Flow",
                          TRACE_ID_DONT_MANGLE(latency_info.trace_id()),
@@ -711,7 +656,25 @@ InputHandlerProxy::EventDisposition InputHandlerProxy::HandleMouseWheel(
           cc::EventListenerClass::kMouseWheel);
   switch (properties) {
     case cc::EventListenerProperties::kPassive:
+      // Last resort fix for 1.13 (VB-34466). Should be removed with proper
+      // handling in View layer before calling render code. ASAP.
+      if (vivaldi::IsVivaldiRunning()) {
+        int modifiers = wheel_event.GetModifiers() &
+            (WebInputEvent::kShiftKey | WebInputEvent::kControlKey |
+             WebInputEvent::kAltKey | WebInputEvent::kMetaKey |
+             WebInputEvent::kRightButtonDown);
+        if (modifiers == WebInputEvent::kAltKey ||
+            modifiers == WebInputEvent::kControlKey ||
+            modifiers == WebInputEvent::kMetaKey ||
+            modifiers == WebInputEvent::kRightButtonDown)
+        {
+          result = DID_NOT_HANDLE;
+        } else {
+          result = DID_HANDLE_NON_BLOCKING;
+        }
+      } else {
       result = DID_HANDLE_NON_BLOCKING;
+      }
       break;
     case cc::EventListenerProperties::kBlockingAndPassive:
     case cc::EventListenerProperties::kBlocking:
@@ -889,7 +852,10 @@ InputHandlerProxy::EventDisposition InputHandlerProxy::HandleGestureScrollBegin(
                            "InputHandlerProxy::handle_input gesture scroll",
                            TRACE_EVENT_SCOPE_THREAD);
       gesture_scroll_on_impl_thread_ = true;
-      result = DID_HANDLE;
+      if (scroll_status.bubble)
+        result = DID_HANDLE_SHOULD_BUBBLE;
+      else
+        result = DID_HANDLE;
       break;
     case cc::InputHandler::SCROLL_UNKNOWN:
     case cc::InputHandler::SCROLL_ON_MAIN_THREAD:
@@ -1043,7 +1009,6 @@ InputHandlerProxy::EventDisposition InputHandlerProxy::HandleGestureFlingStart(
       const float vx = gesture_event.data.fling_start.velocity_x;
       const float vy = gesture_event.data.fling_start.velocity_y;
       current_fling_velocity_ = gfx::Vector2dF(vx, vy);
-      DCHECK(!current_fling_velocity_.IsZero());
       fling_curve_ = client_->CreateFlingAnimationCurve(
           gesture_event.source_device, WebFloatPoint(vx, vy), blink::WebSize());
       disallow_horizontal_fling_scroll_ = !vx;
@@ -1171,7 +1136,6 @@ InputHandlerProxy::EventDisposition InputHandlerProxy::HandleTouchStart(
   cc::TouchAction white_listed_touch_action = cc::kTouchActionAuto;
   EventDisposition result = HitTestTouchEvent(
       touch_event, &is_touching_scrolling_layer, &white_listed_touch_action);
-  client_->SetWhiteListedTouchAction(white_listed_touch_action);
 
   // If |result| is still DROP_EVENT look at the touch end handler as
   // we may not want to discard the entire touch sequence. Note this
@@ -1189,6 +1153,9 @@ InputHandlerProxy::EventDisposition InputHandlerProxy::HandleTouchStart(
   if (is_flinging_on_impl && is_touching_scrolling_layer)
     result = DID_NOT_HANDLE_NON_BLOCKING_DUE_TO_FLING;
 
+  client_->SetWhiteListedTouchAction(white_listed_touch_action,
+                                     touch_event.unique_touch_event_id, result);
+
   return result;
 }
 
@@ -1202,7 +1169,8 @@ InputHandlerProxy::EventDisposition InputHandlerProxy::HandleTouchMove(
     cc::TouchAction white_listed_touch_action = cc::kTouchActionAuto;
     EventDisposition result = HitTestTouchEvent(
         touch_event, &is_touching_scrolling_layer, &white_listed_touch_action);
-    client_->SetWhiteListedTouchAction(white_listed_touch_action);
+    client_->SetWhiteListedTouchAction(
+        white_listed_touch_action, touch_event.unique_touch_event_id, result);
     return result;
   }
   return static_cast<EventDisposition>(touch_result_);
@@ -1513,13 +1481,16 @@ void InputHandlerProxy::HandleOverscroll(
         ToClientScrollIncrement(current_fling_velocity_);
     current_overscroll_params_->causal_event_viewport_point =
         gfx::PointF(causal_event_viewport_point);
+    current_overscroll_params_->scroll_boundary_behavior =
+        scroll_result.scroll_boundary_behavior;
     return;
   }
 
   client_->DidOverscroll(scroll_result.accumulated_root_overscroll,
                          scroll_result.unused_scroll_delta,
                          ToClientScrollIncrement(current_fling_velocity_),
-                         gfx::PointF(causal_event_viewport_point));
+                         gfx::PointF(causal_event_viewport_point),
+                         scroll_result.scroll_boundary_behavior);
 }
 
 bool InputHandlerProxy::CancelCurrentFling() {
@@ -1645,6 +1616,7 @@ bool InputHandlerProxy::TouchpadFlingScroll(
       CancelCurrentFlingWithoutNotifyingClient();
       break;
     case DID_NOT_HANDLE_NON_BLOCKING_DUE_TO_FLING:
+    case DID_HANDLE_SHOULD_BUBBLE:
       NOTREACHED();
       return false;
   }

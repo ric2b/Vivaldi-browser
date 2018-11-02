@@ -12,6 +12,10 @@ group("libjingle_xmpp") {
   ]
 }
 
+config("libjingle_xmpp_common_config") {
+  defines = [ "EXPAT_RELATIVE_PATH" ]
+}
+
 rtc_static_library("rtc_task_runner") {
   sources = [
     "task_runner/task.cc",
@@ -47,6 +51,7 @@ rtc_static_library("rtc_xmllite") {
   public_deps = [
     "//third_party/expat",
   ]
+  all_dependent_configs = [ ":libjingle_xmpp_common_config" ]
 }
 
 config("rtc_xmpp_warnings_config") {
@@ -99,6 +104,7 @@ rtc_static_library("rtc_xmpp") {
     "//third_party/expat",
   ]
   configs += [ ":rtc_xmpp_warnings_config" ]
+  all_dependent_configs = [ ":libjingle_xmpp_common_config" ]
 
   if (is_nacl) {
     deps += [ "//native_client_sdk/src/libraries/nacl_io" ]
@@ -131,9 +137,9 @@ rtc_test("libjingle_xmpp_unittests") {
   deps = [
     ":libjingle_xmpp",
     ":rtc_task_runner",
-
     "//base/test:run_all_unittests",
     "//base/test:test_support",
+
     # TODO(kjellander): Refactor/remove this dependency. It is needed by
     # third_party/webrtc_overrides/webrtc/rtc_base/win32socketinit.cc.
     "//net",

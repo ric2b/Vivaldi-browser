@@ -9,6 +9,7 @@
 
 #include <string>
 
+#include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "media/cdm/api/content_decryption_module.h"
 #include "media/cdm/supported_cdm_versions.h"
@@ -85,6 +86,15 @@ class CdmWrapper {
   virtual void SetServerCertificate(uint32_t promise_id,
                                     const uint8_t* server_certificate_data,
                                     uint32_t server_certificate_data_size) = 0;
+
+  // Gets the key status for a policy that contains the |min_hdcp_version|.
+  // Returns whether GetStatusForPolicy() is supported. If true, the CDM should
+  // resolve or reject the promise. If false, the caller will reject the
+  // promise.
+  virtual bool GetStatusForPolicy(uint32_t promise_id,
+                                  cdm::HdcpVersion min_hdcp_version)
+      WARN_UNUSED_RESULT = 0;
+
   virtual void CreateSessionAndGenerateRequest(uint32_t promise_id,
                                                cdm::SessionType session_type,
                                                cdm::InitDataType init_data_type,
@@ -171,6 +181,14 @@ class CdmWrapperImpl : public CdmWrapper {
                             uint32_t server_certificate_data_size) override {
     cdm_->SetServerCertificate(promise_id, server_certificate_data,
                                server_certificate_data_size);
+  }
+
+  bool GetStatusForPolicy(uint32_t promise_id,
+                          cdm::HdcpVersion min_hdcp_version) override {
+    cdm::Policy policy;
+    policy.min_hdcp_version = min_hdcp_version;
+    cdm_->GetStatusForPolicy(promise_id, policy);
+    return true;
   }
 
   void CreateSessionAndGenerateRequest(uint32_t promise_id,
@@ -272,6 +290,13 @@ class CdmWrapperImpl : public CdmWrapper {
 // Overrides for cdm::Host_8 methods.
 // TODO(jrummell): Remove when CDM_8 no longer supported.
 // https://crbug.com/737296.
+
+template <>
+bool CdmWrapperImpl<cdm::ContentDecryptionModule_8>::GetStatusForPolicy(
+    uint32_t /* promise_id */,
+    cdm::HdcpVersion /* min_hdcp_version */) {
+  return false;
+}
 
 template <>
 void CdmWrapperImpl<cdm::ContentDecryptionModule_8>::OnStorageId(

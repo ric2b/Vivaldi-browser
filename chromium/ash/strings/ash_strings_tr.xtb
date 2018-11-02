@@ -3,12 +3,13 @@
 <translationbundle lang="tr">
 <translation id="1012876632442809908">USB-C cihaz (ön bağlantı noktası)</translation>
 <translation id="1013923882670373915">"<ph name="DEVICE_NAME" />" adlı Bluetooth cihaz eşleme izni istiyor. Lütfen söz konusu cihazda şu PIN kodunu girin: <ph name="PINCODE" /></translation>
-<translation id="1032891413405719768">Ekran kalemi pili düşük</translation>
+<translation id="1032891413405719768">Ekran kaleminin pili düşük</translation>
 <translation id="112308213915226829">Rafı otomatik gizle</translation>
 <translation id="1153356358378277386">Eşlenen cihazlar</translation>
 <translation id="1195412055398077112">fazla tarama</translation>
 <translation id="1247372569136754018">Mikrofon (dahili)</translation>
 <translation id="1252999807265626933"><ph name="POWER_SOURCE" /> güç kaynağından şarj ediliyor</translation>
+<translation id="1267032506238418139">Kısayol değişikliği</translation>
 <translation id="1270290102613614947">Dokunmatik klavye devre dışı</translation>
 <translation id="1272079795634619415">Durdur</translation>
 <translation id="1279938420744323401"><ph name="DISPLAY_NAME" /> (<ph name="ANNOTATION" />)</translation>
@@ -22,7 +23,6 @@
 <translation id="15373452373711364">Büyük fare imleci</translation>
 <translation id="1550523713251050646">Daha fazla seçenek için tıklayın</translation>
 <translation id="1621499497873603021">Pilin boşalması için kalan süre, <ph name="TIME_LEFT" /></translation>
-<translation id="164969095109328410">Chrome cihaz</translation>
 <translation id="1677472565718498478">Kalan süre: <ph name="TIME" /></translation>
 <translation id="1698760176351776263">IPv6 adresi: <ph name="ADDRESS" /></translation>
 <translation id="1734367976349034509">Bu cihaz kuruluş tarafından yönetiliyor</translation>
@@ -92,6 +92,7 @@
 <translation id="315116470104423982">Mobil veriler</translation>
 <translation id="3236488194889173876">Kullanılabilir mobil ağ yok</translation>
 <translation id="3294437725009624529">Misafir</translation>
+<translation id="332587331255250389">Lütfen pili değiştirin</translation>
 <translation id="3364721542077212959">Ekran kalemi araçları</translation>
 <translation id="3368922792935385530">Bağlı</translation>
 <translation id="3371140690572404006">USB-C cihaz (sağ ön bağlantı noktası)</translation>
@@ -110,6 +111,7 @@
 <translation id="3712407551474845318">Alan yakala</translation>
 <translation id="371370241367527062">Ön mikrofon</translation>
 <translation id="3742055079367172538">Ekran görüntüsü alındı</translation>
+<translation id="3771549900096082774">Yüksek Kontrast Modu</translation>
 <translation id="3775358506042162758">Çoklu oturum açmada en fazla üç hesabınız olabilir.</translation>
 <translation id="3783640748446814672">alt</translation>
 <translation id="3784455785234192852">Kilitle</translation>
@@ -142,14 +144,12 @@
 <translation id="4729904664295161097">Asistan yalnızca birincil profilde kullanılabilir.</translation>
 <translation id="479989351350248267">ara</translation>
 <translation id="4804818685124855865">Bağlantıyı kes</translation>
-<translation id="4821830640883629383">Lütfen pilleri şarj edin veya değiştirin.</translation>
 <translation id="4849058404725798627">Klavye odağının olduğu nesneyi vurgula</translation>
 <translation id="4872237917498892622">Alt+Arama veya Üst Karakter</translation>
 <translation id="4895488851634969361">Pil dolu.</translation>
 <translation id="4905614135390995787">Yüksek Kontrast Modunu açma/kapatma kısayolu değişti. Lütfen <ph name="OLD_SHORTCUT" /> yerine <ph name="NEW_SHORTCUT" /> tuşlarını kullanın.</translation>
 <translation id="4918086044614829423">Kabul et</translation>
 <translation id="4961318399572185831">Ekranı yayınla</translation>
-<translation id="5011233892417813670">Chromebook</translation>
 <translation id="5168181903108465623">Yayın cihazları kullanılabilir</translation>
 <translation id="5170568018924773124">Klasörde göster</translation>
 <translation id="5207949376430453814">Metin imlecini vurgula</translation>
@@ -175,7 +175,6 @@
 <translation id="5901316534475909376">Üst Karakter+Esc</translation>
 <translation id="5916664084637901428">Açık</translation>
 <translation id="5927132638760172455">Bilinmeyen bir alıcıya yayınlanıyor</translation>
-<translation id="5932901536148835538">Chromebit</translation>
 <translation id="5947494881799873997">Geri döndür</translation>
 <translation id="595202126637698455">Performans izleme etkin</translation>
 <translation id="5957083217255311415">Mobil veri kapatıldı.</translation>
@@ -219,7 +218,6 @@
 <translation id="683971173229319003">Ara+L</translation>
 <translation id="6857811139397017780">Şunu etkinleştir: <ph name="NETWORKSERVICE" /></translation>
 <translation id="6911468394164995108">Başka ağa katıl...</translation>
-<translation id="6915678159055240887">Chromebox</translation>
 <translation id="6981982820502123353">Erişilebilirlik</translation>
 <translation id="7029814467594812963">Oturumdan çık</translation>
 <translation id="7034339000180558234"><ph name="TAB_NAME" /> sekmesi <ph name="RECEIVER_NAME" /> üzerinde yayınlanıyor</translation>
@@ -227,7 +225,6 @@
 <translation id="7066646422045619941">Bu ağ, yöneticiniz tarafından devre dışı bırakıldı.</translation>
 <translation id="7067196344162293536">Otomatik döndür</translation>
 <translation id="7098389117866926363">USB-C cihaz (arkadaki sol bağlantı noktası)</translation>
-<translation id="714034171374937760">Chromebase</translation>
 <translation id="7165278925115064263">Alt+Üst Karakter+K</translation>
 <translation id="7168224885072002358"><ph name="TIMEOUT_SECONDS" /> saniye içinde eski çözünürlüğe dönülüyor</translation>
 <translation id="7246339268451149667">Parmak iziyle kilit açma etkinleştirilsin mi?</translation>

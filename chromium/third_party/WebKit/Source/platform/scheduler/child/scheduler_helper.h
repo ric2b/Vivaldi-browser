@@ -25,12 +25,9 @@ class PLATFORM_EXPORT SchedulerHelper : public TaskQueueManager::Observer {
       scoped_refptr<SchedulerTqmDelegate> task_queue_manager_delegate);
   ~SchedulerHelper() override;
 
-  // There is a small overhead to recording task delay histograms, we may not
-  // wish to do this on all threads.
-  void SetRecordTaskDelayHistograms(bool record_task_delay_histograms);
-
   // TaskQueueManager::Observer implementation:
   void OnTriedToExecuteBlockedTask() override;
+  void OnBeginNestedRunLoop() override;
 
   // Returns the default task queue.
   virtual scoped_refptr<TaskQueue> DefaultTaskQueue() = 0;
@@ -68,6 +65,9 @@ class PLATFORM_EXPORT SchedulerHelper : public TaskQueueManager::Observer {
     // Called when the scheduler tried to execute a task from a disabled
     // queue. See TaskQueue::Spec::SetShouldReportWhenExecutionBlocked.
     virtual void OnTriedToExecuteBlockedTask() = 0;
+
+    // Called when scheduler executes task with nested run loop.
+    virtual void OnBeginNestedRunLoop() = 0;
   };
 
   // Called once to set the Observer. This function is called on the main

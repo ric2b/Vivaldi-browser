@@ -8,8 +8,6 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
-import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_PHONE;
-
 import android.support.test.filters.SmallTest;
 
 import org.junit.Before;
@@ -24,12 +22,13 @@ import org.chromium.chrome.test.BottomSheetTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
+import org.chromium.ui.test.util.UiRestriction;
 
 /**
  * Tests for the app menu when Chrome Home is enabled.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@Restriction(RESTRICTION_TYPE_PHONE) // ChromeHome is only enabled on phones
+@Restriction(UiRestriction.RESTRICTION_TYPE_PHONE) // ChromeHome is only enabled on phones
 public class ChromeHomeAppMenuTest {
     private static final String TEST_URL = UrlUtils.encodeHtmlDataUri("<html>foo</html>");
     private AppMenuHandler mAppMenuHandler;
@@ -60,12 +59,9 @@ public class ChromeHomeAppMenuTest {
         assertTrue(iconRow.getReloadButtonForTests().isEnabled());
 
         // Navigate backward, open the menu and assert forward button is enabled.
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                mAppMenuHandler.hideAppMenu();
-                mBottomSheetTestRule.getActivity().getActivityTab().goBack();
-            }
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            mAppMenuHandler.hideAppMenu();
+            mBottomSheetTestRule.getActivity().getActivityTab().goBack();
         });
 
         showAppMenuAndAssertMenuShown();
@@ -76,12 +72,8 @@ public class ChromeHomeAppMenuTest {
     @Test
     @SmallTest
     public void testTabSwitcherMenu() throws IllegalArgumentException {
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                mBottomSheetTestRule.getActivity().getLayoutManager().showOverview(false);
-            }
-        });
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> mBottomSheetTestRule.getActivity().getLayoutManager().showOverview(false));
 
         showAppMenuAndAssertMenuShown();
         AppMenu appMenu = mAppMenuHandler.getAppMenu();
@@ -90,12 +82,7 @@ public class ChromeHomeAppMenuTest {
     }
 
     private void showAppMenuAndAssertMenuShown() {
-        ThreadUtils.runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                mAppMenuHandler.showAppMenu(null, false);
-            }
-        });
+        ThreadUtils.runOnUiThread((Runnable) () -> mAppMenuHandler.showAppMenu(null, false));
         CriteriaHelper.pollUiThread(new Criteria("AppMenu did not show") {
             @Override
             public boolean isSatisfied() {

@@ -13,6 +13,11 @@
 // TODO(nicholss): Look into inputView - The custom input view to display when
 // the receiver becomes the first responder
 
+@interface ClientKeyboard () {
+  UIView* _inputView;
+}
+@end
+
 @implementation ClientKeyboard
 
 @synthesize autocapitalizationType = _autocapitalizationType;
@@ -21,6 +26,7 @@
 @synthesize keyboardType = _keyboardType;
 @synthesize spellCheckingType = _spellCheckingType;
 
+@synthesize selectedTextRange = _selectedTextRange;
 @synthesize delegate = _delegate;
 
 // TODO(nicholss): For physical keyboard, look at UIKeyCommand
@@ -34,6 +40,8 @@
     _autocorrectionType = UITextAutocorrectionTypeNo;
     _keyboardType = UIKeyboardTypeDefault;
     _spellCheckingType = UITextSpellCheckingTypeNo;
+
+    self.showsSoftKeyboard = NO;
   }
   return self;
 }
@@ -58,10 +66,50 @@
   return YES;
 }
 
+- (BOOL)resignFirstResponder {
+  if (self.showsSoftKeyboard) {
+    // This translates the action of resigning first responder when the keyboard
+    // is showing into hiding the soft keyboard while keeping the view first
+    // responder. This is to allow the hide keyboard button on the soft keyboard
+    // to work properly with ClientKeyboard's soft keyboard logic, which calls
+    // resignFirstResponder.
+    // This may cause weird behavior if the superview has multiple responders
+    // (text views).
+    self.showsSoftKeyboard = NO;
+    return NO;
+  }
+  return [super resignFirstResponder];
+}
+
 - (UIView*)inputAccessoryView {
   return nil;
 }
 
+- (UIView*)inputView {
+  return _inputView;
+}
+
 #pragma mark - UITextInputTraits
+
+#pragma mark - Properties
+
+- (void)setShowsSoftKeyboard:(BOOL)showsSoftKeyboard {
+  if (self.showsSoftKeyboard == showsSoftKeyboard) {
+    return;
+  }
+
+  // Returning nil for inputView will fallback to the system soft keyboard.
+  // Returning an empty view will effectively hide it.
+  _inputView =
+      showsSoftKeyboard ? nil : [[UIView alloc] initWithFrame:CGRectZero];
+
+  if (self.isFirstResponder) {
+    [self reloadInputViews];
+  }
+}
+
+- (BOOL)showsSoftKeyboard {
+  return _inputView == nil;
+}
 
 @end

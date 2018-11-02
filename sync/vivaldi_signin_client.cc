@@ -108,7 +108,7 @@ net::URLRequestContextGetter* VivaldiSigninClient::GetURLRequestContext() {
 bool VivaldiSigninClient::ShouldMergeSigninCredentialsIntoCookieJar() {
   // If inline sign in is enabled, but account consistency is not, the user's
   // credentials should be merge into the cookie jar.
-  return !switches::IsAccountConsistencyMirrorEnabled();
+  return !signin::IsAccountConsistencyMirrorEnabled();
 }
 
 std::string VivaldiSigninClient::GetProductVersion() {

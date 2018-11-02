@@ -11,7 +11,7 @@
 #include "gpu/ipc/service/gpu_init.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/ui/gpu/interfaces/gpu_main.mojom.h"
-#include "services/ui/gpu/interfaces/gpu_service.mojom.h"
+#include "services/viz/privileged/interfaces/gl/gpu_service.mojom.h"
 
 namespace gpu {
 class GpuMemoryBufferFactory;
@@ -20,11 +20,10 @@ class GpuMemoryBufferFactory;
 namespace viz {
 class DisplayProvider;
 class FrameSinkManagerImpl;
+class GpuServiceImpl;
 }
 
 namespace ui {
-
-class GpuService;
 
 class GpuMain : public gpu::GpuSandboxHelper, public mojom::GpuMain {
  public:
@@ -32,17 +31,17 @@ class GpuMain : public gpu::GpuSandboxHelper, public mojom::GpuMain {
   ~GpuMain() override;
 
   // mojom::GpuMain implementation:
-  void CreateGpuService(mojom::GpuServiceRequest request,
+  void CreateGpuService(viz::mojom::GpuServiceRequest request,
                         mojom::GpuHostPtr gpu_host,
                         const gpu::GpuPreferences& preferences,
                         mojo::ScopedSharedBufferHandle activity_flags) override;
   void CreateFrameSinkManager(
-      cc::mojom::FrameSinkManagerRequest request,
-      cc::mojom::FrameSinkManagerClientPtr client) override;
+      viz::mojom::FrameSinkManagerRequest request,
+      viz::mojom::FrameSinkManagerClientPtr client) override;
 
   void OnStart();
 
-  GpuService* gpu_service() { return gpu_service_.get(); }
+  viz::GpuServiceImpl* gpu_service() { return gpu_service_.get(); }
 
  private:
   void BindOnGpu(mojom::GpuMainRequest request);
@@ -51,12 +50,12 @@ class GpuMain : public gpu::GpuSandboxHelper, public mojom::GpuMain {
       scoped_refptr<base::SingleThreadTaskRunner> compositor_runner);
 
   void CreateFrameSinkManagerInternal(
-      cc::mojom::FrameSinkManagerRequest request,
-      cc::mojom::FrameSinkManagerClientPtrInfo client_info);
+      viz::mojom::FrameSinkManagerRequest request,
+      viz::mojom::FrameSinkManagerClientPtrInfo client_info);
   void CreateFrameSinkManagerOnCompositorThread(
-      cc::mojom::FrameSinkManagerRequest request,
-      cc::mojom::FrameSinkManagerClientPtrInfo client_info);
-  void CreateGpuServiceOnGpuThread(mojom::GpuServiceRequest request,
+      viz::mojom::FrameSinkManagerRequest request,
+      viz::mojom::FrameSinkManagerClientPtrInfo client_info);
+  void CreateGpuServiceOnGpuThread(viz::mojom::GpuServiceRequest request,
                                    mojom::GpuHostPtr gpu_host,
                                    const gpu::GpuPreferences& preferences,
                                    gpu::GpuProcessActivityFlags activity_flags);
@@ -70,15 +69,15 @@ class GpuMain : public gpu::GpuSandboxHelper, public mojom::GpuMain {
       gpu::GpuWatchdogThread* watchdog_thread) override;
 
   std::unique_ptr<gpu::GpuInit> gpu_init_;
-  std::unique_ptr<GpuService> gpu_service_;
+  std::unique_ptr<viz::GpuServiceImpl> gpu_service_;
 
   // The InCommandCommandBuffer::Service used by the frame sink manager.
   scoped_refptr<gpu::InProcessCommandBuffer::Service> gpu_command_service_;
 
   // If the gpu service is not yet ready then we stash pending MessagePipes in
   // these member variables.
-  cc::mojom::FrameSinkManagerRequest pending_frame_sink_manager_request_;
-  cc::mojom::FrameSinkManagerClientPtrInfo
+  viz::mojom::FrameSinkManagerRequest pending_frame_sink_manager_request_;
+  viz::mojom::FrameSinkManagerClientPtrInfo
       pending_frame_sink_manager_client_info_;
 
   // Provides mojo interfaces for creating and managing FrameSinks.

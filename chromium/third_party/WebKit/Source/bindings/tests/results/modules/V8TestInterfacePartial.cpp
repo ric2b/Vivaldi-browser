@@ -25,6 +25,7 @@
 #include "core/dom/ExecutionContext.h"
 #include "core/origin_trials/OriginTrials.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "platform/bindings/RuntimeCallStats.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/bindings/V8ObjectConstructor.h"
 #include "platform/wtf/GetPtr.h"
@@ -379,46 +380,66 @@ static void partial4StaticVoidMethodMethod(const v8::FunctionCallbackInfo<v8::Va
 } // namespace TestInterfaceImplementationPartialV8Internal
 
 void V8TestInterfacePartial::partial4LongAttributeAttributeGetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceImplementation_partial4LongAttribute_Getter");
+
   TestInterfaceImplementationPartialV8Internal::partial4LongAttributeAttributeGetter(info);
 }
 
 void V8TestInterfacePartial::partial4LongAttributeAttributeSetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceImplementation_partial4LongAttribute_Setter");
+
   v8::Local<v8::Value> v8Value = info[0];
 
   TestInterfaceImplementationPartialV8Internal::partial4LongAttributeAttributeSetter(v8Value, info);
 }
 
 void V8TestInterfacePartial::partial4StaticLongAttributeAttributeGetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceImplementation_partial4StaticLongAttribute_Getter");
+
   TestInterfaceImplementationPartialV8Internal::partial4StaticLongAttributeAttributeGetter(info);
 }
 
 void V8TestInterfacePartial::partial4StaticLongAttributeAttributeSetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceImplementation_partial4StaticLongAttribute_Setter");
+
   v8::Local<v8::Value> v8Value = info[0];
 
   TestInterfaceImplementationPartialV8Internal::partial4StaticLongAttributeAttributeSetter(v8Value, info);
 }
 
 void V8TestInterfacePartial::partialVoidTestEnumModulesArgMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceImplementation_partialVoidTestEnumModulesArgMethod");
+
   TestInterfaceImplementationPartialV8Internal::partialVoidTestEnumModulesArgMethodMethod(info);
 }
 
 void V8TestInterfacePartial::partial2VoidTestEnumModulesRecordMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceImplementation_partial2VoidTestEnumModulesRecordMethod");
+
   TestInterfaceImplementationPartialV8Internal::partial2VoidTestEnumModulesRecordMethodMethod(info);
 }
 
 void V8TestInterfacePartial::unscopableVoidMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceImplementation_unscopableVoidMethod");
+
   TestInterfaceImplementationPartialV8Internal::unscopableVoidMethodMethod(info);
 }
 
 void V8TestInterfacePartial::unionWithTypedefMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceImplementation_unionWithTypedefMethod");
+
   TestInterfaceImplementationPartialV8Internal::unionWithTypedefMethodMethod(info);
 }
 
 void V8TestInterfacePartial::partial4VoidMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceImplementation_partial4VoidMethod");
+
   TestInterfaceImplementationPartialV8Internal::partial4VoidMethodMethod(info);
 }
 
 void V8TestInterfacePartial::partial4StaticVoidMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceImplementation_partial4StaticVoidMethod");
+
   TestInterfaceImplementationPartialV8Internal::partial4StaticVoidMethodMethod(info);
 }
 
@@ -483,12 +504,12 @@ void V8TestInterfacePartial::installOriginTrialPartialFeature(v8::Isolate* isola
   v8::Local<v8::Signature> signature = v8::Signature::New(isolate, interfaceTemplate);
   ALLOW_UNUSED_LOCAL(signature);
   static const V8DOMConfiguration::AccessorConfiguration accessorpartial4LongAttributeConfiguration[] = {
-  { "partial4LongAttribute", V8TestInterfacePartial::partial4LongAttributeAttributeGetterCallback, V8TestInterfacePartial::partial4LongAttributeAttributeSetterCallback, nullptr, nullptr, static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds }
+  { "partial4LongAttribute", V8TestInterfacePartial::partial4LongAttributeAttributeGetterCallback, V8TestInterfacePartial::partial4LongAttributeAttributeSetterCallback, nullptr, V8PrivateProperty::kNoCachedAccessor, static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds }
   };
   for (const auto& accessorConfig : accessorpartial4LongAttributeConfiguration)
     V8DOMConfiguration::InstallAccessor(isolate, world, instance, prototype, interface, signature, accessorConfig);
   static const V8DOMConfiguration::AccessorConfiguration accessorpartial4StaticLongAttributeConfiguration[] = {
-  { "partial4StaticLongAttribute", V8TestInterfacePartial::partial4StaticLongAttributeAttributeGetterCallback, V8TestInterfacePartial::partial4StaticLongAttributeAttributeSetterCallback, nullptr, nullptr, static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::kOnInterface, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds }
+  { "partial4StaticLongAttribute", V8TestInterfacePartial::partial4StaticLongAttributeAttributeGetterCallback, V8TestInterfacePartial::partial4StaticLongAttributeAttributeSetterCallback, nullptr, V8PrivateProperty::kNoCachedAccessor, static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::kOnInterface, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds }
   };
   for (const auto& accessorConfig : accessorpartial4StaticLongAttributeConfiguration)
     V8DOMConfiguration::InstallAccessor(isolate, world, instance, prototype, interface, signature, accessorConfig);
@@ -507,7 +528,7 @@ void V8TestInterfacePartial::installOriginTrialPartialFeature(v8::Isolate* isola
 }
 
 void V8TestInterfacePartial::installOriginTrialPartialFeature(ScriptState* scriptState, v8::Local<v8::Object> instance) {
-  V8PerContextData* perContextData = V8PerContextData::From(scriptState->GetContext());
+  V8PerContextData* perContextData = scriptState->PerContextData();
   v8::Local<v8::Object> prototype = perContextData->PrototypeForType(&V8TestInterface::wrapperTypeInfo);
   v8::Local<v8::Function> interface = perContextData->ConstructorForType(&V8TestInterface::wrapperTypeInfo);
   ALLOW_UNUSED_LOCAL(interface);

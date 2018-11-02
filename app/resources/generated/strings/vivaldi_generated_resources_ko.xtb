@@ -23,7 +23,6 @@
 <translation id="1278049586634282054">뷰 검사:</translation>
 <translation id="1297175357211070620">대상</translation>
 <translation id="1303101771013849280">HTML 파일 북마크하기</translation>
-<translation id="1303319084542230573">프린터 추가</translation>
 <translation id="1317502925920562130">설정한 홈페이지가 맞습니까?</translation>
 <translation id="1368832886055348810">왼쪽에서 오른쪽으로</translation>
 <translation id="1430915738399379752">인쇄</translation>
@@ -103,7 +102,6 @@
 <translation id="2439110203301358333">컴퓨터의 다른 프로그램에서 Vivaldi 작동에 영향을 줄 수 있는 확장 프로그램을 추가했습니다.</translation>
 <translation id="2445081178310039857">확장 프로그램 루트 디렉토리가 필요합니다.</translation>
 <translation id="2470702053775288986">지원되지 않는 확장 프로그램이 사용 중지됨</translation>
-<translation id="2498436043474441766">프린터 추가</translation>
 <translation id="2501797496290880632">단축키 입력</translation>
 <translation id="2509495747794740764">배율 값은 10에서 200 사이의 숫자여야 합니다.</translation>
 <translation id="253557089021624350">프로그램 사용 수</translation>
@@ -232,10 +230,6 @@
 <translation id="4240511609794012987">공유 메모리</translation>
 <translation id="4256316378292851214">다른 이름으로 동영상 저장... (&amp;V)</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K(<ph name="NUM_KILOBYTES_LIVE" />K 활성)</translation>
-<translation id="431291515148403474">Google 클라우드 프린트에 프린터를 추가하면
-        어디에서든 인쇄할 수 있습니다. 원하는 사용자와 프린터를 공유한 다음
-        Vivaldi, 휴대전화, 태블릿, PC 또는 기타 웹 연결 기기에서
-        인쇄합니다.</translation>
 <translation id="4345587454538109430">설정...</translation>
 <translation id="4348766275249686434">오류 수집</translation>
 <translation id="4363771538994847871">전송 대상을 찾을 수 없습니다. 도움이 필요하세요?</translation>
@@ -283,9 +277,6 @@
 <translation id="5116628073786783676">다른 이름으로 오디오 저장... (&amp;V)</translation>
 <translation id="5143374789336132547">홈 버튼을 클릭하면 표시되는 페이지가 '<ph name="EXTENSION_NAME" />' 확장 프로그램으로 인해 변경되었습니다.</translation>
 <translation id="5154108062446123722"><ph name="PRINTING_DESTINATION" /> 고급 설정</translation>
-<translation id="5154383699530644092">아래의 '프린터 추가' 버튼을 클릭하여
-        프린터를 컴퓨터에 추가할 수 있습니다. 추가할 프린터가 없는 경우
-        PDF로 저장하거나 Google 드라이브에 저장할 수 있습니다.</translation>
 <translation id="5154917547274118687">메모리</translation>
 <translation id="5171343362375269016">스왑 메모리</translation>
 <translation id="5233019165164992427">NaCl 디버그 포트</translation>

@@ -2,12 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+cr.exportPath('extensions');
+
 /**
  * The different pages that can be shown at a time.
  * Note: This must remain in sync with the page ids in manager.html!
  * @enum {string}
  */
-var Page = {
+const Page = {
   LIST: 'items-list',
   DETAILS: 'details-view',
   SHORTCUTS: 'keyboard-shortcuts',
@@ -15,14 +17,20 @@ var Page = {
 };
 
 /** @enum {string} */
-var Dialog = {
+const Dialog = {
   OPTIONS: 'options',
+};
+
+/** @enum {number} */
+extensions.ShowingType = {
+  EXTENSIONS: 0,
+  APPS: 1,
 };
 
 /** @typedef {{page: Page,
                extensionId: (string|undefined),
                subpage: (!Dialog|undefined)}} */
-var PageState;
+let PageState;
 
 cr.define('extensions', function() {
   'use strict';
@@ -33,19 +41,13 @@ cr.define('extensions', function() {
    * page), we use this object to manage the history and url conversions.
    */
   class NavigationHelper {
-    /**
-     * @param {!function(!PageState):void} onHistoryChange A function to call
-     *     when the page has changed as a result of the user going back or
-     *     forward in history; called with the new active page.
-     */
-    constructor(onHistoryChange) {
-      this.onHistoryChange_ = onHistoryChange;
-      window.addEventListener('popstate', this.onPopState_.bind(this));
-    }
+    constructor() {
+      /** @private {!Array<function(!PageState)>} */
+      this.listeners_ = [];
 
-    /** @private */
-    onPopState_() {
-      this.onHistoryChange_(this.getCurrentPage());
+      window.addEventListener('popstate', () => {
+        this.notifyRouteChanged_(this.getCurrentPage());
+      });
     }
 
     /**
@@ -53,8 +55,8 @@ cr.define('extensions', function() {
      *     URL.
      */
     getCurrentPage() {
-      var search = new URLSearchParams(location.search);
-      var id = search.get('id');
+      const search = new URLSearchParams(location.search);
+      let id = search.get('id');
       if (id)
         return {page: Page.DETAILS, extensionId: id};
       id = search.get('options');
@@ -67,7 +69,44 @@ cr.define('extensions', function() {
       if (location.pathname == '/shortcuts')
         return {page: Page.SHORTCUTS};
 
-      return {page: Page.LIST};
+      if (location.pathname == '/apps')
+        return {page: Page.LIST, type: extensions.ShowingType.APPS};
+
+      return {page: Page.LIST, type: extensions.ShowingType.EXTENSIONS};
+    }
+
+    /**
+     * Function to add subscribers.
+     * @param {!function(!PageState)} listener
+     */
+    onRouteChanged(listener) {
+      this.listeners_.push(listener);
+    }
+
+    /**
+     * Function to notify subscribers.
+     * @private
+     */
+    notifyRouteChanged_(newPage) {
+      for (const listener of this.listeners_) {
+        listener(newPage);
+      }
+    }
+
+    /**
+     * @param {!PageState} newPage the page to navigate to.
+     */
+    navigateTo(newPage) {
+      let currentPage = this.getCurrentPage();
+      if (currentPage && currentPage.page == newPage.page &&
+          currentPage.type == newPage.type &&
+          currentPage.subpage == newPage.subpage &&
+          currentPage.extensionId == newPage.extensionId) {
+        return;
+      }
+
+      this.updateHistory(newPage);
+      this.notifyRouteChanged_(newPage);
     }
 
     /**
@@ -75,10 +114,13 @@ cr.define('extensions', function() {
      * @param {!PageState} entry
      */
     updateHistory(entry) {
-      var path;
+      let path;
       switch (entry.page) {
         case Page.LIST:
-          path = '/';
+          if (entry.type && entry.type == extensions.ShowingType.APPS)
+            path = '/apps';
+          else
+            path = '/';
           break;
         case Page.DETAILS:
           if (entry.subpage) {
@@ -96,10 +138,11 @@ cr.define('extensions', function() {
           break;
       }
       assert(path);
-      var state = {url: path};
-      var currentPage = this.getCurrentPage();
-      var isDialogNavigation = currentPage.page == entry.page &&
-          currentPage.extensionId == entry.extensionId;
+      const state = {url: path};
+      const currentPage = this.getCurrentPage();
+      const isDialogNavigation = currentPage.page == entry.page &&
+          currentPage.extensionId == entry.extensionId &&
+          currentPage.type == entry.type;
       // Navigating to a dialog doesn't visually change pages; it just opens
       // a dialog. As such, we replace state rather than pushing a new state
       // on the stack so that hitting the back button doesn't just toggle the
@@ -111,5 +154,9 @@ cr.define('extensions', function() {
     }
   }
 
-  return {NavigationHelper: NavigationHelper};
+  const navigation = new NavigationHelper();
+
+  return {
+    navigation: navigation,
+  };
 });

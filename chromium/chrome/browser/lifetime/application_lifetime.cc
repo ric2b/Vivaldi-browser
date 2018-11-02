@@ -59,16 +59,6 @@
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #endif
 
-#include "app/vivaldi_apptools.h"
-
-namespace extensions {
-// Action function for RuntimeExitFunction::Run() to work around linking issues on Linux
-void PerformApplicationShutdown()
-{
-  chrome::AttemptExit();
-}
-}
-
 namespace chrome {
 namespace {
 
@@ -180,20 +170,6 @@ void CloseAllBrowsers() {
   // If there are no browsers and closing the last browser would quit the
   // application, send the APP_TERMINATING action here. Otherwise, it will be
   // sent by RemoveBrowser() when the last browser has closed.
-
-  if (vivaldi::IsVivaldiRunning()) {
-    // For Vivaldi closing all browsers means session end.
-
-    // UnloadController::is_attempting_to_close_browser_ will be set so that
-    // webcontents WebContentsImpl being destroyed during the closedown will
-    // be removed correctly from the list of unload-webcontents.
-    for (auto* browser: *BrowserList::GetInstance()) {
-      browser->ShouldCloseWindow();
-    }
-    g_browser_process->EndSession();
-    browser_shutdown::OnShutdownStarting(browser_shutdown::END_SESSION);
-  }
-
   if (GetTotalBrowserCount() == 0 &&
       (browser_shutdown::IsTryingToQuit() ||
        !KeepAliveRegistry::GetInstance()->IsKeepingAlive())) {

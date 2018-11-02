@@ -4,9 +4,13 @@
 
 #include "chrome/browser/ui/views/tabs/new_tab_button.h"
 
+#include "build/build_config.h"
 #include "chrome/browser/themes/theme_properties.h"
+#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/layout_constants.h"
-#include "chrome/browser/ui/views/tabs/new_tab_promo.h"
+#include "chrome/browser/ui/views/feature_promos/new_tab_promo_bubble_view.h"
+#include "chrome/browser/ui/views/tabs/browser_tab_strip_controller.h"
+#include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "third_party/skia/include/core/SkColorFilter.h"
 #include "third_party/skia/include/effects/SkBlurMaskFilter.h"
 #include "third_party/skia/include/effects/SkLayerDrawLooper.h"
@@ -20,6 +24,11 @@
 #include "ui/display/win/screen_win.h"
 #include "ui/gfx/win/hwnd_util.h"
 #include "ui/views/win/hwnd_util.h"
+#endif
+
+#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS) && !defined(OS_MACOSX)
+#include "chrome/browser/feature_engagement/new_tab/new_tab_tracker.h"
+#include "chrome/browser/feature_engagement/new_tab/new_tab_tracker_factory.h"
 #endif
 
 namespace {
@@ -46,6 +55,7 @@ sk_sp<SkDrawLooper> CreateShadowDrawLooper(SkColor color) {
 NewTabButton::NewTabButton(TabStrip* tab_strip, views::ButtonListener* listener)
     : views::ImageButton(listener),
       tab_strip_(tab_strip),
+      new_tab_promo_(nullptr),
       destroyed_(nullptr),
       new_tab_promo_observer_(this) {
   set_animate_on_state_change(true);
@@ -69,11 +79,18 @@ int NewTabButton::GetTopOffset() {
          GetLayoutSize(NEW_TAB_BUTTON).height();
 }
 
+// static
+void NewTabButton::ShowPromoForLastActiveBrowser() {
+  BrowserView* browser = static_cast<BrowserView*>(
+      BrowserList::GetInstance()->GetLastActive()->window());
+  browser->tabstrip()->new_tab_button()->ShowPromo();
+}
+
 void NewTabButton::ShowPromo() {
   // Owned by its native widget. Will be destroyed as its widget is destroyed.
-  NewTabPromo* new_tab_promo = NewTabPromo::CreateSelfOwned(GetVisibleBounds());
-  new_tab_promo_observer_.Add(new_tab_promo->GetWidget());
-  NewTabButton::SchedulePaint();
+  new_tab_promo_ = NewTabPromoBubbleView::CreateOwned(GetVisibleBounds());
+  new_tab_promo_observer_.Add(new_tab_promo_->GetWidget());
+  SchedulePaint();
 }
 
 #if defined(OS_WIN)
@@ -89,7 +106,7 @@ void NewTabButton::OnMouseReleased(const ui::MouseEvent& event) {
       return;
 
     destroyed_ = NULL;
-    SetState(views::CustomButton::STATE_NORMAL);
+    SetState(views::Button::STATE_NORMAL);
     return;
   }
   views::ImageButton::OnMouseReleased(event);
@@ -108,7 +125,7 @@ void NewTabButton::PaintButtonContents(gfx::Canvas* canvas) {
   const int visible_height = GetLayoutSize(NEW_TAB_BUTTON).height();
   canvas->Translate(gfx::Vector2d(0, height() - visible_height));
 
-  const bool pressed = state() == views::CustomButton::STATE_PRESSED;
+  const bool pressed = state() == views::Button::STATE_PRESSED;
   const float scale = canvas->image_scale();
 
   // Fill.
@@ -177,6 +194,11 @@ bool NewTabButton::GetHitTestMask(gfx::Path* mask) const {
 }
 
 void NewTabButton::OnWidgetDestroying(views::Widget* widget) {
+#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS) && !defined(OS_MACOSX)
+  feature_engagement::NewTabTrackerFactory::GetInstance()
+      ->GetForProfile(tab_strip_->controller()->GetProfile())
+      ->OnPromoClosed();
+#endif
   new_tab_promo_observer_.Remove(widget);
   // When the promo widget is destroyed, the NewTabButton needs to be
   // recolored.

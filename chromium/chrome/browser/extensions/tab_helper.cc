@@ -9,7 +9,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/activity_log/activity_log.h"
 #include "chrome/browser/extensions/api/bookmark_manager_private/bookmark_manager_private_api.h"
 #include "chrome/browser/extensions/api/declarative_content/chrome_content_rules_registry.h"
@@ -40,7 +39,6 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
-#include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_frame_host.h"
@@ -54,7 +52,7 @@
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/extension_web_contents_observer.h"
 #include "extensions/browser/image_loader.h"
-#include "extensions/common/constants.h"
+#include "extensions/common/disable_reason.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_icon_set.h"
 #include "extensions/common/extension_messages.h"
@@ -156,7 +154,6 @@ TabHelper::TabHelper(content::WebContents* web_contents)
       extension_app_(NULL),
       pending_web_app_action_(NONE),
       last_committed_nav_entry_unique_id_(0),
-      update_shortcut_on_load_complete_(false),
       script_executor_(
           new ScriptExecutor(web_contents, &script_execution_observers_)),
       extension_action_runner_(new ExtensionActionRunner(web_contents)),
@@ -189,11 +186,6 @@ TabHelper::TabHelper(content::WebContents* web_contents)
       set_delegate(this);
 
   BookmarkManagerPrivateDragEventRouter::CreateForWebContents(web_contents);
-
-  registrar_.Add(this,
-                 content::NOTIFICATION_LOAD_STOP,
-                 content::Source<NavigationController>(
-                     &web_contents->GetController()));
 }
 
 void TabHelper::CreateHostedAppFromWebContents() {
@@ -239,10 +231,10 @@ void TabHelper::SetExtensionApp(const Extension* extension) {
 
   UpdateExtensionAppIcon(extension_app_);
 
-  content::NotificationService::current()->Notify(
-      chrome::NOTIFICATION_TAB_CONTENTS_APPLICATION_EXTENSION_CHANGED,
-      content::Source<TabHelper>(this),
-      content::NotificationService::NoDetails());
+  if (extension_app_) {
+    SessionTabHelper::FromWebContents(web_contents())
+        ->SetTabExtensionAppID(extension_app_->id());
+  }
 }
 
 void TabHelper::SetExtensionAppById(const ExtensionId& extension_app_id) {
@@ -389,10 +381,6 @@ void TabHelper::OnDidGetWebApplicationInfo(content::RenderFrameHost* sender,
           &TabHelper::FinishCreateBookmarkApp, weak_ptr_factory_.GetWeakPtr()));
       break;
     }
-    case UPDATE_SHORTCUT: {
-      web_app::UpdateShortcutForTabContents(web_contents());
-      break;
-    }
     default:
       NOTREACHED();
       break;
@@ -441,7 +429,7 @@ void TabHelper::DoInlineInstall(
   ExtensionRegistry* registry = ExtensionRegistry::Get(profile_);
   if (registry->disabled_extensions().Contains(webstore_item_id) &&
       (ExtensionPrefs::Get(profile_)->GetDisableReasons(webstore_item_id) &
-       Extension::DISABLE_PERMISSIONS_INCREASE) != 0) {
+       disable_reason::DISABLE_PERMISSIONS_INCREASE) != 0) {
     // The extension was disabled due to permissions increase. Prompt for
     // re-enable.
     // TODO(devlin): We should also prompt for re-enable for other reasons,
@@ -625,25 +613,6 @@ void TabHelper::GetApplicationInfo(WebAppAction action) {
   content::RenderFrameHost* main_frame = web_contents()->GetMainFrame();
   main_frame->Send(
       new ChromeFrameMsg_GetWebApplicationInfo(main_frame->GetRoutingID()));
-}
-
-void TabHelper::Observe(int type,
-                        const content::NotificationSource& source,
-                        const content::NotificationDetails& details) {
-  DCHECK_EQ(content::NOTIFICATION_LOAD_STOP, type);
-  const NavigationController& controller =
-      *content::Source<NavigationController>(source).ptr();
-  DCHECK_EQ(controller.GetWebContents(), web_contents());
-
-  if (update_shortcut_on_load_complete_) {
-    update_shortcut_on_load_complete_ = false;
-    // Schedule a shortcut update when web application info is available if
-    // last committed entry is not NULL. Last committed entry could be NULL
-    // when an interstitial page is injected (e.g. bad https certificate,
-    // malware site etc). When this happens, we abort the shortcut update.
-    if (controller.GetLastCommittedEntry())
-      GetApplicationInfo(UPDATE_SHORTCUT);
-  }
 }
 
 void TabHelper::SetTabId(content::RenderFrameHost* render_frame_host) {

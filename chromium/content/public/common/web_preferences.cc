@@ -109,7 +109,6 @@ WebPreferences::WebPreferences()
       hide_scrollbars(false),
       accelerated_2d_canvas_enabled(false),
       minimum_accelerated_2d_canvas_size(257 * 256),
-      disable_2d_canvas_copy_on_write(false),
       antialiased_2d_canvas_disabled(false),
       antialiased_clips_2d_canvas_enabled(true),
       accelerated_2d_canvas_msaa_sample_count(0),
@@ -206,6 +205,8 @@ WebPreferences::WebPreferences()
       video_rotate_to_fullscreen_enabled(false),
       video_fullscreen_detection_enabled(false),
       embedded_media_experience_enabled(false),
+      css_hex_alpha_color_enabled(true),
+      enable_media_download_in_product_help(false),
       scroll_top_left_interop_enabled(true),
 #endif  // defined(OS_ANDROID)
 #if defined(OS_ANDROID)

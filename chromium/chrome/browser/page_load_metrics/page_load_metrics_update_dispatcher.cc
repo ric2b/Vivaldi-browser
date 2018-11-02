@@ -17,6 +17,8 @@
 #include "chrome/common/page_load_metrics/page_load_metrics_constants.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
+#include "extensions/common/constants.h"
+#include "url/gurl.h"
 
 namespace page_load_metrics {
 
@@ -313,7 +315,6 @@ PageLoadMetricsUpdateDispatcher::PageLoadMetricsUpdateDispatcher(
     content::NavigationHandle* navigation_handle,
     PageLoadMetricsEmbedderInterface* embedder_interface)
     : client_(client),
-      embedder_interface_(embedder_interface),
       timer_(embedder_interface->CreateTimer()),
       navigation_start_(navigation_handle->NavigationStart()),
       current_merged_page_timing_(CreatePageLoadTiming()),
@@ -336,7 +337,14 @@ void PageLoadMetricsUpdateDispatcher::ShutDown() {
 void PageLoadMetricsUpdateDispatcher::UpdateMetrics(
     content::RenderFrameHost* render_frame_host,
     const mojom::PageLoadTiming& new_timing,
-    const mojom::PageLoadMetadata& new_metadata) {
+    const mojom::PageLoadMetadata& new_metadata,
+    const mojom::PageLoadFeatures& new_features) {
+  if (render_frame_host->GetLastCommittedURL().SchemeIs(
+          extensions::kExtensionScheme)) {
+    // Ignore updates from Chrome extensions.
+    return;
+  }
+
   if (render_frame_host->GetParent() == nullptr) {
     UpdateMainFrameMetadata(new_metadata);
     UpdateMainFrameTiming(new_timing);
@@ -344,6 +352,7 @@ void PageLoadMetricsUpdateDispatcher::UpdateMetrics(
     UpdateSubFrameMetadata(new_metadata);
     UpdateSubFrameTiming(render_frame_host, new_timing);
   }
+  client_->UpdateFeaturesUsage(new_features);
 }
 
 void PageLoadMetricsUpdateDispatcher::DidFinishSubFrameNavigation(
@@ -355,12 +364,6 @@ void PageLoadMetricsUpdateDispatcher::DidFinishSubFrameNavigation(
   // previously committed navigation.
   subframe_navigation_start_offset_.erase(
       navigation_handle->GetFrameTreeNodeId());
-
-  BrowserPageTrackDecider decider(embedder_interface_,
-                                  navigation_handle->GetWebContents(),
-                                  navigation_handle);
-  if (!decider.ShouldTrack())
-    return;
 
   if (navigation_start_ > navigation_handle->NavigationStart()) {
     RecordInternalError(ERR_SUBFRAME_NAVIGATION_START_BEFORE_MAIN_FRAME);

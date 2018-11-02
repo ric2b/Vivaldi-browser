@@ -78,6 +78,9 @@ class CONTENT_EXPORT IndexedDBFactoryImpl : public IndexedDBFactory {
   void DatabaseDeleted(
       const IndexedDBDatabase::Identifier& identifier) override;
 
+  // Called by IndexedDBBackingStore when blob files have been cleaned.
+  void BlobFilesCleaned(const url::Origin& origin) override;
+
   size_t GetConnectionCount(const url::Origin& origin) const override;
 
  protected:
@@ -122,7 +125,10 @@ class CONTENT_EXPORT IndexedDBFactoryImpl : public IndexedDBFactory {
   leveldb::Status AbortTransactions(const url::Origin& origin);
 
   // Called internally after a database is closed, with some delay. If this
-  // factory has the last reference, it will be released.
+  // factory has the last reference it will start running pre-close tasks.
+  void MaybeStartPreCloseTasks(const url::Origin& origin);
+  // Called internally after pre-close tasks. If this factory has the last
+  // reference it will be released.
   void MaybeCloseBackingStore(const url::Origin& origin);
   bool HasLastBackingStoreReference(const url::Origin& origin) const;
 

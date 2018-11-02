@@ -43,12 +43,12 @@ public class CookieManagerStartupTest extends AwTestBase {
     }
 
     @Override
-    protected boolean needsAwBrowserContextCreated() {
+    public boolean needsAwBrowserContextCreated() {
         return false;
     }
 
     @Override
-    protected boolean needsBrowserProcessStarted() {
+    public boolean needsBrowserProcessStarted() {
         return false;
     }
 
@@ -60,12 +60,7 @@ public class CookieManagerStartupTest extends AwTestBase {
     private void startChromiumWithClient(TestAwContentsClient contentsClient) throws Exception {
         // The activity must be launched in order for proper webview statics to be setup.
         getActivity();
-        getInstrumentation().runOnMainSync(new Runnable() {
-            @Override
-            public void run() {
-                AwBrowserProcess.start();
-            }
-        });
+        getInstrumentation().runOnMainSync(() -> AwBrowserProcess.start());
 
         mContentsClient = contentsClient;
         final AwTestContainerView testContainerView =
@@ -85,7 +80,7 @@ public class CookieManagerStartupTest extends AwTestBase {
             AwCookieManager cookieManager = new AwCookieManager();
             assertNotNull(cookieManager);
 
-            CookieUtils.clearCookies(this, cookieManager);
+            CookieUtils.clearCookies(getInstrumentation(), cookieManager);
             assertFalse(cookieManager.hasCookies());
 
             cookieManager.setAcceptCookie(true);

@@ -29,16 +29,20 @@
 #include "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #import "ios/chrome/browser/ui/browser_view_controller.h"
 #import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
+#include "ios/chrome/browser/ui/commands/browser_commands.h"
+#import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
+#include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #import "ios/chrome/browser/ui/ntp/google_landing_consumer.h"
 #import "ios/chrome/browser/ui/ntp/notification_promo_whats_new.h"
+#include "ios/chrome/browser/ui/ntp/ntp_tile_saver.h"
 #import "ios/chrome/browser/ui/toolbar/web_toolbar_controller.h"
 #import "ios/chrome/browser/ui/url_loader.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/web_state_list/web_state_list_observer_bridge.h"
+#include "ios/chrome/common/app_group/app_group_constants.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #include "ios/public/provider/chrome/browser/voice/voice_search_provider.h"
-#import "ios/shared/chrome/browser/ui/commands/command_dispatcher.h"
 #include "ios/web/public/web_state/web_state.h"
 #include "skia/ext/skia_utils_ios.h"
 
@@ -221,16 +225,14 @@ void SearchEngineObserver::OnTemplateURLServiceChanged() {
 
   // Set up notifications;
   NSNotificationCenter* defaultCenter = [NSNotificationCenter defaultCenter];
-  [defaultCenter
-      addObserver:self.consumer
-         selector:@selector(locationBarBecomesFirstResponder)
-             name:ios_internal::kLocationBarBecomesFirstResponderNotification
-           object:nil];
-  [defaultCenter
-      addObserver:self.consumer
-         selector:@selector(locationBarResignsFirstResponder)
-             name:ios_internal::kLocationBarResignsFirstResponderNotification
-           object:nil];
+  [defaultCenter addObserver:self.consumer
+                    selector:@selector(locationBarBecomesFirstResponder)
+                        name:kLocationBarBecomesFirstResponderNotification
+                      object:nil];
+  [defaultCenter addObserver:self.consumer
+                    selector:@selector(locationBarResignsFirstResponder)
+                        name:kLocationBarResignsFirstResponderNotification
+                      object:nil];
 
   // Set up what's new.
   _notificationPromo.reset(
@@ -261,6 +263,10 @@ void SearchEngineObserver::OnTemplateURLServiceChanged() {
 #pragma mark - MostVisitedSitesObserving
 
 - (void)onMostVisitedURLsAvailable:(const ntp_tiles::NTPTilesVector&)data {
+  // This is used by the content widget.
+  ntp_tile_saver::SaveMostVisitedToDisk(
+      data, self, app_group::ContentWidgetFaviconsFolder());
+
   if (_mostVisitedData.size() > 0) {
     // If some content is already displayed to the user, do not update it to
     // prevent updating the all the tiles without any action from the user.
@@ -279,6 +285,8 @@ void SearchEngineObserver::OnTemplateURLServiceChanged() {
 }
 
 - (void)onIconMadeAvailable:(const GURL&)siteUrl {
+  ntp_tile_saver::UpdateSingleFavicon(siteUrl, self,
+                                      app_group::ContentWidgetFaviconsFolder());
   for (size_t i = 0; i < _mostVisitedData.size(); ++i) {
     const ntp_tiles::NTPTile& ntpTile = _mostVisitedData[i];
     if (ntpTile.url == siteUrl) {
@@ -288,7 +296,7 @@ void SearchEngineObserver::OnTemplateURLServiceChanged() {
   }
 }
 
-- (void)getFaviconForURL:(GURL)URL
+- (void)getFaviconForURL:(const GURL&)URL
                     size:(CGFloat)size
                 useCache:(BOOL)useCache
            imageCallback:(void (^)(UIImage* favicon))imageCallback
@@ -296,7 +304,7 @@ void SearchEngineObserver::OnTemplateURLServiceChanged() {
                                    UIColor* backgroundColor,
                                    BOOL isDefaultColor))fallbackCallback {
   __weak GoogleLandingMediator* weakSelf = self;
-
+  GURL localURL = URL;  // Persisting for use in block below.
   void (^faviconBlock)(const favicon_base::LargeIconResult&) = ^(
       const favicon_base::LargeIconResult& result) {
     ntp_tiles::TileVisualType tileType;
@@ -328,9 +336,9 @@ void SearchEngineObserver::OnTemplateURLServiceChanged() {
     GoogleLandingMediator* strongSelf = weakSelf;
     if (strongSelf) {
       if (result.bitmap.is_valid() || result.fallback_icon_style) {
-        [strongSelf largeIconCache]->SetCachedResult(URL, result);
+        [strongSelf largeIconCache]->SetCachedResult(localURL, result);
       }
-      [strongSelf faviconOfType:tileType fetchedForURL:URL];
+      [strongSelf faviconOfType:tileType fetchedForURL:localURL];
     }
   };
 
@@ -353,7 +361,8 @@ void SearchEngineObserver::OnTemplateURLServiceChanged() {
 
 - (void)webStateList:(WebStateList*)webStateList
     didInsertWebState:(web::WebState*)webState
-              atIndex:(int)index {
+              atIndex:(int)index
+           activating:(BOOL)activating {
   [self.consumer setTabCount:self.webStateList->count()];
 }
 
@@ -426,6 +435,7 @@ void SearchEngineObserver::OnTemplateURLServiceChanged() {
   [self.consumer setPromoCanShow:_notificationPromo->CanShow()];
 }
 
+// TODO(crbug.com/761096) : Promo handling should be DRY and tested.
 - (void)promoTapped {
   DCHECK(_notificationPromo);
   _notificationPromo->HandleClosed();
@@ -440,9 +450,14 @@ void SearchEngineObserver::OnTemplateURLServiceChanged() {
   }
 
   if (_notificationPromo->IsChromeCommand()) {
-    GenericChromeCommand* command = [[GenericChromeCommand alloc]
-        initWithTag:_notificationPromo->command_id()];
-    [self.dispatcher chromeExecuteCommand:command];
+    int command_id = _notificationPromo->command_id();
+    if (command_id == IDC_RATE_THIS_APP) {
+      [self.dispatcher performSelector:@selector(showRateThisAppDialog)];
+    } else {
+      GenericChromeCommand* command =
+          [[GenericChromeCommand alloc] initWithTag:command_id];
+      [self.dispatcher chromeExecuteCommand:command];
+    }
     return;
   }
   NOTREACHED();

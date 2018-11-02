@@ -13,7 +13,6 @@ class ToughCompositorPage(page_module.Page):
         url=url, page_set=page_set, credentials_path = 'data/credentials.json',
         shared_page_state_class=shared_page_state.SharedMobilePageState,
         name=url)
-    self.archive_data_file = 'data/tough_compositor_cases.json'
 
   def RunNavigateSteps(self, action_runner):
     super(ToughCompositorPage, self).RunNavigateSteps(action_runner)
@@ -77,9 +76,3 @@ class ToughCompositorCasesPageSet(story.StorySet):
 
     for url in wait_urls_list:
       self.AddStory(ToughCompositorWaitPage(url, self))
-
-
-class ToughCompositorCaseStoryExpectations(
-    story.expectations.StoryExpectations):
-  def SetExpectations(self):
-    pass

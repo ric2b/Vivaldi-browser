@@ -210,6 +210,11 @@ bool IsSimpleSelectorValidAfterPseudoElement(
     return true;
   if (compound_pseudo_element == CSSSelector::kPseudoContent)
     return simple_selector.Match() != CSSSelector::kPseudoElement;
+  if (compound_pseudo_element == CSSSelector::kPseudoSlotted) {
+    return simple_selector.Match() == CSSSelector::kPseudoElement &&
+           (simple_selector.GetPseudoType() == CSSSelector::kPseudoBefore ||
+            simple_selector.GetPseudoType() == CSSSelector::kPseudoAfter);
+  }
   if (simple_selector.Match() != CSSSelector::kPseudoClass)
     return false;
   CSSSelector::PseudoType pseudo = simple_selector.GetPseudoType();
@@ -442,7 +447,7 @@ std::unique_ptr<CSSParserSelector> CSSSelectorParser::ConsumePseudo(
 
   AtomicString value = token.Value().ToAtomicString().LowerASCII();
   bool has_arguments = token.GetType() == kFunctionToken;
-  selector->UpdatePseudoType(value, has_arguments, context_->Mode());
+  selector->UpdatePseudoType(value, *context_, has_arguments, context_->Mode());
 
   if (!RuntimeEnabledFeatures::CSSSelectorsFocusWithinEnabled() &&
       selector->GetPseudoType() == CSSSelector::kPseudoFocusWithin)
@@ -582,7 +587,11 @@ CSSSelector::RelationType CSSSelectorParser::ConsumeCombinator(
       const CSSParserToken& slash = range.ConsumeIncludingWhitespace();
       if (slash.GetType() != kDelimiterToken || slash.Delimiter() != '/')
         failed_parsing_ = true;
-      return CSSSelector::kShadowDeep;
+      if (RuntimeEnabledFeatures::DeepCombinatorInCSSDynamicProfileEnabled()) {
+        return CSSSelector::kShadowDeep;
+      }
+      return context_->IsDynamicProfile() ? CSSSelector::kShadowDeepAsDescendant
+                                          : CSSSelector::kShadowDeep;
     }
 
     default:

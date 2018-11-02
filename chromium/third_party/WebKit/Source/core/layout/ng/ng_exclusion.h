@@ -6,8 +6,7 @@
 #define NGExclusion_h
 
 #include "core/CoreExport.h"
-#include "core/layout/ng/geometry/ng_logical_rect.h"
-#include "platform/wtf/Vector.h"
+#include "core/layout/ng/geometry/ng_bfc_rect.h"
 
 namespace blink {
 
@@ -25,7 +24,7 @@ struct CORE_EXPORT NGExclusion {
   };
 
   // Rectangle in logical coordinates the represents this exclusion.
-  NGLogicalRect rect;
+  NGBfcRect rect;
 
   // Type of this exclusion.
   Type type = kExclusionTypeUndefined;
@@ -54,24 +53,6 @@ struct CORE_EXPORT NGExclusion {
 };
 
 CORE_EXPORT std::ostream& operator<<(std::ostream&, const NGExclusion&);
-
-struct CORE_EXPORT NGExclusions {
-  NGExclusions();
-  NGExclusions(const NGExclusions& other);
-
-  Vector<std::unique_ptr<const NGExclusion>> storage;
-
-  // Last left/right float exclusions are used to enforce the top edge alignment
-  // rule for floats and for the support of CSS "clear" property.
-  const NGExclusion* last_left_float;   // Owned by storage.
-  const NGExclusion* last_right_float;  // Owned by storage.
-
-  NGExclusions& operator=(const NGExclusions& other);
-  bool operator==(const NGExclusions& other) const;
-  bool operator!=(const NGExclusions& other) const { return !(*this == other); }
-
-  void Add(const NGExclusion& exclusion);
-};
 
 }  // namespace blink
 

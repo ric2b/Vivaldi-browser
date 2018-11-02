@@ -331,10 +331,11 @@ static size_t FindPlainTextInternal(CharacterIteratorAlgorithm<Strategy>& it,
 
   if (buffer.NeedsMoreContext()) {
     for (SimplifiedBackwardsTextIteratorAlgorithm<Strategy> backwards_iterator(
-             PositionTemplate<Strategy>::FirstPositionInNode(
-                 *it.OwnerDocument()),
-             PositionTemplate<Strategy>(it.CurrentContainer(),
-                                        it.StartOffset()));
+             EphemeralRangeTemplate<Strategy>(
+                 PositionTemplate<Strategy>::FirstPositionInNode(
+                     *it.OwnerDocument()),
+                 PositionTemplate<Strategy>(it.CurrentContainer(),
+                                            it.StartOffset())));
          !backwards_iterator.AtEnd(); backwards_iterator.Advance()) {
       BackwardsTextBuffer characters;
       backwards_iterator.CopyTextTo(&characters);
@@ -345,7 +346,6 @@ static size_t FindPlainTextInternal(CharacterIteratorAlgorithm<Strategy>& it,
   }
 
   while (!it.AtEnd()) {
-    // TODO(xiaochengh): Should allow copying text to SearchBuffer directly
     ForwardsTextBuffer characters;
     it.CopyTextTo(&characters);
     buffer.Append(characters.Data(), characters.Size());

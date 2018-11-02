@@ -5,6 +5,7 @@
 #ifndef WorkerOrWorkletGlobalScope_h
 #define WorkerOrWorkletGlobalScope_h
 
+#include "bindings/core/v8/V8CacheOptions.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/frame/UseCounter.h"
 #include "core/workers/WorkerClients.h"
@@ -14,11 +15,14 @@ namespace blink {
 class ResourceFetcher;
 class ScriptWrappable;
 class WorkerOrWorkletScriptController;
+class WorkerReportingProxy;
 class WorkerThread;
 
 class CORE_EXPORT WorkerOrWorkletGlobalScope : public ExecutionContext {
  public:
-  WorkerOrWorkletGlobalScope(v8::Isolate*, WorkerClients*);
+  WorkerOrWorkletGlobalScope(v8::Isolate*,
+                             WorkerClients*,
+                             WorkerReportingProxy&);
   virtual ~WorkerOrWorkletGlobalScope();
 
   // ExecutionContext
@@ -28,6 +32,15 @@ class CORE_EXPORT WorkerOrWorkletGlobalScope : public ExecutionContext {
   bool CanExecuteScripts(ReasonForCallingCanExecuteScripts) final;
 
   virtual ScriptWrappable* GetScriptWrappable() const = 0;
+
+  // Evaluates the given main script as a classic script (as opposed to a module
+  // script).
+  // https://html.spec.whatwg.org/multipage/webappapis.html#classic-script
+  virtual void EvaluateClassicScript(
+      const KURL& script_url,
+      String source_code,
+      std::unique_ptr<Vector<char>> cached_meta_data,
+      V8CacheOptions) = 0;
 
   // Returns true when the WorkerOrWorkletGlobalScope is closing (e.g. via
   // WorkerGlobalScope#close() method). If this returns true, the worker is
@@ -59,16 +72,16 @@ class CORE_EXPORT WorkerOrWorkletGlobalScope : public ExecutionContext {
     return script_controller_.Get();
   }
 
-  DECLARE_VIRTUAL_TRACE();
+  WorkerReportingProxy& ReportingProxy() { return reporting_proxy_; }
 
- protected:
-  virtual void ReportFeature(WebFeature) = 0;
-  virtual void ReportDeprecation(WebFeature) = 0;
+  DECLARE_VIRTUAL_TRACE();
 
  private:
   CrossThreadPersistent<WorkerClients> worker_clients_;
   Member<ResourceFetcher> resource_fetcher_;
   Member<WorkerOrWorkletScriptController> script_controller_;
+
+  WorkerReportingProxy& reporting_proxy_;
 
   // This is the set of features that this worker has used.
   BitVector used_features_;

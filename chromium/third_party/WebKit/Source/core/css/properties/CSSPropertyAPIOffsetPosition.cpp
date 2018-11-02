@@ -9,15 +9,15 @@
 #include "core/css/parser/CSSPropertyParserHelpers.h"
 #include "core/frame/UseCounter.h"
 
-class CSSParserLocalContext;
 namespace blink {
 
 using namespace CSSPropertyParserHelpers;
 
-const CSSValue* CSSPropertyAPIOffsetPosition::parseSingleValue(
+const CSSValue* CSSPropertyAPIOffsetPosition::ParseSingleValue(
+    CSSPropertyID,
     CSSParserTokenRange& range,
     const CSSParserContext& context,
-    const CSSParserLocalContext&) {
+    const CSSParserLocalContext&) const {
   CSSValueID id = range.Peek().Id();
   if (id == CSSValueAuto)
     return ConsumeIdent(range);

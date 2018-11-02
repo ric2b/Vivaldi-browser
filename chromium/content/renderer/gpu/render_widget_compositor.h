@@ -51,10 +51,11 @@ class RenderWidgetCompositorDelegate;
 struct ScreenInfo;
 
 class CONTENT_EXPORT RenderWidgetCompositor
-    : NON_EXPORTED_BASE(public blink::WebLayerTreeView),
-      NON_EXPORTED_BASE(public cc::LayerTreeHostClient),
-      NON_EXPORTED_BASE(public cc::LayerTreeHostSingleThreadClient) {
-  using ReportTimeCallback = base::Callback<void(bool, double)>;
+    : public blink::WebLayerTreeView,
+      public cc::LayerTreeHostClient,
+      public cc::LayerTreeHostSingleThreadClient {
+  using ReportTimeCallback =
+      base::Callback<void(blink::WebLayerTreeView::SwapResult, double)>;
 
  public:
   // Attempt to construct and initialize a compositor instance for the widget
@@ -70,7 +71,8 @@ class CONTENT_EXPORT RenderWidgetCompositor
       CompositorDependencies* compositor_deps,
       float device_scale_factor,
       bool is_for_subframe,
-      const ScreenInfo& screen_info);
+      const ScreenInfo& screen_info,
+      bool is_threaded);
   static std::unique_ptr<cc::LayerTreeHost> CreateLayerTreeHost(
       cc::LayerTreeHostClient* client,
       cc::LayerTreeHostSingleThreadClient* single_thread_client,
@@ -117,14 +119,14 @@ class CONTENT_EXPORT RenderWidgetCompositor
   void SetRasterColorSpace(const gfx::ColorSpace& color_space);
   void SetIsForOopif(bool is_for_oopif);
   void SetContentSourceId(uint32_t source_id);
-  void SetLocalSurfaceId(const viz::LocalSurfaceId& local_surface_id);
+  void SetViewportSize(const gfx::Size& device_viewport_size,
+                       const viz::LocalSurfaceId& local_surface_id);
 
   // WebLayerTreeView implementation.
   viz::FrameSinkId GetFrameSinkId() override;
   void SetRootLayer(const blink::WebLayer& layer) override;
   void ClearRootLayer() override;
   cc::AnimationHost* CompositorAnimationHost() override;
-  void SetViewportSize(const blink::WebSize& device_viewport_size) override;
   blink::WebSize GetViewportSize() const override;
   virtual blink::WebFloatPoint adjustEventPointForPinchZoom(
       const blink::WebFloatPoint& point) const;
@@ -173,18 +175,20 @@ class CONTENT_EXPORT RenderWidgetCompositor
   void UpdateBrowserControlsState(blink::WebBrowserControlsState constraints,
                                   blink::WebBrowserControlsState current,
                                   bool animate) override;
-  void SetBrowserControlsHeight(float height, bool shrink) override;
+  void SetBrowserControlsHeight(float top_height,
+                                float bottom_height,
+                                bool shrink) override;
   void SetBrowserControlsShownRatio(float) override;
-  // TODO(ianwen): Move this method to WebLayerTreeView and implement main
-  // thread scrolling.
-  virtual void setBottomControlsHeight(float height);
   void RequestDecode(const PaintImage& image,
                      const base::Callback<void(bool)>& callback) override;
+
+  void SetScrollBoundaryBehavior(
+      const blink::WebScrollBoundaryBehavior&) override;
 
   // cc::LayerTreeHostClient implementation.
   void WillBeginMainFrame() override;
   void DidBeginMainFrame() override;
-  void BeginMainFrame(const cc::BeginFrameArgs& args) override;
+  void BeginMainFrame(const viz::BeginFrameArgs& args) override;
   void BeginMainFrameNotExpectedSoon() override;
   void BeginMainFrameNotExpectedUntil(base::TimeTicks time) override;
   void UpdateLayerTreeHost() override;

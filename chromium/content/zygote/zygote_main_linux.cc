@@ -25,7 +25,7 @@
 #include "base/native_library.h"
 #include "base/pickle.h"
 #include "base/posix/eintr_wrapper.h"
-#include "base/posix/unix_domain_socket_linux.h"
+#include "base/posix/unix_domain_socket.h"
 #include "base/rand_util.h"
 #include "base/strings/safe_sprintf.h"
 #include "base/strings/string_number_conversions.h"
@@ -477,9 +477,11 @@ static void EnterLayerOneSandbox(LinuxSandbox* linux_sandbox,
 
   ZygotePreSandboxInit();
 
-  // Check that the pre-sandbox initialization didn't spawn threads.
+// Check that the pre-sandbox initialization didn't spawn threads.
+// It's not just our code which may do so - some system-installed libraries
+// are known to be culprits, e.g. lttng.
 #if !defined(THREAD_SANITIZER)
-  DCHECK(sandbox::ThreadHelpers::IsSingleThreaded());
+  CHECK(sandbox::ThreadHelpers::IsSingleThreaded());
 #endif
 
   sandbox::SetuidSandboxClient* setuid_sandbox =

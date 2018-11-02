@@ -32,6 +32,7 @@
 <translation id="2190355936436201913">(tuščias)</translation>
 <translation id="2289052229480071835">Palieskite jutiklines sritis ekrane.</translation>
 <translation id="2297836609126180313"><ph name="QUANTITY" /> TB/s</translation>
+<translation id="24452542372838207">Išskleisti pranešimą</translation>
 <translation id="2482878487686419369">Pranešimai</translation>
 <translation id="2497284189126895209">Visi failai</translation>
 <translation id="2522350507219695259">Kalibravimas baigtas</translation>
@@ -162,6 +163,7 @@
 <translation id="9002566407876343676">atidaryti</translation>
 <translation id="9038489124413477075">Aplankas be pavadinimo</translation>
 <translation id="9044832324875206639">{SECONDS,plural, =1{1 sek.}one{# sek.}few{# sek.}many{# sek.}other{# sek.}}</translation>
+<translation id="9059834730836941392">Sutraukti pranešimą</translation>
 <translation id="9150735707954472829">Skirtukas</translation>
 <translation id="9161053988251441839">SIŪLOMOS PROGRAMOS</translation>
 <translation id="9170848237812810038">&amp;Atšaukti</translation>

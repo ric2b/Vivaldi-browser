@@ -9,21 +9,27 @@
 
 namespace blink {
 
-class ScriptWrappableVisitorVerifier : public WrapperVisitor {
+class ScriptWrappableVisitorVerifier final : public ScriptWrappableVisitor {
  public:
-  void DispatchTraceWrappers(const TraceWrapperBase* t) const override {
-    t->TraceWrappers(this);
-  }
+  explicit ScriptWrappableVisitorVerifier(v8::Isolate* isolate)
+      : ScriptWrappableVisitor(isolate) {}
 
-  void TraceWrappers(const TraceWrapperV8Reference<v8::Value>&) const override {
+  void TraceWrappers(const TraceWrapperV8Reference<v8::Value>&) const final {}
+  void MarkWrapper(const v8::PersistentBase<v8::Value>*) const final {}
+  bool MarkWrapperHeader(HeapObjectHeader* header) const final {
+    if (!visited_headers_.Contains(header)) {
+      visited_headers_.insert(header);
+      return true;
+    }
+    return false;
   }
-  void MarkWrapper(const v8::PersistentBase<v8::Value>*) const override {}
+  void MarkWrappersInAllWorlds(const ScriptWrappable*) const final {}
 
-  bool PushToMarkingDeque(
-      void (*trace_wrappers_callback)(const WrapperVisitor*, const void*),
-      HeapObjectHeader* (*heap_object_header_callback)(const void*),
-      void (*missed_write_barrier_callback)(void),
-      const void* object) const override {
+  void PushToMarkingDeque(
+      TraceWrappersCallback trace_wrappers_callback,
+      HeapObjectHeaderCallback heap_object_header_callback,
+      MissedWriteBarrierCallback missed_write_barrier_callback,
+      const void* object) const final {
     if (!heap_object_header_callback(object)->IsWrapperHeaderMarked()) {
       // If this branch is hit, it means that a white (not discovered by
       // traceWrappers) object was assigned as a member to a black object
@@ -39,17 +45,7 @@ class ScriptWrappableVisitorVerifier : public WrapperVisitor {
       NOTREACHED();
     }
     trace_wrappers_callback(this, object);
-    return true;
   }
-
-  bool MarkWrapperHeader(HeapObjectHeader* header) const override {
-    if (!visited_headers_.Contains(header)) {
-      visited_headers_.insert(header);
-      return true;
-    }
-    return false;
-  }
-  void MarkWrappersInAllWorlds(const ScriptWrappable*) const override {}
 
  private:
   mutable WTF::HashSet<HeapObjectHeader*> visited_headers_;

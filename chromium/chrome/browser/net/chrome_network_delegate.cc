@@ -76,7 +76,7 @@
 #endif
 
 #include "app/vivaldi_apptools.h"
-#include "extensions/tools/vivaldi_tools.h"
+#include "browser/spoof/vivaldi_spoof_tools.h"
 
 using content::BrowserThread;
 using content::RenderViewHost;
@@ -421,7 +421,7 @@ bool ChromeNetworkDelegate::OnCanGetCookies(
     return true;
 
   bool allow = cookie_settings_->IsCookieAccessAllowed(
-      request.url(), request.first_party_for_cookies());
+      request.url(), request.site_for_cookies());
 
   const ResourceRequestInfo* info = ResourceRequestInfo::ForRequest(&request);
   if (info) {
@@ -429,7 +429,7 @@ bool ChromeNetworkDelegate::OnCanGetCookies(
         BrowserThread::UI, FROM_HERE,
         base::BindOnce(&TabSpecificContentSettings::CookiesRead,
                        info->GetWebContentsGetterForRequest(), request.url(),
-                       request.first_party_for_cookies(), cookie_list, !allow));
+                       request.site_for_cookies(), cookie_list, !allow));
   }
 
   return allow;
@@ -443,7 +443,7 @@ bool ChromeNetworkDelegate::OnCanSetCookie(const net::URLRequest& request,
     return true;
 
   bool allow = cookie_settings_->IsCookieAccessAllowed(
-      request.url(), request.first_party_for_cookies());
+      request.url(), request.site_for_cookies());
 
   const ResourceRequestInfo* info = ResourceRequestInfo::ForRequest(&request);
   if (info) {
@@ -451,7 +451,7 @@ bool ChromeNetworkDelegate::OnCanSetCookie(const net::URLRequest& request,
         BrowserThread::UI, FROM_HERE,
         base::BindOnce(&TabSpecificContentSettings::CookieChanged,
                        info->GetWebContentsGetterForRequest(), request.url(),
-                       request.first_party_for_cookies(), cookie_line, *options,
+                       request.site_for_cookies(), cookie_line, *options,
                        !allow));
   }
 
@@ -548,12 +548,12 @@ void ChromeNetworkDelegate::EnableAccessToAllFilesForTesting(bool enabled) {
 
 bool ChromeNetworkDelegate::OnCanEnablePrivacyMode(
     const GURL& url,
-    const GURL& first_party_for_cookies) const {
+    const GURL& site_for_cookies) const {
   // nullptr during tests, or when we're running in the system context.
   if (!cookie_settings_.get())
     return false;
 
-  return !cookie_settings_->IsCookieAccessAllowed(url, first_party_for_cookies);
+  return !cookie_settings_->IsCookieAccessAllowed(url, site_for_cookies);
 }
 
 bool ChromeNetworkDelegate::OnAreExperimentalCookieFeaturesEnabled() const {

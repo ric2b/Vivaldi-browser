@@ -36,6 +36,7 @@ default_args = {
   v8_extra_library_files = [
     # Dependencies used by the extra libraries. Putting them here causes them
     # to be executed first during snapshot creation.
+    "//third_party/WebKit/Source/core/streams/CommonOperations.js",
     "//third_party/WebKit/Source/core/streams/CommonStrings.js",
     "//third_party/WebKit/Source/core/streams/SimpleQueue.js",
 
@@ -69,6 +70,7 @@ check_targets = [
 
   #"//chrome/*",  # Epic number of errors.
   "//chrome/app/*",
+  "//chrome/app_shim/*",
   "//chrome/browser/chromeos/*",
   "//chrome/browser/extensions/*",
   "//chrome/browser/ui/*",
@@ -110,26 +112,8 @@ check_targets = [
   #"//jingle/*",
   "//mash/*",
 
-  #"//media/*",  # Lots of errors.
-  #"//media/base/*",
-  #"//media/capture/*",
-  "//media/cast/*",
-  "//media:media",
-  "//media:shared_memory_support",
-  "//media:media_unittests",
-  "//media:audio_unittests",
-  "//media:media_perftests",
-  "//media/audio/*",
-  "//media/blink/*",
-  "//media/cdm/*",
-  "//media/ffmpeg/*",
-  "//media/gpu/*",
-  "//media/midi/*",
-  "//media/mojo/*",
-  "//media/remoting/*",
-  "//media/test/*",
-
-  "mojo/*",
+  "//media/*",
+  "//mojo/*",
 
   #"//native_client/*",
   "//net/*",

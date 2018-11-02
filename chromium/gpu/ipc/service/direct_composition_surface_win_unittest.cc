@@ -13,6 +13,7 @@
 #include "base/win/scoped_hdc.h"
 #include "base/win/scoped_select_object.h"
 #include "gpu/command_buffer/service/feature_info.h"
+#include "gpu/command_buffer/service/gpu_preferences.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/win/hidden_window.h"
 #include "ui/gfx/buffer_format_util.h"
@@ -60,6 +61,9 @@ class TestImageTransportSurfaceDelegate
   const gles2::FeatureInfo* GetFeatureInfo() const override {
     return feature_info_.get();
   }
+  const GpuPreferences& GetGpuPreferences() const override {
+    return gpu_preferences_;
+  }
   void SetLatencyInfoCallback(const LatencyInfoCallback& callback) override {}
   void UpdateVSyncParameters(base::TimeTicks timebase,
                              base::TimeDelta interval) override {}
@@ -68,6 +72,7 @@ class TestImageTransportSurfaceDelegate
 
  private:
   scoped_refptr<gpu::gles2::FeatureInfo> feature_info_;
+  GpuPreferences gpu_preferences_;
 };
 
 class TestPlatformDelegate : public ui::PlatformWindowDelegate {
@@ -128,8 +133,8 @@ base::win::ScopedComPtr<ID3D11Texture2D> CreateNV12Texture(
   }
 
   std::vector<char> image_data(size.width() * size.height() * 3 / 2);
-  // Y, U, and V should all be Oxff. Output color should be pink.
-  memset(&image_data[0], 0xff, size.width() * size.height() * 3 / 2);
+  // Y, U, and V should all be 160. Output color should be pink.
+  memset(&image_data[0], 160, size.width() * size.height() * 3 / 2);
 
   D3D11_SUBRESOURCE_DATA data = {};
   data.pSysMem = (const void*)&image_data[0];
@@ -156,7 +161,8 @@ TEST(DirectCompositionSurfaceTest, TestMakeCurrent) {
 
   scoped_refptr<gl::GLContext> context1 = gl::init::CreateGLContext(
       nullptr, surface1.get(), gl::GLContextAttribs());
-  EXPECT_TRUE(surface1->Resize(gfx::Size(100, 100), 1.0, true));
+  EXPECT_TRUE(surface1->Resize(gfx::Size(100, 100), 1.0,
+                               gl::GLSurface::ColorSpace::UNSPECIFIED, true));
 
   // First SetDrawRectangle must be full size of surface.
   EXPECT_FALSE(surface1->SetDrawRectangle(gfx::Rect(0, 0, 50, 50)));
@@ -175,7 +181,8 @@ TEST(DirectCompositionSurfaceTest, TestMakeCurrent) {
   EXPECT_TRUE(surface1->SetDrawRectangle(gfx::Rect(0, 0, 100, 100)));
   EXPECT_TRUE(context1->IsCurrent(surface1.get()));
 
-  EXPECT_TRUE(surface1->Resize(gfx::Size(50, 50), 1.0, true));
+  EXPECT_TRUE(surface1->Resize(gfx::Size(50, 50), 1.0,
+                               gl::GLSurface::ColorSpace::UNSPECIFIED, true));
   EXPECT_TRUE(context1->IsCurrent(surface1.get()));
   EXPECT_TRUE(surface1->SetDrawRectangle(gfx::Rect(0, 0, 50, 50)));
   EXPECT_TRUE(context1->IsCurrent(surface1.get()));
@@ -189,7 +196,8 @@ TEST(DirectCompositionSurfaceTest, TestMakeCurrent) {
       nullptr, surface2.get(), gl::GLContextAttribs());
   surface2->SetEnableDCLayers(true);
   EXPECT_TRUE(context2->MakeCurrent(surface2.get()));
-  EXPECT_TRUE(surface2->Resize(gfx::Size(100, 100), 1.0, true));
+  EXPECT_TRUE(surface2->Resize(gfx::Size(100, 100), 1.0,
+                               gl::GLSurface::ColorSpace::UNSPECIFIED, true));
   // The previous IDCompositionSurface should be suspended when another
   // surface is being drawn to.
   EXPECT_TRUE(surface2->SetDrawRectangle(gfx::Rect(0, 0, 100, 100)));
@@ -219,7 +227,8 @@ TEST(DirectCompositionSurfaceTest, DXGIDCLayerSwitch) {
 
   scoped_refptr<gl::GLContext> context =
       gl::init::CreateGLContext(nullptr, surface.get(), gl::GLContextAttribs());
-  EXPECT_TRUE(surface->Resize(gfx::Size(100, 100), 1.0, true));
+  EXPECT_TRUE(surface->Resize(gfx::Size(100, 100), 1.0,
+                              gl::GLSurface::ColorSpace::UNSPECIFIED, true));
   EXPECT_FALSE(surface->swap_chain());
 
   // First SetDrawRectangle must be full size of surface for DXGI
@@ -273,7 +282,8 @@ TEST(DirectCompositionSurfaceTest, SwitchAlpha) {
 
   scoped_refptr<gl::GLContext> context =
       gl::init::CreateGLContext(nullptr, surface.get(), gl::GLContextAttribs());
-  EXPECT_TRUE(surface->Resize(gfx::Size(100, 100), 1.0, true));
+  EXPECT_TRUE(surface->Resize(gfx::Size(100, 100), 1.0,
+                              gl::GLSurface::ColorSpace::UNSPECIFIED, true));
   EXPECT_FALSE(surface->swap_chain());
 
   EXPECT_TRUE(surface->SetDrawRectangle(gfx::Rect(0, 0, 100, 100)));
@@ -284,10 +294,12 @@ TEST(DirectCompositionSurfaceTest, SwitchAlpha) {
   EXPECT_EQ(DXGI_ALPHA_MODE_PREMULTIPLIED, desc.AlphaMode);
 
   // Resize to the same parameters should have no effect.
-  EXPECT_TRUE(surface->Resize(gfx::Size(100, 100), 1.0, true));
+  EXPECT_TRUE(surface->Resize(gfx::Size(100, 100), 1.0,
+                              gl::GLSurface::ColorSpace::UNSPECIFIED, true));
   EXPECT_TRUE(surface->swap_chain());
 
-  EXPECT_TRUE(surface->Resize(gfx::Size(100, 100), 1.0, false));
+  EXPECT_TRUE(surface->Resize(gfx::Size(100, 100), 1.0,
+                              gl::GLSurface::ColorSpace::UNSPECIFIED, false));
   EXPECT_FALSE(surface->swap_chain());
 
   EXPECT_TRUE(surface->SetDrawRectangle(gfx::Rect(0, 0, 100, 100)));
@@ -327,6 +339,7 @@ TEST(DirectCompositionSurfaceTest, NoPresentTwice) {
   scoped_refptr<gl::GLImageDXGI> image_dxgi(
       new gl::GLImageDXGI(texture_size, nullptr));
   image_dxgi->SetTexture(texture, 0);
+  image_dxgi->SetColorSpaceForScanout(gfx::ColorSpace::CreateREC709());
 
   ui::DCRendererLayerParams params(
       false, gfx::Rect(), 1, gfx::Transform(),
@@ -356,7 +369,7 @@ TEST(DirectCompositionSurfaceTest, NoPresentTwice) {
 
   base::win::ScopedComPtr<IDXGISwapChain1> swap_chain2 =
       surface->GetLayerSwapChainForTesting(1);
-  EXPECT_EQ(swap_chain2, swap_chain);
+  EXPECT_EQ(swap_chain2.Get(), swap_chain.Get());
 
   // It's the same image, so it should have the same swapchain.
   EXPECT_TRUE(SUCCEEDED(swap_chain->GetLastPresentCount(&last_present_count)));
@@ -374,7 +387,7 @@ TEST(DirectCompositionSurfaceTest, NoPresentTwice) {
 
   base::win::ScopedComPtr<IDXGISwapChain1> swap_chain3 =
       surface->GetLayerSwapChainForTesting(1);
-  EXPECT_NE(swap_chain2, swap_chain3);
+  EXPECT_NE(swap_chain2.Get(), swap_chain3.Get());
 
   context = nullptr;
   DestroySurface(std::move(surface));
@@ -436,7 +449,8 @@ class DirectCompositionPixelTest : public testing::Test {
 
     scoped_refptr<gl::GLContext> context = gl::init::CreateGLContext(
         nullptr, surface_.get(), gl::GLContextAttribs());
-    EXPECT_TRUE(surface_->Resize(window_size, 1.0, true));
+    EXPECT_TRUE(surface_->Resize(window_size, 1.0,
+                                 gl::GLSurface::ColorSpace::UNSPECIFIED, true));
     EXPECT_TRUE(surface_->SetDrawRectangle(gfx::Rect(window_size)));
     EXPECT_TRUE(context->MakeCurrent(surface_.get()));
 
@@ -458,6 +472,32 @@ class DirectCompositionPixelTest : public testing::Test {
     DestroySurface(std::move(surface_));
   }
 
+  void PixelTestCopyTexture(bool layers_enabled) {
+    if (!CheckIfDCSupported())
+      return;
+    InitializeSurface();
+    surface_->SetEnableDCLayers(layers_enabled);
+    gfx::Size window_size(100, 100);
+
+    scoped_refptr<gl::GLContext> context = gl::init::CreateGLContext(
+        nullptr, surface_.get(), gl::GLContextAttribs());
+    EXPECT_TRUE(surface_->Resize(window_size, 1.0,
+                                 gl::GLSurface::ColorSpace::UNSPECIFIED, true));
+
+    EXPECT_TRUE(surface_->SetDrawRectangle(gfx::Rect(0, 0, 100, 100)));
+    EXPECT_TRUE(context->MakeCurrent(surface_.get()));
+
+    Sleep(1000);
+
+    GLuint texture = 0;
+    glGenTextures(1, &texture);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 0, 0, 100, 100, 0);
+
+    context = nullptr;
+    DestroySurface(std::move(surface_));
+  }
+
   TestPlatformDelegate platform_delegate_;
   TestImageTransportSurfaceDelegate delegate_;
   ui::WinWindow window_;
@@ -472,6 +512,14 @@ TEST_F(DirectCompositionPixelTest, DCLayersDisabled) {
   PixelTestSwapChain(false);
 }
 
+TEST_F(DirectCompositionPixelTest, CopyTextureFromSurfaceWithLayersEnabled) {
+  PixelTestCopyTexture(true);
+}
+
+TEST_F(DirectCompositionPixelTest, CopyTextureFromSurfaceWithLayersDisabled) {
+  PixelTestCopyTexture(false);
+}
+
 bool AreColorsSimilar(int a, int b) {
   // The precise colors may differ depending on the video processor, so allow
   // a margin for error.
@@ -482,58 +530,93 @@ bool AreColorsSimilar(int a, int b) {
          abs(SkColorGetB(a) - SkColorGetB(b)) < kMargin;
 }
 
-TEST_F(DirectCompositionPixelTest, VideoSwapchain) {
-  if (!CheckIfDCSupported())
-    return;
-  InitializeSurface();
-  surface_->SetEnableDCLayers(true);
-  gfx::Size window_size(100, 100);
+class DirectCompositionVideoPixelTest : public DirectCompositionPixelTest {
+ protected:
+  void TestVideo(const gfx::ColorSpace& color_space,
+                 SkColor expected_color,
+                 bool check_color) {
+    if (!CheckIfDCSupported())
+      return;
+    InitializeSurface();
+    surface_->SetEnableDCLayers(true);
+    gfx::Size window_size(100, 100);
 
-  scoped_refptr<gl::GLContext> context = gl::init::CreateGLContext(
-      nullptr, surface_.get(), gl::GLContextAttribs());
-  EXPECT_TRUE(surface_->Resize(window_size, 1.0, true));
+    scoped_refptr<gl::GLContext> context = gl::init::CreateGLContext(
+        nullptr, surface_.get(), gl::GLContextAttribs());
+    EXPECT_TRUE(surface_->Resize(window_size, 1.0,
+                                 gl::GLSurface::ColorSpace::UNSPECIFIED, true));
 
-  base::win::ScopedComPtr<ID3D11Device> d3d11_device =
-      gl::QueryD3D11DeviceObjectFromANGLE();
+    base::win::ScopedComPtr<ID3D11Device> d3d11_device =
+        gl::QueryD3D11DeviceObjectFromANGLE();
 
-  gfx::Size texture_size(50, 50);
-  base::win::ScopedComPtr<ID3D11Texture2D> texture =
-      CreateNV12Texture(d3d11_device, texture_size, false);
+    gfx::Size texture_size(50, 50);
+    base::win::ScopedComPtr<ID3D11Texture2D> texture =
+        CreateNV12Texture(d3d11_device, texture_size, false);
 
-  scoped_refptr<gl::GLImageDXGI> image_dxgi(
-      new gl::GLImageDXGI(texture_size, nullptr));
-  image_dxgi->SetTexture(texture, 0);
+    scoped_refptr<gl::GLImageDXGI> image_dxgi(
+        new gl::GLImageDXGI(texture_size, nullptr));
+    image_dxgi->SetTexture(texture, 0);
+    image_dxgi->SetColorSpaceForScanout(color_space);
 
-  ui::DCRendererLayerParams params(
-      false, gfx::Rect(), 1, gfx::Transform(),
-      std::vector<scoped_refptr<gl::GLImage>>{image_dxgi},
-      gfx::RectF(gfx::Rect(texture_size)), gfx::Rect(texture_size), 0, 0, 1.0,
-      0);
-  surface_->ScheduleDCLayer(params);
+    ui::DCRendererLayerParams params(
+        false, gfx::Rect(), 1, gfx::Transform(),
+        std::vector<scoped_refptr<gl::GLImage>>{image_dxgi},
+        gfx::RectF(gfx::Rect(texture_size)), gfx::Rect(texture_size), 0, 0, 1.0,
+        0);
+    surface_->ScheduleDCLayer(params);
 
-  EXPECT_EQ(gfx::SwapResult::SWAP_ACK, surface_->SwapBuffers());
+    EXPECT_EQ(gfx::SwapResult::SWAP_ACK, surface_->SwapBuffers());
 
-  // Scaling up the swapchain with the same image should cause it to be
-  // transformed again, but not presented again.
-  ui::DCRendererLayerParams params2(
-      false, gfx::Rect(), 1, gfx::Transform(),
-      std::vector<scoped_refptr<gl::GLImage>>{image_dxgi},
-      gfx::RectF(gfx::Rect(texture_size)), gfx::Rect(window_size), 0, 0, 1.0,
-      0);
-  surface_->ScheduleDCLayer(params2);
+    // Scaling up the swapchain with the same image should cause it to be
+    // transformed again, but not presented again.
+    ui::DCRendererLayerParams params2(
+        false, gfx::Rect(), 1, gfx::Transform(),
+        std::vector<scoped_refptr<gl::GLImage>>{image_dxgi},
+        gfx::RectF(gfx::Rect(texture_size)), gfx::Rect(window_size), 0, 0, 1.0,
+        0);
+    surface_->ScheduleDCLayer(params2);
 
-  EXPECT_EQ(gfx::SwapResult::SWAP_ACK, surface_->SwapBuffers());
-  Sleep(1000);
+    EXPECT_EQ(gfx::SwapResult::SWAP_ACK, surface_->SwapBuffers());
+    Sleep(1000);
 
-  SkColor expected_color = SkColorSetRGB(0xff, 0xb7, 0xff);
-  SkColor actual_color =
-      ReadBackWindowPixel(window_.hwnd(), gfx::Point(75, 75));
-  EXPECT_TRUE(AreColorsSimilar(expected_color, actual_color))
-      << std::hex << "Expected " << expected_color << " Actual "
-      << actual_color;
+    if (check_color) {
+      SkColor actual_color =
+          ReadBackWindowPixel(window_.hwnd(), gfx::Point(75, 75));
+      EXPECT_TRUE(AreColorsSimilar(expected_color, actual_color))
+          << std::hex << "Expected " << expected_color << " Actual "
+          << actual_color;
+    }
 
-  context = nullptr;
-  DestroySurface(std::move(surface_));
+    context = nullptr;
+    DestroySurface(std::move(surface_));
+  }
+};
+
+TEST_F(DirectCompositionVideoPixelTest, BT601) {
+  TestVideo(gfx::ColorSpace::CreateREC601(), SkColorSetRGB(0xdb, 0x81, 0xe8),
+            true);
+}
+
+TEST_F(DirectCompositionVideoPixelTest, BT709) {
+  TestVideo(gfx::ColorSpace::CreateREC709(), SkColorSetRGB(0xe1, 0x90, 0xeb),
+            true);
+}
+
+TEST_F(DirectCompositionVideoPixelTest, SRGB) {
+  // SRGB doesn't make sense on an NV12 input, but don't crash.
+  TestVideo(gfx::ColorSpace::CreateSRGB(), SkColorSetRGB(0xd7, 0x89, 0xe0),
+            false);
+}
+
+TEST_F(DirectCompositionVideoPixelTest, SCRGBLinear) {
+  // SCRGB doesn't make sense on an NV12 input, but don't crash.
+  TestVideo(gfx::ColorSpace::CreateSCRGBLinear(),
+            SkColorSetRGB(0xd7, 0x89, 0xe0), false);
+}
+
+TEST_F(DirectCompositionVideoPixelTest, InvalidColorSpace) {
+  // Invalid color space should be treated as BT.709
+  TestVideo(gfx::ColorSpace(), SkColorSetRGB(0xe1, 0x90, 0xeb), true);
 }
 
 TEST_F(DirectCompositionPixelTest, SoftwareVideoSwapchain) {
@@ -545,7 +628,8 @@ TEST_F(DirectCompositionPixelTest, SoftwareVideoSwapchain) {
 
   scoped_refptr<gl::GLContext> context = gl::init::CreateGLContext(
       nullptr, surface_.get(), gl::GLContextAttribs());
-  EXPECT_TRUE(surface_->Resize(window_size, 1.0, true));
+  EXPECT_TRUE(surface_->Resize(window_size, 1.0,
+                               gl::GLSurface::ColorSpace::UNSPECIFIED, true));
 
   base::win::ScopedComPtr<ID3D11Device> d3d11_device =
       gl::QueryD3D11DeviceObjectFromANGLE();
@@ -567,6 +651,7 @@ TEST_F(DirectCompositionPixelTest, SoftwareVideoSwapchain) {
       new gl::GLImageRefCountedMemory(uv_size, GL_BGRA_EXT));
   uv_image->Initialize(new base::RefCountedBytes(uv_data),
                        gfx::BufferFormat::RG_88);
+  y_image->SetColorSpaceForScanout(gfx::ColorSpace::CreateREC709());
 
   ui::DCRendererLayerParams params(
       false, gfx::Rect(), 1, gfx::Transform(),
@@ -597,7 +682,8 @@ TEST_F(DirectCompositionPixelTest, VideoHandleSwapchain) {
 
   scoped_refptr<gl::GLContext> context = gl::init::CreateGLContext(
       nullptr, surface_.get(), gl::GLContextAttribs());
-  EXPECT_TRUE(surface_->Resize(window_size, 1.0, true));
+  EXPECT_TRUE(surface_->Resize(window_size, 1.0,
+                               gl::GLSurface::ColorSpace::UNSPECIFIED, true));
 
   base::win::ScopedComPtr<ID3D11Device> d3d11_device =
       gl::QueryD3D11DeviceObjectFromANGLE();
@@ -626,7 +712,7 @@ TEST_F(DirectCompositionPixelTest, VideoHandleSwapchain) {
 
   Sleep(1000);
 
-  SkColor expected_color = SkColorSetRGB(0xff, 0xb7, 0xff);
+  SkColor expected_color = SkColorSetRGB(0xe1, 0x90, 0xeb);
   SkColor actual_color =
       ReadBackWindowPixel(window_.hwnd(), gfx::Point(75, 75));
   EXPECT_TRUE(AreColorsSimilar(expected_color, actual_color))

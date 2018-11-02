@@ -4,10 +4,10 @@
 
 package org.chromium.net;
 
-import static junit.framework.Assert.assertEquals;
-import static junit.framework.Assert.assertNotNull;
-import static junit.framework.Assert.assertNull;
-import static junit.framework.Assert.assertTrue;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import android.os.ConditionVariable;
 
@@ -164,7 +164,7 @@ public class MetricsTestUtil {
         RequestFinishedInfo.Metrics metrics = info.getMetrics();
         assertNotNull("RequestFinishedInfo.getMetrics() must not be null", metrics);
         // Check old (deprecated) timing metrics
-        assertTrue(metrics.getTotalTimeMs() > 0);
+        assertTrue(metrics.getTotalTimeMs() >= 0);
         assertTrue(metrics.getTotalTimeMs() >= metrics.getTtfbMs());
         // Check new timing metrics
         checkTimingMetrics(metrics, startTime, endTime);

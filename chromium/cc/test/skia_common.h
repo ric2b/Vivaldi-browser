@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/memory/ref_counted.h"
+#include "cc/paint/paint_image.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 
@@ -27,7 +28,11 @@ bool AreDisplayListDrawingResultsSame(const gfx::Rect& layer_rect,
                                       const DisplayItemList* list_a,
                                       const DisplayItemList* list_b);
 
-sk_sp<SkImage> CreateDiscardableImage(const gfx::Size& size);
+sk_sp<PaintImageGenerator> CreatePaintImageGenerator(const gfx::Size& size);
+
+PaintImage CreateDiscardablePaintImage(
+    const gfx::Size& size,
+    sk_sp<SkColorSpace> color_space = nullptr);
 
 }  // namespace cc
 

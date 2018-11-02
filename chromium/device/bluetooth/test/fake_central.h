@@ -15,15 +15,16 @@
 
 namespace bluetooth {
 
+class FakePeripheral;
 class FakeRemoteGattCharacteristic;
 class FakeRemoteGattDescriptor;
+class FakeRemoteGattService;
 
 // Implementation of FakeCentral in
 // src/device/bluetooth/public/interfaces/test/fake_bluetooth.mojom.
 // Implemented on top of the C++ device/bluetooth API, mainly
 // device/bluetooth/bluetooth_adapter.h.
-class FakeCentral : NON_EXPORTED_BASE(public mojom::FakeCentral),
-                    public device::BluetoothAdapter {
+class FakeCentral : public mojom::FakeCentral, public device::BluetoothAdapter {
  public:
   FakeCentral(mojom::CentralState state, mojom::FakeCentralRequest request);
 
@@ -41,6 +42,9 @@ class FakeCentral : NON_EXPORTED_BASE(public mojom::FakeCentral),
       const std::string& address,
       uint16_t code,
       SetNextGATTDiscoveryResponseCallback callback) override;
+  void SimulateGATTServicesChanged(
+      const std::string& address,
+      SimulateGATTServicesChangedCallback callback) override;
   void AddFakeService(const std::string& peripheral_address,
                       const device::BluetoothUUID& service_uuid,
                       AddFakeServiceCallback callback) override;
@@ -49,6 +53,11 @@ class FakeCentral : NON_EXPORTED_BASE(public mojom::FakeCentral),
                              const std::string& service_id,
                              const std::string& peripheral_address,
                              AddFakeCharacteristicCallback callback) override;
+  void RemoveFakeCharacteristic(
+      const std::string& identifier,
+      const std::string& service_id,
+      const std::string& peripheral_address,
+      RemoveFakeCharacteristicCallback callback) override;
   void AddFakeDescriptor(const device::BluetoothUUID& characteristic_uuid,
                          const std::string& characteristic_id,
                          const std::string& service_id,
@@ -142,6 +151,11 @@ class FakeCentral : NON_EXPORTED_BASE(public mojom::FakeCentral),
  private:
   ~FakeCentral() override;
 
+  FakePeripheral* GetFakePeripheral(
+      const std::string& peripheral_address) const;
+  FakeRemoteGattService* GetFakeRemoteGattService(
+      const std::string& peripheral_address,
+      const std::string& service_id) const;
   FakeRemoteGattCharacteristic* GetFakeRemoteGattCharacteristic(
       const std::string& peripheral_address,
       const std::string& service_id,

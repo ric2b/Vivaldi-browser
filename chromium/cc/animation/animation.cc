@@ -8,9 +8,9 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/animation/animation_curve.h"
-#include "cc/base/time_util.h"
 
 namespace {
 
@@ -29,6 +29,14 @@ static_assert(static_cast<int>(cc::Animation::LAST_RUN_STATE) + 1 ==
               "RunStateEnumSize should equal the number of elements in "
               "s_runStateNames");
 
+static const char* const s_curveTypeNames[] = {
+    "COLOR", "FLOAT", "TRANSFORM", "FILTER", "SCROLL_OFFSET", "SIZE"};
+
+static_assert(static_cast<int>(cc::AnimationCurve::LAST_CURVE_TYPE) + 1 ==
+                  arraysize(s_curveTypeNames),
+              "CurveType enum should equal the number of elements in "
+              "s_runStateNames");
+
 }  // namespace
 
 namespace cc {
@@ -37,19 +45,19 @@ std::unique_ptr<Animation> Animation::Create(
     std::unique_ptr<AnimationCurve> curve,
     int animation_id,
     int group_id,
-    TargetProperty::Type target_property) {
-  return base::WrapUnique(
-      new Animation(std::move(curve), animation_id, group_id, target_property));
+    int target_property_id) {
+  return base::WrapUnique(new Animation(std::move(curve), animation_id,
+                                        group_id, target_property_id));
 }
 
 Animation::Animation(std::unique_ptr<AnimationCurve> curve,
                      int animation_id,
                      int group_id,
-                     TargetProperty::Type target_property)
+                     int target_property_id)
     : curve_(std::move(curve)),
       id_(animation_id),
       group_(group_id),
-      target_property_(target_property),
+      target_property_id_(target_property_id),
       run_state_(WAITING_FOR_TARGET_AVAILABILITY),
       iterations_(1),
       iteration_start_(0),
@@ -75,8 +83,8 @@ void Animation::SetRunState(RunState run_state,
     return;
 
   char name_buffer[256];
-  base::snprintf(name_buffer, sizeof(name_buffer), "%s-%d",
-                 TargetProperty::GetName(target_property_), group_);
+  base::snprintf(name_buffer, sizeof(name_buffer), "%s-%d-%d",
+                 s_curveTypeNames[curve_->Type()], target_property_id_, group_);
 
   bool is_waiting_to_start =
       run_state_ == WAITING_FOR_TARGET_AVAILABILITY || run_state_ == STARTING;
@@ -134,8 +142,7 @@ bool Animation::IsFinishedAt(base::TimeTicks monotonic_time) const {
     return false;
 
   return run_state_ == RUNNING && iterations_ >= 0 &&
-         TimeUtil::Scale(curve_->Duration(),
-                         iterations_ / std::abs(playback_rate_)) <=
+         (curve_->Duration() * (iterations_ / std::abs(playback_rate_))) <=
              (monotonic_time + time_offset_ - start_time_ - total_paused_time_);
 }
 
@@ -146,23 +153,20 @@ bool Animation::InEffect(base::TimeTicks monotonic_time) const {
 
 base::TimeDelta Animation::ConvertToActiveTime(
     base::TimeTicks monotonic_time) const {
-  base::TimeTicks trimmed = monotonic_time + time_offset_;
-
-  // If we're paused, time is 'stuck' at the pause time.
-  if (run_state_ == PAUSED)
-    trimmed = pause_time_;
-
-  // Returned time should always be relative to the start time and should
-  // subtract all time spent paused.
-  trimmed -= (start_time_ - base::TimeTicks()) + total_paused_time_;
-
   // If we're just starting or we're waiting on receiving a start time,
   // time is 'stuck' at the initial state.
   if ((run_state_ == STARTING && !has_set_start_time()) ||
-      needs_synchronized_start_time())
-    trimmed = base::TimeTicks() + time_offset_;
+      needs_synchronized_start_time()) {
+    return time_offset_;
+  }
 
-  return (trimmed - base::TimeTicks());
+  // Compute active time. If we're paused, time is 'stuck' at the pause time.
+  base::TimeTicks active_time =
+      (run_state_ == PAUSED) ? pause_time_ : (monotonic_time + time_offset_);
+
+  // Returned time should always be relative to the start time and should
+  // subtract all time spent paused.
+  return active_time - start_time_ - total_paused_time_;
 }
 
 base::TimeDelta Animation::TrimTimeToCurrentIteration(
@@ -172,8 +176,7 @@ base::TimeDelta Animation::TrimTimeToCurrentIteration(
   DCHECK_GE(iteration_start_, 0);
 
   base::TimeDelta active_time = ConvertToActiveTime(monotonic_time);
-  base::TimeDelta start_offset =
-      TimeUtil::Scale(curve_->Duration(), iteration_start_);
+  base::TimeDelta start_offset = curve_->Duration() * iteration_start_;
 
   // Return start offset if we are before the start of the animation
   if (active_time < base::TimeDelta())
@@ -186,10 +189,9 @@ base::TimeDelta Animation::TrimTimeToCurrentIteration(
   if (curve_->Duration() <= base::TimeDelta())
     return base::TimeDelta();
 
-  base::TimeDelta repeated_duration =
-      TimeUtil::Scale(curve_->Duration(), iterations_);
+  base::TimeDelta repeated_duration = curve_->Duration() * iterations_;
   base::TimeDelta active_duration =
-      TimeUtil::Scale(repeated_duration, 1.0 / std::abs(playback_rate_));
+      repeated_duration / std::abs(playback_rate_);
 
   // Check if we are past active duration
   if (iterations_ > 0 && active_time >= active_duration)
@@ -197,13 +199,12 @@ base::TimeDelta Animation::TrimTimeToCurrentIteration(
 
   // Calculate the scaled active time
   base::TimeDelta scaled_active_time;
-  if (playback_rate_ < 0)
+  if (playback_rate_ < 0) {
     scaled_active_time =
-        TimeUtil::Scale((active_time - active_duration), playback_rate_) +
-        start_offset;
-  else
-    scaled_active_time =
-        TimeUtil::Scale(active_time, playback_rate_) + start_offset;
+        ((active_time - active_duration) * playback_rate_) + start_offset;
+  } else {
+    scaled_active_time = (active_time * playback_rate_) + start_offset;
+  }
 
   // Calculate the iteration time
   base::TimeDelta iteration_time;
@@ -211,7 +212,7 @@ base::TimeDelta Animation::TrimTimeToCurrentIteration(
       fmod(iterations_ + iteration_start_, 1) == 0)
     iteration_time = curve_->Duration();
   else
-    iteration_time = TimeUtil::Mod(scaled_active_time, curve_->Duration());
+    iteration_time = scaled_active_time % curve_->Duration();
 
   // Calculate the current iteration
   int iteration;
@@ -239,7 +240,7 @@ base::TimeDelta Animation::TrimTimeToCurrentIteration(
 std::unique_ptr<Animation> Animation::CloneAndInitialize(
     RunState initial_run_state) const {
   std::unique_ptr<Animation> to_return(
-      new Animation(curve_->Clone(), id_, group_, target_property_));
+      new Animation(curve_->Clone(), id_, group_, target_property_id_));
   to_return->run_state_ = initial_run_state;
   to_return->iterations_ = iterations_;
   to_return->iteration_start_ = iteration_start_;
@@ -264,6 +265,14 @@ void Animation::PushPropertiesTo(Animation* other) const {
     other->pause_time_ = pause_time_;
     other->total_paused_time_ = total_paused_time_;
   }
+}
+
+std::string Animation::ToString() const {
+  return base::StringPrintf(
+      "Animation{id=%d, group=%d, target_property_id=%d, "
+      "run_state=%s}",
+      id_, group_, target_property_id_,
+      s_runStateNames[static_cast<int>(run_state_)]);
 }
 
 }  // namespace cc

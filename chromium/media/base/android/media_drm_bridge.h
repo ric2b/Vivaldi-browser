@@ -29,7 +29,7 @@
 #include "media/base/player_tracker.h"
 #include "media/base/provision_fetcher.h"
 #include "media/cdm/player_tracker_impl.h"
-#include "url/gurl.h"
+#include "url/origin.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -55,25 +55,14 @@ class MEDIA_EXPORT MediaDrmBridge : public ContentDecryptionModule,
     SECURITY_LEVEL_3 = 3,
   };
 
-  using JavaObjectPtr =
-      std::unique_ptr<base::android::ScopedJavaGlobalRef<jobject>>;
-
   using ResetCredentialsCB = base::Callback<void(bool)>;
-
-  // Notification called when MediaCrypto object is ready.
-  // Parameters:
-  // |media_crypto| - global reference to MediaCrypto object
-  // |requires_secure_video_codec| - true if secure video decoder is required
-  using MediaCryptoReadyCB =
-      base::Callback<void(JavaObjectPtr media_crypto,
-                          bool requires_secure_video_codec)>;
+  using MediaCryptoReadyCB = MediaDrmBridgeCdmContext::MediaCryptoReadyCB;
+  using CreatedCB = base::OnceCallback<void(scoped_refptr<MediaDrmBridge>)>;
 
   // Checks whether MediaDRM is available and usable, including for decoding.
   // All other static methods check IsAvailable() or equivalent internally.
   // There is no need to check IsAvailable() explicitly before calling them.
   static bool IsAvailable();
-
-  static bool RegisterMediaDrmBridge(JNIEnv* env);
 
   // Checks whether |key_system| is supported.
   static bool IsKeySystemSupported(const std::string& key_system);
@@ -93,23 +82,26 @@ class MEDIA_EXPORT MediaDrmBridge : public ContentDecryptionModule,
   // Returns a MediaDrmBridge instance if |key_system| and |security_level| are
   // supported, and nullptr otherwise. The default security level will be used
   // if |security_level| is SECURITY_LEVEL_DEFAULT.
-  static scoped_refptr<MediaDrmBridge> Create(
+  static void Create(
       const std::string& key_system,
-      const GURL& security_origin,
+      const url::Origin& security_origin,
       SecurityLevel security_level,
       const CreateFetcherCB& create_fetcher_cb,
       const CreateStorageCB& create_storage_cb,
       const SessionMessageCB& session_message_cb,
       const SessionClosedCB& session_closed_cb,
       const SessionKeysChangeCB& session_keys_change_cb,
-      const SessionExpirationUpdateCB& session_expiration_update_cb);
+      const SessionExpirationUpdateCB& session_expiration_update_cb,
+      CreatedCB created_cb);
 
   // Same as Create() except that no session callbacks are provided. This is
   // used when we need to use MediaDrmBridge without creating any sessions.
-  // TODO(yucliu): Pass |security_origin| here to clear per-origin certs and
-  // licenses.
+  //
+  // |create_fetcher_cb| can be empty when we don't want origin provision
+  // to happen, e.g. when unprovision the origin.
   static scoped_refptr<MediaDrmBridge> CreateWithoutSessionSupport(
       const std::string& key_system,
+      const std::string& origin_id,
       SecurityLevel security_level,
       const CreateFetcherCB& create_fetcher_cb);
 
@@ -135,6 +127,14 @@ class MEDIA_EXPORT MediaDrmBridge : public ContentDecryptionModule,
                      std::unique_ptr<media::SimpleCdmPromise> promise) override;
   CdmContext* GetCdmContext() override;
   void DeleteOnCorrectThread() const override;
+
+  // Unprovision the origin bound with |this|. This will remove the cert for
+  // current origin and leave the offline licenses in invalid state (offline
+  // licenses can't be used anymore).
+  //
+  // MediaDrmBridge must be created with a valid origin ID. This function won't
+  // touch persistent storage.
+  void Unprovision();
 
   // PlayerTracker implementation. Can be called on any thread.
   // The registered callbacks will be fired on |task_runner_|. The caller
@@ -247,25 +247,28 @@ class MEDIA_EXPORT MediaDrmBridge : public ContentDecryptionModule,
   friend class base::DeleteHelper<MediaDrmBridge>;
 
   static scoped_refptr<MediaDrmBridge> CreateInternal(
-      const std::string& key_system,
-      const GURL& security_origin,
+      const std::vector<uint8_t>& scheme_uuid,
       SecurityLevel security_level,
+      std::unique_ptr<MediaDrmStorageBridge> storage,
       const CreateFetcherCB& create_fetcher_cb,
-      const CreateStorageCB& create_storage_cb,
       const SessionMessageCB& session_message_cb,
       const SessionClosedCB& session_closed_cb,
       const SessionKeysChangeCB& session_keys_change_cb,
-      const SessionExpirationUpdateCB& session_expiration_update_cb);
+      const SessionExpirationUpdateCB& session_expiration_update_cb,
+      const std::string& origin_id);
 
   // Constructs a MediaDrmBridge for |scheme_uuid| and |security_level|. The
   // default security level will be used if |security_level| is
   // SECURITY_LEVEL_DEFAULT. Sessions should not be created if session callbacks
   // are null.
+  //
+  // |origin_id| is a random string that can identify an origin. It may be empty
+  // when reseting device credential.
   MediaDrmBridge(const std::vector<uint8_t>& scheme_uuid,
-                 const GURL& security_origin,
+                 const std::string& origin_id,
                  SecurityLevel security_level,
+                 std::unique_ptr<MediaDrmStorageBridge> storage,
                  const CreateFetcherCB& create_fetcher_cb,
-                 const CreateStorageCB& create_storage_cb,
                  const SessionMessageCB& session_message_cb,
                  const SessionClosedCB& session_closed_cb,
                  const SessionKeysChangeCB& session_keys_change_cb,
@@ -293,7 +296,7 @@ class MEDIA_EXPORT MediaDrmBridge : public ContentDecryptionModule,
   std::vector<uint8_t> scheme_uuid_;
 
   // Persistent storage for session ID map.
-  MediaDrmStorageBridge storage_;
+  std::unique_ptr<MediaDrmStorageBridge> storage_;
 
   // Java MediaDrm instance.
   base::android::ScopedJavaGlobalRef<jobject> j_media_drm_;

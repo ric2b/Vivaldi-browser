@@ -42,7 +42,11 @@
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
+#include "core/input/ContextMenuAllowedScope.h"
+#include "core/input/EventHandler.h"
 #include "core/layout/LayoutBoxModelObject.h"
+#include "core/layout/LayoutView.h"
+#include "core/page/Page.h"
 #include "modules/accessibility/AXObjectCacheImpl.h"
 #include "platform/text/PlatformLocale.h"
 #include "platform/wtf/HashSet.h"
@@ -162,8 +166,6 @@ const InternalRoleEntry kInternalRoles[] = {
     {kAudioRole, "Audio"},
     {kBannerRole, "Banner"},
     {kBlockquoteRole, "Blockquote"},
-    // TODO(nektar): Delete busy_indicator role. It's used nowhere.
-    {kBusyIndicatorRole, "BusyIndicator"},
     {kButtonRole, "Button"},
     {kCanvasRole, "Canvas"},
     {kCaptionRole, "Caption"},
@@ -199,7 +201,6 @@ const InternalRoleEntry kInternalRoles[] = {
     {kIframePresentationalRole, "IframePresentational"},
     {kIframeRole, "Iframe"},
     {kIgnoredRole, "Ignored"},
-    {kImageMapLinkRole, "ImageMapLink"},
     {kImageMapRole, "ImageMap"},
     {kImageRole, "Image"},
     {kInlineTextBoxRole, "InlineTextBox"},
@@ -230,7 +231,6 @@ const InternalRoleEntry kInternalRoles[] = {
     {kNavigationRole, "Navigation"},
     {kNoneRole, "None"},
     {kNoteRole, "Note"},
-    {kOutlineRole, "Outline"},
     {kParagraphRole, "Paragraph"},
     {kPopUpButtonRole, "PopUpButton"},
     {kPreRole, "Pre"},
@@ -239,15 +239,11 @@ const InternalRoleEntry kInternalRoles[] = {
     {kRadioButtonRole, "RadioButton"},
     {kRadioGroupRole, "RadioGroup"},
     {kRegionRole, "Region"},
-    {kRootWebAreaRole, "RootWebArea"},
     {kRowHeaderRole, "RowHeader"},
     {kRowRole, "Row"},
     {kRubyRole, "Ruby"},
-    {kRulerRole, "Ruler"},
     {kSVGRootRole, "SVGRoot"},
-    {kScrollAreaRole, "ScrollArea"},
     {kScrollBarRole, "ScrollBar"},
-    {kSeamlessWebAreaRole, "SeamlessWebArea"},
     {kSearchRole, "Search"},
     {kSearchBoxRole, "SearchBox"},
     {kSliderRole, "Slider"},
@@ -258,7 +254,6 @@ const InternalRoleEntry kInternalRoles[] = {
     {kStaticTextRole, "StaticText"},
     {kStatusRole, "Status"},
     {kSwitchRole, "Switch"},
-    {kTabGroupRole, "TabGroup"},
     {kTabListRole, "TabList"},
     {kTabPanelRole, "TabPanel"},
     {kTabRole, "Tab"},
@@ -275,8 +270,7 @@ const InternalRoleEntry kInternalRoles[] = {
     {kTreeRole, "Tree"},
     {kUserInterfaceTooltipRole, "UserInterfaceTooltip"},
     {kVideoRole, "Video"},
-    {kWebAreaRole, "WebArea"},
-    {kWindowRole, "Window"}};
+    {kWebAreaRole, "WebArea"}};
 
 static_assert(WTF_ARRAY_LENGTH(kInternalRoles) == kNumRoles,
               "Not all internal roles have an entry in internalRoles array");
@@ -350,8 +344,8 @@ AXObject::AXObject(AXObjectCacheImpl& ax_object_cache)
       cached_is_descendant_of_leaf_node_(false),
       cached_is_descendant_of_disabled_node_(false),
       cached_has_inherited_presentational_role_(false),
-      cached_is_presentational_child_(false),
       cached_ancestor_exposes_active_descendant_(false),
+      cached_is_editable_root_(false),
       cached_live_region_root_(nullptr),
       ax_object_cache_(&ax_object_cache) {
   ++number_of_live_ax_objects_;
@@ -387,9 +381,7 @@ Element* AXObject::GetAOMPropertyOrARIAAttribute(
   if (!element)
     return nullptr;
 
-  AccessibleNode* target =
-      AccessibleNode::GetPropertyOrARIAAttribute(element, property);
-  return target ? target->element() : nullptr;
+  return AccessibleNode::GetPropertyOrARIAAttribute(element, property);
 }
 
 bool AXObject::HasAOMProperty(AOMRelationListProperty property,
@@ -475,6 +467,16 @@ bool AXObject::HasAOMPropertyOrARIAAttribute(AOMFloatProperty property,
   return !is_null;
 }
 
+bool AXObject::HasAOMPropertyOrARIAAttribute(AOMStringProperty property,
+                                             AtomicString& result) const {
+  Element* element = this->GetElement();
+  if (!element)
+    return false;
+
+  result = AccessibleNode::GetPropertyOrARIAAttribute(element, property);
+  return !result.IsNull();
+}
+
 bool AXObject::IsARIATextControl() const {
   return AriaRoleAttribute() == kTextFieldRole ||
          AriaRoleAttribute() == kSearchBoxRole ||
@@ -520,17 +522,16 @@ AccessibilityCheckedState AXObject::CheckedState() const {
                                               : AOMStringProperty::kChecked;
   const AtomicString& checked_attribute = GetAOMPropertyOrARIAAttribute(prop);
   if (checked_attribute) {
-    if (EqualIgnoringASCIICase(checked_attribute, "true"))
-      return kCheckedStateTrue;
-
     if (EqualIgnoringASCIICase(checked_attribute, "mixed")) {
       // Only checkable role that doesn't support mixed is the switch.
       if (role != kSwitchRole)
         return kCheckedStateMixed;
     }
 
-    if (EqualIgnoringASCIICase(checked_attribute, "false"))
-      return kCheckedStateFalse;
+    // Anything other than "false" should be treated as "true".
+    return EqualIgnoringASCIICase(checked_attribute, "false")
+               ? kCheckedStateFalse
+               : kCheckedStateTrue;
   }
 
   // Native checked state
@@ -609,21 +610,26 @@ bool AXObject::IsPasswordFieldAndShouldHideValue() const {
 }
 
 bool AXObject::IsClickable() const {
+  if (IsButton() || IsLink() || IsTextControl())
+    return true;
+
+  // TODO(dmazzoni): Ensure that kColorWellRole and kSpinButtonRole are
+  // correctly handled here via their constituent parts.
   switch (RoleValue()) {
-    case kButtonRole:
-    case kCheckBoxRole:
-    case kColorWellRole:
+    // TODO(dmazzoni): Replace kComboBoxRole with two new combo box roles.
+    // Composite widget and text field.
     case kComboBoxRole:
-    case kImageMapLinkRole:
-    case kLinkRole:
+    case kCheckBoxRole:
+    case kDisclosureTriangleRole:
+    case kListBoxRole:
     case kListBoxOptionRole:
-    case kMenuButtonRole:
-    case kPopUpButtonRole:
+    case kMenuItemCheckBoxRole:
+    case kMenuItemRadioRole:
+    case kMenuItemRole:
+    case kMenuListOptionRole:
     case kRadioButtonRole:
-    case kSpinButtonRole:
+    case kSwitchRole:
     case kTabRole:
-    case kTextFieldRole:
-    case kToggleButtonRole:
       return true;
     default:
       return false;
@@ -670,14 +676,15 @@ void AXObject::UpdateCachedAttributeValuesIfNeeded() const {
   cached_is_descendant_of_disabled_node_ = (DisabledAncestor() != 0);
   cached_has_inherited_presentational_role_ =
       (InheritsPresentationalRoleFrom() != 0);
-  cached_is_presentational_child_ =
-      (AncestorForWhichThisIsAPresentationalChild() != 0);
   cached_is_ignored_ = ComputeAccessibilityIsIgnored();
+  cached_is_editable_root_ =
+      GetNode() ? IsNativeTextControl() || IsRootEditableElement(*GetNode())
+                : false;
   cached_live_region_root_ =
       IsLiveRegion()
           ? const_cast<AXObject*>(this)
           : (ParentObjectIfExists() ? ParentObjectIfExists()->LiveRegionRoot()
-                                    : 0);
+                                    : nullptr);
   cached_ancestor_exposes_active_descendant_ =
       ComputeAncestorExposesActiveDescendant();
 }
@@ -699,15 +706,6 @@ AXObjectInclusion AXObject::DefaultObjectInclusion(
   if (IsInertOrAriaHidden()) {
     if (ignored_reasons)
       ComputeIsInertOrAriaHidden(ignored_reasons);
-    return kIgnoreObject;
-  }
-
-  if (IsPresentationalChild()) {
-    if (ignored_reasons) {
-      AXObject* ancestor = AncestorForWhichThisIsAPresentationalChild();
-      ignored_reasons->push_back(
-          IgnoredReason(kAXAncestorDisallowsChild, ancestor));
-    }
     return kIgnoreObject;
   }
 
@@ -815,6 +813,91 @@ const AXObject* AXObject::InertRoot() const {
   return 0;
 }
 
+bool AXObject::DispatchEventToAOMEventListeners(Event& event,
+                                                Element* target_element) {
+  HeapVector<Member<AccessibleNode>> event_path;
+  for (AXObject* ancestor = this; ancestor;
+       ancestor = ancestor->ParentObject()) {
+    Element* ancestor_element = ancestor->GetElement();
+    if (!ancestor_element)
+      continue;
+
+    AccessibleNode* ancestor_accessible_node =
+        ancestor_element->ExistingAccessibleNode();
+    if (!ancestor_accessible_node)
+      continue;
+
+    event_path.push_back(ancestor_accessible_node);
+  }
+
+  // Short-circuit: if there are no AccessibleNodes attached anywhere
+  // in the ancestry of this node, exit.
+  if (!event_path.size())
+    return false;
+
+  // Check if the user has granted permission for this domain to use
+  // AOM event listeners yet. This may trigger an infobar, but we shouldn't
+  // block, so whatever decision the user makes will apply to the next
+  // event received after that.
+  //
+  // Note that we only ask the user about this permission the first
+  // time an event is received that actually would have triggered an
+  // event listener. However, if the user grants this permission, it
+  // persists for this origin from then on.
+  if (!AxObjectCache().CanCallAOMEventListeners()) {
+    AxObjectCache().RequestAOMEventListenerPermission();
+    return false;
+  }
+
+  // Since we now know the AOM is being used in this document, get the
+  // AccessibleNode for the target element and create it if necessary -
+  // otherwise we wouldn't be able to set the event target. However note
+  // that if it didn't previously exist it won't be part of the event path.
+  if (!target_element)
+    target_element = GetElement();
+  AccessibleNode* target = nullptr;
+  if (target_element) {
+    target = target_element->accessibleNode();
+    event.SetTarget(target);
+  }
+
+  // Capturing phase.
+  event.SetEventPhase(Event::kCapturingPhase);
+  for (int i = static_cast<int>(event_path.size()) - 1; i >= 0; i--) {
+    // Don't call capturing event listeners on the target. Note that
+    // the target may not necessarily be in the event path which is why
+    // we check here.
+    if (event_path[i] == target)
+      break;
+
+    event.SetCurrentTarget(event_path[i]);
+    event_path[i]->FireEventListeners(&event);
+    if (event.PropagationStopped())
+      return true;
+  }
+
+  // Targeting phase.
+  event.SetEventPhase(Event::kAtTarget);
+  event.SetCurrentTarget(event_path[0]);
+  event_path[0]->FireEventListeners(&event);
+  if (event.PropagationStopped())
+    return true;
+
+  // Bubbling phase.
+  event.SetEventPhase(Event::kBubblingPhase);
+  for (size_t i = 1; i < event_path.size(); i++) {
+    event.SetCurrentTarget(event_path[i]);
+    event_path[i]->FireEventListeners(&event);
+    if (event.PropagationStopped())
+      return true;
+  }
+
+  if (event.defaultPrevented())
+    return true;
+
+  return false;
+}
+
 bool AXObject::IsDescendantOfDisabledNode() const {
   UpdateCachedAttributeValuesIfNeeded();
   return cached_is_descendant_of_disabled_node_;
@@ -850,11 +933,6 @@ void AXObject::SetLastKnownIsIgnoredValue(bool is_ignored) {
 bool AXObject::HasInheritedPresentationalRole() const {
   UpdateCachedAttributeValuesIfNeeded();
   return cached_has_inherited_presentational_role_;
-}
-
-bool AXObject::IsPresentationalChild() const {
-  UpdateCachedAttributeValuesIfNeeded();
-  return cached_is_presentational_child_;
 }
 
 bool AXObject::CanReceiveAccessibilityFocus() const {
@@ -962,6 +1040,26 @@ bool AXObject::IsSubWidget(AccessibilityRole role) {
     default:
       break;
   }
+  return false;
+}
+
+bool AXObject::SupportsSetSizeAndPosInSet() const {
+  switch (RoleValue()) {
+    case kListBoxOptionRole:
+    case kListItemRole:
+    case kMenuItemRole:
+    case kMenuItemRadioRole:
+    case kMenuItemCheckBoxRole:
+    case kMenuListOptionRole:
+    case kRadioButtonRole:
+    case kRowRole:
+    case kTabRole:
+    case kTreeItemRole:
+      return true;
+    default:
+      break;
+  }
+
   return false;
 }
 
@@ -1273,34 +1371,45 @@ AXDefaultActionVerb AXObject::Action() const {
   if (!ActionElement())
     return AXDefaultActionVerb::kNone;
 
+  // TODO(dmazzoni): Ensure that combo box text field is handled here.
+  if (IsTextControl())
+    return AXDefaultActionVerb::kActivate;
+
+  if (IsCheckable()) {
+    return CheckedState() != kCheckedStateTrue ? AXDefaultActionVerb::kCheck
+                                               : AXDefaultActionVerb::kUncheck;
+  }
+
   switch (RoleValue()) {
     case kButtonRole:
+    case kDisclosureTriangleRole:
     case kToggleButtonRole:
       return AXDefaultActionVerb::kPress;
-    case kTextFieldRole:
-      return AXDefaultActionVerb::kActivate;
+    case kListBoxOptionRole:
     case kMenuItemRadioRole:
-    case kRadioButtonRole:
+    case kMenuItemRole:
+    case kMenuListOptionRole:
       return AXDefaultActionVerb::kSelect;
     case kLinkRole:
       return AXDefaultActionVerb::kJump;
+    // TODO(dmazzoni): Change kComboBoxRole to combo box composite widget.
+    case kComboBoxRole:
+    case kListBoxRole:
     case kPopUpButtonRole:
       return AXDefaultActionVerb::kOpen;
     default:
-      if (IsCheckable()) {
-        return CheckedState() != kCheckedStateTrue
-                   ? AXDefaultActionVerb::kCheck
-                   : AXDefaultActionVerb::kUncheck;
-      }
       return AXDefaultActionVerb::kClick;
   }
 }
+
 bool AXObject::AriaPressedIsPresent() const {
-  return !GetAttribute(aria_pressedAttr).IsEmpty();
+  AtomicString result;
+  return HasAOMPropertyOrARIAAttribute(AOMStringProperty::kPressed, result);
 }
 
 bool AXObject::AriaCheckedIsPresent() const {
-  return !GetAttribute(aria_checkedAttr).IsEmpty();
+  AtomicString result;
+  return HasAOMPropertyOrARIAAttribute(AOMStringProperty::kChecked, result);
 }
 
 bool AXObject::SupportsActiveDescendant() const {
@@ -1339,27 +1448,6 @@ bool AXObject::SupportsRangeValue() const {
          IsSpinButton() || IsMoveableSplitter();
 }
 
-bool AXObject::SupportsSetSizeAndPosInSet() const {
-  AXObject* parent = ParentObjectUnignored();
-  if (!parent)
-    return false;
-
-  int role = RoleValue();
-  int parent_role = parent->RoleValue();
-
-  if ((role == kListBoxOptionRole && parent_role == kListBoxRole) ||
-      (role == kListItemRole && parent_role == kListRole) ||
-      (role == kMenuItemRole && parent_role == kMenuRole) ||
-      (role == kRadioButtonRole) ||
-      (role == kTabRole && parent_role == kTabListRole) ||
-      (role == kTreeItemRole && parent_role == kTreeRole) ||
-      (role == kTreeItemRole && parent_role == kTreeItemRole)) {
-    return true;
-  }
-
-  return false;
-}
-
 int AXObject::IndexInParent() const {
   if (!ParentObject())
     return 0;
@@ -1377,8 +1465,12 @@ int AXObject::IndexInParent() const {
 
 bool AXObject::IsLiveRegion() const {
   const AtomicString& live_region = LiveRegionStatus();
-  return EqualIgnoringASCIICase(live_region, "polite") ||
-         EqualIgnoringASCIICase(live_region, "assertive");
+  return !live_region.IsEmpty() && !EqualIgnoringASCIICase(live_region, "off");
+}
+
+bool AXObject::IsEditableRoot() const {
+  UpdateCachedAttributeValuesIfNeeded();
+  return cached_is_editable_root_;
 }
 
 AXObject* AXObject::LiveRegionRoot() const {
@@ -1407,7 +1499,9 @@ bool AXObject::ContainerLiveRegionAtomic() const {
 
 bool AXObject::ContainerLiveRegionBusy() const {
   UpdateCachedAttributeValuesIfNeeded();
-  return cached_live_region_root_ && cached_live_region_root_->LiveRegionBusy();
+  return cached_live_region_root_ &&
+         cached_live_region_root_->AOMPropertyOrARIAAttributeIsTrue(
+             AOMBooleanProperty::kBusy);
 }
 
 AXObject* AXObject::ElementAccessibilityHitTest(const IntPoint& point) const {
@@ -1704,258 +1798,230 @@ LayoutRect AXObject::GetBoundsInFrameCoordinates() const {
 // Modify or take an action on an object.
 //
 
-bool AXObject::Press() {
+bool AXObject::RequestDecrementAction() {
+  Element* element = GetElement();
+  if (element) {
+    Event* event = Event::CreateCancelable(EventTypeNames::accessibledecrement);
+    if (DispatchEventToAOMEventListeners(*event, element)) {
+      return true;
+    }
+  }
+
+  return OnNativeDecrementAction();
+}
+
+bool AXObject::RequestClickAction() {
+  Element* element = GetElement();
+  if (element) {
+    Event* event = Event::CreateCancelable(EventTypeNames::accessibleclick);
+    if (DispatchEventToAOMEventListeners(*event, element))
+      return true;
+  }
+
+  return OnNativeClickAction();
+}
+
+bool AXObject::OnNativeClickAction() {
   Document* document = GetDocument();
   if (!document)
     return false;
 
-  UserGestureIndicator gesture_indicator(
-      UserGestureToken::Create(document, UserGestureToken::kNewGesture));
+  std::unique_ptr<UserGestureIndicator> gesture_indicator =
+      LocalFrame::CreateUserGesture(document->GetFrame(),
+                                    UserGestureToken::kNewGesture);
   Element* action_elem = ActionElement();
   if (action_elem) {
     action_elem->AccessKeyAction(true);
     return true;
   }
 
-  if (CanSetFocusAttribute()) {
-    SetFocused(true);
-    return true;
-  }
+  if (CanSetFocusAttribute())
+    return OnNativeFocusAction();
 
   return false;
 }
 
-void AXObject::ScrollToMakeVisible() const {
-  IntRect object_rect = PixelSnappedIntRect(GetBoundsInFrameCoordinates());
-  object_rect.SetLocation(IntPoint());
-  ScrollToMakeVisibleWithSubFocus(object_rect);
+bool AXObject::RequestFocusAction() {
+  Element* element = GetElement();
+  if (element) {
+    Event* event = Event::CreateCancelable(EventTypeNames::accessiblefocus);
+    if (DispatchEventToAOMEventListeners(*event, element))
+      return true;
+  }
+
+  return OnNativeFocusAction();
 }
 
-// This is a 1-dimensional scroll offset helper function that's applied
-// separately in the horizontal and vertical directions, because the
-// logic is the same. The goal is to compute the best scroll offset
-// in order to make an object visible within a viewport.
-//
-// If the object is already fully visible, returns the same scroll
-// offset.
-//
-// In case the whole object cannot fit, you can specify a
-// subfocus - a smaller region within the object that should
-// be prioritized. If the whole object can fit, the subfocus is
-// ignored.
-//
-// If possible, the object and subfocus are centered within the
-// viewport.
-//
-// Example 1: the object is already visible, so nothing happens.
-//   +----------Viewport---------+
-//                 +---Object---+
-//                 +--SubFocus--+
-//
-// Example 2: the object is not fully visible, so it's centered
-// within the viewport.
-//   Before:
-//   +----------Viewport---------+
-//                         +---Object---+
-//                         +--SubFocus--+
-//
-//   After:
-//                 +----------Viewport---------+
-//                         +---Object---+
-//                         +--SubFocus--+
-//
-// Example 3: the object is larger than the viewport, so the
-// viewport moves to show as much of the object as possible,
-// while also trying to center the subfocus.
-//   Before:
-//   +----------Viewport---------+
-//     +---------------Object--------------+
-//                         +-SubFocus-+
-//
-//   After:
-//             +----------Viewport---------+
-//     +---------------Object--------------+
-//                         +-SubFocus-+
-//
-// When constraints cannot be fully satisfied, the min
-// (left/top) position takes precedence over the max (right/bottom).
-//
-// Note that the return value represents the ideal new scroll offset.
-// This may be out of range - the calling function should clip this
-// to the available range.
-static int ComputeBestScrollOffset(int current_scroll_offset,
-                                   int subfocus_min,
-                                   int subfocus_max,
-                                   int object_min,
-                                   int object_max,
-                                   int viewport_min,
-                                   int viewport_max) {
-  int viewport_size = viewport_max - viewport_min;
-
-  // If the object size is larger than the viewport size, consider
-  // only a portion that's as large as the viewport, centering on
-  // the subfocus as much as possible.
-  if (object_max - object_min > viewport_size) {
-    // Since it's impossible to fit the whole object in the
-    // viewport, exit now if the subfocus is already within the viewport.
-    if (subfocus_min - current_scroll_offset >= viewport_min &&
-        subfocus_max - current_scroll_offset <= viewport_max)
-      return current_scroll_offset;
-
-    // Subfocus must be within focus.
-    subfocus_min = std::max(subfocus_min, object_min);
-    subfocus_max = std::min(subfocus_max, object_max);
-
-    // Subfocus must be no larger than the viewport size; favor top/left.
-    if (subfocus_max - subfocus_min > viewport_size)
-      subfocus_max = subfocus_min + viewport_size;
-
-    // Compute the size of an object centered on the subfocus, the size of the
-    // viewport.
-    int centered_object_min = (subfocus_min + subfocus_max - viewport_size) / 2;
-    int centered_object_max = centered_object_min + viewport_size;
-
-    object_min = std::max(object_min, centered_object_min);
-    object_max = std::min(object_max, centered_object_max);
+bool AXObject::RequestIncrementAction() {
+  Element* element = GetElement();
+  if (element) {
+    Event* event = Event::CreateCancelable(EventTypeNames::accessibleincrement);
+    if (DispatchEventToAOMEventListeners(*event, element))
+      return true;
   }
 
-  // Exit now if the focus is already within the viewport.
-  if (object_min - current_scroll_offset >= viewport_min &&
-      object_max - current_scroll_offset <= viewport_max)
-    return current_scroll_offset;
-
-  // Center the object in the viewport.
-  return (object_min + object_max - viewport_min - viewport_max) / 2;
+  return OnNativeIncrementAction();
 }
 
-void AXObject::ScrollToMakeVisibleWithSubFocus(const IntRect& subfocus) const {
-  // Search up the parent chain until we find the first one that's scrollable.
-  const AXObject* scroll_parent = ParentObject() ? ParentObject() : this;
-  ScrollableArea* scrollable_area = 0;
-  while (scroll_parent) {
-    scrollable_area = scroll_parent->GetScrollableAreaIfScrollable();
-    if (scrollable_area)
-      break;
-    scroll_parent = scroll_parent->ParentObject();
-  }
-  if (!scroll_parent || !scrollable_area)
-    return;
-
-  IntRect object_rect = PixelSnappedIntRect(GetBoundsInFrameCoordinates());
-  IntSize scroll_offset = scrollable_area->ScrollOffsetInt();
-  IntRect scroll_visible_rect = scrollable_area->VisibleContentRect();
-
-  // Convert the object rect into local coordinates.
-  if (!scroll_parent->IsWebArea()) {
-    object_rect.MoveBy(IntPoint(scroll_offset));
-    object_rect.MoveBy(
-        -PixelSnappedIntRect(scroll_parent->GetBoundsInFrameCoordinates())
-             .Location());
-  }
-
-  int desired_x = ComputeBestScrollOffset(
-      scroll_offset.Width(), object_rect.X() + subfocus.X(),
-      object_rect.X() + subfocus.MaxX(), object_rect.X(), object_rect.MaxX(), 0,
-      scroll_visible_rect.Width());
-  int desired_y = ComputeBestScrollOffset(
-      scroll_offset.Height(), object_rect.Y() + subfocus.Y(),
-      object_rect.Y() + subfocus.MaxY(), object_rect.Y(), object_rect.MaxY(), 0,
-      scroll_visible_rect.Height());
-
-  scroll_parent->SetScrollOffset(IntPoint(desired_x, desired_y));
-
-  // Convert the subfocus into the coordinates of the scroll parent.
-  IntRect new_subfocus = subfocus;
-  IntRect new_element_rect = PixelSnappedIntRect(GetBoundsInFrameCoordinates());
-  IntRect scroll_parent_rect =
-      PixelSnappedIntRect(scroll_parent->GetBoundsInFrameCoordinates());
-  new_subfocus.Move(new_element_rect.X(), new_element_rect.Y());
-  new_subfocus.Move(-scroll_parent_rect.X(), -scroll_parent_rect.Y());
-
-  if (scroll_parent->ParentObject()) {
-    // Recursively make sure the scroll parent itself is visible.
-    scroll_parent->ScrollToMakeVisibleWithSubFocus(new_subfocus);
-  } else {
-    // To minimize the number of notifications, only fire one on the topmost
-    // object that has been scrolled.
-    AxObjectCache().PostNotification(const_cast<AXObject*>(this),
-                                     AXObjectCacheImpl::kAXLocationChanged);
-  }
+bool AXObject::RequestScrollToGlobalPointAction(const IntPoint& point) {
+  return OnNativeScrollToGlobalPointAction(point);
 }
 
-void AXObject::ScrollToGlobalPoint(const IntPoint& global_point) const {
-  // Search up the parent chain and create a vector of all scrollable parent
-  // objects and ending with this object itself.
-  HeapVector<Member<const AXObject>> objects;
-  AXObject* parent_object;
-  for (parent_object = this->ParentObject(); parent_object;
-       parent_object = parent_object->ParentObject()) {
-    if (parent_object->GetScrollableAreaIfScrollable())
-      objects.push_front(parent_object);
-  }
-  objects.push_back(this);
-
-  // Start with the outermost scrollable (the main window) and try to scroll the
-  // next innermost object to the given point.
-  int offset_x = 0, offset_y = 0;
-  IntPoint point = global_point;
-  size_t levels = objects.size() - 1;
-  for (size_t i = 0; i < levels; i++) {
-    const AXObject* outer = objects[i];
-    const AXObject* inner = objects[i + 1];
-    ScrollableArea* scrollable_area = outer->GetScrollableAreaIfScrollable();
-
-    IntRect inner_rect =
-        inner->IsWebArea()
-            ? PixelSnappedIntRect(
-                  inner->ParentObject()->GetBoundsInFrameCoordinates())
-            : PixelSnappedIntRect(inner->GetBoundsInFrameCoordinates());
-    IntRect object_rect = inner_rect;
-    IntSize scroll_offset = scrollable_area->ScrollOffsetInt();
-
-    // Convert the object rect into local coordinates.
-    object_rect.Move(offset_x, offset_y);
-    if (!outer->IsWebArea())
-      object_rect.Move(scroll_offset.Width(), scroll_offset.Height());
-
-    int desired_x = ComputeBestScrollOffset(
-        0, object_rect.X(), object_rect.MaxX(), object_rect.X(),
-        object_rect.MaxX(), point.X(), point.X());
-    int desired_y = ComputeBestScrollOffset(
-        0, object_rect.Y(), object_rect.MaxY(), object_rect.Y(),
-        object_rect.MaxY(), point.Y(), point.Y());
-    outer->SetScrollOffset(IntPoint(desired_x, desired_y));
-
-    if (outer->IsWebArea() && !inner->IsWebArea()) {
-      // If outer object we just scrolled is a web area (frame) but the inner
-      // object is not, keep track of the coordinate transformation to apply to
-      // future nested calculations.
-      scroll_offset = scrollable_area->ScrollOffsetInt();
-      offset_x -= (scroll_offset.Width() + point.X());
-      offset_y -= (scroll_offset.Height() + point.Y());
-      point.Move(scroll_offset.Width() - inner_rect.Width(),
-                 scroll_offset.Height() - inner_rect.Y());
-    } else if (inner->IsWebArea()) {
-      // Otherwise, if the inner object is a web area, reset the coordinate
-      // transformation.
-      offset_x = 0;
-      offset_y = 0;
-    }
+bool AXObject::RequestScrollToMakeVisibleAction() {
+  Element* element = GetElement();
+  if (element) {
+    Event* event =
+        Event::CreateCancelable(EventTypeNames::accessiblescrollintoview);
+    if (DispatchEventToAOMEventListeners(*event, element))
+      return true;
   }
 
-  // To minimize the number of notifications, only fire one on the topmost
-  // object that has been scrolled.
-  DCHECK(objects[0]);
-  // TODO(nektar): Switch to postNotification(objects[0] and remove |getNode|.
-  AxObjectCache().PostNotification(objects[0]->GetNode(),
-                                   AXObjectCacheImpl::kAXLocationChanged);
+  return OnNativeScrollToMakeVisibleAction();
 }
 
-void AXObject::SetSequentialFocusNavigationStartingPoint() {
+bool AXObject::RequestScrollToMakeVisibleWithSubFocusAction(
+    const IntRect& subfocus) {
+  return OnNativeScrollToMakeVisibleWithSubFocusAction(subfocus);
+}
+
+bool AXObject::RequestSetSelectedAction(bool selected) {
+  return OnNativeSetSelectedAction(selected);
+}
+
+bool AXObject::RequestSetSelectionAction(const AXRange& range) {
+  return OnNativeSetSelectionAction(range);
+}
+
+bool AXObject::RequestSetSequentialFocusNavigationStartingPointAction() {
+  return OnNativeSetSequentialFocusNavigationStartingPointAction();
+}
+
+bool AXObject::RequestSetValueAction(const String& value) {
+  return OnNativeSetValueAction(value);
+}
+
+bool AXObject::RequestShowContextMenuAction() {
+  Element* element = GetElement();
+  if (element) {
+    Event* event =
+        Event::CreateCancelable(EventTypeNames::accessiblecontextmenu);
+    if (DispatchEventToAOMEventListeners(*event, element))
+      return true;
+  }
+
+  return OnNativeShowContextMenuAction();
+}
+
+bool AXObject::OnNativeScrollToMakeVisibleAction() const {
+  Node* node = GetNode();
+  LayoutObject* layout_object = node ? node->GetLayoutObject() : nullptr;
+  if (!layout_object || !node->isConnected())
+    return false;
+  LayoutRect target_rect(layout_object->AbsoluteBoundingBoxRect());
+  layout_object->ScrollRectToVisible(
+      target_rect, ScrollAlignment::kAlignCenterIfNeeded,
+      ScrollAlignment::kAlignCenterIfNeeded, kProgrammaticScroll,
+      !GetDocument()->GetPage()->GetSettings().GetInertVisualViewport(),
+      kScrollBehaviorAuto);
+  AxObjectCache().PostNotification(
+      AxObjectCache().GetOrCreate(GetDocument()->GetLayoutView()),
+      AXObjectCacheImpl::kAXLocationChanged);
+  return true;
+}
+
+bool AXObject::OnNativeScrollToMakeVisibleWithSubFocusAction(
+    const IntRect& rect) const {
+  Node* node = GetNode();
+  LayoutObject* layout_object = node ? node->GetLayoutObject() : nullptr;
+  if (!layout_object || !node->isConnected())
+    return false;
+  LayoutRect target_rect(
+      layout_object->LocalToAbsoluteQuad(FloatQuad(FloatRect(rect)))
+          .BoundingBox());
+  // TODO(szager): This scroll alignment is intended to preserve existing
+  // behavior to the extent possible, but it's not clear that this behavior is
+  // well-spec'ed or optimal.  In particular, it favors centering things in
+  // the visible viewport rather than snapping them to the closest edge, which
+  // is the default behavior of element.scrollIntoView.
+  ScrollAlignment scroll_alignment = {
+      kScrollAlignmentNoScroll, kScrollAlignmentCenter, kScrollAlignmentCenter};
+  layout_object->ScrollRectToVisible(
+      target_rect, scroll_alignment, scroll_alignment, kProgrammaticScroll,
+      !GetDocument()->GetPage()->GetSettings().GetInertVisualViewport(),
+      kScrollBehaviorAuto);
+  AxObjectCache().PostNotification(
+      AxObjectCache().GetOrCreate(GetDocument()->GetLayoutView()),
+      AXObjectCacheImpl::kAXLocationChanged);
+  return true;
+}
+
+bool AXObject::OnNativeScrollToGlobalPointAction(
+    const IntPoint& global_point) const {
+  Node* node = GetNode();
+  LayoutObject* layout_object = node ? node->GetLayoutObject() : nullptr;
+  if (!layout_object || !node->isConnected())
+    return false;
+  LayoutRect target_rect(layout_object->AbsoluteBoundingBoxRect());
+  target_rect.MoveBy(-global_point);
+  layout_object->ScrollRectToVisible(
+      target_rect, ScrollAlignment::kAlignLeftAlways,
+      ScrollAlignment::kAlignTopAlways, kProgrammaticScroll,
+      !GetDocument()->GetPage()->GetSettings().GetInertVisualViewport(),
+      kScrollBehaviorAuto);
+  AxObjectCache().PostNotification(
+      AxObjectCache().GetOrCreate(GetDocument()->GetLayoutView()),
+      AXObjectCacheImpl::kAXLocationChanged);
+  return true;
+}
+
+bool AXObject::OnNativeSetSequentialFocusNavigationStartingPointAction() {
   // Call it on the nearest ancestor that overrides this with a specific
   // implementation.
-  if (ParentObject())
-    ParentObject()->SetSequentialFocusNavigationStartingPoint();
+  if (ParentObject()) {
+    return ParentObject()
+        ->OnNativeSetSequentialFocusNavigationStartingPointAction();
+  }
+  return false;
+}
+
+bool AXObject::OnNativeDecrementAction() {
+  return false;
+}
+
+bool AXObject::OnNativeFocusAction() {
+  return false;
+}
+
+bool AXObject::OnNativeIncrementAction() {
+  return false;
+}
+
+bool AXObject::OnNativeSetValueAction(const String&) {
+  return false;
+}
+
+bool AXObject::OnNativeSetSelectedAction(bool) {
+  return false;
+}
+
+bool AXObject::OnNativeSetSelectionAction(const AXRange& range) {
+  return false;
+}
+
+bool AXObject::OnNativeShowContextMenuAction() {
+  Element* element = GetElement();
+  if (!element)
+    element = ParentObject() ? ParentObject()->GetElement() : nullptr;
+  if (!element)
+    return false;
+
+  Document* document = GetDocument();
+  if (!document || !document->GetFrame())
+    return false;
+
+  ContextMenuAllowedScope scope;
+  document->GetFrame()->GetEventHandler().ShowNonLocatedContextMenu(element);
+  return true;
 }
 
 void AXObject::NotifyIfIgnoredValueChanged() {
@@ -2104,10 +2170,8 @@ bool AXObject::NameFromContents(bool recursive) const {
     case kMeterRole:
     case kNavigationRole:
     case kNoteRole:
-    case kOutlineRole:
     case kProgressIndicatorRole:
     case kRadioGroupRole:
-    case kRootWebAreaRole:
     case kScrollBarRole:
     case kSearchRole:
     case kSearchBoxRole:
@@ -2115,14 +2179,11 @@ bool AXObject::NameFromContents(bool recursive) const {
     case kSliderRole:
     case kSpinButtonRole:
     case kStatusRole:
-    case kScrollAreaRole:
-    case kSeamlessWebAreaRole:
     case kSliderThumbRole:
     case kSpinButtonPartRole:
     case kSVGRootRole:
     case kTableRole:
     case kTableHeaderContainerRole:
-    case kTabGroupRole:
     case kTabListRole:
     case kTabPanelRole:
     case kTermRole:
@@ -2134,7 +2195,6 @@ bool AXObject::NameFromContents(bool recursive) const {
     case kTreeGridRole:
     case kVideoRole:
     case kWebAreaRole:
-    case kWindowRole:
       result = false;
       break;
 
@@ -2143,7 +2203,6 @@ bool AXObject::NameFromContents(bool recursive) const {
     // only have their own name if they are focusable
     case kAbbrRole:
     case kAnnotationRole:
-    case kBusyIndicatorRole:
     case kCanvasRole:
     case kCaptionRole:
     case kDescriptionListDetailRole:
@@ -2154,7 +2213,6 @@ bool AXObject::NameFromContents(bool recursive) const {
     case kFooterRole:
     case kGenericContainerRole:
     case kIgnoredRole:
-    case kImageMapLinkRole:
     case kImageMapRole:
     case kInlineTextBoxRole:
     case kLabelRole:
@@ -2173,7 +2231,6 @@ bool AXObject::NameFromContents(bool recursive) const {
     // if the row might receive focus
     case kRowRole:
     case kRubyRole:
-    case kRulerRole:
       result = recursive || (CanReceiveAccessibilityFocus() && !IsEditable());
       break;
 

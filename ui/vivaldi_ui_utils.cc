@@ -14,25 +14,19 @@
 #include "chrome/browser/thumbnails/thumbnail_utils.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "extensions/browser/app_window/app_window.h"
-#include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
-#include "extensions/common/api/extension_types.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/scrollbar_size.h"
 #include "ui/gfx/skbitmap_operations.h"
-#if defined(OS_WIN) || defined(OS_LINUX)
 #include "ui/vivaldi_browser_window.h"
-#endif  // OS_WIN || OS_LINUX
 #include "skia/ext/image_operations.h"
 #include "skia/ext/platform_canvas.h"
 #include "ui/views/widget/widget.h"
-
-using extensions::AppWindowRegistry;
 
 namespace vivaldi {
 namespace ui_tools {
@@ -69,12 +63,11 @@ extensions::WebViewGuest* GetActiveWebGuestFromBrowser(Browser* browser) {
 }
 
 /*static*/
-extensions::AppWindow* GetActiveAppWindow() {
+VivaldiBrowserWindow* GetActiveAppWindow() {
 #if defined(OS_WIN) || defined(OS_LINUX)
   Browser* browser = chrome::FindLastActive();
   if (browser && browser->is_vivaldi())
-    return static_cast<const VivaldiBrowserWindow*>(browser->window())
-        ->GetAppWindow();
+    return static_cast<VivaldiBrowserWindow*>(browser->window());
 #endif
   return nullptr;
 }
@@ -93,14 +86,11 @@ content::WebContents* GetWebContentsFromTabStrip(int tab_id, Profile* profile) {
 bool IsOutsideAppWindow(int screen_x, int screen_y, Profile* profile) {
   gfx::Point screen_point(screen_x, screen_y);
 
-  AppWindowRegistry* app_window_registry =
-      AppWindowRegistry::Factory::GetForBrowserContext(profile, false);
-  AppWindowRegistry::AppWindowList list =
-      app_window_registry->GetAppWindowsForApp(::vivaldi::kVivaldiAppId);
-
   bool outside = true;
-  for (auto* win : list) {
-    gfx::Rect rect = win->GetBaseWindow()->GetBounds();
+  for (auto* browser : *BrowserList::GetInstance()) {
+    gfx::Rect rect = static_cast<VivaldiBrowserWindow*>(browser->window())
+                         ->GetBaseWindow()
+                         ->GetBounds();
     if (rect.Contains(screen_point)) {
       outside = false;
       break;
@@ -204,14 +194,6 @@ SkBitmap SmartCropAndSize(const SkBitmap& capture,
   }
 #endif
   return result;
-}
-
-Browser* GetBrowserFromWebContents(content::WebContents* web_contents) {
-  DCHECK(web_contents);
-  gfx::NativeWindow window =
-    platform_util::GetTopLevel(web_contents->GetNativeView());
-  DCHECK(window);
-  return chrome::FindBrowserWithWindow(window);
 }
 
 }  // namespace ui_tools

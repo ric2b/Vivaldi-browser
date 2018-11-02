@@ -65,19 +65,21 @@ class ScrollContentsView : public views::View {
     PositionHeaderRows();
   }
 
-  void PaintChildren(const ui::PaintContext& context) override {
-    views::View::PaintChildren(context);
+  void PaintChildren(const views::PaintInfo& paint_info) override {
+    views::View::PaintChildren(paint_info);
     bool did_draw_shadow = false;
     // Paint header row separators.
     for (auto& header : headers_)
-      did_draw_shadow = PaintDelineation(header, context) || did_draw_shadow;
+      did_draw_shadow =
+          PaintDelineation(header, paint_info.context()) || did_draw_shadow;
 
     // Draw a shadow at the top of the viewport when scrolled, but only if a
     // header didn't already draw one. Overlap the shadow with the separator
     // that's below the header view so we don't get both a separator and a full
     // shadow.
     if (y() != 0 && !did_draw_shadow)
-      DrawShadow(context, gfx::Rect(0, 0, width(), -y() - kSeparatorWidth));
+      DrawShadow(paint_info.context(),
+                 gfx::Rect(0, 0, width(), -y() - kSeparatorWidth));
   }
 
   void Layout() override {
@@ -406,7 +408,7 @@ void TrayDetailsView::ShowProgress(double value, bool visible) {
   child_at(kTitleRowSeparatorIndex)->SetVisible(!visible);
 }
 
-views::CustomButton* TrayDetailsView::CreateSettingsButton(
+views::Button* TrayDetailsView::CreateSettingsButton(
     int setting_accessible_name_id) {
   SystemMenuButton* button =
       new SystemMenuButton(this, TrayPopupInkDropStyle::HOST_CENTERED,
@@ -416,7 +418,7 @@ views::CustomButton* TrayDetailsView::CreateSettingsButton(
   return button;
 }
 
-views::CustomButton* TrayDetailsView::CreateHelpButton() {
+views::Button* TrayDetailsView::CreateHelpButton() {
   SystemMenuButton* button =
       new SystemMenuButton(this, TrayPopupInkDropStyle::HOST_CENTERED,
                            kSystemMenuHelpIcon, IDS_ASH_STATUS_TRAY_HELP);
@@ -451,7 +453,8 @@ void TrayDetailsView::DoTransitionToDefaultView() {
   // Cache pointer to owner in this function scope. TrayDetailsView will be
   // deleted after called ShowDefaultView.
   SystemTrayItem* owner = owner_;
-  owner->system_tray()->ShowDefaultView(BUBBLE_USE_EXISTING);
+  owner->system_tray()->ShowDefaultView(BUBBLE_USE_EXISTING,
+                                        false /* show_by_click */);
   owner->set_restore_focus(false);
 }
 

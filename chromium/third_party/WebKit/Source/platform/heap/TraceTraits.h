@@ -5,11 +5,11 @@
 #ifndef TraceTraits_h
 #define TraceTraits_h
 
+#include "platform/bindings/ScriptWrappableVisitor.h"
 #include "platform/heap/GCInfo.h"
 #include "platform/heap/Heap.h"
 #include "platform/heap/StackFrameDepth.h"
 #include "platform/heap/Visitor.h"
-#include "platform/heap/WrapperVisitor.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/HashCountedSet.h"
@@ -97,6 +97,22 @@ class AdjustAndMarkTrait<T, false> {
     }
     visitor->Mark(const_cast<T*>(t), &TraceTrait<T>::Trace);
   }
+
+  static HeapObjectHeader* GetHeapObjectHeader(const T* self) {
+#if DCHECK_IS_ON()
+    HeapObjectHeader::CheckFromPayload(self);
+#endif
+    return HeapObjectHeader::FromPayload(self);
+  }
+
+  static void TraceMarkedWrapper(const ScriptWrappableVisitor* visitor,
+                                 const T* self) {
+    // The term *mark* is misleading here as we effectively trace through the
+    // API boundary, i.e., tell V8 that an object is alive. Actual marking
+    // will be done in V8.
+    visitor->DispatchTraceWrappers(self);
+    visitor->MarkWrappersInAllWorlds(self);
+  }
 };
 
 template <typename T>
@@ -109,6 +125,15 @@ class AdjustAndMarkTrait<T, true> {
     if (!self)
       return;
     self->AdjustAndMark(visitor);
+  }
+
+  static HeapObjectHeader* GetHeapObjectHeader(const T* self) {
+    return self->GetHeapObjectHeader();
+  }
+
+  static void TraceMarkedWrapper(const ScriptWrappableVisitor* visitor,
+                                 const T* self) {
+    self->AdjustAndTraceMarkedWrapper(visitor);
   }
 };
 
@@ -193,8 +218,8 @@ class TraceTrait {
  public:
   static void Trace(Visitor*, void* self);
 
-  static void MarkWrapperNoTracing(const WrapperVisitor*, const void*);
-  static void TraceMarkedWrapper(const WrapperVisitor*, const void*);
+  static void MarkWrapperNoTracing(const ScriptWrappableVisitor*, const void*);
+  static void TraceMarkedWrapper(const ScriptWrappableVisitor*, const void*);
   static HeapObjectHeader* GetHeapObjectHeader(const void*);
 
   template <typename VisitorDispatcher>
@@ -205,13 +230,8 @@ class TraceTrait {
  private:
   static const T* ToWrapperTracingType(const void* t) {
     static_assert(sizeof(T), "type needs to be defined");
-    static_assert(!NeedsAdjustAndMark<T>::value,
-                  "wrapper tracing is not supported within mixins");
     static_assert(IsGarbageCollectedType<T>::value,
                   "only objects deriving from GarbageCollected can be used");
-#if DCHECK_IS_ON()
-    HeapObjectHeader::CheckFromPayload(t);
-#endif
     return reinterpret_cast<const T*>(t);
   }
 };
@@ -226,7 +246,7 @@ void TraceTrait<T>::Trace(Visitor* visitor, void* self) {
 }
 
 template <typename T>
-void TraceTrait<T>::MarkWrapperNoTracing(const WrapperVisitor* visitor,
+void TraceTrait<T>::MarkWrapperNoTracing(const ScriptWrappableVisitor* visitor,
                                          const void* t) {
   const T* traceable = ToWrapperTracingType(t);
   DCHECK(!GetHeapObjectHeader(traceable)->IsWrapperHeaderMarked());
@@ -234,20 +254,16 @@ void TraceTrait<T>::MarkWrapperNoTracing(const WrapperVisitor* visitor,
 }
 
 template <typename T>
-void TraceTrait<T>::TraceMarkedWrapper(const WrapperVisitor* visitor,
+void TraceTrait<T>::TraceMarkedWrapper(const ScriptWrappableVisitor* visitor,
                                        const void* t) {
   const T* traceable = ToWrapperTracingType(t);
-  DCHECK(GetHeapObjectHeader(t)->IsWrapperHeaderMarked());
-  // The term *mark* is misleading here as we effectively trace through the
-  // API boundary, i.e., tell V8 that an object is alive. Actual marking
-  // will be done in V8.
-  visitor->DispatchTraceWrappers(traceable);
-  visitor->MarkWrappersInAllWorlds(traceable);
+  DCHECK(GetHeapObjectHeader(traceable)->IsWrapperHeaderMarked());
+  AdjustAndMarkTrait<T>::TraceMarkedWrapper(visitor, traceable);
 }
 
 template <typename T>
 HeapObjectHeader* TraceTrait<T>::GetHeapObjectHeader(const void* t) {
-  return HeapObjectHeader::FromPayload(ToWrapperTracingType(t));
+  return AdjustAndMarkTrait<T>::GetHeapObjectHeader(ToWrapperTracingType(t));
 }
 
 template <typename T, typename Traits>

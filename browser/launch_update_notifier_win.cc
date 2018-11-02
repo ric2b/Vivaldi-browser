@@ -19,10 +19,21 @@
 
 
 namespace vivaldi {
+
 void LaunchUpdateNotifier(Profile* profile) {
-  // Don't launch the update notifier if we are not running as Vivaldi
+  // Don't launch the update notifier if we are not running as Vivaldi.
   if (!vivaldi::IsVivaldiRunning())
     return;
+
+  base::CommandLine* vivaldi_command_line =
+      base::CommandLine::ForCurrentProcess();
+
+#if defined(COMPONENT_BUILD)
+  // For component (local) builds, the '--launch-updater' switch must be
+  // present to launch the updater.
+  if (!vivaldi_command_line->HasSwitch(switches::kLaunchUpdater))
+    return;
+#endif
 
   std::unique_ptr<base::Environment> env(base::Environment::Create());
   // For non-interactive tests we don't launch the update notifier.
@@ -37,9 +48,6 @@ void LaunchUpdateNotifier(Profile* profile) {
   base::string16 command;
   base::string16 notifier_path_string(
       L"\"" + update_notifier_path.value() + L"\"");
-
-  base::CommandLine* vivaldi_command_line =
-      base::CommandLine::ForCurrentProcess();
 
   base::CommandLine update_notifier_command(update_notifier_path);
   if (vivaldi_command_line->HasSwitch(switches::kVivaldiUpdateURL))

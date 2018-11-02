@@ -110,10 +110,22 @@ void FontBuilder::SetFamilyDescription(
   SetFamilyDescription(font_description_, family_description);
 }
 
-void FontBuilder::SetWeight(FontWeight font_weight) {
+void FontBuilder::SetWeight(FontSelectionValue weight) {
   Set(PropertySetFlag::kWeight);
 
-  font_description_.SetWeight(font_weight);
+  font_description_.SetWeight(weight);
+}
+
+void FontBuilder::SetStyle(FontSelectionValue slope) {
+  Set(PropertySetFlag::kStyle);
+
+  font_description_.SetStyle(slope);
+}
+
+void FontBuilder::SetStretch(FontSelectionValue stretch) {
+  Set(PropertySetFlag::kStretch);
+
+  font_description_.SetStretch(stretch);
 }
 
 void FontBuilder::SetSize(const FontDescription::Size& size) {
@@ -126,22 +138,10 @@ void FontBuilder::SetSizeAdjust(float aspect_value) {
   font_description_.SetSizeAdjust(aspect_value);
 }
 
-void FontBuilder::SetStretch(FontStretch font_stretch) {
-  Set(PropertySetFlag::kStretch);
-
-  font_description_.SetStretch(font_stretch);
-}
-
-void FontBuilder::SetLocale(PassRefPtr<const LayoutLocale> locale) {
+void FontBuilder::SetLocale(RefPtr<const LayoutLocale> locale) {
   Set(PropertySetFlag::kLocale);
 
   font_description_.SetLocale(std::move(locale));
-}
-
-void FontBuilder::SetStyle(FontStyle italic) {
-  Set(PropertySetFlag::kStyle);
-
-  font_description_.SetStyle(italic);
 }
 
 void FontBuilder::SetVariantCaps(FontDescription::FontVariantCaps caps) {
@@ -181,13 +181,12 @@ void FontBuilder::SetFontSmoothing(FontSmoothingMode foont_smoothing_mode) {
   font_description_.SetFontSmoothing(foont_smoothing_mode);
 }
 
-void FontBuilder::SetFeatureSettings(PassRefPtr<FontFeatureSettings> settings) {
+void FontBuilder::SetFeatureSettings(RefPtr<FontFeatureSettings> settings) {
   Set(PropertySetFlag::kFeatureSettings);
   font_description_.SetFeatureSettings(std::move(settings));
 }
 
-void FontBuilder::SetVariationSettings(
-    PassRefPtr<FontVariationSettings> settings) {
+void FontBuilder::SetVariationSettings(RefPtr<FontVariationSettings> settings) {
   Set(PropertySetFlag::kVariationSettings);
   font_description_.SetVariationSettings(std::move(settings));
 }

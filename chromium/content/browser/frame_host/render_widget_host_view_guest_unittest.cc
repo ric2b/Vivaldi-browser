@@ -13,9 +13,9 @@
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
-#include "cc/surfaces/surface.h"
-#include "cc/surfaces/surface_manager.h"
 #include "components/viz/common/surfaces/surface_sequence.h"
+#include "components/viz/service/surfaces/surface.h"
+#include "components/viz/service/surfaces/surface_manager.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/compositor/test/no_transport_image_transport_factory.h"
 #include "content/browser/gpu/compositor_util.h"
@@ -26,7 +26,9 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_context.h"
+#include "content/test/dummy_render_widget_host_delegate.h"
 #include "content/test/fake_renderer_compositor_frame_sink.h"
+#include "content/test/mock_widget_impl.h"
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_web_contents.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -34,21 +36,6 @@
 
 namespace content {
 namespace {
-class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
- public:
-  MockRenderWidgetHostDelegate() {}
-  ~MockRenderWidgetHostDelegate() override {}
-
- private:
-  // RenderWidgetHostDelegate:
-  void ExecuteEditCommand(
-      const std::string& command,
-      const base::Optional<base::string16>& value) override {}
-  void Cut() override {}
-  void Copy() override {}
-  void Paste() override {}
-  void SelectAll() override {}
-};
 
 class RenderWidgetHostViewGuestTest : public testing::Test {
  public:
@@ -66,8 +53,11 @@ class RenderWidgetHostViewGuestTest : public testing::Test {
     MockRenderProcessHost* process_host =
         new MockRenderProcessHost(browser_context_.get());
     int32_t routing_id = process_host->GetNextRoutingID();
-    widget_host_ =
-        new RenderWidgetHostImpl(&delegate_, process_host, routing_id, false);
+    mojom::WidgetPtr widget;
+    widget_impl_ = base::MakeUnique<MockWidgetImpl>(mojo::MakeRequest(&widget));
+
+    widget_host_ = new RenderWidgetHostImpl(
+        &delegate_, process_host, routing_id, std::move(widget), false);
     view_ = RenderWidgetHostViewGuest::Create(
         widget_host_, NULL,
         (new TestRenderWidgetHostView(widget_host_))->GetWeakPtr());
@@ -93,10 +83,11 @@ class RenderWidgetHostViewGuestTest : public testing::Test {
   base::test::ScopedTaskEnvironment scoped_task_environment_;
 
   std::unique_ptr<BrowserContext> browser_context_;
-  MockRenderWidgetHostDelegate delegate_;
+  DummyRenderWidgetHostDelegate delegate_;
 
   // Tests should set these to NULL if they've already triggered their
   // destruction.
+  std::unique_ptr<MockWidgetImpl> widget_impl_;
   RenderWidgetHostImpl* widget_host_;
   RenderWidgetHostViewGuest* view_;
 
@@ -167,15 +158,18 @@ class RenderWidgetHostViewGuestSurfaceTest
         web_contents_.get(), &browser_plugin_guest_delegate_);
 
     int32_t routing_id = process_host->GetNextRoutingID();
-    widget_host_ =
-        new RenderWidgetHostImpl(&delegate_, process_host, routing_id, false);
+    mojom::WidgetPtr widget;
+    widget_impl_ = base::MakeUnique<MockWidgetImpl>(mojo::MakeRequest(&widget));
+
+    widget_host_ = new RenderWidgetHostImpl(
+        &delegate_, process_host, routing_id, std::move(widget), false);
     view_ = RenderWidgetHostViewGuest::Create(
         widget_host_, browser_plugin_guest_,
         (new TestRenderWidgetHostView(widget_host_))->GetWeakPtr());
-    cc::mojom::CompositorFrameSinkPtr sink;
-    cc::mojom::CompositorFrameSinkRequest sink_request =
+    viz::mojom::CompositorFrameSinkPtr sink;
+    viz::mojom::CompositorFrameSinkRequest sink_request =
         mojo::MakeRequest(&sink);
-    cc::mojom::CompositorFrameSinkClientRequest client_request =
+    viz::mojom::CompositorFrameSinkClientRequest client_request =
         mojo::MakeRequest(&renderer_compositor_frame_sink_ptr_);
     renderer_compositor_frame_sink_ =
         base::MakeUnique<FakeRendererCompositorFrameSink>(
@@ -202,28 +196,30 @@ class RenderWidgetHostViewGuestSurfaceTest
     DCHECK(view_);
     RenderWidgetHostViewChildFrame* rwhvcf =
         static_cast<RenderWidgetHostViewChildFrame*>(view_);
-    if (!rwhvcf->local_surface_id_.is_valid())
+    if (!rwhvcf->last_received_local_surface_id_.is_valid())
       return viz::SurfaceId();
-    return viz::SurfaceId(rwhvcf->frame_sink_id_, rwhvcf->local_surface_id_);
+    return viz::SurfaceId(rwhvcf->frame_sink_id_,
+                          rwhvcf->last_received_local_surface_id_);
   }
 
  protected:
   TestBrowserThreadBundle thread_bundle_;
   std::unique_ptr<BrowserContext> browser_context_;
-  MockRenderWidgetHostDelegate delegate_;
+  DummyRenderWidgetHostDelegate delegate_;
   BrowserPluginGuestDelegate browser_plugin_guest_delegate_;
   std::unique_ptr<TestWebContents> web_contents_;
   TestBrowserPluginGuest* browser_plugin_guest_;
 
   // Tests should set these to NULL if they've already triggered their
   // destruction.
+  std::unique_ptr<MockWidgetImpl> widget_impl_;
   RenderWidgetHostImpl* widget_host_;
   RenderWidgetHostViewGuest* view_;
   std::unique_ptr<FakeRendererCompositorFrameSink>
       renderer_compositor_frame_sink_;
 
  private:
-  cc::mojom::CompositorFrameSinkClientPtr renderer_compositor_frame_sink_ptr_;
+  viz::mojom::CompositorFrameSinkClientPtr renderer_compositor_frame_sink_ptr_;
   DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewGuestSurfaceTest);
 };
 
@@ -233,7 +229,7 @@ cc::CompositorFrame CreateDelegatedFrame(float scale_factor,
                                          const gfx::Rect& damage) {
   cc::CompositorFrame frame;
   frame.metadata.device_scale_factor = scale_factor;
-  frame.metadata.begin_frame_ack = cc::BeginFrameAck(0, 1, true);
+  frame.metadata.begin_frame_ack = viz::BeginFrameAck(0, 1, true);
 
   std::unique_ptr<cc::RenderPass> pass = cc::RenderPass::Create();
   pass->SetNew(1, gfx::Rect(size), damage, gfx::Transform());
@@ -263,14 +259,12 @@ TEST_F(RenderWidgetHostViewGuestSurfaceTest, TestGuestSurface) {
   EXPECT_TRUE(id.is_valid());
 
 #if !defined(OS_ANDROID)
-  cc::SurfaceManager* manager = ImageTransportFactory::GetInstance()
-                                    ->GetContextFactoryPrivate()
-                                    ->GetFrameSinkManager()
-                                    ->surface_manager();
-  cc::Surface* surface = manager->GetSurfaceForId(id);
+  viz::SurfaceManager* manager = ImageTransportFactory::GetInstance()
+                                     ->GetContextFactoryPrivate()
+                                     ->GetFrameSinkManager()
+                                     ->surface_manager();
+  viz::Surface* surface = manager->GetSurfaceForId(id);
   EXPECT_TRUE(surface);
-  // There should be a SurfaceSequence created by the RWHVGuest.
-  EXPECT_EQ(1u, surface->GetDestructionDependencyCount());
 #endif
   // Surface ID should have been passed to BrowserPluginGuest to
   // be sent to the embedding renderer.
@@ -291,9 +285,6 @@ TEST_F(RenderWidgetHostViewGuestSurfaceTest, TestGuestSurface) {
 #if !defined(OS_ANDROID)
   surface = manager->GetSurfaceForId(id);
   EXPECT_TRUE(surface);
-  // Another SurfaceSequence should be created by the RWHVGuest when sending
-  // SurfaceInfo to the embedder.
-  EXPECT_EQ(2u, surface->GetDestructionDependencyCount());
 #endif
   // Surface ID should have been passed to BrowserPluginGuest to
   // be sent to the embedding renderer.

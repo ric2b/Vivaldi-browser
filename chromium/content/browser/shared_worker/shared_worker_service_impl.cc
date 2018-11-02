@@ -32,7 +32,7 @@ WorkerService* WorkerService::GetInstance() {
 
 bool IsHostAlive(RenderProcessHostImpl* host) {
   return host && !host->FastShutdownStarted() &&
-         !host->IsWorkerRefCountDisabled();
+         !host->IsKeepAliveRefCountDisabled();
 }
 
 namespace {
@@ -63,8 +63,9 @@ class SharedWorkerReserver {
         worker_process_id, worker_route_id, is_new_worker, instance));
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(&SharedWorkerReserver::TryReserveOnUI, std::move(reserver),
-                   success_cb, failure_cb, try_increment_worker_ref_count));
+        base::BindOnce(&SharedWorkerReserver::TryReserveOnUI,
+                       std::move(reserver), success_cb, failure_cb,
+                       try_increment_worker_ref_count));
   }
 
  private:
@@ -99,8 +100,8 @@ class SharedWorkerReserver {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(callback, worker_process_id_, worker_route_id_,
-                   is_new_worker_, pause_on_start));
+        base::BindOnce(callback, worker_process_id_, worker_route_id_,
+                       is_new_worker_, pause_on_start));
   }
 
   const int worker_process_id_;
@@ -135,37 +136,36 @@ void UpdateWorkerDependencyOnUI(const std::vector<int>& added_ids,
         static_cast<RenderProcessHostImpl*>(RenderProcessHost::FromID(id));
     if (!IsHostAlive(render_process_host_impl))
       continue;
-    render_process_host_impl->IncrementSharedWorkerRefCount();
+    render_process_host_impl->IncrementKeepAliveRefCount();
   }
   for (int id : removed_ids) {
     RenderProcessHostImpl* render_process_host_impl =
         static_cast<RenderProcessHostImpl*>(RenderProcessHost::FromID(id));
     if (!IsHostAlive(render_process_host_impl))
       continue;
-    render_process_host_impl->DecrementSharedWorkerRefCount();
+    render_process_host_impl->DecrementKeepAliveRefCount();
   }
 }
 
 void UpdateWorkerDependency(const std::vector<int>& added_ids,
                             const std::vector<int>& removed_ids) {
   BrowserThread::PostTask(
-      BrowserThread::UI,
-      FROM_HERE,
-      base::Bind(&UpdateWorkerDependencyOnUI, added_ids, removed_ids));
+      BrowserThread::UI, FROM_HERE,
+      base::BindOnce(&UpdateWorkerDependencyOnUI, added_ids, removed_ids));
 }
 
 void DecrementWorkerRefCount(int process_id) {
   if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    BrowserThread::PostTask(BrowserThread::UI,
-                            FROM_HERE,
-                            base::Bind(&DecrementWorkerRefCount, process_id));
+    BrowserThread::PostTask(
+        BrowserThread::UI, FROM_HERE,
+        base::BindOnce(&DecrementWorkerRefCount, process_id));
     return;
   }
   RenderProcessHostImpl* render_process_host_impl =
       static_cast<RenderProcessHostImpl*>(
           RenderProcessHost::FromID(process_id));
   if (IsHostAlive(render_process_host_impl))
-    render_process_host_impl->DecrementSharedWorkerRefCount();
+    render_process_host_impl->DecrementKeepAliveRefCount();
 }
 
 bool TryIncrementWorkerRefCount(int worker_process_id) {
@@ -173,7 +173,7 @@ bool TryIncrementWorkerRefCount(int worker_process_id) {
       RenderProcessHost::FromID(worker_process_id));
   if (!IsHostAlive(render_process))
     return false;
-  render_process->IncrementSharedWorkerRefCount();
+  render_process->IncrementKeepAliveRefCount();
   return true;
 }
 
@@ -441,31 +441,6 @@ void SharedWorkerServiceImpl::WorkerConnected(SharedWorkerMessageFilter* filter,
   if (SharedWorkerHost* host =
           FindSharedWorkerHost(filter->render_process_id(), worker_route_id))
     host->WorkerConnected(connection_request_id);
-}
-
-void SharedWorkerServiceImpl::AllowFileSystem(SharedWorkerMessageFilter* filter,
-                                              int worker_route_id,
-                                              const GURL& url,
-                                              IPC::Message* reply_msg) {
-  if (SharedWorkerHost* host =
-          FindSharedWorkerHost(filter->render_process_id(), worker_route_id)) {
-    host->AllowFileSystem(url, base::WrapUnique(reply_msg));
-  } else {
-    filter->Send(reply_msg);
-    return;
-  }
-}
-
-void SharedWorkerServiceImpl::AllowIndexedDB(SharedWorkerMessageFilter* filter,
-                                             int worker_route_id,
-                                             const GURL& url,
-                                             const base::string16& name,
-                                             bool* result) {
-  if (SharedWorkerHost* host =
-          FindSharedWorkerHost(filter->render_process_id(), worker_route_id))
-    host->AllowIndexedDB(url, name, result);
-  else
-    *result = false;
 }
 
 void SharedWorkerServiceImpl::OnSharedWorkerMessageFilterClosing(

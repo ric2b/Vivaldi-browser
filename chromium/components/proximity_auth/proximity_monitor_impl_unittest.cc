@@ -97,7 +97,9 @@ class ProximityAuthProximityMonitorImplTest : public testing::Test {
                        kRemoteDevicePublicKey,
                        kBluetoothAddress,
                        kPersistentSymmetricKey,
-                       std::string()),
+                       true /* unlock_key */,
+                       true /* mobile_hotspot_supported */,
+                       0 /* last_update_time_millis */),
         connection_(remote_device_),
         pref_manager_(new NiceMock<MockProximityAuthPrefManager>()),
         monitor_(&connection_, base::WrapUnique(clock_), pref_manager_.get()),
@@ -362,7 +364,8 @@ TEST_F(ProximityAuthProximityMonitorImplTest,
   // Note: A device without a recorded name will have "Unknown" as its name.
   cryptauth::RemoteDevice unnamed_remote_device(
       kRemoteDeviceUserId, "" /* name */, kRemoteDevicePublicKey,
-      kBluetoothAddress, kPersistentSymmetricKey, std::string());
+      kBluetoothAddress, kPersistentSymmetricKey, true /* unlock_key */,
+      true /* supports_mobile_hotspot */, 0 /* last_update_time_millis */);
   cryptauth::FakeConnection connection(unnamed_remote_device);
 
   std::unique_ptr<base::TickClock> clock(new base::SimpleTestTickClock());

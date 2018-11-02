@@ -99,7 +99,7 @@ namespace {
 
 const CGFloat kAccountProfilePhotoDimension = 40.0f;
 
-const int kAutomaticSigninPromoViewDismissCount = 20;
+const int kAutomaticSigninPromoViewDismissCount = 5;
 
 typedef NS_ENUM(NSInteger, SectionIdentifier) {
   SectionIdentifierSignIn = kSectionIdentifierEnumZero,
@@ -738,7 +738,7 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
   NSInteger itemType =
       [self.collectionViewModel itemTypeForIndexPath:indexPath];
 
-  UIViewController* controller;
+  SettingsRootCollectionViewController* controller;
 
   switch (itemType) {
     case ItemTypeSignInButton:
@@ -749,8 +749,7 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
     case ItemTypeAccount:
       controller = [[AccountsCollectionViewController alloc]
                initWithBrowserState:_browserState
-          closeSettingsOnAddAccount:NO
-                         dispatcher:self.dispatcher];
+          closeSettingsOnAddAccount:NO];
       break;
     case ItemTypeSearchEngine:
       controller = [[SearchEngineSettingsCollectionViewController alloc]
@@ -799,6 +798,7 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
   }
 
   if (controller) {
+    controller.dispatcher = self.dispatcher;
     [self.navigationController pushViewController:controller animated:YES];
   }
 }
@@ -949,12 +949,10 @@ void SigninObserverBridge::GoogleSignedOut(const std::string& account_id,
     return;
   }
   identityAccountItem.shouldDisplayError =
-      !ios_internal::sync::IsTransientSyncError(
-          syncSetupService->GetSyncServiceState());
+      !IsTransientSyncError(syncSetupService->GetSyncServiceState());
   if (identityAccountItem.shouldDisplayError) {
     identityAccountItem.detailText =
-        ios_internal::sync::GetSyncErrorDescriptionForBrowserState(
-            _browserState);
+        GetSyncErrorDescriptionForBrowserState(_browserState);
   } else {
     identityAccountItem.detailText =
         syncSetupService->IsSyncEnabled()

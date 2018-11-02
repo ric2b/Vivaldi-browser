@@ -479,8 +479,9 @@ std::unique_ptr<api::tabs::MutedInfo> ExtensionTabUtil::CreateMutedInfo(
   switch (chrome::GetTabAudioMutedReason(contents)) {
     case TabMutedReason::NONE:
       break;
-    case TabMutedReason::CONTEXT_MENU:
     case TabMutedReason::AUDIO_INDICATOR:
+    case TabMutedReason::CONTENT_SETTING:
+    case TabMutedReason::CONTEXT_MENU:
       info->reason = api::tabs::MUTED_INFO_REASON_USER;
       break;
     case TabMutedReason::MEDIA_CAPTURE:
@@ -617,15 +618,11 @@ GURL ExtensionTabUtil::ResolvePossiblyRelativeURL(const std::string& url_string,
 }
 
 bool ExtensionTabUtil::IsKillURL(const GURL& url) {
-  static const char* kill_hosts[] = {
-      chrome::kChromeUICrashHost,
-      chrome::kChromeUIDelayedHangUIHost,
-      chrome::kChromeUIHangUIHost,
-      chrome::kChromeUIKillHost,
-      chrome::kChromeUIQuitHost,
-      chrome::kChromeUIRestartHost,
-      content::kChromeUIBrowserCrashHost,
-      content::kChromeUIMemoryExhaustHost,
+  static const char* const kill_hosts[] = {
+      chrome::kChromeUICrashHost,         chrome::kChromeUIDelayedHangUIHost,
+      chrome::kChromeUIHangUIHost,        chrome::kChromeUIKillHost,
+      chrome::kChromeUIQuitHost,          chrome::kChromeUIRestartHost,
+      content::kChromeUIBrowserCrashHost, content::kChromeUIMemoryExhaustHost,
   };
 
   // Check a fixed-up URL, to normalize the scheme and parse hosts correctly.

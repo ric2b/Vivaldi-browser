@@ -63,15 +63,28 @@ class MEDIA_GPU_EXPORT CodecOutputBuffer {
 // can be released on any thread.
 class MEDIA_GPU_EXPORT CodecWrapper {
  public:
-  // |codec| should be in the state referred to by the MediaCodec docs as
-  // "Flushed", i.e., freshly configured or after a Flush() call.
-  CodecWrapper(std::unique_ptr<MediaCodecBridge> codec);
+  // |codec| should be in the flushed state, i.e., freshly configured or after a
+  // Flush(). |output_buffer_release_cb| will be run whenever an output buffer
+  // is released back to the codec (whether it's rendered or not). This is a
+  // signal that the codec might be ready to accept more input. It may be run on
+  // any thread.
+  CodecWrapper(std::unique_ptr<MediaCodecBridge> codec,
+               base::Closure output_buffer_release_cb);
   ~CodecWrapper();
 
   // Takes the backing codec and discards all outstanding codec buffers. This
   // lets you tear down the codec while there are still CodecOutputBuffers
   // referencing |this|.
   std::unique_ptr<MediaCodecBridge> TakeCodec();
+
+  // Whether the codec is in the flushed state.
+  bool IsFlushed() const;
+
+  // Whether an EOS has been queued but not yet dequeued.
+  bool IsDraining() const;
+
+  // Whether an EOS has been dequeued but the codec hasn't been flushed yet.
+  bool IsDrained() const;
 
   // Whether there are any valid CodecOutputBuffers that have not been released.
   bool HasValidCodecOutputBuffers() const;
@@ -99,19 +112,23 @@ class MEDIA_GPU_EXPORT CodecWrapper {
       const EncryptionScheme& encryption_scheme,
       base::TimeDelta presentation_time);
   void QueueEOS(int input_buffer_index);
-  MediaCodecStatus DequeueInputBuffer(base::TimeDelta timeout, int* index);
+  MediaCodecStatus DequeueInputBuffer(int* index);
 
   // Like MediaCodecBridge::DequeueOutputBuffer() but it outputs a
-  // CodecOutputBuffer instead of an index. And it's guaranteed to not return
-  // either of MEDIA_CODEC_OUTPUT_BUFFERS_CHANGED or
-  // MEDIA_CODEC_OUTPUT_FORMAT_CHANGED. It will try to dequeue another
-  // buffer instead. |*codec_buffer| must be null.
+  // CodecOutputBuffer instead of an index. |*codec_buffer| must be null.
+  // If this returns MEDIA_CODEC_OK then either |*end_of_stream| will be set to
+  // true or |*codec_buffer| will be non-null. The EOS buffer is returned to the
+  // codec immediately. Unlike MediaCodecBridge, this does not return
+  // MEDIA_CODEC_OUTPUT_BUFFERS_CHANGED or MEDIA_CODEC_OUTPUT_FORMAT_CHANGED. It
+  // tries to dequeue another buffer instead.
   MediaCodecStatus DequeueOutputBuffer(
-      base::TimeDelta timeout,
       base::TimeDelta* presentation_time,
       bool* end_of_stream,
       std::unique_ptr<CodecOutputBuffer>* codec_buffer);
-  bool SetSurface(jobject surface);
+
+  // Sets the given surface and returns MEDIA_CODEC_OK on success or
+  // MEDIA_CODEC_ERROR on failure.
+  MediaCodecStatus SetSurface(const base::android::JavaRef<jobject>& surface);
 
  private:
   scoped_refptr<CodecWrapperImpl> impl_;

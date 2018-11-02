@@ -51,7 +51,7 @@ static RefPtr<StringImpl> NormalizeWhitespace(RefPtr<StringImpl> string) {
   return new_string;
 }
 
-LayoutSVGInlineText::LayoutSVGInlineText(Node* n, PassRefPtr<StringImpl> string)
+LayoutSVGInlineText::LayoutSVGInlineText(Node* n, RefPtr<StringImpl> string)
     : LayoutText(n, NormalizeWhitespace(std::move(string))),
       scaling_factor_(1) {}
 
@@ -410,7 +410,7 @@ void LayoutSVGInlineText::ComputeNewScaledFontForStyle(
   font_description.SetComputedSize(scaled_font_size);
 
   scaled_font = Font(font_description);
-  scaled_font.Update(document.GetStyleEngine().FontSelector());
+  scaled_font.Update(document.GetStyleEngine().GetFontSelector());
 }
 
 LayoutRect LayoutSVGInlineText::AbsoluteVisualRect() const {

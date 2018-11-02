@@ -21,12 +21,12 @@ class ProcessCoordinationUnitImpl : public CoordinationUnitImpl {
 
   // CoordinationUnitImpl implementation.
   std::set<CoordinationUnitImpl*> GetAssociatedCoordinationUnitsOfType(
-      CoordinationUnitType type) override;
+      CoordinationUnitType type) const override;
 
  private:
   // CoordinationUnitImpl implementation.
   void PropagateProperty(mojom::PropertyType property_type,
-                         const base::Value& value) override;
+                         int64_t value) override;
 
   DISALLOW_COPY_AND_ASSIGN(ProcessCoordinationUnitImpl);
 };

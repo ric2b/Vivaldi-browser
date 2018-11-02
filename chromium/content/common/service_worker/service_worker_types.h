@@ -19,15 +19,19 @@
 #include "content/public/common/request_context_frame_type.h"
 #include "content/public/common/request_context_type.h"
 #include "content/public/common/service_worker_modes.h"
+#include "services/network/public/interfaces/fetch_api.mojom.h"
 #include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerClientType.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerResponseError.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerResponseType.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerState.h"
 #include "url/gurl.h"
 
 // This file is to have common definitions that are to be shared by
 // browser and child process.
+
+namespace storage {
+class BlobHandle;
+}
 
 namespace content {
 
@@ -81,12 +85,6 @@ enum ServiceWorkerFetchEventResult {
   SERVICE_WORKER_FETCH_EVENT_LAST = SERVICE_WORKER_FETCH_EVENT_RESULT_RESPONSE
 };
 
-enum class ServiceWorkerFetchType {
-  FETCH,
-  FOREIGN_FETCH,
-  LAST = FOREIGN_FETCH
-};
-
 struct ServiceWorkerCaseInsensitiveCompare {
   bool operator()(const std::string& lhs, const std::string& rhs) const {
     return base::CompareCaseInsensitiveASCII(lhs, rhs) < 0;
@@ -107,6 +105,7 @@ struct CONTENT_EXPORT ServiceWorkerFetchRequest {
                             const Referrer& referrer,
                             bool is_reload);
   ServiceWorkerFetchRequest(const ServiceWorkerFetchRequest& other);
+  ServiceWorkerFetchRequest& operator=(const ServiceWorkerFetchRequest& other);
   ~ServiceWorkerFetchRequest();
   size_t EstimatedStructSize();
 
@@ -120,6 +119,7 @@ struct CONTENT_EXPORT ServiceWorkerFetchRequest {
   ServiceWorkerHeaderMap headers;
   std::string blob_uuid;
   uint64_t blob_size;
+  scoped_refptr<storage::BlobHandle> blob;
   Referrer referrer;
   FetchCredentialsMode credentials_mode;
   FetchRedirectMode redirect_mode;
@@ -136,16 +136,18 @@ struct CONTENT_EXPORT ServiceWorkerResponse {
       std::unique_ptr<std::vector<GURL>> url_list,
       int status_code,
       const std::string& status_text,
-      blink::WebServiceWorkerResponseType response_type,
+      network::mojom::FetchResponseType response_type,
       std::unique_ptr<ServiceWorkerHeaderMap> headers,
       const std::string& blob_uuid,
       uint64_t blob_size,
+      scoped_refptr<storage::BlobHandle> blob,
       blink::WebServiceWorkerResponseError error,
       base::Time response_time,
       bool is_in_cache_storage,
       const std::string& cache_storage_cache_name,
       std::unique_ptr<ServiceWorkerHeaderList> cors_exposed_header_names);
   ServiceWorkerResponse(const ServiceWorkerResponse& other);
+  ServiceWorkerResponse& operator=(const ServiceWorkerResponse& other);
   ~ServiceWorkerResponse();
   size_t EstimatedStructSize();
 
@@ -153,13 +155,15 @@ struct CONTENT_EXPORT ServiceWorkerResponse {
   std::vector<GURL> url_list;
   int status_code;
   std::string status_text;
-  blink::WebServiceWorkerResponseType response_type;
+  network::mojom::FetchResponseType response_type;
   ServiceWorkerHeaderMap headers;
   // |blob_uuid| and |blob_size| are set when the body is a blob. For other
   // types of responses, the body is provided separately in Mojo IPC via
   // ServiceWorkerFetchResponseCallback.
   std::string blob_uuid;
   uint64_t blob_size;
+  // |blob| is only used when features::kMojoBlobs is enabled.
+  scoped_refptr<storage::BlobHandle> blob;
   blink::WebServiceWorkerResponseError error;
   base::Time response_time;
   bool is_in_cache_storage = false;
@@ -197,7 +201,7 @@ struct CONTENT_EXPORT ServiceWorkerRegistrationObjectInfo {
   int64_t registration_id;
 };
 
-struct ServiceWorkerVersionAttributes {
+struct CONTENT_EXPORT ServiceWorkerVersionAttributes {
   ServiceWorkerObjectInfo installing;
   ServiceWorkerObjectInfo waiting;
   ServiceWorkerObjectInfo active;

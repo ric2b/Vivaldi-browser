@@ -16,6 +16,8 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
+#include "cc/output/layer_tree_frame_sink.h"
+#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/client/focus_change_observer.h"
@@ -1544,7 +1546,7 @@ TEST_P(WindowTest, Visibility) {
   EXPECT_EQ(1, d2.shown());
 }
 
-TEST_P(WindowTest, IgnoreEventsTest) {
+TEST_P(WindowTest, EventTargetingPolicy) {
   TestWindowDelegate d11;
   TestWindowDelegate d12;
   TestWindowDelegate d111;
@@ -1560,18 +1562,32 @@ TEST_P(WindowTest, IgnoreEventsTest) {
   std::unique_ptr<Window> w121(CreateTestWindowWithDelegate(
       &d121, 121, gfx::Rect(150, 150, 50, 50), w12.get()));
 
+  EXPECT_EQ(w121.get(), w1->GetEventHandlerForPoint(gfx::Point(160, 160)));
+  w12->SetEventTargetingPolicy(ui::mojom::EventTargetingPolicy::TARGET_ONLY);
+  EXPECT_EQ(w12.get(), w1->GetEventHandlerForPoint(gfx::Point(160, 160)));
+  w12->SetEventTargetingPolicy(
+      ui::mojom::EventTargetingPolicy::TARGET_AND_DESCENDANTS);
+
   EXPECT_EQ(w12.get(), w1->GetEventHandlerForPoint(gfx::Point(10, 10)));
-  w12->set_ignore_events(true);
+  w12->SetEventTargetingPolicy(ui::mojom::EventTargetingPolicy::NONE);
   EXPECT_EQ(w11.get(), w1->GetEventHandlerForPoint(gfx::Point(10, 10)));
-  w12->set_ignore_events(false);
+  w12->SetEventTargetingPolicy(
+      ui::mojom::EventTargetingPolicy::TARGET_AND_DESCENDANTS);
 
   EXPECT_EQ(w121.get(), w1->GetEventHandlerForPoint(gfx::Point(160, 160)));
-  w121->set_ignore_events(true);
+  w121->SetEventTargetingPolicy(ui::mojom::EventTargetingPolicy::NONE);
   EXPECT_EQ(w12.get(), w1->GetEventHandlerForPoint(gfx::Point(160, 160)));
-  w12->set_ignore_events(true);
+  w12->SetEventTargetingPolicy(ui::mojom::EventTargetingPolicy::NONE);
   EXPECT_EQ(w111.get(), w1->GetEventHandlerForPoint(gfx::Point(160, 160)));
-  w111->set_ignore_events(true);
+  w111->SetEventTargetingPolicy(ui::mojom::EventTargetingPolicy::NONE);
   EXPECT_EQ(w11.get(), w1->GetEventHandlerForPoint(gfx::Point(160, 160)));
+
+  w11->SetEventTargetingPolicy(
+      ui::mojom::EventTargetingPolicy::DESCENDANTS_ONLY);
+  EXPECT_EQ(nullptr, w1->GetEventHandlerForPoint(gfx::Point(160, 160)));
+  w111->SetEventTargetingPolicy(
+      ui::mojom::EventTargetingPolicy::TARGET_AND_DESCENDANTS);
+  EXPECT_EQ(w111.get(), w1->GetEventHandlerForPoint(gfx::Point(160, 160)));
 }
 
 // Tests transformation on the root window.
@@ -2848,6 +2864,33 @@ TEST_P(WindowTest, WindowDestroyCompletesAnimations) {
   EXPECT_TRUE(observer.animation_completed());
   EXPECT_FALSE(observer.animation_aborted());
   animator->RemoveObserver(&observer);
+}
+
+TEST_P(WindowTest, LocalSurfaceIdChanges) {
+  Window window(nullptr);
+  window.Init(ui::LAYER_NOT_DRAWN);
+  std::unique_ptr<cc::LayerTreeFrameSink> frame_sink(
+      window.CreateLayerTreeFrameSink());
+  viz::LocalSurfaceId local_surface_id1 = window.GetLocalSurfaceId();
+  EXPECT_NE(nullptr, frame_sink.get());
+  EXPECT_TRUE(local_surface_id1.is_valid());
+
+  window.SetBounds(gfx::Rect(300, 300));
+  viz::LocalSurfaceId local_surface_id2 = window.GetLocalSurfaceId();
+  EXPECT_TRUE(local_surface_id2.is_valid());
+  EXPECT_NE(local_surface_id1, local_surface_id2);
+
+  window.OnDeviceScaleFactorChanged(3.0f);
+  viz::LocalSurfaceId local_surface_id3 = window.GetLocalSurfaceId();
+  EXPECT_TRUE(local_surface_id3.is_valid());
+  EXPECT_NE(local_surface_id1, local_surface_id3);
+  EXPECT_NE(local_surface_id2, local_surface_id3);
+
+  window.AllocateLocalSurfaceId();
+  viz::LocalSurfaceId local_surface_id4 = window.GetLocalSurfaceId();
+  EXPECT_NE(local_surface_id1, local_surface_id4);
+  EXPECT_NE(local_surface_id2, local_surface_id4);
+  EXPECT_NE(local_surface_id3, local_surface_id4);
 }
 
 INSTANTIATE_TEST_CASE_P(/* no prefix */,

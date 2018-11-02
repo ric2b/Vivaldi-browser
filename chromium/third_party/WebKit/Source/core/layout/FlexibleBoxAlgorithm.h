@@ -32,6 +32,7 @@
 #define FlexibleBoxAlgorithm_h
 
 #include "core/CoreExport.h"
+#include "core/layout/MinMaxSize.h"
 #include "core/layout/OrderIterator.h"
 #include "core/style/ComputedStyle.h"
 #include "platform/LayoutUnit.h"
@@ -40,18 +41,27 @@
 
 namespace blink {
 
+class FlexLayoutAlgorithm;
 class LayoutBox;
+struct MinMaxSize;
 
 enum FlexSign {
   kPositiveFlexibility,
   kNegativeFlexibility,
 };
 
+enum class TransformedWritingMode {
+  kTopToBottomWritingMode,
+  kRightToLeftWritingMode,
+  kLeftToRightWritingMode,
+  kBottomToTopWritingMode
+};
+
 class FlexItem {
  public:
   FlexItem(LayoutBox*,
            LayoutUnit flex_base_content_size,
-           LayoutUnit hypothetical_main_content_size,
+           MinMaxSize min_max_sizes,
            LayoutUnit main_axis_border_and_padding,
            LayoutUnit main_axis_margin);
 
@@ -65,25 +75,68 @@ class FlexItem {
            main_axis_margin;
   }
 
+  LayoutUnit FlexedBorderBoxSize() const {
+    return flexed_content_size + main_axis_border_and_padding;
+  }
+
   LayoutUnit FlexedMarginBoxSize() const {
     return flexed_content_size + main_axis_border_and_padding +
            main_axis_margin;
   }
 
+  LayoutUnit ClampSizeToMinAndMax(LayoutUnit size) const {
+    return min_max_sizes.ClampSizeToMinAndMax(size);
+  }
+
+  ItemPosition Alignment() const;
+
+  bool HasOrthogonalFlow() const;
+
+  LayoutUnit FlowAwareMarginStart() const;
+  LayoutUnit FlowAwareMarginEnd() const;
+  LayoutUnit FlowAwareMarginBefore() const;
+  LayoutUnit CrossAxisMarginExtent() const;
+
+  LayoutUnit MarginBoxAscent() const;
+
+  LayoutUnit AvailableAlignmentSpace(LayoutUnit) const;
+
+  bool HasAutoMarginsInCrossAxis() const;
+
+  FlexLayoutAlgorithm* algorithm;
   LayoutBox* box;
   const LayoutUnit flex_base_content_size;
+  const MinMaxSize min_max_sizes;
   const LayoutUnit hypothetical_main_content_size;
   const LayoutUnit main_axis_border_and_padding;
   const LayoutUnit main_axis_margin;
   LayoutUnit flexed_content_size;
+
+  LayoutUnit cross_axis_size;
+  LayoutPoint desired_location;
+
   bool frozen;
 };
 
 class FlexLine {
  public:
-  FlexLine() {
-    total_flex_grow = total_flex_shrink = total_weighted_flex_shrink = 0;
-  }
+  // This will std::move the passed-in line_items.
+  FlexLine(FlexLayoutAlgorithm* algorithm,
+           Vector<FlexItem>& line_items,
+           LayoutUnit container_logical_width,
+           LayoutUnit sum_flex_base_size,
+           double total_flex_grow,
+           double total_flex_shrink,
+           double total_weighted_flex_shrink,
+           LayoutUnit sum_hypothetical_main_size)
+      : algorithm(algorithm),
+        line_items(std::move(line_items)),
+        container_logical_width(container_logical_width),
+        sum_flex_base_size(sum_flex_base_size),
+        total_flex_grow(total_flex_grow),
+        total_flex_shrink(total_flex_shrink),
+        total_weighted_flex_shrink(total_weighted_flex_shrink),
+        sum_hypothetical_main_size(sum_hypothetical_main_size) {}
 
   FlexSign Sign() const {
     return sum_hypothetical_main_size < container_main_inner_size
@@ -100,16 +153,26 @@ class FlexLine {
   // This modifies remaining_free_space.
   void FreezeViolations(Vector<FlexItem*>& violations);
 
-  // These fields get filled in by ComputeNextFlexLine.
-  // TODO(cbiesinger): Consider moving to a constructor.
+  // Should be called in a loop until it returns false.
+  // This modifies remaining_free_space.
+  bool ResolveFlexibleLengths();
+
+  // Distributes remaining_free_space across the main axis auto margins
+  // of the flex items of this line and returns the amount that should be
+  // used for each auto margins. If there are no auto margins, leaves
+  // remaining_free_space unchanged.
+  LayoutUnit ApplyMainAxisAutoMarginAdjustment();
+
+  FlexLayoutAlgorithm* algorithm;
   Vector<FlexItem> line_items;
-  LayoutUnit sum_flex_base_size;
+  const LayoutUnit container_logical_width;
+  const LayoutUnit sum_flex_base_size;
   double total_flex_grow;
   double total_flex_shrink;
   double total_weighted_flex_shrink;
   // The hypothetical main size of an item is the flex base size clamped
   // according to its min and max main size properties
-  LayoutUnit sum_hypothetical_main_size;
+  const LayoutUnit sum_hypothetical_main_size;
 
   // This gets set by SetContainerMainInnerSize
   LayoutUnit container_main_inner_size;
@@ -122,8 +185,9 @@ class FlexLine {
   LayoutUnit initial_free_space;
   LayoutUnit remaining_free_space;
 
-  // These get filled in by LayoutAndPlaceChildren (for now)
+  // These get filled in by ComputeLineItemsPosition (for now)
   // TODO(cbiesinger): Move that to FlexibleBoxAlgorithm.
+  LayoutUnit main_axis_extent;
   LayoutUnit cross_axis_offset;
   LayoutUnit cross_axis_extent;
   LayoutUnit max_ascent;
@@ -135,20 +199,35 @@ class FlexLayoutAlgorithm {
  public:
   FlexLayoutAlgorithm(const ComputedStyle*,
                       LayoutUnit line_break_length,
-                      const Vector<FlexItem>& all_items);
+                      Vector<FlexItem>& all_items);
+
+  const ComputedStyle* Style() const { return style_; }
 
   Vector<FlexLine>& FlexLines() { return flex_lines_; }
 
   // Computes the next flex line, stores it in FlexLines(), and returns a
   // pointer to it. Returns nullptr if there are no more lines.
-  FlexLine* ComputeNextFlexLine();
+  FlexLine* ComputeNextFlexLine(LayoutUnit container_logical_width);
+
+  bool IsHorizontalFlow() const;
+  static bool IsHorizontalFlow(const ComputedStyle&);
+  bool IsLeftToRightFlow() const;
+  TransformedWritingMode GetTransformedWritingMode() const;
+
+  static TransformedWritingMode GetTransformedWritingMode(const ComputedStyle&);
+
+  static const StyleContentAlignmentData& ContentAlignmentNormalBehavior();
+  static StyleContentAlignmentData ResolvedJustifyContent(const ComputedStyle&);
+  static StyleContentAlignmentData ResolvedAlignContent(const ComputedStyle&);
+  static ItemPosition AlignmentForChild(const ComputedStyle& flexbox_style,
+                                        const ComputedStyle& child_style);
 
  private:
   bool IsMultiline() const { return style_->FlexWrap() != EFlexWrap::kNowrap; }
 
   const ComputedStyle* style_;
   LayoutUnit line_break_length_;
-  const Vector<FlexItem>& all_items_;
+  Vector<FlexItem>& all_items_;
   Vector<FlexLine> flex_lines_;
   size_t next_item_index_;
 };

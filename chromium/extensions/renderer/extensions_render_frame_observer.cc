@@ -12,7 +12,6 @@
 #include "content/public/renderer/render_view.h"
 #include "extensions/common/extension_messages.h"
 #include "extensions/common/stack_frame.h"
-#include "services/service_manager/public/cpp/binder_registry.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebView.h"
 
@@ -78,10 +77,11 @@ StackTrace GetStackTraceFromMessage(base::string16* message,
 }  // namespace
 
 ExtensionsRenderFrameObserver::ExtensionsRenderFrameObserver(
-    content::RenderFrame* render_frame)
+    content::RenderFrame* render_frame,
+    service_manager::BinderRegistry* registry)
     : content::RenderFrameObserver(render_frame),
       webview_visually_deemphasized_(false) {
-  render_frame->GetInterfaceRegistry()->AddInterface(
+  registry->AddInterface(
       base::Bind(&ExtensionsRenderFrameObserver::BindAppWindowRequest,
                  base::Unretained(this)));
 }

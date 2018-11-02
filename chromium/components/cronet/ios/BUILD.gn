@@ -65,8 +65,12 @@ _cronet_deps = [
 ]
 
 _cronet_sources = [
+  "../cronet_prefs_manager.cc",
+  "../cronet_prefs_manager.h",
   "../histogram_manager.cc",
   "../histogram_manager.h",
+  "../host_cache_persistence_manager.cc",
+  "../host_cache_persistence_manager.h",
   "../stale_host_resolver.cc",
   "../stale_host_resolver.h",
   "../url_request_context_config.cc",
@@ -92,6 +96,21 @@ source_set("cronet_sources") {
   }
 }
 
+source_set("cronet_sources_with_global_state") {
+  deps = [
+    "//base",
+    "//ios/web/public/global_state",
+  ]
+
+  public_deps = [
+    ":cronet_sources",
+  ]
+
+  sources = [
+    "ios_global_state_configuration.cc",
+  ]
+}
+
 # Tweak |info_plist| with current version and revision.
 tweak_info_plist("tweak_cronet_plist") {
   info_plist = "Info.plist"
@@ -102,7 +121,7 @@ ios_framework_bundle("cronet_framework") {
   info_plist_target = ":tweak_cronet_plist"
 
   deps = [
-    ":cronet_sources",
+    ":cronet_sources_with_global_state",
     "//base",
     "//net:net",
   ]
@@ -136,7 +155,7 @@ test("cronet_unittests") {
   ]
 
   deps = [
-    ":cronet_sources",
+    ":cronet_sources_with_global_state",
     "//base",
     "//base/test:test_support",
     "//components/cronet/ios/test:cronet_test",
@@ -161,6 +180,7 @@ action("generate_accept_languages") {
 static_library("cronet_static") {
   visibility = [ ":*" ]
   deps = _cronet_deps
+  deps += [ ":cronet_sources_with_global_state" ]
   sources = _cronet_sources
   public_configs = [ ":cronet_include_config" ]
   public_deps = [
@@ -233,10 +253,9 @@ template("ios_static_framework") {
     _framework_name = invoker.framework_name
   }
 
-  _bundle_target_name = _target_name + "_bundle"
   _framework_headers_target = _target_name + "_framework_headers"
   bundle_data(_framework_headers_target) {
-    visibility = [ ":$_bundle_target_name" ]
+    visibility = [ ":$_target_name" ]
     sources = invoker.public_headers
     outputs = [
       "{{bundle_root_dir}}/Headers/{{source_file_part}}",
@@ -247,7 +266,7 @@ template("ios_static_framework") {
   _static_library_target = invoker.static_library_target
 
   bundle_data(_framework_binary_target) {
-    visibility = [ ":$_bundle_target_name" ]
+    visibility = [ ":$_target_name" ]
     sources = get_target_outputs(_static_library_target)
     outputs = [
       "{{bundle_root_dir}}/$_framework_name",
@@ -257,7 +276,7 @@ template("ios_static_framework") {
     ]
   }
 
-  create_bundle(_bundle_target_name) {
+  create_bundle(_target_name) {
     product_type = "com.apple.product-type.framework"
     bundle_root_dir = "$root_out_dir/Static/$_output_name"
     bundle_executable_dir = bundle_root_dir
@@ -266,16 +285,6 @@ template("ios_static_framework") {
     deps = [
       ":$_framework_binary_target",
       ":$_framework_headers_target",
-    ]
-  }
-
-  action(_target_name) {
-    script = "//build/config/ios/dummy.py"
-    outputs = [
-      "$root_out_dir/Static/$_output_name",
-    ]
-    deps = [
-      ":$_bundle_target_name",
     ]
     public_configs = invoker.public_configs
   }

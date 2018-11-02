@@ -14,6 +14,10 @@
 #include "ppapi/proxy/ppapi_messages.h"
 #include "ppapi/shared_impl/platform_file.h"
 
+#if defined(OS_POSIX)
+#include "base/posix/eintr_wrapper.h"
+#endif
+
 #if defined(OS_WIN)
 #include <windows.h>
 #endif
@@ -38,7 +42,7 @@ base::SyncSocket::Handle DuplicateHandle(base::SyncSocket::Handle handle) {
 #elif defined(OS_POSIX)
   // If asked to close the source, we can simply re-use the source fd instead of
   // dup()ing and close()ing.
-  out_handle = ::dup(handle);
+  out_handle = HANDLE_EINTR(::dup(handle));
 #else
 #error Not implemented.
 #endif
@@ -242,7 +246,7 @@ void PepperBroker::ConnectPluginToBroker(PPB_Broker_Impl* client) {
     result = PP_ERROR_FAILED;
   }
 
-  // TOOD(ddorwin): Change the IPC to asynchronous: Queue an object containing
+  // TODO(ddorwin): Change the IPC to asynchronous: Queue an object containing
   // client and plugin_socket.release(), then return.
   // That message handler will then call client->BrokerConnected() with the
   // saved pipe handle.

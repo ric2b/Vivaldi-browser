@@ -13,8 +13,8 @@
 #include "base/strings/string16.h"
 #include "build/build_config.h"
 #include "cc/ipc/cc_param_traits.h"
-#include "cc/output/begin_frame_args.h"
 #include "cc/output/compositor_frame.h"
+#include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/quads/shared_bitmap.h"
 #include "content/common/content_export.h"
 #include "content/common/content_param_traits.h"
@@ -162,6 +162,7 @@ IPC_STRUCT_TRAITS_END()
 IPC_STRUCT_TRAITS_BEGIN(content::ScreenInfo)
   IPC_STRUCT_TRAITS_MEMBER(device_scale_factor)
   IPC_STRUCT_TRAITS_MEMBER(color_space)
+  IPC_STRUCT_TRAITS_MEMBER(icc_profile)
   IPC_STRUCT_TRAITS_MEMBER(depth)
   IPC_STRUCT_TRAITS_MEMBER(depth_per_component)
   IPC_STRUCT_TRAITS_MEMBER(is_monochrome)
@@ -441,12 +442,6 @@ IPC_MESSAGE_ROUTED2(ViewMsg_PluginActionAt,
 // Sets the page scale for the current main frame to the given page scale.
 IPC_MESSAGE_ROUTED1(ViewMsg_SetPageScale, float /* page_scale_factor */)
 
-// Used to tell a render view whether it should expose various bindings
-// that allow JS content extended privileges.  See BindingsPolicy for valid
-// flag values.
-IPC_MESSAGE_ROUTED1(ViewMsg_AllowBindings,
-                    int /* enabled_bindings_flags */)
-
 // Tell the renderer to add a property to the WebUI binding object.  This
 // only works if we allowed WebUI bindings.
 IPC_MESSAGE_ROUTED2(ViewMsg_SetWebUIProperty,
@@ -601,12 +596,7 @@ IPC_MESSAGE_ROUTED1(ViewMsg_ForceRedraw,
 IPC_MESSAGE_ROUTED1(ViewMsg_SetBeginFramePaused, bool /* paused */)
 
 // Sent by the browser when the renderer should generate a new frame.
-IPC_MESSAGE_ROUTED1(ViewMsg_BeginFrame,
-                    cc::BeginFrameArgs /* args */)
-
-// Sent by the browser to deliver a compositor proto to the renderer.
-IPC_MESSAGE_ROUTED1(ViewMsg_HandleCompositorProto,
-                    std::vector<uint8_t> /* proto */)
+IPC_MESSAGE_ROUTED1(ViewMsg_BeginFrame, viz::BeginFrameArgs /* args */)
 
 // Sets the viewport intersection on the widget for an out-of-process iframe.
 IPC_MESSAGE_ROUTED1(ViewMsg_SetViewportIntersection,
@@ -806,7 +796,8 @@ IPC_MESSAGE_ROUTED2(ViewHostMsg_FrameSwapMessages,
 
 // Sent if the BeginFrame did not cause a SwapCompositorFrame (e.g. because no
 // updates were required or because it was aborted in the renderer).
-IPC_MESSAGE_ROUTED1(ViewHostMsg_DidNotProduceFrame, cc::BeginFrameAck /* ack */)
+IPC_MESSAGE_ROUTED1(ViewHostMsg_DidNotProduceFrame,
+                    viz::BeginFrameAck /* ack */)
 
 // Send back a string to be recorded by UserMetrics.
 IPC_MESSAGE_CONTROL1(ViewHostMsg_UserMetricsRecordAction,

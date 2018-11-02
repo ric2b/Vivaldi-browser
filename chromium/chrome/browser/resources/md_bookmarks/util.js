@@ -22,7 +22,7 @@ cr.define('bookmarks.util', function() {
 
   /**
    * @param {BookmarkTreeNode} treeNode
-   * @return {BookmarkNode}
+   * @return {!BookmarkNode}
    */
   function normalizeNode(treeNode) {
     var node = Object.assign({}, treeNode);
@@ -69,7 +69,7 @@ cr.define('bookmarks.util', function() {
     return {
       nodes: {},
       selectedFolder: BOOKMARKS_BAR_ID,
-      closedFolders: new Set(),
+      folderOpenState: new Map(),
       prefs: {
         canEdit: true,
         incognitoAvailability: IncognitoAvailability.ENABLED,
@@ -167,15 +167,39 @@ cr.define('bookmarks.util', function() {
   }
 
   /**
+   * @param {string} name
+   * @param {number} value
+   * @param {number} maxValue
+   */
+  function recordEnumHistogram(name, value, maxValue) {
+    chrome.send('metricsHandler:recordInHistogram', [name, value, maxValue]);
+  }
+
+  /**
    * @param {!Object<string, T>} map
    * @param {!Set<string>} ids
    * @return {!Object<string, T>}
    * @template T
    */
-  function removeIdsFromMap(map, ids) {
-    var newMap = Object.assign({}, map);
+  function removeIdsFromObject(map, ids) {
+    var newObject = Object.assign({}, map);
     ids.forEach(function(id) {
-      delete newMap[id];
+      delete newObject[id];
+    });
+    return newObject;
+  }
+
+
+  /**
+   * @param {!Map<string, T>} map
+   * @param {!Set<string>} ids
+   * @return {!Map<string, T>}
+   * @template T
+   */
+  function removeIdsFromMap(map, ids) {
+    var newMap = new Map(map);
+    ids.forEach(function(id) {
+      newMap.delete(id);
     });
     return newMap;
   }
@@ -203,7 +227,9 @@ cr.define('bookmarks.util', function() {
     isShowingSearch: isShowingSearch,
     normalizeNode: normalizeNode,
     normalizeNodes: normalizeNodes,
+    recordEnumHistogram: recordEnumHistogram,
     removeIdsFromMap: removeIdsFromMap,
+    removeIdsFromObject: removeIdsFromObject,
     removeIdsFromSet: removeIdsFromSet,
   };
 });

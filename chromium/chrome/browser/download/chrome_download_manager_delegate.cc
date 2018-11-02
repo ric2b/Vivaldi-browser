@@ -35,6 +35,7 @@
 #include "chrome/browser/download/save_package_file_picker.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -87,11 +88,6 @@ using safe_browsing::DownloadFileType;
 using safe_browsing::DownloadProtectionService;
 
 namespace {
-
-// The first id assigned to a download when download database failed to
-// initialize.
-const uint32_t kFirstDownloadIdNoPersist =
-    content::DownloadItem::kInvalidId + 1;
 
 #if defined(FULL_SAFE_BROWSING)
 
@@ -165,10 +161,10 @@ base::FilePath GetPlatformDownloadPath(Profile* profile,
 void CheckDownloadUrlDone(
     const DownloadTargetDeterminerDelegate::CheckDownloadUrlCallback& callback,
     bool is_content_check_supported,
-    DownloadProtectionService::DownloadCheckResult result) {
+    safe_browsing::DownloadCheckResult result) {
   content::DownloadDangerType danger_type;
-  if (result == DownloadProtectionService::SAFE ||
-      result == DownloadProtectionService::UNKNOWN) {
+  if (result == safe_browsing::DownloadCheckResult::SAFE ||
+      result == safe_browsing::DownloadCheckResult::UNKNOWN) {
     // If this type of files is handled by the enhanced SafeBrowsing download
     // protection, mark it as potentially dangerous content until we are done
     // with scanning it.
@@ -266,7 +262,7 @@ void ChromeDownloadManagerDelegate::SetNextId(uint32_t next_id) {
   } else {
     // Still download files without download database, all download history in
     // this browser session will not be persisted.
-    next_download_id_ = kFirstDownloadIdNoPersist;
+    next_download_id_ = content::DownloadItem::kInvalidId + 1;
   }
 
   IdCallbackVector callbacks;
@@ -529,6 +525,9 @@ void ChromeDownloadManagerDelegate::OpenDownload(DownloadItem* download) {
   if (!download->CanOpenDownload())
     return;
 
+  MaybeSendDangerousDownloadOpenedReport(download,
+                                         false /* show_download_in_folder */);
+
   if (!DownloadItemModel(download).ShouldPreferOpeningInBrowser()) {
     RecordDownloadOpenMethod(DOWNLOAD_OPEN_METHOD_DEFAULT_PLATFORM);
     OpenDownloadUsingPlatformHandler(download);
@@ -566,6 +565,10 @@ void ChromeDownloadManagerDelegate::ShowDownloadInShell(
     DownloadItem* download) {
   if (!download->CanShowInFolder())
     return;
+
+  MaybeSendDangerousDownloadOpenedReport(download,
+                                         true /* show_download_in_folder */);
+
   base::FilePath platform_path(
       GetPlatformDownloadPath(profile_, download, PLATFORM_CURRENT_PATH));
   DCHECK(!platform_path.empty());
@@ -772,13 +775,13 @@ void ChromeDownloadManagerDelegate::GetFileMimeType(
 #if defined(FULL_SAFE_BROWSING)
 void ChromeDownloadManagerDelegate::CheckClientDownloadDone(
     uint32_t download_id,
-    DownloadProtectionService::DownloadCheckResult result) {
+    safe_browsing::DownloadCheckResult result) {
   DownloadItem* item = download_manager_->GetDownload(download_id);
   if (!item || (item->GetState() != DownloadItem::IN_PROGRESS))
     return;
 
   DVLOG(2) << __func__ << "() download = " << item->DebugString(false)
-           << " verdict = " << result;
+           << " verdict = " << static_cast<int>(result);
   // We only mark the content as being dangerous if the download's safety state
   // has not been set to DANGEROUS yet.  We don't want to show two warnings.
   if (item->GetDangerType() == content::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS ||
@@ -787,7 +790,7 @@ void ChromeDownloadManagerDelegate::CheckClientDownloadDone(
     content::DownloadDangerType danger_type =
         content::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS;
     switch (result) {
-      case DownloadProtectionService::UNKNOWN:
+      case safe_browsing::DownloadCheckResult::UNKNOWN:
         // The check failed or was inconclusive.
         if (DownloadItemModel(item).GetDangerLevel() !=
             DownloadFileType::NOT_DANGEROUS) {
@@ -797,7 +800,7 @@ void ChromeDownloadManagerDelegate::CheckClientDownloadDone(
                                     DANGEROUS_FILE_REASON_MAX);
         }
         break;
-      case DownloadProtectionService::SAFE:
+      case safe_browsing::DownloadCheckResult::SAFE:
         // If this file type require explicit consent, then set the danger type
         // to DANGEROUS_FILE so that the user be required to manually vet
         // whether the download is intended or not.
@@ -808,16 +811,16 @@ void ChromeDownloadManagerDelegate::CheckClientDownloadDone(
                                     SB_RETURNS_SAFE, DANGEROUS_FILE_REASON_MAX);
         }
         break;
-      case DownloadProtectionService::DANGEROUS:
+      case safe_browsing::DownloadCheckResult::DANGEROUS:
         danger_type = content::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT;
         break;
-      case DownloadProtectionService::UNCOMMON:
+      case safe_browsing::DownloadCheckResult::UNCOMMON:
         danger_type = content::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT;
         break;
-      case DownloadProtectionService::DANGEROUS_HOST:
+      case safe_browsing::DownloadCheckResult::DANGEROUS_HOST:
         danger_type = content::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST;
         break;
-      case DownloadProtectionService::POTENTIALLY_UNWANTED:
+      case safe_browsing::DownloadCheckResult::POTENTIALLY_UNWANTED:
         danger_type = content::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED;
         break;
     }
@@ -875,7 +878,7 @@ void ChromeDownloadManagerDelegate::OnDownloadTargetDetermined(
         target_info->is_filetype_handled_safely)
       DownloadItemModel(item).SetShouldPreferOpeningInBrowser(true);
 
-#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+#if defined(OS_LINUX)
     if (item->GetOriginalMimeType() == "application/x-x509-user-cert")
       DownloadItemModel(item).SetShouldPreferOpeningInBrowser(true);
 #endif
@@ -949,4 +952,17 @@ bool ChromeDownloadManagerDelegate::ShouldBlockFile(
                  << static_cast<int>(download_restriction);
   }
   return false;
+}
+
+void ChromeDownloadManagerDelegate::MaybeSendDangerousDownloadOpenedReport(
+    DownloadItem* download,
+    bool show_download_in_folder) {
+#if defined(FULL_SAFE_BROWSING)
+  safe_browsing::DownloadProtectionService* service =
+      GetDownloadProtectionService();
+  if (service) {
+    service->MaybeSendDangerousDownloadOpenedReport(download,
+                                                    show_download_in_folder);
+  }
+#endif
 }

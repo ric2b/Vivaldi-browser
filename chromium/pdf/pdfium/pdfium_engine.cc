@@ -26,6 +26,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "gin/array_buffer.h"
 #include "gin/public/gin_embedders.h"
 #include "gin/public/isolate_holder.h"
@@ -48,6 +49,7 @@
 #include "ppapi/cpp/var_dictionary.h"
 #include "printing/pdf_transform.h"
 #include "printing/units.h"
+#include "third_party/pdfium/public/fpdf_annot.h"
 #include "third_party/pdfium/public/fpdf_edit.h"
 #include "third_party/pdfium/public/fpdf_ext.h"
 #include "third_party/pdfium/public/fpdf_flatten.h"
@@ -516,6 +518,28 @@ void FormatStringForOS(base::string16* text) {
 #endif
 }
 
+// Returns true if |cur| is a character to break on.
+// For double clicks, look for work breaks.
+// For triple clicks, look for line breaks.
+// The actual algorithm used in Blink is much more complicated, so do a simple
+// approximation.
+bool FindMultipleClickBoundary(bool is_double_click, base::char16 cur) {
+  if (!is_double_click)
+    return cur == '\n';
+
+  // Deal with ASCII characters.
+  if (base::IsAsciiAlpha(cur) || base::IsAsciiDigit(cur) || cur == '_')
+    return false;
+  if (cur < 128)
+    return true;
+
+  static constexpr base::char16 kZeroWidthSpace = 0x200B;
+  if (cur == kZeroWidthSpace)
+    return true;
+
+  return false;
+}
+
 // Returns a VarDictionary (representing a bookmark), which in turn contains
 // child VarDictionaries (representing the child bookmarks).
 // If nullptr is passed in as the bookmark then we traverse from the "root".
@@ -623,6 +647,54 @@ std::string WideStringToString(FPDF_WIDESTRING wide_string) {
   return base::UTF16ToUTF8(reinterpret_cast<const base::char16*>(wide_string));
 }
 
+// Returns true if the given |area| and |form_type| combination from
+// PDFiumEngine::GetCharIndex() indicates it is a form text area.
+bool IsFormTextArea(PDFiumPage::Area area, int form_type) {
+  if (form_type == FPDF_FORMFIELD_UNKNOWN)
+    return false;
+
+  DCHECK_EQ(area, PDFiumPage::FormTypeToArea(form_type));
+  return area == PDFiumPage::FORM_TEXT_AREA;
+}
+
+// Checks whether or not focus is in an editable form text area given the
+// form field annotation flags and form type.
+bool CheckIfEditableFormTextArea(int flags, int form_type) {
+  if (!!(flags & FPDF_FORMFLAG_READONLY))
+    return false;
+  if (form_type == FPDF_FORMFIELD_TEXTFIELD)
+    return true;
+  if (form_type == FPDF_FORMFIELD_COMBOBOX &&
+      (!!(flags & FPDF_FORMFLAG_CHOICE_EDIT))) {
+    return true;
+  }
+  return false;
+}
+
+bool IsLinkArea(PDFiumPage::Area area) {
+  return area == PDFiumPage::WEBLINK_AREA || area == PDFiumPage::DOCLINK_AREA;
+}
+
+// Normalize a MouseInputEvent. For Mac, this means transforming ctrl + left
+// button down events into a right button down events.
+pp::MouseInputEvent NormalizeMouseEvent(pp::Instance* instance,
+                                        const pp::MouseInputEvent& event) {
+  pp::MouseInputEvent normalized_event = event;
+#if defined(OS_MACOSX)
+  uint32_t modifiers = event.GetModifiers();
+  if ((modifiers & PP_INPUTEVENT_MODIFIER_CONTROLKEY) &&
+      event.GetButton() == PP_INPUTEVENT_MOUSEBUTTON_LEFT &&
+      event.GetType() == PP_INPUTEVENT_TYPE_MOUSEDOWN) {
+    uint32_t new_modifiers = modifiers & ~PP_INPUTEVENT_MODIFIER_CONTROLKEY;
+    normalized_event = pp::MouseInputEvent(
+        instance, PP_INPUTEVENT_TYPE_MOUSEDOWN, event.GetTimeStamp(),
+        new_modifiers, PP_INPUTEVENT_MOUSEBUTTON_RIGHT, event.GetPosition(), 1,
+        event.GetMovement());
+  }
+#endif
+  return normalized_event;
+}
+
 }  // namespace
 
 bool InitializeSDK() {
@@ -683,6 +755,7 @@ PDFiumEngine::PDFiumEngine(PDFEngine::Client* client)
       mouse_down_state_(PDFiumPage::NONSELECTABLE_AREA,
                         PDFiumPage::LinkTarget()),
       in_form_text_area_(false),
+      editable_form_text_area_(false),
       mouse_left_button_down_(false),
       next_page_to_search_(-1),
       last_page_to_search_(-1),
@@ -1663,16 +1736,6 @@ void PDFiumEngine::PrintEnd() {
   FORM_DoDocumentAAction(form_, FPDFDOC_AACTION_DP);
 }
 
-PDFiumPage::Area PDFiumEngine::GetCharIndex(const pp::MouseInputEvent& event,
-                                            int* page_index,
-                                            int* char_index,
-                                            int* form_type,
-                                            PDFiumPage::LinkTarget* target) {
-  // First figure out which page this is in.
-  pp::Point mouse_point = event.GetPosition();
-  return GetCharIndex(mouse_point, page_index, char_index, form_type, target);
-}
-
 PDFiumPage::Area PDFiumEngine::GetCharIndex(const pp::Point& point,
                                             int* page_index,
                                             int* char_index,
@@ -1699,97 +1762,23 @@ PDFiumPage::Area PDFiumEngine::GetCharIndex(const pp::Point& point,
   }
 
   *page_index = page;
-  return pages_[page]->GetCharIndex(point_in_page, current_rotation_,
-                                    char_index, form_type, target);
+  PDFiumPage::Area result = pages_[page]->GetCharIndex(
+      point_in_page, current_rotation_, char_index, form_type, target);
+  return (client_->IsPrintPreview() && result == PDFiumPage::WEBLINK_AREA)
+             ? PDFiumPage::NONSELECTABLE_AREA
+             : result;
 }
 
 bool PDFiumEngine::OnMouseDown(const pp::MouseInputEvent& event) {
-  if (event.GetButton() == PP_INPUTEVENT_MOUSEBUTTON_RIGHT) {
-    if (selection_.empty())
-      return false;
-    std::vector<pp::Rect> selection_rect_vector;
-    GetAllScreenRectsUnion(&selection_, GetVisibleRect().point(),
-                           &selection_rect_vector);
-    pp::Point point = event.GetPosition();
-    for (const auto& rect : selection_rect_vector) {
-      if (rect.Contains(point.x(), point.y()))
-        return false;
-    }
-    SelectionChangeInvalidator selection_invalidator(this);
-    selection_.clear();
-    return true;
-  }
-
-  if (event.GetButton() != PP_INPUTEVENT_MOUSEBUTTON_LEFT &&
-      event.GetButton() != PP_INPUTEVENT_MOUSEBUTTON_MIDDLE) {
-    return false;
-  }
-
-  SetMouseLeftButtonDown(event.GetButton() == PP_INPUTEVENT_MOUSEBUTTON_LEFT);
-
-  auto selection_invalidator =
-      base::MakeUnique<SelectionChangeInvalidator>(this);
-  selection_.clear();
-
-  int page_index = -1;
-  int char_index = -1;
-  int form_type = FPDF_FORMFIELD_UNKNOWN;
-  PDFiumPage::LinkTarget target;
-  PDFiumPage::Area area =
-      GetCharIndex(event, &page_index, &char_index, &form_type, &target);
-  mouse_down_state_.Set(area, target);
-
-  // Decide whether to open link or not based on user action in mouse up and
-  // mouse move events.
-  if (area == PDFiumPage::WEBLINK_AREA || area == PDFiumPage::DOCLINK_AREA)
-    return true;
-
-  // Prevent middle mouse button from selecting texts.
-  if (event.GetButton() == PP_INPUTEVENT_MOUSEBUTTON_MIDDLE)
-    return false;
-
-  if (page_index != -1) {
-    last_page_mouse_down_ = page_index;
-    double page_x, page_y;
-    pp::Point point = event.GetPosition();
-    DeviceToPage(page_index, point.x(), point.y(), &page_x, &page_y);
-
-    FORM_OnLButtonDown(form_, pages_[page_index]->GetPage(), 0, page_x, page_y);
-    if (form_type > FPDF_FORMFIELD_UNKNOWN) {  // returns -1 sometimes...
-      mouse_down_state_.Set(PDFiumPage::FormTypeToArea(form_type), target);
-
-      // Destroy SelectionChangeInvalidator object before SetInFormTextArea()
-      // changes plugin's focus to be in form text area. This way, regular text
-      // selection can be cleared when a user clicks into a form text area
-      // because the pp::PDF::SetSelectedText() call in
-      // ~SelectionChangeInvalidator() still goes to the Mimehandler
-      // (not the Renderer).
-      selection_invalidator.reset();
-
-      bool is_valid_control = (form_type == FPDF_FORMFIELD_TEXTFIELD ||
-                               form_type == FPDF_FORMFIELD_COMBOBOX);
-
-// TODO(bug_62400): figure out selection and copying
-// for XFA fields
-#if defined(PDF_ENABLE_XFA)
-      is_valid_control |= (form_type == FPDF_FORMFIELD_XFA);
-#endif
-      SetInFormTextArea(is_valid_control);
-      return true;  // Return now before we get into the selection code.
-    }
-  }
-  SetInFormTextArea(false);
-
-  if (area != PDFiumPage::TEXT_AREA)
-    return true;  // Return true so WebKit doesn't do its own highlighting.
-
-  if (event.GetClickCount() == 1) {
-    OnSingleClick(page_index, char_index);
-  } else if (event.GetClickCount() == 2 || event.GetClickCount() == 3) {
-    OnMultipleClick(event.GetClickCount(), page_index, char_index);
-  }
-
-  return true;
+  pp::MouseInputEvent normalized_event =
+      NormalizeMouseEvent(client_->GetPluginInstance(), event);
+  if (normalized_event.GetButton() == PP_INPUTEVENT_MOUSEBUTTON_LEFT)
+    return OnLeftMouseDown(normalized_event);
+  if (normalized_event.GetButton() == PP_INPUTEVENT_MOUSEBUTTON_MIDDLE)
+    return OnMiddleMouseDown(normalized_event);
+  if (normalized_event.GetButton() == PP_INPUTEVENT_MOUSEBUTTON_RIGHT)
+    return OnRightMouseDown(normalized_event);
+  return false;
 }
 
 void PDFiumEngine::OnSingleClick(int page_index, int char_index) {
@@ -1800,14 +1789,15 @@ void PDFiumEngine::OnSingleClick(int page_index, int char_index) {
 void PDFiumEngine::OnMultipleClick(int click_count,
                                    int page_index,
                                    int char_index) {
+  DCHECK_GE(click_count, 2);
+  bool is_double_click = click_count == 2;
+
   // It would be more efficient if the SDK could support finding a space, but
   // now it doesn't.
   int start_index = char_index;
   do {
     base::char16 cur = pages_[page_index]->GetCharAtIndex(start_index);
-    // For double click, we want to select one word so we look for whitespace
-    // boundaries.  For triple click, we want the whole line.
-    if (cur == '\n' || (click_count == 2 && (cur == ' ' || cur == '\t')))
+    if (FindMultipleClickBoundary(is_double_click, cur))
       break;
   } while (--start_index >= 0);
   if (start_index)
@@ -1817,12 +1807,168 @@ void PDFiumEngine::OnMultipleClick(int click_count,
   int total = pages_[page_index]->GetCharCount();
   while (end_index++ <= total) {
     base::char16 cur = pages_[page_index]->GetCharAtIndex(end_index);
-    if (cur == '\n' || (click_count == 2 && (cur == ' ' || cur == '\t')))
+    if (FindMultipleClickBoundary(is_double_click, cur))
       break;
   }
 
   selection_.push_back(PDFiumRange(pages_[page_index].get(), start_index,
                                    end_index - start_index));
+}
+
+bool PDFiumEngine::OnLeftMouseDown(const pp::MouseInputEvent& event) {
+  SetMouseLeftButtonDown(true);
+
+  auto selection_invalidator =
+      base::MakeUnique<SelectionChangeInvalidator>(this);
+  selection_.clear();
+
+  int page_index = -1;
+  int char_index = -1;
+  int form_type = FPDF_FORMFIELD_UNKNOWN;
+  PDFiumPage::LinkTarget target;
+  pp::Point point = event.GetPosition();
+  PDFiumPage::Area area =
+      GetCharIndex(point, &page_index, &char_index, &form_type, &target);
+  DCHECK_GE(form_type, FPDF_FORMFIELD_UNKNOWN);
+  mouse_down_state_.Set(area, target);
+
+  // Decide whether to open link or not based on user action in mouse up and
+  // mouse move events.
+  if (IsLinkArea(area))
+    return true;
+
+  if (page_index != -1) {
+    last_page_mouse_down_ = page_index;
+    double page_x;
+    double page_y;
+    DeviceToPage(page_index, point.x(), point.y(), &page_x, &page_y);
+
+    bool is_form_text_area = IsFormTextArea(area, form_type);
+    FPDF_PAGE page = pages_[page_index]->GetPage();
+    bool is_editable_form_text_area =
+        is_form_text_area &&
+        IsPointInEditableFormTextArea(page, page_x, page_y, form_type);
+
+    FORM_OnLButtonDown(form_, page, 0, page_x, page_y);
+    if (form_type != FPDF_FORMFIELD_UNKNOWN) {
+      // Destroy SelectionChangeInvalidator object before SetInFormTextArea()
+      // changes plugin's focus to be in form text area. This way, regular text
+      // selection can be cleared when a user clicks into a form text area
+      // because the pp::PDF::SetSelectedText() call in
+      // ~SelectionChangeInvalidator() still goes to the Mimehandler
+      // (not the Renderer).
+      selection_invalidator.reset();
+
+      SetInFormTextArea(is_form_text_area);
+      editable_form_text_area_ = is_editable_form_text_area;
+      return true;  // Return now before we get into the selection code.
+    }
+  }
+  SetInFormTextArea(false);
+
+  if (area != PDFiumPage::TEXT_AREA)
+    return true;  // Return true so WebKit doesn't do its own highlighting.
+
+  if (event.GetClickCount() == 1)
+    OnSingleClick(page_index, char_index);
+  else if (event.GetClickCount() == 2 || event.GetClickCount() == 3)
+    OnMultipleClick(event.GetClickCount(), page_index, char_index);
+
+  return true;
+}
+
+bool PDFiumEngine::OnMiddleMouseDown(const pp::MouseInputEvent& event) {
+  SetMouseLeftButtonDown(false);
+
+  SelectionChangeInvalidator selection_invalidator(this);
+  selection_.clear();
+
+  int unused_page_index = -1;
+  int unused_char_index = -1;
+  int unused_form_type = FPDF_FORMFIELD_UNKNOWN;
+  PDFiumPage::LinkTarget target;
+  PDFiumPage::Area area =
+      GetCharIndex(event.GetPosition(), &unused_page_index, &unused_char_index,
+                   &unused_form_type, &target);
+  mouse_down_state_.Set(area, target);
+
+  // Decide whether to open link or not based on user action in mouse up and
+  // mouse move events.
+  if (IsLinkArea(area))
+    return true;
+
+  // Prevent middle mouse button from selecting texts.
+  return false;
+}
+
+bool PDFiumEngine::OnRightMouseDown(const pp::MouseInputEvent& event) {
+  DCHECK_EQ(PP_INPUTEVENT_MOUSEBUTTON_RIGHT, event.GetButton());
+
+  pp::Point point = event.GetPosition();
+  int page_index = -1;
+  int char_index = -1;
+  int form_type = FPDF_FORMFIELD_UNKNOWN;
+  PDFiumPage::LinkTarget target;
+  PDFiumPage::Area area =
+      GetCharIndex(point, &page_index, &char_index, &form_type, &target);
+  DCHECK_GE(form_type, FPDF_FORMFIELD_UNKNOWN);
+
+  bool is_form_text_area = IsFormTextArea(area, form_type);
+  bool is_editable_form_text_area = false;
+
+  double page_x = -1;
+  double page_y = -1;
+  FPDF_PAGE page = nullptr;
+  if (is_form_text_area) {
+    DCHECK_NE(page_index, -1);
+
+    DeviceToPage(page_index, point.x(), point.y(), &page_x, &page_y);
+    page = pages_[page_index]->GetPage();
+    is_editable_form_text_area =
+        IsPointInEditableFormTextArea(page, page_x, page_y, form_type);
+  }
+
+  // Handle the case when focus starts inside a form text area.
+  if (in_form_text_area_) {
+    if (is_form_text_area) {
+      FORM_OnFocus(form_, page, 0, page_x, page_y);
+    } else {
+      // Transition out of a form text area.
+      FORM_ForceToKillFocus(form_);
+      SetInFormTextArea(false);
+    }
+    return true;
+  }
+
+  // Handle the case when focus starts outside a form text area and transitions
+  // into a form text area.
+  if (is_form_text_area) {
+    {
+      SelectionChangeInvalidator selection_invalidator(this);
+      selection_.clear();
+    }
+
+    SetInFormTextArea(true);
+    editable_form_text_area_ = is_editable_form_text_area;
+    FORM_OnFocus(form_, page, 0, page_x, page_y);
+    return true;
+  }
+
+  // Handle the case when focus starts outside a form text area and stays
+  // outside.
+  if (selection_.empty())
+    return false;
+
+  std::vector<pp::Rect> selection_rect_vector;
+  GetAllScreenRectsUnion(&selection_, GetVisibleRect().point(),
+                         &selection_rect_vector);
+  for (const auto& rect : selection_rect_vector) {
+    if (rect.Contains(point.x(), point.y()))
+      return false;
+  }
+  SelectionChangeInvalidator selection_invalidator(this);
+  selection_.clear();
+  return true;
 }
 
 bool PDFiumEngine::OnMouseUp(const pp::MouseInputEvent& event) {
@@ -1838,8 +1984,9 @@ bool PDFiumEngine::OnMouseUp(const pp::MouseInputEvent& event) {
   int char_index = -1;
   int form_type = FPDF_FORMFIELD_UNKNOWN;
   PDFiumPage::LinkTarget target;
+  pp::Point point = event.GetPosition();
   PDFiumPage::Area area =
-      GetCharIndex(event, &page_index, &char_index, &form_type, &target);
+      GetCharIndex(point, &page_index, &char_index, &form_type, &target);
 
   // Open link on mouse up for same link for which mouse down happened earlier.
   if (mouse_down_state_.Matches(area, target)) {
@@ -1871,8 +2018,8 @@ bool PDFiumEngine::OnMouseUp(const pp::MouseInputEvent& event) {
     return false;
 
   if (page_index != -1) {
-    double page_x, page_y;
-    pp::Point point = event.GetPosition();
+    double page_x;
+    double page_y;
     DeviceToPage(page_index, point.x(), point.y(), &page_x, &page_y);
     FORM_OnLButtonUp(form_, pages_[page_index]->GetPage(), 0, page_x, page_y);
   }
@@ -1889,8 +2036,9 @@ bool PDFiumEngine::OnMouseMove(const pp::MouseInputEvent& event) {
   int char_index = -1;
   int form_type = FPDF_FORMFIELD_UNKNOWN;
   PDFiumPage::LinkTarget target;
+  pp::Point point = event.GetPosition();
   PDFiumPage::Area area =
-      GetCharIndex(event, &page_index, &char_index, &form_type, &target);
+      GetCharIndex(point, &page_index, &char_index, &form_type, &target);
 
   // Clear |mouse_down_state_| if mouse moves away from where the mouse down
   // happened.
@@ -1929,8 +2077,8 @@ bool PDFiumEngine::OnMouseMove(const pp::MouseInputEvent& event) {
     }
 
     if (page_index != -1) {
-      double page_x, page_y;
-      pp::Point point = event.GetPosition();
+      double page_x;
+      double page_y;
       DeviceToPage(page_index, point.x(), point.y(), &page_x, &page_y);
       FORM_OnMouseMove(form_, pages_[page_index]->GetPage(), 0, page_x, page_y);
     }
@@ -1956,14 +2104,15 @@ bool PDFiumEngine::OnMouseMove(const pp::MouseInputEvent& event) {
 
   // We're selecting but right now we're not over text, so don't change the
   // current selection.
-  if (area != PDFiumPage::TEXT_AREA && area != PDFiumPage::WEBLINK_AREA &&
-      area != PDFiumPage::DOCLINK_AREA) {
+  if (area != PDFiumPage::TEXT_AREA && !IsLinkArea(area))
     return false;
-  }
 
   SelectionChangeInvalidator selection_invalidator(this);
+  return ExtendSelection(page_index, char_index);
+}
 
-  // Check if the user has descreased their selection area and we need to remove
+bool PDFiumEngine::ExtendSelection(int page_index, int char_index) {
+  // Check if the user has decreased their selection area and we need to remove
   // pages from selection_.
   for (size_t i = 0; i < selection_.size(); ++i) {
     if (selection_[i].page_index() == page_index) {
@@ -1972,7 +2121,6 @@ bool PDFiumEngine::OnMouseMove(const pp::MouseInputEvent& event) {
       break;
     }
   }
-
   if (selection_.empty())
     return false;
 
@@ -2031,10 +2179,9 @@ bool PDFiumEngine::OnKeyDown(const pp::KeyboardInputEvent& event) {
 
   if (event.GetKeyCode() == ui::VKEY_BACK ||
       event.GetKeyCode() == ui::VKEY_ESCAPE) {
-    // Chrome doesn't send char events for backspace or escape keys, see
-    // PlatformKeyboardEventBuilder::isCharacterKey() and
-    // http://chrome-corpsvn.mtv.corp.google.com/viewvc?view=rev&root=chrome&revision=31805
-    // for more information.  So just fake one since PDFium uses it.
+    // Blink does not send char events for backspace or escape keys, see
+    // WebKeyboardEvent::IsCharacterKey() and b/961192 for more information.
+    // So just fake one since PDFium uses it.
     std::string str;
     str.push_back(event.GetKeyCode());
     pp::KeyboardInputEvent synthesized(pp::KeyboardInputEvent(
@@ -2051,12 +2198,11 @@ bool PDFiumEngine::OnKeyUp(const pp::KeyboardInputEvent& event) {
     return false;
 
   // Check if form text selection needs to be updated.
-  if (in_form_text_area_) {
-    SetFormSelectedText(form_, pages_[last_page_mouse_down_]->GetPage());
-  }
+  FPDF_PAGE page = pages_[last_page_mouse_down_]->GetPage();
+  if (in_form_text_area_)
+    SetFormSelectedText(form_, page);
 
-  return !!FORM_OnKeyUp(form_, pages_[last_page_mouse_down_]->GetPage(),
-                        event.GetKeyCode(), event.GetModifiers());
+  return !!FORM_OnKeyUp(form_, page, event.GetKeyCode(), event.GetModifiers());
 }
 
 bool PDFiumEngine::OnChar(const pp::KeyboardInputEvent& event) {
@@ -2398,6 +2544,22 @@ std::string PDFiumEngine::GetSelectedText() {
   FormatStringWithHyphens(&result);
   FormatStringForOS(&result);
   return base::UTF16ToUTF8(result);
+}
+
+bool PDFiumEngine::CanEditText() {
+  return editable_form_text_area_;
+}
+
+void PDFiumEngine::ReplaceSelection(const std::string& text) {
+  DCHECK(CanEditText());
+  if (last_page_mouse_down_ != -1) {
+    base::string16 text_wide = base::UTF8ToUTF16(text);
+    FPDF_WIDESTRING text_pdf_wide =
+        reinterpret_cast<FPDF_WIDESTRING>(text_wide.c_str());
+
+    FORM_ReplaceSelection(form_, pages_[last_page_mouse_down_]->GetPage(),
+                          text_pdf_wide);
+  }
 }
 
 std::string PDFiumEngine::GetLinkAtPosition(const pp::Point& point) {
@@ -3011,7 +3173,7 @@ void PDFiumEngine::FinishPaint(int progressive_index,
   DCHECK(image_data);
 
   int page_index = progressive_paints_[progressive_index].page_index;
-  pp::Rect dirty_in_screen = progressive_paints_[progressive_index].rect;
+  const pp::Rect& dirty_in_screen = progressive_paints_[progressive_index].rect;
   FPDF_BITMAP bitmap = progressive_paints_[progressive_index].bitmap;
   int start_x, start_y, size_x, size_y;
   GetPDFiumRect(page_index, dirty_in_screen, &start_x, &start_y, &size_x,
@@ -3048,7 +3210,7 @@ void PDFiumEngine::FillPageSides(int progressive_index) {
   DCHECK_LT(static_cast<size_t>(progressive_index), progressive_paints_.size());
 
   int page_index = progressive_paints_[progressive_index].page_index;
-  pp::Rect dirty_in_screen = progressive_paints_[progressive_index].rect;
+  const pp::Rect& dirty_in_screen = progressive_paints_[progressive_index].rect;
   FPDF_BITMAP bitmap = progressive_paints_[progressive_index].bitmap;
 
   pp::Rect page_rect = pages_[page_index]->rect();
@@ -3096,7 +3258,7 @@ void PDFiumEngine::PaintPageShadow(int progressive_index,
   DCHECK(image_data);
 
   int page_index = progressive_paints_[progressive_index].page_index;
-  pp::Rect dirty_in_screen = progressive_paints_[progressive_index].rect;
+  const pp::Rect& dirty_in_screen = progressive_paints_[progressive_index].rect;
   pp::Rect page_rect = pages_[page_index]->rect();
   pp::Rect shadow_rect(page_rect);
   shadow_rect.Inset(-kPageShadowLeft, -kPageShadowTop, -kPageShadowRight,
@@ -3124,7 +3286,7 @@ void PDFiumEngine::DrawSelections(int progressive_index,
   DCHECK(image_data);
 
   int page_index = progressive_paints_[progressive_index].page_index;
-  pp::Rect dirty_in_screen = progressive_paints_[progressive_index].rect;
+  const pp::Rect& dirty_in_screen = progressive_paints_[progressive_index].rect;
 
   void* region = nullptr;
   int stride;
@@ -3266,6 +3428,14 @@ void PDFiumEngine::Highlight(void* buffer,
   pp::Rect new_rect = rect;
   for (const auto& highlighted : *highlighted_rects)
     new_rect = new_rect.Subtract(highlighted);
+  if (new_rect.IsEmpty())
+    return;
+
+  std::vector<size_t> overlapping_rect_indices;
+  for (size_t i = 0; i < highlighted_rects->size(); ++i) {
+    if (new_rect.Intersects((*highlighted_rects)[i]))
+      overlapping_rect_indices.push_back(i);
+  }
 
   highlighted_rects->push_back(new_rect);
   int l = new_rect.x();
@@ -3275,8 +3445,18 @@ void PDFiumEngine::Highlight(void* buffer,
 
   for (int y = t; y < t + h; ++y) {
     for (int x = l; x < l + w; ++x) {
+      bool overlaps = false;
+      for (size_t i : overlapping_rect_indices) {
+        const auto& highlighted = (*highlighted_rects)[i];
+        if (highlighted.Contains(x, y)) {
+          overlaps = true;
+          break;
+        }
+      }
+      if (overlaps)
+        continue;
+
       uint8_t* pixel = static_cast<uint8_t*>(buffer) + y * stride + x * 4;
-      //  This is our highlight color.
       pixel[0] = static_cast<uint8_t>(pixel[0] * (kHighlightColorB / 255.0));
       pixel[1] = static_cast<uint8_t>(pixel[1] * (kHighlightColorG / 255.0));
       pixel[2] = static_cast<uint8_t>(pixel[2] * (kHighlightColorR / 255.0));
@@ -3321,6 +3501,7 @@ PDFiumEngine::SelectionChangeInvalidator::~SelectionChangeInvalidator() {
       selection_changed = true;
     }
   }
+
   if (selection_changed)
     engine_->OnSelectionChanged();
 }
@@ -3559,9 +3740,10 @@ void PDFiumEngine::DrawPageShadow(const pp::Rect& page_rc,
   depth = static_cast<uint32_t>(depth * 1.5) + 1;
 
   // We need to check depth only to verify our copy of shadow matrix is correct.
-  if (!page_shadow_.get() || page_shadow_->depth() != depth)
-    page_shadow_.reset(
-        new ShadowMatrix(depth, factor, client_->GetBackgroundColor()));
+  if (!page_shadow_.get() || page_shadow_->depth() != depth) {
+    page_shadow_ = base::MakeUnique<ShadowMatrix>(
+        depth, factor, client_->GetBackgroundColor());
+  }
 
   DCHECK(!image_data->is_null());
   DrawShadow(image_data, shadow_rect, page_rect, clip_rect, *page_shadow_);
@@ -3596,6 +3778,32 @@ void PDFiumEngine::GetRegion(const pp::Point& location,
 void PDFiumEngine::OnSelectionChanged() {
   DCHECK(!in_form_text_area_);
   pp::PDF::SetSelectedText(GetPluginInstance(), GetSelectedText().c_str());
+
+  // We need to determine the top-left and bottom-right points of the selection
+  // in order to report those to the embedder. This code assumes that the
+  // selection list is out of order.
+  pp::Rect left(std::numeric_limits<int32_t>::max(),
+                std::numeric_limits<int32_t>::max(), 0, 0);
+  pp::Rect right;
+  for (auto& sel : selection_) {
+    for (const auto& rect : sel.GetScreenRects(
+             GetVisibleRect().point(), current_zoom_, current_rotation_)) {
+      if (rect.y() < left.y() ||
+          (rect.y() == left.y() && rect.x() < left.x())) {
+        left = rect;
+      }
+      if (rect.y() > right.y() ||
+          (rect.y() == right.y() && rect.right() > right.right())) {
+        right = rect;
+      }
+    }
+  }
+  right.set_x(right.x() + right.width());
+  if (left.IsEmpty()) {
+    left.set_x(0);
+    left.set_y(0);
+  }
+  client_->SelectionChanged(left, right);
 }
 
 void PDFiumEngine::RotateInternal() {
@@ -3642,10 +3850,29 @@ void PDFiumEngine::SetInFormTextArea(bool in_form_text_area) {
 
   client_->FormTextFieldFocusChange(in_form_text_area);
   in_form_text_area_ = in_form_text_area;
+
+  // Clear |editable_form_text_area_| when focus no longer in form text area.
+  if (!in_form_text_area_)
+    editable_form_text_area_ = false;
 }
 
 void PDFiumEngine::SetMouseLeftButtonDown(bool is_mouse_left_button_down) {
   mouse_left_button_down_ = is_mouse_left_button_down;
+}
+
+bool PDFiumEngine::IsPointInEditableFormTextArea(FPDF_PAGE page,
+                                                 double page_x,
+                                                 double page_y,
+                                                 int form_type) {
+  FPDF_ANNOTATION annot =
+      FPDFAnnot_GetFormFieldAtPoint(form_, page, page_x, page_y);
+  DCHECK(annot);
+
+  int flags = FPDFAnnot_GetFormFieldFlags(page, annot);
+  bool is_editable_form_text_area =
+      CheckIfEditableFormTextArea(flags, form_type);
+  FPDFPage_CloseAnnot(annot);
+  return is_editable_form_text_area;
 }
 
 void PDFiumEngine::ScheduleTouchTimer(const pp::TouchInputEvent& evt) {
@@ -3962,6 +4189,49 @@ FPDF_BOOL PDFiumEngine::Pause_NeedToPauseNow(IFSDK_PAUSE* param) {
   PDFiumEngine* engine = static_cast<PDFiumEngine*>(param);
   return (base::Time::Now() - engine->last_progressive_start_time_)
              .InMilliseconds() > engine->progressive_paint_timeout_;
+}
+
+void PDFiumEngine::SetCaretPosition(const pp::Point& position) {
+  // TODO(dsinclair): Handle caret position ...
+}
+
+void PDFiumEngine::MoveRangeSelectionExtent(const pp::Point& extent) {
+  int page_index = -1;
+  int char_index = -1;
+  int form_type = FPDF_FORMFIELD_UNKNOWN;
+  PDFiumPage::LinkTarget target;
+  GetCharIndex(extent, &page_index, &char_index, &form_type, &target);
+  if (page_index < 0 || char_index < 0)
+    return;
+
+  SelectionChangeInvalidator selection_invalidator(this);
+  if (range_selection_direction_ == RangeSelectionDirection::Right) {
+    ExtendSelection(page_index, char_index);
+    return;
+  }
+
+  // For a left selection we clear the current selection and set a new starting
+  // point based on the new left position. We then extend that selection out to
+  // the previously provided base location.
+  selection_.clear();
+  selection_.push_back(PDFiumRange(pages_[page_index].get(), char_index, 0));
+
+  // This should always succeeed because the range selection base should have
+  // already been selected.
+  GetCharIndex(range_selection_base_, &page_index, &char_index, &form_type,
+               &target);
+  ExtendSelection(page_index, char_index);
+}
+
+void PDFiumEngine::SetSelectionBounds(const pp::Point& base,
+                                      const pp::Point& extent) {
+  range_selection_base_ = base;
+  if (base.y() < extent.y() ||
+      (base.y() == extent.y() && base.x() < extent.x())) {
+    range_selection_direction_ = RangeSelectionDirection::Left;
+  } else {
+    range_selection_direction_ = RangeSelectionDirection::Right;
+  }
 }
 
 ScopedUnsupportedFeature::ScopedUnsupportedFeature(PDFiumEngine* engine)

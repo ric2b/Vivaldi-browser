@@ -53,10 +53,8 @@ const char kTemporaryDirectoryName[] = "t";
 const char kPersistentDirectoryName[] = "p";
 const char kSyncableDirectoryName[] = "s";
 
-const char* kPrepopulateTypes[] = {
-  kPersistentDirectoryName,
-  kTemporaryDirectoryName
-};
+const char* const kPrepopulateTypes[] = {kPersistentDirectoryName,
+                                         kTemporaryDirectoryName};
 
 enum FileSystemError {
   kOK = 0,
@@ -135,11 +133,11 @@ void OpenFileSystemOnFileTaskRunner(
 
 void DidOpenFileSystem(
     base::WeakPtr<SandboxFileSystemBackendDelegate> delegate,
-    const base::Callback<void(base::File::Error error)>& callback,
+    base::OnceCallback<void(base::File::Error error)> callback,
     base::File::Error* error) {
-  if (delegate.get())
-    delegate.get()->CollectOpenFileSystemMetrics(*error);
-  callback.Run(*error);
+  if (delegate)
+    delegate->CollectOpenFileSystemMetrics(*error);
+  std::move(callback).Run(*error);
 }
 
 template <typename T>
@@ -251,10 +249,11 @@ void SandboxFileSystemBackendDelegate::OpenFileSystem(
     const GURL& origin_url,
     FileSystemType type,
     OpenFileSystemMode mode,
-    const OpenFileSystemCallback& callback,
+    OpenFileSystemCallback callback,
     const GURL& root_url) {
   if (!IsAllowedScheme(origin_url)) {
-    callback.Run(GURL(), std::string(), base::File::FILE_ERROR_SECURITY);
+    std::move(callback).Run(GURL(), std::string(),
+                            base::File::FILE_ERROR_SECURITY);
     return;
   }
 
@@ -263,13 +262,11 @@ void SandboxFileSystemBackendDelegate::OpenFileSystem(
   base::File::Error* error_ptr = new base::File::Error;
   file_task_runner_->PostTaskAndReply(
       FROM_HERE,
-      base::Bind(&OpenFileSystemOnFileTaskRunner,
-                 obfuscated_file_util(), origin_url, type, mode,
-                 base::Unretained(error_ptr)),
-      base::Bind(&DidOpenFileSystem,
-                 weak_factory_.GetWeakPtr(),
-                 base::Bind(callback, root_url, name),
-                 base::Owned(error_ptr)));
+      base::BindOnce(&OpenFileSystemOnFileTaskRunner, obfuscated_file_util(),
+                     origin_url, type, mode, base::Unretained(error_ptr)),
+      base::BindOnce(&DidOpenFileSystem, weak_factory_.GetWeakPtr(),
+                     base::BindOnce(std::move(callback), root_url, name),
+                     base::Owned(error_ptr)));
 
   io_thread_checker_.DetachFromThread();
   is_filesystem_opened_ = true;
@@ -361,10 +358,10 @@ void SandboxFileSystemBackendDelegate::GetOriginsForTypeOnFileTaskRunner(
   }
   switch (type) {
     case kFileSystemTypeTemporary:
-      UMA_HISTOGRAM_COUNTS(kTemporaryOriginsCountLabel, origins->size());
+      UMA_HISTOGRAM_COUNTS_1M(kTemporaryOriginsCountLabel, origins->size());
       break;
     case kFileSystemTypePersistent:
-      UMA_HISTOGRAM_COUNTS(kPersistentOriginsCountLabel, origins->size());
+      UMA_HISTOGRAM_COUNTS_1M(kPersistentOriginsCountLabel, origins->size());
       break;
     default:
       break;

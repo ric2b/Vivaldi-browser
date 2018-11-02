@@ -40,20 +40,28 @@
 // text in this case.
 
 namespace {
-const int32_t kCommandBufferSize = 1024 * 1024;
-const int32_t kTransferBufferSize = 512 * 1024;
 const bool kBindGeneratesResources = true;
 const bool kLoseContextWhenOutOfMemory = false;
 const bool kSupportClientSideArrays = true;
 }
 
 namespace egl {
+// static
+gpu::GpuFeatureInfo Context::platform_gpu_feature_info_;
+
+// static
+void Context::SetPlatformGpuFeatureInfo(
+    const gpu::GpuFeatureInfo& gpu_feature_info) {
+  platform_gpu_feature_info_ = gpu_feature_info;
+}
+
 Context::Context(Display* display, const Config* config)
     : display_(display),
       config_(config),
       is_current_in_some_thread_(false),
       is_destroyed_(false),
-      gpu_driver_bug_workarounds_(base::CommandLine::ForCurrentProcess()),
+      gpu_driver_bug_workarounds_(
+          platform_gpu_feature_info_.enabled_gpu_driver_bug_workarounds),
       translator_cache_(gpu::GpuPreferences()) {}
 
 Context::~Context() {
@@ -195,11 +203,7 @@ gpu::CommandBufferId Context::GetCommandBufferID() const {
   return gpu::CommandBufferId();
 }
 
-int32_t Context::GetStreamId() const {
-  return 0;
-}
-
-void Context::FlushOrderingBarrierOnStream(int32_t stream_id) {
+void Context::FlushPendingWork() {
   // This is only relevant for out-of-process command buffers.
 }
 
@@ -255,12 +259,13 @@ void Context::ApplyContextReleased() {
 }
 
 bool Context::CreateService(gl::GLSurface* gl_surface) {
+  gpu::SharedMemoryLimits limits;
   scoped_refptr<gpu::gles2::FeatureInfo> feature_info(
       new gpu::gles2::FeatureInfo(gpu_driver_bug_workarounds_));
   scoped_refptr<gpu::gles2::ContextGroup> group(new gpu::gles2::ContextGroup(
-      gpu::GpuPreferences(), &mailbox_manager_, nullptr /* memory_tracker */,
-      &translator_cache_, &completeness_cache_, feature_info, true,
-      &image_manager_, nullptr /* image_factory */,
+      gpu::GpuPreferences(), true, &mailbox_manager_,
+      nullptr /* memory_tracker */, &translator_cache_, &completeness_cache_,
+      feature_info, true, &image_manager_, nullptr /* image_factory */,
       nullptr /* progress_reporter */, gpu::GpuFeatureInfo(),
       &discardable_manager_));
 
@@ -281,6 +286,7 @@ bool Context::CreateService(gl::GLSurface* gl_surface) {
       gl::init::CreateGLContext(nullptr, gl_surface, context_attribs));
   if (!gl_context)
     return false;
+  platform_gpu_feature_info_.ApplyToGLContext(gl_context.get());
 
   gl_context->MakeCurrent(gl_surface);
 
@@ -304,7 +310,7 @@ bool Context::CreateService(gl::GLSurface* gl_surface) {
 
   std::unique_ptr<gpu::gles2::GLES2CmdHelper> gles2_cmd_helper(
       new gpu::gles2::GLES2CmdHelper(command_buffer.get()));
-  if (!gles2_cmd_helper->Initialize(kCommandBufferSize)) {
+  if (!gles2_cmd_helper->Initialize(limits.command_buffer_size)) {
     decoder->Destroy(true);
     return false;
   }
@@ -324,9 +330,7 @@ bool Context::CreateService(gl::GLSurface* gl_surface) {
           kBindGeneratesResources, kLoseContextWhenOutOfMemory,
           kSupportClientSideArrays, this));
 
-  if (!context->Initialize(kTransferBufferSize, kTransferBufferSize / 2,
-                           kTransferBufferSize * 2,
-                           gpu::SharedMemoryLimits::kNoLimit)) {
+  if (!context->Initialize(limits)) {
     DestroyService();
     return false;
   }

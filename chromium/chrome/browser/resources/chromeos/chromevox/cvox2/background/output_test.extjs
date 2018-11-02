@@ -101,7 +101,7 @@ OutputE2ETest.prototype = {
   setUp: function() {
     window.Dir = AutomationUtil.Dir;
     window.RoleType = chrome.automation.RoleType;
-    this.forceContextualLastOutput();   
+    this.forceContextualLastOutput();
   }
 };
 
@@ -380,7 +380,7 @@ TEST_F('OutputE2ETest', 'List', function() {
 
 TEST_F('OutputE2ETest', 'Tree', function() {
   this.runWithLoadedTree(function() {/*!
-    <ul role="tree">
+    <ul role="tree" style="list-style-type:none">
       <li aria-expanded="true" role="treeitem">a
       <li role="treeitem">b
       <li aria-expanded="false" role="treeitem">c
@@ -810,18 +810,19 @@ SYNC_TEST_F('OutputE2ETest', 'ValidateCommonProperties', function() {
 
   // This filters out known roles that don't have states or descriptions.
   var notStated = [RoleType.CLIENT, RoleType.EMBEDDED_OBJECT,
-      RoleType.INLINE_TEXT_BOX, RoleType.LIST_MARKER,
+      RoleType.INLINE_TEXT_BOX, RoleType.LINE_BREAK, RoleType.LIST_MARKER,
       RoleType.PARAGRAPH, RoleType.ROOT_WEB_AREA,
       RoleType.STATIC_TEXT, RoleType.WINDOW];
   var notRestricted = [RoleType.ALERT, RoleType.ALERT_DIALOG, RoleType.CELL,
       RoleType.CLIENT, RoleType.EMBEDDED_OBJECT, RoleType.GENERIC_CONTAINER,
-      RoleType.IMAGE, RoleType.INLINE_TEXT_BOX, RoleType.LIST,
-      RoleType.LIST_MARKER, RoleType.PARAGRAPH, RoleType.REGION,
+      RoleType.IMAGE, RoleType.INLINE_TEXT_BOX, RoleType.LINE_BREAK,
+      RoleType.LIST, RoleType.LIST_MARKER, RoleType.PARAGRAPH, RoleType.REGION,
       RoleType.ROOT_WEB_AREA, RoleType.ROW_HEADER, RoleType.STATIC_TEXT,
       RoleType.TABLE_HEADER_CONTAINER, RoleType.TIMER, RoleType.WINDOW];
   var notDescribed = [RoleType.CLIENT, RoleType.EMBEDDED_OBJECT,
-      RoleType.INLINE_TEXT_BOX, RoleType.LIST_MARKER, RoleType.PARAGRAPH,
-      RoleType.ROOT_WEB_AREA, RoleType.STATIC_TEXT, RoleType.WINDOW];
+      RoleType.INLINE_TEXT_BOX, RoleType.LINE_BREAK, RoleType.LIST_MARKER,
+      RoleType.PARAGRAPH, RoleType.ROOT_WEB_AREA, RoleType.STATIC_TEXT,
+      RoleType.WINDOW];
   missingState = missingState.filter(function(state) {
     return notStated.indexOf(state) == -1;
   });
@@ -836,7 +837,7 @@ SYNC_TEST_F('OutputE2ETest', 'ValidateCommonProperties', function() {
                'Unexpected missing states for output rules ' +
                    missingState.join(' '));
   assertEquals(0, missingRestriction.length,
-               'Unexpected missing rectriction for output rules ' +
+               'Unexpected missing restriction for output rules ' +
                    missingRestriction.join(' '));
   assertEquals(0, missingDescription.length,
                'Unexpected missing descriptions for output rules ' +
@@ -855,4 +856,19 @@ SYNC_TEST_F('OutputE2ETest', 'ValidateCommonProperties', function() {
   // $childCount)'.
   // In such cases, you are responsible for ensuring you include all states and
   // descriptions somewhere in the output.
+});
+
+TEST_F('OutputE2ETest', 'InlineBraille', function() {
+  this.runWithLoadedTree(function(root) {/*!
+    <table border=1>
+      <tr><td>Name</td><td id="active">Age</td><td>Address</td></tr>
+    </table>
+  */}, function(root) {
+    var obj = root.find({role: RoleType.CELL});
+    var o = new Output().withRichSpeechAndBraille(cursors.Range.fromNode(obj));
+    assertEquals('Name|row 1 column 1|Table , 1 by 3',
+                 o.speechOutputForTest.string_);
+    assertEquals('Name r1c1 Age r1c2 Address r1c3',
+                 o.brailleOutputForTest.string_);
+  });
 });

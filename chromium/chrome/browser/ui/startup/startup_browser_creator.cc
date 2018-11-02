@@ -117,6 +117,8 @@
 #include "chrome/browser/ui/app_list/app_list_service.h"
 #endif
 
+#include "app/vivaldi_apptools.h"
+
 using content::BrowserThread;
 using content::ChildProcessSecurityPolicy;
 
@@ -714,7 +716,8 @@ bool StartupBrowserCreator::ProcessCmdLineImpl(
   }
 
   // Check for --load-and-launch-app.
-  if (command_line.HasSwitch(apps::kLoadAndLaunchApp) && can_use_last_profile) {
+  if (command_line.HasSwitch(apps::kLoadAndLaunchApp) &&
+      (can_use_last_profile || vivaldi::IsVivaldiRunning())) {
     base::CommandLine::StringType path =
         command_line.GetSwitchValueNative(apps::kLoadAndLaunchApp);
 
@@ -737,6 +740,11 @@ bool StartupBrowserCreator::ProcessCmdLineImpl(
   if (command_line.HasSwitch(switches::kWinJumplistAction)) {
     jumplist::LogJumplistActionFromSwitchValue(
         command_line.GetSwitchValueASCII(switches::kWinJumplistAction));
+    // Use a non-NULL pointer to indicate JumpList has been used. We re-use
+    // chrome::kJumpListIconDirname as the key to the data.
+    last_used_profile->SetUserData(
+        chrome::kJumpListIconDirname,
+        base::WrapUnique(new base::SupportsUserData::Data()));
   }
 #endif  // defined(OS_WIN)
 

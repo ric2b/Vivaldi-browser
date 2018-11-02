@@ -19,6 +19,7 @@
 #include "net/base/hash_value.h"
 #include "net/base/net_export.h"
 #include "net/cert/cert_status_flags.h"
+#include "net/net_features.h"
 
 #if defined(OS_MACOSX) && !defined(OS_IOS)
 #include <Security/x509defs.h>
@@ -36,9 +37,20 @@ struct NET_EXPORT CertPrincipal {
   explicit CertPrincipal(const std::string& name);
   ~CertPrincipal();
 
-#if (defined(OS_MACOSX) && !defined(OS_IOS)) || defined(OS_WIN)
+#if BUILDFLAG(USE_BYTE_CERTS) || (defined(OS_MACOSX) && !defined(OS_IOS)) || \
+    defined(OS_WIN)
+  // Configures handling of PrintableString values in the DistinguishedName. Do
+  // not use non-default handling without consulting //net owners. With
+  // kAsUTF8Hack, PrintableStrings are interpreted as UTF-8 strings.
+  enum class PrintableStringHandling { kDefault, kAsUTF8Hack };
+
   // Parses a BER-format DistinguishedName.
-  bool ParseDistinguishedName(const void* ber_name_data, size_t length);
+  // TODO(mattm): change this to take a der::Input.
+  bool ParseDistinguishedName(
+      const void* ber_name_data,
+      size_t length,
+      PrintableStringHandling printable_string_handling =
+          PrintableStringHandling::kDefault);
 #endif
 
   // Returns a name that can be used to represent the issuer.  It tries in this

@@ -33,12 +33,14 @@
 
 #include "WebCommon.h"
 #include "WebMediaPlayer.h"
+#include "ui/gfx/color_space.h"
 
 namespace blink {
 
 class WebInbandTextTrack;
 class WebLayer;
 class WebMediaSource;
+class WebRemotePlaybackClient;
 
 enum class WebRemotePlaybackAvailability;
 
@@ -94,6 +96,8 @@ class BLINK_PLATFORM_EXPORT WebMediaPlayerClient {
   virtual void DisconnectedFromRemoteDevice() = 0;
   virtual void CancelledRemotePlaybackRequest() = 0;
   virtual void RemotePlaybackStarted() = 0;
+  virtual void RemotePlaybackCompatibilityChanged(const WebURL&,
+                                                  bool is_compatible) = 0;
 
   // Set the player as the persistent video. Persistent video should hide its
   // controls and go fullscreen.
@@ -101,8 +105,8 @@ class BLINK_PLATFORM_EXPORT WebMediaPlayerClient {
 
   // After the monitoring is activated, the client will inform WebMediaPlayer
   // when the element becomes/stops being the dominant visible content by
-  // calling WebMediaPlayer::becameDominantVisibleContent(bool).
-  virtual void ActivateViewportIntersectionMonitoring(bool) {}
+  // calling WebMediaPlayer::BecameDominantVisibleContent(bool).
+  virtual void ActivateViewportIntersectionMonitoring(bool) = 0;
 
   // Returns whether the media element is in an autoplay muted state.
   virtual bool IsAutoplayingMuted() = 0;
@@ -114,15 +118,30 @@ class BLINK_PLATFORM_EXPORT WebMediaPlayerClient {
   virtual WebMediaPlayer::TrackId GetSelectedVideoTrackId() = 0;
 
   // Informs that media starts/stops being rendered and played back remotely.
-  virtual void MediaRemotingStarted() {}
-  virtual void MediaRemotingStopped() {}
+  // |remote_device_friendly_name| will be shown in the remoting UI to indicate
+  // which device the content is rendered on. An empty name indicates an unknown
+  // remote device. A default message will be shown in this case.
+  virtual void MediaRemotingStarted(
+      const WebString& remote_device_friendly_name) = 0;
+  virtual void MediaRemotingStopped() = 0;
 
   // Returns whether the media element has native controls. It does not mean
   // that the controls are currently visible.
   virtual bool HasNativeControls() = 0;
 
+  // Returns true iff the client represents an HTML <audio> element.
+  virtual bool IsAudioElement() = 0;
+
   // Returns the current display type of the media element.
   virtual WebMediaPlayer::DisplayType DisplayType() const = 0;
+
+  // Returns the remote playback client associated with the media element, if
+  // any.
+  virtual WebRemotePlaybackClient* RemotePlaybackClient() { return nullptr; };
+
+  // Returns the color space to render media into if.
+  // Rendering media into this color space may avoid some conversions.
+  virtual gfx::ColorSpace TargetColorSpace() { return gfx::ColorSpace(); }
 
  protected:
   ~WebMediaPlayerClient() = default;

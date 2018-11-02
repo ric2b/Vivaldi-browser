@@ -319,7 +319,7 @@ struct hb_apply_context_t :
       if (!c->check_glyph_property (&info, lookup_props))
 	return SKIP_YES;
 
-      if (unlikely (_hb_glyph_info_is_default_ignorable_and_not_fvs (&info) &&
+      if (unlikely (_hb_glyph_info_is_default_ignorable_and_not_hidden (&info) &&
 		    (ignore_zwnj || !_hb_glyph_info_is_zwnj (&info)) &&
 		    (ignore_zwj || !_hb_glyph_info_is_zwj (&info))))
 	return SKIP_MAYBE;
@@ -346,9 +346,9 @@ struct hb_apply_context_t :
       matcher.set_match_func (NULL, NULL);
       matcher.set_lookup_props (c->lookup_props);
       /* Ignore ZWNJ if we are matching GSUB context, or matching GPOS. */
-      matcher.set_ignore_zwnj (context_match || c->table_index == 1);
+      matcher.set_ignore_zwnj (c->table_index == 1 || (context_match && c->auto_zwnj));
       /* Ignore ZWJ if we are matching GSUB context, or matching GPOS, or if asked to. */
-      matcher.set_ignore_zwj (context_match || c->table_index == 1 || c->auto_zwj);
+      matcher.set_ignore_zwj  (c->table_index == 1 || (context_match || c->auto_zwj));
       matcher.set_mask (context_match ? -1 : c->lookup_mask);
     }
     inline void set_lookup_props (unsigned int lookup_props)
@@ -457,45 +457,50 @@ struct hb_apply_context_t :
     return ret;
   }
 
-  unsigned int table_index; /* GSUB/GPOS */
+  skipping_iterator_t iter_input, iter_context;
+
   hb_font_t *font;
   hb_face_t *face;
   hb_buffer_t *buffer;
+  recurse_func_t recurse_func;
+  const GDEF &gdef;
+  const VariationStore &var_store;
+
   hb_direction_t direction;
   hb_mask_t lookup_mask;
-  bool auto_zwj;
-  recurse_func_t recurse_func;
-  unsigned int nesting_level_left;
-  unsigned int lookup_props;
-  const GDEF &gdef;
-  bool has_glyph_classes;
-  const VariationStore &var_store;
-  skipping_iterator_t iter_input, iter_context;
+  unsigned int table_index; /* GSUB/GPOS */
   unsigned int lookup_index;
+  unsigned int lookup_props;
+  unsigned int nesting_level_left;
   unsigned int debug_depth;
+
+  bool auto_zwnj;
+  bool auto_zwj;
+  bool has_glyph_classes;
 
 
   hb_apply_context_t (unsigned int table_index_,
 		      hb_font_t *font_,
 		      hb_buffer_t *buffer_) :
-			table_index (table_index_),
+			iter_input (), iter_context (),
 			font (font_), face (font->face), buffer (buffer_),
+			recurse_func (NULL),
+			gdef (*hb_ot_layout_from_face (face)->gdef),
+			var_store (gdef.get_var_store ()),
 			direction (buffer_->props.direction),
 			lookup_mask (1),
-			auto_zwj (true),
-			recurse_func (NULL),
-			nesting_level_left (HB_MAX_NESTING_LEVEL),
-			lookup_props (0),
-			gdef (*hb_ot_layout_from_face (face)->gdef),
-			has_glyph_classes (gdef.has_glyph_classes ()),
-			var_store (gdef.get_var_store ()),
-			iter_input (),
-			iter_context (),
+			table_index (table_index_),
 			lookup_index ((unsigned int) -1),
-			debug_depth (0) {}
+			lookup_props (0),
+			nesting_level_left (HB_MAX_NESTING_LEVEL),
+			debug_depth (0),
+			auto_zwnj (true),
+			auto_zwj (true),
+			has_glyph_classes (gdef.has_glyph_classes ()) {}
 
   inline void set_lookup_mask (hb_mask_t mask) { lookup_mask = mask; }
   inline void set_auto_zwj (bool auto_zwj_) { auto_zwj = auto_zwj_; }
+  inline void set_auto_zwnj (bool auto_zwnj_) { auto_zwnj = auto_zwnj_; }
   inline void set_recurse_func (recurse_func_t func) { recurse_func = func; }
   inline void set_lookup_index (unsigned int lookup_index_) { lookup_index = lookup_index_; }
   inline void set_lookup_props (unsigned int lookup_props_)
@@ -886,7 +891,8 @@ static inline bool match_backtrack (hb_apply_context_t *c,
 				    unsigned int count,
 				    const USHORT backtrack[],
 				    match_func_t match_func,
-				    const void *match_data)
+				    const void *match_data,
+				    unsigned int *match_start)
 {
   TRACE_APPLY (NULL);
 
@@ -898,6 +904,8 @@ static inline bool match_backtrack (hb_apply_context_t *c,
     if (!skippy_iter.prev ())
       return_trace (false);
 
+  *match_start = skippy_iter.idx;
+
   return_trace (true);
 }
 
@@ -906,7 +914,8 @@ static inline bool match_lookahead (hb_apply_context_t *c,
 				    const USHORT lookahead[],
 				    match_func_t match_func,
 				    const void *match_data,
-				    unsigned int offset)
+				    unsigned int offset,
+				    unsigned int *end_index)
 {
   TRACE_APPLY (NULL);
 
@@ -917,6 +926,8 @@ static inline bool match_lookahead (hb_apply_context_t *c,
   for (unsigned int i = 0; i < count; i++)
     if (!skippy_iter.next ())
       return_trace (false);
+
+  *end_index = skippy_iter.idx + 1;
 
   return_trace (true);
 }
@@ -1140,10 +1151,11 @@ static inline bool context_apply_lookup (hb_apply_context_t *c,
 		      inputCount, input,
 		      lookup_context.funcs.match, lookup_context.match_data,
 		      &match_length, match_positions)
-      && apply_lookup (c,
+      && (c->buffer->unsafe_to_break (c->buffer->idx, c->buffer->idx + match_length),
+	  apply_lookup (c,
 		       inputCount, match_positions,
 		       lookupCount, lookupRecord,
-		       match_length);
+		       match_length));
 }
 
 struct Rule
@@ -1661,7 +1673,7 @@ static inline bool chain_context_apply_lookup (hb_apply_context_t *c,
 					       const LookupRecord lookupRecord[],
 					       ChainContextApplyLookupContext &lookup_context)
 {
-  unsigned int match_length = 0;
+  unsigned int start_index = 0, match_length = 0, end_index = 0;
   unsigned int match_positions[HB_MAX_CONTEXT_LENGTH];
   return match_input (c,
 		      inputCount, input,
@@ -1669,15 +1681,17 @@ static inline bool chain_context_apply_lookup (hb_apply_context_t *c,
 		      &match_length, match_positions)
       && match_backtrack (c,
 			  backtrackCount, backtrack,
-			  lookup_context.funcs.match, lookup_context.match_data[0])
+			  lookup_context.funcs.match, lookup_context.match_data[0],
+			  &start_index)
       && match_lookahead (c,
 			  lookaheadCount, lookahead,
 			  lookup_context.funcs.match, lookup_context.match_data[2],
-			  match_length)
-      && apply_lookup (c,
+			  match_length, &end_index)
+      && (c->buffer->unsafe_to_break_from_outbuffer (start_index, end_index),
+          apply_lookup (c,
 		       inputCount, match_positions,
 		       lookupCount, lookupRecord,
-		       match_length);
+		       match_length));
 }
 
 struct ChainRule

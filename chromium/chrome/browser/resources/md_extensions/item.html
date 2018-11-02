@@ -1,7 +1,9 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 
+<link rel="import" href="chrome://resources/cr_elements/cr_icons_css.html">
 <link rel="import" href="chrome://resources/cr_elements/hidden_style_css.html">
 <link rel="import" href="chrome://resources/cr_elements/paper_button_style_css.html">
+<link rel="import" href="chrome://resources/cr_elements/paper_toggle_style_css.html">
 <link rel="import" href="chrome://resources/html/action_link.html">
 <link rel="import" href="chrome://resources/html/action_link_css.html">
 <link rel="import" href="chrome://resources/html/assert.html">
@@ -14,13 +16,14 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/iron-icons.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/communication-icons.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout-classes.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/shadow.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-toggle-button/paper-toggle-button.html">
+<link rel="import" href="chrome://extensions/navigation_helper.html">
 
 <dom-module id="extensions-item">
   <template>
-    <style include="iron-flex cr-hidden-style action-link paper-button-style">
+    <style include="iron-flex cr-hidden-style cr-icons action-link paper-button-style paper-toggle-style">
       #icon-wrapper {
         align-self: flex-start;
         display: flex;
@@ -63,13 +66,12 @@
       }
 
       #name-and-version {
-        line-height: 15px;
+        @apply(--cr-primary-text);
         margin-bottom: 4px;
       }
 
       #name {
         -webkit-margin-end: 8px;
-        color: #333;
       }
 
       #description,
@@ -83,15 +85,17 @@
       #extension-id,
       #inspect-views,
       #button-strip {
+        /* TODO(dschuyler): use --cr-secondary-text. */
         color: var(--paper-grey-600);
+        font-weight: 400;
       }
 
       #button-strip {
         -webkit-padding-end: 4px;
-        -webkit-padding-start: 20px;
-        border-top: 1px solid var(--paper-grey-400);
+        -webkit-padding-start: var(--cr-section-padding);
+        border-top: var(--cr-separator-line);
         box-sizing: border-box;
-        height: 48px;
+        height: var(--cr-section-min-height);
         padding-bottom: 8px;
         padding-top: 8px;
       }
@@ -143,6 +147,7 @@
       }
 
       paper-toggle-button {
+        -webkit-margin-end: 8px;  /* Avoid ripple from overlapping container. */
         cursor: pointer;
       }
 
@@ -151,10 +156,7 @@
       }
 
       #dev-reload-button {
-        -webkit-margin-end: 20px;
-        height: 20px;
-        padding: 0;
-        width: 20px;
+        -webkit-margin-end: 12px;
       }
 
       #warnings {
@@ -229,7 +231,8 @@
           <paper-button id="details-button" on-tap="onDetailsTap_">
             $i18n{itemDetails}
           </paper-button>
-          <paper-button id="remove-button" on-tap="onRemoveTap_">
+          <paper-button id="remove-button" on-tap="onRemoveTap_"
+              hidden="[[isControlled_(data.controlledInfo)]]">
             $i18n{itemRemove}
           </paper-button>
           <paper-button id="errors-button" on-tap="onErrorsTap_"
@@ -238,9 +241,9 @@
           </paper-button>
         </div>
         <template is="dom-if" if="[[!computeDevReloadButtonHidden_(data.*)]]">
-          <paper-icon-button id="dev-reload-button"
-              on-tap="onReloadTap_" icon="refresh">
-          </paper-icon-button>
+          <button id="dev-reload-button" is="paper-icon-button-light"
+              class="icon-refresh no-overlap" on-tap="onReloadTap_">
+          </button>
         </template>
         <paper-button id="repair-button" class="action-button"
             on-tap="onRepairTap_"
@@ -254,7 +257,7 @@
         </paper-button>
         <paper-toggle-button id="enable-toggle" class="action-button"
             checked="[[isEnabled_(data.state)]]" on-change="onEnableChange_"
-            enabled="[[isEnableToggleEnabled_(data)]]"
+            disabled="[[!isEnableToggleEnabled_(data.*)]]"
             hidden$="[[!showEnableToggle_(data.*)]]">
         </paper-toggle-button>
       </div>

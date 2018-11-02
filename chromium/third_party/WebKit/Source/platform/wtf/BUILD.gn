@@ -109,6 +109,9 @@ component("wtf") {
     "RefVector.h",
     "RetainPtr.h",
     "SaturatedArithmetic.h",
+    "SaturatedArithmeticARM.h",
+    "ScopedLogger.cpp",
+    "ScopedLogger.h",
     "SizeAssertions.h",
     "SizeLimits.cpp",
     "SpinLock.h",
@@ -144,7 +147,6 @@ component("wtf") {
     "allocator/PartitionAllocator.h",
     "allocator/Partitions.cpp",
     "allocator/Partitions.h",
-    "build_config.h",
     "debug/Alias.h",
     "debug/CrashLogging.h",
     "debug/StackTrace.h",
@@ -182,6 +184,7 @@ component("wtf") {
     "text/CharacterNames.h",
     "text/Collator.h",
     "text/IntegerToStringConversion.h",
+    "text/NumberParsingOptions.h",
     "text/ParsingUtilities.h",
     "text/StringBuffer.h",
     "text/StringBuilder.cpp",
@@ -272,6 +275,7 @@ component("wtf") {
 
   public_deps = [
     "//base",
+    "//sandbox",
     "//third_party/icu",
   ]
 
@@ -336,6 +340,8 @@ test("wtf_unittests") {
     "PassRefPtrTest.cpp",
     "PtrUtilTest.cpp",
     "RefPtrTest.cpp",
+    "SaturatedArithmeticTest.cpp",
+    "ScopedLoggerTest.cpp",
     "StringExtrasTest.cpp",
     "StringHasherTest.cpp",
     "TimeTest.cpp",

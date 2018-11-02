@@ -37,7 +37,8 @@ class CHROMEOS_EXPORT ConsoleServiceProvider
         const UpdateOwnershipCallback& callback) = 0;
   };
 
-  explicit ConsoleServiceProvider(std::unique_ptr<Delegate> delegate);
+  // The caller must ensure that |delegate| outlives this object.
+  explicit ConsoleServiceProvider(Delegate* delegate);
   ~ConsoleServiceProvider() override;
 
   // CrosDBusService::ServiceProviderInterface overrides:
@@ -63,7 +64,8 @@ class CHROMEOS_EXPORT ConsoleServiceProvider
                   const std::string& method_name,
                   bool success);
 
-  std::unique_ptr<Delegate> delegate_;
+  Delegate* delegate_;  // Not owned.
+
   base::WeakPtrFactory<ConsoleServiceProvider> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ConsoleServiceProvider);

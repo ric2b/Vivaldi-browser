@@ -7,7 +7,9 @@ package org.chromium.chrome.browser.payments;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
+import android.text.TextUtils;
 
+import org.chromium.base.Log;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.chrome.browser.ChromeActivity;
@@ -16,6 +18,7 @@ import org.chromium.payments.mojom.PaymentDetailsModifier;
 import org.chromium.payments.mojom.PaymentItem;
 import org.chromium.payments.mojom.PaymentMethodData;
 
+import java.net.URI;
 import java.util.Set;
 
 import javax.annotation.Nullable;
@@ -28,6 +31,8 @@ import javax.annotation.Nullable;
 @SuppressFBWarnings({"UWF_NULL_FIELD", "URF_UNREAD_PUBLIC_OR_PROTECTED_FIELD",
         "UWF_UNWRITTEN_PUBLIC_OR_PROTECTED_FIELD", "UUF_UNUSED_PUBLIC_OR_PROTECTED_FIELD"})
 public class ServiceWorkerPaymentAppBridge implements PaymentAppFactory.PaymentAppFactoryAddition {
+    private static final String TAG = "SWPaymentApp";
+
     @Override
     public void create(WebContents webContents, Set<String> methodNames,
             PaymentAppFactory.PaymentAppCreatedCallback callback) {
@@ -56,6 +61,18 @@ public class ServiceWorkerPaymentAppBridge implements PaymentAppFactory.PaymentA
         nativeInvokePaymentApp(webContents, registrationId, origin, iframeOrigin, paymentRequestId,
                 methodData.toArray(new PaymentMethodData[0]), total,
                 modifiers.toArray(new PaymentDetailsModifier[0]), callback);
+    }
+
+    /**
+     * Abort invocation of the payment app.
+     *
+     * @param webContents      The web contents that invoked PaymentRequest.
+     * @param registrationId   The service worker registration ID of the Payment App.
+     * @param callback         Called after abort invoke payment app is finished running.
+     */
+    public static void abortPaymentApp(WebContents webContents, long registrationId,
+            PaymentInstrument.AbortCallback callback) {
+        nativeAbortPaymentApp(webContents, registrationId, callback);
     }
 
     @CalledByNative
@@ -99,35 +116,42 @@ public class ServiceWorkerPaymentAppBridge implements PaymentAppFactory.PaymentA
     }
 
     @CalledByNative
-    private static void onPaymentAppCreated(long registrationId, String label,
+    private static void onPaymentAppCreated(long registrationId, String scope, String label,
             @Nullable String sublabel, @Nullable Bitmap icon, String[] methodNameArray,
-            WebContents webContents, Object callback) {
-        assert callback instanceof PaymentAppFactory.PaymentAppCreatedCallback;
+            String[] preferredRelatedApplications, WebContents webContents, Object callback) {
         Context context = ChromeActivity.fromWebContents(webContents);
         if (context == null) return;
+        URI scopeUri = UriUtils.parseUriFromString(scope);
+        if (scopeUri == null) {
+            Log.e(TAG, "%s service worker scope is not a valid URI", scope);
+            return;
+        }
         ((PaymentAppFactory.PaymentAppCreatedCallback) callback)
-                .onPaymentAppCreated(new ServiceWorkerPaymentApp(webContents, registrationId, label,
-                        sublabel,
+                .onPaymentAppCreated(new ServiceWorkerPaymentApp(webContents, registrationId,
+                        scopeUri, label, sublabel,
                         icon == null ? null : new BitmapDrawable(context.getResources(), icon),
-                        methodNameArray));
+                        methodNameArray, preferredRelatedApplications));
     }
 
     @CalledByNative
     private static void onAllPaymentAppsCreated(Object callback) {
-        assert callback instanceof PaymentAppFactory.PaymentAppCreatedCallback;
         ((PaymentAppFactory.PaymentAppCreatedCallback) callback).onAllPaymentAppsCreated();
     }
 
     @CalledByNative
     private static void onPaymentAppInvoked(
             Object callback, String methodName, String stringifiedDetails) {
-        assert callback instanceof PaymentInstrument.InstrumentDetailsCallback;
-        if (methodName == null) {
+        if (TextUtils.isEmpty(methodName)) {
             ((PaymentInstrument.InstrumentDetailsCallback) callback).onInstrumentDetailsError();
         } else {
             ((PaymentInstrument.InstrumentDetailsCallback) callback)
                     .onInstrumentDetailsReady(methodName, stringifiedDetails);
         }
+    }
+
+    @CalledByNative
+    private static void onPaymentAppAborted(Object callback, boolean result) {
+        ((PaymentInstrument.AbortCallback) callback).onInstrumentAbortResult(result);
     }
 
     /*
@@ -146,4 +170,12 @@ public class ServiceWorkerPaymentAppBridge implements PaymentAppFactory.PaymentA
             String topLevelOrigin, String paymentRequestOrigin, String paymentRequestId,
             PaymentMethodData[] methodData, PaymentItem total, PaymentDetailsModifier[] modifiers,
             Object callback);
+
+    /*
+     * TODO(tommyt): crbug.com/505554. Change the |callback| parameter below to
+     * be of type PaymentInstrument.InstrumentDetailsCallback, once this JNI bug
+     * has been resolved.
+     */
+    private static native void nativeAbortPaymentApp(
+            WebContents webContents, long registrationId, Object callback);
 }

@@ -12,7 +12,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/test/simple_test_tick_clock.h"
-#include "cc/test/ordered_simple_task_runner.h"
+#include "components/viz/test/ordered_simple_task_runner.h"
 #include "platform/scheduler/base/task_queue_impl.h"
 #include "platform/scheduler/base/test_time_source.h"
 #include "platform/scheduler/child/scheduler_tqm_delegate_for_test.h"
@@ -134,7 +134,7 @@ TEST_F(BudgetPoolTest, WakeUpBudgetPool) {
       task_queue_throttler_->CreateWakeUpBudgetPool("test");
 
   scoped_refptr<TaskQueue> queue = scheduler_->NewTimerTaskQueue(
-      MainThreadTaskQueue::QueueType::FRAME_TIMER);
+      MainThreadTaskQueue::QueueType::FRAME_THROTTLEABLE);
 
   pool->SetWakeUpRate(0.1);
   pool->SetWakeUpDuration(base::TimeDelta::FromMilliseconds(10));

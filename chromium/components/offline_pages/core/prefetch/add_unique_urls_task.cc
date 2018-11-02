@@ -13,6 +13,8 @@
 #include "base/callback.h"
 #include "base/logging.h"
 #include "base/time/time.h"
+#include "components/offline_pages/core/offline_time_utils.h"
+#include "components/offline_pages/core/prefetch/prefetch_dispatcher.h"
 #include "components/offline_pages/core/prefetch/prefetch_types.h"
 #include "components/offline_pages/core/prefetch/store/prefetch_store.h"
 #include "components/offline_pages/core/prefetch/store/prefetch_store_utils.h"
@@ -51,18 +53,19 @@ bool CreatePrefetchItemSync(sql::Connection* db,
   static const char kSql[] =
       "INSERT INTO prefetch_items"
       " (offline_id, requested_url, client_namespace, client_id, creation_time,"
-      " freshness_time)"
+      " freshness_time, title)"
       " VALUES"
-      " (?, ?, ?, ?, ?, ?)";
+      " (?, ?, ?, ?, ?, ?, ?)";
 
-  int64_t now_internal = base::Time::Now().ToInternalValue();
+  int64_t now_db_time = ToDatabaseTime(base::Time::Now());
   sql::Statement statement(db->GetCachedStatement(SQL_FROM_HERE, kSql));
-  statement.BindInt64(0, GenerateOfflineId());
+  statement.BindInt64(0, PrefetchStoreUtils::GenerateOfflineId());
   statement.BindString(1, prefetch_url.url.spec());
   statement.BindString(2, name_space);
   statement.BindString(3, prefetch_url.id);
-  statement.BindInt64(4, now_internal);
-  statement.BindInt64(5, now_internal);
+  statement.BindInt64(4, now_db_time);
+  statement.BindInt64(5, now_db_time);
+  statement.BindString16(6, prefetch_url.title);
 
   return statement.Run();
 }
@@ -104,8 +107,10 @@ AddUniqueUrlsTask::Result AddUrlsAndCleanupZombiesSync(
   for (const auto& existing_item : existing_items) {
     if (existing_item.second.second != PrefetchItemState::ZOMBIE)
       continue;
-    if (!DeletePrefetchItemByOfflineIdSync(db, existing_item.second.first))
+    if (!PrefetchStoreUtils::DeletePrefetchItemByOfflineIdSync(
+            db, existing_item.second.first)) {
       return AddUniqueUrlsTask::Result::STORE_ERROR;  // Transaction rollback.
+    }
   }
 
   if (!transaction.Commit())
@@ -116,13 +121,18 @@ AddUniqueUrlsTask::Result AddUrlsAndCleanupZombiesSync(
 }
 
 AddUniqueUrlsTask::AddUniqueUrlsTask(
+    PrefetchDispatcher* prefetch_dispatcher,
     PrefetchStore* prefetch_store,
     const std::string& name_space,
     const std::vector<PrefetchURL>& prefetch_urls)
-    : prefetch_store_(prefetch_store),
+    : prefetch_dispatcher_(prefetch_dispatcher),
+      prefetch_store_(prefetch_store),
       name_space_(name_space),
       prefetch_urls_(prefetch_urls),
-      weak_ptr_factory_(this) {}
+      weak_ptr_factory_(this) {
+  DCHECK(prefetch_dispatcher_);
+  DCHECK(prefetch_store_);
+}
 
 AddUniqueUrlsTask::~AddUniqueUrlsTask() {}
 
@@ -134,11 +144,8 @@ void AddUniqueUrlsTask::Run() {
 }
 
 void AddUniqueUrlsTask::OnUrlsAdded(Result result) {
-  if (result == Result::URLS_ADDED) {
-    // TODO(carlosk): schedule NWake here if at least one new entry was added to
-    // the store.
-    NOTIMPLEMENTED();
-  }
+  if (result == Result::URLS_ADDED)
+    prefetch_dispatcher_->EnsureTaskScheduled();
   TaskComplete();
 }
 

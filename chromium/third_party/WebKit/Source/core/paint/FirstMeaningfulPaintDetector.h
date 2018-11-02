@@ -10,6 +10,7 @@
 #include "platform/Timer.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Noncopyable.h"
+#include "public/platform/WebLayerTreeView.h"
 
 namespace blink {
 
@@ -49,7 +50,8 @@ class CORE_EXPORT FirstMeaningfulPaintDetector
   void NotifyInputEvent();
   void NotifyPaint();
   void CheckNetworkStable();
-  void ReportSwapTime(PaintEvent, bool did_swap, double timestamp);
+  void ReportSwapTime(PaintEvent, WebLayerTreeView::SwapResult, double);
+  void NotifyFirstContentfulPaint(double swap_stamp);
 
   DECLARE_TRACE();
 
@@ -57,6 +59,12 @@ class CORE_EXPORT FirstMeaningfulPaintDetector
 
  private:
   friend class FirstMeaningfulPaintDetectorTest;
+
+  enum DeferFirstMeaningfulPaint {
+    kDoNotDefer,
+    kDeferOutstandingSwapPromises,
+    kDeferFirstContentfulPaintNotSet
+  };
 
   // The page is n-quiet if there are no more than n active network requests for
   // this duration of time.
@@ -70,6 +78,7 @@ class CORE_EXPORT FirstMeaningfulPaintDetector
   void Network2QuietTimerFired(TimerBase*);
   void ReportHistograms();
   void RegisterNotifySwapTime(PaintEvent);
+  void SetFirstMeaningfulPaint(double stamp, double swap_stamp);
 
   bool next_paint_is_meaningful_ = false;
   HadUserInput had_user_input_ = kNoUserInput;
@@ -87,7 +96,8 @@ class CORE_EXPORT FirstMeaningfulPaintDetector
   bool network2_quiet_reached_ = false;
   double first_meaningful_paint0_quiet_ = 0.0;
   double first_meaningful_paint2_quiet_ = 0.0;
-  double first_meaningful_paint2_quiet_swap_ = 0.0;
+  unsigned outstanding_swap_promise_count_ = 0;
+  DeferFirstMeaningfulPaint defer_first_meaningful_paint_ = kDoNotDefer;
   TaskRunnerTimer<FirstMeaningfulPaintDetector> network0_quiet_timer_;
   TaskRunnerTimer<FirstMeaningfulPaintDetector> network2_quiet_timer_;
 };

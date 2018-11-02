@@ -71,11 +71,15 @@ namespace TestConstantsV8Internal {
 } // namespace TestConstantsV8Internal
 
 void V8TestConstants::DEPRECATED_CONSTANTConstantGetterCallback(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestConstants_DEPRECATED_CONSTANT_ConstantGetter");
+
   Deprecation::CountDeprecation(CurrentExecutionContext(info.GetIsolate()), WebFeature::kConstant);
   V8SetReturnValueInt(info, 1);
 }
 
 void V8TestConstants::MEASURED_CONSTANTConstantGetterCallback(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestConstants_MEASURED_CONSTANT_ConstantGetter");
+
   UseCounter::Count(CurrentExecutionContext(info.GetIsolate()), WebFeature::kConstant);
   V8SetReturnValueInt(info, 1);
 }
@@ -199,7 +203,7 @@ void V8TestConstants::installFeatureName1(v8::Isolate* isolate, const DOMWrapper
 }
 
 void V8TestConstants::installFeatureName1(ScriptState* scriptState, v8::Local<v8::Object> instance) {
-  V8PerContextData* perContextData = V8PerContextData::From(scriptState->GetContext());
+  V8PerContextData* perContextData = scriptState->PerContextData();
   v8::Local<v8::Object> prototype = perContextData->PrototypeForType(&V8TestConstants::wrapperTypeInfo);
   v8::Local<v8::Function> interface = perContextData->ConstructorForType(&V8TestConstants::wrapperTypeInfo);
   ALLOW_UNUSED_LOCAL(interface);
@@ -218,7 +222,7 @@ void V8TestConstants::installFeatureName2(v8::Isolate* isolate, const DOMWrapper
 }
 
 void V8TestConstants::installFeatureName2(ScriptState* scriptState, v8::Local<v8::Object> instance) {
-  V8PerContextData* perContextData = V8PerContextData::From(scriptState->GetContext());
+  V8PerContextData* perContextData = scriptState->PerContextData();
   v8::Local<v8::Object> prototype = perContextData->PrototypeForType(&V8TestConstants::wrapperTypeInfo);
   v8::Local<v8::Function> interface = perContextData->ConstructorForType(&V8TestConstants::wrapperTypeInfo);
   ALLOW_UNUSED_LOCAL(interface);

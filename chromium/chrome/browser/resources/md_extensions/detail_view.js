@@ -5,10 +5,10 @@
 cr.define('extensions', function() {
   'use strict';
 
-  var DetailView = Polymer({
+  const DetailView = Polymer({
     is: 'extensions-detail-view',
 
-    behaviors: [I18nBehavior, Polymer.NeonAnimatableBehavior],
+    behaviors: [I18nBehavior],
 
     properties: {
       /**
@@ -24,15 +24,18 @@ cr.define('extensions', function() {
       inDevMode: Boolean,
     },
 
-    ready: function() {
-      this.sharedElements = {hero: this.$.main};
-      /** @type {!extensions.AnimationHelper} */
-      this.animationHelper = new extensions.AnimationHelper(this, this.$.main);
-    },
-
     /** @private */
     onCloseButtonTap_: function() {
-      this.fire('close');
+      extensions.navigation.navigateTo(
+          {page: Page.LIST, type: extensions.getItemListType(this.data)});
+    },
+
+    /**
+     * @return {boolean}
+     * @private
+     */
+    isControlled_: function() {
+      return extensions.isControlled(this.data);
     },
 
     /**
@@ -175,7 +178,25 @@ cr.define('extensions', function() {
     computeSourceString_: function() {
       return extensions.getItemSourceString(
           extensions.getItemSource(this.data));
-    }
+    },
+
+    /**
+     * @param {chrome.developerPrivate.ControllerType} type
+     * @return {string}
+     * @private
+     */
+    getIndicatorIcon_: function(type) {
+      switch (type) {
+        case 'POLICY':
+          return 'cr20:domain';
+        case 'CHILD_CUSTODIAN':
+          return 'cr:account-child-invert';
+        case 'SUPERVISED_USER_CUSTODIAN':
+          return 'cr:supervisor-account';
+        default:
+          return '';
+      }
+    },
   });
 
   return {DetailView: DetailView};

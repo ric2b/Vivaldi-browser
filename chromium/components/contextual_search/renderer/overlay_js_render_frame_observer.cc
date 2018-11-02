@@ -18,26 +18,27 @@
 namespace contextual_search {
 
 OverlayJsRenderFrameObserver::OverlayJsRenderFrameObserver(
-    content::RenderFrame* render_frame)
+    content::RenderFrame* render_frame,
+    service_manager::BinderRegistry* registry)
     : RenderFrameObserver(render_frame),
       is_contextual_search_overlay_(false),
-      weak_factory_(this) {}
-
-OverlayJsRenderFrameObserver::~OverlayJsRenderFrameObserver() {}
-
-void OverlayJsRenderFrameObserver::DidStartProvisionalLoad(
-    blink::WebDataSource* data_source) {
-  RegisterMojoInterface();
-}
-
-void OverlayJsRenderFrameObserver::RegisterMojoInterface() {
-  render_frame()->GetInterfaceRegistry()->AddInterface(base::Bind(
+      weak_factory_(this) {
+  registry->AddInterface(base::Bind(
       &OverlayJsRenderFrameObserver::CreateOverlayPageNotifierService,
       weak_factory_.GetWeakPtr()));
 }
 
+OverlayJsRenderFrameObserver::~OverlayJsRenderFrameObserver() {}
+
+void OverlayJsRenderFrameObserver::DidStartProvisionalLoad(
+    blink::WebDocumentLoader* document_loader) {
+  can_bind_requests_ = true;
+}
+
 void OverlayJsRenderFrameObserver::CreateOverlayPageNotifierService(
     mojom::OverlayPageNotifierServiceRequest request) {
+  if (!can_bind_requests_)
+    return;
   mojo::MakeStrongBinding(
       base::MakeUnique<OverlayPageNotifierServiceImpl>(
           weak_factory_.GetWeakPtr()),
@@ -62,11 +63,7 @@ void OverlayJsRenderFrameObserver::DidFinishLoad() {
 }
 
 void OverlayJsRenderFrameObserver::DestroyOverlayPageNotifierService() {
-  if (render_frame()) {
-    render_frame()
-        ->GetInterfaceRegistry()
-        ->RemoveInterface<mojom::OverlayPageNotifierService>();
-  }
+  can_bind_requests_ = false;
 }
 
 void OverlayJsRenderFrameObserver::OnDestruct() {

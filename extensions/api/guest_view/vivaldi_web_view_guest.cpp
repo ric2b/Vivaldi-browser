@@ -6,21 +6,24 @@
 #include <utility>
 #include <vector>
 
-// CPPLint won't let us put this above the C++ stdlib headers, because the path
-// doesn't match the cc file. As long as this compiles fine, it's probably
-// better than the alternative, which is to use NOLINT on all
-// the C++ headers.
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 
 #include "app/vivaldi_apptools.h"
+#include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/api/web_navigation/web_navigation_api.h"
+#include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/tab_contents/tab_util.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
+#include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/webui/site_settings_helper.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/common/insecure_content_renderer.mojom.h"
 #include "chrome/common/render_messages.h"
 #include "components/guest_view/browser/guest_view_event.h"
@@ -28,11 +31,12 @@
 #include "components/security_state/content/content_utils.h"
 #include "components/security_state/core/security_state.h"
 #include "components/web_cache/browser/web_cache_manager.h"
+#include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/origin_util.h"
-#include "extensions/browser/extension_registry.h"
+#include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 #include "extensions/browser/guest_view/web_view/web_view_constants.h"
 #include "extensions/browser/process_manager.h"
 #include "extensions/browser/view_type_utils.h"
@@ -48,15 +52,23 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/tab_modal_confirm_dialog.h"
+#include "chrome/browser/ui/tabs/tab_utils.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
+#include "prefs/vivaldi_gen_prefs.h"
 #include "prefs/vivaldi_pref_names.h"
+#include "ui/base/l10n/l10n_util.h"
+#include "ui/vivaldi_browser_window.h"
 
 #if defined(USE_AURA)
 #include "ui/aura/window.h"
 #endif
+
+#include "browser/vivaldi_browser_finder.h"
+#include "chrome/common/chrome_render_frame.mojom.h"
+#include "content/public/browser/render_frame_host.h"
+#include "content/public/common/associated_interface_provider.h"
 
 #if defined(OS_LINUX) || defined(OS_MACOSX)
 // Vivaldi addition: only define mouse gesture for OSX & linux
@@ -111,10 +123,6 @@ static std::string SSLStateToString(security_state::SecurityLevel status) {
     case security_state::SECURE:
       // HTTPS (non-EV)
       return "secure_no_ev";
-    case security_state::SECURITY_WARNING:
-      // HTTPS, but unable to check certificate revocation status or with
-      // insecure content on the page
-      return "security_warning";
     case security_state::SECURE_WITH_POLICY_INSTALLED_CERT:
       // HTTPS, but the certificate verification chain is anchored on a
       // certificate that was installed by the system administrator
@@ -204,10 +212,10 @@ WebContents::CreateParams WebViewGuest::GetWebContentsCreateParams(
     // different partitions.
     Profile* profile = Profile::FromBrowserContext(context);
 
-    ExtensionRegistry *registry = ExtensionRegistry::Get(profile);
+    ExtensionRegistry* registry = ExtensionRegistry::Get(profile);
     if (registry) {
       std::string extension_id = site.host();
-      const Extension *extension =
+      const Extension* extension =
           registry->enabled_extensions().GetByID(extension_id);
 
       if (extension && !IncognitoInfo::IsSplitMode(extension)) {
@@ -215,10 +223,13 @@ WebContents::CreateParams WebViewGuest::GetWebContentsCreateParams(
         // profile.
         profile = profile->GetOriginalProfile();
         context = profile;
+        guest_site_instance =
+            ProcessManager::Get(profile)->GetSiteInstanceForURL(site);
+      } else {
+        guest_site_instance =
+            content::SiteInstance::CreateForURL(context, site);
       }
     }
-    guest_site_instance =
-        ProcessManager::Get(profile)->GetSiteInstanceForURL(site);
   }
 
   WebContents::CreateParams params(context, guest_site_instance);
@@ -262,59 +273,60 @@ void WebViewGuest::InitListeners() {
 void WebViewGuest::ToggleFullscreenModeForTab(
     content::WebContents* web_contents,
     bool enter_fullscreen) {
+  bool state_changed = enter_fullscreen != is_fullscreen_;
+
   std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
   args->SetBoolean("enterFullscreen", enter_fullscreen);
 
-  bool state_changed = enter_fullscreen != is_fullscreen_;
   is_fullscreen_ = enter_fullscreen;
+  Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
+  if (!browser)
+    return;
 
-  extensions::AppWindow* app_win = GetAppWindow();
+  VivaldiBrowserWindow* app_win = static_cast<VivaldiBrowserWindow*>(browser->window());
   if (app_win) {
-    extensions::NativeAppWindow* native_app_window = app_win->GetBaseWindow();
-    ui::WindowShowState current_window_state =
-        native_app_window->GetRestoredState();
+    ui::WindowShowState current_window_state = app_win->GetRestoredState();
 #if defined(USE_AURA)
     PrefService* pref_service =
-        Profile::FromBrowserContext(web_contents->GetBrowserContext())
-            ->GetPrefs();
+      Profile::FromBrowserContext(web_contents->GetBrowserContext())
+      ->GetPrefs();
     bool hide_cursor =
-        pref_service->GetBoolean(vivaldiprefs::kHideMouseCursorInFullscreen);
+      pref_service->GetBoolean(vivaldiprefs::kHideMouseCursorInFullscreen);
     if (hide_cursor && enter_fullscreen) {
       aura::Window* window =
-          static_cast<aura::Window*>(web_contents->GetNativeView());
+        static_cast<aura::Window*>(web_contents->GetNativeView());
       cursor_hider_.reset(new CursorHider(window->GetRootWindow()));
     } else {
       cursor_hider_.reset(nullptr);
     }
 #endif  // USE_AURA
-
     if (enter_fullscreen) {
       window_state_prior_to_fullscreen_ = current_window_state;
-      app_win->Fullscreen();
+      app_win->SetFullscreen(true);
     } else {
       switch (window_state_prior_to_fullscreen_) {
-        case ui::SHOW_STATE_MAXIMIZED:
-        case ui::SHOW_STATE_NORMAL:
-        case ui::SHOW_STATE_DEFAULT:
-          // If state did not change we had a plugin that came out of
-          // fullscreen. Only HTML-element fullscreen changes the appwindow
-          // state.
-          if (state_changed) {
-            app_win->Restore();
-          }
-          break;
-        case ui::SHOW_STATE_FULLSCREEN:
-          app_win->Fullscreen();
-          break;
-        default:
-          NOTREACHED() << "uncovered state";
-          break;
+      case ui::SHOW_STATE_MAXIMIZED:
+      case ui::SHOW_STATE_NORMAL:
+      case ui::SHOW_STATE_DEFAULT:
+        // If state did not change we had a plugin that came out of
+        // fullscreen. Only HTML-element fullscreen changes the appwindow
+        // state.
+        if (state_changed) {
+          app_win->Restore();
+        }
+        break;
+      case ui::SHOW_STATE_FULLSCREEN:
+        app_win->SetFullscreen(true);
+        break;
+      default:
+        NOTREACHED() << "uncovered state";
+        break;
       }
     }
   }
   if (state_changed) {
     DispatchEventToView(base::WrapUnique(
-        new GuestViewEvent(webview::kEventOnFullscreen, std::move(args))));
+      new GuestViewEvent(webview::kEventOnFullscreen, std::move(args))));
   }
 }
 
@@ -340,6 +352,18 @@ void WebViewGuest::MoveValidationMessage(content::WebContents* web_contents,
   if (rwhv) {
     validation_message_bubble_->SetPositionRelativeToAnchor(
         rwhv->GetRenderWidgetHost(), anchor_in_root_view);
+  }
+}
+
+void WebViewGuest::BeforeUnloadFired(content::WebContents* web_contents,
+                                     bool proceed,
+                                     bool* proceed_to_fire_unload) {
+  // Call the Browser class as it already has an instance of the
+  // active unload controller.
+  Browser* browser = ::vivaldi::FindBrowserWithWebContents(web_contents);
+  DCHECK(browser);
+  if (browser) {
+    browser->DoBeforeUnloadFired(web_contents, proceed, proceed_to_fire_unload);
   }
 }
 
@@ -373,25 +397,6 @@ void WebViewGuest::SetVisible(bool is_visible) {
 
 bool WebViewGuest::IsVisible() {
   return is_visible_;
-}
-
-extensions::AppWindow* WebViewGuest::GetAppWindow() {
-  Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
-  if (browser) {
-    AppWindowRegistry* app_registry =
-        AppWindowRegistry::Get(browser->profile());
-    const AppWindowRegistry::AppWindowList& app_windows =
-        app_registry->app_windows();
-
-    AppWindowRegistry::const_iterator iter = app_windows.begin();
-    while (iter != app_windows.end()) {
-      if ((*iter)->web_contents() == owner_web_contents()) {
-        return (*iter);
-      }
-      iter++;
-    }
-  }
-  return nullptr;
 }
 
 void WebViewGuest::ShowPageInfo(gfx::Point pos) {
@@ -494,7 +499,7 @@ bool WebViewGuest::IsMouseGesturesEnabled() const {
   PrefService* pref_service =
       Profile::FromBrowserContext(web_contents()->GetBrowserContext())
           ->GetPrefs();
-  return pref_service->GetBoolean(vivaldiprefs::kMousegesturesEnabled);
+  return pref_service->GetBoolean(vivaldiprefs::kMouseGesturesEnabled);
 }
 
 bool WebViewGuest::IsRockerGesturesEnabled() const {
@@ -550,7 +555,7 @@ bool WebViewGuest::OnMouseEvent(const blink::WebMouseEvent& mouse_event) {
         mouse_event.GetType() == blink::WebInputEvent::kMouseUp &&
         mouse_event.button == blink::WebMouseEvent::Button::kRight) {
       eat_next_right_mouseup_ = false;
-#ifdef  MOUSE_GESTURES
+#ifdef MOUSE_GESTURES
       // Allows the sequence LMB-DOWN - RMB-DOWN - RMB-UP - LMB-UP (single
       // back nav) to be repeatable without a menu popping up breaking it
       // when LMB-DOWN is activated to start another sequence.
@@ -560,7 +565,7 @@ bool WebViewGuest::OnMouseEvent(const blink::WebMouseEvent& mouse_event) {
     }
   }
 
-#ifdef  MOUSE_GESTURES
+#ifdef MOUSE_GESTURES
   // Both mouse gestures and rocker gestures need a delayed menu (on mouse up)
   // to work propely.
   if (!IsMouseGesturesEnabled() && !IsRockerGesturesEnabled()) {
@@ -791,9 +796,12 @@ void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
     navigate_params.target_contents->SetInitialFocus();
 
   if (navigate_params.target_contents) {
-    navigate_params.target_contents->Send(new ChromeViewMsg_SetWindowFeatures(
-        navigate_params.target_contents->GetRenderViewHost()->GetRoutingID(),
-        blink::mojom::WindowFeatures()));
+    content::RenderFrameHost* host =
+        navigate_params.target_contents->GetMainFrame();
+    DCHECK(host);
+    chrome::mojom::ChromeRenderFrameAssociatedPtr client;
+    host->GetRemoteAssociatedInterfaces()->GetInterface(&client);
+    client->SetWindowFeatures(blink::mojom::WindowFeatures().Clone());
   }
 }
 
@@ -812,9 +820,6 @@ void WebViewGuest::CreateExtensionHost(const std::string& extension_id) {
   }
 
   if (extension_id.empty()) {
-    notification_registrar_.Remove(
-        this, extensions::NOTIFICATION_EXTENSION_HOST_VIEW_SHOULD_CLOSE,
-        content::Source<content::BrowserContext>(browser_context()));
     extension_host_.reset(nullptr);
   } else {
     if (extension_host_.get()) {
@@ -836,10 +841,6 @@ void WebViewGuest::CreateExtensionHost(const std::string& extension_id) {
 
       extension_host_.reset(new ExtensionHostForWebContents(
           extension, site_instance, url, host_type, web_contents()));
-
-      notification_registrar_.Add(
-          this, extensions::NOTIFICATION_EXTENSION_HOST_VIEW_SHOULD_CLOSE,
-          content::Source<content::BrowserContext>(browser_context()));
     }
   }
 }
@@ -855,17 +856,6 @@ blink::WebSecurityStyle WebViewGuest::GetSecurityStyle(
   } else {
     return blink::kWebSecurityStyleUnknown;
   }
-}
-
-void WebViewGuest::ShowCertificateViewerInDevTools(
-    content::WebContents* web_contents,
-    scoped_refptr<net::X509Certificate> certificate) {
-  scoped_refptr<content::DevToolsAgentHost> agent(
-      content::DevToolsAgentHost::GetOrCreateFor(web_contents));
-
-  DevToolsWindow* window = DevToolsWindow::FindDevToolsWindow(agent.get());
-  if (window)
-    window->ShowCertificateViewer(certificate);
 }
 
 void WebViewGuest::OnContentBlocked(ContentSettingsType settings_type,

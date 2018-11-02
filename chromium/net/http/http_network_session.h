@@ -122,6 +122,9 @@ class NET_EXPORT HttpNetworkSession : public base::MemoryCoordinatorClient {
     std::set<HostPortPair> origins_to_force_quic_on;
     // Set of QUIC tags to send in the handshake's connection options.
     QuicTagVector quic_connection_options;
+    // Set of QUIC tags to send in the handshake's connection options that only
+    // affect the client.
+    QuicTagVector quic_client_connection_options;
 
     // Active QUIC experiments
 
@@ -138,9 +141,6 @@ class NET_EXPORT HttpNetworkSession : public base::MemoryCoordinatorClient {
     // Specifies the reduced ping timeout subsequent connections should use when
     // a connection was timed out with open streams.
     int quic_reduced_ping_timeout_seconds;
-    // Specifies the maximum time duration that QUIC packet reader can perform
-    // consecutive packets reading.
-    int quic_packet_reader_yield_after_duration_milliseconds;
     // If true, active QUIC sessions may be migrated onto a new network when
     // the platform indicates that the default network is changing.
     bool quic_migrate_sessions_on_network_change;

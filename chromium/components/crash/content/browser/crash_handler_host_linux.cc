@@ -12,6 +12,8 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/files/file_path.h"
@@ -21,13 +23,15 @@
 #include "base/linux_util.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/rand_util.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread.h"
+#include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "breakpad/src/client/linux/handler/exception_handler.h"
 #include "breakpad/src/client/linux/minidump_writer/linux_dumper.h"
@@ -101,9 +105,8 @@ CrashHandlerHostLinux::CrashHandlerHostLinux(const std::string& process_type,
 #endif
       file_descriptor_watcher_(FROM_HERE),
       shutting_down_(false),
-      worker_pool_token_(base::SequencedWorkerPool::GetSequenceToken()) {
-  write_dump_file_sequence_checker_.DetachFromSequence();
-
+      blocking_task_runner_(base::CreateSequencedTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::USER_VISIBLE})) {
   int fds[2];
   // We use SOCK_SEQPACKET rather than SOCK_DGRAM to prevent the process from
   // sending datagrams to other sockets on the system. The sandbox may prevent
@@ -131,8 +134,8 @@ CrashHandlerHostLinux::~CrashHandlerHostLinux() {
 }
 
 void CrashHandlerHostLinux::StartUploaderThread() {
-  uploader_thread_.reset(
-      new base::Thread(process_type_ + "_crash_uploader"));
+  uploader_thread_ =
+      base::MakeUnique<base::Thread>(process_type_ + "_crash_uploader");
   uploader_thread_->Start();
 }
 
@@ -162,18 +165,18 @@ void CrashHandlerHostLinux::OnFileCanReadWithoutBlocking(int fd) {
   struct msghdr msg = {0};
   struct iovec iov[kCrashIovSize];
 
-  std::unique_ptr<char[]> crash_context(new char[kCrashContextSize]);
+  auto crash_context = base::MakeUnique<char[]>(kCrashContextSize);
 #if defined(ADDRESS_SANITIZER)
-  std::unique_ptr<char[]> asan_report(new char[kMaxAsanReportSize + 1]);
+  auto asan_report = base::MakeUnique<char[]>(kMaxAsanReportSize + 1);
 #endif
 
-  std::unique_ptr<CrashKeyStorage> crash_keys(new CrashKeyStorage);
+  auto crash_keys = base::MakeUnique<CrashKeyStorage>();
   google_breakpad::SerializedNonAllocatingMap* serialized_crash_keys;
   size_t crash_keys_size = crash_keys->Serialize(
       const_cast<const google_breakpad::SerializedNonAllocatingMap**>(
           &serialized_crash_keys));
 
-  char* tid_buf_addr = NULL;
+  char* tid_buf_addr = nullptr;
   int tid_fd = -1;
   uint64_t uptime;
   size_t oom_size;
@@ -360,8 +363,7 @@ void CrashHandlerHostLinux::FindCrashingThreadAndDump(
       reinterpret_cast<ExceptionHandler::CrashContext*>(crash_context.get());
   bad_context->tid = crashing_tid;
 
-  std::unique_ptr<BreakpadInfo> info(new BreakpadInfo);
-
+  auto info = base::MakeUnique<BreakpadInfo>();
   info->fd = -1;
   info->process_type_length = process_type_.length();
   // Freed in CrashDumpTask().
@@ -388,26 +390,23 @@ void CrashHandlerHostLinux::FindCrashingThreadAndDump(
   info->upload = upload_;
 #endif
 
-
-  BrowserThread::GetBlockingPool()->PostSequencedWorkerTask(
-      worker_pool_token_,
+  BreakpadInfo* info_ptr = info.get();
+  blocking_task_runner_->PostTaskAndReply(
       FROM_HERE,
-      base::Bind(&CrashHandlerHostLinux::WriteDumpFile,
-                 base::Unretained(this),
-                 base::Passed(&info),
-                 base::Passed(&crash_context),
-                 crashing_pid,
-                 signal_fd));
+      base::BindOnce(&CrashHandlerHostLinux::WriteDumpFile,
+                     base::Unretained(this), info_ptr,
+                     base::Passed(&crash_context), crashing_pid),
+      base::BindOnce(&CrashHandlerHostLinux::QueueCrashDumpTask,
+                     base::Unretained(this), base::Passed(&info), signal_fd));
 }
 
-void CrashHandlerHostLinux::WriteDumpFile(std::unique_ptr<BreakpadInfo> info,
+void CrashHandlerHostLinux::WriteDumpFile(BreakpadInfo* info,
                                           std::unique_ptr<char[]> crash_context,
-                                          pid_t crashing_pid,
-                                          int signal_fd) {
-  DCHECK(write_dump_file_sequence_checker_.CalledOnValidSequence());
+                                          pid_t crashing_pid) {
+  base::ThreadRestrictions::AssertIOAllowed();
 
   // Set |info->distro| here because base::GetLinuxDistro() needs to run on a
-  // blocking thread.
+  // blocking sequence.
   std::string distro = base::GetLinuxDistro();
   info->distro_length = distro.length();
   // Freed in CrashDumpTask().
@@ -456,13 +455,6 @@ void CrashHandlerHostLinux::WriteDumpFile(std::unique_ptr<BreakpadInfo> info,
   info->log_filename = minidump_log_filename_str;
 #endif
   info->pid = crashing_pid;
-
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::Bind(&CrashHandlerHostLinux::QueueCrashDumpTask,
-                 base::Unretained(this),
-                 base::Passed(&info),
-                 signal_fd));
 }
 
 void CrashHandlerHostLinux::QueueCrashDumpTask(

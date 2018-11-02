@@ -13,6 +13,7 @@
 #include "base/bind.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
+#include "base/run_loop.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
@@ -61,15 +62,6 @@ struct TestCase {
   // The path file selector should return back to the function.
   base::FilePath selected_path;
 };
-
-// Checks that file under path |selected_path| contains |expected_contents|.
-// Must be called on the file thread.
-void ExpectFileContentEquals(const base::FilePath& selected_path,
-                             const std::string& expected_contents) {
-  std::string test_file_contents;
-  ASSERT_TRUE(base::ReadFileToString(selected_path, &test_file_contents));
-  EXPECT_EQ(expected_contents, test_file_contents);
-}
 
 bool OverrideFunction(const std::string& name,
                       extensions::ExtensionFunctionFactory factory) {
@@ -300,15 +292,16 @@ IN_PROC_BROWSER_TEST_F(FileBrowserHandlerExtensionTest, EndToEnd) {
   ASSERT_TRUE(base::PathExists(selected_path));
 
   // Let's check that the file has the expected content.
-  const std::string expected_contents = "hello from test extension.";
-  base::PostTaskWithTraits(FROM_HERE,
-                           {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-                           base::BindOnce(&ExpectFileContentEquals,
-                                          selected_path, expected_contents));
-
-  // Make sure test doesn't finish until we check on file thread that the
-  // selected file's content is as expected.
-  content::RunAllPendingInMessageLoop(content::BrowserThread::FILE);
+  const std::string kExpectedContents = "hello from test extension.";
+  base::RunLoop run_loop;
+  std::string contents;
+  base::PostTaskWithTraitsAndReply(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      base::BindOnce(base::IgnoreResult(base::ReadFileToString), selected_path,
+                     &contents),
+      run_loop.QuitClosure());
+  run_loop.Run();
+  EXPECT_EQ(kExpectedContents, contents);
 
   SetTestCases(NULL);
 }

@@ -27,6 +27,7 @@ class RendererFactorySelectorTest : public testing::Test {
         AudioRendererSink* audio_renderer_sink,
         VideoRendererSink* video_renderer_sink,
         const RequestOverlayInfoCB& request_overlay_info_cb,
+        const gfx::ColorSpace& target_color_space,
         bool use_platform_media_pipeline = false) override {
       return std::unique_ptr<Renderer>();
     }

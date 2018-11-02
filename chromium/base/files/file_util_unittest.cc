@@ -26,6 +26,7 @@
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_environment_variable_override.h"
 #include "base/test/test_file_util.h"
 #include "base/threading/platform_thread.h"
 #include "build/build_config.h"
@@ -870,7 +871,6 @@ TEST_F(FileUtilTest, ChangeDirectoryPermissionsAndEnumerate) {
 
 TEST_F(FileUtilTest, ExecutableExistsInPath) {
   // Create two directories that we will put in our PATH
-  const char kPath[] = "PATH";
   const FilePath::CharType kDir1[] = FPL("dir1");
   const FilePath::CharType kDir2[] = FPL("dir2");
 
@@ -879,9 +879,9 @@ TEST_F(FileUtilTest, ExecutableExistsInPath) {
   ASSERT_TRUE(CreateDirectory(dir1));
   ASSERT_TRUE(CreateDirectory(dir2));
 
-  std::unique_ptr<Environment> env(base::Environment::Create());
-
-  ASSERT_TRUE(env->SetVar(kPath, dir1.value() + ":" + dir2.value()));
+  test::ScopedEnvironmentVariableOverride scoped_env(
+      "PATH", dir1.value() + ":" + dir2.value());
+  ASSERT_TRUE(scoped_env.IsOverridden());
 
   const FilePath::CharType kRegularFileName[] = FPL("regular_file");
   const FilePath::CharType kExeFileName[] = FPL("exe");
@@ -902,9 +902,9 @@ TEST_F(FileUtilTest, ExecutableExistsInPath) {
   ASSERT_TRUE(SetPosixFilePermissions(dir1.Append(kExeFileName),
                                       FILE_PERMISSION_EXECUTE_BY_USER));
 
-  EXPECT_TRUE(ExecutableExistsInPath(env.get(), kExeFileName));
-  EXPECT_FALSE(ExecutableExistsInPath(env.get(), kRegularFileName));
-  EXPECT_FALSE(ExecutableExistsInPath(env.get(), kDneFileName));
+  EXPECT_TRUE(ExecutableExistsInPath(scoped_env.GetEnv(), kExeFileName));
+  EXPECT_FALSE(ExecutableExistsInPath(scoped_env.GetEnv(), kRegularFileName));
+  EXPECT_FALSE(ExecutableExistsInPath(scoped_env.GetEnv(), kDneFileName));
 }
 
 #endif  // !defined(OS_FUCHSIA) && defined(OS_POSIX)

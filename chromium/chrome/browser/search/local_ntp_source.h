@@ -21,6 +21,10 @@ struct OneGoogleBarData;
 class OneGoogleBarService;
 class Profile;
 
+namespace search_provider_logos {
+class LogoService;
+}  // namespace search_provider_logos
+
 // Serves HTML and resources for the local new tab page i.e.
 // chrome-search://local-ntp/local-ntp.html
 class LocalNtpSource : public content::URLDataSource,
@@ -30,6 +34,7 @@ class LocalNtpSource : public content::URLDataSource,
 
  private:
   class GoogleSearchProviderTracker;
+  class DesktopLogoObserver;
 
   struct OneGoogleBarRequest {
     OneGoogleBarRequest(
@@ -59,8 +64,7 @@ class LocalNtpSource : public content::URLDataSource,
   std::string GetContentSecurityPolicyChildSrc() const override;
 
   // Overridden from OneGoogleBarServiceObserver:
-  void OnOneGoogleBarDataChanged() override;
-  void OnOneGoogleBarFetchFailed() override;
+  void OnOneGoogleBarDataUpdated() override;
   void OnOneGoogleBarServiceShuttingDown() override;
 
   void ServeOneGoogleBar(const base::Optional<OneGoogleBarData>& data);
@@ -69,6 +73,10 @@ class LocalNtpSource : public content::URLDataSource,
 
   void SetDefaultSearchProviderIsGoogleOnIOThread(bool is_google);
 
+  void GoogleBaseUrlChanged(const GURL& google_base_url);
+
+  void SetGoogleBaseUrlOnIOThread(const GURL& google_base_url);
+
   Profile* const profile_;
 
   OneGoogleBarService* one_google_bar_service_;
@@ -76,12 +84,19 @@ class LocalNtpSource : public content::URLDataSource,
   ScopedObserver<OneGoogleBarService, OneGoogleBarServiceObserver>
       one_google_bar_service_observer_;
 
+  search_provider_logos::LogoService* logo_service_;
+  std::unique_ptr<DesktopLogoObserver> logo_observer_;
+
   std::vector<OneGoogleBarRequest> one_google_bar_requests_;
 
   std::unique_ptr<GoogleSearchProviderTracker> google_tracker_;
   bool default_search_provider_is_google_;
   // A copy of |default_search_provider_is_google_| for use on the IO thread.
   bool default_search_provider_is_google_io_thread_;
+
+  GURL google_base_url_;
+  // A copy of |google_base_url_| for use on the IO thread.
+  GURL google_base_url_io_thread_;
 
   base::WeakPtrFactory<LocalNtpSource> weak_ptr_factory_;
 

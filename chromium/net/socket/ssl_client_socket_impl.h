@@ -37,7 +37,6 @@
 
 namespace base {
 class FilePath;
-class SequencedTaskRunner;
 namespace trace_event {
 class ProcessMemoryDump;
 }
@@ -78,11 +77,9 @@ class SSLClientSocketImpl : public SSLClientSocket,
   }
 
 #if !defined(OS_NACL)
-  // Log SSL key material to |path| on |task_runner|. Must be called before any
-  // SSLClientSockets are created.
-  static void SetSSLKeyLogFile(
-      const base::FilePath& path,
-      const scoped_refptr<base::SequencedTaskRunner>& task_runner);
+  // Log SSL key material to |path|. Must be called before any SSLClientSockets
+  // are created.
+  static void SetSSLKeyLogFile(const base::FilePath& path);
 #endif
 
   // SSLClientSocket implementation.
@@ -195,8 +192,8 @@ class SSLClientSocketImpl : public SSLClientSocket,
   // the |ssl_info|.signed_certificate_timestamps list.
   void AddCTInfoToSSLInfo(SSLInfo* ssl_info) const;
 
-  // Returns a unique key string for the SSL session cache for
-  // this socket.
+  // Returns a unique key string for the SSL session cache for this socket. This
+  // must not be called if |ssl_session_cache_shard_| is empty.
   std::string GetSessionCacheKey() const;
 
   // Returns true if renegotiations are allowed.

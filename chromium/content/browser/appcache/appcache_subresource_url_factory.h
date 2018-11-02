@@ -7,8 +7,9 @@
 
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "content/common/content_export.h"
 #include "content/public/common/url_loader_factory.mojom.h"
-#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/binding_set.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "url/gurl.h"
 
@@ -20,7 +21,8 @@ class AppCacheServiceImpl;
 class URLLoaderFactoryGetter;
 
 // Implements the URLLoaderFactory mojom for AppCache subresource requests.
-class AppCacheSubresourceURLFactory : public mojom::URLLoaderFactory {
+class CONTENT_EXPORT AppCacheSubresourceURLFactory
+    : public mojom::URLLoaderFactory {
  public:
   ~AppCacheSubresourceURLFactory() override;
 
@@ -30,37 +32,36 @@ class AppCacheSubresourceURLFactory : public mojom::URLLoaderFactory {
   // 2. The |host| parameter contains the appcache host instance. This is used
   //    to create the AppCacheRequestHandler instances for handling subresource
   //    requests.
-  // Returns the AppCacheSubresourceURLFactory instance. The URLLoaderFactoryPtr
-  // is returned in the |loader_factory| parameter.
-  static AppCacheSubresourceURLFactory* CreateURLLoaderFactory(
+  static void CreateURLLoaderFactory(
       URLLoaderFactoryGetter* factory_getter,
       base::WeakPtr<AppCacheHost> host,
       mojom::URLLoaderFactoryPtr* loader_factory);
 
   // mojom::URLLoaderFactory implementation.
-  void CreateLoaderAndStart(
-      mojom::URLLoaderAssociatedRequest url_loader_request,
-      int32_t routing_id,
-      int32_t request_id,
-      uint32_t options,
-      const ResourceRequest& request,
-      mojom::URLLoaderClientPtr client,
-      const net::MutableNetworkTrafficAnnotationTag& traffic_annotation)
-      override;
-  void SyncLoad(int32_t routing_id,
-                int32_t request_id,
-                const ResourceRequest& request,
-                SyncLoadCallback callback) override;
+  void CreateLoaderAndStart(mojom::URLLoaderRequest url_loader_request,
+                            int32_t routing_id,
+                            int32_t request_id,
+                            uint32_t options,
+                            const ResourceRequest& request,
+                            mojom::URLLoaderClientPtr client,
+                            const net::MutableNetworkTrafficAnnotationTag&
+                                traffic_annotation) override;
+  void Clone(mojom::URLLoaderFactoryRequest request) override;
 
  private:
-  AppCacheSubresourceURLFactory(mojom::URLLoaderFactoryRequest request,
-                                URLLoaderFactoryGetter* factory_getter,
+  friend class AppCacheNetworkServiceBrowserTest;
+
+  AppCacheSubresourceURLFactory(URLLoaderFactoryGetter* factory_getter,
                                 base::WeakPtr<AppCacheHost> host);
 
   void OnConnectionError();
 
-  // Mojo binding.
-  mojo::Binding<mojom::URLLoaderFactory> binding_;
+  // Notifies the |client| if there is a failure. The |error_code| contains the
+  // actual error.
+  void NotifyError(mojom::URLLoaderClientPtr client, int error_code);
+
+  // Mojo bindings.
+  mojo::BindingSet<mojom::URLLoaderFactory> bindings_;
 
   // Used to retrieve the network service factory to pass unhandled requests to
   // the network service.

@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <algorithm>
 #include <utility>
 #include <vector>
 
@@ -331,9 +332,9 @@ void MediaDevicesDispatcherHost::CheckPermissionsForEnumerateDevices(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   permission_checker_->CheckPermissions(
       requested_types, render_process_id_, render_frame_id_,
-      base::Bind(&MediaDevicesDispatcherHost::DoEnumerateDevices,
-                 weak_factory_.GetWeakPtr(), requested_types,
-                 base::Passed(&client_callback), security_origin));
+      base::BindOnce(&MediaDevicesDispatcherHost::DoEnumerateDevices,
+                     weak_factory_.GetWeakPtr(), requested_types,
+                     base::Passed(&client_callback), security_origin));
 }
 
 void MediaDevicesDispatcherHost::DoEnumerateDevices(
@@ -455,6 +456,13 @@ media::VideoCaptureFormats MediaDevicesDispatcherHost::GetVideoInputFormats(
 
   media_stream_manager_->video_capture_manager()->GetDeviceSupportedFormats(
       device_id, &formats);
+  // Remove formats that have zero resolution.
+  formats.erase(std::remove_if(formats.begin(), formats.end(),
+                               [](const media::VideoCaptureFormat& format) {
+                                 return format.frame_size.GetArea() <= 0;
+                               }),
+                formats.end());
+
   return formats;
 }
 
@@ -523,8 +531,8 @@ void MediaDevicesDispatcherHost::GotAudioInputEnumeration(
   for (size_t i = 0; i < num_pending_audio_input_parameters_; ++i) {
     media_stream_manager_->audio_system()->GetInputStreamParameters(
         current_audio_input_capabilities_[i].device_id,
-        base::Bind(&MediaDevicesDispatcherHost::GotAudioInputParameters,
-                   weak_factory_.GetWeakPtr(), i));
+        base::BindOnce(&MediaDevicesDispatcherHost::GotAudioInputParameters,
+                       weak_factory_.GetWeakPtr(), i));
   }
 }
 

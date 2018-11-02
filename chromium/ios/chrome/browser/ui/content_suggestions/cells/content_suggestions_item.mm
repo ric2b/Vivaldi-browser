@@ -7,6 +7,7 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/time/time.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_cell.h"
+#import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_gesture_commands.h"
 #import "ios/chrome/browser/ui/content_suggestions/identifier/content_suggestion_identifier.h"
 #import "ios/chrome/browser/ui/favicon/favicon_attributes.h"
 #import "ios/chrome/browser/ui/favicon/favicon_view.h"
@@ -45,8 +46,12 @@
 @synthesize attributes = _attributes;
 @synthesize faviconURL = _faviconURL;
 @synthesize hasImage = _hasImage;
-@synthesize availableOffline = _availableOffline;
 @synthesize firstTimeWithImage = _firstTimeWithImage;
+@synthesize readLaterAction = _readLaterAction;
+@synthesize commandHandler = _commandHandler;
+@synthesize score = _score;
+@synthesize fetchDate = _fetchDate;
+@synthesize metricsRecorded = _metricsRecorded;
 
 - (instancetype)initWithType:(NSInteger)type
                        title:(NSString*)title
@@ -73,10 +78,11 @@
   [cell setContentImage:self.image animated:self.firstTimeWithImage];
   self.firstTimeWithImage = NO;
   [cell setAdditionalInformationWithPublisherName:self.publisher
-                                             date:[self relativeDate]
-                              offlineAvailability:self.availableOffline];
+                                             date:[self relativeDate]];
   cell.isAccessibilityElement = YES;
   cell.accessibilityLabel = [self accessibilityLabel];
+  cell.accessibilityCustomActions = [self customActions];
+  cell.accessibilityIdentifier = self.title;
 }
 
 - (void)setImage:(UIImage*)image {
@@ -90,8 +96,7 @@
                               withImage:self.hasImage
                                   title:self.title
                           publisherName:self.publisher
-                        publicationDate:[self relativeDate]
-                       availableOffline:self.availableOffline];
+                        publicationDate:[self relativeDate]];
 }
 
 #pragma mark - Private
@@ -117,18 +122,74 @@
 
 // Returns the accessibility label.
 - (NSString*)accessibilityLabel {
-  NSString* offlineAvailability = @"";
-  if (self.availableOffline) {
-    offlineAvailability = l10n_util::GetNSString(
-        IDS_IOS_CONTENT_SUGGESTIONS_ACCESSIBILITY_AVAILABLE_OFFLINE);
-  }
-
   return l10n_util::GetNSStringF(
       IDS_IOS_CONTENT_SUGGESTIONS_ACCESSIBILITY_LABEL_SUGGESTION,
       base::SysNSStringToUTF16(self.title),
       base::SysNSStringToUTF16(self.publisher),
-      base::SysNSStringToUTF16([self relativeDate]),
-      base::SysNSStringToUTF16(offlineAvailability));
+      base::SysNSStringToUTF16([self relativeDate]));
+}
+
+#pragma mark - AccessibilityCustomAction
+
+// Custom action for a cell configured with this item.
+- (NSArray<UIAccessibilityCustomAction*>*)customActions {
+  UIAccessibilityCustomAction* openInNewTab =
+      [[UIAccessibilityCustomAction alloc]
+          initWithName:l10n_util::GetNSString(
+                           IDS_IOS_CONTENT_CONTEXT_OPENLINKNEWTAB)
+                target:self
+              selector:@selector(openInNewTab)];
+  UIAccessibilityCustomAction* openInNewIncognitoTab =
+      [[UIAccessibilityCustomAction alloc]
+          initWithName:l10n_util::GetNSString(
+                           IDS_IOS_CONTENT_CONTEXT_OPENLINKNEWINCOGNITOTAB)
+                target:self
+              selector:@selector(openInNewIncognitoTab)];
+  NSMutableArray* customActions = [NSMutableArray
+      arrayWithObjects:openInNewTab, openInNewIncognitoTab, nil];
+
+  if (self.readLaterAction) {
+    UIAccessibilityCustomAction* readLater =
+        [[UIAccessibilityCustomAction alloc]
+            initWithName:l10n_util::GetNSString(
+                             IDS_IOS_CONTENT_CONTEXT_ADDTOREADINGLIST)
+                  target:self
+                selector:@selector(readLater)];
+    [customActions addObject:readLater];
+  }
+
+  UIAccessibilityCustomAction* removeSuggestion = [
+      [UIAccessibilityCustomAction alloc]
+      initWithName:l10n_util::GetNSString(IDS_IOS_CONTENT_SUGGESTIONS_REMOVE)
+            target:self
+          selector:@selector(removeSuggestion)];
+  [customActions addObject:removeSuggestion];
+
+  return customActions;
+}
+
+// Target for custom action.
+- (BOOL)openInNewTab {
+  [self.commandHandler openNewTabWithSuggestionsItem:self incognito:NO];
+  return YES;
+}
+
+// Target for custom action.
+- (BOOL)openInNewIncognitoTab {
+  [self.commandHandler openNewTabWithSuggestionsItem:self incognito:YES];
+  return YES;
+}
+
+// Target for custom action.
+- (BOOL)readLater {
+  [self.commandHandler addItemToReadingList:self];
+  return YES;
+}
+
+// Target for custom action.
+- (BOOL)removeSuggestion {
+  [self.commandHandler dismissSuggestion:self atIndexPath:nil];
+  return YES;
 }
 
 @end

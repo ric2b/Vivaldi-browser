@@ -11,7 +11,7 @@ const char kAlwaysLoadPinnedTabAfterRestore[] =
 const char kAutoUpdateEnabled[] = "vivaldi.autoupdate_enabled";
 const char kDeferredTabLoadingAfterRestore[] =
     "vivaldi.deferred_tab_loading_after_restore";
-const char kMousegesturesEnabled[] = "mousegestures_enabled";
+const char kOldMousegesturesEnabled[] = "mousegestures_enabled";
 const char kPluginsWidevideEnabled[] = "plugins.widevine_enabled";
 const char kRockerGesturesEnabled[] = "vivaldi.rocker_gestures_enabled";
 const char kSmoothScrollingEnabled[] = "smooth_scrolling_enabled";
@@ -45,5 +45,8 @@ const char kSwipeScrollDirection[] = "vivaldi.swipe_scroll_direction";
 
 // Local state prefs go here
 const char kVivaldiUniqueUserId[] = "vivaldi.unique_user_id";
+
+// Enable native window decoration
+const char kVivaldiUseNativeWindowDecoration[] = "vivaldi.use_native_window_decoration";
 
 }  // namespace vivaldiprefs

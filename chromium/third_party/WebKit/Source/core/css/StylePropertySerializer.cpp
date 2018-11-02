@@ -31,6 +31,7 @@
 #include "core/css/CSSPendingSubstitutionValue.h"
 #include "core/css/CSSPropertyMetadata.h"
 #include "core/css/CSSValuePool.h"
+#include "core/css/properties/CSSPropertyAPI.h"
 #include "platform/wtf/StdLibExtras.h"
 #include "platform/wtf/text/StringBuilder.h"
 
@@ -229,10 +230,10 @@ String StylePropertySerializer::AsText() const {
     DCHECK(CSSPropertyMetadata::IsEnabledProperty(property_id));
     // All shorthand properties should have been expanded at parse time.
     DCHECK(property_set_.IsDescriptorContext() ||
-           (CSSPropertyMetadata::IsProperty(property_id) &&
+           (CSSPropertyAPI::Get(property_id).IsProperty() &&
             !isShorthandProperty(property_id)));
     DCHECK(!property_set_.IsDescriptorContext() ||
-           CSSPropertyMetadata::IsDescriptor(property_id));
+           CSSPropertyAPI::Get(property_id).IsDescriptor());
 
     switch (property_id) {
       case CSSPropertyVariable:

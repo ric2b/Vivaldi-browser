@@ -5,6 +5,8 @@
 #include "content/public/test/browser_test_utils.h"
 
 #include <stddef.h>
+
+#include <set>
 #include <tuple>
 #include <utility>
 
@@ -28,9 +30,9 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "cc/surfaces/surface.h"
-#include "cc/surfaces/surface_manager.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
+#include "components/viz/service/surfaces/surface.h"
+#include "components/viz/service/surfaces/surface_manager.h"
 #include "content/browser/accessibility/browser_accessibility.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
@@ -39,9 +41,9 @@
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/frame_host/interstitial_page_impl.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
-#include "content/browser/frame_host/render_widget_host_view_child_frame.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
+#include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/web_contents/web_contents_view.h"
 #include "content/common/fileapi/file_system_messages.h"
@@ -275,6 +277,112 @@ void InjectRawKeyEvent(WebContents* web_contents,
       ->ForwardKeyboardEvent(event);
 }
 
+int SimulateModifierKeysDown(WebContents* web_contents,
+                             bool control,
+                             bool shift,
+                             bool alt,
+                             bool command) {
+  int modifiers = 0;
+
+  // The order of these key down events shouldn't matter for our simulation.
+  // For our simulation we can use either the left keys or the right keys.
+  if (control) {
+    modifiers |= blink::WebInputEvent::kControlKey;
+    InjectRawKeyEvent(web_contents, blink::WebInputEvent::kRawKeyDown,
+                      ui::DomKey::CONTROL, ui::DomCode::CONTROL_LEFT,
+                      ui::VKEY_CONTROL, modifiers);
+  }
+  if (shift) {
+    modifiers |= blink::WebInputEvent::kShiftKey;
+    InjectRawKeyEvent(web_contents, blink::WebInputEvent::kRawKeyDown,
+                      ui::DomKey::SHIFT, ui::DomCode::SHIFT_LEFT,
+                      ui::VKEY_SHIFT, modifiers);
+  }
+  if (alt) {
+    modifiers |= blink::WebInputEvent::kAltKey;
+    InjectRawKeyEvent(web_contents, blink::WebInputEvent::kRawKeyDown,
+                      ui::DomKey::ALT, ui::DomCode::ALT_LEFT, ui::VKEY_MENU,
+                      modifiers);
+  }
+  if (command) {
+    modifiers |= blink::WebInputEvent::kMetaKey;
+    InjectRawKeyEvent(web_contents, blink::WebInputEvent::kRawKeyDown,
+                      ui::DomKey::META, ui::DomCode::META_LEFT,
+                      ui::VKEY_COMMAND, modifiers);
+  }
+  return modifiers;
+}
+
+int SimulateModifierKeysUp(WebContents* web_contents,
+                           bool control,
+                           bool shift,
+                           bool alt,
+                           bool command,
+                           int modifiers) {
+  // The order of these key releases shouldn't matter for our simulation.
+  if (control) {
+    modifiers &= ~blink::WebInputEvent::kControlKey;
+    InjectRawKeyEvent(web_contents, blink::WebInputEvent::kKeyUp,
+                      ui::DomKey::CONTROL, ui::DomCode::CONTROL_LEFT,
+                      ui::VKEY_CONTROL, modifiers);
+  }
+
+  if (shift) {
+    modifiers &= ~blink::WebInputEvent::kShiftKey;
+    InjectRawKeyEvent(web_contents, blink::WebInputEvent::kKeyUp,
+                      ui::DomKey::SHIFT, ui::DomCode::SHIFT_LEFT,
+                      ui::VKEY_SHIFT, modifiers);
+  }
+
+  if (alt) {
+    modifiers &= ~blink::WebInputEvent::kAltKey;
+    InjectRawKeyEvent(web_contents, blink::WebInputEvent::kKeyUp,
+                      ui::DomKey::ALT, ui::DomCode::ALT_LEFT, ui::VKEY_MENU,
+                      modifiers);
+  }
+
+  if (command) {
+    modifiers &= ~blink::WebInputEvent::kMetaKey;
+    InjectRawKeyEvent(web_contents, blink::WebInputEvent::kKeyUp,
+                      ui::DomKey::META, ui::DomCode::META_LEFT,
+                      ui::VKEY_COMMAND, modifiers);
+  }
+  return modifiers;
+}
+
+void SimulateKeyEvent(WebContents* web_contents,
+                      ui::DomKey key,
+                      ui::DomCode code,
+                      ui::KeyboardCode key_code,
+                      bool send_char,
+                      int modifiers) {
+  InjectRawKeyEvent(web_contents, blink::WebInputEvent::kRawKeyDown, key, code,
+                    key_code, modifiers);
+  if (send_char) {
+    InjectRawKeyEvent(web_contents, blink::WebInputEvent::kChar, key, code,
+                      key_code, modifiers);
+  }
+  InjectRawKeyEvent(web_contents, blink::WebInputEvent::kKeyUp, key, code,
+                    key_code, modifiers);
+}
+
+void SimulateKeyPressImpl(WebContents* web_contents,
+                          ui::DomKey key,
+                          ui::DomCode code,
+                          ui::KeyboardCode key_code,
+                          bool control,
+                          bool shift,
+                          bool alt,
+                          bool command,
+                          bool send_char) {
+  int modifiers =
+      SimulateModifierKeysDown(web_contents, control, shift, alt, command);
+  SimulateKeyEvent(web_contents, key, code, key_code, send_char, modifiers);
+  modifiers = SimulateModifierKeysUp(web_contents, control, shift, alt, command,
+                                     modifiers);
+  ASSERT_EQ(modifiers, 0);
+}
+
 void GetCookiesCallback(std::string* cookies_out,
                         base::WaitableEvent* event,
                         const std::string& cookies) {
@@ -290,7 +398,7 @@ void GetCookiesOnIOThread(const GURL& url,
       context_getter->GetURLRequestContext()->cookie_store();
   cookie_store->GetCookiesWithOptionsAsync(
       url, net::CookieOptions(),
-      base::Bind(&GetCookiesCallback, cookies, event));
+      base::BindOnce(&GetCookiesCallback, cookies, event));
 }
 
 void SetCookieCallback(bool* result,
@@ -309,7 +417,7 @@ void SetCookieOnIOThread(const GURL& url,
       context_getter->GetURLRequestContext()->cookie_store();
   cookie_store->SetCookieWithOptionsAsync(
       url, value, net::CookieOptions(),
-      base::Bind(&SetCookieCallback, result, event));
+      base::BindOnce(&SetCookieCallback, result, event));
 }
 
 std::unique_ptr<net::test_server::HttpResponse>
@@ -640,6 +748,8 @@ void SimulateGestureScrollSequence(WebContents* web_contents,
   scroll_begin.source_device = blink::kWebGestureDeviceTouchpad;
   scroll_begin.x = point.x();
   scroll_begin.y = point.y();
+  scroll_begin.data.scroll_begin.delta_x_hint = delta.x();
+  scroll_begin.data.scroll_begin.delta_y_hint = delta.y();
   widget_host->ForwardGestureEvent(scroll_begin);
 
   blink::WebGestureEvent scroll_update(
@@ -747,76 +857,65 @@ void SimulateKeyPress(WebContents* web_contents,
                       bool shift,
                       bool alt,
                       bool command) {
-  int modifiers = 0;
+  SimulateKeyPressImpl(web_contents, key, code, key_code, control, shift, alt,
+                       command, /*send_char=*/true);
+}
 
-  // The order of these key down events shouldn't matter for our simulation.
-  // For our simulation we can use either the left keys or the right keys.
-  if (control) {
-    modifiers |= blink::WebInputEvent::kControlKey;
-    InjectRawKeyEvent(web_contents, blink::WebInputEvent::kRawKeyDown,
-                      ui::DomKey::CONTROL, ui::DomCode::CONTROL_LEFT,
-                      ui::VKEY_CONTROL, modifiers);
-  }
+void SimulateKeyPressWithoutChar(WebContents* web_contents,
+                                 ui::DomKey key,
+                                 ui::DomCode code,
+                                 ui::KeyboardCode key_code,
+                                 bool control,
+                                 bool shift,
+                                 bool alt,
+                                 bool command) {
+  SimulateKeyPressImpl(web_contents, key, code, key_code, control, shift, alt,
+                       command, /*send_char=*/false);
+}
 
-  if (shift) {
-    modifiers |= blink::WebInputEvent::kShiftKey;
-    InjectRawKeyEvent(web_contents, blink::WebInputEvent::kRawKeyDown,
-                      ui::DomKey::SHIFT, ui::DomCode::SHIFT_LEFT,
-                      ui::VKEY_SHIFT, modifiers);
-  }
+ScopedSimulateModifierKeyPress::ScopedSimulateModifierKeyPress(
+    WebContents* web_contents,
+    bool control,
+    bool shift,
+    bool alt,
+    bool command)
+    : web_contents_(web_contents),
+      modifiers_(0),
+      control_(control),
+      shift_(shift),
+      alt_(alt),
+      command_(command) {
+  modifiers_ =
+      SimulateModifierKeysDown(web_contents_, control_, shift_, alt_, command_);
+}
 
-  if (alt) {
-    modifiers |= blink::WebInputEvent::kAltKey;
-    InjectRawKeyEvent(web_contents, blink::WebInputEvent::kRawKeyDown,
-                      ui::DomKey::ALT, ui::DomCode::ALT_LEFT, ui::VKEY_MENU,
-                      modifiers);
-  }
+ScopedSimulateModifierKeyPress::~ScopedSimulateModifierKeyPress() {
+  modifiers_ = SimulateModifierKeysUp(web_contents_, control_, shift_, alt_,
+                                      command_, modifiers_);
+  DCHECK_EQ(0, modifiers_);
+}
 
-  if (command) {
-    modifiers |= blink::WebInputEvent::kMetaKey;
-    InjectRawKeyEvent(web_contents, blink::WebInputEvent::kRawKeyDown,
-                      ui::DomKey::META, ui::DomCode::META_LEFT,
-                      ui::VKEY_COMMAND, modifiers);
-  }
-  InjectRawKeyEvent(web_contents, blink::WebInputEvent::kRawKeyDown, key, code,
-                    key_code, modifiers);
+void ScopedSimulateModifierKeyPress::MouseClickAt(
+    int additional_modifiers,
+    blink::WebMouseEvent::Button button,
+    const gfx::Point& point) {
+  SimulateMouseClickAt(web_contents_, modifiers_ | additional_modifiers, button,
+                       point);
+}
 
-  InjectRawKeyEvent(web_contents, blink::WebInputEvent::kChar, key, code,
-                    key_code, modifiers);
+void ScopedSimulateModifierKeyPress::KeyPress(ui::DomKey key,
+                                              ui::DomCode code,
+                                              ui::KeyboardCode key_code) {
+  SimulateKeyEvent(web_contents_, key, code, key_code, /*send_char=*/true,
+                   modifiers_);
+}
 
-  InjectRawKeyEvent(web_contents, blink::WebInputEvent::kKeyUp, key, code,
-                    key_code, modifiers);
-
-  // The order of these key releases shouldn't matter for our simulation.
-  if (control) {
-    modifiers &= ~blink::WebInputEvent::kControlKey;
-    InjectRawKeyEvent(web_contents, blink::WebInputEvent::kKeyUp,
-                      ui::DomKey::CONTROL, ui::DomCode::CONTROL_LEFT,
-                      ui::VKEY_CONTROL, modifiers);
-  }
-
-  if (shift) {
-    modifiers &= ~blink::WebInputEvent::kShiftKey;
-    InjectRawKeyEvent(web_contents, blink::WebInputEvent::kKeyUp,
-                      ui::DomKey::SHIFT, ui::DomCode::SHIFT_LEFT,
-                      ui::VKEY_SHIFT, modifiers);
-  }
-
-  if (alt) {
-    modifiers &= ~blink::WebInputEvent::kAltKey;
-    InjectRawKeyEvent(web_contents, blink::WebInputEvent::kKeyUp,
-                      ui::DomKey::ALT, ui::DomCode::ALT_LEFT, ui::VKEY_MENU,
-                      modifiers);
-  }
-
-  if (command) {
-    modifiers &= ~blink::WebInputEvent::kMetaKey;
-    InjectRawKeyEvent(web_contents, blink::WebInputEvent::kKeyUp,
-                      ui::DomKey::META, ui::DomCode::META_LEFT,
-                      ui::VKEY_COMMAND, modifiers);
-  }
-
-  ASSERT_EQ(modifiers, 0);
+void ScopedSimulateModifierKeyPress::KeyPressWithoutChar(
+    ui::DomKey key,
+    ui::DomCode code,
+    ui::KeyboardCode key_code) {
+  SimulateKeyEvent(web_contents_, key, code, key_code, /*send_char=*/false,
+                   modifiers_);
 }
 
 bool IsWebcamAvailableOnSystem(WebContents* web_contents) {
@@ -1050,8 +1149,8 @@ std::string GetCookies(BrowserContext* browser_context, const GURL& url) {
 
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&GetCookiesOnIOThread, url, base::RetainedRef(context_getter),
-                 &event, &cookies));
+      base::BindOnce(&GetCookiesOnIOThread, url,
+                     base::RetainedRef(context_getter), &event, &cookies));
   event.Wait();
   return cookies;
 }
@@ -1068,8 +1167,8 @@ bool SetCookie(BrowserContext* browser_context,
 
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&SetCookieOnIOThread, url, value,
-                 base::RetainedRef(context_getter), &event, &result));
+      base::BindOnce(&SetCookieOnIOThread, url, value,
+                     base::RetainedRef(context_getter), &event, &result));
   event.Wait();
   return result;
 }
@@ -1147,7 +1246,7 @@ bool WaitForRenderFrameReady(RenderFrameHost* rfh) {
 void EnableAccessibilityForWebContents(WebContents* web_contents) {
   WebContentsImpl* web_contents_impl =
       static_cast<WebContentsImpl*>(web_contents);
-  web_contents_impl->SetAccessibilityMode(kAccessibilityModeComplete);
+  web_contents_impl->SetAccessibilityMode(ui::kAXModeComplete);
 }
 
 void WaitForAccessibilityFocusChange() {
@@ -1252,7 +1351,8 @@ bool IsInnerInterstitialPageConnected(InterstitialPage* interstitial_page) {
       static_cast<RenderWidgetHostViewChildFrame*>(rwhvb);
 
   CrossProcessFrameConnector* frame_connector =
-      rwhvcf->FrameConnectorForTesting();
+      static_cast<CrossProcessFrameConnector*>(
+          rwhvcf->FrameConnectorForTesting());
 
   WebContentsImpl* inner_web_contents =
       static_cast<WebContentsImpl*>(impl->GetWebContents());
@@ -1333,7 +1433,7 @@ namespace {
 
 class SurfaceHitTestReadyNotifier {
  public:
-  SurfaceHitTestReadyNotifier(RenderWidgetHostViewBase* target_view);
+  explicit SurfaceHitTestReadyNotifier(RenderWidgetHostViewBase* target_view);
   ~SurfaceHitTestReadyNotifier() {}
 
   void WaitForSurfaceReady(RenderWidgetHostViewBase* root_container);
@@ -1341,7 +1441,7 @@ class SurfaceHitTestReadyNotifier {
  private:
   bool ContainsSurfaceId(const viz::SurfaceId& container_surface_id);
 
-  cc::SurfaceManager* surface_manager_;
+  viz::SurfaceManager* surface_manager_;
   RenderWidgetHostViewBase* target_view_;
 
   DISALLOW_COPY_AND_ASSIGN(SurfaceHitTestReadyNotifier);
@@ -1374,7 +1474,7 @@ bool SurfaceHitTestReadyNotifier::ContainsSurfaceId(
   if (!container_surface_id.is_valid())
     return false;
 
-  cc::Surface* container_surface =
+  viz::Surface* container_surface =
       surface_manager_->GetSurfaceForId(container_surface_id);
   if (!container_surface || !container_surface->active_referenced_surfaces())
     return false;
@@ -1415,8 +1515,9 @@ void WaitForChildFrameSurfaceReady(content::RenderFrameHost* child_frame) {
     return;
 
   RenderWidgetHostViewBase* root_view =
-      static_cast<RenderWidgetHostViewChildFrame*>(child_view)
-          ->FrameConnectorForTesting()
+      static_cast<CrossProcessFrameConnector*>(
+          static_cast<RenderWidgetHostViewChildFrame*>(child_view)
+              ->FrameConnectorForTesting())
           ->GetRootRenderWidgetHostViewForTesting();
 
   SurfaceHitTestReadyNotifier notifier(child_view);
@@ -1695,7 +1796,7 @@ bool MainThreadFrameObserver::OnMessageReceived(const IPC::Message& msg) {
       msg.routing_id() == routing_id_) {
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(&MainThreadFrameObserver::Quit, base::Unretained(this)));
+        base::BindOnce(&MainThreadFrameObserver::Quit, base::Unretained(this)));
   }
   return true;
 }
@@ -1733,8 +1834,8 @@ bool InputMsgWatcher::OnMessageReceived(const IPC::Message& message) {
     InputEventAckSource ack_source = std::get<0>(params).source;
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(&InputMsgWatcher::ReceivedAck, this, ack_type, ack_state,
-                   static_cast<uint32_t>(ack_source)));
+        base::BindOnce(&InputMsgWatcher::ReceivedAck, this, ack_type, ack_state,
+                       static_cast<uint32_t>(ack_source)));
   }
   return false;
 }

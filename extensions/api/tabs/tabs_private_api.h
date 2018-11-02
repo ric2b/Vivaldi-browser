@@ -116,11 +116,14 @@ class TabsPrivateAPI : public BrowserContextKeyedAPI,
  private:
   friend class BrowserContextKeyedAPIFactory<TabsPrivateAPI>;
 
+  std::string ShortcutText(const content::NativeWebKeyboardEvent& event);
+
   content::BrowserContext* browser_context_;
 
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "TabsPrivateAPI"; }
   static const bool kServiceIsNULLWhileTesting = true;
+  static const bool kServiceRedirectedInIncognito = true;
 
   std::unique_ptr<TabsPrivateEventRouter> event_router_;
 };

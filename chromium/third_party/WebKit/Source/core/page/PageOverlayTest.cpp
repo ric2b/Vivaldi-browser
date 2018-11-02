@@ -5,10 +5,10 @@
 #include "core/page/PageOverlay.h"
 
 #include <memory>
-#include "core/exported/WebViewBase.h"
+#include "core/exported/WebViewImpl.h"
 #include "core/frame/FrameTestHelpers.h"
 #include "core/frame/LocalFrameView.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "platform/graphics/Color.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/paint/DrawingRecorder.h"
@@ -82,13 +82,15 @@ class PageOverlayTest : public ::testing::Test {
               GetWebView()->IsAcceleratedCompositingActive());
   }
 
-  WebViewBase* GetWebView() const { return helper_.WebView(); }
+  WebViewImpl* GetWebView() const { return helper_.WebView(); }
 
   std::unique_ptr<PageOverlay> CreateSolidYellowOverlay() {
     return PageOverlay::Create(
         GetWebView()->MainFrameImpl(),
         WTF::MakeUnique<SolidColorOverlay>(SK_ColorYELLOW));
   }
+
+  void SetViewportSize(const WebSize& size) { helper_.SetViewportSize(size); }
 
   template <typename OverlayType>
   void RunPageOverlayTestWithAcceleratedCompositing();
@@ -117,8 +119,7 @@ class MockPageOverlayCanvas : public SkCanvas {
 
 TEST_F(PageOverlayTest, PageOverlay_AcceleratedCompositing) {
   Initialize(kAcceleratedCompositing);
-  GetWebView()->LayerTreeView()->SetViewportSize(
-      WebSize(kViewportWidth, kViewportHeight));
+  SetViewportSize(WebSize(kViewportWidth, kViewportHeight));
 
   std::unique_ptr<PageOverlay> page_overlay = CreateSolidYellowOverlay();
   page_overlay->Update();

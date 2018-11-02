@@ -26,7 +26,7 @@
 #include "core/html/track/TextTrackList.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/events/GenericEventQueue.h"
+#include "core/dom/events/MediaElementEventQueue.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/html/track/InbandTextTrack.h"
 #include "core/html/track/LoadableTextTrack.h"
@@ -36,7 +36,7 @@
 namespace blink {
 
 TextTrackList::TextTrackList(HTMLMediaElement* owner)
-    : owner_(owner), async_event_queue_(GenericEventQueue::Create(this)) {}
+    : owner_(owner), async_event_queue_(MediaElementEventQueue::Create(this)) {}
 
 TextTrackList::~TextTrackList() {}
 
@@ -169,13 +169,13 @@ void TextTrackList::InvalidateTrackIndexesAfterTrack(TextTrack* track) {
 
 void TextTrackList::Append(TextTrack* track) {
   if (track->TrackType() == TextTrack::kAddTrack) {
-    add_track_tracks_.push_back(TraceWrapperMember<TextTrack>(this, track));
+    add_track_tracks_.push_back(track);
   } else if (track->TrackType() == TextTrack::kTrackElement) {
     // Insert tracks added for <track> element in tree order.
     size_t index = ToLoadableTextTrack(track)->TrackElementIndex();
-    element_tracks_.insert(index, TraceWrapperMember<TextTrack>(this, track));
+    element_tracks_.insert(index, track);
   } else if (track->TrackType() == TextTrack::kInBand) {
-    inband_tracks_.push_back(TraceWrapperMember<TextTrack>(this, track));
+    inband_tracks_.push_back(track);
   } else {
     NOTREACHED();
   }

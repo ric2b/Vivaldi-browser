@@ -48,6 +48,9 @@ namespace settings {
 
 namespace {
 
+// usb:// is 6 characters long.
+constexpr int kUsbSchemeLength = 6;
+
 constexpr char kIppScheme[] = "ipp";
 constexpr char kIppsScheme[] = "ipps";
 
@@ -60,6 +63,15 @@ constexpr int kIppsPort = 443;
 // enums must never be renumbered or deleted and reused.
 enum PpdSourceForHistogram { kUser = 0, kScs = 1, kPpdSourceMax };
 
+// A parsed representation of a printer uri.
+struct PrinterUri {
+  bool encrypted = false;
+  std::string scheme;
+  std::string host;
+  int port = url::SpecialPort::PORT_INVALID;
+  std::string path;
+};
+
 void RecordPpdSource(const PpdSourceForHistogram& source) {
   UMA_HISTOGRAM_ENUMERATION("Printing.CUPS.PpdSource", source, kPpdSourceMax);
 }
@@ -67,6 +79,76 @@ void RecordPpdSource(const PpdSourceForHistogram& source) {
 void OnRemovedPrinter(const Printer::PrinterProtocol& protocol, bool success) {
   UMA_HISTOGRAM_ENUMERATION("Printing.CUPS.PrinterRemoved", protocol,
                             Printer::PrinterProtocol::kProtocolMax);
+}
+
+// Log if the IPP attributes request was succesful.
+void RecordIppQuerySuccess(bool success) {
+  UMA_HISTOGRAM_BOOLEAN("Printing.CUPS.IppAttributesSuccess", success);
+}
+
+// Parsees |printer_uri| into its components and written into |uri|.  Returns
+// true if the uri was parsed successfully, returns false otherwise.  No changes
+// are made to |uri| if this function returns false.
+bool ParseUri(const std::string& printer_uri, PrinterUri* uri) {
+  DCHECK(uri);
+  const char* uri_ptr = printer_uri.c_str();
+  url::Parsed parsed;
+  url::ParseStandardURL(uri_ptr, printer_uri.length(), &parsed);
+  if (!parsed.scheme.is_valid() || !parsed.host.is_valid() ||
+      !parsed.path.is_valid()) {
+    return false;
+  }
+  base::StringPiece scheme(&uri_ptr[parsed.scheme.begin], parsed.scheme.len);
+  base::StringPiece host(&uri_ptr[parsed.host.begin], parsed.host.len);
+  base::StringPiece path(&uri_ptr[parsed.path.begin], parsed.path.len);
+
+  bool encrypted = scheme != kIppScheme;
+  int port = ParsePort(uri_ptr, parsed.port);
+  // Port not specified.
+  if (port == url::SpecialPort::PORT_UNSPECIFIED ||
+      port == url::SpecialPort::PORT_INVALID) {
+    if (scheme == kIppScheme) {
+      port = kIppPort;
+    } else if (scheme == kIppsScheme) {
+      port = kIppsPort;
+    }
+  }
+
+  uri->encrypted = encrypted;
+  uri->scheme = scheme.as_string();
+  uri->host = host.as_string();
+  uri->port = port;
+  uri->path = path.as_string();
+
+  return true;
+}
+
+// Returns true if |printer_uri| is an IPP uri.
+bool IsIppUri(base::StringPiece printer_uri) {
+  base::StringPiece::size_type separator_location =
+      printer_uri.find(url::kStandardSchemeSeparator);
+  if (separator_location == base::StringPiece::npos) {
+    return false;
+  }
+
+  base::StringPiece scheme_part = printer_uri.substr(0, separator_location);
+  return scheme_part == kIppScheme || scheme_part == kIppsScheme;
+}
+
+// Query an IPP printer to check for autoconf support where the printer is
+// located at |printer_uri|.  Results are reported through |callback|.  It is an
+// error to attempt this with a non-IPP printer.
+void QueryAutoconf(const std::string& printer_uri,
+                   const PrinterInfoCallback& callback) {
+  PrinterUri uri;
+  // Behavior for querying a non-IPP uri is undefined and disallowed.
+  if (!IsIppUri(printer_uri) || !ParseUri(printer_uri, &uri)) {
+    LOG(WARNING) << "Printer uri is invalid: " << printer_uri;
+    callback.Run(false, "", "", "", false);
+    return;
+  }
+
+  QueryIppPrinter(uri.host, uri.port, uri.path, uri.encrypted, callback);
 }
 
 // Create an empty CupsPrinterInfo dictionary value. It should be consistent
@@ -92,7 +174,19 @@ std::unique_ptr<base::DictionaryValue> CreateEmptyPrinterInfo() {
   return printer_info;
 }
 
-// Returns a JSON representation of |printer| as a CupsPrinterInfo.
+// Formats a host and port string.  The |port| portion is omitted if
+// it is unspecified or invalid.
+std::string PrinterAddress(const std::string& host, int port) {
+  if (port != url::PORT_UNSPECIFIED && port != url::PORT_INVALID) {
+    return base::StringPrintf("%s:%d", host.c_str(), port);
+  }
+
+  return host;
+}
+
+// Returns a JSON representation of |printer| as a CupsPrinterInfo. Note it's
+// possible that this function returns a nullptr if the printer url is not in
+// the right format.
 std::unique_ptr<base::DictionaryValue> GetPrinterInfo(const Printer& printer) {
   std::unique_ptr<base::DictionaryValue> printer_info =
       CreateEmptyPrinterInfo();
@@ -102,34 +196,27 @@ std::unique_ptr<base::DictionaryValue> GetPrinterInfo(const Printer& printer) {
   printer_info->SetString("printerManufacturer", printer.manufacturer());
   printer_info->SetString("printerModel", printer.model());
   printer_info->SetString("printerMakeAndModel", printer.make_and_model());
-  // Get protocol, ip address and queue from the printer's URI.
-  const std::string printer_uri = printer.uri();
-  url::Parsed parsed;
-  url::ParseStandardURL(printer_uri.c_str(), printer_uri.length(), &parsed);
 
-  std::string scheme;
-  std::string host;
-  std::string path;
-  if (parsed.scheme.len > 0)
-    scheme = std::string(printer_uri, parsed.scheme.begin, parsed.scheme.len);
-  if (parsed.host.len > 0)
-    host = std::string(printer_uri, parsed.host.begin, parsed.host.len);
-  if (parsed.path.len > 0)
-    path = std::string(printer_uri, parsed.path.begin, parsed.path.len);
-  if (base::ToLowerASCII(scheme) == "usb") {
+  PrinterUri uri;
+  if (!ParseUri(printer.uri(), &uri)) {
+    return nullptr;
+  }
+
+  if (base::ToLowerASCII(uri.scheme) == "usb") {
     // USB has URI path (and, maybe, query) components that aren't really
     // associated with a queue -- the mapping between printing semantics and URI
     // semantics breaks down a bit here.  From the user's point of view, the
     // entire host/path/query block is the printer address for USB.
     printer_info->SetString("printerAddress",
-                            printer_uri.substr(parsed.host.begin));
+                            printer.uri().substr(kUsbSchemeLength));
   } else {
-    printer_info->SetString("printerAddress", host);
-    if (!path.empty()) {
-      printer_info->SetString("printerQueue", path.substr(1));
+    printer_info->SetString("printerAddress",
+                            PrinterAddress(uri.host, uri.port));
+    if (!uri.path.empty()) {
+      printer_info->SetString("printerQueue", uri.path.substr(1));
     }
   }
-  printer_info->SetString("printerProtocol", base::ToLowerASCII(scheme));
+  printer_info->SetString("printerProtocol", base::ToLowerASCII(uri.scheme));
 
   return printer_info;
 }
@@ -223,7 +310,11 @@ void CupsPrintersHandler::HandleGetCupsPrintersList(
 
   auto printers_list = base::MakeUnique<base::ListValue>();
   for (const Printer& printer : printers) {
-    printers_list->Append(GetPrinterInfo(printer));
+    // TODO(skau): Theoretically |printer_info| should not be a nullptr as we
+    // should not allow adding an invalid configured printer to PrinterManager.
+    auto printer_info = GetPrinterInfo(printer);
+    if (printer_info)
+      printers_list->Append(std::move(printer_info));
   }
 
   auto response = base::MakeUnique<base::DictionaryValue>();
@@ -294,7 +385,7 @@ void CupsPrintersHandler::HandleGetPrinterInfo(const base::ListValue* args) {
 
   if (printer_address.empty()) {
     // Run the failure callback.
-    OnPrinterInfo(callback_id, false, "", "", "", false);
+    OnAutoconfQueried(callback_id, false, "", "", "", false);
     return;
   }
 
@@ -306,43 +397,62 @@ void CupsPrintersHandler::HandleGetPrinterInfo(const base::ListValue* args) {
     return;
   }
 
-  // Parse url to separate address and port. ParseStandardURL expects a scheme,
-  // so add the printer_protocol.
+  DCHECK(printer_protocol == kIppScheme || printer_protocol == kIppsScheme)
+      << "Printer info requests only supported for IPP and IPPS printers";
   std::string printer_uri =
-      printer_protocol + url::kStandardSchemeSeparator + printer_address;
-  const char* uri_ptr = printer_uri.c_str();
-  url::Parsed parsed;
-  url::ParseStandardURL(uri_ptr, printer_uri.length(), &parsed);
-  base::StringPiece host(&printer_uri[parsed.host.begin], parsed.host.len);
+      base::StringPrintf("%s://%s/%s", printer_protocol.c_str(),
+                         printer_address.c_str(), printer_queue.c_str());
+  QueryAutoconf(printer_uri,
+                base::Bind(&CupsPrintersHandler::OnAutoconfQueried,
+                           weak_factory_.GetWeakPtr(), callback_id));
+}
 
-  bool encrypted = printer_protocol != kIppScheme;
-  int port = ParsePort(uri_ptr, parsed.port);
-  // Port not specified.
-  if (port == url::SpecialPort::PORT_UNSPECIFIED ||
-      port == url::SpecialPort::PORT_INVALID) {
-    if (printer_protocol == kIppScheme) {
-      port = kIppPort;
-    } else if (printer_protocol == kIppsScheme) {
-      port = kIppsPort;
-    } else {
-      // Port was not defined explicitly and scheme is not recognized.  Cannot
-      // infer a port number.
-      NOTREACHED() << "Unrecognized protocol. Port was not set.";
+void CupsPrintersHandler::OnAutoconfQueriedDiscovered(
+    std::unique_ptr<Printer> printer,
+    bool success,
+    const std::string& make,
+    const std::string& model,
+    const std::string& make_and_model,
+    bool ipp_everywhere) {
+  RecordIppQuerySuccess(success);
+
+  if (success) {
+    // If we queried a valid make and model, use it.  The mDNS record isn't
+    // guaranteed to have it.  However, don't overwrite it if the printer
+    // advertises an empty value through printer-make-and-model.
+    if (!make_and_model.empty()) {
+      // manufacturer and model are set with make_and_model because they are
+      // derived from make_and_model for compatability and are slated for
+      // removal.
+      printer->set_manufacturer(make);
+      printer->set_model(model);
+      printer->set_make_and_model(make_and_model);
+    }
+
+    // Autoconfig available, use it.
+    if (ipp_everywhere) {
+      printer->mutable_ppd_reference()->autoconf = true;
+      printer_configurer_->SetUpPrinter(
+          *printer, base::Bind(&CupsPrintersHandler::OnAddedDiscoveredPrinter,
+                               weak_factory_.GetWeakPtr(), *printer));
+      return;
     }
   }
 
-  QueryIppPrinter(host.as_string(), port, printer_queue, encrypted,
-                  base::Bind(&CupsPrintersHandler::OnPrinterInfo,
-                             weak_factory_.GetWeakPtr(), callback_id));
+  // We don't have enough from discovery to configure the printer.  Fill in as
+  // much information as we can about the printer, and ask the user to supply
+  // the rest.
+  FireWebUIListener("on-manually-add-discovered-printer",
+                    *GetPrinterInfo(*printer));
 }
 
-void CupsPrintersHandler::OnPrinterInfo(const std::string& callback_id,
-                                        bool success,
-                                        const std::string& make,
-                                        const std::string& model,
-                                        const std::string& make_and_model,
-                                        bool ipp_everywhere) {
-  UMA_HISTOGRAM_BOOLEAN("Printing.CUPS.IppAttributesSuccess", success);
+void CupsPrintersHandler::OnAutoconfQueried(const std::string& callback_id,
+                                            bool success,
+                                            const std::string& make,
+                                            const std::string& model,
+                                            const std::string& make_and_model,
+                                            bool ipp_everywhere) {
+  RecordIppQuerySuccess(success);
 
   if (!success) {
     base::DictionaryValue reject;
@@ -389,6 +499,14 @@ void CupsPrintersHandler::HandleAddCupsPrinter(const base::ListValue* args) {
       printer_protocol + url::kStandardSchemeSeparator + printer_address;
   if (!printer_queue.empty()) {
     printer_uri += "/" + printer_queue;
+  }
+
+  // Validate uri before continuing.
+  PrinterUri uri;
+  if (!ParseUri(printer_uri, &uri)) {
+    LOG(ERROR) << "Failed to parse printer";
+    OnAddPrinterError();
+    return;
   }
 
   // Read PPD selection if it was used.
@@ -573,7 +691,8 @@ void CupsPrintersHandler::HandleSelectPPDFile(const base::ListValue* args) {
           ->DownloadPath();
 
   select_file_dialog_ = ui::SelectFileDialog::Create(
-      this, new ChromeSelectFilePolicy(web_ui()->GetWebContents()));
+      this,
+      std::make_unique<ChromeSelectFilePolicy>(web_ui()->GetWebContents()));
   gfx::NativeWindow owning_window =
       chrome::FindBrowserWithWebContents(web_ui()->GetWebContents())
           ->window()
@@ -667,10 +786,14 @@ void CupsPrintersHandler::OnPrintersChanged(
   std::unique_ptr<base::ListValue> printers_list =
       base::MakeUnique<base::ListValue>();
   for (const Printer& printer : automatic_printers_) {
-    printers_list->Append(GetPrinterInfo(printer));
+    auto printer_info = GetPrinterInfo(printer);
+    if (printer_info)
+      printers_list->Append(std::move(printer_info));
   }
   for (const Printer& printer : discovered_printers_) {
-    printers_list->Append(GetPrinterInfo(printer));
+    auto printer_info = GetPrinterInfo(printer);
+    if (printer_info)
+      printers_list->Append(std::move(printer_info));
   }
 
   FireWebUIListener("on-printer-discovered", *printers_list);
@@ -684,24 +807,38 @@ void CupsPrintersHandler::HandleAddDiscoveredPrinter(
   std::string printer_id;
   CHECK(args->GetString(0, &printer_id));
 
-  auto printer = printers_manager_->GetPrinter(printer_id);
-  if (printer == nullptr) {
+  std::unique_ptr<Printer> printer = printers_manager_->GetPrinter(printer_id);
+  PrinterUri uri;
+  if (printer == nullptr || !ParseUri(printer->uri(), &uri)) {
     // Printer disappeared, so we don't have information about it anymore and
-    // can't really do much.  Fail the add.
+    // can't really do much.  Or the printer uri was not parsed successfully.
+    // Fail the add.
     FireWebUIListener("on-add-cups-printer", base::Value(false),
                       base::Value(printer_id));
-  } else if (printer->ppd_reference().autoconf ||
-             !printer->ppd_reference().effective_make_and_model.empty() ||
-             !printer->ppd_reference().user_supplied_ppd_url.empty()) {
+    return;
+  }
+
+  if (printer->ppd_reference().autoconf ||
+      !printer->ppd_reference().effective_make_and_model.empty() ||
+      !printer->ppd_reference().user_supplied_ppd_url.empty()) {
     // If we have something that looks like a ppd reference for this printer,
     // try to configure it.
     printer_configurer_->SetUpPrinter(
         *printer, base::Bind(&CupsPrintersHandler::OnAddedDiscoveredPrinter,
                              weak_factory_.GetWeakPtr(), *printer));
+    return;
+  }
+
+  // The mDNS record doesn't guarantee we can setup the printer.  Query it to
+  // see if we want to try IPP.
+  const std::string printer_uri = printer->effective_uri();
+  if (IsIppUri(printer_uri)) {
+    QueryAutoconf(
+        printer_uri,
+        base::Bind(&CupsPrintersHandler::OnAutoconfQueriedDiscovered,
+                   weak_factory_.GetWeakPtr(), base::Passed(&printer)));
   } else {
-    // We don't have enough from discovery to configure the printer.  Fill in as
-    // much information as we can about the printer, and ask the user to supply
-    // the rest.
+    // If it's not an IPP printer, the user must choose a PPD.
     FireWebUIListener("on-manually-add-discovered-printer",
                       *GetPrinterInfo(*printer));
   }

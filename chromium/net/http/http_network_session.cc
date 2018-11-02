@@ -45,7 +45,7 @@ namespace net {
 
 namespace {
 
-base::StaticAtomicSequenceNumber g_next_shard_id;
+base::AtomicSequenceNumber g_next_shard_id;
 
 ClientSocketPoolManager* CreateSocketPoolManager(
     HttpNetworkSession::SocketPoolType pool_type,
@@ -117,8 +117,6 @@ HttpNetworkSession::Params::Params()
       quic_close_sessions_on_ip_change(false),
       quic_idle_connection_timeout_seconds(kIdleConnectionTimeoutSeconds),
       quic_reduced_ping_timeout_seconds(kPingTimeoutSecs),
-      quic_packet_reader_yield_after_duration_milliseconds(
-          kQuicYieldAfterDurationMilliseconds),
       quic_migrate_sessions_on_network_change(false),
       quic_migrate_sessions_early(false),
       quic_allow_server_migration(false),
@@ -194,7 +192,6 @@ HttpNetworkSession::HttpNetworkSession(const Params& params,
           params.mark_quic_broken_when_network_blackholes,
           params.quic_idle_connection_timeout_seconds,
           params.quic_reduced_ping_timeout_seconds,
-          params.quic_packet_reader_yield_after_duration_milliseconds,
           params.quic_migrate_sessions_on_network_change,
           params.quic_migrate_sessions_early,
           params.quic_allow_server_migration,
@@ -202,6 +199,7 @@ HttpNetworkSession::HttpNetworkSession(const Params& params,
           params.quic_race_cert_verification,
           params.quic_estimate_initial_rtt,
           params.quic_connection_options,
+          params.quic_client_connection_options,
           params.enable_token_binding),
       spdy_session_pool_(context.host_resolver,
                          context.ssl_config_service,
@@ -309,17 +307,17 @@ std::unique_ptr<base::Value> HttpNetworkSession::QuicInfoToValue() const {
   dict->Set("sessions", quic_stream_factory_.QuicStreamFactoryInfoToValue());
   dict->SetBoolean("quic_enabled", IsQuicEnabled());
 
-  auto connection_options(base::MakeUnique<base::ListValue>());
+  auto connection_options(std::make_unique<base::ListValue>());
   for (const auto& option : params_.quic_connection_options)
     connection_options->AppendString(QuicTagToString(option));
   dict->Set("connection_options", std::move(connection_options));
 
-  auto supported_versions(base::MakeUnique<base::ListValue>());
+  auto supported_versions(std::make_unique<base::ListValue>());
   for (const auto& version : params_.quic_supported_versions)
     supported_versions->AppendString(QuicVersionToString(version));
   dict->Set("supported_versions", std::move(supported_versions));
 
-  auto origins_to_force_quic_on(base::MakeUnique<base::ListValue>());
+  auto origins_to_force_quic_on(std::make_unique<base::ListValue>());
   for (const auto& origin : params_.origins_to_force_quic_on)
     origins_to_force_quic_on->AppendString(origin.ToString());
   dict->Set("origins_to_force_quic_on", std::move(origins_to_force_quic_on));
@@ -331,10 +329,6 @@ std::unique_ptr<base::Value> HttpNetworkSession::QuicInfoToValue() const {
                    params_.quic_idle_connection_timeout_seconds);
   dict->SetInteger("reduced_ping_timeout_seconds",
                    params_.quic_reduced_ping_timeout_seconds);
-  dict->SetInteger(
-      "packet_reader_yield_after_duration_milliseconds",
-      params_.quic_packet_reader_yield_after_duration_milliseconds);
-
   dict->SetBoolean("mark_quic_broken_when_network_blackholes",
                    params_.mark_quic_broken_when_network_blackholes);
   dict->SetBoolean("retry_without_alt_svc_on_quic_errors",

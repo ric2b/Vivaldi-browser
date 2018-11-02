@@ -17,6 +17,7 @@ class DesktopPopupAlignmentDelegate;
 class MessageCenter;
 class MessageCenterTray;
 class MessagePopupCollection;
+}  // namespace message_center
 
 // A MessageCenterTrayDelegate implementation that exposes the MessageCenterTray
 // via a system tray icon.  The notification popups will be displayed in the
@@ -32,13 +33,13 @@ class WebNotificationTray : public message_center::MessageCenterTrayDelegate {
   // MessageCenterTrayDelegate implementation.
   bool ShowPopups() override;
   void HidePopups() override;
-  bool ShowMessageCenter() override;
+  bool ShowMessageCenter(bool show_by_click) override;
   void HideMessageCenter() override;
   void OnMessageCenterTrayChanged() override;
   bool ShowNotifierSettings() override;
   bool IsContextMenuEnabled() const override;
 
-  MessageCenterTray* GetMessageCenterTray() override;
+  message_center::MessageCenterTray* GetMessageCenterTray() override;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(WebNotificationTrayTest, WebNotifications);
@@ -46,13 +47,12 @@ class WebNotificationTray : public message_center::MessageCenterTrayDelegate {
   FRIEND_TEST_ALL_PREFIXES(WebNotificationTrayTest, ManyPopupNotifications);
   FRIEND_TEST_ALL_PREFIXES(WebNotificationTrayTest, ManuallyCloseMessageCenter);
 
-  std::unique_ptr<MessagePopupCollection> popup_collection_;
-  std::unique_ptr<DesktopPopupAlignmentDelegate> alignment_delegate_;
+  std::unique_ptr<message_center::MessagePopupCollection> popup_collection_;
+  std::unique_ptr<message_center::DesktopPopupAlignmentDelegate>
+      alignment_delegate_;
+  std::unique_ptr<message_center::MessageCenterTray> message_center_tray_;
 
-  std::unique_ptr<MessageCenterTray> message_center_tray_;
   DISALLOW_COPY_AND_ASSIGN(WebNotificationTray);
 };
-
-}  // namespace message_center
 
 #endif  // CHROME_BROWSER_UI_VIEWS_MESSAGE_CENTER_WEB_NOTIFICATION_TRAY_H_

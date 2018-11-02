@@ -4571,6 +4571,11 @@ error::Error GLES2DecoderImpl::HandleCopyTextureCHROMIUM(
       static_cast<GLboolean>(c.unpack_premultiply_alpha);
   GLboolean unpack_unmultiply_alpha =
       static_cast<GLboolean>(c.unpack_unmultiply_alpha);
+  if (!validators_->texture_target.IsValid(dest_target)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCopyTextureCHROMIUM", dest_target,
+                                    "dest_target");
+    return error::kNoError;
+  }
   if (!validators_->texture_internal_format.IsValid(internalformat)) {
     LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCopyTextureCHROMIUM",
                        "internalformat GL_INVALID_VALUE");
@@ -4609,6 +4614,11 @@ error::Error GLES2DecoderImpl::HandleCopySubTextureCHROMIUM(
       static_cast<GLboolean>(c.unpack_premultiply_alpha);
   GLboolean unpack_unmultiply_alpha =
       static_cast<GLboolean>(c.unpack_unmultiply_alpha);
+  if (!validators_->texture_target.IsValid(dest_target)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCopySubTextureCHROMIUM", dest_target,
+                                    "dest_target");
+    return error::kNoError;
+  }
   if (width < 0) {
     LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCopySubTextureCHROMIUM",
                        "width < 0");
@@ -4780,6 +4790,12 @@ error::Error GLES2DecoderImpl::HandleBindTexImage2DWithInternalformatCHROMIUM(
   if (!validators_->texture_bind_target.IsValid(target)) {
     LOCAL_SET_GL_ERROR_INVALID_ENUM(
         "glBindTexImage2DWithInternalformatCHROMIUM", target, "target");
+    return error::kNoError;
+  }
+  if (!validators_->texture_internal_format.IsValid(internalformat)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM(
+        "glBindTexImage2DWithInternalformatCHROMIUM", internalformat,
+        "internalformat");
     return error::kNoError;
   }
   DoBindTexImage2DWithInternalformatCHROMIUM(target, internalformat, imageId);
@@ -5129,7 +5145,10 @@ error::Error GLES2DecoderImpl::HandleOverlayPromotionHintCHROMIUM(
   GLboolean promotion_hint = static_cast<GLboolean>(c.promotion_hint);
   GLint display_x = static_cast<GLint>(c.display_x);
   GLint display_y = static_cast<GLint>(c.display_y);
-  DoOverlayPromotionHintCHROMIUM(texture, promotion_hint, display_x, display_y);
+  GLint display_width = static_cast<GLint>(c.display_width);
+  GLint display_height = static_cast<GLint>(c.display_height);
+  DoOverlayPromotionHintCHROMIUM(texture, promotion_hint, display_x, display_y,
+                                 display_width, display_height);
   return error::kNoError;
 }
 
@@ -5184,6 +5203,39 @@ error::Error GLES2DecoderImpl::HandleSetEnableDCLayersCHROMIUM(
           cmd_data);
   GLboolean enabled = static_cast<GLboolean>(c.enabled);
   DoSetEnableDCLayersCHROMIUM(enabled);
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderImpl::HandleBeginRasterCHROMIUM(
+    uint32_t immediate_data_size,
+    const volatile void* cmd_data) {
+  const volatile gles2::cmds::BeginRasterCHROMIUM& c =
+      *static_cast<const volatile gles2::cmds::BeginRasterCHROMIUM*>(cmd_data);
+  if (!features().chromium_raster_transport) {
+    return error::kUnknownCommand;
+  }
+
+  GLuint texture_id = static_cast<GLuint>(c.texture_id);
+  GLuint sk_color = static_cast<GLuint>(c.sk_color);
+  GLuint msaa_sample_count = static_cast<GLuint>(c.msaa_sample_count);
+  GLboolean can_use_lcd_text = static_cast<GLboolean>(c.can_use_lcd_text);
+  GLboolean use_distance_field_text =
+      static_cast<GLboolean>(c.use_distance_field_text);
+  GLint pixel_config = static_cast<GLint>(c.pixel_config);
+  DoBeginRasterCHROMIUM(texture_id, sk_color, msaa_sample_count,
+                        can_use_lcd_text, use_distance_field_text,
+                        pixel_config);
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderImpl::HandleEndRasterCHROMIUM(
+    uint32_t immediate_data_size,
+    const volatile void* cmd_data) {
+  if (!features().chromium_raster_transport) {
+    return error::kUnknownCommand;
+  }
+
+  DoEndRasterCHROMIUM();
   return error::kNoError;
 }
 

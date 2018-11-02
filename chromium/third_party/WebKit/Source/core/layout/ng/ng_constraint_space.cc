@@ -7,7 +7,6 @@
 #include "core/layout/LayoutBlock.h"
 #include "core/layout/LayoutView.h"
 #include "core/layout/ng/ng_constraint_space_builder.h"
-#include "core/layout/ng/ng_layout_result.h"
 
 namespace blink {
 
@@ -28,9 +27,9 @@ NGConstraintSpace::NGConstraintSpace(
     bool is_new_fc,
     bool is_anonymous,
     const NGMarginStrut& margin_strut,
-    const NGLogicalOffset& bfc_offset,
-    const WTF::Optional<NGLogicalOffset>& floats_bfc_offset,
-    const std::shared_ptr<NGExclusions>& exclusions,
+    const NGBfcOffset& bfc_offset,
+    const WTF::Optional<NGBfcOffset>& floats_bfc_offset,
+    const NGExclusionSpace& exclusion_space,
     Vector<RefPtr<NGUnpositionedFloat>>& unpositioned_floats,
     const WTF::Optional<LayoutUnit>& clearance_offset,
     Vector<NGBaselineRequest>& baseline_requests)
@@ -55,14 +54,16 @@ NGConstraintSpace::NGConstraintSpace(
       margin_strut_(margin_strut),
       bfc_offset_(bfc_offset),
       floats_bfc_offset_(floats_bfc_offset),
-      exclusions_(exclusions),
+      exclusion_space_(WTF::MakeUnique<NGExclusionSpace>(exclusion_space)),
       clearance_offset_(clearance_offset) {
   unpositioned_floats_.swap(unpositioned_floats);
   baseline_requests_.swap(baseline_requests);
 }
 
 RefPtr<NGConstraintSpace> NGConstraintSpace::CreateFromLayoutObject(
-    const LayoutBox& box) {
+    const LayoutBox& box,
+    Optional<LayoutUnit> override_logical_width,
+    Optional<LayoutUnit> override_logical_height) {
   auto writing_mode = FromPlatformWritingMode(box.StyleRef().GetWritingMode());
   bool parallel_containing_block = IsParallelWritingMode(
       FromPlatformWritingMode(
@@ -99,10 +100,18 @@ RefPtr<NGConstraintSpace> NGConstraintSpace::CreateFromLayoutObject(
     available_size.inline_size =
         box.BorderAndPaddingLogicalWidth() + box.OverrideLogicalContentWidth();
     fixed_inline = true;
+  } else if (override_logical_width.has_value()) {
+    available_size.inline_size =
+        box.BorderAndPaddingLogicalWidth() + override_logical_width.value();
+    fixed_inline = true;
   }
   if (box.HasOverrideLogicalContentHeight()) {
     available_size.block_size = box.BorderAndPaddingLogicalHeight() +
                                 box.OverrideLogicalContentHeight();
+    fixed_block = true;
+  } else if (override_logical_height.has_value()) {
+    available_size.block_size =
+        box.BorderAndPaddingLogicalHeight() + override_logical_height.value();
     fixed_block = true;
   }
 
@@ -124,10 +133,9 @@ RefPtr<NGConstraintSpace> NGConstraintSpace::CreateFromLayoutObject(
   DCHECK_GE(initial_containing_block_size.width, LayoutUnit());
   DCHECK_GE(initial_containing_block_size.height, LayoutUnit());
 
-  return NGConstraintSpaceBuilder(writing_mode)
+  return NGConstraintSpaceBuilder(writing_mode, initial_containing_block_size)
       .SetAvailableSize(available_size)
       .SetPercentageResolutionSize(percentage_size)
-      .SetInitialContainingBlockSize(initial_containing_block_size)
       .SetIsInlineDirectionTriggersScrollbar(
           box.StyleRef().OverflowInlineDirection() == EOverflow::kAuto)
       .SetIsBlockDirectionTriggersScrollbar(
@@ -151,10 +159,6 @@ Optional<LayoutUnit> NGConstraintSpace::ParentPercentageResolutionInlineSize()
       .inline_size;
 }
 
-void NGConstraintSpace::AddExclusion(const NGExclusion& exclusion) {
-  exclusions_->Add(exclusion);
-}
-
 NGFragmentationType NGConstraintSpace::BlockFragmentationType() const {
   return static_cast<NGFragmentationType>(block_direction_fragmentation_type_);
 }
@@ -166,7 +170,8 @@ bool NGConstraintSpace::operator==(const NGConstraintSpace& other) const {
   if (unpositioned_floats_.size() || other.unpositioned_floats_.size())
     return false;
 
-  if (exclusions_ && other.exclusions_ && *exclusions_ != *other.exclusions_)
+  if (exclusion_space_ && other.exclusion_space_ &&
+      *exclusion_space_ != *other.exclusion_space_)
     return false;
 
   return available_size_ == other.available_size_ &&
@@ -193,7 +198,8 @@ bool NGConstraintSpace::operator==(const NGConstraintSpace& other) const {
          margin_strut_ == other.margin_strut_ &&
          bfc_offset_ == other.bfc_offset_ &&
          floats_bfc_offset_ == other.floats_bfc_offset_ &&
-         clearance_offset_ == other.clearance_offset_;
+         clearance_offset_ == other.clearance_offset_ &&
+         baseline_requests_ == other.baseline_requests_;
 }
 
 bool NGConstraintSpace::operator!=(const NGConstraintSpace& other) const {
@@ -202,13 +208,11 @@ bool NGConstraintSpace::operator!=(const NGConstraintSpace& other) const {
 
 String NGConstraintSpace::ToString() const {
   return String::Format(
-      "Offset: %s,%s Size: %sx%s MarginStrut: %s"
-      " Clearance: %s",
-      bfc_offset_.inline_offset.ToString().Ascii().data(),
+      "Offset: %s,%s Size: %sx%s Clearance: %s",
+      bfc_offset_.line_offset.ToString().Ascii().data(),
       bfc_offset_.block_offset.ToString().Ascii().data(),
       AvailableSize().inline_size.ToString().Ascii().data(),
       AvailableSize().block_size.ToString().Ascii().data(),
-      margin_strut_.ToString().Ascii().data(),
       clearance_offset_.has_value()
           ? clearance_offset_.value().ToString().Ascii().data()
           : "none");

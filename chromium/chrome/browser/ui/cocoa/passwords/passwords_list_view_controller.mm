@@ -17,6 +17,8 @@
 #include "chrome/browser/ui/passwords/manage_passwords_bubble_model.h"
 #include "chrome/browser/ui/passwords/manage_passwords_view_utils.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/theme_resources.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 #include "skia/ext/skia_utils_mac.h"
 #import "ui/base/cocoa/controls/hyperlink_button_cell.h"
 #import "ui/base/cocoa/hover_image_button.h"
@@ -33,6 +35,15 @@ CGFloat ManagePasswordItemWidth() {
   const CGFloat undoLinkWidth = LabelSize(IDS_MANAGE_PASSWORDS_UNDO).width;
   return std::max(kDesiredRowWidth,
                   undoExplanationWidth + kItemLabelSpacing + undoLinkWidth);
+}
+
+NSTextField* EditableUsernameField() {
+  base::scoped_nsobject<NSTextField> textField(
+      [[NSTextField alloc] initWithFrame:NSZeroRect]);
+  InitLabel(textField, base::string16());
+  [textField setEditable:YES];
+  [textField setSelectable:YES];
+  return textField.autorelease();
 }
 
 NSTextField* Label(const base::string16& text) {
@@ -204,12 +215,19 @@ NSTextField* FederationLabel(const base::string16& text) {
 
 @implementation PendingPasswordItemView
 
-- (id)initWithForm:(const autofill::PasswordForm&)form {
+- (NSTextField*)usernameField {
+  return usernameField_.get();
+}
+
+- (id)initWithForm:(const autofill::PasswordForm&)form editMode:(BOOL)editMode {
   if ((self = [super initWithFrame:NSZeroRect])) {
     // Add the username.
-    usernameField_.reset([UsernameLabel(GetDisplayUsername(form)) retain]);
+    if (editMode) {
+      usernameField_.reset([EditableUsernameField() retain]);
+    } else {
+      usernameField_.reset([UsernameLabel(GetDisplayUsername(form)) retain]);
+    }
     [self addSubview:usernameField_];
-
     if (form.federation_origin.unique()) {
       passwordField_.reset([PasswordLabel(form.password_value) retain]);
     } else {
@@ -219,6 +237,27 @@ NSTextField* FederationLabel(const base::string16& text) {
       passwordField_.reset([FederationLabel(text) retain]);
     }
     [self addSubview:passwordField_];
+    // Add eye icon if password selection experiment is on.
+    if (base::FeatureList::IsEnabled(
+            password_manager::features::kEnablePasswordSelection)) {
+      passwordViewButton_.reset(
+          [[HoverImageButton alloc] initWithFrame:NSZeroRect]);
+      [passwordViewButton_ setBordered:NO];
+      [[passwordViewButton_ cell] setHighlightsBy:NSNoCellMask];
+      ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
+      gfx::Image image = bundle.GetImageNamed(IDR_SHOW_PASSWORD);
+      [passwordViewButton_
+          setFrameSize:NSMakeSize(image.Width(), image.Height())];
+      [passwordViewButton_ setDefaultImage:image.ToNSImage()];
+      [passwordViewButton_
+          setHoverImage:bundle.GetImageNamed(IDR_SHOW_PASSWORD_HOVER)
+                            .ToNSImage()];
+      NSString* passwordViewTitle =
+          l10n_util::GetNSString(IDS_MANAGE_PASSWORDS_SHOW_PASSWORD);
+      [passwordViewButton_ setAccessibilityTitle:passwordViewTitle];
+      [passwordViewButton_ setToolTip:passwordViewTitle];
+      [self addSubview:passwordViewButton_];
+    }
   }
   return self;
 }
@@ -227,8 +266,16 @@ NSTextField* FederationLabel(const base::string16& text) {
 
 - (void)layoutWithFirstColumn:(CGFloat)firstWidth
                  secondColumn:(CGFloat)secondWidth {
-  std::pair<CGFloat, CGFloat> sizes = GetResizedColumns(
-      kDesiredRowWidth, std::make_pair(firstWidth, secondWidth));
+  std::pair<CGFloat, CGFloat> sizes;
+  if (passwordViewButton_) {
+    sizes = GetResizedColumns(kDesiredRowWidth -
+                                  NSWidth([passwordViewButton_ frame]) -
+                                  kRelatedControlVerticalSpacing,
+                              std::make_pair(firstWidth, secondWidth));
+  } else {
+    sizes = GetResizedColumns(kDesiredRowWidth,
+                              std::make_pair(firstWidth, secondWidth));
+  }
   [usernameField_
       setFrameSize:NSMakeSize(sizes.first, NSHeight([usernameField_ frame]))];
   [passwordField_
@@ -239,10 +286,20 @@ NSTextField* FederationLabel(const base::string16& text) {
   // Move to the right of the username and add the password.
   curX = NSMaxX([usernameField_ frame]) + kItemLabelSpacing;
   [passwordField_ setFrameOrigin:NSMakePoint(curX, curY)];
-  // Move to the top-right of the password.
-  curX = NSMaxX([passwordField_ frame]);
+  if (passwordViewButton_) {
+    // The eye icon should be right-aligned.
+    curX = kDesiredRowWidth - NSWidth([passwordViewButton_ frame]);
+    curY += (NSHeight([usernameField_ frame]) -
+             NSHeight([passwordViewButton_ frame])) /
+            2;
+    [passwordViewButton_ setFrameOrigin:NSMakePoint(curX, curY)];
+    // Move to the right of the eye-icon.
+    curX = NSMaxX([passwordViewButton_ frame]);
+  } else {
+    // Move to the right of the password.
+    curX = NSMaxX([passwordField_ frame]);
+  }
   curY = NSMaxY([passwordField_ frame]) + kRelatedControlVerticalSpacing;
-
   // Update the frame.
   [self setFrameSize:NSMakeSize(curX, curY)];
 }
@@ -257,10 +314,6 @@ NSTextField* FederationLabel(const base::string16& text) {
 @end
 
 @implementation PendingPasswordItemView (Testing)
-
-- (NSTextField*)usernameField {
-  return usernameField_.get();
-}
 
 - (NSTextField*)passwordField {
   return passwordField_.get();
@@ -323,8 +376,9 @@ NSTextField* FederationLabel(const base::string16& text) {
 - (void)updateContent {
   switch (state_) {
     case MANAGE_PASSWORD_ITEM_STATE_PENDING:
-      contentView_.reset(
-          [[PendingPasswordItemView alloc] initWithForm:*passwordForm_]);
+      contentView_.reset([[PendingPasswordItemView alloc]
+          initWithForm:*passwordForm_
+              editMode:FALSE]);
       return;
     case MANAGE_PASSWORD_ITEM_STATE_MANAGE:
       contentView_.reset([[ManagePasswordItemView alloc]

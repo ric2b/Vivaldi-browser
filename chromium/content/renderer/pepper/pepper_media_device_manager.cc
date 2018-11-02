@@ -99,8 +99,8 @@ void PepperMediaDeviceManager::EnumerateDevices(
   CHECK(request_audio_input || request_video_input || request_audio_output);
   GetMediaDevicesDispatcher()->EnumerateDevices(
       request_audio_input, request_video_input, request_audio_output,
-      base::Bind(&PepperMediaDeviceManager::DevicesEnumerated, AsWeakPtr(),
-                 callback, ToMediaDeviceType(type)));
+      base::BindOnce(&PepperMediaDeviceManager::DevicesEnumerated, AsWeakPtr(),
+                     callback, ToMediaDeviceType(type)));
 #else
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(&PepperMediaDeviceManager::DevicesEnumerated,
@@ -143,17 +143,15 @@ int PepperMediaDeviceManager::OpenDevice(PP_DeviceType_Dev type,
 
   RendererPpapiHostImpl* host =
       RendererPpapiHostImpl::GetForPPInstance(pp_instance);
-  if (base::FeatureList::IsEnabled(
-          features::kRequireSecureOriginsForPepperMediaRequests) &&
-      !host->IsSecureContext(pp_instance)) {
+  if (!host->IsSecureContext(pp_instance)) {
     RenderFrame* render_frame = host->GetRenderFrameForInstance(pp_instance);
     if (render_frame) {
       render_frame->AddMessageToConsole(CONSOLE_MESSAGE_LEVEL_WARNING,
                                         kPepperInsecureOriginMessage);
     }
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&PepperMediaDeviceManager::OnDeviceOpenFailed,
-                              AsWeakPtr(), request_id));
+        FROM_HERE, base::BindOnce(&PepperMediaDeviceManager::OnDeviceOpenFailed,
+                                  AsWeakPtr(), request_id));
     return request_id;
   }
 

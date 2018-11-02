@@ -30,7 +30,6 @@ namespace blink {
 class WebFrame;
 class WebLocalFrame;
 class WebPlugin;
-class WebURLRequest;
 struct WebPluginParams;
 }
 
@@ -56,6 +55,7 @@ class Isolate;
 namespace content {
 class AssociatedInterfaceProvider;
 class AssociatedInterfaceRegistry;
+class ChildURLLoaderFactoryGetter;
 class ContextMenuClient;
 class PluginInstanceThrottler;
 class RenderAccessibility;
@@ -148,12 +148,6 @@ class CONTENT_EXPORT RenderFrame : public IPC::Listener,
       const blink::WebPluginParams& params,
       std::unique_ptr<PluginInstanceThrottler> throttler) = 0;
 
-  // The client should handle the navigation externally.
-  virtual void LoadURLExternally(
-      const blink::WebURLRequest& request,
-      blink::WebNavigationPolicy policy,
-      blink::WebTriggeringEventInfo triggering_event_info) = 0;
-
   // Execute a string of JavaScript in this frame's context.
   virtual void ExecuteJavaScript(const base::string16& javascript) = 0;
 
@@ -163,9 +157,11 @@ class CONTENT_EXPORT RenderFrame : public IPC::Listener,
   // Return true if this frame is hidden.
   virtual bool IsHidden() = 0;
 
-  // Returns the BinderRegistry that this process uses to expose interfaces
-  // to the application running in this frame.
-  virtual service_manager::BinderRegistry* GetInterfaceRegistry() = 0;
+  // Ask the RenderFrame (or its observers) to bind a request for
+  // |interface_name| to |interface_pipe|.
+  virtual void BindLocalInterface(
+      const std::string& interface_name,
+      mojo::ScopedMessagePipeHandle interface_pipe) = 0;
 
   // Returns the InterfaceProvider that this process can use to bind
   // interfaces exposed to it by the application running in this frame.
@@ -247,6 +243,10 @@ class CONTENT_EXPORT RenderFrame : public IPC::Listener,
   // Forcefully detaches all connected DevTools clients.
   virtual void DetachDevToolsForTest() = 0;
 
+  // Sets the PreviewsState of this frame, a bitmask of potentially several
+  // Previews optimizations.
+  virtual void SetPreviewsState(PreviewsState previews_state) = 0;
+
   // Returns the PreviewsState of this frame, a bitmask of potentially several
   // Previews optimizations.
   virtual PreviewsState GetPreviewsState() const = 0;
@@ -270,6 +270,10 @@ class CONTENT_EXPORT RenderFrame : public IPC::Listener,
   // Bitwise-ORed set of extra bindings that have been enabled.  See
   // BindingsPolicy for details.
   virtual int GetEnabledBindings() const = 0;
+
+  // Returns a default ChildURLLoaderFactoryGetter for the RenderFrame.
+  // Used to obtain a right mojom::URLLoaderFactory.
+  virtual ChildURLLoaderFactoryGetter* GetDefaultURLLoaderFactoryGetter() = 0;
 
  protected:
   ~RenderFrame() override {}

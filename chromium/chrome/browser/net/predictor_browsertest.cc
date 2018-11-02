@@ -319,7 +319,7 @@ class CrossSitePredictorObserver
 
   void OnPreconnectUrl(
       const GURL& original_url,
-      const GURL& first_party_for_cookies,
+      const GURL& site_for_cookies,
       chrome_browser_net::UrlInfo::ResolutionMotivation motivation,
       int count) override {
     base::AutoLock lock(lock_);
@@ -507,6 +507,9 @@ class PredictorBrowserTest : public InProcessBrowserTest {
                                                   "127.0.0.1", 44);
     rule_based_resolver_proc_->AddRuleWithLatency("gmail.com", "127.0.0.1", 63);
     rule_based_resolver_proc_->AddSimulatedFailure("*.notfound");
+    rule_based_resolver_proc_->AddRuleWithLatency(
+        "slow*.google.com", "127.0.0.1",
+        Predictor::kMaxSpeculativeResolveQueueDelayMs + 300);
     rule_based_resolver_proc_->AddRuleWithLatency("delay.google.com",
                                                   "127.0.0.1", 1000 * 60);
   }
@@ -727,18 +730,33 @@ class PredictorBrowserTest : public InProcessBrowserTest {
   }
 
   // This method verifies that |url| is in the predictor's |results_| map. This
-  // is used for pending lookups, and lookups performed before the observer is
-  // attached.
-  void ExpectUrlRequestedFromPredictorOnUIThread(const GURL& url) {
+  // is used for pending lookups.
+  void ExpectUrlLookupIsInProgressOnUIThread(const GURL& url) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
-        base::BindOnce(&PredictorBrowserTest::ExpectUrlRequestedFromPredictor,
+        base::BindOnce(&PredictorBrowserTest::ExpectUrlLookupIsInProgress,
                        base::Unretained(this), url));
   }
 
-  void ExpectUrlRequestedFromPredictor(const GURL& url) {
+  void ExpectUrlLookupIsInProgress(const GURL& url) {
+    DCHECK_CURRENTLY_ON(BrowserThread::IO);
     EXPECT_TRUE(base::ContainsKey(predictor()->results_, url));
+  }
+
+  // This method verifies that the predictor's |results_| map is empty, i.e.
+  // there are no lookups in progress.
+  void ExpectNoLookupsAreInProgressOnUIThread() {
+    DCHECK_CURRENTLY_ON(BrowserThread::UI);
+    BrowserThread::PostTask(
+        BrowserThread::IO, FROM_HERE,
+        base::BindOnce(&PredictorBrowserTest::ExpectNoLookupsAreInProgress,
+                       base::Unretained(this)));
+  }
+
+  void ExpectNoLookupsAreInProgress() {
+    DCHECK_CURRENTLY_ON(BrowserThread::IO);
+    EXPECT_TRUE(predictor()->results_.empty());
   }
 
   void DiscardAllResultsOnUIThread() {
@@ -809,6 +827,7 @@ IN_PROC_BROWSER_TEST_F(PredictorBrowserTest, SingleLookupTest) {
   observer()->WaitUntilHostLookedUp(url);
   EXPECT_TRUE(observer()->HostFound(url));
   ExpectValidPeakPendingLookupsOnUI(1u);
+  ExpectNoLookupsAreInProgressOnUIThread();
 }
 
 IN_PROC_BROWSER_TEST_F(PredictorBrowserTest, ConcurrentLookupTest) {
@@ -827,6 +846,7 @@ IN_PROC_BROWSER_TEST_F(PredictorBrowserTest, ConcurrentLookupTest) {
   ExpectFoundUrls(found_names, not_found_names);
   ExpectValidPeakPendingLookupsOnUI(found_names.size() +
                                     not_found_names.size());
+  ExpectNoLookupsAreInProgressOnUIThread();
 }
 
 IN_PROC_BROWSER_TEST_F(PredictorBrowserTest, MassiveConcurrentLookupTest) {
@@ -841,6 +861,7 @@ IN_PROC_BROWSER_TEST_F(PredictorBrowserTest, MassiveConcurrentLookupTest) {
   WaitUntilHostsLookedUp(not_found_names);
   ExpectFoundUrls(std::vector<GURL>(), not_found_names);
   ExpectValidPeakPendingLookupsOnUI(not_found_names.size());
+  ExpectNoLookupsAreInProgressOnUIThread();
 }
 
 IN_PROC_BROWSER_TEST_F(PredictorBrowserTest,
@@ -855,8 +876,30 @@ IN_PROC_BROWSER_TEST_F(PredictorBrowserTest,
       base::TimeDelta::FromMilliseconds(500));
   base::RunLoop().Run();
 
-  ExpectUrlRequestedFromPredictor(delayed_url);
+  ExpectUrlLookupIsInProgressOnUIThread(delayed_url);
   EXPECT_FALSE(observer()->HasHostBeenLookedUp(delayed_url));
+}
+
+IN_PROC_BROWSER_TEST_F(PredictorBrowserTest, CongestionControlTest) {
+  const int queue_max_size = Predictor::kMaxSpeculativeParallelResolves;
+  std::vector<GURL> slow_names;
+  std::vector<GURL> recycled_names;
+  for (int i = 0; i < queue_max_size; ++i)
+    slow_names.emplace_back(base::StringPrintf("http://slow%d.google.com", i));
+  for (int i = queue_max_size; i < 5; ++i) {
+    recycled_names.emplace_back(
+        base::StringPrintf("http://host%d.notfound", i));
+  }
+
+  FloodResolveRequestsOnUIThread(slow_names);
+  FloodResolveRequestsOnUIThread(recycled_names);
+
+  WaitUntilHostsLookedUp(slow_names);
+  ExpectFoundUrls(slow_names, {});
+  for (const auto& name : recycled_names)
+    EXPECT_FALSE(observer()->HasHostBeenLookedUp(name));
+  ExpectValidPeakPendingLookupsOnUI(slow_names.size());
+  ExpectNoLookupsAreInProgressOnUIThread();
 }
 
 IN_PROC_BROWSER_TEST_F(PredictorBrowserTest, SimplePreconnectOne) {

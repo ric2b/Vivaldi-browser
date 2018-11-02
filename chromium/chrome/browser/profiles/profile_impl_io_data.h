@@ -26,6 +26,9 @@ class DomainReliabilityMonitor;
 namespace net {
 class CookieStore;
 class HttpServerPropertiesManager;
+struct ReportingPolicy;
+class ReportingService;
+class URLRequestContextBuilder;
 }  // namespace net
 
 namespace storage {
@@ -43,8 +46,6 @@ class ProfileImplIOData : public ProfileIOData {
     // parameters needed to construct a ChromeURLRequestContextGetter.
     void Init(const base::FilePath& cookie_path,
               const base::FilePath& channel_id_path,
-              const base::FilePath& cache_path,
-              int cache_max_size,
               const base::FilePath& media_cache_path,
               int media_cache_max_size,
               const base::FilePath& extensions_cookie_path,
@@ -140,8 +141,6 @@ class ProfileImplIOData : public ProfileIOData {
     // All of these parameters are intended to be read on the IO thread.
     base::FilePath cookie_path;
     base::FilePath channel_id_path;
-    base::FilePath cache_path;
-    int cache_max_size;
     base::FilePath media_cache_path;
     int media_cache_max_size;
     base::FilePath extensions_cookie_path;
@@ -161,11 +160,13 @@ class ProfileImplIOData : public ProfileIOData {
       std::unique_ptr<ChromeNetworkDelegate> chrome_network_delegate)
       const override;
 
-  void InitializeInternal(
-      ProfileParams* profile_params,
-      content::ProtocolHandlerMap* protocol_handlers,
-      content::URLRequestInterceptorScopedVector request_interceptors)
-      const override;
+  void InitializeInternal(net::URLRequestContextBuilder* builder,
+                          ProfileParams* profile_params,
+                          content::ProtocolHandlerMap* protocol_handlers,
+                          content::URLRequestInterceptorScopedVector
+                              request_interceptors) const override;
+  void OnMainRequestContextCreated(
+      ProfileParams* profile_params) const override;
   void InitializeExtensionsRequestContext(
       ProfileParams* profile_params) const override;
   net::URLRequestContext* InitializeAppRequestContext(
@@ -194,8 +195,16 @@ class ProfileImplIOData : public ProfileIOData {
       const StoragePartitionDescriptor& partition_descriptor) const override;
   chrome_browser_net::Predictor* GetPredictor() override;
 
+  // Returns a net::ReportingService, if reporting should be enabled. Otherwise,
+  // returns nullptr.
+  // TODO(mmenke): Remove once URLRequestContextBuilders are always used to
+  // create URLRequestContexts.
   std::unique_ptr<net::ReportingService> MaybeCreateReportingService(
       net::URLRequestContext* url_request_context) const;
+
+  // Returns a net::ReportingPolicy, if reporting should be enabled. Otherwise,
+  // returns nullptr.
+  static std::unique_ptr<net::ReportingPolicy> MaybeCreateReportingPolicy();
 
   // Deletes all network related data since |time|. It deletes transport
   // security state since |time| and also deletes HttpServerProperties data.
@@ -216,10 +225,6 @@ class ProfileImplIOData : public ProfileIOData {
   mutable std::unique_ptr<chrome_browser_net::Predictor> predictor_;
 
   mutable std::unique_ptr<net::URLRequestContext> media_request_context_;
-
-  // Owned by ChromeNetworkDelegate (which is owned by |network_delegate_|).
-  mutable domain_reliability::DomainReliabilityMonitor*
-      domain_reliability_monitor_;
 
   // Parameters needed for isolated apps.
   base::FilePath profile_path_;

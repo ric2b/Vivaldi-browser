@@ -58,6 +58,7 @@ class GL_EXPORT GLSurfaceEGL : public GLSurface {
   GLSurfaceFormat GetFormat() override;
 
   static bool InitializeOneOff(EGLNativeDisplayType native_display);
+  static bool InitializeExtensionSettingsOneOff();
   static void ShutdownOneOff();
   static EGLDisplay GetHardwareDisplay();
   static EGLDisplay InitializeDisplay(EGLNativeDisplayType native_display);
@@ -74,6 +75,9 @@ class GL_EXPORT GLSurfaceEGL : public GLSurface {
   static bool IsEGLSurfacelessContextSupported();
   static bool IsEGLContextPrioritySupported();
   static bool IsDirectCompositionSupported();
+  static bool IsRobustResourceInitSupported();
+  static bool IsDisplayTextureShareGroupSupported();
+  static bool IsCreateContextClientArraysSupported();
 
  protected:
   ~GLSurfaceEGL() override;
@@ -98,6 +102,7 @@ class GL_EXPORT NativeViewGLSurfaceEGL : public GLSurfaceEGL {
   void Destroy() override;
   bool Resize(const gfx::Size& size,
               float scale_factor,
+              ColorSpace color_space,
               bool has_alpha) override;
   bool Recreate() override;
   bool IsOffscreen() override;
@@ -160,6 +165,7 @@ class GL_EXPORT PbufferGLSurfaceEGL : public GLSurfaceEGL {
   gfx::Size GetSize() override;
   bool Resize(const gfx::Size& size,
               float scale_factor,
+              ColorSpace color_space,
               bool has_alpha) override;
   EGLSurface GetHandle() override;
   void* GetShareHandle() override;
@@ -190,6 +196,7 @@ class GL_EXPORT SurfacelessEGL : public GLSurfaceEGL {
   gfx::Size GetSize() override;
   bool Resize(const gfx::Size& size,
               float scale_factor,
+              ColorSpace color_space,
               bool has_alpha) override;
   EGLSurface GetHandle() override;
   void* GetShareHandle() override;

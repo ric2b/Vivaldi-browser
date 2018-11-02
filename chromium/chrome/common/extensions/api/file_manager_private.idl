@@ -112,7 +112,13 @@ enum DeviceEventType {
   // Format succeeded.
   format_success,
   // Format failed.
-  format_fail
+  format_fail,
+  // Rename started.
+  rename_start,
+  // Rename succeeded.
+  rename_success,
+  // Rename failed.
+  rename_fail
 };
 
 // Drive sync error type.
@@ -378,6 +384,9 @@ dictionary VolumeMetadata {
 
   // Context in which the volume has been mounted.
   MountContext? mountContext;
+
+  // File system type indentifier.
+  DOMString? diskFileSystemType;
 };
 
 // Payload data for mount event.
@@ -850,6 +859,11 @@ interface Functions {
   // Formats a mounted volume.
   // |volumeId| ID of the volume to be formatted.
   static void formatVolume(DOMString volumeId);
+
+  // Renames a mounted volume.
+  // |volumeId| ID of the volume to be renamed.
+  // |newName| New name of the target volume.
+  static void renameVolume(DOMString volumeId, DOMString newName);
 
   // Retrieves file manager preferences.
   // |callback|

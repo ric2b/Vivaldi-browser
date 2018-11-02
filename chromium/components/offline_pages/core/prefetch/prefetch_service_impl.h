@@ -9,6 +9,7 @@
 
 #include "base/macros.h"
 #include "components/offline_pages/core/offline_event_logger.h"
+#include "components/offline_pages/core/prefetch/prefetch_background_task_handler.h"
 #include "components/offline_pages/core/prefetch/prefetch_service.h"
 #include "components/offline_pages/core/prefetch/prefetch_types.h"
 
@@ -24,7 +25,10 @@ class PrefetchServiceImpl : public PrefetchService {
       std::unique_ptr<PrefetchStore> prefetch_store,
       std::unique_ptr<SuggestedArticlesObserver> suggested_articles_observer,
       std::unique_ptr<PrefetchDownloader> prefetch_downloader,
-      std::unique_ptr<PrefetchImporter> prefetch_importer);
+      std::unique_ptr<PrefetchImporter> prefetch_importer,
+      std::unique_ptr<PrefetchBackgroundTaskHandler> background_task_handler,
+      std::unique_ptr<PrefetchConfiguration> prefetch_configuration);
+
   ~PrefetchServiceImpl() override;
 
   // PrefetchService implementation:
@@ -37,14 +41,13 @@ class PrefetchServiceImpl : public PrefetchService {
   OfflineEventLogger* GetLogger() override;
   PrefetchDownloader* GetPrefetchDownloader() override;
   PrefetchImporter* GetPrefetchImporter() override;
+  PrefetchBackgroundTaskHandler* GetPrefetchBackgroundTaskHandler() override;
+  PrefetchConfiguration* GetPrefetchConfiguration() override;
 
   // KeyedService implementation:
   void Shutdown() override;
 
  private:
-  // Called when a download completes.
-  void OnDownloadCompleted(const PrefetchDownloadResult& result);
-
   OfflineEventLogger logger_;
 
   std::unique_ptr<OfflineMetricsCollector> offline_metrics_collector_;
@@ -55,6 +58,9 @@ class PrefetchServiceImpl : public PrefetchService {
   std::unique_ptr<SuggestedArticlesObserver> suggested_articles_observer_;
   std::unique_ptr<PrefetchDownloader> prefetch_downloader_;
   std::unique_ptr<PrefetchImporter> prefetch_importer_;
+  std::unique_ptr<PrefetchBackgroundTaskHandler>
+      prefetch_background_task_handler_;
+  std::unique_ptr<PrefetchConfiguration> prefetch_configuration_;
 
   DISALLOW_COPY_AND_ASSIGN(PrefetchServiceImpl);
 };

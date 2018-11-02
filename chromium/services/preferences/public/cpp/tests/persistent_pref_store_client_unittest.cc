@@ -99,6 +99,7 @@ class PersistentPrefStoreClientTest : public testing::Test,
 
   void SchedulePendingLossyWrites() override {}
   void ClearMutableValues() override {}
+  void OnStoreDeletionFromDisk() override {}
 
   base::MessageLoop message_loop_;
 
@@ -130,7 +131,7 @@ TEST_F(PersistentPrefStoreClientTest,
        SubPrefUpdates_BasicWithoutPathExpansion) {
   {
     ScopedDictionaryPrefUpdate update(pref_service(), kDictionaryKey);
-    update->SetIntegerWithoutPathExpansion("key.for.integer", 1);
+    update->SetKey("key.for.integer", base::Value(1));
   }
   auto update = WaitForUpdate();
   ASSERT_TRUE(update->is_split_updates());
@@ -165,8 +166,8 @@ TEST_F(PersistentPrefStoreClientTest,
        SubPrefUpdates_RemoveWithoutPathExpansion) {
   {
     ScopedDictionaryPrefUpdate update(pref_service(), kDictionaryKey);
-    update->SetIntegerWithoutPathExpansion("path.to.another_integer", 1);
-    update->SetIntegerWithoutPathExpansion("path.to.integer", 1);
+    update->SetKey("path.to.another_integer", base::Value(1));
+    update->SetKey("path.to.integer", base::Value(1));
   }
   WaitForUpdate();
   {
@@ -185,7 +186,7 @@ TEST_F(PersistentPrefStoreClientTest,
 TEST_F(PersistentPrefStoreClientTest, SubPrefUpdates_MultipleUpdates) {
   {
     ScopedDictionaryPrefUpdate update(pref_service(), kDictionaryKey);
-    update->SetDoubleWithoutPathExpansion("a.double", 1);
+    update->SetKey("a.double", base::Value(1.0));
   }
   {
     ScopedDictionaryPrefUpdate update(pref_service(), kDictionaryKey);
@@ -304,14 +305,14 @@ TEST_F(PersistentPrefStoreClientTest,
     ScopedDictionaryPrefUpdate update(pref_service(), kDictionaryKey);
     auto dict = update->SetDictionaryWithoutPathExpansion(
         "a.dictionary", base::MakeUnique<base::DictionaryValue>());
-    dict->SetStringWithoutPathExpansion("a.string", "string value");
+    dict->SetKey("a.string", base::Value("string value"));
   }
   auto update = WaitForUpdate();
   ASSERT_TRUE(update->is_split_updates());
   auto& split_updates = update->get_split_updates();
   ASSERT_EQ(1u, split_updates.size());
   base::DictionaryValue expected_value;
-  expected_value.SetStringWithoutPathExpansion("a.string", "string value");
+  expected_value.SetKey("a.string", base::Value("string value"));
   EXPECT_EQ(expected_value, *split_updates[0]->value);
   EXPECT_EQ((std::vector<std::string>{"a.dictionary"}), split_updates[0]->path);
 }

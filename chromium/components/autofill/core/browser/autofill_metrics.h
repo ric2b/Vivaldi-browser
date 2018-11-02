@@ -21,69 +21,6 @@
 #include "components/autofill/core/common/signatures_util.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 
-namespace internal {
-// Name constants are exposed here so they can be referenced from tests.
-extern const char kUKMCardUploadDecisionEntryName[];
-extern const char kUKMCardUploadDecisionMetricName[];
-extern const char kUKMDeveloperEngagementEntryName[];
-extern const char kUKMDeveloperEngagementMetricName[];
-
-// Each form interaction event has a separate |UkmEntry|.
-
-// The first form event |UkmEntry| contains metrics for metadata that apply
-// to all subsequent events.
-extern const char kUKMInteractedWithFormEntryName[];
-extern const char kUKMIsForCreditCardMetricName[];
-extern const char kUKMLocalRecordTypeCountMetricName[];
-extern const char kUKMServerRecordTypeCountMetricName[];
-
-// |UkmEntry| when we show suggestions and when user edits text field. See
-// |kUkmTextFieldDidChangeEntryName|.
-extern const char kUKMSuggestionsShownEntryName[];
-extern const char kUKMHeuristicTypeMetricName[];
-extern const char kUKMHtmlFieldTypeMetricName[];
-extern const char kUKMServerTypeMetricName[];
-
-// |UkmEntry| when user selects a masked server credit card.
-extern const char kUKMSelectedMaskedServerCardEntryName[];
-
-// Each |UkmEntry|, except the first interaction with the form, has a metric for
-// time elapsed, in milliseconds, since we loaded the form.
-extern const char kUKMMillisecondsSinceFormParsedMetricName[];
-
-// |FormEvent| for FORM_EVENT_*_SUGGESTION_FILLED in credit card forms include a
-// |CreditCard| |record_type()| to indicate if the suggestion was for a local
-// card, masked server card or full server card. Similarly, address/profile
-// forms include a |AutofillProfile| |record_type()| to indicate if the
-// profile was a local profile or server profile.
-extern const char kUKMSuggestionFilledEntryName[];
-extern const char kUKMRecordTypeMetricName[];
-
-// |UkmEntry| for user editing text field. Metrics contain field's attributes.
-extern const char kUKMTextFieldDidChangeEntryName[];
-extern const char kUKMFieldTypeGroupMetricName[];
-extern const char kUKMHtmlFieldModeMetricName[];
-extern const char kUKMIsAutofilledMetricName[];
-extern const char kUKMIsEmptyMetricName[];
-
-// |UkmEntry| for |AutofillFormSubmittedState|.
-extern const char kUKMFormSubmittedEntryName[];
-extern const char kUKMAutofillFormSubmittedStateMetricName[];
-
-// |UkmEntry| for capturing field fill status and type prediction quality.
-extern const char kUKMFieldTypeEntryName[];
-extern const char kUKMFieldFillStatusEntryName[];
-extern const char kUKMFormSignatureMetricName[];
-extern const char kUKMFieldSignatureMetricName[];
-extern const char kUKMValidationEventMetricName[];
-extern const char kUKMPredictionSourceMetricName[];
-extern const char kUKMPredictedTypeMetricName[];
-extern const char kUKMActualTypeMetricName[];
-extern const char kUKMWasSuggestionShownMetricName[];
-extern const char kUKMWasPreviouslyAutofilledMetricName[];
-
-}  // namespace internal
-
 namespace autofill {
 
 class AutofillField;
@@ -166,129 +103,6 @@ class AutofillMetrics {
     NUM_DEVELOPER_ENGAGEMENT_METRICS,
   };
 
-  // The action the user took to dismiss a dialog.
-  enum DialogDismissalAction {
-    DIALOG_ACCEPTED = 0,  // The user accepted, i.e. submitted, the dialog.
-    DIALOG_CANCELED,      // The user canceled out of the dialog.
-  };
-
-  // The state of the Autofill dialog when it was dismissed.
-  enum DialogDismissalState {
-    // The user submitted with no data available to save.
-    DEPRECATED_DIALOG_ACCEPTED_EXISTING_DATA,
-    // The saved details to Online Wallet on submit.
-    DIALOG_ACCEPTED_SAVE_TO_WALLET,
-    // The saved details to the local Autofill database on submit.
-    DIALOG_ACCEPTED_SAVE_TO_AUTOFILL,
-    // The user submitted without saving any edited sections.
-    DIALOG_ACCEPTED_NO_SAVE,
-    // The user canceled with no edit UI showing.
-    DIALOG_CANCELED_NO_EDITS,
-    // The user canceled with edit UI showing, but no invalid fields.
-    DIALOG_CANCELED_NO_INVALID_FIELDS,
-    // The user canceled with at least one invalid field.
-    DIALOG_CANCELED_WITH_INVALID_FIELDS,
-    // The user canceled while the sign-in form was showing.
-    DIALOG_CANCELED_DURING_SIGNIN,
-    // The user submitted using data already stored in Wallet.
-    DIALOG_ACCEPTED_EXISTING_WALLET_DATA,
-    // The user submitted using data already stored in Autofill.
-    DIALOG_ACCEPTED_EXISTING_AUTOFILL_DATA,
-    NUM_DIALOG_DISMISSAL_STATES
-  };
-
-  // The initial state of user that's interacting with a freshly shown Autofill
-  // dialog.
-  enum DialogInitialUserStateMetric {
-    // Could not determine the user's state due to failure to communicate with
-    // the Wallet server.
-    DIALOG_USER_STATE_UNKNOWN = 0,
-    // Not signed in, no verified Autofill profiles.
-    DIALOG_USER_NOT_SIGNED_IN_NO_AUTOFILL,
-    // Not signed in, has verified Autofill profiles.
-    DIALOG_USER_NOT_SIGNED_IN_HAS_AUTOFILL,
-    // Signed in, no Wallet items, no verified Autofill profiles.
-    DIALOG_USER_SIGNED_IN_NO_WALLET_NO_AUTOFILL,
-    // Signed in, no Wallet items, has verified Autofill profiles.
-    DIALOG_USER_SIGNED_IN_NO_WALLET_HAS_AUTOFILL,
-    // Signed in, has Wallet items, no verified Autofill profiles.
-    DIALOG_USER_SIGNED_IN_HAS_WALLET_NO_AUTOFILL,
-    // Signed in, has Wallet items, has verified Autofill profiles.
-    DIALOG_USER_SIGNED_IN_HAS_WALLET_HAS_AUTOFILL,
-    NUM_DIALOG_INITIAL_USER_STATE_METRICS
-  };
-
-  // Events related to the Autofill popup shown in a requestAutocomplete
-  // dialog.
-  enum DialogPopupEvent {
-    // An Autofill popup was shown.
-    DIALOG_POPUP_SHOWN = 0,
-    // The user chose to fill the form with a suggestion from the popup.
-    DIALOG_POPUP_FORM_FILLED,
-    NUM_DIALOG_POPUP_EVENTS
-  };
-
-  // For measuring the frequency of security warnings or errors that can come
-  // up as part of the requestAutocomplete flow.
-  enum DialogSecurityMetric {
-    // Baseline metric: The dialog was shown.
-    SECURITY_METRIC_DIALOG_SHOWN = 0,
-    // Credit card requested over non-secure protocol.
-    SECURITY_METRIC_CREDIT_CARD_OVER_HTTP,
-    // Autocomplete data requested from a frame hosted on an origin not matching
-    // the main frame's origin.
-    SECURITY_METRIC_CROSS_ORIGIN_FRAME,
-    NUM_DIALOG_SECURITY_METRICS
-  };
-
-  // For measuring how users are interacting with the Autofill dialog UI.
-  enum DialogUiEvent {
-    // Baseline metric: The dialog was shown.
-    DIALOG_UI_SHOWN = 0,
-
-    // Dialog dismissal actions:
-    DIALOG_UI_ACCEPTED,
-    DIALOG_UI_CANCELED,
-
-    // Selections within the account switcher:
-    // Switched from a Wallet account to local Autofill data.
-    DIALOG_UI_ACCOUNT_CHOOSER_SWITCHED_TO_AUTOFILL,
-    // Switched from local Autofill data to a Wallet account.
-    DIALOG_UI_ACCOUNT_CHOOSER_SWITCHED_TO_WALLET,
-    // Switched from one Wallet account to another one.
-    DIALOG_UI_ACCOUNT_CHOOSER_SWITCHED_WALLET_ACCOUNT,
-
-    // The sign-in UI was shown.
-    DIALOG_UI_SIGNIN_SHOWN,
-
-    // Selecting a different item from a suggestion menu dropdown:
-    DEPRECATED_DIALOG_UI_EMAIL_SELECTED_SUGGESTION_CHANGED,
-    DIALOG_UI_BILLING_SELECTED_SUGGESTION_CHANGED,
-    DIALOG_UI_CC_BILLING_SELECTED_SUGGESTION_CHANGED,
-    DIALOG_UI_SHIPPING_SELECTED_SUGGESTION_CHANGED,
-    DIALOG_UI_CC_SELECTED_SUGGESTION_CHANGED,
-
-    // Showing the editing UI for a section of the dialog:
-    DEPRECATED_DIALOG_UI_EMAIL_EDIT_UI_SHOWN,
-    DEPRECATED_DIALOG_UI_BILLING_EDIT_UI_SHOWN,
-    DEPRECATED_DIALOG_UI_CC_BILLING_EDIT_UI_SHOWN,
-    DEPRECATED_DIALOG_UI_SHIPPING_EDIT_UI_SHOWN,
-    DEPRECATED_DIALOG_UI_CC_EDIT_UI_SHOWN,
-
-    // Adding a new item in a section of the dialog:
-    DEPRECATED_DIALOG_UI_EMAIL_ITEM_ADDED,
-    DIALOG_UI_BILLING_ITEM_ADDED,
-    DIALOG_UI_CC_BILLING_ITEM_ADDED,
-    DIALOG_UI_SHIPPING_ITEM_ADDED,
-    DIALOG_UI_CC_ITEM_ADDED,
-
-    // Also an account switcher menu item. The user selected the
-    // "add account" option.
-    DIALOG_UI_ACCOUNT_CHOOSER_TRIED_TO_ADD_ACCOUNT,
-
-    NUM_DIALOG_UI_EVENTS
-  };
-
   enum InfoBarMetric {
     INFOBAR_SHOWN = 0,  // We showed an infobar, e.g. prompting to save credit
                         // card info.
@@ -344,7 +158,7 @@ class AutofillMetrics {
     // page that caused the prompt to be shown. The navigation occurred while
     // the prompt was showing.
     SAVE_CARD_PROMPT_END_NAVIGATION_SHOWING,
-    // The prompt and icon were removed  because of navigation away from the
+    // The prompt and icon were removed because of navigation away from the
     // page that caused the prompt to be shown. The navigation occurred while
     // the prompt was hidden.
     SAVE_CARD_PROMPT_END_NAVIGATION_HIDDEN,
@@ -352,6 +166,30 @@ class AutofillMetrics {
     SAVE_CARD_PROMPT_DISMISS_CLICK_LEARN_MORE,
     // The prompt was dismissed because the user clicked a legal message link.
     SAVE_CARD_PROMPT_DISMISS_CLICK_LEGAL_MESSAGE,
+
+    // The following _CVC_FIX_FLOW_ metrics are independent of the ones above.
+    // For instance, accepting the CVC fix flow will trigger both
+    // SAVE_CARD_PROMPT_CVC_FIX_FLOW_END_ACCEPTED as well as
+    // SAVE_CARD_PROMPT_END_ACCEPTED.  They are split apart in order to track
+    // acceptance/abandonment rates of the multi-stage dialog user experience.
+
+    // SAVE_CARD_PROMPT_CVC_FIX_FLOW_END_DENIED is an impossible state because
+    // the CVC fix flow uses a close button instead of a cancel button.
+
+    // The prompt moved to a second stage that requested CVC from the user.
+    SAVE_CARD_PROMPT_CVC_FIX_FLOW_SHOWN,
+    // The user explicitly entered CVC and accepted the prompt.
+    SAVE_CARD_PROMPT_CVC_FIX_FLOW_END_ACCEPTED,
+    // The prompt and icon were removed because of navigation away from the page
+    // that caused the prompt to be shown.  The navigation occurred while the
+    // prompt was showing, at the CVC request stage.
+    SAVE_CARD_PROMPT_CVC_FIX_FLOW_END_NAVIGATION_SHOWING,
+    // The prompt and icon were removed because of navigation away from the page
+    // that caused the prompt to be shown.  The navigation occurred while the
+    // prompt was hidden, at the CVC request stage.
+    SAVE_CARD_PROMPT_CVC_FIX_FLOW_END_NAVIGATION_HIDDEN,
+    // The prompt was dismissed because the user clicked a legal message link.
+    SAVE_CARD_PROMPT_CVC_FIX_FLOW_DISMISS_CLICK_LEGAL_MESSAGE,
 
     NUM_SAVE_CARD_PROMPT_METRICS,
   };
@@ -747,20 +585,26 @@ class AutofillMetrics {
     void LogInteractedWithForm(bool is_for_credit_card,
                                size_t local_record_type_count,
                                size_t server_record_type_count);
-    void LogSuggestionsShown(const AutofillField& field);
-    void LogSelectedMaskedServerCard();
-    void LogDidFillSuggestion(int record_type);
-    void LogTextFieldDidChange(const AutofillField& field);
+    void LogSuggestionsShown(const AutofillField& field,
+                             const base::TimeTicks& form_parsed_timestamp);
+    void LogSelectedMaskedServerCard(
+        const base::TimeTicks& form_parsed_timestamp);
+    void LogDidFillSuggestion(int record_type,
+                              const base::TimeTicks& form_parsed_timestamp);
+    void LogTextFieldDidChange(const AutofillField& field,
+                               const base::TimeTicks& form_parsed_timestamp);
     void LogFieldFillStatus(const FormStructure& form,
                             const AutofillField& field,
                             QualityMetricType metric_type);
-    void LogFieldType(FormSignature form_signature,
+    void LogFieldType(const base::TimeTicks& form_parsed_timestamp,
+                      FormSignature form_signature,
                       FieldSignature field_signature,
                       QualityMetricPredictionSource prediction_source,
                       QualityMetricType metric_type,
                       ServerFieldType predicted_type,
                       ServerFieldType actual_type);
-    void LogFormSubmitted(AutofillFormSubmittedState state);
+    void LogFormSubmitted(AutofillFormSubmittedState state,
+                          const base::TimeTicks& form_parsed_timestamp);
 
     // We initialize |url_| with the form's URL when we log the first form
     // interaction. Later, we may update |url_| with the |source_url()| for the
@@ -769,13 +613,13 @@ class AutofillMetrics {
 
    private:
     bool CanLog() const;
-    int64_t MillisecondsSinceFormParsed() const;
+    int64_t MillisecondsSinceFormParsed(
+        const base::TimeTicks& form_parsed_timestamp) const;
     void GetNewSourceID();
 
     ukm::UkmRecorder* ukm_recorder_;  // Weak reference.
     ukm::SourceId source_id_ = -1;
     GURL url_;
-    base::TimeTicks form_parsed_timestamp_;
     base::TimeTicks pinned_timestamp_;
   };
 
@@ -958,6 +802,7 @@ class AutofillMetrics {
   // state of the form.
   static void LogAutofillFormSubmittedState(
       AutofillFormSubmittedState state,
+      const base::TimeTicks& form_parsed_timestamp,
       FormInteractionsUkmLogger* form_interactions_ukm_logger);
 
   // This should be called when determining the heuristic types for a form's
@@ -1028,15 +873,19 @@ class AutofillMetrics {
 
     void OnDidPollSuggestions(const FormFieldData& field);
 
-    void OnDidShowSuggestions(const AutofillField& field);
+    void OnDidShowSuggestions(const AutofillField& field,
+                              const base::TimeTicks& form_parsed_timestamp);
 
-    void OnDidSelectMaskedServerCardSuggestion();
+    void OnDidSelectMaskedServerCardSuggestion(
+        const base::TimeTicks& form_parsed_timestamp);
 
     // In case of masked cards, caller must make sure this gets called before
     // the card is upgraded to a full card.
-    void OnDidFillSuggestion(const CreditCard& credit_card);
+    void OnDidFillSuggestion(const CreditCard& credit_card,
+                             const base::TimeTicks& form_parsed_timestamp);
 
-    void OnDidFillSuggestion(const AutofillProfile& profile);
+    void OnDidFillSuggestion(const AutofillProfile& profile,
+                             const base::TimeTicks& form_parsed_timestamp);
 
     void OnWillSubmitForm();
 

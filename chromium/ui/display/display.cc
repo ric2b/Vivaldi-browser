@@ -61,7 +61,8 @@ int64_t internal_display_id_ = -1;
 }  // namespace
 
 bool CompareDisplayIds(int64_t id1, int64_t id2) {
-  DCHECK_NE(id1, id2);
+  if (id1 == id2)
+    return false;
   // Output index is stored in the first 8 bits. See GetDisplayIdFromEDID
   // in edid_parser.cc.
   int index_1 = id1 & 0xFF;
@@ -94,6 +95,7 @@ void Display::ResetForceDeviceScaleFactorForTesting() {
 // static
 void Display::SetForceDeviceScaleFactor(double dsf) {
   // Reset any previously set values and unset the flag.
+  g_has_forced_device_scale_factor = -1;
   g_forced_device_scale_factor = -1.0;
 
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
@@ -108,6 +110,12 @@ gfx::ColorSpace Display::GetForcedColorProfile() {
           switches::kForceColorProfile);
   if (value == "srgb") {
     return gfx::ColorSpace::CreateSRGB();
+  } else if (value == "display-p3-d65") {
+    return gfx::ColorSpace::CreateDisplayP3D65();
+  } else if (value == "scrgb-linear") {
+    return gfx::ColorSpace::CreateSCRGBLinear();
+  } else if (value == "extended-srgb") {
+    return gfx::ColorSpace::CreateExtendedSRGB();
   } else if (value == "generic-rgb") {
     return gfx::ColorSpace(gfx::ColorSpace::PrimaryID::APPLE_GENERIC_RGB,
                            gfx::ColorSpace::TransferID::GAMMA18);
@@ -143,14 +151,11 @@ Display::Display(int64_t id, const gfx::Rect& bounds)
       bounds_(bounds),
       work_area_(bounds),
       device_scale_factor_(GetForcedDeviceScaleFactor()),
-      color_space_(HasForceColorProfile() ? GetForcedColorProfile()
-                                          : gfx::ColorSpace::CreateSRGB()),
+      color_space_(gfx::ColorSpace::CreateSRGB()),
       color_depth_(DEFAULT_BITS_PER_PIXEL),
       depth_per_component_(DEFAULT_BITS_PER_COMPONENT) {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kEnableHDR)) {
-    color_depth_ = HDR_BITS_PER_PIXEL;
-    depth_per_component_ = HDR_BITS_PER_COMPONENT;
-  }
+  if (HasForceColorProfile())
+    SetColorSpaceAndDepth(GetForcedColorProfile());
 #if defined(USE_AURA)
   SetScaleAndBounds(device_scale_factor_, bounds);
 #endif
@@ -229,6 +234,17 @@ void Display::SetSize(const gfx::Size& size_in_pixel) {
   origin = gfx::ScaleToFlooredPoint(origin, device_scale_factor_);
 #endif
   SetScaleAndBounds(device_scale_factor_, gfx::Rect(origin, size_in_pixel));
+}
+
+void Display::SetColorSpaceAndDepth(const gfx::ColorSpace& color_space) {
+  color_space_ = color_space;
+  if (color_space_.IsHDR()) {
+    color_depth_ = HDR_BITS_PER_PIXEL;
+    depth_per_component_ = HDR_BITS_PER_COMPONENT;
+  } else {
+    color_depth_ = DEFAULT_BITS_PER_PIXEL;
+    depth_per_component_ = DEFAULT_BITS_PER_COMPONENT;
+  }
 }
 
 void Display::UpdateWorkAreaFromInsets(const gfx::Insets& insets) {

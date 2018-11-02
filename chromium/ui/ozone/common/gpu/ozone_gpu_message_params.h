@@ -52,7 +52,6 @@ struct DisplaySnapshot_Params {
   bool has_native_mode = false;
   DisplayMode_Params native_mode;
   int64_t product_id = 0;
-  std::string string_representation;
   gfx::Size maximum_cursor_size;
 };
 
@@ -62,7 +61,6 @@ struct OverlayCheck_Params {
   OverlayCheck_Params(const OverlayCheck_Params& other);
   ~OverlayCheck_Params();
 
-  bool operator<(const OverlayCheck_Params& plane) const;
 
   gfx::Size buffer_size;
   gfx::OverlayTransform transform = gfx::OVERLAY_TRANSFORM_NONE;

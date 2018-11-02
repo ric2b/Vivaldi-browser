@@ -35,6 +35,7 @@ import android.webkit.WebViewProvider;
 
 import com.android.webview.chromium.WebViewDelegateFactory.WebViewDelegate;
 
+import org.chromium.android_webview.AwAutofillProvider;
 import org.chromium.android_webview.AwBrowserContext;
 import org.chromium.android_webview.AwBrowserProcess;
 import org.chromium.android_webview.AwContents;
@@ -46,9 +47,11 @@ import org.chromium.android_webview.AwNetworkChangeNotifierRegistrationPolicy;
 import org.chromium.android_webview.AwQuotaManagerBridge;
 import org.chromium.android_webview.AwResource;
 import org.chromium.android_webview.AwSettings;
+import org.chromium.android_webview.AwSwitches;
 import org.chromium.android_webview.HttpAuthDatabase;
 import org.chromium.android_webview.ResourcesContextWrapperFactory;
 import org.chromium.android_webview.command_line.CommandLineUtil;
+import org.chromium.android_webview.variations.AwVariationsSeedHandler;
 import org.chromium.base.BuildConfig;
 import org.chromium.base.BuildInfo;
 import org.chromium.base.CommandLine;
@@ -65,6 +68,7 @@ import org.chromium.base.library_loader.NativeLibraries;
 import org.chromium.base.library_loader.ProcessInitException;
 import org.chromium.components.autofill.AutofillProvider;
 import org.chromium.content.browser.input.LGEmailActionModeWorkaround;
+import org.chromium.content_public.browser.SmartSelectionToggle;
 import org.chromium.net.NetworkChangeNotifier;
 
 import java.io.File;
@@ -409,6 +413,7 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
         PathService.override(PathService.DIR_MODULE, "/system/lib/");
         PathService.override(DIR_RESOURCE_PAKS_ANDROID, "/system/framework/webview/paks");
 
+        SmartSelectionToggle.setEnabled(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O);
         // Make sure that ResourceProvider is initialized before starting the browser process.
         final PackageInfo webViewPackageInfo = WebViewFactory.getLoadedPackageInfo();
         final String webViewPackageName = webViewPackageInfo.packageName;
@@ -453,6 +458,12 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
         }
 
         mRunQueue.drainQueue();
+
+        boolean enableVariations =
+                CommandLine.getInstance().hasSwitch(AwSwitches.ENABLE_WEBVIEW_VARIATIONS);
+        if (enableVariations) {
+            AwVariationsSeedHandler.bindToVariationsService();
+        }
     }
 
     boolean hasStarted() {
@@ -565,16 +576,7 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
                      */
                     // TODO(ntfschr): add @Override once next android SDK rolls
                     public void initSafeBrowsing(Context context, ValueCallback<Boolean> callback) {
-                        AwContentsStatics.initSafeBrowsing(
-                                context.getApplicationContext(), callback);
-                    }
-
-                    /**
-                     * Shuts down Safe Browsing. This should only be called once.
-                     */
-                    // TODO(ntfschr): add @Override once next android SDK rolls
-                    public void shutdownSafeBrowsing() {
-                        AwContentsStatics.shutdownSafeBrowsing();
+                        AwContentsStatics.initSafeBrowsing(context, callback);
                     }
 
                     // TODO(ntfschr): add @Override once next android SDK rolls
@@ -724,13 +726,13 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
         return mWebViewDelegate;
     }
 
-    // The method to support unreleased Android.
     WebViewContentsClientAdapter createWebViewContentsClientAdapter(WebView webView,
             Context context) {
         return new WebViewContentsClientAdapter(webView, context, mWebViewDelegate);
     }
 
     AutofillProvider createAutofillProvider(Context context, ViewGroup containerView) {
-        return null;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return null;
+        return new AwAutofillProvider(context, containerView);
     }
 }

@@ -28,6 +28,7 @@
 #include "chrome/browser/ui/browser_tab_strip_tracker.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "content/public/browser/navigation_throttle.h"
+#include "ui/gfx/native_widget_types.h"
 
 class BrowserList;
 class GURL;
@@ -50,6 +51,14 @@ class BackgroundTabNavigationThrottle;
 class TabManagerDelegate;
 #endif
 class TabManagerStatsCollector;
+
+// Information about a Browser.
+struct BrowserInfo {
+  Browser* browser = nullptr;  // Can be nullptr in tests.
+  TabStripModel* tab_strip_model = nullptr;
+  bool window_is_minimized = false;
+  bool browser_is_app = false;
+};
 
 // The TabManager periodically updates (see
 // |kAdjustmentIntervalSeconds| in the source) the status of renderers
@@ -143,8 +152,13 @@ class TabManager : public TabStripModelObserver,
 
   // Returns TabStats for all tabs in the current Chrome instance. The tabs are
   // sorted first by most recently used to least recently used Browser and
-  // second by index in the Browser. Must be called on the UI thread.
-  TabStatsList GetUnsortedTabStats() const;
+  // second by index in the Browser. |windows_sorted_by_z_index| is a list of
+  // Browser windows sorted by z-index, from topmost to bottommost. If left
+  // empty, no window occlusion checks will be performed. Must be called on the
+  // UI thread.
+  TabStatsList GetUnsortedTabStats(
+      const std::vector<gfx::NativeWindow>& windows_sorted_by_z_index =
+          std::vector<gfx::NativeWindow>()) const;
 
   void AddObserver(TabManagerObserver* observer);
   void RemoveObserver(TabManagerObserver* observer);
@@ -167,6 +181,12 @@ class TabManager : public TabStripModelObserver,
   // renderer is eligible for purging.
   // TODO(tasak): rename this to CanPurgeBackgroundedRenderer.
   bool CanSuspendBackgroundedRenderer(int render_process_id) const;
+
+  // Indicates how TabManager should load pending background tabs.
+  enum BackgroundTabLoadingMode {
+    kStaggered,  // Load a background tab after another tab has done loading.
+    kPaused      // Pause loading background tabs unless the user selects it.
+  };
 
   // Maybe throttle a tab's navigation based on current system status.
   content::NavigationThrottle::ThrottleCheckResult MaybeThrottleNavigation(
@@ -198,12 +218,22 @@ class TabManager : public TabStripModelObserver,
     return is_session_restore_loading_tabs_;
   }
 
+  // Returns true if the tab was created by session restore and has not finished
+  // the first navigation.
+  bool IsTabInSessionRestore(content::WebContents* web_contents) const;
+
+  // Returns true if the tab was created by session restore and initially in
+  // foreground.
+  bool IsTabRestoredInForeground(content::WebContents* web_contents) const;
+
   // Vivaldi: This is used to set the discarded state for unloaded tabs on
   // startup, and when cloning a tab that is discarded. It only sets the discard
   // flag in WebContentsData.
   void SetIsDiscarded(content::WebContents* web_contents);
 
  private:
+  friend class TabManagerStatsCollectorTest;
+
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, PurgeBackgroundRenderer);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, ActivateTabResetPurgeState);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, ShouldPurgeAtDefaultTime);
@@ -230,8 +260,18 @@ class TabManager : public TabStripModelObserver,
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, OnDidStopLoading);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, OnWebContentsDestroyed);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, OnDelayedTabSelected);
-  FRIEND_TEST_ALL_PREFIXES(TabManagerStatsCollectorTest,
-                           HistogramsSessionRestoreSwitchToTab);
+  FRIEND_TEST_ALL_PREFIXES(TabManagerTest, TimeoutWhenLoadingBackgroundTabs);
+  FRIEND_TEST_ALL_PREFIXES(TabManagerTest, BackgroundTabLoadingMode);
+  FRIEND_TEST_ALL_PREFIXES(TabManagerTest, BackgroundTabLoadingSlots);
+  FRIEND_TEST_ALL_PREFIXES(TabManagerTest, BackgroundTabsLoadingOrdering);
+  FRIEND_TEST_ALL_PREFIXES(TabManagerTest, PauseAndResumeBackgroundTabOpening);
+  FRIEND_TEST_ALL_PREFIXES(TabManagerTest, IsInBackgroundTabOpeningSession);
+  FRIEND_TEST_ALL_PREFIXES(TabManagerWithExperimentDisabledTest,
+                           IsInBackgroundTabOpeningSession);
+  FRIEND_TEST_ALL_PREFIXES(TabManagerTest,
+                           SessionRestoreBeforeBackgroundTabOpeningSession);
+  FRIEND_TEST_ALL_PREFIXES(TabManagerTest,
+                           SessionRestoreAfterBackgroundTabOpeningSession);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest,
                            ProactiveFastShutdownSingleTabProcess);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, UrgentFastShutdownSingleTabProcess);
@@ -245,13 +285,7 @@ class TabManager : public TabStripModelObserver,
                            ProactiveFastShutdownWithBeforeunloadHandler);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest,
                            UrgentFastShutdownWithBeforeunloadHandler);
-
-  // Information about a Browser.
-  struct BrowserInfo {
-    TabStripModel* tab_strip_model;
-    bool window_is_minimized;
-    bool browser_is_app;
-  };
+  FRIEND_TEST_ALL_PREFIXES(TabManagerTest, IsTabRestoredInForeground);
 
   // The time of the first purging after a renderer is backgrounded.
   // The initial value was chosen because most of users activate backgrounded
@@ -262,10 +296,6 @@ class TabManager : public TabStripModelObserver,
   // The min/max time to purge ratio. The max time to purge is set to be
   // min time to purge times this value.
   const int kDefaultMinMaxTimeToPurgeRatio = 2;
-
-  // This is needed so WebContentsData can call OnDiscardedStateChange, and
-  // can use PurgeState.
-  friend class WebContentsData;
 
   // Finds TabStripModel which has a WebContents whose id is the given
   // web_contents_id, and returns the WebContents index and the TabStripModel.
@@ -305,8 +335,11 @@ class TabManager : public TabStripModelObserver,
 
   // Adds all the stats of the tabs in |browser_info| into |stats_list|.
   // |window_is_active| indicates whether |browser_info|'s window is active.
+  // |window_is_visible| indicates whether |browser_info|'s window might be
+  // visible (true when window visibility is unknown).
   void AddTabStats(const BrowserInfo& browser_info,
                    bool window_is_active,
+                   bool window_is_visible,
                    TabStatsList* stats_list) const;
 
   // Callback for when |update_timer_| fires. Takes care of executing the tasks
@@ -343,6 +376,11 @@ class TabManager : public TabStripModelObserver,
                                              TabStripModel* model,
                                              DiscardTabCondition condition);
 
+  // Pause or resume background tab opening according to memory pressure change
+  // if there are pending background tabs.
+  void PauseBackgroundTabOpeningIfNeeded();
+  void ResumeBackgroundTabOpeningIfNeeded();
+
   // Called by the memory pressure listener when the memory pressure rises.
   void OnMemoryPressure(
       base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level);
@@ -359,9 +397,6 @@ class TabManager : public TabStripModelObserver,
                      content::WebContents* contents,
                      int index,
                      bool foreground) override;
-  void TabClosingAt(TabStripModel* tab_strip_model,
-                    content::WebContents* contents,
-                    int index) override;
 
   // BrowserListObserver overrides.
   void OnBrowserSetLastActive(Browser* browser) override;
@@ -397,15 +432,32 @@ class TabManager : public TabStripModelObserver,
 
   void OnSessionRestoreStartedLoadingTabs();
   void OnSessionRestoreFinishedLoadingTabs();
+  void OnWillRestoreTab(content::WebContents* web_contents);
 
-  // Returns true if the navigation should be delayed.
-  bool ShouldDelayNavigation(
-      content::NavigationHandle* navigation_handle) const;
+  // Returns true if it is in BackgroundTabOpening session, which is defined as
+  // the duration from the time when the browser starts to load background tabs
+  // until the time when browser has finished loading those tabs. During the
+  // session, the session can end when background tabs' loading are paused due
+  // to memory pressure. A new session starts when background tabs' loading
+  // resume when memory pressure returns to normal.
+  bool IsInBackgroundTabOpeningSession() const;
 
-  // Start loading the next background tab if needed.
+  // Returns true if TabManager can start loading next tab.
+  bool CanLoadNextTab() const;
+
+  // Start |force_load_timer_| to load the next background tab if the timer
+  // expires before the current tab loading is finished.
+  void StartForceLoadTimer();
+
+  // Start loading the next background tab if needed. This is called when:
+  // 1. a tab has finished loading;
+  // 2. or a tab has been destroyed;
+  // 3. or memory pressure is relieved;
+  // 4. or |force_load_timer_| fires.
   void LoadNextBackgroundTabIfNeeded();
 
-  // Resume the tab's navigation if it is pending right now.
+  // Resume the tab's navigation if it is pending right now. This is called when
+  // a tab is selected.
   void ResumeTabNavigationIfNeeded(content::WebContents* contents);
 
   // Resume navigation.
@@ -416,12 +468,33 @@ class TabManager : public TabStripModelObserver,
   BackgroundTabNavigationThrottle* RemovePendingNavigationIfNeeded(
       content::WebContents* contents);
 
+  // Returns true if |first| is considered to resume navigation before |second|.
+  static bool ComparePendingNavigations(
+      const BackgroundTabNavigationThrottle* first,
+      const BackgroundTabNavigationThrottle* second);
+
   // Check if the tab is loading. Use only in tests.
   bool IsTabLoadingForTest(content::WebContents* contents) const;
 
   // Check if the navigation is delayed. Use only in tests.
   bool IsNavigationDelayedForTest(
       const content::NavigationHandle* navigation_handle) const;
+
+  // Trigger |force_load_timer_| to fire. Use only in tests.
+  bool TriggerForceLoadTimerForTest();
+
+  // Set |loading_slots_|. Use only in tests.
+  void SetLoadingSlotsForTest(size_t loading_slots) {
+    loading_slots_ = loading_slots;
+  }
+
+  // Reset |memory_pressure_listener_| in test so that the test is not affected
+  // by memory pressure.
+  void ResetMemoryPressureListenerForTest() {
+    memory_pressure_listener_.reset();
+  }
+
+  TabManagerStatsCollector* stats_collector() { return stats_collector_.get(); }
 
   // Timer to periodically update the stats of the renderers.
   base::RepeatingTimer update_timer_;
@@ -492,6 +565,12 @@ class TabManager : public TabStripModelObserver,
   class TabManagerSessionRestoreObserver;
   std::unique_ptr<TabManagerSessionRestoreObserver> session_restore_observer_;
 
+  // The mode that TabManager is using to load pending background tabs.
+  BackgroundTabLoadingMode background_tab_loading_mode_;
+
+  // When the timer fires, it forces loading the next background tab if needed.
+  std::unique_ptr<base::OneShotTimer> force_load_timer_;
+
   // The list of navigations that are delayed.
   std::vector<BackgroundTabNavigationThrottle*> pending_navigations_;
 
@@ -500,12 +579,13 @@ class TabManager : public TabStripModelObserver,
   // is brought to foreground.
   std::set<content::WebContents*> loading_contents_;
 
-  // GRC tab signal observer, receives tab scoped signal from GRC.
-  std::unique_ptr<GRCTabSignalObserver> grc_tab_signal_observer_;
+  // The number of loading slots that TabManager can use to load background tabs
+  // in parallel.
+  size_t loading_slots_;
 
   // Records UMAs for tab and system-related events and properties during
   // session restore.
-  std::unique_ptr<TabManagerStatsCollector> tab_manager_stats_collector_;
+  std::unique_ptr<TabManagerStatsCollector> stats_collector_;
 
   // Weak pointer factory used for posting delayed tasks.
   base::WeakPtrFactory<TabManager> weak_ptr_factory_;

@@ -9,6 +9,7 @@
 <translation id="1195412055398077112">túlpásztázás</translation>
 <translation id="1247372569136754018">Mikrofon (belső)</translation>
 <translation id="1252999807265626933">Töltési forrás: <ph name="POWER_SOURCE" /></translation>
+<translation id="1267032506238418139">Billentyűparancsot érintő módosítás</translation>
 <translation id="1270290102613614947">Képernyő-billentyűzet kikapcsolva</translation>
 <translation id="1272079795634619415">Leállítás</translation>
 <translation id="1279938420744323401"><ph name="DISPLAY_NAME" /> (<ph name="ANNOTATION" />)</translation>
@@ -22,7 +23,6 @@
 <translation id="15373452373711364">Nagy egérmutató</translation>
 <translation id="1550523713251050646">Kattintson további lehetőségekért</translation>
 <translation id="1621499497873603021">Akkumulátor lemerüléséig hátralévő idő: <ph name="TIME_LEFT" /></translation>
-<translation id="164969095109328410">Chrome-eszköz</translation>
 <translation id="1677472565718498478"><ph name="TIME" /> van hátra</translation>
 <translation id="1698760176351776263">IPv6-cím: <ph name="ADDRESS" /></translation>
 <translation id="1734367976349034509">Az eszközt a vállalat felügyeli</translation>
@@ -92,6 +92,7 @@
 <translation id="315116470104423982">Mobiladatok</translation>
 <translation id="3236488194889173876">Nem áll rendelkezésre mobilhálózat</translation>
 <translation id="3294437725009624529">Vendég</translation>
+<translation id="332587331255250389">Cserélje ki az akkumulátort</translation>
 <translation id="3364721542077212959">Érintőceruza eszközök</translation>
 <translation id="3368922792935385530">Kapcsolódva</translation>
 <translation id="3371140690572404006">C típusú USB-vel kompatibilis eszköz (jobb első port)</translation>
@@ -110,6 +111,7 @@
 <translation id="3712407551474845318">Terület rögzítése</translation>
 <translation id="371370241367527062">Elülső mikrofon</translation>
 <translation id="3742055079367172538">Képernyőkép elkészítve</translation>
+<translation id="3771549900096082774">Nagy kontrasztú mód</translation>
 <translation id="3775358506042162758">Legfeljebb három fiókot használhat a többfiókos bejelentkezés során.</translation>
 <translation id="3783640748446814672">alt</translation>
 <translation id="3784455785234192852">Zárolás</translation>
@@ -142,14 +144,12 @@
 <translation id="4729904664295161097">A Segéd csak az elsődleges profilhoz áll rendelkezésre.</translation>
 <translation id="479989351350248267">search</translation>
 <translation id="4804818685124855865">Kapcsolat bontása</translation>
-<translation id="4821830640883629383">Töltse fel vagy cserélje ki az akkumulátort.</translation>
 <translation id="4849058404725798627">Objektum kiemelése billentyűzetfókusszal</translation>
 <translation id="4872237917498892622">Alt + Keresés vagy Shift</translation>
 <translation id="4895488851634969361">Az akkumulátor feltöltve.</translation>
 <translation id="4905614135390995787">Módosult a nagy kontrasztú mód billentyűparancsa. Használja a(z) <ph name="NEW_SHORTCUT" /> billentyűparancsot a(z) <ph name="OLD_SHORTCUT" /> helyett.</translation>
 <translation id="4918086044614829423">Elfogadás</translation>
 <translation id="4961318399572185831">Képernyő átküldése</translation>
-<translation id="5011233892417813670">Chromebook</translation>
 <translation id="5168181903108465623">Cast-eszközök állnak rendelkezésre</translation>
 <translation id="5170568018924773124">Megjelenítés mappában</translation>
 <translation id="5207949376430453814">Szövegbeszúrási pont kiemelése</translation>
@@ -175,7 +175,6 @@
 <translation id="5901316534475909376">Shift+Esc</translation>
 <translation id="5916664084637901428">Be</translation>
 <translation id="5927132638760172455">Átküldés ismeretlen fogadó eszközre</translation>
-<translation id="5932901536148835538">Chromebit</translation>
 <translation id="5947494881799873997">Visszavonás</translation>
 <translation id="595202126637698455">Teljesítménykövetés engedélyezve</translation>
 <translation id="5957083217255311415">A mobiladat-kapcsolat ki van kapcsolva.</translation>
@@ -218,7 +217,6 @@
 <translation id="683971173229319003">Keresés+L</translation>
 <translation id="6857811139397017780"><ph name="NETWORKSERVICE" /> aktiválása</translation>
 <translation id="6911468394164995108">Csatlakozás másik hálózathoz...</translation>
-<translation id="6915678159055240887">Chromebox</translation>
 <translation id="6981982820502123353">Kisegítő lehetőségek</translation>
 <translation id="7029814467594812963">Kilépés a munkamenetből</translation>
 <translation id="7034339000180558234"><ph name="TAB_NAME" /> átküldése ide: <ph name="RECEIVER_NAME" /></translation>
@@ -226,7 +224,6 @@
 <translation id="7066646422045619941">Ezt a hálózatot letiltotta a rendszergazda.</translation>
 <translation id="7067196344162293536">Automatikus forgatás</translation>
 <translation id="7098389117866926363">C típusú USB-vel kompatibilis eszköz (bal hátsó port)</translation>
-<translation id="714034171374937760">Chromebase</translation>
 <translation id="7165278925115064263">Alt+Shift+K</translation>
 <translation id="7168224885072002358">Visszaállítás a régi felbontásra <ph name="TIMEOUT_SECONDS" /> mp múlva</translation>
 <translation id="7246339268451149667">Engedélyezi az ujjlenyomatos feloldást?</translation>

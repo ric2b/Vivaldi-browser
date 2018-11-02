@@ -76,13 +76,11 @@ class ExtensionContextMenuBrowserTest : public ExtensionBrowserTest {
     const extensions::ExtensionSet& extensions =
         extensions::ExtensionRegistry::Get(
             browser()->profile())->enabled_extensions();
-    for (extensions::ExtensionSet::const_iterator i = extensions.begin();
-         i != extensions.end(); ++i) {
-      if ((*i)->name() == name) {
-        return i->get();
-      }
+    for (const auto& ext : extensions) {
+      if (ext->name() == name)
+        return ext.get();
     }
-    return NULL;
+    return nullptr;
   }
 
   // This gets all the items that any extension has registered for possible
@@ -178,10 +176,8 @@ class ExtensionContextMenuBrowserTest : public ExtensionBrowserTest {
   bool MenuHasExtensionItemWithLabel(TestRenderViewContextMenu* menu,
                                      const std::string& label) {
     base::string16 label16 = base::UTF8ToUTF16(label);
-    std::map<int, MenuItem::Id>::iterator i;
-    for (i = menu->extension_items().extension_item_map_.begin();
-         i != menu->extension_items().extension_item_map_.end(); ++i) {
-      const MenuItem::Id& id = i->second;
+    for (const auto& it : menu->extension_items().extension_item_map_) {
+      const MenuItem::Id& id = it.second;
       base::string16 tmp_label;
       EXPECT_TRUE(GetItemLabel(menu, id, &tmp_label));
       if (tmp_label == label16)
@@ -195,12 +191,12 @@ class ExtensionContextMenuBrowserTest : public ExtensionBrowserTest {
   // false.
   bool GetItemLabel(TestRenderViewContextMenu* menu,
                     const MenuItem::Id& id,
-                    base::string16* result) {
+                    base::string16* result) const {
     int command_id = 0;
     if (!FindCommandId(menu, id, &command_id))
       return false;
 
-    MenuModel* model = NULL;
+    MenuModel* model = nullptr;
     int index = -1;
     if (!menu->GetMenuModelAndItemIndex(command_id, &model, &index)) {
       return false;
@@ -213,16 +209,38 @@ class ExtensionContextMenuBrowserTest : public ExtensionBrowserTest {
   // in the menu.
   bool FindCommandId(TestRenderViewContextMenu* menu,
                      const MenuItem::Id& id,
-                     int* command_id) {
-    std::map<int, MenuItem::Id>::const_iterator i;
-    for (i = menu->extension_items().extension_item_map_.begin();
-         i != menu->extension_items().extension_item_map_.end(); ++i) {
-      if (i->second == id) {
-        *command_id = i->first;
+                     int* command_id) const {
+    for (const auto& it : menu->extension_items().extension_item_map_) {
+      if (it.second == id) {
+        *command_id = it.first;
         return true;
       }
     }
     return false;
+  }
+
+  // Given a menu item id, executes the item's command.
+  void ExecuteCommand(TestRenderViewContextMenu* menu,
+                      const extensions::ExtensionId& extension_id,
+                      const std::string& item_uid) {
+    MenuItem::Id id(false, MenuItem::ExtensionKey(extension_id));
+    id.string_uid = item_uid;
+    int command_id = -1;
+    ASSERT_TRUE(FindCommandId(menu, id, &command_id));
+    menu->ExecuteCommand(command_id, 0);
+  }
+
+  // Verifies a radio item's selection state (checked or unchecked).
+  void VerifyRadioItemSelectionState(
+      TestRenderViewContextMenu* menu,
+      const extensions::ExtensionId& extension_id,
+      const std::string& radio_uid,
+      bool should_be_checked) {
+    MenuItem::Id id(false, MenuItem::ExtensionKey(extension_id));
+    id.string_uid = radio_uid;
+    int command_id = -1;
+    ASSERT_TRUE(FindCommandId(menu, id, &command_id));
+    EXPECT_EQ(should_be_checked, menu->IsCommandIdChecked(command_id));
   }
 };
 
@@ -288,8 +306,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionContextMenuBrowserTest, UpdateOnclick) {
   ASSERT_TRUE(listener_update2.WaitUntilSatisfied());
 
   // Rebuild the context menu and click on the second extension item.
-  menu.reset(TestRenderViewContextMenu::Create(GetWebContents(), page_url,
-                                               GURL(), GURL()));
+  menu = TestRenderViewContextMenu::Create(GetWebContents(), page_url, GURL(),
+                                           GURL());
   id.string_uid = "id2";
   ASSERT_TRUE(FindCommandId(menu.get(), id, &command_id));
   menu->ExecuteCommand(command_id, 0);
@@ -298,6 +316,116 @@ IN_PROC_BROWSER_TEST_F(ExtensionContextMenuBrowserTest, UpdateOnclick) {
   // Upon completion, the replaced onclick callbacks should not have fired.
   ASSERT_FALSE(listener_error1.was_satisfied());
   ASSERT_FALSE(listener_error2.was_satisfied());
+}
+
+// Tests that updating the first radio item in a radio list from checked to
+// unchecked should not work. The radio button should remain checked because
+// context menu radio lists should always have one item selected.
+IN_PROC_BROWSER_TEST_F(ExtensionContextMenuBrowserTest,
+                       UpdateCheckedStateOfFirstRadioItem) {
+  ExtensionTestMessageListener listener_created_radio1("created radio1 item",
+                                                       false);
+  ExtensionTestMessageListener listener_created_radio2("created radio2 item",
+                                                       false);
+  ExtensionTestMessageListener listener_created_item1("created normal item",
+                                                      false);
+  ExtensionTestMessageListener listener_created_item2(
+      "created second normal item", false);
+
+  ExtensionTestMessageListener listener_radio2_clicked("onclick radio2", false);
+  ExtensionTestMessageListener listener_item1_clicked("onclick normal item",
+                                                      false);
+  ExtensionTestMessageListener listener_radio1_updated("radio1 updated", false);
+
+  const extensions::Extension* extension =
+      LoadContextMenuExtension("radio_check");
+  ASSERT_TRUE(extension);
+
+  // Check that all menu items are created.
+  ASSERT_TRUE(listener_created_radio1.WaitUntilSatisfied());
+  ASSERT_TRUE(listener_created_radio2.WaitUntilSatisfied());
+  ASSERT_TRUE(listener_created_item1.WaitUntilSatisfied());
+  ASSERT_TRUE(listener_created_item2.WaitUntilSatisfied());
+
+  GURL page_url("http://www.google.com");
+
+  // Create and build our test context menu.
+  std::unique_ptr<TestRenderViewContextMenu> menu(
+      TestRenderViewContextMenu::Create(GetWebContents(), page_url, GURL(),
+                                        GURL()));
+
+  VerifyRadioItemSelectionState(menu.get(), extension->id(), "radio1", true);
+  VerifyRadioItemSelectionState(menu.get(), extension->id(), "radio2", false);
+
+  // Clicking the regular item calls chrome.contextMenus.update to uncheck the
+  // first radio item.
+  ExecuteCommand(menu.get(), extension->id(), "item1");
+  ASSERT_TRUE(listener_item1_clicked.WaitUntilSatisfied());
+
+  // Unchecking the second item should not deselect it. Recall that context menu
+  // radio lists should always have one item selected.
+  ASSERT_TRUE(listener_radio1_updated.WaitUntilSatisfied());
+  VerifyRadioItemSelectionState(menu.get(), extension->id(), "radio1", true);
+  VerifyRadioItemSelectionState(menu.get(), extension->id(), "radio2", false);
+}
+
+// Tests that updating a checked radio button (that is not the first item) to be
+// unchecked should not work. The radio button should remain checked because
+// context menu radio lists should always have one item selected.
+IN_PROC_BROWSER_TEST_F(ExtensionContextMenuBrowserTest,
+                       UpdateCheckedStateOfNonfirstRadioItem) {
+  ExtensionTestMessageListener listener_created_radio1("created radio1 item",
+                                                       false);
+  ExtensionTestMessageListener listener_created_radio2("created radio2 item",
+                                                       false);
+  ExtensionTestMessageListener listener_created_item1("created normal item",
+                                                      false);
+  ExtensionTestMessageListener listener_created_item2(
+      "created second normal item", false);
+
+  ExtensionTestMessageListener listener_radio2_clicked("onclick radio2", false);
+  ExtensionTestMessageListener listener_item2_clicked(
+      "onclick second normal item", false);
+  ExtensionTestMessageListener listener_radio2_updated("radio2 updated", false);
+
+  const extensions::Extension* extension =
+      LoadContextMenuExtension("radio_check");
+  ASSERT_TRUE(extension);
+
+  // Check that all menu items are created.
+  ASSERT_TRUE(listener_created_radio1.WaitUntilSatisfied());
+  ASSERT_TRUE(listener_created_radio2.WaitUntilSatisfied());
+  ASSERT_TRUE(listener_created_item1.WaitUntilSatisfied());
+
+  ASSERT_TRUE(listener_created_item2.WaitUntilSatisfied());
+
+  GURL page_url("http://www.google.com");
+
+  // Create and build our test context menu.
+  std::unique_ptr<TestRenderViewContextMenu> menu(
+      TestRenderViewContextMenu::Create(GetWebContents(), page_url, GURL(),
+                                        GURL()));
+
+  VerifyRadioItemSelectionState(menu.get(), extension->id(), "radio1", true);
+  VerifyRadioItemSelectionState(menu.get(), extension->id(), "radio2", false);
+
+  // Click on the second radio button. This should uncheck the first radio item
+  // and check the second item.
+  ExecuteCommand(menu.get(), extension->id(), "radio2");
+  ASSERT_TRUE(listener_radio2_clicked.WaitUntilSatisfied());
+  VerifyRadioItemSelectionState(menu.get(), extension->id(), "radio1", false);
+  VerifyRadioItemSelectionState(menu.get(), extension->id(), "radio2", true);
+
+  // Clicking the regular item calls chrome.contextMenus.update to uncheck the
+  // second radio item.
+  ExecuteCommand(menu.get(), extension->id(), "item2");
+  ASSERT_TRUE(listener_item2_clicked.WaitUntilSatisfied());
+
+  // Unchecking the second item should not deselect it. Recall that context menu
+  // radio lists should always have one item selected.
+  ASSERT_TRUE(listener_radio2_updated.WaitUntilSatisfied());
+  VerifyRadioItemSelectionState(menu.get(), extension->id(), "radio1", false);
+  VerifyRadioItemSelectionState(menu.get(), extension->id(), "radio2", true);
 }
 
 // Tests that setting "documentUrlPatterns" for an item properly restricts
@@ -408,7 +536,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionContextMenuBrowserTest, MAYBE_TopLevel) {
       TestRenderViewContextMenu::Create(GetWebContents(), url, GURL(), GURL()));
 
   int index = 0;
-  MenuModel* model = NULL;
+  MenuModel* model = nullptr;
 
   ASSERT_TRUE(menu->GetMenuModelAndItemIndex(
       ContextMenuMatcher::ConvertToExtensionsCustomCommandId(0),
@@ -478,7 +606,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionContextMenuBrowserTest, Separators) {
   // Load the extension.
   ASSERT_TRUE(LoadContextMenuExtension("separators"));
   const extensions::Extension* extension = GetExtensionNamed("Separators Test");
-  ASSERT_TRUE(extension != NULL);
+  ASSERT_TRUE(extension);
 
   // Navigate to test1.html inside the extension, which should create a bunch
   // of items at the top-level (but they'll get pushed into an auto-generated
@@ -494,7 +622,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionContextMenuBrowserTest, Separators) {
 
   // The top-level item should be an "automagic parent" with the extension's
   // name.
-  MenuModel* model = NULL;
+  MenuModel* model = nullptr;
   int index = 0;
   base::string16 label;
   ASSERT_TRUE(menu->GetMenuModelAndItemIndex(
@@ -506,7 +634,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionContextMenuBrowserTest, Separators) {
 
   // Get the submenu and verify the items there.
   MenuModel* submenu = model->GetSubmenuModelAt(index);
-  ASSERT_TRUE(submenu != NULL);
+  ASSERT_TRUE(submenu);
   VerifyMenuForSeparatorsTest(*submenu);
 
   // Now run our second test - navigate to test2.html which creates an explicit
@@ -515,15 +643,15 @@ IN_PROC_BROWSER_TEST_F(ExtensionContextMenuBrowserTest, Separators) {
   ui_test_utils::NavigateToURL(browser(),
                                GURL(extension->GetResourceURL("test2.html")));
   listener2.WaitUntilSatisfied();
-  menu.reset(
-      TestRenderViewContextMenu::Create(GetWebContents(), url, GURL(), GURL()));
+  menu =
+      TestRenderViewContextMenu::Create(GetWebContents(), url, GURL(), GURL());
   ASSERT_TRUE(menu->GetMenuModelAndItemIndex(
       ContextMenuMatcher::ConvertToExtensionsCustomCommandId(0),
       &model,
       &index));
   EXPECT_EQ(base::UTF8ToUTF16("parent"), model->GetLabelAt(index));
   submenu = model->GetSubmenuModelAt(index);
-  ASSERT_TRUE(submenu != NULL);
+  ASSERT_TRUE(submenu);
   VerifyMenuForSeparatorsTest(*submenu);
 }
 

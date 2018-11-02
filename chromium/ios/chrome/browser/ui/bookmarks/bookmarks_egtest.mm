@@ -9,15 +9,18 @@
 #import <XCTest/XCTest.h>
 
 #include "base/strings/sys_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/titled_url_match.h"
 #include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "ios/chrome/browser/bookmarks/bookmark_new_generation_features.h"
 #include "ios/chrome/browser/bookmarks/bookmarks_utils.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#include "ios/chrome/browser/experimental_flags.h"
 #include "ios/chrome/browser/pref_names.h"
+#import "ios/chrome/browser/ui/authentication/signin_promo_view.h"
+#import "ios/chrome/browser/ui/authentication/signin_promo_view_earlgrey_utils.h"
 #import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_controller.h"
@@ -48,6 +51,8 @@
 
 using chrome_test_util::ButtonWithAccessibilityLabel;
 using chrome_test_util::ButtonWithAccessibilityLabelId;
+using chrome_test_util::PrimarySignInButton;
+using chrome_test_util::SecondarySignInButton;
 
 namespace {
 // TODO(crbug.com/616929): Move common matchers that are useful across tests
@@ -636,28 +641,12 @@ id<GREYMatcher> ActionSheet(Action action) {
   // Tap the edit action.
   [[EarlGrey selectElementWithMatcher:ActionSheet(ActionEdit)]
       performAction:grey_tap()];
-
-  // Replace the title field with new text.
-  // TODO(crbug.com/644730): Use grey_replaceText instead of
-  // grey_clearText/grey_typeText when EarlGrey's issue is fixed:
-  // https://github.com/google/EarlGrey/issues/253
   [[EarlGrey
       selectElementWithMatcher:grey_accessibilityID(@"Title Field_textField")]
-      performAction:grey_clearText()];
-  [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityID(@"Title Field_textField")]
-      performAction:grey_typeText(@"n5")];
-
-  // Replace the url field with new text.
-  // TODO(crbug.com/644730): Use grey_replaceText instead of
-  // grey_clearText/grey_typeText when EarlGrey's issue is fixed:
-  // https://github.com/google/EarlGrey/issues/253
+      performAction:grey_replaceText(@"n5")];
   [[EarlGrey
       selectElementWithMatcher:grey_accessibilityID(@"URL Field_textField")]
-      performAction:grey_clearText()];
-  [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityID(@"URL Field_textField")]
-      performAction:grey_typeText(@"www.a.fr")];
+      performAction:grey_replaceText(@"www.a.fr")];
 
   // Dismiss editor.
   [[EarlGrey selectElementWithMatcher:BookmarksDoneButton()]
@@ -686,28 +675,12 @@ id<GREYMatcher> ActionSheet(Action action) {
   // Tap the edit action.
   [[EarlGrey selectElementWithMatcher:ActionSheet(ActionEdit)]
       performAction:grey_tap()];
-
-  // Replace the title field with new text.
-  // TODO(crbug.com/644730): Use grey_replaceText instead of
-  // grey_clearText/grey_typeText when EarlGrey's issue is fixed:
-  // https://github.com/google/EarlGrey/issues/253
   [[EarlGrey
       selectElementWithMatcher:grey_accessibilityID(@"Title Field_textField")]
-      performAction:grey_clearText()];
-  [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityID(@"Title Field_textField")]
-      performAction:grey_typeText(@"n5")];
-
-  // Replace the url field with new text.
-  // TODO(crbug.com/644730): Use grey_replaceText instead of
-  // grey_clearText/grey_typeText when EarlGrey's issue is fixed:
-  // https://github.com/google/EarlGrey/issues/253
+      performAction:grey_replaceText(@"n5")];
   [[EarlGrey
       selectElementWithMatcher:grey_accessibilityID(@"URL Field_textField")]
-      performAction:grey_clearText()];
-  [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityID(@"URL Field_textField")]
-      performAction:grey_typeText(@"www.a.fr")];
+      performAction:grey_replaceText(@"www.a.fr")];
 
   // Dismiss editor with Cancel button.
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Cancel")]
@@ -762,15 +735,8 @@ id<GREYMatcher> ActionSheet(Action action) {
   [[EarlGrey
       selectElementWithMatcher:grey_accessibilityID(@"Edit_navigation_bar")]
       performAction:grey_tap()];
-
-  // Change the title.
-  // TODO(crbug.com/644730): Use grey_replaceText instead of
-  // grey_clearText/grey_typeText when EarlGrey's issue is fixed:
-  // https://github.com/google/EarlGrey/issues/253
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Title_textField")]
-      performAction:grey_clearText()];
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Title_textField")]
-      performAction:grey_typeText(@"Renamed Folder")];
+      performAction:grey_replaceText(@"Renamed Folder")];
 
   // Cancel without saving.
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Cancel")]
@@ -784,15 +750,8 @@ id<GREYMatcher> ActionSheet(Action action) {
   [[EarlGrey
       selectElementWithMatcher:grey_accessibilityID(@"Edit_navigation_bar")]
       performAction:grey_tap()];
-
-  // Change the title.
-  // TODO(crbug.com/644730): Use grey_replaceText instead of
-  // grey_clearText/grey_typeText when EarlGrey's issue is fixed:
-  // https://github.com/google/EarlGrey/issues/253
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Title_textField")]
-      performAction:grey_clearText()];
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Title_textField")]
-      performAction:grey_typeText(@"Renamed Folder")];
+      performAction:grey_replaceText(@"Renamed Folder")];
 
   // Save.
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Save")]
@@ -1093,27 +1052,88 @@ id<GREYMatcher> ActionSheet(Action action) {
   [self setTearDownHandler:^{
     [BookmarksTestCase setPromoAlreadySeen:NO];
   }];
-  // Check that promo is visible.
+  // Check that sign-in promo view is visible.
   [BookmarksTestCase verifyPromoAlreadySeen:NO];
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"promo_view")]
-      assertWithMatcher:grey_notNil()];
+  [SignPromoViewEarlgreyUtils
+      checkSigninPromoVisibleWithMode:SigninPromoViewModeColdState];
 
   // Tap the dismiss button.
   [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityID(@"promo_no_thanks_button")]
+      selectElementWithMatcher:grey_accessibilityID(kSigninPromoCloseButtonId)]
       performAction:grey_tap()];
 
   // Wait until promo is gone.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"promo_view")]
-      assertWithMatcher:grey_notVisible()];
+  [SignPromoViewEarlgreyUtils checkSigninPromoNotVisible];
 
   // Check that the promo already seen state is updated.
   [BookmarksTestCase verifyPromoAlreadySeen:YES];
 }
 
-// Tests that tapping Sign in on the promo make the Sign in sheet appear and
-// the promo still appears after dismissing the Sign in sheet.
-- (void)testUIPromoSignIn {
+// Tests the tapping on the primary button of sign-in promo view in a cold
+// state makes the sign-in sheet appear, and the promo still appears after
+// dismissing the sheet.
+- (void)testSignInPromoWithColdStateUsingPrimaryButton {
+  [BookmarksTestCase openBookmarks];
+
+  // Check that sign-in promo view are visible.
+  [BookmarksTestCase verifyPromoAlreadySeen:NO];
+  [SignPromoViewEarlgreyUtils
+      checkSigninPromoVisibleWithMode:SigninPromoViewModeColdState];
+
+  // Tap the primary button.
+  [[EarlGrey
+      selectElementWithMatcher:grey_allOf(PrimarySignInButton(),
+                                          grey_sufficientlyVisible(), nil)]
+      performAction:grey_tap()];
+  [[EarlGrey selectElementWithMatcher:grey_buttonTitle(@"Cancel")]
+      performAction:grey_tap()];
+
+  // Check that the bookmarks UI reappeared and the cell is still here.
+  [BookmarksTestCase verifyPromoAlreadySeen:NO];
+  [SignPromoViewEarlgreyUtils
+      checkSigninPromoVisibleWithMode:SigninPromoViewModeColdState];
+}
+
+// Tests the tapping on the primary button of sign-in promo view in a warm
+// state makes the confirmaiton sheet appear, and the promo still appears after
+// dismissing the sheet.
+- (void)testSignInPromoWithWarmStateUsingPrimaryButton {
+  [BookmarksTestCase setupStandardBookmarks];
+  [BookmarksTestCase openTopLevelBookmarksFolder];
+
+  // Set up a fake identity.
+  ChromeIdentity* identity =
+      [FakeChromeIdentity identityWithEmail:@"fakefoo@gmail.com"
+                                     gaiaID:@"fakefoopassword"
+                                       name:@"Fake Foo"];
+  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
+      identity);
+
+  // Check that sign-in promo view are visible.
+  [BookmarksTestCase verifyPromoAlreadySeen:NO];
+  [SignPromoViewEarlgreyUtils
+      checkSigninPromoVisibleWithMode:SigninPromoViewModeWarmState];
+
+  // Tap the secondary button.
+  [[EarlGrey
+      selectElementWithMatcher:grey_allOf(PrimarySignInButton(),
+                                          grey_sufficientlyVisible(), nil)]
+      performAction:grey_tap()];
+
+  // Tap the UNDO button.
+  [[EarlGrey selectElementWithMatcher:grey_buttonTitle(@"UNDO")]
+      performAction:grey_tap()];
+
+  // Check that the bookmarks UI reappeared and the cell is still here.
+  [BookmarksTestCase verifyPromoAlreadySeen:NO];
+  [SignPromoViewEarlgreyUtils
+      checkSigninPromoVisibleWithMode:SigninPromoViewModeWarmState];
+}
+
+// Tests the tapping on the secondary button of sign-in promo view in a warm
+// state makes the sign-in sheet appear, and the promo still appears after
+// dismissing the sheet.
+- (void)testSignInPromoWithWarmStateUsingSecondaryButton {
   [BookmarksTestCase setupStandardBookmarks];
   [BookmarksTestCase openTopLevelBookmarksFolder];
   // Set up a fake identity.
@@ -1124,14 +1144,15 @@ id<GREYMatcher> ActionSheet(Action action) {
   ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
       identity);
 
-  // Check that promo is visible.
+  // Check that sign-in promo view are visible.
   [BookmarksTestCase verifyPromoAlreadySeen:NO];
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"promo_view")]
-      assertWithMatcher:grey_notNil()];
+  [SignPromoViewEarlgreyUtils
+      checkSigninPromoVisibleWithMode:SigninPromoViewModeWarmState];
 
-  // Tap the Sign in button.
+  // Tap the secondary button.
   [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityID(@"promo_sign_in_button")]
+      selectElementWithMatcher:grey_allOf(SecondarySignInButton(),
+                                          grey_sufficientlyVisible(), nil)]
       performAction:grey_tap()];
 
   // Tap the CANCEL button.
@@ -1141,10 +1162,38 @@ id<GREYMatcher> ActionSheet(Action action) {
                      uppercaseString])] performAction:grey_tap()];
 
   // Check that the bookmarks UI reappeared and the cell is still here.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"promo_view")]
-      assertWithMatcher:grey_notNil()];
-
   [BookmarksTestCase verifyPromoAlreadySeen:NO];
+  [SignPromoViewEarlgreyUtils
+      checkSigninPromoVisibleWithMode:SigninPromoViewModeWarmState];
+}
+
+// Tests that the sign-in promo should not be shown after been shown 19 times.
+- (void)testAutomaticSigninPromoDismiss {
+  ios::ChromeBrowserState* browser_state =
+      chrome_test_util::GetOriginalBrowserState();
+  PrefService* prefs = browser_state->GetPrefs();
+  prefs->SetInteger(prefs::kIosBookmarkSigninPromoDisplayedCount, 19);
+  [BookmarksTestCase openBookmarks];
+  // Check the sign-in promo view is visible.
+  [SignPromoViewEarlgreyUtils
+      checkSigninPromoVisibleWithMode:SigninPromoViewModeColdState];
+  // Check the sign-in promo will not be shown anymore.
+  [BookmarksTestCase verifyPromoAlreadySeen:YES];
+  GREYAssertEqual(
+      20, prefs->GetInteger(prefs::kIosBookmarkSigninPromoDisplayedCount),
+      @"Should have incremented the display count");
+  // Close the bookmark view and open it again.
+  if (IsCompact()) {
+    [[EarlGrey selectElementWithMatcher:BookmarksDoneButton()]
+        performAction:grey_tap()];
+    [BookmarksTestCase openBookmarks];
+  } else {
+    [BookmarksTestCase closeAllTabs];
+    chrome_test_util::OpenNewTab();
+  }
+  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  // Check that the sign-in promo is not visible anymore.
+  [SignPromoViewEarlgreyUtils checkSigninPromoNotVisible];
 }
 
 // Tests that all elements on the bookmarks landing page are accessible.
@@ -1344,20 +1393,8 @@ id<GREYMatcher> ActionSheet(Action action) {
 // Rename folder title to |folderTitle|. Must be in edit folder UI.
 + (void)renameBookmarkFolderWithFolderTitle:(NSString*)folderTitle {
   NSString* titleIdentifier = @"Title_textField";
-  NSString* clearTextFieldIdentifier = @"Clear text";
-
-  // Edit the title field.
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(titleIdentifier)]
-      performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityLabel(
-                                          clearTextFieldIdentifier)]
-      performAction:grey_tap()];
-
-  // Type in the new title and use '\n' to dismiss the keyboard.
-  NSString* folderTitleWithNewLine =
-      [NSString stringWithFormat:@"%@\n", folderTitle];
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(titleIdentifier)]
-      performAction:grey_typeText(folderTitleWithNewLine)];
+      performAction:grey_replaceText(folderTitle)];
 }
 
 // Tap on the star to bookmark a page, then edit the bookmark to change the
@@ -1372,14 +1409,7 @@ id<GREYMatcher> ActionSheet(Action action) {
       performAction:grey_tap()];
   NSString* titleIdentifier = @"Title Field_textField";
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(titleIdentifier)]
-      performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityLabel(@"Clear text")]
-      performAction:grey_tap()];
-
-  // Use '\n' to tap Done and dismiss the keyboard.
-  NSString* bookmarkTitle = [NSString stringWithFormat:@"%@\n", title];
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(titleIdentifier)]
-      performAction:grey_typeText(bookmarkTitle)];
+      performAction:grey_replaceText(title)];
 
   // Dismiss the window.
   [[EarlGrey selectElementWithMatcher:BookmarksDoneButton()]
@@ -1506,15 +1536,9 @@ id<GREYMatcher> ActionSheet(Action action) {
 
   // Change the name of the folder.
   if (name.length > 0) {
-    // TODO(crbug.com/644730): Use grey_replaceText instead of
-    // grey_clearText/grey_typeText when EarlGrey's issue is fixed:
-    // https://github.com/google/EarlGrey/issues/253
     [[EarlGrey
         selectElementWithMatcher:grey_accessibilityID(@"Title_textField")]
-        performAction:grey_clearText()];
-    [[EarlGrey
-        selectElementWithMatcher:grey_accessibilityID(@"Title_textField")]
-        performAction:grey_typeText(name)];
+        performAction:grey_replaceText(name)];
   }
 
   // Tap the Save button.

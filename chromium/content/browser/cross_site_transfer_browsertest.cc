@@ -10,6 +10,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
@@ -78,7 +79,7 @@ class TrackingResourceDispatcherHostDelegate
 
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(
+        base::BindOnce(
             &TrackingResourceDispatcherHostDelegate::SetTrackedURLOnIOThread,
             base::Unretained(this), tracked_url, run_loop_->QuitClosure()));
   }
@@ -186,8 +187,9 @@ class CrossSiteTransferTest
   void SetUpOnMainThread() override {
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(&CrossSiteTransferTest::InjectResourceDispatcherHostDelegate,
-                   base::Unretained(this)));
+        base::BindOnce(
+            &CrossSiteTransferTest::InjectResourceDispatcherHostDelegate,
+            base::Unretained(this)));
     host_resolver()->AddRule("*", "127.0.0.1");
     content::SetupCrossSiteRedirector(embedded_test_server());
     ASSERT_TRUE(embedded_test_server()->Start());
@@ -196,7 +198,7 @@ class CrossSiteTransferTest
   void TearDownOnMainThread() override {
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(
+        base::BindOnce(
             &CrossSiteTransferTest::RestoreResourceDisptcherHostDelegate,
             base::Unretained(this)));
   }

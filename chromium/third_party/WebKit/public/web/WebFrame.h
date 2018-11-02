@@ -51,10 +51,8 @@ class OpenedFrameTracker;
 class Visitor;
 class WebElement;
 class WebLocalFrame;
-class WebPerformance;
 class WebRemoteFrame;
 class WebSecurityOrigin;
-class WebString;
 class WebView;
 enum class WebSandboxFlags;
 struct WebFrameOwnerProperties;
@@ -100,14 +98,6 @@ class BLINK_EXPORT WebFrame {
   void Detach();
 
   // Basic properties ---------------------------------------------------
-
-  // The name of this frame. If no name is given, empty string is returned.
-  virtual WebString AssignedName() const = 0;
-
-  // Sets the name of this frame. For child frames (frames that are not a
-  // top-most frame) the actual name may have a suffix appended to make the
-  // frame name unique within the hierarchy.
-  virtual void SetName(const WebString&) = 0;
 
   // The security origin of this frame.
   WebSecurityOrigin GetSecurityOrigin() const;
@@ -176,10 +166,6 @@ class BLINK_EXPORT WebFrame {
   // Returns the next frame in "frame traversal order".
   WebFrame* TraverseNext() const;
 
-  // Content ------------------------------------------------------------
-
-  virtual WebPerformance Performance() const = 0;
-
   // Scripting ----------------------------------------------------------
 
   // Returns the global proxy object.
@@ -196,11 +182,6 @@ class BLINK_EXPORT WebFrame {
   // Stops any pending loads on the frame and its children.
   virtual void StopLoading() = 0;
 
-  // View-source rendering mode.  Set this before loading an URL to cause
-  // it to be rendered in view-source mode.
-  virtual void EnableViewSourceMode(bool) = 0;
-  virtual bool IsViewSourceModeEnabled() const = 0;
-
   // Will return true if between didStartLoading and didStopLoading
   // notifications.
   virtual bool IsLoading() const;
@@ -211,7 +192,7 @@ class BLINK_EXPORT WebFrame {
   // the given element is not a frame, iframe or if the frame is empty.
   static WebFrame* FromFrameOwnerElement(const WebElement&);
 
-#if BLINK_IMPLEMENTATION
+#if INSIDE_BLINK
   // TODO(mustaq): Should be named FromCoreFrame instead.
   static WebFrame* FromFrame(Frame*);
   static Frame* ToCoreFrame(const WebFrame&);
@@ -245,7 +226,7 @@ class BLINK_EXPORT WebFrame {
   void AppendChild(WebFrame*);
 
  private:
-#if BLINK_IMPLEMENTATION
+#if INSIDE_BLINK
   friend class OpenedFrameTracker;
   friend class WebFrameTest;
 

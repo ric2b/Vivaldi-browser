@@ -62,6 +62,7 @@
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/base/window_open_disposition.h"
 #include "ui/resources/grit/ui_resources.h"
 
 using base::UserMetricsAction;
@@ -171,23 +172,10 @@ void ContentSettingSimpleBubbleModel::SetTitle() {
 }
 
 void ContentSettingSimpleBubbleModel::SetManageText() {
-  static const ContentSettingsTypeIdEntry kLinkIDs[] = {
-    {CONTENT_SETTINGS_TYPE_COOKIES, IDS_BLOCKED_COOKIES_LINK},
-    {CONTENT_SETTINGS_TYPE_IMAGES, IDS_BLOCKED_IMAGES_LINK},
-    {CONTENT_SETTINGS_TYPE_JAVASCRIPT, IDS_BLOCKED_JAVASCRIPT_LINK},
-    {CONTENT_SETTINGS_TYPE_PLUGINS, IDS_BLOCKED_PLUGINS_LINK},
-    {CONTENT_SETTINGS_TYPE_POPUPS, IDS_BLOCKED_POPUPS_LINK},
-    {CONTENT_SETTINGS_TYPE_GEOLOCATION, IDS_GEOLOCATION_BUBBLE_MANAGE_LINK},
-    {CONTENT_SETTINGS_TYPE_MIXEDSCRIPT, IDS_LEARN_MORE},
-    {CONTENT_SETTINGS_TYPE_PROTOCOL_HANDLERS, IDS_HANDLERS_BUBBLE_MANAGE_LINK},
-    {CONTENT_SETTINGS_TYPE_PPAPI_BROKER, IDS_PPAPI_BROKER_BUBBLE_MANAGE_LINK},
-    {CONTENT_SETTINGS_TYPE_MIDI_SYSEX, IDS_MIDI_SYSEX_BUBBLE_MANAGE_LINK},
-  };
-  set_manage_text(l10n_util::GetStringUTF16(
-      GetIdForContentType(kLinkIDs, arraysize(kLinkIDs), content_type())));
+  set_manage_text(l10n_util::GetStringUTF16(IDS_MANAGE));
 }
 
-void ContentSettingSimpleBubbleModel::OnManageLinkClicked() {
+void ContentSettingSimpleBubbleModel::OnManageButtonClicked() {
   if (delegate())
     delegate()->ShowContentSettingsPage(content_type());
 
@@ -443,7 +431,7 @@ class ContentSettingPluginBubbleModel : public ContentSettingSimpleBubbleModel {
                                   Profile* profile);
 
  private:
-  void OnLearnMoreLinkClicked() override;
+  void OnLearnMoreClicked() override;
   void OnCustomLinkClicked() override;
 
   void RunPluginsOnPage();
@@ -467,7 +455,7 @@ ContentSettingPluginBubbleModel::ContentSettingPluginBubbleModel(
       map->GetWebsiteSetting(url, url, content_type(), std::string(), &info);
   ContentSetting setting = content_settings::ValueToContentSetting(value.get());
 
-  // If the setting is not managed by the user, hide the "Manage..." link.
+  // If the setting is not managed by the user, hide the "Manage" button.
   if (info.source != SETTING_SOURCE_USER)
     set_manage_text(base::string16());
 
@@ -501,17 +489,17 @@ ContentSettingPluginBubbleModel::ContentSettingPluginBubbleModel(
           ui::ResourceBundle::GetSharedInstance().GetImageNamed(
               IDR_BLOCKED_PLUGINS),
           blocked_plugin, false, 0);
-      add_list_item(plugin_item);
+      AddListItem(plugin_item);
     }
   }
 
-  set_learn_more_link(l10n_util::GetStringUTF16(IDS_LEARN_MORE));
+  set_show_learn_more(true);
 
   content_settings::RecordPluginsAction(
       content_settings::PLUGINS_ACTION_DISPLAYED_BUBBLE);
 }
 
-void ContentSettingPluginBubbleModel::OnLearnMoreLinkClicked() {
+void ContentSettingPluginBubbleModel::OnLearnMoreClicked() {
   if (delegate())
     delegate()->ShowLearnMorePage(CONTENT_SETTINGS_TYPE_PLUGINS);
 
@@ -544,19 +532,33 @@ void ContentSettingPluginBubbleModel::RunPluginsOnPage() {
 
 // ContentSettingPopupBubbleModel ----------------------------------------------
 
-class ContentSettingPopupBubbleModel : public ContentSettingSingleRadioGroup {
+class ContentSettingPopupBubbleModel : public ContentSettingSingleRadioGroup,
+                                       public PopupBlockerTabHelper::Observer {
  public:
   ContentSettingPopupBubbleModel(Delegate* delegate,
                                  WebContents* web_contents,
                                  Profile* profile);
   ~ContentSettingPopupBubbleModel() override;
 
+  // PopupBlockerTabHelper::Observer:
+  void BlockedPopupAdded(int32_t id, const GURL& url) override;
+
+  // content::NotificationObserver:
+  void Observe(int type,
+               const content::NotificationSource& source,
+               const content::NotificationDetails& details) override;
+
  private:
-  void OnListItemClicked(int index) override;
+  ListItem CreateListItem(int32_t id, const GURL& id_and_url);
+
+  void OnListItemClicked(int index, int event_flags) override;
 
   int32_t item_id_from_item_index(int index) const {
     return bubble_content().list_items[index].item_id;
   }
+
+  ScopedObserver<PopupBlockerTabHelper, PopupBlockerTabHelper::Observer>
+      popup_blocker_observer_;
 
   DISALLOW_COPY_AND_ASSIGN(ContentSettingPopupBubbleModel);
 };
@@ -568,35 +570,57 @@ ContentSettingPopupBubbleModel::ContentSettingPopupBubbleModel(
     : ContentSettingSingleRadioGroup(delegate,
                                      web_contents,
                                      profile,
-                                     CONTENT_SETTINGS_TYPE_POPUPS) {
+                                     CONTENT_SETTINGS_TYPE_POPUPS),
+      popup_blocker_observer_(this) {
   if (!web_contents)
     return;
 
   // Build blocked popup list.
   auto* helper = PopupBlockerTabHelper::FromWebContents(web_contents);
   std::map<int32_t, GURL> blocked_popups = helper->GetBlockedPopupRequests();
-  for (const std::pair<int32_t, GURL>& blocked_popup : blocked_popups) {
-    base::string16 title;
-    // The pop-up may not have a valid URL.
-    if (blocked_popup.second.spec().empty())
-      title = l10n_util::GetStringUTF16(IDS_TAB_LOADING_TITLE);
-    else
-      title = base::UTF8ToUTF16(blocked_popup.second.spec());
+  for (const auto& blocked_popup : blocked_popups)
+    AddListItem(CreateListItem(blocked_popup.first, blocked_popup.second));
 
-    ListItem popup_item(ui::ResourceBundle::GetSharedInstance().GetImageNamed(
-                            IDR_DEFAULT_FAVICON),
-                        title, true, blocked_popup.first);
-    add_list_item(popup_item);
-  }
+  popup_blocker_observer_.Add(helper);
   content_settings::RecordPopupsAction(
       content_settings::POPUPS_ACTION_DISPLAYED_BUBBLE);
 }
 
-void ContentSettingPopupBubbleModel::OnListItemClicked(int index) {
+void ContentSettingPopupBubbleModel::BlockedPopupAdded(int32_t id,
+                                                       const GURL& url) {
+  AddListItem(CreateListItem(id, url));
+}
+
+void ContentSettingPopupBubbleModel::Observe(
+    int type,
+    const content::NotificationSource& source,
+    const content::NotificationDetails& details) {
+  ContentSettingSingleRadioGroup::Observe(type, source, details);
+  if (type == content::NOTIFICATION_WEB_CONTENTS_DESTROYED)
+    popup_blocker_observer_.RemoveAll();
+}
+
+ContentSettingBubbleModel::ListItem
+ContentSettingPopupBubbleModel::CreateListItem(int32_t id, const GURL& url) {
+  base::string16 title;
+  // The pop-up may not have a valid URL.
+  if (url.spec().empty())
+    title = l10n_util::GetStringUTF16(IDS_TAB_LOADING_TITLE);
+  else
+    title = base::UTF8ToUTF16(url.spec());
+
+  return ListItem(ui::ResourceBundle::GetSharedInstance().GetImageNamed(
+                      IDR_DEFAULT_FAVICON),
+                  title, true, id);
+}
+
+void ContentSettingPopupBubbleModel::OnListItemClicked(int index,
+                                                       int event_flags) {
   if (web_contents()) {
     auto* helper = PopupBlockerTabHelper::FromWebContents(web_contents());
-    helper->ShowBlockedPopup(item_id_from_item_index(index));
-
+    helper->ShowBlockedPopup(item_id_from_item_index(index),
+                             ui::DispositionFromEventFlags(event_flags));
+    RemoveListItem(index);
     content_settings::RecordPopupsAction(
         content_settings::POPUPS_ACTION_CLICKED_LIST_ITEM_CLICKED);
   }
@@ -608,6 +632,11 @@ ContentSettingPopupBubbleModel::~ContentSettingPopupBubbleModel(){
     // Increases the counter.
     content_settings::RecordPopupsAction(
         content_settings::POPUPS_ACTION_SELECTED_ALWAYS_ALLOW_POPUPS_FROM);
+  }
+
+  if (web_contents()) {
+    auto* helper = PopupBlockerTabHelper::FromWebContents(web_contents());
+    helper->RemoveObserver(this);
   }
 }
 
@@ -665,7 +694,7 @@ ContentSettingMediaStreamBubbleModel*
   return this;
 }
 
-void ContentSettingMediaStreamBubbleModel::OnManageLinkClicked() {
+void ContentSettingMediaStreamBubbleModel::OnManageButtonClicked() {
   if (!delegate())
     return;
 
@@ -877,21 +906,8 @@ void ContentSettingMediaStreamBubbleModel::SetMediaMenus() {
 }
 
 void ContentSettingMediaStreamBubbleModel::SetManageText() {
-  // By default, the manage link refers to both media types. We only need
-  // to change the link text if only one media type was accessed.
-  int link_id;
-  if (CameraAccessed() && MicrophoneAccessed()) {
-    link_id = IDS_MEDIASTREAM_BUBBLE_MANAGE_LINK;
-  } else if (CameraAccessed()) {
-    link_id = IDS_MEDIASTREAM_CAMERA_BUBBLE_MANAGE_LINK;
-  } else if (MicrophoneAccessed()) {
-    link_id = IDS_MEDIASTREAM_MICROPHONE_BUBBLE_MANAGE_LINK;
-  } else {
-    NOTREACHED();
-    return;
-  }
-
-  set_manage_text(l10n_util::GetStringUTF16(link_id));
+  DCHECK(CameraAccessed() || MicrophoneAccessed());
+  set_manage_text(l10n_util::GetStringUTF16(IDS_MANAGE));
 }
 
 void ContentSettingMediaStreamBubbleModel::SetCustomLink() {
@@ -1240,7 +1256,7 @@ ContentSettingSubresourceFilterBubbleModel::
   // TODO(csharrison): The learn more link UI layout is non ideal. Make it align
   // with the future Harmony UI version with a link icon in the bottom left of
   // the bubble.
-  set_learn_more_link(l10n_util::GetStringUTF16(IDS_LEARN_MORE));
+  set_show_learn_more(true);
   ChromeSubresourceFilterClient::LogAction(kActionDetailsShown);
 }
 
@@ -1273,7 +1289,7 @@ void ContentSettingSubresourceFilterBubbleModel::OnManageCheckboxChecked(
   is_checked_ = is_checked;
 }
 
-void ContentSettingSubresourceFilterBubbleModel::OnLearnMoreLinkClicked() {
+void ContentSettingSubresourceFilterBubbleModel::OnLearnMoreClicked() {
   DCHECK(delegate());
   ChromeSubresourceFilterClient::LogAction(kActionClickedLearnMore);
   delegate()->ShowLearnMorePage(CONTENT_SETTINGS_TYPE_ADS);
@@ -1484,10 +1500,10 @@ void ContentSettingDownloadsBubbleModel::SetTitle() {
 }
 
 void ContentSettingDownloadsBubbleModel::SetManageText() {
-  set_manage_text(l10n_util::GetStringUTF16(IDS_BLOCKED_DOWNLOADS_LINK));
+  set_manage_text(l10n_util::GetStringUTF16(IDS_MANAGE));
 }
 
-void ContentSettingDownloadsBubbleModel::OnManageLinkClicked() {
+void ContentSettingDownloadsBubbleModel::OnManageButtonClicked() {
   if (delegate())
     delegate()->ShowContentSettingsPage(
         CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS);
@@ -1549,6 +1565,7 @@ ContentSettingBubbleModel::ContentSettingBubbleModel(Delegate* delegate,
                                                      Profile* profile)
     : web_contents_(web_contents),
       profile_(profile),
+      owner_(nullptr),
       delegate_(delegate),
       rappor_service_(g_browser_process->rappor_service()) {
   registrar_.Add(this, content::NOTIFICATION_WEB_CONTENTS_DESTROYED,
@@ -1617,4 +1634,17 @@ ContentSettingBubbleModel::AsSubresourceFilterBubbleModel() {
 ContentSettingDownloadsBubbleModel*
 ContentSettingBubbleModel::AsDownloadsBubbleModel() {
   return nullptr;
+}
+
+void ContentSettingBubbleModel::AddListItem(const ListItem& item) {
+  bubble_content_.list_items.push_back(item);
+  if (owner_)
+    owner_->OnListItemAdded(item);
+}
+
+void ContentSettingBubbleModel::RemoveListItem(int index) {
+  if (owner_)
+    owner_->OnListItemRemovedAt(index);
+
+  bubble_content_.list_items.erase(bubble_content_.list_items.begin() + index);
 }

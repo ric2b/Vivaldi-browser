@@ -18,6 +18,7 @@
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
+#include "base/optional.h"
 #include "base/process/process_info.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/single_thread_task_runner.h"
@@ -91,6 +92,7 @@
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "chrome/browser/ui/blocked_content/popup_blocker_tab_helper.h"
+#include "chrome/browser/ui/blocked_content/popup_tracker.h"
 #include "chrome/browser/ui/bluetooth/bluetooth_chooser_controller.h"
 #include "chrome/browser/ui/bluetooth/bluetooth_chooser_desktop.h"
 #include "chrome/browser/ui/bookmarks/bookmark_tab_helper.h"
@@ -120,6 +122,7 @@
 #include "chrome/browser/ui/find_bar/find_bar.h"
 #include "chrome/browser/ui/find_bar/find_bar_controller.h"
 #include "chrome/browser/ui/find_bar/find_tab_helper.h"
+#include "chrome/browser/ui/first_run_bubble_presenter.h"
 #include "chrome/browser/ui/global_error/global_error.h"
 #include "chrome/browser/ui/global_error/global_error_service.h"
 #include "chrome/browser/ui/global_error/global_error_service_factory.h"
@@ -129,7 +132,6 @@
 #include "chrome/browser/ui/search/search_delegate.h"
 #include "chrome/browser/ui/search/search_model.h"
 #include "chrome/browser/ui/search/search_tab_helper.h"
-#include "chrome/browser/ui/settings_window_manager.h"
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/browser/ui/status_bubble.h"
 #include "chrome/browser/ui/sync/browser_synced_window_delegate.h"
@@ -211,6 +213,11 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/shell_dialogs/selected_file_info.h"
 
+#if defined(OS_MACOSX)
+#include "content/public/browser/browser_plugin_guest_manager.h"
+#include "extensions/browser/process_manager.h"
+#endif
+
 #if defined(OS_WIN)
 #include <windows.h>
 #include <shellapi.h>
@@ -222,6 +229,7 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/fileapi/external_file_url_util.h"
+#include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #endif
 
 #if defined(USE_ASH)
@@ -284,6 +292,19 @@ const extensions::Extension* GetExtensionForOrigin(
   return nullptr;
 #endif
 }
+
+// Stores a pointer to the Browser in the WebContents.
+struct BrowserLink : public base::SupportsUserData::Data {
+  static const char kKey[];
+
+  explicit BrowserLink(Browser* browser) : browser(browser) {}
+  ~BrowserLink() override = default;
+
+  Browser* browser;
+};
+
+// static
+const char BrowserLink::kKey[] = "BrowserLink";
 
 }  // namespace
 
@@ -608,6 +629,13 @@ Browser::~Browser() {
     select_file_dialog_->ListenerDestroyed();
 }
 
+// static
+Browser* Browser::FromWebContents(content::WebContents* web_contents) {
+  const BrowserLink* link =
+      static_cast<BrowserLink*>(web_contents->GetUserData(&BrowserLink::kKey));
+  return link ? link->browser : nullptr;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // Getters & Setters
 
@@ -772,7 +800,7 @@ void Browser::OnWindowClosing() {
   if (!ShouldCloseWindow())
     return;
 
-  if (is_vivaldi() && tab_strip_model_->count() == 0) {
+  if (tab_strip_model_->count() == 0) {
     // We have already called this and cleaned up.
     return;
   }
@@ -810,6 +838,16 @@ void Browser::OnWindowClosing() {
 
   if (!IsFastTabUnloadEnabled())
     tab_strip_model_->CloseAllTabs();
+}
+
+void Browser::DoBeforeUnloadFired(content::WebContents* web_contents,
+                                  bool proceed,
+                                  bool* proceed_to_fire_unload) {
+  BeforeUnloadFired(web_contents, proceed, proceed_to_fire_unload);
+}
+
+void Browser::DoCloseContents(content::WebContents* source) {
+  CloseContents(source);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -927,8 +965,8 @@ bool Browser::CanSupportWindowFeature(WindowFeature feature) const {
 void Browser::OpenFile() {
   base::RecordAction(UserMetricsAction("OpenFile"));
   select_file_dialog_ = ui::SelectFileDialog::Create(
-      this, new ChromeSelectFilePolicy(
-          tab_strip_model_->GetActiveWebContents()));
+      this, std::make_unique<ChromeSelectFilePolicy>(
+                tab_strip_model_->GetActiveWebContents()));
 
   const base::FilePath directory = profile_->last_selected_directory();
 
@@ -959,8 +997,6 @@ void Browser::UpdateUIForNavigationInTab(
     chrome::NavigateParams::WindowAction action,
     bool user_initiated) {
   tab_strip_model_->TabNavigating(contents, transition);
-
-  if (is_vivaldi()) return;
 
   bool contents_is_selected =
       contents == tab_strip_model_->GetActiveWebContents();
@@ -1022,8 +1058,10 @@ void Browser::TabInsertedAt(TabStripModel* tab_strip_model,
   SyncHistoryWithTabs(index);
 
   // Make sure the loading state is updated correctly, otherwise the throbber
-  // won't start if the page is loading.
-  LoadingStateChanged(contents, true);
+  // won't start if the page is loading. Note that we don't want to
+  // ScheduleUIUpdate() because the tab may not have been inserted in the UI
+  // yet if this function is called before TabStripModel::TabInsertedAt().
+  UpdateWindowForLoadingStateChanged(contents, true);
 
   interstitial_observers_.push_back(new InterstitialObserver(this, contents));
 
@@ -1131,13 +1169,15 @@ void Browser::ActiveTabChanged(WebContents* old_contents,
   if (chrome_updater_factory_.HasWeakPtrs() && old_contents)
     ProcessPendingUIUpdates();
 
+  if (!vivaldi::IsVivaldiRunning()) {
   // Propagate the profile to the location bar.
   UpdateToolbar((reason & CHANGE_REASON_REPLACED) == 0);
 
   if (search::IsInstantExtendedAPIEnabled() &&
       !vivaldi::IsVivaldiRunning())
     search_delegate_->OnTabActivated(new_contents);
-
+  }
+  }
   // Update reload/stop state.
   command_controller_->LoadingStateChanged(new_contents->IsLoading(), true);
 
@@ -1154,6 +1194,7 @@ void Browser::ActiveTabChanged(WebContents* old_contents,
         tab_strip_model_->GetActiveWebContents())->GetStatusText());
   }
 
+  if (!is_vivaldi()) {
   if (HasFindBarController()) {
     find_bar_controller_->ChangeWebContents(new_contents);
     find_bar_controller_->find_bar()->MoveWindowIfNecessary(gfx::Rect());
@@ -1175,14 +1216,12 @@ void Browser::ActiveTabChanged(WebContents* old_contents,
                                        base::TimeTicks::Now());
   }
 
-  if (!is_vivaldi()) {
+  if (!vivaldi::IsVivaldiRunning()) {
   // This needs to be called after notifying SearchDelegate.
   if (instant_controller_)
     instant_controller_->ActiveTabChanged();
 
-  if (!vivaldi::IsVivaldiRunning()) {
   SearchTabHelper::FromWebContents(new_contents)->OnTabActivated();
-  }
   }
 }
 
@@ -1384,6 +1423,29 @@ void Browser::MoveValidationMessage(content::WebContents* web_contents,
 
 bool Browser::PreHandleGestureEvent(content::WebContents* source,
                                     const blink::WebGestureEvent& event) {
+#if defined(OS_MACOSX)
+  // Disable "smart zoom" (double-tap with two fingers on Mac trackpad)
+  // for the PDF viewer, otherwise the viewer's controls will be scaled off
+  // screen.
+  // TODO(mcnee): Investigate having the PDF viewer handle the gesture
+  // once it is a service. crbug.com/757541
+  if (event.GetType() == blink::WebInputEvent::kGestureDoubleTap) {
+    content::BrowserPluginGuestManager* guest_manager =
+        source->GetBrowserContext()->GetGuestManager();
+    if (guest_manager) {
+      const content::WebContents* guest_contents =
+          guest_manager->GetFullPageGuest(source);
+      if (guest_contents) {
+        const extensions::Extension* extension =
+            extensions::ProcessManager::Get(guest_contents->GetBrowserContext())
+                ->GetExtensionForWebContents(guest_contents);
+        if (extension && extension->id() == extension_misc::kPdfExtensionId)
+          return true;
+      }
+    }
+  }
+#endif  // defined(OS_MACOSX)
+
   // Disable pinch zooming in undocked dev tools window due to poor UX.
   if (app_name() == DevToolsWindow::kDevToolsApp)
     return blink::WebInputEvent::IsPinchGestureEventType(event.GetType());
@@ -1393,12 +1455,14 @@ bool Browser::PreHandleGestureEvent(content::WebContents* source,
 bool Browser::CanDragEnter(content::WebContents* source,
                            const content::DropData& data,
                            blink::WebDragOperationsMask operations_allowed) {
+#if defined(OS_CHROMEOS)
   // Disallow drag-and-drop navigation for Settings windows which do not support
   // external navigation.
   if ((operations_allowed & blink::kWebDragOperationLink) &&
       chrome::SettingsWindowManager::GetInstance()->IsSettingsBrowser(this)) {
     return false;
   }
+#endif
   return true;
 }
 
@@ -1412,15 +1476,6 @@ blink::WebSecurityStyle Browser::GetSecurityStyle(
   helper->GetSecurityInfo(&security_info);
   return security_state::GetSecurityStyle(security_info,
                                           security_style_explanations);
-}
-
-void Browser::ShowCertificateViewerInDevTools(
-    content::WebContents* web_contents,
-    scoped_refptr<net::X509Certificate> certificate) {
-  DevToolsWindow* devtools_window =
-      DevToolsWindow::GetInstanceForInspectedWebContents(web_contents);
-  if (devtools_window)
-    devtools_window->ShowCertificateViewer(certificate);
 }
 
 std::unique_ptr<content::BluetoothChooser> Browser::RunBluetoothChooser(
@@ -1513,7 +1568,7 @@ void Browser::OnWindowDidShow() {
 void Browser::ShowFirstRunBubble() {
   // gisli@vivaldi.com:  Added check for existance of the locationbar.
   if (window()->GetLocationBar()) {
-  window()->GetLocationBar()->ShowFirstRunBubble();
+  FirstRunBubblePresenter::PresentWhenReady(this);
   }
 }
 
@@ -1535,23 +1590,18 @@ WebContents* Browser::OpenURLFromTab(WebContents* source,
   if (params.user_gesture)
     nav_params.window_action = chrome::NavigateParams::SHOW_WINDOW;
   nav_params.user_gesture = params.user_gesture;
-
-  PopupBlockerTabHelper* popup_blocker_helper =
-      source ? PopupBlockerTabHelper::FromWebContents(source) : nullptr;
-  if ((params.disposition == WindowOpenDisposition::NEW_POPUP ||
-       params.disposition == WindowOpenDisposition::NEW_FOREGROUND_TAB ||
-       params.disposition == WindowOpenDisposition::NEW_BACKGROUND_TAB ||
-       params.disposition == WindowOpenDisposition::NEW_WINDOW) &&
-      popup_blocker_helper &&
-      PopupBlockerTabHelper::ConsiderForPopupBlocking(
-          source, params.user_gesture, &params)) {
-    if (popup_blocker_helper->MaybeBlockPopup(nav_params,
-                                              blink::mojom::WindowFeatures())) {
-      return nullptr;
-    }
+  bool is_popup =
+      PopupBlockerTabHelper::ConsiderForPopupBlocking(params.disposition);
+  if (is_popup && PopupBlockerTabHelper::MaybeBlockPopup(
+                      source, base::Optional<GURL>(), nav_params, &params,
+                      blink::mojom::WindowFeatures())) {
+    return nullptr;
   }
 
   chrome::Navigate(&nav_params);
+
+  if (is_popup && nav_params.target_contents)
+    PopupTracker::CreateForWebContents(nav_params.target_contents);
 
   return nav_params.target_contents;
 }
@@ -1603,6 +1653,10 @@ void Browser::AddNewContents(WebContents* source,
                              const gfx::Rect& initial_rect,
                              bool user_gesture,
                              bool* was_blocked) {
+  // At this point the |new_contents| is beyond the popup blocker, but we use
+  // the same logic for determining if the popup tracker needs to be attached.
+  if (PopupBlockerTabHelper::ConsiderForPopupBlocking(disposition))
+    PopupTracker::CreateForWebContents(new_contents);
   chrome::AddWebContents(this, source, new_contents, disposition, initial_rect,
                          user_gesture, was_blocked);
 }
@@ -1614,21 +1668,9 @@ void Browser::ActivateContents(WebContents* contents) {
 }
 
 void Browser::LoadingStateChanged(WebContents* source,
-    bool to_different_document) {
-  if (is_vivaldi()) return;
-
-  window_->UpdateLoadingAnimations(tab_strip_model_->TabsAreLoading());
-  window_->UpdateTitleBar();
-
-  WebContents* selected_contents = tab_strip_model_->GetActiveWebContents();
-  if (source == selected_contents) {
-    bool is_loading = source->IsLoading() && to_different_document;
-    command_controller_->LoadingStateChanged(is_loading, false);
-    if (GetStatusBubble()) {
-      GetStatusBubble()->SetStatus(CoreTabHelper::FromWebContents(
-          tab_strip_model_->GetActiveWebContents())->GetStatusText());
-    }
-  }
+                                  bool to_different_document) {
+  ScheduleUIUpdate(source, content::INVALIDATE_TYPE_LOAD);
+  UpdateWindowForLoadingStateChanged(source, to_different_document);
 }
 
 void Browser::CloseContents(WebContents* source) {
@@ -2225,17 +2267,15 @@ void Browser::OnDevToolsDisabledChanged() {
 // Browser, UI update coalescing and handling (private):
 
 void Browser::UpdateToolbar(bool should_restore_state) {
-  if (!vivaldi::IsVivaldiRunning()) {
   window_->UpdateToolbar(should_restore_state ?
       tab_strip_model_->GetActiveWebContents() : NULL);
-  }
 }
 
 void Browser::ScheduleUIUpdate(WebContents* source,
                                unsigned changed_flags) {
   DCHECK(source);
   int index = tab_strip_model_->GetIndexOfWebContents(source);
-  if(is_vivaldi_ && index == TabStripModel::kNoTab) {
+  if(index == TabStripModel::kNoTab) {
     // |source| has already been removed from tabstrip, bail.
     return;
   }
@@ -2247,7 +2287,7 @@ void Browser::ScheduleUIUpdate(WebContents* source,
       FROM_HERE_WITH_EXPLICIT_FUNCTION(
           "466285 Browser::ScheduleUIUpdate::Toolbar"));
   // Do some synchronous updates.
-  if (changed_flags & content::INVALIDATE_TYPE_URL && !is_vivaldi_) {
+  if (changed_flags & content::INVALIDATE_TYPE_URL) {
     if (source == tab_strip_model_->GetActiveWebContents()) {
       // Only update the URL for the current tab. Note that we do not update
       // the navigation commands since those would have already been updated
@@ -2287,11 +2327,6 @@ void Browser::ScheduleUIUpdate(WebContents* source,
     tab_strip_model_->UpdateWebContentsStateAt(
         tab_strip_model_->GetIndexOfWebContents(source),
         TabStripModelObserver::TITLE_NOT_LOADING);
-  }
-
-  if (is_vivaldi_) {
-    // If we Vivaldi we are not interest in scheduling any changes.
-    return;
   }
 
   // If the only updates were synchronously handled above, we're done.
@@ -2473,7 +2508,8 @@ bool Browser::CanCloseWithInProgressDownloads() {
 void Browser::SetAsDelegate(WebContents* web_contents, bool set_delegate) {
   if (is_vivaldi()) return;
 
-  Browser* delegate = set_delegate ? this : NULL;
+  Browser* delegate = set_delegate ? this : nullptr;
+
   // WebContents...
   web_contents->SetDelegate(delegate);
 
@@ -2494,15 +2530,23 @@ void Browser::SetAsDelegate(WebContents* web_contents, bool set_delegate) {
         this);
     //Vivaldi: content_translate_driver.RemoveObserver(this);
   }
-  if(!vivaldi::IsVivaldiRunning())
-  {
-    // If we are not running as Vivaldi the translation need to be activated for tests
+  if (!vivaldi::IsVivaldiRunning()) {
+    // If we are not running as Vivaldi the translation need to be activated for
+    // tests.
     translate::ContentTranslateDriver& content_translate_driver =
       ChromeTranslateClient::FromWebContents(web_contents)->translate_driver();
     if (delegate)
       content_translate_driver.AddObserver(this);
     else
       content_translate_driver.RemoveObserver(this);
+  }
+
+  // Update the back-link from the WebContents to Browser.
+  if (set_delegate) {
+    web_contents->SetUserData(BrowserLink::kKey,
+                              base::MakeUnique<BrowserLink>(this));
+  } else {
+    web_contents->RemoveUserData(BrowserLink::kKey);
   }
 }
 
@@ -2545,6 +2589,23 @@ void Browser::TabDetachedAtImpl(content::WebContents* contents,
     delete interstitial_observers_[i];
     interstitial_observers_.erase(interstitial_observers_.begin() + i);
     return;
+  }
+}
+
+void Browser::UpdateWindowForLoadingStateChanged(content::WebContents* source,
+                                                 bool to_different_document) {
+  window_->UpdateLoadingAnimations(tab_strip_model_->TabsAreLoading());
+  window_->UpdateTitleBar();
+
+  WebContents* selected_contents = tab_strip_model_->GetActiveWebContents();
+  if (source == selected_contents) {
+    bool is_loading = source->IsLoading() && to_different_document;
+    command_controller_->LoadingStateChanged(is_loading, false);
+    if (GetStatusBubble()) {
+      GetStatusBubble()->SetStatus(CoreTabHelper::FromWebContents(
+                                       tab_strip_model_->GetActiveWebContents())
+                                       ->GetStatusText());
+    }
   }
 }
 

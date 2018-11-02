@@ -133,6 +133,7 @@ class WebSpeechSynthesizerClient;
 class WebStorageNamespace;
 class WebSyncProvider;
 struct WebFloatPoint;
+class WebTaskRunner;
 class WebThemeEngine;
 class WebThread;
 class WebTrialTokenValidator;
@@ -152,7 +153,7 @@ class BLINK_PLATFORM_EXPORT Platform {
 #endif
 
   // Initialize platform and wtf. If you need to initialize the entire Blink,
-  // you should use blink::initialize.
+  // you should use blink::Initialize.
   static void Initialize(Platform*);
   static Platform* Current();
 
@@ -190,7 +191,8 @@ class BLINK_PLATFORM_EXPORT Platform {
   virtual unsigned AudioHardwareOutputChannels() { return 0; }
 
   // Creates a device for audio I/O.
-  // Pass in (numberOfInputChannels > 0) if live/local audio input is desired.
+  // Pass in (number_of_input_channels > 0) if live/local audio input is
+  // desired.
   virtual std::unique_ptr<WebAudioDevice> CreateAudioDevice(
       unsigned number_of_input_channels,
       unsigned number_of_channels,
@@ -215,36 +217,35 @@ class BLINK_PLATFORM_EXPORT Platform {
 
   // Database ------------------------------------------------------------
 
-  // Opens a database file; dirHandle should be 0 if the caller does not need
-  // a handle to the directory containing this file
+  // Opens a database file.
   virtual FileHandle DatabaseOpenFile(const WebString& vfs_file_name,
                                       int desired_flags) {
     return FileHandle();
   }
 
-  // Deletes a database file and returns the error code
+  // Deletes a database file and returns the error code.
   virtual int DatabaseDeleteFile(const WebString& vfs_file_name,
                                  bool sync_dir) {
     return 0;
   }
 
-  // Returns the attributes of the given database file
+  // Returns the attributes of the given database file.
   virtual long DatabaseGetFileAttributes(const WebString& vfs_file_name) {
     return 0;
   }
 
-  // Returns the size of the given database file
+  // Returns the size of the given database file.
   virtual long long DatabaseGetFileSize(const WebString& vfs_file_name) {
     return 0;
   }
 
-  // Returns the space available for the given origin
+  // Returns the space available for the given origin.
   virtual long long DatabaseGetSpaceAvailableForOrigin(
       const WebSecurityOrigin& origin) {
     return 0;
   }
 
-  // Set the size of the given database file
+  // Set the size of the given database file.
   virtual bool DatabaseSetFileSize(const WebString& vfs_file_name,
                                    long long size) {
     return false;
@@ -312,8 +313,12 @@ class BLINK_PLATFORM_EXPORT Platform {
   static const size_t kNoDecodedImageByteLimit = static_cast<size_t>(-1);
 
   // Returns the maximum amount of memory a decoded image should be allowed.
-  // See comments on ImageDecoder::m_maxDecodedBytes.
+  // See comments on ImageDecoder::max_decoded_bytes_.
   virtual size_t MaxDecodedImageBytes() { return kNoDecodedImageByteLimit; }
+
+  // Returns true if this is a low-end device.
+  // This is the same as base::SysInfo::IsLowEndDevice.
+  virtual bool IsLowEndDevice() { return false; }
 
   // Process -------------------------------------------------------------
 
@@ -408,6 +413,10 @@ class BLINK_PLATFORM_EXPORT Platform {
   // Creates an embedder-defined thread.
   virtual std::unique_ptr<WebThread> CreateThread(const char* name);
 
+  // Creates a WebAudio-specific thread with the elevated priority. Do NOT use
+  // for any other purpose.
+  virtual std::unique_ptr<WebThread> CreateWebAudioThread();
+
   // Returns an interface to the current thread. This is owned by the
   // embedder.
   virtual WebThread* CurrentThread() { return nullptr; }
@@ -422,8 +431,7 @@ class BLINK_PLATFORM_EXPORT Platform {
   virtual WebData GetDataResource(const char* name) { return WebData(); }
 
   // Decodes the in-memory audio file data and returns the linear PCM audio data
-  // in the destinationBus.  A sample-rate conversion to sampleRate will occur
-  // if the file data is at a different sample-rate.
+  // in the |destination_bus|.
   // Returns true on success.
   virtual bool DecodeAudioFileData(WebAudioBus* destination_bus,
                                    const char* audio_file_data,
@@ -440,7 +448,7 @@ class BLINK_PLATFORM_EXPORT Platform {
 
   // Disable/Enable sudden termination on a process level. When possible, it
   // is preferable to disable sudden termination on a per-frame level via
-  // WebFrameClient::suddenTerminationDisablerChanged.
+  // WebFrameClient::SuddenTerminationDisablerChanged.
   virtual void SuddenTerminationChanged(bool enabled) {}
 
   // System --------------------------------------------------------------
@@ -456,6 +464,10 @@ class BLINK_PLATFORM_EXPORT Platform {
   // renderer was created with threaded rendering desabled.
   virtual WebThread* CompositorThread() const { return 0; }
 
+  // Returns an interface to the file task runner.
+  WebTaskRunner* FileTaskRunner() const;
+  base::TaskRunner* BaseFileTaskRunner() const;
+
   // Testing -------------------------------------------------------------
 
   // Gets a pointer to URLLoaderMockFactory for testing. Will not be available
@@ -464,7 +476,7 @@ class BLINK_PLATFORM_EXPORT Platform {
 
   // Record to a RAPPOR privacy-preserving metric, see:
   // https://www.chromium.org/developers/design-documents/rappor.
-  // recordRappor records a sample string, while recordRapporURL records the
+  // RecordRappor records a sample string, while RecordRapporURL records the
   // eTLD+1 of a url.
   virtual void RecordRappor(const char* metric, const WebString& sample) {}
   virtual void RecordRapporURL(const char* metric, const blink::WebURL& url) {}
@@ -472,7 +484,7 @@ class BLINK_PLATFORM_EXPORT Platform {
   // Record a UMA sequence action.  The UserMetricsAction construction must
   // be on a single line for extract_actions.py to find it.  Please see
   // that script for more details.  Intended use is:
-  // recordAction(UserMetricsAction("MyAction"))
+  // RecordAction(UserMetricsAction("MyAction"))
   virtual void RecordAction(const UserMetricsAction&) {}
 
   typedef uint64_t WebMemoryAllocatorDumpGuid;
@@ -506,7 +518,7 @@ class BLINK_PLATFORM_EXPORT Platform {
   // Returns a newly allocated and initialized offscreen context provider,
   // backed by an independent context. Returns null if the context cannot be
   // created or initialized.
-  // Passing an existing provider to shareContext will create the new context
+  // Passing an existing provider to |share_context| will create the new context
   // in the same share group as the one passed.
   virtual std::unique_ptr<WebGraphicsContext3DProvider>
   CreateOffscreenGraphicsContext3DProvider(
@@ -535,8 +547,8 @@ class BLINK_PLATFORM_EXPORT Platform {
 
   virtual WebCompositorSupport* CompositorSupport() { return nullptr; }
 
-  // Creates a new fling animation curve instance for device |deviceSource|
-  // with |velocity| and already scrolled |cumulativeScroll| pixels.
+  // Creates a new fling animation curve instance for device |device_source|
+  // with |velocity| and already scrolled |cumulative_scroll| pixels.
   virtual std::unique_ptr<WebGestureCurve> CreateFlingAnimationCurve(
       WebGestureDevice device_source,
       const WebFloatPoint& velocity,
@@ -612,6 +624,8 @@ class BLINK_PLATFORM_EXPORT Platform {
 
   virtual InterfaceProvider* GetInterfaceProvider();
 
+  virtual const char* GetBrowserServiceName() const { return ""; }
+
   // Platform events -----------------------------------------------------
   // Device Orientation, Device Motion, Battery, Gamepad.
 
@@ -625,41 +639,41 @@ class BLINK_PLATFORM_EXPORT Platform {
   virtual void StopListening(WebPlatformEventType type) {}
 
   // This method converts from the supplied DOM code enum to the
-  // embedder's DOM code value for the key pressed. |domCode| values are
+  // embedder's DOM code value for the key pressed. |dom_code| values are
   // based on the value defined in
   // ui/events/keycodes/dom4/keycode_converter_data.h.
   // Returns null string, if DOM code value is not found.
   virtual WebString DomCodeStringFromEnum(int dom_code) { return WebString(); }
 
   // This method converts from the suppled DOM code value to the
-  // embedder's DOM code enum for the key pressed. |codeString| is defined in
+  // embedder's DOM code enum for the key pressed. |code_string| is defined in
   // ui/events/keycodes/dom4/keycode_converter_data.h.
   // Returns 0, if DOM code enum is not found.
   virtual int DomEnumFromCodeString(const WebString& code_string) { return 0; }
 
   // This method converts from the supplied DOM |key| enum to the
-  // corresponding DOM |key| string value for the key pressed. |domKey| values
+  // corresponding DOM |key| string value for the key pressed. |dom_key| values
   // are based on the value defined in ui/events/keycodes/dom3/dom_key_data.h.
   // Returns empty string, if DOM key value is not found.
   virtual WebString DomKeyStringFromEnum(int dom_key) { return WebString(); }
 
   // This method converts from the suppled DOM |key| value to the
-  // embedder's DOM |key| enum for the key pressed. |keyString| is defined in
+  // embedder's DOM |key| enum for the key pressed. |key_string| is defined in
   // ui/events/keycodes/dom3/dom_key_data.h.
   // Returns 0 if DOM key enum is not found.
   virtual int DomKeyEnumFromString(const WebString& key_string) { return 0; }
 
-  // This method returns whether the specified |domKey| is a modifier key.
-  // |domKey| values are based on the value defined in
+  // This method returns whether the specified |dom_key| is a modifier key.
+  // |dom_key| values are based on the value defined in
   // ui/events/keycodes/dom3/dom_key_data.h.
   virtual bool IsDomKeyForModifier(int dom_key) { return false; }
 
   // Quota -----------------------------------------------------------
 
   // Queries the storage partition's storage usage and quota information.
-  // WebStorageQuotaCallbacks::didQueryStorageUsageAndQuota will be called
+  // WebStorageQuotaCallbacks::DidQueryStorageUsageAndQuota will be called
   // with the current usage and quota information for the partition. When
-  // an error occurs WebStorageQuotaCallbacks::didFail is called with an
+  // an error occurs WebStorageQuotaCallbacks::DidFail is called with an
   // error code.
   virtual void QueryStorageUsageAndQuota(const WebURL& storage_partition,
                                          WebStorageQuotaType,
@@ -697,6 +711,13 @@ class BLINK_PLATFORM_EXPORT Platform {
   // depending on memory pressure.
   virtual void RequestPurgeMemory() {}
 
+  // V8 Context Snapshot --------------------------------------------------
+
+  // This method returns true only when
+  // tools/v8_context_snapshot/v8_context_snapshot_generator is running (which
+  // runs during Chromium's build step).
+  virtual bool IsTakingV8ContextSnapshot() { return false; }
+
   // Feature Policy -----------------------------------------------------
 
   // Create a new feature policy object for a document, given its parent
@@ -717,9 +738,10 @@ class BLINK_PLATFORM_EXPORT Platform {
 
  protected:
   Platform();
-  virtual ~Platform() {}
+  virtual ~Platform();
 
   WebThread* main_thread_;
+  std::unique_ptr<WebThread> file_thread_;
 };
 
 }  // namespace blink

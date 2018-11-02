@@ -25,6 +25,8 @@ class CHROMEOS_EXPORT FakeCrasAudioClient : public CrasAudioClient {
   void RemoveObserver(Observer* observer) override;
   bool HasObserver(const Observer* observer) const override;
   void GetVolumeState(const GetVolumeStateCallback& callback) override;
+  void GetDefaultOutputBufferSize(
+      const GetDefaultOutputBufferSizeCallback& callback) override;
   void GetNodes(const GetNodesCallback& callback,
                 const ErrorCallback& error_callback) override;
   void SetOutputNodeVolume(uint64_t node_id, int32_t volume) override;
@@ -60,6 +62,9 @@ class CHROMEOS_EXPORT FakeCrasAudioClient : public CrasAudioClient {
 
   // Generates fake signal for OutputNodeVolumeChanged.
   void NotifyOutputNodeVolumeChangedForTesting(uint64_t node_id, int volume);
+
+  // Generates fake hotword signal for HotwordTriggered.
+  void NotifyHotwordTriggeredForTesting(uint64_t tv_sec, uint64_t tv_nsec);
 
   const AudioNodeList& node_list() const { return node_list_; }
   const uint64_t& active_input_node_id() const { return active_input_node_id_; }

@@ -6,7 +6,13 @@ import("//third_party/protobuf/proto_library.gni")
 
 proto_library("csd_proto") {
   sources = [
-    "csd.proto",
+    "proto/csd.proto",
+  ]
+}
+
+proto_library("webui_proto") {
+  sources = [
+    "proto/webui.proto",
   ]
 }
 
@@ -18,6 +24,8 @@ source_set("safe_browsing") {
     "base_resource_throttle.h",
     "base_ui_manager.cc",
     "base_ui_manager.h",
+    "net_event_logger.cc",
+    "net_event_logger.h",
   ]
   public_deps = [
     "//components/security_interstitials/content:security_interstitial_page",
@@ -27,6 +35,7 @@ source_set("safe_browsing") {
     ":features",
     "//base:base",
     "//base:i18n",
+    "//components/safe_browsing/common:common",
     "//components/safe_browsing/common:safe_browsing_prefs",
     "//components/safe_browsing/web_ui:constants",
     "//components/safe_browsing_db:database_manager",

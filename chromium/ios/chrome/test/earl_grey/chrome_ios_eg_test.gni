@@ -125,7 +125,10 @@ template("chrome_ios_eg_test") {
     if (!defined(bundle_deps)) {
       bundle_deps = []
     }
-    bundle_deps += [ "//ios/chrome/app/resources" ]
+    bundle_deps += [
+      "//ios/chrome/app/resources",
+      ios_application_icons_target,
+    ]
 
     if (!defined(extra_substitutions)) {
       extra_substitutions = []
@@ -136,9 +139,10 @@ template("chrome_ios_eg_test") {
       "CHROMIUM_URL_SCHEME_1=$url_unsecure_scheme",
       "CHROMIUM_URL_SCHEME_2=$url_secure_scheme",
       "CHROMIUM_URL_SCHEME_3=$url_x_callback_scheme",
-      "CHROMIUM_URL_SCHEME_4=$url_channel_scheme",
+      "CHROMIUM_URL_CHANNEL_SCHEME=$url_channel_scheme",
       "EG_MAIN_APPLICATION_DELEGATE=$_eg_main_application_delegate",
       "SSOAUTH_URL_SCHEME=$url_ssoauth_scheme",
+      "CONTENT_WIDGET_EXTENSION_BUNDLE_ID=$chromium_bundle_id.ContentTodayExtension",
     ]
     if (ios_automatically_manage_certs) {
       # Use the same bundle identifier for EarlGrey tests as for unit tests

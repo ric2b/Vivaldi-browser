@@ -14,8 +14,8 @@
 #include "base/single_thread_task_runner.h"
 #include "base/test/histogram_tester.h"
 #include "base/test/simple_test_tick_clock.h"
-#include "cc/output/begin_frame_args.h"
-#include "cc/test/ordered_simple_task_runner.h"
+#include "components/viz/common/frame_sinks/begin_frame_args.h"
+#include "components/viz/test/ordered_simple_task_runner.h"
 #include "platform/WebTaskRunner.h"
 #include "platform/scheduler/base/real_time_domain.h"
 #include "platform/scheduler/base/test_time_source.h"
@@ -109,10 +109,10 @@ void WillBeginFrameIdleTask(RendererScheduler* scheduler,
                             uint64_t sequence_number,
                             base::SimpleTestTickClock* clock,
                             base::TimeTicks deadline) {
-  scheduler->WillBeginFrame(cc::BeginFrameArgs::Create(
+  scheduler->WillBeginFrame(viz::BeginFrameArgs::Create(
       BEGINFRAME_FROM_HERE, 0, sequence_number, clock->NowTicks(),
       base::TimeTicks(), base::TimeDelta::FromMilliseconds(1000),
-      cc::BeginFrameArgs::NORMAL));
+      viz::BeginFrameArgs::NORMAL));
 }
 
 void UpdateClockToDeadlineIdleTestTask(base::SimpleTestTickClock* clock,
@@ -218,8 +218,8 @@ class RendererSchedulerImplForTest : public RendererSchedulerImpl {
     RendererSchedulerImpl::UpdatePolicyLocked(update_type);
 
     std::string use_case = RendererSchedulerImpl::UseCaseToString(
-        GetMainThreadOnly().current_use_case);
-    if (GetMainThreadOnly().touchstart_expected_soon) {
+        main_thread_only().current_use_case);
+    if (main_thread_only().touchstart_expected_soon) {
       use_cases_.push_back(use_case + " touchstart expected");
     } else {
       use_cases_.push_back(use_case);
@@ -238,12 +238,12 @@ class RendererSchedulerImplForTest : public RendererSchedulerImpl {
 
   bool BeginMainFrameOnCriticalPath() {
     base::AutoLock lock(any_thread_lock_);
-    return GetAnyThread().begin_main_frame_on_critical_path;
+    return any_thread().begin_main_frame_on_critical_path;
   }
 
   bool waiting_for_meaningful_paint() const {
     base::AutoLock lock(any_thread_lock_);
-    return GetAnyThread().waiting_for_meaningful_paint;
+    return any_thread().waiting_for_meaningful_paint;
   }
 
   int update_policy_count_;
@@ -260,12 +260,16 @@ class RendererSchedulerImplTest : public ::testing::Test {
  public:
   using UseCase = RendererSchedulerImpl::UseCase;
 
-  RendererSchedulerImplTest() : clock_(new base::SimpleTestTickClock()) {
+  RendererSchedulerImplTest()
+      : clock_(new base::SimpleTestTickClock()),
+        fake_task_(FROM_HERE, base::Bind([] {}), base::TimeTicks(), true) {
     clock_->Advance(base::TimeDelta::FromMicroseconds(5000));
   }
 
   RendererSchedulerImplTest(base::MessageLoop* message_loop)
-      : clock_(new base::SimpleTestTickClock()), message_loop_(message_loop) {
+      : clock_(new base::SimpleTestTickClock()),
+        fake_task_(FROM_HERE, base::Bind([] {}), base::TimeTicks(), true),
+        message_loop_(message_loop) {
     clock_->Advance(base::TimeDelta::FromMicroseconds(5000));
   }
 
@@ -290,8 +294,12 @@ class RendererSchedulerImplTest : public ::testing::Test {
     default_task_runner_ = scheduler_->DefaultTaskQueue();
     compositor_task_runner_ = scheduler_->CompositorTaskQueue();
     loading_task_runner_ = scheduler_->LoadingTaskQueue();
+    loading_control_task_runner_ = scheduler_->NewLoadingTaskQueue(
+        MainThreadTaskQueue::QueueType::FRAME_LOADING_CONTROL);
     idle_task_runner_ = scheduler_->IdleTaskRunner();
     timer_task_runner_ = scheduler_->TimerTaskQueue();
+    fake_queue_ = scheduler_->NewLoadingTaskQueue(
+        MainThreadTaskQueue::QueueType::FRAME_LOADING);
   }
 
   void TearDown() override {
@@ -318,20 +326,20 @@ class RendererSchedulerImplTest : public ::testing::Test {
   }
 
   void DoMainFrame() {
-    cc::BeginFrameArgs begin_frame_args = cc::BeginFrameArgs::Create(
+    viz::BeginFrameArgs begin_frame_args = viz::BeginFrameArgs::Create(
         BEGINFRAME_FROM_HERE, 0, next_begin_frame_number_++, clock_->NowTicks(),
         base::TimeTicks(), base::TimeDelta::FromMilliseconds(16),
-        cc::BeginFrameArgs::NORMAL);
+        viz::BeginFrameArgs::NORMAL);
     begin_frame_args.on_critical_path = false;
     scheduler_->WillBeginFrame(begin_frame_args);
     scheduler_->DidCommitFrameToCompositor();
   }
 
   void DoMainFrameOnCriticalPath() {
-    cc::BeginFrameArgs begin_frame_args = cc::BeginFrameArgs::Create(
+    viz::BeginFrameArgs begin_frame_args = viz::BeginFrameArgs::Create(
         BEGINFRAME_FROM_HERE, 0, next_begin_frame_number_++, clock_->NowTicks(),
         base::TimeTicks(), base::TimeDelta::FromMilliseconds(16),
-        cc::BeginFrameArgs::NORMAL);
+        viz::BeginFrameArgs::NORMAL);
     begin_frame_args.on_critical_path = true;
     scheduler_->WillBeginFrame(begin_frame_args);
   }
@@ -519,52 +527,52 @@ class RendererSchedulerImplTest : public ::testing::Test {
   void EnableIdleTasks() { DoMainFrame(); }
 
   UseCase CurrentUseCase() {
-    return scheduler_->GetMainThreadOnly().current_use_case;
+    return scheduler_->main_thread_only().current_use_case;
   }
 
   UseCase ForceUpdatePolicyAndGetCurrentUseCase() {
     scheduler_->ForceUpdatePolicy();
-    return scheduler_->GetMainThreadOnly().current_use_case;
+    return scheduler_->main_thread_only().current_use_case;
   }
 
   v8::RAILMode GetRAILMode() {
-    return scheduler_->GetMainThreadOnly().current_policy.rail_mode();
+    return scheduler_->main_thread_only().current_policy.rail_mode();
   }
 
   bool BeginFrameNotExpectedSoon() {
-    return scheduler_->GetMainThreadOnly().begin_frame_not_expected_soon;
+    return scheduler_->main_thread_only().begin_frame_not_expected_soon;
   }
 
   bool TouchStartExpectedSoon() {
-    return scheduler_->GetMainThreadOnly().touchstart_expected_soon;
+    return scheduler_->main_thread_only().touchstart_expected_soon;
   }
 
   bool HaveSeenABeginMainframe() {
-    return scheduler_->GetMainThreadOnly().have_seen_a_begin_main_frame;
+    return scheduler_->main_thread_only().have_seen_a_begin_main_frame;
   }
 
   bool LoadingTasksSeemExpensive() {
-    return scheduler_->GetMainThreadOnly().loading_tasks_seem_expensive;
+    return scheduler_->main_thread_only().loading_tasks_seem_expensive;
   }
 
   bool TimerTasksSeemExpensive() {
-    return scheduler_->GetMainThreadOnly().timer_tasks_seem_expensive;
+    return scheduler_->main_thread_only().timer_tasks_seem_expensive;
   }
 
   base::TimeTicks EstimatedNextFrameBegin() {
-    return scheduler_->GetMainThreadOnly().estimated_next_frame_begin;
+    return scheduler_->main_thread_only().estimated_next_frame_begin;
   }
 
   int NavigationTaskExpectedCount() {
-    return scheduler_->GetMainThreadOnly().navigation_task_expected_count;
+    return scheduler_->main_thread_only().navigation_task_expected_count;
   }
 
   void AdvanceTimeWithTask(double duration) {
-    double start = (clock_->NowTicks() - base::TimeTicks()).InSecondsF();
+    base::TimeTicks start = clock_->NowTicks();
+    scheduler_->OnTaskStarted(fake_queue_.get(), fake_task_, start);
     clock_->Advance(base::TimeDelta::FromSecondsD(duration));
-    double end = (clock_->NowTicks() - base::TimeTicks()).InSecondsF();
-    scheduler_->WillProcessTask(start);
-    scheduler_->DidProcessTask(start, end);
+    base::TimeTicks end = clock_->NowTicks();
+    scheduler_->OnTaskCompleted(fake_queue_.get(), fake_task_, start, end);
   }
 
   void GetQueueingTimeEstimatorLock() {
@@ -592,6 +600,7 @@ class RendererSchedulerImplTest : public ::testing::Test {
   // - 'D': Default task
   // - 'C': Compositor task
   // - 'L': Loading task
+  // - 'M': Loading Control task
   // - 'I': Idle task
   // - 'T': Timer task
   void PostTestTasks(std::vector<std::string>* run_order,
@@ -611,6 +620,10 @@ class RendererSchedulerImplTest : public ::testing::Test {
           break;
         case 'L':
           loading_task_runner_->PostTask(
+              FROM_HERE, base::Bind(&AppendToVectorTestTask, run_order, task));
+          break;
+        case 'M':
+          loading_control_task_runner_->PostTask(
               FROM_HERE, base::Bind(&AppendToVectorTestTask, run_order, task));
           break;
         case 'I':
@@ -649,9 +662,9 @@ class RendererSchedulerImplTest : public ::testing::Test {
         RendererSchedulerImpl::kEndIdleWhenHiddenDelayMillis);
   }
 
-  static base::TimeDelta suspend_timers_when_backgrounded_delay() {
+  static base::TimeDelta stop_timers_when_backgrounded_delay() {
     return base::TimeDelta::FromMilliseconds(
-        RendererSchedulerImpl::kSuspendTimersWhenBackgroundedDelayMillis);
+        RendererSchedulerImpl::kStopTimersWhenBackgroundedDelayMillis);
   }
 
   static base::TimeDelta rails_response_time() {
@@ -681,6 +694,8 @@ class RendererSchedulerImplTest : public ::testing::Test {
   }
 
   std::unique_ptr<base::SimpleTestTickClock> clock_;
+  TaskQueue::Task fake_task_;
+  scoped_refptr<MainThreadTaskQueue> fake_queue_;
   // Only one of mock_task_runner_ or message_loop_ will be set.
   scoped_refptr<cc::OrderedSimpleTaskRunner> mock_task_runner_;
   std::unique_ptr<base::MessageLoop> message_loop_;
@@ -690,11 +705,12 @@ class RendererSchedulerImplTest : public ::testing::Test {
   scoped_refptr<base::SingleThreadTaskRunner> default_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> loading_task_runner_;
+  scoped_refptr<base::SingleThreadTaskRunner> loading_control_task_runner_;
   scoped_refptr<SingleThreadIdleTaskRunner> idle_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> timer_task_runner_;
   bool simulate_timer_task_ran_;
   bool simulate_compositor_task_ran_;
-  uint64_t next_begin_frame_number_ = cc::BeginFrameArgs::kStartingFrameNumber;
+  uint64_t next_begin_frame_number_ = viz::BeginFrameArgs::kStartingFrameNumber;
 
   DISALLOW_COPY_AND_ASSIGN(RendererSchedulerImplTest);
 };
@@ -742,10 +758,10 @@ TEST_F(RendererSchedulerImplTest, TestPostIdleTask) {
   RunUntilIdle();
   EXPECT_EQ(0, run_count);  // Shouldn't run yet as no WillBeginFrame.
 
-  scheduler_->WillBeginFrame(cc::BeginFrameArgs::Create(
+  scheduler_->WillBeginFrame(viz::BeginFrameArgs::Create(
       BEGINFRAME_FROM_HERE, 0, next_begin_frame_number_++, clock_->NowTicks(),
       base::TimeTicks(), base::TimeDelta::FromMilliseconds(1000),
-      cc::BeginFrameArgs::NORMAL));
+      viz::BeginFrameArgs::NORMAL));
   RunUntilIdle();
   EXPECT_EQ(0, run_count);  // Shouldn't run as no DidCommitFrameToCompositor.
 
@@ -754,10 +770,10 @@ TEST_F(RendererSchedulerImplTest, TestPostIdleTask) {
   RunUntilIdle();
   EXPECT_EQ(0, run_count);  // We missed the deadline.
 
-  scheduler_->WillBeginFrame(cc::BeginFrameArgs::Create(
+  scheduler_->WillBeginFrame(viz::BeginFrameArgs::Create(
       BEGINFRAME_FROM_HERE, 0, next_begin_frame_number_++, clock_->NowTicks(),
       base::TimeTicks(), base::TimeDelta::FromMilliseconds(1000),
-      cc::BeginFrameArgs::NORMAL));
+      viz::BeginFrameArgs::NORMAL));
   clock_->Advance(base::TimeDelta::FromMilliseconds(800));
   scheduler_->DidCommitFrameToCompositor();
   RunUntilIdle();
@@ -816,19 +832,19 @@ TEST_F(RendererSchedulerImplTest, TestDelayedEndIdlePeriodCanceled) {
       FROM_HERE, base::Bind(&IdleTestTask, &run_count, &deadline_in_task));
 
   // Trigger the beginning of an idle period for 1000ms.
-  scheduler_->WillBeginFrame(cc::BeginFrameArgs::Create(
+  scheduler_->WillBeginFrame(viz::BeginFrameArgs::Create(
       BEGINFRAME_FROM_HERE, 0, next_begin_frame_number_++, clock_->NowTicks(),
       base::TimeTicks(), base::TimeDelta::FromMilliseconds(1000),
-      cc::BeginFrameArgs::NORMAL));
+      viz::BeginFrameArgs::NORMAL));
   DoMainFrame();
 
   // End the idle period early (after 500ms), and send a WillBeginFrame which
   // specifies that the next idle period should end 1000ms from now.
   clock_->Advance(base::TimeDelta::FromMilliseconds(500));
-  scheduler_->WillBeginFrame(cc::BeginFrameArgs::Create(
+  scheduler_->WillBeginFrame(viz::BeginFrameArgs::Create(
       BEGINFRAME_FROM_HERE, 0, next_begin_frame_number_++, clock_->NowTicks(),
       base::TimeTicks(), base::TimeDelta::FromMilliseconds(1000),
-      cc::BeginFrameArgs::NORMAL));
+      viz::BeginFrameArgs::NORMAL));
 
   RunUntilIdle();
   EXPECT_EQ(0, run_count);  // Not currently in an idle period.
@@ -1092,7 +1108,7 @@ TEST_F(RendererSchedulerImplTest, Navigation_ResetsTaskCostEstimations) {
   DoMainFrame();
   // A navigation occurs which creates a new Document thus resetting the task
   // cost estimations.
-  scheduler_->OnNavigate();
+  scheduler_->DidStartProvisionalLoad(true);
   SimulateMainThreadGestureStart(TouchEventPolicy::SEND_TOUCH_START,
                                  blink::WebInputEvent::kGestureScrollUpdate);
 
@@ -1263,7 +1279,7 @@ TEST_F(RendererSchedulerImplTest, DISABLED_LoadingUseCase) {
   std::vector<std::string> run_order;
   PostTestTasks(&run_order, "I1 D1 C1 T1 L1 D2 C2 T2 L2");
 
-  scheduler_->OnNavigate();
+  scheduler_->DidStartProvisionalLoad(true);
   EnableIdleTasks();
   RunUntilIdle();
 
@@ -2306,10 +2322,10 @@ TEST_F(RendererSchedulerImplTest, CanExceedIdleDeadlineIfRequired) {
 
   // Next long idle period will be for the maximum time, so
   // CanExceedIdleDeadlineIfRequired should return true.
-  scheduler_->WillBeginFrame(cc::BeginFrameArgs::Create(
+  scheduler_->WillBeginFrame(viz::BeginFrameArgs::Create(
       BEGINFRAME_FROM_HERE, 0, next_begin_frame_number_++, clock_->NowTicks(),
       base::TimeTicks(), base::TimeDelta::FromMilliseconds(1000),
-      cc::BeginFrameArgs::NORMAL));
+      viz::BeginFrameArgs::NORMAL));
   EXPECT_FALSE(scheduler_->CanExceedIdleDeadlineIfRequired());
 }
 
@@ -2354,11 +2370,11 @@ TEST_F(RendererSchedulerImplTest, TimerQueueEnabledByDefault) {
               ::testing::ElementsAre(std::string("T1"), std::string("T2")));
 }
 
-TEST_F(RendererSchedulerImplTest, SuspendAndResumeTimerQueue) {
+TEST_F(RendererSchedulerImplTest, StopAndResumeTimerQueue) {
   std::vector<std::string> run_order;
   PostTestTasks(&run_order, "T1 T2");
 
-  scheduler_->SuspendTimerQueue();
+  scheduler_->PauseTimerQueue();
   RunUntilIdle();
   EXPECT_THAT(run_order, ::testing::ElementsAre());
 
@@ -2368,11 +2384,11 @@ TEST_F(RendererSchedulerImplTest, SuspendAndResumeTimerQueue) {
               ::testing::ElementsAre(std::string("T1"), std::string("T2")));
 }
 
-TEST_F(RendererSchedulerImplTest, SuspendAndThrottleTimerQueue) {
+TEST_F(RendererSchedulerImplTest, StopAndThrottleTimerQueue) {
   std::vector<std::string> run_order;
   PostTestTasks(&run_order, "T1 T2");
 
-  scheduler_->SuspendTimerQueue();
+  scheduler_->PauseTimerQueue();
   RunUntilIdle();
   scheduler_->task_queue_throttler()->IncreaseThrottleRefCount(
       static_cast<TaskQueue*>(timer_task_runner_.get()));
@@ -2380,25 +2396,25 @@ TEST_F(RendererSchedulerImplTest, SuspendAndThrottleTimerQueue) {
   EXPECT_THAT(run_order, ::testing::ElementsAre());
 }
 
-TEST_F(RendererSchedulerImplTest, ThrottleAndSuspendTimerQueue) {
+TEST_F(RendererSchedulerImplTest, ThrottleAndPauseTimerQueue) {
   std::vector<std::string> run_order;
   PostTestTasks(&run_order, "T1 T2");
 
   scheduler_->task_queue_throttler()->IncreaseThrottleRefCount(
       static_cast<TaskQueue*>(timer_task_runner_.get()));
   RunUntilIdle();
-  scheduler_->SuspendTimerQueue();
+  scheduler_->PauseTimerQueue();
   RunUntilIdle();
   EXPECT_THAT(run_order, ::testing::ElementsAre());
 }
 
-TEST_F(RendererSchedulerImplTest, MultipleSuspendsNeedMultipleResumes) {
+TEST_F(RendererSchedulerImplTest, MultipleStopsNeedMultipleResumes) {
   std::vector<std::string> run_order;
   PostTestTasks(&run_order, "T1 T2");
 
-  scheduler_->SuspendTimerQueue();
-  scheduler_->SuspendTimerQueue();
-  scheduler_->SuspendTimerQueue();
+  scheduler_->PauseTimerQueue();
+  scheduler_->PauseTimerQueue();
+  scheduler_->PauseTimerQueue();
   RunUntilIdle();
   EXPECT_THAT(run_order, ::testing::ElementsAre());
 
@@ -2416,14 +2432,15 @@ TEST_F(RendererSchedulerImplTest, MultipleSuspendsNeedMultipleResumes) {
               ::testing::ElementsAre(std::string("T1"), std::string("T2")));
 }
 
-TEST_F(RendererSchedulerImplTest, SuspendRenderer) {
+TEST_F(RendererSchedulerImplTest, PauseRenderer) {
+  scheduler_->SetTimerQueueStoppingWhenBackgroundedEnabled(true);
   // Assume that the renderer is backgrounded.
   scheduler_->SetRendererBackgrounded(true);
 
-  // Tasks in some queues don't fire when the renderer is suspended.
+  // Tasks in some queues don't fire when the renderer is paused.
   std::vector<std::string> run_order;
   PostTestTasks(&run_order, "D1 C1 L1 I1 T1");
-  scheduler_->SuspendRenderer();
+  scheduler_->PauseRenderer();
   EnableIdleTasks();
   RunUntilIdle();
   EXPECT_THAT(run_order,
@@ -2439,8 +2456,8 @@ TEST_F(RendererSchedulerImplTest, SuspendRenderer) {
 
   run_order.clear();
   PostTestTasks(&run_order, "D2 T2");
-  // The renderer is foregrounded. Suspending doesn't take effect.
-  scheduler_->SuspendRenderer();
+  // The renderer is foregrounded. Suspension doesn't take effect.
+  scheduler_->PauseRenderer();
   RunUntilIdle();
   EXPECT_THAT(run_order,
               ::testing::ElementsAre(std::string("D2"), std::string("T2")));
@@ -2452,10 +2469,10 @@ TEST_F(RendererSchedulerImplTest, ResumeRenderer) {
   // Assume that the renderer is backgrounded.
   scheduler_->SetRendererBackgrounded(true);
 
-  // Tasks in some queues don't fire when the renderer is suspended.
+  // Tasks in some queues don't fire when the renderer is paused.
   std::vector<std::string> run_order;
   PostTestTasks(&run_order, "D1 C1 L1 I1 T1");
-  scheduler_->SuspendRenderer();
+  scheduler_->PauseRenderer();
   EnableIdleTasks();
   RunUntilIdle();
   EXPECT_THAT(run_order,
@@ -2470,10 +2487,10 @@ TEST_F(RendererSchedulerImplTest, ResumeRenderer) {
               ::testing::ElementsAre(std::string("L1"), std::string("T1")));
 
   run_order.clear();
-  // No crash occurs when the renderer is suspended again, and
-  // tasks in some queues don't fire because of suspended.
+  // No crash occurs when the renderer is paused again, and
+  // tasks in some queues don't fire because of paused.
   PostTestTasks(&run_order, "D2 C2 L2 I2 T2");
-  scheduler_->SuspendRenderer();
+  scheduler_->PauseRenderer();
   EnableIdleTasks();
   RunUntilIdle();
   EXPECT_THAT(run_order,
@@ -2522,10 +2539,10 @@ TEST_F(RendererSchedulerImplTest, MismatchedDidHandleInputEventOnMainThread) {
 TEST_F(RendererSchedulerImplTest, BeginMainFrameOnCriticalPath) {
   ASSERT_FALSE(scheduler_->BeginMainFrameOnCriticalPath());
 
-  cc::BeginFrameArgs begin_frame_args = cc::BeginFrameArgs::Create(
+  viz::BeginFrameArgs begin_frame_args = viz::BeginFrameArgs::Create(
       BEGINFRAME_FROM_HERE, 0, next_begin_frame_number_++, clock_->NowTicks(),
       base::TimeTicks(), base::TimeDelta::FromMilliseconds(1000),
-      cc::BeginFrameArgs::NORMAL);
+      viz::BeginFrameArgs::NORMAL);
   scheduler_->WillBeginFrame(begin_frame_args);
   ASSERT_TRUE(scheduler_->BeginMainFrameOnCriticalPath());
 
@@ -2543,7 +2560,7 @@ TEST_F(RendererSchedulerImplTest, ShutdownPreventsPostingOfNewTasks) {
 }
 
 TEST_F(RendererSchedulerImplTest, TestRendererBackgroundedTimerSuspension) {
-  scheduler_->SetTimerQueueSuspensionWhenBackgroundedEnabled(true);
+  scheduler_->SetTimerQueueStoppingWhenBackgroundedEnabled(true);
 
   std::vector<std::string> run_order;
   PostTestTasks(&run_order, "T1 T2");
@@ -2567,14 +2584,14 @@ TEST_F(RendererSchedulerImplTest, TestRendererBackgroundedTimerSuspension) {
   EXPECT_THAT(run_order, ::testing::ElementsAre(std::string("T3")));
 
   // Advance the time until after the scheduled timer queue suspension.
-  now = base::TimeTicks() + suspend_timers_when_backgrounded_delay() +
+  now = base::TimeTicks() + stop_timers_when_backgrounded_delay() +
         base::TimeDelta::FromMilliseconds(10);
   run_order.clear();
   clock_->SetNowTicks(now);
   RunUntilIdle();
   ASSERT_TRUE(run_order.empty());
 
-  // Timer tasks should be suspended until the foregrounded signal.
+  // Timer tasks should be paused until the foregrounded signal.
   PostTestTasks(&run_order, "T4 T5");
   now += base::TimeDelta::FromSeconds(10);
   clock_->SetNowTicks(now);
@@ -2902,10 +2919,10 @@ TEST_F(RendererSchedulerImplTest, ModeratelyExpensiveTimer_NotBlocked) {
   for (int i = 0; i < 20; i++) {
     simulate_timer_task_ran_ = false;
 
-    cc::BeginFrameArgs begin_frame_args = cc::BeginFrameArgs::Create(
+    viz::BeginFrameArgs begin_frame_args = viz::BeginFrameArgs::Create(
         BEGINFRAME_FROM_HERE, 0, next_begin_frame_number_++, clock_->NowTicks(),
         base::TimeTicks(), base::TimeDelta::FromMilliseconds(16),
-        cc::BeginFrameArgs::NORMAL);
+        viz::BeginFrameArgs::NORMAL);
     begin_frame_args.on_critical_path = false;
     scheduler_->WillBeginFrame(begin_frame_args);
 
@@ -2941,10 +2958,10 @@ TEST_F(RendererSchedulerImplTest,
   for (int i = 0; i < 20; i++) {
     simulate_timer_task_ran_ = false;
 
-    cc::BeginFrameArgs begin_frame_args = cc::BeginFrameArgs::Create(
+    viz::BeginFrameArgs begin_frame_args = viz::BeginFrameArgs::Create(
         BEGINFRAME_FROM_HERE, 0, next_begin_frame_number_++, clock_->NowTicks(),
         base::TimeTicks(), base::TimeDelta::FromMilliseconds(16),
-        cc::BeginFrameArgs::NORMAL);
+        viz::BeginFrameArgs::NORMAL);
     begin_frame_args.on_critical_path = false;
     scheduler_->WillBeginFrame(begin_frame_args);
     scheduler_->DidAnimateForInputOnCompositorThread();
@@ -2983,10 +3000,10 @@ TEST_F(RendererSchedulerImplTest,
   for (int i = 0; i < 20; i++) {
     simulate_timer_task_ran_ = false;
 
-    cc::BeginFrameArgs begin_frame_args = cc::BeginFrameArgs::Create(
+    viz::BeginFrameArgs begin_frame_args = viz::BeginFrameArgs::Create(
         BEGINFRAME_FROM_HERE, 0, next_begin_frame_number_++, clock_->NowTicks(),
         base::TimeTicks(), base::TimeDelta::FromMilliseconds(16),
-        cc::BeginFrameArgs::NORMAL);
+        viz::BeginFrameArgs::NORMAL);
     begin_frame_args.on_critical_path = false;
     scheduler_->WillBeginFrame(begin_frame_args);
 
@@ -3038,7 +3055,7 @@ TEST_F(RendererSchedulerImplTest,
 // TODO(alexclarke): Reenable once we've reinstaed the Loading UseCase.
 TEST_F(RendererSchedulerImplTest,
        DISABLED_EstimateLongestJankFreeTaskDuration_UseCase_) {
-  scheduler_->OnNavigate();
+  scheduler_->DidStartProvisionalLoad(true);
   EXPECT_EQ(UseCase::LOADING, ForceUpdatePolicyAndGetCurrentUseCase());
   EXPECT_EQ(rails_response_time(),
             scheduler_->EstimateLongestJankFreeTaskDuration());
@@ -3048,10 +3065,10 @@ TEST_F(RendererSchedulerImplTest,
        EstimateLongestJankFreeTaskDuration_UseCase_MAIN_THREAD_GESTURE) {
   SimulateMainThreadGestureStart(TouchEventPolicy::SEND_TOUCH_START,
                                  blink::WebInputEvent::kGestureScrollUpdate);
-  cc::BeginFrameArgs begin_frame_args = cc::BeginFrameArgs::Create(
+  viz::BeginFrameArgs begin_frame_args = viz::BeginFrameArgs::Create(
       BEGINFRAME_FROM_HERE, 0, next_begin_frame_number_++, clock_->NowTicks(),
       base::TimeTicks(), base::TimeDelta::FromMilliseconds(16),
-      cc::BeginFrameArgs::NORMAL);
+      viz::BeginFrameArgs::NORMAL);
   begin_frame_args.on_critical_path = false;
   scheduler_->WillBeginFrame(begin_frame_args);
 
@@ -3072,10 +3089,10 @@ TEST_F(RendererSchedulerImplTest,
 TEST_F(
     RendererSchedulerImplTest,
     EstimateLongestJankFreeTaskDuration_UseCase_MAIN_THREAD_CUSTOM_INPUT_HANDLING) {
-  cc::BeginFrameArgs begin_frame_args = cc::BeginFrameArgs::Create(
+  viz::BeginFrameArgs begin_frame_args = viz::BeginFrameArgs::Create(
       BEGINFRAME_FROM_HERE, 0, next_begin_frame_number_++, clock_->NowTicks(),
       base::TimeTicks(), base::TimeDelta::FromMilliseconds(16),
-      cc::BeginFrameArgs::NORMAL);
+      viz::BeginFrameArgs::NORMAL);
   begin_frame_args.on_critical_path = false;
   scheduler_->WillBeginFrame(begin_frame_args);
 
@@ -3097,10 +3114,10 @@ TEST_F(RendererSchedulerImplTest,
        EstimateLongestJankFreeTaskDuration_UseCase_SYNCHRONIZED_GESTURE) {
   SimulateCompositorGestureStart(TouchEventPolicy::DONT_SEND_TOUCH_START);
 
-  cc::BeginFrameArgs begin_frame_args = cc::BeginFrameArgs::Create(
+  viz::BeginFrameArgs begin_frame_args = viz::BeginFrameArgs::Create(
       BEGINFRAME_FROM_HERE, 0, next_begin_frame_number_++, clock_->NowTicks(),
       base::TimeTicks(), base::TimeDelta::FromMilliseconds(16),
-      cc::BeginFrameArgs::NORMAL);
+      viz::BeginFrameArgs::NORMAL);
   begin_frame_args.on_critical_path = true;
   scheduler_->WillBeginFrame(begin_frame_args);
 
@@ -3158,13 +3175,13 @@ TEST_F(RendererSchedulerImplTest, BlockedTimerNotification) {
             web_view_scheduler.Interventions()[0].find("crbug.com/574343"));
 }
 
-TEST_F(RendererSchedulerImplTest, BlockedTimerNotification_TimersSuspended) {
+TEST_F(RendererSchedulerImplTest, BlockedTimerNotification_TimersStopped) {
   // Make sure we don't report warnings about blocked tasks when timers are
   // being blocked for other reasons.
   WebViewSchedulerImplForTest web_view_scheduler(scheduler_.get());
 
   scheduler_->SetHasVisibleRenderWidgetWithTouchHandler(true);
-  scheduler_->SuspendTimerQueue();
+  scheduler_->PauseTimerQueue();
   DoMainFrame();
   SimulateExpensiveTasks(timer_task_runner_);
   SimulateCompositorGestureStart(TouchEventPolicy::SEND_TOUCH_START);
@@ -3209,10 +3226,10 @@ TEST_F(RendererSchedulerImplTest,
   SimulateExpensiveTasks(timer_task_runner_);
   SimulateCompositorGestureStart(TouchEventPolicy::DONT_SEND_TOUCH_START);
 
-  cc::BeginFrameArgs begin_frame_args = cc::BeginFrameArgs::Create(
+  viz::BeginFrameArgs begin_frame_args = viz::BeginFrameArgs::Create(
       BEGINFRAME_FROM_HERE, 0, next_begin_frame_number_++, clock_->NowTicks(),
       base::TimeTicks(), base::TimeDelta::FromMilliseconds(16),
-      cc::BeginFrameArgs::NORMAL);
+      viz::BeginFrameArgs::NORMAL);
   begin_frame_args.on_critical_path = true;
   scheduler_->WillBeginFrame(begin_frame_args);
 
@@ -3280,10 +3297,10 @@ TEST_F(RendererSchedulerImplTest,
                             scheduler_->TimerTaskQueue()));
 
   for (int i = 0; i < 1000; i++) {
-    cc::BeginFrameArgs begin_frame_args = cc::BeginFrameArgs::Create(
+    viz::BeginFrameArgs begin_frame_args = viz::BeginFrameArgs::Create(
         BEGINFRAME_FROM_HERE, 0, next_begin_frame_number_++, clock_->NowTicks(),
         base::TimeTicks(), base::TimeDelta::FromMilliseconds(16),
-        cc::BeginFrameArgs::NORMAL);
+        viz::BeginFrameArgs::NORMAL);
     begin_frame_args.on_critical_path = true;
     scheduler_->WillBeginFrame(begin_frame_args);
     scheduler_->DidHandleInputEventOnCompositorThread(
@@ -3329,7 +3346,7 @@ TEST_F(RendererSchedulerImplTest,
 }
 
 TEST_F(RendererSchedulerImplTest,
-       SYNCHRONIZED_GESTURE_TimerTaskThrottling_TimersSuspended) {
+       SYNCHRONIZED_GESTURE_TimerTaskThrottling_TimersStopped) {
   SimulateCompositorGestureStart(TouchEventPolicy::SEND_TOUCH_START);
 
   base::TimeTicks first_throttled_run_time =
@@ -3342,12 +3359,12 @@ TEST_F(RendererSchedulerImplTest,
       FROM_HERE, base::Bind(SlowCountingTask, &count, clock_.get(), 7,
                             scheduler_->TimerTaskQueue()));
 
-  bool suspended = false;
+  bool paused = false;
   for (int i = 0; i < 1000; i++) {
-    cc::BeginFrameArgs begin_frame_args = cc::BeginFrameArgs::Create(
+    viz::BeginFrameArgs begin_frame_args = viz::BeginFrameArgs::Create(
         BEGINFRAME_FROM_HERE, 0, next_begin_frame_number_++, clock_->NowTicks(),
         base::TimeTicks(), base::TimeDelta::FromMilliseconds(16),
-        cc::BeginFrameArgs::NORMAL);
+        viz::BeginFrameArgs::NORMAL);
     begin_frame_args.on_critical_path = true;
     scheduler_->WillBeginFrame(begin_frame_args);
     scheduler_->DidHandleInputEventOnCompositorThread(
@@ -3370,7 +3387,7 @@ TEST_F(RendererSchedulerImplTest,
     // will be disabled until the throttled queue is pumped.
     bool expect_queue_enabled =
         (i == 0) || (clock_->NowTicks() > first_throttled_run_time);
-    if (suspended)
+    if (paused)
       expect_queue_enabled = false;
     EXPECT_EQ(expect_queue_enabled,
               scheduler_->TimerTaskQueue()->IsQueueEnabled())
@@ -3378,15 +3395,15 @@ TEST_F(RendererSchedulerImplTest,
 
     // After we've run any expensive tasks suspend the queue.  The throttling
     // helper should /not/ re-enable this queue under any circumstances while
-    // timers are suspended.
-    if (count > 0 && !suspended) {
+    // timers are paused.
+    if (count > 0 && !paused) {
       EXPECT_EQ(2u, count);
-      scheduler_->SuspendTimerQueue();
-      suspended = true;
+      scheduler_->PauseTimerQueue();
+      paused = true;
     }
   }
 
-  // Make sure the timer queue stayed suspended!
+  // Make sure the timer queue stayed paused!
   EXPECT_EQ(2u, count);
 }
 
@@ -3402,10 +3419,10 @@ TEST_F(RendererSchedulerImplTest,
                             scheduler_->TimerTaskQueue()));
 
   for (int i = 0; i < 1000; i++) {
-    cc::BeginFrameArgs begin_frame_args = cc::BeginFrameArgs::Create(
+    viz::BeginFrameArgs begin_frame_args = viz::BeginFrameArgs::Create(
         BEGINFRAME_FROM_HERE, 0, next_begin_frame_number_++, clock_->NowTicks(),
         base::TimeTicks(), base::TimeDelta::FromMilliseconds(16),
-        cc::BeginFrameArgs::NORMAL);
+        viz::BeginFrameArgs::NORMAL);
     begin_frame_args.on_critical_path = true;
     scheduler_->WillBeginFrame(begin_frame_args);
     scheduler_->DidHandleInputEventOnCompositorThread(
@@ -3442,10 +3459,10 @@ TEST_F(RendererSchedulerImplTest,
       FakeInputEvent(blink::WebInputEvent::kGestureScrollUpdate),
       RendererScheduler::InputEventState::EVENT_CONSUMED_BY_COMPOSITOR);
 
-  cc::BeginFrameArgs begin_frame_args = cc::BeginFrameArgs::Create(
+  viz::BeginFrameArgs begin_frame_args = viz::BeginFrameArgs::Create(
       BEGINFRAME_FROM_HERE, 0, next_begin_frame_number_++, clock_->NowTicks(),
       base::TimeTicks(), base::TimeDelta::FromMilliseconds(16),
-      cc::BeginFrameArgs::NORMAL);
+      viz::BeginFrameArgs::NORMAL);
   begin_frame_args.on_critical_path = true;
   scheduler_->WillBeginFrame(begin_frame_args);
 
@@ -3504,10 +3521,10 @@ TEST_F(RendererSchedulerImplTest, SYNCHRONIZED_GESTURE_CompositingExpensive) {
     PostTestTasks(&run_order, "T1");
 
   for (int i = 0; i < 100; i++) {
-    cc::BeginFrameArgs begin_frame_args = cc::BeginFrameArgs::Create(
+    viz::BeginFrameArgs begin_frame_args = viz::BeginFrameArgs::Create(
         BEGINFRAME_FROM_HERE, 0, next_begin_frame_number_++, clock_->NowTicks(),
         base::TimeTicks(), base::TimeDelta::FromMilliseconds(16),
-        cc::BeginFrameArgs::NORMAL);
+        viz::BeginFrameArgs::NORMAL);
     begin_frame_args.on_critical_path = true;
     scheduler_->WillBeginFrame(begin_frame_args);
     scheduler_->DidHandleInputEventOnCompositorThread(
@@ -3546,10 +3563,10 @@ TEST_F(RendererSchedulerImplTest, MAIN_THREAD_CUSTOM_INPUT_HANDLING) {
     PostTestTasks(&run_order, "T1");
 
   for (int i = 0; i < 100; i++) {
-    cc::BeginFrameArgs begin_frame_args = cc::BeginFrameArgs::Create(
+    viz::BeginFrameArgs begin_frame_args = viz::BeginFrameArgs::Create(
         BEGINFRAME_FROM_HERE, 0, next_begin_frame_number_++, clock_->NowTicks(),
         base::TimeTicks(), base::TimeDelta::FromMilliseconds(16),
-        cc::BeginFrameArgs::NORMAL);
+        viz::BeginFrameArgs::NORMAL);
     begin_frame_args.on_critical_path = true;
     scheduler_->WillBeginFrame(begin_frame_args);
     scheduler_->DidHandleInputEventOnCompositorThread(
@@ -3590,10 +3607,10 @@ TEST_F(RendererSchedulerImplTest, MAIN_THREAD_GESTURE) {
     PostTestTasks(&run_order, "T1");
 
   for (int i = 0; i < 100; i++) {
-    cc::BeginFrameArgs begin_frame_args = cc::BeginFrameArgs::Create(
+    viz::BeginFrameArgs begin_frame_args = viz::BeginFrameArgs::Create(
         BEGINFRAME_FROM_HERE, 0, next_begin_frame_number_++, clock_->NowTicks(),
         base::TimeTicks(), base::TimeDelta::FromMilliseconds(16),
-        cc::BeginFrameArgs::NORMAL);
+        viz::BeginFrameArgs::NORMAL);
     begin_frame_args.on_critical_path = true;
     scheduler_->WillBeginFrame(begin_frame_args);
     scheduler_->DidHandleInputEventOnCompositorThread(
@@ -3667,7 +3684,7 @@ TEST_F(RendererSchedulerImplTest, TestLoadRAILMode) {
   EXPECT_CALL(observer, OnRAILModeChanged(v8::PERFORMANCE_ANIMATION));
   EXPECT_CALL(observer, OnRAILModeChanged(v8::PERFORMANCE_LOAD));
 
-  scheduler_->OnNavigate();
+  scheduler_->DidStartProvisionalLoad(true);
   EXPECT_EQ(v8::PERFORMANCE_LOAD, GetRAILMode());
   EXPECT_EQ(UseCase::LOADING, ForceUpdatePolicyAndGetCurrentUseCase());
   scheduler_->OnFirstMeaningfulPaint();
@@ -3682,7 +3699,7 @@ TEST_F(RendererSchedulerImplTest, InputTerminatesLoadRAILMode) {
   EXPECT_CALL(observer, OnRAILModeChanged(v8::PERFORMANCE_ANIMATION));
   EXPECT_CALL(observer, OnRAILModeChanged(v8::PERFORMANCE_LOAD));
 
-  scheduler_->OnNavigate();
+  scheduler_->DidStartProvisionalLoad(true);
   EXPECT_EQ(v8::PERFORMANCE_LOAD, GetRAILMode());
   EXPECT_EQ(UseCase::LOADING, ForceUpdatePolicyAndGetCurrentUseCase());
   scheduler_->DidHandleInputEventOnCompositorThread(
@@ -3713,13 +3730,13 @@ TEST_F(RendererSchedulerImplTest, UnthrottledTaskRunner) {
   unthrottled_task_runner->PostTask(
       FROM_HERE, base::Bind(SlowCountingTask, &unthrottled_count, clock_.get(),
                             7, unthrottled_task_runner));
-  scheduler_->SuspendTimerQueue();
+  scheduler_->PauseTimerQueue();
 
   for (int i = 0; i < 1000; i++) {
-    cc::BeginFrameArgs begin_frame_args = cc::BeginFrameArgs::Create(
+    viz::BeginFrameArgs begin_frame_args = viz::BeginFrameArgs::Create(
         BEGINFRAME_FROM_HERE, 0, next_begin_frame_number_++, clock_->NowTicks(),
         base::TimeTicks(), base::TimeDelta::FromMilliseconds(16),
-        cc::BeginFrameArgs::NORMAL);
+        viz::BeginFrameArgs::NORMAL);
     begin_frame_args.on_critical_path = true;
     scheduler_->WillBeginFrame(begin_frame_args);
     scheduler_->DidHandleInputEventOnCompositorThread(
@@ -3749,8 +3766,10 @@ TEST_F(RendererSchedulerImplTest, EnableVirtualTime) {
   scoped_refptr<MainThreadTaskQueue> loading_tq =
       scheduler_->NewLoadingTaskQueue(
           MainThreadTaskQueue::QueueType::FRAME_LOADING);
+  scoped_refptr<TaskQueue> loading_control_tq = scheduler_->NewLoadingTaskQueue(
+      MainThreadTaskQueue::QueueType::FRAME_LOADING_CONTROL);
   scoped_refptr<MainThreadTaskQueue> timer_tq = scheduler_->NewTimerTaskQueue(
-      MainThreadTaskQueue::QueueType::FRAME_TIMER);
+      MainThreadTaskQueue::QueueType::FRAME_THROTTLEABLE);
   scoped_refptr<MainThreadTaskQueue> unthrottled_tq =
       scheduler_->NewTaskQueue(MainThreadTaskQueue::QueueCreationParams(
           MainThreadTaskQueue::QueueType::UNTHROTTLED));
@@ -3771,6 +3790,8 @@ TEST_F(RendererSchedulerImplTest, EnableVirtualTime) {
             scheduler_->real_time_domain());
 
   EXPECT_EQ(loading_tq->GetTimeDomain(), scheduler_->GetVirtualTimeDomain());
+  EXPECT_EQ(loading_control_tq->GetTimeDomain(),
+            scheduler_->GetVirtualTimeDomain());
   EXPECT_EQ(timer_tq->GetTimeDomain(), scheduler_->GetVirtualTimeDomain());
   EXPECT_EQ(unthrottled_tq->GetTimeDomain(),
             scheduler_->GetVirtualTimeDomain());
@@ -3780,10 +3801,11 @@ TEST_F(RendererSchedulerImplTest, EnableVirtualTime) {
           ->NewLoadingTaskQueue(MainThreadTaskQueue::QueueType::FRAME_LOADING)
           ->GetTimeDomain(),
       scheduler_->GetVirtualTimeDomain());
-  EXPECT_EQ(
-      scheduler_->NewTimerTaskQueue(MainThreadTaskQueue::QueueType::FRAME_TIMER)
-          ->GetTimeDomain(),
-      scheduler_->GetVirtualTimeDomain());
+  EXPECT_EQ(scheduler_
+                ->NewTimerTaskQueue(
+                    MainThreadTaskQueue::QueueType::FRAME_THROTTLEABLE)
+                ->GetTimeDomain(),
+            scheduler_->GetVirtualTimeDomain());
   EXPECT_EQ(scheduler_
                 ->NewTaskQueue(MainThreadTaskQueue::QueueCreationParams(
                     MainThreadTaskQueue::QueueType::UNTHROTTLED))
@@ -3800,7 +3822,7 @@ TEST_F(RendererSchedulerImplTest, DisableVirtualTimeForTesting) {
   scheduler_->EnableVirtualTime();
 
   scoped_refptr<MainThreadTaskQueue> timer_tq = scheduler_->NewTimerTaskQueue(
-      MainThreadTaskQueue::QueueType::FRAME_TIMER);
+      MainThreadTaskQueue::QueueType::FRAME_THROTTLEABLE);
   scoped_refptr<MainThreadTaskQueue> unthrottled_tq =
       scheduler_->NewTaskQueue(MainThreadTaskQueue::QueueCreationParams(
           MainThreadTaskQueue::QueueType::UNTHROTTLED));
@@ -3944,8 +3966,7 @@ TEST_F(RendererSchedulerImplTest, ResponsiveMainThreadDuringTask) {
   EXPECT_FALSE(
       scheduler_->MainThreadSeemsUnresponsive(responsiveness_threshold()));
   clock_->Advance(base::TimeDelta::FromSecondsD(2));
-  scheduler_->WillProcessTask(
-      (clock_->NowTicks() - base::TimeTicks()).InSecondsF());
+  scheduler_->OnTaskStarted(fake_queue_.get(), fake_task_, clock_->NowTicks());
   EXPECT_FALSE(
       scheduler_->MainThreadSeemsUnresponsive(responsiveness_threshold()));
 }
@@ -4070,6 +4091,19 @@ TEST_F(RendererSchedulerImplTest, DidCommitProvisionalLoad) {
                                        true /* is_reload */,
                                        true /* is_main_frame */);
   EXPECT_TRUE(scheduler_->waiting_for_meaningful_paint());  // State cleared.
+}
+
+TEST_F(RendererSchedulerImplTest, LoadingControlTasks) {
+  // Expect control loading tasks (M) to jump ahead of any regular loading
+  // tasks (L).
+  std::vector<std::string> run_order;
+  PostTestTasks(&run_order, "L1 L2 M1 L3 L4 M2 L5 L6");
+  RunUntilIdle();
+  EXPECT_THAT(run_order,
+              testing::ElementsAre(std::string("M1"), std::string("M2"),
+                                   std::string("L1"), std::string("L2"),
+                                   std::string("L3"), std::string("L4"),
+                                   std::string("L5"), std::string("L6")));
 }
 
 }  // namespace scheduler

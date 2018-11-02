@@ -26,7 +26,7 @@ class TestAPIAnimationObserver : public views::BoundsAnimatorObserver {
   // views::BoundsAnimatorObserver overrides:
   void OnBoundsAnimatorProgressed(views::BoundsAnimator* animator) override {}
   void OnBoundsAnimatorDone(views::BoundsAnimator* animator) override {
-    base::MessageLoop::current()->QuitWhenIdle();
+    base::RunLoop::QuitCurrentWhenIdleDeprecated();
   }
 
  private:
@@ -116,11 +116,12 @@ void ShelfViewTestAPI::RunMessageLoopUntilAnimationsDone() {
   shelf_view_->bounds_animator_->RemoveObserver(observer.get());
 }
 
-void ShelfViewTestAPI::CloseMenu() {
+bool ShelfViewTestAPI::CloseMenu() {
   if (!shelf_view_->launcher_menu_runner_)
-    return;
+    return false;
 
   shelf_view_->launcher_menu_runner_->Cancel();
+  return true;
 }
 
 OverflowBubble* ShelfViewTestAPI::overflow_bubble() {

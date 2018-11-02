@@ -70,14 +70,14 @@ bool NotesSyncTest::SetupClients() {
     return false;
 
   if (use_verifier())
-    WaitForNotesModelToLoad(NotesModelFactory::GetForProfile(verifier()));
+    WaitForNotesModelToLoad(NotesModelFactory::GetForBrowserContext(verifier()));
 
   return true;
 }
 
 void NotesSyncTest::WaitForDataModels(Profile* profile) {
   SyncTest::WaitForDataModels(profile);
-  WaitForNotesModelToLoad(NotesModelFactory::GetForProfile(profile));
+  WaitForNotesModelToLoad(NotesModelFactory::GetForBrowserContext(profile));
 }
 
 void NotesSyncTest::VerifyNotesModelMatchesFakeServer(int index) {

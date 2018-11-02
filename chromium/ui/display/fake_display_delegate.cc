@@ -108,10 +108,6 @@ void FakeDisplayDelegate::Initialize() {
   initialized_ = true;
 }
 
-void FakeDisplayDelegate::GrabServer() {}
-
-void FakeDisplayDelegate::UngrabServer() {}
-
 void FakeDisplayDelegate::TakeDisplayControl(
     const DisplayControlCallback& callback) {
   callback.Run(false);
@@ -122,21 +118,12 @@ void FakeDisplayDelegate::RelinquishDisplayControl(
   callback.Run(false);
 }
 
-void FakeDisplayDelegate::SyncWithServer() {}
-
-void FakeDisplayDelegate::SetBackgroundColor(uint32_t color_argb) {}
-
-void FakeDisplayDelegate::ForceDPMSOn() {}
-
 void FakeDisplayDelegate::GetDisplays(const GetDisplaysCallback& callback) {
   std::vector<DisplaySnapshot*> displays;
   for (auto& display : displays_)
     displays.push_back(display.get());
   callback.Run(displays);
 }
-
-void FakeDisplayDelegate::AddMode(const DisplaySnapshot& output,
-                                  const DisplayMode* mode) {}
 
 void FakeDisplayDelegate::Configure(const DisplaySnapshot& output,
                                     const DisplayMode* mode,
@@ -169,8 +156,6 @@ void FakeDisplayDelegate::Configure(const DisplaySnapshot& output,
   }
 }
 
-void FakeDisplayDelegate::CreateFrameBuffer(const gfx::Size& size) {}
-
 void FakeDisplayDelegate::GetHDCPState(const DisplaySnapshot& output,
                                        const GetHDCPStateCallback& callback) {
   callback.Run(false, HDCP_STATE_UNDESIRED);
@@ -180,18 +165,6 @@ void FakeDisplayDelegate::SetHDCPState(const DisplaySnapshot& output,
                                        HDCPState state,
                                        const SetHDCPStateCallback& callback) {
   callback.Run(false);
-}
-
-std::vector<ColorCalibrationProfile>
-FakeDisplayDelegate::GetAvailableColorCalibrationProfiles(
-    const DisplaySnapshot& output) {
-  return std::vector<ColorCalibrationProfile>();
-}
-
-bool FakeDisplayDelegate::SetColorCalibrationProfile(
-    const DisplaySnapshot& output,
-    ColorCalibrationProfile new_profile) {
-  return false;
 }
 
 bool FakeDisplayDelegate::SetColorCorrection(

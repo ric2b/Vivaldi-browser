@@ -63,10 +63,10 @@ class DownloadSuggestionsProvider
       const ntp_snippets::ContentSuggestion::ID& suggestion_id) override;
   void FetchSuggestionImage(
       const ntp_snippets::ContentSuggestion::ID& suggestion_id,
-      const ntp_snippets::ImageFetchedCallback& callback) override;
+      ntp_snippets::ImageFetchedCallback callback) override;
   void Fetch(const ntp_snippets::Category& category,
              const std::set<std::string>& known_suggestion_ids,
-             const ntp_snippets::FetchDoneCallback& callback) override;
+             ntp_snippets::FetchDoneCallback callback) override;
   void ClearHistory(
       base::Time begin,
       base::Time end,
@@ -74,7 +74,7 @@ class DownloadSuggestionsProvider
   void ClearCachedSuggestions(ntp_snippets::Category category) override;
   void GetDismissedSuggestionsForDebugging(
       ntp_snippets::Category category,
-      const ntp_snippets::DismissedSuggestionsCallback& callback) override;
+      ntp_snippets::DismissedSuggestionsCallback callback) override;
   void ClearDismissedSuggestionsForDebugging(
       ntp_snippets::Category category) override;
 
@@ -84,7 +84,7 @@ class DownloadSuggestionsProvider
   friend class DownloadSuggestionsProviderTest;
 
   void GetPagesMatchingQueryCallbackForGetDismissedSuggestions(
-      const ntp_snippets::DismissedSuggestionsCallback& callback,
+      ntp_snippets::DismissedSuggestionsCallback callback,
       const std::vector<offline_pages::OfflinePageItem>& offline_pages) const;
 
   // OfflinePageModel::Observer implementation.

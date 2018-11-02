@@ -14,7 +14,6 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/bindings_policy.h"
 #include "content/public/common/url_constants.h"
-#include "net/cert/x509_certificate.h"
 #include "ui/gfx/geometry/rect.h"
 
 #include "base/bind.h"
@@ -241,6 +240,8 @@ WebContentsDelegate::GetContentVideoViewEmbedder() {
 bool WebContentsDelegate::ShouldBlockMediaRequest(const GURL& url) {
   return false;
 }
+
+void WebContentsDelegate::SetOverlayMode(bool use_overlay_mode) {}
 #endif
 
 bool WebContentsDelegate::RequestPpapiBrokerPermission(
@@ -306,11 +307,6 @@ DownloadItemAction::DownloadItemAction(
 }
 
 DownloadItemAction::~DownloadItemAction() {
-}
-
-void WebContentsDelegate::ShowCertificateViewerInDevTools(
-    WebContents* web_contents,
-    scoped_refptr<net::X509Certificate> certificate) {
 }
 
 void WebContentsDelegate::RequestAppBannerFromDevTools(

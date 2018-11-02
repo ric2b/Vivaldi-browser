@@ -21,6 +21,7 @@
 
 #if defined(USE_AURA)
 #include "ui/aura/client/drag_drop_client.h"
+#include "ui/aura/client/drag_drop_client_observer.h"
 #include "ui/events/event.h"
 #include "ui/events/event_handler.h"
 #endif
@@ -134,9 +135,9 @@ class TestButtonListener : public ButtonListener {
 
   void ButtonPressed(Button* sender, const ui::Event& event) override {
     last_sender_ = sender;
-    CustomButton* custom_button = CustomButton::AsCustomButton(sender);
-    DCHECK(custom_button);
-    last_sender_state_ = custom_button->state();
+    Button* button = Button::AsButton(sender);
+    DCHECK(button);
+    last_sender_state_ = button->state();
     last_event_type_ = event.type();
   }
 
@@ -162,9 +163,9 @@ class TestMenuButtonListener : public MenuButtonListener {
                            const gfx::Point& point,
                            const ui::Event* event) override {
     last_source_ = source;
-    CustomButton* custom_button = CustomButton::AsCustomButton(source);
-    DCHECK(custom_button);
-    last_source_state_ = custom_button->state();
+    Button* button = Button::AsButton(source);
+    DCHECK(button);
+    last_source_state_ = button->state();
   }
 
   View* last_source() { return last_source_; }
@@ -253,6 +254,9 @@ class TestDragDropClient : public aura::client::DragDropClient,
                        ui::DragDropTypes::DragEventSource source) override;
   void DragCancel() override;
   bool IsDragDropInProgress() override;
+  void AddObserver(aura::client::DragDropClientObserver* observer) override {}
+  void RemoveObserver(aura::client::DragDropClientObserver* observer) override {
+  }
 
   // ui::EventHandler:
   void OnMouseEvent(ui::MouseEvent* event) override;

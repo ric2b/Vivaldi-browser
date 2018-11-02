@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/test/scoped_task_environment.h"
 #include "content/browser/accessibility/browser_accessibility.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -39,6 +40,8 @@ class MAYBE_OneShotAccessibilityTreeSearchTest : public testing::Test {
 
  protected:
   void SetUp() override;
+
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
 
   std::unique_ptr<BrowserAccessibilityManager> tree_;
 

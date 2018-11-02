@@ -81,7 +81,6 @@
 #include "chrome/browser/prefs/chrome_pref_service_factory.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/prefs/pref_metrics_service.h"
-#include "chrome/browser/printing/cloud_print/cloud_print_proxy_service.h"
 #include "chrome/browser/printing/cloud_print/cloud_print_proxy_service_factory.h"
 #include "chrome/browser/process_singleton.h"
 #include "chrome/browser/profiles/profile.h"
@@ -214,7 +213,7 @@
 #include "chrome/browser/downgrade/user_data_downgrade.h"
 #include "chrome/browser/first_run/upgrade_util_win.h"
 #include "chrome/browser/ui/network_profile_bubble.h"
-#include "chrome/browser/ui/views/try_chrome_dialog_view.h"
+#include "chrome/browser/ui/views/try_chrome_dialog.h"
 #include "chrome/browser/win/browser_util.h"
 #include "chrome/browser/win/chrome_select_file_dialog_factory.h"
 #include "chrome/install_static/install_util.h"
@@ -253,9 +252,12 @@
 #include "extensions/components/javascript_dialog_extensions_client/javascript_dialog_extension_client_impl.h"
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
-#if BUILDFLAG(ENABLE_PRINT_PREVIEW) && !defined(OFFICIAL_BUILD)
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
+#include "chrome/browser/printing/cloud_print/cloud_print_proxy_service.h"
+#if !defined(OFFICIAL_BUILD)
 #include "printing/printed_document.h"
-#endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW) && !defined(OFFICIAL_BUILD)
+#endif  // !defined(OFFICIAL_BUILD)
+#endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
 #if BUILDFLAG(ENABLE_RLZ)
 #include "chrome/browser/rlz/chrome_rlz_tracker_delegate.h"
@@ -486,10 +488,11 @@ void RegisterComponentsForUpdate() {
 
 #if !defined(OS_ANDROID)
   RegisterPepperFlashComponent(cus);
-#if !defined(OS_CHROMEOS)
-  RegisterWidevineCdmComponent(cus);
-#endif  // !defined(OS_CHROMEOS)
 #endif  // !defined(OS_ANDROID)
+
+#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
+  RegisterWidevineCdmComponent(cus);
+#endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
 #if !defined(DISABLE_NACL) && !defined(OS_ANDROID)
 #if defined(OS_CHROMEOS)
@@ -666,46 +669,11 @@ ChromeBrowserMainParts::~ChromeBrowserMainParts() {
 
 // This will be called after the command-line has been mutated by about:flags
 void ChromeBrowserMainParts::SetupFieldTrials() {
-  TRACE_EVENT0("startup", "ChromeBrowserMainParts::SetupFieldTrials");
-
   // Initialize FieldTrialList to support FieldTrials that use one-time
   // randomization.
   DCHECK(!field_trial_list_);
-  field_trial_list_.reset(
-      new base::FieldTrialList(browser_process_->GetMetricsServicesManager()
-                                   ->CreateEntropyProvider()));
-
-  const base::CommandLine* command_line =
-      base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(variations::switches::kEnableBenchmarking) ||
-      command_line->HasSwitch(cc::switches::kEnableGpuBenchmarking)) {
-    base::FieldTrial::EnableBenchmarking();
-  }
-
-  if (command_line->HasSwitch(variations::switches::kForceFieldTrialParams)) {
-    bool result = variations::AssociateParamsFromString(
-        command_line->GetSwitchValueASCII(
-            variations::switches::kForceFieldTrialParams));
-    CHECK(result) << "Invalid --"
-                  << variations::switches::kForceFieldTrialParams
-                  << " list specified.";
-  }
-
-  // Ensure any field trials specified on the command line are initialized.
-  if (command_line->HasSwitch(switches::kForceFieldTrials)) {
-    std::set<std::string> unforceable_field_trials;
-#if defined(OFFICIAL_BUILD)
-    unforceable_field_trials.insert("SettingsEnforcement");
-#endif  // defined(OFFICIAL_BUILD)
-
-    // Create field trials without activating them, so that this behaves in a
-    // consistent manner with field trials created from the server.
-    bool result = base::FieldTrialList::CreateTrialsFromString(
-        command_line->GetSwitchValueASCII(switches::kForceFieldTrials),
-        unforceable_field_trials);
-    CHECK(result) << "Invalid --" << switches::kForceFieldTrials
-                  << " list specified.";
-  }
+  field_trial_list_.reset(new base::FieldTrialList(
+      browser_process_->GetMetricsServicesManager()->CreateEntropyProvider()));
 
   std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
 
@@ -716,45 +684,20 @@ void ChromeBrowserMainParts::SetupFieldTrials() {
       about_flags::RegisterAllFeatureVariationParameters(
           &flags_storage, feature_list.get());
 
-  variations::VariationsHttpHeaderProvider* http_header_provider =
-      variations::VariationsHttpHeaderProvider::GetInstance();
-  // Force the variation ids selected in chrome://flags and/or specified using
-  // the command-line flag.
-  bool result = http_header_provider->ForceVariationIds(
-      command_line->GetSwitchValueASCII(
-          variations::switches::kForceVariationIds),
-      &variation_ids);
-  CHECK(result) << "Invalid list of variation ids specified (either in --"
-                << variations::switches::kForceVariationIds
-                << " or in chrome://flags)";
-
-  feature_list->InitializeFromCommandLine(
-      command_line->GetSwitchValueASCII(switches::kEnableFeatures),
-      command_line->GetSwitchValueASCII(switches::kDisableFeatures));
-
-#if defined(FIELDTRIAL_TESTING_ENABLED)
-  if (!command_line->HasSwitch(
-          variations::switches::kDisableFieldTrialTestingConfig) &&
-      !command_line->HasSwitch(switches::kForceFieldTrials) &&
-      !command_line->HasSwitch(variations::switches::kVariationsServerURL)) {
-    variations::AssociateDefaultFieldTrialConfig(feature_list.get());
-  }
-#endif  // defined(FIELDTRIAL_TESTING_ENABLED)
+  std::set<std::string> unforceable_field_trials;
+#if defined(OFFICIAL_BUILD)
+  unforceable_field_trials.insert("SettingsEnforcement");
+#endif  // defined(OFFICIAL_BUILD)
 
   variations::VariationsService* variations_service =
       browser_process_->variations_service();
+  variations_service->SetupFieldTrials(
+      cc::switches::kEnableGpuBenchmarking, switches::kEnableFeatures,
+      switches::kDisableFeatures, unforceable_field_trials,
+      std::move(feature_list), &variation_ids, &browser_field_trials_);
 
-  bool has_seed = variations_service &&
-                  variations_service->CreateTrialsFromSeed(feature_list.get());
-
-  browser_field_trials_.SetupFeatureControllingFieldTrials(has_seed,
-                                                           feature_list.get());
-
-  base::FeatureList::SetInstance(std::move(feature_list));
-
-  // This must be called after |local_state_| is initialized.
-  browser_field_trials_.SetupFieldTrials();
-
+  const base::CommandLine* command_line =
+      base::CommandLine::ForCurrentProcess();
   // Enable Navigation Tracing only if a trace upload url is specified.
   if (command_line->HasSwitch(switches::kEnableNavigationTracing) &&
       command_line->HasSwitch(switches::kTraceUploadURL)) {
@@ -1004,10 +947,18 @@ int ChromeBrowserMainParts::PreCreateThreadsImpl() {
   first_run::IsChromeFirstRun();
 #endif  // !defined(OS_ANDROID)
 
+  // The initial read is done synchronously, the TaskPriority is thus only used
+  // for flushes to disks and BACKGROUND is therefore appropriate. Priority of
+  // remaining BACKGROUND+BLOCK_SHUTDOWN tasks is bumped by the TaskScheduler on
+  // shutdown. However, some shutdown use cases happen without
+  // TaskScheduler::Shutdown() (e.g. ChromeRestartRequest::Start() and
+  // BrowserProcessImpl::EndSession()) and we must thus unfortunately make this
+  // USER_VISIBLE until we solve https://crbug.com/747495 to allow bumping
+  // priority of a sequence on demand.
   scoped_refptr<base::SequencedTaskRunner> local_state_task_runner =
-      JsonPrefStore::GetTaskRunnerForFile(
-          base::FilePath(chrome::kLocalStorePoolName),
-          BrowserThread::GetBlockingPool());
+      base::CreateSequencedTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+           base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
 
   {
     TRACE_EVENT0("startup",
@@ -1245,9 +1196,13 @@ int ChromeBrowserMainParts::PreCreateThreadsImpl() {
   SetupFieldTrials();
 
   // ChromeOS needs ResourceBundle::InitSharedInstance to be called before this.
-  // This also instantiates the IOThread which requests the metrics service and
-  // must be after |SetupMetrics()|.
   browser_process_->PreCreateThreads();
+
+  // This must occur in PreCreateThreads() because it initializes global state
+  // which is then read by all threads without synchronization. It must be after
+  // browser_process_->PreCreateThreads() as that instantiates the IOThread
+  // which is used in SetupMetrics().
+  SetupMetrics();
 
   return content::RESULT_CODE_NORMAL_EXIT;
 }
@@ -1440,10 +1395,6 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   SCOPED_UMA_HISTOGRAM_LONG_TIMER("Startup.PreMainMessageLoopRunImplLongTime");
   const base::TimeTicks start_time_step1 = base::TimeTicks::Now();
 
-  // This must occur at PreMainMessageLoopRun because |SetupMetrics()| uses the
-  // blocking pool, which is disabled until the CreateThreads phase of startup.
-  SetupMetrics();
-
   // Can't be in SetupFieldTrials() because it needs a task runner.
   MemoryAblationExperiment::MaybeStart(
       BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
@@ -1580,21 +1531,21 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
     // successfully grabbed above.
     int try_chrome_int;
     base::StringToInt(try_chrome, &try_chrome_int);
-    TryChromeDialogView::Result answer = TryChromeDialogView::Show(
+    TryChromeDialog::Result answer = TryChromeDialog::Show(
         try_chrome_int,
         base::Bind(&ChromeProcessSingleton::SetActiveModalDialog,
                    base::Unretained(process_singleton_.get())));
-    if (answer == TryChromeDialogView::NOT_NOW)
-      return chrome::RESULT_CODE_NORMAL_EXIT_CANCEL;
-    if (answer == TryChromeDialogView::UNINSTALL_CHROME)
-      return chrome::RESULT_CODE_NORMAL_EXIT_EXP2;
-    // At this point the user is willing to try chrome again.
-    if (answer == TryChromeDialogView::TRY_CHROME_AS_DEFAULT) {
-      // Only set in the unattended case. This is not true on Windows 8+.
-      if (shell_integration::GetDefaultWebClientSetPermission() ==
-          shell_integration::SET_DEFAULT_UNATTENDED) {
-        shell_integration::SetAsDefaultBrowser();
-      }
+    switch (answer) {
+      case TryChromeDialog::NOT_NOW:
+        return chrome::RESULT_CODE_NORMAL_EXIT_CANCEL;
+      case TryChromeDialog::OPEN_CHROME_WELCOME:
+        browser_creator_->set_welcome_back_page(
+            StartupBrowserCreator::WelcomeBackPage::kWelcomeStandard);
+      case TryChromeDialog::OPEN_CHROME_WELCOME_WIN10:
+        browser_creator_->set_welcome_back_page(
+            StartupBrowserCreator::WelcomeBackPage::kWelcomeWin10);
+      case TryChromeDialog::OPEN_CHROME_DEFAULT:
+        break;
     }
 #else
     // We don't support retention experiments on Mac or Linux.

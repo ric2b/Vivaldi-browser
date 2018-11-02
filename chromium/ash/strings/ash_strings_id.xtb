@@ -9,6 +9,7 @@
 <translation id="1195412055398077112">pemindaian berlebih</translation>
 <translation id="1247372569136754018">Mikrofon (internal)</translation>
 <translation id="1252999807265626933">Mengisi daya dari <ph name="POWER_SOURCE" /></translation>
+<translation id="1267032506238418139">Perubahan pintasan</translation>
 <translation id="1270290102613614947">Keyboard di layar dinonaktifkan</translation>
 <translation id="1272079795634619415">Berhenti</translation>
 <translation id="1279938420744323401"><ph name="DISPLAY_NAME" /> (<ph name="ANNOTATION" />)</translation>
@@ -22,7 +23,6 @@
 <translation id="15373452373711364">Kursor mouse besar</translation>
 <translation id="1550523713251050646">Klik untuk opsi lainnya</translation>
 <translation id="1621499497873603021">Waktu yang tersisa hingga baterai kosong, <ph name="TIME_LEFT" /></translation>
-<translation id="164969095109328410">Perangkat Chrome</translation>
 <translation id="1677472565718498478">Sisa waktu <ph name="TIME" /></translation>
 <translation id="1698760176351776263">Alamat IPv6: <ph name="ADDRESS" /></translation>
 <translation id="1734367976349034509">Perangkat ini dikelola perusahaan</translation>
@@ -92,6 +92,7 @@
 <translation id="315116470104423982">Data seluler</translation>
 <translation id="3236488194889173876">Jaringan seluler tidak tersedia</translation>
 <translation id="3294437725009624529">Tamu</translation>
+<translation id="332587331255250389">Harap ganti baterai</translation>
 <translation id="3364721542077212959">Alat stilus</translation>
 <translation id="3368922792935385530">Tersambung</translation>
 <translation id="3371140690572404006">Perangkat USB-C (port depan sebelah kanan)</translation>
@@ -110,6 +111,7 @@
 <translation id="3712407551474845318">Tangkap wilayah</translation>
 <translation id="371370241367527062">Mikrofon depan</translation>
 <translation id="3742055079367172538">Screenshot telah diambil</translation>
+<translation id="3771549900096082774">Mode Kontras Tinggi</translation>
 <translation id="3775358506042162758">Anda hanya dapat memiliki paling banyak tiga akun dalam fitur masuk multipel.</translation>
 <translation id="3783640748446814672">alt</translation>
 <translation id="3784455785234192852">Kunci</translation>
@@ -142,14 +144,12 @@
 <translation id="4729904664295161097">Asisten hanya tersedia untuk profil utama.</translation>
 <translation id="479989351350248267">search</translation>
 <translation id="4804818685124855865">Putuskan</translation>
-<translation id="4821830640883629383">Harap isi atau ganti baterai.</translation>
 <translation id="4849058404725798627">Sorot objek dengan fokus keyboard</translation>
 <translation id="4872237917498892622">Alt+Telusuri atau Shift</translation>
 <translation id="4895488851634969361">Baterai penuh.</translation>
 <translation id="4905614135390995787">Pintasan untuk beralih Mode Kontras Tinggi telah berubah. Gunakan <ph name="NEW_SHORTCUT" /> sebagai ganti <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="4918086044614829423">Terima</translation>
 <translation id="4961318399572185831">Transmisikan layar</translation>
-<translation id="5011233892417813670">Chromebook</translation>
 <translation id="5168181903108465623">Perangkat transmisi tersedia</translation>
 <translation id="5170568018924773124">Tampilkan dalam folder</translation>
 <translation id="5207949376430453814">Sorot tempat penyisipan teks</translation>
@@ -175,7 +175,6 @@
 <translation id="5901316534475909376">Shift+Esc</translation>
 <translation id="5916664084637901428">Aktif</translation>
 <translation id="5927132638760172455">Mentransmisi ke penerima tak dikenal</translation>
-<translation id="5932901536148835538">Chromebit</translation>
 <translation id="5947494881799873997">Kembalikan</translation>
 <translation id="595202126637698455">Kinerja pelacakan aktif</translation>
 <translation id="5957083217255311415">Data seluler dinonaktifkan.</translation>
@@ -218,7 +217,6 @@
 <translation id="683971173229319003">Search+L</translation>
 <translation id="6857811139397017780">Aktifkan <ph name="NETWORKSERVICE" /></translation>
 <translation id="6911468394164995108">Bergabung dengan lainnya...</translation>
-<translation id="6915678159055240887">Chromebox</translation>
 <translation id="6981982820502123353">Aksesibilitas</translation>
 <translation id="7029814467594812963">Keluar dari sesi</translation>
 <translation id="7034339000180558234">Mentransmisi <ph name="TAB_NAME" /> ke <ph name="RECEIVER_NAME" /></translation>
@@ -226,7 +224,6 @@
 <translation id="7066646422045619941">Jaringan ini dinonaktifkan oleh administrator Anda.</translation>
 <translation id="7067196344162293536">Putar otomatis</translation>
 <translation id="7098389117866926363">Perangkat USB-C (port belakang sebelah kiri)</translation>
-<translation id="714034171374937760">Chromebase</translation>
 <translation id="7165278925115064263">Alt+Shift+K</translation>
 <translation id="7168224885072002358">Mengembalikan ke resolusi lama dalam <ph name="TIMEOUT_SECONDS" /></translation>
 <translation id="7246339268451149667">Aktifkan buka kunci dengan Sidik Jari?</translation>

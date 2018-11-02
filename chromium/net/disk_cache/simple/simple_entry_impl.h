@@ -35,22 +35,11 @@ class NetLog;
 
 namespace disk_cache {
 
+class BackendCleanupTracker;
 class SimpleBackendImpl;
 class SimpleSynchronousEntry;
 class SimpleEntryStat;
 struct SimpleEntryCreationResults;
-
-// Used in histograms, please only add entries at the end.
-enum SimpleReadResult {
-  READ_RESULT_SUCCESS = 0,
-  READ_RESULT_INVALID_ARGUMENT = 1,
-  READ_RESULT_NONBLOCK_EMPTY_RETURN = 2,
-  READ_RESULT_BAD_STATE = 3,
-  READ_RESULT_FAST_EMPTY_RETURN = 4,
-  READ_RESULT_SYNC_READ_FAILURE = 5,
-  READ_RESULT_SYNC_CHECKSUM_FAILURE = 6,
-  READ_RESULT_MAX = 7,
-};
 
 // SimpleEntryImpl is the IO thread interface to an entry in the very simple
 // disk cache. It proxies for the SimpleSynchronousEntry, which performs IO
@@ -74,6 +63,7 @@ class NET_EXPORT_PRIVATE SimpleEntryImpl : public Entry,
 
   SimpleEntryImpl(net::CacheType cache_type,
                   const base::FilePath& path,
+                  scoped_refptr<BackendCleanupTracker> cleanup_tracker,
                   uint64_t entry_hash,
                   OperationsMode operations_mode,
                   SimpleBackendImpl* backend,
@@ -301,9 +291,11 @@ class NET_EXPORT_PRIVATE SimpleEntryImpl : public Entry,
       int result,
       std::unique_ptr<SimpleSynchronousEntry::CRCRequest> crc_result) const;
 
-  // Called after completion of asynchronous IO and receiving file metadata for
-  // the entry in |entry_stat|. Updates the metadata in the entry and in the
-  // index to make them available on next IO operations.
+  // Called after completion of an operation, to either incoproprate file info
+  // received from I/O done on the worker pool, or to simply bump the
+  // timestamps. Updates the metadata both in |this| and in the index.
+  // Stream size information in particular may be important for following
+  // operations.
   void UpdateDataFromEntryStat(const SimpleEntryStat& entry_stat);
 
   int64_t GetDiskUsage() const;
@@ -312,8 +304,14 @@ class NET_EXPORT_PRIVATE SimpleEntryImpl : public Entry,
   void RecordReadIsParallelizable(const SimpleEntryOperation& operation) const;
   void RecordWriteDependencyType(const SimpleEntryOperation& operation) const;
 
-  // Reads from the stream 0 data kept in memory.
-  int ReadStream0Data(net::IOBuffer* buf, int offset, int buf_len);
+  // Completes a read from the stream data kept in memory, logging metrics
+  // and updating metadata. If |callback| is non-null, it will be posted to the
+  // current task runner with the return code.
+  void ReadFromBufferAndPostReply(net::GrowableIOBuffer* in_buf,
+                                  int offset,
+                                  int buf_len,
+                                  net::IOBuffer* out_buf,
+                                  const CompletionCallback& callback);
 
   // Copies data from |buf| to the internal in-memory buffer for stream 0. If
   // |truncate| is set to true, the target buffer will be truncated at |offset|
@@ -329,6 +327,9 @@ class NET_EXPORT_PRIVATE SimpleEntryImpl : public Entry,
                   int length,
                   int stream_index);
 
+  // We want all async I/O on entries to complete before recycling the dir.
+  scoped_refptr<BackendCleanupTracker> cleanup_tracker_;
+
   std::unique_ptr<ActiveEntryProxy> active_entry_proxy_;
 
   // All nonstatic SimpleEntryImpl methods should always be called on the IO
@@ -341,6 +342,7 @@ class NET_EXPORT_PRIVATE SimpleEntryImpl : public Entry,
   const base::FilePath path_;
   const uint64_t entry_hash_;
   const bool use_optimistic_operations_;
+  bool is_initial_stream1_read_;  // used for metrics only.
   std::string key_;
 
   // |last_used_|, |last_modified_| and |data_size_| are copied from the
@@ -403,6 +405,11 @@ class NET_EXPORT_PRIVATE SimpleEntryImpl : public Entry,
   // used to write HTTP headers, the memory consumption of keeping it in memory
   // is acceptable.
   scoped_refptr<net::GrowableIOBuffer> stream_0_data_;
+
+  // Sometimes stream 1 data is prefetched when stream 0 is first read.
+  // If a write to the stream occurs on the entry the prefetch buffer is
+  // discarded. It may also be null if it wasn't prefetched in the first place.
+  scoped_refptr<net::GrowableIOBuffer> stream_1_prefetch_data_;
 };
 
 }  // namespace disk_cache

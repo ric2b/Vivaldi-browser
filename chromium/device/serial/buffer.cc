@@ -14,14 +14,13 @@ ReadOnlyBuffer::~ReadOnlyBuffer() {
 WritableBuffer::~WritableBuffer() {
 }
 
-SendBuffer::SendBuffer(
-    const std::vector<char>& data,
-    const base::Callback<void(int, device::serial::SendError)>& callback)
-    : data_(data), callback_(callback) {}
+SendBuffer::SendBuffer(const std::vector<uint8_t>& data,
+                       SendCompleteCallback callback)
+    : data_(data), callback_(std::move(callback)) {}
 
 SendBuffer::~SendBuffer() {}
 
-const char* SendBuffer::GetData() {
+const uint8_t* SendBuffer::GetData() {
   return data_.data();
 }
 
@@ -30,18 +29,18 @@ uint32_t SendBuffer::GetSize() {
 }
 
 void SendBuffer::Done(uint32_t bytes_read) {
-  callback_.Run(bytes_read, device::serial::SendError::NONE);
+  std::move(callback_).Run(bytes_read, device::mojom::SerialSendError::NONE);
 }
 
 void SendBuffer::DoneWithError(uint32_t bytes_read, int32_t error) {
-  callback_.Run(bytes_read, static_cast<device::serial::SendError>(error));
+  std::move(callback_).Run(bytes_read,
+                           static_cast<device::mojom::SerialSendError>(error));
 }
 
-ReceiveBuffer::ReceiveBuffer(
-    scoped_refptr<net::IOBuffer> buffer,
-    uint32_t size,
-    const base::Callback<void(int, device::serial::ReceiveError)>& callback)
-    : buffer_(buffer), size_(size), callback_(callback) {}
+ReceiveBuffer::ReceiveBuffer(scoped_refptr<net::IOBuffer> buffer,
+                             uint32_t size,
+                             ReceiveCompleteCallback callback)
+    : buffer_(buffer), size_(size), callback_(std::move(callback)) {}
 
 ReceiveBuffer::~ReceiveBuffer() {}
 
@@ -54,12 +53,13 @@ uint32_t ReceiveBuffer::GetSize() {
 }
 
 void ReceiveBuffer::Done(uint32_t bytes_written) {
-  callback_.Run(bytes_written, device::serial::ReceiveError::NONE);
+  std::move(callback_).Run(bytes_written,
+                           device::mojom::SerialReceiveError::NONE);
 }
 
 void ReceiveBuffer::DoneWithError(uint32_t bytes_written, int32_t error) {
-  callback_.Run(bytes_written,
-                static_cast<device::serial::ReceiveError>(error));
+  std::move(callback_).Run(
+      bytes_written, static_cast<device::mojom::SerialReceiveError>(error));
 }
 
 }  // namespace device

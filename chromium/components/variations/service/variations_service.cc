@@ -194,6 +194,22 @@ bool GetInstanceManipulations(const net::HttpResponseHeaders* headers,
   return true;
 }
 
+// Variations seed fetching is only enabled in official Chrome builds, if a URL
+// is specified on the command line, and for testing.
+bool IsFetchingEnabled() {
+#if !defined(GOOGLE_CHROME_BUILD)
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kVariationsServerURL) &&
+      !g_enabled_for_testing) {
+    DVLOG(1)
+        << "Not performing repeated fetching in unofficial build without --"
+        << switches::kVariationsServerURL << " specified.";
+    return false;
+  }
+#endif
+  return true;
+}
+
 }  // namespace
 
 VariationsService::VariationsService(
@@ -256,28 +272,10 @@ VariationsService::~VariationsService() {
 void VariationsService::PerformPreMainMessageLoopStartup() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
+  if (!IsFetchingEnabled())
+    return;
+
   StartRepeatedVariationsSeedFetch();
-}
-
-void VariationsService::StartRepeatedVariationsSeedFetch() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  // Initialize the Variations server URL.
-  variations_server_url_ =
-      GetVariationsServerURL(policy_pref_service_, restrict_mode_);
-
-  // Check that |CreateTrialsFromSeed| was called, which is necessary to
-  // retrieve the serial number that will be sent to the server.
-  DCHECK(field_trial_creator_.create_trials_from_seed_called());
-
-  DCHECK(!request_scheduler_.get());
-  request_scheduler_.reset(VariationsRequestScheduler::Create(
-      base::Bind(&VariationsService::FetchVariationsSeed,
-                 weak_ptr_factory_.GetWeakPtr()),
-      local_state_));
-  // Note that the act of starting the scheduler will start the fetch, if the
-  // scheduler deems appropriate.
-  request_scheduler_->Start();
 }
 
 std::string VariationsService::LoadPermanentConsistencyCountry(
@@ -299,6 +297,9 @@ void VariationsService::RemoveObserver(Observer* observer) {
 
 void VariationsService::OnAppEnterForeground() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  if (!IsFetchingEnabled())
+    return;
 
   // On mobile platforms, initialize the fetch scheduler when we receive the
   // first app foreground notification.
@@ -387,17 +388,6 @@ std::unique_ptr<VariationsService> VariationsService::Create(
     const char* disable_network_switch,
     const UIStringOverrider& ui_string_overrider) {
   std::unique_ptr<VariationsService> result;
-#if !defined(GOOGLE_CHROME_BUILD)
-  // Unless the URL was provided, unsupported builds should return NULL to
-  // indicate that the service should not be used.
-  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kVariationsServerURL) &&
-      !g_enabled_for_testing) {
-    DVLOG(1) << "Not creating VariationsService in unofficial build without --"
-             << switches::kVariationsServerURL << " specified.";
-    return result;
-  }
-#endif
   result.reset(new VariationsService(
       std::move(client),
       base::MakeUnique<web_resource::ResourceRequestAllowedNotifier>(
@@ -413,6 +403,7 @@ void VariationsService::EnableForTesting() {
 
 void VariationsService::DoActualFetch() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(IsFetchingEnabled());
 
   // Pessimistically assume the fetch will fail. The failure streak will be
   // reset upon success.
@@ -442,7 +433,7 @@ void VariationsService::DoActualFetch() {
           destination: GOOGLE_OWNED_SERVICE
         }
         policy {
-          cookies_allowed: false
+          cookies_allowed: NO
           setting: "This feature cannot be disabled by settings."
           policy_exception_justification:
             "Not implemented, considered not required."
@@ -516,6 +507,27 @@ bool VariationsService::StoreSeed(const std::string& seed_data,
 std::unique_ptr<const base::FieldTrial::EntropyProvider>
 VariationsService::CreateLowEntropyProvider() {
   return state_manager_->CreateLowEntropyProvider();
+}
+
+void VariationsService::StartRepeatedVariationsSeedFetch() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  // Initialize the Variations server URL.
+  variations_server_url_ =
+      GetVariationsServerURL(policy_pref_service_, restrict_mode_);
+
+  // Check that |CreateTrialsFromSeed| was called, which is necessary to
+  // retrieve the serial number that will be sent to the server.
+  DCHECK(field_trial_creator_.create_trials_from_seed_called());
+
+  DCHECK(!request_scheduler_.get());
+  request_scheduler_.reset(VariationsRequestScheduler::Create(
+      base::Bind(&VariationsService::FetchVariationsSeed,
+                 weak_ptr_factory_.GetWeakPtr()),
+      local_state_));
+  // Note that the act of starting the scheduler will start the fetch, if the
+  // scheduler deems appropriate.
+  request_scheduler_->Start();
 }
 
 void VariationsService::FetchVariationsSeed() {
@@ -706,6 +718,20 @@ void VariationsService::GetClientFilterableStateForVersionCalledForTesting() {
 
 std::string VariationsService::GetLatestCountry() const {
   return field_trial_creator_.GetLatestCountry();
+}
+
+bool VariationsService::SetupFieldTrials(
+    const char* kEnableGpuBenchmarking,
+    const char* kEnableFeatures,
+    const char* kDisableFeatures,
+    const std::set<std::string>& unforceable_field_trials,
+    std::unique_ptr<base::FeatureList> feature_list,
+    std::vector<std::string>* variation_ids,
+    variations::PlatformFieldTrials* platform_field_trials) {
+  return field_trial_creator_.SetupFieldTrials(
+      kEnableGpuBenchmarking, kEnableFeatures, kDisableFeatures,
+      unforceable_field_trials, CreateLowEntropyProvider(),
+      std::move(feature_list), variation_ids, platform_field_trials);
 }
 
 bool VariationsService::CreateTrialsFromSeed(base::FeatureList* feature_list) {

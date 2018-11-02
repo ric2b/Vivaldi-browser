@@ -189,7 +189,7 @@ const BookmarkNode* BookmarksFunction::CreateBookmarkNode(
     return NULL;
   }
 
-  if (IsVivaldiApp(extension_id()) == false) {
+  if (extension() && IsVivaldiApp(extension_id()) == false) {
     // NOTE(pettern): Vivaldi-specific properties, no extension are allowed to
     // set them.
     if (details.nickname.get() || details.description.get() ||
@@ -593,21 +593,6 @@ bool BookmarksSearchFunction::RunOnReady() {
   return true;
 }
 
-// static
-bool BookmarksRemoveFunction::ExtractIds(const base::ListValue* args,
-                                         std::list<int64_t>* ids,
-                                         bool* invalid_id) {
-  std::string id_string;
-  if (!args->GetString(0, &id_string))
-    return false;
-  int64_t id;
-  if (base::StringToInt64(id_string, &id))
-    ids->push_back(id);
-  else
-    *invalid_id = true;
-  return true;
-}
-
 bool BookmarksRemoveFunction::RunOnReady() {
   if (!EditBookmarksEnabled())
     return false;
@@ -625,7 +610,7 @@ bool BookmarksRemoveFunction::RunOnReady() {
     recursive = true;
 
   BookmarkModel* model = GetBookmarkModel();
-  if (IsVivaldiApp(extension_id()) == false) {
+  if (extension() && IsVivaldiApp(extension_id()) == false) {
     // VB-10596 - Enforce that extensions cannot delete a folder
     // we are using as a Speed Dial folder.
     const BookmarkNode* node = ::bookmarks::GetBookmarkNodeByID(model, id);
@@ -676,14 +661,6 @@ bool BookmarksCreateFunction::RunOnReady() {
   results_ = bookmarks::Create::Results::Create(ret);
 
   return true;
-}
-
-// static
-bool BookmarksMoveFunction::ExtractIds(const base::ListValue* args,
-                                       std::list<int64_t>* ids,
-                                       bool* invalid_id) {
-  // For now, Move accepts ID parameters in the same way as an Update.
-  return BookmarksUpdateFunction::ExtractIds(args, ids, invalid_id);
 }
 
 bool BookmarksMoveFunction::RunOnReady() {
@@ -739,14 +716,6 @@ bool BookmarksMoveFunction::RunOnReady() {
   return true;
 }
 
-// static
-bool BookmarksUpdateFunction::ExtractIds(const base::ListValue* args,
-                                         std::list<int64_t>* ids,
-                                         bool* invalid_id) {
-  // For now, Update accepts ID parameters in the same way as an Remove.
-  return BookmarksRemoveFunction::ExtractIds(args, ids, invalid_id);
-}
-
 bool BookmarksUpdateFunction::RunOnReady() {
   if (!EditBookmarksEnabled())
     return false;
@@ -784,7 +753,7 @@ bool BookmarksUpdateFunction::RunOnReady() {
     has_title = true;
   }
 
-  if (IsVivaldiApp(extension_id()) == false) {
+  if (extension() && IsVivaldiApp(extension_id()) == false) {
     // NOTE(pettern): Vivaldi-specific properties, no extension are allowed to
     // set them.
     if (params->changes.nickname.get() || params->changes.description.get() ||
@@ -890,7 +859,7 @@ void BookmarksIOFunction::ShowSelectFileDialog(
   WebContents* web_contents = GetAssociatedWebContents();
 
   select_file_dialog_ = ui::SelectFileDialog::Create(
-      this, new ChromeSelectFilePolicy(web_contents));
+      this, std::make_unique<ChromeSelectFilePolicy>(web_contents));
   ui::SelectFileDialog::FileTypeInfo file_type_info;
   file_type_info.extensions.resize(1);
   file_type_info.extensions[0].push_back(FILE_PATH_LITERAL("html"));

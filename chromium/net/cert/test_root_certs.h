@@ -10,10 +10,12 @@
 #include "base/memory/ref_counted.h"
 #include "build/build_config.h"
 #include "net/base/net_export.h"
+#include "net/cert/internal/trust_store_in_memory.h"
 
 #if defined(USE_NSS_CERTS)
 #include <cert.h>
 #include <vector>
+#include "net/cert/scoped_nss_types.h"
 #elif defined(OS_WIN)
 #include <windows.h>
 #include "crypto/wincrypt_shim.h"
@@ -81,6 +83,8 @@ class NET_EXPORT TestRootCerts {
   // engine is appropriate. The caller is responsible for freeing the
   // returned HCERTCHAINENGINE.
   HCERTCHAINENGINE GetChainEngine() const;
+#elif defined(OS_FUCHSIA)
+  TrustStore* test_trust_store() { return &test_trust_store_; }
 #endif
 
  private:
@@ -100,15 +104,15 @@ class NET_EXPORT TestRootCerts {
    public:
     // Creates a new TrustEntry by incrementing the reference to |certificate|
     // and copying |trust|.
-    TrustEntry(CERTCertificate* certificate, const CERTCertTrust& trust);
+    TrustEntry(ScopedCERTCertificate certificate, const CERTCertTrust& trust);
     ~TrustEntry();
 
-    CERTCertificate* certificate() const { return certificate_; }
+    CERTCertificate* certificate() const { return certificate_.get(); }
     const CERTCertTrust& trust() const { return trust_; }
 
    private:
     // The temporary root certificate.
-    CERTCertificate* certificate_;
+    ScopedCERTCertificate certificate_;
 
     // The original trust settings, before |certificate_| was manipulated to
     // be a temporarily trusted root.
@@ -125,11 +129,13 @@ class NET_EXPORT TestRootCerts {
 #elif defined(OS_MACOSX)
   base::ScopedCFTypeRef<CFMutableArrayRef> temporary_roots_;
   bool allow_system_trust_;
+#elif defined(OS_FUCHSIA)
+  TrustStoreInMemory test_trust_store_;
 #endif
 
 #if defined(OS_WIN) || defined(OS_ANDROID) || defined(OS_FUCHSIA)
   // True if there are no temporarily trusted root certificates.
-  bool empty_;
+  bool empty_ = true;
 #endif
 
   DISALLOW_COPY_AND_ASSIGN(TestRootCerts);

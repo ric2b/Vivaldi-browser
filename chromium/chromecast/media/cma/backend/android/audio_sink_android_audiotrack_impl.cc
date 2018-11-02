@@ -44,6 +44,25 @@ using base::android::JavaParamRef;
 namespace chromecast {
 namespace media {
 
+// static
+bool AudioSinkAndroidAudioTrackImpl::GetSessionIds(int* media_id,
+                                                   int* communication_id) {
+  bool is_valid = true;
+  if (media_id) {
+    *media_id = Java_AudioSinkAudioTrackImpl_getSessionIdMedia(
+        base::android::AttachCurrentThread());
+    if (*media_id == -1)
+      is_valid = false;
+  }
+  if (communication_id) {
+    *communication_id = Java_AudioSinkAudioTrackImpl_getSessionIdCommunication(
+        base::android::AttachCurrentThread());
+    if (*communication_id == -1)
+      is_valid = false;
+  }
+  return is_valid;
+}
+
 AudioSinkAndroidAudioTrackImpl::AudioSinkAndroidAudioTrackImpl(
     AudioSinkAndroid::Delegate* delegate,
     int input_samples_per_second,
@@ -136,11 +155,6 @@ void AudioSinkAndroidAudioTrackImpl::FinalizeOnFeederThread() {
 void AudioSinkAndroidAudioTrackImpl::PreventDelegateCalls() {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
   weak_factory_.InvalidateWeakPtrs();
-}
-
-// static
-bool AudioSinkAndroidAudioTrackImpl::RegisterJni(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 void AudioSinkAndroidAudioTrackImpl::CacheDirectBufferAddress(

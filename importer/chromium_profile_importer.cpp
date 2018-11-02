@@ -10,7 +10,7 @@
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/grit/generated_resources.h"
+//#include "chrome/grit/generated_resources.h"
 #include "importer/chrome_importer_utils.h"
 #include "ui/base/l10n/l10n_util.h"
 

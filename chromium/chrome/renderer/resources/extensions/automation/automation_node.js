@@ -4,77 +4,81 @@
 
 var AutomationEvent = require('automationEvent').AutomationEvent;
 var automationInternal =
-    require('binding').Binding.create('automationInternal').generate();
+    getInternalApi ?
+        getInternalApi('automationInternal') :
+        require('binding').Binding.create('automationInternal').generate();
 var exceptionHandler = require('uncaught_exception_handler');
-var IsInteractPermitted =
-    requireNative('automationInternal').IsInteractPermitted;
+
+var natives = requireNative('automationInternal');
+
+var IsInteractPermitted = natives.IsInteractPermitted;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
  * @return {?number} The id of the root node.
  */
-var GetRootID = requireNative('automationInternal').GetRootID;
+var GetRootID = natives.GetRootID;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
  * @return {?string} The title of the document.
  */
-var GetDocTitle = requireNative('automationInternal').GetDocTitle;
+var GetDocTitle = natives.GetDocTitle;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
  * @return {?string} The url of the document.
  */
-var GetDocURL = requireNative('automationInternal').GetDocURL;
+var GetDocURL = natives.GetDocURL;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
  * @return {?boolean} True if the document has finished loading.
  */
-var GetDocLoaded = requireNative('automationInternal').GetDocLoaded;
+var GetDocLoaded = natives.GetDocLoaded;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
  * @return {?number} The loading progress, from 0.0 to 1.0 (fully loaded).
  */
 var GetDocLoadingProgress =
-    requireNative('automationInternal').GetDocLoadingProgress;
+    natives.GetDocLoadingProgress;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
  * @return {?number} The ID of the selection anchor object.
  */
-var GetAnchorObjectID = requireNative('automationInternal').GetAnchorObjectID;
+var GetAnchorObjectID = natives.GetAnchorObjectID;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
  * @return {?number} The selection anchor offset.
  */
-var GetAnchorOffset = requireNative('automationInternal').GetAnchorOffset;
+var GetAnchorOffset = natives.GetAnchorOffset;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
  * @return {?string} The selection anchor affinity.
  */
-var GetAnchorAffinity = requireNative('automationInternal').GetAnchorAffinity;
+var GetAnchorAffinity = natives.GetAnchorAffinity;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
  * @return {?number} The ID of the selection focus object.
  */
-var GetFocusObjectID = requireNative('automationInternal').GetFocusObjectID;
+var GetFocusObjectID = natives.GetFocusObjectID;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
  * @return {?number} The selection focus offset.
  */
-var GetFocusOffset = requireNative('automationInternal').GetFocusOffset;
+var GetFocusOffset = natives.GetFocusOffset;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
  * @return {?string} The selection focus affinity.
  */
-var GetFocusAffinity = requireNative('automationInternal').GetFocusAffinity;
+var GetFocusAffinity = natives.GetFocusAffinity;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
@@ -82,7 +86,7 @@ var GetFocusAffinity = requireNative('automationInternal').GetFocusAffinity;
  * @return {?number} The id of the node's parent, or undefined if it's the
  *    root of its tree or if the tree or node wasn't found.
  */
-var GetParentID = requireNative('automationInternal').GetParentID;
+var GetParentID = natives.GetParentID;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
@@ -90,7 +94,7 @@ var GetParentID = requireNative('automationInternal').GetParentID;
  * @return {?number} The number of children of the node, or undefined if
  *     the tree or node wasn't found.
  */
-var GetChildCount = requireNative('automationInternal').GetChildCount;
+var GetChildCount = natives.GetChildCount;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
@@ -99,7 +103,7 @@ var GetChildCount = requireNative('automationInternal').GetChildCount;
  * @return {?number} The id of the child at the given index, or undefined
  *     if the tree or node or child at that index wasn't found.
  */
-var GetChildIDAtIndex = requireNative('automationInternal').GetChildIDAtIndex;
+var GetChildIDAtIndex = natives.GetChildIDAtIndex;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
@@ -107,14 +111,14 @@ var GetChildIDAtIndex = requireNative('automationInternal').GetChildIDAtIndex;
  * @return {?number} The ids of the children of the node, or undefined
  *     if the tree or node wasn't found.
  */
-var GetChildIds = requireNative('automationInternal').GetChildIDs;
+var GetChildIds = natives.GetChildIDs;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
  * @param {number} nodeID The id of a node.
  * @return {?Object} An object mapping html attributes to values.
  */
-var GetHtmlAttributes = requireNative('automationInternal').GetHtmlAttributes;
+var GetHtmlAttributes = natives.GetHtmlAttributes;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
@@ -122,7 +126,7 @@ var GetHtmlAttributes = requireNative('automationInternal').GetHtmlAttributes;
  * @return {?number} The index of this node in its parent, or undefined if
  *     the tree or node or node parent wasn't found.
  */
-var GetIndexInParent = requireNative('automationInternal').GetIndexInParent;
+var GetIndexInParent = natives.GetIndexInParent;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
@@ -130,7 +134,7 @@ var GetIndexInParent = requireNative('automationInternal').GetIndexInParent;
  * @return {?Object} An object with a string key for every state flag set,
  *     or undefined if the tree or node or node parent wasn't found.
  */
-var GetState = requireNative('automationInternal').GetState;
+var GetState = natives.GetState;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
@@ -138,14 +142,14 @@ var GetState = requireNative('automationInternal').GetState;
  * @return {string} The restriction, one of
  * "disabled", "readOnly" or undefined if enabled or other object not disabled
  */
-var GetRestriction = requireNative('automationInternal').GetRestriction;
+var GetRestriction = natives.GetRestriction;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
  * @param {number} nodeID The id of a node.
  * @return {string} The checked state, as undefined, "true", "false" or "mixed".
  */
-var GetChecked = requireNative('automationInternal').GetChecked;
+var GetChecked = natives.GetChecked;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
@@ -153,7 +157,7 @@ var GetChecked = requireNative('automationInternal').GetChecked;
  * @return {string} The role of the node, or undefined if the tree or
  *     node wasn't found.
  */
-var GetRole = requireNative('automationInternal').GetRole;
+var GetRole = natives.GetRole;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
@@ -161,7 +165,7 @@ var GetRole = requireNative('automationInternal').GetRole;
  * @return {?automation.Rect} The location of the node, or undefined if
  *     the tree or node wasn't found.
  */
-var GetLocation = requireNative('automationInternal').GetLocation;
+var GetLocation = natives.GetLocation;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
@@ -172,7 +176,7 @@ var GetLocation = requireNative('automationInternal').GetLocation;
  *     or the location if there are no subranges, or undefined if
  *     the tree or node wasn't found.
  */
-var GetBoundsForRange = requireNative('automationInternal').GetBoundsForRange;
+var GetBoundsForRange = natives.GetBoundsForRange;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
@@ -191,7 +195,7 @@ var GetLineStartOffsets = requireNative(
  * @return {?string} The value of this attribute, or undefined if the tree,
  *     node, or attribute wasn't found.
  */
-var GetStringAttribute = requireNative('automationInternal').GetStringAttribute;
+var GetStringAttribute = natives.GetStringAttribute;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
@@ -200,7 +204,7 @@ var GetStringAttribute = requireNative('automationInternal').GetStringAttribute;
  * @return {?boolean} The value of this attribute, or undefined if the tree,
  *     node, or attribute wasn't found.
  */
-var GetBoolAttribute = requireNative('automationInternal').GetBoolAttribute;
+var GetBoolAttribute = natives.GetBoolAttribute;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
@@ -209,7 +213,7 @@ var GetBoolAttribute = requireNative('automationInternal').GetBoolAttribute;
  * @return {?number} The value of this attribute, or undefined if the tree,
  *     node, or attribute wasn't found.
  */
-var GetIntAttribute = requireNative('automationInternal').GetIntAttribute;
+var GetIntAttribute = natives.GetIntAttribute;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
@@ -218,7 +222,7 @@ var GetIntAttribute = requireNative('automationInternal').GetIntAttribute;
  * @return {?number} The value of this attribute, or undefined if the tree,
  *     node, or attribute wasn't found.
  */
-var GetFloatAttribute = requireNative('automationInternal').GetFloatAttribute;
+var GetFloatAttribute = natives.GetFloatAttribute;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
@@ -228,7 +232,7 @@ var GetFloatAttribute = requireNative('automationInternal').GetFloatAttribute;
  *     if the tree, node, or attribute wasn't found.
  */
 var GetIntListAttribute =
-    requireNative('automationInternal').GetIntListAttribute;
+    natives.GetIntListAttribute;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
@@ -237,42 +241,42 @@ var GetIntListAttribute =
  * @return {?string} The value of this attribute, or undefined if the tree,
  *     node, or attribute wasn't found.
  */
-var GetHtmlAttribute = requireNative('automationInternal').GetHtmlAttribute;
+var GetHtmlAttribute = natives.GetHtmlAttribute;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
  * @param {number} nodeID The id of a node.
  * @return {automation.NameFromType} The source of the node's name.
  */
-var GetNameFrom = requireNative('automationInternal').GetNameFrom;
+var GetNameFrom = natives.GetNameFrom;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
  * @param {number} nodeID The id of a node.
  * @return {boolean}
  */
-var GetBold = requireNative('automationInternal').GetBold;
+var GetBold = natives.GetBold;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
  * @param {number} nodeID The id of a node.
  * @return {boolean}
  */
-var GetItalic = requireNative('automationInternal').GetItalic;
+var GetItalic = natives.GetItalic;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
  * @param {number} nodeID The id of a node.
  * @return {boolean}
  */
-var GetUnderline = requireNative('automationInternal').GetUnderline;
+var GetUnderline = natives.GetUnderline;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
  * @param {number} nodeID The id of a node.
  * @return {boolean}
  */
-var GetLineThrough = requireNative('automationInternal').GetLineThrough;
+var GetLineThrough = natives.GetLineThrough;
 
 /**
  * @param {number} axTreeID The id of the accessibility tree.
@@ -280,9 +284,8 @@ var GetLineThrough = requireNative('automationInternal').GetLineThrough;
  * @return {?Array.<automation.CustomAction>} List of custom actions of the
  *     node.
  */
-var GetCustomActions = requireNative('automationInternal').GetCustomActions;
+var GetCustomActions = natives.GetCustomActions;
 
-var lastError = require('lastError');
 var logging = requireNative('logging');
 var utils = require('utils');
 
@@ -483,6 +486,30 @@ AutomationNodeImpl.prototype = {
     this.performAction_('resumeMedia');
   },
 
+  scrollBackward: function(opt_callback) {
+    this.performAction_('scrollBackward', {}, opt_callback);
+  },
+
+  scrollForward: function(opt_callback) {
+    this.performAction_('scrollForward', {}, opt_callback);
+  },
+
+  scrollUp: function(opt_callback) {
+    this.performAction_('scrollUp', {}, opt_callback);
+  },
+
+  scrollDown: function(opt_callback) {
+    this.performAction_('scrollDown', {}, opt_callback);
+  },
+
+  scrollLeft: function(opt_callback) {
+    this.performAction_('scrollLeft', {}, opt_callback);
+  },
+
+  scrollRight: function(opt_callback) {
+    this.performAction_('scrollRight', {}, opt_callback);
+  },
+
   setSelection: function(startIndex, endIndex) {
     if (this.role == 'textField' || this.role == 'textBox') {
       this.performAction_('setSelection',
@@ -661,7 +688,7 @@ AutomationNodeImpl.prototype = {
     }
   },
 
-  performAction_: function(actionType, opt_args) {
+  performAction_: function(actionType, opt_args, opt_callback) {
     if (!this.rootImpl)
       return;
 
@@ -676,10 +703,15 @@ AutomationNodeImpl.prototype = {
       throw new Error(actionType + ' requires {"desktop": true} or' +
           ' {"interact": true} in the "automation" manifest key.');
     }
+    var requestID = -1;
+    if (opt_callback) {
+      requestID = this.rootImpl.addActionResultCallback(opt_callback);
+    }
 
     automationInternal.performAction({ treeID: this.rootImpl.treeID,
                                        automationNodeID: this.id,
-                                       actionType: actionType },
+                                       actionType: actionType,
+                                       requestID: requestID},
                                      opt_args || {});
   },
 
@@ -789,10 +821,12 @@ var stringAttributes = [
     'value'];
 
 var boolAttributes = [
+    'busy',
     'containerLiveAtomic',
     'containerLiveBusy',
     'liveAtomic',
-    'liveBusy'];
+    'scrollable'
+];
 
 var intAttributes = [
     'backgroundColor',
@@ -975,6 +1009,7 @@ function AutomationRootNodeImpl(treeID) {
   $Function.call(AutomationNodeImpl, this, this);
   this.treeID = treeID;
   this.axNodeDataCache_ = {__proto__: null};
+  this.actionRequestIDToCallback_ = {__proto__: null};
 }
 
 utils.defineProperty(AutomationRootNodeImpl, 'idToAutomationRootNode_',
@@ -1023,6 +1058,10 @@ AutomationRootNodeImpl.prototype = {
    * @private
    */
   axNodeDataCache_: null,
+
+  actionRequestCounter_: 0,
+
+  actionRequestIDToCallback_: null,
 
   get id() {
     var result = GetRootID(this.treeID);
@@ -1146,6 +1185,18 @@ AutomationRootNodeImpl.prototype = {
     return true;
   },
 
+  addActionResultCallback: function(callback) {
+    this.actionRequestIDToCallback_[++this.actionRequestCounter_] = callback;
+    return this.actionRequestCounter_;
+  },
+
+  onActionResult: function(requestID, result) {
+    if (requestID in this.actionRequestIDToCallback_) {
+      this.actionRequestIDToCallback_[requestID](result);
+      delete this.actionRequestIDToCallback_[requestID];
+    }
+  },
+
   toString: function() {
     function toStringInternal(nodeImpl, indent) {
       if (!nodeImpl)
@@ -1180,6 +1231,12 @@ utils.expose(AutomationNode, AutomationNodeImpl, {
     'matches',
     'performCustomAction',
     'resumeMedia',
+    'scrollBackward',
+    'scrollForward',
+    'scrollUp',
+    'scrollDown',
+    'scrollLeft',
+    'scrollRight',
     'setSelection',
     'setSequentialFocusNavigationStartingPoint',
     'showContextMenu',

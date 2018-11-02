@@ -57,17 +57,18 @@ const {{method.name}}Callback& callback
 
 {%- macro build_serialized_message(message_name, param_name_prefix,
                                    params_struct, params_description,
-                                   flags_text, message_object) %}
+                                   flags_text, message_object_name) %}
+  mojo::Message {{message_object_name}}(
+      {{message_name}}, {{flags_text}}, 0, 0, nullptr);
+  auto* buffer = {{message_object_name}}.payload_buffer();
+  {{params_struct|get_qualified_name_for_kind(internal=True)}}::BufferWriter
+      params;
   mojo::internal::SerializationContext serialization_context;
-  {{struct_macros.get_serialized_size(params_struct, param_name_prefix,
-                                      "&serialization_context")}}
-  serialization_context.PrepareMessage(
-      {{message_name}},
-      {{flags_text}}, size, {{message_object}});
-  auto* buffer = ({{message_object}})->payload_buffer();
   {{struct_macros.serialize(params_struct, params_description,
                             param_name_prefix, "params", "buffer",
                             "&serialization_context")}}
+  {{message_object_name}}.AttachHandlesFromSerializationContext(
+      &serialization_context);
 {%- endmacro %}
 
 {%- macro define_message_type(interface, message_typename, message_name,
@@ -76,7 +77,7 @@ const {{method.name}}Callback& callback
 class {{message_typename}}
     : public mojo::internal::UnserializedMessageContext {
  public:
-  static mojo::internal::UnserializedMessageContext::Tag kMessageTag;
+  static const mojo::internal::UnserializedMessageContext::Tag kMessageTag;
 
   explicit {{message_typename}}(
       uint32_t message_flags
@@ -108,7 +109,7 @@ class {{message_typename}}
                           "kFlags")}}
 
     if (!serialize) {
-      return mojo::Message(base::MakeUnique<{{message_typename}}>(
+      return mojo::Message(std::make_unique<{{message_typename}}>(
           kFlags
 {%-     for param in parameters %}
           , std::move(param_{{param.name}})
@@ -117,9 +118,8 @@ class {{message_typename}}
     }
 
     DCHECK(serialize);
-    mojo::Message message;
     {{build_serialized_message(message_name, "param_%s", params_struct,
-                               params_description, "kFlags", "&message")}}
+                               params_description, "kFlags", "message")}}
     return message;
   }
 
@@ -165,15 +165,10 @@ class {{message_typename}}
 
  private:
   // mojo::internal::UnserializedMessageContext:
-  size_t PrepareToSerialize(
-      mojo::internal::SerializationContext* serialization_context) override {
-    {{struct_macros.get_serialized_size(params_struct, "param_%s_",
-                                        "serialization_context")}}
-    return size;
-  }
-
   void Serialize(mojo::internal::SerializationContext* serialization_context,
                  mojo::internal::Buffer* buffer) override {
+    {{params_struct|get_qualified_name_for_kind(internal=True)}}::BufferWriter
+        params;
     {{struct_macros.serialize(params_struct, params_description, "param_%s_",
                               "params", "buffer", "serialization_context")}}
   }
@@ -185,6 +180,6 @@ class {{message_typename}}
   DISALLOW_COPY_AND_ASSIGN({{message_typename}});
 };
 
-mojo::internal::UnserializedMessageContext::Tag
+const mojo::internal::UnserializedMessageContext::Tag
 {{message_typename}}::kMessageTag = {};
 {%- endmacro -%}

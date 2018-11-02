@@ -38,7 +38,7 @@ class MockBrowserControlsOffsetManagerClient
         top_controls_height_(top_controls_height),
         browser_controls_show_threshold_(browser_controls_show_threshold),
         browser_controls_hide_threshold_(browser_controls_hide_threshold) {
-    active_tree_ = base::MakeUnique<LayerTreeImpl>(
+    active_tree_ = std::make_unique<LayerTreeImpl>(
         &host_impl_, new SyncedProperty<ScaleGroup>, new SyncedBrowserControls,
         new SyncedElasticOverscroll);
     root_scroll_layer_ = LayerImpl::Create(active_tree_.get(), 1);
@@ -483,26 +483,6 @@ TEST(BrowserControlsOffsetManagerTest,
   EXPECT_FALSE(manager->has_animation());
   EXPECT_FLOAT_EQ(50.f, manager->TopControlsHeight());
   EXPECT_FLOAT_EQ(0.f, manager->ControlsTopOffset());
-}
-
-TEST(BrowserControlsOffsetManagerTest,
-     GrowingHeightKeepsBrowserControlsHidden) {
-  MockBrowserControlsOffsetManagerClient client(0.f, 0.5f, 0.5f);
-  BrowserControlsOffsetManager* manager = client.manager();
-  client.SetBrowserControlsHeight(1.f);
-  manager->UpdateBrowserControlsState(HIDDEN, HIDDEN, false);
-  EXPECT_EQ(-1.f, manager->ControlsTopOffset());
-  EXPECT_EQ(0.f, manager->ContentTopOffset());
-
-  client.SetBrowserControlsHeight(50.f);
-  EXPECT_FALSE(manager->has_animation());
-  EXPECT_EQ(-50.f, manager->ControlsTopOffset());
-  EXPECT_EQ(0.f, manager->ContentTopOffset());
-
-  client.SetBrowserControlsHeight(100.f);
-  EXPECT_FALSE(manager->has_animation());
-  EXPECT_EQ(-100.f, manager->ControlsTopOffset());
-  EXPECT_EQ(0.f, manager->ContentTopOffset());
 }
 
 TEST(BrowserControlsOffsetManagerTest,

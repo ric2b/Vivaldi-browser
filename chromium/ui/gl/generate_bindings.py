@@ -760,7 +760,8 @@ GL_FUNCTIONS = [
   'arguments':
       'GLenum pname, GLsizei bufSize, GLsizei* length, GLint* data', },
 { 'return_type': 'void',
-  'versions': [{ 'name': 'glGetInternalformativ' }],
+  'versions': [{'name': 'glGetInternalformativ',
+                'extensions': ['GL_ARB_internalformat_query']}],
   'arguments': 'GLenum target, GLenum internalformat, GLenum pname, '
                'GLsizei bufSize, GLint* params', },
 { 'return_type': 'void',
@@ -769,6 +770,10 @@ GL_FUNCTIONS = [
   'arguments':
       'GLenum target, GLenum internalformat, GLenum pname, GLsizei bufSize, '
       'GLsizei* length, GLint* params', },
+{ 'return_type': 'void',
+  'versions': [{'name': 'glGetMultisamplefv',
+                'extensions': ['GL_ARB_texture_multisample']}],
+  'arguments': 'GLenum pname, GLuint index, GLfloat* val', },
 { 'return_type': 'void',
   'versions': [{'name': 'glGetMultisamplefvRobustANGLE',
                 'extensions': ['GL_ANGLE_robust_client_memory']}],
@@ -1273,6 +1278,9 @@ GL_FUNCTIONS = [
   'names': ['glPointParameteri'],
   'arguments': 'GLenum pname, GLint param', },
 { 'return_type': 'void',
+  'names': ['glPolygonMode'],
+  'arguments': 'GLenum face, GLenum mode', },
+{ 'return_type': 'void',
   'names': ['glPolygonOffset'],
   'arguments': 'GLfloat factor, GLfloat units', },
 { 'return_type': 'void',
@@ -1505,6 +1513,14 @@ GL_FUNCTIONS = [
 { 'return_type': 'GLboolean',
   'names': ['glTestFenceNV'],
   'arguments': 'GLuint fence', },
+{ 'return_type': 'void',
+  'names': ['glTexBuffer', 'glTexBufferOES', 'glTexBufferEXT'],
+  'arguments': 'GLenum target, GLenum internalformat, GLuint buffer', } ,
+{ 'return_type': 'void',
+  'names': ['glTexBufferRange', 'glTexBufferRangeOES', 'glTexBufferRangeEXT'],
+  'arguments':
+      'GLenum target, GLenum internalformat, GLuint buffer, '
+      'GLintptr offset, GLsizeiptr size', },
 { 'return_type': 'void',
   'names': ['glTexImage2D'],
   'arguments':
@@ -1757,7 +1773,7 @@ GL_FUNCTIONS = [
 { 'return_type': 'void',
   'known_as': 'glVertexAttribDivisorANGLE',
   'names': ['glVertexAttribDivisorARB', 'glVertexAttribDivisorANGLE',
-            'glVertexAttribDivisor'],
+            'glVertexAttribDivisorEXT', 'glVertexAttribDivisor'],
   'arguments':
       'GLuint index, GLuint divisor', },
 { 'return_type': 'void',
@@ -1783,7 +1799,7 @@ GL_FUNCTIONS = [
 { 'return_type': 'void',
   'names': ['glViewport'],
   'arguments': 'GLint x, GLint y, GLsizei width, GLsizei height', },
-{ 'return_type': 'GLenum',
+{ 'return_type': 'void',
   'versions': [{ 'name': 'glWaitSync',
                  'extensions': ['GL_ARB_sync'] }],
   'arguments':
@@ -2438,6 +2454,8 @@ def GenerateHeader(file, functions, set_name,
 #ifndef UI_GL_GL_BINDINGS_AUTOGEN_%(name)s_H_
 #define UI_GL_GL_BINDINGS_AUTOGEN_%(name)s_H_
 
+#include <string>
+
 namespace gl {
 
 class GLContext;
@@ -2474,6 +2492,9 @@ class GLContext;
  public:
   %(name)sApi();
   virtual ~%(name)sApi();
+
+  virtual void SetDisabledExtensions(
+      const std::string& disabled_extensions) {}
 
 """ % {'name': set_name.upper()})
   for func in functions:
@@ -2703,25 +2724,22 @@ namespace gl {
 
   if set_name == 'gl':
     file.write("""\
-void DriverGL::InitializeDynamicBindings(
-    const GLVersionInfo* ver, const std::string& context_extensions) {
-  std::string extensions = context_extensions + " ";
-  ALLOW_UNUSED_LOCAL(extensions);
-
+void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
+                                         const ExtensionSet& extensions) {
 """)
   elif set_name == 'egl':
     file.write("""\
 void DriverEGL::InitializeClientExtensionBindings() {
   std::string client_extensions(GetClientExtensions());
-  client_extensions += " ";
-  ALLOW_UNUSED_LOCAL(client_extensions);
+  ExtensionSet extensions(MakeExtensionSet(client_extensions));
+  ALLOW_UNUSED_LOCAL(extensions);
 
 """)
   else:
     file.write("""\
 void Driver%s::InitializeExtensionBindings() {
-  std::string extensions(GetPlatformExtensions());
-  extensions += " ";
+  std::string platform_extensions(GetPlatformExtensions());
+  ExtensionSet extensions(MakeExtensionSet(platform_extensions));
   ALLOW_UNUSED_LOCAL(extensions);
 
 """ % (set_name.upper(),))
@@ -2730,7 +2748,7 @@ void Driver%s::InitializeExtensionBindings() {
     # Extra space at the end of the extension name is intentional,
     # it is used as a separator
     for extension in extensions:
-      file.write('  ext.b_%s = %s.find("%s ") != std::string::npos;\n' %
+      file.write('  ext.b_%s = HasExtension(%s, "%s");\n' %
                  (extension, extension_var, extension))
 
     for func in extension_funcs:
@@ -2739,7 +2757,7 @@ void Driver%s::InitializeExtensionBindings() {
         WriteConditionalFuncBinding(file, func)
 
   OutputExtensionBindings(
-    'client_extensions',
+    'extensions',
     sorted(used_client_extensions),
     [ f for f in functions if IsClientExtensionFunc(f) ])
 
@@ -2748,8 +2766,8 @@ void Driver%s::InitializeExtensionBindings() {
 }
 
 void DriverEGL::InitializeExtensionBindings() {
-  std::string extensions(GetPlatformExtensions());
-  extensions += " ";
+  std::string platform_extensions(GetPlatformExtensions());
+  ExtensionSet extensions(MakeExtensionSet(platform_extensions));
   ALLOW_UNUSED_LOCAL(extensions);
 
 """)
@@ -3306,7 +3324,8 @@ def main(argv):
   parser.add_option('--verify-order', action='store_true')
   parser.add_option('--generate-dchecks', action='store_true',
                     help='Generates DCHECKs into the logging functions '
-                        'asserting no GL errors (useful for debugging)')
+                         'asserting no GL errors (useful for debugging with '
+                         '--enable-gpu-service-logging)')
   parser.add_option('--validate-bindings', action='store_true',
                     help='Generate DCHECKs to validate function bindings '
                          ' were correctly supplied (useful for debugging)')

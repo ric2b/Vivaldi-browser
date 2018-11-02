@@ -115,7 +115,7 @@ SynchronousLayerTreeFrameSink::SynchronousLayerTreeFrameSink(
     viz::SharedBitmapManager* shared_bitmap_manager,
     int routing_id,
     uint32_t layer_tree_frame_sink_id,
-    std::unique_ptr<cc::BeginFrameSource> begin_frame_source,
+    std::unique_ptr<viz::BeginFrameSource> begin_frame_source,
     SynchronousCompositorRegistry* registry,
     scoped_refptr<FrameSwapMessageQueue> frame_swap_message_queue)
     : cc::LayerTreeFrameSink(std::move(context_provider),
@@ -166,7 +166,8 @@ bool SynchronousLayerTreeFrameSink::BindToClient(
   if (!cc::LayerTreeFrameSink::BindToClient(sink_client))
     return false;
 
-  frame_sink_manager_ = base::MakeUnique<viz::FrameSinkManagerImpl>();
+  frame_sink_manager_ = std::make_unique<viz::FrameSinkManagerImpl>(
+      viz::SurfaceManager::LifetimeType::SEQUENCES);
 
   DCHECK(begin_frame_source_);
   client_->SetBeginFrameSource(begin_frame_source_.get());
@@ -178,14 +179,13 @@ bool SynchronousLayerTreeFrameSink::BindToClient(
 
   constexpr bool root_support_is_root = true;
   constexpr bool child_support_is_root = false;
-  constexpr bool handles_frame_sink_id_invalidation = true;
   constexpr bool needs_sync_points = true;
   root_support_ = viz::CompositorFrameSinkSupport::Create(
       this, frame_sink_manager_.get(), kRootFrameSinkId, root_support_is_root,
-      handles_frame_sink_id_invalidation, needs_sync_points);
+      needs_sync_points);
   child_support_ = viz::CompositorFrameSinkSupport::Create(
       this, frame_sink_manager_.get(), kChildFrameSinkId, child_support_is_root,
-      handles_frame_sink_id_invalidation, needs_sync_points);
+      needs_sync_points);
 
   viz::RendererSettings software_renderer_settings;
 
@@ -234,7 +234,7 @@ void SynchronousLayerTreeFrameSink::SubmitCompositorFrame(
 
   if (fallback_tick_running_) {
     DCHECK(frame.resource_list.empty());
-    std::vector<cc::ReturnedResource> return_resources;
+    std::vector<viz::ReturnedResource> return_resources;
     ReclaimResources(return_resources);
     did_submit_frame_ = true;
     return;
@@ -331,9 +331,9 @@ void SynchronousLayerTreeFrameSink::SubmitCompositorFrame(
 }
 
 void SynchronousLayerTreeFrameSink::DidNotProduceFrame(
-    const cc::BeginFrameAck& ack) {
+    const viz::BeginFrameAck& ack) {
   DCHECK(!ack.has_damage);
-  DCHECK_LE(cc::BeginFrameArgs::kStartingFrameNumber, ack.sequence_number);
+  DCHECK_LE(viz::BeginFrameArgs::kStartingFrameNumber, ack.sequence_number);
   Send(new ViewHostMsg_DidNotProduceFrame(routing_id_, ack));
 }
 
@@ -432,7 +432,7 @@ void SynchronousLayerTreeFrameSink::InvokeComposite(
 
 void SynchronousLayerTreeFrameSink::OnReclaimResources(
     uint32_t layer_tree_frame_sink_id,
-    const std::vector<cc::ReturnedResource>& resources) {
+    const std::vector<viz::ReturnedResource>& resources) {
   // Ignore message if it's a stale one coming from a different output surface
   // (e.g. after a lost context).
   if (layer_tree_frame_sink_id != layer_tree_frame_sink_id_)
@@ -489,15 +489,15 @@ bool SynchronousLayerTreeFrameSink::CalledOnValidThread() const {
 }
 
 void SynchronousLayerTreeFrameSink::DidReceiveCompositorFrameAck(
-    const std::vector<cc::ReturnedResource>& resources) {
+    const std::vector<viz::ReturnedResource>& resources) {
   ReclaimResources(resources);
 }
 
 void SynchronousLayerTreeFrameSink::OnBeginFrame(
-    const cc::BeginFrameArgs& args) {}
+    const viz::BeginFrameArgs& args) {}
 
 void SynchronousLayerTreeFrameSink::ReclaimResources(
-    const std::vector<cc::ReturnedResource>& resources) {
+    const std::vector<viz::ReturnedResource>& resources) {
   DCHECK(resources.empty());
   client_->ReclaimResources(resources);
 }

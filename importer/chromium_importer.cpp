@@ -23,7 +23,6 @@
 #include "chrome/common/importer/importer_bridge.h"
 #include "chrome/common/importer/importer_data_types.h"
 #include "chrome/common/ini_parser.h"
-#include "chrome/grit/generated_resources.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/os_crypt/os_crypt.h"
 #include "importer/chrome_importer_utils.h"

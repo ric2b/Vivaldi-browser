@@ -100,6 +100,9 @@ typedef (HTMLScriptElement or SVGScriptElement) HTMLOrSVGScriptElement;
     readonly attribute DocumentReadyState readyState;
 
     // DOM tree accessors
+    // Named getter is implemented without IDL code generation for better
+    // performance. See LocalWindowProxy.cpp.
+    // getter object (DOMString name);
     [CEReactions, CustomElementCallbacks] attribute DOMString title;
     [CEReactions, CustomElementCallbacks] attribute DOMString dir;
     [CEReactions, RaisesException=Setter, CustomElementCallbacks, PerWorldBindings] attribute HTMLElement? body;
@@ -144,7 +147,7 @@ typedef (HTMLScriptElement or SVGScriptElement) HTMLOrSVGScriptElement;
     // FIXME: clear(), captureEvents(), releaseEvents() and all are on HTMLDocument.
 
     // CSS Object Model (CSSOM)
-    // https://dev.w3.org/csswg/cssom/#extensions-to-the-document-interface
+    // https://drafts.csswg.org/cssom/#extensions-to-the-document-interface
     attribute DOMString? selectedStylesheetSet;
     readonly attribute DOMString? preferredStylesheetSet;
 
@@ -158,7 +161,7 @@ typedef (HTMLScriptElement or SVGScriptElement) HTMLOrSVGScriptElement;
 
     // Touch Events
     // https://w3c.github.io/touch-events/#extensions-to-the-document-interface
-    [RuntimeEnabled=TouchEventFeatureDetection, Measure, LegacyInterfaceTypeChecking, Custom=CallPrologue]
+    [OriginTrialEnabled=TouchEventFeatureDetection, Measure, LegacyInterfaceTypeChecking, Custom=CallPrologue]
     Touch createTouch(Window view,
                       EventTarget target,
                       long identifier,
@@ -170,7 +173,7 @@ typedef (HTMLScriptElement or SVGScriptElement) HTMLOrSVGScriptElement;
                       optional unrestricted double radiusY = 0,
                       optional unrestricted float rotationAngle = 0,
                       optional unrestricted float force = 0);
-    [RuntimeEnabled=TouchEventFeatureDetection] TouchList createTouchList(Touch... touches);
+    [OriginTrialEnabled=TouchEventFeatureDetection] TouchList createTouchList(Touch... touches);
 
     // Custom Elements
     // https://w3c.github.io/webcomponents/spec/custom/#extensions-to-document-interface-to-register
@@ -210,6 +213,7 @@ typedef (HTMLScriptElement or SVGScriptElement) HTMLOrSVGScriptElement;
     [RuntimeEnabled=ExperimentalContentSecurityPolicyFeatures] attribute EventHandler onsecuritypolicyviolation;
     attribute EventHandler onselectionchange;
     attribute EventHandler onselectstart;
+    attribute EventHandler onvisibilitychange;
 };
 
 Document implements GlobalEventHandlers;

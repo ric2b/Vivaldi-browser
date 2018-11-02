@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "base/gtest_prod_util.h"
+#include "base/time/time.h"
 #include "chrome/common/insecure_content_renderer.mojom.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
@@ -19,10 +20,12 @@
 #include "content/public/renderer/render_frame_observer_tracker.h"
 #include "extensions/features/features.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 #include "third_party/WebKit/public/platform/WebContentSettingsClient.h"
 #include "url/gurl.h"
 
 namespace blink {
+struct WebEnabledClientHints;
 class WebFrame;
 class WebSecurityOrigin;
 class WebURL;
@@ -44,7 +47,8 @@ class ContentSettingsObserver
   // should be whitelisted for content settings.
   ContentSettingsObserver(content::RenderFrame* render_frame,
                           extensions::Dispatcher* extension_dispatcher,
-                          bool should_whitelist);
+                          bool should_whitelist,
+                          service_manager::BinderRegistry* registry);
   ~ContentSettingsObserver() override;
 
   // Sets the content setting rules which back |allowImage()|, |allowScript()|,
@@ -87,6 +91,14 @@ class ContentSettingsObserver
                                    const blink::WebURL& url) override;
   bool AllowAutoplay(bool default_value) override;
   void PassiveInsecureContentFound(const blink::WebURL&) override;
+  void PersistClientHints(
+      const blink::WebEnabledClientHints& enabled_client_hints,
+      base::TimeDelta duration,
+      const blink::WebURL& url) override;
+
+  bool allow_running_insecure_content() const {
+    return allow_running_insecure_content_;
+  }
 
  private:
   FRIEND_TEST_ALL_PREFIXES(ContentSettingsObserverTest, WhitelistedSchemes);

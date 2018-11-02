@@ -9,11 +9,11 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.IBinder;
 import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
 import android.os.StrictMode;
-import android.webkit.ValueCallback;
 
 import org.chromium.android_webview.command_line.CommandLineUtil;
 import org.chromium.android_webview.crash.CrashReceiverService;
@@ -80,8 +80,10 @@ public final class AwBrowserProcess {
     public static void configureChildProcessLauncher(String packageName,
             boolean isExternalService) {
         final boolean bindToCaller = true;
+        final boolean ignoreVisibilityForImportance = true;
         ChildProcessCreationParams.registerDefault(new ChildProcessCreationParams(packageName,
-                isExternalService, LibraryProcessType.PROCESS_WEBVIEW_CHILD, bindToCaller));
+                isExternalService, LibraryProcessType.PROCESS_WEBVIEW_CHILD, bindToCaller,
+                ignoreVisibilityForImportance));
     }
 
     /**
@@ -95,30 +97,42 @@ public final class AwBrowserProcess {
         // We must post to the UI thread to cover the case that the user
         // has invoked Chromium startup by using the (thread-safe)
         // CookieManager rather than creating a WebView.
-        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                boolean multiProcess = CommandLine.getInstance().hasSwitch(
-                        AwSwitches.WEBVIEW_SANDBOXED_RENDERER);
-                if (multiProcess) {
-                    ChildProcessLauncherHelper.warmUp(appContext);
-                }
-                // The policies are used by browser startup, so we need to register the policy
-                // providers before starting the browser process. This only registers java objects
-                // and doesn't need the native library.
-                CombinedPolicyProvider.get().registerProvider(new AwPolicyProvider(appContext));
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            boolean multiProcess = CommandLine.getInstance().hasSwitch(
+                    AwSwitches.WEBVIEW_SANDBOXED_RENDERER);
+            if (multiProcess) {
+                ChildProcessLauncherHelper.warmUp(appContext);
+            }
+            // The policies are used by browser startup, so we need to register the policy
+            // providers before starting the browser process. This only registers java objects
+            // and doesn't need the native library.
+            CombinedPolicyProvider.get().registerProvider(new AwPolicyProvider(appContext));
 
-                // Check android settings but only when safebrowsing is enabled.
-                AwSafeBrowsingConfigHelper.maybeInitSafeBrowsingFromSettings(appContext);
+            // Check android settings but only when safebrowsing is enabled.
+            AwSafeBrowsingConfigHelper.maybeInitSafeBrowsingFromSettings(appContext);
 
-                try {
-                    BrowserStartupController.get(LibraryProcessType.PROCESS_WEBVIEW)
-                            .startBrowserProcessesSync(!multiProcess);
-                } catch (ProcessInitException e) {
-                    throw new RuntimeException("Cannot initialize WebView", e);
-                }
+            try {
+                BrowserStartupController.get(LibraryProcessType.PROCESS_WEBVIEW)
+                        .startBrowserProcessesSync(!multiProcess);
+            } catch (ProcessInitException e) {
+                throw new RuntimeException("Cannot initialize WebView", e);
             }
         });
+
+        // Only run cleanup task on N+ since on earlier versions there are no extra pak files.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            // Cleanup task to remove unnecessary extra pak files (crbug.com/752510).
+            // TODO(zpeng): Remove cleanup code after at least M64 (crbug.com/756580).
+            AsyncTask.THREAD_POOL_EXECUTOR.execute(() -> {
+                File extraPaksDir = new File(PathUtils.getDataDirectory(), "paks");
+                if (extraPaksDir.exists()) {
+                    for (File pakFile: extraPaksDir.listFiles()) {
+                        pakFile.delete();
+                    }
+                    extraPaksDir.delete();
+                }
+            });
+        }
     }
 
     private static void tryObtainingDataDirLock(Context context) {
@@ -185,18 +199,15 @@ public final class AwBrowserProcess {
             AwBrowserProcess.handleMinidumps(webViewPackageName, true /* enabled */);
         }
 
-        PlatformServiceBridge.getInstance().queryMetricsSetting(new ValueCallback<Boolean>() {
-            // Actions conditioned on whether the Android Checkbox is toggled on
-            public void onReceiveValue(Boolean enabled) {
-                ThreadUtils.assertOnUiThread();
-                if (updateMetricsConsent) {
-                    AwMetricsServiceClient.setConsentSetting(
-                            ContextUtils.getApplicationContext(), enabled);
-                }
+        PlatformServiceBridge.getInstance().queryMetricsSetting(enabled -> {
+            ThreadUtils.assertOnUiThread();
+            if (updateMetricsConsent) {
+                AwMetricsServiceClient.setConsentSetting(
+                        ContextUtils.getApplicationContext(), enabled);
+            }
 
-                if (!enableMinidumpUploadingForTesting) {
-                    AwBrowserProcess.handleMinidumps(webViewPackageName, enabled);
-                }
+            if (!enableMinidumpUploadingForTesting) {
+                AwBrowserProcess.handleMinidumps(webViewPackageName, enabled);
             }
         });
     }

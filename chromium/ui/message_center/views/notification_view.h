@@ -47,7 +47,6 @@ class MESSAGE_CENTER_EXPORT NotificationView
   void OnFocus() override;
   void ScrollRectToVisible(const gfx::Rect& rect) override;
   gfx::NativeCursor GetCursor(const ui::MouseEvent& event) override;
-  void OnMouseMoved(const ui::MouseEvent& event) override;
   void OnMouseEntered(const ui::MouseEvent& event) override;
   void OnMouseExited(const ui::MouseEvent& event) override;
 
@@ -87,6 +86,7 @@ class MESSAGE_CENTER_EXPORT NotificationView
   void CreateOrUpdateSmallIconView(const Notification& notification);
   void CreateOrUpdateImageView(const Notification& notification);
   void CreateOrUpdateActionButtonViews(const Notification& notification);
+  // TODO(yoshiki): Move this to message_center::MessageView
   void UpdateControlButtonsVisibilityWithNotification(
       const Notification& notification);
 
@@ -98,6 +98,9 @@ class MESSAGE_CENTER_EXPORT NotificationView
   // given the space available in the ContextMessage section of the
   // notification.
   base::string16 FormatContextMessage(const Notification& notification) const;
+
+  // Shrink the topmost label not to be covered by the control button.
+  void ShrinkTopmostLabel();
 
   // Describes whether the view should display a hand pointer or not.
   bool clickable_;

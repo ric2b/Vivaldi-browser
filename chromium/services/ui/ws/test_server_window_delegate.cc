@@ -13,14 +13,18 @@ TestServerWindowDelegate::TestServerWindowDelegate() {}
 
 TestServerWindowDelegate::~TestServerWindowDelegate() {}
 
-cc::mojom::FrameSinkManager* TestServerWindowDelegate::GetFrameSinkManager() {
+viz::HostFrameSinkManager* TestServerWindowDelegate::GetHostFrameSinkManager() {
   return nullptr;
 }
 
-ServerWindow* TestServerWindowDelegate::GetRootWindow(
+ServerWindow* TestServerWindowDelegate::GetRootWindowForDrawn(
     const ServerWindow* window) {
   return root_window_;
 }
+
+void TestServerWindowDelegate::OnFirstSurfaceActivation(
+    const viz::SurfaceInfo& surface_info,
+    ServerWindow* window) {}
 
 }  // namespace ws
 }  // namespace ui

@@ -651,6 +651,7 @@ virtual void UnmapTexSubImage2DCHROMIUM(const void* mem) = 0;
 virtual void ResizeCHROMIUM(GLuint width,
                             GLuint height,
                             GLfloat scale_factor,
+                            GLenum color_space,
                             GLboolean alpha) = 0;
 virtual const GLchar* GetRequestableExtensionsCHROMIUM() = 0;
 virtual void RequestExtensionCHROMIUM(const char* extension) = 0;
@@ -773,6 +774,8 @@ virtual void ScheduleCALayerCHROMIUM(GLuint contents_texture_id,
                                      GLuint edge_aa_mask,
                                      const GLfloat* bounds_rect,
                                      GLuint filter) = 0;
+virtual void SetColorSpaceForScanoutCHROMIUM(GLuint texture_id,
+                                             GLColorSpace color_space) = 0;
 virtual void ScheduleCALayerInUseQueryCHROMIUM(GLsizei count,
                                                const GLuint* textures) = 0;
 virtual void CommitOverlayPlanesCHROMIUM() = 0;
@@ -906,7 +909,9 @@ virtual void UniformMatrix4fvStreamTextureMatrixCHROMIUM(
 virtual void OverlayPromotionHintCHROMIUM(GLuint texture,
                                           GLboolean promotion_hint,
                                           GLint display_x,
-                                          GLint display_y) = 0;
+                                          GLint display_y,
+                                          GLint display_width,
+                                          GLint display_height) = 0;
 virtual void SwapBuffersWithBoundsCHROMIUM(GLsizei count,
                                            const GLint* rects) = 0;
 virtual void SetDrawRectangleCHROMIUM(GLint x,
@@ -917,4 +922,16 @@ virtual void SetEnableDCLayersCHROMIUM(GLboolean enabled) = 0;
 virtual void InitializeDiscardableTextureCHROMIUM(GLuint texture_id) = 0;
 virtual void UnlockDiscardableTextureCHROMIUM(GLuint texture_id) = 0;
 virtual bool LockDiscardableTextureCHROMIUM(GLuint texture_id) = 0;
+virtual void BeginRasterCHROMIUM(GLuint texture_id,
+                                 GLuint sk_color,
+                                 GLuint msaa_sample_count,
+                                 GLboolean can_use_lcd_text,
+                                 GLboolean use_distance_field_text,
+                                 GLint pixel_config) = 0;
+virtual void RasterCHROMIUM(const cc::DisplayItemList* list,
+                            GLint x,
+                            GLint y,
+                            GLint w,
+                            GLint h) = 0;
+virtual void EndRasterCHROMIUM() = 0;
 #endif  // GPU_COMMAND_BUFFER_CLIENT_GLES2_INTERFACE_AUTOGEN_H_

@@ -48,7 +48,7 @@
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
-#include "chrome/browser/ui/settings_window_manager.h"
+#include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/test/test_app_window_icon_observer.h"
 #include "chrome/browser/web_applications/web_app.h"
@@ -68,6 +68,7 @@
 #include "extensions/common/switches.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/app_list/app_list_features.h"
 #include "ui/app_list/app_list_switches.h"
 #include "ui/app_list/views/app_list_item_view.h"
 #include "ui/app_list/views/apps_grid_view.h"
@@ -76,6 +77,7 @@
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/base/window_open_disposition.h"
+#include "ui/display/manager/display_manager.h"
 #include "ui/display/test/display_manager_test_api.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/event.h"
@@ -348,16 +350,8 @@ class ShelfAppBrowserTest : public ExtensionBrowserTest {
     int index = model_->GetItemIndexForType(ash::TYPE_BROWSER_SHORTCUT);
     DCHECK_GE(index, 0);
     ash::ShelfItem item = model_->items()[index];
-    Shelf* shelf = ash::Shelf::ForWindow(CurrentContext());
-    std::unique_ptr<LauncherContextMenu> menu(
-        LauncherContextMenu::Create(controller_, &item, shelf));
-    return menu;
-  }
-
-  aura::Window* CurrentContext() {
-    aura::Window* root_window = ash::Shell::GetRootWindowForNewWindows();
-    DCHECK(root_window);
-    return root_window;
+    int64_t display_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
+    return LauncherContextMenu::Create(controller_, &item, display_id);
   }
 
   bool IsItemPresentInMenu(LauncherContextMenu* menu, int command_id) {
@@ -910,7 +904,7 @@ IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest, MAYBE_SetIcon) {
   ASSERT_TRUE(app_custom_icon_item_delegate);
   EXPECT_TRUE(app_custom_icon_item_delegate->image_set_by_controller());
 
-  // Ensure icon heights are correct (see test.js in app_icon/ test directory)
+// Ensure icon heights are correct (see test.js in app_icon/ test directory)
 #if defined(USE_ASH)
   EXPECT_EQ(ash::kShelfSize, app_item.image.height());
 #else
@@ -991,7 +985,7 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, LaunchAppFromDisplayWithoutFocus0) {
   // in the uppermost browser in display 0.
   ash::ShelfID shortcut_id = CreateShortcut("app1");
   Shelf::ActivateShelfItemOnDisplay(model_->ItemIndexByID(shortcut_id),
-                                      displays[1].id());
+                                    displays[1].id());
   EXPECT_EQ(browser0->tab_strip_model()->count(), 1);
   EXPECT_EQ(browser1->tab_strip_model()->count(), 1);
   EXPECT_EQ(browser2->tab_strip_model()->count(), 2);
@@ -1030,7 +1024,7 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, LaunchAppFromDisplayWithoutFocus1) {
   // one tab is opened in display 0.
   ash::ShelfID shortcut_id = CreateShortcut("app1");
   Shelf::ActivateShelfItemOnDisplay(model_->ItemIndexByID(shortcut_id),
-                                      displays[1].id());
+                                    displays[1].id());
   Browser* browser1 = browser_list->GetLastActive();
   EXPECT_EQ(browser_list->size(), 2U);
   EXPECT_NE(browser1, browser0);
@@ -2009,8 +2003,12 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, DISABLED_DragAndDrop) {
 
 // Do basic drag and drop interaction tests between the application list and
 // the launcher in the secondary monitor.
-IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest,
-                       DISABLED_MultiDisplayBasicDragAndDrop) {
+IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, MultiDisplayBasicDragAndDrop) {
+  // TODO(newcomer): this test needs to be reevaluated for the fullscreen app
+  // list (http://crbug.com/759779).
+  if (app_list::features::IsFullscreenAppListEnabled())
+    return;
+
   // Update the display configuration to add a secondary display.
   display::test::DisplayManagerTestApi(ash::Shell::Get()->display_manager())
       .UpdateDisplay("800x800,801+0-800x800");
@@ -2231,7 +2229,12 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, ShelfButtonContextMenu) {
 }
 
 // Check that clicking on an app shelf item launches a new browser.
-IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, DISABLED_ClickItem) {
+IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, ClickItem) {
+  // TODO(newcomer): this test needs to be reevaluated for the fullscreen app
+  // list (http://crbug.com/759779).
+  if (app_list::features::IsFullscreenAppListEnabled())
+    return;
+
   // Get a number of interfaces we need.
   ui::test::EventGenerator generator(ash::Shell::GetPrimaryRootWindow(),
                                      gfx::Point());

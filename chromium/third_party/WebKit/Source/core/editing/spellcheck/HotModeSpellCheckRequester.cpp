@@ -44,11 +44,12 @@ EphemeralRange CurrentWordIfTypingInPartialWord(const Element& editable) {
   if (RootEditableElementOf(selection.Base()) != &editable)
     return EphemeralRange();
 
-  CompositeEditCommand* typing_command =
-      frame.GetEditor().LastTypingCommandIfStillOpenForTyping();
-  if (!typing_command)
+  CompositeEditCommand* last_command = frame.GetEditor().LastEditCommand();
+  if (!last_command || !last_command->IsTypingCommand())
     return EphemeralRange();
-  if (typing_command->EndingSelection().AsSelection() != selection)
+  if (!last_command->EndingSelection().IsValidFor(*frame.GetDocument()))
+    return EphemeralRange();
+  if (last_command->EndingSelection().AsSelection() != selection)
     return EphemeralRange();
   return AdjacentWordIfExists(selection.Base());
 }
@@ -86,8 +87,8 @@ EphemeralRange CalculateHotModeCheckingRange(const Element& editable,
   TextIteratorBehavior behavior = TextIteratorBehavior::Builder()
                                       .SetEmitsObjectReplacementCharacter(true)
                                       .Build();
-  BackwardsCharacterIterator backward_iterator(full_range.StartPosition(),
-                                               position, behavior);
+  BackwardsCharacterIterator backward_iterator(
+      EphemeralRange(full_range.StartPosition(), position), behavior);
   if (!backward_iterator.AtEnd())
     backward_iterator.Advance(kHotModeChunkSize / 2);
   const Position& chunk_start = backward_iterator.EndPosition();

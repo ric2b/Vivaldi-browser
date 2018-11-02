@@ -107,6 +107,7 @@ class WebMediaStreamTrack {
   bool IsNull() const { return private_.IsNull(); }
 
   BLINK_PLATFORM_EXPORT WebString Id() const;
+  BLINK_PLATFORM_EXPORT int UniqueId() const;
 
   BLINK_PLATFORM_EXPORT WebMediaStreamSource Source() const;
   BLINK_PLATFORM_EXPORT bool IsEnabled() const;
@@ -122,7 +123,7 @@ class WebMediaStreamTrack {
 
   // The lifetime of the WebAudioSourceProvider should outlive the
   // WebMediaStreamTrack, and clients are responsible for calling
-  // setSourceProvider(0) before the WebMediaStreamTrack is going away.
+  // SetSourceProvider(0) before the WebMediaStreamTrack is going away.
   BLINK_PLATFORM_EXPORT void SetSourceProvider(WebAudioSourceProvider*);
 
 #if INSIDE_BLINK

@@ -41,8 +41,6 @@ constexpr char kThrottledErrorDescription[] =
     "information.";
 }  // namespace
 
-const char kErrorDomainBlinkInternal[] = "BlinkInternal";
-
 ResourceError ResourceError::CancelledError(const KURL& url) {
   return WebURLError(url, false, net::ERR_ABORTED);
 }
@@ -70,16 +68,17 @@ ResourceError ResourceError::CacheMissError(const KURL& url) {
   return WebURLError(url, false, net::ERR_CACHE_MISS);
 }
 
+ResourceError ResourceError::TimeoutError(const KURL& url) {
+  return WebURLError(url, false, net::ERR_TIMED_OUT);
+}
+
 ResourceError ResourceError::Copy() const {
   ResourceError error_copy;
-  error_copy.domain_ = domain_.IsolatedCopy();
+  error_copy.domain_ = domain_;
   error_copy.error_code_ = error_code_;
   error_copy.failing_url_ = failing_url_.Copy();
   error_copy.localized_description_ = localized_description_.IsolatedCopy();
-  error_copy.is_null_ = is_null_;
   error_copy.is_access_check_ = is_access_check_;
-  error_copy.is_timeout_ = is_timeout_;
-  error_copy.was_ignored_by_handler_ = was_ignored_by_handler_;
   return error_copy;
 }
 
@@ -87,10 +86,7 @@ bool ResourceError::Compare(const ResourceError& a, const ResourceError& b) {
   if (a.IsNull() && b.IsNull())
     return true;
 
-  if (a.IsNull() || b.IsNull())
-    return false;
-
-  if (a.Domain() != b.Domain())
+  if (a.GetDomain() != b.GetDomain())
     return false;
 
   if (a.ErrorCode() != b.ErrorCode())
@@ -105,13 +101,7 @@ bool ResourceError::Compare(const ResourceError& a, const ResourceError& b) {
   if (a.IsAccessCheck() != b.IsAccessCheck())
     return false;
 
-  if (a.IsTimeout() != b.IsTimeout())
-    return false;
-
   if (a.StaleCopyInCache() != b.StaleCopyInCache())
-    return false;
-
-  if (a.WasIgnoredByHandler() != b.WasIgnoredByHandler())
     return false;
 
   return true;
@@ -121,7 +111,7 @@ void ResourceError::InitializeWebURLError(WebURLError* error,
                                           const WebURL& url,
                                           bool stale_copy_in_cache,
                                           int reason) {
-  error->domain = WebString::FromASCII(net::kErrorDomain);
+  error->domain = Domain::kNet;
   error->reason = reason;
   error->stale_copy_in_cache = stale_copy_in_cache;
   error->unreachable_url = url;
@@ -134,14 +124,16 @@ void ResourceError::InitializeWebURLError(WebURLError* error,
   }
 }
 
+bool ResourceError::IsTimeout() const {
+  return domain_ == Domain::kNet && error_code_ == net::ERR_TIMED_OUT;
+}
+
 bool ResourceError::IsCancellation() const {
-  return domain_ == String(net::kErrorDomain) &&
-         error_code_ == net::ERR_ABORTED;
+  return domain_ == Domain::kNet && error_code_ == net::ERR_ABORTED;
 }
 
 bool ResourceError::IsCacheMiss() const {
-  return domain_ == String(net::kErrorDomain) &&
-         error_code_ == net::ERR_CACHE_MISS;
+  return domain_ == Domain::kNet && error_code_ == net::ERR_CACHE_MISS;
 }
 
 }  // namespace blink

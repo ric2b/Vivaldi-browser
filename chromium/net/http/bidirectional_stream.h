@@ -38,9 +38,8 @@ struct SSLConfig;
 // ReadData or SendData/SendvData should be in flight until the operation
 // completes. The BidirectionalStream must be torn down before the
 // HttpNetworkSession.
-class NET_EXPORT BidirectionalStream
-    : public NON_EXPORTED_BASE(BidirectionalStreamImpl::Delegate),
-      public NON_EXPORTED_BASE(HttpStreamRequest::Delegate) {
+class NET_EXPORT BidirectionalStream : public BidirectionalStreamImpl::Delegate,
+                                       public HttpStreamRequest::Delegate {
  public:
   // Delegate interface to get notified of success of failure. Callbacks will be
   // invoked asynchronously.
@@ -197,7 +196,9 @@ class NET_EXPORT BidirectionalStream
       const SSLConfig& used_ssl_config,
       const ProxyInfo& used_proxy_info,
       std::unique_ptr<WebSocketHandshakeStreamBase> stream) override;
-  void OnStreamFailed(int status, const SSLConfig& used_ssl_config) override;
+  void OnStreamFailed(int status,
+                      const NetErrorDetails& net_error_details,
+                      const SSLConfig& used_ssl_config) override;
   void OnCertificateError(int status,
                           const SSLConfig& used_ssl_config,
                           const SSLInfo& ssl_info) override;

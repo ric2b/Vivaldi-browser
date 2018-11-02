@@ -36,6 +36,7 @@
 #include "components/signin/core/browser/fake_account_fetcher_service.h"
 #include "components/signin/core/browser/fake_profile_oauth2_token_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
+#include "components/signin/core/browser/scoped_account_consistency.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/common/profile_management_switches.h"
 #include "components/signin/core/common/signin_pref_names.h"
@@ -112,8 +113,10 @@ class ProfileChooserControllerTest : public CocoaProfileTest {
   }
 
   void SignInFirstProfile() {
-    std::vector<ProfileAttributesEntry*> entries = testing_profile_manager()->
-        profile_attributes_storage()->GetAllProfilesAttributes();
+    std::vector<ProfileAttributesEntry*> entries =
+        testing_profile_manager()
+            ->profile_attributes_storage()
+            ->GetAllProfilesAttributesSortedByName();
     ASSERT_LE(1U, entries.size());
     ProfileAttributesEntry* entry = entries.front();
     entry->SetAuthInfo(kGaiaId, base::ASCIIToUTF16(kEmail));
@@ -251,8 +254,7 @@ TEST_F(ProfileChooserControllerTest,
 
 TEST_F(ProfileChooserControllerTest,
        SignedInProfileActiveCardLinksWithAccountConsistency) {
-  switches::EnableAccountConsistencyMirrorForTesting(
-      base::CommandLine::ForCurrentProcess());
+  signin::ScopedAccountConsistencyMirror scoped_mirror;
 
   SignInFirstProfile();
 
@@ -295,8 +297,7 @@ TEST_F(ProfileChooserControllerTest,
 }
 
 TEST_F(ProfileChooserControllerTest, AccountManagementLayout) {
-  switches::EnableAccountConsistencyMirrorForTesting(
-      base::CommandLine::ForCurrentProcess());
+  signin::ScopedAccountConsistencyMirror scoped_mirror;
 
   SignInFirstProfile();
 

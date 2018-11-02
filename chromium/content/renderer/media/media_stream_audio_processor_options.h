@@ -18,6 +18,7 @@
 #include "third_party/webrtc/api/mediastreaminterface.h"
 #include "third_party/webrtc/media/base/mediachannel.h"
 #include "third_party/webrtc/modules/audio_processing/include/audio_processing.h"
+#include "third_party/webrtc_overrides/webrtc/rtc_base/task_queue.h"
 
 namespace webrtc {
 
@@ -116,7 +117,7 @@ struct CONTENT_EXPORT AudioProcessingProperties {
   // TODO(guidou): Remove this function. http://crbug.com/706408
   static AudioProcessingProperties FromConstraints(
       const blink::WebMediaConstraints& constraints,
-      const MediaStreamDevice::AudioDeviceParameters& input_params);
+      const media::AudioParameters& input_params);
 
   bool enable_sw_echo_cancellation = true;
   bool disable_hw_echo_cancellation = false;
@@ -188,9 +189,13 @@ void EnableNoiseSuppression(AudioProcessing* audio_processing,
 void EnableTypingDetection(AudioProcessing* audio_processing,
                            webrtc::TypingDetection* typing_detector);
 
-// Starts the echo cancellation dump in |audio_processing|.
+// Starts the echo cancellation dump in
+// |audio_processing|. |worker_queue| must be kept alive until either
+// |audio_processing| is destroyed, or
+// StopEchoCancellationDump(audio_processing) is called.
 void StartEchoCancellationDump(AudioProcessing* audio_processing,
-                               base::File aec_dump_file);
+                               base::File aec_dump_file,
+                               rtc::TaskQueue* worker_queue);
 
 // Stops the echo cancellation dump in |audio_processing|.
 // This method has no impact if echo cancellation dump has not been started on
@@ -208,7 +213,7 @@ void GetAudioProcessingStats(
 // TODO(guidou): Remove this function. http://crbug.com/706408
 CONTENT_EXPORT std::vector<media::Point> GetArrayGeometryPreferringConstraints(
     const MediaAudioConstraints& audio_constraints,
-    const MediaStreamDevice::AudioDeviceParameters& input_params);
+    const media::AudioParameters& input_params);
 
 // TODO(guidou): Remove this function. http://crbug.com/706408
 CONTENT_EXPORT bool IsOldAudioConstraints();

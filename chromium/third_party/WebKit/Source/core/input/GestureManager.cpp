@@ -9,6 +9,7 @@
 #include "core/dom/UserGestureIndicator.h"
 #include "core/editing/SelectionController.h"
 #include "core/events/GestureEvent.h"
+#include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/frame/VisualViewport.h"
@@ -17,6 +18,7 @@
 #include "core/input/InputDeviceCapabilities.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
+#include "public/web/WebTappedInfo.h"
 
 namespace blink {
 
@@ -190,8 +192,9 @@ WebInputEventResult GestureManager::HandleGestureTap(
       FlooredIntPoint(gesture_event.PositionInRootFrame());
   Node* tapped_node = current_hit_test.InnerNode();
   Element* tapped_element = current_hit_test.InnerElement();
-  UserGestureIndicator gesture_indicator(UserGestureToken::Create(
-      tapped_node ? &tapped_node->GetDocument() : nullptr));
+  std::unique_ptr<UserGestureIndicator> gesture_indicator =
+      LocalFrame::CreateUserGesture(
+          tapped_node ? tapped_node->GetDocument().GetFrame() : nullptr);
 
   mouse_event_manager_->SetClickElement(tapped_element);
 
@@ -298,9 +301,9 @@ WebInputEventResult GestureManager::HandleGestureTap(
     IntPoint tapped_position_in_viewport =
         frame_->GetPage()->GetVisualViewport().RootFrameToViewport(
             tapped_position);
-    frame_->GetChromeClient().ShowUnhandledTapUIIfNeeded(
-        tapped_position_in_viewport, tapped_node,
-        dom_tree_changed || style_changed);
+    WebTappedInfo tapped_info(dom_tree_changed, style_changed, tapped_node,
+                              tapped_position_in_viewport);
+    frame_->GetChromeClient().ShowUnhandledTapUIIfNeeded(tapped_info);
   }
   return event_result;
 }

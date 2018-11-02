@@ -34,20 +34,18 @@
 #include "platform/weborigin/KURL.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/text/WTFString.h"
+#include "public/platform/WebURLError.h"
 
 namespace blink {
 
 class WebURL;
 enum class ResourceRequestBlockedReason;
-struct WebURLError;
-
-// Used for errors that won't be exposed to clients.
-PLATFORM_EXPORT extern const char kErrorDomainBlinkInternal[];
 
 class PLATFORM_EXPORT ResourceError final {
   DISALLOW_NEW();
 
  public:
+  using Domain = WebURLError::Domain;
   enum Error {
     ACCESS_DENIED = net::ERR_ACCESS_DENIED,
     BLOCKED_BY_XSS_AUDITOR = net::ERR_BLOCKED_BY_XSS_AUDITOR
@@ -63,26 +61,28 @@ class PLATFORM_EXPORT ResourceError final {
       const String& localized_description);
 
   static ResourceError CacheMissError(const KURL&);
+  static ResourceError TimeoutError(const KURL&);
 
   ResourceError() = default;
 
-  ResourceError(const String& domain,
+  ResourceError(Domain domain,
                 int error_code,
                 const KURL& failing_url,
                 const String& localized_description)
       : domain_(domain),
         error_code_(error_code),
         failing_url_(failing_url),
-        localized_description_(localized_description),
-        is_null_(false) {}
+        localized_description_(localized_description) {
+    DCHECK_NE(domain, Domain::kEmpty);
+  }
 
   // Makes a deep copy. Useful for when you need to use a ResourceError on
   // another thread.
   ResourceError Copy() const;
 
-  bool IsNull() const { return is_null_; }
+  bool IsNull() const { return domain_ == Domain::kEmpty; }
 
-  const String& Domain() const { return domain_; }
+  Domain GetDomain() const { return domain_; }
   int ErrorCode() const { return error_code_; }
   const String& FailingURL() const { return failing_url_; }
   const String& LocalizedDescription() const { return localized_description_; }
@@ -94,17 +94,11 @@ class PLATFORM_EXPORT ResourceError final {
   }
   bool IsAccessCheck() const { return is_access_check_; }
 
-  void SetIsTimeout(bool is_timeout) { is_timeout_ = is_timeout; }
-  bool IsTimeout() const { return is_timeout_; }
+  bool IsTimeout() const;
   void SetStaleCopyInCache(bool stale_copy_in_cache) {
     stale_copy_in_cache_ = stale_copy_in_cache;
   }
   bool StaleCopyInCache() const { return stale_copy_in_cache_; }
-
-  void SetWasIgnoredByHandler(bool ignored_by_handler) {
-    was_ignored_by_handler_ = ignored_by_handler;
-  }
-  bool WasIgnoredByHandler() const { return was_ignored_by_handler_; }
 
   bool IsCacheMiss() const;
   bool WasBlockedByResponse() const {
@@ -124,15 +118,12 @@ class PLATFORM_EXPORT ResourceError final {
                                     int reason);
 
  private:
-  String domain_;
+  Domain domain_ = Domain::kEmpty;
   int error_code_ = 0;
   KURL failing_url_;
   String localized_description_;
-  bool is_null_ = true;
   bool is_access_check_ = false;
-  bool is_timeout_ = false;
   bool stale_copy_in_cache_ = false;
-  bool was_ignored_by_handler_ = false;
   bool should_collapse_initiator_ = false;
 };
 

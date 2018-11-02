@@ -62,8 +62,6 @@ static_library("sync") {
     "base/report_unrecoverable_error.cc",
     "base/report_unrecoverable_error.h",
     "base/stop_source.h",
-    "base/sync_features.cc",
-    "base/sync_features.h",
     "base/sync_prefs.cc",
     "base/sync_prefs.h",
     "base/syncer_error.cc",
@@ -610,6 +608,7 @@ static_library("sync") {
     "//google_apis",
     "//sql",
     "//third_party/cacheinvalidation",
+    "//third_party/crc32c",
     "//third_party/leveldatabase",
     "//third_party/zlib",
     "//third_party/zlib/google:compression_utils",
@@ -617,12 +616,7 @@ static_library("sync") {
 
   if (is_android) {
     deps += [ "//components/sync/android:jni_headers" ]
-    sources += [
-      "android/model_type_helper.cc",
-      "android/model_type_helper.h",
-      "android/sync_jni_registrar.cc",
-      "android/sync_jni_registrar.h",
-    ]
+    sources += [ "android/model_type_helper.cc" ]
   }
 
   if (is_chromeos) {
@@ -991,6 +985,7 @@ source_set("unit_tests") {
     "//sql:test_support",
     "//testing/gmock",
     "//testing/gtest",
+    "//third_party/crc32c",
     "//third_party/leveldatabase",
     "//third_party/protobuf:protobuf_lite",
     "//third_party/zlib/google:compression_utils",

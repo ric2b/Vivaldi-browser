@@ -39,7 +39,6 @@ namespace ios {
 class ChromeBrowserState;
 }
 
-namespace ios_internal {
 // Notification sent when the page info is shown.
 extern NSString* const kPageInfoWillShowNotification;
 // Notification sent when the page info is hidden.
@@ -48,7 +47,6 @@ extern NSString* const kPageInfoWillHideNotification;
 extern NSString* const kLocationBarBecomesFirstResponderNotification;
 // Notification sent when the location bar resigns first responder.
 extern NSString* const kLocationBarResignsFirstResponderNotification;
-}  // namespace ios_internal
 
 // The top-level view controller for the browser UI. Manages other controllers
 // which implement the interface.
@@ -104,6 +102,15 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint
 // Called when the typing shield is tapped.
 - (void)shieldWasTapped:(id)sender;
 
+// Called when the user explicitly opens the tab switcher.
+- (void)userEnteredTabSwitcher;
+
+// Presents either the new tab tip or incognito tab tip in-product help bubbles
+// if the the user is in a valid state to see one of them. At most one bubble
+// will be shown. If the feature engagement tracker determines it is not valid
+// to see one of the bubbles, that bubble will not be shown.
+- (void)presentBubblesIfEligible;
+
 // Called when the browser state provided to this instance is being destroyed.
 // At this point the browser will no longer ever be active, and will likely be
 // deallocated soon.
@@ -136,17 +143,17 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint
 // related to showing the previously selected tab.
 - (void)expectNewForegroundTab;
 
-// Shows the voice search UI.
-- (void)startVoiceSearch;
-
-// Shows the QR scanner UI.
-- (void)showQRScanner;
+// Shows the voice search UI. |originView|'s center is used for the presentation
+// and dismissal animations of the Voice Search UI. |originView| can be nil.
+- (void)startVoiceSearchWithOriginView:(UIView*)originView;
 
 // Focuses the omnibox.
 - (void)focusOmnibox;
 
-// Dismisses all presented views then calls |completion|.
-- (void)clearPresentedStateWithCompletion:(ProceduralBlock)completion;
+// Dismisses all presented views, excluding the omnibox if |dismissOmnibox| is
+// NO, then calls |completion|.
+- (void)clearPresentedStateWithCompletion:(ProceduralBlock)completion
+                           dismissOmnibox:(BOOL)dismissOmnibox;
 
 // Returns a set with the names of the files received from other applications
 // that are bookmarked or referenced by an open or recently closed tab.

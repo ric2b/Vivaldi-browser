@@ -248,6 +248,7 @@ class APIPermission {
     kMediaPerceptionPrivate,
     kLockScreen,
     kNewTabPageOverride,
+    kDeclarativeNetRequest,
 
     // vivaldi permissions
 

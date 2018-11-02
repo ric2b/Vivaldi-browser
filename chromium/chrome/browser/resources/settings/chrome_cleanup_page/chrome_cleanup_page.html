@@ -53,10 +53,8 @@
 
       /* Used by |chromeCleanupPoweredByHTML| */
       #powered-by-logo {
-        -webkit-padding-end: 2px;
-        -webkit-padding-start: 5px;
         content: url(chrome://settings/partner-logo.svg);
-        height: 13px;
+        height: 22px;
       }
 
       #status-icon {
@@ -97,16 +95,20 @@
             class$="[[statusIconClassName_]]" id="status-icon"></iron-icon>
       </div>
       <div class="start">
-        <div>[[title_]]</div>
-        <div class="secondary">
-          <span hidden="[[!showDetails_]]">
+        <span>[[title_]]</span>
+        <template is="dom-if" if="[[showDetails_]]">
+          <!-- Force line break to display learn-more inlined with
+               chromeCleanupExplanation or with the title_ (if showDetails_ is
+               false) despite these two elements being on different lines. -->
+          <div></div>
+          <span class="secondary">
             $i18n{chromeCleanupExplanation}
           </span>
-          <a id="learn-more" href="$i18n{chromeCleanupLearnMoreUrl}"
-              target="_blank" hidden="[[!showLearnMore_]]">
-            $i18n{learnMore}
-          </a>
-        </div>
+        </template>
+        <a id="learn-more" href="$i18n{chromeCleanupLearnMoreUrl}"
+            on-tap="learnMore_" target="_blank" hidden="[[!showLearnMore_]]">
+          $i18n{learnMore}
+        </a>
       </div>
       <template is="dom-if" if="[[showActionButton_]]">
         <div class="separator"></div>
@@ -116,14 +118,12 @@
         </paper-button>
       </template>
     </div>
-    <div class="settings-box" hidden="[[!showLogsPermission_]]">
-      <settings-toggle-button class="start"
-              id="chromeCleanupLogsUploadControl"
-              label="$i18n{chromeCleanupLogsUploadPermission}"
-              pref="[[logsUploadPref_]]"
-              on-settings-boolean-control-change="changeLogsPermission_">
-      </settings-toggle-button>
-    </div>
+    <settings-toggle-button hidden="[[!showLogsPermission_]]"
+        id="chromeCleanupLogsUploadControl"
+        label="$i18n{chromeCleanupLogsUploadPermission}"
+        pref="[[logsUploadPref_]]"
+        on-settings-boolean-control-change="changeLogsPermission_">
+    </settings-toggle-button>
     <div id="show-files-button" class="settings-box" actionable
         on-tap="toggleExpandButton_" hidden="[[!showDetails_]]">
       <div class="start">

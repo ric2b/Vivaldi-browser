@@ -16,14 +16,16 @@
 #include "chrome/browser/chromeos/arc/auth/arc_auth_service.h"
 #include "chrome/browser/chromeos/arc/bluetooth/arc_bluetooth_bridge.h"
 #include "chrome/browser/chromeos/arc/boot_phase_monitor/arc_boot_phase_monitor_bridge.h"
+#include "chrome/browser/chromeos/arc/cast_receiver/arc_cast_receiver_service.h"
 #include "chrome/browser/chromeos/arc/downloads_watcher/arc_downloads_watcher_service.h"
 #include "chrome/browser/chromeos/arc/enterprise/arc_enterprise_reporting_service.h"
+#include "chrome/browser/chromeos/arc/fileapi/arc_file_system_bridge.h"
 #include "chrome/browser/chromeos/arc/fileapi/arc_file_system_mounter.h"
-#include "chrome/browser/chromeos/arc/fileapi/arc_file_system_operation_runner.h"
 #include "chrome/browser/chromeos/arc/intent_helper/arc_settings_service.h"
 #include "chrome/browser/chromeos/arc/kiosk/arc_kiosk_bridge.h"
 #include "chrome/browser/chromeos/arc/notification/arc_boot_error_notification.h"
 #include "chrome/browser/chromeos/arc/notification/arc_provision_notification_service.h"
+#include "chrome/browser/chromeos/arc/oemcrypto/arc_oemcrypto_bridge.h"
 #include "chrome/browser/chromeos/arc/policy/arc_policy_bridge.h"
 #include "chrome/browser/chromeos/arc/policy/arc_policy_util.h"
 #include "chrome/browser/chromeos/arc/print/arc_print_service.h"
@@ -132,12 +134,13 @@ void ArcServiceLauncher::OnPrimaryUserProfilePrepared(Profile* profile) {
   ArcBluetoothBridge::GetForBrowserContext(profile);
   ArcBootErrorNotification::GetForBrowserContext(profile);
   ArcBootPhaseMonitorBridge::GetForBrowserContext(profile);
+  ArcCastReceiverService::GetForBrowserContext(profile);
   ArcClipboardBridge::GetForBrowserContext(profile);
   ArcCrashCollectorBridge::GetForBrowserContext(profile);
   ArcDownloadsWatcherService::GetForBrowserContext(profile);
   ArcEnterpriseReportingService::GetForBrowserContext(profile);
+  ArcFileSystemBridge::GetForBrowserContext(profile);
   ArcFileSystemMounter::GetForBrowserContext(profile);
-  ArcFileSystemOperationRunner::GetForBrowserContext(profile);
   ArcImeService::GetForBrowserContext(profile);
   ArcIntentHelperBridge::GetForBrowserContext(profile);
   ArcKioskBridge::GetForBrowserContext(profile);
@@ -146,6 +149,7 @@ void ArcServiceLauncher::OnPrimaryUserProfilePrepared(Profile* profile) {
   ArcNetHostImpl::GetForBrowserContext(profile);
   ArcNotificationManager::GetForBrowserContext(profile);
   ArcObbMounterBridge::GetForBrowserContext(profile);
+  ArcOemCryptoBridge::GetForBrowserContext(profile);
   ArcPolicyBridge::GetForBrowserContext(profile);
   ArcPowerBridge::GetForBrowserContext(profile);
   ArcPrintService::GetForBrowserContext(profile);
@@ -170,7 +174,6 @@ void ArcServiceLauncher::OnPrimaryUserProfilePrepared(Profile* profile) {
 
 void ArcServiceLauncher::Shutdown() {
   arc_play_store_enabled_preference_handler_.reset();
-  arc_service_manager_->Shutdown();
   arc_session_manager_->Shutdown();
 }
 

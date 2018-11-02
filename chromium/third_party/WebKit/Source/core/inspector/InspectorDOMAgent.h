@@ -32,7 +32,7 @@
 
 #include <memory>
 #include "core/CoreExport.h"
-#include "core/events/EventListenerMap.h"
+#include "core/dom/events/EventListenerMap.h"
 #include "core/inspector/InspectorBaseAgent.h"
 #include "core/inspector/protocol/DOM.h"
 #include "core/style/ComputedStyleConstants.h"
@@ -130,7 +130,10 @@ class CORE_EXPORT InspectorDOMAgent final
                                          const String& text,
                                          protocol::Maybe<String> name) override;
   protocol::Response removeAttribute(int node_id, const String& name) override;
-  protocol::Response getOuterHTML(int node_id, String* outer_html) override;
+  protocol::Response getOuterHTML(protocol::Maybe<int> node_id,
+                                  protocol::Maybe<int> backend_node_id,
+                                  protocol::Maybe<String> object_id,
+                                  String* outer_html) override;
   protocol::Response setOuterHTML(int node_id,
                                   const String& outer_html) override;
   protocol::Response performSearch(
@@ -192,6 +195,13 @@ class CORE_EXPORT InspectorDOMAgent final
       int* out_node_id) override;
   protocol::Response getRelayoutBoundary(int node_id,
                                          int* out_node_id) override;
+  protocol::Response describeNode(
+      protocol::Maybe<int> node_id,
+      protocol::Maybe<int> backend_node_id,
+      protocol::Maybe<String> object_id,
+      protocol::Maybe<int> depth,
+      protocol::Maybe<bool> pierce,
+      std::unique_ptr<protocol::DOM::Node>*) override;
 
   bool Enabled() const;
   void ReleaseDanglingNodes();
@@ -248,7 +258,7 @@ class CORE_EXPORT InspectorDOMAgent final
   static void CollectNodes(Node* root,
                            int depth,
                            bool pierce,
-                           Function<bool(Node*)>*,
+                           const Function<bool(Node*)>&,
                            HeapVector<Member<Node>>* result);
 
   protocol::Response AssertNode(int node_id, Node*&);

@@ -30,6 +30,7 @@ public class WebappInterceptNavigationDelegate extends InterceptNavigationDelega
         }
 
         if (UrlUtilities.isValidForIntentFallbackNavigation(navigationParams.url)
+                && !navigationParams.isPost
                 && isUrlOutsideWebappScope(mActivity.mWebappInfo, navigationParams.url)) {
             CustomTabsIntent.Builder intentBuilder = new CustomTabsIntent.Builder();
             intentBuilder.setShowTitle(true);

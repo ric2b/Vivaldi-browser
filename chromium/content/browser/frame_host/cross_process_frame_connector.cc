@@ -4,21 +4,21 @@
 
 #include "content/browser/frame_host/cross_process_frame_connector.h"
 
-#include "cc/surfaces/surface.h"
-#include "cc/surfaces/surface_hittest.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
+#include "components/viz/service/surfaces/surface.h"
+#include "components/viz/service/surfaces/surface_hittest.h"
 #include "content/browser/compositor/surface_utils.h"
 #include "content/browser/frame_host/frame_tree.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/frame_host/render_frame_host_manager.h"
 #include "content/browser/frame_host/render_frame_proxy_host.h"
-#include "content/browser/frame_host/render_widget_host_view_child_frame.h"
 #include "content/browser/renderer_host/cursor_manager.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
+#include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
 #include "content/common/frame_messages.h"
 #include "gpu/ipc/common/gpu_messages.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
@@ -34,7 +34,7 @@ CrossProcessFrameConnector::CrossProcessFrameConnector(
 
 CrossProcessFrameConnector::~CrossProcessFrameConnector() {
   // Notify the view of this object being destroyed, if the view still exists.
-  set_view(nullptr);
+  SetView(nullptr);
 }
 
 bool CrossProcessFrameConnector::OnMessageReceived(const IPC::Message& msg) {
@@ -54,15 +54,14 @@ bool CrossProcessFrameConnector::OnMessageReceived(const IPC::Message& msg) {
   return handled;
 }
 
-void CrossProcessFrameConnector::set_view(
-    RenderWidgetHostViewChildFrame* view) {
+void CrossProcessFrameConnector::SetView(RenderWidgetHostViewChildFrame* view) {
   // Detach ourselves from the previous |view_|.
   if (view_) {
     RenderWidgetHostViewBase* root_view = GetRootRenderWidgetHostView();
     if (root_view && root_view->GetCursorManager())
       root_view->GetCursorManager()->ViewBeingDestroyed(view_);
 
-    // The RenderWidgetHostDelegate needs to be checked because set_view() can
+    // The RenderWidgetHostDelegate needs to be checked because SetView() can
     // be called during nested WebContents destruction. See
     // https://crbug.com/644306.
     if (is_scroll_bubbling_ && GetParentRenderWidgetHostView() &&
@@ -76,15 +75,23 @@ void CrossProcessFrameConnector::set_view(
           ->CancelScrollBubbling(view_);
       is_scroll_bubbling_ = false;
     }
-    view_->SetCrossProcessFrameConnector(nullptr);
+    view_->SetFrameConnectorDelegate(nullptr);
   }
 
+  ResetFrameRect();
   view_ = view;
 
-  // Attach ourselves to the new view and size it appropriately.
+  // Attach ourselves to the new view and size it appropriately. Also update
+  // visibility in case the frame owner is hidden in parent process. We should
+  // try to move these updates to a single IPC (see https://crbug.com/750179).
   if (view_) {
-    view_->SetCrossProcessFrameConnector(this);
+    view_->SetFrameConnectorDelegate(this);
     SetRect(child_frame_rect_);
+    if (is_hidden_)
+      OnVisibilityChanged(false);
+    frame_proxy_in_parent_renderer_->Send(new FrameMsg_ViewChanged(
+        frame_proxy_in_parent_renderer_->GetRoutingID(),
+        view_->GetFrameSinkId()));
   }
 }
 
@@ -146,7 +153,8 @@ bool CrossProcessFrameConnector::TransformPointToLocalCoordSpace(
   // is necessary.
   *transformed_point =
       gfx::ConvertPointToPixel(view_->current_surface_scale_factor(), point);
-  cc::SurfaceHittest hittest(nullptr, GetFrameSinkManager()->surface_manager());
+  viz::SurfaceHittest hittest(nullptr,
+                              GetFrameSinkManager()->surface_manager());
   if (!hittest.TransformPointToTargetSurface(original_surface, local_surface_id,
                                              transformed_point))
     return false;
@@ -263,7 +271,9 @@ void CrossProcessFrameConnector::UnlockMouse() {
 }
 
 void CrossProcessFrameConnector::OnFrameRectChanged(
-    const gfx::Rect& frame_rect) {
+    const gfx::Rect& frame_rect,
+    const viz::LocalSurfaceId& local_surface_id) {
+  local_surface_id_ = local_surface_id;
   if (!frame_rect.size().IsEmpty())
     SetRect(frame_rect);
 }
@@ -276,6 +286,7 @@ void CrossProcessFrameConnector::OnUpdateViewportIntersection(
 }
 
 void CrossProcessFrameConnector::OnVisibilityChanged(bool visible) {
+  is_hidden_ = !visible;
   if (!view_)
     return;
 
@@ -370,6 +381,26 @@ CrossProcessFrameConnector::GetParentRenderWidgetHostView() {
   }
 
   return nullptr;
+}
+
+bool CrossProcessFrameConnector::IsInert() const {
+  return is_inert_;
+}
+
+bool CrossProcessFrameConnector::IsHidden() const {
+  return is_hidden_;
+}
+
+void CrossProcessFrameConnector::SetVisibilityForChildViews(
+    bool visible) const {
+  frame_proxy_in_parent_renderer_->frame_tree_node()
+      ->current_frame_host()
+      ->SetVisibilityForChildViews(visible);
+}
+
+void CrossProcessFrameConnector::ResetFrameRect() {
+  local_surface_id_ = viz::LocalSurfaceId();
+  child_frame_rect_ = gfx::Rect();
 }
 
 }  // namespace content

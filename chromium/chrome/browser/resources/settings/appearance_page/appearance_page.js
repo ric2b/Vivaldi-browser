@@ -14,14 +14,6 @@ var SIZE_DIFFERENCE_FIXED_STANDARD_ = 3;
 /**
  * 'settings-appearance-page' is the settings page containing appearance
  * settings.
- *
- * Example:
- *
- *    <iron-animated-pages>
- *      <settings-appearance-page prefs="{{prefs}}">
- *      </settings-appearance-page>
- *      ... other pages ...
- *    </iron-animated-pages>
  */
 Polymer({
   is: 'settings-appearance-page',
@@ -42,6 +34,9 @@ Polymer({
 
     /** @private */
     defaultZoom_: Number,
+
+    /** @private */
+    isWallpaperPolicyControlled_: {type: Boolean, value: true},
 
     /**
      * List of options for the font size drop-down menu.
@@ -140,9 +135,20 @@ Polymer({
     this.$.defaultFontSize.menuOptions = this.fontSizeOptions_;
     // TODO(dschuyler): Look into adding a listener for the
     // default zoom percent.
-    this.browserProxy_.getDefaultZoom().then(function(zoom) {
+    this.browserProxy_.getDefaultZoom().then(zoom => {
       this.defaultZoom_ = zoom;
-    }.bind(this));
+    });
+    // <if expr="chromeos">
+    this.browserProxy_.isWallpaperSettingVisible().then(
+        isWallpaperSettingVisible => {
+          assert(this.pageVisibility);
+          this.pageVisibility.setWallpaper = isWallpaperSettingVisible;
+        });
+    this.browserProxy_.isWallpaperPolicyControlled().then(
+        isPolicyControlled => {
+          this.isWallpaperPolicyControlled_ = isPolicyControlled;
+        });
+    // </if>
   },
 
   /**
@@ -271,9 +277,9 @@ Polymer({
     if (themeId) {
       assert(!useSystemTheme);
 
-      this.browserProxy_.getThemeInfo(themeId).then(function(info) {
+      this.browserProxy_.getThemeInfo(themeId).then(info => {
         this.themeSublabel_ = info.name;
-      }.bind(this));
+      });
 
       this.themeUrl_ = 'https://chrome.google.com/webstore/detail/' + themeId;
       return;

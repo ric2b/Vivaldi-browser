@@ -16,7 +16,6 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/test/histogram_tester.h"
@@ -126,10 +125,12 @@ class ComponentUpdaterTest : public testing::Test {
  private:
   base::test::ScopedTaskEnvironment scoped_task_environment_;
   base::RunLoop runloop_;
-  base::Closure quit_closure_;
+  const base::Closure quit_closure_ = runloop_.QuitClosure();
 
-  scoped_refptr<TestConfigurator> config_;
-  scoped_refptr<MockUpdateClient> update_client_;
+  scoped_refptr<TestConfigurator> config_ =
+      base::MakeRefCounted<TestConfigurator>();
+  scoped_refptr<MockUpdateClient> update_client_ =
+      base::MakeRefCounted<MockUpdateClient>();
   std::unique_ptr<ComponentUpdateService> component_updater_;
 
   DISALLOW_COPY_AND_ASSIGN(ComponentUpdaterTest);
@@ -181,18 +182,10 @@ std::unique_ptr<ComponentUpdateService> TestComponentUpdateServiceFactory(
   return base::MakeUnique<CrxUpdateService>(config, new MockUpdateClient());
 }
 
-ComponentUpdaterTest::ComponentUpdaterTest()
-    : scoped_task_environment_(
-          base::test::ScopedTaskEnvironment::MainThreadType::UI) {
-  quit_closure_ = runloop_.QuitClosure();
-
-  config_ = new TestConfigurator(
-      base::CreateSequencedTaskRunnerWithTraits({base::MayBlock()}),
-      base::ThreadTaskRunnerHandle::Get());
-
-  update_client_ = new MockUpdateClient();
+ComponentUpdaterTest::ComponentUpdaterTest() {
   EXPECT_CALL(update_client(), AddObserver(_)).Times(1);
-  component_updater_.reset(new CrxUpdateService(config_, update_client_));
+  component_updater_ =
+      base::MakeUnique<CrxUpdateService>(config_, update_client_);
 }
 
 ComponentUpdaterTest::~ComponentUpdaterTest() {
@@ -305,12 +298,13 @@ TEST_F(ComponentUpdaterTest, OnDemandUpdate) {
       ++cnt;
       if (cnt >= max_cnt_) {
         base::ThreadTaskRunnerHandle::Get()->PostTask(
-            FROM_HERE, base::Bind(&LoopHandler::Quit, base::Unretained(this)));
+            FROM_HERE,
+            base::BindOnce(&LoopHandler::Quit, base::Unretained(this)));
       }
     }
 
    private:
-    void Quit() { base::MessageLoop::current()->QuitWhenIdle(); }
+    void Quit() { base::RunLoop::QuitCurrentWhenIdleDeprecated(); }
 
     const int max_cnt_;
   };

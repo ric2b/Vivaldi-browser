@@ -25,7 +25,6 @@ void TexturedElement::Initialize() {
   texture_size_ = GetTexture()->GetPreferredTextureSize(maximum_width_);
   initialized_ = true;
   UpdateTexture();
-  set_fill(Fill::SELF);
 }
 
 void TexturedElement::UpdateTexture() {
@@ -47,15 +46,16 @@ void TexturedElement::UpdateElementSize() {
 }
 
 void TexturedElement::Render(UiElementRenderer* renderer,
-                             gfx::Transform view_proj_matrix) const {
+                             const gfx::Transform& view_proj_matrix) const {
   if (!initialized_)
     return;
   DCHECK(!GetTexture()->dirty());
   gfx::SizeF drawn_size = GetTexture()->GetDrawnSize();
   gfx::RectF copy_rect(0, 0, drawn_size.width() / texture_size_.width(),
                        drawn_size.height() / texture_size_.height());
-  renderer->DrawTexturedQuad(texture_handle_, view_proj_matrix, copy_rect,
-                             opacity());
+  renderer->DrawTexturedQuad(
+      texture_handle_, UiElementRenderer::kTextureLocationLocal,
+      view_proj_matrix, copy_rect, opacity(), size(), corner_radius());
 }
 
 void TexturedElement::Flush(SkSurface* surface) {

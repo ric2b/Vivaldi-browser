@@ -5,7 +5,7 @@
 /**
  * @fileoverview JavaScript implementation of the Payment Request API. When
  * loaded, installs the API onto the window object. Conforms
- * to https://www.w3.org/TR/payment-request/. Note: This is a work in progress.
+ * to https://w3c.github.io/payment-request/. Note: This is a work in progress.
  */
 
 /**
@@ -128,9 +128,10 @@ __gCrWeb['PromiseResolver'] = __gCrWeb.PromiseResolver;
 }());  // End of anonymous object
 
 /**
- * A simple object representation of |window.PaymentRequest| meant for
+ * A simple object representation of |PaymentRequest| meant for
  * communication to the app side.
  * @typedef {{
+ *   id: string,
  *   methodData: !Array<!window.PaymentMethodData>,
  *   details: !window.PaymentDetails,
  *   options: (window.PaymentOptions|undefined)
@@ -139,7 +140,7 @@ __gCrWeb['PromiseResolver'] = __gCrWeb.PromiseResolver;
 var SerializedPaymentRequest;
 
 /**
- * A simple object representation of |window.PaymentResponse| meant for
+ * A simple object representation of |PaymentResponse| meant for
  * communication to the app side.
  * @typedef {{
  *   paymentRequestId: string,
@@ -160,6 +161,444 @@ var SerializedPaymentResponse;
   // already
   // been defined.
   __gCrWeb.paymentRequestManager = {};
+
+  /** @const {number} */
+  __gCrWeb['paymentRequestManager'].MAX_STRING_LENGTH = 1024;
+
+  /** @const {number} */
+  __gCrWeb['paymentRequestManager'].MAX_JSON_STRING_LENGTH = 1048576;
+
+  /** @const {number} */
+  __gCrWeb['paymentRequestManager'].MAX_LIST_SIZE = 1024;
+
+  /**
+   * Validates a PaymentCurrencyAmount which is used to supply monetary amounts.
+   * https://w3c.github.io/payment-request/#dfn-valid-decimal-monetary-value
+   * @param {!window.PaymentCurrencyAmount} amount
+   * @param {string} amountName The name of |amount| to use in the error.
+   * @throws {TypeError|RangeError}
+   */
+  __gCrWeb['paymentRequestManager'].validatePaymentCurrencyAmount = function(
+      amount, amountName) {
+    if (typeof amount.value !== 'string')
+      throw new TypeError(amountName + ' value must be a string');
+    if (amount.value.length >
+        __gCrWeb['paymentRequestManager'].MAX_STRING_LENGTH) {
+      throw new TypeError(
+          amountName + ' value cannot be longer than ' +
+          __gCrWeb['paymentRequestManager'].MAX_STRING_LENGTH + ' characters');
+    }
+    if (!/^-?[0-9]+(\.[0-9]+)?$/.test(amount.value)) {
+      throw new TypeError(
+          amountName + ' value is not a valid decimal monetary value');
+    }
+
+    if (typeof amount.currency !== 'string')
+      throw new TypeError(amountName + ' currency must be a string');
+    if (amount.currency.length >
+        __gCrWeb['paymentRequestManager'].MAX_STRING_LENGTH) {
+      throw new TypeError(
+          amountName + ' currency cannot be longer than ' +
+          __gCrWeb['paymentRequestManager'].MAX_STRING_LENGTH + ' characters');
+    }
+    if ((typeof amount.currencySystem === 'undefined' ||
+        amount.currencySystem == 'urn:iso:std:iso:4217') &&
+        !/^[a-zA-Z]{3}$/.test(amount.currency)) {
+      throw new RangeError(
+          amountName + ' currency is not a valid ISO 4217 currency code');
+    }
+  };
+
+  /**
+   * Validates a window.PaymentItem which indicates a monetary amount along with
+   * a human-readable description of the amount.
+   * @param {!window.PaymentItem} paymentItem
+   * @param {string} paymentItemName The name of |paymentItem| to use in the
+   *     error.
+   * @throws {TypeError|RangeError}
+   */
+  __gCrWeb['paymentRequestManager'].validatePaymentItem = function(
+      paymentItem, paymentItemName) {
+    if (typeof paymentItem.label !== 'string')
+      throw new TypeError(paymentItemName + ' label must be a string');
+    if (paymentItem.label.length >
+        __gCrWeb['paymentRequestManager'].MAX_STRING_LENGTH) {
+      throw new TypeError(
+          paymentItemName + ' label cannot be longer than ' +
+          __gCrWeb['paymentRequestManager'].MAX_STRING_LENGTH + ' characters');
+    }
+
+    if (!paymentItem.amount)
+      throw new TypeError(paymentItemName + ' amount is missing');
+    __gCrWeb['paymentRequestManager'].validatePaymentCurrencyAmount(
+        paymentItem.amount, paymentItemName + ' amount');
+  };
+
+  /**
+   * Validates a Payment method identifier according to:
+   * https://w3c.github.io/payment-method-id/
+   * @param {string} identifier Payment method identifier to validate.
+   * @throws {TypeError|RangeError}
+   */
+  __gCrWeb['paymentRequestManager'].validatePaymentMethodIdentifier = function(
+      identifier) {
+    if (typeof identifier !== 'string')
+      throw new TypeError('A payment method identifier must be a string');
+    if (identifier.length >
+        __gCrWeb['paymentRequestManager'].MAX_STRING_LENGTH) {
+      throw new TypeError(
+          'A payment method identifier cannot be longer than ' +
+          __gCrWeb['paymentRequestManager'].MAX_STRING_LENGTH + ' characters');
+    }
+    try {
+      var url = new URL(identifier);
+      var invalidIdentifier =
+          (url.protocol != 'https:' || url.username || url.password);
+    } catch (error) {
+      invalidIdentifier = !/^[a-z0-9-]+$/.test(identifier);
+    } finally {
+      if (invalidIdentifier) {
+        throw new RangeError(
+            'A payment method identifier must either be valid URL with a ' +
+            'https scheme and empty username and password or a lower-case ' +
+            'alphanumeric string with optional hyphens');
+      }
+    }
+  };
+
+  /**
+   * Validates the supportedMethods property and its associated data property in
+   * a window.PaymentMethodData or window.PaymentDetailsModifier.
+   * @param {(!Array<string>|string)} supportedMethods
+   * @param {(window.BasicCardData|Object)} data
+   * @throws {TypeError|RangeError}
+   */
+  __gCrWeb['paymentRequestManager'].validateSupportedMethods = function(
+      supportedMethods, data) {
+    var hasBasicCardMethod = false;
+
+    if (supportedMethods instanceof Array) {
+      if (supportedMethods.length == 0) {
+        throw new TypeError(
+            'Each payment method needs to include at least one payment ' +
+            'method identifier');
+      }
+      if (supportedMethods.length >
+          __gCrWeb['paymentRequestManager'].MAX_LIST_SIZE) {
+        throw new TypeError(
+            'At most' + __gCrWeb['paymentRequestManager'].MAX_LIST_SIZE +
+            ' payment method identifiers are supported');
+      }
+      for (var i = 0; i < supportedMethods.length; i++) {
+        if (typeof supportedMethods[i] !== 'string') {
+          throw new TypeError('A payment method identifier must be a string');
+        }
+        __gCrWeb['paymentRequestManager'].validatePaymentMethodIdentifier(
+            supportedMethods[i]);
+
+        hasBasicCardMethod =
+            hasBasicCardMethod || supportedMethods[i] == 'basic-card';
+      }
+    } else if (typeof supportedMethods !== 'string') {
+      throw new TypeError('A payment method identifier must be a string');
+    } else {
+      __gCrWeb['paymentRequestManager'].validatePaymentMethodIdentifier(
+          supportedMethods);
+    }
+
+    if (typeof data === 'undefined')
+      return;
+
+    if (!(data instanceof Object)) {
+      throw new TypeError('Payment method data must be of type \'Object\'');
+    }
+    if (JSON.stringify(data).length >
+        __gCrWeb['paymentRequestManager'].MAX_JSON_STRING_LENGTH) {
+      throw new TypeError(
+          'JSON serialization of payment method data should be no longer ' +
+          'than ' + __gCrWeb['paymentRequestManager'].MAX_JSON_STRING_LENGTH +
+          ' characters');
+    }
+
+    // Validate basic-card data.
+    if (hasBasicCardMethod || supportedMethods == 'basic-card') {
+      // Validate basic-card supportedNetworks.
+      if (data.supportedNetworks) {
+        if (!(data.supportedNetworks instanceof Array)) {
+          throw new TypeError('basic-card supportedNetworks must be an array');
+        }
+        if (data.supportedNetworks.length >
+            __gCrWeb['paymentRequestManager'].MAX_LIST_SIZE) {
+          throw new TypeError(
+              'basic-card supportedNetworks cannot be longer than ' +
+              __gCrWeb['paymentRequestManager'].MAX_LIST_SIZE + ' elements');
+        }
+        for (var i = 0; i < data.supportedNetworks.length; i++) {
+          if (typeof data.supportedNetworks[i] !== 'string') {
+            throw new TypeError(
+                'A basic-card supported network must be a string');
+          }
+          if (data.supportedNetworks[i].length >
+              __gCrWeb['paymentRequestManager'].MAX_STRING_LENGTH) {
+            throw new TypeError(
+                'A basic-card supported network cannot be longer than ' +
+                __gCrWeb['paymentRequestManager'].MAX_STRING_LENGTH +
+                ' characters');
+          }
+        }
+      }
+      // Validate basic-card supportedTypes.
+      if (data.supportedTypes) {
+        if (!(data.supportedTypes instanceof Array)) {
+          throw new TypeError('basic-card supportedTypes must be an array');
+        }
+        if (data.supportedTypes.length >
+            __gCrWeb['paymentRequestManager'].MAX_LIST_SIZE) {
+          throw new TypeError(
+              'basic-card supportedTypes cannot be longer than ' +
+              __gCrWeb['paymentRequestManager'].MAX_LIST_SIZE + ' elements');
+        }
+        for (var i = 0; i < data.supportedTypes.length; i++) {
+          if (typeof data.supportedTypes[i] !== 'string') {
+            throw new TypeError('A basic-card supported type must be a string');
+          }
+          if (data.supportedTypes[i].length >
+              __gCrWeb['paymentRequestManager'].MAX_STRING_LENGTH) {
+            throw new TypeError(
+                'A basic-card supported type cannot be longer than ' +
+                __gCrWeb['paymentRequestManager'].MAX_STRING_LENGTH +
+                ' characters');
+          }
+        }
+      }
+    }
+  };
+
+  /**
+   * Validates a list of window.PaymentDetailsModifier instances.
+   * @param {!Array<!window.PaymentDetailsModifier>} modifiers
+   * @throws {TypeError|RangeError}
+   */
+  __gCrWeb['paymentRequestManager'].validatePaymentDetailsModifiers = function(
+      modifiers) {
+    if (!(modifiers instanceof Array))
+      throw new TypeError('Modifiers must be an array');
+    if (modifiers.length > __gCrWeb['paymentRequestManager'].MAX_LIST_SIZE) {
+      throw new TypeError(
+          'At most ' + __gCrWeb['paymentRequestManager'].MAX_LIST_SIZE +
+          ' modifiers allowed');
+    }
+    for (var i = 0; i < modifiers.length; i++) {
+      if (!modifiers[i].supportedMethods) {
+        throw new TypeError(
+            'Must specify at least one payment method identifier');
+      }
+      // Validate PaymentDetailsModifier.supportedMethods and
+      // PaymentDetailsModifier.data.
+      __gCrWeb['paymentRequestManager'].validateSupportedMethods(
+          modifiers[i].supportedMethods, modifiers[i].data);
+
+      if (typeof modifiers[i].total !== 'undefined') {
+        __gCrWeb['paymentRequestManager'].validatePaymentItem(
+            modifiers[i].total, 'Modifier total');
+        if (modifiers[i].total.amount.value[0] == '-')
+          throw new TypeError('Modifier total value should be non-negative');
+      }
+
+      if (typeof modifiers[i].additionalDisplayItems === 'undefined')
+        continue;
+
+      if (!(modifiers[i].additionalDisplayItems instanceof Array)) {
+        throw new TypeError('additionalDisplayItems must be an array');
+      }
+      if (modifiers[i].additionalDisplayItems.length >
+          __gCrWeb['paymentRequestManager'].MAX_LIST_SIZE) {
+        throw new TypeError(
+            'At most ' + __gCrWeb['paymentRequestManager'].MAX_LIST_SIZE +
+            ' additionalDisplayItems allowed');
+      }
+      for (var j = 0; j < modifiers[i].additionalDisplayItems.length; j++) {
+        __gCrWeb['paymentRequestManager'].validatePaymentItem(
+            modifiers[i].additionalDisplayItems[j],
+            'Additional display items in modifier');
+      }
+    }
+  };
+
+  /**
+   * Validates the shipping options passed to the PaymentRequest constructor and
+   * returns the validate values.
+   * @param {(Array<!window.PaymentShippingOption>|undefined)} shippingOptions
+   * @return {!Array<!window.PaymentShippingOption>} Validated shipping options.
+   * @throws {TypeError|RangeError}
+   */
+  __gCrWeb['paymentRequestManager'].validateShippingOptions = function(
+      shippingOptions) {
+    if (!shippingOptions || !(shippingOptions instanceof Array)) {
+      return [];
+    }
+    if (shippingOptions.length >
+        __gCrWeb['paymentRequestManager'].MAX_LIST_SIZE) {
+      throw new TypeError(
+          'At most ' + __gCrWeb['paymentRequestManager'].MAX_LIST_SIZE +
+          ' shipping options allowed');
+    }
+
+    var uniqueIDS = {};
+    for (var i = 0; i < shippingOptions.length; i++) {
+      // Validate window.PaymentShippingOption.
+      if (typeof shippingOptions[i].id !== 'string') {
+        throw new TypeError('Shipping option ID must be a string');
+      }
+      if (shippingOptions[i].id.length >
+          __gCrWeb['paymentRequestManager'].MAX_STRING_LENGTH) {
+        throw new TypeError(
+            'Shipping option ID cannot be longer than ' +
+            __gCrWeb['paymentRequestManager'].MAX_STRING_LENGTH +
+            ' characters');
+      }
+      if (uniqueIDS[shippingOptions[i].id]) {
+        // Return an empty array instead of throwing an error.
+        return [];
+      }
+      uniqueIDS[shippingOptions[i].id] = true;
+
+      if (typeof shippingOptions[i].label !== 'string') {
+        throw new TypeError('Shipping option label must be a string');
+      }
+
+      if (!shippingOptions[i].amount)
+        throw new TypeError('Shipping option amount is missing');
+      __gCrWeb['paymentRequestManager'].validatePaymentCurrencyAmount(
+          shippingOptions[i].amount, 'Shipping option amount');
+    }
+    return shippingOptions;
+  };
+
+  /**
+   * Validates an instance of PaymentDetailsBase and returns the validated
+   * shipping options.
+   * @param {!window.PaymentDetails} details
+   * @return {!Array<!window.PaymentShippingOption>} The validated shipping
+   *     options.
+   * @throws {TypeError|RangeError}
+   */
+  __gCrWeb['paymentRequestManager'].validatePaymentDetailsBase = function(
+      details) {
+    // Validate the details.displayItems.
+    if (typeof details.displayItems !== 'undefined') {
+      if (!(details.displayItems instanceof Array))
+        throw new TypeError('display items must be an array');
+      if (details.displayItems.length >
+          __gCrWeb['paymentRequestManager'].MAX_LIST_SIZE) {
+        throw new TypeError(
+            'At most ' + __gCrWeb['paymentRequestManager'].MAX_LIST_SIZE +
+            'display items allowed');
+      }
+      for (var i = 0; i < details.displayItems.length; i++) {
+        __gCrWeb['paymentRequestManager'].validatePaymentItem(
+            details.displayItems[i], 'display items');
+      }
+    }
+
+    // Validate the details.modifiers.
+    if (typeof details.modifiers !== 'undefined') {
+      __gCrWeb['paymentRequestManager'].validatePaymentDetailsModifiers(
+          details.modifiers);
+    }
+
+    // Validate the details.shippingOptions.
+    return __gCrWeb['paymentRequestManager'].validateShippingOptions(
+        details.shippingOptions);
+  };
+
+  /**
+   * Validates an instance of PaymentDetailsInit and returns the validated
+   * shipping options.
+   * @param {!window.PaymentDetails} details
+   * @return {!Array<!window.PaymentShippingOption>} The validated shipping
+   *     options.
+   * @throws {TypeError|RangeError}
+   */
+  __gCrWeb['paymentRequestManager'].validatePaymentDetailsInit = function(
+      details) {
+    // Validate details.total.
+    if (!details.total)
+      throw new TypeError('Total is missing.');
+    __gCrWeb['paymentRequestManager'].validatePaymentItem(
+        details.total, 'Total');
+    if (details.total.amount.value[0] == '-')
+      throw new TypeError('Total value should be non-negative');
+
+    return __gCrWeb['paymentRequestManager'].validatePaymentDetailsBase(
+        details);
+  };
+
+  /**
+   * Validates an instance of PaymentDetailsUpdate and returns the validated
+   * shipping options.
+   * @param {!window.PaymentDetails} details
+   * @return {!Array<!window.PaymentShippingOption>} The validated shipping
+   *     options.
+   * @throws {TypeError|RangeError}
+   */
+  __gCrWeb['paymentRequestManager'].validatePaymentDetailsUpdate = function(
+      details) {
+    // Validate details.total.
+    if (details.total) {
+      __gCrWeb['paymentRequestManager'].validatePaymentItem(
+          details.total, 'Total');
+      if (details.total.amount.value[0] == '-')
+        throw new TypeError('Total value should be non-negative');
+    }
+
+    // Validate details.error.
+    if (details.errorMessage) {
+      if (typeof details.error !== 'string') {
+        throw new TypeError('Error message must be a string');
+      }
+      if (details.error.length >
+          __gCrWeb['paymentRequestManager'].MAX_STRING_LENGTH) {
+        throw new TypeError(
+            'Error message cannot be longer than ' +
+            __gCrWeb['paymentRequestManager'].MAX_STRING_LENGTH +
+            ' characters');
+      }
+    }
+
+    return __gCrWeb['paymentRequestManager'].validatePaymentDetailsBase(
+        details);
+  };
+
+  /**
+   * Validates the array of PaymentMethodData instances passed to the
+   * PaymentRequest constructor.
+   * @param {!Array<!window.PaymentMethodData>} methodData
+   * @throws {TypeError|RangeError}
+   */
+  __gCrWeb['paymentRequestManager'].validatePaymentMethodData = function(
+      methodData) {
+    if (!(methodData instanceof Array))
+      throw new TypeError('methodData must be an array');
+    if (methodData.length == 0) {
+      throw new TypeError('Needs to include at least one payment method');
+    }
+    if (methodData.length > __gCrWeb['paymentRequestManager'].MAX_LIST_SIZE) {
+      throw new TypeError(
+          'At most ' + __gCrWeb['paymentRequestManager'].MAX_LIST_SIZE +
+          ' payment methods are supported');
+    }
+    for (var i = 0; i < methodData.length; i++) {
+      if (!methodData[i].supportedMethods) {
+        throw new TypeError(
+            'Each payment method needs to include at least one payment ' +
+            'method identifier');
+      }
+      // Validate PaymentMethodData.supportedMethods and PaymentMethodData.data.
+      __gCrWeb['paymentRequestManager'].validateSupportedMethods(
+          methodData[i].supportedMethods, methodData[i].data);
+    }
+  };
 
   /**
    * Generates a random string identfier resembling a GUID.
@@ -186,9 +625,16 @@ var SerializedPaymentResponse;
   __gCrWeb['paymentRequestManager'] = __gCrWeb.paymentRequestManager;
 
   /**
+   * Wether the origin is secure. The default is true unless it is set to false.
+   * If false, PaymentRequest constructor throws a SecurityError DOMException.
+   * @type {boolean}
+   */
+  __gCrWeb['paymentRequestManager'].isContextSecure = true;
+
+  /**
    * The PaymentRequest object, if any. This object is provided by the page and
    * only updated by the app side.
-   * @type {window.PaymentRequest}
+   * @type {PaymentRequest}
    */
   __gCrWeb['paymentRequestManager'].pendingRequest = null;
 
@@ -209,20 +655,21 @@ var SerializedPaymentResponse;
   /**
    * The PromiseResolver object used to resolve the promise returned by
    * PaymentResponse.prototype.complete, if any.
-   * @type {window.PaymentRequest}
+   * @type {PaymentRequest}
    */
   __gCrWeb['paymentRequestManager'].responsePromiseResolver = null;
 
   /**
-   * Parses |paymentResponseData| into a window.PaymentResponse object.
+   * Parses |paymentResponseData| into a PaymentResponse object.
    * @param {!SerializedPaymentResponse} paymentResponseData
-   * @return {window.PaymentResponse}
+   * @return {PaymentResponse}
    */
   __gCrWeb['paymentRequestManager'].parsePaymentResponseData = function(
       paymentResponseData) {
-    var response = new window.PaymentResponse(
-        paymentResponseData['requestId'], paymentResponseData['methodName'],
-        paymentResponseData['details']);
+    var response = new PaymentResponse();
+    response.requestId = paymentResponseData['requestId'];
+    response.methodName = paymentResponseData['methodName'];
+    response.details = paymentResponseData['details'];
     if (paymentResponseData['shippingAddress'])
       response.shippingAddress = paymentResponseData['shippingAddress'];
     if (paymentResponseData['shippingOption'])
@@ -251,8 +698,33 @@ var SerializedPaymentResponse;
    * with a valid one.
    * @param {!Promise<!window.PaymentDetails>|!window.PaymentDetails}
    *     detailsOrPromise
+   * @throws {DOMException}
+   * @suppress {checkTypes} Required for DOMException's constructor.
    */
   __gCrWeb['paymentRequestManager'].updateWith = function(detailsOrPromise) {
+    if (!this || this != __gCrWeb['paymentRequestManager'].updateEvent)
+      return;
+
+    if (!__gCrWeb['paymentRequestManager'].pendingRequest ||
+        __gCrWeb['paymentRequestManager'].pendingRequest.state !=
+            PaymentRequestState.INTERACTIVE) {
+      return;
+    }
+
+    if (__gCrWeb['paymentRequestManager'].pendingRequest.updating) {
+      throw new DOMException(
+          'Failed to execute \'updateWith\' on \'PaymentRequestUpdateEvent\'' +
+              ': \'Cannot update details twice',
+          'InvalidStateError');
+    }
+
+    __gCrWeb['paymentRequestManager'].pendingRequest.updating = true;
+    var message = {
+      'command': 'paymentRequest.setPendingRequestUpdating',
+      'updating': true,
+    };
+    __gCrWeb.message.invokeOnHost(message);
+
     // if |detailsOrPromise| is not an instance of a Promise, wrap it in a
     // Promise that fulfills with |detailsOrPromise|.
     if (!detailsOrPromise || !(detailsOrPromise.then instanceof Function) ||
@@ -266,12 +738,19 @@ var SerializedPaymentResponse;
             throw new TypeError(
                 'An instance of PaymentDetails must be provided.');
 
+          // Validate details and update the shipping options.
+          var validatedShippingOptions =
+              __gCrWeb['paymentRequestManager'].validatePaymentDetailsUpdate(
+                  paymentDetails);
+          paymentDetails.shippingOptions = validatedShippingOptions;
+
           var message = {
             'command': 'paymentRequest.updatePaymentDetails',
             'payment_details': paymentDetails,
           };
           __gCrWeb.message.invokeOnHost(message);
 
+          __gCrWeb['paymentRequestManager'].pendingRequest.updating = false;
           __gCrWeb['paymentRequestManager'].updateEvent = null;
         })
         .catch(function() {
@@ -349,6 +828,8 @@ var SerializedPaymentResponse;
 
     __gCrWeb['paymentRequestManager'].abortPromiseResolver.resolve();
     __gCrWeb['paymentRequestManager'].abortPromiseResolver = null;
+    __gCrWeb['paymentRequestManager'].pendingRequest = null;
+    __gCrWeb['paymentRequestManager'].updateEvent = null;
   };
 
   /**
@@ -389,7 +870,7 @@ var SerializedPaymentResponse;
 
   /**
    * Serializes |paymentRequest| to a SerializedPaymentRequest object.
-   * @param {window.PaymentRequest} paymentRequest
+   * @param {PaymentRequest} paymentRequest
    * @return {SerializedPaymentRequest}
    */
   __gCrWeb['paymentRequestManager'].serializePaymentRequest = function(
@@ -423,17 +904,11 @@ var SerializedPaymentResponse;
    */
   __gCrWeb['paymentRequestManager'].updateShippingOptionAndDispatchEvent =
       function(shippingOptionID) {
-    if (!__gCrWeb['paymentRequestManager'].pendingRequest) {
-      __gCrWeb['paymentRequestManager'].rejectRequestPromise(
-          'Internal PaymentRequest error: No pending request.');
-    }
-
     var pendingRequest = __gCrWeb['paymentRequestManager'].pendingRequest;
-
-    if (__gCrWeb['paymentRequestManager'].updateEvent) {
-      __gCrWeb['paymentRequestManager'].rejectRequestPromise(
-          'Internal PaymentRequest error: Only one update may take ' +
-          'place at a time.');
+    if (!pendingRequest ||
+        pendingRequest.state != PaymentRequestState.INTERACTIVE ||
+        pendingRequest.updating) {
+      return;
     }
 
     pendingRequest.shippingOption = shippingOptionID;
@@ -460,17 +935,11 @@ var SerializedPaymentResponse;
    */
   __gCrWeb['paymentRequestManager'].updateShippingAddressAndDispatchEvent =
       function(shippingAddress) {
-    if (!__gCrWeb['paymentRequestManager'].pendingRequest) {
-      __gCrWeb['paymentRequestManager'].rejectRequestPromise(
-          'Internal PaymentRequest error: No pending request.');
-    }
-
     var pendingRequest = __gCrWeb['paymentRequestManager'].pendingRequest;
-
-    if (__gCrWeb['paymentRequestManager'].updateEvent) {
-      __gCrWeb['paymentRequestManager'].rejectRequestPromise(
-          'Internal PaymentRequest error: Only one update may take ' +
-          'place at a time.');
+    if (!pendingRequest ||
+        pendingRequest.state != PaymentRequestState.INTERACTIVE ||
+        pendingRequest.updating) {
+      return;
     }
 
     pendingRequest.shippingAddress = shippingAddress;
@@ -492,6 +961,17 @@ var SerializedPaymentResponse;
 }());  // End of anonymous object
 
 /**
+ * Possible values for the state of the payment request according to:
+ * https://w3c.github.io/payment-request/#dfn-x%5B%5Bstate%5D%5D
+ * @enum {string}
+ */
+var PaymentRequestState = {
+  CREATED: 'created',
+  INTERACTIVE: 'interactive',
+  CLOSED: 'closed'
+};
+
+/**
  * A request to make a payment.
  * @param {!Array<!window.PaymentMethodData>} methodData Payment method
  *     identifiers for the payment methods that the web site accepts and any
@@ -504,33 +984,55 @@ var SerializedPaymentResponse;
  * @constructor
  * @implements {EventTarget}
  * @extends {__gCrWeb.EventTarget}
+ * @throws {DOMException|TypeError|RangeError}
+ * @suppress {checkTypes} Required for DOMException's constructor.
  */
-window.PaymentRequest = function(methodData, details, opt_options) {
+function PaymentRequest(methodData, details, opt_options) {
   __gCrWeb.EventTarget.call(this);
 
   if (window.top != window.self) {
-    throw new Error(
-        'PaymentRequest can only be used in the top-level context.');
+    throw new DOMException(
+        'Failed to construct \'PaymentRequest\': Must be in top-level context',
+        'SecurityError');
   }
 
-  if (methodData.length == 0)
-    throw new Error('The length of the methodData parameter must be > 0.');
+  // https://w3c.github.io/webappsec-secure-contexts/#is-origin-trustworthy
+  var isOriginPotentiallyTrustworthy = window.location.origin !== 'null' &&
+      (window.location.protocol === 'https:' ||
+       window.location.hostname === '127.0.0.1' ||
+       window.location.hostname === '::1' ||
+       window.location.hostname === 'localhost' ||
+       window.location.protocol === 'file:');
 
-  for (var i = 0; i < methodData.length; i++) {
-    if (methodData[i].supportedMethods.length == 0)
-      throw new Error(
-          'The length of the supportedMethods parameter must be > 0.');
+  if (!__gCrWeb['paymentRequestManager'].isContextSecure ||
+      !isOriginPotentiallyTrustworthy) {
+    throw new DOMException(
+        'Failed to construct \'PaymentRequest\': Must be in a secure context',
+        'SecurityError');
   }
 
-  // TODO(crbug.com/602666): Perform other validation per spec.
+  // Initialize these properties to make them own (vs. inherited) properties.
+  this.shippingAddress = null;
+  this.shippingOption = null;
+  this.shippingType = null;
 
-  // TODO(crbug.com/602666): Process payment methods then set parsedMethodData
-  // instead of methodData on this instance.
-  // /**
-  //  * @type {!Object<!Array<string>, ?string>}
-  //  * @private
-  //  */
-  // this.parsedMethodData = ...;
+  /**
+   * The state of this request, used to govern its lifecycle.
+   * @type {PaymentRequestState}
+   * @private
+   */
+  this.state = PaymentRequestState.CREATED;
+
+  /**
+   * True if there is a pending updateWith call to update the payment request
+   * and false otherwise.
+   * @type {boolean}
+   * @private
+   */
+  this.updating = false;
+
+  // Validate methodData.
+  __gCrWeb['paymentRequestManager'].validatePaymentMethodData(methodData);
 
   /**
    * @type {!Array<!window.PaymentMethodData>}
@@ -538,68 +1040,46 @@ window.PaymentRequest = function(methodData, details, opt_options) {
    */
   this.methodData = methodData;
 
+  // Validate details and update the shipping options.
+  var validatedShippingOptions =
+      __gCrWeb['paymentRequestManager'].validatePaymentDetailsInit(details);
+  details.shippingOptions = validatedShippingOptions;
+
+  this.id = details.id ? details.id : __gCrWeb['paymentRequestManager'].guid();
+
   /**
    * @type {!window.PaymentDetails}
    * @private
    */
   this.details = details;
 
+  // Pick the last selected shipping option as the selected shipping option.
+  for (var i = 0; i < validatedShippingOptions.length; i++) {
+    if (validatedShippingOptions[i].selected)
+      this.shippingOption = validatedShippingOptions[i].id;
+  }
+
+  // Validate the opt_options.shippingType.
+  if (opt_options && opt_options.shippingType &&
+      opt_options.shippingType != PaymentShippingType.SHIPPING &&
+      opt_options.shippingType != PaymentShippingType.DELIVERY &&
+      opt_options.shippingType != PaymentShippingType.PICKUP) {
+    throw new TypeError(
+        'The provided shipping type is not a valid enum value of type ' +
+        'PaymentShippingType');
+  }
+
+  // Use the provided shipping type. Otherwise default to "shipping".
+  if (opt_options && opt_options.requestShipping) {
+    this.shippingType = opt_options.shippingType ? opt_options.shippingType :
+                                                   PaymentShippingType.SHIPPING;
+  }
+
   /**
    * @type {?window.PaymentOptions}
    * @private
    */
   this.options = opt_options || null;
-
-  /**
-   * The state of this request, used to govern its lifecycle.
-   * TODO(crbug.com/602666): Implement state transitions per spec.
-   * @type {string}
-   * @private
-   */
-  this.state = 'created';
-
-  /**
-   * True if there is a pending updateWith call to update the payment request
-   * and false otherwise.
-   * TODO(crbug.com/602666): Implement changes in the value of this property per
-   * spec.
-   * @type {boolean}
-   * @private
-   */
-  this.updating = false;
-
-  /**
-   * A provided or generated ID for the this Payment Request instance.
-   * @type {string}
-   */
-  this.id = details.id ? details.id : __gCrWeb['paymentRequestManager'].guid();
-
-  /**
-   * Shipping address selected by the user.
-   * @type {?window.PaymentAddress}
-   */
-  this.shippingAddress = null;
-
-  /**
-   * Shipping option selected by the user.
-   * @type {?string}
-   */
-  this.shippingOption = null;
-
-  /**
-   * Set to the value of shippingType property of |opt_options| if it is a valid
-   * PaymentShippingType. Otherwise set to PaymentShippingType.SHIPPING.
-   * @type {?PaymentShippingType}
-   */
-  this.shippingType = null;
-
-  if (opt_options && opt_options.requestShipping) {
-    if (opt_options.shippingType != PaymentShippingType.SHIPPING &&
-        opt_options.shippingType != PaymentShippingType.DELIVERY &&
-        opt_options.shippingType != PaymentShippingType.PICKUP) {
-      this.shippingType = PaymentShippingType.SHIPPING;
-    }
-  }
 
   var message = {
     'command': 'paymentRequest.createPaymentRequest',
@@ -609,20 +1089,61 @@ window.PaymentRequest = function(methodData, details, opt_options) {
   __gCrWeb.message.invokeOnHost(message);
 };
 
-window.PaymentRequest.prototype = {
-  __proto__: __gCrWeb.EventTarget.prototype
-};
+PaymentRequest.prototype.__proto__ = __gCrWeb.EventTarget.prototype;
+
+/**
+ * A provided or generated ID for the this Payment Request instance.
+ * @type {string}
+ */
+PaymentRequest.prototype.id = '';
+
+/**
+ * Shipping address selected by the user.
+ * @type {?window.PaymentAddress}
+ */
+PaymentRequest.prototype.shippingAddress = null;
+
+/**
+ * Shipping option selected by the user.
+ * @type {?string}
+ */
+PaymentRequest.prototype.shippingOption = null;
+
+/**
+ * Set to the value of shippingType property of |opt_options| if it is a valid
+ * PaymentShippingType. Otherwise set to PaymentShippingType.SHIPPING.
+ * @type {?PaymentShippingType}
+ */
+PaymentRequest.prototype.shippingType = null;
 
 /**
  * Presents the PaymentRequest UI to the user.
- * @return {!Promise<window.PaymentResponse>} A promise to notify the caller
+ * @return {!Promise<PaymentResponse>} A promise to notify the caller
  *     whether the user accepted or rejected the request.
+ * @suppress {checkTypes} Required for DOMException's constructor.
  */
-window.PaymentRequest.prototype.show = function() {
-  if (__gCrWeb['paymentRequestManager'].pendingRequest) {
-    throw new Error('Only one PaymentRequest may be shown at a time.');
+PaymentRequest.prototype.show = function() {
+  if (!(this instanceof PaymentRequest)) {
+    return Promise.reject(new DOMException(
+        'show() must be called on an instance of PaymentRequest.',
+        'InvalidStateError'));
   }
+
+  if (this.state != PaymentRequestState.CREATED) {
+    return Promise.reject(
+        new DOMException('Already called show() once', 'InvalidStateError'));
+  }
+
+  if (__gCrWeb['paymentRequestManager'].pendingRequest ||
+      __gCrWeb['paymentRequestManager'].requestPromiseResolver) {
+    return Promise.reject(new DOMException(
+        'Only one PaymentRequest may be shown at a time', 'AbortError'));
+  }
+
   __gCrWeb['paymentRequestManager'].pendingRequest = this;
+  __gCrWeb['paymentRequestManager'].requestPromiseResolver =
+      new __gCrWeb.PromiseResolver();
+  this.state = PaymentRequestState.INTERACTIVE;
 
   var message = {
     'command': 'paymentRequest.requestShow',
@@ -631,8 +1152,6 @@ window.PaymentRequest.prototype.show = function() {
   };
   __gCrWeb.message.invokeOnHost(message);
 
-  __gCrWeb['paymentRequestManager'].requestPromiseResolver =
-      new __gCrWeb.PromiseResolver();
   return __gCrWeb['paymentRequestManager'].requestPromiseResolver.promise;
 };
 
@@ -641,20 +1160,36 @@ window.PaymentRequest.prototype.show = function() {
  * payment request and to tear down any user interface that might be shown.
  * @return {!Promise<undefined>} A promise to notify the caller whether the user
  *     agent was able to abort the payment request.
+ * @suppress {checkTypes} Required for DOMException's constructor.
  */
-window.PaymentRequest.prototype.abort = function() {
-  if (!__gCrWeb['paymentRequestManager'].pendingRequest) {
-    __gCrWeb['paymentRequestManager'].rejectRequestPromise(
-        'Internal PaymentRequest error: No pending request.');
+PaymentRequest.prototype.abort = function() {
+  if (!(this instanceof PaymentRequest)) {
+    return Promise.reject(new DOMException(
+        'abort() must be called on an instance of PaymentRequest.',
+        'InvalidStateError'));
   }
+
+  if (!__gCrWeb['paymentRequestManager'].pendingRequest ||
+      !__gCrWeb['paymentRequestManager'].requestPromiseResolver) {
+    return Promise.reject(new DOMException(
+        'Never called show(), so nothing to abort', 'InvalidStateError'));
+  }
+
+  if (__gCrWeb['paymentRequestManager'].abortPromiseResolver) {
+    return Promise.reject(new DOMException(
+        'Cannot abort() again until the previous abort() has resolved or ' +
+        'rejected'));
+  }
+
+  __gCrWeb['paymentRequestManager'].abortPromiseResolver =
+      new __gCrWeb.PromiseResolver();
+  this.state = PaymentRequestState.CLOSED;
 
   var message = {
     'command': 'paymentRequest.requestAbort',
   };
   __gCrWeb.message.invokeOnHost(message);
 
-  __gCrWeb['paymentRequestManager'].abortPromiseResolver =
-      new __gCrWeb.PromiseResolver();
   return __gCrWeb['paymentRequestManager'].abortPromiseResolver.promise;
 };
 
@@ -663,10 +1198,19 @@ window.PaymentRequest.prototype.abort = function() {
  * can be used to make a payment.
  * @return {!Promise<boolean>} A promise to notify the caller whether the
  *     PaymentRequest object can be used to make a payment.
+ * @suppress {checkTypes} Required for DOMException's constructor.
  */
-window.PaymentRequest.prototype.canMakePayment = function() {
-  // TODO(crbug.com/602666): return a promise rejected with InvalidStateError if
-  // |this.state| != 'created'.
+PaymentRequest.prototype.canMakePayment = function() {
+  if (!(this instanceof PaymentRequest)) {
+    return Promise.reject(new DOMException(
+        'canMakePayment() must be called on an instance of PaymentRequest.',
+        'InvalidStateError'));
+  }
+
+  if (this.state != PaymentRequestState.CREATED) {
+    return Promise.reject(
+        new DOMException('Cannot query payment request', 'InvalidStateError'));
+  }
 
   var message = {
     'command': 'paymentRequest.requestCanMakePayment',
@@ -683,8 +1227,16 @@ window.PaymentRequest.prototype.canMakePayment = function() {
 
 /**
  * @typedef {{
- *   supportedMethods: !Array<string>,
- *   data: (Object|undefined)
+ *   supportedNetworks: !Array<string>,
+ *   supportedTypes: !Array<string>
+ * }}
+ */
+window.BasicCardData;
+
+/**
+ * @typedef {{
+ *   supportedMethods: (!Array<string>|string),
+ *   data: (!window.BasicCardData|Object)
  * }}
  */
 window.PaymentMethodData;
@@ -712,9 +1264,10 @@ window.PaymentDetails;
 
 /**
  * @typedef {{
- *   supportedMethods: !Array<string>,
+ *   supportedMethods: (!Array<string>|string),
  *   total: (window.PaymentItem|undefined),
- *   additionalDisplayItems: (!Array<!window.PaymentItem>|undefined)
+ *   additionalDisplayItems: (!Array<!window.PaymentItem>|undefined),
+ *   data: (!window.BasicCardData|Object)
  * }}
  */
 window.PaymentDetailsModifier;
@@ -782,77 +1335,85 @@ window.PaymentShippingOption;
  * user and provided to the web page through the resolve function of the Promise
  * returned by PaymentRequest.show().
  * https://w3c.github.io/browser-payment-api/#paymentresponse-interface
- * @param {string} methodName
- * @param {Object} details
  * @constructor
  * @private
  */
-window.PaymentResponse = function(requestId, methodName, details) {
-  /**
-   * The same identifier present in the original window.PaymentRequest.
-   * @type {string}
-   */
-  this.requestId = requestId;
-
-  /**
-   * The payment method identifier for the payment method that the user selected
-   * to fulfil the transaction.
-   * @type {string}
-   */
-  this.methodName = methodName;
-
-  /**
-   * An object that provides a payment method specific message used by the
-   * merchant to process the transaction and determine successful fund transfer.
-   * the payment request.
-   * @type {Object}
-   */
-  this.details = details;
-
-  /**
-   * If the requestShipping flag was set to true in the window.PaymentOptions
-   * passed to the window.PaymentRequest constructor, this will be the full and
-   * final shipping address chosen by the user.
-   * @type {?window.PaymentAddress}
-   */
+function PaymentResponse(){
+  // Initialize these properties to make them own (vs. inherited) properties.
+  this.requestId = '';
+  this.methodName = '';
+  this.details = {};
   this.shippingAddress = null;
-
-  /**
-   * If the requestShipping flag was set to true in the window.PaymentOptions
-   * passed to the window.PaymentRequest constructor, this will be the id
-   * attribute of the selected shipping option.
-   * @type {?string}
-   */
   this.shippingOption = null;
-
-  /**
-   * If the requestPayerName flag was set to true in the window.PaymentOptions
-   * passed to the window.PaymentRequest constructor, this will be the name
-   * provided by the user.
-   * @type {?string}
-   */
   this.payerName = null;
-
-  /**
-   * If the requestPayerEmail flag was set to true in the window.PaymentOptions
-   * passed to the window.PaymentRequest constructor, this will be the email
-   * address chosen by the user.
-   * @type {?string}
-   */
   this.payerEmail = null;
-
-  /**
-   * If the requestPayerPhone flag was set to true in the window.PaymentOptions
-   * passed to the window.PaymentRequest constructor, this will be the phone
-   * number chosen by the user.
-   * @type {?string}
-   */
   this.payerPhone = null;
 };
 
 /**
+ * The same identifier present in the original PaymentRequest.
+ * @type {string}
+ */
+PaymentResponse.prototype.requestId = '';
+
+/**
+ * The payment method identifier for the payment method that the user selected
+ * to fulfil the transaction.
+ * @type {string}
+ */
+PaymentResponse.prototype.methodName = '';
+
+/**
+ * An object that provides a payment method specific message used by the
+ * merchant to process the transaction and determine successful fund transfer.
+ * the payment request.
+ * @type {Object}
+ */
+PaymentResponse.prototype.details = {};
+
+/**
+ * If the requestShipping flag was set to true in the window.PaymentOptions
+ * passed to the PaymentRequest constructor, this will be the full and
+ * final shipping address chosen by the user.
+ * @type {?window.PaymentAddress}
+ */
+PaymentResponse.prototype.shippingAddress = null;
+
+/**
+ * If the requestShipping flag was set to true in the window.PaymentOptions
+ * passed to the PaymentRequest constructor, this will be the id
+ * attribute of the selected shipping option.
+ * @type {?string}
+ */
+PaymentResponse.prototype.shippingOption = null;
+
+/**
+ * If the requestPayerName flag was set to true in the window.PaymentOptions
+ * passed to the PaymentRequest constructor, this will be the name
+ * provided by the user.
+ * @type {?string}
+ */
+PaymentResponse.prototype.payerName = null;
+
+/**
+ * If the requestPayerEmail flag was set to true in the window.PaymentOptions
+ * passed to the PaymentRequest constructor, this will be the email
+ * address chosen by the user.
+ * @type {?string}
+ */
+PaymentResponse.prototype.payerEmail = null;
+
+/**
+ * If the requestPayerPhone flag was set to true in the window.PaymentOptions
+ * passed to the PaymentRequest constructor, this will be the phone
+ * number chosen by the user.
+ * @type {?string}
+ */
+PaymentResponse.prototype.payerPhone = null;
+
+/**
  * Contains the possible values for the string argument accepted by
- * window.PaymentResponse.prototype.complete.
+ * PaymentResponse.prototype.complete.
  * @enum {string}
  */
 var PaymentComplete = {
@@ -868,7 +1429,7 @@ var PaymentComplete = {
  * @return {!Promise} A promise to notify the caller when the user interface has
  *     been closed.
  */
-window.PaymentResponse.prototype.complete = function(opt_result) {
+PaymentResponse.prototype.complete = function(opt_result) {
   if (opt_result != PaymentComplete.UNKNOWN &&
       opt_result != PaymentComplete.SUCCESS &&
       opt_result != PaymentComplete.FAIL) {

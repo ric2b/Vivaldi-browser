@@ -29,15 +29,19 @@ interface MirrorServiceRemoter {
   // Sends|message| to the sink. |message| is a serialized protobuf from
   // src/media/remoting/proto.
   SendMessageToSink(array<uint8> message);
+
+  // Estimates the transmission capacity. Returns the result in
+  // bytes per second.
+  EstimateTransmissionCapacity() => (double rate);
 };
 
 // Interface used for sending notifications back to the source's control logic,
 // and to pass messages from the sink back to the source.
 interface MirrorServiceRemotingSource {
   // Notifies the source that the sink is now available to start remoting and
-  // passes the receiver's capabilities. It is up to the source's control logic
+  // passes the receiver's metadata. It is up to the source's control logic
   // to decide whether/when to start remoting.
-  OnSinkAvailable(SinkCapabilities capabilities);
+  OnSinkAvailable(RemotingSinkMetadata metadata);
 
   // Passes a |message| from the sink back to the source. The |message| consists
   // of a serialized protobuf from src/media/remoting/proto. This will only be

@@ -67,6 +67,7 @@
 
 #if defined(OS_CHROMEOS)
 #include "ash/accessibility_types.h"
+#include "ash/public/cpp/ash_pref_names.h"
 #include "chrome/browser/chromeos/platform_keys/key_permissions_policy_handler.h"
 #include "chrome/browser/chromeos/policy/configuration_policy_handler_chromeos.h"
 #include "chrome/browser/policy/default_geolocation_policy_handler.h"
@@ -487,10 +488,10 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
     chromeos::prefs::kAudioOutputAllowed,
     base::Value::Type::BOOLEAN },
   { key::kShowLogoutButtonInTray,
-    prefs::kShowLogoutButtonInTray,
+    ash::prefs::kShowLogoutButtonInTray,
     base::Value::Type::BOOLEAN },
   { key::kShelfAutoHideBehavior,
-    prefs::kShelfAutoHideBehaviorLocal,
+    ash::prefs::kShelfAutoHideBehaviorLocal,
     base::Value::Type::STRING },
   { key::kSessionLengthLimit,
     prefs::kSessionLengthLimit,
@@ -514,19 +515,19 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
     prefs::kTermsOfServiceURL,
     base::Value::Type::STRING },
   { key::kShowAccessibilityOptionsInSystemTrayMenu,
-    prefs::kShouldAlwaysShowAccessibilityMenu,
+    ash::prefs::kShouldAlwaysShowAccessibilityMenu,
     base::Value::Type::BOOLEAN },
   { key::kLargeCursorEnabled,
-    prefs::kAccessibilityLargeCursorEnabled,
+    ash::prefs::kAccessibilityLargeCursorEnabled,
     base::Value::Type::BOOLEAN },
   { key::kSpokenFeedbackEnabled,
-    prefs::kAccessibilitySpokenFeedbackEnabled,
+    ash::prefs::kAccessibilitySpokenFeedbackEnabled,
     base::Value::Type::BOOLEAN },
   { key::kHighContrastEnabled,
-    prefs::kAccessibilityHighContrastEnabled,
+    ash::prefs::kAccessibilityHighContrastEnabled,
     base::Value::Type::BOOLEAN },
   { key::kVirtualKeyboardEnabled,
-    prefs::kAccessibilityVirtualKeyboardEnabled,
+    ash::prefs::kAccessibilityVirtualKeyboardEnabled,
     base::Value::Type::BOOLEAN },
   { key::kDeviceLoginScreenDefaultLargeCursorEnabled,
     NULL,
@@ -588,6 +589,15 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kEcryptfsMigrationStrategy,
     prefs::kEcryptfsMigrationStrategy,
     base::Value::Type::INTEGER },
+  { key::kNativePrintersBulkAccessMode,
+    prefs::kRecommendedNativePrintersAccessMode,
+    base::Value::Type::INTEGER },
+  { key::kNativePrintersBulkBlacklist,
+    prefs::kRecommendedNativePrintersBlacklist,
+    base::Value::Type::LIST },
+  { key::kNativePrintersBulkWhitelist,
+    prefs::kRecommendedNativePrintersWhitelist,
+    base::Value::Type::LIST },
 #endif  // defined(OS_CHROMEOS)
 
 // Metrics reporting is controlled by a platform specific policy for ChromeOS
@@ -625,6 +635,9 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
     base::Value::Type::BOOLEAN },
   { key::kPrintPreviewUseSystemDefaultPrinter,
     prefs::kPrintPreviewUseSystemDefaultPrinter,
+    base::Value::Type::BOOLEAN },
+  { key::kCloudPolicyOverridesMachinePolicy,
+    prefs::kCloudPolicyOverridesMachinePolicy,
     base::Value::Type::BOOLEAN },
 #endif  // !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
 
@@ -678,6 +691,13 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kPinUnlockWeakPinsAllowed,
     prefs::kPinUnlockWeakPinsAllowed,
     base::Value::Type::BOOLEAN },
+
+  { key::kCastReceiverEnabled,
+    prefs::kCastReceiverEnabled,
+    base::Value::Type::BOOLEAN },
+  { key::kCastReceiverName,
+    prefs::kCastReceiverName,
+    base::Value::Type::STRING },
 #endif
 
   { key::kRoamingProfileSupportEnabled,
@@ -1026,8 +1046,8 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
   handlers->AddHandler(base::MakeUnique<IntRangePolicyHandler>(
       key::kUptimeLimit, prefs::kUptimeLimit, 3600, INT_MAX, true));
   handlers->AddHandler(base::WrapUnique(new IntRangePolicyHandler(
-      key::kDeviceLoginScreenDefaultScreenMagnifierType, NULL, 0,
-      ash::MAGNIFIER_FULL, false)));
+      key::kDeviceLoginScreenDefaultScreenMagnifierType, nullptr,
+      ash::MAGNIFIER_DISABLED, ash::MAGNIFIER_FULL, false)));
   // TODO(binjin): Remove LegacyPoliciesDeprecatingPolicyHandler for these two
   // policies once deprecation of legacy power management policies is done.
   // http://crbug.com/346229
@@ -1044,6 +1064,8 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
       base::MakeUnique<ExternalDataPolicyHandler>(key::kDeviceWallpaperImage));
   handlers->AddHandler(
       base::MakeUnique<ExternalDataPolicyHandler>(key::kWallpaperImage));
+  handlers->AddHandler(base::MakeUnique<ExternalDataPolicyHandler>(
+      key::kNativePrintersBulkConfiguration));
   handlers->AddHandler(base::WrapUnique(new SimpleSchemaValidatingPolicyHandler(
       key::kSessionLocales, NULL, chrome_schema, SCHEMA_STRICT,
       SimpleSchemaValidatingPolicyHandler::RECOMMENDED_ALLOWED,

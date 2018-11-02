@@ -69,8 +69,7 @@ class Context : public base::RefCountedThreadSafe<Context>,
   void EnsureWorkVisible() override;
   gpu::CommandBufferNamespace GetNamespaceID() const override;
   gpu::CommandBufferId GetCommandBufferID() const override;
-  int32_t GetStreamId() const override;
-  void FlushOrderingBarrierOnStream(int32_t stream_id) override;
+  void FlushPendingWork() override;
   uint64_t GenerateFenceSyncRelease() override;
   bool IsFenceSyncRelease(uint64_t release) override;
   bool IsFenceSyncFlushed(uint64_t release) override;
@@ -88,6 +87,9 @@ class Context : public base::RefCountedThreadSafe<Context>,
   void ApplyCurrentContext(gl::GLSurface* current_surface);
   static void ApplyContextReleased();
 
+  static void SetPlatformGpuFeatureInfo(
+      const gpu::GpuFeatureInfo& gpu_feature_info);
+
  private:
   friend class base::RefCountedThreadSafe<Context>;
   ~Context() override;
@@ -100,6 +102,8 @@ class Context : public base::RefCountedThreadSafe<Context>,
   bool WasServiceContextLost() const;
   bool IsCompatibleSurface(Surface* surface) const;
   bool Flush(gl::GLSurface* gl_surface);
+
+  static gpu::GpuFeatureInfo platform_gpu_feature_info_;
 
   Display* display_;
   const Config* config_;

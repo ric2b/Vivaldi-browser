@@ -4,9 +4,9 @@
 
 #include "content/browser/renderer_host/input/touch_selection_controller_client_child_frame.h"
 
-#include "content/browser/frame_host/render_widget_host_view_child_frame.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
+#include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
 #include "content/common/content_switches_internal.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/touch_selection_controller_client_manager.h"
@@ -29,6 +29,10 @@ TouchSelectionControllerClientChildFrame::
     ~TouchSelectionControllerClientChildFrame() {
   // If the manager doesn't outlive us, our owning view sill detach us.
   manager_->InvalidateClient(this);
+}
+
+void TouchSelectionControllerClientChildFrame::DidStopFlinging() {
+  manager_->DidStopFlinging();
 }
 
 void TouchSelectionControllerClientChildFrame::UpdateSelectionBoundsIfNeeded(

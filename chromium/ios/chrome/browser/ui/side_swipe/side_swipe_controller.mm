@@ -14,6 +14,7 @@
 #import "ios/chrome/browser/snapshots/snapshot_cache_factory.h"
 #import "ios/chrome/browser/tabs/tab.h"
 #import "ios/chrome/browser/tabs/tab_model_observer.h"
+#import "ios/chrome/browser/tabs/tab_private.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_side_swipe_provider.h"
 #import "ios/chrome/browser/ui/side_swipe/card_side_swipe_view.h"
 #import "ios/chrome/browser/ui/side_swipe/history_side_swipe_provider.h"
@@ -21,6 +22,7 @@
 #import "ios/chrome/browser/ui/side_swipe/side_swipe_util.h"
 #import "ios/chrome/browser/ui/side_swipe_gesture_recognizer.h"
 #include "ios/chrome/browser/ui/ui_util.h"
+#import "ios/chrome/browser/web/page_placeholder_tab_helper.h"
 #import "ios/web/public/web_state/web_state_observer_bridge.h"
 #import "ios/web/web_state/ui/crw_web_controller.h"
 
@@ -28,12 +30,10 @@
 #error "This file requires ARC support."
 #endif
 
-namespace ios_internal {
 NSString* const kSideSwipeWillStartNotification =
     @"kSideSwipeWillStartNotification";
 NSString* const kSideSwipeDidStopNotification =
     @"kSideSwipeDidStopNotification";
-}  // namespace ios_internal
 
 namespace {
 
@@ -253,7 +253,8 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
       break;
 
     Tab* tab = [model_ tabAtIndex:index];
-    if (tab && tab.webController.usePlaceholderOverlay) {
+    if (tab && PagePlaceholderTabHelper::FromWebState(tab.webState)
+                   ->will_add_placeholder_for_next_navigation()) {
       [sessionIDs addObject:tab.tabId];
     }
     index = index + dx;
@@ -306,7 +307,7 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
     [[model_ currentTab] updateFullscreenWithToolbarVisible:YES];
     [[model_ currentTab] updateSnapshotWithOverlay:YES visibleFrameOnly:YES];
     [[NSNotificationCenter defaultCenter]
-        postNotificationName:ios_internal::kSideSwipeWillStartNotification
+        postNotificationName:kSideSwipeWillStartNotification
                       object:nil];
     [[swipeDelegate_ tabStripController] setHighlightsSelectedTab:YES];
     startingTabIndex_ = [model_ indexOfTab:[model_ currentTab]];
@@ -362,7 +363,7 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
     [[swipeDelegate_ tabStripController] setHighlightsSelectedTab:NO];
     [self deleteGreyCache];
     [[NSNotificationCenter defaultCenter]
-        postNotificationName:ios_internal::kSideSwipeDidStopNotification
+        postNotificationName:kSideSwipeDidStopNotification
                       object:nil];
   }
 }

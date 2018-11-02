@@ -22,6 +22,7 @@
 #include "content/public/common/associated_interface_registry.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/media_stream_request.h"
+#include "content/public/common/network_service.mojom.h"
 #include "content/public/common/resource_type.h"
 #include "content/public/common/sandbox_type.h"
 #include "content/public/common/socket_permission_request.h"
@@ -44,7 +45,7 @@
 #endif
 
 #if defined(OS_POSIX)
-#include "content/public/browser/file_descriptor_info.h"
+#include "content/public/browser/posix_file_descriptor_info.h"
 #endif
 
 class GURL;
@@ -143,6 +144,10 @@ struct OpenURLParams;
 struct Referrer;
 struct WebPreferences;
 
+namespace mojom {
+class NetworkContext;
+}
+
 // Embedder API (or SPI) for participating in browser logic, to be implemented
 // by the client of the content browser. See ChromeContentBrowserClient for the
 // principal implementation. The methods are assumed to be called on the UI
@@ -176,6 +181,11 @@ class CONTENT_EXPORT ContentBrowserClient {
   // basis; if you need to poll this function constantly, use the above
   // PostAfterStartupTask() API instead.
   virtual bool IsBrowserStartupComplete();
+
+  // Allows the embedder to handle a request from unit tests running in the
+  // content layer to consider startup complete (for the sake of
+  // PostAfterStartupTask()).
+  virtual void SetBrowserStartupIsCompleteForTesting();
 
   // If content creates the WebContentsView implementation, it will ask the
   // embedder to return an (optional) delegate to customize it. The view will
@@ -589,8 +599,8 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual std::unique_ptr<VpnServiceProxy> GetVpnServiceProxy(
       BrowserContext* browser_context);
 
-  // Returns an implementation of a file selecition policy. Can return nullptr.
-  virtual ui::SelectFilePolicy* CreateSelectFilePolicy(
+  // Returns an implementation of a file selecition policy. Can return null.
+  virtual std::unique_ptr<ui::SelectFilePolicy> CreateSelectFilePolicy(
       WebContents* web_contents);
 
   // Returns additional allowed scheme set which can access files in
@@ -784,7 +794,7 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual void GetAdditionalMappedFilesForChildProcess(
       const base::CommandLine& command_line,
       int child_process_id,
-      content::FileDescriptorInfo* mappings) {}
+      content::PosixFileDescriptorInfo* mappings) {}
 #endif  // defined(OS_POSIX) && !defined(OS_MACOSX)
 
 #if defined(OS_WIN)
@@ -825,6 +835,38 @@ class CONTENT_EXPORT ContentBrowserClient {
   // This is called on the IO thread.
   virtual std::vector<std::unique_ptr<URLLoaderThrottle>>
   CreateURLLoaderThrottles(const base::Callback<WebContents*()>& wc_getter);
+
+  // Creates a NetworkContext for a BrowserContext's StoragePartition. If the
+  // network service is enabled, it must return a NetworkContext using the
+  // network service. If the network service is disabled, the embedder may
+  // return a NetworkContext, or it may return nullptr, in which case the
+  // StoragePartition will create one wrapping the URLRequestContext obtained
+  // from the BrowserContext.
+  //
+  // Called before the corresonding BrowserContext::CreateRequestContext method
+  // is called.
+  //
+  // If |in_memory| is true, |relative_partition_path| is still a path that
+  // uniquely identifies the storage partition, though nothing should be written
+  // to it.
+  //
+  // If |relative_partition_path| is the empty string, it means this needs to
+  // create the default NetworkContext for the BrowserContext.
+  virtual mojom::NetworkContextPtr CreateNetworkContext(
+      BrowserContext* context,
+      bool in_memory,
+      const base::FilePath& relative_partition_path);
+
+  // Called when a main-frame navigation to |url| commits using a legacy
+  // Symantec certificate that will be distrusted in future. Allows the embedder
+  // to override the message that is added to the console to inform developers
+  // that their certificate will be distrusted in future. If the method returns
+  // true, then |*console_message| will be printed to the console; otherwise a
+  // generic mesage will be used.
+  virtual bool OverrideLegacySymantecCertConsoleMessage(
+      const GURL& url,
+      const scoped_refptr<net::X509Certificate>& cert,
+      std::string* console_messsage);
 };
 
 }  // namespace content

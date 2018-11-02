@@ -19,6 +19,7 @@
 #include "core/fullscreen/DocumentFullscreen.h"
 #include "core/svg/SVGDocumentExtensions.h"
 #include "core/xml/DocumentXPathEvaluator.h"
+#include "platform/bindings/RuntimeCallStats.h"
 #include "platform/bindings/V8ObjectConstructor.h"
 #include "platform/wtf/GetPtr.h"
 #include "platform/wtf/RefPtr.h"
@@ -102,17 +103,21 @@ static void locationAttributeSetter(v8::Local<v8::Value> v8Value, const v8::Func
 } // namespace TestInterfaceDocumentV8Internal
 
 void V8TestInterfaceDocument::locationAttributeGetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceDocument_location_Getter");
+
   TestInterfaceDocumentV8Internal::locationAttributeGetter(info);
 }
 
 void V8TestInterfaceDocument::locationAttributeSetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceDocument_location_Setter");
+
   v8::Local<v8::Value> v8Value = info[0];
 
   TestInterfaceDocumentV8Internal::locationAttributeSetter(v8Value, info);
 }
 
 static const V8DOMConfiguration::AccessorConfiguration V8TestInterfaceDocumentAccessors[] = {
-    { "location", V8TestInterfaceDocument::locationAttributeGetterCallback, V8TestInterfaceDocument::locationAttributeSetterCallback, nullptr, nullptr, static_cast<v8::PropertyAttribute>(v8::DontDelete), V8DOMConfiguration::kOnInstance, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds },
+    { "location", V8TestInterfaceDocument::locationAttributeGetterCallback, V8TestInterfaceDocument::locationAttributeSetterCallback, nullptr, V8PrivateProperty::kNoCachedAccessor, static_cast<v8::PropertyAttribute>(v8::DontDelete), V8DOMConfiguration::kOnInstance, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds },
 };
 
 static void installV8TestInterfaceDocumentTemplate(

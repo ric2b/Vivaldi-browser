@@ -105,7 +105,7 @@ Polymer({
      * The network IP Address.
      * @private
      */
-    IPAddress_: {
+    ipAddress_: {
       type: String,
       value: '',
     },
@@ -219,19 +219,19 @@ Polymer({
     // Set the IPAddress property to the IPV4 Address.
     var ipv4 =
         CrOnc.getIPConfigForType(this.networkProperties, CrOnc.IPType.IPV4);
-    this.IPAddress_ = (ipv4 && ipv4.IPAddress) || '';
+    this.ipAddress_ = (ipv4 && ipv4.IPAddress) || '';
 
     // Update the detail page title.
     this.parentNode.pageTitle = CrOnc.getNetworkName(this.networkProperties);
 
     Polymer.dom.flush();
 
-    if (this.didSetFocus_) {
+    if (!this.didSetFocus_) {
       // Focus a button once the initial state is set.
       this.didSetFocus_ = true;
-      var button = this.$$('#buttonDiv .primary-button:not([hidden])');
+      var button = this.$$('#titleDiv .primary-button:not([hidden])');
       if (!button)
-        button = this.$$('#buttonDiv .secondary-button:not([hidden])');
+        button = this.$$('#titleDiv paper-button:not([hidden])');
       assert(button);  // At least one button will always be visible.
       button.focus();
     }
@@ -346,13 +346,13 @@ Polymer({
       return;
 
     assert(!!this.guid);
-    this.networkingPrivate.setProperties(this.guid, onc, function() {
+    this.networkingPrivate.setProperties(this.guid, onc, () => {
       if (chrome.runtime.lastError) {
         // An error typically indicates invalid input; request the properties
         // to update any invalid fields.
         this.getNetworkDetails_();
       }
-    }.bind(this));
+    });
   },
 
   /**
@@ -1020,6 +1020,16 @@ Polymer({
     return networkProperties.Type == CrOnc.Type.CELLULAR &&
         this.get('Cellular.Family', this.networkProperties) ==
         CrOnc.NetworkTechnology.GSM;
+  },
+
+  /**
+   * @param {string} ipAddress
+   * @param {!CrOnc.NetworkProperties} networkProperties
+   * @return {boolean}
+   * @private
+   */
+  showIpAddress_: function(ipAddress, networkProperties) {
+    return !!ipAddress && this.isConnectedState_(networkProperties);
   },
 
   /**

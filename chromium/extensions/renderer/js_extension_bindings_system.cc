@@ -7,6 +7,7 @@
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_split.h"
+#include "base/timer/elapsed_timer.h"
 #include "content/public/child/v8_value_converter.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/common/extension.h"
@@ -94,7 +95,7 @@ v8::Local<v8::Object> GetOrCreateBindObjectIfAvailable(
   std::string ancestor_name;
   bool only_ancestor_available = false;
 
-  Feature* feature = api_feature_provider->GetFeature(api_name);
+  const Feature* feature = api_feature_provider->GetFeature(api_name);
   bool is_vivaldi_feature = feature && feature->IsVivaldiFeature();
 
   for (size_t i = 0; i < split.size() - 1; ++i) {
@@ -146,7 +147,7 @@ JsExtensionBindingsSystem::JsExtensionBindingsSystem(
     : source_map_(source_map),
       ipc_message_sender_(std::move(ipc_message_sender)),
       request_sender_(
-          base::MakeUnique<RequestSender>(ipc_message_sender_.get())) {}
+          std::make_unique<RequestSender>(ipc_message_sender_.get())) {}
 
 JsExtensionBindingsSystem::~JsExtensionBindingsSystem() {}
 
@@ -163,6 +164,8 @@ void JsExtensionBindingsSystem::WillReleaseScriptContext(
 
 void JsExtensionBindingsSystem::UpdateBindingsForContext(
     ScriptContext* context) {
+  base::ElapsedTimer timer;
+
   v8::HandleScope handle_scope(context->isolate());
   v8::Context::Scope context_scope(context->v8_context());
 
@@ -204,7 +207,7 @@ void JsExtensionBindingsSystem::UpdateBindingsForContext(
 
         // If this API has a parent feature (and isn't marked 'noparent'),
         // then this must be a function or event, so we should not register.
-        if (api_feature_provider->GetParent(map_entry.second.get()) != nullptr)
+        if (api_feature_provider->GetParent(*map_entry.second) != nullptr)
           continue;
 
         // Skip chrome.test if this isn't a test.
@@ -228,6 +231,8 @@ void JsExtensionBindingsSystem::UpdateBindingsForContext(
       break;
     }
   }
+
+  LogUpdateBindingsForContextTime(context->context_type(), timer.Elapsed());
 }
 
 void JsExtensionBindingsSystem::HandleResponse(int request_id,

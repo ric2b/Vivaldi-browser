@@ -4,15 +4,20 @@
 
 #import "ios/chrome/browser/ui/bookmarks/bookmark_home_view_controller.h"
 
+#include "base/metrics/user_metrics.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "ios/chrome/browser/bookmarks/bookmark_new_generation_features.h"
 #include "ios/chrome/browser/bookmarks/bookmarks_utils.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/metrics/new_tab_page_uma.h"
 #import "ios/chrome/browser/ui/alert_coordinator/action_sheet_coordinator.h"
+#import "ios/chrome/browser/ui/bookmarks/bars/bookmark_context_bar.h"
 #import "ios/chrome/browser/ui/bookmarks/bars/bookmark_editing_bar.h"
 #import "ios/chrome/browser/ui/bookmarks/bars/bookmark_navigation_bar.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_collection_view.h"
+#import "ios/chrome/browser/ui/bookmarks/bookmark_controller_factory.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_edit_view_controller.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_folder_editor_view_controller.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_folder_view_controller.h"
@@ -25,12 +30,15 @@
 #import "ios/chrome/browser/ui/bookmarks/bookmark_navigation_controller.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_panel_view.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_promo_controller.h"
+#import "ios/chrome/browser/ui/bookmarks/bookmark_table_view.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
 #import "ios/chrome/browser/ui/rtl_geometry.h"
 #import "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/url_loader.h"
+#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
+#include "ios/web/public/referrer.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 
@@ -47,7 +55,9 @@ const CGFloat kMenuWidth = 264;
     BookmarkFolderEditorViewControllerDelegate,
     BookmarkFolderViewControllerDelegate,
     BookmarkModelBridgeObserver,
-    BookmarkPromoControllerDelegate>
+    BookmarkPromoControllerDelegate,
+    BookmarkTableViewDelegate,
+    ContextBarDelegate>
 
 @end
 
@@ -72,6 +82,9 @@ const CGFloat kMenuWidth = 264;
 @synthesize scrollToTop = _scrollToTop;
 @synthesize sideSwipingPossible = _sideSwipingPossible;
 @synthesize waitForModelView = _waitForModelView;
+@synthesize homeDelegate = _homeDelegate;
+@synthesize bookmarksTableView = _bookmarksTableView;
+@synthesize contextBar = _contextBar;
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -103,45 +116,124 @@ const CGFloat kMenuWidth = 264;
   return self;
 }
 
+- (void)setRootNode:(const bookmarks::BookmarkNode*)rootNode {
+  _rootNode = rootNode;
+}
+
 #pragma mark - UIViewController
 
 - (void)viewDidLoad {
   [super viewDidLoad];
-  self.navigationBar = [[BookmarkNavigationBar alloc] initWithFrame:CGRectZero];
-  [self.navigationBar setEditTarget:self
-                             action:@selector(navigationBarWantsEditing:)];
-  [self.navigationBar setBackTarget:self action:@selector(navigationBarBack:)];
+  if (!base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    self.navigationBar =
+        [[BookmarkNavigationBar alloc] initWithFrame:CGRectZero];
+    [self.navigationBar setEditTarget:self
+                               action:@selector(navigationBarWantsEditing:)];
+    [self.navigationBar setBackTarget:self
+                               action:@selector(navigationBarBack:)];
+  }
+}
+
+#pragma mark - Public
+
+- (void)dismissModals {
+  [self.actionSheetCoordinator stop];
+  self.actionSheetCoordinator = nil;
 }
 
 #pragma mark - Protected
 
 - (void)loadBookmarkViews {
-  LayoutRect menuLayout =
-      LayoutRectMake(0, self.view.bounds.size.width, 0, self.menuWidth,
-                     self.view.bounds.size.height);
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    // Set up new UI view. TODO(crbug.com/695749): Polish UI according to mocks.
+    _containerView = [[UIView alloc] initWithFrame:self.view.bounds];
+    [_containerView setAutoresizingMask:UIViewAutoresizingFlexibleWidth |
+                                        UIViewAutoresizingFlexibleHeight];
+    [self.view addSubview:_containerView];
 
-  // Create menu view.
-  self.menuView = [[BookmarkMenuView alloc]
-      initWithBrowserState:self.browserState
-                     frame:LayoutRectGetRect(menuLayout)];
-  self.menuView.autoresizingMask =
-      UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    self.bookmarksTableView =
+        [[BookmarkTableView alloc] initWithBrowserState:self.browserState
+                                               delegate:self
+                                               rootNode:_rootNode
+                                                  frame:self.view.bounds];
 
-  // Create panel view.
-  self.panelView = [[BookmarkPanelView alloc] initWithFrame:CGRectZero
-                                              menuViewWidth:self.menuWidth];
-  self.panelView.autoresizingMask =
-      UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [self.bookmarksTableView setTranslatesAutoresizingMaskIntoConstraints:NO];
+    [_containerView addSubview:self.bookmarksTableView];
 
-  // Create folder view.
-  BookmarkCollectionView* view =
-      [[BookmarkCollectionView alloc] initWithBrowserState:self.browserState
-                                                     frame:CGRectZero];
-  self.folderView = view;
-  [self.folderView setEditing:self.editing animated:NO];
-  self.folderView.autoresizingMask =
-      UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleWidth;
-  self.folderView.delegate = self;
+    // TODO(crbug.com/695749): Hide the context bar when browsing
+    // bookmarkModel->root_node.
+    self.contextBar = [[BookmarkContextBar alloc] initWithFrame:CGRectZero];
+    self.contextBar.delegate = self;
+    [self.contextBar setTranslatesAutoresizingMaskIntoConstraints:NO];
+
+    // TODO(crbug.com/695749): Check if we need to create new strings for the
+    // context bar buttons.
+    [self.contextBar setButtonVisibility:YES forButton:ContextBarLeadingButton];
+    [self.contextBar
+        setButtonTitle:l10n_util::GetNSStringWithFixup(
+                           IDS_IOS_BOOKMARK_NEW_GROUP_EDITOR_CREATE_TITLE)
+             forButton:ContextBarLeadingButton];
+
+    [self.contextBar setButtonVisibility:YES
+                               forButton:ContextBarTrailingButton];
+    [self.contextBar setButtonTitle:l10n_util::GetNSStringWithFixup(
+                                        IDS_IOS_BOOKMARK_ACTION_SELECT)
+                          forButton:ContextBarTrailingButton];
+
+    [_containerView addSubview:self.contextBar];
+
+    // Set up the navigation bar.
+    NSString* doneTitle =
+        l10n_util::GetNSString(IDS_IOS_NAVIGATION_BAR_DONE_BUTTON)
+            .uppercaseString;
+    UIBarButtonItem* doneButton =
+        [[UIBarButtonItem alloc] initWithTitle:doneTitle
+                                         style:UIBarButtonItemStyleDone
+                                        target:self
+                                        action:@selector(navigationBarCancel:)];
+    doneButton.accessibilityIdentifier = @"bookmark_done_button";
+    self.navigationItem.rightBarButtonItem = doneButton;
+    self.navigationItem.backBarButtonItem =
+        [[UIBarButtonItem alloc] initWithTitle:@""
+                                         style:UIBarButtonItemStylePlain
+                                        target:nil
+                                        action:nil];
+    self.navigationItem.title =
+        bookmark_utils_ios::TitleForBookmarkNode(_rootNode);
+    self.navigationController.navigationBar.tintColor = UIColor.blackColor;
+    self.navigationController.navigationBar.backgroundColor =
+        bookmark_utils_ios::mainBackgroundColor();
+  } else {
+    // Set up old UI view.
+    LayoutRect menuLayout =
+        LayoutRectMake(0, self.view.bounds.size.width, 0, self.menuWidth,
+                       self.view.bounds.size.height);
+
+    // Create menu view.
+    self.menuView = [[BookmarkMenuView alloc]
+        initWithBrowserState:self.browserState
+                       frame:LayoutRectGetRect(menuLayout)];
+    self.menuView.autoresizingMask =
+        UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+
+    // Create panel view.
+    self.panelView = [[BookmarkPanelView alloc] initWithFrame:CGRectZero
+                                                menuViewWidth:self.menuWidth];
+    self.panelView.autoresizingMask =
+        UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+
+    // Create folder view.
+    BookmarkCollectionView* view =
+        [[BookmarkCollectionView alloc] initWithBrowserState:self.browserState
+                                                       frame:CGRectZero];
+    self.folderView = view;
+    [self.folderView setEditing:self.editing animated:NO];
+    self.folderView.autoresizingMask =
+        UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleWidth;
+    self.folderView.delegate = self;
+  }
 }
 
 - (void)updatePrimaryMenuItem:(BookmarkMenuItem*)menuItem
@@ -150,26 +242,15 @@ const CGFloat kMenuWidth = 264;
   if ([self.primaryMenuItem isEqual:menuItem])
     return;
 
-  // TODO(crbug.com/705339): Folder view is the only primary view now,
-  // hence we don't need to remove primary view anymore.
-  // Simplify this code that removes primary view and adds it back
-  // in subclasses, once the addition code moves here.
-  [[self primaryView] removeFromSuperview];
   self.primaryMenuItem = menuItem;
 
   [self.folderView resetFolder:self.primaryMenuItem.folder];
   [self.folderView promoStateChangedAnimated:NO];
 
-  [[self primaryView] changeOrientation:GetInterfaceOrientation()];
-  [[self primaryView] setScrollsToTop:!self.scrollToTop];
+  [self.folderView changeOrientation:GetInterfaceOrientation()];
+  [self.folderView setScrollsToTop:!self.scrollToTop];
 
   [self.menuView updatePrimaryMenuItem:self.primaryMenuItem];
-}
-
-- (UIView<BookmarkHomePrimaryView>*)primaryView {
-  if (self.primaryMenuItem.type == bookmarks::MenuItemFolder)
-    return self.folderView;
-  return nil;
 }
 
 - (void)loadWaitingView {
@@ -189,11 +270,12 @@ const CGFloat kMenuWidth = 264;
 }
 
 - (void)cachePosition {
-  if ([self primaryView]) {
+  if (self.folderView) {
     bookmark_utils_ios::CachePosition(
-        [[self primaryView] contentPositionInPortraitOrientation],
+        [self.folderView contentPositionInPortraitOrientation],
         [self primaryMenuItem]);
   }
+  // TODO(crbug.com/695749): Cache position for BookmarkTableView in new UI.
 }
 
 - (BOOL)shouldShowBackButtonOnNavigationBar {
@@ -209,10 +291,6 @@ const CGFloat kMenuWidth = 264;
 }
 
 #pragma mark - Subclasses must override
-
-- (void)navigateToBookmarkURL:(const GURL&)url {
-  NOTREACHED() << "Must be overridden by subclass";
-}
 
 - (void)showEditingBarAnimated:(BOOL)animated {
   NOTREACHED() << "Must be overridden by subclass";
@@ -240,8 +318,12 @@ const CGFloat kMenuWidth = 264;
 #pragma mark - BookmarkPromoControllerDelegate
 
 - (void)promoStateChanged:(BOOL)promoEnabled {
-  [self.folderView
-      promoStateChangedAnimated:self.folderView == [self primaryView]];
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    [self.bookmarksTableView promoStateChangedAnimated:YES];
+  } else {
+    [self.folderView promoStateChangedAnimated:YES];
+  }
 }
 
 #pragma mark Action sheet callbacks
@@ -312,6 +394,10 @@ const CGFloat kMenuWidth = 264;
 
 #pragma mark - Navigation Bar Callbacks
 
+- (void)navigationBarCancel:(id)sender {
+  [self dismissWithURL:GURL()];
+}
+
 // Called when the edit button is pressed on the navigation bar.
 - (void)navigationBarWantsEditing:(id)sender {
   DCHECK(self.primaryMenuItem.type == bookmarks::MenuItemFolder);
@@ -343,6 +429,44 @@ const CGFloat kMenuWidth = 264;
       [BookmarkMenuItem folderMenuItemForNode:parentFolder
                                  rootAncestor:rootAncestor];
   [self updatePrimaryMenuItem:menuItem animated:YES];
+}
+
+#pragma mark - BookmarkTableViewDelegate
+
+- (void)bookmarkTableView:(BookmarkTableView*)view
+    selectedUrlForNavigation:(const GURL&)url {
+  [self dismissWithURL:url];
+}
+
+- (void)bookmarkTableView:(BookmarkTableView*)view
+    selectedFolderForNavigation:(const bookmarks::BookmarkNode*)folder {
+  BookmarkControllerFactory* bookmarkControllerFactory =
+      [[BookmarkControllerFactory alloc] init];
+  BookmarkHomeViewController* controller =
+      (BookmarkHomeViewController*)[bookmarkControllerFactory
+          bookmarkControllerWithBrowserState:self.browserState
+                                      loader:_loader];
+  [controller setRootNode:folder];
+  controller.homeDelegate = self.homeDelegate;
+  [self.navigationController pushViewController:controller animated:YES];
+}
+
+- (void)bookmarkTableView:(BookmarkTableView*)view
+    selectedNodesForDeletion:
+        (const std::set<const bookmarks::BookmarkNode*>&)nodes {
+  [self deleteNodes:nodes];
+}
+
+- (BOOL)bookmarkTableViewShouldShowPromoCell:(BookmarkTableView*)tableView {
+  return self.bookmarkPromoController.promoState;
+}
+
+- (void)bookmarkTableViewShowSignIn:(BookmarkTableView*)view {
+  [self.bookmarkPromoController showSignIn];
+}
+
+- (void)bookmarkTableViewDismissPromo:(BookmarkTableView*)view {
+  [self.bookmarkPromoController hidePromoCell];
 }
 
 #pragma mark - BookmarkFolderViewControllerDelegate
@@ -512,7 +636,7 @@ const CGFloat kMenuWidth = 264;
 
   [self updateEditingStateAnimated:animated];
   if ([[self primaryMenuItem] supportsEditing])
-    [[self primaryView] setEditing:editing animated:animated];
+    [self.folderView setEditing:editing animated:animated];
 }
 
 - (void)updateEditBarShadow {
@@ -610,7 +734,7 @@ const CGFloat kMenuWidth = 264;
 
 - (void)bookmarkCollectionView:(BookmarkCollectionView*)view
       selectedUrlForNavigation:(const GURL&)url {
-  [self navigateToBookmarkURL:url];
+  [self dismissWithURL:url];
 }
 
 - (void)bookmarkCollectionView:(BookmarkCollectionView*)collectionView
@@ -729,7 +853,45 @@ const CGFloat kMenuWidth = 264;
   [self setEditing:NO animated:YES];
 }
 
+#pragma mark - Accessibility
+
+- (BOOL)accessibilityPerformEscape {
+  [self dismissWithURL:GURL()];
+  return YES;
+}
+
 #pragma mark - private
+
+// Saves the current position and asks the delegate to open the url, if delegate
+// is set, otherwise opens the URL using loader.
+- (void)dismissWithURL:(const GURL&)url {
+  [self cachePosition];
+  if (self.homeDelegate) {
+    [self.homeDelegate bookmarkHomeViewControllerWantsDismissal:self
+                                                navigationToUrl:url];
+  } else {
+    // Before passing the URL to the block, make sure the block has a copy of
+    // the URL and not just a reference.
+    const GURL localUrl(url);
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [self loadURL:localUrl];
+    });
+  }
+}
+
+- (void)loadURL:(const GURL&)url {
+  if (url == GURL() || url.SchemeIs(url::kJavaScriptScheme))
+    return;
+
+  new_tab_page_uma::RecordAction(self.browserState,
+                                 new_tab_page_uma::ACTION_OPENED_BOOKMARK);
+  base::RecordAction(
+      base::UserMetricsAction("MobileBookmarkManagerEntryOpened"));
+  [self.loader loadURL:url
+               referrer:web::Referrer()
+             transition:ui::PAGE_TRANSITION_AUTO_BOOKMARK
+      rendererInitiated:NO];
+}
 
 - (void)enableSideSwiping:(BOOL)enable {
   if (self.sideSwipingPossible) {
@@ -744,10 +906,41 @@ const CGFloat kMenuWidth = 264;
 
 // Returns NSIndexPath for a given cell.
 - (NSIndexPath*)indexPathForCell:(UICollectionViewCell*)cell {
-  DCHECK([self primaryView].collectionView);
+  DCHECK(self.folderView.collectionView);
   NSIndexPath* indexPath =
-      [[self primaryView].collectionView indexPathForCell:cell];
+      [self.folderView.collectionView indexPathForCell:cell];
   return indexPath;
+}
+
+- (void)updateViewConstraints {
+  if (base::FeatureList::IsEnabled(
+          bookmark_new_generation::features::kBookmarkNewGeneration)) {
+    NSDictionary* views = @{
+      @"tableView" : self.bookmarksTableView,
+      @"contextBar" : self.contextBar,
+    };
+    NSArray* constraints = @[
+      @"V:|[tableView][contextBar(==48)]|", @"H:|[tableView]|",
+      @"H:|[contextBar]|"
+    ];
+    ApplyVisualConstraints(constraints, views);
+  }
+  [super updateViewConstraints];
+}
+
+#pragma mark - ContextBarDelegate implementation
+
+// Called when the leading button is clicked.
+- (void)leadingButtonClicked {
+  // TODO(crbug.com/695749): Implement the button action here.
+}
+// Called when the center button is clicked.
+- (void)centerButtonClicked {
+  // TODO(crbug.com/695749): Implement the button action here.
+}
+// Called when the trailing button is clicked.
+- (void)trailingButtonClicked {
+  // TODO(crbug.com/695749): Implement the button action here.
 }
 
 @end

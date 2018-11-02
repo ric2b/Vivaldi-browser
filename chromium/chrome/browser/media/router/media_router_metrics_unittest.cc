@@ -117,41 +117,26 @@ TEST(MediaRouterMetricsTest, RecordMediaRouterCastingSource) {
                           Bucket(static_cast<int>(source3), 1)));
 }
 
-TEST(MediaRouterMetricsTest, RecordDialDeviceCounts) {
-  MediaRouterMetrics metrics;
-  base::SimpleTestClock* clock = new base::SimpleTestClock();
-  metrics.SetClockForTest(base::WrapUnique(clock));
+TEST(MediaRouterMetricsTest, RecordDialDeviceDescriptionParsingError) {
   base::HistogramTester tester;
-  tester.ExpectTotalCount(
-      MediaRouterMetrics::kHistogramDialAvailableDeviceCount, 0);
-  tester.ExpectTotalCount(MediaRouterMetrics::kHistogramDialKnownDeviceCount,
-                          0);
+  const chrome::mojom::DialParsingError action1 =
+      chrome::mojom::DialParsingError::MISSING_UNIQUE_ID;
+  const chrome::mojom::DialParsingError action2 =
+      chrome::mojom::DialParsingError::MISSING_FRIENDLY_NAME;
+  const chrome::mojom::DialParsingError action3 =
+      chrome::mojom::DialParsingError::MISSING_APP_URL;
 
-  clock->SetNow(base::Time::Now());
-  metrics.RecordDialDeviceCounts(6, 10);
-  metrics.RecordDialDeviceCounts(7, 10);
-  tester.ExpectTotalCount(
-      MediaRouterMetrics::kHistogramDialAvailableDeviceCount, 1);
-  tester.ExpectTotalCount(MediaRouterMetrics::kHistogramDialKnownDeviceCount,
-                          1);
-  tester.ExpectBucketCount(
-      MediaRouterMetrics::kHistogramDialAvailableDeviceCount, 6, 1);
-  tester.ExpectBucketCount(MediaRouterMetrics::kHistogramDialKnownDeviceCount,
-                           10, 1);
-
-  clock->Advance(base::TimeDelta::FromHours(2));
-  metrics.RecordDialDeviceCounts(7, 10);
-
-  tester.ExpectTotalCount(
-      MediaRouterMetrics::kHistogramDialAvailableDeviceCount, 2);
-  tester.ExpectTotalCount(MediaRouterMetrics::kHistogramDialKnownDeviceCount,
-                          2);
-  tester.ExpectBucketCount(
-      MediaRouterMetrics::kHistogramDialAvailableDeviceCount, 6, 1);
-  tester.ExpectBucketCount(
-      MediaRouterMetrics::kHistogramDialAvailableDeviceCount, 7, 1);
-  tester.ExpectBucketCount(MediaRouterMetrics::kHistogramDialKnownDeviceCount,
-                           10, 2);
+  tester.ExpectTotalCount(MediaRouterMetrics::kHistogramDialParsingError, 0);
+  MediaRouterMetrics::RecordDialParsingError(action3);
+  MediaRouterMetrics::RecordDialParsingError(action2);
+  MediaRouterMetrics::RecordDialParsingError(action3);
+  MediaRouterMetrics::RecordDialParsingError(action1);
+  tester.ExpectTotalCount(MediaRouterMetrics::kHistogramDialParsingError, 4);
+  EXPECT_THAT(
+      tester.GetAllSamples(MediaRouterMetrics::kHistogramDialParsingError),
+      ElementsAre(Bucket(static_cast<int>(action1), 1),
+                  Bucket(static_cast<int>(action2), 1),
+                  Bucket(static_cast<int>(action3), 2)));
 }
 
 }  // namespace media_router

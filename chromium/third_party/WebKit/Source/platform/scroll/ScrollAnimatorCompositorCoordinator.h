@@ -25,6 +25,12 @@ class CompositorAnimation;
 class CompositorAnimationPlayer;
 class CompositorAnimationTimeline;
 
+// ScrollAnimatorCompositorCoordinator is the common base class of user scroll
+// animators and programmatic scroll animators, and holds logic related to
+// scheduling and updating scroll animations running on the compositor.
+//
+// See ScrollAnimator.h for more information about scroll animations.
+
 class PLATFORM_EXPORT ScrollAnimatorCompositorCoordinator
     : public GarbageCollectedFinalized<ScrollAnimatorCompositorCoordinator>,
       private CompositorAnimationPlayerClient,
@@ -163,7 +169,9 @@ class PLATFORM_EXPORT ScrollAnimatorCompositorCoordinator
   FRIEND_TEST_ALL_PREFIXES(ScrollAnimatorTest, ImplOnlyAnimationUpdatesCleared);
 
   std::unique_ptr<CompositorAnimationPlayer> compositor_player_;
-  CompositorElementId compositor_animation_attached_to_element_id_;
+  // The element id to which the compositor animation is attached when
+  // the animation is present.
+  CompositorElementId element_id_;
   RunState run_state_;
   int compositor_animation_id_;
   int compositor_animation_group_id_;
@@ -178,6 +186,7 @@ class PLATFORM_EXPORT ScrollAnimatorCompositorCoordinator
   bool impl_only_animation_takeover_;
 
  private:
+  CompositorElementId GetScrollElementId() const;
   bool HasImplOnlyAnimationUpdate() const;
   void UpdateImplOnlyCompositorAnimations();
   // Accesses compositing state and should only be called when in or after

@@ -32,6 +32,7 @@ import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.NavigationController;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_shell.Shell;
+import org.chromium.content_shell.ShellViewAndroidDelegate.OnCursorUpdateHelper;
 
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
@@ -118,6 +119,18 @@ public final class ContentShellTestCommon {
         }, WAIT_FOR_ACTIVE_SHELL_LOADING_TIMEOUT, CriteriaHelper.DEFAULT_POLLING_INTERVAL);
     }
 
+    OnCursorUpdateHelper getOnCursorUpdateHelper() throws ExecutionException {
+        return ThreadUtils.runOnUiThreadBlocking(new Callable<OnCursorUpdateHelper>() {
+            @Override
+            public OnCursorUpdateHelper call() {
+                return mCallback.getActivityForTestCommon()
+                        .getActiveShell()
+                        .getViewAndroidDelegate()
+                        .getOnCursorUpdateHelper();
+            }
+        });
+    }
+
     ContentViewCore getContentViewCore() {
         return mCallback.getActivityForTestCommon().getActiveShell().getContentViewCore();
     }
@@ -166,7 +179,7 @@ public final class ContentShellTestCommon {
                 Criteria.equals(expectedScale, new Callable<Float>() {
                     @Override
                     public Float call() {
-                        return getContentViewCore().getScale();
+                        return getContentViewCore().getPageScaleFactor();
                     }
                 }));
     }

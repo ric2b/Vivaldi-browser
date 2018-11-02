@@ -9,6 +9,9 @@ namespace search_provider_logos {
 namespace switches {
 
 extern const char kGoogleDoodleUrl[];
+extern const char kSearchProviderLogoURL[];
+
+extern const char kThirdPartyDoodleURL[];
 
 }  // namespace switches
 }  // namespace search_provider_logos

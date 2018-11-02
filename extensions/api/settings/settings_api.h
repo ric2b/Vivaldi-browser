@@ -13,10 +13,6 @@
 #include "components/prefs/pref_change_registrar.h"
 #include "content/public/browser/web_ui.h"
 #include "extensions/schema/settings.h"
-#include "prefs/native_settings_observer.h"
-#include "prefs/native_settings_observer_delegate.h"
-
-using vivaldi::NativeSettingsObserverDelegate;
 
 namespace extensions {
 
@@ -49,8 +45,7 @@ class VivaldiSettingsApiNotificationFactory
 
 // A class receiving the callback notification when a registered
 // prefs value has changed.
-class VivaldiSettingsApiNotification : public KeyedService,
-                                       public NativeSettingsObserverDelegate {
+class VivaldiSettingsApiNotification : public KeyedService {
  public:
   explicit VivaldiSettingsApiNotification(Profile*);
   VivaldiSettingsApiNotification();
@@ -62,16 +57,9 @@ class VivaldiSettingsApiNotification : public KeyedService,
 
   void OnChanged(const std::string& prefs_changed);
 
-  // NativeSettingsObserverDelegate
-  void SetPref(const char* name, const int value) override;
-  void SetPref(const char* name, const std::string& value) override;
-  void SetPref(const char* name, const bool value) override;
-
  private:
   Profile* profile_;
   PrefChangeRegistrar prefs_registrar_;
-
-  std::unique_ptr<::vivaldi::NativeSettingsObserver> native_settings_observer_;
 
   base::WeakPtrFactory<VivaldiSettingsApiNotification> weak_ptr_factory_;
 
@@ -135,6 +123,20 @@ class SettingsGetAllPreferencesFunction : public ChromeAsyncExtensionFunction {
 
   DISALLOW_COPY_AND_ASSIGN(SettingsGetAllPreferencesFunction);
 };
+
+class SettingsSetContentSettingFunction : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("settings.setContentSetting",
+                             SETTINGS_SET_CONTENTSETTING)
+  SettingsSetContentSettingFunction();
+
+ private:
+  ~SettingsSetContentSettingFunction() override;
+  bool RunAsync() override;
+
+  DISALLOW_COPY_AND_ASSIGN(SettingsSetContentSettingFunction);
+};
+
 }  // namespace extensions
 
 #endif  // EXTENSIONS_API_SETTINGS_SETTINGS_API_H_

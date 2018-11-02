@@ -15,7 +15,6 @@
 #include "base/mac/mac_logging.h"
 #include "base/mac/mac_util.h"
 #include "base/mac/scoped_cftyperef.h"
-#include "base/sha1.h"
 #include "base/strings/string_piece.h"
 #include "base/synchronization/lock.h"
 #include "crypto/mac_security_services_lock.h"
@@ -93,8 +92,19 @@ CertStatus CertStatusFromOSStatus(OSStatus status) {
 
     case CSSMERR_APPLETP_CRL_NOT_FOUND:
     case CSSMERR_APPLETP_OCSP_UNAVAILABLE:
-    case CSSMERR_APPLETP_INCOMPLETE_REVOCATION_CHECK:
       return CERT_STATUS_NO_REVOCATION_MECHANISM;
+
+    case CSSMERR_APPLETP_INCOMPLETE_REVOCATION_CHECK:
+      // Starting with later 10.12 versions,
+      // CSSMERR_APPLETP_INCOMPLETE_REVOCATION_CHECK is a catch-all code for
+      // failures to check revocation status.
+      // However, on pre-10.12 versions, it would also be used on revocation
+      // failures. (CERT_STATUS_NO_REVOCATION_MECHANISM isn't really right
+      // there either, but that's what the old code has, and it just gets
+      // masked off later so has no actual effect.)
+      return base::mac::IsAtLeastOS10_12()
+                 ? CERT_STATUS_UNABLE_TO_CHECK_REVOCATION
+                 : CERT_STATUS_NO_REVOCATION_MECHANISM;
 
     case CSSMERR_APPLETP_CRL_EXPIRED:
     case CSSMERR_APPLETP_CRL_NOT_VALID_YET:
@@ -336,16 +346,12 @@ bool CheckCertChainEV(const X509Certificate* cert,
       cert->GetIntermediateCertificates();
 
   // Root should have matching policy in EVRootCAMetadata.
-  std::string der_cert;
-  if (os_cert_chain.empty() ||
-      !X509Certificate::GetDEREncoded(os_cert_chain.back(), &der_cert)) {
+  if (os_cert_chain.empty())
     return false;
-  }
-  SHA1HashValue weak_fingerprint;
-  base::SHA1HashBytes(reinterpret_cast<const unsigned char*>(der_cert.data()),
-                      der_cert.size(), weak_fingerprint.data);
+  SHA256HashValue fingerprint =
+      X509Certificate::CalculateFingerprint256(os_cert_chain.back());
   EVRootCAMetadata* metadata = EVRootCAMetadata::GetInstance();
-  if (!metadata->HasEVPolicyOID(weak_fingerprint, ev_policy_oid))
+  if (!metadata->HasEVPolicyOID(fingerprint, ev_policy_oid))
     return false;
 
   // Intermediates should have Certificate Policies extension with the EV policy
@@ -911,11 +917,13 @@ int VerifyWithGivenFlags(X509Certificate* cert,
                      (flags & CertVerifier::VERIFY_REV_CHECKING_ENABLED) &&
                      chain_info[index].StatusCodes[status_code_index] ==
                          CSSMERR_TP_VERIFY_ACTION_FAILED &&
-                     base::mac::IsAtLeastOS10_12()) {
-            // On 10.12, using kSecRevocationRequirePositiveResponse flag
-            // causes a CSSMERR_TP_VERIFY_ACTION_FAILED status if revocation
-            // couldn't be checked. (Note: even if the cert had no
-            // crlDistributionPoints or OCSP AIA.)
+                     base::mac::IsOS10_12()) {
+            // On early versions of 10.12, using
+            // kSecRevocationRequirePositiveResponse flag causes a
+            // CSSMERR_TP_VERIFY_ACTION_FAILED status if revocation couldn't be
+            // checked. (Note: even if the cert had no crlDistributionPoints or
+            // OCSP AIA.) This isn't needed on later 10.12 versions, but it
+            // should be mostly harmless.
             mapped_status = CERT_STATUS_UNABLE_TO_CHECK_REVOCATION;
             policy_fail_already_mapped = true;
           } else {

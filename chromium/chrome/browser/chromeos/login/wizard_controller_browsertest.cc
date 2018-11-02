@@ -1063,9 +1063,7 @@ class WizardControllerProxyAuthOnSigninTest : public WizardControllerTest {
  protected:
   WizardControllerProxyAuthOnSigninTest()
       : proxy_server_(net::SpawnedTestServer::TYPE_BASIC_AUTH_PROXY,
-                      net::SpawnedTestServer::kLocalhost,
-                      base::FilePath()) {
-  }
+                      base::FilePath()) {}
   ~WizardControllerProxyAuthOnSigninTest() override {}
 
   // Overridden from WizardControllerTest:
@@ -1112,6 +1110,7 @@ class WizardControllerKioskFlowTest : public WizardControllerFlowTest {
 
   // Overridden from InProcessBrowserTest:
   void SetUpCommandLine(base::CommandLine* command_line) override {
+    WizardControllerFlowTest::SetUpCommandLine(command_line);
     base::FilePath test_data_dir;
     ASSERT_TRUE(chromeos::test_utils::GetTestDataPath(
                     "app_mode", "kiosk_manifest", &test_data_dir));
@@ -1319,6 +1318,7 @@ class WizardControllerCellularFirstTest : public WizardControllerFlowTest {
   WizardControllerCellularFirstTest() {}
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
+    WizardControllerFlowTest::SetUpCommandLine(command_line);
     command_line->AppendSwitch(switches::kCellularFirst);
   }
 
@@ -1347,7 +1347,7 @@ IN_PROC_BROWSER_TEST_F(WizardControllerCellularFirstTest, CellularFirstFlow) {
 // http://crbug.com/706017
 
 // TODO(updowndota): Add tests for Voice Interaction OptIn flow.
-static_assert(static_cast<int>(ScreenExitCode::EXIT_CODES_COUNT) == 31,
+static_assert(static_cast<int>(ScreenExitCode::EXIT_CODES_COUNT) == 32,
               "tests for new control flow are missing");
 
 }  // namespace chromeos

@@ -111,16 +111,14 @@ void FetchContext::AddResourceTiming(const ResourceTimingInfo&) {}
 
 void FetchContext::SendImagePing(const KURL&) {}
 
-void FetchContext::AddConsoleMessage(const String&,
-                                     FetchContext::LogMessageType) const {}
+void FetchContext::AddWarningConsoleMessage(const String&, LogSource) const {}
+
+void FetchContext::AddErrorConsoleMessage(const String&, LogSource) const {}
 
 void FetchContext::PopulateResourceRequest(
-    const KURL&,
     Resource::Type,
     const ClientHintsPreferences&,
     const FetchParameters::ResourceWidth&,
-    const ResourceLoaderOptions&,
-    SecurityViolationReportingPolicy,
     ResourceRequest&) {}
 
 void FetchContext::SetFirstPartyCookieAndRequestorOrigin(ResourceRequest&) {}

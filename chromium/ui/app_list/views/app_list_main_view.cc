@@ -34,7 +34,6 @@
 #include "ui/gfx/geometry/insets.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/button.h"
-#include "ui/views/controls/button/custom_button.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
@@ -202,6 +201,12 @@ void AppListMainView::CancelDragInActiveFolder() {
       ->EndDrag(true);
 }
 
+void AppListMainView::OnResultInstalled(SearchResult* result) {
+  // Clears the search to show the apps grid. The last installed app
+  // should be highlighted and made visible already.
+  search_box_view_->ClearSearch();
+}
+
 void AppListMainView::QueryChanged(SearchBoxView* sender) {
   base::string16 query;
   base::TrimWhitespace(model_->search_box()->text(), base::TRIM_ALL, &query);
@@ -218,12 +223,6 @@ void AppListMainView::BackButtonPressed() {
 void AppListMainView::SetSearchResultSelection(bool select) {
   if (contents_view_->GetActiveState() == AppListModel::STATE_SEARCH_RESULTS)
     contents_view_->search_results_page_view()->SetSelection(select);
-}
-
-void AppListMainView::OnResultInstalled(SearchResult* result) {
-  // Clears the search to show the apps grid. The last installed app
-  // should be highlighted and made visible already.
-  search_box_view_->ClearSearch();
 }
 
 }  // namespace app_list

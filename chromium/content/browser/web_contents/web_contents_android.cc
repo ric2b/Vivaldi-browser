@@ -181,11 +181,6 @@ ScopedJavaLocalRef<jobject> FromNativePtr(JNIEnv* env,
   return web_contents_android->GetJavaObject();
 }
 
-// static
-bool WebContentsAndroid::Register(JNIEnv* env) {
-  return RegisterNativesImpl(env);
-}
-
 WebContentsAndroid::WebContentsAndroid(WebContentsImpl* web_contents)
     : web_contents_(web_contents),
       navigation_controller_(&(web_contents->GetController())),
@@ -341,6 +336,13 @@ void WebContentsAndroid::OnHide(JNIEnv* env, const JavaParamRef<jobject>& obj) {
 
 void WebContentsAndroid::OnShow(JNIEnv* env, const JavaParamRef<jobject>& obj) {
   web_contents_->WasShown();
+}
+
+void WebContentsAndroid::SetImportance(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj,
+    jint importance) {
+  web_contents_->SetImportance(static_cast<ChildProcessImportance>(importance));
 }
 
 void WebContentsAndroid::SuspendAllMediaPlayers(
@@ -664,22 +666,14 @@ bool WebContentsAndroid::HasActiveEffectivelyFullscreenVideo(
 }
 
 base::android::ScopedJavaLocalRef<jobject>
-WebContentsAndroid::GetCurrentlyPlayingVideoSizes(
+WebContentsAndroid::GetFullscreenVideoSize(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj) {
-  const WebContents::VideoSizeMap& sizes =
-      web_contents_->GetCurrentlyPlayingVideoSizes();
-  DCHECK_GT(sizes.size(), 0u);
+  if (!web_contents_->GetFullscreenVideoSize())
+    return ScopedJavaLocalRef<jobject>();  // Return null.
 
-  ScopedJavaLocalRef<jobject> jsizes = Java_WebContentsImpl_createSizeList(env);
-
-  using MapEntry = std::pair<WebContentsObserver::MediaPlayerId, gfx::Size>;
-  for (const MapEntry& entry : sizes) {
-    Java_WebContentsImpl_createSizeAndAddToList(
-        env, jsizes, entry.second.width(), entry.second.height());
-  }
-
-  return jsizes;
+  gfx::Size size = web_contents_->GetFullscreenVideoSize().value();
+  return Java_WebContentsImpl_createSize(env, size.width(), size.height());
 }
 
 ScopedJavaLocalRef<jobject> WebContentsAndroid::GetOrCreateEventForwarder(

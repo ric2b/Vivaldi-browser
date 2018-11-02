@@ -18,7 +18,7 @@
 #include "android_webview/browser/renderer_host/auto_login_parser.h"
 #include "android_webview/common/url_constants.h"
 #include "components/navigation_interception/intercept_navigation_delegate.h"
-#include "components/safe_browsing_db/safe_browsing_api_handler.h"
+#include "components/safe_browsing/db/safe_browsing_api_handler.h"
 #include "components/web_restrictions/browser/web_restrictions_resource_throttle.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/resource_dispatcher_host.h"
@@ -298,7 +298,7 @@ void AwResourceDispatcherHostDelegate::RequestBeginning(
 
   if (ioThreadThrottle->GetSafeBrowsingEnabled()) {
     content::ResourceThrottle* throttle =
-        AwSafeBrowsingResourceThrottle::MaybeCreate(
+        MaybeCreateAwSafeBrowsingResourceThrottle(
             request, resource_type,
             AwBrowserContext::GetDefault()->GetSafeBrowsingDBManager(),
             AwBrowserContext::GetDefault()->GetSafeBrowsingUIManager(),
@@ -342,7 +342,7 @@ void AwResourceDispatcherHostDelegate::RequestComplete(
         content::ResourceRequestInfo::ForRequest(request);
 
     bool safebrowsing_hit = false;
-    if (request->GetUserData(AwSafeBrowsingResourceThrottle::kUserDataKey)) {
+    if (IsCancelledBySafeBrowsing(request)) {
       safebrowsing_hit = true;
     }
     BrowserThread::PostTask(

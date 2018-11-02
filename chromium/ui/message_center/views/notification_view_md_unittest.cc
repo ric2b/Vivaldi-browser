@@ -16,7 +16,9 @@
 #include "ui/message_center/message_center_style.h"
 #include "ui/message_center/views/bounded_label.h"
 #include "ui/message_center/views/message_center_controller.h"
+#include "ui/message_center/views/notification_control_buttons_view.h"
 #include "ui/message_center/views/notification_header_view.h"
+#include "ui/message_center/views/padded_button.h"
 #include "ui/message_center/views/proportional_image_view.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/label_button.h"
@@ -78,7 +80,7 @@ class NotificationViewMDTest : public views::ViewsTestBase,
   void BeginScroll();
   void EndScroll();
   void ScrollBy(int dx);
-  views::ImageButton* GetCloseButton();
+  views::View* GetCloseButton();
 
  private:
   std::set<std::string> removed_ids_;
@@ -263,8 +265,8 @@ void NotificationViewMDTest::ScrollBy(int dx) {
   DispatchGesture(ui::GestureEventDetails(ui::ET_GESTURE_SCROLL_UPDATE, dx, 0));
 }
 
-views::ImageButton* NotificationViewMDTest::GetCloseButton() {
-  return notification_view()->header_row_->close_button();
+views::View* NotificationViewMDTest::GetCloseButton() {
+  return notification_view()->GetControlButtonsView()->close_button();
 }
 
 /* Unit tests *****************************************************************/
@@ -299,7 +301,7 @@ TEST_F(NotificationViewMDTest, CreateOrUpdateTest) {
 
 TEST_F(NotificationViewMDTest, TestIconSizing) {
   // TODO(tetsui): Remove duplicated integer literal in CreateOrUpdateIconView.
-  const int kNotificationIconSize = 30;
+  const int kNotificationIconSize = 36;
 
   notification()->set_type(NOTIFICATION_TYPE_SIMPLE);
   ProportionalImageView* view = notification_view()->icon_view_;
@@ -344,7 +346,7 @@ TEST_F(NotificationViewMDTest, UpdateButtonsStateTest) {
     notification_view()->ToggleExpanded();
   EXPECT_TRUE(notification_view()->actions_row_->visible());
 
-  EXPECT_EQ(views::CustomButton::STATE_NORMAL,
+  EXPECT_EQ(views::Button::STATE_NORMAL,
             notification_view()->action_buttons_[0]->state());
 
   // Now construct a mouse move event 1 pixel inside the boundary of the action
@@ -356,12 +358,12 @@ TEST_F(NotificationViewMDTest, UpdateButtonsStateTest) {
                       ui::EventTimeForNow(), ui::EF_NONE, ui::EF_NONE);
   widget()->OnMouseEvent(&move);
 
-  EXPECT_EQ(views::CustomButton::STATE_HOVERED,
+  EXPECT_EQ(views::Button::STATE_HOVERED,
             notification_view()->action_buttons_[0]->state());
 
   notification_view()->CreateOrUpdateViews(*notification());
 
-  EXPECT_EQ(views::CustomButton::STATE_HOVERED,
+  EXPECT_EQ(views::Button::STATE_HOVERED,
             notification_view()->action_buttons_[0]->state());
 
   // Now construct a mouse move event 1 pixel outside the boundary of the
@@ -371,7 +373,7 @@ TEST_F(NotificationViewMDTest, UpdateButtonsStateTest) {
                         ui::EventTimeForNow(), ui::EF_NONE, ui::EF_NONE);
   widget()->OnMouseEvent(&move);
 
-  EXPECT_EQ(views::CustomButton::STATE_NORMAL,
+  EXPECT_EQ(views::Button::STATE_NORMAL,
             notification_view()->action_buttons_[0]->state());
 }
 
@@ -385,9 +387,9 @@ TEST_F(NotificationViewMDTest, UpdateButtonCountTest) {
     notification_view()->ToggleExpanded();
   EXPECT_TRUE(notification_view()->actions_row_->visible());
 
-  EXPECT_EQ(views::CustomButton::STATE_NORMAL,
+  EXPECT_EQ(views::Button::STATE_NORMAL,
             notification_view()->action_buttons_[0]->state());
-  EXPECT_EQ(views::CustomButton::STATE_NORMAL,
+  EXPECT_EQ(views::Button::STATE_NORMAL,
             notification_view()->action_buttons_[1]->state());
 
   // Now construct a mouse move event 1 pixel inside the boundary of the action
@@ -401,15 +403,15 @@ TEST_F(NotificationViewMDTest, UpdateButtonCountTest) {
       views::test::WidgetTest::GetEventSink(widget())->OnEventFromSource(&move);
   EXPECT_FALSE(details.dispatcher_destroyed);
 
-  EXPECT_EQ(views::CustomButton::STATE_HOVERED,
+  EXPECT_EQ(views::Button::STATE_HOVERED,
             notification_view()->action_buttons_[0]->state());
-  EXPECT_EQ(views::CustomButton::STATE_NORMAL,
+  EXPECT_EQ(views::Button::STATE_NORMAL,
             notification_view()->action_buttons_[1]->state());
 
   notification()->set_buttons(CreateButtons(1));
   notification_view()->UpdateWithNotification(*notification());
 
-  EXPECT_EQ(views::CustomButton::STATE_HOVERED,
+  EXPECT_EQ(views::Button::STATE_HOVERED,
             notification_view()->action_buttons_[0]->state());
   EXPECT_EQ(1u, notification_view()->action_buttons_.size());
 
@@ -420,7 +422,7 @@ TEST_F(NotificationViewMDTest, UpdateButtonCountTest) {
                         ui::EventTimeForNow(), ui::EF_NONE, ui::EF_NONE);
   widget()->OnMouseEvent(&move);
 
-  EXPECT_EQ(views::CustomButton::STATE_NORMAL,
+  EXPECT_EQ(views::Button::STATE_NORMAL,
             notification_view()->action_buttons_[0]->state());
 }
 
@@ -491,10 +493,25 @@ TEST_F(NotificationViewMDTest, SlideOutPinned) {
 }
 
 TEST_F(NotificationViewMDTest, Pinned) {
-  notification()->set_pinned(true);
+  // Visible at the initial state.
+  EXPECT_TRUE(GetCloseButton());
+  EXPECT_TRUE(GetCloseButton()->visible());
 
+  // Pin.
+  notification()->set_pinned(true);
   UpdateNotificationViews();
-  EXPECT_FALSE(GetCloseButton()->visible());
+  EXPECT_FALSE(GetCloseButton());
+
+  // Unpin.
+  notification()->set_pinned(false);
+  UpdateNotificationViews();
+  EXPECT_TRUE(GetCloseButton());
+  EXPECT_TRUE(GetCloseButton()->visible());
+
+  // Pin again.
+  notification()->set_pinned(true);
+  UpdateNotificationViews();
+  EXPECT_FALSE(GetCloseButton());
 }
 
 #endif  // defined(OS_CHROMEOS)
@@ -530,6 +547,76 @@ TEST_F(NotificationViewMDTest, ExpandLongMessage) {
   EXPECT_EQ(collapsed_height, notification_view()->message_view_->height());
   EXPECT_EQ(collapsed_preferred_height,
             notification_view()->GetPreferredSize().height());
+}
+
+TEST_F(NotificationViewMDTest, TestAccentColor) {
+  const SkColor kActionButtonTextColor = SkColorSetRGB(0x33, 0x67, 0xD6);
+  const SkColor kCustomAccentColor = SkColorSetRGB(0xea, 0x61, 0x0);
+
+  notification()->set_buttons(CreateButtons(2));
+  UpdateNotificationViews();
+  widget()->Show();
+
+  // Action buttons are hidden by collapsed state.
+  if (!notification_view()->expanded_)
+    notification_view()->ToggleExpanded();
+  EXPECT_TRUE(notification_view()->actions_row_->visible());
+
+  // By default, header does not have accent color (default grey), and
+  // buttons have default accent color.
+  EXPECT_EQ(message_center::kNotificationDefaultAccentColor,
+            notification_view()->header_row_->accent_color_for_testing());
+  EXPECT_EQ(
+      kActionButtonTextColor,
+      notification_view()->action_buttons_[0]->enabled_color_for_testing());
+  EXPECT_EQ(
+      kActionButtonTextColor,
+      notification_view()->action_buttons_[1]->enabled_color_for_testing());
+
+  // If custom accent color is set, the header and the buttons should have the
+  // same accent color.
+  notification()->set_accent_color(kCustomAccentColor);
+  UpdateNotificationViews();
+  EXPECT_EQ(kCustomAccentColor,
+            notification_view()->header_row_->accent_color_for_testing());
+  EXPECT_EQ(
+      kCustomAccentColor,
+      notification_view()->action_buttons_[0]->enabled_color_for_testing());
+  EXPECT_EQ(
+      kCustomAccentColor,
+      notification_view()->action_buttons_[1]->enabled_color_for_testing());
+}
+
+TEST_F(NotificationViewMDTest, UseImageAsIcon) {
+  // TODO(tetsui): Remove duplicated integer literal in CreateOrUpdateIconView.
+  const int kNotificationIconSize = 30;
+
+  notification()->set_type(NotificationType::NOTIFICATION_TYPE_IMAGE);
+  notification()->set_icon(
+      CreateTestImage(kNotificationIconSize, kNotificationIconSize));
+
+  // Test normal notification.
+  UpdateNotificationViews();
+  EXPECT_FALSE(notification_view()->expanded_);
+  EXPECT_TRUE(notification_view()->icon_view_->visible());
+
+  // Icon on the right side is still visible when expanded.
+  notification_view()->ToggleExpanded();
+  EXPECT_TRUE(notification_view()->expanded_);
+  EXPECT_TRUE(notification_view()->icon_view_->visible());
+
+  notification_view()->ToggleExpanded();
+  EXPECT_FALSE(notification_view()->expanded_);
+
+  // Test notification with use_image_as_icon e.g. screenshot preview.
+  notification()->set_use_image_as_icon(true);
+  UpdateNotificationViews();
+  EXPECT_TRUE(notification_view()->icon_view_->visible());
+
+  // Icon on the right side is not visible when expanded.
+  notification_view()->ToggleExpanded();
+  EXPECT_TRUE(notification_view()->expanded_);
+  EXPECT_FALSE(notification_view()->icon_view_->visible());
 }
 
 }  // namespace message_center

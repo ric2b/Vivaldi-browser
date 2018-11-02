@@ -75,6 +75,13 @@ void LayoutInline::WillBeDestroyed() {
 
   if (!DocumentBeingDestroyed()) {
     if (FirstLineBox()) {
+      // We can't wait for LayoutBoxModelObject::destroy to clear the selection,
+      // because by then we will have nuked the line boxes.
+      // FIXME: The FrameSelection should be responsible for this when it
+      // is notified of DOM mutations.
+      if (IsSelectionBorder())
+        View()->ClearSelection();
+
       // If line boxes are contained inside a root, that means we're an inline.
       // In that case, we need to remove all the line boxes so that the parent
       // lines aren't pointing to deleted children. If the first line box does
@@ -822,11 +829,6 @@ static LayoutUnit ComputeMargin(const LayoutInline* layout_object,
   return LayoutUnit();
 }
 
-LayoutRectOutsets LayoutInline::MarginBoxOutsets() const {
-  return LayoutRectOutsets(MarginTop(), MarginRight(), MarginBottom(),
-                           MarginLeft());
-}
-
 LayoutUnit LayoutInline::MarginLeft() const {
   return ComputeMargin(this, Style()->MarginLeft());
 }
@@ -841,34 +843,6 @@ LayoutUnit LayoutInline::MarginTop() const {
 
 LayoutUnit LayoutInline::MarginBottom() const {
   return ComputeMargin(this, Style()->MarginBottom());
-}
-
-LayoutUnit LayoutInline::MarginStart(const ComputedStyle* other_style) const {
-  return ComputeMargin(this, StyleRef().MarginStartUsing(
-                                 other_style ? *other_style : StyleRef()));
-}
-
-LayoutUnit LayoutInline::MarginEnd(const ComputedStyle* other_style) const {
-  return ComputeMargin(
-      this, StyleRef().MarginEndUsing(other_style ? *other_style : StyleRef()));
-}
-
-LayoutUnit LayoutInline::MarginBefore(const ComputedStyle* other_style) const {
-  return ComputeMargin(this, StyleRef().MarginBeforeUsing(
-                                 other_style ? *other_style : StyleRef()));
-}
-
-LayoutUnit LayoutInline::MarginAfter(const ComputedStyle* other_style) const {
-  return ComputeMargin(this, StyleRef().MarginAfterUsing(
-                                 other_style ? *other_style : StyleRef()));
-}
-
-LayoutUnit LayoutInline::MarginOver() const {
-  return ComputeMargin(this, Style()->MarginOver());
-}
-
-LayoutUnit LayoutInline::MarginUnder() const {
-  return ComputeMargin(this, Style()->MarginUnder());
 }
 
 bool LayoutInline::NodeAtPoint(HitTestResult& result,
@@ -1175,12 +1149,9 @@ LayoutRect LayoutInline::AbsoluteVisualRect() const {
   return LayoutRect();
 }
 
-LayoutRect LayoutInline::LocalVisualRect() const {
+LayoutRect LayoutInline::LocalVisualRectIgnoringVisibility() const {
   // If we don't create line boxes, we don't have any invalidations to do.
   if (!AlwaysCreateLineBoxes())
-    return LayoutRect();
-
-  if (Style()->Visibility() != EVisibility::kVisible)
     return LayoutRect();
 
   return VisualOverflowRect();
@@ -1373,21 +1344,22 @@ LayoutUnit LayoutInline::LineHeight(
   return LayoutUnit(Style()->ComputedLineHeight());
 }
 
-int LayoutInline::BaselinePosition(FontBaseline baseline_type,
-                                   bool first_line,
-                                   LineDirectionMode direction,
-                                   LinePositionMode line_position_mode) const {
+LayoutUnit LayoutInline::BaselinePosition(
+    FontBaseline baseline_type,
+    bool first_line,
+    LineDirectionMode direction,
+    LinePositionMode line_position_mode) const {
   DCHECK_EQ(line_position_mode, kPositionOnContainingLine);
   const SimpleFontData* font_data = Style(first_line)->GetFont().PrimaryFont();
   DCHECK(font_data);
   if (!font_data)
-    return -1;
+    return LayoutUnit(-1);
   const FontMetrics& font_metrics = font_data->GetFontMetrics();
-  return (font_metrics.Ascent(baseline_type) +
-          (LineHeight(first_line, direction, line_position_mode) -
-           font_metrics.Height()) /
-              2)
-      .ToInt();
+  return LayoutUnit((font_metrics.Ascent(baseline_type) +
+                     (LineHeight(first_line, direction, line_position_mode) -
+                      font_metrics.Height()) /
+                         2)
+                        .ToInt());
 }
 
 LayoutSize LayoutInline::OffsetForInFlowPositionedInline(

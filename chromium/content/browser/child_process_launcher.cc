@@ -60,16 +60,15 @@ ChildProcessLauncher::~ChildProcessLauncher() {
   }
 }
 
-void ChildProcessLauncher::SetProcessPriority(bool background,
-                                              bool boost_for_pending_views) {
+void ChildProcessLauncher::SetProcessPriority(
+    const ChildProcessLauncherPriority& priority) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   base::Process to_pass = process_.process.Duplicate();
   BrowserThread::PostTask(
       BrowserThread::PROCESS_LAUNCHER, FROM_HERE,
-      base::Bind(
+      base::BindOnce(
           &ChildProcessLauncherHelper::SetProcessPriorityOnLauncherThread,
-          helper_, base::Passed(&to_pass), background,
-          boost_for_pending_views));
+          helper_, base::Passed(&to_pass), priority));
 }
 
 void ChildProcessLauncher::Notify(
@@ -179,6 +178,16 @@ ChildProcessLauncher::Client* ChildProcessLauncher::ReplaceClientForTest(
   Client* ret = client_;
   client_ = client;
   return ret;
+}
+
+bool ChildProcessLauncherPriority::operator==(
+    const ChildProcessLauncherPriority& other) const {
+  return background == other.background &&
+         boost_for_pending_views == other.boost_for_pending_views
+#if defined(OS_ANDROID)
+         && importance == other.importance
+#endif
+      ;
 }
 
 }  // namespace content

@@ -268,11 +268,7 @@ void UnloadController::TabReplacedAt(TabStripModel* tab_strip_model,
 void UnloadController::TabStripEmpty() {
   // Set is_attempting_to_close_browser_ here, so that extensions, etc, do not
   // attempt to add tabs to the browser before it closes.
-  // gisli@vivaldi.com:  For Vivaldi empty tabstrip does not mean we are
-  // closing.
-  if (!browser_->is_vivaldi()) {
   is_attempting_to_close_browser_ = true;
-  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

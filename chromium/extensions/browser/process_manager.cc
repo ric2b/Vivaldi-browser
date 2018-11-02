@@ -6,7 +6,6 @@
 
 #include <vector>
 
-#include "app/vivaldi_constants.h"
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -42,6 +41,8 @@
 #include "extensions/common/manifest_handlers/background_info.h"
 #include "extensions/common/manifest_handlers/incognito_info.h"
 #include "extensions/common/one_shot_event.h"
+
+#include "app/vivaldi_apptools.h"
 
 using content::BrowserContext;
 
@@ -741,7 +742,7 @@ void ProcessManager::DecrementLazyKeepaliveCount(
 
 void ProcessManager::OnLazyBackgroundPageIdle(const std::string& extension_id,
                                               uint64_t sequence_id) {
-  if (extension_id == vivaldi::kVivaldiAppId)
+  if (vivaldi::IsVivaldiApp(extension_id))
     return;
 
   ExtensionHost* host = GetBackgroundHostForExtension(extension_id);
@@ -899,7 +900,8 @@ scoped_refptr<content::SiteInstance>
 IncognitoProcessManager::GetSiteInstanceForURL(const GURL& url) {
   const Extension* extension =
       extension_registry_->enabled_extensions().GetExtensionOrAppByURL(url);
-  if (extension && !IncognitoInfo::IsSplitMode(extension)) {
+  if (extension && !IncognitoInfo::IsSplitMode(extension) &&
+      !vivaldi::IsVivaldiApp(extension->id())) {
     BrowserContext* original_context =
         ExtensionsBrowserClient::Get()->GetOriginalContext(browser_context());
     return ProcessManager::Get(original_context)->GetSiteInstanceForURL(url);

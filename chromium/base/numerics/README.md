@@ -1,8 +1,9 @@
 # `base/numerics`
 
 This directory contains a dependency-free, header-only library of templates
-providing well-defined semantics for safely handling a variety of numeric
-operations, including most common arithmetic operations and conversions.
+providing well-defined semantics for safely and performantly handling a variety
+of numeric operations, including most common arithmetic operations and
+conversions.
 
 The public API is broken out into the following header files:
 
@@ -27,6 +28,129 @@ The conversion priority for `Numeric` type coercions is:
 ***
 
 [TOC]
+
+## Common patterns and use-cases
+
+The following covers the preferred style for the most common uses of this
+library. Please don't cargo-cult from anywhere else. 😉
+
+### Performing checked arithmetic conversions
+
+The `checked_cast` template converts between arbitrary arithmetic types, and is
+used for cases where a conversion failure should result in program termination:
+
+```cpp
+// Crash if signed_value is out of range for buff_size.
+size_t buff_size = checked_cast<size_t>(signed_value);
+```
+
+### Performing saturated (clamped) arithmetic conversions
+
+The `saturated_cast` template converts between arbitrary arithmetic types, and
+is used in cases where an out-of-bounds source value should be saturated to the
+corresponding maximum or minimum of the destination type:
+
+```cpp
+// Convert from float with saturation to INT_MAX, INT_MIN, or 0 for NaN.
+int int_value = saturated_cast<int>(floating_point_value);
+```
+
+### Enforcing arithmetic conversions at compile-time
+
+The `strict_cast` enforces type restrictions at compile-time and results in
+emitted code that is identical to a normal `static_cast`. However, a
+`strict_cast` assignment will fail to compile if the destination type cannot
+represent the full range of the source type:
+
+```cpp
+// Throw a compiler error if byte_value is changed to an out-of-range-type.
+int int_value = saturated_cast<int>(byte_value);
+```
+
+You can also enforce these compile-time restrictions on function parameters by
+using the `StrictNumeric` template:
+
+```cpp
+// Throw a compiler error if the size argument cannot be represented by a
+// size_t (e.g. passing an int will fail to compile).
+bool AllocateBuffer(void** buffer, StrictCast<size_t> size);
+```
+
+### Comparing values between arbitrary arithmetic types
+
+Both the `StrictNumeric` and `ClampedNumeric` types provide well defined
+comparisons between arbitrary arithmetic types. This allows you to perform
+comparisons that are not legal or would trigger compiler warnings or errors
+under the normal arithmetic promotion rules:
+
+```cpp
+bool foo(unsigned value, int upper_bound) {
+  // Converting to StrictNumeric allows this comparison to work correctly.
+  if (MakeStrictNum(value) >= upper_bound)
+    return false;
+```
+
+*** note
+**Warning:** Do not perform manual conversions using the comparison operators.
+Instead, use the cast templates described in the previous sections, or the
+constexpr template functions `IsValueInRangeForNumericType` and
+`IsTypeInRangeForNumericType`, as these templates properly handle the full range
+of corner cases and employ various optimizations.
+***
+
+### Calculating a buffer size (checked arithmetic)
+
+When making exact calculations—such as for buffer lengths—it's often necessary
+to know when those calculations trigger an overflow, undefined behavior, or
+other boundary conditions. The `CheckedNumeric` template does this by storing
+a bit determining whether or not some arithmetic operation has occured that
+would put the variable in an "invalid" state. Attempting to extract the value
+from a variable in an invalid state will trigger a check/trap condition, that
+by default will result in process termination.
+
+Here's an example of a buffer calculation using a `CheckedNumeric` type (note:
+the AssignIfValid method will trigger a compile error if the result is ignored).
+
+```cpp
+// Calculate the buffer size and detect if an overflow occurs.
+size_t size;
+if (!CheckAdd(kHeaderSize, CheckMul(count, kItemSize)).AssignIfValid(&size)) {
+  // Handle an overflow error...
+}
+```
+
+### Calculating clamped coordinates (non-sticky saturating arithmetic)
+
+Certain classes of calculations—such as coordinate calculations—require
+well-defined semantics that always produce a valid result on boundary
+conditions. The `ClampedNumeric` template addresses this by providing
+performant, non-sticky saturating arithmetic operations.
+
+Here's an example of using a `ClampedNumeric` to calculate an operation
+insetting a rectangle.
+
+```cpp
+// Use clamped arithmetic since inset calculations might overflow.
+void Rect::Inset(int left, int top, int right, int bottom) {
+  origin_ += Vector2d(left, top);
+  set_width(ClampSub(width(), ClampAdd(left, right)));
+  set_height(ClampSub(height(), ClampAdd(top, bottom)));
+}
+```
+
+*** note
+The `ClampedNumeric` type is not "sticky", which means the saturation is not
+retained across individual operations. As such, one arithmetic operation may
+result in a saturated value, while the next operation may then "desaturate"
+the value. Here's an example:
+
+```cpp
+ClampedNumeric<int> value = INT_MAX;
+++value;  // value is still INT_MAX, due to saturation.
+--value;  // value is now (INT_MAX - 1), because saturation is not sticky.
+```
+
+***
 
 ## Conversion functions and StrictNumeric<> in safe_conversions.h
 
@@ -56,8 +180,12 @@ performing a range of conversions, assignments, and tests.
 ### Other helper and conversion functions
 
 *   `IsValueInRangeForNumericType<>()` - A convenience function that returns
-    true if the type supplied to the template parameter can represent the value
+    true if the type supplied as the template parameter can represent the value
     passed as an argument to the function.
+*   `IsTypeInRangeForNumericType<>()` - A convenience function that evaluates
+    entirely at compile-time and returns true if the destination type (first
+    template parameter) can represent the full range of the source type
+    (second template parameter).
 *   `IsValueNegative()` - A convenience function that will accept any
     arithmetic type as an argument and will return whether the value is less
     than zero. Unsigned types always return false.
@@ -85,11 +213,19 @@ boundary conditions such as overflow, underflow, and invalid conversions.
 The `CheckedNumeric` type implicitly converts from floating point and integer
 data types, and contains overloads for basic arithmetic operations (i.e.: `+`,
 `-`, `*`, `/` for all types and `%`, `<<`, `>>`, `&`, `|`, `^` for integers).
+However, *the [variadic template functions
+](#CheckedNumeric_in-checked_math_h-Non_member-helper-functions)
+are the prefered API,* as they remove type ambiguities and help prevent a number
+of common errors. The variadic functions can also be more performant, as they
+eliminate redundant expressions that are unavoidable with the with the operator
+overloads. (Ideally the compiler should optimize those away, but better to avoid
+them in the first place.)
+
 Type promotions are a slightly modified version of the [standard C/C++ numeric
 promotions
 ](http://en.cppreference.com/w/cpp/language/implicit_conversion#Numeric_promotions)
-with the two differences being that there is no default promotion to int
-and bitwise logical operations always return an unsigned of the wider type.
+with the two differences being that *there is no default promotion to int*
+and *bitwise logical operations always return an unsigned of the wider type.*
 
 ### Members
 
@@ -139,12 +275,13 @@ types because they could result in a crash if the type is not in a valid state.
 Patterns like the following should be used instead:
 
 ```cpp
-CheckedNumeric<size_t> checked_size = untrusted_input_value;
-checked_size += HEADER LENGTH;
-if (checked_size.IsValid() && checked_size.ValueOrDie() < buffer_size) {
-  \\ Do stuff on success...
+// Either input or padding (or both) may be arbitrary sizes.
+size_t buff_size;
+if (!CheckAdd(input, padding, kHeaderLength).AssignIfValid(&buff_size) ||
+     buff_size >= kMaxBuffer) {
+  // Handle an error...
 } else {
-  \\ Handle an error...
+  // Do stuff on success...
 }
 ```
 
@@ -188,11 +325,20 @@ arithmetic types to `CheckedNumeric` types:
 and integer data types, saturating on assignment as appropriate. It contains
 overloads for basic arithmetic operations (i.e.: `+`, `-`, `*`, `/` for
 all types and `%`, `<<`, `>>`, `&`, `|`, `^` for integers) along with comparison
-operators for arithmetic types of any size. Type promotions are a slightly
-modified version of the [standard C/C++ numeric promotions
+operators for arithmetic types of any size. However, *the [variadic template
+functions
+](#ClampedNumeric_in-clamped_math_h-Non_member-helper-functions)
+are the prefered API,* as they remove type ambiguities and help prevent
+a number of common errors. The variadic functions can also be more performant,
+as they eliminate redundant expressions that are unavoidable with the operator
+overloads. (Ideally the compiler should optimize those away, but better to avoid
+them in the first place.)
+
+Type promotions are a slightly modified version of the [standard C/C++ numeric
+promotions
 ](http://en.cppreference.com/w/cpp/language/implicit_conversion#Numeric_promotions)
-with the two differences being that there is no default promotion to int and
-bitwise logical operations always return an unsigned of the wider type.
+with the two differences being that *there is no default promotion to int*
+and *bitwise logical operations always return an unsigned of the wider type.*
 
 *** aside
 Most arithmetic operations saturate normally, to the numeric limit in the
@@ -206,7 +352,7 @@ direction of the sign. The potentially unusual cases are:
     limit (max/min), even for shifts larger than the bit width. 0 shifted any
     amount results in 0.
 *   **Right shift:** Negative values saturate to -1. Positive or 0 saturates
-    to 0.
+    to 0. (Effectively just an unbounded arithmetic-right-shift.)
 *   **Bitwise operations:** No saturation; bit pattern is identical to
     non-saturated bitwise operations.
 ***
@@ -230,6 +376,9 @@ with the following unary arithmetic methods, which return a new
 The following are for converting `ClampedNumeric` instances:
 
 *   `type` - The underlying numeric type.
+*   `RawValue()` - Returns the raw value as the underlying arithmetic type. This
+    is useful when e.g. assigning to an auto type or passing as a deduced
+    template parameter.
 *   `Cast<>()` - Instance method returning a `ClampedNumeric` derived from
     casting the current instance to a `ClampedNumeric` of the supplied
     destination type.

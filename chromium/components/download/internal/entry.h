@@ -9,6 +9,7 @@
 #include "components/download/public/client.h"
 #include "components/download/public/clients.h"
 #include "components/download/public/download_params.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 
 namespace download {
 
@@ -75,8 +76,22 @@ struct Entry {
   // not yet complete.
   base::Time completion_time;
 
+  // Last time when the entry was checked for cleanup, default is
+  // |completion_time|.
+  base::Time last_cleanup_check_time;
+
+  // Size of the download file in bytes, 0 if download is not successfully
+  // completed.
+  uint64_t bytes_downloaded;
+
   // Stores the number of retries for this download.
   uint32_t attempt_count;
+
+  // Stores the number of times the service tried to delete the download file.
+  uint32_t cleanup_attempt_count;
+
+  // Traffic annotation for the network request.
+  net::MutableNetworkTrafficAnnotationTag traffic_annotation;
 };
 
 }  // namespace download

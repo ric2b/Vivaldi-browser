@@ -55,15 +55,15 @@ ApplyBlockElementCommand::ApplyBlockElementCommand(
     : CompositeEditCommand(document), tag_name_(tag_name) {}
 
 void ApplyBlockElementCommand::DoApply(EditingState* editing_state) {
-  if (!EndingSelection().RootEditableElement())
-    return;
-
   // ApplyBlockElementCommands are only created directly by editor commands'
   // execution, which updates layout before entering doApply().
   DCHECK(!GetDocument().NeedsLayoutTreeUpdate());
 
-  VisiblePosition visible_end = EndingSelection().VisibleEnd();
-  VisiblePosition visible_start = EndingSelection().VisibleStart();
+  if (!RootEditableElementOf(EndingSelection().Base()))
+    return;
+
+  VisiblePosition visible_end = EndingVisibleSelection().VisibleEnd();
+  VisiblePosition visible_start = EndingVisibleSelection().VisibleStart();
   if (visible_start.IsNull() || visible_start.IsOrphan() ||
       visible_end.IsNull() || visible_end.IsOrphan())
     return;
@@ -89,11 +89,11 @@ void ApplyBlockElementCommand::DoApply(EditingState* editing_state) {
     const SelectionInDOMTree& new_selection = builder.Build();
     if (new_selection.IsNone())
       return;
-    SetEndingSelection(new_selection);
+    SetEndingSelection(SelectionForUndoStep::From(new_selection));
   }
 
   VisibleSelection selection =
-      SelectionForParagraphIteration(EndingSelection());
+      SelectionForParagraphIteration(EndingVisibleSelection());
   VisiblePosition start_of_selection = selection.VisibleStart();
   VisiblePosition end_of_selection = selection.VisibleEnd();
   DCHECK(!start_of_selection.IsNull());
@@ -117,12 +117,12 @@ void ApplyBlockElementCommand::DoApply(EditingState* editing_state) {
     VisiblePosition start(VisiblePositionForIndex(start_index, start_scope));
     VisiblePosition end(VisiblePositionForIndex(end_index, end_scope));
     if (start.IsNotNull() && end.IsNotNull()) {
-      SetEndingSelection(
+      SetEndingSelection(SelectionForUndoStep::From(
           SelectionInDOMTree::Builder()
               .Collapse(start.ToPositionWithAffinity())
               .Extend(end.DeepEquivalent())
               .SetIsDirectional(EndingSelection().IsDirectional())
-              .Build());
+              .Build()));
     }
   }
 }
@@ -150,10 +150,11 @@ void ApplyBlockElementCommand::FormatSelection(
     AppendNode(placeholder, blockquote, editing_state);
     if (editing_state->IsAborted())
       return;
-    SetEndingSelection(SelectionInDOMTree::Builder()
-                           .Collapse(Position::BeforeNode(*placeholder))
-                           .SetIsDirectional(EndingSelection().IsDirectional())
-                           .Build());
+    SetEndingSelection(SelectionForUndoStep::From(
+        SelectionInDOMTree::Builder()
+            .Collapse(Position::BeforeNode(*placeholder))
+            .SetIsDirectional(EndingSelection().IsDirectional())
+            .Build()));
     return;
   }
 

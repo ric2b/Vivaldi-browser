@@ -13,7 +13,6 @@
 #include "base/logging.h"
 #include "net/spdy/core/hpack/hpack_constants.h"
 #include "net/spdy/core/mock_spdy_framer_visitor.h"
-#include "net/spdy/core/spdy_frame_builder.h"
 #include "net/spdy/core/spdy_frame_reader.h"
 #include "net/spdy/core/spdy_protocol.h"
 #include "net/spdy/core/spdy_test_utils.h"
@@ -145,7 +144,7 @@ class SpdyTestDeframerImpl : public SpdyTestDeframer,
   void OnDataFrameHeader(SpdyStreamId stream_id,
                          size_t length,
                          bool fin) override;
-  void OnError(SpdyFramer* framer) override;
+  void OnError(Http2DecoderAdapter::SpdyFramerError error) override;
   void OnGoAway(SpdyStreamId last_accepted_stream_id,
                 SpdyErrorCode error_code) override;
   bool OnGoAwayFrameData(const char* goaway_data, size_t len) override;
@@ -458,11 +457,11 @@ void SpdyTestDeframerImpl::OnDataFrameHeader(SpdyStreamId stream_id,
 }
 
 // The SpdyFramer will not process any more data at this point.
-void SpdyTestDeframerImpl::OnError(SpdyFramer* framer) {
+void SpdyTestDeframerImpl::OnError(Http2DecoderAdapter::SpdyFramerError error) {
   DVLOG(1) << "SpdyFramer detected an error in the stream: "
-           << SpdyFramer::SpdyFramerErrorToString(framer->spdy_framer_error())
+           << Http2DecoderAdapter::SpdyFramerErrorToString(error)
            << "     frame_type_: " << Http2FrameTypeToString(frame_type_);
-  listener_->OnError(framer, this);
+  listener_->OnError(error, this);
 }
 
 // Received a GOAWAY frame from the peer. The last stream id it accepted from us
@@ -840,9 +839,10 @@ class LoggingSpdyDeframerDelegate : public SpdyDeframerVisitorInterface {
   }
 
   // The SpdyFramer will not process any more data at this point.
-  void OnError(SpdyFramer* framer, SpdyTestDeframer* deframer) override {
+  void OnError(Http2DecoderAdapter::SpdyFramerError error,
+               SpdyTestDeframer* deframer) override {
     DVLOG(1) << "LoggingSpdyDeframerDelegate::OnError";
-    wrapped_->OnError(framer, deframer);
+    wrapped_->OnError(error, deframer);
   }
 
  private:
@@ -1003,8 +1003,9 @@ void DeframerCallbackCollector::OnWindowUpdate(
 }
 
 // The SpdyFramer will not process any more data at this point.
-void DeframerCallbackCollector::OnError(SpdyFramer* framer,
-                                        SpdyTestDeframer* deframer) {
+void DeframerCallbackCollector::OnError(
+    Http2DecoderAdapter::SpdyFramerError error,
+    SpdyTestDeframer* deframer) {
   CollectedFrame cf;
   cf.error_reported = true;
   collected_frames_->push_back(std::move(cf));

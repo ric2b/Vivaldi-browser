@@ -19,15 +19,17 @@
 #include "content/common/content_export.h"
 #include "content/public/common/resource_request.h"
 #include "content/public/common/url_loader.mojom.h"
-#include "mojo/public/cpp/bindings/associated_binding.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/system/data_pipe.h"
+
+namespace network {
+class NetToMojoPendingBuffer;
+}
 
 namespace content {
 
 class AppCacheRequest;
 class AppCacheURLLoaderRequest;
-class NetToMojoPendingBuffer;
 class URLLoaderFactoryGetter;
 
 // Holds information about the subresource load request like the routing id,
@@ -36,7 +38,7 @@ struct SubresourceLoadInfo {
   SubresourceLoadInfo();
   ~SubresourceLoadInfo();
 
-  mojom::URLLoaderAssociatedRequest url_loader_request;
+  mojom::URLLoaderRequest url_loader_request;
   int32_t routing_id;
   int32_t request_id;
   uint32_t options;
@@ -97,28 +99,29 @@ class CONTENT_EXPORT AppCacheURLLoaderJob : public AppCacheJob,
     main_resource_loader_callback_ = std::move(callback);
   }
 
-  // Subresource request load information is passed in the
-  // |subresource_load_info| parameter. This includes the request id, the
-  // client pointer, etc.
-  // |default_url_loader| is used to retrieve the network loader for requests
-  // intended to be sent to the network.
-  void SetSubresourceLoadInfo(
-      std::unique_ptr<SubresourceLoadInfo> subresource_load_info,
-      URLLoaderFactoryGetter* default_url_loader);
-
   // Ownership of the |handler| is transferred to us via this call. This is
   // only for subresource requests.
   void set_request_handler(std::unique_ptr<AppCacheRequestHandler> handler) {
     sub_resource_handler_ = std::move(handler);
   }
 
+  // Binds to the URLLoaderRequest instance passed in the |request| parameter.
+  // The URLLoaderClient instance is passed in the |client| parameter. This
+  // enables the client to receive notifications/data, etc for the ensuing
+  // URL load.
+  void BindRequest(mojom::URLLoaderClientPtr client,
+                   mojom::URLLoaderRequest request);
+
  protected:
   // AppCacheJob::Create() creates this instance.
   friend class AppCacheJob;
 
-  AppCacheURLLoaderJob(const ResourceRequest& request,
-                       AppCacheURLLoaderRequest* appcache_request,
-                       AppCacheStorage* storage);
+  AppCacheURLLoaderJob(
+      const ResourceRequest& request,
+      AppCacheURLLoaderRequest* appcache_request,
+      AppCacheStorage* storage,
+      std::unique_ptr<SubresourceLoadInfo> subresource_load_info,
+      URLLoaderFactoryGetter* loader_factory_getter);
 
   // AppCacheStorage::Delegate methods
   void OnResponseInfoLoaded(AppCacheResponseInfo* response_info,
@@ -177,7 +180,7 @@ class CONTENT_EXPORT AppCacheURLLoaderJob : public AppCacheJob,
   // mojo data pipe entities.
   mojo::ScopedDataPipeProducerHandle response_body_stream_;
 
-  scoped_refptr<NetToMojoPendingBuffer> pending_write_;
+  scoped_refptr<network::NetToMojoPendingBuffer> pending_write_;
 
   mojo::SimpleWatcher writable_handle_watcher_;
 
@@ -198,13 +201,7 @@ class CONTENT_EXPORT AppCacheURLLoaderJob : public AppCacheJob,
   net::LoadTimingInfo load_timing_info_;
 
   // Used for subresource requests which go to the network.
-  mojom::URLLoaderAssociatedPtr network_loader_;
-
-  // Binds the subresource URLLoaderClient with us. We can use the regular
-  // binding_ member above when we remove the need for the associated requests
-  // issue with URLLoaderFactory.
-  std::unique_ptr<mojo::AssociatedBinding<mojom::URLLoader>>
-      associated_binding_;
+  mojom::URLLoaderPtr network_loader_;
 
   // Network URLLoaderClient binding for subresource requests.
   mojo::Binding<mojom::URLLoaderClient> network_loader_client_binding_;
@@ -212,6 +209,10 @@ class CONTENT_EXPORT AppCacheURLLoaderJob : public AppCacheJob,
   // The AppCacheURLLoaderRequest instance. We use this to set the response
   // info when we receive it.
   AppCacheURLLoaderRequest* appcache_request_;
+
+  // Set to true when we receive a response from the network URL loader.
+  // Please see OnReceiveResponse()
+  bool received_response_;
 
   DISALLOW_COPY_AND_ASSIGN(AppCacheURLLoaderJob);
 };

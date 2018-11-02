@@ -17,7 +17,6 @@
 #import "ios/chrome/browser/tabs/tab_model.h"
 #import "ios/chrome/browser/tabs/tab_model_list.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
-#include "ios/web/public/web_thread.h"
 #include "url/gurl.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -71,7 +70,11 @@ IOSChromeTabRestoreServiceClient::~IOSChromeTabRestoreServiceClient() {}
 
 sessions::LiveTabContext*
 IOSChromeTabRestoreServiceClient::CreateLiveTabContext(
-    const std::string& app_name, const std::string& ext_data) {
+    const std::string& /* app_name */,
+    const gfx::Rect& /* bounds */,
+    ui::WindowShowState /* show_state */,
+    const std::string& /* workspace */,
+    const std::string& ext_data) {
   return TabRestoreServiceDelegateImplIOSFactory::GetForBrowserState(
       browser_state_);
 }
@@ -116,11 +119,6 @@ bool IOSChromeTabRestoreServiceClient::ShouldTrackURLForRestore(
 std::string IOSChromeTabRestoreServiceClient::GetExtensionAppIDForTab(
     sessions::LiveTab* tab) {
   return std::string();
-}
-
-base::SequencedWorkerPool* IOSChromeTabRestoreServiceClient::GetBlockingPool() {
-  DCHECK_CURRENTLY_ON(web::WebThread::UI);
-  return web::WebThread::GetBlockingPool();
 }
 
 base::FilePath IOSChromeTabRestoreServiceClient::GetPathToSaveTo() {

@@ -86,7 +86,7 @@ double GetWeightMultiplierPerSecond(
 bool GetPersistentCacheReadingEnabled(
     const std::map<std::string, std::string>& params) {
   if (GetStringValueForVariationParamWithDefaultValue(
-          params, "persistent_cache_reading_enabled", "false") != "true") {
+          params, "persistent_cache_reading_enabled", "true") != "true") {
     return false;
   }
   return true;
@@ -361,21 +361,10 @@ base::Optional<EffectiveConnectionType> GetForcedEffectiveConnectionType(
     const std::map<std::string, std::string>& params) {
   std::string forced_value = GetStringValueForVariationParamWithDefaultValue(
       params, kForceEffectiveConnectionType, "");
-  if (forced_value.empty())
-    return base::Optional<EffectiveConnectionType>();
-
-  EffectiveConnectionType forced_effective_connection_type =
-      EFFECTIVE_CONNECTION_TYPE_UNKNOWN;
-
-  bool effective_connection_type_available = GetEffectiveConnectionTypeForName(
-      forced_value, &forced_effective_connection_type);
-
-  DCHECK(effective_connection_type_available);
-
-  // Silence unused variable warning in release builds.
-  (void)effective_connection_type_available;
-
-  return forced_effective_connection_type;
+  base::Optional<EffectiveConnectionType> ect =
+      GetEffectiveConnectionTypeForName(forced_value);
+  DCHECK(forced_value.empty() || ect);
+  return ect;
 }
 
 }  // namespace
@@ -386,7 +375,11 @@ NetworkQualityEstimatorParams::NetworkQualityEstimatorParams(
       throughput_min_requests_in_flight_(
           GetValueForVariationParam(params_,
                                     "throughput_min_requests_in_flight",
-                                    1)),
+                                    5)),
+      throughput_min_transfer_size_kilobytes_(
+          GetValueForVariationParam(params_,
+                                    "throughput_min_transfer_size_kilobytes",
+                                    32)),
       weight_multiplier_per_second_(GetWeightMultiplierPerSecond(params_)),
       weight_multiplier_per_signal_strength_level_(
           GetDoubleValueForVariationParamWithDefaultValue(
@@ -403,9 +396,44 @@ NetworkQualityEstimatorParams::NetworkQualityEstimatorParams(
       persistent_cache_reading_enabled_(
           GetPersistentCacheReadingEnabled(params_)),
       min_socket_watcher_notification_interval_(
-          GetMinSocketWatcherNotificationInterval(params_)) {
+          GetMinSocketWatcherNotificationInterval(params_)),
+      lower_bound_http_rtt_transport_rtt_multiplier_(
+          GetDoubleValueForVariationParamWithDefaultValue(
+              params_,
+              "lower_bound_http_rtt_transport_rtt_multiplier",
+              -1)),
+      upper_bound_http_rtt_transport_rtt_multiplier_(
+          GetDoubleValueForVariationParamWithDefaultValue(
+              params_,
+              "upper_bound_http_rtt_transport_rtt_multiplier",
+              -1)),
+      increase_in_transport_rtt_logging_interval_(
+          base::TimeDelta::FromMillisecondsD(
+              GetDoubleValueForVariationParamWithDefaultValue(
+                  params_,
+                  "increase_in_transport_rtt_logging_interval",
+                  10000))),
+      recent_time_threshold_(base::TimeDelta::FromMillisecondsD(
+          GetDoubleValueForVariationParamWithDefaultValue(
+              params_,
+              "recent_time_threshold",
+              5000))),
+      historical_time_threshold_(base::TimeDelta::FromMillisecondsD(
+          GetDoubleValueForVariationParamWithDefaultValue(
+              params_,
+              "historical_time_threshold",
+              60000))),
+      use_small_responses_(false) {
   DCHECK_LE(0.0, correlation_uma_logging_probability_);
   DCHECK_GE(1.0, correlation_uma_logging_probability_);
+  DCHECK(lower_bound_http_rtt_transport_rtt_multiplier_ == -1 ||
+         lower_bound_http_rtt_transport_rtt_multiplier_ > 0);
+  DCHECK(upper_bound_http_rtt_transport_rtt_multiplier_ == -1 ||
+         upper_bound_http_rtt_transport_rtt_multiplier_ > 0);
+  DCHECK(lower_bound_http_rtt_transport_rtt_multiplier_ == -1 ||
+         upper_bound_http_rtt_transport_rtt_multiplier_ == -1 ||
+         lower_bound_http_rtt_transport_rtt_multiplier_ <
+             upper_bound_http_rtt_transport_rtt_multiplier_);
 
   const auto algorithm_it = params_.find("effective_connection_type_algorithm");
   effective_connection_type_algorithm_ =
@@ -423,6 +451,17 @@ NetworkQualityEstimatorParams::NetworkQualityEstimatorParams(
 
 NetworkQualityEstimatorParams::~NetworkQualityEstimatorParams() {
 }
+
+void NetworkQualityEstimatorParams::SetUseSmallResponsesForTesting(
+    bool use_small_responses) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  use_small_responses_ = use_small_responses;
+}
+
+bool NetworkQualityEstimatorParams::use_small_responses() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return use_small_responses_;
+};
 
 // static
 NetworkQualityEstimatorParams::EffectiveConnectionTypeAlgorithm
@@ -454,6 +493,22 @@ NetworkQualityEstimatorParams::GetEffectiveConnectionTypeAlgorithmFromString(
 
   NOTREACHED();
   return kDefaultEffectiveConnectionTypeAlgorithm;
+}
+
+size_t NetworkQualityEstimatorParams::throughput_min_requests_in_flight()
+    const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  // If |use_small_responses_| is set to true for testing, then consider one
+  // request as sufficient for taking throughput sample.
+  return use_small_responses_ ? 1 : throughput_min_requests_in_flight_;
+}
+
+int64_t NetworkQualityEstimatorParams::GetThroughputMinTransferSizeBits()
+    const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return static_cast<int64_t>(throughput_min_transfer_size_kilobytes_) * 8 *
+         1000;
 }
 
 // static

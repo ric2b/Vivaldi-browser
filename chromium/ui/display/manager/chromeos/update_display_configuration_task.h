@@ -24,20 +24,17 @@ class NativeDisplayDelegate;
 class DISPLAY_MANAGER_EXPORT UpdateDisplayConfigurationTask
     : public NativeDisplayObserver {
  public:
-  typedef base::Callback<void(
-      bool /* success */,
-      const std::vector<DisplaySnapshot*>& /* displays */,
-      const gfx::Size& /* framebuffer_size */,
-      MultipleDisplayState /* new_display_state */,
-      chromeos::DisplayPowerState /* new_power_state */)>
-      ResponseCallback;
+  using ResponseCallback =
+      base::Callback<void(bool /* success */,
+                          const std::vector<DisplaySnapshot*>& /* displays */,
+                          MultipleDisplayState /* new_display_state */,
+                          chromeos::DisplayPowerState /* new_power_state */)>;
 
   UpdateDisplayConfigurationTask(NativeDisplayDelegate* delegate,
                                  DisplayLayoutManager* layout_manager,
                                  MultipleDisplayState new_display_state,
                                  chromeos::DisplayPowerState new_power_state,
                                  int power_flags,
-                                 uint32_t background_color_argb,
                                  bool force_configure,
                                  const ResponseCallback& callback);
   ~UpdateDisplayConfigurationTask() override;
@@ -91,8 +88,6 @@ class DISPLAY_MANAGER_EXPORT UpdateDisplayConfigurationTask
   // DisplayConfigurator.
   int power_flags_;
 
-  uint32_t background_color_argb_;
-
   bool force_configure_;
 
   // Used to signal that the task has finished.
@@ -104,8 +99,6 @@ class DISPLAY_MANAGER_EXPORT UpdateDisplayConfigurationTask
 
   // List of updated displays.
   std::vector<DisplaySnapshot*> cached_displays_;
-
-  gfx::Size framebuffer_size_;
 
   std::unique_ptr<ConfigureDisplaysTask> configure_task_;
 

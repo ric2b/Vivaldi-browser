@@ -11,7 +11,7 @@ maindeps = check_output(["python", basepath+"/bin/list_jsdeps.py", basepath])
 
 modules = {}
 
-for m in re.findall(r"(.*node_modules/([^/]+))", maindeps):
+for m in re.findall(r"(.*node_modules/((@[^/]+)?[^@][^/]+))", maindeps):
   moduledir = m[0]
   modulename = m[1]
   if (moduledir in modules
@@ -102,6 +102,8 @@ for m in re.findall(r"(.*node_modules/([^/]+))", maindeps):
 ADDITIONAL_PATHS = (
     os.path.join('..', 'third_party', '_winsparkle_lib'),
     os.path.join('..', 'third_party', 'sparkle_lib'),
+    os.path.join('..', 'platform_media'),
+    os.path.join('..', 'vivapp', 'src', 'components', 'image-inspector'),
 )
 
 SPECIAL_CASES = {
@@ -123,11 +125,11 @@ SPECIAL_CASES = {
         "License": "MIT",
         "License File": "/../third_party/sparkle_lib/LICENSE",
     },
-    os.path.join('..', 'vivapp', 'src', 'components', 'imagePanel'): {
+    os.path.join('..', 'vivapp', 'src', 'components', 'image-inspector'): {
         "Name": "Exif.js",
         "URL": "https://github.com/exif-js/exif-js",
         "License": "MIT",
-        "License File": "/../vivapp/src/components/imagePanel/exif_js_license.txt",
+        "License File": "/../vivapp/src/components/image-inspector/exif_js_license.txt",
     },
 }
 

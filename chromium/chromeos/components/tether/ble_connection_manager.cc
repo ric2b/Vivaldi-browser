@@ -62,6 +62,11 @@ void BleConnectionManager::ConnectionMetadata::UnregisterConnectionReason(
   active_connection_reasons_.erase(connection_reason);
 }
 
+ConnectionPriority
+BleConnectionManager::ConnectionMetadata::GetConnectionPriority() {
+  return HighestPriorityForMessageTypes(active_connection_reasons_);
+}
+
 bool BleConnectionManager::ConnectionMetadata::HasReasonForConnection() const {
   return !active_connection_reasons_.empty();
 }
@@ -99,6 +104,11 @@ void BleConnectionManager::ConnectionMetadata::StartConnectionAttemptTimer(
       FROM_HERE, base::TimeDelta::FromMilliseconds(timeout_millis),
       base::Bind(&ConnectionMetadata::OnConnectionAttemptTimeout,
                  weak_ptr_factory_.GetWeakPtr()));
+}
+
+void BleConnectionManager::ConnectionMetadata::StopConnectionAttemptTimer() {
+  DCHECK(!secure_channel_);
+  connection_attempt_timeout_timer_->Stop();
 }
 
 void BleConnectionManager::ConnectionMetadata::OnConnectionAttemptTimeout() {
@@ -303,16 +313,16 @@ void BleConnectionManager::RemoveObserver(Observer* observer) {
 }
 
 void BleConnectionManager::OnReceivedAdvertisementFromDevice(
-    const std::string& device_address,
-    const cryptauth::RemoteDevice& remote_device) {
+    const cryptauth::RemoteDevice& remote_device,
+    device::BluetoothDevice* bluetooth_device) {
   ConnectionMetadata* connection_metadata =
       GetConnectionMetadata(remote_device);
   if (!connection_metadata) {
     // If an advertisement  is received from a device that is not registered,
     // ignore it.
     PA_LOG(WARNING) << "Received an advertisement from a device which is not "
-                    << "registered. Bluetooth address: " << device_address
-                    << ", Remote Device ID: "
+                    << "registered. Bluetooth address: "
+                    << bluetooth_device->GetAddress() << ", Remote Device ID: "
                     << remote_device.GetTruncatedDeviceIdForLogs();
     return;
   }
@@ -320,8 +330,8 @@ void BleConnectionManager::OnReceivedAdvertisementFromDevice(
   if (connection_metadata->HasSecureChannel()) {
     PA_LOG(WARNING) << "Received another advertisement from a registered "
                     << "device which is already being actively communicated "
-                    << "with. Bluetooth address: " << device_address
-                    << ", Remote Device ID: "
+                    << "with. Bluetooth address: "
+                    << bluetooth_device->GetAddress() << ", Remote Device ID: "
                     << remote_device.GetTruncatedDeviceIdForLogs();
     return;
   }
@@ -330,18 +340,19 @@ void BleConnectionManager::OnReceivedAdvertisementFromDevice(
                << remote_device.GetTruncatedDeviceIdForLogs() << "\". "
                << "Starting authentication handshake.";
 
+  // Stop trying to connect to that device, since it has been found.
+  StopConnectionAttemptAndMoveToEndOfQueue(remote_device);
+
   // Create a connection to that device.
-  std::unique_ptr<cryptauth::Connection> connection =
-      cryptauth::weave::BluetoothLowEnergyWeaveClientConnection::Factory::
-          NewInstance(remote_device, device_address, adapter_,
-                      device::BluetoothUUID(std::string(kGattServerUuid)));
+  std::unique_ptr<cryptauth::Connection> connection = cryptauth::weave::
+      BluetoothLowEnergyWeaveClientConnection::Factory::NewInstance(
+          remote_device, adapter_, device::BluetoothUUID(kGattServerUuid),
+          bluetooth_device, false /* should_set_low_connection_latency */);
   std::unique_ptr<cryptauth::SecureChannel> secure_channel =
       cryptauth::SecureChannel::Factory::NewInstance(std::move(connection),
                                                      cryptauth_service_);
   connection_metadata->SetSecureChannel(std::move(secure_channel));
 
-  // Stop trying to connect to that device, since a connection already exists.
-  StopConnectionAttemptAndMoveToEndOfQueue(remote_device);
   UpdateConnectionAttempts();
 }
 
@@ -349,9 +360,8 @@ BleConnectionManager::ConnectionMetadata*
 BleConnectionManager::GetConnectionMetadata(
     const cryptauth::RemoteDevice& remote_device) const {
   const auto map_iter = device_to_metadata_map_.find(remote_device);
-  if (map_iter == device_to_metadata_map_.end()) {
+  if (map_iter == device_to_metadata_map_.end())
     return nullptr;
-  }
 
   return map_iter->second.get();
 }
@@ -384,8 +394,30 @@ void BleConnectionManager::UpdateConnectionAttempts() {
 
   std::vector<cryptauth::RemoteDevice> should_advertise_to =
       ble_advertisement_device_queue_->GetDevicesToWhichToAdvertise();
-  DCHECK(should_advertise_to.size() <=
-         static_cast<size_t>(kMaxConcurrentAdvertisements));
+  DCHECK(should_advertise_to.size() <= kMaxConcurrentAdvertisements);
+
+  // Generate a list of devices which are advertising but are not present in
+  // |should_advertise_to|.
+  std::vector<cryptauth::RemoteDevice> devices_to_stop;
+  for (const auto& map_entry : device_to_metadata_map_) {
+    if (map_entry.second->GetStatus() ==
+            cryptauth::SecureChannel::Status::CONNECTING &&
+        !map_entry.second->HasEstablishedConnection() &&
+        std::find(should_advertise_to.begin(), should_advertise_to.end(),
+                  map_entry.first) == should_advertise_to.end()) {
+      devices_to_stop.push_back(map_entry.first);
+    }
+  }
+  // For each device that should not be advertised to, end the connection
+  // attempt. Note that this is done outside of the map iteration above because
+  // it is possible that EndSuccessfulAttempt() will cause that map to be
+  // modified during iteration.
+  for (const auto& device_to_stop : devices_to_stop) {
+    PA_LOG(INFO) << "Connection attempt for device ID \""
+                 << device_to_stop.GetTruncatedDeviceIdForLogs() << "\""
+                 << " interrupted by higher-priority connection.";
+    EndUnsuccessfulAttempt(device_to_stop);
+  }
 
   for (const auto& remote_device : should_advertise_to) {
     ConnectionMetadata* associated_data = GetConnectionMetadata(remote_device);
@@ -399,7 +431,7 @@ void BleConnectionManager::UpdateConnectionAttempts() {
 }
 
 void BleConnectionManager::UpdateAdvertisementQueue() {
-  std::vector<cryptauth::RemoteDevice> devices_for_queue;
+  std::vector<BleAdvertisementDeviceQueue::PrioritizedDevice> devices;
   for (const auto& map_entry : device_to_metadata_map_) {
     if (map_entry.second->HasEstablishedConnection()) {
       // If there is already an active connection to the device, there is no
@@ -407,10 +439,11 @@ void BleConnectionManager::UpdateAdvertisementQueue() {
       continue;
     }
 
-    devices_for_queue.push_back(map_entry.first);
+    devices.emplace_back(map_entry.first,
+                         map_entry.second->GetConnectionPriority());
   }
 
-  ble_advertisement_device_queue_->SetDevices(devices_for_queue);
+  ble_advertisement_device_queue_->SetDevices(devices);
 }
 
 void BleConnectionManager::StartConnectionAttempt(
@@ -442,6 +475,21 @@ void BleConnectionManager::StartConnectionAttempt(
       cryptauth::SecureChannel::Status::CONNECTING);
 }
 
+void BleConnectionManager::EndUnsuccessfulAttempt(
+    const cryptauth::RemoteDevice& remote_device) {
+  GetConnectionMetadata(remote_device)->StopConnectionAttemptTimer();
+  StopConnectionAttemptAndMoveToEndOfQueue(remote_device);
+
+  device_id_to_advertising_start_time_map_[remote_device.GetDeviceId()] =
+      base::Time();
+
+  // Send a "connecting => disconnected" update to alert clients that a
+  // connection attempt for |remote_device| has failed.
+  SendSecureChannelStatusChangeEvent(
+      remote_device, cryptauth::SecureChannel::Status::CONNECTING,
+      cryptauth::SecureChannel::Status::DISCONNECTED);
+}
+
 void BleConnectionManager::StopConnectionAttemptAndMoveToEndOfQueue(
     const cryptauth::RemoteDevice& remote_device) {
   ble_scanner_->UnregisterScanFilterForDevice(remote_device);
@@ -453,18 +501,7 @@ void BleConnectionManager::OnConnectionAttemptTimeout(
     const cryptauth::RemoteDevice& remote_device) {
   PA_LOG(INFO) << "Connection attempt timeout - Device ID \""
                << remote_device.GetTruncatedDeviceIdForLogs() << "\"";
-
-  StopConnectionAttemptAndMoveToEndOfQueue(remote_device);
-
-  device_id_to_advertising_start_time_map_[remote_device.GetDeviceId()] =
-      base::Time();
-
-  // Send a "connecting => disconnected" update to alert clients that a
-  // connection attempt for |remote_device| has failed.
-  SendSecureChannelStatusChangeEvent(
-      remote_device, cryptauth::SecureChannel::Status::CONNECTING,
-      cryptauth::SecureChannel::Status::DISCONNECTED);
-
+  EndUnsuccessfulAttempt(remote_device);
   UpdateConnectionAttempts();
 }
 

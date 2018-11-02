@@ -9,6 +9,7 @@
 #include "base/trace_event/trace_event.h"
 #include "ui/ozone/common/gpu/ozone_gpu_message_params.h"
 #include "ui/ozone/common/gpu/ozone_gpu_messages.h"
+#include "ui/ozone/platform/drm/common/drm_util.h"
 #include "ui/ozone/platform/drm/host/drm_cursor.h"
 #include "ui/ozone/platform/drm/host/drm_display_host_manager.h"
 #include "ui/ozone/platform/drm/host/drm_overlay_candidates_host.h"
@@ -244,10 +245,10 @@ bool DrmGpuPlatformSupportHost::GpuRelinquishDisplayControl() {
   return Send(new OzoneGpuMsg_RelinquishDisplayControl());
 }
 
-bool DrmGpuPlatformSupportHost::GpuAddGraphicsDevice(
-    const base::FilePath& path,
-    const base::FileDescriptor& fd) {
-  IPC::Message* message = new OzoneGpuMsg_AddGraphicsDevice(path, fd);
+bool DrmGpuPlatformSupportHost::GpuAddGraphicsDevice(const base::FilePath& path,
+                                                     base::ScopedFD fd) {
+  IPC::Message* message = new OzoneGpuMsg_AddGraphicsDevice(
+      path, base::FileDescriptor(std::move(fd)));
 
   // This function may be called from two places:
   // - DrmDisplayHostManager::OnGpuProcessLaunched() invoked synchronously
@@ -294,14 +295,17 @@ bool DrmGpuPlatformSupportHost::OnMessageReceivedForDrmOverlayManager(
 void DrmGpuPlatformSupportHost::OnOverlayResult(
     gfx::AcceleratedWidget widget,
     const std::vector<OverlayCheck_Params>& params,
-    const std::vector<OverlayCheckReturn_Params>& returns) {
-  overlay_manager_->GpuSentOverlayResult(widget, params, returns);
+    const std::vector<OverlayCheckReturn_Params>& param_returns) {
+  auto candidates = CreateOverlaySurfaceCandidateListFrom(params);
+  auto returns = CreateOverlayStatusListFrom(param_returns);
+  overlay_manager_->GpuSentOverlayResult(widget, candidates, returns);
 }
 
 bool DrmGpuPlatformSupportHost::GpuCheckOverlayCapabilities(
     gfx::AcceleratedWidget widget,
-    const std::vector<OverlayCheck_Params>& new_params) {
-  return Send(new OzoneGpuMsg_CheckOverlayCapabilities(widget, new_params));
+    const OverlaySurfaceCandidateList& candidates) {
+  auto params = CreateParamsFromOverlaySurfaceCandidate(candidates);
+  return Send(new OzoneGpuMsg_CheckOverlayCapabilities(widget, params));
 }
 
 // DrmDisplayHost

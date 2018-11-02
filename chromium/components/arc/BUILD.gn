@@ -7,8 +7,6 @@ import("//testing/test.gni")
 
 static_library("arc") {
   sources = [
-    "arc_util.cc",
-    "arc_util.h",
     "audio/arc_audio_bridge.cc",
     "audio/arc_audio_bridge.h",
     "bluetooth/bluetooth_struct_traits.cc",
@@ -37,8 +35,8 @@ static_library("arc") {
     "intent_helper/intent_constants.h",
     "intent_helper/intent_filter.cc",
     "intent_helper/intent_filter.h",
-    "intent_helper/link_handler_model_impl.cc",
-    "intent_helper/link_handler_model_impl.h",
+    "intent_helper/link_handler_model.cc",
+    "intent_helper/link_handler_model.h",
     "intent_helper/page_transition_util.cc",
     "intent_helper/page_transition_util.h",
     "lock_screen/arc_lock_screen_bridge.cc",
@@ -104,8 +102,6 @@ static_library("arc_base") {
     "arc_browser_context_keyed_service_factory_base.h",
     "arc_features.cc",
     "arc_features.h",
-    "arc_service.cc",
-    "arc_service.h",
     "arc_service_manager.cc",
     "arc_service_manager.h",
     "arc_session.cc",
@@ -114,6 +110,8 @@ static_library("arc_base") {
     "arc_session_runner.h",
     "arc_stop_reason.cc",
     "arc_stop_reason.h",
+    "arc_util.cc",
+    "arc_util.h",
     "instance_holder.h",
   ]
 
@@ -124,6 +122,7 @@ static_library("arc_base") {
     "//components/signin/core/account_id",
     "//components/user_manager",
     "//mojo/edk/system",
+    "//ui/aura",
   ]
 
   public_deps = [
@@ -141,6 +140,7 @@ mojom("arc_bindings") {
     "common/bitmap.mojom",
     "common/bluetooth.mojom",
     "common/boot_phase_monitor.mojom",
+    "common/cast_receiver.mojom",
     "common/clipboard.mojom",
     "common/crash_collector.mojom",
     "common/enterprise_reporting.mojom",
@@ -153,6 +153,7 @@ mojom("arc_bindings") {
     "common/net.mojom",
     "common/notifications.mojom",
     "common/obb_mounter.mojom",
+    "common/oemcrypto.mojom",
     "common/policy.mojom",
     "common/power.mojom",
     "common/print.mojom",
@@ -214,7 +215,6 @@ static_library("arc_test_support") {
 source_set("unit_tests") {
   testonly = true
   sources = [
-    "arc_service_manager_unittest.cc",
     "arc_session_runner_unittest.cc",
     "arc_util_unittest.cc",
     "bluetooth/bluetooth_struct_traits_unittest.cc",
@@ -224,7 +224,7 @@ source_set("unit_tests") {
     "intent_helper/arc_intent_helper_bridge_unittest.cc",
     "intent_helper/font_size_util_unittest.cc",
     "intent_helper/intent_filter_unittest.cc",
-    "intent_helper/link_handler_model_impl_unittest.cc",
+    "intent_helper/link_handler_model_unittest.cc",
     "intent_helper/page_transition_util_unittest.cc",
   ]
 

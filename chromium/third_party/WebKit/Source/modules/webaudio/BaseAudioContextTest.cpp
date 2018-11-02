@@ -5,10 +5,12 @@
 #include "modules/webaudio/BaseAudioContext.h"
 
 #include "bindings/core/v8/V8BindingForCore.h"
+#include "build/build_config.h"
 #include "core/dom/Document.h"
 #include "core/dom/UserGestureIndicator.h"
 #include "core/frame/FrameOwner.h"
 #include "core/frame/FrameTypes.h"
+#include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/html/media/AutoplayPolicy.h"
@@ -16,9 +18,11 @@
 #include "core/loader/EmptyClients.h"
 #include "core/testing/DummyPageHolder.h"
 #include "modules/webaudio/AudioContextOptions.h"
+#include "modules/webaudio/AudioWorkletThread.h"
 #include "platform/testing/HistogramTester.h"
 #include "platform/testing/TestingPlatformSupport.h"
 #include "platform/wtf/PtrUtil.h"
+#include "public/platform/Platform.h"
 #include "public/platform/WebAudioDevice.h"
 #include "public/platform/WebAudioLatencyHint.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -80,11 +84,24 @@ class BaseAudioContextTestPlatform : public TestingPlatformSupport {
         AudioHardwareSampleRate(), AudioHardwareBufferSize());
   }
 
+  std::unique_ptr<WebThread> CreateThread(const char* name) override {
+    // return WTF::WrapUnique(old_platform_->CurrentThread());
+    return old_platform_->CreateThread(name);
+  }
+
   double AudioHardwareSampleRate() override { return 44100; }
   size_t AudioHardwareBufferSize() override { return 128; }
 };
 
 }  // anonymous namespace
+
+#if defined(OS_ANDROID)
+// Often times out on Android: https://crbug.com/752511.
+#define MAYBE_TEST_P(test_case_name, test_name) \
+  TEST_P(test_case_name, DISABLED_##test_name)
+#else
+#define MAYBE_TEST_P TEST_P
+#endif
 
 class BaseAudioContextAutoplayTest
     : public ::testing::TestWithParam<AutoplayPolicy::Type> {
@@ -101,11 +118,16 @@ class BaseAudioContextAutoplayTest
 
     GetDocument().GetSettings()->SetAutoplayPolicy(GetParam());
     ChildDocument().GetSettings()->SetAutoplayPolicy(GetParam());
+
+    histogram_tester_ = WTF::MakeUnique<HistogramTester>();
+    AudioWorkletThread::CreateSharedBackingThreadForTest();
   }
 
   void TearDown() override {
     if (child_frame_)
       child_frame_->Detach(FrameDetachType::kRemove);
+
+    AudioWorkletThread::ClearSharedBackingThread();
   }
 
   void CreateChildFrame() {
@@ -136,43 +158,46 @@ class BaseAudioContextAutoplayTest
     audio_context->RecordAutoplayStatus();
   }
 
+  HistogramTester* GetHistogramTester() {
+    return histogram_tester_.get();
+  }
+
  private:
   std::unique_ptr<DummyPageHolder> dummy_page_holder_;
   Persistent<DummyFrameOwner> dummy_frame_owner_;
   Persistent<LocalFrame> child_frame_;
+  std::unique_ptr<HistogramTester> histogram_tester_;
   ScopedTestingPlatformSupport<BaseAudioContextTestPlatform> platform_;
 };
 
 // Creates an AudioContext without a gesture inside a x-origin child frame.
-TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_CreateNoGesture_Child) {
-  HistogramTester histogram_tester;
-
+MAYBE_TEST_P(BaseAudioContextAutoplayTest,
+             AutoplayMetrics_CreateNoGesture_Child) {
   BaseAudioContext* audio_context = BaseAudioContext::Create(
       ChildDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
   RecordAutoplayStatus(audio_context);
 
   switch (GetParam()) {
     case AutoplayPolicy::Type::kNoUserGestureRequired:
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 0);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
       break;
     case AutoplayPolicy::Type::kUserGestureRequired:
     case AutoplayPolicy::Type::kUserGestureRequiredForCrossOrigin:
     case AutoplayPolicy::Type::kDocumentUserActivationRequired:
-      histogram_tester.ExpectBucketCount(
+      GetHistogramTester()->ExpectBucketCount(
           kAutoplayMetric, AutoplayStatus::kAutoplayStatusFailed, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 1);
-      histogram_tester.ExpectBucketCount(
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 1);
+      GetHistogramTester()->ExpectBucketCount(
           kAutoplayCrossOriginMetric, AutoplayStatus::kAutoplayStatusFailed, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 1);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 1);
       break;
   }
 }
 
 // Creates an AudioContext without a gesture inside a main frame.
-TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_CreateNoGesture_Main) {
-  HistogramTester histogram_tester;
-
+MAYBE_TEST_P(BaseAudioContextAutoplayTest,
+             AutoplayMetrics_CreateNoGesture_Main) {
   BaseAudioContext* audio_context = BaseAudioContext::Create(
       GetDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
   RecordAutoplayStatus(audio_context);
@@ -181,24 +206,22 @@ TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_CreateNoGesture_Main) {
     case AutoplayPolicy::Type::kNoUserGestureRequired:
     case AutoplayPolicy::Type::kUserGestureRequired:
     case AutoplayPolicy::Type::kUserGestureRequiredForCrossOrigin:
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 0);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
       break;
     case AutoplayPolicy::Type::kDocumentUserActivationRequired:
-      histogram_tester.ExpectBucketCount(
+      GetHistogramTester()->ExpectBucketCount(
           kAutoplayMetric, AutoplayStatus::kAutoplayStatusFailed, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 1);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
       break;
   }
 }
 
 // Creates an AudioContext then call resume without a gesture in a x-origin
 // child frame.
-TEST_P(BaseAudioContextAutoplayTest,
-       AutoplayMetrics_CallResumeNoGesture_Child) {
-  HistogramTester histogram_tester;
-
+MAYBE_TEST_P(BaseAudioContextAutoplayTest,
+             AutoplayMetrics_CallResumeNoGesture_Child) {
   ScriptState::Scope scope(GetScriptStateFrom(ChildDocument()));
 
   BaseAudioContext* audio_context = BaseAudioContext::Create(
@@ -209,26 +232,25 @@ TEST_P(BaseAudioContextAutoplayTest,
 
   switch (GetParam()) {
     case AutoplayPolicy::Type::kNoUserGestureRequired:
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 0);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
       break;
     case AutoplayPolicy::Type::kUserGestureRequired:
     case AutoplayPolicy::Type::kUserGestureRequiredForCrossOrigin:
     case AutoplayPolicy::Type::kDocumentUserActivationRequired:
-      histogram_tester.ExpectBucketCount(
+      GetHistogramTester()->ExpectBucketCount(
           kAutoplayMetric, AutoplayStatus::kAutoplayStatusFailed, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 1);
-      histogram_tester.ExpectBucketCount(
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 1);
+      GetHistogramTester()->ExpectBucketCount(
           kAutoplayCrossOriginMetric, AutoplayStatus::kAutoplayStatusFailed, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 1);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 1);
       break;
   }
 }
 
 // Creates an AudioContext then call resume without a gesture in a main frame.
-TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_CallResumeNoGesture_Main) {
-  HistogramTester histogram_tester;
-
+MAYBE_TEST_P(BaseAudioContextAutoplayTest,
+             AutoplayMetrics_CallResumeNoGesture_Main) {
   ScriptState::Scope scope(GetScriptStateFrom(GetDocument()));
 
   BaseAudioContext* audio_context = BaseAudioContext::Create(
@@ -241,24 +263,24 @@ TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_CallResumeNoGesture_Main) {
     case AutoplayPolicy::Type::kNoUserGestureRequired:
     case AutoplayPolicy::Type::kUserGestureRequired:
     case AutoplayPolicy::Type::kUserGestureRequiredForCrossOrigin:
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 0);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
       break;
     case AutoplayPolicy::Type::kDocumentUserActivationRequired:
-      histogram_tester.ExpectBucketCount(
+      GetHistogramTester()->ExpectBucketCount(
           kAutoplayMetric, AutoplayStatus::kAutoplayStatusFailed, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 1);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
       break;
   }
 }
 
 // Creates an AudioContext with a user gesture inside a x-origin child frame.
-TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_CreateGesture_Child) {
-  HistogramTester histogram_tester;
-
-  UserGestureIndicator user_gesture_scope(UserGestureToken::Create(
-      &ChildDocument(), UserGestureToken::kNewGesture));
+MAYBE_TEST_P(BaseAudioContextAutoplayTest,
+             AutoplayMetrics_CreateGesture_Child) {
+  std::unique_ptr<UserGestureIndicator> user_gesture_scope =
+      LocalFrame::CreateUserGesture(ChildDocument().GetFrame(),
+                                    UserGestureToken::kNewGesture);
 
   BaseAudioContext* audio_context = BaseAudioContext::Create(
       ChildDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
@@ -266,29 +288,28 @@ TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_CreateGesture_Child) {
 
   switch (GetParam()) {
     case AutoplayPolicy::Type::kNoUserGestureRequired:
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 0);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
       break;
     case AutoplayPolicy::Type::kUserGestureRequired:
     case AutoplayPolicy::Type::kUserGestureRequiredForCrossOrigin:
     case AutoplayPolicy::Type::kDocumentUserActivationRequired:
-      histogram_tester.ExpectBucketCount(
+      GetHistogramTester()->ExpectBucketCount(
           kAutoplayMetric, AutoplayStatus::kAutoplayStatusSucceeded, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 1);
-      histogram_tester.ExpectBucketCount(
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 1);
+      GetHistogramTester()->ExpectBucketCount(
           kAutoplayCrossOriginMetric, AutoplayStatus::kAutoplayStatusSucceeded,
           1);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 1);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 1);
       break;
   }
 }
 
 // Creates an AudioContext with a user gesture inside a main frame.
-TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_CreateGesture_Main) {
-  HistogramTester histogram_tester;
-
-  UserGestureIndicator user_gesture_scope(
-      UserGestureToken::Create(&GetDocument(), UserGestureToken::kNewGesture));
+MAYBE_TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_CreateGesture_Main) {
+  std::unique_ptr<UserGestureIndicator> user_gesture_scope =
+      LocalFrame::CreateUserGesture(GetDocument().GetFrame(),
+                                    UserGestureToken::kNewGesture);
 
   BaseAudioContext* audio_context = BaseAudioContext::Create(
       GetDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
@@ -298,30 +319,30 @@ TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_CreateGesture_Main) {
     case AutoplayPolicy::Type::kNoUserGestureRequired:
     case AutoplayPolicy::Type::kUserGestureRequired:
     case AutoplayPolicy::Type::kUserGestureRequiredForCrossOrigin:
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 0);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
       break;
     case AutoplayPolicy::Type::kDocumentUserActivationRequired:
-      histogram_tester.ExpectBucketCount(
+      GetHistogramTester()->ExpectBucketCount(
           kAutoplayMetric, AutoplayStatus::kAutoplayStatusSucceeded, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 1);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
       break;
   }
 }
 
 // Creates an AudioContext then calls resume with a user gesture inside a
 // x-origin child frame.
-TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_CallResumeGesture_Child) {
-  HistogramTester histogram_tester;
-
+MAYBE_TEST_P(BaseAudioContextAutoplayTest,
+             AutoplayMetrics_CallResumeGesture_Child) {
   ScriptState::Scope scope(GetScriptStateFrom(ChildDocument()));
 
   BaseAudioContext* audio_context = BaseAudioContext::Create(
       ChildDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
 
-  UserGestureIndicator user_gesture_scope(UserGestureToken::Create(
-      &ChildDocument(), UserGestureToken::kNewGesture));
+  std::unique_ptr<UserGestureIndicator> user_gesture_scope =
+      LocalFrame::CreateUserGesture(ChildDocument().GetFrame(),
+                                    UserGestureToken::kNewGesture);
 
   audio_context->resumeContext(GetScriptStateFrom(ChildDocument()));
   RejectPendingResolvers(audio_context);
@@ -329,35 +350,35 @@ TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_CallResumeGesture_Child) {
 
   switch (GetParam()) {
     case AutoplayPolicy::Type::kNoUserGestureRequired:
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 0);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
       break;
     case AutoplayPolicy::Type::kUserGestureRequired:
     case AutoplayPolicy::Type::kUserGestureRequiredForCrossOrigin:
     case AutoplayPolicy::Type::kDocumentUserActivationRequired:
-      histogram_tester.ExpectBucketCount(
+      GetHistogramTester()->ExpectBucketCount(
           kAutoplayMetric, AutoplayStatus::kAutoplayStatusSucceeded, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 1);
-      histogram_tester.ExpectBucketCount(
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 1);
+      GetHistogramTester()->ExpectBucketCount(
           kAutoplayCrossOriginMetric, AutoplayStatus::kAutoplayStatusSucceeded,
           1);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 1);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 1);
       break;
   }
 }
 
 // Creates an AudioContext then calls resume with a user gesture inside a main
 // frame.
-TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_CallResumeGesture_Main) {
-  HistogramTester histogram_tester;
-
+MAYBE_TEST_P(BaseAudioContextAutoplayTest,
+             AutoplayMetrics_CallResumeGesture_Main) {
   ScriptState::Scope scope(GetScriptStateFrom(GetDocument()));
 
   BaseAudioContext* audio_context = BaseAudioContext::Create(
       GetDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
 
-  UserGestureIndicator user_gesture_scope(
-      UserGestureToken::Create(&GetDocument(), UserGestureToken::kNewGesture));
+  std::unique_ptr<UserGestureIndicator> user_gesture_scope =
+      LocalFrame::CreateUserGesture(GetDocument().GetFrame(),
+                                    UserGestureToken::kNewGesture);
 
   audio_context->resumeContext(GetScriptStateFrom(GetDocument()));
   RejectPendingResolvers(audio_context);
@@ -367,23 +388,22 @@ TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_CallResumeGesture_Main) {
     case AutoplayPolicy::Type::kNoUserGestureRequired:
     case AutoplayPolicy::Type::kUserGestureRequired:
     case AutoplayPolicy::Type::kUserGestureRequiredForCrossOrigin:
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 0);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
       break;
     case AutoplayPolicy::Type::kDocumentUserActivationRequired:
-      histogram_tester.ExpectBucketCount(
+      GetHistogramTester()->ExpectBucketCount(
           kAutoplayMetric, AutoplayStatus::kAutoplayStatusSucceeded, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 1);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
       break;
   }
 }
 
 // Creates an AudioContext then calls start on a node without a gesture inside a
 // x-origin child frame.
-TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_NodeStartNoGesture_Child) {
-  HistogramTester histogram_tester;
-
+MAYBE_TEST_P(BaseAudioContextAutoplayTest,
+             AutoplayMetrics_NodeStartNoGesture_Child) {
   BaseAudioContext* audio_context = BaseAudioContext::Create(
       ChildDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
   audio_context->MaybeRecordStartAttempt();
@@ -391,27 +411,26 @@ TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_NodeStartNoGesture_Child) {
 
   switch (GetParam()) {
     case AutoplayPolicy::Type::kNoUserGestureRequired:
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 0);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
       break;
     case AutoplayPolicy::Type::kUserGestureRequired:
     case AutoplayPolicy::Type::kUserGestureRequiredForCrossOrigin:
     case AutoplayPolicy::Type::kDocumentUserActivationRequired:
-      histogram_tester.ExpectBucketCount(
+      GetHistogramTester()->ExpectBucketCount(
           kAutoplayMetric, AutoplayStatus::kAutoplayStatusFailed, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 1);
-      histogram_tester.ExpectBucketCount(
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 1);
+      GetHistogramTester()->ExpectBucketCount(
           kAutoplayCrossOriginMetric, AutoplayStatus::kAutoplayStatusFailed, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 1);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 1);
       break;
   }
 }
 
 // Creates an AudioContext then calls start on a node without a gesture inside a
 // main frame.
-TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_NodeStartNoGesture_Main) {
-  HistogramTester histogram_tester;
-
+MAYBE_TEST_P(BaseAudioContextAutoplayTest,
+             AutoplayMetrics_NodeStartNoGesture_Main) {
   BaseAudioContext* audio_context = BaseAudioContext::Create(
       GetDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
   audio_context->MaybeRecordStartAttempt();
@@ -421,60 +440,60 @@ TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_NodeStartNoGesture_Main) {
     case AutoplayPolicy::Type::kNoUserGestureRequired:
     case AutoplayPolicy::Type::kUserGestureRequired:
     case AutoplayPolicy::Type::kUserGestureRequiredForCrossOrigin:
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 0);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
       break;
     case AutoplayPolicy::Type::kDocumentUserActivationRequired:
-      histogram_tester.ExpectBucketCount(
+      GetHistogramTester()->ExpectBucketCount(
           kAutoplayMetric, AutoplayStatus::kAutoplayStatusFailed, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 1);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
       break;
   }
 }
 
 // Creates an AudioContext then calls start on a node with a gesture inside a
 // x-origin child frame.
-TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_NodeStartGesture_Child) {
-  HistogramTester histogram_tester;
-
+MAYBE_TEST_P(BaseAudioContextAutoplayTest,
+             AutoplayMetrics_NodeStartGesture_Child) {
   BaseAudioContext* audio_context = BaseAudioContext::Create(
       ChildDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
 
-  UserGestureIndicator user_gesture_scope(UserGestureToken::Create(
-      &ChildDocument(), UserGestureToken::kNewGesture));
+  std::unique_ptr<UserGestureIndicator> user_gesture_scope =
+      LocalFrame::CreateUserGesture(ChildDocument().GetFrame(),
+                                    UserGestureToken::kNewGesture);
   audio_context->MaybeRecordStartAttempt();
   RecordAutoplayStatus(audio_context);
 
   switch (GetParam()) {
     case AutoplayPolicy::Type::kNoUserGestureRequired:
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 0);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
       break;
     case AutoplayPolicy::Type::kUserGestureRequired:
     case AutoplayPolicy::Type::kUserGestureRequiredForCrossOrigin:
     case AutoplayPolicy::Type::kDocumentUserActivationRequired:
-      histogram_tester.ExpectBucketCount(
+      GetHistogramTester()->ExpectBucketCount(
           kAutoplayMetric, AutoplayStatus::kAutoplayStatusFailedWithStart, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 1);
-      histogram_tester.ExpectBucketCount(
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 1);
+      GetHistogramTester()->ExpectBucketCount(
           kAutoplayCrossOriginMetric,
           AutoplayStatus::kAutoplayStatusFailedWithStart, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 1);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 1);
       break;
   }
 }
 
 // Creates an AudioContext then calls start on a node with a gesture inside a
 // main frame.
-TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_NodeStartGesture_Main) {
-  HistogramTester histogram_tester;
-
+MAYBE_TEST_P(BaseAudioContextAutoplayTest,
+             AutoplayMetrics_NodeStartGesture_Main) {
   BaseAudioContext* audio_context = BaseAudioContext::Create(
       GetDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
 
-  UserGestureIndicator user_gesture_scope(
-      UserGestureToken::Create(&GetDocument(), UserGestureToken::kNewGesture));
+  std::unique_ptr<UserGestureIndicator> user_gesture_scope =
+      LocalFrame::CreateUserGesture(GetDocument().GetFrame(),
+                                    UserGestureToken::kNewGesture);
   audio_context->MaybeRecordStartAttempt();
   RecordAutoplayStatus(audio_context);
 
@@ -482,69 +501,67 @@ TEST_P(BaseAudioContextAutoplayTest, AutoplayMetrics_NodeStartGesture_Main) {
     case AutoplayPolicy::Type::kNoUserGestureRequired:
     case AutoplayPolicy::Type::kUserGestureRequired:
     case AutoplayPolicy::Type::kUserGestureRequiredForCrossOrigin:
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 0);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
       break;
     case AutoplayPolicy::Type::kDocumentUserActivationRequired:
-      histogram_tester.ExpectBucketCount(
+      GetHistogramTester()->ExpectBucketCount(
           kAutoplayMetric, AutoplayStatus::kAutoplayStatusFailedWithStart, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 1);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
       break;
   }
 }
 
 // Creates an AudioContext then calls start on a node without a gesture and
 // finally allows the AudioContext to produce sound inside x-origin child frame.
-TEST_P(BaseAudioContextAutoplayTest,
-       AutoplayMetrics_NodeStartNoGestureThenSuccess_Child) {
-  HistogramTester histogram_tester;
-
+MAYBE_TEST_P(BaseAudioContextAutoplayTest,
+             AutoplayMetrics_NodeStartNoGestureThenSuccess_Child) {
   ScriptState::Scope scope(GetScriptStateFrom(ChildDocument()));
 
   BaseAudioContext* audio_context = BaseAudioContext::Create(
       ChildDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
   audio_context->MaybeRecordStartAttempt();
 
-  UserGestureIndicator user_gesture_scope(UserGestureToken::Create(
-      &ChildDocument(), UserGestureToken::kNewGesture));
+  std::unique_ptr<UserGestureIndicator> user_gesture_scope =
+      LocalFrame::CreateUserGesture(ChildDocument().GetFrame(),
+                                    UserGestureToken::kNewGesture);
   audio_context->resumeContext(GetScriptStateFrom(ChildDocument()));
   RejectPendingResolvers(audio_context);
   RecordAutoplayStatus(audio_context);
 
   switch (GetParam()) {
     case AutoplayPolicy::Type::kNoUserGestureRequired:
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 0);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
       break;
     case AutoplayPolicy::Type::kUserGestureRequired:
     case AutoplayPolicy::Type::kUserGestureRequiredForCrossOrigin:
     case AutoplayPolicy::Type::kDocumentUserActivationRequired:
-      histogram_tester.ExpectBucketCount(
+      GetHistogramTester()->ExpectBucketCount(
           kAutoplayMetric, AutoplayStatus::kAutoplayStatusSucceeded, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 1);
-      histogram_tester.ExpectBucketCount(
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 1);
+      GetHistogramTester()->ExpectBucketCount(
           kAutoplayCrossOriginMetric, AutoplayStatus::kAutoplayStatusSucceeded,
           1);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 1);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 1);
       break;
   }
 }
 
 // Creates an AudioContext then calls start on a node without a gesture and
 // finally allows the AudioContext to produce sound inside a main frame.
-TEST_P(BaseAudioContextAutoplayTest,
-       AutoplayMetrics_NodeStartNoGestureThenSuccess_Main) {
-  HistogramTester histogram_tester;
-
+MAYBE_TEST_P(BaseAudioContextAutoplayTest,
+             AutoplayMetrics_NodeStartNoGestureThenSuccess_Main) {
   ScriptState::Scope scope(GetScriptStateFrom(GetDocument()));
 
   BaseAudioContext* audio_context = BaseAudioContext::Create(
       GetDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
   audio_context->MaybeRecordStartAttempt();
 
-  UserGestureIndicator user_gesture_scope(
-      UserGestureToken::Create(&GetDocument(), UserGestureToken::kNewGesture));
+  std::unique_ptr<UserGestureIndicator> user_gesture_scope =
+      LocalFrame::CreateUserGesture(GetDocument().GetFrame(),
+                                    UserGestureToken::kNewGesture);
   audio_context->resumeContext(GetScriptStateFrom(GetDocument()));
   RejectPendingResolvers(audio_context);
   RecordAutoplayStatus(audio_context);
@@ -553,31 +570,30 @@ TEST_P(BaseAudioContextAutoplayTest,
     case AutoplayPolicy::Type::kNoUserGestureRequired:
     case AutoplayPolicy::Type::kUserGestureRequired:
     case AutoplayPolicy::Type::kUserGestureRequiredForCrossOrigin:
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 0);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
       break;
     case AutoplayPolicy::Type::kDocumentUserActivationRequired:
-      histogram_tester.ExpectBucketCount(
+      GetHistogramTester()->ExpectBucketCount(
           kAutoplayMetric, AutoplayStatus::kAutoplayStatusSucceeded, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 1);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
       break;
   }
 }
 
 // Creates an AudioContext then calls start on a node with a gesture and
 // finally allows the AudioContext to produce sound inside x-origin child frame.
-TEST_P(BaseAudioContextAutoplayTest,
-       AutoplayMetrics_NodeStartGestureThenSucces_Child) {
-  HistogramTester histogram_tester;
-
+MAYBE_TEST_P(BaseAudioContextAutoplayTest,
+             AutoplayMetrics_NodeStartGestureThenSucces_Child) {
   ScriptState::Scope scope(GetScriptStateFrom(ChildDocument()));
 
   BaseAudioContext* audio_context = BaseAudioContext::Create(
       ChildDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
 
-  UserGestureIndicator user_gesture_scope(UserGestureToken::Create(
-      &ChildDocument(), UserGestureToken::kNewGesture));
+  std::unique_ptr<UserGestureIndicator> user_gesture_scope =
+      LocalFrame::CreateUserGesture(ChildDocument().GetFrame(),
+                                    UserGestureToken::kNewGesture);
   audio_context->MaybeRecordStartAttempt();
   audio_context->resumeContext(GetScriptStateFrom(ChildDocument()));
   RejectPendingResolvers(audio_context);
@@ -585,36 +601,35 @@ TEST_P(BaseAudioContextAutoplayTest,
 
   switch (GetParam()) {
     case AutoplayPolicy::Type::kNoUserGestureRequired:
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 0);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
       break;
     case AutoplayPolicy::Type::kUserGestureRequired:
     case AutoplayPolicy::Type::kUserGestureRequiredForCrossOrigin:
     case AutoplayPolicy::Type::kDocumentUserActivationRequired:
-      histogram_tester.ExpectBucketCount(
+      GetHistogramTester()->ExpectBucketCount(
           kAutoplayMetric, AutoplayStatus::kAutoplayStatusSucceeded, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 1);
-      histogram_tester.ExpectBucketCount(
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 1);
+      GetHistogramTester()->ExpectBucketCount(
           kAutoplayCrossOriginMetric, AutoplayStatus::kAutoplayStatusSucceeded,
           1);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 1);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 1);
       break;
   }
 }
 
 // Creates an AudioContext then calls start on a node with a gesture and
 // finally allows the AudioContext to produce sound inside a main frame.
-TEST_P(BaseAudioContextAutoplayTest,
-       AutoplayMetrics_NodeStartGestureThenSucces_Main) {
-  HistogramTester histogram_tester;
-
+MAYBE_TEST_P(BaseAudioContextAutoplayTest,
+             AutoplayMetrics_NodeStartGestureThenSucces_Main) {
   ScriptState::Scope scope(GetScriptStateFrom(GetDocument()));
 
   BaseAudioContext* audio_context = BaseAudioContext::Create(
       GetDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
 
-  UserGestureIndicator user_gesture_scope(
-      UserGestureToken::Create(&GetDocument(), UserGestureToken::kNewGesture));
+  std::unique_ptr<UserGestureIndicator> user_gesture_scope =
+      LocalFrame::CreateUserGesture(GetDocument().GetFrame(),
+                                    UserGestureToken::kNewGesture);
   audio_context->MaybeRecordStartAttempt();
   audio_context->resumeContext(GetScriptStateFrom(GetDocument()));
   RejectPendingResolvers(audio_context);
@@ -624,25 +639,23 @@ TEST_P(BaseAudioContextAutoplayTest,
     case AutoplayPolicy::Type::kNoUserGestureRequired:
     case AutoplayPolicy::Type::kUserGestureRequired:
     case AutoplayPolicy::Type::kUserGestureRequiredForCrossOrigin:
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 0);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
       break;
     case AutoplayPolicy::Type::kDocumentUserActivationRequired:
-      histogram_tester.ExpectBucketCount(
+      GetHistogramTester()->ExpectBucketCount(
           kAutoplayMetric, AutoplayStatus::kAutoplayStatusSucceeded, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 1);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
       break;
   }
 }
 
 // Attempts to autoplay an AudioContext in a x-origin child frame when the
 // document previous received a user gesture.
-TEST_P(BaseAudioContextAutoplayTest,
-       AutoplayMetrics_DocumentReceivedGesture_Child) {
-  HistogramTester histogram_tester;
-
-  ChildDocument().GetFrame()->SetDocumentHasReceivedUserGesture();
+MAYBE_TEST_P(BaseAudioContextAutoplayTest,
+             AutoplayMetrics_DocumentReceivedGesture_Child) {
+  ChildDocument().GetFrame()->UpdateUserActivationInFrameTree();
 
   BaseAudioContext* audio_context = BaseAudioContext::Create(
       ChildDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
@@ -650,37 +663,35 @@ TEST_P(BaseAudioContextAutoplayTest,
 
   switch (GetParam()) {
     case AutoplayPolicy::Type::kNoUserGestureRequired:
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 0);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
       break;
     case AutoplayPolicy::Type::kUserGestureRequired:
     case AutoplayPolicy::Type::kUserGestureRequiredForCrossOrigin:
-      histogram_tester.ExpectBucketCount(
+      GetHistogramTester()->ExpectBucketCount(
           kAutoplayMetric, AutoplayStatus::kAutoplayStatusFailed, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 1);
-      histogram_tester.ExpectBucketCount(
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 1);
+      GetHistogramTester()->ExpectBucketCount(
           kAutoplayCrossOriginMetric, AutoplayStatus::kAutoplayStatusFailed, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 1);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 1);
       break;
     case AutoplayPolicy::Type::kDocumentUserActivationRequired:
-      histogram_tester.ExpectBucketCount(
+      GetHistogramTester()->ExpectBucketCount(
           kAutoplayMetric, AutoplayStatus::kAutoplayStatusSucceeded, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 1);
-      histogram_tester.ExpectBucketCount(
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 1);
+      GetHistogramTester()->ExpectBucketCount(
           kAutoplayCrossOriginMetric, AutoplayStatus::kAutoplayStatusSucceeded,
           1);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 1);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 1);
       break;
   }
 }
 
 // Attempts to autoplay an AudioContext in a main child frame when the
 // document previous received a user gesture.
-TEST_P(BaseAudioContextAutoplayTest,
-       AutoplayMetrics_DocumentReceivedGesture_Main) {
-  HistogramTester histogram_tester;
-
-  GetDocument().GetFrame()->SetDocumentHasReceivedUserGesture();
+MAYBE_TEST_P(BaseAudioContextAutoplayTest,
+             AutoplayMetrics_DocumentReceivedGesture_Main) {
+  GetDocument().GetFrame()->UpdateUserActivationInFrameTree();
 
   BaseAudioContext* audio_context = BaseAudioContext::Create(
       GetDocument(), AudioContextOptions(), ASSERT_NO_EXCEPTION);
@@ -690,24 +701,22 @@ TEST_P(BaseAudioContextAutoplayTest,
     case AutoplayPolicy::Type::kNoUserGestureRequired:
     case AutoplayPolicy::Type::kUserGestureRequired:
     case AutoplayPolicy::Type::kUserGestureRequiredForCrossOrigin:
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 0);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
       break;
     case AutoplayPolicy::Type::kDocumentUserActivationRequired:
-      histogram_tester.ExpectBucketCount(
+      GetHistogramTester()->ExpectBucketCount(
           kAutoplayMetric, AutoplayStatus::kAutoplayStatusSucceeded, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 1);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
       break;
   }
 }
 
 // Attempts to autoplay an AudioContext in a main child frame when the
 // document received a user gesture before navigation.
-TEST_P(BaseAudioContextAutoplayTest,
-       AutoplayMetrics_DocumentReceivedGesture_BeforeNavigation) {
-  HistogramTester histogram_tester;
-
+MAYBE_TEST_P(BaseAudioContextAutoplayTest,
+             AutoplayMetrics_DocumentReceivedGesture_BeforeNavigation) {
   GetDocument().GetFrame()->SetDocumentHasReceivedUserGestureBeforeNavigation(
       true);
 
@@ -719,14 +728,14 @@ TEST_P(BaseAudioContextAutoplayTest,
     case AutoplayPolicy::Type::kNoUserGestureRequired:
     case AutoplayPolicy::Type::kUserGestureRequired:
     case AutoplayPolicy::Type::kUserGestureRequiredForCrossOrigin:
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 0);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
       break;
     case AutoplayPolicy::Type::kDocumentUserActivationRequired:
-      histogram_tester.ExpectBucketCount(
+      GetHistogramTester()->ExpectBucketCount(
           kAutoplayMetric, AutoplayStatus::kAutoplayStatusSucceeded, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayMetric, 1);
-      histogram_tester.ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayMetric, 1);
+      GetHistogramTester()->ExpectTotalCount(kAutoplayCrossOriginMetric, 0);
       break;
   }
 }

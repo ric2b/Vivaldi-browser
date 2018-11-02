@@ -13,12 +13,15 @@
 // static
 BrowserWindow* BrowserWindow::CreateBrowserWindow(Browser* browser,
                                                   bool user_gesture) {
-  // gisli@vivaldi.com:  Put this here as we choose between Win and Mac
-  // at link time.
   if (browser->is_vivaldi()) {
-    return new VivaldiBrowserWindowCocoa(browser, NULL);
-  }
+    std::string base_url;
+    extensions::AppWindow::CreateParams params =
+        VivaldiBrowserWindow::PrepareWindowParameters(browser, base_url);
 
+    VivaldiBrowserWindow* window = new VivaldiBrowserWindowCocoa();
+    window->Init(browser, base_url, params);
+    return window;
+  }
   BrowserWindowController* controller =
       [[BrowserWindowController alloc] initWithBrowser:browser];
   return [controller browserWindow];

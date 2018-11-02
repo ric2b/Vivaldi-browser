@@ -162,6 +162,13 @@ public class FakeSuggestionsSource implements SuggestionsSource {
         mCategories.remove(Integer.valueOf(category));
     }
 
+    /**
+     * Clears the list of observers.
+     */
+    public void removeObservers() {
+        mObserverList.clear();
+    }
+
     @Override
     public void fetchRemoteSuggestions() {}
 
@@ -240,6 +247,12 @@ public class FakeSuggestionsSource implements SuggestionsSource {
 
     @Override
     public void fetchContextualSuggestions(String url, Callback<List<SnippetArticle>> callback) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void fetchContextualSuggestionImage(
+            SnippetArticle suggestion, Callback<Bitmap> callback) {
         throw new UnsupportedOperationException();
     }
 

@@ -117,6 +117,10 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
     // automatically.
     virtual void OnArcSessionStopped(ArcStopReason stop_reason) {}
 
+    // Called when ARC session is stopped, but is being restarted automatically.
+    // This is called _after_ the container is actually created.
+    virtual void OnArcSessionRestarting() {}
+
     // Called to notify that Android data has been removed. Used in
     // browser_tests
     virtual void OnArcDataRemoved() {}
@@ -250,6 +254,9 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   // require ToS acceptance. Returns false in other cases, including one when
   // ARC is not currently running.
   bool is_directly_started() const { return directly_started_; }
+  void set_directly_started_for_testing(bool directly_started) {
+    directly_started_ = directly_started;
+  }
 
   // Injectors for testing.
   void SetArcSessionRunnerForTesting(
@@ -289,6 +296,7 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   bool IsArcTermsOfServiceNegotiationNeeded() const;
 
   void ShutdownSession();
+  void ResetArcState();
   void OnArcSignInTimeout();
 
   // Starts Android management check. This is for first boot case (= Opt-in
@@ -328,6 +336,7 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
 
   // ArcSessionRunner::Observer:
   void OnSessionStopped(ArcStopReason reason, bool restarting) override;
+  void OnSessionRestarting() override;
 
   // Starts to remove ARC data, if it is requested via RequestArcDataRemoval().
   // On completion, OnArcDataRemoved() is called.

@@ -51,6 +51,7 @@ class MockWebMediaPlayer : public blink::WebMediaPlayer,
   bool HasVideo() const override { return true; }
   bool HasAudio() const override { return false; }
   blink::WebSize NaturalSize() const override { return blink::WebSize(16, 10); }
+  blink::WebSize VisibleRect() const override { return blink::WebSize(16, 10); }
   bool Paused() const override { return false; }
   bool Seeking() const override { return false; }
   double Duration() const override { return 0.0; }
@@ -115,7 +116,7 @@ class HTMLVideoElementCapturerSourceTest : public testing::Test {
 // and its inner object(s). This is a non trivial sequence.
 TEST_F(HTMLVideoElementCapturerSourceTest, ConstructAndDestruct) {}
 
-// Checks that the usual sequence of GetCurrentSupportedFormats() ->
+// Checks that the usual sequence of GetPreferredFormats() ->
 // StartCapture() -> StopCapture() works as expected and let it capture two
 // frames.
 TEST_F(HTMLVideoElementCapturerSourceTest, GetFormatsAndStartAndStop) {
@@ -149,6 +150,38 @@ TEST_F(HTMLVideoElementCapturerSourceTest, GetFormatsAndStartAndStop) {
   run_loop.Run();
 
   html_video_capturer_->StopCapture();
+  Mock::VerifyAndClearExpectations(this);
+}
+
+// When a new source is created and started, it is stopped in the same task
+// when cross-origin data is detected. This test checks that no data is
+// delivered in this case.
+TEST_F(HTMLVideoElementCapturerSourceTest,
+       StartAndStopInSameTaskCaptureZeroFrames) {
+  InSequence s;
+  media::VideoCaptureFormats formats =
+      html_video_capturer_->GetPreferredFormats();
+  ASSERT_EQ(1u, formats.size());
+  EXPECT_EQ(web_media_player_->NaturalSize().width,
+            formats[0].frame_size.width());
+  EXPECT_EQ(web_media_player_->NaturalSize().height,
+            formats[0].frame_size.height());
+
+  media::VideoCaptureParams params;
+  params.requested_format = formats[0];
+
+  EXPECT_CALL(*this, DoOnRunning(true)).Times(1);
+  EXPECT_CALL(*this, DoOnDeliverFrame(_, _)).Times(0);
+
+  html_video_capturer_->StartCapture(
+      params,
+      base::Bind(&HTMLVideoElementCapturerSourceTest::OnDeliverFrame,
+                 base::Unretained(this)),
+      base::Bind(&HTMLVideoElementCapturerSourceTest::OnRunning,
+                 base::Unretained(this)));
+  html_video_capturer_->StopCapture();
+  base::RunLoop().RunUntilIdle();
+
   Mock::VerifyAndClearExpectations(this);
 }
 

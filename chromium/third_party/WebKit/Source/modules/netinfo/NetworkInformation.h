@@ -6,7 +6,7 @@
 #define NetworkInformation_h
 
 #include "core/dom/ContextLifecycleObserver.h"
-#include "core/events/EventTarget.h"
+#include "core/dom/events/EventTarget.h"
 #include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/network/NetworkStateNotifier.h"
 #include "platform/wtf/Optional.h"
@@ -71,6 +71,17 @@ class NetworkInformation final
   explicit NetworkInformation(ExecutionContext*);
   void StartObserving();
   void StopObserving();
+
+  // A random number by which the RTT and downlink estimates are multiplied
+  // with. Adding this noise reduces the chances of cross-origin fingerprinting.
+  double GetRandomMultiplier() const;
+
+  // Rounds |rtt| as per the NetInfo spec and to improve privacy.
+  unsigned long RoundRtt(const Optional<TimeDelta>& rtt) const;
+
+  // Rounds |downlink_mbps| as per the NetInfo spec and to improve privacy. The
+  // returned value is in Mbps.
+  double RoundMbps(const Optional<double>& downlink_mbps) const;
 
   // Touched only on context thread.
   WebConnectionType type_;

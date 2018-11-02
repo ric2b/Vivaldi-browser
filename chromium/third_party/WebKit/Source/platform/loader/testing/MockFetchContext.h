@@ -57,18 +57,17 @@ class MockFetchContext : public FetchContext {
       const KURL&,
       const ResourceLoaderOptions&,
       SecurityViolationReportingPolicy,
-      FetchParameters::OriginRestriction) const override {
+      FetchParameters::OriginRestriction,
+      ResourceRequest::RedirectStatus redirect_status) const override {
     return ResourceRequestBlockedReason::kNone;
   }
-  ResourceRequestBlockedReason CanFollowRedirect(
-      Resource::Type type,
-      const ResourceRequest& request,
+  ResourceRequestBlockedReason CheckCSPForRequest(
+      WebURLRequest::RequestContext,
       const KURL& url,
       const ResourceLoaderOptions& options,
       SecurityViolationReportingPolicy reporting_policy,
-      FetchParameters::OriginRestriction origin_restriction) const override {
-    return CanRequest(type, request, url, options, reporting_policy,
-                      origin_restriction);
+      ResourceRequest::RedirectStatus redirect_status) const override {
+    return ResourceRequestBlockedReason::kNone;
   }
   bool ShouldLoadNewResource(Resource::Type) const override {
     return load_policy_ == kShouldLoadNewResource;
@@ -97,13 +96,14 @@ class MockFetchContext : public FetchContext {
         : runner_(std::move(runner)) {}
     void AddThrottlingObserver(ObserverType, Observer*) override {}
     void RemoveThrottlingObserver(ObserverType, Observer*) override {}
-    RefPtr<WebTaskRunner> TimerTaskRunner() override { return runner_; }
     RefPtr<WebTaskRunner> LoadingTaskRunner() override { return runner_; }
-    RefPtr<WebTaskRunner> SuspendableTaskRunner() override { return runner_; }
-    RefPtr<WebTaskRunner> UnthrottledTaskRunner() override { return runner_; }
-    RefPtr<WebTaskRunner> UnthrottledButBlockableTaskRunner() override {
+    RefPtr<WebTaskRunner> LoadingControlTaskRunner() override {
       return runner_;
     }
+    RefPtr<WebTaskRunner> ThrottleableTaskRunner() override { return runner_; }
+    RefPtr<WebTaskRunner> DeferrableTaskRunner() override { return runner_; }
+    RefPtr<WebTaskRunner> PausableTaskRunner() override { return runner_; }
+    RefPtr<WebTaskRunner> UnpausableTaskRunner() override { return runner_; }
 
    private:
     RefPtr<WebTaskRunner> runner_;

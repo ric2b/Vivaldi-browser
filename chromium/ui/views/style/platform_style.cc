@@ -41,15 +41,16 @@ const bool PlatformStyle::kDefaultLabelButtonHasBoldFont = true;
 const bool PlatformStyle::kDialogDefaultButtonCanBeCancel = true;
 const bool PlatformStyle::kSelectWordOnRightClick = false;
 const bool PlatformStyle::kSelectAllOnRightClickWhenUnfocused = false;
-const CustomButton::NotifyAction PlatformStyle::kMenuNotifyActivationAction =
-    CustomButton::NOTIFY_ON_RELEASE;
-const CustomButton::KeyClickAction PlatformStyle::kKeyClickActionOnSpace =
-    CustomButton::CLICK_ON_KEY_RELEASE;
+const Button::NotifyAction PlatformStyle::kMenuNotifyActivationAction =
+    Button::NOTIFY_ON_RELEASE;
+const Button::KeyClickAction PlatformStyle::kKeyClickActionOnSpace =
+    Button::CLICK_ON_KEY_RELEASE;
 const bool PlatformStyle::kReturnClicksFocusedControl = true;
 const bool PlatformStyle::kTreeViewSelectionPaintsEntireRow = false;
 const bool PlatformStyle::kTreeViewUsesOpenIcon = true;
 const bool PlatformStyle::kUseRipples = true;
 const bool PlatformStyle::kMirrorBubbleArrowInRTLByDefault = true;
+const bool PlatformStyle::kTextfieldScrollsToStartOnFocusChange = false;
 
 // static
 std::unique_ptr<ScrollBar> PlatformStyle::CreateScrollBar(bool is_horizontal) {

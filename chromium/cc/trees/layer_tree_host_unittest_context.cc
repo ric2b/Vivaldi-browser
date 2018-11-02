@@ -16,7 +16,6 @@
 #include "cc/layers/video_layer.h"
 #include "cc/layers/video_layer_impl.h"
 #include "cc/paint/paint_flags.h"
-#include "cc/resources/single_release_callback.h"
 #include "cc/resources/ui_resource_manager.h"
 #include "cc/test/fake_content_layer_client.h"
 #include "cc/test/fake_layer_tree_host_client.h"
@@ -36,6 +35,7 @@
 #include "cc/trees/layer_tree_host_impl.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/single_thread_proxy.h"
+#include "components/viz/common/quads/single_release_callback.h"
 #include "components/viz/test/test_layer_tree_frame_sink.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "media/base/media.h"
@@ -44,6 +44,11 @@ using media::VideoFrame;
 
 namespace cc {
 namespace {
+
+// Returns a fake TimeTicks based on the given microsecond offset.
+base::TimeTicks TicksFromMicroseconds(int64_t micros) {
+  return base::TimeTicks() + base::TimeDelta::FromMicroseconds(micros);
+}
 
 // These tests deal with losing the 3d graphics context.
 class LayerTreeHostContextTest : public LayerTreeTest {
@@ -460,8 +465,8 @@ class MultipleCompositeDoesNotCreateLayerTreeFrameSink
   }
 
   void BeginTest() override {
-    layer_tree_host()->Composite(base::TimeTicks::FromInternalValue(1));
-    layer_tree_host()->Composite(base::TimeTicks::FromInternalValue(2));
+    layer_tree_host()->Composite(TicksFromMicroseconds(1));
+    layer_tree_host()->Composite(TicksFromMicroseconds(2));
   }
 
   void DidInitializeLayerTreeFrameSink() override { EXPECT_TRUE(false); }
@@ -504,12 +509,12 @@ class FailedCreateDoesNotCreateExtraLayerTreeFrameSink
 
   void BeginTest() override {
     // First composite tries to create a surface.
-    layer_tree_host()->Composite(base::TimeTicks::FromInternalValue(1));
+    layer_tree_host()->Composite(TicksFromMicroseconds(1));
     EXPECT_EQ(num_requests_, 2);
     EXPECT_TRUE(has_failed_);
 
     // Second composite should not request or fail.
-    layer_tree_host()->Composite(base::TimeTicks::FromInternalValue(2));
+    layer_tree_host()->Composite(TicksFromMicroseconds(2));
     EXPECT_EQ(num_requests_, 2);
     EndTest();
   }
@@ -557,7 +562,7 @@ class LayerTreeHostContextTestCommitAfterDelayedLayerTreeFrameSink
   }
 
   void BeginTest() override {
-    layer_tree_host()->Composite(base::TimeTicks::FromInternalValue(1));
+    layer_tree_host()->Composite(TicksFromMicroseconds(1));
   }
 
   void ScheduleComposite() override {
@@ -592,7 +597,7 @@ class LayerTreeHostContextTestAvoidUnnecessaryComposite
 
   void BeginTest() override {
     in_composite_ = true;
-    layer_tree_host()->Composite(base::TimeTicks::FromInternalValue(1));
+    layer_tree_host()->Composite(TicksFromMicroseconds(1));
     in_composite_ = false;
   }
 
@@ -877,8 +882,9 @@ class LayerTreeHostContextTestDontUseLostResources
     child_context_provider_ = TestContextProvider::Create();
     CHECK(child_context_provider_->BindToCurrentThread());
     shared_bitmap_manager_.reset(new TestSharedBitmapManager);
-    child_resource_provider_ = FakeResourceProvider::Create(
-        child_context_provider_.get(), shared_bitmap_manager_.get());
+    child_resource_provider_ =
+        FakeResourceProvider::Create<LayerTreeResourceProvider>(
+            child_context_provider_.get(), shared_bitmap_manager_.get());
   }
 
   static void EmptyReleaseCallback(const gpu::SyncToken& sync_token,
@@ -886,12 +892,6 @@ class LayerTreeHostContextTestDontUseLostResources
 
   void SetupTree() override {
     gpu::gles2::GLES2Interface* gl = child_context_provider_->ContextGL();
-
-    ResourceId resource = child_resource_provider_->CreateResource(
-        gfx::Size(4, 4), ResourceProvider::TEXTURE_HINT_IMMUTABLE,
-        viz::RGBA_8888, gfx::ColorSpace());
-    ResourceProvider::ScopedWriteLockGL lock(child_resource_provider_.get(),
-                                             resource, false);
 
     gpu::Mailbox mailbox;
     gl->GenMailboxCHROMIUM(mailbox.name);
@@ -916,7 +916,7 @@ class LayerTreeHostContextTestDontUseLostResources
     texture->SetIsDrawable(true);
     texture->SetTextureMailbox(
         viz::TextureMailbox(mailbox, sync_token, GL_TEXTURE_2D),
-        SingleReleaseCallback::Create(
+        viz::SingleReleaseCallback::Create(
             base::Bind(&LayerTreeHostContextTestDontUseLostResources::
                            EmptyReleaseCallback)));
     root->AddChild(texture);
@@ -1003,6 +1003,11 @@ class LayerTreeHostContextTestDontUseLostResources
   DrawResult PrepareToDrawOnThread(LayerTreeHostImpl* host_impl,
                                    LayerTreeHostImpl::FrameData* frame,
                                    DrawResult draw_result) override {
+    if (host_impl->active_tree()->source_frame_number() == 2) {
+      // Lose the context after draw on the second commit. This will cause
+      // a third commit to recover.
+      context3d_->set_times_bind_texture_succeeds(0);
+    }
     return draw_result;
   }
 
@@ -1018,13 +1023,6 @@ class LayerTreeHostContextTestDontUseLostResources
 
   void DidCommitAndDrawFrame() override {
     ASSERT_TRUE(layer_tree_host()->hud_layer());
-
-    if (layer_tree_host()->SourceFrameNumber() == 2) {
-      // Lose the context after draw on the second commit. This will cause
-      // a third commit to recover.
-      context3d_->set_times_bind_texture_succeeds(0);
-    }
-
     // End the test once we know the 3nd frame drew.
     if (layer_tree_host()->SourceFrameNumber() < 5) {
       layer_tree_host()->root_layer()->SetNeedsDisplay();

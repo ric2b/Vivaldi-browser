@@ -36,7 +36,6 @@
 #include "components/signin/core/account_id/account_id.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "extensions/common/extension_builder.h"
-#include "extensions/common/test_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
@@ -230,10 +229,10 @@ class EPKPChallengeKeyTestBase : public BrowserWithTestWindowTest {
   scoped_refptr<Extension> CreateExtension() {
     switch (profile_type_) {
       case ProfileType::USER_PROFILE:
-        return test_util::CreateEmptyExtension();
+        return ExtensionBuilder("Test").Build();
 
       case ProfileType::SIGNIN_PROFILE:
-        return test_util::BuildApp(ExtensionBuilder())
+        return ExtensionBuilder("Test", ExtensionBuilder::Type::PLATFORM_APP)
             .SetLocation(Manifest::Location::EXTERNAL_POLICY)
             .Build();
     }

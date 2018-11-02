@@ -33,9 +33,9 @@
 #include <string>
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8BindingForTesting.h"
-#include "core/exported/WebViewBase.h"
+#include "core/exported/WebViewImpl.h"
 #include "core/frame/FrameTestHelpers.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "platform/SerializedResource.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
@@ -94,7 +94,7 @@ class FrameSerializerTest : public ::testing::Test,
   void RegisterErrorURL(const char* file, int status_code) {
     WebURLError error;
     error.reason = 0xdead + status_code;
-    error.domain = "FrameSerializerTest";
+    error.domain = WebURLError::Domain::kTest;
 
     WebURLResponse response;
     response.SetMIMEType("text/html");

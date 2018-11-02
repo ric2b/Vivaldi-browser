@@ -48,9 +48,6 @@ bool IsSolidColorPaint(const PaintFlags& flags) {
 // Returns true if the specified drawn_rect will cover the entire canvas, and
 // that the canvas is not clipped (i.e. it covers ALL of the canvas).
 bool IsFullQuad(const SkCanvas& canvas, const SkRect& drawn_rect) {
-  if (!canvas.isClipRect())
-    return false;
-
   SkIRect clip_irect;
   if (!canvas.getDeviceClipBounds(&clip_irect))
     return false;
@@ -132,8 +129,8 @@ base::Optional<SkColor> SolidColorAnalyzer::DetermineIfSolidColor(
     const PaintOpBuffer* buffer,
     const gfx::Rect& rect,
     int max_ops_to_analyze,
-    const std::vector<size_t>* indices) {
-  if (buffer->size() == 0 || (indices && indices->empty()))
+    const std::vector<size_t>* offsets) {
+  if (buffer->size() == 0 || (offsets && offsets->empty()))
     return SK_ColorTRANSPARENT;
 
   bool is_solid = false;
@@ -142,12 +139,12 @@ base::Optional<SkColor> SolidColorAnalyzer::DetermineIfSolidColor(
 
   struct Frame {
     Frame() = default;
-    Frame(PaintOpBuffer::Iterator iter,
+    Frame(PaintOpBuffer::CompositeIterator iter,
           const SkMatrix& original_ctm,
           int save_count)
         : iter(iter), original_ctm(original_ctm), save_count(save_count) {}
 
-    PaintOpBuffer::Iterator iter;
+    PaintOpBuffer::CompositeIterator iter;
     const SkMatrix original_ctm;
     int save_count = 0;
   };
@@ -160,7 +157,7 @@ base::Optional<SkColor> SolidColorAnalyzer::DetermineIfSolidColor(
   // We expect to see at least one DrawRecordOp because of the way items are
   // constructed. Reserve this to 2, and go from there.
   stack.reserve(2);
-  stack.emplace_back(PaintOpBuffer::Iterator(buffer, indices),
+  stack.emplace_back(PaintOpBuffer::CompositeIterator(buffer, offsets),
                      canvas.getTotalMatrix(), canvas.getSaveCount());
 
   int num_ops = 0;
@@ -175,18 +172,17 @@ base::Optional<SkColor> SolidColorAnalyzer::DetermineIfSolidColor(
     }
 
     const PaintOp* op = *frame.iter;
-    const SkMatrix& original_ctm = frame.original_ctm;
+    PlaybackParams params(nullptr, frame.original_ctm);
     switch (op->GetType()) {
       case PaintOpType::DrawRecord: {
         const DrawRecordOp* record_op = static_cast<const DrawRecordOp*>(op);
-        stack.emplace_back(PaintOpBuffer::Iterator(record_op->record.get()),
-                           canvas.getTotalMatrix(), canvas.getSaveCount());
+        stack.emplace_back(
+            PaintOpBuffer::CompositeIterator(record_op->record.get(), nullptr),
+            canvas.getTotalMatrix(), canvas.getSaveCount());
         continue;
       }
 
       // Any of the following ops result in non solid content.
-      case PaintOpType::DrawArc:
-      case PaintOpType::DrawCircle:
       case PaintOpType::DrawDRRect:
       case PaintOpType::DrawImage:
       case PaintOpType::DrawImageRect:
@@ -194,9 +190,8 @@ base::Optional<SkColor> SolidColorAnalyzer::DetermineIfSolidColor(
       case PaintOpType::DrawLine:
       case PaintOpType::DrawOval:
       case PaintOpType::DrawPath:
-      case PaintOpType::DrawPosText:
+        return base::nullopt;
       case PaintOpType::DrawRRect:
-      case PaintOpType::DrawText:
       case PaintOpType::DrawTextBlob:
       // Anything that has to do a save layer is probably not solid. As it will
       // likely need more than one draw op.
@@ -209,7 +204,6 @@ base::Optional<SkColor> SolidColorAnalyzer::DetermineIfSolidColor(
       case PaintOpType::ClipPath:
       case PaintOpType::ClipRRect:
         return base::nullopt;
-
       case PaintOpType::DrawRect: {
         if (++num_ops > max_ops_to_analyze)
           return base::nullopt;
@@ -226,10 +220,20 @@ base::Optional<SkColor> SolidColorAnalyzer::DetermineIfSolidColor(
                           &is_transparent, &color);
         break;
       }
+      case PaintOpType::ClipRect: {
+        // SolidColorAnalyzer uses an SkNoDrawCanvas which uses an
+        // SkNoPixelsDevice which says (without looking) that the canvas's
+        // clip is always a rect.  So, if this clip could result in not
+        // a rect, this is no longer solid color.
+        const ClipRectOp* clip_op = static_cast<const ClipRectOp*>(op);
+        if (clip_op->op == SkClipOp::kDifference)
+          return base::nullopt;
+        op->Raster(&canvas, params);
+        break;
+      }
 
       // The rest of the ops should only affect our state canvas.
       case PaintOpType::Annotate:
-      case PaintOpType::ClipRect:
       case PaintOpType::Concat:
       case PaintOpType::Scale:
       case PaintOpType::SetMatrix:
@@ -238,7 +242,7 @@ base::Optional<SkColor> SolidColorAnalyzer::DetermineIfSolidColor(
       case PaintOpType::Save:
       case PaintOpType::Translate:
       case PaintOpType::Noop:
-        op->Raster(&canvas, original_ctm);
+        op->Raster(&canvas, params);
         break;
     }
     ++frame.iter;

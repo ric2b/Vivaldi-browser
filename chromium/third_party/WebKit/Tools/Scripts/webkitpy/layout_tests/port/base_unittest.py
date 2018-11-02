@@ -202,6 +202,40 @@ class PortTest(unittest.TestCase):
         self.assertEqual('\n'.join(port.expectations_dict().values()), '')
         self.assertEqual('\n'.join(port.all_expectations_dict().values()), 'bb\naa')
 
+    def test_driver_flag_from_file(self):
+        # primary_driver_flag() comes from rwt.flag or --additional-driver-flag
+        # additional_driver_flags() excludes primary_driver_flag()
+
+        port_a = self.make_port()
+        port_b = self.make_port(options=optparse.Values(
+            {'additional_driver_flag': ['--bb']}))
+        port_c = self.make_port(options=optparse.Values(
+            {'additional_driver_flag': ['--bb', '--cc']}))
+
+        self.assertEqual(port_a.primary_driver_flag(), None)
+        self.assertEqual(port_b.primary_driver_flag(), '--bb')
+        self.assertEqual(port_c.primary_driver_flag(), '--bb')
+
+        default_flags = port_a.additional_driver_flags()
+        self.assertEqual(port_b.additional_driver_flags(), default_flags)
+        self.assertEqual(port_c.additional_driver_flags(),
+                         ['--cc'] + default_flags)
+
+        flag_file = '/mock-checkout/third_party/WebKit/LayoutTests/rwt.flag'
+        port_a.host.filesystem.write_text_file(flag_file, '--aa')
+        port_b.host.filesystem.write_text_file(flag_file, '--aa')
+        port_c.host.filesystem.write_text_file(flag_file, '--bb')
+
+        self.assertEqual(port_a.primary_driver_flag(), '--aa')
+        self.assertEqual(port_b.primary_driver_flag(), '--aa')
+        self.assertEqual(port_c.primary_driver_flag(), '--bb')
+
+        self.assertEqual(port_a.additional_driver_flags(), default_flags)
+        self.assertEqual(port_b.additional_driver_flags(),
+                         ['--bb'] + default_flags)
+        self.assertEqual(port_c.additional_driver_flags(),
+                         ['--cc'] + default_flags)
+
     def test_additional_env_var(self):
         port = self.make_port(options=optparse.Values({'additional_env_var': ['FOO=BAR', 'BAR=FOO']}))
         self.assertEqual(port.get_option('additional_env_var'), ['FOO=BAR', 'BAR=FOO'])
@@ -406,6 +440,8 @@ class PortTest(unittest.TestCase):
         self.assertFalse(port.is_slow_wpt_test('dom/ranges/Range-attributes.html'))
         self.assertTrue(port.is_slow_wpt_test('external/wpt/dom/ranges/Range-attributes-slow.html'))
         self.assertTrue(port.is_slow_wpt_test('external/wpt/html/dom/elements/global-attributes/dir_auto-EN-L.html'))
+        self.assertFalse(port.is_slow_wpt_test('virtual/virtual_wpt/external/wpt/dom/ranges/Range-attributes.html'))
+        self.assertTrue(port.is_slow_wpt_test('virtual/virtual_wpt/external/wpt/dom/ranges/Range-attributes-slow.html'))
 
     def test_parse_reftest_list(self):
         port = self.make_port(with_tests=True)
@@ -640,49 +676,36 @@ class PortTest(unittest.TestCase):
     def test_skips_test_in_smoke_tests(self):
         port = self.make_port(with_tests=True)
         port.default_smoke_test_only = lambda: True
-        port.host.filesystem.write_text_file(port.path_to_smoke_tests_file(), 'passes/text.html\n')
-        self.assertTrue(port.skips_test(
-            'failures/expected/image.html',
-            generic_expectations=TestExpectations(port, include_overrides=False),
-            full_expectations=TestExpectations(port, include_overrides=True)))
+        port.host.filesystem.write_text_file(
+            port.path_to_smoke_tests_file(),
+            'passes/text.html\n')
+        self.assertTrue(port.skips_test('failures/expected/image.html'))
 
     def test_skips_test_no_skip_smoke_tests_file(self):
         port = self.make_port(with_tests=True)
         port.default_smoke_test_only = lambda: True
-        self.assertFalse(port.skips_test(
-            'failures/expected/image.html',
-            generic_expectations=TestExpectations(port, include_overrides=False),
-            full_expectations=TestExpectations(port, include_overrides=True)))
+        self.assertFalse(port.skips_test('failures/expected/image.html'))
 
     def test_skips_test_port_doesnt_skip_smoke_tests(self):
         port = self.make_port(with_tests=True)
         port.default_smoke_test_only = lambda: False
-        self.assertFalse(port.skips_test(
-            'failures/expected/image.html',
-            generic_expectations=TestExpectations(port, include_overrides=False),
-            full_expectations=TestExpectations(port, include_overrides=True)))
+        self.assertFalse(port.skips_test('failures/expected/image.html'))
 
-    def test_skips_test_skip_in_generic_expectations(self):
+    def test_skips_test_in_test_expectations(self):
         port = self.make_port(with_tests=True)
         port.default_smoke_test_only = lambda: False
         port.host.filesystem.write_text_file(
             port.path_to_generic_test_expectations_file(),
             'Bug(test) failures/expected/image.html [ Skip ]\n')
-        self.assertFalse(port.skips_test(
-            'failures/expected/image.html',
-            generic_expectations=TestExpectations(port, include_overrides=False),
-            full_expectations=TestExpectations(port, include_overrides=True)))
+        self.assertFalse(port.skips_test('failures/expected/image.html'))
 
-    def test_skips_test_skip_in_full_expectations(self):
+    def test_skips_test_in_never_fix_tests(self):
         port = self.make_port(with_tests=True)
         port.default_smoke_test_only = lambda: False
         port.host.filesystem.write_text_file(
-            port.host.filesystem.join(port.layout_tests_dir(), 'NeverFixTests'),
+            port.path_to_never_fix_tests_file(),
             'Bug(test) failures/expected/image.html [ WontFix ]\n')
-        self.assertTrue(port.skips_test(
-            'failures/expected/image.html',
-            generic_expectations=TestExpectations(port, include_overrides=False),
-            full_expectations=TestExpectations(port, include_overrides=True)))
+        self.assertTrue(port.skips_test('failures/expected/image.html'))
 
 
 class NaturalCompareTest(unittest.TestCase):

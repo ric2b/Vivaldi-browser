@@ -82,6 +82,7 @@ class SyncAPI : public BrowserContextKeyedAPI, public EventRouter::Observer {
   static const char* service_name() { return "SyncAPI"; }
 
   static const bool kServiceIsNULLWhileTesting = true;
+  static const bool kServiceRedirectedInIncognito = true;
 
   // Created lazily upon OnListenerAdded.
   std::unique_ptr<SyncEventRouter> sync_event_router_;

@@ -20,7 +20,7 @@
 #include "platform_media/renderer/decoders/ipc_demuxer.h"
 #include "platform_media/renderer/decoders/pass_through_audio_decoder.h"
 #include "platform_media/renderer/decoders/pass_through_video_decoder.h"
-#include "media/renderers/mock_gpu_video_accelerator_factories.h"
+#include "media/video/mock_gpu_video_accelerator_factories.h"
 #include "media/video/mock_video_decode_accelerator.h"
 
 
@@ -193,7 +193,7 @@ PlatformPipelineTestBase::~PlatformPipelineTestBase() {
 
 Demuxer * PlatformPipelineTestBase::CreatePlatformDemuxer(
     std::unique_ptr<media::DataSource> & data_source,
-    base::MessageLoop & message_loop_,
+    base::test::ScopedTaskEnvironment & task_environment_,
     MediaLog* media_log) {
   const std::string content_type;
   const GURL url("file://" + filepath_.AsUTF8Unsafe());
@@ -201,7 +201,7 @@ Demuxer * PlatformPipelineTestBase::CreatePlatformDemuxer(
     std::unique_ptr<media::IPCMediaPipelineHost> pipeline_host(
           new content::TestPipelineHost(data_source.get()));
     return new media::IPCDemuxer(
-                     message_loop_.task_runner(), data_source.get(),
+                     task_environment_.GetMainThreadTaskRunner(), data_source.get(),
                      std::move(pipeline_host), content_type, url,
                      media_log);
   }
@@ -248,7 +248,9 @@ void PlatformPipelineTestBase::AppendPlatformVideoDecoders(
 
   video_decoders.push_back(
       base::MakeUnique<GpuVideoDecoder>(mock_video_accelerator_factories_.get(),
-                                        RequestOverlayInfoCB(), media_log));
+                                        RequestOverlayInfoCB(),
+                                        gfx::ColorSpace(),
+                                        media_log));
 
   media::VideoDecodeAccelerator::Capabilities capabilities;
   capabilities.supported_profiles = GetSupportedProfiles();

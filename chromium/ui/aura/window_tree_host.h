@@ -83,6 +83,13 @@ class AURA_EXPORT WindowTreeHost : public ui::internal::InputMethodDelegate,
   virtual void SetRootTransform(const gfx::Transform& transform);
   virtual gfx::Transform GetInverseRootTransform() const;
 
+  // These functions are used in event translation for translating the local
+  // coordinates of LocatedEvents. Default implementation calls to non-event
+  // ones (e.g. GetRootTransform()).
+  virtual gfx::Transform GetRootTransformForLocalEventCoordinates() const;
+  virtual gfx::Transform GetInverseRootTransformForLocalEventCoordinates()
+      const;
+
   // Sets padding applied to the output surface. The output surface is sized to
   // to the size of the host plus output surface padding. |window()| is offset
   // by |padding_in_pixels|, that is, |window|'s origin is set to
@@ -195,7 +202,8 @@ class AURA_EXPORT WindowTreeHost : public ui::internal::InputMethodDelegate,
   // If frame_sink_id is not passed in, one will be grabbed from
   // ContextFactoryPrivate.
   void CreateCompositor(
-      const viz::FrameSinkId& frame_sink_id = viz::FrameSinkId());
+      const viz::FrameSinkId& frame_sink_id = viz::FrameSinkId(),
+      bool force_software_compositor = false);
 
   void InitCompositor();
   void OnAcceleratedWidgetAvailable();
@@ -206,6 +214,7 @@ class AURA_EXPORT WindowTreeHost : public ui::internal::InputMethodDelegate,
   void OnHostMovedInPixels(const gfx::Point& new_location_in_pixels);
   void OnHostResizedInPixels(const gfx::Size& new_size_in_pixels);
   void OnHostWorkspaceChanged();
+  void OnHostDisplayChanged();
   void OnHostCloseRequested();
   void OnHostActivated();
   void OnHostLostWindowCapture();

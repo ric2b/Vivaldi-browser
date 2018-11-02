@@ -32,7 +32,7 @@
 #define DOMVisualViewport_h
 
 #include "core/dom/ExecutionContext.h"
-#include "core/events/EventTarget.h"
+#include "core/dom/events/EventTarget.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "platform/scroll/ScrollTypes.h"
@@ -65,6 +65,9 @@ class DOMVisualViewport final : public EventTargetWithInlineData {
   double width() const;
   double height() const;
   double scale() const;
+
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(resize);
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(scroll);
 
  private:
   explicit DOMVisualViewport(LocalDOMWindow*);

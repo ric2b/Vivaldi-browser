@@ -35,8 +35,7 @@ struct CommonNavigationParams;
 struct RequestNavigationParams;
 struct StartNavigationParams;
 
-class CONTENT_EXPORT NavigationEntryImpl
-    : public NON_EXPORTED_BASE(NavigationEntry) {
+class CONTENT_EXPORT NavigationEntryImpl : public NavigationEntry {
  public:
   // Represents a tree of FrameNavigationEntries that make up this joint session
   // history item.  The tree currently only tracks the main frame by default,
@@ -83,7 +82,7 @@ class CONTENT_EXPORT NavigationEntryImpl
       std::unique_ptr<NavigationEntry> entry);
 
   // The value of bindings() before it is set during commit.
-  static int kInvalidBindings;
+  enum : int { kInvalidBindings = -1 };
 
   NavigationEntryImpl();
   NavigationEntryImpl(scoped_refptr<SiteInstanceImpl> instance,

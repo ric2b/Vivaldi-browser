@@ -48,10 +48,6 @@ class LayoutScrollbarPart final : public LayoutBlock {
   void UpdateLayout() override;
 
   // Scrollbar parts needs to be rendered at device pixel boundaries.
-  LayoutRectOutsets MarginBoxOutsets() const override {
-    DCHECK(IsIntegerValue(LayoutBlock::MarginBoxOutsets().Top()));
-    return LayoutBlock::MarginBoxOutsets();
-  }
   LayoutUnit MarginTop() const override {
     DCHECK(IsIntegerValue(LayoutBlock::MarginTop()));
     return LayoutBlock::MarginTop();
@@ -76,7 +72,7 @@ class LayoutScrollbarPart final : public LayoutBlock {
   LayoutObject* ScrollbarStyleSource() const;
 
   // Must call setStyleWithWritingModeOfParent() instead.
-  void SetStyle(PassRefPtr<ComputedStyle>) = delete;
+  void SetStyle(RefPtr<ComputedStyle>) = delete;
 
   // Expose for LayoutScrollbar and PaintInvalidationCapableScrollableArea for
   // paint invalidation.
@@ -102,10 +98,6 @@ class LayoutScrollbarPart final : public LayoutBlock {
   LayoutUnit PaddingBottom() const override { return LayoutUnit(); }
   LayoutUnit PaddingLeft() const override { return LayoutUnit(); }
   LayoutUnit PaddingRight() const override { return LayoutUnit(); }
-  LayoutUnit PaddingBefore() const override { return LayoutUnit(); }
-  LayoutUnit PaddingAfter() const override { return LayoutUnit(); }
-  LayoutUnit PaddingStart() const override { return LayoutUnit(); }
-  LayoutUnit PaddingEnd() const override { return LayoutUnit(); }
 
   void LayoutHorizontalPart();
   void LayoutVerticalPart();

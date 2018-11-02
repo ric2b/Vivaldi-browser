@@ -12,6 +12,7 @@
 #include "base/compiler_specific.h"
 #include "base/lazy_instance.h"
 #include "base/memory/singleton.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/rand_util.h"
 #include "base/stl_util.h"
@@ -27,7 +28,6 @@
 #include "net/base/network_change_notifier.h"
 #include "net/base/network_delegate.h"
 #include "net/base/upload_data_stream.h"
-#include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
 #include "net/log/net_log.h"
 #include "net/log/net_log_event_type.h"
@@ -175,6 +175,13 @@ void URLRequest::Delegate::OnResponseStarted(URLRequest* request) {
 
 URLRequest::~URLRequest() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
+  // Log the redirect count during destruction, to ensure that it is only
+  // recorded at the end of following all redirect chains.
+  UMA_HISTOGRAM_EXACT_LINEAR("Net.RedirectChainLength",
+                             kMaxRedirects - redirect_limit_,
+                             kMaxRedirects + 1);
+
   Cancel();
 
   if (network_delegate_) {
@@ -458,10 +465,9 @@ bool URLRequest::IsHandledURL(const GURL& url) {
   return IsHandledProtocol(url.scheme());
 }
 
-void URLRequest::set_first_party_for_cookies(
-    const GURL& first_party_for_cookies) {
+void URLRequest::set_site_for_cookies(const GURL& site_for_cookies) {
   DCHECK(!is_pending_);
-  first_party_for_cookies_ = first_party_for_cookies;
+  site_for_cookies_ = site_for_cookies;
 }
 
 void URLRequest::set_first_party_url_policy(
@@ -638,6 +644,8 @@ void URLRequest::StartJob(URLRequestJob* job) {
   job_.reset(job);
   job_->SetExtraRequestHeaders(extra_request_headers_);
   job_->SetPriority(priority_);
+  job_->SetRequestHeadersCallback(request_headers_callback_);
+  job_->SetResponseHeadersCallback(response_headers_callback_);
 
   if (upload_data_stream_.get())
     job_->SetUpload(upload_data_stream_.get());
@@ -965,11 +973,10 @@ void URLRequest::Redirect(const RedirectInfo& redirect_info) {
   // not set to "null", a POST request from origin A to a malicious origin M
   // could be redirected by M back to A.
   //
-  // This behavior is specified in step 1 of step 10 of the 301, 302, 303, 307,
-  // 308 block of step 5 of Section 4.2 of Fetch[1] (which supercedes the
-  // behavior outlined in RFC 6454[2].
+  // This behavior is specified in step 10 of the HTTP-redirect fetch
+  // algorithm[1] (which supercedes the behavior outlined in RFC 6454[2].
   //
-  // [1]: https://fetch.spec.whatwg.org/#concept-http-fetch
+  // [1]: https://fetch.spec.whatwg.org/#http-redirect-fetch
   // [2]: https://tools.ietf.org/html/rfc6454#section-7
   //
   // TODO(jww): This is a layering violation and should be refactored somewhere
@@ -983,7 +990,7 @@ void URLRequest::Redirect(const RedirectInfo& redirect_info) {
 
   referrer_ = redirect_info.new_referrer;
   referrer_policy_ = redirect_info.new_referrer_policy;
-  first_party_for_cookies_ = redirect_info.new_first_party_for_cookies;
+  site_for_cookies_ = redirect_info.new_site_for_cookies;
   token_binding_referrer_ = redirect_info.referred_token_binding_host;
 
   url_chain_.push_back(redirect_info.new_url);
@@ -1114,8 +1121,7 @@ bool URLRequest::CanSetCookie(const std::string& cookie_line,
 
 bool URLRequest::CanEnablePrivacyMode() const {
   if (network_delegate_) {
-    return network_delegate_->CanEnablePrivacyMode(url(),
-                                                   first_party_for_cookies_);
+    return network_delegate_->CanEnablePrivacyMode(url(), site_for_cookies_);
   }
   return !g_default_can_use_cookies;
 }
@@ -1206,6 +1212,18 @@ void URLRequest::GetConnectionAttempts(ConnectionAttempts* out) const {
     job_->GetConnectionAttempts(out);
   else
     out->clear();
+}
+
+void URLRequest::SetRequestHeadersCallback(RequestHeadersCallback callback) {
+  DCHECK(!job_.get());
+  DCHECK(request_headers_callback_.is_null());
+  request_headers_callback_ = std::move(callback);
+}
+
+void URLRequest::SetResponseHeadersCallback(ResponseHeadersCallback callback) {
+  DCHECK(!job_.get());
+  DCHECK(response_headers_callback_.is_null());
+  response_headers_callback_ = std::move(callback);
 }
 
 void URLRequest::set_status(URLRequestStatus status) {

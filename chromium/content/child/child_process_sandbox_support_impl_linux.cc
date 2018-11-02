@@ -12,10 +12,12 @@
 
 #include "base/pickle.h"
 #include "base/posix/eintr_wrapper.h"
-#include "base/posix/unix_domain_socket_linux.h"
+#include "base/posix/unix_domain_socket.h"
 #include "base/sys_byteorder.h"
 #include "base/trace_event/trace_event.h"
 #include "content/common/sandbox_linux/sandbox_linux.h"
+#include "third_party/WebKit/public/platform/WebString.h"
+#include "third_party/WebKit/public/platform/WebVector.h"
 #include "third_party/WebKit/public/platform/linux/WebFallbackFont.h"
 #include "third_party/WebKit/public/platform/linux/WebFontRenderStyle.h"
 
@@ -49,8 +51,8 @@ void GetFallbackFontForCharacter(int32_t character,
         pickle_iter.ReadInt(&fontconfigInterfaceId) &&
         pickle_iter.ReadInt(&ttcIndex) && pickle_iter.ReadBool(&isBold) &&
         pickle_iter.ReadBool(&isItalic)) {
-      fallbackFont->name = family_name;
-      fallbackFont->filename = filename;
+      fallbackFont->name = blink::WebString::FromUTF8(family_name);
+      fallbackFont->filename = blink::WebVector<char>(filename);
       fallbackFont->fontconfig_interface_id = fontconfigInterfaceId;
       fallbackFont->ttc_index = ttcIndex;
       fallbackFont->is_bold = isBold;

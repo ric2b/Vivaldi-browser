@@ -11,6 +11,7 @@
 #include "base/callback_helpers.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
 #include "base/threading/thread_checker.h"
 #include "build/build_config.h"
@@ -28,7 +29,7 @@
 #include "media/gpu/ipc/service/media_gpu_channel_manager.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "services/ui/gpu/interfaces/gpu_service.mojom.h"
+#include "services/viz/privileged/interfaces/gl/gpu_service.mojom.h"
 
 #if defined(USE_OZONE)
 #include "ui/ozone/public/ozone_platform.h"
@@ -168,10 +169,11 @@ GpuChildThread::GpuChildThread(
     : ChildThreadImpl(options),
       dead_on_arrival_(dead_on_arrival),
       in_browser_process_(in_browser_process),
-      gpu_service_(new ui::GpuService(gpu_info,
-                                      std::move(gpu_watchdog_thread),
-                                      ChildProcess::current()->io_task_runner(),
-                                      gpu_feature_info)),
+      gpu_service_(
+          new viz::GpuServiceImpl(gpu_info,
+                                  std::move(gpu_watchdog_thread),
+                                  ChildProcess::current()->io_task_runner(),
+                                  gpu_feature_info)),
       gpu_main_binding_(this),
       weak_factory_(this) {
   if (in_browser_process_) {
@@ -204,8 +206,8 @@ void GpuChildThread::Init(const base::Time& process_start_time) {
   registry->AddInterface(base::Bind(&GpuChildThread::BindServiceFactoryRequest,
                                     weak_factory_.GetWeakPtr()),
                          base::ThreadTaskRunnerHandle::Get());
-  if (GetContentClient()->gpu())  // NULL in tests.
-    GetContentClient()->gpu()->Initialize(registry.get());
+  if (GetContentClient()->gpu())  // nullptr in tests.
+    GetContentClient()->gpu()->InitializeRegistry(registry.get());
 
   std::unique_ptr<QueueingConnectionFilter> filter =
       base::MakeUnique<QueueingConnectionFilter>(GetIOTaskRunner(),
@@ -239,7 +241,7 @@ void GpuChildThread::OnAssociatedInterfaceRequest(
 }
 
 void GpuChildThread::CreateGpuService(
-    ui::mojom::GpuServiceRequest request,
+    viz::mojom::GpuServiceRequest request,
     ui::mojom::GpuHostPtr gpu_host,
     const gpu::GpuPreferences& gpu_preferences,
     mojo::ScopedSharedBufferHandle activity_flags) {
@@ -252,7 +254,7 @@ void GpuChildThread::CreateGpuService(
     LOG(ERROR) << "Exiting GPU process due to errors during initialization";
     gpu_service_.reset();
     gpu_host->DidFailInitialize();
-    base::MessageLoop::current()->QuitWhenIdle();
+    base::RunLoop::QuitCurrentWhenIdleDeprecated();
     return;
   }
 
@@ -286,8 +288,8 @@ void GpuChildThread::CreateGpuService(
 }
 
 void GpuChildThread::CreateFrameSinkManager(
-    cc::mojom::FrameSinkManagerRequest request,
-    cc::mojom::FrameSinkManagerClientPtr client) {
+    viz::mojom::FrameSinkManagerRequest request,
+    viz::mojom::FrameSinkManagerClientPtr client) {
   NOTREACHED();
 }
 

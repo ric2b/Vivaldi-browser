@@ -26,20 +26,21 @@
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
-#include "media/audio/sample_rates.h"
+#include "build/build_config.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/decrypt_config.h"
 #include "media/base/limits.h"
 #include "media/base/media_log.h"
 #include "media/base/media_tracks.h"
+#include "media/base/sample_rates.h"
 #include "media/base/timestamp_constants.h"
 #include "media/base/video_codecs.h"
+#include "media/base/webvtt_util.h"
 #include "media/ffmpeg/ffmpeg_common.h"
 #include "media/filters/ffmpeg_aac_bitstream_converter.h"
 #include "media/filters/ffmpeg_bitstream_converter.h"
 #include "media/filters/ffmpeg_glue.h"
 #include "media/filters/ffmpeg_h264_to_annex_b_bitstream_converter.h"
-#include "media/filters/webvtt_util.h"
 #include "media/formats/webm/webm_crypto_helpers.h"
 #include "media/media_features.h"
 #include "third_party/ffmpeg/ffmpeg_features.h"
@@ -242,8 +243,9 @@ std::unique_ptr<FFmpegDemuxerStream> FFmpegDemuxerStream::Create(
     // IsValidConfig internally and return a null scoped_ptr if not valid.
     if (!AVStreamToAudioDecoderConfig(stream, audio_config.get()) ||
         !audio_config->IsValidConfig()) {
-      MEDIA_LOG(ERROR, media_log)
-          << "FFmpegDemuxer: failed creating audio stream";
+      MEDIA_LOG(DEBUG, media_log) << "Warning, FFmpegDemuxer failed to create "
+                                     "a valid audio decoder configuration from "
+                                     "muxed stream";
       return nullptr;
     }
 
@@ -259,8 +261,9 @@ std::unique_ptr<FFmpegDemuxerStream> FFmpegDemuxerStream::Create(
     // IsValidConfig internally and return a null scoped_ptr if not valid.
     if (!AVStreamToVideoDecoderConfig(stream, video_config.get()) ||
         !video_config->IsValidConfig()) {
-      MEDIA_LOG(ERROR, media_log)
-          << "FFmpegDemuxer: failed creating video stream";
+      MEDIA_LOG(DEBUG, media_log) << "Warning, FFmpegDemuxer failed to create "
+                                     "a valid video decoder configuration from "
+                                     "muxed stream";
       return nullptr;
     }
 
@@ -1199,6 +1202,15 @@ void FFmpegDemuxer::OnOpenContextDone(const PipelineStatusCB& status_cb,
     status_cb.Run(PIPELINE_ERROR_ABORT);
     return;
   }
+
+#if defined(OS_ANDROID)
+  if (glue_->detected_hls()) {
+    MEDIA_LOG(INFO, media_log_)
+        << GetDisplayName() << ": detected HLS manifest";
+    status_cb.Run(DEMUXER_ERROR_DETECTED_HLS);
+    return;
+  }
+#endif
 
   if (!result) {
     MEDIA_LOG(ERROR, media_log_) << GetDisplayName() << ": open context failed";

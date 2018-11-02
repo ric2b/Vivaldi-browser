@@ -5,7 +5,7 @@
 package org.chromium.chrome.browser.ntp.cards;
 
 import android.support.annotation.CallSuper;
-import android.support.annotation.Nullable;
+import android.text.TextUtils;
 
 import org.chromium.base.Callback;
 import org.chromium.base.Log;
@@ -18,9 +18,11 @@ import org.chromium.chrome.browser.ntp.snippets.SnippetArticleViewHolder;
 import org.chromium.chrome.browser.ntp.snippets.SnippetsBridge;
 import org.chromium.chrome.browser.ntp.snippets.SuggestionsSource;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
+import org.chromium.chrome.browser.offlinepages.OfflinePageItem;
 import org.chromium.chrome.browser.suggestions.SuggestionsOfflineModelObserver;
 import org.chromium.chrome.browser.suggestions.SuggestionsRanker;
 import org.chromium.chrome.browser.suggestions.SuggestionsUiDelegate;
+import org.chromium.chrome.browser.util.FeatureUtilities;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -68,6 +70,9 @@ public class SuggestionsSection extends InnerNode {
      */
     private boolean mIsDataStale;
 
+    /** Whether content has been recently inserted. We reset this flag upon reading its value. */
+    private boolean mHasInsertedContent;
+
     /**
      * Delegate interface that allows dismissing this section without introducing
      * a circular dependency.
@@ -92,15 +97,26 @@ public class SuggestionsSection extends InnerNode {
 
         mHeader = new SectionHeader(info.getTitle());
         mSuggestionsList = new SuggestionsList(mSuggestionsSource, ranker, info);
-        mStatus = StatusItem.createNoSuggestionsItem(info);
+        boolean useModern = FeatureUtilities.isChromeHomeModernEnabled();
+        if (useModern) {
+            mStatus = null;
+        } else {
+            mStatus = StatusItem.createNoSuggestionsItem(info);
+        }
         mMoreButton = new ActionItem(this, ranker);
         mProgressIndicator = new ProgressItem();
-        addChildren(mHeader, mSuggestionsList, mStatus, mMoreButton, mProgressIndicator);
+        if (useModern) {
+            addChildren(mHeader, mSuggestionsList, mMoreButton, mProgressIndicator);
+        } else {
+            addChildren(mHeader, mSuggestionsList, mStatus, mMoreButton, mProgressIndicator);
+        }
 
         mOfflineModelObserver = new OfflineModelObserver(offlinePageBridge);
         uiDelegate.addDestructionObserver(mOfflineModelObserver);
 
-        mStatus.setVisible(!hasSuggestions());
+        if (!useModern) {
+            mStatus.setVisible(!hasSuggestions());
+        }
     }
 
     private static class SuggestionsList extends ChildNode implements Iterable<SnippetArticle> {
@@ -132,7 +148,6 @@ public class SuggestionsSection extends InnerNode {
         @Override
         public void onBindViewHolder(NewTabPageViewHolder holder, int position) {
             checkIndex(position);
-            assert holder instanceof SnippetArticleViewHolder;
             SnippetArticle suggestion = getSuggestionAt(position);
             mSuggestionsRanker.rankSuggestion(suggestion);
             ((SnippetArticleViewHolder) holder).onBindViewHolder(suggestion, mCategoryInfo);
@@ -209,13 +224,15 @@ public class SuggestionsSection extends InnerNode {
             itemRemovedCallback.onResult(suggestion.mTitle);
         }
 
-        public void updateSuggestionOfflineId(SnippetArticle article, Long newId) {
+        public void updateSuggestionOfflineId(
+                SnippetArticle article, Long newId, boolean isPrefetched) {
             int index = mSuggestions.indexOf(article);
             // The suggestions could have been removed / replaced in the meantime.
             if (index == -1) return;
 
             Long oldId = article.getOfflinePageOfflineId();
             article.setOfflinePageOfflineId(newId);
+            article.setIsPrefetched(isPrefetched);
 
             if ((oldId == null) == (newId == null)) return;
             notifyItemChanged(
@@ -234,10 +251,12 @@ public class SuggestionsSection extends InnerNode {
         int newSuggestionsCount = getSuggestionsCount();
         if ((newSuggestionsCount == 0) == (oldSuggestionsCount == 0)) return;
 
-        mStatus.setVisible(newSuggestionsCount == 0);
+        if (!FeatureUtilities.isChromeHomeModernEnabled()) {
+            mStatus.setVisible(newSuggestionsCount == 0);
+        }
 
-        // When the ActionItem stops being dismissable, it is possible that it was being interacted
-        // with. We need to reset the view's related property changes.
+        // When the ActionItem stops being dismissable, it is possible that it was being
+        // interacted with. We need to reset the view's related property changes.
         if (mMoreButton.isVisible()) {
             mMoreButton.notifyItemChanged(0, NewTabPageRecyclerView.RESET_FOR_DISMISS_CALLBACK);
         }
@@ -268,7 +287,10 @@ public class SuggestionsSection extends InnerNode {
     @Override
     public void onItemRangeInserted(TreeNode child, int index, int count) {
         super.onItemRangeInserted(child, index, count);
-        if (child == mSuggestionsList) onSuggestionsListCountChanged(getSuggestionsCount() - count);
+        if (child == mSuggestionsList) {
+            mHasInsertedContent = true;
+            onSuggestionsListCountChanged(getSuggestionsCount() - count);
+        }
     }
 
     @Override
@@ -337,7 +359,7 @@ public class SuggestionsSection extends InnerNode {
         }
     }
 
-    private boolean hasSuggestions() {
+    public boolean hasSuggestions() {
         return mSuggestionsList.getItemCount() != 0;
     }
 
@@ -345,8 +367,26 @@ public class SuggestionsSection extends InnerNode {
         return mSuggestionsList.getItemCount();
     }
 
+    public int getPrefetchedSuggestionsCount() {
+        int count = 0;
+        for (SnippetArticle suggestion : mSuggestionsList) {
+            if (suggestion.isPrefetched()) ++count;
+        }
+        return count;
+    }
+
     public boolean isDataStale() {
         return mIsDataStale;
+    }
+
+    /**
+     * Returns whether content has been inserted in the section since last time this method was
+     * called.
+     */
+    public boolean hasRecentlyInsertedContent() {
+        boolean value = mHasInsertedContent;
+        mHasInsertedContent = false;
+        return value;
     }
 
     public String[] getDisplayedSuggestionIds() {
@@ -468,9 +508,12 @@ public class SuggestionsSection extends InnerNode {
 
         return true;
     }
-
     /** Fetches additional suggestions only for this section. */
     public void fetchSuggestions() {
+        // We want to disable the action item while we are fetching suggestions in order to
+        // avoid fetching the same suggestions twice. See crbug.com/739648.
+        mMoreButton.setEnabled(false);
+        mMoreButton.setVisible(false);
         mSuggestionsSource.fetchSuggestions(mCategoryInfo.getCategory(),
                 getDisplayedSuggestionIds(), new Callback<List<SnippetArticle>>() {
                     @Override
@@ -478,11 +521,23 @@ public class SuggestionsSection extends InnerNode {
                         if (!isAttached()) return; // The section has been dismissed.
 
                         mProgressIndicator.setVisible(false);
-                        appendSuggestions(additionalSuggestions, /*keepSectionSize=*/false);
+
+                        appendSuggestions(additionalSuggestions, /* keepSectionSize = */ false);
+
+                        mMoreButton.setEnabled(true);
+                        mMoreButton.setVisible(true);
                     }
                 });
 
         mProgressIndicator.setVisible(true);
+    }
+
+    /**
+     * Programmatically click the more button. This differs from directly calling
+     * {@link #fetchSuggestions()} in that it disables the button.
+     */
+    public void clickMoreButton(SuggestionsUiDelegate delegate) {
+        mMoreButton.performAction(delegate);
     }
 
     /** Sets the status for the section. Some statuses can cause the suggestions to be cleared. */
@@ -491,6 +546,7 @@ public class SuggestionsSection extends InnerNode {
             clearData();
             Log.d(TAG, "setStatus: unavailable status, cleared suggestions.");
         }
+
         mProgressIndicator.setVisible(SnippetsBridge.isCategoryLoading(status));
     }
 
@@ -527,7 +583,9 @@ public class SuggestionsSection extends InnerNode {
      * (as opposed to individual items in it).
      */
     private Set<Integer> getSectionDismissalRange() {
-        if (hasSuggestions()) return Collections.emptySet();
+        if (hasSuggestions() || FeatureUtilities.isChromeHomeModernEnabled()) {
+            return Collections.emptySet();
+        }
 
         int statusCardIndex = getStartingOffsetForChild(mStatus);
         if (!mMoreButton.isVisible()) return Collections.singleton(statusCardIndex);
@@ -562,8 +620,12 @@ public class SuggestionsSection extends InnerNode {
         }
 
         @Override
-        public void onSuggestionOfflineIdChanged(SnippetArticle suggestion, @Nullable Long id) {
-            mSuggestionsList.updateSuggestionOfflineId(suggestion, id);
+        public void onSuggestionOfflineIdChanged(SnippetArticle suggestion, OfflinePageItem item) {
+            boolean isPrefetched = item != null
+                    && TextUtils.equals(item.getClientId().getNamespace(),
+                               OfflinePageBridge.SUGGESTED_ARTICLES_NAMESPACE);
+            mSuggestionsList.updateSuggestionOfflineId(
+                    suggestion, item == null ? null : item.getOfflineId(), isPrefetched);
         }
 
         @Override

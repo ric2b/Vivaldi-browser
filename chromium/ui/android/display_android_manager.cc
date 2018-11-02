@@ -32,10 +32,6 @@ void SetScreenAndroid() {
   Java_DisplayAndroidManager_onNativeSideCreated(env, (jlong)manager);
 }
 
-bool RegisterScreenAndroid(JNIEnv* env) {
-  return RegisterNativesImpl(env);
-}
-
 DisplayAndroidManager::DisplayAndroidManager() {}
 
 DisplayAndroidManager::~DisplayAndroidManager() {}
@@ -94,10 +90,9 @@ void DisplayAndroidManager::UpdateDisplay(
   if (!Display::HasForceDeviceScaleFactor())
     display.set_device_scale_factor(dipScale);
   if (!Display::HasForceColorProfile()) {
-    if (isWideColorGamut)
-      display.set_color_space(gfx::ColorSpace::CreateDisplayP3D65());
-    else
-      display.set_color_space(gfx::ColorSpace::CreateSRGB());
+    // TODO(ccameron): Use CreateDisplayP3D65 if isWideColorGamut is true, once
+    // the feature is ready to use.
+    display.set_color_space(gfx::ColorSpace::CreateSRGB());
   }
 
   display.set_size_in_pixels(bounds_in_pixels.size());

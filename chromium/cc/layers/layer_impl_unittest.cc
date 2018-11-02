@@ -25,19 +25,6 @@
 namespace cc {
 namespace {
 
-#define EXECUTE_AND_VERIFY_SUBTREE_CHANGED(code_to_test)                    \
-  root->layer_tree_impl()->ResetAllChangeTracking();                        \
-  code_to_test;                                                             \
-  EXPECT_TRUE(                                                              \
-      root->layer_tree_impl()->LayerNeedsPushPropertiesForTesting(root));   \
-  EXPECT_FALSE(                                                             \
-      root->layer_tree_impl()->LayerNeedsPushPropertiesForTesting(child));  \
-  EXPECT_FALSE(root->layer_tree_impl()->LayerNeedsPushPropertiesForTesting( \
-      grand_child));                                                        \
-  EXPECT_TRUE(root->LayerPropertyChanged());                                \
-  EXPECT_TRUE(child->LayerPropertyChanged());                               \
-  EXPECT_TRUE(grand_child->LayerPropertyChanged());
-
 #define EXECUTE_AND_VERIFY_SUBTREE_DID_NOT_CHANGE(code_to_test)             \
   root->layer_tree_impl()->ResetAllChangeTracking();                        \
   code_to_test;                                                             \
@@ -76,8 +63,14 @@ namespace {
   EXPECT_FALSE(root->layer_tree_impl()->LayerNeedsPushPropertiesForTesting( \
       grand_child));                                                        \
   EXPECT_TRUE(root->LayerPropertyChanged());                                \
+  EXPECT_TRUE(root->LayerPropertyChangedFromPropertyTrees());               \
+  EXPECT_FALSE(root->LayerPropertyChangedNotFromPropertyTrees());           \
   EXPECT_TRUE(child->LayerPropertyChanged());                               \
-  EXPECT_TRUE(grand_child->LayerPropertyChanged());
+  EXPECT_TRUE(child->LayerPropertyChangedFromPropertyTrees());              \
+  EXPECT_FALSE(child->LayerPropertyChangedNotFromPropertyTrees());          \
+  EXPECT_TRUE(grand_child->LayerPropertyChanged());                         \
+  EXPECT_TRUE(grand_child->LayerPropertyChangedFromPropertyTrees());        \
+  EXPECT_FALSE(grand_child->LayerPropertyChangedNotFromPropertyTrees());
 
 #define EXECUTE_AND_VERIFY_ONLY_LAYER_CHANGED(code_to_test)                 \
   root->layer_tree_impl()->ResetAllChangeTracking();                        \
@@ -90,6 +83,8 @@ namespace {
   EXPECT_FALSE(root->layer_tree_impl()->LayerNeedsPushPropertiesForTesting( \
       grand_child));                                                        \
   EXPECT_TRUE(root->LayerPropertyChanged());                                \
+  EXPECT_FALSE(root->LayerPropertyChangedFromPropertyTrees());              \
+  EXPECT_TRUE(root->LayerPropertyChangedNotFromPropertyTrees());            \
   EXPECT_FALSE(child->LayerPropertyChanged());                              \
   EXPECT_FALSE(grand_child->LayerPropertyChanged());
 
@@ -229,10 +224,10 @@ TEST(LayerImplTest, VerifyActiveLayerChangesAreTrackedProperly) {
   root->SetScrollable(gfx::Size(100, 100));
   host_impl.active_tree()->BuildLayerListAndPropertyTreesForTesting();
 
-  // Make root the inner viewport container layer. This ensures the later call
+  // Make root the outer viewport container layer. This ensures the later call
   // to |SetViewportBoundsDelta| will be on a viewport layer.
   LayerTreeImpl::ViewportLayerIds viewport_ids;
-  viewport_ids.inner_viewport_container = root->id();
+  viewport_ids.outer_viewport_container = root->id();
   host_impl.active_tree()->SetViewportLayersFromIds(viewport_ids);
 
   root->SetMasksToBounds(true);
@@ -243,6 +238,8 @@ TEST(LayerImplTest, VerifyActiveLayerChangesAreTrackedProperly) {
   // SetViewportBoundsDelta changes subtree only when masks_to_bounds is true.
   root->SetViewportBoundsDelta(gfx::Vector2d(222, 333));
   EXPECT_TRUE(root->LayerPropertyChanged());
+  EXPECT_TRUE(root->LayerPropertyChangedFromPropertyTrees());
+  EXPECT_FALSE(root->LayerPropertyChangedNotFromPropertyTrees());
   EXPECT_TRUE(host_impl.active_tree()->property_trees()->full_tree_damaged);
 
   root->SetMasksToBounds(false);
@@ -253,18 +250,20 @@ TEST(LayerImplTest, VerifyActiveLayerChangesAreTrackedProperly) {
   // SetViewportBoundsDelta does not change the subtree without masks_to_bounds.
   root->SetViewportBoundsDelta(gfx::Vector2d(333, 444));
   EXPECT_TRUE(root->LayerPropertyChanged());
+  EXPECT_FALSE(root->LayerPropertyChangedFromPropertyTrees());
+  EXPECT_TRUE(root->LayerPropertyChangedNotFromPropertyTrees());
   EXPECT_FALSE(host_impl.active_tree()->property_trees()->full_tree_damaged);
 
   host_impl.active_tree()->property_trees()->needs_rebuild = true;
   host_impl.active_tree()->BuildLayerListAndPropertyTreesForTesting();
   root->layer_tree_impl()->ResetAllChangeTracking();
 
-  // Ensure some node is affected by the inner viewport bounds delta. This
+  // Ensure some node is affected by the outer viewport bounds delta. This
   // ensures the later call to |SetViewportBoundsDelta| will require a
   // transform tree update.
   TransformTree& transform_tree =
       host_impl.active_tree()->property_trees()->transform_tree;
-  transform_tree.AddNodeAffectedByInnerViewportBoundsDelta(
+  transform_tree.AddNodeAffectedByOuterViewportBoundsDelta(
       child->transform_tree_index());
   EXPECT_FALSE(transform_tree.needs_update());
   root->SetViewportBoundsDelta(gfx::Vector2d(111, 222));
@@ -278,6 +277,8 @@ TEST(LayerImplTest, VerifyActiveLayerChangesAreTrackedProperly) {
   root->ScrollBy(gfx::Vector2d(7, 9));
   EXPECT_TRUE(transform_tree.needs_update());
   EXPECT_TRUE(root->LayerPropertyChanged());
+  EXPECT_TRUE(root->LayerPropertyChangedFromPropertyTrees());
+  EXPECT_FALSE(root->LayerPropertyChangedNotFromPropertyTrees());
   EXPECT_FALSE(host_impl.active_tree()->property_trees()->full_tree_damaged);
 }
 
@@ -483,10 +484,10 @@ TEST(LayerImplTest, PerspectiveTransformHasReasonableScale) {
 
 class LayerImplScrollTest : public testing::Test {
  public:
-  LayerImplScrollTest()
-      : host_impl_(settings(),
-                   &task_runner_provider_,
-                   &task_graph_runner_),
+  LayerImplScrollTest() : LayerImplScrollTest(LayerTreeSettings()) {}
+
+  LayerImplScrollTest(const LayerTreeSettings& settings)
+      : host_impl_(settings, &task_runner_provider_, &task_graph_runner_),
         root_id_(7) {
     host_impl_.active_tree()->SetRootLayerForTesting(
         LayerImpl::Create(host_impl_.active_tree(), root_id_));
@@ -520,16 +521,22 @@ class LayerImplScrollTest : public testing::Test {
 
   LayerTreeImpl* tree() { return host_impl_.active_tree(); }
 
-  LayerTreeSettings settings() {
-    LayerTreeSettings settings;
-    return settings;
-  }
-
  private:
   FakeImplTaskRunnerProvider task_runner_provider_;
   TestTaskGraphRunner task_graph_runner_;
   FakeLayerTreeHostImpl host_impl_;
   int root_id_;
+};
+
+class CommitToPendingTreeLayerImplScrollTest : public LayerImplScrollTest {
+ public:
+  CommitToPendingTreeLayerImplScrollTest() : LayerImplScrollTest(settings()) {}
+
+  LayerTreeSettings settings() {
+    LayerTreeSettings tree_settings;
+    tree_settings.commit_to_active_tree = false;
+    return tree_settings;
+  }
 };
 
 TEST_F(LayerImplScrollTest, ScrollByWithZeroOffset) {
@@ -635,7 +642,8 @@ TEST_F(LayerImplScrollTest, ScrollUserUnscrollableLayer) {
   EXPECT_VECTOR_EQ(gfx::Vector2dF(30.5f, 5), layer()->CurrentScrollOffset());
 }
 
-TEST_F(LayerImplScrollTest, PushPropertiesToMirrorsCurrentScrollOffset) {
+TEST_F(CommitToPendingTreeLayerImplScrollTest,
+       PushPropertiesToMirrorsCurrentScrollOffset) {
   gfx::ScrollOffset scroll_offset(10, 5);
   gfx::Vector2dF scroll_delta(12, 18);
 

@@ -243,7 +243,7 @@ void IPCAudioDecoder::OnInitialized(
     const PlatformMediaTimeInfo& time_info,
     const PlatformAudioConfig& audio_config,
     const PlatformVideoConfig& /* video_config */) {
-  DCHECK(g_media_task_runner->RunsTasksOnCurrentThread());
+  DCHECK(g_media_task_runner->RunsTasksInCurrentSequence());
 
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
           << Loggable(audio_config);
@@ -285,7 +285,7 @@ int IPCAudioDecoder::Read(
 }
 
 void IPCAudioDecoder::ReadInternal() {
-  DCHECK(g_media_task_runner->RunsTasksOnCurrentThread());
+  DCHECK(g_media_task_runner->RunsTasksInCurrentSequence());
 
   ipc_media_pipeline_host_->ReadDecodedData(
       PLATFORM_MEDIA_AUDIO,
@@ -294,10 +294,11 @@ void IPCAudioDecoder::ReadInternal() {
 
 void IPCAudioDecoder::DataReady(DemuxerStream::Status status,
                                 const scoped_refptr<DecoderBuffer>& buffer) {
-  DCHECK(g_media_task_runner->RunsTasksOnCurrentThread());
+  DCHECK(g_media_task_runner->RunsTasksInCurrentSequence());
 
   switch (status) {
     case DemuxerStream::Status::kAborted:
+    case DemuxerStream::Status::kError:
       frames_read_ = -1;
       media_task_done_.Signal();
       break;

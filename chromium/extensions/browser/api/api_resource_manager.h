@@ -32,6 +32,7 @@ class CastChannelAsyncApiFunction;
 namespace api {
 class BluetoothSocketApiFunction;
 class BluetoothSocketEventDispatcher;
+class SerialConnectFunction;
 class SerialEventDispatcher;
 class TCPServerSocketEventDispatcher;
 class TCPSocketEventDispatcher;
@@ -40,6 +41,10 @@ class UDPSocketEventDispatcher;
 
 template <typename T>
 struct NamedThreadTraits {
+  static_assert(T::kThreadId == content::BrowserThread::IO ||
+                    T::kThreadId == content::BrowserThread::UI,
+                "ApiResources can only belong to the IO or UI thread.");
+
   static bool IsMessageLoopValid() {
     return content::BrowserThread::IsMessageLoopValid(T::kThreadId);
   }
@@ -51,7 +56,11 @@ struct NamedThreadTraits {
 
 // An ApiResourceManager manages the lifetime of a set of resources that
 // that live on named threads (i.e. BrowserThread::IO) which ApiFunctions use.
-// Examples of such resources are sockets or USB connections.
+// Examples of such resources are sockets or USB connections. Note: The only
+// named threads that are allowed are the IO and UI threads, since all others
+// are deprecated. If we ever need a resource on a different background thread,
+// we can modify NamedThreadTraits to be more generic and just return a task
+// runner.
 //
 // Users of this class should define kThreadId to be the thread that
 // ApiResourceManager to works on. The default is defined in ApiResource.
@@ -66,7 +75,7 @@ struct NamedThreadTraits {
 //
 // class Resource {
 //  public:
-//   static const BrowserThread::ID kThreadId = BrowserThread::FILE;
+//   static const BrowserThread::ID kThreadId = BrowserThread::IO;
 //  private:
 //   friend class ApiResourceManager<Resource>;
 //   static const char* service_name() {
@@ -167,6 +176,7 @@ class ApiResourceManager : public BrowserContextKeyedAPI,
   friend class CastChannelAsyncApiFunction;
   friend class api::BluetoothSocketApiFunction;
   friend class api::BluetoothSocketEventDispatcher;
+  friend class api::SerialConnectFunction;
   friend class api::SerialEventDispatcher;
   friend class api::TCPServerSocketEventDispatcher;
   friend class api::TCPSocketEventDispatcher;

@@ -17,7 +17,6 @@
 #include "base/sequenced_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/grit/generated_resources.h"
 #include "importer/imported_notes_entry.h"
 #include "notes/notes_storage.h"
 #include "notes/notesnode.h"
@@ -60,8 +59,8 @@ Notes_Node* AsMutable(const Notes_Node* node) {
   return const_cast<Notes_Node*>(node);
 }
 
-Notes_Model::Notes_Model(Profile* profile)
-    : profile_(profile),
+Notes_Model::Notes_Model(content::BrowserContext* context)
+    : context_(context),
       root_(0),
       main_node_(nullptr),
       other_node_(nullptr),
@@ -129,7 +128,7 @@ void Notes_Model::Load(
   }
 
   // Load the notes. NotesStorage notifies us when done.
-  store_.reset(new NotesStorage(profile_, this, task_runner.get()));
+  store_.reset(new NotesStorage(context_, this, task_runner.get()));
   store_->LoadNotes(CreateLoadDetails());
 }
 

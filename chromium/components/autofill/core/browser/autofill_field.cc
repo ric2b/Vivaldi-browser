@@ -543,7 +543,9 @@ AutofillField::AutofillField()
       credit_card_number_offset_(0),
       previously_autofilled_(false),
       generation_type_(AutofillUploadContents::Field::NO_GENERATION),
-      form_classifier_outcome_(AutofillUploadContents::Field::NO_OUTCOME) {}
+      generated_password_changed_(false),
+      form_classifier_outcome_(AutofillUploadContents::Field::NO_OUTCOME),
+      username_vote_type_(AutofillUploadContents::Field::NO_INFORMATION) {}
 
 AutofillField::AutofillField(const FormFieldData& field,
                              const base::string16& unique_name)
@@ -558,7 +560,9 @@ AutofillField::AutofillField(const FormFieldData& field,
       previously_autofilled_(false),
       parseable_name_(field.name),
       generation_type_(AutofillUploadContents::Field::NO_GENERATION),
-      form_classifier_outcome_(AutofillUploadContents::Field::NO_OUTCOME) {}
+      generated_password_changed_(false),
+      form_classifier_outcome_(AutofillUploadContents::Field::NO_OUTCOME),
+      username_vote_type_(AutofillUploadContents::Field::NO_INFORMATION) {}
 
 AutofillField::~AutofillField() {}
 
@@ -592,6 +596,17 @@ void AutofillField::SetHtmlType(HtmlFieldType type, HtmlFieldMode mode) {
     phone_part_ = PHONE_SUFFIX;
   else
     phone_part_ = IGNORED;
+}
+
+void AutofillField::SetTypeTo(ServerFieldType type) {
+  if (type == UNKNOWN_TYPE || type == NO_SERVER_DATA) {
+    heuristic_type_ = UNKNOWN_TYPE;
+    server_type_ = NO_SERVER_DATA;
+  } else if (server_type_ == NO_SERVER_DATA) {
+    heuristic_type_ = type;
+  } else {
+    server_type_ = type;
+  }
 }
 
 AutofillType AutofillField::Type() const {

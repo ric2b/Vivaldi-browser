@@ -27,13 +27,12 @@
 #include "modules/media_controls/MediaControlsImpl.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/dom/MutationCallback.h"
 #include "core/dom/MutationObserver.h"
 #include "core/dom/MutationObserverInit.h"
 #include "core/dom/MutationRecord.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/events/KeyboardEvent.h"
-#include "core/events/MouseEvent.h"
+#include "core/events/PointerEvent.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
 #include "core/fullscreen/Fullscreen.h"
@@ -45,7 +44,6 @@
 #include "core/html/track/TextTrackContainer.h"
 #include "core/html/track/TextTrackList.h"
 #include "core/layout/LayoutObject.h"
-#include "core/layout/LayoutTheme.h"
 #include "core/page/SpatialNavigation.h"
 #include "core/resize_observer/ResizeObserver.h"
 #include "core/resize_observer/ResizeObserverEntry.h"
@@ -53,6 +51,7 @@
 #include "modules/media_controls/MediaControlsOrientationLockDelegate.h"
 #include "modules/media_controls/MediaControlsRotateToFullscreenDelegate.h"
 #include "modules/media_controls/MediaControlsWindowEventListener.h"
+#include "modules/media_controls/MediaDownloadInProductHelpManager.h"
 #include "modules/media_controls/elements/MediaControlCastButtonElement.h"
 #include "modules/media_controls/elements/MediaControlCurrentTimeDisplayElement.h"
 #include "modules/media_controls/elements/MediaControlDownloadButtonElement.h"
@@ -152,7 +151,7 @@ bool PreferHiddenVolumeControls(const Document& document) {
          document.GetSettings()->GetPreferHiddenVolumeControls();
 }
 
-}  // anonymous namespace
+}  // namespace
 
 class MediaControlsImpl::BatchedControlUpdate {
   WTF_MAKE_NONCOPYABLE(BatchedControlUpdate);
@@ -208,31 +207,23 @@ class MediaControlsImpl::MediaControlsResizeObserverDelegate final
 // Observes changes to the HTMLMediaElement attributes that affect controls.
 // Currently only observes the disableRemotePlayback attribute.
 class MediaControlsImpl::MediaElementMutationCallback
-    : public MutationCallback {
+    : public MutationObserver::Delegate {
  public:
   explicit MediaElementMutationCallback(MediaControlsImpl* controls)
-      : controls_(controls) {
-    observer_ = MutationObserver::Create(this);
-    Vector<String> filter;
-    filter.push_back(HTMLNames::disableremoteplaybackAttr.ToString());
+      : controls_(controls), observer_(MutationObserver::Create(this)) {
     MutationObserverInit init;
     init.setAttributeOldValue(true);
     init.setAttributes(true);
-    init.setAttributeFilter(filter);
+    init.setAttributeFilter({HTMLNames::disableremoteplaybackAttr.ToString()});
     observer_->observe(&controls_->MediaElement(), init, ASSERT_NO_EXCEPTION);
   }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
-    visitor->Trace(controls_);
-    visitor->Trace(observer_);
-    MutationCallback::Trace(visitor);
+  ExecutionContext* GetExecutionContext() const override {
+    return &controls_->GetDocument();
   }
 
-  void Disconnect() { observer_->disconnect(); }
-
- private:
-  void Call(const HeapVector<Member<MutationRecord>>& records,
-            MutationObserver*) override {
+  void Deliver(const MutationRecordVector& records,
+               MutationObserver&) override {
     for (const auto& record : records) {
       if (record->type() != "attributes")
         continue;
@@ -248,19 +239,18 @@ class MediaControlsImpl::MediaElementMutationCallback
     }
   }
 
-  ExecutionContext* GetExecutionContext() const override {
-    return &controls_->GetDocument();
+  void Disconnect() { observer_->disconnect(); }
+
+  DEFINE_INLINE_VIRTUAL_TRACE() {
+    visitor->Trace(controls_);
+    visitor->Trace(observer_);
+    MutationObserver::Delegate::Trace(visitor);
   }
 
+ private:
   Member<MediaControlsImpl> controls_;
   Member<MutationObserver> observer_;
 };
-
-MediaControls* MediaControlsImpl::Factory::Create(
-    HTMLMediaElement& media_element,
-    ShadowRoot& shadow_root) {
-  return MediaControlsImpl::Create(media_element, shadow_root);
-}
 
 MediaControlsImpl::MediaControlsImpl(HTMLMediaElement& media_element)
     : HTMLDivElement(media_element.GetDocument()),
@@ -329,6 +319,16 @@ MediaControlsImpl* MediaControlsImpl::Create(HTMLMediaElement& media_element,
     controls->rotate_to_fullscreen_delegate_ =
         new MediaControlsRotateToFullscreenDelegate(
             toHTMLVideoElement(media_element));
+  }
+
+  // Initialize download in-product-help for video elements if enabled.
+  if (media_element.GetDocument().GetSettings() &&
+      media_element.GetDocument()
+          .GetSettings()
+          ->GetMediaDownloadInProductHelpEnabled() &&
+      media_element.IsHTMLVideoElement()) {
+    controls->download_iph_manager_ =
+        new MediaDownloadInProductHelpManager(*controls);
   }
 
   shadow_root.AppendChild(controls);
@@ -525,8 +525,6 @@ void MediaControlsImpl::Reset() {
   BatchedControlUpdate batch(this);
 
   const double duration = MediaElement().duration();
-  duration_display_->setTextContent(
-      LayoutTheme::GetTheme().FormatMediaControlsTime(duration));
   duration_display_->SetCurrentValue(duration);
 
   // Show everything that we might hide.
@@ -581,6 +579,8 @@ void MediaControlsImpl::MaybeShow() {
   // Only make the controls visible if they won't get hidden by OnTimeUpdate.
   if (MediaElement().paused() || !ShouldHideMediaControls())
     MakeOpaque();
+  if (download_iph_manager_)
+    download_iph_manager_->SetControlsVisibility(true);
 }
 
 void MediaControlsImpl::Hide() {
@@ -588,6 +588,8 @@ void MediaControlsImpl::Hide() {
   panel_->SetIsDisplayed(false);
   if (overlay_play_button_)
     overlay_play_button_->SetIsWanted(false);
+  if (download_iph_manager_)
+    download_iph_manager_->SetControlsVisibility(false);
 }
 
 bool MediaControlsImpl::IsVisible() const {
@@ -605,8 +607,7 @@ void MediaControlsImpl::MakeTransparent() {
 bool MediaControlsImpl::ShouldHideMediaControls(unsigned behavior_flags) const {
   // Never hide for a media element without visual representation.
   if (!MediaElement().IsHTMLVideoElement() || !MediaElement().HasVideo() ||
-      toHTMLVideoElement(MediaElement()).GetMediaRemotingStatus() ==
-          HTMLVideoElement::MediaRemotingStatus::kStarted) {
+      toHTMLVideoElement(MediaElement()).IsRemotingInterstitialVisible()) {
     return false;
   }
 
@@ -643,6 +644,10 @@ bool MediaControlsImpl::ShouldHideMediaControls(unsigned behavior_flags) const {
   if (text_track_list_->IsWanted() || overflow_list_->IsWanted())
     return false;
 
+  // Don't hide the media controls while the in product help is showing.
+  if (download_iph_manager_ && download_iph_manager_->IsShowingInProductHelp())
+    return false;
+
   return true;
 }
 
@@ -675,14 +680,7 @@ void MediaControlsImpl::EndScrubbing() {
 }
 
 void MediaControlsImpl::UpdateCurrentTimeDisplay() {
-  double now = MediaElement().currentTime();
-  double duration = MediaElement().duration();
-
-  // Allow the theme to format the time.
-  current_time_display_->setInnerText(
-      LayoutTheme::GetTheme().FormatMediaControlsCurrentTime(now, duration),
-      IGNORE_EXCEPTION_FOR_TESTING);
-  current_time_display_->SetCurrentValue(now);
+  current_time_display_->SetCurrentValue(MediaElement().currentTime());
 }
 
 void MediaControlsImpl::ToggleTextTrackList() {
@@ -821,19 +819,18 @@ void MediaControlsImpl::DefaultEventHandler(Event* event) {
     return;
   }
 
-  if (event->type() == EventTypeNames::mouseover) {
+  if (event->type() == EventTypeNames::pointerover) {
     if (!ContainsRelatedTarget(event)) {
       is_mouse_over_controls_ = true;
       if (!MediaElement().paused()) {
         MakeOpaque();
-        if (ShouldHideMediaControls())
-          StartHideMediaControlsTimer();
+        StartHideMediaControlsIfNecessary();
       }
     }
     return;
   }
 
-  if (event->type() == EventTypeNames::mouseout) {
+  if (event->type() == EventTypeNames::pointerout) {
     if (!ContainsRelatedTarget(event)) {
       is_mouse_over_controls_ = false;
       StopHideMediaControlsTimer();
@@ -841,7 +838,7 @@ void MediaControlsImpl::DefaultEventHandler(Event* event) {
     return;
   }
 
-  if (event->type() == EventTypeNames::mousemove) {
+  if (event->type() == EventTypeNames::pointermove) {
     // When we get a mouse move, show the media controls, and start a timer
     // that will hide the media controls after a 3 seconds without a mouse move.
     MakeOpaque();
@@ -910,9 +907,9 @@ void MediaControlsImpl::ResetHideMediaControlsTimer() {
 }
 
 bool MediaControlsImpl::ContainsRelatedTarget(Event* event) {
-  if (!event->IsMouseEvent())
+  if (!event->IsPointerEvent())
     return false;
-  EventTarget* related_target = ToMouseEvent(event)->relatedTarget();
+  EventTarget* related_target = ToPointerEvent(event)->relatedTarget();
   if (!related_target)
     return false;
   return contains(related_target->ToNode());
@@ -959,9 +956,9 @@ void MediaControlsImpl::OnDurationChange() {
   const double duration = MediaElement().duration();
 
   // Update the displayed current time/duration.
-  duration_display_->setTextContent(
-      LayoutTheme::GetTheme().FormatMediaControlsTime(duration));
   duration_display_->SetCurrentValue(duration);
+  // TODO(crbug.com/756698): Determine if this is still needed since the format
+  // of the current time no longer depends on the duration.
   UpdateCurrentTimeDisplay();
 
   // Update the timeline (the UI with the seek marker).
@@ -972,6 +969,9 @@ void MediaControlsImpl::OnPlay() {
   UpdatePlayState();
   timeline_->SetPosition(MediaElement().currentTime());
   UpdateCurrentTimeDisplay();
+
+  if (download_iph_manager_)
+    download_iph_manager_->SetIsPlaying(true);
 }
 
 void MediaControlsImpl::OnPlaying() {
@@ -987,6 +987,9 @@ void MediaControlsImpl::OnPause() {
   MakeOpaque();
 
   StopHideMediaControlsTimer();
+
+  if (download_iph_manager_)
+    download_iph_manager_->SetIsPlaying(false);
 }
 
 void MediaControlsImpl::OnTextTracksAddedOrRemoved() {
@@ -1039,14 +1042,6 @@ void MediaControlsImpl::NotifyElementSizeChanged(DOMRectReadOnly* new_size) {
   IntSize old_size = size_;
   size_.SetWidth(new_size->width());
   size_.SetHeight(new_size->height());
-
-  // Adjust for effective zoom.
-  if (panel_->GetLayoutObject() && panel_->GetLayoutObject()->Style()) {
-    size_.SetWidth(ceil(size_.Width() /
-                        panel_->GetLayoutObject()->Style()->EffectiveZoom()));
-    size_.SetHeight(ceil(size_.Height() /
-                         panel_->GetLayoutObject()->Style()->EffectiveZoom()));
-  }
 
   // Don't bother to do any work if this matches the most recent size.
   if (old_size != size_)
@@ -1230,6 +1225,24 @@ void MediaControlsImpl::HideAllMenus() {
     text_track_list_->SetVisible(false);
 }
 
+void MediaControlsImpl::StartHideMediaControlsIfNecessary() {
+  if (ShouldHideMediaControls())
+    StartHideMediaControlsTimer();
+}
+
+const MediaControlDownloadButtonElement& MediaControlsImpl::DownloadButton()
+    const {
+  return *download_button_;
+}
+
+void MediaControlsImpl::DidDismissDownloadInProductHelp() {
+  StartHideMediaControlsIfNecessary();
+}
+
+MediaDownloadInProductHelpManager* MediaControlsImpl::DownloadInProductHelp() {
+  return download_iph_manager_;
+}
+
 DEFINE_TRACE(MediaControlsImpl) {
   visitor->Trace(element_mutation_callback_);
   visitor->Trace(resize_observer_);
@@ -1255,6 +1268,7 @@ DEFINE_TRACE(MediaControlsImpl) {
   visitor->Trace(window_event_listener_);
   visitor->Trace(orientation_lock_delegate_);
   visitor->Trace(rotate_to_fullscreen_delegate_);
+  visitor->Trace(download_iph_manager_);
   MediaControls::Trace(visitor);
   HTMLDivElement::Trace(visitor);
 }

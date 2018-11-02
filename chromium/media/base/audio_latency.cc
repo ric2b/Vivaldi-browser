@@ -13,6 +13,10 @@
 #include "build/build_config.h"
 #include "media/base/limits.h"
 
+#if defined(OS_ANDROID)
+#include "base/android/build_info.h"
+#endif
+
 #if defined(OS_MACOSX)
 #include "media/base/mac/audio_latency_mac.h"
 #endif
@@ -35,6 +39,23 @@ uint32_t RoundUpToPowerOfTwo(uint32_t v) {
 }
 #endif
 }  // namespace
+
+// static
+bool AudioLatency::IsResamplingPassthroughSupported(LatencyType type) {
+#if defined(OS_CHROMEOS)
+  return true;
+#elif defined(OS_ANDROID)
+  // Only N MR1+ has support for OpenSLES performance modes which allow for
+  // power efficient playback. Per the Android audio team, we shouldn't waste
+  // cycles on resampling when using the playback mode. See OpenSLESOutputStream
+  // for additional implementation details.
+  return type == LATENCY_PLAYBACK &&
+         base::android::BuildInfo::GetInstance()->sdk_int() >=
+             base::android::SDK_VERSION_NOUGAT_MR1;
+#else
+  return false;
+#endif
+}
 
 // static
 int AudioLatency::GetHighLatencyBufferSize(int sample_rate,
@@ -66,11 +87,7 @@ int AudioLatency::GetHighLatencyBufferSize(int sample_rate,
   const int high_latency_buffer_size = RoundUpToPowerOfTwo(twenty_ms_size);
 #endif  // defined(OS_WIN)
 
-#if defined(OS_CHROMEOS)
-  return high_latency_buffer_size;  // No preference.
-#else
   return std::max(preferred_buffer_size, high_latency_buffer_size);
-#endif  // defined(OS_CHROMEOS)
 }
 
 // static
@@ -89,10 +106,10 @@ int AudioLatency::GetRtcBufferSize(int sample_rate, int hardware_buffer_size) {
     return frames_per_buffer;
   }
 
-#if defined(OS_LINUX) || defined(OS_MACOSX)
-  // On Linux and MacOS, the low level IO implementations on the browser side
-  // supports all buffer size the clients want. We use the native peer
-  // connection buffer size (10ms) to achieve best possible performance.
+#if defined(OS_LINUX) || defined(OS_MACOSX) || defined(OS_FUCHSIA)
+  // On Linux, MacOS and Fuchsia, the low level IO implementations on the
+  // browser side supports all buffer size the clients want. We use the native
+  // peer connection buffer size (10ms) to achieve best possible performance.
   frames_per_buffer = sample_rate / 100;
 #elif defined(OS_ANDROID)
   // TODO(olka/henrika): This settings are very old, need to be revisited.

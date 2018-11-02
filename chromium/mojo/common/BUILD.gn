@@ -30,6 +30,12 @@ mojom("common_custom_types") {
   js_bindings_mode = "both"
 }
 
+mojom("read_only_buffer") {
+  sources = [
+    "read_only_buffer.mojom",
+  ]
+}
+
 component("common_base") {
   output_name = "mojo_common_lib"
 
@@ -66,7 +72,6 @@ test("mojo_common_unittests") {
     ":struct_traits",
     ":test_common_custom_types",
     "//base",
-    "//base:message_loop_tests",
     "//base/test:test_support",
     "//mojo/edk/test:run_all_unittests",
     "//mojo/edk/test:test_support",

@@ -13,14 +13,14 @@
 #include "cc/base/switches.h"
 #include "cc/layers/solid_color_layer.h"
 #include "cc/layers/texture_layer.h"
-#include "cc/output/copy_output_request.h"
-#include "cc/output/copy_output_result.h"
 #include "cc/output/software_output_device.h"
 #include "cc/test/pixel_comparator.h"
 #include "cc/test/pixel_test_output_surface.h"
 #include "cc/test/pixel_test_utils.h"
 #include "cc/test/test_in_process_context_provider.h"
 #include "cc/trees/layer_tree_impl.h"
+#include "components/viz/common/quads/copy_output_request.h"
+#include "components/viz/common/quads/copy_output_result.h"
 #include "components/viz/common/quads/texture_mailbox.h"
 #include "components/viz/test/paths.h"
 #include "components/viz/test/test_layer_tree_frame_sink.h"
@@ -56,7 +56,7 @@ LayerTreePixelTest::CreateLayerTreeFrameSink(
       !HasImplThread() &&
       !layer_tree_host()->GetSettings().single_thread_proxy_scheduler;
   auto delegating_output_surface =
-      base::MakeUnique<viz::TestLayerTreeFrameSink>(
+      std::make_unique<viz::TestLayerTreeFrameSink>(
           compositor_context_provider, std::move(worker_context_provider),
           shared_bitmap_manager(), gpu_memory_buffer_manager(),
           viz::RendererSettings(), ImplThreadTaskRunner(),
@@ -79,23 +79,23 @@ LayerTreePixelTest::CreateDisplayOutputSurfaceOnThread(
     display_context_provider->BindToCurrentThread();
 
     bool flipped_output_surface = false;
-    display_output_surface = base::MakeUnique<PixelTestOutputSurface>(
+    display_output_surface = std::make_unique<PixelTestOutputSurface>(
         std::move(display_context_provider), flipped_output_surface);
   } else {
-    display_output_surface = base::MakeUnique<PixelTestOutputSurface>(
-        base::MakeUnique<SoftwareOutputDevice>());
+    display_output_surface = std::make_unique<PixelTestOutputSurface>(
+        std::make_unique<SoftwareOutputDevice>());
   }
   return std::move(display_output_surface);
 }
 
-std::unique_ptr<CopyOutputRequest>
+std::unique_ptr<viz::CopyOutputRequest>
 LayerTreePixelTest::CreateCopyOutputRequest() {
-  return CopyOutputRequest::CreateBitmapRequest(base::BindOnce(
+  return viz::CopyOutputRequest::CreateBitmapRequest(base::BindOnce(
       &LayerTreePixelTest::ReadbackResult, base::Unretained(this)));
 }
 
 void LayerTreePixelTest::ReadbackResult(
-    std::unique_ptr<CopyOutputResult> result) {
+    std::unique_ptr<viz::CopyOutputResult> result) {
   ASSERT_TRUE(result->HasBitmap());
   result_bitmap_ = result->TakeBitmap();
   EndTest();

@@ -44,6 +44,13 @@ namespace content {
 
 namespace {
 
+// Use this to get a new unique ID for a NavigationHandle during construction.
+// The returned ID is guaranteed to be nonzero (zero is the "no ID" indicator).
+int64_t GetUniqueIDInConstructor() {
+  static int64_t unique_id_counter = 0;
+  return ++unique_id_counter;
+}
+
 void UpdateThrottleCheckResult(
     NavigationThrottle::ThrottleCheckResult* to_update,
     NavigationThrottle::ThrottleCheckResult result) {
@@ -111,6 +118,7 @@ NavigationHandleImpl::NavigationHandleImpl(
       request_context_type_(REQUEST_CONTEXT_TYPE_UNSPECIFIED),
       mixed_content_context_type_(
           blink::WebMixedContentContextType::kBlockable),
+      navigation_id_(GetUniqueIDInConstructor()),
       should_replace_current_entry_(false),
       redirect_chain_(redirect_chain),
       is_download_(false),
@@ -194,9 +202,9 @@ NavigationHandleImpl::~NavigationHandleImpl() {
   // from the renderer need to be cleaned up. These are marked as protected in
   // the RDHI, so they do not get cancelled when frames are destroyed.
   if (is_transferring()) {
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
-        base::Bind(&NotifyAbandonedTransferNavigation, GetGlobalRequestID()));
+    BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
+                            base::BindOnce(&NotifyAbandonedTransferNavigation,
+                                           GetGlobalRequestID()));
   }
 
   if (!IsRendererDebugURL(url_))
@@ -217,6 +225,10 @@ NavigationHandleImpl::~NavigationHandleImpl() {
 
 NavigatorDelegate* NavigationHandleImpl::GetDelegate() const {
   return frame_tree_node_->navigator()->GetDelegate();
+}
+
+int64_t NavigationHandleImpl::GetNavigationId() const {
+  return navigation_id_;
 }
 
 const GURL& NavigationHandleImpl::GetURL() {
@@ -358,8 +370,7 @@ net::HostPortPair NavigationHandleImpl::GetSocketAddress() {
 
 void NavigationHandleImpl::Resume(NavigationThrottle* resuming_throttle) {
   DCHECK(resuming_throttle);
-  // TODO(csharrison): Convert to DCHECK when crbug.com/736249 is resolved.
-  CHECK_EQ(resuming_throttle, GetDeferringThrottle());
+  DCHECK_EQ(resuming_throttle, GetDeferringThrottle());
   ResumeInternal();
 }
 
@@ -367,8 +378,7 @@ void NavigationHandleImpl::CancelDeferredNavigation(
     NavigationThrottle* cancelling_throttle,
     NavigationThrottle::ThrottleCheckResult result) {
   DCHECK(cancelling_throttle);
-  // TODO(csharrison): Convert to DCHECK when crbug.com/736249 is resolved.
-  CHECK_EQ(cancelling_throttle, GetDeferringThrottle());
+  DCHECK_EQ(cancelling_throttle, GetDeferringThrottle());
   CancelDeferredNavigationInternal(result);
 }
 
@@ -497,9 +507,13 @@ NavigationData* NavigationHandleImpl::GetNavigationData() {
   return navigation_data_.get();
 }
 
+void NavigationHandleImpl::SetOnDeferCallbackForTesting(
+    const base::Closure& on_defer_callback) {
+  on_defer_callback_for_testing_ = on_defer_callback;
+}
+
 const GlobalRequestID& NavigationHandleImpl::GetGlobalRequestID() {
-  DCHECK(state_ == WILL_PROCESS_RESPONSE || state_ == DEFERRING_RESPONSE ||
-         state_ == READY_TO_COMMIT);
+  DCHECK(state_ >= WILL_PROCESS_RESPONSE);
   return request_id_;
 }
 
@@ -572,8 +586,11 @@ void NavigationHandleImpl::WillStartRequest(
     navigation_ui_data_ = GetDelegate()->GetNavigationUIData(this);
 
   // Notify each throttle of the request.
+  base::Closure on_defer_callback_copy = on_defer_callback_for_testing_;
   NavigationThrottle::ThrottleCheckResult result = CheckWillStartRequest();
   if (result == NavigationThrottle::DEFER) {
+    if (!on_defer_callback_copy.is_null())
+      on_defer_callback_copy.Run();
     // DO NOT ADD CODE: the NavigationHandle might have been destroyed during
     // one of the NavigationThrottle checks.
     return;
@@ -634,8 +651,11 @@ void NavigationHandleImpl::WillRedirectRequest(
   }
 
   // Notify each throttle of the request.
+  base::Closure on_defer_callback_copy = on_defer_callback_for_testing_;
   NavigationThrottle::ThrottleCheckResult result = CheckWillRedirectRequest();
   if (result == NavigationThrottle::DEFER) {
+    if (!on_defer_callback_copy.is_null())
+      on_defer_callback_copy.Run();
     // DO NOT ADD CODE: the NavigationHandle might have been destroyed during
     // one of the NavigationThrottle checks.
     return;
@@ -674,8 +694,11 @@ void NavigationHandleImpl::WillProcessResponse(
   transfer_callback_ = transfer_callback;
 
   // Notify each throttle of the response.
+  base::Closure on_defer_callback_copy = on_defer_callback_for_testing_;
   NavigationThrottle::ThrottleCheckResult result = CheckWillProcessResponse();
   if (result == NavigationThrottle::DEFER) {
+    if (!on_defer_callback_copy.is_null())
+      on_defer_callback_copy.Run();
     // DO NOT ADD CODE: the NavigationHandle might have been destroyed during
     // one of the NavigationThrottle checks.
     return;
@@ -978,9 +1001,12 @@ void NavigationHandleImpl::ResumeInternal() {
                                "Resume");
 
   NavigationThrottle::ThrottleCheckResult result = NavigationThrottle::DEFER;
+  base::Closure on_defer_callback_copy = on_defer_callback_for_testing_;
   if (state_ == DEFERRING_START) {
     result = CheckWillStartRequest();
     if (result == NavigationThrottle::DEFER) {
+      if (!on_defer_callback_copy.is_null())
+        on_defer_callback_copy.Run();
       // DO NOT ADD CODE: the NavigationHandle might have been destroyed during
       // one of the NavigationThrottle checks.
       return;
@@ -988,6 +1014,8 @@ void NavigationHandleImpl::ResumeInternal() {
   } else if (state_ == DEFERRING_REDIRECT) {
     result = CheckWillRedirectRequest();
     if (result == NavigationThrottle::DEFER) {
+      if (!on_defer_callback_copy.is_null())
+        on_defer_callback_copy.Run();
       // DO NOT ADD CODE: the NavigationHandle might have been destroyed during
       // one of the NavigationThrottle checks.
       return;
@@ -995,6 +1023,8 @@ void NavigationHandleImpl::ResumeInternal() {
   } else {
     result = CheckWillProcessResponse();
     if (result == NavigationThrottle::DEFER) {
+      if (!on_defer_callback_copy.is_null())
+        on_defer_callback_copy.Run();
       // DO NOT ADD CODE: the NavigationHandle might have been destroyed during
       // one of the NavigationThrottle checks.
       return;
@@ -1077,11 +1107,6 @@ bool NavigationHandleImpl::MaybeTransferAndProceedInternal() {
     return false;
   }
 
-  // Subframes shouldn't swap processes unless out-of-process iframes are
-  // possible.
-  if (!IsInMainFrame() && !SiteIsolationPolicy::AreCrossProcessFramesPossible())
-    return true;
-
   // If this is a download, do not do a cross-site check. The renderer will
   // see it is a download and abort the request.
   //
@@ -1108,8 +1133,7 @@ bool NavigationHandleImpl::MaybeTransferAndProceedInternal() {
   // above) that a process transfer is needed. Process transfers are skipped for
   // WebUI processes for now, since e.g. chrome://settings has multiple
   // "cross-site" chrome:// frames, and that doesn't yet work cross-process.
-  if (SiteIsolationPolicy::AreCrossProcessFramesPossible() &&
-      !ChildProcessSecurityPolicyImpl::GetInstance()->HasWebUIBindings(
+  if (!ChildProcessSecurityPolicyImpl::GetInstance()->HasWebUIBindings(
           render_frame_host_->GetProcess()->GetID())) {
     should_transfer |= manager->IsRendererTransferNeededForNavigation(
         render_frame_host_, url_);

@@ -16,6 +16,7 @@
 #include "components/payments/core/payment_address.h"
 #include "components/payments/core/payment_instrument.h"
 #include "components/payments/core/payment_request_data_util.h"
+#include "components/payments/core/payment_shipping_option.h"
 #include "components/payments/core/payments_test_util.h"
 #include "ios/chrome/browser/payments/payment_request_test_util.h"
 #import "ios/chrome/browser/ui/payments/payment_request_unittest_base.h"
@@ -36,28 +37,25 @@
 
 @implementation PaymentRequestCoordinatorDelegateMock
 
+typedef void (^mock_coordinator_confirm)(PaymentRequestCoordinator*);
 typedef void (^mock_coordinator_cancel)(PaymentRequestCoordinator*);
-typedef void (^mock_coordinator_complete)(PaymentRequestCoordinator*,
-                                          const std::string&,
-                                          const std::string&);
 typedef void (^mock_coordinator_select_shipping_address)(
     PaymentRequestCoordinator*,
     const autofill::AutofillProfile&);
 typedef void (^mock_coordinator_select_shipping_option)(
     PaymentRequestCoordinator*,
-    const web::PaymentShippingOption&);
+    const payments::PaymentShippingOption&);
+
+- (void)paymentRequestCoordinatorDidConfirm:
+    (PaymentRequestCoordinator*)coordinator {
+  return static_cast<mock_coordinator_confirm>([self blockForSelector:_cmd])(
+      coordinator);
+}
 
 - (void)paymentRequestCoordinatorDidCancel:
     (PaymentRequestCoordinator*)coordinator {
   return static_cast<mock_coordinator_cancel>([self blockForSelector:_cmd])(
       coordinator);
-}
-
-- (void)paymentRequestCoordinator:(PaymentRequestCoordinator*)coordinator
-         didReceiveFullMethodName:(const std::string&)methodName
-               stringifiedDetails:(const std::string&)stringifiedDetails {
-  return static_cast<mock_coordinator_complete>([self blockForSelector:_cmd])(
-      coordinator, methodName, stringifiedDetails);
 }
 
 - (void)paymentRequestCoordinator:(PaymentRequestCoordinator*)coordinator
@@ -69,7 +67,7 @@ typedef void (^mock_coordinator_select_shipping_option)(
 
 - (void)paymentRequestCoordinator:(PaymentRequestCoordinator*)coordinator
           didSelectShippingOption:
-              (const web::PaymentShippingOption&)shippingOption {
+              (const payments::PaymentShippingOption&)shippingOption {
   return static_cast<mock_coordinator_select_shipping_option>(
       [self blockForSelector:_cmd])(coordinator, shippingOption);
 }
@@ -107,6 +105,18 @@ TEST_F(PaymentRequestCoordinatorTest, StartAndStop) {
   [coordinator setPaymentRequest:payment_request()];
   [coordinator setBrowserState:browser_state()];
 
+  // Mock the coordinator delegate.
+  id check_block = ^BOOL(id value) {
+    EXPECT_TRUE(value == coordinator);
+    return YES;
+  };
+  id delegate = [OCMockObject
+      mockForProtocol:@protocol(PaymentRequestCoordinatorDelegate)];
+  [[delegate expect]
+      paymentRequestCoordinatorDidStop:[OCMArg checkWithBlock:check_block]];
+
+  [coordinator setDelegate:delegate];
+
   [coordinator start];
   // Spin the run loop to trigger the animation.
   base::test::ios::SpinRunLoopWithMaxDelay(base::TimeDelta::FromSecondsD(1));
@@ -126,57 +136,8 @@ TEST_F(PaymentRequestCoordinatorTest, StartAndStop) {
     return !base_view_controller.presentedViewController;
   });
   EXPECT_EQ(nil, base_view_controller.presentedViewController);
-}
 
-// Tests that calling the FullCardRequesterConsumer delegate method which
-// notifies the coordinator about successful unmasking of a credit card invokes
-// the appropriate coordinator delegate method with the expected information.
-TEST_F(PaymentRequestCoordinatorTest, FullCardRequestDidSucceedWithMethodName) {
-  UIViewController* base_view_controller = [[UIViewController alloc] init];
-  ScopedKeyWindow scoped_key_window_;
-  [scoped_key_window_.Get() setRootViewController:base_view_controller];
-
-  PaymentRequestCoordinator* coordinator = [[PaymentRequestCoordinator alloc]
-      initWithBaseViewController:base_view_controller];
-  [coordinator setPaymentRequest:payment_request()];
-
-  id delegate = [OCMockObject
-      mockForProtocol:@protocol(PaymentMethodSelectionCoordinatorDelegate)];
-  id delegate_mock([[PaymentRequestCoordinatorDelegateMock alloc]
-      initWithRepresentedObject:delegate]);
-  SEL selector = @selector
-      (paymentRequestCoordinator:didReceiveFullMethodName:stringifiedDetails:);
-  [delegate_mock onSelector:selector
-       callBlockExpectation:^(PaymentRequestCoordinator* callerCoordinator,
-                              const std::string& methodName,
-                              const std::string& stringifiedDetails) {
-         EXPECT_EQ("visa", methodName);
-
-         std::string cvc;
-         std::unique_ptr<base::DictionaryValue> detailsDict =
-             base::DictionaryValue::From(
-                 base::JSONReader::Read(stringifiedDetails));
-         detailsDict->GetString("cardSecurityCode", &cvc);
-         EXPECT_EQ("123", cvc);
-
-         EXPECT_EQ(coordinator, callerCoordinator);
-       }];
-  [coordinator setDelegate:delegate_mock];
-
-  std::string methodName = "visa";
-  std::string appLocale = "";
-
-  std::unique_ptr<base::DictionaryValue> response_value =
-      payments::data_util::GetBasicCardResponseFromAutofillCreditCard(
-          *credit_cards().back(), base::ASCIIToUTF16("123"), *profiles().back(),
-          appLocale)
-          .ToDictionaryValue();
-  std::string stringifiedDetails;
-  base::JSONWriter::Write(*response_value, &stringifiedDetails);
-
-  // Call the card unmasking delegate method.
-  [coordinator fullCardRequestDidSucceedWithMethodName:methodName
-                                    stringifiedDetails:stringifiedDetails];
+  EXPECT_OCMOCK_VERIFY(delegate);
 }
 
 // Tests that calling the ShippingAddressSelectionCoordinator delegate method
@@ -223,11 +184,11 @@ TEST_F(PaymentRequestCoordinatorTest, DidSelectShippingOption) {
       initWithBaseViewController:base_view_controller];
   [coordinator setPaymentRequest:payment_request()];
 
-  web::PaymentShippingOption shipping_option;
-  shipping_option.id = base::ASCIIToUTF16("123456");
-  shipping_option.label = base::ASCIIToUTF16("1-Day");
-  shipping_option.amount.value = base::ASCIIToUTF16("0.99");
-  shipping_option.amount.currency = base::ASCIIToUTF16("USD");
+  payments::PaymentShippingOption shipping_option;
+  shipping_option.id = "123456";
+  shipping_option.label = "1-Day";
+  shipping_option.amount.value = "0.99";
+  shipping_option.amount.currency = "USD";
 
   // Mock the coordinator delegate.
   id delegate = [OCMockObject
@@ -235,17 +196,16 @@ TEST_F(PaymentRequestCoordinatorTest, DidSelectShippingOption) {
   id delegate_mock([[PaymentRequestCoordinatorDelegateMock alloc]
       initWithRepresentedObject:delegate]);
   SEL selector = @selector(paymentRequestCoordinator:didSelectShippingOption:);
-  [delegate_mock
-                onSelector:selector
-      callBlockExpectation:^(PaymentRequestCoordinator* callerCoordinator,
-                             const web::PaymentShippingOption& shippingOption) {
-        EXPECT_EQ(shipping_option, shippingOption);
-        EXPECT_EQ(coordinator, callerCoordinator);
-      }];
+  [delegate_mock onSelector:selector
+       callBlockExpectation:^(
+           PaymentRequestCoordinator* callerCoordinator,
+           const payments::PaymentShippingOption& shippingOption) {
+         EXPECT_EQ(shipping_option, shippingOption);
+         EXPECT_EQ(coordinator, callerCoordinator);
+       }];
   [coordinator setDelegate:delegate_mock];
 
   // Call the ShippingOptionSelectionCoordinator delegate method.
-
   [coordinator shippingOptionSelectionCoordinator:nil
                           didSelectShippingOption:&shipping_option];
 }
@@ -281,4 +241,66 @@ TEST_F(PaymentRequestCoordinatorTest, DidCancel) {
 
   // Call the controller delegate method.
   [coordinator paymentRequestViewControllerDidCancel:nil];
+}
+
+// Tests that calling the view controller delegate method which notifies the
+// coordinator about confirmation of the PaymentRequest invokes the
+// corresponding coordinator delegate method.
+TEST_F(PaymentRequestCoordinatorTest, DidConfirm) {
+  UIViewController* base_view_controller = [[UIViewController alloc] init];
+  ScopedKeyWindow scoped_key_window_;
+  [scoped_key_window_.Get() setRootViewController:base_view_controller];
+
+  PaymentRequestCoordinator* coordinator = [[PaymentRequestCoordinator alloc]
+      initWithBaseViewController:base_view_controller];
+  [coordinator setPaymentRequest:payment_request()];
+
+  // Mock the coordinator delegate.
+  id delegate = [OCMockObject
+      mockForProtocol:@protocol(PaymentMethodSelectionCoordinatorDelegate)];
+  id delegate_mock([[PaymentRequestCoordinatorDelegateMock alloc]
+      initWithRepresentedObject:delegate]);
+  SEL selector = @selector(paymentRequestCoordinatorDidConfirm:);
+  [delegate_mock onSelector:selector
+       callBlockExpectation:^(PaymentRequestCoordinator* callerCoordinator) {
+         EXPECT_EQ(coordinator, callerCoordinator);
+       }];
+  [coordinator setDelegate:delegate_mock];
+  [coordinator setBrowserState:browser_state()];
+
+  [coordinator start];
+  // Spin the run loop to trigger the animation.
+  base::test::ios::SpinRunLoopWithMaxDelay(base::TimeDelta::FromSecondsD(1));
+
+  // Call the controller delegate method.
+  [coordinator paymentRequestViewControllerDidConfirm:nil];
+}
+
+// Tests that calling the PaymentItemsDisplayCoordinatorDelegate delegate method
+// which notifies the coordinator about confirmation of the PaymentRequest
+// invokes the corresponding coordinator delegate method..
+TEST_F(PaymentRequestCoordinatorTest,
+       PaymentItemsDisplayCoordinatorDidConfirm) {
+  UIViewController* base_view_controller = [[UIViewController alloc] init];
+  ScopedKeyWindow scoped_key_window_;
+  [scoped_key_window_.Get() setRootViewController:base_view_controller];
+
+  PaymentRequestCoordinator* coordinator = [[PaymentRequestCoordinator alloc]
+      initWithBaseViewController:base_view_controller];
+  [coordinator setPaymentRequest:payment_request()];
+
+  // Mock the coordinator delegate.
+  id delegate = [OCMockObject
+      mockForProtocol:@protocol(PaymentMethodSelectionCoordinatorDelegate)];
+  id delegate_mock([[PaymentRequestCoordinatorDelegateMock alloc]
+      initWithRepresentedObject:delegate]);
+  SEL selector = @selector(paymentRequestCoordinatorDidConfirm:);
+  [delegate_mock onSelector:selector
+       callBlockExpectation:^(PaymentRequestCoordinator* callerCoordinator) {
+         EXPECT_EQ(coordinator, callerCoordinator);
+       }];
+  [coordinator setDelegate:delegate_mock];
+
+  // Call the PaymentItemsDisplayCoordinatorDelegate delegate method.
+  [coordinator paymentItemsDisplayCoordinatorDidConfirm:nil];
 }

@@ -7,6 +7,7 @@
 
 #include "core/CoreExport.h"
 #include "core/dom/QualifiedName.h"
+#include "core/dom/events/EventTarget.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/wtf/HashMap.h"
 #include "platform/wtf/HashSet.h"
@@ -104,9 +105,7 @@ class CORE_EXPORT AOMPropertyClient {
 // Accessibility Object Model node
 // Explainer: https://github.com/WICG/aom/blob/master/explainer.md
 // Spec: https://wicg.github.io/aom/spec/
-class CORE_EXPORT AccessibleNode
-    : public GarbageCollectedFinalized<AccessibleNode>,
-      public ScriptWrappable {
+class CORE_EXPORT AccessibleNode : public EventTargetWithInlineData {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -137,6 +136,13 @@ class CORE_EXPORT AccessibleNode
   static int32_t GetProperty(Element*, AOMIntProperty, bool& is_null);
   static uint32_t GetProperty(Element*, AOMUIntProperty, bool& is_null);
 
+  // Does the attribute value match one of the ARIA undefined patterns for
+  // boolean and token properties?
+  // These include the empty string ("") or "undefined" as a literal.
+  // See ARIA 1.1 Sections 6.2 and 6.3, as well as properties that specifically
+  // indicate a supported value of "undefined".
+  static bool IsUndefinedAttrValue(const AtomicString&);
+
   // Returns the value of the given string property if the
   // Element has an AccessibleNode, otherwise returns the equivalent
   // ARIA attribute.
@@ -145,8 +151,7 @@ class CORE_EXPORT AccessibleNode
 
   // Returns the given relation property if the Element has an AccessibleNode,
   // otherwise returns the equivalent ARIA attribute.
-  static AccessibleNode* GetPropertyOrARIAAttribute(Element*,
-                                                    AOMRelationProperty);
+  static Element* GetPropertyOrARIAAttribute(Element*, AOMRelationProperty);
 
   // Returns true and provides the the value of the given relation
   // list property if the Element has an AccessibleNode, or if it has
@@ -322,6 +327,17 @@ class CORE_EXPORT AccessibleNode
   AtomicString valueText() const;
   void setValueText(const AtomicString&);
 
+  // EventTarget
+  const AtomicString& InterfaceName() const override;
+  ExecutionContext* GetExecutionContext() const override;
+
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(accessibleclick);
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(accessiblecontextmenu);
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(accessibledecrement);
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(accessiblefocus);
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(accessibleincrement);
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(accessiblescrollintoview);
+
   DECLARE_VIRTUAL_TRACE();
 
  protected:
@@ -329,6 +345,7 @@ class CORE_EXPORT AccessibleNode
   void OnRelationListChanged(AOMRelationListProperty);
 
  private:
+  static bool IsStringTokenProperty(AOMStringProperty);
   void SetStringProperty(AOMStringProperty, const AtomicString&);
   void SetRelationProperty(AOMRelationProperty, AccessibleNode*);
   void SetRelationListProperty(AOMRelationListProperty, AccessibleNodeList*);

@@ -37,6 +37,7 @@
 #include "content/browser/download/download_item_impl.h"
 #include "content/browser/download/download_manager_impl.h"
 #include "content/browser/download/download_resource_handler.h"
+#include "content/browser/download/download_task_runner.h"
 #include "content/browser/download/parallel_download_utils.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -172,7 +173,7 @@ class DownloadFileWithDelay : public DownloadFileImpl {
       DownloadInterruptReason reason,
       const base::FilePath& path);
 
-  // This variable may only be read on the FILE thread, and may only be
+  // This variable may only be read on the download sequence, and may only be
   // indirected through (e.g. methods on DownloadFileWithDelayFactory called)
   // on the UI thread.  This is because after construction,
   // DownloadFileWithDelay lives on the file thread, but
@@ -229,7 +230,7 @@ DownloadFileWithDelay::~DownloadFileWithDelay() {}
 void DownloadFileWithDelay::RenameAndUniquify(
     const base::FilePath& full_path,
     const RenameCompletionCallback& callback) {
-  DCHECK_CURRENTLY_ON(BrowserThread::FILE);
+  DCHECK(GetDownloadTaskRunner()->RunsTasksInCurrentSequence());
   DownloadFileImpl::RenameAndUniquify(
       full_path, base::Bind(DownloadFileWithDelay::RenameCallbackWrapper,
                             owner_, callback));
@@ -241,7 +242,7 @@ void DownloadFileWithDelay::RenameAndAnnotate(
     const GURL& source_url,
     const GURL& referrer_url,
     const RenameCompletionCallback& callback) {
-  DCHECK_CURRENTLY_ON(BrowserThread::FILE);
+  DCHECK(GetDownloadTaskRunner()->RunsTasksInCurrentSequence());
   DownloadFileImpl::RenameAndAnnotate(
       full_path,
       client_guid,
@@ -287,7 +288,7 @@ void DownloadFileWithDelayFactory::AddRenameCallback(base::Closure callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   rename_callbacks_.push_back(callback);
   if (waiting_)
-    base::MessageLoopForUI::current()->QuitWhenIdle();
+    base::RunLoop::QuitCurrentWhenIdleDeprecated();
 }
 
 void DownloadFileWithDelayFactory::GetAllRenameCallbacks(
@@ -321,7 +322,7 @@ class CountingDownloadFile : public DownloadFileImpl {
                          observer) {}
 
   ~CountingDownloadFile() override {
-    DCHECK_CURRENTLY_ON(BrowserThread::FILE);
+    DCHECK(GetDownloadTaskRunner()->RunsTasksInCurrentSequence());
     active_files_--;
   }
 
@@ -330,14 +331,14 @@ class CountingDownloadFile : public DownloadFileImpl {
       const CancelRequestCallback& cancel_request_callback,
       const DownloadItem::ReceivedSlices& received_slices,
       bool is_parallelizable) override {
-    DCHECK_CURRENTLY_ON(BrowserThread::FILE);
+    DCHECK(GetDownloadTaskRunner()->RunsTasksInCurrentSequence());
     active_files_++;
     DownloadFileImpl::Initialize(callback, cancel_request_callback,
                                  received_slices, is_parallelizable);
   }
 
   static void GetNumberActiveFiles(int* result) {
-    DCHECK_CURRENTLY_ON(BrowserThread::FILE);
+    DCHECK(GetDownloadTaskRunner()->RunsTasksInCurrentSequence());
     *result = active_files_;
   }
 
@@ -345,9 +346,9 @@ class CountingDownloadFile : public DownloadFileImpl {
   // until data is returned.
   static int GetNumberActiveFilesFromFileThread() {
     int result = -1;
-    BrowserThread::PostTaskAndReply(
-        BrowserThread::FILE, FROM_HERE,
-        base::Bind(&CountingDownloadFile::GetNumberActiveFiles, &result),
+    GetDownloadTaskRunner()->PostTaskAndReply(
+        FROM_HERE,
+        base::BindOnce(&CountingDownloadFile::GetNumberActiveFiles, &result),
         base::MessageLoop::current()->QuitWhenIdleClosure());
     base::RunLoop().Run();
     DCHECK_NE(-1, result);
@@ -578,11 +579,11 @@ class DownloadContentTest : public ContentBrowserTest {
 
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(&net::URLRequestSlowDownloadJob::AddUrlHandler));
+        base::BindOnce(&net::URLRequestSlowDownloadJob::AddUrlHandler));
     base::FilePath mock_base(GetTestFilePath("download", ""));
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(&net::URLRequestMockHTTPJob::AddUrlHandlers, mock_base));
+        base::BindOnce(&net::URLRequestMockHTTPJob::AddUrlHandlers, mock_base));
     ASSERT_TRUE(embedded_test_server()->Start());
     const std::string real_host =
         embedded_test_server()->host_port_pair().host();
@@ -646,7 +647,7 @@ class DownloadContentTest : public ContentBrowserTest {
     bool result = true;
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(&EnsureNoPendingDownloadJobsOnIO, &result));
+        base::BindOnce(&EnsureNoPendingDownloadJobsOnIO, &result));
     base::RunLoop().Run();
     return result &&
            (CountingDownloadFile::GetNumberActiveFilesFromFileThread() == 0);
@@ -789,7 +790,13 @@ class ParallelDownloadTest : public DownloadContentTest {
 
 }  // namespace
 
-IN_PROC_BROWSER_TEST_F(DownloadContentTest, DownloadCancelled) {
+#if defined(OS_ANDROID)
+// Failing/Flaky on Android: https://crbug.com/754679
+#define MAYBE_DownloadCancelled DISABLED_DownloadCancelled
+#else
+#define MAYBE_DownloadCancelled DownloadCancelled
+#endif
+IN_PROC_BROWSER_TEST_F(DownloadContentTest, MAYBE_DownloadCancelled) {
   SetupEnsureNoPendingDownloads();
 
   // Create a download, wait until it's started, and confirm
@@ -906,7 +913,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, CancelAtFinalRename) {
   download_manager->GetAllDownloads(&items);
   ASSERT_EQ(1u, items.size());
   items[0]->Cancel(true);
-  RunAllPendingInMessageLoop();
+  RunAllBlockingPoolTasksUntilIdle();
 
   // Check state.
   EXPECT_EQ(DownloadItem::CANCELLED, items[0]->GetState());
@@ -1021,13 +1028,15 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, MAYBE_ShutdownInProgress) {
   // a chance to get the second stall onto the IO thread queue after the cancel
   // message created by Shutdown and before the notification callback
   // created by the IO thread in canceling the request.
-  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                          base::Bind(&base::PlatformThread::Sleep,
-                                     base::TimeDelta::FromMilliseconds(25)));
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::BindOnce(&base::PlatformThread::Sleep,
+                     base::TimeDelta::FromMilliseconds(25)));
   DownloadManagerForShell(shell())->Shutdown();
-  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                          base::Bind(&base::PlatformThread::Sleep,
-                                     base::TimeDelta::FromMilliseconds(25)));
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::BindOnce(&base::PlatformThread::Sleep,
+                     base::TimeDelta::FromMilliseconds(25)));
 }
 
 // Try to shutdown just after we release the download file, by delaying
@@ -1074,7 +1083,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, ShutdownAtRelease) {
   ASSERT_EQ(1u, items.size());
   items[0]->Cancel(true);
   EXPECT_EQ(DownloadItem::IN_PROGRESS, items[0]->GetState());
-  RunAllPendingInMessageLoop();
+  RunAllBlockingPoolTasksUntilIdle();
   EXPECT_EQ(DownloadItem::IN_PROGRESS, items[0]->GetState());
 
   MockDownloadItemObserver observer;
@@ -1494,9 +1503,8 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, RecoverFromInitFileError) {
   // We need to make sure that any cross-thread downloads communication has
   // quiesced before clearing and injecting the new errors, as the
   // InjectErrors() routine alters the currently in use download file
-  // factory, which is a file thread object.
-  RunAllPendingInMessageLoop(BrowserThread::FILE);
-  RunAllPendingInMessageLoop();
+  // factory.
+  RunAllBlockingPoolTasksUntilIdle();
 
   // Clear the old errors list.
   injector->ClearError();
@@ -1537,9 +1545,8 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest,
   // We need to make sure that any cross-thread downloads communication has
   // quiesced before clearing and injecting the new errors, as the
   // InjectErrors() routine alters the currently in use download file
-  // factory, which is a file thread object.
-  RunAllPendingInMessageLoop(BrowserThread::FILE);
-  RunAllPendingInMessageLoop();
+  // factory.
+  RunAllBlockingPoolTasksUntilIdle();
 
   // Clear the old errors list.
   injector->ClearError();
@@ -1575,9 +1582,8 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, RecoverFromFinalRenameError) {
   // We need to make sure that any cross-thread downloads communication has
   // quiesced before clearing and injecting the new errors, as the
   // InjectErrors() routine alters the currently in use download file
-  // factory, which is a file thread object.
-  RunAllPendingInMessageLoop(BrowserThread::FILE);
-  RunAllPendingInMessageLoop();
+  // factory, which is a download sequence object.
+  RunAllBlockingPoolTasksUntilIdle();
 
   // Clear the old errors list.
   injector->ClearError();
@@ -1655,8 +1661,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, CancelInterruptedDownload) {
   ASSERT_TRUE(PathExists(intermediate_path));
 
   download->Cancel(true /* user_cancel */);
-  RunAllPendingInMessageLoop(BrowserThread::FILE);
-  RunAllPendingInMessageLoop();
+  RunAllBlockingPoolTasksUntilIdle();
 
   // The intermediate file should now be gone.
   EXPECT_FALSE(PathExists(intermediate_path));
@@ -1677,8 +1682,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, RemoveInterruptedDownload) {
   ASSERT_TRUE(PathExists(intermediate_path));
 
   download->Remove();
-  RunAllPendingInMessageLoop(BrowserThread::FILE);
-  RunAllPendingInMessageLoop();
+  RunAllBlockingPoolTasksUntilIdle();
 
   // The intermediate file should now be gone.
   EXPECT_FALSE(PathExists(intermediate_path));
@@ -1699,8 +1703,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, RemoveCompletedDownload) {
   base::FilePath target_path(download->GetTargetFilePath());
   EXPECT_TRUE(PathExists(target_path));
   download->Remove();
-  RunAllPendingInMessageLoop(BrowserThread::FILE);
-  RunAllPendingInMessageLoop();
+  RunAllBlockingPoolTasksUntilIdle();
 
   // The file should still exist.
   EXPECT_TRUE(PathExists(target_path));
@@ -1739,8 +1742,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, RemoveResumingDownload) {
   request_start_handler.RespondWith(std::string(), net::OK);
 
   // The intermediate file should now be gone.
-  RunAllPendingInMessageLoop(BrowserThread::FILE);
-  RunAllPendingInMessageLoop();
+  RunAllBlockingPoolTasksUntilIdle();
   EXPECT_FALSE(PathExists(intermediate_path));
 
   parameters.ClearInjectedErrors();
@@ -1790,8 +1792,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, CancelResumingDownload) {
 
   // The intermediate file should now be gone.
   RunAllPendingInMessageLoop(BrowserThread::IO);
-  RunAllPendingInMessageLoop(BrowserThread::FILE);
-  RunAllPendingInMessageLoop();
+  RunAllBlockingPoolTasksUntilIdle();
   EXPECT_FALSE(PathExists(intermediate_path));
 
   parameters.ClearInjectedErrors();
@@ -1833,8 +1834,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, RemoveResumedDownload) {
   download->Remove();
 
   // The intermediate file should now be gone.
-  RunAllPendingInMessageLoop(BrowserThread::FILE);
-  RunAllPendingInMessageLoop();
+  RunAllBlockingPoolTasksUntilIdle();
   EXPECT_FALSE(PathExists(intermediate_path));
   EXPECT_FALSE(PathExists(target_path));
   EXPECT_TRUE(EnsureNoPendingDownloads());
@@ -1866,8 +1866,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, CancelResumedDownload) {
   download->Cancel(true);
 
   // The intermediate file should now be gone.
-  RunAllPendingInMessageLoop(BrowserThread::FILE);
-  RunAllPendingInMessageLoop();
+  RunAllBlockingPoolTasksUntilIdle();
   EXPECT_FALSE(PathExists(intermediate_path));
   EXPECT_FALSE(PathExists(target_path));
   EXPECT_TRUE(EnsureNoPendingDownloads());
@@ -2724,6 +2723,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest,
                download->GetTargetFilePath().BaseName().value().c_str());
 }
 
+// Verify parallel download in normal case.
 IN_PROC_BROWSER_TEST_F(ParallelDownloadTest, ParallelDownloadComplete) {
   EXPECT_TRUE(base::FeatureList::IsEnabled(features::kParallelDownloading));
 
@@ -2740,6 +2740,77 @@ IN_PROC_BROWSER_TEST_F(ParallelDownloadTest, ParallelDownloadComplete) {
 
   DownloadItem* download =
       StartDownloadAndReturnItem(shell(), request_handler.url());
+  WaitForCompletion(download);
+
+  TestDownloadRequestHandler::CompletedRequests completed_requests;
+  request_handler.GetCompletedRequestInfo(&completed_requests);
+  EXPECT_EQ(kTestRequestCount, static_cast<int>(completed_requests.size()));
+
+  ReadAndVerifyFileContents(parameters.pattern_generator_seed, parameters.size,
+                            download->GetTargetFilePath());
+}
+
+// Verify parallel download resumption.
+IN_PROC_BROWSER_TEST_F(ParallelDownloadTest,
+                       DISABLED_ParallelDownloadResumption) {
+  EXPECT_TRUE(base::FeatureList::IsEnabled(features::kParallelDownloading));
+
+  TestDownloadRequestHandler request_handler;
+  TestDownloadRequestHandler::Parameters parameters;
+  parameters.etag = "ABC";
+  parameters.size = 3000000;
+  parameters.last_modified = std::string();
+  parameters.connection_type = net::HttpResponseInfo::CONNECTION_INFO_HTTP1_1;
+  request_handler.StartServing(parameters);
+
+  base::FilePath intermediate_file_path =
+      GetDownloadDirectory().AppendASCII("intermediate");
+  std::vector<GURL> url_chain;
+  url_chain.push_back(request_handler.url());
+
+  // Create an intermediate file that contains 3 chunks of data.
+  const int kIntermediateSize = 1000;
+  std::vector<char> buffer(kIntermediateSize);
+  request_handler.GetPatternBytes(parameters.pattern_generator_seed, 0,
+                                  buffer.size(), buffer.data());
+  {
+    base::ThreadRestrictions::ScopedAllowIO allow_io_for_test_setup;
+    base::File file(intermediate_file_path,
+                    base::File::FLAG_CREATE | base::File::FLAG_WRITE);
+    ASSERT_TRUE(file.IsValid());
+    request_handler.GetPatternBytes(parameters.pattern_generator_seed, 0,
+                                    buffer.size(), buffer.data());
+    EXPECT_EQ(kIntermediateSize,
+              file.Write(0, buffer.data(), kIntermediateSize));
+    request_handler.GetPatternBytes(parameters.pattern_generator_seed, 1000000,
+                                    buffer.size(), buffer.data());
+    EXPECT_EQ(kIntermediateSize,
+              file.Write(1000000, buffer.data(), kIntermediateSize));
+    request_handler.GetPatternBytes(parameters.pattern_generator_seed, 2000000,
+                                    buffer.size(), buffer.data());
+    EXPECT_EQ(kIntermediateSize,
+              file.Write(2000000, buffer.data(), kIntermediateSize));
+    file.Close();
+  }
+
+  // Create the received slices data that reflects the data in the file.
+  std::vector<DownloadItem::ReceivedSlice> received_slices = {
+      DownloadItem::ReceivedSlice(0, 1000),
+      DownloadItem::ReceivedSlice(1000000, 1000),
+      DownloadItem::ReceivedSlice(2000000, 1000)};
+
+  DownloadItem* download = DownloadManagerForShell(shell())->CreateDownloadItem(
+      "F7FB1F59-7DE1-4845-AFDB-8A688F70F583", 1, intermediate_file_path,
+      base::FilePath(), url_chain, GURL(), GURL(), GURL(), GURL(),
+      "application/octet-stream", "application/octet-stream", base::Time::Now(),
+      base::Time(), parameters.etag, parameters.last_modified,
+      kIntermediateSize * 3, parameters.size, std::string(),
+      DownloadItem::INTERRUPTED, DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
+      DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED, false, base::Time(), false,
+      received_slices);
+
+  // Resume the parallel download with sparse file and received slices data.
+  download->Resume();
   WaitForCompletion(download);
 
   TestDownloadRequestHandler::CompletedRequests completed_requests;

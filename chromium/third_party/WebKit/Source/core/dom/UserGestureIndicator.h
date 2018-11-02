@@ -7,42 +7,38 @@
 
 #include "core/CoreExport.h"
 #include "core/dom/Document.h"
-#include "core/frame/LocalFrame.h"
-#include "core/frame/LocalFrameClient.h"
 #include "platform/wtf/Noncopyable.h"
 #include "platform/wtf/RefCounted.h"
 #include "platform/wtf/RefPtr.h"
 
 namespace blink {
 
-// A UserGestureToken represents a user gesture. It can be referenced and saved
-// for later (see, e.g., DOMTimer, which propagates user gestures to the timer
-// fire in certain situations). Passing it to a UserGestureIndicator will cause
-// it to be considered as currently being processed.
+// A UserGestureToken represents the current state of a user gesture. It can be
+// retrieved from a UserGestureIndicator to save for later (see, e.g., DOMTimer,
+// which propagates user gestures to the timer fire in certain situations).
+// Passing it to a UserGestureIndicator later on will cause it to be considered
+// as currently being processed.
 class CORE_EXPORT UserGestureToken : public RefCounted<UserGestureToken> {
   WTF_MAKE_NONCOPYABLE(UserGestureToken);
+  friend class UserGestureIndicator;
 
  public:
   enum Status { kNewGesture, kPossiblyExistingGesture };
   enum TimeoutPolicy { kDefault, kOutOfProcess, kHasPaused };
 
-  // Creates a UserGestureToken with the given status. Also if a non-null
-  // Document* is provided, associates the token with the document.
-  static PassRefPtr<UserGestureToken> Create(Document*,
-                                             Status = kPossiblyExistingGesture);
-  static PassRefPtr<UserGestureToken> Adopt(Document*, UserGestureToken*);
-
   ~UserGestureToken() {}
+
+  // TODO(mustaq): The only user of this method is PepperPluginInstanceImpl.  We
+  // need to investigate the usecase closely.
   bool HasGestures() const;
+
+ private:
+  UserGestureToken(Status);
+
   void TransferGestureTo(UserGestureToken*);
   bool ConsumeGesture();
   void SetTimeoutPolicy(TimeoutPolicy);
   void ResetTimestamp();
-
- protected:
-  UserGestureToken(Status);
-
- private:
   bool HasTimedOut() const;
 
   size_t consumable_gestures_;
@@ -73,10 +69,19 @@ class CORE_EXPORT UserGestureIndicator final {
   static UserGestureToken* CurrentToken();
   static UserGestureToken* CurrentTokenThreadSafe();
 
+  static void SetTimeoutPolicy(UserGestureToken::TimeoutPolicy);
+
   explicit UserGestureIndicator(PassRefPtr<UserGestureToken>);
+
+  // Constructs a UserGestureIndicator with a new UserGestureToken of the given
+  // status.
+  explicit UserGestureIndicator(
+      UserGestureToken::Status = UserGestureToken::kPossiblyExistingGesture);
   ~UserGestureIndicator();
 
  private:
+  void UpdateRootToken();
+
   static UserGestureToken* root_token_;
 
   RefPtr<UserGestureToken> token_;

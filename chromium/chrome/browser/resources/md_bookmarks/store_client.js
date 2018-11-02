@@ -79,18 +79,18 @@ cr.define('bookmarks', function() {
 
     /** @param {string} newState */
     onStateChanged: function(newState) {
-      this.watches_.forEach(function(watch) {
+      this.watches_.forEach((watch) => {
         var oldValue = this[watch.localProperty];
         var newValue = watch.valueGetter(newState);
 
         // Avoid poking Polymer unless something has actually changed. Reducers
         // must return new objects rather than mutating existing objects, so
         // any real changes will pass through correctly.
-        if (oldValue == newValue || newValue == undefined)
+        if (oldValue === newValue || newValue === undefined)
           return;
 
         this[watch.localProperty] = newValue;
-      }.bind(this));
+      });
     },
 
     updateFromStore: function() {

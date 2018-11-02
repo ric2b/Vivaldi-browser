@@ -9,12 +9,16 @@ import android.os.AsyncTask;
 import android.os.Environment;
 import android.os.StatFs;
 import android.support.v7.widget.RecyclerView;
+import android.text.Spannable;
+import android.text.SpannableString;
+import android.text.style.ForegroundColorSpan;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
 import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
 import org.chromium.base.VisibleForTesting;
@@ -106,22 +110,28 @@ public class SpaceDisplay extends RecyclerView.AdapterDataObserver {
 
     private DownloadHistoryAdapter mHistoryAdapter;
     private View mView;
+    private View mViewContainer;
     private TextView mSpaceUsedByDownloadsTextView;
-    private TextView mSpaceUsedByOtherAppsTextView;
-    private TextView mSpaceFreeTextView;
+    private TextView mSpaceFreeAndOtherAppsTextView;
     private MaterialProgressBar mSpaceBar;
     private long mFreeBytes;
 
     SpaceDisplay(final ViewGroup parent, DownloadHistoryAdapter historyAdapter) {
         mHistoryAdapter = historyAdapter;
-        mView = (ViewGroup) LayoutInflater.from(parent.getContext())
-                        .inflate(R.layout.download_manager_ui_space_widget, parent, false);
+        mViewContainer = LayoutInflater.from(ContextUtils.getApplicationContext())
+                                 .inflate(R.layout.download_manager_ui_space_widget, parent, false);
+        mView = mViewContainer.findViewById(R.id.space_widget_content);
         mSpaceUsedByDownloadsTextView = (TextView) mView.findViewById(R.id.size_downloaded);
-        mSpaceUsedByOtherAppsTextView = (TextView) mView.findViewById(R.id.size_other_apps);
-        mSpaceFreeTextView = (TextView) mView.findViewById(R.id.size_free);
+        mSpaceFreeAndOtherAppsTextView =
+                (TextView) mView.findViewById(R.id.size_free_and_other_apps);
         mSpaceBar = (MaterialProgressBar) mView.findViewById(R.id.space_bar);
         mFileSystemBytesTask =
                 new StorageSizeTask(true).executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+    }
+
+    /** @return The view container of space display view. */
+    public View getViewContainer() {
+        return mViewContainer;
     }
 
     /** Returns the view. */
@@ -182,22 +192,28 @@ public class SpaceDisplay extends RecyclerView.AdapterDataObserver {
         Context context = mSpaceUsedByDownloadsTextView.getContext();
         mSpaceUsedByDownloadsTextView.setText(
                 DownloadUtils.getStringForBytes(context, USED_STRINGS, bytesUsedByDownloads));
-        mSpaceUsedByOtherAppsTextView.setText(
-                DownloadUtils.getStringForBytes(context, OTHER_STRINGS, bytesUsedByOtherApps));
-        mSpaceFreeTextView.setText(
-                DownloadUtils.getStringForBytes(context, FREE_STRINGS, mFreeBytes));
+
+        String spaceFree = DownloadUtils.getStringForBytes(context, FREE_STRINGS, mFreeBytes);
+        String spaceUsedByOtherApps =
+                DownloadUtils.getStringForBytes(context, OTHER_STRINGS, bytesUsedByOtherApps);
+        SpannableString spannable = new SpannableString(
+                context.getResources().getString(R.string.download_manager_ui_space_free_and_other,
+                        spaceFree, spaceUsedByOtherApps));
+        ForegroundColorSpan colorSpan = new ForegroundColorSpan(
+                ApiCompatibilityUtils.getColor(context.getResources(), R.color.black_alpha_54));
+        spannable.setSpan(colorSpan, 0, spaceFree.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+        mSpaceFreeAndOtherAppsTextView.setText(spannable);
 
         // Set a minimum size for the download size so that it shows up in the progress bar.
         long onePercentOfSystem = fileSystemBytes == 0 ? 0 : fileSystemBytes / 100;
         long fudgedBytesUsedByDownloads = Math.max(bytesUsedByDownloads, onePercentOfSystem);
-        long fudgedbytesUsedByOtherApps = Math.max(0, bytesUsedTotal - fudgedBytesUsedByDownloads);
 
         // Indicate how much space has been used as a progress bar.  The percentage used by
         // downloads is shown by the non-overlapped area of the primary and secondary progressbar.
         int percentageUsedTotal = computePercentage(bytesUsedTotal, fileSystemBytes);
-        int percentageOtherApps = computePercentage(fudgedbytesUsedByOtherApps, fileSystemBytes);
+        int percentageDownloaded = computePercentage(fudgedBytesUsedByDownloads, fileSystemBytes);
         mSpaceBar.setProgress(percentageUsedTotal);
-        mSpaceBar.setSecondaryProgress(percentageOtherApps);
+        mSpaceBar.setSecondaryProgress(percentageDownloaded);
 
         for (Observer observer : mObservers) observer.onSpaceDisplayUpdated(this);
     }

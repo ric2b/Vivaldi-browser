@@ -38,12 +38,8 @@ const char kIdProfileImageUrl[] = "profileImageUrl";
 const char kIdDefaultProfileImageUrl[] = "defaultProfileImageUrl";
 
 // These correspond to enum FamilyInfoFetcher::FamilyMemberRole, in order.
-const char* kFamilyMemberRoleStrings[] = {
-  "headOfHousehold",
-  "parent",
-  "member",
-  "child"
-};
+const char* const kFamilyMemberRoleStrings[] = {"headOfHousehold", "parent",
+                                                "member", "child"};
 
 FamilyInfoFetcher::FamilyProfile::FamilyProfile() {
 }
@@ -187,7 +183,7 @@ void FamilyInfoFetcher::OnGetTokenSuccess(
           destination: GOOGLE_OWNED_SERVICE
         }
         policy {
-          cookies_allowed: false
+          cookies_allowed: NO
           setting:
             "This feature cannot be disabled in settings and is only enabled "
             "for child accounts. If sign-in is restricted to accounts from a "

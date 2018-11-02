@@ -13,6 +13,9 @@
 [submodule "chrome/test/data/perf/frame_rate/content"]
 	path = chrome/test/data/perf/frame_rate/content
 	url = ../frame_rate/content.git
+[submodule "chrome/test/data/vr/webvr_info"]
+	path = chrome/test/data/vr/webvr_info
+	url = ../../external/github.com/toji/webvr.info.git
 [submodule "media/cdm/api"]
 	path = media/cdm/api
 	url = ../cdm.git
@@ -52,6 +55,9 @@
 [submodule "third_party/colorama/src"]
 	path = third_party/colorama/src
 	url = ../../external/colorama.git
+[submodule "third_party/crc32c/src"]
+	path = third_party/crc32c/src
+	url = ../../external/github.com/google/crc32c.git
 [submodule "third_party/cros_system_api"]
 	path = third_party/cros_system_api
 	url = ../../chromiumos/platform/system_api.git
@@ -114,7 +120,7 @@
 	url = ../../external/leveldb.git
 [submodule "third_party/libFuzzer/src"]
 	path = third_party/libFuzzer/src
-	url = ../llvm-project/llvm/lib/Fuzzer.git
+	url = ../llvm-project/compiler-rt/lib/fuzzer.git
 [submodule "third_party/libaddressinput/src"]
 	path = third_party/libaddressinput/src
 	url = ../../external/libaddressinput.git
@@ -247,18 +253,12 @@
 [submodule "third_party/webgl/src"]
 	path = third_party/webgl/src
 	url = ../../external/khronosgroup/webgl.git
-[submodule "third_party/webpagereplay"]
-	path = third_party/webpagereplay
-	url = ../../external/github.com/chromium/web-page-replay.git
 [submodule "third_party/webrtc"]
 	path = third_party/webrtc
 	url = ../../external/webrtc/trunk/webrtc.git
 [submodule "third_party/xdg-utils"]
 	path = third_party/xdg-utils
 	url = ../deps/xdg-utils.git
-[submodule "third_party/yasm/binaries"]
-	path = third_party/yasm/binaries
-	url = ../deps/yasm/binaries.git
 [submodule "third_party/yasm/source/patched-yasm"]
 	path = third_party/yasm/source/patched-yasm
 	url = ../deps/yasm/patched-yasm.git
@@ -270,7 +270,7 @@
 	url = ../deps/acid3.git
 [submodule "tools/swarming_client"]
 	path = tools/swarming_client
-	url = ../../external/swarming.client.git
+	url = ../../infra/luci/client-py.git
 [submodule "v8"]
 	path = v8
 	url = ../../v8/v8.git

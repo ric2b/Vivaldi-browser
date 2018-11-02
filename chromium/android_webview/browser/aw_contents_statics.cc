@@ -2,10 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "android_webview/browser/aw_contents_statics.h"
-
 #include "android_webview/browser/address_parser.h"
 #include "android_webview/browser/aw_browser_context.h"
+#include "android_webview/browser/aw_contents.h"
 #include "android_webview/browser/aw_contents_io_thread_client.h"
 #include "android_webview/browser/aw_safe_browsing_config_helper.h"
 #include "android_webview/browser/aw_safe_browsing_whitelist_manager.h"
@@ -15,6 +14,7 @@
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/callback.h"
+#include "components/google/core/browser/google_util.h"
 #include "components/security_interstitials/core/urls.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
@@ -58,9 +58,11 @@ void SafeBrowsingWhitelistAssigned(const JavaRef<jobject>& callback,
 ScopedJavaLocalRef<jstring> GetSafeBrowsingPrivacyPolicyUrl(
     JNIEnv* env,
     const JavaParamRef<jclass>&) {
-  // TODO(ntfschr): append the locale to this URL
-  return base::android::ConvertUTF8ToJavaString(
-      env, security_interstitials::kSafeBrowsingPrivacyPolicyUrl);
+  GURL privacy_policy_url(
+      security_interstitials::kSafeBrowsingPrivacyPolicyUrl);
+  privacy_policy_url = google_util::AppendGoogleLocaleParam(
+      privacy_policy_url, AwContents::GetLocale());
+  return base::android::ConvertUTF8ToJavaString(env, privacy_policy_url.spec());
 }
 
 // static
@@ -81,13 +83,6 @@ ScopedJavaLocalRef<jstring> GetUnreachableWebDataUrl(
     const JavaParamRef<jclass>&) {
   return base::android::ConvertUTF8ToJavaString(
       env, content::kUnreachableWebDataURL);
-}
-
-// static
-void SetLegacyCacheRemovalDelayForTest(JNIEnv*,
-                                       const JavaParamRef<jclass>&,
-                                       jlong delay_ms) {
-  AwBrowserContext::SetLegacyCacheRemovalDelayForTest(delay_ms);
 }
 
 // static
@@ -151,10 +146,6 @@ ScopedJavaLocalRef<jstring> FindAddress(JNIEnv* env,
   if (android_webview::address_parser::FindAddress(content_16, &result_16))
     return base::android::ConvertUTF16ToJavaString(env, result_16);
   return ScopedJavaLocalRef<jstring>();
-}
-
-bool RegisterAwContentsStatics(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 }  // namespace android_webview

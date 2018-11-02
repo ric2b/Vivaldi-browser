@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/test/scoped_mock_time_message_loop_task_runner.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -41,4 +42,102 @@ IN_PROC_BROWSER_TEST_F(FullscreenControllerTest, FullscreenOnFileURL) {
       browser()->tab_strip_model()->GetActiveWebContents(),
       file_url.GetOrigin());
   ASSERT_TRUE(IsFullscreenBubbleDisplayed());
+}
+
+IN_PROC_BROWSER_TEST_F(FullscreenControllerTest,
+                       MouseLockBubbleHideCallbackReject) {
+  SetWebContentsGrantedSilentMouseLockPermission();
+  mouse_lock_bubble_hide_reason_recorder_.clear();
+  RequestToLockMouse(false, false);
+
+  EXPECT_EQ(0ul, mouse_lock_bubble_hide_reason_recorder_.size());
+}
+
+IN_PROC_BROWSER_TEST_F(FullscreenControllerTest,
+                       MouseLockBubbleHideCallbackSilentLock) {
+  SetWebContentsGrantedSilentMouseLockPermission();
+  mouse_lock_bubble_hide_reason_recorder_.clear();
+  RequestToLockMouse(false, true);
+
+  EXPECT_EQ(1ul, mouse_lock_bubble_hide_reason_recorder_.size());
+  EXPECT_EQ(ExclusiveAccessBubbleHideReason::kNotShown,
+            mouse_lock_bubble_hide_reason_recorder_[0]);
+}
+
+IN_PROC_BROWSER_TEST_F(FullscreenControllerTest,
+                       MouseLockBubbleHideCallbackUnlock) {
+  SetWebContentsGrantedSilentMouseLockPermission();
+  mouse_lock_bubble_hide_reason_recorder_.clear();
+  RequestToLockMouse(true, false);
+  EXPECT_EQ(0ul, mouse_lock_bubble_hide_reason_recorder_.size());
+
+  LostMouseLock();
+  EXPECT_EQ(1ul, mouse_lock_bubble_hide_reason_recorder_.size());
+  EXPECT_EQ(ExclusiveAccessBubbleHideReason::kInterrupted,
+            mouse_lock_bubble_hide_reason_recorder_[0]);
+}
+
+IN_PROC_BROWSER_TEST_F(FullscreenControllerTest,
+                       MouseLockBubbleHideCallbackLockThenFullscreen) {
+  SetWebContentsGrantedSilentMouseLockPermission();
+  mouse_lock_bubble_hide_reason_recorder_.clear();
+  RequestToLockMouse(true, false);
+  EXPECT_EQ(0ul, mouse_lock_bubble_hide_reason_recorder_.size());
+
+  EnterActiveTabFullscreen();
+  EXPECT_EQ(1ul, mouse_lock_bubble_hide_reason_recorder_.size());
+  EXPECT_EQ(ExclusiveAccessBubbleHideReason::kInterrupted,
+            mouse_lock_bubble_hide_reason_recorder_[0]);
+}
+
+IN_PROC_BROWSER_TEST_F(FullscreenControllerTest,
+                       MouseLockBubbleHideCallbackTimeout) {
+  SetWebContentsGrantedSilentMouseLockPermission();
+  base::ScopedMockTimeMessageLoopTaskRunner mock_time_task_runner;
+
+  mouse_lock_bubble_hide_reason_recorder_.clear();
+  RequestToLockMouse(true, false);
+  EXPECT_EQ(0ul, mouse_lock_bubble_hide_reason_recorder_.size());
+
+  EXPECT_TRUE(mock_time_task_runner->HasPendingTask());
+  // Must fast forward at least |ExclusiveAccessBubble::kInitialDelayMs|.
+  mock_time_task_runner->FastForwardBy(
+      base::TimeDelta::FromMilliseconds(InitialBubbleDelayMs() + 20));
+  EXPECT_EQ(1ul, mouse_lock_bubble_hide_reason_recorder_.size());
+  EXPECT_EQ(ExclusiveAccessBubbleHideReason::kTimeout,
+            mouse_lock_bubble_hide_reason_recorder_[0]);
+}
+
+IN_PROC_BROWSER_TEST_F(FullscreenControllerTest, FastMouseLockUnlockRelock) {
+  base::ScopedMockTimeMessageLoopTaskRunner mock_time_task_runner;
+
+  RequestToLockMouse(true, false);
+  // Shorter than |ExclusiveAccessBubble::kInitialDelayMs|.
+  mock_time_task_runner->FastForwardBy(
+      base::TimeDelta::FromMilliseconds(InitialBubbleDelayMs() / 2));
+  LostMouseLock();
+  RequestToLockMouse(true, true);
+
+  EXPECT_TRUE(
+      GetExclusiveAccessManager()->mouse_lock_controller()->IsMouseLocked());
+  EXPECT_FALSE(GetExclusiveAccessManager()
+                   ->mouse_lock_controller()
+                   ->IsMouseLockedSilently());
+}
+
+IN_PROC_BROWSER_TEST_F(FullscreenControllerTest, SlowMouseLockUnlockRelock) {
+  base::ScopedMockTimeMessageLoopTaskRunner mock_time_task_runner;
+
+  RequestToLockMouse(true, false);
+  // Longer than |ExclusiveAccessBubble::kInitialDelayMs|.
+  mock_time_task_runner->FastForwardBy(
+      base::TimeDelta::FromMilliseconds(InitialBubbleDelayMs() + 20));
+  LostMouseLock();
+  RequestToLockMouse(true, true);
+
+  EXPECT_TRUE(
+      GetExclusiveAccessManager()->mouse_lock_controller()->IsMouseLocked());
+  EXPECT_TRUE(GetExclusiveAccessManager()
+                  ->mouse_lock_controller()
+                  ->IsMouseLockedSilently());
 }

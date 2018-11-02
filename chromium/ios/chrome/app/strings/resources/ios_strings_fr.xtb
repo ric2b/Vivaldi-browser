@@ -18,6 +18,7 @@
 <translation id="1209206284964581585">Masquer pour le moment</translation>
 <translation id="1219674500290482172">Impossible de se connecter à Internet.</translation>
 <translation id="1254117744268754948">Sélectionner un dossier</translation>
+<translation id="1265739287306757398">En savoir plus</translation>
 <translation id="1272079795634619415">Arrêter</translation>
 <translation id="129553762522093515">Récemment fermés</translation>
 <translation id="1323735185997015385">Supprimer</translation>
@@ -60,13 +61,16 @@ Par exemple, certains sites Web peuvent répondre à cette demande en affichant 
 <translation id="1952728750904661634">Se connecter avec un compte géré</translation>
 <translation id="1974060860693918893">Paramètres avancés</translation>
 <translation id="1989112275319619282">Parcourir</translation>
+<translation id="2015722694326466240">Pour afficher les mots de passe, vous devez d'abord définir un code secret sur votre appareil.</translation>
 <translation id="2068952045031577364">Semaine dernière</translation>
 <translation id="2079545284768500474">Annuler</translation>
 <translation id="209018056901015185">Voir version ordinateur</translation>
 <translation id="2103075008456228677">Ouvrir history.google.com</translation>
 <translation id="2116625576999540962"><ph name="NUMBER_OF_SELECTED_BOOKMARKS" /> éléments déplacés.</translation>
+<translation id="213900355088104901">Pour parcourir le Web en mode privé, ouvrez un onglet de navigation privée</translation>
 <translation id="2149973817440762519">Modifier le favori</translation>
 <translation id="2230173723195178503">Page Web chargée</translation>
+<translation id="2256128224215992540">Suggestions de recherches et de sites</translation>
 <translation id="2267753748892043616">Ajouter un compte</translation>
 <translation id="2273327106802955778">Menu Plus</translation>
 <translation id="2320166752086256636">Masquer le clavier</translation>
@@ -134,6 +138,7 @@ Par exemple, certains sites Web peuvent répondre à cette demande en affichant 
 <translation id="3474649192738347024">Formulaires remplis.</translation>
 <translation id="3478058380795961209">Mois d'expiration</translation>
 <translation id="3482959374254649722">Synchronisation de vos onglets en cours…</translation>
+<translation id="3493531032208478708"><ph name="BEGIN_LINK" />En savoir plus<ph name="END_LINK" /> sur le contenu suggéré</translation>
 <translation id="3494788280727468875">Confirmer la suppression des données de navigation</translation>
 <translation id="3519193562722059437">Ouvrez un onglet pour naviguer sur le Web.</translation>
 <translation id="3527085408025491307">Dossier</translation>
@@ -145,7 +150,6 @@ Par exemple, certains sites Web peuvent répondre à cette demande en affichant 
 
 Pour modifier le terme de recherche, appuyez sur celui-ci de manière prolongée afin de le sélectionner. Pour affiner la recherche, faites glisser le panneau jusqu'en haut et appuyez sur le champ de recherche.</translation>
 <translation id="3607167657931203000">Saisie automatique</translation>
-<translation id="3608436266458100337">Mode Lecteur</translation>
 <translation id="3628119975092896051">Votre liste de lecture est disponible hors connexion. Pour ajouter une page à cette liste, appuyez sur <ph name="SHARE_OPENING_ICON" />.</translation>
 <translation id="3638472932233958418">Précharger pages Web</translation>
 <translation id="3691593122358196899">Ajouté aux favoris dans "<ph name="FOLDER_TITLE" />"</translation>
@@ -154,6 +158,7 @@ Pour modifier le terme de recherche, appuyez sur celui-ci de manière prolongée
 <translation id="3779810277399252432">Aucune connexion Internet.</translation>
 <translation id="3783017676699494206">Enregistrer l'image</translation>
 <translation id="385051799172605136">Retour</translation>
+<translation id="3857761338463387655">Créer une adresse e-mail avec :</translation>
 <translation id="3897092660631435901">Menu</translation>
 <translation id="3928666092801078803">Combiner mes données</translation>
 <translation id="3950820424414687140">Ouvrir une session</translation>
@@ -173,13 +178,17 @@ Pour modifier le terme de recherche, appuyez sur celui-ci de manière prolongée
 <translation id="4272631900155121838">Pour scanner un code QR, activez l'appareil photo depuis les paramètres</translation>
 <translation id="4281844954008187215">Conditions d'utilisation</translation>
 <translation id="430793432425771671">Tout synchroniser</translation>
+<translation id="4342284590510997375">Nouveau</translation>
+<translation id="434816576838749873">Choisir une application de messagerie</translation>
 <translation id="4359125752503270327">Cette page va s'ouvrir dans une autre application.</translation>
 <translation id="4375040482473363939">Rechercher via un code QR</translation>
 <translation id="4378154925671717803">Téléphone</translation>
 <translation id="441868831736628555">Avis de confidentialité</translation>
+<translation id="4460091562821778167">Demander quelle application utiliser à chaque fois</translation>
 <translation id="4508750114462689118">Fermer la promo de connexion</translation>
 <translation id="4526249700380860531">Afficher et gérer les mots de passe enregistrés sur <ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /></translation>
 <translation id="4536418791685807335">Veuillez essayer de vous reconnecter.</translation>
+<translation id="461440297010471931">Recherche sur Google</translation>
 <translation id="4620246317052452550">Pages lues</translation>
 <translation id="4636930964841734540">Infos</translation>
 <translation id="4659667755519643272">Lancer le sélecteur d'onglets</translation>
@@ -188,6 +197,7 @@ Pour modifier le terme de recherche, appuyez sur celui-ci de manière prolongée
 Vos données sont chiffrées avec votre phrase secrète de synchronisation. Saisissez-la pour lancer la synchronisation.</translation>
 <translation id="473775607612524610">Mettre à jour</translation>
 <translation id="481968316161811770">Cookies/données site</translation>
+<translation id="4854345657858711387">Définir un code secret</translation>
 <translation id="4860895144060829044">Appeler</translation>
 <translation id="4875622588773761625">Voulez-vous que <ph name="PASSWORD_MANAGER_BRAND" /> modifie votre mot de passe pour ce site ?</translation>
 <translation id="4881695831933465202">Ouvrir</translation>
@@ -240,6 +250,7 @@ Handoff doit également être activé dans la section "Général" des paramètre
 <translation id="5871497086027727873">1 élément déplacé.</translation>
 <translation id="5911030830365207728">Google Traduction</translation>
 <translation id="5916664084637901428">Activé</translation>
+<translation id="5948291296578561264">Cela vous permet d'enregistrer des photos dans votre photothèque.</translation>
 <translation id="5953603475187800576">Afficher les adresses et les cartes de paiement figurant sur Google Payments</translation>
 <translation id="5955891643922670672">Affichage de la version hors connexion</translation>
 <translation id="5964480694698977962">Créer un onglet de navigation privée</translation>
@@ -247,6 +258,7 @@ Handoff doit également être activé dans la section "Général" des paramètre
 <translation id="5982717868370722439">Ajoutez les données existantes au compte <ph name="USER_EMAIL" />.</translation>
 <translation id="6012140227487808125">Chiffrement…</translation>
 <translation id="6021332621416007159">Ouvrir dans…</translation>
+<translation id="6039429417015973673"><ph name="TITLE" />, <ph name="PUBLISHER_INFORMATION" />, <ph name="PUBLICATION_DATE" /></translation>
 <translation id="6039694632319341016">Voulez-vous que <ph name="PASSWORD_MANAGER_BRAND" /> mette à jour le mot de passe de <ph name="USERNAME" /> pour ce site ?</translation>
 <translation id="6040143037577758943">Fermer</translation>
 <translation id="6042308850641462728">Plus</translation>
@@ -264,7 +276,6 @@ Handoff doit également être activé dans la section "Général" des paramètre
 <translation id="6196207969502475924">Recherche vocale</translation>
 <translation id="6254066287920239840">Ouvrir les liens dans l'application et non dans le navigateur.</translation>
 <translation id="6255097610484507482">Modifier la carte de paiement</translation>
-<translation id="6273258929211277933"><ph name="TITLE" />, <ph name="PUBLISHER_INFORMATION" />, <ph name="PUBLICATION_DATE" />, <ph name="STATE" /></translation>
 <translation id="6308436439357671616">Cela vous permet de prendre et d'importer des photos.</translation>
 <translation id="6314335155547195432">Générer mot de passe</translation>
 <translation id="6324528485781869530">Changer de compte pour synchro</translation>
@@ -340,6 +351,7 @@ Vos données ont été chiffrées avec votre phrase secrète de synchronisation 
 <translation id="7649070708921625228">Aide</translation>
 <translation id="7658239707568436148">Annuler</translation>
 <translation id="7671141431838911305">INSTALLER</translation>
+<translation id="7677825787905683892">Choisir une application de messagerie par défaut</translation>
 <translation id="7765158879357617694">Déplacer</translation>
 <translation id="7769602470925380267">Accepter et se déconnecter</translation>
 <translation id="7772032839648071052">Confirmer la phrase secrète</translation>
@@ -367,7 +379,6 @@ Vos données ont été chiffrées avec votre phrase secrète de synchronisation 
 <translation id="842017693807136194">Connecté avec</translation>
 <translation id="8428045167754449968">Ville</translation>
 <translation id="8428213095426709021">Paramètres</translation>
-<translation id="8433678324664858900">Aff. suggestions</translation>
 <translation id="8458397775385147834">1 élément supprimé.</translation>
 <translation id="8487700953926739672">Disponible hors connexion</translation>
 <translation id="8503813439785031346">Nom d'utilisateur</translation>
@@ -404,6 +415,8 @@ Vos données ont été chiffrées avec votre phrase secrète de synchronisation 
 <translation id="9083392325882095631">1 élément</translation>
 <translation id="9100610230175265781">Veuillez saisir la phrase secrète.</translation>
 <translation id="9148126808321036104">Nouvelle connexion</translation>
+<translation id="914898748153555155">Vous pouvez modifier cette préférence à tout moment dans les paramètres de Chrome.</translation>
+<translation id="91549621916703028">Créez différents onglets pour toutes vos tâches</translation>
 <translation id="9157836665414082580">Supprimer les boîtes de dialogue</translation>
 <translation id="9188680907066685419">Se déconnecter d'un compte géré</translation>
 <translation id="9203116392574189331">Handoff</translation>

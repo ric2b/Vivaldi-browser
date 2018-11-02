@@ -169,6 +169,43 @@ TEST_F(CryptAuthBluetoothLowEnergyCharacteristicFinderTest,
   observer->GattDiscoveryCompleteForService(adapter_.get(), service_.get());
 }
 
+// Tests that CharacteristicFinder ignores events for other devices.
+TEST_F(CryptAuthBluetoothLowEnergyCharacteristicFinderTest,
+       FindRightCharacteristicsWrongDevice) {
+  // Make CharacteristicFinder which is supposed to listen for other device.
+  std::unique_ptr<device::BluetoothDevice> device(
+      new NiceMock<device::MockBluetoothDevice>(
+          adapter_.get(), 0, kDeviceName, kBluetoothAddress, false, false));
+  BluetoothLowEnergyCharacteristicsFinder characteristic_finder(
+      adapter_, device.get(), remote_service_, to_peripheral_char_,
+      from_peripheral_char_, success_callback_, error_callback_);
+  // Upcasting |characteristic_finder| to access the virtual protected methods
+  // from Observer: GattCharacteristicAdded() and
+  // GattDiscoveryCompleteForService().
+  device::BluetoothAdapter::Observer* observer =
+      static_cast<device::BluetoothAdapter::Observer*>(&characteristic_finder);
+
+  RemoteAttribute found_to_char, found_from_char;
+  // These shouldn't be called at all since the GATT events below are for other
+  // devices.
+  EXPECT_CALL(*this, OnCharacteristicsFound(_, _, _)).Times(0);
+  EXPECT_CALL(*this, OnCharacteristicsFinderError(_, _)).Times(0);
+
+  std::unique_ptr<device::MockBluetoothGattCharacteristic> from_char =
+      ExpectToFindCharacteristic(device::BluetoothUUID(kFromPeripheralCharUUID),
+                                 kFromPeripheralCharID, true);
+  observer->GattCharacteristicAdded(adapter_.get(), from_char.get());
+
+  std::unique_ptr<device::MockBluetoothGattCharacteristic> to_char =
+      ExpectToFindCharacteristic(device::BluetoothUUID(kToPeripheralCharUUID),
+                                 kToPeripheralCharID, true);
+  observer->GattCharacteristicAdded(adapter_.get(), to_char.get());
+
+  EXPECT_CALL(*service_, GetUUID())
+      .WillOnce(Return(device::BluetoothUUID(kServiceUUID)));
+  observer->GattDiscoveryCompleteForService(adapter_.get(), service_.get());
+}
+
 TEST_F(CryptAuthBluetoothLowEnergyCharacteristicFinderTest,
        DidntFindRightCharacteristics) {
   BluetoothLowEnergyCharacteristicsFinder characteristic_finder(
@@ -188,6 +225,28 @@ TEST_F(CryptAuthBluetoothLowEnergyCharacteristicFinderTest,
   EXPECT_CALL(*service_, GetUUID())
       .WillOnce(Return(device::BluetoothUUID(kServiceUUID)));
   observer->GattDiscoveryCompleteForService(adapter_.get(), service_.get());
+}
+
+TEST_F(CryptAuthBluetoothLowEnergyCharacteristicFinderTest,
+       DidntFindRightCharacteristicsNorService) {
+  BluetoothLowEnergyCharacteristicsFinder characteristic_finder(
+      adapter_, device_.get(), remote_service_, to_peripheral_char_,
+      from_peripheral_char_, success_callback_, error_callback_);
+  device::BluetoothAdapter::Observer* observer =
+      static_cast<device::BluetoothAdapter::Observer*>(&characteristic_finder);
+
+  EXPECT_CALL(*this, OnCharacteristicsFound(_, _, _)).Times(0);
+  EXPECT_CALL(*this, OnCharacteristicsFinderError(_, _));
+
+  std::unique_ptr<device::MockBluetoothGattCharacteristic> other_char =
+      ExpectToFindCharacteristic(device::BluetoothUUID(kOtherCharUUID),
+                                 kOtherCharID, false);
+  observer->GattCharacteristicAdded(adapter_.get(), other_char.get());
+
+  // GattServicesDiscovered event is fired but the service that contains the
+  // characteristics has not been found. OnCharacteristicsFinderError is
+  // expected to be called.
+  observer->GattServicesDiscovered(adapter_.get(), device_.get());
 }
 
 TEST_F(CryptAuthBluetoothLowEnergyCharacteristicFinderTest,

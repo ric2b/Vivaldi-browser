@@ -25,6 +25,9 @@ Polymer({
       }
     },
 
+    /** @private Filter applied to search engines. */
+    searchEnginesFilter_: String,
+
     /** @private {!SearchPageHotwordInfo|undefined} */
     hotwordInfo_: Object,
 
@@ -36,9 +39,6 @@ Polymer({
      * @private {!chrome.settingsPrivate.PrefObject|undefined}
      */
     hotwordSearchEnablePref_: Object,
-
-    /** @private */
-    googleNowAvailable_: Boolean,
 
     /** @type {?Map<string, string>} */
     focusConfig_: Object,
@@ -65,24 +65,16 @@ Polymer({
   /** @override */
   ready: function() {
     // Omnibox search engine
-    var updateSearchEngines = function(searchEngines) {
+    var updateSearchEngines = searchEngines => {
       this.set('searchEngines_', searchEngines.defaults);
       this.requestHotwordInfoUpdate_();
-    }.bind(this);
+    };
     this.browserProxy_.getSearchEnginesList().then(updateSearchEngines);
     cr.addWebUIListener('search-engines-changed', updateSearchEngines);
 
     // Hotword (OK Google) listener
     cr.addWebUIListener(
         'hotword-info-update', this.hotwordInfoUpdate_.bind(this));
-
-    // Google Now cards in the launcher
-    cr.addWebUIListener(
-        'google-now-availability-changed',
-        this.googleNowAvailabilityUpdate_.bind(this));
-    this.browserProxy_.getGoogleNowAvailability().then(function(available) {
-      this.googleNowAvailabilityUpdate_(available);
-    }.bind(this));
 
     this.focusConfig_ = new Map();
     if (settings.routes.SEARCH_ENGINES) {
@@ -136,9 +128,9 @@ Polymer({
 
   /** @private */
   requestHotwordInfoUpdate_: function() {
-    this.browserProxy_.getHotwordInfo().then(function(hotwordInfo) {
+    this.browserProxy_.getHotwordInfo().then(hotwordInfo => {
       this.hotwordInfoUpdate_(hotwordInfo);
-    }.bind(this));
+    });
   },
 
   /**
@@ -152,14 +144,6 @@ Polymer({
       type: chrome.settingsPrivate.PrefType.BOOLEAN,
       value: this.hotwordInfo_.enabled,
     };
-  },
-
-  /**
-   * @param {boolean} available
-   * @private
-   */
-  googleNowAvailabilityUpdate_: function(available) {
-    this.googleNowAvailable_ = available;
   },
 
   /**
@@ -212,8 +196,9 @@ Polymer({
    * @return {boolean}
    * @private
    */
-  showAssistantSection_: function(featureAvailable, arcEnabled) {
-    return featureAvailable && arcEnabled;
+  showAssistantSection_: function(
+      featureAvailable, arcEnabled, valuePropAccepted) {
+    return featureAvailable && arcEnabled && valuePropAccepted;
   },
   // </if>
 

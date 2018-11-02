@@ -12,7 +12,7 @@ chrome.runtime.onMessageExternal.addListener(function(
       error['message'] = errorString;
     }
 
-    var errorMessage = error || chrome.extension.lastError;
+    var errorMessage = error || chrome.runtime.lastError;
     sendResponse({'value': value, 'error': errorMessage});
   }
 
@@ -118,7 +118,7 @@ chrome.runtime.onMessageExternal.addListener(function(
                               var errorMessage = null;
                               // If upload fails, report all previous errors.
                               // Otherwise, throw them away.
-                              if (chrome.extension.lastError !== undefined) {
+                              if (chrome.runtime.lastError !== undefined) {
                                 appendLastErrorMessage(errors);
                                 errorMessage = errors.join('; ');
                               }
@@ -273,25 +273,27 @@ function onProcessCpu(port) {
     if (!tabProcess) {
       return;
     }
-    var pluginProcessCpu = 0, browserProcessCpu = 0, gpuProcessCpu = 0;
+
+    var browserProcessCpu, gpuProcessCpu;
     for (var pid in processes) {
       var process = processes[pid];
       if (process.type == 'browser') {
         browserProcessCpu = process.cpu;
       } else if (process.type == 'gpu') {
         gpuProcessCpu = process.cpu;
-      } else if (
-          (process.type == 'plugin' || process.type == 'nacl') &&
-          process.title.toLowerCase().indexOf('hangouts') > 0) {
-        pluginProcessCpu = process.cpu;
       }
+      if (!!browserProcessCpu && !!gpuProcessCpu)
+        break;
     }
 
     port.postMessage({
+      'browserCpuUsage': browserProcessCpu || 0,
+      'gpuCpuUsage': gpuProcessCpu || 0,
       'tabCpuUsage': tabProcess.cpu,
-      'browserCpuUsage': browserProcessCpu,
-      'gpuCpuUsage': gpuProcessCpu,
-      'pluginCpuUsage': pluginProcessCpu
+      'tabNetworkUsage': tabProcess.network,
+      'tabPrivateMemory': tabProcess.privateMemory,
+      'tabJsMemoryAllocated': tabProcess.jsMemoryAllocated,
+      'tabJsMemoryUsed': tabProcess.jsMemoryUsed
     });
   }
 
@@ -302,8 +304,8 @@ function onProcessCpu(port) {
 }
 
 function appendLastErrorMessage(errors) {
-  if (chrome.extension.lastError !== undefined)
-    errors.push(chrome.extension.lastError.message);
+  if (chrome.runtime.lastError !== undefined)
+    errors.push(chrome.runtime.lastError.message);
 }
 
 chrome.runtime.onConnectExternal.addListener(function(port) {

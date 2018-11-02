@@ -13,11 +13,8 @@
 #include "ash/system/network/network_portal_detector_observer.h"
 #include "ash/system/screen_security/screen_capture_observer.h"
 #include "ash/system/screen_security/screen_share_observer.h"
-#include "ash/system/session/last_window_closed_observer.h"
-#include "ash/system/session/logout_button_observer.h"
 #include "ash/system/status_area_focus_observer.h"
 #include "ash/system/tray_tracing.h"
-#include "ash/system/update/update_observer.h"
 #include "ash/system/virtual_keyboard/virtual_keyboard_observer.h"
 
 namespace ash {
@@ -36,10 +33,10 @@ void SystemTrayNotifier::RemoveAccessibilityObserver(
   accessibility_observers_.RemoveObserver(observer);
 }
 
-void SystemTrayNotifier::NotifyAccessibilityModeChanged(
+void SystemTrayNotifier::NotifyAccessibilityStatusChanged(
     AccessibilityNotificationVisibility notify) {
   for (auto& observer : accessibility_observers_)
-    observer.OnAccessibilityModeChanged(notify);
+    observer.OnAccessibilityStatusChanged(notify);
 }
 
 void SystemTrayNotifier::AddBluetoothObserver(BluetoothObserver* observer) {
@@ -119,42 +116,6 @@ void SystemTrayNotifier::NotifyRefreshIME() {
 void SystemTrayNotifier::NotifyRefreshIMEMenu(bool is_active) {
   for (auto& observer : ime_observers_)
     observer.OnIMEMenuActivationChanged(is_active);
-}
-
-void SystemTrayNotifier::AddLastWindowClosedObserver(
-    LastWindowClosedObserver* observer) {
-  last_window_closed_observers_.AddObserver(observer);
-}
-
-void SystemTrayNotifier::RemoveLastWindowClosedObserver(
-    LastWindowClosedObserver* observer) {
-  last_window_closed_observers_.RemoveObserver(observer);
-}
-
-void SystemTrayNotifier::NotifyLastWindowClosed() {
-  for (auto& observer : last_window_closed_observers_)
-    observer.OnLastWindowClosed();
-}
-
-void SystemTrayNotifier::AddLogoutButtonObserver(
-    LogoutButtonObserver* observer) {
-  logout_button_observers_.AddObserver(observer);
-}
-
-void SystemTrayNotifier::RemoveLogoutButtonObserver(
-    LogoutButtonObserver* observer) {
-  logout_button_observers_.RemoveObserver(observer);
-}
-
-void SystemTrayNotifier::NotifyShowLoginButtonChanged(bool show_login_button) {
-  for (auto& observer : logout_button_observers_)
-    observer.OnShowLogoutButtonInTrayChanged(show_login_button);
-}
-
-void SystemTrayNotifier::NotifyLogoutDialogDurationChanged(
-    base::TimeDelta duration) {
-  for (auto& observer : logout_button_observers_)
-    observer.OnLogoutDialogDurationChanged(duration);
 }
 
 void SystemTrayNotifier::AddNetworkObserver(NetworkObserver* observer) {
@@ -255,19 +216,6 @@ void SystemTrayNotifier::RemoveTracingObserver(TracingObserver* observer) {
 void SystemTrayNotifier::NotifyTracingModeChanged(bool value) {
   for (auto& observer : tracing_observers_)
     observer.OnTracingModeChanged(value);
-}
-
-void SystemTrayNotifier::AddUpdateObserver(UpdateObserver* observer) {
-  update_observers_.AddObserver(observer);
-}
-
-void SystemTrayNotifier::RemoveUpdateObserver(UpdateObserver* observer) {
-  update_observers_.RemoveObserver(observer);
-}
-
-void SystemTrayNotifier::NotifyUpdateOverCellularTargetSet(bool success) {
-  for (auto& observer : update_observers_)
-    observer.OnUpdateOverCellularTargetSet(success);
 }
 
 void SystemTrayNotifier::AddVirtualKeyboardObserver(

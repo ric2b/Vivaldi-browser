@@ -54,7 +54,8 @@ AXObjectCache* AXObjectCache::Create(Document& document) {
   return create_function_(document);
 }
 
-AXObjectCache::AXObjectCache() {}
+AXObjectCache::AXObjectCache(Document& document)
+    : ContextLifecycleObserver(document.GetExecutionContext()) {}
 
 AXObjectCache::~AXObjectCache() {}
 
@@ -165,6 +166,10 @@ bool AXObjectCache::IsInsideFocusableElementOrARIAWidget(const Node& node) {
   return false;
 }
 
+DEFINE_TRACE(AXObjectCache) {
+  ContextLifecycleObserver::Trace(visitor);
+}
+
 STATIC_ASSERT_ENUM(kWebAXEventActiveDescendantChanged,
                    AXObjectCache::kAXActiveDescendantChanged);
 STATIC_ASSERT_ENUM(kWebAXEventAlert, AXObjectCache::kAXAlert);
@@ -216,7 +221,5 @@ STATIC_ASSERT_ENUM(kWebAXEventTextChanged, AXObjectCache::kAXTextChanged);
 STATIC_ASSERT_ENUM(kWebAXEventTextInserted, AXObjectCache::kAXTextInserted);
 STATIC_ASSERT_ENUM(kWebAXEventTextRemoved, AXObjectCache::kAXTextRemoved);
 STATIC_ASSERT_ENUM(kWebAXEventValueChanged, AXObjectCache::kAXValueChanged);
-
-#undef STATIC_ASSERT_ENUM
 
 }  // namespace blink

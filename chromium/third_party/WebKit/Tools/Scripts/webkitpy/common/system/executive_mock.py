@@ -61,7 +61,8 @@ class MockProcess(object):
         return
 
 
-MockCall = collections.namedtuple('MockCall', ('args', 'env'))
+MockCall = collections.namedtuple(
+    'MockCall', ('args', 'kwargs'))
 
 
 class MockExecutive(object):
@@ -89,13 +90,8 @@ class MockExecutive(object):
         self._proc = proc
         self.full_calls = []
 
-    def _append_call(self, args, env=None):
-        if env:
-            env = env.copy()
-        self.full_calls.append(MockCall(
-            args=args,
-            env=env.copy() if env is not None else None,
-        ))
+    def _append_call(self, args, **kwargs):
+        self.full_calls.append(MockCall(args=args, kwargs=kwargs))
 
     def check_running_pid(self, pid):
         return pid in self._running_pids.values()
@@ -126,7 +122,7 @@ class MockExecutive(object):
                     decode_output=False,
                     env=None,
                     debug_logging=False):
-        self._append_call(args, env=env)
+        self._append_call(args, cwd=cwd, input=input, env=env)
 
         assert isinstance(args, list) or isinstance(args, tuple)
 
@@ -170,7 +166,7 @@ class MockExecutive(object):
 
     def popen(self, args, cwd=None, env=None, **_):
         assert all(isinstance(arg, basestring) for arg in args)
-        self._append_call(args, env=env)
+        self._append_call(args, cwd=cwd, env=env)
         if self._should_log:
             cwd_string = ''
             if cwd:
@@ -205,9 +201,6 @@ class MockExecutive(object):
     def map(self, thunk, arglist, processes=None):
         return map(thunk, arglist)
 
-    def process_dump(self):
-        return []
-
     @property
     def calls(self):
         # TODO(crbug.com/718456): Make self.full_calls always be an array of
@@ -224,6 +217,7 @@ class MockExecutive(object):
 
 
 def mock_git_commands(vals, strict=False):
+    # TODO(robertma): Support optional look-up by arguments.
     def run_fn(args):
         sub_command = args[1]
         if strict and sub_command not in vals:

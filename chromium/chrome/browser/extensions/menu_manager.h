@@ -163,6 +163,7 @@ class MenuItem {
   MenuItem(const Id& id,
            const std::string& title,
            bool checked,
+           bool visible,
            bool enabled,
            Type type,
            const ContextList& contexts);
@@ -181,6 +182,7 @@ class MenuItem {
   const ContextList& contexts() const { return contexts_; }
   Type type() const { return type_; }
   bool checked() const { return checked_; }
+  bool visible() const { return visible_; }
   bool enabled() const { return enabled_; }
   const URLPatternSet& document_url_patterns() const {
     return document_url_patterns_;
@@ -193,6 +195,7 @@ class MenuItem {
   void set_title(const std::string& new_title) { title_ = new_title; }
   void set_contexts(ContextList contexts) { contexts_ = contexts; }
   void set_type(Type type) { type_ = type; }
+  void set_visible(bool visible) { visible_ = visible; }
   void set_enabled(bool enabled) { enabled_ = enabled; }
   void set_document_url_patterns(const URLPatternSet& patterns) {
     document_url_patterns_ = patterns;
@@ -251,6 +254,9 @@ class MenuItem {
 
   // This should only be true for items of type CHECKBOX or RADIO.
   bool checked_;
+
+  // If the item is visible (shown or hidden) in the menu.
+  bool visible_;
 
   // If the item is enabled or not.
   bool enabled_;
@@ -386,7 +392,7 @@ class MenuManager : public content::NotificationObserver,
   // If there are no radio items selected, then the first item in the run
   // will get selected. If there are multiple radio items selected, then only
   // the last one will get selected.
-  void SanitizeRadioList(const MenuItem::OwnedList& item_list);
+  void SanitizeRadioListsInMenu(const MenuItem::OwnedList& item_list);
 
   // Returns true if item is a descendant of an item with id |ancestor_id|.
   bool DescendantOf(MenuItem* item, const MenuItem::Id& ancestor_id);

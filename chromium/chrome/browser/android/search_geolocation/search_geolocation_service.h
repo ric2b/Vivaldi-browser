@@ -37,6 +37,8 @@ class SearchGeolocationService : public KeyedService {
   // testing.
   class SearchEngineDelegate {
    public:
+    virtual ~SearchEngineDelegate() {}
+
     // Returns the name of the current DSE.
     virtual base::string16 GetDSEName() = 0;
 
@@ -82,6 +84,9 @@ class SearchGeolocationService : public KeyedService {
 
   // Changes the DSE geolocation setting.
   void SetDSEGeolocationSetting(bool setting);
+
+  // Returns the DSE's Origin if geolocation enabled, else an unique Origin.
+  url::Origin GetDSEOriginIfEnabled();
 
   // KeyedService:
   void Shutdown() override;

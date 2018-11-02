@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_UI_ASH_LAUNCHER_ARC_APP_DEFERRED_LAUNCHER_ITEM_CONTROLLER_H_
 #define CHROME_BROWSER_UI_ASH_LAUNCHER_ARC_APP_DEFERRED_LAUNCHER_ITEM_CONTROLLER_H_
 
+#include <stdint.h>
+
 #include <string>
 
 #include "ash/public/cpp/shelf_item_delegate.h"
@@ -22,6 +24,7 @@ class ArcAppDeferredLauncherItemController : public ash::ShelfItemDelegate {
   ArcAppDeferredLauncherItemController(
       const std::string& arc_app_id,
       int event_flags,
+      int64_t display_id,
       const base::WeakPtr<ArcAppDeferredLauncherController>& host);
 
   ~ArcAppDeferredLauncherItemController() override;
@@ -29,19 +32,26 @@ class ArcAppDeferredLauncherItemController : public ash::ShelfItemDelegate {
   base::TimeDelta GetActiveTime() const;
 
   int event_flags() const { return event_flags_; }
+  int64_t display_id() const { return display_id_; }
 
   // ash::ShelfItemDelegate:
   void ItemSelected(std::unique_ptr<ui::Event> event,
                     int64_t display_id,
                     ash::ShelfLaunchSource source,
                     ItemSelectedCallback callback) override;
-  void ExecuteCommand(uint32_t command_id, int32_t event_flags) override;
+  void ExecuteCommand(bool from_context_menu,
+                      int64_t command_id,
+                      int32_t event_flags,
+                      int64_t display_id) override;
+  std::unique_ptr<ui::MenuModel> GetContextMenu(int64_t display_id) override;
   void Close() override;
 
  private:
   // The flags of the event that caused the ARC app to be activated. These will
   // be propagated to the launch event once the app is actually launched.
   const int event_flags_;
+
+  const int64_t display_id_;
 
   base::WeakPtr<ArcAppDeferredLauncherController> host_;
   const base::Time start_time_;

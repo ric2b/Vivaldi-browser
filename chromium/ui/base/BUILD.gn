@@ -67,8 +67,6 @@ component("base") {
     "accelerators/platform_accelerator.h",
     "accelerators/platform_accelerator_cocoa.h",
     "accelerators/platform_accelerator_cocoa.mm",
-    "android/ui_base_jni_registrar.cc",
-    "android/ui_base_jni_registrar.h",
     "class_property.cc",
     "class_property.h",
     "clipboard/clipboard_android.cc",
@@ -379,8 +377,7 @@ component("base") {
 
   if (is_fuchsia) {
     sources += [
-      "clipboard/clipboard_fuchsia.cc",
-      "clipboard/clipboard_fuchsia.h",
+      "idle/idle_fuchsia.cc",
       "resource/resource_bundle_fuchsia.cc",
     ]
   }
@@ -584,10 +581,13 @@ component("base") {
     ]
 
     deps += [
-      "//ui/events/ozone:events_ozone_evdev",
       "//ui/events/ozone:events_ozone_layout",
       "//ui/ozone:ozone_base",
     ]
+
+    if (!is_fuchsia) {
+      deps += [ "//ui/events/ozone:events_ozone_evdev" ]
+    }
   }
 
   if (!toolkit_views && !use_aura) {
@@ -788,6 +788,7 @@ test("ui_base_unittests") {
     "material_design/material_design_controller_unittest.cc",
     "models/tree_node_iterator_unittest.cc",
     "resource/data_pack_literal.cc",
+    "resource/data_pack_literal.h",
     "resource/data_pack_unittest.cc",
     "resource/resource_bundle_unittest.cc",
     "resource/scale_factor_unittest.cc",
@@ -834,6 +835,7 @@ test("ui_base_unittests") {
       "cocoa/controls/hyperlink_text_view_unittest.mm",
       "cocoa/focus_tracker_unittest.mm",
       "cocoa/fullscreen_window_manager_unittest.mm",
+      "cocoa/hover_button_unittest.mm",
       "cocoa/hover_image_button_unittest.mm",
       "cocoa/menu_controller_unittest.mm",
       "cocoa/nsgraphics_context_additions_unittest.mm",
@@ -868,7 +870,7 @@ test("ui_base_unittests") {
     if (use_x11) {
       sources += [ "ime/composition_text_util_pango_unittest.cc" ]
     }
-    if (!use_x11 && is_chromeos) {
+    if (is_chromeos) {
       # These were already removed in the non-chromeos case.
       sources -= [ "ime/input_method_chromeos_unittest.cc" ]
     }
@@ -881,6 +883,7 @@ test("ui_base_unittests") {
     ":ui_base_unittests_bundle_data",
     "//base",
     "//base/test:test_support",
+    "//mojo/edk/system",
     "//net",
     "//skia",
     "//testing/gmock",
@@ -971,7 +974,7 @@ test("ui_base_unittests") {
     ]
   }
 
-  if (use_x11 && !is_chromeos) {
+  if (use_x11) {
     sources += [
       "dragdrop/os_exchange_data_provider_aurax11_unittest.cc",
       "x/selection_requestor_unittest.cc",

@@ -46,23 +46,28 @@ class GLApiTest : public testing::Test {
     fake_extension_strings_ = nullptr;
   }
 
-  void InitializeAPI(base::CommandLine* command_line) {
+  void InitializeAPI(const char* disabled_extensions) {
     driver_.reset(new DriverGL());
     driver_->fn.glGetStringFn = &FakeGetString;
     driver_->fn.glGetStringiFn = &FakeGetStringi;
     driver_->fn.glGetIntegervFn = &FakeGetIntegervFn;
 
     api_.reset(new RealGLApi());
-    if (command_line)
-      api_->InitializeWithCommandLine(driver_.get(), command_line);
-    else
-      api_->Initialize(driver_.get());
+    if (disabled_extensions) {
+      api_->SetDisabledExtensions(disabled_extensions);
+    }
+    api_->Initialize(driver_.get());
 
-    api_->InitializeFilteredExtensions();
-    std::unique_ptr<GLVersionInfo> version =
-        GetVersionInfoFromContext(api_.get());
-    driver_->InitializeDynamicBindings(
-        version.get(), GetGLExtensionsFromCurrentContext(api_.get()));
+    std::string extensions_string =
+        GetGLExtensionsFromCurrentContext(api_.get());
+    ExtensionSet extension_set = MakeExtensionSet(extensions_string);
+
+    auto version = std::make_unique<GLVersionInfo>(
+        reinterpret_cast<const char*>(api_->glGetStringFn(GL_VERSION)),
+        reinterpret_cast<const char*>(api_->glGetStringFn(GL_RENDERER)),
+        extension_set);
+
+    driver_->InitializeDynamicBindings(version.get(), extension_set);
     api_->set_version(std::move(version));
   }
 
@@ -135,14 +140,9 @@ TEST_F(GLApiTest, DisabledExtensionStringTest) {
 
   SetFakeExtensionString(kFakeExtensions);
   InitializeAPI(nullptr);
-
   EXPECT_STREQ(kFakeExtensions, GetExtensions());
 
-  base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
-  command_line.AppendSwitchASCII(switches::kDisableGLExtensions,
-                                 kFakeDisabledExtensions);
-  InitializeAPI(&command_line);
-
+  InitializeAPI(kFakeDisabledExtensions);
   EXPECT_STREQ(kFilteredExtensions, GetExtensions());
 }
 
@@ -154,14 +154,9 @@ TEST_F(GLApiTest, DisabledExtensionBitTest) {
 
   SetFakeExtensionStrings(kFakeExtensions, arraysize(kFakeExtensions));
   InitializeAPI(nullptr);
-
   EXPECT_TRUE(driver_->ext.b_GL_ARB_timer_query);
 
-  base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
-  command_line.AppendSwitchASCII(switches::kDisableGLExtensions,
-                                 kFakeDisabledExtensions);
-  InitializeAPI(&command_line);
-
+  InitializeAPI(kFakeDisabledExtensions);
   EXPECT_FALSE(driver_->ext.b_GL_ARB_timer_query);
 }
 
@@ -186,11 +181,7 @@ TEST_F(GLApiTest, DisabledExtensionStringIndexTest) {
     EXPECT_STREQ(kFakeExtensions[i], GetExtensioni(i));
   }
 
-  base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
-  command_line.AppendSwitchASCII(switches::kDisableGLExtensions,
-                                 kFakeDisabledExtensions);
-  InitializeAPI(&command_line);
-
+  InitializeAPI(kFakeDisabledExtensions);
   EXPECT_EQ(arraysize(kFilteredExtensions), GetNumExtensions());
   for (uint32_t i = 0; i < arraysize(kFilteredExtensions); ++i) {
     EXPECT_STREQ(kFilteredExtensions[i], GetExtensioni(i));

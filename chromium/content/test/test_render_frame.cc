@@ -99,15 +99,15 @@ void TestRenderFrame::CollapseSelection() {
   OnCollapseSelection();
 }
 
-void TestRenderFrame::SetAccessibilityMode(AccessibilityMode new_mode) {
+void TestRenderFrame::SetAccessibilityMode(ui::AXMode new_mode) {
   OnSetAccessibilityMode(new_mode);
 }
 
 void TestRenderFrame::SetCompositionFromExistingText(
     int start,
     int end,
-    const std::vector<blink::WebCompositionUnderline>& underlines) {
-  OnSetCompositionFromExistingText(start, end, underlines);
+    const std::vector<blink::WebImeTextSpan>& ime_text_spans) {
+  OnSetCompositionFromExistingText(start, end, ime_text_spans);
 }
 
 blink::WebNavigationPolicy TestRenderFrame::DecidePolicyForNavigation(

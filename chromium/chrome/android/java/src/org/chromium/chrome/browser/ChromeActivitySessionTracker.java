@@ -30,6 +30,7 @@ import org.chromium.chrome.browser.notifications.NotificationPlatformBridge;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.preferences.privacy.BrowsingDataBridge;
+import org.chromium.chrome.browser.profiles.ProfileManagerUtils;
 import org.chromium.chrome.browser.share.ShareHelper;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.util.FeatureUtilities;
@@ -156,7 +157,7 @@ public class ChromeActivitySessionTracker {
     private void onForegroundSessionEnd() {
         if (!mIsStarted) return;
         UmaUtils.recordBackgroundTime();
-        ChromeApplication.flushPersistentData();
+        ProfileManagerUtils.flushPersistentDataForAllProfiles();
         mIsStarted = false;
         mPowerBroadcastReceiver.onForegroundSessionEnd();
 
@@ -188,14 +189,11 @@ public class ChromeActivitySessionTracker {
     }
 
     private ApplicationStateListener createApplicationStateListener() {
-        return new ApplicationStateListener() {
-            @Override
-            public void onApplicationStateChange(int newState) {
-                if (newState == ApplicationState.HAS_STOPPED_ACTIVITIES) {
-                    onForegroundSessionEnd();
-                } else if (newState == ApplicationState.HAS_DESTROYED_ACTIVITIES) {
-                    onForegroundActivityDestroyed();
-                }
+        return newState -> {
+            if (newState == ApplicationState.HAS_STOPPED_ACTIVITIES) {
+                onForegroundSessionEnd();
+            } else if (newState == ApplicationState.HAS_DESTROYED_ACTIVITIES) {
+                onForegroundActivityDestroyed();
             }
         };
     }

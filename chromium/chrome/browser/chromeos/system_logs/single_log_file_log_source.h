@@ -32,6 +32,21 @@ class SingleLogFileLogSource : public SystemLogsSource {
 
     // For /var/log/atrus.log.
     kAtrusLog,
+
+    // For /var/log/net.log.
+    kNetLog,
+
+    // For /var/log/eventlog.txt.
+    kEventLog,
+
+    // For /var/log/update_engine.log.
+    kUpdateEngineLog,
+
+    // For /var/log/power_manager/powerd.LATEST.
+    kPowerdLatest,
+
+    // For /var/log/power_manager/powerd.PREVIOUS.
+    kPowerdPrevious,
   };
 
   explicit SingleLogFileLogSource(SupportedSource source);

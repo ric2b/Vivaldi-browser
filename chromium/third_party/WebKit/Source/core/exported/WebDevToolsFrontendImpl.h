@@ -42,18 +42,18 @@
 namespace blink {
 
 class DevToolsHost;
-class WebLocalFrameBase;
+class WebLocalFrameImpl;
 
 class CORE_EXPORT WebDevToolsFrontendImpl final
-    : public NON_EXPORTED_BASE(WebDevToolsFrontend),
-      public NON_EXPORTED_BASE(InspectorFrontendClient) {
+    : public WebDevToolsFrontend,
+      public InspectorFrontendClient {
   WTF_MAKE_NONCOPYABLE(WebDevToolsFrontendImpl);
 
  public:
-  WebDevToolsFrontendImpl(WebLocalFrameBase*, WebDevToolsFrontendClient*);
+  WebDevToolsFrontendImpl(WebLocalFrameImpl*, WebDevToolsFrontendClient*);
   ~WebDevToolsFrontendImpl() override;
 
-  void DidClearWindowObject(WebLocalFrameBase*);
+  void DidClearWindowObject(WebLocalFrameImpl*);
 
   void SendMessageToEmbedder(const WTF::String&) override;
 
@@ -65,7 +65,7 @@ class CORE_EXPORT WebDevToolsFrontendImpl final
                        ContextMenuProvider*) override;
 
  private:
-  Persistent<WebLocalFrameBase> web_frame_;
+  Persistent<WebLocalFrameImpl> web_frame_;
   WebDevToolsFrontendClient* client_;
   Persistent<DevToolsHost> devtools_host_;
 };

@@ -34,8 +34,8 @@
 #include "core/clipboard/Pasteboard.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/UserGestureIndicator.h"
-#include "core/events/Event.h"
-#include "core/events/EventTarget.h"
+#include "core/dom/events/Event.h"
+#include "core/dom/events/EventTarget.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
@@ -133,14 +133,15 @@ void DevToolsHost::EvaluateScript(const String& expression) {
   if (!script_state)
     return;
   ScriptState::Scope scope(script_state);
-  UserGestureIndicator gesture_indicator(
-      UserGestureToken::Create(frontend_frame_->GetDocument()));
+  std::unique_ptr<UserGestureIndicator> gesture_indicator =
+      LocalFrame::CreateUserGesture(frontend_frame_);
   v8::MicrotasksScope microtasks(script_state->GetIsolate(),
                                  v8::MicrotasksScope::kRunMicrotasks);
   v8::Local<v8::String> source =
       V8AtomicString(script_state->GetIsolate(), expression.Utf8().data());
-  V8ScriptRunner::CompileAndRunInternalScript(
-      source, script_state->GetIsolate(), String(), TextPosition());
+  V8ScriptRunner::CompileAndRunInternalScript(script_state, source,
+                                              script_state->GetIsolate(),
+                                              String(), TextPosition());
 }
 
 void DevToolsHost::DisconnectClient() {

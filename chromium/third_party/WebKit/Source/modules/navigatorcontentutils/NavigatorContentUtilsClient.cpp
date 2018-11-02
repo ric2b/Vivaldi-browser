@@ -4,18 +4,20 @@
 
 #include "modules/navigatorcontentutils/NavigatorContentUtilsClient.h"
 
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/frame/WebLocalFrameImpl.h"
+#include "platform/wtf/Assertions.h"
 #include "public/web/WebFrameClient.h"
+#include "public/web/WebNavigatorContentUtilsClient.h"
 
 namespace blink {
 
 NavigatorContentUtilsClient* NavigatorContentUtilsClient::Create(
-    WebLocalFrameBase* web_frame) {
+    WebLocalFrameImpl* web_frame) {
   return new NavigatorContentUtilsClient(web_frame);
 }
 
 NavigatorContentUtilsClient::NavigatorContentUtilsClient(
-    WebLocalFrameBase* web_frame)
+    WebLocalFrameImpl* web_frame)
     : web_frame_(web_frame) {}
 
 DEFINE_TRACE(NavigatorContentUtilsClient) {
@@ -40,5 +42,12 @@ void NavigatorContentUtilsClient::UnregisterProtocolHandler(
     const KURL& url) {
   web_frame_->Client()->UnregisterProtocolHandler(scheme, url);
 }
+
+STATIC_ASSERT_ENUM(kWebCustomHandlersNew,
+                   NavigatorContentUtilsClient::kCustomHandlersNew);
+STATIC_ASSERT_ENUM(kWebCustomHandlersRegistered,
+                   NavigatorContentUtilsClient::kCustomHandlersRegistered);
+STATIC_ASSERT_ENUM(kWebCustomHandlersDeclined,
+                   NavigatorContentUtilsClient::kCustomHandlersDeclined);
 
 }  // namespace blink

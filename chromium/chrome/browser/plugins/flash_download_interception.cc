@@ -23,6 +23,9 @@
 #include "third_party/re2/src/re2/re2.h"
 #include "url/origin.h"
 
+#include "app/vivaldi_apptools.h"
+#include "extensions/browser/guest_view/web_view/web_view_permission_helper.h"
+
 using content::BrowserThread;
 using content::NavigationHandle;
 using content::NavigationThrottle;
@@ -43,6 +46,8 @@ const char kGetFlashURLSecondaryDownloadQuery[] =
     "P1_Prod_Version=ShockwaveFlash";
 
 void DoNothing(ContentSetting result) {}
+
+void DoThings(bool /* allow */, const std::string& /* user_input */) {}
 
 bool InterceptNavigation(
     const GURL& source_url,
@@ -71,13 +76,29 @@ void FlashDownloadInterception::InterceptFlashDownloadNavigation(
       host_content_settings_map, CONTENT_SETTINGS_TYPE_PLUGINS, flash_setting);
 
   if (flash_setting == CONTENT_SETTING_DETECT_IMPORTANT_CONTENT) {
+    // NOTE(andre@vivaldi.com) : The most likely next step is the whole thing is
+    // removed.
+    if (vivaldi::IsVivaldiRunning()) {
+      extensions::WebViewPermissionHelper* permissionhelper =
+        extensions::WebViewPermissionHelper::FromWebContents(web_contents);
+      if (permissionhelper) {
+        base::DictionaryValue request_info;
+        request_info.SetString(guest_view::kUrl,
+                               url::Origin(source_url).host());
+        permissionhelper->RequestPermission(
+            WEB_VIEW_PERMISSION_TYPE_LOAD_PLUGIN, request_info,
+            base::Bind(&DoThings), false /* allowed_by_default */);
+      }
+    } else {
     PermissionManager* manager = PermissionManager::Get(profile);
     manager->RequestPermission(
         CONTENT_SETTINGS_TYPE_PLUGINS, web_contents->GetMainFrame(),
         web_contents->GetLastCommittedURL(), true, base::Bind(&DoNothing));
+    }
   } else if (flash_setting == CONTENT_SETTING_BLOCK) {
-    TabSpecificContentSettings::FromWebContents(web_contents)
-        ->FlashDownloadBlocked();
+    auto* settings = TabSpecificContentSettings::FromWebContents(web_contents);
+    if (settings)
+      settings->FlashDownloadBlocked();
   }
 
   // If the content setting has been already changed, do nothing.

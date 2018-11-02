@@ -31,10 +31,6 @@ interface AnimationEvent : Event
     getter animationName
     getter elapsedTime
     method constructor
-interface AppBannerPromptResult
-    getter outcome
-    getter platform
-    method constructor
 interface ApplicationCache : EventTarget
     attribute CHECKING
     attribute DOWNLOADING
@@ -1358,6 +1354,10 @@ interface HTMLDListElement : HTMLElement
     getter compact
     method constructor
     setter compact
+interface HTMLDataElement : HTMLElement
+    getter value
+    method constructor
+    setter value
 interface HTMLDataListElement : HTMLElement
     getter options
     method constructor
@@ -2479,6 +2479,11 @@ interface HTMLTextAreaElement : HTMLElement
     setter selectionStart
     setter value
     setter wrap
+interface HTMLTimeElement : HTMLElement
+    attribute @@toStringTag
+    getter dateTime
+    method constructor
+    setter dateTime
 interface HTMLTitleElement : HTMLElement
     getter text
     method constructor
@@ -3163,6 +3168,7 @@ interface Performance : EventTarget
     getter memory
     getter navigation
     getter onresourcetimingbufferfull
+    getter timeOrigin
     getter timing
     method clearMarks
     method clearMeasures
@@ -4069,7 +4075,6 @@ interface SVGNumberList
     method replaceItem
 interface SVGPathElement : SVGGeometryElement
     method constructor
-    method getPathSegAtLength
 interface SVGPatternElement : SVGElement
     getter height
     getter href
@@ -5563,7 +5568,6 @@ interface webkitRTCPeerConnection : EventTarget
     method getLocalStreams
     method getRemoteStreams
     method getStats
-    method getStreamById
     method removeStream
     method setLocalDescription
     method setRemoteDescription

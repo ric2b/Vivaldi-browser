@@ -6,18 +6,20 @@
 
 #include <algorithm>
 
+#include "base/feature_list.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/omnibox_client.h"
+#include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_popup_model_observer.h"
 #include "components/omnibox/browser/omnibox_popup_view.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
 #include "third_party/icu/source/common/unicode/ubidi.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/gfx/image/image.h"
 
 using bookmarks::BookmarkModel;
 
@@ -26,14 +28,13 @@ using bookmarks::BookmarkModel;
 
 const size_t OmniboxPopupModel::kNoMatch = static_cast<size_t>(-1);
 
-OmniboxPopupModel::OmniboxPopupModel(
-    OmniboxPopupView* popup_view,
-    OmniboxEditModel* edit_model)
+OmniboxPopupModel::OmniboxPopupModel(OmniboxPopupView* popup_view,
+                                     OmniboxEditModel* edit_model)
     : view_(popup_view),
       edit_model_(edit_model),
-      hovered_line_(kNoMatch),
       selected_line_(kNoMatch),
-      selected_line_state_(NORMAL) {
+      selected_line_state_(NORMAL),
+      weak_factory_(this) {
   edit_model->set_popup_model(this);
 }
 
@@ -102,27 +103,6 @@ void OmniboxPopupModel::ComputeMatchMaxWidths(int contents_width,
 
 bool OmniboxPopupModel::IsOpen() const {
   return view_->IsOpen();
-}
-
-void OmniboxPopupModel::SetHoveredLine(size_t line) {
-  const bool is_disabling = (line == kNoMatch);
-  DCHECK(is_disabling || (line < result().size()));
-
-  if (line == hovered_line_)
-    return;  // Nothing to do
-
-  // We need to update |hovered_line_| before calling InvalidateLine(), since it
-  // will check it to determine how to draw.
-  const size_t prev_hovered_line = hovered_line_;
-  hovered_line_ = line;
-
-  // Make sure the old hovered line is redrawn.  No need to redraw the selected
-  // line since selection overrides hover so the appearance won't change.
-  if ((prev_hovered_line != kNoMatch) && (prev_hovered_line != selected_line_))
-    view_->InvalidateLine(prev_hovered_line);
-
-  if (!is_disabling && (hovered_line_ != selected_line_))
-    view_->InvalidateLine(hovered_line_);
 }
 
 void OmniboxPopupModel::SetSelectedLine(size_t line,
@@ -202,10 +182,6 @@ void OmniboxPopupModel::Move(int count) {
   if (result.empty())
     return;
 
-  // The user is using the keyboard to change the selection, so stop tracking
-  // hover.
-  SetHoveredLine(kNoMatch);
-
   // Clamp the new line to [0, result_.count() - 1].
   const size_t new_line = selected_line_ + count;
   SetSelectedLine(((count < 0) && (new_line >= selected_line_)) ? 0 : new_line,
@@ -274,11 +250,41 @@ void OmniboxPopupModel::OnResultChanged() {
   CHECK((selected_line_ != kNoMatch) || result.empty());
   manually_selected_match_.Clear();
   selected_line_state_ = NORMAL;
-  // If we're going to trim the window size to no longer include the hovered
-  // line, turn hover off.  Practically, this shouldn't happen, but it
-  // doesn't hurt to be defensive.
-  if ((hovered_line_ != kNoMatch) && (result.size() <= hovered_line_))
-    SetHoveredLine(kNoMatch);
+
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+  // Update all match icons.
+  if (base::FeatureList::IsEnabled(
+          omnibox::kUIExperimentShowSuggestionFavicons)) {
+    favicon_task_tracker_.TryCancelAll();
+
+    if (result.size() != displayed_page_favicons_.size())
+      displayed_page_favicons_.resize(result.size());
+
+    for (size_t i = 0; i < result.size(); i++) {
+      const AutocompleteMatch& match = result.match_at(i);
+      if (AutocompleteMatch::IsSearchType(match.type)) {
+        // Clear any existing icon.
+        if (!displayed_page_favicons_[i].is_empty())
+          OnPageFaviconFetched(i, GURL(), gfx::Image());
+        continue;
+      }
+
+      // If we already show the correct favicon, skip refetching to avoid
+      // hitting the favicon database and to avoid flicker.
+      //
+      // TODO(tommycli): Investigate whether the fetching can be done in the
+      // autocomplete controller, which already has knowledge of whether and
+      // when the matches are changing.
+      if (match.destination_url == displayed_page_favicons_[i])
+        continue;
+
+      edit_model_->client()->GetFaviconForPageUrl(
+          &favicon_task_tracker_, match.destination_url,
+          base::Bind(&OmniboxPopupModel::OnPageFaviconFetched,
+                     weak_factory_.GetWeakPtr(), i, match.destination_url));
+    }
+  }
+#endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
 
   bool popup_was_open = view_->IsOpen();
   view_->UpdatePopupAppearance();
@@ -300,4 +306,14 @@ void OmniboxPopupModel::RemoveObserver(OmniboxPopupModelObserver* observer) {
 void OmniboxPopupModel::SetAnswerBitmap(const SkBitmap& bitmap) {
   answer_bitmap_ = bitmap;
   view_->UpdatePopupAppearance();
+}
+
+void OmniboxPopupModel::OnPageFaviconFetched(size_t match_index,
+                                             const GURL& page_url,
+                                             const gfx::Image& icon) {
+  DCHECK_LT(match_index, displayed_page_favicons_.size());
+  DCHECK_NE(displayed_page_favicons_[match_index], page_url);
+
+  displayed_page_favicons_[match_index] = page_url;
+  view_->SetMatchIcon(match_index, icon);
 }

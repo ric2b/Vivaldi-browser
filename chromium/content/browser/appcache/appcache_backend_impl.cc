@@ -99,33 +99,36 @@ bool AppCacheBackendImpl::MarkAsForeignEntry(
   return host->MarkAsForeignEntry(document_url, cache_document_was_loaded_from);
 }
 
-bool AppCacheBackendImpl::GetStatusWithCallback(
-    int host_id, const GetStatusCallback& callback, void* callback_param) {
+bool AppCacheBackendImpl::GetStatusWithCallback(int host_id,
+                                                GetStatusCallback callback,
+                                                void* callback_param) {
   AppCacheHost* host = GetHost(host_id);
   if (!host)
     return false;
 
-  host->GetStatusWithCallback(callback, callback_param);
+  host->GetStatusWithCallback(std::move(callback), callback_param);
   return true;
 }
 
-bool AppCacheBackendImpl::StartUpdateWithCallback(
-    int host_id, const StartUpdateCallback& callback, void* callback_param) {
+bool AppCacheBackendImpl::StartUpdateWithCallback(int host_id,
+                                                  StartUpdateCallback callback,
+                                                  void* callback_param) {
   AppCacheHost* host = GetHost(host_id);
   if (!host)
     return false;
 
-  host->StartUpdateWithCallback(callback, callback_param);
+  host->StartUpdateWithCallback(std::move(callback), callback_param);
   return true;
 }
 
-bool AppCacheBackendImpl::SwapCacheWithCallback(
-    int host_id, const SwapCacheCallback& callback, void* callback_param) {
+bool AppCacheBackendImpl::SwapCacheWithCallback(int host_id,
+                                                SwapCacheCallback callback,
+                                                void* callback_param) {
   AppCacheHost* host = GetHost(host_id);
   if (!host)
     return false;
 
-  host->SwapCacheWithCallback(callback, callback_param);
+  host->SwapCacheWithCallback(std::move(callback), callback_param);
   return true;
 }
 

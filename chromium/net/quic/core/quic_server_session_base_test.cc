@@ -80,8 +80,6 @@ class TestServerSession : public QuicServerSessionBase {
   ~TestServerSession() override { delete connection(); };
 
  protected:
-  // TODO(ckrasic) - for two below, remove when
-  // quic_reloadable_flag_quic_refactor_stream_creation is deprecated.
   QuicSpdyStream* CreateIncomingDynamicStream(QuicStreamId id) override {
     if (!ShouldCreateIncomingDynamicStream(id)) {
       return nullptr;
@@ -102,10 +100,6 @@ class TestServerSession : public QuicServerSessionBase {
     stream->SetPriority(priority);
     ActivateStream(QuicWrapUnique(stream));
     return stream;
-  }
-
-  std::unique_ptr<QuicStream> CreateStream(QuicStreamId id) override {
-    return QuicMakeUnique<QuicSimpleServerStream>(id, this, response_cache_);
   }
 
   QuicCryptoServerStreamBase* CreateQuicCryptoServerStream(
@@ -198,17 +192,6 @@ MATCHER_P(EqualsProto, network_params, "") {
 INSTANTIATE_TEST_CASE_P(Tests,
                         QuicServerSessionBaseTest,
                         ::testing::ValuesIn(AllSupportedVersions()));
-TEST_P(QuicServerSessionBaseTest, ServerPushDisabledByDefault) {
-  FLAGS_quic_reloadable_flag_quic_enable_server_push_by_default = true;
-  // Without the client explicitly sending kSPSH, server push will be disabled
-  // at the server, until version 35 when it is enabled by default.
-  EXPECT_FALSE(
-      session_->config()->HasReceivedConnectionOptions() &&
-      ContainsQuicTag(session_->config()->ReceivedConnectionOptions(), kSPSH));
-  session_->OnConfigNegotiated();
-  EXPECT_TRUE(session_->server_push_enabled());
-}
-
 TEST_P(QuicServerSessionBaseTest, CloseStreamDueToReset) {
   // Open a stream, then reset it.
   // Send two bytes of payload to open it.
@@ -358,19 +341,6 @@ TEST_P(QuicServerSessionBaseTest, MaxAvailableStreams) {
       session_.get(), kLimitingStreamId + 2 * next_id));
 }
 
-// TODO(ckrasic): remove this when
-// FLAGS_quic_reloadable_flag_quic_enable_server_push_by_default is
-// deprecated.
-TEST_P(QuicServerSessionBaseTest, EnableServerPushThroughConnectionOption) {
-  FLAGS_quic_reloadable_flag_quic_enable_server_push_by_default = false;
-  // Assume server received server push connection option.
-  QuicTagVector copt;
-  copt.push_back(kSPSH);
-  QuicConfigPeer::SetReceivedConnectionOptions(session_->config(), copt);
-  session_->OnConfigNegotiated();
-  EXPECT_TRUE(session_->server_push_enabled());
-}
-
 TEST_P(QuicServerSessionBaseTest, GetEvenIncomingError) {
   // Incoming streams on the server session must be odd.
   EXPECT_CALL(*connection_, CloseConnection(QUIC_INVALID_STREAM_ID, _, _));
@@ -381,15 +351,9 @@ TEST_P(QuicServerSessionBaseTest, GetEvenIncomingError) {
 TEST_P(QuicServerSessionBaseTest, GetStreamDisconnected) {
   // Don't create new streams if the connection is disconnected.
   QuicConnectionPeer::TearDownLocalConnectionState(connection_);
-  if (FLAGS_quic_reloadable_flag_quic_refactor_stream_creation) {
-    EXPECT_EQ(nullptr, QuicServerSessionBasePeer::GetOrCreateDynamicStream(
-                           session_.get(), GetNthClientInitiatedId(0)));
-  } else {
-    EXPECT_QUIC_BUG(
-        QuicServerSessionBasePeer::GetOrCreateDynamicStream(
-            session_.get(), GetNthClientInitiatedId(0)),
-        "ShouldCreateIncomingDynamicStream called when disconnected");
-  }
+  EXPECT_QUIC_BUG(QuicServerSessionBasePeer::GetOrCreateDynamicStream(
+                      session_.get(), GetNthClientInitiatedId(0)),
+                  "ShouldCreateIncomingDynamicStream called when disconnected");
 }
 
 class MockQuicCryptoServerStream : public QuicCryptoServerStream {

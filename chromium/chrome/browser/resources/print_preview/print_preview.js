@@ -206,8 +206,7 @@ cr.define('print_preview', function() {
      * @private
      */
     this.otherOptionsSettings_ = new print_preview.OtherOptionsSettings(
-        this.printTicketStore_.duplex, this.printTicketStore_.fitToPage,
-        this.printTicketStore_.cssBackground,
+        this.printTicketStore_.duplex, this.printTicketStore_.cssBackground,
         this.printTicketStore_.selectionOnly,
         this.printTicketStore_.headerFooter, this.printTicketStore_.rasterize);
     this.addChild(this.otherOptionsSettings_);
@@ -393,10 +392,6 @@ cr.define('print_preview', function() {
           this.destinationStore_,
           print_preview.DestinationStore.EventType.DESTINATION_SELECT,
           this.onDestinationSelect_.bind(this));
-      this.tracker.add(
-          this.destinationStore_,
-          print_preview.DestinationStore.EventType.DESTINATION_SEARCH_DONE,
-          this.onDestinationSearchDone_.bind(this));
 
       this.tracker.add(
           this.printHeader_,
@@ -440,18 +435,6 @@ cr.define('print_preview', function() {
           this.advancedOptionsSettings_,
           print_preview.AdvancedOptionsSettings.EventType.BUTTON_ACTIVATED,
           this.onAdvancedOptionsButtonActivated_.bind(this));
-
-      // TODO(rltoscano): Move no-destinations-promo into its own component
-      // instead being part of PrintPreview.
-      this.tracker.add(
-          this.getChildElement('#no-destinations-promo .close-button'), 'click',
-          this.onNoDestinationsPromoClose_.bind(this));
-      this.tracker.add(
-          this.getChildElement('#no-destinations-promo .not-now-button'),
-          'click', this.onNoDestinationsPromoClose_.bind(this));
-      this.tracker.add(
-          this.getChildElement('#no-destinations-promo .add-printer-button'),
-          'click', this.onNoDestinationsPromoClick_.bind(this));
     },
 
     /** @override */
@@ -579,9 +562,9 @@ cr.define('print_preview', function() {
                print_preview.Destination.GooglePromotedId.SAVE_AS_PDF)) {
         // Local printers resolve when print is ready to start. Hide the
         // dialog. Mac "Open in Preview" is treated as a local printer.
-        var boundHideDialog = function() {
+        var boundHideDialog = () => {
           this.nativeLayer_.hidePreview();
-        }.bind(this);
+        };
         whenPrintDone.then(boundHideDialog, boundHideDialog);
       } else if (!destination.isLocal) {
         // Cloud print resolves when print data is returned to submit to cloud
@@ -1237,53 +1220,6 @@ cr.define('print_preview', function() {
         this.onPrintButtonClick_();
       }
     },
-
-    /**
-     * Called when the destination store loads a group of destinations. Shows
-     * a promo on Chrome OS if the user has no print destinations promoting
-     * Google Cloud Print.
-     * @private
-     */
-    onDestinationSearchDone_: function() {
-      var isPromoVisible = cr.isChromeOS && this.cloudPrintInterface_ &&
-          this.userInfo_.activeUser && !this.appState_.isGcpPromoDismissed &&
-          !this.destinationStore_.isLocalDestinationSearchInProgress &&
-          !this.destinationStore_.isCloudDestinationSearchInProgress &&
-          this.destinationStore_.hasOnlyDefaultCloudDestinations();
-      setIsVisible(
-          this.getChildElement('#no-destinations-promo'), isPromoVisible);
-      if (isPromoVisible) {
-        new print_preview.GcpPromoMetricsContext().record(
-            print_preview.Metrics.GcpPromoBucket.PROMO_SHOWN);
-      }
-    },
-
-    /**
-     * Called when the close button on the no-destinations-promotion is clicked.
-     * Hides the promotion.
-     * @private
-     */
-    onNoDestinationsPromoClose_: function() {
-      new print_preview.GcpPromoMetricsContext().record(
-          print_preview.Metrics.GcpPromoBucket.PROMO_CLOSED);
-      setIsVisible(this.getChildElement('#no-destinations-promo'), false);
-      this.appState_.persistIsGcpPromoDismissed(true);
-    },
-
-    /**
-     * Called when the no-destinations promotion link is clicked. Opens the
-     * Google Cloud Print management page and closes the print preview.
-     * @private
-     */
-    onNoDestinationsPromoClick_: function() {
-      new print_preview.GcpPromoMetricsContext().record(
-          print_preview.Metrics.GcpPromoBucket.PROMO_CLICKED);
-      this.appState_.persistIsGcpPromoDismissed(true);
-      window.open(
-          this.cloudPrintInterface_.baseUrl +
-          '?authuser=' + this.userInfo_.activeUser + '#printers');
-      this.close_(false);
-    }
   };
 
   // Export

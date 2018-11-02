@@ -34,7 +34,7 @@
 #define InputTypeView_h
 
 #include "core/CoreExport.h"
-#include "core/events/EventDispatcher.h"
+#include "core/dom/events/EventDispatcher.h"
 #include "platform/heap/Handle.h"
 #include "platform/text/TextDirection.h"
 #include "platform/wtf/Allocator.h"
@@ -102,8 +102,8 @@ class CORE_EXPORT InputTypeView : public GarbageCollectedMixin {
 
   virtual void SubtreeHasChanged();
   virtual LayoutObject* CreateLayoutObject(const ComputedStyle&) const;
-  virtual PassRefPtr<ComputedStyle> CustomStyleForLayoutObject(
-      PassRefPtr<ComputedStyle>);
+  virtual RefPtr<ComputedStyle> CustomStyleForLayoutObject(
+      RefPtr<ComputedStyle>);
   virtual TextDirection ComputedTextDirection();
   virtual void StartResourceLoading();
   virtual void ClosePopupView();

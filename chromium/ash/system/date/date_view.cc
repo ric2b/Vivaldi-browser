@@ -123,15 +123,10 @@ void BaseDateTimeView::ChildPreferredSizeChanged(views::View* child) {
   PreferredSizeChanged();
 }
 
-void BaseDateTimeView::OnLocaleChanged() {
-  UpdateText();
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 
 DateView::DateView(SystemTrayItem* owner)
     : BaseDateTimeView(owner), action_(DateAction::NONE) {
-  // TODO(tdanderson): Tweak spacing and layout for material design.
   views::BoxLayout* box_layout =
       new views::BoxLayout(views::BoxLayout::kHorizontal,
                            gfx::Insets(0, kTrayPopupLabelHorizontalPadding), 0);
@@ -251,7 +246,7 @@ bool TimeView::OnMousePressed(const ui::MouseEvent& event) {
 }
 
 void TimeView::OnGestureEvent(ui::GestureEvent* event) {
-  // Skip gesture handling happening in CustomButton so that the container views
+  // Skip gesture handling happening in Button so that the container views
   // receive and handle them properly.
   // TODO(mohsen): Refactor TimeView/DateView classes so that they are not
   // ActionableView anymore. Create an ActionableView as a container for when

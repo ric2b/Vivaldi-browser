@@ -95,7 +95,7 @@ class DISPLAY_MANAGER_EXPORT DisplayConfigurator
 
     // Called when displays are detected.
     virtual MultipleDisplayState GetStateForDisplayIds(
-        const DisplayConfigurator::DisplayStateList& outputs) const = 0;
+        const DisplayConfigurator::DisplayStateList& outputs) = 0;
 
     // Queries the resolution (|size|) in pixels to select display mode for the
     // given display id.
@@ -116,7 +116,8 @@ class DISPLAY_MANAGER_EXPORT DisplayConfigurator
   // Helper class used by tests.
   class TestApi {
    public:
-    TestApi(DisplayConfigurator* configurator) : configurator_(configurator) {}
+    explicit TestApi(DisplayConfigurator* configurator)
+        : configurator_(configurator) {}
     ~TestApi() {}
 
     // If |configure_timer_| is started, stops the timer, runs
@@ -173,7 +174,6 @@ class DISPLAY_MANAGER_EXPORT DisplayConfigurator
   chromeos::DisplayPowerState requested_power_state() const {
     return requested_power_state_;
   }
-  const gfx::Size framebuffer_size() const { return framebuffer_size_; }
   const std::vector<DisplaySnapshot*>& cached_displays() const {
     return cached_displays_;
   }
@@ -212,10 +212,7 @@ class DISPLAY_MANAGER_EXPORT DisplayConfigurator
             bool is_panel_fitting_enabled);
 
   // Does initial configuration of displays during startup.
-  // If |background_color_argb| is non zero and there are multiple displays,
-  // DisplayConfigurator sets the background color of X's RootWindow to this
-  // color.
-  void ForceInitialConfigure(uint32_t background_color_argb);
+  void ForceInitialConfigure();
 
   // Stop handling display configuration events/requests.
   void PrepareForExit();
@@ -274,15 +271,6 @@ class DISPLAY_MANAGER_EXPORT DisplayConfigurator
                             uint32_t protection_mask,
                             const SetProtectionCallback& callback);
 
-  // Checks the available color profiles for |display_id| and fills the result
-  // into |profiles|.
-  std::vector<ColorCalibrationProfile> GetAvailableColorCalibrationProfiles(
-      int64_t display_id);
-
-  // Updates the color calibration to |new_profile|.
-  bool SetColorCalibrationProfile(int64_t display_id,
-                                  ColorCalibrationProfile new_profile);
-
   // Returns true if there is at least one display on.
   bool IsDisplayOn() const;
 
@@ -331,7 +319,6 @@ class DISPLAY_MANAGER_EXPORT DisplayConfigurator
   // this is called with the result (|success|) and the updated display state.
   void OnConfigured(bool success,
                     const std::vector<DisplaySnapshot*>& displays,
-                    const gfx::Size& framebuffer_size,
                     MultipleDisplayState new_display_state,
                     chromeos::DisplayPowerState new_power_state);
 
@@ -381,11 +368,8 @@ class DISPLAY_MANAGER_EXPORT DisplayConfigurator
   bool is_panel_fitting_enabled_;
 
   // This is detected by the constructor to determine whether or not we should
-  // be enabled.  If we aren't running on Chrome OS, we can't assume that the
-  // Xrandr X11 extension or the Ozone underlying display hotplug system are
-  // supported.
-  // If this flag is set to false, any attempts to change the display
-  // configuration to immediately fail without changing the state.
+  // be enabled. If this flag is set to false, any attempts to change the
+  // display configuration will immediately fail without changing the state.
   bool configure_display_;
 
   // Current configuration state.
@@ -431,14 +415,10 @@ class DISPLAY_MANAGER_EXPORT DisplayConfigurator
   // configuration changes asynchronously.
   DisplayStateList cached_displays_;
 
-  // Most-recently-used framebuffer size.
-  gfx::Size framebuffer_size_;
-
   base::ObserverList<Observer> observers_;
 
   // The timer to delay configuring displays. This is used to aggregate multiple
   // display configuration events when they are reported in short time spans.
-  // See comment for NativeDisplayEventDispatcherX11 for more details.
   base::OneShotTimer configure_timer_;
 
   // Id for next display protection client.

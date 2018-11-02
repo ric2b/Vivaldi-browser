@@ -268,7 +268,7 @@ void NativeWidgetMac::GetWindowPlacement(
 bool NativeWidgetMac::SetWindowTitle(const base::string16& title) {
   NSWindow* window = GetNativeWindow();
   NSString* current_title = [window title];
-  NSString* new_title = SysUTF16ToNSString(title);
+  NSString* new_title = base::SysUTF16ToNSString(title);
   if ([current_title isEqualToString:new_title])
     return false;
 
@@ -333,7 +333,7 @@ void NativeWidgetMac::StackAtTop() {
   NOTIMPLEMENTED();
 }
 
-void NativeWidgetMac::SetShape(std::unique_ptr<SkRegion> shape) {
+void NativeWidgetMac::SetShape(std::unique_ptr<Widget::ShapeRects> shape) {
   NOTIMPLEMENTED();
 }
 
@@ -742,14 +742,34 @@ void NativeWidgetPrivate::GetAllOwnedWidgets(gfx::NativeView native_view,
 // static
 void NativeWidgetPrivate::ReparentNativeView(gfx::NativeView native_view,
                                              gfx::NativeView new_parent) {
+  DCHECK_NE(native_view, new_parent);
+  if (!new_parent || [native_view superview] == new_parent) {
+    NOTREACHED();
+    return;
+  }
+
   BridgedNativeWidget* bridge =
       NativeWidgetMac::GetBridgeForNativeWindow([native_view window]);
-  if (bridge && bridge->parent() &&
-      bridge->parent()->GetNSWindow() == [new_parent window])
-    return;  // Nothing to do.
+  BridgedNativeWidget* parent_bridge =
+      NativeWidgetMac::GetBridgeForNativeWindow([new_parent window]);
+  DCHECK(bridge);
+  if (Widget::GetWidgetForNativeView(native_view)->is_top_level() &&
+      bridge->parent() == parent_bridge)
+    return;
 
-  // Not supported. See http://crbug.com/514920.
-  NOTREACHED();
+  Widget::Widgets widgets;
+  GetAllChildWidgets(native_view, &widgets);
+
+  // First notify all the widgets that they are being disassociated
+  // from their previous parent.
+  for (auto* child : widgets)
+    child->NotifyNativeViewHierarchyWillChange();
+
+  bridge->ReparentNativeView(native_view, new_parent);
+
+  // And now, notify them that they have a brand new parent.
+  for (auto* child : widgets)
+    child->NotifyNativeViewHierarchyChanged();
 }
 
 // static

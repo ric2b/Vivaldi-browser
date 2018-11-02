@@ -1,12 +1,17 @@
 include_rules = [
   "+cc",
   "+components/viz",
-  "+ui/gfx/geometry",
+  "+mojo/public/cpp/bindings",
+  "+services/viz/privileged/interfaces",
 ]
 
 specific_include_rules = {
   ".*_test_suite\.cc": [
     "+ui/gl/test",
+  ],
+
+  "test_gpu_memory_buffer_manager.h": [
+    "+gpu/command_buffer/client/gpu_memory_buffer_manager.h",
   ],
 
   "run_all_unittests\.cc": [

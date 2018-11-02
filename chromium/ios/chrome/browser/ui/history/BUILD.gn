@@ -15,8 +15,6 @@ source_set("history") {
     "history_collection_view_controller.mm",
     "history_entries_status_item.h",
     "history_entries_status_item.mm",
-    "history_entry.cc",
-    "history_entry.h",
     "history_entry_inserter.h",
     "history_entry_inserter.mm",
     "history_entry_item.h",
@@ -27,17 +25,10 @@ source_set("history") {
     "history_search_view.mm",
     "history_search_view_controller.h",
     "history_search_view_controller.mm",
-    "history_service_facade.h",
-    "history_service_facade.mm",
-    "history_service_facade_delegate.h",
     "history_util.h",
     "history_util.mm",
-    "tab_history_cell.h",
-    "tab_history_cell.mm",
-    "tab_history_popup_controller.h",
-    "tab_history_popup_controller.mm",
-    "tab_history_view_controller.h",
-    "tab_history_view_controller.mm",
+    "ios_browsing_history_driver.h",
+    "ios_browsing_history_driver.mm",
   ]
   deps = [
     "//base",
@@ -80,7 +71,6 @@ source_set("history") {
     "//net",
     "//skia",
     "//ui/base",
-    "//ui/gfx",
     "//url",
   ]
   libs = [
@@ -95,12 +85,11 @@ source_set("unit_tests") {
   testonly = true
   sources = [
     "favicon_view_provider_unittest.mm",
+    "history_collection_view_controller_unittest.mm",
     "history_entries_status_item_unittest.mm",
     "history_entry_inserter_unittest.mm",
     "history_entry_item_unittest.mm",
     "history_search_view_controller_unittest.mm",
-    "history_util_unittest.mm",
-    "tab_history_popup_controller_unittest.mm",
   ]
   deps = [
     ":history",
@@ -109,53 +98,6 @@ source_set("unit_tests") {
     "//base/test:test_support",
     "//components/favicon/core",
     "//components/favicon/core/test:test_support",
-    "//components/favicon_base",
-    "//components/history/core/browser",
-    "//components/keyed_service/core",
-    "//components/sessions",
-    "//components/strings",
-    "//ios/chrome/app/strings",
-    "//ios/chrome/browser",
-    "//ios/chrome/browser/browser_state:test_support",
-    "//ios/chrome/browser/history",
-    "//ios/chrome/browser/signin",
-    "//ios/chrome/browser/signin:test_support",
-    "//ios/chrome/browser/ui",
-    "//ios/chrome/browser/ui/collection_view",
-    "//ios/chrome/browser/ui/util",
-    "//ios/chrome/common",
-    "//ios/chrome/test:test_support",
-    "//ios/web",
-    "//ios/web/public/test",
-    "//skia",
-    "//testing/gmock",
-    "//testing/gtest",
-    "//third_party/ocmock",
-    "//ui/base",
-    "//ui/gfx",
-    "//url",
-  ]
-
-  public_deps = [
-    ":unit_tests_arc",
-  ]
-  allow_circular_includes_from = [ ":unit_tests_arc" ]
-}
-
-source_set("unit_tests_arc") {
-  testonly = true
-  configs += [ "//build/config/compiler:enable_arc" ]
-
-  sources = [
-    "history_collection_view_controller_unittest.mm",
-    "history_service_facade_unittest.mm",
-  ]
-  deps = [
-    ":history",
-    ":resources_unit_tests",
-    "//base",
-    "//base/test:test_support",
-    "//components/favicon/core",
     "//components/favicon_base",
     "//components/history/core/browser",
     "//components/keyed_service/core",
@@ -206,7 +148,6 @@ source_set("eg_tests") {
   testonly = true
   sources = [
     "history_ui_egtest.mm",
-    "tab_history_popup_controller_egtest.mm",
   ]
   deps = [
     ":history",
@@ -218,6 +159,8 @@ source_set("eg_tests") {
     "//ios/chrome/app/strings",
     "//ios/chrome/browser",
     "//ios/chrome/browser/browser_state",
+    "//ios/chrome/browser/ui:ui",
+    "//ios/chrome/browser/ui/authentication:authentication_ui",
     "//ios/chrome/browser/ui/settings",
     "//ios/chrome/browser/ui/tools_menu",
     "//ios/chrome/browser/ui/util",

@@ -17,8 +17,6 @@ blink_core_sources("loader") {
     "DocumentThreadableLoader.cpp",
     "DocumentThreadableLoader.h",
     "DocumentThreadableLoaderClient.h",
-    "DocumentWriter.cpp",
-    "DocumentWriter.h",
     "EmptyClients.cpp",
     "EmptyClients.h",
     "FormSubmission.cpp",
@@ -56,8 +54,12 @@ blink_core_sources("loader") {
     "PrerendererClient.h",
     "ProgressTracker.cpp",
     "ProgressTracker.h",
+    "ScheduledNavigation.cpp",
+    "ScheduledNavigation.h",
     "SubresourceFilter.cpp",
     "SubresourceFilter.h",
+    "SubresourceIntegrityHelper.cpp",
+    "SubresourceIntegrityHelper.h",
     "TextResourceDecoderBuilder.cpp",
     "TextResourceDecoderBuilder.h",
     "TextTrackLoader.cpp",
@@ -79,6 +81,8 @@ blink_core_sources("loader") {
     "appcache/ApplicationCacheHost.h",
     "modulescript/ModuleScriptCreationParams.h",
     "modulescript/ModuleScriptFetchRequest.h",
+    "modulescript/ModuleScriptFetcher.cpp",
+    "modulescript/ModuleScriptFetcher.h",
     "modulescript/ModuleScriptLoader.cpp",
     "modulescript/ModuleScriptLoader.h",
     "modulescript/ModuleScriptLoaderClient.h",
@@ -89,8 +93,8 @@ blink_core_sources("loader") {
     "modulescript/ModuleTreeLinkerRegistry.cpp",
     "modulescript/ModuleTreeLinkerRegistry.h",
     "modulescript/ModuleTreeReachedUrlSet.h",
-    "private/CrossOriginPreflightResultCache.cpp",
-    "private/CrossOriginPreflightResultCache.h",
+    "modulescript/WorkletModuleScriptFetcher.cpp",
+    "modulescript/WorkletModuleScriptFetcher.h",
     "private/FrameClientHintsPreferencesContext.cpp",
     "private/FrameClientHintsPreferencesContext.h",
     "private/PrerenderHandle.cpp",
@@ -124,5 +128,9 @@ blink_core_sources("loader") {
   configs += [
     # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
     "//build/config/compiler:no_size_t_to_int_warning",
+  ]
+
+  public_deps = [
+    "//services/network/public/interfaces:interfaces_blink",
   ]
 }

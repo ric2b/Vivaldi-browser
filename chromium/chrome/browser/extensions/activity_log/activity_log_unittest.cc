@@ -15,11 +15,13 @@
 #include "base/synchronization/waitable_event.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/activity_log/activity_action_constants.h"
+#include "chrome/browser/extensions/activity_log/activity_log_task_runner.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/browser/prerender/prerender_handle.h"
 #include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/prerender/prerender_manager_factory.h"
+#include "chrome/browser/prerender/prerender_test_utils.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
@@ -30,7 +32,6 @@
 #include "extensions/browser/uninstall_reason.h"
 #include "extensions/common/dom_action_types.h"
 #include "extensions/common/extension_builder.h"
-#include "extensions/common/test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
@@ -59,6 +60,10 @@ class ActivityLogTest : public ChromeRenderViewHostTestHarness {
   virtual bool enable_activity_logging_switch() const { return true; }
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
+
+    SetActivityLogTaskRunnerForTesting(
+        base::ThreadTaskRunnerHandle::Get().get());
+
     base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
     if (enable_activity_logging_switch()) {
       base::CommandLine::ForCurrentProcess()->AppendSwitch(
@@ -74,6 +79,7 @@ class ActivityLogTest : public ChromeRenderViewHostTestHarness {
 
   void TearDown() override {
     base::RunLoop().RunUntilIdle();
+    SetActivityLogTaskRunnerForTesting(nullptr);
     ChromeRenderViewHostTestHarness::TearDown();
   }
 
@@ -236,6 +242,9 @@ TEST_F(ActivityLogTest, LogPrerender) {
   ASSERT_TRUE(GetDatabaseEnabled());
   GURL url("http://www.google.com");
 
+  prerender::test_utils::RestorePrerenderMode restore_prerender_mode;
+  prerender::PrerenderManager::SetOmniboxMode(
+      prerender::PrerenderManager::PRERENDER_MODE_ENABLED);
   prerender::PrerenderManager* prerender_manager =
       prerender::PrerenderManagerFactory::GetForBrowserContext(profile());
 
@@ -415,14 +424,14 @@ TEST_F(ActivityLogTestWithoutSwitch, TestShouldLog) {
       ExtensionSystem::Get(profile()))->SetReady();
   ActivityLog* activity_log = ActivityLog::GetInstance(profile());
   scoped_refptr<const Extension> empty_extension =
-      test_util::CreateEmptyExtension();
+      ExtensionBuilder("Test").Build();
   extension_service_->AddExtension(empty_extension.get());
   // Since the command line switch for logging isn't enabled and there's no
   // watchdog app active, the activity log shouldn't log anything.
   EXPECT_FALSE(activity_log->ShouldLog(empty_extension->id()));
   const char kWhitelistedExtensionId[] = "eplckmlabaanikjjcgnigddmagoglhmp";
   scoped_refptr<const Extension> activity_log_extension =
-      test_util::CreateEmptyExtension(kWhitelistedExtensionId);
+      ExtensionBuilder("Test").SetID(kWhitelistedExtensionId).Build();
   extension_service_->AddExtension(activity_log_extension.get());
   // Loading a watchdog app means the activity log should log other extension
   // activities...
@@ -430,7 +439,7 @@ TEST_F(ActivityLogTestWithoutSwitch, TestShouldLog) {
   // ... but not those of the watchdog app.
   EXPECT_FALSE(activity_log->ShouldLog(activity_log_extension->id()));
   extension_service_->DisableExtension(activity_log_extension->id(),
-                                       Extension::DISABLE_USER_ACTION);
+                                       disable_reason::DISABLE_USER_ACTION);
   // Disabling the watchdog app means that we're back to never logging anything.
   EXPECT_FALSE(activity_log->ShouldLog(empty_extension->id()));
 }

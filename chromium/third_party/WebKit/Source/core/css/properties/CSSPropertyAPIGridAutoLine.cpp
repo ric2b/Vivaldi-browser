@@ -4,4 +4,21 @@
 
 #include "core/css/properties/CSSPropertyAPIGridAutoLine.h"
 
-namespace blink {}  // namespace blink
+#include "core/css/parser/CSSParserContext.h"
+
+#include "core/css/properties/CSSPropertyGridUtils.h"
+#include "platform/RuntimeEnabledFeatures.h"
+
+namespace blink {
+
+const CSSValue* CSSPropertyAPIGridAutoLine::ParseSingleValue(
+    CSSPropertyID,
+    CSSParserTokenRange& range,
+    const CSSParserContext& context,
+    const CSSParserLocalContext&) const {
+  DCHECK(RuntimeEnabledFeatures::CSSGridLayoutEnabled());
+  return CSSPropertyGridUtils::ConsumeGridTrackList(
+      range, context.Mode(), CSSPropertyGridUtils::kGridAuto);
+}
+
+}  // namespace blink

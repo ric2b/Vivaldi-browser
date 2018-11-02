@@ -130,10 +130,10 @@ bool AcceleratorControllerDelegateClassic::HandlesAction(
     case MAGNIFY_SCREEN_ZOOM_OUT:
     case POWER_PRESSED:
     case POWER_RELEASED:
-    case SHOW_MESSAGE_CENTER_BUBBLE:
     case TAKE_PARTIAL_SCREENSHOT:
     case TAKE_SCREENSHOT:
     case TAKE_WINDOW_SCREENSHOT:
+    case TOGGLE_MESSAGE_CENTER_BUBBLE:
     case TOUCH_HUD_CLEAR:
     case TOUCH_HUD_MODE_CHANGE:
     case TOUCH_HUD_PROJECTION_TOGGLE:
@@ -156,6 +156,7 @@ bool AcceleratorControllerDelegateClassic::CanPerformAction(
     case DEBUG_TOGGLE_SHOW_PAINT_RECTS:
       return debug::DebugAcceleratorsEnabled();
     case DEV_ADD_REMOVE_DISPLAY:
+      return debug::DeveloperAcceleratorsEnabled();
     case MAGNIFY_SCREEN_ZOOM_IN:
     case MAGNIFY_SCREEN_ZOOM_OUT:
       return CanHandleMagnifyScreen();

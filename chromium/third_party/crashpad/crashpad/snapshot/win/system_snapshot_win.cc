@@ -98,7 +98,7 @@ void SystemSnapshotWin::Initialize(ProcessReaderWin* process_reader) {
     os_server_ = version_info.wProductType != VER_NT_WORKSTATION;
   }
 
-  const wchar_t kSystemDll[] = L"kernel32.dll";
+  static constexpr wchar_t kSystemDll[] = L"kernel32.dll";
   VS_FIXEDFILEINFO ffi;
   if (GetModuleVersionAndType(base::FilePath(kSystemDll), &ffi)) {
     std::string flags_string = GetStringForFileFlags(ffi.dwFileFlags);
@@ -106,7 +106,7 @@ void SystemSnapshotWin::Initialize(ProcessReaderWin* process_reader) {
     os_version_major_ = ffi.dwFileVersionMS >> 16;
     os_version_minor_ = ffi.dwFileVersionMS & 0xffff;
     os_version_bugfix_ = ffi.dwFileVersionLS >> 16;
-    os_version_build_ = base::StringPrintf("%u", ffi.dwFileVersionLS & 0xffff);
+    os_version_build_ = base::StringPrintf("%lu", ffi.dwFileVersionLS & 0xffff);
     os_version_full_ = base::StringPrintf(
         "%s %u.%u.%u.%s%s",
         os_name.c_str(),
@@ -192,7 +192,7 @@ void SystemSnapshotWin::CPUFrequency(uint64_t* current_hz,
     *max_hz = 0;
     return;
   }
-  const uint64_t kMhzToHz = static_cast<uint64_t>(1E6);
+  constexpr uint64_t kMhzToHz = static_cast<uint64_t>(1E6);
   *current_hz = std::max_element(info.begin(),
                                  info.end(),
                                  [](const PROCESSOR_POWER_INFORMATION& a,

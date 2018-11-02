@@ -27,9 +27,9 @@
 
 #include "core/dom/Element.h"
 #include "core/dom/TaskRunnerHelper.h"
-#include "core/exported/WebViewBase.h"
+#include "core/exported/WebViewImpl.h"
 #include "core/frame/LocalFrameView.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/ValidationMessageOverlayDelegate.h"
 #include "platform/LayoutTestSupport.h"
@@ -42,14 +42,14 @@
 
 namespace blink {
 
-ValidationMessageClientImpl::ValidationMessageClientImpl(WebViewBase& web_view)
+ValidationMessageClientImpl::ValidationMessageClientImpl(WebViewImpl& web_view)
     : web_view_(web_view),
       current_anchor_(nullptr),
       last_page_scale_factor_(1),
       finish_time_(0) {}
 
 ValidationMessageClientImpl* ValidationMessageClientImpl::Create(
-    WebViewBase& web_view) {
+    WebViewImpl& web_view) {
   return new ValidationMessageClientImpl(web_view);
 }
 
@@ -106,7 +106,7 @@ void ValidationMessageClientImpl::ShowValidationMessage(
   auto* target_frame =
       web_view_.MainFrameImpl()
           ? web_view_.MainFrameImpl()
-          : WebLocalFrameBase::FromFrame(anchor.GetDocument().GetFrame());
+          : WebLocalFrameImpl::FromFrame(anchor.GetDocument().GetFrame());
   auto delegate = ValidationMessageOverlayDelegate::Create(
       *web_view_.GetPage(), anchor, message_, message_dir, sub_message,
       sub_message_dir);
@@ -119,7 +119,8 @@ void ValidationMessageClientImpl::ShowValidationMessage(
 }
 
 void ValidationMessageClientImpl::HideValidationMessage(const Element& anchor) {
-  if (!RuntimeEnabledFeatures::ValidationBubbleInRendererEnabled()) {
+  if (!RuntimeEnabledFeatures::ValidationBubbleInRendererEnabled() ||
+      LayoutTestSupport::IsRunningLayoutTest()) {
     HideValidationMessageImmediately(anchor);
     return;
   }
@@ -132,7 +133,7 @@ void ValidationMessageClientImpl::HideValidationMessage(const Element& anchor) {
       this, &ValidationMessageClientImpl::Reset);
   // This should be equal to or larger than transition duration of
   // #container.hiding in validation_bubble.css.
-  const double kHidingAnimationDuration = 0.6;
+  const double kHidingAnimationDuration = 0.13333;
   timer_->StartOneShot(kHidingAnimationDuration, BLINK_FROM_HERE);
 }
 

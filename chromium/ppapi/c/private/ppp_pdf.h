@@ -65,6 +65,23 @@ struct PPP_Pdf_1_1 {
       PP_PdfPrintPresetOptions_Dev* options);
 
   void (*EnableAccessibility)(PP_Instance instance);
+
+  void (*SetCaretPosition)(PP_Instance instance,
+                           const struct PP_FloatPoint* position);
+  void (*MoveRangeSelectionExtent)(PP_Instance instance,
+                                   const struct PP_FloatPoint* extent);
+  void (*SetSelectionBounds)(PP_Instance instance,
+                             const struct PP_FloatPoint* base,
+                             const struct PP_FloatPoint* extent);
+  // Return true if plugin text can be edited. For the PDF plugin, this
+  // is when focus is within an editable form text area (a form text field
+  // or user-editable form combobox text field).
+  PP_Bool (*CanEditText)(PP_Instance instance);
+
+  // Replace the plugin's selected text (if focus is in an editable text area).
+  // If there is no selected text, append the replacement text after the current
+  // caret position.
+  void (*ReplaceSelection)(PP_Instance instance, const char* text);
 };
 
 typedef PPP_Pdf_1_1 PPP_Pdf;

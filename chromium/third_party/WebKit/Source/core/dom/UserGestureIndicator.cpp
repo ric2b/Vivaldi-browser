@@ -4,6 +4,8 @@
 
 #include "core/dom/UserGestureIndicator.h"
 
+#include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameClient.h"
 #include "platform/Histogram.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/CurrentTime.h"
@@ -11,40 +13,11 @@
 
 namespace blink {
 
-namespace {
-
-void SetHasReceivedUserGesture(Document* document) {
-  if (document && document->GetFrame()) {
-    bool had_gesture = document->GetFrame()->HasReceivedUserGesture();
-    if (!had_gesture)
-      document->GetFrame()->SetDocumentHasReceivedUserGesture();
-    document->GetFrame()->Client()->SetHasReceivedUserGesture(had_gesture);
-  }
-}
-
-}  // namespace
-
 // User gestures timeout in 1 second.
 const double kUserGestureTimeout = 1.0;
 
 // For out of process tokens we allow a 10 second delay.
 const double kUserGestureOutOfProcessTimeout = 10.0;
-
-// static
-PassRefPtr<UserGestureToken> UserGestureToken::Create(Document* document,
-                                                      Status status) {
-  SetHasReceivedUserGesture(document);
-  return AdoptRef(new UserGestureToken(status));
-}
-
-// static
-PassRefPtr<UserGestureToken> UserGestureToken::Adopt(Document* document,
-                                                     UserGestureToken* token) {
-  if (!token || !token->HasGestures())
-    return nullptr;
-  SetHasReceivedUserGesture(document);
-  return token;
-}
 
 UserGestureToken::UserGestureToken(Status status)
     : consumable_gestures_(0),
@@ -113,20 +86,28 @@ static void RecordUserGestureMerge(const UserGestureToken& old_token,
 
 UserGestureToken* UserGestureIndicator::root_token_ = nullptr;
 
-UserGestureIndicator::UserGestureIndicator(PassRefPtr<UserGestureToken> token) {
-  // Silently ignore UserGestureIndicators on non-main threads and tokens that
-  // are already active.
-  if (!IsMainThread() || !token || token == root_token_)
-    return;
-
-  token_ = std::move(token);
+void UserGestureIndicator::UpdateRootToken() {
   if (!root_token_) {
     root_token_ = token_.Get();
   } else {
     RecordUserGestureMerge(*root_token_, *token_);
     token_->TransferGestureTo(root_token_);
   }
+}
+
+UserGestureIndicator::UserGestureIndicator(PassRefPtr<UserGestureToken> token) {
+  if (!IsMainThread() || !token || token == root_token_)
+    return;
+  token_ = std::move(token);
   token_->ResetTimestamp();
+  UpdateRootToken();
+}
+
+UserGestureIndicator::UserGestureIndicator(UserGestureToken::Status status) {
+  if (!IsMainThread())
+    return;
+  token_ = AdoptRef(new UserGestureToken(status));
+  UpdateRootToken();
 }
 
 UserGestureIndicator::~UserGestureIndicator() {
@@ -134,12 +115,14 @@ UserGestureIndicator::~UserGestureIndicator() {
     root_token_ = nullptr;
 }
 
+// static
 bool UserGestureIndicator::ProcessingUserGesture() {
   if (auto* token = CurrentToken())
     return token->HasGestures();
   return false;
 }
 
+// static
 bool UserGestureIndicator::ProcessingUserGestureThreadSafe() {
   return IsMainThread() && ProcessingUserGesture();
 }
@@ -153,17 +136,27 @@ bool UserGestureIndicator::ConsumeUserGesture() {
   return false;
 }
 
+// static
 bool UserGestureIndicator::ConsumeUserGestureThreadSafe() {
   return IsMainThread() && ConsumeUserGesture();
 }
 
+// static
 UserGestureToken* UserGestureIndicator::CurrentToken() {
   DCHECK(IsMainThread());
   return root_token_;
 }
 
+// static
 UserGestureToken* UserGestureIndicator::CurrentTokenThreadSafe() {
   return IsMainThread() ? CurrentToken() : nullptr;
+}
+
+// static
+void UserGestureIndicator::SetTimeoutPolicy(
+    UserGestureToken::TimeoutPolicy policy) {
+  if (auto* token = CurrentTokenThreadSafe())
+    token->SetTimeoutPolicy(policy);
 }
 
 }  // namespace blink

@@ -13,6 +13,9 @@
 
 namespace blink {
 
+class Font;
+class TextMetrics;
+
 class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
     : public CanvasRenderingContext,
       public BaseRenderingContext2D {
@@ -57,12 +60,25 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
   void clearRect(double x, double y, double width, double height) override {
     BaseRenderingContext2D::clearRect(x, y, width, height);
   }
-  PassRefPtr<Image> GetImage(AccelerationHint, SnapshotReason) const final;
+  RefPtr<StaticBitmapImage> GetImage(AccelerationHint,
+                                     SnapshotReason) const final;
   ImageData* ToImageData(SnapshotReason) override;
   void Reset() override;
   void RestoreCanvasMatrixClipStack(PaintCanvas* c) const override {
     RestoreMatrixClipStack(c);
   }
+
+  String font() const;
+  void setFont(const String&) override;
+
+  String direction() const;
+  void setDirection(const String&);
+
+  void fillText(const String& text, double x, double y);
+  void fillText(const String& text, double x, double y, double max_width);
+  void strokeText(const String& text, double x, double y);
+  void strokeText(const String& text, double x, double y, double max_width);
+  TextMetrics* measureText(const String& text);
 
   // BaseRenderingContext2D implementation
   bool OriginClean() const final;
@@ -109,6 +125,13 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
 
  private:
   bool IsPaintable() const final;
+
+  void DrawTextInternal(const String&,
+                        double,
+                        double,
+                        CanvasRenderingContext2DState::PaintType,
+                        double* max_width = nullptr);
+  const Font& AccessFont();
 
   RefPtr<StaticBitmapImage> TransferToStaticBitmapImage();
 

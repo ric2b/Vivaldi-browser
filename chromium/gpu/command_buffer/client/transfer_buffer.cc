@@ -65,7 +65,7 @@ bool TransferBuffer::Initialize(
 void TransferBuffer::Free() {
   if (HaveBuffer()) {
     TRACE_EVENT0("gpu", "TransferBuffer::Free");
-    helper_->Finish();
+    helper_->FlushLazy();
     helper_->command_buffer()->DestroyTransferBuffer(buffer_id_);
     buffer_id_ = -1;
     buffer_ = NULL;
@@ -103,6 +103,10 @@ unsigned int TransferBuffer::GetSize() const {
 
 unsigned int TransferBuffer::GetFreeSize() const {
   return HaveBuffer() ? ring_buffer_->GetTotalFreeSizeNoWaiting() : 0;
+}
+
+void TransferBuffer::ShrinkLastBlock(unsigned int new_size) {
+  ring_buffer_->ShrinkLastBlock(new_size);
 }
 
 void TransferBuffer::AllocateRingBuffer(unsigned int size) {
@@ -228,6 +232,13 @@ void ScopedTransferBufferPtr::Reset(unsigned int new_size) {
   // We could add code skip the token for a zero size buffer but it doesn't seem
   // worth the complication.
   buffer_ = transfer_buffer_->AllocUpTo(new_size, &size_);
+}
+
+void ScopedTransferBufferPtr::Shrink(unsigned int new_size) {
+  if (!transfer_buffer_->HaveBuffer() || new_size >= size_)
+    return;
+  transfer_buffer_->ShrinkLastBlock(new_size);
+  size_ = new_size;
 }
 
 }  // namespace gpu

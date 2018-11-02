@@ -17,30 +17,28 @@
 #include "base/strings/stringprintf.h"
 #include "media/base/media_log.h"
 #include "media/base/seekable_buffer.h"
+#include "media/blink/mock_resource_fetch_context.h"
 #include "media/blink/mock_webassociatedurlloader.h"
 #include "media/blink/url_index.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_util.h"
 #include "third_party/WebKit/public/platform/WebString.h"
+#include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebURLError.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/platform/WebURLResponse.h"
-#include "third_party/WebKit/public/web/WebFrameClient.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebView.h"
 
 using ::testing::_;
 using ::testing::InSequence;
+using ::testing::Invoke;
 using ::testing::Return;
 using ::testing::Truly;
 using ::testing::NiceMock;
 
-using blink::WebLocalFrame;
 using blink::WebString;
 using blink::WebURLError;
 using blink::WebURLResponse;
-using blink::WebView;
 
 namespace media {
 
@@ -75,24 +73,20 @@ static bool CorrectAcceptEncodingAndProxy(const blink::WebURLRequest& request) {
 class ResourceMultiBufferDataProviderTest : public testing::Test {
  public:
   ResourceMultiBufferDataProviderTest()
-      : view_(WebView::Create(nullptr, blink::kWebPageVisibilityStateVisible)) {
-    WebLocalFrame* frame =
-        WebLocalFrame::CreateMainFrame(view_, &client_, nullptr, nullptr);
-    url_index_.reset(new UrlIndex(frame, 0));
-
+      : url_index_(base::MakeUnique<UrlIndex>(&fetch_context_, 0)) {
     for (int i = 0; i < kDataSize; ++i) {
       data_[i] = i;
     }
+    ON_CALL(fetch_context_, CreateUrlLoader(_))
+        .WillByDefault(Invoke(
+            this, &ResourceMultiBufferDataProviderTest::CreateUrlLoader));
   }
-
-  virtual ~ResourceMultiBufferDataProviderTest() { view_->Close(); }
 
   void Initialize(const char* url, int first_position) {
     gurl_ = GURL(url);
     url_data_ = url_index_->GetByUrl(gurl_, UrlData::CORS_UNSPECIFIED);
     url_data_->set_etag(kEtag);
     DCHECK(url_data_);
-    DCHECK(url_data_->frame());
     url_data_->OnRedirect(
         base::Bind(&ResourceMultiBufferDataProviderTest::RedirectCallback,
                    base::Unretained(this)));
@@ -103,20 +97,10 @@ class ResourceMultiBufferDataProviderTest : public testing::Test {
         new ResourceMultiBufferDataProvider(url_data_.get(), first_position_));
     loader_ = loader.get();
     url_data_->multibuffer()->AddProvider(std::move(loader));
-
-    // |test_loader_| will be used when Start() is called.
-    url_loader_ = new NiceMock<MockWebAssociatedURLLoader>();
-    loader_->test_loader_ =
-        std::unique_ptr<blink::WebAssociatedURLLoader>(url_loader_);
   }
 
   void Start() {
-    InSequence s;
     got_frfr = false;
-    EXPECT_CALL(
-        *url_loader_,
-        LoadAsynchronously(Truly(CorrectAcceptEncodingAndProxy), loader_));
-
     loader_->Start();
   }
 
@@ -181,22 +165,19 @@ class ResourceMultiBufferDataProviderTest : public testing::Test {
   }
 
   void Redirect(const char* url) {
-    GURL redirectUrl(url);
-    blink::WebURLRequest newRequest(redirectUrl);
-    blink::WebURLResponse redirectResponse(gurl_);
+    blink::WebURL new_url{GURL(url)};
+    blink::WebURLResponse redirect_response(gurl_);
 
     EXPECT_CALL(*this, RedirectCallback(_))
         .WillOnce(
             Invoke(this, &ResourceMultiBufferDataProviderTest::SetUrlData));
 
-    loader_->WillFollowRedirect(newRequest, redirectResponse);
+    loader_->WillFollowRedirect(new_url, redirect_response);
 
     base::RunLoop().RunUntilIdle();
   }
 
   void StopWhenLoad() {
-    InSequence s;
-    EXPECT_CALL(*url_loader_, Cancel());
     loader_ = nullptr;
     url_data_ = nullptr;
   }
@@ -216,7 +197,6 @@ class ResourceMultiBufferDataProviderTest : public testing::Test {
     EXPECT_EQ(0, memcmp(buffer, data_ + pos, size));
   }
 
-  bool HasActiveLoader() { return loader_->active_loader_ != nullptr; }
   MOCK_METHOD1(RedirectCallback, void(const scoped_refptr<UrlData>&));
 
   void SetUrlData(const scoped_refptr<UrlData>& new_url_data) {
@@ -224,20 +204,25 @@ class ResourceMultiBufferDataProviderTest : public testing::Test {
   }
 
  protected:
+  std::unique_ptr<blink::WebAssociatedURLLoader> CreateUrlLoader(
+      const blink::WebAssociatedURLLoaderOptions& options) {
+    auto url_loader = base::MakeUnique<NiceMock<MockWebAssociatedURLLoader>>();
+    EXPECT_CALL(
+        *url_loader.get(),
+        LoadAsynchronously(Truly(CorrectAcceptEncodingAndProxy), loader_));
+    return url_loader;
+  }
+
+  base::MessageLoop message_loop_;
   GURL gurl_;
   int64_t first_position_;
 
+  NiceMock<MockResourceFetchContext> fetch_context_;
   std::unique_ptr<UrlIndex> url_index_;
   scoped_refptr<UrlData> url_data_;
   scoped_refptr<UrlData> redirected_to_;
   // The loader is owned by the UrlData above.
   ResourceMultiBufferDataProvider* loader_;
-  NiceMock<MockWebAssociatedURLLoader>* url_loader_;
-
-  blink::WebFrameClient client_;
-  WebView* view_;
-
-  base::MessageLoop message_loop_;
 
   uint8_t data_[kDataSize];
 

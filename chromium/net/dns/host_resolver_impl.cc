@@ -31,7 +31,6 @@
 #include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/debug/debugger.h"
-#include "base/debug/leak_annotations.h"
 #include "base/debug/stack_trace.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -880,7 +879,7 @@ class HostResolverImpl::ProcTask
       RESOLVE_SPECULATIVE_FAIL,
       RESOLVE_MAX,  // Bounding value.
     };
-    int category = RESOLVE_MAX;  // Illegal value for later DCHECK only.
+    Category category = RESOLVE_MAX;  // Illegal value for later DCHECK only.
 
     base::TimeDelta duration = base::TimeTicks::Now() - start_time;
     if (error == OK) {
@@ -1043,13 +1042,6 @@ class HostResolverImpl::LoopbackProbeJob {
                    base::TaskRunner* worker_task_runner)
       : resolver_(resolver), result_(false) {
     DCHECK(resolver.get());
-
-    // |worker_task_runner| may posts tasks to the WorkerPool, so need this to
-    // avoid reporting worker pool leaks in tests. The WorkerPool doesn't have a
-    // flushing API, so can't do anything about them, other than using another
-    // task runner.
-    // http://crbug.com/248513
-    ANNOTATE_SCOPED_MEMORY_LEAK;
 
     worker_task_runner->PostTaskAndReply(
         FROM_HERE,
@@ -1994,7 +1986,7 @@ int HostResolverImpl::Resolve(const RequestInfo& info,
   }
 
   // Can't complete synchronously. Create and attach request.
-  auto req = base::MakeUnique<RequestImpl>(source_net_log, info, priority,
+  auto req = std::make_unique<RequestImpl>(source_net_log, info, priority,
                                            callback, addresses, job);
   job->AddRequest(req.get());
   *out_req = std::move(req);
@@ -2099,6 +2091,14 @@ int HostResolverImpl::ResolveHelper(const RequestInfo& info,
     MakeNotStale(stale_info);
     return net_error;
   }
+
+  // Special-case localhost names, as per the recommendations in
+  // https://tools.ietf.org/html/draft-west-let-localhost-be-localhost.
+  if (ServeLocalhost(*key, info, addresses)) {
+    MakeNotStale(stale_info);
+    return OK;
+  }
+
   if (ServeFromCache(*key, info, &net_error, addresses, allow_stale,
                      stale_info)) {
     source_net_log.AddEvent(NetLogEventType::HOST_RESOLVER_IMPL_CACHE_HIT,
@@ -2106,16 +2106,12 @@ int HostResolverImpl::ResolveHelper(const RequestInfo& info,
     // |ServeFromCache()| will set |*stale_info| as needed.
     return net_error;
   }
+
   // TODO(szym): Do not do this if nsswitch.conf instructs not to.
   // http://crbug.com/117655
   if (ServeFromHosts(*key, info, addresses)) {
     source_net_log.AddEvent(NetLogEventType::HOST_RESOLVER_IMPL_HOSTS_HIT,
                             addresses->CreateNetLogCallback());
-    MakeNotStale(stale_info);
-    return OK;
-  }
-
-  if (ServeLocalhost(*key, info, addresses)) {
     MakeNotStale(stale_info);
     return OK;
   }
@@ -2163,7 +2159,7 @@ std::unique_ptr<base::Value> HostResolverImpl::GetDnsConfigAsValue() const {
   // for it.
   const DnsConfig* dns_config = dns_client_->GetConfig();
   if (!dns_config)
-    return base::MakeUnique<base::DictionaryValue>();
+    return std::make_unique<base::DictionaryValue>();
 
   return dns_config->ToValue();
 }
@@ -2185,6 +2181,18 @@ int HostResolverImpl::ResolveStaleFromCache(
       ResolveHelper(info, true, stale_info, source_net_log, addresses, &key);
   LogFinishRequest(source_net_log, info, rv);
   return rv;
+}
+
+size_t HostResolverImpl::LastRestoredCacheSize() const {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
+  return cache_ ? cache_->last_restore_size() : 0;
+}
+
+size_t HostResolverImpl::CacheSize() const {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
+  return cache_ ? cache_->size() : 0;
 }
 
 void HostResolverImpl::SetNoIPv6OnWifi(bool no_ipv6_on_wifi) {

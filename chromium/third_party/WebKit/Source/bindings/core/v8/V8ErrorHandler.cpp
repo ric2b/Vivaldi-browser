@@ -54,17 +54,18 @@ v8::Local<v8::Value> V8ErrorHandler::CallListenerFunction(
   if (error_event->World() && error_event->World() != &World())
     return v8::Null(GetIsolate());
 
-  v8::Local<v8::Object> listener =
-      GetListenerObject(ExecutionContext::From(script_state));
+  v8::Local<v8::Context> context = script_state->GetContext();
+  ExecutionContext* execution_context = ToExecutionContext(context);
+  v8::Local<v8::Object> listener = GetListenerObject(execution_context);
   if (listener.IsEmpty() || !listener->IsFunction())
     return v8::Null(GetIsolate());
 
   v8::Local<v8::Function> call_function =
       v8::Local<v8::Function>::Cast(listener);
-  v8::Local<v8::Object> this_value = script_state->GetContext()->Global();
+  v8::Local<v8::Object> this_value = context->Global();
 
   v8::Local<v8::Object> event_object;
-  if (!js_event->ToObject(script_state->GetContext()).ToLocal(&event_object))
+  if (!js_event->ToObject(context).ToLocal(&event_object))
     return v8::Null(GetIsolate());
   auto private_error = V8PrivateProperty::GetErrorEventError(GetIsolate());
   v8::Local<v8::Value> error = private_error.GetOrUndefined(event_object);
@@ -78,16 +79,10 @@ v8::Local<v8::Value> V8ErrorHandler::CallListenerFunction(
       v8::Integer::New(GetIsolate(), error_event->colno()), error};
   v8::TryCatch try_catch(GetIsolate());
   try_catch.SetVerbose(true);
-  v8::MaybeLocal<v8::Value> result;
-  if (ExecutionContext::From(script_state)->IsWorkerGlobalScope()) {
-    result = V8ScriptRunner::CallFunction(
-        call_function, ExecutionContext::From(script_state), this_value,
-        WTF_ARRAY_LENGTH(parameters), parameters, GetIsolate());
-  } else {
-    result = V8ScriptRunner::CallFunction(
-        call_function, ExecutionContext::From(script_state), this_value,
-        WTF_ARRAY_LENGTH(parameters), parameters, GetIsolate());
-  }
+
+  v8::MaybeLocal<v8::Value> result = V8ScriptRunner::CallFunction(
+      call_function, execution_context, this_value,
+      WTF_ARRAY_LENGTH(parameters), parameters, GetIsolate());
   v8::Local<v8::Value> return_value;
   if (!result.ToLocal(&return_value))
     return v8::Null(GetIsolate());

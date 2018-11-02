@@ -20,6 +20,8 @@ namespace ash {
 // Contains a textfield instance with a submit button. The user can type a
 // password into the textfield and hit enter to submit.
 //
+// This view is always rendered via layers.
+//
 // The password view looks like this:
 //
 //   * * * * * *   =>
@@ -60,6 +62,7 @@ class ASH_EXPORT LoginPasswordView : public views::View,
   // views::View:
   const char* GetClassName() const override;
   gfx::Size CalculatePreferredSize() const override;
+  void RequestFocus() override;
   bool OnKeyPressed(const ui::KeyEvent& event) override;
 
   // views::ButtonListener:

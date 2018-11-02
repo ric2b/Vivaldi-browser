@@ -122,7 +122,7 @@ void SafeSearchURLReporter::OnGetTokenSuccess(
           destination: GOOGLE_OWNED_SERVICE
         }
         policy {
-          cookies_allowed: false
+          cookies_allowed: NO
           setting:
             "This feature cannot be disabled by settings and is only enabled "
             "for child accounts. If sign-in is restricted to accounts from a "
@@ -149,7 +149,7 @@ void SafeSearchURLReporter::OnGetTokenSuccess(
       base::StringPrintf(kAuthorizationHeaderFormat, access_token.c_str()));
 
   base::DictionaryValue dict;
-  dict.SetStringWithoutPathExpansion(kUrlKey, (*it)->url.spec());
+  dict.SetKey(kUrlKey, base::Value((*it)->url.spec()));
 
   std::string body;
   base::JSONWriter::Write(dict, &body);

@@ -42,6 +42,7 @@ namespace content {
 
 class EmbeddedWorkerRegistry;
 struct EmbeddedWorkerStartParams;
+class ServiceWorkerContentSettingsProxyImpl;
 class ServiceWorkerContextCore;
 
 // This gives an interface to control one EmbeddedWorker instance, which
@@ -50,7 +51,7 @@ class ServiceWorkerContextCore;
 //
 // Owned by ServiceWorkerVersion. Lives on the IO thread.
 class CONTENT_EXPORT EmbeddedWorkerInstance
-    : NON_EXPORTED_BASE(public mojom::EmbeddedWorkerInstanceHost) {
+    : public mojom::EmbeddedWorkerInstanceHost {
  public:
   class DevToolsProxy;
   typedef base::Callback<void(ServiceWorkerStatusCode)> StatusCallback;
@@ -75,6 +76,10 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
     STARTING_PHASE_MAX_VALUE,
   };
 
+  using ProviderInfoGetter =
+      base::OnceCallback<mojom::ServiceWorkerProviderInfoForStartWorkerPtr(
+          int /* process_id */)>;
+
   class Listener {
    public:
     virtual ~Listener() {}
@@ -86,11 +91,22 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
     virtual void OnThreadStarted() {}
     virtual void OnStarted() {}
 
+    // Called when status changed to STOPPING. The renderer has been sent a Stop
+    // IPC message and OnStopped() will be called upon successful completion.
     virtual void OnStopping() {}
-    // Received ACK from renderer that the worker context terminated.
+
+    // Called when status changed to STOPPED. Usually, this is called upon
+    // receiving an ACK from renderer that the worker context terminated.
+    // OnStopped() is also called if Stop() aborted an ongoing start attempt
+    // even before the Start IPC message was sent to the renderer.  In this
+    // case, OnStopping() is not called; the worker is "stopped" immediately
+    // (the Start IPC is never sent).
     virtual void OnStopped(EmbeddedWorkerStatus old_status) {}
-    // The browser-side IPC endpoint for communication with the worker died.
+
+    // Called when the browser-side IPC endpoint for communication with the
+    // worker died. When this is called, status is STOPPED.
     virtual void OnDetached(EmbeddedWorkerStatus old_status) {}
+
     virtual void OnScriptLoaded() {}
     virtual void OnScriptLoadFailed() {}
     virtual void OnReportException(const base::string16& error_message,
@@ -115,15 +131,23 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
   // to start the worker. If the worker is already installed,
   // |installed_scripts_info| holds information about its scripts; otherwise,
   // it is null.
+  // |provider_info_getter| is called when this instance
+  // allocates a process and is ready to send a StartWorker message.
   void Start(std::unique_ptr<EmbeddedWorkerStartParams> params,
+             ProviderInfoGetter provider_info_getter,
              mojom::ServiceWorkerEventDispatcherRequest dispatcher_request,
              mojom::ServiceWorkerInstalledScriptsInfoPtr installed_scripts_info,
              const StatusCallback& callback);
 
-  // Stops the worker. It is invalid to call this when the worker is
-  // not in STARTING or RUNNING status.
-  // This returns false when StopWorker IPC couldn't be sent to the worker.
-  bool Stop();
+  // Stops the worker. It is invalid to call this when the worker is not in
+  // STARTING or RUNNING status.
+  //
+  // Stop() typically sends a Stop IPC to the renderer, and this instance enters
+  // STOPPING status, with Listener::OnStopped() called upon completion. It can
+  // synchronously complete if this instance is STARTING but the Start IPC
+  // message has not yet been sent. In that case, the start procedure is
+  // aborted, and this instance enters STOPPED status.
+  void Stop();
 
   // Stops the worker if the worker is not being debugged (i.e. devtools is
   // not attached). This method is called by a stop-worker timer to kill
@@ -190,6 +214,11 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
   static std::string StatusToString(EmbeddedWorkerStatus status);
   static std::string StartingPhaseToString(StartingPhase phase);
 
+  // Forces this instance into STOPPED status and releases any state about the
+  // running worker. Called when connection with the renderer died or the
+  // renderer is unresponsive.  Essentially, it throws away any information
+  // about the renderer-side worker, and frees this instance up to start a new
+  // worker.
   void Detach();
 
   base::WeakPtr<EmbeddedWorkerInstance> AsWeakPtr();
@@ -232,7 +261,7 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
   void OnScriptLoaded() override;
   // Notifies the corresponding provider host that the thread has started and is
   // ready to receive messages.
-  void OnThreadStarted(int thread_id, int provider_id) override;
+  void OnThreadStarted(int thread_id) override;
   void OnScriptLoadFailed() override;
   // Fires the callback passed to Start().
   void OnScriptEvaluated(bool success) override;
@@ -250,10 +279,6 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
                               const base::string16& message,
                               int line_number,
                               const GURL& source_url) override;
-
-  // Called when ServiceWorkerDispatcherHost for the worker died while it was
-  // running.
-  void OnDetached();
 
   // Called back from Registry when the worker instance sends message
   // to the browser (i.e. EmbeddedWorker observers).
@@ -288,7 +313,7 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
   int thread_id_;
 
   // |client_| is used to send messages to the renderer process.
-  mojom::EmbeddedWorkerInstanceClientPtr client_;
+  mojom::EmbeddedWorkerInstanceClientAssociatedPtr client_;
 
   // Binding for EmbeddedWorkerInstanceHost, runs on IO thread.
   mojo::AssociatedBinding<EmbeddedWorkerInstanceHost> instance_host_binding_;
@@ -302,6 +327,9 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
   // changed to a mojo struct and we put them in EmbeddedWorkerStartParams.
   mojom::ServiceWorkerEventDispatcherRequest pending_dispatcher_request_;
   mojom::ServiceWorkerInstalledScriptsInfoPtr pending_installed_scripts_info_;
+
+  // This is set at Start and used on SendStartWorker.
+  ProviderInfoGetter provider_info_getter_;
 
   // Whether devtools is attached or not.
   bool devtools_attached_;
@@ -322,6 +350,7 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
   // Used for UMA. The start time of the current start sequence step.
   base::TimeTicks step_time_;
 
+  std::unique_ptr<ServiceWorkerContentSettingsProxyImpl> content_settings_;
   base::WeakPtrFactory<EmbeddedWorkerInstance> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(EmbeddedWorkerInstance);

@@ -27,12 +27,12 @@
 #define DecodingImageGenerator_h
 
 #include "platform/PlatformExport.h"
+#include "platform/graphics/paint/PaintImage.h"
 #include "platform/image-decoders/SegmentReader.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Noncopyable.h"
 #include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/RefPtr.h"
-#include "third_party/skia/include/core/SkImageGenerator.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 
 class SkData;
@@ -44,44 +44,57 @@ class ImageFrameGenerator;
 // Implements SkImageGenerator, used by SkPixelRef to populate a discardable
 // memory with a decoded image frame. ImageFrameGenerator does the actual
 // decoding.
-class PLATFORM_EXPORT DecodingImageGenerator final : public SkImageGenerator {
+class PLATFORM_EXPORT DecodingImageGenerator final
+    : public PaintImageGenerator {
   USING_FAST_MALLOC(DecodingImageGenerator);
   WTF_MAKE_NONCOPYABLE(DecodingImageGenerator);
 
  public:
-  // Make SkImageGenerator::kNeedNewImageUniqueID accessible.
-  enum { kNeedNewImageUniqueID = SkImageGenerator::kNeedNewImageUniqueID };
+  // Aside from tests, this is used to create a decoder from SkData in Skia
+  // (exported via WebImageGenerator and set via
+  // SkGraphics::SetImageGeneratorFromEncodedDataFactory)
+  static std::unique_ptr<SkImageGenerator> CreateAsSkImageGenerator(
+      sk_sp<SkData>);
 
-  static SkImageGenerator* Create(SkData*);
+  static sk_sp<DecodingImageGenerator> Create(PassRefPtr<ImageFrameGenerator>,
+                                              const SkImageInfo&,
+                                              PassRefPtr<SegmentReader>,
+                                              std::vector<FrameMetadata>,
+                                              PaintImage::ContentId,
+                                              bool all_data_received);
 
-  DecodingImageGenerator(PassRefPtr<ImageFrameGenerator>,
-                         const SkImageInfo&,
-                         PassRefPtr<SegmentReader>,
-                         bool all_data_received,
-                         size_t index,
-                         uint32_t unique_id = kNeedNewImageUniqueID);
   ~DecodingImageGenerator() override;
 
   void SetCanYUVDecode(bool yes) { can_yuv_decode_ = yes; }
 
- protected:
-  SkData* onRefEncodedData() override;
-
-  bool onGetPixels(const SkImageInfo&,
-                   void* pixels,
-                   size_t row_bytes,
-                   const Options&) override;
-
-  bool onQueryYUV8(SkYUVSizeInfo*, SkYUVColorSpace*) const override;
-
-  bool onGetYUV8Planes(const SkYUVSizeInfo&, void* planes[3]) override;
+  // PaintImageGenerator implementation.
+  sk_sp<SkData> GetEncodedData() const override;
+  bool GetPixels(const SkImageInfo&,
+                 void* pixels,
+                 size_t row_bytes,
+                 size_t frame_index,
+                 uint32_t lazy_pixel_ref) override;
+  bool QueryYUV8(SkYUVSizeInfo*, SkYUVColorSpace*) const override;
+  bool GetYUV8Planes(const SkYUVSizeInfo&,
+                     void* planes[3],
+                     size_t frame_index,
+                     uint32_t lazy_pixel_ref) override;
+  SkISize GetSupportedDecodeSize(const SkISize& requested_size) const override;
+  PaintImage::ContentId GetContentIdForFrame(size_t frame_index) const override;
 
  private:
+  DecodingImageGenerator(PassRefPtr<ImageFrameGenerator>,
+                         const SkImageInfo&,
+                         PassRefPtr<SegmentReader>,
+                         std::vector<FrameMetadata>,
+                         PaintImage::ContentId,
+                         bool all_data_received);
+
   RefPtr<ImageFrameGenerator> frame_generator_;
   const RefPtr<SegmentReader> data_;  // Data source.
   const bool all_data_received_;
-  const size_t frame_index_;
   bool can_yuv_decode_;
+  const PaintImage::ContentId complete_frame_content_id_;
 };
 
 }  // namespace blink

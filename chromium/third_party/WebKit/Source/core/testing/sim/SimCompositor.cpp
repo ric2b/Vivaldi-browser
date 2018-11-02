@@ -4,16 +4,15 @@
 
 #include "core/testing/sim/SimCompositor.h"
 
-#include "core/exported/WebViewBase.h"
+#include "core/exported/WebViewImpl.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "core/layout/api/LayoutViewItem.h"
-#include "core/layout/compositing/CompositedLayerMapping.h"
-#include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/paint/PaintLayer.h"
+#include "core/paint/compositing/CompositedLayerMapping.h"
+#include "core/paint/compositing/PaintLayerCompositor.h"
 #include "core/testing/sim/SimDisplayItemList.h"
-#include "platform/graphics/ContentLayerDelegate.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/wtf/CurrentTime.h"
 #include "public/platform/WebRect.h"
@@ -23,8 +22,7 @@ namespace blink {
 static void PaintLayers(GraphicsLayer& layer,
                         SimDisplayItemList& display_list) {
   if (layer.DrawsContent() && layer.HasTrackedRasterInvalidations()) {
-    ContentLayerDelegate* delegate = layer.ContentLayerDelegateForTesting();
-    delegate->PaintContents(&display_list);
+    layer.WebContentLayerClientForTesting().PaintContents(&display_list);
     layer.ResetTrackedRasterInvalidations();
   }
 
@@ -57,7 +55,7 @@ SimCompositor::~SimCompositor() {
   LocalFrameView::SetInitialTracksPaintInvalidationsForTesting(false);
 }
 
-void SimCompositor::SetWebView(WebViewBase& web_view) {
+void SimCompositor::SetWebView(WebViewImpl& web_view) {
   web_view_ = &web_view;
 }
 

@@ -50,8 +50,9 @@ class GitCL(object):
             command += ['--auth-refresh-token-json', self._auth_refresh_token_json]
         return self._host.executive.run_command(command, cwd=self._cwd)
 
-    def trigger_try_jobs(self, builders=None):
-        builders = builders or self._host.builders.all_try_builder_names()
+    def trigger_try_jobs(self, builders):
+        # This method assumes the bots to be triggered are Blink try bots,
+        # which are all on the master tryserver.blink except android_blink_rel.
         if 'android_blink_rel' in builders:
             self.run(['try', '-b', 'android_blink_rel'])
             builders.remove('android_blink_rel')
@@ -82,7 +83,7 @@ class GitCL(object):
             self._host.sleep(poll_delay_seconds)
             try_results = self.try_job_results()
             _log.debug('Fetched try results: %s', try_results)
-            if self.all_finished(try_results):
+            if try_results and self.all_finished(try_results):
                 self._host.print_('All jobs finished.')
                 return try_results
             self._host.print_('Waiting. %d seconds passed.' % (self._host.time() - start))
@@ -109,6 +110,8 @@ class GitCL(object):
     @staticmethod
     def filter_latest(try_results):
         """Returns the latest entries from from a Build to TryJobStatus dict."""
+        if try_results is None:
+            return None
         latest_builds = filter_latest_builds(try_results.keys())
         return {b: s for b, s in try_results.items() if b in latest_builds}
 

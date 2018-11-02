@@ -14,10 +14,11 @@ class PLATFORM_EXPORT UnacceleratedStaticBitmapImage final
  public:
   ~UnacceleratedStaticBitmapImage() override;
   static PassRefPtr<UnacceleratedStaticBitmapImage> Create(sk_sp<SkImage>);
+  static PassRefPtr<UnacceleratedStaticBitmapImage> Create(PaintImage);
 
   bool CurrentFrameKnownToBeOpaque(MetadataMode = kUseCurrentMetadata) override;
   IntSize Size() const override;
-  sk_sp<SkImage> ImageForCurrentFrame() override;
+  bool IsPremultiplied() const override;
 
   void Draw(PaintCanvas*,
             const PaintFlags&,
@@ -26,9 +27,13 @@ class PLATFORM_EXPORT UnacceleratedStaticBitmapImage final
             RespectImageOrientationEnum,
             ImageClampingMode) override;
 
+  PaintImage PaintImageForCurrentFrame() override;
+
  private:
   UnacceleratedStaticBitmapImage(sk_sp<SkImage>);
-  sk_sp<SkImage> image_;
+  UnacceleratedStaticBitmapImage(PaintImage);
+
+  PaintImage paint_image_;
 };
 
 }  // namespace blink

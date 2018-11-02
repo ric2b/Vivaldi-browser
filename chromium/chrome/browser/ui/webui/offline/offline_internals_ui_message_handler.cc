@@ -18,7 +18,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
-#include "chrome/browser/android/offline_pages/prefetch/prefetch_background_task.h"
+#include "chrome/browser/offline_pages/android/prefetch_background_task_android.h"
 #include "chrome/browser/offline_pages/offline_page_model_factory.h"
 #include "chrome/browser/offline_pages/prefetch/prefetch_service_factory.h"
 #include "chrome/browser/offline_pages/request_coordinator_factory.h"
@@ -206,6 +206,7 @@ void OfflineInternalsUIMessageHandler::HandleStoredPagesCallback(
     offline_page->SetDouble("lastAccessTime", page.last_access_time.ToJsTime());
     offline_page->SetInteger("accessCount", page.access_count);
     offline_page->SetString("originalUrl", page.original_url.spec());
+    offline_page->SetString("requestOrigin", page.request_origin);
     results.Append(std::move(offline_page));
   }
   ResolveJavascriptCallback(base::Value(callback_id), results);
@@ -230,6 +231,7 @@ void OfflineInternalsUIMessageHandler::HandleRequestQueueCallback(
       save_page_request->SetString("id", std::to_string(request->request_id()));
       save_page_request->SetString("originalUrl",
                                    request->original_url().spec());
+      save_page_request->SetString("requestOrigin", request->request_origin());
       save_page_requests.Append(std::move(save_page_request));
     }
   }
@@ -295,8 +297,10 @@ void OfflineInternalsUIMessageHandler::HandleScheduleNwake(
   const base::Value* callback_id;
   CHECK(args->Get(0, &callback_id));
 
-  offline_pages::PrefetchBackgroundTask::Schedule(0);
-
+  if (prefetch_service_) {
+    prefetch_service_->GetPrefetchBackgroundTaskHandler()
+        ->EnsureTaskScheduled();
+  }
   ResolveJavascriptCallback(*callback_id, base::Value("Scheduled."));
 }
 
@@ -306,7 +310,10 @@ void OfflineInternalsUIMessageHandler::HandleCancelNwake(
   const base::Value* callback_id;
   CHECK(args->Get(0, &callback_id));
 
-  offline_pages::PrefetchBackgroundTask::Cancel();
+  if (prefetch_service_) {
+    prefetch_service_->GetPrefetchBackgroundTaskHandler()
+        ->CancelBackgroundTask();
+  }
 
   ResolveJavascriptCallback(*callback_id, base::Value("Cancelled."));
 }

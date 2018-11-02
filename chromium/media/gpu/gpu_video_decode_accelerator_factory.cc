@@ -5,8 +5,10 @@
 #include "media/gpu/gpu_video_decode_accelerator_factory.h"
 
 #include "base/memory/ptr_util.h"
+#include "build/build_config.h"
 #include "gpu/command_buffer/service/gpu_preferences.h"
 #include "media/base/media_switches.h"
+#include "media/gpu/features.h"
 #include "media/gpu/gpu_video_accelerator_util.h"
 #include "media/gpu/media_gpu_export.h"
 
@@ -14,24 +16,25 @@
 #include "base/win/windows_version.h"
 #include "media/gpu/d3d11_video_decode_accelerator_win.h"
 #include "media/gpu/dxva_video_decode_accelerator_win.h"
-#elif defined(OS_MACOSX)
+#endif
+#if defined(OS_MACOSX)
 #include "media/gpu/vt_video_decode_accelerator_mac.h"
-#elif defined(OS_CHROMEOS)
-#if defined(USE_V4L2_CODEC)
+#endif
+#if BUILDFLAG(USE_V4L2_CODEC)
 #include "media/gpu/v4l2_device.h"
 #include "media/gpu/v4l2_slice_video_decode_accelerator.h"
 #include "media/gpu/v4l2_video_decode_accelerator.h"
 #include "ui/gl/gl_surface_egl.h"
 #endif
-#if defined(ARCH_CPU_X86_FAMILY)
-#include "media/gpu/vaapi_video_decode_accelerator.h"
-#include "ui/gl/gl_implementation.h"
-#endif
-#elif defined(OS_ANDROID)
+#if defined(OS_ANDROID)
 #include "media/gpu/android/device_info.h"
 #include "media/gpu/android_video_decode_accelerator.h"
 #include "media/gpu/android_video_surface_chooser_impl.h"
 #include "media/gpu/avda_codec_allocator.h"
+#endif
+#if BUILDFLAG(USE_VAAPI)
+#include "media/gpu/vaapi_video_decode_accelerator.h"
+#include "ui/gl/gl_implementation.h"
 #endif
 
 namespace media {
@@ -87,9 +90,9 @@ GpuVideoDecodeAcceleratorFactory::GetDecoderCapabilities(
   capabilities.supported_profiles =
       DXVAVideoDecodeAccelerator::GetSupportedProfiles(gpu_preferences,
                                                        workarounds);
-#elif defined(OS_CHROMEOS)
+#elif BUILDFLAG(USE_V4L2_CODEC) || BUILDFLAG(USE_VAAPI)
   VideoDecodeAccelerator::SupportedProfiles vda_profiles;
-#if defined(USE_V4L2_CODEC)
+#if BUILDFLAG(USE_V4L2_CODEC)
   vda_profiles = V4L2VideoDecodeAccelerator::GetSupportedProfiles();
   GpuVideoAcceleratorUtil::InsertUniqueDecodeProfiles(
       vda_profiles, &capabilities.supported_profiles);
@@ -97,7 +100,7 @@ GpuVideoDecodeAcceleratorFactory::GetDecoderCapabilities(
   GpuVideoAcceleratorUtil::InsertUniqueDecodeProfiles(
       vda_profiles, &capabilities.supported_profiles);
 #endif
-#if defined(ARCH_CPU_X86_FAMILY)
+#if BUILDFLAG(USE_VAAPI)
   vda_profiles = VaapiVideoDecodeAccelerator::GetSupportedProfiles();
   GpuVideoAcceleratorUtil::InsertUniqueDecodeProfiles(
       vda_profiles, &capabilities.supported_profiles);
@@ -136,11 +139,11 @@ GpuVideoDecodeAcceleratorFactory::CreateVDA(
     &GpuVideoDecodeAcceleratorFactory::CreateD3D11VDA,
     &GpuVideoDecodeAcceleratorFactory::CreateDXVAVDA,
 #endif
-#if defined(OS_CHROMEOS) && defined(USE_V4L2_CODEC)
+#if BUILDFLAG(USE_V4L2_CODEC)
     &GpuVideoDecodeAcceleratorFactory::CreateV4L2VDA,
     &GpuVideoDecodeAcceleratorFactory::CreateV4L2SVDA,
 #endif
-#if defined(OS_CHROMEOS) && defined(ARCH_CPU_X86_FAMILY)
+#if BUILDFLAG(USE_VAAPI)
     &GpuVideoDecodeAcceleratorFactory::CreateVaapiVDA,
 #endif
 #if defined(OS_MACOSX)
@@ -191,7 +194,7 @@ GpuVideoDecodeAcceleratorFactory::CreateDXVAVDA(
 }
 #endif
 
-#if defined(OS_CHROMEOS) && defined(USE_V4L2_CODEC)
+#if BUILDFLAG(USE_V4L2_CODEC)
 std::unique_ptr<VideoDecodeAccelerator>
 GpuVideoDecodeAcceleratorFactory::CreateV4L2VDA(
     const gpu::GpuDriverBugWorkarounds& workarounds,
@@ -214,14 +217,14 @@ GpuVideoDecodeAcceleratorFactory::CreateV4L2SVDA(
   scoped_refptr<V4L2Device> device = V4L2Device::Create();
   if (device.get()) {
     decoder.reset(new V4L2SliceVideoDecodeAccelerator(
-        device, gl::GLSurfaceEGL::GetHardwareDisplay(), get_gl_context_cb_,
+        device, gl::GLSurfaceEGL::GetHardwareDisplay(), bind_image_cb_,
         make_context_current_cb_));
   }
   return decoder;
 }
 #endif
 
-#if defined(OS_CHROMEOS) && defined(ARCH_CPU_X86_FAMILY)
+#if BUILDFLAG(USE_VAAPI)
 std::unique_ptr<VideoDecodeAccelerator>
 GpuVideoDecodeAcceleratorFactory::CreateVaapiVDA(
     const gpu::GpuDriverBugWorkarounds& workarounds,

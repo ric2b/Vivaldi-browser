@@ -100,6 +100,9 @@ void ArcAppContextMenu::ShowPackageInfo() {
             << app_id() << ".";
     return;
   }
-  if (arc::ShowPackageInfo(app_info->package_name))
+  if (arc::ShowPackageInfo(app_info->package_name,
+                           arc::mojom::ShowPackageInfoPage::MAIN,
+                           controller()->GetAppListDisplayId())) {
     controller()->DismissView();
+  }
 }

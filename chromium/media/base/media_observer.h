@@ -16,13 +16,24 @@ class MEDIA_EXPORT MediaObserverClient {
   virtual ~MediaObserverClient() {}
 
   // Requests to restart the media pipeline and create a new renderer as soon as
-  // possible. |is_rendered_remotely| indicates whether the media is rendered
-  // remotely. When it is true, all the optimizations that might suspend the
-  // media pipeline should be disabled.
-  virtual void SwitchRenderer(bool is_rendered_remotely) = 0;
+  // possible. When switching to remote renderer, all the optimizations that
+  // might suspend the media pipeline should be disabled.
+  // |remote_device_friendly_name| can be empty if the remote device is unknown.
+  virtual void SwitchToRemoteRenderer(
+      const std::string& remote_device_friendly_name) = 0;
+  virtual void SwitchToLocalRenderer() = 0;
 
   // Requests to activate monitoring changes on viewport intersection.
   virtual void ActivateViewportIntersectionMonitoring(bool activate) = 0;
+
+  // Reports the latest compatibility state of the element's source for remote
+  // playback.
+  virtual void UpdateRemotePlaybackCompatibility(bool is_compatible) = 0;
+
+  // Gets the number of audio/video bytes decoded so far from media pipeline.
+  // The count keeps increasing and will not be reset during seek.
+  virtual size_t AudioDecodedByteCount() const = 0;
+  virtual size_t VideoDecodedByteCount() const = 0;
 };
 
 // This class is an observer of media player events.
@@ -30,10 +41,6 @@ class MEDIA_EXPORT MediaObserver {
  public:
   MediaObserver();
   virtual ~MediaObserver();
-
-  // Called when the media element entered/exited fullscreen.
-  virtual void OnEnteredFullscreen() = 0;
-  virtual void OnExitedFullscreen() = 0;
 
   // Called when the media element starts/stops being the dominant visible
   // content.
@@ -55,6 +62,9 @@ class MEDIA_EXPORT MediaObserver {
   // Called when the media is playing/paused.
   virtual void OnPlaying() = 0;
   virtual void OnPaused() = 0;
+
+  // Called when the data source is asynchronously initialized.
+  virtual void OnDataSourceInitialized(const GURL& url_after_redirects) = 0;
 
   // Set the MediaObserverClient.
   virtual void SetClient(MediaObserverClient* client) = 0;

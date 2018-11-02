@@ -641,6 +641,19 @@ bool VideoFrame::HasTextures() const {
   return !mailbox_holders_[0].mailbox.IsZero();
 }
 
+size_t VideoFrame::NumTextures() const {
+  if (!HasTextures())
+    return 0;
+
+  size_t i = 0;
+  for (; i < NumPlanes(format_); ++i) {
+    if (mailbox_holders_[i].mailbox.IsZero()) {
+      return i;
+    }
+  }
+  return i;
+}
+
 gfx::ColorSpace VideoFrame::ColorSpace() const {
   if (color_space_ == gfx::ColorSpace()) {
     int videoframe_color_space;
@@ -790,7 +803,7 @@ void VideoFrame::AddDestructionObserver(base::OnceClosure callback) {
   done_callbacks_.push_back(std::move(callback));
 }
 
-void VideoFrame::UpdateReleaseSyncToken(SyncTokenClient* client) {
+gpu::SyncToken VideoFrame::UpdateReleaseSyncToken(SyncTokenClient* client) {
   DCHECK(HasTextures());
   base::AutoLock locker(release_sync_token_lock_);
   // Must wait on the previous sync point before inserting a new sync point so
@@ -799,6 +812,7 @@ void VideoFrame::UpdateReleaseSyncToken(SyncTokenClient* client) {
   if (release_sync_token_.HasData())
     client->WaitSyncToken(release_sync_token_);
   client->GenerateSyncToken(&release_sync_token_);
+  return release_sync_token_;
 }
 
 std::string VideoFrame::AsHumanReadableString() {

@@ -20,20 +20,19 @@ namespace cc {
 
 class CC_EXPORT ContentDrawQuadBase : public DrawQuad {
  public:
-  void SetNew(const SharedQuadState* shared_quad_state,
+  void SetNew(const viz::SharedQuadState* shared_quad_state,
               DrawQuad::Material material,
               const gfx::Rect& rect,
-              const gfx::Rect& opaque_rect,
               const gfx::Rect& visible_rect,
+              bool needs_blending,
               const gfx::RectF& tex_coord_rect,
               const gfx::Size& texture_size,
               bool swizzle_contents,
               bool nearest_neighbor);
 
-  void SetAll(const SharedQuadState* shared_quad_state,
+  void SetAll(const viz::SharedQuadState* shared_quad_state,
               DrawQuad::Material material,
               const gfx::Rect& rect,
-              const gfx::Rect& opaque_rect,
               const gfx::Rect& visible_rect,
               bool needs_blending,
               const gfx::RectF& tex_coord_rect,

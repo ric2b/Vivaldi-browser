@@ -13,6 +13,10 @@ namespace gfx {
 class Point;
 }
 
+namespace viz {
+class HitTestQuery;
+}
+
 namespace ui {
 
 class Event;
@@ -60,7 +64,11 @@ class EventDispatcherDelegate {
   virtual void OnMouseCursorLocationChanged(const gfx::Point& point,
                                             int64_t display_id) = 0;
 
-  virtual void OnEventChangesCursorVisibility(bool visible) = 0;
+  virtual void OnEventChangesCursorVisibility(const ui::Event& event,
+                                              bool visible) = 0;
+
+  virtual void OnEventChangesCursorTouchVisibility(const ui::Event& event,
+                                                   bool visible) = 0;
 
   // Dispatches an event to the specific client.
   virtual void DispatchInputEventToWindow(ServerWindow* target,
@@ -88,10 +96,32 @@ class EventDispatcherDelegate {
   virtual ServerWindow* GetRootWindowContaining(gfx::Point* location_in_display,
                                                 int64_t* display_id) = 0;
 
+  // Returns the root of |window| that is used for event dispatch. The returned
+  // value is used for coordinate conversion.
+  virtual ServerWindow* GetRootWindowForEventDispatch(ServerWindow* window) = 0;
+
   // Called when event dispatch could not find a target. OnAccelerator may still
   // be called.
   virtual void OnEventTargetNotFound(const ui::Event& event,
                                      int64_t display_id) = 0;
+
+  // If an event is blocked by a modal window this function is used to determine
+  // which window the event should be dispatched to. Return null to indicate no
+  // window. |window| is the window the event would be targetted at if there was
+  // no modal window open.
+  virtual ServerWindow* GetFallbackTargetForEventBlockedByModal(
+      ServerWindow* window) = 0;
+
+  // Called when an event occurs that targets a window that should be blocked
+  // by a modal window. |modal_window| is the modal window that blocked the
+  // event.
+  virtual void OnEventOccurredOutsideOfModalWindow(
+      ServerWindow* modal_window) = 0;
+
+  virtual viz::HitTestQuery* GetHitTestQueryForDisplay(int64_t display_id) = 0;
+
+  virtual ServerWindow* GetWindowFromFrameSinkId(
+      const viz::FrameSinkId& frame_sink_id) = 0;
 
  protected:
   virtual ~EventDispatcherDelegate() {}

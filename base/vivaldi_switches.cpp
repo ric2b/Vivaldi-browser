@@ -17,4 +17,8 @@ const char kRunningVivaldi[] = "running-vivaldi";
 // pseudonymous and hard to guess due to security reasons.
 const char kVivaldiUpdateURL[] = "vuu";
 
+// Add this switch to launch the Update Notifier for component (local) builds.
+#if defined(COMPONENT_BUILD)
+const char kLaunchUpdater[] = "launch-updater";
+#endif
 }  // namespace switches

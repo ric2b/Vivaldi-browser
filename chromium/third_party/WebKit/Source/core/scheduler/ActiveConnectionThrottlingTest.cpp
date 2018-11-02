@@ -2,8 +2,8 @@
 // Use of this source code if governed by a BSD-style license that can be
 // found in LICENSE file.
 
-#include "core/exported/WebViewBase.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/exported/WebViewImpl.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "core/testing/sim/SimRequest.h"
 #include "core/testing/sim/SimTest.h"
 #include "platform/scheduler/renderer/web_view_scheduler.h"

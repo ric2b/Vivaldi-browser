@@ -13,6 +13,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
+#include "base/time/time.h"
 #include "chrome/browser/content_settings/content_settings_mock_observer.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -23,6 +24,7 @@
 #include "components/content_settings/core/browser/content_settings_details.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/browser/user_modifiable_provider.h"
 #include "components/content_settings/core/browser/website_settings_info.h"
 #include "components/content_settings/core/browser/website_settings_registry.h"
 #include "components/content_settings/core/common/pref_names.h"
@@ -32,10 +34,13 @@
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "net/base/static_cookie_policy.h"
 #include "ppapi/features/features.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
 using ::testing::_;
+using ::testing::MockFunction;
+using ::testing::Return;
 
 namespace {
 
@@ -46,6 +51,34 @@ bool MatchPrimaryPattern(const ContentSettingsPattern& expected_primary,
 }
 
 }  // namespace
+
+class MockUserModifiableProvider
+    : public content_settings::UserModifiableProvider {
+ public:
+  ~MockUserModifiableProvider() = default;
+  MOCK_CONST_METHOD3(GetRuleIterator,
+                     std::unique_ptr<content_settings::RuleIterator>(
+                         ContentSettingsType,
+                         const content_settings::ResourceIdentifier&,
+                         bool));
+
+  MOCK_METHOD5(SetWebsiteSetting,
+               bool(const ContentSettingsPattern&,
+                    const ContentSettingsPattern&,
+                    ContentSettingsType,
+                    const content_settings::ResourceIdentifier&,
+                    base::Value*));
+
+  MOCK_METHOD1(ClearAllContentSettingsRules, void(ContentSettingsType));
+
+  MOCK_METHOD0(ShutdownOnUIThread, void());
+
+  MOCK_METHOD4(GetWebsiteSettingLastModified,
+               base::Time(const ContentSettingsPattern&,
+                          const ContentSettingsPattern&,
+                          ContentSettingsType,
+                          const content_settings::ResourceIdentifier&));
+};
 
 class HostContentSettingsMapTest : public testing::Test {
  public:
@@ -251,6 +284,85 @@ TEST_F(HostContentSettingsMapTest, IndividualSettings) {
       CONTENT_SETTINGS_TYPE_POPUPS, std::string(), &host_settings);
   // |host_settings| contains only the default setting.
   EXPECT_EQ(1U, host_settings.size());
+}
+
+TEST_F(HostContentSettingsMapTest, GetWebsiteSettingsForOneType) {
+  TestingProfile profile;
+  GURL hosts[] = {GURL("https://example1.com/"), GURL("https://example2.com/")};
+  ContentSettingsForOneType client_hints_settings;
+  HostContentSettingsMap* host_content_settings_map =
+      HostContentSettingsMapFactory::GetForProfile(&profile);
+
+  host_content_settings_map->GetSettingsForOneType(
+      CONTENT_SETTINGS_TYPE_CLIENT_HINTS, std::string(),
+      &client_hints_settings);
+  EXPECT_EQ(0U, client_hints_settings.size());
+
+  // Add setting for hosts[0].
+  const double expiration_time =
+      (base::Time::Now() + base::TimeDelta::FromDays(1)).ToDoubleT();
+  std::unique_ptr<base::ListValue> expiration_times_list =
+      base::MakeUnique<base::ListValue>();
+  expiration_times_list->AppendInteger(42 /* client hint  value */);
+  auto expiration_times_dictionary = std::make_unique<base::DictionaryValue>();
+  expiration_times_dictionary->SetList("client_hints",
+                                       std::move(expiration_times_list));
+  expiration_times_dictionary->SetDouble("expiration_time", expiration_time);
+  host_content_settings_map->SetWebsiteSettingDefaultScope(
+      hosts[0], GURL(), CONTENT_SETTINGS_TYPE_CLIENT_HINTS, std::string(),
+      base::MakeUnique<base::Value>(expiration_times_dictionary->Clone()));
+
+  // Reading the settings should now return one setting.
+  host_content_settings_map->GetSettingsForOneType(
+      CONTENT_SETTINGS_TYPE_CLIENT_HINTS, std::string(),
+      &client_hints_settings);
+  EXPECT_EQ(1U, client_hints_settings.size());
+  for (size_t i = 0; i < client_hints_settings.size(); ++i) {
+    EXPECT_EQ(ContentSettingsPattern::FromURLNoWildcard(hosts[i]),
+              client_hints_settings.at(i).primary_pattern);
+    EXPECT_EQ(ContentSettingsPattern::Wildcard(),
+              client_hints_settings.at(i).secondary_pattern);
+    EXPECT_EQ(*expiration_times_dictionary,
+              *client_hints_settings.at(i).setting_value);
+  }
+
+  // Add setting for hosts[1].
+  host_content_settings_map->SetWebsiteSettingDefaultScope(
+      hosts[1], GURL(), CONTENT_SETTINGS_TYPE_CLIENT_HINTS, std::string(),
+      base::MakeUnique<base::Value>(expiration_times_dictionary->Clone()));
+
+  // Reading the settings should now return two settings.
+  host_content_settings_map->GetSettingsForOneType(
+      CONTENT_SETTINGS_TYPE_CLIENT_HINTS, std::string(),
+      &client_hints_settings);
+  EXPECT_EQ(2U, client_hints_settings.size());
+  for (size_t i = 0; i < client_hints_settings.size(); ++i) {
+    EXPECT_EQ(ContentSettingsPattern::FromURLNoWildcard(hosts[i]),
+              client_hints_settings.at(i).primary_pattern);
+    EXPECT_EQ(ContentSettingsPattern::Wildcard(),
+              client_hints_settings.at(i).secondary_pattern);
+    EXPECT_EQ(*expiration_times_dictionary,
+              *client_hints_settings.at(i).setting_value);
+  }
+
+  // Add settings again for hosts[0].
+  host_content_settings_map->SetWebsiteSettingDefaultScope(
+      hosts[0], GURL(), CONTENT_SETTINGS_TYPE_CLIENT_HINTS, std::string(),
+      base::MakeUnique<base::Value>(expiration_times_dictionary->Clone()));
+
+  // Reading the settings should still return two settings.
+  host_content_settings_map->GetSettingsForOneType(
+      CONTENT_SETTINGS_TYPE_CLIENT_HINTS, std::string(),
+      &client_hints_settings);
+  EXPECT_EQ(2U, client_hints_settings.size());
+  for (size_t i = 0; i < client_hints_settings.size(); ++i) {
+    EXPECT_EQ(ContentSettingsPattern::FromURLNoWildcard(hosts[i]),
+              client_hints_settings.at(i).primary_pattern);
+    EXPECT_EQ(ContentSettingsPattern::Wildcard(),
+              client_hints_settings.at(i).secondary_pattern);
+    EXPECT_EQ(*expiration_times_dictionary,
+              *client_hints_settings.at(i).setting_value);
+  }
 }
 
 TEST_F(HostContentSettingsMapTest, Clear) {
@@ -1835,6 +1947,67 @@ TEST_F(HostContentSettingsMapTest, GetSettingLastModified) {
                                       ContentSettingsPattern::Wildcard(),
                                       CONTENT_SETTINGS_TYPE_POPUPS);
   EXPECT_EQ(t, clock->Now());
+}
+
+TEST_F(HostContentSettingsMapTest, LastModifiedMultipleModifiableProviders) {
+  base::test::ScopedFeatureList feature_list;
+  // Enable kTabsInCbd to activate last_modified timestamp recording.
+  feature_list.InitAndEnableFeature(features::kTabsInCbd);
+
+  TestingProfile profile;
+  auto* map = HostContentSettingsMapFactory::GetForProfile(&profile);
+  GURL url("https://www.google.com/");
+  ContentSettingsPattern pattern =
+      ContentSettingsPattern::FromURLNoWildcard(url);
+
+  base::Time t1 = base::Time::Now();
+  auto test_clock = base::MakeUnique<base::SimpleTestClock>();
+  test_clock->SetNow(t1);
+
+  base::SimpleTestClock* clock = test_clock.get();
+  clock->Advance(base::TimeDelta::FromSeconds(1));
+  base::Time t2 = clock->Now();
+
+  // Register a provider which reports a modification time of t1.
+  std::unique_ptr<MockUserModifiableProvider> provider =
+      base::MakeUnique<MockUserModifiableProvider>();
+  EXPECT_CALL(*provider, GetWebsiteSettingLastModified(
+                             _, _, CONTENT_SETTINGS_TYPE_NOTIFICATIONS, _))
+      .WillOnce(Return(t1));
+  MockUserModifiableProvider* weak_provider = provider.get();
+  map->RegisterUserModifiableProvider(
+      HostContentSettingsMap::PROVIDER_FOR_TESTS, std::move(provider));
+
+  // Register another provider which reports a modification time of t2.
+  std::unique_ptr<MockUserModifiableProvider> other_provider =
+      base::MakeUnique<MockUserModifiableProvider>();
+  EXPECT_CALL(*other_provider,
+              GetWebsiteSettingLastModified(
+                  _, _, CONTENT_SETTINGS_TYPE_NOTIFICATIONS, _))
+      .WillRepeatedly(Return(t2));
+  MockUserModifiableProvider* weak_other_provider = other_provider.get();
+  map->RegisterUserModifiableProvider(
+      HostContentSettingsMap::OTHER_PROVIDER_FOR_TESTS,
+      std::move(other_provider));
+
+  // Expect the more recent modification time to be reported.
+  EXPECT_EQ(t2, map->GetSettingLastModifiedDate(
+                    pattern, ContentSettingsPattern::Wildcard(),
+                    CONTENT_SETTINGS_TYPE_NOTIFICATIONS));
+
+  // Now have original provider report a more recent modification time.
+  clock->Advance(base::TimeDelta::FromSeconds(1));
+  base::Time t3 = clock->Now();
+  EXPECT_CALL(*weak_provider, GetWebsiteSettingLastModified(
+                                  _, _, CONTENT_SETTINGS_TYPE_NOTIFICATIONS, _))
+      .WillOnce(Return(t3));
+
+  // Expect the timestamp from the registered provider to be reported now.
+  EXPECT_EQ(t3, map->GetSettingLastModifiedDate(
+                    pattern, ContentSettingsPattern::Wildcard(),
+                    CONTENT_SETTINGS_TYPE_NOTIFICATIONS));
+  weak_provider->RemoveObserver(map);
+  weak_other_provider->RemoveObserver(map);
 }
 
 TEST_F(HostContentSettingsMapTest, LastModifiedIsNotRecordedWhenDisabled) {

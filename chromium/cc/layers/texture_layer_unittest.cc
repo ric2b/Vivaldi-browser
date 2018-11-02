@@ -25,7 +25,6 @@
 #include "cc/layers/solid_color_layer.h"
 #include "cc/layers/texture_layer_client.h"
 #include "cc/layers/texture_layer_impl.h"
-#include "cc/resources/returned_resource.h"
 #include "cc/test/fake_impl_task_runner_provider.h"
 #include "cc/test/fake_layer_tree_frame_sink.h"
 #include "cc/test/fake_layer_tree_host_client.h"
@@ -40,6 +39,7 @@
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/single_thread_proxy.h"
 #include "components/viz/common/gpu/context_provider.h"
+#include "components/viz/common/resources/returned_resource.h"
 #include "components/viz/test/test_layer_tree_frame_sink.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -101,7 +101,7 @@ class FakeTextureLayerClient : public TextureLayerClient {
 
   bool PrepareTextureMailbox(
       viz::TextureMailbox* mailbox,
-      std::unique_ptr<SingleReleaseCallback>* release_callback) override {
+      std::unique_ptr<viz::SingleReleaseCallback>* release_callback) override {
     if (!mailbox_changed_)
       return false;
 
@@ -111,8 +111,9 @@ class FakeTextureLayerClient : public TextureLayerClient {
     return true;
   }
 
-  void set_mailbox(const viz::TextureMailbox& mailbox,
-                   std::unique_ptr<SingleReleaseCallback> release_callback) {
+  void set_mailbox(
+      const viz::TextureMailbox& mailbox,
+      std::unique_ptr<viz::SingleReleaseCallback> release_callback) {
     mailbox_ = mailbox;
     release_callback_ = std::move(release_callback);
     mailbox_changed_ = true;
@@ -120,7 +121,7 @@ class FakeTextureLayerClient : public TextureLayerClient {
 
  private:
   viz::TextureMailbox mailbox_;
-  std::unique_ptr<SingleReleaseCallback> release_callback_;
+  std::unique_ptr<viz::SingleReleaseCallback> release_callback_;
   bool mailbox_changed_;
   DISALLOW_COPY_AND_ASSIGN(FakeTextureLayerClient);
 };
@@ -192,9 +193,9 @@ struct CommonMailboxObjects {
   gpu::Mailbox mailbox_name1_;
   gpu::Mailbox mailbox_name2_;
   MockMailboxCallback mock_callback_;
-  ReleaseCallback release_mailbox1_;
-  ReleaseCallback release_mailbox2_;
-  ReleaseCallback release_mailbox3_;
+  viz::ReleaseCallback release_mailbox1_;
+  viz::ReleaseCallback release_mailbox2_;
+  viz::ReleaseCallback release_mailbox3_;
   ReleaseCallbackImpl release_mailbox1_impl_;
   ReleaseCallbackImpl release_mailbox2_impl_;
   ReleaseCallbackImpl release_mailbox3_impl_;
@@ -293,7 +294,7 @@ TEST_F(TextureLayerWithMailboxTest, ReplaceMailboxOnMainThreadBeforeCommit) {
   EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(AtLeast(1));
   test_layer->SetTextureMailbox(
       test_data_.mailbox1_,
-      SingleReleaseCallback::Create(test_data_.release_mailbox1_));
+      viz::SingleReleaseCallback::Create(test_data_.release_mailbox1_));
   Mock::VerifyAndClearExpectations(layer_tree_host_.get());
 
   EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(AtLeast(1));
@@ -303,7 +304,7 @@ TEST_F(TextureLayerWithMailboxTest, ReplaceMailboxOnMainThreadBeforeCommit) {
       .Times(1);
   test_layer->SetTextureMailbox(
       test_data_.mailbox2_,
-      SingleReleaseCallback::Create(test_data_.release_mailbox2_));
+      viz::SingleReleaseCallback::Create(test_data_.release_mailbox2_));
   Mock::VerifyAndClearExpectations(layer_tree_host_.get());
   Mock::VerifyAndClearExpectations(&test_data_.mock_callback_);
 
@@ -319,7 +320,7 @@ TEST_F(TextureLayerWithMailboxTest, ReplaceMailboxOnMainThreadBeforeCommit) {
   EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(AtLeast(1));
   test_layer->SetTextureMailbox(
       test_data_.mailbox3_,
-      SingleReleaseCallback::Create(test_data_.release_mailbox3_));
+      viz::SingleReleaseCallback::Create(test_data_.release_mailbox3_));
   Mock::VerifyAndClearExpectations(layer_tree_host_.get());
   Mock::VerifyAndClearExpectations(&test_data_.mock_callback_);
 
@@ -335,7 +336,7 @@ TEST_F(TextureLayerWithMailboxTest, ReplaceMailboxOnMainThreadBeforeCommit) {
   EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(AtLeast(1));
   test_layer->SetTextureMailbox(
       test_data_.mailbox1_,
-      SingleReleaseCallback::Create(test_data_.release_mailbox1_));
+      viz::SingleReleaseCallback::Create(test_data_.release_mailbox1_));
 }
 
 class TextureLayerMailboxHolderTest : public TextureLayerTest {
@@ -362,7 +363,7 @@ class TextureLayerMailboxHolderTest : public TextureLayerTest {
   void CreateMainRef() {
     main_ref_ = TestMailboxHolder::Create(
         test_data_.mailbox1_,
-        SingleReleaseCallback::Create(test_data_.release_mailbox1_));
+        viz::SingleReleaseCallback::Create(test_data_.release_mailbox1_));
   }
 
   void ReleaseMainRef() { main_ref_ = nullptr; }
@@ -645,7 +646,7 @@ class TextureLayerImplWithMailboxThreadedCallback : public LayerTreeTest {
     bool synchronous_composite =
         !HasImplThread() &&
         !layer_tree_host()->GetSettings().single_thread_proxy_scheduler;
-    return base::MakeUnique<viz::TestLayerTreeFrameSink>(
+    return std::make_unique<viz::TestLayerTreeFrameSink>(
         compositor_context_provider, std::move(worker_context_provider),
         shared_bitmap_manager(), gpu_memory_buffer_manager(), renderer_settings,
         ImplThreadTaskRunner(), synchronous_composite, disable_display_vsync,
@@ -730,8 +731,8 @@ class TextureLayerImplWithMailboxThreadedCallback : public LayerTreeTest {
 
   void SetMailbox(char mailbox_char) {
     EXPECT_EQ(true, main_thread_.CalledOnValidThread());
-    std::unique_ptr<SingleReleaseCallback> callback =
-        SingleReleaseCallback::Create(base::Bind(
+    std::unique_ptr<viz::SingleReleaseCallback> callback =
+        viz::SingleReleaseCallback::Create(base::Bind(
             &TextureLayerImplWithMailboxThreadedCallback::ReleaseCallback,
             base::Unretained(this), mailbox_char));
     layer_->SetTextureMailbox(
@@ -807,8 +808,8 @@ class TextureLayerMailboxIsActivatedDuringCommit : public LayerTreeTest {
   void SetMailbox(char mailbox_char) {
     const gpu::SyncToken sync_token =
         SyncTokenFromUInt(static_cast<uint32_t>(mailbox_char));
-    std::unique_ptr<SingleReleaseCallback> callback =
-        SingleReleaseCallback::Create(base::Bind(
+    std::unique_ptr<viz::SingleReleaseCallback> callback =
+        viz::SingleReleaseCallback::Create(base::Bind(
             &TextureLayerMailboxIsActivatedDuringCommit::ReleaseCallback,
             base::Unretained(this), sync_token));
     layer_->SetTextureMailbox(viz::TextureMailbox(MailboxFromChar(mailbox_char),
@@ -1060,8 +1061,9 @@ TEST_F(TextureLayerImplWithMailboxTest,
 }
 
 TEST_F(TextureLayerImplWithMailboxTest, TestCallbackOnInUseResource) {
-  ResourceProvider* provider = host_impl_.active_tree()->resource_provider();
-  ResourceId id = provider->CreateResourceFromTextureMailbox(
+  LayerTreeResourceProvider* provider =
+      host_impl_.active_tree()->resource_provider();
+  viz::ResourceId id = provider->CreateResourceFromTextureMailbox(
       test_data_.mailbox1_,
       SingleReleaseCallbackImpl::Create(test_data_.release_mailbox1_impl_));
   provider->AllocateForTesting(id);
@@ -1069,7 +1071,7 @@ TEST_F(TextureLayerImplWithMailboxTest, TestCallbackOnInUseResource) {
   // Transfer some resources to the parent.
   ResourceProvider::ResourceIdArray resource_ids_to_transfer;
   resource_ids_to_transfer.push_back(id);
-  std::vector<TransferableResource> list;
+  std::vector<viz::TransferableResource> list;
   provider->PrepareSendToParent(resource_ids_to_transfer, &list);
   EXPECT_TRUE(provider->InUseByConsumer(id));
   EXPECT_CALL(test_data_.mock_callback_, ReleaseImpl(_, _, _, _)).Times(0);
@@ -1077,8 +1079,8 @@ TEST_F(TextureLayerImplWithMailboxTest, TestCallbackOnInUseResource) {
   Mock::VerifyAndClearExpectations(&test_data_.mock_callback_);
   EXPECT_CALL(test_data_.mock_callback_,
               ReleaseImpl(test_data_.mailbox_name1_, _, false, _)).Times(1);
-  std::vector<ReturnedResource> returned =
-      TransferableResource::ReturnResources(list);
+  std::vector<viz::ReturnedResource> returned =
+      viz::TransferableResource::ReturnResources(list);
   provider->ReceiveReturnsFromParent(returned);
 }
 
@@ -1091,7 +1093,7 @@ class TextureLayerNoExtraCommitForMailboxTest
   // TextureLayerClient implementation.
   bool PrepareTextureMailbox(
       viz::TextureMailbox* texture_mailbox,
-      std::unique_ptr<SingleReleaseCallback>* release_callback) override {
+      std::unique_ptr<viz::SingleReleaseCallback>* release_callback) override {
     if (layer_tree_host()->SourceFrameNumber() == 1) {
       // Once this has been committed, the mailbox will be released.
       *texture_mailbox = viz::TextureMailbox();
@@ -1100,7 +1102,7 @@ class TextureLayerNoExtraCommitForMailboxTest
 
     *texture_mailbox = viz::TextureMailbox(
         MailboxFromChar('1'), SyncTokenFromUInt(0x123), GL_TEXTURE_2D);
-    *release_callback = SingleReleaseCallback::Create(
+    *release_callback = viz::SingleReleaseCallback::Create(
         base::Bind(&TextureLayerNoExtraCommitForMailboxTest::MailboxReleased,
                    base::Unretained(this)));
     return true;
@@ -1169,12 +1171,12 @@ class TextureLayerChangeInvisibleMailboxTest
   // TextureLayerClient implementation.
   bool PrepareTextureMailbox(
       viz::TextureMailbox* mailbox,
-      std::unique_ptr<SingleReleaseCallback>* release_callback) override {
+      std::unique_ptr<viz::SingleReleaseCallback>* release_callback) override {
     ++prepare_called_;
     if (!mailbox_changed_)
       return false;
     *mailbox = mailbox_;
-    *release_callback = SingleReleaseCallback::Create(
+    *release_callback = viz::SingleReleaseCallback::Create(
         base::Bind(&TextureLayerChangeInvisibleMailboxTest::MailboxReleased,
                    base::Unretained(this)));
     return true;
@@ -1288,10 +1290,10 @@ class TextureLayerReleaseResourcesBase
   // TextureLayerClient implementation.
   bool PrepareTextureMailbox(
       viz::TextureMailbox* mailbox,
-      std::unique_ptr<SingleReleaseCallback>* release_callback) override {
+      std::unique_ptr<viz::SingleReleaseCallback>* release_callback) override {
     *mailbox = viz::TextureMailbox(MailboxFromChar('1'), SyncTokenFromUInt(1),
                                    GL_TEXTURE_2D);
-    *release_callback = SingleReleaseCallback::Create(
+    *release_callback = viz::SingleReleaseCallback::Create(
         base::Bind(&TextureLayerReleaseResourcesBase::MailboxReleased,
                    base::Unretained(this)));
     return true;
@@ -1362,8 +1364,8 @@ class TextureLayerWithMailboxMainThreadDeleted : public LayerTreeTest {
 
   void SetMailbox(char mailbox_char) {
     EXPECT_EQ(true, main_thread_.CalledOnValidThread());
-    std::unique_ptr<SingleReleaseCallback> callback =
-        SingleReleaseCallback::Create(base::Bind(
+    std::unique_ptr<viz::SingleReleaseCallback> callback =
+        viz::SingleReleaseCallback::Create(base::Bind(
             &TextureLayerWithMailboxMainThreadDeleted::ReleaseCallback,
             base::Unretained(this)));
     layer_->SetTextureMailbox(
@@ -1433,8 +1435,8 @@ class TextureLayerWithMailboxImplThreadDeleted : public LayerTreeTest {
 
   void SetMailbox(char mailbox_char) {
     EXPECT_EQ(true, main_thread_.CalledOnValidThread());
-    std::unique_ptr<SingleReleaseCallback> callback =
-        SingleReleaseCallback::Create(base::Bind(
+    std::unique_ptr<viz::SingleReleaseCallback> callback =
+        viz::SingleReleaseCallback::Create(base::Bind(
             &TextureLayerWithMailboxImplThreadDeleted::ReleaseCallback,
             base::Unretained(this)));
     layer_->SetTextureMailbox(

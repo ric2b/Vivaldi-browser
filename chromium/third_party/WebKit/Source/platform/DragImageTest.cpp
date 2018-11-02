@@ -32,7 +32,6 @@
 
 #include <memory>
 #include "platform/fonts/FontDescription.h"
-#include "platform/fonts/FontTraits.h"
 #include "platform/geometry/IntSize.h"
 #include "platform/graphics/BitmapImage.h"
 #include "platform/graphics/Image.h"
@@ -65,8 +64,6 @@ class TestImage : public Image {
     return IntSize(image_->width(), image_->height());
   }
 
-  sk_sp<SkImage> ImageForCurrentFrame() override { return image_; }
-
   bool CurrentFrameKnownToBeOpaque(
       MetadataMode = kUseCurrentMetadata) override {
     return false;
@@ -83,6 +80,13 @@ class TestImage : public Image {
             RespectImageOrientationEnum,
             ImageClampingMode) override {
     // Image pure virtual stub.
+  }
+
+  PaintImage PaintImageForCurrentFrame() override {
+    PaintImageBuilder builder;
+    InitPaintImageBuilder(builder);
+    builder.set_image(image_);
+    return builder.TakePaintImage();
   }
 
  private:
@@ -142,8 +146,8 @@ TEST(DragImageTest, TrimWhitespace) {
   font_description.SetSpecifiedSize(16);
   font_description.SetIsAbsoluteSize(true);
   font_description.SetGenericFamily(FontDescription::kNoFamily);
-  font_description.SetWeight(kFontWeightNormal);
-  font_description.SetStyle(kFontStyleNormal);
+  font_description.SetWeight(NormalWeightValue());
+  font_description.SetStyle(NormalSlopeValue());
 
   std::unique_ptr<DragImage> test_image =
       DragImage::Create(url, test_label, font_description, device_scale_factor);

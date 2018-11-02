@@ -115,9 +115,6 @@ class Shell : public WebContentsDelegate,
   // Public to be called by an ObjC bridge object.
   void ActionPerformed(int control);
   void URLEntered(const std::string& url_string);
-#elif defined(OS_ANDROID)
-  // Registers the Android Java to native methods.
-  static bool Register(JNIEnv* env);
 #endif
 
   // WebContentsDelegate
@@ -135,6 +132,7 @@ class Shell : public WebContentsDelegate,
   void LoadProgressChanged(WebContents* source, double progress) override;
   base::android::ScopedJavaLocalRef<jobject>
       GetContentVideoViewEmbedder() override;
+  void SetOverlayMode(bool use_overlay_mode) override;
 #endif
   void EnterFullscreenModeForTab(WebContents* web_contents,
                                  const GURL& origin) override;

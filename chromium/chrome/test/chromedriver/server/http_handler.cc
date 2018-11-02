@@ -111,9 +111,15 @@ HttpHandler::HttpHandler(
       CommandMapping(kDelete, "session/:sessionId",
                      base::Bind(&ExecuteSessionCommand, &session_thread_map_,
                                 "Quit", base::Bind(&ExecuteQuit, false), true)),
+      CommandMapping(kGet, "session/:sessionId/window",
+                     WrapToCommand("GetWindow",
+                                   base::Bind(&ExecuteGetCurrentWindowHandle))),
       CommandMapping(kGet, "session/:sessionId/window_handle",
                      WrapToCommand("GetWindow",
                                    base::Bind(&ExecuteGetCurrentWindowHandle))),
+      CommandMapping(
+          kGet, "session/:sessionId/window/handles",
+          WrapToCommand("GetWindows", base::Bind(&ExecuteGetWindowHandles))),
       CommandMapping(
           kGet, "session/:sessionId/window_handles",
           WrapToCommand("GetWindows", base::Bind(&ExecuteGetWindowHandles))),
@@ -126,35 +132,62 @@ HttpHandler::HttpHandler(
                                    base::Bind(&ExecuteAlertCommand,
                                               base::Bind(&ExecuteGetAlert)))),
       CommandMapping(
+          kPost, "session/:sessionId/alert/dismiss",
+          WrapToCommand("DismissAlert",
+                        base::Bind(&ExecuteAlertCommand,
+                                   base::Bind(&ExecuteDismissAlert)))),
+      CommandMapping(
           kPost, "session/:sessionId/dismiss_alert",
           WrapToCommand("DismissAlert",
                         base::Bind(&ExecuteAlertCommand,
                                    base::Bind(&ExecuteDismissAlert)))),
+      CommandMapping(
+          kPost, "session/:sessionId/alert/accept",
+          WrapToCommand("AcceptAlert",
+                        base::Bind(&ExecuteAlertCommand,
+                                   base::Bind(&ExecuteAcceptAlert)))),
       CommandMapping(
           kPost, "session/:sessionId/accept_alert",
           WrapToCommand("AcceptAlert",
                         base::Bind(&ExecuteAlertCommand,
                                    base::Bind(&ExecuteAcceptAlert)))),
       CommandMapping(
+          kGet, "session/:sessionId/alert/text",
+          WrapToCommand("GetAlertMessage",
+                        base::Bind(&ExecuteAlertCommand,
+                                   base::Bind(&ExecuteGetAlertText)))),
+      CommandMapping(
           kGet, "session/:sessionId/alert_text",
           WrapToCommand("GetAlertMessage",
                         base::Bind(&ExecuteAlertCommand,
                                    base::Bind(&ExecuteGetAlertText)))),
       CommandMapping(
+          kPost, "session/:sessionId/alert/text",
+          WrapToCommand("SetAlertPrompt",
+                        base::Bind(&ExecuteAlertCommand,
+                                   base::Bind(&ExecuteSetAlertText)))),
+      CommandMapping(
           kPost, "session/:sessionId/alert_text",
           WrapToCommand("SetAlertPrompt",
                         base::Bind(&ExecuteAlertCommand,
-                                   base::Bind(&ExecuteSetAlertValue)))),
+                                   base::Bind(&ExecuteSetAlertText)))),
       CommandMapping(kPost, "session/:sessionId/forward",
                      WrapToCommand("GoForward", base::Bind(&ExecuteGoForward))),
       CommandMapping(kPost, "session/:sessionId/back",
                      WrapToCommand("GoBack", base::Bind(&ExecuteGoBack))),
       CommandMapping(kPost, "session/:sessionId/refresh",
                      WrapToCommand("Refresh", base::Bind(&ExecuteRefresh))),
+      // still support old endpoints for executing scripts
       CommandMapping(
           kPost, "session/:sessionId/execute",
           WrapToCommand("ExecuteScript", base::Bind(&ExecuteExecuteScript))),
       CommandMapping(kPost, "session/:sessionId/execute_async",
+                     WrapToCommand("ExecuteAsyncScript",
+                                   base::Bind(&ExecuteExecuteAsyncScript))),
+      CommandMapping(
+          kPost, "session/:sessionId/execute/sync",
+          WrapToCommand("ExecuteScript", base::Bind(&ExecuteExecuteScript))),
+      CommandMapping(kPost, "session/:sessionId/execute/async",
                      WrapToCommand("ExecuteAsyncScript",
                                    base::Bind(&ExecuteExecuteAsyncScript))),
       CommandMapping(
@@ -183,6 +216,9 @@ HttpHandler::HttpHandler(
       CommandMapping(
           kPost, "session/:sessionId/elements",
           WrapToCommand("FindElements", base::Bind(&ExecuteFindElements, 50))),
+      CommandMapping(kGet, "session/:sessionId/element/active",
+                     WrapToCommand("GetActiveElement",
+                                   base::Bind(&ExecuteGetActiveElement))),
       CommandMapping(kPost, "session/:sessionId/element/active",
                      WrapToCommand("GetActiveElement",
                                    base::Bind(&ExecuteGetActiveElement))),
@@ -285,7 +321,7 @@ HttpHandler::HttpHandler(
           WrapToCommand("MaximizeWindow", base::Bind(&ExecuteMaximizeWindow))),
       CommandMapping(kPost, "session/:sessionId/window/fullscreen",
                      WrapToCommand("FullscreenWindow",
-                                   base::Bind(&ExecuteUnimplementedCommand))),
+                                   base::Bind(&ExecuteFullScreenWindow))),
       CommandMapping(kDelete, "session/:sessionId/window",
                      WrapToCommand("CloseWindow", base::Bind(&ExecuteClose))),
       CommandMapping(
@@ -304,6 +340,9 @@ HttpHandler::HttpHandler(
       CommandMapping(
           kPost, "session/:sessionId/timeouts",
           WrapToCommand("SetTimeout", base::Bind(&ExecuteSetTimeout))),
+      CommandMapping(
+          kGet, "session/:sessionId/timeouts",
+          WrapToCommand("GetTimeouts", base::Bind(&ExecuteGetTimeouts))),
       CommandMapping(kPost, "session/:sessionId/execute_sql",
                      WrapToCommand("ExecuteSql",
                                    base::Bind(&ExecuteUnimplementedCommand))),
@@ -672,6 +711,8 @@ HttpHandler::PrepareStandardResponse(
     case kInvalidSelector:
     case kXPathLookupError:
     case kNoAlertOpen:
+    case kInvalidArgument:
+    case kElementNotInteractable:
     case kNoSuchExecutionContext:
       response.reset(new net::HttpServerResponseInfo(net::HTTP_BAD_REQUEST));
       break;
@@ -693,6 +734,7 @@ HttpHandler::PrepareStandardResponse(
     case kChromeNotReachable:
     case kDisconnected:
     case kForbidden:
+    case kUnsupportedOperation:
     case kTabCrashed:
       response.reset(
           new net::HttpServerResponseInfo(net::HTTP_INTERNAL_SERVER_ERROR));
@@ -711,13 +753,13 @@ HttpHandler::PrepareStandardResponse(
     std::string message;
     for (size_t i=1; i<status_details.size();++i)
       message += status_details[i];
-
-    body_params.SetString("error", status_details[0]);
-    body_params.SetString("message", message);
-    body_params.SetString("stacktrace", status.stack_trace());
+    std::unique_ptr<base::DictionaryValue> inner_params(
+        new base::DictionaryValue());
+    inner_params->SetString("error", status_details[0]);
+    inner_params->SetString("message", message);
+    inner_params->SetString("stacktrace", status.stack_trace());
+    body_params.SetDictionary("value", std::move(inner_params));
   } else {
-    body_params.SetString("sessionId", session_id);
-    body_params.SetString("status", status.message());
     body_params.Set("value", std::move(value));
   }
 

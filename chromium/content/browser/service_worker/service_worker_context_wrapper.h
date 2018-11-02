@@ -18,12 +18,10 @@
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_context_core_observer.h"
 #include "content/common/content_export.h"
-#include "content/common/worker_url_loader_factory_provider.mojom.h"
 #include "content/public/browser/service_worker_context.h"
 
 namespace base {
 class FilePath;
-class SingleThreadTaskRunner;
 }
 
 namespace storage {
@@ -45,7 +43,7 @@ class URLLoaderFactoryGetter;
 // instance is strictly single threaded and is not refcounted, the core object
 // is what is used internally in the service worker lib.
 class CONTENT_EXPORT ServiceWorkerContextWrapper
-    : NON_EXPORTED_BASE(public ServiceWorkerContext),
+    : public ServiceWorkerContext,
       public ServiceWorkerContextCoreObserver,
       public base::RefCountedThreadSafe<ServiceWorkerContextWrapper> {
  public:
@@ -250,14 +248,6 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
   // Must be called from the IO thread.
   bool OriginHasForeignFetchRegistrations(const GURL& origin);
 
-  // Binds the ServiceWorkerWorkerClient of a dedicated (or shared) worker to
-  // the parent frame's ServiceWorkerProviderHost. (This is used only when
-  // off-main-thread-fetch is enabled.)
-  void BindWorkerFetchContext(
-      int render_process_id,
-      int service_worker_provider_id,
-      mojom::ServiceWorkerWorkerClientAssociatedPtrInfo client_ptr_info);
-
  private:
   friend class BackgroundSyncManagerTest;
   friend class base::RefCountedThreadSafe<ServiceWorkerContextWrapper>;
@@ -276,8 +266,7 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
 
   void InitInternal(
       const base::FilePath& user_data_directory,
-      std::unique_ptr<ServiceWorkerDatabaseTaskManager> database_task_manager,
-      const scoped_refptr<base::SingleThreadTaskRunner>& disk_cache_thread,
+      scoped_refptr<base::SequencedTaskRunner> database_task_runner,
       storage::QuotaManagerProxy* quota_manager_proxy,
       storage::SpecialStoragePolicy* special_storage_policy,
       ChromeBlobStorageContext* blob_context,

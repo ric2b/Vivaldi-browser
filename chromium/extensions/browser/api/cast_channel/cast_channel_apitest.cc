@@ -20,8 +20,8 @@
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/api/cast_channel/cast_channel_api.h"
 #include "extensions/common/api/cast_channel.h"
+#include "extensions/common/extension_builder.h"
 #include "extensions/common/switches.h"
-#include "extensions/common/test_util.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "extensions/test/result_catcher.h"
 #include "net/base/completion_callback.h"
@@ -111,7 +111,7 @@ class CastChannelAPITest : public ExtensionApiTest {
       EXPECT_CALL(*mock_cast_socket_, ConnectInternal(_))
           .WillOnce(WithArgs<0>(
               Invoke([&](const MockCastSocket::MockOnOpenCallback& callback) {
-                callback.Run(mock_cast_socket_->id(), ChannelError::NONE);
+                callback.Run(mock_cast_socket_);
               })));
       EXPECT_CALL(*mock_cast_socket_, ready_state())
           .WillOnce(Return(ReadyState::OPEN));
@@ -138,7 +138,7 @@ class CastChannelAPITest : public ExtensionApiTest {
       EXPECT_CALL(*mock_cast_socket_, ConnectInternal(_))
           .WillOnce(WithArgs<0>(
               Invoke([&](const MockCastSocket::MockOnOpenCallback& callback) {
-                callback.Run(mock_cast_socket_->id(), ChannelError::NONE);
+                callback.Run(mock_cast_socket_);
               })));
       EXPECT_CALL(*mock_cast_socket_, ready_state())
           .WillOnce(Return(ReadyState::OPEN))
@@ -306,7 +306,7 @@ IN_PROC_BROWSER_TEST_F(CastChannelAPITest, MAYBE_TestOpenReceiveClose) {
     EXPECT_CALL(*mock_cast_socket_, ConnectInternal(_))
         .WillOnce(WithArgs<0>(
             Invoke([&](const MockCastSocket::MockOnOpenCallback& callback) {
-              callback.Run(mock_cast_socket_->id(), ChannelError::NONE);
+              callback.Run(mock_cast_socket_);
             })));
     EXPECT_CALL(*mock_cast_socket_, ready_state())
         .Times(3)
@@ -343,7 +343,7 @@ IN_PROC_BROWSER_TEST_F(CastChannelAPITest, MAYBE_TestOpenError) {
   EXPECT_CALL(*mock_cast_socket_, ConnectInternal(_))
       .WillOnce(WithArgs<0>(
           Invoke([&](const MockCastSocket::MockOnOpenCallback& callback) {
-            callback.Run(mock_cast_socket_->id(), ChannelError::CONNECT_ERROR);
+            callback.Run(mock_cast_socket_);
           })));
   mock_cast_socket_->SetErrorState(ChannelError::CONNECT_ERROR);
   EXPECT_CALL(*mock_cast_socket_, ready_state())
@@ -357,7 +357,7 @@ IN_PROC_BROWSER_TEST_F(CastChannelAPITest, MAYBE_TestOpenError) {
 
 IN_PROC_BROWSER_TEST_F(CastChannelAPITest, TestOpenInvalidConnectInfo) {
   scoped_refptr<Extension> empty_extension =
-      extensions::test_util::CreateEmptyExtension();
+      extensions::ExtensionBuilder("Test").Build();
   scoped_refptr<extensions::CastChannelOpenFunction> cast_channel_open_function;
 
   // Invalid IP address
@@ -381,7 +381,7 @@ IN_PROC_BROWSER_TEST_F(CastChannelAPITest, TestOpenInvalidConnectInfo) {
 
 IN_PROC_BROWSER_TEST_F(CastChannelAPITest, TestSendInvalidMessageInfo) {
   scoped_refptr<Extension> empty_extension(
-      extensions::test_util::CreateEmptyExtension());
+      extensions::ExtensionBuilder("Test").Build());
   scoped_refptr<extensions::CastChannelSendFunction> cast_channel_send_function;
 
   // Numbers are not supported

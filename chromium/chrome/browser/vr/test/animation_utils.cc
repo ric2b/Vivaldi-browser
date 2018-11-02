@@ -4,6 +4,8 @@
 
 #include "chrome/browser/vr/test/animation_utils.h"
 
+#include "chrome/browser/vr/target_property.h"
+
 namespace vr {
 
 std::unique_ptr<cc::Animation> CreateTransformAnimation(
@@ -18,7 +20,7 @@ std::unique_ptr<cc::Animation> CreateTransformAnimation(
       cc::TransformKeyframe::Create(base::TimeDelta(), from, nullptr));
   curve->AddKeyframe(cc::TransformKeyframe::Create(duration, to, nullptr));
   std::unique_ptr<cc::Animation> animation(cc::Animation::Create(
-      std::move(curve), id, group, cc::TargetProperty::TRANSFORM));
+      std::move(curve), id, group, TargetProperty::TRANSFORM));
   return animation;
 }
 
@@ -33,24 +35,25 @@ std::unique_ptr<cc::Animation> CreateBoundsAnimation(int id,
       cc::SizeKeyframe::Create(base::TimeDelta(), from, nullptr));
   curve->AddKeyframe(cc::SizeKeyframe::Create(duration, to, nullptr));
   std::unique_ptr<cc::Animation> animation(cc::Animation::Create(
-      std::move(curve), id, group, cc::TargetProperty::BOUNDS));
+      std::move(curve), id, group, TargetProperty::BOUNDS));
   return animation;
 }
 
-base::TimeTicks UsToTicks(uint64_t us) {
-  return base::TimeTicks::FromInternalValue(us);
+base::TimeTicks MicrosecondsToTicks(uint64_t us) {
+  base::TimeTicks to_return;
+  return base::TimeDelta::FromMicroseconds(us) + to_return;
 }
 
-base::TimeDelta UsToDelta(uint64_t us) {
-  return base::TimeDelta::FromInternalValue(us);
+base::TimeDelta MicrosecondsToDelta(uint64_t us) {
+  return base::TimeDelta::FromMicroseconds(us);
 }
 
 base::TimeTicks MsToTicks(uint64_t ms) {
-  return UsToTicks(1000 * ms);
+  return MicrosecondsToTicks(1000 * ms);
 }
 
 base::TimeDelta MsToDelta(uint64_t ms) {
-  return UsToDelta(1000 * ms);
+  return MicrosecondsToDelta(1000 * ms);
 }
 
 }  // namespace vr

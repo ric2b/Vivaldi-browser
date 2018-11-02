@@ -208,6 +208,114 @@ TEST(ContentSettingsPatternParserTest, ParseFilePatterns) {
   ::testing::Mock::VerifyAndClear(&builder);
 }
 
+TEST(ContentSettingsPatternParserTest, ParseChromePatterns) {
+  // The schemes chrome-extension:// and chrome-search:// are valid,
+  // and chrome-not-search:// is not, because the former two are registered
+  // as non-domain wildcard non-port schemes in components_test_suite.cc,
+  // and the last one isn't.
+  ::testing::StrictMock<MockBuilder> builder;
+
+  // Valid chrome-extension:// URL.
+  EXPECT_CALL(builder, WithScheme("chrome-extension"))
+      .Times(1)
+      .WillOnce(::testing::Return(&builder));
+  EXPECT_CALL(builder, WithHost("peoadpeiejnhkmpaakpnompolbglelel"))
+      .Times(1)
+      .WillOnce(::testing::Return(&builder));
+  EXPECT_CALL(builder, WithPath("/"))
+      .Times(1)
+      .WillOnce(::testing::Return(&builder));
+  content_settings::PatternParser::Parse(
+      "chrome-extension://peoadpeiejnhkmpaakpnompolbglelel/", &builder);
+  ::testing::Mock::VerifyAndClear(&builder);
+
+  // Valid chrome-search:// URL.
+  EXPECT_CALL(builder, WithScheme("chrome-search"))
+      .Times(1)
+      .WillOnce(::testing::Return(&builder));
+  EXPECT_CALL(builder, WithHost("local-ntp"))
+      .Times(1)
+      .WillOnce(::testing::Return(&builder));
+  EXPECT_CALL(builder, WithPath("/local-ntp.html"))
+      .Times(1)
+      .WillOnce(::testing::Return(&builder));
+  content_settings::PatternParser::Parse(
+      "chrome-search://local-ntp/local-ntp.html", &builder);
+  ::testing::Mock::VerifyAndClear(&builder);
+
+  // Not a non-domain wildcard non-port scheme implies a port is parsed.
+  EXPECT_CALL(builder, WithScheme("chrome-not-search"))
+      .Times(1)
+      .WillOnce(::testing::Return(&builder));
+  EXPECT_CALL(builder, WithHost("local-ntp"))
+      .Times(1)
+      .WillOnce(::testing::Return(&builder));
+  EXPECT_CALL(builder, WithPath("/local-ntp.html"))
+      .Times(1)
+      .WillOnce(::testing::Return(&builder));
+  EXPECT_CALL(builder, WithPortWildcard())
+      .Times(1)
+      .WillOnce(::testing::Return(&builder));
+  content_settings::PatternParser::Parse(
+      "chrome-not-search://local-ntp/local-ntp.html", &builder);
+  ::testing::Mock::VerifyAndClear(&builder);
+}
+
+TEST(ContentSettingsPatternParserTest,
+     ParseInvalidNonDomainWildcardNonPortPatterns) {
+  ::testing::StrictMock<MockBuilder> builder;
+
+  // Domain wildcard for scheme without domain wildcards.
+  EXPECT_CALL(builder, WithScheme("chrome-search"))
+      .Times(1)
+      .WillOnce(::testing::Return(&builder));
+  EXPECT_CALL(builder, Invalid())
+      .Times(1)
+      .WillOnce(::testing::Return(&builder));
+  content_settings::PatternParser::Parse("chrome-search://*/local-ntp.html",
+                                         &builder);
+  ::testing::Mock::VerifyAndClear(&builder);
+
+  // Domain wildcard for scheme without domain wildcards.
+  EXPECT_CALL(builder, WithScheme("chrome-search"))
+      .Times(1)
+      .WillOnce(::testing::Return(&builder));
+  EXPECT_CALL(builder, Invalid())
+      .Times(1)
+      .WillOnce(::testing::Return(&builder));
+  content_settings::PatternParser::Parse(
+      "chrome-search://*local-ntp/local-ntp.html", &builder);
+  ::testing::Mock::VerifyAndClear(&builder);
+
+  // Port for scheme without ports.
+  EXPECT_CALL(builder, WithScheme("chrome-search"))
+      .Times(1)
+      .WillOnce(::testing::Return(&builder));
+  EXPECT_CALL(builder, WithHost("local-ntp"))
+      .Times(1)
+      .WillOnce(::testing::Return(&builder));
+  EXPECT_CALL(builder, Invalid())
+      .Times(1)
+      .WillOnce(::testing::Return(&builder));
+  content_settings::PatternParser::Parse(
+      "chrome-search://local-ntp:65535/local-ntp.html", &builder);
+  ::testing::Mock::VerifyAndClear(&builder);
+
+  // Port wildcard for scheme without ports.
+  EXPECT_CALL(builder, WithScheme("chrome-search"))
+      .Times(1)
+      .WillOnce(::testing::Return(&builder));
+  EXPECT_CALL(builder, WithHost("local-ntp"))
+      .Times(1)
+      .WillOnce(::testing::Return(&builder));
+  EXPECT_CALL(builder, Invalid())
+      .Times(1)
+      .WillOnce(::testing::Return(&builder));
+  content_settings::PatternParser::Parse(
+      "chrome-search://local-ntp:*/local-ntp.html", &builder);
+  ::testing::Mock::VerifyAndClear(&builder);
+}
+
 TEST(ContentSettingsPatternParserTest, SerializePatterns) {
   ContentSettingsPattern::PatternParts parts;
   parts.scheme = "http";
@@ -227,4 +335,16 @@ TEST(ContentSettingsPatternParserTest, SerializePatterns) {
   parts.path = "";
   parts.is_path_wildcard = true;
   EXPECT_EQ("file:///*", content_settings::PatternParser::ToString(parts));
+
+  parts = ContentSettingsPattern::PatternParts();
+  parts.scheme = "chrome-search";
+  parts.host = "local-ntp";
+  EXPECT_EQ("chrome-search://local-ntp/",
+            content_settings::PatternParser::ToString(parts));
+
+  parts = ContentSettingsPattern::PatternParts();
+  parts.scheme = "chrome-extension";
+  parts.host = "peoadpeiejnhkmpaakpnompolbglelel";
+  EXPECT_EQ("chrome-extension://peoadpeiejnhkmpaakpnompolbglelel/",
+            content_settings::PatternParser::ToString(parts));
 }

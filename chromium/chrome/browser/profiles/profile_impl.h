@@ -170,7 +170,7 @@ class ProfileImpl : public Profile {
   ProfileImpl(const base::FilePath& path,
               Delegate* delegate,
               CreateMode create_mode,
-              base::SequencedTaskRunner* sequenced_task_runner);
+              scoped_refptr<base::SequencedTaskRunner> io_task_runner);
 
   // Does final initialization. Should be called after prefs were loaded.
   void DoFinalInit();
@@ -193,9 +193,7 @@ class ProfileImpl : public Profile {
   void UpdateAvatarInStorage();
   void UpdateIsEphemeralInStorage();
 
-  void GetCacheParameters(bool is_media_context,
-                          base::FilePath* cache_path,
-                          int* max_size);
+  void GetMediaCacheParameters(base::FilePath* cache_path, int* max_size);
 
   PrefProxyConfigTracker* CreateProxyConfigTracker();
 
@@ -210,6 +208,9 @@ class ProfileImpl : public Profile {
 
   base::FilePath path_;
   base::FilePath base_cache_path_;
+
+  // Task runner used for file access in the profile path.
+  scoped_refptr<base::SequencedTaskRunner> io_task_runner_;
 
   // !!! BIG HONKING WARNING !!!
   //  The order of the members below is important. Do not change it unless

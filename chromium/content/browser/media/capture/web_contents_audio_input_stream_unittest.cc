@@ -171,7 +171,7 @@ class MockAudioInputCallback : public AudioInputStream::AudioInputCallback {
   MOCK_METHOD4(OnData,
                void(AudioInputStream* stream,
                     const media::AudioBus* src,
-                    uint32_t hardware_delay_bytes,
+                    base::TimeTicks capture_time,
                     double volume));
   MOCK_METHOD1(OnError, void(AudioInputStream* stream));
 
@@ -286,8 +286,8 @@ class WebContentsAudioInputStreamTest : public testing::TestWithParam<bool> {
     base::WaitableEvent done(base::WaitableEvent::ResetPolicy::AUTOMATIC,
                              base::WaitableEvent::InitialState::NOT_SIGNALED);
     BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE, base::Bind(
-            &base::WaitableEvent::Signal, base::Unretained(&done)));
+        BrowserThread::IO, FROM_HERE,
+        base::BindOnce(&base::WaitableEvent::Signal, base::Unretained(&done)));
     done.Wait();
     ASSERT_TRUE(destination_);
 

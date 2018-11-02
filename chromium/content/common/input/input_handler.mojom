@@ -143,6 +143,10 @@ struct Event {
   TouchData? touch_data;
 };
 
+struct TouchActionOptional {
+  TouchAction touch_action;
+};
+
 interface WidgetInputHandler {
   // Tells widget focus has been changed.
   SetFocus(bool focused);
@@ -169,13 +173,13 @@ interface WidgetInputHandler {
 
   // This message sends a string being composed with an input method.
   ImeSetComposition(mojo.common.mojom.String16 text,
-                    array<ui.mojom.CompositionUnderline> underlines,
+                    array<ui.mojom.ImeTextSpan> ime_text_spans,
                     gfx.mojom.Range range, int32 start, int32 end);
 
   // This message deletes the current composition, inserts specified text, and
   // moves the cursor.
   ImeCommitText(mojo.common.mojom.String16 text,
-                array<ui.mojom.CompositionUnderline> underlines,
+                array<ui.mojom.ImeTextSpan> ime_text_spans,
                 gfx.mojom.Range range, int32 relative_cursor_position);
 
   // This message inserts the ongoing composition.
@@ -199,7 +203,8 @@ interface WidgetInputHandler {
   // you don't require notification.
   DispatchEvent(Event event)
       => (InputEventAckSource source, ui.mojom.LatencyInfo updated_latency,
-         InputEventAckState state, DidOverscrollParams? overscroll);
+         InputEventAckState state, DidOverscrollParams? overscroll,
+         TouchActionOptional? touch_action);
 
   // Sends a non-blocking input event to the render widget. The behaviour
   // of this API is the same as DispatchEvent just that there is no callback
@@ -216,7 +221,7 @@ interface FrameInputHandler {
   // Sets the text composition to be between the given start and end offsets in
   // the currently focused editable field.
   SetCompositionFromExistingText(
-      int32 start, int32 end, array<ui.mojom.CompositionUnderline> underlines);
+      int32 start, int32 end, array<ui.mojom.ImeTextSpan> ime_text_spans);
 
   // Deletes the current selection plus the specified number of characters
   // before and after the selection or caret.
@@ -282,6 +287,8 @@ interface FrameInputHandler {
   // Requests the renderer to move the caret selection toward the point.
   MoveCaret(gfx.mojom.Point point);
 
-  // TODO(dtapuska): Implement WidgetInputHandler.
-  // GetWidgetInputHandler(associated WidgetInputHandler& interface_request);
+  // Return an associated WidgetInputHandler interface so that input
+  // messages to the widget associated with this frame can be sent
+  // serially.
+  GetWidgetInputHandler(associated WidgetInputHandler& interface_request);
 };

@@ -35,6 +35,11 @@ void WidgetElement::OnWidgetBoundsChanged(views::Widget* widget,
   delegate()->OnUIElementBoundsChanged(this);
 }
 
+std::vector<std::pair<std::string, std::string>>
+WidgetElement::GetCustomAttributes() const {
+  return {};
+}
+
 void WidgetElement::GetBounds(gfx::Rect* bounds) const {
   *bounds = widget_->GetRestoredBounds();
 }
@@ -63,9 +68,9 @@ std::pair<aura::Window*, gfx::Rect> WidgetElement::GetNodeWindowAndBounds()
 }
 
 // static
-views::Widget* WidgetElement::From(UIElement* element) {
+views::Widget* WidgetElement::From(const UIElement* element) {
   DCHECK_EQ(UIElementType::WIDGET, element->type());
-  return static_cast<WidgetElement*>(element)->widget_;
+  return static_cast<const WidgetElement*>(element)->widget_;
 }
 
 }  // namespace ui_devtools

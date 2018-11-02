@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.ntp.cards;
 
+import android.support.annotation.LayoutRes;
 import android.view.View;
 
 import org.chromium.base.VisibleForTesting;
@@ -15,6 +16,7 @@ import org.chromium.chrome.browser.suggestions.SuggestionsMetrics;
 import org.chromium.chrome.browser.suggestions.SuggestionsRanker;
 import org.chromium.chrome.browser.suggestions.SuggestionsRecyclerView;
 import org.chromium.chrome.browser.suggestions.SuggestionsUiDelegate;
+import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.widget.displaystyle.UiConfig;
 
 /**
@@ -27,11 +29,13 @@ public class ActionItem extends OptionalLeaf {
 
     private boolean mImpressionTracked;
     private int mPerSectionRank = -1;
+    private boolean mEnabled;
 
     public ActionItem(SuggestionsSection section, SuggestionsRanker ranker) {
         mCategoryInfo = section.getCategoryInfo();
         mParentSection = section;
         mSuggestionsRanker = ranker;
+        mEnabled = true;
         setVisibilityInternal(
                 mCategoryInfo.getAdditionalAction() != ContentSuggestionsAdditionalAction.NONE);
     }
@@ -43,7 +47,6 @@ public class ActionItem extends OptionalLeaf {
 
     @Override
     protected void onBindViewHolder(NewTabPageViewHolder holder) {
-        assert holder instanceof ViewHolder;
         mSuggestionsRanker.rankActionItem(this, mParentSection);
         ((ViewHolder) holder).onBindViewHolder(this);
     }
@@ -68,6 +71,8 @@ public class ActionItem extends OptionalLeaf {
 
     @VisibleForTesting
     void performAction(SuggestionsUiDelegate uiDelegate) {
+        if (!mEnabled) return;
+
         uiDelegate.getEventReporter().onMoreButtonClicked(this);
 
         switch (mCategoryInfo.getAdditionalAction()) {
@@ -90,6 +95,15 @@ public class ActionItem extends OptionalLeaf {
         }
     }
 
+    /** Used to enable/disable the action of this item. */
+    public void setEnabled(boolean enabled) {
+        mEnabled = enabled;
+    }
+
+    public void setVisible(boolean visible) {
+        setVisibilityInternal(visible);
+    }
+
     /** ViewHolder associated to {@link ItemViewType#ACTION}. */
     public static class ViewHolder extends CardViewHolder implements ContextMenuManager.Delegate {
         private ActionItem mActionListItem;
@@ -97,7 +111,7 @@ public class ActionItem extends OptionalLeaf {
         public ViewHolder(final SuggestionsRecyclerView recyclerView,
                 ContextMenuManager contextMenuManager, final SuggestionsUiDelegate uiDelegate,
                 UiConfig uiConfig) {
-            super(R.layout.new_tab_page_action_card, recyclerView, uiConfig, contextMenuManager);
+            super(getLayout(), recyclerView, uiConfig, contextMenuManager);
 
             itemView.findViewById(R.id.action_button)
                     .setOnClickListener(new View.OnClickListener() {
@@ -121,6 +135,13 @@ public class ActionItem extends OptionalLeaf {
         public void onBindViewHolder(ActionItem item) {
             super.onBindViewHolder();
             mActionListItem = item;
+        }
+
+        @LayoutRes
+        private static int getLayout() {
+            return FeatureUtilities.isChromeHomeEnabled()
+                    ? R.layout.content_suggestions_action_card_modern
+                    : R.layout.new_tab_page_action_card;
         }
     }
 }

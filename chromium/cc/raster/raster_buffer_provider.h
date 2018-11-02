@@ -12,7 +12,7 @@
 #include "cc/raster/task_graph_runner.h"
 #include "cc/raster/tile_task.h"
 #include "cc/resources/resource_provider.h"
-#include "components/viz/common/quads/resource_format.h"
+#include "components/viz/common/resources/resource_format.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -70,7 +70,7 @@ class CC_EXPORT RasterBufferProvider {
   virtual bool CanPartialRasterIntoProvidedResource() const = 0;
 
   // Returns true if the indicated resource is ready to draw.
-  virtual bool IsResourceReadyToDraw(ResourceId id) const = 0;
+  virtual bool IsResourceReadyToDraw(viz::ResourceId id) const = 0;
 
   // Calls the provided |callback| when the provided |resources| are ready to
   // draw. Returns a callback ID which can be used to track this callback.

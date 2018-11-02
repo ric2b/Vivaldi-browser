@@ -41,8 +41,7 @@ namespace blink {
 class DevToolsEmulator;
 class Settings;
 
-class CORE_EXPORT WebSettingsImpl final
-    : NON_EXPORTED_BASE(public WebSettings) {
+class CORE_EXPORT WebSettingsImpl final : public WebSettings {
  public:
   WebSettingsImpl(Settings*, DevToolsEmulator*);
   virtual ~WebSettingsImpl() {}
@@ -182,6 +181,7 @@ class CORE_EXPORT WebSettingsImpl final
   void SetTextTrackTextSize(const WebString&) override;
   void SetThreadedScrollingEnabled(bool) override;
   void SetTouchDragDropEnabled(bool) override;
+  void SetBarrelButtonForDragEnabled(bool) override;
   void SetUseLegacyBackgroundSizeShorthandBehavior(bool) override;
   void SetViewportStyle(WebViewportStyle) override;
   void SetUseSolidColorScrollbars(bool) override;
@@ -203,6 +203,7 @@ class CORE_EXPORT WebSettingsImpl final
   void SetXSSAuditorEnabled(bool) override;
   void SetMediaControlsEnabled(bool) override;
   void SetDoNotUpdateSelectionOnMutatingSelectionRange(bool) override;
+  void SetMediaDownloadInProductHelpEnabled(bool) override;
 
   bool ShowFPSCounter() const { return show_fps_counter_; }
   bool ShowPaintRects() const { return show_paint_rects_; }

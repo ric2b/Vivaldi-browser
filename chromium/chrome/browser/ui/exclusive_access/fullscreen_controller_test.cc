@@ -8,6 +8,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/exclusive_access/exclusive_access_bubble.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_switches.h"
@@ -22,6 +23,26 @@ using content::WebContents;
 const char FullscreenControllerTest::kFullscreenMouseLockHTML[] =
     "/fullscreen_mouselock/fullscreen_mouselock.html";
 
+FullscreenControllerTest::FullscreenControllerTest()
+    : weak_ptr_factory_(this) {}
+
+FullscreenControllerTest::~FullscreenControllerTest() = default;
+
+void FullscreenControllerTest::SetUpOnMainThread() {
+  GetExclusiveAccessManager()
+      ->mouse_lock_controller()
+      ->set_bubble_hide_callback_for_test_(
+          base::BindRepeating(&FullscreenControllerTest::OnBubbleHidden,
+                              weak_ptr_factory_.GetWeakPtr()));
+}
+
+void FullscreenControllerTest::TearDownOnMainThread() {
+  GetExclusiveAccessManager()
+      ->mouse_lock_controller()
+      ->set_bubble_hide_callback_for_test_(
+          base::RepeatingCallback<void(ExclusiveAccessBubbleHideReason)>());
+}
+
 void FullscreenControllerTest::RequestToLockMouse(
     bool user_gesture,
     bool last_unlocked_by_target) {
@@ -32,6 +53,14 @@ void FullscreenControllerTest::RequestToLockMouse(
   browser()->RequestToLockMouse(tab, user_gesture,
       last_unlocked_by_target);
   mouse_lock_controller->set_fake_mouse_lock_for_test(false);
+}
+
+void FullscreenControllerTest::
+    SetWebContentsGrantedSilentMouseLockPermission() {
+  GetExclusiveAccessManager()
+      ->mouse_lock_controller()
+      ->set_web_contents_granted_silent_mouse_lock_permission_for_test(
+          browser()->tab_strip_model()->GetActiveWebContents());
 }
 
 FullscreenController* FullscreenControllerTest::GetFullscreenController() {
@@ -94,4 +123,13 @@ void FullscreenControllerTest::EnterActiveTabFullscreen() {
   FullscreenNotificationObserver fullscreen_observer;
   browser()->EnterFullscreenModeForTab(tab, GURL());
   fullscreen_observer.Wait();
+}
+
+void FullscreenControllerTest::OnBubbleHidden(
+    ExclusiveAccessBubbleHideReason reason) {
+  mouse_lock_bubble_hide_reason_recorder_.push_back(reason);
+}
+
+int FullscreenControllerTest::InitialBubbleDelayMs() const {
+  return ExclusiveAccessBubble::kInitialDelayMs;
 }

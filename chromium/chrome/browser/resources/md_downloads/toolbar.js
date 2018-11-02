@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 cr.define('downloads', function() {
-  var Toolbar = Polymer({
+  const Toolbar = Polymer({
     is: 'downloads-toolbar',
 
     properties: {
@@ -18,6 +18,14 @@ cr.define('downloads', function() {
         type: Boolean,
         notify: true,
       },
+    },
+
+    /** @private {?downloads.BrowserProxy} */
+    browserProxy_: null,
+
+    /** @override */
+    ready: function() {
+      this.browserProxy_ = downloads.BrowserProxy.getInstance();
     },
 
     /** @return {boolean} Whether removal can be undone. */
@@ -47,7 +55,7 @@ cr.define('downloads', function() {
     /** @private */
     onClearAllTap_: function() {
       assert(this.canClearAll());
-      downloads.ActionService.getInstance().clearAll();
+      this.browserProxy_.clearAll();
       this.$.moreActionsMenu.close();
     },
 
@@ -61,7 +69,7 @@ cr.define('downloads', function() {
      * @private
      */
     onSearchChanged_: function(event) {
-      var actionService = downloads.ActionService.getInstance();
+      const actionService = downloads.ActionService.getInstance();
       if (actionService.search(/** @type {string} */ (event.detail)))
         this.spinnerActive = actionService.isSearching();
       this.updateClearAll_();
@@ -69,7 +77,7 @@ cr.define('downloads', function() {
 
     /** @private */
     onOpenDownloadsFolderTap_: function() {
-      downloads.ActionService.getInstance().openDownloadsFolder();
+      this.browserProxy_.openDownloadsFolder();
       this.$.moreActionsMenu.close();
     },
 

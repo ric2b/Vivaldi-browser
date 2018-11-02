@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <limits>
 
+#include "base/debug/alias.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "mojo/edk/system/watch.h"
@@ -23,6 +24,11 @@ void WatcherDispatcher::NotifyHandleState(Dispatcher* dispatcher,
   auto it = watched_handles_.find(dispatcher);
   if (it == watched_handles_.end())
     return;
+
+  // TODO(crbug.com/740044): Remove this.
+  uint32_t sentinel = sentinel_value_for_debugging_;
+  base::debug::Alias(&sentinel);
+  CHECK_EQ(0x12345678u, sentinel);
 
   // Maybe fire a notification to the watch associated with this dispatcher,
   // provided we're armed and it cares about the new state.
@@ -46,14 +52,16 @@ void WatcherDispatcher::NotifyHandleClosed(Dispatcher* dispatcher) {
 
     watch = std::move(it->second);
 
-    // TODO(crbug.com/740044): Remove this CHECK.
-    CHECK(watch);
-
     // Wipe out all state associated with the closed dispatcher.
     watches_.erase(watch->context());
     ready_watches_.erase(watch.get());
     watched_handles_.erase(it);
   }
+
+  // TODO(crbug.com/740044): Remove this.
+  uint32_t sentinel = sentinel_value_for_debugging_;
+  base::debug::Alias(&sentinel);
+  CHECK_EQ(0x12345678u, sentinel);
 
   // NOTE: It's important that this is called outside of |lock_| since it
   // acquires internal Watch locks.
@@ -96,7 +104,8 @@ MojoResult WatcherDispatcher::Close() {
   base::flat_map<uintptr_t, scoped_refptr<Watch>> watches;
   {
     base::AutoLock lock(lock_);
-    DCHECK(!closed_);
+    if (closed_)
+      return MOJO_RESULT_INVALID_ARGUMENT;
     closed_ = true;
     std::swap(watches, watches_);
     watched_handles_.clear();
@@ -121,9 +130,8 @@ MojoResult WatcherDispatcher::WatchDispatcher(
   // after we've updated all our own relevant state and released |lock_|.
   {
     base::AutoLock lock(lock_);
-
-    // TODO(crbug.com/740044): Remove this CHECK.
-    CHECK(!closed_);
+    if (closed_)
+      return MOJO_RESULT_INVALID_ARGUMENT;
 
     if (watches_.count(context) || watched_handles_.count(dispatcher.get()))
       return MOJO_RESULT_ALREADY_EXISTS;
@@ -146,6 +154,18 @@ MojoResult WatcherDispatcher::WatchDispatcher(
     return rv;
   }
 
+  bool remove_now;
+  {
+    // If we've been closed already, there's a chance our closure raced with
+    // the call to AddWatcherRef() above. In that case we want to ensure we've
+    // removed our ref from |dispatcher|. Note that this may in turn race
+    // with normal removal, but that's fine.
+    base::AutoLock lock(lock_);
+    remove_now = closed_;
+  }
+  if (remove_now)
+    dispatcher->RemoveWatcherRef(this, context);
+
   return MOJO_RESULT_OK;
 }
 
@@ -155,6 +175,8 @@ MojoResult WatcherDispatcher::CancelWatch(uintptr_t context) {
   scoped_refptr<Watch> watch;
   {
     base::AutoLock lock(lock_);
+    if (closed_)
+      return MOJO_RESULT_INVALID_ARGUMENT;
     auto it = watches_.find(context);
     if (it == watches_.end())
       return MOJO_RESULT_NOT_FOUND;
@@ -162,10 +184,10 @@ MojoResult WatcherDispatcher::CancelWatch(uintptr_t context) {
     watches_.erase(it);
   }
 
-  // TODO(crbug.com/740044): Remove these CHECKs.
-  CHECK(watch);
-  CHECK(watch->dispatcher());
-  CHECK(this);
+  // TODO(crbug.com/740044): Remove this.
+  uint32_t sentinel = sentinel_value_for_debugging_;
+  base::debug::Alias(&sentinel);
+  CHECK_EQ(0x12345678u, sentinel);
 
   // Mark the watch as cancelled so no further notifications get through.
   watch->Cancel();
@@ -201,6 +223,8 @@ MojoResult WatcherDispatcher::Arm(
       (!ready_contexts || !ready_results || !ready_signals_states)) {
     return MOJO_RESULT_INVALID_ARGUMENT;
   }
+  if (closed_)
+    return MOJO_RESULT_INVALID_ARGUMENT;
 
   if (watched_handles_.empty())
     return MOJO_RESULT_NOT_FOUND;
@@ -246,7 +270,7 @@ MojoResult WatcherDispatcher::Arm(
 
 WatcherDispatcher::~WatcherDispatcher() {
   // TODO(crbug.com/740044): Remove this.
-  CHECK(closed_);
+  sentinel_value_for_debugging_ = 0x87654321;
 }
 
 }  // namespace edk

@@ -15,7 +15,7 @@
 #include <vector>
 
 #include "base/compiler_specific.h"
-#include "base/id_map.h"
+#include "base/containers/id_map.h"
 #include "base/macros.h"
 #include "content/common/content_export.h"
 #include "content/public/common/presentation_info.h"
@@ -41,8 +41,8 @@ namespace content {
 // Blink. It forwards the calls to the Mojo PresentationService.
 class CONTENT_EXPORT PresentationDispatcher
     : public RenderFrameObserver,
-      public NON_EXPORTED_BASE(blink::WebPresentationClient),
-      public NON_EXPORTED_BASE(blink::mojom::PresentationServiceClient) {
+      public blink::WebPresentationClient,
+      public blink::mojom::PresentationServiceClient {
  public:
   explicit PresentationDispatcher(RenderFrame* render_frame);
   ~PresentationDispatcher() override;
@@ -151,7 +151,7 @@ class CONTENT_EXPORT PresentationDispatcher
   };
 
   using AvailabilityCallbacksMap =
-      IDMap<std::unique_ptr<blink::WebPresentationAvailabilityCallbacks>>;
+      base::IDMap<std::unique_ptr<blink::WebPresentationAvailabilityCallbacks>>;
   using AvailabilityObserversSet =
       std::set<blink::WebPresentationAvailabilityObserver*>;
 

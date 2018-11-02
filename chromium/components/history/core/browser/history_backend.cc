@@ -536,6 +536,15 @@ void HistoryBackend::AddPage(const HistoryAddPageArgs& request) {
     ui::PageTransition redirect_info = ui::PAGE_TRANSITION_CHAIN_START;
 
     RedirectList redirects = request.redirects;
+    // In the presence of client redirects, |request.redirects| can be a partial
+    // chain because previous calls to this function may have reported a
+    // redirect chain already. This is fine for the visits database where we'll
+    // just append data but insufficient for |recent_redirects_|
+    // (backpropagation of favicons and titles), where we'd like the full
+    // (extended) redirect chain. We use |extended_redirect_chain| to represent
+    // this.
+    RedirectList extended_redirect_chain;
+
     if (redirects[0].SchemeIs(url::kAboutScheme)) {
       // When the redirect source + referrer is "about" we skip it. This
       // happens when a page opens a new frame/window to about:blank and then
@@ -574,6 +583,8 @@ void HistoryBackend::AddPage(const HistoryAddPageArgs& request) {
               visit_row.transition & ~ui::PAGE_TRANSITION_CHAIN_END);
           db_->UpdateVisitRow(visit_row);
         }
+
+        GetCachedRecentRedirects(request.referrer, &extended_redirect_chain);
       }
     }
 
@@ -608,8 +619,12 @@ void HistoryBackend::AddPage(const HistoryAddPageArgs& request) {
     }
 
     // Last, save this redirect chain for later so we can set titles & favicons
-    // on the redirected pages properly.
-    recent_redirects_.Put(request.url, redirects);
+    // on the redirected pages properly. For this we use the extended redirect
+    // chain, which includes URLs from chained redirects.
+    extended_redirect_chain.insert(extended_redirect_chain.end(),
+                                   std::make_move_iterator(redirects.begin()),
+                                   std::make_move_iterator(redirects.end()));
+    recent_redirects_.Put(request.url, extended_redirect_chain);
   }
 
   // TODO(brettw) bug 1140015: Add an "add page" notification so the history
@@ -1063,6 +1078,12 @@ bool HistoryBackend::GetURL(const GURL& url, URLRow* url_row) {
   return false;
 }
 
+bool HistoryBackend::GetURLByID(URLID url_id, URLRow* url_row) {
+  if (db_)
+    return db_->GetURLRow(url_id, url_row);
+  return false;
+}
+
 void HistoryBackend::QueryURL(const GURL& url,
                               bool want_visits,
                               QueryURLResult* result) {
@@ -1474,8 +1495,8 @@ void HistoryBackend::GetFavicon(
     favicon_base::IconType icon_type,
     const std::vector<int>& desired_sizes,
     std::vector<favicon_base::FaviconRawBitmapResult>* bitmap_results) {
-  UpdateFaviconMappingsAndFetchImpl(nullptr, icon_url, icon_type, desired_sizes,
-                                    bitmap_results);
+  UpdateFaviconMappingsAndFetchImpl(std::set<GURL>(), icon_url, icon_type,
+                                    desired_sizes, bitmap_results);
 }
 
 void HistoryBackend::GetLargestFaviconForURL(
@@ -1606,12 +1627,12 @@ void HistoryBackend::GetFaviconForID(
 }
 
 void HistoryBackend::UpdateFaviconMappingsAndFetch(
-    const GURL& page_url,
+    const std::set<GURL>& page_urls,
     const GURL& icon_url,
     favicon_base::IconType icon_type,
     const std::vector<int>& desired_sizes,
     std::vector<favicon_base::FaviconRawBitmapResult>* bitmap_results) {
-  UpdateFaviconMappingsAndFetchImpl(&page_url, icon_url, icon_type,
+  UpdateFaviconMappingsAndFetchImpl(page_urls, icon_url, icon_type,
                                     desired_sizes, bitmap_results);
 }
 
@@ -1927,7 +1948,7 @@ bool HistoryBackend::SetFaviconsImpl(const GURL& page_url,
 }
 
 void HistoryBackend::UpdateFaviconMappingsAndFetchImpl(
-    const GURL* page_url,
+    const std::set<GURL>& page_urls,
     const GURL& icon_url,
     favicon_base::IconType icon_type,
     const std::vector<int>& desired_sizes,
@@ -1945,12 +1966,14 @@ void HistoryBackend::UpdateFaviconMappingsAndFetchImpl(
   if (favicon_id)
     favicon_ids.push_back(favicon_id);
 
-  if (page_url && !favicon_ids.empty()) {
-    bool mappings_updated = SetFaviconMappingsForPageAndRedirects(
-        *page_url, icon_type, favicon_ids);
-    if (mappings_updated) {
-      SendFaviconChangedNotificationForPageAndRedirects(*page_url);
-      ScheduleCommit();
+  if (!favicon_ids.empty()) {
+    for (const GURL& page_url : page_urls) {
+      bool mappings_updated = SetFaviconMappingsForPageAndRedirects(
+          page_url, icon_type, favicon_ids);
+      if (mappings_updated) {
+        SendFaviconChangedNotificationForPageAndRedirects(page_url);
+        ScheduleCommit();
+      }
     }
   }
 
@@ -2147,6 +2170,8 @@ bool HistoryBackend::SetFaviconMappingsForPageAndRedirects(
   if (page_url.has_ref()) {
     // Refs often gets added by Javascript, but the redirect chain is keyed to
     // the URL without a ref.
+    // TODO(crbug.com/746268): This can cause orphan favicons, i.e. without a
+    // matching history URL, which will never be cleaned up by the expirer.
     GURL::Replacements replacements;
     replacements.ClearRef();
     GURL page_url_without_ref = page_url.ReplaceComponents(replacements);
@@ -2699,6 +2724,10 @@ bool HistoryBackend::ClearAllMainHistory(const URLRows& kept_urls) {
   db_->GetStartDate(&first_recorded_time_);
 
   return true;
+}
+
+void HistoryBackend::DropHistoryTables() {
+  db_->DropHistoryTables();
 }
 
 }  // namespace history

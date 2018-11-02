@@ -23,7 +23,6 @@
 
 using leveldb::DB;
 using leveldb::Env;
-using leveldb::Options;
 using leveldb::ReadOptions;
 using leveldb::Slice;
 using leveldb::Status;
@@ -32,6 +31,7 @@ using leveldb::WriteOptions;
 using leveldb_env::ChromiumEnv;
 using leveldb_env::DBTracker;
 using leveldb_env::MethodID;
+using leveldb_env::Options;
 
 TEST(ErrorEncoding, OnlyAMethod) {
   const MethodID in_method = leveldb_env::kSequentialFileRead;
@@ -195,6 +195,24 @@ TEST(ChromiumEnv, TestWriteBufferSize) {
 
   // Check for very large disk size (catch overflow).
   EXPECT_EQ(size_t(4 * MB), leveldb_env::WriteBufferSize(100 * MB * MB));
+}
+
+TEST(ChromiumEnv, LockFile) {
+  base::FilePath tmp_file_path;
+  base::CreateTemporaryFile(&tmp_file_path);
+  leveldb::FileLock* lock = nullptr;
+
+  Env* env = Env::Default();
+  EXPECT_TRUE(env->LockFile(tmp_file_path.MaybeAsASCII(), &lock).ok());
+  EXPECT_NE(nullptr, lock);
+
+  leveldb::FileLock* failed_lock = nullptr;
+  EXPECT_FALSE(env->LockFile(tmp_file_path.MaybeAsASCII(), &failed_lock).ok());
+  EXPECT_EQ(nullptr, failed_lock);
+
+  EXPECT_TRUE(env->UnlockFile(lock).ok());
+  EXPECT_TRUE(env->LockFile(tmp_file_path.MaybeAsASCII(), &lock).ok());
+  EXPECT_TRUE(env->UnlockFile(lock).ok());
 }
 
 class ChromiumEnvDBTrackerTest : public ::testing::Test {

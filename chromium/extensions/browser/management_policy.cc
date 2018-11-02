@@ -42,7 +42,7 @@ bool ManagementPolicy::Provider::MustRemainEnabled(const Extension* extension,
 
 bool ManagementPolicy::Provider::MustRemainDisabled(
     const Extension* extension,
-    Extension::DisableReason* reason,
+    disable_reason::DisableReason* reason,
     base::string16* error) const {
   return false;
 }
@@ -86,8 +86,14 @@ bool ManagementPolicy::MustRemainEnabled(const Extension* extension,
 }
 
 bool ManagementPolicy::MustRemainDisabled(const Extension* extension,
-                                          Extension::DisableReason* reason,
+                                          disable_reason::DisableReason* reason,
                                           base::string16* error) const {
+  if (!UserMayLoad(extension, error)) {
+    if (reason)
+      *reason = disable_reason::DISABLE_BLOCKED_BY_POLICY;
+    return true;
+  }
+
   for (ProviderList::const_iterator it = providers_.begin();
        it != providers_.end(); ++it)
     if ((*it)->MustRemainDisabled(extension, reason, error))

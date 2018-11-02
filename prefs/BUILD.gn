@@ -1,3 +1,31 @@
+action("prefs_files_generator") {
+  prefs_definitions_json = "//vivaldi/vivapp/src/prefs_definitions.json"
+
+  vivaldi_gen_prefs_cc = "$target_gen_dir/vivaldi_gen_prefs.cc"
+  vivaldi_gen_prefs_h = "$target_gen_dir/vivaldi_gen_prefs.h"
+  vivaldi_gen_pref_enums_h = "$target_gen_dir/vivaldi_gen_pref_enums.h"
+
+  sources = [
+    prefs_definitions_json,
+  ]
+
+  outputs = [
+    vivaldi_gen_prefs_cc,
+    vivaldi_gen_prefs_h,
+    vivaldi_gen_pref_enums_h,
+  ]
+
+  script = "//vivaldi/tools/prefs_files_generator/prefs_files_generator.py"
+
+  args = [
+    "--prefs-definitions=" + rebase_path(prefs_definitions_json, root_build_dir),
+    "--prefs-names-h=" + rebase_path(vivaldi_gen_prefs_h, root_build_dir),
+    "--prefs-names-cc=" + rebase_path(vivaldi_gen_prefs_cc, root_build_dir),
+    "--prefs-enums-h=" + rebase_path(vivaldi_gen_pref_enums_h, root_build_dir),
+    "--root="+rebase_path(root_gen_dir, root_build_dir)
+  ]
+}
+
 static_library("prefs") {
   sources = [
     "vivaldi_browser_prefs.h",
@@ -8,8 +36,10 @@ static_library("prefs") {
     "vivaldi_pref_names.cc",
     "vivaldi_pref_names.h",
   ]
+  sources += get_target_outputs(":prefs_files_generator")
   deps = [
     "//skia",
+    ":prefs_files_generator",
   ]
 }
 
@@ -30,6 +60,10 @@ static_library("browser_prefs") {
   deps = [
     "//content/public/browser",
     "//skia",
-    "//vivaldi/extensions/schema:api",
   ]
+  if (!is_android) {
+    deps += [
+      "//vivaldi/extensions/schema:api",
+    ]
+  }
 }

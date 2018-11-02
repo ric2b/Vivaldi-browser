@@ -34,11 +34,12 @@
 
 #include "core/CoreExport.h"
 #include "core/dom/DOMHighResTimeStamp.h"
-#include "core/events/EventTarget.h"
+#include "core/dom/events/EventTarget.h"
 #include "core/loader/FrameLoaderTypes.h"
 #include "core/timing/PerformanceEntry.h"
 #include "core/timing/PerformanceNavigationTiming.h"
 #include "core/timing/PerformancePaintTiming.h"
+#include "core/timing/SubTaskAttribution.h"
 #include "platform/Timer.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Forward.h"
@@ -55,6 +56,7 @@ class ResourceResponse;
 class ResourceTimingInfo;
 class SecurityOrigin;
 class UserTiming;
+class SubTaskAttribution;
 
 using PerformanceEntryVector = HeapVector<Member<PerformanceEntry>>;
 using PerformanceObservers = HeapListHashSet<Member<PerformanceObserver>>;
@@ -70,7 +72,7 @@ class CORE_EXPORT PerformanceBase : public EventTargetWithInlineData {
 
   virtual void UpdateLongTaskInstrumentation() {}
 
-  // Reduce the resolution to 5µs to prevent timing attacks. See:
+  // Reduce the resolution to prevent timing attacks. See:
   // http://www.w3.org/TR/hr-time-2/#privacy-security
   static double ClampTimeResolution(double time_seconds);
 
@@ -86,7 +88,12 @@ class CORE_EXPORT PerformanceBase : public EventTargetWithInlineData {
   DOMHighResTimeStamp MonotonicTimeToDOMHighResTimeStamp(double) const;
   DOMHighResTimeStamp now() const;
 
-  double TimeOrigin() const { return time_origin_; }
+  // High Resolution Time Level 3 timeOrigin.
+  // (https://www.w3.org/TR/hr-time-3/#dom-performance-timeorigin)
+  DOMHighResTimeStamp timeOrigin() const;
+
+  // Internal getter method for the time origin value.
+  double GetTimeOrigin() const { return time_origin_; }
 
   PerformanceEntryVector getEntries();
   PerformanceEntryVector getEntriesByType(const String& entry_type);
@@ -98,12 +105,14 @@ class CORE_EXPORT PerformanceBase : public EventTargetWithInlineData {
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(resourcetimingbufferfull);
 
-  void AddLongTaskTiming(double start_time,
-                         double end_time,
-                         const String& name,
-                         const String& culprit_frame_src,
-                         const String& culprit_frame_id,
-                         const String& culprit_frame_name);
+  void AddLongTaskTiming(
+      double start_time,
+      double end_time,
+      const String& name,
+      const String& culprit_frame_src,
+      const String& culprit_frame_id,
+      const String& culprit_frame_name,
+      const SubTaskAttribution::EntriesVector& sub_task_attributions);
 
   void AddResourceTiming(const ResourceTimingInfo&);
 
@@ -155,7 +164,7 @@ class CORE_EXPORT PerformanceBase : public EventTargetWithInlineData {
   bool IsResourceTimingBufferFull();
   void AddResourceTimingBuffer(PerformanceEntry&);
 
-  void NotifyObserversOfEntry(PerformanceEntry&);
+  void NotifyObserversOfEntry(PerformanceEntry&) const;
   void NotifyObserversOfEntries(PerformanceEntryVector&);
   bool HasObserverFor(PerformanceEntry::EntryType) const;
 

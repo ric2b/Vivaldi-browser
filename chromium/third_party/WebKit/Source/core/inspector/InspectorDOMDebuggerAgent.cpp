@@ -36,8 +36,8 @@
 #include "core/dom/DOMNodeIds.h"
 #include "core/dom/Element.h"
 #include "core/dom/Node.h"
-#include "core/events/Event.h"
-#include "core/events/EventTarget.h"
+#include "core/dom/events/Event.h"
+#include "core/dom/events/EventTarget.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/inspector/InspectorDOMAgent.h"
 #include "core/inspector/V8InspectorString.h"
@@ -163,9 +163,8 @@ void InspectorDOMDebuggerAgent::EventListenersInfoForTarget(
     if (depth < 0)
       depth = INT_MAX;
     HeapVector<Member<Node>> nodes;
-    InspectorDOMAgent::CollectNodes(node, depth, pierce,
-                                    WTF::Bind(&FilterNodesWithListeners).get(),
-                                    &nodes);
+    InspectorDOMAgent::CollectNodes(
+        node, depth, pierce, WTF::Bind(&FilterNodesWithListeners), &nodes);
     for (Node* n : nodes) {
       // We are only interested in listeners from the current context.
       CollectEventListeners(isolate, n, v8::Local<v8::Value>(), n, pierce,

@@ -35,8 +35,9 @@ class GpuClient : public ui::mojom::Gpu {
   void SetForceAllowAccessToGpu(bool enable) override;
   void CreateJpegDecodeAccelerator(
       media::mojom::GpuJpegDecodeAcceleratorRequest jda_request) override;
-  void CreateVideoEncodeAccelerator(
-      media::mojom::VideoEncodeAcceleratorRequest vea_request) override;
+  void CreateVideoEncodeAcceleratorProvider(
+      media::mojom::VideoEncodeAcceleratorProviderRequest vea_provider_request)
+      override;
   void CreateGpuMemoryBuffer(
       gfx::GpuMemoryBufferId id,
       const gfx::Size& size,

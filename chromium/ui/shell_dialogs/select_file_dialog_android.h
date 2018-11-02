@@ -17,7 +17,7 @@ namespace ui {
 class SelectFileDialogImpl : public SelectFileDialog {
  public:
   static SelectFileDialogImpl* Create(Listener* listener,
-                                      SelectFilePolicy* policy);
+                                      std::unique_ptr<SelectFilePolicy> policy);
 
   void OnFileSelected(JNIEnv* env,
                       const base::android::JavaParamRef<jobject>& java_object,
@@ -50,13 +50,12 @@ class SelectFileDialogImpl : public SelectFileDialog {
                       gfx::NativeWindow owning_window,
                       void* params) override;
 
-  static bool RegisterSelectFileDialog(JNIEnv* env);
-
  protected:
   ~SelectFileDialogImpl() override;
 
  private:
-  SelectFileDialogImpl(Listener* listener,  SelectFilePolicy* policy);
+  SelectFileDialogImpl(Listener* listener,
+                       std::unique_ptr<SelectFilePolicy> policy);
 
   bool HasMultipleFileTypeChoicesImpl() override;
 

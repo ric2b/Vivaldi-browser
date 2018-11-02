@@ -4,12 +4,17 @@
 
 #include "gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h"
 
+#include "base/callback.h"
 #include "base/strings/string_split.h"
 #include "gpu/command_buffer/service/command_buffer_service.h"
 #include "gpu/command_buffer/service/feature_info.h"
 #include "gpu/command_buffer/service/gl_utils.h"
 #include "gpu/command_buffer/service/gpu_tracer.h"
 #include "ui/gl/gl_version_info.h"
+
+#if defined(USE_EGL)
+#include "ui/gl/angle_platform_impl.h"
+#endif  // defined(USE_EGL)
 
 namespace gpu {
 namespace gles2 {
@@ -21,7 +26,8 @@ void DeleteServiceObjects(ClientServiceMap<ClientType, ServiceType>* id_map,
                           DeleteFunction delete_function) {
   if (have_context) {
     for (auto client_service_id_pair : *id_map) {
-      delete_function(client_service_id_pair.second);
+      delete_function(client_service_id_pair.first,
+                      client_service_id_pair.second);
     }
   }
 
@@ -47,22 +53,34 @@ PassthroughResources::PassthroughResources() {}
 PassthroughResources::~PassthroughResources() {}
 
 void PassthroughResources::Destroy(bool have_context) {
-  DeleteServiceObjects(&texture_id_map, have_context,
-                       [](GLuint texture) { glDeleteTextures(1, &texture); });
-  DeleteServiceObjects(&buffer_id_map, have_context,
-                       [](GLuint buffer) { glDeleteBuffersARB(1, &buffer); });
+  // Only delete textures that are not referenced by a TexturePassthrough
+  // object, they handle their own deletion once all references are lost
   DeleteServiceObjects(
-      &renderbuffer_id_map, have_context,
-      [](GLuint renderbuffer) { glDeleteRenderbuffersEXT(1, &renderbuffer); });
-  DeleteServiceObjects(&sampler_id_map, have_context,
-                       [](GLuint sampler) { glDeleteSamplers(1, &sampler); });
-  DeleteServiceObjects(&program_id_map, have_context,
-                       [](GLuint program) { glDeleteProgram(program); });
-  DeleteServiceObjects(&shader_id_map, have_context,
-                       [](GLuint shader) { glDeleteShader(shader); });
-  DeleteServiceObjects(&sync_id_map, have_context, [](uintptr_t sync) {
-    glDeleteSync(reinterpret_cast<GLsync>(sync));
-  });
+      &texture_id_map, have_context, [this](GLuint client_id, GLuint texture) {
+        if (texture_object_map.find(client_id) == texture_object_map.end()) {
+          glDeleteTextures(1, &texture);
+        }
+      });
+  DeleteServiceObjects(
+      &buffer_id_map, have_context,
+      [](GLuint client_id, GLuint buffer) { glDeleteBuffersARB(1, &buffer); });
+  DeleteServiceObjects(&renderbuffer_id_map, have_context,
+                       [](GLuint client_id, GLuint renderbuffer) {
+                         glDeleteRenderbuffersEXT(1, &renderbuffer);
+                       });
+  DeleteServiceObjects(
+      &sampler_id_map, have_context,
+      [](GLuint client_id, GLuint sampler) { glDeleteSamplers(1, &sampler); });
+  DeleteServiceObjects(
+      &program_id_map, have_context,
+      [](GLuint client_id, GLuint program) { glDeleteProgram(program); });
+  DeleteServiceObjects(
+      &shader_id_map, have_context,
+      [](GLuint client_id, GLuint shader) { glDeleteShader(shader); });
+  DeleteServiceObjects(&sync_id_map, have_context,
+                       [](GLuint client_id, uintptr_t sync) {
+                         glDeleteSync(reinterpret_cast<GLsync>(sync));
+                       });
 
   if (!have_context) {
     for (auto passthrough_texture : texture_object_map) {
@@ -95,6 +113,18 @@ GLES2DecoderPassthroughImpl::ActiveQuery::operator=(const ActiveQuery&) =
 GLES2DecoderPassthroughImpl::ActiveQuery&
 GLES2DecoderPassthroughImpl::ActiveQuery::operator=(ActiveQuery&&) = default;
 
+GLES2DecoderPassthroughImpl::BoundTexture::BoundTexture() = default;
+GLES2DecoderPassthroughImpl::BoundTexture::~BoundTexture() = default;
+GLES2DecoderPassthroughImpl::BoundTexture::BoundTexture(const BoundTexture&) =
+    default;
+GLES2DecoderPassthroughImpl::BoundTexture::BoundTexture(BoundTexture&&) =
+    default;
+GLES2DecoderPassthroughImpl::BoundTexture&
+GLES2DecoderPassthroughImpl::BoundTexture::operator=(const BoundTexture&) =
+    default;
+GLES2DecoderPassthroughImpl::BoundTexture&
+GLES2DecoderPassthroughImpl::BoundTexture::operator=(BoundTexture&&) = default;
+
 GLES2DecoderPassthroughImpl::GLES2DecoderPassthroughImpl(
     GLES2DecoderClient* client,
     CommandBufferServiceBase* command_buffer_service,
@@ -108,7 +138,7 @@ GLES2DecoderPassthroughImpl::GLES2DecoderPassthroughImpl(
       context_(),
       offscreen_(false),
       group_(group),
-      feature_info_(new FeatureInfo),
+      feature_info_(new FeatureInfo(group->feature_info()->workarounds())),
       gpu_decoder_category_(TRACE_EVENT_API_GET_CATEGORY_GROUP_ENABLED(
           TRACE_DISABLED_BY_DEFAULT("gpu_decoder"))),
       gpu_trace_level_(2),
@@ -186,6 +216,10 @@ GLES2Decoder::Error GLES2DecoderPassthroughImpl::DoCommandsImpl(
             gpu_tracer_->Begin(TRACE_DISABLED_BY_DEFAULT("gpu_decoder"),
                                GetCommandName(command), kTraceDecoder);
           }
+        }
+
+        if (DebugImpl) {
+          VerifyServiceTextureObjectsExist();
         }
 
         uint32_t immediate_data_size = (arg_count - info_arg_count) *
@@ -270,6 +304,11 @@ bool GLES2DecoderPassthroughImpl::Initialize(
     return false;
   }
 
+  if (attrib_helper.enable_oop_rasterization) {
+    Destroy(true);
+    return false;
+  }
+
   bind_generates_resource_ = group_->bind_generates_resource();
 
   resources_ = group_->passthrough_resources();
@@ -281,23 +320,49 @@ bool GLES2DecoderPassthroughImpl::Initialize(
   glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &num_texture_units);
 
   active_texture_unit_ = 0;
-  bound_textures_[GL_TEXTURE_2D].resize(num_texture_units, 0);
-  bound_textures_[GL_TEXTURE_CUBE_MAP].resize(num_texture_units, 0);
+  bound_textures_[GL_TEXTURE_2D].resize(num_texture_units);
+  bound_textures_[GL_TEXTURE_CUBE_MAP].resize(num_texture_units);
   if (feature_info_->gl_version_info().IsAtLeastGLES(3, 0)) {
-    bound_textures_[GL_TEXTURE_2D_ARRAY].resize(num_texture_units, 0);
-    bound_textures_[GL_TEXTURE_3D].resize(num_texture_units, 0);
+    bound_textures_[GL_TEXTURE_2D_ARRAY].resize(num_texture_units);
+    bound_textures_[GL_TEXTURE_3D].resize(num_texture_units);
   }
   if (feature_info_->gl_version_info().IsAtLeastGLES(3, 1)) {
-    bound_textures_[GL_TEXTURE_2D_MULTISAMPLE].resize(num_texture_units, 0);
+    bound_textures_[GL_TEXTURE_2D_MULTISAMPLE].resize(num_texture_units);
   }
   if (feature_info_->feature_flags().oes_egl_image_external ||
       feature_info_->feature_flags().nv_egl_stream_consumer_external) {
-    bound_textures_[GL_TEXTURE_EXTERNAL_OES].resize(num_texture_units, 0);
+    bound_textures_[GL_TEXTURE_EXTERNAL_OES].resize(num_texture_units);
+  }
+
+  // Initialize the tracked buffer bindings
+  bound_buffers_[GL_ARRAY_BUFFER] = 0;
+  bound_buffers_[GL_ELEMENT_ARRAY_BUFFER] = 0;
+  if (feature_info_->gl_version_info().IsAtLeastGLES(3, 0) ||
+      feature_info_->feature_flags().ext_pixel_buffer_object) {
+    bound_buffers_[GL_PIXEL_PACK_BUFFER] = 0;
+    bound_buffers_[GL_PIXEL_UNPACK_BUFFER] = 0;
+  }
+  if (feature_info_->gl_version_info().IsAtLeastGLES(3, 0)) {
+    bound_buffers_[GL_COPY_READ_BUFFER] = 0;
+    bound_buffers_[GL_COPY_WRITE_BUFFER] = 0;
+    bound_buffers_[GL_TRANSFORM_FEEDBACK_BUFFER] = 0;
+    bound_buffers_[GL_UNIFORM_BUFFER] = 0;
+  }
+  if (feature_info_->gl_version_info().IsAtLeastGLES(3, 1)) {
+    bound_buffers_[GL_ATOMIC_COUNTER_BUFFER] = 0;
+    bound_buffers_[GL_SHADER_STORAGE_BUFFER] = 0;
+    bound_buffers_[GL_DRAW_INDIRECT_BUFFER] = 0;
+    bound_buffers_[GL_DISPATCH_INDIRECT_BUFFER] = 0;
   }
 
   if (group_->gpu_preferences().enable_gpu_driver_debug_logging &&
       feature_info_->feature_flags().khr_debug) {
     InitializeGLDebugLogging();
+  }
+
+  if (feature_info_->feature_flags().chromium_texture_filtering_hint &&
+      feature_info_->feature_flags().is_swiftshader) {
+    glHint(GL_TEXTURE_FILTERING_HINT_CHROMIUM, GL_NICEST);
   }
 
   has_robustness_extension_ = feature_info_->feature_flags().khr_robustness ||
@@ -312,18 +377,30 @@ void GLES2DecoderPassthroughImpl::Destroy(bool have_context) {
     FlushErrors();
   }
 
-  DeleteServiceObjects(
-      &framebuffer_id_map_, have_context,
-      [](GLuint framebuffer) { glDeleteFramebuffersEXT(1, &framebuffer); });
+  if (!have_context) {
+    for (const auto& bound_texture_type : bound_textures_) {
+      for (const auto& bound_texture : bound_texture_type.second) {
+        bound_texture.texture->MarkContextLost();
+      }
+    }
+  }
+  bound_textures_.clear();
+
+  DeleteServiceObjects(&framebuffer_id_map_, have_context,
+                       [](GLuint client_id, GLuint framebuffer) {
+                         glDeleteFramebuffersEXT(1, &framebuffer);
+                       });
   DeleteServiceObjects(&transform_feedback_id_map_, have_context,
-                       [](GLuint transform_feedback) {
+                       [](GLuint client_id, GLuint transform_feedback) {
                          glDeleteTransformFeedbacks(1, &transform_feedback);
                        });
-  DeleteServiceObjects(&query_id_map_, have_context,
-                       [](GLuint query) { glDeleteQueries(1, &query); });
   DeleteServiceObjects(
-      &vertex_array_id_map_, have_context,
-      [](GLuint vertex_array) { glDeleteVertexArraysOES(1, &vertex_array); });
+      &query_id_map_, have_context,
+      [](GLuint client_id, GLuint query) { glDeleteQueries(1, &query); });
+  DeleteServiceObjects(&vertex_array_id_map_, have_context,
+                       [](GLuint client_id, GLuint vertex_array) {
+                         glDeleteVertexArraysOES(1, &vertex_array);
+                       });
 
   // Destroy the GPU Tracer which may own some in process GPU Timings.
   if (gpu_tracer_) {
@@ -336,6 +413,13 @@ void GLES2DecoderPassthroughImpl::Destroy(bool have_context) {
   surface_ = nullptr;
 
   if (group_) {
+#if defined(USE_EGL)
+    // Clear the program binary caching callback.
+    if (group_->has_program_cache()) {
+      angle::ResetCacheProgramCallback();
+    }
+#endif  // defined(USE_EGL)
+
     group_->Destroy(this, have_context);
     group_ = nullptr;
   }
@@ -398,6 +482,15 @@ bool GLES2DecoderPassthroughImpl::MakeCurrent() {
     group_->LoseContexts(error::kUnknown);
     return false;
   }
+
+#if defined(USE_EGL)
+  // Establish the program binary caching callback.
+  if (group_->has_program_cache()) {
+    auto program_callback = base::BindRepeating(
+        &GLES2DecoderClient::CacheShader, base::Unretained(client_));
+    angle::SetCacheProgramCallback(program_callback);
+  }
+#endif  // defined(USE_EGL)
 
   return true;
 }
@@ -479,9 +572,11 @@ gpu::Capabilities GLES2DecoderPassthroughImpl::GetCapabilities() {
   caps.flips_vertically = !offscreen_ && surface_->FlipsVertically();
   caps.multisample_compatibility =
       feature_info_->feature_flags().ext_multisample_compatibility;
+  caps.dc_layers = !offscreen_ && surface_->SupportsDCLayers();
 
   // TODO:
   // caps.commit_overlay_planes
+  // caps.use_dc_overlays_for_video = surface_->UseOverlaysForVideo();
 
   return caps;
 }
@@ -592,6 +687,13 @@ bool GLES2DecoderPassthroughImpl::GetServiceTextureId(
                                                  service_texture_id);
 }
 
+TextureBase* GLES2DecoderPassthroughImpl::GetTextureBase(uint32_t client_id) {
+  auto texture_object_iter = resources_->texture_object_map.find(client_id);
+  return (texture_object_iter != resources_->texture_object_map.end())
+             ? texture_object_iter->second.get()
+             : nullptr;
+}
+
 bool GLES2DecoderPassthroughImpl::ClearLevel(Texture* texture,
                                              unsigned target,
                                              int level,
@@ -675,6 +777,51 @@ const gpu::gles2::ContextState* GLES2DecoderPassthroughImpl::GetContextState() {
 scoped_refptr<ShaderTranslatorInterface>
 GLES2DecoderPassthroughImpl::GetTranslator(GLenum type) {
   return nullptr;
+}
+
+void GLES2DecoderPassthroughImpl::BindImage(uint32_t client_texture_id,
+                                            uint32_t texture_target,
+                                            gl::GLImage* image,
+                                            bool can_bind_to_sampler) {
+  auto passthrough_texture_iter =
+      resources_->texture_object_map.find(client_texture_id);
+  if (passthrough_texture_iter == resources_->texture_object_map.end()) {
+    return;
+  }
+
+  TexturePassthrough* passthrough_texture =
+      passthrough_texture_iter->second.get();
+  DCHECK(passthrough_texture != nullptr);
+
+  GLenum bind_target = GLES2Util::GLFaceTargetToTextureTarget(texture_target);
+  if (passthrough_texture->target() != bind_target) {
+    return;
+  }
+
+  if (can_bind_to_sampler) {
+    // Binding an image to a texture requires that the texture is currently
+    // bound.
+    scoped_refptr<TexturePassthrough> current_texture =
+        bound_textures_[bind_target][active_texture_unit_].texture;
+    bool bind_new_texture = current_texture != passthrough_texture;
+    if (bind_new_texture) {
+      glBindTexture(bind_target, passthrough_texture->service_id());
+    }
+
+    if (!image->BindTexImage(texture_target)) {
+      image->CopyTexImage(texture_target);
+    }
+
+    // Re-bind the old texture
+    if (bind_new_texture) {
+      GLuint current_service_texture =
+          current_texture ? current_texture->service_id() : 0;
+      glBindTexture(bind_target, current_service_texture);
+    }
+  }
+
+  // Reference the image even if it is not bound as a sampler.
+  passthrough_texture->SetLevelImage(texture_target, 0, image);
 }
 
 const char* GLES2DecoderPassthroughImpl::GetCommandName(
@@ -782,6 +929,47 @@ INSTANTIATE_PATCH_NUMERIC_RESULTS(GLint64);
 INSTANTIATE_PATCH_NUMERIC_RESULTS(GLfloat);
 INSTANTIATE_PATCH_NUMERIC_RESULTS(GLboolean);
 #undef INSTANTIATE_PATCH_NUMERIC_RESULTS
+
+template <typename T>
+error::Error GLES2DecoderPassthroughImpl::PatchGetBufferResults(GLenum target,
+                                                                GLenum pname,
+                                                                GLsizei bufsize,
+                                                                GLsizei* length,
+                                                                T* params) {
+  if (pname != GL_BUFFER_ACCESS_FLAGS) {
+    return error::kNoError;
+  }
+
+  // If there was no error, the buffer target should exist
+  DCHECK(bound_buffers_.find(target) != bound_buffers_.end());
+  GLuint current_client_buffer = bound_buffers_[target];
+
+  auto mapped_buffer_info_iter =
+      resources_->mapped_buffer_map.find(current_client_buffer);
+  if (mapped_buffer_info_iter == resources_->mapped_buffer_map.end()) {
+    // Buffer is not mapped, nothing to do
+    return error::kNoError;
+  }
+
+  // Buffer is mapped, patch the result with the original access flags
+  DCHECK(bufsize >= 1);
+  DCHECK(*length == 1);
+  params[0] = mapped_buffer_info_iter->second.original_access;
+  return error::kNoError;
+}
+
+template error::Error GLES2DecoderPassthroughImpl::PatchGetBufferResults(
+    GLenum target,
+    GLenum pname,
+    GLsizei bufsize,
+    GLsizei* length,
+    GLint64* params);
+template error::Error GLES2DecoderPassthroughImpl::PatchGetBufferResults(
+    GLenum target,
+    GLenum pname,
+    GLsizei bufsize,
+    GLsizei* length,
+    GLint* params);
 
 error::Error
 GLES2DecoderPassthroughImpl::PatchGetFramebufferAttachmentParameter(
@@ -1000,16 +1188,17 @@ void GLES2DecoderPassthroughImpl::RemovePendingQuery(GLuint service_id) {
   }
 }
 
-void GLES2DecoderPassthroughImpl::UpdateTextureBinding(GLenum target,
-                                                       GLuint client_id,
-                                                       GLuint service_id) {
+void GLES2DecoderPassthroughImpl::UpdateTextureBinding(
+    GLenum target,
+    GLuint client_id,
+    TexturePassthrough* texture) {
+  GLuint texture_service_id = texture ? texture->service_id() : 0;
   size_t cur_texture_unit = active_texture_unit_;
-  const auto& target_bound_textures = bound_textures_.at(target);
+  auto& target_bound_textures = bound_textures_.at(target);
   for (size_t bound_texture_index = 0;
        bound_texture_index < target_bound_textures.size();
        bound_texture_index++) {
-    GLuint bound_client_id = target_bound_textures[bound_texture_index];
-    if (bound_client_id == client_id) {
+    if (target_bound_textures[bound_texture_index].client_id == client_id) {
       // Update the active texture unit if needed
       if (bound_texture_index != cur_texture_unit) {
         glActiveTexture(static_cast<GLenum>(GL_TEXTURE0 + bound_texture_index));
@@ -1017,7 +1206,8 @@ void GLES2DecoderPassthroughImpl::UpdateTextureBinding(GLenum target,
       }
 
       // Update the texture binding
-      glBindTexture(target, service_id);
+      glBindTexture(target, texture_service_id);
+      target_bound_textures[bound_texture_index].texture = texture;
     }
   }
 
@@ -1042,6 +1232,13 @@ error::Error GLES2DecoderPassthroughImpl::BindTexImage2DCHROMIUMImpl(
     return error::kNoError;
   }
 
+  const BoundTexture& bound_texture =
+      bound_textures_[GL_TEXTURE_2D][active_texture_unit_];
+  if (bound_texture.texture == nullptr) {
+    InsertError(GL_INVALID_OPERATION, "No texture bound");
+    return error::kNoError;
+  }
+
   if (internalformat) {
     if (!image->BindTexImageWithInternalformat(target, internalformat)) {
       image->CopyTexImage(target);
@@ -1052,6 +1249,24 @@ error::Error GLES2DecoderPassthroughImpl::BindTexImage2DCHROMIUMImpl(
     }
   }
 
+  DCHECK(bound_texture.texture != nullptr);
+  bound_texture.texture->SetLevelImage(target, 0, image);
+
+  return error::kNoError;
+}
+
+void GLES2DecoderPassthroughImpl::VerifyServiceTextureObjectsExist() {
+  for (const auto& texture_mapping : resources_->texture_object_map) {
+    DCHECK_EQ(GL_TRUE, glIsTexture(texture_mapping.second->service_id()));
+  }
+}
+
+error::Error GLES2DecoderPassthroughImpl::HandleRasterCHROMIUM(
+    uint32_t immediate_data_size,
+    const volatile void* cmd_data) {
+  // TODO(enne): Add CHROMIUM_raster_transport extension support to the
+  // passthrough command buffer.
+  NOTIMPLEMENTED();
   return error::kNoError;
 }
 

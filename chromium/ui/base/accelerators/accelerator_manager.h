@@ -69,7 +69,7 @@ class UI_BASE_EXPORT AcceleratorManager {
   // Returns whether |accelerator| is already registered.
   bool IsRegistered(const Accelerator& accelerator) const;
 
-  // Activate the target associated with the specified accelerator.
+  // Activates the target associated with the specified accelerator.
   // First, AcceleratorPressed handler of the most recently registered target
   // is called, and if that handler processes the event (i.e. returns true),
   // this method immediately returns. If not, we do the same thing on the next

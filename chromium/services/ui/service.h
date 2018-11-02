@@ -79,6 +79,10 @@ class Service : public service_manager::Service,
     // Can only be de-referenced on |resource_runner_|.
     base::WeakPtr<ImageCursorsSet> image_cursors_set_weak_ptr = nullptr;
 
+    // If null Service creates a DiscardableSharedMemoryManager.
+    discardable_memory::DiscardableSharedMemoryManager* memory_manager =
+        nullptr;
+
    private:
     DISALLOW_COPY_AND_ASSIGN(InProcessConfig);
   };
@@ -136,19 +140,13 @@ class Service : public service_manager::Service,
       mojom::DisplayManagerRequest request,
       const service_manager::BindSourceInfo& source_info);
 
-  void BindGpuRequest(mojom::GpuRequest request,
-                      const service_manager::BindSourceInfo& source_info);
+  void BindGpuRequest(mojom::GpuRequest request);
 
-  void BindIMERegistrarRequest(
-      mojom::IMERegistrarRequest request,
-      const service_manager::BindSourceInfo& source_info);
+  void BindIMERegistrarRequest(mojom::IMERegistrarRequest request);
 
-  void BindIMEDriverRequest(mojom::IMEDriverRequest request,
-                            const service_manager::BindSourceInfo& source_info);
+  void BindIMEDriverRequest(mojom::IMEDriverRequest request);
 
-  void BindUserAccessManagerRequest(
-      mojom::UserAccessManagerRequest request,
-      const service_manager::BindSourceInfo& source_info);
+  void BindUserAccessManagerRequest(mojom::UserAccessManagerRequest request);
 
   void BindUserActivityMonitorRequest(
       mojom::UserActivityMonitorRequest request,
@@ -170,9 +168,7 @@ class Service : public service_manager::Service,
       discardable_memory::mojom::DiscardableSharedMemoryManagerRequest request,
       const service_manager::BindSourceInfo& source_info);
 
-  void BindWindowServerTestRequest(
-      mojom::WindowServerTestRequest request,
-      const service_manager::BindSourceInfo& source_info);
+  void BindWindowServerTestRequest(mojom::WindowServerTestRequest request);
 
   std::unique_ptr<ws::WindowServer> window_server_;
   std::unique_ptr<PlatformEventSource> event_source_;
@@ -207,15 +203,23 @@ class Service : public service_manager::Service,
   IMERegistrarImpl ime_registrar_;
   IMEDriverBridge ime_driver_;
 
-  std::unique_ptr<discardable_memory::DiscardableSharedMemoryManager>
+  discardable_memory::DiscardableSharedMemoryManager*
       discardable_shared_memory_manager_;
+
+  // non-null if this created the DiscardableSharedMemoryManager. Null when
+  // running in-process.
+  std::unique_ptr<discardable_memory::DiscardableSharedMemoryManager>
+      owned_discardable_shared_memory_manager_;
 
   service_manager::BinderRegistryWithArgs<
       const service_manager::BindSourceInfo&>
-      registry_;
+      registry_with_source_info_;
+  service_manager::BinderRegistry registry_;
 
   // Set to true in StartDisplayInit().
   bool is_gpu_ready_ = false;
+
+  bool in_destructor_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(Service);
 };

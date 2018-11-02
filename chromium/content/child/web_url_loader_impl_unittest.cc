@@ -70,6 +70,7 @@ class TestResourceDispatcher : public ResourceDispatcher {
   void StartSync(
       std::unique_ptr<ResourceRequest> request,
       int routing_id,
+      const url::Origin& frame_origin,
       SyncLoadResponse* response,
       blink::WebURLRequest::LoadingIPCType ipc_type,
       mojom::URLLoaderFactory* url_loader_factory,
@@ -82,12 +83,15 @@ class TestResourceDispatcher : public ResourceDispatcher {
       int routing_id,
       scoped_refptr<base::SingleThreadTaskRunner> loading_task_runner,
       const url::Origin& frame_origin,
+      bool is_sync,
       std::unique_ptr<RequestPeer> peer,
       blink::WebURLRequest::LoadingIPCType ipc_type,
       mojom::URLLoaderFactory* url_loader_factory,
       std::vector<std::unique_ptr<URLLoaderThrottle>> throttles,
       mojo::ScopedDataPipeConsumerHandle consumer_handle) override {
     EXPECT_FALSE(peer_);
+    if (sync_load_response_.encoded_body_length != -1)
+      EXPECT_TRUE(is_sync);
     peer_ = std::move(peer);
     url_ = request->url;
     stream_url_ = request->resource_body_stream_url;
@@ -139,19 +143,19 @@ class TestWebURLLoaderClient : public blink::WebURLLoaderClient {
         delete_on_fail_(false),
         did_receive_redirect_(false),
         did_receive_response_(false),
-        check_redirect_request_priority_(false),
         did_finish_(false) {}
 
   ~TestWebURLLoaderClient() override {}
 
   // blink::WebURLLoaderClient implementation:
-  bool WillFollowRedirect(
-      blink::WebURLRequest& newRequest,
-      const blink::WebURLResponse& redirectResponse) override {
+  bool WillFollowRedirect(const blink::WebURL& new_url,
+                          const blink::WebURL& new_site_for_cookies,
+                          const blink::WebString& new_referrer,
+                          blink::WebReferrerPolicy new_referrer_policy,
+                          const blink::WebString& new_method,
+                          const blink::WebURLResponse& passed_redirect_response,
+                          bool& report_raw_headers) override {
     EXPECT_TRUE(loader_);
-
-    if (check_redirect_request_priority_)
-      EXPECT_EQ(redirect_request_priority, newRequest.GetPriority());
 
     // No test currently simulates mutiple redirects.
     EXPECT_FALSE(did_receive_redirect_);
@@ -188,7 +192,7 @@ class TestWebURLLoaderClient : public blink::WebURLLoaderClient {
     EXPECT_TRUE(did_receive_response_);
     EXPECT_FALSE(did_finish_);
     EXPECT_EQ(net::OK, error_.reason);
-    EXPECT_EQ("", error_.domain.Utf8());
+    EXPECT_EQ(blink::WebURLError::Domain::kEmpty, error_.domain);
 
     received_data_.append(data, dataLength);
 
@@ -231,10 +235,6 @@ class TestWebURLLoaderClient : public blink::WebURLLoaderClient {
   void set_delete_on_receive_data() { delete_on_receive_data_ = true; }
   void set_delete_on_finish() { delete_on_finish_ = true; }
   void set_delete_on_fail() { delete_on_fail_ = true; }
-  void set_redirect_request_priority(blink::WebURLRequest::Priority priority) {
-    check_redirect_request_priority_ = true;
-    redirect_request_priority = priority;
-  }
 
   bool did_receive_redirect() const { return did_receive_redirect_; }
   bool did_receive_response() const { return did_receive_response_; }
@@ -254,8 +254,6 @@ class TestWebURLLoaderClient : public blink::WebURLLoaderClient {
 
   bool did_receive_redirect_;
   bool did_receive_response_;
-  bool check_redirect_request_priority_;
-  blink::WebURLRequest::Priority redirect_request_priority;
   std::string received_data_;
   bool did_finish_;
   blink::WebURLError error_;
@@ -294,7 +292,7 @@ class WebURLLoaderImplTest : public testing::Test {
     redirect_info.status_code = 302;
     redirect_info.new_method = "GET";
     redirect_info.new_url = GURL(kTestURL);
-    redirect_info.new_first_party_for_cookies = GURL(kTestURL);
+    redirect_info.new_site_for_cookies = GURL(kTestURL);
     peer()->OnReceivedRedirect(redirect_info,
                                content::ResourceResponseInfo());
     EXPECT_TRUE(client()->did_receive_redirect());
@@ -306,7 +304,7 @@ class WebURLLoaderImplTest : public testing::Test {
     redirect_info.status_code = 302;
     redirect_info.new_method = "GET";
     redirect_info.new_url = GURL(kTestHTTPSURL);
-    redirect_info.new_first_party_for_cookies = GURL(kTestHTTPSURL);
+    redirect_info.new_site_for_cookies = GURL(kTestHTTPSURL);
     peer()->OnReceivedRedirect(redirect_info,
                                content::ResourceResponseInfo());
     EXPECT_TRUE(client()->did_receive_redirect());
@@ -329,23 +327,23 @@ class WebURLLoaderImplTest : public testing::Test {
 
   void DoCompleteRequest() {
     EXPECT_FALSE(client()->did_finish());
-    peer()->OnCompletedRequest(net::OK, false, false, base::TimeTicks(),
+    peer()->OnCompletedRequest(net::OK, false, base::TimeTicks(),
                                strlen(kTestData), strlen(kTestData),
                                strlen(kTestData));
     EXPECT_TRUE(client()->did_finish());
     // There should be no error.
     EXPECT_EQ(net::OK, client()->error().reason);
-    EXPECT_EQ("", client()->error().domain.Utf8());
+    EXPECT_EQ(blink::WebURLError::Domain::kEmpty, client()->error().domain);
   }
 
   void DoFailRequest() {
     EXPECT_FALSE(client()->did_finish());
-    peer()->OnCompletedRequest(net::ERR_FAILED, false, false, base::TimeTicks(),
+    peer()->OnCompletedRequest(net::ERR_FAILED, false, base::TimeTicks(),
                                strlen(kTestData), strlen(kTestData),
                                strlen(kTestData));
     EXPECT_FALSE(client()->did_finish());
     EXPECT_EQ(net::ERR_FAILED, client()->error().reason);
-    EXPECT_EQ(net::kErrorDomain, client()->error().domain.Utf8());
+    EXPECT_EQ(blink::WebURLError::Domain::kNet, client()->error().domain);
   }
 
   void DoReceiveResponseFtp() {
@@ -386,19 +384,6 @@ TEST_F(WebURLLoaderImplTest, Success) {
 
 TEST_F(WebURLLoaderImplTest, Redirect) {
   DoStartAsyncRequest();
-  DoReceiveRedirect();
-  DoReceiveResponse();
-  DoReceiveData();
-  DoCompleteRequest();
-  EXPECT_FALSE(dispatcher()->canceled());
-  EXPECT_EQ(kTestData, client()->received_data());
-}
-
-TEST_F(WebURLLoaderImplTest, RedirectCorrectPriority) {
-  DoStartAsyncRequestWithPriority(
-      blink::WebURLRequest::Priority::kPriorityVeryHigh);
-  client()->set_redirect_request_priority(
-      blink::WebURLRequest::Priority::kPriorityVeryHigh);
   DoReceiveRedirect();
   DoReceiveResponse();
   DoReceiveData();
@@ -469,7 +454,7 @@ TEST_F(WebURLLoaderImplTest, DataURL) {
   EXPECT_EQ("blah!", client()->received_data());
   EXPECT_TRUE(client()->did_finish());
   EXPECT_EQ(net::OK, client()->error().reason);
-  EXPECT_EQ("", client()->error().domain.Utf8());
+  EXPECT_EQ(blink::WebURLError::Domain::kEmpty, client()->error().domain);
 }
 
 TEST_F(WebURLLoaderImplTest, DataURLDeleteOnReceiveResponse) {
@@ -535,7 +520,7 @@ TEST_F(WebURLLoaderImplTest, DataURLDefersLoading) {
 
   EXPECT_EQ("blah!", client()->received_data());
   EXPECT_EQ(net::OK, client()->error().reason);
-  EXPECT_EQ("", client()->error().domain.Utf8());
+  EXPECT_EQ(blink::WebURLError::Domain::kEmpty, client()->error().domain);
 }
 
 TEST_F(WebURLLoaderImplTest, DefersLoadingBeforeStart) {
@@ -581,7 +566,7 @@ TEST_F(WebURLLoaderImplTest, FtpDeleteOnReceiveMoreData) {
   // Directory listings are only parsed once the request completes, so this will
   // cancel in DoReceiveDataFtp, before the request finishes.
   client()->set_delete_on_receive_data();
-  peer()->OnCompletedRequest(net::OK, false, false, base::TimeTicks(),
+  peer()->OnCompletedRequest(net::OK, false, base::TimeTicks(),
                              strlen(kTestData), strlen(kTestData),
                              strlen(kTestData));
   EXPECT_FALSE(client()->did_finish());

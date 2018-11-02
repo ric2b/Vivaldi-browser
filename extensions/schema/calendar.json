@@ -5,6 +5,54 @@
     "description": "Use the <code>vivaldi.calendar</code> API to manipulate calendar events.",
     "types": [
       {
+        "id": "OccurrenceInterval",
+        "type": "string",
+        "enum": [ "", "days", "weeks", "months", "years" ],
+        "description": "Interval (none (empty string),days, weeks, months) when next event should reoccur."
+      },
+      {
+        "id": "RecurrencePattern",
+        "type": "object",
+        "description": "A pattern describing how a event should reoccur",
+        "properties": {
+          "interval": {
+            "$ref": "OccurrenceInterval",
+            "optional": true,
+            "description": "Interval (days, weeks, months, year) when next event should reoccur."
+          },
+          "number_of_occurrences": {
+            "type": "integer",
+            "optional": true,
+            "description": "How often the event shoud reoccur."
+          },
+          "skip_count": {
+            "type": "integer",
+            "optional": true,
+            "description": "How many (days, week, months) see interval, should be skipped until next event occurs."
+          },
+          "day_of_week": {
+            "type": "integer",
+            "optional": true,
+            "description": "Which day of the week the event takes place. Number 1,2,3,4,5,6,7 starting on monday"
+          },
+          "week_of_month": {
+            "type": "integer",
+            "optional": true,
+            "description": "Which week of the month the event takes place. 1,2,3,4. Negative numbers from end of month"
+          },
+          "day_of_month": {
+            "type": "integer",
+            "optional": true,
+            "description": "Which day of the month the event takes place. 1,2,3,..30. Negative numbers from end of month"
+          },
+          "month_of_year": {
+            "type": "integer",
+            "optional": true,
+            "description": "Which month of the year event takes place. 1,2,3,..12. Negative numbers from end of year"
+          }
+        }
+      },
+      {
         "id": "CalendarEvent",
         "type": "object",
         "description": "A calendar event. An event belongs to a single Calendar",
@@ -78,6 +126,11 @@
             "description": "The url of the event",
             "type": "string",
             "optional": true
+          },
+          "recurrence": {
+            "$ref": "RecurrencePattern",
+            "optional": true,
+            "description": "How this event reoccurs."
           }
         }
       },
@@ -134,6 +187,11 @@
             "description": "The url of the event",
             "type": "string",
             "optional": true
+          },
+          "recurrence": {
+            "$ref": "RecurrencePattern",
+            "optional": true,
+            "description": "How this event reoccurs."
           }
         }
       },
@@ -350,6 +408,11 @@
                 "description": "The url of the event",
                 "type": "string",
                 "optional": true
+              },
+              "recurrence": {
+                "$ref": "RecurrencePattern",
+                "optional": true,
+                "description": "How this event reoccurs."
               }
             }
           }

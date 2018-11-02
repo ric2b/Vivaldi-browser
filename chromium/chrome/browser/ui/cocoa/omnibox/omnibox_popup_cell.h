@@ -28,13 +28,10 @@ class OmniboxPopupViewMac;
 
 // Common icon that shows next to most rows in the list.
 @property(readonly, retain, nonatomic) NSImage* image;
-@property(retain, nonatomic) NSImage* incognitoImage;
 
 // Uncommon icon that only shows on answer rows (e.g. weather).
 @property(readonly, retain, nonatomic) NSImage* answerImage;
 
-// The offset at which the tail suggestion contents should be displayed.
-@property(readonly, nonatomic) CGFloat contentsOffset;
 @property(readonly, nonatomic) BOOL isContentsRTL;
 
 // Is this suggestion an answer or calculator result.
@@ -43,7 +40,6 @@ class OmniboxPopupViewMac;
 @property(readonly, nonatomic) int maxLines;
 
 - (instancetype)initWithMatch:(const AutocompleteMatch&)match
-               contentsOffset:(CGFloat)contentsOffset
                         image:(NSImage*)image
                   answerImage:(NSImage*)answerImage
                  forDarkTheme:(BOOL)isDarkTheme;

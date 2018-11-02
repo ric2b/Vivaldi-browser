@@ -58,12 +58,8 @@ namespace blink {
 
 Node* V8GCController::OpaqueRootForGC(v8::Isolate*, Node* node) {
   DCHECK(node);
-  if (node->isConnected()) {
-    Document& document = node->GetDocument();
-    if (HTMLImportsController* controller = document.ImportsController())
-      return controller->Master();
-    return &document;
-  }
+  if (node->isConnected())
+    return &node->GetDocument().MasterDocument();
 
   if (node->IsAttributeNode()) {
     Node* owner_element = ToAttr(node)->ownerElement();
@@ -298,6 +294,7 @@ void VisitWeakHandlesForMinorGC(v8::Isolate* isolate) {
 void V8GCController::GcPrologue(v8::Isolate* isolate,
                                 v8::GCType type,
                                 v8::GCCallbackFlags flags) {
+  RUNTIME_CALL_TIMER_SCOPE(isolate, RuntimeCallStats::CounterId::kGcPrologue);
   if (IsMainThread())
     ScriptForbiddenScope::Enter();
 
@@ -363,6 +360,7 @@ void UpdateCollectedPhantomHandles(v8::Isolate* isolate) {
 void V8GCController::GcEpilogue(v8::Isolate* isolate,
                                 v8::GCType type,
                                 v8::GCCallbackFlags flags) {
+  RUNTIME_CALL_TIMER_SCOPE(isolate, RuntimeCallStats::CounterId::kGcEpilogue);
   UpdateCollectedPhantomHandles(isolate);
   switch (type) {
     case v8::kGCTypeScavenge:
@@ -465,7 +463,7 @@ void V8GCController::CollectGarbage(v8::Isolate* isolate, bool only_minor_gc) {
   builder.Append(only_minor_gc ? "true" : "false");
   builder.Append(")");
   V8ScriptRunner::CompileAndRunInternalScript(
-      V8String(isolate, builder.ToString()), isolate);
+      script_state.Get(), V8String(isolate, builder.ToString()), isolate);
   script_state->DisposePerContextData();
 }
 

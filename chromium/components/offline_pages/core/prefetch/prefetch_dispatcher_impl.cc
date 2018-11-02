@@ -13,14 +13,27 @@
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/offline_pages/core/offline_event_logger.h"
-#include "components/offline_pages/core/offline_page_feature.h"
 #include "components/offline_pages/core/prefetch/add_unique_urls_task.h"
+#include "components/offline_pages/core/prefetch/download_archives_task.h"
+#include "components/offline_pages/core/prefetch/download_cleanup_task.h"
+#include "components/offline_pages/core/prefetch/download_completed_task.h"
+#include "components/offline_pages/core/prefetch/generate_page_bundle_reconcile_task.h"
 #include "components/offline_pages/core/prefetch/generate_page_bundle_task.h"
 #include "components/offline_pages/core/prefetch/get_operation_task.h"
+#include "components/offline_pages/core/prefetch/import_archives_task.h"
+#include "components/offline_pages/core/prefetch/import_completed_task.h"
+#include "components/offline_pages/core/prefetch/mark_operation_done_task.h"
+#include "components/offline_pages/core/prefetch/metrics_finalization_task.h"
+#include "components/offline_pages/core/prefetch/page_bundle_update_task.h"
+#include "components/offline_pages/core/prefetch/prefetch_background_task_handler.h"
+#include "components/offline_pages/core/prefetch/prefetch_configuration.h"
 #include "components/offline_pages/core/prefetch/prefetch_gcm_handler.h"
+#include "components/offline_pages/core/prefetch/prefetch_importer.h"
 #include "components/offline_pages/core/prefetch/prefetch_network_request_factory.h"
 #include "components/offline_pages/core/prefetch/prefetch_service.h"
 #include "components/offline_pages/core/prefetch/prefetch_types.h"
+#include "components/offline_pages/core/prefetch/sent_get_operation_cleanup_task.h"
+#include "components/offline_pages/core/prefetch/stale_entry_finalizer_task.h"
 #include "components/offline_pages/core/prefetch/suggested_articles_observer.h"
 #include "components/offline_pages/core/task.h"
 #include "url/gurl.h"
@@ -34,7 +47,8 @@ void DeleteBackgroundTaskHelper(
 }
 }  // namespace
 
-PrefetchDispatcherImpl::PrefetchDispatcherImpl() : weak_factory_(this) {}
+PrefetchDispatcherImpl::PrefetchDispatcherImpl()
+    : task_queue_(this), weak_factory_(this) {}
 
 PrefetchDispatcherImpl::~PrefetchDispatcherImpl() = default;
 
@@ -43,24 +57,43 @@ void PrefetchDispatcherImpl::SetService(PrefetchService* service) {
   service_ = service;
 }
 
+void PrefetchDispatcherImpl::SchedulePipelineProcessing() {
+  needs_pipeline_processing_ = true;
+  service_->GetLogger()->RecordActivity(
+      "Dispatcher: Scheduled more pipeline processing.");
+}
+
+void PrefetchDispatcherImpl::EnsureTaskScheduled() {
+  if (background_task_) {
+    background_task_->SetNeedsReschedule(true /* reschedule */,
+                                         false /* backoff */);
+  } else {
+    service_->GetPrefetchBackgroundTaskHandler()->EnsureTaskScheduled();
+  }
+}
+
 void PrefetchDispatcherImpl::AddCandidatePrefetchURLs(
     const std::string& name_space,
     const std::vector<PrefetchURL>& prefetch_urls) {
-  if (!IsPrefetchingOfflinePagesEnabled())
+  if (!service_->GetPrefetchConfiguration()->IsPrefetchingEnabled())
     return;
+
+  service_->GetLogger()->RecordActivity("Dispatcher: Received " +
+                                        std::to_string(prefetch_urls.size()) +
+                                        " suggested URLs.");
 
   PrefetchStore* prefetch_store = service_->GetPrefetchStore();
   std::unique_ptr<Task> add_task = base::MakeUnique<AddUniqueUrlsTask>(
-      prefetch_store, name_space, prefetch_urls);
+      this, prefetch_store, name_space, prefetch_urls);
   task_queue_.AddTask(std::move(add_task));
 
   // TODO(dewittj): Remove when we have proper scheduling.
-  BeginBackgroundTask(nullptr);
+  EnsureTaskScheduled();
 }
 
 void PrefetchDispatcherImpl::RemoveAllUnprocessedPrefetchURLs(
     const std::string& name_space) {
-  if (!IsPrefetchingOfflinePagesEnabled())
+  if (!service_->GetPrefetchConfiguration()->IsPrefetchingEnabled())
     return;
 
   NOTIMPLEMENTED();
@@ -68,7 +101,7 @@ void PrefetchDispatcherImpl::RemoveAllUnprocessedPrefetchURLs(
 
 void PrefetchDispatcherImpl::RemovePrefetchURLsByClientId(
     const ClientId& client_id) {
-  if (!IsPrefetchingOfflinePagesEnabled())
+  if (!service_->GetPrefetchConfiguration()->IsPrefetchingEnabled())
     return;
 
   NOTIMPLEMENTED();
@@ -76,42 +109,104 @@ void PrefetchDispatcherImpl::RemovePrefetchURLsByClientId(
 
 void PrefetchDispatcherImpl::BeginBackgroundTask(
     std::unique_ptr<ScopedBackgroundTask> background_task) {
-  if (!IsPrefetchingOfflinePagesEnabled())
+  if (!service_->GetPrefetchConfiguration()->IsPrefetchingEnabled())
     return;
+  service_->GetLogger()->RecordActivity(
+      "Dispatcher: Beginning background task.");
 
   background_task_ = std::move(background_task);
 
-  // TODO(dewittj): Remove this when the task can get the suggestions from the
-  // SQL store directly.
-  std::vector<PrefetchURL> prefetch_urls;
-  service_->GetSuggestedArticlesObserver()->GetCurrentSuggestions(
-      &prefetch_urls);
+  QueueReconcileTasks();
+  QueueActionTasks();
+}
+
+void PrefetchDispatcherImpl::QueueReconcileTasks() {
+  service_->GetLogger()->RecordActivity("Dispatcher: Adding reconcile tasks.");
+  // Note: For optimal results StaleEntryFinalizerTask should be executed before
+  // other reconciler tasks that deal with external systems so that entries
+  // finalized by it will promptly effect any external processing they relate
+  // to.
+  task_queue_.AddTask(base::MakeUnique<StaleEntryFinalizerTask>(
+      this, service_->GetPrefetchStore()));
+
+  task_queue_.AddTask(base::MakeUnique<GeneratePageBundleReconcileTask>(
+      service_->GetPrefetchStore(),
+      service_->GetPrefetchNetworkRequestFactory()));
+
+  task_queue_.AddTask(base::MakeUnique<SentGetOperationCleanupTask>(
+      service_->GetPrefetchStore(),
+      service_->GetPrefetchNetworkRequestFactory()));
+
+  // This task should be last, because it is least important for correct
+  // operation of the system, and because any reconciliation tasks might
+  // generate more entries in the FINISHED state that the finalization task
+  // could pick up.
+  task_queue_.AddTask(
+      base::MakeUnique<MetricsFinalizationTask>(service_->GetPrefetchStore()));
+}
+
+void PrefetchDispatcherImpl::QueueActionTasks() {
+  service_->GetLogger()->RecordActivity("Dispatcher: Adding action tasks.");
+
+  std::unique_ptr<Task> download_archives_task =
+      base::MakeUnique<DownloadArchivesTask>(service_->GetPrefetchStore(),
+                                             service_->GetPrefetchDownloader());
+  task_queue_.AddTask(std::move(download_archives_task));
+
+  std::unique_ptr<Task> get_operation_task = base::MakeUnique<GetOperationTask>(
+      service_->GetPrefetchStore(),
+      service_->GetPrefetchNetworkRequestFactory(),
+      base::Bind(&PrefetchDispatcherImpl::DidGetOperationRequest,
+                 weak_factory_.GetWeakPtr()));
+  task_queue_.AddTask(std::move(get_operation_task));
 
   std::unique_ptr<Task> generate_page_bundle_task =
       base::MakeUnique<GeneratePageBundleTask>(
-          prefetch_urls, service_->GetPrefetchGCMHandler(),
+          service_->GetPrefetchStore(), service_->GetPrefetchGCMHandler(),
           service_->GetPrefetchNetworkRequestFactory(),
-          base::Bind(&PrefetchDispatcherImpl::DidPrefetchRequest,
-                     weak_factory_.GetWeakPtr(), "GeneratePageBundleRequest"));
+          base::Bind(&PrefetchDispatcherImpl::DidGenerateBundleRequest,
+                     weak_factory_.GetWeakPtr()));
   task_queue_.AddTask(std::move(generate_page_bundle_task));
+
+  std::unique_ptr<Task> import_archives_task =
+      base::MakeUnique<ImportArchivesTask>(service_->GetPrefetchStore(),
+                                           service_->GetPrefetchImporter());
+  task_queue_.AddTask(std::move(import_archives_task));
 }
 
 void PrefetchDispatcherImpl::StopBackgroundTask() {
-  if (!IsPrefetchingOfflinePagesEnabled())
+  if (!service_->GetPrefetchConfiguration()->IsPrefetchingEnabled())
     return;
+
+  service_->GetLogger()->RecordActivity(
+      "Dispatcher: Stopping background task.");
 
   DisposeTask();
 }
 
 void PrefetchDispatcherImpl::RequestFinishBackgroundTaskForTest() {
-  if (!IsPrefetchingOfflinePagesEnabled())
+  if (!service_->GetPrefetchConfiguration()->IsPrefetchingEnabled())
     return;
 
   DisposeTask();
 }
 
+void PrefetchDispatcherImpl::OnTaskQueueIsIdle() {
+  if (needs_pipeline_processing_) {
+    needs_pipeline_processing_ = false;
+    QueueActionTasks();
+  } else {
+    PrefetchNetworkRequestFactory* request_factory =
+        service_->GetPrefetchNetworkRequestFactory();
+    if (!request_factory->HasOutstandingRequests())
+      DisposeTask();
+  }
+}
+
 void PrefetchDispatcherImpl::DisposeTask() {
-  DCHECK(background_task_);
+  if (!background_task_)
+    return;
+
   // Delay the deletion till the caller finishes.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(&DeleteBackgroundTaskHelper,
@@ -120,16 +215,77 @@ void PrefetchDispatcherImpl::DisposeTask() {
 
 void PrefetchDispatcherImpl::GCMOperationCompletedMessageReceived(
     const std::string& operation_name) {
-  if (!IsPrefetchingOfflinePagesEnabled())
+  if (!service_->GetPrefetchConfiguration()->IsPrefetchingEnabled())
     return;
 
-  task_queue_.AddTask(base::MakeUnique<GetOperationTask>(
-      operation_name, service_->GetPrefetchNetworkRequestFactory(),
-      base::Bind(&PrefetchDispatcherImpl::DidPrefetchRequest,
-                 weak_factory_.GetWeakPtr(), "GetOperation")));
+  service_->GetLogger()->RecordActivity("Dispatcher: Received GCM message.");
+
+  PrefetchStore* prefetch_store = service_->GetPrefetchStore();
+  task_queue_.AddTask(base::MakeUnique<MarkOperationDoneTask>(
+      this, prefetch_store, operation_name));
 }
 
-void PrefetchDispatcherImpl::DidPrefetchRequest(
+void PrefetchDispatcherImpl::DidGenerateBundleRequest(
+    PrefetchRequestStatus status,
+    const std::string& operation_name,
+    const std::vector<RenderPageInfo>& pages) {
+  PrefetchStore* prefetch_store = service_->GetPrefetchStore();
+  task_queue_.AddTask(base::MakeUnique<PageBundleUpdateTask>(
+      prefetch_store, this, operation_name, pages));
+  LogRequestResult("GeneratePageBundleRequest", status, operation_name, pages);
+}
+
+void PrefetchDispatcherImpl::DidGetOperationRequest(
+    PrefetchRequestStatus status,
+    const std::string& operation_name,
+    const std::vector<RenderPageInfo>& pages) {
+  PrefetchStore* prefetch_store = service_->GetPrefetchStore();
+  task_queue_.AddTask(base::MakeUnique<PageBundleUpdateTask>(
+      prefetch_store, this, operation_name, pages));
+  LogRequestResult("GetOperationRequest", status, operation_name, pages);
+}
+
+void PrefetchDispatcherImpl::CleanupDownloads(
+    const std::set<std::string>& outstanding_download_ids,
+    const std::map<std::string, std::pair<base::FilePath, int64_t>>&
+        success_downloads) {
+  task_queue_.AddTask(base::MakeUnique<DownloadCleanupTask>(
+      service_->GetPrefetchDispatcher(), service_->GetPrefetchStore(),
+      outstanding_download_ids, success_downloads));
+}
+
+void PrefetchDispatcherImpl::DownloadCompleted(
+    const PrefetchDownloadResult& download_result) {
+  if (!service_->GetPrefetchConfiguration()->IsPrefetchingEnabled())
+    return;
+
+  service_->GetLogger()->RecordActivity(
+      "Download " + download_result.download_id +
+      (download_result.success ? "succeeded" : "failed"));
+  if (download_result.success) {
+    service_->GetLogger()->RecordActivity(
+        "Download size: " + std::to_string(download_result.file_size));
+  }
+
+  task_queue_.AddTask(base::MakeUnique<DownloadCompletedTask>(
+      service_->GetPrefetchDispatcher(), service_->GetPrefetchStore(),
+      download_result));
+}
+
+void PrefetchDispatcherImpl::ImportCompleted(int64_t offline_id, bool success) {
+  if (!service_->GetPrefetchConfiguration()->IsPrefetchingEnabled())
+    return;
+
+  service_->GetLogger()->RecordActivity("Importing archive " +
+                                        std::to_string(offline_id) +
+                                        (success ? "succeeded" : "failed"));
+
+  task_queue_.AddTask(base::MakeUnique<ImportCompletedTask>(
+      service_->GetPrefetchDispatcher(), service_->GetPrefetchStore(),
+      offline_id, success));
+}
+
+void PrefetchDispatcherImpl::LogRequestResult(
     const std::string& request_name_for_logging,
     PrefetchRequestStatus status,
     const std::string& operation_name,

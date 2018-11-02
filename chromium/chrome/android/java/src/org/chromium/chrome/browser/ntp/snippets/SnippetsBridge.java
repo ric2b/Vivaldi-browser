@@ -80,22 +80,10 @@ public class SnippetsBridge implements SuggestionsSource {
         nativeRemoteSuggestionsSchedulerOnPersistentSchedulerWakeUp();
     }
 
-    public static void setRemoteSuggestionsEnabled(boolean enabled) {
-        nativeSetRemoteSuggestionsEnabled(enabled);
-    }
-
     @Override
     public boolean areRemoteSuggestionsEnabled() {
         assert mNativeSnippetsBridge != 0;
         return nativeAreRemoteSuggestionsEnabled(mNativeSnippetsBridge);
-    }
-
-    public static boolean areRemoteSuggestionsManaged() {
-        return nativeAreRemoteSuggestionsManaged();
-    }
-
-    public static boolean areRemoteSuggestionsManagedByCustodian() {
-        return nativeAreRemoteSuggestionsManagedByCustodian();
     }
 
     public static void setContentSuggestionsNotificationsEnabled(boolean enabled) {
@@ -156,6 +144,14 @@ public class SnippetsBridge implements SuggestionsSource {
     public void fetchContextualSuggestions(String url, Callback<List<SnippetArticle>> callback) {
         assert mNativeSnippetsBridge != 0;
         nativeFetchContextualSuggestions(mNativeSnippetsBridge, url, callback);
+    }
+
+    @Override
+    public void fetchContextualSuggestionImage(
+            SnippetArticle suggestion, Callback<Bitmap> callback) {
+        assert mNativeSnippetsBridge != 0;
+        nativeFetchContextualSuggestionImage(mNativeSnippetsBridge, suggestion.mCategory,
+                suggestion.mIdWithinCategory, callback);
     }
 
     @Override
@@ -266,10 +262,7 @@ public class SnippetsBridge implements SuggestionsSource {
     private native void nativeReloadSuggestions(long nativeNTPSnippetsBridge);
     private static native void nativeRemoteSuggestionsSchedulerOnPersistentSchedulerWakeUp();
     private static native void nativeRemoteSuggestionsSchedulerOnBrowserUpgraded();
-    private static native void nativeSetRemoteSuggestionsEnabled(boolean enabled);
     private native boolean nativeAreRemoteSuggestionsEnabled(long nativeNTPSnippetsBridge);
-    private static native boolean nativeAreRemoteSuggestionsManaged();
-    private static native boolean nativeAreRemoteSuggestionsManagedByCustodian();
     private static native void nativeSetContentSuggestionsNotificationsEnabled(boolean enabled);
     private static native boolean nativeAreContentSuggestionsNotificationsEnabled();
     private native int[] nativeGetCategories(long nativeNTPSnippetsBridge);
@@ -287,6 +280,8 @@ public class SnippetsBridge implements SuggestionsSource {
             String[] knownSuggestions, Callback<List<SnippetArticle>> callback);
     private native void nativeFetchContextualSuggestions(
             long nativeNTPSnippetsBridge, String url, Callback<List<SnippetArticle>> callback);
+    private native void nativeFetchContextualSuggestionImage(long nativeNTPSnippetsBridge,
+            int category, String idWithinCategory, Callback<Bitmap> callback);
     private native void nativeDismissSuggestion(long nativeNTPSnippetsBridge, String url,
             int globalPosition, int category, int positionInCategory, String idWithinCategory);
     private native void nativeDismissCategory(long nativeNTPSnippetsBridge, int category);

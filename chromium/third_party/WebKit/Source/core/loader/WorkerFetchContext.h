@@ -26,9 +26,7 @@ CORE_EXPORT void ProvideWorkerFetchContextToWorker(
 
 // The WorkerFetchContext is a FetchContext for workers (dedicated, shared and
 // service workers) and threaded worklets (animation and audio worklets). This
-// class is used only when off-main-thread-fetch is enabled, and is still under
-// development.
-// TODO(horo): Implement all methods of FetchContext. crbug.com/443374
+// class is used only when off-main-thread-fetch is enabled.
 class WorkerFetchContext final : public BaseFetchContext {
  public:
   static WorkerFetchContext* Create(WorkerOrWorkletGlobalScope&);
@@ -37,10 +35,10 @@ class WorkerFetchContext final : public BaseFetchContext {
   RefPtr<WebTaskRunner> GetTaskRunner() { return loading_task_runner_; }
 
   // BaseFetchContext implementation:
-  KURL GetFirstPartyForCookies() const override;
+  KURL GetSiteForCookies() const override;
   bool AllowScriptFromSource(const KURL&) const override;
   SubresourceFilter* GetSubresourceFilter() const override;
-  bool ShouldBlockRequestByInspector(const ResourceRequest&) const override;
+  bool ShouldBlockRequestByInspector(const KURL&) const override;
   void DispatchDidBlockRequest(const ResourceRequest&,
                                const FetchInitiatorInfo&,
                                ResourceRequestBlockedReason) const override;
@@ -49,7 +47,9 @@ class WorkerFetchContext final : public BaseFetchContext {
   void CountUsage(WebFeature) const override;
   void CountDeprecation(WebFeature) const override;
   bool ShouldBlockFetchByMixedContentCheck(
-      const ResourceRequest&,
+      WebURLRequest::RequestContext,
+      WebURLRequest::FrameType,
+      ResourceRequest::RedirectStatus,
       const KURL&,
       SecurityViolationReportingPolicy) const override;
   bool ShouldBlockFetchAsCredentialedSubresource(const ResourceRequest&,
@@ -95,12 +95,9 @@ class WorkerFetchContext final : public BaseFetchContext {
                        int64_t encodedDataLength,
                        bool isInternalRequest) override;
   void AddResourceTiming(const ResourceTimingInfo&) override;
-  void PopulateResourceRequest(const KURL&,
-                               Resource::Type,
+  void PopulateResourceRequest(Resource::Type,
                                const ClientHintsPreferences&,
                                const FetchParameters::ResourceWidth&,
-                               const ResourceLoaderOptions&,
-                               SecurityViolationReportingPolicy,
                                ResourceRequest&) override;
   void SetFirstPartyCookieAndRequestorOrigin(ResourceRequest&) override;
 

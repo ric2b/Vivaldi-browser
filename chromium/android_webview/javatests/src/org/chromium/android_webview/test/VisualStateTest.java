@@ -4,13 +4,20 @@
 
 package org.chromium.android_webview.test;
 
+import static org.chromium.android_webview.test.AwActivityTestRule.WAIT_TIMEOUT_MS;
 import static org.chromium.base.test.util.ScalableTimeout.scaleTimeout;
 
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Rect;
+import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.SmallTest;
 import android.util.Base64;
+
+import org.junit.Assert;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.runner.RunWith;
 
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwContents.VisualStateCallback;
@@ -31,7 +38,6 @@ import java.io.ByteArrayInputStream;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -39,7 +45,11 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * Visual state related tests.
  */
-public class VisualStateTest extends AwTestBase {
+@RunWith(AwJUnit4ClassRunner.class)
+public class VisualStateTest {
+    @Rule
+    public AwActivityTestRule mActivityTestRule = new AwActivityTestRule();
+
     private static final String WAIT_FOR_JS_TEST_URL =
             "file:///android_asset/visual_state_waits_for_js_test.html";
     private static final String WAIT_FOR_JS_DETACHED_TEST_URL =
@@ -98,42 +108,37 @@ public class VisualStateTest extends AwTestBase {
         @Override
         public InputStream getData() {
             final DelayedInputStream stream = (DelayedInputStream) super.getData();
-            ThreadUtils.postOnUiThreadDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    stream.allowReads();
-                }
-            }, IMAGE_LOADING_DELAY_MS);
+            ThreadUtils.postOnUiThreadDelayed(() -> stream.allowReads(), IMAGE_LOADING_DELAY_MS);
             return stream;
         }
     }
 
+    @Test
     @Feature({"AndroidWebView"})
     @SmallTest
     public void testVisualStateCallbackIsReceived() throws Throwable {
-        AwTestContainerView testContainer = createAwTestContainerViewOnMainSync(mContentsClient);
+        AwTestContainerView testContainer =
+                mActivityTestRule.createAwTestContainerViewOnMainSync(mContentsClient);
         final AwContents awContents = testContainer.getAwContents();
-        loadDataSync(awContents, mContentsClient.getOnPageFinishedHelper(),
+        mActivityTestRule.loadDataSync(awContents, mContentsClient.getOnPageFinishedHelper(),
                 CommonResources.ABOUT_HTML, "text/html", false);
         final CallbackHelper ch = new CallbackHelper();
         final int chCount = ch.getCallCount();
-        runTestOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                final long requestId = 0x123456789abcdef0L; // ensure requestId is not truncated.
-                awContents.insertVisualStateCallback(requestId,
-                        new AwContents.VisualStateCallback() {
-                            @Override
-                            public void onComplete(long id) {
-                                assertEquals(requestId, id);
-                                ch.notifyCalled();
-                            }
-                        });
-            }
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+            final long requestId = 0x123456789abcdef0L; // ensure requestId is not truncated.
+            awContents.insertVisualStateCallback(requestId,
+                    new VisualStateCallback() {
+                        @Override
+                        public void onComplete(long id) {
+                            Assert.assertEquals(requestId, id);
+                            ch.notifyCalled();
+                        }
+                    });
         });
         ch.waitForCallback(chCount);
     }
 
+    @Test
     @Feature({"AndroidWebView"})
     @SmallTest
     public void testVisualStateCallbackWaitsForContentsToBeOnScreen() throws Throwable {
@@ -146,7 +151,7 @@ public class VisualStateTest extends AwTestBase {
 
         final AtomicReference<AwContents> awContentsRef = new AtomicReference<>();
         final AwTestContainerView testView =
-                createAwTestContainerViewOnMainSync(new TestAwContentsClient() {
+                mActivityTestRule.createAwTestContainerViewOnMainSync(new TestAwContentsClient() {
                     @Override
                     public void onPageFinished(String url) {
                         if (bluePageUrl.getUrl().equals(url)) {
@@ -155,11 +160,12 @@ public class VisualStateTest extends AwTestBase {
                                     new VisualStateCallback() {
                                         @Override
                                         public void onComplete(long id) {
-                                            assertEquals(requestId, id);
+                                            Assert.assertEquals(requestId, id);
                                             Bitmap blueScreenshot = GraphicsTestUtils
                                                     .drawAwContents(
                                                             awContentsRef.get(), 1, 1);
-                                            assertEquals(Color.BLUE, blueScreenshot.getPixel(0, 0));
+                                            Assert.assertEquals(
+                                                    Color.BLUE, blueScreenshot.getPixel(0, 0));
                                             testFinishedSignal.countDown();
                                         }
                                     });
@@ -169,25 +175,24 @@ public class VisualStateTest extends AwTestBase {
         final AwContents awContents = testView.getAwContents();
         awContentsRef.set(awContents);
 
-        runTestOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                awContents.setBackgroundColor(Color.RED);
-                awContents.loadUrl(bluePageUrl);
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+            awContents.setBackgroundColor(Color.RED);
+            awContents.loadUrl(bluePageUrl);
 
-                // We have just loaded the blue page, but the graphics pipeline is asynchronous
-                // so at this point the WebView still draws red, ie. the View background color.
-                // Only when the flush callback is received will we know for certain that the
-                // blue page contents are on screen.
-                Bitmap redScreenshot = GraphicsTestUtils.drawAwContents(
-                        awContentsRef.get(), 1, 1);
-                assertEquals(Color.RED, redScreenshot.getPixel(0, 0));
-            }
+            // We have just loaded the blue page, but the graphics pipeline is asynchronous
+            // so at this point the WebView still draws red, ie. the View background color.
+            // Only when the flush callback is received will we know for certain that the
+            // blue page contents are on screen.
+            Bitmap redScreenshot = GraphicsTestUtils.drawAwContents(
+                    awContentsRef.get(), 1, 1);
+            Assert.assertEquals(Color.RED, redScreenshot.getPixel(0, 0));
         });
 
-        assertTrue(testFinishedSignal.await(AwTestBase.WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+        Assert.assertTrue(
+                testFinishedSignal.await(AwTestBase.WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
     }
 
+    @Test
     @Feature({"AndroidWebView"})
     @SmallTest
     public void testOnPageCommitVisible() throws Throwable {
@@ -200,12 +205,12 @@ public class VisualStateTest extends AwTestBase {
 
         final AtomicReference<AwContents> awContentsRef = new AtomicReference<>();
         final AwTestContainerView testView =
-                createAwTestContainerViewOnMainSync(new TestAwContentsClient() {
+                mActivityTestRule.createAwTestContainerViewOnMainSync(new TestAwContentsClient() {
                     @Override
                     public void onPageCommitVisible(String url) {
                         Bitmap bitmap =
                                 GraphicsTestUtils.drawAwContents(awContentsRef.get(), 256, 256);
-                        assertEquals(Color.GREEN, bitmap.getPixel(128, 128));
+                        Assert.assertEquals(Color.GREEN, bitmap.getPixel(128, 128));
                         pageCommitCallbackOccurred.countDown();
                     }
 
@@ -231,7 +236,7 @@ public class VisualStateTest extends AwTestBase {
                                     public void onComplete(long id) {
                                         Bitmap bitmap = GraphicsTestUtils.drawAwContents(
                                                 awContentsRef.get(), 256, 256);
-                                        assertEquals(Color.BLUE, bitmap.getPixel(128, 128));
+                                        Assert.assertEquals(Color.BLUE, bitmap.getPixel(128, 128));
                                         testFinishedSignal.countDown();
                                     }
                                 });
@@ -241,28 +246,27 @@ public class VisualStateTest extends AwTestBase {
         final AwContents awContents = testView.getAwContents();
         awContentsRef.set(awContents);
 
-        runTestOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                awContents.setBackgroundColor(Color.RED);
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+            awContents.setBackgroundColor(Color.RED);
 
-                awContents.loadUrl(new LoadUrlParams(ON_PAGE_COMMIT_VISIBLE_TEST_URL));
+            awContents.loadUrl(new LoadUrlParams(ON_PAGE_COMMIT_VISIBLE_TEST_URL));
 
-                // We have just loaded the blue page, but the graphics pipeline is asynchronous
-                // so at this point the WebView still draws red, ie. the View background color.
-                // Only when the flush callback is received will we know for certain that the
-                // blue page contents are on screen.
-                Bitmap bitmap = GraphicsTestUtils.drawAwContents(
-                        awContentsRef.get(), 256, 256);
-                assertEquals(Color.RED, bitmap.getPixel(128, 128));
-            }
+            // We have just loaded the blue page, but the graphics pipeline is asynchronous
+            // so at this point the WebView still draws red, ie. the View background color.
+            // Only when the flush callback is received will we know for certain that the
+            // blue page contents are on screen.
+            Bitmap bitmap = GraphicsTestUtils.drawAwContents(
+                    awContentsRef.get(), 256, 256);
+            Assert.assertEquals(Color.RED, bitmap.getPixel(128, 128));
         });
 
-        assertTrue(pageCommitCallbackOccurred.await(
+        Assert.assertTrue(pageCommitCallbackOccurred.await(
                 AwTestBase.WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
-        assertTrue(testFinishedSignal.await(AwTestBase.WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+        Assert.assertTrue(
+                testFinishedSignal.await(AwTestBase.WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
     }
 
+    @Test
     @Feature({"AndroidWebView"})
     @SmallTest
     public void testVisualStateCallbackWaitsForJs() throws Throwable {
@@ -284,55 +288,49 @@ public class VisualStateTest extends AwTestBase {
                             public void onComplete(long id) {
                                 Bitmap blueScreenshot = GraphicsTestUtils.drawAwContents(
                                         awContentsRef.get(), 100, 100);
-                                assertEquals(Color.BLUE, blueScreenshot.getPixel(50, 50));
+                                Assert.assertEquals(Color.BLUE, blueScreenshot.getPixel(50, 50));
                                 readyToUpdateColor.countDown();
                             }
                         });
             }
         };
         final AwTestContainerView testView =
-                createAwTestContainerViewOnMainSync(awContentsClient);
+                mActivityTestRule.createAwTestContainerViewOnMainSync(awContentsClient);
         final AwContents awContents = testView.getAwContents();
         awContentsRef.set(awContents);
         final ContentViewCore contentViewCore = testView.getContentViewCore();
-        enableJavaScriptOnUiThread(awContents);
+        mActivityTestRule.enableJavaScriptOnUiThread(awContents);
 
         // JS will notify this observer once it has changed the background color of the page.
         final JavascriptEventObserver jsObserver = new JavascriptEventObserver();
-        runTestOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                jsObserver.register(contentViewCore, "jsObserver");
-            }
-        });
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(
+                () -> jsObserver.register(contentViewCore, "jsObserver"));
 
-        loadUrlSync(awContents,
-                awContentsClient.getOnPageFinishedHelper(), WAIT_FOR_JS_TEST_URL);
+        mActivityTestRule.loadUrlSync(
+                awContents, awContentsClient.getOnPageFinishedHelper(), WAIT_FOR_JS_TEST_URL);
 
-        assertTrue(readyToUpdateColor.await(AwTestBase.WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+        Assert.assertTrue(
+                readyToUpdateColor.await(AwTestBase.WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
         DOMUtils.clickNode(contentViewCore, UPDATE_COLOR_CONTROL_ID);
-        assertTrue(jsObserver.waitForEvent(WAIT_TIMEOUT_MS));
+        Assert.assertTrue(jsObserver.waitForEvent(WAIT_TIMEOUT_MS));
 
-        runTestOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                awContents.insertVisualStateCallback(20,
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(
+                () -> awContents.insertVisualStateCallback(20,
                         new VisualStateCallback() {
                             @Override
                             public void onComplete(long id) {
                                 Bitmap redScreenshot = GraphicsTestUtils.drawAwContents(
                                         awContents, 100, 100);
-                                assertEquals(Color.RED, redScreenshot.getPixel(50, 50));
+                                Assert.assertEquals(Color.RED, redScreenshot.getPixel(50, 50));
                                 testFinishedSignal.countDown();
                             }
-                        });
+                        }));
 
-            }
-        });
-
-        assertTrue(testFinishedSignal.await(AwTestBase.WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+        Assert.assertTrue(
+                testFinishedSignal.await(AwTestBase.WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
     }
 
+    @Test
     @Feature({"AndroidWebView"})
     @SmallTest
     public void testVisualStateCallbackFromJsDuringFullscreenTransitions() throws Throwable {
@@ -345,80 +343,75 @@ public class VisualStateTest extends AwTestBase {
 
         final AtomicReference<AwContents> awContentsRef = new AtomicReference<>();
         final FullScreenVideoTestAwContentsClient awContentsClient =
-                new FullScreenVideoTestAwContentsClient(
-                        getActivity(), isHardwareAcceleratedTest()) {
-            @Override
-            public void onPageFinished(String url) {
-                super.onPageFinished(url);
-                awContentsRef.get().insertVisualStateCallback(10, new VisualStateCallback() {
+                new FullScreenVideoTestAwContentsClient(mActivityTestRule.getActivity(),
+                        mActivityTestRule.isHardwareAcceleratedTest()) {
                     @Override
-                    public void onComplete(long id) {
-                        Bitmap blueScreenshot =
-                                GraphicsTestUtils.drawAwContents(awContentsRef.get(), 100, 100);
-                        assertEquals(Color.BLUE, blueScreenshot.getPixel(50, 50));
-                        readyToEnterFullscreenSignal.countDown();
+                    public void onPageFinished(String url) {
+                        super.onPageFinished(url);
+                        awContentsRef.get().insertVisualStateCallback(
+                                10, new VisualStateCallback() {
+                                    @Override
+                                    public void onComplete(long id) {
+                                        Bitmap blueScreenshot = GraphicsTestUtils.drawAwContents(
+                                                awContentsRef.get(), 100, 100);
+                                        Assert.assertEquals(
+                                                Color.BLUE, blueScreenshot.getPixel(50, 50));
+                                        readyToEnterFullscreenSignal.countDown();
+                                    }
+                                });
                     }
-                });
-            }
-        };
-        final AwTestContainerView testView = createAwTestContainerViewOnMainSync(awContentsClient);
+                };
+        final AwTestContainerView testView =
+                mActivityTestRule.createAwTestContainerViewOnMainSync(awContentsClient);
         final AwContents awContents = testView.getAwContents();
         awContentsRef.set(awContents);
         final ContentViewCore contentViewCore = testView.getContentViewCore();
-        enableJavaScriptOnUiThread(awContents);
+        mActivityTestRule.enableJavaScriptOnUiThread(awContents);
         awContents.getSettings().setFullscreenSupported(true);
 
         // JS will notify this observer once it has entered fullscreen.
         final JavascriptEventObserver jsObserver = new JavascriptEventObserver();
-        runTestOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                jsObserver.register(contentViewCore, "jsObserver");
-            }
-        });
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(
+                () -> jsObserver.register(contentViewCore, "jsObserver"));
 
-        loadUrlSync(awContents, awContentsClient.getOnPageFinishedHelper(), FULLSCREEN_TEST_URL);
+        mActivityTestRule.loadUrlSync(
+                awContents, awContentsClient.getOnPageFinishedHelper(), FULLSCREEN_TEST_URL);
 
-        assertTrue(readyToEnterFullscreenSignal.await(
+        Assert.assertTrue(readyToEnterFullscreenSignal.await(
                 AwTestBase.WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
         DOMUtils.clickNode(contentViewCore, ENTER_FULLSCREEN_CONTROL_ID);
-        assertTrue(jsObserver.waitForEvent(WAIT_TIMEOUT_MS));
+        Assert.assertTrue(jsObserver.waitForEvent(WAIT_TIMEOUT_MS));
 
-        runTestOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                awContents.insertVisualStateCallback(20, new VisualStateCallback() {
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(
+                () -> awContents.insertVisualStateCallback(20, new VisualStateCallback() {
                     @Override
                     public void onComplete(long id) {
                         // NOTE: We cannot use drawAwContents here because the web contents
                         // are rendered into the custom view while in fullscreen.
                         Bitmap redScreenshot = GraphicsTestUtils.drawView(
                                 awContentsClient.getCustomView(), 100, 100);
-                        assertEquals(Color.RED, redScreenshot.getPixel(50, 50));
+                        Assert.assertEquals(Color.RED, redScreenshot.getPixel(50, 50));
                         testFinishedSignal.countDown();
                     }
-                });
-            }
-        });
+                }));
 
-        assertTrue(testFinishedSignal.await(AwTestBase.WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+        Assert.assertTrue(
+                testFinishedSignal.await(AwTestBase.WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
     }
 
     private AwTestContainerView createDetachedTestContainerViewOnMainSync(
             final AwContentsClient awContentsClient) {
-        return ThreadUtils.runOnUiThreadBlockingNoException(new Callable<AwTestContainerView>() {
-            @Override
-            public AwTestContainerView call() {
-                AwTestContainerView detachedView =
-                        createDetachedAwTestContainerView(awContentsClient);
-                detachedView.setClipBounds(new Rect(0, 0, 100, 100));
-                detachedView.measure(100, 100);
-                detachedView.layout(0, 0, 100, 100);
-                return detachedView;
-            }
+        return ThreadUtils.runOnUiThreadBlockingNoException(() -> {
+            AwTestContainerView detachedView =
+                    mActivityTestRule.createDetachedAwTestContainerView(awContentsClient);
+            detachedView.setClipBounds(new Rect(0, 0, 100, 100));
+            detachedView.measure(100, 100);
+            detachedView.layout(0, 0, 100, 100);
+            return detachedView;
         });
     }
 
+    @Test
     @Feature({"AndroidWebView"})
     @SmallTest
     public void testVisualStateCallbackWhenContainerViewDetached() throws Throwable {
@@ -430,39 +423,33 @@ public class VisualStateTest extends AwTestBase {
         final AwContents awContents = testView.getAwContents();
         final ContentViewCore contentViewCore = testView.getContentViewCore();
 
-        enableJavaScriptOnUiThread(awContents);
+        mActivityTestRule.enableJavaScriptOnUiThread(awContents);
 
         // JS will notify this observer once it has changed the background color of the page.
         final Object pageChangeNotifier = new Object() {
             @SuppressFBWarnings("UMAC_UNCALLABLE_METHOD_OF_ANONYMOUS_CLASS")
             public void onPageChanged() {
-                ThreadUtils.postOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        awContents.insertVisualStateCallback(20, new VisualStateCallback() {
+                ThreadUtils.postOnUiThread(
+                        () -> awContents.insertVisualStateCallback(20, new VisualStateCallback() {
                             @Override
                             public void onComplete(long id) {
-                                Bitmap redScreenshot =
-                                        GraphicsTestUtils.drawAwContents(awContents, 100, 100);
-                                assertEquals(Color.RED, redScreenshot.getPixel(50, 50));
+                                Bitmap redScreenshot = GraphicsTestUtils.drawAwContents(awContents,
+                                        100, 100);
+                                Assert.assertEquals(Color.RED, redScreenshot.getPixel(50, 50));
                                 testFinishedSignal.countDown();
                             }
-                        });
-                    }
-                });
+                        }));
             }
         };
 
-        runTestOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                contentViewCore.addPossiblyUnsafeJavascriptInterface(
-                        pageChangeNotifier, "pageChangeNotifier", null);
-                awContents.loadUrl(WAIT_FOR_JS_DETACHED_TEST_URL);
-            }
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+            contentViewCore.addPossiblyUnsafeJavascriptInterface(
+                    pageChangeNotifier, "pageChangeNotifier", null);
+            awContents.loadUrl(WAIT_FOR_JS_DETACHED_TEST_URL);
         });
 
-        assertTrue(testFinishedSignal.await(AwTestBase.WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+        Assert.assertTrue(
+                testFinishedSignal.await(AwTestBase.WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
     }
 
     private static final LoadUrlParams createTestPageUrl(String backgroundColor) {

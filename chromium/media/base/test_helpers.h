@@ -30,6 +30,7 @@ class TimeDelta;
 namespace media {
 
 class AudioBuffer;
+class AudioBus;
 class DecoderBuffer;
 
 // Return a callback that expects to be run once.
@@ -145,6 +146,32 @@ scoped_refptr<AudioBuffer> MakeAudioBuffer(SampleFormat format,
                                            size_t frames,
                                            base::TimeDelta timestamp);
 
+// Create an AudioBuffer containing bitstream data. |start| and |increment| are
+// used to specify the values for the data. The value is determined by:
+//   start + frames * increment
+//   start + (frames + 1) * increment
+//   start + (frames + 2) * increment, ...
+scoped_refptr<AudioBuffer> MakeBitstreamAudioBuffer(
+    SampleFormat format,
+    ChannelLayout channel_layout,
+    size_t channel_count,
+    int sample_rate,
+    uint8_t start,
+    uint8_t increment,
+    size_t frames,
+    size_t data_size,
+    base::TimeDelta timestamp);
+
+// Verify the bitstream data in an AudioBus. |start| and |increment| are
+// used to specify the values for the data. The value is determined by:
+//   start + frames * increment
+//   start + (frames + 1) * increment
+//   start + (frames + 2) * increment, ...
+void VerifyBitstreamAudioBus(AudioBus* bus,
+                             size_t data_size,
+                             uint8_t start,
+                             uint8_t increment);
+
 // Create a fake video DecoderBuffer for testing purpose. The buffer contains
 // part of video decoder config info embedded so that the testing code can do
 // some sanity check.
@@ -215,14 +242,24 @@ MATCHER(ParsedDTSGreaterThanPTS, "") {
 
 MATCHER_P(FoundStream, stream_type_string, "") {
   return CONTAINS_STRING(
-             arg, "found_" + std::string(stream_type_string) + "_stream") &&
-         CONTAINS_STRING(arg, "true");
+      arg, "found_" + std::string(stream_type_string) + "_stream\":true");
 }
 
 MATCHER_P2(CodecName, stream_type_string, codec_string, "") {
   return CONTAINS_STRING(arg,
                          std::string(stream_type_string) + "_codec_name") &&
          CONTAINS_STRING(arg, std::string(codec_string));
+}
+
+MATCHER_P2(FlacAudioSampleRateOverriddenByStreaminfo,
+           original_rate_string,
+           streaminfo_rate_string,
+           "") {
+  return CONTAINS_STRING(
+      arg, "FLAC AudioSampleEntry sample rate " +
+               std::string(original_rate_string) + " overridden by rate " +
+               std::string(streaminfo_rate_string) +
+               " from FLACSpecificBox's STREAMINFO metadata");
 }
 
 MATCHER_P2(InitSegmentMismatchesMimeType, stream_type, codec_name, "") {
@@ -245,6 +282,15 @@ MATCHER_P2(FrameTypeMismatchesTrackType, frame_type, track_type, "") {
   return CONTAINS_STRING(arg, std::string("Frame type ") + frame_type +
                                   " doesn't match track buffer type " +
                                   track_type);
+}
+
+MATCHER_P2(AudioNonKeyframe, pts_microseconds, dts_microseconds, "") {
+  return CONTAINS_STRING(
+      arg, std::string("Bytestream with audio frame PTS ") +
+               base::IntToString(pts_microseconds) + "us and DTS " +
+               base::IntToString(dts_microseconds) +
+               "us indicated the frame is not a random access point (key "
+               "frame). All audio frames are expected to be key frames.");
 }
 
 MATCHER_P2(SkippingSpliceAtOrBefore,

@@ -49,6 +49,9 @@ class ASH_EXPORT ShelfWidget : public views::Widget,
                            AnimationChangeType change_type);
   ShelfBackgroundType GetBackgroundType() const;
 
+  // Gets the alpha value of |background_type|.
+  int GetBackgroundAlphaValue(ShelfBackgroundType background_type) const;
+
   // Hide the shelf behind a black bar during e.g. a user transition when |hide|
   // is true. The |animation_time_ms| will be used as animation duration.
   void HideShelfBehindBlackBar(bool hide, int animation_time_ms);
@@ -66,10 +69,6 @@ class ASH_EXPORT ShelfWidget : public views::Widget,
   // Sets the focus cycler.  Also adds the shelf to the cycle.
   void SetFocusCycler(FocusCycler* focus_cycler);
   FocusCycler* GetFocusCycler();
-
-  // Called by the activation delegate, before the shelf is activated
-  // when no other windows are visible.
-  void WillActivateAsFallback() { activating_as_fallback_ = true; }
 
   // Clean up prior to deletion.
   void Shutdown();
@@ -116,7 +115,6 @@ class ASH_EXPORT ShelfWidget : public views::Widget,
   // View containing the shelf items. Owned by the views hierarchy.
   ShelfView* const shelf_view_;
   ShelfBackgroundAnimator background_animator_;
-  bool activating_as_fallback_;
 
   DISALLOW_COPY_AND_ASSIGN(ShelfWidget);
 };

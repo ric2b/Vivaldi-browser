@@ -64,10 +64,12 @@
 <translation id="4506599922270137252">Kontaktovať správcu systému</translation>
 <translation id="4522570452068850558">Podrobnosti</translation>
 <translation id="4558551763791394412">Skúste deaktivovať rozšírenia.</translation>
+<translation id="4611292653554630842">Prihlásiť sa</translation>
 <translation id="4708268264240856090">Pripojenie bolo prerušené</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Spustiť diagnostiku siete v systéme Windows<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">Spustiteľná cesta</translation>
 <translation id="4764776831041365478">Webové stránky na adrese <ph name="URL" /> môžu byť dočasne nedostupné alebo sa mohli natrvalo premiestniť na novú webovú adresu.</translation>
+<translation id="4913131542719409934">Vyžaduje sa overenie totožnosti</translation>
 <translation id="5023310440958281426">Skontrolujte pravidlá správcu</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Skontrolovať adresu proxy servera<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bitová verzia)</translation>
@@ -96,10 +98,12 @@
 <translation id="6328639280570009161">Skúste zakázať predpovede siete</translation>
 <translation id="6433595998831338502">Web <ph name="HOST_NAME" /> zamietol pripojenie.</translation>
 <translation id="6569060085658103619">Prezeráte si stránku s rozšíreniami</translation>
+<translation id="6657585470893396449">Heslo</translation>
 <translation id="6685834062052613830">Odhláste sa a dokončite nastavenie</translation>
 <translation id="6711464428925977395">Vyskytol sa problém s proxy serverom alebo je adresa nesprávna.</translation>
 <translation id="6757797048963528358">Váš počítač prešiel do režimu spánku.</translation>
 <translation id="6897140037006041989">Používateľský agent</translation>
+<translation id="7090678807593890770">Vyhľadajte na Googli výraz <ph name="LINK" /></translation>
 <translation id="7210863904660874423">Web <ph name="HOST_NAME" /> nespĺňa bezpečnostné štandardy.</translation>
 <translation id="7353601530677266744">Príkazový riadok</translation>
 <translation id="7419106976560586862">Cesta k profilu</translation>
@@ -118,6 +122,7 @@
 <translation id="8289355894181816810">Ak neviete, čo to znamená, kontaktujte správcu siete.</translation>
 <translation id="8332188693563227489">Prístup k webu <ph name="HOST_NAME" /> bol zamietnutý</translation>
 <translation id="8498891568109133222">Web <ph name="HOST_NAME" /> príliš dlho neodpovedal.</translation>
+<translation id="8503813439785031346">Používateľské meno</translation>
 <translation id="8740359287975076522"><ph name="HOST_NAME" /> &lt;abbr id="dnsDefinition"&gt;adresa DNS&lt;/abbr&gt; sa nenašla. Problém sa diagnostikuje.</translation>
 <translation id="9001074447101275817">Proxy server <ph name="DOMAIN" /> vyžaduje používateľské meno a heslo.</translation>
 <translation id="9183425211371246419">Web <ph name="HOST_NAME" /> využíva nepodporovaný protokol.</translation>

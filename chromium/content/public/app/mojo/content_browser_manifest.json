@@ -4,12 +4,14 @@
   "interface_provider_specs": {
     "service_manager:connector": {
       "provides": {
+        // Interfaces needed by a generic client of content browser.
+        "app": [
+          "discardable_memory::mojom::DiscardableSharedMemoryManager",
+          "memory_instrumentation::mojom::Coordinator"
+        ],
         "gpu": [
           "content::mojom::FieldTrialRecorder",
           "media::mojom::AndroidOverlayProvider"
-        ],
-        "memory_instrumentation": [
-          "memory_instrumentation::mojom::Coordinator"
         ],
         "plugin": [
           "discardable_memory::mojom::DiscardableSharedMemoryManager",
@@ -25,9 +27,9 @@
           "blink::mojom::OffscreenCanvasProvider",
           "blink::mojom::PermissionService",
           "blink::mojom::WebSocket",
-	  "cc::mojom::SharedBitmapAllocationNotifier",
           "content::mojom::FieldTrialRecorder",
           "content::mojom::FrameSinkProvider",
+          "content::mojom::MediaStreamDispatcherHost",
           "content::mojom::MemoryCoordinatorHandle",
           "content::mojom::PushMessaging",
           "content::mojom::RendererHost",
@@ -46,17 +48,14 @@
           "resource_coordinator::mojom::CoordinationUnit",
           "shape_detection::mojom::TextDetection",
           "storage::mojom::BlobRegistry",
-          "ui::mojom::Gpu"
+          "ui::mojom::Gpu",
+          "viz::mojom::SharedBitmapAllocationNotifier"
         ],
         "geolocation_config": [
           "device::mojom::GeolocationConfig"
         ],
         "service_manager:service_factory": [
           "service_manager::mojom::ServiceFactory"
-        ],
-        "utility": [
-          "discardable_memory::mojom::DiscardableSharedMemoryManager",
-          "memory_instrumentation::mojom::Coordinator"
         ]
       },
       "requires": {
@@ -66,7 +65,6 @@
         "content_browser": [
           "ash",
           "display",
-          "memory_instrumentation",
           "url_keyed_metrics",
           "geolocation_config"
         ],
@@ -75,7 +73,13 @@
         "content_renderer": [ "browser" ],
         "content_utility": [ "browser" ],
         "data_decoder": [ "image_decoder" ],
-        "device": [ "device:generic_sensor", "device:nfc", "device:wake_lock" ],
+        "device": [
+          "device:generic_sensor",
+          "device:nfc",
+          "device:serial",
+          "device:vibration",
+          "device:wake_lock"
+        ],
         "file": [ "file:filesystem", "file:leveldb" ],
         "media": [ "media:media" ],
         "network": [
@@ -95,7 +99,12 @@
           "face_detection",
           "text_detection"
         ],
-        "resource_coordinator": [ "coordination_unit", "service_callbacks", "tab_signal" ],
+        "resource_coordinator": [
+          "coordination_unit",
+          "coordination_unit_introspector",
+          "service_callbacks",
+          "tab_signal"
+        ],
         "video_capture": [ "capture", "tests" ]
       }
     },
@@ -107,29 +116,38 @@
           // impossible this week. Remove once sky/ken fix this.
           "autofill::mojom::AutofillDriver",
           "autofill::mojom::PasswordManagerDriver",
+          "blink::mojom::InsecureInputService",
           "blink::mojom::KeyboardLockService",
           "blink::mojom::MediaSessionService",
           "blink::mojom::PermissionService",
           "blink::mojom::PresentationService",
-          "blink::mojom::SensitiveInputVisibilityService",
+          "blink::mojom::TextSuggestionHost",
           "blink::mojom::WebBluetoothService",
           "blink::mojom::WebSocket",
 
           // TODO(beng): figure out how to overlay test interfaces like this.
           "content::mojom::BrowserTarget",
 
+          // InputInjector is only exposed when gpu benchmarking is enabled.
+          "content::mojom::InputInjector",
+
           "content::mojom::RendererAudioOutputStreamFactory",
-          "device::mojom::VRService",
           "device::mojom::Geolocation",
+          "device::mojom::GeolocationService",
           "device::mojom::NFC",
           "device::mojom::SensorProvider",
+          "device::mojom::VibrationManager",
+          "device::mojom::VRService",
           "device::mojom::WakeLock",
+          "device::mojom::VRService",
           "device::usb::DeviceManager",
           "discardable_memory::mojom::DiscardableSharedMemoryManager",
           "media::mojom::ImageCapture",
           "media::mojom::InterfaceFactory",
           "media::mojom::RemoterFactory",
           "media::mojom::Renderer",
+          "media::mojom::VideoDecodeStatsRecorder",
+          "media::mojom::WatchTimeRecorderProvider",
           "mojom::MediaDevicesDispatcherHost",
           "payments::mojom::PaymentManager",
           "payments::mojom::PaymentRequest",

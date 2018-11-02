@@ -24,7 +24,6 @@
 #include "extensions/browser/value_store/value_store.h"
 #include "extensions/browser/value_store/value_store_factory_impl.h"
 #include "extensions/common/manifest.h"
-#include "extensions/common/test_util.h"
 #include "third_party/leveldatabase/src/include/leveldb/db.h"
 #include "third_party/leveldatabase/src/include/leveldb/write_batch.h"
 
@@ -42,7 +41,7 @@ std::unique_ptr<KeyedService> CreateStorageFrontendForTesting(
 
 std::unique_ptr<KeyedService> BuildEventRouter(
     content::BrowserContext* context) {
-  return base::MakeUnique<extensions::EventRouter>(context, nullptr);
+  return std::make_unique<extensions::EventRouter>(context, nullptr);
 }
 
 }  // namespace

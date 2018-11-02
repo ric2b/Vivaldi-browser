@@ -127,10 +127,11 @@ MATCHER_P(CheckUsernamePtr, username_value, "Username incorrect") {
   return arg && arg->username_value == username_value;
 }
 
-MATCHER_P3(CheckUploadedAutofillTypesAndSignature,
+MATCHER_P4(CheckUploadedAutofillTypesAndSignature,
            form_signature,
            expected_types,
            expect_generation_vote,
+           expected_username_vote_type,
            "Unexpected autofill types or form signature") {
   if (form_signature != arg.FormSignatureAsStr()) {
     // Unexpected form's signature.
@@ -138,6 +139,7 @@ MATCHER_P3(CheckUploadedAutofillTypesAndSignature,
                   << ", but found " << arg.FormSignatureAsStr();
     return false;
   }
+
   bool found_generation_vote = false;
   for (const auto& field : arg) {
     if (field->possible_types().size() > 1) {
@@ -160,6 +162,20 @@ MATCHER_P3(CheckUploadedAutofillTypesAndSignature,
       ADD_FAILURE() << field->name << " field: expected vote " << expected_vote
                     << ", but found " << actual_vote;
       return false;
+    }
+    if (expected_vote == autofill::USERNAME) {
+      if (field->username_vote_type() != expected_username_vote_type) {
+        ADD_FAILURE() << field->name
+                      << " field has expected username vote type "
+                      << expected_username_vote_type << ", but found "
+                      << field->username_vote_type();
+      }
+    } else {
+      if (field->username_vote_type() !=
+          autofill::AutofillUploadContents::Field::NO_INFORMATION) {
+        ADD_FAILURE() << field->name
+                      << " field should not have any username vote type";
+      }
     }
   }
   EXPECT_EQ(expect_generation_vote, found_generation_vote);
@@ -313,6 +329,7 @@ class MockPasswordManagerDriver : public StubPasswordManagerDriver {
                void(const autofill::PasswordFormFillData&));
   MOCK_METHOD1(AllowPasswordGenerationForForm,
                void(const autofill::PasswordForm&));
+  MOCK_METHOD0(MatchingBlacklistedFormFound, void());
 
   MockAutofillManager* mock_autofill_manager() {
     return &mock_autofill_manager_;
@@ -373,6 +390,7 @@ class PasswordFormManagerTest : public testing::Test {
     observed_form_.password_element = ASCIIToUTF16("Passwd");
     observed_form_.submit_element = ASCIIToUTF16("signIn");
     observed_form_.signon_realm = "http://accounts.google.com";
+    observed_form_.form_data.name = ASCIIToUTF16("the-form-name");
 
     saved_match_ = observed_form_;
     saved_match_.origin = GURL("http://accounts.google.com/a/ServiceLoginAuth");
@@ -453,7 +471,19 @@ class PasswordFormManagerTest : public testing::Test {
     autofill::ServerFieldTypeSet expected_available_field_types;
     FieldTypeMap expected_types;
     expected_types[ASCIIToUTF16("full_name")] = autofill::UNKNOWN_TYPE;
-    expected_types[match.username_element] = autofill::UNKNOWN_TYPE;
+
+    // When we're voting for an account creation form, we should also vote
+    // for its username field.
+    if (field_type && *field_type == autofill::ACCOUNT_CREATION_PASSWORD) {
+      expected_types[match.username_element] = autofill::USERNAME;
+      expected_available_field_types.insert(autofill::USERNAME);
+    } else {
+      expected_types[match.username_element] = autofill::UNKNOWN_TYPE;
+    }
+
+    autofill::AutofillUploadContents::Field::UsernameVoteType
+        expected_username_vote_type =
+            autofill::AutofillUploadContents::Field::CREDENTIALS_REUSED;
 
     bool expect_generation_vote = false;
     if (field_type) {
@@ -469,13 +499,13 @@ class PasswordFormManagerTest : public testing::Test {
     }
 
     if (field_type) {
-      EXPECT_CALL(
-          *client()->mock_driver()->mock_autofill_download_manager(),
-          StartUploadRequest(CheckUploadedAutofillTypesAndSignature(
-                                 pending_structure.FormSignatureAsStr(),
-                                 expected_types, expect_generation_vote),
-                             false, expected_available_field_types,
-                             expected_login_signature, true));
+      EXPECT_CALL(*client()->mock_driver()->mock_autofill_download_manager(),
+                  StartUploadRequest(CheckUploadedAutofillTypesAndSignature(
+                                         pending_structure.FormSignatureAsStr(),
+                                         expected_types, expect_generation_vote,
+                                         expected_username_vote_type),
+                                     false, expected_available_field_types,
+                                     expected_login_signature, true));
     } else {
       EXPECT_CALL(*client()->mock_driver()->mock_autofill_download_manager(),
                   StartUploadRequest(_, _, _, _, _))
@@ -572,11 +602,14 @@ class PasswordFormManagerTest : public testing::Test {
       expected_login_signature = pending_structure.FormSignatureAsStr();
     }
     EXPECT_CALL(*client()->mock_driver()->mock_autofill_download_manager(),
-                StartUploadRequest(CheckUploadedAutofillTypesAndSignature(
-                                       observed_form_signature, expected_types,
-                                       false /* expect_generation_vote */),
-                                   false, expected_available_field_types,
-                                   expected_login_signature, true));
+                StartUploadRequest(
+                    CheckUploadedAutofillTypesAndSignature(
+                        observed_form_signature, expected_types,
+                        false /* expect_generation_vote */,
+                        autofill::AutofillUploadContents::Field::NO_INFORMATION
+                        /* expected_username_vote_type */),
+                    false, expected_available_field_types,
+                    expected_login_signature, true));
 
     switch (field_type) {
       case autofill::NEW_PASSWORD:
@@ -1104,6 +1137,7 @@ TEST_F(PasswordFormManagerTest, PSLMatchedCredentialsMetadataUpdated) {
 
   autofill::ServerFieldTypeSet expected_available_field_types;
   expected_available_field_types.insert(autofill::ACCOUNT_CREATION_PASSWORD);
+  expected_available_field_types.insert(autofill::USERNAME);
   EXPECT_CALL(
       *client()->mock_driver()->mock_autofill_download_manager(),
       StartUploadRequest(_, false, expected_available_field_types, _, true));
@@ -1442,11 +1476,10 @@ TEST_F(PasswordFormManagerTest,
 }
 
 TEST_F(PasswordFormManagerTest,
-       TestSendNotBlacklistedMessage_BlacklistedCredentials) {
+       TestSendMachedBlacklistedFoundMessage_BlacklistedCredentials) {
   // Signing up on a previously visited site. Credentials are found in the
-  // password store, but they are blacklisted. AllowPasswordGenerationForForm
-  // is still called.
-  EXPECT_CALL(*(client()->mock_driver()), AllowPasswordGenerationForForm(_));
+  // password store, but they are blacklisted.
+  EXPECT_CALL(*client()->mock_driver(), MatchingBlacklistedFormFound());
   PasswordForm simulated_result = CreateSavedMatch(true);
   fake_form_fetcher()->SetNonFederated({&simulated_result}, 0u);
 }
@@ -1795,8 +1828,8 @@ TEST_F(PasswordFormManagerTest, NonHTMLFormsDoNotMatchHTMLForms) {
   ASSERT_EQ(PasswordForm::SCHEME_HTML, observed_form()->scheme);
   PasswordForm non_html_form(*observed_form());
   non_html_form.scheme = PasswordForm::SCHEME_DIGEST;
-  EXPECT_EQ(0, form_manager()->DoesManage(non_html_form, nullptr) &
-                   PasswordFormManager::RESULT_HTML_ATTRIBUTES_MATCH);
+  EXPECT_EQ(PasswordFormManager::RESULT_NO_MATCH,
+            form_manager()->DoesManage(non_html_form, nullptr));
 
   // The other way round: observing a non-HTML form, don't match a HTML form.
   PasswordForm html_form(*observed_form());
@@ -1804,8 +1837,8 @@ TEST_F(PasswordFormManagerTest, NonHTMLFormsDoNotMatchHTMLForms) {
       password_manager(), client(), kNoDriver, non_html_form,
       base::MakeUnique<MockFormSaver>(), fake_form_fetcher());
   non_html_manager.Init(nullptr);
-  EXPECT_EQ(0, non_html_manager.DoesManage(html_form, nullptr) &
-                   PasswordFormManager::RESULT_HTML_ATTRIBUTES_MATCH);
+  EXPECT_EQ(PasswordFormManager::RESULT_NO_MATCH,
+            non_html_manager.DoesManage(html_form, nullptr));
 }
 
 TEST_F(PasswordFormManagerTest, OriginCheck_HostsMatchExactly) {
@@ -1813,8 +1846,8 @@ TEST_F(PasswordFormManagerTest, OriginCheck_HostsMatchExactly) {
   PasswordForm form_longer_host(*observed_form());
   form_longer_host.origin = GURL("http://accounts.google.com.au/a/LoginAuth");
   // Check that accounts.google.com does not match accounts.google.com.au.
-  EXPECT_EQ(0, form_manager()->DoesManage(form_longer_host, nullptr) &
-                   PasswordFormManager::RESULT_HTML_ATTRIBUTES_MATCH);
+  EXPECT_EQ(PasswordFormManager::RESULT_NO_MATCH,
+            form_manager()->DoesManage(form_longer_host, nullptr));
 }
 
 TEST_F(PasswordFormManagerTest, OriginCheck_MoreSecureSchemePathsMatchPrefix) {
@@ -1823,7 +1856,7 @@ TEST_F(PasswordFormManagerTest, OriginCheck_MoreSecureSchemePathsMatchPrefix) {
   PasswordForm form_longer_path(*observed_form());
   form_longer_path.origin = GURL("https://accounts.google.com/a/LoginAuth/sec");
   EXPECT_NE(0, form_manager()->DoesManage(form_longer_path, nullptr) &
-                   PasswordFormManager::RESULT_HTML_ATTRIBUTES_MATCH);
+                   PasswordFormManager::RESULT_ORIGINS_OR_FRAMES_MATCH);
 }
 
 TEST_F(PasswordFormManagerTest,
@@ -1833,8 +1866,8 @@ TEST_F(PasswordFormManagerTest,
   PasswordForm form_longer_path(*observed_form());
   form_longer_path.origin = GURL("http://accounts.google.com/a/LoginAuth/sec");
   // Check that /a/LoginAuth does not match /a/LoginAuth/more.
-  EXPECT_EQ(0, form_manager()->DoesManage(form_longer_path, nullptr) &
-                   PasswordFormManager::RESULT_HTML_ATTRIBUTES_MATCH);
+  EXPECT_EQ(PasswordFormManager::RESULT_NO_MATCH,
+            form_manager()->DoesManage(form_longer_path, nullptr));
 
   PasswordForm secure_observed_form(*observed_form());
   secure_observed_form.origin = GURL("https://accounts.google.com/a/LoginAuth");
@@ -1844,27 +1877,64 @@ TEST_F(PasswordFormManagerTest,
   secure_manager.Init(nullptr);
   // Also for HTTPS in the observed form, and HTTP in the compared form, an
   // exact path match is expected.
-  EXPECT_EQ(0, secure_manager.DoesManage(form_longer_path, nullptr) &
-                   PasswordFormManager::RESULT_HTML_ATTRIBUTES_MATCH);
+  EXPECT_EQ(PasswordFormManager::RESULT_NO_MATCH,
+            secure_manager.DoesManage(form_longer_path, nullptr));
   // Not even upgrade to HTTPS in the compared form should help.
   form_longer_path.origin = GURL("https://accounts.google.com/a/LoginAuth/sec");
-  EXPECT_EQ(0, secure_manager.DoesManage(form_longer_path, nullptr) &
-                   PasswordFormManager::RESULT_HTML_ATTRIBUTES_MATCH);
+  EXPECT_EQ(PasswordFormManager::RESULT_NO_MATCH,
+            secure_manager.DoesManage(form_longer_path, nullptr));
 }
 
 TEST_F(PasswordFormManagerTest, OriginCheck_OnlyOriginsMatch) {
   // Make sure DoesManage() can distinguish when only origins match.
 
-  PasswordForm different_html_attributes(*observed_form());
-  different_html_attributes.password_element = ASCIIToUTF16("random_pass");
-  different_html_attributes.username_element = ASCIIToUTF16("random_user");
-
-  EXPECT_EQ(0, form_manager()->DoesManage(different_html_attributes, nullptr) &
-                   PasswordFormManager::RESULT_HTML_ATTRIBUTES_MATCH);
+  PasswordForm same_origin_only(*observed_form());
+  same_origin_only.form_data.name = ASCIIToUTF16("other_name");
+  same_origin_only.action = GURL("https://somewhere/else");
 
   EXPECT_EQ(PasswordFormManager::RESULT_ORIGINS_OR_FRAMES_MATCH,
-            form_manager()->DoesManage(different_html_attributes, nullptr) &
-                PasswordFormManager::RESULT_ORIGINS_OR_FRAMES_MATCH);
+            form_manager()->DoesManage(same_origin_only, nullptr));
+}
+
+TEST_F(PasswordFormManagerTest, FormsMatchIfNamesMatch) {
+  PasswordForm other_form(*observed_form());
+  autofill::FormFieldData field;
+  field.name = ASCIIToUTF16("another-field-name");
+  other_form.form_data.fields.push_back(field);
+  other_form.action = GURL("https://somewhere/else");
+  // Names should match, other things may not.
+  EXPECT_EQ(PasswordFormManager::RESULT_FORM_NAME_MATCH,
+            form_manager()->DoesManage(other_form, nullptr) &
+                PasswordFormManager::RESULT_FORM_NAME_MATCH);
+}
+
+TEST_F(PasswordFormManagerTest, FormsMatchIfSignaturesMatch) {
+  PasswordForm other_form(*observed_form());
+  other_form.action = GURL("https://somewhere/else");
+  // Signatures should match, other things may not.
+  EXPECT_EQ(PasswordFormManager::RESULT_SIGNATURE_MATCH,
+            form_manager()->DoesManage(other_form, nullptr) &
+                PasswordFormManager::RESULT_SIGNATURE_MATCH);
+}
+
+TEST_F(PasswordFormManagerTest, NoMatchForEmptyNames) {
+  // If two forms have no name, it's not evidence for a match.
+  PasswordForm other_form(*observed_form());
+  const_cast<PasswordForm&>(form_manager()->observed_form())
+      .form_data.name.clear();
+  other_form.form_data.name.clear();
+  EXPECT_EQ(0, form_manager()->DoesManage(other_form, nullptr) &
+                   PasswordFormManager::RESULT_FORM_NAME_MATCH);
+}
+
+TEST_F(PasswordFormManagerTest, NoMatchForEmtpyActions) {
+  // If two forms have no actions, it's not evidence for a match.
+  PasswordForm other_form(*observed_form());
+  const_cast<PasswordForm&>(form_manager()->observed_form()).form_data.action =
+      GURL::EmptyGURL();
+  other_form.action = GURL::EmptyGURL();
+  EXPECT_EQ(0, form_manager()->DoesManage(other_form, nullptr) &
+                   PasswordFormManager::RESULT_ACTION_MATCH);
 }
 
 // Test that if multiple credentials with the same username are stored, and the
@@ -2294,12 +2364,13 @@ TEST_F(PasswordFormManagerTest, TestUpdateNoUsernameTextfieldPresent) {
 TEST_F(PasswordFormManagerTest, TestUpdateUsernameMethod) {
   fake_form_fetcher()->SetNonFederated(std::vector<const PasswordForm*>(), 0u);
 
-  // User logs in, edits username.
+  // User enters credential in the form.
   PasswordForm credential(*observed_form());
   credential.username_value = ASCIIToUTF16("oldusername");
   credential.password_value = ASCIIToUTF16("password");
   form_manager()->ProvisionallySave(
       credential, PasswordFormManager::IGNORE_OTHER_POSSIBLE_USERNAMES);
+  // User edits username in a prompt.
   form_manager()->UpdateUsername(ASCIIToUTF16("newusername"));
   EXPECT_EQ(form_manager()->pending_credentials().username_value,
             ASCIIToUTF16("newusername"));
@@ -2322,7 +2393,7 @@ TEST_F(PasswordFormManagerTest, TestUpdateUsernameToExisting) {
   // We have an already existing credential.
   fake_form_fetcher()->SetNonFederated({saved_match()}, 0u);
 
-  // User submits credential to the observed form.
+  // User enters credential in the form.
   PasswordForm credential(*observed_form());
   credential.username_value = ASCIIToUTF16("different_username");
   credential.password_value = ASCIIToUTF16("different_pass");
@@ -2330,7 +2401,7 @@ TEST_F(PasswordFormManagerTest, TestUpdateUsernameToExisting) {
   form_manager()->ProvisionallySave(
       credential, PasswordFormManager::IGNORE_OTHER_POSSIBLE_USERNAMES);
 
-  // User edits the username to the already existing one.
+  // User edits username in a prompt to one already existing.
   form_manager()->UpdateUsername(saved_match()->username_value);
 
   // The username in credentials is expected to be updated.
@@ -2512,8 +2583,8 @@ TEST_F(PasswordFormManagerTest, ProcessFrame_StoreUpdatesCausesAutofill) {
 }
 
 // TODO(crbug.com/639786): Restore the following test:
-// when PasswordFormManager::Save is called, then PasswordFormManager also
-// calls PasswordManager::UpdateFormManagers.
+// when PasswordFormManager::Save or PasswordFormManager::Update is called, then
+// PasswordFormManager also calls PasswordManager::UpdateFormManagers.
 
 TEST_F(PasswordFormManagerTest, UploadChangePasswordForm) {
   autofill::ServerFieldType kChangePasswordVotes[] = {
@@ -2864,11 +2935,14 @@ TEST_F(PasswordFormManagerTest,
       autofill::FormStructure(saved_match()->form_data).FormSignatureAsStr();
 
   EXPECT_CALL(*client()->mock_driver()->mock_autofill_download_manager(),
-              StartUploadRequest(CheckUploadedAutofillTypesAndSignature(
-                                     observed_form_signature, expected_types,
-                                     false /* expect_generation_vote */),
-                                 false, expected_available_field_types,
-                                 expected_login_signature, true));
+              StartUploadRequest(
+                  CheckUploadedAutofillTypesAndSignature(
+                      observed_form_signature, expected_types,
+                      false /* expect_generation_vote */,
+                      autofill::AutofillUploadContents::Field::NO_INFORMATION
+                      /* expected_username_vote_type */),
+                  false, expected_available_field_types,
+                  expected_login_signature, true));
 
   form_manager.Update(*saved_match());
 }
@@ -3071,6 +3145,7 @@ TEST_F(PasswordFormManagerTest, SkipZeroClickIntact) {
 TEST_F(PasswordFormManagerTest, ProbablyAccountCreationUpload) {
   PasswordForm form(*observed_form());
   form.form_data = saved_match()->form_data;
+  form.other_possible_usernames = saved_match()->other_possible_usernames;
 
   FakeFormFetcher fetcher;
   fetcher.Fetch();
@@ -3088,22 +3163,33 @@ TEST_F(PasswordFormManagerTest, ProbablyAccountCreationUpload) {
 
   fetcher.SetNonFederated(std::vector<const PasswordForm*>(), 0u);
 
+  // A user submits a form and edits the username in the prompt.
+  form_manager.ProvisionallySave(
+      form_to_save, PasswordFormManager::IGNORE_OTHER_POSSIBLE_USERNAMES);
+  form_manager.UpdateUsername(ASCIIToUTF16(" test2@gmail.com"));
+
   autofill::FormStructure pending_structure(form_to_save.form_data);
   autofill::ServerFieldTypeSet expected_available_field_types;
   std::map<base::string16, autofill::ServerFieldType> expected_types;
-  expected_types[ASCIIToUTF16("full_name")] = autofill::UNKNOWN_TYPE;
   expected_types[saved_match()->username_element] = autofill::UNKNOWN_TYPE;
-  expected_available_field_types.insert(
-      autofill::PROBABLY_ACCOUNT_CREATION_PASSWORD);
+  expected_types[ASCIIToUTF16("full_name")] = autofill::USERNAME;
   expected_types[saved_match()->password_element] =
       autofill::PROBABLY_ACCOUNT_CREATION_PASSWORD;
+  expected_available_field_types.insert(
+      autofill::PROBABLY_ACCOUNT_CREATION_PASSWORD);
+  expected_available_field_types.insert(autofill::USERNAME);
 
-  EXPECT_CALL(*client()->mock_driver()->mock_autofill_download_manager(),
-              StartUploadRequest(
-                  CheckUploadedAutofillTypesAndSignature(
-                      pending_structure.FormSignatureAsStr(), expected_types,
-                      false /* expect_generation_vote */),
-                  false, expected_available_field_types, std::string(), true));
+  autofill::AutofillUploadContents::Field::UsernameVoteType
+      expected_username_vote_type =
+          autofill::AutofillUploadContents::Field::USERNAME_EDITED;
+
+  EXPECT_CALL(
+      *client()->mock_driver()->mock_autofill_download_manager(),
+      StartUploadRequest(
+          CheckUploadedAutofillTypesAndSignature(
+              pending_structure.FormSignatureAsStr(), expected_types,
+              false /* expect_generation_vote */, expected_username_vote_type),
+          false, expected_available_field_types, std::string(), true));
 
   form_manager.ProvisionallySave(
       form_to_save, PasswordFormManager::IGNORE_OTHER_POSSIBLE_USERNAMES);
@@ -3242,6 +3328,11 @@ TEST_F(PasswordFormManagerTest, UploadUsernameCorrectionVote) {
   expected_username_vote.username_element =
       saved_match()->other_possible_usernames[0].second;
 
+  // Checks the username vote type is saved.
+  autofill::AutofillUploadContents::Field::UsernameVoteType
+      expected_username_vote_type =
+          autofill::AutofillUploadContents::Field::USERNAME_OVERWRITTEN;
+
   // Checks the upload.
   autofill::ServerFieldTypeSet expected_available_field_types;
   expected_available_field_types.insert(autofill::USERNAME);
@@ -3260,11 +3351,12 @@ TEST_F(PasswordFormManagerTest, UploadUsernameCorrectionVote) {
   expected_types[ASCIIToUTF16("Email")] = autofill::UNKNOWN_TYPE;
 
   EXPECT_CALL(*client()->mock_driver()->mock_autofill_download_manager(),
-              StartUploadRequest(CheckUploadedAutofillTypesAndSignature(
-                                     expected_upload.FormSignatureAsStr(),
-                                     expected_types, false),
-                                 false, expected_available_field_types,
-                                 expected_login_signature, true));
+              StartUploadRequest(
+                  CheckUploadedAutofillTypesAndSignature(
+                      expected_upload.FormSignatureAsStr(), expected_types,
+                      false, expected_username_vote_type),
+                  false, expected_available_field_types,
+                  expected_login_signature, true));
   form_manager()->Save();
 }
 
@@ -3859,9 +3951,30 @@ TEST_F(PasswordFormManagerTest, TestUkmForFilling) {
     const auto* source =
         test_ukm_recorder.GetSourceForUrl(form_to_fill.origin.spec().c_str());
     ASSERT_TRUE(source);
-    test_ukm_recorder.ExpectMetric(*source, "PasswordForm",
-                                   kUkmManagerFillEvent, test.expected_event);
+    test_ukm_recorder.ExpectMetric(
+        *source, ukm::builders::PasswordForm::kEntryName,
+        ukm::builders::PasswordForm::kManagerFill_ActionName,
+        test.expected_event);
   }
+}
+TEST_F(PasswordFormManagerTest,
+       TestSendNotBlacklistedMessage_BlacklistedCredentials) {
+  // Signing up on a previously visited site. Credentials are found in the
+  // password store, but they are blacklisted. AllowPasswordGenerationForForm
+  // is still called.
+  EXPECT_CALL(*(client()->mock_driver()), AllowPasswordGenerationForForm(_));
+  PasswordForm simulated_result = CreateSavedMatch(true);
+  fake_form_fetcher()->SetNonFederated({&simulated_result}, 0u);
+}
+
+TEST_F(PasswordFormManagerTest,
+       TestSendMachedBlacklistedFoundMessage_Credentials) {
+  // Signing up on a previously visited site. Credentials are found in the
+  // password store, and are not blacklisted.
+  EXPECT_CALL(*client()->mock_driver(), MatchingBlacklistedFormFound())
+      .Times(0);
+  PasswordForm simulated_result = CreateSavedMatch(false);
+  fake_form_fetcher()->SetNonFederated({&simulated_result}, 0u);
 }
 
 }  // namespace password_manager

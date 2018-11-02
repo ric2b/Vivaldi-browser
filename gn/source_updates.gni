@@ -5,7 +5,9 @@ import("//vivaldi/app/source_updates.gni")
 import("//vivaldi/base/source_updates.gni")
 import("//vivaldi/browser/source_updates.gni")
 import("//vivaldi/components/source_updates.gni")
-import("//vivaldi/extensions/source_updates.gni")
+if (!is_android) {
+  import("//vivaldi/extensions/source_updates.gni")
+}
 import("//vivaldi/extraparts/source_updates.gni")
 import("//vivaldi/importer/source_updates.gni")
 import("//vivaldi/installer/source_updates.gni")

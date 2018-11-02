@@ -16,6 +16,7 @@
 #include "ios/web/public/reload_type.h"
 #import "ios/web/public/web_state/context_menu_params.h"
 #import "ios/web/public/web_state/js/crw_js_injection_receiver.h"
+#import "ios/web/public/web_state/navigation_context.h"
 #import "ios/web/public/web_state/ui/crw_web_delegate.h"
 #import "ios/web/public/web_state/ui/crw_web_view_proxy.h"
 #import "ios/web/public/web_state/ui/crw_web_view_scroll_view_proxy.h"
@@ -226,13 +227,23 @@ static NSString* gUserAgentProduct = nil;
     didFinishNavigation:(web::NavigationContext*)navigation {
   [self updateNavigationAvailability];
   [self updateCurrentURLs];
+
+  NSError* error = navigation->GetError();
+  SEL selector = @selector(webView:didFailNavigationWithError:);
+  if (error && [_navigationDelegate respondsToSelector:selector]) {
+    [_navigationDelegate webView:self didFailNavigationWithError:error];
+  }
 }
 
 - (void)webState:(web::WebState*)webState didLoadPageWithSuccess:(BOOL)success {
   DCHECK_EQ(_webState.get(), webState);
-  SEL selector = @selector(webView:didLoadPageWithSuccess:);
+  if (!success) {
+    // Failure callbacks will be handled inside |webState:didFinishNavigation:|.
+    return;
+  }
+  SEL selector = @selector(webViewDidFinishNavigation:);
   if ([_navigationDelegate respondsToSelector:selector]) {
-    [_navigationDelegate webView:self didLoadPageWithSuccess:success];
+    [_navigationDelegate webViewDidFinishNavigation:self];
   }
 }
 
@@ -260,12 +271,12 @@ static NSString* gUserAgentProduct = nil;
   }
 }
 
-- (BOOL)webState:(web::WebState*)webState
+- (void)webState:(web::WebState*)webState
     handleContextMenu:(const web::ContextMenuParams&)params {
   SEL selector = @selector(webView:runContextMenuWithTitle:forHTMLElement:inView
                                   :userGestureLocation:);
   if (![_UIDelegate respondsToSelector:selector]) {
-    return NO;
+    return;
   }
   NSURL* hyperlink = net::NSURLWithGURL(params.link_url);
   NSURL* mediaSource = net::NSURLWithGURL(params.src_url);
@@ -278,7 +289,6 @@ static NSString* gUserAgentProduct = nil;
                forHTMLElement:HTMLElement
                        inView:params.view
           userGestureLocation:params.location];
-  return YES;
 }
 
 - (web::WebState*)webState:(web::WebState*)webState

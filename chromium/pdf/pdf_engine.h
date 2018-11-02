@@ -190,6 +190,9 @@ class PDFEngine {
 
     // Sets selection status.
     virtual void IsSelectingChanged(bool is_selecting) {}
+
+    virtual void SelectionChanged(const pp::Rect& left, const pp::Rect& right) {
+    }
   };
 
   // Factory method to create an instance of the PDF Engine.
@@ -228,6 +231,13 @@ class PDFEngine {
   virtual void RotateClockwise() = 0;
   virtual void RotateCounterclockwise() = 0;
   virtual std::string GetSelectedText() = 0;
+  // Returns true if focus is within an editable form text area, and false
+  // otherwise.
+  virtual bool CanEditText() = 0;
+  // Replace selected text within an editable form text area with another
+  // string. If there is no selected text, append the replacement text after the
+  // current caret position.
+  virtual void ReplaceSelection(const std::string& text) = 0;
   virtual std::string GetLinkAtPosition(const pp::Point& point) = 0;
   // Checks the permissions associated with this document.
   virtual bool HasPermission(DocumentPermission permission) const = 0;
@@ -305,6 +315,11 @@ class PDFEngine {
   virtual bool IsProgressiveLoad() = 0;
 
   virtual std::string GetMetadata(const std::string& key) = 0;
+
+  virtual void SetCaretPosition(const pp::Point& position) = 0;
+  virtual void MoveRangeSelectionExtent(const pp::Point& extent) = 0;
+  virtual void SetSelectionBounds(const pp::Point& base,
+                                  const pp::Point& extent) = 0;
 };
 
 // Interface for exports that wrap the PDF engine.

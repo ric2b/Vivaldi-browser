@@ -4,7 +4,9 @@
 
 // This module implements the public-facing API functions for the <webview> tag.
 
-var WebViewInternal = require('webViewInternal').WebViewInternal;
+var WebViewInternal = getInternalApi ?
+    getInternalApi('webViewInternal') :
+    require('webViewInternal').WebViewInternal;
 var WebViewImpl = require('webView').WebViewImpl;
 
 // An array of <webview>'s public-facing API methods. Methods without custom
@@ -52,6 +54,9 @@ var WEB_VIEW_API_METHODS = [
   // Navigates to the subsequent history entry.
   'forward',
 
+  // Returns audio state.
+  'getAudioState',
+
   // Returns Chrome's internal process ID for the guest web page's current
   // process.
   'getProcessId',
@@ -72,6 +77,9 @@ var WEB_VIEW_API_METHODS = [
   // Injects CSS into the guest page.
   'insertCSS',
 
+  // Returns whether audio is muted.
+  'isAudioMuted',
+
   // Indicates whether or not the webview's user agent string has been
   // overridden.
   'isUserAgentOverridden',
@@ -89,6 +97,9 @@ var WEB_VIEW_API_METHODS = [
 
   // Reloads the current top-level page.
   'reload',
+
+  // Set audio mute.
+  'setAudioMuted',
 
   // Override the user agent string used by the webview for guest page requests.
   'setUserAgentOverride',

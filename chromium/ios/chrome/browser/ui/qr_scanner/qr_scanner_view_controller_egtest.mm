@@ -6,13 +6,12 @@
 #import <EarlGrey/EarlGrey.h>
 #import <UIKit/UIKit.h>
 
+#include "base/ios/ios_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/version_info/version_info.h"
 #import "ios/chrome/app/main_controller.h"
-#include "ios/chrome/browser/chrome_switches.h"
-#include "ios/chrome/browser/experimental_flags.h"
 #import "ios/chrome/browser/ui/browser_view_controller.h"
 #import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
@@ -21,6 +20,7 @@
 #include "ios/chrome/browser/ui/qr_scanner/qr_scanner_view.h"
 #include "ios/chrome/browser/ui/qr_scanner/qr_scanner_view_controller.h"
 #include "ios/chrome/browser/ui/toolbar/web_toolbar_controller.h"
+#include "ios/chrome/browser/ui/ui_util.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
@@ -114,29 +114,21 @@ id<GREYMatcher> DialogCancelButton() {
 
 // Opens the QR Scanner view.
 void ShowQRScanner() {
-  // TODO(crbug.com/738106): only show the QR Scanner via the Keyboard Accessory
-  // View.
-  if (experimental_flags::IsKeyboardAccessoryViewWithCameraSearchEnabled()) {
-    // Tap the omnibox to get the keyboard accessory view to show up.
-    id<GREYMatcher> locationbarButton = grey_allOf(
-        grey_accessibilityLabel(l10n_util::GetNSString(IDS_OMNIBOX_EMPTY_HINT)),
-        grey_minimumVisiblePercent(0.2), nil);
-    [[EarlGrey selectElementWithMatcher:locationbarButton]
-        assertWithMatcher:grey_text(@"Search or type URL")];
-    [[EarlGrey selectElementWithMatcher:locationbarButton]
-        performAction:grey_tap()];
+  // Tap the omnibox to get the keyboard accessory view to show up.
+  id<GREYMatcher> locationbarButton = grey_allOf(
+      grey_accessibilityLabel(l10n_util::GetNSString(IDS_OMNIBOX_EMPTY_HINT)),
+      grey_minimumVisiblePercent(0.2), nil);
+  [[EarlGrey selectElementWithMatcher:locationbarButton]
+      assertWithMatcher:grey_text(@"Search or type URL")];
+  [[EarlGrey selectElementWithMatcher:locationbarButton]
+      performAction:grey_tap()];
 
-    // Tap the QR Code scanner button in the keyboard accessory view.
-    id<GREYMatcher> matcher =
-        grey_allOf(grey_accessibilityLabel(@"QR code Search"),
-                   grey_kindOfClass([UIButton class]), nil);
+  // Tap the QR Code scanner button in the keyboard accessory view.
+  id<GREYMatcher> matcher =
+      grey_allOf(grey_accessibilityLabel(@"QR code Search"),
+                 grey_kindOfClass([UIButton class]), nil);
 
-    [[EarlGrey selectElementWithMatcher:matcher] performAction:grey_tap()];
-  } else {
-    GenericChromeCommand* command =
-        [[GenericChromeCommand alloc] initWithTag:IDC_SHOW_QR_SCANNER];
-    chrome_test_util::RunCommandWithActiveViewController(command);
-  }
+  [[EarlGrey selectElementWithMatcher:matcher] performAction:grey_tap()];
 }
 
 // Taps the |button|.
@@ -636,13 +628,6 @@ void TapKeyboardReturnKeyInOmniboxWithText(std::string text) {
 // Tests that a UIAlertController is presented instead of the
 // QRScannerViewController if the camera is unavailable.
 - (void)testCameraUnavailableDialog {
-// TODO(crbug.com/663026): Reenable the test for devices.
-#if !TARGET_IPHONE_SIMULATOR
-  EARL_GREY_TEST_DISABLED(@"Disabled for devices because existing system "
-                          @"alerts would prevent app alerts to present "
-                          @"correctly.");
-#endif
-
   UIViewController* bvc = [self currentBVC];
   [self assertModalOfClass:[QRScannerViewController class]
           isNotPresentedBy:bvc];
@@ -664,13 +649,6 @@ void TapKeyboardReturnKeyInOmniboxWithText(std::string text) {
 // Tests that a UIAlertController is presented by the QRScannerViewController if
 // the camera state changes after the QRScannerViewController is presented.
 - (void)testDialogIsDisplayedIfCameraStateChanges {
-// TODO(crbug.com/663026): Reenable the test for devices.
-#if !TARGET_IPHONE_SIMULATOR
-  EARL_GREY_TEST_DISABLED(@"Disabled for devices because existing system "
-                          @"alerts would prevent app alerts to present "
-                          @"correctly.");
-#endif
-
   id cameraControllerMock =
       [self getCameraControllerMockWithAuthorizationStatus:
                 AVAuthorizationStatusAuthorized];
@@ -699,13 +677,6 @@ void TapKeyboardReturnKeyInOmniboxWithText(std::string text) {
 
 // Tests that a new dialog replaces an old dialog if the camera state changes.
 - (void)testDialogIsReplacedIfCameraStateChanges {
-// TODO(crbug.com/663026): Reenable the test for devices.
-#if !TARGET_IPHONE_SIMULATOR
-  EARL_GREY_TEST_DISABLED(@"Disabled for devices because existing system "
-                          @"alerts would prevent app alerts to present "
-                          @"correctly.");
-#endif
-
   id cameraControllerMock =
       [self getCameraControllerMockWithAuthorizationStatus:
                 AVAuthorizationStatusAuthorized];
@@ -818,6 +789,12 @@ void TapKeyboardReturnKeyInOmniboxWithText(std::string text) {
 // Test that the correct page is loaded if the scanner result is a URL which is
 // then manually edited.
 - (void)testReceivingQRScannerURLResultAndEditingTheURL {
+  // TODO(crbug.com/753098): Re-enable this test on iOS 11 iPad once
+  // grey_typeText works on iOS 11.
+  if (base::ios::IsRunningOnIOS11OrLater() && IsIPadIdiom()) {
+    EARL_GREY_TEST_DISABLED(@"Test disabled on iOS 11.");
+  }
+
   [self doTestReceivingResult:_testURL.GetContent()
                      response:kTestURLEditedResponse
                          edit:@"\b\bedited/"];
@@ -832,6 +809,12 @@ void TapKeyboardReturnKeyInOmniboxWithText(std::string text) {
 // Test that the correct page is loaded if the scanner result is a search query
 // which is then manually edited.
 - (void)testReceivingQRScannerSearchQueryResultAndEditingTheQuery {
+  // TODO(crbug.com/753098): Re-enable this test on iOS 11 iPad once
+  // grey_typeText works on iOS 11.
+  if (base::ios::IsRunningOnIOS11OrLater() && IsIPadIdiom()) {
+    EARL_GREY_TEST_DISABLED(@"Test disabled on iOS 11.");
+  }
+
   [self swizzleWebToolbarControllerLoadGURLFromLocationBar:_testQueryEdited];
   [self doTestReceivingResult:kTestQuery
                      response:kTestQueryEditedResponse

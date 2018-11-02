@@ -97,6 +97,7 @@ public class AccountManagerFacade {
      */
     private AccountManagerFacade(AccountManagerDelegate delegate) {
         mDelegate = delegate;
+        mDelegate.registerObservers();
     }
 
     /**
@@ -205,6 +206,30 @@ public class AccountManagerFacade {
     }
 
     /**
+     * Asynchronous version of {@link #tryGetGoogleAccountNames()}.
+     */
+    @MainThread
+    public void getGoogleAccountNames(
+            final Callback<AccountManagerResult<List<String>>> callback) {
+        getGoogleAccounts(new Callback<AccountManagerResult<Account[]>>() {
+            @Override
+            public void onResult(AccountManagerResult<Account[]> accounts) {
+                final AccountManagerResult<List<String>> result;
+                if (accounts.hasValue()) {
+                    List<String> accountNames = new ArrayList<>(accounts.getValue().length);
+                    for (Account account : accounts.getValue()) {
+                        accountNames.add(account.name);
+                    }
+                    result = new AccountManagerResult<>(accountNames);
+                } else {
+                    result = new AccountManagerResult<>(accounts.getException());
+                }
+                callback.onResult(result);
+            }
+        });
+    }
+
+    /**
      * Retrieves all Google accounts on the device.
      *
      * @throws AccountManagerDelegateException if Google Play Services are out of date,
@@ -213,6 +238,29 @@ public class AccountManagerFacade {
     @WorkerThread
     public Account[] getGoogleAccounts() throws AccountManagerDelegateException {
         return mDelegate.getAccountsSync();
+    }
+
+    /**
+     * Asynchronous version of {@link #getGoogleAccounts()}.
+     */
+    @MainThread
+    public void getGoogleAccounts(final Callback<AccountManagerResult<Account[]>> callback) {
+        ThreadUtils.assertOnUiThread();
+        new AsyncTask<Void, Void, AccountManagerResult<Account[]>>() {
+            @Override
+            protected AccountManagerResult<Account[]> doInBackground(Void... params) {
+                try {
+                    return new AccountManagerResult<>(getGoogleAccounts());
+                } catch (AccountManagerDelegateException ex) {
+                    return new AccountManagerResult<>(ex);
+                }
+            }
+
+            @Override
+            protected void onPostExecute(AccountManagerResult<Account[]> accounts) {
+                callback.onResult(accounts);
+            }
+        }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
     }
 
     /**
@@ -449,6 +497,16 @@ public class AccountManagerFacade {
     public void updateCredentials(
             Account account, Activity activity, @Nullable Callback<Boolean> callback) {
         mDelegate.updateCredentials(account, activity, callback);
+    }
+
+    /**
+     * Gets profile data source.
+     * @return {@link ProfileDataSource} if it is supported by implementation, null otherwise.
+     */
+    @MainThread
+    @Nullable
+    public ProfileDataSource getProfileDataSource() {
+        return mDelegate.getProfileDataSource();
     }
 
     private interface AuthTask<T> {

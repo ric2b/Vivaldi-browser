@@ -69,11 +69,13 @@
 <translation id="4506599922270137252">Կապվել համակարգի ադմինիստրատորի հետ</translation>
 <translation id="4522570452068850558">Մանրամասներ</translation>
 <translation id="4558551763791394412">Փորձեք անջատել Ձեր ընդլայնումները։</translation>
+<translation id="4611292653554630842">Մուտք</translation>
 <translation id="4708268264240856090">Ձեր միացումն ընդհատվեց</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Աշխատեցնել Windows-ի ցանցային ախտորոշումը<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">Կատարելի ֆայլի ուղի</translation>
 <translation id="4764776831041365478"><ph name="URL" /> հասցեով վեբ էջը, հնարավոր է, որ ժամանակավորապես անհասանելի է կամ մշտապես տեղափոխվել է նոր վեբ հասցե։</translation>
 <translation id="4807049035289105102">Դուք այս պահին չեք կարող այցելել <ph name="SITE" />, քանի որ կայքն ուղարկել է ծածկագրված վկայագրեր, որոնք Vivaldi-ն չի կարող մշակել։ Սովորաբար ցանցային սխալներն ու հարձակումները ժամանակավոր են, ուստի միառժամանակ հետո այս էջը հավանաբար կաշխատի։</translation>
+<translation id="4913131542719409934">Պահանջվում է վավերացում</translation>
 <translation id="5023310440958281426">Ստուգեք Ձեր ադմինիստրատորի կողմից սահմանված դրույթները</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Ստուգել պրոքսի հասցեն<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 բիթ)</translation>
@@ -103,10 +105,12 @@
 <translation id="6328639280570009161">Փորձեք անջատել ցանցային կանխատեսումը</translation>
 <translation id="6433595998831338502">Միացումը մերժվեց <ph name="HOST_NAME" />-ի կողմից։</translation>
 <translation id="6569060085658103619">Դուք դիտում եք ընդլայնման էջ</translation>
+<translation id="6657585470893396449">Գաղտնաբառ</translation>
 <translation id="6685834062052613830">Դուրս գրվեք և ավարտին հասցրեք կարգավորելը</translation>
 <translation id="6711464428925977395">Պրոքսի սերվերի հետ ինչ-որ խնդիր կա կամ հասցեն սխալ է նշված։</translation>
 <translation id="6757797048963528358">Ձեր սարքն անցել է քնի ռեժիմին։</translation>
 <translation id="6897140037006041989">User Agent</translation>
+<translation id="7090678807593890770">Որոնել Google-ում <ph name="LINK" /></translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" />-ը չի համապատասխանում անվտանգության ստանդարտներին։</translation>
 <translation id="7353601530677266744">Հրամանի տող</translation>
 <translation id="7419106976560586862">Պրոֆիլի ուղի</translation>
@@ -125,6 +129,7 @@
 <translation id="8289355894181816810">Լրացուցիչ տեղեկությունների համար կապվեք Ձեր ցանցային ադմինիստրատորի հետ։</translation>
 <translation id="8332188693563227489">Մուտքը <ph name="HOST_NAME" /> արգելված է</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> կայքի պատասխանը շատ է երկարաձգվում։</translation>
+<translation id="8503813439785031346">Օգտվողի անուն</translation>
 <translation id="8740359287975076522"><ph name="HOST_NAME" />-ի &lt;abbr id="dnsDefinition"&gt;DNS հասցեն&lt;/abbr&gt; գտնել չհաջողվեց։ Կատարվում է խնդրի ախտորոշում։</translation>
 <translation id="9001074447101275817"><ph name="DOMAIN" /> պրոքսին պահանջում է օգտվողի անուն և գաղտնաբառ։</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" />-ն օգտագործում է չաջակցվող պրոտոկոլ։</translation>

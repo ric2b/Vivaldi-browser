@@ -12,7 +12,6 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "cc/base/container_util.h"
-#include "cc/debug/traced_value.h"
 #include "cc/resources/scoped_resource.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 
@@ -113,16 +112,14 @@ void StagingBuffer::OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd,
   const uint64_t tracing_process_id =
       base::trace_event::MemoryDumpManager::GetInstance()
           ->GetTracingProcessId();
-  auto shared_buffer_guid =
-      gpu_memory_buffer->GetGUIDForTracing(tracing_process_id);
-
   auto shared_memory_guid = gpu_memory_buffer->GetHandle().handle.GetGUID();
   const int kImportance = 2;
   if (!shared_memory_guid.is_empty()) {
     pmd->CreateSharedMemoryOwnershipEdge(buffer_dump->guid(),
-                                         shared_buffer_guid, shared_memory_guid,
-                                         kImportance);
+                                         shared_memory_guid, kImportance);
   } else {
+    auto shared_buffer_guid =
+        gpu_memory_buffer->GetGUIDForTracing(tracing_process_id);
     pmd->CreateSharedGlobalAllocatorDump(shared_buffer_guid);
     pmd->AddOwnershipEdge(buffer_dump->guid(), shared_buffer_guid, kImportance);
   }
@@ -336,7 +333,7 @@ std::unique_ptr<StagingBuffer> StagingBufferPool::AcquireStagingBuffer(
   // Create new staging buffer if necessary.
   if (!staging_buffer) {
     staging_buffer =
-        base::MakeUnique<StagingBuffer>(resource->size(), resource->format());
+        std::make_unique<StagingBuffer>(resource->size(), resource->format());
     AddStagingBuffer(staging_buffer.get(), resource->format());
   }
 

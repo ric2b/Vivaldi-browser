@@ -88,22 +88,22 @@ bool AcceleratorManager::IsRegistered(const Accelerator& accelerator) const {
 }
 
 bool AcceleratorManager::Process(const Accelerator& accelerator) {
-  bool result = false;
   AcceleratorMap::iterator map_iter = accelerators_.find(accelerator);
-  if (map_iter != accelerators_.end()) {
-    // We have to copy the target list here, because an AcceleratorPressed
-    // event handler may modify the list.
-    AcceleratorTargetList targets(map_iter->second.second);
-    for (AcceleratorTargetList::iterator iter = targets.begin();
-         iter != targets.end(); ++iter) {
-      if ((*iter)->CanHandleAccelerators() &&
-          (*iter)->AcceleratorPressed(accelerator)) {
-        result = true;
-        break;
-      }
+  if (map_iter == accelerators_.end())
+    return false;
+
+  // We have to copy the target list here, because an AcceleratorPressed
+  // event handler may modify the list.
+  AcceleratorTargetList targets(map_iter->second.second);
+  for (AcceleratorTargetList::iterator iter = targets.begin();
+       iter != targets.end(); ++iter) {
+    if ((*iter)->CanHandleAccelerators() &&
+        (*iter)->AcceleratorPressed(accelerator)) {
+      return true;
     }
   }
-  return result;
+
+  return false;
 }
 
 bool AcceleratorManager::HasPriorityHandler(

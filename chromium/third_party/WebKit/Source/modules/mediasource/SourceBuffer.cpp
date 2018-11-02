@@ -37,8 +37,8 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/events/Event.h"
-#include "core/events/GenericEventQueue.h"
+#include "core/dom/events/Event.h"
+#include "core/dom/events/MediaElementEventQueue.h"
 #include "core/frame/Deprecation.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLMediaElement.h"
@@ -105,7 +105,7 @@ WTF::String WebTimeRangesToString(const WebTimeRanges& ranges) {
 SourceBuffer* SourceBuffer::Create(
     std::unique_ptr<WebSourceBuffer> web_source_buffer,
     MediaSource* source,
-    GenericEventQueue* async_event_queue) {
+    MediaElementEventQueue* async_event_queue) {
   SourceBuffer* source_buffer =
       new SourceBuffer(std::move(web_source_buffer), source, async_event_queue);
   source_buffer->SuspendIfNeeded();
@@ -114,7 +114,7 @@ SourceBuffer* SourceBuffer::Create(
 
 SourceBuffer::SourceBuffer(std::unique_ptr<WebSourceBuffer> web_source_buffer,
                            MediaSource* source,
-                           GenericEventQueue* async_event_queue)
+                           MediaElementEventQueue* async_event_queue)
     : SuspendableObject(source->GetExecutionContext()),
       web_source_buffer_(std::move(web_source_buffer)),
       source_(source),

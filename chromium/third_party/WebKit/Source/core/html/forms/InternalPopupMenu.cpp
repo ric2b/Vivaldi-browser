@@ -11,8 +11,8 @@
 #include "core/dom/NodeComputedStyle.h"
 #include "core/dom/StyleEngine.h"
 #include "core/dom/TaskRunnerHelper.h"
-#include "core/events/ScopedEventQueue.h"
-#include "core/exported/WebViewBase.h"
+#include "core/dom/events/ScopedEventQueue.h"
+#include "core/exported/WebViewImpl.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/html/HTMLHRElement.h"
@@ -23,6 +23,8 @@
 #include "core/layout/LayoutTheme.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/PagePopup.h"
+#include "platform/fonts/FontSelector.h"
+#include "platform/fonts/FontSelectorClient.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/text/PlatformLocale.h"
 #include "public/platform/Platform.h"
@@ -33,44 +35,12 @@ namespace blink {
 
 namespace {
 
-const char* FontWeightToString(FontWeight weight) {
-  switch (weight) {
-    case kFontWeight100:
-      return "100";
-    case kFontWeight200:
-      return "200";
-    case kFontWeight300:
-      return "300";
-    case kFontWeight400:
-      return "400";
-    case kFontWeight500:
-      return "500";
-    case kFontWeight600:
-      return "600";
-    case kFontWeight700:
-      return "700";
-    case kFontWeight800:
-      return "800";
-    case kFontWeight900:
-      return "900";
-  }
-  NOTREACHED();
-  return nullptr;
-}
-
 // TODO crbug.com/516675 Add stretch to serialization
 
-const char* FontStyleToString(FontStyle style) {
-  switch (style) {
-    case kFontStyleNormal:
-      return "normal";
-    case kFontStyleOblique:
-      return "oblique";
-    case kFontStyleItalic:
-      return "italic";
-  }
-  NOTREACHED();
-  return nullptr;
+const char* FontStyleToString(FontSelectionValue slope) {
+  if (slope == ItalicSlopeValue())
+    return "italic";
+  return "normal";
 }
 
 const char* TextTransformToString(ETextTransform transform) {
@@ -91,7 +61,7 @@ const char* TextTransformToString(ETextTransform transform) {
 }  // anonymous namespace
 
 class PopupMenuCSSFontSelector : public CSSFontSelector,
-                                 private CSSFontSelectorClient {
+                                 private FontSelectorClient {
   USING_GARBAGE_COLLECTED_MIXIN(PopupMenuCSSFontSelector);
 
  public:
@@ -105,15 +75,15 @@ class PopupMenuCSSFontSelector : public CSSFontSelector,
 
   // We don't override willUseFontData() for now because the old PopupListBox
   // only worked with fonts loaded when opening the popup.
-  PassRefPtr<FontData> GetFontData(const FontDescription&,
-                                   const AtomicString&) override;
+  RefPtr<FontData> GetFontData(const FontDescription&,
+                               const AtomicString&) override;
 
   DECLARE_VIRTUAL_TRACE();
 
  private:
   PopupMenuCSSFontSelector(Document*, CSSFontSelector*);
 
-  void FontsNeedUpdate(CSSFontSelector*) override;
+  void FontsNeedUpdate(FontSelector*) override;
 
   Member<CSSFontSelector> owner_font_selector_;
 };
@@ -127,20 +97,20 @@ PopupMenuCSSFontSelector::PopupMenuCSSFontSelector(
 
 PopupMenuCSSFontSelector::~PopupMenuCSSFontSelector() {}
 
-PassRefPtr<FontData> PopupMenuCSSFontSelector::GetFontData(
+RefPtr<FontData> PopupMenuCSSFontSelector::GetFontData(
     const FontDescription& description,
     const AtomicString& name) {
   return owner_font_selector_->GetFontData(description, name);
 }
 
-void PopupMenuCSSFontSelector::FontsNeedUpdate(CSSFontSelector* font_selector) {
+void PopupMenuCSSFontSelector::FontsNeedUpdate(FontSelector* font_selector) {
   DispatchInvalidationCallbacks();
 }
 
 DEFINE_TRACE(PopupMenuCSSFontSelector) {
   visitor->Trace(owner_font_selector_);
   CSSFontSelector::Trace(visitor);
-  CSSFontSelectorClient::Trace(visitor);
+  FontSelectorClient::Trace(visitor);
 }
 
 // ----------------------------------------------------------------
@@ -367,9 +337,8 @@ void InternalPopupMenu::AddElementStyle(ItemIterationContext& context,
     AddProperty("fontSize", font_description.ComputedPixelSize(), data);
   }
   // Our UA stylesheet has font-weight:normal for OPTION.
-  if (kFontWeightNormal != font_description.Weight()) {
-    AddProperty("fontWeight",
-                String(FontWeightToString(font_description.Weight())), data);
+  if (NormalWeightValue() != font_description.Weight()) {
+    AddProperty("fontWeight", String::Number(font_description.Weight()), data);
   }
   if (base_font.Family() != font_description.Family()) {
     PagePopupClient::AddString("fontFamily: [\n", data);
@@ -446,7 +415,7 @@ void InternalPopupMenu::AddSeparator(ItemIterationContext& context,
 void InternalPopupMenu::SelectFontsFromOwnerDocument(Document& document) {
   Document& owner_document = OwnerElement().GetDocument();
   document.GetStyleEngine().SetFontSelector(PopupMenuCSSFontSelector::Create(
-      &document, owner_document.GetStyleEngine().FontSelector()));
+      &document, owner_document.GetStyleEngine().GetFontSelector()));
 }
 
 void InternalPopupMenu::SetValueAndClosePopup(int num_value,

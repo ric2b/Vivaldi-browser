@@ -59,6 +59,11 @@
     "dependencies": [ "permission:notes" ],
     "contexts": [ "blessed_extension" ]
   },
+  "prefs": {
+    "vivaldi": true,
+    "dependencies": [ "permission:prefs" ],
+    "contexts": [ "blessed_extension" ]
+  },
   "runtimePrivate": {
     "vivaldi": true,
     "dependencies": [ "permission:runtimePrivate" ],
@@ -99,11 +104,6 @@
     "dependencies": [ "permission:thumbnails" ],
     "contexts": [ "blessed_extension" ]
   },
-  "zoom": {
-    "vivaldi": true,
-    "dependencies": [ "permission:zoom" ],
-    "contexts": [ "blessed_extension" ]
-  },
   "utilities": {
     "vivaldi": true,
     "dependencies": [ "permission:utilities" ],
@@ -120,5 +120,15 @@
       "chrome://media-router/*",
       "chrome://oobe/*"
     ]
-  }]
+  }],
+  "windowPrivate": {
+    "vivaldi": true,
+    "dependencies": [ "permission:windowPrivate" ],
+    "contexts": [ "blessed_extension" ]
+  },
+  "zoom": {
+    "vivaldi": true,
+    "dependencies": [ "permission:zoom" ],
+    "contexts": [ "blessed_extension" ]
+  }
 }

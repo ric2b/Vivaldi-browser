@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "android_webview/browser/cookie_manager.h"
-
 #include <stdint.h>
 
 #include <memory>
@@ -322,7 +320,7 @@ net::CookieStore* CookieManager::GetCookieStore() {
 
     content::CookieStoreConfig cookie_config(
         cookie_store_path, content::CookieStoreConfig::RESTORED_SESSION_COOKIES,
-        nullptr, nullptr);
+        nullptr);
     cookie_config.client_task_runner = cookie_store_task_runner_;
     cookie_config.background_task_runner =
         cookie_store_backend_thread_.task_runner();
@@ -625,10 +623,6 @@ scoped_refptr<base::SingleThreadTaskRunner> GetCookieStoreTaskRunner() {
 
 net::CookieStore* GetCookieStore() {
   return CookieManager::GetInstance()->GetCookieStore();
-}
-
-bool RegisterCookieManager(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 }  // namespace android_webview

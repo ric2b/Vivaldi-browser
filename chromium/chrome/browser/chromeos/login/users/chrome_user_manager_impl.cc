@@ -498,6 +498,7 @@ void ChromeUserManagerImpl::Observe(
           multi_profile_user_controller_->StartObserving(profile);
         }
       }
+      system::UpdateSystemTimezone(profile);
       UpdateUserTimeZoneRefresher(profile);
       break;
     }
@@ -506,7 +507,7 @@ void ChromeUserManagerImpl::Observe(
       user_manager::User* user =
           ProfileHelper::Get()->GetUserByProfile(profile);
       if (user != NULL) {
-        user->set_profile_is_created();
+        user->SetProfileIsCreated();
 
         if (user->HasGaiaAccount())
           GetUserImageManager(user->GetAccountId())->UserProfileCreated();
@@ -1342,6 +1343,13 @@ bool ChromeUserManagerImpl::IsStubAccountId(const AccountId& account_id) const {
 
 bool ChromeUserManagerImpl::IsSupervisedAccountId(
     const AccountId& account_id) const {
+  const policy::BrowserPolicyConnectorChromeOS* connector =
+      g_browser_process->platform_part()->browser_policy_connector_chromeos();
+  // Supervised accounts are not allowed on the Active Directory devices. It
+  // also makes sure "locally-managed.localhost" would work properly and would
+  // not be detected as supervised users.
+  if (connector->IsActiveDirectoryManaged())
+    return false;
   return gaia::ExtractDomainName(account_id.GetUserEmail()) ==
          user_manager::kSupervisedUserDomain;
 }

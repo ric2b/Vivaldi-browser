@@ -33,7 +33,7 @@
 
 #include "core/animation/CompositorMutatorImpl.h"
 #include "core/frame/WebFrameWidgetBase.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "core/page/PageWidgetDelegate.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/heap/SelfKeepAlive.h"
@@ -109,7 +109,7 @@ class WebFrameWidgetImpl final : public WebFrameWidgetBase,
   void SetIsInert(bool) override;
 
   // WebFrameWidget implementation.
-  WebLocalFrameBase* LocalRoot() const override { return local_root_; }
+  WebLocalFrameImpl* LocalRoot() const override { return local_root_; }
   void SetVisibilityState(WebPageVisibilityState) override;
   void SetBackgroundColorOverride(WebColor) override;
   void ClearBackgroundColorOverride() override;
@@ -179,6 +179,8 @@ class WebFrameWidgetImpl final : public WebFrameWidgetBase,
   WebInputEventResult HandleKeyEvent(const WebKeyboardEvent&) override;
   WebInputEventResult HandleCharEvent(const WebKeyboardEvent&) override;
 
+  PageWidgetEventHandler* GetPageWidgetEventHandler() override;
+
   // This method returns the focused frame belonging to this WebWidget, that
   // is, a focused frame with the same local root as the one corresponding
   // to this widget. It will return nullptr if no frame is focused or, the
@@ -194,7 +196,7 @@ class WebFrameWidgetImpl final : public WebFrameWidgetBase,
   // WebFrameWidget is associated with a subtree of the frame tree,
   // corresponding to a maximal connected tree of LocalFrames. This member
   // points to the root of that subtree.
-  Member<WebLocalFrameBase> local_root_;
+  Member<WebLocalFrameImpl> local_root_;
 
   WebSize size_;
 

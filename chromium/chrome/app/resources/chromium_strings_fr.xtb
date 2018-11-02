@@ -13,14 +13,12 @@ Certaines fonctionnalités ne seront peut-être pas disponibles, et les modifica
 <translation id="1403254041219632970">Les futures versions de Chromium ne seront plus compatibles avec les versions 10.6, 10.7 et 10.8 de Mac OS X.</translation>
 <translation id="1414495520565016063">Vous êtes connecté à Chromium.</translation>
 <translation id="1444754455097148408">Licences Chromium Open Source</translation>
-<translation id="1480489203462860648">Essayez-le, il est déjà installé.</translation>
 <translation id="1502360822835740515">Définir Chromium en tant que navigateur par défaut</translation>
 <translation id="151962892725702025">Impossible de synchroniser vos données dans Chromium OS, car la synchronisation n'est pas disponible pour votre domaine.</translation>
 <translation id="1559451348202814456">Chromium risque de ne pas fonctionner correctement, car la compatibilité n'est plus assurée sur les versions 10.6, 10.7 et 10.8 de Mac OS X.</translation>
 <translation id="1653828314016431939">OK – Redémarrer maintenant</translation>
 <translation id="1668054258064581266">Une fois votre compte Chromium supprimé, vous devrez peut-être charger de nouveau les onglets ouverts pour que les modifications prennent effet.</translation>
 <translation id="1688750314291223739">Configurez la synchronisation pour enregistrer sur le Web les fonctionnalités personnalisées de votre navigateur et y accéder à partir de Chromium sur n'importe quel ordinateur.</translation>
-<translation id="1699664235656412242">Veuillez fermer toutes les fenêtres de Chromium (y compris celles en mode Windows 8), puis réessayer.</translation>
 <translation id="1708666629004767631">Une nouvelle version de Chromium encore plus sûre est disponible.</translation>
 <translation id="1774152462503052664">Laisser Chromium s'exécuter en arrière-plan</translation>
 <translation id="1779356040007214683">Afin de rendre Chrome plus sûr, nous avons désactivé certaines extensions qui ne sont pas répertoriées sur le <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> et qui ont pu être ajoutées à votre insu.</translation>
@@ -102,6 +100,7 @@ Certaines fonctionnalités ne seront peut-être pas disponibles, et les modifica
 <translation id="4271805377592243930">Obtenir de l'aide avec Chromium</translation>
 <translation id="4285930937574705105">Échec de l'installation suite à une erreur non spécifiée. Si Chromium est en cours d'exécution, veuillez le fermer, puis réessayer.</translation>
 <translation id="4330585738697551178">Ce module n'est pas compatible avec Chromium.</translation>
+<translation id="4421155425831608516">L'option de connexion à Chromium a été désactivée par l'administrateur de cet appareil.</translation>
 <translation id="4423735387467980091">Personnaliser et contrôler Chromium</translation>
 <translation id="4458285410772214805">Pour que cette modification soit prise en compte, veuillez vous déconnecter, puis vous reconnecter.</translation>
 <translation id="4469812139324097969">Chromium n'est plus à jour, car il n'a pas été relancé depuis quelque temps. La mise à jour disponible sera installée dès que vous le relancerez.</translation>
@@ -178,7 +177,6 @@ Certaines fonctionnalités ne seront peut-être pas disponibles, et les modifica
 Certaines fonctionnalités seront peut-être indisponibles. Veuillez spécifier un autre répertoire de profil ou utiliser une version plus récente de Chromium.</translation>
 <translation id="6734080038664603509">Mettre à jour &amp;Chromium</translation>
 <translation id="6734291798041940871">Chromium est déjà installé pour tous les utilisateurs de votre ordinateur.</translation>
-<translation id="6757767188268205357">Ne plus me notifier</translation>
 <translation id="6810143991807788455">Aidez-nous à améliorer Chromium en nous signalant vos paramètres actuels.</translation>
 <translation id="6857782730669500492">Chromium – <ph name="PAGE_TITLE" /></translation>
 <translation id="6883876366448858277">envoie un mot et son contexte à la recherche Google, qui renvoie à son tour des définitions, des photos et d'autres résultats de recherche.</translation>
@@ -191,7 +189,6 @@ Certaines fonctionnalités seront peut-être indisponibles. Veuillez spécifier 
 <translation id="707471633328071618">Google Payments (copiée vers Chromium)</translation>
 <translation id="7138853919861947730">Chromium utilise parfois des services Web pour améliorer votre confort de navigation.</translation>
 <translation id="7162152143154757523">Chromium peut vous proposer une correction orthographique plus intelligente en envoyant ce que vous saisissez dans le navigateur aux serveurs Google, ce qui vous permet d'utiliser la même technologie de correction orthographique que la recherche Google.</translation>
-<translation id="7196020411877309443">Pourquoi ce message s'affiche-t-il ?</translation>
 <translation id="7205698830395646142">Masquer dans le menu Chromium</translation>
 <translation id="7223968959479464213">Gestionnaire de tâches – Chromium</translation>
 <translation id="722928257909516027">Afficher le menu Chromium</translation>

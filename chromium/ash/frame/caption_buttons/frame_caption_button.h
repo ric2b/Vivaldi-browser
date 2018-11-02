@@ -11,7 +11,7 @@
 #include "ash/frame/caption_buttons/caption_button_types.h"
 #include "base/macros.h"
 #include "ui/gfx/image/image_skia.h"
-#include "ui/views/controls/button/custom_button.h"
+#include "ui/views/controls/button/button.h"
 
 namespace gfx {
 class SlideAnimation;
@@ -22,7 +22,7 @@ namespace ash {
 
 // Base class for the window caption buttons (minimize, maximize, restore,
 // close).
-class ASH_EXPORT FrameCaptionButton : public views::CustomButton {
+class ASH_EXPORT FrameCaptionButton : public views::Button {
  public:
   enum Animate { ANIMATE_YES, ANIMATE_NO };
 
@@ -49,6 +49,7 @@ class ASH_EXPORT FrameCaptionButton : public views::CustomButton {
   // views::View overrides:
   const char* GetClassName() const override;
   void OnGestureEvent(ui::GestureEvent* event) override;
+  views::PaintInfo::ScaleType GetPaintScaleType() const override;
 
   void set_paint_as_active(bool paint_as_active) {
     paint_as_active_ = paint_as_active;
@@ -59,7 +60,7 @@ class ASH_EXPORT FrameCaptionButton : public views::CustomButton {
   CaptionButtonIcon icon() const { return icon_; }
 
  protected:
-  // views::CustomButton override:
+  // views::Button override:
   void PaintButtonContents(gfx::Canvas* canvas) override;
 
  private:

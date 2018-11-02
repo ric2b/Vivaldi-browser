@@ -17,14 +17,15 @@ namespace gpu {
 // Default Service class when no service is specified. GpuInProcessThreadService
 // is used by Mus and unit tests.
 class GPU_EXPORT GpuInProcessThreadService
-    : public NON_EXPORTED_BASE(gpu::InProcessCommandBuffer::Service),
+    : public gpu::InProcessCommandBuffer::Service,
       public base::RefCountedThreadSafe<GpuInProcessThreadService> {
  public:
   GpuInProcessThreadService(
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
       gpu::SyncPointManager* sync_point_manager,
       gpu::gles2::MailboxManager* mailbox_manager,
-      scoped_refptr<gl::GLShareGroup> share_group);
+      scoped_refptr<gl::GLShareGroup> share_group,
+      const GpuFeatureInfo& gpu_feature_info);
 
   // gpu::InProcessCommandBuffer::Service implementation.
   void ScheduleTask(const base::Closure& task) override;

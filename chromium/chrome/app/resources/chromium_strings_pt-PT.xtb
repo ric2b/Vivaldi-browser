@@ -12,14 +12,12 @@
 <translation id="1403254041219632970">As versões futuras do Chromium não suportarão o Mac OS X 10.6, o Mac OS X 10.7 ou o Mac OS X 10.8.</translation>
 <translation id="1414495520565016063">Tem sessão iniciada no Chromium!</translation>
 <translation id="1444754455097148408">Licenças de código aberto do Chromium</translation>
-<translation id="1480489203462860648">Experimente, já está instalado</translation>
 <translation id="1502360822835740515">Tornar o Chromium o navegador predefinido</translation>
 <translation id="151962892725702025">O SO Chromium não conseguiu sincronizar os dados porque a sincronização não está disponível para o seu domínio.</translation>
 <translation id="1559451348202814456">O Chromium pode não funcionar corretamente, uma vez que já não é suportado no Mac OS X 10.6, no Mac OS X 10.7 ou no Mac OS X 10.8.</translation>
 <translation id="1653828314016431939">OK - Reiniciar agora</translation>
 <translation id="1668054258064581266">Depois de remover a sua conta do Chromium, poderá ter de recarregar os separadores abertos para que as alterações tenham efeito.</translation>
 <translation id="1688750314291223739">Configure a Sincronização para guardar as suas funcionalidades personalizadas do navegador para a Web e aceder às mesmas a partir do Chromium em qualquer computador.</translation>
-<translation id="1699664235656412242">Feche todas as janelas do Chromium (incluindo as que estiverem no modo Windows 8) e tente novamente.</translation>
 <translation id="1708666629004767631">Está disponível uma versão nova e mais segura do Chromium.</translation>
 <translation id="1774152462503052664">Permitir que o Chromium seja executado em segundo plano</translation>
 <translation id="1779356040007214683">Para tornar o Chromium mais seguro, desativámos algumas extensões que não estão listadas na <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> e é possível que tenham sido adicionadas sem o seu conhecimento.</translation>
@@ -101,6 +99,7 @@
 <translation id="4271805377592243930">Obter ajuda relacionada com o Chromium</translation>
 <translation id="4285930937574705105">A instalação falhou devido a um erro não especificado. Se o Chromium estiver em execução, feche-o e tente de novo.</translation>
 <translation id="4330585738697551178">Este módulo é conhecido por entrar em conflito com o Chromium.</translation>
+<translation id="4421155425831608516">O início de sessão no Chromium foi desativado pelo administrador deste dispositivo.</translation>
 <translation id="4423735387467980091">Personalizar e controlar o Chromium</translation>
 <translation id="4458285410772214805">Termine sessão e volte a iniciar sessão para que esta alteração tenha efeito.</translation>
 <translation id="4469812139324097969">O Chromium está desatualizado porque não é reiniciado há algum tempo. Está disponível uma atualização que será aplicada logo que o reinicie.</translation>
@@ -177,7 +176,6 @@
 Algumas funcionalidades podem não estar disponíveis. Especifique um diretório de perfil diferente ou utilize uma versão mais recente do Chromium.</translation>
 <translation id="6734080038664603509">Atualizar o &amp;Chromium</translation>
 <translation id="6734291798041940871">O Chromium já está instalado para todos os utilizadores no seu computador.</translation>
-<translation id="6757767188268205357">Não incomodar</translation>
 <translation id="6810143991807788455">Ajude a melhorar o Chromium ao comunicar as definições atuais</translation>
 <translation id="6857782730669500492">Chromium – <ph name="PAGE_TITLE" /></translation>
 <translation id="6883876366448858277">envia uma palavra e o respetivo contexto circundante à Pesquisa Google, que devolve definições, imagens e outros resultados da pesquisa.</translation>
@@ -190,7 +188,6 @@ Algumas funcionalidades podem não estar disponíveis. Especifique um diretório
 <translation id="707471633328071618">Google Payments (copiado para o Chromium)</translation>
 <translation id="7138853919861947730">O Chromium pode utilizar serviços Web para melhorar a sua experiência de navegação.</translation>
 <translation id="7162152143154757523">O Chromium pode disponibilizar uma verificação ortográfica mais inteligente ao enviar o que escreve no navegador para os servidores da Google, o que lhe permite utilizar a mesma tecnologia de verificação ortográfica da Pesquisa Google.</translation>
-<translation id="7196020411877309443">Por que motivo estou a ver esta caixa de diálogo?</translation>
 <translation id="7205698830395646142">Ocultar no menu do Chromium</translation>
 <translation id="7223968959479464213">Gestor de Tarefas - Chromium</translation>
 <translation id="722928257909516027">Mostrar menu do Chromium</translation>

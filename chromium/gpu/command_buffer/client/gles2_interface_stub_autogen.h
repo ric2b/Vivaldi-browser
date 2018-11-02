@@ -630,6 +630,7 @@ void UnmapTexSubImage2DCHROMIUM(const void* mem) override;
 void ResizeCHROMIUM(GLuint width,
                     GLuint height,
                     GLfloat scale_factor,
+                    GLenum color_space,
                     GLboolean alpha) override;
 const GLchar* GetRequestableExtensionsCHROMIUM() override;
 void RequestExtensionCHROMIUM(const char* extension) override;
@@ -751,6 +752,8 @@ void ScheduleCALayerCHROMIUM(GLuint contents_texture_id,
                              GLuint edge_aa_mask,
                              const GLfloat* bounds_rect,
                              GLuint filter) override;
+void SetColorSpaceForScanoutCHROMIUM(GLuint texture_id,
+                                     GLColorSpace color_space) override;
 void ScheduleCALayerInUseQueryCHROMIUM(GLsizei count,
                                        const GLuint* textures) override;
 void CommitOverlayPlanesCHROMIUM() override;
@@ -880,7 +883,9 @@ void UniformMatrix4fvStreamTextureMatrixCHROMIUM(
 void OverlayPromotionHintCHROMIUM(GLuint texture,
                                   GLboolean promotion_hint,
                                   GLint display_x,
-                                  GLint display_y) override;
+                                  GLint display_y,
+                                  GLint display_width,
+                                  GLint display_height) override;
 void SwapBuffersWithBoundsCHROMIUM(GLsizei count, const GLint* rects) override;
 void SetDrawRectangleCHROMIUM(GLint x,
                               GLint y,
@@ -890,4 +895,16 @@ void SetEnableDCLayersCHROMIUM(GLboolean enabled) override;
 void InitializeDiscardableTextureCHROMIUM(GLuint texture_id) override;
 void UnlockDiscardableTextureCHROMIUM(GLuint texture_id) override;
 bool LockDiscardableTextureCHROMIUM(GLuint texture_id) override;
+void BeginRasterCHROMIUM(GLuint texture_id,
+                         GLuint sk_color,
+                         GLuint msaa_sample_count,
+                         GLboolean can_use_lcd_text,
+                         GLboolean use_distance_field_text,
+                         GLint pixel_config) override;
+void RasterCHROMIUM(const cc::DisplayItemList* list,
+                    GLint x,
+                    GLint y,
+                    GLint w,
+                    GLint h) override;
+void EndRasterCHROMIUM() override;
 #endif  // GPU_COMMAND_BUFFER_CLIENT_GLES2_INTERFACE_STUB_AUTOGEN_H_

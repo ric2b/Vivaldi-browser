@@ -12,6 +12,7 @@
 #include "base/callback.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -19,6 +20,7 @@
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/password_manager/core/browser/password_reuse_detector.h"
+#include "components/safe_browsing/features.h"
 #include "components/safe_browsing/password_protection/password_protection_request.h"
 #include "components/safe_browsing_db/database_manager.h"
 #include "components/safe_browsing_db/v4_protocol_manager_util.h"
@@ -74,21 +76,23 @@ GURL GetHostNameWithHTTPScheme(const GURL& url) {
 
 }  // namespace
 
-const base::Feature kPasswordFieldOnFocusPinging{
-    "PasswordFieldOnFocusPinging", base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kProtectedPasswordEntryPinging{
-    "ProtectedPasswordEntryPinging", base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kPasswordProtectionInterstitial{
-    "PasswordProtectionInterstitial", base::FEATURE_DISABLED_BY_DEFAULT};
-
-const char kPasswordOnFocusRequestOutcomeHistogramName[] =
+const char kPasswordOnFocusRequestOutcomeHistogram[] =
     "PasswordProtection.RequestOutcome.PasswordFieldOnFocus";
-const char kPasswordEntryRequestOutcomeHistogramName[] =
-    "PasswordProtection.RequestOutcome.ProtectedPasswordEntry";
-const char kSyncPasswordEntryRequestOutcomeHistogramName[] =
+// Matches sync and/or saved password
+const char kAnyPasswordEntryRequestOutcomeHistogram[] =
+    "PasswordProtection.RequestOutcome.AnyPasswordEntry";
+// Matches sync and maybe also saved password
+const char kSyncPasswordEntryRequestOutcomeHistogram[] =
     "PasswordProtection.RequestOutcome.SyncPasswordEntry";
+// Matches saved but NOT sync password
+const char kProtectedPasswordEntryRequestOutcomeHistogram[] =
+    "PasswordProtection.RequestOutcome.ProtectedPasswordEntry";
+const char kSyncPasswordWarningDialogHistogram[] =
+    "PasswordProtection.ModalWarningDialogAction.SyncPasswordEntry";
+const char kSyncPasswordPageInfoHistogram[] =
+    "PasswordProtection.PageInfoAction.SyncPasswordEntry";
+const char kSyncPasswordChromeSettingsHistogram[] =
+    "PasswordProtection.ChromeSettingsAction.SyncPasswordEntry";
 
 PasswordProtectionService::PasswordProtectionService(
     const scoped_refptr<SafeBrowsingDatabaseManager>& database_manager,
@@ -121,6 +125,57 @@ bool PasswordProtectionService::CanGetReputationOfURL(const GURL& url) {
   const std::string hostname = url.HostNoBrackets();
   return !net::IsLocalhost(hostname) && !net::IsHostnameNonUnique(hostname) &&
          hostname.find('.') != std::string::npos;
+}
+
+void PasswordProtectionService::RecordWarningAction(WarningUIType ui_type,
+                                                    WarningAction action) {
+  switch (ui_type) {
+    case PAGE_INFO:
+      UMA_HISTOGRAM_ENUMERATION(kSyncPasswordPageInfoHistogram, action,
+                                MAX_ACTION);
+      break;
+    case MODAL_DIALOG:
+      UMA_HISTOGRAM_ENUMERATION(kSyncPasswordWarningDialogHistogram, action,
+                                MAX_ACTION);
+      break;
+    case CHROME_SETTINGS:
+      UMA_HISTOGRAM_ENUMERATION(kSyncPasswordChromeSettingsHistogram, action,
+                                MAX_ACTION);
+      break;
+    case NOT_USED:
+    case MAX_UI_TYPE:
+      NOTREACHED();
+      break;
+  }
+}
+
+void PasswordProtectionService::OnWarningDone(
+    content::WebContents* web_contents,
+    WarningUIType ui_type,
+    WarningAction action) {
+  RecordWarningAction(ui_type, action);
+  // TODO(jialiul): Need to send post-warning report, trigger event logger and
+  // other tasks.
+  if (ui_type == MODAL_DIALOG)
+    web_contents_to_proto_map_.erase(web_contents);
+
+  if (action == MARK_AS_LEGITIMATE) {
+    DCHECK_EQ(PAGE_INFO, ui_type);
+    UpdateSecurityState(SB_THREAT_TYPE_SAFE, web_contents);
+    // TODO(jialiul): Close page info bubble.
+  }
+}
+
+void PasswordProtectionService::OnWarningShown(
+    content::WebContents* web_contents,
+    WarningUIType ui_type) {
+  RecordWarningAction(ui_type, SHOWN);
+  // TODO(jialiul): Trigger event logger here.
+}
+
+bool PasswordProtectionService::ShouldShowSofterWarning() {
+  return base::GetFieldTrialParamByFeatureAsBool(kGoogleBrandedPhishingWarning,
+                                                 "softer_warning", false);
 }
 
 // We cache both types of pings under the same content settings type (
@@ -314,17 +369,17 @@ void PasswordProtectionService::StartRequest(
     const GURL& main_frame_url,
     const GURL& password_form_action,
     const GURL& password_form_frame_url,
-    const std::string& saved_domain,
+    bool matches_sync_password,
+    const std::vector<std::string>& matching_domains,
     TriggerType trigger_type,
     bool password_field_exists) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   scoped_refptr<PasswordProtectionRequest> request(
       new PasswordProtectionRequest(
           web_contents, main_frame_url, password_form_action,
-          password_form_frame_url, saved_domain, trigger_type,
-          password_field_exists, this, GetRequestTimeoutInMS()));
+          password_form_frame_url, matches_sync_password, matching_domains,
+          trigger_type, password_field_exists, this, GetRequestTimeoutInMS()));
 
-  DCHECK(request);
   request->Start();
   requests_.insert(std::move(request));
 }
@@ -338,7 +393,8 @@ void PasswordProtectionService::MaybeStartPasswordFieldOnFocusRequest(
   if (CanSendPing(kPasswordFieldOnFocusPinging, main_frame_url, false)) {
     StartRequest(web_contents, main_frame_url, password_form_action,
                  password_form_frame_url,
-                 std::string(), /* saved_domain: not used for this type */
+                 false, /* matches_sync_password: not used for this type */
+                 {},    /* matching_domains: not used for this type */
                  LoginReputationClientRequest::UNFAMILIAR_LOGIN_PAGE, true);
   }
 }
@@ -346,13 +402,14 @@ void PasswordProtectionService::MaybeStartPasswordFieldOnFocusRequest(
 void PasswordProtectionService::MaybeStartProtectedPasswordEntryRequest(
     WebContents* web_contents,
     const GURL& main_frame_url,
-    const std::string& saved_domain,
+    bool matches_sync_password,
+    const std::vector<std::string>& matching_domains,
     bool password_field_exists) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (CanSendPing(
-          kProtectedPasswordEntryPinging, main_frame_url,
-          saved_domain == std::string(password_manager::kSyncPasswordDomain))) {
-    StartRequest(web_contents, main_frame_url, GURL(), GURL(), saved_domain,
+  if (CanSendPing(kProtectedPasswordEntryPinging, main_frame_url,
+                  matches_sync_password)) {
+    StartRequest(web_contents, main_frame_url, GURL(), GURL(),
+                 matches_sync_password, matching_domains,
                  LoginReputationClientRequest::PASSWORD_REUSE_EVENT,
                  password_field_exists);
   }
@@ -360,13 +417,13 @@ void PasswordProtectionService::MaybeStartProtectedPasswordEntryRequest(
 
 bool PasswordProtectionService::CanSendPing(const base::Feature& feature,
                                             const GURL& main_frame_url,
-                                            bool is_sync_password) {
+                                            bool matches_sync_password) {
   RequestOutcome request_outcome = URL_NOT_VALID_FOR_REPUTATION_COMPUTING;
   if (IsPingingEnabled(feature, &request_outcome) &&
       CanGetReputationOfURL(main_frame_url)) {
     return true;
   }
-  RecordNoPingingReason(feature, request_outcome, is_sync_password);
+  RecordNoPingingReason(feature, request_outcome, matches_sync_password);
   return false;
 }
 
@@ -661,11 +718,8 @@ bool PasswordProtectionService::ParseVerdictEntry(
 bool PasswordProtectionService::PathVariantsMatchCacheExpression(
     const std::vector<std::string>& generated_paths,
     const std::string& cache_expression_path) {
-  for (const auto& path : generated_paths) {
-    if (cache_expression_path == path)
-      return true;
-  }
-  return false;
+  return std::find(generated_paths.begin(), generated_paths.end(),
+                   cache_expression_path) != generated_paths.end();
 }
 
 bool PasswordProtectionService::IsCacheExpired(int cache_creation_time,
@@ -727,23 +781,30 @@ PasswordProtectionService::CreateDictionaryFromVerdict(
 void PasswordProtectionService::RecordNoPingingReason(
     const base::Feature& feature,
     RequestOutcome reason,
-    bool is_sync_password) {
+    bool matches_sync_password) {
   DCHECK(feature.name == kProtectedPasswordEntryPinging.name ||
          feature.name == kPasswordFieldOnFocusPinging.name);
 
-  bool is_password_entry_ping =
-      feature.name == kProtectedPasswordEntryPinging.name;
+  if (feature.name == kPasswordFieldOnFocusPinging.name) {
+    UMA_HISTOGRAM_ENUMERATION(kPasswordOnFocusRequestOutcomeHistogram, reason,
+                              MAX_OUTCOME);
+    return;
+  }
 
-  if (is_password_entry_ping) {
-    if (is_sync_password) {
-      UMA_HISTOGRAM_ENUMERATION(kSyncPasswordEntryRequestOutcomeHistogramName,
-                                reason, MAX_OUTCOME);
-    } else {
-      UMA_HISTOGRAM_ENUMERATION(kPasswordEntryRequestOutcomeHistogramName,
-                                reason, MAX_OUTCOME);
-    }
+  LogPasswordEntryRequestOutcome(reason, matches_sync_password);
+}
+
+// static
+void PasswordProtectionService::LogPasswordEntryRequestOutcome(
+    RequestOutcome reason,
+    bool matches_sync_password) {
+  UMA_HISTOGRAM_ENUMERATION(kAnyPasswordEntryRequestOutcomeHistogram, reason,
+                            MAX_OUTCOME);
+  if (matches_sync_password) {
+    UMA_HISTOGRAM_ENUMERATION(kSyncPasswordEntryRequestOutcomeHistogram, reason,
+                              MAX_OUTCOME);
   } else {
-    UMA_HISTOGRAM_ENUMERATION(kPasswordOnFocusRequestOutcomeHistogramName,
+    UMA_HISTOGRAM_ENUMERATION(kProtectedPasswordEntryRequestOutcomeHistogram,
                               reason, MAX_OUTCOME);
   }
 }

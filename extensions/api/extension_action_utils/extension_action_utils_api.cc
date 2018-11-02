@@ -348,7 +348,6 @@ void ExtensionActionUtil::OnExtensionUninstalled(
   extensions::ExtensionActionManager* action_manager =
       extensions::ExtensionActionManager::Get(profile_);
   ExtensionAction* action = action_manager->GetExtensionAction(*extension);
-
   FillInfoForTabId(&info, action, ExtensionAction::kDefaultTabId, profile_);
 
   std::unique_ptr<base::ListValue> args =
@@ -713,6 +712,7 @@ bool ExtensionActionUtilsExecuteExtensionActionFunction::RunAsync() {
     }
   }
 
+  DCHECK(extension);
   if (!extension)
     return false;
 
@@ -720,13 +720,12 @@ bool ExtensionActionUtilsExecuteExtensionActionFunction::RunAsync() {
   // running in a tab.
   Browser* browser = nullptr;
   for (auto* browser_it : *BrowserList::GetInstance()) {
-    if (browser_it->profile()->GetOriginalProfile() == GetProfile() &&
-        ExtensionTabUtil::GetWindowId(browser_it) == *params->window_id.get() &&
+    if (ExtensionTabUtil::GetWindowId(browser_it) == *params->window_id.get() &&
         browser_it->window()) {
       browser = browser_it;
     }
   }
-
+  DCHECK(browser);
   if (!browser) {
     return false;
   }
@@ -735,6 +734,7 @@ bool ExtensionActionUtilsExecuteExtensionActionFunction::RunAsync() {
       browser->tab_strip_model()->GetActiveWebContents();
 
   ExtensionAction* action = action_manager->GetExtensionAction(*extension);
+  DCHECK(action);
   if (!action)
     return false;
 
@@ -822,6 +822,7 @@ bool ExtensionActionUtilsToggleBrowserActionVisibilityFunction::RunAsync() {
                              extensions::ExtensionRegistry::ENABLED);
 
   ExtensionAction* action = action_manager->GetExtensionAction(*extension);
+  DCHECK(action);
   if (!action) {
     SendResponse(false);
     return false;
@@ -892,12 +893,13 @@ bool ExtensionActionUtilsRemoveExtensionFunction::RunAsync() {
 
   Browser* browser = nullptr;
   for (auto* browser_it : *BrowserList::GetInstance()) {
-    if (browser_it->profile()->GetOriginalProfile() == GetProfile() &&
-        ExtensionTabUtil::GetWindowId(browser_it) == *params->window_id.get() &&
+    if (ExtensionTabUtil::GetWindowId(browser_it) == *params->window_id.get() &&
         browser_it->window()) {
       browser = browser_it;
     }
   }
+  DCHECK(browser);
+  DCHECK(extension);
 
   if (!browser || !extension) {
     return false;

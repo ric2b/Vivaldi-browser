@@ -5,7 +5,6 @@
 #ifndef ANDROID_WEBVIEW_BROWSER_AW_AUTOFILL_CLIENT_H_
 #define ANDROID_WEBVIEW_BROWSER_AW_AUTOFILL_CLIENT_H_
 
-#include <jni.h>
 #include <memory>
 #include <string>
 #include <vector>
@@ -66,7 +65,6 @@ class AwAutofillClient : public autofill::AutofillClient,
   PrefService* GetPrefs() override;
   syncer::SyncService* GetSyncService() override;
   IdentityProvider* GetIdentityProvider() override;
-  rappor::RapporServiceImpl* GetRapporServiceImpl() override;
   ukm::UkmRecorder* GetUkmRecorder() override;
   autofill::SaveCardBubbleController* GetSaveCardBubbleController() override;
   void ShowAutofillSettings() override;
@@ -105,9 +103,8 @@ class AwAutofillClient : public autofill::AutofillClient,
                              const base::string16& profile_full_name) override;
   bool IsContextSecure() override;
   bool ShouldShowSigninPromo() override;
-  void StartSigninFlow() override;
-  void ShowHttpNotSecureExplanation() override;
   bool IsAutofillSupported() override;
+  void ExecuteCommand(int id) override;
 
   void Dismissed(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
   void SuggestionSelected(JNIEnv* env,
@@ -136,8 +133,6 @@ class AwAutofillClient : public autofill::AutofillClient,
 
   DISALLOW_COPY_AND_ASSIGN(AwAutofillClient);
 };
-
-bool RegisterAwAutofillClient(JNIEnv* env);
 
 }  // namespace android_webview
 

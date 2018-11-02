@@ -66,6 +66,8 @@ GPUTestConfig::OS GetCurrentOS() {
         return GPUTestConfig::kOsMacElCapitan;
       case 12:
         return GPUTestConfig::kOsMacSierra;
+      case 13:
+        return GPUTestConfig::kOsMacHighSierra;
     }
   }
 #elif defined(OS_ANDROID)
@@ -192,6 +194,7 @@ bool GPUTestBotConfig::IsValid() const {
     case kOsMacYosemite:
     case kOsMacElCapitan:
     case kOsMacSierra:
+    case kOsMacHighSierra:
     case kOsLinux:
     case kOsChromeOS:
     case kOsAndroid:
@@ -302,12 +305,6 @@ bool GPUTestBotConfig::CurrentConfigMatches(
 
 // static
 bool GPUTestBotConfig::GpuBlacklistedOnBot() {
-#if defined(OS_WIN)
-  // Blacklist rule #79 disables all Gpu acceleration before Windows 7.
-  if (base::win::GetVersion() <= base::win::VERSION_VISTA) {
-    return true;
-  }
-#endif
   return false;
 }
 

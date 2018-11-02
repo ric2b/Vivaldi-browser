@@ -13,7 +13,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/StyleEngine.h"
-#include "core/events/Event.h"
+#include "core/dom/events/Event.h"
 #include "core/frame/Settings.h"
 #include "core/geometry/DOMRect.h"
 #include "core/html/HTMLElement.h"
@@ -22,8 +22,10 @@
 #include "core/layout/LayoutObject.h"
 #include "core/loader/EmptyClients.h"
 #include "core/testing/DummyPageHolder.h"
+#include "modules/media_controls/MediaDownloadInProductHelpManager.h"
 #include "modules/media_controls/elements/MediaControlCurrentTimeDisplayElement.h"
 #include "modules/media_controls/elements/MediaControlDownloadButtonElement.h"
+#include "modules/media_controls/elements/MediaControlRemainingTimeDisplayElement.h"
 #include "modules/media_controls/elements/MediaControlTimelineElement.h"
 #include "modules/media_controls/elements/MediaControlVolumeSliderElement.h"
 #include "modules/remoteplayback/HTMLMediaElementRemotePlayback.h"
@@ -76,11 +78,22 @@ class MockLayoutObject : public LayoutObject {
  public:
   MockLayoutObject(Node* node) : LayoutObject(node) {}
 
+  void SetVisible(bool visible) { visible_ = visible; }
+
   const char* GetName() const override { return "MockLayoutObject"; }
   void UpdateLayout() override {}
   FloatRect LocalBoundingBoxRectForAccessibility() const override {
     return FloatRect();
   }
+  void AbsoluteQuads(Vector<FloatQuad>& quads,
+                     MapCoordinatesFlags mode) const override {
+    if (!visible_)
+      return;
+    quads.push_back(FloatQuad(FloatRect(0.f, 0.f, 10.f, 10.f)));
+  }
+
+ private:
+  bool visible_ = false;
 };
 
 class StubLocalFrameClientForImpl : public EmptyLocalFrameClient {
@@ -92,7 +105,8 @@ class StubLocalFrameClientForImpl : public EmptyLocalFrameClient {
   std::unique_ptr<WebMediaPlayer> CreateWebMediaPlayer(
       HTMLMediaElement&,
       const WebMediaPlayerSource&,
-      WebMediaPlayerClient*) override {
+      WebMediaPlayerClient*,
+      WebLayerTreeView*) override {
     return WTF::WrapUnique(new MockWebMediaPlayerForImpl);
   }
 
@@ -109,6 +123,13 @@ Element* GetElementByShadowPseudoId(Node& root_node,
       return &element;
   }
   return nullptr;
+}
+
+MediaControlDownloadButtonElement& GetDownloadButton(
+    MediaControlsImpl& controls) {
+  Element* element = GetElementByShadowPseudoId(
+      controls, "-internal-media-controls-download-button");
+  return static_cast<MediaControlDownloadButtonElement&>(*element);
 }
 
 bool IsElementVisible(Element& element) {
@@ -158,6 +179,8 @@ class MediaControlsImplTest : public ::testing::Test {
     clients.chrome_client = new MockChromeClientForImpl();
     page_holder_ = DummyPageHolder::Create(
         IntSize(800, 600), &clients, StubLocalFrameClientForImpl::Create());
+    GetDocument().GetSettings()->SetMediaDownloadInProductHelpEnabled(
+        EnableDownloadInProductHelp());
 
     GetDocument().write("<video>");
     HTMLVideoElement& video =
@@ -196,6 +219,10 @@ class MediaControlsImplTest : public ::testing::Test {
   MediaControlCurrentTimeDisplayElement* GetCurrentTimeDisplayElement() const {
     return media_controls_->current_time_display_;
   }
+  MediaControlRemainingTimeDisplayElement* GetRemainingTimeDisplayElement()
+      const {
+    return media_controls_->duration_display_;
+  }
   MockWebMediaPlayerForImpl* WebMediaPlayer() {
     return static_cast<MockWebMediaPlayerForImpl*>(
         MediaControls().MediaElement().GetWebMediaPlayer());
@@ -225,6 +252,12 @@ class MediaControlsImplTest : public ::testing::Test {
 
   bool HasAvailabilityCallbacks(RemotePlayback* remote_playback) {
     return !remote_playback->availability_callbacks_.IsEmpty();
+  }
+
+  virtual bool EnableDownloadInProductHelp() { return false; }
+
+  const String& GetDisplayedTime(MediaControlTimeDisplayElement* display) {
+    return ToText(display->firstChild())->data();
   }
 
  private:
@@ -513,6 +546,137 @@ TEST_F(MediaControlsImplTest, DownloadButtonNotDisplayedHLS) {
   EXPECT_FALSE(IsElementVisible(*download_button));
 }
 
+TEST_F(MediaControlsImplTest, DownloadButtonInProductHelpDisabled) {
+  EXPECT_FALSE(MediaControls().DownloadInProductHelp());
+}
+
+class MediaControlsImplInProductHelpTest : public MediaControlsImplTest {
+ public:
+  void SetUp() override {
+    MediaControlsImplTest::SetUp();
+    ASSERT_TRUE(MediaControls().DownloadInProductHelp());
+  }
+
+  MediaDownloadInProductHelpManager& Manager() {
+    return *MediaControls().DownloadInProductHelp();
+  }
+
+  void Play() { MediaControls().OnPlay(); }
+
+  bool EnableDownloadInProductHelp() override { return true; }
+};
+
+// Disabled on Mac. Elusive Segfault on 10.12. See http://crbug.com/758076.
+#if defined(OS_MACOSX)
+#define MAYBE_DownloadButtonInProductHelp_Button \
+  DISABLED_DownloadButtonInProductHelp_Button
+#define MAYBE_DownloadButtonInProductHelp_ControlsVisibility \
+  DISABLED_DownloadButtonInProductHelp_ControlsVisibility
+#define MAYBE_DownloadButtonInProductHelp_ButtonVisibility \
+  DISABLED_DownloadButtonInProductHelp_ButtonVisibility
+#else
+#define MAYBE_DownloadButtonInProductHelp_Button \
+  DownloadButtonInProductHelp_Button
+#define MAYBE_DownloadButtonInProductHelp_ControlsVisibility \
+  DownloadButtonInProductHelp_ControlsVisibility
+#define MAYBE_DownloadButtonInProductHelp_ButtonVisibility \
+  DownloadButtonInProductHelp_ButtonVisibility
+#endif
+TEST_F(MediaControlsImplInProductHelpTest,
+       MAYBE_DownloadButtonInProductHelp_Button) {
+  EnsureSizing();
+
+  // Inject the LayoutObject for the button to override the rect returned in
+  // visual viewport.
+  MediaControlDownloadButtonElement& button =
+      GetDownloadButton(MediaControls());
+  MockLayoutObject layout_object(&button);
+  layout_object.SetVisible(true);
+  button.SetLayoutObject(&layout_object);
+
+  MediaControls().MediaElement().SetSrc("https://example.com/foo.mp4");
+  testing::RunPendingTasks();
+  SimulateLoadedMetadata();
+  Play();
+
+  // Load above should have made the button wanted, which should trigger showing
+  // in-product help.
+  EXPECT_TRUE(Manager().IsShowingInProductHelp());
+
+  // Disable the download button, which dismisses the in-product-help.
+  button.SetIsWanted(false);
+  EXPECT_FALSE(Manager().IsShowingInProductHelp());
+
+  // Toggle again. In-product help is shown only once.
+  button.SetIsWanted(true);
+  EXPECT_FALSE(Manager().IsShowingInProductHelp());
+
+  button.SetLayoutObject(nullptr);
+}
+
+TEST_F(MediaControlsImplInProductHelpTest,
+       MAYBE_DownloadButtonInProductHelp_ControlsVisibility) {
+  EnsureSizing();
+
+  // Inject the LayoutObject for the button to override the rect returned in
+  // visual viewport.
+  MediaControlDownloadButtonElement& button =
+      GetDownloadButton(MediaControls());
+  MockLayoutObject layout_object(&button);
+  layout_object.SetVisible(true);
+  button.SetLayoutObject(&layout_object);
+
+  // The in-product-help should not be shown while the controls are hidden.
+  MediaControls().Hide();
+  MediaControls().MediaElement().SetSrc("https://example.com/foo.mp4");
+  testing::RunPendingTasks();
+  SimulateLoadedMetadata();
+  Play();
+
+  ASSERT_TRUE(button.IsWanted());
+  EXPECT_FALSE(Manager().IsShowingInProductHelp());
+
+  // Showing the controls initiates showing in-product-help.
+  MediaControls().MaybeShow();
+  EXPECT_TRUE(Manager().IsShowingInProductHelp());
+
+  // Hiding the controls dismissed in-product-help.
+  MediaControls().Hide();
+  EXPECT_FALSE(Manager().IsShowingInProductHelp());
+
+  button.SetLayoutObject(nullptr);
+}
+
+TEST_F(MediaControlsImplInProductHelpTest,
+       MAYBE_DownloadButtonInProductHelp_ButtonVisibility) {
+  EnsureSizing();
+
+  // Inject the LayoutObject for the button to override the rect returned in
+  // visual viewport.
+  MediaControlDownloadButtonElement& button =
+      GetDownloadButton(MediaControls());
+  MockLayoutObject layout_object(&button);
+  button.SetLayoutObject(&layout_object);
+
+  // The in-product-help should not be shown while the button is hidden.
+  layout_object.SetVisible(false);
+  MediaControls().MediaElement().SetSrc("https://example.com/foo.mp4");
+  testing::RunPendingTasks();
+  SimulateLoadedMetadata();
+  Play();
+
+  ASSERT_TRUE(button.IsWanted());
+  EXPECT_FALSE(Manager().IsShowingInProductHelp());
+
+  // Make the button visible to show in-product-help.
+  layout_object.SetVisible(true);
+  button.SetIsWanted(false);
+  button.SetIsWanted(true);
+  EXPECT_TRUE(Manager().IsShowingInProductHelp());
+
+  button.SetLayoutObject(nullptr);
+}
+
 TEST_F(MediaControlsImplTest, TimelineSeekToRoundedEnd) {
   EnsureSizing();
 
@@ -747,6 +911,42 @@ TEST_F(MediaControlsImplTest, TimelineMetricsDragBackAndForth) {
       "Media.Timeline.DragSumAbsTimeDelta." TIMELINE_W, 17 /* [8m, 15m) */, 1);
   GetHistogramTester().ExpectUniqueSample(
       "Media.Timeline.DragTimeDelta." TIMELINE_W, 9 /* (-4m, -2m] */, 1);
+}
+
+TEST_F(MediaControlsImplTest, TimeIsCorrectlyFormatted) {
+  struct {
+    double time;
+    String expected_result;
+  } tests[] = {
+      {-3661, "-1:01:01"},   {-1, "-0:01"},     {0, "0:00"},
+      {1, "0:01"},           {15, "0:15"},      {125, "2:05"},
+      {615, "10:15"},        {3666, "1:01:06"}, {75123, "20:52:03"},
+      {360600, "100:10:00"},
+  };
+
+  double duration = 360600;  // Long enough to check each of the tests.
+  LoadMediaWithDuration(duration);
+  EnsureSizing();
+  testing::RunPendingTasks();
+
+  MediaControlCurrentTimeDisplayElement* current_display =
+      GetCurrentTimeDisplayElement();
+  MediaControlRemainingTimeDisplayElement* duration_display =
+      GetRemainingTimeDisplayElement();
+
+  // The value and format of the duration display should be correct.
+  EXPECT_EQ(360600, duration_display->CurrentValue());
+  EXPECT_EQ("/ 100:10:00", GetDisplayedTime(duration_display));
+
+  for (const auto& testcase : tests) {
+    current_display->SetCurrentValue(testcase.time);
+
+    // Current value should be updated.
+    EXPECT_EQ(testcase.time, current_display->CurrentValue());
+
+    // Display text should be updated and correctly formatted.
+    EXPECT_EQ(testcase.expected_result, GetDisplayedTime(current_display));
+  }
 }
 
 namespace {

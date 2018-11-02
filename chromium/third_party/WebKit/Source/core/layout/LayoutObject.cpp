@@ -35,13 +35,13 @@
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/ElementTraversal.h"
+#include "core/dom/FirstLetterPseudoElement.h"
 #include "core/dom/ShadowRoot.h"
 #include "core/dom/StyleChangeReason.h"
 #include "core/dom/StyleEngine.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/TextAffinity.h"
-#include "core/editing/VisibleUnits.h"
 #include "core/frame/DeprecatedScheduleStyleRecalcDuringLayout.h"
 #include "core/frame/EventHandlerRegistry.h"
 #include "core/frame/LocalFrame.h"
@@ -69,6 +69,7 @@
 #include "core/layout/LayoutTableCell.h"
 #include "core/layout/LayoutTableCol.h"
 #include "core/layout/LayoutTableRow.h"
+#include "core/layout/LayoutTextFragment.h"
 #include "core/layout/LayoutTheme.h"
 #include "core/layout/LayoutView.h"
 #include "core/layout/api/LayoutAPIShim.h"
@@ -635,7 +636,7 @@ bool LayoutObject::ScrollRectToVisible(const LayoutRect& rect,
     return false;
 
   GetDocument().GetPage()->GetSmoothScrollSequencer()->AbortAnimations();
-  enclosing_box->ScrollRectToVisible(
+  enclosing_box->ScrollRectToVisibleRecursive(
       rect, align_x, align_y, scroll_type, make_visible_in_visual_viewport,
       scroll_behavior, scroll_type == kProgrammaticScroll);
   GetDocument().GetPage()->GetSmoothScrollSequencer()->RunQueuedAnimations();
@@ -1181,7 +1182,7 @@ LayoutRect LayoutObject::AbsoluteVisualRect() const {
   return rect;
 }
 
-LayoutRect LayoutObject::LocalVisualRect() const {
+LayoutRect LayoutObject::LocalVisualRectIgnoringVisibility() const {
   NOTREACHED();
   return LayoutRect();
 }
@@ -1355,11 +1356,6 @@ Color LayoutObject::SelectionEmphasisMarkColor(
   return SelectionColor(CSSPropertyWebkitTextEmphasisColor, global_paint_flags);
 }
 
-std::pair<int, int> LayoutObject::SelectionStartEnd() const {
-  DCHECK(!View()->NeedsLayout());
-  return GetFrame()->Selection().LayoutSelectionStartEnd();
-}
-
 // Called when an object that was floating or positioned becomes a normal flow
 // object again. We have to make sure the layout tree updates as needed to
 // accommodate the new normal flow object.
@@ -1472,7 +1468,7 @@ StyleDifference LayoutObject::AdjustStyleDifference(
   return diff;
 }
 
-void LayoutObject::SetPseudoStyle(PassRefPtr<ComputedStyle> pseudo_style) {
+void LayoutObject::SetPseudoStyle(RefPtr<ComputedStyle> pseudo_style) {
   DCHECK(pseudo_style->StyleType() == kPseudoIdBefore ||
          pseudo_style->StyleType() == kPseudoIdAfter ||
          pseudo_style->StyleType() == kPseudoIdFirstLetter);
@@ -1552,18 +1548,10 @@ void LayoutObject::SetNeedsOverflowRecalcAfterStyleChange() {
 }
 
 DISABLE_CFI_PERF
-void LayoutObject::SetStyle(PassRefPtr<ComputedStyle> style) {
+void LayoutObject::SetStyle(RefPtr<ComputedStyle> style) {
   DCHECK(style);
-
-  if (style_ == style) {
-    // We need to run through adjustStyleDifference() for iframes, plugins, and
-    // canvas so style sharing is disabled for them. That should ensure that we
-    // never hit this code path.
-    DCHECK(!IsLayoutIFrame());
-    DCHECK(!IsEmbeddedObject());
-    DCHECK(!IsCanvas());
+  if (style_ == style)
     return;
-  }
 
   StyleDifference diff;
   if (style_)
@@ -1920,7 +1908,7 @@ void LayoutObject::PropagateStyleToAnonymousChildren() {
   }
 }
 
-void LayoutObject::SetStyleWithWritingModeOf(PassRefPtr<ComputedStyle> style,
+void LayoutObject::SetStyleWithWritingModeOf(RefPtr<ComputedStyle> style,
                                              LayoutObject* parent) {
   if (parent)
     style->SetWritingMode(parent->StyleRef().GetWritingMode());
@@ -1928,7 +1916,7 @@ void LayoutObject::SetStyleWithWritingModeOf(PassRefPtr<ComputedStyle> style,
 }
 
 void LayoutObject::SetStyleWithWritingModeOfParent(
-    PassRefPtr<ComputedStyle> style) {
+    RefPtr<ComputedStyle> style) {
   SetStyleWithWritingModeOf(std::move(style), Parent());
 }
 
@@ -2356,16 +2344,19 @@ void LayoutObject::ComputeLayerHitTestRects(
 
   if (!HasLayer()) {
     LayoutObject* container = this->Container();
-    current_layer = container->EnclosingLayer();
-    if (container && current_layer->GetLayoutObject() != container) {
-      layer_offset.Move(container->OffsetFromAncestorContainer(
-          &current_layer->GetLayoutObject()));
-      // If the layer itself is scrolled, we have to undo the subtraction of its
-      // scroll offset since we want the offset relative to the scrolling
-      // content, not the element itself.
-      if (current_layer->GetLayoutObject().HasOverflowClip())
-        layer_offset.Move(
-            current_layer->GetLayoutBox()->ScrolledContentOffset());
+    if (container) {
+      current_layer = container->EnclosingLayer();
+      if (current_layer->GetLayoutObject() != container) {
+        layer_offset.Move(container->OffsetFromAncestorContainer(
+            &current_layer->GetLayoutObject()));
+        // If the layer itself is scrolled, we have to undo the subtraction of
+        // its scroll offset since we want the offset relative to the scrolling
+        // content, not the element itself.
+        if (current_layer->GetLayoutObject().HasOverflowClip()) {
+          layer_offset.Move(
+              current_layer->GetLayoutBox()->ScrolledContentOffset());
+        }
+      }
     }
   }
 
@@ -2948,7 +2939,7 @@ void LayoutObject::ForceChildLayout() {
 
 enum StyleCacheState { kCached, kUncached };
 
-static PassRefPtr<ComputedStyle> FirstLineStyleForCachedUncachedType(
+static RefPtr<ComputedStyle> FirstLineStyleForCachedUncachedType(
     StyleCacheState type,
     const LayoutObject* layout_object,
     ComputedStyle* style) {
@@ -2988,7 +2979,7 @@ static PassRefPtr<ComputedStyle> FirstLineStyleForCachedUncachedType(
   return nullptr;
 }
 
-PassRefPtr<ComputedStyle> LayoutObject::UncachedFirstLineStyle() const {
+RefPtr<ComputedStyle> LayoutObject::UncachedFirstLineStyle() const {
   if (!GetDocument().GetStyleEngine().UsesFirstLineRules())
     return nullptr;
 
@@ -3022,7 +3013,7 @@ ComputedStyle* LayoutObject::GetCachedPseudoStyle(
   return element->PseudoStyle(PseudoStyleRequest(pseudo), parent_style);
 }
 
-PassRefPtr<ComputedStyle> LayoutObject::GetUncachedPseudoStyle(
+RefPtr<ComputedStyle> LayoutObject::GetUncachedPseudoStyle(
     const PseudoStyleRequest& request,
     const ComputedStyle* parent_style) const {
   DCHECK_NE(request.pseudo_id, kPseudoIdBefore);
@@ -3037,7 +3028,7 @@ PassRefPtr<ComputedStyle> LayoutObject::GetUncachedPseudoStyle(
   return element->GetUncachedPseudoStyle(request, parent_style);
 }
 
-PassRefPtr<ComputedStyle> LayoutObject::GetUncachedSelectionStyle() const {
+RefPtr<ComputedStyle> LayoutObject::GetUncachedSelectionStyle() const {
   if (!GetNode())
     return nullptr;
 
@@ -3049,8 +3040,10 @@ PassRefPtr<ComputedStyle> LayoutObject::GetUncachedSelectionStyle() const {
   if (ShadowRoot* root = GetNode()->ContainingShadowRoot()) {
     if (root->GetType() == ShadowRootType::kUserAgent) {
       if (Element* shadow_host = GetNode()->OwnerShadowHost()) {
-        return shadow_host->GetLayoutObject()->GetUncachedPseudoStyle(
-            PseudoStyleRequest(kPseudoIdSelection));
+        if (LayoutObject* obj = shadow_host->GetLayoutObject()) {
+          return obj->GetUncachedPseudoStyle(
+              PseudoStyleRequest(kPseudoIdSelection));
+        }
       }
     }
   }
@@ -3480,10 +3473,6 @@ void LayoutObject::SetIsBackgroundAttachmentFixedObject(
     GetFrameView()->RemoveBackgroundAttachmentFixedObject(this);
 }
 
-PropertyTreeState LayoutObject::ContentsProperties() const {
-  return rare_paint_data_->ContentsProperties();
-}
-
 RarePaintData& LayoutObject::EnsureRarePaintData() {
   if (!rare_paint_data_)
     rare_paint_data_ = WTF::MakeUnique<RarePaintData>();
@@ -3532,6 +3521,61 @@ void LayoutObject::InvalidatePaintForSelection() {
       continue;
     child->SetShouldInvalidateSelection();
   }
+}
+
+// Note about ::first-letter pseudo-element:
+//   When an element has ::first-letter pseudo-element, first letter characters
+//   are taken from |Text| node and first letter characters are considered
+//   as content of <pseudo:first-letter>.
+//   For following HTML,
+//      <style>div::first-letter {color: red}</style>
+//      <div>abc</div>
+//   we have following layout tree:
+//      LayoutBlockFlow {DIV} at (0,0) size 784x55
+//        LayoutInline {<pseudo:first-letter>} at (0,0) size 22x53
+//          LayoutTextFragment (anonymous) at (0,1) size 22x53
+//            text run at (0,1) width 22: "a"
+//        LayoutTextFragment {#text} at (21,30) size 16x17
+//          text run at (21,30) width 16: "bc"
+//  In this case, |Text::layoutObject()| for "abc" returns |LayoutTextFragment|
+//  containing "bc", and it is called remaining part.
+//
+//  Even if |Text| node contains only first-letter characters, e.g. just "a",
+//  remaining part of |LayoutTextFragment|, with |fragmentLength()| == 0, is
+//  appeared in layout tree.
+//
+//  When |Text| node contains only first-letter characters and whitespaces, e.g.
+//  "B\n", associated |LayoutTextFragment| is first-letter part instead of
+//  remaining part.
+//
+//  Punctuation characters are considered as first-letter. For "(1)ab",
+//  "(1)" are first-letter part and "ab" are remaining part.
+const LayoutObject* AssociatedLayoutObjectOf(const Node& node,
+                                             int offset_in_node) {
+  DCHECK_GE(offset_in_node, 0);
+  LayoutObject* layout_object = node.GetLayoutObject();
+  if (!node.IsTextNode() || !layout_object ||
+      !ToLayoutText(layout_object)->IsTextFragment())
+    return layout_object;
+  LayoutTextFragment* layout_text_fragment =
+      ToLayoutTextFragment(layout_object);
+  if (!layout_text_fragment->IsRemainingTextLayoutObject()) {
+    DCHECK_LE(
+        static_cast<unsigned>(offset_in_node),
+        layout_text_fragment->Start() + layout_text_fragment->FragmentLength());
+    return layout_text_fragment;
+  }
+  if (layout_text_fragment->FragmentLength() &&
+      static_cast<unsigned>(offset_in_node) >= layout_text_fragment->Start())
+    return layout_object;
+  LayoutObject* first_letter_layout_object =
+      layout_text_fragment->GetFirstLetterPseudoElement()->GetLayoutObject();
+  // TODO(yosin): We're not sure when |firstLetterLayoutObject| has
+  // multiple child layout object.
+  LayoutObject* child = first_letter_layout_object->SlowFirstChild();
+  CHECK(child && child->IsText());
+  DCHECK_EQ(child, first_letter_layout_object->SlowLastChild());
+  return child;
 }
 
 }  // namespace blink

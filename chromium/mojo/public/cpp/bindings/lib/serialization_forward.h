@@ -33,22 +33,6 @@ struct IsOptionalWrapper {
           typename std::remove_reference<T>::type>::type>::value;
 };
 
-// PrepareToSerialize() must be matched by a Serialize() for the same input
-// later. Moreover, within the same SerializationContext if PrepareToSerialize()
-// is called for |input_1|, ..., |input_n|, Serialize() must be called for
-// those objects in the exact same order.
-template <typename MojomType,
-          typename InputUserType,
-          typename... Args,
-          typename std::enable_if<
-              !IsOptionalWrapper<InputUserType>::value>::type* = nullptr>
-size_t PrepareToSerialize(InputUserType&& input, Args&&... args) {
-  return Serializer<MojomType,
-                    typename std::remove_reference<InputUserType>::type>::
-      PrepareToSerialize(std::forward<InputUserType>(input),
-                         std::forward<Args>(args)...);
-}
-
 template <typename MojomType,
           typename InputUserType,
           typename... Args,
@@ -71,33 +55,19 @@ bool Deserialize(DataType&& input, InputUserType* output, Args&&... args) {
       std::forward<DataType>(input), output, std::forward<Args>(args)...);
 }
 
-// Specialization that unwraps base::Optional<>.
 template <typename MojomType,
           typename InputUserType,
-          typename... Args,
-          typename std::enable_if<
-              IsOptionalWrapper<InputUserType>::value>::type* = nullptr>
-size_t PrepareToSerialize(InputUserType&& input, Args&&... args) {
-  if (!input)
-    return 0;
-  return PrepareToSerialize<MojomType>(*input, std::forward<Args>(args)...);
-}
-
-template <typename MojomType,
-          typename InputUserType,
-          typename DataType,
+          typename BufferWriterType,
           typename... Args,
           typename std::enable_if<
               IsOptionalWrapper<InputUserType>::value>::type* = nullptr>
 void Serialize(InputUserType&& input,
                Buffer* buffer,
-               DataType** output,
+               BufferWriterType* writer,
                Args&&... args) {
-  if (!input) {
-    *output = nullptr;
+  if (!input)
     return;
-  }
-  Serialize<MojomType>(*input, buffer, output, std::forward<Args>(args)...);
+  Serialize<MojomType>(*input, buffer, writer, std::forward<Args>(args)...);
 }
 
 template <typename MojomType,

@@ -45,7 +45,6 @@ class HTMLOptGroupElement;
 class HTMLOptionElement;
 class HTMLOptionElementOrHTMLOptGroupElement;
 class HTMLElementOrLong;
-class PaintLayerScrollableArea;
 class PopupMenu;
 
 class CORE_EXPORT HTMLSelectElement final
@@ -72,8 +71,9 @@ class CORE_EXPORT HTMLSelectElement final
   unsigned length() const;
   void setLength(unsigned, ExceptionState&);
 
+  // TODO(tkent): Rename |size| to |Size|. This is not an implementation of
+  // |size| IDL attribute.
   unsigned size() const { return size_; }
-  void setSize(unsigned);
   bool IsMultiple() const { return is_multiple_; }
 
   bool UsesMenuList() const;
@@ -119,7 +119,6 @@ class CORE_EXPORT HTMLSelectElement final
 
   void ScrollToSelection();
   void ScrollToOption(HTMLOptionElement*);
-  void ScrollToOptionAfterLayout(PaintLayerScrollableArea&);
 
   bool CanSelectAll() const;
   void SelectAll();
@@ -269,6 +268,7 @@ class CORE_EXPORT HTMLSelectElement final
                                                   SkipDirection) const;
   HTMLOptionElement* EventTargetOption(const Event&);
   AutoscrollController* GetAutoscrollController() const;
+  void ScrollToOptionTask();
 
   bool AreAuthorShadowsAllowed() const override { return false; }
   void FinishParsingChildren() override;

@@ -19,7 +19,6 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/drop_data.h"
-#include "extensions/api/tabs/tabs_private_api.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
 
 #if defined(OS_MACOSX)

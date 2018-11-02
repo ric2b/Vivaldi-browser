@@ -29,11 +29,11 @@ VRDeviceManager* g_vr_device_manager = nullptr;
 VRDeviceManager::VRDeviceManager() : keep_alive_(false) {
 // Register VRDeviceProviders for the current platform
 #if defined(OS_ANDROID)
-  RegisterProvider(base::MakeUnique<GvrDeviceProvider>());
+  RegisterProvider(std::make_unique<GvrDeviceProvider>());
 #endif
 
 #if BUILDFLAG(ENABLE_OPENVR)
-  RegisterProvider(base::MakeUnique<OpenVRDeviceProvider>());
+  RegisterProvider(std::make_unique<OpenVRDeviceProvider>());
 #endif
 }
 
@@ -102,9 +102,8 @@ unsigned int VRDeviceManager::GetNumberOfConnectedDevices() {
 VRDevice* VRDeviceManager::GetDevice(unsigned int index) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  if (index == 0) {
-    return NULL;
-  }
+  if (index == 0)
+    return nullptr;
 
   DeviceMap::iterator iter = devices_.find(index);
   if (iter == devices_.end()) {

@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 /**
+ * @implements {Protocol.StorageDispatcher}
  * @unrestricted
  */
 SDK.ServiceWorkerCacheModel = class extends SDK.SDKModel {
@@ -11,13 +12,18 @@ SDK.ServiceWorkerCacheModel = class extends SDK.SDKModel {
    */
   constructor(target) {
     super(target);
+    target.registerStorageDispatcher(this);
 
     /** @type {!Map<string, !SDK.ServiceWorkerCacheModel.Cache>} */
     this._caches = new Map();
 
-    this._agent = target.cacheStorageAgent();
+    this._cacheAgent = target.cacheStorageAgent();
+    this._storageAgent = target.storageAgent();
 
     this._securityOriginManager = target.model(SDK.SecurityOriginManager);
+
+    this._originsUpdated = new Set();
+    this._throttler = new Common.Throttler(2000);
 
     /** @type {boolean} */
     this._enabled = false;
@@ -58,7 +64,7 @@ SDK.ServiceWorkerCacheModel = class extends SDK.SDKModel {
    * @param {!SDK.ServiceWorkerCacheModel.Cache} cache
    */
   async deleteCache(cache) {
-    var response = await this._agent.invoke_deleteCache({cacheId: cache.cacheId});
+    var response = await this._cacheAgent.invoke_deleteCache({cacheId: cache.cacheId});
     if (response[Protocol.Error]) {
       console.error(`ServiceWorkerCacheAgent error deleting cache ${cache.toString()}: ${response[Protocol.Error]}`);
       return;
@@ -73,7 +79,7 @@ SDK.ServiceWorkerCacheModel = class extends SDK.SDKModel {
    * @return {!Promise}
    */
   async deleteCacheEntry(cache, request) {
-    var response = await this._agent.invoke_deleteEntry({cacheId: cache.cacheId, request});
+    var response = await this._cacheAgent.invoke_deleteEntry({cacheId: cache.cacheId, request});
     if (!response[Protocol.Error])
       return;
     Common.console.error(Common.UIString(
@@ -85,7 +91,7 @@ SDK.ServiceWorkerCacheModel = class extends SDK.SDKModel {
    * @param {!SDK.ServiceWorkerCacheModel.Cache} cache
    * @param {number} skipCount
    * @param {number} pageSize
-   * @param {function(!Array.<!SDK.ServiceWorkerCacheModel.Entry>, boolean)} callback
+   * @param {function(!Array.<!Protocol.CacheStorage.DataEntry>, boolean)} callback
    */
   loadCacheData(cache, skipCount, pageSize, callback) {
     this._requestEntries(cache, skipCount, pageSize, callback);
@@ -118,6 +124,7 @@ SDK.ServiceWorkerCacheModel = class extends SDK.SDKModel {
 
   _addOrigin(securityOrigin) {
     this._loadCacheNames(securityOrigin);
+    this._storageAgent.trackCacheStorageForOrigin(securityOrigin);
   }
 
   /**
@@ -131,13 +138,14 @@ SDK.ServiceWorkerCacheModel = class extends SDK.SDKModel {
         this._cacheRemoved(cache);
       }
     }
+    this._storageAgent.untrackCacheStorageForOrigin(securityOrigin);
   }
 
   /**
    * @param {string} securityOrigin
    */
   async _loadCacheNames(securityOrigin) {
-    var caches = await this._agent.requestCacheNames(securityOrigin);
+    var caches = await this._cacheAgent.requestCacheNames(securityOrigin);
     if (!caches)
       return;
     this._updateCacheNames(securityOrigin, caches);
@@ -168,7 +176,7 @@ SDK.ServiceWorkerCacheModel = class extends SDK.SDKModel {
 
     for (var cacheJson of cachesJson) {
       var cache =
-          new SDK.ServiceWorkerCacheModel.Cache(cacheJson.securityOrigin, cacheJson.cacheName, cacheJson.cacheId);
+          new SDK.ServiceWorkerCacheModel.Cache(this, cacheJson.securityOrigin, cacheJson.cacheName, cacheJson.cacheId);
       updatingCachesIds.add(cache.cacheId);
       if (this._caches.has(cache.cacheId))
         continue;
@@ -214,18 +222,39 @@ SDK.ServiceWorkerCacheModel = class extends SDK.SDKModel {
    * @param {!SDK.ServiceWorkerCacheModel.Cache} cache
    * @param {number} skipCount
    * @param {number} pageSize
-   * @param {function(!Array<!SDK.ServiceWorkerCacheModel.Entry>, boolean)} callback
+   * @param {function(!Array<!Protocol.CacheStorage.DataEntry>, boolean)} callback
    */
   async _requestEntries(cache, skipCount, pageSize, callback) {
-    var response = await this._agent.invoke_requestEntries({cacheId: cache.cacheId, skipCount, pageSize});
+    var response = await this._cacheAgent.invoke_requestEntries({cacheId: cache.cacheId, skipCount, pageSize});
     if (response[Protocol.Error]) {
       console.error('ServiceWorkerCacheAgent error while requesting entries: ', response[Protocol.Error]);
       return;
     }
-    var entries = response.cacheDataEntries.map(
-        dataEntry => new SDK.ServiceWorkerCacheModel.Entry(
-            dataEntry.request, dataEntry.response, new Date(dataEntry.responseTime * 1000).toLocaleString()));
-    callback(entries, response.hasMore);
+    callback(response.cacheDataEntries, response.hasMore);
+  }
+
+  /**
+   * @param {string} origin
+   * @override
+   */
+  cacheStorageListUpdated(origin) {
+    this._originsUpdated.add(origin);
+
+    this._throttler.schedule(() => {
+      var promises = Array.from(this._originsUpdated, origin => this._loadCacheNames(origin));
+      this._originsUpdated.clear();
+      return Promise.all(promises);
+    });
+  }
+
+  /**
+   * @param {string} origin
+   * @param {string} cacheName
+   * @override
+   */
+  cacheStorageContentUpdated(origin, cacheName) {
+    this.dispatchEventToListeners(
+        SDK.ServiceWorkerCacheModel.Events.CacheStorageContentUpdated, {origin: origin, cacheName: cacheName});
   }
 };
 
@@ -234,23 +263,8 @@ SDK.SDKModel.register(SDK.ServiceWorkerCacheModel, SDK.Target.Capability.Browser
 /** @enum {symbol} */
 SDK.ServiceWorkerCacheModel.Events = {
   CacheAdded: Symbol('CacheAdded'),
-  CacheRemoved: Symbol('CacheRemoved')
-};
-
-/**
- * @unrestricted
- */
-SDK.ServiceWorkerCacheModel.Entry = class {
-  /**
-   * @param {string} request
-   * @param {string} response
-   * @param {string} responseTime
-   */
-  constructor(request, response, responseTime) {
-    this.request = request;
-    this.response = response;
-    this.responseTime = responseTime;
-  }
+  CacheRemoved: Symbol('CacheRemoved'),
+  CacheStorageContentUpdated: Symbol('CacheStorageContentUpdated')
 };
 
 /**
@@ -258,11 +272,13 @@ SDK.ServiceWorkerCacheModel.Entry = class {
  */
 SDK.ServiceWorkerCacheModel.Cache = class {
   /**
+   * @param {!SDK.ServiceWorkerCacheModel} model
    * @param {string} securityOrigin
    * @param {string} cacheName
    * @param {string} cacheId
    */
-  constructor(securityOrigin, cacheName, cacheId) {
+  constructor(model, securityOrigin, cacheName, cacheId) {
+    this._model = model;
     this.securityOrigin = securityOrigin;
     this.cacheName = cacheName;
     this.cacheId = cacheId;
@@ -282,5 +298,13 @@ SDK.ServiceWorkerCacheModel.Cache = class {
    */
   toString() {
     return this.securityOrigin + this.cacheName;
+  }
+
+  /**
+   * @param {string} url
+   * @return {!Promise<?Protocol.CacheStorage.CachedResponse>}
+   */
+  requestCachedResponse(url) {
+    return this._model._cacheAgent.requestCachedResponse(this.cacheId, url);
   }
 };

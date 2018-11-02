@@ -14,7 +14,6 @@
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/threading/thread_restrictions.h"
-#include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -179,7 +178,9 @@ bool AudioOutputDevice::CurrentThreadIsRenderingThread() {
 void AudioOutputDevice::RequestDeviceAuthorizationOnIOThread() {
   DCHECK(task_runner()->BelongsToCurrentThread());
   DCHECK_EQ(state_, IDLE);
+
   state_ = AUTHORIZING;
+  auth_start_time_ = base::TimeTicks::Now();
   ipc_->RequestDeviceAuthorization(this, session_id_, device_id_,
                                    security_origin_);
 
@@ -319,6 +320,12 @@ void AudioOutputDevice::OnDeviceAuthorized(
   DCHECK(task_runner()->BelongsToCurrentThread());
 
   auth_timeout_action_.reset();
+  // Times over 15 s should be very rare, so we don't lose interesting data by
+  // making it the upper limit.
+  UMA_HISTOGRAM_CUSTOM_TIMES("Media.Audio.Render.OutputDeviceAuthorizationTime",
+                             base::TimeTicks::Now() - auth_start_time_,
+                             base::TimeDelta::FromMilliseconds(1),
+                             base::TimeDelta::FromSeconds(15), 100);
 
   // Do nothing if late authorization is received after timeout.
   if (state_ == IPC_CLOSED)
@@ -463,6 +470,7 @@ void AudioOutputDevice::AudioThreadCallback::MapSharedMemory() {
   AudioOutputBuffer* buffer =
       reinterpret_cast<AudioOutputBuffer*>(shared_memory_.memory());
   output_bus_ = AudioBus::WrapMemory(audio_parameters_, buffer->audio);
+  output_bus_->set_is_bitstream_format(audio_parameters_.IsBitstreamFormat());
 }
 
 // Called whenever we receive notifications about pending data.
@@ -500,6 +508,11 @@ void AudioOutputDevice::AudioThreadCallback::Process(uint32_t control_signal) {
   // memory.
   render_callback_->Render(delay, delay_timestamp, frames_skipped,
                            output_bus_.get());
+
+  if (audio_parameters_.IsBitstreamFormat()) {
+    buffer->params.bitstream_data_size = output_bus_->GetBitstreamDataSize();
+    buffer->params.bitstream_frames = output_bus_->GetBitstreamFrames();
+  }
 }
 
 bool AudioOutputDevice::AudioThreadCallback::

@@ -11,16 +11,14 @@
 #include "core/layout/ng/ng_layout_opportunity_iterator.h"
 #include "platform/fonts/shaping/HarfBuzzShaper.h"
 #include "platform/fonts/shaping/ShapeResultSpacing.h"
-#include "platform/heap/Handle.h"
 #include "platform/text/TextBreakIterator.h"
 #include "platform/wtf/Allocator.h"
-#include "platform/wtf/text/AtomicString.h"
 
 namespace blink {
 
+class Hyphenation;
 class NGInlineBreakToken;
 class NGInlineItem;
-class NGInlineNode;
 class NGFragmentBuilder;
 
 // Represents a line breaker.
@@ -28,30 +26,68 @@ class NGFragmentBuilder;
 // This class measures each NGInlineItem and determines items to form a line,
 // so that NGInlineLayoutAlgorithm can build a line box from the output.
 class CORE_EXPORT NGLineBreaker {
+  STACK_ALLOCATED();
+
  public:
   NGLineBreaker(NGInlineNode,
-                NGConstraintSpace*,
+                const NGConstraintSpace&,
                 NGFragmentBuilder*,
                 Vector<RefPtr<NGUnpositionedFloat>>*,
                 const NGInlineBreakToken* = nullptr);
   ~NGLineBreaker() {}
-  STACK_ALLOCATED();
 
   // Compute the next line break point and produces NGInlineItemResults for
   // the line.
-  bool NextLine(NGLineInfo*, const NGLogicalOffset&);
+  bool NextLine(const NGLogicalOffset& content_offset,
+                const NGExclusionSpace&,
+                NGLineInfo*);
 
   // Create an NGInlineBreakToken for the last line returned by NextLine().
   RefPtr<NGInlineBreakToken> CreateBreakToken() const;
 
+  NGExclusionSpace* ExclusionSpace() { return line_.exclusion_space.get(); }
+
  private:
+  // This struct holds information for the current line.
+  struct LineData {
+    STACK_ALLOCATED();
+
+    // The current position from inline_start. Unlike NGInlineLayoutAlgorithm
+    // that computes position in visual order, this position in logical order.
+    LayoutUnit position;
+
+    // The current opportunity.
+    WTF::Optional<NGLayoutOpportunity> opportunity;
+
+    std::unique_ptr<NGExclusionSpace> exclusion_space;
+
+    // We don't create "certain zero-height line boxes".
+    // https://drafts.csswg.org/css2/visuren.html#phantom-line-box
+    // Such line boxes do not prevent two margins being "adjoining", and thus
+    // collapsing.
+    // https://drafts.csswg.org/css2/box.html#collapsing-margins
+    bool should_create_line_box = false;
+
+    // Set when the line ended with a forced break. Used to setup the states for
+    // the next line.
+    bool is_after_forced_break = false;
+
+    bool HasAvailableWidth() const { return opportunity.has_value(); }
+    LayoutUnit AvailableWidth() const { return opportunity->InlineSize(); }
+    bool CanFit() const { return position <= AvailableWidth(); }
+    bool CanFit(LayoutUnit extra) const {
+      return position + extra <= AvailableWidth();
+    }
+  };
+
   void BreakLine(NGLineInfo*);
 
-  bool HasAvailableWidth() const { return opportunity_.has_value(); }
-  LayoutUnit AvailableWidth() const {
-    return opportunity_.value().InlineSize();
-  }
-  void UpdateAvailableWidth();
+  void PrepareNextLine(const NGExclusionSpace&, NGLineInfo*);
+
+  bool HasFloatsAffectingCurrentLine() const;
+  void FindNextLayoutOpportunity();
+  void FindNextLayoutOpportunityWithMinimumInlineSize(LayoutUnit);
+
   void ComputeLineLocation(NGLineInfo*) const;
 
   enum class LineBreakState {
@@ -71,22 +107,23 @@ class CORE_EXPORT NGLineBreaker {
   void BreakText(NGInlineItemResult*,
                  const NGInlineItem&,
                  LayoutUnit available_width);
+  static void AppendHyphen(const ComputedStyle&, ShapeResult*);
 
   LineBreakState HandleControlItem(const NGInlineItem&, NGInlineItemResult*);
   LineBreakState HandleAtomicInline(const NGInlineItem&,
                                     NGInlineItemResult*,
                                     const NGLineInfo&);
-  void HandleFloat(const NGInlineItem&,
-                   NGInlineItemResults*);
+  LineBreakState HandleFloat(const NGInlineItem&, NGInlineItemResult*);
 
   void HandleOpenTag(const NGInlineItem&, NGInlineItemResult*);
-  void HandleCloseTag(const NGInlineItem&, NGInlineItemResult*);
+  LineBreakState HandleCloseTag(const NGInlineItem&, NGInlineItemResults*);
 
   void HandleOverflow(NGLineInfo*);
   void Rewind(NGLineInfo*, unsigned new_end);
 
   void SetCurrentStyle(const ComputedStyle&);
   bool IsFirstBreakOpportunity(unsigned, const NGInlineItemResults&) const;
+  LineBreakState ComputeIsBreakableAfter(NGInlineItemResult*) const;
 
   void MoveToNextOf(const NGInlineItem&);
   void MoveToNextOf(const NGInlineItemResult&);
@@ -94,31 +131,27 @@ class CORE_EXPORT NGLineBreaker {
 
   bool IsFirstFormattedLine() const;
 
+  LineData line_;
   NGInlineNode node_;
-  NGConstraintSpace* constraint_space_;
+  const NGConstraintSpace& constraint_space_;
   NGFragmentBuilder* container_builder_;
   Vector<RefPtr<NGUnpositionedFloat>>* unpositioned_floats_;
-  const AtomicString locale_;
-  unsigned item_index_;
-  unsigned offset_;
-  LayoutUnit position_;
-  WTF::Optional<NGLayoutOpportunity> opportunity_;
+  unsigned item_index_ = 0;
+  unsigned offset_ = 0;
   NGLogicalOffset content_offset_;
   LazyLineBreakIterator break_iterator_;
   HarfBuzzShaper shaper_;
   ShapeResultSpacing<String> spacing_;
+  const Hyphenation* hyphenation_ = nullptr;
 
-  bool auto_wrap_;
-  bool break_if_overflow_;
+  // Keep track of handled float items. See HandleFloat().
+  unsigned handled_floats_end_item_index_ = 0;
 
-  // We don't create "certain zero-height line boxes".
-  // https://drafts.csswg.org/css2/visuren.html#phantom-line-box
-  // Such line boxes do not prevent two margins being "adjoining", and thus
-  // collapsing.
-  // https://drafts.csswg.org/css2/box.html#collapsing-margins
-  bool should_create_line_box_;
+  // True when current box allows line wrapping.
+  bool auto_wrap_ = false;
 
-  bool is_after_forced_break_;
+  // True when current box has 'word-break/word-wrap: break-word'.
+  bool break_if_overflow_ = false;
 };
 
 }  // namespace blink

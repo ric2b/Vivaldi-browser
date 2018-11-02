@@ -48,6 +48,7 @@
       'dependencies': [
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:load_time_data',
+        '<(EXTERNS_GYP):metrics_private',
         'page_visibility'
       ],
       'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
@@ -78,7 +79,7 @@
         'appearance_page/compiled_resources2.gyp:*',
         'basic_page/compiled_resources2.gyp:*',
         'bluetooth_page/compiled_resources2.gyp:*',
-        'certificate_manager_page/compiled_resources2.gyp:*',
+        'change_password_page/compiled_resources2.gyp:*',
         'chrome_cleanup_page/compiled_resources2.gyp:*',
         'clear_browsing_data_dialog/compiled_resources2.gyp:*',
         'controls/compiled_resources2.gyp:*',

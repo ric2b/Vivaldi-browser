@@ -4,7 +4,7 @@
 
 #include <string>
 
-#include "app/vivaldi_apptools.h"
+#include "app/vivaldi_version_info.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/url_constants.h"

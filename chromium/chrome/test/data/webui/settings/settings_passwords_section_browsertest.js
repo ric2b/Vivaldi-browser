@@ -26,7 +26,7 @@ SettingsPasswordSectionBrowserTest.prototype = {
 
   /** @override */
   browsePreload:
-      'chrome://md-settings/passwords_and_forms_page/passwords_section.html',
+      'chrome://settings/passwords_and_forms_page/passwords_section.html',
 
   /** @override */
   extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
@@ -88,7 +88,9 @@ TEST_F('SettingsPasswordSectionBrowserTest', 'uiTests', function() {
       assertEquals(
           exception.urls.shown,
           node.querySelector('#exception').textContent.trim());
-      assertEquals(exception.urls.link, node.querySelector('#exception').href);
+      assertEquals(
+          exception.urls.link.toLowerCase(),
+          node.querySelector('#exception').href);
     }
   }
 
@@ -132,6 +134,20 @@ TEST_F('SettingsPasswordSectionBrowserTest', 'uiTests', function() {
     document.body.appendChild(passwordsSection);
     flushPasswordSection(passwordsSection);
     return passwordsSection;
+  }
+
+  /**
+   * Helper method used to create a password list item.
+   * @param {!chrome.passwordsPrivate.PasswordUiEntry} passwordItem
+   * @return {!Object}
+   * @private
+   */
+  function createPasswordListItem(passwordItem) {
+    var passwordListItem = document.createElement('password-list-item');
+    passwordListItem.item = passwordItem;
+    document.body.appendChild(passwordListItem);
+    Polymer.dom.flush();
+    return passwordListItem;
   }
 
   /**
@@ -291,7 +307,7 @@ TEST_F('SettingsPasswordSectionBrowserTest', 'uiTests', function() {
 
     test('verifyFilterPasswords', function() {
       var passwordList = [
-        FakeDataMaker.passwordEntry('one.com', 'show', 5),
+        FakeDataMaker.passwordEntry('one.com', 'SHOW', 5),
         FakeDataMaker.passwordEntry('two.com', 'shower', 3),
         FakeDataMaker.passwordEntry('three.com/show', 'four', 1),
         FakeDataMaker.passwordEntry('four.com', 'three', 2),
@@ -301,11 +317,11 @@ TEST_F('SettingsPasswordSectionBrowserTest', 'uiTests', function() {
 
       var passwordsSection = createPasswordsSection(
           passwordManager, passwordList, []);
-      passwordsSection.filter = 'show';
+      passwordsSection.filter = 'SHow';
       Polymer.dom.flush();
 
       var expectedList = [
-        FakeDataMaker.passwordEntry('one.com', 'show', 5),
+        FakeDataMaker.passwordEntry('one.com', 'SHOW', 5),
         FakeDataMaker.passwordEntry('two.com', 'shower', 3),
         FakeDataMaker.passwordEntry('three.com/show', 'four', 1),
         FakeDataMaker.passwordEntry('six-show.com', 'one', 6),
@@ -316,7 +332,7 @@ TEST_F('SettingsPasswordSectionBrowserTest', 'uiTests', function() {
 
     test('verifyFilterPasswordExceptions', function() {
       var exceptionList = [
-        FakeDataMaker.exceptionEntry('docsshow.google.com'),
+        FakeDataMaker.exceptionEntry('docsshoW.google.com'),
         FakeDataMaker.exceptionEntry('showmail.com'),
         FakeDataMaker.exceptionEntry('google.com'),
         FakeDataMaker.exceptionEntry('inbox.google.com'),
@@ -326,11 +342,11 @@ TEST_F('SettingsPasswordSectionBrowserTest', 'uiTests', function() {
 
       var passwordsSection = createPasswordsSection(
           passwordManager, [], exceptionList);
-      passwordsSection.filter = 'show';
+      passwordsSection.filter = 'shOW';
       Polymer.dom.flush();
 
       var expectedExceptionList = [
-        FakeDataMaker.exceptionEntry('docsshow.google.com'),
+        FakeDataMaker.exceptionEntry('docsshoW.google.com'),
         FakeDataMaker.exceptionEntry('showmail.com'),
         FakeDataMaker.exceptionEntry('mapsshow.google.com'),
         FakeDataMaker.exceptionEntry('plus.google.comshow'),
@@ -461,7 +477,7 @@ TEST_F('SettingsPasswordSectionBrowserTest', 'uiTests', function() {
       assertTrue(passwordDialog.$.showPasswordButton.hidden);
     });
 
-    test('showSavedPassword', function() {
+    test('showSavedPasswordEditDialog', function() {
       var PASSWORD = 'bAn@n@5';
       var item = FakeDataMaker.passwordEntry('goo.gl', 'bart', PASSWORD.length);
       var passwordDialog = createPasswordDialog(item);
@@ -469,8 +485,6 @@ TEST_F('SettingsPasswordSectionBrowserTest', 'uiTests', function() {
       assertFalse(passwordDialog.$.showPasswordButton.hidden);
 
       passwordDialog.password = PASSWORD;
-      passwordDialog.showPassword = true;
-
       Polymer.dom.flush();
 
       assertEquals(PASSWORD,
@@ -481,18 +495,60 @@ TEST_F('SettingsPasswordSectionBrowserTest', 'uiTests', function() {
       assertFalse(passwordDialog.$.showPasswordButton.hidden);
     });
 
+    test('showSavedPasswordListItem', function() {
+      var PASSWORD = 'bAn@n@5';
+      var item = FakeDataMaker.passwordEntry('goo.gl', 'bart', PASSWORD.length);
+      var passwordListItem = createPasswordListItem(item);
+      // Hidden passwords should be disabled.
+      assertTrue(passwordListItem.$$('#password').disabled);
+
+      passwordListItem.password = PASSWORD;
+      Polymer.dom.flush();
+
+      assertEquals(PASSWORD, passwordListItem.$$('#password').value);
+      // Password should be visible.
+      assertEquals('text', passwordListItem.$$('#password').type);
+      // Visible passwords should not be disabled.
+      assertFalse(passwordListItem.$$('#password').disabled);
+
+      // Hide Password Button should be shown.
+      assertTrue(passwordListItem.$$('#showPasswordButton')
+                     .classList.contains('icon-visibility-off'));
+    });
+
     // Test will timeout if event is not received.
-    test('onShowSavedPassword', function(done) {
-      var item = FakeDataMaker.passwordEntry('goo.gl', 'bart', 1);
-      var passwordDialog = createPasswordDialog(item);
+    test('onShowSavedPasswordEditDialog', function(done) {
+      var expectedItem = FakeDataMaker.passwordEntry('goo.gl', 'bart', 1);
+      var passwordDialog = createPasswordDialog(expectedItem);
 
       passwordDialog.addEventListener('show-password', function(event) {
-        assertEquals(item.loginPair.urls.origin, event.detail.urls.origin);
-        assertEquals(item.loginPair.username, event.detail.username);
+        var actualItem = event.detail.item;
+        assertEquals(
+            expectedItem.loginPair.urls.origin,
+            actualItem.loginPair.urls.origin);
+        assertEquals(
+            expectedItem.loginPair.username, actualItem.loginPair.username);
         done();
       });
 
       MockInteractions.tap(passwordDialog.$.showPasswordButton);
+    });
+
+    test('onShowSavedPasswordListItem', function(done) {
+      var expectedItem = FakeDataMaker.passwordEntry('goo.gl', 'bart', 1);
+      var passwordListItem = createPasswordListItem(expectedItem);
+
+      passwordListItem.addEventListener('show-password', function(event) {
+        var actualItem = event.detail.item;
+        assertEquals(
+            expectedItem.loginPair.urls.origin,
+            actualItem.loginPair.urls.origin);
+        assertEquals(
+            expectedItem.loginPair.username, actualItem.loginPair.username);
+        done();
+      });
+
+      MockInteractions.tap(passwordListItem.$$('#showPasswordButton'));
     });
   });
 

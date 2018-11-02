@@ -133,6 +133,14 @@ TEST(SimpleColorSpace, TransferFnCancel) {
       ColorTransform::NewColorTransform(
           bt709, gamma24, ColorTransform::Intent::INTENT_PERCEPTUAL));
   EXPECT_EQ(bt709_to_gamma24->NumberOfStepsForTesting(), 2u);
+
+  // Rec 601 YUV to RGB conversion should have a single step.
+  gfx::ColorSpace rec601 = gfx::ColorSpace::CreateREC601();
+  std::unique_ptr<ColorTransform> rec601_yuv_to_rgb(
+      ColorTransform::NewColorTransform(
+          rec601, rec601.GetAsFullRangeRGB(),
+          ColorTransform::Intent::INTENT_PERCEPTUAL));
+  EXPECT_EQ(rec601_yuv_to_rgb->NumberOfStepsForTesting(), 1u);
 }
 
 TEST(SimpleColorSpace, SRGBFromICCAndNotICC) {

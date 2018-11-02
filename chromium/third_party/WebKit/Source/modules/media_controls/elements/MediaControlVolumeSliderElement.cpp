@@ -6,7 +6,7 @@
 
 #include "core/HTMLNames.h"
 #include "core/InputTypeNames.h"
-#include "core/events/Event.h"
+#include "core/dom/events/Event.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/layout/LayoutObject.h"
 #include "modules/media_controls/MediaControlsImpl.h"
@@ -63,12 +63,12 @@ void MediaControlVolumeSliderElement::DefaultEventHandler(Event* event) {
     MaybeRecordInteracted();
   }
 
-  if (event->type() == EventTypeNames::mousedown) {
+  if (event->type() == EventTypeNames::pointerdown) {
     Platform::Current()->RecordAction(
         UserMetricsAction("Media.Controls.VolumeChangeBegin"));
   }
 
-  if (event->type() == EventTypeNames::mouseup) {
+  if (event->type() == EventTypeNames::pointerup) {
     Platform::Current()->RecordAction(
         UserMetricsAction("Media.Controls.VolumeChangeEnd"));
   }

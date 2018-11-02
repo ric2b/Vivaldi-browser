@@ -4,10 +4,14 @@
 
 #include "content/gpu/in_process_gpu_thread.h"
 
+#include "base/command_line.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "content/gpu/gpu_child_thread.h"
 #include "content/gpu/gpu_process.h"
+#include "content/public/common/content_client.h"
+#include "content/public/common/content_switches.h"
+#include "content/public/gpu/content_gpu_client.h"
 #include "gpu/config/gpu_info_collector.h"
 #include "gpu/config/gpu_util.h"
 #include "ui/gl/init/gl_factory.h"
@@ -53,13 +57,38 @@ void InProcessGpuThread::Init() {
 #endif
 
   gpu::GPUInfo gpu_info;
-  if (!gl::init::InitializeGLOneOff())
-    VLOG(1) << "gl::init::InitializeGLOneOff failed";
-  else
+  gpu::GpuFeatureInfo gpu_feature_info;
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (GetContentClient()->gpu() && GetContentClient()->gpu()->GetGPUInfo() &&
+      GetContentClient()->gpu()->GetGpuFeatureInfo()) {
+    gpu_info = *(GetContentClient()->gpu()->GetGPUInfo());
+    gpu_feature_info = *(GetContentClient()->gpu()->GetGpuFeatureInfo());
+  } else {
+#if defined(OS_ANDROID)
     gpu::CollectContextGraphicsInfo(&gpu_info);
+#else
+    // TODO(zmo): Collect basic GPU info here instead.
+    gpu::GetGpuInfoFromCommandLine(*command_line, &gpu_info);
+#endif
+    gpu_feature_info = gpu::ComputeGpuFeatureInfo(gpu_info, command_line);
+  }
 
-  gpu::GpuFeatureInfo gpu_feature_info =
-      gpu::GetGpuFeatureInfo(gpu_info, *base::CommandLine::ForCurrentProcess());
+  if (!gl::init::InitializeGLNoExtensionsOneOff()) {
+    VLOG(1) << "gl::init::InitializeGLNoExtensionsOneOff failed";
+  } else {
+#if !defined(OS_ANDROID)
+    gpu::CollectContextGraphicsInfo(&gpu_info);
+    gpu_feature_info = gpu::ComputeGpuFeatureInfo(gpu_info, command_line);
+#endif
+  }
+  if (!gpu_feature_info.disabled_extensions.empty()) {
+    gl::init::SetDisabledExtensionsPlatform(
+        gpu_feature_info.disabled_extensions);
+  }
+  if (!gl::init::InitializeExtensionSettingsOneOffPlatform()) {
+    VLOG(1) << "gl::init::InitializeExtensionSettingsOneOffPlatform failed";
+  }
+  GetContentClient()->SetGpuInfo(gpu_info);
 
   // The process object takes ownership of the thread object, so do not
   // save and delete the pointer.

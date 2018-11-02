@@ -10,7 +10,9 @@
 Polymer({
   is: 'site-details',
 
-  behaviors: [SiteSettingsBehavior, settings.RouteObserverBehavior],
+  behaviors: [
+    SiteSettingsBehavior, settings.RouteObserverBehavior, WebUIListenerBehavior
+  ],
 
   properties: {
     /**
@@ -23,6 +25,15 @@ Polymer({
     },
 
     /**
+     * Use the string representing the origin or extension name as the page
+     * title of the settings-subpage parent.
+     */
+    pageTitle: {
+      type: String,
+      notify: true,
+    },
+
+    /**
      * The amount of data stored for the origin.
      * @private
      */
@@ -31,18 +42,38 @@ Polymer({
       value: '',
     },
 
+    /** @private */
+    enableSiteSettings_: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.getBoolean('enableSiteSettings');
+      },
+    },
+
+    /** @private */
+    enableSoundContentSetting_: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.getBoolean('enableSoundContentSetting');
+      },
+    },
+
     /**
      * The type of storage for the origin.
      * @private
      */
     storageType_: Number,
-
-    /** @private */
-    confirmationDeleteMsg_: String,
   },
 
   listeners: {
     'usage-deleted': 'onUsageDeleted_',
+  },
+
+  /** @override */
+  attached: function() {
+    this.addWebUIListener(
+        'contentSettingSitePermissionChanged',
+        this.onPermissionChanged_.bind(this));
   },
 
   /** @override */
@@ -67,25 +98,70 @@ Polymer({
    * @private
    */
   onOriginChanged_: function() {
-    this.$.usageApi.fetchUsageTotal(this.toUrl(this.origin).hostname);
+    this.browserProxy.isOriginValid(this.origin).then((valid) => {
+      if (!valid) {
+        settings.navigateToPreviousRoute();
+      } else {
+        if (this.enableSiteSettings_)
+          this.$.usageApi.fetchUsageTotal(this.toUrl(this.origin).hostname);
 
-    var siteDetailsPermissions =
-        /** @type{!NodeList<!SiteDetailsPermissionElement>} */
-        (this.root.querySelectorAll('site-details-permission'));
-    var categoryList =
-        /** @type{!Array<!string>} */ (
-            Array.prototype.map.call(siteDetailsPermissions, function(element) {
-              return element.category;
-            }));
+        this.updatePermissions_(this.getCategoryList_());
+      }
+    });
+
+  },
+
+  /**
+   * Called when a site within a category has been changed.
+   * @param {!settings.ContentSettingsTypes} category The category that changed.
+   * @param {string} origin The origin of the site that changed.
+   * @param {string} embeddingOrigin The embedding origin of the site that
+   *     changed.
+   * @private
+   */
+  onPermissionChanged_: function(category, origin, embeddingOrigin) {
+    if (this.origin === undefined || this.origin == '' ||
+        origin === undefined || origin == '')
+      return;
+    if (!this.getCategoryList_().includes(category))
+      return;
+
+    // Site details currently doesn't support embedded origins, so ignore it and
+    // just check whether the origins are the same.
+    if (this.toUrl(origin).origin == this.toUrl(this.origin).origin)
+      this.updatePermissions_([category]);
+  },
+
+  /**
+   * Retrieves the permissions listed in |categoryList| from the backend for
+   * |this.origin|.
+   * @param {!Array<!settings.ContentSettingsTypes>} categoryList The list of
+   *     categories to update permissions for.
+   * @private
+   */
+  updatePermissions_: function(categoryList) {
+    var permissionsMap =
+        /** @type {!Object<!settings.ContentSettingsTypes,
+         *         !SiteDetailsPermissionElement>} */
+        (Array.prototype.reduce.call(
+            this.root.querySelectorAll('site-details-permission'),
+            (map, element) => {
+              if (categoryList.includes(element.category))
+                map[element.category] = element;
+              return map;
+            },
+            {}));
 
     this.browserProxy.getOriginPermissions(this.origin, categoryList)
-        .then(function(exceptionList) {
-          exceptionList.forEach(function(exception, i) {
-            // |exceptionList| should be in the same order as |categoryList|,
-            // which is in the same order as |siteDetailsPermissions|.
-            siteDetailsPermissions[i].site =
-                /** @type {!RawSiteException} */ (exception);
+        .then((exceptionList) => {
+          exceptionList.forEach((exception, i) => {
+            // |exceptionList| should be in the same order as |categoryList|.
+            permissionsMap[categoryList[i]].site = exception;
           });
+
+          // The displayName won't change, so just use the first exception.
+          assert(exceptionList.length > 0);
+          this.pageTitle = exceptionList[0].displayName;
         });
   },
 
@@ -99,10 +175,8 @@ Polymer({
    * @param {!Event} e
    * @private
    */
-  onConfirmClearStorage_: function(e) {
+  onConfirmClearSettings_: function(e) {
     e.preventDefault();
-    this.confirmationDeleteMsg_ = loadTimeData.getStringF(
-        'siteSettingsSiteRemoveConfirmation', this.toUrl(this.origin).href);
     this.$.confirmDeleteDialog.showModal();
   },
 
@@ -111,7 +185,11 @@ Polymer({
    * @private
    */
   onClearStorage_: function() {
-    this.$.usageApi.clearUsage(this.toUrl(this.origin).href, this.storageType_);
+    // Since usage is only shown when "Site Settings" is enabled, don't clear it
+    // when it's not shown.
+    if (this.enableSiteSettings_)
+      this.$.usageApi.clearUsage(
+          this.toUrl(this.origin).href, this.storageType_);
   },
 
   /**
@@ -120,10 +198,8 @@ Polymer({
    * @private
    */
   onUsageDeleted_: function(event) {
-    if (event.detail.origin == this.toUrl(this.origin).href) {
+    if (event.detail.origin == this.toUrl(this.origin).href)
       this.storedData_ = '';
-      this.navigateBackIfNoData_();
-    }
   },
 
   /**
@@ -131,35 +207,44 @@ Polymer({
    * @private
    */
   onClearAndReset_: function() {
-    this.root.querySelectorAll('site-details-permission')
-        .forEach(function(element) {
-          element.resetPermission();
-        });
+    this.browserProxy.setOriginPermissions(
+        this.origin, this.getCategoryList_(), settings.ContentSetting.DEFAULT);
 
     if (this.storedData_ != '')
       this.onClearStorage_();
-    else
-      this.navigateBackIfNoData_();
+
+    this.onCloseDialog_();
   },
 
   /**
-   * Navigate back if the UI is empty (everything been cleared).
+   * Returns list of categories for each permission displayed in <site-details>.
+   * @return {!Array<!settings.ContentSettingsTypes>}
    * @private
    */
-  navigateBackIfNoData_: function() {
-    if (this.storedData_ == '' && !this.permissionShowing_())
-      settings.navigateToPreviousRoute();
-  },
-
-  /**
-   * Returns true if one or more permission is showing.
-   * @private
-   */
-  permissionShowing_: function() {
-    return Array.prototype.some.call(
-        this.root.querySelectorAll('site-details-permission'),
-        function(element) {
-          return element.offsetHeight > 0;
+  getCategoryList_: function() {
+    return Array.prototype.map.call(
+        this.root.querySelectorAll('site-details-permission'), (element) => {
+          return element.category;
         });
   },
+
+  /**
+   * Checks whether the permission list is standalone or has a heading.
+   * @return {string} CSS class applied when the permission list has no heading.
+   * @private
+   */
+  permissionListClass_: function(hasHeading) {
+    return hasHeading ? '' : 'without-heading';
+  },
+
+  /**
+   * Checks whether this site has any usage information to show.
+   * @return {boolean} Whether there is any usage information to show (e.g.
+   *     disk or battery).
+   * @private
+   */
+  hasUsage_: function(storage) {
+    return storage != '';
+  },
+
 });

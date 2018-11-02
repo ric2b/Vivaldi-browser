@@ -4,7 +4,14 @@
 
 #include "components/download/internal/scheduler/device_status_listener.h"
 
+#include "base/memory/ptr_util.h"
 #include "base/power_monitor/power_monitor.h"
+#include "build/build_config.h"
+#include "components/download/internal/scheduler/network_status_listener.h"
+
+#if defined(OS_ANDROID)
+#include "components/download/internal/android/network_status_listener_android.h"
+#endif
 
 namespace download {
 
@@ -55,16 +62,20 @@ void DeviceStatusListener::Start(DeviceStatusListener::Observer* observer) {
 
   DCHECK(observer);
   observer_ = observer;
+
+  // Listen to battery status changes.
   base::PowerMonitor* power_monitor = base::PowerMonitor::Get();
   DCHECK(power_monitor);
   power_monitor->AddObserver(this);
 
-  net::NetworkChangeNotifier::AddConnectionTypeObserver(this);
+  // Listen to network status changes.
+  BuildNetworkStatusListener();
+  network_listener_->Start(this);
 
   status_.battery_status =
       ToBatteryStatus(base::PowerMonitor::Get()->IsOnBatteryPower());
   status_.network_status =
-      ToNetworkStatus(net::NetworkChangeNotifier::GetConnectionType());
+      ToNetworkStatus(network_listener_->GetConnectionType());
   listening_ = true;
 }
 
@@ -73,7 +84,9 @@ void DeviceStatusListener::Stop() {
     return;
 
   base::PowerMonitor::Get()->RemoveObserver(this);
-  net::NetworkChangeNotifier::RemoveConnectionTypeObserver(this);
+
+  network_listener_->Stop();
+  network_listener_.reset();
 
   status_ = DeviceStatus();
   listening_ = false;
@@ -117,6 +130,14 @@ void DeviceStatusListener::NotifyNetworkChangeAfterDelay(
     NetworkStatus network_status) {
   status_.network_status = network_status;
   NotifyStatusChange();
+}
+
+void DeviceStatusListener::BuildNetworkStatusListener() {
+#if defined(OS_ANDROID)
+  network_listener_ = base::MakeUnique<NetworkStatusListenerAndroid>();
+#else
+  network_listener_ = base::MakeUnique<NetworkStatusListenerImpl>();
+#endif
 }
 
 }  // namespace download

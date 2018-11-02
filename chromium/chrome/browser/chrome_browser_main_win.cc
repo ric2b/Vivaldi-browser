@@ -27,12 +27,13 @@
 #include "base/scoped_native_library.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task_scheduler/post_task.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/version.h"
 #include "base/win/pe_image.h"
 #include "base/win/registry.h"
 #include "base/win/win_util.h"
-#include "base/win/windows_version.h"
 #include "base/win/wrapped_window_proc.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/conflicts/enumerate_input_method_editors_win.h"
@@ -45,8 +46,7 @@
 #include "chrome/browser/profiles/profile_shortcut_manager.h"
 #include "chrome/browser/safe_browsing/chrome_cleaner/settings_resetter_win.h"
 #include "chrome/browser/safe_browsing/settings_reset_prompt/settings_reset_prompt_config.h"
-#include "chrome/browser/safe_browsing/settings_reset_prompt/settings_reset_prompt_controller.h"
-#include "chrome/browser/shell_integration.h"
+#include "chrome/browser/safe_browsing/settings_reset_prompt/settings_reset_prompt_util_win.h"
 #include "chrome/browser/ui/simple_message_box.h"
 #include "chrome/browser/ui/uninstall_browser_prompt.h"
 #include "chrome/browser/win/browser_util.h"
@@ -69,6 +69,7 @@
 #include "chrome/installer/util/installer_util_strings.h"
 #include "chrome/installer/util/l10n_string_util.h"
 #include "chrome/installer/util/shell_util.h"
+#include "components/crash/content/app/crash_export_thunks.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/main_function_params.h"
@@ -88,12 +89,8 @@ typedef HRESULT (STDAPICALLTYPE* RegisterApplicationRestartProc)(
     DWORD flags);
 
 void InitializeWindowProcExceptions() {
-  // Get the breakpad pointer from chrome.exe
   base::win::WinProcExceptionFilter exception_filter =
-      reinterpret_cast<base::win::WinProcExceptionFilter>(::GetProcAddress(
-          ::GetModuleHandle(chrome::kChromeElfDllName), "CrashForException"));
-  CHECK(exception_filter);
-  exception_filter = base::win::SetWinProcExceptionFilter(exception_filter);
+      base::win::SetWinProcExceptionFilter(&CrashForException);
   DCHECK(!exception_filter);
 }
 
@@ -182,9 +179,7 @@ uint32_t GetModuleTimeDateStamp(const void* module_load_address) {
 
 // Used as the callback for ModuleWatcher events in this process. Dispatches
 // them to the ModuleDatabase.
-void OnModuleEvent(uint32_t process_id,
-                   uint64_t creation_time,
-                   const ModuleWatcher::ModuleEvent& event) {
+void OnModuleEvent(const ModuleWatcher::ModuleEvent& event) {
   auto* module_database = ModuleDatabase::GetInstance();
   uintptr_t load_address =
       reinterpret_cast<uintptr_t>(event.module_load_address);
@@ -193,13 +188,8 @@ void OnModuleEvent(uint32_t process_id,
     case mojom::ModuleEventType::MODULE_ALREADY_LOADED:
     case mojom::ModuleEventType::MODULE_LOADED: {
       module_database->OnModuleLoad(
-          process_id, creation_time, event.module_path, event.module_size,
+          content::PROCESS_TYPE_BROWSER, event.module_path, event.module_size,
           GetModuleTimeDateStamp(event.module_load_address), load_address);
-      return;
-    }
-
-    case mojom::ModuleEventType::MODULE_UNLOADED: {
-      module_database->OnModuleUnload(process_id, creation_time, load_address);
       return;
     }
   }
@@ -209,23 +199,13 @@ void OnModuleEvent(uint32_t process_id,
 // the provided |module_watcher|, and starts the enumeration of registered
 // modules in the Windows Registry.
 void SetupModuleDatabase(std::unique_ptr<ModuleWatcher>* module_watcher) {
-  uint64_t creation_time = 0;
-  ModuleEventSinkImpl::GetProcessCreationTime(::GetCurrentProcess(),
-                                              &creation_time);
-  ModuleDatabase::SetInstance(base::MakeUnique<ModuleDatabase>(
-      content::BrowserThread::GetTaskRunnerForThread(
-          content::BrowserThread::UI)));
-  auto* module_database = ModuleDatabase::GetInstance();
-  uint32_t process_id = ::GetCurrentProcessId();
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  // The ModuleWatcher will immediately start emitting module events, but the
-  // ModuleDatabase expects an OnProcessStarted event prior to that. For child
-  // processes this is handled via the ModuleEventSinkImpl. For the browser
-  // process a manual notification is sent before wiring up the ModuleWatcher.
-  module_database->OnProcessStarted(process_id, creation_time,
-                                    content::PROCESS_TYPE_BROWSER);
-  *module_watcher = ModuleWatcher::Create(
-      base::BindRepeating(&OnModuleEvent, process_id, creation_time));
+  ModuleDatabase::SetInstance(
+      base::MakeUnique<ModuleDatabase>(base::SequencedTaskRunnerHandle::Get()));
+  auto* module_database = ModuleDatabase::GetInstance();
+
+  *module_watcher = ModuleWatcher::Create(base::BindRepeating(&OnModuleEvent));
 
   // Enumerate shell extensions and input method editors. It is safe to use
   // base::Unretained() here because the ModuleDatabase is never freed.
@@ -242,15 +222,9 @@ void SetupModuleDatabase(std::unique_ptr<ModuleWatcher>* module_watcher) {
 }
 
 void ShowCloseBrowserFirstMessageBox() {
-  int message_id = IDS_UNINSTALL_CLOSE_APP;
-  if (base::win::GetVersion() >= base::win::VERSION_WIN8 &&
-      (shell_integration::GetDefaultBrowser() ==
-       shell_integration::IS_DEFAULT)) {
-    message_id = IDS_UNINSTALL_CLOSE_APP_IMMERSIVE;
-  }
-  chrome::ShowWarningMessageBox(NULL,
-                                l10n_util::GetStringUTF16(IDS_PRODUCT_NAME),
-                                l10n_util::GetStringUTF16(message_id));
+  chrome::ShowWarningMessageBox(
+      nullptr, l10n_util::GetStringUTF16(IDS_PRODUCT_NAME),
+      l10n_util::GetStringUTF16(IDS_UNINSTALL_CLOSE_APP));
 }
 
 void MaybePostSettingsResetPrompt() {
@@ -379,8 +353,15 @@ void ChromeBrowserMainPartsWin::PostBrowserStart() {
   UMA_HISTOGRAM_BOOLEAN("Windows.Tablet", base::win::IsTabletDevice(nullptr));
 
   // Set up a task to verify installed modules in the current process.
+  // TODO(gab): Use base::PostTaskWithTraits() directly when we're convinced
+  // BACKGROUND work doesn't interfere with startup (i.e.
+  // https://crbug.com/726937).
+  // TODO(robertshield): remove this altogether, https://crbug.com/747557.
   content::BrowserThread::PostAfterStartupTask(
-      FROM_HERE, content::BrowserThread::GetBlockingPool(),
+      FROM_HERE,
+      base::CreateTaskRunnerWithTraits(
+          {base::TaskPriority::BACKGROUND,
+           base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN}),
       base::Bind(&VerifyInstallation));
 
   InitializeChromeElf();

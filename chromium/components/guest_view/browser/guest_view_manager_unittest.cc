@@ -22,13 +22,12 @@ namespace guest_view {
 // Vivaldi helper function that is defined multiple places.
 // Returns true if a Browser object owns and manage the lifecycle of the
 // |content::WebContents|
-/*
+
 bool HandOverToBrowser(WebContents* contents) {
   return false;
 }
-*/
 
-//void AttachWebContentsObservers(WebContents* contents) { }
+void AttachWebContentsObservers(WebContents* contents) { }
 
 namespace {
 

@@ -166,7 +166,16 @@ void RendererWebMediaPlayerDelegate::ClearStaleFlag(int player_id) {
   // time idle cleanup runs.
   idle_player_map_[player_id] = tick_clock_->NowTicks() - idle_timeout_;
 
-  ScheduleUpdateTask();
+  // No need to call Update immediately, just make sure the idle
+  // timer is running. Calling ScheduleUpdateTask() here will cause
+  // immediate cleanup, and if that fails, this function gets called
+  // again which uses 100% cpu until resolved.
+  if (!idle_cleanup_timer_.IsRunning() && !pending_update_task_) {
+    idle_cleanup_timer_.Start(
+        FROM_HERE, idle_cleanup_interval_,
+        base::Bind(&RendererWebMediaPlayerDelegate::UpdateTask,
+                   base::Unretained(this)));
+  }
 }
 
 bool RendererWebMediaPlayerDelegate::IsStale(int player_id) {
@@ -190,7 +199,8 @@ void RendererWebMediaPlayerDelegate::DidPlayerSizeChange(
 void RendererWebMediaPlayerDelegate::WasHidden() {
   RecordAction(base::UserMetricsAction("Media.Hidden"));
 
-  for (IDMap<Observer*>::iterator it(&id_map_); !it.IsAtEnd(); it.Advance())
+  for (base::IDMap<Observer*>::iterator it(&id_map_); !it.IsAtEnd();
+       it.Advance())
     it.GetCurrentValue()->OnFrameHidden();
 
   ScheduleUpdateTask();
@@ -200,7 +210,8 @@ void RendererWebMediaPlayerDelegate::WasShown() {
   RecordAction(base::UserMetricsAction("Media.Shown"));
   is_frame_closed_ = false;
 
-  for (IDMap<Observer*>::iterator it(&id_map_); !it.IsAtEnd(); it.Advance())
+  for (base::IDMap<Observer*>::iterator it(&id_map_); !it.IsAtEnd();
+       it.Advance())
     it.GetCurrentValue()->OnFrameShown();
 
   ScheduleUpdateTask();
@@ -224,9 +235,10 @@ bool RendererWebMediaPlayerDelegate::OnMessageReceived(
 
 void RendererWebMediaPlayerDelegate::SetIdleCleanupParamsForTesting(
     base::TimeDelta idle_timeout,
+    base::TimeDelta idle_cleanup_interval,
     base::TickClock* tick_clock,
     bool is_jelly_bean) {
-  idle_cleanup_interval_ = base::TimeDelta();
+  idle_cleanup_interval_ = idle_cleanup_interval;
   idle_timeout_ = idle_timeout;
   tick_clock_ = tick_clock;
   is_jelly_bean_ = is_jelly_bean;
@@ -279,7 +291,8 @@ void RendererWebMediaPlayerDelegate::OnMediaDelegatePlay(int player_id) {
 void RendererWebMediaPlayerDelegate::OnMediaDelegateSuspendAllMediaPlayers() {
   is_frame_closed_ = true;
 
-  for (IDMap<Observer*>::iterator it(&id_map_); !it.IsAtEnd(); it.Advance())
+  for (base::IDMap<Observer*>::iterator it(&id_map_); !it.IsAtEnd();
+       it.Advance())
     it.GetCurrentValue()->OnFrameClosed();
 }
 
@@ -302,8 +315,8 @@ void RendererWebMediaPlayerDelegate::OnMediaDelegateBecamePersistentVideo(
 void RendererWebMediaPlayerDelegate::ScheduleUpdateTask() {
   if (!pending_update_task_) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::Bind(&RendererWebMediaPlayerDelegate::UpdateTask, AsWeakPtr()));
+        FROM_HERE, base::BindOnce(&RendererWebMediaPlayerDelegate::UpdateTask,
+                                  AsWeakPtr()));
     pending_update_task_ = true;
   }
 }

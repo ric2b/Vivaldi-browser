@@ -9,24 +9,23 @@
 
 #include <string>
 
+#include "base/files/platform_file.h"
 #include "base/macros.h"
 #include "base/strings/string16.h"
+#include "base/synchronization/lock.h"
 
 namespace profiling {
 
 class MemlogSenderPipe {
  public:
-  explicit MemlogSenderPipe(const std::string& pipe_id);
+  explicit MemlogSenderPipe(base::ScopedPlatformFile file);
   ~MemlogSenderPipe();
-
-  bool Connect();
 
   bool Send(const void* data, size_t sz);
 
  private:
-  base::string16 pipe_id_;
-
-  HANDLE handle_;
+  base::ScopedPlatformFile file_;
+  base::Lock lock_;
 
   DISALLOW_COPY_AND_ASSIGN(MemlogSenderPipe);
 };

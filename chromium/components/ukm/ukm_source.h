@@ -5,22 +5,27 @@
 #ifndef COMPONENTS_UKM_UKM_SOURCE_H_
 #define COMPONENTS_UKM_UKM_SOURCE_H_
 
-#include <stddef.h>
 #include <map>
 
 #include "base/macros.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "url/gurl.h"
 
 namespace ukm {
 
 class Source;
 
-typedef int64_t SourceId;
-
 // Contains UKM data for a single navigation entry.
 class UkmSource {
  public:
+  enum CustomTabState {
+    kCustomTabUnset,
+    kCustomTabTrue,
+    kCustomTabFalse,
+  };
+
   UkmSource();
   ~UkmSource();
 
@@ -43,6 +48,9 @@ class UkmSource {
   // Serializes the members of the class into the supplied proto.
   void PopulateProto(Source* proto_source) const;
 
+  // Sets the current "custom tab" state. This can be called from any thread.
+  static void SetCustomTabVisible(bool visible);
+
  private:
   ukm::SourceId id_;
 
@@ -52,6 +60,11 @@ class UkmSource {
   // The initial URL for this source. Only set if different from |url_| (i.e. if
   // the URL changed over the lifetime of this source).
   GURL initial_url_;
+
+  // A flag indicating if metric was collected in a custom tab. This is set
+  // automatically when the object is created and so represents the state when
+  // the metric was created.
+  const CustomTabState custom_tab_state_;
 
   DISALLOW_COPY_AND_ASSIGN(UkmSource);
 };

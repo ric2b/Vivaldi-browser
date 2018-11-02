@@ -6,6 +6,7 @@
 
 #include "ash/accelerators/accelerator_commands.h"
 #include "ash/ash_switches.h"
+#include "ash/public/cpp/touchscreen_enabled_source.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
@@ -142,13 +143,12 @@ void HandleToggleTouchpad() {
 void HandleToggleTouchscreen() {
   base::RecordAction(base::UserMetricsAction("Accel_Toggle_Touchscreen"));
   ShellDelegate* delegate = Shell::Get()->shell_delegate();
-  delegate->SetTouchscreenEnabledInPrefs(
-      !delegate->IsTouchscreenEnabledInPrefs(false /* use_local_state */),
-      false /* use_local_state */);
-  delegate->UpdateTouchscreenStatusFromPrefs();
+  delegate->SetTouchscreenEnabled(
+      !delegate->GetTouchscreenEnabled(TouchscreenEnabledSource::USER_PREF),
+      TouchscreenEnabledSource::USER_PREF);
 }
 
-void HandleToggleTouchView() {
+void HandleToggleTabletMode() {
   TabletModeController* controller = Shell::Get()->tablet_mode_controller();
   controller->EnableTabletModeWindowManager(
       !controller->IsTabletModeWindowManagerEnabled());
@@ -207,8 +207,8 @@ void PerformDebugActionIfEnabled(AcceleratorAction action) {
     case DEBUG_TOGGLE_TOUCH_SCREEN:
       HandleToggleTouchscreen();
       break;
-    case DEBUG_TOGGLE_TOUCH_VIEW:
-      HandleToggleTouchView();
+    case DEBUG_TOGGLE_TABLET_MODE:
+      HandleToggleTabletMode();
       break;
     case DEBUG_TOGGLE_WALLPAPER_MODE:
       HandleToggleWallpaperMode();

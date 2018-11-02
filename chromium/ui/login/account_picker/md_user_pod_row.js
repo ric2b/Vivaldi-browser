@@ -2909,8 +2909,8 @@ cr.define('login', function() {
     // Array of users that are shown (public/supervised/regular).
     users_: [],
 
-    // If we're in Touch View mode.
-    touchViewEnabled_: false,
+    // If we're in tablet mode.
+    tabletModeEnabled_: false,
 
     // If testing mode is enabled.
     testingModeEnabled_: false,
@@ -2957,14 +2957,14 @@ cr.define('login', function() {
 
     /**
      * Return true if user pod row has only single user pod in it, which should
-     * always be focused except desktop and touch view modes.
+     * always be focused except desktop and tablet modes.
      * @type {boolean}
      */
     get alwaysFocusSinglePod() {
       var isDesktopUserManager = Oobe.getInstance().displayType ==
           DISPLAY_TYPE.DESKTOP_USER_MANAGER;
 
-      return (isDesktopUserManager || this.touchViewEnabled_) ?
+      return (isDesktopUserManager || this.tabletModeEnabled_) ?
           false :
           this.pods.length == 1;
     },
@@ -3519,16 +3519,18 @@ cr.define('login', function() {
     },
 
     /**
-     * Sets the state of touch view mode.
-     * @param {boolean} isTouchViewEnabled true if the mode is on.
+     * Sets the state of tablet mode.
+     * @param {boolean} isTabletModeEnabled true if the mode is on.
      */
-    setTouchViewState: function(isTouchViewEnabled) {
-      this.touchViewEnabled_ = isTouchViewEnabled;
+    setTabletModeState: function(isTabletModeEnabled) {
+      this.tabletModeEnabled_ = isTabletModeEnabled;
       this.pods.forEach(function(pod, index) {
-        pod.actionBoxAreaElement.classList.toggle('forced', isTouchViewEnabled);
-        if (pod.isPublicSessionPod)
+        pod.actionBoxAreaElement.classList.toggle(
+            'forced', isTabletModeEnabled);
+        if (pod.isPublicSessionPod) {
           pod.querySelector('.button-container')
-              .classList.toggle('forced', isTouchViewEnabled);
+              .classList.toggle('forced', isTabletModeEnabled);
+        }
       });
     },
 
@@ -3677,6 +3679,8 @@ cr.define('login', function() {
       // apply to account picker.
       // This is a hacky solution: we can make #scroll-container hide the
       // overflow area and manully position #inner-container.
+      // NOTE: The global states set here might need to be cleared in
+      //   handleHide. Please update the code there when adding new stuff here.
       var isScreenShrinked = this.isScreenShrinked_();
       $('scroll-container')
           .classList.toggle('disable-scroll', isScreenShrinked);
@@ -4784,6 +4788,11 @@ cr.define('login', function() {
             event, this.listeners_[event][0], this.listeners_[event][1]);
       }
       $('login-header-bar').buttonsTabIndex = 0;
+
+      // Clear global states that should only applies to account picker.
+      $('scroll-container').classList.remove('disable-scroll');
+      $('inner-container').classList.remove('disable-scroll');
+      $('inner-container').style.top = 'unset';
     },
 
     /**

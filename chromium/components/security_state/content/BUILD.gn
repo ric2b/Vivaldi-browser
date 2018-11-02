@@ -6,6 +6,8 @@ static_library("content") {
   sources = [
     "content_utils.cc",
     "content_utils.h",
+    "ssl_status_input_event_data.cc",
+    "ssl_status_input_event_data.h",
   ]
 
   public_deps = [
@@ -34,6 +36,7 @@ source_set("unit_tests") {
     "//base",
     "//base/test:test_support",
     "//components/security_state/core",
+    "//components/strings",
     "//content/public/browser",
     "//content/test:test_support",
     "//net",

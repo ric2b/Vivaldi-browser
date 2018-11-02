@@ -5,7 +5,7 @@
 #ifndef TrackListBase_h
 #define TrackListBase_h
 
-#include "core/events/EventTarget.h"
+#include "core/dom/events/EventTarget.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/html/track/TrackEvent.h"
 #include "core/html/track/TrackEventInit.h"
@@ -50,7 +50,7 @@ class TrackListBase : public EventTargetWithInlineData {
 
   void Add(T* track) {
     track->SetMediaElement(media_element_);
-    tracks_.push_back(TraceWrapperMember<T>(this, track));
+    tracks_.push_back(track);
     ScheduleEvent(TrackEvent::Create(EventTypeNames::addtrack, track));
   }
 

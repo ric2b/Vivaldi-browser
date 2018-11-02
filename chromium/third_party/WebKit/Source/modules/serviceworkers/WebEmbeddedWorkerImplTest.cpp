@@ -54,13 +54,6 @@ class MockServiceWorkerContextClient : public WebServiceWorkerContextClient {
     return std::unique_ptr<WebServiceWorkerProvider>(
         CreateServiceWorkerProviderProxy());
   }
-
-  bool HasAssociatedRegistration() override {
-    return has_associated_registration_;
-  }
-  void SetHasAssociatedRegistration(bool has_associated_registration) {
-    has_associated_registration_ = has_associated_registration;
-  }
   void GetClient(const WebString&,
                  std::unique_ptr<WebServiceWorkerClientCallbacks>) override {
     NOTREACHED();
@@ -111,7 +104,6 @@ class MockServiceWorkerContextClient : public WebServiceWorkerContextClient {
   void WaitUntilThreadTermination() { termination_event_.Wait(); }
 
  private:
-  bool has_associated_registration_ = true;
   WaitableEvent script_evaluated_event_;
   WaitableEvent termination_event_;
 };
@@ -136,8 +128,9 @@ class WebEmbeddedWorkerImplTest : public ::testing::Test {
     } else {
       mock_installed_scripts_manager_ = nullptr;
     }
-    worker_ = WebEmbeddedWorker::Create(
-        std::move(client), std::move(installed_scripts_manager), nullptr);
+    worker_ = WebEmbeddedWorker::Create(std::move(client),
+                                        std::move(installed_scripts_manager),
+                                        mojo::ScopedMessagePipeHandle());
 
     WebURL script_url = URLTestHelpers::ToKURL("https://www.example.com/sw.js");
     WebURLResponse response;
@@ -262,7 +255,7 @@ TEST_F(WebEmbeddedWorkerImplTest, ScriptNotFound) {
   response.SetHTTPStatusCode(404);
   WebURLError error;
   error.reason = 1010;
-  error.domain = "WebEmbeddedWorkerImplTest";
+  error.domain = WebURLError::Domain::kTest;
   Platform::Current()->GetURLLoaderMockFactory()->RegisterErrorURL(
       script_url, response, error);
   start_data_.script_url = script_url;
@@ -288,38 +281,6 @@ TEST_F(WebEmbeddedWorkerImplTest, ScriptNotFound) {
   }
 
   // Load the script.
-  EXPECT_CALL(*mock_client_, WorkerScriptLoaded()).Times(0);
-  EXPECT_CALL(*mock_client_, CreateServiceWorkerProviderProxy()).Times(0);
-  EXPECT_CALL(*mock_client_, WorkerContextFailedToStart()).Times(1);
-  Platform::Current()->GetURLLoaderMockFactory()->ServeAsynchronousRequests();
-  ::testing::Mock::VerifyAndClearExpectations(mock_client_);
-}
-
-TEST_F(WebEmbeddedWorkerImplTest, NoRegistration) {
-  EXPECT_CALL(*mock_client_, WorkerReadyForInspection()).Times(1);
-  start_data_.pause_after_download_mode =
-      WebEmbeddedWorkerStartData::kPauseAfterDownload;
-  worker_->StartWorkerContext(start_data_);
-  ::testing::Mock::VerifyAndClearExpectations(mock_client_);
-
-  // Load the shadow page.
-  EXPECT_CALL(*mock_client_, CreateServiceWorkerNetworkProviderProxy())
-      .WillOnce(::testing::Return(nullptr));
-  if (mock_installed_scripts_manager_) {
-    EXPECT_CALL(*mock_installed_scripts_manager_,
-                IsScriptInstalled(start_data_.script_url))
-        .Times(1)
-        .WillOnce(::testing::Return(false));
-  }
-  Platform::Current()->GetURLLoaderMockFactory()->ServeAsynchronousRequests();
-  ::testing::Mock::VerifyAndClearExpectations(mock_client_);
-  if (mock_installed_scripts_manager_) {
-    ::testing::Mock::VerifyAndClearExpectations(
-        mock_installed_scripts_manager_);
-  }
-
-  // Load the script.
-  mock_client_->SetHasAssociatedRegistration(false);
   EXPECT_CALL(*mock_client_, WorkerScriptLoaded()).Times(0);
   EXPECT_CALL(*mock_client_, CreateServiceWorkerProviderProxy()).Times(0);
   EXPECT_CALL(*mock_client_, WorkerContextFailedToStart()).Times(1);

@@ -30,8 +30,11 @@ CalendarEvent::CalendarEvent(const CalendarEvent& event)
       end(event.end),
       all_day(event.all_day),
       is_recurring(event.is_recurring),
+      start_recurring(event.start_recurring),
+      end_recurring(event.end_recurring),
       location(event.location),
       url(event.url),
+      recurrence(event.recurrence),
       updateFields(event.updateFields) {}
 
 CalendarEvent::~CalendarEvent() {}
@@ -50,7 +53,8 @@ EventRow::EventRow(EventID id,
                    base::Time start_recurring,
                    base::Time end_recurring,
                    base::string16 location,
-                   base::string16 url)
+                   base::string16 url,
+                   EventRecurrence recurrence)
     : id_(id),
 
       calendar_id_(calendar_id),
@@ -64,7 +68,8 @@ EventRow::EventRow(EventID id,
       start_recurring_(start_recurring),
       end_recurring_(end_recurring),
       location_(location),
-      url_(url) {}
+      url_(url),
+      recurrence_(recurrence) {}
 
 EventRow::~EventRow() {}
 
@@ -81,6 +86,7 @@ void EventRow::Swap(EventRow* other) {
   std::swap(end_recurring_, other->end_recurring_);
   std::swap(location_, other->location_);
   std::swap(url_, other->url_);
+  std::swap(recurrence_, other->recurrence_);
 }
 
 EventRow::EventRow(const EventRow& other) = default;
@@ -98,7 +104,8 @@ EventRow::EventRow(const EventRow&& other) noexcept
       is_recurring_(other.is_recurring_),
       start_recurring_(other.start_recurring_),
       end_recurring_(other.end_recurring_),
-      location_(other.location_) {}
+      location_(other.location_),
+      recurrence_(other.recurrence_) {}
 
 EventResult::EventResult() {}
 

@@ -13,13 +13,16 @@
 #include "content/common/content_export.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
+#include "mojo/public/cpp/system/message_pipe.h"
 #include "third_party/WebKit/public/platform/WebLoadingBehaviorFlag.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
+#include "third_party/WebKit/public/platform/web_client_hints_types.mojom.h"
+#include "third_party/WebKit/public/platform/web_feature.mojom.h"
 #include "third_party/WebKit/public/web/WebMeaningfulLayout.h"
 #include "v8/include/v8.h"
 
 namespace blink {
-class WebDataSource;
+class WebDocumentLoader;
 class WebFormElement;
 class WebNode;
 class WebString;
@@ -64,7 +67,8 @@ class CONTENT_EXPORT RenderFrameObserver : public IPC::Listener,
   virtual void WillCommitProvisionalLoad() {}
   virtual void DidCommitProvisionalLoad(bool is_new_navigation,
                                         bool is_same_document_navigation) {}
-  virtual void DidStartProvisionalLoad(blink::WebDataSource* data_source) {}
+  virtual void DidStartProvisionalLoad(
+      blink::WebDocumentLoader* document_loader) {}
   virtual void DidFailProvisionalLoad(const blink::WebURLError& error) {}
   virtual void DidFinishLoad() {}
   virtual void DidFinishDocumentLoad() {}
@@ -116,6 +120,10 @@ class CONTENT_EXPORT RenderFrameObserver : public IPC::Listener,
   virtual void DidObserveLoadingBehavior(
       blink::WebLoadingBehaviorFlag behavior) {}
 
+  // Notification when the renderer observes a new feature usage during a page
+  // load. This is used for UseCounter feature metrics.
+  virtual void DidObserveNewFeatureUsage(blink::mojom::WebFeature feature) {}
+
   // Called when the focused node has changed to |node|.
   virtual void FocusedNodeChanged(const blink::WebNode& node) {}
 
@@ -130,6 +138,12 @@ class CONTENT_EXPORT RenderFrameObserver : public IPC::Listener,
 
   // Called when a worker fetch context will be created.
   virtual void WillCreateWorkerFetchContext(blink::WebWorkerFetchContext*) {}
+
+  // Called to give the embedder an opportunity to bind an interface request
+  // for a frame. If the request can be bound, |interface_pipe| will be taken.
+  virtual void OnInterfaceRequestForFrame(
+      const std::string& interface_name,
+      mojo::ScopedMessagePipeHandle* interface_pipe) {}
 
   // IPC::Listener implementation.
   bool OnMessageReceived(const IPC::Message& message) override;

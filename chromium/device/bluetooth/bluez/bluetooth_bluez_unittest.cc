@@ -166,7 +166,7 @@ class TestPairingDelegate : public BluetoothDevice::PairingDelegate {
   // break out of those loops.
   void QuitMessageLoop() {
     if (base::RunLoop::IsRunningOnCurrentThread())
-      base::MessageLoop::current()->QuitWhenIdle();
+      base::RunLoop::QuitCurrentWhenIdleDeprecated();
   }
 };
 
@@ -362,7 +362,7 @@ class BluetoothBlueZTest : public testing::Test {
   // break out of those loops.
   void QuitMessageLoop() {
     if (base::RunLoop::IsRunningOnCurrentThread())
-      base::MessageLoop::current()->QuitWhenIdle();
+      base::RunLoop::QuitCurrentWhenIdleDeprecated();
   }
 };
 const char BluetoothBlueZTest::kGapUuid[] =
@@ -756,6 +756,39 @@ TEST_F(BluetoothBlueZTest, StopDiscovery) {
   base::RunLoop().Run();
   EXPECT_EQ(1, callback_count_);
   EXPECT_EQ(0, error_callback_count_);
+}
+
+TEST_F(BluetoothBlueZTest, StopDiscoveryInProgress) {
+  GetAdapter();
+
+  adapter_->SetPowered(true, GetCallback(), GetErrorCallback());
+
+  callback_count_ = 0;
+  adapter_->SetPowered(true, GetCallback(), GetErrorCallback());
+  adapter_->StartDiscoverySession(
+      base::Bind(&BluetoothBlueZTest::DiscoverySessionCallback,
+                 base::Unretained(this)),
+      GetErrorCallback());
+  base::RunLoop().Run();
+  EXPECT_EQ(2, callback_count_);
+  EXPECT_EQ(0, error_callback_count_);
+  callback_count_ = 0;
+  ASSERT_TRUE(adapter_->IsPowered());
+  ASSERT_TRUE(adapter_->IsDiscovering());
+  ASSERT_EQ((size_t)1, discovery_sessions_.size());
+  ASSERT_TRUE(discovery_sessions_[0]->IsActive());
+
+  // First call to Stop() should succeed.
+  discovery_sessions_[0]->Stop(GetCallback(), GetErrorCallback());
+  // Second call to Stop() while the first is in progress should fail.
+  discovery_sessions_[0]->Stop(GetCallback(), GetErrorCallback());
+
+  base::RunLoop().Run();
+  EXPECT_EQ(1, callback_count_);
+  EXPECT_EQ(1, error_callback_count_);
+  discovery_sessions_.clear();
+  callback_count_ = 0;
+  error_callback_count_ = 0;
 }
 
 TEST_F(BluetoothBlueZTest, Discovery) {

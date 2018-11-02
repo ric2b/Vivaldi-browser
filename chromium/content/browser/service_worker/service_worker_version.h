@@ -17,14 +17,15 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/containers/id_map.h"
 #include "base/gtest_prod_util.h"
-#include "base/id_map.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "base/optional.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/clock.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -66,7 +67,7 @@ struct ServiceWorkerVersionInfo;
 // one of them is activated. This class connects the actual script with a
 // running worker.
 class CONTENT_EXPORT ServiceWorkerVersion
-    : NON_EXPORTED_BASE(public base::RefCounted<ServiceWorkerVersion>),
+    : public base::RefCounted<ServiceWorkerVersion>,
       public EmbeddedWorkerInstance::Listener {
  public:
   using StatusCallback = base::Callback<void(ServiceWorkerStatusCode)>;
@@ -196,7 +197,7 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // Registers status change callback. (This is for one-off observation,
   // the consumer needs to re-register if it wants to continue observing
   // status changes)
-  void RegisterStatusChangeCallback(const base::Closure& callback);
+  void RegisterStatusChangeCallback(base::OnceClosure callback);
 
   // Starts an embedded worker for this version.
   // This returns OK (success) if the worker is already running.
@@ -227,7 +228,7 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // this method returns).
   // |purpose| is used for UMA.
   void RunAfterStartWorker(ServiceWorkerMetrics::EventType purpose,
-                           const base::Closure& task,
+                           base::OnceClosure task,
                            const StatusCallback& error_callback);
 
   // Call this while the worker is running before dispatching an event to the
@@ -289,15 +290,6 @@ class CONTENT_EXPORT ServiceWorkerVersion
     return event_dispatcher_.get();
   }
 
-  // This method registers a callback to receive messages sent back from the
-  // service worker in response to |request_id|.
-  // ResponseMessage is the type of the IPC message that is used for the
-  // response, and its first argument MUST be the request_id.
-  // Callback registration should be done once for one request_id.
-  template <typename ResponseMessage, typename ResponseCallbackType>
-  void RegisterRequestCallback(int request_id,
-                               const ResponseCallbackType& callback);
-
   // Adds and removes |provider_host| as a controllee of this ServiceWorker.
   void AddControllee(ServiceWorkerProviderHost* provider_host);
   void RemoveControllee(ServiceWorkerProviderHost* provider_host);
@@ -306,6 +298,13 @@ class CONTENT_EXPORT ServiceWorkerVersion
   bool HasControllee() const { return !controllee_map_.empty(); }
   std::map<std::string, ServiceWorkerProviderHost*> controllee_map() {
     return controllee_map_;
+  }
+
+  // The provider host hosting this version. Only valid while the version is
+  // running.
+  ServiceWorkerProviderHost* provider_host() {
+    DCHECK(provider_host_);
+    return provider_host_.get();
   }
 
   base::WeakPtr<ServiceWorkerContextCore> context() const { return context_; }
@@ -352,6 +351,8 @@ class CONTENT_EXPORT ServiceWorkerVersion
     force_bypass_cache_for_scripts_ = force_bypass_cache_for_scripts;
   }
 
+  // Used for pausing service worker startup in the renderer in order to do the
+  // byte-for-byte check.
   bool pause_after_download() const { return pause_after_download_; }
   void set_pause_after_download(bool pause_after_download) {
     pause_after_download_ = pause_after_download;
@@ -385,6 +386,9 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // Used to allow tests to change time for testing.
   void SetTickClockForTesting(std::unique_ptr<base::TickClock> tick_clock);
 
+  // Used to allow tests to change wall clock for testing.
+  void SetClockForTesting(std::unique_ptr<base::Clock> clock);
+
   // Returns true if the service worker has work to do: it has pending
   // requests, in-progress streaming URLRequestJobs, or pending start callbacks.
   bool HasWork() const;
@@ -405,6 +409,8 @@ class CONTENT_EXPORT ServiceWorkerVersion
     used_features_ = used_features;
   }
   const std::set<uint32_t>& used_features() const { return used_features_; }
+
+  static bool IsInstalled(ServiceWorkerVersion::Status status);
 
  private:
   friend class base::RefCounted<ServiceWorkerVersion>;
@@ -434,6 +440,8 @@ class CONTENT_EXPORT ServiceWorkerVersion
                            TimeoutWorkerInEvent);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerStallInStoppingTest, DetachThenStart);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerStallInStoppingTest, DetachThenRestart);
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerStallInStoppingTest,
+                           DetachThenRestartNoCrash);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest,
                            RegisterForeignFetchScopes);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest, RequestNowTimeout);
@@ -465,22 +473,10 @@ class CONTENT_EXPORT ServiceWorkerVersion
                    ServiceWorkerMetrics::EventType event_type);
     ~PendingRequest();
 
-    // ------------------------------------------------------------------------
-    // For all requests. Set by StartRequest.
-    // ------------------------------------------------------------------------
     StatusCallback error_callback;
     base::Time start_time;
     base::TimeTicks start_time_ticks;
     ServiceWorkerMetrics::EventType event_type;
-
-    // ------------------------------------------------------------------------
-    // For IPC message requests.
-    // ------------------------------------------------------------------------
-    // Set by RegisterRequestCallback. Receives IPC responses to the request via
-    // OnMessageReceived.
-    std::unique_ptr<EmbeddedWorkerInstance::Listener> listener;
-    // True if an IPC message was sent to dispatch the event for this request.
-    bool is_dispatched = false;
   };
 
   using ServiceWorkerClients = std::vector<ServiceWorkerClientInfo>;
@@ -704,11 +700,11 @@ class CONTENT_EXPORT ServiceWorkerVersion
   std::unique_ptr<EmbeddedWorkerInstance> embedded_worker_;
   std::vector<StatusCallback> start_callbacks_;
   std::vector<StatusCallback> stop_callbacks_;
-  std::vector<base::Closure> status_change_callbacks_;
+  std::vector<base::OnceClosure> status_change_callbacks_;
 
   // Holds in-flight requests, including requests due to outstanding push,
   // fetch, sync, etc. events.
-  IDMap<std::unique_ptr<PendingRequest>> pending_requests_;
+  base::IDMap<std::unique_ptr<PendingRequest>> pending_requests_;
 
   // Container for pending external requests for this service worker.
   // (key, value): (request uuid, request id).
@@ -722,6 +718,11 @@ class CONTENT_EXPORT ServiceWorkerVersion
       installed_scripts_sender_;
 
   std::set<const ServiceWorkerURLRequestJob*> streaming_url_request_jobs_;
+
+  // Keeps track of the provider hosting this running service worker for this
+  // version. |provider_host_| is always valid as long as this version is
+  // running.
+  base::WeakPtr<ServiceWorkerProviderHost> provider_host_;
 
   std::map<std::string, ServiceWorkerProviderHost*> controllee_map_;
   // Will be null while shutting down.
@@ -778,6 +779,9 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // The clock used to vend tick time.
   std::unique_ptr<base::TickClock> tick_clock_;
 
+  // The clock used for actual (wall clock) time
+  std::unique_ptr<base::Clock> clock_;
+
   std::unique_ptr<PingController> ping_controller_;
 
   // Used for recording worker activities (e.g., a ratio of handled events)
@@ -800,19 +804,6 @@ class CONTENT_EXPORT ServiceWorkerVersion
 
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerVersion);
 };
-
-template <typename ResponseMessage, typename ResponseCallbackType>
-void ServiceWorkerVersion::RegisterRequestCallback(
-    int request_id,
-    const ResponseCallbackType& callback) {
-  PendingRequest* request = pending_requests_.Lookup(request_id);
-  DCHECK(request) << "Invalid request id";
-  DCHECK(!request->listener) << "Callback was already registered";
-  DCHECK(!request->is_dispatched) << "Request already dispatched an IPC event";
-  request->listener.reset(
-      new EventResponseHandler<ResponseMessage, ResponseCallbackType>(
-          embedded_worker()->AsWeakPtr(), request_id, callback));
-}
 
 template <typename ResponseMessage, typename CallbackType, typename... Args>
 bool ServiceWorkerVersion::EventResponseHandler<

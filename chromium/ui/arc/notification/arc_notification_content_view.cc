@@ -21,11 +21,11 @@
 #include "ui/gfx/transform.h"
 #include "ui/message_center/message_center_style.h"
 #include "ui/message_center/views/notification_control_buttons_view.h"
-#include "ui/message_center/views/toast_contents_view.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/widget/root_view.h"
 #include "ui/views/widget/widget.h"
+#include "ui/views/widget/widget_delegate.h"
 #include "ui/wm/core/window_util.h"
 
 namespace arc {
@@ -84,7 +84,8 @@ class ArcNotificationContentView::EventForwarder : public ui::EventHandler {
 
     // TODO(yoshiki): Use a better tigger (eg. focusing EditText on
     // notification) than clicking (crbug.com/697379).
-    if (event->type() == ui::ET_MOUSE_PRESSED)
+    if (event->type() == ui::ET_MOUSE_PRESSED ||
+        event->type() == ui::ET_GESTURE_TAP)
       owner_->Activate();
 
     views::Widget* widget = owner_->GetWidget();
@@ -134,8 +135,10 @@ class ArcNotificationContentView::SlideHelper
     // Reset opacity to 1 to handle to case when the surface is sliding before
     // getting managed by this class, e.g. sliding in a popup before showing
     // in a message center view.
-    if (owner_->surface_ && owner_->surface_->GetWindow())
+    if (owner_->surface_) {
+      DCHECK(owner_->surface_->GetWindow());
       owner_->surface_->GetWindow()->layer()->SetOpacity(1.0f);
+    }
   }
   ~SlideHelper() override {
     if (GetSlideOutLayer())
@@ -166,8 +169,9 @@ class ArcNotificationContentView::SlideHelper
   }
 
   void OnSlideStart() {
-    if (!owner_->surface_ || !owner_->surface_->GetWindow())
+    if (!owner_->surface_)
       return;
+    DCHECK(owner_->surface_->GetWindow());
     surface_copy_ = ::wm::RecreateLayers(owner_->surface_->GetWindow());
     // |surface_copy_| is at (0, 0) in owner_->layer().
     surface_copy_->root()->SetBounds(gfx::Rect(surface_copy_->root()->size()));
@@ -176,8 +180,9 @@ class ArcNotificationContentView::SlideHelper
   }
 
   void OnSlideEnd() {
-    if (!owner_->surface_ || !owner_->surface_->GetWindow())
+    if (!owner_->surface_)
       return;
+    DCHECK(owner_->surface_->GetWindow());
     owner_->surface_->GetWindow()->layer()->SetOpacity(1.0f);
     owner_->Layout();
     surface_copy_.reset();
@@ -231,6 +236,10 @@ class ArcNotificationContentView::ContentViewDelegate
     return owner_->control_buttons_view_;
   }
 
+  bool IsExpanded() const override { return owner_->IsExpanded(); }
+
+  void SetExpanded(bool expanded) override { owner_->SetExpanded(expanded); }
+
  private:
   ArcNotificationContentView* const owner_;
 
@@ -247,6 +256,10 @@ ArcNotificationContentView::ArcNotificationContentView(
       notification_key_(item->GetNotificationKey()),
       event_forwarder_(new EventForwarder(this)),
       mouse_enter_exit_handler_(new MouseEnterExitHandler(this)) {
+  // kNotificationWidth must be 360, since this value is separately defiend in
+  // ArcNotificationWrapperView class in Android side.
+  DCHECK_EQ(360, message_center::kNotificationWidth);
+
   SetFocusBehavior(FocusBehavior::ALWAYS);
   set_notify_enter_exit_on_child(true);
 
@@ -312,7 +325,7 @@ void ArcNotificationContentView::MaybeCreateFloatingControlButtons() {
       GetControlButtonBackgroundColor(item_->GetShownContents()));
   control_buttons_view_->ShowSettingsButton(
       item_->IsOpeningSettingsSupported());
-  control_buttons_view_->ShowCloseButton(!item_->GetPinned());
+  control_buttons_view_->ShowCloseButton(!notification_view->GetPinned());
 
   views::Widget::InitParams params(views::Widget::InitParams::TYPE_CONTROL);
   params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
@@ -343,8 +356,10 @@ void ArcNotificationContentView::SetSurface(ArcNotificationSurface* surface) {
   // Reset |floating_control_buttons_widget_| when |surface_| is changed.
   floating_control_buttons_widget_.reset();
 
-  if (surface_ && surface_->GetWindow()) {
-    surface_->GetWindow()->RemoveObserver(this);
+  if (surface_) {
+    DCHECK(surface_->GetWindow());
+    DCHECK(surface_->GetContentWindow());
+    surface_->GetContentWindow()->RemoveObserver(this);
     surface_->GetWindow()->RemovePreTargetHandler(event_forwarder_.get());
 
     if (surface_->GetAttachedHost() == this) {
@@ -355,8 +370,10 @@ void ArcNotificationContentView::SetSurface(ArcNotificationSurface* surface) {
 
   surface_ = surface;
 
-  if (surface_ && surface_->GetWindow()) {
-    surface_->GetWindow()->AddObserver(this);
+  if (surface_) {
+    DCHECK(surface_->GetWindow());
+    DCHECK(surface_->GetContentWindow());
+    surface_->GetContentWindow()->AddObserver(this);
     surface_->GetWindow()->AddPreTargetHandler(event_forwarder_.get());
 
     if (GetWidget()) {
@@ -411,18 +428,6 @@ void ArcNotificationContentView::UpdateControlButtonsVisibility() {
     floating_control_buttons_widget_->Hide();
 }
 
-void ArcNotificationContentView::UpdatePinnedState() {
-  if (!item_)
-    return;
-
-  // Surface is not attached yet.
-  if (!control_buttons_view_)
-    return;
-
-  control_buttons_view_->ShowCloseButton(!item_->GetPinned());
-  Layout();
-}
-
 void ArcNotificationContentView::UpdateSnapshot() {
   // Bail if we have a |surface_| because it controls the sizes and paints UI.
   if (surface_)
@@ -462,6 +467,21 @@ void ArcNotificationContentView::UpdateAccessibleName() {
     return;
 
   accessible_name_ = item_->GetAccessibleName();
+}
+
+bool ArcNotificationContentView::IsExpanded() const {
+  return item_->GetExpandState() == mojom::ArcNotificationExpandState::EXPANDED;
+}
+
+void ArcNotificationContentView::SetExpanded(bool expanded) {
+  auto expand_state = item_->GetExpandState();
+  if (expanded) {
+    if (expand_state == mojom::ArcNotificationExpandState::COLLAPSED)
+      item_->ToggleExpansion();
+  } else {
+    if (expand_state == mojom::ArcNotificationExpandState::EXPANDED)
+      item_->ToggleExpansion();
+  }
 }
 
 void ArcNotificationContentView::ViewHierarchyChanged(
@@ -504,11 +524,11 @@ void ArcNotificationContentView::Layout() {
   // Scale notification surface if necessary.
   gfx::Transform transform;
   const gfx::Size surface_size = surface_->GetSize();
-  const gfx::Size contents_size = contents_bounds.size();
-  if (!surface_size.IsEmpty() && !contents_size.IsEmpty()) {
-    transform.Scale(
-        static_cast<float>(contents_size.width()) / surface_size.width(),
-        static_cast<float>(contents_size.height()) / surface_size.height());
+  if (!surface_size.IsEmpty()) {
+    const float factor =
+        static_cast<float>(message_center::kNotificationWidth) /
+        surface_size.width();
+    transform.Scale(factor, factor);
   }
 
   // Apply the transform to the surface content so that close button can
@@ -642,7 +662,6 @@ void ArcNotificationContentView::OnItemDestroying() {
 
 void ArcNotificationContentView::OnItemUpdated() {
   UpdateAccessibleName();
-  UpdatePinnedState();
   UpdateSnapshot();
   if (control_buttons_view_) {
     DCHECK(floating_control_buttons_widget_);

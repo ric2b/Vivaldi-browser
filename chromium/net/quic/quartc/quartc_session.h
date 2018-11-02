@@ -72,6 +72,8 @@ class QUIC_EXPORT_PRIVATE QuartcSession
 
   void CancelStream(QuicStreamId stream_id) override;
 
+  QuartcSessionStats GetStats() override;
+
   void SetDelegate(QuartcSessionInterface::Delegate* session_delegate) override;
 
   void OnTransportCanWrite() override;
@@ -97,7 +99,6 @@ class QUIC_EXPORT_PRIVATE QuartcSession
  protected:
   // QuicSession override.
   QuicStream* CreateIncomingDynamicStream(QuicStreamId id) override;
-  std::unique_ptr<QuicStream> CreateStream(QuicStreamId id) override;
 
   std::unique_ptr<QuartcStream> CreateDataStream(QuicStreamId id,
                                                  SpdyPriority priority);

@@ -712,8 +712,9 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
 
 // This test calls getUserMedia in an iframe and immediately close the iframe
 // in the scope of the success callback.
+// Flaky: crbug.com/727601.
 IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
-                       AudioInIFrameAndCloseInSuccessCb) {
+                       DISABLED_AudioInIFrameAndCloseInSuccessCb) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
@@ -1502,6 +1503,41 @@ IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
   EXPECT_EQ("onmute: muted=true, readyState=live",
             ExecuteJavascriptAndReturnResult(
                 "failTestAfterTimeout('Got no mute event', 1500);"));
+}
+
+IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest, SrcObjectAddVideoTrack) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
+  NavigateToURL(shell(), url);
+  ExecuteJavascriptAndWaitForOk("srcObjectAddVideoTrack()");
+}
+
+IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
+                       SrcObjectRemoveVideoTrack) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
+  NavigateToURL(shell(), url);
+  ExecuteJavascriptAndWaitForOk("srcObjectRemoveVideoTrack()");
+}
+
+IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
+                       SrcObjectRemoveFirstOfTwoVideoTracks) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
+  NavigateToURL(shell(), url);
+  ExecuteJavascriptAndWaitForOk("srcObjectRemoveFirstOfTwoVideoTracks()");
+}
+
+// TODO(guidou): Add SrcObjectAddAudioTrack and SrcObjectRemoveAudioTrack tests
+// when a straightforward mechanism to detect the presence/absence of audio in a
+// media element with an assigned MediaStream becomes available.
+
+IN_PROC_BROWSER_TEST_F(WebRtcGetUserMediaBrowserTest,
+                       SrcObjectReassignSameObject) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url(embedded_test_server()->GetURL("/media/getusermedia.html"));
+  NavigateToURL(shell(), url);
+  ExecuteJavascriptAndWaitForOk("srcObjectReassignSameObject()");
 }
 
 }  // namespace content

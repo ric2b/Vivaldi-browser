@@ -12,6 +12,7 @@
 #include "base/strings/string16.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/md_bookmarks/bookmarks_message_handler.h"
+#include "chrome/browser/ui/webui/metrics_handler.h"
 #include "chrome/browser/ui/webui/plural_string_handler.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/url_constants.h"
@@ -54,6 +55,8 @@ content::WebUIDataSource* CreateMdBookmarksUIHTMLSource(Profile* profile) {
                              IDS_BOOKMARK_MANAGER_URL_INPUT_PLACE_HOLDER);
   AddLocalizedString(source, "emptyList",
                      IDS_MD_BOOKMARK_MANAGER_EMPTY_LIST);
+  AddLocalizedString(source, "folderLabel",
+                     IDS_MD_BOOKMARK_MANAGER_FOLDER_LABEL);
   AddLocalizedString(source, "itemsSelected",
                      IDS_MD_BOOKMARK_MANAGER_ITEMS_SELECTED);
   AddLocalizedString(source, "menuAddBookmark",
@@ -66,22 +69,20 @@ content::WebUIDataSource* CreateMdBookmarksUIHTMLSource(Profile* profile) {
   AddLocalizedString(source, "menuEdit", IDS_EDIT);
   AddLocalizedString(source, "menuExport", IDS_MD_BOOKMARK_MANAGER_MENU_EXPORT);
   AddLocalizedString(source, "menuImport", IDS_MD_BOOKMARK_MANAGER_MENU_IMPORT);
-  // TODO(tsergeant): These are not the exact strings specified by UI. Reconcile
-  // the differences between these strings and the work in crbug.com/708815.
   AddLocalizedString(source, "menuOpenAllNewTab", IDS_BOOKMARK_BAR_OPEN_ALL);
   AddLocalizedString(source, "menuOpenAllNewWindow",
-                     IDS_BOOKMARK_BAR_OPEN_ALL_NEW_WINDOW);
+                     IDS_MD_BOOKMARK_MANAGER_MENU_OPEN_ALL_NEW_WINDOW);
   AddLocalizedString(source, "menuOpenAllIncognito",
-                     IDS_BOOKMARK_BAR_OPEN_ALL_INCOGNITO);
+                     IDS_MD_BOOKMARK_MANAGER_MENU_OPEN_ALL_INCOGNITO);
   AddLocalizedString(source, "menuOpenNewTab",
-                     IDS_BOOKMARK_BAR_OPEN_IN_NEW_TAB);
+                     IDS_MD_BOOKMARK_MANAGER_MENU_OPEN_IN_NEW_TAB);
   AddLocalizedString(source, "menuOpenNewWindow",
-                     IDS_BOOKMARK_BAR_OPEN_IN_NEW_WINDOW);
+                     IDS_MD_BOOKMARK_MANAGER_MENU_OPEN_IN_NEW_WINDOW);
   AddLocalizedString(source, "menuOpenIncognito",
-                     IDS_BOOKMARK_BAR_OPEN_INCOGNITO);
+                     IDS_MD_BOOKMARK_MANAGER_MENU_OPEN_INCOGNITO);
   AddLocalizedString(source, "menuRename", IDS_MD_BOOKMARK_MANAGER_MENU_RENAME);
   AddLocalizedString(source, "menuShowInFolder",
-                     IDS_BOOKMARK_MANAGER_SHOW_IN_FOLDER);
+                     IDS_MD_BOOKMARK_MANAGER_MENU_SHOW_IN_FOLDER);
   AddLocalizedString(source, "menuSort", IDS_MD_BOOKMARK_MANAGER_MENU_SORT);
   AddLocalizedString(source, "moreActionsButtonTitle",
                      IDS_MD_BOOKMARK_MANAGER_MORE_ACTIONS);
@@ -212,6 +213,7 @@ MdBookmarksUI::MdBookmarksUI(content::WebUI* web_ui) : WebUIController(web_ui) {
   web_ui->AddMessageHandler(std::move(plural_string_handler));
 
   web_ui->AddMessageHandler(base::MakeUnique<BookmarksMessageHandler>());
+  web_ui->AddMessageHandler(base::MakeUnique<MetricsHandler>());
 }
 
 // static

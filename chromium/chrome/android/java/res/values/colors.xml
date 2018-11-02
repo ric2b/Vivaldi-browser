@@ -15,9 +15,6 @@
     <color name="dark_action_bar_color">#263238</color>
     <color name="descriptive_text_color">#646464</color>
     <color name="error_text_color">#c53929</color>
-    <color name="google_blue_300">#7BAAF7</color>
-    <color name="google_blue_500">#4285f4</color>
-    <color name="google_blue_700">#3367d6</color>
     <color name="google_blue_grey_500">#607D8B</color>
     <color name="google_red_700">#c53929</color>
     <color name="google_green_700">#0b8043</color>
@@ -29,22 +26,23 @@
     <color name="google_grey_600">#757575</color>
     <color name="toolbar_shadow_color">#1d000000</color>
     <color name="white_alpha_50">#80ffffff</color>
-    <color name="white_alpha_70">#B3FFFFFF</color>
+    <color name="white_alpha_54">#8Affffff</color>
+    <color name="black_alpha_65">#A6000000</color>
     <color name="toolbar_light_tint">#A3000000</color>
     <color name="light_grey">#ccc</color>
     <color name="modal_dialog_scrim_color">#7f000000</color>
 
+    <color name="modern_grey_300">#DFE1E5</color>
+    <color name="modern_light_grey">#F1F3F4</color>
+
     <!-- New list of common text colors -->
     <color name="black_alpha_20">#33000000</color>
     <color name="black_alpha_30">#4d000000</color>
-    <color name="black_alpha_38">#61000000</color>
     <color name="black_alpha_40">#66000000</color>
-    <color name="black_alpha_54">#8a000000</color>
-    <color name="black_alpha_87">#de000000</color>
 
     <!-- Infobar colors -->
     <color name="infobar_accent_blue">#4285f4</color>
-    <color name="infobar_descriptive_text_color">#646464</color>
+    <color name="infobar_descriptive_text_color">@color/black_alpha_54</color>
 
     <!-- Snackbar colors -->
     <color name="snackbar_background_color">#282C32</color>
@@ -61,11 +59,11 @@
 
     <!-- Connection Info Popup colors -->
     <color name="connection_info_popup_reset_cert_decisions_button">#000000</color>
-    <color name="connection_info_popup_text">#444444</color>
+    <color name="connection_info_popup_text">@color/black_alpha_87</color>
 
     <!-- Page Info Popup colors -->
-    <color name="page_info_popup_text">#444444</color>
-    <color name="page_info_popup_text_link">#4285f4</color>
+    <color name="page_info_popup_text">@color/black_alpha_87</color>
+    <color name="page_info_popup_text_link">@color/google_blue_700</color>
 
     <!-- URL Emphasizer colors -->
     <color name="url_emphasis_non_emphasized_text">#80333333</color>
@@ -91,7 +89,6 @@
 
     <!-- Preferences Colors -->
     <color name="pref_accent_color">@color/light_active_color</color>
-    <color name="expandable_group_dark_gray">#484848</color>
 
     <!-- Data Saver Colors -->
     <color name="data_reduction_compressed_color">@color/pref_accent_color</color>
@@ -106,7 +103,6 @@
 
     <!-- First Run Experience Colors -->
     <color name="fre_text_color">#000000</color>
-    <color name="fre_title_color">#161616</color>
 
     <!-- Account Signin Colors -->
     <!-- As in dimens.xml, signin uses values from the First Run Experience -->
@@ -135,6 +131,8 @@
     <color name="incognito_text">#b3ffffff</color>
     <color name="incognito_emphasis">@android:color/white</color>
     <color name="incognito_header">#ccffffff</color>
+    <color name="incognito_ntp_learn_more_link">#03a9f4</color>
+    <color name="incognito_ntp_header">#d2d2d2</color>
 
     <!-- Site suggestion tile colors. -->
     <color name="tile_view_text">@color/black_alpha_54</color>
@@ -154,6 +152,7 @@
 
     <!-- Theme colors. Also used for toolbar background -->
     <color name="incognito_primary_color">#505050</color>
+    <color name="modern_primary_color">@android:color/white</color>
 
     <!-- LocationBar colors -->
     <color name="locationbar_dark_hint_text">@color/black_alpha_54</color>
@@ -174,8 +173,6 @@
     <color name="find_result_bar_active_border_color">#c37e3b</color>
     <color name="find_in_page_query_color">#333333</color>
     <color name="find_in_page_query_white_color">#ffffff</color>
-    <color name="find_in_page_results_status_color">#969696</color>
-    <color name="find_in_page_results_status_white_color">#7f7f7f</color>
     <color name="find_in_page_failed_results_status_color">#db4437</color>
 
     <!-- App Background Colors -->
@@ -185,8 +182,6 @@
     <!-- WebappActivity colors -->
     <color name="webapp_default_bg">#fafafa</color>
     <color name="webapp_splash_title_light">#ffffff</color>
-    <color name="webapp_url_bar_bg">#fafafa</color>
-    <color name="webapp_url_bar_separator">#e1e1e1</color>
 
     <!-- Bookmark UI colors -->
     <color name="bookmark_detail_section">#7C7B79</color>
@@ -217,8 +212,8 @@
     <color name="translate_overflow_menu_divider_color">#e0e0e0</color>
 
     <!-- Other colors -->
-    <color name="selectable_list_item_highlight_color">#804281f4</color>
     <color name="media_viewer_bg">#000000</color>
     <color name="image_viewer_bg">#0e0e0e</color>
+    <color name="modern_toolbar_bg">#E6FFFFFF</color>
 
 </resources>

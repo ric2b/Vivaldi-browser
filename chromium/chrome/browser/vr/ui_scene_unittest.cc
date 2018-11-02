@@ -10,10 +10,15 @@
 #include <vector>
 
 #include "base/memory/ptr_util.h"
+#include "base/test/gtest_util.h"
 #include "base/values.h"
+#include "chrome/browser/vr/elements/draw_phase.h"
 #include "chrome/browser/vr/elements/ui_element.h"
 #include "chrome/browser/vr/elements/ui_element_transform_operations.h"
+#include "chrome/browser/vr/elements/viewport_aware_root.h"
+#include "chrome/browser/vr/test/animation_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gfx/geometry/vector3d_f.h"
 #include "ui/gfx/transform_util.h"
 
 #define TOLERANCE 0.0001
@@ -27,14 +32,38 @@ namespace vr {
 
 namespace {
 
-base::TimeTicks usToTicks(uint64_t us) {
-  return base::TimeTicks::FromInternalValue(us);
+size_t NumElementsInSubtree(UiElement* element) {
+  size_t count = 1;
+  for (auto& child : element->children()) {
+    count += NumElementsInSubtree(child.get());
+  }
+  return count;
 }
 
-void addElement(UiScene* scene, int id) {
+void MakeViewportAwareElements(UiScene* scene,
+                               UiElement** child,
+                               UiElement** grandchild) {
   auto element = base::MakeUnique<UiElement>();
-  element->set_id(id);
-  scene->AddUiElement(std::move(element));
+  UiElement* container = element.get();
+  element->set_draw_phase(0);
+  scene->AddUiElement(kRoot, std::move(element));
+
+  auto root = base::MakeUnique<ViewportAwareRoot>();
+  UiElement* viewport_aware_root = root.get();
+  root->set_draw_phase(0);
+  container->AddChild(std::move(root));
+
+  element = base::MakeUnique<UiElement>();
+  *child = element.get();
+  element->set_viewport_aware(true);
+  element->set_draw_phase(0);
+  viewport_aware_root->AddChild(std::move(element));
+
+  element = base::MakeUnique<UiElement>();
+  *grandchild = element.get();
+  element->set_viewport_aware(false);
+  element->set_draw_phase(0);
+  (*child)->AddChild(std::move(element));
 }
 
 }  // namespace
@@ -42,26 +71,40 @@ void addElement(UiScene* scene, int id) {
 TEST(UiScene, AddRemoveElements) {
   UiScene scene;
 
-  EXPECT_EQ(scene.GetUiElements().size(), 0u);
-  addElement(&scene, 0);
-  EXPECT_EQ(scene.GetUiElements().size(), 1u);
-  addElement(&scene, 99);
-  EXPECT_EQ(scene.GetUiElements().size(), 2u);
+  // Always start with the root element.
+  EXPECT_EQ(NumElementsInSubtree(&scene.root_element()), 1u);
 
-  EXPECT_NE(scene.GetUiElementById(0), nullptr);
-  EXPECT_NE(scene.GetUiElementById(99), nullptr);
-  EXPECT_EQ(scene.GetUiElementById(1), nullptr);
+  auto element = base::MakeUnique<UiElement>();
+  element->set_draw_phase(kPhaseForeground);
+  UiElement* parent = element.get();
+  int parent_id = parent->id();
+  scene.AddUiElement(kRoot, std::move(element));
 
-  scene.RemoveUiElement(0);
-  EXPECT_EQ(scene.GetUiElements().size(), 1u);
-  EXPECT_EQ(scene.GetUiElementById(0), nullptr);
-  scene.RemoveUiElement(99);
-  EXPECT_EQ(scene.GetUiElements().size(), 0u);
-  EXPECT_EQ(scene.GetUiElementById(99), nullptr);
+  EXPECT_EQ(NumElementsInSubtree(&scene.root_element()), 2u);
 
-  scene.RemoveUiElement(0);
-  scene.RemoveUiElement(99);
-  EXPECT_EQ(scene.GetUiElements().size(), 0u);
+  element = base::MakeUnique<UiElement>();
+  element->set_draw_phase(kPhaseForeground);
+  UiElement* child = element.get();
+  int child_id = child->id();
+
+  parent->AddChild(std::move(element));
+
+  EXPECT_EQ(NumElementsInSubtree(&scene.root_element()), 3u);
+
+  EXPECT_NE(scene.GetUiElementById(parent_id), nullptr);
+  EXPECT_NE(scene.GetUiElementById(child_id), nullptr);
+  EXPECT_EQ(scene.GetUiElementById(-1), nullptr);
+
+  scene.RemoveUiElement(child_id);
+  EXPECT_EQ(NumElementsInSubtree(&scene.root_element()), 2u);
+  EXPECT_EQ(scene.GetUiElementById(child_id), nullptr);
+
+  scene.RemoveUiElement(parent_id);
+  EXPECT_EQ(NumElementsInSubtree(&scene.root_element()), 1u);
+  EXPECT_EQ(scene.GetUiElementById(parent_id), nullptr);
+
+  // It is an error to remove an already-deleted element.
+  EXPECT_DCHECK_DEATH(scene.RemoveUiElement(child_id));
 }
 
 // This test creates a parent and child UI element, each with their own
@@ -73,7 +116,7 @@ TEST(UiScene, ParentTransformAppliesToChild) {
   // Add a parent element, with distinct transformations.
   // Size of the parent should be ignored by the child.
   auto element = base::MakeUnique<UiElement>();
-  element->set_id(0);
+  UiElement* parent = element.get();
   element->SetSize(1000, 1000);
 
   UiElementTransformOperations operations;
@@ -81,26 +124,26 @@ TEST(UiScene, ParentTransformAppliesToChild) {
   operations.SetRotate(0, 0, 1, 90);
   operations.SetScale(3, 3, 1);
   element->SetTransformOperations(operations);
-  scene.AddUiElement(std::move(element));
+  element->set_draw_phase(0);
+  scene.AddUiElement(kRoot, std::move(element));
 
   // Add a child to the parent, with different transformations.
   element = base::MakeUnique<UiElement>();
-  element->set_id(1);
-  scene.GetUiElementById(0)->AddChild(element.get());
   UiElementTransformOperations child_operations;
   child_operations.SetTranslate(3, 0, 0);
   child_operations.SetRotate(0, 0, 1, 90);
   child_operations.SetScale(2, 2, 1);
   element->SetTransformOperations(child_operations);
-  scene.AddUiElement(std::move(element));
-  const UiElement* child = scene.GetUiElementById(1);
+  element->set_draw_phase(0);
+  UiElement* child = element.get();
+  parent->AddChild(std::move(element));
 
   gfx::Point3F origin(0, 0, 0);
   gfx::Point3F point(1, 0, 0);
 
-  scene.OnBeginFrame(usToTicks(1));
-  child->screen_space_transform().TransformPoint(&origin);
-  child->screen_space_transform().TransformPoint(&point);
+  scene.OnBeginFrame(MicrosecondsToTicks(1), gfx::Vector3dF());
+  child->world_space_transform().TransformPoint(&origin);
+  child->world_space_transform().TransformPoint(&point);
   EXPECT_VEC3F_NEAR(gfx::Point3F(6, 10, 0), origin);
   EXPECT_VEC3F_NEAR(gfx::Point3F(0, 10, 0), point);
 }
@@ -109,38 +152,42 @@ TEST(UiScene, Opacity) {
   UiScene scene;
 
   auto element = base::MakeUnique<UiElement>();
-  element->set_id(0);
+  UiElement* parent = element.get();
   element->SetOpacity(0.5);
-  scene.AddUiElement(std::move(element));
+  element->set_draw_phase(0);
+  scene.AddUiElement(kRoot, std::move(element));
 
   element = base::MakeUnique<UiElement>();
-  element->set_id(1);
-  scene.GetUiElementById(0)->AddChild(element.get());
+  UiElement* child = element.get();
   element->SetOpacity(0.5);
-  scene.AddUiElement(std::move(element));
+  element->set_draw_phase(0);
+  parent->AddChild(std::move(element));
 
-  scene.OnBeginFrame(usToTicks(0));
-  EXPECT_EQ(0.5f, scene.GetUiElementById(0)->computed_opacity());
-  EXPECT_EQ(0.25f, scene.GetUiElementById(1)->computed_opacity());
+  scene.OnBeginFrame(MicrosecondsToTicks(0), gfx::Vector3dF());
+  EXPECT_EQ(0.5f, parent->computed_opacity());
+  EXPECT_EQ(0.25f, child->computed_opacity());
 }
 
-TEST(UiScene, LockToFov) {
+TEST(UiScene, ViewportAware) {
   UiScene scene;
+  UiElement* child = nullptr;
+  UiElement* grandchild = nullptr;
+  MakeViewportAwareElements(&scene, &child, &grandchild);
 
-  auto element = base::MakeUnique<UiElement>();
-  element->set_id(0);
-  element->set_lock_to_fov(true);
-  scene.AddUiElement(std::move(element));
+  scene.OnBeginFrame(MicrosecondsToTicks(0), gfx::Vector3dF(0.f, 0.f, -1.0f));
+  EXPECT_TRUE(child->computed_viewport_aware());
+  EXPECT_TRUE(grandchild->computed_viewport_aware());
+}
 
-  element = base::MakeUnique<UiElement>();
-  element->set_id(1);
-  scene.GetUiElementById(0)->AddChild(element.get());
-  element->set_lock_to_fov(false);
-  scene.AddUiElement(std::move(element));
+TEST(UiScene, NoViewportAwareElementWhenNoVisibleChild) {
+  UiScene scene;
+  UiElement* child = nullptr;
+  UiElement* grandchild = nullptr;
+  MakeViewportAwareElements(&scene, &child, &grandchild);
 
-  scene.OnBeginFrame(usToTicks(0));
-  EXPECT_TRUE(scene.GetUiElementById(0)->computed_lock_to_fov());
-  EXPECT_TRUE(scene.GetUiElementById(1)->computed_lock_to_fov());
+  EXPECT_FALSE(scene.GetViewportAwareElements().empty());
+  child->SetVisible(false);
+  EXPECT_TRUE(scene.GetViewportAwareElements().empty());
 }
 
 typedef struct {
@@ -157,24 +204,23 @@ TEST_P(AnchoringTest, VerifyCorrectPosition) {
 
   // Create a parent element with non-unity size and scale.
   auto element = base::MakeUnique<UiElement>();
-  element->set_id(0);
+  UiElement* parent = element.get();
   element->SetSize(2, 2);
   element->SetScale(2, 2, 1);
-  scene.AddUiElement(std::move(element));
+  element->set_draw_phase(0);
+  scene.AddUiElement(kRoot, std::move(element));
 
   // Add a child to the parent, with anchoring.
   element = base::MakeUnique<UiElement>();
-  element->set_id(1);
-  scene.GetUiElementById(0)->AddChild(element.get());
+  UiElement* child = element.get();
   element->set_x_anchoring(GetParam().x_anchoring);
   element->set_y_anchoring(GetParam().y_anchoring);
-  scene.AddUiElement(std::move(element));
+  element->set_draw_phase(0);
+  parent->AddChild(std::move(element));
 
-  scene.OnBeginFrame(usToTicks(0));
-  const UiElement* child = scene.GetUiElementById(1);
+  scene.OnBeginFrame(MicrosecondsToTicks(0), gfx::Vector3dF());
   EXPECT_NEAR(GetParam().expected_x, child->GetCenter().x(), TOLERANCE);
   EXPECT_NEAR(GetParam().expected_y, child->GetCenter().y(), TOLERANCE);
-  scene.RemoveUiElement(1);
 }
 
 const std::vector<AnchoringTestCase> anchoring_test_cases = {

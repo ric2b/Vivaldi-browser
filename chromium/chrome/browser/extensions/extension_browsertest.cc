@@ -14,6 +14,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/path_service.h"
+#include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -60,7 +61,7 @@
 #include "extensions/browser/notification_types.h"
 #include "extensions/browser/test_extension_registry_observer.h"
 #include "extensions/browser/uninstall_reason.h"
-#include "extensions/common/constants.h"
+#include "extensions/common/disable_reason.h"
 #include "extensions/common/extension_set.h"
 #include "net/url_request/url_request_file_job.h"
 
@@ -526,7 +527,8 @@ void ExtensionBrowserTest::UninstallExtension(const std::string& extension_id) {
 void ExtensionBrowserTest::DisableExtension(const std::string& extension_id) {
   ExtensionService* service = extensions::ExtensionSystem::Get(
       profile())->extension_service();
-  service->DisableExtension(extension_id, Extension::DISABLE_USER_ACTION);
+  service->DisableExtension(extension_id,
+                            extensions::disable_reason::DISABLE_USER_ACTION);
 }
 
 void ExtensionBrowserTest::EnableExtension(const std::string& extension_id) {
@@ -538,6 +540,7 @@ void ExtensionBrowserTest::EnableExtension(const std::string& extension_id) {
 void ExtensionBrowserTest::OpenWindow(content::WebContents* contents,
                                       const GURL& url,
                                       bool newtab_process_should_equal_opener,
+                                      bool should_succeed,
                                       content::WebContents** newtab_result) {
   content::WebContentsAddedObserver tab_added_observer;
   ASSERT_TRUE(content::ExecuteScript(contents,
@@ -545,7 +548,20 @@ void ExtensionBrowserTest::OpenWindow(content::WebContents* contents,
   content::WebContents* newtab = tab_added_observer.GetWebContents();
   ASSERT_TRUE(newtab);
   WaitForLoadStop(newtab);
-  EXPECT_EQ(url, newtab->GetLastCommittedURL());
+
+  if (should_succeed) {
+    EXPECT_EQ(url, newtab->GetLastCommittedURL());
+    EXPECT_EQ(content::PAGE_TYPE_NORMAL,
+              newtab->GetController().GetLastCommittedEntry()->GetPageType());
+  } else {
+    // "Failure" comes in two forms: redirecting to about:blank or showing an
+    // error page. At least one should be true.
+    EXPECT_TRUE(
+        newtab->GetLastCommittedURL() == GURL(url::kAboutBlankURL) ||
+        newtab->GetController().GetLastCommittedEntry()->GetPageType() ==
+            content::PAGE_TYPE_ERROR);
+  }
+
   if (newtab_process_should_equal_opener) {
     EXPECT_EQ(contents->GetMainFrame()->GetSiteInstance(),
               newtab->GetMainFrame()->GetSiteInstance());

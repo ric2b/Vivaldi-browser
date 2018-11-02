@@ -180,7 +180,7 @@ class BASE_EXPORT TaskScheduler {
   static void Create(StringPiece name);
 
   // Registers |task_scheduler| to handle tasks posted through the post_task.h
-  // API for this process. For tests, prefer base::test::ScopedTaskScheduler
+  // API for this process. For tests, prefer base::test::ScopedTaskEnvironment
   // (ensures isolation).
   static void SetInstance(std::unique_ptr<TaskScheduler> task_scheduler);
 
@@ -201,15 +201,16 @@ class BASE_EXPORT TaskScheduler {
   friend class gin::V8Platform;
   friend class content::BrowserMainLoopTest_CreateThreadsInSingleProcess_Test;
 
-  // Returns the maximum number of non-single-threaded tasks posted with
-  // |traits| that can run concurrently in this TaskScheduler.
+  // Returns the maximum number of non-single-threaded non-blocked tasks posted
+  // with |traits| that can run concurrently in this TaskScheduler.
   //
   // Do not use this method. To process n items, post n tasks that each process
-  // 1 item rather than GetMaxConcurrentTasksWithTraitsDeprecated() tasks that
-  // each process n/GetMaxConcurrentTasksWithTraitsDeprecated() items.
+  // 1 item rather than GetMaxConcurrentNonBlockedTasksWithTraitsDeprecated()
+  // tasks that each process
+  // n/GetMaxConcurrentNonBlockedTasksWithTraitsDeprecated() items.
   //
   // TODO(fdoray): Remove this method. https://crbug.com/687264
-  virtual int GetMaxConcurrentTasksWithTraitsDeprecated(
+  virtual int GetMaxConcurrentNonBlockedTasksWithTraitsDeprecated(
       const TaskTraits& traits) const = 0;
 };
 

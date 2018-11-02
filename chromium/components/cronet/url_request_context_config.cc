@@ -174,8 +174,7 @@ URLRequestContextConfig::~URLRequestContextConfig() {}
 void URLRequestContextConfig::ParseAndSetExperimentalOptions(
     net::URLRequestContextBuilder* context_builder,
     net::HttpNetworkSession::Params* session_params,
-    net::NetLog* net_log,
-    const scoped_refptr<base::SequencedTaskRunner>& file_task_runner) {
+    net::NetLog* net_log) {
   if (experimental_options.empty())
     return;
 
@@ -353,16 +352,14 @@ void URLRequestContextConfig::ParseAndSetExperimentalOptions(
     } else if (it.key() == kSSLKeyLogFile) {
       std::string ssl_key_log_file_string;
       if (it.value().GetAsString(&ssl_key_log_file_string)) {
-        DCHECK(file_task_runner);
         base::FilePath ssl_key_log_file(ssl_key_log_file_string);
-        if (!ssl_key_log_file.empty() && file_task_runner) {
+        if (!ssl_key_log_file.empty()) {
           // SetSSLKeyLogFile is only safe to call before any SSLClientSockets
           // are created. This should not be used if there are multiple
           // CronetEngine.
           // TODO(xunjieli): Expose this as a stable API after crbug.com/458365
           // is resolved.
-          net::SSLClientSocket::SetSSLKeyLogFile(ssl_key_log_file,
-                                                 file_task_runner);
+          net::SSLClientSocket::SetSSLKeyLogFile(ssl_key_log_file);
         }
       }
     } else if (it.key() == kNetworkQualityEstimatorFieldTrialName) {
@@ -383,17 +380,11 @@ void URLRequestContextConfig::ParseAndSetExperimentalOptions(
       std::string nqe_option;
       if (nqe_args->GetString(net::kForceEffectiveConnectionType,
                               &nqe_option)) {
-        net::EffectiveConnectionType forced_effective_connection_type =
-            net::EFFECTIVE_CONNECTION_TYPE_UNKNOWN;
-        bool effective_connection_type_available =
-            net::GetEffectiveConnectionTypeForName(
-                nqe_option, &forced_effective_connection_type);
-        if (!effective_connection_type_available) {
+        nqe_forced_effective_connection_type =
+            net::GetEffectiveConnectionTypeForName(nqe_option);
+        if (!nqe_option.empty() && !nqe_forced_effective_connection_type) {
           LOG(ERROR) << "\"" << nqe_option
                      << "\" is not a valid effective connection type value";
-        } else {
-          nqe_forced_effective_connection_type =
-              forced_effective_connection_type;
         }
       }
 
@@ -432,8 +423,7 @@ void URLRequestContextConfig::ParseAndSetExperimentalOptions(
 
 void URLRequestContextConfig::ConfigureURLRequestContextBuilder(
     net::URLRequestContextBuilder* context_builder,
-    net::NetLog* net_log,
-    const scoped_refptr<base::SequencedTaskRunner>& file_task_runner) {
+    net::NetLog* net_log) {
   DCHECK(net_log);
 
   std::string config_cache;
@@ -461,8 +451,7 @@ void URLRequestContextConfig::ConfigureURLRequestContextBuilder(
   if (enable_quic)
     session_params.quic_user_agent_id = quic_user_agent_id;
 
-  ParseAndSetExperimentalOptions(context_builder, &session_params, net_log,
-                                 file_task_runner);
+  ParseAndSetExperimentalOptions(context_builder, &session_params, net_log);
   context_builder->set_http_network_session_params(session_params);
 
   std::unique_ptr<net::CertVerifier> cert_verifier;

@@ -14,9 +14,9 @@
 #include "media/base/media_log.h"
 #include "media/filters/gpu_video_decoder.h"
 #include "media/renderers/audio_renderer_impl.h"
-#include "media/renderers/gpu_video_accelerator_factories.h"
 #include "media/renderers/renderer_impl.h"
 #include "media/renderers/video_renderer_impl.h"
+#include "media/video/gpu_video_accelerator_factories.h"
 
 #if !defined(MEDIA_DISABLE_FFMPEG)
 #include "media/filters/ffmpeg_audio_decoder.h"
@@ -98,6 +98,7 @@ std::vector<std::unique_ptr<VideoDecoder>>
 DefaultRendererFactory::CreateVideoDecoders(
     const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
     const RequestOverlayInfoCB& request_overlay_info_cb,
+    const gfx::ColorSpace& target_color_space,
     GpuVideoAcceleratorFactories* gpu_factories,
     bool use_platform_media_pipeline) {
   // Create our video decoders and renderer.
@@ -129,7 +130,8 @@ DefaultRendererFactory::CreateVideoDecoders(
     }
     if (gpu_factories)
       video_decoders.push_back(base::MakeUnique<GpuVideoDecoder>(
-          gpu_factories, request_overlay_info_cb, media_log_));
+          gpu_factories, request_overlay_info_cb, target_color_space,
+          media_log_));
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   }
@@ -161,6 +163,7 @@ std::unique_ptr<Renderer> DefaultRendererFactory::CreateRenderer(
     AudioRendererSink* audio_renderer_sink,
     VideoRendererSink* video_renderer_sink,
     const RequestOverlayInfoCB& request_overlay_info_cb,
+    const gfx::ColorSpace& target_color_space,
     bool use_platform_media_pipeline) {
   DCHECK(audio_renderer_sink);
 
@@ -190,7 +193,8 @@ std::unique_ptr<Renderer> DefaultRendererFactory::CreateRenderer(
       // finishes.
       base::Bind(&DefaultRendererFactory::CreateVideoDecoders,
                  base::Unretained(this), media_task_runner,
-                 request_overlay_info_cb, gpu_factories, use_platform_media_pipeline),
+                 request_overlay_info_cb, target_color_space, gpu_factories,
+                 use_platform_media_pipeline),
       true, gpu_factories, media_log_));
 
   return base::MakeUnique<RendererImpl>(

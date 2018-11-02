@@ -69,11 +69,13 @@
 <translation id="4506599922270137252">Contactar o administrador do sistema</translation>
 <translation id="4522570452068850558">Detalhes</translation>
 <translation id="4558551763791394412">Experimente desativar as extensões.</translation>
+<translation id="4611292653554630842">Iniciar sessão</translation>
 <translation id="4708268264240856090">A ligação foi interrompida</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Executar os diagnósticos de rede do Windows<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">Caminho do Executável</translation>
 <translation id="4764776831041365478">A página Web em <ph name="URL" /> poderá estar temporariamente inactiva ou poderá ter sido movida permanentemente para um novo endereço Web.</translation>
 <translation id="4807049035289105102">Não pode visitar <ph name="SITE" /> de momento, porque o site enviou credenciais codificadas que o Vivaldi não é capaz de processar. Os ataques e erros de rede são geralmente temporários, pelo que esta página deve funcionar mais tarde.</translation>
+<translation id="4913131542719409934">Autenticação necessária</translation>
 <translation id="5023310440958281426">Verificar as políticas do administrador</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />A verificar o endereço proxy<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 bits)</translation>
@@ -103,10 +105,12 @@
 <translation id="6328639280570009161">Tente desativar a previsão de rede</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> recusou estabelecer ligação.</translation>
 <translation id="6569060085658103619">Está a ver a página de uma extensão</translation>
+<translation id="6657585470893396449">Senha</translation>
 <translation id="6685834062052613830">Termine sessão e conclua a configuração</translation>
 <translation id="6711464428925977395">Existe um problema com o servidor proxy ou o endereço está incorreto.</translation>
 <translation id="6757797048963528358">O seu diapositivo entrou em suspensão.</translation>
 <translation id="6897140037006041989">Agente do utilizador</translation>
+<translation id="7090678807593890770">Pesquisar <ph name="LINK" /> no Google</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> não respeita os padrões de segurança.</translation>
 <translation id="7353601530677266744">Linha de comandos</translation>
 <translation id="7419106976560586862">Caminho do Perfil</translation>
@@ -125,6 +129,7 @@
 <translation id="8289355894181816810">Se não tiver a certeza do que isto significa, contacte o administrador de rede.</translation>
 <translation id="8332188693563227489">O acesso a <ph name="HOST_NAME" /> foi recusado</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> demorou demasiado tempo a responder.</translation>
+<translation id="8503813439785031346">Nome de utilizador</translation>
 <translation id="8740359287975076522">Não foi possível encontrar o &lt;abbr id="dnsDefinition"&gt;endereço DNS&lt;/abbr&gt; de <ph name="HOST_NAME" />. Estamos a diagnosticar o problema.</translation>
 <translation id="9001074447101275817">O proxy <ph name="DOMAIN" /> necessita de um nome de utilizador e de uma palavra-passe.</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> utiliza um protocolo não suportado.</translation>

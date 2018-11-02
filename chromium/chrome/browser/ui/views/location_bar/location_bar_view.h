@@ -20,7 +20,6 @@
 #include "chrome/browser/ui/views/extensions/extension_popup.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
 #include "components/prefs/pref_member.h"
-#include "components/search_engines/template_url_service_observer.h"
 #include "components/security_state/core/security_state.h"
 #include "components/zoom/zoom_event_manager_observer.h"
 #include "ui/gfx/animation/animation_delegate.h"
@@ -40,7 +39,6 @@ class ManagePasswordsIconViews;
 class Profile;
 class SelectedKeywordView;
 class StarView;
-class TemplateURLService;
 class TranslateIconView;
 class ZoomView;
 
@@ -68,7 +66,6 @@ class LocationBarView : public LocationBar,
                         public gfx::AnimationDelegate,
                         public ChromeOmniboxEditController,
                         public DropdownBarHostDelegate,
-                        public TemplateURLServiceObserver,
                         public zoom::ZoomEventManagerObserver,
                         public views::ButtonListener {
  public:
@@ -83,9 +80,6 @@ class LocationBarView : public LocationBar,
     // Returns ContentSettingBubbleModelDelegate.
     virtual ContentSettingBubbleModelDelegate*
         GetContentSettingBubbleModelDelegate() = 0;
-
-    // Shows permissions and settings for the given web contents.
-    virtual void ShowPageInfo(content::WebContents* web_contents) = 0;
 
    protected:
     virtual ~Delegate() {}
@@ -186,6 +180,10 @@ class LocationBarView : public LocationBar,
 
   LocationIconView* location_icon_view() { return location_icon_view_; }
 
+  SelectedKeywordView* selected_keyword_view() {
+    return selected_keyword_view_;
+  }
+
   // Where InfoBar arrows should point. The point will be returned in the
   // coordinates of the LocationBarView.
   gfx::Point GetInfoBarAnchorPoint() const;
@@ -282,9 +280,6 @@ class LocationBarView : public LocationBar,
   // Updates the color of the icon for the "clear all" button.
   void RefreshClearAllButtonIcon();
 
-  // Helper to show the first run info bubble.
-  void ShowFirstRunBubbleInternal();
-
   // Returns text to be placed in the location icon view.
   // - For secure/insecure pages, returns text describing the URL's security
   // level.
@@ -303,7 +298,6 @@ class LocationBarView : public LocationBar,
   bool ShouldAnimateLocationIconTextVisibilityChange() const;
 
   // LocationBar:
-  void ShowFirstRunBubble() override;
   GURL GetDestinationURL() const override;
   WindowOpenDisposition GetWindowOpenDisposition() const override;
   ui::PageTransition GetPageTransition() const override;
@@ -349,9 +343,6 @@ class LocationBarView : public LocationBar,
 
   // DropdownBarHostDelegate:
   void SetFocusAndSelection(bool select_all) override;
-
-  // TemplateURLServiceObserver:
-  void OnTemplateURLServiceChanged() override;
 
   // The Browser this LocationBarView is in.  Note that at least
   // chromeos::SimpleWebViewDialog uses a LocationBarView outside any browser
@@ -417,10 +408,6 @@ class LocationBarView : public LocationBar,
   // True if we should show a focus rect while the location entry field is
   // focused. Used when the toolbar is in full keyboard accessibility mode.
   bool show_focus_rect_ = false;
-
-  // This is in case we're destroyed before the model loads. We need to make
-  // Add/RemoveObserver calls.
-  TemplateURLService* template_url_service_ = nullptr;
 
   // Tracks this preference to determine whether bookmark editing is allowed.
   BooleanPrefMember edit_bookmarks_enabled_;

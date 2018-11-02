@@ -65,7 +65,7 @@
       "D5736E4B5CF695CB93A2FB57E4FDC6E5AFAB6FE2", // http://crbug.com/312900
       "D57DE394F36DC1C3220E7604C575D29C51A6C495", // http://crbug.com/319444
       "3F65507A3B39259B38C8173C6FFA3D12DF64CCE9",  // http://crbug.com/371562
-      "mpognobbkildjkofajifpdfhcoklimli"   // Vivaldi
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C"  // Vivaldi
     ]
   },
   "bookmarks": [{
@@ -74,9 +74,7 @@
   },{
     "channel": "stable",
     "extension_types": ["platform_app"],
-    "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli"
-    ]
+    "whitelist": ["A414F2F4543AC9C68DDF663D0A459E6053E3373C"]  // Vivaldi
   }],
   "brailleDisplayPrivate": {
     "channel": "stable",
@@ -93,9 +91,7 @@
   },{
     "channel": "stable",
     "extension_types": ["platform_app"],
-    "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli"
-    ]
+    "whitelist": ["A414F2F4543AC9C68DDF663D0A459E6053E3373C"] // Vivaldi
   }],
   "cast.streaming": [{
     "channel": "dev",
@@ -179,9 +175,7 @@
     },{
       "channel": "stable",
       "extension_types": ["platform_app"],
-      "whitelist": [
-        "mpognobbkildjkofajifpdfhcoklimli"   // Vivaldi
-      ]
+      "whitelist" : ["A414F2F4543AC9C68DDF663D0A459E6053E3373C"]  // Vivaldi
   }],
   "commands.accessibility": {
     "channel": "stable",
@@ -197,9 +191,7 @@
     },{
       "channel": "stable",
       "extension_types": ["platform_app"],
-      "whitelist": [
-        "mpognobbkildjkofajifpdfhcoklimli"   // Vivaldi
-      ]
+      "whitelist" : ["A414F2F4543AC9C68DDF663D0A459E6053E3373C"]  // Vivaldi
   }],
   "contextMenus": {
     "channel": "stable",
@@ -211,9 +203,7 @@
     },{
       "channel": "stable",
       "extension_types": ["platform_app"],
-      "whitelist": [
-        "mpognobbkildjkofajifpdfhcoklimli"   // Vivaldi
-      ]
+      "whitelist" : ["A414F2F4543AC9C68DDF663D0A459E6053E3373C"]  // Vivaldi
   }],
   "cryptotokenPrivate": {
     "channel": "stable",
@@ -280,8 +270,7 @@
       "channel": "stable",
       "extension_types": ["platform_app"],
       "whitelist": [
-        "mpognobbkildjkofajifpdfhcoklimli"   // Vivaldi
-      ]
+        "A414F2F4543AC9C68DDF663D0A459E6053E3373C"]   // Vivaldi
   }],
   "downloads.open": [{
       "channel": "stable",
@@ -289,9 +278,7 @@
     },{
       "channel": "stable",
       "extension_types": ["platform_app"],
-      "whitelist": [
-        "mpognobbkildjkofajifpdfhcoklimli"   // Vivaldi
-      ]
+      "whitelist": ["A414F2F4543AC9C68DDF663D0A459E6053E3373C"]   // Vivaldi
   }],
   "downloads.shelf": [{
       "channel": "stable",
@@ -299,9 +286,7 @@
     },{
       "channel": "stable",
       "extension_types": ["platform_app"],
-      "whitelist": [
-        "mpognobbkildjkofajifpdfhcoklimli"   // Vivaldi
-      ]
+      "whitelist": ["A414F2F4543AC9C68DDF663D0A459E6053E3373C"]   // Vivaldi
   }],
   "dial": {
     "channel": "stable",
@@ -359,22 +344,6 @@
       "extension", "legacy_packaged_app", "hosted_app", "platform_app"
     ]
   },
-  "feedbackPrivate": {
-    "channel": "stable",
-    "extension_types": ["extension", "platform_app"],
-    "whitelist": [
-      "7910EAFDAF64B947E1CB31B333A9BD14CA556B6C",  // Feedback UI.
-      "1C93BD3CF875F4A73C0B2A163BB8FBDA8B8B3D80",  // http://crbug.com/293683
-      "A3BC37E2148AC4E99BE4B16AF9D42DD1E592BBBE",  // http://crbug.com/293683
-      "8C3741E3AF0B93B6E8E0DDD499BB0B74839EA578",  // http://crbug.com/234235
-      "E703483CEF33DEC18B4B6DD84B5C776FB9182BDB",  // http://crbug.com/234235
-      "307E96539209F95A1A8740C713E6998A73657D96",  // http://crbug.com/329690
-      "4F25792AF1AA7483936DE29C07806F203C7170A0",  // http://crbug.com/407693
-      "BD8781D757D830FC2E85470A1B6E8A718B7EE0D9",  // http://crbug.com/407693
-      "4AC2B6C63C6480D150DFDA13E4A5956EB1D0DDBB",  // http://crbug.com/407693
-      "81986D4F846CEDDDB962643FA501D1780DD441BB"   // http://crbug.com/407693
-    ]
-  },
   "fileBrowserHandler": {
     "channel": "stable",
     "extension_types": ["extension", "legacy_packaged_app", "platform_app"],
@@ -418,9 +387,7 @@
   },{
      "channel": "stable",
      "extension_types": ["platform_app"],
-     "whitelist": [
-       "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
-     ]
+     "whitelist": ["A414F2F4543AC9C68DDF663D0A459E6053E3373C"] // Vivaldi
   }],
   "gcm": {
     "channel": "stable",
@@ -438,9 +405,7 @@
     },{
       "channel": "stable",
       "extension_types": ["platform_app"],
-      "whitelist": [
-        "mpognobbkildjkofajifpdfhcoklimli"   // Vivaldi
-      ]
+      "whitelist": ["A414F2F4543AC9C68DDF663D0A459E6053E3373C"]   // Vivaldi
   }],
   "hotwordPrivate": {
     "channel": "stable",
@@ -527,7 +492,7 @@
       "channel": "stable",
       "extension_types": ["platform_app"],
       "whitelist": [
-        "mpognobbkildjkofajifpdfhcoklimli",   // Vivaldi
+        "A414F2F4543AC9C68DDF663D0A459E6053E3373C",   // Vivaldi
         "AE27D69DBE571F4B1694F05C89B710C646792231", // Published ADT
         // TODO(grv): clean up once Apps developer tool is published.
         "5107DE9024C329EEA9C9A72D94C16723790C6422",  // Apps Developer Tool.
@@ -687,8 +652,7 @@
     {
       "channel": "stable",
       "extension_types": ["platform_app"],
-      "whitelist": [
-        "mpognobbkildjkofajifpdfhcoklimli"]   // Vivaldi
+      "whitelist": ["A414F2F4543AC9C68DDF663D0A459E6053E3373C"]   // Vivaldi
     }
   ],
   "processes": [{
@@ -770,9 +734,7 @@
   "sessions": [{
     "channel": "stable",
     "extension_types": ["platform_app"],
-    "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli"   // Vivaldi
-    ]
+    "whitelist": ["A414F2F4543AC9C68DDF663D0A459E6053E3373C"]   // Vivaldi
   },{
     "channel": "stable",
     "extension_types": ["extension"]
@@ -823,9 +785,7 @@
     {
       "channel": "stable",
       "extension_types": ["platform_app"],
-      "whitelist": [
-        "mpognobbkildjkofajifpdfhcoklimli"   // Vivaldi
-      ]
+      "whitelist": ["A414F2F4543AC9C68DDF663D0A459E6053E3373C"]   // Vivaldi
     }
   ],
   "tabCapture": {
@@ -847,9 +807,7 @@
     },{
       "channel": "stable",
       "extension_types": ["platform_app"],
-      "whitelist": [
-        "mpognobbkildjkofajifpdfhcoklimli"   // Vivaldi
-      ]
+      "whitelist": ["A414F2F4543AC9C68DDF663D0A459E6053E3373C"] // Vivaldi
   }],
   "tts": {
     "channel": "stable",

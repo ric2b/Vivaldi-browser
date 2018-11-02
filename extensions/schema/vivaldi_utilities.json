@@ -33,6 +33,21 @@
             "description": "Extension ending, eg. 'jpg'"
           }
         }
+      },
+      {
+        "id": "SharedDataValue",
+        "type": "object",
+        "description": "Data key+value pair.",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "The data key."
+          },
+          "value": {
+            "type": "any",
+            "description": "The data value."
+          }
+        }
       }
     ],
     "functions": [
@@ -158,35 +173,6 @@
         ]
       },
       {
-        "name": "mapFocusAppWindowToWindowId",
-        "type": "function",
-        "description": "Maps focus tracking between a app window and the given window id. Once the tracking is set, focus handling is automatic.",
-        "parameters": [
-          {
-            "type": "string",
-            "description": "The ID of the app window",
-            "name": "appWindowId"
-          },
-          {
-            "type": "integer",
-            "description": "The ID of the window id.",
-            "name": "windowId"
-          }
-        ]
-      },
-      {
-        "name": "pauseAllDownloads",
-        "type": "function",
-        "description": "Pauses all downloads so the exit sequence can continue.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": []
-          }
-        ]
-      },
-      {
         "name": "createUrlMapping",
         "type": "function",
         "description": "Creates a mapping to a local file so it can be accessed using the chrome://vivaldi-data/local-image/ protocol.",
@@ -285,6 +271,54 @@
             ]
           }
         ]
+      },
+      {
+        "name": "setSharedData",
+        "type": "function",
+        "description": "Sets the given data to be kept in-memory for the duration of the Vivaldi setting (until Vivaldi exits).",
+        "parameters": [
+          {
+            "name": "keyValuePair",
+            "$ref": "SharedDataValue",
+            "description": "The Key-value."
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "newvalue",
+                "type": "boolean",
+                "description": "true if a new value was set, false if an existing value was updated."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "getSharedData",
+        "type": "function",
+        "description": "Gets the given data from the in-memory storage.",
+        "parameters": [
+          {
+            "name": "keyValuePair",
+            "$ref": "SharedDataValue",
+            "description": "The Key-value, the value is the default value returned if the key does not exist."
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "value",
+                "type": "any",
+                "description": "Data value."
+              }
+            ]
+          }
+        ]
       }
     ],
     "events": [
@@ -298,6 +332,23 @@
             "name": "scrollType",
             "minimum": 0,
             "description":"Device that triggers scrolling. 1: Mouse, 2: Trackpad 3: Inertial"
+          }
+        ]
+      },
+      {
+        "name": "onSharedDataUpdated",
+        "type": "function",
+        "description": "Fires when a shared data value has changed or been added.",
+        "parameters": [
+          {
+            "name": "key",
+            "type": "string",
+            "description": "Name of the key for the value."
+          },
+          {
+            "name": "value",
+            "type": "any",
+            "description": "The new value for the key."
           }
         ]
       }

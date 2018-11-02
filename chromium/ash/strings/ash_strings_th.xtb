@@ -9,6 +9,7 @@
 <translation id="1195412055398077112">โอเวอร์สแกน</translation>
 <translation id="1247372569136754018">ไมโครโฟน (ภายใน)</translation>
 <translation id="1252999807265626933">กำลังชาร์จจาก<ph name="POWER_SOURCE" /></translation>
+<translation id="1267032506238418139">มีการเปลี่ยนแปลงทางลัด</translation>
 <translation id="1270290102613614947">ปิดใช้แป้นพิมพ์บนหน้าจออยู่</translation>
 <translation id="1272079795634619415">หยุด</translation>
 <translation id="1279938420744323401"><ph name="DISPLAY_NAME" /> (<ph name="ANNOTATION" />)</translation>
@@ -22,7 +23,6 @@
 <translation id="15373452373711364">เคอร์เซอร์เมาส์ขนาดใหญ่</translation>
 <translation id="1550523713251050646">คลิกเพื่อดูตัวเลือกเพิ่มเติม</translation>
 <translation id="1621499497873603021">เวลาที่เหลือกว่าแบตเตอรี่จะหมด, <ph name="TIME_LEFT" /></translation>
-<translation id="164969095109328410">อุปกรณ์ Chrome</translation>
 <translation id="1677472565718498478">ใช้ได้อีก <ph name="TIME" /></translation>
 <translation id="1698760176351776263">ที่อยู่ IPv6: <ph name="ADDRESS" /></translation>
 <translation id="1734367976349034509">อุปกรณ์นี้ได้รับการจัดการโดยองค์กร</translation>
@@ -92,6 +92,7 @@
 <translation id="315116470104423982">ข้อมูลมือถือ</translation>
 <translation id="3236488194889173876">ไม่มีเครือข่ายมือถือพร้อมใช้งาน</translation>
 <translation id="3294437725009624529">ผู้มาเยือน</translation>
+<translation id="332587331255250389">โปรดเปลี่ยนแบตเตอรี่</translation>
 <translation id="3364721542077212959">เครื่องมือสไตลัส</translation>
 <translation id="3368922792935385530">เชื่อมต่อแล้ว</translation>
 <translation id="3371140690572404006">อุปกรณ์ USB-C (พอร์ตด้านหน้าขวา)</translation>
@@ -110,6 +111,7 @@
 <translation id="3712407551474845318">จับภาพบางส่วนของหน้าเว็บ</translation>
 <translation id="371370241367527062">ไมโครโฟนด้านหน้า</translation>
 <translation id="3742055079367172538">ภาพหน้าจอที่บันทึก</translation>
+<translation id="3771549900096082774">โหมดคอนทราสต์สูง</translation>
 <translation id="3775358506042162758">คุณสามารถมีได้มากสุดสามบัญชีเท่านั้นในการลงชื่อเข้าสู่ระบบพร้อมกันหลายบัญชี</translation>
 <translation id="3783640748446814672">alt</translation>
 <translation id="3784455785234192852">ล็อก</translation>
@@ -142,14 +144,12 @@
 <translation id="4729904664295161097">Assistant ใช้งานได้กับโปรไฟล์หลักเท่านั้น</translation>
 <translation id="479989351350248267">ค้นหา</translation>
 <translation id="4804818685124855865">ตัดการเชื่อมต่อ</translation>
-<translation id="4821830640883629383">โปรดชาร์จหรือเปลี่ยนแบตเตอรี่ใหม่</translation>
 <translation id="4849058404725798627">ไฮไลต์วัตถุที่มีโฟกัสแป้นพิมพ์</translation>
 <translation id="4872237917498892622">Alt+ค้นหา หรือ Shift</translation>
 <translation id="4895488851634969361">แบตเตอรี่เต็ม</translation>
 <translation id="4905614135390995787">มีการเปลี่ยนแปลงแป้นพิมพ์ลัดสำหรับสลับโหมดคอนทราสต์สูง โปรดใช้ <ph name="NEW_SHORTCUT" /> แทน <ph name="OLD_SHORTCUT" /></translation>
 <translation id="4918086044614829423">ยอมรับ</translation>
 <translation id="4961318399572185831">แคสต์หน้าจอ</translation>
-<translation id="5011233892417813670">Chromebook</translation>
 <translation id="5168181903108465623">เครื่องส่งพร้อมใช้งาน</translation>
 <translation id="5170568018924773124">แสดงในโฟลเดอร์</translation>
 <translation id="5207949376430453814">ไฮไลต์เครื่องหมาย Caret ของข้อความ</translation>
@@ -175,7 +175,6 @@
 <translation id="5901316534475909376">Shift+Esc</translation>
 <translation id="5916664084637901428">เปิด</translation>
 <translation id="5927132638760172455">กำลังแคสต์ไปยังเครื่องรับที่ไม่รู้จัก</translation>
-<translation id="5932901536148835538">Chromebit</translation>
 <translation id="5947494881799873997">ย้อนกลับ</translation>
 <translation id="595202126637698455">เปิดใช้งานการติดตามการปฏิบัติงานแล้ว</translation>
 <translation id="5957083217255311415">เน็ตมือถือปิดอยู่</translation>
@@ -218,7 +217,6 @@
 <translation id="683971173229319003">Search+L</translation>
 <translation id="6857811139397017780">เปิดใช้งาน <ph name="NETWORKSERVICE" /></translation>
 <translation id="6911468394164995108">เชื่อมต่อเครือข่ายอื่น...</translation>
-<translation id="6915678159055240887">Chromebox</translation>
 <translation id="6981982820502123353">การเข้าถึง</translation>
 <translation id="7029814467594812963">ออกจากเซสชัน</translation>
 <translation id="7034339000180558234">กำลังแคสต์ <ph name="TAB_NAME" /> ไปยัง <ph name="RECEIVER_NAME" /></translation>
@@ -226,7 +224,6 @@
 <translation id="7066646422045619941">ผู้ดูแลระบบปิดใช้เครือข่ายนี้</translation>
 <translation id="7067196344162293536">หมุนอัตโนมัติ</translation>
 <translation id="7098389117866926363">อุปกรณ์ USB-C (พอร์ตด้านหลังซ้าย)</translation>
-<translation id="714034171374937760">Chromebase</translation>
 <translation id="7165278925115064263">Alt+Shift+K</translation>
 <translation id="7168224885072002358">เปลี่ยนกลับไปเป็นความละเอียดเดิมภายใน <ph name="TIMEOUT_SECONDS" /></translation>
 <translation id="7246339268451149667">หากต้องการเปิดใช้การปลดล็อกด้วยลายนิ้วมือ</translation>

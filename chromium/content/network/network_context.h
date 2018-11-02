@@ -12,6 +12,7 @@
 
 #include "base/macros.h"
 #include "content/common/content_export.h"
+#include "content/network/cookie_manager_impl.h"
 #include "content/public/common/network_service.mojom.h"
 #include "content/public/common/url_loader_factory.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
@@ -26,7 +27,20 @@ namespace content {
 class NetworkServiceImpl;
 class URLLoaderImpl;
 
-class NetworkContext : public mojom::NetworkContext {
+// A NetworkContext creates and manages access to a URLRequestContext.
+//
+// When the network service is enabled, NetworkContexts are created through
+// NetworkService's mojo interface and are owned jointly by the NetworkService
+// and the NetworkContextPtr used to talk to them, and the NetworkContext is
+// destroyed when either one is torn down.
+//
+// When the network service is disabled, NetworkContexts may be created through
+// NetworkServiceImpl::CreateNetworkContextWithBuilder, and take in a
+// URLRequestContextBuilder to seed construction of the NetworkContext's
+// URLRequestContext. When that happens, the consumer takes ownership of the
+// NetworkContext directly, has direct access to its URLRequestContext, and is
+// responsible for destroying it before the NetworkService.
+class CONTENT_EXPORT NetworkContext : public mojom::NetworkContext {
  public:
   NetworkContext(NetworkServiceImpl* network_service,
                  mojom::NetworkContextRequest request,
@@ -34,17 +48,23 @@ class NetworkContext : public mojom::NetworkContext {
 
   // Temporary constructor that allows creating an in-process NetworkContext
   // with a pre-populated URLRequestContextBuilder.
-  NetworkContext(mojom::NetworkContextRequest request,
+  NetworkContext(NetworkServiceImpl* network_service,
+                 mojom::NetworkContextRequest request,
                  mojom::NetworkContextParamsPtr params,
                  std::unique_ptr<net::URLRequestContextBuilder> builder);
 
+  // Creates a NetworkContext that wraps a consumer-provided URLRequestContext
+  // that the NetworkContext does not own. In this case, there is no
+  // NetworkService object.
+  // TODO(mmenke):  Remove this constructor when the network service ships.
+  NetworkContext(mojom::NetworkContextRequest request,
+                 net::URLRequestContext* url_request_context);
+
   ~NetworkContext() override;
 
-  CONTENT_EXPORT static std::unique_ptr<NetworkContext> CreateForTesting();
+  static std::unique_ptr<NetworkContext> CreateForTesting();
 
-  net::URLRequestContext* url_request_context() {
-    return url_request_context_.get();
-  }
+  net::URLRequestContext* url_request_context() { return url_request_context_; }
 
   // These are called by individual url loaders as they are being created and
   // destroyed.
@@ -56,10 +76,14 @@ class NetworkContext : public mojom::NetworkContext {
                               uint32_t process_id) override;
   void HandleViewCacheRequest(const GURL& url,
                               mojom::URLLoaderClientPtr client) override;
+  void GetCookieManager(mojom::CookieManagerRequest request) override;
 
   // Called when the associated NetworkServiceImpl is going away. Guaranteed to
   // destroy NetworkContext's URLRequestContext.
   void Cleanup();
+
+  // Disables use of QUIC by the NetworkContext.
+  void DisableQuic();
 
  private:
   NetworkContext();
@@ -69,7 +93,11 @@ class NetworkContext : public mojom::NetworkContext {
 
   NetworkServiceImpl* const network_service_;
 
-  std::unique_ptr<net::URLRequestContext> url_request_context_;
+  // Owning pointer to |url_request_context_|. nullptr when the
+  // NetworkContextImpl doesn't own its own URLRequestContext.
+  std::unique_ptr<net::URLRequestContext> owned_url_request_context_;
+
+  net::URLRequestContext* url_request_context_ = nullptr;
 
   // Put it below |url_request_context_| so that it outlives all the
   // NetworkServiceURLLoaderFactoryImpl instances.
@@ -84,6 +112,8 @@ class NetworkContext : public mojom::NetworkContext {
   mojom::NetworkContextParamsPtr params_;
 
   mojo::Binding<mojom::NetworkContext> binding_;
+
+  std::unique_ptr<CookieManagerImpl> cookie_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(NetworkContext);
 };

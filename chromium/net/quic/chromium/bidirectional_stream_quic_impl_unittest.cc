@@ -74,7 +74,7 @@ class TestDelegateBase : public BidirectionalStreamImpl::Delegate {
   TestDelegateBase(IOBuffer* read_buf, int read_buf_len)
       : TestDelegateBase(read_buf,
                          read_buf_len,
-                         base::MakeUnique<base::Timer>(false, false)) {}
+                         std::make_unique<base::Timer>(false, false)) {}
 
   TestDelegateBase(IOBuffer* read_buf,
                    int read_buf_len,
@@ -164,7 +164,7 @@ class TestDelegateBase : public BidirectionalStreamImpl::Delegate {
              const NetLogWithSource& net_log,
              std::unique_ptr<QuicChromiumClientSession::Handle> session) {
     not_expect_callback_ = true;
-    stream_ = base::MakeUnique<BidirectionalStreamQuicImpl>(std::move(session));
+    stream_ = std::make_unique<BidirectionalStreamQuicImpl>(std::move(session));
     stream_->Start(request_info, net_log, send_request_headers_automatically_,
                    this, nullptr);
     not_expect_callback_ = false;
@@ -2118,6 +2118,34 @@ TEST_P(BidirectionalStreamQuicImplTest, DeleteStreamDuringOnTrailersReceived) {
 
   EXPECT_EQ(1, delegate->on_data_read_count());
   EXPECT_EQ(0, delegate->on_data_sent_count());
+}
+
+// Tests that if QuicChromiumClientSession is closed after
+// BidirectionalStreamQuicImpl::OnStreamReady() but before
+// QuicChromiumClientSession::Handle::ReleaseStream() is called, there is no
+// crash. Regression test for crbug.com/754823.
+TEST_P(BidirectionalStreamQuicImplTest, ReleaseStreamFails) {
+  SetRequest("GET", "/", DEFAULT_PRIORITY);
+  Initialize();
+
+  BidirectionalStreamRequestInfo request;
+  request.method = "GET";
+  request.url = GURL("http://www.google.com/");
+  request.end_stream_on_headers = true;
+  request.priority = DEFAULT_PRIORITY;
+
+  scoped_refptr<IOBuffer> read_buffer(new IOBuffer(kReadBufferSize));
+  std::unique_ptr<TestDelegateBase> delegate(
+      new TestDelegateBase(read_buffer.get(), kReadBufferSize));
+  delegate->set_trailers_expected(true);
+  // QuicChromiumClientSession::Handle::RequestStream() returns OK synchronously
+  // because Initialize() has established a Session.
+  delegate->Start(&request, net_log().bound(), session()->CreateHandle());
+  // Now closes the underlying session.
+  session_->CloseSessionOnError(ERR_ABORTED, QUIC_INTERNAL_ERROR);
+  delegate->WaitUntilNextCallback(kOnFailed);
+
+  EXPECT_THAT(delegate->error(), IsError(ERR_CONNECTION_CLOSED));
 }
 
 }  // namespace test

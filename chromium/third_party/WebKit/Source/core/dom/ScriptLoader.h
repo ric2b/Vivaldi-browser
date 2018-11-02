@@ -84,12 +84,7 @@ class CORE_EXPORT ScriptLoader : public GarbageCollectedFinalized<ScriptLoader>,
   // https://html.spec.whatwg.org/#execute-the-script-block
   // The single entry point of script execution.
   // PendingScript::Dispose() is called in ExecuteScriptBlock().
-  //
-  // TODO(hiroshige): Replace ExecuteScript() calls with ExecuteScriptBlock().
-  //
-  // TODO(hiroshige): Currently this returns bool (true if success) only to
-  // preserve existing code structure around PrepareScript(). Clean up this.
-  bool ExecuteScriptBlock(PendingScript*, const KURL&);
+  void ExecuteScriptBlock(PendingScript*, const KURL&);
 
   // Creates a PendingScript for external script whose fetch is started in
   // FetchClassicScript()/FetchModuleScriptTree().
@@ -126,19 +121,17 @@ class CORE_EXPORT ScriptLoader : public GarbageCollectedFinalized<ScriptLoader>,
   virtual bool IsReady() const {
     return pending_script_ && pending_script_->IsReady();
   }
-  bool ErrorOccurred() const {
-    return pending_script_ && pending_script_->ErrorOccurred();
-  }
-
-  bool WasCreatedDuringDocumentWrite() {
-    return created_during_document_write_;
-  }
 
   bool DisallowedFetchForDocWrittenScript() {
     return document_write_intervention_ ==
            DocumentWriteIntervention::kDoNotFetchDocWrittenScript;
   }
   void SetFetchDocWrittenScriptDeferIdle();
+
+  // To support script streaming, the ScriptRunner may need to access the
+  // PendingScript. This breaks the intended layering, so please use with
+  // care. (Method is virtual to support testing.)
+  virtual PendingScript* GetPendingScriptIfScriptIsAsync();
 
  protected:
   ScriptLoader(ScriptElementBase*,
@@ -175,7 +168,6 @@ class CORE_EXPORT ScriptLoader : public GarbageCollectedFinalized<ScriptLoader>,
     kShouldFireLoadEvent,
     kShouldFireNone
   };
-  WARN_UNUSED_RESULT ExecuteScriptResult ExecuteScript(const Script*);
   ExecuteScriptResult DoExecuteScript(const Script*);
   void DispatchLoadEvent();
   void DispatchErrorEvent();
@@ -185,6 +177,10 @@ class CORE_EXPORT ScriptLoader : public GarbageCollectedFinalized<ScriptLoader>,
 
   // PendingScriptClient
   void PendingScriptFinished(PendingScript*) override;
+
+  bool WasCreatedDuringDocumentWrite() {
+    return created_during_document_write_;
+  }
 
   Member<ScriptElementBase> element_;
   Member<ScriptResource> resource_;

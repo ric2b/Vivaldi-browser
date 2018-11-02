@@ -23,6 +23,7 @@
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_settings.h"
 #include "components/data_reduction_proxy/core/browser/data_usage_store.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_event_store.h"
+#include "components/data_reduction_proxy/core/common/data_reduction_proxy_features.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_headers.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_pref_names.h"
@@ -163,8 +164,10 @@ jboolean DataReductionProxySettingsAndroid::IsDataReductionProxyUnreachable(
 jboolean DataReductionProxySettingsAndroid::AreLoFiPreviewsEnabled(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
-  return data_reduction_proxy::params::IsIncludedInLitePageFieldTrial() ||
-      (data_reduction_proxy::params::IsLoFiOnViaFlags() &&
+  return base::FeatureList::IsEnabled(
+             data_reduction_proxy::features::
+                 kDataReductionProxyDecidesTransform) ||
+         (data_reduction_proxy::params::IsLoFiOnViaFlags() &&
           data_reduction_proxy::params::AreLitePagesEnabledViaFlags());
 }
 
@@ -261,13 +264,13 @@ void DataReductionProxySettingsAndroid::OnQueryDataUsageComplete(
 
   for (const auto& site_bucket : per_site_usage_map) {
     Java_DataReductionProxySettings_createDataUseItemAndAddToList(
-        env, j_query_result_obj_.obj(),
+        env, j_query_result_obj_,
         ConvertUTF8ToJavaString(env, site_bucket.first),
         site_bucket.second.data_used, site_bucket.second.original_size);
   }
 
   Java_DataReductionProxySettings_onQueryDataUsageComplete(
-      env, j_settings_obj_.get(env), j_query_result_obj_.obj());
+      env, j_settings_obj_.get(env), j_query_result_obj_);
 
   j_query_result_obj_.Release();
 }

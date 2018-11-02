@@ -795,7 +795,7 @@ void SupervisedUserService::OnBlacklistFileChecked(const base::FilePath& path,
           destination: GOOGLE_OWNED_SERVICE
         }
         policy {
-          cookies_allowed: false
+          cookies_allowed: NO
           setting:
             "The feature can be remotely enabled or disabled by the parent. In "
             "addition, if sign-in is restricted to accounts from a managed "
@@ -885,8 +885,9 @@ std::string SupervisedUserService::GetSupervisedUserName() const {
 #if defined(OS_CHROMEOS)
   // The active user can be NULL in unit tests.
   if (user_manager::UserManager::Get()->GetActiveUser()) {
-    return UTF16ToUTF8(user_manager::UserManager::Get()->GetUserDisplayName(
-        user_manager::UserManager::Get()->GetActiveUser()->GetAccountId()));
+    return base::UTF16ToUTF8(
+        user_manager::UserManager::Get()->GetUserDisplayName(
+            user_manager::UserManager::Get()->GetActiveUser()->GetAccountId()));
   }
   return std::string();
 #else
@@ -1011,9 +1012,10 @@ bool SupervisedUserService::MustRemainInstalled(const Extension* extension,
   return may_not_uninstall;
 }
 
-bool SupervisedUserService::MustRemainDisabled(const Extension* extension,
-                                               Extension::DisableReason* reason,
-                                               base::string16* error) const {
+bool SupervisedUserService::MustRemainDisabled(
+    const Extension* extension,
+    extensions::disable_reason::DisableReason* reason,
+    base::string16* error) const {
   DCHECK(ProfileIsSupervised());
   ExtensionState state = GetExtensionState(*extension);
   // Only extensions that require approval should be disabled.
@@ -1029,20 +1031,21 @@ bool SupervisedUserService::MustRemainDisabled(const Extension* extension,
     // We do nothing and we don't add an extra disable reason.
     ExtensionPrefs* extension_prefs = ExtensionPrefs::Get(profile_);
     if (extension_prefs->HasDisableReason(
-            extension->id(), Extension::DISABLE_PERMISSIONS_INCREASE)) {
+            extension->id(),
+            extensions::disable_reason::DISABLE_PERMISSIONS_INCREASE)) {
       if (reason)
-        *reason = Extension::DISABLE_PERMISSIONS_INCREASE;
+        *reason = extensions::disable_reason::DISABLE_PERMISSIONS_INCREASE;
       return true;
     }
     if (reason)
-      *reason = Extension::DISABLE_CUSTODIAN_APPROVAL_REQUIRED;
+      *reason = extensions::disable_reason::DISABLE_CUSTODIAN_APPROVAL_REQUIRED;
     if (base::FeatureList::IsEnabled(
             supervised_users::kSupervisedUserInitiatedExtensionInstall)) {
       // If the Extension isn't pending a custodian approval already, send
       // an approval request.
       if (!extension_prefs->HasDisableReason(
-              extension->id(),
-              Extension::DISABLE_CUSTODIAN_APPROVAL_REQUIRED)) {
+              extension->id(), extensions::disable_reason::
+                                   DISABLE_CUSTODIAN_APPROVAL_REQUIRED)) {
         // MustRemainDisabled is a const method and hence cannot call
         // AddExtensionInstallRequest directly.
         SupervisedUserService* supervised_user_service =
@@ -1071,7 +1074,7 @@ void SupervisedUserService::OnExtensionInstalled(
   // If an already approved extension is updated without requiring
   // new permissions, we update the approved_version.
   if (!extension_prefs->HasDisableReason(
-          id, Extension::DISABLE_PERMISSIONS_INCREASE) &&
+          id, extensions::disable_reason::DISABLE_PERMISSIONS_INCREASE) &&
       approved_extensions_map_.count(id) > 0 &&
       approved_extensions_map_[id] < version) {
     approved_extensions_map_[id] = version;
@@ -1137,17 +1140,20 @@ void SupervisedUserService::ChangeExtensionStateIfNecessary(
     case ExtensionState::FORCED:
       break;
     case ExtensionState::REQUIRE_APPROVAL:
-      service->DisableExtension(extension_id,
-                                Extension::DISABLE_CUSTODIAN_APPROVAL_REQUIRED);
+      service->DisableExtension(
+          extension_id,
+          extensions::disable_reason::DISABLE_CUSTODIAN_APPROVAL_REQUIRED);
       break;
     case ExtensionState::ALLOWED:
       extension_prefs->RemoveDisableReason(
-          extension_id, Extension::DISABLE_CUSTODIAN_APPROVAL_REQUIRED);
+          extension_id,
+          extensions::disable_reason::DISABLE_CUSTODIAN_APPROVAL_REQUIRED);
       extension_prefs->RemoveDisableReason(
-          extension_id, Extension::DISABLE_PERMISSIONS_INCREASE);
+          extension_id,
+          extensions::disable_reason::DISABLE_PERMISSIONS_INCREASE);
       // If not disabled for other reasons, enable it.
       if (extension_prefs->GetDisableReasons(extension_id) ==
-          Extension::DISABLE_NONE) {
+          extensions::disable_reason::DISABLE_NONE) {
         service->EnableExtension(extension_id);
       }
       break;

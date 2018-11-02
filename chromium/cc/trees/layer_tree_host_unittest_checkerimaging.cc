@@ -3,13 +3,13 @@
 // found in the LICENSE file.
 
 #include "cc/base/completion_event.h"
-#include "cc/test/begin_frame_args_test.h"
 #include "cc/test/fake_content_layer_client.h"
-#include "cc/test/fake_external_begin_frame_source.h"
 #include "cc/test/fake_picture_layer.h"
 #include "cc/test/layer_tree_test.h"
 #include "cc/test/skia_common.h"
 #include "cc/trees/layer_tree_impl.h"
+#include "components/viz/test/begin_frame_args_test.h"
+#include "components/viz/test/fake_external_begin_frame_source.h"
 #include "components/viz/test/test_layer_tree_frame_sink.h"
 
 namespace cc {
@@ -22,6 +22,7 @@ class LayerTreeHostCheckerImagingTest : public LayerTreeTest {
 
   void InitializeSettings(LayerTreeSettings* settings) override {
     settings->enable_checker_imaging = true;
+    settings->min_image_bytes_to_checker = 512 * 1024;
   }
 
   void SetupTree() override {
@@ -35,8 +36,8 @@ class LayerTreeHostCheckerImagingTest : public LayerTreeTest {
     gfx::Size layer_size(1000, 500);
     content_layer_client_.set_bounds(layer_size);
     content_layer_client_.set_fill_with_nonsolid_color(true);
-    sk_sp<SkImage> checkerable_image =
-        CreateDiscardableImage(gfx::Size(450, 450));
+    PaintImage checkerable_image =
+        CreateDiscardablePaintImage(gfx::Size(450, 450));
     content_layer_client_.add_draw_image(checkerable_image, gfx::Point(0, 0),
                                          PaintFlags());
 
@@ -53,7 +54,7 @@ class LayerTreeHostCheckerImagingTest : public LayerTreeTest {
 
 class LayerTreeHostCheckerImagingTestMergeWithMainFrame
     : public LayerTreeHostCheckerImagingTest {
-  void BeginMainFrame(const BeginFrameArgs& args) override {
+  void BeginMainFrame(const viz::BeginFrameArgs& args) override {
     if (layer_tree_host()->SourceFrameNumber() == 1) {
       // The first commit has happened, invalidate a tile outside the region
       // for the image to ensure that the final invalidation on the pending
@@ -125,8 +126,9 @@ class LayerTreeHostCheckerImagingTestMergeWithMainFrame
   bool invalidation_requested_ = false;
 };
 
-SINGLE_AND_MULTI_THREAD_TEST_F(
-    LayerTreeHostCheckerImagingTestMergeWithMainFrame);
+// Checkering of content is only done on the pending tree which does not exist
+// in single-threaded mode.
+MULTI_THREAD_TEST_F(LayerTreeHostCheckerImagingTestMergeWithMainFrame);
 
 class LayerTreeHostCheckerImagingTestImplSideTree
     : public LayerTreeHostCheckerImagingTest {
@@ -186,7 +188,9 @@ class LayerTreeHostCheckerImagingTestImplSideTree
   int num_of_impl_side_invalidations_ = 0;
 };
 
-SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostCheckerImagingTestImplSideTree);
+// Checkering of content is only done on the pending tree which does not exist
+// in single-threaded mode.
+MULTI_THREAD_TEST_F(LayerTreeHostCheckerImagingTestImplSideTree);
 
 }  // namespace
 }  // namespace cc

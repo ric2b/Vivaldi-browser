@@ -39,11 +39,11 @@
 #include "core/layout/SubtreeLayoutScope.h"
 #include "core/layout/api/HitTestAction.h"
 #include "core/layout/api/SelectionState.h"
-#include "core/layout/compositing/CompositingState.h"
 #include "core/loader/resource/ImageResourceObserver.h"
 #include "core/paint/LayerHitTestRects.h"
 #include "core/paint/PaintPhase.h"
 #include "core/paint/RarePaintData.h"
+#include "core/paint/compositing/CompositingState.h"
 #include "core/style/ComputedStyle.h"
 #include "core/style/StyleDifference.h"
 #include "platform/geometry/FloatQuad.h"
@@ -69,7 +69,6 @@ class LayoutFlowThread;
 class LayoutGeometryMap;
 class LayoutMultiColumnSpannerPlaceholder;
 class LayoutView;
-class PropertyTreeState;
 class ObjectPaintProperties;
 class PaintLayer;
 class PseudoStyleRequest;
@@ -397,30 +396,10 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   // Sets the parent of this object but doesn't add it as a child of the parent.
   void SetDangerousOneWayParent(LayoutObject*);
 
-  // The ObjectPaintProperties structure holds references to the property tree
-  // nodes that are created by the layout object. The property nodes should only
-  // be updated during InPrePaint phase of the document lifecycle.
-  const ObjectPaintProperties* PaintProperties() const {
-    return rare_paint_data_ ? rare_paint_data_->PaintProperties() : nullptr;
-  }
-
-  LayoutObjectId UniqueId() const {
+  UniqueObjectId UniqueId() const {
     DCHECK(rare_paint_data_);
     return rare_paint_data_ ? rare_paint_data_->UniqueId() : 0;
   }
-
-  // The complete set of property nodes that should be used as a starting point
-  // to paint this LayoutObject. See also the comment for
-  // RarePaintData::local_border_box_properties_.
-  const PropertyTreeState* LocalBorderBoxProperties() const {
-    if (rare_paint_data_)
-      return rare_paint_data_->LocalBorderBoxProperties();
-    return nullptr;
-  }
-
-  // The complete set of property nodes that should be used as a starting point
-  // to paint contents of this LayoutObject.
-  PropertyTreeState ContentsProperties() const;
 
  private:
   //////////////////////////////////////////
@@ -453,7 +432,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
 
   // Gets ::selection pseudo style from Shadow host(in case of input elements)
   // or from parent element.
-  PassRefPtr<ComputedStyle> GetUncachedSelectionStyle() const;
+  RefPtr<ComputedStyle> GetUncachedSelectionStyle() const;
 
  public:
 #ifndef NDEBUG
@@ -887,7 +866,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   ComputedStyle* GetCachedPseudoStyle(
       PseudoId,
       const ComputedStyle* parent_style = nullptr) const;
-  PassRefPtr<ComputedStyle> GetUncachedPseudoStyle(
+  RefPtr<ComputedStyle> GetUncachedPseudoStyle(
       const PseudoStyleRequest&,
       const ComputedStyle* parent_style = nullptr) const;
 
@@ -1163,21 +1142,20 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
       MarkingBehavior marking_behaviour = kMarkContainerChain);
 
   // Set the style of the object and update the state of the object accordingly.
-  void SetStyle(PassRefPtr<ComputedStyle>);
+  void SetStyle(RefPtr<ComputedStyle>);
 
   // Set the style of the object if it's generated content.
-  void SetPseudoStyle(PassRefPtr<ComputedStyle>);
+  void SetPseudoStyle(RefPtr<ComputedStyle>);
 
   // Updates only the local style ptr of the object.  Does not update the state
   // of the object, and so only should be called when the style is known not to
   // have changed (or from setStyle).
-  void SetStyleInternal(PassRefPtr<ComputedStyle> style) {
+  void SetStyleInternal(RefPtr<ComputedStyle> style) {
     style_ = std::move(style);
   }
 
-  void SetStyleWithWritingModeOf(PassRefPtr<ComputedStyle>,
-                                 LayoutObject* parent);
-  void SetStyleWithWritingModeOfParent(PassRefPtr<ComputedStyle>);
+  void SetStyleWithWritingModeOf(RefPtr<ComputedStyle>, LayoutObject* parent);
+  void SetStyleWithWritingModeOfParent(RefPtr<ComputedStyle>);
   void AddChildWithWritingModeOfParent(LayoutObject* new_child,
                                        LayoutObject* before_child);
 
@@ -1409,7 +1387,12 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   // non-SVG objects and LayoutSVGRoot only. SVG objects (except LayoutSVGRoot)
   // should use visualRectInLocalSVGCoordinates() and map with SVG transforms
   // instead.
-  virtual LayoutRect LocalVisualRect() const;
+  LayoutRect LocalVisualRect() const {
+    if (StyleRef().Visibility() != EVisibility::kVisible &&
+        VisualRectRespectsVisibility())
+      return LayoutRect();
+    return LocalVisualRectIgnoringVisibility();
+  }
 
   // Given a rect in the object's coordinate space, mutates the rect into one
   // representing the size of its visual painted output as if |ancestor| was the
@@ -1539,8 +1522,6 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   void ImageChanged(WrappedImagePtr, const IntRect* = nullptr) override {}
   bool WillRenderImage() final;
   bool GetImageAnimationPolicy(ImageAnimationPolicy&) final;
-
-  std::pair<int, int> SelectionStartEnd() const;
 
   void Remove() {
     if (Parent())
@@ -1724,6 +1705,10 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   // debugging output
   virtual LayoutRect DebugRect() const;
 
+  FragmentData* FirstFragment() const {
+    return rare_paint_data_ ? rare_paint_data_->Fragment() : nullptr;
+  }
+
   // Painters can use const methods only, except for these explicitly declared
   // methods.
   class CORE_EXPORT MutableForPainting {
@@ -1802,40 +1787,11 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
                              canStartElementOnCompositorEffectSPv2);
     FRIEND_TEST_ALL_PREFIXES(PrePaintTreeWalkTest, ClipRects);
 
-    // The following non-const functions for ObjectPaintProperties should only
-    // be called from PaintPropertyTreeBuilder.
-    ObjectPaintProperties& EnsurePaintProperties() {
-      return layout_object_.EnsureRarePaintData()
-          .EnsureFragment()
-          .EnsurePaintProperties();
-    }
-    ObjectPaintProperties* PaintProperties() {
-      if (auto* paint_data = layout_object_.GetRarePaintData())
-        return paint_data->PaintProperties();
-      return nullptr;
-    }
-    void ClearPaintProperties() {
-      if (auto* paint_data = layout_object_.GetRarePaintData()) {
-        if (auto* fragment = paint_data->Fragment())
-          fragment->ClearPaintProperties();
-      }
-    }
     // Each LayoutObject has one or more painting fragments (exactly one
     // in the absence of multicol/pagination).
     // See ../paint/README.md for more on fragments.
     FragmentData* FirstFragment();
     FragmentData& EnsureFirstFragment();
-
-    // The following non-const functions for local border box properties should
-    // only be called from PaintPropertyTreeBuilder.
-    void ClearLocalBorderBoxProperties() {
-      if (auto* paint_data = layout_object_.GetRarePaintData())
-        paint_data->ClearLocalBorderBoxProperties();
-    }
-    void SetLocalBorderBoxProperties(PropertyTreeState& local_border_box) {
-      return layout_object_.EnsureRarePaintData().SetLocalBorderBoxProperties(
-          local_border_box);
-    }
 
     friend class LayoutObject;
     MutableForPainting(const LayoutObject& layout_object)
@@ -2097,10 +2053,13 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   RarePaintData& EnsureRarePaintData();
   RarePaintData* GetRarePaintData() const { return rare_paint_data_.get(); }
 
+  virtual bool VisualRectRespectsVisibility() const { return true; }
+  virtual LayoutRect LocalVisualRectIgnoringVisibility() const;
+
  private:
   // Used only by applyFirstLineChanges to get a first line style based off of a
   // given new style, without accessing the cache.
-  PassRefPtr<ComputedStyle> UncachedFirstLineStyle() const;
+  RefPtr<ComputedStyle> UncachedFirstLineStyle() const;
 
   // Adjusts a visual rect in the space of |visual_rect_| to be in the space of
   // the |paint_invalidation_container|, if needed. They can be different only
@@ -2532,7 +2491,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
       }
     }
     void ClearPositionedState() {
-      positioned_state_ = static_cast<unsigned>(EPosition::kStatic);
+      positioned_state_ = kIsStaticallyPositioned;
     }
 
     ALWAYS_INLINE SelectionState GetSelectionState() const {
@@ -2778,14 +2737,14 @@ inline LayoutUnit AdjustLayoutUnitForAbsoluteZoom(LayoutUnit value,
 }
 
 inline void AdjustFloatQuadForAbsoluteZoom(FloatQuad& quad,
-                                           LayoutObject& layout_object) {
+                                           const LayoutObject& layout_object) {
   float zoom = layout_object.StyleRef().EffectiveZoom();
   if (zoom != 1)
     quad.Scale(1 / zoom, 1 / zoom);
 }
 
 inline void AdjustFloatRectForAbsoluteZoom(FloatRect& rect,
-                                           LayoutObject& layout_object) {
+                                           const LayoutObject& layout_object) {
   float zoom = layout_object.StyleRef().EffectiveZoom();
   if (zoom != 1)
     rect.Scale(1 / zoom, 1 / zoom);
@@ -2795,6 +2754,9 @@ inline double AdjustScrollForAbsoluteZoom(double value,
                                           LayoutObject& layout_object) {
   return AdjustScrollForAbsoluteZoom(value, layout_object.StyleRef());
 }
+
+CORE_EXPORT const LayoutObject* AssociatedLayoutObjectOf(const Node&,
+                                                         int offset_in_node);
 
 #define DEFINE_LAYOUT_OBJECT_TYPE_CASTS(thisType, predicate)           \
   DEFINE_TYPE_CASTS(thisType, LayoutObject, object, object->predicate, \

@@ -20,6 +20,7 @@
 #include "components/cast_channel/cast_channel_enum.h"
 #include "components/cast_channel/cast_message_util.h"
 #include "crypto/random.h"
+#include "net/cert/internal/signature_algorithm.h"
 #include "net/cert/x509_certificate.h"
 #include "net/der/parse_values.h"
 
@@ -51,9 +52,15 @@ const base::Feature kEnforceRevocationChecking{
 // the one sent to the device. As a result, the nonce can be empty and omitted
 // from the signature. This allows backwards compatibility with legacy Cast
 // receivers.
-
 const base::Feature kEnforceNonceChecking{"CastNonceEnforced",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enforce the use of SHA256 digest for signatures.
+// If disabled, the device may respond with a signature with SHA1 digest even
+// though a signature with SHA256 digest was requested in the challenge. This
+// allows for backwards compatibility with legacy Cast receivers.
+const base::Feature kEnforceSHA256Checking{"CastSHA256Enforced",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
 namespace cast_crypto = ::cast_certificate;
 
@@ -136,6 +143,12 @@ enum CertVerificationStatus {
   CERT_STATUS_INVALID_CRL,
   CERT_STATUS_VERIFICATION_FAILED,
   CERT_STATUS_REVOKED,
+  CERT_STATUS_MISSING_CRL,
+  CERT_STATUS_PARSE_FAILED,
+  CERT_STATUS_DATE_INVALID,
+  CERT_STATUS_RESTRICTIONS_FAILED,
+  CERT_STATUS_MISSING_CERTS,
+  CERT_STATUS_UNEXPECTED_FAILED,
   CERT_STATUS_COUNT,
 };
 
@@ -148,6 +161,16 @@ enum NonceVerificationStatus {
   NONCE_COUNT,
 };
 
+// Must match with the histogram enum CastSignature.
+// This should never be reordered.
+enum SignatureStatus {
+  SIGNATURE_OK,
+  SIGNATURE_EMPTY,
+  SIGNATURE_VERIFY_FAILED,
+  SIGNATURE_ALGORITHM_UNSUPPORTED,
+  SIGNATURE_COUNT,
+};
+
 // Record certificate verification histogram events.
 void RecordCertificateEvent(CertVerificationStatus event) {
   UMA_HISTOGRAM_ENUMERATION("Cast.Channel.Certificate", event,
@@ -157,6 +180,61 @@ void RecordCertificateEvent(CertVerificationStatus event) {
 // Record nonce verification histogram events.
 void RecordNonceEvent(NonceVerificationStatus event) {
   UMA_HISTOGRAM_ENUMERATION("Cast.Channel.Nonce", event, NONCE_COUNT);
+}
+
+// Record signature verification histogram events.
+void RecordSignatureEvent(SignatureStatus event) {
+  UMA_HISTOGRAM_ENUMERATION("Cast.Channel.Signature", event, SIGNATURE_COUNT);
+}
+
+// Maps CastCertError to AuthResult.
+// If crl_required is set to false, all revocation related errors are ignored.
+AuthResult MapToAuthResult(cast_certificate::CastCertError error,
+                           bool crl_required) {
+  switch (error) {
+    case cast_certificate::CastCertError::ERR_CERTS_MISSING:
+      RecordCertificateEvent(CERT_STATUS_MISSING_CERTS);
+      return AuthResult("Failed to locate certificates.",
+                        AuthResult::ERROR_PEER_CERT_EMPTY);
+    case cast_certificate::CastCertError::ERR_CERTS_PARSE:
+      RecordCertificateEvent(CERT_STATUS_PARSE_FAILED);
+      return AuthResult("Failed to parse certificates.",
+                        AuthResult::ERROR_CERT_PARSING_FAILED);
+    case cast_certificate::CastCertError::ERR_CERTS_DATE_INVALID:
+      RecordCertificateEvent(CERT_STATUS_DATE_INVALID);
+      return AuthResult("Failed date validity check.",
+                        AuthResult::ERROR_CERT_NOT_SIGNED_BY_TRUSTED_CA);
+    case cast_certificate::CastCertError::ERR_CERTS_VERIFY_GENERIC:
+      RecordCertificateEvent(CERT_STATUS_VERIFICATION_FAILED);
+      return AuthResult("Failed with a generic certificate verification error.",
+                        AuthResult::ERROR_CERT_NOT_SIGNED_BY_TRUSTED_CA);
+    case cast_certificate::CastCertError::ERR_CERTS_RESTRICTIONS:
+      RecordCertificateEvent(CERT_STATUS_RESTRICTIONS_FAILED);
+      return AuthResult("Failed certificate restrictions.",
+                        AuthResult::ERROR_CERT_NOT_SIGNED_BY_TRUSTED_CA);
+    case cast_certificate::CastCertError::ERR_CRL_INVALID:
+      // Histogram events are recorded during CRL verification.
+      // This error is only encountered if |crl_required| is true.
+      DCHECK(crl_required);
+      return AuthResult("Failed to provide a valid CRL.",
+                        AuthResult::ERROR_CRL_INVALID);
+    case cast_certificate::CastCertError::ERR_CERTS_REVOKED:
+      RecordCertificateEvent(CERT_STATUS_REVOKED);
+      // Revocation check is the last step of Cast certificate verification.
+      // If this error is encountered, the rest of certificate verification has
+      // succeeded.
+      if (!crl_required)
+        return AuthResult();
+      return AuthResult("Failed certificate revocation check.",
+                        AuthResult::ERROR_CERT_REVOKED);
+    case cast_certificate::CastCertError::ERR_UNEXPECTED:
+      RecordCertificateEvent(CERT_STATUS_UNEXPECTED_FAILED);
+      return AuthResult("Failed verifying cast device certificate.",
+                        AuthResult::ERROR_CERT_NOT_SIGNED_BY_TRUSTED_CA);
+    case cast_certificate::CastCertError::OK:
+      return AuthResult();
+  }
+  return AuthResult();
 }
 
 }  // namespace
@@ -198,6 +276,24 @@ AuthResult AuthContext::VerifySenderNonce(
     }
   } else {
     RecordNonceEvent(NONCE_MATCH);
+  }
+  return AuthResult();
+}
+
+AuthResult VerifyAndMapDigestAlgorithm(HashAlgorithm response_digest_algorithm,
+                                       net::DigestAlgorithm* digest_algorithm) {
+  switch (response_digest_algorithm) {
+    case SHA1:
+      RecordSignatureEvent(SIGNATURE_ALGORITHM_UNSUPPORTED);
+      *digest_algorithm = net::DigestAlgorithm::Sha1;
+      if (base::FeatureList::IsEnabled(kEnforceSHA256Checking)) {
+        return AuthResult("Unsupported digest algorithm.",
+                          AuthResult::ERROR_DIGEST_UNSUPPORTED);
+      }
+      break;
+    case SHA256:
+      *digest_algorithm = net::DigestAlgorithm::Sha256;
+      break;
   }
   return AuthResult();
 }
@@ -304,55 +400,50 @@ AuthResult VerifyCredentialsImpl(const AuthResponse& response,
                     response.intermediate_certificate().end());
 
   // Parse the CRL.
-  std::unique_ptr<cast_crypto::CastCRL> crl =
-      cast_crypto::ParseAndVerifyCRLUsingCustomTrustStore(
-          response.crl(), verification_time, crl_trust_store);
-  if (!crl) {
-    // CRL is invalid.
-    RecordCertificateEvent(CERT_STATUS_INVALID_CRL);
-    if (crl_policy == cast_crypto::CRLPolicy::CRL_REQUIRED) {
-      return AuthResult("Failed verifying Cast CRL.",
-                        AuthResult::ERROR_CRL_INVALID);
+  std::unique_ptr<cast_crypto::CastCRL> crl;
+  if (response.crl().empty()) {
+    RecordCertificateEvent(CERT_STATUS_MISSING_CRL);
+  } else {
+    crl = cast_crypto::ParseAndVerifyCRLUsingCustomTrustStore(
+        response.crl(), verification_time, crl_trust_store);
+    if (!crl) {
+      RecordCertificateEvent(CERT_STATUS_INVALID_CRL);
     }
   }
 
+  // Perform certificate verification.
   cast_crypto::CastDeviceCertPolicy device_policy;
-  bool verification_success =
+  cast_crypto::CastCertError verify_result =
       cast_crypto::VerifyDeviceCertUsingCustomTrustStore(
           cert_chain, verification_time, &verification_context, &device_policy,
           crl.get(), crl_policy, cast_trust_store);
-  if (!verification_success) {
-    // TODO(ryanchung): Once this feature is completely rolled-out, remove the
-    // reverification step and use error reporting to get verification errors
-    // for metrics.
-    bool verification_no_crl_success =
-        cast_crypto::VerifyDeviceCertUsingCustomTrustStore(
-            cert_chain, verification_time, &verification_context,
-            &device_policy, nullptr, cast_crypto::CRLPolicy::CRL_OPTIONAL,
-            cast_trust_store);
-    if (!verification_no_crl_success) {
-      // TODO(eroman): The error information was lost; this error is ambiguous.
-      RecordCertificateEvent(CERT_STATUS_VERIFICATION_FAILED);
-      return AuthResult("Failed verifying cast device certificate",
-                        AuthResult::ERROR_CERT_NOT_SIGNED_BY_TRUSTED_CA);
-    }
-    if (crl) {
-      // If CRL was not present, it should've been recorded as such.
-      RecordCertificateEvent(CERT_STATUS_REVOKED);
-    }
-    if (crl_policy == cast_crypto::CRLPolicy::CRL_REQUIRED) {
-      // Device is revoked.
-      return AuthResult("Failed certificate revocation check.",
-                        AuthResult::ERROR_CERT_REVOKED);
-    }
-  }
+
+  // Handle and report errors.
+  AuthResult result = MapToAuthResult(
+      verify_result, crl_policy == cast_crypto::CRLPolicy::CRL_REQUIRED);
+  if (!result.success())
+    return result;
+
   // The certificate is verified at this point.
   RecordCertificateEvent(CERT_STATUS_OK);
-  if (!verification_context->VerifySignatureOverData(response.signature(),
-                                                     signature_input)) {
-    return AuthResult("Failed verifying signature over data",
+
+  if (response.signature().empty() && !signature_input.empty()) {
+    RecordSignatureEvent(SIGNATURE_EMPTY);
+    return AuthResult("Signature is empty.", AuthResult::ERROR_SIGNATURE_EMPTY);
+  }
+  net::DigestAlgorithm digest_algorithm;
+  AuthResult digest_result =
+      VerifyAndMapDigestAlgorithm(response.hash_algorithm(), &digest_algorithm);
+  if (!digest_result.success())
+    return digest_result;
+
+  if (!verification_context->VerifySignatureOverData(
+          response.signature(), signature_input, digest_algorithm)) {
+    RecordSignatureEvent(SIGNATURE_VERIFY_FAILED);
+    return AuthResult("Failed verifying signature over data.",
                       AuthResult::ERROR_SIGNED_BLOBS_MISMATCH);
   }
+  RecordSignatureEvent(SIGNATURE_OK);
 
   AuthResult success;
 

@@ -29,7 +29,9 @@
 #include "content/public/common/referrer.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
+#include "content/public/test/test_utils.h"
 #include "net/base/test_completion_callback.h"
+#include "net/disk_cache/disk_cache.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_job_factory_impl.h"
@@ -41,6 +43,7 @@
 #include "storage/browser/quota/quota_manager_proxy.h"
 #include "storage/browser/test/mock_quota_manager_proxy.h"
 #include "storage/browser/test/mock_special_storage_policy.h"
+#include "storage/common/blob_storage/blob_handle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace content {
@@ -354,7 +357,7 @@ class CacheStorageCacheTest : public testing::Test {
     quota_policy_ = new MockSpecialStoragePolicy;
     mock_quota_manager_ = new MockQuotaManager(
         is_incognito, temp_dir_path, base::ThreadTaskRunnerHandle::Get().get(),
-        base::ThreadTaskRunnerHandle::Get().get(), quota_policy_.get());
+        quota_policy_.get());
     mock_quota_manager_->SetQuota(GURL(kOrigin), storage::kStorageTypeTemporary,
                                   1024 * 1024 * 100);
 
@@ -383,7 +386,8 @@ class CacheStorageCacheTest : public testing::Test {
 
   void TearDown() override {
     quota_manager_proxy_->SimulateQuotaManagerDestroyed();
-    base::RunLoop().RunUntilIdle();
+    disk_cache::FlushCacheThreadForTesting();
+    content::RunAllBlockingPoolTasksUntilIdle();
   }
 
   void CreateRequests(ChromeBlobStorageContext* blob_storage_context) {
@@ -443,9 +447,10 @@ class CacheStorageCacheTest : public testing::Test {
       std::unique_ptr<ServiceWorkerHeaderList> cors_exposed_header_names) {
     return ServiceWorkerResponse(
         base::MakeUnique<std::vector<GURL>>(1, GURL(url)), 200, "OK",
-        blink::kWebServiceWorkerResponseTypeDefault, std::move(headers),
-        blob_uuid, blob_size, blink::kWebServiceWorkerResponseErrorUnknown,
-        base::Time::Now(), false /* is_in_cache_storage */,
+        network::mojom::FetchResponseType::kDefault, std::move(headers),
+        blob_uuid, blob_size, nullptr /* blob */,
+        blink::kWebServiceWorkerResponseErrorUnknown, base::Time::Now(),
+        false /* is_in_cache_storage */,
         std::string() /* cache_storage_cache_name */,
         std::move(cors_exposed_header_names));
   }
@@ -671,7 +676,7 @@ class CacheStorageCacheTest : public testing::Test {
       run_loop->Quit();
   }
 
-  bool TestResponseType(blink::WebServiceWorkerResponseType response_type) {
+  bool TestResponseType(network::mojom::FetchResponseType response_type) {
     body_response_.response_type = response_type;
     EXPECT_TRUE(Put(body_request_, body_response_));
     EXPECT_TRUE(Match(body_request_));
@@ -1408,11 +1413,13 @@ TEST_P(CacheStorageCacheTestP, QuickStressBody) {
 }
 
 TEST_P(CacheStorageCacheTestP, PutResponseType) {
-  EXPECT_TRUE(TestResponseType(blink::kWebServiceWorkerResponseTypeBasic));
-  EXPECT_TRUE(TestResponseType(blink::kWebServiceWorkerResponseTypeCORS));
-  EXPECT_TRUE(TestResponseType(blink::kWebServiceWorkerResponseTypeDefault));
-  EXPECT_TRUE(TestResponseType(blink::kWebServiceWorkerResponseTypeError));
-  EXPECT_TRUE(TestResponseType(blink::kWebServiceWorkerResponseTypeOpaque));
+  EXPECT_TRUE(TestResponseType(network::mojom::FetchResponseType::kBasic));
+  EXPECT_TRUE(TestResponseType(network::mojom::FetchResponseType::kCORS));
+  EXPECT_TRUE(TestResponseType(network::mojom::FetchResponseType::kDefault));
+  EXPECT_TRUE(TestResponseType(network::mojom::FetchResponseType::kError));
+  EXPECT_TRUE(TestResponseType(network::mojom::FetchResponseType::kOpaque));
+  EXPECT_TRUE(
+      TestResponseType(network::mojom::FetchResponseType::kOpaqueRedirect));
 }
 
 TEST_P(CacheStorageCacheTestP, WriteSideData) {
@@ -1517,8 +1524,8 @@ TEST_F(CacheStorageCacheTest, CaselessServiceWorkerResponseHeaders) {
   // headers so that it can quickly lookup vary headers.
   ServiceWorkerResponse response(
       base::MakeUnique<std::vector<GURL>>(), 200, "OK",
-      blink::kWebServiceWorkerResponseTypeDefault,
-      base::MakeUnique<ServiceWorkerHeaderMap>(), "", 0,
+      network::mojom::FetchResponseType::kDefault,
+      base::MakeUnique<ServiceWorkerHeaderMap>(), "", 0, nullptr /* blob */,
       blink::kWebServiceWorkerResponseErrorUnknown, base::Time(),
       false /* is_in_cache_storage */,
       std::string() /* cache_storage_cache_name */,

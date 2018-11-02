@@ -6,40 +6,40 @@
 <dom-module id="cups-printer-shared">
   <template>
     <style include="settings-shared md-select">
-      .dialog-body .settings-box {
+      [slot='dialog-body'] .settings-box {
         border-top: none;
         margin-bottom: 10px;
       }
 
-      .dialog-body .settings-box .two-line {
+      [slot='dialog-body'] .settings-box .two-line {
         min-height: 72px;
       }
 
-      .dialog-body .settings-box .start .label {
+      [slot='dialog-body'] .settings-box .start .label {
         color: var(--google-grey-700);
       }
 
-      .dialog-body .settings-box paper-input {
+      [slot='dialog-body'] .settings-box paper-input {
         --paper-input-container-input: {
           font-size: inherit;
         };
         width: 270px;
       }
 
-      .dialog-body .settings-box .md-select-wrapper {
+      [slot='dialog-body'] .settings-box .md-select-wrapper {
         -webkit-margin-start: calc(-1 * var(--md-select-side-padding));
         margin-top: 8px;
       }
 
-      .dialog-body .settings-box .md-select {
+      [slot='dialog-body'] .settings-box .md-select {
         width: calc(270px + calc(2* var(--md-select-side-padding)));
       }
 
-      .dialog-body .settings-box .printer-name-input {
+      [slot='dialog-body'] .settings-box .printer-name-input {
         width: 450px;
       }
 
-      .dialog-body .settings-box .browse-file-input {
+      [slot='dialog-body'] .settings-box .browse-file-input {
         --paper-input-container-input: {
           border: 1px solid lightgray;
           font-size: inherit;
@@ -56,16 +56,16 @@
         width: 340px;
       }
 
-      .dialog-body .settings-box .browse-button {
+      [slot='dialog-body'] .settings-box .browse-button {
         -webkit-margin-start: 5px;
         color: black;
       }
 
-      .dialog-body .last {
+      [slot='dialog-body'] .last {
         margin-top: 20px;
       }
 
-      .dialog-body .center {
+      [slot='dialog-body'] .center {
         display: flex;
         justify-content: center;
         position: absolute;
@@ -73,7 +73,7 @@
         width: 100%;
       }
 
-      .dialog-buttons {
+      [slot='dialog-buttons'] {
         display: flex;
         justify-content: space-between;
         width: 100%;

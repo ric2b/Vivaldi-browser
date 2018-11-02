@@ -17,8 +17,6 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/transform.h"
 
-class SkRegion;
-
 namespace aura {
 class Window;
 }
@@ -34,6 +32,7 @@ class Widget;
 namespace ash {
 
 class ScopedOverviewAnimationSettings;
+class WindowSelectorItem;
 
 // Manages a window, and its transient children, in the overview mode. This
 // class allows transforming the windows with a helper to determine the best
@@ -42,6 +41,7 @@ class ScopedOverviewAnimationSettings;
 class ASH_EXPORT ScopedTransformOverviewWindow : public ui::EventHandler {
  public:
   class OverviewContentMask;
+  using ShapeRects = std::vector<gfx::Rect>;
   using ScopedAnimationSettings =
       std::vector<std::unique_ptr<ScopedOverviewAnimationSettings>>;
 
@@ -65,7 +65,8 @@ class ASH_EXPORT ScopedTransformOverviewWindow : public ui::EventHandler {
   static gfx::Transform GetTransformForRect(const gfx::Rect& src_rect,
                                             const gfx::Rect& dst_rect);
 
-  explicit ScopedTransformOverviewWindow(aura::Window* window);
+  ScopedTransformOverviewWindow(WindowSelectorItem* selector_item,
+                                aura::Window* window);
   ~ScopedTransformOverviewWindow() override;
 
   // Starts an animation sequence which will use animation settings specified by
@@ -165,11 +166,14 @@ class ASH_EXPORT ScopedTransformOverviewWindow : public ui::EventHandler {
   // Makes Close() execute synchronously when used in tests.
   static void SetImmediateCloseForTests();
 
+  // A weak pointer to the window selector item that owns the transform window.
+  WindowSelectorItem* selector_item_;
+
   // A weak pointer to the real window in the overview.
   aura::Window* window_;
 
   // Original |window_|'s shape, if it was set on the window.
-  std::unique_ptr<SkRegion> original_window_shape_;
+  std::unique_ptr<ShapeRects> original_window_shape_;
 
   // True after the |original_window_shape_| has been set or after it has
   // been determined that window shape was not originally set on the |window_|.

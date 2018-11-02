@@ -8,24 +8,29 @@
 #include <stdint.h>
 #include <memory>
 
+#include "base/callback_forward.h"
 #include "base/md5.h"
-#include "base/message_loop/message_loop.h"
-#include "base/test/scoped_task_scheduler.h"
+#include "base/test/scoped_feature_list.h"
+#include "base/test/scoped_task_environment.h"
 #include "media/audio/clockless_audio_sink.h"
 #include "media/audio/null_audio_sink.h"
 #include "media/base/demuxer.h"
+#include "media/base/mock_media_log.h"
 #include "media/base/null_video_sink.h"
 #include "media/base/pipeline_impl.h"
 #include "media/base/pipeline_status.h"
 #include "media/base/text_track.h"
 #include "media/base/text_track_config.h"
 #include "media/base/video_frame.h"
+#include "media/renderers/audio_renderer_impl.h"
 #include "media/renderers/video_renderer_impl.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
 #include "platform_media/gpu/test/platform_pipeline_test_base.h"
 #endif
+
+using ::testing::NiceMock;
 
 namespace media {
 
@@ -83,9 +88,10 @@ class PipelineIntegrationTestBase : public Pipeline::Client
   enum TestTypeFlags {
     kNormal = 0,
     kHashed = 1,
-    kClockless = 2,
+    kNoClockless = 2,
     kExpectDemuxerFailure = 4,
     kUnreliableDuration = 8,
+    kWebAudio = 16,
   };
 
   // Starts the pipeline with a file specified by |filename|, optionally with a
@@ -144,19 +150,23 @@ class PipelineIntegrationTestBase : public Pipeline::Client
     encrypted_media_init_data_cb_ = encrypted_media_init_data_cb;
   }
 
+  // Saves a test callback, ownership of which will be transferred to the next
+  // AudioRendererImpl created by CreateRenderer().
+  void set_audio_play_delay_cb(AudioRendererImpl::PlayDelayCBForTesting cb) {
+    audio_play_delay_cb_ = std::move(cb);
+  }
+
   std::unique_ptr<Renderer> CreateRenderer(
       CreateVideoDecodersCB prepend_video_decoders_cb,
       CreateAudioDecodersCB prepend_audio_decoders_cb);
 
  protected:
-  MediaLog media_log_;
-  base::MessageLoop message_loop_;
+  NiceMock<MockMediaLog> media_log_;
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   base::MD5Context md5_context_;
   bool hashing_enabled_;
   bool clockless_playback_;
-
-  // TaskScheduler is used only for FFmpegDemuxer.
-  std::unique_ptr<base::test::ScopedTaskScheduler> task_scheduler_;
+  bool webaudio_attached_;
   std::unique_ptr<Demuxer> demuxer_;
   std::unique_ptr<DataSource> data_source_;
   std::unique_ptr<PipelineImpl> pipeline_;
@@ -172,6 +182,7 @@ class PipelineIntegrationTestBase : public Pipeline::Client
   PipelineMetadata metadata_;
   scoped_refptr<VideoFrame> last_frame_;
   base::TimeDelta current_duration_;
+  AudioRendererImpl::PlayDelayCBForTesting audio_play_delay_cb_;
   std::unique_ptr<PipelineTestRendererFactory> renderer_factory_;
 
   PipelineStatus StartInternal(
@@ -206,7 +217,8 @@ class PipelineIntegrationTestBase : public Pipeline::Client
 
   void DemuxerMediaTracksUpdatedCB(std::unique_ptr<MediaTracks> tracks);
 
-  void QuitAfterCurrentTimeTask(const base::TimeDelta& quit_time);
+  void QuitAfterCurrentTimeTask(base::TimeDelta quit_time,
+                                base::OnceClosure quit_closure);
 
   // Creates Demuxer and sets |demuxer_|.
   void CreateDemuxer(std::unique_ptr<DataSource> data_source);

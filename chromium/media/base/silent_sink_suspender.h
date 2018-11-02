@@ -15,9 +15,9 @@
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/lock.h"
 #include "base/time/time.h"
-#include "media/audio/fake_audio_worker.h"
 #include "media/base/audio_parameters.h"
 #include "media/base/audio_renderer_sink.h"
+#include "media/base/fake_audio_worker.h"
 #include "media/base/media_export.h"
 
 namespace base {
@@ -32,7 +32,7 @@ namespace media {
 // physical hardwasre usage. Note: The transition from real to fake audio output
 // and vice versa may result in some irregular Render() callbacks.
 class MEDIA_EXPORT SilentSinkSuspender
-    : NON_EXPORTED_BASE(public AudioRendererSink::RenderCallback) {
+    : public AudioRendererSink::RenderCallback {
  public:
   // |callback| is the true producer of audio data, |params| are the parameters
   // used to initialize |sink|, |sink| is the sink to monitor for idle, and

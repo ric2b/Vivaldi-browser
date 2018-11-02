@@ -5,7 +5,7 @@
 #ifndef CHROME_INSTALLER_ZUCCHINI_TYPED_VALUE_H_
 #define CHROME_INSTALLER_ZUCCHINI_TYPED_VALUE_H_
 
-#include <cstdint>
+#include <ostream>
 
 namespace zucchini {
 
@@ -36,10 +36,21 @@ class TypedValue {
   friend bool operator!=(const TypedValue& a, const TypedValue& b) {
     return !(a == b);
   }
+  friend bool operator<(const TypedValue& a, const TypedValue& b) {
+    return a.value_ < b.value_;
+  }
+  friend bool operator>(const TypedValue& a, const TypedValue& b) {
+    return b < a;
+  }
 
  private:
   T value_ = {};
 };
+
+template <class Tag, class T>
+std::ostream& operator<<(std::ostream& os, const TypedValue<Tag, T>& tag) {
+  return os << tag.value();
+}
 
 }  // namespace zucchini
 

@@ -16,6 +16,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/ref_counted_memory.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
@@ -25,10 +26,21 @@
 namespace search_provider_logos {
 
 GURL GetGoogleDoodleURL(const GURL& google_base_url) {
+  std::string override_url = base::GetFieldTrialParamValueByFeature(
+      features::kUseDdljsonApi, features::kDdljsonOverrideUrlParam);
+  if (!override_url.empty()) {
+    return GURL(override_url);
+  }
+  bool use_ddljson_api = base::FeatureList::IsEnabled(features::kUseDdljsonApi);
   GURL::Replacements replacements;
-  replacements.SetPathStr(base::FeatureList::IsEnabled(features::kUseDdljsonApi)
-                              ? "async/ddljson"
-                              : "async/newtab_mobile");
+  replacements.SetPathStr(use_ddljson_api ? "async/ddljson"
+                                          : "async/newtab_mobile");
+  // Make sure we use https rather than http (except for .cn).
+  if (use_ddljson_api && google_base_url.SchemeIs(url::kHttpScheme) &&
+      !base::EndsWith(google_base_url.host_piece(), ".cn",
+                      base::CompareCase::INSENSITIVE_ASCII)) {
+    replacements.SetSchemeStr(url::kHttpsScheme);
+  }
   return google_base_url.ReplaceComponents(replacements);
 }
 
@@ -152,13 +164,17 @@ std::unique_ptr<EncodedLogo> GoogleLegacyParseLogoResponse(
   }
 
   // Don't check return values since these fields are optional.
-  logo_dict->GetString("target", &logo->metadata.on_click_url);
+  std::string on_click_url;
+  logo_dict->GetString("target", &on_click_url);
+  logo->metadata.on_click_url = GURL(on_click_url);
   logo_dict->GetString("fingerprint", &logo->metadata.fingerprint);
   logo_dict->GetString("alt", &logo->metadata.alt_text);
 
   // Existance of url indicates |data| is a call to action image for an
   // animated doodle. |url| points to that animated doodle.
-  logo_dict->GetString("url", &logo->metadata.animated_url);
+  std::string animated_url;
+  logo_dict->GetString("url", &animated_url);
+  logo->metadata.animated_url = GURL(animated_url);
 
   base::TimeDelta time_to_live;
   int time_to_live_ms;
@@ -190,7 +206,7 @@ GURL GoogleNewAppendQueryparamsToLogoURL(bool gray_background,
 
   query += "async=";
 
-  std::vector<base::StringPiece> params;
+  std::vector<std::string> params;
   params.push_back("ntp:1");
   if (gray_background) {
     params.push_back("graybg:1");
@@ -264,14 +280,13 @@ std::unique_ptr<EncodedLogo> GoogleNewParseLogoResponse(
   bool is_animated = false;
   const base::DictionaryValue* image = nullptr;
   if (ddljson->GetDictionary("large_image", &image)) {
-    image->GetBoolean("is_animated", &is_animated);
+    image->GetBoolean("is_animated_gif", &is_animated);
 
     // If animated, get the URL for the animated image.
     if (is_animated) {
-      GURL animated_url = ParseUrl(*image, "url", base_url);
-      if (!animated_url.is_valid())
+      logo->metadata.animated_url = ParseUrl(*image, "url", base_url);
+      if (!logo->metadata.animated_url.is_valid())
         return nullptr;
-      logo->metadata.animated_url = animated_url.spec();
     }
   }
 
@@ -309,8 +324,7 @@ std::unique_ptr<EncodedLogo> GoogleNewParseLogoResponse(
       return nullptr;
   }
 
-  logo->metadata.on_click_url =
-      ParseUrl(*ddljson, "target_url", base_url).spec();
+  logo->metadata.on_click_url = ParseUrl(*ddljson, "target_url", base_url);
   ddljson->GetString("alt_text", &logo->metadata.alt_text);
 
   ddljson->GetString("fingerprint", &logo->metadata.fingerprint);

@@ -28,7 +28,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/IncrementLoadEventDelayCount.h"
-#include "core/events/Event.h"
+#include "core/dom/events/Event.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
@@ -53,6 +53,8 @@
 #include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebClientHintsType.h"
 #include "public/platform/WebURLRequest.h"
+
+#include "app/vivaldi_constants.h"
 
 namespace blink {
 
@@ -231,7 +233,8 @@ static void ConfigureRequest(
         element.GetDocument().GetSecurityOrigin(), cross_origin);
   }
 
-  if (client_hints_preferences.ShouldSend(kWebClientHintsTypeResourceWidth) &&
+  if (client_hints_preferences.ShouldSend(
+          mojom::WebClientHintsType::kResourceWidth) &&
       isHTMLImageElement(element))
     params.SetResourceWidth(toHTMLImageElement(element).GetResourceWidth());
 }
@@ -331,7 +334,7 @@ void ImageLoader::DoUpdateFromElement(BypassMainWorldBehavior bypass_behavior,
     // "self-contained" and the blobs will be created within the webview.
 
     if (image_source_url.StartsWith(
-        "blob:chrome-extension://mpognobbkildjkofajifpdfhcoklimli/")) {
+        "blob:chrome-extension://" VIVALDI_APP_ID "/")) {
       params.SetOriginRestriction(FetchParameters::kNoOriginRestriction);
     }
 #endif

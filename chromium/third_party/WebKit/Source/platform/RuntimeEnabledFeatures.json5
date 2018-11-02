@@ -108,10 +108,6 @@
       status: "experimental",
     },
     {
-      name: "BackgroundSync",
-      status: "stable",
-    },
-    {
       name: "BackgroundVideoTrackOptimization",
       status: "stable",
     },
@@ -120,10 +116,6 @@
     },
     {
       name: "BlockCredentialedSubresources",
-      status: "stable",
-    },
-    {
-      name: "BlockLegacySubresources",
       status: "stable",
     },
     {
@@ -140,16 +132,11 @@
       status: "experimental",
     },
     {
-      name: "CanMakePayment",
-      status: "stable",
-    },
-    {
       name: "Canvas2dFixedRenderingMode",
       status: "test",
     },
     {
       name: "Canvas2dImageChromium",
-      status: "experimental",
     },
     {
       name: "ClickRetargetting",
@@ -158,6 +145,10 @@
     {
       name: "ClientHints",
       status: "stable",
+    },
+    {
+      name: "ClientHintsPersistent",
+      status: "experimental",
     },
     {
       name: "ClientPlaceholdersForServerLoFi",
@@ -232,10 +223,6 @@
       status: "experimental",
     },
     {
-      name: "CSSContainment",
-      status: "stable",
-    },
-    {
       name: "CSSDisplayContents",
       status: "experimental",
     },
@@ -253,7 +240,7 @@
     },
     {
       name: "CSSHexAlphaColor",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "CSSHyphens",
@@ -331,7 +318,7 @@
     },
     {
       name: "CSSVariableFonts",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "CSSVariables2",
@@ -356,6 +343,16 @@
     },
     {
       name: "DecodeToYUV",
+      status: "experimental",
+    },
+    // Introduced this flag as stable so we can re-enable this feature easily
+    // after we disable this feature.
+    {
+      name: "DeepCombinatorInCSSDynamicProfile",
+      status: "stable",
+    },
+    {
+      name: "DeprecationReporting",
       status: "experimental",
     },
     {
@@ -384,14 +381,7 @@
       name: "DocumentWrite",
     },
     {
-      name: "DocumentWriteEvaluator",
-    },
-    {
       name: "DOMConvenienceAPI",
-      status: "stable",
-    },
-    {
-      name: "DurableStorage",
       status: "stable",
     },
     {
@@ -437,20 +427,12 @@
       status: "experimental",
     },
     {
-      name: "FileAPIBlobClose",
-      status: "experimental",
-    },
-    {
       name: "FileSystem",
       status: "stable",
     },
     {
       name: "FontCacheScaling",
       status: "test",
-    },
-    // See crbug.com/585250.
-    {
-      name: "ForceDisable2dCanvasCopyOnWrite",
     },
     {
       name: "ForceDisplayList2dCanvas",
@@ -480,17 +462,13 @@
       status: "experimental",
     },
     {
-      name: "FrameTimingSupport",
-      status: "experimental",
-    },
-    {
       name: "FullscreenUnprefixed",
       settable_from_internals: true,
       status: "experimental",
     },
     {
       name: "GamepadExtensions",
-      origin_trial_feature_name: "WebVR1.1",
+      origin_trial_feature_name: "WebVR1.1M62",
       status: "test",
     },
     {
@@ -500,10 +478,6 @@
     },
     {
       name: "GetUserMedia",
-      status: "stable",
-    },
-    {
-      name: "GlobalCacheStorage",
       status: "stable",
     },
     {
@@ -580,6 +554,12 @@
       name: "LayoutNG",
     },
     {
+      name: "LayoutNGFragmentCaching",
+    },
+    {
+      name: "LayoutNGPaintFragments",
+    },
+    {
       name: "LazyInitializeMediaControls",
       // This is enabled by features::kLazyInitializeMediaControls.
     },
@@ -600,6 +580,9 @@
       status: "stable",
     },
     {
+      name: "LongTaskV2",
+    },
+    {
       name: "MediaCapabilities",
       status: "test",
     },
@@ -611,12 +594,16 @@
       status: "experimental",
     },
     {
+      name: "MediaCaptureDepthVideoKind",
+      status: "experimental",
+    },
+    {
       name: "MediaCaptureFromCanvas",
       status: "stable",
     },
     {
       name: "MediaCaptureFromVideo",
-      status: "experimental",
+      status: "stable",
     },
     // Set to reflect the MediaCastOverlayButton feature.
     {
@@ -628,6 +615,10 @@
     },
     {
       name: "MediaDocumentDownloadButton",
+    },
+    // Set to reflect the kMediaEngagementBypassAutoplayPolicies feature.
+    {
+      name: "MediaEngagementBypassAutoplayPolicies",
     },
     {
       name: "MediaQueryShape",
@@ -703,6 +694,10 @@
       name: "NavigatorContentUtils",
     },
     {
+      name: "NavigatorDeviceMemory",
+      status: "experimental",
+    },
+    {
       name: "NetInfoDownlink",
       status: "stable",
     },
@@ -717,6 +712,9 @@
     {
       name: "NetInfoRtt",
       status: "stable",
+    },
+    {
+      name: "NetworkService",
     },
     // Not a web exposed feature, enabled from the command line.
     {
@@ -797,7 +795,7 @@
     },
     {
       name: "PaymentDetailsModifierData",
-      status: "experimental",
+      status: "stable",
     },
     // PaymentRequest is enabled by default on Android
     {
@@ -846,6 +844,10 @@
       status: "stable",
     },
     {
+      name: "PreloadDefaultIsMetadata",
+      status: "experimental",
+    },
+    {
       name: "Presentation",
       status: "stable",
     },
@@ -885,6 +887,10 @@
     {
       name: "RenderUnicodeControlCharacters",
       status: "stable",
+    },
+    {
+      name: "ReportingObserver",
+      status: "experimental",
     },
     {
       name: "ResizeObserver",
@@ -939,12 +945,13 @@
       status: "experimental",
     },
     {
-      name: "ServerTiming",
+      name: "SensorExtraClasses",
+      depends_on: ["Sensor"],
       status: "experimental",
     },
     {
-      name: "ServiceWorkerNavigationPreload",
-      status: "stable",
+      name: "ServerTiming",
+      status: "experimental",
     },
     {
       name: "ServiceWorkerScriptStreaming",
@@ -953,9 +960,21 @@
       name: "SetRootScroller",
       status: "experimental",
     },
+    // Introduced this flag as stable so web developers can test their sites
+    // without native Shadow DOM v0 support
+    {
+      name: "ShadowDOMV0",
+      status: "stable",
+    },
     {
       name: "ShadowPiercingDescendantCombinator",
       status: "experimental",
+    },
+    // Introduced this flag as stable so we can re-enable this feature easily
+    // after we disable this feature.
+    {
+      name: "ShadowPseudoElementInCSSDynamicProfile",
+      status: "stable",
     },
     {
       name: "ShapeDetection",
@@ -970,8 +989,11 @@
       status: "stable",
     },
     {
+      name: "SignatureBasedIntegrity",
+      status: "experimental",
+    },
+    {
       name: "SkipCompositingSmallScrollers",
-      status: "test",
     },
     {
       name: "SlimmingPaintStrictCullRectClipping",
@@ -999,14 +1021,6 @@
       status: "experimental",
     },
     {
-      name: "StorageEstimate",
-      status: "stable",
-    },
-    {
-      name: "StyleSharing",
-      status: "experimental",
-    },
-    {
       name: "Suborigins",
       status: "experimental",
     },
@@ -1029,6 +1043,7 @@
     // enabled since they're a feature always supported by Chrome.
     {
       name: "TouchEventFeatureDetection",
+      origin_trial_feature_name: "ForceTouchEventFeatureDetectionForInspector",
       status: "stable",
     },
     // This is set conditionally in SetRuntimeFeaturesDefaultsAndUpdateFromArgs
@@ -1042,19 +1057,26 @@
       status: "stable",
     },
     {
+      name: "TurnOff2DAndOpacityCompositorAnimations",
+    },
+    {
       name: "UnclosedFormControlIsInvalid",
       status: "experimental",
     },
     {
       name: "UpdateHoverPostLayout",
-      status: "experimental",
+      status: "stable",
+    },
+    {
+      name: "V8ContextSnapshot",
+      status: "test",
     },
     {
       name: "V8IdleTasks",
     },
     {
       name: "ValidationBubbleInRenderer",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "VibrateRequiresUserGesture",
@@ -1068,6 +1090,14 @@
     },
     {
       name: "VideoRotateToFullscreen",
+    },
+    {
+      name: "VisibilityCollapseColumn",
+      status: "experimental",
+    },
+    {
+      name: "VisibilityCollapseRow",
+      status: "stable",
     },
     {
       name: "VisualViewportAPI",
@@ -1136,7 +1166,7 @@
     },
     {
       name: "WebVR",
-      origin_trial_feature_name: "WebVR1.1",
+      origin_trial_feature_name: "WebVR1.1M62",
       status: "test",
     },
     {
@@ -1153,6 +1183,10 @@
     },
     {
       name: "Worklet",
+      status: "experimental",
+    },
+    {
+      name: "WorkStealingInScriptRunner",
       status: "experimental",
     },
     {

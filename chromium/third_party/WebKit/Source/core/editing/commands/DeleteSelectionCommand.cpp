@@ -195,7 +195,7 @@ void DeleteSelectionCommand::SetStartingSelectionOnSmartDelete(
   DocumentLifecycle::DisallowTransitionScope disallow_transition(
       GetDocument().Lifecycle());
 
-  bool is_base_first = StartingSelection().IsBaseFirst();
+  const bool is_base_first = StartingSelection().IsBaseFirst();
   // TODO(yosin): We should not call |createVisiblePosition()| here and use
   // |start| and |end| as base/extent since |VisibleSelection| also calls
   // |createVisiblePosition()| during construction.
@@ -932,7 +932,7 @@ void DeleteSelectionCommand::MergeParagraphs(EditingState* editing_state) {
   need_placeholder_ = need_placeholder;
   // The endingPosition was likely clobbered by the move, so recompute it
   // (moveParagraph selects the moved paragraph).
-  ending_position_ = EndingSelection().Start();
+  ending_position_ = EndingVisibleSelection().Start();
 }
 
 void DeleteSelectionCommand::RemovePreviouslySelectedEmptyTableRows(
@@ -1059,9 +1059,10 @@ void DeleteSelectionCommand::DoApply(EditingState* editing_state) {
   // If selection has not been set to a custom selection when the command was
   // created, use the current ending selection.
   if (!has_selection_to_delete_)
-    selection_to_delete_ = EndingSelection();
+    selection_to_delete_ = EndingVisibleSelection();
 
-  if (!selection_to_delete_.IsNonOrphanedRange() ||
+  if (!selection_to_delete_.IsValidFor(GetDocument()) ||
+      !selection_to_delete_.IsRange() ||
       !selection_to_delete_.IsContentEditable()) {
     // editing/execCommand/delete-non-editable-range-crash.html reaches here.
     return;
@@ -1204,7 +1205,7 @@ void DeleteSelectionCommand::DoApply(EditingState* editing_state) {
   // Fixes: <rdar://problem/3910425> REGRESSION (Mail): Crash in
   // ReplaceSelectionCommand; selection is empty, leading to null deref
   if (!reference_move_position_.IsConnected())
-    reference_move_position_ = EndingSelection().Start();
+    reference_move_position_ = EndingVisibleSelection().Start();
 
   // Move selection shouldn't left empty <li> block.
   CleanupAfterDeletion(editing_state,

@@ -36,6 +36,7 @@
 #include "components/grit/components_scaled_resources.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/notification_service.h"
+#include "extensions/browser/extension_file_task_runner.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
@@ -375,7 +376,7 @@ void ThemeService::RemoveUnusedThemes(bool ignore_infobars) {
       // themes because externally installed themes are initially disabled.
       int disable_reason = prefs->GetDisableReasons(extension->id());
       if (!prefs->IsExtensionDisabled(extension->id()) ||
-          disable_reason == Extension::DISABLE_USER_ACTION) {
+          disable_reason == extensions::disable_reason::DISABLE_USER_ACTION) {
         remove_list.push_back((*it)->id());
       }
     }
@@ -878,7 +879,7 @@ void ThemeService::OnThemeBuiltFromExtension(
     return;
 
   // Write the packed file to disk.
-  service->GetFileTaskRunner()->PostTask(
+  extensions::GetExtensionFileTaskRunner()->PostTask(
       FROM_HERE, base::Bind(&WritePackToDiskCallback, base::RetainedRef(pack),
                             extension->path()));
 
@@ -911,7 +912,7 @@ void ThemeService::OnThemeBuiltFromExtension(
 
     // Disable the old theme.
     service->DisableExtension(previous_theme_id,
-                              extensions::Extension::DISABLE_USER_ACTION);
+                              extensions::disable_reason::DISABLE_USER_ACTION);
 
     can_revert_theme = true;
   }

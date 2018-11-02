@@ -17,18 +17,36 @@
 #include "base/android/jni_int_wrapper.h"
 
 // Step 1: forward declarations.
-namespace {
-const char kMyOtherInnerClassClassPath[] =
+JNI_REGISTRATION_EXPORT extern const char
+    kClassPath_org_chromium_TestJni_00024MyOtherInnerClass[];
+const char kClassPath_org_chromium_TestJni_00024MyOtherInnerClass[] =
     "org/chromium/TestJni$MyOtherInnerClass";
-const char kTestJniClassPath[] = "org/chromium/TestJni";
-// Leaking this jclass as we cannot use LazyInstance from some threads.
-base::subtle::AtomicWord g_MyOtherInnerClass_clazz __attribute__((unused)) = 0;
-#define MyOtherInnerClass_clazz(env) base::android::LazyGetClass(env, kMyOtherInnerClassClassPath, &g_MyOtherInnerClass_clazz)
-// Leaking this jclass as we cannot use LazyInstance from some threads.
-base::subtle::AtomicWord g_TestJni_clazz __attribute__((unused)) = 0;
-#define TestJni_clazz(env) base::android::LazyGetClass(env, kTestJniClassPath, &g_TestJni_clazz)
 
-}  // namespace
+JNI_REGISTRATION_EXPORT extern const char kClassPath_org_chromium_TestJni[];
+const char kClassPath_org_chromium_TestJni[] = "org/chromium/TestJni";
+
+// Leaking this jclass as we cannot use LazyInstance from some threads.
+JNI_REGISTRATION_EXPORT base::subtle::AtomicWord
+    g_org_chromium_TestJni_00024MyOtherInnerClass_clazz = 0;
+#ifndef org_chromium_TestJni_00024MyOtherInnerClass_clazz_defined
+#define org_chromium_TestJni_00024MyOtherInnerClass_clazz_defined
+inline jclass org_chromium_TestJni_00024MyOtherInnerClass_clazz(JNIEnv* env) {
+  return base::android::LazyGetClass(env,
+      kClassPath_org_chromium_TestJni_00024MyOtherInnerClass,
+      &g_org_chromium_TestJni_00024MyOtherInnerClass_clazz);
+}
+#endif
+
+// Leaking this jclass as we cannot use LazyInstance from some threads.
+JNI_REGISTRATION_EXPORT base::subtle::AtomicWord g_org_chromium_TestJni_clazz =
+    0;
+#ifndef org_chromium_TestJni_clazz_defined
+#define org_chromium_TestJni_clazz_defined
+inline jclass org_chromium_TestJni_clazz(JNIEnv* env) {
+  return base::android::LazyGetClass(env, kClassPath_org_chromium_TestJni,
+      &g_org_chromium_TestJni_clazz);
+}
+#endif
 
 // Step 2: method stubs.
 
@@ -47,57 +65,6 @@ JNI_GENERATOR_EXPORT jint
     Java_org_chromium_TestJni_00024MyOtherInnerClass_nativeInit(JNIEnv* env,
     jobject jcaller) {
   return Init(env, base::android::JavaParamRef<jobject>(env, jcaller));
-}
-
-// Step 3: RegisterNatives.
-
-static const JNINativeMethod kMethodsMyOtherInnerClass[] = {
-    { "nativeInit",
-"("
-")"
-"I",
-    reinterpret_cast<void*>(Java_org_chromium_TestJni_00024MyOtherInnerClass_nativeInit)
-    },
-};
-
-static const JNINativeMethod kMethodsTestJni[] = {
-    { "nativeInit",
-"("
-")"
-"I", reinterpret_cast<void*>(Java_org_chromium_TestJni_nativeInit) },
-};
-
-// TODO(agrieve): Remove these empty registration functions and functions
-// calling them. https://crbug.com/683256.
-inline bool RegisterNativesImpl(JNIEnv* env) {
-  return true;
-}
-
-JNI_REGISTRATION_EXPORT bool RegisterNative_org_chromium_TestJni(JNIEnv* env) {
-
-  const int kMethodsMyOtherInnerClassSize =
-      arraysize(kMethodsMyOtherInnerClass);
-
-  if (env->RegisterNatives(MyOtherInnerClass_clazz(env),
-                           kMethodsMyOtherInnerClass,
-                           kMethodsMyOtherInnerClassSize) < 0) {
-    jni_generator::HandleRegistrationError(
-        env, MyOtherInnerClass_clazz(env), __FILE__);
-    return false;
-  }
-
-  const int kMethodsTestJniSize =
-      arraysize(kMethodsTestJni);
-
-  if (env->RegisterNatives(TestJni_clazz(env),
-                           kMethodsTestJni,
-                           kMethodsTestJniSize) < 0) {
-    jni_generator::HandleRegistrationError(
-        env, TestJni_clazz(env), __FILE__);
-    return false;
-  }
-
-  return true;
 }
 
 #endif  // org_chromium_TestJni_JNI

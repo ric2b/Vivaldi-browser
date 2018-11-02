@@ -18,7 +18,6 @@
 #include "cc/animation/timing_function.h"
 #include "cc/animation/transform_operations.h"
 #include "cc/base/completion_event.h"
-#include "cc/base/time_util.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/layer_impl.h"
 #include "cc/test/animation_test_common.h"
@@ -90,7 +89,7 @@ class LayerTreeHostAnimationTestSetNeedsAnimateShouldNotSetCommitRequested
 
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
 
-  void BeginMainFrame(const BeginFrameArgs& args) override {
+  void BeginMainFrame(const viz::BeginFrameArgs& args) override {
     // We skip the first commit because its the commit that populates the
     // impl thread with a tree. After the second commit, the test is done.
     if (num_commits_ != 1)
@@ -139,7 +138,7 @@ class LayerTreeHostAnimationTestSetNeedsAnimateInsideAnimationCallback
 
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
 
-  void BeginMainFrame(const BeginFrameArgs& args) override {
+  void BeginMainFrame(const viz::BeginFrameArgs& args) override {
     if (!num_begin_frames_) {
       layer_tree_host()->SetNeedsAnimate();
       num_begin_frames_++;
@@ -178,7 +177,7 @@ class LayerTreeHostAnimationTestAddAnimation
   }
 
   void NotifyAnimationStarted(base::TimeTicks monotonic_time,
-                              TargetProperty::Type target_property,
+                              int target_property,
                               int group) override {
     EXPECT_LT(base::TimeTicks(), monotonic_time);
 
@@ -263,7 +262,7 @@ class LayerTreeHostAnimationTestAnimationsGetDeleted
   }
 
   void NotifyAnimationFinished(base::TimeTicks monotonic_time,
-                               TargetProperty::Type target_property,
+                               int target_property,
                                int group) override {
     // Animations on the impl-side ElementAnimations only get deleted during
     // a commit, so we need to schedule a commit.
@@ -305,7 +304,7 @@ class LayerTreeHostAnimationTestAddAnimationWithTimingFunction
       return;
 
     // Wait for the commit with the animation to happen.
-    if (host_impl->sync_tree()->source_frame_number() != 0)
+    if (host_impl->active_tree()->source_frame_number() != 0)
       return;
 
     scoped_refptr<AnimationTimeline> timeline_impl =
@@ -322,7 +321,7 @@ class LayerTreeHostAnimationTestAddAnimationWithTimingFunction
     float end_opacity = curve->GetValue(curve->Duration());
     float linearly_interpolated_opacity =
         0.25f * end_opacity + 0.75f * start_opacity;
-    base::TimeDelta time = TimeUtil::Scale(curve->Duration(), 0.25f);
+    base::TimeDelta time = curve->Duration() * 0.25f;
     // If the linear timing function associated with this animation was not
     // picked up, then the linearly interpolated opacity would be different
     // because of the default ease timing function.
@@ -363,7 +362,7 @@ class LayerTreeHostAnimationTestSynchronizeAnimationStartTimes
   }
 
   void NotifyAnimationStarted(base::TimeTicks monotonic_time,
-                              TargetProperty::Type target_property,
+                              int target_property,
                               int group) override {
     Animation* animation = player_child_->GetAnimation(TargetProperty::OPACITY);
     main_start_time_ = animation->start_time();
@@ -412,7 +411,7 @@ class LayerTreeHostAnimationTestAnimationFinishedEvents
   }
 
   void NotifyAnimationFinished(base::TimeTicks monotonic_time,
-                               TargetProperty::Type target_property,
+                               int target_property,
                                int group) override {
     Animation* animation = player_->GetAnimation(TargetProperty::OPACITY);
     if (animation)
@@ -524,7 +523,7 @@ class LayerTreeHostAnimationTestCancelAnimateCommit
 
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
 
-  void BeginMainFrame(const BeginFrameArgs& args) override {
+  void BeginMainFrame(const viz::BeginFrameArgs& args) override {
     num_begin_frames_++;
     // No-op animate will cancel the commit.
     if (layer_tree_host()->SourceFrameNumber() == 1) {
@@ -568,7 +567,7 @@ class LayerTreeHostAnimationTestForceRedraw
 
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
 
-  void BeginMainFrame(const BeginFrameArgs& args) override {
+  void BeginMainFrame(const viz::BeginFrameArgs& args) override {
     if (++num_animate_ < 2)
       layer_tree_host()->SetNeedsAnimate();
   }
@@ -604,7 +603,7 @@ class LayerTreeHostAnimationTestAnimateAfterSetNeedsCommit
 
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
 
-  void BeginMainFrame(const BeginFrameArgs& args) override {
+  void BeginMainFrame(const viz::BeginFrameArgs& args) override {
     if (++num_animate_ <= 2) {
       layer_tree_host()->SetNeedsCommit();
       layer_tree_host()->SetNeedsAnimate();
@@ -690,7 +689,7 @@ class LayerTreeHostAnimationTestCheckerboardDoesntStartAnimations
   }
 
   void NotifyAnimationStarted(base::TimeTicks monotonic_time,
-                              TargetProperty::Type target_property,
+                              int target_property,
                               int group) override {
     if (TestEnded())
       return;
@@ -816,8 +815,8 @@ class LayerTreeHostAnimationTestScrollOffsetAnimationTakeover
   }
 
   void NotifyAnimationTakeover(base::TimeTicks monotonic_time,
-                               TargetProperty::Type target_property,
-                               double animation_start_time,
+                               int target_property,
+                               base::TimeTicks animation_start_time,
                                std::unique_ptr<AnimationCurve> curve) override {
     EndTest();
   }
@@ -973,7 +972,7 @@ class LayerTreeHostAnimationTestScrollOffsetAnimationRemoval
 
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
 
-  void BeginMainFrame(const BeginFrameArgs& args) override {
+  void BeginMainFrame(const viz::BeginFrameArgs& args) override {
     switch (layer_tree_host()->SourceFrameNumber()) {
       case 0:
         break;
@@ -995,7 +994,7 @@ class LayerTreeHostAnimationTestScrollOffsetAnimationRemoval
   }
 
   void WillBeginImplFrameOnThread(LayerTreeHostImpl* host_impl,
-                                  const BeginFrameArgs& args) override {
+                                  const viz::BeginFrameArgs& args) override {
     host_impl->BlockNotifyReadyToActivateForTesting(
         ShouldBlockActivation(host_impl));
   }
@@ -1106,7 +1105,7 @@ class LayerTreeHostAnimationTestAnimationsAddedToNewAndExistingLayers
   }
 
   void WillBeginImplFrameOnThread(LayerTreeHostImpl* host_impl,
-                                  const BeginFrameArgs& args) override {
+                                  const viz::BeginFrameArgs& args) override {
     if (!host_impl->pending_tree() ||
         host_impl->pending_tree()->source_frame_number() != 2)
       return;
@@ -1189,12 +1188,13 @@ class LayerTreeHostAnimationTestPendingTreeAnimatesFirstCommit
   }
 
   void WillPrepareTilesOnThread(LayerTreeHostImpl* host_impl) override {
-    if (host_impl->sync_tree()->source_frame_number() != 0)
+    // After activating the sync tree PrepareTiles will be called
+    // again (which races with the test exiting).
+    LayerTreeImpl* sync_tree = host_impl->sync_tree();
+    if (!sync_tree || TestEnded())
       return;
 
-    // After checking this on the sync tree, we will activate, which will cause
-    // PrepareTiles to happen again (which races with the test exiting).
-    if (TestEnded())
+    if (sync_tree->source_frame_number() != 0)
       return;
 
     scoped_refptr<AnimationTimeline> timeline_impl =
@@ -1202,7 +1202,7 @@ class LayerTreeHostAnimationTestPendingTreeAnimatesFirstCommit
     scoped_refptr<AnimationPlayer> player_impl =
         timeline_impl->GetPlayerById(player_id_);
 
-    LayerImpl* child = host_impl->sync_tree()->LayerById(layer_->id());
+    LayerImpl* child = sync_tree->LayerById(layer_->id());
     Animation* animation = player_impl->GetAnimation(TargetProperty::TRANSFORM);
 
     // The animation should be starting for the first frame.
@@ -1371,10 +1371,10 @@ class LayerTreeHostAnimationTestAddAnimationAfterAnimating
 
     Animation* root_anim =
         player_impl_->GetAnimation(TargetProperty::TRANSFORM);
-    EXPECT_GT((root_anim->start_time() - base::TimeTicks()).InSecondsF(), 0);
+    EXPECT_LT(base::TimeTicks(), root_anim->start_time());
 
     Animation* anim = player_child_impl_->GetAnimation(TargetProperty::OPACITY);
-    EXPECT_GT((anim->start_time() - base::TimeTicks()).InSecondsF(), 0);
+    EXPECT_LT(base::TimeTicks(), anim->start_time());
 
     EndTest();
   }
@@ -1695,7 +1695,7 @@ class LayerTreeHostAnimationTestImplSideInvalidation
       // invalidation and make sure it finishes before the main thread is
       // released.
       did_request_impl_side_invalidation_ = true;
-      host_impl->RequestImplSideInvalidation();
+      host_impl->RequestImplSideInvalidationForCheckerImagedTiles();
     }
   }
 
@@ -1749,16 +1749,15 @@ class LayerTreeHostAnimationTestNotifyAnimationFinished
   }
 
   void NotifyAnimationStarted(base::TimeTicks monotonic_time,
-                              TargetProperty::Type target_property,
+                              int target_property,
                               int group) override {
     called_animation_started_ = true;
-    layer_tree_host()->AnimateLayers(base::TimeTicks::FromInternalValue(
-        std::numeric_limits<int64_t>::max()));
+    layer_tree_host()->AnimateLayers(base::TimeTicks::Max());
     PostSetNeedsCommitToMainThread();
   }
 
   void NotifyAnimationFinished(base::TimeTicks monotonic_time,
-                               TargetProperty::Type target_property,
+                               int target_property,
                                int group) override {
     called_animation_finished_ = true;
     EndTest();

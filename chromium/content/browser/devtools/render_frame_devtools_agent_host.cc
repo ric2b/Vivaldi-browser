@@ -18,7 +18,7 @@
 #include "content/browser/devtools/devtools_frame_trace_recorder.h"
 #include "content/browser/devtools/devtools_manager.h"
 #include "content/browser/devtools/devtools_session.h"
-#include "content/browser/devtools/page_navigation_throttle.h"
+#include "content/browser/devtools/protocol/browser_handler.h"
 #include "content/browser/devtools/protocol/dom_handler.h"
 #include "content/browser/devtools/protocol/emulation_handler.h"
 #include "content/browser/devtools/protocol/input_handler.h"
@@ -110,45 +110,41 @@ class RenderFrameDevToolsAgentHost::FrameHostHolder {
   bool ProcessChunkedMessageFromAgent(const DevToolsMessageChunk& chunk);
   void Suspend();
   void Resume();
-  std::string StateCookie() const { return chunk_processor_.state_cookie(); }
-  void ReattachWithCookie(std::string cookie);
+  std::string StateCookie(int session_id) const;
+  void ReattachWithCookie(DevToolsSession* session, std::string cookie);
 
  private:
-  void SendMessageToClient(int session_id, const std::string& message);
-
-  RenderFrameDevToolsAgentHost* agent_;
-  RenderFrameHostImpl* host_;
-  bool attached_;
-  bool suspended_;
-  DevToolsMessageChunkProcessor chunk_processor_;
-  struct PendingMessage {
-    int session_id;
+  struct Message {
     std::string method;
     std::string message;
   };
-  // <session_id, message>
-  std::vector<std::pair<int, std::string>> pending_messages_;
-  // <call_id> -> PendingMessage
-  std::map<int, PendingMessage> sent_messages_;
-  // These are sent messages for which we got a reply while suspended.
-  std::map<int, PendingMessage> sent_messages_whose_reply_came_while_suspended_;
+  struct SessionInfo {
+    std::unique_ptr<DevToolsMessageChunkProcessor> chunk_processor;
+    std::vector<std::string> pending_messages;
+    using CallId = int;
+    std::map<CallId, Message> sent_messages;
+  };
+
+  void SendChunkedMessage(int session_id, const std::string& message);
+  SessionInfo& InitInfo(int session_id);
+
+  RenderFrameDevToolsAgentHost* agent_;
+  RenderFrameHostImpl* host_;
+  bool suspended_;
+  base::flat_map<int, SessionInfo> infos_;
 };
 
 RenderFrameDevToolsAgentHost::FrameHostHolder::FrameHostHolder(
-    RenderFrameDevToolsAgentHost* agent, RenderFrameHostImpl* host)
-    : agent_(agent),
-      host_(host),
-      attached_(false),
-      suspended_(false),
-      chunk_processor_(base::Bind(
-           &RenderFrameDevToolsAgentHost::FrameHostHolder::SendMessageToClient,
-           base::Unretained(this))) {
+    RenderFrameDevToolsAgentHost* agent,
+    RenderFrameHostImpl* host)
+    : agent_(agent), host_(host), suspended_(false) {
+  DCHECK(!IsBrowserSideNavigationEnabled());
   DCHECK(agent_);
   DCHECK(host_);
 }
 
 RenderFrameDevToolsAgentHost::FrameHostHolder::~FrameHostHolder() {
-  if (attached_)
+  if (!infos_.empty())
     agent_->RevokePolicy(host_);
 }
 
@@ -157,42 +153,48 @@ void RenderFrameDevToolsAgentHost::FrameHostHolder::Attach(
   host_->Send(new DevToolsAgentMsg_Attach(
       host_->GetRoutingID(), agent_->GetId(), session->session_id()));
   agent_->GrantPolicy(host_);
-  attached_ = true;
+  InitInfo(session->session_id());
 }
 
 void RenderFrameDevToolsAgentHost::FrameHostHolder::Reattach(
     FrameHostHolder* old) {
-  std::string cookie = old ? old->chunk_processor_.state_cookie() : "";
-  ReattachWithCookie(std::move(cookie));
-  if (!old)
-    return;
-  if (IsBrowserSideNavigationEnabled()) {
-    for (const auto& pair :
-         old->sent_messages_whose_reply_came_while_suspended_) {
-      DispatchProtocolMessage(pair.second.session_id, pair.first,
-                              pair.second.method, pair.second.message);
+  for (DevToolsSession* session : agent_->sessions()) {
+    int session_id = session->session_id();
+    std::string cookie = old ? old->StateCookie(session_id) : std::string();
+    ReattachWithCookie(session, std::move(cookie));
+    if (!old)
+      continue;
+    auto it = old->infos_.find(session_id);
+    if (it == old->infos_.end())
+      continue;
+    for (const auto& pair : it->second.sent_messages) {
+      DispatchProtocolMessage(session_id, pair.first, pair.second.method,
+                              pair.second.message);
     }
-  }
-  for (const auto& pair : old->sent_messages_) {
-    DispatchProtocolMessage(pair.second.session_id, pair.first,
-                            pair.second.method, pair.second.message);
   }
 }
 
+std::string RenderFrameDevToolsAgentHost::FrameHostHolder::StateCookie(
+    int session_id) const {
+  auto it = infos_.find(session_id);
+  if (it == infos_.end())
+    return std::string();
+  return it->second.chunk_processor->state_cookie();
+}
+
 void RenderFrameDevToolsAgentHost::FrameHostHolder::ReattachWithCookie(
+    DevToolsSession* session,
     std::string cookie) {
-  chunk_processor_.set_state_cookie(cookie);
+  InitInfo(session->session_id()).chunk_processor->set_state_cookie(cookie);
   host_->Send(new DevToolsAgentMsg_Reattach(
-      host_->GetRoutingID(), agent_->GetId(),
-      agent_->SingleSession()->session_id(), cookie));
+      host_->GetRoutingID(), agent_->GetId(), session->session_id(), cookie));
   agent_->GrantPolicy(host_);
-  attached_ = true;
 }
 
 void RenderFrameDevToolsAgentHost::FrameHostHolder::Detach(int session_id) {
   host_->Send(new DevToolsAgentMsg_Detach(host_->GetRoutingID(), session_id));
   agent_->RevokePolicy(host_);
-  attached_ = false;
+  infos_.erase(session_id);
 }
 
 void RenderFrameDevToolsAgentHost::FrameHostHolder::DispatchProtocolMessage(
@@ -202,12 +204,11 @@ void RenderFrameDevToolsAgentHost::FrameHostHolder::DispatchProtocolMessage(
     const std::string& message) {
   host_->Send(new DevToolsAgentMsg_DispatchOnInspectorBackend(
       host_->GetRoutingID(), session_id, call_id, method, message));
-  sent_messages_[call_id] = {session_id, method, message};
+  infos_[session_id].sent_messages[call_id] = {method, message};
 }
 
 void RenderFrameDevToolsAgentHost::FrameHostHolder::InspectElement(
     int session_id, int x, int y) {
-  DCHECK(attached_);
   host_->Send(new DevToolsAgentMsg_InspectElement(
       host_->GetRoutingID(), session_id, x, y));
 }
@@ -215,21 +216,27 @@ void RenderFrameDevToolsAgentHost::FrameHostHolder::InspectElement(
 bool
 RenderFrameDevToolsAgentHost::FrameHostHolder::ProcessChunkedMessageFromAgent(
     const DevToolsMessageChunk& chunk) {
-  return chunk_processor_.ProcessChunkedMessageFromAgent(chunk);
+  auto it = infos_.find(chunk.session_id);
+  if (it != infos_.end())
+    return it->second.chunk_processor->ProcessChunkedMessageFromAgent(chunk);
+  return true;
 }
 
-void RenderFrameDevToolsAgentHost::FrameHostHolder::SendMessageToClient(
+void RenderFrameDevToolsAgentHost::FrameHostHolder::SendChunkedMessage(
     int session_id,
     const std::string& message) {
-  int id = chunk_processor_.last_call_id();
-  PendingMessage sent_message = sent_messages_[id];
-  sent_messages_.erase(id);
+  auto it = infos_.find(session_id);
+  if (it == infos_.end())
+    return;
+  SessionInfo& info = it->second;
+  int id = info.chunk_processor->last_call_id();
+  Message sent_message = std::move(info.sent_messages[id]);
+  info.sent_messages.erase(id);
   if (suspended_) {
-    sent_messages_whose_reply_came_while_suspended_[id] = sent_message;
-    pending_messages_.push_back(std::make_pair(session_id, message));
+    info.pending_messages.push_back(message);
   } else {
-    DevToolsSession* session = agent_->SingleSession();
-    if (session && session->session_id() == session_id)
+    DevToolsSession* session = agent_->SessionById(session_id);
+    if (session)
       session->SendMessageToClient(message);
     // |this| may be deleted at this point.
   }
@@ -241,14 +248,24 @@ void RenderFrameDevToolsAgentHost::FrameHostHolder::Suspend() {
 
 void RenderFrameDevToolsAgentHost::FrameHostHolder::Resume() {
   suspended_ = false;
-  for (const auto& pair : pending_messages_) {
-    DevToolsSession* session = agent_->SingleSession();
-    if (session && session->session_id() == pair.first)
-      session->SendMessageToClient(pair.second);
+  for (DevToolsSession* session : agent_->sessions()) {
+    auto it = infos_.find(session->session_id());
+    if (it == infos_.end())
+      return;
+    SessionInfo& info = it->second;
+    std::vector<std::string> messages = std::move(info.pending_messages);
+    for (std::string& message : messages)
+      session->SendMessageToClient(message);
   }
-  std::vector<std::pair<int, std::string>> empty;
-  pending_messages_.swap(empty);
-  sent_messages_whose_reply_came_while_suspended_.clear();
+}
+
+RenderFrameDevToolsAgentHost::FrameHostHolder::SessionInfo&
+RenderFrameDevToolsAgentHost::FrameHostHolder::InitInfo(int session_id) {
+  SessionInfo& info = infos_[session_id];
+  info.chunk_processor.reset(new DevToolsMessageChunkProcessor(base::Bind(
+      &RenderFrameDevToolsAgentHost::FrameHostHolder::SendChunkedMessage,
+      base::Unretained(this))));
+  return info;
 }
 
 // RenderFrameDevToolsAgentHost ------------------------------------------------
@@ -355,14 +372,14 @@ RenderFrameDevToolsAgentHost::CreateThrottleForNavigation(
     frame_tree_node = frame_tree_node->parent();
   }
   RenderFrameDevToolsAgentHost* agent_host = FindAgentHost(frame_tree_node);
-  // Note Page.setControlNavigations is intended to control navigations in the
-  // main frame and all child frames and |page_handler_| only exists for the
-  // main frame.
+  // Note Network.setRequestInterceptionEnabled is intended to control
+  // navigations in the main frame and all child frames.
   if (!agent_host)
     return nullptr;
-  for (auto* page_handler : protocol::PageHandler::ForAgentHost(agent_host)) {
+  for (auto* network_handler :
+       protocol::NetworkHandler::ForAgentHost(agent_host)) {
     std::unique_ptr<NavigationThrottle> throttle =
-        page_handler->CreateThrottleForNavigation(navigation_handle);
+        network_handler->CreateThrottleForNavigation(navigation_handle);
     if (throttle)
       return throttle;
   }
@@ -384,18 +401,30 @@ bool RenderFrameDevToolsAgentHost::IsNetworkHandlerEnabled(
 }
 
 // static
-std::string RenderFrameDevToolsAgentHost::UserAgentOverride(
-    FrameTreeNode* frame_tree_node) {
+void RenderFrameDevToolsAgentHost::AppendDevToolsHeaders(
+    FrameTreeNode* frame_tree_node,
+    net::HttpRequestHeaders* headers) {
+  static const char kDevToolsEmulateNetworkConditionsClientId[] =
+      "X-DevTools-Emulate-Network-Conditions-Client-Id";
+
   frame_tree_node = GetFrameTreeNodeAncestor(frame_tree_node);
   RenderFrameDevToolsAgentHost* agent_host = FindAgentHost(frame_tree_node);
   if (!agent_host)
-    return std::string();
+    return;
+  std::string ua_override;
+  bool enabled = false;
   for (auto* network : protocol::NetworkHandler::ForAgentHost(agent_host)) {
-    std::string override = network->UserAgentOverride();
-    if (!override.empty())
-      return override;
+    enabled = enabled || network->enabled();
+    ua_override = network->UserAgentOverride();
+    if (!ua_override.empty())
+      break;
   }
-  return std::string();
+  if (!enabled)
+    return;
+  headers->SetHeader(kDevToolsEmulateNetworkConditionsClientId,
+                     agent_host->GetId());
+  if (!ua_override.empty())
+    headers->SetHeader(net::HttpRequestHeaders::kUserAgent, ua_override);
 }
 
 // static
@@ -495,6 +524,7 @@ void RenderFrameDevToolsAgentHost::AttachSession(DevToolsSession* session) {
 
   protocol::EmulationHandler* emulation_handler =
       new protocol::EmulationHandler();
+  session->AddHandler(base::WrapUnique(new protocol::BrowserHandler()));
   session->AddHandler(base::WrapUnique(new protocol::DOMHandler()));
   session->AddHandler(base::WrapUnique(emulation_handler));
   session->AddHandler(base::WrapUnique(new protocol::InputHandler()));
@@ -666,9 +696,9 @@ void RenderFrameDevToolsAgentHost::DidFinishNavigation(
 
   // UpdateFrameHost may destruct |this|.
   scoped_refptr<RenderFrameDevToolsAgentHost> protect(this);
-  if (handle->HasCommitted() && !handle->IsErrorPage())
-    UpdateFrameHost(handle->GetRenderFrameHost());
+  UpdateFrameHost(frame_tree_node_->current_frame_host());
   DCHECK(CheckConsistency());
+
   if (navigation_handles_.empty()) {
     for (auto& pair : suspended_messages_by_session_id_) {
       int session_id = pair.first;
@@ -1061,7 +1091,7 @@ void RenderFrameDevToolsAgentHost::UpdateProtocolHandlers(
     handlers_frame_host_->GetRenderWidgetHost()->GetRoutingID();
 #endif
   handlers_frame_host_ = host;
-  if (DevToolsSession* session = SingleSession())
+  for (DevToolsSession* session : sessions())
     session->SetRenderFrameHost(host);
 }
 
@@ -1076,9 +1106,11 @@ void RenderFrameDevToolsAgentHost::DisconnectWebContents() {
   if (pending_)
     DiscardPending();
   UpdateProtocolHandlers(nullptr);
-  if (DevToolsSession* session = SingleSession()) {
-    disconnected_cookie_ = current_->StateCookie();
-    current_->Detach(session->session_id());
+  for (DevToolsSession* session : sessions()) {
+    int session_id = session->session_id();
+    disconnected_cookie_for_session_[session_id] =
+        current_->StateCookie(session_id);
+    current_->Detach(session_id);
   }
   current_.reset();
   frame_tree_node_ = nullptr;
@@ -1106,9 +1138,12 @@ void RenderFrameDevToolsAgentHost::ConnectWebContents(WebContents* wc) {
   DCHECK(host);
   current_frame_crashed_ = false;
   current_.reset(new FrameHostHolder(this, host));
-  std::string cookie = std::move(disconnected_cookie_);
-  if (IsAttached())
-    current_->ReattachWithCookie(std::move(cookie));
+  for (DevToolsSession* session : sessions()) {
+    current_->ReattachWithCookie(
+        session,
+        std::move(disconnected_cookie_for_session_[session->session_id()]));
+  }
+  disconnected_cookie_for_session_.clear();
 
   UpdateProtocolHandlers(host);
   frame_tree_node_ = host->frame_tree_node();
@@ -1239,10 +1274,9 @@ void RenderFrameDevToolsAgentHost::SignalSynchronousSwapCompositorFrame(
     // Unblock the compositor.
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(
+        base::BindOnce(
             &RenderFrameDevToolsAgentHost::SynchronousSwapCompositorFrame,
-            dtah.get(),
-            base::Passed(std::move(frame_metadata))));
+            dtah.get(), base::Passed(std::move(frame_metadata))));
   }
 }
 
@@ -1312,11 +1346,6 @@ void RenderFrameDevToolsAgentHost::OnRequestNewWindow(
 
 bool RenderFrameDevToolsAgentHost::IsChildFrame() {
   return frame_tree_node_ && frame_tree_node_->parent();
-}
-
-DevToolsSession* RenderFrameDevToolsAgentHost::SingleSession() {
-  DCHECK(!IsBrowserSideNavigationEnabled());
-  return sessions().empty() ? nullptr : *sessions().begin();
 }
 
 }  // namespace content

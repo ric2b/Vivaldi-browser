@@ -69,6 +69,7 @@
 <translation id="4506599922270137252">Contactarea administratorului de sistem</translation>
 <translation id="4522570452068850558">Detalii</translation>
 <translation id="4558551763791394412">Încercați să dezactivați extensiile.</translation>
+<translation id="4611292653554630842">Autentificare</translation>
 <translation id="4708268264240856090">Conexiunea a fost întreruptă</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Rularea diagnosticului de rețea Windows<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">Cale executabilă</translation>
@@ -103,6 +104,7 @@
 <translation id="6328639280570009161">Încercați să dezactivați predicția rețelei</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> a refuzat conexiunea.</translation>
 <translation id="6569060085658103619">Actualmente vizualizați pagina unei extensii</translation>
+<translation id="6657585470893396449">Parolă</translation>
 <translation id="6685834062052613830">Deconectați-vă și finalizați configurarea</translation>
 <translation id="6711464428925977395">A apărut o problemă la serverul proxy sau adresa nu este corectă.</translation>
 <translation id="6757797048963528358">Dispozitivul a intrat în starea de repaus.</translation>
@@ -125,6 +127,7 @@
 <translation id="8289355894181816810">Dacă nu știți sigur ce înseamnă aceasta, contactați administratorul de rețea.</translation>
 <translation id="8332188693563227489">Accesul la <ph name="HOST_NAME" /> nu este permis</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> a răspuns prea târziu.</translation>
+<translation id="8503813439785031346">Nume de utilizator</translation>
 <translation id="8740359287975076522">&lt;abbr id="dnsDefinition"&gt;Adresa DNS&lt;/abbr&gt; pentru <ph name="HOST_NAME" /> nu a putut fi găsită. Se diagnostichează problema.</translation>
 <translation id="9001074447101275817">Proxy-ul <ph name="DOMAIN" /> necesită un nume de utilizator și o parolă.</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> folosește un protocol neacceptat.</translation>

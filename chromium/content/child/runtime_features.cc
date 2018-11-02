@@ -10,7 +10,6 @@
 #include "base/feature_list.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_params.h"
-#include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
 #include "content/common/content_switches_internal.h"
@@ -268,14 +267,8 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   if (command_line.HasSwitch(switches::kEnableSlimmingPaintV2))
     WebRuntimeFeatures::EnableSlimmingPaintV2(true);
 
-  if (base::FeatureList::IsEnabled(features::kDocumentWriteEvaluator))
-    WebRuntimeFeatures::EnableDocumentWriteEvaluator(true);
-
   if (base::FeatureList::IsEnabled(features::kLazyParseCSS))
     WebRuntimeFeatures::EnableLazyParseCSS(true);
-
-  WebRuntimeFeatures::EnableMediaDocumentDownloadButton(
-      base::FeatureList::IsEnabled(features::kMediaDocumentDownloadButton));
 
   WebRuntimeFeatures::EnablePassiveDocumentEventListeners(
       base::FeatureList::IsEnabled(features::kPassiveDocumentEventListeners));
@@ -324,9 +317,6 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   WebRuntimeFeatures::EnablePaymentRequest(
       base::FeatureList::IsEnabled(features::kWebPayments));
 
-  WebRuntimeFeatures::EnableServiceWorkerNavigationPreload(
-      base::FeatureList::IsEnabled(features::kServiceWorkerNavigationPreload));
-
   WebRuntimeFeatures::EnableServiceWorkerScriptStreaming(
       base::FeatureList::IsEnabled(features::kServiceWorkerScriptStreaming));
 
@@ -335,6 +325,9 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
 
   WebRuntimeFeatures::EnableMojoBlobs(
       base::FeatureList::IsEnabled(features::kMojoBlobs));
+
+  WebRuntimeFeatures::EnableNetworkService(
+      base::FeatureList::IsEnabled(features::kNetworkService));
 
   if (base::FeatureList::IsEnabled(features::kGamepadExtensions))
     WebRuntimeFeatures::EnableGamepadExtensions(true);
@@ -352,12 +345,18 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   if (base::FeatureList::IsEnabled(features::kSkipCompositingSmallScrollers))
     WebRuntimeFeatures::EnableSkipCompositingSmallScrollers(true);
 
-  if (base::FeatureList::IsEnabled(features::kGenericSensor))
+  if (base::FeatureList::IsEnabled(features::kGenericSensor)) {
     WebRuntimeFeatures::EnableGenericSensor(true);
+    if (base::FeatureList::IsEnabled(features::kGenericSensorExtraClasses))
+      WebRuntimeFeatures::EnableGenericSensorExtraClasses(true);
+  }
 
   if (base::FeatureList::IsEnabled(features::kLoadingWithMojo) ||
       base::FeatureList::IsEnabled(features::kNetworkService))
     WebRuntimeFeatures::EnableLoadingWithMojo(true);
+
+  if (base::FeatureList::IsEnabled(features::kOutOfBlinkCORS))
+    WebRuntimeFeatures::EnableOutOfBlinkCORS(true);
 
   WebRuntimeFeatures::EnableMediaCastOverlayButton(
       base::FeatureList::IsEnabled(media::kMediaCastOverlayButton));
@@ -407,21 +406,19 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   WebRuntimeFeatures::EnableLazyInitializeMediaControls(
       base::FeatureList::IsEnabled(features::kLazyInitializeMediaControls));
 
+  WebRuntimeFeatures::EnableMediaEngagementBypassAutoplayPolicies(
+      base::FeatureList::IsEnabled(
+          media::kMediaEngagementBypassAutoplayPolicies));
+
   // Enable explicitly enabled features, and then disable explicitly disabled
   // ones.
-  if (command_line.HasSwitch(switches::kEnableBlinkFeatures)) {
-    std::vector<std::string> enabled_features = base::SplitString(
-        command_line.GetSwitchValueASCII(switches::kEnableBlinkFeatures),
-        ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
-    for (const std::string& feature : enabled_features)
-      WebRuntimeFeatures::EnableFeatureFromString(feature, true);
+  for (const std::string& feature :
+       FeaturesFromSwitch(command_line, switches::kEnableBlinkFeatures)) {
+    WebRuntimeFeatures::EnableFeatureFromString(feature, true);
   }
-  if (command_line.HasSwitch(switches::kDisableBlinkFeatures)) {
-    std::vector<std::string> disabled_features = base::SplitString(
-        command_line.GetSwitchValueASCII(switches::kDisableBlinkFeatures),
-        ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
-    for (const std::string& feature : disabled_features)
-      WebRuntimeFeatures::EnableFeatureFromString(feature, false);
+  for (const std::string& feature :
+       FeaturesFromSwitch(command_line, switches::kDisableBlinkFeatures)) {
+    WebRuntimeFeatures::EnableFeatureFromString(feature, false);
   }
 }
 

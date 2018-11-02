@@ -1,6 +1,5 @@
 include_rules = [
   "+components/discardable_memory/client",
-  "+content/public/common",
   "+content/public/utility",
   "+mojo/public/cpp",
   "+printing/common",
@@ -8,3 +7,9 @@ include_rules = [
   "+skia",
   "+third_party/skia",
 ]
+
+specific_include_rules = {
+  "test_service_main\.cc": [
+    "+services/service_manager/public/c",
+  ]
+}

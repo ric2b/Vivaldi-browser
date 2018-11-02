@@ -12,6 +12,7 @@
 #include "ash/shell.h"
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
+#include "components/prefs/testing_pref_service.h"
 #include "components/session_manager/session_manager_types.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user_type.h"
@@ -61,6 +62,12 @@ void TestSessionControllerClient::Reset() {
 
   controller_->ClearUserSessionsForTest();
   controller_->SetSessionInfo(session_info_->Clone());
+
+  if (!controller_->GetSigninScreenPrefService()) {
+    auto pref_service = base::MakeUnique<TestingPrefServiceSimple>();
+    Shell::RegisterProfilePrefs(pref_service->registry(), true /* for_test */);
+    controller_->SetSigninScreenPrefServiceForTest(std::move(pref_service));
+  }
 }
 
 void TestSessionControllerClient::SetCanLockScreen(bool can_lock) {
@@ -92,6 +99,9 @@ void TestSessionControllerClient::CreatePredefinedUserSessions(int count) {
     AddUserSession(base::StringPrintf("user%d@tray", numbered_user_index));
   }
 
+  // Sets the first user as active.
+  SwitchActiveUser(controller_->GetUserSession(0)->user_info->account_id);
+
   // Updates session state after adding user sessions.
   SetSessionState(session_manager::SessionState::ACTIVE);
 }
@@ -102,18 +112,26 @@ void TestSessionControllerClient::AddUserSession(
     bool enable_settings,
     bool provide_pref_service,
     bool is_new_profile) {
+  auto account_id = AccountId::FromUserEmail(GetUserIdFromEmail(display_email));
   mojom::UserSessionPtr session = mojom::UserSession::New();
   session->session_id = ++fake_session_id_;
   session->user_info = mojom::UserInfo::New();
   session->user_info->type = user_type;
-  session->user_info->account_id =
-      AccountId::FromUserEmail(GetUserIdFromEmail(display_email));
+  session->user_info->account_id = account_id;
   session->user_info->display_name = "Über tray Über tray Über tray Über tray";
   session->user_info->display_email = display_email;
   session->user_info->is_new_profile = is_new_profile;
   session->should_enable_settings = enable_settings;
   session->should_show_notification_tray = true;
   controller_->UpdateUserSession(std::move(session));
+
+  if (provide_pref_service &&
+      !controller_->GetUserPrefServiceForUser(account_id)) {
+    auto pref_service = base::MakeUnique<TestingPrefServiceSimple>();
+    Shell::RegisterProfilePrefs(pref_service->registry(), true /* for_test */);
+    controller_->ProvideUserPrefServiceForTest(account_id,
+                                               std::move(pref_service));
+  }
 }
 
 void TestSessionControllerClient::UnlockScreen() {

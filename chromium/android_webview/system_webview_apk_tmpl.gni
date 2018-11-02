@@ -53,8 +53,10 @@ template("system_webview_apk_tmpl") {
         "//android_webview/apk/java/proguard.flags",
         "//base/android/proguard/chromium_apk.flags",
         "//base/android/proguard/chromium_code.flags",
+        "//base/android/proguard/disable_all_obfuscation.flags",
       ]
       png_to_webp = true
     }
+    command_line_flags_file = "webview-command-line"
   }
 }

@@ -14,6 +14,7 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "chromeos/audio/audio_device.h"
 #include "media/audio/audio_manager_base.h"
 
 namespace media {
@@ -27,7 +28,6 @@ class MEDIA_EXPORT AudioManagerCras : public AudioManagerBase {
   // AudioManager implementation.
   bool HasAudioOutputDevices() override;
   bool HasAudioInputDevices() override;
-  void ShowAudioInputSettings() override;
   void GetAudioInputDeviceNames(AudioDeviceNames* device_names) override;
   void GetAudioOutputDeviceNames(AudioDeviceNames* device_names) override;
   AudioParameters GetInputStreamParameters(
@@ -36,6 +36,7 @@ class MEDIA_EXPORT AudioManagerCras : public AudioManagerBase {
       const std::string& input_device_id) override;
   std::string GetDefaultOutputDeviceID() override;
   const char* GetName() override;
+  bool Shutdown() override;
 
   // AudioManagerBase implementation.
   AudioOutputStream* MakeLinearOutputStream(
@@ -74,18 +75,35 @@ class MEDIA_EXPORT AudioManagerCras : public AudioManagerBase {
   AudioInputStream* MakeInputStream(const AudioParameters& params,
                                     const std::string& device_id);
 
-  // Get minimum output buffer size for this board.
-  int GetMinimumOutputBufferSizePerBoard();
+  // Get default output buffer size for this board.
+  int GetDefaultOutputBufferSizePerBoard();
 
   void GetAudioDeviceNamesImpl(bool is_input, AudioDeviceNames* device_names);
 
-  void AddBeamformingDevices(AudioDeviceNames* device_names);
+  void GetAudioDevices(chromeos::AudioDeviceList* devices);
+  void GetAudioDevicesOnMainThread(chromeos::AudioDeviceList* devices,
+                                   base::WaitableEvent* event);
+  uint64_t GetPrimaryActiveInputNode();
+  void GetPrimaryActiveInputNodeOnMainThread(uint64_t* active_input_node_id,
+                                             base::WaitableEvent* event);
+  void GetPrimaryActiveOutputNodeOnMainThread(uint64_t* active_output_node_id,
+                                              base::WaitableEvent* event);
+  void GetDefaultOutputBufferSizeOnMainThread(int32_t* buffer_size,
+                                              base::WaitableEvent* event);
 
-  // Stores the mic positions field from the device.
-  std::vector<Point> mic_positions_;
+  void WaitEventOrShutdown(base::WaitableEvent* event);
 
-  const char* beamforming_on_device_id_;
-  const char* beamforming_off_device_id_;
+  // Signaled if AudioManagerCras is shutting down.
+  base::WaitableEvent on_shutdown_;
+
+  // Task runner of browser main thread. CrasAudioHandler should be only
+  // accessed on this thread.
+  scoped_refptr<base::SingleThreadTaskRunner> main_task_runner_;
+
+  // For posting tasks from audio thread to |main_task_runner_|.
+  base::WeakPtr<AudioManagerCras> weak_this_;
+
+  base::WeakPtrFactory<AudioManagerCras> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(AudioManagerCras);
 };

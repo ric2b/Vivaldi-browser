@@ -36,6 +36,7 @@
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_utils.h"
+#include "content/test/mock_widget_impl.h"
 #include "content/test/test_render_view_host.h"
 #include "gpu/ipc/common/gpu_messages.h"
 #include "gpu/ipc/service/image_transport_surface.h"
@@ -236,13 +237,7 @@ class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
 
 class MockRenderWidgetHostImpl : public RenderWidgetHostImpl {
  public:
-  MockRenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
-                           RenderProcessHost* process,
-                           int32_t routing_id)
-      : RenderWidgetHostImpl(delegate, process, routing_id, false) {
-    set_renderer_initialized(true);
-    lastWheelEventLatencyInfo = ui::LatencyInfo();
-  }
+  ~MockRenderWidgetHostImpl() override {}
 
   // Extracts |latency_info| and stores it in |lastWheelEventLatencyInfo|.
   void ForwardWheelEventWithLatencyInfo (
@@ -257,8 +252,36 @@ class MockRenderWidgetHostImpl : public RenderWidgetHostImpl {
   MOCK_METHOD0(Blur, void());
 
   ui::LatencyInfo lastWheelEventLatencyInfo;
+  static MockRenderWidgetHostImpl* Create(RenderWidgetHostDelegate* delegate,
+                                          RenderProcessHost* process,
+                                          int32_t routing_id) {
+    mojom::WidgetPtr widget;
+    std::unique_ptr<MockWidgetImpl> widget_impl =
+        base::MakeUnique<MockWidgetImpl>(mojo::MakeRequest(&widget));
+
+    return new MockRenderWidgetHostImpl(delegate, process, routing_id,
+                                        std::move(widget_impl),
+                                        std::move(widget));
+  }
 
  private:
+  MockRenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
+                           RenderProcessHost* process,
+                           int32_t routing_id,
+                           std::unique_ptr<MockWidgetImpl> widget_impl,
+                           mojom::WidgetPtr widget)
+      : RenderWidgetHostImpl(delegate,
+                             process,
+                             routing_id,
+                             std::move(widget),
+                             false),
+        widget_impl_(std::move(widget_impl)) {
+    set_renderer_initialized(true);
+    lastWheelEventLatencyInfo = ui::LatencyInfo();
+  }
+
+  std::unique_ptr<MockWidgetImpl> widget_impl_;
+
   DISALLOW_COPY_AND_ASSIGN(MockRenderWidgetHostImpl);
 };
 
@@ -339,11 +362,18 @@ NSEvent* MockScrollWheelEventWithMomentumPhase(SEL mockPhaseSelector,
 
 class RenderWidgetHostViewMacTest : public RenderViewHostImplTestHarness {
  public:
-  RenderWidgetHostViewMacTest() : rwhv_mac_(nullptr), old_rwhv_(nullptr) {
+  RenderWidgetHostViewMacTest(bool scroll_latching = false)
+      : rwhv_mac_(nullptr),
+        scroll_latching_(scroll_latching),
+        old_rwhv_(nullptr) {
     std::unique_ptr<base::SimpleTestTickClock> mock_clock(
         new base::SimpleTestTickClock());
     mock_clock->Advance(base::TimeDelta::FromMilliseconds(100));
     ui::SetEventTickClockForTesting(std::move(mock_clock));
+    if (scroll_latching)
+      EnableWheelScrollLatching();
+    else
+      DisableWheelScrollLatching();
   }
 
   void SetUp() override {
@@ -397,14 +427,30 @@ class RenderWidgetHostViewMacTest : public RenderViewHostImplTestHarness {
     return base::UTF16ToUTF8(rwhv_mac_->GetTextSelection()->selected_text());
   }
 
+  void EnableWheelScrollLatching() {
+    feature_list_.InitFromCommandLine(
+        features::kTouchpadAndWheelScrollLatching.name, "");
+  }
+
+  void DisableWheelScrollLatching() {
+    feature_list_.InitFromCommandLine(
+        "", features::kTouchpadAndWheelScrollLatching.name);
+  }
+
+  void IgnoreEmptyUnhandledWheelEventWithWheelGestures();
+  void ScrollWheelEndEventDelivery();
+
   RenderWidgetHostViewMac* rwhv_mac_;
   base::scoped_nsobject<RenderWidgetHostViewCocoa> rwhv_cocoa_;
+  bool scroll_latching_;
 
  private:
   // This class isn't derived from PlatformTest.
   base::mac::ScopedNSAutoreleasePool pool_;
 
   RenderWidgetHostView* old_rwhv_;
+
+  base::test::ScopedFeatureList feature_list_;
 
   DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewMacTest);
 };
@@ -460,8 +506,8 @@ TEST_F(RenderWidgetHostViewMacTest, FullscreenCloseOnEscape) {
       new MockRenderProcessHost(&browser_context);
   int32_t routing_id = process_host->GetNextRoutingID();
   // Owned by its |cocoa_view()|.
-  RenderWidgetHostImpl* rwh =
-      new RenderWidgetHostImpl(&delegate, process_host, routing_id, false);
+  MockRenderWidgetHostImpl* rwh =
+      MockRenderWidgetHostImpl::Create(&delegate, process_host, routing_id);
   RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(rwh, false);
 
   view->InitAsFullscreen(rwhv_mac_);
@@ -494,8 +540,8 @@ TEST_F(RenderWidgetHostViewMacTest, AcceleratorDestroy) {
       new MockRenderProcessHost(&browser_context);
   int32_t routing_id = process_host->GetNextRoutingID();
   // Owned by its |cocoa_view()|.
-  RenderWidgetHostImpl* rwh =
-      new RenderWidgetHostImpl(&delegate, process_host, routing_id, false);
+  MockRenderWidgetHostImpl* rwh =
+      MockRenderWidgetHostImpl::Create(&delegate, process_host, routing_id);
   RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(rwh, false);
 
   view->InitAsFullscreen(rwhv_mac_);
@@ -527,7 +573,7 @@ TEST_F(RenderWidgetHostViewMacTest, FilterNonPrintableCharacter) {
   MockRenderWidgetHostDelegate delegate;
   int32_t routing_id = process_host->GetNextRoutingID();
   MockRenderWidgetHostImpl* host =
-      new MockRenderWidgetHostImpl(&delegate, process_host, routing_id);
+      MockRenderWidgetHostImpl::Create(&delegate, process_host, routing_id);
   RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host, false);
 
   // Simulate ctrl+F12, will produce a private use character but shouldn't
@@ -573,7 +619,7 @@ TEST_F(RenderWidgetHostViewMacTest, InvalidKeyCode) {
   MockRenderWidgetHostDelegate delegate;
   int32_t routing_id = process_host->GetNextRoutingID();
   MockRenderWidgetHostImpl* host =
-      new MockRenderWidgetHostImpl(&delegate, process_host, routing_id);
+      MockRenderWidgetHostImpl::Create(&delegate, process_host, routing_id);
   RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host, false);
 
   // Simulate "Convert" key on JIS PC keyboard, will generate a |NSFlagsChanged|
@@ -954,7 +1000,7 @@ TEST_F(RenderWidgetHostViewMacTest, BlurAndFocusOnSetActive) {
   // Owned by its |cocoa_view()|.
   int32_t routing_id = process_host->GetNextRoutingID();
   MockRenderWidgetHostImpl* rwh =
-      new MockRenderWidgetHostImpl(&delegate, process_host, routing_id);
+      MockRenderWidgetHostImpl::Create(&delegate, process_host, routing_id);
   RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(rwh, false);
 
   base::scoped_nsobject<CocoaTestHelperWindow> window(
@@ -998,7 +1044,7 @@ TEST_F(RenderWidgetHostViewMacTest, LastWheelEventLatencyInfoExists) {
   MockRenderWidgetHostDelegate delegate;
   int32_t routing_id = process_host->GetNextRoutingID();
   MockRenderWidgetHostImpl* host =
-      new MockRenderWidgetHostImpl(&delegate, process_host, routing_id);
+      MockRenderWidgetHostImpl::Create(&delegate, process_host, routing_id);
   RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host, false);
   process_host->sink().ClearMessages();
 
@@ -1036,7 +1082,7 @@ TEST_F(RenderWidgetHostViewMacTest, SourceEventTypeExistsInLatencyInfo) {
   MockRenderWidgetHostDelegate delegate;
   int32_t routing_id = process_host->GetNextRoutingID();
   MockRenderWidgetHostImpl* host =
-      new MockRenderWidgetHostImpl(&delegate, process_host, routing_id);
+      MockRenderWidgetHostImpl::Create(&delegate, process_host, routing_id);
   RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host, false);
   process_host->sink().ClearMessages();
 
@@ -1051,7 +1097,7 @@ TEST_F(RenderWidgetHostViewMacTest, SourceEventTypeExistsInLatencyInfo) {
   host->ShutdownAndDestroyWidget(true);
 }
 
-TEST_F(RenderWidgetHostViewMacTest, ScrollWheelEndEventDelivery) {
+void RenderWidgetHostViewMacTest::ScrollWheelEndEventDelivery() {
   // Initialize the view associated with a MockRenderWidgetHostImpl, rather than
   // the MockRenderProcessHost that is set up by the test harness which mocks
   // out |OnMessageReceived()|.
@@ -1062,7 +1108,7 @@ TEST_F(RenderWidgetHostViewMacTest, ScrollWheelEndEventDelivery) {
   MockRenderWidgetHostDelegate delegate;
   int32_t routing_id = process_host->GetNextRoutingID();
   MockRenderWidgetHostImpl* host =
-      new MockRenderWidgetHostImpl(&delegate, process_host, routing_id);
+      MockRenderWidgetHostImpl::Create(&delegate, process_host, routing_id);
   RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host, false);
   process_host->sink().ClearMessages();
 
@@ -1088,10 +1134,20 @@ TEST_F(RenderWidgetHostViewMacTest, ScrollWheelEndEventDelivery) {
   NSEvent* event2 = MockScrollWheelEventWithPhase(@selector(phaseEnded), 0);
   [NSApp postEvent:event2 atStart:NO];
   base::RunLoop().RunUntilIdle();
-  ASSERT_EQ(1U, process_host->sink().message_count());
+  if (scroll_latching_) {
+    // The wheel event with phaseEnded won't be sent to the render view
+    // immediately, instead the mouse_wheel_phase_handler will wait for 100ms
+    // to see if a wheel event with momentumPhase began arrives or not.
+    ASSERT_EQ(0U, process_host->sink().message_count());
+  } else {
+    ASSERT_EQ(1U, process_host->sink().message_count());
+  }
 
   // Clean up.
   host->ShutdownAndDestroyWidget(true);
+}
+TEST_F(RenderWidgetHostViewMacTest, ScrollWheelEndEventDelivery) {
+  ScrollWheelEndEventDelivery();
 }
 
 TEST_F(RenderWidgetHostViewMacTest, PointerEventWithEraserType) {
@@ -1105,7 +1161,7 @@ TEST_F(RenderWidgetHostViewMacTest, PointerEventWithEraserType) {
   MockRenderWidgetHostDelegate delegate;
   int32_t routing_id = process_host->GetNextRoutingID();
   MockRenderWidgetHostImpl* host =
-      new MockRenderWidgetHostImpl(&delegate, process_host, routing_id);
+      MockRenderWidgetHostImpl::Create(&delegate, process_host, routing_id);
   RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host, false);
   process_host->sink().ClearMessages();
 
@@ -1140,7 +1196,7 @@ TEST_F(RenderWidgetHostViewMacTest, PointerEventWithPenType) {
   MockRenderWidgetHostDelegate delegate;
   int32_t routing_id = process_host->GetNextRoutingID();
   MockRenderWidgetHostImpl* host =
-      new MockRenderWidgetHostImpl(&delegate, process_host, routing_id);
+      MockRenderWidgetHostImpl::Create(&delegate, process_host, routing_id);
   RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host, false);
   process_host->sink().ClearMessages();
 
@@ -1175,7 +1231,7 @@ TEST_F(RenderWidgetHostViewMacTest, PointerEventWithMouseType) {
   MockRenderWidgetHostDelegate delegate;
   int32_t routing_id = process_host->GetNextRoutingID();
   MockRenderWidgetHostImpl* host =
-      new MockRenderWidgetHostImpl(&delegate, process_host, routing_id);
+      MockRenderWidgetHostImpl::Create(&delegate, process_host, routing_id);
   RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host, false);
   process_host->sink().ClearMessages();
 
@@ -1192,8 +1248,8 @@ TEST_F(RenderWidgetHostViewMacTest, PointerEventWithMouseType) {
   host->ShutdownAndDestroyWidget(true);
 }
 
-TEST_F(RenderWidgetHostViewMacTest,
-       IgnoreEmptyUnhandledWheelEventWithWheelGestures) {
+void RenderWidgetHostViewMacTest::
+    IgnoreEmptyUnhandledWheelEventWithWheelGestures() {
   // Initialize the view associated with a MockRenderWidgetHostImpl, rather than
   // the MockRenderProcessHost that is set up by the test harness which mocks
   // out |OnMessageReceived()|.
@@ -1204,7 +1260,7 @@ TEST_F(RenderWidgetHostViewMacTest,
   MockRenderWidgetHostDelegate delegate;
   int32_t routing_id = process_host->GetNextRoutingID();
   MockRenderWidgetHostImpl* host =
-      new MockRenderWidgetHostImpl(&delegate, process_host, routing_id);
+      MockRenderWidgetHostImpl::Create(&delegate, process_host, routing_id);
   RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host, false);
   process_host->sink().ClearMessages();
 
@@ -1226,7 +1282,21 @@ TEST_F(RenderWidgetHostViewMacTest,
   std::unique_ptr<IPC::Message> response1(
       new InputHostMsg_HandleInputEvent_ACK(0, unhandled_ack));
   host->OnMessageReceived(*response1);
-  ASSERT_EQ(2U, process_host->sink().message_count());
+
+  if (scroll_latching_) {
+    // Only wheel event ack exists since GSB event is blocking.
+    ASSERT_EQ(1U, process_host->sink().message_count());
+    // Send GSB ack.
+    InputEventAck unhandled_scroll_ack(
+        InputEventAckSource::COMPOSITOR_THREAD,
+        blink::WebInputEvent::kGestureScrollBegin,
+        INPUT_EVENT_ACK_STATE_CONSUMED);
+    std::unique_ptr<IPC::Message> scroll_response1(
+        new InputHostMsg_HandleInputEvent_ACK(0, unhandled_scroll_ack));
+    host->OnMessageReceived(*scroll_response1);
+  } else {
+    ASSERT_EQ(2U, process_host->sink().message_count());
+  }
   process_host->sink().ClearMessages();
 
   InputEventAck unhandled_scroll_ack(InputEventAckSource::COMPOSITOR_THREAD,
@@ -1243,7 +1313,12 @@ TEST_F(RenderWidgetHostViewMacTest,
   // Send another wheel event, this time for scrolling by 0 lines (empty event).
   NSEvent* event2 = MockScrollWheelEventWithPhase(@selector(phaseChanged), 0);
   [view->cocoa_view() scrollWheel:event2];
-  ASSERT_EQ(2U, process_host->sink().message_count());
+  if (scroll_latching_) {
+    ASSERT_EQ(1U, process_host->sink().message_count());
+  } else {
+    // The second message will be nonblocking GSB's ack.
+    ASSERT_EQ(2U, process_host->sink().message_count());
+  }
 
   // Indicate that the wheel event was also unhandled.
   std::unique_ptr<IPC::Message> response2(
@@ -1255,6 +1330,10 @@ TEST_F(RenderWidgetHostViewMacTest,
 
   // Clean up.
   host->ShutdownAndDestroyWidget(true);
+}
+TEST_F(RenderWidgetHostViewMacTest,
+       IgnoreEmptyUnhandledWheelEventWithWheelGestures) {
+  IgnoreEmptyUnhandledWheelEventWithWheelGestures();
 }
 
 // Tests that when view initiated shutdown happens (i.e. RWHView is deleted
@@ -1269,7 +1348,7 @@ TEST_F(RenderWidgetHostViewMacTest, GuestViewDoesNotLeak) {
 
   // Owned by its |cocoa_view()|.
   MockRenderWidgetHostImpl* rwh =
-      new MockRenderWidgetHostImpl(&delegate, process_host, routing_id);
+      MockRenderWidgetHostImpl::Create(&delegate, process_host, routing_id);
   RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(rwh, true);
 
   // Add a delegate to the view.
@@ -1304,6 +1383,9 @@ TEST_F(RenderWidgetHostViewMacTest, GuestViewDoesNotLeak) {
 // RenderWidgetHostTest.Background. This test has some additional checks for
 // Mac.
 TEST_F(RenderWidgetHostViewMacTest, Background) {
+  const IPC::Message* set_background = nullptr;
+  std::tuple<bool> sent_background;
+
   TestBrowserContext browser_context;
   MockRenderProcessHost* process_host =
       new MockRenderProcessHost(&browser_context);
@@ -1311,37 +1393,49 @@ TEST_F(RenderWidgetHostViewMacTest, Background) {
   MockRenderWidgetHostDelegate delegate;
   int32_t routing_id = process_host->GetNextRoutingID();
   MockRenderWidgetHostImpl* host =
-      new MockRenderWidgetHostImpl(&delegate, process_host, routing_id);
+      MockRenderWidgetHostImpl::Create(&delegate, process_host, routing_id);
   RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host, false);
 
-  EXPECT_EQ(static_cast<unsigned>(SK_ColorTRANSPARENT),
-            view->background_color());
-  EXPECT_FALSE([view->cocoa_view() isOpaque]);
+  // If no color has been specified then default color of white should be
+  // returned.
+  EXPECT_EQ(static_cast<unsigned>(SK_ColorWHITE), view->background_color());
 
-  view->SetBackgroundColor(SK_ColorWHITE);
-  EXPECT_NE(static_cast<unsigned>(SK_ColorTRANSPARENT),
-            view->background_color());
-  EXPECT_TRUE([view->cocoa_view() isOpaque]);
-
-  const IPC::Message* set_background;
+  // Set the color to red. The background is initially assumed to be opaque, so
+  // no opacity message change should be sent.
+  view->SetBackgroundColor(SK_ColorRED);
+  EXPECT_EQ(static_cast<unsigned>(SK_ColorRED), view->background_color());
   set_background = process_host->sink().GetUniqueMessageMatching(
       ViewMsg_SetBackgroundOpaque::ID);
-  ASSERT_TRUE(set_background);
-  std::tuple<bool> sent_background;
-  ViewMsg_SetBackgroundOpaque::Read(set_background, &sent_background);
-  EXPECT_TRUE(std::get<0>(sent_background));
+  ASSERT_FALSE(set_background);
 
-  // Try setting it back.
+  // Set the color to blue. This should not send an opacity message.
+  view->SetBackgroundColor(SK_ColorBLUE);
+  EXPECT_EQ(static_cast<unsigned>(SK_ColorBLUE), view->background_color());
+  set_background = process_host->sink().GetUniqueMessageMatching(
+      ViewMsg_SetBackgroundOpaque::ID);
+  ASSERT_FALSE(set_background);
+
+  // Set the color back to transparent. The background color should now be
+  // reported as the default (white), and a transparency change message should
+  // be sent.
   process_host->sink().ClearMessages();
   view->SetBackgroundColor(SK_ColorTRANSPARENT);
-  EXPECT_EQ(static_cast<unsigned>(SK_ColorTRANSPARENT),
-            view->background_color());
-  EXPECT_FALSE([view->cocoa_view() isOpaque]);
+  EXPECT_EQ(static_cast<unsigned>(SK_ColorWHITE), view->background_color());
   set_background = process_host->sink().GetUniqueMessageMatching(
       ViewMsg_SetBackgroundOpaque::ID);
   ASSERT_TRUE(set_background);
   ViewMsg_SetBackgroundOpaque::Read(set_background, &sent_background);
   EXPECT_FALSE(std::get<0>(sent_background));
+
+  // Set the color to red. This should send an opacity message.
+  process_host->sink().ClearMessages();
+  view->SetBackgroundColor(SK_ColorBLUE);
+  EXPECT_EQ(static_cast<unsigned>(SK_ColorBLUE), view->background_color());
+  set_background = process_host->sink().GetUniqueMessageMatching(
+      ViewMsg_SetBackgroundOpaque::ID);
+  ASSERT_TRUE(set_background);
+  ViewMsg_SetBackgroundOpaque::Read(set_background, &sent_background);
+  EXPECT_TRUE(std::get<0>(sent_background));
 
   host->ShutdownAndDestroyWidget(true);
 }
@@ -1349,14 +1443,19 @@ TEST_F(RenderWidgetHostViewMacTest, Background) {
 class RenderWidgetHostViewMacWithWheelScrollLatchingEnabledTest
     : public RenderWidgetHostViewMacTest {
  public:
-  RenderWidgetHostViewMacWithWheelScrollLatchingEnabledTest() {
-    feature_list_.InitFromCommandLine(
-        features::kTouchpadAndWheelScrollLatching.name, "");
-  }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
+  RenderWidgetHostViewMacWithWheelScrollLatchingEnabledTest()
+      : RenderWidgetHostViewMacTest(true) {}
 };
+
+TEST_F(RenderWidgetHostViewMacWithWheelScrollLatchingEnabledTest,
+       IgnoreEmptyUnhandledWheelEventWithWheelGestures) {
+  IgnoreEmptyUnhandledWheelEventWithWheelGestures();
+}
+
+TEST_F(RenderWidgetHostViewMacWithWheelScrollLatchingEnabledTest,
+       ScrollWheelEndEventDelivery) {
+  ScrollWheelEndEventDelivery();
+}
 
 // When wheel scroll latching is enabled, wheel end events are not sent
 // immediately, instead we start a timer to see if momentum phase of the scroll
@@ -1373,7 +1472,7 @@ TEST_F(RenderWidgetHostViewMacWithWheelScrollLatchingEnabledTest,
   MockRenderWidgetHostDelegate delegate;
   int32_t routing_id = process_host->GetNextRoutingID();
   MockRenderWidgetHostImpl* host =
-      new MockRenderWidgetHostImpl(&delegate, process_host, routing_id);
+      MockRenderWidgetHostImpl::Create(&delegate, process_host, routing_id);
   RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host, false);
   process_host->sink().ClearMessages();
 
@@ -1420,7 +1519,7 @@ TEST_F(RenderWidgetHostViewMacWithWheelScrollLatchingEnabledTest,
   MockRenderWidgetHostDelegate delegate;
   int32_t routing_id = process_host->GetNextRoutingID();
   MockRenderWidgetHostImpl* host =
-      new MockRenderWidgetHostImpl(&delegate, process_host, routing_id);
+      MockRenderWidgetHostImpl::Create(&delegate, process_host, routing_id);
   RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host, false);
   process_host->sink().ClearMessages();
 
@@ -1477,7 +1576,7 @@ TEST_F(RenderWidgetHostViewMacWithWheelScrollLatchingEnabledTest,
   MockRenderWidgetHostDelegate delegate;
   int32_t routing_id = process_host->GetNextRoutingID();
   MockRenderWidgetHostImpl* host =
-      new MockRenderWidgetHostImpl(&delegate, process_host, routing_id);
+      MockRenderWidgetHostImpl::Create(&delegate, process_host, routing_id);
   RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host, false);
   process_host->sink().ClearMessages();
 
@@ -1537,8 +1636,8 @@ class RenderWidgetHostViewMacPinchTest : public RenderWidgetHostViewMacTest {
     process_host_->Init();
     delegate_.reset(new MockRenderWidgetHostDelegate);
     int32_t routing_id = process_host_->GetNextRoutingID();
-    host_.reset(new MockRenderWidgetHostImpl(delegate_.get(),
-                                             process_host_.get(), routing_id));
+    host_.reset(MockRenderWidgetHostImpl::Create(
+        delegate_.get(), process_host_.get(), routing_id));
     view_ = new RenderWidgetHostViewMac(host_.get(), false);
     cocoa_view_.reset([view_->cocoa_view() retain]);
     process_host_->sink().ClearMessages();
@@ -1724,7 +1823,7 @@ TEST_F(RenderWidgetHostViewMacTest, EventLatencyOSMouseWheelHistogram) {
   MockRenderWidgetHostDelegate delegate;
   int32_t routing_id = process_host->GetNextRoutingID();
   MockRenderWidgetHostImpl* host =
-      new MockRenderWidgetHostImpl(&delegate, process_host, routing_id);
+      MockRenderWidgetHostImpl::Create(&delegate, process_host, routing_id);
   RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host, false);
   process_host->sink().ClearMessages();
 
@@ -1774,9 +1873,9 @@ class InputMethodMacTest : public RenderWidgetHostViewMacTest {
     child_process_host_ = new MockRenderProcessHost(&browser_context_);
     RenderWidgetHostDelegate* rwh_delegate =
         RenderWidgetHostImpl::From(rvh()->GetWidget())->delegate();
-    child_widget_ = new RenderWidgetHostImpl(
+    child_widget_ = MockRenderWidgetHostImpl::Create(
         rwh_delegate, child_process_host_,
-        child_process_host_->GetNextRoutingID(), false);
+        child_process_host_->GetNextRoutingID());
     child_view_ = new TestRenderWidgetHostView(child_widget_);
     text_input_manager_ = rwh_delegate->GetTextInputManager();
     tab_widget_ = RenderWidgetHostImpl::From(rvh()->GetWidget());
@@ -2087,6 +2186,16 @@ TEST_F(RenderWidgetHostViewMacTest, ForwardKeyEquivalentsOnlyIfKey) {
   EXPECT_EQ("RawKeyDown Char", GetInputMessageTypes(process_host));
 
   rwhv_mac_->release_pepper_fullscreen_window_for_testing();
+}
+
+TEST_F(RenderWidgetHostViewMacTest, ClearCompositorFrame) {
+  BrowserCompositorMac* browser_compositor =
+      rwhv_mac_->BrowserCompositorForTesting();
+  EXPECT_NE(browser_compositor->CompositorForTesting(), nullptr);
+  EXPECT_TRUE(browser_compositor->CompositorForTesting()->IsLocked());
+  rwhv_mac_->ClearCompositorFrame();
+  EXPECT_NE(browser_compositor->CompositorForTesting(), nullptr);
+  EXPECT_FALSE(browser_compositor->CompositorForTesting()->IsLocked());
 }
 
 }  // namespace content

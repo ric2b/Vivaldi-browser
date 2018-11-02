@@ -28,8 +28,6 @@ class QuicSentPacketManagerPeer {
 
   static bool GetUseNewRto(QuicSentPacketManager* sent_packet_manager);
 
-  static bool GetUndoRetransmits(QuicSentPacketManager* sent_packet_manager);
-
   static void SetPerspective(QuicSentPacketManager* sent_packet_manager,
                              Perspective perspective);
 
@@ -47,9 +45,6 @@ class QuicSentPacketManagerPeer {
 
   static bool HasPendingPackets(
       const QuicSentPacketManager* sent_packet_manager);
-
-  static QuicTime GetSentTime(const QuicSentPacketManager* sent_packet_manager,
-                              QuicPacketNumber packet_number);
 
   // Returns true if |packet_number| is a retransmission of a packet.
   static bool IsRetransmission(QuicSentPacketManager* sent_packet_manager,
@@ -69,9 +64,6 @@ class QuicSentPacketManagerPeer {
       const QuicSentPacketManager* sent_packet_manager);
 
   static QuicByteCount GetBytesInFlight(
-      const QuicSentPacketManager* sent_packet_manager);
-
-  static QuicSentPacketManager::NetworkChangeVisitor* GetNetworkChangeVisitor(
       const QuicSentPacketManager* sent_packet_manager);
 
   static void SetConsecutiveRtoCount(QuicSentPacketManager* sent_packet_manager,

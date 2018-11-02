@@ -6,7 +6,7 @@
 <translation id="1728549374069268714">貼上並前往</translation>
 <translation id="1756026472674246267">在新分頁開啟連結</translation>
 <translation id="1759842336958782510">Chrome 瀏覽器</translation>
-<translation id="1769904678986817931">圖片屬性</translation>
+<translation id="1769904678986817931">圖片屬性...</translation>
 <translation id="1920297417712412573">複製到筆記</translation>
 <translation id="1921101374471252440">重新載入圖片(&amp;R)</translation>
 <translation id="2444387452209867610">插入筆記</translation>
@@ -25,7 +25,7 @@
 <translation id="3588820906588687999">在新分頁開啟圖片</translation>
 <translation id="3732157130969736834">新增連結為書籤</translation>
 <translation id="3914946330804881301">從 Opera 匯入</translation>
-<translation id="4044951018940382324">Vivaldi 瀏覽器</translation>
+<translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">不再顯示(&amp;D)</translation>
 <translation id="4074744496918018786">在無痕視窗開啟圖片</translation>
 <translation id="4512900838580567989">在背景分頁開啟連結</translation>
@@ -44,6 +44,7 @@
 <translation id="5716238312826274098">停用訊息通知</translation>
 <translation id="588258955323874662">全螢幕模式</translation>
 <translation id="5916080360077521750">真遺憾，您的 Chrome 設定在瀏覽器運行時不可用。 要將這些設定導入 Vivaldi，請保存您的工作並關閉所有 Chrome 視窗， 然後點擊繼續。</translation>
+<translation id="6229528619562190452">點此更新 Vivaldi。</translation>
 <translation id="6234173136417926046">使用圖片作為起始頁背景</translation>
 <translation id="6259156558325130047">重新排序(&amp;R)</translation>
 <translation id="630690498669249215">Opera 書籤檔案</translation>

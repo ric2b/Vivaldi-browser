@@ -38,6 +38,7 @@ class LocalFrame;
 
 enum class SelectionModifyAlteration { kMove, kExtend };
 enum class SelectionModifyVerticalDirection { kUp, kDown };
+enum class SelectionModifyDirection { kBackward, kForward, kLeft, kRight };
 
 class SelectionModifier {
   STACK_ALLOCATED();
@@ -54,7 +55,9 @@ class SelectionModifier {
   }
   const VisibleSelection& Selection() const { return selection_; }
 
-  bool Modify(SelectionModifyAlteration, SelectionDirection, TextGranularity);
+  bool Modify(SelectionModifyAlteration,
+              SelectionModifyDirection,
+              TextGranularity);
   bool ModifyWithPageGranularity(SelectionModifyAlteration,
                                  unsigned vertical_distance,
                                  SelectionModifyVerticalDirection);
@@ -69,13 +72,19 @@ class SelectionModifier {
   VisiblePosition StartForPlatform() const;
   VisiblePosition EndForPlatform() const;
   LayoutUnit LineDirectionPointForBlockDirectionNavigation(const Position&);
+  VisiblePosition ComputeModifyPosition(SelectionModifyAlteration,
+                                        SelectionModifyDirection,
+                                        TextGranularity);
   VisiblePosition ModifyExtendingRight(TextGranularity);
+  VisiblePosition ModifyExtendingRightInternal(TextGranularity);
   VisiblePosition ModifyExtendingForward(TextGranularity);
   VisiblePosition ModifyExtendingForwardInternal(TextGranularity);
   VisiblePosition ModifyMovingRight(TextGranularity);
   VisiblePosition ModifyMovingForward(TextGranularity);
   VisiblePosition ModifyExtendingLeft(TextGranularity);
+  VisiblePosition ModifyExtendingLeftInternal(TextGranularity);
   VisiblePosition ModifyExtendingBackward(TextGranularity);
+  VisiblePosition ModifyExtendingBackwardInternal(TextGranularity);
   VisiblePosition ModifyMovingLeft(TextGranularity);
   VisiblePosition ModifyMovingBackward(TextGranularity);
   VisiblePosition NextWordPositionForPlatform(const VisiblePosition&);

@@ -29,6 +29,7 @@
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "gpu/command_buffer/client/buffer_tracker.h"
 #include "gpu/command_buffer/client/gles2_cmd_helper.h"
 #include "gpu/command_buffer/client/gpu_control.h"
@@ -46,6 +47,15 @@
 #if defined(GPU_CLIENT_DEBUG)
 #include "base/command_line.h"
 #include "gpu/command_buffer/client/gpu_switches.h"
+#endif
+
+#if !defined(OS_NACL)
+#include "cc/paint/display_item_list.h"  // nogncheck
+#endif
+
+#if !defined(__native_client__)
+#include "ui/gfx/color_space.h"
+#include "ui/gfx/ipc/color/gfx_param_traits.h"
 #endif
 
 namespace gpu {
@@ -152,17 +162,7 @@ GLES2Implementation::GLES2Implementation(
       support_client_side_arrays_(support_client_side_arrays),
       use_count_(0),
       flush_id_(0),
-      max_extra_transfer_buffer_size_(
-#if defined(OS_NACL)
-          0),
-#else
-          // Do not use more than 5% of extra shared memory, and do not
-          // use any extra for memory contrained devices (<=1GB).
-          base::SysInfo::AmountOfPhysicalMemory() > 1024 * 1024 * 1024
-              ? base::saturated_cast<uint32_t>(
-                    base::SysInfo::AmountOfPhysicalMemory() / 20)
-              : 0),
-#endif
+      max_extra_transfer_buffer_size_(0),
       current_trace_stack_(0),
       gpu_control_(gpu_control),
       capabilities_(gpu_control->GetCapabilities()),
@@ -192,38 +192,25 @@ GLES2Implementation::GLES2Implementation(
   memset(&reserved_ids_, 0, sizeof(reserved_ids_));
 }
 
-bool GLES2Implementation::Initialize(
-    unsigned int starting_transfer_buffer_size,
-    unsigned int min_transfer_buffer_size,
-    unsigned int max_transfer_buffer_size,
-    unsigned int mapped_memory_limit) {
+bool GLES2Implementation::Initialize(const SharedMemoryLimits& limits) {
   TRACE_EVENT0("gpu", "GLES2Implementation::Initialize");
-  DCHECK_GE(starting_transfer_buffer_size, min_transfer_buffer_size);
-  DCHECK_LE(starting_transfer_buffer_size, max_transfer_buffer_size);
-  DCHECK_GE(min_transfer_buffer_size, kStartingOffset);
+  DCHECK_GE(limits.start_transfer_buffer_size, limits.min_transfer_buffer_size);
+  DCHECK_LE(limits.start_transfer_buffer_size, limits.max_transfer_buffer_size);
+  DCHECK_GE(limits.min_transfer_buffer_size, kStartingOffset);
 
   gpu_control_->SetGpuControlClient(this);
 
   if (!transfer_buffer_->Initialize(
-      starting_transfer_buffer_size,
-      kStartingOffset,
-      min_transfer_buffer_size,
-      max_transfer_buffer_size,
-      kAlignment,
-      kSizeToFlush)) {
+          limits.start_transfer_buffer_size, kStartingOffset,
+          limits.min_transfer_buffer_size, limits.max_transfer_buffer_size,
+          kAlignment, kSizeToFlush)) {
     return false;
   }
 
-  mapped_memory_.reset(new MappedMemoryManager(helper_, mapped_memory_limit));
-
-  unsigned chunk_size = 2 * 1024 * 1024;
-  if (mapped_memory_limit != SharedMemoryLimits::kNoLimit) {
-    // Use smaller chunks if the client is very memory conscientious.
-    chunk_size = std::min(mapped_memory_limit / 4, chunk_size);
-    chunk_size = base::bits::Align(chunk_size,
-                                   FencedAllocator::kAllocAlignment);
-  }
-  mapped_memory_->set_chunk_size_multiple(chunk_size);
+  max_extra_transfer_buffer_size_ = limits.max_mapped_memory_for_texture_upload;
+  mapped_memory_.reset(
+      new MappedMemoryManager(helper_, limits.mapped_memory_reclaim_limit));
+  mapped_memory_->set_chunk_size_multiple(limits.mapped_memory_chunk_size);
 
   GLStaticState::ShaderPrecisionMap* shader_precisions =
       &static_state_.shader_precisions;
@@ -360,8 +347,7 @@ void GLES2Implementation::FreeUnusedSharedMemory() {
 }
 
 void GLES2Implementation::FreeEverything() {
-  WaitForCmd();
-  query_tracker_->Shrink();
+  query_tracker_->Shrink(helper_);
   FreeUnusedSharedMemory();
   transfer_buffer_->Free();
   helper_->FreeRingBuffer();
@@ -376,12 +362,8 @@ void GLES2Implementation::RunIfContextNotLost(const base::Closure& callback) {
     callback.Run();
 }
 
-int32_t GLES2Implementation::GetStreamId() const {
-  return gpu_control_->GetStreamId();
-}
-
-void GLES2Implementation::FlushOrderingBarrierOnStream(int32_t stream_id) {
-  gpu_control_->FlushOrderingBarrierOnStream(stream_id);
+void GLES2Implementation::FlushPendingWork() {
+  gpu_control_->FlushPendingWork();
 }
 
 void GLES2Implementation::SignalSyncToken(const gpu::SyncToken& sync_token,
@@ -465,15 +447,15 @@ bool GLES2Implementation::OnMemoryDump(
   if (args.level_of_detail != MemoryDumpLevelOfDetail::BACKGROUND) {
     dump->AddScalar("free_size", MemoryAllocatorDump::kUnitsBytes,
                     transfer_buffer_->GetFreeSize());
-    auto guid = GetBufferGUIDForTracing(tracing_process_id,
-                                        transfer_buffer_->GetShmId());
     auto shared_memory_guid =
         transfer_buffer_->shared_memory_handle().GetGUID();
     const int kImportance = 2;
     if (!shared_memory_guid.is_empty()) {
-      pmd->CreateSharedMemoryOwnershipEdge(dump->guid(), guid,
-                                           shared_memory_guid, kImportance);
+      pmd->CreateSharedMemoryOwnershipEdge(dump->guid(), shared_memory_guid,
+                                           kImportance);
     } else {
+      auto guid = GetBufferGUIDForTracing(tracing_process_id,
+                                          transfer_buffer_->GetShmId());
       pmd->CreateSharedGlobalAllocatorDump(guid);
       pmd->AddOwnershipEdge(dump->guid(), guid, kImportance);
     }
@@ -4995,6 +4977,33 @@ void GLES2Implementation::ScheduleDCLayerSharedStateCHROMIUM(
                                               buffer.shm_id(), buffer.offset());
 }
 
+void GLES2Implementation::SetColorSpaceForScanoutCHROMIUM(
+    GLuint texture_id,
+    GLColorSpace color_space) {
+#if defined(__native_client__)
+  // Including gfx::ColorSpace would bring Skia and a lot of other code into
+  // NaCl's IRT.
+  SetGLError(GL_INVALID_VALUE, "GLES2::SetColorSpaceForScanoutCHROMIUM",
+             "not supported");
+#else
+  gfx::ColorSpace* gfx_color_space =
+      reinterpret_cast<gfx::ColorSpace*>(color_space);
+  base::Pickle color_space_data;
+  IPC::ParamTraits<gfx::ColorSpace>::Write(&color_space_data, *gfx_color_space);
+
+  ScopedTransferBufferPtr buffer(color_space_data.size(), helper_,
+                                 transfer_buffer_);
+  if (!buffer.valid() || buffer.size() < color_space_data.size()) {
+    SetGLError(GL_OUT_OF_MEMORY, "GLES2::SetColorSpaceForScanoutCHROMIUM",
+               "out of memory");
+    return;
+  }
+  memcpy(buffer.address(), color_space_data.data(), color_space_data.size());
+  helper_->SetColorSpaceForScanoutCHROMIUM(
+      texture_id, buffer.shm_id(), buffer.offset(), color_space_data.size());
+#endif
+}
+
 void GLES2Implementation::ScheduleDCLayerCHROMIUM(
     GLsizei num_textures,
     const GLuint* contents_texture_ids,
@@ -5316,11 +5325,12 @@ void GLES2Implementation::UnmapTexSubImage2DCHROMIUM(const void* mem) {
 void GLES2Implementation::ResizeCHROMIUM(GLuint width,
                                          GLuint height,
                                          float scale_factor,
+                                         GLenum color_space,
                                          GLboolean alpha) {
   GPU_CLIENT_SINGLE_THREAD_CHECK();
   GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glResizeCHROMIUM(" << width << ", "
                      << height << ", " << scale_factor << ", " << alpha << ")");
-  helper_->ResizeCHROMIUM(width, height, scale_factor, alpha);
+  helper_->ResizeCHROMIUM(width, height, scale_factor, color_space, alpha);
   CheckGLError();
 }
 
@@ -6130,8 +6140,7 @@ void GLES2Implementation::GenSyncTokenCHROMIUM(GLuint64 fence_sync,
   }
 
   // Copy the data over after setting the data to ensure alignment.
-  SyncToken sync_token_data(gpu_control_->GetNamespaceID(),
-                            gpu_control_->GetStreamId(),
+  SyncToken sync_token_data(gpu_control_->GetNamespaceID(), 0,
                             gpu_control_->GetCommandBufferID(), fence_sync);
   sync_token_data.SetVerifyFlush();
   memcpy(sync_token, &sync_token_data, sizeof(sync_token_data));
@@ -6154,8 +6163,7 @@ void GLES2Implementation::GenUnverifiedSyncTokenCHROMIUM(GLuint64 fence_sync,
   }
 
   // Copy the data over after setting the data to ensure alignment.
-  SyncToken sync_token_data(gpu_control_->GetNamespaceID(),
-                            gpu_control_->GetStreamId(),
+  SyncToken sync_token_data(gpu_control_->GetNamespaceID(), 0,
                             gpu_control_->GetCommandBufferID(), fence_sync);
   memcpy(sync_token, &sync_token_data, sizeof(sync_token_data));
 }
@@ -6176,20 +6184,18 @@ void GLES2Implementation::VerifySyncTokensCHROMIUM(GLbyte **sync_tokens,
         }
         requires_synchronization = true;
         DCHECK(sync_token.verified_flush());
-        memcpy(sync_tokens[i], &sync_token, sizeof(sync_token));
       }
+
+      // Set verify bit on empty sync tokens too.
+      sync_token.SetVerifyFlush();
+
+      memcpy(sync_tokens[i], &sync_token, sizeof(sync_token));
     }
   }
 
-  // This step must be done after all unverified tokens have finished processing
-  // CanWaitUnverifiedSyncToken(), command buffers use that to do any necessary
-  // flushes.
-  if (requires_synchronization) {
-    // Make sure we have no pending ordering barriers by flushing now.
-    FlushHelper();
-    // Ensure all the fence syncs are visible on GPU service.
+  // Ensure all the fence syncs are visible on GPU service.
+  if (requires_synchronization)
     gpu_control_->EnsureWorkVisible();
-  }
 }
 
 void GLES2Implementation::WaitSyncTokenCHROMIUM(const GLbyte* sync_token_data) {
@@ -7128,6 +7134,73 @@ void GLES2Implementation::Viewport(GLint x,
   state_.SetViewport(x, y, width, height);
   helper_->Viewport(x, y, width, height);
   CheckGLError();
+}
+
+void GLES2Implementation::RasterCHROMIUM(const cc::DisplayItemList* list,
+                                         GLint x,
+                                         GLint y,
+                                         GLint w,
+                                         GLint h) {
+#if defined(OS_NACL)
+  NOTREACHED();
+#else
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glRasterChromium(" << list << ", "
+                     << x << ", " << y << ", " << w << ", " << h << ")");
+
+  // TODO(enne): tune these numbers
+  // TODO(enne): convert these types here and in transfer buffer to be size_t.
+  static constexpr unsigned int kMinAlloc = 16 * 1024;
+  static constexpr unsigned int kBlockAlloc = 512 * 1024;
+
+  unsigned int free_size = std::max(transfer_buffer_->GetFreeSize(), kMinAlloc);
+  ScopedTransferBufferPtr buffer(free_size, helper_, transfer_buffer_);
+  DCHECK(buffer.valid());
+
+  char* memory = static_cast<char*>(buffer.address());
+  size_t written_bytes = 0;
+  size_t free_bytes = buffer.size();
+
+  cc::PaintOp::SerializeOptions options;
+
+  // TODO(enne): need to implement alpha folding optimization from POB.
+  // TODO(enne): don't access private members of DisplayItemList.
+  gfx::Rect playback_rect(x, y, w, h);
+  std::vector<size_t> indices = list->rtree_.Search(playback_rect);
+  for (cc::PaintOpBuffer::FlatteningIterator iter(&list->paint_op_buffer_,
+                                                  &indices);
+       iter; ++iter) {
+    const cc::PaintOp* op = *iter;
+    size_t size = op->Serialize(memory + written_bytes, free_bytes, options);
+    if (!size) {
+      buffer.Shrink(written_bytes);
+      helper_->RasterCHROMIUM(buffer.shm_id(), buffer.offset(), x, y, w, h,
+                              written_bytes);
+      buffer.Reset(kBlockAlloc);
+      memory = static_cast<char*>(buffer.address());
+      written_bytes = 0;
+      free_bytes = buffer.size();
+
+      size = op->Serialize(memory + written_bytes, free_bytes, options);
+    }
+    DCHECK_GE(size, 4u);
+    DCHECK_EQ(size % cc::PaintOpBuffer::PaintOpAlign, 0u);
+    DCHECK_LE(size, free_bytes);
+    DCHECK_EQ(free_bytes + written_bytes, buffer.size());
+
+    written_bytes += size;
+    free_bytes -= size;
+  }
+
+  buffer.Shrink(written_bytes);
+
+  if (!written_bytes)
+    return;
+  helper_->RasterCHROMIUM(buffer.shm_id(), buffer.offset(), x, y, w, h,
+                          buffer.size());
+
+  CheckGLError();
+#endif
 }
 
 // Include the auto-generated part of this file. We split this because it means

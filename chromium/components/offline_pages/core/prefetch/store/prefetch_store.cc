@@ -14,7 +14,6 @@
 #include "base/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/offline_pages/core/offline_store_types.h"
-#include "components/offline_pages/core/prefetch/prefetch_item.h"
 #include "components/offline_pages/core/prefetch/store/prefetch_store_utils.h"
 #include "sql/connection.h"
 #include "sql/meta_table.h"
@@ -26,6 +25,7 @@ namespace {
 
 // Name of the table with prefetch items.
 const char kPrefetchItemsTableName[] = "prefetch_items";
+const char kPrefetchQuotaTableName[] = "prefetch_downloader_quota";
 const char kPrefetchStoreFileName[] = "PrefetchStore.db";
 
 const int kCurrentVersion = 1;
@@ -35,24 +35,51 @@ using InitializeCallback =
     base::Callback<void(InitializationStatus,
                         std::unique_ptr<sql::Connection>)>;
 
+// IMPORTANT #1: when making changes to these columns please also reflect them
+// into:
+// - PrefetchItem: update existing fields and all method implementations
+//   (operator=, operator<<, ToString, etc).
+// - PrefetchItemTest, PrefetchStoreTestUtil: update test related code to cover
+//   the changed set of columns and PrefetchItem members.
+// - MockPrefetchItemGenerator: so that its generated items consider all fields.
+// IMPORTANT #2: the ordering of column types is important in SQLite 3 tables to
+// simplify data retrieval. Columns with fixed length types must come first and
+// variable length types must come later.
+static const char kTableCreationSql[] =
+    "CREATE TABLE prefetch_items"
+    // Fixed length columns come first.
+    "(offline_id INTEGER PRIMARY KEY NOT NULL,"
+    " state INTEGER NOT NULL DEFAULT 0,"
+    " generate_bundle_attempts INTEGER NOT NULL DEFAULT 0,"
+    " get_operation_attempts INTEGER NOT NULL DEFAULT 0,"
+    " download_initiation_attempts INTEGER NOT NULL DEFAULT 0,"
+    " archive_body_length INTEGER_NOT_NULL DEFAULT -1,"
+    " creation_time INTEGER NOT NULL,"
+    " freshness_time INTEGER NOT NULL,"
+    " error_code INTEGER NOT NULL DEFAULT 0,"
+    " file_size INTEGER NOT NULL DEFAULT -1,"
+    // Variable length columns come later.
+    " guid VARCHAR NOT NULL DEFAULT '',"
+    " client_namespace VARCHAR NOT NULL DEFAULT '',"
+    " client_id VARCHAR NOT NULL DEFAULT '',"
+    " requested_url VARCHAR NOT NULL DEFAULT '',"
+    " final_archived_url VARCHAR NOT NULL DEFAULT '',"
+    " operation_name VARCHAR NOT NULL DEFAULT '',"
+    " archive_body_name VARCHAR NOT NULL DEFAULT '',"
+    " title VARCHAR NOT NULL DEFAULT '',"
+    " file_path VARCHAR NOT NULL DEFAULT ''"
+    ")";
+
 bool CreatePrefetchItemsTable(sql::Connection* db) {
+  return db->Execute(kTableCreationSql);
+}
+
+bool CreatePrefetchQuotaTable(sql::Connection* db) {
   static const char kSql[] =
-      "CREATE TABLE prefetch_items"
-      "(offline_id INTEGER PRIMARY KEY NOT NULL,"
-      " state INTEGER NOT NULL DEFAULT 0,"
-      " request_archive_attempt_count INTEGER NOT NULL DEFAULT 0,"
-      " archive_body_length INTEGER_NOT_NULL DEFAULT -1,"
-      " creation_time INTEGER NOT NULL,"
-      " freshness_time INTEGER NOT NULL,"
-      " error_code INTEGER NOT NULL DEFAULT 0,"
-      " guid VARCHAR NOT NULL DEFAULT '',"
-      " client_namespace VARCHAR NOT NULL DEFAULT '',"
-      " client_id VARCHAR NOT NULL DEFAULT '',"
-      " requested_url VARCHAR NOT NULL DEFAULT '',"
-      " final_archived_url VARCHAR NOT NULL DEFAULT '',"
-      " operation_name VARCHAR NOT NULL DEFAULT '',"
-      " archive_body_name VARCHAR NOT NULL DEFAULT ''"
-      ")";
+      "CREATE TABLE prefetch_downloader_quota"
+      "(quota_id INTEGER PRIMARY KEY NOT NULL DEFAULT 1,"
+      " update_time INTEGER NOT NULL,"
+      " available_quota INTEGER NOT NULL DEFAULT 0)";
   return db->Execute(kSql);
 }
 
@@ -65,6 +92,11 @@ bool CreateSchema(sql::Connection* db) {
 
   if (!db->DoesTableExist(kPrefetchItemsTableName)) {
     if (!CreatePrefetchItemsTable(db))
+      return false;
+  }
+
+  if (!db->DoesTableExist(kPrefetchQuotaTableName)) {
+    if (!CreatePrefetchQuotaTable(db))
       return false;
   }
 
@@ -168,6 +200,11 @@ void PrefetchStore::OnInitializeDone(base::OnceClosure pending_command,
   // attempted.
   if (initialization_status_ == InitializationStatus::FAILURE)
     initialization_status_ = InitializationStatus::NOT_INITIALIZED;
+}
+
+// static
+const char* PrefetchStore::GetTableCreationSqlForTesting() {
+  return kTableCreationSql;
 }
 
 }  // namespace offline_pages

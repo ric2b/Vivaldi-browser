@@ -92,7 +92,6 @@
     "channel": "stable",
     "contexts": ["webui"],
     "matches": [
-      "chrome://md-settings/*",
       "chrome://settings/*"
     ]
   }],
@@ -135,7 +134,7 @@
       "D5736E4B5CF695CB93A2FB57E4FDC6E5AFAB6FE2", // http://crbug.com/312900
       "D57DE394F36DC1C3220E7604C575D29C51A6C495", // http://crbug.com/319444
       "3F65507A3B39259B38C8173C6FFA3D12DF64CCE9", // http://crbug.com/371562
-      "mpognobbkildjkofajifpdfhcoklimli"          // Vivaldi
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C"          // Vivaldi
     ]
   }, {
     "channel": "stable",
@@ -395,21 +394,11 @@
     "dependencies": ["permission:experimental", "manifest:devtools_page"],
     "contexts": ["blessed_extension"]
   },
-  "extension": [{
-      "channel": "stable",
-      "extension_types": ["extension", "legacy_packaged_app"],
-      "contexts": ["blessed_extension"],
-      "default_parent": true
-    },
-    {
-      "channel": "stable",
-      "extension_types": ["platform_app"],
-      "contexts": ["blessed_extension"],
-      "whitelist": [
-        "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
-      ]
-    }
-  ],
+  "extension": {
+    "channel": "stable",
+    "extension_types": ["extension", "legacy_packaged_app", "platform_app"],
+    "contexts": ["blessed_extension"]
+  },
   "extension.getURL": {
     "contexts": ["blessed_extension", "unblessed_extension", "content_script", "extension_service_worker"]
   },
@@ -425,7 +414,8 @@
       "contexts": ["blessed_extension"],
       "extension_types": ["platform_app"],
       "whitelist": [
-        "A948368FC53BE437A55FEB414106E207925482F5"  // File manager
+        "A948368FC53BE437A55FEB414106E207925482F5",  // File manager
+        "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
       ]
     }
   ],
@@ -457,14 +447,6 @@
     "internal": true,
     "channel": "stable",
     "contexts": ["blessed_extension"]
-  },
-  "feedbackPrivate": {
-    "dependencies": ["permission:feedbackPrivate"],
-    "contexts": ["blessed_extension"]
-  },
-  "feedbackPrivate.readLogSource": {
-    "platforms": ["chromeos"],
-    "session_types": ["kiosk"]
   },
   "fileBrowserHandler": {
     "dependencies": ["permission:fileBrowserHandler"],
@@ -556,7 +538,6 @@
     "channel": "stable",
     "contexts": ["webui"],
     "matches": [
-      "chrome://md-settings/*",
       "chrome://settings/*"
     ]
   }],
@@ -571,7 +552,6 @@
     "channel": "stable",
     "contexts": ["webui"],
     "matches": [
-      "chrome://md-settings/*",
       "chrome://settings/*"
     ]
   }],
@@ -644,7 +624,6 @@
     "channel": "stable",
     "contexts": ["webui"],
     "matches": [
-      "chrome://md-settings/*",
       "chrome://settings/*"
     ]
   }],
@@ -690,7 +669,6 @@
     "channel": "stable",
     "contexts": ["webui"],
     "matches": [
-      "chrome://md-settings/*",
       "chrome://settings/*"
     ],
     "platforms": ["chromeos"]
@@ -720,7 +698,6 @@
     "channel": "stable",
     "contexts": ["webui"],
     "matches": [
-      "chrome://md-settings/*",
       "chrome://settings/*"
     ]
   }],
@@ -763,7 +740,7 @@
     "extension_types": ["platform_app"],
     "contexts": ["blessed_extension"],
     "whitelist": [
-      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   }],
   "terminalPrivate": {
@@ -789,7 +766,6 @@
     "channel": "stable",
     "contexts": ["webui"],
     "matches": [
-      "chrome://md-settings/*",
       "chrome://settings/*"
     ]
   }],

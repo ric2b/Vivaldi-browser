@@ -10,6 +10,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/timer/timer.h"
 #include "chromeos/components/tether/initializer.h"
 #include "chromeos/dbus/power_manager_client.h"
 #include "chromeos/dbus/session_manager_client.h"
@@ -120,7 +121,14 @@ class TetherService : public KeyedService,
   FRIEND_TEST_ALL_PREFIXES(TetherServiceTest,
                            TestBleAdvertisingSupportedButIncorrectlyRecorded);
   FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestScreenLock);
-  FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestFeatureFlagEnabled);
+  FRIEND_TEST_ALL_PREFIXES(TetherServiceTest,
+                           TestFeatureFlagDisabled_CommandLineDisabled);
+  FRIEND_TEST_ALL_PREFIXES(TetherServiceTest,
+                           TestFeatureFlagDisabled_CommandLineEnabled);
+  FRIEND_TEST_ALL_PREFIXES(TetherServiceTest,
+                           TestFeatureFlagEnabled_CommandLineDisabled);
+  FRIEND_TEST_ALL_PREFIXES(TetherServiceTest,
+                           TestFeatureFlagEnabled_CommandLineEnabled);
   FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestNoTetherHosts);
   FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestProhibitedByPolicy);
   FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestIsBluetoothPowered);
@@ -130,6 +138,8 @@ class TetherService : public KeyedService,
   FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestEnabled);
   FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestBluetoothNotification);
   FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestBluetoothNotPresent);
+  FRIEND_TEST_ALL_PREFIXES(TetherServiceTest,
+                           TestBluetoothNotPresent_FalsePositive);
   FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestWifiNotPresent);
 
   // Reflects InstantTethering_TechnologyStateAndReason enum in enums.xml. Do
@@ -187,9 +197,14 @@ class TetherService : public KeyedService,
   // Record to UMA Tether's current feature state.
   void RecordTetherFeatureState();
 
+  // Attempt to record the current Tether FeatureState.
+  void RecordTetherFeatureStateIfPossible();
+
   void SetNotificationPresenterForTest(
       std::unique_ptr<chromeos::tether::NotificationPresenter>
           notification_presenter);
+
+  void SetTimerForTest(std::unique_ptr<base::Timer> timer);
 
   // Whether the service has been shut down.
   bool shut_down_ = false;
@@ -201,6 +216,11 @@ class TetherService : public KeyedService,
   // Whether the BLE advertising interval has attempted to be set during this
   // session.
   bool has_attempted_to_set_ble_advertising_interval_ = false;
+
+  // The first report of TetherFeatureState::BLE_NOT_PRESENT is usually
+  // incorrect and hence is a false positive. This property tracks if the first
+  // report has been hit yet.
+  bool ble_not_present_false_positive_encountered_ = false;
 
   // The TetherFeatureState obtained the last time that
   // GetTetherTechnologyState() was called. Used only for logging purposes.
@@ -218,6 +238,7 @@ class TetherService : public KeyedService,
 
   PrefChangeRegistrar registrar_;
   scoped_refptr<device::BluetoothAdapter> adapter_;
+  std::unique_ptr<base::Timer> timer_;
 
   base::WeakPtrFactory<TetherService> weak_ptr_factory_;
 

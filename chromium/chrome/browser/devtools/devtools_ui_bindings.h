@@ -65,6 +65,7 @@ class DevToolsUIBindings : public DevToolsEmbedderMessageDispatcher::Delegate,
     virtual void ReadyForTest() = 0;
     virtual InfoBarService* GetInfoBarService() = 0;
     virtual void RenderProcessGone(bool crashed) = 0;
+    virtual void ShowCertificateViewer(const std::string& cert_chain) = 0;
   };
 
   explicit DevToolsUIBindings(content::WebContents* web_contents);
@@ -166,6 +167,7 @@ class DevToolsUIBindings : public DevToolsEmbedderMessageDispatcher::Delegate,
 
   void SendMessageAck(int request_id,
                       const base::Value* arg1);
+  void InnerAttach();
 
   // DevToolsAndroidBridge::DeviceCountListener override:
   void DeviceCountChanged(int count) override;

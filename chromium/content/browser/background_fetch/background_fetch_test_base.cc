@@ -5,6 +5,7 @@
 #include "content/browser/background_fetch/background_fetch_test_base.h"
 
 #include <stdint.h>
+#include <map>
 #include <memory>
 #include <utility>
 
@@ -139,7 +140,8 @@ class BackgroundFetchTestBase::RespondingDownloadManager
     download_item->SetURL(params->url());
     download_item->SetUrlChain({params->url()});
     download_item->SetState(DownloadItem::DownloadState::IN_PROGRESS);
-    download_item->SetGuid(base::GenerateGUID());
+    download_item->SetGuid(params->guid().empty() ? base::GenerateGUID()
+                                                  : params->guid());
     download_item->SetStartTime(base::Time::Now());
     download_item->SetResponseHeaders(response->headers);
 
@@ -147,10 +149,10 @@ class BackgroundFetchTestBase::RespondingDownloadManager
     // dealing with the response in this class.
     BrowserThread::PostTaskAndReply(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(params->callback(), download_item.get(),
-                   DOWNLOAD_INTERRUPT_REASON_NONE),
-        base::Bind(&RespondingDownloadManager::DidStartDownload,
-                   weak_ptr_factory_.GetWeakPtr(), download_item.get()));
+        base::BindOnce(params->callback(), download_item.get(),
+                       DOWNLOAD_INTERRUPT_REASON_NONE),
+        base::BindOnce(&RespondingDownloadManager::DidStartDownload,
+                       weak_ptr_factory_.GetWeakPtr(), download_item.get()));
 
     download_items_.push_back(std::move(download_item));
   }

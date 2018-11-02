@@ -18,18 +18,53 @@ Polymer({
     },
   },
 
+  listeners: {
+    'tap': 'onHostTap_',
+  },
+
+  observers: [
+    'onDisableOrPrefChange_(disabled, pref.*)',
+  ],
+
   /** @override */
   focus: function() {
     this.$.control.focus();
   },
 
+  /**
+   * Handle taps directly on the toggle (see: onLabelWrapperTap_ for non-toggle
+   * taps).
+   * @param {!Event} e
+   * @private
+   */
+  onToggleTap_: function(e) {
+    // Stop the event from propagating to avoid firing two 'changed' events.
+    e.stopPropagation();
+  },
+
   /** @private */
-  onLabelWrapperTap_: function() {
+  onDisableOrPrefChange_: function() {
+    if (this.controlDisabled_()) {
+      this.removeAttribute('actionable');
+    } else {
+      this.setAttribute('actionable', '');
+    }
+  },
+
+  /**
+   * Handle non-toggle button taps (see: onToggleTap_ for toggle taps).
+   * @param {!Event} e
+   * @private
+   */
+  onHostTap_: function(e) {
+    // Stop the event from propagating to avoid firing two 'changed' events.
+    e.stopPropagation();
     if (this.controlDisabled_())
       return;
 
     this.checked = !this.checked;
     this.notifyChangedByUserInteraction();
+    this.fire('change');
   },
 
   /**
@@ -38,6 +73,7 @@ Polymer({
    * @private
    */
   resetTrackLock_: function() {
-    Polymer.Gestures.gestures.tap.reset();
+    // Run tap.reset in next run-loop to avoid reversing the current tap event.
+    setTimeout(() => Polymer.Gestures.gestures.tap.reset());
   },
 });

@@ -14,6 +14,7 @@
 #include "services/device/generic_sensor/linux/sensor_data_linux.h"
 #include "services/device/generic_sensor/linux/sensor_device_manager.h"
 #include "services/device/generic_sensor/platform_sensor_provider_linux.h"
+#include "services/device/public/cpp/generic_sensor/sensor_traits.h"
 
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -33,6 +34,8 @@ using mojom::SensorType;
 
 // Zero value can mean whether value is not being not used or zero value.
 constexpr double kZero = 0.0;
+
+constexpr double kAmbientLightFrequencyValue = 10.0;
 
 constexpr double kAccelerometerFrequencyValue = 10.0;
 constexpr double kAccelerometerOffsetValue = 1.0;
@@ -123,7 +126,7 @@ class MockPlatformSensorClient : public PlatformSensor::Client {
   }
 
   // PlatformSensor::Client interface.
-  MOCK_METHOD0(OnSensorReadingChanged, void());
+  MOCK_METHOD1(OnSensorReadingChanged, void(mojom::SensorType type));
   MOCK_METHOD0(OnSensorError, void());
   MOCK_METHOD0(IsSuspended, bool());
 
@@ -250,11 +253,12 @@ class PlatformSensorAndProviderLinuxTest : public ::testing::Test {
   }
 
   // Waits before OnSensorReadingChanged is called.
-  void WaitOnSensorReadingChangedEvent(MockPlatformSensorClient* client) {
+  void WaitOnSensorReadingChangedEvent(MockPlatformSensorClient* client,
+                                       mojom::SensorType type) {
     run_loop_ = base::MakeUnique<base::RunLoop>();
-    EXPECT_CALL(*client, OnSensorReadingChanged()).WillOnce(Invoke([this]() {
-      run_loop_->Quit();
-    }));
+    EXPECT_CALL(*client, OnSensorReadingChanged(type))
+        .WillOnce(
+            Invoke([this](mojom::SensorType type) { run_loop_->Quit(); }));
     run_loop_->Run();
     run_loop_ = nullptr;
   }
@@ -353,7 +357,7 @@ TEST_F(PlatformSensorAndProviderLinuxTest, SensorStarted) {
   auto client = base::MakeUnique<NiceMock<MockPlatformSensorClient>>(sensor);
   PlatformSensorConfiguration configuration(5);
   EXPECT_TRUE(sensor->StartListening(client.get(), configuration));
-  WaitOnSensorReadingChangedEvent(client.get());
+  WaitOnSensorReadingChangedEvent(client.get(), sensor->GetType());
   EXPECT_TRUE(sensor->StopListening(client.get(), configuration));
 }
 
@@ -421,7 +425,7 @@ TEST_F(PlatformSensorAndProviderLinuxTest, CheckAllSupportedSensors) {
   EXPECT_TRUE(als_sensor);
   EXPECT_EQ(als_sensor->GetType(), SensorType::AMBIENT_LIGHT);
   EXPECT_THAT(als_sensor->GetDefaultConfiguration().frequency(),
-              kDefaultAmbientLightFrequencyHz);
+              SensorTraits<SensorType::AMBIENT_LIGHT>::kDefaultFrequency);
 
   auto accel_sensor = CreateSensor(SensorType::ACCELEROMETER);
   EXPECT_TRUE(accel_sensor);
@@ -471,7 +475,7 @@ TEST_F(PlatformSensorAndProviderLinuxTest,
   EXPECT_TRUE(sensor);
   EXPECT_EQ(SensorType::AMBIENT_LIGHT, sensor->GetType());
   EXPECT_THAT(sensor->GetMaximumSupportedFrequency(),
-              kDefaultAmbientLightFrequencyHz);
+              SensorTraits<SensorType::AMBIENT_LIGHT>::kDefaultFrequency);
 }
 
 // Tests that Ambient Light sensor is correctly read.
@@ -496,12 +500,12 @@ TEST_F(PlatformSensorAndProviderLinuxTest, CheckAmbientLightReadings) {
   PlatformSensorConfiguration configuration(
       sensor->GetMaximumSupportedFrequency());
   EXPECT_TRUE(sensor->StartListening(client.get(), configuration));
-  WaitOnSensorReadingChangedEvent(client.get());
+  WaitOnSensorReadingChangedEvent(client.get(), sensor->GetType());
   EXPECT_TRUE(sensor->StopListening(client.get(), configuration));
 
   SensorReadingSharedBuffer* buffer =
       static_cast<SensorReadingSharedBuffer*>(mapping.get());
-  EXPECT_THAT(buffer->reading.values[0], sensor_value[0]);
+  EXPECT_THAT(buffer->reading.als.value, sensor_value[0]);
 }
 
 // Tests that Accelerometer readings are correctly converted.
@@ -536,25 +540,66 @@ TEST_F(PlatformSensorAndProviderLinuxTest,
   auto client = base::MakeUnique<NiceMock<MockPlatformSensorClient>>(sensor);
   PlatformSensorConfiguration configuration(10);
   EXPECT_TRUE(sensor->StartListening(client.get(), configuration));
-  WaitOnSensorReadingChangedEvent(client.get());
+  WaitOnSensorReadingChangedEvent(client.get(), sensor->GetType());
   EXPECT_TRUE(sensor->StopListening(client.get(), configuration));
 
   SensorReadingSharedBuffer* buffer =
       static_cast<SensorReadingSharedBuffer*>(mapping.get());
 #if defined(OS_CHROMEOS)
   double scaling = kMeanGravity / kAccelerometerScalingValue;
-  EXPECT_THAT(buffer->reading.values[0], scaling * sensor_values[0]);
-  EXPECT_THAT(buffer->reading.values[1], scaling * sensor_values[1]);
-  EXPECT_THAT(buffer->reading.values[2], scaling * sensor_values[2]);
+  EXPECT_THAT(buffer->reading.accel.x, scaling * sensor_values[0]);
+  EXPECT_THAT(buffer->reading.accel.y, scaling * sensor_values[1]);
+  EXPECT_THAT(buffer->reading.accel.z, scaling * sensor_values[2]);
 #else
   double scaling = kAccelerometerScalingValue;
-  EXPECT_THAT(buffer->reading.values[0],
+  EXPECT_THAT(buffer->reading.accel.x,
               -scaling * (sensor_values[0] + kAccelerometerOffsetValue));
-  EXPECT_THAT(buffer->reading.values[1],
+  EXPECT_THAT(buffer->reading.accel.y,
               -scaling * (sensor_values[1] + kAccelerometerOffsetValue));
-  EXPECT_THAT(buffer->reading.values[2],
+  EXPECT_THAT(buffer->reading.accel.z,
               -scaling * (sensor_values[2] + kAccelerometerOffsetValue));
 #endif
+}
+
+// Tests that LinearAcceleration sensor is successfully created and works.
+TEST_F(PlatformSensorAndProviderLinuxTest, CheckLinearAcceleration) {
+  mojo::ScopedSharedBufferHandle handle = provider_->CloneSharedBufferHandle();
+  mojo::ScopedSharedBufferMapping mapping = handle->MapAtOffset(
+      sizeof(SensorReadingSharedBuffer),
+      SensorReadingSharedBuffer::GetOffset(SensorType::LINEAR_ACCELERATION));
+#if defined(OS_CHROMEOS)
+  // CrOS has a different axes plane and scale, see crbug.com/501184.
+  double sensor_values[3] = {0, 0, 1};
+#else
+  double sensor_values[3] = {0, 0, -kMeanGravity};
+#endif
+  InitializeSupportedSensor(SensorType::ACCELEROMETER,
+                            kAccelerometerFrequencyValue, kZero, kZero,
+                            sensor_values);
+
+  InitializeMockUdevMethods(sensors_dir_.GetPath());
+  SetServiceStart();
+
+  auto sensor = CreateSensor(SensorType::LINEAR_ACCELERATION);
+  EXPECT_TRUE(sensor);
+  EXPECT_EQ(sensor->GetReportingMode(), mojom::ReportingMode::CONTINUOUS);
+
+  auto client = base::MakeUnique<NiceMock<MockPlatformSensorClient>>(sensor);
+  PlatformSensorConfiguration configuration(10);
+  EXPECT_TRUE(sensor->StartListening(client.get(), configuration));
+
+  // The actual accceration is around 0 but the algorithm needs several
+  // iterations to isolate gravity properly.
+  int kApproximateExpectedAcceleration = 6;
+  WaitOnSensorReadingChangedEvent(client.get(), sensor->GetType());
+  EXPECT_TRUE(sensor->StopListening(client.get(), configuration));
+
+  SensorReadingSharedBuffer* buffer =
+      static_cast<SensorReadingSharedBuffer*>(mapping.get());
+  EXPECT_THAT(buffer->reading.accel.x, 0.0);
+  EXPECT_THAT(buffer->reading.accel.y, 0.0);
+  EXPECT_THAT(static_cast<int>(buffer->reading.accel.z),
+              kApproximateExpectedAcceleration);
 }
 
 // Tests that Gyroscope readings are correctly converted.
@@ -587,23 +632,23 @@ TEST_F(PlatformSensorAndProviderLinuxTest, CheckGyroscopeReadingConversion) {
   auto client = base::MakeUnique<NiceMock<MockPlatformSensorClient>>(sensor);
   PlatformSensorConfiguration configuration(10);
   EXPECT_TRUE(sensor->StartListening(client.get(), configuration));
-  WaitOnSensorReadingChangedEvent(client.get());
+  WaitOnSensorReadingChangedEvent(client.get(), sensor->GetType());
   EXPECT_TRUE(sensor->StopListening(client.get(), configuration));
 
   SensorReadingSharedBuffer* buffer =
       static_cast<SensorReadingSharedBuffer*>(mapping.get());
 #if defined(OS_CHROMEOS)
   double scaling = kMeanGravity * kRadiansInDegrees / kGyroscopeScalingValue;
-  EXPECT_THAT(buffer->reading.values[0], -scaling * sensor_values[0]);
-  EXPECT_THAT(buffer->reading.values[1], -scaling * sensor_values[1]);
-  EXPECT_THAT(buffer->reading.values[2], -scaling * sensor_values[2]);
+  EXPECT_THAT(buffer->reading.gyro.x, -scaling * sensor_values[0]);
+  EXPECT_THAT(buffer->reading.gyro.y, -scaling * sensor_values[1]);
+  EXPECT_THAT(buffer->reading.gyro.z, -scaling * sensor_values[2]);
 #else
   double scaling = kGyroscopeScalingValue;
-  EXPECT_THAT(buffer->reading.values[0],
+  EXPECT_THAT(buffer->reading.gyro.x,
               scaling * (sensor_values[0] + kGyroscopeOffsetValue));
-  EXPECT_THAT(buffer->reading.values[1],
+  EXPECT_THAT(buffer->reading.gyro.y,
               scaling * (sensor_values[1] + kGyroscopeOffsetValue));
-  EXPECT_THAT(buffer->reading.values[2],
+  EXPECT_THAT(buffer->reading.gyro.z,
               scaling * (sensor_values[2] + kGyroscopeOffsetValue));
 #endif
 }
@@ -639,18 +684,57 @@ TEST_F(PlatformSensorAndProviderLinuxTest, CheckMagnetometerReadingConversion) {
   auto client = base::MakeUnique<NiceMock<MockPlatformSensorClient>>(sensor);
   PlatformSensorConfiguration configuration(10);
   EXPECT_TRUE(sensor->StartListening(client.get(), configuration));
-  WaitOnSensorReadingChangedEvent(client.get());
+  WaitOnSensorReadingChangedEvent(client.get(), sensor->GetType());
   EXPECT_TRUE(sensor->StopListening(client.get(), configuration));
 
   SensorReadingSharedBuffer* buffer =
       static_cast<SensorReadingSharedBuffer*>(mapping.get());
   double scaling = kMagnetometerScalingValue * kMicroteslaInGauss;
-  EXPECT_THAT(buffer->reading.values[0],
+  EXPECT_THAT(buffer->reading.magn.x,
               scaling * (sensor_values[0] + kMagnetometerOffsetValue));
-  EXPECT_THAT(buffer->reading.values[1],
+  EXPECT_THAT(buffer->reading.magn.y,
               scaling * (sensor_values[1] + kMagnetometerOffsetValue));
-  EXPECT_THAT(buffer->reading.values[2],
+  EXPECT_THAT(buffer->reading.magn.z,
               scaling * (sensor_values[2] + kMagnetometerOffsetValue));
+}
+
+// Tests that Ambient Light sensor client's OnSensorReadingChanged() is called
+// when the Ambient Light sensor's reporting mode is
+// mojom::ReportingMode::CONTINUOUS.
+TEST_F(PlatformSensorAndProviderLinuxTest,
+       SensorClientGetReadingChangedNotificationWhenSensorIsInContinuousMode) {
+  mojo::ScopedSharedBufferHandle handle = provider_->CloneSharedBufferHandle();
+  mojo::ScopedSharedBufferMapping mapping = handle->MapAtOffset(
+      sizeof(SensorReadingSharedBuffer),
+      SensorReadingSharedBuffer::GetOffset(SensorType::AMBIENT_LIGHT));
+
+  double sensor_value[3] = {22};
+  // Set a non-zero frequency here and sensor's reporting mode will be
+  // mojom::ReportingMode::CONTINUOUS.
+  InitializeSupportedSensor(SensorType::AMBIENT_LIGHT,
+                            kAmbientLightFrequencyValue, kZero, kZero,
+                            sensor_value);
+
+  InitializeMockUdevMethods(sensors_dir_.GetPath());
+  SetServiceStart();
+
+  auto sensor = CreateSensor(SensorType::AMBIENT_LIGHT);
+  EXPECT_TRUE(sensor);
+  EXPECT_EQ(mojom::ReportingMode::CONTINUOUS, sensor->GetReportingMode());
+
+  auto client = base::MakeUnique<NiceMock<MockPlatformSensorClient>>(sensor);
+
+  PlatformSensorConfiguration configuration(
+      sensor->GetMaximumSupportedFrequency());
+  EXPECT_TRUE(sensor->StartListening(client.get(), configuration));
+
+  WaitOnSensorReadingChangedEvent(client.get(), sensor->GetType());
+
+  EXPECT_TRUE(sensor->StopListening(client.get(), configuration));
+
+  SensorReadingSharedBuffer* buffer =
+      static_cast<SensorReadingSharedBuffer*>(mapping.get());
+  EXPECT_THAT(buffer->reading.als.value, sensor_value[0]);
 }
 
 }  // namespace device

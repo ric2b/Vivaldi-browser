@@ -9,6 +9,7 @@
 <translation id="1195412055398077112">imbas lampau</translation>
 <translation id="1247372569136754018">Mikrofon (dalaman)</translation>
 <translation id="1252999807265626933">Mengecas daripada <ph name="POWER_SOURCE" /></translation>
+<translation id="1267032506238418139">Perubahan pintasan</translation>
 <translation id="1270290102613614947">Papan kekunci pada skrin dilumpuhkan</translation>
 <translation id="1272079795634619415">Berhenti</translation>
 <translation id="1279938420744323401"><ph name="DISPLAY_NAME" /> (<ph name="ANNOTATION" />)</translation>
@@ -22,7 +23,6 @@
 <translation id="15373452373711364">Kursor tetikus besar</translation>
 <translation id="1550523713251050646">Klik untuk mendapatkan lagi pilihan</translation>
 <translation id="1621499497873603021">Masa yang tinggal sehingga bateri kosong, <ph name="TIME_LEFT" /></translation>
-<translation id="164969095109328410">Peranti Chrome</translation>
 <translation id="1677472565718498478">Berbaki <ph name="TIME" /></translation>
 <translation id="1698760176351776263">Alamat IPv6: <ph name="ADDRESS" /></translation>
 <translation id="1734367976349034509">Peranti ini diurus perusahaan</translation>
@@ -92,6 +92,7 @@
 <translation id="315116470104423982">Data mudah alih</translation>
 <translation id="3236488194889173876">Tiada rangkaian mudah alih tersedia</translation>
 <translation id="3294437725009624529">Tetamu</translation>
+<translation id="332587331255250389">Sila gantikan bateri</translation>
 <translation id="3364721542077212959">Alatan stilus</translation>
 <translation id="3368922792935385530">Disambungkan</translation>
 <translation id="3371140690572404006">Peranti USB-C (port depan sebelah kanan)</translation>
@@ -110,6 +111,7 @@
 <translation id="3712407551474845318">Tangkap bahagian</translation>
 <translation id="371370241367527062">Mikrofon depan</translation>
 <translation id="3742055079367172538">Tangkapan skrin diambil</translation>
+<translation id="3771549900096082774">Mod Kontras Tinggi</translation>
 <translation id="3775358506042162758">Anda hanya boleh mempunyai sehingga tiga akaun dalam log masuk berbilang.</translation>
 <translation id="3783640748446814672">alt</translation>
 <translation id="3784455785234192852">Kunci</translation>
@@ -142,14 +144,12 @@
 <translation id="4729904664295161097">Pembantu hanya tersedia untuk profil utama.</translation>
 <translation id="479989351350248267">search</translation>
 <translation id="4804818685124855865">Putuskan sambungan</translation>
-<translation id="4821830640883629383">Sila cas atau gantikan bateri.</translation>
 <translation id="4849058404725798627">Serlahkan objek dengan fokus papan kekunci</translation>
 <translation id="4872237917498892622">Alt+Search atau Shift</translation>
 <translation id="4895488851634969361">Bateri penuh.</translation>
 <translation id="4905614135390995787">Pintasan untuk menogol Mod Kontras Tinggi telah ditukar. Sila gunakan <ph name="NEW_SHORTCUT" /> dan bukannya <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="4918086044614829423">Terima</translation>
 <translation id="4961318399572185831">Hantar skrin</translation>
-<translation id="5011233892417813670">Chromebook</translation>
 <translation id="5168181903108465623">Peranti Cast tersedia</translation>
 <translation id="5170568018924773124">Paparkan dalam folder</translation>
 <translation id="5207949376430453814">Serlahkan karet teks</translation>
@@ -175,7 +175,6 @@
 <translation id="5901316534475909376">Shift+Esc</translation>
 <translation id="5916664084637901428">Hidupkan</translation>
 <translation id="5927132638760172455">Menghantar ke penerima yang tidak diketahui</translation>
-<translation id="5932901536148835538">Chromebit</translation>
 <translation id="5947494881799873997">Berbalik</translation>
 <translation id="595202126637698455">Penjejakan prestasi didayakan</translation>
 <translation id="5957083217255311415">Data mudah alih dimatikan.</translation>
@@ -218,7 +217,6 @@
 <translation id="683971173229319003">Carian+L</translation>
 <translation id="6857811139397017780">Aktifkan <ph name="NETWORKSERVICE" /></translation>
 <translation id="6911468394164995108">Sertai yang lain...</translation>
-<translation id="6915678159055240887">Chromebox</translation>
 <translation id="6981982820502123353">Kebolehcapaian</translation>
 <translation id="7029814467594812963">Keluar dari sesi</translation>
 <translation id="7034339000180558234">Menghantar <ph name="TAB_NAME" /> ke <ph name="RECEIVER_NAME" /></translation>
@@ -226,7 +224,6 @@
 <translation id="7066646422045619941">Rangkaian ini dilumpuhkan oleh pentadbir anda.</translation>
 <translation id="7067196344162293536">Auto putar</translation>
 <translation id="7098389117866926363">Peranti USB-C (port kiri di belakang)</translation>
-<translation id="714034171374937760">Chromebase</translation>
 <translation id="7165278925115064263">Alt+Shift+K</translation>
 <translation id="7168224885072002358">Kembali kepada peleraian lama dalam <ph name="TIMEOUT_SECONDS" /></translation>
 <translation id="7246339268451149667">Dayakan buka kunci menggunakan Cap Jari?</translation>

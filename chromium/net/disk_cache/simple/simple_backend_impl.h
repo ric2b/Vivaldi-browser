@@ -29,7 +29,7 @@
 #include "net/disk_cache/simple/simple_index_delegate.h"
 
 namespace base {
-class SingleThreadTaskRunner;
+class SequencedTaskRunner;
 class TaskRunner;
 }
 
@@ -47,6 +47,7 @@ namespace disk_cache {
 // The non-static functions below must be called on the IO thread unless
 // otherwise stated.
 
+class BackendCleanupTracker;
 class SimpleEntryImpl;
 class SimpleIndex;
 
@@ -56,9 +57,10 @@ class NET_EXPORT_PRIVATE SimpleBackendImpl : public Backend,
  public:
   SimpleBackendImpl(
       const base::FilePath& path,
+      scoped_refptr<BackendCleanupTracker> cleanup_tracker,
       int max_bytes,
       net::CacheType cache_type,
-      const scoped_refptr<base::SingleThreadTaskRunner>& cache_thread,
+      const scoped_refptr<base::SequencedTaskRunner>& cache_runner,
       net::NetLog* net_log);
 
   ~SimpleBackendImpl() override;
@@ -120,6 +122,8 @@ class NET_EXPORT_PRIVATE SimpleBackendImpl : public Backend,
   size_t DumpMemoryStats(
       base::trace_event::ProcessMemoryDump* pmd,
       const std::string& parent_absolute_name) const override;
+  uint8_t GetEntryInMemoryData(const std::string& key) override;
+  void SetEntryInMemoryData(const std::string& key, uint8_t data) override;
 
  private:
   class SimpleIterator;
@@ -213,10 +217,13 @@ class NET_EXPORT_PRIVATE SimpleBackendImpl : public Backend,
                            const CompletionCallback& callback,
                            int result);
 
+  // We want this destroyed after every other field.
+  scoped_refptr<BackendCleanupTracker> cleanup_tracker_;
+
   const base::FilePath path_;
   const net::CacheType cache_type_;
   std::unique_ptr<SimpleIndex> index_;
-  const scoped_refptr<base::SingleThreadTaskRunner> cache_thread_;
+  const scoped_refptr<base::SequencedTaskRunner> cache_runner_;
   scoped_refptr<base::TaskRunner> worker_pool_;
 
   int orig_max_size_;

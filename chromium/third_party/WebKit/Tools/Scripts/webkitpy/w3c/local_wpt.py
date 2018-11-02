@@ -7,7 +7,6 @@
 import logging
 
 from webkitpy.common.system.executive import ScriptError
-from webkitpy.w3c.chromium_commit import ChromiumCommit
 from webkitpy.w3c.common import WPT_GH_SSH_URL_TEMPLATE, WPT_MIRROR_URL, CHROMIUM_WPT_DIR
 
 _log = logging.getLogger(__name__)
@@ -48,24 +47,6 @@ class LocalWPT(object):
     def run(self, command, **kwargs):
         """Runs a command in the local WPT directory."""
         return self.host.executive.run_command(command, cwd=self.path, **kwargs)
-
-    def most_recent_chromium_commit(self):
-        """Finds the most recent commit in WPT with a Chromium commit position.
-
-        Returns:
-            A pair (commit hash, ChromiumCommit instance).
-        """
-        wpt_commit_hash = self.run(['git', 'rev-list', 'HEAD', '-n', '1', '--grep=Cr-Commit-Position'])
-        if not wpt_commit_hash:
-            return None, None
-
-        wpt_commit_hash = wpt_commit_hash.strip()
-        position = self.run(['git', 'footers', '--position', wpt_commit_hash])
-        position = position.strip()
-        assert position
-
-        chromium_commit = ChromiumCommit(self.host, position=position)
-        return wpt_commit_hash, chromium_commit
 
     def clean(self):
         """Resets git to a clean state, on origin/master with no changed files."""
@@ -120,34 +101,43 @@ class LocalWPT(object):
         else:
             self.run(['git', 'push', 'origin', branch_name])
 
-    def test_patch(self, patch, chromium_commit=None):
-        """Returns the expected output of a patch against origin/master.
+    def test_patch(self, patch):
+        """Tests whether a patch can be cleanly applied against origin/master.
 
         Args:
             patch: The patch to test against.
 
         Returns:
-            A string containing the diff the patch produced.
+            (success, error): success is True if and only if the patch can be
+            cleanly applied and produce non-empty diff; error is a string of
+            error messages when the patch fails to apply, empty otherwise.
         """
         self.clean()
+        error = self.apply_patch(patch)
+        diff = self.run(['git', 'diff', 'origin/master'])
+        self.clean()
+        if error != '':
+            return False, error
+        if diff == '':
+            # No error message is returned for empty diff. The patch might be
+            # empty or has been exported.
+            return False, ''
+        return True, ''
 
+    def apply_patch(self, patch):
+        """Applies a Chromium patch to the local WPT repo and stages.
+
+        Returns:
+            A string containing error messages from git, empty if the patch applies cleanly.
+        """
         # Remove Chromium WPT directory prefix.
         patch = patch.replace(CHROMIUM_WPT_DIR, '')
-
         try:
             self.run(['git', 'apply', '-'], input=patch)
             self.run(['git', 'add', '.'])
-            output = self.run(['git', 'diff', 'origin/master'])
-        except ScriptError as e:
-            _log.info('Patch did not apply cleanly for the following commit:')
-            if chromium_commit:
-                _log.info('Commit: %s', chromium_commit.url())
-                _log.info('Commit subject: "%s"', chromium_commit.subject())
-                _log.info('Message: %s\n\n', e.message)
-            output = ''
-
-        self.clean()
-        return output
+        except ScriptError as error:
+            return error.message
+        return ''
 
     def commits_behind_master(self, commit):
         """Returns the number of commits after the given commit on origin/master.

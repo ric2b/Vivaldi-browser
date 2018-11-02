@@ -52,7 +52,6 @@ class WebView;
 class WebWidget;
 enum class WebSandboxFlags;
 struct WebDateTimeChooserParams;
-struct WebPoint;
 struct WebRect;
 struct WebSize;
 struct WebWindowFeatures;
@@ -244,14 +243,13 @@ class WebViewClient : protected WebWidgetClient {
   void DidOverscroll(const WebFloatSize& overscroll_delta,
                      const WebFloatSize& accumulated_overscroll,
                      const WebFloatPoint& position_in_viewport,
-                     const WebFloatSize& velocity_in_viewport) override {}
+                     const WebFloatSize& velocity_in_viewport,
+                     const WebScrollBoundaryBehavior& behavior) override {}
   void HasTouchEventHandlers(bool) override {}
   WebLayerTreeView* InitializeLayerTreeView() override { return nullptr; }
   WebScreenInfo GetScreenInfo() override { return WebScreenInfo(); }
   void SetTouchAction(WebTouchAction touch_action) override {}
-  void ShowUnhandledTapUIIfNeeded(const WebPoint& tapped_position,
-                                  const WebNode& tapped_node,
-                                  bool page_changed) override {}
+  void ShowUnhandledTapUIIfNeeded(const WebTappedInfo& tapped_info) override {}
   void Show(WebNavigationPolicy) override {}
   virtual WebWidgetClient* WidgetClient() { return this; }
 

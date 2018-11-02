@@ -18,7 +18,8 @@
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
-#include "chrome/browser/safe_browsing/download_protection_service.h"
+#include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
+#include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
 #include "chrome/browser/safe_browsing/incident_reporting/delayed_analysis_callback.h"
 #include "chrome/browser/safe_browsing/incident_reporting/delayed_callback_runner.h"
 #include "chrome/browser/safe_browsing/incident_reporting/download_metadata_manager.h"
@@ -51,9 +52,7 @@ class TrackedPreferenceValidationDelegate;
 
 namespace safe_browsing {
 
-#if !defined(GOOGLE_CHROME_BUILD)
-extern const base::Feature kIncidentReportingDisableUpload;
-#endif
+extern const base::Feature kIncidentReportingEnableUpload;
 
 class ClientDownloadRequest;
 class ClientIncidentReport;
@@ -296,8 +295,7 @@ class IncidentReportingService : public content::NotificationObserver {
 
   // A subscription for ClientDownloadRequests, used to persist them for later
   // use.
-  DownloadProtectionService::ClientDownloadRequestSubscription
-      client_download_request_subscription_;
+  ClientDownloadRequestSubscription client_download_request_subscription_;
 
   // True when the asynchronous environment collection task has been fired off
   // but has not yet completed.

@@ -29,12 +29,15 @@ class TracedValue;
 }
 }
 
+namespace viz {
+class CopyOutputRequest;
+class SharedQuadState;
+}
+
 namespace cc {
 
 class DrawQuad;
-class CopyOutputRequest;
 class RenderPassDrawQuad;
-class SharedQuadState;
 
 // A list of DrawQuad objects, sorted internally in front-to-back order.
 class CC_EXPORT QuadList : public ListContainer<DrawQuad> {
@@ -49,9 +52,13 @@ class CC_EXPORT QuadList : public ListContainer<DrawQuad> {
   inline BackToFrontIterator BackToFrontEnd() { return rend(); }
   inline ConstBackToFrontIterator BackToFrontBegin() const { return rbegin(); }
   inline ConstBackToFrontIterator BackToFrontEnd() const { return rend(); }
+
+  // This function is used by overlay algorithm to fill the backbuffer with
+  // transparent black.
+  void ReplaceExistingQuadWithOpaqueTransparentSolidColor(Iterator at);
 };
 
-typedef ListContainer<SharedQuadState> SharedQuadStateList;
+using SharedQuadStateList = ListContainer<viz::SharedQuadState>;
 
 using RenderPassId = uint64_t;
 
@@ -93,7 +100,7 @@ class CC_EXPORT RenderPass {
 
   void AsValueInto(base::trace_event::TracedValue* dict) const;
 
-  SharedQuadState* CreateAndAppendSharedQuadState();
+  viz::SharedQuadState* CreateAndAppendSharedQuadState();
 
   template <typename DrawQuadType>
   DrawQuadType* CreateAndAppendDrawQuad() {
@@ -102,10 +109,8 @@ class CC_EXPORT RenderPass {
 
   RenderPassDrawQuad* CopyFromAndAppendRenderPassDrawQuad(
       const RenderPassDrawQuad* quad,
-      const SharedQuadState* shared_quad_state,
       RenderPassId render_pass_id);
-  DrawQuad* CopyFromAndAppendDrawQuad(const DrawQuad* quad,
-                                      const SharedQuadState* shared_quad_state);
+  DrawQuad* CopyFromAndAppendDrawQuad(const DrawQuad* quad);
 
   // Uniquely identifies the render pass in the compositor's current frame.
   RenderPassId id = 0;
@@ -141,7 +146,7 @@ class CC_EXPORT RenderPass {
   // contents as a bitmap, and give a copy of the bitmap to each callback in
   // this list. This property should not be serialized between compositors, as
   // it only makes sense in the root compositor.
-  std::vector<std::unique_ptr<CopyOutputRequest>> copy_requests;
+  std::vector<std::unique_ptr<viz::CopyOutputRequest>> copy_requests;
 
   QuadList quad_list;
   SharedQuadStateList shared_quad_state_list;

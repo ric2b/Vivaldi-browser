@@ -25,8 +25,7 @@ using base::TimeDelta;
 using base::TimeTicks;
 
 static base::TimeTicks TicksFromSecondsF(double seconds) {
-  return base::TimeTicks::FromInternalValue(seconds *
-                                            base::Time::kMicrosecondsPerSecond);
+  return base::TimeTicks() + base::TimeDelta::FromSecondsD(seconds);
 }
 
 // An ElementAnimations cannot be ticked at 0.0, since an animation
@@ -283,7 +282,7 @@ class TestAnimationDelegateThatDestroysPlayer : public TestAnimationDelegate {
   TestAnimationDelegateThatDestroysPlayer() {}
 
   void NotifyAnimationStarted(base::TimeTicks monotonic_time,
-                              TargetProperty::Type target_property,
+                              int target_property,
                               int group) override {
     TestAnimationDelegate::NotifyAnimationStarted(monotonic_time,
                                                   target_property, group);
@@ -1963,7 +1962,7 @@ TEST_F(ElementAnimationsTest, ImplThreadTakeoverAnimationGetsDeleted) {
   EXPECT_TRUE(host_impl_->needs_push_properties());
   EXPECT_EQ(1u, events->events_.size());
   EXPECT_EQ(AnimationEvent::TAKEOVER, events->events_[0].type);
-  EXPECT_EQ(123, events->events_[0].animation_start_time);
+  EXPECT_EQ(TicksFromSecondsF(123), events->events_[0].animation_start_time);
   EXPECT_EQ(
       target_value,
       events->events_[0].curve->ToScrollOffsetAnimationCurve()->target_value());

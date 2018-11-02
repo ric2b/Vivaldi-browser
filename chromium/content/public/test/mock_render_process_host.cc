@@ -23,6 +23,7 @@
 #include "content/common/child_process_host_impl.h"
 #include "content/common/frame_messages.h"
 #include "content/common/renderer.mojom.h"
+#include "content/public/browser/android/child_process_importance.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/notification_details.h"
@@ -50,7 +51,7 @@ MockRenderProcessHost::MockRenderProcessHost(BrowserContext* browser_context)
       is_for_guests_only_(false),
       is_process_backgrounded_(false),
       is_unused_(true),
-      worker_ref_count_(0),
+      keep_alive_ref_count_(0),
       shared_bitmap_allocation_notifier_impl_(
           viz::ServerSharedBitmapManager::current()),
       weak_ptr_factory_(this) {
@@ -90,7 +91,7 @@ void MockRenderProcessHost::SimulateCrash() {
   // the listeners by descending routing ID, instead of using the arbitrary
   // hash-map order like RenderProcessHostImpl.
   std::vector<std::pair<int32_t, IPC::Listener*>> sorted_listeners_;
-  IDMap<IPC::Listener*>::iterator iter(&listeners_);
+  base::IDMap<IPC::Listener*>::iterator iter(&listeners_);
   while (!iter.IsAtEnd()) {
     sorted_listeners_.push_back(
         std::make_pair(iter.GetCurrentKey(), iter.GetCurrentValue()));
@@ -234,7 +235,7 @@ void MockRenderProcessHost::Cleanup() {
     // Post the delete of |this| as a WeakPtr so that if |this| is deleted by a
     // test directly, we don't double free.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&DeleteIt, weak_ptr_factory_.GetWeakPtr()));
+        FROM_HERE, base::BindOnce(&DeleteIt, weak_ptr_factory_.GetWeakPtr()));
     RenderProcessHostImpl::UnregisterHost(GetID());
     deletion_callback_called_ = true;
   }
@@ -251,6 +252,17 @@ void MockRenderProcessHost::AddWidget(RenderWidgetHost* widget) {
 
 void MockRenderProcessHost::RemoveWidget(RenderWidgetHost* widget) {
 }
+
+#if defined(OS_ANDROID)
+void MockRenderProcessHost::UpdateWidgetImportance(
+    ChildProcessImportance old_value,
+    ChildProcessImportance new_value) {}
+
+ChildProcessImportance MockRenderProcessHost::ComputeEffectiveImportance() {
+  NOTIMPLEMENTED();
+  return ChildProcessImportance::NORMAL;
+}
+#endif
 
 void MockRenderProcessHost::SetSuddenTerminationAllowed(bool allowed) {
 }
@@ -307,31 +319,23 @@ bool MockRenderProcessHost::IsProcessBackgrounded() const {
   return is_process_backgrounded_;
 }
 
-size_t MockRenderProcessHost::GetWorkerRefCount() const {
-  return worker_ref_count_;
+size_t MockRenderProcessHost::GetKeepAliveRefCount() const {
+  return keep_alive_ref_count_;
 }
 
-void MockRenderProcessHost::IncrementServiceWorkerRefCount() {
-  ++worker_ref_count_;
+void MockRenderProcessHost::IncrementKeepAliveRefCount() {
+  ++keep_alive_ref_count_;
 }
 
-void MockRenderProcessHost::DecrementServiceWorkerRefCount() {
-  --worker_ref_count_;
+void MockRenderProcessHost::DecrementKeepAliveRefCount() {
+  --keep_alive_ref_count_;
 }
 
-void MockRenderProcessHost::IncrementSharedWorkerRefCount() {
-  ++worker_ref_count_;
+void MockRenderProcessHost::DisableKeepAliveRefCount() {
+  keep_alive_ref_count_ = 0;
 }
 
-void MockRenderProcessHost::DecrementSharedWorkerRefCount() {
-  --worker_ref_count_;
-}
-
-void MockRenderProcessHost::ForceReleaseWorkerRefCounts() {
-  worker_ref_count_ = 0;
-}
-
-bool MockRenderProcessHost::IsWorkerRefCountDisabled() {
+bool MockRenderProcessHost::IsKeepAliveRefCountDisabled() {
   return false;
 }
 
@@ -376,7 +380,7 @@ void MockRenderProcessHost::SetIsUsed() {
 }
 
 bool MockRenderProcessHost::HostHasNotBeenUsed() {
-  return IsUnused() && listeners_.IsEmpty() && GetWorkerRefCount() == 0;
+  return IsUnused() && listeners_.IsEmpty() && GetKeepAliveRefCount() == 0;
 }
 
 void MockRenderProcessHost::FilterURL(bool empty_allowed, GURL* url) {
@@ -432,6 +436,12 @@ void MockRenderProcessHost::OverrideBinderForTesting(
     const std::string& interface_name,
     const InterfaceBinder& binder) {
   binder_overrides_[interface_name] = binder;
+}
+
+void MockRenderProcessHost::OverrideRendererInterfaceForTesting(
+    std::unique_ptr<mojo::AssociatedInterfacePtr<mojom::Renderer>>
+        renderer_interface) {
+  renderer_interface_ = std::move(renderer_interface);
 }
 
 MockRenderProcessHostFactory::MockRenderProcessHostFactory() {}

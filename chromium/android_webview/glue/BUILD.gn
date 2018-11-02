@@ -29,6 +29,7 @@ android_library("glue") {
   _ijar = webview_public_framework_ijar
   _ijar_dir = get_label_info(alternative_android_sdk_ijar_dep, "target_out_dir")
   alternative_android_sdk_ijar = "$_ijar_dir/$_ijar"
+  alternative_android_sdk_jar = webview_public_framework_jar
   java_files = [
     "java/src/com/android/webview/chromium/ContentSettingsAdapter.java",
     "java/src/com/android/webview/chromium/CookieManagerAdapter.java",
@@ -46,6 +47,7 @@ android_library("glue") {
     "java/src/com/android/webview/chromium/WebMessagePortAdapter.java",
     "java/src/com/android/webview/chromium/WebStorageAdapter.java",
     "java/src/com/android/webview/chromium/WebViewChromiumFactoryProvider.java",
+    "java/src/com/android/webview/chromium/WebViewChromiumFactoryProviderForO.java",
     "java/src/com/android/webview/chromium/WebViewChromium.java",
     "java/src/com/android/webview/chromium/WebViewContentsClientAdapter.java",
     "java/src/com/android/webview/chromium/WebViewDatabaseAdapter.java",

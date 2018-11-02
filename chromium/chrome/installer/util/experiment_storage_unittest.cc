@@ -89,7 +89,7 @@ TEST_P(ExperimentStorageTest, TestEncodeDecodeForMax) {
   // it to its maximum value.
   metrics.toast_hour = 24;
   base::string16 encoded_metrics(ExperimentStorage::EncodeMetrics(metrics));
-  EXPECT_EQ(L"///j//8f", encoded_metrics);
+  EXPECT_EQ(L"///j//9B", encoded_metrics);
   ExperimentMetrics decoded_metrics;
   ASSERT_TRUE(
       ExperimentStorage::DecodeMetrics(encoded_metrics, &decoded_metrics));
@@ -139,6 +139,8 @@ TEST_P(ExperimentStorageTest, TestLoadStoreExperiment) {
   Experiment stored_experiment;
   ASSERT_TRUE(storage.AcquireLock()->LoadExperiment(&stored_experiment));
   EXPECT_EQ(ExperimentMetrics::kGroupAssigned, stored_experiment.state());
+  EXPECT_EQ(ExperimentMetrics::kGroupAssigned,
+            stored_experiment.metrics().state);
   EXPECT_EQ(5, stored_experiment.group());
   // Verify that expeirment state is stored in correct location in registry.
   base::win::RegKey key;

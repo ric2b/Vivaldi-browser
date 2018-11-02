@@ -105,6 +105,14 @@ DISABLE(ServiceWorkerURLRequestJobTest,
         NavPreloadMetrics_NavPreloadFirst_MainFrame)
 DISABLE(ContentSubresourceFilterThrottleManagerTest, LogActivation)
 DISABLE(SessionsSyncManagerTest, TrackTasksOnLocalTabModified)
+DISABLE(CookieManagerImplTest, GetAllCookies)
+DISABLE(DataReductionProxyNetworkDelegateTest, IncrementingMainFramePageId)
+DISABLE(DataReductionProxyNetworkDelegateTest, RedirectSharePid)
+DISABLE(DataReductionProxyNetworkDelegateTest, ResetSessionResetsId)
+DISABLE(DataReductionProxyNetworkDelegateTest, SubResourceNoPageId)
+DISABLE(DownloadArchivesTaskTest, MultipleLargeArchivesToDownload)
+DISABLE(DownloadArchivesTaskTest, SingleArchiveToDownload)
+DISABLE(DownloadArchivesTaskTest, TooManyArchivesToDownload)
 
 // Fails on tester, works on dev PC; assume it is the timing issue
 DISABLE(NotificationPermissionContextTest, TestDenyInIncognitoAfterDelay)

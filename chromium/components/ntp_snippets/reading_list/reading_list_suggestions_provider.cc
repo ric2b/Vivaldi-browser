@@ -81,23 +81,23 @@ void ReadingListSuggestionsProvider::DismissSuggestion(
 
 void ReadingListSuggestionsProvider::FetchSuggestionImage(
     const ContentSuggestion::ID& suggestion_id,
-    const ImageFetchedCallback& callback) {
+    ImageFetchedCallback callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(callback, gfx::Image()));
+      FROM_HERE, base::BindOnce(std::move(callback), gfx::Image()));
 }
 
 void ReadingListSuggestionsProvider::Fetch(
     const Category& category,
     const std::set<std::string>& known_suggestion_ids,
-    const FetchDoneCallback& callback) {
+    FetchDoneCallback callback) {
   LOG(DFATAL) << "ReadingListSuggestionsProvider has no |Fetch| functionality!";
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
-      base::Bind(callback,
-                 Status(StatusCode::PERMANENT_ERROR,
-                        "ReadingListSuggestionsProvider has no |Fetch| "
-                        "functionality!"),
-                 base::Passed(std::vector<ContentSuggestion>())));
+      base::BindOnce(std::move(callback),
+                     Status(StatusCode::PERMANENT_ERROR,
+                            "ReadingListSuggestionsProvider has no |Fetch| "
+                            "functionality!"),
+                     std::vector<ContentSuggestion>()));
 }
 
 void ReadingListSuggestionsProvider::ClearHistory(
@@ -114,9 +114,9 @@ void ReadingListSuggestionsProvider::ClearCachedSuggestions(Category category) {
 
 void ReadingListSuggestionsProvider::GetDismissedSuggestionsForDebugging(
     Category category,
-    const DismissedSuggestionsCallback& callback) {
+    DismissedSuggestionsCallback callback) {
   if (!reading_list_model_ || reading_list_model_->IsPerformingBatchUpdates()) {
-    callback.Run(std::vector<ContentSuggestion>());
+    std::move(callback).Run(std::vector<ContentSuggestion>());
     return;
   }
 
@@ -136,7 +136,7 @@ void ReadingListSuggestionsProvider::GetDismissedSuggestionsForDebugging(
     suggestions.emplace_back(ConvertEntry(entry));
   }
 
-  callback.Run(std::move(suggestions));
+  std::move(callback).Run(std::move(suggestions));
 }
 
 void ReadingListSuggestionsProvider::ClearDismissedSuggestionsForDebugging(
@@ -162,6 +162,8 @@ void ReadingListSuggestionsProvider::ReadingListModelBeingDeleted(
 void ReadingListSuggestionsProvider::ReadingListDidApplyChanges(
     ReadingListModel* model) {
   DCHECK(model == reading_list_model_);
+  if (model->IsPerformingBatchUpdates())
+    return;
 
   FetchReadingListInternal();
 }
@@ -227,7 +229,6 @@ ContentSuggestion ReadingListSuggestionsProvider::ConvertEntry(
       base::Time::FromDoubleT(entry_time / base::Time::kMicrosecondsPerSecond));
 
   auto extra = base::MakeUnique<ReadingListSuggestionExtra>();
-  extra->distilled = entry->DistilledState() == ReadingListEntry::PROCESSED;
   extra->favicon_page_url =
       entry->DistilledURL().is_valid() ? entry->DistilledURL() : entry->URL();
   suggestion.set_reading_list_suggestion_extra(std::move(extra));

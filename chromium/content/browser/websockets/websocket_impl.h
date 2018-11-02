@@ -25,21 +25,20 @@ class Origin;
 }  // namespace url
 
 namespace net {
+class URLRequestContext;
 class WebSocketChannel;
 }  // namespace net
 
 namespace content {
-class StoragePartition;
 
 // Host of net::WebSocketChannel.
-class CONTENT_EXPORT WebSocketImpl
-    : NON_EXPORTED_BASE(public blink::mojom::WebSocket) {
+class CONTENT_EXPORT WebSocketImpl : public blink::mojom::WebSocket {
  public:
   class Delegate {
    public:
     virtual ~Delegate() {}
     virtual int GetClientProcessId() = 0;
-    virtual StoragePartition* GetStoragePartition() = 0;
+    virtual net::URLRequestContext* GetURLRequestContext() = 0;
     virtual void OnReceivedResponseFromServer(WebSocketImpl* impl) = 0;
     virtual void OnLostConnectionToClient(WebSocketImpl* impl) = 0;
   };
@@ -59,7 +58,7 @@ class CONTENT_EXPORT WebSocketImpl
   void AddChannelRequest(const GURL& url,
                          const std::vector<std::string>& requested_protocols,
                          const url::Origin& origin,
-                         const GURL& first_party_for_cookies,
+                         const GURL& site_for_cookies,
                          const std::string& user_agent_override,
                          blink::mojom::WebSocketClientPtr client) override;
   void SendFrame(bool fin,
@@ -78,7 +77,7 @@ class CONTENT_EXPORT WebSocketImpl
   void AddChannel(const GURL& socket_url,
                   const std::vector<std::string>& requested_protocols,
                   const url::Origin& origin,
-                  const GURL& first_party_for_cookies,
+                  const GURL& site_for_cookies,
                   const std::string& user_agent_override);
 
   Delegate* delegate_;

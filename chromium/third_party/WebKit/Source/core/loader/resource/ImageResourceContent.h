@@ -53,7 +53,7 @@ class CORE_EXPORT ImageResourceContent final
   }
 
   // Creates ImageResourceContent from an already loaded image.
-  static ImageResourceContent* CreateLoaded(PassRefPtr<blink::Image>);
+  static ImageResourceContent* CreateLoaded(RefPtr<blink::Image>);
 
   static ImageResourceContent* Fetch(FetchParameters&, ResourceFetcher*);
 
@@ -122,6 +122,9 @@ class CORE_EXPORT ImageResourceContent final
   bool IsAccessAllowed(SecurityOrigin*);
   const ResourceResponse& GetResponse() const;
   const ResourceError& GetResourceError() const;
+  // DEPRECATED: ImageResourceContents consumers shouldn't need to worry about
+  // whether the underlying Resource is being revalidated.
+  bool IsCacheValidator() const;
 
   // For FrameSerializer.
   bool HasCacheControlNoStoreHeader() const;
@@ -160,7 +163,7 @@ class CORE_EXPORT ImageResourceContent final
     // Only occurs when UpdateImage or ClearAndUpdateImage is specified.
     kShouldDecodeError,
   };
-  WARN_UNUSED_RESULT UpdateImageResult UpdateImage(PassRefPtr<SharedBuffer>,
+  WARN_UNUSED_RESULT UpdateImageResult UpdateImage(RefPtr<SharedBuffer>,
                                                    ResourceStatus,
                                                    UpdateImageOption,
                                                    bool all_data_received,
@@ -173,7 +176,7 @@ class CORE_EXPORT ImageResourceContent final
   void SetImageResourceInfo(ImageResourceInfo*);
 
   ResourcePriority PriorityFromObservers() const;
-  PassRefPtr<const SharedBuffer> ResourceBuffer() const;
+  RefPtr<const SharedBuffer> ResourceBuffer() const;
   bool ShouldUpdateImageImmediately() const;
   bool HasObservers() const {
     return !observers_.IsEmpty() || !finished_observers_.IsEmpty();
@@ -183,7 +186,7 @@ class CORE_EXPORT ImageResourceContent final
   }
 
  private:
-  explicit ImageResourceContent(PassRefPtr<blink::Image> = nullptr);
+  explicit ImageResourceContent(RefPtr<blink::Image> = nullptr);
 
   // ImageObserver
   void DecodedSizeChangedTo(const blink::Image*, size_t new_size) override;
@@ -192,7 +195,7 @@ class CORE_EXPORT ImageResourceContent final
   void ChangedInRect(const blink::Image*, const IntRect&) override;
   void AsyncLoadCompleted(const blink::Image*) override;
 
-  PassRefPtr<Image> CreateImage(bool is_multipart);
+  RefPtr<Image> CreateImage(bool is_multipart);
   void ClearImage();
 
   enum NotifyFinishOption { kShouldNotifyFinish, kDoNotNotifyFinish };

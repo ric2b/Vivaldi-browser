@@ -14,32 +14,30 @@ namespace cc {
 StreamVideoDrawQuad::StreamVideoDrawQuad() {
 }
 
-void StreamVideoDrawQuad::SetNew(const SharedQuadState* shared_quad_state,
+void StreamVideoDrawQuad::SetNew(const viz::SharedQuadState* shared_quad_state,
                                  const gfx::Rect& rect,
-                                 const gfx::Rect& opaque_rect,
-                                 const gfx::Rect& visible_rect,
-                                 unsigned resource_id,
-                                 gfx::Size resource_size_in_pixels,
-                                 const gfx::Transform& matrix) {
-  bool needs_blending = false;
-  DrawQuad::SetAll(shared_quad_state, DrawQuad::STREAM_VIDEO_CONTENT, rect,
-                   opaque_rect, visible_rect, needs_blending);
-  resources.ids[kResourceIdIndex] = resource_id;
-  overlay_resources.size_in_pixels[kResourceIdIndex] = resource_size_in_pixels;
-  resources.count = 1;
-  this->matrix = matrix;
-}
-
-void StreamVideoDrawQuad::SetAll(const SharedQuadState* shared_quad_state,
-                                 const gfx::Rect& rect,
-                                 const gfx::Rect& opaque_rect,
                                  const gfx::Rect& visible_rect,
                                  bool needs_blending,
                                  unsigned resource_id,
                                  gfx::Size resource_size_in_pixels,
                                  const gfx::Transform& matrix) {
   DrawQuad::SetAll(shared_quad_state, DrawQuad::STREAM_VIDEO_CONTENT, rect,
-                   opaque_rect, visible_rect, needs_blending);
+                   visible_rect, needs_blending);
+  resources.ids[kResourceIdIndex] = resource_id;
+  overlay_resources.size_in_pixels[kResourceIdIndex] = resource_size_in_pixels;
+  resources.count = 1;
+  this->matrix = matrix;
+}
+
+void StreamVideoDrawQuad::SetAll(const viz::SharedQuadState* shared_quad_state,
+                                 const gfx::Rect& rect,
+                                 const gfx::Rect& visible_rect,
+                                 bool needs_blending,
+                                 unsigned resource_id,
+                                 gfx::Size resource_size_in_pixels,
+                                 const gfx::Transform& matrix) {
+  DrawQuad::SetAll(shared_quad_state, DrawQuad::STREAM_VIDEO_CONTENT, rect,
+                   visible_rect, needs_blending);
   resources.ids[kResourceIdIndex] = resource_id;
   overlay_resources.size_in_pixels[kResourceIdIndex] = resource_size_in_pixels;
   resources.count = 1;

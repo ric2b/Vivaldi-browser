@@ -17,12 +17,10 @@
 #include "ash/system/session/logout_button_tray.h"
 #include "ash/system/status_area_widget_delegate.h"
 #include "ash/system/tray/system_tray.h"
-#include "ash/system/tray/system_tray_delegate.h"
 #include "ash/system/virtual_keyboard/virtual_keyboard_tray.h"
 #include "ash/system/web_notification/web_notification_tray.h"
 #include "base/i18n/time_formatting.h"
 #include "ui/display/display.h"
-#include "ui/events/devices/input_device_manager.h"
 #include "ui/native_theme/native_theme_dark_aura.h"
 
 namespace ash {
@@ -64,10 +62,8 @@ void StatusAreaWidget::CreateTrayViews() {
   AddImeMenuTray();
   AddLogoutButtonTray();
 
-  SystemTrayDelegate* delegate = Shell::Get()->system_tray_delegate();
-  DCHECK(delegate);
   // Initialize after all trays have been created.
-  system_tray_->InitializeTrayItems(delegate, web_notification_tray_);
+  system_tray_->InitializeTrayItems(web_notification_tray_);
   web_notification_tray_->Initialize();
   lock_screen_action_tray_->Initialize();
   if (palette_tray_)

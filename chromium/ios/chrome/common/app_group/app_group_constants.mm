@@ -21,12 +21,10 @@ const char kChromeAppGroupCommandPreference[] =
     "GroupApp.ChromeAppGroupCommand";
 
 const char kChromeAppGroupCommandTimePreference[] = "CommandTime";
-
 const char kChromeAppGroupCommandAppPreference[] = "SourceApp";
-
 const char kChromeAppGroupCommandCommandPreference[] = "Command";
-
-const char kChromeAppGroupCommandParameterPreference[] = "Parameter";
+const char kChromeAppGroupCommandURLPreference[] = "URL";
+const char kChromeAppGroupCommandIndexPreference[] = "Index";
 
 const char kChromeAppGroupOpenURLCommand[] = "openurl";
 const char kChromeAppGroupVoiceSearchCommand[] = "voicesearch";
@@ -47,7 +45,13 @@ NSString* const kShareItemDate = @"Date";
 NSString* const kShareItemCancel = @"Cancel";
 NSString* const kShareItemType = @"Type";
 
-NSString* const kShareItemShareExtensionSource = @"ChromeShareExtension";
+NSString* const kShareItemSourceShareExtension = @"ChromeShareExtension";
+
+NSString* const kOpenCommandSourceTodayExtension = @"ChromeTodayExtension";
+NSString* const kOpenCommandSourceContentExtension = @"ChromeContentExtension";
+NSString* const kOpenCommandSourceSearchExtension = @"ChromeSearchExtension";
+
+NSString* const kSuggestedItems = @"SuggestedItems";
 
 NSString* ApplicationGroup() {
   NSBundle* bundle = [NSBundle mainBundle];
@@ -105,13 +109,25 @@ NSURL* LegacyShareExtensionItemsFolder() {
 
 NSURL* ExternalCommandsItemsFolder() {
   NSURL* groupURL = [[NSFileManager defaultManager]
-      containerURLForSecurityApplicationGroupIdentifier:ApplicationGroup()];
+      containerURLForSecurityApplicationGroupIdentifier:
+          CommonApplicationGroup()];
   NSURL* chromeURL =
       [groupURL URLByAppendingPathComponent:@"Chrome" isDirectory:YES];
   NSURL* externalCommandsURL =
       [chromeURL URLByAppendingPathComponent:@"ExternalCommands"
                                  isDirectory:YES];
   return externalCommandsURL;
+}
+
+NSURL* ContentWidgetFaviconsFolder() {
+  NSURL* groupURL = [[NSFileManager defaultManager]
+      containerURLForSecurityApplicationGroupIdentifier:ApplicationGroup()];
+  NSURL* chromeURL =
+      [groupURL URLByAppendingPathComponent:@"Chrome" isDirectory:YES];
+  NSURL* contentWidgetFaviconsURL =
+      [chromeURL URLByAppendingPathComponent:@"ContentWidgetFavicons"
+                                 isDirectory:YES];
+  return contentWidgetFaviconsURL;
 }
 
 }  // namespace app_group

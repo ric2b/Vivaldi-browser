@@ -17,7 +17,6 @@
 #include "base/feature_list.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram.h"
 #include "base/profiler/scoped_tracker.h"
@@ -221,7 +220,7 @@ void ProfileSyncService::Initialize() {
 
   // We don't pass StartupController an Unretained reference to future-proof
   // against the controller impl changing to post tasks.
-  startup_controller_ = base::MakeUnique<syncer::StartupController>(
+  startup_controller_ = std::make_unique<syncer::StartupController>(
       &sync_prefs_,
       base::Bind(&ProfileSyncService::CanEngineStart, base::Unretained(this)),
       base::Bind(&ProfileSyncService::StartUpSlowEngineComponents,
@@ -230,10 +229,10 @@ void ProfileSyncService::Initialize() {
       sync_client_->GetSyncSessionsClient()->GetLocalSessionEventRouter();
   local_device_ = sync_client_->GetSyncApiComponentFactory()
                       ->CreateLocalDeviceInfoProvider();
-  sync_stopped_reporter_ = base::MakeUnique<syncer::SyncStoppedReporter>(
+  sync_stopped_reporter_ = std::make_unique<syncer::SyncStoppedReporter>(
       sync_service_url_, local_device_->GetSyncUserAgent(),
       url_request_context_, syncer::SyncStoppedReporter::ResultCallback());
-  sessions_sync_manager_ = base::MakeUnique<SessionsSyncManager>(
+  sessions_sync_manager_ = std::make_unique<SessionsSyncManager>(
       sync_client_->GetSyncSessionsClient(), &sync_prefs_, local_device_.get(),
       router,
       base::Bind(&ProfileSyncService::NotifyForeignSessionUpdated,
@@ -245,14 +244,14 @@ void ProfileSyncService::Initialize() {
   if (base::FeatureList::IsEnabled(switches::kSyncUSSDeviceInfo)) {
     const syncer::ModelTypeStoreFactory& store_factory =
         GetModelTypeStoreFactory(syncer::DEVICE_INFO, base_directory_);
-    device_info_sync_bridge_ = base::MakeUnique<DeviceInfoSyncBridge>(
+    device_info_sync_bridge_ = std::make_unique<DeviceInfoSyncBridge>(
         local_device_.get(), store_factory,
         base::BindRepeating(
             &ModelTypeChangeProcessor::Create,
             base::BindRepeating(&syncer::ReportUnrecoverableError, channel_)));
   } else {
     device_info_sync_service_ =
-        base::MakeUnique<DeviceInfoSyncService>(local_device_.get());
+        std::make_unique<DeviceInfoSyncService>(local_device_.get());
   }
 
   syncer::SyncApiComponentFactory::RegisterDataTypesMethod
@@ -319,11 +318,11 @@ void ProfileSyncService::Initialize() {
 #if !defined(OS_ANDROID)
   DCHECK(sync_error_controller_ == nullptr)
       << "Initialize() called more than once.";
-  sync_error_controller_ = base::MakeUnique<syncer::SyncErrorController>(this);
+  sync_error_controller_ = std::make_unique<syncer::SyncErrorController>(this);
   AddObserver(sync_error_controller_.get());
 #endif
 
-  memory_pressure_listener_ = base::MakeUnique<base::MemoryPressureListener>(
+  memory_pressure_listener_ = std::make_unique<base::MemoryPressureListener>(
       base::Bind(&ProfileSyncService::OnMemoryPressure,
                  sync_enabled_weak_factory_.GetWeakPtr()));
   startup_controller_->Reset(GetRegisteredDataTypes());
@@ -1145,9 +1144,11 @@ void ProfileSyncService::OnActionableError(const SyncProtocolError& error) {
 #if !defined(OS_CHROMEOS)
       // On every platform except ChromeOS, sign out the user after a dashboard
       // clear.
-      static_cast<SigninManager*>(signin_->GetOriginal())
-          ->SignOut(signin_metrics::SERVER_FORCED_DISABLE,
-                    signin_metrics::SignoutDelete::IGNORE_METRIC);
+      if (!IsLocalSyncEnabled()) {
+        static_cast<SigninManager*>(signin_->GetOriginal())
+            ->SignOut(signin_metrics::SERVER_FORCED_DISABLE,
+                      signin_metrics::SignoutDelete::IGNORE_METRIC);
+      }
 #endif
       break;
     case syncer::STOP_SYNC_FOR_DISABLED_ACCOUNT:
@@ -1686,7 +1687,7 @@ void ProfileSyncService::ConfigureDataTypeManager() {
     restart = true;
 
     // We create the migrator at the same time.
-    migrator_ = base::MakeUnique<BackendMigrator>(
+    migrator_ = std::make_unique<BackendMigrator>(
         debug_identifier_, GetUserShare(), this, data_type_manager_.get(),
         base::Bind(&ProfileSyncService::StartSyncingWithServer,
                    base::Unretained(this)));
@@ -1750,7 +1751,7 @@ void ProfileSyncService::GetModelSafeRoutingInfo(
 
 std::unique_ptr<base::Value> ProfileSyncService::GetTypeStatusMap() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  auto result = base::MakeUnique<base::ListValue>();
+  auto result = std::make_unique<base::ListValue>();
 
   if (!engine_ || !engine_initialized_) {
     return std::move(result);
@@ -1779,7 +1780,7 @@ std::unique_ptr<base::Value> ProfileSyncService::GetTypeStatusMap() {
   for (ModelTypeSet::Iterator it = registered.First(); it.Good(); it.Inc()) {
     ModelType type = it.Get();
 
-    auto type_status = base::MakeUnique<base::DictionaryValue>();
+    auto type_status = std::make_unique<base::DictionaryValue>();
     type_status->SetString("name", ModelTypeToString(type));
     type_status->SetString("group_type",
                            ModelSafeGroupToString(routing_info[type]));
@@ -1927,7 +1928,7 @@ void ProfileSyncService::GoogleSigninSucceeded(const std::string& account_id,
     is_auth_in_progress_ = true;
   }
 
-  if (switches::IsAccountConsistencyDiceEnabled() &&
+  if (signin::IsAccountConsistencyDiceEnabled() &&
       oauth2_token_service_->RefreshTokenIsAvailable(account_id)) {
     // When Dice is enabled, the refresh token may be available before the user
     // enables sync. Start sync if the refresh token is already available in the
@@ -2114,7 +2115,7 @@ void ProfileSyncService::GetAllNodes(
     // If there's no engine available to fulfill the request, handle it here.
     for (ModelTypeSet::Iterator it = all_types.First(); it.Good(); it.Inc()) {
       helper->OnReceivedNodesForType(it.Get(),
-                                     base::MakeUnique<base::ListValue>());
+                                     std::make_unique<base::ListValue>());
     }
     return;
   }
@@ -2132,6 +2133,10 @@ void ProfileSyncService::GetAllNodes(
               it.Get(), GetUserShare()->directory.get()));
     }
   }
+}
+
+syncer::GlobalIdMapper* ProfileSyncService::GetGlobalIdMapper() const {
+  return sessions_sync_manager_.get();
 }
 
 base::WeakPtr<syncer::JsController> ProfileSyncService::GetJsController() {

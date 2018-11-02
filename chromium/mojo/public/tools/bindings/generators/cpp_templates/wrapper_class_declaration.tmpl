@@ -13,10 +13,13 @@ class {{export_attribute}} {{struct.name}} {
   static {{constant|format_constant_declaration(nested=True)}};
 {%- endfor %}
 
+{%- set in_place_marker = "WTF::in_place"
+        if for_blink else "base::in_place" %}
+
   template <typename... Args>
   static {{struct.name}}Ptr New(Args&&... args) {
     return {{struct.name}}Ptr(
-        base::in_place,
+        {{in_place_marker}},
         std::forward<Args>(args)...);
   }
 
@@ -69,11 +72,32 @@ class {{export_attribute}} {{struct.name}} {
   }
 
   template <typename UserType>
+  static mojo::Message SerializeAsMessage(UserType* input) {
+    return mojo::internal::StructSerializeAsMessageImpl<
+        {{struct.name}}::DataView>(input);
+  }
+
+  template <typename UserType>
+  static bool Deserialize(const void* data,
+                          size_t data_num_bytes,
+                          UserType* output) {
+    return mojo::internal::StructDeserializeImpl<{{struct.name}}::DataView>(
+        data, data_num_bytes, std::vector<mojo::ScopedHandle>(), output, Validate);
+  }
+
+  template <typename UserType>
   static bool Deserialize(const {{serialization_result_type}}& input,
                           UserType* output) {
-    return mojo::internal::StructDeserializeImpl<
-        {{struct.name}}::DataView, {{serialization_result_type}}>(
-            input, output, Validate);
+    return {{struct.name}}::Deserialize(
+        input.size() == 0 ? nullptr : &input.front(), input.size(), output);
+  }
+
+  template <typename UserType>
+  static bool DeserializeFromMessage(mojo::Message input,
+                                     UserType* output) {
+    return mojo::internal::StructDeserializeImpl<{{struct.name}}::DataView>(
+        input.payload(), input.payload_num_bytes(),
+        std::move(*input.mutable_handles()), output, Validate);
   }
 
 {#--- Struct members #}
@@ -91,4 +115,3 @@ class {{export_attribute}} {{struct.name}} {
   DISALLOW_COPY_AND_ASSIGN({{struct.name}});
 {%- endif %}
 };
-

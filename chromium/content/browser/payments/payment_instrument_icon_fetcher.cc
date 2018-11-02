@@ -35,7 +35,7 @@ net::NetworkTrafficAnnotationTag g_traffic_annotation =
           destination: WEBSITE
         }
         policy {
-          cookies_allowed: false
+          cookies_allowed: NO
           setting:
             "This feature cannot be disabled in settings. Users can refuse to "
             "install web payment apps."
@@ -132,7 +132,7 @@ void PaymentInstrumentIconFetcher::OnURLFetchComplete(
   data_decoder::DecodeImage(
       connector.get(), image_data, data_decoder::mojom::ImageCodec::DEFAULT,
       false, data_decoder::kDefaultMaxSizeInBytes, gfx::Size(),
-      base::Bind(&PaymentInstrumentIconFetcher::DecodeImageCallback, this));
+      base::BindOnce(&PaymentInstrumentIconFetcher::DecodeImageCallback, this));
 }
 
 void PaymentInstrumentIconFetcher::DecodeImageCallback(const SkBitmap& bitmap) {

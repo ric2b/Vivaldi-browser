@@ -35,6 +35,8 @@ SchedulerSettings LayerTreeSettings::ToSchedulerSettings() const {
   scheduler_settings.enable_latency_recovery = enable_latency_recovery;
   scheduler_settings.background_frame_interval =
       base::TimeDelta::FromSecondsD(1.0 / background_animation_rate);
+  scheduler_settings.wait_for_all_pipeline_stages_before_draw =
+      wait_for_all_pipeline_stages_before_draw;
   return scheduler_settings;
 }
 
@@ -42,6 +44,7 @@ TileManagerSettings LayerTreeSettings::ToTileManagerSettings() const {
   TileManagerSettings tile_manager_settings;
   tile_manager_settings.use_partial_raster = use_partial_raster;
   tile_manager_settings.enable_checker_imaging = enable_checker_imaging;
+  tile_manager_settings.min_image_bytes_to_checker = min_image_bytes_to_checker;
   return tile_manager_settings;
 }
 

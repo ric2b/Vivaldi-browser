@@ -141,13 +141,13 @@ def DefaultPages(base_name):
       'pixel_video_mp4.html',
       base_name + '_Video_MP4',
       test_rect=[0, 0, 300, 300],
-      revision=5),
+      revision=7),
 
     PixelTestPage(
       'pixel_video_vp9.html',
       base_name + '_Video_VP9',
       test_rect=[0, 0, 300, 300],
-      revision=5),
+      revision=7),
   ]
 
 
@@ -354,56 +354,56 @@ def ExperimentalCanvasFeaturesPages(base_name):
       'pixel_offscreenCanvas_2d_commit_main.html',
       base_name + '_OffscreenCanvasAccelerated2D',
       test_rect=[0, 0, 360, 200],
-      revision=6,
+      revision=7,
       browser_args=browser_args),
 
     PixelTestPage(
       'pixel_offscreenCanvas_2d_commit_worker.html',
       base_name + '_OffscreenCanvasAccelerated2DWorker',
       test_rect=[0, 0, 360, 200],
-      revision=6,
+      revision=7,
       browser_args=browser_args),
 
     PixelTestPage(
       'pixel_offscreenCanvas_2d_commit_main.html',
       base_name + '_OffscreenCanvasUnaccelerated2D',
       test_rect=[0, 0, 360, 200],
-      revision=5,
+      revision=6,
       browser_args=browser_args + unaccelerated_args),
 
     PixelTestPage(
       'pixel_offscreenCanvas_2d_commit_worker.html',
       base_name + '_OffscreenCanvasUnaccelerated2DWorker',
       test_rect=[0, 0, 360, 200],
-      revision=5,
+      revision=6,
       browser_args=browser_args + unaccelerated_args),
 
     PixelTestPage(
       'pixel_offscreenCanvas_2d_commit_main.html',
       base_name + '_OffscreenCanvasUnaccelerated2DGPUCompositing',
       test_rect=[0, 0, 360, 200],
-      revision=7,
+      revision=8,
       browser_args=browser_args + ['--disable-accelerated-2d-canvas']),
 
     PixelTestPage(
       'pixel_offscreenCanvas_2d_commit_worker.html',
       base_name + '_OffscreenCanvasUnaccelerated2DGPUCompositingWorker',
       test_rect=[0, 0, 360, 200],
-      revision=7,
+      revision=8,
       browser_args=browser_args + ['--disable-accelerated-2d-canvas']),
 
     PixelTestPage(
       'pixel_offscreenCanvas_2d_resize_on_worker.html',
       base_name + '_OffscreenCanvas2DResizeOnWorker',
       test_rect=[0, 0, 200, 200],
-      revision=2,
+      revision=3,
       browser_args=browser_args),
 
     PixelTestPage(
       'pixel_offscreenCanvas_webgl_resize_on_worker.html',
       base_name + '_OffscreenCanvasWebglResizeOnWorker',
       test_rect=[0, 0, 200, 200],
-      revision=1,
+      revision=2,
       browser_args=browser_args),
 
     PixelTestPage(
@@ -484,12 +484,12 @@ def MacSpecificPages(base_name):
       'filter_effects.html',
       base_name + '_CSSFilterEffects',
       test_rect=[0, 0, 300, 300],
-      revision=5),
+      revision=6),
     PixelTestPage(
       'filter_effects.html',
       base_name + '_CSSFilterEffects_NoOverlays',
       test_rect=[0, 0, 300, 300],
-      revision=5,
+      revision=6,
       tolerance=10,
       browser_args=['--disable-mac-overlays']),
   ]

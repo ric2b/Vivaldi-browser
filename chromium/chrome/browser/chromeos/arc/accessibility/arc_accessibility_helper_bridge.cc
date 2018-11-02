@@ -142,7 +142,8 @@ ArcAccessibilityHelperBridge::ArcAccessibilityHelperBridge(
     : profile_(Profile::FromBrowserContext(browser_context)),
       arc_bridge_service_(arc_bridge_service),
       binding_(this),
-      current_task_id_(kNoTaskId) {
+      current_task_id_(kNoTaskId),
+      fallback_tree_(new AXTreeSourceArc(this)) {
   arc_bridge_service_->accessibility_helper()->AddObserver(this);
 
   // Null on testing.
@@ -162,12 +163,7 @@ void ArcAccessibilityHelperBridge::Shutdown() {
   if (app_list_prefs)
     app_list_prefs->RemoveObserver(this);
 
-  // TODO(hidehiko): Currently, the lifetime of ArcBridgeService and
-  // BrowserContextKeyedService is not nested.
-  // If ArcServiceManager::Get() returns nullptr, it is already destructed,
-  // so do not touch it.
-  if (ArcServiceManager::Get())
-    arc_bridge_service_->accessibility_helper()->RemoveObserver(this);
+  arc_bridge_service_->accessibility_helper()->RemoveObserver(this);
 }
 
 void ArcAccessibilityHelperBridge::OnInstanceReady() {
@@ -217,31 +213,41 @@ void ArcAccessibilityHelperBridge::OnAccessibilityEvent(
     if (!node->string_properties)
       return;
 
-    auto package_it = node->string_properties->find(
+    auto package_entry = node->string_properties->find(
         arc::mojom::AccessibilityStringProperty::PACKAGE_NAME);
-    if (package_it == node->string_properties->end())
+    if (package_entry == node->string_properties->end())
       return;
 
-    auto task_ids_it = package_name_to_task_ids_.find(package_it->second);
-    if (task_ids_it == package_name_to_task_ids_.end())
-      return;
-
-    const auto& task_ids = task_ids_it->second;
-
-    // Reject updates to non-current task ids. We can do this currently
-    // because all events include the entire tree.
-    if (task_ids.count(current_task_id_) == 0)
-      return;
-
-    auto tree_it = package_name_to_tree_.find(package_it->second);
+    auto task_ids_it = package_name_to_task_ids_.find(package_entry->second);
     AXTreeSourceArc* tree_source;
-    if (tree_it == package_name_to_tree_.end()) {
-      package_name_to_tree_[package_it->second].reset(
-          new AXTreeSourceArc(this));
-      tree_source = package_name_to_tree_[package_it->second].get();
+    if (task_ids_it == package_name_to_task_ids_.end()) {
+      // It's possible for there to have never been a package mapping for this
+      // task id due to underlying bugs. See crbug.com/745978.
+      for (auto entry : package_name_to_task_ids_) {
+        if (entry.second.count(current_task_id_) > 0)
+          return;
+      }
+      DLOG(ERROR) << "Package did not trigger OnTaskCreated "
+                  << package_entry->second;
+      tree_source = fallback_tree_.get();
     } else {
-      tree_source = tree_it->second.get();
+      const auto& task_ids = task_ids_it->second;
+
+      // Reject updates to non-current task ids. We can do this currently
+      // because all events include the entire tree.
+      if (task_ids.count(current_task_id_) == 0)
+        return;
+
+      auto tree_it = package_name_to_tree_.find(package_entry->second);
+      if (tree_it == package_name_to_tree_.end()) {
+        package_name_to_tree_[package_entry->second].reset(
+            new AXTreeSourceArc(this));
+        tree_source = package_name_to_tree_[package_entry->second].get();
+      } else {
+        tree_source = tree_it->second.get();
+      }
     }
+
     tree_source->NotifyAccessibilityEvent(event_data.get());
     return;
   }
@@ -265,6 +271,29 @@ void ArcAccessibilityHelperBridge::OnAction(
     case ui::AX_ACTION_DO_DEFAULT:
       action_data->action_type = arc::mojom::AccessibilityActionType::CLICK;
       break;
+    case ui::AX_ACTION_SCROLL_BACKWARD:
+      action_data->action_type =
+          arc::mojom::AccessibilityActionType::SCROLL_BACKWARD;
+      break;
+    case ui::AX_ACTION_SCROLL_FORWARD:
+      action_data->action_type =
+          arc::mojom::AccessibilityActionType::SCROLL_FORWARD;
+      break;
+    case ui::AX_ACTION_SCROLL_UP:
+      action_data->action_type = arc::mojom::AccessibilityActionType::SCROLL_UP;
+      break;
+    case ui::AX_ACTION_SCROLL_DOWN:
+      action_data->action_type =
+          arc::mojom::AccessibilityActionType::SCROLL_DOWN;
+      break;
+    case ui::AX_ACTION_SCROLL_LEFT:
+      action_data->action_type =
+          arc::mojom::AccessibilityActionType::SCROLL_LEFT;
+      break;
+    case ui::AX_ACTION_SCROLL_RIGHT:
+      action_data->action_type =
+          arc::mojom::AccessibilityActionType::SCROLL_RIGHT;
+      break;
     case ui::AX_ACTION_CUSTOM_ACTION:
       action_data->action_type =
           arc::mojom::AccessibilityActionType::CUSTOM_ACTION;
@@ -276,7 +305,29 @@ void ArcAccessibilityHelperBridge::OnAction(
 
   auto* instance = ARC_GET_INSTANCE_FOR_METHOD(
       arc_bridge_service_->accessibility_helper(), PerformAction);
-  instance->PerformAction(std::move(action_data));
+  instance->PerformAction(
+      std::move(action_data),
+      base::Bind(&ArcAccessibilityHelperBridge::OnActionResult,
+                 base::Unretained(this), data));
+}
+
+void ArcAccessibilityHelperBridge::OnActionResult(const ui::AXActionData& data,
+                                                  bool result) const {
+  AXTreeSourceArc* tree_source = nullptr;
+  for (auto it = package_name_to_tree_.begin();
+       it != package_name_to_tree_.end(); ++it) {
+    ui::AXTreeData cur_data;
+    it->second->GetTreeData(&cur_data);
+    if (cur_data.tree_id == data.target_tree_id) {
+      tree_source = it->second.get();
+      break;
+    }
+  }
+
+  if (!tree_source)
+    return;
+
+  tree_source->NotifyActionResult(data, result);
 }
 
 void ArcAccessibilityHelperBridge::OnWindowActivated(
@@ -298,8 +349,11 @@ void ArcAccessibilityHelperBridge::OnWindowActivated(
     }
   }
 
-  if (!found_entry)
+  if (!found_entry && GetFilterTypeForProfile(profile_) ==
+                          arc::mojom::AccessibilityFilterType::ALL) {
+    fallback_tree_->Focus(gained_active);
     return;
+  }
 
   auto it = package_name_to_tree_.find(found_entry->first);
   if (it != package_name_to_tree_.end())

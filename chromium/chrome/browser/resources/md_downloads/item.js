@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 cr.define('downloads', function() {
-  var Item = Polymer({
+  const Item = Polymer({
     is: 'downloads-item',
 
     properties: {
@@ -74,7 +74,12 @@ cr.define('downloads', function() {
       'observeIsDangerous_(isDangerous_, data)',
     ],
 
+    /** @private {?downloads.BrowserProxy} */
+    browserProxy_: null,
+
+    /** @override */
     ready: function() {
+      this.browserProxy_ = downloads.BrowserProxy.getInstance();
       this.content = this.$.content;
     },
 
@@ -89,7 +94,7 @@ cr.define('downloads', function() {
 
     /** @private */
     computeClass_: function() {
-      var classes = [];
+      const classes = [];
 
       if (this.isActive_)
         classes.push('is-active');
@@ -114,8 +119,8 @@ cr.define('downloads', function() {
       if (!this.data.by_ext_id || !this.data.by_ext_name)
         return '';
 
-      var url = 'chrome://extensions#' + this.data.by_ext_id;
-      var name = this.data.by_ext_name;
+      const url = 'chrome://extensions#' + this.data.by_ext_id;
+      const name = this.data.by_ext_name;
       return loadTimeData.getStringF('controlledByUrl', url, HTMLEscape(name));
     },
 
@@ -134,11 +139,11 @@ cr.define('downloads', function() {
 
     /** @private */
     computeDescription_: function() {
-      var data = this.data;
+      const data = this.data;
 
       switch (data.state) {
         case downloads.States.DANGEROUS:
-          var fileName = data.file_name;
+          const fileName = data.file_name;
           switch (data.danger_type) {
             case downloads.DangerType.DANGEROUS_FILE:
               return loadTimeData.getString('dangerFileDesc');
@@ -201,8 +206,8 @@ cr.define('downloads', function() {
 
     /** @private */
     computeRemoveStyle_: function() {
-      var canDelete = loadTimeData.getBoolean('allowDeletingHistory');
-      var hideRemove = this.isDangerous_ || this.showCancel_ || !canDelete;
+      const canDelete = loadTimeData.getBoolean('allowDeletingHistory');
+      const hideRemove = this.isDangerous_ || this.showCancel_ || !canDelete;
       return hideRemove ? 'visibility: hidden' : '';
     },
 
@@ -254,20 +259,20 @@ cr.define('downloads', function() {
         this.$.url.removeAttribute('href');
       } else {
         this.$.url.href = assert(this.data.url);
-        var filePath = encodeURIComponent(this.data.file_path);
-        var scaleFactor = '?scale=' + window.devicePixelRatio + 'x';
+        const filePath = encodeURIComponent(this.data.file_path);
+        const scaleFactor = '?scale=' + window.devicePixelRatio + 'x';
         this.$['file-icon'].src = 'chrome://fileicon/' + filePath + scaleFactor;
       }
     },
 
     /** @private */
     onCancelTap_: function() {
-      downloads.ActionService.getInstance().cancel(this.data.id);
+      this.browserProxy_.cancel(this.data.id);
     },
 
     /** @private */
     onDiscardDangerousTap_: function() {
-      downloads.ActionService.getInstance().discardDangerous(this.data.id);
+      this.browserProxy_.discardDangerous(this.data.id);
     },
 
     /**
@@ -276,7 +281,7 @@ cr.define('downloads', function() {
      */
     onDragStart_: function(e) {
       e.preventDefault();
-      downloads.ActionService.getInstance().drag(this.data.id);
+      this.browserProxy_.drag(this.data.id);
     },
 
     /**
@@ -285,35 +290,35 @@ cr.define('downloads', function() {
      */
     onFileLinkTap_: function(e) {
       e.preventDefault();
-      downloads.ActionService.getInstance().openFile(this.data.id);
+      this.browserProxy_.openFile(this.data.id);
     },
 
     /** @private */
     onPauseOrResumeTap_: function() {
       if (this.isInProgress_)
-        downloads.ActionService.getInstance().pause(this.data.id);
+        this.browserProxy_.pause(this.data.id);
       else
-        downloads.ActionService.getInstance().resume(this.data.id);
+        this.browserProxy_.resume(this.data.id);
     },
 
     /** @private */
     onRemoveTap_: function() {
-      downloads.ActionService.getInstance().remove(this.data.id);
+      this.browserProxy_.remove(this.data.id);
     },
 
     /** @private */
     onRetryTap_: function() {
-      downloads.ActionService.getInstance().download(this.data.url);
+      this.browserProxy_.download(this.data.url);
     },
 
     /** @private */
     onSaveDangerousTap_: function() {
-      downloads.ActionService.getInstance().saveDangerous(this.data.id);
+      this.browserProxy_.saveDangerous(this.data.id);
     },
 
     /** @private */
     onShowTap_: function() {
-      downloads.ActionService.getInstance().show(this.data.id);
+      this.browserProxy_.show(this.data.id);
     },
   });
 

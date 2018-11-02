@@ -9,6 +9,7 @@
 
 #include "base/macros.h"
 #include "ui/aura/env.h"
+#include "ui/aura/env_input_state_controller.h"
 #include "ui/aura/input_state_lookup.h"
 
 namespace aura {
@@ -28,6 +29,8 @@ class EnvTestHelper {
   void ResetEventState() {
     env_->mouse_button_flags_ = 0;
     env_->is_touch_down_ = false;
+    env_->last_mouse_location_ = gfx::Point();
+    env_->env_controller_->touch_ids_down_ = 0;
   }
 
   void SetMode(Env::Mode mode) {
@@ -45,6 +48,9 @@ class EnvTestHelper {
     env_->in_mus_shutdown_ = window_tree_client ? false : true;
   }
 
+  // Use to force Env::last_mouse_location() to return the value last set.
+  // This matters for MUS, which may not return the last explicitly set
+  // location.
   void SetAlwaysUseLastMouseLocation(bool value) {
     env_->always_use_last_mouse_location_ = value;
   }

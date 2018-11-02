@@ -16,6 +16,7 @@
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/base/test_completion_callback.h"
+#include "net/disk_cache/backend_cleanup_tracker.h"
 #include "net/disk_cache/blockfile/backend_impl.h"
 #include "net/disk_cache/cache_util.h"
 #include "net/disk_cache/disk_cache.h"
@@ -85,9 +86,7 @@ DiskCacheTestWithCache::DiskCacheTestWithCache()
       new_eviction_(false),
       first_cleanup_(true),
       integrity_(true),
-      use_current_thread_(false),
-      cache_thread_("CacheThread") {
-}
+      use_current_thread_(false) {}
 
 DiskCacheTestWithCache::~DiskCacheTestWithCache() {}
 
@@ -113,7 +112,7 @@ void DiskCacheTestWithCache::SimulateCrash() {
   cache_.reset();
   EXPECT_TRUE(CheckCacheIntegrity(cache_path_, new_eviction_, mask_));
 
-  CreateBackend(disk_cache::kNoRandom, &cache_thread_);
+  CreateBackend(disk_cache::kNoRandom);
 }
 
 void DiskCacheTestWithCache::SetTestMode() {
@@ -281,8 +280,6 @@ void DiskCacheTestWithCache::TearDown() {
   disk_cache::SimpleBackendImpl::FlushWorkerPoolForTesting();
   base::RunLoop().RunUntilIdle();
   cache_.reset();
-  if (cache_thread_.IsRunning())
-    cache_thread_.Stop();
 
   if (!memory_only_ && !simple_cache_mode_ && integrity_) {
     EXPECT_TRUE(CheckCacheIntegrity(cache_path_, new_eviction_, mask_));
@@ -307,28 +304,22 @@ void DiskCacheTestWithCache::InitDiskCache() {
   if (first_cleanup_)
     ASSERT_TRUE(CleanupCacheDir());
 
-  if (!cache_thread_.IsRunning()) {
-    ASSERT_TRUE(cache_thread_.StartWithOptions(
-        base::Thread::Options(base::MessageLoop::TYPE_IO, 0)));
-  }
-  ASSERT_TRUE(cache_thread_.message_loop() != NULL);
-
-  CreateBackend(disk_cache::kNoRandom, &cache_thread_);
+  CreateBackend(disk_cache::kNoRandom);
 }
 
-void DiskCacheTestWithCache::CreateBackend(uint32_t flags,
-                                           base::Thread* thread) {
+void DiskCacheTestWithCache::CreateBackend(uint32_t flags) {
   scoped_refptr<base::SingleThreadTaskRunner> runner;
   if (use_current_thread_)
     runner = base::ThreadTaskRunnerHandle::Get();
   else
-    runner = thread->task_runner();
+    runner = nullptr;  // let the backend sort it out.
 
   if (simple_cache_mode_) {
     net::TestCompletionCallback cb;
     std::unique_ptr<disk_cache::SimpleBackendImpl> simple_backend(
-        new disk_cache::SimpleBackendImpl(cache_path_, size_, type_, runner,
-                                          NULL));
+        new disk_cache::SimpleBackendImpl(
+            cache_path_, /* cleanup_tracker = */ nullptr, size_, type_, runner,
+            /*net_log = */ nullptr));
     int rv = simple_backend->Init(cb.callback());
     ASSERT_THAT(cb.GetResult(rv), IsOk());
     simple_cache_impl_ = simple_backend.get();
@@ -343,9 +334,12 @@ void DiskCacheTestWithCache::CreateBackend(uint32_t flags,
   }
 
   if (mask_)
-    cache_impl_ = new disk_cache::BackendImpl(cache_path_, mask_, runner, NULL);
+    cache_impl_ = new disk_cache::BackendImpl(cache_path_, mask_, runner,
+                                              /* net_log = */ nullptr);
   else
-    cache_impl_ = new disk_cache::BackendImpl(cache_path_, runner, NULL);
+    cache_impl_ = new disk_cache::BackendImpl(cache_path_,
+                                              /* cleanup_tracker = */ nullptr,
+                                              runner, /* net_log = */ nullptr);
   cache_.reset(cache_impl_);
   ASSERT_TRUE(cache_);
   if (size_)

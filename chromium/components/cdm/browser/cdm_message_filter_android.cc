@@ -11,9 +11,9 @@
 
 #include "base/feature_list.h"
 #include "base/macros.h"
+#include "base/task_scheduler/post_task.h"
 #include "components/cdm/common/cdm_messages_android.h"
 #include "content/public/browser/android/android_overlay_provider.h"
-#include "content/public/browser/browser_thread.h"
 #include "ipc/ipc_message_macros.h"
 #include "media/base/android/media_codec_util.h"
 #include "media/base/android/media_drm_bridge.h"
@@ -22,7 +22,6 @@
 #include "media/base/video_codecs.h"
 #include "media/media_features.h"
 
-using content::BrowserThread;
 using media::MediaDrmBridge;
 using media::SupportedCodecs;
 
@@ -55,6 +54,7 @@ const CodecInfo<media::VideoCodec> kVideoCodecsToQuery[] = {
 };
 
 const CodecInfo<media::AudioCodec> kAudioCodecsToQuery[] = {
+    // FLAC is not supported. See https://crbug.com/747050 for details.
     // Vorbis is not supported. See http://crbug.com/710924 for details.
     {media::EME_CODEC_WEBM_OPUS, media::kCodecOpus, "video/webm"},
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
@@ -93,9 +93,14 @@ static SupportedCodecs GetSupportedCodecs(
   return supported_codecs;
 }
 
-CdmMessageFilterAndroid::CdmMessageFilterAndroid(bool can_use_secure_codecs)
+CdmMessageFilterAndroid::CdmMessageFilterAndroid(
+    bool can_persist_data,
+    bool force_to_support_secure_codecs)
     : BrowserMessageFilter(EncryptedMediaMsgStart),
-      force_to_support_secure_codecs_(can_use_secure_codecs) {}
+      task_runner_(base::CreateSequencedTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::BACKGROUND})),
+      can_persist_data_(can_persist_data),
+      force_to_support_secure_codecs_(force_to_support_secure_codecs) {}
 
 CdmMessageFilterAndroid::~CdmMessageFilterAndroid() {}
 
@@ -111,11 +116,13 @@ bool CdmMessageFilterAndroid::OnMessageReceived(const IPC::Message& message) {
   return handled;
 }
 
-void CdmMessageFilterAndroid::OverrideThreadForMessage(
-    const IPC::Message& message, BrowserThread::ID* thread) {
+base::TaskRunner* CdmMessageFilterAndroid::OverrideTaskRunnerForMessage(
+    const IPC::Message& message) {
   // Move the IPC handling to FILE thread as it is not very cheap.
   if (message.type() == ChromeViewHostMsg_QueryKeySystemSupport::ID)
-    *thread = BrowserThread::FILE;
+    return task_runner_.get();
+
+  return nullptr;
 }
 
 void CdmMessageFilterAndroid::OnQueryKeySystemSupport(
@@ -132,6 +139,15 @@ void CdmMessageFilterAndroid::OnQueryKeySystemSupport(
   }
 
   if (!MediaDrmBridge::IsKeySystemSupported(request.key_system))
+    return;
+
+  // When using MediaDrm, we assume it'll always try to persist some data. If
+  // |can_persist_data_| is false and MediaDrm were to persist data on the
+  // Android system, we are somewhat violating the incognito assumption.
+  // This cannot be used detect incognito mode easily because the result is the
+  // same when |can_persist_data_| is false, and when user blocks the "protected
+  // media identifier" permission prompt.
+  if (!can_persist_data_)
     return;
 
   DCHECK(request.codecs & media::EME_CODEC_ALL) << "unrecognized codec";

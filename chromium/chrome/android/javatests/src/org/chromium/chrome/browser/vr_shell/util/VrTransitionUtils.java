@@ -4,14 +4,23 @@
 
 package org.chromium.chrome.browser.vr_shell.util;
 
-import static org.chromium.chrome.browser.vr_shell.VrTestRule.POLL_CHECK_INTERVAL_SHORT_MS;
-import static org.chromium.chrome.browser.vr_shell.VrTestRule.POLL_TIMEOUT_LONG_MS;
+import static org.chromium.chrome.browser.vr_shell.VrTestFramework.POLL_CHECK_INTERVAL_SHORT_MS;
+import static org.chromium.chrome.browser.vr_shell.VrTestFramework.POLL_TIMEOUT_LONG_MS;
+
+import android.app.Activity;
+import android.content.Intent;
+import android.net.Uri;
+import android.support.customtabs.CustomTabsIntent;
+
+import com.google.vr.ndk.base.DaydreamApi;
 
 import org.junit.Assert;
 
 import org.chromium.base.ThreadUtils;
+import org.chromium.chrome.browser.vr_shell.VrClassesWrapperImpl;
+import org.chromium.chrome.browser.vr_shell.VrIntentUtils;
 import org.chromium.chrome.browser.vr_shell.VrShellDelegate;
-import org.chromium.chrome.browser.vr_shell.VrTestRule;
+import org.chromium.chrome.browser.vr_shell.VrTestFramework;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
@@ -50,8 +59,8 @@ public class VrTransitionUtils {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                VrShellDelegateUtils.getDelegateInstance().shutdownVr(true /* disableVrMode */,
-                        false /* canReenter */, true /* stayingInChrome */);
+                VrShellDelegateUtils.getDelegateInstance().shutdownVr(
+                        true /* disableVrMode */, true /* stayingInChrome */);
             }
         });
     }
@@ -67,7 +76,7 @@ public class VrTransitionUtils {
         CriteriaHelper.pollUiThread(Criteria.equals(true, new Callable<Boolean>() {
             @Override
             public Boolean call() {
-                return VrShellDelegate.isInVr();
+                return VrShellDelegate.getInstanceForTesting().isVrEntryComplete();
             }
         }), timeout, POLL_CHECK_INTERVAL_SHORT_MS);
     }
@@ -78,7 +87,7 @@ public class VrTransitionUtils {
      * CardboardUtils.sendCardboardClick if not already presenting, but less prone
      * to errors, e.g. if there's dialog in the center of the screen blocking the canvas.
      *
-     * Only meant to be used alongside the test framework from VrTestRule.
+     * Only meant to be used alongside the test framework from VrTestFramework.
      * @param cvc The ContentViewCore for the tab the canvas is in.
      */
     public static void enterPresentation(ContentViewCore cvc) {
@@ -93,13 +102,13 @@ public class VrTransitionUtils {
      * Sends a click event directly to the WebGL canvas then waits for the
      * JavaScript step to finish.
      *
-     * Only meant to be used alongside the test framework from VrTestRule.
+     * Only meant to be used alongside the test framework from VrTestFramework.
      * @param cvc The ContentViewCore for the tab the canvas is in.
      * @param webContents The WebContents for the tab the JavaScript step is in.
      */
     public static void enterPresentationAndWait(ContentViewCore cvc, WebContents webContents) {
         enterPresentation(cvc);
-        VrTestRule.waitOnJavaScriptStep(webContents);
+        VrTestFramework.waitOnJavaScriptStep(webContents);
     }
 
     /**
@@ -111,8 +120,8 @@ public class VrTransitionUtils {
      */
     public static void enterPresentationOrFail(ContentViewCore cvc) {
         enterPresentation(cvc);
-        VrTestRule.pollJavaScriptBoolean(
-                "vrDisplay.isPresenting", POLL_TIMEOUT_LONG_MS, cvc.getWebContents());
+        Assert.assertTrue(VrTestFramework.pollJavaScriptBoolean(
+                "vrDisplay.isPresenting", POLL_TIMEOUT_LONG_MS, cvc.getWebContents()));
         Assert.assertTrue(VrShellDelegate.getVrShellForTesting().getWebVrModeEnabled());
     }
 
@@ -129,5 +138,71 @@ public class VrTransitionUtils {
             }
         });
         return isBackButtonEnabled.get();
+    }
+
+    /**
+     * @return Whether the VR forward button is enabled.
+     */
+    public static Boolean isForwardButtonEnabled() {
+        final AtomicBoolean isForwardButtonEnabled = new AtomicBoolean();
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                isForwardButtonEnabled.set(
+                        VrShellDelegate.getVrShellForTesting().isForwardButtonEnabled());
+            }
+        });
+        return isForwardButtonEnabled.get();
+    }
+
+    /**
+     * Navigates VrShell back.
+     */
+    public static void navigateBack() {
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                VrShellDelegate.getVrShellForTesting().navigateBack();
+            }
+        });
+    }
+
+    /**
+     * Navigates VrShell forward.
+     */
+    public static void navigateForward() {
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                VrShellDelegate.getVrShellForTesting().navigateForward();
+            }
+        });
+    }
+
+    /**
+     * Sends an intent to Chrome telling it to autopresent the given URL. This
+     * is expected to fail unless the trusted intent check is disabled in VrShellDelegate.
+     *
+     * @param url String containing the URL to open
+     * @param activity The activity to launch the intent from
+     */
+    public static void sendDaydreamAutopresentIntent(String url, final Activity activity) {
+        // Create an intent that will launch Chrome at the specified URL with autopresent
+        final Intent intent =
+                activity.getPackageManager().getLaunchIntentForPackage(activity.getPackageName());
+        intent.setAction(Intent.ACTION_VIEW);
+        intent.setData(Uri.parse(url));
+        intent.putExtra(VrIntentUtils.DAYDREAM_VR_EXTRA, true);
+        DaydreamApi.setupVrIntent(intent);
+        intent.removeCategory("com.google.intent.category.DAYDREAM");
+        CustomTabsIntent.setAlwaysUseBrowserUI(intent);
+
+        final VrClassesWrapperImpl wrapper = new VrClassesWrapperImpl();
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                wrapper.createVrDaydreamApi(activity).launchInVr(intent);
+            }
+        });
     }
 }

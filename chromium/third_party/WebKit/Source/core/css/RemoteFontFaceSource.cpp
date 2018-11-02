@@ -216,8 +216,9 @@ bool RemoteFontFaceSource::IsLowPriorityLoadingAllowedForRemoteFont() const {
   return is_intervention_triggered_ && IsInterventionV2Enabled();
 }
 
-PassRefPtr<SimpleFontData> RemoteFontFaceSource::CreateFontData(
-    const FontDescription& font_description) {
+RefPtr<SimpleFontData> RemoteFontFaceSource::CreateFontData(
+    const FontDescription& font_description,
+    const FontSelectionCapabilities& font_selection_capabilities) {
   if (period_ == kFailurePeriod || !IsValid())
     return nullptr;
   if (!IsLoaded())
@@ -230,12 +231,14 @@ PassRefPtr<SimpleFontData> RemoteFontFaceSource::CreateFontData(
       custom_font_data_->GetFontPlatformData(
           font_description.EffectiveFontSize(),
           font_description.IsSyntheticBold(),
-          font_description.IsSyntheticItalic(), font_description.Orientation(),
+          font_description.IsSyntheticItalic(),
+          font_description.GetFontSelectionRequest(),
+          font_selection_capabilities, font_description.Orientation(),
           font_description.VariationSettings()),
       CustomFontData::Create());
 }
 
-PassRefPtr<SimpleFontData> RemoteFontFaceSource::CreateLoadingFallbackFontData(
+RefPtr<SimpleFontData> RemoteFontFaceSource::CreateLoadingFallbackFontData(
     const FontDescription& font_description) {
   // This temporary font is not retained and should not be returned.
   FontCachePurgePreventer font_cache_purge_preventer;

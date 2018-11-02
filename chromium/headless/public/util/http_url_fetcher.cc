@@ -4,6 +4,7 @@
 
 #include "headless/public/util/http_url_fetcher.h"
 
+#include "headless/public/util/generic_url_request_job.h"
 #include "net/base/elements_upload_data_stream.h"
 #include "net/base/io_buffer.h"
 #include "net/base/upload_bytes_element_reader.h"
@@ -33,7 +34,7 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
           destination: OTHER
         }
         policy {
-          cookies_allowed: true
+          cookies_allowed: YES
           cookies_store:
             "Various, but cookies stores are deleted when session ends."
           setting:
@@ -211,12 +212,16 @@ void HttpURLFetcher::Delegate::OnResponseCompleted(net::URLRequest* request,
     return;
   }
 
+  // Extract LoadTimingInfo from the request to pass to the result listener.
+  net::LoadTimingInfo load_timing_info;
+  request->GetLoadTimingInfo(&load_timing_info);
+
   // TODO(alexclarke) apart from the headers there's a lot of stuff in
   // |request->response_info()| that we drop here.  Find a way to pipe it
   // through.
   result_listener_->OnFetchComplete(
       request->url(), request->response_info().headers,
-      bytes_read_so_far_.c_str(), bytes_read_so_far_.size());
+      bytes_read_so_far_.c_str(), bytes_read_so_far_.size(), load_timing_info);
 }
 
 HttpURLFetcher::HttpURLFetcher(
@@ -225,14 +230,12 @@ HttpURLFetcher::HttpURLFetcher(
 
 HttpURLFetcher::~HttpURLFetcher() {}
 
-void HttpURLFetcher::StartFetch(const GURL& rewritten_url,
-                                const std::string& method,
-                                const std::string& post_data,
-                                const net::HttpRequestHeaders& request_headers,
+void HttpURLFetcher::StartFetch(const Request* request,
                                 ResultListener* result_listener) {
-  delegate_.reset(new Delegate(rewritten_url, method, post_data,
-                               request_headers, url_request_context_,
-                               result_listener));
+  delegate_.reset(new Delegate(
+      request->GetURLRequest()->url(), request->GetURLRequest()->method(),
+      request->GetPostData(), request->GetHttpRequestHeaders(),
+      url_request_context_, result_listener));
 }
 
 }  // namespace headless

@@ -573,7 +573,8 @@ AutocompleteMatch HistoryURLProvider::SuggestExactInput(
     DCHECK(!(trim_http && AutocompleteInput::HasHTTPScheme(input.text())));
     base::string16 display_string(url_formatter::FormatUrl(
         destination_url,
-        url_formatter::kFormatUrlOmitAll & ~url_formatter::kFormatUrlOmitHTTP,
+        url_formatter::kFormatUrlOmitDefaults &
+            ~url_formatter::kFormatUrlOmitHTTP,
         net::UnescapeRule::SPACES, nullptr, nullptr, nullptr));
     const size_t offset = trim_http ? TrimHttpPrefix(&display_string) : 0;
     match.fill_into_edit =
@@ -725,21 +726,25 @@ void HistoryURLProvider::DoAutocomplete(history::HistoryBackend* backend,
         match.input_location = i->prefix.length();
         match.match_in_scheme = !i->num_components;
 
-        bool url_has_subdomain =
-            row_url.host_piece().length() >
+        size_t domain_length =
             net::registry_controlled_domains::GetDomainAndRegistry(
                 row_url.host_piece(),
                 net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES)
                 .size();
-        bool input_matches_host =
-            row_url.host_piece().find(base::UTF16ToUTF8(
-                params->input.text())) != base::StringPiece::npos;
-        match.match_in_subdomain = url_has_subdomain && input_matches_host;
+        const url::Parsed& parsed = row_url.parsed_for_possibly_invalid_spec();
 
-        size_t path_pos =
-            row_url.parsed_for_possibly_invalid_spec().CountCharactersBefore(
-                url::Parsed::PATH, false);
-        match.match_after_host = prefixed_input.length() >= path_pos;
+        size_t host_pos =
+            parsed.CountCharactersBefore(url::Parsed::HOST, false);
+        size_t path_pos = parsed.CountCharactersBefore(url::Parsed::PATH, true);
+        size_t domain_pos = path_pos - domain_length;
+
+        // For the match to be in the subdomain, the prefix cannot encompass
+        // the subdomain, and the whole prefixed input (prefix + input) should
+        // be in the host or later.
+        match.match_in_subdomain = match.input_location < domain_pos &&
+                                   prefixed_input.length() > host_pos;
+
+        match.match_after_host = prefixed_input.length() > path_pos;
 
         match.innermost_match =
             i->num_components >= best_prefix->num_components;
@@ -1165,7 +1170,7 @@ AutocompleteMatch HistoryURLProvider::HistoryMatchToACMatch(
   size_t inline_autocomplete_offset =
       history_match.input_location + params.input.text().length();
 
-  auto fill_into_edit_format_types = url_formatter::kFormatUrlOmitAll;
+  auto fill_into_edit_format_types = url_formatter::kFormatUrlOmitDefaults;
   if (!params.trim_http || history_match.match_in_scheme)
     fill_into_edit_format_types &= ~url_formatter::kFormatUrlOmitHTTP;
   match.fill_into_edit =
@@ -1194,17 +1199,26 @@ AutocompleteMatch HistoryURLProvider::HistoryMatchToACMatch(
       (!params.prevent_inline_autocomplete ||
        (inline_autocomplete_offset >= match.fill_into_edit.length()));
 
-  size_t match_start = history_match.input_location;
+  // Get the adjusted (for match contents) match start and end offsets.
+  std::vector<size_t> offsets = {
+      history_match.input_location,
+      history_match.input_location + params.input.text().length()};
+
   const auto format_types = AutocompleteMatch::GetFormatTypes(
-      params.trim_http && !history_match.match_in_scheme);
-  match.contents = url_formatter::FormatUrl(info.url(), format_types,
-                                            net::UnescapeRule::SPACES, nullptr,
-                                            nullptr, &match_start);
-  if ((match_start != base::string16::npos) && autocomplete_offset_valid &&
-      (inline_autocomplete_offset != match_start)) {
-    DCHECK(inline_autocomplete_offset > match_start);
-    AutocompleteMatch::ClassifyLocationInString(match_start,
-        inline_autocomplete_offset - match_start, match.contents.length(),
+      !params.trim_http || history_match.match_in_scheme,
+      history_match.match_in_subdomain, history_match.match_after_host);
+  match.contents = url_formatter::FormatUrlWithOffsets(
+      info.url(), format_types, net::UnescapeRule::SPACES, nullptr, nullptr,
+      &offsets);
+
+  size_t match_start = offsets[0];
+  size_t match_end = offsets[1];
+
+  if (match_start != base::string16::npos &&
+      match_end != base::string16::npos && match_end != match_start) {
+    DCHECK_GT(match_end, match_start);
+    AutocompleteMatch::ClassifyLocationInString(
+        match_start, match_end - match_start, match.contents.length(),
         ACMatchClassification::URL, &match.contents_class);
   } else {
     AutocompleteMatch::ClassifyLocationInString(base::string16::npos, 0,

@@ -11,6 +11,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
 #include "base/power_monitor/power_monitor.h"
@@ -150,16 +151,8 @@ int WebMainLoop::CreateThreads(
         thread_to_start = &db_thread_;
         options.timer_slack = base::TIMER_SLACK_MAXIMUM;
         break;
-      case WebThread::FILE_USER_BLOCKING:
-        thread_to_start = &file_user_blocking_thread_;
-        break;
       case WebThread::FILE:
         thread_to_start = &file_thread_;
-        options = io_message_loop_options;
-        options.timer_slack = base::TIMER_SLACK_MAXIMUM;
-        break;
-      case WebThread::CACHE:
-        thread_to_start = &cache_thread_;
         options = io_message_loop_options;
         options.timer_slack = base::TIMER_SLACK_MAXIMUM;
         break;
@@ -232,21 +225,13 @@ void WebMainLoop::ShutdownThreadsAndCleanUp() {
     // follows (need to be filled in a bit):
     //
     //
-    // - The IO thread is the only user of the CACHE thread.
-    //
     // - (Not sure why DB stops last.)
     switch (thread_id) {
       case WebThread::DB:
         db_thread_.reset();
         break;
-      case WebThread::FILE_USER_BLOCKING:
-        file_user_blocking_thread_.reset();
-        break;
       case WebThread::FILE:
         file_thread_.reset();
-        break;
-      case WebThread::CACHE:
-        cache_thread_.reset();
         break;
       case WebThread::IO:
         io_thread_.reset();

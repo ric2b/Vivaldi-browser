@@ -35,6 +35,15 @@ class WebRtcRtpBrowserTest : public WebRtcTestBase {
     right_tab_ = OpenTestPageAndGetUserMediaInNewTab(kMainWebrtcTestHtmlPage);
   }
 
+  const TrackEvent* FindTrackEvent(const std::vector<TrackEvent>& track_events,
+                                   const std::string& track_id) {
+    auto event_it = std::find_if(track_events.begin(), track_events.end(),
+                                 [&track_id](const TrackEvent& event) {
+                                   return event.track_id == track_id;
+                                 });
+    return event_it != track_events.end() ? &(*event_it) : nullptr;
+  }
+
   content::WebContents* left_tab_;
   content::WebContents* right_tab_;
 };
@@ -69,8 +78,7 @@ IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest, GetReceivers) {
   VerifyRtpReceivers(right_tab_, 6);
 }
 
-IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest,
-                       DISABLED_AddAndRemoveTracksWithoutStream) {
+IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest, AddAndRemoveTracksWithoutStream) {
   StartServerAndOpenTabs();
 
   SetupPeerconnectionWithoutLocalStream(left_tab_);
@@ -96,23 +104,36 @@ IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest,
   EXPECT_EQ("null", video_stream_id);
   EXPECT_NE("null", video_track_id);
   CollectGarbage(left_tab_);
-  EXPECT_FALSE(
-      HasLocalStreamWithTrack(left_tab_, audio_stream_id, audio_track_id));
-  EXPECT_FALSE(
-      HasLocalStreamWithTrack(left_tab_, video_stream_id, video_track_id));
+  EXPECT_FALSE(HasLocalStreamWithTrack(left_tab_, kUndefined, audio_track_id));
+  EXPECT_FALSE(HasLocalStreamWithTrack(left_tab_, kUndefined, video_track_id));
   EXPECT_TRUE(HasSenderWithTrack(left_tab_, audio_track_id));
   EXPECT_TRUE(HasSenderWithTrack(left_tab_, video_track_id));
   VerifyRtpSenders(left_tab_, 2);
   // Negotiate call, sets remote description.
   NegotiateCall(left_tab_, right_tab_);
-  // TODO(hbos): When |addTrack| without streams results in SDP that does not
-  // signal a remote stream to be added this should be EXPECT_FALSE.
-  // https://crbug.com/webrtc/7933
-  EXPECT_TRUE(HasRemoteStreamWithTrack(right_tab_, kUndefined, audio_track_id));
-  EXPECT_TRUE(HasRemoteStreamWithTrack(right_tab_, kUndefined, video_track_id));
   EXPECT_TRUE(HasReceiverWithTrack(right_tab_, audio_track_id));
   EXPECT_TRUE(HasReceiverWithTrack(right_tab_, video_track_id));
   VerifyRtpReceivers(right_tab_, 2);
+  // TODO(hbos): When |addTrack| without streams results in SDP that does not
+  // signal a remote stream to be added we should expect |stream_ids| to be
+  // empty and |HasRemoteStreamWithTrack| to be false.
+  // https://crbug.com/webrtc/7933
+  std::vector<TrackEvent> track_events = GetTrackEvents(right_tab_);
+  EXPECT_EQ(2u, track_events.size());
+  const TrackEvent* audio_track_event =
+      FindTrackEvent(track_events, audio_track_id);
+  ASSERT_TRUE(audio_track_event);
+  EXPECT_EQ(1u, audio_track_event->stream_ids.size());
+  std::string remote_audio_stream_id = audio_track_event->stream_ids[0];
+  EXPECT_TRUE(HasRemoteStreamWithTrack(right_tab_, remote_audio_stream_id,
+                                       audio_track_id));
+  const TrackEvent* video_track_event =
+      FindTrackEvent(track_events, video_track_id);
+  ASSERT_TRUE(video_track_event);
+  EXPECT_EQ(1u, video_track_event->stream_ids.size());
+  std::string remote_video_stream_id = video_track_event->stream_ids[0];
+  EXPECT_TRUE(HasRemoteStreamWithTrack(right_tab_, remote_video_stream_id,
+                                       video_track_id));
 
   // Remove first track.
   RemoveTrack(left_tab_, audio_track_id);
@@ -124,9 +145,12 @@ IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest,
   // Re-negotiate call, sets remote description again.
   NegotiateCall(left_tab_, right_tab_);
   CollectGarbage(right_tab_);
-  EXPECT_FALSE(
-      HasRemoteStreamWithTrack(right_tab_, kUndefined, audio_track_id));
-  EXPECT_TRUE(HasRemoteStreamWithTrack(right_tab_, kUndefined, video_track_id));
+  // No additional track events should have fired.
+  EXPECT_EQ(2u, GetTrackEvents(right_tab_).size());
+  EXPECT_FALSE(HasRemoteStreamWithTrack(right_tab_, remote_audio_stream_id,
+                                        audio_track_id));
+  EXPECT_TRUE(HasRemoteStreamWithTrack(right_tab_, remote_video_stream_id,
+                                       video_track_id));
   EXPECT_FALSE(HasReceiverWithTrack(right_tab_, audio_track_id));
   EXPECT_TRUE(HasReceiverWithTrack(right_tab_, video_track_id));
   VerifyRtpReceivers(right_tab_, 1);
@@ -141,17 +165,19 @@ IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest,
   // Re-negotiate call, sets remote description again.
   NegotiateCall(left_tab_, right_tab_);
   CollectGarbage(right_tab_);
-  EXPECT_FALSE(
-      HasRemoteStreamWithTrack(right_tab_, kUndefined, audio_track_id));
-  EXPECT_FALSE(
-      HasRemoteStreamWithTrack(right_tab_, kUndefined, video_track_id));
+  // No additional track events should have fired.
+  EXPECT_EQ(2u, GetTrackEvents(right_tab_).size());
+  EXPECT_FALSE(HasRemoteStreamWithTrack(right_tab_, remote_audio_stream_id,
+                                        audio_track_id));
+  EXPECT_FALSE(HasRemoteStreamWithTrack(right_tab_, remote_video_stream_id,
+                                        video_track_id));
   EXPECT_FALSE(HasReceiverWithTrack(right_tab_, audio_track_id));
   EXPECT_FALSE(HasReceiverWithTrack(right_tab_, video_track_id));
   VerifyRtpReceivers(right_tab_, 0);
 }
 
 IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest,
-                       DISABLED_AddAndRemoveTracksWithSharedStream) {
+                       AddAndRemoveTracksWithSharedStream) {
   StartServerAndOpenTabs();
 
   SetupPeerconnectionWithoutLocalStream(left_tab_);
@@ -193,6 +219,18 @@ IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest,
   EXPECT_TRUE(HasReceiverWithTrack(right_tab_, audio_track_id));
   EXPECT_TRUE(HasReceiverWithTrack(right_tab_, video_track_id));
   VerifyRtpReceivers(right_tab_, 2);
+  std::vector<TrackEvent> track_events = GetTrackEvents(right_tab_);
+  EXPECT_EQ(2u, track_events.size());
+  const TrackEvent* audio_track_event =
+      FindTrackEvent(track_events, audio_track_id);
+  ASSERT_TRUE(audio_track_event);
+  ASSERT_EQ(1u, audio_track_event->stream_ids.size());
+  EXPECT_EQ(audio_stream_id, audio_track_event->stream_ids[0]);
+  const TrackEvent* video_track_event =
+      FindTrackEvent(track_events, video_track_id);
+  ASSERT_TRUE(video_track_event);
+  ASSERT_EQ(1u, video_track_event->stream_ids.size());
+  EXPECT_EQ(video_stream_id, video_track_event->stream_ids[0]);
 
   // Remove first track.
   RemoveTrack(left_tab_, audio_track_id);
@@ -204,6 +242,8 @@ IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest,
   // Re-negotiate call, sets remote description again.
   NegotiateCall(left_tab_, right_tab_);
   CollectGarbage(right_tab_);
+  // No additional track events should have fired.
+  EXPECT_EQ(2u, GetTrackEvents(right_tab_).size());
   EXPECT_FALSE(
       HasRemoteStreamWithTrack(right_tab_, audio_stream_id, audio_track_id));
   EXPECT_TRUE(
@@ -222,6 +262,8 @@ IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest,
   // Re-negotiate call, sets remote description again.
   NegotiateCall(left_tab_, right_tab_);
   CollectGarbage(right_tab_);
+  // No additional track events should have fired.
+  EXPECT_EQ(2u, GetTrackEvents(right_tab_).size());
   EXPECT_FALSE(
       HasRemoteStreamWithTrack(right_tab_, audio_stream_id, audio_track_id));
   EXPECT_FALSE(
@@ -232,7 +274,7 @@ IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest,
-                       DISABLED_AddAndRemoveTracksWithIndividualStreams) {
+                       AddAndRemoveTracksWithIndividualStreams) {
   StartServerAndOpenTabs();
 
   SetupPeerconnectionWithoutLocalStream(left_tab_);
@@ -274,6 +316,18 @@ IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest,
   EXPECT_TRUE(HasReceiverWithTrack(right_tab_, audio_track_id));
   EXPECT_TRUE(HasReceiverWithTrack(right_tab_, video_track_id));
   VerifyRtpReceivers(right_tab_, 2);
+  std::vector<TrackEvent> track_events = GetTrackEvents(right_tab_);
+  EXPECT_EQ(2u, track_events.size());
+  const TrackEvent* audio_track_event =
+      FindTrackEvent(track_events, audio_track_id);
+  ASSERT_TRUE(audio_track_event);
+  ASSERT_EQ(1u, audio_track_event->stream_ids.size());
+  EXPECT_EQ(audio_stream_id, audio_track_event->stream_ids[0]);
+  const TrackEvent* video_track_event =
+      FindTrackEvent(track_events, video_track_id);
+  ASSERT_TRUE(video_track_event);
+  ASSERT_EQ(1u, video_track_event->stream_ids.size());
+  EXPECT_EQ(video_stream_id, video_track_event->stream_ids[0]);
 
   // Remove first track.
   RemoveTrack(left_tab_, audio_track_id);
@@ -285,6 +339,8 @@ IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest,
   // Re-negotiate call, sets remote description again.
   NegotiateCall(left_tab_, right_tab_);
   CollectGarbage(right_tab_);
+  // No additional track events should have fired.
+  EXPECT_EQ(2u, GetTrackEvents(right_tab_).size());
   EXPECT_FALSE(
       HasRemoteStreamWithTrack(right_tab_, audio_stream_id, audio_track_id));
   EXPECT_TRUE(
@@ -303,6 +359,8 @@ IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest,
   // Re-negotiate call, sets remote description again.
   NegotiateCall(left_tab_, right_tab_);
   CollectGarbage(right_tab_);
+  // No additional track events should have fired.
+  EXPECT_EQ(2u, GetTrackEvents(right_tab_).size());
   EXPECT_FALSE(
       HasRemoteStreamWithTrack(right_tab_, audio_stream_id, audio_track_id));
   EXPECT_FALSE(
@@ -316,4 +374,18 @@ IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest, GetReceiversSetRemoteDescription) {
   StartServerAndOpenTabs();
   EXPECT_EQ("ok", ExecuteJavascript("createReceiverWithSetRemoteDescription()",
                                     left_tab_));
+}
+
+IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest, SwitchRemoteStreamAndBackAgain) {
+  StartServerAndOpenTabs();
+  EXPECT_EQ("ok",
+            ExecuteJavascript("switchRemoteStreamAndBackAgain()", left_tab_));
+}
+
+IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest,
+                       SwitchRemoteStreamWithoutWaitingForPromisesToResolve) {
+  StartServerAndOpenTabs();
+  EXPECT_EQ("ok", ExecuteJavascript(
+                      "switchRemoteStreamWithoutWaitingForPromisesToResolve()",
+                      left_tab_));
 }

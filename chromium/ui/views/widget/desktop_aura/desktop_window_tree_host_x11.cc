@@ -168,8 +168,7 @@ DesktopWindowTreeHostX11::DesktopWindowTreeHostX11(
       has_pointer_focus_(false),
       modal_dialog_counter_(0),
       close_widget_factory_(this),
-      weak_factory_(this) {
-}
+      weak_factory_(this) {}
 
 DesktopWindowTreeHostX11::~DesktopWindowTreeHostX11() {
   window()->ClearProperty(kHostForRootWindow);
@@ -703,15 +702,18 @@ gfx::Rect DesktopWindowTreeHostX11::GetWorkAreaBoundsInScreen() const {
 }
 
 void DesktopWindowTreeHostX11::SetShape(
-    std::unique_ptr<SkRegion> native_region) {
+    std::unique_ptr<Widget::ShapeRects> native_shape) {
   custom_window_shape_ = false;
   window_shape_.reset();
 
-  if (native_region) {
+  if (native_shape) {
+    SkRegion native_region;
+    for (const gfx::Rect& rect : *native_shape)
+      native_region.op(gfx::RectToSkIRect(rect), SkRegion::kUnion_Op);
     gfx::Transform transform = GetRootTransform();
-    if (!transform.IsIdentity() && !native_region->isEmpty()) {
+    if (!transform.IsIdentity() && !native_region.isEmpty()) {
       SkPath path_in_dip;
-      if (native_region->getBoundaryPath(&path_in_dip)) {
+      if (native_region.getBoundaryPath(&path_in_dip)) {
         SkPath path_in_pixels;
         path_in_dip.transform(transform.matrix(), &path_in_pixels);
         window_shape_.reset(gfx::CreateRegionFromSkPath(path_in_pixels));
@@ -719,7 +721,7 @@ void DesktopWindowTreeHostX11::SetShape(
         window_shape_.reset(XCreateRegion());
       }
     } else {
-      window_shape_.reset(gfx::CreateRegionFromSkRegion(*native_region));
+      window_shape_.reset(gfx::CreateRegionFromSkRegion(native_region));
     }
 
     custom_window_shape_ = true;
@@ -1323,6 +1325,8 @@ void DesktopWindowTreeHostX11::OnDisplayMetricsChanged(
   }
 }
 
+void DesktopWindowTreeHostX11::OnMaximizedStateChanged() {}
+
 ////////////////////////////////////////////////////////////////////////////////
 // DesktopWindowTreeHostX11, private:
 
@@ -1541,7 +1545,10 @@ void DesktopWindowTreeHostX11::InitX11Window(
   if (window_icon) {
     SetWindowIcons(gfx::ImageSkia(), *window_icon);
   }
-  CreateCompositor();
+  // Disable compositing on tooltips as a workaround for
+  // https://crbug.com/442111.
+  CreateCompositor(viz::FrameSinkId(),
+                   params.type == Widget::InitParams::TYPE_TOOLTIP);
   OnAcceleratedWidgetAvailable();
 }
 
@@ -1571,10 +1578,14 @@ void DesktopWindowTreeHostX11::OnWMStateUpdated() {
   ui::GetAtomArrayProperty(xwindow_, "_NET_WM_STATE", &atom_list);
 
   bool was_minimized = IsMinimized();
+  bool was_maximized = IsMaximized();
 
   window_properties_.clear();
   std::copy(atom_list.begin(), atom_list.end(),
             inserter(window_properties_, window_properties_.begin()));
+
+  bool is_minimized = IsMinimized();
+  bool is_maximized = IsMaximized();
 
   // Propagate the window minimization information to the content window, so
   // the render side can update its visibility properly. OnWMStateUpdated() is
@@ -1588,7 +1599,6 @@ void DesktopWindowTreeHostX11::OnWMStateUpdated() {
   // don't draw any 'blank' frames that could be noticed in applications such as
   // window manager previews, which show content even when a window is
   // minimized.
-  bool is_minimized = IsMinimized();
   if (is_minimized != was_minimized) {
     if (is_minimized) {
       compositor()->SetVisible(false);
@@ -1621,6 +1631,9 @@ void DesktopWindowTreeHostX11::OnWMStateUpdated() {
   // do preprocessing before the x window's fullscreen state is toggled.
 
   is_always_on_top_ = HasWMSpecProperty("_NET_WM_STATE_ABOVE");
+
+  if (was_maximized != is_maximized)
+    OnMaximizedStateChanged();
 
   // Now that we have different window properties, we may need to relayout the
   // window. (The windows code doesn't need this because their window change is

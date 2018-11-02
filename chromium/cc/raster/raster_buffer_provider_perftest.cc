@@ -22,13 +22,13 @@
 #include "cc/test/fake_resource_provider.h"
 #include "cc/test/test_context_provider.h"
 #include "cc/test/test_context_support.h"
-#include "cc/test/test_gpu_memory_buffer_manager.h"
 #include "cc/test/test_shared_bitmap_manager.h"
 #include "cc/test/test_web_graphics_context_3d.h"
 #include "cc/tiles/tile_task_manager.h"
 #include "components/viz/common/gpu/context_cache_controller.h"
 #include "components/viz/common/gpu/context_provider.h"
 #include "components/viz/common/resources/platform_color.h"
+#include "components/viz/test/test_gpu_memory_buffer_manager.h"
 #include "gpu/command_buffer/common/sync_token.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/perf/perf_test.h"
@@ -243,7 +243,7 @@ class RasterBufferProviderPerfTestBase {
 
     for (unsigned i = 0; i < num_raster_tasks; ++i) {
       auto resource =
-          base::MakeUnique<ScopedResource>(resource_provider_.get());
+          std::make_unique<ScopedResource>(resource_provider_.get());
       resource->Allocate(size, ResourceProvider::TEXTURE_HINT_IMMUTABLE,
                          viz::RGBA_8888, gfx::ColorSpace());
 
@@ -309,7 +309,7 @@ class RasterBufferProviderPerfTestBase {
  protected:
   scoped_refptr<viz::ContextProvider> compositor_context_provider_;
   scoped_refptr<viz::ContextProvider> worker_context_provider_;
-  std::unique_ptr<ResourceProvider> resource_provider_;
+  std::unique_ptr<LayerTreeResourceProvider> resource_provider_;
   scoped_refptr<base::TestSimpleTaskRunner> task_runner_;
   std::unique_ptr<SynchronousTaskGraphRunner> task_graph_runner_;
   LapTimer timer_;
@@ -330,7 +330,7 @@ class RasterBufferProviderPerfTest
         break;
       case RASTER_BUFFER_PROVIDER_TYPE_ONE_COPY:
         Create3dResourceProvider();
-        raster_buffer_provider_ = base::MakeUnique<OneCopyRasterBufferProvider>(
+        raster_buffer_provider_ = std::make_unique<OneCopyRasterBufferProvider>(
             task_runner_.get(), compositor_context_provider_.get(),
             worker_context_provider_.get(), resource_provider_.get(),
             std::numeric_limits<int>::max(), false,
@@ -339,10 +339,10 @@ class RasterBufferProviderPerfTest
         break;
       case RASTER_BUFFER_PROVIDER_TYPE_GPU:
         Create3dResourceProvider();
-        raster_buffer_provider_ = base::MakeUnique<GpuRasterBufferProvider>(
+        raster_buffer_provider_ = std::make_unique<GpuRasterBufferProvider>(
             compositor_context_provider_.get(), worker_context_provider_.get(),
             resource_provider_.get(), false, 0,
-            viz::PlatformColor::BestTextureFormat(), false);
+            viz::PlatformColor::BestTextureFormat(), false, false);
         break;
       case RASTER_BUFFER_PROVIDER_TYPE_BITMAP:
         CreateSoftwareResourceProvider();
@@ -485,13 +485,15 @@ class RasterBufferProviderPerfTest
  private:
   void Create3dResourceProvider() {
     resource_provider_ =
-        FakeResourceProvider::Create(compositor_context_provider_.get(),
-                                     nullptr, &gpu_memory_buffer_manager_);
+        FakeResourceProvider::Create<LayerTreeResourceProvider>(
+            compositor_context_provider_.get(), nullptr,
+            &gpu_memory_buffer_manager_);
   }
 
   void CreateSoftwareResourceProvider() {
     resource_provider_ =
-        FakeResourceProvider::Create(nullptr, &shared_bitmap_manager_, nullptr);
+        FakeResourceProvider::Create<LayerTreeResourceProvider>(
+            nullptr, &shared_bitmap_manager_, nullptr);
   }
 
   std::string TestModifierString() const {
@@ -511,7 +513,7 @@ class RasterBufferProviderPerfTest
 
   std::unique_ptr<TileTaskManager> tile_task_manager_;
   std::unique_ptr<RasterBufferProvider> raster_buffer_provider_;
-  TestGpuMemoryBufferManager gpu_memory_buffer_manager_;
+  viz::TestGpuMemoryBufferManager gpu_memory_buffer_manager_;
   TestSharedBitmapManager shared_bitmap_manager_;
 };
 
@@ -555,8 +557,9 @@ class RasterBufferProviderCommonPerfTest
  public:
   // Overridden from testing::Test:
   void SetUp() override {
-    resource_provider_ = FakeResourceProvider::Create(
-        compositor_context_provider_.get(), nullptr);
+    resource_provider_ =
+        FakeResourceProvider::Create<LayerTreeResourceProvider>(
+            compositor_context_provider_.get(), nullptr);
   }
 
   void RunBuildTileTaskGraphTest(const std::string& test_name,

@@ -25,7 +25,6 @@
 #import "ui/gfx/mac/nswindow_frame_controls.h"
 #include "ui/gfx/skia_util.h"
 
-#include "app/vivaldi_apptools.h"
 #import "chrome/browser/app_controller_mac.h"
 
 // NOTE: State Before Update.
@@ -50,23 +49,6 @@ using extensions::AppWindow;
 @interface NSWindow (NSPrivateApis)
 - (void)setBottomCornerRounded:(BOOL)rounded;
 - (BOOL)_isTitleHidden;
-@end
-
-// Content view for frameless window mode.
-@interface VivaldiContentView : NSView
-@end
-
-@implementation VivaldiContentView
-- (void)setFrame:(NSRect)rect {
-  // This view must cover the entire framless window area.
-  [super setFrame:self.superview.frame];
-}
-
-- (void)setFrameSize:(NSSize)size {
-  // This view must cover the entire framless window area.
-  [super setFrameSize:self.superview.frame.size];
-}
-
 @end
 
 namespace {
@@ -211,9 +193,6 @@ std::vector<gfx::Rect> CalculateNonDraggableRegions(
 // Similar to ChromeBrowserWindow, don't draw the title, but allow it to be seen
 // in menus, Expose, etc.
 - (BOOL)_isTitleHidden {
-  if (vivaldi::IsVivaldiRunning())
-    return NO;
-
   return YES;
 }
 
@@ -245,60 +224,6 @@ std::vector<gfx::Rect> CalculateNonDraggableRegions(
   return frameRect;
 }
 
-- (void)VivaldiSetAppWindowCocoa:(NativeAppWindowCocoa*)appWindowCocoa {
-  appWindowCocoa_ = appWindowCocoa;
-}
-
-- (NSView*)VivaldiGetTouchView {
-  NSView* view = nil;
-  content::WebContents* webContents = appWindowCocoa_->VivaldiWebContents();
-  if (webContents) {
-    for (NSView* subview in [webContents->GetNativeView() subviews]) {
-      if ([subview respondsToSelector:@selector(vivaldiTouchMarker)]) {
-        view = subview;
-        break;
-      }
-    }
-  }
-  return view;
-}
-
-// NOTE(espen@ovivaldi.com): Hook up for swipe navigation without animation.
-- (void)swipeWithEvent:(NSEvent*)event {
-  AppController* appController = static_cast<AppController*>([NSApp delegate]);
-  [appController swipeWithEvent:event];
-}
-
-// NOTE(espen@vivaldi.com) Reimplemented for swipe workaround.
-- (void)sendEvent:(NSEvent*)event {
-  // NOTE(espen@vivaldi.com). Brute force workaround for swiping in frameless
-  // mode. This functionality stopped working properly with chrome 51 because
-  // the touches***WithEvent: functions are not called by the NSWindow
-  // (happens when the view is reparented to be a child of
-  // [[window() contentView] superview]). The swipe state machine depends on
-  // them with 51. Code below will signal directly to the
-  // RenderWidgetHostViewCocoa which is the view that normally receive these
-  // calls (works fine in framed window mode). This need to be tested for each
-  // chrome upgrade.
-  if (vivaldi::IsVivaldiRunning() && !base::mac::IsAtLeastOS10_10()) {
-    // 10.10 and later uses a modified view layout that will call the functions
-    // automatically. See InstallView()
-    if (event.type == NSEventTypeGesture ||
-        event.type == NSEventTypeBeginGesture ||
-        event.type == NSEventTypeEndGesture) {
-      NSView* view = [self VivaldiGetTouchView];
-      if (event.type == NSEventTypeGesture)
-        [view touchesMovedWithEvent:event];
-      else if (event.type == NSEventTypeBeginGesture)
-        [view touchesBeganWithEvent:event];
-      else
-        [view touchesEndedWithEvent:event];
-    }
-  }
-
-  [super sendEvent:event];
-}
-
 @end
 
 @interface ControlRegionView : NSView
@@ -319,7 +244,6 @@ std::vector<gfx::Rect> CalculateNonDraggableRegions(
 @interface NSView (WebContentsView)
 - (void)setMouseDownCanMoveWindow:(BOOL)can_move;
 - (void)_addKnownSubview:(NSView *)subview;
-- (void)VivaldiSetInFramelessContentView:(BOOL)framelessContentView;
 @end
 
 NativeAppWindowCocoa::NativeAppWindowCocoa(
@@ -352,13 +276,6 @@ NativeAppWindowCocoa::NativeAppWindowCocoa(
                   backing:NSBackingStoreBuffered
                     defer:NO]);
   [window setReleasedWhenClosed:NO];  // Owned by the window controller.
-
-  if (vivaldi::IsVivaldiRunning() && !has_frame_) {
-    [(AppFramelessNSWindow*)window VivaldiSetAppWindowCocoa:this];
-    window.get().contentView =
-        [[VivaldiContentView alloc] initWithFrame:NSZeroRect];
-    [window.get().contentView release];
-  }
 
   std::string name;
   const extensions::Extension* extension = app_window_->GetExtension();
@@ -435,18 +352,6 @@ void NativeAppWindowCocoa::InstallView() {
 
     NSView* frameView = [[window() contentView] superview];
     [view setFrame:[frameView bounds]];
-    if (vivaldi::IsVivaldiRunning() && base::mac::IsAtLeastOS10_10()) {
-      DCHECK([view
-        respondsToSelector:@selector(VivaldiSetInFramelessContentView:)]);
-      [view VivaldiSetInFramelessContentView:YES];
-      [[window() contentView] addSubview:view];
-      [[window() contentView] setFrame:[frameView bounds]];
-      // This hides the NSTitlebarView (parent of the zoom button). It will
-      // otherwise overlay the tabs. We have to have a title because automatic
-      // tests use it to locate the window (but it does not have to be visible).
-      [[[window() standardWindowButton:NSWindowZoomButton] superview]
-          setHidden:YES];
-    } else
     [frameView addSubview:view];
 
     [[window() standardWindowButton:NSWindowZoomButton] setHidden:YES];
@@ -501,21 +406,6 @@ void NativeAppWindowCocoa::SetFullscreen(int fullscreen_types) {
   if (fullscreen && !shows_fullscreen_controls_)
     gfx::SetNSWindowCanFullscreen(window(), true);
 
-  // NOTE(tomas@vivaldi.com): If the window is not native (has no frame)
-  // make sure that the native title is not shown.
-  // The superview of the standard buttons is the titlebar view.
-  if (vivaldi::IsVivaldiRunning() && !has_frame_) {
-    if (fullscreen) {
-      [window() toggleFullScreen:nil];
-      [[[window() standardWindowButton:NSWindowZoomButton] superview]
-       setHidden:NO];
-    } else {
-      [[[window() standardWindowButton:NSWindowZoomButton] superview]
-       setHidden:YES];
-      [window() toggleFullScreen:nil];
-    }
-  }
-  else
   [window() toggleFullScreen:nil];
   is_fullscreen_ = fullscreen;
 }
@@ -664,7 +554,7 @@ void NativeAppWindowCocoa::UpdateWindowTitle() {
   [window() setTitle:base::SysUTF16ToNSString(title)];
 }
 
-void NativeAppWindowCocoa::UpdateShape(std::unique_ptr<SkRegion> region) {
+void NativeAppWindowCocoa::UpdateShape(std::unique_ptr<ShapeRects> rects) {
   NOTIMPLEMENTED();
 }
 

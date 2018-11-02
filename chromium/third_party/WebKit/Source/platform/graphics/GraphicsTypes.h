@@ -28,7 +28,6 @@
 
 #include "platform/PlatformExport.h"
 #include "platform/wtf/Forward.h"
-#include "platform/wtf/build_config.h"
 #include "public/platform/WebBlendMode.h"
 #include "third_party/skia/include/core/SkFilterQuality.h"
 #include "third_party/skia/include/core/SkPaint.h"
@@ -124,6 +123,12 @@ enum FlushReason {
   kFlushReasonUnknown,
   kFlushReasonInitialClear,
   kFlushReasonDrawImageOfWebGL,
+};
+
+enum MailboxSyncMode {
+  kVerifiedSyncToken,
+  kUnverifiedSyncToken,
+  kOrderingBarrier,
 };
 
 enum ImageInitializationMode {

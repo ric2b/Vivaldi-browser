@@ -201,6 +201,7 @@ class DCLayerTree {
     std::unique_ptr<SwapChainPresenter> swap_chain_presenter;
     base::win::ScopedComPtr<IDXGISwapChain1> swap_chain;
     base::win::ScopedComPtr<IDCompositionSurface> surface;
+    uint64_t dcomp_surface_serial = 0;
 
     gfx::Rect bounds;
     float swap_chain_scale_x = 0.0f;
@@ -210,12 +211,13 @@ class DCLayerTree {
     gfx::Transform transform;
   };
 
-  void InitVisual(size_t i);
-  void UpdateVisualForVideo(VisualInfo* visual_info,
+  // These functions return true if the visual tree was changed.
+  bool InitVisual(size_t i);
+  bool UpdateVisualForVideo(VisualInfo* visual_info,
                             const ui::DCRendererLayerParams& params);
-  void UpdateVisualForBackbuffer(VisualInfo* visual_info,
+  bool UpdateVisualForBackbuffer(VisualInfo* visual_info,
                                  const ui::DCRendererLayerParams& params);
-  void UpdateVisualClip(VisualInfo* visual_info,
+  bool UpdateVisualClip(VisualInfo* visual_info,
                         const ui::DCRendererLayerParams& params);
 
   DirectCompositionSurfaceWin* surface_;
@@ -590,6 +592,9 @@ void DCLayerTree::SwapChainPresenter::PresentToSwapChain(
 
   // TODO(jbauman): Use correct colorspace.
   gfx::ColorSpace src_color_space = gfx::ColorSpace::CreateREC709();
+  if (params.image[0]->color_space().IsValid()) {
+    src_color_space = params.image[0]->color_space();
+  }
   base::win::ScopedComPtr<ID3D11VideoContext1> context1;
   if (SUCCEEDED(video_context_.CopyTo(context1.GetAddressOf()))) {
     context1->VideoProcessorSetStreamColorSpace1(
@@ -615,16 +620,47 @@ void DCLayerTree::SwapChainPresenter::PresentToSwapChain(
   if (SUCCEEDED(swap_chain_.CopyTo(swap_chain3.GetAddressOf()))) {
     DXGI_COLOR_SPACE_TYPE color_space =
         gfx::ColorSpaceWin::GetDXGIColorSpace(output_color_space);
+    if (is_yuy2_swapchain_) {
+      // Swapchains with YUY2 textures can't have RGB color spaces.
+      switch (color_space) {
+        case DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709:
+        case DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709:
+          color_space = DXGI_COLOR_SPACE_YCBCR_FULL_G22_LEFT_P709;
+          break;
+
+        case DXGI_COLOR_SPACE_RGB_STUDIO_G22_NONE_P709:
+          color_space = DXGI_COLOR_SPACE_YCBCR_STUDIO_G22_LEFT_P709;
+          break;
+
+        case DXGI_COLOR_SPACE_RGB_STUDIO_G22_NONE_P2020:
+          color_space = DXGI_COLOR_SPACE_YCBCR_STUDIO_G22_LEFT_P2020;
+          break;
+
+        case DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020:
+        case DXGI_COLOR_SPACE_RGB_STUDIO_G2084_NONE_P2020:
+          color_space = DXGI_COLOR_SPACE_YCBCR_STUDIO_G2084_LEFT_P2020;
+          break;
+
+        case DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P2020:
+          color_space = DXGI_COLOR_SPACE_YCBCR_FULL_G22_LEFT_P2020;
+          break;
+
+        default:
+          break;
+      }
+    }
     HRESULT hr = swap_chain3->SetColorSpace1(color_space);
-    CHECK(SUCCEEDED(hr));
-    if (context1) {
-      context1->VideoProcessorSetOutputColorSpace1(video_processor_.Get(),
-                                                   color_space);
-    } else {
-      D3D11_VIDEO_PROCESSOR_COLOR_SPACE d3d11_color_space =
-          gfx::ColorSpaceWin::GetD3D11ColorSpace(output_color_space);
-      video_context_->VideoProcessorSetOutputColorSpace(video_processor_.Get(),
-                                                        &d3d11_color_space);
+
+    if (SUCCEEDED(hr)) {
+      if (context1) {
+        context1->VideoProcessorSetOutputColorSpace1(video_processor_.Get(),
+                                                     color_space);
+      } else {
+        D3D11_VIDEO_PROCESSOR_COLOR_SPACE d3d11_color_space =
+            gfx::ColorSpaceWin::GetD3D11ColorSpace(output_color_space);
+        video_context_->VideoProcessorSetOutputColorSpace(
+            video_processor_.Get(), &d3d11_color_space);
+      }
     }
   }
 
@@ -810,11 +846,11 @@ void DCLayerTree::SwapChainPresenter::ReallocateSwapChain(bool yuy2) {
   out_view_.Reset();
 }
 
-void DCLayerTree::InitVisual(size_t i) {
+bool DCLayerTree::InitVisual(size_t i) {
   DCHECK_GT(visual_info_.size(), i);
   VisualInfo* visual_info = &visual_info_[i];
   if (visual_info->content_visual)
-    return;
+    return false;
   DCHECK(!visual_info->clip_visual);
   base::win::ScopedComPtr<IDCompositionVisual2> visual;
   dcomp_device_->CreateVisual(visual_info->clip_visual.GetAddressOf());
@@ -825,14 +861,16 @@ void DCLayerTree::InitVisual(size_t i) {
   IDCompositionVisual2* last_visual =
       (i > 0) ? visual_info_[i - 1].clip_visual.Get() : nullptr;
   root_visual_->AddVisual(visual_info->clip_visual.Get(), TRUE, last_visual);
+  return true;
 }
 
-void DCLayerTree::UpdateVisualForVideo(
+bool DCLayerTree::UpdateVisualForVideo(
     VisualInfo* visual_info,
     const ui::DCRendererLayerParams& params) {
   base::win::ScopedComPtr<IDCompositionVisual2> dc_visual =
       visual_info->content_visual;
 
+  bool changed = false;
   gfx::Rect bounds_rect = params.rect;
   visual_info->surface.Reset();
   if (!visual_info->swap_chain_presenter) {
@@ -844,6 +882,7 @@ void DCLayerTree::UpdateVisualForVideo(
       visual_info->swap_chain_presenter->swap_chain()) {
     visual_info->swap_chain = visual_info->swap_chain_presenter->swap_chain();
     dc_visual->SetContent(visual_info->swap_chain.Get());
+    changed = true;
   }
 
   if (visual_info->swap_chain_presenter->swap_chain_scale_x() !=
@@ -879,16 +918,19 @@ void DCLayerTree::UpdateVisualForVideo(
                                      final_transform.matrix().get(3, 1)}}};
     dcomp_transform->SetMatrix(d2d_matrix);
     dc_visual->SetTransform(dcomp_transform.Get());
+    changed = true;
   }
+  return changed;
 }
 
-void DCLayerTree::UpdateVisualForBackbuffer(
+bool DCLayerTree::UpdateVisualForBackbuffer(
     VisualInfo* visual_info,
     const ui::DCRendererLayerParams& params) {
   base::win::ScopedComPtr<IDCompositionVisual2> dc_visual =
       visual_info->content_visual;
 
   visual_info->swap_chain_presenter = nullptr;
+  bool changed = false;
   if ((visual_info->surface != surface_->dcomp_surface()) ||
       (visual_info->swap_chain != surface_->swap_chain())) {
     visual_info->surface = surface_->dcomp_surface();
@@ -900,6 +942,7 @@ void DCLayerTree::UpdateVisualForBackbuffer(
     } else {
       dc_visual->SetContent(nullptr);
     }
+    changed = true;
   }
 
   gfx::Rect bounds_rect = params.rect;
@@ -910,10 +953,17 @@ void DCLayerTree::UpdateVisualForBackbuffer(
     visual_info->bounds = bounds_rect;
     dc_visual->SetTransform(nullptr);
     visual_info->transform = gfx::Transform();
+    changed = true;
   }
+  if (surface_->dcomp_surface() &&
+      surface_->GetDCompSurfaceSerial() != visual_info->dcomp_surface_serial) {
+    changed = true;
+    visual_info->dcomp_surface_serial = surface_->GetDCompSurfaceSerial();
+  }
+  return changed;
 }
 
-void DCLayerTree::UpdateVisualClip(VisualInfo* visual_info,
+bool DCLayerTree::UpdateVisualClip(VisualInfo* visual_info,
                                    const ui::DCRendererLayerParams& params) {
   if (params.is_clipped != visual_info->is_clipped ||
       params.clip_rect != visual_info->clip_rect) {
@@ -934,7 +984,9 @@ void DCLayerTree::UpdateVisualClip(VisualInfo* visual_info,
     } else {
       visual_info->clip_visual->SetClip(nullptr);
     }
+    return true;
   }
+  return false;
 }
 
 bool DCLayerTree::CommitAndClearPendingOverlays() {
@@ -957,10 +1009,12 @@ bool DCLayerTree::CommitAndClearPendingOverlays() {
               return a->z_order < b->z_order;
             });
 
+  bool changed = false;
   while (visual_info_.size() > pending_overlays_.size()) {
     visual_info_.back().clip_visual->RemoveAllVisuals();
     root_visual_->RemoveVisual(visual_info_.back().clip_visual.Get());
     visual_info_.pop_back();
+    changed = true;
   }
 
   visual_info_.resize(pending_overlays_.size());
@@ -974,19 +1028,21 @@ bool DCLayerTree::CommitAndClearPendingOverlays() {
     ui::DCRendererLayerParams& params = *pending_overlays_[i];
     VisualInfo* visual_info = &visual_info_[i];
 
-    InitVisual(i);
+    changed |= InitVisual(i);
     if (params.image.size() >= 1 && params.image[0]) {
-      UpdateVisualForVideo(visual_info, params);
+      changed |= UpdateVisualForVideo(visual_info, params);
     } else if (params.image.empty()) {
-      UpdateVisualForBackbuffer(visual_info, params);
+      changed |= UpdateVisualForBackbuffer(visual_info, params);
     } else {
       CHECK(false);
     }
-    UpdateVisualClip(visual_info, params);
+    changed |= UpdateVisualClip(visual_info, params);
   }
 
-  HRESULT hr = dcomp_device_->Commit();
-  CHECK(SUCCEEDED(hr));
+  if (changed) {
+    HRESULT hr = dcomp_device_->Commit();
+    CHECK(SUCCEEDED(hr));
+  }
 
   pending_overlays_.clear();
   return true;
@@ -1013,10 +1069,20 @@ DirectCompositionSurfaceWin::~DirectCompositionSurfaceWin() {
 
 // static
 bool DirectCompositionSurfaceWin::AreOverlaysSupported() {
-  if (!HardwareSupportsOverlays())
-    return false;
+  static bool initialized;
+  static bool overlays_supported;
+  if (initialized)
+    return overlays_supported;
 
-  return base::FeatureList::IsEnabled(switches::kDirectCompositionOverlays);
+  initialized = true;
+
+  overlays_supported =
+      HardwareSupportsOverlays() &&
+      base::FeatureList::IsEnabled(switches::kDirectCompositionOverlays);
+
+  UMA_HISTOGRAM_BOOLEAN("GPU.DirectComposition.OverlaysSupported",
+                        overlays_supported);
+  return overlays_supported;
 }
 
 // static
@@ -1132,8 +1198,10 @@ void* DirectCompositionSurfaceWin::GetHandle() {
 
 bool DirectCompositionSurfaceWin::Resize(const gfx::Size& size,
                                          float scale_factor,
+                                         ColorSpace color_space,
                                          bool has_alpha) {
-  if ((size == GetSize()) && (has_alpha == has_alpha_))
+  bool is_hdr = color_space == ColorSpace::SCRGB_LINEAR;
+  if (size == GetSize() && has_alpha == has_alpha_ && is_hdr == is_hdr_)
     return true;
 
   // Force a resize and redraw (but not a move, activate, etc.).
@@ -1143,6 +1211,7 @@ bool DirectCompositionSurfaceWin::Resize(const gfx::Size& size,
     return false;
   }
   size_ = size;
+  is_hdr_ = is_hdr;
   has_alpha_ = has_alpha;
   ui::ScopedReleaseCurrent release_current(this);
   return RecreateRootSurface();
@@ -1204,6 +1273,10 @@ bool DirectCompositionSurfaceWin::SupportsDCLayers() const {
   return true;
 }
 
+bool DirectCompositionSurfaceWin::UseOverlaysForVideo() const {
+  return AreOverlaysSupported();
+}
+
 bool DirectCompositionSurfaceWin::SetDrawRectangle(const gfx::Rect& rectangle) {
   if (root_surface_)
     return root_surface_->SetDrawRectangle(rectangle);
@@ -1222,8 +1295,8 @@ void DirectCompositionSurfaceWin::WaitForSnapshotRendering() {
 }
 
 bool DirectCompositionSurfaceWin::RecreateRootSurface() {
-  root_surface_ = new DirectCompositionChildSurfaceWin(size_, has_alpha_,
-                                                       enable_dc_layers_);
+  root_surface_ = new DirectCompositionChildSurfaceWin(
+      size_, is_hdr_, has_alpha_, enable_dc_layers_);
   return root_surface_->Initialize();
 }
 
@@ -1235,6 +1308,10 @@ DirectCompositionSurfaceWin::dcomp_surface() const {
 const base::win::ScopedComPtr<IDXGISwapChain1>
 DirectCompositionSurfaceWin::swap_chain() const {
   return root_surface_ ? root_surface_->swap_chain() : nullptr;
+}
+
+uint64_t DirectCompositionSurfaceWin::GetDCompSurfaceSerial() const {
+  return root_surface_ ? root_surface_->dcomp_surface_serial() : 0;
 }
 
 scoped_refptr<base::TaskRunner>

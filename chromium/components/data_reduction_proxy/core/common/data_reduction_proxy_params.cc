@@ -30,7 +30,6 @@ namespace {
 const char kEnabled[] = "Enabled";
 const char kControl[] = "Control";
 const char kDisabled[] = "Disabled";
-const char kLitePage[] = "Enabled_Preview";
 const char kDefaultSecureProxyCheckUrl[] = "http://check.googlezip.net/connect";
 const char kDefaultWarmupUrl[] = "http://check.googlezip.net/generate_204";
 
@@ -41,8 +40,6 @@ const char kLoFiFlagFieldTrial[] = "DataCompressionProxyLoFiFlag";
 
 const char kBlackListTransitionFieldTrial[] =
     "DataReductionProxyPreviewsBlackListTransition";
-
-const char kTrustedSpdyProxyFieldTrialName[] = "DataReductionTrustedSpdyProxy";
 
 // Default URL for retrieving the Data Reduction Proxy configuration.
 const char kClientConfigURL[] =
@@ -136,50 +133,12 @@ std::string HoldbackFieldTrialGroup() {
   return base::FieldTrialList::FindFullName("DataCompressionProxyHoldback");
 }
 
-const char* GetTrustedSpdyProxyFieldTrialName() {
-  return kTrustedSpdyProxyFieldTrialName;
-}
-
-bool IsIncludedInTrustedSpdyProxyFieldTrial() {
-  if (base::StartsWith(base::FieldTrialList::FindFullName(
-                           GetTrustedSpdyProxyFieldTrialName()),
-                       kControl, base::CompareCase::SENSITIVE)) {
-    return false;
-  }
-  if (base::StartsWith(base::FieldTrialList::FindFullName(
-                           GetTrustedSpdyProxyFieldTrialName()),
-                       kDisabled, base::CompareCase::SENSITIVE)) {
-    return false;
-  }
-  // Trusted SPDY proxy experiment is enabled by default.
-  return true;
-}
-
 const char* GetLoFiFieldTrialName() {
   return kLoFiFieldTrial;
 }
 
 const char* GetLoFiFlagFieldTrialName() {
   return kLoFiFlagFieldTrial;
-}
-
-bool IsIncludedInLoFiEnabledFieldTrial() {
-  return !IsLoFiOnViaFlags() && !IsLoFiDisabledViaFlags() &&
-         IsIncludedInFieldTrial(GetLoFiFieldTrialName());
-}
-
-bool IsIncludedInLoFiControlFieldTrial() {
-  return !IsLoFiOnViaFlags() && !IsLoFiDisabledViaFlags() &&
-         base::StartsWith(
-             base::FieldTrialList::FindFullName(GetLoFiFieldTrialName()),
-             kControl, base::CompareCase::SENSITIVE);
-}
-
-bool IsIncludedInLitePageFieldTrial() {
-  return !IsLoFiOnViaFlags() && !IsLoFiDisabledViaFlags() &&
-         base::StartsWith(
-             base::FieldTrialList::FindFullName(GetLoFiFieldTrialName()),
-             kLitePage, base::CompareCase::SENSITIVE);
 }
 
 bool IsIncludedInServerExperimentsFieldTrial() {
@@ -467,40 +426,20 @@ DataReductionProxyTypeInfo::DataReductionProxyTypeInfo(
 
 DataReductionProxyTypeInfo::~DataReductionProxyTypeInfo() {}
 
-DataReductionProxyParams::DataReductionProxyParams()
-    : use_override_proxies_for_http_(false) {
-  static const char kDefaultSpdyOrigin[] = "https://proxy.googlezip.net:443";
-  static const char kDefaultFallbackOrigin[] = "compress.googlezip.net:80";
+DataReductionProxyParams::DataReductionProxyParams() {
+  bool use_override_proxies_for_http =
+      params::GetOverrideProxiesForHttpFromCommandLine(&proxies_for_http_);
 
-  use_override_proxies_for_http_ =
-      params::GetOverrideProxiesForHttpFromCommandLine(
-          &override_data_reduction_proxy_servers_);
-
-  const base::CommandLine& command_line =
-      *base::CommandLine::ForCurrentProcess();
-  std::string origin =
-      command_line.GetSwitchValueASCII(switches::kDataReductionProxy);
-  std::string fallback_origin =
-      command_line.GetSwitchValueASCII(switches::kDataReductionProxyFallback);
-
-  // Set from preprocessor constants those params that are not specified on the
-  // command line.
-  if (origin.empty())
-    origin = kDefaultSpdyOrigin;
-  if (fallback_origin.empty())
-    fallback_origin = kDefaultFallbackOrigin;
-
-  net::ProxyServer origin_proxy_server =
-      net::ProxyServer::FromURI(origin, net::ProxyServer::SCHEME_HTTP);
-  net::ProxyServer fallback_proxy_server =
-      net::ProxyServer::FromURI(fallback_origin, net::ProxyServer::SCHEME_HTTP);
-  if (origin_proxy_server.is_valid()) {
-    proxies_for_http_.push_back(
-        DataReductionProxyServer(origin_proxy_server, ProxyServer::CORE));
-  }
-  if (fallback_proxy_server.is_valid()) {
-    proxies_for_http_.push_back(
-        DataReductionProxyServer(fallback_proxy_server, ProxyServer::CORE));
+  if (!use_override_proxies_for_http) {
+    DCHECK(proxies_for_http_.empty());
+    proxies_for_http_.push_back(DataReductionProxyServer(
+        net::ProxyServer::FromURI("https://proxy.googlezip.net:443",
+                                  net::ProxyServer::SCHEME_HTTP),
+        ProxyServer::CORE));
+    proxies_for_http_.push_back(DataReductionProxyServer(
+        net::ProxyServer::FromURI("compress.googlezip.net:80",
+                                  net::ProxyServer::SCHEME_HTTP),
+        ProxyServer::CORE));
   }
 }
 
@@ -513,8 +452,6 @@ void DataReductionProxyParams::SetProxiesForHttpForTesting(
 
 const std::vector<DataReductionProxyServer>&
 DataReductionProxyParams::proxies_for_http() const {
-  if (use_override_proxies_for_http_)
-    return override_data_reduction_proxy_servers_;
   return proxies_for_http_;
 }
 

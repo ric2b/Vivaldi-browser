@@ -36,8 +36,9 @@
 
 namespace blink {
 
-CSSSegmentedFontFace::CSSSegmentedFontFace(FontTraits traits)
-    : traits_(traits),
+CSSSegmentedFontFace::CSSSegmentedFontFace(
+    FontSelectionCapabilities font_selection_capabilities)
+    : font_selection_capabilities_(font_selection_capabilities),
       first_non_css_connected_face_(font_faces_.end()),
       approximate_character_count_(0) {}
 
@@ -91,14 +92,15 @@ void CSSSegmentedFontFace::RemoveFontFace(FontFace* font_face) {
   font_face->CssFontFace()->ClearSegmentedFontFace();
 }
 
-PassRefPtr<FontData> CSSSegmentedFontFace::GetFontData(
+RefPtr<FontData> CSSSegmentedFontFace::GetFontData(
     const FontDescription& font_description) {
   if (!IsValid())
     return nullptr;
 
-  FontTraits desired_traits = font_description.Traits();
-  FontCacheKey key =
-      font_description.CacheKey(FontFaceCreationParams(), desired_traits);
+  const FontSelectionRequest& font_selection_request =
+      font_description.GetFontSelectionRequest();
+  FontCacheKey key = font_description.CacheKey(FontFaceCreationParams(),
+                                               font_selection_request);
 
   RefPtr<SegmentedFontData>& font_data =
       font_data_table_.insert(key, nullptr).stored_value->value;
@@ -112,13 +114,14 @@ PassRefPtr<FontData> CSSSegmentedFontFace::GetFontData(
     font_data = SegmentedFontData::Create();
 
   FontDescription requested_font_description(font_description);
-  requested_font_description.SetTraits(traits_);
-  requested_font_description.SetSyntheticBold(
-      traits_.Weight() < kFontWeight600 &&
-      desired_traits.Weight() >= kFontWeight600);
-  requested_font_description.SetSyntheticItalic(
-      traits_.Style() == kFontStyleNormal &&
-      desired_traits.Style() == kFontStyleItalic);
+  if (!font_selection_capabilities_.HasRange()) {
+    requested_font_description.SetSyntheticBold(
+        font_selection_capabilities_.weight.maximum < BoldThreshold() &&
+        font_selection_request.weight >= BoldThreshold());
+    requested_font_description.SetSyntheticItalic(
+        font_selection_capabilities_.slope.maximum == NormalSlopeValue() &&
+        font_selection_request.slope == ItalicSlopeValue());
+  }
 
   for (FontFaceList::reverse_iterator it = font_faces_.rbegin();
        it != font_faces_.rend(); ++it) {

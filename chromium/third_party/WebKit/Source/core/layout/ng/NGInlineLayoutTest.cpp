@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "core/exported/WebViewBase.h"
+#include "core/exported/WebViewImpl.h"
 #include "core/layout/ng/inline/ng_inline_node.h"
 #include "core/layout/ng/layout_ng_block_flow.h"
 #include "core/layout/ng/ng_block_layout_algorithm.h"
@@ -24,7 +24,8 @@ class NGInlineLayoutTest : public SimTest {
   RefPtr<NGConstraintSpace> ConstraintSpaceForElement(
       LayoutNGBlockFlow* block_flow) {
     return NGConstraintSpaceBuilder(
-               FromPlatformWritingMode(block_flow->Style()->GetWritingMode()))
+               FromPlatformWritingMode(block_flow->Style()->GetWritingMode()),
+               /* icb_size */ {NGSizeIndefinite, NGSizeIndefinite})
         .SetAvailableSize(NGLogicalSize(LayoutUnit(), LayoutUnit()))
         .SetPercentageResolutionSize(NGLogicalSize(LayoutUnit(), LayoutUnit()))
         .SetTextDirection(block_flow->Style()->Direction())
@@ -52,7 +53,7 @@ TEST_F(NGInlineLayoutTest, BlockWithSingleTextNode) {
   NGBlockNode node(block_flow);
 
   RefPtr<NGLayoutResult> result =
-      NGBlockLayoutAlgorithm(node, constraint_space.Get()).Layout();
+      NGBlockLayoutAlgorithm(node, *constraint_space).Layout();
   EXPECT_TRUE(result);
 
   String expected_text("Hello World!");
@@ -77,7 +78,7 @@ TEST_F(NGInlineLayoutTest, BlockWithTextAndAtomicInline) {
   NGBlockNode node(block_flow);
 
   RefPtr<NGLayoutResult> result =
-      NGBlockLayoutAlgorithm(node, constraint_space.Get()).Layout();
+      NGBlockLayoutAlgorithm(node, *constraint_space).Layout();
   EXPECT_TRUE(result);
 
   String expected_text("Hello ");

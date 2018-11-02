@@ -32,7 +32,7 @@ class TestBase : public WebSocketStreamCreateTestBase {
  public:
   void CreateAndConnect(const GURL& url,
                         const url::Origin& origin,
-                        const GURL& first_party_for_cookies,
+                        const GURL& site_for_cookies,
                         const std::string& cookie_header,
                         const std::string& response_body) {
     // We assume cookie_header ends with CRLF if not empty, as
@@ -46,8 +46,8 @@ class TestBase : public WebSocketStreamCreateTestBase {
                                             cookie_header, std::string(),
                                             std::string()),
         response_body);
-    CreateAndConnectStream(url, NoSubProtocols(), origin,
-                           first_party_for_cookies, "", nullptr);
+    CreateAndConnectStream(url, NoSubProtocols(), origin, site_for_cookies, "",
+                           nullptr);
   }
 
   std::string AddCRLFIfNotEmpty(const std::string& s) {
@@ -122,7 +122,7 @@ class WebSocketStreamServerSetCookieTest
 
 TEST_P(WebSocketStreamClientUseCookieTest, ClientUseCookie) {
   // For wss tests.
-  ssl_data_.push_back(base::MakeUnique<SSLSocketDataProvider>(ASYNC, OK));
+  ssl_data_.push_back(std::make_unique<SSLSocketDataProvider>(ASYNC, OK));
 
   CookieStore* store =
       url_request_context_host_.GetURLRequestContext()->cookie_store();
@@ -130,7 +130,7 @@ TEST_P(WebSocketStreamClientUseCookieTest, ClientUseCookie) {
   const GURL url(GetParam().url);
   const GURL cookie_url(GetParam().cookie_url);
   const url::Origin origin(GURL("http://www.example.com"));
-  const GURL first_party_for_cookies("http://www.example.com/");
+  const GURL site_for_cookies("http://www.example.com/");
   const std::string cookie_line(GetParam().cookie_line);
   const std::string cookie_header(AddCRLFIfNotEmpty(GetParam().cookie_header));
 
@@ -149,7 +149,7 @@ TEST_P(WebSocketStreamClientUseCookieTest, ClientUseCookie) {
   ASSERT_TRUE(is_called);
   ASSERT_TRUE(set_cookie_result);
 
-  CreateAndConnect(url, origin, first_party_for_cookies, cookie_header,
+  CreateAndConnect(url, origin, site_for_cookies, cookie_header,
                    WebSocketStandardResponse(""));
   WaitUntilConnectDone();
   EXPECT_FALSE(has_failed());
@@ -157,12 +157,12 @@ TEST_P(WebSocketStreamClientUseCookieTest, ClientUseCookie) {
 
 TEST_P(WebSocketStreamServerSetCookieTest, ServerSetCookie) {
   // For wss tests.
-  ssl_data_.push_back(base::MakeUnique<SSLSocketDataProvider>(ASYNC, OK));
+  ssl_data_.push_back(std::make_unique<SSLSocketDataProvider>(ASYNC, OK));
 
   const GURL url(GetParam().url);
   const GURL cookie_url(GetParam().cookie_url);
   const url::Origin origin(GURL("http://www.example.com"));
-  const GURL first_party_for_cookies("http://www.example.com/");
+  const GURL site_for_cookies("http://www.example.com/");
   const std::string cookie_line(GetParam().cookie_line);
   const std::string cookie_header(AddCRLFIfNotEmpty(GetParam().cookie_header));
 
@@ -178,7 +178,7 @@ TEST_P(WebSocketStreamServerSetCookieTest, ServerSetCookie) {
   CookieStore* store =
       url_request_context_host_.GetURLRequestContext()->cookie_store();
 
-  CreateAndConnect(url, origin, first_party_for_cookies, "", response);
+  CreateAndConnect(url, origin, site_for_cookies, "", response);
   WaitUntilConnectDone();
   EXPECT_FALSE(has_failed());
 

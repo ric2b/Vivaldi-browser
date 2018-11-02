@@ -25,20 +25,23 @@ namespace chromeos {
 
 namespace tether {
 
+class BleSynchronizerBase;
+
+// Performs BLE scans for devices which are advertising to this device.
 class BleScanner : public device::BluetoothAdapter::Observer {
  public:
   class Observer {
    public:
     virtual void OnReceivedAdvertisementFromDevice(
-        const std::string& device_address,
-        const cryptauth::RemoteDevice& remote_device) {}
+        const cryptauth::RemoteDevice& remote_device,
+        device::BluetoothDevice* bluetooth_device) {}
     virtual void OnDiscoverySessionStateChanged(bool discovery_session_active) {
     }
   };
 
-  BleScanner(
-      scoped_refptr<device::BluetoothAdapter> adapter,
-      const cryptauth::LocalDeviceDataProvider* local_device_data_provider);
+  BleScanner(scoped_refptr<device::BluetoothAdapter> adapter,
+             cryptauth::LocalDeviceDataProvider* local_device_data_provider,
+             BleSynchronizerBase* ble_synchronizer);
   ~BleScanner() override;
 
   virtual bool RegisterScanFilterForDevice(
@@ -63,9 +66,11 @@ class BleScanner : public device::BluetoothAdapter::Observer {
 
  protected:
   void NotifyReceivedAdvertisementFromDevice(
-      const std::string& device_address,
-      const cryptauth::RemoteDevice& remote_device);
+      const cryptauth::RemoteDevice& remote_device,
+      device::BluetoothDevice* bluetooth_device);
   void NotifyDiscoverySessionStateChanged(bool discovery_session_active);
+
+  scoped_refptr<device::BluetoothAdapter> adapter() { return adapter_; }
 
  private:
   friend class BleScannerTest;
@@ -85,13 +90,17 @@ class BleScanner : public device::BluetoothAdapter::Observer {
         device::BluetoothDevice* bluetooth_device) override;
   };
 
-  BleScanner(
+  void SetTestDoubles(
       std::unique_ptr<ServiceDataProvider> service_data_provider,
-      scoped_refptr<device::BluetoothAdapter> adapter,
-      std::unique_ptr<cryptauth::ForegroundEidGenerator> eid_generator,
-      const cryptauth::LocalDeviceDataProvider* local_device_data_provider);
+      std::unique_ptr<cryptauth::ForegroundEidGenerator> eid_generator);
 
   bool IsDeviceRegistered(const std::string& device_id);
+
+  // A discovery session should stay active until it has been stopped. However,
+  // due to bugs in Bluetooth code, it is possible for a discovery status to
+  // transition to being off without a Stop() call ever succeeding. This
+  // function corrects the state of Bluetooth if such a bug occurs.
+  void ResetDiscoverySessionIfNotActive();
 
   void UpdateDiscoveryStatus();
 
@@ -108,22 +117,22 @@ class BleScanner : public device::BluetoothAdapter::Observer {
   void CheckForMatchingScanFilters(device::BluetoothDevice* bluetooth_device,
                                    std::string& service_data);
 
-  base::ObserverList<Observer> observer_list_;
-
-  std::unique_ptr<ServiceDataProvider> service_data_provider_;
 
   scoped_refptr<device::BluetoothAdapter> adapter_;
+  cryptauth::LocalDeviceDataProvider* local_device_data_provider_;
+  BleSynchronizerBase* ble_synchronizer_;
 
+  std::unique_ptr<ServiceDataProvider> service_data_provider_;
   std::unique_ptr<cryptauth::ForegroundEidGenerator> eid_generator_;
-  // |local_device_data_provider_| is not owned by this instance and must
-  // outlive it.
-  const cryptauth::LocalDeviceDataProvider* local_device_data_provider_;
+
+  std::vector<cryptauth::RemoteDevice> registered_remote_devices_;
+  base::ObserverList<Observer> observer_list_;
 
   bool is_initializing_discovery_session_ = false;
   bool is_stopping_discovery_session_ = false;
   std::unique_ptr<device::BluetoothDiscoverySession> discovery_session_;
-
-  std::vector<cryptauth::RemoteDevice> registered_remote_devices_;
+  std::unique_ptr<base::WeakPtrFactory<device::BluetoothDiscoverySession>>
+      discovery_session_weak_ptr_factory_;
 
   base::WeakPtrFactory<BleScanner> weak_ptr_factory_;
 

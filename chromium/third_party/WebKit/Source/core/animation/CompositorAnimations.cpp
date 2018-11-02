@@ -43,10 +43,10 @@
 #include "core/dom/DOMNodeIds.h"
 #include "core/layout/LayoutBoxModelObject.h"
 #include "core/layout/LayoutObject.h"
-#include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/paint/FilterEffectBuilder.h"
 #include "core/paint/ObjectPaintProperties.h"
 #include "core/paint/PaintLayer.h"
+#include "core/paint/compositing/CompositedLayerMapping.h"
 #include "platform/animation/AnimationTranslationUtil.h"
 #include "platform/animation/CompositorAnimation.h"
 #include "platform/animation/CompositorAnimationPlayer.h"
@@ -352,17 +352,20 @@ CompositorAnimations::CheckCanStartElementOnCompositor(
     // the DCHECK below.
     // DCHECK(document().lifecycle().state() >=
     // DocumentLifecycle::PrePaintClean);
-    const ObjectPaintProperties* paint_properties =
-        target_element.GetLayoutObject()->PaintProperties();
-    const TransformPaintPropertyNode* transform_node =
-        paint_properties->Transform();
-    const EffectPaintPropertyNode* effect_node = paint_properties->Effect();
-    bool has_direct_compositing_reasons =
-        (transform_node && transform_node->HasDirectCompositingReasons()) ||
-        (effect_node && effect_node->HasDirectCompositingReasons());
-    if (!has_direct_compositing_reasons) {
-      return FailureCode::NonActionable(
-          "Element has no direct compositing reasons");
+    if (FragmentData* fragment =
+            target_element.GetLayoutObject()->FirstFragment()) {
+      const ObjectPaintProperties* paint_properties =
+          target_element.GetLayoutObject()->FirstFragment()->PaintProperties();
+      const TransformPaintPropertyNode* transform_node =
+          paint_properties->Transform();
+      const EffectPaintPropertyNode* effect_node = paint_properties->Effect();
+      bool has_direct_compositing_reasons =
+          (transform_node && transform_node->HasDirectCompositingReasons()) ||
+          (effect_node && effect_node->HasDirectCompositingReasons());
+      if (!has_direct_compositing_reasons) {
+        return FailureCode::NonActionable(
+            "Element has no direct compositing reasons");
+      }
     }
   } else {
     bool paints_into_own_backing =
@@ -523,7 +526,7 @@ void CompositorAnimations::AttachCompositedLayers(Element& element,
   }
 
   CompositorAnimationPlayer* compositor_player = animation.CompositorPlayer();
-  compositor_player->AttachElement(CompositorElementIdFromLayoutObjectId(
+  compositor_player->AttachElement(CompositorElementIdFromUniqueObjectId(
       element.GetLayoutObject()->UniqueId(),
       CompositorElementIdNamespace::kPrimary));
 }

@@ -140,8 +140,6 @@ class MODULES_EXPORT RTCPeerConnection final
 
   MediaStreamVector getRemoteStreams() const;
 
-  MediaStream* getStreamById(const String& stream_id);
-
   void addStream(ScriptState*,
                  MediaStream*,
                  const Dictionary& media_constraints,
@@ -158,6 +156,7 @@ class MODULES_EXPORT RTCPeerConnection final
   HeapVector<Member<RTCRtpReceiver>> getReceivers();
   RTCRtpSender* addTrack(MediaStreamTrack*, MediaStreamVector, ExceptionState&);
   void removeTrack(RTCRtpSender*, ExceptionState&);
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(track);
 
   RTCDataChannel* createDataChannel(ScriptState*,
                                     String label,
@@ -166,7 +165,7 @@ class MODULES_EXPORT RTCPeerConnection final
 
   RTCDTMFSender* createDTMFSender(MediaStreamTrack*, ExceptionState&);
 
-  void close(ExceptionState&);
+  void close();
 
   // We allow getStats after close, but not other calls or callbacks.
   bool ShouldFireDefaultCallbacks() { return !closed_ && !stopped_; }
@@ -191,7 +190,9 @@ class MODULES_EXPORT RTCPeerConnection final
   void DidChangeSignalingState(SignalingState) override;
   void DidChangeICEGatheringState(ICEGatheringState) override;
   void DidChangeICEConnectionState(ICEConnectionState) override;
-  void DidAddRemoteStream(const WebMediaStream&) override;
+  void DidAddRemoteStream(
+      const WebMediaStream&,
+      WebVector<std::unique_ptr<WebRTCRtpReceiver>>*) override;
   void DidRemoveRemoteStream(const WebMediaStream&) override;
   void DidAddRemoteDataChannel(WebRTCDataChannelHandler*) override;
   void ReleasePeerConnectionHandler() override;
@@ -225,7 +226,7 @@ class MODULES_EXPORT RTCPeerConnection final
   typedef Function<bool()> BoolFunction;
   class EventWrapper : public GarbageCollectedFinalized<EventWrapper> {
    public:
-    EventWrapper(Event*, std::unique_ptr<BoolFunction>);
+    EventWrapper(Event*, BoolFunction);
     // Returns true if |m_setupFunction| returns true or it is null.
     // |m_event| will only be fired if setup() returns true;
     bool Setup();
@@ -235,7 +236,7 @@ class MODULES_EXPORT RTCPeerConnection final
     Member<Event> event_;
 
    private:
-    std::unique_ptr<BoolFunction> setup_function_;
+    BoolFunction setup_function_;
   };
 
   RTCPeerConnection(ExecutionContext*,
@@ -245,9 +246,11 @@ class MODULES_EXPORT RTCPeerConnection final
   void Dispose();
 
   void ScheduleDispatchEvent(Event*);
-  void ScheduleDispatchEvent(Event*, std::unique_ptr<BoolFunction>);
+  void ScheduleDispatchEvent(Event*, BoolFunction);
   void DispatchScheduledEvent();
-  MediaStreamTrack* GetTrack(const WebMediaStreamTrack& web_track) const;
+  MediaStreamTrack* GetTrack(const WebMediaStreamTrack&) const;
+  RTCRtpReceiver* GetOrCreateRTCRtpReceiver(
+      std::unique_ptr<WebRTCRtpReceiver> web_rtp_receiver);
 
   // The "Change" methods set the state asynchronously and fire the
   // corresponding event immediately after changing the state (if it was really
@@ -296,8 +299,8 @@ class MODULES_EXPORT RTCPeerConnection final
   // |rtp_receivers_|.
   HeapHashMap<WeakMember<MediaStreamComponent>, WeakMember<MediaStreamTrack>>
       tracks_;
-  HeapHashMap<uintptr_t, WeakMember<RTCRtpSender>> rtp_senders_;
-  HeapHashMap<uintptr_t, WeakMember<RTCRtpReceiver>> rtp_receivers_;
+  HeapHashMap<uintptr_t, Member<RTCRtpSender>> rtp_senders_;
+  HeapHashMap<uintptr_t, Member<RTCRtpReceiver>> rtp_receivers_;
 
   std::unique_ptr<WebRTCPeerConnectionHandler> peer_handler_;
 

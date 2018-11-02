@@ -16,6 +16,7 @@
 #include "content/browser/download/download_interrupt_reasons_impl.h"
 #include "content/browser/download/download_manager_impl.h"
 #include "content/browser/download/download_request_handle.h"
+#include "content/browser/download/download_task_runner.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/loader/resource_controller.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
@@ -70,8 +71,7 @@ static void StartOnUIThread(
       started_cb.Run(nullptr, DOWNLOAD_INTERRUPT_REASON_USER_CANCELED);
 
     if (stream)
-      BrowserThread::DeleteSoon(BrowserThread::FILE, FROM_HERE,
-                                stream.release());
+      GetDownloadTaskRunner()->DeleteSoon(FROM_HERE, stream.release());
     return;
   }
 
@@ -115,7 +115,7 @@ DownloadResourceHandler::DownloadResourceHandler(net::URLRequest* request)
   const ResourceRequestInfoImpl* request_info = GetRequestInfo();
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(
+      base::BindOnce(
           &InitializeDownloadTabInfoOnUIThread,
           DownloadRequestHandle(AsWeakPtr(),
                                 request_info->GetWebContentsGetterForRequest()),
@@ -126,7 +126,7 @@ DownloadResourceHandler::~DownloadResourceHandler() {
   if (tab_info_) {
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(&DeleteOnUIThread, base::Passed(&tab_info_)));
+        base::BindOnce(&DeleteOnUIThread, base::Passed(&tab_info_)));
   }
 }
 
@@ -235,7 +235,7 @@ void DownloadResourceHandler::OnStart(
     if (!callback.is_null())
       BrowserThread::PostTask(
           BrowserThread::UI, FROM_HERE,
-          base::Bind(callback, nullptr, create_info->result));
+          base::BindOnce(callback, nullptr, create_info->result));
     return;
   }
 
@@ -252,10 +252,10 @@ void DownloadResourceHandler::OnStart(
 
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(&StartOnUIThread, base::Passed(&create_info),
-                 base::Passed(&tab_info_), base::Passed(&stream_reader),
-                 render_process_id, render_frame_id,
-                 request_info->frame_tree_node_id(), callback));
+      base::BindOnce(&StartOnUIThread, base::Passed(&create_info),
+                     base::Passed(&tab_info_), base::Passed(&stream_reader),
+                     render_process_id, render_frame_id,
+                     request_info->frame_tree_node_id(), callback));
 }
 
 void DownloadResourceHandler::OnReadyToRead() {

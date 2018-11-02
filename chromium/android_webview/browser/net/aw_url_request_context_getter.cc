@@ -134,11 +134,6 @@ std::unique_ptr<net::URLRequestJobFactory> CreateJobFactory(
       base::WrapUnique(
           (*protocol_handlers)[content::kChromeUIScheme].release()));
   DCHECK(set_protocol);
-  set_protocol = aw_job_factory->SetProtocolHandler(
-      content::kChromeDevToolsScheme,
-      base::WrapUnique(
-          (*protocol_handlers)[content::kChromeDevToolsScheme].release()));
-  DCHECK(set_protocol);
   protocol_handlers->clear();
 
   // Note that even though the content:// scheme handler is created here,
@@ -254,8 +249,6 @@ void AwURLRequestContextGetter::InitializeURLRequestContext() {
   cache_params.max_size = 20 * 1024 * 1024;  // 20M
   cache_params.path = cache_path_;
   builder.EnableHttpCache(cache_params);
-  builder.SetCacheThreadTaskRunner(
-      BrowserThread::GetTaskRunnerForThread(BrowserThread::CACHE));
 
   net::HttpNetworkSession::Params network_session_params;
   ApplyCmdlineOverridesToNetworkSessionParams(&network_session_params);

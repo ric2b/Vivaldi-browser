@@ -20,6 +20,7 @@
 #include "components/autofill/content/renderer/page_click_tracker.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 #include "third_party/WebKit/public/web/WebAutofillClient.h"
 #include "third_party/WebKit/public/web/WebFormControlElement.h"
 #include "third_party/WebKit/public/web/WebFormElement.h"
@@ -55,7 +56,8 @@ class AutofillAgent : public content::RenderFrameObserver,
   // guaranteed to outlive AutofillAgent.
   AutofillAgent(content::RenderFrame* render_frame,
                 PasswordAutofillAgent* password_autofill_manager,
-                PasswordGenerationAgent* password_generation_agent);
+                PasswordGenerationAgent* password_generation_agent,
+                service_manager::BinderRegistry* registry);
   ~AutofillAgent() override;
 
   void BindRequest(mojom::AutofillAgentRequest request);

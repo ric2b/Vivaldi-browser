@@ -49,7 +49,6 @@
 #include "extensions/common/extension_set.h"
 #include "extensions/common/feature_switch.h"
 #include "extensions/common/manifest_constants.h"
-#include "extensions/common/test_util.h"
 #include "extensions/common/value_builder.h"
 
 using testing::Return;
@@ -911,7 +910,7 @@ TEST_F(DeveloperPrivateApiUnitTest, RepairPolicyExtension) {
 
   // Corrupt the extension , still expect repair failure because this is a
   // policy extension.
-  service()->DisableExtension(extension_id, Extension::DISABLE_CORRUPTED);
+  service()->DisableExtension(extension_id, disable_reason::DISABLE_CORRUPTED);
   args = ListBuilder().Append(extension_id).Build();
   function = new api::DeveloperPrivateRepairExtensionFunction();
   EXPECT_FALSE(RunFunction(function, *args));

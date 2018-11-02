@@ -234,14 +234,14 @@ void PhysicalWebProvider::ConstructZeroSuggestMatches(
     match.destination_url = url;
 
     match.contents = url_formatter::FormatUrl(
-        url, AutocompleteMatch::GetFormatTypes(true), net::UnescapeRule::SPACES,
-        nullptr, nullptr, nullptr);
+        url, AutocompleteMatch::GetFormatTypes(false, false, false),
+        net::UnescapeRule::SPACES, nullptr, nullptr, nullptr);
     match.contents_class.push_back(
         ACMatchClassification(0, ACMatchClassification::URL));
 
     match.fill_into_edit =
         AutocompleteInput::FormattedStringWithEquivalentMeaning(
-            url, match.contents, client_->GetSchemeClassifier());
+            url, url_formatter::FormatUrl(url), client_->GetSchemeClassifier());
 
     match.description = title;
     match.description_class.push_back(

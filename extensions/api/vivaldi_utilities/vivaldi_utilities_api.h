@@ -37,7 +37,6 @@ class VivaldiUtilitiesEventRouter {
 };
 
 class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
-                            public extensions::AppWindowRegistry::Observer,
                             public EventRouter::Observer {
  public:
   explicit VivaldiUtilitiesAPI(content::BrowserContext* context);
@@ -53,19 +52,17 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
   // EventRouter::Observer implementation.
   void OnListenerAdded(const EventListenerInfo& details) override;
 
-  // Returns the window id based on the given app window id.
-  Browser* FindBrowserFromAppWindowId(const std::string& appwindow_id);
-
   // Fires an event to JS with the active device that triggers scrolling.
   // 1: Mouse, 2: Trackpad 3: Inertial"
   void ScrollType(int scrollType);
 
-  // Maps the given app window id to a window id.
-  void MapAppWindowIdToWindowId(const std::string& appwindow_id, int window_id);
+  // Returns true if the key didn't not exist previously, false if it updated
+  // an existing value
+  bool SetSharedData(const std::string& key, base::Value* value);
 
-  // AppWindowRegistry::Observer
-  void OnAppWindowActivated(extensions::AppWindow* app_window) override;
-  void OnAppWindowRemoved(extensions::AppWindow* app_window) override;
+  // Looks up an existing key/value pair, returns nullptr if the key does not
+  // exist.
+  const base::Value* GetSharedData(const std::string& key);
 
  private:
   friend class BrowserContextKeyedAPIFactory<VivaldiUtilitiesAPI>;
@@ -77,11 +74,10 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
   static const bool kServiceIsNULLWhileTesting = true;
   static const bool kServiceRedirectedInIncognito = true;
 
-  // Maps the window id of the Browser window to a AppWindow id
-  typedef std::map<std::string, int> WindowIdToAppWindowId;
-  WindowIdToAppWindowId appwindow_id_to_window_id_;
-
   std::unique_ptr<VivaldiUtilitiesEventRouter> event_router_;
+
+  // Map used for the *sharedData apis.
+  std::map<std::string, base::Value*> key_to_values_map_;
 };
 
 class UtilitiesBasicPrintFunction : public ChromeAsyncExtensionFunction {
@@ -187,39 +183,6 @@ class UtilitiesGetSelectedTextFunction : public ChromeAsyncExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(UtilitiesGetSelectedTextFunction);
 };
 
-class UtilitiesMapFocusAppWindowToWindowIdFunction
-    : public ChromeAsyncExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("utilities.mapFocusAppWindowToWindowId",
-                             UTILITIES_MAPFOCUSAPPWINDOWTOWINDOWIDFUNCTION)
-  UtilitiesMapFocusAppWindowToWindowIdFunction();
-
- protected:
-  ~UtilitiesMapFocusAppWindowToWindowIdFunction() override;
-
-  // ExtensionFunction:
-  bool RunAsync() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesMapFocusAppWindowToWindowIdFunction);
-};
-
-class UtilitiesPauseAllDownloadsFunction : public ChromeAsyncExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("utilities.pauseAllDownloads",
-                             UTILITIES_PAUSEALLDOWNLOADS)
-  UtilitiesPauseAllDownloadsFunction() = default;
-
- protected:
-  ~UtilitiesPauseAllDownloadsFunction() override = default;
-
-  // ExtensionFunction:
-  bool RunAsync() override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UtilitiesPauseAllDownloadsFunction);
-};
-
 class UtilitiesCreateUrlMappingFunction : public ChromeAsyncExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.createUrlMapping",
@@ -289,6 +252,36 @@ class UtilitiesGetVersionFunction : public AsyncExtensionFunction {
 
  private:
   DISALLOW_COPY_AND_ASSIGN(UtilitiesGetVersionFunction);
+};
+
+class UtilitiesSetSharedDataFunction : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.setSharedData", UTILITIES_SETSHAREDDATA)
+
+  UtilitiesSetSharedDataFunction() = default;
+
+ protected:
+  ~UtilitiesSetSharedDataFunction() override = default;
+
+  bool RunAsync() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesSetSharedDataFunction);
+};
+
+class UtilitiesGetSharedDataFunction : public ChromeAsyncExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.getSharedData", UTILITIES_GETSHAREDDATA)
+
+  UtilitiesGetSharedDataFunction() = default;
+
+ protected:
+  ~UtilitiesGetSharedDataFunction() override = default;
+
+  bool RunAsync() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesGetSharedDataFunction);
 };
 
 }  // namespace extensions

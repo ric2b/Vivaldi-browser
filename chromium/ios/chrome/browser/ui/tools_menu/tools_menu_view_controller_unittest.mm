@@ -7,8 +7,8 @@
 #import "base/mac/scoped_nsobject.h"
 #include "ios/chrome/browser/experimental_flags.h"
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
+#import "ios/chrome/browser/ui/tools_menu/tools_menu_configuration.h"
 #import "ios/chrome/browser/ui/tools_menu/tools_menu_view_item.h"
-#import "ios/shared/chrome/browser/ui/tools_menu/tools_menu_configuration.h"
 #include "ios/web/public/user_agent.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
@@ -84,13 +84,7 @@ TEST_F(ToolsMenuViewControllerTest, TestUserAgentTypeDESKTOP) {
   ToolsMenuViewItem* mobile_item =
       GetToolsMenuViewItemWithTag(IDC_REQUEST_MOBILE_SITE);
 
-  if (experimental_flags::IsRequestMobileSiteEnabled()) {
-    EXPECT_FALSE(desktop_item);
-    ASSERT_TRUE(mobile_item);
-    EXPECT_TRUE(mobile_item.active);
-  } else {
-    ASSERT_TRUE(desktop_item);
-    EXPECT_FALSE(desktop_item.active);
-    EXPECT_FALSE(mobile_item);
-  }
+  EXPECT_FALSE(desktop_item);
+  ASSERT_TRUE(mobile_item);
+  EXPECT_TRUE(mobile_item.active);
 }

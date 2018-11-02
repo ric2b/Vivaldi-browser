@@ -42,7 +42,6 @@ namespace {
 const char kChromeManageAccountsHeader[] = "X-Chrome-Manage-Accounts";
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
-const char kDiceResponseHeader[] = "X-Chrome-ID-Consistency-Response";
 const char kGoogleSignoutResponseHeader[] = "Google-Accounts-SignOut";
 #endif
 
@@ -54,8 +53,7 @@ void ProcessMirrorHeaderUIThread(
     const content::ResourceRequestInfo::WebContentsGetter&
         web_contents_getter) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  DCHECK_EQ(switches::AccountConsistencyMethod::kMirror,
-            switches::GetAccountConsistencyMethod());
+  DCHECK(IsAccountConsistencyMirrorEnabled());
 
   GAIAServiceType service_type = manage_accounts_params.service_type;
   DCHECK_NE(GAIA_SERVICE_TYPE_NONE, service_type);
@@ -115,8 +113,7 @@ void ProcessDiceHeaderUIThread(
     const content::ResourceRequestInfo::WebContentsGetter&
         web_contents_getter) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  DCHECK_EQ(switches::AccountConsistencyMethod::kDice,
-            switches::GetAccountConsistencyMethod());
+  DCHECK(IsDiceFixAuthErrorsEnabled());
 
   content::WebContents* web_contents = web_contents_getter.Run();
   if (!web_contents)
@@ -163,8 +160,7 @@ void ProcessMirrorResponseHeaderIfExists(net::URLRequest* request,
     return;
   }
 
-  if (switches::GetAccountConsistencyMethod() !=
-      switches::AccountConsistencyMethod::kMirror) {
+  if (!IsAccountConsistencyMirrorEnabled()) {
     NOTREACHED() << "Gaia should not send the X-Chrome-Manage-Accounts header "
                  << "when Mirror is disabled.";
     return;
@@ -198,8 +194,7 @@ void ProcessDiceResponseHeaderIfExists(net::URLRequest* request,
   if (!gaia::IsGaiaSignonRealm(request->url().GetOrigin()))
     return;
 
-  if (switches::GetAccountConsistencyMethod() !=
-      switches::AccountConsistencyMethod::kDice) {
+  if (!IsDiceFixAuthErrorsEnabled()) {
     return;
   }
 
@@ -236,26 +231,19 @@ void ProcessDiceResponseHeaderIfExists(net::URLRequest* request,
 
 void FixAccountConsistencyRequestHeader(net::URLRequest* request,
                                         const GURL& redirect_url,
-                                        ProfileIOData* io_data,
-                                        int child_id,
-                                        int route_id) {
+                                        ProfileIOData* io_data) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
   if (io_data->IsOffTheRecord())
-    return;
+    return;  // Account consistency is disabled in incognito.
 
-#if !defined(OS_ANDROID)
-  extensions::WebViewRendererState::WebViewInfo webview_info;
-  bool is_guest = extensions::WebViewRendererState::GetInstance()->GetInfo(
-      child_id, route_id, &webview_info);
-  // Do not set the account consistency header on requests from a native signin
-  // webview, as identified by an empty extension id which means the webview is
-  // embedded in a webui page, otherwise user may end up with a blank page as
-  // gaia uses the header to decide whether it returns 204 for certain end
-  // points.
-  if (is_guest && webview_info.owner_host.empty())
+  if (io_data->GetMainRequestContext() != request->context()) {
+    // Account consistency requires the AccountReconcilor, which is only
+    // attached to the main request context.
+    // Note: InlineLoginUI uses an isolated request context and thus bypasses
+    // the account consistency flow here. See http://crbug.com/428396
     return;
-#endif  // !defined(OS_ANDROID)
+  }
 
   int profile_mode_mask = PROFILE_MODE_DEFAULT;
   if (io_data->incognito_availibility()->GetValue() ==
@@ -267,9 +255,10 @@ void FixAccountConsistencyRequestHeader(net::URLRequest* request,
   std::string account_id = io_data->google_services_account_id()->GetValue();
 
   // If new url is eligible to have the header, add it, otherwise remove it.
-  AppendOrRemoveAccountConsistentyRequestHeader(
+  AppendOrRemoveAccountConsistencyRequestHeader(
       request, redirect_url, account_id, io_data->IsSyncEnabled(),
-      io_data->GetCookieSettings(), profile_mode_mask);
+      io_data->SyncHasAuthError(), io_data->GetCookieSettings(),
+      profile_mode_mask);
 }
 
 void ProcessAccountConsistencyResponseHeaders(net::URLRequest* request,

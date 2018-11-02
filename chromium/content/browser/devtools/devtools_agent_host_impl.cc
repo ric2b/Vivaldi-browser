@@ -22,7 +22,6 @@
 #include "content/browser/devtools/shared_worker_devtools_agent_host.h"
 #include "content/browser/devtools/shared_worker_devtools_manager.h"
 #include "content/browser/frame_host/frame_tree_node.h"
-#include "content/browser/loader/netlog_observer.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
@@ -37,14 +36,13 @@ base::LazyInstance<base::ObserverList<DevToolsAgentHostObserver>>::Leaky
     g_observers = LAZY_INSTANCE_INITIALIZER;
 }  // namespace
 
-char DevToolsAgentHost::kTypePage[] = "page";
-char DevToolsAgentHost::kTypeFrame[] = "iframe";
-char DevToolsAgentHost::kTypeSharedWorker[] = "shared_worker";
-char DevToolsAgentHost::kTypeServiceWorker[] = "service_worker";
-char DevToolsAgentHost::kTypeBrowser[] = "browser";
-char DevToolsAgentHost::kTypeGuest[] = "webview";
-char DevToolsAgentHost::kTypeOther[] = "other";
-int DevToolsAgentHostImpl::s_attached_count_ = 0;
+const char DevToolsAgentHost::kTypePage[] = "page";
+const char DevToolsAgentHost::kTypeFrame[] = "iframe";
+const char DevToolsAgentHost::kTypeSharedWorker[] = "shared_worker";
+const char DevToolsAgentHost::kTypeServiceWorker[] = "service_worker";
+const char DevToolsAgentHost::kTypeBrowser[] = "browser";
+const char DevToolsAgentHost::kTypeGuest[] = "webview";
+const char DevToolsAgentHost::kTypeOther[] = "other";
 int DevToolsAgentHostImpl::s_force_creation_count_ = 0;
 
 // static
@@ -171,11 +169,8 @@ void DevToolsAgentHostImpl::InnerAttachClient(DevToolsAgentHostClient* client) {
     NotifyAttached();
 }
 
-bool DevToolsAgentHostImpl::AttachClient(DevToolsAgentHostClient* client) {
-  if (!sessions_.empty())
-    return false;
+void DevToolsAgentHostImpl::AttachClient(DevToolsAgentHostClient* client) {
   InnerAttachClient(client);
-  return true;
 }
 
 void DevToolsAgentHostImpl::ForceAttachClient(DevToolsAgentHostClient* client) {
@@ -183,10 +178,6 @@ void DevToolsAgentHostImpl::ForceAttachClient(DevToolsAgentHostClient* client) {
   if (!sessions_.empty())
     ForceDetachAllClients(true);
   DCHECK(sessions_.empty());
-  InnerAttachClient(client);
-}
-
-void DevToolsAgentHostImpl::AttachMultiClient(DevToolsAgentHostClient* client) {
   InnerAttachClient(client);
 }
 
@@ -345,28 +336,11 @@ void DevToolsAgentHostImpl::NotifyCreated() {
 }
 
 void DevToolsAgentHostImpl::NotifyAttached() {
-  if (!s_attached_count_) {
-    BrowserThread::PostTask(
-        BrowserThread::IO,
-        FROM_HERE,
-        base::Bind(&NetLogObserver::Attach,
-                   GetContentClient()->browser()->GetNetLog()));
-  }
-  ++s_attached_count_;
-
   for (auto& observer : g_observers.Get())
     observer.DevToolsAgentHostAttached(this);
 }
 
 void DevToolsAgentHostImpl::NotifyDetached() {
-  --s_attached_count_;
-  if (!s_attached_count_) {
-    BrowserThread::PostTask(
-        BrowserThread::IO,
-        FROM_HERE,
-        base::Bind(&NetLogObserver::Detach));
-  }
-
   for (auto& observer : g_observers.Get())
     observer.DevToolsAgentHostDetached(this);
 }

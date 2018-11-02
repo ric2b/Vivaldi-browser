@@ -30,51 +30,18 @@
 #include "media/base/surface_manager.h"
 #include "media/base/video_decoder_config.h"
 #include "media/media_features.h"
-#include "media/renderers/gpu_video_accelerator_factories.h"
+#include "media/video/gpu_video_accelerator_factories.h"
 #include "third_party/skia/include/core/SkBitmap.h"
-
-#if BUILDFLAG(USE_PROPRIETARY_CODECS)
-#include "media/formats/mp4/box_definitions.h"
-#endif
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
 #include "platform_media/common/pipeline_stats.h"
 #endif
 
-namespace media {
-namespace {
-
 #if defined(OS_ANDROID) && BUILDFLAG(USE_PROPRIETARY_CODECS)
-// Extract the SPS and PPS lists from |extra_data|. Each SPS and PPS is prefixed
-// with 0x0001, the Annex B framing bytes. The out parameters are not modified
-// on failure.
-void ExtractSpsAndPps(const std::vector<uint8_t>& extra_data,
-                      std::vector<uint8_t>* sps_out,
-                      std::vector<uint8_t>* pps_out) {
-  if (extra_data.empty())
-    return;
-
-  mp4::AVCDecoderConfigurationRecord record;
-  if (!record.Parse(extra_data.data(), extra_data.size())) {
-    DVLOG(1) << "Failed to extract the SPS and PPS from extra_data";
-    return;
-  }
-
-  constexpr std::array<uint8_t, 4> prefix = {{0, 0, 0, 1}};
-  for (const std::vector<uint8_t>& sps : record.sps_list) {
-    sps_out->insert(sps_out->end(), prefix.begin(), prefix.end());
-    sps_out->insert(sps_out->end(), sps.begin(), sps.end());
-  }
-
-  for (const std::vector<uint8_t>& pps : record.pps_list) {
-    pps_out->insert(pps_out->end(), prefix.begin(), prefix.end());
-    pps_out->insert(pps_out->end(), pps.begin(), pps.end());
-  }
-}
+#include "media/base/android/extract_sps_and_pps.h"
 #endif
 
-}  // namespace
-
+namespace media {
 const char GpuVideoDecoder::kDecoderName[] = "GpuVideoDecoder";
 
 // Maximum number of concurrent VDA::Decode() operations GVD will maintain.
@@ -110,10 +77,12 @@ GpuVideoDecoder::BufferData::~BufferData() {}
 GpuVideoDecoder::GpuVideoDecoder(
     GpuVideoAcceleratorFactories* factories,
     const RequestOverlayInfoCB& request_overlay_info_cb,
+    const gfx::ColorSpace& target_color_space,
     MediaLog* media_log)
     : needs_bitstream_conversion_(false),
       factories_(factories),
       request_overlay_info_cb_(request_overlay_info_cb),
+      target_color_space_(target_color_space),
       media_log_(media_log),
       vda_initialized_(false),
       state_(kNormal),
@@ -375,7 +344,8 @@ void GpuVideoDecoder::CompleteInitialization(const OverlayInfo& overlay_info) {
   vda_config.encryption_scheme = config_.encryption_scheme();
   vda_config.is_deferred_initialization_allowed = true;
   vda_config.initial_expected_coded_size = config_.coded_size();
-  vda_config.color_space = config_.color_space_info();
+  vda_config.container_color_space = config_.color_space_info();
+  vda_config.target_color_space = target_color_space_;
 
 #if defined(OS_ANDROID) && BUILDFLAG(USE_PROPRIETARY_CODECS)
   // We pass the SPS and PPS on Android because it lets us initialize

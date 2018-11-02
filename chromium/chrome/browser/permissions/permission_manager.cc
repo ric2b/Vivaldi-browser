@@ -10,8 +10,10 @@
 #include "base/callback.h"
 #include "base/memory/ptr_util.h"
 #include "build/build_config.h"
+#include "chrome/browser/accessibility/accessibility_permission_context.h"
 #include "chrome/browser/background_sync/background_sync_permission_context.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/generic_sensor/sensor_permission_context.h"
 #include "chrome/browser/media/midi_permission_context.h"
 #include "chrome/browser/media/midi_sysex_permission_context.h"
 #include "chrome/browser/media/webrtc/media_stream_device_permission_context.h"
@@ -104,6 +106,10 @@ ContentSettingsType PermissionTypeToContentSetting(PermissionType permission) {
       return CONTENT_SETTINGS_TYPE_BACKGROUND_SYNC;
     case PermissionType::FLASH:
       return CONTENT_SETTINGS_TYPE_PLUGINS;
+    case PermissionType::SENSORS:
+      return CONTENT_SETTINGS_TYPE_SENSORS;
+    case PermissionType::ACCESSIBILITY_EVENTS:
+      return CONTENT_SETTINGS_TYPE_ACCESSIBILITY_EVENTS;
     case PermissionType::NUM:
       // This will hit the NOTREACHED below.
       break;
@@ -284,6 +290,10 @@ PermissionManager::PermissionManager(Profile* profile)
   permission_contexts_[CONTENT_SETTINGS_TYPE_PLUGINS] =
       base::MakeUnique<FlashPermissionContext>(profile);
 #endif
+  permission_contexts_[CONTENT_SETTINGS_TYPE_SENSORS] =
+      base::MakeUnique<SensorPermissionContext>(profile);
+  permission_contexts_[CONTENT_SETTINGS_TYPE_ACCESSIBILITY_EVENTS] =
+      base::MakeUnique<AccessibilityPermissionContext>(profile);
 }
 
 PermissionManager::~PermissionManager() {
@@ -327,6 +337,7 @@ int PermissionManager::RequestPermissions(
       content::WebContents::FromRenderFrameHost(render_frame_host);
 
   if (vr::VrTabHelper::IsInVr(web_contents)) {
+    vr::VrTabHelper::UISuppressed(vr::UiSuppressedElement::kPermissionRequest);
     callback.Run(
         std::vector<ContentSetting>(permissions.size(), CONTENT_SETTING_BLOCK));
     return kNoPendingOperation;
@@ -452,8 +463,12 @@ void PermissionManager::CancelPermissionRequest(int request_id) {
       continue;
     context->CancelPermissionRequest(web_contents, request);
   }
+
   // The request should be automatically removed from |pending_requests_| as a
   // result of it being cancelled but not necessarily immediately.
+  // TODO(timloh): It would be nice to DCHECK that the request is removed, but
+  // currently the PermissionUpdateInfobar (and maybe other places) does this
+  // asynchronously.
 }
 
 void PermissionManager::ResetPermission(PermissionType permission,

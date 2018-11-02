@@ -21,7 +21,6 @@
 #include "chrome/browser/chromeos/accessibility/accessibility_util.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/chromeos/lock_screen_apps/state_controller.h"
-#include "chrome/browser/chromeos/login/enrollment/auto_enrollment_controller.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host_impl.h"
 #include "chrome/browser/chromeos/login/ui/preloaded_web_view.h"
 #include "chrome/browser/chromeos/login/ui/preloaded_web_view_factory.h"
@@ -44,6 +43,7 @@
 #include "chromeos/network/network_state_handler.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/password_manager/core/browser/password_manager.h"
+#include "components/session_manager/core/session_manager.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_frame_host.h"
@@ -144,17 +144,9 @@ WebUILoginView::WebUILoginView(const WebViewSettings& settings)
   }
   accel_map_[ui::Accelerator(ui::VKEY_V, ui::EF_ALT_DOWN)] =
       kAccelNameVersion;
-
-  // Devices with forced re-enrollment enabled shouldn't be able to powerwash.
-  const AutoEnrollmentController::FRERequirement requirement =
-      AutoEnrollmentController::GetFRERequirement();
-  if (requirement == AutoEnrollmentController::NOT_REQUIRED ||
-      requirement == AutoEnrollmentController::EXPLICITLY_NOT_REQUIRED) {
-    accel_map_[ui::Accelerator(ui::VKEY_R,
-                               ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN |
-                                   ui::EF_SHIFT_DOWN)] = kAccelNameReset;
-  }
-
+  accel_map_[ui::Accelerator(
+      ui::VKEY_R, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN | ui::EF_SHIFT_DOWN)] =
+      kAccelNameReset;
   accel_map_[ui::Accelerator(ui::VKEY_X,
       ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN | ui::EF_SHIFT_DOWN)] =
       kAccelNameEnableDebugging;
@@ -372,16 +364,19 @@ OobeUI* WebUILoginView::GetOobeUI() {
   return static_cast<OobeUI*>(GetWebUI()->GetController());
 }
 
-void WebUILoginView::OpenProxySettings() {
-  const NetworkState* network =
-      NetworkHandler::Get()->network_state_handler()->DefaultNetwork();
+void WebUILoginView::OpenProxySettings(const std::string& network_id) {
+  auto* network_state_handler = NetworkHandler::Get()->network_state_handler();
+  const NetworkState* network;
+  if (!network_id.empty())
+    network = network_state_handler->GetNetworkStateFromGuid(network_id);
+  else
+    network = network_state_handler->DefaultNetwork();
   if (!network) {
-    LOG(ERROR) << "No default network found!";
+    LOG(ERROR) << "Network not found: " << network_id;
     return;
   }
-  ProxySettingsDialog* dialog =
-      new ProxySettingsDialog(ProfileHelper::GetSigninProfile(),
-                              *network, NULL, GetNativeWindow());
+  ProxySettingsDialog* dialog = new ProxySettingsDialog(
+      ProfileHelper::GetSigninProfile(), *network, nullptr, GetNativeWindow());
   dialog->Show();
 }
 
@@ -408,9 +403,6 @@ void WebUILoginView::Layout() {
 
   for (auto& observer : observer_list_)
     observer.OnPositionRequiresUpdate();
-}
-
-void WebUILoginView::OnLocaleChanged() {
 }
 
 void WebUILoginView::ChildPreferredSizeChanged(View* child) {
@@ -617,6 +609,13 @@ bool WebUILoginView::MoveFocusToSystemTray(bool reverse) {
   // exit early.
   if (ash_util::IsRunningInMash())
     return true;
+
+  // The focus should not move to the system tray if voice interaction OOOBE is
+  // active.
+  if (LoginDisplayHost::default_host() &&
+      LoginDisplayHost::default_host()->IsVoiceInteractionOobe()) {
+    return false;
+  }
 
   ash::SystemTray* tray = ash::Shell::Get()->GetPrimarySystemTray();
   if (!tray || !tray->GetWidget()->IsVisible() || !tray->visible())

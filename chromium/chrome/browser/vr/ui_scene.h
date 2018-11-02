@@ -11,17 +11,20 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "chrome/browser/vr/color_scheme.h"
-#include "chrome/browser/vr/elements/ui_element_debug_id.h"
+#include "chrome/browser/vr/elements/ui_element_name.h"
 #include "third_party/skia/include/core/SkColor.h"
 
 namespace base {
-class ListValue;
 class TimeTicks;
 }  // namespace base
 
 namespace cc {
 class Animation;
 }  // namespace cc
+
+namespace gfx {
+class Vector3dF;
+}  // namespace gfx
 
 namespace vr {
 
@@ -41,7 +44,7 @@ class UiScene {
   UiScene();
   virtual ~UiScene();
 
-  void AddUiElement(std::unique_ptr<UiElement> element);
+  void AddUiElement(UiElementName parent, std::unique_ptr<UiElement> element);
 
   void RemoveUiElement(int element_id);
 
@@ -54,25 +57,21 @@ class UiScene {
   // Handles per-frame updates, giving each element the opportunity to update,
   // if necessary (eg, for animations). NB: |current_time| is the shared,
   // absolute begin frame time.
-  void OnBeginFrame(const base::TimeTicks& current_time);
+  void OnBeginFrame(const base::TimeTicks& current_time,
+                    const gfx::Vector3dF& look_at);
 
   // This function gets called just before rendering the elements in the
   // frame lifecycle. After this function, no element should be dirtied.
   void PrepareToDraw();
 
-  // Handle a batch of commands passed from the UI HTML.
-  void HandleCommands(std::unique_ptr<base::ListValue> commands,
-                      const base::TimeTicks& current_time);
-
-  const std::vector<std::unique_ptr<UiElement>>& GetUiElements() const;
+  UiElement& root_element();
 
   UiElement* GetUiElementById(int element_id) const;
-  UiElement* GetUiElementByDebugId(UiElementDebugId debug_id) const;
+  UiElement* GetUiElementByName(UiElementName name) const;
 
   std::vector<const UiElement*> GetWorldElements() const;
   std::vector<const UiElement*> GetOverlayElements() const;
-  std::vector<const UiElement*> GetHeadLockedElements() const;
-  bool HasVisibleHeadLockedElements() const;
+  std::vector<const UiElement*> GetViewportAwareElements() const;
 
   float background_distance() const { return background_distance_; }
   void set_background_distance(float d) { background_distance_ = d; }
@@ -87,15 +86,19 @@ class UiScene {
   void set_reticle_rendering_enabled(bool enabled) {
     reticle_rendering_enabled_ = enabled;
   }
+  int first_foreground_draw_phase() const {
+    return first_foreground_draw_phase_;
+  }
+  void set_first_foreground_draw_phase(int phase) {
+    first_foreground_draw_phase_ = phase;
+  }
 
-  void OnGLInitialized();
+  void OnGlInitialized();
 
  private:
   void Animate(const base::TimeTicks& current_time);
-  void ApplyRecursiveTransforms(UiElement* element);
 
-  std::vector<std::unique_ptr<UiElement>> ui_elements_;
-  UiElement* content_element_ = nullptr;
+  std::unique_ptr<UiElement> root_element_;
   ColorScheme::Mode mode_ = ColorScheme::kModeNormal;
 
   float background_distance_ = 10.0f;
@@ -103,6 +106,7 @@ class UiScene {
   bool webvr_rendering_enabled_ = false;
   bool reticle_rendering_enabled_ = true;
   bool gl_initialized_ = false;
+  int first_foreground_draw_phase_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(UiScene);
 };

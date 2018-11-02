@@ -144,7 +144,9 @@ class TestDownloadRequestHandler {
     // response.
     int pattern_generator_seed;
 
-    // If true, the response contains a 'Accept-Ranges: bytes' header.
+    // Whether the server can handle partial request.
+    // If true, contains a 'Accept-Ranges: bytes' header for HTTP 200
+    // response, or contains 'Content-Range' header for HTTP 206 response.
     bool support_byte_ranges;
 
     // The connection type in the response.
@@ -215,7 +217,7 @@ class TestDownloadRequestHandler {
     net::URLRequest::ReferrerPolicy referrer_policy =
         net::URLRequest::NEVER_CLEAR_REFERRER;
 
-    GURL first_party_for_cookies;
+    GURL site_for_cookies;
     net::URLRequest::FirstPartyURLPolicy first_party_url_policy =
         net::URLRequest::NEVER_CHANGE_FIRST_PARTY_URL;
 

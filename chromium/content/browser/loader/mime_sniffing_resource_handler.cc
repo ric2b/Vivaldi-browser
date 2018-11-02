@@ -14,7 +14,6 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "components/mime_util/mime_util.h"
 #include "content/browser/download/download_resource_handler.h"
 #include "content/browser/download/download_stats.h"
 #include "content/browser/loader/intercepting_resource_handler.h"
@@ -39,6 +38,7 @@
 #include "net/http/http_response_headers.h"
 #include "net/url_request/url_request.h"
 #include "ppapi/features/features.h"
+#include "third_party/WebKit/common/mime_util/mime_util.h"
 #include "url/origin.h"
 
 namespace content {
@@ -80,11 +80,6 @@ class MimeSniffingResourceHandler::Controller : public ResourceController {
   void Cancel() override {
     MarkAsUsed();
     mime_handler_->Cancel();
-  }
-
-  void CancelAndIgnore() override {
-    MarkAsUsed();
-    mime_handler_->CancelAndIgnore();
   }
 
   void CancelWithError(int error_code) override {
@@ -329,8 +324,8 @@ void MimeSniffingResourceHandler::ResumeInternal() {
   // it will resume the request. Posted as a task to avoid re-entrancy into
   // the calling class.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&MimeSniffingResourceHandler::AdvanceState,
-                            weak_ptr_factory_.GetWeakPtr()));
+      FROM_HERE, base::BindOnce(&MimeSniffingResourceHandler::AdvanceState,
+                                weak_ptr_factory_.GetWeakPtr()));
 }
 
 void MimeSniffingResourceHandler::AdvanceState() {
@@ -467,7 +462,7 @@ bool MimeSniffingResourceHandler::MaybeStartInterception() {
 
   bool must_download = MustDownload();
   if (!must_download) {
-    if (mime_util::IsSupportedMimeType(mime_type))
+    if (blink::IsSupportedMimeType(mime_type))
       return true;
 
     bool handled_by_plugin;
@@ -508,8 +503,8 @@ bool MimeSniffingResourceHandler::CheckForPluginHandler(
   if (stale) {
     // Refresh the plugins asynchronously.
     plugin_service_->GetPlugins(
-        base::Bind(&MimeSniffingResourceHandler::OnPluginsLoaded,
-                   weak_ptr_factory_.GetWeakPtr()));
+        base::BindOnce(&MimeSniffingResourceHandler::OnPluginsLoaded,
+                       weak_ptr_factory_.GetWeakPtr()));
     request()->LogBlockedBy("MimeSniffingResourceHandler");
     // Will complete asynchronously.
     return false;

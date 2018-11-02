@@ -29,6 +29,8 @@ void HighlighterControllerTestApi::DestroyPointerView() {
 }
 
 void HighlighterControllerTestApi::SimulateInterruptedStrokeTimeout() {
+  if (!instance_->interrupted_stroke_timer_)
+    return;
   instance_->interrupted_stroke_timer_->Stop();
   instance_->RecognizeGesture();
 }
@@ -61,6 +63,17 @@ const FastInkPoints& HighlighterControllerTestApi::predicted_points() const {
 void HighlighterControllerTestApi::HandleSelection(const gfx::Rect& rect) {
   handle_selection_called_ = true;
   selection_ = rect;
+  // This is mimicking the logic implemented PaletteDelegateChromeOS,
+  // which should eventually move to HighlighterController (crbug/761120).
+  CallMetalayerDone();
+}
+
+void HighlighterControllerTestApi::HandleFailedSelection() {
+  handle_failed_selection_called_ = true;
+  // This is mimicking the logic implemented PaletteDelegateChromeOS,
+  // which should eventually move to HighlighterController (crbug/761120).
+  if (via_button_)
+    CallMetalayerDone();
 }
 
 }  // namespace ash

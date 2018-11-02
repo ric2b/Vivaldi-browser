@@ -42,7 +42,6 @@
 #include "content/public/test/test_utils.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
-#include "ui/views/controls/button/custom_button.h"
 #include "ui/views/view.h"
 
 namespace em = enterprise_management;
@@ -147,7 +146,7 @@ class ShutdownPolicyInSessionTest
   // Opens the system tray menu. This creates the tray views.
   void OpenSystemTrayMenu() {
     ash::Shell::Get()->GetPrimarySystemTray()->ShowDefaultView(
-        ash::BUBBLE_CREATE_NEW);
+        ash::BUBBLE_CREATE_NEW, false /* show_by_click */);
   }
 
   // Closes the system tray menu. This deletes the tray views.

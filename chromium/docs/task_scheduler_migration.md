@@ -104,7 +104,10 @@ assigned files by:
 * base::ThreadChecker -> base::SequenceChecker
   * ThreadChecker::CalledOnValidThread() -> DCHECK_CALLED_ON_VALID_SEQUENCE(...)
 * base::ThreadLocalStorage::Slot -> base::SequenceLocalStorageSlot
+* BrowserThread::PostTaskAndReplyWithResult() -> base::PostTaskAndReplyWithResult()
+  (from post_task.h or from task_runner_util.h (if you need to feed a TaskRunner))
 * BrowserThread::DeleteOnThread -> base::DeleteOnTaskRunner / base::RefCountedDeleteOnSequence
+* BrowserMessageFilter::OverrideThreadForMessage() -> BrowserMessageFilter::OverrideTaskRunnerForMessage()
 * CreateSingleThreadTaskRunnerWithTraits() -> CreateSequencedTaskRunnerWithTraits()
    * Every CreateSingleThreadTaskRunnerWithTraits() usage should be accompanied
      with a comment and ideally a bug to make it sequence when the sequence-unfriendly

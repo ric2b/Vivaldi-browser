@@ -22,7 +22,7 @@ namespace {
 
 constexpr char kFakeUserEmail[] = "fake_user@nightlight";
 
-class TrayNightLightTest : public AshTestBase {
+class TrayNightLightTest : public NoSessionAshTestBase {
  public:
   TrayNightLightTest() = default;
   ~TrayNightLightTest() override = default;
@@ -33,20 +33,11 @@ class TrayNightLightTest : public AshTestBase {
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         ash::switches::kAshEnableNightLight);
 
-    AshTestBase::SetUp();
-    GetSessionControllerClient()->Reset();
-    GetSessionControllerClient()->AddUserSession(kFakeUserEmail);
-    Shell::RegisterProfilePrefs(pref_service_.registry());
-
-    ash_test_helper()->test_shell_delegate()->set_active_user_pref_service(
-        &pref_service_);
-    GetSessionControllerClient()->SwitchActiveUser(
-        AccountId::FromUserEmail(kFakeUserEmail));
+    NoSessionAshTestBase::SetUp();
+    SimulateUserLogin(kFakeUserEmail);
   }
 
  private:
-  TestingPrefServiceSimple pref_service_;
-
   DISALLOW_COPY_AND_ASSIGN(TrayNightLightTest);
 };
 

@@ -14,15 +14,15 @@
 #include "base/files/file_path.h"
 #include "base/synchronization/lock.h"
 #include "build/build_config.h"
+#include "chrome/common/features.h"
 #include "chrome/common/origin_trials/chrome_origin_trial_policy.h"
+#include "chrome/common/profiling/memlog_client.h"
 #include "content/public/common/content_client.h"
 #include "ppapi/features/features.h"
 
 #if BUILDFLAG(ENABLE_PLUGINS)
 #include "content/public/common/pepper_plugin_info.h"
 #endif
-
-#include "url/url_util.h"
 
 // Returns the user agent of Chrome.
 std::string GetUserAgent();
@@ -106,10 +106,15 @@ class ChromeContentClient : public content::ContentClient {
   media::MediaDrmBridgeClient* GetMediaDrmBridgeClient() override;
 #endif  // OS_ANDROID
 
+  // This method isn't called by utility processes.
+  void OnServiceManagerConnected(
+      content::ServiceManagerConnection* connection) override;
+
  private:
   // Used to lock when |origin_trial_policy_| is initialized.
   base::Lock origin_trial_policy_lock_;
   std::unique_ptr<ChromeOriginTrialPolicy> origin_trial_policy_;
+  profiling::MemlogClient memlog_client_;
 };
 
 #endif  // CHROME_COMMON_CHROME_CONTENT_CLIENT_H_

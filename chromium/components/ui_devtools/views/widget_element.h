@@ -35,13 +35,15 @@ class WidgetElement : public views::WidgetRemovalsObserver,
                              const gfx::Rect& new_bounds) override;
 
   // UIElement:
+  std::vector<std::pair<std::string, std::string>> GetCustomAttributes()
+      const override;
   void GetBounds(gfx::Rect* bounds) const override;
   void SetBounds(const gfx::Rect& bounds) override;
   void GetVisible(bool* visible) const override;
   void SetVisible(bool visible) override;
   std::pair<aura::Window*, gfx::Rect> GetNodeWindowAndBounds() const override;
 
-  static views::Widget* From(UIElement* element);
+  static views::Widget* From(const UIElement* element);
 
  private:
   views::Widget* widget_;

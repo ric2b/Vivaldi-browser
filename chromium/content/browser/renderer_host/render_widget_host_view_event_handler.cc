@@ -897,15 +897,6 @@ bool RenderWidgetHostViewEventHandler::ShouldRouteEvent(
   if (host_->delegate() && !host_->delegate()->IsWidgetForMainFrame(host_))
     return false;
 
-  // ScrollEvents get transformed into MouseWheel events, and so are treated
-  // the same as mouse events for routing purposes.
-  if (event->IsMouseEvent() || event->type() == ui::ET_SCROLL)
-    result = result && SiteIsolationPolicy::AreCrossProcessFramesPossible() &&
-  // NOTE(andre@vivaldi.com) : We still need to skip routing of mouse events in
-  // Vivaldi because of interstitial pages. See bug VB-26634. Also, any
-  // changes here should be made for mac as well in
-  // RenderWidgetHostViewMac::ShouldRouteEvent()
-      !vivaldi::IsVivaldiRunning();
   return result;
 }
 

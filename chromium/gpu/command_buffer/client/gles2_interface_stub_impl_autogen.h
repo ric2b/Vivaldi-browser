@@ -868,6 +868,7 @@ void GLES2InterfaceStub::UnmapTexSubImage2DCHROMIUM(const void* /* mem */) {}
 void GLES2InterfaceStub::ResizeCHROMIUM(GLuint /* width */,
                                         GLuint /* height */,
                                         GLfloat /* scale_factor */,
+                                        GLenum /* color_space */,
                                         GLboolean /* alpha */) {}
 const GLchar* GLES2InterfaceStub::GetRequestableExtensionsCHROMIUM() {
   return 0;
@@ -1020,6 +1021,9 @@ void GLES2InterfaceStub::ScheduleCALayerCHROMIUM(
     GLuint /* edge_aa_mask */,
     const GLfloat* /* bounds_rect */,
     GLuint /* filter */) {}
+void GLES2InterfaceStub::SetColorSpaceForScanoutCHROMIUM(
+    GLuint /* texture_id */,
+    GLColorSpace /* color_space */) {}
 void GLES2InterfaceStub::ScheduleCALayerInUseQueryCHROMIUM(
     GLsizei /* count */,
     const GLuint* /* textures */) {}
@@ -1184,7 +1188,9 @@ void GLES2InterfaceStub::OverlayPromotionHintCHROMIUM(
     GLuint /* texture */,
     GLboolean /* promotion_hint */,
     GLint /* display_x */,
-    GLint /* display_y */) {}
+    GLint /* display_y */,
+    GLint /* display_width */,
+    GLint /* display_height */) {}
 void GLES2InterfaceStub::SwapBuffersWithBoundsCHROMIUM(
     GLsizei /* count */,
     const GLint* /* rects */) {}
@@ -1201,4 +1207,17 @@ bool GLES2InterfaceStub::LockDiscardableTextureCHROMIUM(
     GLuint /* texture_id */) {
   return 0;
 }
+void GLES2InterfaceStub::BeginRasterCHROMIUM(
+    GLuint /* texture_id */,
+    GLuint /* sk_color */,
+    GLuint /* msaa_sample_count */,
+    GLboolean /* can_use_lcd_text */,
+    GLboolean /* use_distance_field_text */,
+    GLint /* pixel_config */) {}
+void GLES2InterfaceStub::RasterCHROMIUM(const cc::DisplayItemList* /* list */,
+                                        GLint /* x */,
+                                        GLint /* y */,
+                                        GLint /* w */,
+                                        GLint /* h */) {}
+void GLES2InterfaceStub::EndRasterCHROMIUM() {}
 #endif  // GPU_COMMAND_BUFFER_CLIENT_GLES2_INTERFACE_STUB_IMPL_AUTOGEN_H_

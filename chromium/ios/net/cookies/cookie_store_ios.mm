@@ -605,7 +605,7 @@ void CookieStoreIOS::FlushStore(base::OnceClosure closure) {
 CookieStoreIOS::CookieStoreIOS(
     net::CookieMonster::PersistentCookieStore* persistent_store,
     NSHTTPCookieStorage* system_store)
-    : cookie_monster_(new net::CookieMonster(persistent_store, nullptr)),
+    : cookie_monster_(new net::CookieMonster(persistent_store)),
       system_store_(system_store),
       creation_time_manager_(new CookieCreationTimeManager),
       metrics_enabled_(false),
@@ -741,6 +741,14 @@ CookieStoreIOS::AddCallbackForCookie(const GURL& gurl,
 
   DCHECK(hook_map_.find(key) != hook_map_.end());
   return hook_map_[key]->Add(callback);
+}
+
+std::unique_ptr<net::CookieStore::CookieChangedSubscription>
+CookieStoreIOS::AddCallbackForAllChanges(
+    const CookieChangedCallback& callback) {
+  // Implement when needed by iOS consumers.
+  NOTIMPLEMENTED();
+  return nullptr;
 }
 
 bool CookieStoreIOS::IsEphemeral() {

@@ -115,7 +115,8 @@ bool DecryptMasterPasswordKeys(const std::string& password,
   EVP_CipherUpdate(
       &decryptor,
       reinterpret_cast<uint8_t*>(const_cast<char*>(out_data->data())), &out_len,
-      reinterpret_cast<const uint8_t*>(in_data.data()), in_data.length());
+      reinterpret_cast<const uint8_t*>(in_data.data()),
+      static_cast<unsigned int>(in_data.length()));
   total_len += out_len;
   EVP_CipherFinal_ex(&decryptor,
                      reinterpret_cast<uint8_t*>(
@@ -325,7 +326,7 @@ bool WandReadEncryptedField(std::string::iterator* buffer,
         &decryptor,
         reinterpret_cast<uint8_t*>(const_cast<char*>(out_data.data())),
         &out_len, reinterpret_cast<const uint8_t*>(in_data.data()),
-        in_data.length());
+      static_cast<unsigned int>(in_data.length()));
     total_len += out_len;
     EVP_CipherFinal_ex(&decryptor,
                        reinterpret_cast<uint8_t*>(

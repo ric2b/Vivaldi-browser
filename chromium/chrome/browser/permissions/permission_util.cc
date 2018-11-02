@@ -43,6 +43,10 @@ std::string PermissionUtil::GetPermissionString(
       return "BackgroundSync";
     case CONTENT_SETTINGS_TYPE_PLUGINS:
       return "Flash";
+    case CONTENT_SETTINGS_TYPE_SENSORS:
+      return "Sensors";
+    case CONTENT_SETTINGS_TYPE_ACCESSIBILITY_EVENTS:
+      return "AccessibilityEvents";
     default:
       break;
   }
@@ -73,6 +77,10 @@ std::string PermissionUtil::ConvertContentSettingsTypeToSafeBrowsingName(
       return "BACKGROUND_SYNC";
     case CONTENT_SETTINGS_TYPE_PLUGINS:
       return "FLASH";
+    case CONTENT_SETTINGS_TYPE_SENSORS:
+      return "SENSORS";
+    case CONTENT_SETTINGS_TYPE_ACCESSIBILITY_EVENTS:
+      return "ACCESSIBILITY_EVENTS";
     default:
       break;
   }
@@ -98,6 +106,8 @@ PermissionRequestType PermissionUtil::GetRequestType(ContentSettingsType type) {
       return PermissionRequestType::PERMISSION_MEDIASTREAM_MIC;
     case CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA:
       return PermissionRequestType::PERMISSION_MEDIASTREAM_CAMERA;
+    case CONTENT_SETTINGS_TYPE_ACCESSIBILITY_EVENTS:
+      return PermissionRequestType::PERMISSION_ACCESSIBILITY_EVENTS;
     default:
       NOTREACHED();
       return PermissionRequestType::UNKNOWN;
@@ -135,6 +145,10 @@ bool PermissionUtil::GetPermissionType(ContentSettingsType type,
   } else if (type == CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER) {
     *out = PermissionType::PROTECTED_MEDIA_IDENTIFIER;
 #endif
+  } else if (type == CONTENT_SETTINGS_TYPE_SENSORS) {
+    *out = PermissionType::SENSORS;
+  } else if (type == CONTENT_SETTINGS_TYPE_ACCESSIBILITY_EVENTS) {
+    *out = PermissionType::ACCESSIBILITY_EVENTS;
   } else {
     return false;
   }
@@ -162,6 +176,8 @@ bool PermissionUtil::IsPermission(ContentSettingsType type) {
 #if defined(OS_ANDROID) || defined(OS_CHROMEOS)
     case CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER:
 #endif
+    case CONTENT_SETTINGS_TYPE_SENSORS:
+    case CONTENT_SETTINGS_TYPE_ACCESSIBILITY_EVENTS:
       return true;
     default:
       return false;

@@ -326,6 +326,7 @@ static_library("test_support") {
     "//chrome/utility",
     "//components/crash/content/app",
     "//components/crash/content/app:lib",
+    "//components/crash/content/app:test_support",
     "//components/startup_metric_utils/browser:lib",
     "//content/public/app:both",
     "//content/public/common",
@@ -348,6 +349,7 @@ static_library("test_support") {
     deps += [
       "//chrome:chrome_initial",
       "//chrome/install_static:install_static_util",
+      "//chrome_elf:test_stubs",
       "//sandbox/win:sandbox",
     ]
   }
@@ -384,6 +386,7 @@ static_library("test_support") {
 
 chrome_packaged_services = [
   ":chrome_manifest",
+  "//chrome/profiling:manifest",
   "//services/preferences:local_state_manifest",
 ]
 
@@ -394,7 +397,11 @@ if (enable_basic_printing || enable_print_preview) {
 
 if (is_chromeos) {
   chrome_packaged_services +=
-      [ "//chrome/browser:preferences_forwarder_manifest" ]
+      [ "//chrome/browser/chromeos:ash_pref_connector_manifest" ]
+}
+
+if (!is_android) {
+  chrome_packaged_services += [ "//chrome/utility:profile_import_manifest" ]
 }
 
 service_manifest("chrome_manifest") {

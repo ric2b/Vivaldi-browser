@@ -13,7 +13,6 @@
 #include "base/bit_cast.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/base/math_util.h"
-#include "cc/output/gl_renderer.h"
 #include "cc/paint/skia_paint_canvas.h"
 #include "cc/resources/resource_provider.h"
 #include "cc/resources/resource_util.h"
@@ -36,7 +35,9 @@ const viz::ResourceFormat kRGBResourceFormat = viz::RGBA_8888;
 
 VideoFrameExternalResources::ResourceType ResourceTypeForVideoFrame(
     media::VideoFrame* video_frame,
+    gfx::BufferFormat* buffer_format,
     bool use_stream_video_draw_quad) {
+  DCHECK(buffer_format);
   switch (video_frame->format()) {
     case media::PIXEL_FORMAT_ARGB:
     case media::PIXEL_FORMAT_XRGB:
@@ -65,7 +66,13 @@ VideoFrameExternalResources::ResourceType ResourceTypeForVideoFrame(
       switch (video_frame->mailbox_holder(0).texture_target) {
         case GL_TEXTURE_EXTERNAL_OES:
         case GL_TEXTURE_2D:
-          return VideoFrameExternalResources::YUV_RESOURCE;
+          // Single plane textures can be sampled as RGB.
+          if (video_frame->NumTextures() > 1) {
+            return VideoFrameExternalResources::YUV_RESOURCE;
+          } else {
+            *buffer_format = gfx::BufferFormat::YUV_420_BIPLANAR;
+            return VideoFrameExternalResources::RGB_RESOURCE;
+          }
         case GL_TEXTURE_RECTANGLE_ARB:
           return VideoFrameExternalResources::RGB_RESOURCE;
         default:
@@ -103,10 +110,10 @@ VideoFrameExternalResources::ResourceType ResourceTypeForVideoFrame(
 
 class SyncTokenClientImpl : public media::VideoFrame::SyncTokenClient {
  public:
-  SyncTokenClientImpl(gpu::gles2::GLES2Interface* gl,
-                      const gpu::SyncToken& sync_token)
+  SyncTokenClientImpl(gpu::gles2::GLES2Interface* gl, gpu::SyncToken sync_token)
       : gl_(gl), sync_token_(sync_token) {}
-  ~SyncTokenClientImpl() override {}
+  ~SyncTokenClientImpl() override = default;
+
   void GenerateSyncToken(gpu::SyncToken* sync_token) override {
     if (sync_token_.HasData()) {
       *sync_token = sync_token_;
@@ -116,6 +123,7 @@ class SyncTokenClientImpl : public media::VideoFrame::SyncTokenClient {
       gl_->GenSyncTokenCHROMIUM(fence_sync, sync_token->GetData());
     }
   }
+
   void WaitSyncToken(const gpu::SyncToken& sync_token) override {
     if (sync_token.HasData()) {
       gl_->WaitSyncTokenCHROMIUM(sync_token.GetConstData());
@@ -129,7 +137,16 @@ class SyncTokenClientImpl : public media::VideoFrame::SyncTokenClient {
  private:
   gpu::gles2::GLES2Interface* gl_;
   gpu::SyncToken sync_token_;
+  DISALLOW_COPY_AND_ASSIGN(SyncTokenClientImpl);
 };
+
+// Sync tokens passed downstream to the compositor can be unverified.
+void GenerateCompositorSyncToken(gpu::gles2::GLES2Interface* gl,
+                                 gpu::SyncToken* sync_token) {
+  const uint64_t fence_sync = gl->InsertFenceSyncCHROMIUM();
+  gl->OrderingBarrierCHROMIUM();
+  gl->GenUnverifiedSyncTokenCHROMIUM(fence_sync, sync_token->GetData());
+}
 
 }  // namespace
 
@@ -163,6 +180,7 @@ void VideoResourceUpdater::PlaneResource::SetUniqueId(int unique_frame_id,
 VideoFrameExternalResources::VideoFrameExternalResources()
     : type(NONE),
       read_lock_fences_enabled(false),
+      buffer_format(gfx::BufferFormat::RGBA_8888),
       offset(0.0f),
       multiplier(1.0f),
       bits_per_channel(8) {}
@@ -244,9 +262,10 @@ VideoResourceUpdater::AllocateResource(const gfx::Size& plane_size,
                                        bool immutable_hint) {
   // TODO(danakj): Abstract out hw/sw resource create/delete from
   // ResourceProvider and stop using ResourceProvider in this class.
-  const ResourceId resource_id = resource_provider_->CreateResource(
-      plane_size, immutable_hint ? ResourceProvider::TEXTURE_HINT_IMMUTABLE
-                                 : ResourceProvider::TEXTURE_HINT_DEFAULT,
+  const viz::ResourceId resource_id = resource_provider_->CreateResource(
+      plane_size,
+      immutable_hint ? ResourceProvider::TEXTURE_HINT_IMMUTABLE
+                     : ResourceProvider::TEXTURE_HINT_DEFAULT,
       format, color_space);
   DCHECK_NE(resource_id, 0u);
 
@@ -257,10 +276,9 @@ VideoResourceUpdater::AllocateResource(const gfx::Size& plane_size,
     gpu::gles2::GLES2Interface* gl = context_provider_->ContextGL();
 
     gl->GenMailboxCHROMIUM(mailbox.name);
-    ResourceProvider::ScopedWriteLockGL lock(resource_provider_, resource_id,
-                                             false);
+    ResourceProvider::ScopedWriteLockGL lock(resource_provider_, resource_id);
     gl->ProduceTextureDirectCHROMIUM(
-        lock.texture_id(),
+        lock.GetTexture(),
         resource_provider_->GetResourceTextureTarget(resource_id),
         mailbox.name);
   }
@@ -427,12 +445,15 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
                      plane_resource.resource_id());
       external_resources.type = VideoFrameExternalResources::SOFTWARE_RESOURCE;
     } else {
-      // VideoResourceUpdater shares a context with the compositor so
-      // a sync token is not required.
-      viz::TextureMailbox mailbox(plane_resource.mailbox(), gpu::SyncToken(),
+      // Set the sync token otherwise resource is assumed to be synchronized.
+      gpu::SyncToken sync_token;
+      GenerateCompositorSyncToken(context_provider_->ContextGL(), &sync_token);
+
+      viz::TextureMailbox mailbox(plane_resource.mailbox(), sync_token,
                                   resource_provider_->GetResourceTextureTarget(
                                       plane_resource.resource_id()));
       mailbox.set_color_space(output_color_space);
+
       external_resources.mailboxes.push_back(mailbox);
       external_resources.release_callbacks.push_back(
           base::Bind(&RecycleResource, weak_ptr_factory_.GetWeakPtr(),
@@ -531,10 +552,17 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
                                          resource_size_pixels);
       plane_resource.SetUniqueId(video_frame->unique_id(), i);
     }
+  }
 
+  // Set the sync token otherwise resource is assumed to be synchronized.
+  gpu::SyncToken sync_token;
+  GenerateCompositorSyncToken(context_provider_->ContextGL(), &sync_token);
+
+  for (size_t i = 0; i < plane_resources.size(); ++i) {
+    PlaneResource& plane_resource = *plane_resources[i];
     // VideoResourceUpdater shares a context with the compositor so a
     // sync token is not required.
-    viz::TextureMailbox mailbox(plane_resource.mailbox(), gpu::SyncToken(),
+    viz::TextureMailbox mailbox(plane_resource.mailbox(), sync_token,
                                 resource_provider_->GetResourceTextureTarget(
                                     plane_resource.resource_id()));
     mailbox.set_color_space(output_color_space);
@@ -559,9 +587,7 @@ void VideoResourceUpdater::ReturnTexture(
   // resource.
   if (lost_resource || !updater.get())
     return;
-  // Update the release sync point in |video_frame| with |sync_token|
-  // returned by the compositor and emit a WaitSyncTokenCHROMIUM on
-  // |video_frame|'s previous sync point using the current GL context.
+  // The video frame will insert a wait on the previous release sync token.
   SyncTokenClientImpl client(updater->context_provider_->ContextGL(),
                              sync_token);
   video_frame->UpdateReleaseSyncToken(&client);
@@ -574,9 +600,6 @@ void VideoResourceUpdater::CopyPlaneTexture(
     const gfx::ColorSpace& resource_color_space,
     const gpu::MailboxHolder& mailbox_holder,
     VideoFrameExternalResources* external_resources) {
-  gpu::gles2::GLES2Interface* gl = context_provider_->ContextGL();
-  SyncTokenClientImpl client(gl, mailbox_holder.sync_token);
-
   const gfx::Size output_plane_resource_size = video_frame->coded_size();
   // The copy needs to be a direct transfer of pixel data, so we use an RGBA8
   // target to avoid loss of precision or dropping any alpha component.
@@ -592,28 +615,29 @@ void VideoResourceUpdater::CopyPlaneTexture(
   resource->add_ref();
 
   ResourceProvider::ScopedWriteLockGL lock(resource_provider_,
-                                           resource->resource_id(), false);
+                                           resource->resource_id());
   DCHECK_EQ(
       resource_provider_->GetResourceTextureTarget(resource->resource_id()),
       (GLenum)GL_TEXTURE_2D);
+
+  gpu::gles2::GLES2Interface* gl = context_provider_->ContextGL();
 
   gl->WaitSyncTokenCHROMIUM(mailbox_holder.sync_token.GetConstData());
   uint32_t src_texture_id = gl->CreateAndConsumeTextureCHROMIUM(
       mailbox_holder.texture_target, mailbox_holder.mailbox.name);
   gl->CopySubTextureCHROMIUM(
-      src_texture_id, 0, GL_TEXTURE_2D, lock.texture_id(), 0, 0, 0, 0, 0,
+      src_texture_id, 0, GL_TEXTURE_2D, lock.GetTexture(), 0, 0, 0, 0, 0,
       output_plane_resource_size.width(), output_plane_resource_size.height(),
       false, false, false);
   gl->DeleteTextures(1, &src_texture_id);
 
-  // Done with the source video frame texture at this point.
-  video_frame->UpdateReleaseSyncToken(&client);
+  // Pass an empty sync token to force generation of a new sync token.
+  SyncTokenClientImpl client(gl, gpu::SyncToken());
+  gpu::SyncToken sync_token = video_frame->UpdateReleaseSyncToken(&client);
 
-  // VideoResourceUpdater shares a context with the compositor so a
-  // sync token is not required.
-  viz::TextureMailbox mailbox(resource->mailbox(), gpu::SyncToken(),
-                              GL_TEXTURE_2D, video_frame->coded_size(), false,
-                              false);
+  // Set sync token otherwise resource is assumed to be synchronized.
+  viz::TextureMailbox mailbox(resource->mailbox(), sync_token, GL_TEXTURE_2D,
+                              video_frame->coded_size(), false, false);
   mailbox.set_color_space(resource_color_space);
   external_resources->mailboxes.push_back(mailbox);
 
@@ -636,8 +660,9 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForHardwarePlanes(
   }
   gfx::ColorSpace resource_color_space = video_frame->ColorSpace();
 
-  external_resources.type =
-      ResourceTypeForVideoFrame(video_frame.get(), use_stream_video_draw_quad_);
+  external_resources.type = ResourceTypeForVideoFrame(
+      video_frame.get(), &external_resources.buffer_format,
+      use_stream_video_draw_quad_);
   if (external_resources.type == VideoFrameExternalResources::NONE) {
     DLOG(ERROR) << "Unsupported Texture format"
                 << media::VideoPixelFormatToString(video_frame->format());
@@ -681,7 +706,7 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForHardwarePlanes(
 // static
 void VideoResourceUpdater::RecycleResource(
     base::WeakPtr<VideoResourceUpdater> updater,
-    ResourceId resource_id,
+    viz::ResourceId resource_id,
     const gpu::SyncToken& sync_token,
     bool lost_resource,
     BlockingTaskRunner* main_thread_task_runner) {

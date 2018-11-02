@@ -1,6 +1,10 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 
+<link rel="import" href="chrome://resources/cr_elements/cr_icons_css.html">
+<link rel="import" href="chrome://resources/cr_elements/cr_link_row/cr_link_row.html">
 <link rel="import" href="chrome://resources/cr_elements/hidden_style_css.html">
+<link rel="import" href="chrome://resources/cr_elements/paper_toggle_style_css.html">
+<link rel="import" href="chrome://resources/cr_elements/policy/cr_tooltip_icon.html">
 <link rel="import" href="chrome://resources/html/action_link.html">
 <link rel="import" href="chrome://resources/html/action_link_css.html">
 <link rel="import" href="chrome://resources/html/cr.html">
@@ -8,29 +12,39 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout-classes.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/iron-icons.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/color.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable-behavior.html">
-<link rel="import" href="chrome://extensions/animation_helper.html">
 <link rel="import" href="chrome://extensions/item_util.html">
+<link rel="import" href="chrome://extensions/navigation_helper.html">
 
 <dom-module id="extensions-detail-view">
   <template>
-    <style include="iron-flex cr-hidden-style action-link">
+    <style include=
+        "iron-flex cr-hidden-style cr-icons action-link paper-toggle-style">
       :host {
-        display: flex;
-        justify-content: center;
+        --iron-icon-fill-color: var(--paper-grey-600);
+        display: block;
+        height: 100%;
+        overflow: auto;
+      }
+
+      #enable-section {
+        margin-bottom: 8px;
+      }
+
+      #enable-section cr-tooltip-icon {
+        -webkit-margin-end: 20px;
       }
 
       #main {
         background-color: white;
-        height: 100%;
+        margin: auto;
+        min-height: 100%;
         width: 640px;
       }
 
       #top-bar {
         align-items: center;
-        color: #5a5a5a;
+        color: var(--paper-grey-700);
         display: flex;
         font-size: 14px;
         height: 40px;
@@ -45,10 +59,6 @@
         width: 24px;
       }
 
-      a paper-icon-button {
-        color: var(--paper-grey-600);
-      }
-
       #name {
         flex-grow: 1;
       }
@@ -57,42 +67,38 @@
         align-items: center;
         display: flex;
         justify-content: space-between;
+        width: 100%;
       }
 
       .control-line span {
-        color: #333;
-      }
-
-      #enable-section {
-        height: 48px;
-        margin-bottom: 8px;
-        padding: 0 20px;
+        color: var(--paper-grey-900);
       }
 
       .section {
-        border-bottom: 1px solid var(--paper-grey-400);
-        padding: 16px 20px;
+        @apply(--cr-section);
       }
 
-      .section:last-child {
+      .section.block {
+        display: block;
+        padding-bottom: 16px;
+        padding-top: 16px;
+      }
+
+      .section.continuation {
+        border-top: none;
+      }
+
+      .section:first-child {
         border: none;
       }
 
       .section-title {
-        color: #333;
+        color: var(--paper-grey-900);
         margin-bottom: 12px;
       }
 
       .section-content {
-        color: #646464;
-      }
-
-      #options-section {
-        padding: 7px 20px;
-      }
-
-      #options-section .control-line {
-        height: 52px;
+        color: var(--paper-grey-600);
       }
 
       .actionable {
@@ -109,42 +115,41 @@
         -webkit-padding-start: 20px;
         margin: 0;
       }
-
-      button[is='paper-icon-button-light'].action-arrow {
-        background-image: url(chrome://resources/images/arrow_right.svg);
-      }
-
-      button[is='paper-icon-button-light'].open-in-new {
-        background-image: url(chrome://resources/images/open_in_new.svg);
-        background-size: contain;
-        height: 20px;
-        width: 20px;
-      }
     </style>
     <div id="main">
       <div id="top-bar">
-        <paper-icon-button id="close-button" icon="arrow-back"
-            on-tap="onCloseButtonTap_"></paper-icon-button>
+        <button id="close-button" is="paper-icon-button-light"
+            class="icon-arrow-back no-overlap"
+            on-tap="onCloseButtonTap_"></button>
         <img alt="" id="icon" src="[[data.iconUrl]]">
         <span id="name">[[data.name]]</span>
       </div>
-      <div class="control-line" id="enable-section">
-        <span>[[computeEnabledText_(data.*)]]</span>
-        <paper-toggle-button id="enable-toggle"
-            checked="[[isEnabled_(data.state)]]"
-            on-change="onEnableChange_"
-            enabled="[[isEnableToggleEnabled_(data)]]">
-        </paper-toggle-button>
+      <div class="section continuation" id="enable-section">
+        <div class="control-line">
+          <span>[[computeEnabledText_(data.*)]]</span>
+          <div class="layout horizontal">
+            <cr-tooltip-icon hidden$="[[!data.controlledInfo]]"
+                tooltip-text="[[data.controlledInfo.text]]"
+                icon-class="[[getIndicatorIcon_(data.controlledInfo.type)]]"
+                icon-aria-label="[[data.controlledInfo.type]]">
+            </cr-tooltip-icon>
+            <paper-toggle-button id="enable-toggle"
+                checked="[[isEnabled_(data.state)]]"
+                on-change="onEnableChange_"
+                disabled="[[!isEnableToggleEnabled_(data.*)]]">
+            </paper-toggle-button>
+          </div>
+        </div>
       </div>
-      <div class="section">
+      <div class="section continuation block">
         <div class="section-title">$i18n{itemDescriptionLabel}</div>
         <div class="section-content">[[data.description]]</div>
       </div>
-      <div class="section">
+      <div class="section block">
         <div class="section-title">$i18n{itemVersion}</div>
         <div class="section-content">[[data.version]]</div>
       </div>
-      <div class="section" id="id-section" hidden$="[[!inDevMode]]">
+      <div class="section block" id="id-section" hidden$="[[!inDevMode]]">
         <div class="section-title">$i18n{itemIdHeading}</div>
         <div class="section-content">[[data.id]]</div>
       </div>
@@ -163,7 +168,7 @@
           </ul>
         </div>
       </div>
-      <div class="section">
+      <div class="section block">
         <div class="section-title">$i18n{itemPermissions}</div>
         <div class="section-content">
           <span id="no-permissions"
@@ -180,7 +185,7 @@
       </div>
       <template is="dom-if"
           if="[[hasDependentExtensions_(data.dependentExtensions.splices)]]">
-        <div class="section">
+        <div class="section block">
           <div class="section-title">$i18n{itemDependencies}</div>
           <div class="section-content">
             <ul id="dependent-extensions-list">
@@ -192,7 +197,7 @@
         </div>
       </template>
       <template is="dom-if" if="[[shouldShowOptionsSection_(data.*)]]">
-        <div class="section layout vertical" id="options-section">
+        <div class="section">
           <template is="dom-if" if="[[data.incognitoAccess.isEnabled]]">
             <div class="control-line">
               <span>$i18n{itemAllowIncognito}</span>
@@ -232,17 +237,14 @@
         <div class="control-line actionable" id="extensions-options"
             on-tap="onOptionsTap_">
           <span>$i18n{itemOptions}</span>
-          <button class="open-in-new" is="paper-icon-button-light"></button>
+          <button class="icon-external" is="paper-icon-button-light"></button>
         </div>
       </div>
-      <div class="section">
-        <div class="control-line actionable" id="remove-extension"
-            on-tap="onRemoveTap_">
-          <span>$i18n{itemRemoveExtension}</span>
-          <button class="action-arrow" is="paper-icon-button-light"></button>
-        </div>
-      </div>
-      <div class="section">
+      <button is="cr-link-row" hidden="[[isControlled_(data.controlledInfo)]]"
+          icon-class="subpage-arrow" id="remove-extension"
+          label="$i18n{itemRemoveExtension}" on-tap="onRemoveTap_">
+      </button>
+      <div class="section block">
         <div class="section-title">$i18n{itemSource}</div>
         <div class="section-content">
           [[computeSourceString_(data.*)]]

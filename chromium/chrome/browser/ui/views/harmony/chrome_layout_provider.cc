@@ -11,10 +11,27 @@
 #include "chrome/browser/ui/views/harmony/chrome_typography.h"
 #include "chrome/browser/ui/views/harmony/harmony_layout_provider.h"
 #include "ui/base/material_design/material_design_controller.h"
-#include "ui/gfx/font_list.h"
+
+namespace {
+
+ChromeLayoutProvider* g_chrome_layout_provider = nullptr;
+
+}  // namespace
+
+ChromeLayoutProvider::ChromeLayoutProvider() {
+  DCHECK_EQ(nullptr, g_chrome_layout_provider);
+  g_chrome_layout_provider = this;
+}
+
+ChromeLayoutProvider::~ChromeLayoutProvider() {
+  DCHECK_EQ(this, g_chrome_layout_provider);
+  g_chrome_layout_provider = nullptr;
+}
 
 // static
 ChromeLayoutProvider* ChromeLayoutProvider::Get() {
+  // Check to avoid downcasting a base LayoutProvider.
+  DCHECK_EQ(g_chrome_layout_provider, views::LayoutProvider::Get());
   return static_cast<ChromeLayoutProvider*>(views::LayoutProvider::Get());
 }
 
@@ -24,14 +41,6 @@ ChromeLayoutProvider::CreateLayoutProvider() {
   return ui::MaterialDesignController::IsSecondaryUiMaterial()
              ? base::MakeUnique<HarmonyLayoutProvider>()
              : base::MakeUnique<ChromeLayoutProvider>();
-}
-
-// static
-int ChromeLayoutProvider::GetControlHeightForFont(const gfx::FontList& font) {
-  return std::max(views::style::GetLineHeight(views::style::CONTEXT_LABEL,
-                                              views::style::STYLE_PRIMARY),
-                  font.GetHeight()) +
-         Get()->GetDistanceMetric(DISTANCE_CONTROL_TOTAL_VERTICAL_TEXT_PADDING);
 }
 
 gfx::Insets ChromeLayoutProvider::GetInsetsMetric(int metric) const {
@@ -49,14 +58,10 @@ int ChromeLayoutProvider::GetDistanceMetric(int metric) const {
       return 48;
     case DISTANCE_CONTROL_LIST_VERTICAL:
       return GetDistanceMetric(views::DISTANCE_UNRELATED_CONTROL_VERTICAL);
-    case DISTANCE_CONTROL_TOTAL_VERTICAL_TEXT_PADDING:
-      return 6;
     case DISTANCE_RELATED_CONTROL_HORIZONTAL_SMALL:
       return 8;
     case DISTANCE_RELATED_CONTROL_VERTICAL_SMALL:
       return 4;
-    case DISTANCE_RELATED_LABEL_HORIZONTAL:
-      return 10;
     case DISTANCE_RELATED_LABEL_HORIZONTAL_LIST:
       return 8;
     case DISTANCE_SUBSECTION_HORIZONTAL_INDENT:

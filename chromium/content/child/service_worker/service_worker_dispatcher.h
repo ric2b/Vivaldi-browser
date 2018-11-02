@@ -12,12 +12,13 @@
 #include <set>
 #include <vector>
 
-#include "base/id_map.h"
+#include "base/containers/id_map.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string16.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/public/child/worker_thread.h"
+#include "mojo/public/cpp/system/message_pipe.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerError.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerProvider.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerRegistration.h"
@@ -34,6 +35,7 @@ class Message;
 }
 
 struct ServiceWorkerMsg_MessageToDocument_Params;
+struct ServiceWorkerMsg_SetControllerServiceWorker_Params;
 
 namespace content {
 
@@ -177,23 +179,23 @@ class CONTENT_EXPORT ServiceWorkerDispatcher : public WorkerThread::Observer {
 
  private:
   using RegistrationCallbackMap =
-      IDMap<std::unique_ptr<WebServiceWorkerRegistrationCallbacks>>;
+      base::IDMap<std::unique_ptr<WebServiceWorkerRegistrationCallbacks>>;
   using UpdateCallbackMap =
-      IDMap<std::unique_ptr<WebServiceWorkerUpdateCallbacks>>;
+      base::IDMap<std::unique_ptr<WebServiceWorkerUpdateCallbacks>>;
   using UnregistrationCallbackMap =
-      IDMap<std::unique_ptr<WebServiceWorkerUnregistrationCallbacks>>;
+      base::IDMap<std::unique_ptr<WebServiceWorkerUnregistrationCallbacks>>;
   using GetRegistrationCallbackMap =
-      IDMap<std::unique_ptr<WebServiceWorkerGetRegistrationCallbacks>>;
+      base::IDMap<std::unique_ptr<WebServiceWorkerGetRegistrationCallbacks>>;
   using GetRegistrationsCallbackMap =
-      IDMap<std::unique_ptr<WebServiceWorkerGetRegistrationsCallbacks>>;
-  using GetRegistrationForReadyCallbackMap =
-      IDMap<std::unique_ptr<WebServiceWorkerGetRegistrationForReadyCallbacks>>;
+      base::IDMap<std::unique_ptr<WebServiceWorkerGetRegistrationsCallbacks>>;
+  using GetRegistrationForReadyCallbackMap = base::IDMap<
+      std::unique_ptr<WebServiceWorkerGetRegistrationForReadyCallbacks>>;
   using EnableNavigationPreloadCallbackMap =
-      IDMap<std::unique_ptr<WebEnableNavigationPreloadCallbacks>>;
+      base::IDMap<std::unique_ptr<WebEnableNavigationPreloadCallbacks>>;
   using GetNavigationPreloadStateCallbackMap =
-      IDMap<std::unique_ptr<WebGetNavigationPreloadStateCallbacks>>;
+      base::IDMap<std::unique_ptr<WebGetNavigationPreloadStateCallbacks>>;
   using SetNavigationPreloadHeaderCallbackMap =
-      IDMap<std::unique_ptr<WebSetNavigationPreloadHeaderCallbacks>>;
+      base::IDMap<std::unique_ptr<WebSetNavigationPreloadHeaderCallbacks>>;
 
   using ProviderClientMap =
       std::map<int, blink::WebServiceWorkerProviderClient*>;
@@ -210,12 +212,6 @@ class CONTENT_EXPORT ServiceWorkerDispatcher : public WorkerThread::Observer {
   // WorkerThread::Observer implementation.
   void WillStopCurrentWorkerThread() override;
 
-  void OnAssociateRegistration(int thread_id,
-                               int provider_id,
-                               const ServiceWorkerRegistrationObjectInfo& info,
-                               const ServiceWorkerVersionAttributes& attrs);
-  void OnDisassociateRegistration(int thread_id,
-                                  int provider_id);
   void OnRegistered(int thread_id,
                     int request_id,
                     const ServiceWorkerRegistrationObjectInfo& info,
@@ -245,40 +241,38 @@ class CONTENT_EXPORT ServiceWorkerDispatcher : public WorkerThread::Observer {
   void OnDidSetNavigationPreloadHeader(int thread_id, int request_id);
   void OnRegistrationError(int thread_id,
                            int request_id,
-                           blink::WebServiceWorkerError::ErrorType error_type,
+                           blink::mojom::ServiceWorkerErrorType error_type,
                            const base::string16& message);
   void OnUpdateError(int thread_id,
                      int request_id,
-                     blink::WebServiceWorkerError::ErrorType error_type,
+                     blink::mojom::ServiceWorkerErrorType error_type,
                      const base::string16& message);
   void OnUnregistrationError(int thread_id,
                              int request_id,
-                             blink::WebServiceWorkerError::ErrorType error_type,
+                             blink::mojom::ServiceWorkerErrorType error_type,
                              const base::string16& message);
-  void OnGetRegistrationError(
-      int thread_id,
-      int request_id,
-      blink::WebServiceWorkerError::ErrorType error_type,
-      const base::string16& message);
-  void OnGetRegistrationsError(
-      int thread_id,
-      int request_id,
-      blink::WebServiceWorkerError::ErrorType error_type,
-      const base::string16& message);
+  void OnGetRegistrationError(int thread_id,
+                              int request_id,
+                              blink::mojom::ServiceWorkerErrorType error_type,
+                              const base::string16& message);
+  void OnGetRegistrationsError(int thread_id,
+                               int request_id,
+                               blink::mojom::ServiceWorkerErrorType error_type,
+                               const base::string16& message);
   void OnEnableNavigationPreloadError(
       int thread_id,
       int request_id,
-      blink::WebServiceWorkerError::ErrorType error_type,
+      blink::mojom::ServiceWorkerErrorType error_type,
       const std::string& message);
   void OnGetNavigationPreloadStateError(
       int thread_id,
       int request_id,
-      blink::WebServiceWorkerError::ErrorType error_type,
+      blink::mojom::ServiceWorkerErrorType error_type,
       const std::string& message);
   void OnSetNavigationPreloadHeaderError(
       int thread_id,
       int request_id,
-      blink::WebServiceWorkerError::ErrorType error_type,
+      blink::mojom::ServiceWorkerErrorType error_type,
       const std::string& message);
   void OnServiceWorkerStateChanged(int thread_id,
                                    int handle_id,
@@ -289,11 +283,8 @@ class CONTENT_EXPORT ServiceWorkerDispatcher : public WorkerThread::Observer {
                               const ServiceWorkerVersionAttributes& attributes);
   void OnUpdateFound(int thread_id,
                      int registration_handle_id);
-  void OnSetControllerServiceWorker(int thread_id,
-                                    int provider_id,
-                                    const ServiceWorkerObjectInfo& info,
-                                    bool should_notify_controllerchange,
-                                    const std::set<uint32_t>& used_features);
+  void OnSetControllerServiceWorker(
+      const ServiceWorkerMsg_SetControllerServiceWorker_Params& params);
   void OnPostMessage(const ServiceWorkerMsg_MessageToDocument_Params& params);
   void OnCountFeature(int thread_id, int provider_id, uint32_t feature);
 

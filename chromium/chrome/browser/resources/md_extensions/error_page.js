@@ -3,15 +3,15 @@
 // found in the LICENSE file.
 
 /** @typedef {chrome.developerPrivate.ManifestError} */
-var ManifestError;
+let ManifestError;
 /** @typedef {chrome.developerPrivate.RuntimeError} */
-var RuntimeError;
+let RuntimeError;
 
 cr.define('extensions', function() {
   'use strict';
 
   /** @interface */
-  var ErrorPageDelegate = function() {};
+  const ErrorPageDelegate = function() {};
 
   ErrorPageDelegate.prototype = {
     /**
@@ -28,10 +28,8 @@ cr.define('extensions', function() {
     requestFileSource: assertNotReached,
   };
 
-  var ErrorPage = Polymer({
+  const ErrorPage = Polymer({
     is: 'extensions-error-page',
-
-    behaviors: [Polymer.NeonAnimatableBehavior],
 
     properties: {
       /** @type {!chrome.developerPrivate.ExtensionInfo|undefined} */
@@ -49,14 +47,6 @@ cr.define('extensions', function() {
       'onSelectedErrorChanged_(selectedError_)',
     ],
 
-    ready: function() {
-      /** @type {!extensions.AnimationHelper} */
-      this.animationHelper = new extensions.AnimationHelper(this, this.$.main);
-      this.animationHelper.setEntryAnimations([extensions.Animation.FADE_IN]);
-      this.animationHelper.setExitAnimations([extensions.Animation.SCALE_DOWN]);
-      this.sharedElements = {hero: this.$.main};
-    },
-
     /**
      * Watches for changes to |data| in order to fetch the corresponding
      * file source.
@@ -64,7 +54,7 @@ cr.define('extensions', function() {
      */
     observeDataChanges_: function() {
       assert(this.data);
-      var e = this.data.manifestErrors[0] || this.data.runtimeErrors[0];
+      const e = this.data.manifestErrors[0] || this.data.runtimeErrors[0];
       if (e)
         this.selectedError_ = e;
     },
@@ -79,7 +69,11 @@ cr.define('extensions', function() {
 
     /** @private */
     onCloseButtonTap_: function() {
-      this.fire('close');
+      extensions.navigation.navigateTo({
+        page: Page.LIST,
+        type: extensions.getItemListType(
+            /** @type {!chrome.developerPrivate.ExtensionInfo} */ (this.data))
+      });
     },
 
     /**
@@ -110,7 +104,7 @@ cr.define('extensions', function() {
     onDeleteErrorTap_: function(event) {
       // TODO(devlin): It would be cleaner if we could cast this to a
       // PolymerDomRepeatEvent-type thing, but that doesn't exist yet.
-      var e = /** @type {!{model:Object}} */ (event);
+      const e = /** @type {!{model:Object}} */ (event);
       this.delegate.deleteErrors(this.data.id, [e.model.item.id]);
     },
 
@@ -119,8 +113,8 @@ cr.define('extensions', function() {
      * @private
      */
     onSelectedErrorChanged_: function() {
-      var error = this.selectedError_;
-      var args = {
+      const error = this.selectedError_;
+      const args = {
         extensionId: error.extensionId,
         message: error.message,
       };
@@ -138,9 +132,9 @@ cr.define('extensions', function() {
               0;
           break;
       }
-      this.delegate.requestFileSource(args).then(function(code) {
+      this.delegate.requestFileSource(args).then(code => {
         this.$['code-section'].code = code;
-      }.bind(this));
+      });
     },
 
     /**

@@ -15,10 +15,10 @@ class FakeLayerTreeFrameSinkClient : public LayerTreeFrameSinkClient {
  public:
   FakeLayerTreeFrameSinkClient() : memory_policy_(0) {}
 
-  void SetBeginFrameSource(BeginFrameSource* source) override;
+  void SetBeginFrameSource(viz::BeginFrameSource* source) override;
   void DidReceiveCompositorFrameAck() override;
   void ReclaimResources(
-      const std::vector<ReturnedResource>& resources) override {}
+      const std::vector<viz::ReturnedResource>& resources) override {}
   void DidLoseLayerTreeFrameSink() override;
   void SetExternalTilePriorityConstraints(
       const gfx::Rect& viewport_rect_for_tile_priority,
@@ -37,13 +37,15 @@ class FakeLayerTreeFrameSinkClient : public LayerTreeFrameSinkClient {
 
   const ManagedMemoryPolicy& memory_policy() const { return memory_policy_; }
 
-  BeginFrameSource* begin_frame_source() const { return begin_frame_source_; }
+  viz::BeginFrameSource* begin_frame_source() const {
+    return begin_frame_source_;
+  }
 
  private:
   int ack_count_ = 0;
   bool did_lose_layer_tree_frame_sink_called_ = false;
   ManagedMemoryPolicy memory_policy_;
-  BeginFrameSource* begin_frame_source_;
+  viz::BeginFrameSource* begin_frame_source_;
 };
 
 }  // namespace cc

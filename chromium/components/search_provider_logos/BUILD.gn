@@ -14,6 +14,8 @@ static_library("search_provider_logos") {
     "logo_cache.h",
     "logo_common.cc",
     "logo_common.h",
+    "logo_service.cc",
+    "logo_service.h",
     "logo_tracker.cc",
     "logo_tracker.h",
     "switches.cc",
@@ -27,9 +29,53 @@ static_library("search_provider_logos") {
 
   deps = [
     "//components/data_use_measurement/core",
+    "//components/image_fetcher/core",
+    "//components/keyed_service/core",
+    "//components/search_engines",
     "//net",
     "//ui/gfx",
     "//url",
+  ]
+}
+
+bundle_data("unit_tests_bundle_data") {
+  visibility = [ ":unit_tests" ]
+  testonly = true
+  sources = [
+    "//components/test/data/search_provider_logos/ddljson_android0.json",
+    "//components/test/data/search_provider_logos/ddljson_android0_fp.json",
+    "//components/test/data/search_provider_logos/ddljson_android1.json",
+    "//components/test/data/search_provider_logos/ddljson_android1_fp.json",
+    "//components/test/data/search_provider_logos/ddljson_android2.json",
+    "//components/test/data/search_provider_logos/ddljson_android2_fp.json",
+    "//components/test/data/search_provider_logos/ddljson_android3.json",
+    "//components/test/data/search_provider_logos/ddljson_android3_fp.json",
+    "//components/test/data/search_provider_logos/ddljson_android4.json",
+    "//components/test/data/search_provider_logos/ddljson_android4_fp.json",
+    "//components/test/data/search_provider_logos/ddljson_desktop0.json",
+    "//components/test/data/search_provider_logos/ddljson_desktop0_fp.json",
+    "//components/test/data/search_provider_logos/ddljson_desktop1.json",
+    "//components/test/data/search_provider_logos/ddljson_desktop1_fp.json",
+    "//components/test/data/search_provider_logos/ddljson_desktop2.json",
+    "//components/test/data/search_provider_logos/ddljson_desktop2_fp.json",
+    "//components/test/data/search_provider_logos/ddljson_desktop3.json",
+    "//components/test/data/search_provider_logos/ddljson_desktop3_fp.json",
+    "//components/test/data/search_provider_logos/ddljson_desktop4.json",
+    "//components/test/data/search_provider_logos/ddljson_desktop4_fp.json",
+    "//components/test/data/search_provider_logos/ddljson_ios0.json",
+    "//components/test/data/search_provider_logos/ddljson_ios0_fp.json",
+    "//components/test/data/search_provider_logos/ddljson_ios1.json",
+    "//components/test/data/search_provider_logos/ddljson_ios1_fp.json",
+    "//components/test/data/search_provider_logos/ddljson_ios2.json",
+    "//components/test/data/search_provider_logos/ddljson_ios2_fp.json",
+    "//components/test/data/search_provider_logos/ddljson_ios3.json",
+    "//components/test/data/search_provider_logos/ddljson_ios3_fp.json",
+    "//components/test/data/search_provider_logos/ddljson_ios4.json",
+    "//components/test/data/search_provider_logos/ddljson_ios4_fp.json",
+  ]
+  outputs = [
+    "{{bundle_resources_dir}}/" +
+        "{{source_root_relative_dir}}/{{source_file_part}}",
   ]
 }
 
@@ -42,6 +88,7 @@ source_set("unit_tests") {
   ]
   deps = [
     ":search_provider_logos",
+    ":unit_tests_bundle_data",
     "//base/test:test_support",
     "//net:test_support",
     "//testing/gmock",

@@ -148,6 +148,9 @@ class DisplayWGL {
 DisplayWGL* g_display;
 }  // namespace
 
+// static
+bool GLSurfaceWGL::initialized_ = false;
+
 GLSurfaceWGL::GLSurfaceWGL() {
 }
 
@@ -158,9 +161,9 @@ void* GLSurfaceWGL::GetDisplay() {
   return GetDisplayDC();
 }
 
+// static
 bool GLSurfaceWGL::InitializeOneOff() {
-  static bool initialized = false;
-  if (initialized)
+  if (initialized_)
     return true;
 
   DCHECK(g_display == NULL);
@@ -169,7 +172,15 @@ bool GLSurfaceWGL::InitializeOneOff() {
     return false;
 
   g_display = wgl_display.release();
-  initialized = true;
+  initialized_ = true;
+  return true;
+}
+
+// static
+bool GLSurfaceWGL::InitializeExtensionSettingsOneOff() {
+  if (!initialized_)
+    return false;
+  g_driver_wgl.InitializeExtensionBindings();
   return true;
 }
 
@@ -257,6 +268,7 @@ void NativeViewGLSurfaceWGL::Destroy() {
 
 bool NativeViewGLSurfaceWGL::Resize(const gfx::Size& size,
                                     float scale_factor,
+                                    ColorSpace color_space,
                                     bool has_alpha) {
   RECT rect;
   if (!GetClientRect(window_, &rect)) {

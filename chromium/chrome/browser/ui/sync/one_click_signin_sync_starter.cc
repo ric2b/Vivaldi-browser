@@ -116,11 +116,35 @@ OneClickSigninSyncStarter::OneClickSigninSyncStarter(
   BrowserList::AddObserver(this);
   Initialize(profile, browser);
 
-  DCHECK(!refresh_token.empty() || switches::IsAccountConsistencyDiceEnabled());
+  DCHECK(!refresh_token.empty() || signin::IsAccountConsistencyDiceEnabled());
   SigninManagerFactory::GetForProfile(profile_)->StartSignInWithRefreshToken(
       refresh_token, gaia_id, email, password,
       base::Bind(&OneClickSigninSyncStarter::ConfirmSignin,
                  weak_pointer_factory_.GetWeakPtr(), profile_mode));
+}
+
+OneClickSigninSyncStarter::OneClickSigninSyncStarter(
+    Profile* profile,
+    Browser* browser,
+    const std::string& gaia_id,
+    const std::string& email,
+    content::WebContents* web_contents,
+    Callback callback)
+    : OneClickSigninSyncStarter(
+          profile,
+          browser,
+          gaia_id,
+          email,
+          std::string() /* password */,
+          std::string() /* refresh_token */,
+          OneClickSigninSyncStarter::CURRENT_PROFILE,
+          OneClickSigninSyncStarter::CONFIRM_SYNC_SETTINGS_FIRST,
+          web_contents,
+          OneClickSigninSyncStarter::CONFIRM_AFTER_SIGNIN,
+          GURL() /* current_url */,
+          GURL() /* continue_url */,
+          callback) {
+  DCHECK(signin::IsAccountConsistencyDiceEnabled());
 }
 
 void OneClickSigninSyncStarter::OnBrowserRemoved(Browser* browser) {
@@ -177,7 +201,7 @@ void OneClickSigninSyncStarter::ConfirmSignin(ProfileMode profile_mode,
       policy::UserPolicySigninService* policy_service =
           policy::UserPolicySigninServiceFactory::GetForProfile(profile_);
       if (oauth_token.empty()) {
-        DCHECK(switches::IsAccountConsistencyDiceEnabled());
+        DCHECK(signin::IsAccountConsistencyDiceEnabled());
         policy_service->RegisterForPolicyWithAccountId(
             signin->GetUsernameForAuthInProgress(),
             signin->GetAccountIdForAuthInProgress(),
@@ -269,7 +293,7 @@ void OneClickSigninSyncStarter::OnRegisteredForPolicy(
   TabDialogs::FromWebContents(web_contents)
       ->ShowProfileSigninConfirmation(browser_, profile_,
                                       signin->GetUsernameForAuthInProgress(),
-                                      base::MakeUnique<SigninDialogDelegate>(
+                                      std::make_unique<SigninDialogDelegate>(
                                           weak_pointer_factory_.GetWeakPtr()));
   // If force signin enabled, lock the profile when dialog is being displayed to
   // avoid new browser window opened.

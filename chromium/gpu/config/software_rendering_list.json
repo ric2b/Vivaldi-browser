@@ -1,6 +1,6 @@
 {
   "name": "software rendering list",
-  "version": "13.10",
+  "version": "13.13",
   "entries": [
     {
       "id": 1,
@@ -496,8 +496,8 @@
     },
     {
       "id": 68,
-      "description": "VMware Fusion 4 has corrupt rendering with Win Vista+",
-      "cr_bugs": [169470],
+      "description": "VMware has corrupt rendering on Windows",
+      "cr_bugs": [169470, 754435],
       "os": {
         "type": "win",
         "version": {
@@ -506,10 +506,6 @@
         }
       },
       "vendor_id": "0x15ad",
-      "driver_version": {
-        "op": "<=",
-        "value": "7.14.1.1134"
-      },
       "features": [
         "all"
       ]
@@ -1495,9 +1491,13 @@
     {
       "id": 146,
       "description": "Disable D3D11/WebGL2 on AMD switchable graphics",
-      "cr_bugs": [451420],
+      "cr_bugs": [451420, 755722],
       "os": {
         "type": "win"
+      },
+      "driver_date": {
+        "op": "<",
+        "value": "2016.6"
       },
       "multi_gpu_style": "amd_switchable",
       "features": [
@@ -1530,6 +1530,24 @@
       },
       "gl_renderer": ".*VideoCore V.*",
       "features": [
+        "gpu_rasterization"
+      ]
+    },
+    {
+      "id": 150,
+      "description": "Macs with NVidia GPUs experience rendering issues on High Sierra",
+      "cr_bugs": [773705],
+      "os": {
+        "type": "macosx",
+        "version": {
+          "op": ">=",
+          "value": "10.13"
+        }
+      },
+      "vendor_id": "0x10de",
+      "multi_gpu_category": "any",
+      "features": [
+        "accelerated_2d_canvas",
         "gpu_rasterization"
       ]
     }

@@ -9,6 +9,7 @@
 <translation id="1175364870820465910">Im&amp;primir...</translation>
 <translation id="1181037720776840403">Remover</translation>
 <translation id="1187722533808055681">Ativações do estado ocioso</translation>
+<translation id="1238150413700645698">Conteúdo DRM</translation>
 <translation id="1278049586634282054">Inspecionar:</translation>
 <translation id="1303101771013849280">Arquivo HTML de marcadores</translation>
 <translation id="1368832886055348810">Da &amp;esquerda para a direita</translation>
@@ -18,6 +19,7 @@
 <translation id="1588438908519853928">Normal</translation>
 <translation id="159359590073980872">Cache de Imagem</translation>
 <translation id="1616206807336925449">Esta extensão não requer permissões especiais.</translation>
+<translation id="1620510694547887537">Câmera</translation>
 <translation id="1627276047960621195">Descritores de Arquivos</translation>
 <translation id="1635033183663317347">Instalada pelo seu tutor legal.</translation>
 <translation id="1682548588986054654">Nova janela privada</translation>
@@ -28,6 +30,7 @@
 <translation id="1744108098763830590">Página de fundo</translation>
 <translation id="176587472219019965">Nova &amp;Janela</translation>
 <translation id="1769104665586091481">Abrir link em nova &amp;janela</translation>
+<translation id="1789575671122666129">Popups</translation>
 <translation id="1815083418640426271">Colar &amp;sem formatação</translation>
 <translation id="1859234291848436338">&amp;Direção da escrita</translation>
 <translation id="1901303067676059328">Selecionar &amp;tudo</translation>
@@ -41,6 +44,7 @@
 <translation id="2177950615300672361">Guia Privada: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Módulo de Cliente Nativo: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Colar &amp;sem formatação</translation>
+<translation id="225240747099314620">Permitir identificadores únicos (talvez seja necessário reiniciar o computador)</translation>
 <translation id="2282146716419988068">Processo de GPU</translation>
 <translation id="2301382460326681002">O diretório raiz da extensão é inválido.</translation>
 <translation id="2326931316514688470">Recarregar aplicativo</translation>
@@ -52,6 +56,8 @@
 <translation id="2423578206845792524">&amp;Salvar imagem como...</translation>
 <translation id="2439110203301358333">Outro programa em seu computador adicionou uma extensão que pode modificar a forma como o Vivaldi funciona.</translation>
 <translation id="2445081178310039857">O diretório raiz da extensão é obrigatório.</translation>
+<translation id="2476578072172137802">Configurações de conteúdo</translation>
+<translation id="2482878487686419369">Notificações</translation>
 <translation id="2501797496290880632">Digite um atalho</translation>
 <translation id="253557089021624350">Manutenção de atividade</translation>
 <translation id="2550212893339833758">Memória de swap</translation>
@@ -67,6 +73,7 @@
 <translation id="2972581237482394796">Refa&amp;zer</translation>
 <translation id="299483336428448530">Instalada pelo seus pais.</translation>
 <translation id="3003623123441819449">Cache de CSS</translation>
+<translation id="3013291976881901233">Dispositivos MIDI</translation>
 <translation id="3021678814754966447">Exibir código &amp;fonte do frame</translation>
 <translation id="302620147503052030">Exibir Botão</translation>
 <translation id="3031601332414921114">Continuar Impressão</translation>
@@ -76,6 +83,7 @@
 <translation id="3124111068741548686">Handles do USER</translation>
 <translation id="3149510190863420837">Aplicativos</translation>
 <translation id="3222066309010235055">Pré-renderizador: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
+<translation id="3227137524299004712">Microfone</translation>
 <translation id="32279126412636473">Recarregar (⌘R)</translation>
 <translation id="3241680850019875542">Selecione o diretório raiz da extensão a ser empacotada. Para atualizar uma extensão, selecione também a chave privada a ser reutilizada.</translation>
 <translation id="3280237271814976245">&amp;Salvar como...</translation>
@@ -94,6 +102,7 @@
 <translation id="3683524264665795342"><ph name="APP_NAME" /> deseja transmitir a tela</translation>
 <translation id="370665806235115550">Carregando...</translation>
 <translation id="3727187387656390258">Inspecionar popup</translation>
+<translation id="3744111561329211289">Sincronização em segundo plano</translation>
 <translation id="3760460896538743390">&amp;Inspecionar página de fundo</translation>
 <translation id="3798449238516105146">Versão</translation>
 <translation id="3855441664322950881">Compactar Extensão</translation>
@@ -103,6 +112,7 @@
 <translation id="3936390757709632190">Abrir áudio em nova &amp;guia</translation>
 <translation id="3943582379552582368">&amp;Voltar</translation>
 <translation id="3948116654032448504">Pes&amp;quisar imagem no <ph name="SEARCH_ENGINE" /></translation>
+<translation id="3955193568934677022">Permitir que os sites reproduzam conteúdo protegido por DRM (recomendado)</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4022426551683927403">&amp;Adicionar ao dicionário</translation>
 <translation id="4087089424473531098">A extensão foi compactada em:
@@ -111,6 +121,7 @@
 <translation id="4089192115462111328">No Vivaldi</translation>
 <translation id="4090535558450035482">(Esta extensão é gerenciada e não pode ser removida)</translation>
 <translation id="4100839878934973028">Outro programa em seu computador adicionou um aplicativo que pode modificar a forma como o Vivaldi funciona.</translation>
+<translation id="4115080753528843955">Alguns serviços de conteúdo requerem uma identificação única do cliente para autorizar o acesso a conteúdo protegido</translation>
 <translation id="411666854932687641">Memória Privada</translation>
 <translation id="4176463684765177261">Desativada</translation>
 <translation id="4200983522494130825">Nova &amp;guia</translation>
@@ -158,6 +169,7 @@
 <translation id="5542132724887566711">Perfil</translation>
 <translation id="5575473780076478375">Extensão Privada: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5646376287012673985">Localização</translation>
+<translation id="5649053991847567735">Downloads automáticos</translation>
 <translation id="5715711091495208045">Agente de Plugin: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5764483294734785780">&amp;Salvar áudio como...</translation>
 <translation id="5780973441651030252">Prioridade</translation>
@@ -260,6 +272,7 @@ Mantenha o seu arquivo de chave privada em um local seguro. Você precisará del
 <translation id="8032244173881942855">Não foi possível transmitir a guia.</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> KB</translation>
 <translation id="8188120771410500975">&amp;Verificar ortografia em campos de texto</translation>
+<translation id="8270242299912238708">Documentos PDF</translation>
 <translation id="8294431847097064396">Origem da instalação</translation>
 <translation id="8338952601723052325">Website do desenvolvedor</translation>
 <translation id="8357224663288891423">Atalhos de Teclado para Extensões e Aplicativos</translation>

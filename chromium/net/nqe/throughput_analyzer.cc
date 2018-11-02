@@ -26,10 +26,6 @@ namespace {
 // degrade accuracy held in the memory.
 static const size_t kMaxRequestsSize = 300;
 
-// Tiny transfer sizes may give inaccurate throughput results.
-// Minimum size of the transfer over which the throughput is computed.
-static const int kMinTransferSizeInBits = 32 * 8 * 1000;
-
 }  // namespace
 
 namespace nqe {
@@ -40,8 +36,6 @@ ThroughputAnalyzer::ThroughputAnalyzer(
     const NetworkQualityEstimatorParams* params,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
     ThroughputObservationCallback throughput_observation_callback,
-    bool use_local_host_requests_for_tests,
-    bool use_smaller_responses_for_tests,
     const NetLogWithSource& net_log)
     : params_(params),
       task_runner_(task_runner),
@@ -50,8 +44,7 @@ ThroughputAnalyzer::ThroughputAnalyzer(
       window_start_time_(base::TimeTicks()),
       bits_received_at_window_start_(0),
       disable_throughput_measurements_(false),
-      use_localhost_requests_for_tests_(use_local_host_requests_for_tests),
-      use_small_responses_for_tests_(use_smaller_responses_for_tests),
+      use_localhost_requests_for_tests_(false),
       net_log_(net_log) {
   DCHECK(params_);
   DCHECK(task_runner_);
@@ -120,8 +113,6 @@ void ThroughputAnalyzer::NotifyStartTransaction(const URLRequest& request) {
     accuracy_degrading_requests_.insert(&request);
 
     BoundRequestsSize();
-    if (disable_throughput_measurements_)
-      return;
 
     // Call EndThroughputObservationWindow since observations cannot be
     // recorded in the presence of requests that degrade throughput computation
@@ -207,8 +198,10 @@ bool ThroughputAnalyzer::MaybeGetThroughputObservation(
 
   // Ignore tiny/short transfers, which will not produce accurate rates. Skip
   // the checks if |use_small_responses_| is true.
-  if (!use_small_responses_for_tests_ && bits_received < kMinTransferSizeInBits)
+  if (!params_->use_small_responses() &&
+      bits_received < params_->GetThroughputMinTransferSizeBits()) {
     return false;
+  }
 
   double downstream_kbps_double =
       (bits_received * 1.0f) / duration.InMillisecondsF();
@@ -245,12 +238,6 @@ void ThroughputAnalyzer::SetUseLocalHostRequestsForTesting(
     bool use_localhost_requests) {
   DCHECK(thread_checker_.CalledOnValidThread());
   use_localhost_requests_for_tests_ = use_localhost_requests;
-}
-
-void ThroughputAnalyzer::SetUseSmallResponsesForTesting(
-    bool use_small_responses) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  use_small_responses_for_tests_ = use_small_responses;
 }
 
 int64_t ThroughputAnalyzer::GetBitsReceived() const {

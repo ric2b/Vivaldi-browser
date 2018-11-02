@@ -8,10 +8,10 @@ namespace ui {
 namespace ws {
 
 CompositorFrameSinkClientBinding::CompositorFrameSinkClientBinding(
-    cc::mojom::CompositorFrameSinkClient* sink_client,
-    cc::mojom::CompositorFrameSinkClientRequest sink_client_request,
-    cc::mojom::CompositorFrameSinkAssociatedPtr compositor_frame_sink,
-    cc::mojom::DisplayPrivateAssociatedPtr display_private)
+    viz::mojom::CompositorFrameSinkClient* sink_client,
+    viz::mojom::CompositorFrameSinkClientRequest sink_client_request,
+    viz::mojom::CompositorFrameSinkAssociatedPtr compositor_frame_sink,
+    viz::mojom::DisplayPrivateAssociatedPtr display_private)
     : binding_(sink_client, std::move(sink_client_request)),
       display_private_(std::move(display_private)),
       compositor_frame_sink_(std::move(compositor_frame_sink)) {}
@@ -25,20 +25,22 @@ void CompositorFrameSinkClientBinding::SetNeedsBeginFrame(
 
 void CompositorFrameSinkClientBinding::SubmitCompositorFrame(
     const viz::LocalSurfaceId& local_surface_id,
-    cc::CompositorFrame frame) {
+    cc::CompositorFrame frame,
+    viz::mojom::HitTestRegionListPtr hit_test_region_list,
+    uint64_t submit_time) {
   if (local_surface_id != local_surface_id_) {
     local_surface_id_ = local_surface_id;
-    gfx::Size frame_size = frame.render_pass_list.back()->output_rect.size();
-    display_private_->ResizeDisplay(frame_size);
+    display_private_->ResizeDisplay(frame.size_in_pixels());
     display_private_->SetLocalSurfaceId(local_surface_id_,
-                                        frame.metadata.device_scale_factor);
+                                        frame.device_scale_factor());
   }
-  compositor_frame_sink_->SubmitCompositorFrame(local_surface_id_,
-                                                std::move(frame));
+  compositor_frame_sink_->SubmitCompositorFrame(
+      local_surface_id_, std::move(frame), std::move(hit_test_region_list),
+      submit_time);
 }
 
 void CompositorFrameSinkClientBinding::DidNotProduceFrame(
-    const cc::BeginFrameAck& ack) {
+    const viz::BeginFrameAck& ack) {
   compositor_frame_sink_->DidNotProduceFrame(ack);
 }
 

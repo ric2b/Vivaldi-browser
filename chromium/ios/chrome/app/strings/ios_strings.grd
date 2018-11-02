@@ -529,10 +529,7 @@ locale.  The strings in this file are specific to iOS.
         Save Image
       </message>
       <message name="IDS_IOS_CONTENT_SUGGESTIONS_ACCESSIBILITY_LABEL_SUGGESTION" desc="The accessibility label of a suggestion. Summarizes fields in the reading list entry (title, publisher informations, status and informations). Read by Text-to-Speech.">
-        <ph name="TITLE"><ex>Learn about the new Chromium Projects</ex>$1</ph>, <ph name="PUBLISHER_INFORMATION"><ex>The Chromium organization</ex>$2</ph>, <ph name="PUBLICATION_DATE"><ex>January 1 2017</ex>$3</ph>, <ph name="STATE"><ex>Available offline</ex>$4</ph>
-      </message>
-      <message name="IDS_IOS_CONTENT_SUGGESTIONS_ACCESSIBILITY_AVAILABLE_OFFLINE" desc="Accessibility label to indicate that the suggestion is available offline. Read by Text-to-Speech.">
-        Available offline
+        <ph name="TITLE"><ex>Learn about the new Chromium Projects</ex>$1</ph>, <ph name="PUBLISHER_INFORMATION"><ex>The Chromium organization</ex>$2</ph>, <ph name="PUBLICATION_DATE"><ex>January 1 2017</ex>$3</ph>
       </message>
       <message name="IDS_IOS_CONTENT_SUGGESTIONS_FOOTER_TITLE" desc="The title of the footer of the sections of Content Suggestions">
         More
@@ -740,6 +737,9 @@ To adjust your search term, long press to select. To refine your search, slide t
       <message name="IDS_IOS_NET_EXPORT_NO_EMAIL_ACCOUNTS_ALERT_TITLE" desc="The title of the alert informing a user with no email accounts that they need to configure an email account to send net-export data. [Length: 20em]">
         No Email Accounts
       </message>
+      <message name="IDS_IOS_NEW_INCOGNITO_TAB_IPH_PROMOTION_TEXT" desc="Text for the New Incognito Tab Tip in-product help promotion, explaining that incognito tabs can be used to browse privately. [iOS only]" meaning="The user has never created an incognito tab before. A bubble is displayed pointing to the tools menu button and informing users about how to use incognito mode.">
+        To browse privately, open an incognito tab
+      </message>
       <message name="IDS_IOS_NEW_TAB_BOOKMARKS_PAGE_TITLE_MOBILE" desc="The 'Bookmarks' title on the new tab page [Length: 10em]">
         Bookmarks
       </message>
@@ -748,6 +748,15 @@ To adjust your search term, long press to select. To refine your search, slide t
       </message>
       <message name="IDS_IOS_NEW_TAB_INCOGNITO" desc="Title for the Incognito panel of the new tab page.">
         Incognito
+      </message>
+      <message name="IDS_IOS_NEW_TAB_IPH_PROMOTION_TEXT" desc="Text for the New Tab Tip in-product help promotion, explaining that new tabs can be opened. [iOS only]" meaning="The user has never created a new tab, and a bubble is displayed pointing to the tab switcher to inform users how to create tabs.">
+        Create multiple tabs for all your tasks
+      </message>
+      <message name="IDS_IOS_NEW_TAB_LEARN_MORE_ABOUT_SUGGESTED_CONTENT" desc="Text in the footer of the New Tab Page. Part of the text is a link to a help center page where the user can learn more about suggested content.">
+        <ph name="BEGIN_LINK">BEGIN_LINK</ph>Learn more<ph name="END_LINK">END_LINK</ph> about suggested content
+      </message>
+      <message name="IDS_IOS_NEW_TAB_LOGO_ACCESSIBILITY_LABEL" desc="Label of the Google logo shown on the New Tab Page to signal that the current search engine is Google. Read by Text To Speech">
+        Searching with Google
       </message>
       <message name="IDS_IOS_NEW_TAB_MOST_VISITED" desc="Title for the Most Visited panel of the new tab page. [Length: 10em] [iOS only]">
         Most Visited
@@ -874,7 +883,7 @@ Handoff must also be enabled in the General section of Settings, and your device
         Report an Issue
       </message>
       <message name="IDS_IOS_OPTIONS_SEARCH_URL_SUGGESTIONS" desc="Title for the option to turn on/off search and URL suggestions. [Length: 18em] [iOS only]">
-        Show Suggestions
+        Search and Site Suggestions
       </message>
       <message name="IDS_IOS_OPTIONS_SEND_USAGE_DATA" desc="Title for opening the setting for if/when to send usage data and crash reports. [Length: 20em] [iOS only]">
         Send Usage Data
@@ -920,6 +929,9 @@ Handoff must also be enabled in the General section of Settings, and your device
       </message>
       <message name="IDS_IOS_PHOTO_LIBRARY_USAGE_DESCRIPTION" desc="Specifies the reason for accessing the user's photo library while the app is in use [Length: unlimited] [iOS only].">
         This lets you save and upload photos.
+      </message>
+      <message name="IDS_IOS_PHOTO_LIBRARY_ADD_USAGE_DESCRIPTION" desc="Specifies the reason for writing to the user's photo library while the app is in use [Length: unlimited] [iOS only].">
+        This lets you save photos to your photo library.
       </message>
       <message name="IDS_IOS_PLACEHOLDER_FIND_IN_PAGE" desc="The iOS placeholder for searching in the current page [Length: 30em] [iOS only]">
         Find in page...
@@ -998,6 +1010,9 @@ Handoff must also be enabled in the General section of Settings, and your device
       </message>
       <message name="IDS_IOS_READING_LIST_CANCEL_BUTTON" desc="Label of the button to stop editing the reading list entries (delete, mark as read/unread) [Length: 25em]" meaning="Stop editing. [Length: 25em]">
         Cancel
+      </message>
+      <message name="IDS_IOS_READING_LIST_CELL_NEW_FEATURE_BADGE" desc="Title and accessibility label of the badge displayed on the tools menu reading list item when users have never used it before [Length: 20em]" meaning="The user has never viewed the reading list before, so a badge is displayed informing them of this feature that is new to them.">
+        New
       </message>
       <message name="IDS_IOS_READING_LIST_CONTENT_CONTEXT_OFFLINE" desc="Title of the button to display the Offline version instead of the Online one. [Length: 50em]">
         View Offline Version in New Tab
@@ -1158,6 +1173,15 @@ Handoff must also be enabled in the General section of Settings, and your device
       <message name="IDS_IOS_SETTINGS_PASSWORD_WAS_NOT_COPIED_MESSAGE" desc="Message informing the user that the password was not copied because the authentication failed. This is shown alone in an infobar at the bottom of the screen after the user tries to reauthenticate with Touch ID or PIN to copy the password and fails. [Length: one line]">
         Can't verify your identity. Password not copied.
       </message>
+      <message name="IDS_IOS_SETTINGS_SET_UP_SCREENLOCK_TITLE" desc="Title of the alert informing the user that in order to view or copy the password, a screen lock needs to be set up on the device. [Length: one line]">
+        Set A Passcode
+      </message>
+      <message name="IDS_IOS_SETTINGS_SET_UP_SCREENLOCK_CONTENT" desc="Message informing the user that in order to view or copy the password, a screen lock needs to be set up on the device. This is shown as an alert message after the user tries to view or copy the password from a settings page. [Length: about two lines]">
+        To see passwords, you must first set a passcode on your device.
+      </message>
+      <message name="IDS_IOS_SETTINGS_SET_UP_SCREENLOCK_LEARN_HOW" desc="The label of the 'Learn how' button of the alert informing the user that in order to view or copy the password, a screen lock needs to be set up on the device. The button leads to a help article on how to set up a device lock.">
+        Learn How
+      </message>
       <message name="IDS_IOS_SETTINGS_TITLE" desc="Title for the settings panel [iOS].">
         Settings
       </message>
@@ -1215,10 +1239,10 @@ Handoff must also be enabled in the General section of Settings, and your device
       <message name="IDS_IOS_SHOW_PASSWORD_VIEW_PASSWORD" desc="Label indicating that the text displayed below is a password. [Length: 20em] [iOS only]">
         Password
       </message>
-      <message name="IDS_IOS_SHOW_PASSWORD_VIEW_SITE" desc="Label indicating that the text displayed below is the site on which the associated password was saved. The password is displayed in the same view, but under a diferent label. [Length: 20em] [iOS only]">
+      <message name="IDS_IOS_SHOW_PASSWORD_VIEW_SITE" desc="Label indicating that the text displayed below is the site on which the associated password was saved. The password is displayed in the same view, but under a different label. [Length: 20em] [iOS only]">
         Site
       </message>
-      <message name="IDS_IOS_SHOW_PASSWORD_VIEW_USERNAME" desc="Label indicating that the text displayed below is the username to which a saved password corresponds. The password is displayed in the same view, but under a diferent label. [Length: 20em] [iOS only]">
+      <message name="IDS_IOS_SHOW_PASSWORD_VIEW_USERNAME" desc="Label indicating that the text displayed below is the username to which a saved password corresponds. The password is displayed in the same view, but under a different label. [Length: 20em] [iOS only]">
         Username
       </message>
       <message name="IDS_IOS_SHOW_PASSWORD_VIEW_FEDERATION" desc="Label indicating that the text displayed below is the hostname of the identity provider used for the displayed credential. [Length: to fit on one line] [iOS only]">
@@ -1486,9 +1510,6 @@ Your data was encrypted with your sync passphrase on <ph name="TIME">$2<ex>Sept 
       <message name="IDS_IOS_TOOLS_MENU_NEW_TAB" desc="The iOS menu item for opening a new tab [Length: 15em] [iOS only]" meaning="Tools menu entry to create a new tab.">
         New Tab
       </message>
-      <message name="IDS_IOS_TOOLS_MENU_READER_MODE" desc="The iOS menu item for entering reader mode [Length: 15em] [iOS only]">
-        Reader mode
-      </message>
       <message name="IDS_IOS_TOOLS_MENU_READING_LIST" desc="The iOS menu item for opening the reading list [Length: 15em] [iOS only]">
         Reading List
       </message>
@@ -1551,6 +1572,21 @@ Your data was encrypted with your sync passphrase on <ph name="TIME">$2<ex>Sept 
       </message>
       <message name="IDS_IOS_COMPOSE_EMAIL_SETTING" desc="Title for the view and option to select a handler for mailto: URLs. [Length: 20em]">
         Compose Email
+      </message>
+      <message name="IDS_IOS_CHOOSE_EMAIL_CLIENT_APP" desc="Title for action sheet to select an email client app when user taps on an URL that has a mailto: URL scheme. [Length: 50em]">
+        Create email with:
+      </message>
+      <message name="IDS_IOS_CHOOSE_DEFAULT_EMAIL_CLIENT_APP" desc="Title for action sheet to select an email client app when user taps on an URL that has a mailto: URL scheme. [Length: 50em]">
+        Choose Default Email App
+      </message>
+      <message name="IDS_IOS_CHOOSE_EMAIL_APP" desc="Title for bottom sheet to choose an email client app when user taps on an URL that has a mailto: URL scheme. [Length 40em]">
+        Choose Email App
+      </message>
+      <message name="IDS_IOS_CHOOSE_EMAIL_APP_HOW_TO_CHANGE" desc="Subtitle for action sheet to choose mailto:// handler with instructions on how to change the preference in the future. [Length: 80]">
+        You can change this preference any time in Chrome settings
+      </message>
+      <message name="IDS_IOS_CHOOSE_EMAIL_ASK_TOGGLE" desc="Title for toggle switch to set whether to ask user which Mail client app to use every time a mailto:// URL is tapped. [Length: 50]">
+        Ask me which app to use every time
       </message>
     </messages>
   </release>

@@ -24,6 +24,7 @@ include_rules = [
   "+mojo",
   "+services",
   "-storage/browser",
+  "+storage/public/interfaces",
   "+third_party/hyphen/hyphen.h",
   "+third_party/webrtc_overrides",
   "+v8/include",
@@ -42,4 +43,9 @@ specific_include_rules = {
     "+components/discardable_memory/service",
     "+content/browser/browser_main_loop.h",
   ],
+  # TODO(crbug.com/734668): Dependencies on ozone should be removed, as content
+  # embedded in mus won't be able to talk to the native ozone.
+  "renderer_main\.cc": [
+    "+ui/ozone/public/client_native_pixmap_factory_ozone.h",
+  ]
 }

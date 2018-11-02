@@ -50,8 +50,7 @@ class NotificationDispatcher;
 class ThreadSafeSender;
 class WebCryptoImpl;
 
-class CONTENT_EXPORT BlinkPlatformImpl
-    : NON_EXPORTED_BASE(public blink::Platform) {
+class CONTENT_EXPORT BlinkPlatformImpl : public blink::Platform {
  public:
   BlinkPlatformImpl();
   explicit BlinkPlatformImpl(
@@ -77,11 +76,13 @@ class CONTENT_EXPORT BlinkPlatformImpl
   size_t NumberOfProcessors() override;
 
   size_t MaxDecodedImageBytes() override;
+  bool IsLowEndDevice() override;
   uint32_t GetUniqueIdForProcess() override;
   std::unique_ptr<blink::WebDataConsumerHandle> CreateDataConsumerHandle(
       mojo::ScopedDataPipeConsumerHandle handle) override;
   blink::WebString UserAgent() override;
   std::unique_ptr<blink::WebThread> CreateThread(const char* name) override;
+  std::unique_ptr<blink::WebThread> CreateWebAudioThread() override;
   blink::WebThread* CurrentThread() override;
   void RecordAction(const blink::UserMetricsAction&) override;
 
@@ -108,6 +109,7 @@ class CONTENT_EXPORT BlinkPlatformImpl
   bool AllowScriptExtensionForServiceWorker(
       const blink::WebURL& script_url) override;
   blink::WebCrypto* Crypto() override;
+  const char* GetBrowserServiceName() const override;
   blink::WebNotificationManager* GetNotificationManager() override;
   blink::WebPushProvider* PushProvider() override;
   blink::WebMediaCapabilitiesClient* MediaCapabilitiesClient() override;

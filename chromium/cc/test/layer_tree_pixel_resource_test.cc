@@ -132,7 +132,7 @@ void LayerTreeHostPixelResourceTest::CreateResourceAndRasterBufferProvider(
       host_impl->layer_tree_frame_sink()->context_provider();
   viz::ContextProvider* worker_context_provider =
       host_impl->layer_tree_frame_sink()->worker_context_provider();
-  ResourceProvider* resource_provider = host_impl->resource_provider();
+  LayerTreeResourceProvider* resource_provider = host_impl->resource_provider();
   int max_bytes_per_copy_operation = 1024 * 1024;
   int max_staging_buffer_usage_in_bytes = 32 * 1024 * 1024;
 
@@ -154,10 +154,10 @@ void LayerTreeHostPixelResourceTest::CreateResourceAndRasterBufferProvider(
       EXPECT_TRUE(worker_context_provider);
       EXPECT_EQ(PIXEL_TEST_GL, test_type_);
 
-      *raster_buffer_provider = base::MakeUnique<GpuRasterBufferProvider>(
+      *raster_buffer_provider = std::make_unique<GpuRasterBufferProvider>(
           compositor_context_provider, worker_context_provider,
           resource_provider, false, 0, viz::PlatformColor::BestTextureFormat(),
-          false);
+          false, false);
       break;
     case RASTER_BUFFER_PROVIDER_TYPE_ZERO_COPY:
       EXPECT_TRUE(compositor_context_provider);
@@ -171,7 +171,7 @@ void LayerTreeHostPixelResourceTest::CreateResourceAndRasterBufferProvider(
       EXPECT_TRUE(worker_context_provider);
       EXPECT_EQ(PIXEL_TEST_GL, test_type_);
 
-      *raster_buffer_provider = base::MakeUnique<OneCopyRasterBufferProvider>(
+      *raster_buffer_provider = std::make_unique<OneCopyRasterBufferProvider>(
           task_runner, compositor_context_provider, worker_context_provider,
           resource_provider, max_bytes_per_copy_operation, false,
           max_staging_buffer_usage_in_bytes,

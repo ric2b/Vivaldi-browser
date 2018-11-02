@@ -27,7 +27,7 @@ class ServiceWorkerRegistration;
 
 class CONTENT_EXPORT PaymentAppDatabase {
  public:
-  using PaymentApps = std::map<GURL, std::unique_ptr<StoredPaymentApp>>;
+  using PaymentApps = std::map<int64_t, std::unique_ptr<StoredPaymentApp>>;
   using ReadAllPaymentAppsCallback = base::OnceCallback<void(PaymentApps)>;
 
   using DeletePaymentInstrumentCallback =
@@ -142,14 +142,13 @@ class CONTENT_EXPORT PaymentAppDatabase {
                                  ServiceWorkerStatusCode status);
 
   // FetchAndWritePaymentAppInfo callbacks.
-  void FetchPaymentAppInfoCallback(const GURL& scope,
-                                   FetchAndWritePaymentAppInfoCallback callback,
-                                   const std::string& name,
-                                   const std::string& icon);
+  void FetchPaymentAppInfoCallback(
+      const GURL& scope,
+      FetchAndWritePaymentAppInfoCallback callback,
+      std::unique_ptr<PaymentAppInfoFetcher::PaymentAppInfo> app_info);
   void DidFindRegistrationToWritePaymentAppInfo(
       FetchAndWritePaymentAppInfoCallback callback,
-      const std::string& name,
-      const std::string& icon,
+      std::unique_ptr<PaymentAppInfoFetcher::PaymentAppInfo> app_info,
       ServiceWorkerStatusCode status,
       scoped_refptr<ServiceWorkerRegistration> registration);
   void DidWritePaymentApp(FetchAndWritePaymentAppInfoCallback callback,

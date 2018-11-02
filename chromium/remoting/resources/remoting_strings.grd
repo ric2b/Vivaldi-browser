@@ -17,7 +17,7 @@
     <output filename="remoting/resources/de.pak" lang="de" type="data_package"/>
     <output filename="remoting/resources/el.pak" lang="el" type="data_package"/>
     <output filename="remoting/resources/en-GB.pak" lang="en-GB" type="data_package"/>
-    <if expr="chromeos or is_ios">
+    <if expr="chromeos">
       <output filename="remoting/resources/en-US.pak" lang="en" type="data_package"/>
     </if>
     <output filename="remoting/resources/en.pak" lang="en" type="data_package"/>
@@ -31,7 +31,10 @@
     <output filename="remoting/resources/es.pak" lang="es" type="data_package"/>
     <output filename="remoting/resources/et.pak" lang="et" type="data_package"/>
     <output filename="remoting/resources/fa.pak" lang="fa" type="data_package"/>
-    <output filename="remoting/resources/fake-bidi.pak" lang="fake-bidi" type="data_package"/>
+    <if expr="not _official_build">
+      <!-- We don't need to generate the fake-bidi locale for official builds. -->
+      <output filename="remoting/resources/fake-bidi.pak" lang="fake-bidi" type="data_package"/>
+    </if>
     <output filename="remoting/resources/fi.pak" lang="fi" type="data_package"/>
     <output filename="remoting/resources/fil.pak" lang="fil" type="data_package"/>
     <output filename="remoting/resources/fr.pak" lang="fr" type="data_package"/>
@@ -87,11 +90,15 @@
     <output filename="remoting/webapp/_locales/da/messages.json" lang="da" type="chrome_messages_json"/>
     <output filename="remoting/webapp/_locales/de/messages.json" lang="de" type="chrome_messages_json"/>
     <output filename="remoting/webapp/_locales/fa/messages.json" lang="fa" type="chrome_messages_json"/>
-    <output filename="remoting/webapp/_locales/fake_bidi/messages.json" lang="fake-bidi" type="chrome_messages_json"/>
+    <if expr="not _official_build">
+      <!-- We don't need to generate the fake-bidi locale for official builds. -->
+      <output filename="remoting/webapp/_locales/fake_bidi/messages.json" lang="fake-bidi" type="chrome_messages_json"/>
+    </if>
     <output filename="remoting/webapp/_locales/el/messages.json" lang="el" type="chrome_messages_json"/>
     <output filename="remoting/webapp/_locales/en/messages.json" lang="en" type="chrome_messages_json"/>
-    <if expr="chromeos or is_ios">
-      <output filename="remoting/webapp/_locales/en_US/messages.json" lang="en-US" type="chrome_messages_json"/>
+    <if expr="chromeos">
+      <!-- lang="en-US" will create an empty json file. -->
+      <output filename="remoting/webapp/_locales/en_US/messages.json" lang="en" type="chrome_messages_json"/>
     </if>
     <output filename="remoting/webapp/_locales/en_GB/messages.json" lang="en-GB" type="chrome_messages_json"/>
     <output filename="remoting/webapp/_locales/es/messages.json" lang="es" type="chrome_messages_json"/>
@@ -264,6 +271,9 @@
           <message desc="The product name, as displayed on Android devices. Ideally this would be 'Chrome Remote Desktop', but that name is too long to be displayed in the Android Launcher. Try to keep the translation below 16 characters if possible." name="IDS_PRODUCT_NAME_ANDROID" formatter_data="android_java">
             Remote Desktop
           </message>
+          <message desc="The product name, as displayed on iOS devices. Ideally this would be 'Chrome Remote Desktop', but the iOS launcher can only show about 10 characters without being clipped. Event 'Remote Desktop' will be shown as 'Remote De...'. Try to keep the translation as short as possible." name="IDS_IOS_DISPLAY_NAME">
+            Remote Desktop
+          </message>
         </if>  <!-- is_android or is_ios -->
 
         <message desc="Message shown when the Chrome Remote Desktop client tab is closed while a connection is active." name="IDS_CLOSE_PROMPT">
@@ -344,12 +354,6 @@
         <message name="IDS_VERIFY_PIN_DIALOG_MESSAGE" desc="The message displayed by the PIN verification dialog.">
           Please confirm your account and PIN below to allow access by Chrome Remote Desktop.
         </message>
-        <message name="IDS_MAC_PREFPANE_BUNDLE_NAME" desc="The bundle name specified in the property list of Chrome Remote Desktop Host Preferences bundle on MacOS. The Chrome Remote Desktop host allows a user to connect to their computer remotely (it 'hosts' a connection from a remote computer).">
-          Chrome Remote Desktop Host Preferences
-        </message>
-        <message name="IDS_MAC_PREFPANE_ICON_LABEL" desc="The name of Chrome Remote Desktop Host icon in Preference Pane on MacOS. The carriage return makes sure that the label is not truncated. The Chrome Remote Desktop host allows a user to connect to their computer remotely (it 'hosts' a connection from a remote computer).">
-          Chrome Remote&#x0a;Desktop Host
-        </message>
         <message name="IDS_MAC_UNINSTALLER_BUNDLE_NAME" desc="The bundle name specified in the property list of Chrome Remote Desktop Host Uninstaller bundle on MacOS. The Chrome Remote Desktop host allows a user to connect to their computer remotely (it 'hosts' a connection from a remote computer).">
           Chrome Remote Desktop Host Uninstaller
         </message>
@@ -364,6 +368,9 @@
             To use Chromoting, you'll need to add a Google Account to your device.
           </message>
           <message desc="The product name, as displayed on Android devices. Try to keep the translation below 16 characters if possible." name="IDS_PRODUCT_NAME_ANDROID" formatter_data="android_java">
+            Chromoting
+          </message>
+          <message desc="The product name, as displayed on iOS devices. Try to keep the translation below 10 characters if possible." name="IDS_IOS_DISPLAY_NAME">
             Chromoting
           </message>
         </if>  <!-- is_android or is_ios -->
@@ -445,12 +452,6 @@
         </message>
         <message name="IDS_VERIFY_PIN_DIALOG_MESSAGE" desc="The message displayed by the PIN verification dialog.">
           Please confirm your account and PIN below to allow access by Chromoting.
-        </message>
-        <message name="IDS_MAC_PREFPANE_BUNDLE_NAME" desc="The bundle name specified in the property list of Chromoting Host Preferences bundle on MacOS.">
-          Chromoting Host Preferences
-        </message>
-        <message name="IDS_MAC_PREFPANE_ICON_LABEL" desc="The name of Chromoting Host icon in Preference Pane on MacOS. The carriage return makes sure that the label is not truncated.">
-          Chromoting&#x0a;Host
         </message>
         <message name="IDS_MAC_UNINSTALLER_BUNDLE_NAME" desc="The bundle name specified in the property list of Chromoting Host Uninstaller bundle on MacOS.">
           Chromoting Host Uninstaller
@@ -634,14 +635,8 @@
         <message desc="Text shown in tooltip when user touches an offline host on the device." name="IDS_HOST_OFFLINE_TOOLTIP" formatter_data="android_java">
           Host is offline.
         </message>
-        <message desc="Error that is shown in tooltip if the app loses its connection to the Cast device." name="IDS_CONNECTION_TO_CAST_FAILED" formatter_data="android_java">
-          Failed to connect to Cast device.
-        </message>
-         <message desc="Text shown in tooltip when the application has closed its connection to the Cast device." name="IDS_CONNECTION_TO_CAST_CLOSED" formatter_data="android_java">
-          Closed connection to Cast device.
-        </message>
-        <message desc="Title for Cast button in Android application menu." name="IDS_CAST_BUTTON_TITLE" formatter_data="android_java">
-          Cast
+        <message name="IDS_MOBILE_NETWORK_WARNING" desc="Message shown in an alert dialog that warns the user that they are trying to connect to a device over mobile network.">
+          Data charges may apply when connecting to a device over mobile network. Do you want to continue?
         </message>
 
 <!-- Play Store listings text. These Android-specific strings are not marked
@@ -673,10 +668,35 @@ Remote computers with non US-English keyboards may receive incorrect text input.
 For information about privacy, please see the Google Privacy Policy (http://goo.gl/SyrVzj) and the Chrome Privacy Policy (http://goo.gl/0uXE5d).
         </message>
         <message name="IDS_PLAY_STORE_CHANGES" desc="List of what's changed in this release of Chrome Remote Desktop for Android. [CHAR-LIMIT=500] [NAME=play_store_changes]">
-• Added Multi-Window support for Android Nougat.
-• Improved desktop image quality, responsiveness, and battery consumption.
-• Improved responsiveness of click-drag operations.
-• Improved several UI animation effects.
+• Added support for Android 8.0 Oreo.
+        </message>
+
+        <!-- iOS App Store metadata text. Won't be bundled into the app. -->
+        <message name="IDS_APP_STORE_TITLE" desc="App Store title of the Chrome Remote Desktop app for iOS. If needed to meet the 30-char limit, please translate just 'Remote Desktop' instead. [CHAR-LIMIT=30] [NAME=app_store_title]" meaning="Title used in App Store">
+          Chrome Remote Desktop
+        </message>
+        <message name="IDS_APP_STORE_KEYWORDS" desc="App Store keywords (to be used to search for the app) for the Chrome Remote Desktop app for iOS. Separate keywords with newline. [NAME=app_store_keywords]">
+Chrome Remote Desktop
+Remote Desktop
+Remote PC
+Remote Computer
+Remote Access
+Remote Support
+        </message>
+        <message name="IDS_APP_STORE_DESCRIPTION" desc="App Store description of the Chrome Remote Desktop app for iOS. [CHAR-LIMIT=4000] [NAME=app_store_description]">
+Securely access your computer from your iOS device. Its fast, simple and free.
+
+• On the computer you want to access remotely, find the Chrome Remote Desktop app on the Chrome Web Store  https://chrome.google.com/remotedesktop
+• Install Chrome Remote Desktop software and follow the instructions to complete setup.
+• On your iOS device, open the app and tap on any of your online computers to connect.
+
+For information about privacy, please see the Google Privacy Policy (http://goo.gl/SyrVzj).
+        </message>
+        <message name="IDS_APP_STORE_CHANGES" desc="List of what's changed in this release of Chrome Remote Desktop for iOS. [CHAR-LIMIT=500] [NAME=app_store_changes]">
+• Redesigned user interface.
+• Improved performance, responsiveness and reliability.
+• Support for playing audio from Windows or Linux computers.
+• Enhanced keyboard support.
         </message>
       </if>  <!-- is_android or is_ios -->
 
@@ -703,6 +723,12 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
       </message>
       <message desc="Title for the button that brings up a settings menu." name="IDS_SETTINGS_BUTTON">
         Settings
+      </message>
+      <message desc="Title for the button that moves the floating action button to the other left side of the screen." name="IDS_MOVE_FAB_LEFT_BUTTON">
+        Dock Left
+      </message>
+      <message desc="Title for the button that moves the floating action button to the right side of the screen." name="IDS_MOVE_FAB_RIGHT_BUTTON">
+        Dock Right
       </message>
       <message desc="Short placeholder text on a text box to prompt the user to enter the PIN." name="IDS_ENTER_PIN">
         Enter PIN
@@ -743,10 +769,28 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
       <message desc="Subtitle (description) of the option controlling whether or not the remote desktop is resized to match the window size as closely as possible." name="IDS_RESIZE_TO_CLIENT_SUBTITLE">
         Update remote resolution to match window
       </message>
+      <message desc="Subtitle (description) for the touch mode. In this mode, there is no visible mouse pointer and the user must tap on the screen to simulate a left-click." name="IDS_TOUCH_MODE_DESCRIPTION">
+        Screen acts like a touch screen
+      </message>
+      <message desc="Subtitle (description) for the trackpad mode. In this mode, In this mode, the mouse cursor is visible and the screen acts as a laptop's trackpad." name="IDS_TRACKPAD_MODE_DESCRIPTION">
+        Screen acts like a trackpad
+      </message>
 
       <!-- This is a verbatim transcription for the description. See also IDS_REMEMBER_PIN. -->
       <message desc="Check-box displayed when the user enters their PIN to connect to a host, avoiding the need to enter the PIN each time." name="IDS_REMEMBER_PIN_ON_THIS_DEVICE">
         Remember my PIN on this device.
+      </message>
+
+      <message desc="Title for the instructions for setting up a remote host. Shown when the user has no host available." name="IDS_HOST_SETUP_TITLE">
+        Welcome to Chrome Remote Desktop
+      </message>
+      <message desc="Instructions for setting up a computer to be remotely accessible. Please make sure the translated string has exactly the same number of lines." name="IDS_HOST_SETUP_INSTRUCTIONS">
+On the computer you want to access remotely, open Chrome and visit <ph name="INSTALLATION_LINK">$1<ex>google.com/remotedesktop</ex></ph>
+Install Chrome Remote Desktop software and follow the instructions to complete setup
+After setup is complete, you'll be able to access the computer from this page by entering the PIN or access code
+      </message>
+      <message desc="Label for a button for sending the user an email with link and instructions for setting up a computer for remote access." name="IDS_EMAIL_LINKS_AND_INSTRUCTIONS">
+        Email these instructions
       </message>
 
       <message desc="Label for the access code entry box. This is where the client user enters the code that permits access to the host." name="IDS_ACCESS_CODE">
@@ -840,6 +884,9 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
       <message desc="Error displayed when the service returns a 503 error. Such errors are usually temporary, and resolve themselves in about 30 seconds." name="IDS_ERROR_SERVICE_UNAVAILABLE">
         The service is temporarily unavailable. Please try again later.
       </message>
+      <message desc="Error displayed when the user's oauth token is invalid." name="IDS_ERROR_OAUTH_TOKEN_INVALID">
+        There was an issue authenticating, please login again.
+      </message>
       <message desc="Error displayed in situations where things go wrong in ways not anticipated by the developers. There is typically no user-workaround to suggest, other than reporting the error so that we can investigate further." name="IDS_ERROR_UNEXPECTED" formatter_data="android_java">
         An unexpected error occurred. Please report this problem to the developers.
       </message>
@@ -852,7 +899,7 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
       <message desc="Menu option for toggle full-screen mode." name="IDS_FULL_SCREEN" formatter_data="android_java">
         Full screen
       </message>
-      <message desc="Icon to leave full-screen mode." name="IDS_EXIT_FULL_SCREEN" formatter_data="android_java">
+      <message desc="Icon to leave full-screen mode." name="IDS_EXIT_FULL_SCREEN">
         Exit full screen
       </message>
       <message desc="Tool-tip for the window's close icon." name="IDS_CLOSE_WINDOW">
@@ -989,16 +1036,12 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
       </message>
       <if expr="is_android">
         <!-- Android uses a different format for placeholder -->
-        <message desc="Message that is spoken (for accessibility) whenever the user selects an account from a list displayed in the application." name="IDS_LOG_IN_ACCOUNT_DESCRIPTION" formatter_data="android_java">
+        <message desc="Message that is spoken (for accessibility) whenever the user selects an account from a list displayed in the application." name="IDS_LOG_IN_ACCOUNT_ACCESSIBILITY_DESCRIPTION" formatter_data="android_java" meaning="Spoken message">
           Signed in as <ph name="EMAIL_ADDRESS">%1$s<ex>test@gmail.com</ex></ph>.
         </message>
         <message desc="This string represents a host status line, which is shown below the host name for offline hosts.  The status line consists of 1) a host offline status (i.e. a specific 'Host failed to read the policy.' or 'Invalid host owner.' or a generic 'Host if offline.') and 2) statement when the host was last seen online (i.e. 'Last seen online 20 minutes ago.')."
                  name="IDS_HOST_STATUS_LINE" formatter_data="android_java">
           <ph name="OPTIONAL_OFFLINE_REASON">%2$s<ex>Host failed to read the policy.</ex></ph>  Last seen online <ph name="RELATIVE_TIMESTAMP">%1$s<ex>yesterday</ex></ph>.
-        </message>
-        <message desc="Content description (used for accessibility) of a host icon representing an online host."
-                 name="IDS_HOST_ICON_ONLINE_DESCRIPTION" formatter_data="android_java">
-          Online.
         </message>
         <message desc="Content description (used for accessibility) of a host icon representing an offline host."
                  name="IDS_HOST_ICON_OFFLINE_DESCRIPTION" formatter_data="android_java">
@@ -1006,7 +1049,7 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
         </message>
       </if>
       <if expr="not is_android">
-        <message desc="Short message being popped up whenever the user selects an account from a list displayed in the application." name="IDS_LOG_IN_ACCOUNT_DESCRIPTION">
+        <message desc="Short message being popped up whenever the user selects an account from a list displayed in the application." name="IDS_LOG_IN_ACCOUNT_DESCRIPTION" meaning="UI element">
           Signed in as <ph name="EMAIL_ADDRESS">$1<ex>test@gmail.com</ex></ph>.
         </message>
         <message desc="Modified version of the host name shown for hosts that are not currently accessible and for which no last-online status is available." name="IDS_OFFLINE">
@@ -1287,7 +1330,11 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
       <message  name="IDS_WEBSITE_INVITE_DEPRECATION_2" desc="Requirement all users to try the new version">
         This app is no longer supported. To ensure you're getting the latest features and security updates, please use the <ph name="LINK_BEGIN">$1<ex>&lt;a href=http://example.com&gt;</ex></ph>Chrome Remote Desktop web app<ph name="LINK_END">$2<ex>&lt;/a&gt;</ex></ph>.
       </message>
-
+      <if expr="is_macosx">
+        <message name="IDS_HOST_AUTHENTICATION_PROMPT" desc="The prompt to be displayed in the authentication dialog when making changes to the system.  The system will add a sentence asking for an administrator's name and password.  Mac-only.">
+          <ph name="PRODUCT_NAME">$1<ex>Chrome Remote Desktop</ex></ph> wants to make changes.
+        </message>
+      </if>
     </messages>
   </release>
 </grit>

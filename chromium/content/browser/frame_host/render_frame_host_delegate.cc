@@ -62,14 +62,14 @@ std::string RenderFrameHostDelegate::GetDefaultMediaDeviceID(
   return std::string();
 }
 
-AccessibilityMode RenderFrameHostDelegate::GetAccessibilityMode() const {
-  return AccessibilityMode();
+ui::AXMode RenderFrameHostDelegate::GetAccessibilityMode() const {
+  return ui::AXMode();
 }
 
 RenderFrameHost* RenderFrameHostDelegate::GetGuestByInstanceID(
     RenderFrameHost* render_frame_host,
     int browser_plugin_instance_id) {
-  return NULL;
+  return nullptr;
 }
 
 device::GeolocationContext* RenderFrameHostDelegate::GetGeolocationContext() {

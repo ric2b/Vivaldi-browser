@@ -32,39 +32,36 @@
 #define WebEmbeddedWorkerImpl_h
 
 #include <memory>
+#include "core/exported/WorkerShadowPage.h"
+#include "core/workers/GlobalScopeCreationParams.h"
 #include "core/workers/WorkerClients.h"
 #include "modules/ModulesExport.h"
+#include "modules/serviceworkers/ServiceWorkerContentSettingsProxy.h"
 #include "platform/WebTaskRunner.h"
 #include "platform/heap/Handle.h"
-#include "public/platform/Platform.h"
-#include "public/platform/WebContentSecurityPolicy.h"
 #include "public/web/WebDevToolsAgentClient.h"
 #include "public/web/WebEmbeddedWorker.h"
 #include "public/web/WebEmbeddedWorkerStartData.h"
-#include "public/web/WebFrameClient.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
 
 namespace blink {
 
-class ThreadableLoadingContext;
-class ServiceWorkerGlobalScopeProxy;
+class ContentSecurityPolicy;
 class ServiceWorkerInstalledScriptsManager;
-class WebLocalFrameBase;
-class WebView;
 class WorkerInspectorProxy;
 class WorkerScriptLoader;
 class WorkerThread;
 
 class MODULES_EXPORT WebEmbeddedWorkerImpl final
     : public WebEmbeddedWorker,
-      public WebFrameClient,
-      NON_EXPORTED_BASE(public WebDevToolsAgentClient) {
+      public WorkerShadowPage::Client {
   WTF_MAKE_NONCOPYABLE(WebEmbeddedWorkerImpl);
 
  public:
   WebEmbeddedWorkerImpl(
       std::unique_ptr<WebServiceWorkerContextClient>,
       std::unique_ptr<WebServiceWorkerInstalledScriptsManager>,
-      std::unique_ptr<WebContentSettingsClient>);
+      std::unique_ptr<ServiceWorkerContentSettingsProxy>);
   ~WebEmbeddedWorkerImpl() override;
 
   // WebEmbeddedWorker overrides.
@@ -83,21 +80,20 @@ class MODULES_EXPORT WebEmbeddedWorkerImpl final
   void AddMessageToConsole(const WebConsoleMessage&) override;
 
   void PostMessageToPageInspector(int session_id, const WTF::String&);
-  std::unique_ptr<blink::WebURLLoader> CreateURLLoader(
-      const WebURLRequest& request,
-      SingleThreadTaskRunner* task_runner) override {
-    // TODO(yhirano): Stop using Platform::CreateURLLoader() here.
-    return Platform::Current()->CreateURLLoader(request, task_runner);
-  }
+
+  // Applies the specified CSP and referrer policy to the worker, so that
+  // fetches initiated by the worker (other than for the main worker script
+  // itself) are affected by these policies. This must be called before starting
+  // script execution on the worker thread.
+  void SetContentSecurityPolicyAndReferrerPolicy(ContentSecurityPolicy*,
+                                                 String referrer_policy);
+
+  // WorkerShadowPage::Client overrides.
+  std::unique_ptr<WebApplicationCacheHost> CreateApplicationCacheHost(
+      WebApplicationCacheHostClient*) override;
+  void OnShadowPageInitialized() override;
 
  private:
-  void PrepareShadowPageForLoader();
-  void LoadShadowPage();
-
-  // WebFrameClient overrides.
-  void FrameDetached(WebLocalFrame*, DetachType) override;
-  void DidFinishDocumentLoad() override;
-
   // WebDevToolsAgentClient overrides.
   void SendProtocolMessage(int session_id,
                            int call_id,
@@ -114,33 +110,21 @@ class MODULES_EXPORT WebEmbeddedWorkerImpl final
 
   std::unique_ptr<WebServiceWorkerContextClient> worker_context_client_;
 
-  // This is valid until the worker thread is created. After the worker thread
-  // is created, this is passed to the worker thread.
+  // These are valid until StartWorkerThread() is called. After the worker
+  // thread is created, these are passed to the worker thread.
   std::unique_ptr<ServiceWorkerInstalledScriptsManager>
       installed_scripts_manager_;
-
-  // This is kept until startWorkerContext is called, and then passed on
-  // to WorkerContext.
-  std::unique_ptr<WebContentSettingsClient> content_settings_client_;
+  std::unique_ptr<ServiceWorkerContentSettingsProxy> content_settings_client_;
 
   // Kept around only while main script loading is ongoing.
   RefPtr<WorkerScriptLoader> main_script_loader_;
 
   std::unique_ptr<WorkerThread> worker_thread_;
-  Persistent<ServiceWorkerGlobalScopeProxy> worker_global_scope_proxy_;
   Persistent<WorkerInspectorProxy> worker_inspector_proxy_;
 
-  // 'shadow page' - created to proxy loading requests from the worker.
-  // Both WebView and WebFrame objects are close()'ed (where they're
-  // deref'ed) when this EmbeddedWorkerImpl is destructed, therefore they
-  // are guaranteed to exist while this object is around.
-  WebView* web_view_;
+  std::unique_ptr<WorkerShadowPage> shadow_page_;
 
-  Persistent<WebLocalFrameBase> main_frame_;
-  Persistent<ThreadableLoadingContext> loading_context_;
-
-  bool loading_shadow_page_;
-  bool asked_to_terminate_;
+  bool asked_to_terminate_ = false;
 
   enum WaitingForDebuggerState { kWaitingForDebugger, kNotWaitingForDebugger };
 
@@ -152,8 +136,6 @@ class MODULES_EXPORT WebEmbeddedWorkerImpl final
 
   WaitingForDebuggerState waiting_for_debugger_state_;
 };
-
-extern template class WorkerClientsInitializer<WebEmbeddedWorkerImpl>;
 
 }  // namespace blink
 

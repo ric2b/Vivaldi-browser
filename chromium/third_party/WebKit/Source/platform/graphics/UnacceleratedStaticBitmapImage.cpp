@@ -10,23 +10,43 @@ namespace blink {
 
 PassRefPtr<UnacceleratedStaticBitmapImage>
 UnacceleratedStaticBitmapImage::Create(sk_sp<SkImage> image) {
+  DCHECK(!image->isTextureBacked());
   return AdoptRef(new UnacceleratedStaticBitmapImage(std::move(image)));
 }
 
 UnacceleratedStaticBitmapImage::UnacceleratedStaticBitmapImage(
-    sk_sp<SkImage> image)
-    : image_(std::move(image)) {
-  DCHECK(image_);
+    sk_sp<SkImage> image) {
+  DCHECK(!image->isLazyGenerated());
+
+  PaintImageBuilder builder;
+  InitPaintImageBuilder(builder);
+  builder.set_image(std::move(image));
+  paint_image_ = builder.TakePaintImage();
+}
+
+PassRefPtr<UnacceleratedStaticBitmapImage>
+UnacceleratedStaticBitmapImage::Create(PaintImage image) {
+  return AdoptRef(new UnacceleratedStaticBitmapImage(std::move(image)));
+}
+
+UnacceleratedStaticBitmapImage::UnacceleratedStaticBitmapImage(PaintImage image)
+    : paint_image_(std::move(image)) {
+  DCHECK(paint_image_);
 }
 
 UnacceleratedStaticBitmapImage::~UnacceleratedStaticBitmapImage() {}
 
 IntSize UnacceleratedStaticBitmapImage::Size() const {
-  return IntSize(image_->width(), image_->height());
+  return IntSize(paint_image_.width(), paint_image_.height());
+}
+
+bool UnacceleratedStaticBitmapImage::IsPremultiplied() const {
+  return paint_image_.GetSkImage()->alphaType() ==
+         SkAlphaType::kPremul_SkAlphaType;
 }
 
 bool UnacceleratedStaticBitmapImage::CurrentFrameKnownToBeOpaque(MetadataMode) {
-  return image_->isOpaque();
+  return paint_image_.GetSkImage()->isOpaque();
 }
 
 void UnacceleratedStaticBitmapImage::Draw(PaintCanvas* canvas,
@@ -39,8 +59,8 @@ void UnacceleratedStaticBitmapImage::Draw(PaintCanvas* canvas,
                                 PaintImageForCurrentFrame());
 }
 
-sk_sp<SkImage> UnacceleratedStaticBitmapImage::ImageForCurrentFrame() {
-  return image_;
+PaintImage UnacceleratedStaticBitmapImage::PaintImageForCurrentFrame() {
+  return paint_image_;
 }
 
 }  // namespace blink

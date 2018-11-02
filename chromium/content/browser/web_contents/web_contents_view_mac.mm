@@ -93,6 +93,7 @@ content::ScreenInfo GetNSViewScreenInfo(NSView* view) {
   content::ScreenInfo results;
   results.device_scale_factor = static_cast<int>(display.device_scale_factor());
   results.color_space = display.color_space();
+  results.color_space.GetICCProfile(&results.icc_profile);
   results.depth = display.color_depth();
   results.depth_per_component = display.depth_per_component();
   results.is_monochrome = display.is_monochrome();
@@ -575,16 +576,6 @@ void WebContentsViewMac::CloseTab() {
   return mouseDownCanMoveWindow_;
 }
 
-- (void)setOpaque:(BOOL)opaque {
-  WebContentsImpl* webContents = [self webContents];
-  if (!webContents)
-    return;
-  RenderWidgetHostViewMac* view = static_cast<RenderWidgetHostViewMac*>(
-      webContents->GetRenderWidgetHostView());
-  DCHECK(view);
-  [view->cocoa_view() setOpaque:opaque];
-}
-
 - (void)pasteboard:(NSPasteboard*)sender provideDataForType:(NSString*)type {
   [dragSource_ lazyWriteToPasteboard:sender
                              forType:type];
@@ -744,6 +735,9 @@ void WebContentsViewMac::CloseTab() {
     [[self.window contentView] setFrameSize:newSize];
   }
   [super setFrameSize:newSize];
+
+  if (webContentsView_ && webContentsView_->delegate())
+    webContentsView_->delegate()->SizeChanged(gfx::Size(newSize));
 
   // Perform manual layout of subviews, e.g., when the window size changes.
   for (NSView* subview in [self subviews])

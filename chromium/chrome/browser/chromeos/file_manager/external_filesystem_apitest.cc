@@ -33,6 +33,7 @@
 #include "google_apis/drive/time_util.h"
 #include "storage/browser/fileapi/external_mount_points.h"
 #include "ui/shell_dialogs/select_file_dialog_factory.h"
+#include "ui/shell_dialogs/select_file_policy.h"
 
 // Tests for access to external file systems (as defined in
 // storage/common/fileapi/file_system_types.h) from extensions with
@@ -81,8 +82,8 @@ const char kSecondProfileHash[] = "fileBrowserApiTestProfile2";
 class FakeSelectFileDialog : public ui::SelectFileDialog {
  public:
   FakeSelectFileDialog(ui::SelectFileDialog::Listener* listener,
-                       ui::SelectFilePolicy* policy)
-      : ui::SelectFileDialog(listener, policy) {}
+                       std::unique_ptr<ui::SelectFilePolicy> policy)
+      : ui::SelectFileDialog(listener, std::move(policy)) {}
 
   void SelectFileImpl(Type type,
                       const base::string16& title,
@@ -110,9 +111,10 @@ class FakeSelectFileDialog : public ui::SelectFileDialog {
 
 class FakeSelectFileDialogFactory : public ui::SelectFileDialogFactory {
  private:
-  ui::SelectFileDialog* Create(ui::SelectFileDialog::Listener* listener,
-                               ui::SelectFilePolicy* policy) override {
-    return new FakeSelectFileDialog(listener, policy);
+  ui::SelectFileDialog* Create(
+      ui::SelectFileDialog::Listener* listener,
+      std::unique_ptr<ui::SelectFilePolicy> policy) override {
+    return new FakeSelectFileDialog(listener, std::move(policy));
   }
 };
 
@@ -467,9 +469,12 @@ class DriveFileSystemExtensionApiTest : public FileSystemExtensionApiTestBase {
   // DriveIntegrationService factory function for this test.
   drive::DriveIntegrationService* CreateDriveIntegrationService(
       Profile* profile) {
-    // Ignore signin profile.
-    if (profile->GetPath() == chromeos::ProfileHelper::GetSigninProfileDir())
+    // Ignore signin and lock screen apps profile.
+    if (profile->GetPath() == chromeos::ProfileHelper::GetSigninProfileDir() ||
+        profile->GetPath() ==
+            chromeos::ProfileHelper::GetLockScreenAppProfilePath()) {
       return nullptr;
+    }
 
     // DriveFileSystemExtensionApiTest doesn't expect that several user profiles
     // could exist simultaneously.

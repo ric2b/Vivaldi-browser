@@ -19,7 +19,6 @@
 <translation id="1278049586634282054">Periksa semua pandangan:</translation>
 <translation id="1297175357211070620">Tujuan</translation>
 <translation id="1303101771013849280">File HTML Bookmark</translation>
-<translation id="1303319084542230573">Tambahkan pencetak</translation>
 <translation id="1317502925920562130">Apakah Ini Beranda yang Anda Harapkan?</translation>
 <translation id="1368832886055348810">Kiri ke Kanan</translation>
 <translation id="1430915738399379752">Cetak</translation>
@@ -96,7 +95,6 @@
 <translation id="2439110203301358333">Program lain di komputer anda menambahkan ekstensi yang dapat mengubah cara kerja Vivaldi.</translation>
 <translation id="2445081178310039857">Di perlukan direktori akar ekstensi.</translation>
 <translation id="2470702053775288986">Ekstensi yang tidak di dukung di nonaktifkan</translation>
-<translation id="2498436043474441766">Tambahkan Pencetak</translation>
 <translation id="2501797496290880632">Ketik pintasan</translation>
 <translation id="2509495747794740764">Jumlah skala harus berupa angka antara 10 dan 200.</translation>
 <translation id="253557089021624350">Penghitung keepalive</translation>
@@ -214,10 +212,6 @@
 <translation id="4240511609794012987">Memori bersama</translation>
 <translation id="4256316378292851214">Sim&amp;pan Video sebagai...</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K langsung)</translation>
-<translation id="431291515148403474">Menambahkan printer ke Google Cloud Print memungkinkan anda mencetak dari
-        mana saja, ke mana saja. Bagikan printer anda dengan orang yang anda
-        pilih dan cetak dari Vivaldi, ponsel, tablet, PC, atau perangkat
-        lain yang tersambung ke web.</translation>
 <translation id="4348766275249686434">Kumpulkan semua galat</translation>
 <translation id="4363771538994847871">Tujuan Cast tidak di temukan. Perlu bantuan?</translation>
 <translation id="4384652540891215547">Aktifkan ekstensi</translation>
@@ -262,9 +256,6 @@
 <translation id="5116628073786783676">Sim&amp;pan Audio sebagai...</translation>
 <translation id="5143374789336132547">Ekstensi "<ph name="EXTENSION_NAME" />" telah mengubah halaman apa yang ditampilkan saat anda meng-klik tombol Beranda.</translation>
 <translation id="5154108062446123722">Pengaturan lanjutan untuk <ph name="PRINTING_DESTINATION" /></translation>
-<translation id="5154383699530644092">Anda dapat menambahkan pencetak ke komputer dengan mengklik tombol "Tambahkan pencetak"
-        di bawah. Jika tidak ada p yang ditambahkan, anda tetap dapat menyimpan
-        PDF atau menyimpannya di Google Drive.</translation>
 <translation id="5154917547274118687">Memori</translation>
 <translation id="5171343362375269016">Memori yang di Tukar</translation>
 <translation id="5233019165164992427">Port debug NaCl</translation>

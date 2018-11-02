@@ -34,7 +34,6 @@ class Profile;
 namespace base {
 class DictionaryValue;
 class ListValue;
-class SimpleTestClock;
 class SimpleTestTickClock;
 class TickClock;
 }
@@ -83,10 +82,19 @@ class PrerenderManager : public content::NotificationObserver,
                          public MediaCaptureDevicesDispatcher::Observer {
  public:
   enum PrerenderManagerMode {
+    // WARNING: Legacy code, not for use. Disables prerendering and avoids
+    // creating an instance of PrerenderManager. This mode overrides forced
+    // prerenders which breaks the assumptions of the CustomTabActivityTest.
     PRERENDER_MODE_DISABLED,
+
+    // Enables all types of prerendering for any origin.
     PRERENDER_MODE_ENABLED,
+
+    // For each request to prerender performs a NoStatePrefetch for the same URL
+    // instead.
     PRERENDER_MODE_NOSTATE_PREFETCH,
-    // Like PRERENDER_MODE_DISABLED, but keeps track of pages that would have
+
+    // Ignores requests to prerender, but keeps track of pages that would have
     // been prerendered and records metrics for comparison with other modes.
     PRERENDER_MODE_SIMPLE_LOAD_EXPERIMENT
   };
@@ -325,7 +333,6 @@ class PrerenderManager : public content::NotificationObserver,
   // testing.
   base::Time GetCurrentTime() const;
   base::TimeTicks GetCurrentTimeTicks() const;
-  void SetClockForTesting(std::unique_ptr<base::SimpleTestClock> clock);
   void SetTickClockForTesting(
       std::unique_ptr<base::SimpleTestTickClock> tick_clock);
 
@@ -361,10 +368,6 @@ class PrerenderManager : public content::NotificationObserver,
 
   void SetPrerenderContentsFactoryForTest(
       PrerenderContents::Factory* prerender_contents_factory);
-
-  bool IsPrerenderSilenceExperimentForTesting(Origin origin) const {
-    return IsPrerenderSilenceExperiment(origin);
-  }
 
   base::WeakPtr<PrerenderManager> AsWeakPtr();
 
@@ -452,10 +455,6 @@ class PrerenderManager : public content::NotificationObserver,
 
   // Time window for which we record old navigations, in milliseconds.
   static const int kNavigationRecordWindowMs = 5000;
-
-  // Returns whether adding new prerenders should be disabled because of the
-  // experiment running.
-  bool IsPrerenderSilenceExperiment(Origin origin) const;
 
   // Returns whether prerendering is currently enabled or the reason why it is
   // disabled.
@@ -631,7 +630,6 @@ class PrerenderManager : public content::NotificationObserver,
   using PrerenderProcessSet = std::set<content::RenderProcessHost*>;
   PrerenderProcessSet prerender_process_hosts_;
 
-  std::unique_ptr<base::Clock> clock_;
   std::unique_ptr<base::TickClock> tick_clock_;
 
   bool page_load_metric_observer_disabled_;

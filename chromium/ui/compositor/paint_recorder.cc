@@ -21,32 +21,60 @@ namespace ui {
 // to the |context|'s PaintOpBuffer.
 PaintRecorder::PaintRecorder(const PaintContext& context,
                              const gfx::Size& recording_size,
+                             float recording_scale_x,
+                             float recording_scale_y,
                              PaintCache* cache)
     : context_(context),
-      record_canvas_(cache ? cache->ResetCache() : context_.list_->StartPaint(),
+      local_list_(cache ? base::MakeRefCounted<cc::DisplayItemList>(
+                              cc::DisplayItemList::kToBeReleasedAsPaintOpBuffer)
+                        : nullptr),
+      record_canvas_(cache ? local_list_.get() : context_.list_,
                      gfx::RectToSkRect(gfx::Rect(recording_size))),
       canvas_(&record_canvas_, context.device_scale_factor_),
       cache_(cache),
       recording_size_(recording_size) {
+  if (cache) {
+    local_list_->StartPaint();
+  } else {
+    context_.list_->StartPaint();
+  }
+
 #if DCHECK_IS_ON()
-  DCHECK(!context.inside_paint_recorder_);
-  context.inside_paint_recorder_ = true;
+  DCHECK(!context_.inside_paint_recorder_);
+  context_.inside_paint_recorder_ = true;
 #endif
+  if (context_.is_pixel_canvas()) {
+    canvas()->Save();
+    canvas()->Scale(recording_scale_x, recording_scale_y);
+  }
 }
 
+// TODO(malaykeshav): The scaling of recording size needs to be handled case
+// by case and the decision to perform the scale should be moved to the caller.
 PaintRecorder::PaintRecorder(const PaintContext& context,
                              const gfx::Size& recording_size)
-    : PaintRecorder(context, recording_size, nullptr) {}
+    : PaintRecorder(
+          context,
+          gfx::ScaleToRoundedSize(
+              recording_size,
+              context.is_pixel_canvas() ? context.device_scale_factor_ : 1.f),
+          context.device_scale_factor_,
+          context.device_scale_factor_,
+          nullptr) {}
 
 PaintRecorder::~PaintRecorder() {
 #if DCHECK_IS_ON()
   context_.inside_paint_recorder_ = false;
 #endif
+  if (context_.is_pixel_canvas())
+    canvas()->Restore();
   // If using cache, append what we've saved there to the PaintContext.
   // Otherwise, the content is already stored in the PaintContext, and we can
   // just close it.
   if (cache_) {
-    cache_->FinalizeCache();
+    local_list_->EndPaintOfUnpaired(gfx::Rect());
+    local_list_->Finalize();
+    cache_->SetPaintOpBuffer(local_list_->ReleaseAsRecord());
     cache_->UseCache(context_, recording_size_);
   } else {
     gfx::Rect bounds_in_layer = context_.ToLayerSpaceBounds(recording_size_);

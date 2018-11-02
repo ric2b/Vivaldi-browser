@@ -68,10 +68,6 @@ struct EnumTraits<blink::mojom::RequestContextType,
 template <>
 struct StructTraits<blink::mojom::FetchAPIRequestDataView,
                     blink::WebServiceWorkerRequest> {
-  static void* SetUpContext(const blink::WebServiceWorkerRequest&);
-  static void TearDownContext(const blink::WebServiceWorkerRequest&,
-                              void* context);
-
   static blink::WebURLRequest::FetchRequestMode mode(
       const blink::WebServiceWorkerRequest& request) {
     return request.Mode();
@@ -96,13 +92,15 @@ struct StructTraits<blink::mojom::FetchAPIRequestDataView,
 
   static WTF::String method(const blink::WebServiceWorkerRequest&);
 
-  static const WTF::HashMap<WTF::String, WTF::String>& headers(
-      const blink::WebServiceWorkerRequest&,
-      void* context);
+  static WTF::HashMap<WTF::String, WTF::String> headers(
+      const blink::WebServiceWorkerRequest&);
 
   static WTF::String blob_uuid(const blink::WebServiceWorkerRequest&);
 
   static uint64_t blob_size(const blink::WebServiceWorkerRequest&);
+
+  static storage::mojom::blink::BlobPtr blob(
+      const blink::WebServiceWorkerRequest&);
 
   static const blink::Referrer& referrer(const blink::WebServiceWorkerRequest&);
 

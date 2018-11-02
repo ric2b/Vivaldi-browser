@@ -46,7 +46,7 @@ static CGLPixelFormatObj GetPixelFormat() {
   std::vector<CGLPixelFormatAttribute> attribs;
   // If the system supports dual gpus then allow offline renderers for every
   // context, so that they can all be in the same share group.
-  if (ui::GpuSwitchingManager::GetInstance()->SupportsDualGpus()) {
+  if (GLContext::SwitchableGPUsSupported()) {
     attribs.push_back(kCGLPFAAllowOfflineRenderers);
     g_support_renderer_switching = true;
   }
@@ -101,8 +101,7 @@ bool GLContextCGL::Initialize(GLSurface* compatible_surface,
          attribs.bind_generates_resource);
 
   GpuPreference gpu_preference =
-      ui::GpuSwitchingManager::GetInstance()->AdjustGpuPreference(
-          attribs.gpu_preference);
+      GLContext::AdjustGpuPreference(attribs.gpu_preference);
 
   GLContextCGL* share_context = share_group() ?
       static_cast<GLContextCGL*>(share_group()->GetContext()) : nullptr;
@@ -113,7 +112,7 @@ bool GLContextCGL::Initialize(GLSurface* compatible_surface,
 
   // If using the discrete gpu, create a pixel format requiring it before we
   // create the context.
-  if (!ui::GpuSwitchingManager::GetInstance()->SupportsDualGpus() ||
+  if (!GLContext::SwitchableGPUsSupported() ||
       gpu_preference == PreferDiscreteGpu) {
     std::vector<CGLPixelFormatAttribute> discrete_attribs;
     discrete_attribs.push_back((CGLPixelFormatAttribute) 0);
@@ -149,7 +148,7 @@ bool GLContextCGL::Initialize(GLSurface* compatible_surface,
 }
 
 void GLContextCGL::Destroy() {
-  if (yuv_to_rgb_converter_) {
+  if (!yuv_to_rgb_converters_.empty()) {
     // If this context is not current, bind this context's API so that the YUV
     // converter can safely destruct
     GLContext* current_context = GetRealCurrent();
@@ -158,7 +157,7 @@ void GLContextCGL::Destroy() {
     }
 
     ScopedCGLSetCurrentContext(static_cast<CGLContextObj>(context_));
-    yuv_to_rgb_converter_.reset();
+    yuv_to_rgb_converters_.clear();
 
     // Rebind the current context's API if needed.
     if (current_context && current_context != this) {
@@ -224,10 +223,14 @@ bool GLContextCGL::ForceGpuSwitchIfNeeded() {
   return true;
 }
 
-YUVToRGBConverter* GLContextCGL::GetYUVToRGBConverter() {
-  if (!yuv_to_rgb_converter_)
-    yuv_to_rgb_converter_.reset(new YUVToRGBConverter(*GetVersionInfo()));
-  return yuv_to_rgb_converter_.get();
+YUVToRGBConverter* GLContextCGL::GetYUVToRGBConverter(
+    const gfx::ColorSpace& color_space) {
+  std::unique_ptr<YUVToRGBConverter>& yuv_to_rgb_converter =
+      yuv_to_rgb_converters_[color_space];
+  if (!yuv_to_rgb_converter)
+    yuv_to_rgb_converter.reset(
+        new YUVToRGBConverter(*GetVersionInfo(), color_space));
+  return yuv_to_rgb_converter.get();
 }
 
 bool GLContextCGL::MakeCurrent(GLSurface* surface) {
@@ -238,6 +241,16 @@ bool GLContextCGL::MakeCurrent(GLSurface* surface) {
 
   if (IsCurrent(surface))
     return true;
+
+  // It's likely we're going to switch OpenGL contexts at this point.
+  // Before doing so, if there is a current context, flush it. There
+  // are many implicit assumptions of flush ordering between contexts
+  // at higher levels, and if a flush isn't performed, OpenGL commands
+  // may be issued in unexpected orders, causing flickering and other
+  // artifacts.
+  if (CGLGetCurrentContext() != nullptr) {
+    glFlush();
+  }
 
   ScopedReleaseCurrent release_current;
   TRACE_EVENT0("gpu", "GLContextCGL::MakeCurrent");
@@ -266,6 +279,12 @@ bool GLContextCGL::MakeCurrent(GLSurface* surface) {
 void GLContextCGL::ReleaseCurrent(GLSurface* surface) {
   if (!IsCurrent(surface))
     return;
+
+  // Before releasing the current context, flush it. This ensures that
+  // all commands issued by higher levels will be seen by the OpenGL
+  // implementation, which is assumed throughout the code. See comment
+  // in MakeCurrent, above.
+  glFlush();
 
   SetCurrent(nullptr);
   CGLSetCurrentContext(nullptr);

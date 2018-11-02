@@ -42,6 +42,7 @@ import org.chromium.chrome.browser.preferences.LocationSettings;
 import org.chromium.chrome.browser.preferences.ManagedPreferenceDelegate;
 import org.chromium.chrome.browser.preferences.ManagedPreferencesUtils;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
+import org.chromium.chrome.browser.preferences.PreferenceUtils;
 import org.chromium.chrome.browser.preferences.ProtectedContentResetCredentialConfirmDialogFragment;
 import org.chromium.chrome.browser.preferences.website.Website.StoredDataClearedCallback;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -307,6 +308,13 @@ public class SingleCategoryPreferences extends PreferenceFragment
     }
 
     /**
+     * Returns the category being displayed. For testing.
+     */
+    public SiteSettingsCategory getCategoryForTest() {
+        return mCategory;
+    }
+
+    /**
      * This clears all the storage for websites that are displayed to the user. This happens
      * asynchronously, and then we call {@link #getInfoForOrigins()} when we're done.
      */
@@ -335,7 +343,7 @@ public class SingleCategoryPreferences extends PreferenceFragment
 
     @Override
     public void onActivityCreated(Bundle savedInstanceState) {
-        addPreferencesFromResource(R.xml.website_preferences);
+        PreferenceUtils.addPreferencesFromResource(this, R.xml.website_preferences);
         ListView listView = (ListView) getView().findViewById(android.R.id.list);
         mEmptyView = (TextView) getView().findViewById(android.R.id.empty);
         listView.setEmptyView(mEmptyView);
@@ -587,7 +595,7 @@ public class SingleCategoryPreferences extends PreferenceFragment
         // This will remove the combo box at the top and all the sites listed below it.
         getPreferenceScreen().removeAll();
         // And this will add the filter preference back (combo box).
-        addPreferencesFromResource(R.xml.website_preferences);
+        PreferenceUtils.addPreferencesFromResource(this, R.xml.website_preferences);
 
         configureGlobalToggles();
 

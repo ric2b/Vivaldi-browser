@@ -21,7 +21,7 @@
 
 #include "platform/geometry/FloatRect.h"
 #include "platform/geometry/FloatSize.h"
-#include "platform/wtf/PassRefPtr.h"
+#include "platform/wtf/RefPtr.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkImage.h"
 
@@ -61,8 +61,11 @@ bool SVGImageForContainer::ApplyShader(PaintFlags& flags,
                                          local_matrix);
 }
 
-sk_sp<SkImage> SVGImageForContainer::ImageForCurrentFrame() {
-  return image_->ImageForCurrentFrameForContainer(url_, Size());
+PaintImage SVGImageForContainer::PaintImageForCurrentFrame() {
+  PaintImageBuilder builder;
+  InitPaintImageBuilder(builder);
+  image_->PopulatePaintRecordForCurrentFrameForContainer(builder, url_, Size());
+  return builder.TakePaintImage();
 }
 
 }  // namespace blink

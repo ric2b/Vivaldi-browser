@@ -321,16 +321,16 @@ void ExtensionInfoGenerator::CreateExtensionInfoHelper(
   int blacklist_text = -1;
   switch (extension_prefs_->GetExtensionBlacklistState(extension.id())) {
     case BLACKLISTED_MALWARE:
-      blacklist_text = IDS_OPTIONS_BLACKLISTED_MALWARE;
+      blacklist_text = IDS_EXTENSIONS_BLACKLISTED_MALWARE;
       break;
     case BLACKLISTED_SECURITY_VULNERABILITY:
-      blacklist_text = IDS_OPTIONS_BLACKLISTED_SECURITY_VULNERABILITY;
+      blacklist_text = IDS_EXTENSIONS_BLACKLISTED_SECURITY_VULNERABILITY;
       break;
     case BLACKLISTED_CWS_POLICY_VIOLATION:
-      blacklist_text = IDS_OPTIONS_BLACKLISTED_CWS_POLICY_VIOLATION;
+      blacklist_text = IDS_EXTENSIONS_BLACKLISTED_CWS_POLICY_VIOLATION;
       break;
     case BLACKLISTED_POTENTIALLY_UNWANTED:
-      blacklist_text = IDS_OPTIONS_BLACKLISTED_POTENTIALLY_UNWANTED;
+      blacklist_text = IDS_EXTENSIONS_BLACKLISTED_POTENTIALLY_UNWANTED;
       break;
     default:
       break;
@@ -349,7 +349,7 @@ void ExtensionInfoGenerator::CreateExtensionInfoHelper(
     if (is_policy_location) {
       info->controlled_info->type = developer::CONTROLLER_TYPE_POLICY;
       info->controlled_info->text =
-          l10n_util::GetStringUTF8(IDS_OPTIONS_INSTALL_LOCATION_ENTERPRISE);
+          l10n_util::GetStringUTF8(IDS_EXTENSIONS_INSTALL_LOCATION_ENTERPRISE);
     } else if (profile->IsChild()) {
       info->controlled_info->type = developer::CONTROLLER_TYPE_CHILD_CUSTODIAN;
       info->controlled_info->text = l10n_util::GetStringUTF8(
@@ -388,11 +388,12 @@ void ExtensionInfoGenerator::CreateExtensionInfoHelper(
   // Disable reasons.
   int disable_reasons = extension_prefs_->GetDisableReasons(extension.id());
   info->disable_reasons.suspicious_install =
-      (disable_reasons & Extension::DISABLE_NOT_VERIFIED) != 0;
+      (disable_reasons & disable_reason::DISABLE_NOT_VERIFIED) != 0;
   info->disable_reasons.corrupt_install =
-      (disable_reasons & Extension::DISABLE_CORRUPTED) != 0;
+      (disable_reasons & disable_reason::DISABLE_CORRUPTED) != 0;
   info->disable_reasons.update_required =
-      (disable_reasons & Extension::DISABLE_UPDATE_REQUIRED_BY_POLICY) != 0;
+      (disable_reasons & disable_reason::DISABLE_UPDATE_REQUIRED_BY_POLICY) !=
+      0;
 
   // Error collection.
   bool error_console_enabled =
@@ -455,11 +456,11 @@ void ExtensionInfoGenerator::CreateExtensionInfoHelper(
   // Location text.
   int location_text = -1;
   if (info->location == developer::LOCATION_UNKNOWN)
-    location_text = IDS_OPTIONS_INSTALL_LOCATION_UNKNOWN;
+    location_text = IDS_EXTENSIONS_INSTALL_LOCATION_UNKNOWN;
   else if (extension.location() == Manifest::EXTERNAL_REGISTRY)
-    location_text = IDS_OPTIONS_INSTALL_LOCATION_3RD_PARTY;
+    location_text = IDS_EXTENSIONS_INSTALL_LOCATION_3RD_PARTY;
   else if (extension.is_shared_module())
-    location_text = IDS_OPTIONS_INSTALL_LOCATION_SHARED_MODULE;
+    location_text = IDS_EXTENSIONS_INSTALL_LOCATION_SHARED_MODULE;
   if (location_text != -1) {
     info->location_text.reset(
         new std::string(l10n_util::GetStringUTF8(location_text)));

@@ -22,7 +22,7 @@
 namespace content {
 class RenderFrameHost;
 class WebContents;
-}
+}  // namespace content
 
 namespace payments {
 
@@ -114,6 +114,10 @@ class PaymentRequest : public mojom::PaymentRequest,
 
   std::unique_ptr<PaymentRequestSpec> spec_;
   std::unique_ptr<PaymentRequestState> state_;
+
+  // The RFC 6454 origin of the top level frame that has invoked PaymentRequest
+  // API. This is what the user sees in the address bar.
+  const GURL top_level_origin_;
 
   // The RFC 6454 origin of the frame that has invoked PaymentRequest API. This
   // can be either the main frame or an iframe.

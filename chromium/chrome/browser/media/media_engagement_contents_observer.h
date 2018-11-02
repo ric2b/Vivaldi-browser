@@ -22,6 +22,8 @@ class MediaEngagementContentsObserver : public content::WebContentsObserver {
   void WebContentsDestroyed() override;
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
+  void ReadyToCommitNavigation(
+      content::NavigationHandle* navigation_handle) override;
   void WasShown() override;
   void WasHidden() override;
   void MediaStartedPlaying(const MediaPlayerInfo& media_player_info,
@@ -33,7 +35,7 @@ class MediaEngagementContentsObserver : public content::WebContentsObserver {
   void MediaResized(const gfx::Size& size, const MediaPlayerId& id) override;
 
   static const gfx::Size kSignificantSize;
-  static const char* kHistogramScoreAtPlaybackName;
+  static const char* const kHistogramScoreAtPlaybackName;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(MediaEngagementContentsObserverTest,
@@ -43,6 +45,7 @@ class MediaEngagementContentsObserver : public content::WebContentsObserver {
   // Only MediaEngagementService can create a MediaEngagementContentsObserver.
   friend MediaEngagementService;
   friend MediaEngagementContentsObserverTest;
+  friend class MediaEngagementBrowserTest;
 
   MediaEngagementContentsObserver(content::WebContents* web_contents,
                                   MediaEngagementService* service);
@@ -148,19 +151,13 @@ class MediaEngagementContentsObserver : public content::WebContentsObserver {
       const MediaPlayerId& id,
       MediaEngagementContentsObserver::InsignificantHistogram histogram);
 
-  static const char* kHistogramSignificantNotAddedAfterFirstTimeName;
-  static const char* kHistogramSignificantNotAddedFirstTimeName;
-  static const char* kHistogramSignificantRemovedName;
+  static const char* const kHistogramSignificantNotAddedAfterFirstTimeName;
+  static const char* const kHistogramSignificantNotAddedFirstTimeName;
+  static const char* const kHistogramSignificantRemovedName;
   static const int kMaxInsignificantPlaybackReason;
 
   // Record the score and change in score to UKM.
   void RecordUkmMetrics();
-
-  static const char* kUkmEntryName;
-  static const char* kUkmMetricPlaybacksTotalName;
-  static const char* kUkmMetricVisitsTotalName;
-  static const char* kUkmMetricEngagementScoreName;
-  static const char* kUkmMetricPlaybacksDeltaName;
 
   bool is_visible_ = false;
   bool significant_playback_recorded_ = false;
@@ -170,6 +167,8 @@ class MediaEngagementContentsObserver : public content::WebContentsObserver {
   void RecordEngagementScoreToHistogramAtPlayback(const MediaPlayerId& id);
 
   url::Origin committed_origin_;
+
+  static const base::TimeDelta kSignificantMediaPlaybackTime;
 
   DISALLOW_COPY_AND_ASSIGN(MediaEngagementContentsObserver);
 };

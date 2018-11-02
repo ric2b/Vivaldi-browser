@@ -6,16 +6,10 @@
 #define SharedGpuContext_h
 
 #include "platform/PlatformExport.h"
+#include "platform/graphics/WebGraphicsContext3DProviderWrapper.h"
 #include "platform/wtf/ThreadSpecific.h"
 
 #include <memory>
-
-namespace gpu {
-namespace gles2 {
-class GLES2Interface;
-}
-}
-class GrContext;
 
 namespace blink {
 
@@ -28,26 +22,13 @@ class WebGraphicsContext3DProvider;
 // Platform::createSharedOffscreenGraphicsContext3DProvider
 class PLATFORM_EXPORT SharedGpuContext {
  public:
-  // The contextId is incremented each time a new underlying context
-  // is created. For example, when the context is lost, then restored.
-  // User code can rely on this Id to determine whether long-lived
-  // gpu resources are still alive in the current context.
-  static unsigned ContextId();
-  static gpu::gles2::GLES2Interface*
-  Gl();                    // May re-create context if context was lost
-  static GrContext* Gr();  // May re-create context if context was lost
-  static bool IsValid();   // May re-create context if context was lost
   // May re-create context if context was lost
+  static WeakPtr<WebGraphicsContext3DProviderWrapper> ContextProviderWrapper();
   static bool AllowSoftwareToAcceleratedCanvasUpgrade();
-
   static bool IsValidWithoutRestoring();
   typedef std::function<std::unique_ptr<WebGraphicsContext3DProvider>()>
       ContextProviderFactory;
   static void SetContextProviderFactoryForTesting(ContextProviderFactory);
-
-  enum {
-    kNoSharedContext = 0,
-  };
 
  private:
   static SharedGpuContext* GetInstanceForCurrentThread();
@@ -55,11 +36,13 @@ class PLATFORM_EXPORT SharedGpuContext {
   SharedGpuContext();
   void CreateContextProviderOnMainThread(WaitableEvent*);
   void CreateContextProviderIfNeeded();
+  void SetContextProvider(std::unique_ptr<WebGraphicsContext3DProvider>&&);
 
   ContextProviderFactory context_provider_factory_ = nullptr;
-  std::unique_ptr<WebGraphicsContext3DProvider> context_provider_;
-  unsigned context_id_;
+  std::unique_ptr<WebGraphicsContext3DProviderWrapper>
+      context_provider_wrapper_;
   friend class WTF::ThreadSpecific<SharedGpuContext>;
+  bool context_provider_creation_failed_ = false;
 };
 
 }  // blink

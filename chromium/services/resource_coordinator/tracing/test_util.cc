@@ -22,15 +22,16 @@ mojom::AgentPtr MockAgent::CreateAgentPtr() {
 }
 
 void MockAgent::StartTracing(const std::string& config,
+                             base::TimeTicks coordinator_time,
                              const StartTracingCallback& cb) {
   call_stat_.push_back("StartTracing");
-  cb.Run();
+  cb.Run(true);
 }
 
 void MockAgent::StopAndFlush(mojom::RecorderPtr recorder) {
   call_stat_.push_back("StopAndFlush");
   if (!metadata_.empty())
-    recorder->AddMetadata(base::MakeUnique<base::DictionaryValue>(metadata_));
+    recorder->AddMetadata(metadata_.CreateDeepCopy());
   for (const auto& chunk : data_) {
     recorder->AddChunk(chunk);
   }

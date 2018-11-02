@@ -6,6 +6,7 @@
 
 #include <linux/magic.h>
 #include <sys/statfs.h>
+#include <map>
 #include <set>
 
 #include "base/callback.h"
@@ -36,6 +37,15 @@ namespace {
 
 constexpr char kLsbReleaseArcVersionKey[] = "CHROMEOS_ARC_ANDROID_SDK_VERSION";
 constexpr char kAndroidMSdkVersion[] = "23";
+
+// Contains set of profiles for which decline reson was already reported.
+base::LazyInstance<std::set<base::FilePath>>::DestructorAtExit
+    g_profile_declined_set = LAZY_INSTANCE_INITIALIZER;
+
+// The cached value of migration allowed for profile. It is necessary to use
+// the same value during a user session.
+base::LazyInstance<std::map<base::FilePath, bool>>::DestructorAtExit
+    g_is_arc_migration_allowed = LAZY_INSTANCE_INITIALIZER;
 
 // Let IsAllowedForProfile() return "false" for any profile.
 bool g_disallow_for_testing = false;
@@ -97,81 +107,24 @@ void StoreCompatibilityCheckResult(const AccountId& account_id,
   callback.Run();
 }
 
-}  // namespace
-
-bool IsArcAllowedForProfile(const Profile* profile) {
-  if (g_disallow_for_testing) {
-    VLOG(1) << "ARC is disallowed for testing.";
-    return false;
-  }
-
-  // ARC Kiosk can be enabled even if ARC is not yet supported on the device.
-  // In that case IsArcKioskMode() should return true as profile is already
-  // created.
-  if (!IsArcAvailable() && !(IsArcKioskMode() && IsArcKioskAvailable())) {
-    VLOG(1) << "ARC is not available.";
-    return false;
-  }
-
-  if (!profile) {
-    VLOG(1) << "ARC is not supported for systems without profile.";
-    return false;
-  }
-
-  if (!chromeos::ProfileHelper::IsPrimaryProfile(profile)) {
-    VLOG(1) << "Non-primary users are not supported in ARC.";
-    return false;
-  }
-
-  // IsPrimaryProfile can return true for an incognito profile corresponding
-  // to the primary profile, but ARC does not support it.
-  if (profile->IsOffTheRecord()) {
-    VLOG(1) << "Incognito profile is not supported in ARC.";
-    return false;
-  }
-
-  if (profile->IsLegacySupervised()) {
-    VLOG(1) << "Supervised users are not supported in ARC.";
-    return false;
-  }
-
-  if (!IsArcCompatibleFileSystemUsedForProfile(profile) &&
-      !IsArcMigrationAllowedByPolicyForProfile(profile)) {
-    VLOG(1) << "Incompatible encryption and migration forbidden.";
-    return false;
-  }
-
-  // Play Store requires an appropriate application install mechanism. Normal
-  // users do this through GAIA, but Kiosk and Active Directory users use
-  // different application install mechanism. ARC is not allowed otherwise
-  // (e.g. in public sessions). cf) crbug.com/605545
-  const user_manager::User* user =
-      chromeos::ProfileHelper::Get()->GetUserByProfile(profile);
-  if (!IsArcAllowedForUser(user)) {
-    VLOG(1) << "ARC is not allowed for the user.";
-    return false;
-  }
-
-  // Do not run ARC instance when supervised user is being created.
-  // Otherwise noisy notification may be displayed.
-  chromeos::UserFlow* user_flow =
-      chromeos::ChromeUserManager::Get()->GetUserFlow(user->GetAccountId());
-  if (!user_flow || !user_flow->CanStartArc()) {
-    VLOG(1) << "ARC is not allowed in the current user flow.";
-    return false;
-  }
-
-  return true;
+// Returns true if this is called first time for profile. Used to detect
+// duplicate message for the same profile.
+bool IsReportingFirstTimeForProfile(const Profile* profile) {
+  const base::FilePath path = profile->GetPath();
+  bool inserted;
+  std::tie(std::ignore, inserted) = g_profile_declined_set.Get().insert(path);
+  return inserted;
 }
 
-bool IsArcMigrationAllowedByPolicyForProfile(const Profile* profile) {
-  if (!profile || !profile->GetPrefs()->IsManagedPreference(
-                      prefs::kEcryptfsMigrationStrategy)) {
-    return true;
+bool IsArcMigrationAllowedInternal(const Profile* profile) {
+  policy_util::EcryptfsMigrationAction migration_strategy =
+      policy_util::GetDefaultEcryptfsMigrationActionForManagedUser(
+          IsActiveDirectoryUserForProfile(profile));
+  if (profile->GetPrefs()->IsManagedPreference(
+          prefs::kEcryptfsMigrationStrategy)) {
+    migration_strategy = static_cast<policy_util::EcryptfsMigrationAction>(
+        profile->GetPrefs()->GetInteger(prefs::kEcryptfsMigrationStrategy));
   }
-
-  int migration_strategy =
-      profile->GetPrefs()->GetInteger(prefs::kEcryptfsMigrationStrategy);
   // |kAskForEcryptfsArcUsers| value is received only if the device is in EDU
   // and admin left the migration policy unset. Note that when enabling ARC on
   // the admin console, it is mandatory for the administrator to also choose a
@@ -181,8 +134,7 @@ bool IsArcMigrationAllowedByPolicyForProfile(const Profile* profile) {
   // TODO(pmarko): Remove the special kAskForEcryptfsArcUsers handling when we
   // assess that it's not necessary anymore: crbug.com/761348.
   if (migration_strategy ==
-      static_cast<int>(
-          arc::policy_util::EcryptfsMigrationAction::kAskForEcryptfsArcUsers)) {
+      policy_util::EcryptfsMigrationAction::kAskForEcryptfsArcUsers) {
     // Note that ARC enablement is controlled by policy for managed users (as
     // it's marked 'default_for_enterprise_users': False in
     // policy_templates.json).
@@ -196,8 +148,110 @@ bool IsArcMigrationAllowedByPolicyForProfile(const Profile* profile) {
   }
 
   return migration_strategy !=
-         static_cast<int>(
-             arc::policy_util::EcryptfsMigrationAction::kDisallowMigration);
+         policy_util::EcryptfsMigrationAction::kDisallowMigration;
+}
+
+}  // namespace
+
+bool IsArcAllowedForProfile(const Profile* profile) {
+  // Silently ignore default and lock screen profiles.
+  if (!profile || chromeos::ProfileHelper::IsSigninProfile(profile) ||
+      chromeos::ProfileHelper::IsLockScreenAppProfile(profile)) {
+    return false;
+  }
+
+  if (g_disallow_for_testing) {
+    VLOG_IF(1, IsReportingFirstTimeForProfile(profile))
+        << "ARC is disallowed for testing.";
+    return false;
+  }
+
+  // ARC Kiosk can be enabled even if ARC is not yet supported on the device.
+  // In that case IsArcKioskMode() should return true as profile is already
+  // created.
+  if (!IsArcAvailable() && !(IsArcKioskMode() && IsArcKioskAvailable())) {
+    VLOG_IF(1, IsReportingFirstTimeForProfile(profile))
+        << "ARC is not available.";
+    return false;
+  }
+
+  if (!chromeos::ProfileHelper::IsPrimaryProfile(profile)) {
+    VLOG_IF(1, IsReportingFirstTimeForProfile(profile))
+        << "Non-primary users are not supported in ARC.";
+    return false;
+  }
+
+  // IsPrimaryProfile can return true for an incognito profile corresponding
+  // to the primary profile, but ARC does not support it.
+  if (profile->IsOffTheRecord()) {
+    VLOG_IF(1, IsReportingFirstTimeForProfile(profile))
+        << "Incognito profile is not supported in ARC.";
+    return false;
+  }
+
+  if (profile->IsLegacySupervised()) {
+    VLOG_IF(1, IsReportingFirstTimeForProfile(profile))
+        << "Supervised users are not supported in ARC.";
+    return false;
+  }
+
+  if (IsArcBlockedDueToIncompatibleFileSystem(profile) &&
+      !IsArcMigrationAllowedByPolicyForProfile(profile)) {
+    VLOG_IF(1, IsReportingFirstTimeForProfile(profile))
+        << "Incompatible encryption and migration forbidden.";
+    return false;
+  }
+
+  // Play Store requires an appropriate application install mechanism. Normal
+  // users do this through GAIA, but Kiosk and Active Directory users use
+  // different application install mechanism. ARC is not allowed otherwise
+  // (e.g. in public sessions). cf) crbug.com/605545
+  const user_manager::User* user =
+      chromeos::ProfileHelper::Get()->GetUserByProfile(profile);
+  if (!IsArcAllowedForUser(user)) {
+    VLOG_IF(1, IsReportingFirstTimeForProfile(profile))
+        << "ARC is not allowed for the user.";
+    return false;
+  }
+
+  // Do not run ARC instance when supervised user is being created.
+  // Otherwise noisy notification may be displayed.
+  chromeos::UserFlow* user_flow =
+      chromeos::ChromeUserManager::Get()->GetUserFlow(user->GetAccountId());
+  if (!user_flow || !user_flow->CanStartArc()) {
+    VLOG_IF(1, IsReportingFirstTimeForProfile(profile))
+        << "ARC is not allowed in the current user flow.";
+    return false;
+  }
+
+  return true;
+}
+
+bool IsArcMigrationAllowedByPolicyForProfile(const Profile* profile) {
+  // Always allow migration for unmanaged users.
+  // We're checking if kArcEnabled is managed to find out if the profile is
+  // managed. This is equivalent, because kArcEnabled is marked
+  // 'default_for_enterprise_users': False in policy_templates.json).
+  // Also note that IsArcPlayStoreEnabledPreferenceManagedForProfile cannot be
+  // used here due to function call chain (it calls IsArcAllowedForProfile
+  // again).
+  // TODO(pmarko): crbug.com/771666: Figure out a nicer way to do this on a
+  // const Profile*.
+  if (!profile ||
+      !profile->GetPrefs()->IsManagedPreference(prefs::kArcEnabled)) {
+    return true;
+  }
+
+  // Use the profile path as unique identifier for profile.
+  const base::FilePath path = profile->GetPath();
+  auto iter = g_is_arc_migration_allowed.Get().find(path);
+  if (iter == g_is_arc_migration_allowed.Get().end()) {
+    iter = g_is_arc_migration_allowed.Get()
+               .emplace(path, IsArcMigrationAllowedInternal(profile))
+               .first;
+  }
+
+  return iter->second;
 }
 
 bool IsArcBlockedDueToIncompatibleFileSystem(const Profile* profile) {

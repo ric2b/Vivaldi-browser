@@ -12,14 +12,12 @@
 <translation id="1403254041219632970">日後發佈的 Chromium 版本將不再支援 Mac OS X 10.6、10.7 或 10.8。</translation>
 <translation id="1414495520565016063">你已登入 Chromium！</translation>
 <translation id="1444754455097148408">Chromium 開放原始碼授權</translation>
-<translation id="1480489203462860648">安裝完畢，馬上試試吧！</translation>
 <translation id="1502360822835740515">將 Chromium 設為預設瀏覽器</translation>
 <translation id="151962892725702025">你的網域無法使用「同步功能」，因此 Chromium 作業系統無法同步處理你的資料。</translation>
 <translation id="1559451348202814456">Chromium 已不適用於 Mac OS X 10.6、10.7 或 10.8，因此可能無法正常運作。</translation>
 <translation id="1653828314016431939">確定 - 立即重新啟動</translation>
 <translation id="1668054258064581266">將你的帳戶從 Chromium 移除後，可能需要重新載入開啟的分頁，這項操作才會生效。</translation>
 <translation id="1688750314291223739">設定同步處理功能，即可在網路上儲存你的個人化瀏覽器功能，並且透過任何電腦從 Chromium 使用這些功能。</translation>
-<translation id="1699664235656412242">請將所有 Chromium 視窗 (包括在 Windows 8 模式中的視窗) 關閉，然後再試一次。</translation>
 <translation id="1708666629004767631">新版 Chromium 現已推出，安全更上一層樓。</translation>
 <translation id="1774152462503052664">讓 Chromium 在背景執行</translation>
 <translation id="1779356040007214683">為了讓 Chromium 的安全性更有保障，我們已將部分未列在 <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> 中的擴充功能停用，它們可能在你不知情的情況下加入瀏覽器。</translation>
@@ -101,6 +99,7 @@
 <translation id="4271805377592243930">前往 Chromium 說明頁面</translation>
 <translation id="4285930937574705105">不明錯誤導致安裝失敗。如果目前 Chromium 正在執行，請關閉 Chromium，然後再試一次。</translation>
 <translation id="4330585738697551178">已知這個模組與 Chromium 衝突。</translation>
+<translation id="4421155425831608516">這部裝置的管理員停用了 Chromium 的登入功能。</translation>
 <translation id="4423735387467980091">自訂及控制 Chromium</translation>
 <translation id="4458285410772214805">請先登出，然後重新登入，這項變更才會生效。</translation>
 <translation id="4469812139324097969">Chromium 已有一段時間未重新啟動，現用版本因此過舊。重新啟動後，即會套用可用的更新。</translation>
@@ -177,7 +176,6 @@
 這表示你可能無法使用部分功能。請指定另一個設定檔目錄，或使用較新版本的 Chromium。</translation>
 <translation id="6734080038664603509">更新 Chromium(&amp;C)</translation>
 <translation id="6734291798041940871">電腦上的所有使用者都已經安裝 Chromium 了。</translation>
-<translation id="6757767188268205357">不要再問我</translation>
 <translation id="6810143991807788455">只要回報目前的設定，就能助我們一臂之力，讓 Chromium 更臻完美</translation>
 <translation id="6857782730669500492">Chromium - <ph name="PAGE_TITLE" /></translation>
 <translation id="6883876366448858277">將特定字詞及其上下文內容傳送至 Google 搜尋，並傳回字詞定義、相關圖片和其他搜尋結果。</translation>
@@ -190,7 +188,6 @@
 <translation id="707471633328071618">Google Payments (已複製到 Chromium)</translation>
 <translation id="7138853919861947730">Chromium 透過網路服務改善瀏覽品質。</translation>
 <translation id="7162152143154757523">Chromium 可將您在瀏覽器中輸入的字詞傳送給 Google 伺服器，並透過 Google 搜尋所使用的拼字檢查技術，為您提供更精確的拼字檢查功能。</translation>
-<translation id="7196020411877309443">為何出現這個對話框？</translation>
 <translation id="7205698830395646142">在 Chromium 選單中隱藏</translation>
 <translation id="7223968959479464213">工作管理員 - Chromium</translation>
 <translation id="722928257909516027">顯示 Chromium 選單</translation>

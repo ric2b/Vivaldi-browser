@@ -14,6 +14,7 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "components/payments/core/features.h"
+#include "ios/chrome/browser/passwords/credential_manager_features.h"
 #include "ios/web/public/test/fakes/test_browser_state.h"
 #import "ios/web/public/test/js_test_util.h"
 #include "ios/web/public/test/scoped_testing_web_client.h"
@@ -87,9 +88,9 @@ TEST_F(ChromeWebClientTest, WKWebViewEarlyPageScriptPrint) {
               web::ExecuteJavaScript(web_view, @"typeof __gCrWeb.print"));
 }
 
-// Tests that ChromeWebClient does not provide payment request script for
-// WKWebView unless the feature is enabled.
-TEST_F(ChromeWebClientTest, WKWebViewEarlyPageScriptPaymentRequest) {
+// Tests that ChromeWebClient provides credential manager script for WKWebView
+// if and only if the feature is enabled.
+TEST_F(ChromeWebClientTest, WKWebViewEarlyPageScriptCredentialManager) {
   // Chrome scripts rely on __gCrWeb object presence.
   web::TestBrowserState browser_state;
   WKWebView* web_view = web::BuildWKWebView(CGRectZero, &browser_state);
@@ -99,14 +100,49 @@ TEST_F(ChromeWebClientTest, WKWebViewEarlyPageScriptPaymentRequest) {
   NSString* script = web_client.Get()->GetEarlyPageScript(&browser_state);
   web::ExecuteJavaScript(web_view, script);
   EXPECT_NSEQ(@"undefined", web::ExecuteJavaScript(
-                                web_view, @"typeof window.PaymentRequest"));
+                                web_view, @"typeof navigator.credentials"));
 
   base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(payments::features::kWebPayments);
+  feature_list.InitAndEnableFeature(
+      credential_manager::features::kCredentialManager);
   script = web_client.Get()->GetEarlyPageScript(&browser_state);
+  web::ExecuteJavaScript(web_view, script);
+  EXPECT_NSEQ(@"object", web::ExecuteJavaScript(
+                             web_view, @"typeof navigator.credentials"));
+}
+
+// Tests that ChromeWebClient provides payment request script for WKWebView if
+// the feature is enabled.
+TEST_F(ChromeWebClientTest, WKWebViewEarlyPageScriptPaymentRequestEnabled) {
+  // Chrome scripts rely on __gCrWeb object presence.
+  web::TestBrowserState browser_state;
+  WKWebView* web_view = web::BuildWKWebView(CGRectZero, &browser_state);
+  web::ExecuteJavaScript(web_view, @"__gCrWeb = {};");
+
+  web::ScopedTestingWebClient web_client(base::MakeUnique<ChromeWebClient>());
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(payments::features::kWebPayments);
+  NSString* script = web_client.Get()->GetEarlyPageScript(&browser_state);
   web::ExecuteJavaScript(web_view, script);
   EXPECT_NSEQ(@"function", web::ExecuteJavaScript(
                                web_view, @"typeof window.PaymentRequest"));
+}
+
+// Tests that ChromeWebClient does not provide payment request script for
+// WKWebView if the feature is disabled.
+TEST_F(ChromeWebClientTest, WKWebViewEarlyPageScriptPaymentRequestDisabled) {
+  // Chrome scripts rely on __gCrWeb object presence.
+  web::TestBrowserState browser_state;
+  WKWebView* web_view = web::BuildWKWebView(CGRectZero, &browser_state);
+  web::ExecuteJavaScript(web_view, @"__gCrWeb = {};");
+
+  web::ScopedTestingWebClient web_client(base::MakeUnique<ChromeWebClient>());
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndDisableFeature(payments::features::kWebPayments);
+  NSString* script = web_client.Get()->GetEarlyPageScript(&browser_state);
+  web::ExecuteJavaScript(web_view, script);
+  EXPECT_NSEQ(@"undefined", web::ExecuteJavaScript(
+                                web_view, @"typeof window.PaymentRequest"));
 }
 
 }  // namespace

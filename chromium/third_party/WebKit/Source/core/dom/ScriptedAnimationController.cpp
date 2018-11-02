@@ -28,7 +28,7 @@
 #include "core/css/MediaQueryListListener.h"
 #include "core/dom/Document.h"
 #include "core/dom/FrameRequestCallback.h"
-#include "core/events/Event.h"
+#include "core/dom/events/Event.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/inspector/InspectorTraceEvents.h"
@@ -82,10 +82,10 @@ void ScriptedAnimationController::CancelCallback(CallbackId id) {
 }
 
 void ScriptedAnimationController::RunTasks() {
-  Vector<std::unique_ptr<WTF::Closure>> tasks;
+  Vector<WTF::Closure> tasks;
   tasks.swap(task_queue_);
   for (auto& task : tasks)
-    (*task)();
+    task();
 }
 
 void ScriptedAnimationController::DispatchEvents(
@@ -167,8 +167,7 @@ void ScriptedAnimationController::ServiceScriptedAnimations(
   ScheduleAnimationIfNeeded();
 }
 
-void ScriptedAnimationController::EnqueueTask(
-    std::unique_ptr<WTF::Closure> task) {
+void ScriptedAnimationController::EnqueueTask(WTF::Closure task) {
   task_queue_.push_back(std::move(task));
   ScheduleAnimationIfNeeded();
 }

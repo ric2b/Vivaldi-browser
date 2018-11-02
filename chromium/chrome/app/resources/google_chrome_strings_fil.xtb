@@ -19,7 +19,6 @@ Maaaring hindi available ang ilang tampok at hindi mase-save ang mga pagbabago s
 <translation id="1434626383986940139">Chrome Canary Apps</translation>
 <translation id="1457721931618994305">Ina-update ang Google Chrome...</translation>
 <translation id="1469002951682717133">App Launcher ng Chrome</translation>
-<translation id="1480489203462860648">Subukan mo ito, naka-install na ito</translation>
 <translation id="1553358976309200471">I-update ang Chrome</translation>
 <translation id="1587223624401073077">Ginagamit ng Google Chrome ang iyong camera.</translation>
 <translation id="1587325591171447154">Mapanganib ang <ph name="FILE_NAME" />, kaya na-block ito ng Chrome.</translation>
@@ -98,6 +97,7 @@ Pakitingnan ang iyong email sa <ph name="ACCOUNT_EMAIL" /> para sa mga karagdaga
 <translation id="345171907106878721">Idagdag ang iyong sarili sa Chrome</translation>
 <translation id="3612333635265770873">Ang module na may parehong pangalan ay kilalang salungat sa Google Chrome.</translation>
 <translation id="3622797965165704966">Ngayon, mas madali nang gamitin ang Chrome sa iyong Google Account at sa mga nakabahaging computer.</translation>
+<translation id="3637702109597584617"><ph name="TERMS_OF_SERVICE_LINK" />Mga Tuntunin ng Serbisyo<ph name="END_TERMS_OF_SERVICE_LINK" /> ng Google Chrome OS</translation>
 <translation id="3718181793972440140">Magde-delete ito ng 1 item sa device na ito. Upang makuha ang iyong data sa ibang pagkakataon, mag-sign in sa Chrome bilang <ph name="USER_EMAIL" />.</translation>
 <translation id="3735758079232443276">Binago ng extension na "<ph name="EXTENSION_NAME" />" ang ipinapakitang page kapag sinimulan mo ang Chrome.</translation>
 <translation id="3738139272394829648">Pindutin upang Hanapin</translation>
@@ -136,12 +136,12 @@ Pakitingnan ang iyong email sa <ph name="ACCOUNT_EMAIL" /> para sa mga karagdaga
 <translation id="4754614261631455953">Google Chrome Canary (mDNS-In)</translation>
 <translation id="4771048833395599659">Maaaring mapanganib ang file na ito, kaya na-block ito ng Chrome.</translation>
 <translation id="4794050651896644714">I-save ang mga detalye sa Chrome</translation>
+<translation id="4804732725083176494">Na-disable ng administrator ng device na ito ang pag-sign in sa Chrome.</translation>
 <translation id="4891791193823137474">Hayaan ang Google Chrome na tumakbo sa background</translation>
 <translation id="4921569541910214635">Magbabahagi ng computer? Ngayon, maaari mong i-set up ang Chrome sa paraang gusto mo.</translation>
 <translation id="4953650215774548573">Itakda ang Google Chrome bilang iyong default na browser</translation>
 <translation id="495931528404527476">Sa Chrome</translation>
 <translation id="4965682129423310439">May nakitang mapaminsalang software ang Chrome sa iyong computer. Maaari itong alisin ng Chrome at i-restore ang mga setting mo upang mapaganang muli nang normal ang iyong browser.</translation>
-<translation id="4987308747895123092">Pakisara ang lahat ng window ng Google Chrome (kasama ang mga nasa mode na Windows 8) at subukang muli.</translation>
 <translation id="4990567037958725628">Google Chrome Canary</translation>
 <translation id="5028489144783860647">Hindi mai-sync ng Google Chrome ang iyong data. Paki-update ang iyong passphrase sa Pag-sync.</translation>
 <translation id="5037239767309817516">Pakisara ang lahat ng mga window ng Google Chrome at ilunsad itong muli para magkaroon ng epekto ang pagbabagong ito.</translation>
@@ -203,7 +203,6 @@ Hindi magawang bawiin ng Google Chrome ang iyong mga setting.</translation>
 <translation id="6634887557811630702">Napapanahon ang Google Chrome.</translation>
 <translation id="6676384891291319759">I-access ang Internet</translation>
 <translation id="6697947395630195233">Kailangan ng Chrome ng access sa iyong lokasyon upang ibahagi ang lokasyon mo sa site na ito.</translation>
-<translation id="6757767188268205357">Huwag akong istorbohin</translation>
 <translation id="683440813066116847">Inbound na panuntunan para sa Google Chrome Canary upang payagan ang trapiko ng mDNS.</translation>
 <translation id="686561893457936865">Dalhin ang Chrome kahit saan</translation>
 <translation id="6883876366448858277">ipapadala ang isang salita at ang konteksto nito sa Google Search, at magbibigay ng mga pagpapakahulugan, larawan at iba pang mga resulta ng paghahanap.</translation>
@@ -218,7 +217,6 @@ Hindi magawang bawiin ng Google Chrome ang iyong mga setting.</translation>
 <translation id="7161904924553537242">Maligayang pagdating sa Google Chrome</translation>
 <translation id="7164397146364144019">Makakatulong ka na gawing mas ligtas at mas madaling gamitin ang Chrome sa pamamagitan ng awtomatikong pag-uulat ng mga detalye ng mga posibleng isyu sa seguridad sa Google.</translation>
 <translation id="7185038942300673794">Naidagdag ang <ph name="EXTENSION_NAME" /> sa Chrome.</translation>
-<translation id="7196020411877309443">Bakit ko nakikita ito?</translation>
 <translation id="7242029209006116544">Nagsa-sign in ka gamit ang isang pinamamahalaang account at nagbibigay sa administrator nito ng kontrol sa iyong profile sa Google Chrome. Permanenteng mauugnay ang iyong data sa Chrome, gaya ng iyong apps, mga bookmark, kasaysayan, password, at iba pang setting sa <ph name="USER_NAME" />. Matatanggal mo ang data na ito sa Google Accounts Dashboard, ngunit hindi mo maiuugnay ang data na ito sa isa pang account. Maaari ka ring gumawa ng bagong profile upang ihiwalay ang iyong umiiral na data sa Chrome. <ph name="LEARN_MORE" /></translation>
 <translation id="729375352412857283">Malapit nang hindi makatanggap ang computer na ito ng mga update sa Google Chrome dahil hindi na susuportahan ang Windows XP at Windows Vista.</translation>
 <translation id="7330164299247909639">Hindi nagtagumpay ang certificate ng pag-authenticate. Mag-sign in muli sa Google Chrome bilang si <ph name="USER_NAME" /> o makipag-ugnayan sa iyong administrator para sa higit pang impormasyon. <ph name="ADDITIONAL_EXPLANATION" /></translation>

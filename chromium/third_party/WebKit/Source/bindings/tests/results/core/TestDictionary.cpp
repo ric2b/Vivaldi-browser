@@ -15,7 +15,7 @@
 #include "bindings/tests/idls/core/TestInterfaceImplementation.h"
 #include "bindings/tests/idls/core/TestObject.h"
 #include "core/dom/Element.h"
-#include "core/events/EventTarget.h"
+#include "core/dom/events/EventTarget.h"
 #include "platform/wtf/Vector.h"
 
 namespace blink {
@@ -280,17 +280,6 @@ bool TestDictionary::runtimeMember() const {
 void TestDictionary::setRuntimeMember(bool value) {
   m_runtimeMember = value;
   m_hasRuntimeMember = true;
-}
-bool TestDictionary::hasStringArrayMember() const {
-  return m_hasStringArrayMember;
-}
-const Vector<String>& TestDictionary::stringArrayMember() const {
-  DCHECK(m_hasStringArrayMember);
-  return m_stringArrayMember;
-}
-void TestDictionary::setStringArrayMember(const Vector<String>& value) {
-  m_stringArrayMember = value;
-  m_hasStringArrayMember = true;
 }
 bool TestDictionary::hasStringMember() const {
   return !m_stringMember.IsNull();

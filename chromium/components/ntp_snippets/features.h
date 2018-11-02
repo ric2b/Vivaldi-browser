@@ -24,7 +24,7 @@ namespace ntp_snippets {
 // If you add a base::Feature below, you must add it to this list. It is used in
 // internal pages to list relevant parameters and settings.
 //
-extern const base::Feature*(kAllFeatures[]);
+extern const base::Feature* const kAllFeatures[];
 
 // Features to turn individual providers/categories on/off.
 // TODO(jkrcal): Rename to kRemoteSuggestionsFeature.
@@ -122,6 +122,11 @@ constexpr int kNotificationsIgnoredDefaultLimit = 3;
 // Whether to keep some prefetched content suggestions even when new suggestions
 // have been fetched.
 extern const base::Feature kKeepPrefetchedContentSuggestions;
+
+// Whether remote categories (except articles) which are not present in the last
+// fetch response should be deleted. This feature implicitly depends on
+// kArticleSuggestionsFeature.
+extern const base::Feature kDeleteRemoteCategoriesNotPresentInLastFetch;
 
 }  // namespace ntp_snippets
 

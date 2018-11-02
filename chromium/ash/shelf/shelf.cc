@@ -9,7 +9,6 @@
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
-#include "ash/session/session_controller.h"
 #include "ash/shelf/shelf_bezel_event_handler.h"
 #include "ash/shelf/shelf_controller.h"
 #include "ash/shelf/shelf_layout_manager.h"
@@ -18,6 +17,7 @@
 #include "ash/shell.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "ui/app_list/presenter/app_list.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -76,34 +76,6 @@ Shelf* Shelf::ForWindow(aura::Window* window) {
   return RootWindowController::ForWindow(window)->shelf();
 }
 
-// static
-bool Shelf::CanChangeShelfAlignment() {
-  if (Shell::Get()->session_controller()->IsUserSupervised())
-    return false;
-
-  const LoginStatus login_status =
-      Shell::Get()->session_controller()->login_status();
-
-  switch (login_status) {
-    case LoginStatus::LOCKED:
-    // Shelf alignment changes can be requested while being locked, but will
-    // be applied upon unlock.
-    case LoginStatus::USER:
-    case LoginStatus::OWNER:
-      return true;
-    case LoginStatus::PUBLIC:
-    case LoginStatus::SUPERVISED:
-    case LoginStatus::GUEST:
-    case LoginStatus::KIOSK_APP:
-    case LoginStatus::ARC_KIOSK_APP:
-    case LoginStatus::NOT_LOGGED_IN:
-      return false;
-  }
-
-  NOTREACHED();
-  return false;
-}
-
 void Shelf::CreateShelfWidget(aura::Window* root) {
   DCHECK(!shelf_widget_);
   aura::Window* shelf_container =
@@ -128,13 +100,8 @@ void Shelf::ShutdownShelfWidget() {
 }
 
 void Shelf::DestroyShelfWidget() {
+  // May be called multiple times during shutdown.
   shelf_widget_.reset();
-}
-
-void Shelf::NotifyShelfInitialized() {
-  DCHECK(shelf_layout_manager_);
-  DCHECK(shelf_widget_);
-  Shell::Get()->shelf_controller()->NotifyShelfInitialized(this);
 }
 
 aura::Window* Shelf::GetWindow() {
@@ -159,7 +126,6 @@ void Shelf::SetAlignment(ShelfAlignment alignment) {
   // The ShelfWidget notifies the ShelfView of the alignment change.
   shelf_widget_->OnShelfAlignmentChanged();
   shelf_layout_manager_->LayoutShelf();
-  Shell::Get()->shelf_controller()->NotifyShelfAlignmentChanged(this);
   Shell::Get()->NotifyShelfAlignmentChanged(GetWindow()->GetRootWindow());
 }
 
@@ -201,7 +167,6 @@ void Shelf::SetAutoHideBehavior(ShelfAutoHideBehavior auto_hide_behavior) {
     return;
 
   auto_hide_behavior_ = auto_hide_behavior;
-  Shell::Get()->shelf_controller()->NotifyShelfAutoHideBehaviorChanged(this);
   Shell::Get()->NotifyShelfAutoHideBehaviorChanged(
       GetWindow()->GetRootWindow());
 }
@@ -299,6 +264,10 @@ bool Shelf::ProcessGestureEvent(const ui::GestureEvent& event) {
   if (!shelf_layout_manager_)
     return false;
   return shelf_layout_manager_->ProcessGestureEvent(event);
+}
+
+void Shelf::ProcessMouseWheelEvent(const ui::MouseWheelEvent& event) {
+  Shell::Get()->app_list()->ProcessMouseWheelEvent(event);
 }
 
 void Shelf::AddObserver(ShelfObserver* observer) {

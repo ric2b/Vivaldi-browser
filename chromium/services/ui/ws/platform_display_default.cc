@@ -44,7 +44,7 @@ PlatformDisplayDefault::PlatformDisplayDefault(
       widget_(gfx::kNullAcceleratedWidget) {}
 
 PlatformDisplayDefault::~PlatformDisplayDefault() {
-#if defined(USE_OZONE) && defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS)
   ui::CursorController::GetInstance()->ClearCursorConfigForWindow(
       GetAcceleratedWidget());
 #endif
@@ -159,6 +159,11 @@ void PlatformDisplayDefault::SetCursorSize(const ui::CursorSize& cursor_size) {
   image_cursors_->SetCursorSize(cursor_size);
 }
 
+void PlatformDisplayDefault::ConfineCursorToBounds(
+    const gfx::Rect& pixel_bounds) {
+  platform_window_->ConfineCursorToBounds(pixel_bounds);
+}
+
 void PlatformDisplayDefault::UpdateTextInputState(
     const ui::TextInputState& state) {
   ui::PlatformImeController* ime = platform_window_->GetPlatformImeController();
@@ -194,6 +199,10 @@ void PlatformDisplayDefault::UpdateViewportMetrics(
   }
 }
 
+const display::ViewportMetrics& PlatformDisplayDefault::GetViewportMetrics() {
+  return metrics_;
+}
+
 gfx::AcceleratedWidget PlatformDisplayDefault::GetAcceleratedWidget() const {
   return widget_;
 }
@@ -201,7 +210,7 @@ gfx::AcceleratedWidget PlatformDisplayDefault::GetAcceleratedWidget() const {
 void PlatformDisplayDefault::SetCursorConfig(
     display::Display::Rotation rotation,
     float scale) {
-#if defined(USE_OZONE) && defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS)
   ui::CursorController::GetInstance()->SetCursorConfigForWindow(
       GetAcceleratedWidget(), rotation, scale);
 #endif
@@ -268,10 +277,10 @@ void PlatformDisplayDefault::OnAcceleratedWidgetAvailable(
   widget_ = widget;
   delegate_->OnAcceleratedWidgetAvailable();
 
-  cc::mojom::CompositorFrameSinkAssociatedPtr compositor_frame_sink;
-  cc::mojom::DisplayPrivateAssociatedPtr display_private;
-  cc::mojom::CompositorFrameSinkClientPtr compositor_frame_sink_client;
-  cc::mojom::CompositorFrameSinkClientRequest
+  viz::mojom::CompositorFrameSinkAssociatedPtr compositor_frame_sink;
+  viz::mojom::DisplayPrivateAssociatedPtr display_private;
+  viz::mojom::CompositorFrameSinkClientPtr compositor_frame_sink_client;
+  viz::mojom::CompositorFrameSinkClientRequest
       compositor_frame_sink_client_request =
           mojo::MakeRequest(&compositor_frame_sink_client);
 

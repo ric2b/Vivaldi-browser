@@ -13,6 +13,8 @@
 #include "content/public/common/cursor_info.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_context.h"
+#include "content/test/dummy_render_widget_host_delegate.h"
+#include "content/test/mock_widget_impl.h"
 #include "content/test/test_render_view_host.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -22,24 +24,6 @@
 namespace content {
 
 namespace {
-
-// TODO(kenrb): This mock is implemented in several unit test files, and
-// could be moved into a common header.
-class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
- public:
-  MockRenderWidgetHostDelegate() {}
-  ~MockRenderWidgetHostDelegate() override {}
-
- private:
-  // RenderWidgetHostDelegate:
-  void ExecuteEditCommand(
-      const std::string& command,
-      const base::Optional<base::string16>& value) override {}
-  void Cut() override {}
-  void Copy() override {}
-  void Paste() override {}
-  void SelectAll() override {}
-};
 
 class MockRenderWidgetHostViewForCursors : public TestRenderWidgetHostView {
  public:
@@ -62,6 +46,37 @@ class MockRenderWidgetHostViewForCursors : public TestRenderWidgetHostView {
   std::unique_ptr<CursorManager> cursor_manager_;
 };
 
+class MockRenderWidgetHost : public RenderWidgetHostImpl {
+ public:
+  static MockRenderWidgetHost* Create(RenderWidgetHostDelegate* delegate,
+                                      RenderProcessHost* process,
+                                      int32_t routing_id) {
+    mojom::WidgetPtr widget;
+    std::unique_ptr<MockWidgetImpl> widget_impl =
+        base::MakeUnique<MockWidgetImpl>(mojo::MakeRequest(&widget));
+
+    return new MockRenderWidgetHost(delegate, process, routing_id,
+                                    std::move(widget_impl), std::move(widget));
+  }
+
+ private:
+  MockRenderWidgetHost(RenderWidgetHostDelegate* delegate,
+                       RenderProcessHost* process,
+                       int routing_id,
+                       std::unique_ptr<MockWidgetImpl> widget_impl,
+                       mojom::WidgetPtr widget)
+      : RenderWidgetHostImpl(delegate,
+                             process,
+                             routing_id,
+                             std::move(widget),
+                             false),
+        widget_impl_(std::move(widget_impl)) {}
+
+  std::unique_ptr<MockWidgetImpl> widget_impl_;
+
+  DISALLOW_COPY_AND_ASSIGN(MockRenderWidgetHost);
+};
+
 class CursorManagerTest : public testing::Test {
  public:
   CursorManagerTest()
@@ -78,8 +93,8 @@ class CursorManagerTest : public testing::Test {
 
   RenderWidgetHostImpl* MakeNewWidgetHost() {
     int32_t routing_id = process_host_->GetNextRoutingID();
-    return new RenderWidgetHostImpl(&delegate_, process_host_.get(), routing_id,
-                                    false);
+    return MockRenderWidgetHost::Create(&delegate_, process_host_.get(),
+                                        routing_id);
   }
 
   void TearDown() override {
@@ -101,7 +116,7 @@ class CursorManagerTest : public testing::Test {
   // destruction.
   MockRenderWidgetHostViewForCursors* top_view_;
 
-  MockRenderWidgetHostDelegate delegate_;
+  DummyRenderWidgetHostDelegate delegate_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(CursorManagerTest);

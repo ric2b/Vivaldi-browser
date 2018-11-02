@@ -1,8 +1,10 @@
 
-post_process_target("//chrome/test:browser_tests") {
-  sources += [
-    "//vivaldi/extensions/api/webview/chrome_web_view_mediastate_apitest.cc",
-  ]
+if (!is_android) {
+  post_process_target("//chrome/test:browser_tests") {
+    sources += [
+      "//vivaldi/extensions/api/webview/chrome_web_view_mediastate_apitest.cc",
+    ]
+  }
 }
 
 post_process_target("//extensions/browser:browser_sources") {
@@ -11,6 +13,7 @@ post_process_target("//extensions/browser:browser_sources") {
   deps += [
     "//third_party/WebKit/public:blink_headers",
     "//vivaldi/extensions/schema:api",
+    "//vivaldi/prefs:prefs_files_generator",
   ]
 }
 

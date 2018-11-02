@@ -29,7 +29,7 @@ cr.define('extensions', function() {
       this.manager_ = manager;
       this.manager_.set('delegate', this);
 
-      var keyboardShortcuts = this.manager_.keyboardShortcuts;
+      const keyboardShortcuts = this.manager_.keyboardShortcuts;
       keyboardShortcuts.addEventListener(
           'shortcut-updated', this.onExtensionCommandUpdated_.bind(this));
       keyboardShortcuts.addEventListener(
@@ -43,14 +43,13 @@ cr.define('extensions', function() {
       chrome.developerPrivate.onItemStateChanged.addListener(
           this.onItemStateChanged_.bind(this));
       chrome.developerPrivate.getExtensionsInfo(
-          {includeDisabled: true, includeTerminated: true},
-          function(extensions) {
+          {includeDisabled: true, includeTerminated: true}, extensions => {
             this.extensions_ = extensions;
             for (let extension of extensions)
               this.manager_.addItem(extension);
 
             this.manager_.initPage();
-          }.bind(this));
+          });
       chrome.developerPrivate.getProfileConfiguration(
           this.onProfileStateChanged_.bind(this));
     }
@@ -68,11 +67,11 @@ cr.define('extensions', function() {
      * @private
      */
     onItemStateChanged_(eventData) {
-      var currentIndex = this.extensions_.findIndex(function(extension) {
+      const currentIndex = this.extensions_.findIndex(function(extension) {
         return extension.id == eventData.item_id;
       });
 
-      var EventType = chrome.developerPrivate.EventType;
+      const EventType = chrome.developerPrivate.EventType;
       switch (eventData.event_type) {
         case EventType.VIEW_REGISTERED:
         case EventType.VIEW_UNREGISTERED:
@@ -181,13 +180,13 @@ cr.define('extensions', function() {
       if (this.isDeleting_)
         return;
       this.isDeleting_ = true;
-      chrome.management.uninstall(id, {showConfirmDialog: true}, function() {
+      chrome.management.uninstall(id, {showConfirmDialog: true}, () => {
         // The "last error" was almost certainly the user canceling the dialog.
         // Do nothing. We only check it so we don't get noisy logs.
         /** @suppress {suspiciousCode} */
         chrome.runtime.lastError;
         this.isDeleting_ = false;
-      }.bind(this));
+      });
     }
 
     /** @override */
@@ -249,14 +248,14 @@ cr.define('extensions', function() {
 
     /** @override */
     showItemOptionsPage(id) {
-      var extension = this.extensions_.find(function(e) {
+      const extension = this.extensions_.find(function(e) {
         return e.id == id;
       });
       assert(extension && extension.optionsPage);
       if (extension.optionsPage.openInTab) {
         chrome.developerPrivate.showOptions(id);
       } else {
-        this.manager_.changePage(
+        extensions.navigation.navigateTo(
             {page: Page.DETAILS, subpage: Dialog.OPTIONS, extensionId: id});
       }
     }
@@ -292,8 +291,8 @@ cr.define('extensions', function() {
     }
 
     /** @override */
-    packExtension(rootPath, keyPath) {
-      chrome.developerPrivate.packDirectory(rootPath, keyPath);
+    packExtension(rootPath, keyPath, flag, callback) {
+      chrome.developerPrivate.packDirectory(rootPath, keyPath, flag, callback);
     }
 
     /** @override */

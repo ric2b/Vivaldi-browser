@@ -23,6 +23,7 @@
 #include "mojo/public/cpp/system/buffer.h"
 #include "services/device/public/cpp/generic_sensor/platform_sensor_configuration.h"
 #include "services/device/public/cpp/generic_sensor/sensor_reading.h"
+#include "services/device/public/cpp/generic_sensor/sensor_traits.h"
 #include "services/device/public/interfaces/constants.mojom.h"
 #include "services/device/public/interfaces/sensor.mojom.h"
 #include "services/device/public/interfaces/sensor_provider.mojom.h"
@@ -56,24 +57,26 @@ class FakeAmbientLightSensor : public device::mojom::Sensor {
   }
 
   void RemoveConfiguration(
-      const device::PlatformSensorConfiguration& configuration,
-      RemoveConfigurationCallback callback) override {
-    std::move(callback).Run(true);
-  }
+      const device::PlatformSensorConfiguration& configuration) override {}
 
   void Suspend() override {}
   void Resume() override {}
   void ConfigureReadingChangeNotifications(bool enabled) override {}
 
   device::PlatformSensorConfiguration GetDefaultConfiguration() {
-    return device::PlatformSensorConfiguration(60 /* frequency */);
+    return device::PlatformSensorConfiguration(
+        device::SensorTraits<
+            device::mojom::SensorType::AMBIENT_LIGHT>::kDefaultFrequency);
   }
 
   device::mojom::ReportingMode GetReportingMode() {
     return device::mojom::ReportingMode::ON_CHANGE;
   }
 
-  double GetMaximumSupportedFrequency() { return 60.0; }
+  double GetMaximumSupportedFrequency() {
+    return device::SensorTraits<
+        device::mojom::SensorType::AMBIENT_LIGHT>::kMaxAllowedFrequency;
+  }
   double GetMinimumSupportedFrequency() { return 1.0; }
 
   device::mojom::SensorClientRequest GetClient() {
@@ -100,9 +103,9 @@ class FakeAmbientLightSensor : public device::mojom::Sensor {
             GetBufferOffset());
 
     device::SensorReading reading;
-    reading.timestamp =
+    reading.als.timestamp =
         (base::TimeTicks::Now() - base::TimeTicks()).InSecondsF();
-    reading.values[0] = 50;
+    reading.als.value = 50;
 
     device::SensorReadingSharedBuffer* buffer =
         static_cast<device::SensorReadingSharedBuffer*>(shared_buffer.get());
@@ -171,15 +174,16 @@ class GenericSensorBrowserTest : public ContentBrowserTest {
             base::WaitableEvent::ResetPolicy::AUTOMATIC,
             base::WaitableEvent::InitialState::NOT_SIGNALED) {
     base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
-    cmd_line->AppendSwitchASCII(switches::kEnableFeatures, "GenericSensor");
+    cmd_line->AppendSwitchASCII(switches::kEnableFeatures,
+                                "GenericSensor, GenericSensorExtraClasses");
   }
 
   void SetUpOnMainThread() override {
     fake_sensor_provider_ = base::MakeUnique<FakeSensorProvider>();
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(&GenericSensorBrowserTest::SetBinderOnIOThread,
-                   base::Unretained(this)));
+        base::BindOnce(&GenericSensorBrowserTest::SetBinderOnIOThread,
+                       base::Unretained(this)));
 
     io_loop_finished_event_.Wait();
   }

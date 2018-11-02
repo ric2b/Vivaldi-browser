@@ -12,6 +12,8 @@ import static org.hamcrest.Matchers.not;
 import static org.junit.Assert.assertThat;
 
 import android.annotation.TargetApi;
+import android.app.NotificationChannel;
+import android.app.NotificationChannelGroup;
 import android.app.NotificationManager;
 import android.content.Context;
 import android.os.Build;
@@ -19,16 +21,20 @@ import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.SmallTest;
 
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.chromium.base.BuildInfo;
+import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.notifications.NotificationManagerProxy;
 import org.chromium.chrome.browser.notifications.NotificationManagerProxyImpl;
-import org.chromium.chrome.test.util.browser.notifications.MockNotificationManagerProxy;
+import org.chromium.chrome.browser.notifications.NotificationSettingsBridge;
+import org.chromium.chrome.test.util.browser.Features;
+import org.chromium.content.browser.test.NativeLibraryTestRule;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -42,232 +48,247 @@ import java.util.List;
  */
 @RunWith(BaseJUnit4ClassRunner.class)
 public class ChannelsInitializerTest {
-    static final String MISCELLANEOUS_CHANNEL_ID = "miscellaneous";
     private ChannelsInitializer mChannelsInitializer;
     private NotificationManagerProxy mNotificationManagerProxy;
     private Context mContext;
 
+    @Rule
+    public NativeLibraryTestRule mNativeLibraryTestRule = new NativeLibraryTestRule();
+
+    @Rule
+    @SuppressFBWarnings("URF_UNREAD_PUBLIC_OR_PROTECTED_FIELD")
+    public Features.Processor processor = new Features.Processor();
+
     @Before
     public void setUp() throws Exception {
+        // Not initializing the browser process is safe because
+        // UrlFormatter.formatUrlForSecurityDisplay() is stand-alone.
+        mNativeLibraryTestRule.loadNativeLibraryNoBrowserProcess();
+
         mContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
         mNotificationManagerProxy = new NotificationManagerProxyImpl(
                 (NotificationManager) mContext.getSystemService(Context.NOTIFICATION_SERVICE));
         mChannelsInitializer =
                 new ChannelsInitializer(mNotificationManagerProxy, mContext.getResources());
-        // Delete any channels that may already have been initialized. Cleaning up here rather than
-        // in tearDown in case tests running before these ones caused channels to be created.
-        for (Channel channel : mNotificationManagerProxy.getNotificationChannels()) {
-            if (!channel.getId().equals(MISCELLANEOUS_CHANNEL_ID)) {
+
+        // Delete any channels and channel groups that may already have been initialized. Cleaning
+        // up here rather than in tearDown in case tests running before these ones caused channels
+        // to be created.
+        for (NotificationChannel channel : mNotificationManagerProxy.getNotificationChannels()) {
+            if (!channel.getId().equals(NotificationChannel.DEFAULT_CHANNEL_ID)) {
                 mNotificationManagerProxy.deleteNotificationChannel(channel.getId());
             }
+        }
+        for (NotificationChannelGroup group :
+                mNotificationManagerProxy.getNotificationChannelGroups()) {
+            mNotificationManagerProxy.deleteNotificationChannelGroup(group.getId());
         }
     }
 
     @Test
     @SmallTest
-    // TODO(crbug.com/685808) Replace this with VERSION_CODES.O & remove isAtLeastO check below.
-    @MinAndroidSdkLevel(Build.VERSION_CODES.N_MR1)
-    @TargetApi(Build.VERSION_CODES.N_MR1)
+    @MinAndroidSdkLevel(Build.VERSION_CODES.O)
+    @TargetApi(Build.VERSION_CODES.O)
     @Feature({"Browser", "Notifications"})
+    @Features(@Features.Register(ChromeFeatureList.SITE_NOTIFICATION_CHANNELS))
     public void testDeleteLegacyChannels_noopOnCurrentDefinitions() throws Exception {
-        if (!BuildInfo.isAtLeastO()) return;
-        assertThat(getChannelsIgnoringMiscellaneous(), is(empty()));
+        assertThat(getChannelsIgnoringDefault(), is(empty()));
 
         mChannelsInitializer.deleteLegacyChannels();
-        assertThat(getChannelsIgnoringMiscellaneous(), is(empty()));
+        assertThat(getChannelsIgnoringDefault(), is(empty()));
 
         mChannelsInitializer.initializeStartupChannels();
-        assertThat(getChannelsIgnoringMiscellaneous(), is(not(empty())));
+        assertThat(getChannelsIgnoringDefault(), is(not(empty())));
 
-        int nChannels = getChannelsIgnoringMiscellaneous().size();
+        int nChannels = getChannelsIgnoringDefault().size();
         mChannelsInitializer.deleteLegacyChannels();
-        assertThat(getChannelsIgnoringMiscellaneous(), hasSize(nChannels));
+        assertThat(getChannelsIgnoringDefault(), hasSize(nChannels));
     }
 
     @Test
     @SmallTest
-    // TODO(crbug.com/685808) Replace this with VERSION_CODES.O & remove isAtLeastO check below.
-    @MinAndroidSdkLevel(Build.VERSION_CODES.N_MR1)
-    @TargetApi(Build.VERSION_CODES.N_MR1)
+    @MinAndroidSdkLevel(Build.VERSION_CODES.O)
+    @TargetApi(Build.VERSION_CODES.O)
     @Feature({"Browser", "Notifications"})
     public void testInitializeStartupChannels() throws Exception {
-        if (!BuildInfo.isAtLeastO()) return;
         mChannelsInitializer.initializeStartupChannels();
         List<String> notificationChannelIds = new ArrayList<>();
-        for (Channel channel : getChannelsIgnoringMiscellaneous()) {
+        for (NotificationChannel channel : getChannelsIgnoringDefault()) {
             notificationChannelIds.add(channel.getId());
         }
         assertThat(notificationChannelIds,
                 containsInAnyOrder(ChannelDefinitions.CHANNEL_ID_BROWSER,
                         ChannelDefinitions.CHANNEL_ID_DOWNLOADS,
                         ChannelDefinitions.CHANNEL_ID_INCOGNITO,
-                        ChannelDefinitions.CHANNEL_ID_SITES, ChannelDefinitions.CHANNEL_ID_MEDIA));
+                        ChannelDefinitions.CHANNEL_ID_MEDIA));
     }
 
     @Test
     @SmallTest
-    // TODO(crbug.com/685808) Replace this with VERSION_CODES.O & remove isAtLeastO check below.
-    @MinAndroidSdkLevel(Build.VERSION_CODES.N_MR1)
-    @TargetApi(Build.VERSION_CODES.N_MR1)
+    @MinAndroidSdkLevel(Build.VERSION_CODES.O)
+    @TargetApi(Build.VERSION_CODES.O)
     @Feature({"Browser", "Notifications"})
     public void testInitializeStartupChannels_groupCreated() throws Exception {
-        if (!BuildInfo.isAtLeastO()) return;
-        // Use a mock notification manager since the real one does not allow us to query which
-        // groups have been created.
-        MockNotificationManagerProxy mockNotificationManager = new MockNotificationManagerProxy();
-        ChannelsInitializer channelsInitializer =
-                new ChannelsInitializer(mockNotificationManager, mContext.getResources());
-        channelsInitializer.initializeStartupChannels();
-        assertThat(mockNotificationManager.getNotificationChannelGroups(), hasSize(1));
-        assertThat(mockNotificationManager.getNotificationChannelGroups().get(0).mId,
+        mChannelsInitializer.initializeStartupChannels();
+        assertThat(mNotificationManagerProxy.getNotificationChannelGroups(), hasSize(1));
+        assertThat(mNotificationManagerProxy.getNotificationChannelGroups().get(0).getId(),
                 is(ChannelDefinitions.CHANNEL_GROUP_ID_GENERAL));
     }
 
     @Test
     @SmallTest
-    // TODO(crbug.com/685808) Replace this with VERSION_CODES.O & remove isAtLeastO check below.
-    @MinAndroidSdkLevel(Build.VERSION_CODES.N_MR1)
-    @TargetApi(Build.VERSION_CODES.N_MR1)
+    @MinAndroidSdkLevel(Build.VERSION_CODES.O)
+    @TargetApi(Build.VERSION_CODES.O)
     @Feature({"Browser", "Notifications"})
     public void testEnsureInitialized_browserChannel() throws Exception {
-        if (!BuildInfo.isAtLeastO()) return;
         mChannelsInitializer.ensureInitialized(ChannelDefinitions.CHANNEL_ID_BROWSER);
 
-        assertThat(getChannelsIgnoringMiscellaneous(), hasSize(1));
-        Channel channel = getChannelsIgnoringMiscellaneous().get(0);
+        assertThat(getChannelsIgnoringDefault(), hasSize(1));
+        NotificationChannel channel = getChannelsIgnoringDefault().get(0);
         assertThat(channel.getId(), is(ChannelDefinitions.CHANNEL_ID_BROWSER));
         assertThat(channel.getName().toString(),
                 is(mContext.getString(org.chromium.chrome.R.string.notification_category_browser)));
         assertThat(channel.getImportance(), is(NotificationManager.IMPORTANCE_LOW));
-        assertThat(channel.getGroupId(), is(ChannelDefinitions.CHANNEL_GROUP_ID_GENERAL));
+        assertThat(channel.getGroup(), is(ChannelDefinitions.CHANNEL_GROUP_ID_GENERAL));
     }
 
     @Test
     @SmallTest
-    // TODO(crbug.com/685808) Replace this with VERSION_CODES.O & remove isAtLeastO check below.
-    @MinAndroidSdkLevel(Build.VERSION_CODES.N_MR1)
-    @TargetApi(Build.VERSION_CODES.N_MR1)
+    @MinAndroidSdkLevel(Build.VERSION_CODES.O)
+    @TargetApi(Build.VERSION_CODES.O)
     @Feature({"Browser", "Notifications"})
     public void testEnsureInitialized_downloadsChannel() throws Exception {
-        if (!BuildInfo.isAtLeastO()) return;
         mChannelsInitializer.ensureInitialized(ChannelDefinitions.CHANNEL_ID_DOWNLOADS);
 
-        assertThat(getChannelsIgnoringMiscellaneous(), hasSize(1));
-        Channel channel = getChannelsIgnoringMiscellaneous().get(0);
+        assertThat(getChannelsIgnoringDefault(), hasSize(1));
+        NotificationChannel channel = getChannelsIgnoringDefault().get(0);
         assertThat(channel.getId(), is(ChannelDefinitions.CHANNEL_ID_DOWNLOADS));
         assertThat(channel.getName().toString(),
                 is(mContext.getString(
                         org.chromium.chrome.R.string.notification_category_downloads)));
         assertThat(channel.getImportance(), is(NotificationManager.IMPORTANCE_LOW));
-        assertThat(channel.getGroupId(), is(ChannelDefinitions.CHANNEL_GROUP_ID_GENERAL));
+        assertThat(channel.getGroup(), is(ChannelDefinitions.CHANNEL_GROUP_ID_GENERAL));
     }
 
     @Test
     @SmallTest
-    // TODO(crbug.com/685808) Replace this with VERSION_CODES.O & remove isAtLeastO check below.
-    @MinAndroidSdkLevel(Build.VERSION_CODES.N_MR1)
-    @TargetApi(Build.VERSION_CODES.N_MR1)
+    @MinAndroidSdkLevel(Build.VERSION_CODES.O)
+    @TargetApi(Build.VERSION_CODES.O)
     @Feature({"Browser", "Notifications"})
     public void testEnsureInitialized_incognitoChannel() throws Exception {
-        if (!BuildInfo.isAtLeastO()) return;
         mChannelsInitializer.ensureInitialized(ChannelDefinitions.CHANNEL_ID_INCOGNITO);
 
-        assertThat(getChannelsIgnoringMiscellaneous(), hasSize(1));
-        Channel channel = getChannelsIgnoringMiscellaneous().get(0);
+        assertThat(getChannelsIgnoringDefault(), hasSize(1));
+        NotificationChannel channel = getChannelsIgnoringDefault().get(0);
         assertThat(channel.getId(), is(ChannelDefinitions.CHANNEL_ID_INCOGNITO));
         assertThat(channel.getName().toString(),
                 is(mContext.getString(
                         org.chromium.chrome.R.string.notification_category_incognito)));
         assertThat(channel.getImportance(), is(NotificationManager.IMPORTANCE_LOW));
-        assertThat(channel.getGroupId(), is(ChannelDefinitions.CHANNEL_GROUP_ID_GENERAL));
+        assertThat(channel.getGroup(), is(ChannelDefinitions.CHANNEL_GROUP_ID_GENERAL));
     }
 
     @Test
     @SmallTest
-    // TODO(crbug.com/685808) Replace this with VERSION_CODES.O & remove isAtLeastO check below.
-    @MinAndroidSdkLevel(Build.VERSION_CODES.N_MR1)
-    @TargetApi(Build.VERSION_CODES.N_MR1)
+    @MinAndroidSdkLevel(Build.VERSION_CODES.O)
+    @TargetApi(Build.VERSION_CODES.O)
     @Feature({"Browser", "Notifications"})
     public void testEnsureInitialized_mediaChannel() throws Exception {
-        if (!BuildInfo.isAtLeastO()) return;
         mChannelsInitializer.ensureInitialized(ChannelDefinitions.CHANNEL_ID_MEDIA);
 
-        assertThat(getChannelsIgnoringMiscellaneous(), hasSize(1));
-        Channel channel = getChannelsIgnoringMiscellaneous().get(0);
+        assertThat(getChannelsIgnoringDefault(), hasSize(1));
+        NotificationChannel channel = getChannelsIgnoringDefault().get(0);
         assertThat(channel.getId(), is(ChannelDefinitions.CHANNEL_ID_MEDIA));
         assertThat(channel.getName().toString(),
                 is(mContext.getString(org.chromium.chrome.R.string.notification_category_media)));
         assertThat(channel.getImportance(), is(NotificationManager.IMPORTANCE_LOW));
-        assertThat(channel.getGroupId(), is(ChannelDefinitions.CHANNEL_GROUP_ID_GENERAL));
+        assertThat(channel.getGroup(), is(ChannelDefinitions.CHANNEL_GROUP_ID_GENERAL));
     }
 
     @Test
     @SmallTest
-    // TODO(crbug.com/685808) Replace this with VERSION_CODES.O & remove isAtLeastO check below.
-    @MinAndroidSdkLevel(Build.VERSION_CODES.N_MR1)
-    @TargetApi(Build.VERSION_CODES.N_MR1)
+    @MinAndroidSdkLevel(Build.VERSION_CODES.O)
+    @TargetApi(Build.VERSION_CODES.O)
     @Feature({"Browser", "Notifications"})
     public void testEnsureInitialized_sitesChannel() throws Exception {
-        if (!BuildInfo.isAtLeastO()) return;
         mChannelsInitializer.ensureInitialized(ChannelDefinitions.CHANNEL_ID_SITES);
 
-        assertThat(getChannelsIgnoringMiscellaneous(), hasSize(1));
+        assertThat(getChannelsIgnoringDefault(), hasSize(1));
 
-        Channel channel = getChannelsIgnoringMiscellaneous().get(0);
+        NotificationChannel channel = getChannelsIgnoringDefault().get(0);
         assertThat(channel.getId(), is(ChannelDefinitions.CHANNEL_ID_SITES));
         assertThat(channel.getName().toString(),
                 is(mContext.getString(org.chromium.chrome.R.string.notification_category_sites)));
         assertThat(channel.getImportance(), is(NotificationManager.IMPORTANCE_DEFAULT));
-        assertThat(channel.getGroupId(), is(ChannelDefinitions.CHANNEL_GROUP_ID_GENERAL));
+        assertThat(channel.getGroup(), is(ChannelDefinitions.CHANNEL_GROUP_ID_GENERAL));
     }
 
     @Test
     @SmallTest
-    // TODO(crbug.com/685808) Replace this with VERSION_CODES.O & remove isAtLeastO check below.
-    @MinAndroidSdkLevel(Build.VERSION_CODES.N_MR1)
-    @TargetApi(Build.VERSION_CODES.N_MR1)
+    @MinAndroidSdkLevel(Build.VERSION_CODES.O)
+    @TargetApi(Build.VERSION_CODES.O)
+    @Feature({"Browser", "Notifications"})
+    public void testEnsureInitialized_contentSuggestionsDisabled() throws Exception {
+        // This test does not cover ensureInitialized() with CHANNEL_ID_CONTENT_SUGGESTIONS, because
+        // channels ignore construction parameters when re-created. If one test created the channel
+        // enabled, and the other disabled, the second test would fail.
+        mChannelsInitializer.ensureInitializedAndDisabled(
+                ChannelDefinitions.CHANNEL_ID_CONTENT_SUGGESTIONS);
+
+        assertThat(getChannelsIgnoringDefault(), hasSize(1));
+
+        NotificationChannel channel = getChannelsIgnoringDefault().get(0);
+        assertThat(channel.getId(), is(ChannelDefinitions.CHANNEL_ID_CONTENT_SUGGESTIONS));
+        assertThat(channel.getName().toString(),
+                is(mContext.getString(
+                        org.chromium.chrome.R.string.notification_category_content_suggestions)));
+        assertThat(channel.getImportance(), is(NotificationManager.IMPORTANCE_NONE));
+        assertThat(channel.getGroup(), is(ChannelDefinitions.CHANNEL_GROUP_ID_GENERAL));
+    }
+
+    @Test
+    @SmallTest
+    @MinAndroidSdkLevel(Build.VERSION_CODES.O)
+    @TargetApi(Build.VERSION_CODES.O)
     @Feature({"Browser", "Notifications"})
     public void testEnsureInitialized_singleOriginSiteChannel() throws Exception {
-        if (!BuildInfo.isAtLeastO()) return;
         String origin = "https://example.com";
         long creationTime = 621046800000L;
-        mChannelsInitializer.ensureInitialized(
-                SiteChannelsManager.createChannelId(origin, creationTime));
+        NotificationSettingsBridge.SiteChannel siteChannel =
+                SiteChannelsManager.getInstance().createSiteChannel(origin, creationTime, true);
+        mChannelsInitializer.ensureInitialized(siteChannel.getId());
 
-        assertThat(getChannelsIgnoringMiscellaneous(), hasSize(1));
+        assertThat(getChannelsIgnoringDefault(), hasSize(1));
 
-        Channel channel = getChannelsIgnoringMiscellaneous().get(0);
-        assertThat(channel.getId(), is(SiteChannelsManager.createChannelId(origin, creationTime)));
-        assertThat(channel.getName().toString(), is("https://example.com"));
+        NotificationChannel channel = getChannelsIgnoringDefault().get(0);
+        assertThat(channel.getName().toString(), is("example.com"));
         assertThat(channel.getImportance(), is(NotificationManager.IMPORTANCE_DEFAULT));
-        assertThat(channel.getGroupId(), is(ChannelDefinitions.CHANNEL_GROUP_ID_SITES));
+        assertThat(channel.getGroup(), is(ChannelDefinitions.CHANNEL_GROUP_ID_SITES));
     }
 
     @Test
     @SmallTest
-    // TODO(crbug.com/685808) Replace this with VERSION_CODES.O & remove isAtLeastO check below.
-    @MinAndroidSdkLevel(Build.VERSION_CODES.N_MR1)
-    @TargetApi(Build.VERSION_CODES.N_MR1)
+    @MinAndroidSdkLevel(Build.VERSION_CODES.O)
+    @TargetApi(Build.VERSION_CODES.O)
     @Feature({"Browser", "Notifications"})
     public void testEnsureInitialized_multipleCalls() throws Exception {
-        if (!BuildInfo.isAtLeastO()) return;
         mChannelsInitializer.ensureInitialized(ChannelDefinitions.CHANNEL_ID_SITES);
         mChannelsInitializer.ensureInitialized(ChannelDefinitions.CHANNEL_ID_BROWSER);
-        assertThat(getChannelsIgnoringMiscellaneous(), hasSize(2));
+        assertThat(getChannelsIgnoringDefault(), hasSize(2));
     }
 
     /**
      * Gets the current notification channels from the notification manager, except for any with
-     * the id 'miscellaneous', which will be removed from the list before returning.
+     * the default ID, which will be removed from the list before returning.
      *
-     * (Android *might* add a Miscellaneous channel on our behalf, but we don't want to tie our
+     * (Android *might* add a default 'Misc' channel on our behalf, but we don't want to tie our
      * tests to its presence, as this could change).
      */
-    private List<Channel> getChannelsIgnoringMiscellaneous() {
-        List<Channel> channels = mNotificationManagerProxy.getNotificationChannels();
-        for (Iterator<Channel> it = channels.iterator(); it.hasNext();) {
-            Channel channel = it.next();
-            if (channel.getId().equals(MISCELLANEOUS_CHANNEL_ID)) it.remove();
+    private List<NotificationChannel> getChannelsIgnoringDefault() {
+        List<NotificationChannel> channels = mNotificationManagerProxy.getNotificationChannels();
+        for (Iterator<NotificationChannel> it = channels.iterator(); it.hasNext();) {
+            NotificationChannel channel = it.next();
+            if (channel.getId().equals(NotificationChannel.DEFAULT_CHANNEL_ID)) it.remove();
         }
         return channels;
     }

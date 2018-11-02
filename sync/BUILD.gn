@@ -52,7 +52,6 @@ source_set("browser") {
     "//components/signin/core/browser",
     "//components/sync/protocol",
     "//components/translate/content/common",
-    "//extensions/browser",
     "//skia",
     "//third_party/icu",
     "//third_party/cacheinvalidation",
@@ -62,6 +61,14 @@ source_set("browser") {
     "//vivaldi/sync/glue",
     #"//chrome/browser",
     "//components/sync/protocol",
-    "//vivaldi/extensions",
+    "//vivaldi/notes:browser",
   ]
+  if (!is_android) {
+    deps += [
+      "//extensions/browser",
+    ]
+    public_deps += [
+      "//vivaldi/extensions",
+    ]
+  }
 }

@@ -9,6 +9,7 @@
 #include <memory>
 
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/pickle.h"
 #include "base/sha1.h"
 #include "base/strings/string_number_conversions.h"
@@ -17,16 +18,13 @@
 #include "crypto/rsa_private_key.h"
 #include "net/base/net_errors.h"
 #include "net/cert/asn1_util.h"
-#include "net/cert/x509_util_nss.h"
+#include "net/cert/pem_tokenizer.h"
+#include "net/cert/x509_util.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/test_certificate_data.h"
 #include "net/test/test_data_directory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/url_features.h"
-
-#if defined(USE_NSS_CERTS)
-#include <cert.h>
-#endif
 
 using base::HexEncode;
 using base::Time;
@@ -267,6 +265,39 @@ TEST(X509CertificateTest, UnescapedSpecialCharacters) {
   EXPECT_EQ("Chromium", subject.organization_unit_names[1]);
   EXPECT_EQ(0U, subject.domain_components.size());
 }
+
+#if BUILDFLAG(USE_BYTE_CERTS)
+TEST(X509CertificateTest, InvalidPrintableStringIsUtf8) {
+  base::FilePath certs_dir =
+      GetTestNetDataDirectory().AppendASCII("parse_certificate_unittest");
+
+  std::string file_data;
+  ASSERT_TRUE(base::ReadFileToString(
+      certs_dir.AppendASCII(
+          "subject_printable_string_containing_utf8_client_cert.pem"),
+      &file_data));
+
+  net::PEMTokenizer pem_tokenizer(file_data, {"CERTIFICATE"});
+  ASSERT_TRUE(pem_tokenizer.GetNext());
+  std::string cert_der(pem_tokenizer.data());
+  ASSERT_FALSE(pem_tokenizer.GetNext());
+
+  bssl::UniquePtr<CRYPTO_BUFFER> cert_handle =
+      x509_util::CreateCryptoBuffer(cert_der);
+  ASSERT_TRUE(cert_handle);
+
+  EXPECT_FALSE(X509Certificate::CreateFromHandle(cert_handle.get(), {}));
+
+  X509Certificate::UnsafeCreateOptions options;
+  options.printable_string_is_utf8 = true;
+  scoped_refptr<X509Certificate> cert =
+      X509Certificate::CreateFromHandleUnsafeOptions(cert_handle.get(), {},
+                                                     options);
+
+  const CertPrincipal& subject = cert->subject();
+  EXPECT_EQ("Foo@#_ Clïênt Cërt", subject.common_name);
+}
+#endif
 
 TEST(X509CertificateTest, TeletexStringIsLatin1) {
   base::FilePath certs_dir =
@@ -584,29 +615,6 @@ TEST(X509CertificateTest, ParseSubjectAltNames) {
   EXPECT_EQ(0u, dns_names.size());
   EXPECT_EQ(0u, ip_addresses.size());
 }
-
-#if defined(USE_NSS_CERTS)
-TEST(X509CertificateTest, ParseClientSubjectAltNames) {
-  base::FilePath certs_dir = GetTestCertsDirectory();
-
-  // This cert contains one rfc822Name field, and one Microsoft UPN
-  // otherName field.
-  scoped_refptr<X509Certificate> san_cert =
-      ImportCertFromFile(certs_dir, "client_3.pem");
-  ASSERT_NE(static_cast<X509Certificate*>(NULL), san_cert.get());
-
-  std::vector<std::string> rfc822_names;
-  net::x509_util::GetRFC822SubjectAltNames(san_cert->os_cert_handle(),
-                                           &rfc822_names);
-  ASSERT_EQ(1U, rfc822_names.size());
-  EXPECT_EQ("santest@example.com", rfc822_names[0]);
-
-  std::vector<std::string> upn_names;
-  net::x509_util::GetUPNSubjectAltNames(san_cert->os_cert_handle(), &upn_names);
-  ASSERT_EQ(1U, upn_names.size());
-  EXPECT_EQ("santest@ad.corp.example.com", upn_names[0]);
-}
-#endif  // defined(USE_NSS_CERTS)
 
 TEST(X509CertificateTest, ExtractSPKIFromDERCert) {
   base::FilePath certs_dir = GetTestCertsDirectory();
@@ -941,20 +949,6 @@ TEST(X509CertificateTest, IsIssuedByEncodedWithIntermediates) {
 TEST(X509CertificateTest, FreeNullHandle) {
   X509Certificate::FreeOSCertHandle(NULL);
 }
-
-#if defined(USE_NSS_CERTS)
-TEST(X509CertificateTest, GetDefaultNickname) {
-  base::FilePath certs_dir = GetTestCertsDirectory();
-
-  scoped_refptr<X509Certificate> test_cert(
-      ImportCertFromFile(certs_dir, "no_subject_common_name_cert.pem"));
-  ASSERT_NE(static_cast<X509Certificate*>(NULL), test_cert.get());
-
-  std::string nickname = test_cert->GetDefaultNickname(USER_CERT);
-  EXPECT_EQ("wtc@google.com's COMODO Client Authentication and "
-            "Secure Email CA ID", nickname);
-}
-#endif
 
 const struct CertificateFormatTestData {
   const char* file_name;

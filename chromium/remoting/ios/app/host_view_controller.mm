@@ -11,6 +11,7 @@
 #include <memory>
 
 #import "ios/third_party/material_components_ios/src/components/Buttons/src/MaterialButtons.h"
+#import "remoting/ios/app/physical_keyboard_detector.h"
 #import "remoting/ios/app/remoting_theme.h"
 #import "remoting/ios/app/settings/remoting_settings_view_controller.h"
 #import "remoting/ios/client_gestures.h"
@@ -31,6 +32,7 @@
 
 static const CGFloat kFabInset = 15.f;
 static const CGFloat kKeyboardAnimationTime = 0.3;
+static const CGFloat kMoveFABAnimationTime = 0.3;
 
 @interface HostViewController ()<ClientKeyboardDelegate,
                                  ClientGesturesDelegate,
@@ -43,6 +45,24 @@ static const CGFloat kKeyboardAnimationTime = 0.3;
   CGSize _keyboardSize;
   BOOL _surfaceCreated;
   HostSettings* _settings;
+  BOOL _fabIsRight;
+  NSArray<NSLayoutConstraint*>* _fabLeftConstraints;
+  NSArray<NSLayoutConstraint*>* _fabRightConstraints;
+  // When set to true, ClientKeyboard will immediately resign first responder
+  // after it becomes first responder.
+  BOOL _blocksKeyboard;
+  BOOL _hasPhysicalKeyboard;
+  NSLayoutConstraint* _keyboardHeightConstraint;
+
+  // Identical to self.view. Just casted to EAGLView.
+  EAGLView* _hostView;
+
+  // A placeholder view for anchoring views and calculating visible area.
+  UIView* _keyboardPlaceholderView;
+
+  // A display link for animating host surface size change. Use the paused
+  // property to start or stop the animation.
+  CADisplayLink* _surfaceSizeAnimationLink;
 }
 @end
 
@@ -54,8 +74,24 @@ static const CGFloat kKeyboardAnimationTime = 0.3;
     _client = client;
     _keyboardSize = CGSizeZero;
     _surfaceCreated = NO;
+    _blocksKeyboard = NO;
+    _hasPhysicalKeyboard = NO;
     _settings =
         [[RemotingPreferences instance] settingsForHost:client.hostInfo.hostId];
+    _surfaceSizeAnimationLink = [CADisplayLink
+        displayLinkWithTarget:self
+                     selector:@selector(animateHostSurfaceSize:)];
+    _surfaceSizeAnimationLink.paused = YES;
+    [_surfaceSizeAnimationLink addToRunLoop:NSRunLoop.currentRunLoop
+                                    forMode:NSDefaultRunLoopMode];
+
+    if ([UIView userInterfaceLayoutDirectionForSemanticContentAttribute:
+                    self.view.semanticContentAttribute] ==
+        UIUserInterfaceLayoutDirectionRightToLeft) {
+      _fabIsRight = NO;
+    } else {
+      _fabIsRight = YES;
+    }
   }
   return self;
 }
@@ -63,40 +99,81 @@ static const CGFloat kKeyboardAnimationTime = 0.3;
 #pragma mark - UIViewController
 
 - (void)loadView {
-  EAGLView* glView = [[EAGLView alloc] initWithFrame:CGRectZero];
-  glView.displayTaskRunner =
-      remoting::ChromotingClientRuntime::GetInstance()->display_task_runner();
-  self.view = glView;
+  _hostView = [[EAGLView alloc] initWithFrame:CGRectZero];
+  self.view = _hostView;
 }
 
 - (void)viewDidLoad {
   [super viewDidLoad];
+  _hostView.displayTaskRunner =
+      remoting::ChromotingClientRuntime::GetInstance()->display_task_runner();
+
+  _keyboardPlaceholderView = [[UIView alloc] initWithFrame:CGRectZero];
+  _keyboardPlaceholderView.translatesAutoresizingMaskIntoConstraints = NO;
+  [self.view addSubview:_keyboardPlaceholderView];
+  [NSLayoutConstraint activateConstraints:@[
+    [_keyboardPlaceholderView.leadingAnchor
+        constraintEqualToAnchor:self.view.leadingAnchor],
+    [_keyboardPlaceholderView.trailingAnchor
+        constraintEqualToAnchor:self.view.trailingAnchor],
+    [_keyboardPlaceholderView.bottomAnchor
+        constraintEqualToAnchor:self.view.bottomAnchor],
+  ]];
+
   _floatingButton =
       [MDCFloatingButton floatingButtonWithShape:MDCFloatingButtonShapeMini];
   // Note(nicholss): Setting title to " " because the FAB requires the title
   // or image to be set but we are using the rotating image instead. Until this
   // is directly supported by the FAB, a space for the title is a work-around.
   [_floatingButton setTitle:@" " forState:UIControlStateNormal];
+  [_floatingButton setBackgroundColor:RemotingTheme.buttonBackgroundColor
+                             forState:UIControlStateNormal];
   [_floatingButton addTarget:self
                       action:@selector(didTap:)
             forControlEvents:UIControlEventTouchUpInside];
   [_floatingButton sizeToFit];
+  _floatingButton.translatesAutoresizingMaskIntoConstraints = NO;
 
   _actionImageView =
       [[MDCActionImageView alloc] initWithFrame:_floatingButton.bounds
-                                   primaryImage:RemotingTheme.settingsIcon
+                                   primaryImage:RemotingTheme.menuIcon
                                     activeImage:RemotingTheme.closeIcon];
   [_floatingButton addSubview:_actionImageView];
-  [self.view addSubview:_floatingButton];
+  [_hostView addSubview:_floatingButton];
 
   [self applyInputMode];
+
+  _clientKeyboard = [[ClientKeyboard alloc] init];
+  _clientKeyboard.delegate = self;
+  [_hostView addSubview:_clientKeyboard];
+
+  NSDictionary* views = @{@"fab" : _floatingButton};
+  NSDictionary* metrics = @{ @"inset" : @(kFabInset) };
+
+  _fabLeftConstraints = [NSLayoutConstraint
+      constraintsWithVisualFormat:@"H:|-(inset)-[fab]"
+                          options:NSLayoutFormatDirectionLeftToRight
+                          metrics:metrics
+                            views:views];
+
+  _fabRightConstraints = [NSLayoutConstraint
+      constraintsWithVisualFormat:@"H:[fab]-(inset)-|"
+                          options:NSLayoutFormatDirectionLeftToRight
+                          metrics:metrics
+                            views:views];
+  [_floatingButton.bottomAnchor
+      constraintEqualToAnchor:_keyboardPlaceholderView.topAnchor
+                     constant:-kFabInset]
+      .active = YES;
+
+  [self setKeyboardSize:CGSizeZero needsLayout:NO];
 }
 
 - (void)viewDidUnload {
   [super viewDidUnload];
   // TODO(nicholss): There needs to be a hook to tell the client we are done.
 
-  [(EAGLView*)self.view stop];
+  [_hostView stop];
   _clientGestures = nil;
   _client = nil;
 }
@@ -108,13 +185,15 @@ static const CGFloat kKeyboardAnimationTime = 0.3;
 - (void)viewDidAppear:(BOOL)animated {
   [super viewDidAppear:animated];
   if (!_surfaceCreated) {
-    [_client.displayHandler onSurfaceCreated:(EAGLView*)self.view];
+    [_client.displayHandler onSurfaceCreated:_hostView];
     _surfaceCreated = YES;
   }
-  // viewDidLayoutSubviews may be called before viewDidAppear, in which case
-  // the surface is not ready to handle the transformation matrix.
-  // Call onSurfaceChanged here to cover that case.
-  [_client surfaceChanged:self.view.frame];
+
+  [PhysicalKeyboardDetector detectOnView:_hostView
+                                callback:^(BOOL hasPhysicalKeyboard) {
+                                  _hasPhysicalKeyboard = hasPhysicalKeyboard;
+                                  [_clientKeyboard becomeFirstResponder];
+                                }];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -122,7 +201,7 @@ static const CGFloat kKeyboardAnimationTime = 0.3;
 
   if (!_clientGestures) {
     _clientGestures =
-        [[ClientGestures alloc] initWithView:self.view client:_client];
+        [[ClientGestures alloc] initWithView:_hostView client:_client];
     _clientGestures.delegate = self;
   }
   [[NSNotificationCenter defaultCenter]
@@ -150,69 +229,48 @@ static const CGFloat kKeyboardAnimationTime = 0.3;
 - (void)viewDidLayoutSubviews {
   [super viewDidLayoutSubviews];
 
-  if (self.view.window != nil) {
-    // If the context is not set yet, the view size will be set in
-    // viewDidAppear.
-    [_client surfaceChanged:self.view.bounds];
-  }
+  // Pass the actual size of the view to the renderer.
+  [_client.displayHandler onSurfaceChanged:_hostView.bounds];
 
-  CGSize btnSize = _floatingButton.frame.size;
-  _floatingButton.frame =
-      CGRectMake(self.view.frame.size.width - btnSize.width - kFabInset,
-                 self.view.frame.size.height - btnSize.height - kFabInset,
-                 btnSize.width, btnSize.height);
-}
+  // Start the animation on the host's visible area.
+  _surfaceSizeAnimationLink.paused = NO;
 
-#pragma mark - Keyboard
+  [self resizeHostToFitIfNeeded];
 
-- (BOOL)isKeyboardActive {
-  if (_clientKeyboard) {
-    return [_clientKeyboard isFirstResponder];
-  }
-  return NO;
-}
-
-- (void)showKeyboard {
-  if (!_clientKeyboard) {
-    _clientKeyboard = [[ClientKeyboard alloc] init];
-    _clientKeyboard.delegate = self;
-    [self.view addSubview:_clientKeyboard];
-    // TODO(nicholss): need to pass some keyboard injection interface here.
-  }
-  [_clientKeyboard becomeFirstResponder];
-}
-
-- (void)hideKeyboard {
-  [_clientKeyboard resignFirstResponder];
+  [self updateFABConstraintsAnimated:NO];
 }
 
 #pragma mark - Keyboard Notifications
 
 - (void)keyboardWillShow:(NSNotification*)notification {
+  // The soft keyboard can be triggered by the PhysicalKeyboardDetector, in this
+  // case we don't need to change the keyboard size.
+  if (!_clientKeyboard.isFirstResponder) {
+    return;
+  }
+
+  if (_blocksKeyboard) {
+    // This is to make sure the keyboard is removed from the responder chain.
+    [_clientKeyboard removeFromSuperview];
+    [self.view addSubview:_clientKeyboard];
+    _clientKeyboard.showsSoftKeyboard = NO;
+    [_clientKeyboard becomeFirstResponder];
+    return;
+  }
+
   CGSize keyboardSize =
       [[[notification userInfo] objectForKey:UIKeyboardFrameEndUserInfoKey]
           CGRectValue]
           .size;
-  if (_keyboardSize.height != keyboardSize.height) {
-    CGFloat deltaHeight = keyboardSize.height - _keyboardSize.height;
-    [UIView animateWithDuration:kKeyboardAnimationTime
-                     animations:^{
-                       CGRect f = self.view.frame;
-                       f.size.height -= deltaHeight;
-                       self.view.frame = f;
-                     }];
-    _keyboardSize = keyboardSize;
-  }
+  [self setKeyboardSize:keyboardSize needsLayout:YES];
 }
 
 - (void)keyboardWillHide:(NSNotification*)notification {
-  [UIView animateWithDuration:kKeyboardAnimationTime
-                   animations:^{
-                     CGRect f = self.view.frame;
-                     f.size.height += _keyboardSize.height;
-                     self.view.frame = f;
-                   }];
-  _keyboardSize = CGSizeZero;
+  if (!_clientKeyboard.isFirstResponder) {
+    return;
+  }
+
+  [self setKeyboardSize:CGSizeZero needsLayout:YES];
 }
 
 #pragma mark - ClientKeyboardDelegate
@@ -229,11 +287,11 @@ static const CGFloat kKeyboardAnimationTime = 0.3;
 #pragma mark - ClientGesturesDelegate
 
 - (void)keyboardShouldShow {
-  [self showKeyboard];
+  _clientKeyboard.showsSoftKeyboard = YES;
 }
 
 - (void)keyboardShouldHide {
-  [self hideKeyboard];
+  _clientKeyboard.showsSoftKeyboard = NO;
 }
 
 #pragma mark - RemotingSettingsViewControllerDelegate
@@ -244,10 +302,10 @@ static const CGFloat kKeyboardAnimationTime = 0.3;
 }
 
 - (void)setResizeToFit:(BOOL)resizeToFit {
-  // TODO(nicholss): I don't think this option makes sense for phones. Maybe
-  // for an iPad. Maybe we add a native screen size mimimum before enabling
-  // this option? Ask Jon.
-  NSLog(@"TODO: resizeToFit %d", resizeToFit);
+  // TODO(yuweih): Maybe we add a native screen size mimimum before enabling
+  // this option? This doesn't work well for smaller screens. Ask Jon.
+  _settings.shouldResizeHostToFit = resizeToFit;
+  [self resizeHostToFitIfNeeded];
 }
 
 - (void)useDirectInputMode {
@@ -268,7 +326,81 @@ static const CGFloat kKeyboardAnimationTime = 0.3;
   _client.keyboardInterpreter->HandlePrintScreenEvent();
 }
 
+- (void)moveFAB {
+  _fabIsRight = !_fabIsRight;
+  [self updateFABConstraintsAnimated:YES];
+}
+
 #pragma mark - Private
+
+- (void)updateFABConstraintsAnimated:(BOOL)animated {
+  [NSLayoutConstraint deactivateConstraints:_fabRightConstraints];
+  [NSLayoutConstraint deactivateConstraints:_fabLeftConstraints];
+  if (_fabIsRight) {
+    [NSLayoutConstraint activateConstraints:_fabRightConstraints];
+  } else {
+    [NSLayoutConstraint activateConstraints:_fabLeftConstraints];
+  }
+
+  if (animated) {
+    [UIView animateWithDuration:kMoveFABAnimationTime
+                     animations:^{
+                       [self.view layoutIfNeeded];
+                     }];
+  } else {
+    [self.view layoutIfNeeded];
+  }
+}
+
+- (void)resizeHostToFitIfNeeded {
+  // Don't adjust the host resolution if the keyboard is active. That would end
+  // up with a very narrow desktop.
+  // Also don't adjust if it's the phone and in portrait orientation. This is
+  // the most used orientation on phones but the aspect ratio is uncommon on
+  // desktop devices.
+  BOOL isPhonePortrait =
+      self.traitCollection.horizontalSizeClass ==
+          UIUserInterfaceSizeClassCompact &&
+      self.traitCollection.verticalSizeClass == UIUserInterfaceSizeClassRegular;
+
+  if (_settings.shouldResizeHostToFit && !isPhonePortrait &&
+      !_clientKeyboard.showsSoftKeyboard) {
+    [_client setHostResolution:_hostView.frame.size
+                         scale:_hostView.contentScaleFactor];
+  }
+}
+
+- (void)animateHostSurfaceSize:(CADisplayLink*)link {
+  // The method is called when the keyboard animation is in-progress. It
+  // calculates the intermediate visible area size during the animation and
+  // passes it to DesktopViewport.
+
+  // This method is called in sync with the refresh cycle, otherwise the frame
+  // rate will drop for some reason. Note that the actual rendering process is
+  // done on the display thread asynchronously, so unfortunately the animation
+  // will not be perfectly synchronized with the keyboard animation.
+
+  CGSize viewSize = _hostView.frame.size;
+  CGFloat targetVisibleHeight =
+      viewSize.height - _keyboardPlaceholderView.frame.size.height;
+  CALayer* kbPlaceholderLayer =
+      [_keyboardPlaceholderView.layer presentationLayer];
+  CGFloat currentVisibleHeight =
+      viewSize.height - kbPlaceholderLayer.frame.size.height;
+
+  _client.gestureInterpreter->OnSurfaceSizeChanged(viewSize.width,
+                                                   currentVisibleHeight);
+  if (currentVisibleHeight == targetVisibleHeight) {
+    // Animation is done.
+    _surfaceSizeAnimationLink.paused = YES;
+  }
+}
+
+- (void)disconnectFromHost {
+  [_client disconnectFromHost];
+  [_surfaceSizeAnimationLink invalidate];
+  _surfaceSizeAnimationLink = nil;
+}
 
 - (void)applyInputMode {
   switch (_settings.inputMode) {
@@ -288,38 +420,45 @@ static const CGFloat kKeyboardAnimationTime = 0.3;
   // more options. This is not ideal but it gets us an easy way to make a
   // modal window option selector. Replace this with a real menu later.
 
+  // ClientKeyboard may gain first responder immediately after the alert is
+  // dismissed. This will cause weird show-then-hide animation when hiding
+  // keyboard on iPhone (iPad is unaffected since it shows the alert as popup).
+  // The fix is to remove ClientKeyboard from the responder chain in
+  // keyboardWillShow and manually show the keyboard again only when needed.
+
   UIAlertController* alert = [UIAlertController
       alertControllerWithTitle:nil
                        message:nil
                 preferredStyle:UIAlertControllerStyleActionSheet];
 
-  if ([self isKeyboardActive]) {
-    void (^hideKeyboardHandler)(UIAlertAction*) = ^(UIAlertAction*) {
-      [self hideKeyboard];
-      [_actionImageView setActive:NO animated:YES];
-    };
-    [alert addAction:[UIAlertAction actionWithTitle:l10n_util::GetNSString(
-                                                        IDS_HIDE_KEYBOARD)
-                                              style:UIAlertActionStyleDefault
-                                            handler:hideKeyboardHandler]];
-  } else {
-    void (^showKeyboardHandler)(UIAlertAction*) = ^(UIAlertAction*) {
-      [self showKeyboard];
-      [_actionImageView setActive:NO animated:YES];
-    };
-    [alert addAction:[UIAlertAction actionWithTitle:l10n_util::GetNSString(
-                                                        IDS_SHOW_KEYBOARD)
-                                              style:UIAlertActionStyleDefault
-                                            handler:showKeyboardHandler]];
+  __weak HostViewController* weakSelf = self;
+  if (!_hasPhysicalKeyboard) {
+    // These are only needed if the device has no physical keyboard.
+    __weak ClientKeyboard* weakClientKeyboard = _clientKeyboard;
+    if (_clientKeyboard.showsSoftKeyboard) {
+      [self addActionToAlert:alert
+                       title:IDS_HIDE_KEYBOARD
+                       style:UIAlertActionStyleDefault
+            restoresKeyboard:NO
+                     handler:^() {
+                       weakClientKeyboard.showsSoftKeyboard = NO;
+                     }];
+    } else {
+      [self addActionToAlert:alert
+                       title:IDS_SHOW_KEYBOARD
+                     handler:^() {
+                       weakClientKeyboard.showsSoftKeyboard = YES;
+                     }];
+    }
   }
 
   remoting::GestureInterpreter::InputMode currentInputMode =
       _client.gestureInterpreter->GetInputMode();
-  NSString* switchInputModeTitle = l10n_util::GetNSString(
+  int switchInputModeTitle =
       currentInputMode == remoting::GestureInterpreter::DIRECT_INPUT_MODE
           ? IDS_SELECT_TRACKPAD_MODE
-          : IDS_SELECT_TOUCH_MODE);
-  void (^switchInputModeHandler)(UIAlertAction*) = ^(UIAlertAction*) {
+          : IDS_SELECT_TOUCH_MODE;
+  void (^switchInputModeHandler)() = ^() {
     switch (currentInputMode) {
       case remoting::GestureInterpreter::DIRECT_INPUT_MODE:
         [self useTrackpadInputMode];
@@ -329,50 +468,57 @@ static const CGFloat kKeyboardAnimationTime = 0.3;
         [self useDirectInputMode];
         break;
     }
-    [_actionImageView setActive:NO animated:YES];
   };
-  [alert addAction:[UIAlertAction actionWithTitle:switchInputModeTitle
-                                            style:UIAlertActionStyleDefault
-                                          handler:switchInputModeHandler]];
+  [self addActionToAlert:alert
+                   title:switchInputModeTitle
+                 handler:switchInputModeHandler];
 
-  void (^disconnectHandler)(UIAlertAction*) = ^(UIAlertAction*) {
-    [_client disconnectFromHost];
-    [self.navigationController popToRootViewControllerAnimated:YES];
-    [_actionImageView setActive:NO animated:YES];
+  void (^disconnectHandler)() = ^() {
+    [weakSelf disconnectFromHost];
+    [weakSelf.navigationController popToRootViewControllerAnimated:YES];
   };
-  [alert
-      addAction:[UIAlertAction actionWithTitle:l10n_util::GetNSString(
-                                                   IDS_DISCONNECT_MYSELF_BUTTON)
-                                         style:UIAlertActionStyleDefault
-                                       handler:disconnectHandler]];
+  [self addActionToAlert:alert
+                   title:IDS_DISCONNECT_MYSELF_BUTTON
+                   style:UIAlertActionStyleDefault
+        restoresKeyboard:NO
+                 handler:disconnectHandler];
 
-  __weak HostViewController* weakSelf = self;
-  void (^settingsHandler)(UIAlertAction*) = ^(UIAlertAction*) {
+  void (^settingsHandler)() = ^() {
     RemotingSettingsViewController* settingsViewController =
         [[RemotingSettingsViewController alloc] init];
     settingsViewController.delegate = weakSelf;
     settingsViewController.inputMode = currentInputMode;
+    settingsViewController.shouldResizeHostToFit =
+        _settings.shouldResizeHostToFit;
     UINavigationController* navController = [[UINavigationController alloc]
         initWithRootViewController:settingsViewController];
     [weakSelf presentViewController:navController animated:YES completion:nil];
-    [_actionImageView setActive:NO animated:YES];
   };
-  [alert addAction:[UIAlertAction actionWithTitle:l10n_util::GetNSString(
-                                                      IDS_SETTINGS_BUTTON)
-                                            style:UIAlertActionStyleDefault
-                                          handler:settingsHandler]];
+  // Don't restore keyboard since the settings view will be show immediately.
+  [self addActionToAlert:alert
+                   title:IDS_SETTINGS_BUTTON
+                   style:UIAlertActionStyleDefault
+        restoresKeyboard:NO
+                 handler:settingsHandler];
+
+  [self addActionToAlert:alert
+                   title:(_fabIsRight) ? IDS_MOVE_FAB_LEFT_BUTTON
+                                       : IDS_MOVE_FAB_RIGHT_BUTTON
+                 handler:^() {
+                   [weakSelf moveFAB];
+                 }];
 
   __weak UIAlertController* weakAlert = alert;
-  void (^cancelHandler)(UIAlertAction*) = ^(UIAlertAction*) {
+  void (^cancelHandler)() = ^() {
     [weakAlert dismissViewControllerAnimated:YES completion:nil];
-    [_actionImageView setActive:NO animated:YES];
   };
-  [alert addAction:[UIAlertAction
-                       actionWithTitle:l10n_util::GetNSString(IDS_CANCEL)
-                                 style:UIAlertActionStyleCancel
-                               handler:cancelHandler]];
+  [self addActionToAlert:alert
+                   title:IDS_CANCEL
+                   style:UIAlertActionStyleCancel
+        restoresKeyboard:YES
+                 handler:cancelHandler];
 
-  alert.popoverPresentationController.sourceView = self.view;
+  alert.popoverPresentationController.sourceView = _hostView;
   // Target the alert menu at the top middle of the FAB.
   alert.popoverPresentationController.sourceRect = CGRectMake(
       _floatingButton.center.x, _floatingButton.frame.origin.y, 1.0, 1.0);
@@ -380,7 +526,65 @@ static const CGFloat kKeyboardAnimationTime = 0.3;
   alert.popoverPresentationController.permittedArrowDirections =
       UIPopoverArrowDirectionDown;
   [self presentViewController:alert animated:YES completion:nil];
+
+  // Prevent keyboard from showing between (alert is shown, action is executed).
+  _blocksKeyboard = YES;
+
   [_actionImageView setActive:YES animated:YES];
+}
+
+// Adds an action to the alert. And restores the states for you.
+// restoresKeyboard:
+//   Set to YES to show the keyboard if it was previously shown. Do not assume
+//   the keyboard will always be hidden when the alert view is shown.
+- (void)addActionToAlert:(UIAlertController*)alert
+                   title:(int)titleMessageId
+                   style:(UIAlertActionStyle)style
+        restoresKeyboard:(BOOL)restoresKeyboard
+                 handler:(void (^)())handler {
+  BOOL isKeyboardActive = _clientKeyboard.showsSoftKeyboard;
+  [alert addAction:[UIAlertAction
+                       actionWithTitle:l10n_util::GetNSString(titleMessageId)
+                                 style:style
+                               handler:^(UIAlertAction*) {
+                                 _blocksKeyboard = NO;
+                                 if (isKeyboardActive && restoresKeyboard) {
+                                   _clientKeyboard.showsSoftKeyboard = YES;
+                                 }
+                                 if (handler) {
+                                   handler();
+                                 }
+                                 [_actionImageView setActive:NO animated:YES];
+                               }]];
+}
+
+// Shorter version of addActionToAlert with default action style and
+// restoresKeyboard == YES.
+- (void)addActionToAlert:(UIAlertController*)alert
+                   title:(int)titleMessageId
+                 handler:(void (^)())handler {
+  [self addActionToAlert:alert
+                   title:titleMessageId
+                   style:UIAlertActionStyleDefault
+        restoresKeyboard:YES
+                 handler:handler];
+}
+
+- (void)setKeyboardSize:(CGSize)keyboardSize needsLayout:(BOOL)needsLayout {
+  _keyboardSize = keyboardSize;
+  if (_keyboardHeightConstraint) {
+    _keyboardHeightConstraint.active = NO;
+  }
+  _keyboardHeightConstraint = [_keyboardPlaceholderView.heightAnchor
+      constraintEqualToConstant:keyboardSize.height];
+  _keyboardHeightConstraint.active = YES;
+
+  if (needsLayout) {
+    [UIView animateWithDuration:kKeyboardAnimationTime
+                     animations:^{
+                       [self.view layoutIfNeeded];
+                     }];
+  }
 }
 
 @end

@@ -12,14 +12,12 @@
 <translation id="1403254041219632970">Chromium'un gelecek sürümleri artık Mac OS X 10.6, 10.7 veya 10.8'i desteklemeyecek.</translation>
 <translation id="1414495520565016063">Chromium'da oturum açtınız!</translation>
 <translation id="1444754455097148408">Chromium açık kaynak lisansları</translation>
-<translation id="1480489203462860648">Deneyin, zaten yüklü!</translation>
 <translation id="1502360822835740515">Chromium'u varsayılan tarayıcı yapma</translation>
 <translation id="151962892725702025">Senkronizasyon alan adınızda kullanılamadığından Chromium OS, verilerinizi senkronize edemedi.</translation>
 <translation id="1559451348202814456">Chromium artık Mac OS X 10.6, 10.7 veya 10.8 üzerinde desteklenmediği için doğru şekilde çalışmayabilir.</translation>
 <translation id="1653828314016431939">Tamam - Şimdi yeniden başlat</translation>
 <translation id="1668054258064581266">Hesabınızı Chromium'dan kaldırdıktan sonra, bu durumun etkili olması için açık sekmelerinizi yeniden yüklemeniz gerekebilir.</translation>
 <translation id="1688750314291223739">Kişiselleştirilmiş tarayıcı özelliklerinizi Web'e kaydetmek ve herhangi bir bilgisayardan Chromium ile bu özelliklere erişmek için senkronizasyonu ayarlayın.</translation>
-<translation id="1699664235656412242">Lütfen, (Windows 8 modunda olanlar dahil) Chromium pencerelerinin tümünü kapatın ve tekrar deneyin.</translation>
 <translation id="1708666629004767631">Chromium'un kullanabileceğiniz yeni, daha güvenli bir sürümü var.</translation>
 <translation id="1774152462503052664">Chromium'un arka planda çalışmasına izin ver</translation>
 <translation id="1779356040007214683">Chromium'u daha güvenli bir hale getirmek için <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> altında listelenmeyen ve bilginiz dışında eklenmiş olabilecek bazı uzantıları devre dışı bıraktık.</translation>
@@ -99,6 +97,7 @@
 <translation id="4271805377592243930">Chromium'la ilgili yardım alın</translation>
 <translation id="4285930937574705105">Belirlenemeyen bir hata nedeniyle yükleme başarısız oldu. Chromium şu anda çalışır durumdaysa kapatıp yeniden deneyin.</translation>
 <translation id="4330585738697551178">Bu modülün Chromium'la çakıştığı biliniyor.</translation>
+<translation id="4421155425831608516">Chromium'da oturum açma işlevi, bu cihazın yöneticisi tarafından devre dışı bırakılmıştır.</translation>
 <translation id="4423735387467980091">Chromium'u özelleştirin ve kontrol edin</translation>
 <translation id="4458285410772214805">Bu değişikliğin geçerli olabilmesi için lütfen çıkış yapıp tekrar oturum açın.</translation>
 <translation id="4469812139324097969">Bir süredir çalıştırılmadığından Chromium güncel değil. Kullanılabilir bir güncelleme var ve yeniden başlattığınızda hemen uygulanacak.</translation>
@@ -175,7 +174,6 @@
 Bazı özellikler kullanılamayabilir. Lütfen farklı bir profil dizini belirtin veya daha yeni bir Chromium sürümünü kullanın.</translation>
 <translation id="6734080038664603509">&amp;Chromium'u güncelle</translation>
 <translation id="6734291798041940871">Chromium zaten bilgisayarınızdaki tüm kullanıcılar için yüklendi.</translation>
-<translation id="6757767188268205357">Beni rahatsız etmeyin</translation>
 <translation id="6810143991807788455">Mevcut ayarlarınızı bildirerek Chromium'u daha iyi hale getirmemize yardımcı olun</translation>
 <translation id="6857782730669500492">Chromium - <ph name="PAGE_TITLE" /></translation>
 <translation id="6883876366448858277">bir kelimeyi ve içinde bulunduğu bağlamı oluşturan metni Google Arama'ya göndererek ilgili tanımları, resimleri ve diğer arama sonuçlarını döndürür.</translation>
@@ -188,7 +186,6 @@ Bazı özellikler kullanılamayabilir. Lütfen farklı bir profil dizini belirti
 <translation id="707471633328071618">Google Payments (Chromium'a kopyalandı)</translation>
 <translation id="7138853919861947730">Chromium, tarama deneyiminizi iyileştirmek için Web hizmetlerinden yararlanabilir.</translation>
 <translation id="7162152143154757523">Chromium, tarayıcıda yazdıklarınızı Google sunucularına gönderip akıllı yazım denetimi olanağı sağlayabilir ve Google arama tarafından kullanılan yazım denetimi teknolojisini kullanmanıza olanak tanır.</translation>
-<translation id="7196020411877309443">Neden bunu görüyorum?</translation>
 <translation id="7205698830395646142">Chromium Menüsünde Gizle</translation>
 <translation id="7223968959479464213">Görev Yöneticisi - Chromium</translation>
 <translation id="722928257909516027">Chromium menüsünü göster</translation>

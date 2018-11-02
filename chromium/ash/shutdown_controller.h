@@ -7,7 +7,6 @@
 
 #include "ash/ash_export.h"
 #include "ash/public/interfaces/shutdown.mojom.h"
-#include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 
@@ -17,8 +16,7 @@ enum class ShutdownReason;
 
 // Handles actual device shutdown by making requests to powerd over D-Bus.
 // Caches the DeviceRebootOnShutdown device policy sent from Chrome over mojo.
-class ASH_EXPORT ShutdownController
-    : NON_EXPORTED_BASE(public mojom::ShutdownController) {
+class ASH_EXPORT ShutdownController : public mojom::ShutdownController {
  public:
   ShutdownController();
   ~ShutdownController() override;
@@ -36,6 +34,7 @@ class ASH_EXPORT ShutdownController
  private:
   // mojom::ShutdownController:
   void SetRebootOnShutdown(bool reboot_on_shutdown) override;
+  void RequestShutdownFromLoginScreen() override;
 
   // Cached copy of the DeviceRebootOnShutdown policy from chrome.
   bool reboot_on_shutdown_ = false;

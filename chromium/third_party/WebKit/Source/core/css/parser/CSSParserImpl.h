@@ -21,6 +21,7 @@ class CSSLazyParsingState;
 class CSSParserContext;
 class CSSParserObserver;
 class CSSParserObserverWrapper;
+class CSSParserTokenStream;
 class StyleRule;
 class StyleRuleBase;
 class StyleRuleCharset;
@@ -112,7 +113,9 @@ class CSSParserImpl {
   template <typename T>
   bool ConsumeRuleList(CSSParserTokenRange, RuleListType, T callback);
 
-  // These two functions update the range they're given
+  // These functions update the range/stream they're given
+  StyleRuleBase* ConsumeAtRule(CSSParserTokenStream&, AllowedRulesType);
+  // TODO(shend): Remove this overload once we switch over to streams.
   StyleRuleBase* ConsumeAtRule(CSSParserTokenRange&, AllowedRulesType);
   StyleRuleBase* ConsumeQualifiedRule(CSSParserTokenRange&, AllowedRulesType);
 
@@ -140,6 +143,8 @@ class CSSParserImpl {
   StyleRule* ConsumeStyleRule(CSSParserTokenRange prelude,
                               CSSParserTokenRange block);
 
+  void ConsumeDeclarationList(CSSParserTokenStream&, StyleRule::RuleType);
+  // TODO(shend): Remove this overload once we switch over to streams.
   void ConsumeDeclarationList(CSSParserTokenRange, StyleRule::RuleType);
   void ConsumeDeclaration(CSSParserTokenRange, StyleRule::RuleType);
   void ConsumeDeclarationValue(CSSParserTokenRange,

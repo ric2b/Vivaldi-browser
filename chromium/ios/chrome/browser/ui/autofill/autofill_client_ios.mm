@@ -76,10 +76,6 @@ IdentityProvider* AutofillClientIOS::GetIdentityProvider() {
   return identity_provider_.get();
 }
 
-rappor::RapporServiceImpl* AutofillClientIOS::GetRapporServiceImpl() {
-  return GetApplicationContext()->GetRapporServiceImpl();
-}
-
 ukm::UkmRecorder* AutofillClientIOS::GetUkmRecorder() {
   return GetApplicationContext()->GetUkmRecorder();
 }
@@ -218,11 +214,7 @@ bool AutofillClientIOS::ShouldShowSigninPromo() {
   return false;
 }
 
-void AutofillClientIOS::StartSigninFlow() {
-  NOTIMPLEMENTED();
-}
-
-void AutofillClientIOS::ShowHttpNotSecureExplanation() {
+void AutofillClientIOS::ExecuteCommand(int id) {
   NOTIMPLEMENTED();
 }
 

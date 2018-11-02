@@ -19,7 +19,8 @@ class FrameClientHintsPreferencesContext final
  public:
   explicit FrameClientHintsPreferencesContext(LocalFrame*);
 
-  void CountClientHints(WebClientHintsType) override;
+  void CountClientHints(mojom::WebClientHintsType) override;
+  void CountPersistentClientHintHeaders() override;
 
  private:
   Member<LocalFrame> frame_;

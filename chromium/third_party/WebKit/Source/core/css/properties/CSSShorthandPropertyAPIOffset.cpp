@@ -8,22 +8,26 @@
 #include "core/css/parser/CSSParserContext.h"
 #include "core/css/parser/CSSParserLocalContext.h"
 #include "core/css/parser/CSSPropertyParserHelpers.h"
-#include "core/css/properties/CSSPropertyAPIOffsetAnchor.h"
-#include "core/css/properties/CSSPropertyAPIOffsetPosition.h"
 #include "core/css/properties/CSSPropertyOffsetPathUtils.h"
 #include "core/css/properties/CSSPropertyOffsetRotateUtils.h"
+#include "platform/RuntimeEnabledFeatures.h"
 
 namespace blink {
 
-bool CSSShorthandPropertyAPIOffset::parseShorthand(
+bool CSSShorthandPropertyAPIOffset::ParseShorthand(
+    CSSPropertyID,
     bool important,
     CSSParserTokenRange& range,
     const CSSParserContext& context,
-    bool,
-    HeapVector<CSSProperty, 256>& properties) {
+    const CSSParserLocalContext&,
+    HeapVector<CSSProperty, 256>& properties) const {
+  // TODO(meade): The propertyID parameter isn't used - it can be removed
+  // once all of the ParseSingleValue implementations have been moved to the
+  // CSSPropertyAPIs, and the base CSSPropertyAPI::ParseSingleValue contains
+  // no functionality.
   const CSSValue* offset_position =
-      CSSPropertyAPIOffsetPosition::parseSingleValue(range, context,
-                                                     CSSParserLocalContext());
+      GetCSSPropertyOffsetPositionAPI().ParseSingleValue(
+          CSSPropertyInvalid, range, context, CSSParserLocalContext());
   const CSSValue* offset_path =
       CSSPropertyOffsetPathUtils::ConsumeOffsetPath(range, context);
   const CSSValue* offset_distance = nullptr;
@@ -40,8 +44,8 @@ bool CSSShorthandPropertyAPIOffset::parseShorthand(
   }
   const CSSValue* offset_anchor = nullptr;
   if (CSSPropertyParserHelpers::ConsumeSlashIncludingWhitespace(range)) {
-    offset_anchor = CSSPropertyAPIOffsetAnchor::parseSingleValue(
-        range, context, CSSParserLocalContext());
+    offset_anchor = GetCSSPropertyOffsetAnchorAPI().ParseSingleValue(
+        CSSPropertyInvalid, range, context, CSSParserLocalContext());
     if (!offset_anchor)
       return false;
   }

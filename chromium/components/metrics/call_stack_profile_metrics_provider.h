@@ -71,9 +71,11 @@ class CallStackProfileMetricsProvider : public MetricsProvider {
   static bool IsPeriodicSamplingEnabled();
 
   // MetricsProvider:
+  void Init() override;
   void OnRecordingEnabled() override;
   void OnRecordingDisabled() override;
-  void ProvideGeneralMetrics(ChromeUserMetricsExtension* uma_proto) override;
+  void ProvideCurrentSessionData(
+      ChromeUserMetricsExtension* uma_proto) override;
 
  protected:
   // base::Feature for reporting profiles. Provided here for test use.

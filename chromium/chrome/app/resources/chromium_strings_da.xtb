@@ -12,14 +12,12 @@
 <translation id="1403254041219632970">Fremtidige versioner af Chromium vil ikke længere understøtte Mac OS X 10.6, 10.7 eller 10.8.</translation>
 <translation id="1414495520565016063">Du er logget ind på Chromium.</translation>
 <translation id="1444754455097148408">Chromium open source-licenser</translation>
-<translation id="1480489203462860648">Prøv det, det er allerede installeret</translation>
 <translation id="1502360822835740515">Gør Chromium til din standardbrowser</translation>
 <translation id="151962892725702025">Chromium OS kunne ikke synkronisere dine data, fordi synkronisering ikke er tilgængeligt på dit domæne.</translation>
 <translation id="1559451348202814456">Chromium fungerer muligvis ikke korrekt på grund af manglende understøttelse i Mac OS X 10.6, 10.7 og 10.8.</translation>
 <translation id="1653828314016431939">OK, genstart nu</translation>
 <translation id="1668054258064581266">Når du har fjernet din konto fra Chromium, skal du muligvis genindlæse dine åbne faner, før ændringen træder i kraft.</translation>
 <translation id="1688750314291223739">Konfigurer Synkronisering for at gemme dine personlige browserfunktioner på nettet, og få adgang til dem fra Chromium på en computer.</translation>
-<translation id="1699664235656412242">Luk alle Chromium-vinduer (herunder dem i Windows 8-tilstand), og prøv igen.</translation>
 <translation id="1708666629004767631">Der findes en ny og mere sikker version af Chromium.</translation>
 <translation id="1774152462503052664">Lad Chromium køre i baggrunden</translation>
 <translation id="1779356040007214683">For at gøre Chromium sikrere har vi slået nogle udvidelser fra, som ikke er anført i <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> og muligvis er blevet tilføjet, uden at du vidste det.</translation>
@@ -101,6 +99,7 @@
 <translation id="4271805377592243930">Få hjælp til Chromium</translation>
 <translation id="4285930937574705105">Installationen mislykkedes på grund af en ikke-specificeret fejl. Hvis Chromium kører, skal du lukke programmet og prøve igen.</translation>
 <translation id="4330585738697551178">Dette modul modstrider Chromium.</translation>
+<translation id="4421155425831608516">Login til Chromium er deaktiveret af administratoren af denne enhed.</translation>
 <translation id="4423735387467980091">Tilpas og kontrollér Chromium</translation>
 <translation id="4458285410772214805">Du skal logge ud og logge ind igen, for at denne ændring kan træde i kraft.</translation>
 <translation id="4469812139324097969">Chromium er forældet, da den ikke er blevet genstartet i et stykke tid. Der er en tilgængelig opdatering, som anvendes, så snart du genstarter.</translation>
@@ -177,7 +176,6 @@
 Visse funktioner kan være utilgængelige. Angiv en anden profilmappe, eller brug en nyere version af Chromium.</translation>
 <translation id="6734080038664603509">Opdater &amp;Chromium</translation>
 <translation id="6734291798041940871">Chromium er allerede installeret for alle brugere på computeren.</translation>
-<translation id="6757767188268205357">Spørg mig ikke igen</translation>
 <translation id="6810143991807788455">Hjælp med at gøre Chromium bedre ved at rapportere de aktuelle indstillinger</translation>
 <translation id="6857782730669500492">Chromium – <ph name="PAGE_TITLE" /></translation>
 <translation id="6883876366448858277">sender et ord og ordets kontekst til Google Søgning, der leverer definitioner, billeder, søgeresultater og andre oplysninger.</translation>
@@ -190,7 +188,6 @@ Visse funktioner kan være utilgængelige. Angiv en anden profilmappe, eller bru
 <translation id="707471633328071618">Google Payments (kopieret til Chromium)</translation>
 <translation id="7138853919861947730">Chromium kan bruge webtjenester til at forbedre din søgeoplevelse.</translation>
 <translation id="7162152143154757523">Chromium kan anvende smartere stavekontrol ved at sende dine indtastninger i browseren til Googles servere, så du kan bruge den samme teknologi til stavekontrol, som der anvendes i Google-søgninger.</translation>
-<translation id="7196020411877309443">Hvorfor får jeg vist dette?</translation>
 <translation id="7205698830395646142">Skjul i Chromium-menuen</translation>
 <translation id="7223968959479464213">Jobliste – Chromium</translation>
 <translation id="722928257909516027">Vis Chromium-menuen</translation>

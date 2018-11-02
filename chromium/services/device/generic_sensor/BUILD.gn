@@ -13,9 +13,19 @@ source_set("generic_sensor") {
 
   output_name = "generic_sensor"
   sources = [
+    "absolute_orientation_euler_angles_fusion_algorithm_using_accelerometer_and_magnetometer.cc",
+    "absolute_orientation_euler_angles_fusion_algorithm_using_accelerometer_and_magnetometer.h",
     "generic_sensor_consts.h",
+    "linear_acceleration_fusion_algorithm_using_accelerometer.cc",
+    "linear_acceleration_fusion_algorithm_using_accelerometer.h",
     "linux/sensor_data_linux.cc",
     "linux/sensor_data_linux.h",
+    "orientation_euler_angles_fusion_algorithm_using_quaternion.cc",
+    "orientation_euler_angles_fusion_algorithm_using_quaternion.h",
+    "orientation_quaternion_fusion_algorithm_using_euler_angles.cc",
+    "orientation_quaternion_fusion_algorithm_using_euler_angles.h",
+    "orientation_util.cc",
+    "orientation_util.h",
     "platform_sensor.cc",
     "platform_sensor.h",
     "platform_sensor_accelerometer_mac.cc",
@@ -24,6 +34,10 @@ source_set("generic_sensor") {
     "platform_sensor_ambient_light_mac.h",
     "platform_sensor_android.cc",
     "platform_sensor_android.h",
+    "platform_sensor_fusion.cc",
+    "platform_sensor_fusion.h",
+    "platform_sensor_fusion_algorithm.cc",
+    "platform_sensor_fusion_algorithm.h",
     "platform_sensor_linux.cc",
     "platform_sensor_linux.h",
     "platform_sensor_provider.cc",
@@ -42,6 +56,8 @@ source_set("generic_sensor") {
     "platform_sensor_reader_win.h",
     "platform_sensor_win.cc",
     "platform_sensor_win.h",
+    "relative_orientation_euler_angles_fusion_algorithm_using_accelerometer.cc",
+    "relative_orientation_euler_angles_fusion_algorithm_using_accelerometer.h",
     "sensor_impl.cc",
     "sensor_impl.h",
     "sensor_provider_impl.cc",
@@ -51,6 +67,7 @@ source_set("generic_sensor") {
   deps = [
     "//base",
     "//device/base/synchronization",
+    "//services/device/public/cpp:device_features",
   ]
 
   public_deps = [
@@ -58,11 +75,6 @@ source_set("generic_sensor") {
   ]
 
   if (is_android) {
-    sources += [
-      "android/sensors_jni_registrar.cc",
-      "android/sensors_jni_registrar.h",
-    ]
-
     deps += [ ":jni_headers" ]
   }
 

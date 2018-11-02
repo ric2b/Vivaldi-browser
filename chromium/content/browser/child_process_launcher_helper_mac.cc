@@ -38,7 +38,7 @@ void ChildProcessLauncherHelper::BeforeLaunchOnClientThread() {
   DCHECK_CURRENTLY_ON(client_thread_id_);
 }
 
-std::unique_ptr<FileDescriptorInfo>
+std::unique_ptr<PosixFileDescriptorInfo>
 ChildProcessLauncherHelper::GetFilesToMap() {
   DCHECK_CURRENTLY_ON(BrowserThread::PROCESS_LAUNCHER);
   return CreateDefaultPosixFilesToMap(
@@ -51,14 +51,15 @@ void ChildProcessLauncherHelper::BeforeLaunchOnLauncherThread(
     const FileMappedForLaunch& files_to_register,
     base::LaunchOptions* options) {
   // Convert FD mapping to FileHandleMappingVector.
-  std::unique_ptr<base::FileHandleMappingVector> fds_to_map =
-      files_to_register.GetMappingWithIDAdjustment(
-          base::GlobalDescriptors::kBaseDescriptor);
+  options->fds_to_remap = files_to_register.GetMappingWithIDAdjustment(
+      base::GlobalDescriptors::kBaseDescriptor);
 
   options->environ = delegate_->GetEnvironment();
 
+  bool no_sandbox = command_line_->HasSwitch(switches::kNoSandbox);
+
   if (base::FeatureList::IsEnabled(features::kMacV2Sandbox) &&
-      GetProcessType() == switches::kRendererProcess) {
+      GetProcessType() == switches::kRendererProcess && !no_sandbox) {
     seatbelt_exec_client_ = base::MakeUnique<sandbox::SeatbeltExecClient>();
     base::StringPiece renderer_sb = GetContentClient()->GetDataResource(
         IDR_RENDERER_SANDBOX_V2_PROFILE, ui::SCALE_FACTOR_NONE);
@@ -73,16 +74,13 @@ void ChildProcessLauncherHelper::BeforeLaunchOnLauncherThread(
     base::FilePath helper_executable;
     CHECK(PathService::Get(content::CHILD_PROCESS_EXE, &helper_executable));
 
-    fds_to_map->push_back(std::make_pair(pipe, pipe));
+    options->fds_to_remap.push_back(std::make_pair(pipe, pipe));
 
     // Update the command line to enable the V2 sandbox and pass the
     // communication FD to the helper executable.
     command_line_->AppendSwitch(switches::kEnableV2Sandbox);
     command_line_->AppendArg("--fd_mapping=" + std::to_string(pipe));
   }
-
-  // fds_to_remap will de deleted in AfterLaunchOnLauncherThread() below.
-  options->fds_to_remap = fds_to_map.release();
 
   // Hold the MachBroker lock for the duration of LaunchProcess. The child will
   // send its task port to the parent almost immediately after startup. The Mach
@@ -115,7 +113,7 @@ void ChildProcessLauncherHelper::BeforeLaunchOnLauncherThread(
 ChildProcessLauncherHelper::Process
 ChildProcessLauncherHelper::LaunchProcessOnLauncherThread(
     const base::LaunchOptions& options,
-    std::unique_ptr<FileDescriptorInfo> files_to_register,
+    std::unique_ptr<PosixFileDescriptorInfo> files_to_register,
     bool* is_synchronous_launch,
     int* launch_result) {
   *is_synchronous_launch = true;
@@ -129,8 +127,6 @@ ChildProcessLauncherHelper::LaunchProcessOnLauncherThread(
 void ChildProcessLauncherHelper::AfterLaunchOnLauncherThread(
     const ChildProcessLauncherHelper::Process& process,
     const base::LaunchOptions& options) {
-  delete options.fds_to_remap;
-
   std::unique_ptr<sandbox::PreExecDelegate> pre_exec_delegate =
     base::WrapUnique(static_cast<sandbox::PreExecDelegate*>(
         options.pre_exec_delegate));
@@ -177,10 +173,11 @@ void ChildProcessLauncherHelper::ForceNormalProcessTerminationSync(
 
 void ChildProcessLauncherHelper::SetProcessPriorityOnLauncherThread(
     base::Process process,
-    bool background,
-    bool boost_for_pending_views) {
-  if (process.CanBackgroundProcesses())
-    process.SetProcessBackgrounded(MachBroker::GetInstance(), background);
+    const ChildProcessLauncherPriority& priority) {
+  if (process.CanBackgroundProcesses()) {
+    process.SetProcessBackgrounded(MachBroker::GetInstance(),
+                                   priority.background);
+  }
 }
 
 // static

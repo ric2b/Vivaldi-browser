@@ -52,7 +52,7 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/url_request/url_request_failed_job.h"
-#include "testing/gmock/include/gmock/gmock-matchers.h"
+#include "testing/gmock/include/gmock/gmock.h"
 
 namespace {
 
@@ -680,6 +680,57 @@ class FrameNavigateParamsCapturer : public WebContentsObserver {
   scoped_refptr<MessageLoopRunner> message_loop_runner_;
 };
 
+// Test that going back in a subframe on a loadDataWithBaseURL page doesn't
+// crash.  See https://crbug.com/768575.
+IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
+                       NavigateBackInChildOfLoadDataWithBaseURL) {
+  GURL iframe_url(embedded_test_server()->GetURL(
+      "/navigation_controller/page_with_links.html"));
+
+  const GURL base_url("http://baseurl");
+  const GURL history_url("http://historyurl");
+  std::string data =
+      "<html><body>"
+      "  <p>"
+      "    <iframe src=\"";
+  data += iframe_url.spec();
+  data +=
+      "\" />"
+      "  </p>"
+      "</body></html>";
+
+  // Load data and commit.
+  TestNavigationObserver same_tab_observer(shell()->web_contents(), 1);
+#if defined(OS_ANDROID)
+  shell()->LoadDataAsStringWithBaseURL(history_url, data, base_url);
+#else
+  shell()->LoadDataWithBaseURL(history_url, data, base_url);
+#endif
+  same_tab_observer.Wait();
+
+  FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
+                            ->GetFrameTree()
+                            ->root();
+  ASSERT_EQ(1u, root->child_count());
+  FrameTreeNode* child = root->child_at(0u);
+
+  {
+    TestNavigationObserver observer(shell()->web_contents(), 1);
+    std::string script = "document.getElementById('thelink').click()";
+    EXPECT_TRUE(ExecuteScript(child, script));
+    observer.Wait();
+  }
+
+  {
+    TestNavigationObserver observer(shell()->web_contents(), 1);
+    shell()->web_contents()->GetController().GoBack();
+    observer.Wait();
+  }
+
+  // Passes if renderer is still alive.
+  EXPECT_TRUE(ExecuteScript(shell(), "console.log('Success');"));
+}
+
 class LoadCommittedCapturer : public WebContentsObserver {
  public:
   // Observes the load commit for the specified |node|.
@@ -709,11 +760,11 @@ class LoadCommittedCapturer : public WebContentsObserver {
     RenderFrameHostImpl* rfh =
         static_cast<RenderFrameHostImpl*>(render_frame_host);
 
-    // Don't pay attention to swapped out RenderFrameHosts in the main frame.
-    // TODO(nasko): Remove once swappedout:// is gone.
-    // See https://crbug.com/357747.
+    // Don't pay attention to pending delete RenderFrameHosts in the main frame,
+    // which might happen in a race if a cross-process navigation happens
+    // quickly.
     if (!rfh->is_active()) {
-      DLOG(INFO) << "Skipping swapped out RFH: "
+      DLOG(INFO) << "Skipping pending delete RFH: "
                  << rfh->GetSiteInstance()->GetSiteURL();
       return;
     }
@@ -913,8 +964,9 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   NavigationController& controller = shell()->web_contents()->GetController();
   GURL error_url(
       net::URLRequestFailedJob::GetMockHttpUrl(net::ERR_CONNECTION_RESET));
-  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                          base::Bind(&net::URLRequestFailedJob::AddUrlHandler));
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::BindOnce(&net::URLRequestFailedJob::AddUrlHandler));
 
   EXPECT_TRUE(NavigateToURL(shell(), GURL(url::kAboutBlankURL)));
   EXPECT_EQ(1, controller.GetEntryCount());
@@ -4308,9 +4360,6 @@ class NavigationControllerOopifBrowserTest
 // create out-of-process iframes unless the current SiteIsolationPolicy says to.
 IN_PROC_BROWSER_TEST_F(NavigationControllerOopifBrowserTest,
                        RestoreWithoutExtraOopifs) {
-  // This test requires OOPIFs to be possible.
-  EXPECT_TRUE(SiteIsolationPolicy::AreCrossProcessFramesPossible());
-
   // 1. Start on a page with a data URL iframe.
   GURL main_url_a(embedded_test_server()->GetURL(
       "a.com", "/navigation_controller/page_with_data_iframe.html"));
@@ -4739,8 +4788,7 @@ class FailureWatcher : public WebContentsObserver {
   void DidFailLoad(RenderFrameHost* render_frame_host,
                    const GURL& validated_url,
                    int error_code,
-                   const base::string16& error_description,
-                   bool was_ignored_by_handler) override {
+                   const base::string16& error_description) override {
     RenderFrameHostImpl* rfh =
         static_cast<RenderFrameHostImpl*>(render_frame_host);
     if (rfh->frame_tree_node()->frame_tree_node_id() != frame_tree_node_id_)
@@ -6144,7 +6192,7 @@ class GoBackAndCommitFilter : public BrowserMessageFilter {
 
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(&NavigateBackAndCommit, message, web_contents_));
+        base::BindOnce(&NavigateBackAndCommit, message, web_contents_));
     return true;
   }
 
@@ -6585,7 +6633,7 @@ class RequestMonitoringNavigationBrowserTest : public ContentBrowserTest {
       const net::test_server::HttpRequest& request) {
     postback_task_runner->PostTask(
         FROM_HERE,
-        base::Bind(
+        base::BindOnce(
             &RequestMonitoringNavigationBrowserTest::MonitorRequestOnMainThread,
             weak_this, request));
   }
@@ -6869,6 +6917,59 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
             controller.GetLastCommittedEntry()->GetURL().spec());
 }
 
+// Same-document navigations can sometimes succeed but then later be blocked by
+// policy (e.g., X-Frame-Options) after a page is restored or reloaded.  Ensure
+// that navigating back from a newly blocked URL in a subframe is not treated as
+// same-document, even if it had been same-document originally.
+// See https://crbug.com/765291.
+IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
+                       BackSameDocumentAfterBlockedSubframe) {
+  NavigationControllerImpl& controller = static_cast<NavigationControllerImpl&>(
+      shell()->web_contents()->GetController());
+
+  GURL start_url(embedded_test_server()->GetURL(
+      "/navigation_controller/page_with_iframe_simple.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), start_url));
+
+  FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
+                            ->GetFrameTree()
+                            ->root();
+
+  // pushState to a URL that will be blocked by XFO if loaded from scratch.
+  {
+    FrameNavigateParamsCapturer capturer(root->child_at(0));
+    std::string pushStateToXfo =
+        "history.pushState({}, '', '/x-frame-options-deny.html')";
+    EXPECT_TRUE(ExecuteScript(root->child_at(0), pushStateToXfo));
+    capturer.Wait();
+    EXPECT_TRUE(capturer.is_same_document());
+  }
+
+  // Navigate the main frame to another page.
+  GURL new_url(embedded_test_server()->GetURL(
+      "/navigation_controller/simple_page_1.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), new_url));
+
+  // Go back, causing the subframe to be blocked by XFO.
+  {
+    TestNavigationObserver observer(shell()->web_contents());
+    controller.GoBack();
+    observer.Wait();
+  }
+  EXPECT_EQ(GURL("data:,"), root->child_at(0)->current_url());
+
+  // Go back again.  This would have been same-document if the prior navigation
+  // had succeeded.
+  {
+    TestNavigationObserver observer(shell()->web_contents());
+    controller.GoBack();
+    observer.Wait();
+  }
+
+  // Check that the renderer is still alive.
+  EXPECT_TRUE(ExecuteScript(root->child_at(0), "console.log('Success');"));
+}
+
 // If the main frame does a load, it should not be reported as a subframe
 // navigation. This used to occur in the following case:
 // 1. You're on a site with frames.
@@ -6981,6 +7082,33 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
         controller.GetEntryAtIndex(2)->GetTransitionType(),
         ui::PAGE_TRANSITION_LINK));
   }
+}
+
+IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
+                       HashNavigationVsBeforeUnloadEvent) {
+  GURL main_url(embedded_test_server()->GetURL("/title1.html"));
+  GURL hash_url(embedded_test_server()->GetURL("/title1.html#hash"));
+
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+  EXPECT_TRUE(
+      ExecuteScript(shell(),
+                    R"( window.addEventListener("beforeunload", function(e) {
+              domAutomationController.send("beforeunload");
+          });
+          window.addEventListener("unload", function(e) {
+              domAutomationController.send("unload");
+          });
+      )"));
+
+  DOMMessageQueue message_queue;
+  std::vector<std::string> messages;
+  std::string message;
+  EXPECT_TRUE(NavigateToURL(shell(), hash_url));
+  while (message_queue.PopMessage(&message))
+    messages.push_back(message);
+
+  // Verify that none of "beforeunload", "unload" events fired.
+  EXPECT_THAT(messages, testing::IsEmpty());
 }
 
 }  // namespace content

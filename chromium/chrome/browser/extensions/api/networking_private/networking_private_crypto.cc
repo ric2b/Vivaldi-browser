@@ -13,6 +13,7 @@
 #include "components/cast_certificate/cast_cert_validator.h"
 #include "crypto/openssl_util.h"
 #include "crypto/rsa_private_key.h"
+#include "net/cert/internal/signature_algorithm.h"
 #include "net/cert/pem_tokenizer.h"
 #include "third_party/boringssl/src/include/openssl/evp.h"
 #include "third_party/boringssl/src/include/openssl/rsa.h"
@@ -92,9 +93,10 @@ bool VerifyCredentialsAtTime(
   cast_crypto::CastDeviceCertPolicy unused_policy;
 
   std::unique_ptr<cast_crypto::CertVerificationContext> verification_context;
-  if (!cast_crypto::VerifyDeviceCert(certs, time, &verification_context,
-                                     &unused_policy, nullptr,
-                                     cast_crypto::CRLPolicy::CRL_OPTIONAL)) {
+  if (cast_crypto::VerifyDeviceCert(certs, time, &verification_context,
+                                    &unused_policy, nullptr,
+                                    cast_crypto::CRLPolicy::CRL_OPTIONAL) !=
+      cast_crypto::CastCertError::OK) {
     LOG(ERROR) << kErrorPrefix << "Failed verifying cast device cert";
     return false;
   }
@@ -112,7 +114,8 @@ bool VerifyCredentialsAtTime(
 
   // Use the public key from verified certificate to verify |signature| over
   // |data|.
-  if (!verification_context->VerifySignatureOverData(signature, data)) {
+  if (!verification_context->VerifySignatureOverData(
+          signature, data, net::DigestAlgorithm::Sha1)) {
     LOG(ERROR) << kErrorPrefix
                << "Failed verifying signature using cast device cert";
     return false;

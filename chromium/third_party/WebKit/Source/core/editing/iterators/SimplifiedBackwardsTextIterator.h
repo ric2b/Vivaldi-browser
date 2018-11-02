@@ -26,6 +26,7 @@
 #ifndef SimplifiedBackwardsTextIterator_h
 #define SimplifiedBackwardsTextIterator_h
 
+#include "core/editing/EphemeralRange.h"
 #include "core/editing/Position.h"
 #include "core/editing/iterators/BackwardsTextBuffer.h"
 #include "core/editing/iterators/FullyClippedStateStack.h"
@@ -45,8 +46,7 @@ class CORE_TEMPLATE_CLASS_EXPORT SimplifiedBackwardsTextIteratorAlgorithm {
 
  public:
   SimplifiedBackwardsTextIteratorAlgorithm(
-      const PositionTemplate<Strategy>& start,
-      const PositionTemplate<Strategy>& end,
+      const EphemeralRangeTemplate<Strategy>&,
       const TextIteratorBehavior& = TextIteratorBehavior());
 
   bool AtEnd() const { return !position_node_ || should_stop_; }
@@ -64,11 +64,9 @@ class CORE_TEMPLATE_CLASS_EXPORT SimplifiedBackwardsTextIteratorAlgorithm {
   // Calculate the minimum |actualLength >= minLength| such that code units
   // with offset range [position, position + actualLength) are whole code
   // points. Prepend these code points to |output| and return |actualLength|.
-  // TODO(xiaochengh): Use (start, end) instead of (start, length).
   int CopyTextTo(BackwardsTextBuffer* output,
                  int position,
                  int min_length) const;
-  // TODO(xiaochengh): Avoid default parameters.
   int CopyTextTo(BackwardsTextBuffer* output, int position = 0) const;
 
   Node* StartContainer() const;

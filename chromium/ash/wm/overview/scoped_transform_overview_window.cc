@@ -9,6 +9,7 @@
 
 #include "ash/wm/overview/scoped_overview_animation_settings.h"
 #include "ash/wm/overview/window_selector_item.h"
+#include "ash/wm/splitview/split_view_controller.h"
 #include "ash/wm/window_mirror_view.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
@@ -164,8 +165,10 @@ TransientDescendantIteratorRange GetTransientTreeIterator(
 }  // namespace
 
 ScopedTransformOverviewWindow::ScopedTransformOverviewWindow(
+    WindowSelectorItem* selector_item,
     aura::Window* window)
-    : window_(window),
+    : selector_item_(selector_item),
+      window_(window),
       determined_original_window_shape_(false),
       ignored_by_shelf_(wm::GetWindowState(window)->ignored_by_shelf()),
       overview_started_(false),
@@ -345,9 +348,9 @@ void ScopedTransformOverviewWindow::SetTransform(
   if (&transform != &original_transform_ &&
       !determined_original_window_shape_) {
     determined_original_window_shape_ = true;
-    SkRegion* window_shape = window()->layer()->alpha_shape();
+    const ShapeRects* window_shape = window()->layer()->alpha_shape();
     if (!original_window_shape_ && window_shape)
-      original_window_shape_.reset(new SkRegion(*window_shape));
+      original_window_shape_ = base::MakeUnique<ShapeRects>(*window_shape);
   }
 
   gfx::Point target_origin(GetTargetBoundsInScreen().origin());
@@ -377,24 +380,27 @@ void ScopedTransformOverviewWindow::HideHeader() {
   if (inset > 0) {
     // Use alpha shape to hide the window header.
     bounds.Inset(0, inset, 0, 0);
-    std::unique_ptr<SkRegion> region(new SkRegion);
-    region->setRect(RectToSkIRect(bounds));
-    if (original_window_shape_)
-      region->op(*original_window_shape_, SkRegion::kIntersect_Op);
+    std::unique_ptr<ShapeRects> shape;
+    if (original_window_shape_) {
+      // When the |window| has a shape, use the new bounds to clip that shape.
+      shape = base::MakeUnique<ShapeRects>(*original_window_shape_);
+      for (auto& rect : *shape)
+        rect.Intersect(bounds);
+    } else {
+      shape = base::MakeUnique<ShapeRects>();
+      shape->push_back(bounds);
+    }
     aura::Window* window = GetOverviewWindow();
-    window->layer()->SetAlphaShape(std::move(region));
+    window->layer()->SetAlphaShape(std::move(shape));
     window->layer()->SetMasksToBounds(true);
   }
 }
 
 void ScopedTransformOverviewWindow::ShowHeader() {
   ui::Layer* layer = window()->layer();
-  if (original_window_shape_) {
-    layer->SetAlphaShape(
-        base::MakeUnique<SkRegion>(*original_window_shape_.get()));
-  } else {
-    layer->SetAlphaShape(nullptr);
-  }
+  layer->SetAlphaShape(original_window_shape_ ? base::MakeUnique<ShapeRects>(
+                                                    *original_window_shape_)
+                                              : nullptr);
   layer->SetMasksToBounds(false);
 }
 
@@ -456,7 +462,25 @@ void ScopedTransformOverviewWindow::EnsureVisible() {
 }
 
 void ScopedTransformOverviewWindow::OnGestureEvent(ui::GestureEvent* event) {
-  if (event->type() == ui::ET_GESTURE_TAP) {
+  if (minimized_widget_ && SplitViewController::ShouldAllowSplitView()) {
+    gfx::Point location(event->location());
+    ::wm::ConvertPointToScreen(minimized_widget_->GetNativeWindow(), &location);
+    switch (event->type()) {
+      case ui::ET_GESTURE_SCROLL_BEGIN:
+      case ui::ET_GESTURE_TAP_DOWN:
+        selector_item_->HandlePressEvent(location);
+        break;
+      case ui::ET_GESTURE_SCROLL_UPDATE:
+        selector_item_->HandleDragEvent(location);
+        break;
+      case ui::ET_GESTURE_END:
+        selector_item_->HandleReleaseEvent(location);
+        break;
+      default:
+        break;
+    }
+    event->SetHandled();
+  } else if (event->type() == ui::ET_GESTURE_TAP) {
     EnsureVisible();
     window_->Show();
     wm::ActivateWindow(window_);
@@ -464,7 +488,25 @@ void ScopedTransformOverviewWindow::OnGestureEvent(ui::GestureEvent* event) {
 }
 
 void ScopedTransformOverviewWindow::OnMouseEvent(ui::MouseEvent* event) {
-  if (event->type() == ui::ET_MOUSE_PRESSED && event->IsOnlyLeftMouseButton()) {
+  if (minimized_widget_ && SplitViewController::ShouldAllowSplitView()) {
+    gfx::Point location(event->location());
+    ::wm::ConvertPointToScreen(minimized_widget_->GetNativeWindow(), &location);
+    switch (event->type()) {
+      case ui::ET_MOUSE_PRESSED:
+        selector_item_->HandlePressEvent(location);
+        break;
+      case ui::ET_MOUSE_DRAGGED:
+        selector_item_->HandleDragEvent(location);
+        break;
+      case ui::ET_MOUSE_RELEASED:
+        selector_item_->HandleReleaseEvent(location);
+        break;
+      default:
+        break;
+    }
+    event->SetHandled();
+  } else if (event->type() == ui::ET_MOUSE_PRESSED &&
+             event->IsOnlyLeftMouseButton()) {
     EnsureVisible();
     window_->Show();
     wm::ActivateWindow(window_);

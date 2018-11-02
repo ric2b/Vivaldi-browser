@@ -31,6 +31,10 @@
 #include "services/resource_coordinator/public/interfaces/memory_instrumentation/constants.mojom.h"
 #include "services/service_manager/runner/common/client_util.h"
 
+#if defined(USE_AURA)
+#include "ui/aura/env.h"
+#endif
+
 namespace content {
 
 BrowserGpuChannelHostFactory* BrowserGpuChannelHostFactory::instance_ = NULL;
@@ -77,8 +81,9 @@ BrowserGpuChannelHostFactory::EstablishRequest::Create(
   // PostTask outside the constructor to ensure at least one reference exists.
   task_runner->PostTask(
       FROM_HERE,
-      base::Bind(&BrowserGpuChannelHostFactory::EstablishRequest::EstablishOnIO,
-                 establish_request));
+      base::BindOnce(
+          &BrowserGpuChannelHostFactory::EstablishRequest::EstablishOnIO,
+          establish_request));
   return establish_request;
 }
 
@@ -136,8 +141,8 @@ void BrowserGpuChannelHostFactory::EstablishRequest::FinishOnIO() {
   event_.Signal();
   main_task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&BrowserGpuChannelHostFactory::EstablishRequest::FinishOnMain,
-                 this));
+      base::BindOnce(
+          &BrowserGpuChannelHostFactory::EstablishRequest::FinishOnMain, this));
 }
 
 void BrowserGpuChannelHostFactory::EstablishRequest::FinishOnMain() {
@@ -214,7 +219,7 @@ BrowserGpuChannelHostFactory::BrowserGpuChannelHostFactory()
     if (!cache_dir.empty()) {
       GetIOThreadTaskRunner()->PostTask(
           FROM_HERE,
-          base::Bind(
+          base::BindOnce(
               &BrowserGpuChannelHostFactory::InitializeShaderDiskCacheOnIO,
               gpu_client_id_, cache_dir));
     }
@@ -251,7 +256,9 @@ BrowserGpuChannelHostFactory::AllocateSharedMemory(size_t size) {
 
 void BrowserGpuChannelHostFactory::EstablishGpuChannel(
     const gpu::GpuChannelEstablishedCallback& callback) {
-  DCHECK(!service_manager::ServiceManagerIsRemote());
+#if defined(USE_AURA)
+  DCHECK_EQ(aura::Env::Mode::LOCAL, aura::Env::GetInstance()->mode());
+#endif
   DCHECK(IsMainThread());
   if (gpu_channel_.get() && gpu_channel_->IsLost()) {
     DCHECK(!pending_request_.get());

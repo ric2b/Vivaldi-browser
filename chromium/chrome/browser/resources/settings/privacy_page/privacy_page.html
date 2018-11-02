@@ -1,7 +1,6 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 
 <link rel="import" href="chrome://resources/cr_elements/cr_dialog/cr_dialog.html">
-<link rel="import" href="chrome://resources/cr_elements/policy/cr_policy_vars_css.html">
 <link rel="import" href="chrome://resources/html/assert.html">
 <link rel="import" href="chrome://resources/html/cr/ui/focus_without_ink.html">
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
@@ -10,6 +9,7 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 <link rel="import" href="../clear_browsing_data_dialog/clear_browsing_data_dialog.html">
+<link rel="import" href="../clear_browsing_data_dialog/clear_browsing_data_dialog_tabs.html">
 <link rel="import" href="../controls/settings_toggle_button.html">
 <link rel="import" href="../lifetime_browser_proxy.html">
 <link rel="import" href="../route.html">
@@ -31,7 +31,7 @@
 <link rel="import" href="../site_settings_page/site_settings_page.html">
 
 <if expr="use_nss_certs">
-<link rel="import" href="../certificate_manager_page/certificate_manager_page.html">
+  <link rel="import" href="chrome://resources/cr_components/certificate_manager/certificate_manager.html">
 </if>
 <link rel="import" href="privacy_page_browser_proxy.html">
 
@@ -40,18 +40,25 @@
     <style include="settings-shared">
     </style>
     <template is="dom-if" if="[[showClearBrowsingDataDialog_]]" restamp>
-      <settings-clear-browsing-data-dialog prefs="{{prefs}}"
-          on-close="onDialogClosed_">
-      </settings-clear-browsing-data-dialog>
+      <template is="dom-if" if="[[!tabsInCbd_]]" restamp>
+        <settings-clear-browsing-data-dialog prefs="{{prefs}}"
+            on-close="onDialogClosed_">
+        </settings-clear-browsing-data-dialog>
+      </template>
+      <template is="dom-if" if="[[tabsInCbd_]]" restamp>
+        <settings-clear-browsing-data-dialog-tabs prefs="{{prefs}}"
+            on-close="onDialogClosed_">
+        </settings-clear-browsing-data-dialog-tabs>
+      </template>
     </template>
     <template id="doNotTrackDialogIf" is="dom-if"
         if="[[showDoNotTrackDialog_]]" notify-dom-change>
       <dialog is="cr-dialog" id="confirmDoNotTrackDialog"
           close-text="$i18n{close}" on-cancel="onDoNotTrackDialogCancel_"
           on-close="onDoNotTrackDialogClosed_">
-        <div class="title" slot="title">$i18n{doNotTrackDialogTitle}</div>
-        <div class="body" slot="body">$i18nRaw{doNotTrackDialogMessage}</div>
-        <div class="button-container" slot="button-container">
+        <div slot="title">$i18n{doNotTrackDialogTitle}</div>
+        <div slot="body">$i18nRaw{doNotTrackDialogMessage}</div>
+        <div slot="button-container">
           <paper-button class="cancel-button"
               on-tap="onDoNotTrackDialogCancel_">
             $i18n{cancel}
@@ -69,97 +76,68 @@
         <div class="settings-box first">
           <p class="privacy-explanation">$i18nRaw{improveBrowsingExperience}</p>
         </div>
-        <div class="settings-box">
-          <settings-toggle-button class="start"
-              pref="{{prefs.alternate_error_pages.enabled}}"
-              label="$i18n{linkDoctorPref}">
-          </settings-toggle-button>
-        </div>
-        <div class="settings-box" hidden="[[!pageVisibility.searchPrediction]]">
-          <settings-toggle-button class="start"
-              pref="{{prefs.search.suggest_enabled}}"
-              label="$i18n{searchSuggestPref}">
-          </settings-toggle-button>
-        </div>
-        <div class="settings-box"
-            hidden="[[!pageVisibility.networkPrediction]]">
-          <settings-toggle-button class="start"
-              pref="{{prefs.net.network_prediction_options}}"
-              label="$i18n{networkPredictionEnabled}"
-              numeric-unchecked-value="[[networkPredictionEnum_.NEVER]]">
-          </settings-toggle-button>
-        </div>
-        <div class="settings-box">
-          <settings-toggle-button class="start"
-              id="safeBrowsingExtendedReportingControl"
-              pref="[[safeBrowsingExtendedReportingPref_]]"
-              label="$i18n{safeBrowsingEnableExtendedReporting}"
-              on-settings-boolean-control-change="onSberChange_"
-              no-set-pref>
-          </settings-toggle-button>
-        </div>
-        <div class="settings-box">
-          <settings-toggle-button class="start"
-              pref="{{prefs.safebrowsing.enabled}}"
-              label="$i18n{safeBrowsingEnableProtection}">
-          </settings-toggle-button>
-        </div>
+        <settings-toggle-button pref="{{prefs.alternate_error_pages.enabled}}"
+            label="$i18n{linkDoctorPref}">
+        </settings-toggle-button>
+        <settings-toggle-button hidden="[[!pageVisibility.searchPrediction]]"
+            pref="{{prefs.search.suggest_enabled}}"
+            label="$i18n{searchSuggestPref}">
+        </settings-toggle-button>
+        <settings-toggle-button hidden="[[!pageVisibility.networkPrediction]]"
+            pref="{{prefs.net.network_prediction_options}}"
+            label="$i18n{networkPredictionEnabled}"
+            numeric-unchecked-value="[[networkPredictionEnum_.NEVER]]">
+        </settings-toggle-button>
+        <settings-toggle-button id="safeBrowsingExtendedReportingControl"
+            pref="[[safeBrowsingExtendedReportingPref_]]"
+            label="$i18n{safeBrowsingEnableExtendedReporting}"
+            on-settings-boolean-control-change="onSberChange_"
+            no-set-pref>
+        </settings-toggle-button>
+        <settings-toggle-button pref="{{prefs.safebrowsing.enabled}}"
+            label="$i18n{safeBrowsingEnableProtection}">
+        </settings-toggle-button>
 <if expr="_google_chrome">
 <if expr="chromeos">
-        <div class="settings-box">
-          <settings-toggle-button class="start"
-              pref="{{prefs.cros.metrics.reportingEnabled}}"
-              label="$i18n{enableLogging}">
-          </settings-toggle-button>
-        </div>
+        <settings-toggle-button pref="{{prefs.cros.metrics.reportingEnabled}}"
+            label="$i18n{enableLogging}">
+        </settings-toggle-button>
 </if><!-- chromeos -->
 <if expr="not chromeos">
-        <div class="settings-box">
-          <settings-toggle-button class="start"
-              id="metricsReportingControl"
-              pref="[[metricsReportingPref_]]"
-              label="$i18n{enableLogging}"
-              on-settings-boolean-control-change="onMetricsReportingChange_"
-              no-set-pref>
-            <template is="dom-if" if="[[showRestart_]]" restamp>
-              <paper-button on-tap="onRestartTap_" id="restart"
-                  class="more-actions">
-                $i18n{restart}
-              </paper-button>
-            </template>
-          </settings-toggle-button>
-        </div>
+        <settings-toggle-button id="metricsReportingControl"
+            pref="[[metricsReportingPref_]]" label="$i18n{enableLogging}"
+            on-settings-boolean-control-change="onMetricsReportingChange_"
+            no-set-pref>
+          <template is="dom-if" if="[[showRestart_]]" restamp>
+            <paper-button on-tap="onRestartTap_" id="restart"
+                slot="more-actions">
+              $i18n{restart}
+            </paper-button>
+          </template>
+        </settings-toggle-button>
 </if><!-- not chromeos -->
 </if><!-- _google_chrome -->
-        <div class="settings-box">
-          <settings-toggle-button id="doNotTrack" class="start"
-              pref="{{prefs.enable_do_not_track}}" label="$i18n{doNotTrack}"
-              on-settings-boolean-control-change="onDoNotTrackChange_"
-              no-set-pref>
-          </settings-toggle-button>
-        </div>
+        <settings-toggle-button id="doNotTrack"
+            pref="{{prefs.enable_do_not_track}}" label="$i18n{doNotTrack}"
+            on-settings-boolean-control-change="onDoNotTrackChange_"
+            no-set-pref>
+        </settings-toggle-button>
 <if expr="chromeos">
-        <div class="settings-box">
-          <settings-toggle-button class="start"
-              pref="{{prefs.cros.device.attestation_for_content_protection_enabled}}"
-              label="$i18n{enableContentProtectionAttestation}">
-          </settings-toggle-button>
-        </div>
-        <div class="settings-box">
-          <settings-toggle-button class="start"
-              pref="{{prefs.settings.internet.wake_on_wifi_darkconnect}}"
-              label="$i18n{wakeOnWifi}">
-          </settings-toggle-button>
-        </div>
+        <settings-toggle-button
+            pref="{{prefs.cros.device.attestation_for_content_protection_enabled}}"
+            label="$i18n{enableContentProtectionAttestation}">
+        </settings-toggle-button>
+        <settings-toggle-button
+            pref="{{prefs.settings.internet.wake_on_wifi_darkconnect}}"
+            label="$i18n{wakeOnWifi}">
+        </settings-toggle-button>
 </if>
 <if expr="_google_chrome">
-        <div class="settings-box two-line">
-          <settings-toggle-button class="start"
-              pref="{{prefs.spellcheck.use_spelling_service}}"
-              label="$i18n{spellingPref}"
-              sub-label="$i18n{spellingDescription}">
-          </settings-toggle-button>
-        </div>
+        <settings-toggle-button
+            pref="{{prefs.spellcheck.use_spelling_service}}"
+            label="$i18n{spellingPref}"
+            sub-label="$i18n{spellingDescription}">
+        </settings-toggle-button>
 </if>
 <if expr="use_nss_certs or is_win or is_macosx">
         <div id="manageCertificates" class="settings-box two-line"
@@ -213,8 +191,7 @@
         <settings-subpage
             associated-control="[[$$('#manageCertificates')]]"
             page-title="$i18n{manageCertificates}">
-          <settings-certificate-manager-page>
-          </settings-certificate-manager-page>
+          <certificate-manager></certificate-manager>
         </settings-subpage>
       </template>
 </if>
@@ -280,17 +257,31 @@
               toggle-on-label="$i18n{siteSettingsCookiesAllowedRecommended}"
               sub-option-label="$i18n{deleteDataPostSession}">
           </category-default-setting>
-          <div class="settings-box two-line">
-            <settings-toggle-button class="start"
-                pref="{{prefs.profile.block_third_party_cookies}}"
-                label="$i18n{thirdPartyCookie}"
-                sub-label="$i18n{thirdPartyCookieSublabel}">
-            </settings-toggle-button>
+          <settings-toggle-button
+              pref="{{prefs.profile.block_third_party_cookies}}"
+              label="$i18n{thirdPartyCookie}"
+              sub-label="$i18n{thirdPartyCookieSublabel}">
+          </settings-toggle-button>
+          <div class="settings-box" actionable on-tap="onSiteDataTap_">
+             <div class="start" id="cookiesLink">
+               $i18n{siteSettingsCookieLink}
+             </div>
+             <button class="subpage-arrow" is="paper-icon-button-light"
+                 aria-labelledby="cookiesLink">
+             </button>
           </div>
           <category-setting-exceptions
               category="{{ContentSettingsTypes.COOKIES}}">
           </category-setting-exceptions>
-          <site-data focus-config="[[focusConfig_]]"></site-data>
+        </settings-subpage>
+      </template>
+      <template is="dom-if" route-path="/siteData" no-search>
+        <settings-subpage page-title="$i18n{siteSettingsCookieHeader}"
+            search-label="$i18n{siteSettingsCookieSearch}"
+            search-term="{{siteDataFilter_}}">
+          <site-data filter="[[siteDataFilter_]]"
+              focus-config="[[focusConfig_]]">
+          </site-data>
         </settings-subpage>
       </template>
       <template is="dom-if" route-path="/content/images" no-search>
@@ -346,6 +337,21 @@
           </category-setting-exceptions>
         </settings-subpage>
       </template>
+      <template is="dom-if" if="[[enableSoundContentSetting_]]"
+          no-search>
+        <template is="dom-if" route-path="/content/sound" no-search>
+          <settings-subpage page-title="$i18n{siteSettingsSound}">
+            <category-default-setting
+                toggle-off-label="$i18n{siteSettingsBlocked}"
+                toggle-on-label="$i18n{siteSettingsAllowedRecommended}"
+                category="{{ContentSettingsTypes.SOUND}}">
+            </category-default-setting>
+            <category-setting-exceptions
+                category="{{ContentSettingsTypes.SOUND}}">
+            </category-setting-exceptions>
+          </settings-subpage>
+       </template>
+     </template>
       <template is="dom-if" route-path="/content/microphone" no-search>
         <settings-subpage page-title="$i18n{siteSettingsCategoryMicrophone}">
           <media-picker label="$i18n{siteSettingsMicrophoneLabel}" type="mic">
@@ -376,9 +382,7 @@
         <settings-subpage page-title="$i18n{siteSettingsFlash}">
           <category-default-setting category="{{ContentSettingsTypes.PLUGINS}}"
               toggle-off-label="$i18n{siteSettingsFlashBlock}"
-              toggle-on-label="$i18n{siteSettingsFlashAllow}"
-              sub-option-label="$i18n{siteSettingsFlashAskBefore}"
-              sub-option-secondary="$i18n{siteSettingsFlashAskBeforeSubtitle}">
+              toggle-on-label="$i18n{siteSettingsFlashAskFirstRecommended}">
           </category-default-setting>
 <if expr="chromeos">
           <a class="settings-box inherit-color no-outline" tabindex="-1"
@@ -453,13 +457,13 @@
         </settings-subpage>
       </template>
       <template is="dom-if" route-path="/content/siteDetails" no-search>
-        <settings-subpage page-title="$i18n{siteSettingsSiteDetails}">
-          <site-details></site-details>
+        <settings-subpage page-title="[[pageTitle]]">
+          <site-details page-title="{{pageTitle}}"></site-details>
         </settings-subpage>
       </template>
       <template is="dom-if" route-path="/cookies/detail" no-search>
         <settings-subpage page-title="[[pageTitle]]">
-          <paper-button class="subpage-title-extra secondary-button"
+          <paper-button slot="subpage-title-extra" class="secondary-button"
               on-tap="onRemoveAllCookiesFromSite_">
             $i18n{siteSettingsCookieRemoveAll}
           </paper-button>
@@ -469,26 +473,22 @@
       </template>
       <template is="dom-if" route-path="/content/protectedContent" no-search>
         <settings-subpage page-title="$i18n{siteSettingsProtectedContent}">
-          <div class="settings-box first">
-            <settings-toggle-button class="start"
-                pref="{{prefs.webkit.webprefs.encrypted_media_enabled}}"
-                label="[[getProtectedContentLabel_(
-                    prefs.webkit.webprefs.encrypted_media_enabled.value)]]"
-                disabled$="[[isGuest_]]">
-            </settings-toggle-button>
-          </div>
+          <settings-toggle-button class="first"
+              pref="{{prefs.webkit.webprefs.encrypted_media_enabled}}"
+              label="[[getProtectedContentLabel_(
+                  prefs.webkit.webprefs.encrypted_media_enabled.value)]]"
+              disabled$="[[isGuest_]]">
+          </settings-toggle-button>
 <if expr="chromeos or is_win">
           <div class="settings-box first two-line">
             $i18n{siteSettingsProtectedContentIdentifiersExplanation}
           </div>
-          <div class="settings-box first">
-            <settings-toggle-button class="start"
-                pref="{{prefs.settings.privacy.drm_enabled}}"
-                label="[[getProtectedContentIdentifiersLabel_(
-                    prefs.settings.privacy.drm_enabled.value)]]"
-                disabled$="[[isGuest_]]">
-            </settings-toggle-button>
-          </div>
+          <settings-toggle-button class="first"
+              pref="{{prefs.settings.privacy.drm_enabled}}"
+              label="[[getProtectedContentIdentifiersLabel_(
+                  prefs.settings.privacy.drm_enabled.value)]]"
+              disabled$="[[isGuest_]]">
+          </settings-toggle-button>
 </if>
 <if expr="chromeos">
           <template is="dom-if"

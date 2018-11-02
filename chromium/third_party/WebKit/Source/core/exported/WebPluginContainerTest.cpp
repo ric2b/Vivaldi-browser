@@ -38,12 +38,13 @@
 #include "core/events/KeyboardEvent.h"
 #include "core/exported/FakeWebPlugin.h"
 #include "core/exported/WebPluginContainerImpl.h"
-#include "core/exported/WebViewBase.h"
+#include "core/exported/WebViewImpl.h"
 #include "core/frame/EventHandlerRegistry.h"
 #include "core/frame/FrameTestHelpers.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "core/layout/LayoutObject.h"
 #include "core/page/Page.h"
+#include "platform/KeyboardCodes.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/paint/CullRect.h"
 #include "platform/graphics/paint/ForeignLayerDisplayItem.h"
@@ -106,6 +107,12 @@ class WebPluginContainerTest : public ::testing::Test {
 
 namespace {
 
+#if defined(OS_MACOSX)
+const WebInputEvent::Modifiers kEditingModifier = WebInputEvent::kMetaKey;
+#else
+const WebInputEvent::Modifiers kEditingModifier = WebInputEvent::kControlKey;
+#endif
+
 template <typename T>
 class CustomPluginWebFrameClient : public FrameTestHelpers::TestWebFrameClient {
  public:
@@ -132,7 +139,54 @@ class TestPlugin : public FakeWebPlugin {
   void PrintPage(int page_number, WebCanvas*) override;
 
  private:
+  ~TestPlugin() override {}
+
   TestPluginWebFrameClient* const test_client_;
+};
+
+// Subclass of FakeWebPlugin used for testing edit commands, so HasSelection()
+// and CanEditText() return true by default.
+class TestPluginWithEditableText : public FakeWebPlugin {
+ public:
+  static TestPluginWithEditableText* FromContainer(WebElement* element) {
+    WebPlugin* plugin =
+        ToWebPluginContainerImpl(element->PluginContainer())->Plugin();
+    return static_cast<TestPluginWithEditableText*>(plugin);
+  }
+
+  explicit TestPluginWithEditableText(const WebPluginParams& params)
+      : FakeWebPlugin(params), cut_called_(false), paste_called_(false) {}
+
+  bool HasSelection() const override { return true; }
+  bool CanEditText() const override { return true; }
+  bool ExecuteEditCommand(const WebString& name) {
+    return ExecuteEditCommand(name, WebString());
+  }
+  bool ExecuteEditCommand(const WebString& name,
+                          const WebString& value) override {
+    if (name == "Cut") {
+      cut_called_ = true;
+      return true;
+    }
+    if (name == "Paste" || name == "PasteAndMatchStyle") {
+      paste_called_ = true;
+      return true;
+    }
+    return false;
+  }
+
+  bool IsCutCalled() const { return cut_called_; }
+  bool IsPasteCalled() const { return paste_called_; }
+  void ResetEditCommandState() {
+    cut_called_ = false;
+    paste_called_ = false;
+  }
+
+ private:
+  ~TestPluginWithEditableText() override {}
+
+  bool cut_called_;
+  bool paste_called_;
 };
 
 class TestPluginWebFrameClient : public FrameTestHelpers::TestWebFrameClient {
@@ -150,17 +204,25 @@ class TestPluginWebFrameClient : public FrameTestHelpers::TestWebFrameClient {
 
   WebPlugin* CreatePlugin(const WebPluginParams& params) override {
     if (params.mime_type == "application/x-webkit-test-webplugin" ||
-        params.mime_type == "application/pdf")
+        params.mime_type == "application/pdf") {
+      if (has_editable_text_)
+        return new TestPluginWithEditableText(params);
+
       return new TestPlugin(params, this);
+    }
     return WebFrameClient::CreatePlugin(params);
   }
 
  public:
   void OnPrintPage() { printed_page_ = true; }
   bool PrintedAtLeastOnePage() const { return printed_page_; }
+  void SetHasEditableText(bool has_editable_text) {
+    has_editable_text_ = has_editable_text;
+  }
 
  private:
   bool printed_page_ = false;
+  bool has_editable_text_ = false;
 };
 
 void TestPlugin::PrintPage(int page_number, WebCanvas* canvas) {
@@ -168,27 +230,64 @@ void TestPlugin::PrintPage(int page_number, WebCanvas* canvas) {
   test_client_->OnPrintPage();
 }
 
-WebPluginContainer* GetWebPluginContainer(WebViewBase* web_view,
+void EnablePlugins(WebView* web_view, const WebSize& size) {
+  DCHECK(web_view);
+  web_view->GetSettings()->SetPluginsEnabled(true);
+  web_view->Resize(size);
+  web_view->UpdateAllLifecyclePhases();
+  RunPendingTasks();
+}
+
+WebPluginContainer* GetWebPluginContainer(WebViewImpl* web_view,
                                           const WebString& id) {
   WebElement element =
       web_view->MainFrameImpl()->GetDocument().GetElementById(id);
   return element.PluginContainer();
 }
 
+WebString ReadClipboard() {
+  return Platform::Current()->Clipboard()->ReadPlainText(
+      WebClipboard::Buffer());
+}
+
+void ClearClipboardBuffer() {
+  Platform::Current()->Clipboard()->WritePlainText(WebString());
+  EXPECT_EQ(WebString(), ReadClipboard());
+}
+
+void CreateAndHandleKeyboardEvent(WebElement* plugin_container_one_element,
+                                  WebInputEvent::Modifiers modifier_key,
+                                  int key_code) {
+  WebKeyboardEvent web_keyboard_event(WebInputEvent::kRawKeyDown, modifier_key,
+                                      WebInputEvent::kTimeStampForTesting);
+  web_keyboard_event.windows_key_code = key_code;
+  KeyboardEvent* key_event = KeyboardEvent::Create(web_keyboard_event, 0);
+  ToWebPluginContainerImpl(plugin_container_one_element->PluginContainer())
+      ->HandleEvent(key_event);
+}
+
+void ExecuteContextMenuCommand(WebViewImpl* web_view,
+                               const WebString& command_name) {
+  auto event = FrameTestHelpers::CreateMouseEvent(WebMouseEvent::kMouseDown,
+                                                  WebMouseEvent::Button::kRight,
+                                                  WebPoint(30, 30), 0);
+  event.click_count = 1;
+
+  web_view->HandleInputEvent(WebCoalescedInputEvent(event));
+  EXPECT_TRUE(
+      web_view->MainFrame()->ToWebLocalFrame()->ExecuteCommand(command_name));
+}
+
 }  // namespace
 
 TEST_F(WebPluginContainerTest, WindowToLocalPointTest) {
   RegisterMockedURL("plugin_container.html");
-  TestPluginWebFrameClient
-      plugin_web_frame_client;  // Must outlive webViewHelper.
+  // Must outlive |web_view_helper|.
+  TestPluginWebFrameClient plugin_web_frame_client;
   FrameTestHelpers::WebViewHelper web_view_helper;
-  WebViewBase* web_view = web_view_helper.InitializeAndLoad(
+  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
       base_url_ + "plugin_container.html", &plugin_web_frame_client);
-  DCHECK(web_view);
-  web_view->GetSettings()->SetPluginsEnabled(true);
-  web_view->Resize(WebSize(300, 300));
-  web_view->UpdateAllLifecyclePhases();
-  RunPendingTasks();
+  EnablePlugins(web_view, WebSize(300, 300));
 
   WebPluginContainer* plugin_container_one =
       GetWebPluginContainer(web_view, WebString::FromUTF8("translated-plugin"));
@@ -218,10 +317,10 @@ TEST_F(WebPluginContainerTest, WindowToLocalPointTest) {
 TEST_F(WebPluginContainerTest, PluginDocumentPluginIsFocused) {
   RegisterMockedURL("test.pdf", "application/pdf");
 
-  TestPluginWebFrameClient
-      plugin_web_frame_client;  // Must outlive webViewHelper.
+  // Must outlive |web_view_helper|.
+  TestPluginWebFrameClient plugin_web_frame_client;
   FrameTestHelpers::WebViewHelper web_view_helper;
-  WebViewBase* web_view = web_view_helper.InitializeAndLoad(
+  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
       base_url_ + "test.pdf", &plugin_web_frame_client);
   DCHECK(web_view);
   web_view->UpdateAllLifecyclePhases();
@@ -237,10 +336,10 @@ TEST_F(WebPluginContainerTest, IFramePluginDocumentNotFocused) {
   RegisterMockedURL("test.pdf", "application/pdf");
   RegisterMockedURL("iframe_pdf.html", "text/html");
 
-  TestPluginWebFrameClient
-      plugin_web_frame_client;  // Must outlive webViewHelper.
+  // Must outlive |web_view_helper|.
+  TestPluginWebFrameClient plugin_web_frame_client;
   FrameTestHelpers::WebViewHelper web_view_helper;
-  WebViewBase* web_view = web_view_helper.InitializeAndLoad(
+  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
       base_url_ + "iframe_pdf.html", &plugin_web_frame_client);
   DCHECK(web_view);
   web_view->UpdateAllLifecyclePhases();
@@ -259,10 +358,10 @@ TEST_F(WebPluginContainerTest, IFramePluginDocumentNotFocused) {
 TEST_F(WebPluginContainerTest, PrintOnePage) {
   RegisterMockedURL("test.pdf", "application/pdf");
 
-  TestPluginWebFrameClient
-      plugin_web_frame_client;  // Must outlive webViewHelper.
+  // Must outlive |web_view_helper|.
+  TestPluginWebFrameClient plugin_web_frame_client;
   FrameTestHelpers::WebViewHelper web_view_helper;
-  WebViewBase* web_view = web_view_helper.InitializeAndLoad(
+  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
       base_url_ + "test.pdf", &plugin_web_frame_client);
   DCHECK(web_view);
   web_view->UpdateAllLifecyclePhases();
@@ -283,10 +382,10 @@ TEST_F(WebPluginContainerTest, PrintOnePage) {
 TEST_F(WebPluginContainerTest, PrintAllPages) {
   RegisterMockedURL("test.pdf", "application/pdf");
 
-  TestPluginWebFrameClient
-      plugin_web_frame_client;  // Must outlive webViewHelper.
+  // Must outlive |web_view_helper|.
+  TestPluginWebFrameClient plugin_web_frame_client;
   FrameTestHelpers::WebViewHelper web_view_helper;
-  WebViewBase* web_view = web_view_helper.InitializeAndLoad(
+  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
       base_url_ + "test.pdf", &plugin_web_frame_client);
   DCHECK(web_view);
   web_view->UpdateAllLifecyclePhases();
@@ -306,16 +405,12 @@ TEST_F(WebPluginContainerTest, PrintAllPages) {
 
 TEST_F(WebPluginContainerTest, LocalToWindowPointTest) {
   RegisterMockedURL("plugin_container.html");
-  TestPluginWebFrameClient
-      plugin_web_frame_client;  // Must outlive webViewHelper.
+  // Must outlive |web_view_helper|.
+  TestPluginWebFrameClient plugin_web_frame_client;
   FrameTestHelpers::WebViewHelper web_view_helper;
-  WebViewBase* web_view = web_view_helper.InitializeAndLoad(
+  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
       base_url_ + "plugin_container.html", &plugin_web_frame_client);
-  DCHECK(web_view);
-  web_view->GetSettings()->SetPluginsEnabled(true);
-  web_view->Resize(WebSize(300, 300));
-  web_view->UpdateAllLifecyclePhases();
-  RunPendingTasks();
+  EnablePlugins(web_view, WebSize(300, 300));
 
   WebPluginContainer* plugin_container_one =
       GetWebPluginContainer(web_view, WebString::FromUTF8("translated-plugin"));
@@ -344,16 +439,12 @@ TEST_F(WebPluginContainerTest, LocalToWindowPointTest) {
 // Verifies executing the command 'Copy' results in copying to the clipboard.
 TEST_F(WebPluginContainerTest, Copy) {
   RegisterMockedURL("plugin_container.html");
-  TestPluginWebFrameClient
-      plugin_web_frame_client;  // Must outlive webViewHelper.
+  // Must outlive |web_view_helper|.
+  TestPluginWebFrameClient plugin_web_frame_client;
   FrameTestHelpers::WebViewHelper web_view_helper;
-  WebViewBase* web_view = web_view_helper.InitializeAndLoad(
+  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
       base_url_ + "plugin_container.html", &plugin_web_frame_client);
-  DCHECK(web_view);
-  web_view->GetSettings()->SetPluginsEnabled(true);
-  web_view->Resize(WebSize(300, 300));
-  web_view->UpdateAllLifecyclePhases();
-  RunPendingTasks();
+  EnablePlugins(web_view, WebSize(300, 300));
 
   web_view->MainFrameImpl()
       ->GetDocument()
@@ -362,38 +453,28 @@ TEST_F(WebPluginContainerTest, Copy) {
       ->getElementById("translated-plugin")
       ->focus();
   EXPECT_TRUE(web_view->MainFrame()->ToWebLocalFrame()->ExecuteCommand("Copy"));
-  EXPECT_EQ(WebString("x"), Platform::Current()->Clipboard()->ReadPlainText(
-                                WebClipboard::Buffer()));
+  EXPECT_EQ(WebString("x"), ReadClipboard());
+  ClearClipboardBuffer();
 }
 
 TEST_F(WebPluginContainerTest, CopyFromContextMenu) {
   RegisterMockedURL("plugin_container.html");
-  TestPluginWebFrameClient
-      plugin_web_frame_client;  // Must outlive webViewHelper.
+  // Must outlive |web_view_helper|.
+  TestPluginWebFrameClient plugin_web_frame_client;
   FrameTestHelpers::WebViewHelper web_view_helper;
-  WebViewBase* web_view = web_view_helper.InitializeAndLoad(
+  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
       base_url_ + "plugin_container.html", &plugin_web_frame_client);
-  DCHECK(web_view);
-  web_view->GetSettings()->SetPluginsEnabled(true);
-  web_view->Resize(WebSize(300, 300));
-  web_view->UpdateAllLifecyclePhases();
-  RunPendingTasks();
+  EnablePlugins(web_view, WebSize(300, 300));
+
+  // Make sure the right-click + command works in common scenario.
+  ExecuteContextMenuCommand(web_view, "Copy");
+  EXPECT_EQ(WebString("x"), ReadClipboard());
+  ClearClipboardBuffer();
 
   auto event = FrameTestHelpers::CreateMouseEvent(WebMouseEvent::kMouseDown,
                                                   WebMouseEvent::Button::kRight,
                                                   WebPoint(30, 30), 0);
   event.click_count = 1;
-
-  // Make sure the right-click + Copy works in common scenario.
-  web_view->HandleInputEvent(WebCoalescedInputEvent(event));
-  EXPECT_TRUE(web_view->MainFrame()->ToWebLocalFrame()->ExecuteCommand("Copy"));
-  EXPECT_EQ(WebString("x"), Platform::Current()->Clipboard()->ReadPlainText(
-                                WebClipboard::Buffer()));
-
-  // Clear the clipboard buffer.
-  Platform::Current()->Clipboard()->WritePlainText(WebString(""));
-  EXPECT_EQ(WebString(""), Platform::Current()->Clipboard()->ReadPlainText(
-                               WebClipboard::Buffer()));
 
   // Now, let's try a more complex scenario:
   // 1) open the context menu. This will focus the plugin.
@@ -403,61 +484,221 @@ TEST_F(WebPluginContainerTest, CopyFromContextMenu) {
   // 3) Copy should still operate on the context node, even though the focus had
   //    shifted.
   EXPECT_TRUE(web_view->MainFrameImpl()->ExecuteCommand("Copy"));
-  EXPECT_EQ(WebString("x"), Platform::Current()->Clipboard()->ReadPlainText(
-                                WebClipboard::Buffer()));
+  EXPECT_EQ(WebString("x"), ReadClipboard());
+  ClearClipboardBuffer();
 }
 
 // Verifies |Ctrl-C| and |Ctrl-Insert| keyboard events, results in copying to
 // the clipboard.
 TEST_F(WebPluginContainerTest, CopyInsertKeyboardEventsTest) {
   RegisterMockedURL("plugin_container.html");
-  TestPluginWebFrameClient
-      plugin_web_frame_client;  // Must outlive webViewHelper.
+  // Must outlive |web_view_helper|.
+  TestPluginWebFrameClient plugin_web_frame_client;
   FrameTestHelpers::WebViewHelper web_view_helper;
-  WebViewBase* web_view = web_view_helper.InitializeAndLoad(
+  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
       base_url_ + "plugin_container.html", &plugin_web_frame_client);
-  DCHECK(web_view);
-  web_view->GetSettings()->SetPluginsEnabled(true);
-  web_view->Resize(WebSize(300, 300));
-  web_view->UpdateAllLifecyclePhases();
-  RunPendingTasks();
+  EnablePlugins(web_view, WebSize(300, 300));
 
   WebElement plugin_container_one_element =
       web_view->MainFrameImpl()->GetDocument().GetElementById(
           WebString::FromUTF8("translated-plugin"));
   WebInputEvent::Modifiers modifier_key = static_cast<WebInputEvent::Modifiers>(
-      WebInputEvent::kControlKey | WebInputEvent::kNumLockOn |
-      WebInputEvent::kIsLeft);
-#if defined(OS_MACOSX)
+      kEditingModifier | WebInputEvent::kNumLockOn | WebInputEvent::kIsLeft);
+  CreateAndHandleKeyboardEvent(&plugin_container_one_element, modifier_key,
+                               VKEY_C);
+  EXPECT_EQ(WebString("x"), ReadClipboard());
+  ClearClipboardBuffer();
+
+  CreateAndHandleKeyboardEvent(&plugin_container_one_element, modifier_key,
+                               VKEY_INSERT);
+  EXPECT_EQ(WebString("x"), ReadClipboard());
+  ClearClipboardBuffer();
+}
+
+// Verifies |Ctrl-X| and |Shift-Delete| keyboard events, results in the "Cut"
+// command being invoked.
+TEST_F(WebPluginContainerTest, CutDeleteKeyboardEventsTest) {
+  RegisterMockedURL("plugin_container.html");
+  // Must outlive |web_view_helper|.
+  TestPluginWebFrameClient plugin_web_frame_client;
+  FrameTestHelpers::WebViewHelper web_view_helper;
+
+  // Use TestPluginWithEditableText for testing "Cut".
+  plugin_web_frame_client.SetHasEditableText(true);
+
+  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
+      base_url_ + "plugin_container.html", &plugin_web_frame_client);
+  EnablePlugins(web_view, WebSize(300, 300));
+
+  WebElement plugin_container_one_element =
+      web_view->MainFrameImpl()->GetDocument().GetElementById(
+          WebString::FromUTF8("translated-plugin"));
+
+  WebInputEvent::Modifiers modifier_key = static_cast<WebInputEvent::Modifiers>(
+      kEditingModifier | WebInputEvent::kNumLockOn | WebInputEvent::kIsLeft);
+  CreateAndHandleKeyboardEvent(&plugin_container_one_element, modifier_key,
+                               VKEY_X);
+
+  // Check that "Cut" command is invoked.
+  auto* test_plugin =
+      TestPluginWithEditableText::FromContainer(&plugin_container_one_element);
+  EXPECT_TRUE(test_plugin->IsCutCalled());
+
+  // Reset Cut status for next time.
+  test_plugin->ResetEditCommandState();
+
   modifier_key = static_cast<WebInputEvent::Modifiers>(
-      WebInputEvent::kMetaKey | WebInputEvent::kNumLockOn |
+      WebInputEvent::kShiftKey | WebInputEvent::kNumLockOn |
       WebInputEvent::kIsLeft);
-#endif
-  WebKeyboardEvent web_keyboard_event_c(WebInputEvent::kRawKeyDown,
-                                        modifier_key,
-                                        WebInputEvent::kTimeStampForTesting);
-  web_keyboard_event_c.windows_key_code = 67;
-  KeyboardEvent* key_event_c = KeyboardEvent::Create(web_keyboard_event_c, 0);
-  ToWebPluginContainerImpl(plugin_container_one_element.PluginContainer())
-      ->HandleEvent(key_event_c);
-  EXPECT_EQ(WebString("x"), Platform::Current()->Clipboard()->ReadPlainText(
-                                WebClipboard::Buffer()));
 
-  // Clearing |Clipboard::Buffer()|.
-  Platform::Current()->Clipboard()->WritePlainText(WebString(""));
-  EXPECT_EQ(WebString(""), Platform::Current()->Clipboard()->ReadPlainText(
-                               WebClipboard::Buffer()));
+  CreateAndHandleKeyboardEvent(&plugin_container_one_element, modifier_key,
+                               VKEY_DELETE);
 
-  WebKeyboardEvent web_keyboard_event_insert(
-      WebInputEvent::kRawKeyDown, modifier_key,
-      WebInputEvent::kTimeStampForTesting);
-  web_keyboard_event_insert.windows_key_code = 45;
-  KeyboardEvent* key_event_insert =
-      KeyboardEvent::Create(web_keyboard_event_insert, 0);
-  ToWebPluginContainerImpl(plugin_container_one_element.PluginContainer())
-      ->HandleEvent(key_event_insert);
-  EXPECT_EQ(WebString("x"), Platform::Current()->Clipboard()->ReadPlainText(
-                                WebClipboard::Buffer()));
+  // Check that "Cut" command is invoked.
+  EXPECT_TRUE(test_plugin->IsCutCalled());
+}
+
+// Verifies |Ctrl-V| and |Shift-Insert| keyboard events, results in the "Paste"
+// command being invoked.
+TEST_F(WebPluginContainerTest, PasteInsertKeyboardEventsTest) {
+  RegisterMockedURL("plugin_container.html");
+  // Must outlive |web_view_helper|.
+  TestPluginWebFrameClient plugin_web_frame_client;
+  FrameTestHelpers::WebViewHelper web_view_helper;
+
+  // Use TestPluginWithEditableText for testing "Paste".
+  plugin_web_frame_client.SetHasEditableText(true);
+
+  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
+      base_url_ + "plugin_container.html", &plugin_web_frame_client);
+  EnablePlugins(web_view, WebSize(300, 300));
+
+  WebElement plugin_container_one_element =
+      web_view->MainFrameImpl()->GetDocument().GetElementById(
+          WebString::FromUTF8("translated-plugin"));
+
+  WebInputEvent::Modifiers modifier_key = static_cast<WebInputEvent::Modifiers>(
+      kEditingModifier | WebInputEvent::kNumLockOn | WebInputEvent::kIsLeft);
+  CreateAndHandleKeyboardEvent(&plugin_container_one_element, modifier_key,
+                               VKEY_V);
+
+  // Check that "Paste" command is invoked.
+  auto* test_plugin =
+      TestPluginWithEditableText::FromContainer(&plugin_container_one_element);
+  EXPECT_TRUE(test_plugin->IsPasteCalled());
+
+  // Reset Paste status for next time.
+  test_plugin->ResetEditCommandState();
+
+  modifier_key = static_cast<WebInputEvent::Modifiers>(
+      WebInputEvent::kShiftKey | WebInputEvent::kNumLockOn |
+      WebInputEvent::kIsLeft);
+
+  CreateAndHandleKeyboardEvent(&plugin_container_one_element, modifier_key,
+                               VKEY_INSERT);
+
+  // Check that "Paste" command is invoked.
+  EXPECT_TRUE(test_plugin->IsPasteCalled());
+}
+
+// Verifies |Ctrl-Shift-V| keyboard event results in the "PasteAndMatchStyle"
+// command being invoked.
+TEST_F(WebPluginContainerTest, PasteAndMatchStyleKeyboardEventsTest) {
+  RegisterMockedURL("plugin_container.html");
+  // Must outlive |web_view_helper|.
+  TestPluginWebFrameClient plugin_web_frame_client;
+  FrameTestHelpers::WebViewHelper web_view_helper;
+
+  // Use TestPluginWithEditableText for testing "PasteAndMatchStyle".
+  plugin_web_frame_client.SetHasEditableText(true);
+
+  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
+      base_url_ + "plugin_container.html", &plugin_web_frame_client);
+  EnablePlugins(web_view, WebSize(300, 300));
+
+  WebElement plugin_container_one_element =
+      web_view->MainFrameImpl()->GetDocument().GetElementById(
+          WebString::FromUTF8("translated-plugin"));
+
+  WebInputEvent::Modifiers modifier_key = static_cast<WebInputEvent::Modifiers>(
+      kEditingModifier | WebInputEvent::kShiftKey | WebInputEvent::kNumLockOn |
+      WebInputEvent::kIsLeft);
+  CreateAndHandleKeyboardEvent(&plugin_container_one_element, modifier_key,
+                               VKEY_V);
+
+  // Check that "PasteAndMatchStyle" command is invoked.
+  auto* test_plugin =
+      TestPluginWithEditableText::FromContainer(&plugin_container_one_element);
+  EXPECT_TRUE(test_plugin->IsPasteCalled());
+}
+
+TEST_F(WebPluginContainerTest, CutFromContextMenu) {
+  RegisterMockedURL("plugin_container.html");
+  // Must outlive |web_view_helper|.
+  TestPluginWebFrameClient plugin_web_frame_client;
+  FrameTestHelpers::WebViewHelper web_view_helper;
+
+  // Use TestPluginWithEditableText for testing "Cut".
+  plugin_web_frame_client.SetHasEditableText(true);
+
+  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
+      base_url_ + "plugin_container.html", &plugin_web_frame_client);
+  EnablePlugins(web_view, WebSize(300, 300));
+
+  WebElement plugin_container_one_element =
+      web_view->MainFrameImpl()->GetDocument().GetElementById(
+          WebString::FromUTF8("translated-plugin"));
+
+  ExecuteContextMenuCommand(web_view, "Cut");
+  auto* test_plugin =
+      TestPluginWithEditableText::FromContainer(&plugin_container_one_element);
+  EXPECT_TRUE(test_plugin->IsCutCalled());
+}
+
+TEST_F(WebPluginContainerTest, PasteFromContextMenu) {
+  RegisterMockedURL("plugin_container.html");
+  // Must outlive |web_view_helper|.
+  TestPluginWebFrameClient plugin_web_frame_client;
+  FrameTestHelpers::WebViewHelper web_view_helper;
+
+  // Use TestPluginWithEditableText for testing "Paste".
+  plugin_web_frame_client.SetHasEditableText(true);
+
+  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
+      base_url_ + "plugin_container.html", &plugin_web_frame_client);
+  EnablePlugins(web_view, WebSize(300, 300));
+
+  WebElement plugin_container_one_element =
+      web_view->MainFrameImpl()->GetDocument().GetElementById(
+          WebString::FromUTF8("translated-plugin"));
+
+  ExecuteContextMenuCommand(web_view, "Paste");
+  auto* test_plugin =
+      TestPluginWithEditableText::FromContainer(&plugin_container_one_element);
+  EXPECT_TRUE(test_plugin->IsPasteCalled());
+}
+
+TEST_F(WebPluginContainerTest, PasteAndMatchStyleFromContextMenu) {
+  RegisterMockedURL("plugin_container.html");
+  // Must outlive |web_view_helper|.
+  TestPluginWebFrameClient plugin_web_frame_client;
+  FrameTestHelpers::WebViewHelper web_view_helper;
+
+  // Use TestPluginWithEditableText for testing "Paste".
+  plugin_web_frame_client.SetHasEditableText(true);
+
+  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
+      base_url_ + "plugin_container.html", &plugin_web_frame_client);
+  EnablePlugins(web_view, WebSize(300, 300));
+
+  WebElement plugin_container_one_element =
+      web_view->MainFrameImpl()->GetDocument().GetElementById(
+          WebString::FromUTF8("translated-plugin"));
+
+  ExecuteContextMenuCommand(web_view, "PasteAndMatchStyle");
+  auto* test_plugin =
+      TestPluginWithEditableText::FromContainer(&plugin_container_one_element);
+  EXPECT_TRUE(test_plugin->IsPasteCalled());
 }
 
 // A class to facilitate testing that events are correctly received by plugins.
@@ -501,6 +742,8 @@ class EventTestPlugin : public FakeWebPlugin {
   size_t GetCoalescedEventCount() { return coalesced_event_count_; }
 
  private:
+  ~EventTestPlugin() override {}
+
   size_t coalesced_event_count_;
   WebInputEvent::Type last_event_type_;
   IntPoint last_event_location_;
@@ -508,16 +751,12 @@ class EventTestPlugin : public FakeWebPlugin {
 
 TEST_F(WebPluginContainerTest, GestureLongPressReachesPlugin) {
   RegisterMockedURL("plugin_container.html");
-  CustomPluginWebFrameClient<EventTestPlugin>
-      plugin_web_frame_client;  // Must outlive webViewHelper.
+  // Must outlive |web_view_helper|.
+  CustomPluginWebFrameClient<EventTestPlugin> plugin_web_frame_client;
   FrameTestHelpers::WebViewHelper web_view_helper;
-  WebViewBase* web_view = web_view_helper.InitializeAndLoad(
+  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
       base_url_ + "plugin_container.html", &plugin_web_frame_client);
-  DCHECK(web_view);
-  web_view->GetSettings()->SetPluginsEnabled(true);
-  web_view->Resize(WebSize(300, 300));
-  web_view->UpdateAllLifecyclePhases();
-  RunPendingTasks();
+  EnablePlugins(web_view, WebSize(300, 300));
 
   WebElement plugin_container_one_element =
       web_view->MainFrameImpl()->GetDocument().GetElementById(
@@ -557,16 +796,12 @@ TEST_F(WebPluginContainerTest, GestureLongPressReachesPlugin) {
 
 TEST_F(WebPluginContainerTest, MouseWheelEventTranslated) {
   RegisterMockedURL("plugin_container.html");
-  CustomPluginWebFrameClient<EventTestPlugin>
-      plugin_web_frame_client;  // Must outlive webViewHelper.
+  // Must outlive |web_view_helper|.
+  CustomPluginWebFrameClient<EventTestPlugin> plugin_web_frame_client;
   FrameTestHelpers::WebViewHelper web_view_helper;
-  WebViewBase* web_view = web_view_helper.InitializeAndLoad(
+  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
       base_url_ + "plugin_container.html", &plugin_web_frame_client);
-  DCHECK(web_view);
-  web_view->GetSettings()->SetPluginsEnabled(true);
-  web_view->Resize(WebSize(300, 300));
-  web_view->UpdateAllLifecyclePhases();
-  RunPendingTasks();
+  EnablePlugins(web_view, WebSize(300, 300));
 
   WebElement plugin_container_one_element =
       web_view->MainFrameImpl()->GetDocument().GetElementById(
@@ -593,16 +828,12 @@ TEST_F(WebPluginContainerTest, MouseWheelEventTranslated) {
 
 TEST_F(WebPluginContainerTest, TouchEventScrolled) {
   RegisterMockedURL("plugin_scroll.html");
-  CustomPluginWebFrameClient<EventTestPlugin>
-      plugin_web_frame_client;  // Must outlive webViewHelper.
+  // Must outlive |web_view_helper|.
+  CustomPluginWebFrameClient<EventTestPlugin> plugin_web_frame_client;
   FrameTestHelpers::WebViewHelper web_view_helper;
-  WebViewBase* web_view = web_view_helper.InitializeAndLoad(
+  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
       base_url_ + "plugin_scroll.html", &plugin_web_frame_client);
-  DCHECK(web_view);
-  web_view->GetSettings()->SetPluginsEnabled(true);
-  web_view->Resize(WebSize(300, 300));
-  web_view->UpdateAllLifecyclePhases();
-  RunPendingTasks();
+  EnablePlugins(web_view, WebSize(300, 300));
   web_view->SmoothScroll(0, 200, 0);
   web_view->UpdateAllLifecyclePhases();
   RunPendingTasks();
@@ -635,16 +866,12 @@ TEST_F(WebPluginContainerTest, TouchEventScrolled) {
 
 TEST_F(WebPluginContainerTest, TouchEventScrolledWithCoalescedTouches) {
   RegisterMockedURL("plugin_scroll.html");
-  CustomPluginWebFrameClient<EventTestPlugin>
-      plugin_web_frame_client;  // Must outlive webViewHelper.
+  // Must outlive |web_view_helper|.
+  CustomPluginWebFrameClient<EventTestPlugin> plugin_web_frame_client;
   FrameTestHelpers::WebViewHelper web_view_helper;
-  WebViewBase* web_view = web_view_helper.InitializeAndLoad(
+  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
       base_url_ + "plugin_scroll.html", &plugin_web_frame_client);
-  DCHECK(web_view);
-  web_view->GetSettings()->SetPluginsEnabled(true);
-  web_view->Resize(WebSize(300, 300));
-  web_view->UpdateAllLifecyclePhases();
-  RunPendingTasks();
+  EnablePlugins(web_view, WebSize(300, 300));
   web_view->SmoothScroll(0, 200, 0);
   web_view->UpdateAllLifecyclePhases();
   RunPendingTasks();
@@ -717,16 +944,12 @@ TEST_F(WebPluginContainerTest, TouchEventScrolledWithCoalescedTouches) {
 
 TEST_F(WebPluginContainerTest, MouseWheelEventScrolled) {
   RegisterMockedURL("plugin_scroll.html");
-  CustomPluginWebFrameClient<EventTestPlugin>
-      plugin_web_frame_client;  // Must outlive webViewHelper.
+  // Must outlive |web_view_helper|.
+  CustomPluginWebFrameClient<EventTestPlugin> plugin_web_frame_client;
   FrameTestHelpers::WebViewHelper web_view_helper;
-  WebViewBase* web_view = web_view_helper.InitializeAndLoad(
+  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
       base_url_ + "plugin_scroll.html", &plugin_web_frame_client);
-  DCHECK(web_view);
-  web_view->GetSettings()->SetPluginsEnabled(true);
-  web_view->Resize(WebSize(300, 300));
-  web_view->UpdateAllLifecyclePhases();
-  RunPendingTasks();
+  EnablePlugins(web_view, WebSize(300, 300));
   web_view->SmoothScroll(0, 200, 0);
   web_view->UpdateAllLifecyclePhases();
   RunPendingTasks();
@@ -758,16 +981,12 @@ TEST_F(WebPluginContainerTest, MouseWheelEventScrolled) {
 
 TEST_F(WebPluginContainerTest, MouseEventScrolled) {
   RegisterMockedURL("plugin_scroll.html");
-  CustomPluginWebFrameClient<EventTestPlugin>
-      plugin_web_frame_client;  // Must outlive webViewHelper.
+  // Must outlive |web_view_helper|.
+  CustomPluginWebFrameClient<EventTestPlugin> plugin_web_frame_client;
   FrameTestHelpers::WebViewHelper web_view_helper;
-  WebViewBase* web_view = web_view_helper.InitializeAndLoad(
+  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
       base_url_ + "plugin_scroll.html", &plugin_web_frame_client);
-  DCHECK(web_view);
-  web_view->GetSettings()->SetPluginsEnabled(true);
-  web_view->Resize(WebSize(300, 300));
-  web_view->UpdateAllLifecyclePhases();
-  RunPendingTasks();
+  EnablePlugins(web_view, WebSize(300, 300));
   web_view->SmoothScroll(0, 200, 0);
   web_view->UpdateAllLifecyclePhases();
   RunPendingTasks();
@@ -798,10 +1017,10 @@ TEST_F(WebPluginContainerTest, MouseEventScrolled) {
 
 TEST_F(WebPluginContainerTest, MouseEventZoomed) {
   RegisterMockedURL("plugin_scroll.html");
-  CustomPluginWebFrameClient<EventTestPlugin>
-      plugin_web_frame_client;  // Must outlive webViewHelper.
+  // Must outlive |web_view_helper|.
+  CustomPluginWebFrameClient<EventTestPlugin> plugin_web_frame_client;
   FrameTestHelpers::WebViewHelper web_view_helper;
-  WebViewBase* web_view = web_view_helper.InitializeAndLoad(
+  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
       base_url_ + "plugin_scroll.html", &plugin_web_frame_client);
   DCHECK(web_view);
   web_view->GetSettings()->SetPluginsEnabled(true);
@@ -839,10 +1058,10 @@ TEST_F(WebPluginContainerTest, MouseEventZoomed) {
 
 TEST_F(WebPluginContainerTest, MouseWheelEventZoomed) {
   RegisterMockedURL("plugin_scroll.html");
-  CustomPluginWebFrameClient<EventTestPlugin>
-      plugin_web_frame_client;  // Must outlive webViewHelper.
+  // Must outlive |web_view_helper|.
+  CustomPluginWebFrameClient<EventTestPlugin> plugin_web_frame_client;
   FrameTestHelpers::WebViewHelper web_view_helper;
-  WebViewBase* web_view = web_view_helper.InitializeAndLoad(
+  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
       base_url_ + "plugin_scroll.html", &plugin_web_frame_client);
   DCHECK(web_view);
   web_view->GetSettings()->SetPluginsEnabled(true);
@@ -881,10 +1100,10 @@ TEST_F(WebPluginContainerTest, MouseWheelEventZoomed) {
 
 TEST_F(WebPluginContainerTest, TouchEventZoomed) {
   RegisterMockedURL("plugin_scroll.html");
-  CustomPluginWebFrameClient<EventTestPlugin>
-      plugin_web_frame_client;  // Must outlive webViewHelper.
+  // Must outlive |web_view_helper|.
+  CustomPluginWebFrameClient<EventTestPlugin> plugin_web_frame_client;
   FrameTestHelpers::WebViewHelper web_view_helper;
-  WebViewBase* web_view = web_view_helper.InitializeAndLoad(
+  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
       base_url_ + "plugin_scroll.html", &plugin_web_frame_client);
   DCHECK(web_view);
   web_view->GetSettings()->SetPluginsEnabled(true);
@@ -926,16 +1145,12 @@ TEST_F(WebPluginContainerTest, TouchEventZoomed) {
 // Verify that isRectTopmost returns false when the document is detached.
 TEST_F(WebPluginContainerTest, IsRectTopmostTest) {
   RegisterMockedURL("plugin_container.html");
-  TestPluginWebFrameClient
-      plugin_web_frame_client;  // Must outlive webViewHelper.
+  // Must outlive |web_view_helper|.
+  TestPluginWebFrameClient plugin_web_frame_client;
   FrameTestHelpers::WebViewHelper web_view_helper;
-  WebViewBase* web_view = web_view_helper.InitializeAndLoad(
+  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
       base_url_ + "plugin_container.html", &plugin_web_frame_client);
-  DCHECK(web_view);
-  web_view->GetSettings()->SetPluginsEnabled(true);
-  web_view->Resize(WebSize(300, 300));
-  web_view->UpdateAllLifecyclePhases();
-  RunPendingTasks();
+  EnablePlugins(web_view, WebSize(300, 300));
 
   WebPluginContainerImpl* plugin_container_impl =
       ToWebPluginContainerImpl(GetWebPluginContainer(
@@ -951,29 +1166,16 @@ TEST_F(WebPluginContainerTest, IsRectTopmostTest) {
   EXPECT_FALSE(plugin_container_impl->IsRectTopmost(rect));
 }
 
-#define EXPECT_RECT_EQ(expected, actual)                \
-  do {                                                  \
-    const IntRect& actual_rect = actual;                \
-    EXPECT_EQ(expected.X(), actual_rect.X());           \
-    EXPECT_EQ(expected.Y(), actual_rect.Y());           \
-    EXPECT_EQ(expected.Width(), actual_rect.Width());   \
-    EXPECT_EQ(expected.Height(), actual_rect.Height()); \
-  } while (false)
-
 TEST_F(WebPluginContainerTest, ClippedRectsForIframedElement) {
   RegisterMockedURL("plugin_container.html");
   RegisterMockedURL("plugin_containing_page.html");
 
-  TestPluginWebFrameClient
-      plugin_web_frame_client;  // Must outlive webViewHelper.
+  // Must outlive |web_view_helper|.
+  TestPluginWebFrameClient plugin_web_frame_client;
   FrameTestHelpers::WebViewHelper web_view_helper;
   WebView* web_view = web_view_helper.InitializeAndLoad(
       base_url_ + "plugin_containing_page.html", &plugin_web_frame_client);
-  DCHECK(web_view);
-  web_view->GetSettings()->SetPluginsEnabled(true);
-  web_view->Resize(WebSize(300, 300));
-  web_view->UpdateAllLifecyclePhases();
-  RunPendingTasks();
+  EnablePlugins(web_view, WebSize(300, 300));
 
   WebElement plugin_element = web_view->MainFrame()
                                   ->FirstChild()
@@ -999,16 +1201,12 @@ TEST_F(WebPluginContainerTest, ClippedRectsForIframedElement) {
 TEST_F(WebPluginContainerTest, ClippedRectsForSubpixelPositionedPlugin) {
   RegisterMockedURL("plugin_container.html");
 
-  TestPluginWebFrameClient
-      plugin_web_frame_client;  // Must outlive webViewHelper.
+  // Must outlive |web_view_helper|.
+  TestPluginWebFrameClient plugin_web_frame_client;
   FrameTestHelpers::WebViewHelper web_view_helper;
-  WebViewBase* web_view = web_view_helper.InitializeAndLoad(
+  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
       base_url_ + "plugin_container.html", &plugin_web_frame_client);
-  DCHECK(web_view);
-  web_view->GetSettings()->SetPluginsEnabled(true);
-  web_view->Resize(WebSize(300, 300));
-  web_view->UpdateAllLifecyclePhases();
-  RunPendingTasks();
+  EnablePlugins(web_view, WebSize(300, 300));
 
   WebElement plugin_element =
       web_view->MainFrameImpl()->GetDocument().GetElementById(
@@ -1045,19 +1243,18 @@ TEST_F(WebPluginContainerTest, TopmostAfterDetachTest) {
       EXPECT_FALSE(Container()->IsRectTopmost(topmost_rect));
       FakeWebPlugin::Destroy();
     }
+
+   private:
+    ~TopmostPlugin() override {}
   };
 
   RegisterMockedURL("plugin_container.html");
   // The client must outlive WebViewHelper.
   CustomPluginWebFrameClient<TopmostPlugin> plugin_web_frame_client;
   FrameTestHelpers::WebViewHelper web_view_helper;
-  WebViewBase* web_view = web_view_helper.InitializeAndLoad(
+  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
       base_url_ + "plugin_container.html", &plugin_web_frame_client);
-  DCHECK(web_view);
-  web_view->GetSettings()->SetPluginsEnabled(true);
-  web_view->Resize(WebSize(300, 300));
-  web_view->UpdateAllLifecyclePhases();
-  RunPendingTasks();
+  EnablePlugins(web_view, WebSize(300, 300));
 
   WebPluginContainerImpl* plugin_container_impl =
       ToWebPluginContainerImpl(GetWebPluginContainer(
@@ -1101,6 +1298,8 @@ class CompositedPlugin : public FakeWebPlugin {
   }
 
  private:
+  ~CompositedPlugin() override {}
+
   std::unique_ptr<WebLayer> layer_;
 };
 
@@ -1109,15 +1308,12 @@ class CompositedPlugin : public FakeWebPlugin {
 TEST_F(WebPluginContainerTest, CompositedPluginSPv2) {
   ScopedSlimmingPaintV2ForTest enable_s_pv2(true);
   RegisterMockedURL("plugin.html");
+  // Must outlive |web_view_helper|
   CustomPluginWebFrameClient<CompositedPlugin> web_frame_client;
   FrameTestHelpers::WebViewHelper web_view_helper;
-  WebViewBase* web_view = web_view_helper.InitializeAndLoad(
+  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
       base_url_ + "plugin.html", &web_frame_client);
-  ASSERT_TRUE(web_view);
-  web_view->GetSettings()->SetPluginsEnabled(true);
-  web_view->Resize(WebSize(800, 600));
-  web_view->UpdateAllLifecyclePhases();
-  RunPendingTasks();
+  EnablePlugins(web_view, WebSize(800, 600));
 
   WebPluginContainerImpl* container = static_cast<WebPluginContainerImpl*>(
       GetWebPluginContainer(web_view, WebString::FromUTF8("plugin")));
@@ -1150,16 +1346,12 @@ TEST_F(WebPluginContainerTest, CompositedPluginSPv2) {
 
 TEST_F(WebPluginContainerTest, NeedsWheelEvents) {
   RegisterMockedURL("plugin_container.html");
-  TestPluginWebFrameClient
-      plugin_web_frame_client;  // Must outlive webViewHelper
+  // Must outlive |web_view_helper|
+  TestPluginWebFrameClient plugin_web_frame_client;
   FrameTestHelpers::WebViewHelper web_view_helper;
-  WebViewBase* web_view = web_view_helper.InitializeAndLoad(
+  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
       base_url_ + "plugin_container.html", &plugin_web_frame_client);
-  DCHECK(web_view);
-  web_view->GetSettings()->SetPluginsEnabled(true);
-  web_view->Resize(WebSize(300, 300));
-  web_view->UpdateAllLifecyclePhases();
-  RunPendingTasks();
+  EnablePlugins(web_view, WebSize(300, 300));
 
   WebElement plugin_container_one_element =
       web_view->MainFrameImpl()->GetDocument().GetElementById(

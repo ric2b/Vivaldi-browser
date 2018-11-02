@@ -14,7 +14,6 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
-#include "ui/compositor/paint_context.h"
 #include "ui/compositor/paint_recorder.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -31,6 +30,7 @@
 #include "ui/views/controls/image_view.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/layout_provider.h"
+#include "ui/views/paint_info.h"
 #include "ui/views/resources/grit/views_resources.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
@@ -72,6 +72,21 @@ int GetOffScreenLength(const gfx::Rect& available_bounds,
 
 }  // namespace
 
+// A container that changes visibility with its contents.
+class FootnoteContainerView : public View {
+ public:
+  FootnoteContainerView() {}
+
+  // View:
+  void ChildVisibilityChanged(View* child) override {
+    DCHECK_EQ(child_count(), 1);
+    SetVisible(child->visible());
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(FootnoteContainerView);
+};
+
 // static
 const char BubbleFrameView::kViewClassName[] = "BubbleFrameView";
 
@@ -80,6 +95,7 @@ BubbleFrameView::BubbleFrameView(const gfx::Insets& title_margins,
     : bubble_border_(nullptr),
       title_margins_(title_margins),
       content_margins_(content_margins),
+      footnote_margins_(content_margins_),
       title_icon_(new views::ImageView()),
       default_title_(CreateDefaultTitleLabel(base::string16()).release()),
       custom_title_(nullptr),
@@ -122,13 +138,13 @@ Button* BubbleFrameView::CreateCloseButton(ButtonListener* listener) {
   } else {
     ui::ResourceBundle* rb = &ui::ResourceBundle::GetSharedInstance();
     close_button = new ImageButton(listener);
-    close_button->SetImage(CustomButton::STATE_NORMAL,
+    close_button->SetImage(Button::STATE_NORMAL,
                            *rb->GetImageNamed(IDR_CLOSE_DIALOG).ToImageSkia());
     close_button->SetImage(
-        CustomButton::STATE_HOVERED,
+        Button::STATE_HOVERED,
         *rb->GetImageNamed(IDR_CLOSE_DIALOG_H).ToImageSkia());
     close_button->SetImage(
-        CustomButton::STATE_PRESSED,
+        Button::STATE_PRESSED,
         *rb->GetImageNamed(IDR_CLOSE_DIALOG_P).ToImageSkia());
   }
   close_button->SetTooltipText(l10n_util::GetStringUTF16(IDS_APP_CLOSE));
@@ -147,7 +163,9 @@ gfx::Rect BubbleFrameView::GetBoundsForClientView() const {
   // (i.e. |this|), but not the client view bounds.
   gfx::Rect client_bounds = GetContentsBounds();
   client_bounds.Inset(GetClientInsetsForFrameWidth(client_bounds.width()));
-  if (footnote_container_) {
+  // Only account for footnote_container_'s height if it's visible, because
+  // content_margins_ adds extra padding even if all child views are invisible.
+  if (footnote_container_ && footnote_container_->visible()) {
     client_bounds.set_height(client_bounds.height() -
                              footnote_container_->height());
   }
@@ -364,12 +382,14 @@ void BubbleFrameView::Layout() {
       std::max(title_icon_pref_size.height(), title_preferred_height);
   title()->SetBounds(title_label_x,
                      bounds.y() + (title_height - title_preferred_height) / 2,
-                     title_available_width, title_height);
+                     title_available_width, title_preferred_height);
 
   title_icon_->SetBounds(bounds.x(), bounds.y(), title_icon_pref_size.width(),
                          title_height);
 
-  if (footnote_container_) {
+  // Only account for footnote_container_'s height if it's visible, because
+  // content_margins_ adds extra padding even if all child views are invisible.
+  if (footnote_container_ && footnote_container_->visible()) {
     const int width = contents_bounds.width();
     const int height = footnote_container_->GetHeightForWidth(width);
     footnote_container_->SetBounds(
@@ -409,11 +429,14 @@ void BubbleFrameView::OnPaint(gfx::Canvas* canvas) {
   // Border comes after children.
 }
 
-void BubbleFrameView::PaintChildren(const ui::PaintContext& context) {
-  NonClientFrameView::PaintChildren(context);
+void BubbleFrameView::PaintChildren(const PaintInfo& paint_info) {
+  NonClientFrameView::PaintChildren(paint_info);
 
   ui::PaintCache paint_cache;
-  ui::PaintRecorder recorder(context, size(), &paint_cache);
+  ui::PaintRecorder recorder(
+      paint_info.context(), paint_info.paint_recording_size(),
+      paint_info.paint_recording_scale_x(),
+      paint_info.paint_recording_scale_y(), &paint_cache);
   OnPaintBorder(recorder.canvas());
 }
 
@@ -437,14 +460,15 @@ void BubbleFrameView::SetFootnoteView(View* view) {
     return;
 
   DCHECK(!footnote_container_);
-  footnote_container_ = new views::View();
+  footnote_container_ = new FootnoteContainerView();
   footnote_container_->SetLayoutManager(
-      new BoxLayout(BoxLayout::kVertical, content_margins_, 0));
+      new BoxLayout(BoxLayout::kVertical, footnote_margins_, 0));
   footnote_container_->SetBackground(
       CreateSolidBackground(kFootnoteBackgroundColor));
   footnote_container_->SetBorder(
       CreateSolidSidedBorder(1, 0, 0, 0, kFootnoteBorderColor));
   footnote_container_->AddChildView(view);
+  footnote_container_->SetVisible(view->visible());
   AddChildView(footnote_container_);
 }
 
@@ -573,15 +597,19 @@ gfx::Size BubbleFrameView::GetFrameSizeForClientSize(
   DCHECK_GE(frame_width, client_size.width());
   gfx::Size size(frame_width, client_size.height() + client_insets.height());
 
-  if (footnote_container_)
+  // Only account for footnote_container_'s height if it's visible, because
+  // content_margins_ adds extra padding even if all child views are invisible.
+  if (footnote_container_ && footnote_container_->visible())
     size.Enlarge(0, footnote_container_->GetHeightForWidth(size.width()));
 
   return size;
 }
 
 bool BubbleFrameView::HasTitle() const {
-  return custom_title_ != nullptr ||
-         default_title_->GetPreferredSize().height() > 0 ||
+  return (custom_title_ != nullptr &&
+          GetWidget()->widget_delegate()->ShouldShowWindowTitle()) ||
+         (default_title_ != nullptr &&
+          default_title_->GetPreferredSize().height() > 0) ||
          title_icon_->GetPreferredSize().height() > 0;
 }
 

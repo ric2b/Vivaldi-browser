@@ -26,7 +26,7 @@ class TestHooks : public AnimationDelegate {
       std::unique_ptr<RasterBufferProvider>* raster_buffer_provider,
       std::unique_ptr<ResourcePool>* resource_pool);
   virtual void WillBeginImplFrameOnThread(LayerTreeHostImpl* host_impl,
-                                          const BeginFrameArgs& args) {}
+                                          const viz::BeginFrameArgs& args) {}
   virtual void DidFinishImplFrameOnThread(LayerTreeHostImpl* host_impl) {}
   virtual void DidSendBeginMainFrameOnThread(LayerTreeHostImpl* host_impl) {}
   virtual void BeginMainFrameAbortedOnThread(LayerTreeHostImpl* host_impl,
@@ -92,7 +92,7 @@ class TestHooks : public AnimationDelegate {
       float scale,
       float top_controls_delta) {}
   virtual void BeginMainFrameNotExpectedSoon() {}
-  virtual void BeginMainFrame(const BeginFrameArgs& args) {}
+  virtual void BeginMainFrame(const viz::BeginFrameArgs& args) {}
   virtual void WillBeginMainFrame() {}
   virtual void DidBeginMainFrame() {}
   virtual void UpdateLayerTreeHost() {}
@@ -108,17 +108,17 @@ class TestHooks : public AnimationDelegate {
 
   // AnimationDelegate implementation.
   void NotifyAnimationStarted(base::TimeTicks monotonic_time,
-                              TargetProperty::Type target_property,
+                              int target_property,
                               int group) override {}
   void NotifyAnimationFinished(base::TimeTicks monotonic_time,
-                               TargetProperty::Type target_property,
+                               int target_property,
                                int group) override {}
   void NotifyAnimationAborted(base::TimeTicks monotonic_time,
-                              TargetProperty::Type target_property,
+                              int target_property,
                               int group) override {}
   void NotifyAnimationTakeover(base::TimeTicks monotonic_time,
-                               TargetProperty::Type target_property,
-                               double animation_start_time,
+                               int target_property,
+                               base::TimeTicks animation_start_time,
                                std::unique_ptr<AnimationCurve> curve) override {
   }
 

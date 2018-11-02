@@ -110,6 +110,8 @@ using content::DownloadManagerDelegate;
 using content::HostZoomMap;
 #endif
 
+#include "components/datasource/vivaldi_data_source.h"
+
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 namespace {
 
@@ -193,6 +195,9 @@ void OffTheRecordProfileImpl::Init() {
   extensions::ExtensionIconSource* icon_source =
       new extensions::ExtensionIconSource(profile_);
   content::URLDataSource::Add(this, icon_source);
+
+  VivaldiDataSource* data_source = new VivaldiDataSource(profile_);
+  content::URLDataSource::Add(this, data_source);
 
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,

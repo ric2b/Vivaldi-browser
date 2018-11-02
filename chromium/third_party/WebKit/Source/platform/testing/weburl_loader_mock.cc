@@ -4,6 +4,7 @@
 
 #include "platform/testing/weburl_loader_mock.h"
 
+#include "platform/SharedBuffer.h"
 #include "platform/testing/weburl_loader_mock_factory_impl.h"
 #include "public/platform/URLConversion.h"
 #include "public/platform/WebData.h"
@@ -63,46 +64,42 @@ void WebURLLoaderMock::ServeAsynchronousRequest(
     delegate->DidFail(client_, error, data.size(), 0, 0);
     return;
   }
-  delegate->DidReceiveData(client_, data.Data(), data.size());
+
+  data.ForEachSegment([this, &delegate, &self](const char* segment,
+                                               size_t segment_size,
+                                               size_t segment_offset) {
+    delegate->DidReceiveData(client_, segment, segment_size);
+    // DidReceiveData() may clear the |self| weak ptr.  We stop iterating
+    // when that happens.
+    return self;
+  });
+
   if (!self)
     return;
 
   delegate->DidFinishLoading(client_, 0, data.size(), data.size(), data.size());
 }
 
-WebURLRequest WebURLLoaderMock::ServeRedirect(
+WebURL WebURLLoaderMock::ServeRedirect(
     const WebURLRequest& request,
     const WebURLResponse& redirect_response) {
   KURL redirect_url(kParsedURLString,
                     redirect_response.HttpHeaderField("Location"));
 
-  WebURLRequest new_request(redirect_url);
-  new_request.SetFirstPartyForCookies(redirect_url);
-  new_request.SetDownloadToFile(request.DownloadToFile());
-  new_request.SetUseStreamOnResponse(request.UseStreamOnResponse());
-  new_request.SetRequestContext(request.GetRequestContext());
-  new_request.SetFrameType(request.GetFrameType());
-  new_request.SetServiceWorkerMode(request.GetServiceWorkerMode());
-  new_request.SetShouldResetAppCache(request.ShouldResetAppCache());
-  new_request.SetFetchRequestMode(request.GetFetchRequestMode());
-  new_request.SetFetchCredentialsMode(request.GetFetchCredentialsMode());
-  new_request.SetHTTPMethod(request.HttpMethod());
-  new_request.SetHTTPBody(request.HttpBody());
-
   WeakPtr<WebURLLoaderMock> self = weak_factory_.CreateWeakPtr();
 
-  bool follow = client_->WillFollowRedirect(new_request, redirect_response);
-  if (!follow)
-    new_request = WebURLRequest();
-
+  bool report_raw_headers = false;
+  bool follow = client_->WillFollowRedirect(
+      redirect_url, redirect_url, WebString(), kWebReferrerPolicyDefault,
+      request.HttpMethod(), redirect_response, report_raw_headers);
   // |this| might be deleted in willFollowRedirect().
   if (!self)
-    return new_request;
+    return redirect_url;
 
   if (!follow)
     Cancel();
 
-  return new_request;
+  return redirect_url;
 }
 
 void WebURLLoaderMock::LoadSynchronously(const WebURLRequest& request,

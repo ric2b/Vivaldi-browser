@@ -50,7 +50,7 @@ enum class NavigationInitiationType {
 class NavigationManagerImpl : public NavigationManager {
  public:
   NavigationManagerImpl();
-  ~NavigationManagerImpl() override {}
+  ~NavigationManagerImpl() override;
 
   // Setters for NavigationManagerDelegate and BrowserState.
   virtual void SetDelegate(NavigationManagerDelegate* delegate);
@@ -60,7 +60,7 @@ class NavigationManagerImpl : public NavigationManager {
   // Keeps a strong reference to |session_controller|.
   // This method should only be called when deserializing |session_controller|
   // and joining it with its NavigationManager. Other cases should call
-  // InitializeSession() or ReplaceSessionHistory().
+  // InitializeSession() or Restore().
   // TODO(stuartmorgan): Also move deserialization of CRWSessionControllers
   // under the control of this class, and move the bulk of CRWSessionController
   // logic into it.
@@ -69,13 +69,6 @@ class NavigationManagerImpl : public NavigationManager {
 
   // Initializes a new session history.
   virtual void InitializeSession() = 0;
-
-  // Replace the session history with a new one, where |items| is the
-  // complete set of navigation items in the new history, and |current_index|
-  // is the index of the currently active item.
-  virtual void ReplaceSessionHistory(
-      std::vector<std::unique_ptr<NavigationItem>> items,
-      int current_index) = 0;
 
   // Helper functions for notifying WebStateObservers of changes.
   // TODO(stuartmorgan): Make these private once the logic triggering them moves
@@ -108,16 +101,6 @@ class NavigationManagerImpl : public NavigationManager {
   // Commits the pending item, if any.
   virtual void CommitPendingItem() = 0;
 
-  // Returns the current list of transient url rewriters, passing ownership to
-  // the caller.
-  // TODO(crbug.com/546197): remove once NavigationItem creation occurs in this
-  // class.
-  virtual std::unique_ptr<std::vector<BrowserURLRewriter::URLRewriter>>
-  GetTransientURLRewriters() = 0;
-
-  // Called to reset the transient url rewriter list.
-  virtual void RemoveTransientURLRewriters() = 0;
-
   // Returns the navigation index that differs from the current item (or pending
   // item if it exists) by the specified |offset|, skipping redirect navigation
   // items. The index returned is not guaranteed to be valid.
@@ -128,8 +111,39 @@ class NavigationManagerImpl : public NavigationManager {
   // Returns the index of the previous item. Only used by SessionStorageBuilder.
   virtual int GetPreviousItemIndex() const = 0;
 
+  // Resets the transient url rewriter list.
+  void RemoveTransientURLRewriters();
+
+  // Creates a NavigationItem using the given properties. Calling this method
+  // resets the transient URLRewriters cached in this instance.
+  // TODO(crbug.com/738020): This method is only used by CRWSessionController.
+  // Remove it after switching to WKBasedNavigationManagerImpl.
+  std::unique_ptr<NavigationItemImpl> CreateNavigationItem(
+      const GURL& url,
+      const Referrer& referrer,
+      ui::PageTransition transition,
+      NavigationInitiationType initiation_type);
+
+  // Updates the URL of the yet to be committed pending item. Useful for page
+  // redirects. Does nothing if there is no pending item.
+  void UpdatePendingItemUrl(const GURL& url) const;
+
+  // The current NavigationItem. During a pending navigation, returns the
+  // NavigationItem for that navigation. If a transient NavigationItem exists,
+  // this NavigationItem will be returned.
+  // TODO(crbug.com/661316): Make this private once all navigation code is moved
+  // out of CRWWebController.
+  NavigationItemImpl* GetCurrentItemImpl() const;
+
   // NavigationManager:
-  void Reload(ReloadType reload_type, bool check_for_reposts) override;
+  NavigationItem* GetLastCommittedItem() const final;
+  NavigationItem* GetPendingItem() const final;
+  NavigationItem* GetTransientItem() const final;
+  void LoadURLWithParams(const NavigationManager::WebLoadParams&) final;
+  void AddTransientURLRewriter(BrowserURLRewriter::URLRewriter rewriter) final;
+  void GoToIndex(int index) final;
+  void Reload(ReloadType reload_type, bool check_for_reposts) final;
+  void LoadIfNecessary() final;
 
  protected:
   // The SessionStorageBuilder functions require access to private variables of
@@ -139,22 +153,57 @@ class NavigationManagerImpl : public NavigationManager {
   // TODO(crbug.com/738020): Remove legacy code and merge
   // WKBasedNavigationManager into this class after the navigation experiment.
 
+  // Checks whether or not two URLs differ only in the fragment.
+  static bool IsFragmentChangeNavigationBetweenUrls(const GURL& existing_url,
+                                                    const GURL& new_url);
+
+  // Applies the user agent override to |pending_item|, or inherits the user
+  // agent of |inherit_from| if |user_agent_override_option| is INHERIT.
+  static void UpdatePendingItemUserAgentType(
+      UserAgentOverrideOption override_option,
+      const NavigationItem* inherit_from,
+      NavigationItem* pending_item);
+
+  // Creates a NavigationItem using the given properties, where |previous_url|
+  // is the URL of the navigation just prior to the current one. If
+  // |url_rewriters| is not nullptr, apply them before applying the permanent
+  // URL rewriters from BrowserState.
+  // TODO(crbug.com/738020): Make this private when WKBasedNavigationManagerImpl
+  // is merged into this class.
+  std::unique_ptr<NavigationItemImpl> CreateNavigationItemWithRewriters(
+      const GURL& url,
+      const Referrer& referrer,
+      ui::PageTransition transition,
+      NavigationInitiationType initiation_type,
+      const GURL& previous_url,
+      const std::vector<BrowserURLRewriter::URLRewriter>* url_rewriters) const;
+
+  // Returns the most recent NavigationItem that does not have an app-specific
+  // URL.
+  NavigationItem* GetLastCommittedNonAppSpecificItem() const;
+
   // Identical to GetItemAtIndex() but returns the underlying NavigationItemImpl
   // instead of the public NavigationItem interface. This is used by
   // SessionStorageBuilder to persist session state.
   virtual NavigationItemImpl* GetNavigationItemImplAtIndex(
       size_t index) const = 0;
 
-  // Checks whether or not two URL are an in-page navigation (differing only
-  // in the fragment).
-  static bool AreUrlsFragmentChangeNavigation(const GURL& existing_url,
-                                              const GURL& new_url);
+  // Implementation for corresponding NavigationManager getters.
+  virtual NavigationItemImpl* GetPendingItemImpl() const = 0;
+  virtual NavigationItemImpl* GetTransientItemImpl() const = 0;
+  virtual NavigationItemImpl* GetLastCommittedItemImpl() const = 0;
+
+  // Subclass specific implementation to update session state.
+  virtual void FinishGoToIndex(int index) = 0;
 
   // The primary delegate for this manager.
   NavigationManagerDelegate* delegate_;
 
   // The BrowserState that is associated with this instance.
   BrowserState* browser_state_;
+
+  // List of transient url rewriters added by |AddTransientURLRewriter()|.
+  std::vector<BrowserURLRewriter::URLRewriter> transient_url_rewriters_;
 };
 
 }  // namespace web

@@ -10,7 +10,6 @@
 
 #include "ash/accessibility_delegate.h"
 #include "ash/cancel_mode.h"
-#include "ash/metrics/user_metrics_recorder.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/interfaces/shutdown.mojom.h"
 #include "ash/session/session_controller.h"
@@ -27,6 +26,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/user_metrics.h"
 #include "base/strings/string_util.h"
 #include "base/sys_info.h"
 #include "base/timer/timer.h"
@@ -214,8 +214,7 @@ void LockStateController::SetLockScreenDisplayedCallback(
   lock_screen_displayed_callback_ = std::move(callback);
 }
 
-void LockStateController::OnHostCloseRequested(
-    const aura::WindowTreeHost* host) {
+void LockStateController::OnHostCloseRequested(aura::WindowTreeHost* host) {
   Shell::Get()->shell_delegate()->Exit();
 }
 
@@ -493,9 +492,13 @@ void LockStateController::PreLockAnimationFinished(bool request_lock) {
   }
 
   if (request_lock) {
-    Shell::Get()->metrics()->RecordUserMetricsAction(
-        shutdown_after_lock_ ? UMA_ACCEL_LOCK_SCREEN_POWER_BUTTON
-                             : UMA_ACCEL_LOCK_SCREEN_LOCK_BUTTON);
+    if (shutdown_after_lock_) {
+      base::RecordAction(
+          base::UserMetricsAction("Accel_LockScreen_PowerButton"));
+    } else {
+      base::RecordAction(
+          base::UserMetricsAction("Accel_LockScreen_LockButton"));
+    }
     chromeos::DBusThreadManager::Get()
         ->GetSessionManagerClient()
         ->RequestLockScreen();
@@ -503,17 +506,10 @@ void LockStateController::PreLockAnimationFinished(bool request_lock) {
 
   base::TimeDelta timeout =
       base::TimeDelta::FromMilliseconds(kLockFailTimeoutMs);
-  // Increase lock timeout for slower hardware, see http://crbug.com/350628
-  // The devices with boards "x86-mario", "daisy", "x86-alex" and "x86-zgb" have
-  // slower hardware. For "x86-alex" and "x86-zgb" there are some modifications
-  // like "x86-alex-he". Also there's "daisy", "daisy_spring" and "daisy_skate",
-  // but they are all different devices and only "daisy" has slower hardware.
-  const std::string board = base::SysInfo::GetStrippedReleaseBoard();
-  if (board == "x86-mario" || board == "daisy" ||
-      base::StartsWith(board, "x86-alex", base::CompareCase::SENSITIVE) ||
-      base::StartsWith(board, "x86-zgb", base::CompareCase::SENSITIVE)) {
+  // TODO(derat): Remove this scaling after October 2017 when daisy (Samsung
+  // Chromebook XE303) is unsupported.
+  if (base::SysInfo::GetStrippedReleaseBoard() == "daisy")
     timeout *= 2;
-  }
   lock_fail_timer_.Start(FROM_HERE, timeout, this,
                          &LockStateController::OnLockFailTimeout);
 

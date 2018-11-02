@@ -20,7 +20,7 @@ static const int kTimeLimitMillis = 2000;
 static const int kWarmupRuns = 5;
 static const int kTimeCheckInterval = 10;
 
-SharedQuadState* CreateSharedQuadState(RenderPass* render_pass) {
+viz::SharedQuadState* CreateSharedQuadState(RenderPass* render_pass) {
   gfx::Transform quad_transform = gfx::Transform(1.0, 0.0, 0.5, 1.0, 0.5, 0.0);
   gfx::Rect content_rect(26, 28);
   gfx::Rect visible_layer_rect(10, 12, 14, 16);
@@ -30,7 +30,7 @@ SharedQuadState* CreateSharedQuadState(RenderPass* render_pass) {
   int sorting_context_id = 65536;
   SkBlendMode blend_mode = SkBlendMode::kSrcOver;
 
-  SharedQuadState* state = render_pass->CreateAndAppendSharedQuadState();
+  viz::SharedQuadState* state = render_pass->CreateAndAppendSharedQuadState();
   state->SetAll(quad_transform, content_rect, visible_layer_rect, clip_rect,
                 is_clipped, opacity, blend_mode, sorting_context_id);
   return state;
@@ -45,7 +45,7 @@ class DrawQuadPerfTest : public testing::Test {
 
   void CreateRenderPass() {
     render_pass_ = RenderPass::Create();
-    SharedQuadState* new_shared_state(
+    viz::SharedQuadState* new_shared_state(
         CreateSharedQuadState(render_pass_.get()));
     shared_state_ = render_pass_->CreateAndAppendSharedQuadState();
     *shared_state_ = *new_shared_state;
@@ -61,7 +61,8 @@ class DrawQuadPerfTest : public testing::Test {
       TextureDrawQuad* quad =
           render_pass_->CreateAndAppendDrawQuad<TextureDrawQuad>();
       gfx::Rect rect(0, 0, 100, 100);
-      ResourceId resource_id = 1;
+      bool needs_blending = false;
+      viz::ResourceId resource_id = 1;
       bool premultiplied_alpha = true;
       gfx::PointF uv_top_left(0, 0);
       gfx::PointF uv_bottom_right(1, 1);
@@ -70,7 +71,7 @@ class DrawQuadPerfTest : public testing::Test {
       bool y_flipped = false;
       bool nearest_neighbor = true;
 
-      quad->SetNew(shared_state_, rect, rect, rect, resource_id,
+      quad->SetNew(shared_state_, rect, rect, needs_blending, resource_id,
                    premultiplied_alpha, uv_top_left, uv_bottom_right,
                    background_color, vertex_opacity, y_flipped,
                    nearest_neighbor, false);
@@ -86,7 +87,7 @@ class DrawQuadPerfTest : public testing::Test {
     timer_.Reset();
     do {
       for (auto* quad : quads) {
-        for (ResourceId& resource_id : quad->resources)
+        for (viz::ResourceId& resource_id : quad->resources)
           ++resource_id;
       }
       timer_.NextLap();
@@ -99,7 +100,7 @@ class DrawQuadPerfTest : public testing::Test {
 
  private:
   std::unique_ptr<RenderPass> render_pass_;
-  SharedQuadState* shared_state_;
+  viz::SharedQuadState* shared_state_;
   LapTimer timer_;
 };
 

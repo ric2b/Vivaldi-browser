@@ -249,7 +249,7 @@ std::unique_ptr<base::DictionaryValue> GpuInfoAsDictionaryValue() {
   info->Set("diagnostics", std::move(dx_info));
 #endif
 
-#if defined(USE_X11) && !defined(OS_CHROMEOS)
+#if defined(USE_X11)
   basic_info->Append(NewDescriptionValuePair(
       "System visual ID", base::Uint64ToString(gpu_info.system_visual)));
   basic_info->Append(NewDescriptionValuePair(
@@ -309,8 +309,12 @@ const char* BufferUsageToString(gfx::BufferUsage usage) {
       return "GPU_READ";
     case gfx::BufferUsage::SCANOUT:
       return "SCANOUT";
+    case gfx::BufferUsage::SCANOUT_CAMERA_READ_WRITE:
+      return "SCANOUT_CAMERA_READ_WRITE";
     case gfx::BufferUsage::SCANOUT_CPU_READ_WRITE:
       return "SCANOUT_CPU_READ_WRITE";
+    case gfx::BufferUsage::SCANOUT_VDA_WRITE:
+      return "SCANOUT_VDA_WRITE";
     case gfx::BufferUsage::GPU_READ_CPU_READ_WRITE:
       return "GPU_READ_CPU_READ_WRITE";
     case gfx::BufferUsage::GPU_READ_CPU_READ_WRITE_PERSISTENT:

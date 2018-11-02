@@ -6,14 +6,16 @@ import("//build/config/features.gni")
 #import("//build/config/locales.gni")
 
 import("//vivaldi/app/deps_updates.gni")
-import("//vivaldi/base/deps_updates.gni")
 import("//vivaldi/browser/deps_updates.gni")
 import("//vivaldi/calendar/deps_updates.gni")
 import("//vivaldi/db/deps_updates.gni")
-import("//vivaldi/extensions/deps_updates.gni")
+if (!is_android) {
+  import("//vivaldi/extensions/deps_updates.gni")
+}
 import("//vivaldi/extraparts/deps_updates.gni")
 import("//vivaldi/importer/deps_updates.gni")
 import("//vivaldi/notes/deps_updates.gni")
+import("//vivaldi/prefs/deps_updates.gni")
 import("//vivaldi/sync/deps_updates.gni")
 import("//vivaldi/third_party/deps_updates.gni")
 import("//vivaldi/vivapp/deps_updates.gni")
@@ -32,9 +34,9 @@ post_process_target("//components/url_formatter:url_formatter") {
 
 post_process_target("//third_party/WebKit/public:all_blink") {
   public_deps -= [
+    "//third_party/WebKit/Source/controller:webkit_unit_tests",
     "//third_party/WebKit/Source/platform/heap:blink_heap_unittests",
     "//third_party/WebKit/Source/platform:blink_platform_unittests",
-    "//third_party/WebKit/Source/web:webkit_unit_tests",
     "//third_party/WebKit/Source/platform/wtf:wtf_unittests",
   ]
 }
@@ -100,6 +102,7 @@ foreach(_target,
       "//vivaldi/extraparts",
       "//vivaldi/calendar",
       "//vivaldi/notes",
+      "//vivaldi/notes:browser",
       "//vivaldi/importer",
       "//vivaldi/sync:browser",
     ]
@@ -107,13 +110,13 @@ foreach(_target,
 }
 
 post_process_template("//components:components_unittests") {
-  if (!is_linux) {
+  if (!is_linux && !is_android) {
     deps -= [
       "//components/rlz:unit_tests",
     ]
   }
   deps += [
-    "//chrome/utility",
+    #"//chrome/utility",
     "//vivaldi/importer",
     "//vivaldi/importer:browser",
     "//vivaldi/notes",

@@ -11,6 +11,7 @@
 #include "base/mac/scoped_nsobject.h"
 #include "components/omnibox/browser/omnibox_view.h"
 #include "components/toolbar/toolbar_model.h"
+#import "ios/chrome/browser/ui/omnibox/omnibox_popup_view_suggestions_delegate.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_text_field_ios.h"
 
 struct AutocompleteMatch;
@@ -18,6 +19,7 @@ class AutocompleteResult;
 @class AutocompleteTextFieldDelegate;
 class GURL;
 @class OmniboxTextFieldIOS;
+@class OmniboxTextFieldPasteDelegate;
 @protocol OmniboxPopupPositioner;
 class WebOmniboxEditController;
 class OmniboxPopupViewIOS;
@@ -29,7 +31,8 @@ class ChromeBrowserState;
 
 // iOS implementation of OmniBoxView.  Wraps a UITextField and
 // interfaces with the rest of the autocomplete system.
-class OmniboxViewIOS : public OmniboxView {
+class OmniboxViewIOS : public OmniboxView,
+                       public OmniboxPopupViewSuggestionsDelegate {
  public:
   // Retains |field|.
   OmniboxViewIOS(OmniboxTextFieldIOS* field,
@@ -97,6 +100,18 @@ class OmniboxViewIOS : public OmniboxView {
   void WillPaste();
   void OnDeleteBackward();
 
+  // OmniboxPopupViewSuggestionsDelegate methods
+
+  void OnTopmostSuggestionImageChanged(int imageId) override;
+  void OnResultsChanged(const AutocompleteResult& result) override;
+  void OnPopupDidScroll() override;
+  void OnSelectedMatchForAppending(const base::string16& str) override;
+  void OnSelectedMatchForOpening(AutocompleteMatch match,
+                                 WindowOpenDisposition disposition,
+                                 const GURL& alternate_nav_url,
+                                 const base::string16& pasted_text,
+                                 size_t index) override;
+
   ios::ChromeBrowserState* browser_state() { return browser_state_; }
 
   // Updates this edit view to show the proper text, highlight and images.
@@ -121,9 +136,6 @@ class OmniboxViewIOS : public OmniboxView {
   // This does not affect the popup state and is a NOOP if the omnibox is
   // already focused.
   void FocusOmnibox();
-
-  // Called when the popup results change.  Used to update prerendering.
-  void OnPopupResultsChanged(const AutocompleteResult& result);
 
   // Returns |true| if AutocompletePopupView is currently open.
   BOOL IsPopupOpen();
@@ -158,10 +170,9 @@ class OmniboxViewIOS : public OmniboxView {
   ios::ChromeBrowserState* browser_state_;
 
   base::scoped_nsobject<OmniboxTextFieldIOS> field_;
+  base::scoped_nsobject<OmniboxTextFieldPasteDelegate> paste_delegate_;
   WebOmniboxEditController* controller_;  // weak, owns us
   std::unique_ptr<OmniboxPopupViewIOS> popup_view_;
-  // |preloader_| should be __weak but is included from non-ARC code.
-  __unsafe_unretained id<PreloadProvider> preloader_;
 
   State state_before_change_;
   base::scoped_nsobject<NSString> marked_text_before_change_;
@@ -183,7 +194,7 @@ class OmniboxViewIOS : public OmniboxView {
 
   // Temporary pointer to the attributed display string, stored as color and
   // other emphasis attributes are applied by the superclass.
-  NSMutableAttributedString* attributing_display_string_;  // weak
+  NSMutableAttributedString* attributing_display_string_;
 };
 
 #endif  // IOS_CHROME_BROWSER_UI_OMNIBOX_OMNIBOX_VIEW_IOS_H_

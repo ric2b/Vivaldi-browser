@@ -230,7 +230,7 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest, SpareRenderProcessHostKilled) {
   spare_renderer->AddObserver(this);  // For process_exit_callback.
 
   // Should reply with a bad message and cause process death.
-  service->DoSomething(base::Bind(&base::DoNothing));
+  service->DoSomething(base::BindOnce(&base::DoNothing));
   run_loop.Run();
 
   // The spare RenderProcessHost should disappear when its process dies.
@@ -425,7 +425,7 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest, KillProcessOnBadMojoMessage) {
   set_process_exit_callback(run_loop.QuitClosure());
 
   // Should reply with a bad message and cause process death.
-  service->DoSomething(base::Bind(&base::DoNothing));
+  service->DoSomething(base::BindOnce(&base::DoNothing));
 
   run_loop.Run();
 
@@ -462,6 +462,8 @@ class MediaStopObserver : public WebContentsObserver {
 #define KillProcessZerosAudioStreams DISABLED_KillProcessZerosAudioStreams
 #endif
 IN_PROC_BROWSER_TEST_F(RenderProcessHostTest, KillProcessZerosAudioStreams) {
+  // TODO(maxmorin): This test only uses an output stream. There should be a
+  // similar test for input streams.
   embedded_test_server()->ServeFilesFromSourceDirectory(
       media::GetTestDataPath());
   ASSERT_TRUE(embedded_test_server()->Start());
@@ -497,7 +499,7 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest, KillProcessZerosAudioStreams) {
     // must run after these notifications have been delivered.
     base::RunLoop run_loop;
     set_process_exit_callback(media::BindToCurrentLoop(run_loop.QuitClosure()));
-    service->DoSomething(base::Bind(&base::DoNothing));
+    service->DoSomething(base::BindOnce(&base::DoNothing));
     run_loop.Run();
   }
 
@@ -525,6 +527,10 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest, KillProcessZerosAudioStreams) {
 #define StopResetsVideoCaptureStreams DISABLED_StopResetsVideoCaptureStreams
 #define KillProcessZerosVideoCaptureStreams \
   DISABLED_KillProcessZerosVideoCaptureStreams
+#define GetUserMediaAudioOnlyIncrementsMediaStreams \
+  DISABLED_GetUserMediaAudioOnlyIncrementsMediaStreams
+#define KillProcessZerosAudioCaptureStreams \
+  DISABLED_KillProcessZerosAudioCaptureStreams
 #endif  // BUILDFLAG(ENABLE_WEBRTC)
 
 // Tests that video capture stream count increments when getUserMedia() is
@@ -585,7 +591,72 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest,
     // Force a bad message event to occur which will terminate the renderer.
     base::RunLoop run_loop;
     set_process_exit_callback(media::BindToCurrentLoop(run_loop.QuitClosure()));
-    service->DoSomething(base::Bind(&base::DoNothing));
+    service->DoSomething(base::BindOnce(&base::DoNothing));
+    run_loop.Run();
+  }
+
+  {
+    // Cycle UI and IO loop once to ensure OnChannelClosing() has been delivered
+    // to audio stream owners and they get a chance to notify of stream closure.
+    base::RunLoop run_loop;
+    BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
+                            media::BindToCurrentLoop(run_loop.QuitClosure()));
+    run_loop.Run();
+  }
+
+  EXPECT_EQ(0, rph->get_media_stream_count_for_testing());
+  EXPECT_EQ(1, process_exits_);
+  EXPECT_EQ(0, host_destructions_);
+  if (!host_destructions_)
+    rph->RemoveObserver(this);
+}
+
+// Tests that media stream count increments when getUserMedia() is
+// called with audio only.
+IN_PROC_BROWSER_TEST_F(RenderProcessHostTest,
+                       GetUserMediaAudioOnlyIncrementsMediaStreams) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  NavigateToURL(shell(),
+                embedded_test_server()->GetURL("/media/getusermedia.html"));
+  RenderProcessHostImpl* rph = static_cast<RenderProcessHostImpl*>(
+      shell()->web_contents()->GetMainFrame()->GetProcess());
+  std::string result;
+  EXPECT_TRUE(ExecuteScriptAndExtractString(
+      shell(), "getUserMediaAndExpectSuccess({video: false, audio: true});",
+      &result))
+      << "Failed to execute javascript.";
+  EXPECT_EQ(1, rph->get_media_stream_count_for_testing());
+}
+
+// Tests that media stream counts (used for process priority
+// calculations) are properly set and cleared during media playback and renderer
+// terminations for audio only streams.
+IN_PROC_BROWSER_TEST_F(RenderProcessHostTest,
+                       KillProcessZerosAudioCaptureStreams) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  NavigateToURL(shell(),
+                embedded_test_server()->GetURL("/media/getusermedia.html"));
+  RenderProcessHostImpl* rph = static_cast<RenderProcessHostImpl*>(
+      shell()->web_contents()->GetMainFrame()->GetProcess());
+  std::string result;
+  EXPECT_TRUE(ExecuteScriptAndExtractString(
+      shell(), "getUserMediaAndExpectSuccess({video: false, audio: true});",
+      &result))
+      << "Failed to execute javascript.";
+  EXPECT_EQ(1, rph->get_media_stream_count_for_testing());
+
+  host_destructions_ = 0;
+  process_exits_ = 0;
+  rph->AddObserver(this);
+
+  mojom::TestServicePtr service;
+  BindInterface(rph, &service);
+
+  {
+    // Force a bad message event to occur which will terminate the renderer.
+    base::RunLoop run_loop;
+    set_process_exit_callback(media::BindToCurrentLoop(run_loop.QuitClosure()));
+    service->DoSomething(base::BindOnce(&base::DoNothing));
     run_loop.Run();
   }
 

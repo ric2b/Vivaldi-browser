@@ -115,6 +115,13 @@ class NavigationManager {
   virtual void LoadURLWithParams(
       const NavigationManager::WebLoadParams& params) = 0;
 
+  // Loads the current page in the following cases:
+  //  - NavigationManager was restored from history and the current page has not
+  //    loaded yet.
+  //  - Renderer process has crashed.
+  //  - Web usage was disabled and re-enabled.
+  virtual void LoadIfNecessary() = 0;
+
   // Adds |rewriter| to a transient list of URL rewriters.  Transient URL
   // rewriters will be executed before the rewriters already added to the
   // BrowserURLRewriter singleton, and the list will be cleared after the next
@@ -172,6 +179,13 @@ class NavigationManager {
   // or follows the current index.
   virtual NavigationItemList GetBackwardItems() const = 0;
   virtual NavigationItemList GetForwardItems() const = 0;
+
+  // Initializes this NavigationManager with the given saved navigations, using
+  // |last_committed_item_index| as the currently loaded item. Before this call
+  // the NavigationManager should be unused (there should be no current item).
+  // This takes ownership of |items| (must be moved).
+  virtual void Restore(int last_committed_item_index,
+                       std::vector<std::unique_ptr<NavigationItem>> items) = 0;
 
   // Removes all items from this except the last committed item, and inserts
   // copies of all items from |source| at the beginning of the session history.

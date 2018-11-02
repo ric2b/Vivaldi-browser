@@ -18,6 +18,7 @@
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task_scheduler/lazy_task_runner.h"
 #include "build/build_config.h"
 #include "chrome/browser/defaults.h"
 #include "chrome/browser/prefs/pref_service_syncable_util.h"
@@ -26,6 +27,7 @@
 #include "chrome/common/chrome_paths.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "content/public/browser/browser_thread.h"
+#include "extensions/browser/extension_file_task_runner.h"
 
 using content::BrowserThread;
 
@@ -36,7 +38,7 @@ base::FilePath::CharType kExternalExtensionJson[] =
 
 std::set<base::FilePath> GetPrefsCandidateFilesFromFolder(
       const base::FilePath& external_extension_search_path) {
-  CHECK(BrowserThread::CurrentlyOn(BrowserThread::FILE));
+  base::ThreadRestrictions::AssertIOAllowed();
 
   std::set<base::FilePath> external_extension_paths;
 
@@ -69,34 +71,6 @@ std::set<base::FilePath> GetPrefsCandidateFilesFromFolder(
   } while (true);
 
   return external_extension_paths;
-}
-
-// Extracts extension information from a json file serialized by |serializer|.
-// |path| is only used for informational purposes (outputted when an error
-// occurs). An empty dictionary is returned in case of failure (e.g. invalid
-// path or json content).
-// Caller takes ownership of the returned dictionary.
-std::unique_ptr<base::DictionaryValue> ExtractExtensionPrefs(
-    base::ValueDeserializer* deserializer,
-    const base::FilePath& path) {
-  std::string error_msg;
-  std::unique_ptr<base::Value> extensions =
-      deserializer->Deserialize(NULL, &error_msg);
-  if (!extensions) {
-    LOG(WARNING) << "Unable to deserialize json data: " << error_msg
-                 << " in file " << path.value() << ".";
-    return base::WrapUnique(new base::DictionaryValue);
-  }
-
-  std::unique_ptr<base::DictionaryValue> ext_dictionary =
-      base::DictionaryValue::From(std::move(extensions));
-  if (ext_dictionary) {
-    return ext_dictionary;
-  }
-
-  LOG(WARNING) << "Expected a JSON dictionary in file " << path.value()
-                 << ".";
-  return base::WrapUnique(new base::DictionaryValue);
 }
 
 }  // namespace
@@ -144,10 +118,31 @@ void ExternalPrefLoader::StartLoading() {
       }
     }
   } else {
-    BrowserThread::PostTask(
-        BrowserThread::FILE, FROM_HERE,
-        base::BindOnce(&ExternalPrefLoader::LoadOnFileThread, this));
+    GetExtensionFileTaskRunner()->PostTask(
+        FROM_HERE, base::BindOnce(&ExternalPrefLoader::LoadOnFileThread, this));
   }
+}
+
+// static.
+std::unique_ptr<base::DictionaryValue>
+ExternalPrefLoader::ExtractExtensionPrefs(base::ValueDeserializer* deserializer,
+                                          const base::FilePath& path) {
+  std::string error_msg;
+  std::unique_ptr<base::Value> extensions =
+      deserializer->Deserialize(NULL, &error_msg);
+  if (!extensions) {
+    LOG(WARNING) << "Unable to deserialize json data: " << error_msg
+                 << " in file " << path.value() << ".";
+    return base::MakeUnique<base::DictionaryValue>();
+  }
+
+  std::unique_ptr<base::DictionaryValue> ext_dictionary =
+      base::DictionaryValue::From(std::move(extensions));
+  if (ext_dictionary)
+    return ext_dictionary;
+
+  LOG(WARNING) << "Expected a JSON dictionary in file " << path.value() << ".";
+  return base::MakeUnique<base::DictionaryValue>();
 }
 
 void ExternalPrefLoader::OnIsSyncingChanged() {
@@ -185,15 +180,14 @@ void ExternalPrefLoader::PostLoadAndRemoveObservers() {
   DCHECK(service);
   service->RemoveObserver(this);
 
-  BrowserThread::PostTask(
-      BrowserThread::FILE, FROM_HERE,
-      base::BindOnce(&ExternalPrefLoader::LoadOnFileThread, this));
+  GetExtensionFileTaskRunner()->PostTask(
+      FROM_HERE, base::BindOnce(&ExternalPrefLoader::LoadOnFileThread, this));
 }
 
 void ExternalPrefLoader::LoadOnFileThread() {
-  CHECK(BrowserThread::CurrentlyOn(BrowserThread::FILE));
+  base::ThreadRestrictions::AssertIOAllowed();
 
-  std::unique_ptr<base::DictionaryValue> prefs(new base::DictionaryValue);
+  auto prefs = base::MakeUnique<base::DictionaryValue>();
 
   // TODO(skerner): Some values of base_path_id_ will cause
   // PathService::Get() to return false, because the path does
@@ -233,7 +227,7 @@ void ExternalPrefLoader::LoadOnFileThread() {
 
 void ExternalPrefLoader::ReadExternalExtensionPrefFile(
     base::DictionaryValue* prefs) {
-  CHECK(BrowserThread::CurrentlyOn(BrowserThread::FILE));
+  base::ThreadRestrictions::AssertIOAllowed();
   CHECK(NULL != prefs);
 
   base::FilePath json_file = base_path_.Append(kExternalExtensionJson);
@@ -271,7 +265,7 @@ void ExternalPrefLoader::ReadExternalExtensionPrefFile(
 
 void ExternalPrefLoader::ReadStandaloneExtensionPrefFiles(
     base::DictionaryValue* prefs) {
-  CHECK(BrowserThread::CurrentlyOn(BrowserThread::FILE));
+  base::ThreadRestrictions::AssertIOAllowed();
   CHECK(NULL != prefs);
 
   // First list the potential .json candidates.
@@ -308,28 +302,6 @@ void ExternalPrefLoader::ReadStandaloneExtensionPrefFiles(
       prefs->Set(id, std::move(ext_prefs));
     }
   }
-}
-
-ExternalTestingLoader::ExternalTestingLoader(
-    const std::string& json_data,
-    const base::FilePath& fake_base_path)
-    : fake_base_path_(fake_base_path) {
-  CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
-  JSONStringValueDeserializer deserializer(json_data);
-  base::FilePath fake_json_path = fake_base_path.AppendASCII("fake.json");
-  testing_prefs_ = ExtractExtensionPrefs(&deserializer, fake_json_path);
-}
-
-void ExternalTestingLoader::StartLoading() {
-  CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
-  prefs_.reset(testing_prefs_->DeepCopy());
-  LoadFinished();
-}
-
-ExternalTestingLoader::~ExternalTestingLoader() {}
-
-const base::FilePath ExternalTestingLoader::GetBaseCrxFilePath() {
-  return fake_base_path_;
 }
 
 }  // namespace extensions

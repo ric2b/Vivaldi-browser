@@ -5,14 +5,32 @@
 #include "ui/message_center/notification.h"
 
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
+#include "ui/base/l10n/l10n_util.h"
+#include "ui/gfx/image/image_skia.h"
+#include "ui/gfx/image/image_skia_operations.h"
+#include "ui/gfx/paint_vector_icon.h"
+#include "ui/gfx/vector_icon_types.h"
+#include "ui/message_center/message_center.h"
+#include "ui/message_center/message_center_style.h"
 #include "ui/message_center/notification_delegate.h"
 #include "ui/message_center/notification_types.h"
+#include "ui/strings/grit/ui_strings.h"
 
 namespace message_center {
 
 namespace {
 
 unsigned g_next_serial_number_ = 0;
+
+const gfx::ImageSkia CreateSolidColorImage(int width,
+                                           int height,
+                                           SkColor color) {
+  SkBitmap bitmap;
+  bitmap.allocN32Pixels(width, height);
+  bitmap.eraseColor(color);
+  return gfx::ImageSkia::CreateFrom1xBitmap(bitmap);
+}
 
 }  // namespace
 
@@ -43,6 +61,7 @@ RichNotificationData::RichNotificationData(const RichNotificationData& other)
       small_image(other.small_image),
       items(other.items),
       progress(other.progress),
+      progress_status(other.progress_status),
       buttons(other.buttons),
       should_make_spoken_feedback_for_popup_updates(
           other.should_make_spoken_feedback_for_popup_updates),
@@ -53,7 +72,10 @@ RichNotificationData::RichNotificationData(const RichNotificationData& other)
       vibration_pattern(other.vibration_pattern),
       renotify(other.renotify),
       silent(other.silent),
-      accessible_name(other.accessible_name) {}
+      accessible_name(other.accessible_name),
+      accent_color(other.accent_color),
+      use_image_as_icon(other.use_image_as_icon) {
+}
 
 RichNotificationData::~RichNotificationData() = default;
 
@@ -161,6 +183,18 @@ bool Notification::UseOriginAsContextMessage() const {
          origin_url_.SchemeIsHTTPOrHTTPS();
 }
 
+gfx::Image Notification::GenerateMaskedSmallIcon(SkColor color) const {
+  if (!vector_small_image().is_empty())
+    return gfx::Image(gfx::CreateVectorIcon(vector_small_image(), color));
+
+  if (small_image().IsEmpty())
+    return small_image();
+
+  gfx::ImageSkia image = small_image().AsImageSkia();
+  return gfx::Image(gfx::ImageSkiaOperations::CreateMaskedImage(
+      CreateSolidColorImage(image.width(), image.height(), color), image));
+}
+
 // static
 std::unique_ptr<Notification> Notification::CreateSystemNotification(
     const std::string& notification_id,
@@ -169,13 +203,59 @@ std::unique_ptr<Notification> Notification::CreateSystemNotification(
     const gfx::Image& icon,
     const std::string& system_component_id,
     const base::Closure& click_callback) {
-  std::unique_ptr<Notification> notification(new Notification(
+  std::unique_ptr<Notification> notification = CreateSystemNotification(
       NOTIFICATION_TYPE_SIMPLE, notification_id, title, message, icon,
       base::string16() /* display_source */, GURL(),
       NotifierId(NotifierId::SYSTEM_COMPONENT, system_component_id),
       RichNotificationData(),
-      new HandleNotificationClickedDelegate(click_callback)));
+      new HandleNotificationClickedDelegate(click_callback), gfx::kNoneIcon,
+      SystemNotificationWarningLevel::CRITICAL_WARNING);
   notification->SetSystemPriority();
+  return notification;
+}
+
+// static
+std::unique_ptr<Notification> Notification::CreateSystemNotification(
+    NotificationType type,
+    const std::string& id,
+    const base::string16& title,
+    const base::string16& message,
+    const gfx::Image& icon,
+    const base::string16& display_source,
+    const GURL& origin_url,
+    const NotifierId& notifier_id,
+    const RichNotificationData& optional_fields,
+    scoped_refptr<NotificationDelegate> delegate,
+    const gfx::VectorIcon& small_image,
+    SystemNotificationWarningLevel color_type) {
+  SkColor color = message_center::kSystemNotificationColorNormal;
+  switch (color_type) {
+    case SystemNotificationWarningLevel::NORMAL:
+      color = message_center::kSystemNotificationColorNormal;
+      break;
+    case SystemNotificationWarningLevel::WARNING:
+      color = message_center::kSystemNotificationColorWarning;
+      break;
+    case SystemNotificationWarningLevel::CRITICAL_WARNING:
+      color = message_center::kSystemNotificationColorCriticalWarning;
+      break;
+  }
+  base::string16 display_source_or_default = display_source;
+  if (display_source_or_default.empty()) {
+    display_source_or_default = l10n_util::GetStringFUTF16(
+        IDS_MESSAGE_CENTER_NOTIFICATION_CHROMEOS_SYSTEM,
+        MessageCenter::Get()->GetProductOSName());
+  }
+  std::unique_ptr<Notification> notification = base::MakeUnique<Notification>(
+      type, id, title, message, icon, display_source_or_default, origin_url,
+      notifier_id, optional_fields, delegate);
+  notification->set_accent_color(color);
+  notification->set_small_image(
+      small_image.is_empty()
+          ? gfx::Image()
+          : gfx::Image(gfx::CreateVectorIcon(small_image, color)));
+  if (!small_image.is_empty())
+    notification->set_vector_small_image(small_image);
   return notification;
 }
 

@@ -23,13 +23,16 @@ class CORE_EXPORT SpellCheckMarkerListImpl : public DocumentMarkerList {
   void Clear() final;
 
   const HeapVector<Member<DocumentMarker>>& GetMarkers() const final;
+  DocumentMarker* FirstMarkerIntersectingRange(unsigned start_offset,
+                                               unsigned end_offset) const final;
   HeapVector<Member<DocumentMarker>> MarkersIntersectingRange(
       unsigned start_offset,
       unsigned end_offset) const final;
 
   bool MoveMarkers(int length, DocumentMarkerList* dst_list) final;
   bool RemoveMarkers(unsigned start_offset, int length) final;
-  bool ShiftMarkers(unsigned offset,
+  bool ShiftMarkers(const String& node_text,
+                    unsigned offset,
                     unsigned old_length,
                     unsigned new_length) final;
 

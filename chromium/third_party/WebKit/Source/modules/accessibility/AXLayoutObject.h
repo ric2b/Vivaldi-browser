@@ -122,8 +122,6 @@ class MODULES_EXPORT AXLayoutObject : public AXNodeObject {
   void AriaOwnsElements(AXObjectVector&) const override;
 
   bool AriaHasPopup() const override;
-  bool AriaRoleHasPresentationalChildren() const override;
-  AXObject* AncestorForWhichThisIsAPresentationalChild() const override;
   bool SupportsARIADragging() const override;
   bool SupportsARIADropping() const override;
   bool SupportsARIAFlowTo() const override;
@@ -133,7 +131,6 @@ class MODULES_EXPORT AXLayoutObject : public AXNodeObject {
   const AtomicString& LiveRegionStatus() const override;
   const AtomicString& LiveRegionRelevant() const override;
   bool LiveRegionAtomic() const override;
-  bool LiveRegionBusy() const override;
 
   // AX name calc.
   String TextAlternative(bool recursive,
@@ -143,11 +140,13 @@ class MODULES_EXPORT AXLayoutObject : public AXNodeObject {
                          AXRelatedObjectVector*,
                          NameSources*) const override;
 
-  // Methods that retrieve or manipulate the current selection.
+  // Modify or take an action on an object.
+  bool OnNativeSetSelectionAction(const AXRange&) override;
+  bool OnNativeSetValueAction(const String&) override;
 
+  // Methods that retrieve or manipulate the current selection.
   AXRange Selection() const override;
   AXRange SelectionUnderObject() const override;
-  void SetSelection(const AXRange&) override;
 
   // Hit testing.
   AXObject* AccessibilityHitTest(const IntPoint&) const override;
@@ -178,8 +177,6 @@ class MODULES_EXPORT AXLayoutObject : public AXNodeObject {
   LocalFrameView* DocumentFrameView() const override;
   Element* AnchorElement() const override;
 
-  void SetValue(const String&) override;
-
   // Notifications that this object may have changed.
   void HandleActiveDescendantChanged() override;
   void HandleAriaExpandedChanged() override;
@@ -191,7 +188,6 @@ class MODULES_EXPORT AXLayoutObject : public AXNodeObject {
   void LineBreaks(Vector<int>&) const final;
 
  private:
-  AXObject* TreeAncestorDisallowingChild() const;
   bool IsTabItemSelected() const;
   bool IsValidSelectionBound(const AXObject*) const;
   AXObject* AccessibilityImageMapHitTest(HTMLAreaElement*,
@@ -210,11 +206,15 @@ class MODULES_EXPORT AXLayoutObject : public AXNodeObject {
   void AddRemoteSVGChildren();
   void AddInlineTextBoxChildren(bool force);
 
-  bool ElementAttributeValue(const QualifiedName&) const;
   LayoutRect ComputeElementRect() const;
   AXRange TextControlSelection() const;
   int IndexForVisiblePosition(const VisiblePosition&) const;
   AXLayoutObject* GetUnignoredObjectFromNode(Node&) const;
+
+  bool CanIgnoreTextAsEmpty() const;
+  bool CanIgnoreSpaceNextTo(Node*) const;
+  bool IsFocusableByDefault(Element*) const;
+  bool HasAriaCellRole(Element*) const;
 };
 
 DEFINE_AX_OBJECT_TYPE_CASTS(AXLayoutObject, IsAXLayoutObject());

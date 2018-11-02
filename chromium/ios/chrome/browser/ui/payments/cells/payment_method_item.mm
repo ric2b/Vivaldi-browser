@@ -4,7 +4,9 @@
 
 #import "ios/chrome/browser/ui/payments/cells/payment_method_item.h"
 
+#import "ios/chrome/browser/ui/collection_view/cells/MDCCollectionViewCell+Chrome.h"
 #import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
+#import "ios/chrome/browser/ui/payments/cells/accessibility_util.h"
 #import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -52,7 +54,7 @@ const CGFloat kHorizontalPadding = 16;
   cell.notificationLabel.text = self.notification;
   cell.methodTypeIconView.image = self.methodTypeIcon;
   cell.reserveRoomForAccessoryType = self.reserveRoomForAccessoryType;
-  cell.accessoryType = self.accessoryType;
+  [cell cr_setAccessoryType:self.accessoryType];
 }
 
 @end
@@ -199,10 +201,12 @@ const CGFloat kHorizontalPadding = 16;
 #pragma mark - Accessibility
 
 - (NSString*)accessibilityLabel {
-  return [NSString stringWithFormat:@"%@, %@, %@, %@", self.methodIDLabel.text,
-                                    self.methodDetailLabel.text,
-                                    self.methodAddressLabel.text,
-                                    self.notificationLabel.text];
+  AccessibilityLabelBuilder* builder = [[AccessibilityLabelBuilder alloc] init];
+  [builder appendItem:self.methodIDLabel.text];
+  [builder appendItem:self.methodDetailLabel.text];
+  [builder appendItem:self.methodAddressLabel.text];
+  [builder appendItem:self.notificationLabel.text];
+  return [builder buildAccessibilityLabel];
 }
 
 @end

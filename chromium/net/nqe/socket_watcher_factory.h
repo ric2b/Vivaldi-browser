@@ -10,9 +10,11 @@
 #include "base/callback.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
+#include "net/nqe/network_quality_estimator_util.h"
 #include "net/socket/socket_performance_watcher.h"
 #include "net/socket/socket_performance_watcher_factory.h"
 
@@ -25,7 +27,8 @@ namespace net {
 
 namespace {
 typedef base::Callback<void(SocketPerformanceWatcherFactory::Protocol protocol,
-                            const base::TimeDelta& rtt)>
+                            const base::TimeDelta& rtt,
+                            const base::Optional<nqe::internal::IPHash>& host)>
     OnUpdatedRTTAvailableCallback;
 }
 
@@ -53,7 +56,12 @@ class SocketWatcherFactory : public SocketPerformanceWatcherFactory {
 
   // SocketPerformanceWatcherFactory implementation:
   std::unique_ptr<SocketPerformanceWatcher> CreateSocketPerformanceWatcher(
-      const Protocol protocol) override;
+      const Protocol protocol,
+      const AddressList& address_list) override;
+
+  void SetUseLocalHostRequestsForTesting(bool use_localhost_requests) {
+    allow_rtt_private_address_ = use_localhost_requests;
+  }
 
  private:
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
@@ -61,6 +69,10 @@ class SocketWatcherFactory : public SocketPerformanceWatcherFactory {
   // Minimum interval betweeen consecutive notifications to the socket watchers
   // created by this factory.
   const base::TimeDelta min_notification_interval_;
+
+  // True if socket watchers constructed by this factory can use the RTT from
+  // the sockets that are connected to the private addresses.
+  bool allow_rtt_private_address_;
 
   // Called every time a new RTT observation is available.
   OnUpdatedRTTAvailableCallback updated_rtt_observation_callback_;

@@ -18,6 +18,8 @@
 #include "content/public/common/resource_type.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
+#include "mojo/public/cpp/system/message_pipe.h"
+#include "services/service_manager/public/cpp/bind_source_info.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/page_transition_types.h"
@@ -38,8 +40,10 @@ class WebContents;
 class WebContentsImpl;
 struct AXEventNotificationDetails;
 struct AXLocationChangeNotificationDetails;
+struct EntryChangedDetails;
 struct FaviconURL;
 struct LoadCommittedDetails;
+struct PrunedDetails;
 struct Referrer;
 struct ResourceRedirectDetails;
 struct ResourceRequestDetails;
@@ -240,8 +244,7 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener,
   virtual void DidFailLoad(RenderFrameHost* render_frame_host,
                            const GURL& validated_url,
                            int error_code,
-                           const base::string16& error_description,
-                           bool was_ignored_by_handler) {}
+                           const base::string16& error_description) {}
 
   // This method is invoked when the visible security state of the page changes.
   virtual void DidChangeVisibleSecurityState() {}
@@ -271,6 +274,26 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener,
   // navigations).
   virtual void NavigationEntryCommitted(
       const LoadCommittedDetails& load_details) {}
+
+  // Invoked when the NavigationController decreased its back/forward list count
+  // by removing entries from either the front or back of its list. This is
+  // usually the result of going back and then doing a new navigation, meaning
+  // all the "forward" items are deleted.
+  //
+  // This normally happens as a result of a new navigation. It will be
+  // followed by a NavigationEntryCommitted() call for the new page that
+  // caused the pruning. It could also be a result of removing an item from
+  // the list to fix up after interstitials.
+  virtual void NavigationListPruned(const PrunedDetails& pruned_details) {}
+
+  // Invoked when a NavigationEntry has changed.
+  //
+  // This will NOT be sent on navigation, interested parties should also
+  // implement NavigationEntryCommitted() to handle that case. This will be
+  // sent when the entry is updated outside of navigation (like when a new
+  // title comes).
+  virtual void NavigationEntryChanged(
+      const EntryChangedDetails& change_details) {}
 
   // This method is invoked when a new WebContents was created in response to
   // an action in the observed WebContents, e.g. a link with target=_blank was
@@ -396,7 +419,7 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener,
 
   // Called when accessibility events or location changes are received
   // from a render frame, but only when the accessibility mode has the
-  // AccessibilityMode::kWebContents flag set.
+  // ui::AXMode::kWebContents flag set.
   virtual void AccessibilityEventReceived(
       const std::vector<AXEventNotificationDetails>& details) {}
   virtual void AccessibilityLocationChangesReceived(
@@ -451,7 +474,18 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener,
   virtual void DidUpdateWebManifestURL(
       const base::Optional<GURL>& manifest_url) {}
 
+  // Called to give the embedder an opportunity to bind an interface request
+  // from a frame. If the request can be bound, |interface_pipe| will be taken.
+  virtual void OnInterfaceRequestFromFrame(
+      RenderFrameHost* render_frame_host,
+      const std::string& interface_name,
+      mojo::ScopedMessagePipeHandle* interface_pipe) {}
+
   // IPC::Listener implementation.
+  // DEPRECATED: Use (i.e. override) the other overload instead:
+  //     virtual bool OnMessageReceived(const IPC::Message& message,
+  //                                    RenderFrameHost* render_frame_host);
+  // TODO(https://crbug.com/758026): Delete this overload when possible.
   bool OnMessageReceived(const IPC::Message& message) override;
 
   // IPC::Sender implementation.

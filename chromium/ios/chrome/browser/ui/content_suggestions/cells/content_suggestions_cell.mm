@@ -6,7 +6,7 @@
 
 #import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
 #import "ios/chrome/browser/ui/favicon/favicon_view.h"
-#import "ios/chrome/browser/ui/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
 #import "ios/chrome/browser/ui/util/i18n_string.h"
 #import "ios/third_party/material_components_ios/src/components/Palettes/src/MaterialPalettes.h"
 #import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
@@ -16,14 +16,9 @@
 #endif
 
 namespace {
-const CGFloat kImageSize = 72;
+const CGFloat kImageSize = 62;
 const CGFloat kStandardSpacing = 16;
 const CGFloat kSmallSpacing = 8;
-
-// Name of the icon displayed when a suggestion is available offline.
-NSString* const kOfflineIconName = @"content_suggestions_offline";
-// Size of the icon displayed when a suggestion is available offline.
-const CGFloat kOfflineIconSize = 24;
 
 // Size of the favicon view.
 const CGFloat kFaviconSize = 16;
@@ -143,12 +138,9 @@ const CGFloat kAnimationDuration = 0.3;
 }
 
 - (void)setAdditionalInformationWithPublisherName:(NSString*)publisherName
-                                             date:(NSString*)date
-                              offlineAvailability:(BOOL)availableOffline {
-  self.additionalInformationLabel.attributedText =
-      [[self class] attributedStringForPublisher:publisherName
-                                            date:date
-                                availableOffline:availableOffline];
+                                             date:(NSString*)date {
+  self.additionalInformationLabel.text =
+      [[self class] stringForPublisher:publisherName date:date];
 }
 
 - (void)setDisplayImage:(BOOL)displayImage {
@@ -168,25 +160,24 @@ const CGFloat kAnimationDuration = 0.3;
                 withImage:(BOOL)hasImage
                     title:(NSString*)title
             publisherName:(NSString*)publisherName
-          publicationDate:(NSString*)publicationDate
-         availableOffline:(BOOL)availableOffline {
+          publicationDate:(NSString*)publicationDate {
   UILabel* titleLabel = [[UILabel alloc] init];
   [self configureTitleLabel:titleLabel];
   titleLabel.text = title;
 
   UILabel* additionalInfoLabel = [[UILabel alloc] init];
   additionalInfoLabel.font = [self additionalInformationFont];
-  additionalInfoLabel.attributedText =
-      [self attributedStringForPublisher:publisherName
-                                    date:publicationDate
-                        availableOffline:availableOffline];
+  additionalInfoLabel.text =
+      [self stringForPublisher:publisherName date:publicationDate];
 
   CGSize sizeForLabels =
       CGSizeMake(width - [self labelMarginWithImage:hasImage], 500);
 
   CGFloat labelHeight = 3 * kStandardSpacing;
   labelHeight += [titleLabel sizeThatFits:sizeForLabels].height;
-  labelHeight += [additionalInfoLabel sizeThatFits:sizeForLabels].height;
+  CGFloat additionalInfoHeight =
+      [additionalInfoLabel sizeThatFits:sizeForLabels].height;
+  labelHeight += MAX(additionalInfoHeight, kFaviconSize);
 
   CGFloat minimalHeight = hasImage ? kImageSize : 0;
   minimalHeight += 2 * kStandardSpacing;
@@ -227,8 +218,8 @@ const CGFloat kAnimationDuration = 0.3;
 - (void)applyConstraints {
   _imageSize =
       [_imageContainer.heightAnchor constraintEqualToConstant:kImageSize];
-  _imageTitleSpacing = [_imageContainer.leadingAnchor
-      constraintEqualToAnchor:_titleLabel.trailingAnchor
+  _imageTitleSpacing = [_titleLabel.leadingAnchor
+      constraintEqualToAnchor:_imageContainer.trailingAnchor
                      constant:kStandardSpacing];
 
   [NSLayoutConstraint activateConstraints:@[
@@ -246,8 +237,8 @@ const CGFloat kAnimationDuration = 0.3;
 
     // Additional Information.
     [_additionalInformationLabel.topAnchor
-        constraintEqualToAnchor:_titleLabel.bottomAnchor
-                       constant:kStandardSpacing],
+        constraintGreaterThanOrEqualToAnchor:_titleLabel.bottomAnchor
+                                    constant:kStandardSpacing],
     [_additionalInformationLabel.trailingAnchor
         constraintEqualToAnchor:_titleLabel.trailingAnchor],
     [_additionalInformationLabel.bottomAnchor
@@ -258,6 +249,8 @@ const CGFloat kAnimationDuration = 0.3;
     [_faviconView.topAnchor
         constraintGreaterThanOrEqualToAnchor:_titleLabel.bottomAnchor
                                     constant:kStandardSpacing],
+    [_faviconView.leadingAnchor
+        constraintEqualToAnchor:_titleLabel.leadingAnchor],
     [_faviconView.centerYAnchor
         constraintEqualToAnchor:_additionalInformationLabel.centerYAnchor],
     [_faviconView.bottomAnchor
@@ -280,10 +273,10 @@ const CGFloat kAnimationDuration = 0.3;
 
   ApplyVisualConstraintsWithMetrics(
       @[
-        @"H:|-(space)-[title]",
-        @"H:[image]-(space)-|",
+        @"H:[title]-(space)-|",
+        @"H:|-(space)-[image]",
         @"V:|-(space)-[title]",
-        @"H:|-(space)-[favicon]-(small)-[additional]",
+        @"H:[favicon]-(small)-[additional]",
       ],
       @{
         @"image" : _imageContainer,
@@ -313,29 +306,9 @@ const CGFloat kAnimationDuration = 0.3;
 }
 
 // Returns the attributed string to be displayed.
-+ (NSAttributedString*)attributedStringForPublisher:(NSString*)publisherName
-                                               date:(NSString*)date
-                                   availableOffline:(BOOL)availableOffline {
-  NSString* publisherString = AdjustStringForLocaleDirection(
++ (NSString*)stringForPublisher:(NSString*)publisherName date:(NSString*)date {
+  return AdjustStringForLocaleDirection(
       [NSString stringWithFormat:@"%@ - %@ ", publisherName, date]);
-
-  NSMutableAttributedString* additionInformation =
-      [[NSMutableAttributedString alloc] initWithString:publisherString
-                                             attributes:nil];
-
-  if (availableOffline) {
-    NSTextAttachment* offlineIcon = [[NSTextAttachment alloc] init];
-    offlineIcon.image = [[UIImage imageNamed:kOfflineIconName]
-        imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-    offlineIcon.bounds = CGRectMake(
-        0, ([self additionalInformationFont].xHeight - kOfflineIconSize) / 2,
-        kOfflineIconSize, kOfflineIconSize);
-
-    [additionInformation
-        appendAttributedString:[NSAttributedString
-                                   attributedStringWithAttachment:offlineIcon]];
-  }
-  return additionInformation;
 }
 
 @end

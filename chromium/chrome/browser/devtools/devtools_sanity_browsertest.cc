@@ -18,6 +18,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -49,6 +50,10 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/app_modal/javascript_app_modal_dialog.h"
 #include "components/app_modal/native_app_modal_dialog.h"
+#include "components/autofill/content/browser/content_autofill_driver.h"
+#include "components/autofill/content/browser/content_autofill_driver_factory.h"
+#include "components/autofill/core/browser/autofill_manager.h"
+#include "components/autofill/core/browser/autofill_manager_test_delegate.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/child_process_data.h"
 #include "content/public/browser/content_browser_client.h"
@@ -79,6 +84,7 @@
 #include "net/test/spawned_test_server/spawned_test_server.h"
 #include "net/test/url_request/url_request_mock_http_job.h"
 #include "net/url_request/url_request_context.h"
+#include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_filter.h"
 #include "net/url_request/url_request_http_job.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
@@ -128,6 +134,8 @@ const char kReloadSharedWorkerTestWorker[] =
     "files/workers/debug_shared_worker_initialization.js";
 const char kEmulateNetworkConditionsPage[] =
     "files/devtools/emulate_network_conditions.html";
+const char kDispatchKeyEventShowsAutoFill[] =
+    "files/devtools/dispatch_key_event_shows_auto_fill.html";
 
 template <typename... T>
 void DispatchOnTestSuiteSkipCheck(DevToolsWindow* window,
@@ -453,7 +461,7 @@ class DevToolsBeforeUnloadTest: public DevToolsSanityTest {
 
 void TimeoutCallback(const std::string& timeout_message) {
   ADD_FAILURE() << timeout_message;
-  base::MessageLoop::current()->QuitWhenIdle();
+  base::RunLoop::QuitCurrentWhenIdleDeprecated();
 }
 
 // Base class for DevTools tests that test devtools functionality for
@@ -629,7 +637,7 @@ class DevToolsExtensionTest : public DevToolsSanityTest,
                const content::NotificationDetails& details) override {
     DCHECK_EQ(extensions::NOTIFICATION_EXTENSION_HOST_DID_STOP_FIRST_LOAD,
               type);
-    base::MessageLoopForUI::current()->QuitWhenIdle();
+    base::RunLoop::QuitCurrentWhenIdleDeprecated();
   }
 
   std::vector<std::unique_ptr<extensions::TestExtensionDir>>
@@ -1497,8 +1505,8 @@ IN_PROC_BROWSER_TEST_F(DevToolsExtensionTest,
                          // Whitelist the script we stuff into the 'blob:' URL:
                          .Set("content_security_policy",
                               "script-src 'self' "
-                              "'sha256-95xJWHeV+"
-                              "1zjAKQufDVW0misgmR4gCjgpipP2LJ5iis='; "
+                              "'sha256-uv9gxBEOFchPzak3TK6O39RdKxJeZvfha9zOHGam"
+                              "TB4='; "
                               "object-src 'none'")
                          .Set("manifest_version", 2)
                          .Set("devtools_page", "devtools.html")
@@ -1531,7 +1539,6 @@ IN_PROC_BROWSER_TEST_F(DevToolsExtensionTest,
       "var xhr = new XMLHttpRequest();\n"
       "xhr.open('GET', blob_url, true);\n"
       "xhr.onload = function (e) {\n"
-      "    domAutomationController.setAutomationId(0);\n"
       "    domAutomationController.send(xhr.response);\n"
       "};\n"
       "xhr.send(null);\n");
@@ -1540,7 +1547,6 @@ IN_PROC_BROWSER_TEST_F(DevToolsExtensionTest,
       "var payload = `"
       "<html><body>iframe blob contents"
       "<script>"
-      "    domAutomationController.setAutomationId(0);"
       "    domAutomationController.send(document.body.innerText);\n"
       "</script></body></html>"
       "`;"
@@ -1694,6 +1700,47 @@ IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, TestDeviceEmulation) {
 
 IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, TestDispatchKeyEventDoesNotCrash) {
   RunTest("testDispatchKeyEventDoesNotCrash", "about:blank");
+}
+
+class AutofillManagerTestDelegateDevtoolsImpl
+    : public autofill::AutofillManagerTestDelegate {
+ public:
+  explicit AutofillManagerTestDelegateDevtoolsImpl(
+      WebContents* inspectedContents)
+      : inspected_contents_(inspectedContents) {}
+  ~AutofillManagerTestDelegateDevtoolsImpl() override {}
+
+  void DidPreviewFormData() override {}
+
+  void DidFillFormData() override {}
+
+  void DidShowSuggestions() override {
+    ASSERT_TRUE(content::ExecuteScript(inspected_contents_,
+                                       "console.log('didShowSuggestions');"));
+  }
+
+  void OnTextFieldChanged() override {}
+
+ private:
+  WebContents* inspected_contents_;
+
+  DISALLOW_COPY_AND_ASSIGN(AutofillManagerTestDelegateDevtoolsImpl);
+};
+
+IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, TestDispatchKeyEventShowsAutoFill) {
+  OpenDevToolsWindow(kDispatchKeyEventShowsAutoFill, false);
+
+  autofill::ContentAutofillDriver* autofill_driver =
+      autofill::ContentAutofillDriverFactory::FromWebContents(GetInspectedTab())
+          ->DriverForFrame(GetInspectedTab()->GetMainFrame());
+  autofill::AutofillManager* autofill_manager =
+      autofill_driver->autofill_manager();
+  AutofillManagerTestDelegateDevtoolsImpl autoFillTestDelegate(
+      GetInspectedTab());
+  autofill_manager->SetTestDelegate(&autoFillTestDelegate);
+
+  RunTestFunction(window_, "testDispatchKeyEventShowsAutoFill");
+  CloseDevToolsWindow();
 }
 
 // Tests that settings are stored in profile correctly.
@@ -1995,6 +2042,10 @@ IN_PROC_BROWSER_TEST_F(DevToolsNetInfoTest, EmulateNetworkConditions) {
   RunTest("testEmulateNetworkConditions", kEmulateNetworkConditionsPage);
 }
 
+IN_PROC_BROWSER_TEST_F(DevToolsNetInfoTest, OfflineNetworkConditions) {
+  RunTest("testOfflineNetworkConditions", kEmulateNetworkConditionsPage);
+}
+
 class StaticURLDataSource : public content::URLDataSource {
  public:
   StaticURLDataSource(const std::string& source, const std::string& content)
@@ -2065,4 +2116,41 @@ IN_PROC_BROWSER_TEST_F(DevToolsSanityTest,
 
   DevToolsWindowTesting::CloseDevToolsWindowSync(window);
   content::WebUIControllerFactory::UnregisterFactoryForTesting(&test_factory);
+}
+
+void AddHSTSHost(scoped_refptr<net::URLRequestContextGetter> context,
+                 std::string host) {
+  net::TransportSecurityState* transport_security_state =
+      context->GetURLRequestContext()->transport_security_state();
+  base::Time expiry = base::Time::Now() + base::TimeDelta::FromDays(1000);
+  bool include_subdomains = false;
+  transport_security_state->AddHSTS(host, expiry, include_subdomains);
+}
+
+IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, TestRawHeadersWithRedirectAndHSTS) {
+  net::EmbeddedTestServer https_test_server(
+      net::EmbeddedTestServer::TYPE_HTTPS);
+  https_test_server.SetSSLConfig(
+      net::EmbeddedTestServer::CERT_COMMON_NAME_IS_DOMAIN);
+  https_test_server.ServeFilesFromSourceDirectory("chrome/test/data");
+  ASSERT_TRUE(https_test_server.Start());
+  GURL https_url = https_test_server.GetURL("localhost", "/devtools/image.png");
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::BindOnce(
+          AddHSTSHost,
+          base::RetainedRef(browser()->profile()->GetRequestContext()),
+          https_url.host()));
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  OpenDevToolsWindow(std::string(), false);
+  GURL::Replacements replace_scheme;
+  replace_scheme.SetSchemeStr("http");
+  GURL http_url = https_url.ReplaceComponents(replace_scheme);
+  GURL redirect_url =
+      embedded_test_server()->GetURL("/server-redirect?" + http_url.spec());
+
+  DispatchOnTestSuite(window_, "testRawHeadersWithHSTS",
+                      redirect_url.spec().c_str());
+  CloseDevToolsWindow();
 }

@@ -7,6 +7,7 @@
 #include <limits>
 #include "base/files/scoped_temp_dir.h"
 #include "base/rand_util.h"
+#include "base/run_loop.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_restrictions.h"
@@ -41,6 +42,18 @@ class MockBlob : public mojom::Blob {
                             std::move(request));
   }
 
+  void ReadRange(uint64_t offset,
+                 uint64_t size,
+                 mojo::ScopedDataPipeProducerHandle,
+                 mojom::BlobReaderClientPtr) override {
+    NOTREACHED();
+  }
+
+  void ReadAll(mojo::ScopedDataPipeProducerHandle,
+               mojom::BlobReaderClientPtr) override {
+    NOTREACHED();
+  }
+
   void GetInternalUUID(GetInternalUUIDCallback callback) override {
     std::move(callback).Run(uuid_);
   }
@@ -60,9 +73,11 @@ class MockDelegate : public BlobRegistryImpl::Delegate {
   bool CanReadFileSystemFile(const FileSystemURL& url) override {
     return can_read_file_system_file_result;
   }
+  bool CanCommitURL(const GURL& url) override { return can_commit_url_result; }
 
   bool can_read_file_result = true;
   bool can_read_file_system_file_result = true;
+  bool can_commit_url_result = true;
 };
 
 void BindBytesProvider(std::unique_ptr<MockBytesProvider> impl,
@@ -185,6 +200,26 @@ class BlobRegistryImplTest : public testing::Test {
                                   std::move(request)));
   }
 
+  size_t BlobsUnderConstruction() {
+    return registry_impl_->BlobsUnderConstructionForTesting();
+  }
+
+  void RegisterURL(mojom::BlobPtr blob,
+                   const GURL& url,
+                   mojom::BlobURLHandlePtr* url_handle_out) {
+    base::RunLoop loop;
+    registry_->RegisterURL(std::move(blob), url,
+                           base::Bind(
+                               [](base::Closure quit_closure,
+                                  mojom::BlobURLHandlePtr* url_handle_out,
+                                  mojom::BlobURLHandlePtr url_handle) {
+                                 *url_handle_out = std::move(url_handle);
+                                 quit_closure.Run();
+                               },
+                               loop.QuitClosure(), url_handle_out));
+    loop.Run();
+  }
+
  protected:
   base::ScopedTempDir data_dir_;
   base::test::ScopedTaskEnvironment scoped_task_environment_;
@@ -242,6 +277,7 @@ TEST_F(BlobRegistryImplTest, Register_EmptyUUID) {
 
   blob.FlushForTesting();
   EXPECT_TRUE(blob.encountered_error());
+  EXPECT_EQ(0u, BlobsUnderConstruction());
 }
 
 TEST_F(BlobRegistryImplTest, Register_ExistingUUID) {
@@ -260,6 +296,7 @@ TEST_F(BlobRegistryImplTest, Register_ExistingUUID) {
 
   blob.FlushForTesting();
   EXPECT_TRUE(blob.encountered_error());
+  EXPECT_EQ(0u, BlobsUnderConstruction());
 }
 
 TEST_F(BlobRegistryImplTest, Register_EmptyBlob) {
@@ -285,6 +322,7 @@ TEST_F(BlobRegistryImplTest, Register_EmptyBlob) {
 
   EXPECT_FALSE(handle->IsBroken());
   EXPECT_EQ(BlobStatus::DONE, handle->GetBlobStatus());
+  EXPECT_EQ(0u, BlobsUnderConstruction());
 }
 
 TEST_F(BlobRegistryImplTest, Register_ReferencedBlobClosedPipe) {
@@ -306,6 +344,7 @@ TEST_F(BlobRegistryImplTest, Register_ReferencedBlobClosedPipe) {
 
   EXPECT_TRUE(handle->IsBroken());
   EXPECT_EQ(BlobStatus::ERR_REFERENCED_BLOB_BROKEN, handle->GetBlobStatus());
+  EXPECT_EQ(0u, BlobsUnderConstruction());
 }
 
 TEST_F(BlobRegistryImplTest, Register_SelfReference) {
@@ -333,6 +372,7 @@ TEST_F(BlobRegistryImplTest, Register_SelfReference) {
 
   registry_.FlushForTesting();
   EXPECT_TRUE(registry_.encountered_error());
+  EXPECT_EQ(0u, BlobsUnderConstruction());
 }
 
 TEST_F(BlobRegistryImplTest, Register_CircularReference) {
@@ -396,6 +436,7 @@ TEST_F(BlobRegistryImplTest, Register_CircularReference) {
 
   registry_.FlushForTesting();
   EXPECT_TRUE(registry_.encountered_error());
+  EXPECT_EQ(0u, BlobsUnderConstruction());
 #endif
 }
 
@@ -425,6 +466,7 @@ TEST_F(BlobRegistryImplTest, Register_NonExistentBlob) {
 
   registry_.FlushForTesting();
   EXPECT_TRUE(registry_.encountered_error());
+  EXPECT_EQ(0u, BlobsUnderConstruction());
 }
 
 TEST_F(BlobRegistryImplTest, Register_ValidBlobReferences) {
@@ -471,6 +513,7 @@ TEST_F(BlobRegistryImplTest, Register_ValidBlobReferences) {
 
   EXPECT_EQ(expected_blob_data, *handle2->CreateSnapshot());
   EXPECT_EQ(expected_blob_data, *handle3->CreateSnapshot());
+  EXPECT_EQ(0u, BlobsUnderConstruction());
 }
 
 TEST_F(BlobRegistryImplTest, Register_UnreadableFile) {
@@ -492,6 +535,7 @@ TEST_F(BlobRegistryImplTest, Register_UnreadableFile) {
 
   EXPECT_TRUE(handle->IsBroken());
   EXPECT_EQ(BlobStatus::ERR_FILE_WRITE_FAILED, handle->GetBlobStatus());
+  EXPECT_EQ(0u, BlobsUnderConstruction());
 }
 
 TEST_F(BlobRegistryImplTest, Register_ValidFile) {
@@ -519,6 +563,7 @@ TEST_F(BlobRegistryImplTest, Register_ValidFile) {
   expected_blob_data.AppendFile(path, 0, 16, base::Time());
 
   EXPECT_EQ(expected_blob_data, *handle->CreateSnapshot());
+  EXPECT_EQ(0u, BlobsUnderConstruction());
 }
 
 TEST_F(BlobRegistryImplTest, Register_FileSystemFile_InvalidScheme) {
@@ -539,6 +584,7 @@ TEST_F(BlobRegistryImplTest, Register_FileSystemFile_InvalidScheme) {
 
   EXPECT_TRUE(handle->IsBroken());
   EXPECT_EQ(BlobStatus::ERR_FILE_WRITE_FAILED, handle->GetBlobStatus());
+  EXPECT_EQ(0u, BlobsUnderConstruction());
 }
 
 TEST_F(BlobRegistryImplTest, Register_FileSystemFile_UnreadablFile) {
@@ -561,6 +607,7 @@ TEST_F(BlobRegistryImplTest, Register_FileSystemFile_UnreadablFile) {
 
   EXPECT_TRUE(handle->IsBroken());
   EXPECT_EQ(BlobStatus::ERR_FILE_WRITE_FAILED, handle->GetBlobStatus());
+  EXPECT_EQ(0u, BlobsUnderConstruction());
 }
 
 TEST_F(BlobRegistryImplTest, Register_FileSystemFile_Valid) {
@@ -588,6 +635,7 @@ TEST_F(BlobRegistryImplTest, Register_FileSystemFile_Valid) {
   expected_blob_data.AppendFileSystemFile(url, 0, 16, base::Time());
 
   EXPECT_EQ(expected_blob_data, *handle->CreateSnapshot());
+  EXPECT_EQ(0u, BlobsUnderConstruction());
 }
 
 TEST_F(BlobRegistryImplTest, Register_BytesInvalidEmbeddedData) {
@@ -615,6 +663,7 @@ TEST_F(BlobRegistryImplTest, Register_BytesInvalidEmbeddedData) {
   EXPECT_EQ(0u, reply_request_count_);
   EXPECT_EQ(0u, stream_request_count_);
   EXPECT_EQ(0u, file_request_count_);
+  EXPECT_EQ(0u, BlobsUnderConstruction());
 }
 
 TEST_F(BlobRegistryImplTest, Register_BytesInvalidDataSize) {
@@ -646,6 +695,7 @@ TEST_F(BlobRegistryImplTest, Register_BytesInvalidDataSize) {
   EXPECT_EQ(0u, reply_request_count_);
   EXPECT_EQ(0u, stream_request_count_);
   EXPECT_EQ(0u, file_request_count_);
+  EXPECT_EQ(0u, BlobsUnderConstruction());
 }
 
 TEST_F(BlobRegistryImplTest, Register_BytesOutOfMemory) {
@@ -671,6 +721,7 @@ TEST_F(BlobRegistryImplTest, Register_BytesOutOfMemory) {
   EXPECT_EQ(0u, reply_request_count_);
   EXPECT_EQ(0u, stream_request_count_);
   EXPECT_EQ(0u, file_request_count_);
+  EXPECT_EQ(0u, BlobsUnderConstruction());
 }
 
 TEST_F(BlobRegistryImplTest, Register_ValidEmbeddedBytes) {
@@ -700,6 +751,7 @@ TEST_F(BlobRegistryImplTest, Register_ValidEmbeddedBytes) {
   EXPECT_EQ(0u, reply_request_count_);
   EXPECT_EQ(0u, stream_request_count_);
   EXPECT_EQ(0u, file_request_count_);
+  EXPECT_EQ(0u, BlobsUnderConstruction());
 }
 
 TEST_F(BlobRegistryImplTest, Register_ValidBytesAsReply) {
@@ -728,6 +780,7 @@ TEST_F(BlobRegistryImplTest, Register_ValidBytesAsReply) {
   EXPECT_EQ(1u, reply_request_count_);
   EXPECT_EQ(0u, stream_request_count_);
   EXPECT_EQ(0u, file_request_count_);
+  EXPECT_EQ(0u, BlobsUnderConstruction());
 }
 
 TEST_F(BlobRegistryImplTest, Register_ValidBytesAsStream) {
@@ -762,6 +815,7 @@ TEST_F(BlobRegistryImplTest, Register_ValidBytesAsStream) {
   EXPECT_EQ(0u, reply_request_count_);
   EXPECT_EQ(1u, stream_request_count_);
   EXPECT_EQ(0u, file_request_count_);
+  EXPECT_EQ(0u, BlobsUnderConstruction());
 }
 
 TEST_F(BlobRegistryImplTest, Register_ValidBytesAsFile) {
@@ -805,6 +859,7 @@ TEST_F(BlobRegistryImplTest, Register_ValidBytesAsFile) {
     remaining_size -= item->length();
   }
   EXPECT_EQ(0u, remaining_size);
+  EXPECT_EQ(0u, BlobsUnderConstruction());
 }
 
 TEST_F(BlobRegistryImplTest, Register_BytesProviderClosedPipe) {
@@ -827,6 +882,7 @@ TEST_F(BlobRegistryImplTest, Register_BytesProviderClosedPipe) {
 
   EXPECT_TRUE(handle->IsBroken());
   EXPECT_EQ(BlobStatus::ERR_SOURCE_DIED_IN_TRANSIT, handle->GetBlobStatus());
+  EXPECT_EQ(0u, BlobsUnderConstruction());
 }
 
 TEST_F(BlobRegistryImplTest,
@@ -847,6 +903,7 @@ TEST_F(BlobRegistryImplTest,
 
   EXPECT_TRUE(context_->registry().HasEntry(kId));
   EXPECT_TRUE(context_->GetBlobDataFromUUID(kId)->IsBeingBuilt());
+  EXPECT_EQ(1u, BlobsUnderConstruction());
 
   // Now drop all references to the blob.
   blob.reset();
@@ -857,6 +914,7 @@ TEST_F(BlobRegistryImplTest,
   // Now cause construction to fail, if it would still be going on.
   request = nullptr;
   base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(0u, BlobsUnderConstruction());
 }
 
 TEST_F(BlobRegistryImplTest,
@@ -878,6 +936,7 @@ TEST_F(BlobRegistryImplTest,
 
   EXPECT_TRUE(context_->registry().HasEntry(kId));
   EXPECT_TRUE(context_->GetBlobDataFromUUID(kId)->IsBeingBuilt());
+  EXPECT_EQ(1u, BlobsUnderConstruction());
 
   // Now drop all references to the blob.
   blob.reset();
@@ -889,6 +948,45 @@ TEST_F(BlobRegistryImplTest,
   CreateBytesProvider(kData, std::move(request));
   scoped_task_environment_.RunUntilIdle();
   base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(0u, BlobsUnderConstruction());
+}
+
+TEST_F(BlobRegistryImplTest, PublicBlobUrls) {
+  const std::string kId = "id";
+  std::unique_ptr<BlobDataHandle> handle =
+      CreateBlobFromString(kId, "hello world");
+
+  mojom::BlobPtr blob;
+  registry_->GetBlobFromUUID(MakeRequest(&blob), kId);
+  EXPECT_EQ(kId, UUIDFromBlob(blob.get()));
+  EXPECT_FALSE(blob.encountered_error());
+
+  // Now register a url for that blob.
+  const GURL kUrl("blob:id");
+  mojom::BlobURLHandlePtr url_handle;
+  RegisterURL(std::move(blob), kUrl, &url_handle);
+
+  std::unique_ptr<BlobDataHandle> blob_data_handle =
+      context_->GetBlobDataFromPublicURL(kUrl);
+  ASSERT_TRUE(blob_data_handle.get());
+  EXPECT_EQ(kId, blob_data_handle->uuid());
+
+  handle.reset();
+  base::RunLoop().RunUntilIdle();
+
+  // The url registration should keep the blob alive even after
+  // explicit references are dropped.
+  blob_data_handle = context_->GetBlobDataFromPublicURL(kUrl);
+  EXPECT_TRUE(blob_data_handle);
+  blob_data_handle.reset();
+
+  // Finally drop the URL handle.
+  url_handle.reset();
+  base::RunLoop().RunUntilIdle();
+
+  blob_data_handle = context_->GetBlobDataFromPublicURL(kUrl);
+  EXPECT_FALSE(blob_data_handle.get());
+  EXPECT_FALSE(context_->registry().HasEntry(kId));
 }
 
 }  // namespace storage

@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "services/ui/public/interfaces/window_server_test.mojom.h"
 #include "services/ui/public/interfaces/window_tree_constants.mojom.h"
@@ -153,7 +154,7 @@ TEST_F(DragTestInteractive, DragTest) {
   aura::test::ChangeCompletionWaiter source_waiter(
       MusClient::Get()->window_tree_client(), aura::ChangeType::BOUNDS, false);
   source_widget->SetBounds(gfx::Rect(0, 0, 20, 20));
-  source_waiter.Wait();
+  ASSERT_TRUE(source_waiter.Wait());
 
   Widget* target_widget = CreateTopLevelFramelessPlatformWidget();
   TargetView* target_view = new TargetView;
@@ -163,7 +164,7 @@ TEST_F(DragTestInteractive, DragTest) {
   aura::test::ChangeCompletionWaiter target_waiter(
       MusClient::Get()->window_tree_client(), aura::ChangeType::BOUNDS, false);
   target_widget->SetBounds(gfx::Rect(20, 20, 20, 20));
-  target_waiter.Wait();
+  ASSERT_TRUE(target_waiter.Wait());
 
   auto* dnwa =
       static_cast<DesktopNativeWidgetAura*>(source_widget->native_widget());

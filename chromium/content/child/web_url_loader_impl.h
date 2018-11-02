@@ -49,23 +49,17 @@ struct CONTENT_EXPORT StreamOverrideParameters {
   base::OnceCallback<void(const GURL&)> on_delete;
 };
 
-class CONTENT_EXPORT WebURLLoaderImpl
-    : public NON_EXPORTED_BASE(blink::WebURLLoader) {
+class CONTENT_EXPORT WebURLLoaderImpl : public blink::WebURLLoader {
  public:
   WebURLLoaderImpl(ResourceDispatcher* resource_dispatcher,
                    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
                    mojom::URLLoaderFactory* url_loader_factory);
   ~WebURLLoaderImpl() override;
 
-  static void PopulateURLResponse(const GURL& url,
+  static void PopulateURLResponse(const blink::WebURL& url,
                                   const ResourceResponseInfo& info,
                                   blink::WebURLResponse* response,
                                   bool report_security_info);
-  static blink::WebURLRequest PopulateURLRequestForRedirect(
-      const blink::WebURLRequest& request,
-      const net::RedirectInfo& redirect_info,
-      blink::WebURLRequest::ServiceWorkerMode service_worker_mode);
-
   // WebURLLoader methods:
   void LoadSynchronously(const blink::WebURLRequest& request,
                          blink::WebURLResponse& response,

@@ -15,7 +15,6 @@
 #include "base/macros.h"
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/prefs/pref_service.h"
-#include "components/rappor/test_rappor_service.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "google_apis/gaia/fake_identity_provider.h"
 #include "google_apis/gaia/fake_oauth2_token_service.h"
@@ -34,7 +33,6 @@ class TestAutofillClient : public AutofillClient {
   PrefService* GetPrefs() override;
   syncer::SyncService* GetSyncService() override;
   IdentityProvider* GetIdentityProvider() override;
-  rappor::RapporServiceImpl* GetRapporServiceImpl() override;
   ukm::UkmRecorder* GetUkmRecorder() override;
   SaveCardBubbleController* GetSaveCardBubbleController() override;
   void ShowAutofillSettings() override;
@@ -75,16 +73,11 @@ class TestAutofillClient : public AutofillClient {
   // http:// URL.
   bool IsContextSecure() override;
   bool ShouldShowSigninPromo() override;
-  void StartSigninFlow() override;
-  void ShowHttpNotSecureExplanation() override;
   bool IsAutofillSupported() override;
+  void ExecuteCommand(int id) override;
 
   void SetPrefs(std::unique_ptr<PrefService> prefs) {
     prefs_ = std::move(prefs);
-  }
-
-  rappor::TestRapporServiceImpl* test_rappor_service() {
-    return rappor_service_.get();
   }
 
   void set_form_origin(const GURL& url) { form_origin_ = url; }
@@ -94,7 +87,6 @@ class TestAutofillClient : public AutofillClient {
   std::unique_ptr<PrefService> prefs_;
   std::unique_ptr<FakeOAuth2TokenService> token_service_;
   std::unique_ptr<FakeIdentityProvider> identity_provider_;
-  std::unique_ptr<rappor::TestRapporServiceImpl> rappor_service_;
 #if !defined(OS_ANDROID)
   std::unique_ptr<SaveCardBubbleController> save_card_bubble_controller_;
 #endif

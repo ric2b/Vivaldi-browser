@@ -20,6 +20,7 @@
 #include "bindings/core/v8/V8TestInterfaceGarbageCollected.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/frame/LocalDOMWindow.h"
+#include "platform/bindings/RuntimeCallStats.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/bindings/V8ObjectConstructor.h"
 #include "platform/wtf/GetPtr.h"
@@ -133,7 +134,7 @@ static void keysMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
 
   TestInterfaceGarbageCollected* impl = V8TestInterfaceGarbageCollected::toImpl(info.Holder());
 
-  ScriptState* scriptState = ScriptState::ForReceiverObject(info);
+  ScriptState* scriptState = ScriptState::ForRelevantRealm(info);
 
   Iterator* result = impl->keysForBinding(scriptState, exceptionState);
   if (exceptionState.HadException()) {
@@ -147,7 +148,7 @@ static void entriesMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
 
   TestInterfaceGarbageCollected* impl = V8TestInterfaceGarbageCollected::toImpl(info.Holder());
 
-  ScriptState* scriptState = ScriptState::ForReceiverObject(info);
+  ScriptState* scriptState = ScriptState::ForRelevantRealm(info);
 
   Iterator* result = impl->entriesForBinding(scriptState, exceptionState);
   if (exceptionState.HadException()) {
@@ -161,7 +162,7 @@ static void forEachMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
 
   TestInterfaceGarbageCollected* impl = V8TestInterfaceGarbageCollected::toImpl(info.Holder());
 
-  ScriptState* scriptState = ScriptState::ForReceiverObject(info);
+  ScriptState* scriptState = ScriptState::ForRelevantRealm(info);
 
   if (UNLIKELY(info.Length() < 1)) {
     exceptionState.ThrowTypeError(ExceptionMessages::NotEnoughArguments(1, info.Length()));
@@ -190,7 +191,7 @@ static void hasMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
 
   TestInterfaceGarbageCollected* impl = V8TestInterfaceGarbageCollected::toImpl(info.Holder());
 
-  ScriptState* scriptState = ScriptState::ForReceiverObject(info);
+  ScriptState* scriptState = ScriptState::ForRelevantRealm(info);
 
   if (UNLIKELY(info.Length() < 1)) {
     exceptionState.ThrowTypeError(ExceptionMessages::NotEnoughArguments(1, info.Length()));
@@ -214,7 +215,7 @@ static void addMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
 
   TestInterfaceGarbageCollected* impl = V8TestInterfaceGarbageCollected::toImpl(info.Holder());
 
-  ScriptState* scriptState = ScriptState::ForReceiverObject(info);
+  ScriptState* scriptState = ScriptState::ForRelevantRealm(info);
 
   if (UNLIKELY(info.Length() < 1)) {
     exceptionState.ThrowTypeError(ExceptionMessages::NotEnoughArguments(1, info.Length()));
@@ -238,7 +239,7 @@ static void clearMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
 
   TestInterfaceGarbageCollected* impl = V8TestInterfaceGarbageCollected::toImpl(info.Holder());
 
-  ScriptState* scriptState = ScriptState::ForReceiverObject(info);
+  ScriptState* scriptState = ScriptState::ForRelevantRealm(info);
 
   impl->clearForBinding(scriptState, exceptionState);
   if (exceptionState.HadException()) {
@@ -251,7 +252,7 @@ static void deleteMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
 
   TestInterfaceGarbageCollected* impl = V8TestInterfaceGarbageCollected::toImpl(info.Holder());
 
-  ScriptState* scriptState = ScriptState::ForReceiverObject(info);
+  ScriptState* scriptState = ScriptState::ForRelevantRealm(info);
 
   if (UNLIKELY(info.Length() < 1)) {
     exceptionState.ThrowTypeError(ExceptionMessages::NotEnoughArguments(1, info.Length()));
@@ -275,7 +276,7 @@ static void iteratorMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
 
   TestInterfaceGarbageCollected* impl = V8TestInterfaceGarbageCollected::toImpl(info.Holder());
 
-  ScriptState* scriptState = ScriptState::ForReceiverObject(info);
+  ScriptState* scriptState = ScriptState::ForRelevantRealm(info);
 
   Iterator* result = impl->GetIterator(scriptState, exceptionState);
   if (exceptionState.HadException()) {
@@ -285,6 +286,8 @@ static void iteratorMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
 }
 
 static void constructor(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceGarbageCollected_ConstructorCallback");
+
   if (UNLIKELY(info.Length() < 1)) {
     V8ThrowException::ThrowTypeError(info.GetIsolate(), ExceptionMessages::FailedToConstruct("TestInterfaceGarbageCollected", ExceptionMessages::NotEnoughArguments(1, info.Length())));
     return;
@@ -304,59 +307,83 @@ static void constructor(const v8::FunctionCallbackInfo<v8::Value>& info) {
 } // namespace TestInterfaceGarbageCollectedV8Internal
 
 void V8TestInterfaceGarbageCollected::attr1AttributeGetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceGarbageCollected_attr1_Getter");
+
   TestInterfaceGarbageCollectedV8Internal::attr1AttributeGetter(info);
 }
 
 void V8TestInterfaceGarbageCollected::attr1AttributeSetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceGarbageCollected_attr1_Setter");
+
   v8::Local<v8::Value> v8Value = info[0];
 
   TestInterfaceGarbageCollectedV8Internal::attr1AttributeSetter(v8Value, info);
 }
 
 void V8TestInterfaceGarbageCollected::sizeAttributeGetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceGarbageCollected_size_Getter");
+
   TestInterfaceGarbageCollectedV8Internal::sizeAttributeGetter(info);
 }
 
 void V8TestInterfaceGarbageCollected::funcMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceGarbageCollected_func");
+
   TestInterfaceGarbageCollectedV8Internal::funcMethod(info);
 }
 
 void V8TestInterfaceGarbageCollected::keysMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceGarbageCollected_keys");
+
   TestInterfaceGarbageCollectedV8Internal::keysMethod(info);
 }
 
 void V8TestInterfaceGarbageCollected::entriesMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceGarbageCollected_entries");
+
   TestInterfaceGarbageCollectedV8Internal::entriesMethod(info);
 }
 
 void V8TestInterfaceGarbageCollected::forEachMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceGarbageCollected_forEach");
+
   TestInterfaceGarbageCollectedV8Internal::forEachMethod(info);
 }
 
 void V8TestInterfaceGarbageCollected::hasMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceGarbageCollected_has");
+
   TestInterfaceGarbageCollectedV8Internal::hasMethod(info);
 }
 
 void V8TestInterfaceGarbageCollected::addMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceGarbageCollected_add");
+
   TestInterfaceGarbageCollectedV8Internal::addMethod(info);
 }
 
 void V8TestInterfaceGarbageCollected::clearMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceGarbageCollected_clear");
+
   TestInterfaceGarbageCollectedV8Internal::clearMethod(info);
 }
 
 void V8TestInterfaceGarbageCollected::deleteMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceGarbageCollected_delete");
+
   TestInterfaceGarbageCollectedV8Internal::deleteMethod(info);
 }
 
 void V8TestInterfaceGarbageCollected::iteratorMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceGarbageCollected_iterator");
+
   TestInterfaceGarbageCollectedV8Internal::iteratorMethod(info);
 }
 
 static const V8DOMConfiguration::AccessorConfiguration V8TestInterfaceGarbageCollectedAccessors[] = {
-    { "attr1", V8TestInterfaceGarbageCollected::attr1AttributeGetterCallback, V8TestInterfaceGarbageCollected::attr1AttributeSetterCallback, nullptr, nullptr, static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds },
+    { "attr1", V8TestInterfaceGarbageCollected::attr1AttributeGetterCallback, V8TestInterfaceGarbageCollected::attr1AttributeSetterCallback, nullptr, V8PrivateProperty::kNoCachedAccessor, static_cast<v8::PropertyAttribute>(v8::None), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds },
 
-    { "size", V8TestInterfaceGarbageCollected::sizeAttributeGetterCallback, nullptr, nullptr, nullptr, static_cast<v8::PropertyAttribute>(v8::DontEnum | v8::ReadOnly), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds },
+    { "size", V8TestInterfaceGarbageCollected::sizeAttributeGetterCallback, nullptr, nullptr, V8PrivateProperty::kNoCachedAccessor, static_cast<v8::PropertyAttribute>(v8::DontEnum | v8::ReadOnly), V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kAllWorlds },
 };
 
 static const V8DOMConfiguration::MethodConfiguration V8TestInterfaceGarbageCollectedMethods[] = {
@@ -371,6 +398,8 @@ static const V8DOMConfiguration::MethodConfiguration V8TestInterfaceGarbageColle
 };
 
 void V8TestInterfaceGarbageCollected::constructorCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceGarbageCollected_Constructor");
+
   if (!info.IsConstructCall()) {
     V8ThrowException::ThrowTypeError(info.GetIsolate(), ExceptionMessages::ConstructorNotCallableAsFunction("TestInterfaceGarbageCollected"));
     return;

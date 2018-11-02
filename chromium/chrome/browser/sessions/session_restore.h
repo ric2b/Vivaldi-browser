@@ -113,6 +113,9 @@ class SessionRestore {
   // without session restore started.
   static void OnTabLoaderFinishedLoadingTabs();
 
+  // Is called when session restore is going to restore a tab.
+  static void OnWillRestoreTab(content::WebContents* web_contents);
+
  private:
   friend class SessionRestoreImpl;
   FRIEND_TEST_ALL_PREFIXES(SessionRestoreObserverTest, SingleSessionRestore);

@@ -19,11 +19,11 @@
 <translation id="1187722533808055681">تعداد خروج از حالت بی‌حرکت</translation>
 <translation id="119944043368869598">پاک کردن همه</translation>
 <translation id="1221825588892235038">فقط محتوای انتخاب شده</translation>
+<translation id="1238150413700645698">محتوای محافظت شده</translation>
 <translation id="1244303850296295656">خطای افزونه</translation>
 <translation id="1278049586634282054">بررسی مشاهدات:</translation>
 <translation id="1297175357211070620">مقصد</translation>
 <translation id="1303101771013849280">‏فایل HTML نشانک‌ها</translation>
-<translation id="1303319084542230573">افزودن چاپگر</translation>
 <translation id="1317502925920562130">آیا این همان صفحه اصلی مورد انتظار شماست؟</translation>
 <translation id="1368832886055348810">چپ به راست</translation>
 <translation id="1430915738399379752">چاپ</translation>
@@ -40,10 +40,12 @@
 <translation id="1601560923496285236">اعمال</translation>
 <translation id="1603914832182249871">(حالت ناشناس)</translation>
 <translation id="1616206807336925449">این برنامه افزودنی به مجوز خاصی نیاز ندارد.</translation>
+<translation id="1620510694547887537">دوربین</translation>
 <translation id="1627276047960621195">توصیف‌گرهای فایل</translation>
 <translation id="1635033183663317347">قیم شما نصب کرده است.</translation>
 <translation id="1681120471812444678">تنظیم برای افزودن چاپگرها…</translation>
 <translation id="1682548588986054654">پنجره حالت &amp;ناشناس جدید</translation>
+<translation id="1706625117072057435">سطوح بزرگ‌نمایی</translation>
 <translation id="1708338024780164500">(غیرفعال)</translation>
 <translation id="1708713382908678956"><ph name="NAME_PH" /> (شناسه: <ph name="ID_PH" />)</translation>
 <translation id="1723824996674794290">پنجره &amp;جدید</translation>
@@ -103,7 +105,8 @@
 <translation id="2439110203301358333">‏برنامه‌ای دیگر بر روی رایانه شما یک برنامه افزودنی را اضافه کرده است که ممکن است نحوه کارکرد Vivaldi را تغییر دهد.</translation>
 <translation id="2445081178310039857">دایرکتوری ریشه برنامهٔ افزودنی لازم است.</translation>
 <translation id="2470702053775288986">افزونه‌های پشتیبانی نشده غیرفعال شدند</translation>
-<translation id="2498436043474441766">افزودن چاپگرها</translation>
+<translation id="2476578072172137802">تنظیمات سایت</translation>
+<translation id="2482878487686419369">آگاه‌سازی‌ها</translation>
 <translation id="2501797496290880632">تایپ کردن میان‌بر</translation>
 <translation id="2509495747794740764">مقیاس باید عددی بین ۱۰ تا ۲۰۰ باشد.</translation>
 <translation id="253557089021624350">شمارش استفاده</translation>
@@ -135,6 +138,7 @@
 <translation id="299483336428448530">پدر یا مادر شما نصب کرده‌اند.</translation>
 <translation id="3003623123441819449">‏حافظهٔ پنهان CSS</translation>
 <translation id="3012631534724231212">(iframe)</translation>
+<translation id="3013291976881901233">‏دستگاه‌های MIDI</translation>
 <translation id="3021678814754966447">&amp;مشاهده‌ی منبع قاب</translation>
 <translation id="302620147503052030">نمایش دکمه</translation>
 <translation id="3031601332414921114">ادامه‌ی چاپ</translation>
@@ -150,6 +154,7 @@
 <translation id="3149510190863420837">برنامه‌های کروم</translation>
 <translation id="3154429428035006212">آفلاین برای مدت بیش از یک ماه</translation>
 <translation id="3222066309010235055">پیش رندر: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
+<translation id="3227137524299004712">میکروفن</translation>
 <translation id="32279126412636473">تازه‌سازی (⌘R)</translation>
 <translation id="3241680850019875542">دایرکتوری ریشه برنامهٔ افزودنی را برای فشرده کردن انتخاب کنید. همچنین برای به‌روزرسانی برنامهٔ افزودنی، فایل کلید خصوصی را برای استفاده مجدد انتخاب کنید.</translation>
 <translation id="3269093882174072735">بارگیری تصویر</translation>
@@ -190,6 +195,7 @@
 <translation id="3725367690636977613">صفحات</translation>
 <translation id="3727187387656390258">بررسی بالاپرها</translation>
 <translation id="3730639321086573427">مقصدهای محلی</translation>
+<translation id="3744111561329211289">همگام‌سازی پس‌زمینه</translation>
 <translation id="3760460896538743390">بررسی صفحه &amp;پس‌زمینه</translation>
 <translation id="3763401818161139108">همیشه روی <ph name="ORIGIN" /> اجرا شود</translation>
 <translation id="3797900183766075808">جستجوی <ph name="SEARCH_ENGINE" /> برای «<ph name="SEARCH_TERMS" />»</translation>
@@ -232,10 +238,6 @@
 <translation id="4240511609794012987">حافظه مشترک</translation>
 <translation id="4256316378292851214">ذ&amp;خیره فایل ویدیویی به‌عنوان...</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> کیلوبایت (<ph name="NUM_KILOBYTES_LIVE" />کیلوبایت زنده)</translation>
-<translation id="431291515148403474">‏افزودن چاپگرهایتان به Google Cloud Print به شما امکان می‌دهد تا
-        از همه جا در همه جا چاپ کنید. چاپگرهای خود را با افرادی که انتخاب می‌کنید به اشتراک بگذارید و
-        از Vivaldi، تلفن، تبلت، رایانه یا هر دستگاه دیگرتان که به وب متصل است، 
-        در آنها چاپ کنید.</translation>
 <translation id="4345587454538109430">پیکربندی...</translation>
 <translation id="4348766275249686434">جمع‌آوری خطاها</translation>
 <translation id="4363771538994847871">هیچ مقصدی برای ارسال محتوا پیدا نشد. نیاز به راهنمایی دارید؟</translation>
@@ -248,7 +250,7 @@
 <translation id="4478664379124702289">ذخیره پی&amp;وند به‌عنوان...</translation>
 <translation id="4481249487722541506">بارگذاری افزونه‌ی باز شده...</translation>
 <translation id="4522570452068850558">جزئیات</translation>
-<translation id="4552089082226364758">Flash</translation>
+<translation id="4552089082226364758">فلش</translation>
 <translation id="4552495056028768700">دسترسی صفحه</translation>
 <translation id="4557136421275541763">اخطار:</translation>
 <translation id="4579581181964204535">ارسال محتوای <ph name="HOST_NAME" /> امکان‌پذیر نیست.</translation>
@@ -283,9 +285,6 @@
 <translation id="5116628073786783676">ذ&amp;خیره فایل صوتی به‌عنوان...</translation>
 <translation id="5143374789336132547">افزونه «<ph name="EXTENSION_NAME" />»، صفحه‌ای را با کلیک روی دکمه صفحه اصلی نمایش داده می‌شود، تغییر داده است.</translation>
 <translation id="5154108062446123722">تنظیمات پیشرفته برای <ph name="PRINTING_DESTINATION" /></translation>
-<translation id="5154383699530644092">‏با کلیک کردن بر روی دکمه «افزودن چاپگر» در زیر می‌توانید چاپگرها
-          را به رایانه‌تان اضافه کنید.اگر چاپگری برای افزودن ندارید، 
-          هنوز هم قادر به ذخیره یک فایل PDF  یا ذخیره در Google Drive خواهید بود.</translation>
 <translation id="5154917547274118687">حافظه</translation>
 <translation id="5171343362375269016">حافظه جابه‌جاشده</translation>
 <translation id="5233019165164992427">‏درگاه اشکال‌زدایی NaCl</translation>
@@ -324,6 +323,7 @@
 <translation id="5623842676595125836">گزارش</translation>
 <translation id="5627086634964711283">این برنامه افزودنی همچنین صفحه‌ای را که هنگام کلیک کردن روی دکمه اصلی نشان داده می‌شود، کنترل می‌کند.</translation>
 <translation id="5646376287012673985">مکان</translation>
+<translation id="5649053991847567735">دانلود‌های خودکار</translation>
 <translation id="5707185214361380026">بارگذاری ناموفق افزونه از:</translation>
 <translation id="5715711091495208045">واسطه افزایه:‌ <ph name="PLUGIN_NAME" /></translation>
 <translation id="5729996640881880439">متأسفیم، قادر به نمایش کد این خطا نیستیم.</translation>
@@ -346,6 +346,7 @@
 <translation id="6025215716629925253">ردیابی پشته</translation>
 <translation id="6040143037577758943">بستن</translation>
 <translation id="6042308850641462728">بیشتر</translation>
+<translation id="6059925163896151826">‏دستگاه‌های USB</translation>
 <translation id="6082651258230788217">نمایش در نوار ابزار</translation>
 <translation id="6086814797483779854">اجرا با کلیک</translation>
 <translation id="6086846494333236931">نصب شده توسط مدیر شما</translation>
@@ -368,6 +369,7 @@
 <translation id="6268252012308737255">باز کردن با <ph name="APP" /></translation>
 <translation id="6272643420381259437">هنگام بارگیری افزایه، خطایی (<ph name="ERROR" />) روی داد</translation>
 <translation id="6273677812470008672">کیفیت</translation>
+<translation id="6295158916970320988">همه سایت‌ها</translation>
 <translation id="6295855836753816081">در حال ذخیره‌سازی...</translation>
 <translation id="6308937455967653460">ذخیره پی&amp;وند به‌عنوان...</translation>
 <translation id="6314335155547195432">تولید گذرواژه</translation>
@@ -488,6 +490,7 @@
 
 فایل کلید خود را در جای امن نگه دارید. برای ایجاد نسخه‌های جدید برنامهٔ افزودنی خود به آن نیاز دارید.</translation>
 <translation id="8004582292198964060">مرورگر</translation>
+<translation id="8018313076035239964">اطلاعاتی را که وب‌سایت‌ها می‌توانند استفاده کنند و محتوایی را که می‌توانند به شما نشان دهند کنترل کنید</translation>
 <translation id="8023801379949507775">افزونه‌ها اکنون به‌روزرسانی شوند</translation>
 <translation id="8032244173881942855">ارسال محتوای زبانه امکان‌پذیر نیست.</translation>
 <translation id="8069615408251337349">Google Cloud Print</translation>
@@ -498,6 +501,7 @@
 <translation id="8188120771410500975">&amp;بررسی املای فیلدهای نوشتاری</translation>
 <translation id="8259581864063078725">برای یافتن برنامه‌ای برای استفاده از این چاپگر کلیک کنید.</translation>
 <translation id="8261378640211443080">این برنامه‌افزودنی در <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> فهرست نشده است و ممکن است بدون اطلاع شما اضافه شده باشد.</translation>
+<translation id="8270242299912238708">‏سندهای PDF</translation>
 <translation id="8294431847097064396">منبع</translation>
 <translation id="8335587457941836791">بار کردن سنجاق از راه انداز</translation>
 <translation id="8338952601723052325">وب‌سایت برنامه‌نویس</translation>

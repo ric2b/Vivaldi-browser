@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_UI_APP_LIST_ARC_ARC_APP_LAUNCHER_H_
 #define CHROME_BROWSER_UI_APP_LIST_ARC_ARC_APP_LAUNCHER_H_
 
+#include <stdint.h>
+
 #include <string>
 
 #include "base/macros.h"
@@ -22,8 +24,8 @@ class ArcAppLauncher : public ArcAppListPrefs::Observer {
   ArcAppLauncher(content::BrowserContext* context,
                  const std::string& app_id,
                  const base::Optional<std::string>& launch_intent,
-                 bool landscape_layout,
-                 bool deferred_launch_allowed);
+                 bool deferred_launch_allowed,
+                 int64_t display_id);
   ~ArcAppLauncher() override;
 
   bool app_launched() const { return app_launched_; }
@@ -43,12 +45,12 @@ class ArcAppLauncher : public ArcAppListPrefs::Observer {
   // Optional intent to launch the app. If not set then app is started default
   // way.
   const base::Optional<std::string> launch_intent_;
-  // Requested layout.
-  const bool landscape_layout_;
   // If it is set to true that means app is allowed to launch in deferred mode
   // once it is registered, regardless it is ready or not. Otherwise app is
   // launched when it becomes ready.
   const bool deferred_launch_allowed_;
+  // Display where the app should be launched.
+  const int64_t display_id_;
   // Flag indicating that ARC app was launched.
   bool app_launched_ = false;
 

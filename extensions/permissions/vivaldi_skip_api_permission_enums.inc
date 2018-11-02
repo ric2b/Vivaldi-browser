@@ -17,6 +17,7 @@ void SkipVivaldiAPIPermissions(extensions::APIPermissionSet& skip) {
   skip.insert(APIPermission::kHistoryPrivate);
   skip.insert(APIPermission::kImportData);
   skip.insert(APIPermission::kNotes);
+  skip.insert(APIPermission::kPrefs);
   skip.insert(APIPermission::kRuntimePrivate);
   skip.insert(APIPermission::kSavedPasswords);
   skip.insert(APIPermission::kSessionsPrivate);
@@ -25,9 +26,10 @@ void SkipVivaldiAPIPermissions(extensions::APIPermissionSet& skip) {
   skip.insert(APIPermission::kSync);
   skip.insert(APIPermission::kTabsPrivate);
   skip.insert(APIPermission::kThumbnails);
-  skip.insert(APIPermission::kZoom);
   skip.insert(APIPermission::kUtilities);
   skip.insert(APIPermission::kWebViewPrivate);
+  skip.insert(APIPermission::kWindowPrivate);
+  skip.insert(APIPermission::kZoom);
 }
 
 }  // namespace extensions

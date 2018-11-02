@@ -6,7 +6,6 @@
 
 #include "base/format_macros.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_controller.h"
-#import "ios/chrome/browser/ui/toolbar/toolbar_controller_private.h"
 #import "ios/chrome/browser/ui/ui_util.h"
 #include "testing/gtest_mac.h"
 #include "testing/platform_test.h"
@@ -58,7 +57,7 @@ TEST_F(ToolbarControllerTest, TestTabCountZero) {
 }
 
 // Verify that when subsequent calls to tab count cross the max tab count
-// threshhold (increasing), the title is blank but the a11y value is set to the
+// threshold (increasing), the title is blank but the a11y value is set to the
 // second value.
 //
 // Doesn't do anything when run on an iPad.
@@ -76,7 +75,7 @@ TEST_F(ToolbarControllerTest, TestTabCountBecomesEasterEgg_iPhoneOnly) {
 }
 
 // Verify that when subsequent calls to tab count cross the max tab count
-// threshhold (decreasing), title and a11y value are both set to the second
+// threshold (decreasing), title and a11y value are both set to the second
 // value.
 //
 // Doesn't do anything when run on an iPad.

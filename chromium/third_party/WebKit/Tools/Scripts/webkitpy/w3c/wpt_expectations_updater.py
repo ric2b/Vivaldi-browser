@@ -29,6 +29,7 @@ class WPTExpectationsUpdater(object):
     def __init__(self, host):
         self.host = host
         self.port = self.host.port_factory.get()
+        self.git_cl = GitCL(host)
         self.finder = PathFinder(self.host.filesystem)
         self.ports_with_no_results = set()
         self.ports_with_all_pass = set()
@@ -78,11 +79,11 @@ class WPTExpectationsUpdater(object):
 
     def get_issue_number(self):
         """Returns current CL number. Can be replaced in unit tests."""
-        return GitCL(self.host).get_issue_number()
+        return self.git_cl.get_issue_number()
 
     def get_latest_try_jobs(self):
         """Returns the latest finished try jobs as Build objects."""
-        return GitCL(self.host).latest_try_jobs(self._get_try_bots())
+        return self.git_cl.latest_try_jobs(self._get_try_bots())
 
     def get_failing_results_dict(self, build):
         """Returns a nested dict of failing test results.
@@ -348,12 +349,9 @@ class WPTExpectationsUpdater(object):
 
     def skipped_specifiers(self, test_name):
         """Returns a list of platform specifiers for which the test is skipped."""
-        # TODO(qyearsley): Change Port.skips_test so that this can be simplified.
         specifiers = []
         for port in self.all_try_builder_ports():
-            generic_expectations = TestExpectations(port, tests=[test_name], include_overrides=False)
-            full_expectations = TestExpectations(port, tests=[test_name], include_overrides=True)
-            if port.skips_test(test_name, generic_expectations, full_expectations):
+            if port.skips_test(test_name):
                 specifiers.append(self.host.builders.version_specifier_for_port_name(port.name()))
         return specifiers
 

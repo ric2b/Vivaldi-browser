@@ -149,8 +149,8 @@ class TestWindowTree : public ui::mojom::WindowTree {
                         float opacity) override;
   void AttachCompositorFrameSink(
       uint32_t window_id,
-      mojo::InterfaceRequest<cc::mojom::CompositorFrameSink> surface,
-      cc::mojom::CompositorFrameSinkClientPtr client) override;
+      mojo::InterfaceRequest<viz::mojom::CompositorFrameSink> surface,
+      viz::mojom::CompositorFrameSinkClientPtr client) override;
   void AddWindow(uint32_t change_id, uint32_t parent, uint32_t child) override;
   void RemoveWindowFromParent(uint32_t change_id, uint32_t window_id) override;
   void AddTransientWindow(uint32_t change_id,
@@ -161,6 +161,9 @@ class TestWindowTree : public ui::mojom::WindowTree {
   void SetModalType(uint32_t change_id,
                     uint32_t window_id,
                     ui::ModalType modal_type) override;
+  void SetChildModalParent(uint32_t change_id,
+                           Id window_id,
+                           Id parent_window_id) override;
   void ReorderWindow(uint32_t change_id,
                      uint32_t window_id,
                      uint32_t relative_window_id,

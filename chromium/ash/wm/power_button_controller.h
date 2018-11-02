@@ -10,6 +10,7 @@
 #include "ash/ash_export.h"
 #include "base/macros.h"
 #include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "chromeos/accelerometer/accelerometer_reader.h"
 #include "chromeos/dbus/power_manager_client.h"
 #include "ui/display/manager/chromeos/display_configurator.h"
@@ -17,7 +18,9 @@
 
 namespace ash {
 
+class PowerButtonDisplayController;
 class LockStateController;
+class PowerButtonDisplayController;
 class TabletPowerButtonController;
 
 // Handles power & lock button events which may result in the locking or
@@ -43,8 +46,10 @@ class ASH_EXPORT PowerButtonController
   void OnPowerButtonEvent(bool down, const base::TimeTicks& timestamp);
   void OnLockButtonEvent(bool down, const base::TimeTicks& timestamp);
 
-  // ui::EventHandler:
+  // Overridden from ui::EventHandler:
   void OnKeyEvent(ui::KeyEvent* event) override;
+  void OnMouseEvent(ui::MouseEvent* event) override;
+  void OnTouchEvent(ui::TouchEvent* event) override;
 
   // Overridden from display::DisplayConfigurator::Observer:
   void OnDisplayModeChanged(
@@ -58,9 +63,9 @@ class ASH_EXPORT PowerButtonController
   void OnAccelerometerUpdated(
       scoped_refptr<const chromeos::AccelerometerUpdate> update) override;
 
-  // Resets |tablet_controller_| to hold a new object to simulate Chrome
-  // starting. Also calls ProcessCommandLine().
-  void ResetTabletPowerButtonControllerForTest();
+  // If |display_off_timer_| is running, stops it, runs its task, and returns
+  // true. Otherwise, returns false.
+  bool TriggerDisplayOffTimerForTesting() WARN_UNUSED_RESULT;
 
   TabletPowerButtonController* tablet_power_button_controller_for_test() {
     return tablet_controller_.get();
@@ -70,6 +75,10 @@ class ASH_EXPORT PowerButtonController
   // Updates |has_legacy_power_button_| and |force_clamshell_power_button_|
   // based on the current command line.
   void ProcessCommandLine();
+
+  // Called by |display_off_timer_| to force backlights off shortly after the
+  // screen is locked. Only used when |force_clamshell_power_button_| is true.
+  void ForceDisplayOffAfterLock();
 
   // Are the power or lock buttons currently held?
   bool power_button_down_ = false;
@@ -98,10 +107,21 @@ class ASH_EXPORT PowerButtonController
   // button behavior even if we're running on a convertible device?
   bool force_clamshell_power_button_ = false;
 
+  // True if the lock animation was started for the last power button down
+  // event.
+  bool started_lock_animation_for_power_button_down_ = false;
+
   LockStateController* lock_state_controller_;  // Not owned.
+
+  // Used to interact with the display.
+  std::unique_ptr<PowerButtonDisplayController> display_controller_;
 
   // Handles events for convertible/tablet devices.
   std::unique_ptr<TabletPowerButtonController> tablet_controller_;
+
+  // Used to run ForceDisplayOffAfterLock() shortly after the screen is locked.
+  // Only started when |force_clamshell_power_button_| is true.
+  base::OneShotTimer display_off_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(PowerButtonController);
 };

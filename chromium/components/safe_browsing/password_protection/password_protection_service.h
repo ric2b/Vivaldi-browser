@@ -6,6 +6,7 @@
 #define COMPONENTS_SAFE_BROWSING_PASSWORD_PROTECTION_PASSWORD_PROTECTION_SERVICE_H_
 
 #include <set>
+#include <unordered_map>
 
 #include "base/callback.h"
 #include "base/feature_list.h"
@@ -17,7 +18,8 @@
 #include "base/task/cancelable_task_tracker.h"
 #include "base/values.h"
 #include "components/history/core/browser/history_service_observer.h"
-#include "components/safe_browsing/csd.pb.h"
+#include "components/safe_browsing/proto/csd.pb.h"
+#include "components/safe_browsing_db/v4_protocol_manager_util.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "third_party/protobuf/src/google/protobuf/repeated_field.h"
 
@@ -37,12 +39,14 @@ namespace safe_browsing {
 class SafeBrowsingDatabaseManager;
 class PasswordProtectionRequest;
 
-extern const base::Feature kPasswordFieldOnFocusPinging;
-extern const base::Feature kProtectedPasswordEntryPinging;
-extern const base::Feature kPasswordProtectionInterstitial;
-extern const char kPasswordOnFocusRequestOutcomeHistogramName[];
-extern const char kPasswordEntryRequestOutcomeHistogramName[];
-extern const char kSyncPasswordEntryRequestOutcomeHistogramName[];
+// UMA metrics
+extern const char kPasswordOnFocusRequestOutcomeHistogram[];
+extern const char kAnyPasswordEntryRequestOutcomeHistogram[];
+extern const char kSyncPasswordEntryRequestOutcomeHistogram[];
+extern const char kProtectedPasswordEntryRequestOutcomeHistogram[];
+extern const char kSyncPasswordWarningDialogHistogram[];
+extern const char kSyncPasswordPageInfoHistogram[];
+extern const char kSyncPasswordChromeSettingsHistogram[];
 
 // Manage password protection pings and verdicts. There is one instance of this
 // class per profile. Therefore, every PasswordProtectionService instance is
@@ -53,6 +57,9 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
   using TriggerType = LoginReputationClientRequest::TriggerType;
   using SyncAccountType =
       LoginReputationClientRequest::PasswordReuseEvent::SyncAccountType;
+  using WebContentsToProtoMap = std::unordered_map<
+      content::WebContents*,
+      std::pair<LoginReputationClientRequest, LoginReputationClientResponse>>;
 
   // The outcome of the request. These values are used for UMA.
   // DO NOT CHANGE THE ORDERING OF THESE VALUES.
@@ -73,6 +80,37 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
     DISABLED_DUE_TO_USER_POPULATION = 13,
     URL_NOT_VALID_FOR_REPUTATION_COMPUTING = 14,
     MAX_OUTCOME
+  };
+
+  // Enum values indicates if a password protection warning is shown or
+  // represents user's action on warnings. These values are used for UMA.
+  // DO NOT CHANGE THE ORDERING OF THESE VALUES.
+  enum WarningAction {
+    // Warning shows up.
+    SHOWN = 0,
+
+    // User clicks on "Change Password" button.
+    CHANGE_PASSWORD = 1,
+
+    // User clicks on "Ignore" button.
+    IGNORE_WARNING = 2,
+
+    // User navigates page away or hit "ESC" to close dialog.
+    CLOSE = 3,
+
+    // User explicitly mark the site as legitimate.
+    MARK_AS_LEGITIMATE = 4,
+
+    MAX_ACTION
+  };
+
+  // Type of password protection warning UI.
+  enum WarningUIType {
+    NOT_USED = 0,
+    PAGE_INFO = 1,
+    MODAL_DIALOG = 2,
+    CHROME_SETTINGS = 3,
+    MAX_UI_TYPE
   };
 
   PasswordProtectionService(
@@ -112,7 +150,8 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
                     const GURL& main_frame_url,
                     const GURL& password_form_action,
                     const GURL& password_form_frame_url,
-                    const std::string& saved_domain,
+                    bool matches_sync_password,
+                    const std::vector<std::string>& matching_domains,
                     TriggerType trigger_type,
                     bool password_field_exists);
 
@@ -125,8 +164,13 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
   virtual void MaybeStartProtectedPasswordEntryRequest(
       content::WebContents* web_contents,
       const GURL& main_frame_url,
-      const std::string& saved_domain,
+      bool matches_sync_password,
+      const std::vector<std::string>& matching_domains,
       bool password_field_exists);
+
+  // Records a Chrome Sync event that sync password reuse was detected.
+  virtual void MaybeLogPasswordReuseDetectedEvent(
+      content::WebContents* web_contents) = 0;
 
   scoped_refptr<SafeBrowsingDatabaseManager> database_manager();
 
@@ -139,16 +183,47 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
   // (6) Its hostname is a dotless domain.
   static bool CanGetReputationOfURL(const GURL& url);
 
+  // Records user action to corresponding UMA histograms.
+  void RecordWarningAction(WarningUIType ui_type, WarningAction action);
+
+  // Called when user close warning UI or navigate away.
+  void OnWarningDone(content::WebContents* web_contents,
+                     WarningUIType ui_type,
+                     WarningAction action);
+
+  // Shows modal warning dialog on the current |web_contents| and store request
+  // and response protos in |web_contents_to_proto_map_|.
+  virtual void ShowModalWarning(
+      content::WebContents* web_contents,
+      const LoginReputationClientRequest* request_proto,
+      const LoginReputationClientResponse* response_proto) {}
+
+  // Record UMA stats and trigger event logger when warning UI is shown.
+  virtual void OnWarningShown(content::WebContents* web_contents,
+                              WarningUIType ui_type);
+
+  // If we want to show softer warnings based on Finch parameters.
+  static bool ShouldShowSofterWarning();
+
+  virtual void UpdateSecurityState(safe_browsing::SBThreatType threat_type,
+                                   content::WebContents* web_contents) {}
+
+  // Log the |reason| to several UMA metrics, depending on the value
+  // of |matches_sync_password|.
+  static void LogPasswordEntryRequestOutcome(RequestOutcome reason,
+                                             bool matches_sync_password);
+
  protected:
   friend class PasswordProtectionRequest;
   FRIEND_TEST_ALL_PREFIXES(PasswordProtectionServiceTest, VerifyCanSendPing);
+
   // Chrome can send password protection ping if it is allowed by Finch config
   // and if Safe Browsing can compute reputation of |main_frame_url| (e.g.
   // Safe Browsing is not able to compute reputation of a private IP or
-  // a local host). |is_sync_password| is used for UMA metric recording.
+  // a local host). |matches_sync_password| is used for UMA metric recording.
   bool CanSendPing(const base::Feature& feature,
                    const GURL& main_frame_url,
-                   bool is_sync_password);
+                   bool matches_sync_password);
 
   // Called by a PasswordProtectionRequest instance when it finishes to remove
   // itself from |requests_|.
@@ -202,9 +277,20 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
   // |NOT_SIGNED_IN|.
   virtual SyncAccountType GetSyncAccountType() = 0;
 
+  // Records a Chrome Sync event for the result of the URL reputation lookup
+  // if the user enters their sync password on a website.
+  virtual void MaybeLogPasswordReuseLookupEvent(
+      content::WebContents* web_contents,
+      PasswordProtectionService::RequestOutcome,
+      const LoginReputationClientResponse*) = 0;
+
   void CheckCsdWhitelistOnIOThread(const GURL& url, bool* check_result);
 
   HostContentSettingsMap* content_settings() const { return content_settings_; }
+
+  WebContentsToProtoMap web_contents_to_proto_map() const {
+    return web_contents_to_proto_map_;
+  }
 
  private:
   friend class PasswordProtectionServiceTest;
@@ -266,7 +352,7 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
 
   static void RecordNoPingingReason(const base::Feature& feature,
                                     RequestOutcome reason,
-                                    bool is_sync_password);
+                                    bool matches_sync_password);
   // Number of verdict stored for this profile for password on focus pings.
   int stored_verdict_count_password_on_focus_;
 
@@ -293,6 +379,8 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
   // Weakptr can only cancel task if it is posted to the same thread. Therefore,
   // we need CancelableTaskTracker to cancel tasks posted to IO thread.
   base::CancelableTaskTracker tracker_;
+
+  WebContentsToProtoMap web_contents_to_proto_map_;
 
   base::WeakPtrFactory<PasswordProtectionService> weak_factory_;
   DISALLOW_COPY_AND_ASSIGN(PasswordProtectionService);

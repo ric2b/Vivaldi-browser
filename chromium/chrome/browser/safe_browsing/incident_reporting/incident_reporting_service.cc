@@ -37,7 +37,7 @@
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
-#include "components/safe_browsing/csd.pb.h"
+#include "components/safe_browsing/proto/csd.pb.h"
 #include "components/safe_browsing_db/database_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
@@ -46,11 +46,14 @@
 
 namespace safe_browsing {
 
-#if !defined(GOOGLE_CHROME_BUILD)
-// Chromium-only flag to disable incident uploads.
-extern const base::Feature kIncidentReportingDisableUpload{
-    "IncidentReportingDisableUpload", base::FEATURE_ENABLED_BY_DEFAULT};
+extern const base::Feature kIncidentReportingEnableUpload {
+  "IncidentReportingEnableUpload",
+#if defined(GOOGLE_CHROME_BUILD)
+      base::FEATURE_ENABLED_BY_DEFAULT
+#else
+      base::FEATURE_DISABLED_BY_DEFAULT
 #endif
+};
 
 namespace {
 
@@ -971,26 +974,23 @@ void IncidentReportingService::CancelAllReportUploads() {
 
 void IncidentReportingService::OnKillSwitchResult(UploadContext* context,
                                                   bool is_killswitch_on) {
-#if !defined(GOOGLE_CHROME_BUILD)
-  if (base::FeatureList::IsEnabled(kIncidentReportingDisableUpload)) {
-    is_killswitch_on = true;
-  }
-#endif
-
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  if (!is_killswitch_on) {
-    // Initiate the upload.
-    context->uploader = StartReportUpload(
-        base::Bind(&IncidentReportingService::OnReportUploadResult,
-                   weak_ptr_factory_.GetWeakPtr(), context),
-        url_request_context_getter_, *context->report);
-    if (!context->uploader) {
-      OnReportUploadResult(context,
-                           IncidentReportUploader::UPLOAD_INVALID_REQUEST,
-                           std::unique_ptr<ClientIncidentResponse>());
-    }
-  } else {
+
+  if (is_killswitch_on ||
+      !base::FeatureList::IsEnabled(kIncidentReportingEnableUpload)) {
     OnReportUploadResult(context, IncidentReportUploader::UPLOAD_SUPPRESSED,
+                         std::unique_ptr<ClientIncidentResponse>());
+    return;
+  }
+
+  // Initiate the upload.
+  context->uploader = StartReportUpload(
+      base::Bind(&IncidentReportingService::OnReportUploadResult,
+                 weak_ptr_factory_.GetWeakPtr(), context),
+      url_request_context_getter_, *context->report);
+  if (!context->uploader) {
+    OnReportUploadResult(context,
+                         IncidentReportUploader::UPLOAD_INVALID_REQUEST,
                          std::unique_ptr<ClientIncidentResponse>());
   }
 }

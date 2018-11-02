@@ -27,6 +27,9 @@
 #ifndef ResourceResponse_h
 #define ResourceResponse_h
 
+#include <memory>
+#include <utility>
+
 #include "platform/PlatformExport.h"
 #include "platform/blob/BlobData.h"
 #include "platform/loader/fetch/ResourceLoadInfo.h"
@@ -40,7 +43,7 @@
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/CString.h"
 #include "public/platform/WebURLResponse.h"
-#include "public/platform/modules/serviceworker/WebServiceWorkerResponseType.h"
+#include "services/network/public/interfaces/fetch_api.mojom-blink.h"
 
 namespace blink {
 
@@ -70,7 +73,6 @@ class PLATFORM_EXPORT ResourceResponse final {
     kSecurityStyleUnknown,
     kSecurityStyleUnauthenticated,
     kSecurityStyleAuthenticationBroken,
-    kSecurityStyleWarning,
     kSecurityStyleAuthenticated
   };
 
@@ -292,11 +294,12 @@ class PLATFORM_EXPORT ResourceResponse final {
     was_fallback_required_by_service_worker_ = value;
   }
 
-  WebServiceWorkerResponseType ServiceWorkerResponseType() const {
-    return service_worker_response_type_;
+  network::mojom::FetchResponseType ResponseTypeViaServiceWorker() const {
+    return response_type_via_service_worker_;
   }
-  void SetServiceWorkerResponseType(WebServiceWorkerResponseType value) {
-    service_worker_response_type_ = value;
+  void SetResponseTypeViaServiceWorker(
+      network::mojom::FetchResponseType value) {
+    response_type_via_service_worker_ = value;
   }
 
   // See ServiceWorkerResponseInfo::url_list_via_service_worker.
@@ -448,8 +451,8 @@ class PLATFORM_EXPORT ResourceResponse final {
   // the request for this resource.
   bool did_service_worker_navigation_preload_ : 1;
 
-  // The type of the response which was fetched by the ServiceWorker.
-  WebServiceWorkerResponseType service_worker_response_type_;
+  // The type of the response which was returned by the ServiceWorker.
+  network::mojom::FetchResponseType response_type_via_service_worker_;
 
   // HTTP version used in the response, if known.
   HTTPVersion http_version_;
@@ -576,7 +579,7 @@ struct CrossThreadResourceResponseData {
   bool was_fetched_via_service_worker_;
   bool was_fetched_via_foreign_fetch_;
   bool was_fallback_required_by_service_worker_;
-  WebServiceWorkerResponseType service_worker_response_type_;
+  network::mojom::FetchResponseType response_type_via_service_worker_;
   Vector<KURL> url_list_via_service_worker_;
   String cache_storage_cache_name_;
   bool did_service_worker_navigation_preload_;

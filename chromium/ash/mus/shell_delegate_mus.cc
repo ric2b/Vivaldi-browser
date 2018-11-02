@@ -8,8 +8,6 @@
 
 #include "ash/gpu_support_stub.h"
 #include "ash/mus/accessibility_delegate_mus.h"
-#include "ash/mus/context_menu_mus.h"
-#include "ash/mus/system_tray_delegate_mus.h"
 #include "ash/mus/wallpaper_delegate_mus.h"
 #include "ash/palette_delegate.h"
 #include "base/memory/ptr_util.h"
@@ -18,10 +16,7 @@
 #include "components/user_manager/user_info_impl.h"
 #include "ui/gfx/image/image.h"
 #include "ui/keyboard/keyboard_ui.h"
-
-#if defined(USE_OZONE)
 #include "services/ui/public/cpp/input_devices/input_device_controller_client.h"
-#endif
 
 namespace ash {
 
@@ -88,8 +83,11 @@ void ShellDelegateMus::ShelfShutdown() {
   NOTIMPLEMENTED();
 }
 
-SystemTrayDelegate* ShellDelegateMus::CreateSystemTrayDelegate() {
-  return new SystemTrayDelegateMus();
+NetworkingConfigDelegate* ShellDelegateMus::GetNetworkingConfigDelegate() {
+  // TODO(mash): Provide a real implementation, perhaps by folding its behavior
+  // into an ash-side network information cache. http://crbug.com/651157
+  NOTIMPLEMENTED();
+  return nullptr;
 }
 
 std::unique_ptr<WallpaperDelegate> ShellDelegateMus::CreateWallpaperDelegate() {
@@ -104,11 +102,6 @@ std::unique_ptr<PaletteDelegate> ShellDelegateMus::CreatePaletteDelegate() {
   // TODO: http://crbug.com/647417.
   NOTIMPLEMENTED();
   return nullptr;
-}
-
-ui::MenuModel* ShellDelegateMus::CreateContextMenu(Shelf* shelf,
-                                                   const ShelfItem* item) {
-  return new ContextMenuMus(shelf);
 }
 
 GPUSupport* ShellDelegateMus::CreateGPUSupport() {
@@ -127,37 +120,17 @@ gfx::Image ShellDelegateMus::GetDeprecatedAcceleratorImage() const {
   return gfx::Image();
 }
 
-PrefService* ShellDelegateMus::GetActiveUserPrefService() const {
-  // This code should never be called in the case of Config::MASH. Rather, the
-  // PrefService instance is stored by Shell when it manages to connect to the
-  // pref service in Chrome.
-  NOTREACHED();
-  return nullptr;
-}
-
-PrefService* ShellDelegateMus::GetLocalStatePrefService() const {
-  // This code should never be called in the case of Config::MASH. Rather, the
-  // PrefService instance is stored by Shell when it manages to connect to the
-  // pref service in Chrome.
-  NOTREACHED();
-  return nullptr;
-}
-
-bool ShellDelegateMus::IsTouchscreenEnabledInPrefs(bool use_local_state) const {
+bool ShellDelegateMus::GetTouchscreenEnabled(
+    TouchscreenEnabledSource source) const {
   NOTIMPLEMENTED();
   return true;
 }
 
-void ShellDelegateMus::SetTouchscreenEnabledInPrefs(bool enabled,
-                                                    bool use_local_state) {
+void ShellDelegateMus::SetTouchscreenEnabled(bool enabled,
+                                             TouchscreenEnabledSource source) {
   NOTIMPLEMENTED();
 }
 
-void ShellDelegateMus::UpdateTouchscreenStatusFromPrefs() {
-  NOTIMPLEMENTED();
-}
-
-#if defined(USE_OZONE)
 ui::InputDeviceControllerClient*
 ShellDelegateMus::GetInputDeviceControllerClient() {
   if (!connector_)
@@ -169,6 +142,5 @@ ShellDelegateMus::GetInputDeviceControllerClient() {
   }
   return input_device_controller_client_.get();
 }
-#endif
 
 }  // namespace ash

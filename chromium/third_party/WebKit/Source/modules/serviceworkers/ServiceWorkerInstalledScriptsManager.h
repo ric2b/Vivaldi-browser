@@ -13,14 +13,16 @@ namespace blink {
 // ServiceWorkerInstalledScriptsManager provides the main script and imported
 // scripts of an installed service worker. The scripts are streamed from the
 // browser process in parallel with worker thread initialization.
-class ServiceWorkerInstalledScriptsManager : public InstalledScriptsManager {
+class ServiceWorkerInstalledScriptsManager final
+    : public InstalledScriptsManager {
  public:
   explicit ServiceWorkerInstalledScriptsManager(
       std::unique_ptr<WebServiceWorkerInstalledScriptsManager>);
 
   // InstalledScriptsManager implementation.
   bool IsScriptInstalled(const KURL& script_url) const override;
-  Optional<ScriptData> GetScriptData(const KURL& script_url) override;
+  ScriptStatus GetScriptData(const KURL& script_url,
+                             ScriptData* out_script_data) override;
 
  private:
   std::unique_ptr<WebServiceWorkerInstalledScriptsManager> manager_;

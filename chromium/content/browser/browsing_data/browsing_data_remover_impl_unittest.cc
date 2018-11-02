@@ -27,7 +27,6 @@
 #include "base/task/cancelable_task_tracker.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
-#include "build/build_config.h"
 #include "content/browser/browsing_data/browsing_data_remover_impl.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browsing_data_filter_builder.h"
@@ -41,6 +40,7 @@
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_browser_thread.h"
 #include "content/public/test/test_browser_thread_bundle.h"
+#include "content/public/test/test_storage_partition.h"
 #include "content/public/test/test_utils.h"
 #include "net/cookies/cookie_store.h"
 #include "net/http/http_network_session.h"
@@ -126,37 +126,11 @@ net::CanonicalCookie CreateCookieWithHost(const GURL& source) {
   return *cookie;
 }
 
-class TestStoragePartition : public StoragePartition {
+class StoragePartitionRemovalTestStoragePartition
+    : public TestStoragePartition {
  public:
-  TestStoragePartition() {}
-  ~TestStoragePartition() override {}
-
-  // StoragePartition implementation.
-  base::FilePath GetPath() override { return base::FilePath(); }
-  net::URLRequestContextGetter* GetURLRequestContext() override {
-    return nullptr;
-  }
-  net::URLRequestContextGetter* GetMediaURLRequestContext() override {
-    return nullptr;
-  }
-  storage::QuotaManager* GetQuotaManager() override { return nullptr; }
-  AppCacheService* GetAppCacheService() override { return nullptr; }
-  storage::FileSystemContext* GetFileSystemContext() override {
-    return nullptr;
-  }
-  storage::DatabaseTracker* GetDatabaseTracker() override { return nullptr; }
-  DOMStorageContext* GetDOMStorageContext() override { return nullptr; }
-  IndexedDBContext* GetIndexedDBContext() override { return nullptr; }
-  ServiceWorkerContext* GetServiceWorkerContext() override { return nullptr; }
-  CacheStorageContext* GetCacheStorageContext() override { return nullptr; }
-  PlatformNotificationContext* GetPlatformNotificationContext() override {
-    return nullptr;
-  }
-#if !defined(OS_ANDROID)
-  HostZoomMap* GetHostZoomMap() override { return nullptr; }
-  HostZoomLevelContext* GetHostZoomLevelContext() override { return nullptr; }
-  ZoomLevelDelegate* GetZoomLevelDelegate() override { return nullptr; }
-#endif  // !defined(OS_ANDROID)
+  StoragePartitionRemovalTestStoragePartition() {}
+  ~StoragePartitionRemovalTestStoragePartition() override {}
 
   void ClearDataForOrigin(uint32_t remove_mask,
                           uint32_t quota_storage_remove_mask,
@@ -165,8 +139,9 @@ class TestStoragePartition : public StoragePartition {
                           const base::Closure& callback) override {
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::BindOnce(&TestStoragePartition::AsyncRunCallback,
-                       base::Unretained(this), callback));
+        base::BindOnce(
+            &StoragePartitionRemovalTestStoragePartition::AsyncRunCallback,
+            base::Unretained(this), callback));
   }
 
   void ClearData(uint32_t remove_mask,
@@ -186,8 +161,9 @@ class TestStoragePartition : public StoragePartition {
 
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::BindOnce(&TestStoragePartition::AsyncRunCallback,
-                       base::Unretained(this), callback));
+        base::BindOnce(
+            &StoragePartitionRemovalTestStoragePartition::AsyncRunCallback,
+            base::Unretained(this), callback));
   }
 
   void ClearData(uint32_t remove_mask,
@@ -208,21 +184,10 @@ class TestStoragePartition : public StoragePartition {
 
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::BindOnce(&TestStoragePartition::AsyncRunCallback,
-                       base::Unretained(this), callback));
+        base::BindOnce(
+            &StoragePartitionRemovalTestStoragePartition::AsyncRunCallback,
+            base::Unretained(this), callback));
   }
-
-  void ClearHttpAndMediaCaches(
-      const base::Time begin,
-      const base::Time end,
-      const base::Callback<bool(const GURL&)>& url_matcher,
-      const base::Closure& callback) override {
-    // Not needed in this test.
-  }
-
-  void Flush() override {}
-
-  void ClearBluetoothAllowedDevicesMapForTesting() override {}
 
   StoragePartitionRemovalData GetStoragePartitionRemovalData() {
     return storage_partition_removal_data_;
@@ -233,7 +198,7 @@ class TestStoragePartition : public StoragePartition {
 
   StoragePartitionRemovalData storage_partition_removal_data_;
 
-  DISALLOW_COPY_AND_ASSIGN(TestStoragePartition);
+  DISALLOW_COPY_AND_ASSIGN(StoragePartitionRemovalTestStoragePartition);
 };
 
 // Custom matcher to test the equivalence of two URL filters. Since those are
@@ -310,8 +275,8 @@ class RemoveCookieTester {
     get_cookie_success_ = false;
     cookie_store_->GetCookiesWithOptionsAsync(
         kOrigin1, net::CookieOptions(),
-        base::Bind(&RemoveCookieTester::GetCookieCallback,
-                   base::Unretained(this)));
+        base::BindOnce(&RemoveCookieTester::GetCookieCallback,
+                       base::Unretained(this)));
     message_loop_runner->Run();
     return get_cookie_success_;
   }
@@ -322,8 +287,8 @@ class RemoveCookieTester {
     quit_closure_ = message_loop_runner->QuitClosure();
     cookie_store_->SetCookieWithOptionsAsync(
         kOrigin1, "A=1", net::CookieOptions(),
-        base::Bind(&RemoveCookieTester::SetCookieCallback,
-                   base::Unretained(this)));
+        base::BindOnce(&RemoveCookieTester::SetCookieCallback,
+                       base::Unretained(this)));
     message_loop_runner->Run();
   }
 
@@ -532,14 +497,14 @@ class BrowsingDataRemoverImplTest : public testing::Test {
     // destroyed, and that the message loop is cleared out, before destroying
     // the threads and loop. Otherwise we leak memory.
     browser_context_.reset();
-    base::RunLoop().RunUntilIdle();
+    RunAllBlockingPoolTasksUntilIdle();
   }
 
   void BlockUntilBrowsingDataRemoved(const base::Time& delete_begin,
                                      const base::Time& delete_end,
                                      int remove_mask,
                                      bool include_protected_origins) {
-    TestStoragePartition storage_partition;
+    StoragePartitionRemovalTestStoragePartition storage_partition;
     remover_->OverrideStoragePartitionForTesting(&storage_partition);
 
     int origin_type_mask = BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB;
@@ -561,7 +526,7 @@ class BrowsingDataRemoverImplTest : public testing::Test {
       const base::Time& delete_end,
       int remove_mask,
       std::unique_ptr<BrowsingDataFilterBuilder> filter_builder) {
-    TestStoragePartition storage_partition;
+    StoragePartitionRemovalTestStoragePartition storage_partition;
     remover_->OverrideStoragePartitionForTesting(&storage_partition);
 
     BrowsingDataRemoverCompletionObserver completion_observer(remover_);
@@ -1403,7 +1368,7 @@ TEST_F(BrowsingDataRemoverImplTest, CompletionInhibition) {
   // sure we do not complete asynchronously before ContinueToCompletion() is
   // called.
   completion_inhibitor.BlockUntilNearCompletion();
-  base::RunLoop().RunUntilIdle();
+  RunAllBlockingPoolTasksUntilIdle();
 
   // Verify that the removal has not yet been completed and the observer has
   // not been called.
@@ -1610,6 +1575,9 @@ TEST_F(BrowsingDataRemoverImplTest, MultipleTasks) {
   }
 
   EXPECT_FALSE(remover->is_removing());
+
+  // Run clean up tasks.
+  RunAllBlockingPoolTasksUntilIdle();
 }
 
 // The previous test, BrowsingDataRemoverTest.MultipleTasks, tests that the

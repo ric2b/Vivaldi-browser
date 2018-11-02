@@ -6,7 +6,7 @@
 
 #import "ios/chrome/browser/ui/authentication/signin_promo_view.h"
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_configurator.h"
-#import "ios/chrome/browser/ui/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -21,6 +21,9 @@
 - (instancetype)initWithType:(NSInteger)type {
   self = [super initWithType:type];
   if (self) {
+    // |accessibilityIdentifier| is passed to the cell in -[CollectionViewItem
+    // configureCell:].
+    self.accessibilityIdentifier = @"SigninPromoCell";
     self.cellClass = [SigninPromoCell class];
   }
   return self;

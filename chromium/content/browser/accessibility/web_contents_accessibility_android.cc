@@ -5,6 +5,7 @@
 #include "content/browser/accessibility/web_contents_accessibility_android.h"
 
 #include "base/android/jni_android.h"
+#include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/feature_list.h"
 #include "base/macros.h"
@@ -291,6 +292,13 @@ void DeleteAutofillPopupProxy() {
   }
 }
 
+// The most common use of the EXTRA_DATA_TEXT_CHARACTER_LOCATION_KEY
+// API is to retrieve character bounds for one word at a time. There
+// should never need to be a reason to return more than this many
+// character bounding boxes at once. Set the limit much higher than needed
+// but small enough to prevent wasting memory and cpu if abused.
+const int kMaxCharacterBoundingBoxLen = 1024;
+
 }  // anonymous namespace
 
 class WebContentsAccessibilityAndroid::Connector
@@ -298,8 +306,9 @@ class WebContentsAccessibilityAndroid::Connector
  public:
   Connector(WebContents* web_contents,
             WebContentsAccessibilityAndroid* accessibility);
+  ~Connector() override;
 
-  // RendetWidgetHostConnector implementation.
+  // RenderWidgetHostConnector:
   void UpdateRenderProcessConnection(
       RenderWidgetHostViewAndroid* old_rwhva,
       RenderWidgetHostViewAndroid* new_rhwva) override;
@@ -315,6 +324,10 @@ WebContentsAccessibilityAndroid::Connector::Connector(
   Initialize();
 }
 
+WebContentsAccessibilityAndroid::Connector::~Connector() {
+  accessibility_->UpdateEnabledState(false);
+}
+
 void WebContentsAccessibilityAndroid::Connector::UpdateRenderProcessConnection(
     RenderWidgetHostViewAndroid* old_rwhva,
     RenderWidgetHostViewAndroid* new_rwhva) {
@@ -327,11 +340,9 @@ void WebContentsAccessibilityAndroid::Connector::UpdateRenderProcessConnection(
 WebContentsAccessibilityAndroid::WebContentsAccessibilityAndroid(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
-    WebContents* web_contents,
-    bool should_focus_on_page_load)
+    WebContents* web_contents)
     : java_ref_(env, obj),
       web_contents_(static_cast<WebContentsImpl*>(web_contents)),
-      should_focus_on_page_load_(should_focus_on_page_load),
       frame_info_initialized_(false),
       root_manager_(nullptr),
       connector_(new Connector(web_contents, this)) {
@@ -364,9 +375,10 @@ void WebContentsAccessibilityAndroid::Enable(JNIEnv* env,
 void WebContentsAccessibilityAndroid::UpdateEnabledState(bool enabled) {
   BrowserAccessibilityStateImpl* accessibility_state =
       BrowserAccessibilityStateImpl::GetInstance();
+  auto* manager = static_cast<BrowserAccessibilityManagerAndroid*>(
+      web_contents_->GetRootBrowserAccessibilityManager());
+
   if (enabled) {
-    auto* manager = static_cast<BrowserAccessibilityManagerAndroid*>(
-        web_contents_->GetRootBrowserAccessibilityManager());
     // First check if we already have a BrowserAccessibilityManager that
     // that needs to be connected to this instance. This can happen if
     // BAM creation precedes render view updates for the associated
@@ -382,8 +394,13 @@ void WebContentsAccessibilityAndroid::UpdateEnabledState(bool enabled) {
     // this WebContents if that succeeded.
     accessibility_state->OnScreenReaderDetected();
     if (accessibility_state->IsAccessibleBrowser())
-      web_contents_->AddAccessibilityMode(kAccessibilityModeComplete);
+      web_contents_->AddAccessibilityMode(ui::kAXModeComplete);
   } else {
+    // Remove accessibility from the BrowserAccessibilityManager or it may
+    // continue to reference this object which is no longer active (and may be
+    // about to be destroyed).
+    if (manager)
+      manager->set_web_contents_accessibility(nullptr);
     // Note that disabling part is not useful at this moment since the mode will
     // be enabled again almost immediately for the renderer process that just
     // got swapped in. This boolean enable/disable logic will be expanded
@@ -412,8 +429,6 @@ bool WebContentsAccessibilityAndroid::ShouldExposePasswordText() {
 }
 
 void WebContentsAccessibilityAndroid::HandlePageLoaded(int32_t unique_id) {
-  if (!should_focus_on_page_load_)
-    return;
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   if (obj.is_null())
@@ -564,7 +579,8 @@ jint WebContentsAccessibilityAndroid::GetRootId(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
   if (root_manager_) {
-    auto* root = root_manager_->GetRoot();
+    auto* root =
+        static_cast<BrowserAccessibilityAndroid*>(root_manager_->GetRoot());
     if (root)
       return static_cast<jint>(root->unique_id());
   }
@@ -640,12 +656,16 @@ jboolean WebContentsAccessibilityAndroid::PopulateAccessibilityNodeInfo(
     return false;
 
   if (node->PlatformGetParent()) {
+    auto* android_node =
+        static_cast<BrowserAccessibilityAndroid*>(node->PlatformGetParent());
     Java_WebContentsAccessibility_setAccessibilityNodeInfoParent(
-        env, obj, info, node->PlatformGetParent()->unique_id());
+        env, obj, info, android_node->unique_id());
   }
   for (unsigned i = 0; i < node->PlatformChildCount(); ++i) {
+    auto* android_node =
+        static_cast<BrowserAccessibilityAndroid*>(node->PlatformGetChild(i));
     Java_WebContentsAccessibility_addAccessibilityNodeInfoChild(
-        env, obj, info, node->PlatformGetChild(i)->unique_id());
+        env, obj, info, android_node->unique_id());
   }
   Java_WebContentsAccessibility_setAccessibilityNodeInfoBooleanAttributes(
       env, obj, info, unique_id, node->IsCheckable(), node->IsChecked(),
@@ -690,6 +710,7 @@ jboolean WebContentsAccessibilityAndroid::PopulateAccessibilityNodeInfo(
   Java_WebContentsAccessibility_setAccessibilityNodeInfoKitKatAttributes(
       env, obj, info, is_root, node->IsEditableText(),
       base::android::ConvertUTF16ToJavaString(env, node->GetRoleDescription()),
+      base::android::ConvertUTF16ToJavaString(env, node->GetHint()),
       node->GetIntAttribute(ui::AX_ATTR_TEXT_SEL_START),
       node->GetIntAttribute(ui::AX_ATTR_TEXT_SEL_END));
 
@@ -697,6 +718,12 @@ jboolean WebContentsAccessibilityAndroid::PopulateAccessibilityNodeInfo(
       env, obj, info, node->CanOpenPopup(), node->IsContentInvalid(),
       node->IsDismissable(), node->IsMultiLine(), node->AndroidInputType(),
       node->AndroidLiveRegionType());
+
+  bool has_character_locations = node->GetRole() == ui::AX_ROLE_STATIC_TEXT ||
+                                 node->IsInterestingOnAndroid();
+  Java_WebContentsAccessibility_setAccessibilityNodeInfoOAttributes(
+      env, obj, info, has_character_locations);
+
   if (node->IsCollection()) {
     Java_WebContentsAccessibility_setAccessibilityNodeInfoCollectionInfo(
         env, obj, info, node->RowCount(), node->ColumnCount(),
@@ -925,7 +952,9 @@ jint WebContentsAccessibilityAndroid::FindElementType(
   if (tree_search.CountMatches() == 0)
     return 0;
 
-  int32_t element_id = tree_search.GetMatchAtIndex(0)->unique_id();
+  auto* android_node =
+      static_cast<BrowserAccessibilityAndroid*>(tree_search.GetMatchAtIndex(0));
+  int32_t element_id = android_node->unique_id();
 
   // Navigate forwards to the autofill popup's proxy node if focus is currently
   // on the element hosting the autofill popup. Once within the popup, a back
@@ -936,7 +965,9 @@ jint WebContentsAccessibilityAndroid::FindElementType(
   if (forwards && start_id == g_element_hosting_autofill_popup_unique_id &&
       g_autofill_popup_proxy_node) {
     g_element_after_element_hosting_autofill_popup_unique_id = element_id;
-    return g_autofill_popup_proxy_node->unique_id();
+    auto* android_node =
+        static_cast<BrowserAccessibilityAndroid*>(g_autofill_popup_proxy_node);
+    return android_node->unique_id();
   }
 
   return element_id;
@@ -997,9 +1028,12 @@ void WebContentsAccessibilityAndroid::SetAccessibilityFocus(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
     jint unique_id) {
+  // When Android sets accessibility focus to a node, we load inline text
+  // boxes for that node so that subsequent requests for character bounding
+  // boxes will succeed.
   BrowserAccessibilityAndroid* node = GetAXFromUniqueID(unique_id);
   if (node)
-    node->manager()->SetAccessibilityFocus(*node);
+    node->manager()->LoadInlineTextBoxes(*node);
 }
 
 bool WebContentsAccessibilityAndroid::IsSlider(JNIEnv* env,
@@ -1039,7 +1073,9 @@ void WebContentsAccessibilityAndroid::OnAutofillPopupDisplayed(
   g_autofill_popup_proxy_node->Init(root_manager_,
                                     g_autofill_popup_proxy_node_ax_node);
 
-  g_element_hosting_autofill_popup_unique_id = current_focus->unique_id();
+  auto* android_node = static_cast<BrowserAccessibilityAndroid*>(current_focus);
+
+  g_element_hosting_autofill_popup_unique_id = android_node->unique_id();
 }
 
 void WebContentsAccessibilityAndroid::OnAutofillPopupDismissed(
@@ -1067,8 +1103,10 @@ jboolean WebContentsAccessibilityAndroid::IsAutofillPopupNode(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
     jint unique_id) {
-  return g_autofill_popup_proxy_node &&
-         g_autofill_popup_proxy_node->unique_id() == unique_id;
+  auto* android_node =
+      static_cast<BrowserAccessibilityAndroid*>(g_autofill_popup_proxy_node);
+
+  return g_autofill_popup_proxy_node && android_node->unique_id() == unique_id;
 }
 
 bool WebContentsAccessibilityAndroid::Scroll(JNIEnv* env,
@@ -1082,10 +1120,63 @@ bool WebContentsAccessibilityAndroid::Scroll(JNIEnv* env,
   return node->Scroll(direction);
 }
 
+jboolean WebContentsAccessibilityAndroid::AreInlineTextBoxesLoaded(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    jint unique_id) {
+  BrowserAccessibilityAndroid* node = GetAXFromUniqueID(unique_id);
+  if (!node)
+    return false;
+
+  return node->AreInlineTextBoxesLoaded();
+}
+
+void WebContentsAccessibilityAndroid::LoadInlineTextBoxes(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    jint unique_id) {
+  BrowserAccessibilityAndroid* node = GetAXFromUniqueID(unique_id);
+  if (node)
+    node->manager()->LoadInlineTextBoxes(*node);
+}
+
+base::android::ScopedJavaLocalRef<jintArray>
+WebContentsAccessibilityAndroid::GetCharacterBoundingBoxes(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj,
+    jint unique_id,
+    jint start,
+    jint len) {
+  BrowserAccessibilityAndroid* node = GetAXFromUniqueID(unique_id);
+  if (!node)
+    return nullptr;
+
+  if (len <= 0 || len > kMaxCharacterBoundingBoxLen) {
+    LOG(ERROR) << "Trying to request EXTRA_DATA_TEXT_CHARACTER_LOCATION_KEY "
+               << "with a length of " << len << ". Valid values are between 1 "
+               << "and " << kMaxCharacterBoundingBoxLen;
+    return nullptr;
+  }
+
+  gfx::Rect object_bounds = node->GetPageBoundsRect();
+  int coords[4 * len];
+  for (int i = 0; i < len; i++) {
+    gfx::Rect char_bounds = node->GetPageBoundsForRange(start + i, 1);
+    if (char_bounds.IsEmpty())
+      char_bounds = object_bounds;
+    coords[4 * i + 0] = char_bounds.x();
+    coords[4 * i + 1] = char_bounds.y();
+    coords[4 * i + 2] = char_bounds.right();
+    coords[4 * i + 3] = char_bounds.bottom();
+  }
+  return base::android::ToJavaIntArray(env, coords,
+                                       static_cast<size_t>(4 * len));
+}
+
 BrowserAccessibilityAndroid* WebContentsAccessibilityAndroid::GetAXFromUniqueID(
     int32_t unique_id) {
   return static_cast<BrowserAccessibilityAndroid*>(
-      BrowserAccessibility::GetFromUniqueID(unique_id));
+      BrowserAccessibilityAndroid::GetFromUniqueId(unique_id));
 }
 
 void WebContentsAccessibilityAndroid::UpdateFrameInfo() {
@@ -1169,19 +1260,14 @@ void WebContentsAccessibilityAndroid::CollectStats() {
   CAPABILITY_TYPE_HISTOGRAM(capabilities_mask, CAN_PERFORM_GESTURES);
 }
 
-bool RegisterWebContentsAccessibilityAndroid(JNIEnv* env) {
-  return RegisterNativesImpl(env);
-}
-
 jlong Init(JNIEnv* env,
            const JavaParamRef<jobject>& obj,
-           const JavaParamRef<jobject>& jweb_contents,
-           jboolean should_focus_on_page_load) {
+           const JavaParamRef<jobject>& jweb_contents) {
   WebContents* web_contents = WebContents::FromJavaWebContents(jweb_contents);
   DCHECK(web_contents);
 
-  return reinterpret_cast<intptr_t>(new WebContentsAccessibilityAndroid(
-      env, obj, web_contents, should_focus_on_page_load));
+  return reinterpret_cast<intptr_t>(
+      new WebContentsAccessibilityAndroid(env, obj, web_contents));
 }
 
 }  // namespace content

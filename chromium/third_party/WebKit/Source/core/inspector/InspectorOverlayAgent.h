@@ -57,17 +57,17 @@ class Page;
 class PageOverlay;
 class WebGestureEvent;
 class WebMouseEvent;
-class WebLocalFrameBase;
+class WebLocalFrameImpl;
 class WebTouchEvent;
 
 class CORE_EXPORT InspectorOverlayAgent final
-    : public NON_EXPORTED_BASE(InspectorBaseAgent<protocol::Overlay::Metainfo>),
-      public NON_EXPORTED_BASE(InspectorOverlayHost::Listener) {
+    : public InspectorBaseAgent<protocol::Overlay::Metainfo>,
+      public InspectorOverlayHost::Listener {
   WTF_MAKE_NONCOPYABLE(InspectorOverlayAgent);
   USING_GARBAGE_COLLECTED_MIXIN(InspectorOverlayAgent);
 
  public:
-  InspectorOverlayAgent(WebLocalFrameBase*,
+  InspectorOverlayAgent(WebLocalFrameImpl*,
                         InspectedFrames*,
                         v8_inspector::V8InspectorSession*,
                         InspectorDOMAgent*);
@@ -146,6 +146,7 @@ class CORE_EXPORT InspectorOverlayAgent final
   void DrawQuadHighlight();
   void DrawPausedInDebuggerMessage();
   void DrawViewSize();
+  void DrawScreenshotBorder();
 
   float WindowToViewportScale() const;
 
@@ -163,8 +164,8 @@ class CORE_EXPORT InspectorOverlayAgent final
   void ClearInternal();
   void UpdateAllLifecyclePhases();
 
-  bool HandleMouseDown();
-  bool HandleMouseUp();
+  bool HandleMouseDown(const WebMouseEvent&);
+  bool HandleMouseUp(const WebMouseEvent&);
   bool HandleGestureEvent(const WebGestureEvent&);
   bool HandleTouchEvent(const WebTouchEvent&);
   bool HandleMouseMove(const WebMouseEvent&);
@@ -189,7 +190,7 @@ class CORE_EXPORT InspectorOverlayAgent final
                           bool omit_tooltip);
   void InnerHideHighlight();
 
-  Member<WebLocalFrameBase> frame_impl_;
+  Member<WebLocalFrameImpl> frame_impl_;
   Member<InspectedFrames> inspected_frames_;
   bool enabled_;
   String paused_in_debugger_message_;
@@ -219,6 +220,9 @@ class CORE_EXPORT InspectorOverlayAgent final
   SearchMode inspect_mode_;
   std::unique_ptr<InspectorHighlightConfig> inspect_mode_highlight_config_;
   int backend_node_id_to_inspect_;
+  bool screenshot_mode_ = false;
+  IntPoint screenshot_anchor_;
+  IntPoint screenshot_position_;
 };
 
 }  // namespace blink

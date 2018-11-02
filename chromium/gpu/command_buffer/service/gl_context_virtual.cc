@@ -77,7 +77,7 @@ std::string GLContextVirtual::GetGLRenderer() {
   return shared_context_->GetGLRenderer();
 }
 
-std::string GLContextVirtual::GetExtensions() {
+const gl::ExtensionSet& GLContextVirtual::GetExtensions() {
   return shared_context_->GetExtensions();
 }
 
@@ -96,8 +96,9 @@ void GLContextVirtual::SetUnbindFboOnMakeCurrent() {
   shared_context_->SetUnbindFboOnMakeCurrent();
 }
 
-gl::YUVToRGBConverter* GLContextVirtual::GetYUVToRGBConverter() {
-  return shared_context_->GetYUVToRGBConverter();
+gl::YUVToRGBConverter* GLContextVirtual::GetYUVToRGBConverter(
+    const gfx::ColorSpace& color_space) {
+  return shared_context_->GetYUVToRGBConverter(color_space);
 }
 
 void GLContextVirtual::ForceReleaseVirtuallyCurrent() {
@@ -106,6 +107,10 @@ void GLContextVirtual::ForceReleaseVirtuallyCurrent() {
 
 GLContextVirtual::~GLContextVirtual() {
   Destroy();
+}
+
+void GLContextVirtual::ResetExtensions() {
+  shared_context_->ResetExtensions();
 }
 
 }  // namespace gpu

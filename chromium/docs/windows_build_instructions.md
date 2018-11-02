@@ -43,6 +43,11 @@ When installing the 14393 Windows SDK choose Debugging Tools For Windows in
 order to get windbg and cdb. The latter is required for the build to succeed as
 some tests use it for symbolizing crash dumps.
 
+If the Windows SDK was installed via the Visual Studio installer, the Debugging
+Tools can be installed by going to: Control Panel → Programs →
+Programs and Features → Select the "Windows Software Development Kit" v14393 →
+Change → Change → Check "Debugging Tools For Windows" → Change.
+
 ## Install `depot_tools`
 
 Download the [depot_tools bundle](https://storage.googleapis.com/chrome-infra/depot_tools.zip)
@@ -199,18 +204,16 @@ in the editor that appears when you create your output directory
 (`gn args out/Default`) or on the gn gen command line
 (`gn gen out/Default --args="is_component_build = true is_debug = true"`).
 Some helpful settings to consider using include:
-* `use_jumbo_builds = true` - *Experimental* [Jumbo/unity](jumbo.md) builds.
+* `use_jumbo_build = true` - *Experimental* [Jumbo/unity](jumbo.md) builds.
 * `is_component_build = true` - this uses more, smaller DLLs, and incremental
 linking.
-* `use_nacl = false` - this disables Native Client which is usually not needed for
-local builds.
+* `enable_nacl = false` - this disables Native Client which is usually not
+needed for local builds.
 * `target_cpu = "x86"` - x86 builds are slightly faster than x64 builds and
 support incremental linking for more targets. Note that if you set this but
-don't' set use_nacl = false then build times may get worse.
+don't' set enable_nacl = false then build times may get worse.
 * `remove_webcore_debug_symbols = true` - turn off source-level debugging for
 blink to reduce build times, appropriate if you don't plan to debug blink.
-* `use_jumbo_build = true` - compile multiple translation units as one, for
-faster builds (applies only to some components).
 * `win_linker_timing = true` - this should not generally be set but can be
 helpful when trying to understand build times or incremental linking failures.
 

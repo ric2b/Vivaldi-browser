@@ -44,6 +44,12 @@ def add_bindings_scripts_dir_to_sys_path():
         sys.path.append(path_to_bindings_scripts)
 
 
+def add_webkitpy_thirdparty_dir_to_sys_path():
+    path_to_bindings_scripts = get_webkitpy_thirdparty_dir()
+    if path_to_bindings_scripts not in sys.path:
+        sys.path.append(path_to_bindings_scripts)
+
+
 def get_bindings_scripts_dir():
     return os.path.join(get_source_dir(), 'bindings', 'scripts')
 
@@ -116,57 +122,15 @@ class PathFinder(object):
     def path_from_layout_tests(self, *comps):
         return self._filesystem.join(self.layout_tests_dir(), *comps)
 
-    def layout_test_name(self, file_path):
-        """Returns a layout test name, given the path from the repo root.
-
-        Note: this appears to not work on Windows; see crbug.com/658795.
-        Also, this function duplicates functionality that's in
-        Port.relative_test_filename.
-
-        TODO(qyearsley): De-duplicate this and Port.relative_test_filename,
-        and ensure that it works properly with Windows paths.
-
-        Args:
-            file_path: A relative path from the root of the Chromium repo.
-
-        Returns:
-            The normalized layout test name, which is just the relative path from
-            the LayoutTests directory, using forward slash as the path separator.
-            Returns None if the given file is not in the LayoutTests directory.
-        """
-        layout_tests_rel_path = self._filesystem.relpath(self.layout_tests_dir(), self.chromium_base())
-        if not file_path.startswith(layout_tests_rel_path):
-            return None
-        return file_path[len(layout_tests_rel_path) + 1:]
-
     @memoized
     def depot_tools_base(self):
         """Returns the path to depot_tools, or None if not found.
 
-        This basically duplicates src/build/find_depot_tools.py without the
-        side effects of adding the directory to sys.path or importing breakpad.
+        Expects depot_tools to be //third_party/depot_tools.
+        src.git's DEPS defines depot_tools to be there.
         """
-        return (self._check_paths_for_depot_tools(self._sys_path) or
-                self._check_paths_for_depot_tools(self._env_path) or
-                self._check_upward_for_depot_tools())
-
-    def _check_paths_for_depot_tools(self, paths):
-        for path in paths:
-            if path.rstrip(self._dirsep).endswith('depot_tools'):
-                return path
-        return None
-
-    def _check_upward_for_depot_tools(self):
-        # TODO(qyearsley): Remove this, since on Chromium developer machines
-        # we generally assume that depot_tools is in PATH.
-        fs = self._filesystem
-        prev_dir = ''
-        current_dir = fs.dirname(self._webkit_base())
-        while current_dir != prev_dir:
-            if fs.exists(fs.join(current_dir, 'depot_tools', 'pylint.py')):
-                return fs.join(current_dir, 'depot_tools')
-            prev_dir = current_dir
-            current_dir = fs.dirname(current_dir)
+        depot_tools = self.path_from_chromium_base('third_party', 'depot_tools')
+        return depot_tools if self._filesystem.isdir(depot_tools) else None
 
     def path_from_depot_tools_base(self, *comps):
         return self._filesystem.join(self.depot_tools_base(), *comps)

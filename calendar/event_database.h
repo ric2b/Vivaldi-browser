@@ -40,9 +40,9 @@ class EventDatabase {
   bool CreateEventTable();
   bool GetAllCalendarEvents(EventRows* events);
 
-  bool GetRowForEvent(calendar::EventID event_id, EventRow* out_event);
+  bool GetRowForEvent(EventID event_id, EventRow* out_event);
   bool UpdateEventRow(const EventRow& event);
-  bool DeleteEvent(calendar::EventID event_id);
+  bool DeleteEvent(EventID event_id);
 
  protected:
   virtual sql::Connection& GetDB() = 0;

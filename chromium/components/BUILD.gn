@@ -77,11 +77,10 @@ test("components_unittests") {
     "//components/data_usage/core:unit_tests",
     "//components/device_event_log:unit_tests",
     "//components/dom_distiller/core:unit_tests",
-    "//components/doodle:unit_tests",
     "//components/download:unit_tests",
     "//components/favicon/core:unit_tests",
     "//components/favicon_base:unit_tests",
-    "//components/feature_engagement_tracker:unit_tests",
+    "//components/feature_engagement:unit_tests",
     "//components/flags_ui:unit_tests",
     "//components/gcm_driver:unit_tests",
     "//components/gcm_driver/crypto:unit_tests",
@@ -98,7 +97,6 @@ test("components_unittests") {
     "//components/login:unit_tests",
     "//components/machine_intelligence:unit_tests",
     "//components/metrics:unit_tests",
-    "//components/mime_util:unit_tests",
     "//components/navigation_metrics:unit_tests",
     "//components/net_log:unit_tests",
     "//components/network_session_configurator/browser:unit_tests",
@@ -182,6 +180,7 @@ test("components_unittests") {
       "//components/crash/content/app:unit_tests",
       "//components/crash/core/common:unit_tests",
       "//components/data_reduction_proxy/content/browser:unit_tests",
+      "//components/data_reduction_proxy/content/renderer:unit_tests",
       "//components/data_reduction_proxy/core/browser:unit_tests",
       "//components/data_reduction_proxy/core/common:unit_tests",
       "//components/data_use_measurement/core:unit_tests",
@@ -189,8 +188,6 @@ test("components_unittests") {
       "//components/discardable_memory/service:unit_tests",
       "//components/dom_distiller/content/browser:unit_tests",
       "//components/domain_reliability:unit_tests",
-      "//components/download/content:unit_tests",
-      "//components/error_page/renderer:unit_tests",
       "//components/favicon/content:unit_tests",
       "//components/gcm_driver/instance_id:unit_tests",
       "//components/history/content/browser:unit_tests",
@@ -322,11 +319,31 @@ test("components_unittests") {
   if (safe_browsing_mode == 1) {
     deps += [ "//components/safe_browsing_db:unit_tests_desktop" ]
   } else if (safe_browsing_mode == 2) {
-    deps += [ "//components/safe_browsing_db:unit_tests_mobile" ]
+    deps += [ "//components/safe_browsing/db:unit_tests_mobile" ]
+  }
+
+  # No components should depend on Chrome.
+  if (is_chromeos) {
+    # TODO(bug 758767): //chromeos depends on a target in //chrome, and this
+    # target indirectly on //chromeos. The //chromeos -> //chrome dependency
+    # should be fixed and all of chrome added to the assert_no_deps.
+    #
+    # Until this case is fixed, we can blacklist the main Chrome targets which
+    # aren't actually used. This should prevent most major regressions.
+    assert_no_deps = [
+      "//chrome:*",  # Catches targets in this file and not subdirs.
+      "//chrome/browser",  # No * due to //chrome/browser/chromeos mess.
+      "//chrome/common/*",
+      "//chrome/renderer/*",
+      "//chrome/test/*",
+    ]
+  } else {
+    # Other platforms have clean dependencies.
+    assert_no_deps = [ "//chrome/*" ]
   }
 
   if (is_ios) {
-    assert_no_deps = ios_assert_no_deps
+    assert_no_deps += ios_assert_no_deps
   }
 }
 
@@ -405,6 +422,7 @@ if (!is_ios) {
       "dom_distiller/content/browser/distillable_page_utils_browsertest.cc",
       "dom_distiller/content/browser/distiller_page_web_contents_browsertest.cc",
       "dom_distiller/content/browser/test/dom_distiller_js_browsertest.cc",
+      "offline_pages/content/renovations/test/page_renovator_browsertest.cc",
       "password_manager/content/renderer/credential_manager_client_browsertest.cc",
       "security_state/content/content_utils_browsertest.cc",
     ]
@@ -427,6 +445,8 @@ if (!is_ios) {
       "//components/dom_distiller/content/browser",
       "//components/dom_distiller/core",
       "//components/dom_distiller/core:test_support",
+      "//components/offline_pages/content/renovations",
+      "//components/offline_pages/core/renovations",
       "//components/password_manager/content/browser",
       "//components/password_manager/content/renderer",
       "//components/security_state/content",
@@ -488,8 +508,25 @@ if (!is_ios) {
     }
 
     if (enable_basic_printing || enable_print_preview) {
-      sources += [ "printing/test/print_web_view_helper_browsertest.cc" ]
+      sources += [ "printing/test/print_render_frame_helper_browsertest.cc" ]
       deps += [ "//components/printing/test:test_support" ]
+    }
+
+    if (is_chromeos) {
+      # TODO(bug 758767): //chromeos depends on a target in //chrome, and this
+      # target indirectly on //chromeos. The //chromeos -> //chrome dependency
+      # should be fixed and all of chrome added to the assert_no_deps. For
+      # now, blacklist large parts of Chrome to prevent the most obvious
+      # regressions.
+      assert_no_deps = [
+        "//chrome:*",  # Catches targets in this file and not subdirs.
+        "//chrome/browser",  # No * due to //chrome/browser/chromeos problem.
+        "//chrome/common/*",
+        "//chrome/renderer/*",
+        "//chrome/test/*",
+      ]
+    } else {
+      assert_no_deps = [ "//chrome/*" ]
     }
   }
 

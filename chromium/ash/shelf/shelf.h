@@ -23,6 +23,7 @@ class Rect;
 
 namespace ui {
 class GestureEvent;
+class MouseWheelEvent;
 }
 
 namespace ash {
@@ -49,10 +50,6 @@ class ASH_EXPORT Shelf : public ShelfLayoutManagerObserver {
   // widget may not exist, or the shelf may not be visible.
   static Shelf* ForWindow(aura::Window* window);
 
-  // Returns if shelf alignment options are enabled, and the user is able to
-  // adjust the alignment (eg. not allowed in guest and supervised user modes).
-  static bool CanChangeShelfAlignment();
-
   void CreateShelfWidget(aura::Window* root);
   void ShutdownShelfWidget();
   void DestroyShelfWidget();
@@ -62,9 +59,6 @@ class ASH_EXPORT Shelf : public ShelfLayoutManagerObserver {
   }
 
   ShelfWidget* shelf_widget() { return shelf_widget_.get(); }
-
-  // TODO(jamescook): Eliminate this method.
-  void NotifyShelfInitialized();
 
   // Returns the window showing the shelf.
   aura::Window* GetWindow();
@@ -129,6 +123,9 @@ class ASH_EXPORT Shelf : public ShelfLayoutManagerObserver {
   // auto-hide with a swipe, even if that gesture event hits another window.
   // Returns true if the event was handled.
   bool ProcessGestureEvent(const ui::GestureEvent& event);
+
+  // Handles a mousewheel scroll event coming from the shelf.
+  void ProcessMouseWheelEvent(const ui::MouseWheelEvent& event);
 
   void AddObserver(ShelfObserver* observer);
   void RemoveObserver(ShelfObserver* observer);

@@ -12,6 +12,7 @@
 #include "core/css/parser/CSSPropertyParserHelpers.h"
 #include "core/svg/SVGPathByteStream.h"
 #include "core/svg/SVGPathUtilities.h"
+#include "platform/RuntimeEnabledFeatures.h"
 
 namespace blink {
 
@@ -57,7 +58,7 @@ CSSValue* ConsumeRay(CSSParserTokenRange& range,
   while (!function_args.AtEnd()) {
     if (!angle) {
       angle = CSSPropertyParserHelpers::ConsumeAngle(
-          function_args, context, WTF::Optional<WebFeature>());
+          function_args, &context, WTF::Optional<WebFeature>());
       if (angle)
         continue;
     }

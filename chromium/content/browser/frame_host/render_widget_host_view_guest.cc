@@ -12,9 +12,9 @@
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "build/build_config.h"
-#include "cc/surfaces/surface.h"
-#include "cc/surfaces/surface_manager.h"
 #include "components/viz/common/surfaces/surface_sequence.h"
+#include "components/viz/service/surfaces/surface.h"
+#include "components/viz/service/surfaces/surface_manager.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/compositor/surface_utils.h"
 #include "content/browser/renderer_host/input/input_router.h"
@@ -94,6 +94,11 @@ RenderWidgetHostViewGuest::RenderWidgetHostViewGuest(
       guest_(guest ? guest->AsWeakPtr() : base::WeakPtr<BrowserPluginGuest>()),
       platform_view_(platform_view),
       should_forward_text_selection_(false) {
+  // In tests |guest_| and therefore |owner| can be null.
+  auto* owner = GetOwnerRenderWidgetHostView();
+  if (owner)
+    SetParentFrameSinkId(owner->GetFrameSinkId());
+
   gfx::NativeView view = GetNativeView();
   if (view)
     UpdateScreenInfo(view);
@@ -139,7 +144,7 @@ void RenderWidgetHostViewGuest::Show() {
     // Since we were last shown, our renderer may have had a different surface
     // set (e.g. showing an interstitial), so we resend our current surface to
     // the renderer.
-    if (local_surface_id_.is_valid())
+    if (last_received_local_surface_id_.is_valid())
       SendSurfaceInfoToEmbedder();
   }
   // NOTE(andre@vivaldi.com) : The platform view might have gone out of sync
@@ -299,10 +304,9 @@ base::string16 RenderWidgetHostViewGuest::GetSelectedText() {
   }
 }
 
-void RenderWidgetHostViewGuest::SetNeedsBeginFrames(
-    bool needs_begin_frames) {
- if (platform_view_)
-   platform_view_->SetNeedsBeginFrames(needs_begin_frames);
+void RenderWidgetHostViewGuest::SetNeedsBeginFrames(bool needs_begin_frames) {
+  if (platform_view_)
+    platform_view_->SetNeedsBeginFrames(needs_begin_frames);
 }
 
 TouchSelectionControllerClientManager*
@@ -397,14 +401,9 @@ void RenderWidgetHostViewGuest::UpdateCursor(const WebCursor& cursor) {
   // and so we will always hit this code path.
   if (!guest_)
     return;
-  if (SiteIsolationPolicy::AreCrossProcessFramesPossible()) {
-    RenderWidgetHostViewBase* rwhvb = GetOwnerRenderWidgetHostView();
-    if (rwhvb)
-      rwhvb->UpdateCursor(cursor);
-  } else {
-    guest_->SendMessageToEmbedder(base::MakeUnique<BrowserPluginMsg_SetCursor>(
-        guest_->browser_plugin_instance_id(), cursor));
-  }
+  RenderWidgetHostViewBase* rwhvb = GetOwnerRenderWidgetHostView();
+  if (rwhvb)
+    rwhvb->UpdateCursor(cursor);
 }
 
 void RenderWidgetHostViewGuest::SetIsLoading(bool is_loading) {
@@ -495,7 +494,7 @@ void RenderWidgetHostViewGuest::UnlockMouse() {
 }
 
 void RenderWidgetHostViewGuest::DidCreateNewRendererCompositorFrameSink(
-    cc::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink) {
+    viz::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink) {
   RenderWidgetHostViewChildFrame::DidCreateNewRendererCompositorFrameSink(
       renderer_compositor_frame_sink);
   platform_view_->DidCreateNewRendererCompositorFrameSink(
@@ -609,6 +608,12 @@ void RenderWidgetHostViewGuest::GestureEventAck(
     guest_->ResendEventToEmbedder(event);
   } else if (event.GetType() == blink::WebInputEvent::kGestureScrollUpdate ||
              event.GetType() == blink::WebInputEvent::kGestureScrollBegin) {
+    if (vivaldi::IsVivaldiRunning()) {
+      // NOTE(espen@vivaldi.com): I expect chromium fixes here after 62.
+      auto* owner = GetOwnerRenderWidgetHostView();
+      if (owner)
+        owner->GestureEventAck(event, ack_result);
+    } else
     GetOwnerRenderWidgetHostView()->GestureEventAck(event, ack_result);
   }
 }
@@ -629,6 +634,12 @@ InputEventAckState RenderWidgetHostViewGuest::FilterInputEvent(
       input_event.GetType() == blink::WebInputEvent::kGestureScrollEnd) {
     const blink::WebGestureEvent& gesture_event =
         static_cast<const blink::WebGestureEvent&>(input_event);
+    if (vivaldi::IsVivaldiRunning()) {
+      // NOTE(espen@vivaldi.com): I expect chromium fixes here after 62.
+      auto* owner = GetOwnerRenderWidgetHostView();
+      if (owner)
+        return owner->FilterChildGestureEvent(gesture_event);
+    } else
     return GetOwnerRenderWidgetHostView()->FilterChildGestureEvent(
         gesture_event);
   }
@@ -718,9 +729,8 @@ void RenderWidgetHostViewGuest::OnHandleInputEvent(
   }
 
   if (blink::WebInputEvent::IsKeyboardEventType(event->GetType())) {
-    if (!embedder->GetLastKeyboardEvent())
-      return;
-    NativeWebKeyboardEvent keyboard_event(*embedder->GetLastKeyboardEvent());
+    NativeWebKeyboardEvent keyboard_event(
+        *static_cast<const blink::WebKeyboardEvent*>(event));
     host_->ForwardKeyboardEvent(keyboard_event);
     return;
   }
@@ -767,8 +777,9 @@ void RenderWidgetHostViewGuest::CopyFromSurfaceToVideoFrame(
   scoped_refptr<media::VideoFrame> target,
   const base::Callback<void(const gfx::Rect&, bool)>& callback) {
 
-  std::unique_ptr<cc::CopyOutputRequest> request =
-      cc::CopyOutputRequest::CreateRequest(base::Bind(
+
+  std::unique_ptr<viz::CopyOutputRequest> request =
+      viz::CopyOutputRequest::CreateRequest(base::Bind(
           &RenderWidgetHostViewGuest::DidCopyOutput,
           std::move(target), callback));
 
@@ -782,11 +793,10 @@ void RenderWidgetHostViewGuest::CopyFromSurfaceToVideoFrame(
 void RenderWidgetHostViewGuest::DidCopyOutput(
     scoped_refptr<media::VideoFrame> video_frame,
     const base::Callback<void(const gfx::Rect&, bool)>& callback,
-    std::unique_ptr<cc::CopyOutputResult> result) {
+    std::unique_ptr<viz::CopyOutputResult> result) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  bool succeeded = true;
-
+#if !defined(OS_ANDROID)
   ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
   viz::GLHelper* gl_helper = factory->GetGLHelper();
   if (!gl_helper) {
@@ -794,7 +804,7 @@ void RenderWidgetHostViewGuest::DidCopyOutput(
   }
 
   viz::TextureMailbox texture_mailbox;
-  std::unique_ptr<cc::SingleReleaseCallback> release_callback;
+  std::unique_ptr<viz::SingleReleaseCallback> release_callback;
   result->TakeTexture(&texture_mailbox, &release_callback);
   if (!texture_mailbox.IsTexture()) {
     callback.Run(gfx::Rect(), false);
@@ -807,9 +817,6 @@ void RenderWidgetHostViewGuest::DidCopyOutput(
                               region_in_frame.y() & ~1,
                               region_in_frame.width() & ~1,
                               region_in_frame.height() & ~1);
-  if (region_in_frame.IsEmpty()) {
-    succeeded = false;
-  }
 
   std::unique_ptr<viz::ReadbackYUVInterface>
       yuv_readback_pipeline_;
@@ -844,20 +851,22 @@ void RenderWidgetHostViewGuest::DidCopyOutput(
 
   // Clear the non-drawn region.
   media::LetterboxYUV(video_frame.get(), region_in_frame);
-
+#endif
 }
 
 /*static*/
 void RenderWidgetHostViewGuest::ReadBackDone(
     scoped_refptr<media::VideoFrame> video_frame,
     const base::Callback<void(bool)>& capture_frame_cb,
-    std::unique_ptr<cc::SingleReleaseCallback> release_callback, bool result) {
+    std::unique_ptr<viz::SingleReleaseCallback> release_callback, bool result) {
   capture_frame_cb.Run(result);
 
   gpu::SyncToken sync_token;
+#if !defined(OS_ANDROID)
   viz::GLHelper* gl_helper =
       ImageTransportFactory::GetInstance()->GetGLHelper();
   gl_helper->GenerateSyncToken(&sync_token);
+#endif
   if (release_callback) {
     const bool lost_resource = !sync_token.HasData();
     release_callback->Run(sync_token, lost_resource);
@@ -865,17 +874,17 @@ void RenderWidgetHostViewGuest::ReadBackDone(
 
 }
 
+// Vivaldi addition
 void RenderWidgetHostViewGuest::BeginFrameSubscription(
     std::unique_ptr<RenderWidgetHostViewFrameSubscriber> subscriber) {
-  // NOTE(andre@vivaldi.com): The surface is now handled in
-  // |RenderWidgetHostViewChildFrame|.
-  // This is a temporary work-around since RenderWidgetHostViewGuest is going
-  // away.
-  // noop
+  // NOTE: This is just to get the subscription going. The surface is now
+  // handled in RenderWidgetHostViewChildFrame.
+  platform_view_->BeginFrameSubscription(std::move(subscriber));
 }
 
+// Vivaldi addition
 void RenderWidgetHostViewGuest::EndFrameSubscription() {
-  // noop
+  platform_view_->EndFrameSubscription();
 }
 
 }  // namespace content

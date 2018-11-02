@@ -375,8 +375,8 @@ WebSocketImpl::WebSocketImpl(Delegate* delegate,
       frame_id_(frame_id),
       handshake_succeeded_(false),
       weak_ptr_factory_(this) {
-  binding_.set_connection_error_handler(
-      base::Bind(&WebSocketImpl::OnConnectionError, base::Unretained(this)));
+  binding_.set_connection_error_handler(base::BindOnce(
+      &WebSocketImpl::OnConnectionError, base::Unretained(this)));
 }
 
 WebSocketImpl::~WebSocketImpl() {}
@@ -390,17 +390,15 @@ void WebSocketImpl::AddChannelRequest(
     const GURL& socket_url,
     const std::vector<std::string>& requested_protocols,
     const url::Origin& origin,
-    const GURL& first_party_for_cookies,
+    const GURL& site_for_cookies,
     const std::string& user_agent_override,
     blink::mojom::WebSocketClientPtr client) {
   DVLOG(3) << "WebSocketImpl::AddChannelRequest @"
-           << reinterpret_cast<void*>(this)
-           << " socket_url=\"" << socket_url << "\" requested_protocols=\""
-           << base::JoinString(requested_protocols, ", ")
-           << "\" origin=\"" << origin
-           << "\" first_party_for_cookies=\"" << first_party_for_cookies
-           << "\" user_agent_override=\"" << user_agent_override
-           << "\"";
+           << reinterpret_cast<void*>(this) << " socket_url=\"" << socket_url
+           << "\" requested_protocols=\""
+           << base::JoinString(requested_protocols, ", ") << "\" origin=\""
+           << origin << "\" site_for_cookies=\"" << site_for_cookies
+           << "\" user_agent_override=\"" << user_agent_override << "\"";
 
   if (client_ || !client) {
     bad_message::ReceivedBadMessage(
@@ -415,16 +413,13 @@ void WebSocketImpl::AddChannelRequest(
   if (delay_ > base::TimeDelta()) {
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE,
-        base::Bind(&WebSocketImpl::AddChannel,
-                   weak_ptr_factory_.GetWeakPtr(),
-                   socket_url,
-                   requested_protocols,
-                   origin,
-                   first_party_for_cookies,
-                   user_agent_override),
+        base::BindOnce(&WebSocketImpl::AddChannel,
+                       weak_ptr_factory_.GetWeakPtr(), socket_url,
+                       requested_protocols, origin, site_for_cookies,
+                       user_agent_override),
         delay_);
   } else {
-    AddChannel(socket_url, requested_protocols, origin, first_party_for_cookies,
+    AddChannel(socket_url, requested_protocols, origin, site_for_cookies,
                user_agent_override);
   }
 }
@@ -500,28 +495,20 @@ void WebSocketImpl::AddChannel(
     const GURL& socket_url,
     const std::vector<std::string>& requested_protocols,
     const url::Origin& origin,
-    const GURL& first_party_for_cookies,
+    const GURL& site_for_cookies,
     const std::string& user_agent_override) {
-  DVLOG(3) << "WebSocketImpl::AddChannel @"
-           << reinterpret_cast<void*>(this)
-           << " socket_url=\"" << socket_url
-           << "\" requested_protocols=\""
-           << base::JoinString(requested_protocols, ", ")
-           << "\" origin=\"" << origin
-           << "\" first_party_for_cookies=\"" << first_party_for_cookies
-           << "\" user_agent_override=\"" << user_agent_override
-           << "\"";
+  DVLOG(3) << "WebSocketImpl::AddChannel @" << reinterpret_cast<void*>(this)
+           << " socket_url=\"" << socket_url << "\" requested_protocols=\""
+           << base::JoinString(requested_protocols, ", ") << "\" origin=\""
+           << origin << "\" site_for_cookies=\"" << site_for_cookies
+           << "\" user_agent_override=\"" << user_agent_override << "\"";
 
   DCHECK(!channel_);
 
-  StoragePartition* partition = delegate_->GetStoragePartition();
-
   std::unique_ptr<net::WebSocketEventInterface> event_interface(
       new WebSocketEventHandler(this));
-  channel_.reset(
-      new net::WebSocketChannel(
-          std::move(event_interface),
-          partition->GetURLRequestContext()->GetURLRequestContext()));
+  channel_.reset(new net::WebSocketChannel(std::move(event_interface),
+                                           delegate_->GetURLRequestContext()));
 
   int64_t quota = pending_flow_control_quota_;
   pending_flow_control_quota_ = 0;
@@ -539,7 +526,7 @@ void WebSocketImpl::AddChannel(
                                             user_agent_override.c_str());
   }
   channel_->SendAddChannelRequest(socket_url, requested_protocols, origin,
-                                  first_party_for_cookies, additional_headers);
+                                  site_for_cookies, additional_headers);
   if (quota > 0)
     SendFlowControl(quota);
 }

@@ -11,6 +11,7 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/macros.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "net/test/embedded_test_server/embedded_test_server_connection_listener.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
 
@@ -21,12 +22,17 @@ namespace test_server {
 class EmbeddedTestServerAndroid {
  public:
   EmbeddedTestServerAndroid(JNIEnv* env,
-                            const base::android::JavaRef<jobject>& obj);
+                            const base::android::JavaRef<jobject>& obj,
+                            jboolean jhttps);
   ~EmbeddedTestServerAndroid();
 
   void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
 
   jboolean Start(JNIEnv* env, const base::android::JavaParamRef<jobject>& jobj);
+
+  base::android::ScopedJavaLocalRef<jstring> GetRootCertPemPath(
+      JNIEnv* jenv,
+      const base::android::JavaParamRef<jobject>& jobj) const;
 
   jboolean ShutdownAndWaitUntilComplete(
       JNIEnv* env,
@@ -42,6 +48,10 @@ class EmbeddedTestServerAndroid {
       const base::android::JavaParamRef<jobject>& jobj,
       const base::android::JavaParamRef<jstring>& jdirectory_path);
 
+  void SetSSLConfig(JNIEnv* jenv,
+                    const base::android::JavaParamRef<jobject>& jobj,
+                    jint jserver_certificate);
+
   void RegisterRequestHandler(JNIEnv* jenv,
                               const base::android::JavaParamRef<jobject>& jobj,
                               jlong handler);
@@ -51,12 +61,28 @@ class EmbeddedTestServerAndroid {
       const base::android::JavaParamRef<jobject>& jobj,
       const base::android::JavaParamRef<jstring>& jdirectory_path);
 
-  static bool RegisterEmbeddedTestServerAndroid(JNIEnv* env);
-
  private:
+  // Connection listener forwarding notifications to EmbeddedTestServerAndroid.
+  class ConnectionListener : public EmbeddedTestServerConnectionListener {
+   public:
+    ConnectionListener(EmbeddedTestServerAndroid* test_server_android);
+    ~ConnectionListener() override;
+
+    void AcceptedSocket(const StreamSocket& socket) override;
+    void ReadFromSocket(const StreamSocket& socket, int rv) override;
+
+   private:
+    EmbeddedTestServerAndroid* test_server_android_;
+  };
+
+  // Forwards notifications to Java. See EmbeddedTestServerConnectionListener.
+  void AcceptedSocket(const void* socket_id);
+  void ReadFromSocket(const void* socket_id);
+
   JavaObjectWeakGlobalRef weak_java_server_;
 
   EmbeddedTestServer test_server_;
+  ConnectionListener connection_listener_;
 
   DISALLOW_COPY_AND_ASSIGN(EmbeddedTestServerAndroid);
 };

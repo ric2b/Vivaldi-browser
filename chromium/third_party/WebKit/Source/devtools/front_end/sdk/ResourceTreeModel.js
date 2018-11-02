@@ -771,6 +771,14 @@ SDK.PageDispatcher = class {
 
   /**
    * @override
+   * @param {string} name
+   * @param {number} time
+   */
+  lifecycleEvent(name, time) {
+  }
+
+  /**
+   * @override
    * @param {!Protocol.Page.FrameId} frameId
    * @param {!Protocol.Page.FrameId} parentFrameId
    * @param {!Protocol.Runtime.StackTrace=} stackTrace
@@ -833,17 +841,20 @@ SDK.PageDispatcher = class {
 
   /**
    * @override
+   * @param {string} url
    * @param {string} message
    * @param {string} dialogType
+   * @param {string=} prompt
    */
-  javascriptDialogOpening(message, dialogType) {
+  javascriptDialogOpening(url, message, dialogType, prompt) {
   }
 
   /**
    * @override
    * @param {boolean} result
+   * @param {string} userInput
    */
-  javascriptDialogClosed(result) {
+  javascriptDialogClosed(result, userInput) {
   }
 
   /**
@@ -876,12 +887,5 @@ SDK.PageDispatcher = class {
   interstitialHidden() {
     this._resourceTreeModel._isInterstitialShowing = false;
     this._resourceTreeModel.dispatchEventToListeners(SDK.ResourceTreeModel.Events.InterstitialHidden);
-  }
-
-  /**
-   * @override
-   */
-  navigationRequested() {
-    // Frontend is not interested in when navigations are requested.
   }
 };

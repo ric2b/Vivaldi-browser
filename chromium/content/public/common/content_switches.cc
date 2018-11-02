@@ -64,6 +64,9 @@ const char kBlinkSettings[]                 = "blink-settings";
 // Causes the browser process to crash on startup.
 const char kBrowserCrashTest[]              = "crash-test";
 
+// Causes the browser process to display a dialog on launch.
+const char kBrowserStartupDialog[]          = "browser-startup-dialog";
+
 // Path to the exe to run for the renderer and plugin subprocesses.
 const char kBrowserSubprocessPath[]         = "browser-subprocess-path";
 
@@ -254,10 +257,6 @@ const char kDisableRendererAccessibility[]  = "disable-renderer-accessibility";
 // Prevent renderer process backgrounding when set.
 const char kDisableRendererBackgrounding[]  = "disable-renderer-backgrounding";
 
-// No not manage renderer process priority at all when set.
-const char kDisableRendererPriorityManagement[] =
-    "disable-renderer-priority-management";
-
 // Whether the resize lock is disabled. Default is false. This is generally only
 // useful for tests that want to force disabling.
 const char kDisableResizeLock[] = "disable-resize-lock";
@@ -342,6 +341,10 @@ const char kEnableDistanceFieldText[]       = "enable-distance-field-text";
 // Enable the creation of compositing layers when it would prevent LCD text.
 const char kEnablePreferCompositingToLCDText[] =
     "enable-prefer-compositing-to-lcd-text";
+
+// Enable work-in-progress persistent storage for the Background Fetch API.
+const char kEnableBackgroundFetchPersistence[] =
+    "enable-background-fetch-persistence";
 
 // Enable one or more Blink runtime-enabled features.
 // Use names from RuntimeEnabledFeatures.json5, separated by commas.
@@ -544,6 +547,12 @@ const char kGpuRasterizationMSAASampleCount[] =
 // testing the Android overlay fullscreen functionality on other platforms.
 const char kForceOverlayFullscreenVideo[]   = "force-overlay-fullscreen-video";
 
+// This forces pages to be loaded as presentation receivers.  Useful for testing
+// behavior specific to presentation receivers.
+// Spec: https://www.w3.org/TR/presentation-api/#interface-presentationreceiver
+const char kForcePresentationReceiverForTesting[] =
+    "force-presentation-receiver-for-testing";
+
 // Force renderer accessibility to be on instead of enabling it on demand when
 // a screen reader is detected. The disable-renderer-accessibility switch
 // overrides this if present.
@@ -672,7 +681,8 @@ const char kNumRasterThreads[]              = "num-raster-threads";
 
 // Override the behavior of plugin throttling for testing.
 // By default the throttler is only enabled for a hard-coded list of plugins.
-// Set the value to 'always' to always throttle every plugin instance.
+// Set the value to 'always' to always throttle every plugin instance. Set the
+// value to 'never' to disable throttling.
 const char kOverridePluginPowerSaverForTesting[] =
     "override-plugin-power-saver-for-testing";
 
@@ -755,6 +765,12 @@ const char kProcessType[]                   = "type";
 // pref service.
 const char kProxyServer[] = "proxy-server";
 
+// Enables or disables pull-to-refresh gesture in response to vertical
+// overscroll.
+// Set the value to '1' to enable the feature, and set to '0' to disable.
+// Defaults to disabled.
+const char kPullToRefresh[] = "pull-to-refresh";
+
 // Enables more web features over insecure connections. Designed to be used
 // for testing purposes only.
 const char kReduceSecurityForTesting[]      = "reduce-security-for-testing";
@@ -793,11 +809,6 @@ const char kRootLayerScrolls[]              = "root-layer-scrolls";
 
 // Causes the process to run as a sandbox IPC subprocess.
 const char kSandboxIPCProcess[]             = "sandbox-ipc";
-
-// Enables or disables scroll end effect in response to vertical overscroll.
-// Set the value to '1' to enable the feature, and set to '0' to disable.
-// Defaults to disabled.
-const char kScrollEndEffect[] = "scroll-end-effect";
 
 // Visibly render a border around paint rects in the web page to help debug
 // and study painting behavior.
@@ -890,11 +901,18 @@ const char kUtilityCmdPrefix[]              = "utility-cmd-prefix";
 // Causes the process to run as a utility subprocess.
 const char kUtilityProcess[]                = "utility";
 
-// The utility process is sandboxed, with access to one directory. This flag
-// specifies the directory that can be accessed.
+// When utility process is sandboxed, there is still access to one directory.
+// This flag specifies the directory that can be accessed.
 const char kUtilityProcessAllowedDir[]      = "utility-allowed-dir";
 
 const char kUtilityProcessRunningElevated[] = "utility-run-elevated";
+
+// Type of sandbox to apply to the utility process. Options are "none",
+// "network", or "utility" (the default).
+const char kUtilityProcessSandboxType[] = "utility-sandbox-type";
+
+// Causes the utility process to display a dialog on launch.
+const char kUtilityStartupDialog[] = "utility-startup-dialog";
 
 // In debug builds, asserts that the stream of input events is valid.
 const char kValidateInputEventStream[] = "validate-input-event-stream";
@@ -924,6 +942,12 @@ const char kDisableWebRtcHWEncoding[] = "disable-webrtc-hw-encoding";
 // Enables negotiation of GCM cipher suites from RFC 7714 for SRTP in WebRTC.
 // See https://tools.ietf.org/html/rfc7714 for further information.
 const char kEnableWebRtcSrtpAesGcm[] = "enable-webrtc-srtp-aes-gcm";
+
+// Enables negotiation of encrypted header extensions from RFC 6904 for SRTP
+// in WebRTC.
+// See https://tools.ietf.org/html/rfc6904 for further information.
+const char kEnableWebRtcSrtpEncryptedHeaders[] =
+    "enable-webrtc-srtp-encrypted-headers";
 
 // Enables Origin header in Stun messages for WebRTC.
 const char kEnableWebRtcStunOrigin[]        = "enable-webrtc-stun-origin";
@@ -959,6 +983,10 @@ const char kDisablePullToRefreshEffect[]   = "disable-pull-to-refresh-effect";
 
 // Disable the locking feature of the screen orientation API.
 const char kDisableScreenOrientationLock[]  = "disable-screen-orientation-lock";
+
+// Disable timeouts that may cause the browser to die when running slowly. This
+// is useful if running with profiling (such as debug malloc).
+const char kDisableTimeoutsForProfiling[] = "disable-timeouts-for-profiling";
 
 // Enable inverting of selection handles so that they are not clipped by the
 // viewport boundaries.

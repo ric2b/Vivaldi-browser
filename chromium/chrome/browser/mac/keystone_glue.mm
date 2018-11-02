@@ -32,7 +32,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 
-#include "app/vivaldi_constants.h"
+#include "app/vivaldi_version_constants.h"
 
 namespace {
 

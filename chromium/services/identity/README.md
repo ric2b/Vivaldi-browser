@@ -61,9 +61,14 @@ If you were previously listening to SigninManagerBase::GoogleSigninSucceeded()
 or OAuth2TokenService::OnRefreshTokenIsAvailable() to determine when the primary
 account is available, you should call
 IdentityManager::GetPrimaryAccountWhenAvailable(). This method will fire when
-the authenticated account is signed in and has a refresh token available. Here
-is an [example CL](https://chromium-review.googlesource.com/c/539637/)
-illustrating this pattern.
+the authenticated account is signed in, has a refresh token available, and the
+refresh token is not in an error state. This method can be used in the context
+where the user is not yet signed in, as well as in the context where the user is
+signed in but in an auth error state, and the client wants to kick off a
+re-authentication flow and get notified when the re-authentication is complete
+and the user is no long in an auth error state. Here is an [example
+CL](https://chromium-review.googlesource.com/c/539637/) illustrating this
+pattern.
 
 ## Determining if an Account Has a Refresh Token Available
 
@@ -103,11 +108,16 @@ drive the bringup of this interface.
 
 ## Obtaining the Information of All Accounts
 
-If you are currently calling AccountTracker::GetAccounts() or
-AccountTrackerService::GetAccounts(), the corresponding interface does not yet
-exist in the Identity Service. When we bring it up, it will have the same
-constraints and guidance as that for getting the info of the [primary
-account](#obtaining-the-information-of-the-primary-account).
+If you are currently calling AccountTracker::GetAccounts(),
+AccountTrackerService::GetAccounts(), or OAuth2TokenService::GetAccounts(), the
+corresponding interface in the Identity Service is
+IdentityManager::GetAccounts(). Note the semantics of this method carefully (as
+described in its documentation). In particular, this method returns only
+accounts that have a refresh token available, which is not necessarily the
+same behavior as AccountTracker::GetAccounts() or
+AccountTrackerService::GetAccounts() (but *is* the same behavior as
+OAuth2TokenService::GetAccounts()). If your use case is difficult to
+implement with the semantics of this method, contact blundell@chromium.org.
 
 ## Other Needs
 

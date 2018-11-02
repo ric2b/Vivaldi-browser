@@ -110,15 +110,6 @@ class CC_PAINT_EXPORT PaintCanvas {
   virtual void drawDRRect(const SkRRect& outer,
                           const SkRRect& inner,
                           const PaintFlags& flags) = 0;
-  virtual void drawCircle(SkScalar cx,
-                          SkScalar cy,
-                          SkScalar radius,
-                          const PaintFlags& flags) = 0;
-  virtual void drawArc(const SkRect& oval,
-                       SkScalar start_angle,
-                       SkScalar sweep_angle,
-                       bool use_center,
-                       const PaintFlags& flags) = 0;
   virtual void drawRoundRect(const SkRect& rect,
                              SkScalar rx,
                              SkScalar ry,
@@ -150,15 +141,6 @@ class CC_PAINT_EXPORT PaintCanvas {
     drawBitmap(bitmap, left, top, nullptr);
   }
 
-  virtual void drawText(const void* text,
-                        size_t byte_length,
-                        SkScalar x,
-                        SkScalar y,
-                        const PaintFlags& flags) = 0;
-  virtual void drawPosText(const void* text,
-                           size_t byte_length,
-                           const SkPoint pos[],
-                           const PaintFlags& flags) = 0;
   virtual void drawTextBlob(sk_sp<SkTextBlob> blob,
                             SkScalar x,
                             SkScalar y,

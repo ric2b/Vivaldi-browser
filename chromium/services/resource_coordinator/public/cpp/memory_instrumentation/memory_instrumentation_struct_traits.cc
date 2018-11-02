@@ -5,7 +5,6 @@
 #include "services/resource_coordinator/public/cpp/memory_instrumentation/memory_instrumentation_struct_traits.h"
 
 #include "base/trace_event/memory_dump_request_args.h"
-#include "base/trace_event/process_memory_totals.h"
 #include "mojo/common/common_custom_types_struct_traits.h"
 #include "services/resource_coordinator/public/interfaces/memory_instrumentation/memory_instrumentation.mojom.h"
 
@@ -25,6 +24,8 @@ EnumTraits<memory_instrumentation::mojom::DumpType,
       return memory_instrumentation::mojom::DumpType::PEAK_MEMORY_USAGE;
     case base::trace_event::MemoryDumpType::SUMMARY_ONLY:
       return memory_instrumentation::mojom::DumpType::SUMMARY_ONLY;
+    case base::trace_event::MemoryDumpType::VM_REGIONS_ONLY:
+      return memory_instrumentation::mojom::DumpType::VM_REGIONS_ONLY;
     default:
       CHECK(false) << "Invalid type: " << static_cast<uint8_t>(type);
       // This should not be reached. Just return a random value.
@@ -49,6 +50,9 @@ bool EnumTraits<memory_instrumentation::mojom::DumpType,
       break;
     case memory_instrumentation::mojom::DumpType::SUMMARY_ONLY:
       *out = base::trace_event::MemoryDumpType::SUMMARY_ONLY;
+      break;
+    case memory_instrumentation::mojom::DumpType::VM_REGIONS_ONLY:
+      *out = base::trace_event::MemoryDumpType::VM_REGIONS_ONLY;
       break;
     default:
       NOTREACHED() << "Invalid type: " << static_cast<uint8_t>(input);
@@ -107,46 +111,6 @@ bool StructTraits<memory_instrumentation::mojom::RequestArgsDataView,
   if (!input.ReadDumpType(&out->dump_type))
     return false;
   if (!input.ReadLevelOfDetail(&out->level_of_detail))
-    return false;
-  return true;
-}
-
-// static
-bool StructTraits<
-    memory_instrumentation::mojom::PlatformPrivateFootprintDataView,
-    base::trace_event::ProcessMemoryTotals::PlatformPrivateFootprint>::
-    Read(
-        memory_instrumentation::mojom::PlatformPrivateFootprintDataView input,
-        base::trace_event::ProcessMemoryTotals::PlatformPrivateFootprint* out) {
-  out->phys_footprint_bytes = input.phys_footprint_bytes();
-  out->internal_bytes = input.internal_bytes();
-  out->compressed_bytes = input.compressed_bytes();
-  out->rss_anon_bytes = input.rss_anon_bytes();
-  out->vm_swap_bytes = input.vm_swap_bytes();
-  out->private_bytes = input.private_bytes();
-  return true;
-}
-
-// static
-bool StructTraits<memory_instrumentation::mojom::ChromeMemDumpDataView,
-                  base::trace_event::MemoryDumpCallbackResult::ChromeMemDump>::
-    Read(memory_instrumentation::mojom::ChromeMemDumpDataView input,
-         base::trace_event::MemoryDumpCallbackResult::ChromeMemDump* out) {
-  out->malloc_total_kb = input.malloc_total_kb();
-  out->command_buffer_total_kb = input.command_buffer_total_kb();
-  out->partition_alloc_total_kb = input.partition_alloc_total_kb();
-  out->blink_gc_total_kb = input.blink_gc_total_kb();
-  out->v8_total_kb = input.v8_total_kb();
-  return true;
-}
-
-// static
-bool StructTraits<memory_instrumentation::mojom::RawOSMemDumpDataView,
-                  base::trace_event::MemoryDumpCallbackResult::OSMemDump>::
-    Read(memory_instrumentation::mojom::RawOSMemDumpDataView input,
-         base::trace_event::MemoryDumpCallbackResult::OSMemDump* out) {
-  out->resident_set_kb = input.resident_set_kb();
-  if (!input.ReadPlatformPrivateFootprint(&out->platform_private_footprint))
     return false;
   return true;
 }

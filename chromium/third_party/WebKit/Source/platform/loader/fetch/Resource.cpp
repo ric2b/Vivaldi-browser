@@ -38,7 +38,6 @@
 #include "platform/WebTaskRunner.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/loader/fetch/CachedMetadata.h"
-#include "platform/loader/fetch/CrossOriginAccessControl.h"
 #include "platform/loader/fetch/FetchInitiatorTypeNames.h"
 #include "platform/loader/fetch/FetchParameters.h"
 #include "platform/loader/fetch/IntegrityMetadata.h"
@@ -59,6 +58,7 @@
 #include "public/platform/Platform.h"
 #include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebSecurityOrigin.h"
+#include "services/network/public/interfaces/fetch_api.mojom-blink.h"
 
 namespace blink {
 
@@ -324,9 +324,49 @@ void Resource::SetLoader(ResourceLoader* loader) {
   status_ = ResourceStatus::kPending;
 }
 
-void Resource::CheckNotify() {
-  if (IsLoading())
+void Resource::CheckResourceIntegrity() {
+  // Skip the check and reuse the previous check result, especially on
+  // successful revalidation.
+  if (IntegrityDisposition() != ResourceIntegrityDisposition::kNotChecked)
     return;
+
+  // Loading error occurred? Then result is uncheckable.
+  integrity_report_info_.Clear();
+  if (ErrorOccurred()) {
+    CHECK(!Data());
+    integrity_disposition_ = ResourceIntegrityDisposition::kFailed;
+    return;
+  }
+
+  // No integrity attributes to check? Then we're passing.
+  if (IntegrityMetadata().IsEmpty()) {
+    integrity_disposition_ = ResourceIntegrityDisposition::kPassed;
+    return;
+  }
+
+  const char* data = nullptr;
+  size_t data_length = 0;
+
+  // Edge case: If a resource actually has zero bytes then it will not
+  // typically have a resource buffer, but we still need to check integrity
+  // because people might want to assert a zero-length resource.
+  CHECK(DecodedSize() == 0 || Data());
+  if (Data()) {
+    data = Data()->Data();
+    data_length = Data()->size();
+  }
+
+  if (SubresourceIntegrity::CheckSubresourceIntegrity(IntegrityMetadata(), data,
+                                                      data_length, Url(), *this,
+                                                      integrity_report_info_))
+    integrity_disposition_ = ResourceIntegrityDisposition::kPassed;
+  else
+    integrity_disposition_ = ResourceIntegrityDisposition::kFailed;
+  DCHECK_NE(IntegrityDisposition(), ResourceIntegrityDisposition::kNotChecked);
+}
+
+void Resource::NotifyFinished() {
+  DCHECK(IsLoaded());
 
   TriggerNotificationForFinishObservers();
 
@@ -408,7 +448,8 @@ void Resource::FinishAsError(const ResourceError& error) {
   DCHECK(ErrorOccurred());
   ClearData();
   loader_ = nullptr;
-  CheckNotify();
+  CheckResourceIntegrity();
+  NotifyFinished();
 }
 
 void Resource::Finish(double load_finish_time) {
@@ -417,18 +458,12 @@ void Resource::Finish(double load_finish_time) {
   if (!ErrorOccurred())
     status_ = ResourceStatus::kCached;
   loader_ = nullptr;
-  CheckNotify();
+  CheckResourceIntegrity();
+  NotifyFinished();
 }
 
 AtomicString Resource::HttpContentType() const {
   return GetResponse().HttpContentType();
-}
-
-void Resource::SetIntegrityDisposition(
-    ResourceIntegrityDisposition disposition) {
-  DCHECK_NE(disposition, ResourceIntegrityDisposition::kNotChecked);
-  DCHECK(type_ == Resource::kScript || type_ == Resource::kCSSStyleSheet);
-  integrity_disposition_ = disposition;
 }
 
 bool Resource::MustRefetchDueToIntegrityMetadata(
@@ -810,6 +845,27 @@ bool Resource::CanReuse(const FetchParameters& params) const {
   const ResourceRequest& new_request = params.GetResourceRequest();
   const ResourceLoaderOptions& new_options = params.Options();
 
+  // Never reuse opaque responses from a service worker for requests that are
+  // not no-cors. https://crbug.com/625575
+  // TODO(yhirano): Remove this.
+  if (GetResponse().WasFetchedViaServiceWorker() &&
+      GetResponse().ResponseTypeViaServiceWorker() ==
+          network::mojom::FetchResponseType::kOpaque &&
+      new_request.GetFetchRequestMode() !=
+          WebURLRequest::kFetchRequestModeNoCORS) {
+    return false;
+  }
+
+  // If credentials were sent with the previous request and won't be with this
+  // one, or vice versa, re-fetch the resource.
+  //
+  // This helps with the case where the server sends back
+  // "Access-Control-Allow-Origin: *" all the time, but some of the client's
+  // requests are made without CORS and some with.
+  if (GetResourceRequest().AllowStoredCredentials() !=
+      new_request.AllowStoredCredentials())
+    return false;
+
   // Certain requests (e.g., XHRs) might have manually set headers that require
   // revalidation. In theory, this should be a Revalidate case. In practice, the
   // MemoryCache revalidation path assumes a whole bunch of things about how
@@ -857,35 +913,43 @@ bool Resource::CanReuse(const FetchParameters& params) const {
   // securityOrigin has more complicated checks which callers are responsible
   // for.
 
-  // TODO(yhirano): Clean up this condition. This is generated to keep the old
-  // behavior across refactoring.
-  //
-  // TODO(tyoshino): Consider returning false when the credentials mode
-  // differs.
+  if (new_request.GetFetchCredentialsMode() !=
+      resource_request_.GetFetchCredentialsMode())
+    return false;
 
-  bool new_is_with_fetcher_cors_suppressed =
-      new_options.cors_handling_by_resource_fetcher ==
-      kDisableCORSHandlingByResourceFetcher;
-  bool existing_was_with_fetcher_cors_suppressed =
-      options_.cors_handling_by_resource_fetcher ==
-      kDisableCORSHandlingByResourceFetcher;
+  const auto new_mode = new_request.GetFetchRequestMode();
+  const auto existing_mode = resource_request_.GetFetchRequestMode();
 
-  auto new_mode = new_request.GetFetchRequestMode();
-  auto existing_mode = resource_request_.GetFetchRequestMode();
+  if (new_mode != existing_mode)
+    return false;
 
-  if (new_is_with_fetcher_cors_suppressed) {
-    if (existing_was_with_fetcher_cors_suppressed)
-      return true;
+  switch (new_mode) {
+    case WebURLRequest::kFetchRequestModeNoCORS:
+    case WebURLRequest::kFetchRequestModeNavigate:
+      break;
 
-    return existing_mode != WebURLRequest::kFetchRequestModeCORS;
+    case WebURLRequest::kFetchRequestModeCORS:
+    case WebURLRequest::kFetchRequestModeSameOrigin:
+    case WebURLRequest::kFetchRequestModeCORSWithForcedPreflight:
+      // We have two separate CORS handling logics in DocumentThreadableLoader
+      // and ResourceLoader and sharing resources is difficult when they are
+      // handled differently.
+      if (options_.cors_handling_by_resource_fetcher !=
+          new_options.cors_handling_by_resource_fetcher) {
+        // If the existing one is handled in DocumentThreadableLoader and the
+        // new one is handled in ResourceLoader, reusing the existing one will
+        // lead to CORS violations.
+        if (!options_.cors_handling_by_resource_fetcher)
+          return false;
+
+        // Otherwise (i.e., if the existing one is handled in ResourceLoader
+        // and the new one is handled in DocumentThreadableLoader), reusing
+        // the existing one will lead to double check which is harmless.
+      }
+      break;
   }
 
-  if (existing_was_with_fetcher_cors_suppressed)
-    return new_mode != WebURLRequest::kFetchRequestModeCORS;
-
-  return existing_mode == new_mode &&
-         new_request.GetFetchCredentialsMode() ==
-             resource_request_.GetFetchCredentialsMode();
+  return true;
 }
 
 void Resource::Prune() {
@@ -1011,6 +1075,8 @@ void Resource::RevalidationFailed() {
   SECURITY_CHECK(redirect_chain_.IsEmpty());
   ClearData();
   cache_handler_.Clear();
+  integrity_disposition_ = ResourceIntegrityDisposition::kNotChecked;
+  integrity_report_info_.Clear();
   DestroyDecodedDataForFailedRevalidation();
   is_revalidating_ = false;
 }
@@ -1020,7 +1086,7 @@ void Resource::MarkAsPreload() {
   is_unused_preload_ = true;
 }
 
-void Resource::MatchPreload() {
+bool Resource::MatchPreload(const FetchParameters& params) {
   DCHECK(is_unused_preload_);
   is_unused_preload_ = false;
 
@@ -1031,6 +1097,7 @@ void Resource::MatchPreload() {
                         ("PreloadScanner.ReferenceTime", 0, 10000, 50));
     preload_discovery_histogram.Count(time_since_discovery);
   }
+  return true;
 }
 
 bool Resource::CanReuseRedirectChain() const {

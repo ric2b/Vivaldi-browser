@@ -7,12 +7,16 @@
 
 #include <map>
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "base/memory/ref_counted.h"
 #include "extensions/browser/api/clipboard/clipboard_api.h"
 #include "extensions/browser/api/declarative_content/content_rules_registry.h"
 #include "extensions/browser/api/storage/settings_namespace.h"
 #include "extensions/common/api/clipboard.h"
+
+class GURL;
 
 namespace base {
 template <class T>
@@ -35,8 +39,10 @@ class ContentRulesRegistry;
 class DevicePermissionsPrompt;
 class ExtensionOptionsGuest;
 class ExtensionOptionsGuestDelegate;
+class FeedbackPrivateDelegate;
 class FileSystemDelegate;
 class ManagementAPIDelegate;
+class MessagingDelegate;
 class MetricsPrivateDelegate;
 class MimeHandlerViewGuest;
 class MimeHandlerViewGuestDelegate;
@@ -82,6 +88,10 @@ class ExtensionsAPIClient {
   // to |web_contents|.
   virtual void AttachWebContentsHelpers(content::WebContents* web_contents)
       const;
+
+  // Returns true if the header should be hidden to extensions.
+  virtual bool ShouldHideResponseHeader(const GURL& url,
+                                        const std::string& header_name) const;
 
   // Creates the AppViewGuestDelegate.
   virtual AppViewGuestDelegate* CreateAppViewGuestDelegate() const;
@@ -140,6 +150,12 @@ class ExtensionsAPIClient {
 
   // Returns a delegate for embedder-specific chrome.fileSystem behavior.
   virtual FileSystemDelegate* GetFileSystemDelegate();
+
+  // Returns a delegate for embedder-specific extension messaging.
+  virtual MessagingDelegate* GetMessagingDelegate();
+
+  // Returns a delegate for the chrome.feedbackPrivate API.
+  virtual FeedbackPrivateDelegate* GetFeedbackPrivateDelegate();
 
 #if defined(OS_CHROMEOS)
   // If supported by the embedder, returns a delegate for querying non-native

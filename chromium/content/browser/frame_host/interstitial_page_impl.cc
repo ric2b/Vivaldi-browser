@@ -294,8 +294,8 @@ void InterstitialPageImpl::Hide() {
   // been called from a RVH delegate method, and we can't delete the RVH out
   // from under itself.
   base::ThreadTaskRunnerHandle::Get()->PostNonNestableTask(
-      FROM_HERE, base::Bind(&InterstitialPageImpl::Shutdown,
-                            weak_ptr_factory_.GetWeakPtr()));
+      FROM_HERE, base::BindOnce(&InterstitialPageImpl::Shutdown,
+                                weak_ptr_factory_.GetWeakPtr()));
   bool has_focus = render_view_host_->GetWidget()->GetView() &&
                    render_view_host_->GetWidget()->GetView()->HasFocus();
   render_view_host_ = NULL;
@@ -430,11 +430,11 @@ InterstitialPage* InterstitialPageImpl::GetAsInterstitialPage() {
   return this;
 }
 
-AccessibilityMode InterstitialPageImpl::GetAccessibilityMode() const {
+ui::AXMode InterstitialPageImpl::GetAccessibilityMode() const {
   if (web_contents_)
     return static_cast<WebContentsImpl*>(web_contents_)->GetAccessibilityMode();
   else
-    return AccessibilityMode();
+    return ui::AXMode();
 }
 
 void InterstitialPageImpl::Cut() {

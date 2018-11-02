@@ -18,6 +18,7 @@ function replaceBody(element) {
  * Convert a list of top-level bookmark nodes into a normalized lookup table of
  * nodes.
  * @param {...BookmarkTreeNode} nodes
+ * @return {NodeMap}
  */
 function testTree(nodes) {
   return bookmarks.util.normalizeNodes(
@@ -82,12 +83,22 @@ function createItem(id, config) {
 }
 
 /**
- * @param {Set<T>}
+ * @param {Set<T>|Map<T>}
  * @return {Array<T>}
  * @template T
  */
-function normalizeSet(set) {
-  return Array.from(set).sort();
+function normalizeIterable(iterable) {
+  return Array.from(iterable).sort();
+}
+
+/**
+ * @param {NodeState} nodes
+ * @return {FolderOpenState}
+ */
+function getAllFoldersOpenState(nodes) {
+  var folderOpenState = new Map();
+  Object.keys(nodes).forEach((n) => folderOpenState.set(n, true));
+  return folderOpenState;
 }
 
 /**
@@ -95,8 +106,10 @@ function normalizeSet(set) {
  * rewritten to command-clicks on Mac.
  * @param {HTMLElement} element
  * @param {Object=} config
+ * @param {string=} eventName
  */
-function customClick(element, config) {
+function customClick(element, config, eventName) {
+  eventName = eventName || 'click';
   var props = {
     bubbles: true,
     cancelable: true,
@@ -119,7 +132,7 @@ function customClick(element, config) {
 
   element.dispatchEvent(new MouseEvent('mousedown', props));
   element.dispatchEvent(new MouseEvent('mouseup', props));
-  element.dispatchEvent(new MouseEvent('click', props));
+  element.dispatchEvent(new MouseEvent(eventName, props));
   if (config && config.detail == 2)
     element.dispatchEvent(new MouseEvent('dblclick', props));
 }

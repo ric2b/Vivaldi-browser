@@ -38,14 +38,41 @@ class SingleThreadTaskRunner;
 // a nested RunLoop but please do not use nested loops in production code!
 class BASE_EXPORT RunLoop {
  public:
-  RunLoop();
+  // The type of RunLoop: a kDefault RunLoop at the top-level (non-nested) will
+  // process system and application tasks assigned to its Delegate. When nested
+  // however a kDefault RunLoop will only process system tasks while a
+  // kNestableTasksAllowed RunLoop will continue to process application tasks
+  // even if nested.
+  //
+  // This is relevant in the case of recursive RunLoops. Some unwanted run loops
+  // may occur when using common controls or printer functions. By default,
+  // recursive task processing is disabled.
+  //
+  // In general, nestable RunLoops are to be avoided. They are dangerous and
+  // difficult to get right, so please use with extreme caution. To further
+  // protect this: kNestableTasksAllowed RunLoops are only allowed on threads
+  // where IsNestingAllowedOnCurrentThread().
+  //
+  // A specific example where this makes a difference is:
+  // - The thread is running a RunLoop.
+  // - It receives a task #1 and executes it.
+  // - The task #1 implicitly starts a RunLoop, like a MessageBox in the unit
+  //   test. This can also be StartDoc or GetSaveFileName.
+  // - The thread receives a task #2 before or while in this second RunLoop.
+  // - With a kNestableTasksAllowed RunLoop, the task #2 will run right away.
+  //   Otherwise, it will get executed right after task #1 completes in the main
+  //   RunLoop.
+  enum class Type {
+    kDefault,
+    kNestableTasksAllowed,
+  };
+
+  RunLoop(Type type = Type::kDefault);
   ~RunLoop();
 
   // Run the current RunLoop::Delegate. This blocks until Quit is called. Before
   // calling Run, be sure to grab the QuitClosure in order to stop the
-  // RunLoop::Delegate asynchronously. MessageLoop::QuitWhenIdle and QuitNow
-  // will also trigger a return from Run (if RunLoop::Delegate happens to be a
-  // MessageLoop...), but those are deprecated.
+  // RunLoop::Delegate asynchronously.
   void Run();
 
   // Run the current RunLoop::Delegate until it doesn't find any tasks or
@@ -66,15 +93,14 @@ class BASE_EXPORT RunLoop {
   // called from another thread (will quit soon but tasks that were already
   // queued on this RunLoop will get to run first).
   //
-  // There can be other nested RunLoops servicing the same task queue
-  // (MessageLoop); Quitting one RunLoop has no bearing on the others. Quit()
-  // and QuitWhenIdle() can be called before, during or after Run(). If called
-  // before Run(), Run() will return immediately when called. Calling Quit() or
-  // QuitWhenIdle() after the RunLoop has already finished running has no
-  // effect.
+  // There can be other nested RunLoops servicing the same task queue. Quitting
+  // one RunLoop has no bearing on the others. Quit() and QuitWhenIdle() can be
+  // called before, during or after Run(). If called before Run(), Run() will
+  // return immediately when called. Calling Quit() or QuitWhenIdle() after the
+  // RunLoop has already finished running has no effect.
   //
   // WARNING: You must NEVER assume that a call to Quit() or QuitWhenIdle() will
-  // terminate the targetted message loop. If a nested run loop continues
+  // terminate the targetted message loop. If a nested RunLoop continues
   // running, the target may NEVER terminate. It is very easy to livelock (run
   // forever) in such a case.
   void Quit();
@@ -103,7 +129,7 @@ class BASE_EXPORT RunLoop {
   // Safe to call before RegisterDelegateForCurrentThread().
   static bool IsNestedOnCurrentThread();
 
-  // A NestingObserver is notified when a nested run loop begins. The observers
+  // A NestingObserver is notified when a nested RunLoop begins. The observers
   // are notified before the current thread's RunLoop::Delegate::Run() is
   // invoked and nested work begins.
   class BASE_EXPORT NestingObserver {
@@ -137,19 +163,23 @@ class BASE_EXPORT RunLoop {
 
     // The client interface provided back to the caller who registers this
     // Delegate via RegisterDelegateForCurrentThread.
-    class Client {
+    class BASE_EXPORT Client {
      public:
-      // Returns the RunLoop with the topmost active Run() call on the stack.
-      // TODO(gab): Break the inter-dependency between MessageLoop and RunLoop
-      // further. http://crbug.com/703346
-      RunLoop* GetTopMostRunLoop() const;
+      // Returns true if the Delegate should return from the topmost Run() when
+      // it becomes idle. The Delegate is responsible for probing this when it
+      // becomes idle.
+      bool ShouldQuitWhenIdle() const;
 
       // Returns true if this |outer_| is currently in nested runs. This is a
       // shortcut for RunLoop::IsNestedOnCurrentThread() for the owner of this
       // interface.
-      // TODO(gab): consider getting rid of this and the Client class altogether
-      // when it's the only method left on Client. http://crbug.com/703346.
       bool IsNested() const;
+
+      // Returns true if the Delegate is allowed to process application tasks.
+      // This typically returns true except in nested RunLoops outside the scope
+      // of a ScopedNestableTaskAllowed as, by default, nested RunLoops are only
+      // meant to process system events.
+      bool ProcessingTasksAllowed() const;
 
      private:
       // Only a Delegate can instantiate a Delegate::Client.
@@ -169,9 +199,23 @@ class BASE_EXPORT RunLoop {
     // eventual matching Quit() call. Upon receiving a Quit() call it should
     // return from the Run() call as soon as possible without executing
     // remaining tasks/messages. Run() calls can nest in which case each Quit()
-    // call should result in the topmost active Run() call returning.
+    // call should result in the topmost active Run() call returning. The only
+    // other trigger for Run() to return is Client::ShouldQuitWhenIdle() which
+    // the Delegate should probe before sleeping when it becomes idle. Run()
+    // implementations should also check Client::ProcessingTasksAllowed() before
+    // processing assigned application tasks (they should only process system
+    // tasks otherwise).
     virtual void Run() = 0;
     virtual void Quit() = 0;
+
+    // Invoked right before a RunLoop enters a nested Run() call on this
+    // Delegate iff this RunLoop is of type kNestableTasksAllowed. The Delegate
+    // should ensure that the upcoming Run() call will result in processing
+    // application tasks queued ahead of it without further probing. e.g.
+    // message pumps on some platforms, like Mac, need an explicit request to
+    // process application tasks when nested, otherwise they'll only wait for
+    // system messages.
+    virtual void EnsureWorkScheduled() = 0;
 
     // A vector-based stack is more memory efficient than the default
     // deque-based stack as the active RunLoop stack isn't expected to ever
@@ -181,6 +225,10 @@ class BASE_EXPORT RunLoop {
     bool allow_nesting_ = true;
     RunLoopStack active_run_loops_;
     ObserverList<RunLoop::NestingObserver> nesting_observers_;
+
+#if DCHECK_IS_ON()
+    bool allow_running_for_testing_ = true;
+#endif
 
     // True once this Delegate is bound to a thread via
     // RegisterDelegateForCurrentThread().
@@ -200,18 +248,46 @@ class BASE_EXPORT RunLoop {
   // Delegate::Client is valid as long as |delegate| is kept alive.
   static Delegate::Client* RegisterDelegateForCurrentThread(Delegate* delegate);
 
+  // Quits the active RunLoop (when idle) -- there must be one. These were
+  // introduced as prefered temporary replacements to the long deprecated
+  // MessageLoop::Quit(WhenIdle) methods. Callers should properly plumb a
+  // reference to the appropriate RunLoop instance (or its QuitClosure) instead
+  // of using these in order to link Run()/Quit() to a single RunLoop instance
+  // and increase readability.
+  static void QuitCurrentDeprecated();
+  static void QuitCurrentWhenIdleDeprecated();
+
+  // Run() will DCHECK if called while there's a ScopedDisallowRunningForTesting
+  // in scope on its thread. This is useful to add safety to some test
+  // constructs which allow multiple task runners to share the main thread in
+  // unit tests. While the main thread can be shared by multiple runners to
+  // deterministically fake multi threading, there can still only be a single
+  // RunLoop::Delegate per thread and RunLoop::Run() should only be invoked from
+  // it (or it would result in incorrectly driving TaskRunner A while in
+  // TaskRunner B's context).
+  class BASE_EXPORT ScopedDisallowRunningForTesting {
+   public:
+    ScopedDisallowRunningForTesting();
+    ~ScopedDisallowRunningForTesting();
+
+   private:
+#if DCHECK_IS_ON()
+    Delegate* current_delegate_;
+    const bool previous_run_allowance_;
+#endif  // DCHECK_IS_ON()
+
+    DISALLOW_COPY_AND_ASSIGN(ScopedDisallowRunningForTesting);
+  };
+
  private:
-  // TODO(gab): Break the inter-dependency between MessageLoop and RunLoop
-  // further. http://crbug.com/703346
-  friend class MessageLoop;
 #if defined(OS_ANDROID)
-  // Android doesn't support the blocking MessageLoop::Run, so it calls
+  // Android doesn't support the blocking RunLoop::Run, so it calls
   // BeforeRun and AfterRun directly.
   friend class base::MessagePumpForUI;
 #endif
 
 #if defined(OS_IOS)
-  // iOS doesn't support the blocking MessageLoop::Run, so it calls
+  // iOS doesn't support the blocking RunLoop::Run, so it calls
   // BeforeRun directly.
   friend class base::MessagePumpUIApplication;
 #endif
@@ -225,14 +301,19 @@ class BASE_EXPORT RunLoop {
   // during Run(), ref. |sequence_checker_| below).
   Delegate* delegate_;
 
+  const Type type_;
+
 #if DCHECK_IS_ON()
   bool run_called_ = false;
 #endif
 
   bool quit_called_ = false;
   bool running_ = false;
-  // Used to record that QuitWhenIdle() was called on the MessageLoop, meaning
-  // that we should quit Run once it becomes idle.
+  // Used to record that QuitWhenIdle() was called on this RunLoop, meaning that
+  // the Delegate should quit Run() once it becomes idle (it's responsible for
+  // probing this state via Client::ShouldQuitWhenIdle()). This state is stored
+  // here rather than pushed to Delegate via, e.g., Delegate::QuitWhenIdle() to
+  // support nested RunLoops.
   bool quit_when_idle_received_ = false;
 
   // RunLoop is not thread-safe. Its state/methods, unless marked as such, may

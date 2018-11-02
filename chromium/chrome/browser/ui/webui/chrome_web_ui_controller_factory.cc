@@ -40,13 +40,13 @@
 #include "chrome/browser/ui/webui/local_state/local_state_ui.h"
 #include "chrome/browser/ui/webui/log_web_ui_url.h"
 #include "chrome/browser/ui/webui/media/media_engagement_ui.h"
+#include "chrome/browser/ui/webui/memory_internals_ui.h"
 #include "chrome/browser/ui/webui/net_export_ui.h"
 #include "chrome/browser/ui/webui/net_internals/net_internals_ui.h"
 #include "chrome/browser/ui/webui/ntp_tiles_internals_ui.h"
 #include "chrome/browser/ui/webui/omnibox/omnibox_ui.h"
 #include "chrome/browser/ui/webui/password_manager_internals/password_manager_internals_ui.h"
 #include "chrome/browser/ui/webui/physical_web/physical_web_ui.h"
-#include "chrome/browser/ui/webui/policy_material_design_ui.h"
 #include "chrome/browser/ui/webui/policy_ui.h"
 #include "chrome/browser/ui/webui/predictors/predictors_ui.h"
 #include "chrome/browser/ui/webui/profiler_ui.h"
@@ -209,10 +209,6 @@
 #include "extensions/common/manifest.h"
 #endif
 
-#if BUILDFLAG(ENABLE_OOP_HEAP_PROFILING)
-#include "chrome/browser/ui/webui/memory_internals_ui.h"
-#endif
-
 using content::WebUI;
 using content::WebUIController;
 using ui::WebDialogUI;
@@ -269,20 +265,12 @@ WebUIController* NewWebUI<dom_distiller::DomDistillerUi>(WebUI* web_ui,
       web_ui, service, dom_distiller::kDomDistillerScheme);
 }
 
-#if !defined(OS_ANDROID)
-template<>
-WebUIController* NewWebUI<settings::MdSettingsUI>(WebUI* web_ui,
-                                                  const GURL& url) {
-  return new settings::MdSettingsUI(web_ui, url);
-}
-
-#if !defined(OS_CHROMEOS)
+#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
 template <>
 WebUIController* NewWebUI<WelcomeUI>(WebUI* web_ui, const GURL& url) {
   return new WelcomeUI(web_ui, url);
 }
-#endif  // !defined(OS_CHROMEOS)
-#endif  // !defined(OS_ANDROID)
+#endif  // !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
 
 #if defined(OS_WIN)
 template <>
@@ -428,13 +416,13 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
   // Identity API is not available on Android.
   if (url.host_piece() == chrome::kChromeUIIdentityInternalsHost)
     return &NewWebUI<IdentityInternalsUI>;
+  if (url.host_piece() == chrome::kChromeUIMemoryInternalsHost)
+    return &NewWebUI<MemoryInternalsUI>;
   if (url.host_piece() == chrome::kChromeUINewTabHost)
     return &NewWebUI<NewTabUI>;
   // Settings are implemented with native UI elements on Android.
-  if (url.host_piece() == chrome::kChromeUISettingsHost ||
-      url.host_piece() == chrome::kChromeUIMdSettingsHost) {
+  if (url.host_piece() == chrome::kChromeUISettingsHost)
     return &NewWebUI<settings::MdSettingsUI>;
-  }
   if (url.host_piece() == chrome::kChromeUIExtensionsHost)
     return &NewWebUI<extensions::ExtensionsUI>;
   if (url.host_piece() == chrome::kChromeUIHistoryHost)
@@ -545,9 +533,8 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
     return &NewWebUI<NaClUI>;
 #endif
 #if (defined(OS_LINUX) && defined(TOOLKIT_VIEWS)) || defined(USE_AURA)
-  if (url.host_piece() == chrome::kChromeUITabModalConfirmDialogHost) {
+  if (url.host_piece() == chrome::kChromeUITabModalConfirmDialogHost)
     return &NewWebUI<ConstrainedWebDialogUI>;
-  }
 #endif
 #if defined(USE_NSS_CERTS) && defined(USE_AURA)
   if (url.host_piece() == chrome::kChromeUICertificateViewerHost)
@@ -560,10 +547,6 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
 
   if (url.host_piece() == chrome::kChromeUIPolicyHost)
     return &NewWebUI<PolicyUI>;
-  if (url.host_piece() == chrome::kChromeUIMdPolicyHost &&
-      switches::MdPolicyPageEnabled()) {
-    return &NewWebUI<PolicyMaterialDesignUI>;
-  }
 
 #if BUILDFLAG(ENABLE_APP_LIST)
   if (url.host_piece() == chrome::kChromeUIAppListStartPageHost)
@@ -571,18 +554,13 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
 #endif
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
   if (url.host() == chrome::kChromeUISigninDiceInternalsHost &&
-      !profile->IsOffTheRecord() &&
-      switches::IsAccountConsistencyDiceEnabled()) {
+      !profile->IsOffTheRecord() && signin::IsAccountConsistencyDiceEnabled()) {
     return &NewWebUI<SigninDiceInternalsUI>;
   }
 #endif
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   if (url.host_piece() == chrome::kChromeUIExtensionsFrameHost)
     return &NewWebUI<extensions::ExtensionsUI>;
-#endif
-#if BUILDFLAG(ENABLE_OOP_HEAP_PROFILING)
-  if (url.host_piece() == chrome::kChromeUIMemoryInternalsHost)
-    return &NewWebUI<MemoryInternalsUI>;
 #endif
 #if BUILDFLAG(ENABLE_PLUGINS)
   if (url.host_piece() == chrome::kChromeUIFlashHost)
@@ -811,14 +789,14 @@ base::RefCountedMemory* ChromeWebUIControllerFactory::GetFaviconResourceBytes(
     return MdDownloadsUI::GetFaviconResourceBytes(scale_factor);
 
   // Android doesn't use the Options/Settings pages.
-  if (page_url.host_piece() == chrome::kChromeUISettingsHost ||
-      page_url.host_piece() == chrome::kChromeUIMdSettingsHost)
+  if (page_url.host_piece() == chrome::kChromeUISettingsHost)
     return settings_utils::GetFaviconResourceBytes(scale_factor);
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   if (page_url.host_piece() == chrome::kChromeUIExtensionsHost ||
-      page_url.host_piece() == chrome::kChromeUIExtensionsFrameHost)
+      page_url.host_piece() == chrome::kChromeUIExtensionsFrameHost) {
     return extensions::ExtensionsUI::GetFaviconResourceBytes(scale_factor);
+  }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 #endif  // !defined(OS_ANDROID)
 

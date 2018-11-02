@@ -27,6 +27,7 @@
 namespace gl {
 class GLContext;
 class GLSurface;
+class GLImage;
 }
 
 namespace gfx {
@@ -50,6 +51,7 @@ class Logger;
 class QueryManager;
 class ShaderTranslatorInterface;
 class Texture;
+class TextureBase;
 class TransformFeedbackManager;
 class VertexArrayManager;
 struct ContextCreationAttribHelper;
@@ -113,8 +115,7 @@ class GPU_EXPORT GLES2DecoderClient {
 
 // This class implements the AsyncAPIInterface interface, decoding GLES2
 // commands and calling GL.
-class GPU_EXPORT GLES2Decoder : public CommonDecoder,
-                                NON_EXPORTED_BASE(public AsyncAPIInterface) {
+class GPU_EXPORT GLES2Decoder : public CommonDecoder, public AsyncAPIInterface {
  public:
   typedef error::Error Error;
 
@@ -272,6 +273,10 @@ class GPU_EXPORT GLES2Decoder : public CommonDecoder,
   virtual bool GetServiceTextureId(uint32_t client_texture_id,
                                    uint32_t* service_texture_id);
 
+  // Gets the texture object associated with the client ID.  null is returned on
+  // failure or if the texture has not been bound yet.
+  virtual TextureBase* GetTextureBase(uint32_t client_id);
+
   // Clears a level sub area of a 2D texture.
   // Returns false if a GL error should be generated.
   virtual bool ClearLevel(Texture* texture,
@@ -330,6 +335,11 @@ class GPU_EXPORT GLES2Decoder : public CommonDecoder,
   virtual const ContextState* GetContextState() = 0;
   virtual scoped_refptr<ShaderTranslatorInterface> GetTranslator(
       unsigned int type) = 0;
+
+  virtual void BindImage(uint32_t client_texture_id,
+                         uint32_t texture_target,
+                         gl::GLImage* image,
+                         bool can_bind_to_sampler) = 0;
 
  protected:
   explicit GLES2Decoder(CommandBufferServiceBase* command_buffer_service);

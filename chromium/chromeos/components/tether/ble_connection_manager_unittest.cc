@@ -148,7 +148,7 @@ class UnregisteringObserver : public BleConnectionManager::Observer {
 class MockBleScanner : public BleScanner {
  public:
   explicit MockBleScanner(scoped_refptr<device::BluetoothAdapter> adapter)
-      : BleScanner(adapter, nullptr) {}
+      : BleScanner(adapter, nullptr, nullptr) {}
   ~MockBleScanner() override {}
 
   MOCK_METHOD1(RegisterScanFilterForDevice,
@@ -157,10 +157,13 @@ class MockBleScanner : public BleScanner {
                bool(const cryptauth::RemoteDevice&));
 
   void NotifyReceivedAdvertisementFromDevice(
-      const std::string& device_address,
+      const std::string& bluetooth_address,
       const cryptauth::RemoteDevice& remote_device) {
-    BleScanner::NotifyReceivedAdvertisementFromDevice(device_address,
-                                                      remote_device);
+    device::MockBluetoothDevice device(
+        static_cast<device::MockBluetoothAdapter*>(adapter().get()),
+        0u /* bluetooth_class */, "name", bluetooth_address, false /* paired */,
+        false /* connected */);
+    BleScanner::NotifyReceivedAdvertisementFromDevice(remote_device, &device);
   }
 };
 
@@ -199,14 +202,17 @@ class FakeConnectionFactory
 
   std::unique_ptr<cryptauth::Connection> BuildInstance(
       const cryptauth::RemoteDevice& remote_device,
-      const std::string& device_address,
       scoped_refptr<device::BluetoothAdapter> adapter,
-      const device::BluetoothUUID remote_service_uuid) override {
+      const device::BluetoothUUID remote_service_uuid,
+      device::BluetoothDevice* bluetooth_device,
+      bool should_set_low_connection_latency) override {
     EXPECT_EQ(expected_adapter_, adapter);
     EXPECT_EQ(expected_remote_service_uuid_, remote_service_uuid);
+    EXPECT_FALSE(should_set_low_connection_latency);
 
     return base::WrapUnique<FakeConnectionWithAddress>(
-        new FakeConnectionWithAddress(remote_device, device_address));
+        new FakeConnectionWithAddress(remote_device,
+                                      bluetooth_device->GetAddress()));
   }
 
  private:
@@ -272,7 +278,7 @@ class BleConnectionManagerTest : public testing::Test {
   BleConnectionManagerTest() : test_devices_(CreateTestDevices(4)) {
     // These tests assume a maximum of two concurrent advertisers. Some of the
     // multi-device tests would need to be re-written if this constant changes.
-    EXPECT_EQ(2, kMaxConcurrentAdvertisements);
+    EXPECT_EQ(2u, kMaxConcurrentAdvertisements);
   }
 
   void SetUp() override {

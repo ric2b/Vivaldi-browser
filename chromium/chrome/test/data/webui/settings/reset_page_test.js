@@ -42,7 +42,7 @@ cr.define('settings_reset_page', function() {
       teardown(function() { resetPage.remove(); });
 
       /**
-       * @param {function(SettingsResetProfileDialogElemeent)}
+       * @param {function(SettingsResetProfileDialogElement)}
        *     closeDialogFn A function to call for closing the dialog.
        * @return {!Promise}
        */
@@ -99,9 +99,9 @@ cr.define('settings_reset_page', function() {
         var dialog = resetPage.$$('settings-reset-profile-dialog');
         assertTrue(!!dialog);
 
-        var checkbox = dialog.$$('.footer paper-checkbox');
+        var checkbox = dialog.$$('[slot=footer] paper-checkbox');
         assertTrue(checkbox.checked);
-        var showReportedSettingsLink = dialog.$$('.footer a');
+        var showReportedSettingsLink = dialog.$$('[slot=footer] a');
         assertTrue(!!showReportedSettingsLink);
         MockInteractions.tap(showReportedSettingsLink);
 
@@ -153,7 +153,7 @@ cr.define('settings_reset_page', function() {
 
       if (cr.isChromeOS) {
         /**
-         * @param {function(SettingsPowerwashDialogElemeent):!Element}
+         * @param {function(SettingsPowerwashDialogElement):!Element}
          *     closeButtonFn A function that returns the button to be used for
          *     closing the dialog.
          * @return {!Promise}

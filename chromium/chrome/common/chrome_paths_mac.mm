@@ -18,7 +18,7 @@
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths_internal.h"
 
-#include "app/vivaldi_constants.h"
+#include "app/vivaldi_version_constants.h"
 
 namespace {
 

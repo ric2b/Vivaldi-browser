@@ -8,10 +8,8 @@
 #include "core/layout/ng/inline/ng_inline_layout_algorithm.h"
 #include "core/layout/ng/inline/ng_physical_line_box_fragment.h"
 #include "core/layout/ng/inline/ng_physical_text_fragment.h"
-#include "core/layout/ng/inline/ng_text_fragment.h"
 #include "core/layout/ng/ng_constraint_space.h"
 #include "core/layout/ng/ng_constraint_space_builder.h"
-#include "core/layout/ng/ng_fragment_builder.h"
 #include "core/layout/ng/ng_layout_result.h"
 #include "core/layout/ng/ng_physical_box_fragment.h"
 #include "core/style/ComputedStyle.h"
@@ -23,34 +21,37 @@ class NGInlineNodeForTest : public NGInlineNode {
  public:
   using NGInlineNode::NGInlineNode;
 
-  String& Text() { return MutableData().text_content_; }
-  Vector<NGInlineItem>& Items() { return MutableData().items_; }
+  String& Text() { return MutableData()->text_content_; }
+  Vector<NGInlineItem>& Items() { return MutableData()->items_; }
 
   void Append(const String& text,
               const ComputedStyle* style = nullptr,
               LayoutObject* layout_object = nullptr) {
     unsigned start = Data().text_content_.length();
-    MutableData().text_content_.append(text);
-    MutableData().items_.push_back(NGInlineItem(NGInlineItem::kText, start,
-                                                start + text.length(), style,
-                                                layout_object));
+    MutableData()->text_content_.append(text);
+    MutableData()->items_.push_back(NGInlineItem(NGInlineItem::kText, start,
+                                                 start + text.length(), style,
+                                                 layout_object));
+    MutableData()->is_empty_inline_ = false;
   }
 
   void Append(UChar character) {
-    MutableData().text_content_.append(character);
+    MutableData()->text_content_.append(character);
     unsigned end = Data().text_content_.length();
-    MutableData().items_.push_back(
+    MutableData()->items_.push_back(
         NGInlineItem(NGInlineItem::kBidiControl, end - 1, end, nullptr));
-    MutableData().is_bidi_enabled_ = true;
+    MutableData()->is_bidi_enabled_ = true;
+    MutableData()->is_empty_inline_ = false;
   }
 
   void ClearText() {
-    MutableData().text_content_ = String();
-    MutableData().items_.clear();
+    MutableData()->text_content_ = String();
+    MutableData()->items_.clear();
+    MutableData()->is_empty_inline_ = true;
   }
 
   void SegmentText() {
-    MutableData().is_bidi_enabled_ = true;
+    MutableData()->is_bidi_enabled_ = true;
     NGInlineNode::SegmentText();
   }
 
@@ -96,11 +97,13 @@ class NGInlineNodeTest : public RenderingTest {
 
   void CreateLine(NGInlineNode node,
                   Vector<RefPtr<const NGPhysicalTextFragment>>* fragments_out) {
+    NGPhysicalSize icb_size(LayoutUnit(200), LayoutUnit(200));
+
     RefPtr<NGConstraintSpace> constraint_space =
-        NGConstraintSpaceBuilder(kHorizontalTopBottom)
+        NGConstraintSpaceBuilder(kHorizontalTopBottom, icb_size)
             .ToConstraintSpace(kHorizontalTopBottom);
     RefPtr<NGLayoutResult> result =
-        NGInlineLayoutAlgorithm(node, constraint_space.Get()).Layout();
+        NGInlineLayoutAlgorithm(node, *constraint_space).Layout();
 
     const NGPhysicalBoxFragment* container =
         ToNGPhysicalBoxFragment(result->PhysicalFragment().Get());
@@ -299,13 +302,11 @@ TEST_F(NGInlineNodeTest, SegmentBidiIsolate) {
   TEST_ITEM_OFFSET_DIR(items[8], 22u, 28u, TextDirection::kLtr);
 }
 
-#define TEST_TEXT_FRAGMENT(fragment, node, index, start_offset, end_offset, \
-                           dir)                                             \
-  EXPECT_EQ(node, fragment->Node());                                        \
-  EXPECT_EQ(index, fragment->ItemIndex());                                  \
-  EXPECT_EQ(start_offset, fragment->StartOffset());                         \
-  EXPECT_EQ(end_offset, fragment->EndOffset());                             \
-  EXPECT_EQ(dir, node.Items()[fragment->ItemIndex()].Direction())
+#define TEST_TEXT_FRAGMENT(fragment, index, start_offset, end_offset, dir) \
+  EXPECT_EQ(index, fragment->ItemIndexDeprecated());                       \
+  EXPECT_EQ(start_offset, fragment->StartOffset());                        \
+  EXPECT_EQ(end_offset, fragment->EndOffset());                            \
+  EXPECT_EQ(dir, node.Items()[fragment->ItemIndexDeprecated()].Direction())
 
 TEST_F(NGInlineNodeTest, CreateLineBidiIsolate) {
   UseLayoutObjectAndAhem();
@@ -318,31 +319,31 @@ TEST_F(NGInlineNodeTest, CreateLineBidiIsolate) {
   Vector<RefPtr<const NGPhysicalTextFragment>> fragments;
   CreateLine(node, &fragments);
   ASSERT_EQ(5u, fragments.size());
-  TEST_TEXT_FRAGMENT(fragments[0], node, 0u, 0u, 6u, TextDirection::kLtr);
-  TEST_TEXT_FRAGMENT(fragments[1], node, 6u, 16u, 21u, TextDirection::kRtl);
-  TEST_TEXT_FRAGMENT(fragments[2], node, 4u, 14u, 15u, TextDirection::kLtr);
-  TEST_TEXT_FRAGMENT(fragments[3], node, 2u, 7u, 13u, TextDirection::kRtl);
-  TEST_TEXT_FRAGMENT(fragments[4], node, 8u, 22u, 28u, TextDirection::kLtr);
+  TEST_TEXT_FRAGMENT(fragments[0], 0u, 0u, 6u, TextDirection::kLtr);
+  TEST_TEXT_FRAGMENT(fragments[1], 6u, 16u, 21u, TextDirection::kRtl);
+  TEST_TEXT_FRAGMENT(fragments[2], 4u, 14u, 15u, TextDirection::kLtr);
+  TEST_TEXT_FRAGMENT(fragments[3], 2u, 7u, 13u, TextDirection::kRtl);
+  TEST_TEXT_FRAGMENT(fragments[4], 8u, 22u, 28u, TextDirection::kLtr);
 }
 
-TEST_F(NGInlineNodeTest, MinMaxContentSize) {
+TEST_F(NGInlineNodeTest, MinMaxSize) {
   LoadAhem();
   SetupHtml("t", "<div id=t style='font:10px Ahem'>AB CDEF</div>");
   NGInlineNodeForTest node = CreateInlineNode();
-  MinMaxContentSize sizes = node.ComputeMinMaxContentSize();
-  EXPECT_EQ(40, sizes.min_content);
-  EXPECT_EQ(70, sizes.max_content);
+  MinMaxSize sizes = node.ComputeMinMaxSize();
+  EXPECT_EQ(40, sizes.min_size);
+  EXPECT_EQ(70, sizes.max_size);
 }
 
-TEST_F(NGInlineNodeTest, MinMaxContentSizeElementBoundary) {
+TEST_F(NGInlineNodeTest, MinMaxSizeElementBoundary) {
   LoadAhem();
   SetupHtml("t", "<div id=t style='font:10px Ahem'>A B<span>C D</span></div>");
   NGInlineNodeForTest node = CreateInlineNode();
-  MinMaxContentSize sizes = node.ComputeMinMaxContentSize();
+  MinMaxSize sizes = node.ComputeMinMaxSize();
   // |min_content| should be the width of "BC" because there is an element
   // boundary between "B" and "C" but no break opportunities.
-  EXPECT_EQ(20, sizes.min_content);
-  EXPECT_EQ(60, sizes.max_content);
+  EXPECT_EQ(20, sizes.min_size);
+  EXPECT_EQ(60, sizes.max_size);
 }
 
 }  // namespace blink

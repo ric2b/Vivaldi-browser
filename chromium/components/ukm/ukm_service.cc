@@ -34,12 +34,6 @@ namespace {
 // initialization work.
 constexpr int kInitializationDelaySeconds = 5;
 
-// True if we should record session ids in the UKM Report proto.
-bool ShouldRecordSessionId() {
-  return base::GetFieldTrialParamByFeatureAsBool(kUkmFeature, "RecordSessionId",
-                                                 false);
-}
-
 // Generates a new client id and stores it in prefs.
 uint64_t GenerateClientId(PrefService* pref_service) {
   uint64_t client_id = 0;
@@ -73,6 +67,7 @@ UkmService::UkmService(PrefService* pref_service,
     : pref_service_(pref_service),
       client_id_(0),
       session_id_(0),
+      report_count_(0),
       client_(client),
       reporting_service_(client, pref_service),
       initialize_started_(false),
@@ -94,8 +89,7 @@ UkmService::UkmService(PrefService* pref_service,
   scheduler_.reset(new ukm::UkmRotationScheduler(rotate_callback,
                                                  get_upload_interval_callback));
 
-  for (auto& provider : metrics_providers_)
-    provider->Init();
+  metrics_providers_.Init();
 
   StoreWhitelistedEntries();
 
@@ -125,8 +119,7 @@ void UkmService::EnableReporting() {
   if (reporting_service_.reporting_active())
     return;
 
-  for (auto& provider : metrics_providers_)
-    provider->OnRecordingEnabled();
+  metrics_providers_.OnRecordingEnabled();
 
   if (!initialize_started_)
     Initialize();
@@ -140,8 +133,7 @@ void UkmService::DisableReporting() {
 
   reporting_service_.DisableReporting();
 
-  for (auto& provider : metrics_providers_)
-    provider->OnRecordingDisabled();
+  metrics_providers_.OnRecordingDisabled();
 
   scheduler_->Stop();
   Flush();
@@ -170,8 +162,7 @@ void UkmService::OnAppEnterBackground() {
   scheduler_->Stop();
 
   // Give providers a chance to persist ukm data as part of being backgrounded.
-  for (auto& provider : metrics_providers_)
-    provider->OnAppEnterBackground();
+  metrics_providers_.OnAppEnterBackground();
 
   Flush();
 }
@@ -196,11 +187,12 @@ void UkmService::Purge() {
 void UkmService::ResetClientId() {
   client_id_ = GenerateClientId(pref_service_);
   session_id_ = LoadSessionId(pref_service_);
+  report_count_ = 0;
 }
 
 void UkmService::RegisterMetricsProvider(
     std::unique_ptr<metrics::MetricsProvider> provider) {
-  metrics_providers_.push_back(std::move(provider));
+  metrics_providers_.RegisterMetricsProvider(std::move(provider));
 }
 
 // static
@@ -215,8 +207,10 @@ void UkmService::StartInitTask() {
   DVLOG(1) << "UkmService::StartInitTask";
   client_id_ = LoadOrGenerateClientId(pref_service_);
   session_id_ = LoadSessionId(pref_service_);
-  client_->InitializeSystemProfileMetrics(base::Bind(
-      &UkmService::FinishedInitTask, self_ptr_factory_.GetWeakPtr()));
+  report_count_ = 0;
+
+  metrics_providers_.AsyncInit(base::Bind(&UkmService::FinishedInitTask,
+                                          self_ptr_factory_.GetWeakPtr()));
 }
 
 void UkmService::FinishedInitTask() {
@@ -245,17 +239,16 @@ void UkmService::BuildAndStoreLog() {
 
   Report report;
   report.set_client_id(client_id_);
-  if (ShouldRecordSessionId())
-    report.set_session_id(session_id_);
+  report.set_session_id(session_id_);
+  report.set_report_id(++report_count_);
 
   StoreRecordingsInReport(&report);
 
   metrics::MetricsLog::RecordCoreSystemProfile(client_,
                                                report.mutable_system_profile());
 
-  for (auto& provider : metrics_providers_) {
-    provider->ProvideSystemProfileMetrics(report.mutable_system_profile());
-  }
+  metrics_providers_.ProvideSystemProfileMetrics(
+      report.mutable_system_profile());
 
   std::string serialized_log;
   report.SerializeToString(&serialized_log);

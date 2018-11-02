@@ -197,7 +197,8 @@ AutomationPredicate.object = function(node) {
   // Editable nodes are within a text-like field and don't make sense when
   // performing object navigation. Users should use line, word, or character
   // navigation. Only navigate to the top level node.
-  if (node.parent && node.parent.state.editable)
+  if (node.parent && node.parent.state.editable &&
+      !node.parent.state[State.RICHLY_EDITABLE])
     return false;
 
   // Descend into large nodes.
@@ -284,6 +285,8 @@ AutomationPredicate.structuralContainer = AutomationPredicate.roles([
 AutomationPredicate.root = function(node) {
   switch (node.role) {
     case Role.WINDOW:
+    case Role.MENU:
+    case Role.MENU_BAR:
       return true;
     case Role.DIALOG:
       // The below logic handles nested dialogs properly in the desktop tree
@@ -298,8 +301,21 @@ AutomationPredicate.root = function(node) {
     case Role.ROOT_WEB_AREA:
       return !node.parent || node.parent.root.role == Role.DESKTOP;
     default:
-      return node.state.richlyEditable && node.state.focused;
+      return false;
   }
+};
+
+/**
+ * Returns whether the given node should not be crossed when performing
+ * traversal inside of an editable. Note that this predicate should not be
+ * applied everywhere since there would be no way for a user to exit the
+ * editable.
+ * @param {AutomationNode} node
+ * @return {boolean}
+ */
+AutomationPredicate.editableRoot = function(node) {
+  return AutomationPredicate.root(node) ||
+      node.state.richlyEditable && node.state.focused;
 };
 
 /**
@@ -329,7 +345,7 @@ AutomationPredicate.shouldIgnoreNode = function(node) {
   // Ignore some roles.
   return AutomationPredicate.leaf(node) && (AutomationPredicate.roles([
            Role.CLIENT, Role.COLUMN, Role.GENERIC_CONTAINER, Role.GROUP,
-           Role.IMAGE, Role.STATIC_TEXT, Role.SVG_ROOT,
+           Role.IMAGE, Role.PARAGRAPH, Role.STATIC_TEXT, Role.SVG_ROOT,
            Role.TABLE_HEADER_CONTAINER, Role.UNKNOWN
          ])(node));
 };
@@ -442,5 +458,16 @@ AutomationPredicate.makeHeadingPredicate = function(level) {
  */
 AutomationPredicate.supportsImageData =
     AutomationPredicate.roles([Role.CANVAS, Role.IMAGE, Role.VIDEO]);
+
+/**
+ * Matches against a node that forces showing surrounding contextual information
+ * for braille.
+ * @param {!AutomationNode} node
+ * @return {boolean}
+ */
+AutomationPredicate.contextualBraille = function(node) {
+  return node.parent != null && node.parent.role == Role.ROW &&
+      AutomationPredicate.cellLike(node);
+};
 
 });  // goog.scope

@@ -12,34 +12,32 @@
 #include "device/base/synchronization/shared_memory_seqlock_buffer.h"
 #include "services/device/generic_sensor/generic_sensor_consts.h"
 #include "services/device/generic_sensor/platform_sensor_provider_mac.h"
+#include "services/device/public/cpp/generic_sensor/sensor_traits.h"
 #include "third_party/sudden_motion_sensor/sudden_motion_sensor_mac.h"
 
 namespace {
 
-constexpr double kMeanGravity = 9.80665;
-
-constexpr double kGravityThreshold = kMeanGravity * 0.01;
+constexpr double kGravityThreshold = device::kMeanGravity * 0.01;
 
 bool IsSignificantlyDifferent(const device::SensorReading& reading1,
                               const device::SensorReading& reading2) {
-  return (std::fabs(reading1.values[0] - reading2.values[0]) >=
+  return (std::fabs(reading1.accel.x - reading2.accel.x) >=
           kGravityThreshold) ||
-         (std::fabs(reading1.values[1] - reading2.values[1]) >=
+         (std::fabs(reading1.accel.y - reading2.accel.y) >=
           kGravityThreshold) ||
-         (std::fabs(reading1.values[2] - reading2.values[2]) >=
-          kGravityThreshold);
+         (std::fabs(reading1.accel.z - reading2.accel.z) >= kGravityThreshold);
 }
 
 }  // namespace
 
 namespace device {
 
+using mojom::SensorType;
+
 PlatformSensorAccelerometerMac::PlatformSensorAccelerometerMac(
     mojo::ScopedSharedBufferMapping mapping,
     PlatformSensorProvider* provider)
-    : PlatformSensor(mojom::SensorType::ACCELEROMETER,
-                     std::move(mapping),
-                     provider),
+    : PlatformSensor(SensorType::ACCELEROMETER, std::move(mapping), provider),
       sudden_motion_sensor_(SuddenMotionSensor::Create()) {}
 
 PlatformSensorAccelerometerMac::~PlatformSensorAccelerometerMac() = default;
@@ -52,12 +50,13 @@ bool PlatformSensorAccelerometerMac::CheckSensorConfiguration(
     const PlatformSensorConfiguration& configuration) {
   return configuration.frequency() > 0 &&
          configuration.frequency() <=
-             mojom::SensorConfiguration::kMaxAllowedFrequency;
+             SensorTraits<SensorType::ACCELEROMETER>::kMaxAllowedFrequency;
 }
 
 PlatformSensorConfiguration
 PlatformSensorAccelerometerMac::GetDefaultConfiguration() {
-  return PlatformSensorConfiguration(kDefaultAccelerometerFrequencyHz);
+  return PlatformSensorConfiguration(
+      SensorTraits<SensorType::ACCELEROMETER>::kDefaultFrequency);
 }
 
 bool PlatformSensorAccelerometerMac::StartSensor(
@@ -89,14 +88,15 @@ void PlatformSensorAccelerometerMac::PollForData() {
     return;
 
   SensorReading reading;
-  reading.timestamp = (base::TimeTicks::Now() - base::TimeTicks()).InSecondsF();
-  reading.values[0] = axis_value[0] * kMeanGravity;
-  reading.values[1] = axis_value[1] * kMeanGravity;
-  reading.values[2] = axis_value[2] * kMeanGravity;
+  reading.accel.timestamp =
+      (base::TimeTicks::Now() - base::TimeTicks()).InSecondsF();
+  reading.accel.x = axis_value[0] * kMeanGravity;
+  reading.accel.y = axis_value[1] * kMeanGravity;
+  reading.accel.z = axis_value[2] * kMeanGravity;
 
   if (IsSignificantlyDifferent(reading_, reading)) {
     reading_ = reading;
-    UpdateSensorReading(reading, true);
+    UpdateSensorReading(reading);
   }
 }
 

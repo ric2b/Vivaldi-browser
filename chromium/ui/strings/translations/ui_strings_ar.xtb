@@ -32,6 +32,7 @@
 <translation id="2190355936436201913">(فارغ)</translation>
 <translation id="2289052229480071835">انقر على أهداف اللمس على شاشتك.</translation>
 <translation id="2297836609126180313"><ph name="QUANTITY" /> تيرابايت/ثانية</translation>
+<translation id="24452542372838207">توسيع الإشعار</translation>
 <translation id="2482878487686419369">الاشعارات</translation>
 <translation id="2497284189126895209">الملفّات كلّها</translation>
 <translation id="2522350507219695259">اكتملت المعايرة</translation>
@@ -162,6 +163,7 @@
 <translation id="9002566407876343676">الفتح</translation>
 <translation id="9038489124413477075">مجلد بدون اسم</translation>
 <translation id="9044832324875206639">{SECONDS,plural, =1{ثانية واحدة}zero{# ثانية}two{ثانيتان (#)}few{# ثوانٍ}many{# ثانية}other{# من الثواني}}</translation>
+<translation id="9059834730836941392">تصغير الإشعار</translation>
 <translation id="9150735707954472829">علامة تبويب</translation>
 <translation id="9161053988251441839">التطبيقات المُقترحَة</translation>
 <translation id="9170848237812810038">&amp;إلغاء</translation>

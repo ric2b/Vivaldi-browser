@@ -33,10 +33,10 @@
 #include "net/quic/chromium/quic_chromium_packet_writer.h"
 #include "net/quic/chromium/quic_connection_logger.h"
 #include "net/quic/core/quic_client_push_promise_index.h"
-#include "net/quic/core/quic_client_session_base.h"
 #include "net/quic/core/quic_crypto_client_stream.h"
 #include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_server_id.h"
+#include "net/quic/core/quic_spdy_client_session_base.h"
 #include "net/quic/core/quic_time.h"
 #include "net/socket/socket_performance_watcher.h"
 #include "net/spdy/chromium/multiplexed_session.h"
@@ -62,7 +62,7 @@ class QuicChromiumClientSessionPeer;
 }  // namespace test
 
 class NET_EXPORT_PRIVATE QuicChromiumClientSession
-    : public QuicClientSessionBase,
+    : public QuicSpdyClientSessionBase,
       public MultiplexedSession,
       public QuicChromiumPacketReader::Visitor,
       public QuicChromiumPacketWriter::Delegate {
@@ -100,7 +100,8 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
     int RequestStream(bool requires_confirmation,
                       const CompletionCallback& callback);
 
-    // Releases |stream_| to the caller.
+    // Releases |stream_| to the caller. Returns nullptr if the underlying
+    // QuicChromiumClientSession is closed.
     std::unique_ptr<QuicChromiumClientStream::Handle> ReleaseStream();
 
     // Releases |push_stream_| to the caller.
@@ -139,6 +140,10 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
     // code.
     int GetPeerAddress(IPEndPoint* address) const;
 
+    // Copies the local udp address into |address| and returns a net error
+    // code.
+    int GetSelfAddress(IPEndPoint* address) const;
+
     // Returns the push promise index associated with the session.
     QuicClientPushPromiseIndex* GetPushPromiseIndex();
 
@@ -153,6 +158,9 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
                    const SpdyHeaderBlock& promise_request,
                    const SpdyHeaderBlock& promise_response) override;
     void OnRendezvousResult(QuicSpdyStream* stream) override;
+
+    // Returns true if the session's connection has sent or received any bytes.
+    bool WasEverUsed() const;
 
    private:
     friend class QuicChromiumClientSession;
@@ -170,9 +178,11 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
 
     // Called when the session is closed with a net error.
     void OnSessionClosed(QuicVersion quic_version,
-                         int error,
+                         int net_error,
+                         QuicErrorCode quic_error,
                          bool port_migration_detected,
-                         LoadTimingInfo::ConnectTiming connect_timing);
+                         LoadTimingInfo::ConnectTiming connect_timing,
+                         bool was_ever_used);
 
     // Called by |request| to create a stream.
     int TryCreateStream(StreamRequest* request);
@@ -190,7 +200,8 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
     // session is destroyed.
     NetLogWithSource net_log_;
     bool was_handshake_confirmed_;
-    int error_;
+    int net_error_;
+    QuicErrorCode quic_error_;
     bool port_migration_detected_;
     QuicServerId server_id_;
     QuicVersion quic_version_;
@@ -204,6 +215,8 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
     QuicClientPushPromiseIndex::TryHandle* push_handle_;
     CompletionCallback push_callback_;
     std::unique_ptr<QuicChromiumClientStream::Handle> push_stream_;
+
+    bool was_ever_used_;
   };
 
   // A helper class used to manage a request to create a stream.
@@ -248,7 +261,8 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
 
     // Called by |session_| for an asynchronous request when the stream
     // request has finished successfully.
-    void OnRequestCompleteSuccess(QuicChromiumClientStream* stream);
+    void OnRequestCompleteSuccess(
+        std::unique_ptr<QuicChromiumClientStream::Handle> stream);
 
     // Called by |session_| for an asynchronous request when the stream
     // request has finished with an error. Also called with ERR_ABORTED
@@ -258,7 +272,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
     QuicChromiumClientSession::Handle* session_;
     const bool requires_confirmation_;
     CompletionCallback callback_;
-    QuicChromiumClientStream* stream_;
+    std::unique_ptr<QuicChromiumClientStream::Handle> stream_;
     // For tracking how much time pending stream requests wait.
     base::TimeTicks pending_start_time_;
     State next_state_;
@@ -296,8 +310,6 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
       NetLog* net_log);
   ~QuicChromiumClientSession() override;
 
-  std::unique_ptr<QuicStream> CreateStream(QuicStreamId id) override;
-
   void Initialize() override;
 
   void AddHandle(Handle* handle);
@@ -324,7 +336,8 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
 
   // QuicChromiumPacketWriter::Delegate override.
   int HandleWriteError(int error_code,
-                       scoped_refptr<StringIOBuffer> last_packet) override;
+                       scoped_refptr<QuicChromiumPacketWriter::ReusableIOBuffer>
+                           last_packet) override;
   void OnWriteError(int error_code) override;
   void OnWriteUnblocked() override;
 
@@ -400,10 +413,6 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   // than the number of round-trips needed for the handshake.
   int GetNumSentClientHellos() const;
 
-  // Returns the stream id of the push stream if it is not claimed yet, or 0
-  // otherwise.
-  QuicStreamId GetStreamIdForPush(const GURL& pushed_url);
-
   // Returns true if |hostname| may be pooled onto this session.  If this
   // is a secure QUIC session, then |hostname| must match the certificate
   // presented during the handshake.
@@ -478,6 +487,8 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   // TODO(xunjieli): It only tracks |packet_readers_|. Write a better estimate.
   size_t EstimateMemoryUsage() const;
 
+  bool require_confirmation() const { return require_confirmation_; }
+
  protected:
   // QuicSession methods:
   bool ShouldCreateIncomingDynamicStream(QuicStreamId id) override;
@@ -491,6 +502,8 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
 
   typedef std::set<Handle*> HandleSet;
   typedef std::list<StreamRequest*> StreamRequestQueue;
+
+  bool WasConnectionEverUsed();
 
   QuicChromiumClientStream* CreateOutgoingReliableStreamImpl();
   QuicChromiumClientStream* CreateIncomingReliableStreamImpl(QuicStreamId id);
@@ -553,7 +566,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   uint64_t bytes_pushed_and_unclaimed_count_;
   // Stores packet that witnesses socket write error. This packet is
   // written to a new socket after migration completes.
-  scoped_refptr<StringIOBuffer> packet_;
+  scoped_refptr<QuicChromiumPacketWriter::ReusableIOBuffer> packet_;
   // TODO(jri): Replace use of migration_pending_ sockets_.size().
   // When a task is posted for MigrateSessionOnError, pass in
   // sockets_.size(). Then in MigrateSessionOnError, check to see if

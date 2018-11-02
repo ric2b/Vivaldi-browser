@@ -38,17 +38,17 @@
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/ElementTraversal.h"
-#include "core/dom/MutationCallback.h"
 #include "core/dom/MutationObserver.h"
 #include "core/dom/MutationObserverInit.h"
 #include "core/dom/MutationRecord.h"
 #include "core/dom/NodeComputedStyle.h"
 #include "core/dom/NodeListsNodeData.h"
 #include "core/dom/NodeTraversal.h"
+#include "core/dom/TaskRunnerHelper.h"
+#include "core/dom/events/ScopedEventQueue.h"
 #include "core/events/GestureEvent.h"
 #include "core/events/KeyboardEvent.h"
 #include "core/events/MouseEvent.h"
-#include "core/events/ScopedEventQueue.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/html/FormData.h"
@@ -58,6 +58,7 @@
 #include "core/html/HTMLOptionElement.h"
 #include "core/html/forms/FormController.h"
 #include "core/html/forms/PopupMenu.h"
+#include "core/html/parser/HTMLParserIdioms.h"
 #include "core/input/EventHandler.h"
 #include "core/input/InputDeviceCapabilities.h"
 #include "core/inspector/ConsoleMessage.h"
@@ -70,7 +71,6 @@
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "core/page/SpatialNavigation.h"
-#include "core/paint/PaintLayerScrollableArea.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/text/PlatformLocale.h"
 
@@ -295,18 +295,8 @@ void HTMLSelectElement::ParseAttribute(
     const AttributeModificationParams& params) {
   if (params.name == sizeAttr) {
     unsigned old_size = size_;
-    // Set the attribute value to a number.
-    // This is important since the style rules for this attribute can
-    // determine the appearance property.
-    unsigned size = params.new_value.GetString().ToUInt();
-    AtomicString attr_size = AtomicString::Number(size);
-    if (attr_size != params.new_value) {
-      // FIXME: This is horribly factored.
-      if (Attribute* size_attribute =
-              EnsureUniqueElementData().Attributes().Find(sizeAttr))
-        size_attribute->SetValue(attr_size);
-    }
-    size_ = size;
+    if (!ParseHTMLNonNegativeInteger(params.new_value, size_))
+      size_ = 0;
     SetNeedsValidityCheck();
     if (size_ != old_size) {
       if (InActiveDocument())
@@ -364,10 +354,6 @@ void HTMLSelectElement::AccessKeyAction(bool send_mouse_events) {
   focus();
   DispatchSimulatedClick(
       nullptr, send_mouse_events ? kSendMouseUpDownEvents : kSendNoEvents);
-}
-
-void HTMLSelectElement::setSize(unsigned size) {
-  SetUnsignedIntegralAttribute(sizeAttr, size);
 }
 
 Element* HTMLSelectElement::namedItem(const AtomicString& name) {
@@ -463,10 +449,9 @@ HTMLOptionElement* HTMLSelectElement::OptionAtListIndex(int list_index) const {
   if (list_index < 0)
     return nullptr;
   const ListItems& items = GetListItems();
-  if (static_cast<size_t>(list_index) >= items.size() ||
-      !isHTMLOptionElement(items[list_index]))
+  if (static_cast<size_t>(list_index) >= items.size())
     return nullptr;
-  return toHTMLOptionElement(items[list_index]);
+  return ToHTMLOptionElementOrNull(items[list_index]);
 }
 
 // Returns the 1st valid OPTION |skip| items from |listIndex| in direction
@@ -892,43 +877,31 @@ void HTMLSelectElement::ScrollToOption(HTMLOptionElement* option) {
     return;
   if (UsesMenuList())
     return;
-  if (GetLayoutObject()) {
-    if (GetDocument().Lifecycle().GetState() >=
-        DocumentLifecycle::kLayoutClean) {
-      ToLayoutListBox(GetLayoutObject())->ScrollToRect(option->BoundingBox());
-      return;
-    }
-    // Make sure the LayoutObject will be laid out.
-    GetLayoutObject()->SetNeedsLayout(
-        LayoutInvalidationReason::kMenuOptionsChanged);
-  }
+  bool has_pending_task = option_to_scroll_to_;
+  // We'd like to keep an HTMLOptionElement reference rather than the index of
+  // the option because the task should work even if unselected option is
+  // inserted before executing scrollToOptionTask().
   option_to_scroll_to_ = option;
-  // ScrollToOptionAfterLayout() should be called if this element is rendered.
+  if (!has_pending_task) {
+    TaskRunnerHelper::Get(TaskType::kUserInteraction, &GetDocument())
+        ->PostTask(BLINK_FROM_HERE,
+                   WTF::Bind(&HTMLSelectElement::ScrollToOptionTask,
+                             WrapPersistent(this)));
+  }
 }
 
-void HTMLSelectElement::ScrollToOptionAfterLayout(
-    PaintLayerScrollableArea& scrollable_area) {
+void HTMLSelectElement::ScrollToOptionTask() {
   HTMLOptionElement* option = option_to_scroll_to_.Release();
-  if (!option || UsesMenuList())
+  if (!option || !isConnected())
     return;
-  LayoutBox* option_box = option->GetLayoutBox();
-  if (!option_box)
+  // optionRemoved() makes sure m_optionToScrollTo doesn't have an option with
+  // another owner.
+  DCHECK_EQ(option->OwnerSelectElement(), this);
+  GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
+  if (!GetLayoutObject() || !GetLayoutObject()->IsListBox())
     return;
-
-  // We can't use PaintLayerScrollableArea::ScrollIntoView(), which needs
-  // absolute coordinate. We are unable to compute absolute positions because
-  // ancestors' layout aren't fixed yet.
-  LayoutSize option_offset;
-  for (LayoutObject* container = option_box; container != GetLayoutObject();
-       container = container->Container()) {
-    if (!container->Container())
-      return;
-    option_offset += container->OffsetFromContainer(container->Container());
-  }
-  scrollable_area.ScrollLocalRectIntoView(
-      LayoutRect(LayoutPoint() + option_offset, option_box->Size()),
-      ScrollAlignment::kAlignToEdgeIfNeeded,
-      ScrollAlignment::kAlignToEdgeIfNeeded, false);
+  LayoutRect bounds = option->BoundingBox();
+  ToLayoutListBox(GetLayoutObject())->ScrollToRect(bounds);
 }
 
 void HTMLSelectElement::OptionSelectionStateChanged(HTMLOptionElement* option,
@@ -1856,11 +1829,10 @@ HTMLOptionElement* HTMLSelectElement::SpatialNavigationFocusedOption() {
 
 String HTMLSelectElement::ItemText(const Element& element) const {
   String item_string;
-  if (isHTMLOptGroupElement(element))
-    item_string = toHTMLOptGroupElement(element).GroupLabelText();
-  else if (isHTMLOptionElement(element))
-    item_string =
-        toHTMLOptionElement(element).TextIndentedToRespectGroupLabel();
+  if (auto* optgroup = ToHTMLOptGroupElementOrNull(element))
+    item_string = optgroup->GroupLabelText();
+  else if (auto* option = ToHTMLOptionElementOrNull(element))
+    item_string = option->TextIndentedToRespectGroupLabel();
 
   if (GetLayoutObject())
     ApplyTextTransform(GetLayoutObject()->Style(), item_string, ' ');
@@ -1868,8 +1840,8 @@ String HTMLSelectElement::ItemText(const Element& element) const {
 }
 
 bool HTMLSelectElement::ItemIsDisplayNone(Element& element) const {
-  if (isHTMLOptionElement(element))
-    return toHTMLOptionElement(element).IsDisplayNone();
+  if (auto* option = ToHTMLOptionElementOrNull(element))
+    return option->IsDisplayNone();
   if (const ComputedStyle* style = ItemComputedStyle(element))
     return style->Display() == EDisplay::kNone;
   return false;
@@ -2003,17 +1975,29 @@ void HTMLSelectElement::ResetTypeAheadSessionForTesting() {
 
 // PopupUpdater notifies updates of the specified SELECT element subtree to
 // a PopupMenu object.
-class HTMLSelectElement::PopupUpdater : public MutationCallback {
+class HTMLSelectElement::PopupUpdater : public MutationObserver::Delegate {
  public:
-  explicit PopupUpdater(HTMLSelectElement&);
-  DECLARE_VIRTUAL_TRACE();
+  explicit PopupUpdater(HTMLSelectElement& select)
+      : select_(select), observer_(MutationObserver::Create(this)) {
+    MutationObserverInit init;
+    init.setAttributeOldValue(true);
+    init.setAttributes(true);
+    // Observe only attributes which affect popup content.
+    init.setAttributeFilter({"disabled", "label", "selected", "value"});
+    init.setCharacterData(true);
+    init.setCharacterDataOldValue(true);
+    init.setChildList(true);
+    init.setSubtree(true);
+    observer_->observe(select_, init, ASSERT_NO_EXCEPTION);
+  }
 
-  void Dispose() { observer_->disconnect(); }
+  ExecutionContext* GetExecutionContext() const override {
+    return &select_->GetDocument();
+  }
 
- private:
-  void Call(const HeapVector<Member<MutationRecord>>& records,
-            MutationObserver*) override {
-    // We disconnect the MutationObserver when a popuup is closed.  However
+  void Deliver(const MutationRecordVector& records,
+               MutationObserver&) override {
+    // We disconnect the MutationObserver when a popup is closed.  However
     // MutationObserver can call back after disconnection.
     if (!select_->PopupIsVisible())
       return;
@@ -2031,40 +2015,18 @@ class HTMLSelectElement::PopupUpdater : public MutationCallback {
     }
   }
 
-  ExecutionContext* GetExecutionContext() const override {
-    return &select_->GetDocument();
+  void Dispose() { observer_->disconnect(); }
+
+  DEFINE_INLINE_VIRTUAL_TRACE() {
+    visitor->Trace(select_);
+    visitor->Trace(observer_);
+    MutationObserver::Delegate::Trace(visitor);
   }
 
+ private:
   Member<HTMLSelectElement> select_;
   Member<MutationObserver> observer_;
 };
-
-HTMLSelectElement::PopupUpdater::PopupUpdater(HTMLSelectElement& select)
-    : select_(select) {
-  observer_ = MutationObserver::Create(this);
-  Vector<String> filter;
-  filter.ReserveCapacity(4);
-  // Observe only attributes which affect popup content.
-  filter.push_back(String("disabled"));
-  filter.push_back(String("label"));
-  filter.push_back(String("selected"));
-  filter.push_back(String("value"));
-  MutationObserverInit init;
-  init.setAttributeOldValue(true);
-  init.setAttributes(true);
-  init.setAttributeFilter(filter);
-  init.setCharacterData(true);
-  init.setCharacterDataOldValue(true);
-  init.setChildList(true);
-  init.setSubtree(true);
-  observer_->observe(&select, init, ASSERT_NO_EXCEPTION);
-}
-
-DEFINE_TRACE(HTMLSelectElement::PopupUpdater) {
-  visitor->Trace(select_);
-  visitor->Trace(observer_);
-  MutationCallback::Trace(visitor);
-}
 
 void HTMLSelectElement::ObserveTreeMutation() {
   DCHECK(!popup_updater_);

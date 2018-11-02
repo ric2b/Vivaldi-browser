@@ -12,7 +12,7 @@
 #include <set>
 #include <vector>
 
-#include "base/id_map.h"
+#include "base/containers/id_map.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "storage/browser/blob/blob_data_handle.h"
@@ -269,7 +269,7 @@ class STORAGE_EXPORT FileSystemOperationRunner
   void DidReadDirectory(const OperationHandle& handle,
                         const ReadDirectoryCallback& callback,
                         base::File::Error rv,
-                        const std::vector<DirectoryEntry>& entries,
+                        std::vector<DirectoryEntry> entries,
                         bool has_more);
   void DidWrite(const OperationHandle& handle,
                 const WriteCallback& callback,
@@ -287,7 +287,7 @@ class STORAGE_EXPORT FileSystemOperationRunner
       base::File::Error rv,
       const base::File::Info& file_info,
       const base::FilePath& platform_path,
-      const scoped_refptr<storage::ShareableFileReference>& file_ref);
+      scoped_refptr<storage::ShareableFileReference> file_ref);
 
   void OnCopyProgress(const OperationHandle& handle,
                       const CopyProgressCallback& callback,
@@ -308,7 +308,7 @@ class STORAGE_EXPORT FileSystemOperationRunner
   FileSystemContext* file_system_context_;
 
   // IDMap<std::unique_ptr<FileSystemOperation>> operations_;
-  IDMap<std::unique_ptr<FileSystemOperation>> operations_;
+  base::IDMap<std::unique_ptr<FileSystemOperation>> operations_;
 
   // We keep track of the file to be modified by each operation so that
   // we can notify observers when we're done.

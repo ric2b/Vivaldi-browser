@@ -28,13 +28,14 @@ service_test("services_unittests") {
       "//services/preferences:tests",
       "//services/resource_coordinator:tests",
       "//services/shape_detection:tests",
+      "//services/viz/privileged/interfaces:unit_tests",
+      "//services/viz/public/cpp/compositing:tests",
     ]
   }
 
   if (use_aura) {
     deps += [
       "//services/ui/clipboard:tests",
-      "//services/ui/gpu:tests",
       "//services/ui/ime:tests",
       "//services/ui/input_devices:tests",
       "//services/ui/public/cpp/tests",
@@ -66,7 +67,7 @@ service_test("services_unittests") {
     deps += [ "//services/video_capture:tests" ]
   }
 
-  if (use_ozone && is_chromeos) {
+  if (is_chromeos) {
     deps += [ "//services/ui/display:tests" ]
   }
 
@@ -94,7 +95,6 @@ catalog("services_unittests_catalog") {
   if (use_aura) {
     catalog_deps += [
       "//services/ui/clipboard:tests_catalog",
-      "//services/ui/gpu:tests_catalog",
       "//services/ui/ime:tests_catalog",
     ]
 
@@ -141,6 +141,7 @@ if (is_android) {
       "shape_detection/android/javatests/src/org/chromium/shape_detection/BarcodeDetectionImplTest.java",
       "shape_detection/android/javatests/src/org/chromium/shape_detection/FaceDetectionImplTest.java",
       "shape_detection/android/javatests/src/org/chromium/shape_detection/TestUtils.java",
+      "shape_detection/android/javatests/src/org/chromium/shape_detection/TextDetectionImplTest.java",
     ]
     deps = [
       "$google_play_services_package:google_play_services_base_java",
@@ -154,6 +155,7 @@ if (is_android) {
       "//services/shape_detection/public/interfaces:interfaces_java",
       "//skia/public/interfaces:interfaces_java",
       "//third_party/android_support_test_runner:runner_java",
+      "//third_party/junit",
       "//ui/gfx/geometry/mojo:mojo_java",
     ]
     data = [

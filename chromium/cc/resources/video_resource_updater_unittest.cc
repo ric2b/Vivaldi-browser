@@ -174,9 +174,12 @@ class VideoResourceUpdaterTest : public testing::Test {
     return video_frame;
   }
 
-  static void ReleaseMailboxCB(const gpu::SyncToken& sync_token) {}
+  void SetReleaseSyncToken(const gpu::SyncToken& sync_token) {
+    release_sync_token_ = sync_token;
+  }
 
   scoped_refptr<media::VideoFrame> CreateTestHardwareVideoFrame(
+      media::VideoPixelFormat format,
       unsigned target) {
     const int kDimension = 10;
     gfx::Size size(kDimension, kDimension);
@@ -184,69 +187,77 @@ class VideoResourceUpdaterTest : public testing::Test {
     gpu::Mailbox mailbox;
     mailbox.name[0] = 51;
 
-    const gpu::SyncToken sync_token(
-        gpu::CommandBufferNamespace::GPU_IO, 0,
-        gpu::CommandBufferId::FromUnsafeValue(0x123), 7);
     gpu::MailboxHolder mailbox_holders[media::VideoFrame::kMaxPlanes] = {
-        gpu::MailboxHolder(mailbox, sync_token, target)};
+        gpu::MailboxHolder(mailbox, kMailboxSyncToken, target)};
     scoped_refptr<media::VideoFrame> video_frame =
-        media::VideoFrame::WrapNativeTextures(media::PIXEL_FORMAT_ARGB,
-                                              mailbox_holders,
-                                              base::Bind(&ReleaseMailboxCB),
-                                              size,             // coded_size
-                                              gfx::Rect(size),  // visible_rect
-                                              size,             // natural_size
-                                              base::TimeDelta());  // timestamp
+        media::VideoFrame::WrapNativeTextures(
+            format, mailbox_holders,
+            base::Bind(&VideoResourceUpdaterTest::SetReleaseSyncToken,
+                       base::Unretained(this)),
+            size,                // coded_size
+            gfx::Rect(size),     // visible_rect
+            size,                // natural_size
+            base::TimeDelta());  // timestamp
     EXPECT_TRUE(video_frame);
     return video_frame;
   }
 
   scoped_refptr<media::VideoFrame> CreateTestRGBAHardwareVideoFrame() {
-    return CreateTestHardwareVideoFrame(GL_TEXTURE_2D);
+    return CreateTestHardwareVideoFrame(media::PIXEL_FORMAT_ARGB,
+                                        GL_TEXTURE_2D);
   }
 
   scoped_refptr<media::VideoFrame> CreateTestStreamTextureHardwareVideoFrame(
       bool needs_copy) {
-    scoped_refptr<media::VideoFrame> video_frame =
-        CreateTestHardwareVideoFrame(GL_TEXTURE_EXTERNAL_OES);
+    scoped_refptr<media::VideoFrame> video_frame = CreateTestHardwareVideoFrame(
+        media::PIXEL_FORMAT_ARGB, GL_TEXTURE_EXTERNAL_OES);
     video_frame->metadata()->SetBoolean(
         media::VideoFrameMetadata::COPY_REQUIRED, needs_copy);
     return video_frame;
   }
 
-  scoped_refptr<media::VideoFrame> CreateTestYuvHardwareVideoFrame() {
+  scoped_refptr<media::VideoFrame> CreateTestYuvHardwareVideoFrame(
+      media::VideoPixelFormat format,
+      size_t num_textures,
+      unsigned target) {
     const int kDimension = 10;
     gfx::Size size(kDimension, kDimension);
 
-    const gpu::SyncToken sync_token(
-        gpu::CommandBufferNamespace::GPU_IO, 0,
-        gpu::CommandBufferId::FromUnsafeValue(0x123), 7);
-    const unsigned target = GL_TEXTURE_RECTANGLE_ARB;
-    const int kPlanesNum = 3;
     gpu::MailboxHolder mailbox_holders[media::VideoFrame::kMaxPlanes];
-    for (int i = 0; i < kPlanesNum; ++i) {
+    for (size_t i = 0; i < num_textures; ++i) {
       gpu::Mailbox mailbox;
       mailbox.name[0] = 50 + 1;
-      mailbox_holders[i] = gpu::MailboxHolder(mailbox, sync_token, target);
+      mailbox_holders[i] =
+          gpu::MailboxHolder(mailbox, kMailboxSyncToken, target);
     }
     scoped_refptr<media::VideoFrame> video_frame =
-        media::VideoFrame::WrapNativeTextures(media::PIXEL_FORMAT_I420,
-                                              mailbox_holders,
-                                              base::Bind(&ReleaseMailboxCB),
-                                              size,             // coded_size
-                                              gfx::Rect(size),  // visible_rect
-                                              size,             // natural_size
-                                              base::TimeDelta());  // timestamp
+        media::VideoFrame::WrapNativeTextures(
+            format, mailbox_holders,
+            base::Bind(&VideoResourceUpdaterTest::SetReleaseSyncToken,
+                       base::Unretained(this)),
+            size,                // coded_size
+            gfx::Rect(size),     // visible_rect
+            size,                // natural_size
+            base::TimeDelta());  // timestamp
     EXPECT_TRUE(video_frame);
     return video_frame;
   }
+
+  static const gpu::SyncToken kMailboxSyncToken;
 
   WebGraphicsContext3DUploadCounter* context3d_;
   scoped_refptr<TestContextProvider> context_provider_;
   std::unique_ptr<SharedBitmapManagerAllocationCounter> shared_bitmap_manager_;
   std::unique_ptr<ResourceProvider> resource_provider3d_;
   std::unique_ptr<ResourceProvider> resource_provider_software_;
+  gpu::SyncToken release_sync_token_;
 };
+
+const gpu::SyncToken VideoResourceUpdaterTest::kMailboxSyncToken =
+    gpu::SyncToken(gpu::CommandBufferNamespace::GPU_IO,
+                   0,
+                   gpu::CommandBufferId::FromUnsafeValue(0x123),
+                   7);
 
 TEST_F(VideoResourceUpdaterTest, SoftwareFrame) {
   bool use_stream_video_draw_quad = false;
@@ -488,7 +499,8 @@ TEST_F(VideoResourceUpdaterTest, CreateForHardwarePlanes) {
   EXPECT_EQ(1u, resources.release_callbacks.size());
   EXPECT_EQ(0u, resources.software_resources.size());
 
-  video_frame = CreateTestYuvHardwareVideoFrame();
+  video_frame = CreateTestYuvHardwareVideoFrame(media::PIXEL_FORMAT_I420, 3,
+                                                GL_TEXTURE_RECTANGLE_ARB);
 
   resources = updater.CreateExternalResourcesFromVideoFrame(video_frame);
   EXPECT_EQ(VideoFrameExternalResources::YUV_RESOURCE, resources.type);
@@ -497,7 +509,8 @@ TEST_F(VideoResourceUpdaterTest, CreateForHardwarePlanes) {
   EXPECT_EQ(0u, resources.software_resources.size());
   EXPECT_FALSE(resources.read_lock_fences_enabled);
 
-  video_frame = CreateTestYuvHardwareVideoFrame();
+  video_frame = CreateTestYuvHardwareVideoFrame(media::PIXEL_FORMAT_I420, 3,
+                                                GL_TEXTURE_RECTANGLE_ARB);
   video_frame->metadata()->SetBoolean(
       media::VideoFrameMetadata::READ_LOCK_FENCES_ENABLED, true);
 
@@ -563,6 +576,140 @@ TEST_F(VideoResourceUpdaterTest, CreateForHardwarePlanes_TextureQuad) {
   EXPECT_EQ((GLenum)GL_TEXTURE_EXTERNAL_OES, resources.mailboxes[0].target());
   EXPECT_EQ(1u, resources.release_callbacks.size());
   EXPECT_EQ(0u, resources.software_resources.size());
+  EXPECT_EQ(0, context3d_->TextureCreationCount());
+}
+
+// Passthrough the sync token returned by the compositor if we don't have an
+// existing release sync token.
+TEST_F(VideoResourceUpdaterTest, PassReleaseSyncToken) {
+  VideoResourceUpdater updater(context_provider_.get(),
+                               resource_provider3d_.get(),
+                               false /* use_stream_video_draw_quad */);
+
+  const gpu::SyncToken sync_token(gpu::CommandBufferNamespace::GPU_IO, 0,
+                                  gpu::CommandBufferId::FromUnsafeValue(0x123),
+                                  123);
+
+  {
+    scoped_refptr<media::VideoFrame> video_frame =
+        CreateTestRGBAHardwareVideoFrame();
+
+    VideoFrameExternalResources resources =
+        updater.CreateExternalResourcesFromVideoFrame(video_frame);
+
+    ASSERT_EQ(resources.release_callbacks.size(), 1u);
+    resources.release_callbacks[0].Run(sync_token, false, nullptr);
+  }
+
+  EXPECT_EQ(release_sync_token_, sync_token);
+}
+
+// Generate new sync token because video frame has an existing sync token.
+TEST_F(VideoResourceUpdaterTest, GenerateReleaseSyncToken) {
+  VideoResourceUpdater updater(context_provider_.get(),
+                               resource_provider3d_.get(),
+                               false /* use_stream_video_draw_quad */);
+
+  const gpu::SyncToken sync_token1(gpu::CommandBufferNamespace::GPU_IO, 0,
+                                   gpu::CommandBufferId::FromUnsafeValue(0x123),
+                                   123);
+
+  const gpu::SyncToken sync_token2(gpu::CommandBufferNamespace::GPU_IO, 0,
+                                   gpu::CommandBufferId::FromUnsafeValue(0x234),
+                                   234);
+
+  {
+    scoped_refptr<media::VideoFrame> video_frame =
+        CreateTestRGBAHardwareVideoFrame();
+
+    VideoFrameExternalResources resources =
+        updater.CreateExternalResourcesFromVideoFrame(video_frame);
+
+    ASSERT_EQ(resources.release_callbacks.size(), 1u);
+    resources.release_callbacks[0].Run(sync_token1, false, nullptr);
+    resources.release_callbacks[0].Run(sync_token2, false, nullptr);
+  }
+
+  EXPECT_TRUE(release_sync_token_.HasData());
+  EXPECT_NE(release_sync_token_, sync_token1);
+  EXPECT_NE(release_sync_token_, sync_token2);
+}
+
+// Pass mailbox sync token as is if no GL operations are performed before frame
+// resources are handed off to the compositor.
+TEST_F(VideoResourceUpdaterTest, PassMailboxSyncToken) {
+  VideoResourceUpdater updater(context_provider_.get(),
+                               resource_provider3d_.get(),
+                               false /* use_stream_video_draw_quad */);
+
+  scoped_refptr<media::VideoFrame> video_frame =
+      CreateTestRGBAHardwareVideoFrame();
+
+  VideoFrameExternalResources resources =
+      updater.CreateExternalResourcesFromVideoFrame(video_frame);
+
+  ASSERT_EQ(resources.mailboxes.size(), 1u);
+  EXPECT_TRUE(resources.mailboxes[0].HasSyncToken());
+  EXPECT_EQ(resources.mailboxes[0].sync_token(), kMailboxSyncToken);
+}
+
+// Generate new sync token for compositor when copying the texture.
+TEST_F(VideoResourceUpdaterTest, GenerateSyncTokenOnTextureCopy) {
+  VideoResourceUpdater updater(context_provider_.get(),
+                               resource_provider3d_.get(),
+                               false /* use_stream_video_draw_quad */);
+
+  scoped_refptr<media::VideoFrame> video_frame =
+      CreateTestStreamTextureHardwareVideoFrame(true /* needs_copy */);
+
+  VideoFrameExternalResources resources =
+      updater.CreateExternalResourcesFromVideoFrame(video_frame);
+
+  ASSERT_EQ(resources.mailboxes.size(), 1u);
+  EXPECT_TRUE(resources.mailboxes[0].HasSyncToken());
+  EXPECT_NE(resources.mailboxes[0].sync_token(), kMailboxSyncToken);
+}
+
+// NV12 VideoFrames backed by a single native texture can be sampled out
+// by GL as RGB. To use them as HW overlays we need to know the format
+// of the underlying buffer, that is YUV_420_BIPLANAR.
+TEST_F(VideoResourceUpdaterTest, CreateForHardwarePlanes_SingleNV12) {
+  bool use_stream_video_draw_quad = false;
+  VideoResourceUpdater updater(context_provider_.get(),
+                               resource_provider3d_.get(),
+                               use_stream_video_draw_quad);
+  context3d_->ResetTextureCreationCount();
+  scoped_refptr<media::VideoFrame> video_frame = CreateTestHardwareVideoFrame(
+      media::PIXEL_FORMAT_NV12, GL_TEXTURE_EXTERNAL_OES);
+
+  VideoFrameExternalResources resources =
+      updater.CreateExternalResourcesFromVideoFrame(video_frame);
+  EXPECT_EQ(VideoFrameExternalResources::RGB_RESOURCE, resources.type);
+  EXPECT_EQ(1u, resources.mailboxes.size());
+  EXPECT_EQ((GLenum)GL_TEXTURE_EXTERNAL_OES, resources.mailboxes[0].target());
+  EXPECT_EQ(gfx::BufferFormat::YUV_420_BIPLANAR, resources.buffer_format);
+  EXPECT_EQ(0, context3d_->TextureCreationCount());
+}
+
+TEST_F(VideoResourceUpdaterTest, CreateForHardwarePlanes_DualNV12) {
+  bool use_stream_video_draw_quad = false;
+  VideoResourceUpdater updater(context_provider_.get(),
+                               resource_provider3d_.get(),
+                               use_stream_video_draw_quad);
+  context3d_->ResetTextureCreationCount();
+  scoped_refptr<media::VideoFrame> video_frame =
+      CreateTestYuvHardwareVideoFrame(media::PIXEL_FORMAT_NV12, 2,
+                                      GL_TEXTURE_EXTERNAL_OES);
+
+  VideoFrameExternalResources resources =
+      updater.CreateExternalResourcesFromVideoFrame(video_frame);
+  EXPECT_EQ(VideoFrameExternalResources::YUV_RESOURCE, resources.type);
+  EXPECT_EQ(2u, resources.mailboxes.size());
+  EXPECT_EQ(2u, resources.release_callbacks.size());
+  EXPECT_EQ(0u, resources.software_resources.size());
+  EXPECT_EQ((GLenum)GL_TEXTURE_EXTERNAL_OES, resources.mailboxes[0].target());
+  // |updater| doesn't set |buffer_format| in this case.
+  EXPECT_EQ(gfx::BufferFormat::RGBA_8888, resources.buffer_format);
   EXPECT_EQ(0, context3d_->TextureCreationCount());
 }
 

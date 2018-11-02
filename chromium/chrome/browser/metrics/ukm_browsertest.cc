@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/run_loop.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -15,6 +16,11 @@
 #include "components/ukm/ukm_service.h"
 #include "content/public/common/content_switches.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
+
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/signin/signin_manager_factory.h"
+#include "components/signin/core/browser/signin_manager_base.h"
+#endif
 
 namespace metrics {
 
@@ -68,11 +74,21 @@ class UkmBrowserTest : public SyncTest {
         base::MakeUnique<fake_server::FakeServerNetworkResources>(
             GetFakeServer()->AsWeakPtr()));
 
+#if defined(OS_CHROMEOS)
+    // In browser tests, the profile is already authenticated with stub account
+    // |user_manager::kStubUserEmail|.
+    AccountInfo info = SigninManagerFactory::GetForProfile(profile)
+                           ->GetAuthenticatedAccountInfo();
+    std::string username = info.email;
+    std::string gaia_id = info.gaia;
+#else
+    std::string username = "user@gmail.com";
+    std::string gaia_id = "123456789";
+#endif
     std::unique_ptr<ProfileSyncServiceHarness> harness =
         ProfileSyncServiceHarness::Create(
-            profile, "user@gmail.com", "password",
+            profile, username, gaia_id, "unused" /* password */,
             ProfileSyncServiceHarness::SigninType::FAKE_SIGNIN);
-
     EXPECT_TRUE(harness->SetupSync());
     return harness;
   }

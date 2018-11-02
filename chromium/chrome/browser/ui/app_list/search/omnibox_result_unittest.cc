@@ -14,6 +14,7 @@
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_match_type.h"
 #include "components/search_engines/template_url.h"
+#include "ui/app_list/app_list_features.h"
 
 namespace app_list {
 namespace test {
@@ -89,7 +90,12 @@ class OmniboxResultTest : public AppListTestBase {
   DISALLOW_COPY_AND_ASSIGN(OmniboxResultTest);
 };
 
-TEST_F(OmniboxResultTest, DISABLED_Basic) {
+TEST_F(OmniboxResultTest, Basic) {
+  // TODO(newcomer): this test needs to be reevaluated for the fullscreen app
+  // list (http://crbug.com/759779).
+  if (app_list::features::IsFullscreenAppListEnabled())
+    return;
+
   std::unique_ptr<OmniboxResult> result = CreateOmniboxResult(
       kFullQuery, kRelevance, kExampleUrl, kFullQuery, kExampleDescription,
       AutocompleteMatchType::HISTORY_URL, kExampleKeyword, false);

@@ -31,6 +31,8 @@ TestWebState::TestWebState()
     : browser_state_(nullptr),
       web_usage_enabled_(false),
       is_loading_(false),
+      is_crashed_(false),
+      is_evicted_(false),
       trust_level_(kAbsolute),
       content_is_html_(true) {}
 
@@ -57,6 +59,8 @@ bool TestWebState::IsWebUsageEnabled() const {
 
 void TestWebState::SetWebUsageEnabled(bool enabled) {
   web_usage_enabled_ = enabled;
+  if (!web_usage_enabled_)
+    SetIsEvicted(true);
 }
 
 bool TestWebState::ShouldSuppressDialogs() const {
@@ -67,6 +71,16 @@ void TestWebState::SetShouldSuppressDialogs(bool should_suppress) {}
 
 UIView* TestWebState::GetView() {
   return view_;
+}
+
+void TestWebState::WasShown() {
+  for (auto& observer : observers_)
+    observer.WasShown();
+}
+
+void TestWebState::WasHidden() {
+  for (auto& observer : observers_)
+    observer.WasHidden();
 }
 
 const NavigationManager* TestWebState::GetNavigationManager() const {
@@ -100,6 +114,16 @@ void TestWebState::SetView(UIView* view) {
   view_ = view;
 }
 
+void TestWebState::SetIsCrashed(bool value) {
+  is_crashed_ = value;
+  if (is_crashed_)
+    SetIsEvicted(true);
+}
+
+void TestWebState::SetIsEvicted(bool value) {
+  is_evicted_ = value;
+}
+
 CRWJSInjectionReceiver* TestWebState::GetJSInjectionReceiver() const {
   return nullptr;
 }
@@ -111,12 +135,10 @@ void TestWebState::ExecuteJavaScript(const base::string16& javascript,
   callback.Run(nullptr);
 }
 
+void TestWebState::ExecuteUserJavaScript(NSString* javaScript) {}
+
 const std::string& TestWebState::GetContentsMimeType() const {
   return mime_type_;
-}
-
-const std::string& TestWebState::GetContentLanguageHeader() const {
-  return content_language_;
 }
 
 bool TestWebState::ContentIsHTML() const {
@@ -164,6 +186,14 @@ double TestWebState::GetLoadingProgress() const {
   return 0.0;
 }
 
+bool TestWebState::IsCrashed() const {
+  return is_crashed_;
+}
+
+bool TestWebState::IsEvicted() const {
+  return is_evicted_;
+}
+
 bool TestWebState::IsBeingDestroyed() const {
   return false;
 }
@@ -192,6 +222,11 @@ void TestWebState::OnPageLoaded(
 void TestWebState::OnNavigationStarted(NavigationContext* navigation_context) {
   for (auto& observer : observers_)
     observer.DidStartNavigation(navigation_context);
+}
+
+void TestWebState::OnNavigationFinished(NavigationContext* navigation_context) {
+  for (auto& observer : observers_)
+    observer.DidFinishNavigation(navigation_context);
 }
 
 void TestWebState::OnRenderProcessGone() {

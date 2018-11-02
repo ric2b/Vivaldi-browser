@@ -8,6 +8,7 @@
 
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -47,7 +48,7 @@
 #include "extensions/test/extension_test_message_listener.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "ui/base/ime/composition_text.h"
-#include "ui/base/ime/composition_underline.h"
+#include "ui/base/ime/ime_text_span.h"
 #include "ui/base/ime/text_input_client.h"
 #include "ui/base/test/ui_controls.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -1293,51 +1294,6 @@ IN_PROC_BROWSER_TEST_F(WebViewPopupInteractiveTest,
   PopupTestHelper(gfx::Point(20, 0));
 }
 
-// Drag and drop inside a webview is currently only enabled for linux and mac,
-// but the tests don't work on anything except chromeos for now. This is because
-// of simulating mouse drag code's dependency on platforms.
-
-// Flaky: https://crbug.com/700483
-#if defined(OS_CHROMEOS) && !defined(USE_OZONE)
-IN_PROC_BROWSER_TEST_P(WebViewDragDropInteractiveTest,
-                       DISABLED_DragDropWithinWebView) {
-  LoadAndLaunchPlatformApp("web_view/dnd_within_webview", "connected");
-  ASSERT_TRUE(ui_test_utils::ShowAndFocusNativeWindow(GetPlatformAppWindow()));
-
-  embedder_web_contents_ = GetFirstAppWindowWebContents();
-  gfx::Rect offset = embedder_web_contents_->GetContainerBounds();
-  corner_ = gfx::Point(offset.x(), offset.y());
-
-  // In the drag drop test we add 20px padding to the page body because on
-  // windows if we get too close to the edge of the window the resize cursor
-  // appears and we start dragging the window edge.
-  corner_.Offset(20, 20);
-
-  // Flush any pending events to make sure we start with a clean slate.
-  content::RunAllPendingInMessageLoop();
-  for (;;) {
-    base::RunLoop run_loop;
-    quit_closure_ = run_loop.QuitClosure();
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&WebViewInteractiveTestBase::DragTestStep1,
-                              base::Unretained(this)));
-    run_loop.Run();
-
-    if (last_drop_data_ == "Drop me")
-      break;
-
-    LOG(INFO) << "Drag was cancelled in interactive_test, restarting drag";
-
-    // Reset state for next try.
-    ExtensionTestMessageListener reset_listener("resetStateReply", false);
-    EXPECT_TRUE(content::ExecuteScript(embedder_web_contents_,
-                                       "window.resetState()"));
-    ASSERT_TRUE(reset_listener.WaitUntilSatisfied());
-  }
-  ASSERT_EQ("Drop me", last_drop_data_);
-}
-#endif  // (defined(OS_CHROMEOS))
-
 IN_PROC_BROWSER_TEST_P(WebViewInteractiveTest, Navigation) {
   TestHelper("testNavigation", "web_view/navigation", NO_TEST_SERVER);
 }
@@ -1844,7 +1800,7 @@ IN_PROC_BROWSER_TEST_P(WebViewImeInteractiveTest,
       target_web_contents->GetRenderWidgetHostView()->GetRenderWidgetHost();
   content::SendImeCommitTextToWidget(
       target_rwh_for_input, base::UTF8ToUTF16("C"),
-      std::vector<ui::CompositionUnderline>(), gfx::Range(4, 5), 0);
+      std::vector<ui::ImeTextSpan>(), gfx::Range(4, 5), 0);
   input_listener.WaitUntilSatisfied();
 
   // Get the input value from the guest.
@@ -1910,7 +1866,7 @@ IN_PROC_BROWSER_TEST_P(WebViewImeInteractiveTest, CompositionRangeUpdates) {
   CompositionRangeUpdateObserver observer(embedder_web_contents);
   content::SendImeSetCompositionTextToWidget(
       target_web_contents->GetRenderWidgetHostView()->GetRenderWidgetHost(),
-      base::UTF8ToUTF16("ABC"), std::vector<ui::CompositionUnderline>(),
+      base::UTF8ToUTF16("ABC"), std::vector<ui::ImeTextSpan>(),
       gfx::Range::InvalidRange(), 0, 3);
   observer.WaitForCompositionRangeLength(3U);
 }

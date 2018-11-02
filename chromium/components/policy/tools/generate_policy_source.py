@@ -666,7 +666,7 @@ class SchemaNodesGenerator:
       f.write('};\n\n')
 
     if self.string_enums:
-      f.write('const char* kStringEnumerations[] = {\n')
+      f.write('const char* const kStringEnumerations[] = {\n')
       for possible_values in self.string_enums:
         f.write('  %s,\n' % self.GetString(possible_values))
       f.write('};\n\n')

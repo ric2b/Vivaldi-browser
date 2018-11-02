@@ -19,11 +19,8 @@
 #include "base/guid.h"
 #include "base/location.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
-#include "base/task_runner.h"
-#include "base/task_runner_util.h"
-#include "base/threading/sequenced_worker_pool.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "content/browser/resource_context_impl.h"
@@ -39,6 +36,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/browser/service_worker_context.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/resource_request_body.h"
 #include "net/base/net_errors.h"
@@ -51,6 +49,7 @@
 #include "net/log/net_log_with_source.h"
 #include "storage/browser/blob/blob_data_builder.h"
 #include "storage/browser/blob/blob_data_handle.h"
+#include "storage/browser/blob/blob_impl.h"
 #include "storage/browser/blob/blob_storage_context.h"
 #include "ui/base/page_transition_types.h"
 
@@ -121,8 +120,8 @@ net::NetLogEventType RequestJobResultToNetEventType(
   return n::FAILED;
 }
 
-std::vector<int64_t> GetFileSizesOnBlockingPool(
-    std::vector<base::FilePath> file_paths) {
+// Does file IO. Use with base::MayBlock().
+std::vector<int64_t> GetFileSizes(std::vector<base::FilePath> file_paths) {
   std::vector<int64_t> sizes;
   sizes.reserve(file_paths.size());
   for (const base::FilePath& path : file_paths) {
@@ -158,13 +157,12 @@ class ServiceWorkerURLRequestJob::FileSizeResolver {
                            phase_ == Phase::SUCCESS);
   }
 
-  void Resolve(base::TaskRunner* file_runner,
-               const base::Callback<void(bool)>& callback) {
+  void Resolve(base::OnceCallback<void(bool /* success */)> callback) {
     DCHECK_EQ(static_cast<int>(Phase::INITIAL), static_cast<int>(phase_));
     DCHECK(file_elements_.empty());
     phase_ = Phase::WAITING;
     body_ = owner_->body_;
-    callback_ = callback;
+    callback_ = std::move(callback);
 
     std::vector<base::FilePath> file_paths;
     for (ResourceRequestBody::Element& element : *body_->elements_mutable()) {
@@ -179,10 +177,11 @@ class ServiceWorkerURLRequestJob::FileSizeResolver {
       return;
     }
 
-    PostTaskAndReplyWithResult(
-        file_runner, FROM_HERE,
-        base::Bind(&GetFileSizesOnBlockingPool, base::Passed(&file_paths)),
-        base::Bind(
+    base::PostTaskWithTraitsAndReplyWithResult(
+        FROM_HERE,
+        {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+        base::BindOnce(&GetFileSizes, std::move(file_paths)),
+        base::BindOnce(
             &ServiceWorkerURLRequestJob::FileSizeResolver::OnFileSizesResolved,
             weak_factory_.GetWeakPtr()));
   }
@@ -209,8 +208,8 @@ class ServiceWorkerURLRequestJob::FileSizeResolver {
   void Complete(bool success) {
     DCHECK_EQ(static_cast<int>(Phase::WAITING), static_cast<int>(phase_));
     phase_ = success ? Phase::SUCCESS : Phase::FAIL;
-    // Destroys |this|, so we use a copy.
-    base::ResetAndReturn(&callback_).Run(success);
+    // Destroys |this|.
+    std::move(callback_).Run(success);
   }
 
   // Owns and must outlive |this|.
@@ -218,7 +217,7 @@ class ServiceWorkerURLRequestJob::FileSizeResolver {
 
   scoped_refptr<ResourceRequestBody> body_;
   std::vector<ResourceRequestBody::Element*> file_elements_;
-  base::Callback<void(bool)> callback_;
+  base::OnceCallback<void(bool /* success */)> callback_;
   Phase phase_ = Phase::INITIAL;
   base::WeakPtrFactory<FileSizeResolver> weak_factory_;
 
@@ -337,8 +336,7 @@ ServiceWorkerURLRequestJob::ServiceWorkerURLRequestJob(
       delegate_(delegate),
       response_type_(NOT_DETERMINED),
       is_started_(false),
-      service_worker_response_type_(
-          blink::kWebServiceWorkerResponseTypeDefault),
+      fetch_response_type_(network::mojom::FetchResponseType::kDefault),
       client_id_(client_id),
       blob_storage_context_(blob_storage_context),
       resource_context_(resource_context),
@@ -512,8 +510,8 @@ void ServiceWorkerURLRequestJob::MaybeStartRequest() {
   if (is_started_ && response_type_ != NOT_DETERMINED) {
     // Start asynchronously.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&ServiceWorkerURLRequestJob::StartRequest,
-                              weak_factory_.GetWeakPtr()));
+        FROM_HERE, base::BindOnce(&ServiceWorkerURLRequestJob::StartRequest,
+                                  weak_factory_.GetWeakPtr()));
   }
 }
 
@@ -544,11 +542,9 @@ void ServiceWorkerURLRequestJob::StartRequest() {
       if (HasRequestBody()) {
         DCHECK(!file_size_resolver_);
         file_size_resolver_.reset(new FileSizeResolver(this));
-        file_size_resolver_->Resolve(
-            BrowserThread::GetBlockingPool(),
-            base::Bind(
-                &ServiceWorkerURLRequestJob::RequestBodyFileSizesResolved,
-                GetWeakPtr()));
+        file_size_resolver_->Resolve(base::BindOnce(
+            &ServiceWorkerURLRequestJob::RequestBodyFileSizesResolved,
+            GetWeakPtr()));
         return;
       }
 
@@ -581,6 +577,7 @@ ServiceWorkerURLRequestJob::CreateFetchRequest() {
   }
   request->blob_uuid = blob_uuid;
   request->blob_size = blob_size;
+  request->blob = request_body_blob_handle_;
   request->credentials_mode = credentials_mode_;
   request->redirect_mode = redirect_mode_;
   request->integrity = integrity_;
@@ -614,6 +611,15 @@ void ServiceWorkerURLRequestJob::CreateRequestBodyBlob(std::string* blob_uuid,
       blob_storage_context_->AddFinishedBlob(&blob_builder);
   *blob_uuid = blob_builder.uuid();
   *blob_size = request_body_blob_data_handle_->size();
+
+  if (base::FeatureList::IsEnabled(features::kMojoBlobs)) {
+    storage::mojom::BlobPtr blob_ptr;
+    storage::BlobImpl::Create(base::MakeUnique<storage::BlobDataHandle>(
+                                  *request_body_blob_data_handle_),
+                              MakeRequest(&blob_ptr));
+    request_body_blob_handle_ =
+        base::MakeRefCounted<storage::BlobHandle>(std::move(blob_ptr));
+  }
 }
 
 bool ServiceWorkerURLRequestJob::ShouldRecordNavigationMetrics(
@@ -674,6 +680,7 @@ void ServiceWorkerURLRequestJob::DidDispatchFetchEvent(
     ServiceWorkerFetchEventResult fetch_result,
     const ServiceWorkerResponse& response,
     blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream,
+    storage::mojom::BlobPtr body_as_blob,
     const scoped_refptr<ServiceWorkerVersion>& version) {
   // Do not clear |fetch_dispatcher_| if it has dispatched a navigation preload
   // request to keep the mojom::URLLoader related objects in it, because the
@@ -749,6 +756,8 @@ void ServiceWorkerURLRequestJob::DidDispatchFetchEvent(
   }
 
   // Set up a request for reading the blob.
+  // |body_as_blob| must be kept around until we call this to ensure that
+  // it's alive.
   if (!response.blob_uuid.empty() && blob_storage_context_) {
     SetResponseBodyType(BLOB);
     std::unique_ptr<storage::BlobDataHandle> blob_data_handle =
@@ -773,7 +782,7 @@ void ServiceWorkerURLRequestJob::DidDispatchFetchEvent(
 void ServiceWorkerURLRequestJob::SetResponse(
     const ServiceWorkerResponse& response) {
   response_url_list_ = response.url_list;
-  service_worker_response_type_ = response.response_type;
+  fetch_response_type_ = response.response_type;
   cors_exposed_header_names_ = response.cors_exposed_header_names;
   response_time_ = response.response_time;
   CreateResponseHeader(response.status_code, response.status_text,
@@ -922,7 +931,7 @@ void ServiceWorkerURLRequestJob::OnStartCompleted() const {
               false /* was_fetched_via_foreign_fetch */,
               false /* was_fallback_required */,
               std::vector<GURL>() /* url_list_via_service_worker */,
-              blink::kWebServiceWorkerResponseTypeDefault,
+              network::mojom::FetchResponseType::kDefault,
               base::TimeTicks() /* service_worker_start_time */,
               base::TimeTicks() /* service_worker_ready_time */,
               false /* response_is_in_cache_storage */,
@@ -939,11 +948,10 @@ void ServiceWorkerURLRequestJob::OnStartCompleted() const {
           ->OnStartCompleted(
               true /* was_fetched_via_service_worker */,
               fetch_type_ == ServiceWorkerFetchType::FOREIGN_FETCH,
-              fall_back_required_, response_url_list_,
-              service_worker_response_type_, worker_start_time_,
-              worker_ready_time_, response_is_in_cache_storage_,
-              response_cache_storage_cache_name_, cors_exposed_header_names_,
-              did_navigation_preload_);
+              fall_back_required_, response_url_list_, fetch_response_type_,
+              worker_start_time_, worker_ready_time_,
+              response_is_in_cache_storage_, response_cache_storage_cache_name_,
+              cors_exposed_header_names_, did_navigation_preload_);
       break;
   }
 }

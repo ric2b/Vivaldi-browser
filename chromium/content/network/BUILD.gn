@@ -26,11 +26,17 @@ source_set("network_sources") {
     "//content/app:*",
     "//content/public/network/*",
     "//content/utility:utility",
+
+    # For use by StoragePartition.
+    # TODO(mmenke): Remove when network service ships.
+    "//content/browser",
   ]
 
   sources = [
     "cache_url_loader.cc",
     "cache_url_loader.h",
+    "cookie_manager_impl.cc",
+    "cookie_manager_impl.h",
     "network_context.cc",
     "network_context.h",
     "network_service_impl.cc",
@@ -45,6 +51,7 @@ source_set("network_sources") {
 
   deps = [
     "//base",
+    "//components/network_session_configurator/browser",
     "//components/network_session_configurator/common",
     "//content:export",
     "//content/common",
@@ -52,6 +59,7 @@ source_set("network_sources") {
     "//content/public/common:common_sources",
     "//mojo/public/cpp/bindings",
     "//net",
+    "//services/network/public/cpp",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/interfaces",
   ]

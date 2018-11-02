@@ -38,6 +38,7 @@ using base::android::AttachCurrentThread;
 using base::android::ConvertUTF8ToJavaString;
 using base::android::ConvertUTF16ToJavaString;
 using base::android::JavaParamRef;
+using base::android::JavaRef;
 using base::android::ScopedJavaLocalRef;
 using base::android::ScopedJavaGlobalRef;
 using base::android::ToJavaIntArray;
@@ -86,7 +87,9 @@ std::unique_ptr<icu::Collator> GetICUCollator() {
 
 }  // namespace
 
-BookmarkBridge::BookmarkBridge(JNIEnv* env, jobject obj, jobject j_profile)
+BookmarkBridge::BookmarkBridge(JNIEnv* env,
+                               const JavaRef<jobject>& obj,
+                               const JavaRef<jobject>& j_profile)
     : weak_java_ref_(env, obj),
       bookmark_model_(NULL),
       managed_bookmark_service_(NULL),
@@ -235,8 +238,7 @@ void BookmarkBridge::GetTopLevelFolderIDs(
   std::size_t special_count = top_level_folders.size();
 
   if (get_normal) {
-    DCHECK_EQ(bookmark_model_->root_node()->child_count(), 5);
-
+    DCHECK_EQ(bookmark_model_->root_node()->child_count(), 5 +1 /* trash */);
     const BookmarkNode* mobile_node = bookmark_model_->mobile_node();
     for (int i = 0; i < mobile_node->child_count(); ++i) {
       const BookmarkNode* node = mobile_node->GetChild(i);
@@ -747,8 +749,9 @@ ScopedJavaLocalRef<jobject> BookmarkBridge::CreateJavaBookmark(
       GetBookmarkType(parent), IsEditable(node), IsManaged(node));
 }
 
-void BookmarkBridge::ExtractBookmarkNodeInformation(const BookmarkNode* node,
-                                                     jobject j_result_obj) {
+void BookmarkBridge::ExtractBookmarkNodeInformation(
+    const BookmarkNode* node,
+    const JavaRef<jobject>& j_result_obj) {
   JNIEnv* env = AttachCurrentThread();
   if (!IsReachable(node))
     return;

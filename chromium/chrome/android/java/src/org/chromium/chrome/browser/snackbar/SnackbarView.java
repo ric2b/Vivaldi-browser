@@ -49,10 +49,12 @@ class SnackbarView {
     private ViewGroup mParent;
     private Snackbar mSnackbar;
     private boolean mAnimateOverWebContent;
+    private View mRootContentView;
 
     // Variables used to calculate the virtual keyboard's height.
     private Rect mCurrentVisibleRect = new Rect();
     private Rect mPreviousVisibleRect = new Rect();
+    private int[] mTempLocation = new int[2];
 
     private OnLayoutChangeListener mLayoutListener = new OnLayoutChangeListener() {
         @Override
@@ -83,6 +85,7 @@ class SnackbarView {
             mOriginalParent = parentView;
         }
 
+        mRootContentView = activity.findViewById(android.R.id.content);
         mParent = mOriginalParent;
         mView = (ViewGroup) LayoutInflater.from(activity).inflate(
                 R.layout.snackbar, mParent, false);
@@ -120,7 +123,7 @@ class SnackbarView {
         animatorSet.addListener(new AnimatorListenerAdapter() {
             @Override
             public void onAnimationEnd(Animator animation) {
-                mParent.removeOnLayoutChangeListener(mLayoutListener);
+                mRootContentView.removeOnLayoutChangeListener(mLayoutListener);
                 mParent.removeView(mView);
             }
         });
@@ -143,9 +146,16 @@ class SnackbarView {
         if (!mCurrentVisibleRect.equals(mPreviousVisibleRect)) {
             mPreviousVisibleRect.set(mCurrentVisibleRect);
 
-            int keyboardHeight = mParent.getHeight() - mCurrentVisibleRect.bottom
-                    + mCurrentVisibleRect.top;
+            mParent.getLocationInWindow(mTempLocation);
+            int keyboardHeight =
+                    mParent.getHeight() + mTempLocation[1] - mCurrentVisibleRect.bottom;
+            keyboardHeight = Math.max(0, keyboardHeight);
             FrameLayout.LayoutParams lp = getLayoutParams();
+
+            int prevBottomMargin = lp.bottomMargin;
+            int prevWidth = lp.width;
+            int prevGravity = lp.gravity;
+
             lp.bottomMargin = keyboardHeight;
             if (mIsTablet) {
                 int margin = mParent.getResources()
@@ -155,7 +165,11 @@ class SnackbarView {
                 lp.width = Math.min(width, mParent.getWidth() - 2 * margin);
                 lp.gravity = Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM;
             }
-            mView.setLayoutParams(lp);
+
+            if (prevBottomMargin != lp.bottomMargin || prevWidth != lp.width
+                    || prevGravity != lp.gravity) {
+                mView.setLayoutParams(lp);
+            }
         }
     }
 
@@ -163,7 +177,7 @@ class SnackbarView {
      * @see SnackbarManager#overrideParent(ViewGroup)
      */
     void overrideParent(ViewGroup overridingParent) {
-        mParent.removeOnLayoutChangeListener(mLayoutListener);
+        mRootContentView.removeOnLayoutChangeListener(mLayoutListener);
         mParent = overridingParent == null ? mOriginalParent : overridingParent;
         if (isShowing()) {
             ((ViewGroup) mView.getParent()).removeView(mView);
@@ -205,7 +219,7 @@ class SnackbarView {
         // change listener of the view itself, the force layout flag will be reset to 0 when
         // layout() returns. Therefore we have to do request layout on one level above the requested
         // view.
-        mParent.addOnLayoutChangeListener(mLayoutListener);
+        mRootContentView.addOnLayoutChangeListener(mLayoutListener);
     }
 
     private boolean updateInternal(Snackbar snackbar, boolean animate) {

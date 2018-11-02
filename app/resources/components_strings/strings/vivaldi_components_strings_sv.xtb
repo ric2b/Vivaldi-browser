@@ -69,11 +69,13 @@
 <translation id="4506599922270137252">Kontakta systemadministratören</translation>
 <translation id="4522570452068850558">Info</translation>
 <translation id="4558551763791394412">Testa att inaktivera tilläggen.</translation>
+<translation id="4611292653554630842">Logga in</translation>
 <translation id="4708268264240856090">Anslutningen avbröts</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Köra Windows nätverksdiagnostik<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">Sökväg till körbar fil</translation>
 <translation id="4764776831041365478">Webbsidan på <ph name="URL" /> kan ligga nere för tillfället eller kan ha flyttats permanent till en ny webbadress.</translation>
 <translation id="4807049035289105102">Du kan inte besöka <ph name="SITE" /> just nu eftersom webbsidan sände förvrängda uppgifter som inte Vivaldi kan hantera. Nätverksfel och attacker är ofta tillfälliga, så sidan kommer förmodligen att fungera senare.</translation>
+<translation id="4913131542719409934">Autentisering krävs</translation>
 <translation id="5023310440958281426">Kontrollera administratörsprinciperna</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Kontrollera adressen till mellanservern (proxyn)<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 bitar)</translation>
@@ -103,10 +105,12 @@
 <translation id="6328639280570009161">Prova att inaktivera nätverksförslag</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> avvisade anslutningen.</translation>
 <translation id="6569060085658103619">Du visar en tilläggssida</translation>
+<translation id="6657585470893396449">Lösenord</translation>
 <translation id="6685834062052613830">Logga ut och slutför konfigurationen</translation>
 <translation id="6711464428925977395">Något är fel med proxyservern eller så är adressen felaktig.</translation>
 <translation id="6757797048963528358">Enheten gick i viloläge.</translation>
 <translation id="6897140037006041989">Användaragent</translation>
+<translation id="7090678807593890770">Sök efter <ph name="LINK" /> på Google</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> följer inte säkerhetsstandarderna.</translation>
 <translation id="7353601530677266744">Kommandorad</translation>
 <translation id="7419106976560586862">Profilsökväg</translation>
@@ -125,6 +129,7 @@
 <translation id="8289355894181816810">Kontakta din nätverksadministratör om du är osäker på vad det här innebär.</translation>
 <translation id="8332188693563227489">Åtkomst nekades till <ph name="HOST_NAME" /></translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> tog för lång tid på sig att svara.</translation>
+<translation id="8503813439785031346">Användarnamn</translation>
 <translation id="8740359287975076522">Det gick inte att hitta <ph name="HOST_NAME" />s &lt;abbr id="dnsDefinition"&gt;DNS-adress&lt;/abbr&gt;. Diagnostiserar problemet.</translation>
 <translation id="9001074447101275817">Proxyservern <ph name="DOMAIN" /> kräver användarnamn och lösenord.</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> använder ett protokoll som inte stöds.</translation>

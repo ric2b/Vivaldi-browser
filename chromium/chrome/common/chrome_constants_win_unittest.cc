@@ -12,7 +12,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-#include "app/vivaldi_constants.h"
+#include "app/vivaldi_version_constants.h"
 
 namespace chrome {
 

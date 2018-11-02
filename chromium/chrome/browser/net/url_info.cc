@@ -159,7 +159,7 @@ void UrlInfo::SetPendingDeleteState() {
 }
 
 void UrlInfo::SetFoundState() {
-  DCHECK(ASSIGNED == state_);
+  DCHECK(ASSIGNED == state_ || ASSIGNED_BUT_MARKED == state_);
   state_ = FOUND;
   resolve_duration_ = GetDuration();
   const TimeDelta max_duration = MaxNonNetworkDnsLookupDuration();
@@ -172,7 +172,7 @@ void UrlInfo::SetFoundState() {
 }
 
 void UrlInfo::SetNoSuchNameState() {
-  DCHECK(ASSIGNED == state_);
+  DCHECK(ASSIGNED == state_ || ASSIGNED_BUT_MARKED == state_);
   state_ = NO_SUCH_NAME;
   resolve_duration_ = GetDuration();
 #ifndef NDEBUG
@@ -368,10 +368,10 @@ std::string UrlInfo::GetAsciiMotivation() const {
       return "n/a";
 
     case STATIC_REFERAL_MOTIVATED:
-      return RemoveJs(referring_url_.spec()) + "*";
+      return "[static referal]";
 
     case LEARNED_REFERAL_MOTIVATED:
-      return RemoveJs(referring_url_.spec());
+      return "[learned referal]";
 
     default:
       return std::string();

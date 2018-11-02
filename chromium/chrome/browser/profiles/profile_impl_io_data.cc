@@ -38,6 +38,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "components/cookie_config/cookie_store_util.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_io_data.h"
@@ -45,6 +46,7 @@
 #include "components/data_reduction_proxy/core/browser/data_store_impl.h"
 #include "components/domain_reliability/monitor.h"
 #include "components/net_log/chrome_net_log.h"
+#include "components/network_session_configurator/browser/network_session_configurator.h"
 #include "components/offline_pages/features/features.h"
 #include "components/prefs/json_pref_store.h"
 #include "components/prefs/pref_filter.h"
@@ -69,7 +71,7 @@
 #include "net/reporting/reporting_policy.h"
 #include "net/reporting/reporting_service.h"
 #include "net/ssl/channel_id_service.h"
-#include "net/url_request/url_request_context_storage.h"
+#include "net/url_request/url_request_context_builder.h"
 #include "net/url_request/url_request_intercepting_job_factory.h"
 #include "net/url_request/url_request_job_factory_impl.h"
 #include "storage/browser/quota/special_storage_policy.h"
@@ -80,35 +82,23 @@
 
 namespace {
 
-net::BackendType ChooseCacheBackendType() {
-#if !defined(OS_ANDROID)
-  const base::CommandLine& command_line =
-      *base::CommandLine::ForCurrentProcess();
-  if (command_line.HasSwitch(switches::kUseSimpleCacheBackend)) {
-    const std::string opt_value =
-        command_line.GetSwitchValueASCII(switches::kUseSimpleCacheBackend);
-    if (base::LowerCaseEqualsASCII(opt_value, "off"))
+// Returns the BackendType that the disk cache should use.
+// TODO(mmenke): Once all URLRequestContexts are set up using
+// URLRequestContextBuilders, and the media URLRequestContext is take care of
+// (In one way or another), this should be removed.
+net::BackendType ChooseCacheBackendType(const base::CommandLine& command_line) {
+  switch (network_session_configurator::ChooseCacheType(command_line)) {
+    case net::URLRequestContextBuilder::HttpCacheParams::DISK_BLOCKFILE:
       return net::CACHE_BACKEND_BLOCKFILE;
-    if (opt_value.empty() || base::LowerCaseEqualsASCII(opt_value, "on"))
+    case net::URLRequestContextBuilder::HttpCacheParams::DISK_SIMPLE:
       return net::CACHE_BACKEND_SIMPLE;
+    case net::URLRequestContextBuilder::HttpCacheParams::DISK:
+      return net::CACHE_BACKEND_DEFAULT;
+    case net::URLRequestContextBuilder::HttpCacheParams::IN_MEMORY:
+      NOTREACHED();
+      break;
   }
-  const std::string experiment_name =
-      base::FieldTrialList::FindFullName("SimpleCacheTrial");
-  if (base::StartsWith(experiment_name, "Disable",
-                       base::CompareCase::INSENSITIVE_ASCII)) {
-    return net::CACHE_BACKEND_BLOCKFILE;
-  }
-  if (base::StartsWith(experiment_name, "ExperimentYes",
-                       base::CompareCase::INSENSITIVE_ASCII)) {
-    return net::CACHE_BACKEND_SIMPLE;
-  }
-#endif  // #if !defined(OS_ANDROID)
-
-#if defined(OS_ANDROID) || defined(OS_LINUX) || defined(OS_CHROMEOS)
-  return net::CACHE_BACKEND_SIMPLE;
-#else
-  return net::CACHE_BACKEND_BLOCKFILE;
-#endif
+  return net::CACHE_BACKEND_DEFAULT;
 }
 
 }  // namespace
@@ -145,8 +135,6 @@ ProfileImplIOData::Handle::~Handle() {
 void ProfileImplIOData::Handle::Init(
     const base::FilePath& cookie_path,
     const base::FilePath& channel_id_path,
-    const base::FilePath& cache_path,
-    int cache_max_size,
     const base::FilePath& media_cache_path,
     int media_cache_max_size,
     const base::FilePath& extensions_cookie_path,
@@ -164,8 +152,6 @@ void ProfileImplIOData::Handle::Init(
 
   lazy_params->cookie_path = cookie_path;
   lazy_params->channel_id_path = channel_id_path;
-  lazy_params->cache_path = cache_path;
-  lazy_params->cache_max_size = cache_max_size;
   lazy_params->media_cache_path = media_cache_path;
   lazy_params->media_cache_max_size = media_cache_max_size;
   lazy_params->extensions_cookie_path = extensions_cookie_path;
@@ -186,7 +172,8 @@ void ProfileImplIOData::Handle::Init(
   // Keep track of profile path and cache sizes separately so we can use them
   // on demand when creating storage isolated URLRequestContextGetters.
   io_data_->profile_path_ = profile_path;
-  io_data_->app_cache_max_size_ = cache_max_size;
+  io_data_->app_cache_max_size_ =
+      pref_service->GetInteger(prefs::kDiskCacheSize);
   io_data_->app_media_cache_max_size_ = media_cache_max_size;
 
   io_data_->predictor_.reset(predictor);
@@ -409,8 +396,7 @@ ProfileImplIOData::Handle::GetAllContextGetters() {
 }
 
 ProfileImplIOData::LazyParams::LazyParams()
-    : cache_max_size(0),
-      media_cache_max_size(0),
+    : media_cache_max_size(0),
       session_cookie_mode(
           content::CookieStoreConfig::EPHEMERAL_SESSION_COOKIES) {}
 
@@ -419,15 +405,11 @@ ProfileImplIOData::LazyParams::~LazyParams() {}
 ProfileImplIOData::ProfileImplIOData()
     : ProfileIOData(Profile::REGULAR_PROFILE),
       http_server_properties_manager_(NULL),
-      domain_reliability_monitor_(nullptr),
       app_cache_max_size_(0),
       app_media_cache_max_size_(0) {
 }
 
 ProfileImplIOData::~ProfileImplIOData() {
-  if (domain_reliability_monitor_)
-    domain_reliability_monitor_->Shutdown();
-
   DestroyResourceContext();
 
   if (media_request_context_)
@@ -439,15 +421,6 @@ ProfileImplIOData::ConfigureNetworkDelegate(
     IOThread* io_thread,
     std::unique_ptr<ChromeNetworkDelegate> chrome_network_delegate) const {
   if (lazy_params_->domain_reliability_monitor) {
-    // Hold on to a raw pointer to call Shutdown() in ~ProfileImplIOData.
-    domain_reliability_monitor_ =
-        lazy_params_->domain_reliability_monitor.get();
-
-    domain_reliability_monitor_->InitURLRequestContext(main_request_context());
-    domain_reliability_monitor_->AddBakedInConfigs();
-    domain_reliability_monitor_->SetDiscardUploads(
-        !GetMetricsEnabledStateOnIOThread());
-
     chrome_network_delegate->set_domain_reliability_monitor(
         std::move(lazy_params_->domain_reliability_monitor));
   }
@@ -460,23 +433,20 @@ ProfileImplIOData::ConfigureNetworkDelegate(
 }
 
 void ProfileImplIOData::InitializeInternal(
+    net::URLRequestContextBuilder* builder,
     ProfileParams* profile_params,
     content::ProtocolHandlerMap* protocol_handlers,
     content::URLRequestInterceptorScopedVector request_interceptors) const {
-  net::URLRequestContext* main_context = main_request_context();
-  net::URLRequestContextStorage* main_context_storage =
-      main_request_context_storage();
-
   IOThread* const io_thread = profile_params->io_thread;
   IOThread::Globals* const io_thread_globals = io_thread->globals();
 
   if (lazy_params_->http_server_properties_manager) {
     lazy_params_->http_server_properties_manager->InitializeOnNetworkSequence();
-    main_context_storage->set_http_server_properties(
+    builder->SetHttpServerProperties(
         std::move(lazy_params_->http_server_properties_manager));
   }
 
-  main_context->set_network_quality_estimator(
+  builder->set_network_quality_estimator(
       io_thread_globals->network_quality_estimator.get());
 
   // Create a single task runner to use with the CookieStore and ChannelIDStore.
@@ -491,7 +461,7 @@ void ProfileImplIOData::InitializeInternal(
       new QuotaPolicyChannelIDStore(lazy_params_->channel_id_path,
                                     cookie_background_task_runner,
                                     lazy_params_->special_storage_policy.get());
-  main_context_storage->set_channel_id_service(
+  std::unique_ptr<net::ChannelIDService> channel_id_service(
       base::MakeUnique<net::ChannelIDService>(
           new net::DefaultChannelIDStore(channel_id_db.get())));
 
@@ -500,30 +470,19 @@ void ProfileImplIOData::InitializeInternal(
 
   content::CookieStoreConfig cookie_config(
       lazy_params_->cookie_path, lazy_params_->session_cookie_mode,
-      lazy_params_->special_storage_policy.get(),
-      profile_params->cookie_monster_delegate.get());
+      lazy_params_->special_storage_policy.get());
   cookie_config.crypto_delegate = cookie_config::GetCookieCryptoDelegate();
-  cookie_config.channel_id_service = main_context->channel_id_service();
+  cookie_config.channel_id_service = channel_id_service.get();
   cookie_config.background_task_runner = cookie_background_task_runner;
-  main_context_storage->set_cookie_store(
+  std::unique_ptr<net::CookieStore> cookie_store(
       content::CreateCookieStore(cookie_config));
 
-  main_context->cookie_store()->SetChannelIDServiceID(
-      main_context->channel_id_service()->GetUniqueID());
+  cookie_store->SetChannelIDServiceID(channel_id_service->GetUniqueID());
 
-  std::unique_ptr<net::HttpCache::BackendFactory> main_backend(
-      new net::HttpCache::DefaultBackend(
-          net::DISK_CACHE, ChooseCacheBackendType(), lazy_params_->cache_path,
-          lazy_params_->cache_max_size,
-          BrowserThread::GetTaskRunnerForThread(BrowserThread::CACHE)));
-  main_context_storage->set_http_network_session(
-      CreateHttpNetworkSession(*profile_params));
-  main_context_storage->set_http_transaction_factory(CreateMainHttpFactory(
-      main_context_storage->http_network_session(), std::move(main_backend)));
+  builder->SetCookieAndChannelIdStores(std::move(cookie_store),
+                                       std::move(channel_id_service));
 
-  std::unique_ptr<net::URLRequestJobFactoryImpl> main_job_factory(
-      new net::URLRequestJobFactoryImpl());
-  InstallProtocolHandlers(main_job_factory.get(), protocol_handlers);
+  AddProtocolHandlersToBuilder(builder, protocol_handlers);
 
   // Install the Offline Page Interceptor.
 #if BUILDFLAG(ENABLE_OFFLINE_PAGES)
@@ -539,24 +498,26 @@ void ProfileImplIOData::InitializeInternal(
       data_reduction_proxy_io_data()->CreateInterceptor());
   data_reduction_proxy_io_data()->SetDataUseAscriber(
       io_thread_globals->data_use_ascriber.get());
-  main_context_storage->set_job_factory(SetUpJobFactoryDefaults(
-      std::move(main_job_factory), std::move(request_interceptors),
-      std::move(profile_params->protocol_handler_interceptor),
-      main_context->network_delegate(),
-      io_thread_globals->system_request_context->host_resolver()));
+  SetUpJobFactoryDefaultsForBuilder(
+      builder, std::move(request_interceptors),
+      std::move(profile_params->protocol_handler_interceptor));
+
+  builder->set_reporting_policy(MaybeCreateReportingPolicy());
+}
+
+void ProfileImplIOData::OnMainRequestContextCreated(
+    ProfileParams* profile_params) const {
+  DCHECK(lazy_params_);
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   InitializeExtensionsRequestContext(profile_params);
 #endif
 
-  main_context_storage->set_reporting_service(
-      MaybeCreateReportingService(main_context));
-
   // Create a media request context based on the main context, but using a
   // media cache.  It shares the same job factory as the main context.
   StoragePartitionDescriptor details(profile_path_, false);
-  media_request_context_.reset(
-      InitializeMediaRequestContext(main_context, details, "main_media"));
+  media_request_context_.reset(InitializeMediaRequestContext(
+      main_request_context(), details, "main_media"));
   lazy_params_.reset();
 }
 
@@ -566,10 +527,9 @@ void ProfileImplIOData::
   // store.
   net::URLRequestContext* extensions_context = extensions_request_context();
 
-  content::CookieStoreConfig cookie_config(
-      lazy_params_->extensions_cookie_path,
-      lazy_params_->session_cookie_mode,
-      NULL, NULL);
+  content::CookieStoreConfig cookie_config(lazy_params_->extensions_cookie_path,
+                                           lazy_params_->session_cookie_mode,
+                                           NULL);
   cookie_config.crypto_delegate = cookie_config::GetCookieCryptoDelegate();
   // Enable cookies for chrome-extension URLs.
   cookie_config.cookieable_schemes.push_back(extensions::kExtensionScheme);
@@ -602,9 +562,9 @@ net::URLRequestContext* ProfileImplIOData::InitializeAppRequestContext(
     app_backend = net::HttpCache::DefaultBackend::InMemory(0);
   } else {
     app_backend.reset(new net::HttpCache::DefaultBackend(
-        net::DISK_CACHE, ChooseCacheBackendType(), cache_path,
-        app_cache_max_size_,
-        BrowserThread::GetTaskRunnerForThread(BrowserThread::CACHE)));
+        net::DISK_CACHE,
+        ChooseCacheBackendType(*base::CommandLine::ForCurrentProcess()),
+        cache_path, app_cache_max_size_));
   }
 
   std::unique_ptr<net::CookieStore> cookie_store;
@@ -619,7 +579,7 @@ net::URLRequestContext* ProfileImplIOData::InitializeAppRequestContext(
   }
   content::CookieStoreConfig cookie_config(
       cookie_path, content::CookieStoreConfig::EPHEMERAL_SESSION_COOKIES,
-      nullptr, nullptr);
+      nullptr);
   if (!partition_descriptor.in_memory) {
     // Use an app-specific cookie store.
     DCHECK(!cookie_path.empty());
@@ -644,13 +604,12 @@ net::URLRequestContext* ProfileImplIOData::InitializeAppRequestContext(
   // main_request_context_storage() objects and the argumet to this method,
   // |main_context|.  Remove |main_context| as an argument, and just use
   // main_context() instead.
-  net::HttpNetworkSession::Context session_context =
-      main_request_context_storage()->http_network_session()->context();
+  net::HttpNetworkSession* network_session =
+      main_context->http_transaction_factory()->GetSession();
+  net::HttpNetworkSession::Context session_context = network_session->context();
   session_context.channel_id_service = channel_id_service.get();
   std::unique_ptr<net::HttpNetworkSession> http_network_session(
-      new net::HttpNetworkSession(
-          main_request_context_storage()->http_network_session()->params(),
-          session_context));
+      new net::HttpNetworkSession(network_session->params(), session_context));
   std::unique_ptr<net::HttpCache> app_http_cache =
       CreateMainHttpFactory(http_network_session.get(), std::move(app_backend));
 
@@ -713,9 +672,9 @@ net::URLRequestContext* ProfileImplIOData::InitializeMediaRequestContext(
   // Use a separate HTTP disk cache for isolated apps.
   std::unique_ptr<net::HttpCache::BackendFactory> media_backend(
       new net::HttpCache::DefaultBackend(
-          net::MEDIA_CACHE, ChooseCacheBackendType(), cache_path,
-          cache_max_size,
-          BrowserThread::GetTaskRunnerForThread(BrowserThread::CACHE)));
+          net::MEDIA_CACHE,
+          ChooseCacheBackendType(*base::CommandLine::ForCurrentProcess()),
+          cache_path, cache_max_size));
   std::unique_ptr<net::HttpCache> media_http_cache = CreateHttpFactory(
       main_request_context()->http_transaction_factory(),
       std::move(media_backend));
@@ -772,11 +731,20 @@ chrome_browser_net::Predictor* ProfileImplIOData::GetPredictor() {
 std::unique_ptr<net::ReportingService>
 ProfileImplIOData::MaybeCreateReportingService(
     net::URLRequestContext* url_request_context) const {
-  if (!base::FeatureList::IsEnabled(features::kReporting))
+  std::unique_ptr<net::ReportingPolicy> reporting_policy(
+      MaybeCreateReportingPolicy());
+  if (!reporting_policy)
     return std::unique_ptr<net::ReportingService>();
 
-  return net::ReportingService::Create(net::ReportingPolicy(),
-                                       url_request_context);
+  return net::ReportingService::Create(*reporting_policy, url_request_context);
+}
+
+std::unique_ptr<net::ReportingPolicy>
+ProfileImplIOData::MaybeCreateReportingPolicy() {
+  if (!base::FeatureList::IsEnabled(features::kReporting))
+    return std::unique_ptr<net::ReportingPolicy>();
+
+  return base::MakeUnique<net::ReportingPolicy>();
 }
 
 void ProfileImplIOData::ClearNetworkingHistorySinceOnIOThread(

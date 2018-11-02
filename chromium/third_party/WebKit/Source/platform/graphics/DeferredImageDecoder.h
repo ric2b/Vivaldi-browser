@@ -29,14 +29,13 @@
 #include <memory>
 #include "platform/PlatformExport.h"
 #include "platform/geometry/IntSize.h"
+#include "platform/graphics/paint/PaintImage.h"
 #include "platform/image-decoders/ImageDecoder.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/Vector.h"
 #include "third_party/skia/include/core/SkRWBuffer.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
-
-class SkImage;
 
 namespace blink {
 
@@ -61,7 +60,7 @@ class PLATFORM_EXPORT DeferredImageDecoder final {
 
   String FilenameExtension() const;
 
-  sk_sp<SkImage> CreateFrameAtIndex(size_t);
+  sk_sp<PaintImageGenerator> CreateGenerator(size_t index);
 
   PassRefPtr<SharedBuffer> Data();
   void SetData(PassRefPtr<SharedBuffer> data, bool all_data_received);
@@ -72,24 +71,23 @@ class PLATFORM_EXPORT DeferredImageDecoder final {
   IntSize FrameSizeAtIndex(size_t index) const;
   size_t FrameCount();
   int RepetitionCount() const;
-  size_t ClearCacheExceptFrame(size_t index);
+  void ClearCacheExceptFrame(size_t index);
   bool FrameHasAlphaAtIndex(size_t index) const;
   bool FrameIsReceivedAtIndex(size_t index) const;
+  // Duration is reported in seconds.
+  // TODO(vmpstr): Use something like TimeDelta here.
   float FrameDurationAtIndex(size_t index) const;
-  size_t FrameBytesAtIndex(size_t index) const;
   ImageOrientation OrientationAtIndex(size_t index) const;
   bool HotSpot(IntPoint&) const;
 
  private:
-  explicit DeferredImageDecoder(std::unique_ptr<ImageDecoder> actual_decoder);
+  explicit DeferredImageDecoder(std::unique_ptr<ImageDecoder> metadata_decoder);
 
   friend class DeferredImageDecoderTest;
   ImageFrameGenerator* FrameGenerator() { return frame_generator_.Get(); }
 
   void ActivateLazyDecoding();
   void PrepareLazyDecodedFrames();
-
-  sk_sp<SkImage> CreateFrameImageAtIndex(size_t index, bool known_to_be_opaque);
 
   void SetDataInternal(RefPtr<SharedBuffer> data,
                        bool all_data_received,
@@ -98,7 +96,7 @@ class PLATFORM_EXPORT DeferredImageDecoder final {
   // Copy of the data that is passed in, used by deferred decoding.
   // Allows creating readonly snapshots that may be read in another thread.
   std::unique_ptr<SkRWBuffer> rw_buffer_;
-  std::unique_ptr<ImageDecoder> actual_decoder_;
+  std::unique_ptr<ImageDecoder> metadata_decoder_;
 
   String filename_extension_;
   IntSize size_;
@@ -109,6 +107,7 @@ class PLATFORM_EXPORT DeferredImageDecoder final {
   bool has_hot_spot_;
   sk_sp<SkColorSpace> color_space_for_sk_images_;
   IntPoint hot_spot_;
+  const PaintImage::ContentId complete_frame_content_id_;
 
   // Caches frame state information.
   Vector<DeferredFrameData> frame_data_;

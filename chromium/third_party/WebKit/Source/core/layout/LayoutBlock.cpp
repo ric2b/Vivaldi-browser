@@ -585,7 +585,9 @@ void LayoutBlock::UpdateBlockChildDirtyBitsBeforeLayout(bool relayout_children,
       child.StretchesToViewport();
   if (relayout_children || (has_relative_logical_height && !IsLayoutView()) ||
       (height_available_to_children_changed_ &&
-       ChangeInAvailableLogicalHeightAffectsChild(this, child))) {
+       ChangeInAvailableLogicalHeightAffectsChild(this, child)) ||
+      (child.IsListMarker() && IsListItem() &&
+       ToLayoutBlockFlow(this)->ContainsFloats())) {
     child.SetChildNeedsLayout(kMarkOnlyThis);
   }
 }
@@ -694,7 +696,7 @@ void LayoutBlock::MarkFixedPositionObjectForLayoutIfNeeded(
     return;
 
   LayoutObject* o = child->Parent();
-  while (o && !o->IsLayoutView() &&
+  while (!o->IsLayoutView() &&
          o->Style()->GetPosition() != EPosition::kAbsolute)
     o = o->Parent();
   // The LayoutView is absolute-positioned, but does not move.
@@ -903,15 +905,6 @@ LayoutUnit LayoutBlock::LogicalRightSelectionOffset(
     return ContainingBlock()->LogicalRightSelectionOffset(
         root_block, position + LogicalTop());
   return LogicalRightOffsetForContent();
-}
-
-void LayoutBlock::SetSelectionState(SelectionState state) {
-  LayoutBox::SetSelectionState(state);
-
-  if (InlineBoxWrapper() && CanUpdateSelectionOnRootLineBoxes()) {
-    InlineBoxWrapper()->Root().SetHasSelectedChildren(state !=
-                                                      SelectionState::kNone);
-  }
 }
 
 TrackedLayoutBoxListHashSet* LayoutBlock::PositionedObjectsInternal() const {
@@ -1397,6 +1390,17 @@ void LayoutBlock::ComputePreferredLogicalWidths() {
     ComputeIntrinsicLogicalWidths(min_preferred_logical_width_,
                                   max_preferred_logical_width_);
 
+  if (style_to_use.LogicalMaxWidth().IsFixed()) {
+    max_preferred_logical_width_ =
+        std::min(max_preferred_logical_width_,
+                 AdjustContentBoxLogicalWidthForBoxSizing(
+                     LayoutUnit(style_to_use.LogicalMaxWidth().Value())));
+    min_preferred_logical_width_ =
+        std::min(min_preferred_logical_width_,
+                 AdjustContentBoxLogicalWidthForBoxSizing(
+                     LayoutUnit(style_to_use.LogicalMaxWidth().Value())));
+  }
+
   if (style_to_use.LogicalMinWidth().IsFixed() &&
       style_to_use.LogicalMinWidth().Value() > 0) {
     max_preferred_logical_width_ =
@@ -1407,17 +1411,6 @@ void LayoutBlock::ComputePreferredLogicalWidths() {
         std::max(min_preferred_logical_width_,
                  AdjustContentBoxLogicalWidthForBoxSizing(
                      LayoutUnit(style_to_use.LogicalMinWidth().Value())));
-  }
-
-  if (style_to_use.LogicalMaxWidth().IsFixed()) {
-    max_preferred_logical_width_ =
-        std::min(max_preferred_logical_width_,
-                 AdjustContentBoxLogicalWidthForBoxSizing(
-                     LayoutUnit(style_to_use.LogicalMaxWidth().Value())));
-    min_preferred_logical_width_ =
-        std::min(min_preferred_logical_width_,
-                 AdjustContentBoxLogicalWidthForBoxSizing(
-                     LayoutUnit(style_to_use.LogicalMaxWidth().Value())));
   }
 
   // Table layout uses integers, ceil the preferred widths to ensure that they
@@ -1619,17 +1612,18 @@ LayoutUnit LayoutBlock::LineHeight(bool first_line,
   return LayoutUnit(style.ComputedLineHeight());
 }
 
-int LayoutBlock::BeforeMarginInLineDirection(
+LayoutUnit LayoutBlock::BeforeMarginInLineDirection(
     LineDirectionMode direction) const {
   // InlineFlowBox::placeBoxesInBlockDirection will flip lines in
   // case of verticalLR mode, so we can assume verticalRL for now.
-  return (direction == kHorizontalLine ? MarginTop() : MarginRight()).ToInt();
+  return direction == kHorizontalLine ? MarginTop() : MarginRight();
 }
 
-int LayoutBlock::BaselinePosition(FontBaseline baseline_type,
-                                  bool first_line,
-                                  LineDirectionMode direction,
-                                  LinePositionMode line_position_mode) const {
+LayoutUnit LayoutBlock::BaselinePosition(
+    FontBaseline baseline_type,
+    bool first_line,
+    LineDirectionMode direction,
+    LinePositionMode line_position_mode) const {
   // Inline blocks are replaced elements. Otherwise, just pass off to
   // the base class.  If we're being queried as though we're the root line
   // box, then the fact that we're an inline-block is irrelevant, and we behave
@@ -1645,9 +1639,9 @@ int LayoutBlock::BaselinePosition(FontBaseline baseline_type,
         !LayoutTheme::GetTheme().IsControlContainer(Style()->Appearance()))
       return LayoutTheme::GetTheme().BaselinePosition(this);
 
-    int baseline_pos = (IsWritingModeRoot() && !IsRubyRun())
-                           ? -1
-                           : InlineBlockBaseline(direction);
+    LayoutUnit baseline_pos = (IsWritingModeRoot() && !IsRubyRun())
+                                  ? LayoutUnit(-1)
+                                  : InlineBlockBaseline(direction);
 
     if (IsDeprecatedFlexibleBox()) {
       // Historically, we did this check for all baselines. But we can't
@@ -1662,7 +1656,7 @@ int LayoutBlock::BaselinePosition(FontBaseline baseline_type,
               : Size().Width() - BorderLeft() - PaddingLeft() -
                     VerticalScrollbarWidth();
       if (baseline_pos > bottom_of_content)
-        baseline_pos = -1;
+        baseline_pos = LayoutUnit(-1);
     }
     if (baseline_pos != -1)
       return BeforeMarginInLineDirection(direction) + baseline_pos;
@@ -1679,14 +1673,14 @@ int LayoutBlock::BaselinePosition(FontBaseline baseline_type,
   const SimpleFontData* font_data = Style(first_line)->GetFont().PrimaryFont();
   DCHECK(font_data);
   if (!font_data)
-    return -1;
+    return LayoutUnit(-1);
 
   const FontMetrics& font_metrics = font_data->GetFontMetrics();
-  return (font_metrics.Ascent(baseline_type) +
-          (LineHeight(first_line, direction, line_position_mode) -
-           font_metrics.Height()) /
-              2)
-      .ToInt();
+  return LayoutUnit((font_metrics.Ascent(baseline_type) +
+                     (LineHeight(first_line, direction, line_position_mode) -
+                      font_metrics.Height()) /
+                         2)
+                        .ToInt());
 }
 
 LayoutUnit LayoutBlock::MinLineHeightForReplacedObject(
@@ -1708,20 +1702,21 @@ LayoutUnit LayoutBlock::MinLineHeightForReplacedObject(
 // them. Just walking the block children in logical order seems rather wrong for
 // those two layout modes, though.
 
-int LayoutBlock::FirstLineBoxBaseline() const {
+LayoutUnit LayoutBlock::FirstLineBoxBaseline() const {
   DCHECK(!ChildrenInline());
   if (IsWritingModeRoot() && !IsRubyRun())
-    return -1;
+    return LayoutUnit(-1);
 
   for (LayoutBox* curr = FirstChildBox(); curr; curr = curr->NextSiblingBox()) {
     if (!curr->IsFloatingOrOutOfFlowPositioned()) {
-      int result = curr->FirstLineBoxBaseline();
-      if (result != -1)
-        return (curr->LogicalTop() + result)
-            .ToInt();  // Translate to our coordinate space.
+      LayoutUnit result = curr->FirstLineBoxBaseline();
+      if (result != -1) {
+        // Translate to our coordinate space.
+        return curr->LogicalTop() + result;
+      }
     }
   }
-  return -1;
+  return LayoutUnit(-1);
 }
 
 bool LayoutBlock::UseLogicalBottomMarginEdgeForInlineBlockBaseline() const {
@@ -1738,43 +1733,44 @@ bool LayoutBlock::UseLogicalBottomMarginEdgeForInlineBlockBaseline() const {
          Style()->ContainsSize();
 }
 
-int LayoutBlock::InlineBlockBaseline(LineDirectionMode line_direction) const {
+LayoutUnit LayoutBlock::InlineBlockBaseline(
+    LineDirectionMode line_direction) const {
   DCHECK(!ChildrenInline());
   if (UseLogicalBottomMarginEdgeForInlineBlockBaseline()) {
     // We are not calling LayoutBox::baselinePosition here because the caller
     // should add the margin-top/margin-right, not us.
-    return (line_direction == kHorizontalLine ? Size().Height() + MarginBottom()
-                                              : Size().Width() + MarginLeft())
-        .ToInt();
+    return line_direction == kHorizontalLine ? Size().Height() + MarginBottom()
+                                             : Size().Width() + MarginLeft();
   }
 
   if (IsWritingModeRoot() && !IsRubyRun())
-    return -1;
+    return LayoutUnit(-1);
 
   bool have_normal_flow_child = false;
   for (LayoutBox* curr = LastChildBox(); curr;
        curr = curr->PreviousSiblingBox()) {
     if (!curr->IsFloatingOrOutOfFlowPositioned()) {
       have_normal_flow_child = true;
-      int result = curr->InlineBlockBaseline(line_direction);
-      if (result != -1)
-        return (curr->LogicalTop() + result)
-            .ToInt();  // Translate to our coordinate space.
+      LayoutUnit result = curr->InlineBlockBaseline(line_direction);
+      if (result != -1) {
+        // Translate to our coordinate space.
+        return curr->LogicalTop() + result;
+      }
     }
   }
   const SimpleFontData* font_data = FirstLineStyle()->GetFont().PrimaryFont();
   if (font_data && !have_normal_flow_child && HasLineIfEmpty()) {
     const FontMetrics& font_metrics = font_data->GetFontMetrics();
-    return (font_metrics.Ascent() +
-            (LineHeight(true, line_direction, kPositionOfInteriorLineBoxes) -
-             font_metrics.Height()) /
-                2 +
-            (line_direction == kHorizontalLine
-                 ? BorderTop() + PaddingTop()
-                 : BorderRight() + PaddingRight()))
-        .ToInt();
+    return LayoutUnit(
+        (font_metrics.Ascent() +
+         (LineHeight(true, line_direction, kPositionOfInteriorLineBoxes) -
+          font_metrics.Height()) /
+             2 +
+         (line_direction == kHorizontalLine ? BorderTop() + PaddingTop()
+                                            : BorderRight() + PaddingRight()))
+            .ToInt());
   }
-  return -1;
+  return LayoutUnit(-1);
 }
 
 const LayoutBlock* LayoutBlock::EnclosingFirstLineStyleBlock() const {

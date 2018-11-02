@@ -71,6 +71,7 @@
  *   SITE_SETTINGS_HANDLERS: (undefined|!settings.Route),
  *   SITE_SETTINGS_IMAGES: (undefined|!settings.Route),
  *   SITE_SETTINGS_JAVASCRIPT: (undefined|!settings.Route),
+ *   SITE_SETTINGS_SOUND: (undefined|!settings.Route),
  *   SITE_SETTINGS_LOCATION: (undefined|!settings.Route),
  *   SITE_SETTINGS_MICROPHONE: (undefined|!settings.Route),
  *   SITE_SETTINGS_MIDI_DEVICES: (undefined|!settings.Route),
@@ -78,6 +79,7 @@
  *   SITE_SETTINGS_PDF_DOCUMENTS: (undefined|!settings.Route),
  *   SITE_SETTINGS_POPUPS: (undefined|!settings.Route),
  *   SITE_SETTINGS_PROTECTED_CONTENT: (undefined|!settings.Route),
+ *   SITE_SETTINGS_SITE_DATA: (undefined|!settings.Route),
  *   SITE_SETTINGS_SITE_DETAILS: (undefined|!settings.Route),
  *   SITE_SETTINGS_UNSANDBOXED_PLUGINS: (undefined|!settings.Route),
  *   SITE_SETTINGS_USB_DEVICES: (undefined|!settings.Route),
@@ -235,7 +237,7 @@ cr.define('settings', function() {
 
     if (pageVisibility.onStartup !== false) {
       r.ON_STARTUP = r.BASIC.createSection('/onStartup', 'onStartup');
-      r.STARTUP_URLS = r.ON_STARTUP.createChild('/startupUrls');
+      r.STARTUP_PAGES = r.ON_STARTUP.createChild('/startupPages');
     }
 
     if (pageVisibility.people !== false) {
@@ -262,7 +264,7 @@ cr.define('settings', function() {
     r.POWER = r.DEVICE.createChild('/power');
     // </if>
 
-    // Advacned Routes
+    // Advanced Routes
     if (pageVisibility.advancedSettings !== false) {
       r.ADVANCED = new Route('/advanced');
 
@@ -298,10 +300,13 @@ cr.define('settings', function() {
           r.SITE_SETTINGS.createChild('backgroundSync');
       r.SITE_SETTINGS_CAMERA = r.SITE_SETTINGS.createChild('camera');
       r.SITE_SETTINGS_COOKIES = r.SITE_SETTINGS.createChild('cookies');
+      r.SITE_SETTINGS_SITE_DATA =
+          r.SITE_SETTINGS_COOKIES.createChild('/siteData');
       r.SITE_SETTINGS_DATA_DETAILS =
-          r.SITE_SETTINGS_COOKIES.createChild('/cookies/detail');
+          r.SITE_SETTINGS_SITE_DATA.createChild('/cookies/detail');
       r.SITE_SETTINGS_IMAGES = r.SITE_SETTINGS.createChild('images');
       r.SITE_SETTINGS_JAVASCRIPT = r.SITE_SETTINGS.createChild('javascript');
+      r.SITE_SETTINGS_SOUND = r.SITE_SETTINGS.createChild('sound');
       r.SITE_SETTINGS_LOCATION = r.SITE_SETTINGS.createChild('location');
       r.SITE_SETTINGS_MICROPHONE = r.SITE_SETTINGS.createChild('microphone');
       r.SITE_SETTINGS_NOTIFICATIONS =
@@ -426,13 +431,15 @@ cr.define('settings', function() {
      * @param {boolean} isPopstate
      */
     setCurrentRoute(route, queryParameters, isPopstate) {
+      this.recordMetrics(route.path);
+
       var oldRoute = this.currentRoute;
       this.currentRoute = route;
       this.currentQueryParameters_ = queryParameters;
       this.wasLastRouteChangePopstate_ = isPopstate;
-      routeObservers.forEach(function(observer) {
+      new Set(routeObservers).forEach((observer) => {
         observer.currentRouteChanged(this.currentRoute, oldRoute);
-      }.bind(this));
+      });
     }
 
     /** @return {!settings.Route} */
@@ -461,9 +468,9 @@ cr.define('settings', function() {
       var canonicalPath = path.replace(CANONICAL_PATH_REGEX, '$1$2');
 
       // TODO(tommycli): Use Object.values once Closure compilation supports it.
-      var matchingKey = Object.keys(this.routes_).find(function(key) {
-        return this.routes_[key].path == canonicalPath;
-      }.bind(this));
+      var matchingKey =
+          Object.keys(this.routes_)
+              .find((key) => this.routes_[key].path == canonicalPath);
 
       return !!matchingKey ? this.routes_[matchingKey] : null;
     }
@@ -523,6 +530,8 @@ cr.define('settings', function() {
      * Initialize the route and query params from the URL.
      */
     initializeRouteFromUrl() {
+      this.recordMetrics(window.location.pathname);
+
       assert(!this.initializeRouteFromUrlCalled_);
       this.initializeRouteFromUrlCalled_ = true;
 
@@ -535,6 +544,18 @@ cr.define('settings', function() {
       } else {
         window.history.replaceState(undefined, '', this.routes_.BASIC.path);
       }
+    }
+
+    /**
+     * Make a UMA note about visiting this URL path.
+     * @param {string} urlPath The url path (only).
+     */
+    recordMetrics(urlPath) {
+      assert(!urlPath.startsWith('chrome://'));
+      assert(!urlPath.startsWith('settings'));
+      assert(urlPath.startsWith('/'));
+      chrome.metricsPrivate.recordSparseHashable(
+          'WebUI.Settings.PathVisited', urlPath);
     }
 
     resetRouteForTesting() {
@@ -569,7 +590,6 @@ cr.define('settings', function() {
     /**
      * @param {!settings.Route|undefined} opt_newRoute
      * @param {!settings.Route|undefined} opt_oldRoute
-     * @abstract
      */
     currentRouteChanged: function(opt_newRoute, opt_oldRoute) {
       assertNotReached();

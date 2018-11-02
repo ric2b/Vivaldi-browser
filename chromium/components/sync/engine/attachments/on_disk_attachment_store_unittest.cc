@@ -10,7 +10,6 @@
 
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -105,7 +104,7 @@ class OnDiskAttachmentStoreSpecificTest : public testing::Test {
 
   std::unique_ptr<leveldb::DB> OpenLevelDB() {
     std::unique_ptr<leveldb::DB> db;
-    leveldb::Options options;
+    leveldb_env::Options options;
     options.create_if_missing = true;
     leveldb::Status s =
         leveldb_env::OpenDB(options, db_path_.AsUTF8Unsafe(), &db);

@@ -242,6 +242,23 @@ enum class IsSyncPasswordHashSaved {
 };
 #endif
 
+// Specifies the context in which the "Show all saved passwords" fallback is
+// shown or accepted.
+// Metrics:
+// - PasswordManager.ShowAllSavedPasswordsAcceptedContext
+// - PasswordManager.ShowAllSavedPasswordsShownContext
+enum ShowAllSavedPasswordsContext {
+  SHOW_ALL_SAVED_PASSWORDS_CONTEXT_NONE,
+  // The "Show all saved passwords..." fallback is shown below a list of
+  // available passwords.
+  SHOW_ALL_SAVED_PASSWORDS_CONTEXT_PASSWORD,
+  // The "Show all saved passwords..." fallback is shown when no available
+  // passwords can be suggested to the user, e.g. because none are saved or
+  // because of technical issues.
+  SHOW_ALL_SAVED_PASSWORDS_CONTEXT_MANUAL_FALLBACK,
+  SHOW_ALL_SAVED_PASSWORDS_CONTEXT_COUNT
+};
+
 // A version of the UMA_HISTOGRAM_BOOLEAN macro that allows the |name|
 // to vary over the program's runtime.
 void LogUMAHistogramBoolean(const std::string& name, bool sample);
@@ -318,6 +335,15 @@ void LogShowedHttpNotSecureExplanation();
 // Log that the Form-Not-Secure warning was shown. Should be called at most once
 // per main-frame navigation.
 void LogShowedFormNotSecureWarningOnCurrentNavigation();
+
+// Log the context in which the "Show all saved passwords" fallback was shown.
+void LogContextOfShowAllSavedPasswordsShown(
+    ShowAllSavedPasswordsContext context);
+
+// Log the context in which the "Show all saved passwords" fallback was
+// accepted.
+void LogContextOfShowAllSavedPasswordsAccepted(
+    ShowAllSavedPasswordsContext context);
 
 // Log a password successful submission event.
 void LogPasswordSuccessfulSubmissionIndicatorEvent(

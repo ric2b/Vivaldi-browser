@@ -116,9 +116,9 @@ bool UpdateNotifierWindow::Init() {
 }
 
 UpdateNotifierWindow::~UpdateNotifierWindow() {
+  RemoveNotification();
   if (hwnd_ != NULL)
     DestroyWindow(hwnd_);
-  RemoveNotification();
 }
 
 void UpdateNotifierWindow::ShowNotification(const std::string& version) {
@@ -135,8 +135,7 @@ void UpdateNotifierWindow::ShowNotification(const std::string& version) {
   LoadIconMetric(GetModuleHandle(NULL), MAKEINTRESOURCE(IDI_NOTIFIER_MAIN),
                  LIM_SMALL, &notify_icon.hIcon);
   SetNotificationString(notify_icon.szTip, arraysize(notify_icon.szTip),
-                        l10n_util::GetStringFUTF16(IDS_UPDATE_NOTIFICATION_TEXT,
-                                                   base::UTF8ToUTF16(version)));
+      l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_TOOLTIP));
   notify_icon.dwInfoFlags = NIIF_USER;
 
   if (is_showing_notification_)

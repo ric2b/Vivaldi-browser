@@ -20,6 +20,7 @@
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/history_service_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/ntp_snippets/breaking_news/breaking_news_gcm_app_handler.h"
 #include "components/ntp_snippets/callbacks.h"
 #include "components/ntp_snippets/category.h"
 #include "components/ntp_snippets/category_rankers/category_ranker.h"
@@ -138,7 +139,7 @@ class ContentSuggestionsService : public KeyedService,
   // the callback gets an empty image. The callback will not be called
   // synchronously.
   void FetchSuggestionImage(const ContentSuggestion::ID& suggestion_id,
-                            const ImageFetchedCallback& callback);
+                            ImageFetchedCallback callback);
 
   // Fetches the favicon from local cache (if larger than or equal to
   // |minimum_size_in_pixel|) or from Google server (if there is no icon in the
@@ -148,7 +149,7 @@ class ContentSuggestionsService : public KeyedService,
   void FetchSuggestionFavicon(const ContentSuggestion::ID& suggestion_id,
                               int minimum_size_in_pixel,
                               int desired_size_in_pixel,
-                              const ImageFetchedCallback& callback);
+                              ImageFetchedCallback callback);
 
   // Dismisses the suggestion with the given |suggestion_id|, if it exists.
   // This will not trigger an update through the observers (i.e. providers must
@@ -173,7 +174,7 @@ class ContentSuggestionsService : public KeyedService,
   // to get suggestions to just this async Fetch() API.
   void Fetch(const Category& category,
              const std::set<std::string>& known_suggestion_ids,
-             const FetchDoneCallback& callback);
+             FetchDoneCallback callback);
 
   // Reloads suggestions from all categories, from all providers. If a provider
   // naturally has some ability to generate fresh suggestions, it may provide a
@@ -222,7 +223,7 @@ class ContentSuggestionsService : public KeyedService,
   // empty vector. The callback may be called synchronously.
   void GetDismissedSuggestionsForDebugging(
       Category category,
-      const DismissedSuggestionsCallback& callback);
+      DismissedSuggestionsCallback callback);
 
   // Only for debugging use through the internals page. Some providers
   // internally store a list of dismissed suggestions to prevent them from
@@ -231,18 +232,8 @@ class ContentSuggestionsService : public KeyedService,
   // supports it).
   void ClearDismissedSuggestionsForDebugging(Category category);
 
-  // Enables or disables the remote suggestions provider.
-  void SetRemoteSuggestionsEnabled(bool enabled);
-
   // Returns true if the remote suggestions provider is enabled.
   bool AreRemoteSuggestionsEnabled() const;
-
-  // Returns true if the remote provider is managed by an adminstrator's policy.
-  bool AreRemoteSuggestionsManaged() const;
-
-  // Returns true if the remote provider is managed by the guardian/parent of a
-  // child account.
-  bool AreRemoteSuggestionsManagedByCustodian() const;
 
   // The reference to the RemoteSuggestionsProvider provider should
   // only be set by the factory and only used for debugging.
@@ -334,7 +325,7 @@ class ContentSuggestionsService : public KeyedService,
   void GetFaviconFromCache(const GURL& publisher_url,
                            int minimum_size_in_pixel,
                            int desired_size_in_pixel,
-                           const ImageFetchedCallback& callback,
+                           ImageFetchedCallback callback,
                            bool continue_to_google_server);
 
   // Callbacks for fetching favicons.
@@ -342,14 +333,14 @@ class ContentSuggestionsService : public KeyedService,
       const GURL& publisher_url,
       int minimum_size_in_pixel,
       int desired_size_in_pixel,
-      const ImageFetchedCallback& callback,
+      ImageFetchedCallback callback,
       bool continue_to_google_server,
       const favicon_base::LargeIconImageResult& result);
   void OnGetFaviconFromGoogleServerFinished(
       const GURL& publisher_url,
       int minimum_size_in_pixel,
       int desired_size_in_pixel,
-      const ImageFetchedCallback& callback,
+      ImageFetchedCallback callback,
       favicon_base::GoogleFaviconServerRequestStatus status);
 
   // Whether the content suggestions feature is enabled.

@@ -7,7 +7,6 @@
 
 #include "base/process/process_handle.h"
 #include "base/trace_event/memory_dump_request_args.h"
-#include "base/trace_event/process_memory_totals.h"
 #include "mojo/common/common_custom_types_struct_traits.h"
 #include "services/resource_coordinator/public/cpp/resource_coordinator_export.h"
 #include "services/resource_coordinator/public/interfaces/memory_instrumentation/memory_instrumentation.mojom.h"
@@ -52,91 +51,6 @@ struct SERVICES_RESOURCE_COORDINATOR_PUBLIC_CPP_EXPORT
   }
   static bool Read(memory_instrumentation::mojom::RequestArgsDataView input,
                    base::trace_event::MemoryDumpRequestArgs* out);
-};
-
-template <>
-struct SERVICES_RESOURCE_COORDINATOR_PUBLIC_CPP_EXPORT StructTraits<
-    memory_instrumentation::mojom::PlatformPrivateFootprintDataView,
-    base::trace_event::ProcessMemoryTotals::PlatformPrivateFootprint> {
-  static uint64_t phys_footprint_bytes(
-      const base::trace_event::ProcessMemoryTotals::PlatformPrivateFootprint&
-          args) {
-    return args.phys_footprint_bytes;
-  }
-  static uint64_t internal_bytes(
-      const base::trace_event::ProcessMemoryTotals::PlatformPrivateFootprint&
-          args) {
-    return args.internal_bytes;
-  }
-  static uint64_t compressed_bytes(
-      const base::trace_event::ProcessMemoryTotals::PlatformPrivateFootprint&
-          args) {
-    return args.compressed_bytes;
-  }
-  static uint64_t rss_anon_bytes(
-      const base::trace_event::ProcessMemoryTotals::PlatformPrivateFootprint&
-          args) {
-    return args.rss_anon_bytes;
-  }
-  static uint64_t vm_swap_bytes(
-      const base::trace_event::ProcessMemoryTotals::PlatformPrivateFootprint&
-          args) {
-    return args.vm_swap_bytes;
-  }
-  static uint64_t private_bytes(
-      const base::trace_event::ProcessMemoryTotals::PlatformPrivateFootprint&
-          args) {
-    return args.private_bytes;
-  }
-  static bool Read(
-      memory_instrumentation::mojom::PlatformPrivateFootprintDataView input,
-      base::trace_event::ProcessMemoryTotals::PlatformPrivateFootprint* out);
-};
-
-template <>
-struct SERVICES_RESOURCE_COORDINATOR_PUBLIC_CPP_EXPORT
-    StructTraits<memory_instrumentation::mojom::ChromeMemDumpDataView,
-                 base::trace_event::MemoryDumpCallbackResult::ChromeMemDump> {
-  static uint32_t malloc_total_kb(
-      const base::trace_event::MemoryDumpCallbackResult::ChromeMemDump& args) {
-    return args.malloc_total_kb;
-  }
-  static uint32_t command_buffer_total_kb(
-      const base::trace_event::MemoryDumpCallbackResult::ChromeMemDump& args) {
-    return args.command_buffer_total_kb;
-  }
-  static uint32_t partition_alloc_total_kb(
-      const base::trace_event::MemoryDumpCallbackResult::ChromeMemDump& args) {
-    return args.partition_alloc_total_kb;
-  }
-  static uint32_t blink_gc_total_kb(
-      const base::trace_event::MemoryDumpCallbackResult::ChromeMemDump& args) {
-    return args.blink_gc_total_kb;
-  }
-  static uint32_t v8_total_kb(
-      const base::trace_event::MemoryDumpCallbackResult::ChromeMemDump& args) {
-    return args.v8_total_kb;
-  }
-  static bool Read(
-      memory_instrumentation::mojom::ChromeMemDumpDataView input,
-      base::trace_event::MemoryDumpCallbackResult::ChromeMemDump* out);
-};
-
-template <>
-struct SERVICES_RESOURCE_COORDINATOR_PUBLIC_CPP_EXPORT
-    StructTraits<memory_instrumentation::mojom::RawOSMemDumpDataView,
-                 base::trace_event::MemoryDumpCallbackResult::OSMemDump> {
-  static uint32_t resident_set_kb(
-      const base::trace_event::MemoryDumpCallbackResult::OSMemDump& args) {
-    return args.resident_set_kb;
-  }
-  static base::trace_event::ProcessMemoryTotals::PlatformPrivateFootprint
-  platform_private_footprint(
-      const base::trace_event::MemoryDumpCallbackResult::OSMemDump& args) {
-    return args.platform_private_footprint;
-  }
-  static bool Read(memory_instrumentation::mojom::RawOSMemDumpDataView input,
-                   base::trace_event::MemoryDumpCallbackResult::OSMemDump* out);
 };
 
 }  // namespace mojo

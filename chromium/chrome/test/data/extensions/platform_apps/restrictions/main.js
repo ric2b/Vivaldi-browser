@@ -180,7 +180,7 @@ chrome.test.runTests([
       assertEq('undefined', typeof(chrome.app.getDetails));
       assertEq('undefined', typeof(chrome.app.runningState));
     }
-    assertEq('undefined', typeof(chrome.extension));
+    // assertEq('undefined', typeof(chrome.extension)); // Vivaldi have this active for platform app
     succeed();
   },
 

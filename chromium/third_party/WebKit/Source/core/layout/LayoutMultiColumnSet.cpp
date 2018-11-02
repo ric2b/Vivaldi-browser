@@ -626,8 +626,9 @@ bool LayoutMultiColumnSet::ComputeColumnRuleBounds(
   return true;
 }
 
-LayoutRect LayoutMultiColumnSet::LocalVisualRect() const {
-  LayoutRect block_flow_bounds = LayoutBlockFlow::LocalVisualRect();
+LayoutRect LayoutMultiColumnSet::LocalVisualRectIgnoringVisibility() const {
+  LayoutRect block_flow_bounds =
+      LayoutBlockFlow::LocalVisualRectIgnoringVisibility();
 
   // Now add in column rule bounds, if present.
   Vector<LayoutRect> column_rule_bounds;
@@ -636,6 +637,13 @@ LayoutRect LayoutMultiColumnSet::LocalVisualRect() const {
       block_flow_bounds.Unite(bound);
   }
   return block_flow_bounds;
+}
+
+void LayoutMultiColumnSet::UpdateFromNG() {
+  DCHECK_EQ(fragmentainer_groups_.size(), 1U);
+  auto& group = fragmentainer_groups_[0];
+  group.UpdateFromNG(LogicalHeight());
+  ClearNeedsLayout();
 }
 
 }  // namespace blink

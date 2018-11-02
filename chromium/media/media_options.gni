@@ -2,10 +2,32 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/chrome_build.gni")
 import("//build/config/chromecast_build.gni")
 import("//build/config/features.gni")
+
+# TODO(xhwang): Remove this once pepper CDM support is removed.
 import("//ppapi/features/features.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
+import("//third_party/widevine/cdm/widevine.gni")
+
+# Do not expand this list without double-checking with OWNERS, this is a list of
+# all targets which roll up into the //media component. It controls visibility
+# of subcomponent targets and public_deps for //media.
+media_subcomponent_deps = [
+  "//media/audio",
+  "//media/base",
+
+  # TODO(crbug.com/583067): These files should not be in //media/base.
+  "//media/base/android",
+  "//media/cdm",
+  "//media/device_monitors",
+  "//media/filters",
+  "//media/formats",
+  "//media/muxers",
+  "//media/renderers",
+  "//media/video",
+]
 
 declare_args() {
   # Allows distributions to link pulseaudio directly (DT_NEEDED) instead of
@@ -31,8 +53,8 @@ declare_args() {
   # Override to dynamically link the cras (ChromeOS audio) library.
   use_cras = false
 
-  # Use low-memory buffers on non-Android builds of Chromecast.
-  use_low_memory_buffer = is_chromecast && !is_android
+  # Use low-memory buffers on cast builds.
+  use_low_memory_buffer = is_chromecast
 
   # Enables AC3/EAC3 audio demuxing. This is enabled only on Chromecast, since
   # it only provides demuxing, and is only useful for AC3/EAC3 audio
@@ -55,7 +77,7 @@ declare_args() {
   # which are encoded using HEVC require |enable_hevc_demuxing| to be enabled.
   enable_dolby_vision_demuxing = proprietary_codecs && is_chromecast
 
-  enable_webrtc = !is_cast_audio_only
+  enable_webrtc = !is_cast_audio_only && !is_fuchsia
 
   # Enable HLS with SAMPLE-AES decryption.
   # Enabled by default on the cast desktop implementation to allow unit tests of
@@ -64,10 +86,18 @@ declare_args() {
 
   # If true, use cast CMA backend instead of default chromium media pipeline.
   is_cast_using_cma_backend = is_cast_audio_only || !is_android
+
+  # A temporary arg for enabling MCVD while it's being implemented.
+  # See http://crbug.com/660942
+  enable_media_codec_video_decoder = false
 }
 
 # enable_hls_sample_aes can only be true if enable_mse_mpeg2ts_stream_parser is.
 assert(enable_mse_mpeg2ts_stream_parser || !enable_hls_sample_aes)
+
+if (media_use_ffmpeg) {
+  media_subcomponent_deps += [ "//media/ffmpeg" ]
+}
 
 # Use a second declare_args() to pick up possible overrides of |use_cras|.
 declare_args() {
@@ -100,12 +130,20 @@ declare_args() {
   disable_ffmpeg_video_decoders = !media_use_ffmpeg || is_android
 }
 
+# Enables the use of library CDMs that implements the interface defined at
+# media/cdm/api/content_decryption_module.h
+# TODO(xhwang): Remove |enable_plugins| once pepper CDM support is removed.
+enable_library_cdms = enable_plugins && (is_linux || is_mac || is_win)
+
+# Enables host verification for CDMs.
+enable_cdm_host_verification = false
+
 declare_args() {
   # Experiment to enable mojo media services (e.g. "renderer", "cdm", see
   # |mojo_media_services|). When enabled, selected mojo paths will be enabled in
   # the media pipeline and corresponding services will hosted in the selected
   # remote process (e.g. "utility" process, see |mojo_media_host|).
-  enable_mojo_media = is_android || is_chromecast || enable_pepper_cdms
+  enable_mojo_media = is_android || is_chromecast || enable_library_cdms
 
   # Enable the TestMojoMediaClient to be used in mojo MediaService. This is for
   # testing only and will override the default platform MojoMediaClient, if any.
@@ -170,8 +208,11 @@ declare_args() {
         "cdm",
         "audio_decoder",
       ]
+      if (enable_media_codec_video_decoder) {
+        mojo_media_services += [ "video_decoder" ]
+      }
       mojo_media_host = "gpu"
-    } else if (enable_pepper_cdms) {
+    } else if (enable_library_cdms) {
       mojo_media_services = [ "cdm" ]
       enable_standalone_cdm_service = true
     }
@@ -182,5 +223,11 @@ declare_args() {
   # This switch defines whether the Media Remoting implementation will be built.
   # When enabled, media is allowed to be renderer and played back on remote
   # devices when the tab is being casted and other conditions are met.
-  enable_media_remoting = !is_chromecast && !is_ios && !is_android
+  enable_media_remoting = !is_chromecast && !is_ios
+}
+
+declare_args() {
+  # Media Remoting RPC is disabled on Android since it's unused but increases
+  # the native binary size by ~70Kb.
+  enable_media_remoting_rpc = enable_media_remoting && !is_android
 }

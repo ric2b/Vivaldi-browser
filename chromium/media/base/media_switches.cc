@@ -3,9 +3,9 @@
 // found in the LICENSE file.
 
 #include "media/base/media_switches.h"
+
 #include "base/command_line.h"
 #include "build/build_config.h"
-#include "ppapi/features/features.h"
 
 namespace switches {
 
@@ -67,13 +67,12 @@ const char kUseCras[] = "use-cras";
 
 // For automated testing of protected content, this switch allows specific
 // domains (e.g. example.com) to skip asking the user for permission to share
-// their personal identifier. In this context, domain does not include the
-// port number. This flag will have no effect if user-data-dir is not set and
-// will not affect the user's content settings.
+// the protected media identifier. In this context, domain does not include the
+// port number. User's content settings will not be affected by enabling this
+// switch.
 // Reference: http://crbug.com/718608
 // Example:
 // --unsafely-allow-protected-media-identifier-for-domain=a.com,b.ca
-// --user-data-dir=/test/only/profile/dir
 const char kUnsafelyAllowProtectedMediaIdentifierForDomain[] =
     "unsafely-allow-protected-media-identifier-for-domain";
 
@@ -202,16 +201,16 @@ const base::Feature kMediaCastOverlayButton{"MediaCastOverlayButton",
                                             base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Use AndroidOverlay rather than ContentVideoView in clank?
-const base::Feature kUseAndroidOverlay{"use-android_overlay",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kUseAndroidOverlay{"UseAndroidOverlay",
+                                       base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Let video track be unselected when video is playing in the background.
 const base::Feature kBackgroundVideoTrackOptimization{
-    "BackgroundVideoTrackOptimization", base::FEATURE_DISABLED_BY_DEFAULT};
+    "BackgroundVideoTrackOptimization", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Let video without audio be paused when it is playing in the background.
 const base::Feature kBackgroundVideoPauseOptimization{
-    "BackgroundVideoPauseOptimization", base::FEATURE_DISABLED_BY_DEFAULT};
+    "BackgroundVideoPauseOptimization", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kComplexityBasedVideoBuffering{
     "ComplexityBasedVideoBuffering", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -227,9 +226,17 @@ const base::Feature kMemoryPressureBasedSourceBufferGC{
 // still missing and this feature should only be enabled for testing.
 const base::Feature kMojoCdm{"MojoCdm", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Support FLAC codec within ISOBMFF streams used with Media Source Extensions.
+const base::Feature kMseFlacInIsobmff{"MseFlacInIsobmff",
+                                      base::FEATURE_ENABLED_BY_DEFAULT};
+
 // Use the new Remote Playback / media flinging pipeline.
 const base::Feature kNewRemotePlaybackPipeline{
     "NewRemotePlaybackPipeline", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Set preload to "metadata" by default for <video> and <audio>.
+const base::Feature kPreloadDefaultIsMetadata{
+    "PreloadDefaultIsMetadata", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // CanPlayThrough issued according to standard.
 const base::Feature kSpecCompliantCanPlayThrough{
@@ -268,7 +275,12 @@ const base::Feature kLowDelayVideoRenderingOnLiveStream{
 // Enables Media Engagement Index recording. The data from which will
 // be used to bypass autoplay policies.
 const base::Feature kRecordMediaEngagementScores{
-    "RecordMediaEngagementScores", base::FEATURE_DISABLED_BY_DEFAULT};
+    "RecordMediaEngagementScores", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Enables the Media Engagement Index to override autoplay policies if an
+// origins engagement score is high enough.
+const base::Feature kMediaEngagementBypassAutoplayPolicies{
+    "MediaEngagementBypassAutoplayPolicies", base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if defined(OS_ANDROID)
 // Lock the screen orientation when a video goes fullscreen.
@@ -283,7 +295,7 @@ const base::Feature kVideoRotateToFullscreen{"VideoRotateToFullscreen",
 // when using Encrypted Media Extensions (EME) API.
 // TODO(xhwang): Remove this after feature launch. See http://crbug.com/493521
 const base::Feature kMediaDrmPersistentLicense{
-    "MediaDrmPersistentLicense", base::FEATURE_DISABLED_BY_DEFAULT};
+    "MediaDrmPersistentLicense", base::FEATURE_ENABLED_BY_DEFAULT};
 
 #endif
 
@@ -302,6 +314,14 @@ const base::Feature kDelayCopyNV12Textures{"DelayCopyNV12Textures",
 const base::Feature kMediaFoundationH264Encoding{
     "MediaFoundationH264Encoding", base::FEATURE_ENABLED_BY_DEFAULT};
 #endif  // defined(OS_WIN)
+
+#if defined(OS_MACOSX)
+// Enables a workaround for a CoreAudio issue. The workaround ensures that
+// CoreAudio's pause and resume operations are serialized. These operations are
+// executed when the system is suspended and when it resumes.
+const base::Feature kSerializeCoreAudioPauseResume{
+    "SerializeCoreAudioPauseResume", base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // defined(OS_MACOSX)
 
 std::string GetEffectiveAutoplayPolicy(const base::CommandLine& command_line) {
   // |kIgnoreAutoplayRestrictionsForTests| overrides all other settings.

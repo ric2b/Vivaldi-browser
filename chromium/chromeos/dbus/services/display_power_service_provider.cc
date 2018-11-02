@@ -31,15 +31,13 @@ DisplayPowerServiceProvider::~DisplayPowerServiceProvider() {}
 void DisplayPowerServiceProvider::Start(
     scoped_refptr<dbus::ExportedObject> exported_object) {
   exported_object->ExportMethod(
-      kLibCrosServiceInterface,
-      kSetDisplayPower,
+      kDisplayServiceInterface, kDisplayServiceSetPowerMethod,
       base::Bind(&DisplayPowerServiceProvider::SetDisplayPower,
                  weak_ptr_factory_.GetWeakPtr()),
       base::Bind(&DisplayPowerServiceProvider::OnExported,
                  weak_ptr_factory_.GetWeakPtr()));
   exported_object->ExportMethod(
-      kLibCrosServiceInterface,
-      kSetDisplaySoftwareDimming,
+      kDisplayServiceInterface, kDisplayServiceSetSoftwareDimmingMethod,
       base::Bind(&DisplayPowerServiceProvider::SetDisplaySoftwareDimming,
                  weak_ptr_factory_.GetWeakPtr()),
       base::Bind(&DisplayPowerServiceProvider::OnExported,

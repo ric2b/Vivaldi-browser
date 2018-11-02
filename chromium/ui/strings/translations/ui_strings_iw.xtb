@@ -32,6 +32,7 @@
 <translation id="2190355936436201913">(ריק)</translation>
 <translation id="2289052229480071835">הקש על יעדי המגע במסך.</translation>
 <translation id="2297836609126180313"><ph name="QUANTITY" /> TB/s</translation>
+<translation id="24452542372838207">הרחבת ההודעה</translation>
 <translation id="2482878487686419369">התראות</translation>
 <translation id="2497284189126895209">כל הקבצים</translation>
 <translation id="2522350507219695259">הכיול הושלם</translation>
@@ -162,6 +163,7 @@
 <translation id="9002566407876343676">פתח</translation>
 <translation id="9038489124413477075">תיקייה ללא שם</translation>
 <translation id="9044832324875206639">{SECONDS,plural, =1{שנ‘ אחת}two{# שנ‘}many{# שנ‘}other{# שנ‘}}</translation>
+<translation id="9059834730836941392">כיווץ ההודעה</translation>
 <translation id="9150735707954472829">כרטיסייה</translation>
 <translation id="9161053988251441839">אפליקציות מוצעות</translation>
 <translation id="9170848237812810038">&amp;ביטול</translation>

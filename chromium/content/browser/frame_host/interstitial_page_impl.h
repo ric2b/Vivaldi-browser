@@ -42,13 +42,12 @@ enum ResourceRequestAction {
   CANCEL
 };
 
-class CONTENT_EXPORT InterstitialPageImpl
-    : public NON_EXPORTED_BASE(InterstitialPage),
-      public NotificationObserver,
-      public NON_EXPORTED_BASE(RenderFrameHostDelegate),
-      public RenderViewHostDelegate,
-      public RenderWidgetHostDelegate,
-      public NON_EXPORTED_BASE(NavigatorDelegate) {
+class CONTENT_EXPORT InterstitialPageImpl : public InterstitialPage,
+                                            public NotificationObserver,
+                                            public RenderFrameHostDelegate,
+                                            public RenderViewHostDelegate,
+                                            public RenderWidgetHostDelegate,
+                                            public NavigatorDelegate {
  public:
   // The different state of actions the user can take in an interstitial.
   enum ActionState {
@@ -114,7 +113,7 @@ class CONTENT_EXPORT InterstitialPageImpl
                    const base::string16& title,
                    base::i18n::TextDirection title_direction) override;
   InterstitialPage* GetAsInterstitialPage() override;
-  AccessibilityMode GetAccessibilityMode() const override;
+  ui::AXMode GetAccessibilityMode() const override;
   void ExecuteEditCommand(const std::string& command,
                           const base::Optional<base::string16>& value) override;
   void Cut() override;

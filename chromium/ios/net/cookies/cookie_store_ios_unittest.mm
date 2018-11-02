@@ -38,6 +38,7 @@ struct CookieStoreIOSTestTraits {
   static const bool filters_schemes = false;
   static const bool has_path_prefix_bug = true;
   static const bool forbids_setting_empty_name = true;
+  static const bool supports_global_cookie_tracking = false;
   static const int creation_time_granularity_in_ms = 1000;
 
   base::MessageLoop loop_;
@@ -80,7 +81,7 @@ void IgnoreString(const std::string& ignored) {
 
 }  // namespace
 
-// Test fixture to exersize net::CookieStoreIOS created without backend and
+// Test fixture to exercise net::CookieStoreIOS created without backend and
 // synchronized with |[NSHTTPCookieStorage sharedHTTPCookieStorage]|.
 class CookieStoreIOSTest : public testing::Test {
  public:

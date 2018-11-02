@@ -26,8 +26,7 @@ namespace storage {
 class FileSystemContext;
 class FileStreamWriter;
 
-class STORAGE_EXPORT SandboxFileStreamWriter
-    : public NON_EXPORTED_BASE(FileStreamWriter) {
+class STORAGE_EXPORT SandboxFileStreamWriter : public FileStreamWriter {
  public:
   SandboxFileStreamWriter(FileSystemContext* file_system_context,
                           const FileSystemURL& url,
@@ -57,7 +56,7 @@ class STORAGE_EXPORT SandboxFileStreamWriter
       base::File::Error file_error,
       const base::File::Info& file_info,
       const base::FilePath& platform_path,
-      const scoped_refptr<storage::ShareableFileReference>& file_ref);
+      scoped_refptr<storage::ShareableFileReference> file_ref);
   void DidGetUsageAndQuota(const net::CompletionCallback& callback,
                            storage::QuotaStatusCode status,
                            int64_t usage,

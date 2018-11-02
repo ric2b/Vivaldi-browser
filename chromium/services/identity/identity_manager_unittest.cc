@@ -10,6 +10,7 @@
 #include "components/signin/core/browser/fake_signin_manager.h"
 #include "components/signin/core/browser/test_signin_client.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
+#include "google_apis/gaia/fake_oauth2_token_service_delegate.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/identity/identity_service.h"
 #include "services/identity/public/cpp/account_state.h"
@@ -30,10 +31,12 @@ using SigninManagerForTest = FakeSigninManagerBase;
 using SigninManagerForTest = FakeSigninManager;
 #endif  // OS_CHROMEOS
 
-const std::string kTestGaiaId = "dummyId";
-const std::string kTestEmail = "me@dummy.com";
-const std::string kTestRefreshToken = "dummy-refresh-token";
-const std::string kTestAccessToken = "access_token";
+const char kTestGaiaId[] = "dummyId";
+const char kTestEmail[] = "me@dummy.com";
+const char kSecondaryTestGaiaId[] = "secondaryDummyId";
+const char kSecondaryTestEmail[] = "metoo@dummy.com";
+const char kTestRefreshToken[] = "dummy-refresh-token";
+const char kTestAccessToken[] = "access_token";
 
 class ServiceTestClient : public service_manager::test::ServiceTestClient,
                           public service_manager::mojom::ServiceFactory {
@@ -133,6 +136,13 @@ class IdentityManagerTest : public service_manager::test::ServiceTest {
       const AccountState& account_state) {
     account_info_from_gaia_id_ = account_info;
     account_state_from_gaia_id_ = account_state;
+    quit_closure.Run();
+  }
+
+  void OnGotAccounts(base::Closure quit_closure,
+                     std::vector<mojom::AccountPtr>* output,
+                     std::vector<mojom::AccountPtr> accounts) {
+    *output = std::move(accounts);
     quit_closure.Run();
   }
 
@@ -504,6 +514,49 @@ TEST_F(IdentityManagerTest, GetPrimaryAccountWhenAvailableOverlappingCalls) {
   EXPECT_TRUE(account_state2.is_primary_account);
 }
 
+// Check that GetPrimaryAccountWhenAvailable() doesn't return the account as
+// available if the refresh token has an auth error.
+TEST_F(IdentityManagerTest,
+       GetPrimaryAccountWhenAvailableRefreshTokenHasAuthError) {
+  signin_manager()->SetAuthenticatedAccountInfo(kTestGaiaId, kTestEmail);
+  token_service()->UpdateCredentials(
+      signin_manager()->GetAuthenticatedAccountId(), kTestRefreshToken);
+  FakeOAuth2TokenServiceDelegate* delegate =
+      static_cast<FakeOAuth2TokenServiceDelegate*>(
+          token_service()->GetDelegate());
+  delegate->SetLastErrorForAccount(
+      signin_manager()->GetAuthenticatedAccountId(),
+      GoogleServiceAuthError(
+          GoogleServiceAuthError::State::INVALID_GAIA_CREDENTIALS));
+
+  AccountInfo account_info;
+  AccountState account_state;
+  base::RunLoop run_loop;
+  GetIdentityManager()->GetPrimaryAccountWhenAvailable(base::Bind(
+      &IdentityManagerTest::OnPrimaryAccountAvailable, base::Unretained(this),
+      run_loop.QuitClosure(), base::Unretained(&account_info),
+      base::Unretained(&account_state)));
+
+  // Flush the Identity Manager and check that the callback didn't fire.
+  FlushIdentityManagerForTesting();
+  EXPECT_TRUE(account_info.account_id.empty());
+
+  // Clear the auth error, update credentials, and check that the callback
+  // fires.
+  delegate->SetLastErrorForAccount(
+      signin_manager()->GetAuthenticatedAccountId(), GoogleServiceAuthError());
+  token_service()->UpdateCredentials(
+      signin_manager()->GetAuthenticatedAccountId(), kTestRefreshToken);
+  run_loop.Run();
+
+  EXPECT_EQ(signin_manager()->GetAuthenticatedAccountId(),
+            account_info.account_id);
+  EXPECT_EQ(kTestGaiaId, account_info.gaia);
+  EXPECT_EQ(kTestEmail, account_info.email);
+  EXPECT_TRUE(account_state.has_refresh_token);
+  EXPECT_TRUE(account_state.is_primary_account);
+}
+
 // Check that the account info for a given GAIA ID is null if that GAIA ID is
 // unknown.
 TEST_F(IdentityManagerTest, GetAccountInfoForUnknownGaiaID) {
@@ -553,6 +606,108 @@ TEST_F(IdentityManagerTest, GetAccountInfoForKnownGaiaIdRefreshToken) {
   EXPECT_EQ(kTestEmail, account_info_from_gaia_id_->email);
   EXPECT_TRUE(account_state_from_gaia_id_.has_refresh_token);
   EXPECT_FALSE(account_state_from_gaia_id_.is_primary_account);
+}
+
+// Check the implementation of GetAccounts() when there are no accounts.
+TEST_F(IdentityManagerTest, GetAccountsNoAccount) {
+  token_service()->LoadCredentials("dummy");
+
+  std::vector<mojom::AccountPtr> accounts;
+
+  // Check that an empty list is returned when there are no accounts.
+  base::RunLoop run_loop;
+  GetIdentityManager()->GetAccounts(
+      base::Bind(&IdentityManagerTest::OnGotAccounts, base::Unretained(this),
+                 run_loop.QuitClosure(), &accounts));
+  run_loop.Run();
+  EXPECT_EQ(0u, accounts.size());
+}
+
+// Check the implementation of GetAccounts() when there is a single account,
+// which is the primary account.
+TEST_F(IdentityManagerTest, GetAccountsPrimaryAccount) {
+  token_service()->LoadCredentials("dummy");
+  std::vector<mojom::AccountPtr> accounts;
+
+  // Add a primary account.
+  signin_manager()->SetAuthenticatedAccountInfo(kTestGaiaId, kTestEmail);
+  token_service()->UpdateCredentials(
+      signin_manager()->GetAuthenticatedAccountId(), kTestRefreshToken);
+
+  base::RunLoop run_loop;
+  GetIdentityManager()->GetAccounts(
+      base::Bind(&IdentityManagerTest::OnGotAccounts, base::Unretained(this),
+                 run_loop.QuitClosure(), &accounts));
+  run_loop.Run();
+
+  // Verify that |accounts| contains the primary account.
+  EXPECT_EQ(1u, accounts.size());
+  const mojom::AccountPtr& primary_account = accounts[0];
+  EXPECT_EQ(signin_manager()->GetAuthenticatedAccountId(),
+            primary_account->info.account_id);
+  EXPECT_EQ(kTestGaiaId, primary_account->info.gaia);
+  EXPECT_EQ(kTestEmail, primary_account->info.email);
+  EXPECT_TRUE(primary_account->state.has_refresh_token);
+  EXPECT_TRUE(primary_account->state.is_primary_account);
+}
+
+// Check the implementation of GetAccounts() when there are multiple accounts,
+// in particular that ProfileOAuth2TokenService is the source of truth for
+// whether an account is present.
+TEST_F(IdentityManagerTest, GetAccountsMultipleAccounts) {
+  token_service()->LoadCredentials("dummy");
+  std::vector<mojom::AccountPtr> accounts;
+
+  // Add a primary account.
+  signin_manager()->SetAuthenticatedAccountInfo(kTestGaiaId, kTestEmail);
+  token_service()->UpdateCredentials(
+      signin_manager()->GetAuthenticatedAccountId(), kTestRefreshToken);
+
+  // Add a secondary account with AccountTrackerService, but don't yet make
+  // ProfileOAuth2TokenService aware of it.
+  std::string secondary_account_id = account_tracker()->SeedAccountInfo(
+      kSecondaryTestGaiaId, kSecondaryTestEmail);
+  base::RunLoop run_loop;
+  GetIdentityManager()->GetAccounts(
+      base::Bind(&IdentityManagerTest::OnGotAccounts, base::Unretained(this),
+                 run_loop.QuitClosure(), &accounts));
+  run_loop.Run();
+
+  // Verify that |accounts| contains only the primary account at this time.
+  EXPECT_EQ(1u, accounts.size());
+  const mojom::AccountPtr& primary_account = accounts[0];
+  EXPECT_EQ(signin_manager()->GetAuthenticatedAccountId(),
+            primary_account->info.account_id);
+  EXPECT_EQ(kTestGaiaId, primary_account->info.gaia);
+  EXPECT_EQ(kTestEmail, primary_account->info.email);
+  EXPECT_TRUE(primary_account->state.has_refresh_token);
+  EXPECT_TRUE(primary_account->state.is_primary_account);
+
+  // Make PO2TS aware of the secondary account.
+  token_service()->UpdateCredentials(secondary_account_id, kTestRefreshToken);
+  base::RunLoop run_loop2;
+  GetIdentityManager()->GetAccounts(
+      base::Bind(&IdentityManagerTest::OnGotAccounts, base::Unretained(this),
+                 run_loop2.QuitClosure(), &accounts));
+  run_loop2.Run();
+
+  // Verify that |accounts| contains both accounts, with the primary account
+  // being first and having the same information as previously.
+  EXPECT_EQ(2u, accounts.size());
+  const mojom::AccountPtr& primary_account_redux = accounts[0];
+  EXPECT_EQ(signin_manager()->GetAuthenticatedAccountId(),
+            primary_account_redux->info.account_id);
+  EXPECT_EQ(kTestGaiaId, primary_account_redux->info.gaia);
+  EXPECT_EQ(kTestEmail, primary_account_redux->info.email);
+  EXPECT_TRUE(primary_account_redux->state.has_refresh_token);
+  EXPECT_TRUE(primary_account_redux->state.is_primary_account);
+
+  const mojom::AccountPtr& secondary_account = accounts[1];
+  EXPECT_EQ(secondary_account_id, secondary_account->info.account_id);
+  EXPECT_EQ(kSecondaryTestGaiaId, secondary_account->info.gaia);
+  EXPECT_EQ(kSecondaryTestEmail, secondary_account->info.email);
+  EXPECT_TRUE(secondary_account->state.has_refresh_token);
+  EXPECT_FALSE(secondary_account->state.is_primary_account);
 }
 
 // Check that the expected error is received if requesting an access token when

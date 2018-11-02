@@ -9,6 +9,7 @@
 #include "base/callback.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/timer/timer.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop_highlight.h"
@@ -38,6 +39,12 @@ const char* kLoginPinViewClassName = "LoginPinView";
 
 // View ids. Useful for the test api.
 const int kBackspaceButtonId = -1;
+
+// How long does the user have to long-press the backspace button before it
+// auto-submits?
+const int kInitialBackspaceDelayMs = 500;
+// After the first auto-submit, how long until the next backspace event fires?
+const int kRepeatingBackspaceDelayMs = 150;
 
 // An alpha value for button's sub label.
 // In specs this is listed as 34% = 0x57 / 0xFF.
@@ -69,10 +76,10 @@ int GetViewIdForPinNumber(int number) {
 }
 
 // A base class for pin button in the pin keyboard.
-class BasePinButton : public views::CustomButton, public views::ButtonListener {
+class BasePinButton : public views::Button, public views::ButtonListener {
  public:
   explicit BasePinButton(const base::Closure& on_press)
-      : views::CustomButton(this), on_press_(on_press) {
+      : views::Button(this), on_press_(on_press) {
     SetFocusBehavior(FocusBehavior::ALWAYS);
     SetPreferredSize(
         gfx::Size(LoginPinView::kButtonSizeDp, LoginPinView::kButtonSizeDp));
@@ -133,13 +140,14 @@ class BasePinButton : public views::CustomButton, public views::ButtonListener {
             kInkDropHighlightColor, LoginPinView::kButtonSizeDp / 2));
   }
 
- private:
+ protected:
   base::Closure on_press_;
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(BasePinButton);
 };
 
-// A pin button that displays a digit number and corresponding letter mapping.
+// A PIN button that displays a digit number and corresponding letter mapping.
 class DigitPinButton : public BasePinButton {
  public:
   DigitPinButton(int value, const LoginPinView::OnPinKey& on_key)
@@ -157,12 +165,20 @@ class DigitPinButton : public BasePinButton {
         SkColorSetA(SK_ColorWHITE, kButtonSubLabelAlpha));
     label->SetAutoColorReadabilityEnabled(false);
     sub_label->SetAutoColorReadabilityEnabled(false);
+    label->SetSubpixelRenderingEnabled(false);
+    sub_label->SetSubpixelRenderingEnabled(false);
     label->SetFontList(base_font_list.Derive(8, gfx::Font::FontStyle::NORMAL,
                                              gfx::Font::Weight::LIGHT));
     sub_label->SetFontList(base_font_list.Derive(
         -3, gfx::Font::FontStyle::NORMAL, gfx::Font::Weight::NORMAL));
     AddChildView(label);
     AddChildView(sub_label);
+
+    // Layer rendering.
+    label->SetPaintToLayer();
+    label->layer()->SetFillsBoundsOpaquely(false);
+    sub_label->SetPaintToLayer();
+    sub_label->layer()->SetFillsBoundsOpaquely(false);
   }
 
   ~DigitPinButton() override = default;
@@ -171,20 +187,78 @@ class DigitPinButton : public BasePinButton {
   DISALLOW_COPY_AND_ASSIGN(DigitPinButton);
 };
 
-// A pin button that displays backspace icon.
+// A PIN button that displays backspace icon.
 class BackspacePinButton : public BasePinButton {
  public:
-  BackspacePinButton(const base::Closure& on_press) : BasePinButton(on_press) {
+  BackspacePinButton(const base::Closure& on_press)
+      : BasePinButton(on_press),
+        delay_timer_(base::MakeUnique<base::OneShotTimer>()),
+        repeat_timer_(base::MakeUnique<base::RepeatingTimer>()) {
     views::ImageView* image = new views::ImageView();
     // TODO: Change icon color when enabled/disabled.
     image->SetImage(
         gfx::CreateVectorIcon(kLockScreenBackspaceIcon, SK_ColorWHITE));
+
+    // Layer rendering.
+    image->SetPaintToLayer();
+    image->layer()->SetFillsBoundsOpaquely(false);
+
     AddChildView(image);
   }
 
   ~BackspacePinButton() override = default;
 
+  void SetTimersForTesting(std::unique_ptr<base::Timer> delay_timer,
+                           std::unique_ptr<base::Timer> repeat_timer) {
+    delay_timer_ = std::move(delay_timer);
+    repeat_timer_ = std::move(repeat_timer);
+  }
+
+  // BasePinButton:
+  bool OnMousePressed(const ui::MouseEvent& event) override {
+    did_autosubmit_ = false;
+
+    if (IsTriggerableEvent(event) && enabled() &&
+        HitTestPoint(event.location())) {
+      delay_timer_->Start(
+          FROM_HERE,
+          base::TimeDelta::FromMilliseconds(kInitialBackspaceDelayMs),
+          base::Bind(&BackspacePinButton::DispatchRepeatablePressEvent,
+                     base::Unretained(this)));
+    }
+
+    return BasePinButton::OnMousePressed(event);
+  }
+  void OnMouseReleased(const ui::MouseEvent& event) override {
+    delay_timer_->Stop();
+    repeat_timer_->Stop();
+    BasePinButton::OnMouseReleased(event);
+  }
+  void ButtonPressed(Button* sender, const ui::Event& event) override {
+    if (did_autosubmit_)
+      return;
+    BasePinButton::ButtonPressed(sender, event);
+  }
+
  private:
+  void DispatchRepeatablePressEvent() {
+    // Start repeat timer if this was fired by the initial delay timer.
+    if (!repeat_timer_->IsRunning()) {
+      repeat_timer_->Start(
+          FROM_HERE,
+          base::TimeDelta::FromMilliseconds(kRepeatingBackspaceDelayMs),
+          base::Bind(&BackspacePinButton::DispatchRepeatablePressEvent,
+                     base::Unretained(this)));
+    }
+
+    did_autosubmit_ = true;
+    on_press_.Run();
+  }
+
+  bool did_autosubmit_ = false;
+  std::unique_ptr<base::Timer> delay_timer_;
+  std::unique_ptr<base::Timer> repeat_timer_;
+
   DISALLOW_COPY_AND_ASSIGN(BackspacePinButton);
 };
 
@@ -207,11 +281,22 @@ views::View* LoginPinView::TestApi::GetBackspaceButton() const {
   return view_->GetViewByID(kBackspaceButtonId);
 }
 
+void LoginPinView::TestApi::SetBackspaceTimers(
+    std::unique_ptr<base::Timer> delay_timer,
+    std::unique_ptr<base::Timer> repeat_timer) {
+  BackspacePinButton* button =
+      static_cast<BackspacePinButton*>(GetBackspaceButton());
+  button->SetTimersForTesting(std::move(delay_timer), std::move(repeat_timer));
+}
+
 LoginPinView::LoginPinView(const OnPinKey& on_key,
                            const OnPinBackspace& on_backspace)
     : on_key_(on_key), on_backspace_(on_backspace) {
   DCHECK(on_key_);
   DCHECK(on_backspace_);
+
+  // Layer rendering.
+  SetPaintToLayer(ui::LayerType::LAYER_NOT_DRAWN);
 
   // Builds and returns a new view which contains a row of the PIN keyboard.
   auto build_and_add_row = [this]() {

@@ -9,38 +9,33 @@
 #include "base/memory/ptr_util.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/test_app_window_contents.h"
 #include "extensions/browser/extensions_test.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
-#include "extensions/shell/browser/desktop_controller.h"
 #include "extensions/shell/browser/shell_app_delegate.h"
 #include "extensions/shell/browser/shell_app_window_client.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/size.h"
 
 namespace extensions {
 
 class ShellNativeAppWindowAuraTest : public ExtensionsTest {
  public:
   ShellNativeAppWindowAuraTest()
-      : ExtensionsTest(base::MakeUnique<content::TestBrowserThreadBundle>()) {
+      : ExtensionsTest(std::make_unique<content::TestBrowserThreadBundle>()) {
     AppWindowClient::Set(&app_window_client_);
   }
 
-  ~ShellNativeAppWindowAuraTest() override {}
+  ~ShellNativeAppWindowAuraTest() override { AppWindowClient::Set(nullptr); }
 
  protected:
   ShellAppWindowClient app_window_client_;
 };
 
 TEST_F(ShellNativeAppWindowAuraTest, Bounds) {
-  // The BrowserContext used here must be destroyed before the thread bundle,
-  // because of destructors of things spawned from creating a WebContents.
-  std::unique_ptr<content::BrowserContext> browser_context(
-      new content::TestBrowserContext);
   scoped_refptr<Extension> extension =
       ExtensionBuilder()
           .SetManifest(DictionaryBuilder()
@@ -50,12 +45,14 @@ TEST_F(ShellNativeAppWindowAuraTest, Bounds) {
                            .Build())
           .Build();
 
-  AppWindow* app_window = new AppWindow(
-      browser_context.get(), new ShellAppDelegate, extension.get());
-  content::WebContents* web_contents = content::WebContents::Create(
-      content::WebContents::CreateParams(browser_context.get()));
+  AppWindow* app_window =
+      new AppWindow(browser_context(), new ShellAppDelegate, extension.get());
+
+  std::unique_ptr<content::WebContents> web_contents(
+      content::WebContents::Create(
+          content::WebContents::CreateParams(browser_context())));
   app_window->SetAppWindowContentsForTesting(
-      base::MakeUnique<TestAppWindowContents>(web_contents));
+      std::make_unique<TestAppWindowContents>(std::move(web_contents)));
 
   AppWindow::BoundsSpecification window_spec;
   window_spec.bounds = gfx::Rect(100, 200, 300, 400);
@@ -66,6 +63,10 @@ TEST_F(ShellNativeAppWindowAuraTest, Bounds) {
 
   gfx::Rect bounds = window.GetBounds();
   EXPECT_EQ(window_spec.bounds, bounds);
+
+  // The window should not be resizable from the extension API.
+  EXPECT_EQ(bounds.size(), window.GetContentMinimumSize());
+  EXPECT_EQ(bounds.size(), window.GetContentMaximumSize());
 
   // Delete the AppWindow.
   app_window->OnNativeClose();

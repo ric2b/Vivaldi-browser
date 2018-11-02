@@ -26,8 +26,9 @@ class Message;
 namespace content {
 
 class MessagePort;
-class SharedWorkerMessageFilter;
+class SharedWorkerContentSettingsProxyImpl;
 class SharedWorkerInstance;
+class SharedWorkerMessageFilter;
 
 // The SharedWorkerHost is the interface that represents the browser side of
 // the browser <-> worker communication channel. This is owned by
@@ -72,10 +73,8 @@ class SharedWorkerHost {
   void WorkerScriptLoadFailed();
   void WorkerConnected(int connection_request_id);
   void AllowFileSystem(const GURL& url,
-                       std::unique_ptr<IPC::Message> reply_msg);
-  void AllowIndexedDB(const GURL& url,
-                      const base::string16& name,
-                      bool* result);
+                       base::OnceCallback<void(bool)> callback);
+  bool AllowIndexedDB(const GURL& url, const base::string16& name);
 
   // Terminates the given worker, i.e. based on a UI action.
   void TerminateWorker();
@@ -120,7 +119,7 @@ class SharedWorkerHost {
   void SetConnectionRequestID(SharedWorkerMessageFilter* filter,
                               int route_id,
                               int connection_request_id);
-  void AllowFileSystemResponse(std::unique_ptr<IPC::Message> reply_msg,
+  void AllowFileSystemResponse(base::OnceCallback<void(bool)> callback,
                                bool allowed);
 
   // Sends |message| to the SharedWorker.
@@ -146,6 +145,7 @@ class SharedWorkerHost {
   // from blink::UseCounter::Feature enum.
   std::set<uint32_t> used_features_;
 
+  std::unique_ptr<SharedWorkerContentSettingsProxyImpl> content_settings_;
   base::WeakPtrFactory<SharedWorkerHost> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(SharedWorkerHost);

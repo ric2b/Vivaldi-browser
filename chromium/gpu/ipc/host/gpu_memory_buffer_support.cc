@@ -23,7 +23,7 @@ bool AreNativeGpuMemoryBuffersEnabled() {
     return false;
   }
 
-#if defined(OS_MACOSX) || defined(OS_CHROMEOS) && defined(ARCH_CPU_X86_FAMILY)
+#if defined(OS_MACOSX)
   return !base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kDisableNativeGpuMemoryBuffers);
 #else
@@ -51,6 +51,7 @@ GpuMemoryBufferConfigurationSet GetNativeGpuMemoryBufferConfigurations() {
         gfx::BufferFormat::YUV_420_BIPLANAR};
     const gfx::BufferUsage kNativeUsages[] = {
         gfx::BufferUsage::GPU_READ, gfx::BufferUsage::SCANOUT,
+        gfx::BufferUsage::SCANOUT_CAMERA_READ_WRITE,
         gfx::BufferUsage::GPU_READ_CPU_READ_WRITE,
         gfx::BufferUsage::GPU_READ_CPU_READ_WRITE_PERSISTENT};
     for (auto format : kNativeFormats) {
@@ -74,7 +75,8 @@ GpuMemoryBufferConfigurationSet GetNativeGpuMemoryBufferConfigurations() {
         gfx::BufferFormat::YVU_420,   gfx::BufferFormat::YUV_420_BIPLANAR};
     const gfx::BufferUsage kGPUReadWriteUsages[] = {
         gfx::BufferUsage::GPU_READ, gfx::BufferUsage::SCANOUT,
-        gfx::BufferUsage::SCANOUT_CPU_READ_WRITE};
+        gfx::BufferUsage::SCANOUT_CPU_READ_WRITE,
+        gfx::BufferUsage::SCANOUT_VDA_WRITE};
     for (auto format : kGPUReadWriteFormats) {
       for (auto usage : kGPUReadWriteUsages) {
         if (IsNativeGpuMemoryBufferConfigurationSupported(format, usage))

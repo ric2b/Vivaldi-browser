@@ -11,6 +11,7 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
+#include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/validation.h"
 #include "components/autofill/core/common/autofill_constants.h"
@@ -135,15 +136,30 @@ SaveCardBubbleView* SaveCardBubbleControllerImpl::save_card_bubble_view()
 }
 
 base::string16 SaveCardBubbleControllerImpl::GetWindowTitle() const {
-  return l10n_util::GetStringUTF16(
-      is_uploading_ ? IDS_AUTOFILL_SAVE_CARD_PROMPT_TITLE_TO_CLOUD
-                    : IDS_AUTOFILL_SAVE_CARD_PROMPT_TITLE_LOCAL);
+  if (is_uploading_) {
+    if (is_currently_requesting_cvc_) {
+      return l10n_util::GetStringUTF16(
+          IDS_AUTOFILL_SAVE_CARD_PROMPT_ENTER_CVC_TITLE);
+    }
+    if (IsAutofillUpstreamShowNewUiExperimentEnabled()) {
+      return l10n_util::GetStringUTF16(
+          IDS_AUTOFILL_SAVE_CARD_PROMPT_TITLE_TO_CLOUD_V2);
+    }
+    return l10n_util::GetStringUTF16(
+        IDS_AUTOFILL_SAVE_CARD_PROMPT_TITLE_TO_CLOUD);
+  }
+  return l10n_util::GetStringUTF16(IDS_AUTOFILL_SAVE_CARD_PROMPT_TITLE_LOCAL);
 }
 
 base::string16 SaveCardBubbleControllerImpl::GetExplanatoryMessage() const {
-  return is_uploading_ ? l10n_util::GetStringUTF16(
-                             IDS_AUTOFILL_SAVE_CARD_PROMPT_UPLOAD_EXPLANATION)
-                       : base::string16();
+  if (is_uploading_) {
+    return IsAutofillUpstreamShowNewUiExperimentEnabled()
+               ? l10n_util::GetStringUTF16(
+                     IDS_AUTOFILL_SAVE_CARD_PROMPT_UPLOAD_EXPLANATION_V2)
+               : l10n_util::GetStringUTF16(
+                     IDS_AUTOFILL_SAVE_CARD_PROMPT_UPLOAD_EXPLANATION);
+  }
+  return base::string16();
 }
 
 const CreditCard SaveCardBubbleControllerImpl::GetCard() const {
@@ -178,6 +194,13 @@ void SaveCardBubbleControllerImpl::OnSaveButton(const base::string16& cvc) {
       AutofillMetrics::SAVE_CARD_PROMPT_END_ACCEPTED, is_uploading_, is_reshow_,
       pref_service_->GetInteger(
           prefs::kAutofillAcceptSaveCreditCardPromptState));
+  if (is_currently_requesting_cvc_) {
+    AutofillMetrics::LogSaveCardPromptMetric(
+        AutofillMetrics::SAVE_CARD_PROMPT_CVC_FIX_FLOW_END_ACCEPTED,
+        is_uploading_, is_reshow_,
+        pref_service_->GetInteger(
+            prefs::kAutofillAcceptSaveCreditCardPromptState));
+  }
   pref_service_->SetInteger(
       prefs::kAutofillAcceptSaveCreditCardPromptState,
       prefs::PREVIOUS_SAVE_CREDIT_CARD_PROMPT_USER_DECISION_ACCEPTED);
@@ -210,6 +233,14 @@ void SaveCardBubbleControllerImpl::OnLegalMessageLinkClicked(const GURL& url) {
       is_uploading_, is_reshow_,
       pref_service_->GetInteger(
           prefs::kAutofillAcceptSaveCreditCardPromptState));
+  if (is_currently_requesting_cvc_) {
+    AutofillMetrics::LogSaveCardPromptMetric(
+        AutofillMetrics::
+            SAVE_CARD_PROMPT_CVC_FIX_FLOW_DISMISS_CLICK_LEGAL_MESSAGE,
+        is_uploading_, is_reshow_,
+        pref_service_->GetInteger(
+            prefs::kAutofillAcceptSaveCreditCardPromptState));
+  }
 }
 
 void SaveCardBubbleControllerImpl::OnBubbleClosed() {
@@ -220,6 +251,15 @@ void SaveCardBubbleControllerImpl::OnBubbleClosed() {
 const LegalMessageLines& SaveCardBubbleControllerImpl::GetLegalMessageLines()
     const {
   return legal_message_lines_;
+}
+
+void SaveCardBubbleControllerImpl::ContinueToRequestCvcStage() {
+  is_currently_requesting_cvc_ = true;
+  AutofillMetrics::LogSaveCardPromptMetric(
+      AutofillMetrics::SAVE_CARD_PROMPT_CVC_FIX_FLOW_SHOWN, is_uploading_,
+      is_reshow_,
+      pref_service_->GetInteger(
+          prefs::kAutofillAcceptSaveCreditCardPromptState));
 }
 
 bool SaveCardBubbleControllerImpl::InputCvcIsValid(
@@ -262,6 +302,13 @@ void SaveCardBubbleControllerImpl::DidFinishNavigation(
         is_reshow_,
         pref_service_->GetInteger(
             prefs::kAutofillAcceptSaveCreditCardPromptState));
+    if (is_currently_requesting_cvc_) {
+      AutofillMetrics::LogSaveCardPromptMetric(
+          AutofillMetrics::SAVE_CARD_PROMPT_CVC_FIX_FLOW_END_NAVIGATION_SHOWING,
+          is_uploading_, is_reshow_,
+          pref_service_->GetInteger(
+              prefs::kAutofillAcceptSaveCreditCardPromptState));
+    }
   } else {
     UpdateIcon();
 
@@ -270,12 +317,21 @@ void SaveCardBubbleControllerImpl::DidFinishNavigation(
         is_reshow_,
         pref_service_->GetInteger(
             prefs::kAutofillAcceptSaveCreditCardPromptState));
+    if (is_currently_requesting_cvc_) {
+      AutofillMetrics::LogSaveCardPromptMetric(
+          AutofillMetrics::SAVE_CARD_PROMPT_CVC_FIX_FLOW_END_NAVIGATION_HIDDEN,
+          is_uploading_, is_reshow_,
+          pref_service_->GetInteger(
+              prefs::kAutofillAcceptSaveCreditCardPromptState));
+    }
   }
 }
 
 void SaveCardBubbleControllerImpl::ShowBubble() {
   DCHECK(!save_card_callback_.is_null());
   DCHECK(!save_card_bubble_view_);
+
+  is_currently_requesting_cvc_ = false;
 
   // Need to create location bar icon before bubble, otherwise bubble will be
   // unanchored.

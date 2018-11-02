@@ -11,6 +11,7 @@
 #include "bindings/core/v8/WorkerOrWorkletScriptController.h"
 #include "bindings/modules/v8/V8AudioParamDescriptor.h"
 #include "core/dom/ExceptionCode.h"
+#include "modules/webaudio/CrossThreadAudioWorkletProcessorInfo.h"
 #include "modules/webaudio/AudioBuffer.h"
 #include "modules/webaudio/AudioParamDescriptor.h"
 #include "modules/webaudio/AudioWorkletProcessor.h"
@@ -83,7 +84,7 @@ void AudioWorkletGlobalScope::registerProcessor(
 
   v8::Local<v8::Value> prototype_value_local;
   bool prototype_extracted =
-      class_definition_local->Get(context, V8String(isolate, "prototype"))
+      class_definition_local->Get(context, V8AtomicString(isolate, "prototype"))
           .ToLocal(&prototype_value_local);
   DCHECK(prototype_extracted);
 
@@ -92,7 +93,7 @@ void AudioWorkletGlobalScope::registerProcessor(
 
   v8::Local<v8::Value> process_value_local;
   bool process_extracted =
-      prototype_object_local->Get(context, V8String(isolate, "process"))
+      prototype_object_local->Get(context, V8AtomicString(isolate, "process"))
           .ToLocal(&process_value_local);
   DCHECK(process_extracted);
 
@@ -121,8 +122,8 @@ void AudioWorkletGlobalScope::registerProcessor(
 
   v8::Local<v8::Value> parameter_descriptors_value_local;
   bool did_get_parameter_descriptor =
-      class_definition_local->Get(context,
-                                  V8String(isolate, "parameterDescriptors"))
+      class_definition_local
+          ->Get(context, V8AtomicString(isolate, "parameterDescriptors"))
           .ToLocal(&parameter_descriptors_value_local);
 
   // If parameterDescriptor() is parsed and has a valid value, create a vector
@@ -139,9 +140,7 @@ void AudioWorkletGlobalScope::registerProcessor(
     definition->SetAudioParamDescriptors(audio_param_descriptors);
   }
 
-  processor_definition_map_.Set(
-      name,
-      TraceWrapperMember<AudioWorkletProcessorDefinition>(this, definition));
+  processor_definition_map_.Set(name, definition);
 }
 
 AudioWorkletProcessor* AudioWorkletGlobalScope::CreateInstance(
@@ -166,8 +165,7 @@ AudioWorkletProcessor* AudioWorkletGlobalScope::CreateInstance(
   DCHECK(processor);
 
   processor->SetInstance(isolate, instance_local);
-  processor_instances_.push_back(
-      TraceWrapperMember<AudioWorkletProcessor>(this, processor));
+  processor_instances_.push_back(processor);
 
   return processor;
 }
@@ -209,6 +207,23 @@ bool AudioWorkletGlobalScope::Process(AudioWorkletProcessor* processor,
 AudioWorkletProcessorDefinition* AudioWorkletGlobalScope::FindDefinition(
     const String& name) {
   return processor_definition_map_.at(name);
+}
+
+unsigned AudioWorkletGlobalScope::NumberOfRegisteredDefinitions() {
+  return processor_definition_map_.size();
+}
+
+std::unique_ptr<Vector<CrossThreadAudioWorkletProcessorInfo>>
+AudioWorkletGlobalScope::WorkletProcessorInfoListForSynchronization() {
+  auto processor_info_list =
+      WTF::MakeUnique<Vector<CrossThreadAudioWorkletProcessorInfo>>();
+  for (auto definition_entry : processor_definition_map_) {
+    if (!definition_entry.value->IsSynchronized()) {
+      definition_entry.value->MarkAsSynchronized();
+      processor_info_list->emplace_back(*definition_entry.value);
+    }
+  }
+  return processor_info_list;
 }
 
 DEFINE_TRACE(AudioWorkletGlobalScope) {

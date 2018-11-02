@@ -46,11 +46,12 @@ var prefsGeolocation = {
     images: [],
     javascript: [],
     mic: [],
-    midiDevices: [],
+    midi_devices: [],
     notifications: [],
     plugins: [],
     protectedContent: [],
     popups: [],
+    sound: [],
     unsandboxed_plugins: [],
   }
 };
@@ -180,7 +181,7 @@ var prefsVarious = {
     images: [],
     javascript: [],
     mic: [],
-    midiDevices: [],
+    midi_devices: [],
     notifications: [
       {
         embeddingOrigin: '',
@@ -658,7 +659,7 @@ suite('SiteList', function() {
           var remove = testElement.$.reset;
           assertTrue(!!remove);
           MockInteractions.tap(remove);
-          return browserProxy.whenCalled('resetCategoryPermissionForOrigin');
+          return browserProxy.whenCalled('resetCategoryPermissionForPattern');
         })
         .then(function(args) {
           assertEquals('http://foo.com', args[0]);
@@ -696,7 +697,7 @@ suite('SiteList', function() {
           var remove = testElement.$.reset;
           assertTrue(!!remove);
           MockInteractions.tap(remove);
-          return browserProxy.whenCalled('resetCategoryPermissionForOrigin');
+          return browserProxy.whenCalled('resetCategoryPermissionForPattern');
         })
         .then(function(args) {
           assertEquals('http://foo.com', args[0]);
@@ -738,7 +739,7 @@ suite('SiteList', function() {
           assertFalse(resetButton.hidden);
 
           MockInteractions.tap(resetButton);
-          return browserProxy.whenCalled('resetCategoryPermissionForOrigin');
+          return browserProxy.whenCalled('resetCategoryPermissionForPattern');
         })
         .then(function(args) {
           assertEquals('https://foo-allow.com:443', args[0]);
@@ -918,7 +919,7 @@ suite('SiteList', function() {
           var allow = testElement.$.allow;
           assertTrue(!!allow);
           MockInteractions.tap(allow);
-          return browserProxy.whenCalled('setCategoryPermissionForOrigin');
+          return browserProxy.whenCalled('setCategoryPermissionForPattern');
         });
   });
 
@@ -935,7 +936,7 @@ suite('SiteList', function() {
           var allow = testElement.$.allow;
           assertTrue(!!allow);
           MockInteractions.tap(allow);
-          return browserProxy.whenCalled('setCategoryPermissionForOrigin');
+          return browserProxy.whenCalled('setCategoryPermissionForPattern');
         })
         .then(function(args) {
           assertEquals(
@@ -1019,14 +1020,14 @@ suite('EditExceptionDialog', function() {
     assertFalse(actionButton.disabled);
 
     MockInteractions.tap(actionButton);
-    return browserProxy.whenCalled('resetCategoryPermissionForOrigin')
+    return browserProxy.whenCalled('resetCategoryPermissionForPattern')
         .then(function(args) {
           assertEquals(cookieException.origin, args[0]);
           assertEquals(cookieException.embeddingOrigin, args[1]);
           assertEquals(settings.ContentSettingsTypes.COOKIES, args[2]);
           assertEquals(cookieException.incognito, args[3]);
 
-          return browserProxy.whenCalled('setCategoryPermissionForOrigin');
+          return browserProxy.whenCalled('setCategoryPermissionForPattern');
         })
         .then(function(args) {
           assertEquals(newValue, args[0]);

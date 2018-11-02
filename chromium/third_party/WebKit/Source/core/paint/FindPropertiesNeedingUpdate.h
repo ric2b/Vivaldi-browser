@@ -66,6 +66,8 @@ class FindFrameViewPropertiesNeedingUpdateScope {
       original_pre_translation_ = pre_translation->Clone();
     if (auto* content_clip = frame_view_->ContentClip())
       original_content_clip_ = content_clip->Clone();
+    if (auto* scroll_node = frame_view_->ScrollNode())
+      original_scroll_node_ = scroll_node->Clone();
     if (auto* scroll_translation = frame_view_->ScrollTranslation())
       original_scroll_translation_ = scroll_translation->Clone();
   }
@@ -85,6 +87,8 @@ class FindFrameViewPropertiesNeedingUpdateScope {
                                  frame_view_->PreTranslation());
     DCHECK_FRAMEVIEW_PROPERTY_EQ(original_content_clip_,
                                  frame_view_->ContentClip());
+    DCHECK_FRAMEVIEW_PROPERTY_EQ(original_scroll_node_,
+                                 frame_view_->ScrollNode());
     DCHECK_FRAMEVIEW_PROPERTY_EQ(original_scroll_translation_,
                                  frame_view_->ScrollTranslation());
 
@@ -98,6 +102,7 @@ class FindFrameViewPropertiesNeedingUpdateScope {
   bool needed_forced_subtree_update_;
   RefPtr<const TransformPaintPropertyNode> original_pre_translation_;
   RefPtr<const ClipPaintPropertyNode> original_content_clip_;
+  RefPtr<const ScrollPaintPropertyNode> original_scroll_node_;
   RefPtr<const TransformPaintPropertyNode> original_scroll_translation_;
 };
 
@@ -121,12 +126,15 @@ class FindObjectPropertiesNeedingUpdateScope {
     object_.GetMutableForPainting()
         .SetOnlyThisNeedsPaintPropertyUpdateForTesting();
 
-    if (const auto* properties = object_.PaintProperties())
-      original_properties_ = properties->Clone();
+    if (const auto* fragment_data = object_.FirstFragment()) {
+      if (const auto* properties = fragment_data->PaintProperties())
+        original_properties_ = properties->Clone();
 
-    if (const auto* local_border_box = object_.LocalBorderBoxProperties()) {
-      original_local_border_box_properties_ =
-          WTF::WrapUnique(new PropertyTreeState(*local_border_box));
+      if (const auto* local_border_box =
+              fragment_data->LocalBorderBoxProperties()) {
+        original_local_border_box_properties_ =
+            WTF::WrapUnique(new PropertyTreeState(*local_border_box));
+      }
     }
   }
 
@@ -136,7 +144,9 @@ class FindObjectPropertiesNeedingUpdateScope {
     // property update.
     DCHECK_OBJECT_PROPERTY_EQ(object_, &original_paint_offset_,
                               &object_.PaintOffset());
-    const auto* object_properties = object_.PaintProperties();
+    const auto* object_properties =
+        object_.FirstFragment() ? object_.FirstFragment()->PaintProperties()
+                                : nullptr;
     if (original_properties_ && object_properties) {
       DCHECK_OBJECT_PROPERTY_EQ(object_,
                                 original_properties_->PaintOffsetTranslation(),
@@ -179,6 +189,8 @@ class FindObjectPropertiesNeedingUpdateScope {
       DCHECK_OBJECT_PROPERTY_EQ(
           object_, original_properties_->SvgLocalToBorderBoxTransform(),
           object_properties->SvgLocalToBorderBoxTransform());
+      DCHECK_OBJECT_PROPERTY_EQ(object_, original_properties_->Scroll(),
+                                object_properties->Scroll());
       DCHECK_OBJECT_PROPERTY_EQ(object_,
                                 original_properties_->ScrollTranslation(),
                                 object_properties->ScrollTranslation());
@@ -190,7 +202,10 @@ class FindObjectPropertiesNeedingUpdateScope {
           << " Object: " << object_.DebugName();
     }
 
-    const auto* object_border_box = object_.LocalBorderBoxProperties();
+    const auto* object_border_box =
+        object_.FirstFragment()
+            ? object_.FirstFragment()->LocalBorderBoxProperties()
+            : nullptr;
     if (original_local_border_box_properties_ && object_border_box) {
       DCHECK_OBJECT_PROPERTY_EQ(
           object_, original_local_border_box_properties_->Transform(),

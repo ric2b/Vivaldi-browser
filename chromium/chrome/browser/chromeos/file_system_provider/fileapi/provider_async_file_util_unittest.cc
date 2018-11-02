@@ -70,7 +70,7 @@ class EventLogger {
   }
 
   void OnReadDirectory(base::File::Error error,
-                       const storage::AsyncFileUtil::EntryList& file_list,
+                       storage::AsyncFileUtil::EntryList file_list,
                        bool has_more) {
     result_.reset(new base::File::Error(error));
   }
@@ -79,7 +79,7 @@ class EventLogger {
       base::File::Error error,
       const base::File::Info& file_info,
       const base::FilePath& platform_path,
-      const scoped_refptr<storage::ShareableFileReference>& file_ref) {
+      scoped_refptr<storage::ShareableFileReference> file_ref) {
     result_.reset(new base::File::Error(error));
   }
 

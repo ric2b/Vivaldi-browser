@@ -4,18 +4,15 @@
 #define PREFS_NATIVE_SETTINGS_OBSERVER_LINUX_H_
 
 #include "prefs/native_settings_observer.h"
-#include "prefs/native_settings_observer_delegate.h"
+
+class Profile;
 
 namespace vivaldi {
 
 class NativeSettingsObserverLinux : public NativeSettingsObserver {
  public:
-  explicit NativeSettingsObserverLinux(
-      NativeSettingsObserverDelegate* delegate);
-  ~NativeSettingsObserverLinux() override;
-
- private:
-  NativeSettingsObserverDelegate* delegate_;
+  explicit NativeSettingsObserverLinux(Profile* profile);
+  ~NativeSettingsObserverLinux() override = default;
 };
 
 }  // namespace vivaldi

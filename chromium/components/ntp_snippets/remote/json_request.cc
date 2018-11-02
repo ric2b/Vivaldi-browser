@@ -76,7 +76,7 @@ bool IsSendingTopLanguagesEnabled() {
 bool IsSendingUserClassEnabled() {
   return variations::GetVariationParamByFeatureAsBool(
       ntp_snippets::kArticleSuggestionsFeature, kSendUserClassName,
-      /*default_value=*/false);
+      /*default_value=*/true);
 }
 
 // Translate the BCP 47 |language_code| into a posix locale string.
@@ -371,7 +371,7 @@ std::unique_ptr<net::URLFetcher> JsonRequest::Builder::BuildURLFetcher(
           destination: GOOGLE_OWNED_SERVICE
         }
         policy {
-          cookies_allowed: false
+          cookies_allowed: NO
           setting:
             "This feature cannot be disabled by settings now (but is requested "
             "to be implemented in crbug.com/695129)."

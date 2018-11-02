@@ -54,7 +54,6 @@
 #include "core/layout/api/LayoutEmbeddedContentItem.h"
 #include "core/layout/api/LineLayoutBlockFlow.h"
 #include "core/layout/api/LineLayoutBox.h"
-#include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/layout/shapes/ShapeOutsideInfo.h"
 #include "core/page/AutoscrollController.h"
 #include "core/page/Page.h"
@@ -66,6 +65,7 @@
 #include "core/paint/BoxPaintInvalidator.h"
 #include "core/paint/BoxPainter.h"
 #include "core/paint/PaintLayer.h"
+#include "core/paint/compositing/PaintLayerCompositor.h"
 #include "core/style/ShadowList.h"
 #include "platform/LengthFunctions.h"
 #include "platform/geometry/DoubleRect.h"
@@ -185,19 +185,6 @@ void LayoutBox::StyleWillChange(StyleDifference diff,
     LayoutFlowThread* flow_thread = FlowThreadContainingBlock();
     if (flow_thread && flow_thread != this)
       flow_thread->FlowThreadDescendantStyleWillChange(this, diff, new_style);
-
-    // The background of the root element or the body element could propagate up
-    // to the canvas. Just dirty the entire canvas when our style changes
-    // substantially.
-    if ((diff.NeedsFullPaintInvalidation() || diff.NeedsLayout()) &&
-        GetNode() &&
-        (isHTMLHtmlElement(*GetNode()) || isHTMLBodyElement(*GetNode()))) {
-      View()->SetShouldDoFullPaintInvalidation();
-
-      if (old_style->HasEntirelyFixedBackground() !=
-          new_style.HasEntirelyFixedBackground())
-        View()->Compositor()->SetNeedsUpdateFixedBackground();
-    }
 
     // When a layout hint happens and an object's position style changes, we
     // have to do a layout to dirty the layout tree using the old position
@@ -366,16 +353,17 @@ void LayoutBox::UpdateBackgroundAttachmentFixedStatusAfterStyleChange() {
     return;
 
   // An object needs to be repainted on frame scroll when it has background-
-  // attachment:fixed. LayoutView is responsible for painting root background,
-  // thus the root element (and the body element if html element has no
-  // background) skips painting backgrounds.
+  // attachment:fixed, unless the background will be separately composited.
+  // LayoutView is responsible for painting root background, thus the root
+  // element (and the body element if html element has no background) skips
+  // painting backgrounds.
   bool is_background_attachment_fixed_object =
       !IsDocumentElement() && !BackgroundStolenForBeingBody() &&
       StyleRef().HasFixedBackgroundImage();
   if (IsLayoutView() &&
-      View()->Compositor()->SupportsFixedRootBackgroundCompositing()) {
-    if (StyleRef().HasEntirelyFixedBackground())
-      is_background_attachment_fixed_object = false;
+      View()->Compositor()->PreferCompositingToLCDTextEnabled() &&
+      StyleRef().HasEntirelyFixedBackground()) {
+    is_background_attachment_fixed_object = false;
   }
 
   SetIsBackgroundAttachmentFixedObject(is_background_attachment_fixed_object);
@@ -643,13 +631,14 @@ static bool IsDisallowedAutoscroll(HTMLFrameOwnerElement* owner_element,
   return false;
 }
 
-void LayoutBox::ScrollRectToVisible(const LayoutRect& rect,
-                                    const ScrollAlignment& align_x,
-                                    const ScrollAlignment& align_y,
-                                    ScrollType scroll_type,
-                                    bool make_visible_in_visual_viewport,
-                                    ScrollBehavior scroll_behavior,
-                                    bool is_for_scroll_sequence) {
+void LayoutBox::ScrollRectToVisibleRecursive(
+    const LayoutRect& rect,
+    const ScrollAlignment& align_x,
+    const ScrollAlignment& align_y,
+    ScrollType scroll_type,
+    bool make_visible_in_visual_viewport,
+    ScrollBehavior scroll_behavior,
+    bool is_for_scroll_sequence) {
   DCHECK(scroll_type == kProgrammaticScroll || scroll_type == kUserScroll);
   // Presumably the same issue as in setScrollTop. See crbug.com/343132.
   DisableCompositingQueryAsserts disabler;
@@ -738,9 +727,10 @@ void LayoutBox::ScrollRectToVisible(const LayoutRect& rect,
     parent_box = EnclosingScrollableBox();
 
   if (parent_box) {
-    parent_box->ScrollRectToVisible(new_rect, align_x, align_y, scroll_type,
-                                    make_visible_in_visual_viewport,
-                                    scroll_behavior, is_for_scroll_sequence);
+    parent_box->ScrollRectToVisibleRecursive(
+        new_rect, align_x, align_y, scroll_type,
+        make_visible_in_visual_viewport, scroll_behavior,
+        is_for_scroll_sequence);
   }
 }
 
@@ -1053,9 +1043,10 @@ void LayoutBox::Autoscroll(const IntPoint& position_in_root_frame) {
 
   IntPoint position_in_content =
       frame_view->RootFrameToContents(position_in_root_frame);
-  ScrollRectToVisible(LayoutRect(position_in_content, LayoutSize(1, 1)),
-                      ScrollAlignment::kAlignToEdgeIfNeeded,
-                      ScrollAlignment::kAlignToEdgeIfNeeded, kUserScroll);
+  ScrollRectToVisibleRecursive(
+      LayoutRect(position_in_content, LayoutSize(1, 1)),
+      ScrollAlignment::kAlignToEdgeIfNeeded,
+      ScrollAlignment::kAlignToEdgeIfNeeded, kUserScroll);
 }
 
 // There are two kinds of layoutObject that can autoscroll.
@@ -1539,26 +1530,27 @@ bool LayoutBox::NodeAtPoint(HitTestResult& result,
       HitTestOverflowControl(result, location_in_container, adjusted_location))
     return true;
 
-  // TODO(pdr): We should also check for css clip in the !isSelfPaintingLayer
-  //            case, similar to overflow clip below.
   bool skip_children = false;
-  if (ShouldClipOverflow() && !HasSelfPaintingLayer()) {
-    if (!location_in_container.Intersects(OverflowClipRect(
+  if (ShouldClipOverflow()) {
+    // PaintLayer::HitTestContentsForFragments checked the fragments'
+    // foreground rect for intersection if a layer is self painting,
+    // so only do the overflow clip check here for non-self-painting layers.
+    if (!HasSelfPaintingLayer() &&
+        !location_in_container.Intersects(OverflowClipRect(
             adjusted_location, kExcludeOverlayScrollbarSizeForHitTesting))) {
       skip_children = true;
-    } else if (Style()->HasBorderRadius()) {
+    }
+    if (!skip_children && Style()->HasBorderRadius()) {
       LayoutRect bounds_rect(adjusted_location, Size());
       skip_children = !location_in_container.Intersects(
           Style()->GetRoundedInnerBorderFor(bounds_rect));
     }
   }
 
-  // TODO(pdr): We should also include checks for hit testing border radius at
-  //            the layer level (see: crbug.com/568904).
-
-  if (!skip_children &&
-      HitTestChildren(result, location_in_container, adjusted_location, action))
+  if (!skip_children && HitTestChildren(result, location_in_container,
+                                        adjusted_location, action)) {
     return true;
+  }
 
   if (Style()->HasBorderRadius() &&
       HitTestClippedOutByBorder(location_in_container, adjusted_location))
@@ -2431,10 +2423,7 @@ bool LayoutBox::PaintedOutputOfObjectHasNoEffectRegardlessOfSize() const {
   return true;
 }
 
-LayoutRect LayoutBox::LocalVisualRect() const {
-  if (Style()->Visibility() != EVisibility::kVisible)
-    return LayoutRect();
-
+LayoutRect LayoutBox::LocalVisualRectIgnoringVisibility() const {
   if (HasMask() && !ShouldClipOverflow() &&
       !RuntimeEnabledFeatures::SlimmingPaintV2Enabled())
     return LayoutRect(Layer()->BoxForFilterOrMask());
@@ -5302,20 +5291,21 @@ LayoutUnit LayoutBox::LineHeight(bool /*firstLine*/,
 }
 
 DISABLE_CFI_PERF
-int LayoutBox::BaselinePosition(FontBaseline baseline_type,
-                                bool /*firstLine*/,
-                                LineDirectionMode direction,
-                                LinePositionMode line_position_mode) const {
+LayoutUnit LayoutBox::BaselinePosition(
+    FontBaseline baseline_type,
+    bool /*firstLine*/,
+    LineDirectionMode direction,
+    LinePositionMode line_position_mode) const {
   DCHECK_EQ(line_position_mode, kPositionOnContainingLine);
   if (IsAtomicInlineLevel()) {
-    int result = direction == kHorizontalLine
-                     ? RoundToInt(MarginHeight() + Size().Height())
-                     : RoundToInt(MarginWidth() + Size().Width());
+    LayoutUnit result = direction == kHorizontalLine
+                            ? MarginHeight() + Size().Height()
+                            : MarginWidth() + Size().Width();
     if (baseline_type == kAlphabeticBaseline)
       return result;
     return result - result / 2;
   }
-  return 0;
+  return LayoutUnit();
 }
 
 PaintLayer* LayoutBox::EnclosingFloatPaintingLayer() const {
@@ -5830,10 +5820,13 @@ LayoutUnit LayoutBox::PageRemainingLogicalHeightForOffset(
   LayoutView* layout_view = View();
   offset += OffsetFromLogicalTopOfFirstPage();
 
+  LayoutUnit footer_height =
+      View()->GetLayoutState()->HeightOffsetForTableFooters();
   LayoutFlowThread* flow_thread = FlowThreadContainingBlock();
+  LayoutUnit remaining_height;
   if (!flow_thread) {
     LayoutUnit page_logical_height = layout_view->PageLogicalHeight();
-    LayoutUnit remaining_height =
+    remaining_height =
         page_logical_height - IntMod(offset, page_logical_height);
     if (page_boundary_rule == kAssociateWithFormerPage) {
       // An offset exactly at a page boundary will act as being part of the
@@ -5841,11 +5834,11 @@ LayoutUnit LayoutBox::PageRemainingLogicalHeightForOffset(
       // part of the latter (i.e. one whole page length of remaining space).
       remaining_height = IntMod(remaining_height, page_logical_height);
     }
-    return remaining_height;
+  } else {
+    remaining_height = flow_thread->PageRemainingLogicalHeightForOffset(
+        offset, page_boundary_rule);
   }
-
-  return flow_thread->PageRemainingLogicalHeightForOffset(offset,
-                                                          page_boundary_rule);
+  return remaining_height - footer_height;
 }
 
 bool LayoutBox::CrossesPageBoundary(LayoutUnit offset,
@@ -5858,15 +5851,16 @@ bool LayoutBox::CrossesPageBoundary(LayoutUnit offset,
 
 LayoutUnit LayoutBox::CalculatePaginationStrutToFitContent(
     LayoutUnit offset,
-    LayoutUnit strut_to_next_page,
     LayoutUnit content_logical_height) const {
-  DCHECK_EQ(strut_to_next_page, PageRemainingLogicalHeightForOffset(
-                                    offset, kAssociateWithLatterPage));
+  LayoutUnit strut_to_next_page =
+      PageRemainingLogicalHeightForOffset(offset, kAssociateWithLatterPage);
+
+  LayoutState* layout_state = View()->GetLayoutState();
+  strut_to_next_page += layout_state->HeightOffsetForTableFooters();
   // If we're inside a cell in a row that straddles a page then avoid the
   // repeating header group if necessary. If we're a table section we're
   // already accounting for it.
   if (!IsTableSection()) {
-    LayoutState* layout_state = View()->GetLayoutState();
     strut_to_next_page += layout_state->HeightOffsetForTableHeaders();
   }
 

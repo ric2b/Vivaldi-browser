@@ -103,6 +103,18 @@ struct CommittedKBytes {
   size_t image;
 };
 
+#if defined(OS_LINUX) || defined(OS_ANDROID)
+// Minor and major page fault counts since the process creation.
+// Both counts are process-wide, and exclude child processes.
+//
+// minor: Number of page faults that didn't require disk IO.
+// major: Number of page faults that required disk IO.
+struct PageFaultCounts {
+  int64_t minor;
+  int64_t major;
+};
+#endif  // defined(OS_LINUX) || defined(OS_ANDROID)
+
 // Convert a POSIX timeval to microseconds.
 BASE_EXPORT int64_t TimeValToMicroseconds(const struct timeval& tv);
 
@@ -228,6 +240,10 @@ class BASE_EXPORT ProcessMetrics {
 #if defined(OS_LINUX) || defined(OS_ANDROID)
   // Bytes of swap as reported by /proc/[pid]/status.
   uint64_t GetVmSwapBytes() const;
+
+  // Minor and major page fault count as reported by /proc/[pid]/stat.
+  // Returns true for success.
+  bool GetPageFaultCounts(PageFaultCounts* counts) const;
 #endif  // defined(OS_LINUX) || defined(OS_ANDROID)
 
   // Returns total memory usage of malloc.
@@ -396,7 +412,7 @@ struct BASE_EXPORT SystemMemoryInfoKB {
 BASE_EXPORT bool GetSystemMemoryInfo(SystemMemoryInfoKB* meminfo);
 
 #endif  // defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX) ||
-        // defined(OS_ANDROID)
+        // defined(OS_ANDROID) || defined(OS_AIX) || defined(OS_FUCHSIA)
 
 #if defined(OS_LINUX) || defined(OS_ANDROID) || defined(OS_AIX)
 // Parse the data found in /proc/<pid>/stat and return the sum of the
@@ -480,9 +496,22 @@ struct BASE_EXPORT SwapInfo {
   uint64_t mem_used_total;
 };
 
+// Parses a string containing the contents of /sys/block/zram0/mm_stat.
+// This should be used for the new ZRAM sysfs interfaces.
+// Returns true on success or false for a parsing error.
+// Exposed for testing.
+BASE_EXPORT bool ParseZramMmStat(StringPiece mm_stat_data, SwapInfo* swap_info);
+
+// Parses a string containing the contents of /sys/block/zram0/stat
+// This should be used for the new ZRAM sysfs interfaces.
+// Returns true on success or false for a parsing error.
+// Exposed for testing.
+BASE_EXPORT bool ParseZramStat(StringPiece stat_data, SwapInfo* swap_info);
+
 // In ChromeOS, reads files from /sys/block/zram0 that contain ZRAM usage data.
 // Fills in the provided |swap_data| structure.
-BASE_EXPORT void GetSwapInfo(SwapInfo* swap_info);
+// Returns true on success or false for a parsing error.
+BASE_EXPORT bool GetSwapInfo(SwapInfo* swap_info);
 #endif  // defined(OS_CHROMEOS)
 
 // Collects and holds performance metrics for system memory and disk.

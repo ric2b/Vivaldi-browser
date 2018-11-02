@@ -53,10 +53,9 @@ class ScopedLayerAnimationSettings;
 // ensure that it is not disposed of until it finishes executing. It does this
 // by holding a reference to itself for the duration of methods for which it
 // must guarantee that |this| is valid.
-class COMPOSITOR_EXPORT LayerAnimator
-    : public base::RefCounted<LayerAnimator>,
-      public LayerThreadedAnimationDelegate,
-      NON_EXPORTED_BASE(public cc::AnimationDelegate) {
+class COMPOSITOR_EXPORT LayerAnimator : public base::RefCounted<LayerAnimator>,
+                                        public LayerThreadedAnimationDelegate,
+                                        public cc::AnimationDelegate {
  public:
   enum PreemptionStrategy {
     IMMEDIATELY_SET_NEW_TARGET,
@@ -345,18 +344,18 @@ class COMPOSITOR_EXPORT LayerAnimator
 
   // cc::AnimationDelegate implementation.
   void NotifyAnimationStarted(base::TimeTicks monotonic_time,
-                              cc::TargetProperty::Type target_property,
+                              int target_property,
                               int group_id) override;
   void NotifyAnimationFinished(base::TimeTicks monotonic_time,
-                               cc::TargetProperty::Type target_property,
+                               int target_property,
                                int group_id) override {}
   void NotifyAnimationAborted(base::TimeTicks monotonic_time,
-                              cc::TargetProperty::Type target_property,
+                              int target_property,
                               int group_id) override {}
   void NotifyAnimationTakeover(
       base::TimeTicks monotonic_time,
-      cc::TargetProperty::Type target_property,
-      double animation_start_time,
+      int target_property,
+      base::TimeTicks animation_start_time,
       std::unique_ptr<cc::AnimationCurve> curve) override {}
 
   // Implementation of LayerThreadedAnimationDelegate.

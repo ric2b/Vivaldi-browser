@@ -269,6 +269,9 @@ void RecordFileBandwidth(size_t length,
                          base::TimeDelta disk_write_time,
                          base::TimeDelta elapsed_time);
 
+// Records the size of the download from content-length header.
+void RecordParallelizableContentLength(int64_t content_length);
+
 // Increment one of the count for parallelizable download.
 void RecordParallelizableDownloadCount(DownloadCountTypes type,
                                        bool is_parallel_download_enabled);
@@ -337,7 +340,7 @@ enum OriginStateOnResumption {
 // request. |state| is a combination of values from OriginStateOnResumption
 // enum.
 void RecordOriginStateOnResumption(bool is_partial,
-                                   int state);
+                                   OriginStateOnResumption state);
 
 void RecordDownloadConnectionSecurity(const GURL& download_url,
                                       const std::vector<GURL>& url_chain);

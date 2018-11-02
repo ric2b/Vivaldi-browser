@@ -223,22 +223,18 @@ base::DictionaryValue WifiHotspotConnector::CreateWifiPropertyDictionary(
   base::DictionaryValue properties;
 
   shill_property_util::SetSSID(ssid, &properties);
-  properties.SetStringWithoutPathExpansion(shill::kGuidProperty,
-                                           wifi_network_guid_);
-  properties.SetBooleanWithoutPathExpansion(shill::kAutoConnectProperty, false);
-  properties.SetStringWithoutPathExpansion(shill::kTypeProperty,
-                                           shill::kTypeWifi);
-  properties.SetBooleanWithoutPathExpansion(shill::kSaveCredentialsProperty,
-                                            true);
+  properties.SetKey(shill::kGuidProperty, base::Value(wifi_network_guid_));
+  properties.SetKey(shill::kAutoConnectProperty, base::Value(false));
+  properties.SetKey(shill::kTypeProperty, base::Value(shill::kTypeWifi));
+  properties.SetKey(shill::kSaveCredentialsProperty, base::Value(true));
 
   if (password.empty()) {
-    properties.SetStringWithoutPathExpansion(shill::kSecurityClassProperty,
-                                             shill::kSecurityNone);
+    properties.SetKey(shill::kSecurityClassProperty,
+                      base::Value(shill::kSecurityNone));
   } else {
-    properties.SetStringWithoutPathExpansion(shill::kSecurityClassProperty,
-                                             shill::kSecurityPsk);
-    properties.SetStringWithoutPathExpansion(shill::kPassphraseProperty,
-                                             password);
+    properties.SetKey(shill::kSecurityClassProperty,
+                      base::Value(shill::kSecurityPsk));
+    properties.SetKey(shill::kPassphraseProperty, base::Value(password));
   }
 
   return properties;

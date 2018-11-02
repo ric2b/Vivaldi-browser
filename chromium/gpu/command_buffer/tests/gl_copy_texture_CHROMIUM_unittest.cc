@@ -13,11 +13,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "base/command_line.h"
-#include "base/strings/string_number_conversions.h"
 #include "gpu/command_buffer/tests/gl_manager.h"
 #include "gpu/command_buffer/tests/gl_test_utils.h"
-#include "gpu/config/gpu_switches.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gl/gl_version_info.h"
@@ -525,15 +522,13 @@ class GLCopyTextureCHROMIUMES3Test : public GLCopyTextureCHROMIUMTest {
     GLManager::Options options;
     options.context_type = gles2::CONTEXT_TYPE_OPENGLES3;
     options.size = gfx::Size(64, 64);
-    base::CommandLine command_line(*base::CommandLine::ForCurrentProcess());
+    GpuDriverBugWorkarounds workarounds;
 #if defined(OS_MACOSX)
     // Sampling of seamless integer cube map texture has bug on Intel GEN7 gpus
     // on Mac OSX, see crbug.com/658930.
-    command_line.AppendSwitchASCII(
-        switches::kGpuDriverBugWorkarounds,
-        base::IntToString(gpu::DISABLE_TEXTURE_CUBE_MAP_SEAMLESS));
+    workarounds.disable_texture_cube_map_seamless = true;
 #endif
-    gl_.InitializeWithCommandLine(options, command_line);
+    gl_.InitializeWithWorkarounds(options, workarounds);
 
     width_ = 8;
     height_ = 8;
@@ -625,6 +620,12 @@ TEST_P(GLCopyTextureCHROMIUMTest, Basic) {
 TEST_P(GLCopyTextureCHROMIUMES3Test, FormatCombinations) {
   if (ShouldSkipTest())
     return;
+  if (gl_.gpu_preferences().use_passthrough_cmd_decoder) {
+    // TODO(geofflang): anglebug.com/1932
+    LOG(INFO)
+        << "Passthrough command decoder expected failure. Skipping test...";
+    return;
+  }
   CopyType copy_type = GetParam();
 
   FormatType src_format_types[] = {
@@ -931,6 +932,12 @@ TEST_P(GLCopyTextureCHROMIUMTest, CopyTextureLevel) {
 TEST_P(GLCopyTextureCHROMIUMES3Test, CopyTextureLevel) {
   if (ShouldSkipTest())
     return;
+  if (gl_.gpu_preferences().use_passthrough_cmd_decoder) {
+    // TODO(geofflang): anglebug.com/1932
+    LOG(INFO)
+        << "Passthrough command decoder expected failure. Skipping test...";
+    return;
+  }
   CopyType copy_type = GetParam();
 
   // Copy from RGBA source texture to dest texture.

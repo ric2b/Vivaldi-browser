@@ -50,7 +50,7 @@ const ProtocolHandler& LookupHandler(
 // If true default protocol handlers will be removed if the OS level
 // registration for a protocol is no longer Chrome.
 bool ShouldRemoveHandlersNotInOS() {
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_ANDROID)
   // We don't do this on Linux as the OS registration there is not reliable,
   // and Chrome OS doesn't have any notion of OS registration.
   // TODO(benwells): When Linux support is more reliable remove this
@@ -879,8 +879,10 @@ void ProtocolHandlerRegistry::EraseHandler(const ProtocolHandler& handler,
 void ProtocolHandlerRegistry::OnSetAsDefaultProtocolClientFinished(
     const std::string& protocol,
     shell_integration::DefaultWebClientState state) {
+  // Clear if the default protocol client isn't this installation.
   if (ShouldRemoveHandlersNotInOS() &&
-      state == shell_integration::NOT_DEFAULT) {
+      (state == shell_integration::NOT_DEFAULT ||
+       state == shell_integration::OTHER_MODE_IS_DEFAULT)) {
     ClearDefault(protocol);
   }
 }

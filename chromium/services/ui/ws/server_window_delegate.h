@@ -10,10 +10,8 @@
 #include "services/ui/public/interfaces/mus_constants.mojom.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
 
-namespace cc {
-namespace mojom {
-class FrameSinkManager;
-}
+namespace viz {
+class HostFrameSinkManager;
 }
 
 namespace ui {
@@ -24,13 +22,18 @@ class ServerWindow;
 
 class ServerWindowDelegate {
  public:
-  // Returns a frame sink manager interface pointer. There is only one
-  // FrameSinkManagerImpl running in the system.
-  virtual cc::mojom::FrameSinkManager* GetFrameSinkManager() = 0;
+  virtual viz::HostFrameSinkManager* GetHostFrameSinkManager() = 0;
 
   // Returns the root of the window tree to which this |window| is attached.
   // Returns null if this window is not attached up through to a root window.
-  virtual ServerWindow* GetRootWindow(const ServerWindow* window) = 0;
+  // The returned root is used for drawn checks and may differ from that used
+  // for event dispatch purposes.
+  virtual ServerWindow* GetRootWindowForDrawn(const ServerWindow* window) = 0;
+
+  // Called when a CompositorFrame with a new SurfaceId activates for the first
+  // time for |window|.
+  virtual void OnFirstSurfaceActivation(const viz::SurfaceInfo& surface_info,
+                                        ServerWindow* window) = 0;
 
  protected:
   virtual ~ServerWindowDelegate() {}

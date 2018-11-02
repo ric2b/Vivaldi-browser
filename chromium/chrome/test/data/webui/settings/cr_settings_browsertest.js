@@ -55,7 +55,7 @@ CrSettingsCheckboxTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/controls/settings_checkbox.html',
+  browsePreload: 'chrome://settings/controls/settings_checkbox.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -64,7 +64,6 @@ CrSettingsCheckboxTest.prototype = {
 };
 
 TEST_F('CrSettingsCheckboxTest', 'All', function() {
-  settings_checkbox.registerTests();
   mocha.run();
 });
 
@@ -78,7 +77,7 @@ CrSettingsSliderTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/controls/settings_slider.html',
+  browsePreload: 'chrome://settings/controls/settings_slider.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -100,7 +99,7 @@ CrSettingsToggleButtonTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/controls/settings_toggle_button.html',
+  browsePreload: 'chrome://settings/controls/settings_toggle_button.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -109,7 +108,6 @@ CrSettingsToggleButtonTest.prototype = {
 };
 
 TEST_F('CrSettingsToggleButtonTest', 'All', function() {
-  settings_toggle_button.registerTests();
   mocha.run();
 });
 
@@ -119,7 +117,7 @@ CrSettingsDropdownMenuTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/controls/settings_dropdown_menu.html',
+  browsePreload: 'chrome://settings/controls/settings_dropdown_menu.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -128,7 +126,6 @@ CrSettingsDropdownMenuTest.prototype = {
 };
 
 TEST_F('CrSettingsDropdownMenuTest', 'All', function() {
-  settings_dropdown_menu.registerTests();
   mocha.run();
 });
 
@@ -138,7 +135,7 @@ CrSettingsPrefUtilTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/prefs/pref_util.html',
+  browsePreload: 'chrome://settings/prefs/pref_util.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -147,7 +144,6 @@ CrSettingsPrefUtilTest.prototype = {
 };
 
 TEST_F('CrSettingsPrefUtilTest', 'All', function() {
-  settings_prefUtil.registerTests();
   mocha.run();
 });
 
@@ -157,7 +153,7 @@ CrSettingsPrefsTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/prefs/prefs.html',
+  browsePreload: 'chrome://settings/prefs/prefs.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -169,7 +165,6 @@ CrSettingsPrefsTest.prototype = {
 };
 
 TEST_F('CrSettingsPrefsTest', 'All', function() {
-  settings_prefs.registerTests();
   mocha.run();
 });
 
@@ -183,7 +178,7 @@ CrSettingsAboutPageTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/about_page/about_page.html',
+  browsePreload: 'chrome://settings/about_page/about_page.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -221,12 +216,11 @@ CrSettingsPeoplePageQuickUnlockAuthenticateTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/people_page/password_prompt_dialog.html',
+  browsePreload: 'chrome://settings/people_page/password_prompt_dialog.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
-    '../fake_chrome_event.js',
-    'fake_quick_unlock_private.js',
+    '../fake_chrome_event.js', 'fake_quick_unlock_private.js',
     'fake_quick_unlock_uma.js',
     'quick_unlock_authenticate_browsertest_chromeos.js'
   ]),
@@ -250,14 +244,12 @@ CrSettingsPeoplePageLockScreenTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/people_page/lock_screen.html',
+  browsePreload: 'chrome://settings/people_page/lock_screen.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
-    '../fake_chrome_event.js',
-    'fake_quick_unlock_private.js',
-    'fake_settings_private.js',
-    'fake_quick_unlock_uma.js',
+    '../fake_chrome_event.js', 'fake_quick_unlock_private.js',
+    'fake_settings_private.js', 'fake_quick_unlock_uma.js',
     'quick_unlock_authenticate_browsertest_chromeos.js'
   ]),
 };
@@ -281,14 +273,12 @@ CrSettingsPeoplePageSetupPinDialogTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/people_page/setup_pin_dialog.html',
+  browsePreload: 'chrome://settings/people_page/setup_pin_dialog.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
-    '../fake_chrome_event.js',
-    'fake_quick_unlock_private.js',
-    'fake_settings_private.js',
-    'fake_quick_unlock_uma.js',
+    '../fake_chrome_event.js', 'fake_quick_unlock_private.js',
+    'fake_settings_private.js', 'fake_quick_unlock_uma.js',
     'quick_unlock_authenticate_browsertest_chromeos.js'
   ]),
 };
@@ -313,8 +303,7 @@ CrSettingsFingerprintProgressArcTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload:
-      'chrome://md-settings/people_page/fingerprint_progress_arc.html',
+  browsePreload: 'chrome://settings/people_page/fingerprint_progress_arc.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -340,7 +329,7 @@ CrSettingsFingerprintListTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/people_page/fingerprint_list.html',
+  browsePreload: 'chrome://settings/people_page/fingerprint_list.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -366,7 +355,7 @@ CrSettingsPeoplePageChangePictureTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/people_page/change_picture.html',
+  browsePreload: 'chrome://settings/people_page/change_picture.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -376,7 +365,6 @@ CrSettingsPeoplePageChangePictureTest.prototype = {
 };
 
 TEST_F('CrSettingsPeoplePageChangePictureTest', 'All', function() {
-  settings_people_page_change_picture.registerTests();
   mocha.run();
 });
 GEN('#else');  // !defined(OS_CHROMEOS)
@@ -393,7 +381,7 @@ CrSettingsPeoplePageManageProfileTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/people_page/manage_profile.html',
+  browsePreload: 'chrome://settings/people_page/manage_profile.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -403,7 +391,6 @@ CrSettingsPeoplePageManageProfileTest.prototype = {
 };
 
 TEST_F('CrSettingsPeoplePageManageProfileTest', 'All', function() {
-  settings_people_page_manage_profile.registerTests();
   mocha.run();
 });
 GEN('#endif');
@@ -420,17 +407,18 @@ CrSettingsPeoplePageTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/people_page/people_page.html',
+  browsePreload: 'chrome://settings/people_page/people_page.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
     '../test_browser_proxy.js',
+    'test_profile_info_browser_proxy.js',
+    'test_sync_browser_proxy.js',
     'people_page_test.js',
   ]),
 };
 
 TEST_F('CrSettingsPeoplePageTest', 'All', function() {
-  settings_people_page.registerTests();
   mocha.run();
 });
 
@@ -446,7 +434,7 @@ CrSettingsPeoplePageSyncPageTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/people_page/sync_page.html',
+  browsePreload: 'chrome://settings/people_page/sync_page.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -456,7 +444,6 @@ CrSettingsPeoplePageSyncPageTest.prototype = {
 };
 
 TEST_F('CrSettingsPeoplePageSyncPageTest', 'All', function() {
-  settings_people_page_sync_page.registerTests();
   mocha.run();
 });
 
@@ -470,7 +457,7 @@ CrSettingsRtlTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/settings_ui/settings_ui.html',
+  browsePreload: 'chrome://settings/settings_ui/settings_ui.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -480,7 +467,6 @@ CrSettingsRtlTest.prototype = {
 
 TEST_F('CrSettingsRtlTest', 'All', function() {
   settingsHidePagesByDefaultForTest = true;
-  settings_rtl_tests.registerDrawerPanelTests();
   mocha.run();
 });
 
@@ -495,7 +481,7 @@ CrSettingsResetPageTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/reset_page/reset_page.html',
+  browsePreload: 'chrome://settings/reset_page/reset_page.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -522,7 +508,7 @@ CrSettingsResetProfileBannerTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/reset_page/reset_profile_banner.html',
+  browsePreload: 'chrome://settings/reset_page/reset_profile_banner.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -546,7 +532,7 @@ CrSettingsAppearancePageTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/appearance_page/appearance_page.html',
+  browsePreload: 'chrome://settings/appearance_page/appearance_page.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -570,8 +556,7 @@ CrSettingsAppearanceFontsPageTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload:
-      'chrome://md-settings/appearance_page/appearance_fonts_page.html',
+  browsePreload: 'chrome://settings/appearance_page/appearance_fonts_page.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -597,7 +582,7 @@ CrSettingsChromeCleanupPageTest.prototype = {
 
   /** @override */
   browsePreload:
-      'chrome://md-settings/chrome_cleanup_page/chrome_cleanup_page.html',
+      'chrome://settings/chrome_cleanup_page/chrome_cleanup_page.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -621,7 +606,7 @@ CrSettingsDownloadsPageTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/downloads_page/downloads_page.html',
+  browsePreload: 'chrome://settings/downloads_page/downloads_page.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -648,7 +633,7 @@ CrSettingsDefaultBrowserTest.prototype = {
 
   /** @override */
   browsePreload:
-      'chrome://md-settings/default_browser_page/default_browser_page.html',
+      'chrome://settings/default_browser_page/default_browser_page.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -658,7 +643,6 @@ CrSettingsDefaultBrowserTest.prototype = {
 };
 
 TEST_F('CrSettingsDefaultBrowserTest', 'All', function() {
-  settings_default_browser.registerTests();
   mocha.run();
 });
 
@@ -674,7 +658,7 @@ CrSettingsImportDataDialogTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/people_page/import_data_dialog.html',
+  browsePreload: 'chrome://settings/people_page/import_data_dialog.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -699,7 +683,7 @@ CrSettingsSearchPageTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/search_page/search_page.html',
+  browsePreload: 'chrome://settings/search_page/search_page.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -710,7 +694,6 @@ CrSettingsSearchPageTest.prototype = {
 };
 
 TEST_F('CrSettingsSearchPageTest', 'All', function() {
-  settings_search_page.registerTests();
   mocha.run();
 });
 
@@ -726,7 +709,7 @@ CrSettingsSearchEnginesTest.prototype = {
 
   /** @override */
   browsePreload:
-      'chrome://md-settings/search_engines_page/search_engines_page.html',
+      'chrome://settings/search_engines_page/search_engines_page.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -738,13 +721,13 @@ CrSettingsSearchEnginesTest.prototype = {
 };
 
 TEST_F('CrSettingsSearchEnginesTest', 'All', function() {
-  settings_search_engines_page.registerTests();
   mocha.run();
 });
 
 GEN('#if defined(USE_NSS_CERTS)');
 /**
- * Test fixture for chrome/browser/resources/settings/certificate_manager_page/.
+ * Test fixture for chrome://settings/certificates. This tests the
+ * certificate-manager component in the context of the Settings privacy page.
  * @constructor
  * @extends {CrSettingsBrowserTest}
  */
@@ -753,20 +736,21 @@ function CrSettingsCertificateManagerTest() {}
 CrSettingsCertificateManagerTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
-  /** @override */
-  browsePreload: 'chrome://md-settings/certificate_manager_page/' +
-      'certificate_manager_page.html',
+  /**
+   * The certificate-manager subpage is embeded in privacy_page.html.
+   * @override
+   */
+  browsePreload: 'chrome://settings/privacy_page/privacy_page.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
     'test_util.js',
     '../test_browser_proxy.js',
-    'certificate_manager_page_test.js',
+    'certificate_manager_test.js',
   ]),
 };
 
 TEST_F('CrSettingsCertificateManagerTest', 'All', function() {
-  certificate_manager_page.registerTests();
   mocha.run();
 });
 GEN('#endif');
@@ -782,7 +766,7 @@ CrSettingsPrivacyPageTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/privacy_page/privacy_page.html',
+  browsePreload: 'chrome://settings/privacy_page/privacy_page.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -795,7 +779,6 @@ CrSettingsPrivacyPageTest.prototype = {
 };
 
 TEST_F('CrSettingsPrivacyPageTest', 'All', function() {
-  settings_privacy_page.registerTests();
   mocha.run();
 });
 
@@ -809,7 +792,7 @@ CrSettingsSiteDataDetailsTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/privacy_page/privacy_page.html',
+  browsePreload: 'chrome://settings/privacy_page/privacy_page.html',
 
   /** @override */
   commandLineSwitches: [{
@@ -838,7 +821,7 @@ CrSettingsCategoryDefaultSettingTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/privacy_page/privacy_page.html',
+  browsePreload: 'chrome://settings/privacy_page/privacy_page.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -862,7 +845,7 @@ CrSettingsCategorySettingExceptionsTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/privacy_page/privacy_page.html',
+  browsePreload: 'chrome://settings/privacy_page/privacy_page.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -886,7 +869,7 @@ CrSettingsAllSitesTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/privacy_page/privacy_page.html',
+  browsePreload: 'chrome://settings/privacy_page/privacy_page.html',
 
   /** @override */
   commandLineSwitches: [{
@@ -915,7 +898,7 @@ CrSettingsSiteDetailsTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/privacy_page/privacy_page.html',
+  browsePreload: 'chrome://settings/privacy_page/privacy_page.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -939,7 +922,7 @@ CrSettingsSiteDetailsPermissionTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/privacy_page/privacy_page.html',
+  browsePreload: 'chrome://settings/privacy_page/privacy_page.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -963,7 +946,7 @@ CrSettingsSiteListTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/privacy_page/privacy_page.html',
+  browsePreload: 'chrome://settings/privacy_page/privacy_page.html',
 
   /** @override */
   commandLineSwitches: [{
@@ -1000,7 +983,7 @@ CrSettingsZoomLevelsTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/privacy_page/privacy_page.html',
+  browsePreload: 'chrome://settings/privacy_page/privacy_page.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -1024,7 +1007,7 @@ CrSettingsUsbDevicesTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/privacy_page/privacy_page.html',
+  browsePreload: 'chrome://settings/privacy_page/privacy_page.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -1048,7 +1031,7 @@ CrSettingsProtocolHandlersTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/privacy_page/privacy_page.html',
+  browsePreload: 'chrome://settings/privacy_page/privacy_page.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -1071,7 +1054,7 @@ function CrSettingsSiteDataTest() {}
 CrSettingsSiteDataTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
-  browsePreload: 'chrome://md-settings/site_settings/site_data.html',
+  browsePreload: 'chrome://settings/site_settings/site_data.html',
 
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
     '../test_browser_proxy.js',
@@ -1096,7 +1079,7 @@ CrSettingsDevicePageTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/device_page/device_page.html',
+  browsePreload: 'chrome://settings/device_page/device_page.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -1143,7 +1126,7 @@ CrSettingsBluetoothPageTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/bluetooth_page/bluetooth_page.html',
+  browsePreload: 'chrome://settings/bluetooth_page/bluetooth_page.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -1170,7 +1153,7 @@ CrSettingsInternetPageTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/internet_page/internet_page.html',
+  browsePreload: 'chrome://settings/internet_page/internet_page.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -1204,7 +1187,7 @@ CrSettingsMenuTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/settings_menu/settings_menu.html',
+  browsePreload: 'chrome://settings/settings_menu/settings_menu.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -1213,7 +1196,6 @@ CrSettingsMenuTest.prototype = {
 };
 
 TEST_F('CrSettingsMenuTest', 'SettingsMenu', function() {
-  settings_menu.registerTests();
   mocha.run();
 });
 
@@ -1229,7 +1211,7 @@ CrSettingsSubpageTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/settings_page/settings_subpage.html',
+  browsePreload: 'chrome://settings/settings_page/settings_subpage.html',
 
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
     'settings_subpage_test.js',
@@ -1251,7 +1233,7 @@ CrSettingsSystemPageTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/system_page/system_page.html',
+  browsePreload: 'chrome://settings/system_page/system_page.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -1275,7 +1257,7 @@ function CrSettingsStartupUrlsPageTest() {}
 CrSettingsStartupUrlsPageTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
-  browsePreload: 'chrome://md-settings/on_startup_page/startup_urls_page.html',
+  browsePreload: 'chrome://settings/on_startup_page/startup_urls_page.html',
 
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
     '../test_browser_proxy.js',
@@ -1298,8 +1280,7 @@ CrSettingsEditDictionaryPageTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload:
-      'chrome://md-settings/languages_page/edit_dictionary_page.html',
+  browsePreload: 'chrome://settings/languages_page/edit_dictionary_page.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -1326,7 +1307,7 @@ CrSettingsLanguagesTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/languages_page/languages.html',
+  browsePreload: 'chrome://settings/languages_page/languages.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -1357,7 +1338,7 @@ CrSettingsLanguagesPageTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/languages_page/languages_page.html',
+  browsePreload: 'chrome://settings/languages_page/languages_page.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -1398,7 +1379,7 @@ CrSettingsRouteTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/route.html',
+  browsePreload: 'chrome://settings/route.html',
 
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
     'route_tests.js',
@@ -1419,7 +1400,7 @@ CrSettingsNonExistentRouteTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/non/existent/route',
+  browsePreload: 'chrome://settings/non/existent/route',
 
   /** @override */
   runAccessibilityChecks: false,
@@ -1451,7 +1432,7 @@ CrSettingsRouteDynamicParametersTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/search?guid=a%2Fb&foo=42',
+  browsePreload: 'chrome://settings/search?guid=a%2Fb&foo=42',
 
   /** @override */
   runAccessibilityChecks: false,
@@ -1497,7 +1478,7 @@ CrSettingsMainPageTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/settings_main/settings_main.html',
+  browsePreload: 'chrome://settings/settings_main/settings_main.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -1515,7 +1496,6 @@ GEN('#else');
 GEN('#define MAYBE_MainPage MainPage');
 GEN('#endif');
 TEST_F('CrSettingsMainPageTest', 'MAYBE_MainPage', function() {
-  settings_main_page.registerTests();
   mocha.run();
 });
 
@@ -1530,7 +1510,7 @@ CrSettingsSearchTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/settings_page/settings_section.html',
+  browsePreload: 'chrome://settings/settings_page/settings_section.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -1552,7 +1532,7 @@ CrControlledButtonTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/controls/controlled_button.html',
+  browsePreload: 'chrome://settings/controls/controlled_button.html',
 
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
     'controlled_button_tests.js',
@@ -1573,7 +1553,7 @@ CrControlledRadioButtonTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/controls/controlled_radio_button.html',
+  browsePreload: 'chrome://settings/controls/controlled_radio_button.html',
 
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
     'controlled_radio_button_tests.js',
@@ -1592,7 +1572,7 @@ CrSettingsMetricsReportingTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/privacy_page/privacy_page.html',
+  browsePreload: 'chrome://settings/privacy_page/privacy_page.html',
 
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
     '../test_browser_proxy.js',
@@ -1619,8 +1599,7 @@ CrSettingsPrintingPageTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload:
-      'chrome://md-settings/printing_page/cups_add_printer_dialog.html',
+  browsePreload: 'chrome://settings/printing_page/cups_add_printer_dialog.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -1646,7 +1625,7 @@ CrSettingsMultidevicePageTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/multidevice_page/multidevice_page.html',
+  browsePreload: 'chrome://settings/multidevice_page/multidevice_page.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -1673,8 +1652,7 @@ CrSettingsAndroidAppsPageTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload:
-      'chrome://md-settings/android_apps_page/android_apps_page.html',
+  browsePreload: 'chrome://settings/android_apps_page/android_apps_page.html',
 
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
     ROOT_PATH + 'ui/webui/resources/js/promise_resolver.js',
@@ -1699,7 +1677,7 @@ CrSettingsDateTimePageTest.prototype = {
   __proto__: CrSettingsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/date_time_page/date_time_page.html',
+  browsePreload: 'chrome://settings/date_time_page/date_time_page.html',
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
@@ -1708,6 +1686,36 @@ CrSettingsDateTimePageTest.prototype = {
 };
 
 TEST_F('CrSettingsDateTimePageTest', 'All', function() {
+  mocha.run();
+});
+
+/**
+ * @constructor
+ * @extends {CrSettingsBrowserTest}
+ */
+function CrSettingsGoogleAssistantPageTest() {}
+
+CrSettingsGoogleAssistantPageTest.prototype = {
+  __proto__: CrSettingsBrowserTest.prototype,
+
+  /** @override */
+  browsePreload:
+      'chrome://md-settings/google_assistant_page/google_assistant_page.html',
+
+  /** @override */
+  commandLineSwitches: [{
+    switchName: 'enable-voice-interaction',
+  }],
+
+  /** @override */
+  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
+    ROOT_PATH + 'ui/webui/resources/js/promise_resolver.js',
+    '../test_browser_proxy.js',
+    'google_assistant_page_test.js',
+  ]),
+};
+
+TEST_F('CrSettingsGoogleAssistantPageTest', 'All', function() {
   mocha.run();
 });
 
@@ -1724,7 +1732,7 @@ CrSettingsExtensionControlledIndicatorTest.prototype = {
 
   /** @override */
   browsePreload:
-      'chrome://md-settings/controls/extension_controlled_indicator.html',
+      'chrome://settings/controls/extension_controlled_indicator.html',
 
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
     '../test_browser_proxy.js',

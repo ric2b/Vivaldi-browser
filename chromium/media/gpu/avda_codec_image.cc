@@ -234,11 +234,15 @@ void AVDACodecImage::GetTextureMatrix(float matrix[16]) {
 
 void AVDACodecImage::NotifyPromotionHint(bool promotion_hint,
                                          int display_x,
-                                         int display_y) {
+                                         int display_y,
+                                         int display_width,
+                                         int display_height) {
   // TODO(liberato): this should just be given to us.
   PromotionHintAggregator::Hint hint;
   hint.x = display_x;
   hint.y = display_y;
+  hint.width = display_width;
+  hint.height = display_height;
   hint.is_promotable = promotion_hint;
   shared_state_->GetPromotionHintCB().Run(hint);
 }

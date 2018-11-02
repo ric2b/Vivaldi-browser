@@ -1709,16 +1709,15 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostManagerTest,
 }
 
 // Test for crbug.com/143155.  Frame tree updates during unload should not
-// interrupt the intended navigation and show swappedout:// instead.
+// interrupt the intended navigation.
 // Specifically:
 // 1) Open 2 tabs in an HTTP SiteInstance, with a subframe in the opener.
 // 2) Send the second tab to a different foo.com SiteInstance.
-//    This creates a swapped out opener for the first tab in the foo process.
+//    This created a swapped out opener for the first tab in the foo process.
 // 3) Navigate the first tab to the foo.com SiteInstance, and have the first
 //    tab's unload handler remove its frame.
-// This used to cause an update to the frame tree of the swapped out RV,
-// just as it was navigating to a real page.  That pre-empted the real
-// navigation and visibly sent the tab to swappedout://.
+// In older versions of Chrome, this caused an update to the frame tree that
+// resulted in showing an internal page rather than the real page.
 IN_PROC_BROWSER_TEST_F(RenderFrameHostManagerTest,
                        DontPreemptNavigationWithFrameTreeUpdate) {
   StartEmbeddedServer();
@@ -1884,18 +1883,10 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostManagerTest,
   EXPECT_TRUE(shell()->web_contents()->GetController().CanGoForward());
 }
 
-// The test fails with Android ASAN with changes in v8 that seem unrelated.
-//   See http://crbug.com/428329.
-#if defined(OS_ANDROID) && defined(THREAD_SANITIZER)
-#define MAYBE_ClearPendingWebUIOnCommit DISABLED_ClearPendingWebUIOnCommit
-#else
-#define MAYBE_ClearPendingWebUIOnCommit ClearPendingWebUIOnCommit
-#endif
 // Ensure that pending_and_current_web_ui_ is cleared when a URL commits.
 // Otherwise it might get picked up by InitRenderView when granting bindings
 // to other RenderViewHosts.  See http://crbug.com/330811.
-IN_PROC_BROWSER_TEST_F(RenderFrameHostManagerTest,
-                       MAYBE_ClearPendingWebUIOnCommit) {
+IN_PROC_BROWSER_TEST_F(RenderFrameHostManagerTest, ClearPendingWebUIOnCommit) {
   // Visit a WebUI page with bindings.
   GURL webui_url(GURL(std::string(kChromeUIScheme) + "://" +
                       std::string(kChromeUIGpuHost)));

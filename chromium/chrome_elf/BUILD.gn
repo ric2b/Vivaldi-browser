@@ -26,17 +26,21 @@ windows_manifest("chrome_elf_manifest") {
   sources = [
     as_invoker_manifest,
   ]
-  type = "dll"
 }
 
 # We should move chrome_result_codes.h to another target which does not bring
 # in the world.
 shared_library("chrome_elf") {
   sources = [
-    "chrome_elf.def",
     "chrome_elf_main.cc",
     "chrome_elf_main.h",
   ]
+  if (target_cpu == "x86") {
+    sources += [ "chrome_elf_x86.def" ]
+  } else {
+    sources += [ "chrome_elf_x64.def" ]
+  }
+
   deps = [
     ":blacklist",
     ":chrome_elf_manifest",
@@ -49,6 +53,7 @@ shared_library("chrome_elf") {
     "//build/config:exe_and_shlib_deps",
     "//chrome/install_static:install_static_util",
     "//chrome/install_static:primary_module",
+    "//components/crash/content/app:crash_export_thunks",
   ]
   configs += [ "//build/config/win:windowed" ]
   configs -= [ "//build/config/win:console" ]
@@ -65,6 +70,22 @@ shared_library("chrome_elf") {
     # Don"t set an x64 base address (to avoid breaking HE-ASLR).
     ldflags += [ "/BASE:0x01c20000" ]
   }
+}
+
+# For code that isn't Chrome-the browser, like test binaries, these stubs stand
+# in for chrome_elf.;
+static_library("test_stubs") {
+  testonly = true
+
+  sources = [
+    "chrome_elf_main.h",
+    "chrome_elf_test_stubs.cc",
+  ]
+
+  deps = [
+    "//base",
+    "//chrome/common:constants",
+  ]
 }
 
 ##------------------------------------------------------------------------------
@@ -145,15 +166,15 @@ static_library("crash") {
   ]
   deps = [
     ":hook_util",
-    "//base:base",  # This needs to go.  DEP of app, crash_keys, client.
+    "//base",  # This needs to go.  DEP of app, crash_keys, client.
     "//base:base_static",  # pe_image
     "//chrome/install_static:install_static_util",
-    "//components/crash/content/app:app",
+    "//components/crash/content/app",
     "//components/crash/core/common",  # crash_keys
     "//components/version_info:channel",
     "//content/public/common:result_codes",
     "//gpu/config:crash_keys",
-    "//third_party/crashpad/crashpad/client:client",  # DumpWithoutCrash
+    "//third_party/crashpad/crashpad/client",  # DumpWithoutCrash
   ]
 }
 
@@ -219,6 +240,7 @@ test("chrome_elf_unittests") {
     "//chrome/common:version_header",
     "//chrome/install_static:install_static_util",
     "//chrome/install_static/test:test_support",
+    "//components/crash/content/app:test_support",
     "//sandbox",
     "//testing/gtest",
   ]
@@ -262,6 +284,7 @@ shared_library("blacklist_test_main_dll") {
     "//base",
     "//build/config:exe_and_shlib_deps",
     "//chrome/install_static:install_static_util",
+    "//components/crash/content/app:test_support",
   ]
 }
 

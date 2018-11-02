@@ -111,7 +111,7 @@ class QuitDraggingObserver : public content::NotificationObserver {
                const content::NotificationSource& source,
                const content::NotificationDetails& details) override {
     DCHECK_EQ(chrome::NOTIFICATION_TAB_DRAG_LOOP_DONE, type);
-    base::MessageLoopForUI::current()->QuitWhenIdle();
+    base::RunLoop::QuitCurrentWhenIdleDeprecated();
     delete this;
   }
 
@@ -827,9 +827,14 @@ class MaximizedBrowserWindowWaiter {
 
 }  // namespace
 
+#if defined(OS_CHROMEOS)
+#define MAYBE_DetachToOwnWindow DISABLED_DetachToOwnWindow
+#else
+#define MAYBE_DetachToOwnWindow DetachToOwnWindow
+#endif
 // Drags from browser to separate window and releases mouse.
 IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
-                       DetachToOwnWindow) {
+                       MAYBE_DetachToOwnWindow) {
   const gfx::Rect initial_bounds(browser()->window()->GetBounds());
   // Add another tab.
   AddTabAndResetBrowser(browser());
@@ -2342,20 +2347,10 @@ IN_PROC_BROWSER_TEST_F(
       ui_controls::LEFT, ui_controls::UP));
 }
 
-// Flaky on MSAN builders with use-of-uninitialized-value.
-// See: https://crbug.com/737469.
-#if defined(MEMORY_SANITIZER)
-#define MAYBE_CancelDragTabToWindowIn1stDisplay \
-  DISABLED_CancelDragTabToWindowIn1stDisplay
-#else
-#define MAYBE_CancelDragTabToWindowIn1stDisplay \
-  CancelDragTabToWindowIn1stDisplay
-#endif
-
 // Drags from browser from a second display to primary and releases input.
 IN_PROC_BROWSER_TEST_F(
     DetachToBrowserInSeparateDisplayAndCancelTabDragControllerTest,
-    MAYBE_CancelDragTabToWindowIn1stDisplay) {
+    CancelDragTabToWindowIn1stDisplay) {
   aura::Window::Windows roots = ash::Shell::GetAllRootWindows();
   ASSERT_EQ(2u, roots.size());
 

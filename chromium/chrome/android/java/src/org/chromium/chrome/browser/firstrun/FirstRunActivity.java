@@ -19,7 +19,6 @@ import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.CachedMetrics.EnumeratedHistogramSample;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
 import org.chromium.chrome.browser.customtabs.CustomTabsConnection;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
@@ -28,12 +27,12 @@ import org.chromium.chrome.browser.metrics.UmaUtils;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.chrome.browser.preferences.datareduction.DataReductionPromoUtils;
 import org.chromium.chrome.browser.preferences.datareduction.DataReductionProxyUma;
+import org.chromium.chrome.browser.profiles.ProfileManagerUtils;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService;
 import org.chromium.chrome.browser.searchwidget.SearchWidgetProvider;
 import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.ui.base.LocalizationUtils;
 
-import java.lang.ref.WeakReference;
 import java.lang.reflect.Constructor;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -75,7 +74,6 @@ public class FirstRunActivity extends AsyncInitializationActivity implements Fir
     public static final String EXTRA_USE_FRE_FLOW_SEQUENCER = "Extra.UseFreFlowSequencer";
     public static final String EXTRA_START_LIGHTWEIGHT_FRE = "Extra.StartLightweightFRE";
     public static final String EXTRA_CHROME_LAUNCH_INTENT = "Extra.FreChromeLaunchIntent";
-    public static final String EXTRA_FINISH_ON_TOUCH_OUTSIDE = "Extra.FreFinishOnTouchOutside";
 
     static final String SHOW_WELCOME_PAGE = "ShowWelcome";
     static final String SHOW_DATA_REDUCTION_PAGE = "ShowDataReduction";
@@ -85,7 +83,6 @@ public class FirstRunActivity extends AsyncInitializationActivity implements Fir
     static final String POST_NATIVE_SETUP_NEEDED = "PostNativeSetupNeeded";
 
     // Outgoing results:
-    public static final String RESULT_CLOSE_APP = "Close App";
     public static final String RESULT_SIGNIN_ACCOUNT_NAME = "ResultSignInTo";
     public static final String RESULT_SHOW_SIGNIN_SETTINGS = "ResultShowSignInSettings";
     public static final String EXTRA_FIRST_RUN_ACTIVITY_RESULT = "Extra.FreActivityResult";
@@ -115,9 +112,6 @@ public class FirstRunActivity extends AsyncInitializationActivity implements Fir
             new EnumeratedHistogramSample("MobileFre.Progress.MainIntent", FRE_PROGRESS_MAX);
     private static final EnumeratedHistogramSample sMobileFreProgressViewIntentHistogram =
             new EnumeratedHistogramSample("MobileFre.Progress.ViewIntent", FRE_PROGRESS_MAX);
-
-    @VisibleForTesting
-    static FirstRunGlue sGlue = new FirstRunGlueImpl();
 
     private static FirstRunActivityObserver sObserver;
 
@@ -228,8 +222,7 @@ public class FirstRunActivity extends AsyncInitializationActivity implements Fir
             mFreProperties = new Bundle();
         }
 
-        setFinishOnTouchOutside(
-                mFreProperties.getBoolean(FirstRunActivity.EXTRA_FINISH_ON_TOUCH_OUTSIDE));
+        setFinishOnTouchOutside(true);
 
         // Skip creating content view if it is to start a lightweight First Run Experience.
         if (mFreProperties.getBoolean(FirstRunActivity.EXTRA_START_LIGHTWEIGHT_FRE)) {
@@ -375,13 +368,6 @@ public class FirstRunActivity extends AsyncInitializationActivity implements Fir
         // active).
         UmaUtils.recordForegroundStartTime();
         stopProgressionIfNotAcceptedTermsOfService();
-        if (!mFreProperties.getBoolean(EXTRA_USE_FRE_FLOW_SEQUENCER)) {
-            if (FirstRunStatus.getFirstRunFlowComplete()) {
-                // This is a parallel flow that needs to be refreshed/re-fired.
-                // Signal the FRE flow completion and re-launch the original intent.
-                completeFirstRunExperience();
-            }
-        }
     }
 
     @Override
@@ -418,10 +404,7 @@ public class FirstRunActivity extends AsyncInitializationActivity implements Fir
 
     @Override
     public void abortFirstRunExperience() {
-        Intent intent = new Intent();
-        if (mFreProperties != null) intent.putExtras(mFreProperties);
-        intent.putExtra(RESULT_CLOSE_APP, true);
-        finishAllTheActivities(getLocalClassName(), Activity.RESULT_CANCELED, intent);
+        finish();
 
         sendPendingIntentIfNecessary(false);
         if (sObserver != null) sObserver.onAbortFirstRunExperience();
@@ -469,17 +452,13 @@ public class FirstRunActivity extends AsyncInitializationActivity implements Fir
         if (sObserver != null) sObserver.onUpdateCachedEngineName();
 
         if (!sendPendingIntentIfNecessary(true)) {
-            Intent resultData = new Intent();
-            resultData.putExtras(mFreProperties);
-            finishAllTheActivities(getLocalClassName(), Activity.RESULT_OK, resultData);
+            finish();
         } else {
             ApplicationStatus.registerStateListenerForActivity(new ActivityStateListener() {
                 @Override
                 public void onActivityStateChange(Activity activity, int newState) {
                     if (newState == ActivityState.STOPPED || newState == ActivityState.DESTROYED) {
-                        Intent resultData = new Intent();
-                        resultData.putExtras(mFreProperties);
-                        finishAllTheActivities(getLocalClassName(), Activity.RESULT_OK, resultData);
+                        finish();
                         ApplicationStatus.unregisterActivityStateListener(this);
                     }
                 }
@@ -507,7 +486,7 @@ public class FirstRunActivity extends AsyncInitializationActivity implements Fir
 
     @Override
     public boolean didAcceptTermsOfService() {
-        boolean result = sGlue.didAcceptTermsOfService(getApplicationContext());
+        boolean result = FirstRunUtils.didAcceptTermsOfService(getApplicationContext());
         if (sObserver != null) sObserver.onAcceptTermsOfService();
         return result;
     }
@@ -516,36 +495,16 @@ public class FirstRunActivity extends AsyncInitializationActivity implements Fir
     public void acceptTermsOfService(boolean allowCrashUpload) {
         // If default is true then it corresponds to opt-out and false corresponds to opt-in.
         UmaUtils.recordMetricsReportingDefaultOptIn(!DEFAULT_METRICS_AND_CRASH_REPORTING);
-        sGlue.acceptTermsOfService(allowCrashUpload);
+        FirstRunUtils.acceptTermsOfService(allowCrashUpload);
         FirstRunStatus.setSkipWelcomePage(true);
         flushPersistentData();
         stopProgressionIfNotAcceptedTermsOfService();
         jumpToPage(mPager.getCurrentItem() + 1);
     }
 
-    @Override
-    public void openAccountAdder(Fragment fragment) {
-        sGlue.openAccountAdder(fragment);
-    }
-
     protected void flushPersistentData() {
-        if (mNativeSideIsInitialized) ChromeApplication.flushPersistentData();
-    }
-
-    /**
-    * Finish all the instances of the given Activity.
-    * @param targetActivity The class name of the target Activity.
-    * @param result The result code to propagate back to the originating activity.
-    * @param data The data to propagate back to the originating activity.
-    */
-    protected static void finishAllTheActivities(String targetActivity, int result, Intent data) {
-        List<WeakReference<Activity>> activities = ApplicationStatus.getRunningActivities();
-        for (WeakReference<Activity> weakActivity : activities) {
-            Activity activity = weakActivity.get();
-            if (activity != null && activity.getLocalClassName().equals(targetActivity)) {
-                activity.setResult(result, data);
-                activity.finish();
-            }
+        if (mNativeSideIsInitialized) {
+            ProfileManagerUtils.flushPersistentDataForAllProfiles();
         }
     }
 

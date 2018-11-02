@@ -22,7 +22,7 @@
 #import "ios/chrome/browser/ui/material_components/activity_indicator.h"
 #import "ios/chrome/browser/ui/sync/sync_util.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_switcher_model.h"
-#import "ios/chrome/browser/ui/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
@@ -138,7 +138,8 @@ const CGFloat kSubtitleMinimunLineHeight = 24.0;
                            forState:UIControlStateDisabled];
     [_textButton setTranslatesAutoresizingMaskIntoConstraints:NO];
     [[_textButton imageView] setTintColor:[UIColor whiteColor]];
-    [_textButton setCustomTitleColor:[UIColor whiteColor]];
+    [_textButton setTitleColor:[UIColor whiteColor]
+                      forState:UIControlStateNormal];
     [_container addSubview:_textButton];
 
     // Create and add floatingButton to the container.
@@ -461,8 +462,7 @@ const CGFloat kSubtitleMinimunLineHeight = 24.0;
 }
 
 - (void)showSyncSettings {
-  [self chromeExecuteCommand:ios_internal::sync::GetSyncCommandForBrowserState(
-                                 _browserState)];
+  [self chromeExecuteCommand:GetSyncCommandForBrowserState(_browserState)];
 }
 
 - (void)sendNewTabCommand:(id)sender {

@@ -53,6 +53,17 @@ void DictionaryValueUpdate::Set(base::StringPiece path,
   value_->Set(path, std::move(in_value));
 }
 
+void DictionaryValueUpdate::SetPath(
+    std::initializer_list<base::StringPiece> path,
+    base::Value value) {
+  const base::Value* found = value_->FindPath(path);
+  if (found && *found == value)
+    return;
+
+  RecordSplitPath(path);
+  value_->SetPath(path, std::move(value));
+}
+
 void DictionaryValueUpdate::SetBoolean(base::StringPiece path, bool in_value) {
   Set(path, base::MakeUnique<base::Value>(in_value));
 }
@@ -86,6 +97,15 @@ std::unique_ptr<DictionaryValueUpdate> DictionaryValueUpdate::SetDictionary(
       report_update_, dictionary_value, ConcatPath(path_, path));
 }
 
+void DictionaryValueUpdate::SetKey(base::StringPiece key, base::Value value) {
+  const base::Value* found = value_->FindKey(key);
+  if (found && *found == value)
+    return;
+
+  RecordKey(key);
+  value_->SetKey(key, std::move(value));
+}
+
 void DictionaryValueUpdate::SetWithoutPathExpansion(
     base::StringPiece key,
     std::unique_ptr<base::Value> in_value) {
@@ -96,36 +116,6 @@ void DictionaryValueUpdate::SetWithoutPathExpansion(
   }
   RecordKey(key);
   value_->SetWithoutPathExpansion(key, std::move(in_value));
-}
-
-void DictionaryValueUpdate::SetBooleanWithoutPathExpansion(
-    base::StringPiece path,
-    bool in_value) {
-  SetWithoutPathExpansion(path, base::MakeUnique<base::Value>(in_value));
-}
-
-void DictionaryValueUpdate::SetIntegerWithoutPathExpansion(
-    base::StringPiece path,
-    int in_value) {
-  SetWithoutPathExpansion(path, base::MakeUnique<base::Value>(in_value));
-}
-
-void DictionaryValueUpdate::SetDoubleWithoutPathExpansion(
-    base::StringPiece path,
-    double in_value) {
-  SetWithoutPathExpansion(path, base::MakeUnique<base::Value>(in_value));
-}
-
-void DictionaryValueUpdate::SetStringWithoutPathExpansion(
-    base::StringPiece path,
-    base::StringPiece in_value) {
-  SetWithoutPathExpansion(path, base::MakeUnique<base::Value>(in_value));
-}
-
-void DictionaryValueUpdate::SetStringWithoutPathExpansion(
-    base::StringPiece path,
-    const base::string16& in_value) {
-  SetWithoutPathExpansion(path, base::MakeUnique<base::Value>(in_value));
 }
 
 std::unique_ptr<DictionaryValueUpdate>

@@ -112,7 +112,7 @@ using content::OpenURLParams;
 using content::PageNavigator;
 using content::Referrer;
 using ui::DropTargetEvent;
-using views::CustomButton;
+using views::Button;
 using views::LabelButtonBorder;
 using views::MenuButton;
 using views::View;
@@ -1050,8 +1050,8 @@ void BookmarkBarView::ViewHierarchyChanged(
   }
 }
 
-void BookmarkBarView::PaintChildren(const ui::PaintContext& context) {
-  View::PaintChildren(context);
+void BookmarkBarView::PaintChildren(const views::PaintInfo& paint_info) {
+  View::PaintChildren(paint_info);
 
   if (drop_info_.get() && drop_info_->valid &&
       drop_info_->location.operation != 0 && drop_info_->location.index != -1 &&
@@ -1082,7 +1082,7 @@ void BookmarkBarView::PaintChildren(const ui::PaintContext& context) {
     gfx::Rect indicator_bounds = GetMirroredRect(
         gfx::Rect(x - kDropIndicatorWidth / 2, y, kDropIndicatorWidth, h));
 
-    ui::PaintRecorder recorder(context, size());
+    ui::PaintRecorder recorder(paint_info.context(), size());
     // TODO(sky/glen): make me pretty!
     recorder.canvas()->FillRect(
         indicator_bounds,
@@ -2041,7 +2041,7 @@ void BookmarkBarView::StartThrobbing(const BookmarkNode* node,
       // Node is hidden, animate the overflow button.
       throbbing_view_ = overflow_button_;
     } else if (!overflow_only) {
-      throbbing_view_ = static_cast<CustomButton*>(child_at(index));
+      throbbing_view_ = static_cast<Button*>(child_at(index));
     }
   } else if (bookmarks::IsDescendantOf(node, managed_->managed_node())) {
     throbbing_view_ = managed_bookmarks_button_;
@@ -2056,7 +2056,7 @@ void BookmarkBarView::StartThrobbing(const BookmarkNode* node,
     throbbing_view_->StartThrobbing(std::numeric_limits<int>::max());
 }
 
-views::CustomButton* BookmarkBarView::DetermineViewToThrobFromRemove(
+views::Button* BookmarkBarView::DetermineViewToThrobFromRemove(
     const BookmarkNode* parent,
     int old_index) {
   const BookmarkNode* bbn = model_->bookmark_bar_node();
@@ -2075,7 +2075,7 @@ views::CustomButton* BookmarkBarView::DetermineViewToThrobFromRemove(
       // Node is hidden, animate the overflow button.
       return overflow_button_;
     }
-    return static_cast<CustomButton*>(child_at(old_index_on_bb));
+    return static_cast<Button*>(child_at(old_index_on_bb));
   }
   if (bookmarks::IsDescendantOf(parent, managed_->managed_node()))
     return managed_bookmarks_button_;

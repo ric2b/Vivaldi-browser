@@ -4,7 +4,7 @@
 
 #include "modules/media_controls/elements/MediaControlElementsHelper.h"
 
-#include "core/events/Event.h"
+#include "core/dom/events/Event.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/layout/LayoutSlider.h"
 #include "core/layout/api/LayoutSliderItem.h"
@@ -16,7 +16,9 @@ namespace blink {
 // static
 bool MediaControlElementsHelper::IsUserInteractionEvent(Event* event) {
   const AtomicString& type = event->type();
-  return type == EventTypeNames::mousedown || type == EventTypeNames::mouseup ||
+  return type == EventTypeNames::pointerdown ||
+         type == EventTypeNames::pointerup ||
+         type == EventTypeNames::mousedown || type == EventTypeNames::mouseup ||
          type == EventTypeNames::click || type == EventTypeNames::dblclick ||
          event->IsKeyboardEvent() || event->IsTouchEvent();
 }

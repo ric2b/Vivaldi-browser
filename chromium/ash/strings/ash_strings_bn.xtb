@@ -3,12 +3,13 @@
 <translationbundle lang="bn">
 <translation id="1012876632442809908">USB-C ডিভাইস (সামনের পোর্ট)</translation>
 <translation id="1013923882670373915">ব্লুটুথ ডিভাইস "<ph name="DEVICE_NAME" />" যুক্ত করার অনুমতি চাইছে। দয়া করে ডিভাইসটিতে এই পিন কোড প্রবেশ করুন: <ph name="PINCODE" /></translation>
-<translation id="1032891413405719768">স্টাইলাসের ব্যাটারি কম</translation>
+<translation id="1032891413405719768">স্টাইলাসের চার্জ কমে গেছে</translation>
 <translation id="112308213915226829">তাককে স্বয়ংক্রিয়ভাবে লুকান</translation>
 <translation id="1153356358378277386">যুক্ত করা ডিভাইসগুলি</translation>
 <translation id="1195412055398077112">ওভারস্ক্যান</translation>
 <translation id="1247372569136754018">মাইক্রোফোন (অভ্যন্তরীণ)</translation>
 <translation id="1252999807265626933"><ph name="POWER_SOURCE" /> থেকে চার্জ হচ্ছে</translation>
+<translation id="1267032506238418139">শর্টকাটে পরিবর্তন</translation>
 <translation id="1270290102613614947">অন-স্ক্রীন কীবোর্ড অক্ষম করা রয়েছে</translation>
 <translation id="1272079795634619415">বন্ধ</translation>
 <translation id="1279938420744323401"><ph name="DISPLAY_NAME" /> (<ph name="ANNOTATION" />)</translation>
@@ -22,7 +23,6 @@
 <translation id="15373452373711364">বড় মাউস কার্সার</translation>
 <translation id="1550523713251050646">আরও বিকল্পের জন্য ক্লিক করুন</translation>
 <translation id="1621499497873603021">ব্যাটারি শেষ হতে <ph name="TIME_LEFT" /> সময় বাকি আছে</translation>
-<translation id="164969095109328410">Chrome ডিভাইস</translation>
 <translation id="1677472565718498478"><ph name="TIME" /> বাকি আছে</translation>
 <translation id="1698760176351776263">IPv6 ঠিকানা: <ph name="ADDRESS" /></translation>
 <translation id="1734367976349034509">এই ডিভাইসটি এন্টারপ্রাইজ পরিচালিত</translation>
@@ -92,6 +92,7 @@
 <translation id="315116470104423982">মোবাইল ডেটা</translation>
 <translation id="3236488194889173876">কোনো মোবাইল নেটওয়ার্ক উপলব্ধ নেই</translation>
 <translation id="3294437725009624529">অতিথি</translation>
+<translation id="332587331255250389">অনুগ্রহ করে ব্যাটারি পাল্টান</translation>
 <translation id="3364721542077212959">লেখনী সরঞ্জামগুলি</translation>
 <translation id="3368922792935385530">সংযুক্ত</translation>
 <translation id="3371140690572404006">USB-C ডিভাইস (ডান দিকের সামনের পোর্ট)</translation>
@@ -110,6 +111,7 @@
 <translation id="3712407551474845318">অঞ্চল ক্যাপচার করুন</translation>
 <translation id="371370241367527062">সামনের মাইক্রোফোন</translation>
 <translation id="3742055079367172538">স্ক্রীনশট নেওয়া হয়েছে</translation>
+<translation id="3771549900096082774">উচ্চ কনট্রাস্ট মোড</translation>
 <translation id="3775358506042162758">একাধিক সাইন ইনে আপনার কেবলমাত্র তিনটি অ্যাকাউন্ট থাকতে পারে৷</translation>
 <translation id="3783640748446814672">alt</translation>
 <translation id="3784455785234192852">লক করুন</translation>
@@ -142,14 +144,12 @@
 <translation id="4729904664295161097">সহায়ক শুধুমাত্র প্রাথমিক প্রোফাইলেই ব্যবহার করা যায়।</translation>
 <translation id="479989351350248267">search</translation>
 <translation id="4804818685124855865">সংযোগ বিচ্ছিন্ন</translation>
-<translation id="4821830640883629383">অনুগ্রহ করে ব্যাটারী চার্জ করুন বা পাল্টে দিন।</translation>
 <translation id="4849058404725798627">কিবোর্ড ফোকাসের মাধ্যমে হাইলাইট করুন</translation>
 <translation id="4872237917498892622">Alt+Search অথবা Shift</translation>
 <translation id="4895488851634969361">ব্যাটারি পূর্ণ৷</translation>
 <translation id="4905614135390995787">উচ্চ কনট্রাস্ট মোড টগল করার শর্টকাটটি পরিবর্তিত হয়েছে। <ph name="OLD_SHORTCUT" /> এর পরিবর্তে অনুগ্রহ করে <ph name="NEW_SHORTCUT" /> ব্যবহার করুন।</translation>
 <translation id="4918086044614829423">স্বীকার</translation>
 <translation id="4961318399572185831">স্ক্রীন কাস্ট করুন</translation>
-<translation id="5011233892417813670">Chromebook</translation>
 <translation id="5168181903108465623">কাস্ট ডিভাইসগুলি উপলব্ধ</translation>
 <translation id="5170568018924773124">ফোল্ডারে দেখান</translation>
 <translation id="5207949376430453814">পাঠ্যের কার্সার হাইলাইট করুন</translation>
@@ -175,7 +175,6 @@
 <translation id="5901316534475909376">Shift+Esc</translation>
 <translation id="5916664084637901428">চালু</translation>
 <translation id="5927132638760172455">একটি অজানা রিসিভারে কাস্টিং করা হচ্ছে</translation>
-<translation id="5932901536148835538">Chromebit</translation>
 <translation id="5947494881799873997">ফেরান</translation>
 <translation id="595202126637698455">কার্য-সম্পাদনা ট্রেস করা সক্ষম রয়েছে</translation>
 <translation id="5957083217255311415">মোবাইল ডেটা বন্ধ করা আছে।</translation>
@@ -218,7 +217,6 @@
 <translation id="683971173229319003">Search+L</translation>
 <translation id="6857811139397017780">সক্রিয় করুন <ph name="NETWORKSERVICE" /></translation>
 <translation id="6911468394164995108">অন্যতে যোগদান করুন ...</translation>
-<translation id="6915678159055240887">ক্রোমবাক্স</translation>
 <translation id="6981982820502123353">অ্যাক্সেযোগ্যতা</translation>
 <translation id="7029814467594812963">সেশন থেকে প্রস্থান</translation>
 <translation id="7034339000180558234"><ph name="TAB_NAME" /> কে <ph name="RECEIVER_NAME" /> এ কাস্ট করা হচ্ছে</translation>
@@ -226,7 +224,6 @@
 <translation id="7066646422045619941">এই নেটওয়ার্কটি আপনার প্রশাসকের দ্বারা অক্ষম করা হয়েছে৷</translation>
 <translation id="7067196344162293536">স্বতঃ ঘূর্ণন</translation>
 <translation id="7098389117866926363">USB-C ডিভাইস (পিছনের বাঁ পোর্ট)</translation>
-<translation id="714034171374937760">Chromebase</translation>
 <translation id="7165278925115064263">Alt+Shift+K</translation>
 <translation id="7168224885072002358"><ph name="TIMEOUT_SECONDS" /> এ পুরানো রেসুলিউশানে ফেরানো হচ্ছে</translation>
 <translation id="7246339268451149667">আঙ্গুলের ছাপ দিয়ে আনলক সক্ষম করবেন?</translation>

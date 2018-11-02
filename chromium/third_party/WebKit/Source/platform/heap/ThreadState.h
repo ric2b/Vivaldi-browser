@@ -108,6 +108,24 @@ class Visitor;
   ThreadState::PrefinalizerRegistration<Class> prefinalizer_dummy_ = this; \
   using UsingPreFinalizerMacroNeedsTrailingSemiColon = char
 
+class PLATFORM_EXPORT BlinkGCObserver {
+ public:
+  // The constructor automatically register this object to ThreadState's
+  // observer lists. The argument must not be null.
+  explicit BlinkGCObserver(ThreadState*);
+
+  // The destructor automatically unregister this object from ThreadState's
+  // observer lists.
+  virtual ~BlinkGCObserver();
+
+  virtual void OnCompleteSweepDone() = 0;
+
+ private:
+  // As a ThreadState must live when a BlinkGCObserver lives, holding a raw
+  // pointer is safe.
+  ThreadState* thread_state_;
+};
+
 class PLATFORM_EXPORT ThreadState {
   USING_FAST_MALLOC(ThreadState);
   WTF_MAKE_NONCOPYABLE(ThreadState);
@@ -290,6 +308,11 @@ class PLATFORM_EXPORT ThreadState {
   void LeaveObjectResurrectionForbiddenScope() {
     DCHECK(object_resurrection_forbidden_);
     object_resurrection_forbidden_ = false;
+  }
+
+  bool WrapperTracingInProgress() const { return wrapper_tracing_in_progress_; }
+  void SetWrapperTracingInProgress(bool value) {
+    wrapper_tracing_in_progress_ = value;
   }
 
   class MainThreadGCForbiddenScope final {
@@ -557,6 +580,8 @@ class PLATFORM_EXPORT ThreadState {
     return &FromObject(object)->Heap() == &Heap();
   }
 
+  int GcAge() const { return gc_age_; }
+
  private:
   template <typename T>
   friend class PrefinalizerRegistration;
@@ -630,6 +655,18 @@ class PLATFORM_EXPORT ThreadState {
 
   friend class SafePointScope;
 
+  friend class BlinkGCObserver;
+
+  // Adds the given observer to the ThreadState's observer list. This doesn't
+  // take ownership of the argument. The argument must not be null. The argument
+  // must not be registered before calling this.
+  void AddObserver(BlinkGCObserver*);
+
+  // Removes the given observer from the ThreadState's observer list. This
+  // doesn't take ownership of the argument. The argument must not be null.
+  // The argument must be registered before calling this.
+  void RemoveObserver(BlinkGCObserver*);
+
   static WTF::ThreadSpecific<ThreadState*>* thread_specific_;
 
   // We can't create a static member of type ThreadState here
@@ -679,10 +716,13 @@ class PLATFORM_EXPORT ThreadState {
   void (*trace_dom_wrappers_)(v8::Isolate*, Visitor*);
   void (*invalidate_dead_objects_in_wrappers_marking_deque_)(v8::Isolate*);
   void (*perform_cleanup_)(v8::Isolate*);
+  bool wrapper_tracing_in_progress_;
 
 #if defined(ADDRESS_SANITIZER)
   void* asan_fake_stack_;
 #endif
+
+  HashSet<BlinkGCObserver*> observers_;
 
   // PersistentNodes that are stored in static references;
   // references that either have to be cleared upon the thread
@@ -708,6 +748,8 @@ class PLATFORM_EXPORT ThreadState {
   size_t allocated_object_size_;
   size_t marked_object_size_;
   size_t reported_memory_to_v8_;
+
+  int gc_age_ = 0;
 };
 
 template <ThreadAffinity affinity>

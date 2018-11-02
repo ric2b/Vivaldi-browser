@@ -26,6 +26,7 @@
 #include "components/exo/surface.h"
 #include "components/exo/test/exo_test_base.h"
 #include "components/exo/test/exo_test_helper.h"
+#include "components/exo/wm_helper.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
@@ -33,6 +34,7 @@
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/layer.h"
 #include "ui/display/display.h"
+#include "ui/display/manager/display_manager.h"
 #include "ui/display/screen.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/views/widget/widget.h"
@@ -85,9 +87,13 @@ class ShellSurfaceBoundsModeTest
   }
 
   std::unique_ptr<ShellSurface> CreateDefaultShellSurface(Surface* surface) {
-    return base::MakeUnique<ShellSurface>(surface, nullptr, GetParam(),
-                                          gfx::Point(), true, false,
-                                          ash::kShellWindowId_DefaultContainer);
+    if (IsClientBoundsMode()) {
+      return Display().CreateRemoteShellSurface(
+          surface, ash::kShellWindowId_DefaultContainer,
+          WMHelper::GetInstance()->GetDefaultDeviceScaleFactor());
+    } else {
+      return Display().CreateShellSurface(surface);
+    }
   }
 
  private:
@@ -318,7 +324,7 @@ TEST_F(ShellSurfaceTest, SetApplicationId) {
   std::unique_ptr<Surface> surface(new Surface);
   std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
 
-  EXPECT_EQ(nullptr, shell_surface->GetWidget());
+  EXPECT_FALSE(shell_surface->GetWidget());
   shell_surface->SetApplicationId("pre-widget-id");
 
   surface->Attach(buffer.get());
@@ -376,20 +382,73 @@ TEST_F(ShellSurfaceTest, SetGeometry) {
             shell_surface->host_window()->bounds().ToString());
 }
 
-TEST_F(ShellSurfaceTest, SetScale) {
+TEST_P(ShellSurfaceBoundsModeTest, DefaultDeviceScaleFactorForcedScaleFactor) {
+  double scale = 1.5;
+  display::Display::SetForceDeviceScaleFactor(scale);
+
+  int64_t display_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
+  display::Display::SetInternalDisplayId(display_id);
+
   gfx::Size buffer_size(64, 64);
   std::unique_ptr<Buffer> buffer(
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
   std::unique_ptr<Surface> surface(new Surface);
-  std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
+  std::unique_ptr<ShellSurface> shell_surface(
+      CreateDefaultShellSurface(surface.get()));
+  surface->Attach(buffer.get());
+  surface->Commit();
+  gfx::Transform transform;
+  if (IsClientBoundsMode())
+    transform.Scale(1.0 / scale, 1.0 / scale);
 
-  double scale = 1.5;
-  shell_surface->SetScale(scale);
+  EXPECT_EQ(
+      transform.ToString(),
+      shell_surface->host_window()->layer()->GetTargetTransform().ToString());
+}
+
+TEST_P(ShellSurfaceBoundsModeTest, DefaultDeviceScaleFactorFromDisplayManager) {
+  int64_t display_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
+  display::Display::SetInternalDisplayId(display_id);
+  gfx::Size size(1920, 1080);
+
+  display::DisplayManager* display_manager =
+      ash::Shell::Get()->display_manager();
+
+  double scale = 1.25;
+  scoped_refptr<display::ManagedDisplayMode> mode(
+      new display::ManagedDisplayMode(size, 60.f, false /* overscan */,
+                                      true /*native*/, 1.0, scale));
+  mode->set_is_default(true);
+
+  display::ManagedDisplayInfo::ManagedDisplayModeList mode_list;
+  mode_list.push_back(mode);
+
+  display::ManagedDisplayInfo native_display_info(display_id, "test", false);
+  native_display_info.SetManagedDisplayModes(mode_list);
+
+  native_display_info.SetBounds(gfx::Rect(size));
+  native_display_info.set_device_scale_factor(scale);
+
+  std::vector<display::ManagedDisplayInfo> display_info_list;
+  display_info_list.push_back(native_display_info);
+
+  display_manager->OnNativeDisplaysChanged(display_info_list);
+  display_manager->UpdateInternalManagedDisplayModeListForTest();
+
+  gfx::Size buffer_size(64, 64);
+  std::unique_ptr<Buffer> buffer(
+      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
+  std::unique_ptr<Surface> surface(new Surface);
+  std::unique_ptr<ShellSurface> shell_surface(
+      CreateDefaultShellSurface(surface.get()));
+
   surface->Attach(buffer.get());
   surface->Commit();
 
   gfx::Transform transform;
-  transform.Scale(1.0 / scale, 1.0 / scale);
+  if (IsClientBoundsMode())
+    transform.Scale(1.0 / scale, 1.0 / scale);
+
   EXPECT_EQ(
       transform.ToString(),
       shell_surface->host_window()->layer()->GetTargetTransform().ToString());
@@ -483,6 +542,11 @@ TEST_F(ShellSurfaceTest, ConfigureCallback) {
       base::Bind(&Configure, base::Unretained(&suggested_size),
                  base::Unretained(&has_state_type),
                  base::Unretained(&is_resizing), base::Unretained(&is_active)));
+  // Commit without contents should result in a configure callback with empty
+  // suggested size as a mechanims to ask the client size itself.
+  surface->Commit();
+  EXPECT_EQ(gfx::Size(), suggested_size);
+
   shell_surface->Maximize();
   shell_surface->AcknowledgeConfigure(0);
   EXPECT_EQ(CurrentContext()->bounds().width(), suggested_size.width());
@@ -699,12 +763,42 @@ TEST_F(ShellSurfaceTest, SurfaceShadow) {
   EXPECT_TRUE(shadow->layer()->visible());
 
   // For surface shadow, the underlay is placed at the bottom of shell surfaces.
-  EXPECT_EQ(shell_surface->host_window(),
-            shell_surface->shadow_underlay()->parent());
+  EXPECT_EQ(window, shell_surface->shadow_underlay()->parent());
   EXPECT_EQ(window, shell_surface->shadow_overlay()->parent());
 
-  EXPECT_EQ(*shell_surface->host_window()->children().begin(),
-            shell_surface->shadow_underlay());
+  auto child_it = window->children().begin();
+  EXPECT_EQ(*child_it++, shell_surface->shadow_underlay());
+  EXPECT_EQ(*child_it++, shell_surface->shadow_overlay());
+  EXPECT_EQ(*child_it++, shell_surface->host_window());
+  EXPECT_EQ(child_it, window->children().end());
+
+  // Set the shadow background to 0, and the shadow_underlay should be
+  // destroyed.
+  shell_surface->SetRectangularShadowBackgroundOpacity(0.f);
+  surface->Commit();
+
+  EXPECT_FALSE(shell_surface->shadow_underlay());
+  EXPECT_EQ(window, shell_surface->shadow_overlay()->parent());
+
+  child_it = window->children().begin();
+  EXPECT_EQ(*child_it++, shell_surface->shadow_overlay());
+  EXPECT_EQ(*child_it++, shell_surface->host_window());
+  EXPECT_EQ(child_it, window->children().end());
+
+  // Set the shadow background to 1, and the shadow_underlay should be
+  // recreated.
+  shell_surface->SetRectangularShadowBackgroundOpacity(1.f);
+  surface->Commit();
+
+  EXPECT_TRUE(shell_surface->shadow_underlay());
+  EXPECT_EQ(window, shell_surface->shadow_underlay()->parent());
+  EXPECT_EQ(window, shell_surface->shadow_overlay()->parent());
+
+  child_it = window->children().begin();
+  EXPECT_EQ(*child_it++, shell_surface->shadow_underlay());
+  EXPECT_EQ(*child_it++, shell_surface->shadow_overlay());
+  EXPECT_EQ(*child_it++, shell_surface->host_window());
+  EXPECT_EQ(child_it, window->children().end());
 }
 
 TEST_F(ShellSurfaceTest, NonSurfaceShadow) {
@@ -903,7 +997,6 @@ TEST_F(ShellSurfaceTest, ShadowStartMaximized) {
   // Underlay should be created even without shadow.
   ASSERT_TRUE(shell_surface->shadow_underlay());
   EXPECT_TRUE(shell_surface->shadow_underlay()->IsVisible());
-
   shell_surface->SetRectangularSurfaceShadow(gfx::Rect(0, 0, 0, 0));
   // Underlay should be created even without shadow.
   ASSERT_TRUE(shell_surface->shadow_underlay());
@@ -999,7 +1092,8 @@ TEST_F(ShellSurfaceTest,
   surface->Commit();
   EXPECT_EQ(shadow_bounds,
             shell_surface->GetWidget()->GetWindowBoundsInScreen());
-  ASSERT_EQ(shadow_bounds, shell_surface->shadow_underlay()->bounds());
+  ASSERT_EQ(shadow_bounds,
+            shell_surface->shadow_underlay()->GetBoundsInScreen());
   EXPECT_EQ(display::Screen::GetScreen()->GetPrimaryDisplay().size(),
             shell_surface->surface_for_testing()->window()->bounds().size());
 
@@ -1046,8 +1140,8 @@ TEST_F(ShellSurfaceTest, CompositorLockInRotation) {
   EXPECT_FALSE(compositor->IsLocked());
 }
 
-// System tray should be activated if user presses tab key while shell surface
-// is active.
+// If system tray is shown by click. It should be activated if user presses tab
+// key while shell surface is active.
 TEST_F(ShellSurfaceTest, KeyboardNavigationWithSystemTray) {
   const gfx::Size buffer_size(800, 600);
   std::unique_ptr<Buffer> buffer(
@@ -1062,9 +1156,11 @@ TEST_F(ShellSurfaceTest, KeyboardNavigationWithSystemTray) {
 
   EXPECT_TRUE(shell_surface->GetWidget()->IsActive());
 
-  // Show system tray.
+  // Show system tray by perfoming a gesture tap at tray.
   ash::SystemTray* system_tray = GetPrimarySystemTray();
-  system_tray->ShowDefaultView(ash::BUBBLE_CREATE_NEW);
+  ui::GestureEvent tap(0, 0, 0, base::TimeTicks(),
+                       ui::GestureEventDetails(ui::ET_GESTURE_TAP));
+  system_tray->PerformAction(tap);
   ASSERT_TRUE(system_tray->GetWidget());
 
   // Confirm that system tray is not active at this time.

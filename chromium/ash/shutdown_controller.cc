@@ -9,6 +9,8 @@
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
 #include "ash/shutdown_reason.h"
+#include "ash/wm/lock_state_controller.h"
+#include "base/metrics/user_metrics.h"
 #include "base/sys_info.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power_manager_client.h"
@@ -26,10 +28,8 @@ void ShutdownController::ShutDownOrReboot(ShutdownReason reason) {
     return;
   }
 
-  if (reason == ShutdownReason::POWER_BUTTON) {
-    Shell::Get()->metrics()->RecordUserMetricsAction(
-        UMA_ACCEL_SHUT_DOWN_POWER_BUTTON);
-  }
+  if (reason == ShutdownReason::POWER_BUTTON)
+    base::RecordAction(base::UserMetricsAction("Accel_ShutDown_PowerButton"));
 
   // On real Chrome OS hardware the power manager handles shutdown.
   using chromeos::DBusThreadManager;
@@ -41,6 +41,11 @@ void ShutdownController::ShutDownOrReboot(ShutdownReason reason) {
 
 void ShutdownController::SetRebootOnShutdown(bool reboot_on_shutdown) {
   reboot_on_shutdown_ = reboot_on_shutdown;
+}
+
+void ShutdownController::RequestShutdownFromLoginScreen() {
+  Shell::Get()->lock_state_controller()->RequestShutdown(
+      ShutdownReason::LOGIN_SHUT_DOWN_BUTTON);
 }
 
 void ShutdownController::BindRequest(mojom::ShutdownControllerRequest request) {

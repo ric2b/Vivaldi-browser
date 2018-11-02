@@ -15,6 +15,7 @@
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/android/vr_shell/gl_browser_interface.h"
+#include "chrome/browser/android/vr_shell/gvr_util.h"
 #include "chrome/browser/android/vr_shell/mailbox_to_surface_bridge.h"
 #include "chrome/browser/android/vr_shell/vr_controller.h"
 #include "chrome/browser/android/vr_shell/vr_metrics_util.h"
@@ -26,6 +27,7 @@
 #include "chrome/browser/vr/ui_scene.h"
 #include "chrome/browser/vr/vr_gl_util.h"
 #include "chrome/browser/vr/vr_shell_renderer.h"
+#include "content/public/common/content_features.h"
 #include "device/vr/android/gvr/gvr_delegate.h"
 #include "device/vr/android/gvr/gvr_device.h"
 #include "device/vr/android/gvr/gvr_gamepad_data_provider.h"
@@ -50,22 +52,23 @@ static constexpr float kZFar = 100.0f;
 // GVR buffer indices for use with viewport->SetSourceBufferIndex
 // or frame.BindBuffer. We use one for world content (with reprojection)
 // including main VrShell and WebVR content plus world-space UI.
-// The headlocked buffer is for UI that should not use reprojection.
 static constexpr int kFramePrimaryBuffer = 0;
-static constexpr int kFrameHeadlockedBuffer = 1;
+static constexpr int kFrameWebVrBrowserUiBuffer = 1;
 
-// Pixel dimensions and field of view for the head-locked content. This
-// is currently sized to fit the WebVR "insecure transport" warnings,
-// adjust it as needed if there is additional content.
-static constexpr gfx::Size kHeadlockedBufferDimensions = {1024, 1024};
-// Represents the frame of view in degrees. 0 degrees is straight ahead, and the
-// rect represents bottom/left/right/top alway from the center line.
-static constexpr gvr::Rectf kHeadlockedBufferFov = {30.f, 20.f, 20.f, 20.f};
+// When display UI on top of WebVR, we use a seperate buffer. Normally, the
+// buffer is set to recommended size to get best visual (i.e the buffer for
+// rendering ChromeVR). We divide the recommended buffer size by this number to
+// improve performance.
+// We calculate a smaller FOV and UV per frame which includes all visible
+// elements. This allows us rendering UI at the same quality with a smaller
+// buffer.
+// Use 2 for now, we can probably make the buffer even smaller.
+static constexpr float kWebVrBrowserUiSizeFactor = 2.f;
 
 // The GVR viewport list has two entries (left eye and right eye) for each
 // GVR buffer.
 static constexpr int kViewportListPrimaryOffset = 0;
-static constexpr int kViewportListHeadlockedOffset = 2;
+static constexpr int kViewportListWebVrBrowserUiOffset = 2;
 
 // Buffer size large enough to handle the current backlog of poses which is
 // 2-3 frames.
@@ -83,6 +86,8 @@ static constexpr float kMinAppButtonGestureAngleRad = 0.25;
 // reached, yield to let other tasks execute before rechecking.
 static constexpr base::TimeDelta kWebVRFenceCheckTimeout =
     base::TimeDelta::FromMicroseconds(2000);
+
+static constexpr int kWebVrInitialFrameTimeoutSeconds = 5;
 
 // Provides the direction the head is looking towards as a 3x1 unit vector.
 gfx::Vector3dF GetForwardVector(const gfx::Transform& head_pose) {
@@ -151,10 +156,6 @@ gfx::RectF GfxRectFromUV(gvr::Rectf rect) {
                     rect.top - rect.bottom);
 }
 
-double NowSeconds() {
-  return (base::TimeTicks::Now() - base::TimeTicks()).InSecondsF();
-}
-
 void LoadControllerModelTask(
     base::WeakPtr<VrShellGl> weak_vr_shell_gl,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
@@ -189,7 +190,6 @@ VrShellGl::VrShellGl(GlBrowserInterface* browser,
 }
 
 VrShellGl::~VrShellGl() {
-  vsync_task_.Cancel();
   closePresentationBindings();
 }
 
@@ -251,7 +251,14 @@ void VrShellGl::InitializeGl(gfx::AcceleratedWidget window) {
 
   InitializeRenderer();
 
-  browser_->OnGLInitialized();
+  // TODO(vollick): this is really going to the UI, not the browser. It would be
+  // nice to hold a pointer to a, possibly limited, UI interface that could be
+  // invoked synchronously on this thread (cf the post tasking to the current
+  // thread in VrGlThread). I.e., we could probably split GlBrowserInterface
+  // into parts.
+  browser_->OnGlInitialized(content_texture_id_);
+
+  webvr_vsync_align_ = base::FeatureList::IsEnabled(features::kWebVrVsyncAlign);
 
   gfx::Size webvr_size =
       device::GvrDelegate::GetRecommendedWebVrSize(gvr_api_.get());
@@ -260,11 +267,6 @@ void VrShellGl::InitializeGl(gfx::AcceleratedWidget window) {
 
   CreateOrResizeWebVRSurface(webvr_size);
 
-  vsync_task_.Reset(base::Bind(&VrShellGl::OnVSync, base::Unretained(this)));
-  OnVSync();
-
-  ready_to_draw_ = true;
-
   if (daydream_support_) {
     base::PostTaskWithTraits(
         FROM_HERE, {base::TaskPriority::BACKGROUND},
@@ -272,9 +274,12 @@ void VrShellGl::InitializeGl(gfx::AcceleratedWidget window) {
                    task_runner_));
   }
 
-  input_manager_ = base::MakeUnique<vr::UiInputManager>(scene_, this);
-  ui_renderer_ = base::MakeUnique<vr::UiRenderer>(scene_, content_texture_id_,
-                                                  vr_shell_renderer_.get());
+  input_manager_ = base::MakeUnique<vr::UiInputManager>(scene_);
+  ui_renderer_ =
+      base::MakeUnique<vr::UiRenderer>(scene_, vr_shell_renderer_.get());
+
+  ready_to_draw_ = true;
+  OnVSync(base::TimeTicks::Now());
 }
 
 void VrShellGl::CreateContentSurface() {
@@ -361,6 +366,7 @@ void VrShellGl::ConnectPresentingService(
   closePresentationBindings();
   submit_client_.Bind(std::move(submit_client_info));
   binding_.Bind(std::move(request));
+  ScheduleWebVrFrameTimeout();
 }
 
 void VrShellGl::OnContentFrameAvailable() {
@@ -386,6 +392,31 @@ void VrShellGl::OnWebVRFrameAvailable() {
   browser_->OnWebVrFrameAvailable();
 
   DrawFrame(frame_index);
+  if (web_vr_mode_) {
+    ++webvr_frames_received_;
+    ScheduleWebVrFrameTimeout();
+  } else {
+    webvr_frame_timeout_.Cancel();
+  }
+}
+
+void VrShellGl::ScheduleWebVrFrameTimeout() {
+  // TODO(mthiesse): We should also timeout after the initial frame to prevent
+  // bad experiences, but we have to be careful to handle things like splash
+  // screens correctly. For now just ensure we receive a first frame.
+  if (webvr_frames_received_ > 0) {
+    webvr_frame_timeout_.Cancel();
+    return;
+  }
+  webvr_frame_timeout_.Reset(
+      base::Bind(&VrShellGl::OnWebVrFrameTimedOut, base::Unretained(this)));
+  task_runner_->PostDelayedTask(
+      FROM_HERE, webvr_frame_timeout_.callback(),
+      base::TimeDelta::FromSeconds(kWebVrInitialFrameTimeoutSeconds));
+}
+
+void VrShellGl::OnWebVrFrameTimedOut() {
+  browser_->OnWebVrTimedOut();
 }
 
 void VrShellGl::GvrInit(gvr_context* gvr_api) {
@@ -413,19 +444,18 @@ void VrShellGl::InitializeRenderer() {
   std::vector<gvr::BufferSpec> specs;
   // For kFramePrimaryBuffer (primary VrShell and WebVR content)
   specs.push_back(gvr_api_->CreateBufferSpec());
-  gvr::Sizei render_size_primary = specs[kFramePrimaryBuffer].GetSize();
-  render_size_primary_ = {render_size_primary.width,
-                          render_size_primary.height};
-  render_size_vrshell_ = render_size_primary_;
-
-  // For kFrameHeadlockedBuffer (for WebVR insecure content warning).
-  // Set this up at fixed resolution, the (smaller) FOV gets set below.
   specs.push_back(gvr_api_->CreateBufferSpec());
-  specs.back().SetSize({kHeadlockedBufferDimensions.width(),
-                        kHeadlockedBufferDimensions.height()});
-  gvr::Sizei render_size_headlocked = specs[kFrameHeadlockedBuffer].GetSize();
-  render_size_headlocked_ = {render_size_headlocked.width,
-                             render_size_headlocked.height};
+
+  gvr::Sizei render_size_default = specs[kFramePrimaryBuffer].GetSize();
+  render_size_default_ = {render_size_default.width,
+                          render_size_default.height};
+
+  specs[kFrameWebVrBrowserUiBuffer].SetSize(
+      {render_size_default.width / kWebVrBrowserUiSizeFactor,
+       render_size_default.height / kWebVrBrowserUiSizeFactor});
+  render_size_webvr_ui_ = {
+      render_size_default.width / kWebVrBrowserUiSizeFactor,
+      render_size_default.height / kWebVrBrowserUiSizeFactor};
 
   swap_chain_ =
       base::MakeUnique<gvr::SwapChain>(gvr_api_->CreateSwapChain(specs));
@@ -444,26 +474,21 @@ void VrShellGl::InitializeRenderer() {
       new gvr::BufferViewportList(gvr_api_->CreateEmptyBufferViewportList()));
   buffer_viewport_list_->SetToRecommendedBufferViewports();
 
-  // Set up head-locked UI viewports, these will be elements 2=left eye
-  // and 3=right eye. For now, use a hardcoded 20-degree-from-center FOV
-  // frustum to reduce rendering cost for this overlay. This fits the
-  // current content, but will need to be adjusted once there's more dynamic
-  // head-locked content that could be larger.
-  headlocked_left_viewport_.reset(
+  // Set up WebVR Browser UI viewports, these will be elements 2=left eye
+  // and 3=right eye.
+  webvr_browser_ui_left_viewport_.reset(
       new gvr::BufferViewport(gvr_api_->CreateBufferViewport()));
-  buffer_viewport_list_->GetBufferViewport(GVR_LEFT_EYE,
-                                           headlocked_left_viewport_.get());
-  headlocked_left_viewport_->SetSourceBufferIndex(kFrameHeadlockedBuffer);
-  headlocked_left_viewport_->SetReprojection(GVR_REPROJECTION_NONE);
-  headlocked_left_viewport_->SetSourceFov(kHeadlockedBufferFov);
+  buffer_viewport_list_->GetBufferViewport(
+      GVR_LEFT_EYE, webvr_browser_ui_left_viewport_.get());
+  webvr_browser_ui_left_viewport_->SetSourceBufferIndex(
+      kFrameWebVrBrowserUiBuffer);
 
-  headlocked_right_viewport_.reset(
+  webvr_browser_ui_right_viewport_.reset(
       new gvr::BufferViewport(gvr_api_->CreateBufferViewport()));
-  buffer_viewport_list_->GetBufferViewport(GVR_RIGHT_EYE,
-                                           headlocked_right_viewport_.get());
-  headlocked_right_viewport_->SetSourceBufferIndex(kFrameHeadlockedBuffer);
-  headlocked_right_viewport_->SetReprojection(GVR_REPROJECTION_NONE);
-  headlocked_right_viewport_->SetSourceFov(kHeadlockedBufferFov);
+  buffer_viewport_list_->GetBufferViewport(
+      GVR_RIGHT_EYE, webvr_browser_ui_right_viewport_.get());
+  webvr_browser_ui_right_viewport_->SetSourceBufferIndex(
+      kFrameWebVrBrowserUiBuffer);
 
   // Save copies of the first two viewport items for use by WebVR, it
   // sets its own UV bounds.
@@ -482,12 +507,19 @@ void VrShellGl::InitializeRenderer() {
   browser_->GvrDelegateReady(gvr_api_->GetViewerType());
 }
 
-void VrShellGl::UpdateController(const gfx::Vector3dF& head_direction) {
-  controller_->UpdateState(head_direction);
+void VrShellGl::UpdateController(const gfx::Transform& head_pose) {
+  TRACE_EVENT0("gpu", "VrShellGl::UpdateController");
+  gvr::Mat4f gvr_head_pose;
+  TransformToGvrMat(head_pose, &gvr_head_pose);
+  controller_->UpdateState(gvr_head_pose);
   controller_info_.laser_origin = controller_->GetPointerStart();
 
   device::GvrGamepadData controller_data = controller_->GetGamepadData();
+  if (!ShouldDrawWebVr())
+    controller_data.connected = false;
   browser_->UpdateGamepadData(controller_data);
+
+  HandleControllerInput(GetForwardVector(head_pose));
 }
 
 void VrShellGl::HandleControllerInput(const gfx::Vector3dF& head_direction) {
@@ -497,8 +529,6 @@ void VrShellGl::HandleControllerInput(const gfx::Vector3dF& head_direction) {
     SendImmediateExitRequestIfNecessary();
     return;
   }
-
-  HandleWebVrCompatibilityClick();
 
   gfx::Vector3dF ergo_neutral_pose;
   if (!controller_->IsConnected()) {
@@ -528,11 +558,7 @@ void VrShellGl::HandleControllerInput(const gfx::Vector3dF& head_direction) {
   DCHECK(!(controller_->ButtonUpHappened(gvr::kControllerButtonClick) &&
            controller_->ButtonDownHappened(gvr::kControllerButtonClick)))
       << "Cannot handle a button down and up event within one frame.";
-  if (touch_pending_) {
-    controller_info_.touchpad_button_state =
-        vr::UiInputManager::ButtonState::CLICKED;
-    touch_pending_ = false;
-  } else if (controller_->ButtonState(gvr::kControllerButtonClick)) {
+  if (controller_->ButtonState(gvr::kControllerButtonClick)) {
     controller_info_.touchpad_button_state =
         vr::UiInputManager::ButtonState::DOWN;
   }
@@ -549,26 +575,6 @@ void VrShellGl::HandleControllerInput(const gfx::Vector3dF& head_direction) {
       controller_direction, controller_info_.laser_origin,
       controller_info_.touchpad_button_state, &gesture_list,
       &controller_info_.target_point, &controller_info_.reticle_render_target);
-}
-
-void VrShellGl::HandleWebVrCompatibilityClick() {
-  if (!ShouldDrawWebVr())
-    return;
-
-  // Process screen touch events for Cardboard button compatibility.
-  // Also send tap events for controller "touchpad click" events.
-  if (touch_pending_ ||
-      controller_->ButtonUpHappened(gvr::kControllerButtonClick)) {
-    touch_pending_ = false;
-    auto gesture = base::MakeUnique<blink::WebGestureEvent>(
-        blink::WebInputEvent::kGestureTapDown,
-        blink::WebInputEvent::kNoModifiers, NowSeconds());
-    gesture->source_device = blink::kWebGestureDeviceTouchpad;
-    gesture->x = 0;
-    gesture->y = 0;
-    SendGestureToContent(std::move(gesture));
-    DVLOG(1) << __FUNCTION__ << ": sent CLICK gesture";
-  }
 }
 
 std::unique_ptr<blink::WebMouseEvent> VrShellGl::MakeMouseEvent(
@@ -639,7 +645,7 @@ void VrShellGl::OnContentUp(const gfx::PointF& normalized_hit_point) {
       MakeMouseEvent(blink::WebInputEvent::kMouseUp, normalized_hit_point));
 }
 
-void VrShellGl::OnContentFlingBegin(
+void VrShellGl::OnContentFlingStart(
     std::unique_ptr<blink::WebGestureEvent> gesture,
     const gfx::PointF& normalized_hit_point) {
   UpdateGesture(normalized_hit_point, *gesture);
@@ -736,6 +742,14 @@ void VrShellGl::DrawFrame(int16_t frame_index) {
   // DrawVrShell if needed.
   buffer_viewport_list_->SetToRecommendedBufferViewports();
 
+  // Update recommended fov and uv per frame.
+  buffer_viewport_list_->GetBufferViewport(GVR_LEFT_EYE,
+                                           buffer_viewport_.get());
+  const gvr::Rectf& fov_recommended_left = buffer_viewport_->GetSourceFov();
+  buffer_viewport_list_->GetBufferViewport(GVR_RIGHT_EYE,
+                                           buffer_viewport_.get());
+  const gvr::Rectf& fov_recommended_right = buffer_viewport_->GetSourceFov();
+
   // If needed, resize the primary buffer for use with WebVR. Resizing
   // needs to happen before acquiring a frame.
   if (ShouldDrawWebVr()) {
@@ -773,36 +787,36 @@ void VrShellGl::DrawFrame(int16_t frame_index) {
                                              *webvr_left_viewport_);
     buffer_viewport_list_->SetBufferViewport(GVR_RIGHT_EYE,
                                              *webvr_right_viewport_);
-    if (render_info_primary_.content_texture_size != webvr_surface_size_) {
+    if (render_info_primary_.surface_texture_size != webvr_surface_size_) {
       if (!webvr_surface_size_.width()) {
         // Don't try to resize to 0x0 pixels, drop frames until we get a
         // valid size.
         return;
       }
 
-      render_info_primary_.content_texture_size = webvr_surface_size_;
+      render_info_primary_.surface_texture_size = webvr_surface_size_;
       DVLOG(1) << __FUNCTION__ << ": resize GVR to "
-               << render_info_primary_.content_texture_size.width() << "x"
-               << render_info_primary_.content_texture_size.height();
+               << render_info_primary_.surface_texture_size.width() << "x"
+               << render_info_primary_.surface_texture_size.height();
       swap_chain_->ResizeBuffer(
           kFramePrimaryBuffer,
-          {render_info_primary_.content_texture_size.width(),
-           render_info_primary_.content_texture_size.height()});
+          {render_info_primary_.surface_texture_size.width(),
+           render_info_primary_.surface_texture_size.height()});
     }
   } else {
-    if (render_info_primary_.content_texture_size != render_size_vrshell_) {
-      render_info_primary_.content_texture_size = render_size_vrshell_;
+    if (render_info_primary_.surface_texture_size != render_size_default_) {
+      render_info_primary_.surface_texture_size = render_size_default_;
       swap_chain_->ResizeBuffer(
           kFramePrimaryBuffer,
-          {render_info_primary_.content_texture_size.width(),
-           render_info_primary_.content_texture_size.height()});
+          {render_info_primary_.surface_texture_size.width(),
+           render_info_primary_.surface_texture_size.height()});
     }
   }
 
   TRACE_EVENT_BEGIN0("gpu", "VrShellGl::AcquireFrame");
   gvr::Frame frame = swap_chain_->AcquireFrame();
   TRACE_EVENT_END0("gpu", "VrShellGl::AcquireFrame");
-  if (!frame.is_valid()) {
+  if (!frame) {
     return;
   }
   frame.BindBuffer(kFramePrimaryBuffer);
@@ -828,17 +842,12 @@ void VrShellGl::DrawFrame(int16_t frame_index) {
   }
 
   // Update the render position of all UI elements (including desktop).
-  scene_->OnBeginFrame(current_time);
+  scene_->OnBeginFrame(current_time,
+                       GetForwardVector(render_info_primary_.head_pose));
 
-  {
-    // TODO(crbug.com/704690): Acquire controller state in a way that's timely
-    // for both the gamepad API and UI input handling.
-    TRACE_EVENT0("gpu", "VrShellGl::UpdateController");
-    gfx::Vector3dF head_direction =
-        GetForwardVector(render_info_primary_.head_pose);
-    UpdateController(head_direction);
-    HandleControllerInput(head_direction);
-  }
+  // WebVR handles controller input in OnVsync.
+  if (!ShouldDrawWebVr())
+    UpdateController(render_info_primary_.head_pose);
 
   // Ensure that all elements are ready before drawing. Eg., elements may have
   // been dirtied due to animation on input processing and need to regenerate
@@ -846,29 +855,62 @@ void VrShellGl::DrawFrame(int16_t frame_index) {
   scene_->PrepareToDraw();
 
   UpdateEyeInfos(render_info_primary_.head_pose, kViewportListPrimaryOffset,
-                 render_info_primary_.content_texture_size,
+                 render_info_primary_.surface_texture_size,
                  &render_info_primary_);
-  ui_renderer_->Draw(render_info_primary_, controller_info_, ShouldDrawWebVr());
 
+  // Measure projected content size and bubble up if delta exceeds threshold.
+  browser_->OnProjMatrixChanged(render_info_primary_.left_eye_info.proj_matrix);
+
+  ui_renderer_->Draw(render_info_primary_, controller_info_, ShouldDrawWebVr());
+  if (!scene_->GetViewportAwareElements().empty() && !ShouldDrawWebVr()) {
+    ui_renderer_->DrawViewportAware(render_info_primary_, controller_info_,
+                                    false);
+  }
   frame.Unbind();
 
-  // Draw head-locked elements to a separate, non-reprojected buffer.
-  if (scene_->HasVisibleHeadLockedElements()) {
-    frame.BindBuffer(kFrameHeadlockedBuffer);
+  if (!scene_->GetViewportAwareElements().empty() && ShouldDrawWebVr()) {
+    // WebVR content may use an arbitray size buffer. We need to draw browser UI
+    // on a different buffer to make sure that our UI has enough resolution.
+    frame.BindBuffer(kFrameWebVrBrowserUiBuffer);
 
-    // Add head-locked viewports. The list gets reset to just
-    // the recommended viewports (for the primary buffer) each frame.
+    // Set render info to recommended setting. It will be used as our base for
+    // optimization.
+    render_info_webvr_browser_ui_.head_pose = render_info_primary_.head_pose;
+    webvr_browser_ui_left_viewport_->SetSourceFov(fov_recommended_left);
+    webvr_browser_ui_right_viewport_->SetSourceFov(fov_recommended_right);
     buffer_viewport_list_->SetBufferViewport(
-        kViewportListHeadlockedOffset + GVR_LEFT_EYE,
-        *headlocked_left_viewport_);
+        kViewportListWebVrBrowserUiOffset + GVR_LEFT_EYE,
+        *webvr_browser_ui_left_viewport_);
     buffer_viewport_list_->SetBufferViewport(
-        kViewportListHeadlockedOffset + GVR_RIGHT_EYE,
-        *headlocked_right_viewport_);
+        kViewportListWebVrBrowserUiOffset + GVR_RIGHT_EYE,
+        *webvr_browser_ui_right_viewport_);
+    UpdateEyeInfos(render_info_webvr_browser_ui_.head_pose,
+                   kViewportListWebVrBrowserUiOffset, render_size_webvr_ui_,
+                   &render_info_webvr_browser_ui_);
+    gvr::Rectf minimal_fov;
+    GetMinimalFov(render_info_webvr_browser_ui_.left_eye_info.view_matrix,
+                  scene_->GetViewportAwareElements(), fov_recommended_left,
+                  kZNear, &minimal_fov);
+    webvr_browser_ui_left_viewport_->SetSourceFov(minimal_fov);
 
-    UpdateEyeInfos(render_info_headlocked_.head_pose,
-                   kViewportListHeadlockedOffset, render_size_headlocked_,
-                   &render_info_headlocked_);
-    ui_renderer_->DrawHeadLocked(render_info_headlocked_, controller_info_);
+    GetMinimalFov(render_info_webvr_browser_ui_.right_eye_info.view_matrix,
+                  scene_->GetViewportAwareElements(), fov_recommended_right,
+                  kZNear, &minimal_fov);
+    webvr_browser_ui_right_viewport_->SetSourceFov(minimal_fov);
+
+    buffer_viewport_list_->SetBufferViewport(
+        kViewportListWebVrBrowserUiOffset + GVR_LEFT_EYE,
+        *webvr_browser_ui_left_viewport_);
+    buffer_viewport_list_->SetBufferViewport(
+        kViewportListWebVrBrowserUiOffset + GVR_RIGHT_EYE,
+        *webvr_browser_ui_right_viewport_);
+    UpdateEyeInfos(render_info_webvr_browser_ui_.head_pose,
+                   kViewportListWebVrBrowserUiOffset, render_size_webvr_ui_,
+                   &render_info_webvr_browser_ui_);
+
+    ui_renderer_->DrawViewportAware(render_info_webvr_browser_ui_,
+                                    controller_info_, true);
+
     frame.Unbind();
   }
 
@@ -1000,35 +1042,40 @@ void VrShellGl::DrawWebVr() {
   vr_shell_renderer_->GetWebVrRenderer()->Draw(webvr_texture_id_);
 }
 
-void VrShellGl::OnTriggerEvent() {
-  // Set a flag to handle this on the render thread at the next frame.
-  touch_pending_ = true;
-}
-
 void VrShellGl::OnPause() {
-  vsync_task_.Cancel();
+  vsync_helper_.CancelVSyncRequest();
   controller_->OnPause();
   gvr_api_->PauseTracking();
+  webvr_frame_timeout_.Cancel();
 }
 
 void VrShellGl::OnResume() {
   gvr_api_->RefreshViewerProfile();
   gvr_api_->ResumeTracking();
   controller_->OnResume();
-  if (ready_to_draw_) {
-    vsync_task_.Reset(base::Bind(&VrShellGl::OnVSync, base::Unretained(this)));
-    OnVSync();
-  }
+  if (!ready_to_draw_)
+    return;
+  vsync_helper_.CancelVSyncRequest();
+  OnVSync(base::TimeTicks::Now());
+  if (web_vr_mode_ && submit_client_)
+    ScheduleWebVrFrameTimeout();
 }
 
 void VrShellGl::SetWebVrMode(bool enabled) {
   web_vr_mode_ = enabled;
 
+  if (web_vr_mode_ && submit_client_) {
+    ScheduleWebVrFrameTimeout();
+  } else {
+    webvr_frame_timeout_.Cancel();
+    webvr_frames_received_ = 0;
+  }
+
   if (cardboard_) {
     browser_->ToggleCardboardGamepad(enabled);
   }
 
-  if (!enabled) {
+  if (!web_vr_mode_) {
     closePresentationBindings();
   }
 }
@@ -1055,34 +1102,30 @@ void VrShellGl::SetControllerModel(
   vr_shell_renderer_->GetControllerRenderer()->SetUp(std::move(model));
 }
 
-void VrShellGl::OnVSync() {
+void VrShellGl::OnVSync(base::TimeTicks frame_time) {
   while (premature_received_frames_ > 0) {
     TRACE_EVENT0("gpu", "VrShellGl::OnWebVRFrameAvailableRetry");
     --premature_received_frames_;
     OnWebVRFrameAvailable();
   }
+  vsync_helper_.RequestVSync(
+      base::Bind(&VrShellGl::OnVSync, base::Unretained(this)));
 
-  // Don't send VSyncs until we have a timebase/interval.
-  if (vsync_interval_.is_zero())
-    return;
-
-  base::TimeTicks now = base::TimeTicks::Now();
-  base::TimeTicks target = now + vsync_interval_;
-  double intervalsF =
-      (target - vsync_timebase_).InSecondsF() / vsync_interval_.InSecondsF();
-  uint64_t intervals = std::llround(intervalsF);
-  target = vsync_timebase_ + intervals * vsync_interval_;
-  task_runner_->PostDelayedTask(FROM_HERE, vsync_task_.callback(),
-                                target - now);
-
-  base::TimeDelta current_time = target - vsync_interval_ - base::TimeTicks();
   if (!callback_.is_null()) {
-    SendVSync(current_time, base::ResetAndReturn(&callback_));
+    SendVSync(frame_time, base::ResetAndReturn(&callback_));
   } else {
     pending_vsync_ = true;
-    pending_time_ = current_time;
+    pending_time_ = frame_time;
   }
-  if (!ShouldDrawWebVr()) {
+  if (ShouldDrawWebVr()) {
+    // When drawing WebVR, controller input doesn't need to be synchronized with
+    // rendering as WebVR uses the gamepad api. To ensure we always handle input
+    // like app button presses, update the controller here, but not in
+    // DrawFrame.
+    gfx::Transform head_pose;
+    device::GvrDelegate::GetGvrPoseWithNeckModel(gvr_api_.get(), &head_pose);
+    UpdateController(render_info_primary_.head_pose);
+  } else {
     DrawFrame(-1);
   }
 }
@@ -1091,7 +1134,7 @@ void VrShellGl::GetVSync(GetVSyncCallback callback) {
   // In surfaceless (reprojecting) rendering, stay locked
   // to vsync intervals. Otherwise, for legacy Cardboard mode,
   // run requested animation frames now if it missed a vsync.
-  if (surfaceless_rendering_ || !pending_vsync_) {
+  if ((surfaceless_rendering_ && webvr_vsync_align_) || !pending_vsync_) {
     if (!callback_.is_null()) {
       mojo::ReportBadMessage(
           "Requested VSync before waiting for response to previous request.");
@@ -1103,17 +1146,6 @@ void VrShellGl::GetVSync(GetVSyncCallback callback) {
   }
   pending_vsync_ = false;
   SendVSync(pending_time_, std::move(callback));
-}
-
-void VrShellGl::UpdateVSyncInterval(base::TimeTicks vsync_timebase,
-                                    base::TimeDelta vsync_interval) {
-  bool needs_init = vsync_timebase_ == base::TimeTicks();
-  vsync_timebase_ = vsync_timebase;
-  vsync_interval_ = vsync_interval;
-  if (needs_init) {
-    vsync_task_.Reset(base::Bind(&VrShellGl::OnVSync, base::Unretained(this)));
-    OnVSync();
-  }
 }
 
 void VrShellGl::ForceExitVr() {
@@ -1166,7 +1198,8 @@ void VrShellGl::UpdateLayerBounds(int16_t frame_index,
 }
 
 int64_t VrShellGl::GetPredictedFrameTimeNanos() {
-  int64_t frame_time_micros = vsync_interval_.InMicroseconds();
+  int64_t frame_time_micros =
+      vsync_helper_.LastVSyncInterval().InMicroseconds();
   // If we aim to submit at vsync, that frame will start scanning out
   // one vsync later. Add a half frame to split the difference between
   // left and right eye.
@@ -1182,7 +1215,7 @@ int64_t VrShellGl::GetPredictedFrameTimeNanos() {
   return expected_frame_micros * 1000;
 }
 
-void VrShellGl::SendVSync(base::TimeDelta time, GetVSyncCallback callback) {
+void VrShellGl::SendVSync(base::TimeTicks time, GetVSyncCallback callback) {
   uint8_t frame_index = frame_index_++;
 
   TRACE_EVENT1("input", "VrShellGl::SendVSync", "frame", frame_index);
@@ -1199,7 +1232,7 @@ void VrShellGl::SendVSync(base::TimeDelta time, GetVSyncCallback callback) {
   webvr_time_pose_[frame_index % kPoseRingBufferSize] = base::TimeTicks::Now();
 
   std::move(callback).Run(
-      std::move(pose), time, frame_index,
+      std::move(pose), time - base::TimeTicks(), frame_index,
       device::mojom::VRPresentationProvider::VSyncStatus::SUCCESS);
 }
 
@@ -1216,6 +1249,7 @@ void VrShellGl::CreateVRDisplayInfo(
 }
 
 void VrShellGl::closePresentationBindings() {
+  webvr_frame_timeout_.Cancel();
   submit_client_.reset();
   if (!callback_.is_null()) {
     // When this Presentation provider is going away we have to respond to

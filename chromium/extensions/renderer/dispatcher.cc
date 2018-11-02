@@ -105,7 +105,6 @@
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/web/WebCustomElement.h"
-#include "third_party/WebKit/public/web/WebDataSource.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebFrame.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
@@ -119,7 +118,6 @@
 
 #include "extensions/vivaldi_script_dispatcher.h"
 
-using blink::WebDataSource;
 using blink::WebDocument;
 using blink::WebScopedUserGesture;
 using blink::WebSecurityPolicy;
@@ -232,12 +230,12 @@ Dispatcher::Dispatcher(DispatcherDelegate* delegate)
   if (FeatureSwitch::native_crx_bindings()->IsEnabled()) {
     // This Unretained is safe because the IPCMessageSender is guaranteed to
     // outlive the bindings system.
-    auto system = base::MakeUnique<NativeExtensionBindingsSystem>(
+    auto system = std::make_unique<NativeExtensionBindingsSystem>(
         std::move(ipc_message_sender));
     delegate_->InitializeBindingsSystem(this, system->api_system());
     bindings_system_ = std::move(system);
   } else {
-    bindings_system_ = base::MakeUnique<JsExtensionBindingsSystem>(
+    bindings_system_ = std::make_unique<JsExtensionBindingsSystem>(
         &source_map_, std::move(ipc_message_sender));
   }
 
@@ -448,7 +446,7 @@ void Dispatcher::DidInitializeServiceWorkerContextOnWorkerThread(
     // TODO(lazyboy): Make sure accessing |source_map_| in worker thread is
     // safe.
     context->set_module_system(
-        base::MakeUnique<ModuleSystem>(context, &source_map_));
+        std::make_unique<ModuleSystem>(context, &source_map_));
 
     ModuleSystem* module_system = context->module_system();
     // Enable natives in startup.
@@ -531,16 +529,28 @@ void Dispatcher::WillDestroyServiceWorkerContextOnWorkerThread(
     int64_t service_worker_version_id,
     const GURL& service_worker_scope,
     const GURL& script_url) {
-  if (script_url.SchemeIs(kExtensionScheme)) {
+  if (!script_url.SchemeIs(kExtensionScheme)) {
     // See comment in DidInitializeServiceWorkerContextOnWorkerThread.
-    g_worker_script_context_set.Get().Remove(v8_context, script_url);
-    // TODO(devlin): We're not calling
-    // ExtensionBindingsSystem::WillReleaseScriptContext() here. This should be
-    // fine, since the entire bindings system is being destroyed when we
-    // remove the worker data, but we might want to notify the system anyway.
+    return;
   }
-  if (ExtensionsClient::Get()->ExtensionAPIEnabledInExtensionServiceWorkers())
+
+  if (ExtensionsClient::Get()->ExtensionAPIEnabledInExtensionServiceWorkers()) {
+    // TODO(lazyboy/devlin): Should this cleanup happen in a worker class, like
+    // WorkerThreadDispatcher? If so, we should move the initialization as well.
+    ScriptContext* script_context = WorkerThreadDispatcher::GetScriptContext();
+    ExtensionBindingsSystem* worker_bindings_system =
+        WorkerThreadDispatcher::GetBindingsSystem();
+    worker_bindings_system->WillReleaseScriptContext(script_context);
+    // Note: we have to remove the context (and thus perform invalidation on
+    // the native handlers) prior to removing the worker data, which destroys
+    // the associated bindings system.
+    g_worker_script_context_set.Get().Remove(v8_context, script_url);
     WorkerThreadDispatcher::Get()->RemoveWorkerData(service_worker_version_id);
+  } else {
+    // If extension APIs in service workers aren't enabled, we just need to
+    // remove the context.
+    g_worker_script_context_set.Get().Remove(v8_context, script_url);
+  }
 }
 
 void Dispatcher::DidCreateDocumentElement(blink::WebLocalFrame* frame) {
@@ -816,18 +826,18 @@ void Dispatcher::RegisterNativeHandlers(
       std::unique_ptr<NativeHandler>(new V8ContextNativeHandler(context)));
   module_system->RegisterNativeHandler(
       "event_natives",
-      base::MakeUnique<EventBindings>(
+      std::make_unique<EventBindings>(
           context,
           // Note: |bindings_system| can be null in unit tests.
           bindings_system ? bindings_system->GetIPCMessageSender() : nullptr));
   module_system->RegisterNativeHandler(
-      "messaging_natives", base::MakeUnique<MessagingBindings>(context));
+      "messaging_natives", std::make_unique<MessagingBindings>(context));
   module_system->RegisterNativeHandler(
       "apiDefinitions", std::unique_ptr<NativeHandler>(
                             new ApiDefinitionsNatives(dispatcher, context)));
   module_system->RegisterNativeHandler(
       "sendRequest",
-      base::MakeUnique<SendRequestNatives>(
+      std::make_unique<SendRequestNatives>(
           // Note: |bindings_system| can be null in unit tests.
           bindings_system ? bindings_system->GetRequestSender() : nullptr,
           context));
@@ -869,7 +879,7 @@ void Dispatcher::RegisterNativeHandlers(
       std::unique_ptr<NativeHandler>(new RuntimeCustomBindings(context)));
   module_system->RegisterNativeHandler(
       "display_source",
-      base::MakeUnique<DisplaySourceCustomBindings>(context, bindings_system));
+      std::make_unique<DisplaySourceCustomBindings>(context, bindings_system));
 }
 
 bool Dispatcher::OnControlMessageReceived(const IPC::Message& message) {
@@ -1149,6 +1159,8 @@ void Dispatcher::OnUnloaded(const std::string& id) {
 
   ExtensionsRendererClient::Get()->OnExtensionUnloaded(id);
 
+  bindings_system_->OnExtensionRemoved(id);
+
   active_extension_ids_.erase(id);
 
   script_injection_manager_->OnExtensionUnloaded(id);
@@ -1213,6 +1225,8 @@ void Dispatcher::OnUpdatePermissions(
     extension->permissions_data()->SetPolicyHostRestrictions(
         params.policy_blocked_hosts, params.policy_allowed_hosts);
   }
+
+  bindings_system_->OnExtensionPermissionsUpdated(params.extension_id);
   UpdateBindings(extension->id());
 }
 

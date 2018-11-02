@@ -26,6 +26,7 @@
 #include "third_party/skia/include/gpu/GrContext.h"
 #include "third_party/skia/include/gpu/gl/GrGLAssembleInterface.h"
 #include "third_party/skia/include/gpu/gl/GrGLInterface.h"
+#include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_enums.h"
 #include "ui/gl/gl_surface_egl.h"
@@ -49,6 +50,9 @@ const char kSize[] = "size";
 
 // Specifies the client scale factor (ie. number of physical pixels per DIP).
 const char kScale[] = "scale";
+
+// Specifies the client transform (ie. rotation).
+const char kTransform[] = "transform";
 
 // Specifies if the background should be transparent.
 const char kTransparentBackground[] = "transparent-background";
@@ -101,6 +105,9 @@ void RegistryHandler(void* data,
   } else if (strcmp(interface, "zwp_linux_dmabuf_v1") == 0) {
     globals->linux_dmabuf.reset(static_cast<zwp_linux_dmabuf_v1*>(
         wl_registry_bind(registry, id, &zwp_linux_dmabuf_v1_interface, 1)));
+  } else if (strcmp(interface, "wl_subcompositor") == 0) {
+    globals->subcompositor.reset(static_cast<wl_subcompositor*>(
+        wl_registry_bind(registry, id, &wl_subcompositor_interface, 1)));
   }
 }
 
@@ -133,6 +140,7 @@ wl_buffer_listener g_buffer_listener = {BufferRelease};
 ClientBase::InitParams::InitParams() {
 #if defined(OZONE_PLATFORM_GBM)
   drm_format = DRM_FORMAT_ABGR8888;
+  bo_usage = GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING | GBM_BO_USE_TEXTURING;
 #endif
 }
 
@@ -153,6 +161,23 @@ bool ClientBase::InitParams::FromCommandLine(
                          &scale)) {
     LOG(ERROR) << "Invalid value for " << switches::kScale;
     return false;
+  }
+
+  if (command_line.HasSwitch(switches::kTransform)) {
+    std::string transform_str =
+        command_line.GetSwitchValueASCII(switches::kTransform);
+    if (transform_str == "0") {
+      transform = WL_OUTPUT_TRANSFORM_NORMAL;
+    } else if (transform_str == "90") {
+      transform = WL_OUTPUT_TRANSFORM_90;
+    } else if (transform_str == "180") {
+      transform = WL_OUTPUT_TRANSFORM_180;
+    } else if (transform_str == "270") {
+      transform = WL_OUTPUT_TRANSFORM_270;
+    } else {
+      LOG(ERROR) << "Invalid value for " << switches::kTransform;
+      return false;
+    }
   }
 
   use_drm = command_line.HasSwitch(switches::kUseDrm);
@@ -183,9 +208,24 @@ ClientBase::Buffer::~Buffer() {}
 // ClientBase, public:
 
 bool ClientBase::Init(const InitParams& params) {
-  width_ = params.width;
-  height_ = params.height;
+  size_.SetSize(params.width, params.height);
   scale_ = params.scale;
+  transform_ = params.transform;
+  switch (params.transform) {
+    case WL_OUTPUT_TRANSFORM_NORMAL:
+    case WL_OUTPUT_TRANSFORM_180:
+      surface_size_.SetSize(params.width, params.height);
+      break;
+    case WL_OUTPUT_TRANSFORM_90:
+    case WL_OUTPUT_TRANSFORM_270:
+      surface_size_.SetSize(params.height, params.width);
+      break;
+    default:
+      NOTREACHED();
+      break;
+  }
+  surface_size_ = gfx::ToCeiledSize(
+      gfx::ScaleSize(gfx::SizeF(surface_size_), 1.0f / params.scale));
   fullscreen_ = params.fullscreen;
   transparent_background_ = params.transparent_background;
 
@@ -293,7 +333,7 @@ bool ClientBase::Init(const InitParams& params) {
   }
 #endif
   for (size_t i = 0; i < params.num_buffers; ++i) {
-    auto buffer = CreateBuffer(params.drm_format);
+    auto buffer = CreateBuffer(size_, params.drm_format, params.bo_usage);
     if (!buffer) {
       LOG(ERROR) << "Failed to create buffer";
       return false;
@@ -308,9 +348,6 @@ bool ClientBase::Init(const InitParams& params) {
       LOG(ERROR) << "buffer handle uninitialized.";
       return false;
     }
-
-    wl_buffer_add_listener(buffers_[i]->buffer.get(), &g_buffer_listener,
-                           buffers_[i].get());
   }
 
   surface_.reset(static_cast<wl_surface*>(
@@ -328,7 +365,7 @@ bool ClientBase::Init(const InitParams& params) {
       return false;
     }
 
-    wl_region_add(opaque_region.get(), 0, 0, width_, height_);
+    wl_region_add(opaque_region.get(), 0, 0, size_.width(), size_.height());
     wl_surface_set_opaque_region(surface_.get(), opaque_region.get());
   }
   std::unique_ptr<wl_shell_surface> shell_surface(
@@ -363,12 +400,53 @@ ClientBase::~ClientBase() {}
 // ClientBase, private:
 
 std::unique_ptr<ClientBase::Buffer> ClientBase::CreateBuffer(
-    int32_t drm_format) {
-  std::unique_ptr<Buffer> buffer(new Buffer());
+    const gfx::Size& size,
+    int32_t drm_format,
+    int32_t bo_usage) {
+  std::unique_ptr<Buffer> buffer;
+  if (device_) {
+    buffer = CreateDrmBuffer(size, drm_format, bo_usage);
+    CHECK(buffer) << "Can't create drm buffer";
+  } else {
+    buffer = base::MakeUnique<Buffer>();
+
+    size_t stride = size.width() * kBytesPerPixel;
+    buffer->shared_memory.reset(new base::SharedMemory());
+    buffer->shared_memory->CreateAndMapAnonymous(stride * size.height());
+    buffer->shm_pool.reset(wl_shm_create_pool(
+        globals_.shm.get(), buffer->shared_memory->handle().GetHandle(),
+        buffer->shared_memory->requested_size()));
+
+    buffer->buffer.reset(static_cast<wl_buffer*>(
+        wl_shm_pool_create_buffer(buffer->shm_pool.get(), 0, size.width(),
+                                  size.height(), stride, kShmFormat)));
+    if (!buffer->buffer) {
+      LOG(ERROR) << "Can't create buffer";
+      return nullptr;
+    }
+
+    buffer->sk_surface = SkSurface::MakeRasterDirect(
+        SkImageInfo::Make(size.width(), size.height(), kColorType,
+                          kOpaque_SkAlphaType),
+        static_cast<uint8_t*>(buffer->shared_memory->memory()), stride);
+    DCHECK(buffer->sk_surface);
+  }
+
+  wl_buffer_add_listener(buffer->buffer.get(), &g_buffer_listener,
+                         buffer.get());
+  return buffer;
+}
+
+std::unique_ptr<ClientBase::Buffer> ClientBase::CreateDrmBuffer(
+    const gfx::Size& size,
+    int32_t drm_format,
+    int32_t bo_usage) {
+  std::unique_ptr<Buffer> buffer;
 #if defined(OZONE_PLATFORM_GBM)
   if (device_) {
-    buffer->bo.reset(gbm_bo_create(device_.get(), width_, height_, drm_format,
-                                   GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING));
+    buffer = base::MakeUnique<Buffer>();
+    buffer->bo.reset(gbm_bo_create(device_.get(), size.width(), size.height(),
+                                   drm_format, bo_usage));
     if (!buffer->bo) {
       LOG(ERROR) << "Can't create gbm buffer";
       return nullptr;
@@ -385,7 +463,7 @@ std::unique_ptr<ClientBase::Buffer> ClientBase::CreateBuffer(
                                      stride, 0, 0);
     }
     buffer->buffer.reset(zwp_linux_buffer_params_v1_create_immed(
-        buffer->params.get(), width_, height_, drm_format, 0));
+        buffer->params.get(), size.width(), size.height(), drm_format, 0));
 
     if (gbm_bo_get_num_planes(buffer->bo.get()) != 1)
       return buffer;
@@ -393,9 +471,9 @@ std::unique_ptr<ClientBase::Buffer> ClientBase::CreateBuffer(
     EGLint khr_image_attrs[] = {EGL_DMA_BUF_PLANE0_FD_EXT,
                                 fd.get(),
                                 EGL_WIDTH,
-                                width_,
+                                size.width(),
                                 EGL_HEIGHT,
-                                height_,
+                                size.height(),
                                 EGL_LINUX_DRM_FOURCC_EXT,
                                 drm_format,
                                 EGL_DMA_BUF_PLANE0_PITCH_EXT,
@@ -419,34 +497,14 @@ std::unique_ptr<ClientBase::Buffer> ClientBase::CreateBuffer(
     GrGLTextureInfo texture_info;
     texture_info.fID = buffer->texture->get();
     texture_info.fTarget = GL_TEXTURE_2D;
-    GrBackendTexture backend_texture(width_, height_, kGrPixelConfig,
-                                     texture_info);
+    GrBackendTexture backend_texture(size.width(), size.height(),
+                                     kGrPixelConfig, texture_info);
     buffer->sk_surface = SkSurface::MakeFromBackendTextureAsRenderTarget(
         gr_context_.get(), backend_texture, kTopLeft_GrSurfaceOrigin,
         /* sampleCnt */ 0, /* colorSpace */ nullptr, /* props */ nullptr);
     DCHECK(buffer->sk_surface);
-    return buffer;
   }
 #endif
-
-  size_t stride = width_ * kBytesPerPixel;
-  buffer->shared_memory.reset(new base::SharedMemory());
-  buffer->shared_memory->CreateAndMapAnonymous(stride * height_);
-  buffer->shm_pool.reset(wl_shm_create_pool(
-      globals_.shm.get(), buffer->shared_memory->handle().GetHandle(),
-      buffer->shared_memory->requested_size()));
-
-  buffer->buffer.reset(static_cast<wl_buffer*>(wl_shm_pool_create_buffer(
-      buffer->shm_pool.get(), 0, width_, height_, stride, kShmFormat)));
-  if (!buffer->buffer) {
-    LOG(ERROR) << "Can't create buffer";
-    return nullptr;
-  }
-
-  buffer->sk_surface = SkSurface::MakeRasterDirect(
-      SkImageInfo::Make(width_, height_, kColorType, kOpaque_SkAlphaType),
-      static_cast<uint8_t*>(buffer->shared_memory->memory()), stride);
-  DCHECK(buffer->sk_surface);
   return buffer;
 }
 

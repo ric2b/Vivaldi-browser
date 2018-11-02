@@ -22,9 +22,7 @@
 #include "base/trace_event/memory_dump_provider.h"
 #include "cc/cc_export.h"
 #include "cc/paint/draw_image.h"
-#include "cc/tiles/decoded_draw_image.h"
 #include "cc/tiles/image_decode_cache.h"
-#include "components/viz/common/quads/resource_format.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -37,15 +35,15 @@ namespace cc {
 class CC_EXPORT ImageDecodeCacheKey {
  public:
   static ImageDecodeCacheKey FromDrawImage(const DrawImage& image,
-                                           viz::ResourceFormat format);
+                                           SkColorType color_type);
 
   ImageDecodeCacheKey(const ImageDecodeCacheKey& other);
 
   bool operator==(const ImageDecodeCacheKey& other) const {
-    // The image_id always has to be the same. However, after that all original
+    // The frame_key always has to be the same. However, after that all original
     // decodes are the same, so if we can use the original decode, return true.
     // If not, then we have to compare every field.
-    return image_id_ == other.image_id_ &&
+    return frame_key_ == other.frame_key_ &&
            can_use_original_size_decode_ ==
                other.can_use_original_size_decode_ &&
            target_color_space_ == other.target_color_space_ &&
@@ -59,7 +57,7 @@ class CC_EXPORT ImageDecodeCacheKey {
     return !(*this == other);
   }
 
-  uint32_t image_id() const { return image_id_; }
+  const PaintImage::FrameKey& frame_key() const { return frame_key_; }
   SkFilterQuality filter_quality() const { return filter_quality_; }
   gfx::Rect src_rect() const { return src_rect_; }
   gfx::Size target_size() const { return target_size_; }
@@ -86,7 +84,7 @@ class CC_EXPORT ImageDecodeCacheKey {
   std::string ToString() const;
 
  private:
-  ImageDecodeCacheKey(uint32_t image_id,
+  ImageDecodeCacheKey(PaintImage::FrameKey frame_key,
                       const gfx::Rect& src_rect,
                       const gfx::Size& size,
                       const gfx::ColorSpace& target_color_space,
@@ -94,7 +92,7 @@ class CC_EXPORT ImageDecodeCacheKey {
                       bool can_use_original_size_decode,
                       bool should_use_subrect);
 
-  uint32_t image_id_;
+  PaintImage::FrameKey frame_key_;
   gfx::Rect src_rect_;
   gfx::Size target_size_;
   gfx::ColorSpace target_color_space_;
@@ -121,7 +119,7 @@ class CC_EXPORT SoftwareImageDecodeCache
 
   enum class DecodeTaskType { USE_IN_RASTER_TASKS, USE_OUT_OF_RASTER_TASKS };
 
-  SoftwareImageDecodeCache(viz::ResourceFormat format,
+  SoftwareImageDecodeCache(SkColorType color_type,
                            size_t locked_memory_limit_bytes);
   ~SoftwareImageDecodeCache() override;
 
@@ -142,7 +140,7 @@ class CC_EXPORT SoftwareImageDecodeCache
       bool aggressively_free_resources) override {}
   void ClearCache() override;
   size_t GetMaximumMemoryLimitBytes() const override;
-  void NotifyImageUnused(uint32_t skimage_id) override;
+  void NotifyImageUnused(const PaintImage::FrameKey& frame_key) override;
 
   // Decode the given image and store it in the cache. This is only called by an
   // image decode task from a worker thread.
@@ -254,17 +252,17 @@ class CC_EXPORT SoftwareImageDecodeCache
   DecodedDrawImage GetDecodedImageForDrawInternal(const ImageKey& key,
                                                   const DrawImage& draw_image);
 
-  // GetOriginalSizeImageDecode is called by DecodeImageInternal when the
+  // GetExactSizeImageDecode is called by DecodeImageInternal when the
   // quality does not scale the image. Like DecodeImageInternal, it should be
   // called with no lock acquired and it returns nullptr if the decoding failed.
-  std::unique_ptr<DecodedImage> GetOriginalSizeImageDecode(
+  std::unique_ptr<DecodedImage> GetExactSizeImageDecode(
       const ImageKey& key,
-      sk_sp<const SkImage> image);
+      const PaintImage& image);
 
-  // GetSubrectImageDecode is similar to GetOriginalSizeImageDecode in that no
-  // scale is performed on the image. However, we extract a subrect (copy it
+  // GetSubrectImageDecode is similar to GetExactSizeImageDecode in that the
+  // image is decoded to exact scale. However, we extract a subrect (copy it
   // out) and only return this subrect in order to cache a smaller amount of
-  // memory. Note that this uses GetOriginalSizeImageDecode to get the initial
+  // memory. Note that this uses GetExactSizeImageDecode to get the initial
   // data, which ensures that we cache an unlocked version of the original image
   // in case we need to extract multiple subrects (as would be the case in an
   // atlas).
@@ -302,6 +300,11 @@ class CC_EXPORT SoftwareImageDecodeCache
                                      DecodeTaskType type,
                                      scoped_refptr<TileTask>* task);
 
+  void CacheDecodedImages(const ImageKey& key,
+                          std::unique_ptr<DecodedImage> decoded_image);
+  void CleanupDecodedImagesCache(const ImageKey& key,
+                                 ImageMRUCache::iterator it);
+
   std::unordered_map<ImageKey, scoped_refptr<TileTask>, ImageKeyHash>
       pending_in_raster_image_tasks_;
   std::unordered_map<ImageKey, scoped_refptr<TileTask>, ImageKeyHash>
@@ -317,6 +320,13 @@ class CC_EXPORT SoftwareImageDecodeCache
   ImageMRUCache decoded_images_;
   std::unordered_map<ImageKey, int, ImageKeyHash> decoded_images_ref_counts_;
 
+  // A map of PaintImage::FrameKey to the ImageKeys for cached decodes of this
+  // PaintImage.
+  std::unordered_map<PaintImage::FrameKey,
+                     std::vector<ImageKey>,
+                     PaintImage::FrameKeyHash>
+      frame_key_to_image_keys_;
+
   // Decoded image and ref counts (at-raster decode path).
   ImageMRUCache at_raster_decoded_images_;
   std::unordered_map<ImageKey, int, ImageKeyHash>
@@ -324,7 +334,7 @@ class CC_EXPORT SoftwareImageDecodeCache
 
   MemoryBudget locked_images_budget_;
 
-  viz::ResourceFormat format_;
+  SkColorType color_type_;
   size_t max_items_in_cache_;
 
   // Used to uniquely identify DecodedImages for memory traces.

@@ -37,7 +37,6 @@
 #include "platform/wtf/HashCountedSet.h"
 #include "platform/wtf/HashMap.h"
 #include "platform/wtf/HashSet.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/WTFString.h"
@@ -192,7 +191,10 @@ class CORE_EXPORT InspectorCSSAgent final
       const String& value) override;
   protocol::Response getBackgroundColors(
       int node_id,
-      protocol::Maybe<protocol::Array<String>>* background_colors) override;
+      protocol::Maybe<protocol::Array<String>>* background_colors,
+      protocol::Maybe<String>* computed_font_size,
+      protocol::Maybe<String>* computed_font_weight,
+      protocol::Maybe<String>* computed_body_font_size) override;
 
   protocol::Response startRuleUsageTracking() override;
   protocol::Response takeCoverageDelta(

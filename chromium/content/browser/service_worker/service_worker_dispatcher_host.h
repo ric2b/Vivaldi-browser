@@ -10,7 +10,7 @@
 #include <memory>
 #include <vector>
 
-#include "base/id_map.h"
+#include "base/containers/id_map.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
@@ -63,7 +63,8 @@ struct ServiceWorkerVersionAttributes;
 //
 // This class is bound with mojom::ServiceWorkerDispatcherHost. All
 // InterfacePtrs on the same render process are bound to the same
-// content::ServiceWorkerDispatcherHost.
+// content::ServiceWorkerDispatcherHost. This can be overridden only for
+// testing.
 class CONTENT_EXPORT ServiceWorkerDispatcherHost
     : public BrowserMessageFilter,
       public BrowserAssociatedInterface<mojom::ServiceWorkerDispatcherHost>,
@@ -89,18 +90,32 @@ class CONTENT_EXPORT ServiceWorkerDispatcherHost
   // be destroyed.
   bool Send(IPC::Message* message) override;
 
-  void RegisterServiceWorkerHandle(std::unique_ptr<ServiceWorkerHandle> handle);
-  void RegisterServiceWorkerRegistrationHandle(
+  // Virtual for testing.
+  virtual void RegisterServiceWorkerHandle(
+      std::unique_ptr<ServiceWorkerHandle> handle);
+  // Virtual for testing.
+  virtual void RegisterServiceWorkerRegistrationHandle(
       std::unique_ptr<ServiceWorkerRegistrationHandle> handle);
 
   ServiceWorkerHandle* FindServiceWorkerHandle(int provider_id,
                                                int64_t version_id);
+
+  // Gets or creates the registration and version handles appropriate for
+  // representing |registration| inside of |provider_host|. Sets |out_info| and
+  // |out_attrs| accordingly for these handles.
+  void GetRegistrationObjectInfoAndVersionAttributes(
+      base::WeakPtr<ServiceWorkerProviderHost> provider_host,
+      ServiceWorkerRegistration* registration,
+      ServiceWorkerRegistrationObjectInfo* out_info,
+      ServiceWorkerVersionAttributes* out_attrs);
 
   // Returns the existing registration handle whose reference count is
   // incremented or a newly created one if it doesn't exist.
   ServiceWorkerRegistrationHandle* GetOrCreateRegistrationHandle(
       base::WeakPtr<ServiceWorkerProviderHost> provider_host,
       ServiceWorkerRegistration* registration);
+
+  base::WeakPtr<ServiceWorkerDispatcherHost> AsWeakPtr();
 
  protected:
   ~ServiceWorkerDispatcherHost() override;
@@ -114,17 +129,16 @@ class CONTENT_EXPORT ServiceWorkerDispatcherHost
                            ProviderCreatedAndDestroyed);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerDispatcherHostTest,
                            CleanupOnRendererCrash);
+  FRIEND_TEST_ALL_PREFIXES(BackgroundSyncManagerTest,
+                           RegisterWithoutLiveSWRegistration);
 
   using StatusCallback = base::Callback<void(ServiceWorkerStatusCode status)>;
   enum class ProviderStatus { OK, NO_CONTEXT, DEAD_HOST, NO_HOST, NO_URL };
+  // Debugging for https://crbug.com/750267
+  enum class Phase { kInitial, kAddedToContext, kRemovedFromContext };
 
   // mojom::ServiceWorkerDispatcherHost implementation
   void OnProviderCreated(ServiceWorkerProviderHostInfo info) override;
-  void OnSetHostedVersionId(
-      int provider_id,
-      int64_t version_id,
-      int embedded_worker_id,
-      mojom::URLLoaderFactoryAssociatedRequest request) override;
 
   // IPC Message handlers
   void OnRegisterServiceWorker(int thread_id,
@@ -213,12 +227,6 @@ class CONTENT_EXPORT ServiceWorkerDispatcherHost
       int provider_id,
       int64_t registration_handle_id);
 
-  void GetRegistrationObjectInfoAndVersionAttributes(
-      base::WeakPtr<ServiceWorkerProviderHost> provider_host,
-      ServiceWorkerRegistration* registration,
-      ServiceWorkerRegistrationObjectInfo* info,
-      ServiceWorkerVersionAttributes* attrs);
-
   // Callbacks from ServiceWorkerContextCore
   void RegistrationComplete(int thread_id,
                             int provider_id,
@@ -276,16 +284,20 @@ class CONTENT_EXPORT ServiceWorkerDispatcherHost
   const int render_process_id_;
   ResourceContext* resource_context_;
   // Only accessed on the IO thread.
+  Phase phase_ = Phase::kInitial;
+  // Only accessed on the IO thread.
   scoped_refptr<ServiceWorkerContextWrapper> context_wrapper_;
 
-  IDMap<std::unique_ptr<ServiceWorkerHandle>> handles_;
+  base::IDMap<std::unique_ptr<ServiceWorkerHandle>> handles_;
 
   using RegistrationHandleMap =
-      IDMap<std::unique_ptr<ServiceWorkerRegistrationHandle>>;
+      base::IDMap<std::unique_ptr<ServiceWorkerRegistrationHandle>>;
   RegistrationHandleMap registration_handles_;
 
   bool channel_ready_;  // True after BrowserMessageFilter::sender_ != NULL.
   std::vector<std::unique_ptr<IPC::Message>> pending_messages_;
+
+  base::WeakPtrFactory<ServiceWorkerDispatcherHost> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerDispatcherHost);
 };

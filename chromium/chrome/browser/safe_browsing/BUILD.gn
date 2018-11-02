@@ -65,6 +65,8 @@ static_library("safe_browsing") {
       "settings_reset_prompt/settings_reset_prompt_model.h",
       "settings_reset_prompt/settings_reset_prompt_prefs_manager.cc",
       "settings_reset_prompt/settings_reset_prompt_prefs_manager.h",
+      "settings_reset_prompt/settings_reset_prompt_util_win.cc",
+      "settings_reset_prompt/settings_reset_prompt_util_win.h",
     ]
   }
 
@@ -112,6 +114,7 @@ static_library("safe_browsing") {
       "//components/safe_browsing/password_protection",
       "//components/safe_browsing/triggers:triggers",
       "//components/safe_browsing_db:metadata_proto",
+      "//components/safe_browsing_db:whitelist_checker_client",
     ]
     if (safe_browsing_mode == 1) {
       # "Safe Browsing Full" files in addition to the "basic" ones to use for
@@ -135,14 +138,30 @@ static_library("safe_browsing") {
         "client_side_detection_service.h",
         "client_side_model_loader.cc",
         "client_side_model_loader.h",
-        "disk_image_type_sniffer_mac.cc",
-        "disk_image_type_sniffer_mac.h",
-        "download_feedback.cc",
-        "download_feedback.h",
-        "download_feedback_service.cc",
-        "download_feedback_service.h",
-        "download_protection_service.cc",
-        "download_protection_service.h",
+        "download_protection/check_client_download_request.cc",
+        "download_protection/check_client_download_request.h",
+        "download_protection/disk_image_type_sniffer_mac.cc",
+        "download_protection/disk_image_type_sniffer_mac.h",
+        "download_protection/download_feedback.cc",
+        "download_protection/download_feedback.h",
+        "download_protection/download_feedback_service.cc",
+        "download_protection/download_feedback_service.h",
+        "download_protection/download_protection_service.cc",
+        "download_protection/download_protection_service.h",
+        "download_protection/download_protection_util.cc",
+        "download_protection/download_protection_util.h",
+        "download_protection/download_url_sb_client.cc",
+        "download_protection/download_url_sb_client.h",
+        "download_protection/path_sanitizer.cc",
+        "download_protection/path_sanitizer.h",
+        "download_protection/ppapi_download_request.cc",
+        "download_protection/ppapi_download_request.h",
+        "download_protection/sandboxed_dmg_analyzer_mac.cc",
+        "download_protection/sandboxed_dmg_analyzer_mac.h",
+        "download_protection/sandboxed_zip_analyzer.cc",
+        "download_protection/sandboxed_zip_analyzer.h",
+        "download_protection/two_phase_uploader.cc",
+        "download_protection/two_phase_uploader.h",
         "incident_reporting/binary_integrity_analyzer.cc",
         "incident_reporting/binary_integrity_analyzer.h",
         "incident_reporting/binary_integrity_analyzer_mac.cc",
@@ -206,8 +225,6 @@ static_library("safe_browsing") {
         "incident_reporting/variations_seed_signature_incident.h",
         "local_database_manager.cc",
         "local_database_manager.h",
-        "path_sanitizer.cc",
-        "path_sanitizer.h",
         "protocol_manager.cc",
         "protocol_manager.h",
         "protocol_parser.cc",
@@ -220,22 +237,26 @@ static_library("safe_browsing") {
         "safe_browsing_store_file.h",
         "safe_browsing_util.cc",
         "safe_browsing_util.h",
-        "sandboxed_dmg_analyzer_mac.cc",
-        "sandboxed_dmg_analyzer_mac.h",
-        "sandboxed_zip_analyzer.cc",
-        "sandboxed_zip_analyzer.h",
         "services_delegate_impl.cc",
         "services_delegate_impl.h",
         "signature_evaluator_mac.h",
         "signature_evaluator_mac.mm",
-        "two_phase_uploader.cc",
-        "two_phase_uploader.h",
+        "trigger_creator.cc",
+        "trigger_creator.h",
         "v4_test_utils.cc",
         "v4_test_utils.h",
       ]
       deps += [
+        "//components/content_settings/core/browser:browser",
+        "//components/prefs:prefs",
         "//components/safe_browsing/common:safe_browsing_prefs",
+        "//components/safe_browsing/triggers:ad_sampler_trigger",
+        "//components/safe_browsing/triggers:trigger_throttler",
+        "//components/safe_browsing/triggers:triggers",
         "//components/safe_browsing_db:safe_browsing_db",
+        "//components/security_interstitials/content:security_interstitial_page",
+        "//content/public/browser:browser",
+        "//net:net",
       ]
       if (is_win) {
         deps += [ "//chrome/browser/safe_browsing/incident_reporting:state_store_data_proto" ]
@@ -247,7 +268,7 @@ static_library("safe_browsing") {
         "services_delegate_stub.cc",
         "services_delegate_stub.h",
       ]
-      deps += [ "//components/safe_browsing_db:safe_browsing_db_mobile" ]
+      deps += [ "//components/safe_browsing/db:safe_browsing_mobile" ]
     }
   }
 }

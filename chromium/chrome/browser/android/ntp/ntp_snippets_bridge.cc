@@ -20,6 +20,7 @@
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/ntp_snippets/content_suggestions_notifier_service_factory.h"
 #include "chrome/browser/ntp_snippets/content_suggestions_service_factory.h"
+#include "chrome/browser/ntp_snippets/contextual_content_suggestions_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_android.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -148,44 +149,6 @@ static void RemoteSuggestionsSchedulerOnBrowserUpgraded(
   scheduler->OnBrowserUpgraded();
 }
 
-static void SetRemoteSuggestionsEnabled(JNIEnv* env,
-                                        const JavaParamRef<jclass>& caller,
-                                        jboolean enabled) {
-  ntp_snippets::ContentSuggestionsService* content_suggestions_service =
-      ContentSuggestionsServiceFactory::GetForProfile(
-          ProfileManager::GetLastUsedProfile());
-  if (!content_suggestions_service)
-    return;
-
-  content_suggestions_service->SetRemoteSuggestionsEnabled(enabled);
-}
-
-// Returns true if the remote provider is managed by an adminstrator's policy.
-static jboolean AreRemoteSuggestionsManaged(
-    JNIEnv* env,
-    const JavaParamRef<jclass>& caller) {
-  ntp_snippets::ContentSuggestionsService* content_suggestions_service =
-      ContentSuggestionsServiceFactory::GetForProfile(
-          ProfileManager::GetLastUsedProfile());
-  if (!content_suggestions_service)
-    return false;
-
-  return content_suggestions_service->AreRemoteSuggestionsManaged();
-}
-
-// Returns true if the remote provider is managed by a supervisor
-static jboolean AreRemoteSuggestionsManagedByCustodian(
-    JNIEnv* env,
-    const JavaParamRef<jclass>& caller) {
-  ntp_snippets::ContentSuggestionsService* content_suggestions_service =
-      ContentSuggestionsServiceFactory::GetForProfile(
-          ProfileManager::GetLastUsedProfile());
-  if (!content_suggestions_service)
-    return false;
-
-  return content_suggestions_service->AreRemoteSuggestionsManagedByCustodian();
-}
-
 static void SetContentSuggestionsNotificationsEnabled(
     JNIEnv* env,
     const JavaParamRef<jclass>& caller,
@@ -220,6 +183,8 @@ NTPSnippetsBridge::NTPSnippetsBridge(JNIEnv* env,
   Profile* profile = ProfileAndroid::FromProfileAndroid(j_profile);
   content_suggestions_service_ =
       ContentSuggestionsServiceFactory::GetForProfile(profile);
+  contextual_content_suggestions_service_ =
+      ContextualContentSuggestionsServiceFactory::GetForProfile(profile);
   history_service_ = HistoryServiceFactory::GetForProfile(
       profile, ServiceAccessType::EXPLICIT_ACCESS);
   content_suggestions_service_observer_.Add(content_suggestions_service_);
@@ -337,24 +302,25 @@ void NTPSnippetsBridge::FetchContextualSuggestions(
     const JavaParamRef<jobject>& j_callback) {
   DCHECK(base::FeatureList::IsEnabled(
       chrome::android::kContextualSuggestionsCarousel));
+  GURL url(ConvertJavaStringToUTF8(env, j_url));
+  contextual_content_suggestions_service_->FetchContextualSuggestions(
+      url, base::Bind(&NTPSnippetsBridge::OnContextualSuggestionsFetched,
+                      weak_ptr_factory_.GetWeakPtr(),
+                      ScopedJavaGlobalRef<jobject>(j_callback)));
+}
 
-  // We don't currently have a contextual suggestions service or provider, so
-  // we use articles as placeholders.
-  Category category = Category::FromKnownCategory(KnownCategories::ARTICLES);
-  auto suggestions = ToJavaSuggestionList(
-      env, category,
-      content_suggestions_service_->GetSuggestionsForCategory(category));
-
-  // We would eventually have to hit the network or a database, so let's
-  // pretend here the call is asynchronous.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(
-                     [](const base::android::JavaRef<jobject>& j_callback,
-                        const base::android::JavaRef<jobject>& j_suggestions) {
-                       RunCallbackAndroid(j_callback, j_suggestions);
-                     },
-                     ScopedJavaGlobalRef<jobject>(j_callback),
-                     ScopedJavaGlobalRef<jobject>(suggestions)));
+void NTPSnippetsBridge::FetchContextualSuggestionImage(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    jint j_category_id,
+    const JavaParamRef<jstring>& id_within_category,
+    const JavaParamRef<jobject>& j_callback) {
+  ScopedJavaGlobalRef<jobject> callback(j_callback);
+  contextual_content_suggestions_service_->FetchContextualSuggestionImage(
+      ContentSuggestion::ID(Category::FromIDValue(j_category_id),
+                            ConvertJavaStringToUTF8(env, id_within_category)),
+      base::Bind(&NTPSnippetsBridge::OnImageFetched,
+                 weak_ptr_factory_.GetWeakPtr(), callback));
 }
 
 void NTPSnippetsBridge::ReloadSuggestions(JNIEnv* env,
@@ -425,13 +391,13 @@ void NTPSnippetsBridge::OnSuggestionInvalidated(
     const ContentSuggestion::ID& suggestion_id) {
   JNIEnv* env = AttachCurrentThread();
   Java_SnippetsBridge_onSuggestionInvalidated(
-      env, bridge_.obj(), static_cast<int>(suggestion_id.category().id()),
-      ConvertUTF8ToJavaString(env, suggestion_id.id_within_category()).obj());
+      env, bridge_, static_cast<int>(suggestion_id.category().id()),
+      ConvertUTF8ToJavaString(env, suggestion_id.id_within_category()));
 }
 
 void NTPSnippetsBridge::OnFullRefreshRequired() {
   JNIEnv* env = AttachCurrentThread();
-  Java_SnippetsBridge_onFullRefreshRequired(env, bridge_.obj());
+  Java_SnippetsBridge_onFullRefreshRequired(env, bridge_);
 }
 
 void NTPSnippetsBridge::ContentSuggestionsServiceShutdown() {
@@ -457,4 +423,16 @@ void NTPSnippetsBridge::OnSuggestionsFetched(
   JNIEnv* env = AttachCurrentThread();
   RunCallbackAndroid(callback,
                      ToJavaSuggestionList(env, category, suggestions));
+}
+
+void NTPSnippetsBridge::OnContextualSuggestionsFetched(
+    ScopedJavaGlobalRef<jobject> j_callback,
+    ntp_snippets::Status status,
+    const GURL& url,
+    std::vector<ContentSuggestion> suggestions) {
+  JNIEnv* env = AttachCurrentThread();
+  auto j_suggestions = ToJavaSuggestionList(
+      env, Category::FromKnownCategory(KnownCategories::CONTEXTUAL),
+      suggestions);
+  RunCallbackAndroid(j_callback, j_suggestions);
 }

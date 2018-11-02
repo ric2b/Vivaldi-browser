@@ -34,6 +34,9 @@ enum PipelineStatus {
   DEMUXER_ERROR_COULD_NOT_OPEN = 12,
   DEMUXER_ERROR_COULD_NOT_PARSE = 13,
   DEMUXER_ERROR_NO_SUPPORTED_STREAMS = 14,
+  // Android only. Used as a signal to fallback MediaPlayerRenderer, and thus
+  // not exactly an 'error' per say.
+  DEMUXER_ERROR_DETECTED_HLS = 22,
 
   // Decoder related errors.
   DECODER_ERROR_NOT_SUPPORTED = 15,
@@ -48,7 +51,7 @@ enum PipelineStatus {
   // Deprecated: AUDIO_RENDERER_ERROR_SPLICE_FAILED = 20,
 
   // Must be equal to the largest value ever logged.
-  PIPELINE_STATUS_MAX = PIPELINE_ERROR_EXTERNAL_RENDERER_FAILED,
+  PIPELINE_STATUS_MAX = DEMUXER_ERROR_DETECTED_HLS,
 };
 
 typedef base::Callback<void(PipelineStatus)> PipelineStatusCB;
@@ -61,6 +64,7 @@ struct PipelineStatistics {
   int64_t audio_memory_usage = 0;
   int64_t video_memory_usage = 0;
   base::TimeDelta video_keyframe_distance_average = kNoTimestamp;
+  // NOTE: frame duration should reflect changes to playback rate.
   base::TimeDelta video_frame_duration_average = kNoTimestamp;
 };
 

@@ -4,4 +4,16 @@
 
 #include "core/css/properties/CSSPropertyAPIBorderImageWidth.h"
 
-namespace blink {}  // namespace blink
+#include "core/css/properties/CSSPropertyBorderImageUtils.h"
+
+namespace blink {
+
+const CSSValue* CSSPropertyAPIBorderImageWidth::ParseSingleValue(
+    CSSPropertyID,
+    CSSParserTokenRange& range,
+    const CSSParserContext&,
+    const CSSParserLocalContext&) const {
+  return CSSPropertyBorderImageUtils::ConsumeBorderImageWidth(range);
+}
+
+}  // namespace blink

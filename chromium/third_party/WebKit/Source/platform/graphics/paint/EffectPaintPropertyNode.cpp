@@ -26,22 +26,15 @@ FloatRect EffectPaintPropertyNode::MapRect(const FloatRect& input_rect) const {
   return result;
 }
 
-cc::Layer* EffectPaintPropertyNode::EnsureDummyLayer() const {
-  if (dummy_layer_)
-    return dummy_layer_.get();
-  dummy_layer_ = cc::Layer::Create();
-  return dummy_layer_.get();
-}
-
 String EffectPaintPropertyNode::ToString() const {
   return String::Format(
       "parent=%p localTransformSpace=%p outputClip=%p opacity=%f filter=%s "
-      "blendMode=%s directCompositingReasons=%s compositorElementId=%lu "
+      "blendMode=%s directCompositingReasons=%s compositorElementId=%s "
       "paintOffset=%s",
       Parent(), local_transform_space_.Get(), output_clip_.Get(), opacity_,
       filter_.ToString().Ascii().data(), SkBlendMode_Name(blend_mode_),
       CompositingReasonsAsString(direct_compositing_reasons_).Ascii().data(),
-      static_cast<unsigned long>(compositor_element_id_.id_),
+      compositor_element_id_.ToString().c_str(),
       paint_offset_.ToString().Ascii().data());
 }
 

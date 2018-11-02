@@ -69,3 +69,10 @@ DISABLE(FFmpegGlueContainerTest, MP3)
 
 // Flaky
 DISABLE(SitePerProcessTextInputManagerTest, StopTrackingCrashedChildFrame)
+
+// broke in v61
+DISABLE(PasswordGenerationInteractiveTest, PopupShownAndPasswordSelected)
+
+// Will be broken until we start using the TemplateURlService for searches
+// because TemplateURLService::OnHistoryURLVisited is disabled until then.
+DISABLE(TemplateURLServiceTest, GenerateVisitOnKeyword)

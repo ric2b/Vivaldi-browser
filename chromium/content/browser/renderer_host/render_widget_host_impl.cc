@@ -42,6 +42,7 @@
 #include "content/browser/renderer_host/dip_util.h"
 #include "content/browser/renderer_host/frame_metadata_util.h"
 #include "content/browser/renderer_host/input/input_router_config_helper.h"
+#include "content/browser/renderer_host/input/input_router_impl.h"
 #include "content/browser/renderer_host/input/legacy_input_router_impl.h"
 #include "content/browser/renderer_host/input/synthetic_gesture.h"
 #include "content/browser/renderer_host/input/synthetic_gesture_controller.h"
@@ -74,6 +75,7 @@
 #include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_constants.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/result_codes.h"
 #include "content/public/common/web_preferences.h"
@@ -84,8 +86,9 @@
 #include "skia/ext/image_operations.h"
 #include "skia/ext/platform_canvas.h"
 #include "storage/browser/fileapi/isolated_context.h"
-#include "third_party/WebKit/public/web/WebCompositionUnderline.h"
+#include "third_party/WebKit/public/web/WebImeTextSpan.h"
 #include "ui/base/clipboard/clipboard.h"
+#include "ui/base/ui_base_switches.h"
 #include "ui/display/display_switches.h"
 #include "ui/events/blink/web_input_event_traits.h"
 #include "ui/events/event.h"
@@ -257,6 +260,54 @@ std::vector<DropData::Metadata> DropDataToMetaData(const DropData& drop_data) {
   return metadata;
 }
 
+class UnboundWidgetInputHandler : public mojom::WidgetInputHandler {
+ public:
+  void SetFocus(bool focused) override {
+    DLOG(WARNING) << "Input request on unbound interface";
+  }
+  void MouseCaptureLost() override {
+    DLOG(WARNING) << "Input request on unbound interface";
+  }
+  void SetEditCommandsForNextKeyEvent(
+      const std::vector<content::EditCommand>& commands) override {
+    DLOG(WARNING) << "Input request on unbound interface";
+  }
+  void CursorVisibilityChanged(bool visible) override {
+    DLOG(WARNING) << "Input request on unbound interface";
+  }
+  void ImeSetComposition(const base::string16& text,
+                         const std::vector<ui::ImeTextSpan>& ime_text_spans,
+                         const gfx::Range& range,
+                         int32_t start,
+                         int32_t end) override {
+    DLOG(WARNING) << "Input request on unbound interface";
+  }
+  void ImeCommitText(const base::string16& text,
+                     const std::vector<ui::ImeTextSpan>& ime_text_spans,
+                     const gfx::Range& range,
+                     int32_t relative_cursor_position) override {
+    DLOG(WARNING) << "Input request on unbound interface";
+  }
+  void ImeFinishComposingText(bool keep_selection) override {
+    DLOG(WARNING) << "Input request on unbound interface";
+  }
+  void RequestTextInputStateUpdate() override {
+    DLOG(WARNING) << "Input request on unbound interface";
+  }
+  void RequestCompositionUpdates(bool immediate_request,
+                                 bool monitor_request) override {
+    DLOG(WARNING) << "Input request on unbound interface";
+  }
+  void DispatchEvent(std::unique_ptr<content::InputEvent> event,
+                     DispatchEventCallback callback) override {
+    DLOG(WARNING) << "Input request on unbound interface";
+  }
+  void DispatchNonBlockingEvent(
+      std::unique_ptr<content::InputEvent> event) override {
+    DLOG(WARNING) << "Input request on unbound interface";
+  }
+};
+
 }  // namespace
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -265,6 +316,7 @@ std::vector<DropData::Metadata> DropDataToMetaData(const DropData& drop_data) {
 RenderWidgetHostImpl::RenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
                                            RenderProcessHost* process,
                                            int32_t routing_id,
+                                           mojom::WidgetPtr widget,
                                            bool hidden)
     : renderer_initialized_(false),
       destroyed_(false),
@@ -309,7 +361,6 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
   CHECK(delegate_);
   CHECK_NE(MSG_ROUTING_NONE, routing_id_);
   latency_tracker_.SetDelegate(delegate_);
-
   DCHECK(base::TaskScheduler::GetInstance())
       << "Ref. Prerequisite section of post_task.h";
 #if defined(OS_WIN)
@@ -321,6 +372,8 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
         base::Bind(&gfx::ICCProfile::UpdateCachedProfilesOnBackgroundThread));
   }
 #endif
+
+  SetWidget(std::move(widget));
 
   std::pair<RoutingIDWidgetMap::iterator, bool> result =
       g_routing_id_widget_map.Get().insert(std::make_pair(
@@ -337,11 +390,7 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
 
   latency_tracker_.Initialize(routing_id_, GetProcess()->GetID());
 
-  input_router_.reset(new LegacyInputRouterImpl(
-      process_, this, this, routing_id_, GetInputRouterConfigForPlatform()));
-  legacy_widget_input_handler_ = base::MakeUnique<LegacyIPCWidgetInputHandler>(
-      static_cast<LegacyInputRouterImpl*>(input_router_.get()));
-
+  SetupInputRouter();
   touch_emulator_.reset();
 
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -552,8 +601,6 @@ bool RenderWidgetHostImpl::OnMessageReceived(const IPC::Message &msg) {
   IPC_BEGIN_MESSAGE_MAP(RenderWidgetHostImpl, msg)
     IPC_MESSAGE_HANDLER(FrameHostMsg_RenderProcessGone, OnRenderProcessGone)
     IPC_MESSAGE_HANDLER(FrameHostMsg_HittestData, OnHittestData)
-    IPC_MESSAGE_HANDLER(InputHostMsg_QueueSyntheticGesture,
-                        OnQueueSyntheticGesture)
     IPC_MESSAGE_HANDLER(InputHostMsg_ImeCancelComposition,
                         OnImeCancelComposition)
     IPC_MESSAGE_HANDLER(ViewHostMsg_Close, OnClose)
@@ -674,17 +721,20 @@ void RenderWidgetHostImpl::WasShown(const ui::LatencyInfo& latency_info) {
   WasResized();
 }
 
+#if defined(OS_ANDROID)
+void RenderWidgetHostImpl::SetImportance(ChildProcessImportance importance) {
+  if (importance_ == importance)
+    return;
+  ChildProcessImportance old = importance_;
+  importance_ = importance;
+  process_->UpdateWidgetImportance(old, importance_);
+}
+#endif
+
 bool RenderWidgetHostImpl::GetResizeParams(ResizeParams* resize_params) {
   *resize_params = ResizeParams();
 
   GetScreenInfo(&resize_params->screen_info);
-
-  // Pretend that HDR displays are sRGB so that we do not have inconsistent
-  // coloring.
-  // TODO(ccameron): Disable this once color correct rasterization is functional
-  // https://crbug.com/701942
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kEnableHDR))
-    resize_params->screen_info.color_space = gfx::ColorSpace::CreateSRGB();
 
   if (delegate_) {
     resize_params->is_fullscreen_granted =
@@ -1115,7 +1165,8 @@ void RenderWidgetHostImpl::ForwardGestureEvent(
 void RenderWidgetHostImpl::ForwardGestureEventWithLatencyInfo(
     const blink::WebGestureEvent& gesture_event,
     const ui::LatencyInfo& latency) {
-  TRACE_EVENT0("input", "RenderWidgetHostImpl::ForwardGestureEvent");
+  TRACE_EVENT1("input", "RenderWidgetHostImpl::ForwardGestureEvent", "type",
+               WebInputEvent::GetName(gesture_event.GetType()));
   // Early out if necessary, prior to performing latency logic.
   if (ShouldDropInputEvents())
     return;
@@ -1317,7 +1368,7 @@ void RenderWidgetHostImpl::ForwardKeyboardEventWithCommands(
 
 void RenderWidgetHostImpl::QueueSyntheticGesture(
     std::unique_ptr<SyntheticGesture> synthetic_gesture,
-    const base::Callback<void(SyntheticGesture::Result)>& on_complete) {
+    base::OnceCallback<void(SyntheticGesture::Result)> on_complete) {
   if (!synthetic_gesture_controller_ && view_) {
     synthetic_gesture_controller_ =
         base::MakeUnique<SyntheticGestureController>(
@@ -1325,7 +1376,7 @@ void RenderWidgetHostImpl::QueueSyntheticGesture(
   }
   if (synthetic_gesture_controller_) {
     synthetic_gesture_controller_->QueueSyntheticGesture(
-        std::move(synthetic_gesture), on_complete);
+        std::move(synthetic_gesture), std::move(on_complete));
   }
 }
 
@@ -1487,6 +1538,10 @@ void RenderWidgetHostImpl::SetCursor(const CursorInfo& cursor_info) {
 }
 
 mojom::WidgetInputHandler* RenderWidgetHostImpl::GetWidgetInputHandler() {
+  if (associated_widget_input_handler_)
+    return associated_widget_input_handler_.get();
+  if (widget_input_handler_)
+    return widget_input_handler_.get();
   return legacy_widget_input_handler_.get();
 }
 
@@ -1530,11 +1585,6 @@ void RenderWidgetHostImpl::GetSnapshotFromBrowser(
   latency_info.AddLatencyNumber(ui::BROWSER_SNAPSHOT_FRAME_NUMBER_COMPONENT, 0,
                                 id);
   Send(new ViewMsg_ForceRedraw(GetRoutingID(), latency_info));
-}
-
-const NativeWebKeyboardEvent*
-    RenderWidgetHostImpl::GetLastKeyboardEvent() const {
-  return input_router_->GetLastKeyboardEvent();
 }
 
 void RenderWidgetHostImpl::SelectionChanged(const base::string16& text,
@@ -1698,11 +1748,9 @@ void RenderWidgetHostImpl::RendererExited(base::TerminationStatus status,
   // renderer. Otherwise it may be stuck waiting for the old renderer to ack an
   // event. (In particular, the above call to view_->RenderProcessGone will
   // destroy the aura window, which may dispatch a synthetic mouse move.)
-  input_router_.reset(new LegacyInputRouterImpl(
-      process_, this, this, routing_id_, GetInputRouterConfigForPlatform()));
-  legacy_widget_input_handler_ = base::MakeUnique<LegacyIPCWidgetInputHandler>(
-      static_cast<LegacyInputRouterImpl*>(input_router_.get()));
-
+  SetupInputRouter();
+  associated_widget_input_handler_ = nullptr;
+  widget_input_handler_ = nullptr;
   synthetic_gesture_controller_.reset();
 
   last_received_frame_token_ = 0;
@@ -1730,21 +1778,21 @@ void RenderWidgetHostImpl::NotifyTextDirection() {
 
 void RenderWidgetHostImpl::ImeSetComposition(
     const base::string16& text,
-    const std::vector<ui::CompositionUnderline>& underlines,
+    const std::vector<ui::ImeTextSpan>& ime_text_spans,
     const gfx::Range& replacement_range,
     int selection_start,
     int selection_end) {
   GetWidgetInputHandler()->ImeSetComposition(
-      text, underlines, replacement_range, selection_start, selection_end);
+      text, ime_text_spans, replacement_range, selection_start, selection_end);
 }
 
 void RenderWidgetHostImpl::ImeCommitText(
     const base::string16& text,
-    const std::vector<ui::CompositionUnderline>& underlines,
+    const std::vector<ui::ImeTextSpan>& ime_text_spans,
     const gfx::Range& replacement_range,
     int relative_cursor_pos) {
-  GetWidgetInputHandler()->ImeCommitText(text, underlines, replacement_range,
-                                         relative_cursor_pos);
+  GetWidgetInputHandler()->ImeCommitText(
+      text, ime_text_spans, replacement_range, relative_cursor_pos);
 }
 
 void RenderWidgetHostImpl::ImeFinishComposingText(bool keep_selection) {
@@ -1752,9 +1800,9 @@ void RenderWidgetHostImpl::ImeFinishComposingText(bool keep_selection) {
 }
 
 void RenderWidgetHostImpl::ImeCancelComposition() {
-  GetWidgetInputHandler()->ImeSetComposition(
-      base::string16(), std::vector<ui::CompositionUnderline>(),
-      gfx::Range::InvalidRange(), 0, 0);
+  GetWidgetInputHandler()->ImeSetComposition(base::string16(),
+                                             std::vector<ui::ImeTextSpan>(),
+                                             gfx::Range::InvalidRange(), 0, 0);
 }
 
 void RenderWidgetHostImpl::RejectMouseLockOrUnlockIfNecessary() {
@@ -1943,9 +1991,9 @@ void RenderWidgetHostImpl::OnRequestMove(const gfx::Rect& pos) {
   }
 }
 
-void RenderWidgetHostImpl::DidNotProduceFrame(const cc::BeginFrameAck& ack) {
+void RenderWidgetHostImpl::DidNotProduceFrame(const viz::BeginFrameAck& ack) {
   // |has_damage| is not transmitted.
-  cc::BeginFrameAck modified_ack = ack;
+  viz::BeginFrameAck modified_ack = ack;
   modified_ack.has_damage = false;
 
   if (view_)
@@ -1990,8 +2038,8 @@ void RenderWidgetHostImpl::OnUpdateRect(
     new_auto_size_ = params.view_size;
     if (post_callback) {
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::Bind(&RenderWidgetHostImpl::DelayedAutoResized,
-                                weak_factory_.GetWeakPtr()));
+          FROM_HERE, base::BindOnce(&RenderWidgetHostImpl::DelayedAutoResized,
+                                    weak_factory_.GetWeakPtr()));
     }
   }
 
@@ -2023,22 +2071,6 @@ void RenderWidgetHostImpl::DidUpdateBackingStore(
       ViewHostMsg_UpdateRect_Flags::is_resize_ack(params.flags);
   if (is_resize_ack)
     WasResized();
-}
-
-void RenderWidgetHostImpl::OnQueueSyntheticGesture(
-    const SyntheticGesturePacket& gesture_packet) {
-  // Only allow untrustworthy gestures if explicitly enabled.
-  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
-          cc::switches::kEnableGpuBenchmarking)) {
-    bad_message::ReceivedBadMessage(GetProcess(),
-                                    bad_message::RWH_SYNTHETIC_GESTURE);
-    return;
-  }
-
-  QueueSyntheticGesture(
-        SyntheticGesture::Create(*gesture_packet.gesture_params()),
-        base::Bind(&RenderWidgetHostImpl::OnSyntheticGestureCompleted,
-                   weak_factory_.GetWeakPtr()));
 }
 
 void RenderWidgetHostImpl::OnSetCursor(const WebCursor& cursor) {
@@ -2081,19 +2113,13 @@ void RenderWidgetHostImpl::OnAutoscrollEnd() {
   input_router_->SendGestureEvent(GestureEventWithLatencyInfo(end_event));
 }
 
-void RenderWidgetHostImpl::SetTouchEventEmulationEnabled(
-    bool enabled, ui::GestureProviderConfigType config_type) {
-  if (enabled) {
-    if (!touch_emulator_) {
-      touch_emulator_.reset(new TouchEmulator(
-          this,
-          view_.get() ? content::GetScaleFactorForView(view_.get()) : 1.0f));
-    }
-    touch_emulator_->Enable(config_type);
-  } else {
-    if (touch_emulator_)
-      touch_emulator_->Disable();
+TouchEmulator* RenderWidgetHostImpl::GetTouchEmulator() {
+  if (!touch_emulator_) {
+    touch_emulator_.reset(new TouchEmulator(
+        this,
+        view_.get() ? content::GetScaleFactorForView(view_.get()) : 1.0f));
   }
+  return touch_emulator_.get();
 }
 
 void RenderWidgetHostImpl::OnTextInputStateChanged(
@@ -2381,13 +2407,6 @@ void RenderWidgetHostImpl::OnUnexpectedEventAck(UnexpectedEventAckType type) {
   }
 }
 
-void RenderWidgetHostImpl::OnSyntheticGestureCompleted(
-    SyntheticGesture::Result result) {
-  // TODO(dtapuska): Define mojo interface for InputHostMsg's and this will be a
-  // callback for completing InputHostMsg_QueueSyntheticGesture.
-  process_->Send(new InputMsg_SyntheticGestureCompleted(GetRoutingID()));
-}
-
 bool RenderWidgetHostImpl::ShouldDropInputEvents() const {
   return ignore_input_events_ || process_->IgnoreInputEvents() || !delegate_;
 }
@@ -2579,8 +2598,8 @@ void RenderWidgetHostImpl::RequestCompositionUpdates(bool immediate_request,
 }
 
 void RenderWidgetHostImpl::RequestCompositorFrameSink(
-    cc::mojom::CompositorFrameSinkRequest request,
-    cc::mojom::CompositorFrameSinkClientPtr client) {
+    viz::mojom::CompositorFrameSinkRequest request,
+    viz::mojom::CompositorFrameSinkClientPtr client) {
   if (compositor_frame_sink_binding_.is_bound())
     compositor_frame_sink_binding_.Close();
   compositor_frame_sink_binding_.Bind(
@@ -2601,7 +2620,23 @@ void RenderWidgetHostImpl::SetNeedsBeginFrame(bool needs_begin_frame) {
 
 void RenderWidgetHostImpl::SubmitCompositorFrame(
     const viz::LocalSurfaceId& local_surface_id,
-    cc::CompositorFrame frame) {
+    cc::CompositorFrame frame,
+    viz::mojom::HitTestRegionListPtr hit_test_region_list,
+    uint64_t submit_time) {
+  // TODO(gklassen): Route hit-test data to appropriate HitTestAggregator.
+  TRACE_EVENT_FLOW_END0(TRACE_DISABLED_BY_DEFAULT("cc.debug.ipc"),
+                        "SubmitCompositorFrame", local_surface_id.local_id());
+  bool tracing_enabled;
+  TRACE_EVENT_CATEGORY_GROUP_ENABLED(TRACE_DISABLED_BY_DEFAULT("cc.debug.ipc"),
+                                     &tracing_enabled);
+  if (tracing_enabled) {
+    base::TimeDelta elapsed = base::TimeTicks::Now().since_origin() -
+                              base::TimeDelta::FromMicroseconds(submit_time);
+    TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("cc.debug.ipc"),
+                         "SubmitCompositorFrame::TimeElapsed",
+                         TRACE_EVENT_SCOPE_THREAD,
+                         "elapsed time:", elapsed.InMicroseconds());
+  }
   auto new_surface_properties =
       RenderWidgetSurfaceProperties::FromCompositorFrame(frame);
 
@@ -2626,6 +2661,7 @@ void RenderWidgetHostImpl::SubmitCompositorFrame(
     saved_frame_.frame = std::move(frame);
     saved_frame_.local_surface_id = local_surface_id;
     saved_frame_.max_shared_bitmap_sequence_number = max_sequence_number;
+    saved_frame_.hit_test_region_list = std::move(hit_test_region_list);
     TRACE_EVENT_ASYNC_BEGIN2("renderer_host", "PauseCompositorFrameSink", this,
                              "LastRegisteredSequenceNumber",
                              last_registered_sequence_number,
@@ -2662,8 +2698,8 @@ void RenderWidgetHostImpl::SubmitCompositorFrame(
     view_->SubmitCompositorFrame(local_surface_id, std::move(frame));
     view_->DidReceiveRendererFrame();
   } else {
-    std::vector<cc::ReturnedResource> resources =
-        cc::TransferableResource::ReturnResources(frame.resource_list);
+    std::vector<viz::ReturnedResource> resources =
+        viz::TransferableResource::ReturnResources(frame.resource_list);
     renderer_compositor_frame_sink_->DidReceiveCompositorFrameAck(resources);
   }
 
@@ -2736,11 +2772,53 @@ device::mojom::WakeLock* RenderWidgetHostImpl::GetWakeLock() {
 void RenderWidgetHostImpl::DidAllocateSharedBitmap(uint32_t sequence_number) {
   if (saved_frame_.local_surface_id.is_valid() &&
       sequence_number >= saved_frame_.max_shared_bitmap_sequence_number) {
-    SubmitCompositorFrame(saved_frame_.local_surface_id,
-                          std::move(saved_frame_.frame));
+    bool tracing_enabled;
+    TRACE_EVENT_CATEGORY_GROUP_ENABLED(
+        TRACE_DISABLED_BY_DEFAULT("cc.debug.ipc"), &tracing_enabled);
+    SubmitCompositorFrame(
+        saved_frame_.local_surface_id, std::move(saved_frame_.frame),
+        std::move(saved_frame_.hit_test_region_list),
+        tracing_enabled ? base::TimeTicks::Now().since_origin().InMicroseconds()
+                        : 0);
     saved_frame_.local_surface_id = viz::LocalSurfaceId();
     compositor_frame_sink_binding_.ResumeIncomingMethodCallProcessing();
     TRACE_EVENT_ASYNC_END0("renderer_host", "PauseCompositorFrameSink", this);
+  }
+}
+
+void RenderWidgetHostImpl::SetupInputRouter() {
+  if (base::FeatureList::IsEnabled(features::kMojoInputMessages)) {
+    input_router_.reset(
+        new InputRouterImpl(this, this, GetInputRouterConfigForPlatform()));
+    // TODO(dtapuska): Remove the need for the unbound interface. It is
+    // possible that a RVHI may make calls to a WidgetInputHandler when
+    // the main frame is remote. This is because of ordering issues during
+    // widget shutdown, so we present an UnboundWidgetInputHandler had
+    // DLOGS the message calls.
+    legacy_widget_input_handler_ =
+        base::MakeUnique<UnboundWidgetInputHandler>();
+  } else {
+    input_router_.reset(new LegacyInputRouterImpl(
+        process_, this, this, routing_id_, GetInputRouterConfigForPlatform()));
+    legacy_widget_input_handler_ =
+        base::MakeUnique<LegacyIPCWidgetInputHandler>(
+            static_cast<LegacyInputRouterImpl*>(input_router_.get()));
+  }
+}
+
+void RenderWidgetHostImpl::SetForceEnableZoom(bool enabled) {
+  input_router_->SetForceEnableZoom(enabled);
+}
+
+void RenderWidgetHostImpl::SetWidgetInputHandler(
+    mojom::WidgetInputHandlerAssociatedPtr widget_input_handler) {
+  associated_widget_input_handler_ = std::move(widget_input_handler);
+}
+
+void RenderWidgetHostImpl::SetWidget(mojom::WidgetPtr widget) {
+  if (widget && base::FeatureList::IsEnabled(features::kMojoInputMessages)) {
+    widget_input_handler_.reset();
+    widget->GetWidgetInputHandler(mojo::MakeRequest(&widget_input_handler_));
   }
 }
 

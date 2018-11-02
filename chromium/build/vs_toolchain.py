@@ -207,7 +207,8 @@ def _CopyUCRTRuntime(target_dir, source_dir, target_cpu, dll_pattern, suffix):
   win_sdk_dir = os.path.normpath(
       os.environ.get('WINDOWSSDKDIR',
                      'C:\\Program Files (x86)\\Windows Kits\\10'))
-  ucrt_dll_dirs = os.path.join(win_sdk_dir, r'Redist\ucrt\DLLs', target_cpu)
+  ucrt_dll_dirs = os.path.join(win_sdk_dir, 'Redist', 'ucrt', 'DLLs',
+                               target_cpu)
   ucrt_files = glob.glob(os.path.join(ucrt_dll_dirs, 'api-ms-win-*.dll'))
   assert len(ucrt_files) > 0
   for ucrt_src_file in ucrt_files:
@@ -327,13 +328,18 @@ def _CopyDebugger(target_dir, target_cpu):
   if not win_sdk_dir:
     return
 
-  debug_files = ['dbghelp.dll', 'dbgcore.dll']
-  for debug_file in debug_files:
+  # List of debug files that should be copied, the first element of the tuple is
+  # the name of the file and the second indicates if it's optional.
+  debug_files = [('dbghelp.dll', False), ('dbgcore.dll', True)]
+  for debug_file, is_optional in debug_files:
     full_path = os.path.join(win_sdk_dir, 'Debuggers', target_cpu, debug_file)
     if not os.path.exists(full_path):
-      raise Exception('%s not found in "%s"\r\nYou must install the '
-                      '"Debugging Tools for Windows" feature from the Windows '
-                      '10 SDK.' % (debug_file, full_path))
+      if is_optional:
+        continue
+      else:
+        raise Exception('%s not found in "%s"\r\nYou must install the '
+                        '"Debugging Tools for Windows" feature from the Windows'
+                        ' 10 SDK.' % (debug_file, full_path))
     target_path = os.path.join(target_dir, debug_file)
     _CopyRuntimeImpl(target_path, full_path)
 
@@ -346,8 +352,8 @@ def _GetDesiredVsToolchainHashes():
     # Update 3 final with 10.0.15063.468 SDK and no vctip.exe.
     return ['f53e4598951162bad6330f7a167486c7ae5db1e5']
   if env_version == '2017':
-    # VS 2017 Update 3 Preview 4 with 10.0.15063.468 SDK.
-    return ['1f52d730755ac72dddaf121b73c9d6fd5c24ddf8']
+    # VS 2017 Update 3.2 with 10.0.15063.468 SDK.
+    return ['9bc7ccbf9f4bd50d4a3bd185e8ca94ff1618de0b']
   raise Exception('Unsupported VS version %s' % env_version)
 
 

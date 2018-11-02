@@ -51,7 +51,7 @@ source_set("minimal") {
 source_set("minimal_content_dummy") {
   check_includes = false
   sources = [
-    "//content/public/child/child_process_sandbox_support_linux.h",
+    "//content/public/common/common_sandbox_support_linux.h",
     "//content/public/common/main_function_params.h",
     "//content/public/common/sandbox_init.h",
   ]
@@ -68,7 +68,6 @@ source_set("loader") {
   ]
   deps = [
     "//components/nacl/common",
-    "//content/public/child",
     "//content/public/common",
     "//ppapi/shared_impl",
     "//services/service_manager/public/cpp",
@@ -134,6 +133,12 @@ if (is_linux) {
     cflags = [ "-fPIE" ]
 
     ldflags = [ "-pie" ]
+
+    if (is_chromeos) {
+      # NaCl is not working with compiler-rt in ChromeOS.
+      # Force libgcc as a workaround. See https://crbug.com/761103
+      ldflags += [ "-rtlib=libgcc" ]
+    }
 
     data_deps = [
       "//native_client/src/trusted/service_runtime/linux:bootstrap",

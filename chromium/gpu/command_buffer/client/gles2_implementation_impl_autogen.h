@@ -3122,9 +3122,10 @@ void GLES2Implementation::CopyTextureCHROMIUM(
   GPU_CLIENT_SINGLE_THREAD_CHECK();
   GPU_CLIENT_LOG(
       "[" << GetLogPrefix() << "] glCopyTextureCHROMIUM(" << source_id << ", "
-          << source_level << ", " << GLES2Util::GetStringEnum(dest_target)
-          << ", " << dest_id << ", " << dest_level << ", " << internalformat
-          << ", " << GLES2Util::GetStringPixelType(dest_type) << ", "
+          << source_level << ", "
+          << GLES2Util::GetStringTextureTarget(dest_target) << ", " << dest_id
+          << ", " << dest_level << ", " << internalformat << ", "
+          << GLES2Util::GetStringPixelType(dest_type) << ", "
           << GLES2Util::GetStringBool(unpack_flip_y) << ", "
           << GLES2Util::GetStringBool(unpack_premultiply_alpha) << ", "
           << GLES2Util::GetStringBool(unpack_unmultiply_alpha) << ")");
@@ -3154,9 +3155,9 @@ void GLES2Implementation::CopySubTextureCHROMIUM(
   GPU_CLIENT_LOG(
       "[" << GetLogPrefix() << "] glCopySubTextureCHROMIUM(" << source_id
           << ", " << source_level << ", "
-          << GLES2Util::GetStringEnum(dest_target) << ", " << dest_id << ", "
-          << dest_level << ", " << xoffset << ", " << yoffset << ", " << x
-          << ", " << y << ", " << width << ", " << height << ", "
+          << GLES2Util::GetStringTextureTarget(dest_target) << ", " << dest_id
+          << ", " << dest_level << ", " << xoffset << ", " << yoffset << ", "
+          << x << ", " << y << ", " << width << ", " << height << ", "
           << GLES2Util::GetStringBool(unpack_flip_y) << ", "
           << GLES2Util::GetStringBool(unpack_premultiply_alpha) << ", "
           << GLES2Util::GetStringBool(unpack_unmultiply_alpha) << ")");
@@ -3198,11 +3199,11 @@ void GLES2Implementation::BindTexImage2DWithInternalformatCHROMIUM(
     GLenum internalformat,
     GLint imageId) {
   GPU_CLIENT_SINGLE_THREAD_CHECK();
-  GPU_CLIENT_LOG("[" << GetLogPrefix()
-                     << "] glBindTexImage2DWithInternalformatCHROMIUM("
-                     << GLES2Util::GetStringTextureBindTarget(target) << ", "
-                     << GLES2Util::GetStringEnum(internalformat) << ", "
-                     << imageId << ")");
+  GPU_CLIENT_LOG(
+      "[" << GetLogPrefix() << "] glBindTexImage2DWithInternalformatCHROMIUM("
+          << GLES2Util::GetStringTextureBindTarget(target) << ", "
+          << GLES2Util::GetStringTextureInternalFormat(internalformat) << ", "
+          << imageId << ")");
   helper_->BindTexImage2DWithInternalformatCHROMIUM(target, internalformat,
                                                     imageId);
   CheckGLError();
@@ -3512,14 +3513,18 @@ void GLES2Implementation::UniformMatrix4fvStreamTextureMatrixCHROMIUM(
 void GLES2Implementation::OverlayPromotionHintCHROMIUM(GLuint texture,
                                                        GLboolean promotion_hint,
                                                        GLint display_x,
-                                                       GLint display_y) {
+                                                       GLint display_y,
+                                                       GLint display_width,
+                                                       GLint display_height) {
   GPU_CLIENT_SINGLE_THREAD_CHECK();
   GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glOverlayPromotionHintCHROMIUM("
                      << texture << ", "
                      << GLES2Util::GetStringBool(promotion_hint) << ", "
-                     << display_x << ", " << display_y << ")");
+                     << display_x << ", " << display_y << ", " << display_width
+                     << ", " << display_height << ")");
   helper_->OverlayPromotionHintCHROMIUM(texture, promotion_hint, display_x,
-                                        display_y);
+                                        display_y, display_width,
+                                        display_height);
   CheckGLError();
 }
 
@@ -3539,6 +3544,33 @@ void GLES2Implementation::SetEnableDCLayersCHROMIUM(GLboolean enabled) {
   GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glSetEnableDCLayersCHROMIUM("
                      << GLES2Util::GetStringBool(enabled) << ")");
   helper_->SetEnableDCLayersCHROMIUM(enabled);
+  CheckGLError();
+}
+
+void GLES2Implementation::BeginRasterCHROMIUM(GLuint texture_id,
+                                              GLuint sk_color,
+                                              GLuint msaa_sample_count,
+                                              GLboolean can_use_lcd_text,
+                                              GLboolean use_distance_field_text,
+                                              GLint pixel_config) {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glBeginRasterCHROMIUM("
+                     << texture_id << ", " << sk_color << ", "
+                     << msaa_sample_count << ", "
+                     << GLES2Util::GetStringBool(can_use_lcd_text) << ", "
+                     << GLES2Util::GetStringBool(use_distance_field_text)
+                     << ", " << pixel_config << ")");
+  helper_->BeginRasterCHROMIUM(texture_id, sk_color, msaa_sample_count,
+                               can_use_lcd_text, use_distance_field_text,
+                               pixel_config);
+  CheckGLError();
+}
+
+void GLES2Implementation::EndRasterCHROMIUM() {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glEndRasterCHROMIUM("
+                     << ")");
+  helper_->EndRasterCHROMIUM();
   CheckGLError();
 }
 

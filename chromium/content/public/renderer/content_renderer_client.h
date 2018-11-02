@@ -113,11 +113,8 @@ class CONTENT_EXPORT ContentRendererClient {
       const GURL& original_url);
 
   // Returns true if the embedder has an error page to show for the given http
-  // status code. If so |error_domain| should be set to according to WebURLError
-  // and the embedder's GetNavigationErrorHtml will be called afterwards to get
-  // the error html.
-  virtual bool HasErrorPage(int http_status_code,
-                            std::string* error_domain);
+  // status code.
+  virtual bool HasErrorPage(int http_status_code);
 
   // Returns true if the embedder prefers not to show an error page for a failed
   // navigation to |url| in |render_frame|.
@@ -136,6 +133,13 @@ class CONTENT_EXPORT ContentRendererClient {
       content::RenderFrame* render_frame,
       const blink::WebURLRequest& failed_request,
       const blink::WebURLError& error,
+      std::string* error_html,
+      base::string16* error_description) {}
+  virtual void GetNavigationErrorStringsForHttpStatusError(
+      content::RenderFrame* render_frame,
+      const blink::WebURLRequest& failed_request,
+      const GURL& unreachable_url,
+      int http_status,
       std::string* error_html,
       base::string16* error_description) {}
 
@@ -192,7 +196,7 @@ class CONTENT_EXPORT ContentRendererClient {
 
   // Returns true if the renderer process should allow shared timer suspension
   // after the process has been backgrounded. Defaults to false.
-  virtual bool AllowTimerSuspensionWhenProcessBackgrounded();
+  virtual bool AllowStoppingTimersWhenProcessBackgrounded();
 
   // Returns true if a popup window should be allowed.
   virtual bool AllowPopup();
@@ -322,6 +326,7 @@ class CONTENT_EXPORT ContentRendererClient {
   // Currently only called when the context menu is for an image.
   virtual void AddImageContextMenuProperties(
       const blink::WebURLResponse& response,
+      bool is_image_in_context_a_placeholder_image,
       std::map<std::string, std::string>* properties) {}
 
   // Notifies that a document element has been inserted in the frame's document.

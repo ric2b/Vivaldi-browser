@@ -44,6 +44,7 @@ using blink::WebInputEventResult;
 using blink::WebKeyboardEvent;
 using blink::WebMouseEvent;
 using blink::WebMouseWheelEvent;
+using blink::WebScrollBoundaryBehavior;
 using blink::WebTouchEvent;
 using blink::WebTouchPoint;
 using ui::DidOverscrollParams;
@@ -58,69 +59,16 @@ int64_t GetEventLatencyMicros(double event_timestamp, base::TimeTicks now) {
 }
 
 void LogInputEventLatencyUma(const WebInputEvent& event, base::TimeTicks now) {
-  WebInputEvent::Type event_type = event.GetType();
   UMA_HISTOGRAM_CUSTOM_COUNTS(
       "Event.AggregatedLatency.Renderer2",
       GetEventLatencyMicros(event.TimeStampSeconds(), now), 1, 10000000, 100);
-
-#define CASE_TYPE(t)                                                       \
-  case WebInputEvent::t:                                                   \
-    UMA_HISTOGRAM_CUSTOM_COUNTS(                                           \
-        "Event.Latency.Renderer2." #t,                                     \
-        GetEventLatencyMicros(event.TimeStampSeconds(), now), 1, 10000000, \
-        100);                                                              \
-    break;
-
-  switch (event_type) {
-    CASE_TYPE(kUndefined);
-    CASE_TYPE(kMouseDown);
-    CASE_TYPE(kMouseUp);
-    CASE_TYPE(kMouseMove);
-    CASE_TYPE(kMouseEnter);
-    CASE_TYPE(kMouseLeave);
-    CASE_TYPE(kContextMenu);
-    CASE_TYPE(kMouseWheel);
-    CASE_TYPE(kRawKeyDown);
-    CASE_TYPE(kKeyDown);
-    CASE_TYPE(kKeyUp);
-    CASE_TYPE(kChar);
-    CASE_TYPE(kGestureScrollBegin);
-    CASE_TYPE(kGestureScrollEnd);
-    CASE_TYPE(kGestureScrollUpdate);
-    CASE_TYPE(kGestureFlingStart);
-    CASE_TYPE(kGestureFlingCancel);
-    CASE_TYPE(kGestureShowPress);
-    CASE_TYPE(kGestureTap);
-    CASE_TYPE(kGestureTapUnconfirmed);
-    CASE_TYPE(kGestureTapDown);
-    CASE_TYPE(kGestureTapCancel);
-    CASE_TYPE(kGestureDoubleTap);
-    CASE_TYPE(kGestureTwoFingerTap);
-    CASE_TYPE(kGestureLongPress);
-    CASE_TYPE(kGestureLongTap);
-    CASE_TYPE(kGesturePinchBegin);
-    CASE_TYPE(kGesturePinchEnd);
-    CASE_TYPE(kGesturePinchUpdate);
-    CASE_TYPE(kTouchStart);
-    CASE_TYPE(kTouchMove);
-    CASE_TYPE(kTouchEnd);
-    CASE_TYPE(kTouchCancel);
-    CASE_TYPE(kTouchScrollStarted);
-    default:
-      // Must include default to let blink::WebInputEvent add new event types
-      // before they're added here.
-      DLOG(WARNING) << "Unhandled WebInputEvent type: " << event_type;
-      break;
-  }
-
-#undef CASE_TYPE
 }
 
 void LogPassiveEventListenersUma(WebInputEventResult result,
                                  WebInputEvent::DispatchType dispatch_type,
                                  double event_timestamp,
                                  const ui::LatencyInfo& latency_info) {
-  enum {
+  enum ListenerEnum {
     PASSIVE_LISTENER_UMA_ENUM_PASSIVE,
     PASSIVE_LISTENER_UMA_ENUM_UNCANCELABLE,
     PASSIVE_LISTENER_UMA_ENUM_SUPPRESSED,
@@ -131,7 +79,7 @@ void LogPassiveEventListenersUma(WebInputEventResult result,
     PASSIVE_LISTENER_UMA_ENUM_COUNT
   };
 
-  int enum_value;
+  ListenerEnum enum_value;
   switch (dispatch_type) {
     case WebInputEvent::kListenersForcedNonBlockingDueToFling:
       enum_value = PASSIVE_LISTENER_UMA_ENUM_FORCED_NON_BLOCKING_DUE_TO_FLING;
@@ -221,6 +169,12 @@ void RenderWidgetInputHandler::HandleInputEvent(
   base::AutoReset<std::unique_ptr<DidOverscrollParams>*>
       handling_event_overscroll_resetter(&handling_event_overscroll_,
                                          &event_overscroll);
+
+  // Calls into |ProcessTouchAction()| while handling this event will
+  // populate |handling_touch_action_|, which in turn will be bundled with
+  // the event ack.
+  base::AutoReset<base::Optional<cc::TouchAction>>
+      handling_touch_action_resetter(&handling_touch_action_, base::nullopt);
 
 #if defined(OS_ANDROID)
   ImeEventGuard guard(widget_);
@@ -389,7 +343,8 @@ void RenderWidgetInputHandler::HandleInputEvent(
 
   if (callback) {
     std::move(callback).Run(ack_result, swap_latency_info,
-                            std::move(event_overscroll));
+                            std::move(event_overscroll),
+                            handling_touch_action_);
   } else {
     DCHECK(!event_overscroll) << "Unexpected overscroll for un-acked event";
   }
@@ -422,7 +377,8 @@ void RenderWidgetInputHandler::DidOverscrollFromBlink(
     const WebFloatSize& overscrollDelta,
     const WebFloatSize& accumulatedOverscroll,
     const WebFloatPoint& position,
-    const WebFloatSize& velocity) {
+    const WebFloatSize& velocity,
+    const WebScrollBoundaryBehavior& behavior) {
   std::unique_ptr<DidOverscrollParams> params(new DidOverscrollParams());
   params->accumulated_overscroll = gfx::Vector2dF(
       accumulatedOverscroll.width, accumulatedOverscroll.height);
@@ -431,6 +387,7 @@ void RenderWidgetInputHandler::DidOverscrollFromBlink(
   params->current_fling_velocity =
       gfx::Vector2dF(velocity.width, velocity.height);
   params->causal_event_viewport_point = gfx::PointF(position.x, position.y);
+  params->scroll_boundary_behavior = behavior;
 
   // If we're currently handling an event, stash the overscroll data such that
   // it can be bundled in the event ack.
@@ -440,6 +397,17 @@ void RenderWidgetInputHandler::DidOverscrollFromBlink(
   }
 
   delegate_->OnDidOverscroll(*params);
+}
+
+bool RenderWidgetInputHandler::ProcessTouchAction(
+    cc::TouchAction touch_action) {
+  // Ignore setTouchAction calls that result from synthetic touch events (eg.
+  // when blink is emulating touch with mouse).
+  if (handling_event_type_ != WebInputEvent::kTouchStart)
+    return false;
+
+  handling_touch_action_ = touch_action;
+  return true;
 }
 
 }  // namespace content

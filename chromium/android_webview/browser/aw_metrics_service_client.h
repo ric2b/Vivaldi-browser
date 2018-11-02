@@ -5,7 +5,6 @@
 #ifndef ANDROID_WEBVIEW_BROWSER_AW_METRICS_SERVICE_CLIENT_H_
 #define ANDROID_WEBVIEW_BROWSER_AW_METRICS_SERVICE_CLIENT_H_
 
-#include <jni.h>
 #include <memory>
 #include <string>
 
@@ -45,8 +44,14 @@ class AwMetricsServiceClient : public metrics::MetricsServiceClient,
  public:
   static AwMetricsServiceClient* GetInstance();
 
-  // Retrieve the client ID or generate one if none exists
-  static void GetOrCreateGUID();
+  // Return true if running on an sdk version metrics should be enabled for.
+  static bool CheckSDKVersionForMetrics();
+
+  // Retrieve the client ID or generate one if none exists.
+  static void LoadOrCreateClientId();
+
+  // Return the cached client id.
+  static std::string GetClientId();
 
   void Initialize(PrefService* pref_service,
                   net::URLRequestContextGetter* request_context);
@@ -67,8 +72,6 @@ class AwMetricsServiceClient : public metrics::MetricsServiceClient,
   bool GetBrand(std::string* brand_code) override;
   metrics::SystemProfileProto::Channel GetChannel() override;
   std::string GetVersionString() override;
-  void InitializeSystemProfileMetrics(
-      const base::Closure& done_callback) override;
   void CollectFinalMetricsForLog(const base::Closure& done_callback) override;
   std::unique_ptr<metrics::MetricsLogUploader> CreateUploader(
       base::StringPiece server_url,
@@ -82,7 +85,7 @@ class AwMetricsServiceClient : public metrics::MetricsServiceClient,
   AwMetricsServiceClient();
   ~AwMetricsServiceClient() override;
 
-  void InitializeWithGUID();
+  void InitializeWithClientId();
 
   bool is_enabled_;
   PrefService* pref_service_;
@@ -93,8 +96,6 @@ class AwMetricsServiceClient : public metrics::MetricsServiceClient,
 
   DISALLOW_COPY_AND_ASSIGN(AwMetricsServiceClient);
 };
-
-bool RegisterAwMetricsServiceClient(JNIEnv* env);
 
 }  // namespace android_webview
 

@@ -44,15 +44,15 @@ class UrlDownloader::RequestHandle : public DownloadRequestHandleInterface {
   DownloadManager* GetDownloadManager() const override { return nullptr; }
   void PauseRequest() const override {
     downloader_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&UrlDownloader::PauseRequest, downloader_));
+        FROM_HERE, base::BindOnce(&UrlDownloader::PauseRequest, downloader_));
   }
   void ResumeRequest() const override {
     downloader_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&UrlDownloader::ResumeRequest, downloader_));
+        FROM_HERE, base::BindOnce(&UrlDownloader::ResumeRequest, downloader_));
   }
   void CancelRequest(bool user_cancel) const override {
     downloader_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&UrlDownloader::CancelRequest, downloader_));
+        FROM_HERE, base::BindOnce(&UrlDownloader::CancelRequest, downloader_));
   }
 
  private:
@@ -64,7 +64,7 @@ class UrlDownloader::RequestHandle : public DownloadRequestHandleInterface {
 
 // static
 std::unique_ptr<UrlDownloader> UrlDownloader::BeginDownload(
-    base::WeakPtr<UrlDownloader::Delegate> delegate,
+    base::WeakPtr<UrlDownloadHandler::Delegate> delegate,
     std::unique_ptr<net::URLRequest> request,
     const Referrer& referrer,
     bool is_parallel_request) {
@@ -84,9 +84,10 @@ std::unique_ptr<UrlDownloader> UrlDownloader::BeginDownload(
   return downloader;
 }
 
-UrlDownloader::UrlDownloader(std::unique_ptr<net::URLRequest> request,
-                             base::WeakPtr<Delegate> delegate,
-                             bool is_parallel_request)
+UrlDownloader::UrlDownloader(
+    std::unique_ptr<net::URLRequest> request,
+    base::WeakPtr<UrlDownloadHandler::Delegate> delegate,
+    bool is_parallel_request)
     : request_(std::move(request)),
       delegate_(delegate),
       core_(request_.get(), this, is_parallel_request),
@@ -143,8 +144,8 @@ void UrlDownloader::StartReading(bool is_continuation) {
   if (!core_.OnWillRead(&buf, &buf_size)) {
     int result = request_->CancelWithError(net::ERR_ABORTED);
     base::SequencedTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&UrlDownloader::ResponseCompleted,
-                              weak_ptr_factory_.GetWeakPtr(), result));
+        FROM_HERE, base::BindOnce(&UrlDownloader::ResponseCompleted,
+                                  weak_ptr_factory_.GetWeakPtr(), result));
     return;
   }
 
@@ -163,9 +164,9 @@ void UrlDownloader::StartReading(bool is_continuation) {
     // Else, trigger OnReadCompleted asynchronously to avoid starving the IO
     // thread in case the URLRequest can provide data synchronously.
     base::SequencedTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::Bind(&UrlDownloader::OnReadCompleted,
-                   weak_ptr_factory_.GetWeakPtr(), request_.get(), bytes_read));
+        FROM_HERE, base::BindOnce(&UrlDownloader::OnReadCompleted,
+                                  weak_ptr_factory_.GetWeakPtr(),
+                                  request_.get(), bytes_read));
   }
 }
 
@@ -215,9 +216,11 @@ void UrlDownloader::OnStart(
 
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(&UrlDownloader::Delegate::OnUrlDownloaderStarted, delegate_,
-                 base::Passed(&create_info), base::Passed(&stream_reader),
-                 callback));
+      base::BindOnce(&UrlDownloadHandler::Delegate::OnUrlDownloadStarted,
+                     delegate_, std::move(create_info),
+                     base::MakeUnique<UrlDownloadHandler::InputStream>(
+                         std::move(stream_reader)),
+                     callback));
 }
 
 void UrlDownloader::OnReadyToRead() {
@@ -239,8 +242,8 @@ void UrlDownloader::CancelRequest() {
 void UrlDownloader::Destroy() {
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(&UrlDownloader::Delegate::OnUrlDownloaderStopped, delegate_,
-                 this));
+      base::BindOnce(&UrlDownloadHandler::Delegate::OnUrlDownloadStopped,
+                     delegate_, this));
 }
 
 }  // namespace content

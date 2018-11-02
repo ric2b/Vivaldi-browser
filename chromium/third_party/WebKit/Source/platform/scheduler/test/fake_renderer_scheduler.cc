@@ -49,7 +49,7 @@ FakeRendererScheduler::NewRenderWidgetSchedulingState() {
   return nullptr;
 }
 
-void FakeRendererScheduler::WillBeginFrame(const cc::BeginFrameArgs& args) {}
+void FakeRendererScheduler::WillBeginFrame(const viz::BeginFrameArgs& args) {}
 
 void FakeRendererScheduler::BeginFrameNotExpectedSoon() {}
 
@@ -80,15 +80,13 @@ void FakeRendererScheduler::SetRendererHidden(bool hidden) {}
 
 void FakeRendererScheduler::SetRendererBackgrounded(bool backgrounded) {}
 
-void FakeRendererScheduler::SuspendRenderer() {}
+void FakeRendererScheduler::PauseRenderer() {}
 
 void FakeRendererScheduler::ResumeRenderer() {}
 
 void FakeRendererScheduler::AddPendingNavigation(NavigatingFrameType type) {}
 
 void FakeRendererScheduler::RemovePendingNavigation(NavigatingFrameType type) {}
-
-void FakeRendererScheduler::OnNavigate() {}
 
 bool FakeRendererScheduler::ShouldYieldForHighPriorityWork() {
   return false;
@@ -106,7 +104,7 @@ void FakeRendererScheduler::RemoveTaskObserver(
 
 void FakeRendererScheduler::Shutdown() {}
 
-void FakeRendererScheduler::SuspendTimerQueue() {}
+void FakeRendererScheduler::PauseTimerQueue() {}
 
 void FakeRendererScheduler::ResumeTimerQueue() {}
 
@@ -114,7 +112,7 @@ void FakeRendererScheduler::VirtualTimePaused() {}
 
 void FakeRendererScheduler::VirtualTimeResumed() {}
 
-void FakeRendererScheduler::SetTimerQueueSuspensionWhenBackgroundedEnabled(
+void FakeRendererScheduler::SetTimerQueueStoppingWhenBackgroundedEnabled(
     bool enabled) {}
 
 void FakeRendererScheduler::SetTopLevelBlameContext(
@@ -126,6 +124,8 @@ bool FakeRendererScheduler::MainThreadSeemsUnresponsive(
     base::TimeDelta main_thread_responsiveness_threshold) {
   return false;
 }
+
+void FakeRendererScheduler::SetRendererProcessType(RendererProcessType type) {}
 
 }  // namespace scheduler
 }  // namespace blink

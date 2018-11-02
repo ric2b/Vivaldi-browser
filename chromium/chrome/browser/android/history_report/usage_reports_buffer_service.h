@@ -28,7 +28,7 @@ class UsageReportsBufferBackend;
 class UsageReportsBufferService {
  public:
   explicit UsageReportsBufferService(const base::FilePath& dir);
-  ~UsageReportsBufferService();
+  virtual ~UsageReportsBufferService();
 
   // Init buffer. All calls to buffer before it's initialized are ignored. It's
   // asynchronous.
@@ -53,8 +53,7 @@ class UsageReportsBufferService {
   std::string Dump();
 
  private:
-  // Token used to serialize buffer operations.
-  base::SequencedWorkerPool::SequenceToken worker_pool_token_;
+  scoped_refptr<base::SequencedTaskRunner> task_runner_;
   // Non thread safe backend.
   std::unique_ptr<UsageReportsBufferBackend> backend_;
 

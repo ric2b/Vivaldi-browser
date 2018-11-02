@@ -12,15 +12,13 @@
 #include "core/timing/Performance.h"
 #include "modules/sensor/SensorErrorEvent.h"
 #include "modules/sensor/SensorProviderProxy.h"
+#include "services/device/public/cpp/generic_sensor/sensor_traits.h"
 #include "services/device/public/interfaces/sensor.mojom-blink.h"
 
 namespace blink {
 
 namespace {
-
-constexpr double kMinWaitingInterval =
-    1 / device::mojom::blink::SensorConfiguration::kMaxAllowedFrequency;
-
+const double kWaitingIntervalThreshold = 0.01;
 }  // namespace
 
 Sensor::Sensor(ExecutionContext* execution_context,
@@ -35,7 +33,7 @@ Sensor::Sensor(ExecutionContext* execution_context,
   // Check secure context.
   String error_message;
   if (!execution_context->IsSecureContext(error_message)) {
-    exception_state.ThrowDOMException(kSecurityError, error_message);
+    exception_state.ThrowSecurityError(error_message);
     return;
   }
 
@@ -50,11 +48,15 @@ Sensor::Sensor(ExecutionContext* execution_context,
   // Check the given frequency value.
   if (sensor_options_.hasFrequency()) {
     double frequency = sensor_options_.frequency();
-    if (frequency > SensorConfiguration::kMaxAllowedFrequency) {
-      sensor_options_.setFrequency(SensorConfiguration::kMaxAllowedFrequency);
-      ConsoleMessage* console_message =
-          ConsoleMessage::Create(kJSMessageSource, kInfoMessageLevel,
-                                 "Frequency is limited to 60 Hz.");
+    const double max_allowed_frequency =
+        device::GetSensorMaxAllowedFrequency(type_);
+    if (frequency > max_allowed_frequency) {
+      sensor_options_.setFrequency(max_allowed_frequency);
+      String message = String::Format(
+          "Maximum allowed frequency value for this sensor type is %.0f Hz.",
+          max_allowed_frequency);
+      ConsoleMessage* console_message = ConsoleMessage::Create(
+          kJSMessageSource, kInfoMessageLevel, std::move(message));
       execution_context->AddConsoleMessage(console_message);
     }
   }
@@ -100,7 +102,7 @@ DOMHighResTimeStamp Sensor::timestamp(ScriptState* script_state,
   is_null = false;
 
   return performance->MonotonicTimeToDOMHighResTimeStamp(
-      sensor_proxy_->reading().timestamp);
+      sensor_proxy_->reading().timestamp());
 }
 
 DEFINE_TRACE(Sensor) {
@@ -134,17 +136,6 @@ auto Sensor::CreateSensorConfig() -> SensorConfigurationPtr {
 
   result->frequency = frequency;
   return result;
-}
-
-double Sensor::ReadingValue(int index, bool& is_null) const {
-  is_null = !CanReturnReadings();
-  return is_null ? 0.0 : ReadingValueUnchecked(index);
-}
-
-double Sensor::ReadingValueUnchecked(int index) const {
-  DCHECK(sensor_proxy_);
-  DCHECK(index >= 0 && index < device::SensorReading::kValuesCount);
-  return sensor_proxy_->reading().values[index];
 }
 
 void Sensor::InitSensorProxyIfNeeded() {
@@ -184,7 +175,7 @@ void Sensor::OnSensorReadingChanged() {
     return;
 
   double elapsedTime =
-      sensor_proxy_->reading().timestamp - last_reported_timestamp_;
+      sensor_proxy_->reading().timestamp() - last_reported_timestamp_;
   DCHECK_GT(elapsedTime, 0.0);
 
   DCHECK_GT(configuration_->frequency, 0.0);
@@ -195,7 +186,7 @@ void Sensor::OnSensorReadingChanged() {
   // polling period.
   auto sensor_reading_changed =
       WTF::Bind(&Sensor::NotifyReading, WrapWeakPersistent(this));
-  if (waitingTime < kMinWaitingInterval) {
+  if (waitingTime < kWaitingIntervalThreshold) {
     // Invoke JS callbacks in a different callchain to obviate
     // possible modifications of SensorProxy::observers_ container
     // while it is being iterated through.
@@ -280,9 +271,10 @@ void Sensor::RequestAddConfiguration() {
   if (!configuration_) {
     configuration_ = CreateSensorConfig();
     DCHECK(configuration_);
-    DCHECK(configuration_->frequency > 0 &&
-           configuration_->frequency <=
-               SensorConfiguration::kMaxAllowedFrequency);
+    DCHECK_GE(configuration_->frequency,
+              sensor_proxy_->FrequencyLimits().first);
+    DCHECK_LE(configuration_->frequency,
+              sensor_proxy_->FrequencyLimits().second);
   }
 
   DCHECK(sensor_proxy_);
@@ -317,7 +309,7 @@ void Sensor::HandleError(ExceptionCode code,
 
 void Sensor::NotifyReading() {
   DCHECK_EQ(state_, SensorState::kActivated);
-  last_reported_timestamp_ = sensor_proxy_->reading().timestamp;
+  last_reported_timestamp_ = sensor_proxy_->reading().timestamp();
   DispatchEvent(Event::Create(EventTypeNames::reading));
 }
 
@@ -349,7 +341,7 @@ bool Sensor::CanReturnReadings() const {
   if (!IsActivated())
     return false;
   DCHECK(sensor_proxy_);
-  return sensor_proxy_->reading().timestamp != 0.0;
+  return sensor_proxy_->reading().timestamp() != 0.0;
 }
 
 bool Sensor::IsIdleOrErrored() const {

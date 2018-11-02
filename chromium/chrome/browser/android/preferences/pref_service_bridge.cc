@@ -54,6 +54,9 @@
 #include "third_party/icu/source/common/unicode/uloc.h"
 #include "ui/base/l10n/l10n_util.h"
 
+#include "app/vivaldi_version_info.h"
+
+
 using base::android::AttachCurrentThread;
 using base::android::ConvertJavaStringToUTF8;
 using base::android::ConvertUTF8ToJavaString;
@@ -551,11 +554,14 @@ static void SetBrowsingDataDeletionTimePeriod(JNIEnv* env,
   DCHECK_GE(time_period, 0);
   DCHECK_LE(time_period,
             static_cast<int>(browsing_data::TimePeriod::TIME_PERIOD_LAST));
-  browsing_data::RecordTimePeriodChange(
-      static_cast<browsing_data::TimePeriod>(time_period));
-  GetPrefService()->SetInteger(browsing_data::GetTimePeriodPreferenceName(
-                                   ToTabEnum(clear_browsing_data_tab)),
-                               time_period);
+  const char* pref_name = browsing_data::GetTimePeriodPreferenceName(
+      ToTabEnum(clear_browsing_data_tab));
+  int previous_value = GetPrefService()->GetInteger(pref_name);
+  if (time_period != previous_value) {
+    browsing_data::RecordTimePeriodChange(
+        static_cast<browsing_data::TimePeriod>(time_period));
+    GetPrefService()->SetInteger(pref_name, time_period);
+  }
 }
 
 static jint GetLastClearBrowsingDataTab(JNIEnv* env,
@@ -866,8 +872,11 @@ static ScopedJavaLocalRef<jobject> GetAboutVersionStrings(
         base::android::BuildInfo::GetInstance();
   std::string application(android_build_info->package_label());
   application.append(" ");
+#if defined(VIVALDI_BUILD)
+  application.append(vivaldi::GetVivaldiVersionString());
+#else
   application.append(version_info::GetVersionNumber());
-
+#endif
   return Java_PrefServiceBridge_createAboutVersionStrings(
       env, ConvertUTF8ToJavaString(env, application),
       ConvertUTF8ToJavaString(env, os_version));

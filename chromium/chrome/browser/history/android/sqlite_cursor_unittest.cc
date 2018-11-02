@@ -70,12 +70,6 @@ class SQLiteCursorTest : public testing::Test,
         testing_profile_, ServiceAccessType::EXPLICIT_ACCESS);
   }
 
-  void TearDown() override {
-    testing_profile_->DestroyHistoryService();
-    profile_manager_.DeleteTestingProfile(chrome::kInitialProfile);
-    testing_profile_ = NULL;
-  }
-
   // Override SQLiteCursor::TestObserver.
   void OnPostMoveToTask() override {
     ASSERT_FALSE(run_loop_);
@@ -131,13 +125,13 @@ class CallbackHelper : public base::RefCountedThreadSafe<CallbackHelper> {
 
   void OnInserted(int64_t id) {
     success_ = id != 0;
-    base::MessageLoop::current()->QuitWhenIdle();
+    base::RunLoop::QuitCurrentWhenIdleDeprecated();
   }
 
   void OnQueryResult(AndroidStatement* statement) {
     success_ = statement != NULL;
     statement_ = statement;
-    base::MessageLoop::current()->QuitWhenIdle();
+    base::RunLoop::QuitCurrentWhenIdleDeprecated();
   }
 
  private:

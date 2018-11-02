@@ -120,19 +120,7 @@ int AwBrowserMainParts::PreCreateThreads() {
 
   base::android::MemoryPressureListenerAndroid::RegisterSystemCallback(
       base::android::AttachCurrentThread());
-  DeferredGpuCommandService::SetInstance();
   breakpad::CrashDumpObserver::Create();
-
-  if (crash_reporter::IsCrashReporterEnabled()) {
-    base::FilePath crash_dir;
-    if (PathService::Get(android_webview::DIR_CRASH_DUMPS, &crash_dir)) {
-      if (!base::PathExists(crash_dir))
-        base::CreateDirectory(crash_dir);
-      breakpad::CrashDumpObserver::GetInstance()->RegisterClient(
-          base::MakeUnique<breakpad::CrashDumpManager>(
-              crash_dir, kAndroidMinidumpDescriptor));
-    }
-  }
 
   // We need to create the safe browsing specific directory even if the
   // AwSafeBrowsingConfigHelper::GetSafeBrowsingEnabled() is false
@@ -145,16 +133,24 @@ int AwBrowserMainParts::PreCreateThreads() {
       base::CreateDirectory(safe_browsing_dir);
   }
 
+  base::FilePath crash_dir;
+  if (crash_reporter::IsCrashReporterEnabled()) {
+    if (PathService::Get(android_webview::DIR_CRASH_DUMPS, &crash_dir)) {
+      if (!base::PathExists(crash_dir))
+        base::CreateDirectory(crash_dir);
+    }
+  }
+
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kWebViewSandboxedRenderer)) {
     // Create the renderers crash manager on the UI thread.
     breakpad::CrashDumpObserver::GetInstance()->RegisterClient(
-        base::MakeUnique<AwBrowserTerminator>());
+        base::MakeUnique<AwBrowserTerminator>(crash_dir));
   }
 
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableWebViewFinch)) {
-    AwMetricsServiceClient::GetOrCreateGUID();
+          switches::kEnableWebViewVariations)) {
+    aw_field_trial_creator_.SetUpFieldTrials();
   }
 
   return content::RESULT_CODE_NORMAL_EXIT;
@@ -170,6 +166,10 @@ void AwBrowserMainParts::PreMainMessageLoopRun() {
 
   // TODO(meacer): Remove when PlzNavigate ships.
   content::RenderFrameHost::AllowDataUrlNavigationForAndroidWebView();
+
+  // This only works because webview uses in-process gpu
+  // which is not started up early by BrowserMainLoop.
+  DeferredGpuCommandService::SetInstance();
 }
 
 bool AwBrowserMainParts::MainMessageLoopRun(int* result_code) {

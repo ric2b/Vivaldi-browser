@@ -29,15 +29,15 @@ InspectTabIdAttribute.prototype.handleMutation = function (oldValue, newValue) {
   // nothing to do here
 };
 
-function WindowIdAttribute(view) {
-  GuestViewAttributes.Attribute.call(this,
-    WebViewConstants.ATTRIBUTE_WINDOW_ID, view);
+function UseNormalProfileAttribute(view) {
+  GuestViewAttributes.BooleanAttribute.call(this,
+    WebViewConstants.ATTRIBUTE_USE_NORMAL_PROFILE, view);
 }
 
-WindowIdAttribute.prototype.__proto__ =
-  GuestViewAttributes.Attribute.prototype;
+UseNormalProfileAttribute.prototype.__proto__ =
+  GuestViewAttributes.BooleanAttribute.prototype;
 
-WindowIdAttribute.prototype.handleMutation = function (oldValue, newValue) {
+UseNormalProfileAttribute.prototype.handleMutation = function (oldValue, newValue) {
   // nothing to do here
 };
 
@@ -84,8 +84,8 @@ function addPrivateAttributes(athis /* WebViewImpl */) {
   athis.attributes[WebViewConstants.ATTRIBUTE_TAB_ID] =
       new TabIdAttribute(athis);
 
-  athis.attributes[WebViewConstants.ATTRIBUTE_WINDOW_ID] =
-      new WindowIdAttribute(athis);
+  athis.attributes[WebViewConstants.ATTRIBUTE_USE_NORMAL_PROFILE] =
+      new UseNormalProfileAttribute(athis);
 
   athis.attributes[WebViewConstants.ATTRIBUTE_WASTYPED] =
       new WasTypedAttribute(athis);

@@ -5,6 +5,27 @@
 import("//components/viz/viz.gni")
 import("//testing/test.gni")
 
+viz_component("resource_format") {
+  output_name = "viz_resource_format"
+
+  defines = [ "VIZ_RESOURCE_FORMAT_IMPLEMENTATION" ]
+
+  sources = [
+    "resources/resource_format.h",
+    "resources/resource_format_utils.cc",
+    "resources/resource_format_utils.h",
+    "viz_resource_format_export.h",
+  ]
+
+  configs = [ "//third_party/khronos:khronos_headers" ]
+
+  deps = [
+    "//base",
+    "//skia",
+    "//ui/gfx:buffer_types",
+  ]
+}
+
 viz_component("common") {
   output_name = "viz_common"
 
@@ -13,6 +34,12 @@ viz_component("common") {
   sources = [
     "display/renderer_settings.cc",
     "display/renderer_settings.h",
+    "frame_sinks/begin_frame_args.cc",
+    "frame_sinks/begin_frame_args.h",
+    "frame_sinks/begin_frame_source.cc",
+    "frame_sinks/begin_frame_source.h",
+    "frame_sinks/delay_based_time_source.cc",
+    "frame_sinks/delay_based_time_source.h",
     "gl_helper.cc",
     "gl_helper.h",
     "gl_helper_readback_support.cc",
@@ -25,20 +52,33 @@ viz_component("common") {
     "gpu/context_provider.h",
     "gpu/in_process_context_provider.cc",
     "gpu/in_process_context_provider.h",
+    "gpu/vulkan_context_provider.h",
+    "gpu/vulkan_in_process_context_provider.cc",
+    "gpu/vulkan_in_process_context_provider.h",
     "hit_test/aggregated_hit_test_region.h",
-    "quads/resource_format.h",
+    "quads/copy_output_request.cc",
+    "quads/copy_output_request.h",
+    "quads/copy_output_result.cc",
+    "quads/copy_output_result.h",
+    "quads/release_callback.h",
     "quads/shared_bitmap.cc",
     "quads/shared_bitmap.h",
+    "quads/shared_quad_state.cc",
+    "quads/shared_quad_state.h",
+    "quads/single_release_callback.cc",
+    "quads/single_release_callback.h",
     "quads/texture_mailbox.cc",
     "quads/texture_mailbox.h",
     "resources/buffer_to_texture_target_map.cc",
     "resources/buffer_to_texture_target_map.h",
     "resources/platform_color.h",
-    "resources/resource_format_utils.cc",
-    "resources/resource_format_utils.h",
+    "resources/resource_id.h",
     "resources/resource_settings.cc",
     "resources/resource_settings.h",
+    "resources/returned_resource.h",
     "resources/shared_bitmap_manager.h",
+    "resources/transferable_resource.cc",
+    "resources/transferable_resource.h",
     "surfaces/frame_sink_id.cc",
     "surfaces/frame_sink_id.h",
     "surfaces/frame_sink_id_allocator.h",
@@ -48,6 +88,8 @@ viz_component("common") {
     "surfaces/local_surface_id_allocator.h",
     "surfaces/sequence_surface_reference_factory.cc",
     "surfaces/sequence_surface_reference_factory.h",
+    "surfaces/stub_surface_reference_factory.cc",
+    "surfaces/stub_surface_reference_factory.h",
     "surfaces/surface_id.cc",
     "surfaces/surface_id.h",
     "surfaces/surface_info.h",
@@ -56,10 +98,18 @@ viz_component("common") {
     "surfaces/surface_sequence.h",
     "surfaces/surface_sequence_generator.cc",
     "surfaces/surface_sequence_generator.h",
+    "switches.cc",
+    "switches.h",
+    "traced_value.cc",
+    "traced_value.h",
     "viz_common_export.h",
   ]
 
   deps = [
+    # TODO(staraz): cc/base was added because SharedQuadState includes
+    # cc::MathUtil. Remove it once cc/base/math_util* are moved to viz.
+    "//cc/base",
+
     "//base",
     "//gpu",
     "//gpu/command_buffer/client:gles2_implementation",
@@ -67,6 +117,7 @@ viz_component("common") {
     "//gpu/command_buffer/service",
     "//gpu/ipc:gl_in_process_context",
     "//gpu/skia_bindings:skia_bindings",
+    "//gpu/vulkan:features",
     "//mojo/public/cpp/bindings",
     "//skia",
     "//ui/gfx:color_space",
@@ -75,6 +126,7 @@ viz_component("common") {
   ]
 
   public_deps = [
+    ":resource_format",
     "//gpu/command_buffer/client",
     "//gpu/command_buffer/common",
     "//mojo/public/cpp/bindings",
@@ -84,6 +136,8 @@ viz_component("common") {
 viz_source_set("unit_tests") {
   testonly = true
   sources = [
+    "frame_sinks/begin_frame_args_unittest.cc",
+    "frame_sinks/delay_based_time_source_unittest.cc",
     "gl_helper_unittest.cc",
     "resources/buffer_to_texture_target_map_unittest.cc",
     "resources/platform_color_unittest.cc",
@@ -94,6 +148,7 @@ viz_source_set("unit_tests") {
   deps = [
     ":common",
     "//base/test:test_support",
+    "//components/viz/test:test_support",
     "//gpu/command_buffer/client:gles2_implementation",
     "//gpu/command_buffer/client:gles2_interface",
     "//gpu/ipc:gl_in_process_context",

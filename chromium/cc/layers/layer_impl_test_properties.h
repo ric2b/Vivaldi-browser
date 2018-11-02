@@ -18,9 +18,12 @@
 #include "ui/gfx/geometry/point3_f.h"
 #include "ui/gfx/transform.h"
 
+namespace viz {
+class CopyOutputRequest;
+}
+
 namespace cc {
 
-class CopyOutputRequest;
 class LayerImpl;
 
 struct CC_EXPORT LayerImplTestProperties {
@@ -51,10 +54,9 @@ struct CC_EXPORT LayerImplTestProperties {
   gfx::Point3F transform_origin;
   gfx::Transform transform;
   LayerImpl* scroll_parent;
-  std::unique_ptr<std::set<LayerImpl*>> scroll_children;
   LayerImpl* clip_parent;
   std::unique_ptr<std::set<LayerImpl*>> clip_children;
-  std::vector<std::unique_ptr<CopyOutputRequest>> copy_requests;
+  std::vector<std::unique_ptr<viz::CopyOutputRequest>> copy_requests;
   LayerImplList children;
   LayerImpl* mask_layer;
   LayerImpl* parent;

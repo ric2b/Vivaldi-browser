@@ -42,14 +42,14 @@ void StyleSheetCollection::Dispose() {
 
 void StyleSheetCollection::Swap(StyleSheetCollection& other) {
   ::blink::swap(style_sheets_for_style_sheet_list_,
-                other.style_sheets_for_style_sheet_list_, this, &other);
+                other.style_sheets_for_style_sheet_list_);
   active_author_style_sheets_.swap(other.active_author_style_sheets_);
   sheet_list_dirty_ = false;
 }
 
 void StyleSheetCollection::SwapSheetsForSheetList(
     HeapVector<Member<StyleSheet>>& sheets) {
-  ::blink::swap(style_sheets_for_style_sheet_list_, sheets, this);
+  ::blink::swap(style_sheets_for_style_sheet_list_, sheets);
   sheet_list_dirty_ = false;
 }
 
@@ -59,8 +59,7 @@ void StyleSheetCollection::AppendActiveStyleSheet(
 }
 
 void StyleSheetCollection::AppendSheetForList(StyleSheet* sheet) {
-  style_sheets_for_style_sheet_list_.push_back(
-      TraceWrapperMember<StyleSheet>(this, sheet));
+  style_sheets_for_style_sheet_list_.push_back(sheet);
 }
 
 DEFINE_TRACE(StyleSheetCollection) {

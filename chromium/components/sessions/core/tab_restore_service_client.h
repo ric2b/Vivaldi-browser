@@ -11,12 +11,16 @@
 #include "base/files/file_path.h"
 #include "components/sessions/core/session_id.h"
 #include "components/sessions/core/sessions_export.h"
+#include "ui/base/ui_base_types.h"
 
 class GURL;
 
 namespace base {
 class CancelableTaskTracker;
-class SequencedWorkerPool;
+}
+
+namespace gfx {
+class Rect;
 }
 
 namespace sessions {
@@ -42,8 +46,12 @@ class SESSIONS_EXPORT TabRestoreServiceClient {
   // functionality).
   // NOTE(andre@vivaldi.com) : We added ext_data to be able to restore a browser
   // window with the saved ext_data.
-  virtual LiveTabContext* CreateLiveTabContext(const std::string& app_name,
-                                               const std::string& ext_data) = 0;
+  virtual LiveTabContext* CreateLiveTabContext(
+      const std::string& app_name,
+      const gfx::Rect& bounds,
+      ui::WindowShowState show_state,
+      const std::string& workspace,
+      const std::string& ext_data) = 0;
 
   // Returns the LiveTabContext instance that is associated with
   // |tab|, or null if there is no such instance.
@@ -61,10 +69,6 @@ class SESSIONS_EXPORT TabRestoreServiceClient {
   // if there is no such ID (e.g., if extensions are not supported by the
   // embedder).
   virtual std::string GetExtensionAppIDForTab(LiveTab* tab) = 0;
-
-  // Get the sequenced worker pool for running tasks on the backend thread as
-  // long as the system is not shutting down.
-  virtual base::SequencedWorkerPool* GetBlockingPool() = 0;
 
   // Returns the path of the directory to save state into.
   virtual base::FilePath GetPathToSaveTo() = 0;

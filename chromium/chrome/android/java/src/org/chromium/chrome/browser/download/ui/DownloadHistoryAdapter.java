@@ -9,6 +9,7 @@ import android.support.annotation.Nullable;
 import android.support.v7.widget.RecyclerView.ViewHolder;
 import android.text.TextUtils;
 import android.view.LayoutInflater;
+import android.view.View;
 import android.view.ViewGroup;
 
 import org.chromium.base.ContextUtils;
@@ -29,9 +30,7 @@ import org.chromium.chrome.browser.download.ui.DownloadManagerUi.DownloadUiObser
 import org.chromium.chrome.browser.offlinepages.downloads.OfflinePageDownloadBridge;
 import org.chromium.chrome.browser.offlinepages.downloads.OfflinePageDownloadItem;
 import org.chromium.chrome.browser.widget.DateDividedAdapter;
-import org.chromium.chrome.browser.widget.displaystyle.MarginResizer;
 import org.chromium.chrome.browser.widget.displaystyle.UiConfig;
-import org.chromium.chrome.browser.widget.selection.SelectableListLayout;
 import org.chromium.chrome.browser.widget.selection.SelectionDelegate;
 import org.chromium.components.offline_items_collection.ContentId;
 import org.chromium.content_public.browser.DownloadState;
@@ -167,6 +166,7 @@ public class DownloadHistoryAdapter extends DateDividedAdapter
     private int mFilter = DownloadFilter.FILTER_ALL;
     private String mSearchQuery = EMPTY_QUERY;
     private SpaceDisplay mSpaceDisplay;
+    private HeaderItem mSpaceDisplayHeaderItem;
     private boolean mIsSearching;
     private boolean mShouldShowStorageInfoHeader;
 
@@ -190,6 +190,8 @@ public class DownloadHistoryAdapter extends DateDividedAdapter
     public void initialize(BackendProvider provider, @Nullable UiConfig uiConfig) {
         mBackendProvider = provider;
         mUiConfig = uiConfig;
+
+        generateHeaderItems();
 
         DownloadItemSelectionDelegate selectionDelegate =
                 (DownloadItemSelectionDelegate) mBackendProvider.getSelectionDelegate();
@@ -321,7 +323,6 @@ public class DownloadHistoryAdapter extends DateDividedAdapter
                         .inflate(R.layout.offline_download_header, parent, false);
         offlineHeader.setAdapter(this);
         offlineHeader.setSelectionDelegate((DownloadItemSelectionDelegate) getSelectionDelegate());
-        if (mUiConfig != null) offlineHeader.configureWideDisplayStyle(mUiConfig);
         return new SubsectionHeaderViewHolder(offlineHeader);
     }
 
@@ -334,23 +335,10 @@ public class DownloadHistoryAdapter extends DateDividedAdapter
     }
 
     @Override
-    protected DateViewHolder createDateViewHolder(ViewGroup parent) {
-        DateViewHolder viewHolder = super.createDateViewHolder(parent);
-        if (mUiConfig != null) {
-            MarginResizer.createAndAttach(viewHolder.itemView, mUiConfig,
-                    parent.getResources().getDimensionPixelSize(R.dimen.list_item_default_margin),
-                    SelectableListLayout.getDefaultListItemLateralShadowSizePx(
-                            parent.getResources()));
-        }
-        return viewHolder;
-    }
-
-    @Override
     public ViewHolder createViewHolder(ViewGroup parent) {
         DownloadItemView v = (DownloadItemView) LayoutInflater.from(parent.getContext()).inflate(
                 R.layout.download_item_view, parent, false);
         v.setSelectionDelegate(getSelectionDelegate());
-        if (mUiConfig != null) v.configureWideDisplayStyle(mUiConfig);
         mViews.add(v);
         return new DownloadHistoryItemViewHolder(v);
     }
@@ -364,26 +352,24 @@ public class DownloadHistoryAdapter extends DateDividedAdapter
     }
 
     @Override
+    protected void bindViewHolderForHeaderItem(ViewHolder viewHolder, HeaderItem headerItem) {
+        super.bindViewHolderForHeaderItem(viewHolder, headerItem);
+        mSpaceDisplay.onChanged();
+    }
+
+    @Override
     protected ItemGroup createGroup(long timeStamp) {
         return new DownloadItemGroup(timeStamp);
     }
 
-    @Override
-    protected BasicViewHolder createHeader(ViewGroup parent) {
-        if (mSpaceDisplay == null) {
-            mSpaceDisplay = new SpaceDisplay(parent, this);
-            registerAdapterDataObserver(mSpaceDisplay);
-            if (mUiConfig != null) {
-                MarginResizer.createAndAttach(mSpaceDisplay.getView(), mUiConfig,
-                        parent.getResources().getDimensionPixelSize(
-                                R.dimen.list_item_default_margin),
-                        SelectableListLayout.getDefaultListItemLateralShadowSizePx(
-                                parent.getResources()));
-            }
-        }
-
-        mSpaceDisplay.onChanged();
-        return new BasicViewHolder(mSpaceDisplay.getView());
+    /**
+     * Initialize space display view in storage info header and generate header item for it.
+     */
+    void generateHeaderItems() {
+        mSpaceDisplay = new SpaceDisplay(null, this);
+        View view = mSpaceDisplay.getViewContainer();
+        registerAdapterDataObserver(mSpaceDisplay);
+        mSpaceDisplayHeaderItem = new HeaderItem(0, view);
     }
 
     /** Called when a new DownloadItem has been created by the native DownloadManager. */
@@ -598,7 +584,7 @@ public class DownloadHistoryAdapter extends DateDividedAdapter
 
         clear(false);
         if (!filteredTimedItems.isEmpty() && !mIsSearching && mShouldShowStorageInfoHeader) {
-            addHeader();
+            setHeaders(mSpaceDisplayHeaderItem);
         }
 
         loadItems(filteredTimedItems);

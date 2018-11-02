@@ -23,6 +23,7 @@
 #include "ash/shelf/shelf_application_menu_model.h"
 #include "ash/shelf/shelf_button.h"
 #include "ash/shelf/shelf_constants.h"
+#include "ash/shelf/shelf_context_menu_model.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
@@ -34,6 +35,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/app_list/app_list_features.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/compositor/layer.h"
@@ -187,6 +189,12 @@ void ReflectItemStatus(const ShelfItem& item, ShelfButton* button) {
       button->AddState(ShelfButton::STATE_ATTENTION);
       break;
   }
+}
+
+// Returns the id of the display on which |view| is shown.
+int64_t GetDisplayIdForView(View* view) {
+  aura::Window* window = view->GetWidget()->GetNativeWindow();
+  return display::Screen::GetScreen()->GetDisplayNearestWindow(window).id();
 }
 
 }  // namespace
@@ -465,11 +473,9 @@ void ShelfView::ButtonPressed(views::Button* sender,
       break;
   }
 
-  const int64_t display_id =
-      display::Screen::GetScreen()->GetDisplayNearestWindow(window).id();
-
   // Notify the item of its selection; handle the result in AfterItemSelected.
   const ShelfItem& item = model_->items()[last_pressed_index_];
+  const int64_t display_id = GetDisplayIdForView(this);
 
   // Run AfterItemSelected directly if the item has no delegate (ie. in tests).
   if (!model_->GetShelfItemDelegate(item.id)) {
@@ -688,10 +694,11 @@ void ShelfView::PointerPressedOnButton(views::View* view,
   drag_view_ = static_cast<ShelfButton*>(view);
   drag_origin_ = gfx::Point(event.x(), event.y());
   UMA_HISTOGRAM_ENUMERATION("Ash.ShelfAlignmentUsage",
-                            shelf_->SelectValueForShelfAlignment(
-                                SHELF_ALIGNMENT_UMA_ENUM_VALUE_BOTTOM,
-                                SHELF_ALIGNMENT_UMA_ENUM_VALUE_LEFT,
-                                SHELF_ALIGNMENT_UMA_ENUM_VALUE_RIGHT),
+                            static_cast<ShelfAlignmentUmaEnumValue>(
+                                shelf_->SelectValueForShelfAlignment(
+                                    SHELF_ALIGNMENT_UMA_ENUM_VALUE_BOTTOM,
+                                    SHELF_ALIGNMENT_UMA_ENUM_VALUE_LEFT,
+                                    SHELF_ALIGNMENT_UMA_ENUM_VALUE_RIGHT)),
                             SHELF_ALIGNMENT_UMA_ENUM_VALUE_COUNT);
 }
 
@@ -795,8 +802,8 @@ void ShelfView::CalculateIdealBounds(gfx::Rect* overflow_bounds) const {
     // If this is the app list button and we are in tablet mode, make space for
     // the back button (which is part of the app list button).
     if (i == 0 && is_tablet_mode) {
-      width = shelf_->PrimaryAxisValue(2 * w + kShelfButtonSpacing, w);
-      height = shelf_->PrimaryAxisValue(h, 2 * h + kShelfButtonSpacing);
+      width = shelf_->PrimaryAxisValue(2 * w, w);
+      height = shelf_->PrimaryAxisValue(h, 2 * h);
     }
 
     view_model_->set_ideal_bounds(i, gfx::Rect(x, y, width, height));
@@ -1545,6 +1552,14 @@ void ShelfView::OnGestureEvent(ui::GestureEvent* event) {
     event->StopPropagation();
 }
 
+bool ShelfView::OnMouseWheel(const ui::MouseWheelEvent& event) {
+  if (!app_list::features::IsFullscreenAppListEnabled())
+    return false;
+
+  shelf_->ProcessMouseWheelEvent(event);
+  return true;
+}
+
 void ShelfView::ShelfItemAdded(int model_index) {
   {
     base::AutoReset<bool> cancelling_drag(&cancelling_drag_model_changed_,
@@ -1585,13 +1600,15 @@ void ShelfView::ShelfItemAdded(int model_index) {
 void ShelfView::ShelfItemRemoved(int model_index, const ShelfItem& old_item) {
   if (old_item.id == context_menu_id_)
     launcher_menu_runner_->Cancel();
+
+  views::View* view = view_model_->view_at(model_index);
+  view_model_->Remove(model_index);
+
   {
     base::AutoReset<bool> cancelling_drag(&cancelling_drag_model_changed_,
                                           true);
-    model_index = CancelDrag(model_index);
+    CancelDrag(-1);
   }
-  views::View* view = view_model_->view_at(model_index);
-  view_model_->Remove(model_index);
 
   // When the overflow bubble is visible, the overflow range needs to be set
   // before CalculateIdealBounds() gets called. Otherwise CalculateIdealBounds()
@@ -1698,7 +1715,7 @@ void ShelfView::AfterItemSelected(
   if (action != SHELF_ACTION_APP_LIST_SHOWN) {
     if (action != SHELF_ACTION_NEW_WINDOW_CREATED && menu_items &&
         menu_items->size() > 1) {
-      // Show the app menu if there are 2 or more items and no window was shown.
+      // Show the app menu with 2 or more items, if no window was created.
       ink_drop->AnimateToState(views::InkDropState::ACTIVATED);
       context_menu_id_ = item.id;
       ShowMenu(base::MakeUnique<ShelfApplicationMenuModel>(
@@ -1715,13 +1732,28 @@ void ShelfView::AfterItemSelected(
     scoped_root_window_for_new_windows_.reset();
 }
 
+void ShelfView::AfterGetContextMenuItems(
+    const ShelfID& shelf_id,
+    const gfx::Point& point,
+    ui::MenuSourceType source_type,
+    std::vector<mojom::MenuItemPtr> menu_items) {
+  context_menu_id_ = shelf_id;
+  const int64_t display_id = GetDisplayIdForView(this);
+  ShowMenu(base::MakeUnique<ShelfContextMenuModel>(
+               std::move(menu_items), model_->GetShelfItemDelegate(shelf_id),
+               display_id),
+           nullptr /* source */, point, true /* context_menu */, source_type,
+           nullptr /* ink_drop */);
+}
+
 void ShelfView::ShowContextMenuForView(views::View* source,
                                        const gfx::Point& point,
                                        ui::MenuSourceType source_type) {
   gfx::Point context_menu_point = point;
+  aura::Window* shelf_window = shelf_widget_->GetNativeWindow();
+
   // Align the context menu to the edge of the shelf for touch events.
   if (source_type == ui::MenuSourceType::MENU_SOURCE_TOUCH) {
-    aura::Window* shelf_window = shelf_widget_->GetNativeWindow();
     gfx::Rect shelf_bounds =
         is_overflow_mode()
             ? owner_overflow_bubble_->bubble_view()->GetBubbleBounds()
@@ -1744,20 +1776,21 @@ void ShelfView::ShowContextMenuForView(views::View* source,
   }
   last_pressed_index_ = -1;
 
+  const int64_t display_id = GetDisplayIdForView(this);
   const ShelfItem* item = ShelfItemForView(source);
-  if (!item) {
-    ShellPort::Get()->ShowContextMenu(context_menu_point, source_type);
+  if (!item || !model_->GetShelfItemDelegate(item->id)) {
+    context_menu_id_ = ShelfID();
+    ShowMenu(base::MakeUnique<ShelfContextMenuModel>(
+                 std::vector<mojom::MenuItemPtr>(), nullptr, display_id),
+             source, context_menu_point, true, source_type, nullptr);
     return;
   }
 
-  std::unique_ptr<ui::MenuModel> context_menu_model(
-      Shell::Get()->shell_delegate()->CreateContextMenu(shelf_, item));
-  if (!context_menu_model)
-    return;
-
-  context_menu_id_ = item ? item->id : ShelfID();
-  ShowMenu(std::move(context_menu_model), source, context_menu_point, true,
-           source_type, nullptr);
+  // Get any custom entries; show the context menu in AfterGetContextMenuItems.
+  model_->GetShelfItemDelegate(item->id)->GetContextMenuItems(
+      display_id,
+      base::Bind(&ShelfView::AfterGetContextMenuItems,
+                 weak_factory_.GetWeakPtr(), item->id, point, source_type));
 }
 
 void ShelfView::ShowMenu(std::unique_ptr<ui::MenuModel> menu_model,
@@ -1780,7 +1813,7 @@ void ShelfView::ShowMenu(std::unique_ptr<ui::MenuModel> menu_model,
       new views::MenuRunner(menu_model_adapter_->CreateMenu(), run_types));
 
   // Place new windows on the same display as the button that spawned the menu.
-  aura::Window* window = source->GetWidget()->GetNativeWindow();
+  aura::Window* window = GetWidget()->GetNativeWindow();
   scoped_root_window_for_new_windows_.reset(
       new ScopedRootWindowForNewWindows(window->GetRootWindow()));
 
@@ -1788,6 +1821,7 @@ void ShelfView::ShowMenu(std::unique_ptr<ui::MenuModel> menu_model,
   gfx::Rect anchor = gfx::Rect(click_point, gfx::Size());
 
   if (!context_menu) {
+    DCHECK(source) << "Application lists require a source button view.";
     // Application lists use a bubble.
     // It is possible to invoke the menu while it is sliding into view. To cover
     // that case, the screen coordinates are offsetted by the animation delta.
@@ -1821,8 +1855,8 @@ void ShelfView::ShowMenu(std::unique_ptr<ui::MenuModel> menu_model,
   }
 
   // NOTE: if you convert to HAS_MNEMONICS be sure to update menu building code.
-  launcher_menu_runner_->RunMenuAt(source->GetWidget(), nullptr, anchor,
-                                   menu_alignment, source_type);
+  launcher_menu_runner_->RunMenuAt(GetWidget(), nullptr, anchor, menu_alignment,
+                                   source_type);
 }
 
 void ShelfView::OnMenuClosed(views::InkDrop* ink_drop) {

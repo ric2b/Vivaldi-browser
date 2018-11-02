@@ -45,31 +45,24 @@ class ContentSubresourceFilterDriverFactory
       SubresourceFilterClient* client);
   ~ContentSubresourceFilterDriverFactory() override;
 
+  // This class will be notified of page level activation, before the associated
+  // navigation commits.
   void NotifyPageActivationComputed(
       content::NavigationHandle* navigation_handle,
       ActivationDecision activation_decision,
-      Configuration::ActivationOptions matched_options);
+      const Configuration& matched_configuration);
 
-  // Returns the |ActivationDecision| for the current main frame document. Do
-  // not rely on this API, it is only temporary.
-  // TODO(csharrison): Remove this and |activation_decision_| once consumers
-  // move to become SubresourceFilterObservers.
-  ActivationDecision GetActivationDecisionForLastCommittedPageLoad() const {
-    return activation_decision_;
-  }
+  // Returns whether or not the current WebContents is allowed to create a new
+  // window.
+  bool ShouldDisallowNewWindow(const content::OpenURLParams* open_url_params);
 
-  // Returns the |ActivationOptions| for the current main frame
-  // document. Do not rely on this API, it is only temporary.
-  // TODO(csharrison): Remove this and |activation_options_| in place of adding
-  // |should_suppress_notifications| on ActivationState.
-  const Configuration::ActivationOptions&
-  GetActivationOptionsForLastCommittedPageLoad() const {
-    return activation_options_;
+  // Returns the Configuration for the current main frame document.
+  const Configuration& GetMatchedConfigurationForLastCommittedPageLoad() const {
+    return matched_configuration_;
   }
 
   // ContentSubresourceFilterThrottleManager::Delegate:
   void OnFirstSubresourceLoadDisallowed() override;
-  bool AllowStrongPopupBlocking() override;
   bool AllowRulesetRules() override;
 
   ContentSubresourceFilterThrottleManager* throttle_manager() {
@@ -81,6 +74,10 @@ class ContentSubresourceFilterDriverFactory
  private:
   friend class ContentSubresourceFilterDriverFactoryTest;
   friend class safe_browsing::SafeBrowsingServiceTest;
+
+  const Configuration::ActivationOptions& activation_options() const {
+    return matched_configuration_.activation_options;
+  }
 
   // content::WebContentsObserver:
   void DidStartNavigation(
@@ -104,14 +101,18 @@ class ContentSubresourceFilterDriverFactory
   ActivationDecision activation_decision_ =
       ActivationDecision::ACTIVATION_DISABLED;
 
-  // The activation options corresponding to the most recently _committed_
+  // The Configuration corresponding to the most recently _committed_
   // non-same-document navigation in the main frame.
   //
   // The value corresponding to the previous such navigation will be retained,
   // and the new value not assigned until a subsequent navigation successfully
   // reaches the WillProcessResponse stage (or successfully finishes if
   // throttles are not invoked).
-  Configuration::ActivationOptions activation_options_;
+  //
+  // Careful note: the Configuration may not entirely match up with
+  // a config in GetEnabledConfigurations() due to activation computation
+  // changing the config (e.g. for forcing devtools activation).
+  Configuration matched_configuration_;
 
   DISALLOW_COPY_AND_ASSIGN(ContentSubresourceFilterDriverFactory);
 };

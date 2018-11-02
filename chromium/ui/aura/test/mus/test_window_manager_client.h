@@ -18,6 +18,7 @@ namespace aura {
 enum class WindowManagerClientChangeType {
   ADD_ACTIVATION_PARENT,
   SET_DISPLAY_CONFIGURATION,
+  SET_FRAME_DECORATIONS,
 };
 
 // WindowManagerClient implementation for tests.
@@ -28,12 +29,12 @@ class TestWindowManagerClient : public ui::mojom::WindowManagerClient {
 
   size_t GetChangeCountForType(WindowManagerClientChangeType type);
   int64_t last_internal_display_id() const { return last_internal_display_id_; }
+  size_t IndexOfFirstChangeOfType(WindowManagerClientChangeType type) const;
 
  private:
   // ui::mojom::WindowManagerClient:
   void AddActivationParent(Id transport_window_id) override;
   void RemoveActivationParent(Id transport_window_id) override;
-  void ActivateNextWindow() override;
   void SetExtendedHitRegionForChildren(
       Id window_id,
       const gfx::Insets& mouse_insets,
@@ -57,6 +58,9 @@ class TestWindowManagerClient : public ui::mojom::WindowManagerClient {
   void SwapDisplayRoots(int64_t display_id1,
                         int64_t display_id2,
                         const SwapDisplayRootsCallback& callback) override;
+  void SetBlockingContainers(
+      std::vector<ui::mojom::BlockingContainersPtr> blocking_containers,
+      const SetBlockingContainersCallback& callback) override;
   void WmResponse(uint32_t change_id, bool response) override;
   void WmSetBoundsResponse(uint32_t change_id) override;
   void WmRequestClose(Id transport_window_id) override;
@@ -72,6 +76,9 @@ class TestWindowManagerClient : public ui::mojom::WindowManagerClient {
       base::Optional<ui::CursorData> cursor) override;
   void WmMoveCursorToDisplayLocation(const gfx::Point& display_pixels,
                                      int64_t display_id) override;
+  void WmConfineCursorToBounds(const gfx::Rect& bounds_in_pixles,
+                               int64_t display_id) override;
+  void WmSetCursorTouchVisible(bool enabled) override;
   void OnWmCreatedTopLevelWindow(uint32_t change_id,
                                  Id transport_window_id) override;
   void OnAcceleratorAck(

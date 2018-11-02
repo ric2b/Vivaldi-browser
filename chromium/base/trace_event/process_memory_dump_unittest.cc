@@ -23,6 +23,10 @@
 #include <sys/mman.h>
 #endif
 
+#if defined(OS_IOS)
+#include "base/ios/ios_util.h"
+#endif
+
 namespace base {
 namespace trace_event {
 
@@ -62,18 +66,65 @@ void Unmap(void* addr, size_t size) {
 
 }  // namespace
 
+TEST(ProcessMemoryDumpTest, MoveConstructor) {
+  auto heap_state = MakeRefCounted<HeapProfilerSerializationState>();
+  heap_state->SetStackFrameDeduplicator(MakeUnique<StackFrameDeduplicator>());
+  heap_state->SetTypeNameDeduplicator(MakeUnique<TypeNameDeduplicator>());
+
+  ProcessMemoryDump pmd1 = ProcessMemoryDump(heap_state, kDetailedDumpArgs);
+  pmd1.CreateAllocatorDump("mad1");
+  pmd1.CreateAllocatorDump("mad2");
+  pmd1.AddOwnershipEdge(MemoryAllocatorDumpGuid(42),
+                        MemoryAllocatorDumpGuid(4242));
+
+  ProcessMemoryDump pmd2(std::move(pmd1));
+
+  EXPECT_EQ(1u, pmd2.allocator_dumps().count("mad1"));
+  EXPECT_EQ(1u, pmd2.allocator_dumps().count("mad2"));
+  EXPECT_EQ(MemoryDumpLevelOfDetail::DETAILED,
+            pmd2.dump_args().level_of_detail);
+  EXPECT_EQ(1u, pmd2.allocator_dumps_edges_for_testing().size());
+  EXPECT_EQ(heap_state.get(), pmd2.heap_profiler_serialization_state().get());
+
+  // Check that calling AsValueInto() doesn't cause a crash.
+  auto traced_value = MakeUnique<TracedValue>();
+  pmd2.AsValueInto(traced_value.get());
+}
+
+TEST(ProcessMemoryDumpTest, MoveAssignment) {
+  auto heap_state = MakeRefCounted<HeapProfilerSerializationState>();
+  heap_state->SetStackFrameDeduplicator(MakeUnique<StackFrameDeduplicator>());
+  heap_state->SetTypeNameDeduplicator(MakeUnique<TypeNameDeduplicator>());
+
+  ProcessMemoryDump pmd1 = ProcessMemoryDump(heap_state, kDetailedDumpArgs);
+  pmd1.CreateAllocatorDump("mad1");
+  pmd1.CreateAllocatorDump("mad2");
+  pmd1.AddOwnershipEdge(MemoryAllocatorDumpGuid(42),
+                        MemoryAllocatorDumpGuid(4242));
+
+  ProcessMemoryDump pmd2(nullptr, {MemoryDumpLevelOfDetail::BACKGROUND});
+  pmd2.CreateAllocatorDump("malloc");
+
+  pmd2 = std::move(pmd1);
+  EXPECT_EQ(1u, pmd2.allocator_dumps().count("mad1"));
+  EXPECT_EQ(1u, pmd2.allocator_dumps().count("mad2"));
+  EXPECT_EQ(0u, pmd2.allocator_dumps().count("mad3"));
+  EXPECT_EQ(MemoryDumpLevelOfDetail::DETAILED,
+            pmd2.dump_args().level_of_detail);
+  EXPECT_EQ(1u, pmd2.allocator_dumps_edges_for_testing().size());
+  EXPECT_EQ(heap_state.get(), pmd2.heap_profiler_serialization_state().get());
+
+  // Check that calling AsValueInto() doesn't cause a crash.
+  auto traced_value = MakeUnique<TracedValue>();
+  pmd2.AsValueInto(traced_value.get());
+}
+
 TEST(ProcessMemoryDumpTest, Clear) {
   std::unique_ptr<ProcessMemoryDump> pmd1(
       new ProcessMemoryDump(nullptr, kDetailedDumpArgs));
   pmd1->CreateAllocatorDump("mad1");
   pmd1->CreateAllocatorDump("mad2");
   ASSERT_FALSE(pmd1->allocator_dumps().empty());
-
-  pmd1->process_totals()->set_resident_set_bytes(42);
-  pmd1->set_has_process_totals();
-
-  pmd1->process_mmaps()->AddVMRegion(ProcessMemoryMaps::VMRegion());
-  pmd1->set_has_process_mmaps();
 
   pmd1->AddOwnershipEdge(MemoryAllocatorDumpGuid(42),
                          MemoryAllocatorDumpGuid(4242));
@@ -88,9 +139,6 @@ TEST(ProcessMemoryDumpTest, Clear) {
   ASSERT_TRUE(pmd1->allocator_dumps_edges_for_testing().empty());
   ASSERT_EQ(nullptr, pmd1->GetAllocatorDump("mad1"));
   ASSERT_EQ(nullptr, pmd1->GetAllocatorDump("mad2"));
-  ASSERT_FALSE(pmd1->has_process_totals());
-  ASSERT_FALSE(pmd1->has_process_mmaps());
-  ASSERT_TRUE(pmd1->process_mmaps()->vm_regions().empty());
   ASSERT_EQ(nullptr, pmd1->GetSharedGlobalAllocatorDump(shared_mad_guid1));
   ASSERT_EQ(nullptr, pmd1->GetSharedGlobalAllocatorDump(shared_mad_guid2));
 
@@ -338,17 +386,16 @@ TEST(ProcessMemoryDumpTest, SharedMemoryOwnershipTest) {
       pmd->allocator_dumps_edges_for_testing();
 
   auto* client_dump2 = pmd->CreateAllocatorDump("discardable/segment2");
-  MemoryAllocatorDumpGuid client_global_guid2(2);
   auto shm_token2 = UnguessableToken::Create();
   MemoryAllocatorDumpGuid shm_local_guid2 =
-      SharedMemoryTracker::GetDumpIdForTracing(shm_token2);
+      MemoryAllocatorDump::GetDumpIdFromName(
+          SharedMemoryTracker::GetDumpNameForTracing(shm_token2));
   MemoryAllocatorDumpGuid shm_global_guid2 =
       SharedMemoryTracker::GetGlobalDumpIdForTracing(shm_token2);
   pmd->AddOverridableOwnershipEdge(shm_local_guid2, shm_global_guid2,
                                    0 /* importance */);
 
-  pmd->CreateSharedMemoryOwnershipEdge(client_dump2->guid(),
-                                       client_global_guid2, shm_token2,
+  pmd->CreateSharedMemoryOwnershipEdge(client_dump2->guid(), shm_token2,
                                        1 /* importance */);
   EXPECT_EQ(2u, edges.size());
 
@@ -425,6 +472,53 @@ TEST(ProcessMemoryDumpTest, CountResidentBytes) {
       ProcessMemoryDump::CountResidentBytes(memory2, kVeryLargeMemorySize);
   ASSERT_EQ(res2, kVeryLargeMemorySize);
   Unmap(memory2, kVeryLargeMemorySize);
+}
+
+TEST(ProcessMemoryDumpTest, CountResidentBytesInSharedMemory) {
+#if defined(OS_IOS)
+  // TODO(crbug.com/748410): Reenable this test.
+  if (!base::ios::IsRunningOnIOS10OrLater()) {
+    return;
+  }
+#endif
+
+  const size_t page_size = ProcessMemoryDump::GetSystemPageSize();
+
+  // Allocate few page of dirty memory and check if it is resident.
+  const size_t size1 = 5 * page_size;
+  SharedMemory shared_memory1;
+  shared_memory1.CreateAndMapAnonymous(size1);
+  memset(shared_memory1.memory(), 0, size1);
+  base::Optional<size_t> res1 =
+      ProcessMemoryDump::CountResidentBytesInSharedMemory(shared_memory1);
+  ASSERT_TRUE(res1.has_value());
+  ASSERT_EQ(res1.value(), size1);
+  shared_memory1.Unmap();
+  shared_memory1.Close();
+
+  // Allocate a large memory segment (> 8Mib).
+  const size_t kVeryLargeMemorySize = 15 * 1024 * 1024;
+  SharedMemory shared_memory2;
+  shared_memory2.CreateAndMapAnonymous(kVeryLargeMemorySize);
+  memset(shared_memory2.memory(), 0, kVeryLargeMemorySize);
+  base::Optional<size_t> res2 =
+      ProcessMemoryDump::CountResidentBytesInSharedMemory(shared_memory2);
+  ASSERT_TRUE(res2.has_value());
+  ASSERT_EQ(res2.value(), kVeryLargeMemorySize);
+  shared_memory2.Unmap();
+  shared_memory2.Close();
+
+  // Allocate a large memory segment, but touch about half of all pages.
+  const size_t kTouchedMemorySize = 7 * 1024 * 1024;
+  SharedMemory shared_memory3;
+  shared_memory3.CreateAndMapAnonymous(kVeryLargeMemorySize);
+  memset(shared_memory3.memory(), 0, kTouchedMemorySize);
+  base::Optional<size_t> res3 =
+      ProcessMemoryDump::CountResidentBytesInSharedMemory(shared_memory3);
+  ASSERT_TRUE(res3.has_value());
+  ASSERT_EQ(res3.value(), kTouchedMemorySize);
+  shared_memory3.Unmap();
+  shared_memory3.Close();
 }
 #endif  // defined(COUNT_RESIDENT_BYTES_SUPPORTED)
 

@@ -35,7 +35,7 @@
 #import "ios/chrome/browser/ui/collection_view/collection_view_model.h"
 #import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
 #import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
-#include "ios/chrome/browser/ui/commands/ios_command_ids.h"
+#import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/open_url_command.h"
 #import "ios/chrome/browser/ui/settings/cells/sync_switch_item.h"
 #import "ios/chrome/browser/ui/settings/cells/text_and_error_item.h"
@@ -126,7 +126,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 // Returns a switch item for sync everything, set to on if |isOn| is YES.
 - (CollectionViewItem*)syncEverythingSwitchItem:(BOOL)isOn;
 // Returns a switch item for the syncable data type |dataType|, set to on if
-// |IsDataTypeEnabled| for that type returns true.
+// |IsDataTypePreferred| for that type returns true.
 - (CollectionViewItem*)switchItemForDataType:
     (SyncSetupService::SyncableDatatype)dataType;
 // Returns an item for Encryption.
@@ -341,8 +341,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
       [[CollectionViewAccountItem alloc] initWithType:ItemTypeSyncError];
   syncErrorItem.text = l10n_util::GetNSString(IDS_IOS_SYNC_ERROR_TITLE);
   syncErrorItem.image = [UIImage imageNamed:@"settings_error"];
-  syncErrorItem.detailText =
-      ios_internal::sync::GetSyncErrorMessageForBrowserState(_browserState);
+  syncErrorItem.detailText = GetSyncErrorMessageForBrowserState(_browserState);
   return syncErrorItem;
 }
 
@@ -374,7 +373,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 - (CollectionViewItem*)switchItemForDataType:
     (SyncSetupService::SyncableDatatype)dataType {
   syncer::ModelType modelType = _syncSetupService->GetModelType(dataType);
-  BOOL isOn = _syncSetupService->IsDataTypeEnabled(modelType);
+  BOOL isOn = _syncSetupService->IsDataTypePreferred(modelType);
 
   SyncSwitchItem* syncDataTypeItem =
       [self switchItemWithType:ItemTypeSyncableDataType
@@ -499,8 +498,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
           GetApplicationContext()->GetApplicationLocale());
       OpenUrlCommand* command =
           [[OpenUrlCommand alloc] initWithURLFromChrome:learnMoreUrl];
-      [command setTag:IDC_CLOSE_SETTINGS_AND_OPEN_URL];
-      [self chromeExecuteCommand:command];
+      [self.dispatcher closeSettingsUIAndOpenURL:command];
       break;
     }
     default:
@@ -592,8 +590,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
     return;
   }
 
-  GenericChromeCommand* command =
-      ios_internal::sync::GetSyncCommandForBrowserState(_browserState);
+  GenericChromeCommand* command = GetSyncCommandForBrowserState(_browserState);
   [self chromeExecuteCommand:command];
 }
 
@@ -691,7 +688,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
       [self shouldDisableSettingsOnSyncError])
     return;
 
-  UIViewController* controllerToPush;
+  SettingsRootCollectionViewController* controllerToPush;
   // If there was a sync error, prompt the user to enter the passphrase.
   // Otherwise, show the full encryption options.
   if (syncService->IsPassphraseRequired()) {
@@ -701,6 +698,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
     controllerToPush = [[SyncEncryptionCollectionViewController alloc]
         initWithBrowserState:_browserState];
   }
+  controllerToPush.dispatcher = self.dispatcher;
   [self.navigationController pushViewController:controllerToPush animated:YES];
 }
 
@@ -773,7 +771,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
     SyncSetupService::SyncableDatatype dataType =
         (SyncSetupService::SyncableDatatype)syncSwitchItem.dataType;
     syncer::ModelType modelType = _syncSetupService->GetModelType(dataType);
-    syncSwitchItem.on = _syncSetupService->IsDataTypeEnabled(modelType);
+    syncSwitchItem.on = _syncSetupService->IsDataTypePreferred(modelType);
     syncSwitchItem.enabled = [self shouldSyncableItemsBeEnabled];
     [switchsToReconfigure addObject:syncSwitchItem];
   }

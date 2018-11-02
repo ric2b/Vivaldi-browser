@@ -77,10 +77,6 @@ public class AwContentsStatics {
         return sRecordFullDocument;
     }
 
-    public static void setLegacyCacheRemovalDelayForTest(long timeoutMs) {
-        nativeSetLegacyCacheRemovalDelayForTest(timeoutMs);
-    }
-
     public static String getProductVersion() {
         return nativeGetProductVersion();
     }
@@ -99,16 +95,6 @@ public class AwContentsStatics {
         nativeSetSafeBrowsingEnabledByManifest(enable);
     }
 
-    // TODO(ntfschr): remove this when downstream no longer depends on it
-    public static boolean getSafeBrowsingEnabled() {
-        return getSafeBrowsingEnabledByManifest();
-    }
-
-    // TODO(ntfschr): remove this when downstream no longer depends on it
-    public static void setSafeBrowsingEnabled(boolean enable) {
-        setSafeBrowsingEnabledByManifest(enable);
-    }
-
     @CalledByNative
     private static void safeBrowsingWhitelistAssigned(
             ValueCallback<Boolean> callback, boolean success) {
@@ -120,9 +106,7 @@ public class AwContentsStatics {
             List<String> urls, ValueCallback<Boolean> callback) {
         String[] urlArray = urls.toArray(new String[urls.size()]);
         if (callback == null) {
-            callback = new ValueCallback<Boolean>() {
-                @Override
-                public void onReceiveValue(Boolean b) {}
+            callback = b -> {
             };
         }
         nativeSetSafeBrowsingWhitelist(urlArray, callback);
@@ -133,17 +117,10 @@ public class AwContentsStatics {
     public static void initSafeBrowsing(Context context, final ValueCallback<Boolean> callback) {
         // Wrap the callback to make sure we always invoke it on the UI thread, as guaranteed by the
         // API.
-        ValueCallback<Boolean> wrapperCallback = new ValueCallback<Boolean>() {
-            @Override
-            public void onReceiveValue(final Boolean b) {
-                if (callback != null) {
-                    ThreadUtils.runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            callback.onReceiveValue(b);
-                        }
-                    });
-                }
+        final Context appContext = context.getApplicationContext();
+        ValueCallback<Boolean> wrapperCallback = b -> {
+            if (callback != null) {
+                ThreadUtils.runOnUiThread(() -> callback.onReceiveValue(b));
             }
         };
 
@@ -151,21 +128,9 @@ public class AwContentsStatics {
             Class cls = Class.forName(sSafeBrowsingWarmUpHelper);
             Method m =
                     cls.getDeclaredMethod("warmUpSafeBrowsing", Context.class, ValueCallback.class);
-            m.invoke(null, context, wrapperCallback);
+            m.invoke(null, appContext, wrapperCallback);
         } catch (ReflectiveOperationException e) {
             wrapperCallback.onReceiveValue(false);
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    @TargetApi(19)
-    public static void shutdownSafeBrowsing() {
-        try {
-            Class cls = Class.forName(sSafeBrowsingWarmUpHelper);
-            Method m = cls.getDeclaredMethod("coolDownSafeBrowsing");
-            m.invoke(null);
-        } catch (ReflectiveOperationException e) {
-            // This is not an error; it just means this device doesn't have specialized services.
         }
     }
 
@@ -198,7 +163,6 @@ public class AwContentsStatics {
     private static native String nativeGetSafeBrowsingPrivacyPolicyUrl();
     private static native void nativeClearClientCertPreferences(Runnable callback);
     private static native String nativeGetUnreachableWebDataUrl();
-    private static native void nativeSetLegacyCacheRemovalDelayForTest(long timeoutMs);
     private static native String nativeGetProductVersion();
     private static native void nativeSetServiceWorkerIoThreadClient(
             AwContentsIoThreadClient ioThreadClient, AwBrowserContext browserContext);

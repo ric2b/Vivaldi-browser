@@ -8,6 +8,8 @@ import math
 import json5_generator
 import template_expander
 import make_style_builder
+import keyword_utils
+import bisect
 
 from name_utilities import (
     enum_for_css_keyword, enum_type_name, enum_value_name, class_member_name, method_name,
@@ -307,7 +309,6 @@ def _create_enums(properties):
         if property_['field_template'] in ('keyword', 'multi_keyword') and len(property_['include_paths']) == 0:
             enum = Enum(property_['type_name'], property_['keywords'],
                         is_set=(property_['field_template'] == 'multi_keyword'))
-
             if property_['field_template'] == 'multi_keyword':
                 assert property_['keywords'][0] == 'none', \
                     "First keyword in a 'multi_keyword' field must be 'none' in '{}'.".format(property_['name'])
@@ -318,8 +319,8 @@ def _create_enums(properties):
                     ("'" + property_['name'] + "' can't have type_name '" + enum.type_name + "' "
                      "because it was used by a previous property, but with a different set of keywords. "
                      "Either give it a different name or ensure the keywords are the same.")
-
-            enums[enum.type_name] = enum
+            else:
+                enums[enum.type_name] = enum
 
     # Return the enums sorted by type name
     return list(sorted(enums.values(), key=lambda e: e.type_name))
@@ -502,6 +503,85 @@ def _reorder_fields(fields):
     return _reorder_non_bit_fields(non_bit_fields) + _reorder_bit_fields(bit_fields)
 
 
+def _get_properties_ranking(properties_ranking_file, partition_rule):
+    """Read the properties ranking file and produce a dictionary of css
+    properties with their group number based on the partition_rule
+
+    Args:
+        properties_ranking_file: file path to the ranking file
+        partition_rule: cumulative distribution over properties_ranking
+
+    Returns:
+        dictionary with keys are css properties' name values are the group
+        that each css properties belong to. Smaller group number is higher
+        popularity in the ranking.
+    """
+    properties_ranking = [x["name"] for x in
+                          json5_generator.Json5File.load_from_files([properties_ranking_file]).name_dictionaries]
+    return dict(zip(properties_ranking,
+                    [bisect.bisect_left(partition_rule, float(i) / len(properties_ranking)) + 1
+                     for i in range(len(properties_ranking))]))
+
+
+def _evaluate_rare_non_inherited_group(all_properties, properties_ranking_file,
+                                       number_of_layer, partition_rule=None):
+    """Re-evaluate the grouping of RareNonInherited groups based on each property's
+    popularity.
+
+    Args:
+        all_properties: list of all css properties
+        properties_ranking_file: file path to the ranking file
+        number_of_layer: the number of group to split
+        partition_rule: cumulative distribution over properties_ranking
+                        Ex: [0.3, 0.6, 1]
+    """
+    if partition_rule is None:
+        partition_rule = [1.0 * (i + 1) / number_of_layer for i in range(number_of_layer)]
+
+    assert number_of_layer == len(partition_rule), "Length of rule and number_of_layer mismatch"
+
+    layers_name = ["rare-non-inherited-usage-less-than-" + str(int(round(partition_rule[i] * 100))) + "-percent"
+                   for i in range(number_of_layer)]
+    properties_ranking = _get_properties_ranking(properties_ranking_file, partition_rule)
+
+    for property_ in all_properties:
+        if property_["field_group"] is not None:
+            if "rare-non-inherited" in property_["field_group"] and property_["name"] in properties_ranking:
+                property_["field_group"] = "->".join(layers_name[0:properties_ranking[property_["name"]]])
+            elif "rare-non-inherited" in property_["field_group"] and property_["name"] not in properties_ranking:
+                group_tree = property_["field_group"].split("->")
+                group_tree = [layers_name[0]] + group_tree
+                property_["field_group"] = "->".join(group_tree)
+
+
+def _evaluate_rare_inherit_group(all_properties, properties_ranking_file,
+                                 number_of_layer, partition_rule=None):
+    """Re-evaluate the grouping of RareInherited groups based on each property's
+    popularity.
+
+    Args:
+        all_properties: list of all css properties
+        properties_ranking_file: file path to the ranking file
+        number_of_layer: the number of group to split
+        partition_rule: cumulative distribution over properties_ranking
+                        Ex: [0.4, 1]
+    """
+    if partition_rule is None:
+        partition_rule = [1.0 * (i + 1) / number_of_layer for i in range(number_of_layer)]
+
+    assert number_of_layer == len(partition_rule), "Length of rule and number_of_layer mismatch"
+
+    layers_name = ["rare-inherited-usage-less-than-" + str(int(round(partition_rule[i] * 100))) + "-percent"
+                   for i in range(number_of_layer)]
+    properties_ranking = _get_properties_ranking(properties_ranking_file, partition_rule)
+
+    for property_ in all_properties:
+        if property_["field_group"] is not None \
+           and "rare-inherited" in property_["field_group"] \
+           and property_["name"] in properties_ranking:
+            property_["field_group"] = "->".join(["rare-inherited"] + layers_name[1:properties_ranking[property_["name"]]])
+
+
 class ComputedStyleBaseWriter(make_style_builder.StyleBuilderWriter):
     def __init__(self, json5_file_paths):
         # Read CSSProperties.json5
@@ -514,6 +594,15 @@ class ComputedStyleBaseWriter(make_style_builder.StyleBuilderWriter):
                     "Shorthand '{}' cannot have a field_template.".format(property_['name'])
 
         css_properties = [value for value in self._properties.values() if not value['longhands']]
+        # We sort the enum values based on each value's position in
+        # the keywords as listed in CSSProperties.json5. This will ensure that if there is a continuous
+        # segment in CSSProperties.json5 matching the segment in this enum then
+        # the generated enum will have the same order and continuity as
+        # CSSProperties.json5 and we can get the longest continuous segment.
+        # Thereby reduce the switch case statement to the minimum.
+        css_properties = keyword_utils.sort_keyword_properties_by_canonical_order(css_properties,
+                                                                                  json5_file_paths[3],
+                                                                                  self.json5_file.parameters)
 
         for property_ in css_properties:
             # Set default values for extra parameters in ComputedStyleExtraFields.json5.
@@ -539,6 +628,13 @@ class ComputedStyleBaseWriter(make_style_builder.StyleBuilderWriter):
 
         # Organise fields into a tree structure where the root group
         # is ComputedStyleBase.
+
+        # [0.134, 0.327, 1.0] is the best RareNonInherited partition parameter
+        # that was found by experiments
+        _evaluate_rare_non_inherited_group(all_properties, json5_file_paths[4], 3, [0.134, 0.327, 1.0])
+        # [0.4, 1.0] is the best RareInherited partition parameter that was
+        # found by experiments
+        _evaluate_rare_inherit_group(all_properties, json5_file_paths[4], 2, [0.4, 1.0])
         self._root_group = _create_groups(all_properties)
         self._diff_functions_map = _create_diff_groups_map(json5_generator.Json5File.load_from_files(
             [json5_file_paths[2]]

@@ -32,7 +32,7 @@ std::unique_ptr<LayerImpl> PictureImageLayer::CreateLayerImpl(
 }
 
 bool PictureImageLayer::HasDrawableContent() const {
-  return image_.sk_image() && PictureLayer::HasDrawableContent();
+  return image_ && PictureLayer::HasDrawableContent();
 }
 
 void PictureImageLayer::SetImage(PaintImage image) {
@@ -54,33 +54,34 @@ gfx::Rect PictureImageLayer::PaintableRegion() {
 
 scoped_refptr<DisplayItemList> PictureImageLayer::PaintContentsToDisplayList(
     ContentLayerClient::PaintingControlSetting painting_control) {
-  DCHECK(image_.sk_image());
-  DCHECK_GT(image_.sk_image()->width(), 0);
-  DCHECK_GT(image_.sk_image()->height(), 0);
+  DCHECK(image_);
+  DCHECK_GT(image_.width(), 0);
+  DCHECK_GT(image_.height(), 0);
   DCHECK(layer_tree_host());
 
   float content_to_layer_scale_x =
-      static_cast<float>(bounds().width()) / image_.sk_image()->width();
+      static_cast<float>(bounds().width()) / image_.width();
   float content_to_layer_scale_y =
-      static_cast<float>(bounds().height()) / image_.sk_image()->height();
+      static_cast<float>(bounds().height()) / image_.height();
   bool has_scale = !MathUtil::IsWithinEpsilon(content_to_layer_scale_x, 1.f) ||
                    !MathUtil::IsWithinEpsilon(content_to_layer_scale_y, 1.f);
 
   auto display_list = base::MakeRefCounted<DisplayItemList>();
 
-  PaintOpBuffer* buffer = display_list->StartPaint();
+  display_list->StartPaint();
   if (has_scale) {
-    buffer->push<SaveOp>();
-    buffer->push<ScaleOp>(content_to_layer_scale_x, content_to_layer_scale_y);
+    display_list->push<SaveOp>();
+    display_list->push<ScaleOp>(content_to_layer_scale_x,
+                                content_to_layer_scale_y);
   }
 
   // Because Android WebView resourceless software draw mode rasters directly
   // to the root canvas, this draw must use the SkBlendMode::kSrcOver so that
   // transparent images blend correctly.
-  buffer->push<DrawImageOp>(image_, 0.f, 0.f, nullptr);
+  display_list->push<DrawImageOp>(image_, 0.f, 0.f, nullptr);
 
   if (has_scale)
-    buffer->push<RestoreOp>();
+    display_list->push<RestoreOp>();
   display_list->EndPaintOfUnpaired(PaintableRegion());
   display_list->Finalize();
   return display_list;

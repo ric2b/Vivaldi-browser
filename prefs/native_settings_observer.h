@@ -1,20 +1,27 @@
-// Copyright (c) 2016 Vivaldi Technologies. All Rights Reserved.
+// Copyright (c) 2017 Vivaldi Technologies. All Rights Reserved.
 
 #ifndef PREFS_NATIVE_SETTINGS_OBSERVER_H_
 #define PREFS_NATIVE_SETTINGS_OBSERVER_H_
 
-#include "prefs/native_settings_observer_delegate.h"
+#include <string>
+
+class Profile;
 
 namespace vivaldi {
 
-// A class receiving the callback notification when a registered
-// native setting has changed.
 class NativeSettingsObserver {
  public:
-  virtual ~NativeSettingsObserver();
+  explicit NativeSettingsObserver(Profile* profile);
+  virtual ~NativeSettingsObserver() = default;
 
-  static NativeSettingsObserver* Create(
-      NativeSettingsObserverDelegate* delegate);
+  static NativeSettingsObserver* Create(Profile* profile);
+
+  void SetPref(const char* name, const int value);
+  void SetPref(const char* name, const std::string& value);
+  void SetPref(const char* name, const bool value);
+
+ private:
+  Profile* profile_;
 };
 
 }  // namespace vivaldi

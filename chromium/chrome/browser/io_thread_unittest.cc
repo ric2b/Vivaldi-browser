@@ -16,6 +16,7 @@
 #include "base/test/mock_entropy_provider.h"
 #include "build/build_config.h"
 #include "chrome/browser/io_thread.h"
+#include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "components/policy/core/common/mock_policy_service.h"
@@ -31,7 +32,6 @@
 #include "net/cert_net/nss_ocsp.h"
 #include "net/http/http_auth_preferences.h"
 #include "net/http/http_auth_scheme.h"
-#include "net/http/http_network_session.h"
 #include "net/nqe/effective_connection_type.h"
 #include "net/nqe/network_quality_estimator.h"
 #include "net/quic/chromium/quic_stream_factory.h"
@@ -58,13 +58,6 @@ class IOThreadPeer {
  public:
   static net::HttpAuthPreferences* GetAuthPreferences(IOThread* io_thread) {
     return io_thread->globals()->http_auth_preferences.get();
-  }
-  static void ConfigureParamsFromFieldTrialsAndCommandLine(
-      const base::CommandLine& command_line,
-      bool is_quic_allowed_by_policy,
-      net::HttpNetworkSession::Params* params) {
-    IOThread::ConfigureParamsFromFieldTrialsAndCommandLine(
-        command_line, is_quic_allowed_by_policy, false, params);
   }
 };
 
@@ -117,8 +110,9 @@ class IOThreadTestWithIOThreadObject : public testing::Test {
 
  protected:
   IOThreadTestWithIOThreadObject()
-      : thread_bundle_(content::TestBrowserThreadBundle::REAL_IO_THREAD |
-                       content::TestBrowserThreadBundle::DONT_CREATE_THREADS) {
+      : thread_bundle_(
+            content::TestBrowserThreadBundle::REAL_IO_THREAD |
+            content::TestBrowserThreadBundle::DONT_CREATE_BROWSER_THREADS) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
     event_router_forwarder_ = new extensions::EventRouterForwarder;
 #endif
@@ -145,15 +139,15 @@ class IOThreadTestWithIOThreadObject : public testing::Test {
     // BrowserThreadDelegate for the io thread.
     io_thread_.reset(new IOThread(&pref_service_, &policy_service_, nullptr,
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-                                  event_router_forwarder_.get()
+                                  event_router_forwarder_.get(),
 #else
-                                  nullptr
+                                  nullptr,
 #endif
-                                      ));
+                                  &system_network_context_manager_));
     // Now that IOThread object is registered starting the threads will
     // call the IOThread::Init(). This sets up the environment needed for
     // these tests.
-    thread_bundle_.CreateThreads();
+    thread_bundle_.CreateBrowserThreads();
   }
 
   ~IOThreadTestWithIOThreadObject() override {
@@ -185,6 +179,7 @@ class IOThreadTestWithIOThreadObject : public testing::Test {
 #endif
   policy::PolicyMap policy_map_;
   policy::MockPolicyService policy_service_;
+  SystemNetworkContextManager system_network_context_manager_;
   // The ordering of the declarations of |io_thread_object_| and
   // |thread_bundle_| matters. An IOThread cannot be deleted until all of
   // the globals have been reset to their initial state via CleanUp. As
@@ -269,11 +264,13 @@ TEST_F(IOThreadTestWithIOThreadObject, UpdateAuthAndroidNegotiateAccountType) {
 #endif
 
 TEST_F(IOThreadTestWithIOThreadObject, ForceECTFromCommandLine) {
-  CreateThreads();
   base::CommandLine::Init(0, nullptr);
   ASSERT_TRUE(base::CommandLine::InitializedForCurrentProcess());
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
       "--force-effective-connection-type", "Slow-2G");
+
+  // Create threads after initializing the command line.
+  CreateThreads();
 
   RunOnIOThreadBlocking(base::Bind(
       &IOThreadTestWithIOThreadObject::CheckEffectiveConnectionType,
@@ -323,180 +320,6 @@ TEST_F(IOThreadTestWithIOThreadObject, ECTFromCommandLineOverridesFieldTrial) {
   RunOnIOThreadBlocking(base::Bind(
       &IOThreadTestWithIOThreadObject::CheckEffectiveConnectionType,
       base::Unretained(this), net::EFFECTIVE_CONNECTION_TYPE_SLOW_2G));
-}
-
-class ConfigureParamsFromFieldTrialsAndCommandLineTest
-    : public ::testing::Test {
- public:
-  ConfigureParamsFromFieldTrialsAndCommandLineTest()
-      : command_line_(base::CommandLine::NO_PROGRAM),
-        is_quic_allowed_by_policy_(true) {}
-
- protected:
-  void ConfigureParamsFromFieldTrialsAndCommandLine() {
-    IOThreadPeer::ConfigureParamsFromFieldTrialsAndCommandLine(
-        command_line_, is_quic_allowed_by_policy_, &params_);
-  }
-
-  base::CommandLine command_line_;
-  bool is_quic_allowed_by_policy_;
-  net::HttpNetworkSession::Params params_;
-};
-
-TEST_F(ConfigureParamsFromFieldTrialsAndCommandLineTest, Default) {
-  ConfigureParamsFromFieldTrialsAndCommandLine();
-
-  EXPECT_TRUE(params_.enable_http2);
-  EXPECT_FALSE(params_.enable_quic);
-  EXPECT_EQ(1350u, params_.quic_max_packet_length);
-  EXPECT_EQ(net::QuicTagVector(), params_.quic_connection_options);
-  EXPECT_TRUE(params_.origins_to_force_quic_on.empty());
-  EXPECT_FALSE(params_.enable_user_alternate_protocol_ports);
-  EXPECT_FALSE(params_.ignore_certificate_errors);
-  EXPECT_EQ(0, params_.testing_fixed_http_port);
-  EXPECT_EQ(0, params_.testing_fixed_https_port);
-}
-
-TEST_F(ConfigureParamsFromFieldTrialsAndCommandLineTest,
-       Http2CommandLineDisableHttp2) {
-  command_line_.AppendSwitch("disable-http2");
-
-  ConfigureParamsFromFieldTrialsAndCommandLine();
-
-  EXPECT_FALSE(params_.enable_http2);
-}
-
-// Command line flag should not only disable QUIC but should also prevent QUIC
-// related field trials and command line flags from being parsed.
-TEST_F(ConfigureParamsFromFieldTrialsAndCommandLineTest,
-       DisableQuicFromCommandLineOverridesFieldTrial) {
-  auto field_trial_list =
-      base::MakeUnique<base::FieldTrialList>(
-          base::MakeUnique<base::MockEntropyProvider>());
-  variations::testing::ClearAllVariationParams();
-
-  std::map<std::string, std::string> field_trial_params;
-  variations::AssociateVariationParams("QUIC", "Enabled", field_trial_params);
-  base::FieldTrialList::CreateFieldTrial("QUIC", "Enabled");
-
-  command_line_.AppendSwitch("disable-quic");
-
-  ConfigureParamsFromFieldTrialsAndCommandLine();
-
-  EXPECT_FALSE(params_.enable_quic);
-}
-
-TEST_F(ConfigureParamsFromFieldTrialsAndCommandLineTest,
-       EnableQuicFromCommandLine) {
-  command_line_.AppendSwitch("enable-quic");
-
-  ConfigureParamsFromFieldTrialsAndCommandLine();
-
-  EXPECT_TRUE(params_.enable_quic);
-}
-
-TEST_F(ConfigureParamsFromFieldTrialsAndCommandLineTest,
-       QuicVersionFromCommandLine) {
-  command_line_.AppendSwitch("enable-quic");
-  std::string version =
-      net::QuicVersionToString(net::AllSupportedVersions().back());
-  command_line_.AppendSwitchASCII("quic-version", version);
-
-  ConfigureParamsFromFieldTrialsAndCommandLine();
-
-  net::QuicVersionVector supported_versions;
-  supported_versions.push_back(net::AllSupportedVersions().back());
-  EXPECT_EQ(supported_versions, params_.quic_supported_versions);
-}
-
-TEST_F(ConfigureParamsFromFieldTrialsAndCommandLineTest,
-       QuicConnectionOptionsFromCommandLine) {
-  command_line_.AppendSwitch("enable-quic");
-  command_line_.AppendSwitchASCII("quic-connection-options", "TIME,TBBR,REJ");
-
-  ConfigureParamsFromFieldTrialsAndCommandLine();
-
-  net::QuicTagVector options;
-  options.push_back(net::kTIME);
-  options.push_back(net::kTBBR);
-  options.push_back(net::kREJ);
-  EXPECT_EQ(options, params_.quic_connection_options);
-}
-
-TEST_F(ConfigureParamsFromFieldTrialsAndCommandLineTest,
-       QuicOriginsToForceQuicOn) {
-  command_line_.AppendSwitch("enable-quic");
-  command_line_.AppendSwitchASCII("origin-to-force-quic-on",
-                                  "www.example.com:443, www.example.org:443");
-
-  ConfigureParamsFromFieldTrialsAndCommandLine();
-
-  EXPECT_EQ(2u, params_.origins_to_force_quic_on.size());
-  EXPECT_TRUE(
-      base::ContainsKey(params_.origins_to_force_quic_on,
-                        net::HostPortPair::FromString("www.example.com:443")));
-  EXPECT_TRUE(
-      base::ContainsKey(params_.origins_to_force_quic_on,
-                        net::HostPortPair::FromString("www.example.org:443")));
-}
-
-TEST_F(ConfigureParamsFromFieldTrialsAndCommandLineTest,
-       QuicOriginsToForceQuicOnAll) {
-  command_line_.AppendSwitch("enable-quic");
-  command_line_.AppendSwitchASCII("origin-to-force-quic-on", "*");
-
-  ConfigureParamsFromFieldTrialsAndCommandLine();
-
-  EXPECT_EQ(1u, params_.origins_to_force_quic_on.size());
-  EXPECT_TRUE(
-      base::ContainsKey(params_.origins_to_force_quic_on, net::HostPortPair()));
-}
-
-TEST_F(ConfigureParamsFromFieldTrialsAndCommandLineTest,
-       QuicDisallowedByPolicy) {
-  command_line_.AppendSwitch("enable-quic");
-  is_quic_allowed_by_policy_ = false;
-
-  ConfigureParamsFromFieldTrialsAndCommandLine();
-
-  EXPECT_FALSE(params_.enable_quic);
-}
-
-TEST_F(ConfigureParamsFromFieldTrialsAndCommandLineTest, QuicMaxPacketLength) {
-  command_line_.AppendSwitch("enable-quic");
-  command_line_.AppendSwitchASCII("quic-max-packet-length", "1450");
-
-  ConfigureParamsFromFieldTrialsAndCommandLine();
-
-  EXPECT_EQ(1450u, params_.quic_max_packet_length);
-}
-
-TEST_F(ConfigureParamsFromFieldTrialsAndCommandLineTest,
-       EnableUserAlternateProtocolPorts) {
-  command_line_.AppendSwitch("enable-user-controlled-alternate-protocol-ports");
-
-  ConfigureParamsFromFieldTrialsAndCommandLine();
-
-  EXPECT_TRUE(params_.enable_user_alternate_protocol_ports);
-}
-
-TEST_F(ConfigureParamsFromFieldTrialsAndCommandLineTest,
-       IgnoreCertificateErrors) {
-  command_line_.AppendSwitch("ignore-certificate-errors");
-
-  ConfigureParamsFromFieldTrialsAndCommandLine();
-
-  EXPECT_TRUE(params_.ignore_certificate_errors);
-}
-
-TEST_F(ConfigureParamsFromFieldTrialsAndCommandLineTest, TestingFixedPort) {
-  command_line_.AppendSwitchASCII("testing-fixed-http-port", "42");
-  command_line_.AppendSwitchASCII("testing-fixed-https-port", "137");
-
-  ConfigureParamsFromFieldTrialsAndCommandLine();
-
-  EXPECT_EQ(42u, params_.testing_fixed_http_port);
-  EXPECT_EQ(137u, params_.testing_fixed_https_port);
 }
 
 }  // namespace test

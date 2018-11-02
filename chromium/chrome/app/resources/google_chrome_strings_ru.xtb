@@ -17,7 +17,6 @@
 <translation id="1434626383986940139">Приложения Chrome Canary</translation>
 <translation id="1457721931618994305">Выполняется обновление Google Chrome...</translation>
 <translation id="1469002951682717133">Панель запуска приложений Chrome</translation>
-<translation id="1480489203462860648">Запустить Chrome (уже установлен)</translation>
 <translation id="1553358976309200471">Обновить Chrome</translation>
 <translation id="1587223624401073077">Google Chrome использует камеру.</translation>
 <translation id="1587325591171447154">Chrome заблокировал файл <ph name="FILE_NAME" /> как опасный.</translation>
@@ -94,6 +93,7 @@
 <translation id="345171907106878721">Добавить пользователя Chrome</translation>
 <translation id="3612333635265770873">Известно, что модуль с таким названием конфликтует с Google Chrome.</translation>
 <translation id="3622797965165704966">Теперь с Chrome ещё удобнее работать в аккаунте Google, в том числе на общих компьютерах.</translation>
+<translation id="3637702109597584617"><ph name="TERMS_OF_SERVICE_LINK" />Условия использования<ph name="END_TERMS_OF_SERVICE_LINK" /> Google Chrome OS</translation>
 <translation id="3718181793972440140">С устройства будет удален 1 объект. Чтобы восстановить данные позже, войдите в Chrome как <ph name="USER_EMAIL" />.</translation>
 <translation id="3735758079232443276">Расширение "<ph name="EXTENSION_NAME" />" изменило стартовую страницу Chrome.</translation>
 <translation id="3738139272394829648">Быстрый поиск</translation>
@@ -132,12 +132,12 @@
 <translation id="4754614261631455953">Google Chrome Canary (mDNS-In)</translation>
 <translation id="4771048833395599659">Chrome заблокировал этот файл как потенциально опасный.</translation>
 <translation id="4794050651896644714">Сохранять данные в Chrome</translation>
+<translation id="4804732725083176494">Вход в Chrome отключен администратором устройства.</translation>
 <translation id="4891791193823137474">Разрешить работу Google Chrome в фоновом режиме</translation>
 <translation id="4921569541910214635">Пользуетесь компьютером вместе с коллегой или другом? Теперь каждый из вас сможет настроить Chrome по своему вкусу.</translation>
 <translation id="4953650215774548573">Сделать Google Chrome браузером по умолчанию</translation>
 <translation id="495931528404527476">В Chrome</translation>
 <translation id="4965682129423310439">На вашем компьютере обнаружено вредоносное ПО. Chrome может удалить его и восстановить настройки, чтобы вернуть браузер в обычное состояние.</translation>
-<translation id="4987308747895123092">Закройте все окна Google Chrome (включая открытые в режиме Windows 8) и повторите попытку.</translation>
 <translation id="4990567037958725628">Google Chrome Canary</translation>
 <translation id="5028489144783860647">Google Chrome не удалось синхронизировать данные. Обновите кодовую фразу в Sync.</translation>
 <translation id="5037239767309817516">Чтобы изменения вступили в силу, закройте все окна Google Chrome и перезапустите браузер.</translation>
@@ -195,7 +195,6 @@
 <translation id="6634887557811630702">Вы используете самую новую версию Chrome.</translation>
 <translation id="6676384891291319759">Доступ в Интернет</translation>
 <translation id="6697947395630195233">Для этого сайта Chrome запрашивает доступ к данным о вашем местоположении.</translation>
-<translation id="6757767188268205357">Больше не спрашивать</translation>
 <translation id="683440813066116847">Разрешить в Google Chrome Canary передачу входящего трафика по протоколу mDNS</translation>
 <translation id="686561893457936865">Chrome всегда под рукой</translation>
 <translation id="6883876366448858277">отправляет слово и окружающий его контекст в Google Поиск; возвращает определения, фотографии, картинки и другие результаты.</translation>
@@ -210,7 +209,6 @@
 <translation id="7161904924553537242">Добро пожаловать в Google Chrome</translation>
 <translation id="7164397146364144019">Вы можете сделать защиту Chrome ещё надежнее. Просто разрешите автоматически отправлять в Google информацию о возможных проблемах безопасности.</translation>
 <translation id="7185038942300673794">Расширение "<ph name="EXTENSION_NAME" />" установлено.</translation>
-<translation id="7196020411877309443">Что это?</translation>
 <translation id="7242029209006116544">Выполнив вход в управляемый аккаунт, вы предоставляете администратору право контролировать настройки вашего профиля Google Chrome. Ваши данные Chrome (приложения, закладки, история, пароли и другие настройки) будут временно связаны с аккаунтом <ph name="USER_NAME" />. Эти данные можно удалить в Личном кабинете Google, но их нельзя связать с другим аккаунтом. Чтобы сохранить данные Chrome отдельно, создайте новый профиль. <ph name="LEARN_MORE" /></translation>
 <translation id="729375352412857283">Google Chrome скоро перестанет обновляться на этом компьютере, так как поддержка Windows XP и Windows Vista будет прекращена.</translation>
 <translation id="7330164299247909639">Ошибка сертификата аутентификации. Войдите в Google Chrome как <ph name="USER_NAME" /> ещё раз или обратитесь за информацией к администратору. <ph name="ADDITIONAL_EXPLANATION" /></translation>

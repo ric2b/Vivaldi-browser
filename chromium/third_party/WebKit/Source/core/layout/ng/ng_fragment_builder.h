@@ -5,35 +5,41 @@
 #ifndef NGFragmentBuilder_h
 #define NGFragmentBuilder_h
 
-#include "core/layout/ng/geometry/ng_static_position.h"
+#include "core/layout/ng/geometry/ng_bfc_offset.h"
+#include "core/layout/ng/geometry/ng_border_edges.h"
 #include "core/layout/ng/inline/ng_baseline.h"
-#include "core/layout/ng/inline/ng_physical_text_fragment.h"
+#include "core/layout/ng/ng_base_fragment_builder.h"
 #include "core/layout/ng/ng_break_token.h"
-#include "core/layout/ng/ng_constraint_space.h"
 #include "core/layout/ng/ng_layout_result.h"
 #include "core/layout/ng/ng_out_of_flow_positioned_descendant.h"
 #include "core/layout/ng/ng_physical_fragment.h"
-#include "core/layout/ng/ng_positioned_float.h"
 #include "core/layout/ng/ng_unpositioned_float.h"
+#include "platform/heap/Handle.h"
 #include "platform/wtf/Allocator.h"
 
 namespace blink {
 
-class CORE_EXPORT NGFragmentBuilder final {
+class NGExclusionSpace;
+
+class CORE_EXPORT NGFragmentBuilder final : public NGBaseFragmentBuilder {
   DISALLOW_NEW();
 
  public:
-  NGFragmentBuilder(NGPhysicalFragment::NGFragmentType, NGLayoutInputNode);
+  NGFragmentBuilder(NGLayoutInputNode,
+                    RefPtr<const ComputedStyle>,
+                    NGWritingMode,
+                    TextDirection);
 
   // Build a fragment for LayoutObject without NGLayoutInputNode. LayoutInline
   // has NGInlineItem but does not have corresponding NGLayoutInputNode.
-  NGFragmentBuilder(NGPhysicalFragment::NGFragmentType, LayoutObject*);
+  NGFragmentBuilder(LayoutObject*,
+                    RefPtr<const ComputedStyle>,
+                    NGWritingMode,
+                    TextDirection);
+
+  ~NGFragmentBuilder();
 
   using WeakBoxList = PersistentHeapLinkedHashSet<WeakMember<NGBlockNode>>;
-
-  NGWritingMode WritingMode() const { return writing_mode_; }
-  NGFragmentBuilder& SetWritingMode(NGWritingMode);
-  NGFragmentBuilder& SetDirection(TextDirection);
 
   NGFragmentBuilder& SetSize(const NGLogicalSize&);
   NGFragmentBuilder& SetBlockSize(LayoutUnit);
@@ -46,7 +52,7 @@ class CORE_EXPORT NGFragmentBuilder final {
   NGFragmentBuilder& AddChild(RefPtr<NGPhysicalFragment>,
                               const NGLogicalOffset&);
 
-  NGFragmentBuilder& SetBfcOffset(const NGLogicalOffset& offset);
+  NGFragmentBuilder& SetBfcOffset(const NGBfcOffset& offset);
 
   // Builder has non-trivial out-of-flow descendant methods.
   // These methods are building blocks for implementation of
@@ -81,12 +87,16 @@ class CORE_EXPORT NGFragmentBuilder final {
 
   NGFragmentBuilder& AddOutOfFlowDescendant(NGOutOfFlowPositionedDescendant);
 
-  // Sets how much of the block size we've used so far for this box.
-  //
-  // This will result in a fragment which has an unfinished break token, which
-  // contains this information.
+  // Set how much of the block size we've used so far for this box.
   NGFragmentBuilder& SetUsedBlockSize(LayoutUnit used_block_size) {
     used_block_size_ = used_block_size;
+    return *this;
+  }
+
+  // Specify that we broke.
+  //
+  // This will result in a fragment which has an unfinished break token.
+  NGFragmentBuilder& SetDidBreak() {
     did_break_ = true;
     return *this;
   }
@@ -108,14 +118,16 @@ class CORE_EXPORT NGFragmentBuilder final {
   const Vector<NGLogicalOffset>& Offsets() const { return offsets_; }
   Vector<NGLogicalOffset>& MutableOffsets() { return offsets_; }
 
-  void SwapUnpositionedFloats(
+  NGFragmentBuilder& SwapUnpositionedFloats(
       Vector<RefPtr<NGUnpositionedFloat>>* unpositioned_floats) {
     unpositioned_floats_.swap(*unpositioned_floats);
+    return *this;
   }
 
-  const WTF::Optional<NGLogicalOffset>& BfcOffset() const {
-    return bfc_offset_;
-  }
+  NGFragmentBuilder& SetExclusionSpace(
+      std::unique_ptr<const NGExclusionSpace> exclusion_space);
+
+  const WTF::Optional<NGBfcOffset>& BfcOffset() const { return bfc_offset_; }
 
   const Vector<RefPtr<NGPhysicalFragment>>& Children() const {
     return children_;
@@ -159,10 +171,6 @@ class CORE_EXPORT NGFragmentBuilder final {
     NGLogicalOffset child_offset;
   };
 
-  NGPhysicalFragment::NGFragmentType type_;
-  NGWritingMode writing_mode_;
-  TextDirection direction_;
-
   NGLayoutInputNode node_;
   LayoutObject* layout_object_;
 
@@ -181,11 +189,13 @@ class CORE_EXPORT NGFragmentBuilder final {
   Vector<NGOutOfFlowPositionedCandidate> oof_positioned_candidates_;
   Vector<NGOutOfFlowPositionedDescendant> oof_positioned_descendants_;
 
+  std::unique_ptr<const NGExclusionSpace> exclusion_space_;
+
   // Floats that need to be positioned by the next in-flow fragment that can
   // determine its block position in space.
   Vector<RefPtr<NGUnpositionedFloat>> unpositioned_floats_;
 
-  WTF::Optional<NGLogicalOffset> bfc_offset_;
+  WTF::Optional<NGBfcOffset> bfc_offset_;
   NGMarginStrut end_margin_strut_;
 
   Vector<NGBaseline> baselines_;

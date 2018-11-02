@@ -84,6 +84,8 @@ void SoftwareVideoRenderer::OnSessionConfig(
     decoder_ = VideoDecoderVpx::CreateForVP8();
   } else if (codec == ChannelConfig::CODEC_VP9) {
     decoder_ = VideoDecoderVpx::CreateForVP9();
+  } else if (codec == ChannelConfig::CODEC_H264) {
+    NOTIMPLEMENTED() << "H264 software decoding is not supported.";
   } else {
     NOTREACHED() << "Invalid Encoding found: " << codec;
   }
@@ -157,7 +159,7 @@ void SoftwareVideoRenderer::ProcessVideoPacket(
                  base::Passed(&frame)),
       base::Bind(&SoftwareVideoRenderer::RenderFrame,
                  weak_factory_.GetWeakPtr(), base::Passed(&frame_stats),
-                 done_runner.Release()));
+                 base::AdaptCallbackForRepeating(done_runner.Release())));
 }
 
 void SoftwareVideoRenderer::RenderFrame(

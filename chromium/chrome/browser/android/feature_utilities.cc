@@ -6,6 +6,8 @@
 
 #include "jni/FeatureUtilities_jni.h"
 
+#include "components/ukm/ukm_source.h"
+
 using base::android::JavaParamRef;
 
 namespace {
@@ -25,6 +27,11 @@ bool GetIsInMultiWindowModeValue() {
   return is_in_multi_window_mode;
 }
 
+bool GetIsChromeHomeEnabled() {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  return Java_FeatureUtilities_isChromeHomeEnabled(env);
+}
+
 } // namespace android
 } // namespace chrome
 
@@ -32,6 +39,7 @@ static void SetCustomTabVisible(JNIEnv* env,
                                 const JavaParamRef<jclass>& clazz,
                                 jboolean visible) {
   custom_tab_visible = visible;
+  ukm::UkmSource::SetCustomTabVisible(visible);
 }
 
 static void SetIsInMultiWindowMode(JNIEnv* env,

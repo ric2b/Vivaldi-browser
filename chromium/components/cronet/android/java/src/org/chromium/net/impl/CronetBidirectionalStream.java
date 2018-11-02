@@ -64,7 +64,7 @@ public class CronetBidirectionalStream extends ExperimentalBidirectionalStream {
         READING_DONE,
         /* Stream is canceled. */
         CANCELED,
-        /* Error has occured, stream is closed. */
+        /* Error has occurred, stream is closed. */
         ERROR,
         /* Reading and writing are done, and the stream is closed successfully. */
         SUCCESS,
@@ -602,7 +602,7 @@ public class CronetBidirectionalStream extends ExperimentalBidirectionalStream {
                     new QuicExceptionImpl("Exception in BidirectionalStream: " + errorString,
                             nativeError, nativeQuicError));
         } else {
-            failWithException(new NetworkExceptionImpl(
+            failWithException(new BidirectionalStreamNetworkException(
                     "Exception in BidirectionalStream: " + errorString, errorCode, nativeError));
         }
     }

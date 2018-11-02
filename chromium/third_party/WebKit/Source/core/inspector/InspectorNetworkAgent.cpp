@@ -31,6 +31,8 @@
 #include "core/inspector/InspectorNetworkAgent.h"
 
 #include <memory>
+#include <utility>
+
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/SourceLocation.h"
 #include "core/dom/Document.h"
@@ -150,7 +152,7 @@ class InspectorFileReaderLoaderClient final : public FileReaderLoaderClient {
 
  public:
   InspectorFileReaderLoaderClient(
-      PassRefPtr<BlobDataHandle> blob,
+      RefPtr<BlobDataHandle> blob,
       const String& mime_type,
       const String& text_encoding_name,
       std::unique_ptr<GetResponseBodyCallback> callback)
@@ -414,9 +416,6 @@ BuildObjectForResourceResponse(const ResourceResponse& response,
     case ResourceResponse::kSecurityStyleAuthenticationBroken:
       security_state = protocol::Security::SecurityStateEnum::Insecure;
       break;
-    case ResourceResponse::kSecurityStyleWarning:
-      security_state = protocol::Security::SecurityStateEnum::Warning;
-      break;
     case ResourceResponse::kSecurityStyleAuthenticated:
       security_state = protocol::Security::SecurityStateEnum::Secure;
       break;
@@ -560,17 +559,16 @@ DEFINE_TRACE(InspectorNetworkAgent) {
   InspectorBaseAgent::Trace(visitor);
 }
 
-void InspectorNetworkAgent::ShouldBlockRequest(const ResourceRequest& request,
-                                               bool* result) {
+void InspectorNetworkAgent::ShouldBlockRequest(const KURL& url, bool* result) {
   protocol::DictionaryValue* blocked_urls =
       state_->getObject(NetworkAgentState::kBlockedURLs);
   if (!blocked_urls)
     return;
 
-  String url = request.Url().GetString();
+  String url_string = url.GetString();
   for (size_t i = 0; i < blocked_urls->size(); ++i) {
     auto entry = blocked_urls->at(i);
-    if (Matches(url, entry.first)) {
+    if (Matches(url_string, entry.first)) {
       *result = true;
       return;
     }
@@ -862,7 +860,6 @@ void InspectorNetworkAgent::DidFinishLoading(unsigned long identifier,
 }
 
 void InspectorNetworkAgent::DidReceiveCORSRedirectResponse(
-    LocalFrame* frame,
     unsigned long identifier,
     DocumentLoader* loader,
     const ResourceResponse& response,
@@ -874,6 +871,7 @@ void InspectorNetworkAgent::DidReceiveCORSRedirectResponse(
 }
 
 void InspectorNetworkAgent::DidFailLoading(unsigned long identifier,
+                                           DocumentLoader*,
                                            const ResourceError& error) {
   String request_id = IdentifiersFactory::RequestId(identifier);
   bool canceled = error.IsCancellation();
@@ -940,7 +938,7 @@ void InspectorNetworkAgent::WillLoadXHR(XMLHttpRequest* xhr,
                                         const AtomicString& method,
                                         const KURL& url,
                                         bool async,
-                                        PassRefPtr<EncodedFormData> form_data,
+                                        RefPtr<EncodedFormData> form_data,
                                         const HTTPHeaderMap& headers,
                                         bool include_credentials) {
   DCHECK(xhr);
@@ -1311,56 +1309,20 @@ void InspectorNetworkAgent::GetResponseBodyBlob(
 
 void InspectorNetworkAgent::getResponseBody(
     const String& request_id,
-    std::unique_ptr<GetResponseBodyCallback> pass_callback) {
-  std::unique_ptr<GetResponseBodyCallback> callback = std::move(pass_callback);
-  NetworkResourcesData::ResourceData const* resource_data =
-      resources_data_->Data(request_id);
-  if (!resource_data) {
-    callback->sendFailure(
-        Response::Error("No resource with given identifier found"));
-    return;
-  }
-
+    std::unique_ptr<GetResponseBodyCallback> callback) {
   if (CanGetResponseBodyBlob(request_id)) {
     GetResponseBodyBlob(request_id, std::move(callback));
     return;
   }
 
-  if (resource_data->HasContent()) {
-    callback->sendSuccess(resource_data->Content(),
-                          resource_data->Base64Encoded());
-    return;
+  String content;
+  bool base64_encoded;
+  Response response = GetResponseBody(request_id, &content, &base64_encoded);
+  if (response.isSuccess()) {
+    callback->sendSuccess(content, base64_encoded);
+  } else {
+    callback->sendFailure(response);
   }
-
-  if (resource_data->IsContentEvicted()) {
-    callback->sendFailure(
-        Response::Error("Request content was evicted from inspector cache"));
-    return;
-  }
-
-  if (resource_data->Buffer() && !resource_data->TextEncodingName().IsNull()) {
-    String result;
-    bool base64_encoded;
-    bool success = InspectorPageAgent::SharedBufferContent(
-        resource_data->Buffer(), resource_data->MimeType(),
-        resource_data->TextEncodingName(), &result, &base64_encoded);
-    DCHECK(success);
-    callback->sendSuccess(result, base64_encoded);
-    return;
-  }
-
-  if (resource_data->CachedResource()) {
-    String content;
-    bool base64_encoded = false;
-    if (InspectorPageAgent::CachedResourceContent(
-            resource_data->CachedResource(), &content, &base64_encoded)) {
-      callback->sendSuccess(content, base64_encoded);
-      return;
-    }
-  }
-
-  callback->sendFailure(
-      Response::Error("No data found for resource with given identifier"));
 }
 
 Response InspectorNetworkAgent::setBlockedURLs(
@@ -1494,7 +1456,7 @@ void InspectorNetworkAgent::DidCommitLoad(LocalFrame* frame,
 }
 
 void InspectorNetworkAgent::FrameScheduledNavigation(LocalFrame* frame,
-                                                     double) {
+                                                     ScheduledNavigation*) {
   String frame_id = IdentifiersFactory::FrameId(frame);
   frames_with_scheduled_navigation_.insert(frame_id);
   if (!frames_with_scheduled_client_navigation_.Contains(frame_id)) {
@@ -1531,6 +1493,42 @@ void InspectorNetworkAgent::FrameClearedScheduledClientNavigation(
 
 void InspectorNetworkAgent::SetHostId(const String& host_id) {
   host_id_ = host_id;
+}
+
+Response InspectorNetworkAgent::GetResponseBody(const String& request_id,
+                                                String* content,
+                                                bool* base64_encoded) {
+  NetworkResourcesData::ResourceData const* resource_data =
+      resources_data_->Data(request_id);
+  if (!resource_data) {
+    return Response::Error("No resource with given identifier found");
+  }
+
+  if (resource_data->HasContent()) {
+    *content = resource_data->Content();
+    *base64_encoded = resource_data->Base64Encoded();
+    return Response::OK();
+  }
+
+  if (resource_data->IsContentEvicted()) {
+    return Response::Error("Request content was evicted from inspector cache");
+  }
+
+  if (resource_data->Buffer() && !resource_data->TextEncodingName().IsNull()) {
+    bool success = InspectorPageAgent::SharedBufferContent(
+        resource_data->Buffer(), resource_data->MimeType(),
+        resource_data->TextEncodingName(), content, base64_encoded);
+    DCHECK(success);
+    return Response::OK();
+  }
+
+  if (resource_data->CachedResource() &&
+      InspectorPageAgent::CachedResourceContent(resource_data->CachedResource(),
+                                                content, base64_encoded)) {
+    return Response::OK();
+  }
+
+  return Response::Error("No data found for resource with given identifier");
 }
 
 bool InspectorNetworkAgent::FetchResourceContent(Document* document,

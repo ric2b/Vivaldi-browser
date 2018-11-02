@@ -27,7 +27,6 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import datetime
 import logging
 import re
 
@@ -102,22 +101,13 @@ class Git(object):
         return self._filesystem.join(self.checkout_root, repository_relative_path)
 
     def in_working_directory(self, path):
-        try:
-            return self._executive.run_command(
-                [self._executable_name, 'rev-parse', '--is-inside-work-tree'],
-                cwd=path, error_handler=Executive.ignore_error).rstrip() == 'true'
-        except OSError:
-            # The Windows bots seem to throw a WindowsError when git isn't installed.
-            # TODO(qyearsley): Check if this is still necessary and remove if possible.
-            _log.warn('Got OSError when running Git.in_working_directory.')
-            return False
+        return self._executive.run_command(
+            [self._executable_name, 'rev-parse', '--is-inside-work-tree'],
+            cwd=path, error_handler=Executive.ignore_error).rstrip() == 'true'
 
     def find_checkout_root(self, path):
-        # "git rev-parse --show-cdup" would be another way to get to the root
-        checkout_root = self.run(['rev-parse', '--show-toplevel'], cwd=(path or './')).strip()
-        if not self._filesystem.isabs(checkout_root):  # Sometimes git returns relative paths
-            checkout_root = self._filesystem.join(path, checkout_root)
-        return checkout_root
+        """Returns the absolute path to the root of the repository."""
+        return self.run(['rev-parse', '--show-toplevel'], cwd=path).strip()
 
     @classmethod
     def read_git_config(cls, key, cwd=None, executive=None):
@@ -129,25 +119,12 @@ class Git(object):
         return executive.run_command(
             [cls.executable_name, 'config', '--get-all', key], error_handler=Executive.ignore_error, cwd=cwd).rstrip('\n')
 
-    def _discard_local_commits(self):
-        self.run(['reset', '--hard', self._remote_branch_ref()])
-
-    def _rebase_in_progress(self):
-        return self._filesystem.exists(self.absolute_path(self._filesystem.join('.git', 'rebase-apply')))
-
     def has_working_directory_changes(self, pathspec=None):
         """Checks whether there are uncommitted changes."""
         command = ['diff', 'HEAD', '--no-renames', '--name-only']
         if pathspec:
             command.extend(['--', pathspec])
         return self.run(command) != ''
-
-    def _discard_working_directory_changes(self):
-        # TODO(qyearsley): Could run git clean here too; this wasn't done
-        # before in order to match svn, but this is no longer a concern.
-        self.run(['reset', 'HEAD', '--hard'])
-        if self._rebase_in_progress():
-            self.run(['rebase', '--abort'])
 
     def unstaged_changes(self):
         """Lists files with unstaged changes, including untracked files.
@@ -194,14 +171,6 @@ class Git(object):
             return ''
         return self._branch_from_ref(ref)
 
-    def current_branch_or_ref(self):
-        """Returns the name of the current branch, or the commit hash if HEAD is detached."""
-        branch_name = self.current_branch()
-        if not branch_name:
-            # HEAD is detached; use commit SHA instead.
-            return self.run(['rev-parse', 'HEAD']).strip()
-        return branch_name
-
     def _upstream_branch(self):
         current_branch = self.current_branch()
         return self._branch_from_ref(self.read_git_config(
@@ -243,7 +212,6 @@ class Git(object):
             match = re.search(status_regexp, line)
             if not match:
                 continue
-            # status = match.group('status')
             filename = match.group('filename')
             filenames.append(filename)
         return filenames
@@ -275,27 +243,8 @@ class Git(object):
         git_log = self.most_recent_log_matching('Cr-Commit-Position:', path)
         return self._commit_position_from_git_log(git_log)
 
-    def _commit_position_regex_for_timestamp(self):
-        return 'Cr-Commit-Position:.*@{#%s}'
-
-    def timestamp_of_revision(self, path, revision):
-        git_log = self.most_recent_log_matching(self._commit_position_regex_for_timestamp() % revision, path)
-        match = re.search(r"^Date:\s*(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2}) ([+-])(\d{2})(\d{2})$", git_log, re.MULTILINE)
-        if not match:
-            return ''
-
-        # Manually modify the timezone since Git doesn't have an option to show it in UTC.
-        # Git also truncates milliseconds but we're going to ignore that for now.
-        time_with_timezone = datetime.datetime(int(match.group(1)), int(match.group(2)), int(match.group(3)),
-                                               int(match.group(4)), int(match.group(5)), int(match.group(6)), 0)
-
-        sign = 1 if match.group(7) == '+' else -1
-        time_without_timezone = time_with_timezone - \
-            datetime.timedelta(hours=sign * int(match.group(8)), minutes=int(match.group(9)))
-        return time_without_timezone.strftime('%Y-%m-%dT%H:%M:%SZ')
-
     def create_patch(self, git_commit=None, changed_files=None):
-        """Returns a byte array (str()) representing the patch file.
+        """Returns a byte array (str) representing the patch file.
 
         Patch files are effectively binary since they may contain
         files of multiple different encodings.
@@ -310,7 +259,6 @@ class Git(object):
             '--no-renames',
             '--src-prefix=a/',
             '--dst-prefix=b/',
-
         ]
         if order:
             command.append(order)
@@ -333,22 +281,8 @@ class Git(object):
         git_log = self.git_commit_detail(git_commit)
         return self._commit_position_from_git_log(git_log)
 
-    def checkout_branch(self, name):
-        self.run(['checkout', '-q', name])
-
-    def create_clean_branch(self, name):
-        self.run(['checkout', '-q', '-b', name, self._remote_branch_ref()])
-
-    def blame(self, path):
-        return self.run(['blame', '--show-email', path])
-
-    # Git-specific methods:
     def _branch_ref_exists(self, branch_ref):
         return self.run(['show-ref', '--quiet', '--verify', branch_ref], return_exit_code=True) == 0
-
-    def delete_branch(self, branch_name):
-        if self._branch_ref_exists('refs/heads/' + branch_name):
-            self.run(['branch', '-D', branch_name])
 
     def _remote_merge_base(self):
         return self.run(['merge-base', self._remote_branch_ref(), 'HEAD']).strip()
@@ -375,20 +309,3 @@ class Git(object):
         if format:
             args.append('--format=' + format)
         return self.run(args)
-
-    def affected_files(self, commit):
-        output = self.run(['log', '-1', '--format=', '--name-only', commit])
-        return output.strip().split('\n')
-
-    def _branch_tracking_remote_master(self):
-        origin_info = self.run(['remote', 'show', 'origin', '-n'])
-        match = re.search(r"^\s*(?P<branch_name>\S+)\s+merges with remote master$", origin_info, re.MULTILINE)
-        if not match:
-            raise ScriptError(message='Unable to find local branch tracking origin/master.')
-        branch = str(match.group('branch_name'))
-        return self._branch_from_ref(self.run(['rev-parse', '--symbolic-full-name', branch]).strip())
-
-    def ensure_cleanly_tracking_remote_master(self):
-        self._discard_working_directory_changes()
-        self.run(['checkout', '-q', self._branch_tracking_remote_master()])
-        self._discard_local_commits()

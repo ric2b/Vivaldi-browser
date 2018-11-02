@@ -10,6 +10,7 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.support.v4.view.ViewCompat;
@@ -20,6 +21,7 @@ import android.util.AttributeSet;
 import android.util.Pair;
 import android.view.DragEvent;
 import android.view.MotionEvent;
+import android.view.PointerIcon;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.accessibility.AccessibilityEvent;
@@ -73,7 +75,6 @@ import java.util.List;
 public class CompositorViewHolder extends FrameLayout
         implements ContentOffsetProvider, LayoutManagerHost, LayoutRenderHost, Invalidator.Host,
                 FullscreenListener {
-
     private boolean mIsKeyboardShowing;
 
     private final Invalidator mInvalidator = new Invalidator();
@@ -123,7 +124,7 @@ public class CompositorViewHolder extends FrameLayout
      * The information about {@link ContentView} for overlay panel. Used to adjust the backing
      * size of the content accordingly.
      */
-    private ContentView mOverlayContentView;
+    private View mOverlayContentView;
     private int mOverlayContentWidthMeasureSpec = ContentView.DEFAULT_MEASURE_SPEC;
     private int mOverlayContentHeightMeasureSpec = ContentView.DEFAULT_MEASURE_SPEC;
 
@@ -180,6 +181,14 @@ public class CompositorViewHolder extends FrameLayout
         super(c);
 
         internalInit();
+    }
+
+    @Override
+    public PointerIcon onResolvePointerIcon(MotionEvent event, int pointerIndex) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return null;
+        View activeView = getActiveView();
+        if (activeView == null || !ViewCompat.isAttachedToWindow(activeView)) return null;
+        return activeView.onResolvePointerIcon(event, pointerIndex);
     }
 
     /**
@@ -261,7 +270,7 @@ public class CompositorViewHolder extends FrameLayout
      * @param width The width of the content view in {@link MeasureSpec}.
      * @param height The height of the content view in {@link MeasureSpec}.
      */
-    public void setOverlayContentInfo(ContentView overlayContentView, int width, int height) {
+    public void setOverlayContentInfo(View overlayContentView, int width, int height) {
         mOverlayContentView = overlayContentView;
         mOverlayContentWidthMeasureSpec = width;
         mOverlayContentHeightMeasureSpec = height;
@@ -411,7 +420,7 @@ public class CompositorViewHolder extends FrameLayout
     /**
      * @return The SurfaceView proxy used by the Compositor.
      */
-    public View getCompositorView() {
+    public CompositorView getCompositorView() {
         return mCompositorView;
     }
 
@@ -478,6 +487,15 @@ public class CompositorViewHolder extends FrameLayout
     public void onToggleOverlayVideoMode(boolean enabled) {
         if (mCompositorView != null) {
             mCompositorView.setOverlayVideoMode(enabled);
+        }
+    }
+
+    /**
+     * Sets the overlay mode.
+     */
+    public void setOverlayMode(boolean useOverlayMode) {
+        if (mCompositorView != null) {
+            mCompositorView.setOverlayVideoMode(useOverlayMode);
         }
     }
 
@@ -734,15 +752,6 @@ public class CompositorViewHolder extends FrameLayout
         }
     }
 
-    /**
-     * @return True if the currently active content view is shown in the normal interactive mode.
-     */
-    public boolean isTabInteractive() {
-        return mLayoutManager != null && mLayoutManager.getActiveLayout() != null
-                && mLayoutManager.getActiveLayout().isTabInteractive() && mContentOverlayVisiblity
-                && mView != null;
-    }
-
     @Override
     public void hideKeyboard(Runnable postHideTask) {
         // When this is called we actually want to hide the keyboard whatever owns it.
@@ -904,8 +913,7 @@ public class CompositorViewHolder extends FrameLayout
      * @param height The default height.
      */
     private void adjustPhysicalBackingSize(ContentViewCore contentViewCore, int width, int height) {
-        ContentView contentView = (ContentView) contentViewCore.getContainerView();
-        if (contentView == mOverlayContentView) {
+        if (contentViewCore.getContainerView() == mOverlayContentView) {
             width = MeasureSpec.getSize(mOverlayContentWidthMeasureSpec);
             height = MeasureSpec.getSize(mOverlayContentHeightMeasureSpec);
         }

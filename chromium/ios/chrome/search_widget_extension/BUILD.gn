@@ -26,8 +26,8 @@ ios_appex_bundle("search_widget_extension") {
   deps = [
     ":search_widget",
     ":system_strings",
-    "resources:quick_action_camera_search",
     "resources:quick_action_incognito_search",
+    "resources:quick_action_scan_qr_code",
     "resources:quick_action_search",
     "resources:quick_action_voice_search",
   ]
@@ -35,7 +35,7 @@ ios_appex_bundle("search_widget_extension") {
   extra_substitutions = [
     "CHROME_CHANNEL_SCHEME=$url_channel_scheme",
     "CHROMIUM_SHORT_NAME=$chromium_short_name",
-    "WIDGET_EXTENSION_BUNDLE_ID=$chromium_bundle_id.SearchTodayExtension",
+    "WIDGET_EXTENSION_BUNDLE_ID=$chromium_bundle_id.TodayExtension",
   ]
 
   entitlements_target = ":entitlements"
@@ -59,6 +59,7 @@ source_set("search_widget") {
   deps = [
     "//base",
     "//components/open_from_clipboard:open_from_clipboard_impl",
+    "//ios/chrome/browser/ui/util:constraints_ui",
     "//ios/chrome/common/app_group",
   ]
 

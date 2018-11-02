@@ -45,12 +45,16 @@
 #endif
 
 #include "app/vivaldi_apptools.h"
+#include "extensions/features/features.h"
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/browser/guest_view/web_view/web_view_constants.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/browser/guest_view/web_view/web_view_permission_helper.h"
 
 using extensions::WebViewGuest;
+#endif
 
 namespace {
 
@@ -140,6 +144,7 @@ void PermissionContextBase::RequestPermission(
   PermissionResult result = GetPermissionStatus(
       nullptr /* render_frame_host */, requesting_origin, embedding_origin);
 
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   // NOTE(andre@vivaldi.com) : Adding an event for "Using permission" here to
   // show current state of page. This is done in the |LocationBar| in |Browser|
   // |Window|. Done this way because of the difference between permission
@@ -153,6 +158,8 @@ void PermissionContextBase::RequestPermission(
         result.content_setting);
   }
   // Vivaldi-block-end
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+
 
   if (result.content_setting == CONTENT_SETTING_ALLOW ||
       result.content_setting == CONTENT_SETTING_BLOCK) {
@@ -179,6 +186,7 @@ void PermissionContextBase::RequestPermission(
                                     kPermissionBlockedBlacklistMessage,
                                     content_settings_type_);
         break;
+      case PermissionStatusSource::INSECURE_ORIGIN:
       case PermissionStatusSource::UNSPECIFIED:
         break;
     }
@@ -254,7 +262,7 @@ PermissionResult PermissionContextBase::GetPermissionStatus(
   if (IsRestrictedToSecureOrigins()) {
     if (!content::IsOriginSecure(requesting_origin)) {
       return PermissionResult(CONTENT_SETTING_BLOCK,
-                              PermissionStatusSource::UNSPECIFIED);
+                              PermissionStatusSource::INSECURE_ORIGIN);
     }
 
     // TODO(raymes): We should check the entire chain of embedders here whenever
@@ -265,7 +273,7 @@ PermissionResult PermissionContextBase::GetPermissionStatus(
     if (!requesting_origin.SchemeIs(extensions::kExtensionScheme) &&
         !content::IsOriginSecure(embedding_origin)) {
       return PermissionResult(CONTENT_SETTING_BLOCK,
-                              PermissionStatusSource::UNSPECIFIED);
+                              PermissionStatusSource::INSECURE_ORIGIN);
     }
   }
 
@@ -355,6 +363,7 @@ void PermissionContextBase::DecidePermission(
     const BrowserPermissionCallback& callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   // NOTE(yngve) extensions are not allowed to create webviews when running as
   // Vivaldi, so this is only non-null for Vivaldi, but adding check of Vivaldi
   // just to be on the safe side
@@ -404,6 +413,7 @@ void PermissionContextBase::DecidePermission(
     }
     return;
   }
+#endif
   if (PermissionRequestManager::IsEnabled()) {
     PermissionRequestManager* permission_request_manager =
         PermissionRequestManager::FromWebContents(web_contents);
@@ -445,13 +455,18 @@ void PermissionContextBase::DecidePermission(
 }
 
 int PermissionContextBase::RemoveBridgeID(int bridge_id) {
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   std::map<int, int>::iterator bridge_itr =
       bridge_id_to_request_id_map_.find(bridge_id);
+
   if (bridge_itr == bridge_id_to_request_id_map_.end())
     return webview::kInvalidPermissionRequestID;
 
   int request_id = bridge_itr->second;
   bridge_id_to_request_id_map_.erase(bridge_itr);
+#else
+  int request_id = 0;
+#endif
   return request_id;
 }
 

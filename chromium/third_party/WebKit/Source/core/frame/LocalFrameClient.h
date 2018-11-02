@@ -61,9 +61,12 @@
 
 namespace service_manager {
 class InterfaceProvider;
-}
+}  // namespace service_manager
 
 namespace blink {
+namespace mojom {
+enum class WebFeature : int32_t;
+}  // namespace mojom
 
 class Document;
 class DocumentLoader;
@@ -86,6 +89,7 @@ class WebApplicationCacheHost;
 class WebApplicationCacheHostClient;
 class WebCookieJar;
 class WebFrame;
+class WebLayerTreeView;
 class WebMediaPlayer;
 class WebMediaPlayerClient;
 class WebMediaPlayerSource;
@@ -150,10 +154,6 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
 
   virtual void DownloadURL(const ResourceRequest&,
                            const String& suggested_name) = 0;
-  virtual void LoadURLExternally(const ResourceRequest&,
-                                 NavigationPolicy,
-                                 WebTriggeringEventInfo,
-                                 bool replaces_current_history_item) = 0;
   virtual void LoadErrorPage(int reason) = 0;
 
   virtual bool NavigateBackForward(int offset) const = 0;
@@ -188,6 +188,10 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
   // Will be called when a particular loading code path has been used. This
   // propogates renderer loading behavior to the browser process for histograms.
   virtual void DidObserveLoadingBehavior(WebLoadingBehaviorFlag) {}
+
+  // Will be called when a new useCounter feature has been observed in a frame.
+  // This propogates feature usage to the browser process for histograms.
+  virtual void DidObserveNewFeatureUsage(mojom::WebFeature) {}
 
   // Transmits the change in the set of watched CSS selectors property that
   // match any element on the frame.
@@ -228,7 +232,8 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
   virtual std::unique_ptr<WebMediaPlayer> CreateWebMediaPlayer(
       HTMLMediaElement&,
       const WebMediaPlayerSource&,
-      WebMediaPlayerClient*) = 0;
+      WebMediaPlayerClient*,
+      WebLayerTreeView*) = 0;
   virtual WebRemotePlaybackClient* CreateWebRemotePlaybackClient(
       HTMLMediaElement&) = 0;
 
@@ -310,10 +315,6 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
       bool present,
       WebSuddenTerminationDisablerType) {}
 
-  virtual LinkResource* CreateServiceWorkerLinkResource(HTMLLinkElement*) {
-    return nullptr;
-  }
-
   // Effective connection type when this frame was loaded.
   virtual WebEffectiveConnectionType GetEffectiveConnectionType() {
     return WebEffectiveConnectionType::kTypeUnknown;
@@ -353,6 +354,8 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
                                                         WebTaskRunner*) = 0;
 
   virtual void AnnotatedRegionsChanged() = 0;
+
+  virtual void DidBlockFramebust(const KURL&) {}
 
   // VB-6063:
   virtual void extendedProgressEstimateChanged(double progressEstimate, double loaded_bytes, int loaded_elements, int total_elements) {}

@@ -32,8 +32,8 @@ int AndroidLiveTabContext::GetSelectedIndex() const {
   return tab_model_->GetActiveIndex();
 }
 
-// Not supported by android.
 std::string AndroidLiveTabContext::GetAppName() const {
+  // Not applicable to android.
   return std::string();
 }
 
@@ -54,9 +54,24 @@ sessions::LiveTab* AndroidLiveTabContext::GetActiveLiveTab() const {
   return sessions::ContentLiveTab::GetForWebContents(web_contents);
 }
 
-// Not supported by android.
 bool AndroidLiveTabContext::IsTabPinned(int index) const {
+  // Not applicable to android.
   return false;
+}
+
+const gfx::Rect AndroidLiveTabContext::GetRestoredBounds() const {
+  // Not applicable to android.
+  return gfx::Rect();
+}
+
+ui::WindowShowState AndroidLiveTabContext::GetRestoredState() const {
+  // Not applicable to android.
+  return ui::SHOW_STATE_NORMAL;
+}
+
+std::string AndroidLiveTabContext::GetWorkspace() const {
+  // Not applicable to android.
+  return std::string();
 }
 
 sessions::LiveTab* AndroidLiveTabContext::AddRestoredTab(
@@ -68,7 +83,8 @@ sessions::LiveTab* AndroidLiveTabContext::AddRestoredTab(
     bool pin,
     bool from_last_session,
     const sessions::PlatformSpecificTabData* tab_platform_data,
-    const std::string& user_agent_override) {
+    const std::string& user_agent_override,
+    const std::string& ext_data) {
   Profile* profile = tab_model_->GetProfile();
 
   // Prepare navigation history.
@@ -95,7 +111,8 @@ sessions::LiveTab* AndroidLiveTabContext::ReplaceRestoredTab(
     bool from_last_session,
     const std::string& extension_app_id,
     const sessions::PlatformSpecificTabData* tab_platform_data,
-    const std::string& user_agent_override) {
+    const std::string& user_agent_override,
+    const std::string& ext_data) {
   NOTIMPLEMENTED();
   return nullptr;
 }

@@ -31,7 +31,6 @@
 #include "core/frame/VisualViewport.h"
 
 #include <memory>
-#include "core/dom/DOMNodeIds.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameClient.h"
@@ -42,10 +41,10 @@
 #include "core/frame/Settings.h"
 #include "core/fullscreen/Fullscreen.h"
 #include "core/layout/TextAutosizer.h"
-#include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
+#include "core/paint/compositing/PaintLayerCompositor.h"
 #include "core/probe/CoreProbes.h"
 #include "platform/Histogram.h"
 #include "platform/geometry/DoubleRect.h"
@@ -66,7 +65,8 @@ VisualViewport::VisualViewport(Page& owner)
       scale_(1),
       browser_controls_adjustment_(0),
       max_page_scale_(-1),
-      track_pinch_zoom_stats_for_page_(false) {
+      track_pinch_zoom_stats_for_page_(false),
+      unique_id_(NewUniqueObjectId()) {
   Reset();
 }
 
@@ -374,9 +374,7 @@ void VisualViewport::CreateLayerTree() {
   if (MainFrame()) {
     if (Document* document = MainFrame()->GetDocument()) {
       inner_viewport_scroll_layer_->SetElementId(
-          CompositorElementIdFromDOMNodeId(
-              DOMNodeIds::IdForNode(document),
-              CompositorElementIdNamespace::kViewport));
+          CompositorElementIdFromUniqueObjectId(unique_id_));
     }
   }
 
@@ -500,6 +498,11 @@ void VisualViewport::SetScrollLayerOnScrollbars(WebLayer* scroll_layer) const {
 
 bool VisualViewport::VisualViewportSuppliesScrollbars() const {
   return GetPage().GetSettings().GetViewportEnabled();
+}
+
+CompositorElementId VisualViewport::GetCompositorElementId() const {
+  // TODO(chrishtr): Implement http://crbug.com/638473.
+  return CompositorElementId();
 }
 
 bool VisualViewport::ScrollAnimatorEnabled() const {

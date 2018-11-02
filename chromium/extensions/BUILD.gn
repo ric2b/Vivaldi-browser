@@ -51,9 +51,9 @@ grit("extensions_renderer_resources") {
   ]
 
   deps = [
-    "//device/serial:serial_mojo_js",
     "//extensions/common:mojo_js",
     "//extensions/common/api:mojom_js",
+    "//services/device/public/interfaces:interfaces_js",
   ]
 }
 
@@ -102,8 +102,6 @@ static_library("test_support") {
     "common/permissions/mock_manifest_permission.h",
     "common/permissions/permission_message_test_util.cc",
     "common/permissions/permission_message_test_util.h",
-    "common/test_util.cc",
-    "common/test_util.h",
     "renderer/test_extensions_renderer_client.cc",
     "renderer/test_extensions_renderer_client.h",
     "test/background_page_watcher.cc",
@@ -155,8 +153,8 @@ static_library("test_support") {
 
 repack("shell_and_test_pak") {
   sources = [
-    "$root_gen_dir/blink/public/resources/blink_image_resources_100_percent.pak",
     "$root_gen_dir/blink/public/resources/blink_resources.pak",
+    "$root_gen_dir/blink/public/resources/blink_scaled_resources_100_percent.pak",
     "$root_gen_dir/content/app/strings/content_strings_en-US.pak",
     "$root_gen_dir/content/browser/devtools/devtools_resources.pak",
     "$root_gen_dir/content/content_resources.pak",
@@ -181,8 +179,8 @@ repack("shell_and_test_pak") {
     "//content/shell:resources",
     "//extensions/shell:resources",
     "//extensions/strings",
-    "//third_party/WebKit/public:image_resources",
     "//third_party/WebKit/public:resources",
+    "//third_party/WebKit/public:scaled_resources_100_percent",
     "//ui/resources",
     "//ui/strings",
   ]
@@ -292,8 +290,7 @@ source_set("chrome_extensions_browsertests") {
     "//device/serial:test_support",
     "//extensions/common/api",
     "//google_apis:test_support",
-    "//media",
-    "//media/base:test_support",
+    "//media:test_support",
     "//media/cast:test_support",
     "//net",
     "//net:test_support",

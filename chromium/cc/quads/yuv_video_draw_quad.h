@@ -38,10 +38,10 @@ class CC_EXPORT YUVVideoDrawQuad : public DrawQuad {
   YUVVideoDrawQuad();
   YUVVideoDrawQuad(const YUVVideoDrawQuad& other);
 
-  void SetNew(const SharedQuadState* shared_quad_state,
+  void SetNew(const viz::SharedQuadState* shared_quad_state,
               const gfx::Rect& rect,
-              const gfx::Rect& opaque_rect,
               const gfx::Rect& visible_rect,
+              bool needs_blending,
               // |*_tex_coord_rect| contains non-normalized coordinates.
               // TODO(reveman): Make the use of normalized vs non-normalized
               // coordinates consistent across all quad types: crbug.com/487370
@@ -59,9 +59,8 @@ class CC_EXPORT YUVVideoDrawQuad : public DrawQuad {
               float multiplier,
               uint32_t bits_per_channel);
 
-  void SetAll(const SharedQuadState* shared_quad_state,
+  void SetAll(const viz::SharedQuadState* shared_quad_state,
               const gfx::Rect& rect,
-              const gfx::Rect& opaque_rect,
               const gfx::Rect& visible_rect,
               bool needs_blending,
               // |*_tex_coord_rect| contains non-normalized coordinates.
@@ -96,16 +95,16 @@ class CC_EXPORT YUVVideoDrawQuad : public DrawQuad {
 
   static const YUVVideoDrawQuad* MaterialCast(const DrawQuad*);
 
-  ResourceId y_plane_resource_id() const {
+  viz::ResourceId y_plane_resource_id() const {
     return resources.ids[kYPlaneResourceIdIndex];
   }
-  ResourceId u_plane_resource_id() const {
+  viz::ResourceId u_plane_resource_id() const {
     return resources.ids[kUPlaneResourceIdIndex];
   }
-  ResourceId v_plane_resource_id() const {
+  viz::ResourceId v_plane_resource_id() const {
     return resources.ids[kVPlaneResourceIdIndex];
   }
-  ResourceId a_plane_resource_id() const {
+  viz::ResourceId a_plane_resource_id() const {
     return resources.ids[kAPlaneResourceIdIndex];
   }
 

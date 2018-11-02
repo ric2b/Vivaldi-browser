@@ -47,6 +47,7 @@ std::map<const std::wstring, const std::wstring> kLanguages = {
     {L"da", L"Danish"},
     {L"nl", L"Dutch"},
     {L"en-us", L"English"},
+    {L"en-AU", L"English (Australia)"},
     {L"et", L"Estonian"},
     {L"eo", L"Esperanto"},
     {L"fi", L"Finnish"},
@@ -264,6 +265,7 @@ void VivaldiInstallDialog::SaveInstallValues() {
 }
 
 bool VivaldiInstallDialog::InternalSelectLanguage(const std::wstring& code) {
+  LOG(INFO) << "InternalSelectLanguage: code: " << code;
   bool found = false;
   std::map<const std::wstring, const std::wstring>::iterator it;
   for (it = kLanguages.begin(); it != kLanguages.end(); it++) {
@@ -274,7 +276,22 @@ bool VivaldiInstallDialog::InternalSelectLanguage(const std::wstring& code) {
       break;
     }
   }
+  if (!found)
+    LOG(WARNING) << "InternalSelectLanguage: language code undefined";
   return found;
+}
+
+std::wstring VivaldiInstallDialog::GetCurrentTranslation() {
+  // Special handling for Australian locale. This locale is not supported
+  // by the Chromium installer.
+  std::unique_ptr<wchar_t[]> buffer(new wchar_t[LOCALE_NAME_MAX_LENGTH]);
+  if (buffer.get()) {
+    ::GetUserDefaultLocaleName(buffer.get(), LOCALE_NAME_MAX_LENGTH);
+    std::wstring locale_name(buffer.get());
+    if (locale_name.compare(L"en-AU") == 0)
+      return locale_name;
+  }
+  return installer::GetCurrentTranslation();
 }
 
 void VivaldiInstallDialog::InitDialog() {

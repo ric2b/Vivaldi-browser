@@ -31,17 +31,15 @@
 
 #include <memory>
 #include "core/CoreExport.h"
+#include "core/dom/UserGestureIndicator.h"
 #include "core/dom/WeakIdentifierMap.h"
 #include "core/frame/Frame.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/loader/FrameLoader.h"
 #include "core/page/FrameTree.h"
-#include "core/paint/PaintPhase.h"
 #include "platform/Supplementable.h"
-#include "platform/graphics/ImageOrientation.h"
 #include "platform/heap/Handle.h"
 #include "platform/scroll/ScrollTypes.h"
-#include "platform/wtf/HashSet.h"
 
 namespace service_manager {
 class InterfaceProvider;
@@ -84,6 +82,7 @@ class PluginData;
 class ResourceRequest;
 class ScriptController;
 class SpellChecker;
+class TextSuggestionController;
 class WebFrameScheduler;
 class WebPluginContainerImpl;
 class WebTaskRunner;
@@ -134,7 +133,8 @@ class CORE_EXPORT LocalFrame final : public Frame,
   void DocumentAttached();
 
   Frame* FindFrameForNavigation(const AtomicString& name,
-                                LocalFrame& active_frame);
+                                LocalFrame& active_frame,
+                                const KURL& destination_url);
 
   // Note: these two functions are not virtual but intentionally shadow the
   // corresponding method in the Frame base class to return the
@@ -157,6 +157,7 @@ class CORE_EXPORT LocalFrame final : public Frame,
   NavigationScheduler& GetNavigationScheduler() const;
   FrameSelection& Selection() const;
   InputMethodController& GetInputMethodController() const;
+  TextSuggestionController& GetTextSuggestionController() const;
   ScriptController& GetScriptController() const;
   SpellChecker& GetSpellChecker() const;
   FrameConsole& Console() const;
@@ -225,7 +226,10 @@ class CORE_EXPORT LocalFrame final : public Frame,
 
   bool IsNavigationAllowed() const { return navigation_disable_count_ == 0; }
 
-  bool CanNavigate(const Frame&);
+  // destination_url is only used when a navigation is blocked due to
+  // framebusting defenses, in order to give the option of restarting the
+  // navigation at a later time.
+  bool CanNavigate(const Frame&, const KURL& destination_url = KURL());
 
   service_manager::InterfaceProvider& GetInterfaceProvider();
   InterfaceRegistry* GetInterfaceRegistry() { return interface_registry_; }
@@ -233,10 +237,10 @@ class CORE_EXPORT LocalFrame final : public Frame,
   LocalFrameClient* Client() const;
 
   ContentSettingsClient* GetContentSettingsClient();
-  FrameResourceCoordinator* GetFrameResourceCoordinator() {
-    // can be null
-    return frame_resource_coordinator_;
-  }
+
+  // GetFrameResourceCoordinator may return nullptr when it can not hook up to
+  // services/resource_coordinator.
+  FrameResourceCoordinator* GetFrameResourceCoordinator();
 
   PluginData* GetPluginData() const;
 
@@ -252,13 +256,6 @@ class CORE_EXPORT LocalFrame final : public Frame,
 
   bool IsInert() const { return is_inert_; }
 
-  using FrameInitCallback = void (*)(LocalFrame*);
-  // Allows for the registration of a callback that is invoked whenever a new
-  // LocalFrame is initialized. Callbacks are executed in the order that they
-  // were added using registerInitializationCallback, and there are no checks
-  // for adding a callback multiple times.
-  static void RegisterInitializationCallback(FrameInitCallback);
-
   // If the frame hosts a PluginDocument, this method returns the
   // WebPluginContainerImpl that hosts the plugin. If the provided node is a
   // plugin, then it returns its WebPluginContainerImpl. Otherwise, uses the
@@ -272,6 +269,15 @@ class CORE_EXPORT LocalFrame final : public Frame,
   // and their respective scroll positions, clips, etc.
   void SetViewportIntersectionFromParent(const IntRect&);
   IntRect RemoteViewportIntersection() { return remote_viewport_intersection_; }
+
+  void NotifyUserActivation();
+
+  // Creates a UserGestureIndicator that contains a UserGestureToken with the
+  // given status. Also if a non-null LocalFrame* is provided, associates the
+  // token with the frame tree.
+  static std::unique_ptr<UserGestureIndicator> CreateUserGesture(
+      LocalFrame*,
+      UserGestureToken::Status = UserGestureToken::kPossiblyExistingGesture);
 
  private:
   friend class FrameNavigationDisabler;
@@ -311,6 +317,7 @@ class CORE_EXPORT LocalFrame final : public Frame,
   const Member<EventHandler> event_handler_;
   const Member<FrameConsole> console_;
   const Member<InputMethodController> input_method_controller_;
+  const Member<TextSuggestionController> text_suggestion_controller_;
 
   int navigation_disable_count_;
 
@@ -325,7 +332,7 @@ class CORE_EXPORT LocalFrame final : public Frame,
   InterfaceRegistry* const interface_registry_;
 
   IntRect remote_viewport_intersection_;
-  Member<FrameResourceCoordinator> frame_resource_coordinator_;
+  std::unique_ptr<FrameResourceCoordinator> frame_resource_coordinator_;
 };
 
 inline FrameLoader& LocalFrame::Loader() const {
@@ -363,6 +370,11 @@ inline FrameConsole& LocalFrame::Console() const {
 
 inline InputMethodController& LocalFrame::GetInputMethodController() const {
   return *input_method_controller_;
+}
+
+inline TextSuggestionController& LocalFrame::GetTextSuggestionController()
+    const {
+  return *text_suggestion_controller_;
 }
 
 inline bool LocalFrame::InViewSourceMode() const {

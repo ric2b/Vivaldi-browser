@@ -54,6 +54,27 @@ stage_install_rpm() {
   chmod 755 "${STAGEDIR}/etc/cron.daily/${PACKAGE}"
 }
 
+verify_package() {
+  local DEPENDS="$1"
+  local ADDITIONAL_RPM_DEPENDS="/bin/sh, \
+  rpmlib(CompressedFileNames) <= 3.0.4-1, \
+  rpmlib(PayloadFilesHavePrefix) <= 4.0-1, \
+  rpmlib(PayloadIsXz) <= 5.2-1, \
+  /usr/sbin/update-alternatives"
+  echo "${DEPENDS}" "${ADDITIONAL_RPM_DEPENDS}" | sed 's/,/\n/g' | \
+      sed 's/^ *//' | LANG=C sort > expected_rpm_depends
+  rpm -qpR "${OUTPUTDIR}/${PKGNAME}.${ARCHITECTURE}.rpm" | LANG=C sort | uniq \
+      > actual_rpm_depends
+  BAD_DIFF=0
+  diff -u expected_rpm_depends actual_rpm_depends || BAD_DIFF=1
+  if [ $BAD_DIFF -ne 0 ] && [ -z "${IGNORE_DEPS_CHANGES:-}" ]; then
+    echo
+    echo "ERROR: bad rpm dependencies!"
+    echo
+    exit $BAD_DIFF
+  fi
+}
+
 # Actually generate the package file.
 do_package() {
   echo "Packaging ${ARCHITECTURE}..."
@@ -112,22 +133,26 @@ do_package() {
   # link-time code rewriting, but it might leave the symbol dependency in
   # place -- there are no guarantees.
   BAD_DIFF=0
-  diff -u "$SCRIPTDIR/expected_deps_$ARCHITECTURE" \
-      <(echo "${DETECTED_DEPENDS}" | \
-        LANG=C sort | \
-        grep -v '^ld-linux.*\(GLIBC_2\.3\)') \
-      || BAD_DIFF=1
+  if [ -r "$SCRIPTDIR/expected_deps_$ARCHITECTURE" ]; then
+    diff -u "$SCRIPTDIR/expected_deps_$ARCHITECTURE" \
+        <(echo "${DETECTED_DEPENDS}" | \
+          LANG=C sort | \
+          grep -v '^ld-linux.*\(GLIBC_2\.3\)') \
+        || BAD_DIFF=1
+  fi
   if [ $BAD_DIFF -ne 0 ] && [ -z "${IGNORE_DEPS_CHANGES:-}" ]; then
     echo
     echo "ERROR: Shared library dependencies changed!"
     echo "If this is intentional, please update:"
-    echo "chrome/installer/linux/rpm/expected_deps_i386"
     echo "chrome/installer/linux/rpm/expected_deps_x86_64"
     echo
     exit $BAD_DIFF
   fi
 
-  # lsb implies many dependencies.
+  # lsb implies many dependencies and on Fedora or RHEL some of these are not
+  # needed at all (the most obvious one is qt3) and Chrome is usually the one
+  # who pulls them to the system by requiring the whole lsb. Require only
+  # lsb_release from the lsb as that's the only thing that we are using.
   #
   # nss (bundled) is optional in LSB 4.0. Also specify a more recent version
   # for security and stability updates. While we depend on libnss3.so and not
@@ -161,7 +186,6 @@ do_package() {
   gen_spec
 
   # Create temporary rpmbuild dirs.
-  RPMBUILD_DIR=$(mktemp -d -t rpmbuild.XXXXXX) || exit 1
   mkdir -p "$RPMBUILD_DIR/BUILD"
   mkdir -p "$RPMBUILD_DIR/RPMS"
 
@@ -188,14 +212,16 @@ EOSCRIPT
   fi
   # Make sure the package is world-readable, otherwise it causes problems when
   # copied to share drive.
-  chmod a+r "${OUTPUTDIR}/${PKGNAME}.$ARCHITECTURE.rpm"
-  rm -rf "$RPMBUILD_DIR"
+  chmod a+r "${OUTPUTDIR}/${PKGNAME}.${ARCHITECTURE}.rpm"
+
+  verify_package "$DEPENDS"
 }
 
 # Remove temporary files and unwanted packaging output.
 cleanup() {
   rm -rf "${STAGEDIR}"
   rm -rf "${TMPFILEDIR}"
+  rm -rf "${RPMBUILD_DIR}"
 }
 
 usage() {
@@ -294,8 +320,6 @@ process_opts() {
 
 SCRIPTDIR=$(readlink -f "$(dirname "$0")")
 OUTPUTDIR="${PWD}"
-STAGEDIR=$(mktemp -d -t rpm.build.XXXXXX) || exit 1
-TMPFILEDIR=$(mktemp -d -t rpm.tmp.XXXXXX) || exit 1
 CHANNEL="trunk"
 # Default target architecture to same as build host.
 if [ "$(uname -m)" = "x86_64" ]; then
@@ -303,12 +327,19 @@ if [ "$(uname -m)" = "x86_64" ]; then
 else
   TARGETARCH="ia32"
 fi
-SPEC="${TMPFILEDIR}/vivaldi.spec"
 
 # call cleanup() on exit
 trap cleanup 0
 process_opts "$@"
 BUILDDIR=${BUILDDIR:=$(readlink -f "${SCRIPTDIR}/../../../../../out/Release")}
+
+STAGEDIR="${BUILDDIR}/rpm-staging-${CHANNEL}"
+mkdir -p "${STAGEDIR}"
+TMPFILEDIR="${BUILDDIR}/rpm-tmp-${CHANNEL}"
+mkdir -p "${TMPFILEDIR}"
+RPMBUILD_DIR="${BUILDDIR}/rpm-build-${CHANNEL}"
+mkdir -p "${RPMBUILD_DIR}"
+SPEC="${TMPFILEDIR}/vivaldi.spec"
 
 source ${BUILDDIR}/installer/common/installer.include
 

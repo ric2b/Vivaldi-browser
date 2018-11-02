@@ -7,8 +7,6 @@
 #include <algorithm>
 #include <vector>
 
-#include "ash/metrics/user_metrics_action.h"
-#include "ash/metrics/user_metrics_recorder.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
@@ -16,11 +14,13 @@
 #include "ash/wm/overview/overview_animation_type.h"
 #include "ash/wm/overview/scoped_overview_animation_settings.h"
 #include "ash/wm/overview/scoped_transform_overview_window.h"
+#include "ash/wm/overview/window_grid.h"
 #include "ash/wm/overview/window_selector.h"
 #include "ash/wm/overview/window_selector_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_state.h"
 #include "base/auto_reset.h"
+#include "base/metrics/user_metrics.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
@@ -58,7 +58,7 @@ static const int kWindowSelectorMargin = kWindowMargin * 2;
 // Foreground label color.
 static const SkColor kLabelColor = SK_ColorWHITE;
 
-// TODO(tdanderson): Move this to a central location.
+// Close button color.
 static const SkColor kCloseButtonColor = SK_ColorWHITE;
 
 // Label background color once in overview mode.
@@ -100,6 +100,10 @@ static const int kExitFadeInMilliseconds = 30;
 // this fraction of size.
 static const float kPreCloseScale = 0.02f;
 
+// Before dragging an overview window, the window will scale up |kPreDragScale|
+// to indicate its selection.
+static const float kDragWindowScale = 0.04f;
+
 // Convenience method to fade in a Window with predefined animation settings.
 // Note: The fade in animation will occur after a delay where the delay is how
 // long the lay out animations take.
@@ -112,12 +116,13 @@ void SetupFadeInAfterLayout(views::Widget* widget) {
   window->layer()->SetOpacity(1.0f);
 }
 
-// A Button that has a listener and listens to mouse clicks on the visible part
-// of an overview window.
-class ShieldButton : public views::CustomButton {
+// A Button that has a listener and listens to mouse / gesture events on the
+// visible part of an overview window. Note that the drag events are only
+// handled in maximized mode.
+class ShieldButton : public views::Button {
  public:
   ShieldButton(views::ButtonListener* listener, const base::string16& name)
-      : views::CustomButton(listener) {
+      : views::Button(listener) {
     SetAccessibleName(name);
   }
   ~ShieldButton() override {}
@@ -128,6 +133,65 @@ class ShieldButton : public views::CustomButton {
   // necessary to prevent a crash when a user clicks on the fading out widget
   // after the WindowSelectorItem has been destroyed.
   void ResetListener() { listener_ = nullptr; }
+
+  // views::Button:
+  bool OnMousePressed(const ui::MouseEvent& event) override {
+    if (listener() && SplitViewController::ShouldAllowSplitView()) {
+      gfx::Point location(event.location());
+      views::View::ConvertPointToScreen(this, &location);
+      listener()->HandlePressEvent(location);
+      return true;
+    }
+    return views::Button::OnMousePressed(event);
+  }
+
+  void OnMouseReleased(const ui::MouseEvent& event) override {
+    if (listener() && SplitViewController::ShouldAllowSplitView()) {
+      gfx::Point location(event.location());
+      views::View::ConvertPointToScreen(this, &location);
+      listener()->HandleReleaseEvent(location);
+      return;
+    }
+    views::Button::OnMouseReleased(event);
+  }
+
+  bool OnMouseDragged(const ui::MouseEvent& event) override {
+    if (listener() && SplitViewController::ShouldAllowSplitView()) {
+      gfx::Point location(event.location());
+      views::View::ConvertPointToScreen(this, &location);
+      listener()->HandleDragEvent(location);
+      return true;
+    }
+    return views::Button::OnMouseDragged(event);
+  }
+
+  void OnGestureEvent(ui::GestureEvent* event) override {
+    if (listener() && SplitViewController::ShouldAllowSplitView()) {
+      gfx::Point location(event->location());
+      views::View::ConvertPointToScreen(this, &location);
+      switch (event->type()) {
+        case ui::ET_GESTURE_SCROLL_BEGIN:
+        case ui::ET_GESTURE_TAP_DOWN:
+          listener()->HandlePressEvent(location);
+          break;
+        case ui::ET_GESTURE_SCROLL_UPDATE:
+          listener()->HandleDragEvent(location);
+          break;
+        case ui::ET_GESTURE_END:
+          listener()->HandleReleaseEvent(location);
+          break;
+        default:
+          break;
+      }
+      event->SetHandled();
+      return;
+    }
+    views::Button::OnGestureEvent(event);
+  }
+
+  WindowSelectorItem* listener() {
+    return static_cast<WindowSelectorItem*>(listener_);
+  }
 
  protected:
   // views::View:
@@ -142,7 +206,7 @@ class ShieldButton : public views::CustomButton {
 WindowSelectorItem::OverviewCloseButton::OverviewCloseButton(
     views::ButtonListener* listener)
     : views::ImageButton(listener) {
-  SetImage(views::CustomButton::STATE_NORMAL,
+  SetImage(views::Button::STATE_NORMAL,
            gfx::CreateVectorIcon(kWindowControlCloseIcon, kCloseButtonColor));
   SetImageAlignment(views::ImageButton::ALIGN_CENTER,
                     views::ImageButton::ALIGN_MIDDLE);
@@ -396,17 +460,19 @@ class WindowSelectorItem::CaptionContainerView : public views::View {
 };
 
 WindowSelectorItem::WindowSelectorItem(aura::Window* window,
-                                       WindowSelector* window_selector)
+                                       WindowSelector* window_selector,
+                                       WindowGrid* window_grid)
     : dimmed_(false),
       root_window_(window->GetRootWindow()),
-      transform_window_(window),
+      transform_window_(this, window),
       in_bounds_update_(false),
       selected_(false),
       caption_container_view_(nullptr),
       label_view_(nullptr),
       close_button_(new OverviewCloseButton(this)),
       window_selector_(window_selector),
-      background_view_(nullptr) {
+      background_view_(nullptr),
+      window_grid_(window_grid) {
   CreateWindowLabel(window->GetTitle());
   GetWindow()->AddObserver(this);
 }
@@ -530,19 +596,22 @@ void WindowSelectorItem::SetDimmed(bool dimmed) {
 void WindowSelectorItem::ButtonPressed(views::Button* sender,
                                        const ui::Event& event) {
   if (sender == close_button_) {
-    Shell::Get()->metrics()->RecordUserMetricsAction(
-        UMA_WINDOW_OVERVIEW_CLOSE_BUTTON);
-    if (ash::Shell::Get()
+    base::RecordAction(
+        base::UserMetricsAction("WindowSelector_OverviewCloseButton"));
+    if (Shell::Get()
             ->tablet_mode_controller()
             ->IsTabletModeWindowManagerEnabled()) {
-      ash::Shell::Get()->metrics()->RecordUserMetricsAction(
-          ash::UMA_TABLET_WINDOW_CLOSE_THROUGH_OVERVIEW_CLOSE_BUTTON);
+      base::RecordAction(
+          base::UserMetricsAction("Tablet_WindowCloseFromOverviewButton"));
     }
     CloseWindow();
     return;
   }
   CHECK(sender == caption_container_view_->listener_button());
-  window_selector_->SelectWindow(this);
+
+  // For other cases, the event is handled in OverviewWindowDragController.
+  if (!SplitViewController::ShouldAllowSplitView())
+    window_selector_->SelectWindow(this);
 }
 
 void WindowSelectorItem::OnWindowDestroying(aura::Window* window) {
@@ -563,6 +632,22 @@ float WindowSelectorItem::GetItemScale(const gfx::Size& size) {
       transform_window_.GetTargetBoundsInScreen().size(), inset_size,
       transform_window_.GetTopInset(),
       close_button_->GetPreferredSize().height());
+}
+
+void WindowSelectorItem::HandlePressEvent(
+    const gfx::Point& location_in_screen) {
+  StartDrag();
+  window_selector_->InitiateDrag(this, location_in_screen);
+}
+
+void WindowSelectorItem::HandleReleaseEvent(
+    const gfx::Point& location_in_screen) {
+  EndDrag();
+  window_selector_->CompleteDrag(this);
+}
+
+void WindowSelectorItem::HandleDragEvent(const gfx::Point& location_in_screen) {
+  window_selector_->Drag(this, location_in_screen);
 }
 
 gfx::Rect WindowSelectorItem::GetTargetBoundsInScreen() const {
@@ -750,6 +835,60 @@ gfx::SlideAnimation* WindowSelectorItem::GetBackgroundViewAnimation() {
 
 aura::Window* WindowSelectorItem::GetOverviewWindowForMinimizedStateForTest() {
   return transform_window_.GetOverviewWindowForMinimizedState();
+}
+
+void WindowSelectorItem::StartDrag() {
+  gfx::Rect scaled_bounds(target_bounds_);
+  scaled_bounds.Inset(-target_bounds_.width() * kDragWindowScale,
+                      -target_bounds_.height() * kDragWindowScale);
+  OverviewAnimationType animation_type =
+      OverviewAnimationType::OVERVIEW_ANIMATION_DRAGGING_SELECTOR_ITEM;
+  SetBounds(scaled_bounds, animation_type);
+
+  aura::Window* widget_window = item_widget_->GetNativeWindow();
+  if (widget_window && widget_window->parent() == GetWindow()->parent()) {
+    // TODO(xdai): This might not work if there is an always on top window.
+    // See crbug.com/733760.
+    widget_window->parent()->StackChildAtTop(widget_window);
+    widget_window->parent()->StackChildBelow(GetWindow(), widget_window);
+  }
+}
+
+void WindowSelectorItem::EndDrag() {
+  // First stack this item's window below the snapped window if split view mode
+  // is active.
+  aura::Window* dragged_window = GetWindow();
+  aura::Window* dragged_widget_window = item_widget_->GetNativeWindow();
+  aura::Window* parent_window = dragged_widget_window->parent();
+  if (Shell::Get()->IsSplitViewModeActive()) {
+    aura::Window* snapped_window =
+        Shell::Get()->split_view_controller()->GetDefaultSnappedWindow();
+    if (snapped_window->parent() == parent_window &&
+        dragged_window->parent() == parent_window) {
+      parent_window->StackChildBelow(dragged_widget_window, snapped_window);
+      parent_window->StackChildBelow(dragged_window, dragged_widget_window);
+    }
+  }
+
+  // Then find the window which was stacked right above this selector item's
+  // window before dragging and stack this selector item's window below it.
+  const std::vector<std::unique_ptr<WindowSelectorItem>>& selector_items =
+      window_grid_->window_list();
+  aura::Window* stacking_target = nullptr;
+  for (size_t index = 0; index < selector_items.size(); index++) {
+    if (index > 0) {
+      aura::Window* window = selector_items[index - 1].get()->GetWindow();
+      if (window->parent() == parent_window &&
+          dragged_window->parent() == parent_window) {
+        stacking_target = window;
+      }
+    }
+    if (selector_items[index].get() == this && stacking_target) {
+      parent_window->StackChildBelow(dragged_widget_window, stacking_target);
+      parent_window->StackChildBelow(dragged_window, dragged_widget_window);
+      break;
+    }
+  }
 }
 
 }  // namespace ash

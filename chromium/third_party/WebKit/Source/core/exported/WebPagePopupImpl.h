@@ -49,20 +49,19 @@ class PagePopupChromeClient;
 class PagePopupClient;
 class WebLayerTreeView;
 class WebLayer;
-class WebViewBase;
+class WebViewImpl;
 class LocalDOMWindow;
 
-class CORE_EXPORT WebPagePopupImpl final
-    : public NON_EXPORTED_BASE(WebPagePopup),
-      public NON_EXPORTED_BASE(PageWidgetEventHandler),
-      public NON_EXPORTED_BASE(PagePopup),
-      public NON_EXPORTED_BASE(RefCounted<WebPagePopupImpl>) {
+class CORE_EXPORT WebPagePopupImpl final : public WebPagePopup,
+                                           public PageWidgetEventHandler,
+                                           public PagePopup,
+                                           public RefCounted<WebPagePopupImpl> {
   WTF_MAKE_NONCOPYABLE(WebPagePopupImpl);
   USING_FAST_MALLOC(WebPagePopupImpl);
 
  public:
   ~WebPagePopupImpl() override;
-  bool Initialize(WebViewBase*, PagePopupClient*);
+  bool Initialize(WebViewImpl*, PagePopupClient*);
   void ClosePopup();
   WebWidgetClient* WidgetClient() const { return widget_client_; }
   bool HasSamePopupClient(WebPagePopupImpl* other) {
@@ -117,7 +116,7 @@ class CORE_EXPORT WebPagePopupImpl final
   WebRect WindowRectInScreen() const;
 
   WebWidgetClient* widget_client_;
-  WebViewBase* web_view_;
+  WebViewImpl* web_view_;
   Persistent<Page> page_;
   Persistent<PagePopupChromeClient> chrome_client_;
   PagePopupClient* popup_client_;

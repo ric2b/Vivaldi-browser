@@ -58,11 +58,6 @@ const unsigned kLoadMaxDelayMs = 2000;
 // color.
 const SkColor kDefaultWallpaperColor = SK_ColorGRAY;
 
-#if DCHECK_IS_ON()
-base::LazyInstance<base::SequenceChecker>::Leaky g_wallpaper_sequence_checker =
-    LAZY_INSTANCE_INITIALIZER;
-#endif
-
 // The path ids for directories.
 int dir_user_data_path_id = -1;            // chrome::DIR_USER_DATA
 int dir_chromeos_wallpapers_path_id = -1;  // chrome::DIR_CHROMEOS_WALLPAPERS
@@ -136,9 +131,9 @@ MovableOnDestroyCallback::~MovableOnDestroyCallback() {
     callback_.Run();
 }
 
-void AssertCalledOnWallpaperSequence() {
+void AssertCalledOnWallpaperSequence(base::SequencedTaskRunner* task_runner) {
 #if DCHECK_IS_ON()
-  DCHECK(g_wallpaper_sequence_checker.Get().CalledOnValidSequence());
+  DCHECK(task_runner->RunsTasksInCurrentSequence());
 #endif
 }
 
@@ -592,15 +587,6 @@ void WallpaperManagerBase::InitInitialUserWallpaper(const AccountId& account_id,
   current_user_wallpaper_info_.layout = WALLPAPER_LAYOUT_CENTER_CROPPED;
   current_user_wallpaper_info_.type = DEFAULT;
   current_user_wallpaper_info_.date = base::Time::Now().LocalMidnight();
-
-  std::string device_wallpaper_url;
-  std::string device_wallpaper_hash;
-  if (ShouldSetDeviceWallpaper(account_id, &device_wallpaper_url,
-                               &device_wallpaper_hash)) {
-    current_user_wallpaper_info_.location =
-        GetDeviceWallpaperFilePath().value();
-    current_user_wallpaper_info_.type = DEVICE;
-  }
 
   WallpaperInfo info = current_user_wallpaper_info_;
   SetUserWallpaperInfo(account_id, info, is_persistent);

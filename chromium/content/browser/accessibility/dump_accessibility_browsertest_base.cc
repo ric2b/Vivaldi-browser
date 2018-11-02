@@ -23,7 +23,7 @@
 #include "content/browser/accessibility/browser_accessibility.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/accessibility/browser_accessibility_state_impl.h"
-#include "content/browser/frame_host/render_widget_host_view_child_frame.h"
+#include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_paths.h"
@@ -263,13 +263,13 @@ void DumpAccessibilityTestBase::RunTestForPlatform(
     // Load the url, then enable accessibility.
     NavigateToURL(shell(), url);
     AccessibilityNotificationWaiter accessibility_waiter(
-        web_contents, kAccessibilityModeComplete, ui::AX_EVENT_NONE);
+        web_contents, ui::kAXModeComplete, ui::AX_EVENT_NONE);
     accessibility_waiter.WaitForNotification();
   } else {
     // Enable accessibility, then load the test html and wait for the
     // "load complete" AX event.
     AccessibilityNotificationWaiter accessibility_waiter(
-        web_contents, kAccessibilityModeComplete, ui::AX_EVENT_LOAD_COMPLETE);
+        web_contents, ui::kAXModeComplete, ui::AX_EVENT_LOAD_COMPLETE);
     NavigateToURL(shell(), url);
     accessibility_waiter.WaitForNotification();
   }

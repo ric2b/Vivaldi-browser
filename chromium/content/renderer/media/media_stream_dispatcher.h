@@ -16,15 +16,19 @@
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "content/common/content_export.h"
+#include "content/common/media/media_stream.mojom.h"
 #include "content/common/media/media_stream_options.h"
 #include "content/public/renderer/render_frame_observer.h"
-#include "content/renderer/media/media_stream_dispatcher_eventhandler.h"
+#include "mojo/public/cpp/bindings/binding.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 
 namespace url {
 class Origin;
 }
 
 namespace content {
+
+class MediaStreamDispatcherEventHandler;
 
 // MediaStreamDispatcher is a delegate for the Media Stream API messages.
 // MediaStreams are used by WebKit to open media devices such as Video Capture
@@ -33,7 +37,7 @@ namespace content {
 // RenderProcessHostImpl).
 class CONTENT_EXPORT MediaStreamDispatcher
     : public RenderFrameObserver,
-      public base::SupportsWeakPtr<MediaStreamDispatcher> {
+      public mojom::MediaStreamDispatcher {
  public:
   explicit MediaStreamDispatcher(RenderFrame* render_frame);
   ~MediaStreamDispatcher() override;
@@ -88,15 +92,15 @@ class CONTENT_EXPORT MediaStreamDispatcher
   // Returns an audio session_id given a label and an index.
   virtual int audio_session_id(const std::string& label, int index);
 
- protected:
-  int GetNextIpcIdForTest() { return next_ipc_id_; }
-
  private:
+  friend class MediaStreamDispatcherTest;
+  friend class UserMediaClientImplTest;
   FRIEND_TEST_ALL_PREFIXES(MediaStreamDispatcherTest, BasicVideoDevice);
   FRIEND_TEST_ALL_PREFIXES(MediaStreamDispatcherTest, TestFailure);
   FRIEND_TEST_ALL_PREFIXES(MediaStreamDispatcherTest, CancelGenerateStream);
   FRIEND_TEST_ALL_PREFIXES(MediaStreamDispatcherTest,
                            GetNonScreenCaptureDevices);
+  FRIEND_TEST_ALL_PREFIXES(MediaStreamDispatcherTest, DeviceClosed);
 
   struct Request;
 
@@ -105,26 +109,32 @@ class CONTENT_EXPORT MediaStreamDispatcher
   struct Stream;
 
   // RenderFrameObserver override.
+  void OnInterfaceRequestForFrame(
+      const std::string& interface_name,
+      mojo::ScopedMessagePipeHandle* interface_pipe) override;
   void OnDestruct() override;
-  bool Send(IPC::Message* message) override;
-  bool OnMessageReceived(const IPC::Message& message) override;
 
-  // Messages from the browser.
-  void OnStreamGenerated(
-      int request_id,
-      const std::string& label,
-      const StreamDeviceInfoArray& audio_array,
-      const StreamDeviceInfoArray& video_array);
-  void OnStreamGenerationFailed(
-      int request_id,
-      content::MediaStreamRequestResult result);
+  // mojom::MediaStreamDispatcher implementation.
+  void OnStreamGenerated(int32_t request_id,
+                         const std::string& label,
+                         const StreamDeviceInfoArray& audio_array,
+                         const StreamDeviceInfoArray& video_array) override;
+  void OnStreamGenerationFailed(int32_t request_id,
+                                MediaStreamRequestResult result) override;
+  void OnDeviceOpened(int32_t request_id,
+                      const std::string& label,
+                      const StreamDeviceInfo& device_info) override;
+  void OnDeviceOpenFailed(int32_t request_id) override;
   void OnDeviceStopped(const std::string& label,
-                       const StreamDeviceInfo& device_info);
-  void OnDeviceOpened(
-      int request_id,
-      const std::string& label,
-      const StreamDeviceInfo& device_info);
-  void OnDeviceOpenFailed(int request_id);
+                       const StreamDeviceInfo& device_info) override;
+
+  void BindMediaStreamDispatcherRequest(
+      mojom::MediaStreamDispatcherRequest request);
+
+  const mojom::MediaStreamDispatcherHostPtr& GetMediaStreamDispatcherHost();
+
+  mojom::MediaStreamDispatcherHostPtr dispatcher_host_;
+  mojo::Binding<mojom::MediaStreamDispatcher> binding_;
 
   // Used for DCHECKs so methods calls won't execute in the wrong thread.
   base::ThreadChecker thread_checker_;
@@ -137,6 +147,8 @@ class CONTENT_EXPORT MediaStreamDispatcher
   // been canceled.
   typedef std::list<Request> RequestList;
   RequestList requests_;
+
+  service_manager::BinderRegistry registry_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaStreamDispatcher);
 };

@@ -25,15 +25,21 @@
 #include "media/base/media_switches.h"
 #include "media/base/renderer_factory_selector.h"
 #include "media/base/surface_manager.h"
+#include "media/blink/resource_fetch_context.h"
 #include "media/blink/webencryptedmediaclient_impl.h"
 #include "media/blink/webmediaplayer_impl.h"
 #include "media/filters/context_3d.h"
+#include "media/media_features.h"
 #include "media/renderers/default_renderer_factory.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
+#include "services/service_manager/public/cpp/connect.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
+#include "third_party/WebKit/public/platform/WebSurfaceLayerBridge.h"
+#include "third_party/WebKit/public/platform/WebVideoFrameSubmitter.h"
 #include "third_party/WebKit/public/web/WebKit.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "url/origin.h"
 
 #if defined(OS_ANDROID)
 #include "content/renderer/media/android/media_player_renderer_client_factory.h"
@@ -42,10 +48,11 @@
 #include "content/renderer/media/android/stream_texture_wrapper_impl.h"
 #include "media/base/android/media_codec_util.h"
 #include "media/base/media.h"
+#include "url/gurl.h"
 #endif
 
 #if BUILDFLAG(ENABLE_MOJO_MEDIA)
-#include "content/renderer/media/media_interface_provider.h"
+#include "content/renderer/media/media_interface_factory.h"
 #endif
 
 #if BUILDFLAG(ENABLE_MOJO_CDM)
@@ -69,10 +76,32 @@
 #include "media/remoting/sink_availability_observer.h"  // nogncheck
 #endif
 
-#if BUILDFLAG(ENABLE_PEPPER_CDMS)
+#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
 #include "content/renderer/media/cdm/pepper_cdm_wrapper_impl.h"
 #include "content/renderer/media/cdm/render_cdm_factory.h"
 #endif
+
+namespace {
+class FrameFetchContext : public media::ResourceFetchContext {
+ public:
+  explicit FrameFetchContext(blink::WebLocalFrame* frame) : frame_(frame) {
+    DCHECK(frame_);
+  }
+  ~FrameFetchContext() override = default;
+
+  blink::WebLocalFrame* frame() const { return frame_; }
+
+  // media::ResourceFetchContext implementation.
+  std::unique_ptr<blink::WebAssociatedURLLoader> CreateUrlLoader(
+      const blink::WebAssociatedURLLoaderOptions& options) override {
+    return base::WrapUnique(frame_->CreateAssociatedURLLoader(options));
+  }
+
+ private:
+  blink::WebLocalFrame* frame_;
+  DISALLOW_COPY_AND_ASSIGN(FrameFetchContext);
+};
+}  // namespace
 
 namespace content {
 
@@ -123,10 +152,6 @@ bool UseMediaPlayerRenderer(const GURL& url) {
   if (url.SchemeIsBlob())
     return false;
 
-  // The default renderer does not support HLS.
-  if (media::MediaCodecUtil::IsHLSURL(url))
-    return true;
-
   // Don't use the default renderer if the container likely contains a codec we
   // can't decode in software and platform decoders are not available.
   if (!media::HasPlatformDecoderSupport()) {
@@ -151,7 +176,8 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
     blink::WebMediaPlayerClient* client,
     blink::WebMediaPlayerEncryptedMediaClient* encrypted_client,
     blink::WebContentDecryptionModule* initial_cdm,
-    const blink::WebString& sink_id) {
+    const blink::WebString& sink_id,
+    blink::WebLayerTreeView* layer_tree_view) {
   blink::WebLocalFrame* web_frame = render_frame_->GetWebFrame();
   blink::WebSecurityOrigin security_origin =
       render_frame_->GetWebFrame()->GetSecurityOrigin();
@@ -196,15 +222,15 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
       webkit_preferences.embedded_media_experience_enabled;
 #endif  // defined(OS_ANDROID)
 
+  // Enable background optimizations based on field trial for src= content, but
+  // always enable for MSE content. See http://crbug.com/709302.
   base::TimeDelta max_keyframe_distance_to_disable_background_video =
       base::TimeDelta::FromMilliseconds(base::GetFieldTrialParamByFeatureAsInt(
           media::kBackgroundVideoTrackOptimization, "max_keyframe_distance_ms",
-          base::TimeDelta::FromSeconds(10).InMilliseconds()));
+          0));
   base::TimeDelta max_keyframe_distance_to_disable_background_video_mse =
-      base::TimeDelta::FromMilliseconds(base::GetFieldTrialParamByFeatureAsInt(
-          media::kBackgroundVideoTrackOptimization,
-          "max_keyframe_distance_media_source_ms",
-          base::TimeDelta::FromSeconds(10).InMilliseconds()));
+      base::TimeDelta::FromSeconds(5);
+
   // When memory pressure based garbage collection is enabled for MSE, the
   // |enable_instant_source_buffer_gc| flag controls whether the GC is done
   // immediately on memory pressure notification or during the next SourceBuffer
@@ -229,9 +255,25 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
   DCHECK(media_observer);
 #endif
 
-  if (!url_index_.get() || url_index_->frame() != web_frame)
-    url_index_.reset(new media::UrlIndex(web_frame));
+  if (!fetch_context_) {
+    fetch_context_ = base::MakeUnique<FrameFetchContext>(web_frame);
+    DCHECK(!url_index_);
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+    // Set buffer size to 64kb (default is 32kb) : 1<<16 == 64kb
+    url_index_ = base::MakeUnique<media::UrlIndex>(fetch_context_.get(), 16);
+#else
+    url_index_ = base::MakeUnique<media::UrlIndex>(fetch_context_.get());
+#endif
+  }
+  DCHECK_EQ(static_cast<FrameFetchContext*>(fetch_context_.get())->frame(),
+            web_frame);
 
+  if (!watch_time_recorder_provider_) {
+    remote_interfaces_->GetInterface(
+        mojo::MakeRequest(&watch_time_recorder_provider_));
+  }
+
+  DCHECK(layer_tree_view);
   std::unique_ptr<media::WebMediaPlayerParams> params(
       new media::WebMediaPlayerParams(
           std::move(media_log),
@@ -251,12 +293,15 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
           initial_cdm, media_surface_manager_, request_routing_token_cb_,
           media_observer, max_keyframe_distance_to_disable_background_video,
           max_keyframe_distance_to_disable_background_video_mse,
-          enable_instant_source_buffer_gc,
-          embedded_media_experience_enabled));
+          enable_instant_source_buffer_gc, embedded_media_experience_enabled,
+          watch_time_recorder_provider_.get(),
+          base::Bind(&MediaFactory::CreateVideoDecodeStatsRecorder,
+                     base::Unretained(this)),
+          base::Bind(&blink::WebSurfaceLayerBridge::Create, layer_tree_view)));
 
   media::WebMediaPlayerImpl* media_player = new media::WebMediaPlayerImpl(
       web_frame, client, encrypted_client, GetWebMediaPlayerDelegate(),
-      std::move(factory_selector), url_index_, std::move(params));
+      std::move(factory_selector), url_index_.get(), std::move(params));
 
 #if defined(OS_ANDROID)  // WMPI_CAST
   media_player->SetMediaPlayerManager(GetMediaPlayerManager());
@@ -331,7 +376,7 @@ MediaFactory::CreateRendererFactorySelector(
         base::MakeUnique<media::MojoRendererFactory>(
             base::Bind(&RenderThreadImpl::GetGpuFactories,
                        base::Unretained(render_thread)),
-            GetMediaInterfaceProvider()));
+            GetMediaInterfaceFactory()));
 
     factory_selector->SetBaseFactoryType(
         media::RendererFactorySelector::FactoryType::MOJO);
@@ -433,7 +478,7 @@ media::DecoderFactory* MediaFactory::GetDecoderFactory() {
 #if BUILDFLAG(ENABLE_MOJO_AUDIO_DECODER) || BUILDFLAG(ENABLE_MOJO_VIDEO_DECODER)
   if (!decoder_factory_) {
     decoder_factory_.reset(
-        new media::MojoDecoderFactory(GetMediaInterfaceProvider()));
+        new media::MojoDecoderFactory(GetMediaInterfaceFactory()));
   }
 #endif
   return decoder_factory_.get();
@@ -464,18 +509,19 @@ media::CdmFactory* MediaFactory::GetCdmFactory() {
   if (cdm_factory_)
     return cdm_factory_.get();
 
-#if BUILDFLAG(ENABLE_PEPPER_CDMS)
-  static_assert(BUILDFLAG(ENABLE_MOJO_CDM),
-                "Mojo CDM should always be enabled when PPAPI CDM is enabled");
+#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
+  static_assert(
+      BUILDFLAG(ENABLE_MOJO_CDM),
+      "Mojo CDM should always be enabled when library CDM is enabled");
   if (base::FeatureList::IsEnabled(media::kMojoCdm)) {
-    cdm_factory_.reset(new media::MojoCdmFactory(GetMediaInterfaceProvider()));
+    cdm_factory_.reset(new media::MojoCdmFactory(GetMediaInterfaceFactory()));
   } else {
     cdm_factory_.reset(new RenderCdmFactory(
         base::Bind(&PepperCdmWrapperImpl::Create, web_frame)));
   }
 #elif BUILDFLAG(ENABLE_MOJO_CDM)
-  cdm_factory_.reset(new media::MojoCdmFactory(GetMediaInterfaceProvider()));
-#endif  // BUILDFLAG(ENABLE_PEPPER_CDMS)
+  cdm_factory_.reset(new media::MojoCdmFactory(GetMediaInterfaceFactory()));
+#endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
 #if BUILDFLAG(ENABLE_MEDIA_REMOTING)
   cdm_factory_.reset(new media::remoting::RemotingCdmFactory(
@@ -486,16 +532,24 @@ media::CdmFactory* MediaFactory::GetCdmFactory() {
   return cdm_factory_.get();
 }
 
+media::mojom::VideoDecodeStatsRecorderPtr
+MediaFactory::CreateVideoDecodeStatsRecorder() {
+  DCHECK(remote_interfaces_);
+  media::mojom::VideoDecodeStatsRecorderPtr recorder_ptr;
+  service_manager::GetInterface(remote_interfaces_->get(), &recorder_ptr);
+
+  return recorder_ptr;
+}
+
 #if BUILDFLAG(ENABLE_MOJO_MEDIA)
-service_manager::mojom::InterfaceProvider*
-MediaFactory::GetMediaInterfaceProvider() {
-  if (!media_interface_provider_) {
+media::mojom::InterfaceFactory* MediaFactory::GetMediaInterfaceFactory() {
+  if (!media_interface_factory_) {
     DCHECK(remote_interfaces_);
-    media_interface_provider_.reset(
-        new MediaInterfaceProvider(remote_interfaces_));
+    media_interface_factory_.reset(
+        new MediaInterfaceFactory(remote_interfaces_));
   }
 
-  return media_interface_provider_.get();
+  return media_interface_factory_.get();
 }
 #endif  // BUILDFLAG(ENABLE_MOJO_MEDIA)
 

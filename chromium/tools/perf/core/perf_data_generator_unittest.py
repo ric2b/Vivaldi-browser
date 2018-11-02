@@ -3,12 +3,11 @@
 # found in the LICENSE file.
 import unittest
 
-from core import perf_benchmark
 from core import perf_data_generator
 from core.perf_data_generator import BenchmarkMetadata
 
 from telemetry import benchmark
-from telemetry import decorators
+from telemetry import story
 
 import mock
 
@@ -85,14 +84,15 @@ class PerfDataGeneratorTest(unittest.TestCase):
     expected_generated_test = {
         'override_compile_targets': ['telemetry_perf_tests'],
         'args': ['speedometer', '-v', '--upload-results',
-                 '--output-format=chartjson', '--browser=release'],
+                 '--browser=release', '--output-format=chartjson'],
         'swarming': {
           'ignore_task_failure': False,
           'dimension_sets': [{'os': 'SkyNet', 'id': 'T-850', 'pool': 'T-RIP'}],
           'hard_timeout': 10800,
           'can_use_on_swarming_builders': True,
           'expiration': 36000,
-          'io_timeout': 3600,
+          'io_timeout': 600,
+          'upload_test_results': False,
         },
         'name': 'speedometer',
         'isolate_name': 'telemetry_perf_tests',
@@ -106,7 +106,8 @@ class PerfDataGeneratorTest(unittest.TestCase):
     expected_generated_test = {
         'override_compile_targets': ['telemetry_perf_tests'],
         'args': ['speedometer', '-v', '--upload-results',
-                 '--output-format=chartjson', '--browser=reference',
+                 '--browser=reference', '--output-format=chartjson',
+                 '--max-failures=5',
                  '--output-trace-tag=_ref'],
         'swarming': {
           'ignore_task_failure': True,
@@ -114,7 +115,8 @@ class PerfDataGeneratorTest(unittest.TestCase):
           'hard_timeout': 10800,
           'can_use_on_swarming_builders': True,
           'expiration': 36000,
-          'io_timeout': 3600,
+          'io_timeout': 600,
+          'upload_test_results': False,
         },
         'name': 'speedometer.reference',
         'isolate_name': 'telemetry_perf_tests',
@@ -143,27 +145,27 @@ class PerfDataGeneratorTest(unittest.TestCase):
     self.assertEqual(len(tests), 1)
     test = tests[0]
     self.assertEquals(test['args'], [
-        'regular', '-v', '--upload-results', '--output-format=chartjson',
-        '--browser=android-webview',
+        'regular', '-v', '--upload-results',
+        '--browser=android-webview', '--output-format=chartjson',
         '--webview-embedder-apk=../../out/Release/apks/SystemWebViewShell.apk'])
     self.assertEquals(test['isolate_name'], 'telemetry_perf_webview_tests')
 
   def testGenerateTelemetryTestsWithUploadToFlakinessDashboard(self):
     swarming_dimensions = [{'os': 'SkyNet', 'id': 'T-850', 'pool': 'T-RIP'}]
     test = perf_data_generator.generate_telemetry_test(
-        swarming_dimensions, 'system_health.common_desktop', 'release', True)
+        swarming_dimensions, 'system_health.common_desktop', 'release')
     expected_generated_test = {
         'override_compile_targets': ['telemetry_perf_tests'],
         'args': ['system_health.common_desktop', '-v', '--upload-results',
-                 '--output-format=chartjson', '--browser=release',
-                 '--output-format=json-test-results'],
+                 '--browser=release', '--output-format=chartjson'],
         'swarming': {
           'ignore_task_failure': False,
           'dimension_sets': [{'os': 'SkyNet', 'id': 'T-850', 'pool': 'T-RIP'}],
           'hard_timeout': 10800,
           'can_use_on_swarming_builders': True,
           'expiration': 36000,
-          'io_timeout': 3600,
+          'io_timeout': 600,
+          'upload_test_results': True,
         },
         'name': 'system_health.common_desktop',
         'isolate_name': 'telemetry_perf_tests',
@@ -198,49 +200,6 @@ class PerfDataGeneratorTest(unittest.TestCase):
         generated_test_names,
         {'blacklisted', 'not_blacklisted', 'not_blacklisted.reference'})
 
-  def testShouldBenchmarkBeScheduledNormal(self):
-    class bench(perf_benchmark.PerfBenchmark):
-      pass
-
-    self.assertEqual(
-        perf_data_generator.ShouldBenchmarkBeScheduled(bench(), 'win'),
-        True)
-
-  def testShouldBenchmarkBeScheduledDisabledAll(self):
-    @decorators.Disabled('all')
-    class bench(perf_benchmark.PerfBenchmark):
-      pass
-
-    self.assertEqual(
-        perf_data_generator.ShouldBenchmarkBeScheduled(bench(), 'win'),
-        False)
-
-  def testShouldBenchmarkBeScheduledOnDesktopMobileTest(self):
-    @decorators.Enabled('android')
-    class bench(perf_benchmark.PerfBenchmark):
-      pass
-
-    self.assertEqual(
-        perf_data_generator.ShouldBenchmarkBeScheduled(bench(), 'win'),
-        False)
-
-  def testShouldBenchmarkBeScheduledOnMobileMobileTest(self):
-    @decorators.Enabled('android')
-    class bench(perf_benchmark.PerfBenchmark):
-      pass
-
-    self.assertEqual(
-        perf_data_generator.ShouldBenchmarkBeScheduled(bench(), 'android'),
-        True)
-
-  def testShouldBenchmarkBeScheduledOnMobileMobileTestDisabled(self):
-    @decorators.Disabled('android')
-    class bench(perf_benchmark.PerfBenchmark):
-      pass
-
-    self.assertEqual(
-        perf_data_generator.ShouldBenchmarkBeScheduled(bench(), 'android'),
-        False)
 
   def testRemoveBlacklistedTestsNoop(self):
     tests = [{
@@ -324,3 +283,54 @@ class PerfDataGeneratorTest(unittest.TestCase):
     self.assertTrue('Linux Perf' in tests)
     self.assertTrue('Mojo Linux Perf' in tests)
     self.assertFalse('comment' in tests)
+
+  def testShouldBenchmarksBeScheduledBadOS(self):
+    class RegularBenchmark(benchmark.Benchmark):
+      @classmethod
+      def Name(cls):
+        return 'regular'
+
+    with self.assertRaises(TypeError):
+      perf_data_generator.ShouldBenchmarksBeScheduled(
+          RegularBenchmark, 'bot_name', 'os_name', None)
+
+  def testShouldBenchmarksBeScheduledShouldRun(self):
+    class RegularBenchmark(benchmark.Benchmark):
+      @classmethod
+      def Name(cls):
+        return 'regular'
+    valid_os_list = ['mac', 'android', 'windows', 'linux']
+    for os in valid_os_list:
+      self.assertTrue(
+          perf_data_generator.ShouldBenchmarksBeScheduled(
+              RegularBenchmark, 'bot_name', os, None))
+
+  def testShouldBenchmarksBeScheduledShouldntRun(self):
+    class RegularBenchmark(benchmark.Benchmark):
+      @classmethod
+      def Name(cls):
+        return 'regular'
+
+      def GetExpectations(self):
+        class Expectations(story.expectations.StoryExpectations):
+          def SetExpectations(self):
+            self.DisableBenchmark([story.expectations.ALL], 'reason')
+        return Expectations()
+
+    valid_os_list = ['mac', 'android', 'windows', 'linux']
+    for os in valid_os_list:
+      self.assertFalse(
+          perf_data_generator.ShouldBenchmarksBeScheduled(
+              RegularBenchmark, 'bot_name', os, None))
+
+  def testShouldBenchmarkBeScheduledSupportedPlatform(self):
+    class RegularBenchmark(benchmark.Benchmark):
+      SUPPORTED_PLATFORMS = []
+
+      @classmethod
+      def Name(cls):
+        return 'regular'
+
+    self.assertFalse(
+        perf_data_generator.ShouldBenchmarksBeScheduled(
+            RegularBenchmark, 'bot_name', 'mac', None))

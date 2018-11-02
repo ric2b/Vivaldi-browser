@@ -149,7 +149,7 @@ static void MakeCapitalized(String* string, UChar previous) {
   *string = result.ToString();
 }
 
-LayoutText::LayoutText(Node* node, PassRefPtr<StringImpl> str)
+LayoutText::LayoutText(Node* node, RefPtr<StringImpl> str)
     : LayoutObject(node),
       has_tab_(false),
       lines_dirty_(false),
@@ -1368,15 +1368,8 @@ void LayoutText::ComputePreferredLogicalWidths(
     last_line_line_min_width_ = curr_max_width;
   }
 
-  const SimpleFontData* font_data = f.PrimaryFont();
-  DCHECK(font_data);
-
   GlyphOverflow glyph_overflow;
-  if (font_data) {
-    glyph_overflow.SetFromBounds(
-        glyph_bounds, font_data->GetFontMetrics().FloatAscent(),
-        font_data->GetFontMetrics().FloatDescent(), max_width_);
-  }
+  glyph_overflow.SetFromBounds(glyph_bounds, f, max_width_);
   // We shouldn't change our mind once we "know".
   DCHECK(!known_to_have_no_overflow_and_no_fallback_fonts_ ||
          (fallback_fonts.IsEmpty() && glyph_overflow.IsApproximatelyZero()));
@@ -1446,40 +1439,13 @@ float LayoutText::FirstRunY() const {
 void LayoutText::SetSelectionState(SelectionState state) {
   LayoutObject::SetSelectionState(state);
 
-  if (CanUpdateSelectionOnRootLineBoxes()) {
-    if (state == SelectionState::kStart || state == SelectionState::kEnd ||
-        state == SelectionState::kStartAndEnd) {
-      int start_pos, end_pos;
-      std::tie(start_pos, end_pos) = SelectionStartEnd();
-      if (GetSelectionState() == SelectionState::kStart) {
-        end_pos = TextLength();
-
-        // to handle selection from end of text to end of line
-        if (start_pos && start_pos == end_pos)
-          start_pos = end_pos - 1;
-      } else if (GetSelectionState() == SelectionState::kEnd) {
-        start_pos = 0;
-      }
-
-      for (InlineTextBox* box : InlineTextBoxesOf(*this)) {
-        if (box->IsSelected(start_pos, end_pos)) {
-          box->Root().SetHasSelectedChildren(true);
-        }
-      }
-    } else {
-      for (InlineTextBox* box : InlineTextBoxesOf(*this)) {
-        box->Root().SetHasSelectedChildren(state == SelectionState::kInside);
-      }
-    }
-  }
-
   // The containing block can be null in case of an orphaned tree.
   LayoutBlock* containing_block = this->ContainingBlock();
   if (containing_block && !containing_block->IsLayoutView())
     containing_block->SetSelectionState(state);
 }
 
-void LayoutText::SetTextWithOffset(PassRefPtr<StringImpl> text,
+void LayoutText::SetTextWithOffset(RefPtr<StringImpl> text,
                                    unsigned offset,
                                    unsigned len,
                                    bool force) {
@@ -1671,7 +1637,7 @@ void LayoutText::SecureText(UChar mask) {
   }
 }
 
-void LayoutText::SetText(PassRefPtr<StringImpl> text, bool force) {
+void LayoutText::SetText(RefPtr<StringImpl> text, bool force) {
   DCHECK(text);
 
   if (!force && Equal(text_.Impl(), text.Get()))
@@ -1893,10 +1859,7 @@ LayoutRect LayoutText::VisualOverflowRect() const {
   return rect;
 }
 
-LayoutRect LayoutText::LocalVisualRect() const {
-  if (Style()->Visibility() != EVisibility::kVisible)
-    return LayoutRect();
-
+LayoutRect LayoutText::LocalVisualRectIgnoringVisibility() const {
   return UnionRect(VisualOverflowRect(), LocalSelectionRect());
 }
 
@@ -1919,15 +1882,17 @@ LayoutRect LayoutText::LocalSelectionRect() const {
   } else {
     const FrameSelection& frame_selection = GetFrame()->Selection();
     if (GetSelectionState() == SelectionState::kStart) {
-      start_pos = frame_selection.LayoutSelectionStart().value();
+      // TODO(yoichio): value_or is used to prevent use uininitialized value
+      // on release. It should be value() after LayoutSelection brushup.
+      start_pos = frame_selection.LayoutSelectionStart().value_or(0);
       end_pos = TextLength();
     } else if (GetSelectionState() == SelectionState::kEnd) {
       start_pos = 0;
-      end_pos = frame_selection.LayoutSelectionEnd().value();
+      end_pos = frame_selection.LayoutSelectionEnd().value_or(0);
     } else {
       DCHECK(GetSelectionState() == SelectionState::kStartAndEnd);
-      start_pos = frame_selection.LayoutSelectionStart().value();
-      end_pos = frame_selection.LayoutSelectionEnd().value();
+      start_pos = frame_selection.LayoutSelectionStart().value_or(0);
+      end_pos = frame_selection.LayoutSelectionEnd().value_or(0);
     }
   }
 
@@ -1985,7 +1950,7 @@ void LayoutText::MomentarilyRevealLastTypedCharacter(
   secure_text_timer->RestartWithNewText(last_typed_character_offset);
 }
 
-PassRefPtr<AbstractInlineTextBox> LayoutText::FirstAbstractInlineTextBox() {
+RefPtr<AbstractInlineTextBox> LayoutText::FirstAbstractInlineTextBox() {
   return AbstractInlineTextBox::GetOrCreate(LineLayoutText(this),
                                             first_text_box_);
 }

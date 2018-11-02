@@ -31,7 +31,6 @@ ServiceWorkerURLLoaderJob::ServiceWorkerURLLoaderJob(
       blob_client_binding_(this),
       binding_(this),
       weak_factory_(this) {
-  DCHECK(ServiceWorkerUtils::IsServicificationEnabled());
 }
 
 ServiceWorkerURLLoaderJob::~ServiceWorkerURLLoaderJob() {}
@@ -213,6 +212,7 @@ void ServiceWorkerURLLoaderJob::DidDispatchFetchEvent(
     ServiceWorkerFetchEventResult fetch_result,
     const ServiceWorkerResponse& response,
     blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream,
+    storage::mojom::BlobPtr body_as_blob,
     const scoped_refptr<ServiceWorkerVersion>& version) {
   if (!did_navigation_preload_)
     fetch_dispatcher_.reset();
@@ -251,51 +251,64 @@ void ServiceWorkerURLLoaderJob::DidDispatchFetchEvent(
   // ServiceWorker, we have to check the security level of the responses.
   const net::HttpResponseInfo* main_script_http_info =
       version->GetMainScriptHttpResponseInfo();
-  DCHECK(main_script_http_info);
-  ssl_info_ = main_script_http_info->ssl_info;
+  // TODO(kinuko)
+  // Fix this here.
+  if (main_script_http_info)
+    ssl_info_ = main_script_http_info->ssl_info;
 
   std::move(loader_callback_)
-      .Run(base::Bind(&ServiceWorkerURLLoaderJob::StartResponse,
-                      weak_factory_.GetWeakPtr(), response,
-                      base::Passed(std::move(body_as_stream))));
+      .Run(base::BindOnce(&ServiceWorkerURLLoaderJob::StartResponse,
+                          weak_factory_.GetWeakPtr(), response,
+                          std::move(body_as_stream), std::move(body_as_blob)));
 }
 
 void ServiceWorkerURLLoaderJob::StartResponse(
     const ServiceWorkerResponse& response,
     blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream,
+    storage::mojom::BlobPtr body_as_blob,
     mojom::URLLoaderRequest request,
     mojom::URLLoaderClientPtr client) {
   DCHECK(!binding_.is_bound());
   binding_.Bind(std::move(request));
-  binding_.set_connection_error_handler(
-      base::Bind(&ServiceWorkerURLLoaderJob::Cancel, base::Unretained(this)));
+  binding_.set_connection_error_handler(base::BindOnce(
+      &ServiceWorkerURLLoaderJob::Cancel, base::Unretained(this)));
   url_loader_client_ = std::move(client);
 
   SaveResponseInfo(response);
   SaveResponseHeaders(response.status_code, response.status_text,
                       response.headers);
 
-  // Ideally, we would always get a data pipe fom SWFetchDispatcher and use
-  // this case. See:
-  // https://docs.google.com/a/google.com/document/d/1_ROmusFvd8ATwIZa29-P6Ls5yyLjfld0KvKchVfA84Y/edit?usp=drive_web
+  // Handle a stream response body.
   if (!body_as_stream.is_null() && body_as_stream->stream.is_valid()) {
     CommitResponseHeaders();
     url_loader_client_->OnStartLoadingResponseBody(
         std::move(body_as_stream->stream));
+    // TODO(falken): Call CommitCompleted() when stream finished.
+    // See https://crbug.com/758455
     CommitCompleted(net::OK);
     return;
   }
 
+  // Handle a blob response body. Ideally we'd just get a data pipe from
+  // SWFetchDispatcher, and this could be treated the same as a stream response.
+  // |body_as_blob| must be kept around until here to ensure the blob is alive.
+  // See:
+  // https://docs.google.com/a/google.com/document/d/1_ROmusFvd8ATwIZa29-P6Ls5yyLjfld0KvKchVfA84Y/edit?usp=drive_web
   if (!response.blob_uuid.empty() && blob_storage_context_) {
     std::unique_ptr<storage::BlobDataHandle> blob_data_handle =
         blob_storage_context_->GetBlobDataFromUUID(response.blob_uuid);
-    mojom::URLLoaderAssociatedRequest request;
+    mojom::URLLoaderRequest request;
     mojom::URLLoaderClientPtr client;
     blob_client_binding_.Bind(mojo::MakeRequest(&client));
     BlobURLLoaderFactory::CreateLoaderAndStart(
         std::move(request), resource_request_, std::move(client),
         std::move(blob_data_handle), nullptr /* file_system_context */);
+    return;
   }
+
+  // The response has no body.
+  CommitResponseHeaders();
+  CommitCompleted(net::OK);
 }
 
 // URLLoader implementation----------------------------------------

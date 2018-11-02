@@ -2,11 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+#include <string>
+#include <unordered_set>
+#include <utility>
+#include <vector>
+
 #include "base/command_line.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
+#include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/test/histogram_tester.h"
 #include "base/threading/thread_restrictions.h"
@@ -19,11 +27,16 @@
 #include "chrome/browser/page_load_metrics/observers/core_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/document_write_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/no_state_prefetch_page_load_metrics_observer.h"
+#include "chrome/browser/page_load_metrics/observers/session_restore_page_load_metrics_observer.h"
+#include "chrome/browser/page_load_metrics/observers/use_counter_page_load_metrics_observer.h"
+#include "chrome/browser/page_load_metrics/page_load_metrics_initialize.h"
 #include "chrome/browser/page_load_metrics/page_load_tracker.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/prerender/prerender_histograms.h"
 #include "chrome/browser/prerender/prerender_origin.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/sessions/session_restore.h"
+#include "chrome/browser/sessions/session_restore_test_helper.h"
 #include "chrome/browser/sessions/session_service_factory.h"
 #include "chrome/browser/sessions/session_service_test_helper.h"
 #include "chrome/browser/ui/browser.h"
@@ -31,16 +44,20 @@
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_features.h"
+#include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/prefs/pref_service.h"
+#include "components/sessions/core/serialized_navigation_entry.h"
+#include "components/sessions/core/serialized_navigation_entry_test_helper.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/referrer.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/download_test_observer.h"
 #include "net/base/net_errors.h"
@@ -49,8 +66,12 @@
 #include "net/http/http_cache.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/url_request/url_request_failed_job.h"
+#include "net/test/url_request/url_request_mock_http_job.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "net/url_request/url_request_filter.h"
+#include "third_party/WebKit/public/platform/web_feature.mojom.h"
+#include "url/gurl.h"
 
 namespace {
 
@@ -77,9 +98,10 @@ class PageLoadMetricsWaiter
     FIRST_PAINT = 1 << 1,
     FIRST_CONTENTFUL_PAINT = 1 << 2,
     FIRST_MEANINGFUL_PAINT = 1 << 3,
-    STYLE_UPDATE_BEFORE_FCP = 1 << 4,
-    DOCUMENT_WRITE_BLOCK_RELOAD = 1 << 5,
-    LOAD_EVENT = 1 << 6
+    DOCUMENT_WRITE_BLOCK_RELOAD = 1 << 4,
+    LOAD_EVENT = 1 << 5,
+    // LOAD_TIMING_INFO waits for main frame timing info only.
+    LOAD_TIMING_INFO = 1 << 6,
   };
 
   explicit PageLoadMetricsWaiter(content::WebContents* web_contents)
@@ -93,10 +115,15 @@ class PageLoadMetricsWaiter
   // Add a page-level expectation.
   void AddPageExpectation(TimingField field) {
     page_expected_fields_.Set(field);
+    if (field == TimingField::LOAD_TIMING_INFO) {
+      attach_on_tracker_creation_ = true;
+    }
   }
 
   // Add a subframe-level expectation.
   void AddSubFrameExpectation(TimingField field) {
+    CHECK_NE(field, TimingField::LOAD_TIMING_INFO)
+        << "LOAD_TIMING_INFO should only be used as a page-level expectation";
     subframe_expected_fields_.Set(field);
     // If the given field is also a page-level field, then add a page-level
     // expectation as well
@@ -109,9 +136,9 @@ class PageLoadMetricsWaiter
     return observed_page_fields_.IsSet(field);
   }
 
-  // Waits for a OnTimingUpdated call that matches the fields set by
+  // Waits for PageLoadMetrics events that match the fields set by
   // |AddPageExpectation| and |AddSubFrameExpectation|. All matching fields
-  // must be set in a OnTimingUpdated call for it to end this wait.
+  // must be set to end this wait.
   void Wait() {
     if (expectations_satisfied())
       return;
@@ -144,6 +171,33 @@ class PageLoadMetricsWaiter
       run_loop_->Quit();
   }
 
+  void OnLoadedResource(const page_load_metrics::ExtraRequestCompleteInfo&
+                            extra_request_complete_info) {
+    if (expectations_satisfied())
+      return;
+
+    if (extra_request_complete_info.resource_type !=
+        content::RESOURCE_TYPE_MAIN_FRAME) {
+      // The waiter confirms loading timing for the main frame only.
+      return;
+    }
+
+    if (!extra_request_complete_info.load_timing_info->connect_timing.dns_start
+             .is_null() &&
+        !extra_request_complete_info.load_timing_info->connect_timing.dns_end
+             .is_null() &&
+        !extra_request_complete_info.load_timing_info->send_start.is_null() &&
+        !extra_request_complete_info.load_timing_info->send_end.is_null() &&
+        !extra_request_complete_info.load_timing_info->request_start
+             .is_null()) {
+      page_expected_fields_.Clear(TimingField::LOAD_TIMING_INFO);
+      observed_page_fields_.Set(TimingField::LOAD_TIMING_INFO);
+    }
+
+    if (expectations_satisfied() && run_loop_)
+      run_loop_->Quit();
+  }
+
  private:
   // PageLoadMetricsObserver used by the PageLoadMetricsWaiter to observe
   // metrics updates.
@@ -161,6 +215,12 @@ class PageLoadMetricsWaiter
         const page_load_metrics::PageLoadExtraInfo& extra_info) override {
       if (waiter_)
         waiter_->OnTimingUpdated(is_subframe, timing, extra_info);
+    }
+
+    void OnLoadedResource(const page_load_metrics::ExtraRequestCompleteInfo&
+                              extra_request_complete_info) override {
+      if (waiter_)
+        waiter_->OnLoadedResource(extra_request_complete_info);
     }
 
    private:
@@ -182,6 +242,9 @@ class PageLoadMetricsWaiter
 
     // Sets the bit for the given |field|.
     void Set(TimingField field) { bitmask_ |= static_cast<int>(field); }
+
+    // Clears the bit for the given |field|.
+    void Clear(TimingField field) { bitmask_ &= ~static_cast<int>(field); }
 
     // Merges bits set in |other| into this bitset.
     void Merge(const TimingFieldBitSet& other) { bitmask_ |= other.bitmask_; }
@@ -220,8 +283,6 @@ class PageLoadMetricsWaiter
       matched_bits.Set(TimingField::FIRST_CONTENTFUL_PAINT);
     if (timing.paint_timing->first_meaningful_paint)
       matched_bits.Set(TimingField::FIRST_MEANINGFUL_PAINT);
-    if (timing.style_sheet_timing->update_style_duration_before_fcp)
-      matched_bits.Set(TimingField::STYLE_UPDATE_BEFORE_FCP);
     if (metadata.behavior_flags &
         blink::WebLoadingBehaviorFlag::
             kWebLoadingBehaviorDocumentWriteBlockReload)
@@ -230,7 +291,20 @@ class PageLoadMetricsWaiter
     return matched_bits;
   }
 
+  void OnTrackerCreated(page_load_metrics::PageLoadTracker* tracker) override {
+    if (!attach_on_tracker_creation_)
+      return;
+    // A PageLoadMetricsWaiter should only wait for events from a single page
+    // load.
+    ASSERT_FALSE(did_add_observer_);
+    tracker->AddObserver(
+        base::MakeUnique<WaiterMetricsObserver>(weak_factory_.GetWeakPtr()));
+    did_add_observer_ = true;
+  }
+
   void OnCommit(page_load_metrics::PageLoadTracker* tracker) override {
+    if (attach_on_tracker_creation_)
+      return;
     // A PageLoadMetricsWaiter should only wait for events from a single page
     // load.
     ASSERT_FALSE(did_add_observer_);
@@ -250,13 +324,14 @@ class PageLoadMetricsWaiter
 
   TimingFieldBitSet observed_page_fields_;
 
+  bool attach_on_tracker_creation_ = false;
   bool did_add_observer_ = false;
 
   base::WeakPtrFactory<PageLoadMetricsWaiter> weak_factory_;
 };
 
 using TimingField = PageLoadMetricsWaiter::TimingField;
-
+using WebFeature = blink::mojom::WebFeature;
 }  // namespace
 
 class PageLoadMetricsBrowserTest : public InProcessBrowserTest {
@@ -339,6 +414,7 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, NewPageInNewForegroundTab) {
                                 embedded_test_server()->GetURL("/title1.html"),
                                 ui::PAGE_TRANSITION_LINK);
   params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+
   chrome::Navigate(&params);
   auto waiter = base::MakeUnique<PageLoadMetricsWaiter>(params.target_contents);
   waiter->AddPageExpectation(TimingField::LOAD_EVENT);
@@ -403,6 +479,24 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, PaintInChildFrame) {
   waiter->AddSubFrameExpectation(TimingField::FIRST_PAINT);
   waiter->AddSubFrameExpectation(TimingField::FIRST_CONTENTFUL_PAINT);
   ui_test_utils::NavigateToURL(browser(), a_url);
+  waiter->Wait();
+
+  histogram_tester_.ExpectTotalCount(internal::kHistogramFirstLayout, 1);
+  histogram_tester_.ExpectTotalCount(internal::kHistogramLoad, 1);
+  histogram_tester_.ExpectTotalCount(internal::kHistogramFirstPaint, 1);
+}
+
+IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, PaintInDynamicChildFrame) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  auto waiter = CreatePageLoadMetricsWaiter();
+  waiter->AddPageExpectation(TimingField::FIRST_LAYOUT);
+  waiter->AddPageExpectation(TimingField::LOAD_EVENT);
+  waiter->AddSubFrameExpectation(TimingField::FIRST_PAINT);
+  waiter->AddSubFrameExpectation(TimingField::FIRST_CONTENTFUL_PAINT);
+  ui_test_utils::NavigateToURL(
+      browser(),
+      embedded_test_server()->GetURL("/page_load_metrics/dynamic_iframe.html"));
   waiter->Wait();
 
   histogram_tester_.ExpectTotalCount(internal::kHistogramFirstLayout, 1);
@@ -574,37 +668,6 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, IgnoreDownloads) {
   EXPECT_TRUE(NoPageLoadMetricsRecorded());
 }
 
-IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, PreloadDocumentWrite) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-
-  auto waiter = CreatePageLoadMetricsWaiter();
-  waiter->AddPageExpectation(TimingField::FIRST_CONTENTFUL_PAINT);
-
-  ui_test_utils::NavigateToURL(
-      browser(), embedded_test_server()->GetURL(
-                     "/page_load_metrics/document_write_external_script.html"));
-  waiter->Wait();
-
-  histogram_tester_.ExpectTotalCount(
-      internal::kHistogramDocWriteParseStartToFirstContentfulPaint, 1);
-}
-
-IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, NoPreloadDocumentWrite) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-
-  auto waiter = CreatePageLoadMetricsWaiter();
-  waiter->AddPageExpectation(TimingField::FIRST_CONTENTFUL_PAINT);
-  ui_test_utils::NavigateToURL(
-      browser(), embedded_test_server()->GetURL(
-                     "/page_load_metrics/document_write_no_script.html"));
-  waiter->Wait();
-
-  histogram_tester_.ExpectTotalCount(internal::kHistogramFirstContentfulPaint,
-                                     1);
-  histogram_tester_.ExpectTotalCount(
-      internal::kHistogramDocWriteParseStartToFirstContentfulPaint, 0);
-}
-
 IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, NoDocumentWrite) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -617,8 +680,6 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, NoDocumentWrite) {
 
   histogram_tester_.ExpectTotalCount(internal::kHistogramFirstContentfulPaint,
                                      1);
-  histogram_tester_.ExpectTotalCount(
-      internal::kHistogramDocWriteParseStartToFirstContentfulPaint, 0);
   histogram_tester_.ExpectTotalCount(
       internal::kHistogramDocWriteBlockParseStartToFirstContentfulPaint, 0);
   histogram_tester_.ExpectTotalCount(internal::kHistogramDocWriteBlockCount, 0);
@@ -734,12 +795,8 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, NoDocumentWriteScript) {
 }
 
 // TODO(crbug.com/712935): Flaky on Linux dbg.
-#if defined(OS_LINUX) && !defined(NDEBUG)
-#define MAYBE_BadXhtml DISABLED_BadXhtml
-#else
-#define MAYBE_BadXhtml BadXhtml
-#endif
-IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, MAYBE_BadXhtml) {
+// TODO(crbug.com/738235): Now flaky on Win and Mac.
+IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, DISABLED_BadXhtml) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // When an XHTML page contains invalid XML, it causes a paint of the error
@@ -990,7 +1047,7 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, CSSTiming) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   auto waiter = CreatePageLoadMetricsWaiter();
-  waiter->AddPageExpectation(TimingField::STYLE_UPDATE_BEFORE_FCP);
+  waiter->AddPageExpectation(TimingField::FIRST_CONTENTFUL_PAINT);
 
   // Careful: Blink code clamps timestamps to 5us, so any CSS parsing we do here
   // must take >> 5us, otherwise we'll log 0 for the value and it will remain
@@ -1078,6 +1135,95 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest,
   histogram_tester_.ExpectUniqueSample(internal::kHistogramTotalBytes, 0, 1);
 }
 
+// Test UseCounter Features observed in the main frame are recorded, exactly
+// once per feature.
+IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest,
+                       UseCounterFeaturesInMainFrame) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  auto waiter = CreatePageLoadMetricsWaiter();
+  waiter->AddPageExpectation(TimingField::LOAD_EVENT);
+  ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL(
+                     "/page_load_metrics/use_counter_features.html"));
+  waiter->Wait();
+  NavigateToUntrackedUrl();
+
+  histogram_tester_.ExpectBucketCount(
+      internal::kFeaturesHistogramName,
+      static_cast<int32_t>(WebFeature::kTextWholeText), 1);
+  histogram_tester_.ExpectBucketCount(
+      internal::kFeaturesHistogramName,
+      static_cast<int32_t>(WebFeature::kV8Element_Animate_Method), 1);
+}
+
+// Test UseCounter Features observed in a child frame are recorded, exactly
+// once per feature.
+IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, UseCounterFeaturesInIframe) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  auto waiter = CreatePageLoadMetricsWaiter();
+  waiter->AddPageExpectation(TimingField::LOAD_EVENT);
+  ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL(
+                     "/page_load_metrics/use_counter_features_in_iframe.html"));
+  waiter->Wait();
+  NavigateToUntrackedUrl();
+
+  histogram_tester_.ExpectBucketCount(
+      internal::kFeaturesHistogramName,
+      static_cast<int32_t>(WebFeature::kTextWholeText), 1);
+  histogram_tester_.ExpectBucketCount(
+      internal::kFeaturesHistogramName,
+      static_cast<int32_t>(WebFeature::kV8Element_Animate_Method), 1);
+}
+
+// Test UseCounter Features observed in multiple child frames are recorded,
+// exactly once per feature.
+IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest,
+                       UseCounterFeaturesInIframes) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  auto waiter = CreatePageLoadMetricsWaiter();
+  waiter->AddPageExpectation(TimingField::LOAD_EVENT);
+  ui_test_utils::NavigateToURL(
+      browser(),
+      embedded_test_server()->GetURL(
+          "/page_load_metrics/use_counter_features_in_iframes.html"));
+  waiter->Wait();
+  NavigateToUntrackedUrl();
+
+  histogram_tester_.ExpectBucketCount(
+      internal::kFeaturesHistogramName,
+      static_cast<int32_t>(WebFeature::kTextWholeText), 1);
+  histogram_tester_.ExpectBucketCount(
+      internal::kFeaturesHistogramName,
+      static_cast<int32_t>(WebFeature::kV8Element_Animate_Method), 1);
+}
+
+IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, LoadingMetrics) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  auto waiter = CreatePageLoadMetricsWaiter();
+  waiter->AddPageExpectation(TimingField::LOAD_TIMING_INFO);
+  ui_test_utils::NavigateToURL(browser(),
+                               embedded_test_server()->GetURL("/title1.html"));
+  // Waits until nonzero loading metrics are seen.
+  waiter->Wait();
+}
+
+IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, LoadingMetricsFailed) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  auto waiter = CreatePageLoadMetricsWaiter();
+  waiter->AddPageExpectation(TimingField::LOAD_TIMING_INFO);
+  ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/page_load_metrics/404.html"));
+  // Waits until nonzero loading metrics are seen about the failed request. The
+  // load timing metrics come before the commit, but because the
+  // PageLoadMetricsWaiter is registered on tracker creation, it is able to
+  // catch the events.
+  waiter->Wait();
+}
+
 class SessionRestorePageLoadMetricsBrowserTest
     : public PageLoadMetricsBrowserTest {
  public:
@@ -1086,19 +1232,20 @@ class SessionRestorePageLoadMetricsBrowserTest
   // PageLoadMetricsBrowserTest:
   void SetUpOnMainThread() override {
     PageLoadMetricsBrowserTest::SetUpOnMainThread();
-    SessionStartupPref::SetStartupPref(
-        browser()->profile(), SessionStartupPref(SessionStartupPref::LAST));
     ASSERT_TRUE(embedded_test_server()->Start());
-#if defined(OS_CHROMEOS)
-    SessionServiceTestHelper helper(
-        SessionServiceFactory::GetForProfile(browser()->profile()));
-    helper.SetForceBrowserNotAliveWithNoWindows(true);
-    helper.ReleaseService();
-#endif
   }
 
   Browser* QuitBrowserAndRestore(Browser* browser) {
     Profile* profile = browser->profile();
+
+    SessionStartupPref::SetStartupPref(
+        profile, SessionStartupPref(SessionStartupPref::LAST));
+#if defined(OS_CHROMEOS)
+    SessionServiceTestHelper helper(
+        SessionServiceFactory::GetForProfile(profile));
+    helper.SetForceBrowserNotAliveWithNoWindows(true);
+    helper.ReleaseService();
+#endif
 
     std::unique_ptr<ScopedKeepAlive> keep_alive(new ScopedKeepAlive(
         KeepAliveOrigin::SESSION_RESTORE, KeepAliveRestartOption::DISABLED));
@@ -1107,7 +1254,11 @@ class SessionRestorePageLoadMetricsBrowserTest
     // Create a new window, which should trigger session restore.
     chrome::NewEmptyWindow(profile);
     ui_test_utils::BrowserAddedObserver window_observer;
-    return window_observer.WaitForSingleNewBrowser();
+    SessionRestoreTestHelper restore_observer;
+
+    Browser* new_browser = window_observer.WaitForSingleNewBrowser();
+    restore_observer.Wait();
+    return new_browser;
   }
 
   void WaitForTabsToLoad(Browser* browser) {
@@ -1115,16 +1266,70 @@ class SessionRestorePageLoadMetricsBrowserTest
       content::WebContents* contents =
           browser->tab_strip_model()->GetWebContentsAt(i);
       contents->GetController().LoadIfNecessary();
-      content::WaitForLoadStop(contents);
+      ASSERT_TRUE(content::WaitForLoadStop(contents));
     }
   }
 
+  // The PageLoadMetricsWaiter can observe first meaningful paints on these test
+  // pages while not on other simple pages such as /title1.html.
   GURL GetTestURL() const {
-    return embedded_test_server()->GetURL("/title1.html");
+    return embedded_test_server()->GetURL(
+        "/page_load_metrics/main_frame_with_iframe.html");
+  }
+
+  GURL GetTestURL2() const {
+    return embedded_test_server()->GetURL("/title2.html");
+  }
+
+  void ExpectFirstPaintMetricsTotalCount(int expected_total_count) const {
+    histogram_tester_.ExpectTotalCount(
+        internal::kHistogramSessionRestoreForegroundTabFirstPaint,
+        expected_total_count);
+    histogram_tester_.ExpectTotalCount(
+        internal::kHistogramSessionRestoreForegroundTabFirstContentfulPaint,
+        expected_total_count);
+    histogram_tester_.ExpectTotalCount(
+        internal::kHistogramSessionRestoreForegroundTabFirstMeaningfulPaint,
+        expected_total_count);
   }
 
  private:
   DISALLOW_COPY_AND_ASSIGN(SessionRestorePageLoadMetricsBrowserTest);
+};
+
+class SessionRestorePaintWaiter : public SessionRestoreObserver {
+ public:
+  SessionRestorePaintWaiter() { SessionRestore::AddObserver(this); }
+  ~SessionRestorePaintWaiter() { SessionRestore::RemoveObserver(this); }
+
+  // SessionRestoreObserver implementation:
+  void OnWillRestoreTab(content::WebContents* contents) override {
+    chrome::InitializePageLoadMetricsForWebContents(contents);
+    auto waiter = base::MakeUnique<PageLoadMetricsWaiter>(contents);
+    waiter->AddPageExpectation(TimingField::FIRST_PAINT);
+    waiter->AddPageExpectation(TimingField::FIRST_CONTENTFUL_PAINT);
+    waiter->AddPageExpectation(TimingField::FIRST_MEANINGFUL_PAINT);
+    waiters_[contents] = std::move(waiter);
+  }
+
+  // First meaningful paints occur only on foreground tabs.
+  void WaitForForegroundTabs(size_t num_expected_foreground_tabs) {
+    size_t num_actual_foreground_tabs = 0;
+    for (auto iter = waiters_.begin(); iter != waiters_.end(); ++iter) {
+      if (!iter->first->IsVisible())
+        continue;
+      iter->second->Wait();
+      ++num_actual_foreground_tabs;
+    }
+    EXPECT_EQ(num_expected_foreground_tabs, num_actual_foreground_tabs);
+  }
+
+ private:
+  std::unordered_map<content::WebContents*,
+                     std::unique_ptr<PageLoadMetricsWaiter>>
+      waiters_;
+
+  DISALLOW_COPY_AND_ASSIGN(SessionRestorePaintWaiter);
 };
 
 IN_PROC_BROWSER_TEST_F(SessionRestorePageLoadMetricsBrowserTest,
@@ -1136,7 +1341,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestorePageLoadMetricsBrowserTest,
       page_load_metrics::internal::kPageLoadStartedInForeground, true, 1);
 
   Browser* new_browser = QuitBrowserAndRestore(browser());
-  WaitForTabsToLoad(new_browser);
+  ASSERT_NO_FATAL_FAILURE(WaitForTabsToLoad(new_browser));
 
   histogram_tester_.ExpectTotalCount(
       page_load_metrics::internal::kPageLoadStartedInForeground, 2);
@@ -1156,7 +1361,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestorePageLoadMetricsBrowserTest,
       page_load_metrics::internal::kPageLoadStartedInForeground, false, 1);
 
   Browser* new_browser = QuitBrowserAndRestore(browser());
-  WaitForTabsToLoad(new_browser);
+  ASSERT_NO_FATAL_FAILURE(WaitForTabsToLoad(new_browser));
 
   TabStripModel* tab_strip = new_browser->tab_strip_model();
   ASSERT_TRUE(tab_strip);
@@ -1168,4 +1373,232 @@ IN_PROC_BROWSER_TEST_F(SessionRestorePageLoadMetricsBrowserTest,
       page_load_metrics::internal::kPageLoadStartedInForeground, true, 2);
   histogram_tester_.ExpectBucketCount(
       page_load_metrics::internal::kPageLoadStartedInForeground, false, 2);
+}
+
+IN_PROC_BROWSER_TEST_F(SessionRestorePageLoadMetricsBrowserTest,
+                       NoSessionRestore) {
+  ui_test_utils::NavigateToURL(browser(), GetTestURL());
+  ExpectFirstPaintMetricsTotalCount(0);
+}
+
+IN_PROC_BROWSER_TEST_F(SessionRestorePageLoadMetricsBrowserTest,
+                       SingleTabSessionRestore) {
+  ui_test_utils::NavigateToURL(browser(), GetTestURL());
+
+  SessionRestorePaintWaiter session_restore_paint_waiter;
+  QuitBrowserAndRestore(browser());
+
+  session_restore_paint_waiter.WaitForForegroundTabs(1);
+  ExpectFirstPaintMetricsTotalCount(1);
+}
+
+IN_PROC_BROWSER_TEST_F(SessionRestorePageLoadMetricsBrowserTest,
+                       MultipleTabsSessionRestore) {
+  ui_test_utils::NavigateToURL(browser(), GetTestURL());
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), GetTestURL(), WindowOpenDisposition::NEW_BACKGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+
+  SessionRestorePaintWaiter session_restore_paint_waiter;
+  Browser* new_browser = QuitBrowserAndRestore(browser());
+
+  TabStripModel* tab_strip = new_browser->tab_strip_model();
+  ASSERT_TRUE(tab_strip);
+  ASSERT_EQ(2, tab_strip->count());
+
+  // Only metrics of the initial foreground tab are recorded.
+  session_restore_paint_waiter.WaitForForegroundTabs(1);
+  ASSERT_NO_FATAL_FAILURE(WaitForTabsToLoad(new_browser));
+  ExpectFirstPaintMetricsTotalCount(1);
+}
+
+IN_PROC_BROWSER_TEST_F(SessionRestorePageLoadMetricsBrowserTest,
+                       NavigationDuringSessionRestore) {
+  NavigateToUntrackedUrl();
+  Browser* new_browser = QuitBrowserAndRestore(browser());
+
+  auto waiter = base::MakeUnique<PageLoadMetricsWaiter>(
+      new_browser->tab_strip_model()->GetActiveWebContents());
+  waiter->AddPageExpectation(TimingField::FIRST_MEANINGFUL_PAINT);
+  ui_test_utils::NavigateToURL(new_browser, GetTestURL());
+  waiter->Wait();
+
+  // No metrics recorded for the second navigation because the tab navigated
+  // away during session restore.
+  ExpectFirstPaintMetricsTotalCount(0);
+}
+
+IN_PROC_BROWSER_TEST_F(SessionRestorePageLoadMetricsBrowserTest,
+                       LoadingAfterSessionRestore) {
+  ui_test_utils::NavigateToURL(browser(), GetTestURL());
+
+  Browser* new_browser = nullptr;
+  {
+    SessionRestorePaintWaiter session_restore_paint_waiter;
+    new_browser = QuitBrowserAndRestore(browser());
+
+    session_restore_paint_waiter.WaitForForegroundTabs(1);
+    ExpectFirstPaintMetricsTotalCount(1);
+  }
+
+  // Load a new page after session restore.
+  auto waiter = base::MakeUnique<PageLoadMetricsWaiter>(
+      new_browser->tab_strip_model()->GetActiveWebContents());
+  waiter->AddPageExpectation(TimingField::FIRST_MEANINGFUL_PAINT);
+  ui_test_utils::NavigateToURL(new_browser, GetTestURL());
+  waiter->Wait();
+
+  // No more metrics because the navigation is after session restore.
+  ExpectFirstPaintMetricsTotalCount(1);
+}
+
+IN_PROC_BROWSER_TEST_F(SessionRestorePageLoadMetricsBrowserTest,
+                       InitialForegroundTabChanged) {
+  ui_test_utils::NavigateToURL(browser(), GetTestURL());
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), GetTestURL(), WindowOpenDisposition::NEW_BACKGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+
+  SessionRestorePaintWaiter session_restore_paint_waiter;
+  Browser* new_browser = QuitBrowserAndRestore(browser());
+
+  // Change the foreground tab before the first meaningful paint.
+  TabStripModel* tab_strip = new_browser->tab_strip_model();
+  ASSERT_TRUE(tab_strip);
+  ASSERT_EQ(2, tab_strip->count());
+  ASSERT_EQ(0, tab_strip->active_index());
+  tab_strip->ActivateTabAt(1, true);
+
+  session_restore_paint_waiter.WaitForForegroundTabs(1);
+
+  // No metrics were recorded because initial foreground tab was switched away.
+  ExpectFirstPaintMetricsTotalCount(0);
+}
+
+IN_PROC_BROWSER_TEST_F(SessionRestorePageLoadMetricsBrowserTest,
+                       MultipleSessionRestores) {
+  ui_test_utils::NavigateToURL(browser(), GetTestURL());
+
+  Browser* current_browser = browser();
+  const int num_session_restores = 3;
+  for (int i = 1; i <= num_session_restores; ++i) {
+    SessionRestorePaintWaiter session_restore_paint_waiter;
+    current_browser = QuitBrowserAndRestore(current_browser);
+    session_restore_paint_waiter.WaitForForegroundTabs(1);
+    ExpectFirstPaintMetricsTotalCount(i);
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(SessionRestorePageLoadMetricsBrowserTest,
+                       RestoreForeignTab) {
+  sessions::SerializedNavigationEntry nav =
+      sessions::SerializedNavigationEntryTestHelper::CreateNavigation(
+          GetTestURL().spec(), "one");
+
+  // Set up the restore data.
+  sync_pb::SessionTab sync_data;
+  sync_data.set_tab_visual_index(0);
+  sync_data.set_current_navigation_index(1);
+  sync_data.set_pinned(false);
+  sync_data.add_navigation()->CopyFrom(nav.ToSyncData());
+
+  sessions::SessionTab tab;
+  tab.SetFromSyncData(sync_data, base::Time::Now());
+  ASSERT_EQ(1, browser()->tab_strip_model()->count());
+
+  // Restore in the current tab.
+  content::WebContents* tab_contents = nullptr;
+  {
+    SessionRestorePaintWaiter session_restore_paint_waiter;
+    tab_contents = SessionRestore::RestoreForeignSessionTab(
+        browser()->tab_strip_model()->GetActiveWebContents(), tab,
+        WindowOpenDisposition::CURRENT_TAB);
+    ASSERT_EQ(1, browser()->tab_strip_model()->count());
+    ASSERT_TRUE(tab_contents);
+    ASSERT_EQ(GetTestURL(), tab_contents->GetURL());
+
+    session_restore_paint_waiter.WaitForForegroundTabs(1);
+    ExpectFirstPaintMetricsTotalCount(1);
+  }
+
+  // Restore in a new foreground tab.
+  {
+    SessionRestorePaintWaiter session_restore_paint_waiter;
+    tab_contents = SessionRestore::RestoreForeignSessionTab(
+        browser()->tab_strip_model()->GetActiveWebContents(), tab,
+        WindowOpenDisposition::NEW_FOREGROUND_TAB);
+    ASSERT_EQ(2, browser()->tab_strip_model()->count());
+    ASSERT_EQ(1, browser()->tab_strip_model()->active_index());
+    ASSERT_TRUE(tab_contents);
+    ASSERT_EQ(GetTestURL(), tab_contents->GetURL());
+
+    session_restore_paint_waiter.WaitForForegroundTabs(1);
+    ExpectFirstPaintMetricsTotalCount(2);
+  }
+
+  // Restore in a new background tab.
+  {
+    tab_contents = SessionRestore::RestoreForeignSessionTab(
+        browser()->tab_strip_model()->GetActiveWebContents(), tab,
+        WindowOpenDisposition::NEW_BACKGROUND_TAB);
+    ASSERT_EQ(3, browser()->tab_strip_model()->count());
+    ASSERT_EQ(1, browser()->tab_strip_model()->active_index());
+    ASSERT_TRUE(tab_contents);
+    ASSERT_EQ(GetTestURL(), tab_contents->GetURL());
+    ASSERT_NO_FATAL_FAILURE(WaitForTabsToLoad(browser()));
+
+    // Do not record timings of initially background tabs.
+    ExpectFirstPaintMetricsTotalCount(2);
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(SessionRestorePageLoadMetricsBrowserTest,
+                       RestoreForeignSession) {
+  Profile* profile = browser()->profile();
+
+  sessions::SerializedNavigationEntry nav1 =
+      sessions::SerializedNavigationEntryTestHelper::CreateNavigation(
+          GetTestURL().spec(), "one");
+  sessions::SerializedNavigationEntry nav2 =
+      sessions::SerializedNavigationEntryTestHelper::CreateNavigation(
+          GetTestURL2().spec(), "two");
+
+  // Set up the restore data: one window with two tabs.
+  std::vector<const sessions::SessionWindow*> session;
+  sessions::SessionWindow window;
+  auto tab1 = base::MakeUnique<sessions::SessionTab>();
+  {
+    sync_pb::SessionTab sync_data;
+    sync_data.set_tab_visual_index(0);
+    sync_data.set_current_navigation_index(0);
+    sync_data.set_pinned(true);
+    sync_data.add_navigation()->CopyFrom(nav1.ToSyncData());
+    tab1->SetFromSyncData(sync_data, base::Time::Now());
+  }
+  window.tabs.push_back(std::move(tab1));
+
+  auto tab2 = base::MakeUnique<sessions::SessionTab>();
+  {
+    sync_pb::SessionTab sync_data;
+    sync_data.set_tab_visual_index(1);
+    sync_data.set_current_navigation_index(0);
+    sync_data.set_pinned(false);
+    sync_data.add_navigation()->CopyFrom(nav2.ToSyncData());
+    tab2->SetFromSyncData(sync_data, base::Time::Now());
+  }
+  window.tabs.push_back(std::move(tab2));
+
+  // Restore the session window with 2 tabs.
+  session.push_back(static_cast<const sessions::SessionWindow*>(&window));
+  ui_test_utils::BrowserAddedObserver window_observer;
+  SessionRestorePaintWaiter session_restore_paint_waiter;
+  SessionRestore::RestoreForeignSessionWindows(profile, session.begin(),
+                                               session.end());
+  Browser* new_browser = window_observer.WaitForSingleNewBrowser();
+  ASSERT_TRUE(new_browser);
+  ASSERT_EQ(2, new_browser->tab_strip_model()->count());
+
+  session_restore_paint_waiter.WaitForForegroundTabs(1);
+  ASSERT_NO_FATAL_FAILURE(WaitForTabsToLoad(new_browser));
+  ExpectFirstPaintMetricsTotalCount(1);
 }

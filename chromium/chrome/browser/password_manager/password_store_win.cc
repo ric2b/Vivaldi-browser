@@ -75,7 +75,7 @@ class PasswordStoreWin::DBHandler : public WebDataServiceConsumer {
   scoped_refptr<PasswordWebDataService> web_data_service_;
 
   // This creates a cycle between us and PasswordStore. The cycle is broken
-  // from PasswordStoreWin::ShutdownOnUIThread, which deletes us.
+  // from PasswordStoreWin::ShutdownOnUIThread(), which deletes us.
   scoped_refptr<PasswordStoreWin> password_store_;
 
   PendingRequestMap pending_requests_;
@@ -85,7 +85,7 @@ class PasswordStoreWin::DBHandler : public WebDataServiceConsumer {
 
 PasswordStoreWin::DBHandler::~DBHandler() {
   DCHECK(
-      password_store_->GetBackgroundTaskRunner()->RunsTasksInCurrentSequence());
+      password_store_->background_task_runner()->RunsTasksInCurrentSequence());
   for (PendingRequestMap::const_iterator i = pending_requests_.begin();
        i != pending_requests_.end();
        ++i) {
@@ -97,7 +97,7 @@ void PasswordStoreWin::DBHandler::GetIE7Login(
     const PasswordStore::FormDigest& form,
     const ResultCallback& result_callback) {
   DCHECK(
-      password_store_->GetBackgroundTaskRunner()->RunsTasksInCurrentSequence());
+      password_store_->background_task_runner()->RunsTasksInCurrentSequence());
   IE7PasswordInfo info;
   info.url_hash =
       ie7_password::GetUrlHash(base::UTF8ToWide(form.origin.spec()));
@@ -112,7 +112,7 @@ PasswordStoreWin::DBHandler::GetIE7Results(
     const WDTypedResult* result,
     const PasswordStore::FormDigest& form) {
   DCHECK(
-      password_store_->GetBackgroundTaskRunner()->RunsTasksInCurrentSequence());
+      password_store_->background_task_runner()->RunsTasksInCurrentSequence());
   std::vector<std::unique_ptr<PasswordForm>> matched_forms;
   const WDResult<IE7PasswordInfo>* r =
       static_cast<const WDResult<IE7PasswordInfo>*>(result);
@@ -137,8 +137,8 @@ PasswordStoreWin::DBHandler::GetIE7Results(
         matched_form->preferred = true;
         matched_form->date_created = info.date_created;
 
-        // Add this PasswordForm to the saved password table. We're on the DB
-        // thread already, so we use AddLoginImpl.
+        // Add this PasswordForm to the saved password table. We're on the
+        // background sequence already, so we use AddLoginImpl.
         password_store_->AddLoginImpl(*matched_form);
         matched_forms.push_back(std::move(matched_form));
       }
@@ -157,7 +157,7 @@ void PasswordStoreWin::DBHandler::OnWebDataServiceRequestDone(
           "422460 PasswordStoreWin::DBHandler::OnWebDataServiceRequestDone"));
 
   DCHECK(
-      password_store_->GetBackgroundTaskRunner()->RunsTasksInCurrentSequence());
+      password_store_->background_task_runner()->RunsTasksInCurrentSequence());
 
   PendingRequestMap::iterator i = pending_requests_.find(handle);
   DCHECK(i != pending_requests_.end());
@@ -185,27 +185,24 @@ void PasswordStoreWin::DBHandler::OnWebDataServiceRequestDone(
 }
 
 PasswordStoreWin::PasswordStoreWin(
-    scoped_refptr<base::SequencedTaskRunner> main_thread_runner,
-    scoped_refptr<base::SequencedTaskRunner> db_thread_runner,
     std::unique_ptr<password_manager::LoginDatabase> login_db,
     const scoped_refptr<PasswordWebDataService>& web_data_service)
-    : PasswordStoreDefault(main_thread_runner,
-                           db_thread_runner,
-                           std::move(login_db)) {
+    : PasswordStoreDefault(std::move(login_db)) {
   db_handler_.reset(new DBHandler(web_data_service, this));
 }
 
 PasswordStoreWin::~PasswordStoreWin() {
 }
 
-void PasswordStoreWin::ShutdownOnDBThread() {
-  DCHECK(GetBackgroundTaskRunner()->RunsTasksInCurrentSequence());
+void PasswordStoreWin::ShutdownOnBackgroundSequence() {
+  DCHECK(background_task_runner()->RunsTasksInCurrentSequence());
   db_handler_.reset();
 }
 
 void PasswordStoreWin::ShutdownOnUIThread() {
-  GetBackgroundTaskRunner()->PostTask(
-      FROM_HERE, base::Bind(&PasswordStoreWin::ShutdownOnDBThread, this));
+  background_task_runner()->PostTask(
+      FROM_HERE,
+      base::Bind(&PasswordStoreWin::ShutdownOnBackgroundSequence, this));
   PasswordStoreDefault::ShutdownOnUIThread();
 }
 

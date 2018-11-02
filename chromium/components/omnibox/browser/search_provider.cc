@@ -162,7 +162,7 @@ void SearchProvider::RegisterDisplayedAnswers(
 
 // static
 int SearchProvider::CalculateRelevanceForKeywordVerbatim(
-    metrics::OmniboxInputType::Type type,
+    metrics::OmniboxInputType type,
     bool allow_exact_keyword_match,
     bool prefer_keyword) {
   // This function is responsible for scoring verbatim query matches
@@ -172,8 +172,9 @@ int SearchProvider::CalculateRelevanceForKeywordVerbatim(
   if (allow_exact_keyword_match && prefer_keyword)
     return 1500;
   return (allow_exact_keyword_match &&
-          (type == metrics::OmniboxInputType::QUERY)) ?
-      1450 : 1100;
+          (type == metrics::OmniboxInputType::QUERY))
+             ? 1450
+             : 1100;
 }
 
 void SearchProvider::ResetSession() {
@@ -918,7 +919,7 @@ std::unique_ptr<net::URLFetcher> SearchProvider::CreateSuggestFetcher(
           destination: WEBSITE
         }
         policy {
-          cookies_allowed: true
+          cookies_allowed: YES
           cookies_store: "user"
           setting:
             "Users can control this feature via the 'Use a prediction service "
@@ -1116,10 +1117,10 @@ bool SearchProvider::IsTopMatchSearchWithURLInput() const {
   ACMatches::const_iterator first_match =
       AutocompleteResult::FindTopMatch(matches_);
   return (input_.type() == metrics::OmniboxInputType::URL) &&
-      (first_match != matches_.end()) &&
-      (first_match->relevance > CalculateRelevanceForVerbatim()) &&
-      (first_match->type != AutocompleteMatchType::NAVSUGGEST) &&
-      (first_match->type != AutocompleteMatchType::NAVSUGGEST_PERSONALIZED);
+         (first_match != matches_.end()) &&
+         (first_match->relevance > CalculateRelevanceForVerbatim()) &&
+         (first_match->type != AutocompleteMatchType::NAVSUGGEST) &&
+         (first_match->type != AutocompleteMatchType::NAVSUGGEST_PERSONALIZED);
 }
 
 void SearchProvider::AddNavigationResultsToMatches(
@@ -1285,7 +1286,8 @@ void SearchProvider::ScoreHistoryResults(
     return;
   }
 
-  bool prevent_inline_autocomplete = input_.prevent_inline_autocomplete() ||
+  bool prevent_inline_autocomplete =
+      input_.prevent_inline_autocomplete() ||
       (input_.type() == metrics::OmniboxInputType::URL);
   const base::string16 input_text = GetInput(is_keyword).text();
   bool input_multiple_words = HasMultipleWords(input_text);
@@ -1455,7 +1457,7 @@ AutocompleteMatch SearchProvider::NavigationToMatch(
   bool trim_http = !AutocompleteInput::HasHTTPScheme(input) &&
       (!prefix || (match_start != 0));
   const url_formatter::FormatUrlTypes format_types =
-      url_formatter::kFormatUrlOmitAll &
+      url_formatter::kFormatUrlOmitDefaults &
       ~(trim_http ? 0 : url_formatter::kFormatUrlOmitHTTP);
 
   size_t inline_autocomplete_offset = (prefix == NULL) ?

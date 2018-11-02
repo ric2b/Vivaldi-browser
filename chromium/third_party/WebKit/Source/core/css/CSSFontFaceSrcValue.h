@@ -30,14 +30,14 @@
 #include "core/loader/resource/FontResource.h"
 #include "platform/loader/fetch/ResourceOwner.h"
 #include "platform/weborigin/Referrer.h"
-#include "platform/wtf/PassRefPtr.h"
+#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
 class Document;
 
-class CSSFontFaceSrcValue : public CSSValue {
+class CORE_EXPORT CSSFontFaceSrcValue : public CSSValue {
  public:
   static CSSFontFaceSrcValue* Create(
       const String& specified_resource,

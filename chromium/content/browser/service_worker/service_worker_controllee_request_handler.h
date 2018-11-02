@@ -21,7 +21,6 @@
 #include "content/public/common/request_context_type.h"
 #include "content/public/common/resource_type.h"
 #include "content/public/common/service_worker_modes.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerResponseType.h"
 #include "url/gurl.h"
 
 namespace net {
@@ -83,8 +82,7 @@ class CONTENT_EXPORT ServiceWorkerControlleeRequestHandler
   typedef ServiceWorkerControlleeRequestHandler self;
 
   // For main resource case.
-  void PrepareForMainResource(const GURL& url,
-                              const GURL& first_party_for_cookies);
+  void PrepareForMainResource(const GURL& url, const GURL& site_for_cookies);
   void DidLookupRegistrationForMainResource(
       ServiceWorkerStatusCode status,
       scoped_refptr<ServiceWorkerRegistration> registration);

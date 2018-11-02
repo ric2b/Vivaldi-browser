@@ -44,6 +44,7 @@ class MEDIA_EXPORT DefaultRendererFactory : public RendererFactory {
       AudioRendererSink* audio_renderer_sink,
       VideoRendererSink* video_renderer_sink,
       const RequestOverlayInfoCB& request_overlay_info_cb,
+      const gfx::ColorSpace& target_color_space,
       bool use_platform_media_pipeline = false) final;
 
  private:
@@ -53,6 +54,7 @@ class MEDIA_EXPORT DefaultRendererFactory : public RendererFactory {
   std::vector<std::unique_ptr<VideoDecoder>> CreateVideoDecoders(
       const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
       const RequestOverlayInfoCB& request_overlay_info_cb,
+      const gfx::ColorSpace& target_color_space,
       GpuVideoAcceleratorFactories* gpu_factories,
       bool use_platform_media_pipeline);
 

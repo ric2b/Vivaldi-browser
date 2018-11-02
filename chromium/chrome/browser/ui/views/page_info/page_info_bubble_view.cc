@@ -15,14 +15,18 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/certificate_viewer.h"
 #include "chrome/browser/infobars/infobar_service.h"
+#include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_dialogs.h"
+#include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/page_info/page_info.h"
+#include "chrome/browser/ui/page_info/page_info_dialog.h"
 #include "chrome/browser/ui/view_ids.h"
+#include "chrome/browser/ui/views/bubble_anchor_util_views.h"
 #include "chrome/browser/ui/views/collected_cookies_views.h"
 #include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/harmony/chrome_typography.h"
@@ -40,6 +44,7 @@
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/base/ui_features.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/insets.h"
@@ -47,6 +52,7 @@
 #include "ui/views/border.h"
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/controls/button/image_button.h"
+#include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
@@ -59,6 +65,15 @@
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
 #include "url/gurl.h"
+
+#if !defined(OS_MACOSX) || BUILDFLAG(MAC_VIEWS_BROWSER)
+#include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/location_bar/location_bar_view.h"
+#include "chrome/browser/ui/views/location_bar/location_icon_view.h"
+#endif
+
+using bubble_anchor_util::GetPageInfoAnchorRect;
+using bubble_anchor_util::GetPageInfoAnchorView;
 
 namespace {
 
@@ -176,7 +191,12 @@ class BubbleHeaderView : public views::View {
 
   void AddResetDecisionsLabel();
 
+  void AddPasswordReuseButtons();
+
  private:
+  // The listener for the buttons in this view.
+  views::ButtonListener* button_listener_;
+
   // The listener for the styled labels in this view.
   views::StyledLabelListener* styled_label_listener_;
 
@@ -191,6 +211,12 @@ class BubbleHeaderView : public views::View {
   views::View* reset_decisions_label_container_;
   views::StyledLabel* reset_cert_decisions_label_;
 
+  // A container for the label buttons used to change password or mark the site
+  // as safe.
+  views::View* password_reuse_button_container_;
+  views::LabelButton* change_password_button_;
+  views::LabelButton* whitelist_password_reuse_button_;
+
   DISALLOW_COPY_AND_ASSIGN(BubbleHeaderView);
 };
 
@@ -202,6 +228,7 @@ class InternalPageInfoBubbleView : public views::BubbleDialogDelegateView {
   // If |anchor_view| is nullptr, or has no Widget, |parent_window| may be
   // provided to ensure this bubble is closed when the parent closes.
   InternalPageInfoBubbleView(views::View* anchor_view,
+                             const gfx::Rect& anchor_rect,
                              gfx::NativeView parent_window,
                              const GURL& url);
   ~InternalPageInfoBubbleView() override;
@@ -211,8 +238,6 @@ class InternalPageInfoBubbleView : public views::BubbleDialogDelegateView {
   int GetDialogButtons() const override;
 
  private:
-  friend class PageInfoBubbleView;
-
   // Used around icon and inside bubble border.
   static constexpr int kSpacing = 12;
 
@@ -227,10 +252,14 @@ BubbleHeaderView::BubbleHeaderView(
     views::ButtonListener* button_listener,
     views::StyledLabelListener* styled_label_listener,
     int side_margin)
-    : styled_label_listener_(styled_label_listener),
+    : button_listener_(button_listener),
+      styled_label_listener_(styled_label_listener),
       security_details_label_(nullptr),
       reset_decisions_label_container_(nullptr),
-      reset_cert_decisions_label_(nullptr) {
+      reset_cert_decisions_label_(nullptr),
+      password_reuse_button_container_(nullptr),
+      change_password_button_(nullptr),
+      whitelist_password_reuse_button_(nullptr) {
   views::GridLayout* layout = new views::GridLayout(this);
   SetLayoutManager(layout);
 
@@ -241,7 +270,8 @@ BubbleHeaderView::BubbleHeaderView(
   layout->StartRow(0, label_column_status);
   security_details_label_ =
       new views::StyledLabel(base::string16(), styled_label_listener);
-  security_details_label_->set_id(VIEW_ID_PAGE_INFO_LABEL_SECURITY_DETAILS);
+  security_details_label_->set_id(
+      PageInfoBubbleView::VIEW_ID_PAGE_INFO_LABEL_SECURITY_DETAILS);
   layout->AddView(security_details_label_, 1, 1, views::GridLayout::FILL,
                   views::GridLayout::LEADING);
 
@@ -250,6 +280,13 @@ BubbleHeaderView::BubbleHeaderView(
   reset_decisions_label_container_->SetLayoutManager(
       new views::BoxLayout(views::BoxLayout::kHorizontal));
   layout->AddView(reset_decisions_label_container_, 1, 1,
+                  views::GridLayout::FILL, views::GridLayout::LEADING);
+
+  layout->StartRow(0, label_column_status);
+  password_reuse_button_container_ = new views::View();
+  password_reuse_button_container_->SetLayoutManager(
+      new views::BoxLayout(views::BoxLayout::kHorizontal, gfx::Insets(), 8));
+  layout->AddView(password_reuse_button_container_, 1, 1,
                   views::GridLayout::FILL, views::GridLayout::LEADING);
 
   layout->AddPaddingRow(1, kHeaderPaddingBottom);
@@ -293,7 +330,7 @@ void BubbleHeaderView::AddResetDecisionsLabel() {
   reset_cert_decisions_label_ =
       new views::StyledLabel(text, styled_label_listener_);
   reset_cert_decisions_label_->set_id(
-      VIEW_ID_PAGE_INFO_LABEL_RESET_CERTIFICATE_DECISIONS);
+      PageInfoBubbleView::VIEW_ID_PAGE_INFO_LABEL_RESET_CERTIFICATE_DECISIONS);
   gfx::Range link_range(offsets[1], text.length());
 
   views::StyledLabel::RangeStyleInfo link_style =
@@ -315,18 +352,42 @@ void BubbleHeaderView::AddResetDecisionsLabel() {
   InvalidateLayout();
 }
 
+void BubbleHeaderView::AddPasswordReuseButtons() {
+  change_password_button_ = views::MdTextButton::CreateSecondaryUiBlueButton(
+      button_listener_,
+      l10n_util::GetStringUTF16(IDS_PAGE_INFO_CHANGE_PASSWORD_BUTTON));
+  change_password_button_->set_id(
+      PageInfoBubbleView::VIEW_ID_PAGE_INFO_BUTTON_CHANGE_PASSWORD);
+  whitelist_password_reuse_button_ =
+      views::MdTextButton::CreateSecondaryUiButton(
+          button_listener_, l10n_util::GetStringUTF16(
+                                IDS_PAGE_INFO_WHITELIST_PASSWORD_REUSE_BUTTON));
+  whitelist_password_reuse_button_->set_id(
+      PageInfoBubbleView::VIEW_ID_PAGE_INFO_BUTTON_WHITELIST_PASSWORD_REUSE);
+  password_reuse_button_container_->AddChildView(change_password_button_);
+  password_reuse_button_container_->AddChildView(
+      whitelist_password_reuse_button_);
+  password_reuse_button_container_->SetBorder(
+      views::CreateEmptyBorder(8, 0, 0, 0));
+
+  InvalidateLayout();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // InternalPageInfoBubbleView
 ////////////////////////////////////////////////////////////////////////////////
 
 InternalPageInfoBubbleView::InternalPageInfoBubbleView(
     views::View* anchor_view,
+    const gfx::Rect& anchor_rect,
     gfx::NativeView parent_window,
     const GURL& url)
     : BubbleDialogDelegateView(anchor_view, views::BubbleBorder::TOP_LEFT) {
   g_shown_bubble_type = PageInfoBubbleView::BUBBLE_INTERNAL_PAGE;
   g_page_info_bubble = this;
   set_parent_window(parent_window);
+  if (!anchor_view)
+    SetAnchorRect(anchor_rect);
 
   int text = IDS_PAGE_INFO_INTERNAL_PAGE;
   int icon = IDR_PRODUCT_LOGO_16;
@@ -383,42 +444,28 @@ int InternalPageInfoBubbleView::GetDialogButtons() const {
 PageInfoBubbleView::~PageInfoBubbleView() {}
 
 // static
-views::BubbleDialogDelegateView* PageInfoBubbleView::ShowBubble(
-    views::View* anchor_view,
-    views::WidgetObserver* widget_observer,
-    const gfx::Rect& anchor_rect,
-    Profile* profile,
+views::BubbleDialogDelegateView* PageInfoBubbleView::CreatePageInfoBubble(
+    Browser* browser,
     content::WebContents* web_contents,
     const GURL& url,
     const security_state::SecurityInfo& security_info) {
+  views::View* anchor_view = GetPageInfoAnchorView(browser);
+  gfx::Rect anchor_rect =
+      anchor_view ? gfx::Rect() : GetPageInfoAnchorRect(browser);
   gfx::NativeView parent_window =
-      anchor_view ? nullptr : web_contents->GetNativeView();
+      platform_util::GetViewForWindow(browser->window()->GetNativeWindow());
+
   if (url.SchemeIs(content::kChromeUIScheme) ||
       url.SchemeIs(content::kChromeDevToolsScheme) ||
       url.SchemeIs(extensions::kExtensionScheme) ||
       url.SchemeIs(content::kViewSourceScheme)) {
-    // Use the concrete type so that |SetAnchorRect| can be called as a friend.
-    InternalPageInfoBubbleView* bubble =
-        new InternalPageInfoBubbleView(anchor_view, parent_window, url);
-    if (!anchor_view) {
-      bubble->SetAnchorRect(anchor_rect);
-    }
-    if (widget_observer) {
-      bubble->GetWidget()->AddObserver(widget_observer);
-    }
-    bubble->GetWidget()->Show();
-    return bubble;
+    return new InternalPageInfoBubbleView(anchor_view, anchor_rect,
+                                          parent_window, url);
   }
-  PageInfoBubbleView* bubble = new PageInfoBubbleView(
-      anchor_view, parent_window, profile, web_contents, url, security_info);
-  if (!anchor_view) {
-    bubble->SetAnchorRect(anchor_rect);
-  }
-  if (widget_observer) {
-    bubble->GetWidget()->AddObserver(widget_observer);
-  }
-  bubble->GetWidget()->Show();
-  return bubble;
+
+  return new PageInfoBubbleView(anchor_view, anchor_rect, parent_window,
+                                browser->profile(), web_contents, url,
+                                security_info);
 }
 
 // Whole function added by Vivaldi
@@ -430,8 +477,9 @@ void PageInfoBubbleView::ShowPopupAtPos(gfx::Point anchor_pos,
           const security_state::SecurityInfo& security_info,
           Browser* browser,
           gfx::NativeView parent) {
+  gfx::Rect anchor_rect = gfx::Rect();
   PageInfoBubbleView* thispopup = new PageInfoBubbleView(
-            NULL, parent,
+            nullptr, anchor_rect, parent,
             profile, web_contents, url, security_info);
   thispopup->SetAnchorRect(gfx::Rect(anchor_pos, gfx::Size()));
   thispopup->GetWidget()->Show();
@@ -449,6 +497,7 @@ views::BubbleDialogDelegateView* PageInfoBubbleView::GetPageInfoBubble() {
 
 PageInfoBubbleView::PageInfoBubbleView(
     views::View* anchor_view,
+    const gfx::Rect& anchor_rect,
     gfx::NativeView parent_window,
     Profile* profile,
     content::WebContents* web_contents,
@@ -466,6 +515,8 @@ PageInfoBubbleView::PageInfoBubbleView(
   g_shown_bubble_type = BUBBLE_PAGE_INFO;
   g_page_info_bubble = this;
   set_parent_window(parent_window);
+  if (!anchor_view)
+    SetAnchorRect(anchor_rect);
 
   // Compensate for built-in vertical padding in the anchor view's image.
   set_anchor_view_insets(gfx::Insets(
@@ -583,8 +634,20 @@ int PageInfoBubbleView::GetDialogButtons() const {
 
 void PageInfoBubbleView::ButtonPressed(views::Button* button,
                                        const ui::Event& event) {
-  DCHECK_EQ(VIEW_ID_PAGE_INFO_BUTTON_CLOSE, button->id());
-  GetWidget()->Close();
+  switch (button->id()) {
+    case PageInfoBubbleView::VIEW_ID_PAGE_INFO_BUTTON_CLOSE:
+      GetWidget()->Close();
+      break;
+    case PageInfoBubbleView::VIEW_ID_PAGE_INFO_BUTTON_CHANGE_PASSWORD:
+      presenter_->OnChangePasswordButtonPressed(web_contents());
+      break;
+    case PageInfoBubbleView::VIEW_ID_PAGE_INFO_BUTTON_WHITELIST_PASSWORD_REUSE:
+      GetWidget()->Close();
+      presenter_->OnWhitelistPasswordReuseButtonPressed(web_contents());
+      break;
+    default:
+      NOTREACHED();
+  }
 }
 
 void PageInfoBubbleView::LinkClicked(views::Link* source, int event_flags) {
@@ -700,7 +763,8 @@ void PageInfoBubbleView::SetPermissionInfo(
   // Add site settings link.
   views::Link* site_settings_link = new views::Link(
       l10n_util::GetStringUTF16(IDS_PAGE_INFO_SITE_SETTINGS_LINK));
-  site_settings_link->set_id(VIEW_ID_PAGE_INFO_LINK_SITE_SETTINGS);
+  site_settings_link->set_id(
+      PageInfoBubbleView::VIEW_ID_PAGE_INFO_LINK_SITE_SETTINGS);
   site_settings_link->set_listener(this);
   views::View* link_section = new views::View();
   const int kLinkMarginTop = 4;
@@ -739,7 +803,7 @@ void PageInfoBubbleView::SetIdentityInfo(const IdentityInfo& identity_info) {
       // Create the link to add to the Certificate Section.
       views::Link* certificate_viewer_link = new views::Link(link_title);
       certificate_viewer_link->set_id(
-          VIEW_ID_PAGE_INFO_LINK_CERTIFICATE_VIEWER);
+          PageInfoBubbleView::VIEW_ID_PAGE_INFO_LINK_CERTIFICATE_VIEWER);
       certificate_viewer_link->set_listener(this);
       if (valid_identity) {
         certificate_viewer_link->SetTooltipText(l10n_util::GetStringFUTF16(
@@ -754,6 +818,10 @@ void PageInfoBubbleView::SetIdentityInfo(const IdentityInfo& identity_info) {
                                    certificate_viewer_link),
           0);
     }
+  }
+
+  if (identity_info.show_change_password_buttons) {
+    header_->AddPasswordReuseButtons();
   }
 
   header_->SetDetails(security_description->details);
@@ -773,7 +841,8 @@ views::View* PageInfoBubbleView::CreateSiteSettingsView(int side_margin) {
   // Create the link and icon for the Certificate section.
   cookie_dialog_link_ = new views::Link(
       l10n_util::GetPluralStringFUTF16(IDS_PAGE_INFO_NUM_COOKIES, 0));
-  cookie_dialog_link_->set_id(VIEW_ID_PAGE_INFO_LINK_COOKIE_DIALOG);
+  cookie_dialog_link_->set_id(
+      PageInfoBubbleView::VIEW_ID_PAGE_INFO_LINK_COOKIE_DIALOG);
   cookie_dialog_link_->set_listener(this);
 
   PageInfoUI::PermissionInfo info;
@@ -797,16 +866,16 @@ void PageInfoBubbleView::HandleLinkClickedAsync(views::Link* source) {
     return;
   }
   switch (source->id()) {
-    case VIEW_ID_PAGE_INFO_LINK_SITE_SETTINGS:
+    case PageInfoBubbleView::VIEW_ID_PAGE_INFO_LINK_SITE_SETTINGS:
       presenter_->OpenSiteSettingsView();
       break;
-    case VIEW_ID_PAGE_INFO_LINK_COOKIE_DIALOG:
+    case PageInfoBubbleView::VIEW_ID_PAGE_INFO_LINK_COOKIE_DIALOG:
       // Count how often the Collected Cookies dialog is opened.
       presenter_->RecordPageInfoAction(
           PageInfo::PAGE_INFO_COOKIES_DIALOG_OPENED);
       new CollectedCookiesViews(web_contents());
       break;
-    case VIEW_ID_PAGE_INFO_LINK_CERTIFICATE_VIEWER: {
+    case PageInfoBubbleView::VIEW_ID_PAGE_INFO_LINK_CERTIFICATE_VIEWER: {
       gfx::NativeWindow top_window = web_contents()->GetTopLevelNativeWindow();
       if (certificate_ && top_window) {
         presenter_->RecordPageInfoAction(
@@ -824,7 +893,7 @@ void PageInfoBubbleView::StyledLabelLinkClicked(views::StyledLabel* label,
                                                 const gfx::Range& range,
                                                 int event_flags) {
   switch (label->id()) {
-    case VIEW_ID_PAGE_INFO_LABEL_SECURITY_DETAILS:
+    case PageInfoBubbleView::VIEW_ID_PAGE_INFO_LABEL_SECURITY_DETAILS:
       web_contents()->OpenURL(content::OpenURLParams(
           GURL(chrome::kPageInfoHelpCenterURL), content::Referrer(),
           WindowOpenDisposition::NEW_FOREGROUND_TAB, ui::PAGE_TRANSITION_LINK,
@@ -832,7 +901,8 @@ void PageInfoBubbleView::StyledLabelLinkClicked(views::StyledLabel* label,
       presenter_->RecordPageInfoAction(
           PageInfo::PAGE_INFO_CONNECTION_HELP_OPENED);
       break;
-    case VIEW_ID_PAGE_INFO_LABEL_RESET_CERTIFICATE_DECISIONS:
+    case PageInfoBubbleView::
+        VIEW_ID_PAGE_INFO_LABEL_RESET_CERTIFICATE_DECISIONS:
       presenter_->OnRevokeSSLErrorBypassButtonPressed();
       GetWidget()->Close();
       break;
@@ -840,3 +910,18 @@ void PageInfoBubbleView::StyledLabelLinkClicked(views::StyledLabel* label,
       NOTREACHED();
   }
 }
+
+#if !defined(OS_MACOSX) || BUILDFLAG(MAC_VIEWS_BROWSER)
+void ShowPageInfoDialogImpl(Browser* browser,
+                            content::WebContents* web_contents,
+                            const GURL& virtual_url,
+                            const security_state::SecurityInfo& security_info) {
+  views::BubbleDialogDelegateView* bubble =
+      PageInfoBubbleView::CreatePageInfoBubble(browser, web_contents,
+                                               virtual_url, security_info);
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
+  bubble->GetWidget()->AddObserver(
+      browser_view->GetLocationBarView()->location_icon_view());
+  bubble->GetWidget()->Show();
+}
+#endif

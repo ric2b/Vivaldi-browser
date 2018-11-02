@@ -1001,8 +1001,10 @@ bool PrePostProcessCode(Scope::ProcessParseMap &map,
     it = map.find(function_scope->GetSourceDir().value());
   if (it != map.end()) {
     for (auto &&item: it->second) {
+      Scope::MergeOptions prefer_scope;
+      prefer_scope.prefer_existing = true;
       Scope extra_scope(scope);
-      item.second->NonRecursiveMergeTo(&extra_scope, Scope::MergeOptions(),
+      item.second->NonRecursiveMergeTo(&extra_scope, prefer_scope,
               function, "PrePostProcess start import", err);
       if (err->has_error())
         return false;
@@ -1026,8 +1028,10 @@ bool PrePostProcessCode(Scope::ProcessParseMap &map,
   it = map.find(label.GetUserVisibleName(false));
   if (it != map.end()) {
     for (auto &&item: it->second) {
+      Scope::MergeOptions prefer_scope;
+      prefer_scope.prefer_existing = true;
       Scope extra_scope(scope);
-      item.second->NonRecursiveMergeTo(&extra_scope, Scope::MergeOptions(),
+      item.second->NonRecursiveMergeTo(&extra_scope, prefer_scope,
               function, "PrePostProcess start import", err);
       if (err->has_error())
         return false;

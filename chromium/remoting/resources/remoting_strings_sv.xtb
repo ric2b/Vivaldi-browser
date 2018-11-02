@@ -23,11 +23,10 @@ Du hittar mer information om sekretess i Googles sekretesspolicy (http://goo.gl/
 <translation id="1520828917794284345">Anpassa skrivbordets storlek</translation>
 <translation id="154040539590487450">Det gick inte att starta fjärråtkomsttjänsten.</translation>
 <translation id="1546934824884762070">Ett oväntat fel uppstod. Rapportera problemet till utvecklarna.</translation>
-<translation id="1619813076098775562">Stängd anslutning till överföringsenheten.</translation>
 <translation id="1643640058022401035">Om du lämnar sidan avslutas sessionen i Chromoting.</translation>
 <translation id="1654128982815600832">Fjärranslutningar aktiveras för den här datorn ...</translation>
 <translation id="170207782578677537">Det gick inte att registrera datorn.</translation>
-<translation id="1704090719919187045">Chromoting Host Preferences</translation>
+<translation id="1727412735341161734">Chrome Remote Desktop</translation>
 <translation id="174018511426417793">Du har inte registrerat några datorer. Om du vill aktivera fjärranslutningar till en dator installerar du Chrome Remote Desktop på datorn och klickar på <ph name="BUTTON_NAME" />.</translation>
 <translation id="1742469581923031760">Anslutningen upprättas …</translation>
 <translation id="1770394049404108959">Jag kan inte öppna appen.</translation>
@@ -42,10 +41,6 @@ Du hittar mer information om sekretess i Googles sekretesspolicy (http://goo.gl/
 <translation id="2013996867038862849">Alla kopplade klienter har tagits bort.</translation>
 <translation id="2038229918502634450">Värdenheten startar om för att implementera en ändring i policyn.</translation>
 <translation id="2046651113449445291">Följande klienter har kopplats ihop med den här datorn och kan ansluta utan att en pinkod behöver anges. Du kan återkalla behörigheten när som helst, antingen individuellt eller för alla klienter.</translation>
-<translation id="2053901200959289492">• ytterligare stöd för flerfönsterläge för Android Nougat
-• förbättrad bildkvalitet på skrivbordet, kortare svarstider och minskad batteriförbrukning
-• snabbare svarstider på klicka-och-dra-funktioner
-• förbättrade animerade effekter i användargränssnittet.</translation>
 <translation id="2078880767960296260">Värdprocess</translation>
 <translation id="20876857123010370">Styrplatteläge</translation>
 <translation id="2089514346391228378">Fjärranslutningar har aktiverats för den här datorn.</translation>
@@ -81,6 +76,7 @@ Du hittar mer information om sekretess i Googles sekretesspolicy (http://goo.gl/
 <translation id="2676780859508944670">Arbetar ...</translation>
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2747641796667576127">Programuppdateringar sker oftast automatiskt, men kan ibland misslyckas. Uppdateringen av programvaran bör inte ta mer än några minuter och du kan göra den när du är fjärransluten till datorn.</translation>
+<translation id="2758123043070977469">Det gick inte att autentisera. Logga in igen.</translation>
 <translation id="2803375539583399270">Ange pinkod</translation>
 <translation id="2841013758207633010">Tid</translation>
 <translation id="2851754573186462851">Chromium App Streaming</translation>
@@ -99,8 +95,15 @@ Du hittar mer information om sekretess i Googles sekretesspolicy (http://goo.gl/
 <translation id="3150823315463303127">Värdenheten kunde inte läsa policyn.</translation>
 <translation id="3194245623920924351">Chrome Remote Desktop</translation>
 <translation id="3197730452537982411">Remote Desktop</translation>
+<translation id="321944585103975186">• Användargränssnittet har fått ett nytt utseende.
+• Appen har fått bättre prestanda, svarar snabbare och är mer stabil.
+• Stöd för att spela upp ljud från Windows- och Linux-datorer.
+• Förbättrat tangentbordsstöd.</translation>
+<translation id="324272851072175193">Skicka anvisningarna med e-post</translation>
 <translation id="3258789396564295715">Du kan få säker åtkomst till den här datorn med Chrome Remote Desktop.</translation>
 <translation id="3286521253923406898">Chromoting Host Controller</translation>
+<translation id="3305934114213025800"><ph name="PRODUCT_NAME" /> vill göra ändringar.</translation>
+<translation id="331779822864701136">• Stöd för Android 8.0 Oreo har lagts till.</translation>
 <translation id="332624996707057614">Ändra datorns namn</translation>
 <translation id="3339299787263251426">Säker åtkomst till datorn via internet</translation>
 <translation id="3360306038446926262">Fönster</translation>
@@ -109,6 +112,10 @@ Du hittar mer information om sekretess i Googles sekretesspolicy (http://goo.gl/
 <translation id="3385242214819933234">Ogiltig ägare till värden.</translation>
 <translation id="3403830762023901068">Enligt policyinställningarna får du inte dela den här datorn som en Chromoting-värd. Kontakta systemadministratören om du behöver hjälp.</translation>
 <translation id="3423542133075182604">Fjärrkommunikationsprocess för säkerhetsnyckel</translation>
+<translation id="3426467947138417795">Chrome Remote Desktop
+Fjärrdator
+Fjärråtkomst
+Fjärrhjälp</translation>
 <translation id="3581045510967524389">Det gick inte att ansluta till nätverket. Kontrollera att enheten är online.</translation>
 <translation id="3596628256176442606">Med den här tjänsten aktiveras inkommande anslutningar från Chromoting-klienter.</translation>
 <translation id="3606997049964069799">Du är inte inloggad i Chromium. Logga in och försök igen.</translation>
@@ -117,8 +124,13 @@ Du hittar mer information om sekretess i Googles sekretesspolicy (http://goo.gl/
 <translation id="3695446226812920698">Läs mer</translation>
 <translation id="3718805989288361841">Det finns ett fel i principinställningarna för Chrome Remote Desktop. Kontakta systemadministratören om du behöver hjälp.</translation>
 <translation id="3776024066357219166">Chrome Remote Desktop-sessionen har avslutats.</translation>
-<translation id="3785447812627779171">Chromoting
-Host</translation>
+<translation id="3788372335219293587">Få säker åtkomst till datorn från din iOS-enhet. Det är snabbt, enkelt och gratis.
+
+• Besök Chrome Web Store på datorn som du vill fjärransluta till och leta reda på appen Chrome Remote Desktop: https://chrome.google.com/remotedesktop
+• Installera Chrome Remote Desktop och slutför konfigureringen enligt anvisningarna.
+• Öppna appen på iOS-enheten och tryck på en av datorerna som är online om du vill ansluta till den.
+
+Du hittar information om sekretess i Googles sekretesspolicy (http://goo.gl/SyrVzj)</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
 <translation id="3884839335308961732">Bekräfta ditt konto och pinkoden nedan för att tillåta åtkomst via Chrome Remote Desktop.</translation>
 <translation id="3897092660631435901">Meny</translation>
@@ -132,9 +144,9 @@ Host</translation>
 <translation id="405887016757208221">Fjärrdatorn har misslyckats med att starta sessionen. Konfigurera värden på nytt om problemet kvarstår.</translation>
 <translation id="4068946408131579958">Alla anslutningar</translation>
 <translation id="409800995205263688">OBS! Enligt policyinställningarna tillåts endast anslutning mellan datorer i ditt nätverk.</translation>
+<translation id="4145029455188493639">Inloggad som <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4155497795971509630">Vissa obligatoriska komponenter saknas. Kontrollera att du har installerat den senaste versionen av programvaran och försök igen.</translation>
 <translation id="4156740505453712750">Om du vill skydda åtkomsten till den här datorn väljer du en PIN-kod som består av <ph name="BOLD_START" />minst sex siffror<ph name="BOLD_END" />. PIN-koden krävs när du ansluter från en annan plats.</translation>
-<translation id="4156741816461781891">Inloggad som <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4176825807642096119">Åtkomstkod</translation>
 <translation id="4207623512727273241">Kör installationsprogrammet innan du fortsätter.</translation>
 <translation id="4227991223508142681">Verktyg för värdprovisionering</translation>
@@ -152,8 +164,7 @@ Host</translation>
 <translation id="4517233780764084060">Obs! Om du vill vara säker på att alla kortkommandon är tillgängliga kan du ställa in Chromoting på att Öppna som fönster.</translation>
 <translation id="4563926062592110512">Klient frånkopplad: <ph name="CLIENT_USERNAME" />.</translation>
 <translation id="4572065712096155137">Åtkomst</translation>
-<translation id="4573676252416618192">Chrome Remote
-Desktop Host</translation>
+<translation id="4592037108270173918">Dataavgifter kan tillkomma när du ansluter till en enhet via mobilnätverket. Vill du fortsätta?</translation>
 <translation id="4619978527973181021">Godkänn och installera</translation>
 <translation id="4635770493235256822">Fjärrenheter</translation>
 <translation id="4660011489602794167">Visa tangentbord</translation>
@@ -192,20 +203,19 @@ Desktop Host</translation>
 <translation id="5419418238395129586">Senast online: <ph name="DATE" /></translation>
 <translation id="544077782045763683">Värdenheten har stängts av.</translation>
 <translation id="5510035215749041527">Koppla från nu</translation>
-<translation id="5537725057119320332">Casta</translation>
 <translation id="5593560073513909978">Tjänsten är inte tillgänglig för närvarande. Försök igen senare.</translation>
 <translation id="5601503069213153581">PIN-kod</translation>
 <translation id="5619148062500147964">Till den här datorn</translation>
 <translation id="5625493749705183369">Få åtkomst till andra datorer eller ge andra åtkomst till din dator över internet på ett säkert sätt.</translation>
 <translation id="5702987232842159181">Ansluten:</translation>
 <translation id="5708869785009007625">Ditt skrivbord delas just nu med <ph name="USER" />.</translation>
+<translation id="5750083143895808682">Inloggad som <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="5773590752998175013">Kopplade den</translation>
 <translation id="579702532610384533">Återanslut</translation>
+<translation id="5810269635982033450">Skärmen används som styrplatta</translation>
 <translation id="5841343754884244200">Skärmalternativ</translation>
 <translation id="5843054235973879827">Varför är det säkert?</translation>
 <translation id="5859141382851488196">Nytt fönster ...</translation>
-<translation id="5885438903806970186">På webben.</translation>
-<translation id="6001953797859482435">Chrome Remote Desktop Host Preferences</translation>
 <translation id="6011539954251327702">Med Chromoting kan du säkert dela din dator över internet. Båda användarna måste köra appen Chromoting, som finns här: <ph name="URL" />.</translation>
 <translation id="6033507038939587647">Tangentbordsalternativ</translation>
 <translation id="6040143037577758943">Stäng</translation>
@@ -254,10 +264,14 @@ Desktop Host</translation>
 <translation id="7019153418965365059">Okänt värdfel: <ph name="HOST_OFFLINE_REASON" />.</translation>
 <translation id="701976023053394610">Fjärrhjälp</translation>
 <translation id="7038683108611689168">Hjälp oss att förbättra Chromoting genom att tillåta att vi samlar in användningsstatistik och felrapporter.</translation>
-<translation id="712467900648340229">Det gick inte att ansluta till överföringsenheten.</translation>
+<translation id="7067321367069083429">Skärmen används som pekskärm</translation>
+<translation id="7116737094673640201">Välkommen till Chrome Remote Desktop</translation>
 <translation id="7144878232160441200">Försök igen</translation>
 <translation id="7149517134817561223">Program som används för att skicka kommandon till värddatorn för Chrome Remote Desktop.</translation>
 <translation id="7215059001581613786">Ange en PIN-kod som består av minst sex siffror.</translation>
+<translation id="7237767047212540055">Öppna Chrome på datorn som du vill fjärransluta till och besök <ph name="INSTALLATION_LINK" />
+Installera Chrome Remote Desktop och slutför konfigureringen enligt anvisningarna
+När konfigureringen är klar kan du ansluta till datorn via den här sidan genom att ange pinkoden eller åtkomstkoden</translation>
 <translation id="7312846573060934304">Värden är offline.</translation>
 <translation id="7319983568955948908">Sluta dela</translation>
 <translation id="7401733114166276557">Chrome Remote Desktop</translation>
@@ -271,6 +285,7 @@ Desktop Host</translation>
 <translation id="7658239707568436148">Avbryt</translation>
 <translation id="7665369617277396874">Lägg till konto</translation>
 <translation id="7672203038394118626">Fjärranslutningar har inaktiverats för den här datorn.</translation>
+<translation id="7678209621226490279">Docka till vänster</translation>
 <translation id="7693372326588366043">Uppdatera listan med värdar</translation>
 <translation id="7782471917492991422">Kontrollera datorns inställningar för energisparfunktioner och se till att den inte försätts i viloläge vid inaktivitet.</translation>
 <translation id="7810127880729796595">Visa statistik (anslutning: <ph name="QUALITY" />)</translation>
@@ -278,6 +293,7 @@ Desktop Host</translation>
 <translation id="7868137160098754906">Ange din pinkod för fjärrdatorn.</translation>
 <translation id="7869445566579231750">Du har inte behörighet att köra den här appen.</translation>
 <translation id="7895403300744144251">Fjärrdatorns säkerhetspolicy tillåter inte anslutningar från ditt konto.</translation>
+<translation id="7936528439960309876">Docka till höger</translation>
 <translation id="7948001860594368197">Skärmalternativ</translation>
 <translation id="7970576581263377361">Autentiseringen misslyckades. Logga in i Chromium igen.</translation>
 <translation id="7981525049612125370">Fjärrsessionen har avslutats.</translation>

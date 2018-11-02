@@ -11,10 +11,12 @@
 #include "base/strings/sys_string_conversions.h"
 #include "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
+#import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
+#import "ios/chrome/browser/ui/commands/start_voice_search_command.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/ui/context_menu/context_menu_coordinator.h"
 #import "ios/chrome/browser/ui/ntp/google_landing_data_source.h"
@@ -28,6 +30,7 @@
 #include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/url_loader.h"
+#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
 #include "ios/chrome/common/string_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/third_party/material_components_ios/src/components/Snackbar/src/MaterialSnackbar.h"
@@ -116,7 +119,8 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
   NewTabPageHeaderView* _headerView;
   WhatsNewHeaderView* _promoHeaderView;
   __weak id<GoogleLandingDataSource> _dataSource;
-  __weak id<UrlLoader, OmniboxFocuser> _dispatcher;
+  __weak id<ApplicationCommands, BrowserCommands, UrlLoader, OmniboxFocuser>
+      _dispatcher;
 }
 
 // Whether the Google logo or doodle is being shown.
@@ -206,6 +210,7 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
 
 @implementation GoogleLandingViewController
 
+@synthesize dispatcher = _dispatcher;
 @synthesize logoVendor = _logoVendor;
 // Property declared in NewTabPagePanelProtocol.
 @synthesize delegate = _delegate;
@@ -298,6 +303,7 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
   self.leftMargin =
       content_suggestions::centeredTilesMarginForWidth([self viewWidth]);
   [self updateConstraintsForWidth:[self viewWidth]];
+  [self updateSearchField];
   // Invalidate layout to handle the cases where the layout is changed when the
   // NTP is not presented (e.g. tab backgrounded).
   [[_mostVisitedView collectionViewLayout] invalidateLayout];
@@ -318,14 +324,6 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
 
 - (void)setDataSource:(id<GoogleLandingDataSource>)dataSource {
   _dataSource = dataSource;
-}
-
-- (id<UrlLoader, OmniboxFocuser>)dispatcher {
-  return _dispatcher;
-}
-
-- (void)setDispatcher:(id<UrlLoader, OmniboxFocuser>)dispatcher {
-  _dispatcher = dispatcher;
 }
 
 #pragma mark - Private
@@ -440,7 +438,10 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
 - (void)loadVoiceSearch:(id)sender {
   DCHECK(self.voiceSearchIsEnabled);
   base::RecordAction(UserMetricsAction("MobileNTPMostVisitedVoiceSearch"));
-  [sender chromeExecuteCommand:sender];
+  UIView* view = base::mac::ObjCCastStrict<UIView>(sender);
+  StartVoiceSearchCommand* command =
+      [[StartVoiceSearchCommand alloc] initWithOriginView:view];
+  [self.dispatcher startVoiceSearch:command];
 }
 
 - (void)preloadVoiceSearch:(id)sender {
@@ -449,11 +450,7 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
                 action:@selector(preloadVoiceSearch:)
       forControlEvents:UIControlEventTouchDown];
 
-  // Use a GenericChromeCommand because |sender| already has a tag set for a
-  // different command.
-  GenericChromeCommand* command =
-      [[GenericChromeCommand alloc] initWithTag:IDC_PRELOAD_VOICE_SEARCH];
-  [sender chromeExecuteCommand:command];
+  [self.dispatcher preloadVoiceSearch];
 }
 
 // Initialize and add a panel with most visited sites.
@@ -499,7 +496,8 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
                             topMargin:_searchFieldTopMarginConstraint
                    subviewConstraints:constraints
                         logoIsShowing:self.logoIsShowing
-                            forOffset:[_mostVisitedView contentOffset].y];
+                            forOffset:[_mostVisitedView contentOffset].y
+                                width:0];
 }
 
 - (void)addOverscrollActions {
@@ -660,7 +658,7 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
                     andHeaderView:(UIView*)headerView {
   _doodleTopMarginConstraint = [logoView.topAnchor
       constraintEqualToAnchor:headerView.topAnchor
-                     constant:content_suggestions::doodleTopMargin()];
+                     constant:content_suggestions::doodleTopMargin(YES)];
   _doodleHeightConstraint = [logoView.heightAnchor
       constraintEqualToConstant:content_suggestions::doodleHeight(
                                     self.logoIsShowing)];
@@ -690,7 +688,7 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
       setSideMargin:content_suggestions::centeredTilesMarginForWidth(width)
            forWidth:width];
   [_doodleTopMarginConstraint
-      setConstant:content_suggestions::doodleTopMargin()];
+      setConstant:content_suggestions::doodleTopMargin(YES)];
   [_searchFieldWidthConstraint
       setConstant:content_suggestions::searchFieldWidth(width)];
   [_searchFieldTopMarginConstraint
@@ -721,8 +719,8 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
     referenceSizeForHeaderInSection:(NSInteger)section {
   CGFloat headerHeight = 0;
   if (section == SectionWithOmnibox) {
-    headerHeight = content_suggestions::heightForLogoHeader(self.logoIsShowing,
-                                                            self.promoCanShow);
+    headerHeight = content_suggestions::heightForLogoHeader(
+        self.logoIsShowing, self.promoCanShow, YES);
     ((UICollectionViewFlowLayout*)collectionViewLayout).headerReferenceSize =
         CGSizeMake(0, headerHeight);
   } else if (section == SectionWithMostVisited) {
@@ -911,7 +909,7 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
         indexPathForCell:static_cast<UICollectionViewCell*>(sender.view)];
     const NSUInteger index = indexPath.row;
 
-    // A long press occured on one of the most visited button. Popup a context
+    // A long press occurred on one of the most visited button. Popup a context
     // menu.
     DCHECK(index < [self numberOfItems]);
 
@@ -941,8 +939,13 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
       MostVisitedCell* cell = (MostVisitedCell*)sender.view;
       [[strongSelf dataSource] logMostVisitedClick:index
                                           tileType:cell.tileType];
+      // GoogleLandingViewController is only displayed in non-incognito tabs,
+      // so |inIncognito| can be assumed to be NO. If it were displayed in an
+      // incognito state, then passing NO to |inIncognito| would open a tab in
+      // the wrong browser state.
       [[strongSelf dispatcher] webPageOrderedOpen:url
                                          referrer:web::Referrer()
+                                      inIncognito:NO
                                      inBackground:YES
                                          appendTo:kCurrentTab];
     };
@@ -1026,7 +1029,7 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
 // the omnibox to the top of the screen.
 - (CGFloat)pinnedOffsetY {
   CGFloat headerHeight = content_suggestions::heightForLogoHeader(
-      self.logoIsShowing, self.promoCanShow);
+      self.logoIsShowing, self.promoCanShow, YES);
   CGFloat offsetY =
       headerHeight - ntp_header::kScrolledToTopOmniboxBottomMargin;
   if (!IsIPadIdiom())

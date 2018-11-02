@@ -5,23 +5,27 @@
 #include "ash/system/tray_caps_lock.h"
 
 #include "ash/accessibility_delegate.h"
+#include "ash/ime/ime_controller.h"
 #include "ash/metrics/user_metrics_recorder.h"
+#include "ash/public/cpp/config.h"
 #include "ash/resources/vector_icons/vector_icons.h"
+#include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/system_notifier.h"
 #include "ash/system/tray/actionable_view.h"
-#include "ash/system/tray/system_tray_delegate.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_popup_item_style.h"
 #include "ash/system/tray/tray_popup_utils.h"
 #include "ash/system/tray/tri_view.h"
 #include "base/sys_info.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/pref_service.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/ime/chromeos/ime_keyboard.h"
-#include "ui/base/ime/chromeos/input_method_manager.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/chromeos/events/pref_names.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/message_center/message_center.h"
@@ -43,31 +47,57 @@ const int kCaptionRightPadding = 6;
 
 const char kCapsLockNotificationId[] = "capslock";
 
-bool CapsLockIsEnabled() {
-  chromeos::input_method::InputMethodManager* ime =
-      chromeos::input_method::InputMethodManager::Get();
-  return (ime && ime->GetImeKeyboard())
-             ? ime->GetImeKeyboard()->CapsLockIsEnabled()
-             : false;
+bool IsCapsLockEnabled() {
+  return Shell::Get()->ime_controller()->IsCapsLockEnabled();
+}
+
+bool IsSearchKeyMappedToCapsLock() {
+  PrefService* prefs =
+      Shell::Get()->session_controller()->GetLastActiveUserPrefService();
+  // Null early in mash startup.
+  if (!prefs)
+    return false;
+
+  // Don't bother to observe for the pref changing because the system tray
+  // menu is rebuilt every time it is opened and the user has to close the
+  // menu to open settings to change the pref. It's not worth the complexity
+  // to worry about sync changing the pref while the menu or notification is
+  // visible.
+  return prefs->GetInteger(prefs::kLanguageRemapSearchKeyTo) ==
+         chromeos::input_method::kCapsLockKey;
 }
 
 std::unique_ptr<Notification> CreateNotification() {
   const int string_id =
-      Shell::Get()->system_tray_delegate()->IsSearchKeyMappedToCapsLock()
+      IsSearchKeyMappedToCapsLock()
           ? IDS_ASH_STATUS_TRAY_CAPS_LOCK_CANCEL_BY_SEARCH
           : IDS_ASH_STATUS_TRAY_CAPS_LOCK_CANCEL_BY_ALT_SEARCH;
-  std::unique_ptr<Notification> notification(new Notification(
-      message_center::NOTIFICATION_TYPE_SIMPLE, kCapsLockNotificationId,
-      l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_CAPS_LOCK_ENABLED),
-      l10n_util::GetStringUTF16(string_id),
-      gfx::Image(
-          gfx::CreateVectorIcon(kSystemMenuCapsLockIcon,
-                                TrayPopupItemStyle::GetIconColor(
-                                    TrayPopupItemStyle::ColorStyle::ACTIVE))),
-      base::string16() /* display_source */, GURL(),
-      message_center::NotifierId(message_center::NotifierId::SYSTEM_COMPONENT,
-                                 system_notifier::kNotifierCapsLock),
-      message_center::RichNotificationData(), nullptr));
+  std::unique_ptr<Notification> notification;
+  if (message_center::MessageCenter::IsNewStyleNotificationEnabled()) {
+    notification = Notification::CreateSystemNotification(
+        message_center::NOTIFICATION_TYPE_SIMPLE, kCapsLockNotificationId,
+        l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_CAPS_LOCK_ENABLED),
+        l10n_util::GetStringUTF16(string_id), gfx::Image(),
+        base::string16() /* display_source */, GURL(),
+        message_center::NotifierId(message_center::NotifierId::SYSTEM_COMPONENT,
+                                   system_notifier::kNotifierCapsLock),
+        message_center::RichNotificationData(), nullptr,
+        kNotificationCapslockIcon,
+        message_center::SystemNotificationWarningLevel::NORMAL);
+  } else {
+    notification = base::MakeUnique<Notification>(
+        message_center::NOTIFICATION_TYPE_SIMPLE, kCapsLockNotificationId,
+        l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_CAPS_LOCK_ENABLED),
+        l10n_util::GetStringUTF16(string_id),
+        gfx::Image(
+            gfx::CreateVectorIcon(kSystemMenuCapsLockIcon,
+                                  TrayPopupItemStyle::GetIconColor(
+                                      TrayPopupItemStyle::ColorStyle::ACTIVE))),
+        base::string16() /* display_source */, GURL(),
+        message_center::NotifierId(message_center::NotifierId::SYSTEM_COMPONENT,
+                                   system_notifier::kNotifierCapsLock),
+        message_center::RichNotificationData(), nullptr);
+  }
   return notification;
 }
 
@@ -117,8 +147,7 @@ class CapsLockDefaultView : public ActionableView {
     text_label_->SetText(l10n_util::GetStringUTF16(text_string_id));
 
     int shortcut_string_id = 0;
-    bool search_mapped_to_caps_lock =
-        Shell::Get()->system_tray_delegate()->IsSearchKeyMappedToCapsLock();
+    const bool search_mapped_to_caps_lock = IsSearchKeyMappedToCapsLock();
     if (caps_lock_enabled) {
       shortcut_string_id =
           search_mapped_to_caps_lock
@@ -143,15 +172,11 @@ class CapsLockDefaultView : public ActionableView {
 
   // ActionableView:
   bool PerformAction(const ui::Event& event) override {
-    chromeos::input_method::ImeKeyboard* keyboard =
-        chromeos::input_method::InputMethodManager::Get()->GetImeKeyboard();
-    if (keyboard) {
-      Shell::Get()->metrics()->RecordUserMetricsAction(
-          keyboard->CapsLockIsEnabled()
-              ? UMA_STATUS_AREA_CAPS_LOCK_DISABLED_BY_CLICK
-              : UMA_STATUS_AREA_CAPS_LOCK_ENABLED_BY_CLICK);
-      keyboard->SetCapsLockEnabled(!keyboard->CapsLockIsEnabled());
-    }
+    bool new_state = !IsCapsLockEnabled();
+    Shell::Get()->ime_controller()->SetCapsLockFromTray(new_state);
+    Shell::Get()->metrics()->RecordUserMetricsAction(
+        new_state ? UMA_STATUS_AREA_CAPS_LOCK_ENABLED_BY_CLICK
+                  : UMA_STATUS_AREA_CAPS_LOCK_DISABLED_BY_CLICK);
     return true;
   }
 
@@ -167,19 +192,26 @@ class CapsLockDefaultView : public ActionableView {
 TrayCapsLock::TrayCapsLock(SystemTray* system_tray)
     : TrayImageItem(system_tray, kSystemTrayCapsLockIcon, UMA_CAPS_LOCK),
       default_(nullptr),
-      caps_lock_enabled_(CapsLockIsEnabled()),
+      caps_lock_enabled_(IsCapsLockEnabled()),
       message_shown_(false) {
-  chromeos::input_method::InputMethodManager* ime =
-      chromeos::input_method::InputMethodManager::Get();
-  if (ime && ime->GetImeKeyboard())
-    ime->GetImeKeyboard()->AddObserver(this);
+  Shell::Get()->ime_controller()->AddObserver(this);
 }
 
 TrayCapsLock::~TrayCapsLock() {
-  chromeos::input_method::InputMethodManager* ime =
-      chromeos::input_method::InputMethodManager::Get();
-  if (ime && ime->GetImeKeyboard())
-    ime->GetImeKeyboard()->RemoveObserver(this);
+  Shell::Get()->ime_controller()->RemoveObserver(this);
+}
+
+// static
+void TrayCapsLock::RegisterProfilePrefs(PrefRegistrySimple* registry,
+                                        bool for_test) {
+  if (for_test) {
+    // There is no remote pref service, so pretend that ash owns the pref.
+    registry->RegisterIntegerPref(prefs::kLanguageRemapSearchKeyTo,
+                                  chromeos::input_method::kSearchKey);
+    return;
+  }
+  // Pref is owned by chrome and flagged as PUBLIC.
+  registry->RegisterForeignPref(prefs::kLanguageRemapSearchKeyTo);
 }
 
 void TrayCapsLock::OnCapsLockChanged(bool enabled) {
@@ -213,7 +245,7 @@ void TrayCapsLock::OnCapsLockChanged(bool enabled) {
 }
 
 bool TrayCapsLock::GetInitialVisibility() {
-  return CapsLockIsEnabled();
+  return IsCapsLockEnabled();
 }
 
 views::View* TrayCapsLock::CreateDefaultView(LoginStatus status) {

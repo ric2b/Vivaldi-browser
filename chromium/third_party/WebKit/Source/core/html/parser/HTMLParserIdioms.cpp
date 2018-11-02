@@ -28,7 +28,6 @@
 #include "platform/wtf/MathExtras.h"
 #include "platform/wtf/text/AtomicString.h"
 #include "platform/wtf/text/ParsingUtilities.h"
-#include "platform/wtf/text/StringBuilder.h"
 #include "platform/wtf/text/StringHash.h"
 #include "platform/wtf/text/StringToNumber.h"
 #include "platform/wtf/text/TextEncoding.h"
@@ -162,53 +161,22 @@ template <typename CharacterType>
 static bool ParseHTMLIntegerInternal(const CharacterType* position,
                                      const CharacterType* end,
                                      int& value) {
-  // Step 3
-  bool is_negative = false;
-
   // Step 4
-  while (position < end) {
-    if (!IsHTMLSpace<CharacterType>(*position))
-      break;
-    ++position;
-  }
+  SkipWhile<CharacterType, IsHTMLSpace<CharacterType>>(position, end);
 
   // Step 5
   if (position == end)
     return false;
   DCHECK_LT(position, end);
 
-  // Step 6
-  if (*position == '-') {
-    is_negative = true;
-    ++position;
-  } else if (*position == '+')
-    ++position;
-  if (position == end)
-    return false;
-  DCHECK_LT(position, end);
-
-  // Step 7
-  if (!IsASCIIDigit(*position))
-    return false;
-
-  // Step 8
-  static const int kIntMax = std::numeric_limits<int>::max();
-  const int kBase = 10;
-  const int kMaxMultiplier = kIntMax / kBase;
-
-  unsigned temp = 0;
-  do {
-    int digit_value = *position - '0';
-    if (temp > kMaxMultiplier ||
-        (temp == kMaxMultiplier &&
-         digit_value > (kIntMax % kBase) + is_negative))
-      return false;
-    temp = temp * kBase + digit_value;
-    ++position;
-  } while (position < end && IsASCIIDigit(*position));
-  // Step 9
-  value = is_negative ? (0 - temp) : temp;
-  return true;
+  bool ok;
+  WTF::NumberParsingOptions options(
+      WTF::NumberParsingOptions::kAcceptTrailingGarbage |
+      WTF::NumberParsingOptions::kAcceptLeadingPlus);
+  int wtf_value = CharactersToInt(position, end - position, options, &ok);
+  if (ok)
+    value = wtf_value;
+  return ok;
 }
 
 // http://www.whatwg.org/specs/web-apps/current-work/#rules-for-parsing-integers
@@ -226,7 +194,7 @@ bool ParseHTMLInteger(const String& input, int& value) {
 }
 
 template <typename CharacterType>
-static WTF::NumberParsingState ParseHTMLNonNegativeIntegerInternal(
+static WTF::NumberParsingResult ParseHTMLNonNegativeIntegerInternal(
     const CharacterType* position,
     const CharacterType* end,
     unsigned& value) {
@@ -238,76 +206,32 @@ static WTF::NumberParsingState ParseHTMLNonNegativeIntegerInternal(
   // [1]
   // https://html.spec.whatwg.org/multipage/infrastructure.html#rules-for-parsing-integers
 
-  // Step 3: Let sign have the value "positive".
-  int sign = 1;
-
   // Step 4: Skip whitespace.
-  while (position < end) {
-    if (!IsHTMLSpace<CharacterType>(*position))
-      break;
-    ++position;
-  }
+  SkipWhile<CharacterType, IsHTMLSpace<CharacterType>>(position, end);
 
   // Step 5: If position is past the end of input, return an error.
   if (position == end)
-    return WTF::NumberParsingState::kError;
+    return WTF::NumberParsingResult::kError;
   DCHECK_LT(position, end);
 
-  // Step 6: If the character indicated by position (the first character) is a
-  // U+002D HYPHEN-MINUS character (-), ...
-  if (*position == '-') {
-    sign = -1;
-    ++position;
-  } else if (*position == '+') {
-    ++position;
-  }
-
-  if (position == end)
-    return WTF::NumberParsingState::kError;
-  DCHECK_LT(position, end);
-
-  // Step 7: If the character indicated by position is not an ASCII digit,
-  // then return an error.
-  if (!IsASCIIDigit(*position))
-    return WTF::NumberParsingState::kError;
-
-  // Step 8: Collect a sequence of characters ...
-  StringBuilder digits;
-  while (position < end) {
-    if (!IsASCIIDigit(*position))
-      break;
-    digits.Append(*position++);
-  }
-
-  WTF::NumberParsingState state;
-  unsigned digits_value;
-  if (digits.Is8Bit()) {
-    digits_value =
-        CharactersToUIntStrict(digits.Characters8(), digits.length(), &state);
-  } else {
-    digits_value =
-        CharactersToUIntStrict(digits.Characters16(), digits.length(), &state);
-  }
-  // TODO(tkent): The following code to adjust NumberParsingState is not simple
-  // due to "-0" behavior difference between CharactersToUIntStrict() and
-  // ParseHTMLNonNegativeIntegerInternal(). Simplify the code by updating
-  // CharactersToUIntStrict() to accept "-0".
-  if (state == WTF::NumberParsingState::kOverflowMax && sign < 0)
-    return WTF::NumberParsingState::kError;
-  if (state == WTF::NumberParsingState::kSuccess) {
-    if (sign < 0 && digits_value != 0)
-      return WTF::NumberParsingState::kError;
-    value = digits_value;
-  }
-  return state;
+  WTF::NumberParsingResult result;
+  WTF::NumberParsingOptions options(
+      WTF::NumberParsingOptions::kAcceptTrailingGarbage |
+      WTF::NumberParsingOptions::kAcceptLeadingPlus |
+      WTF::NumberParsingOptions::kAcceptMinusZeroForUnsigned);
+  unsigned wtf_value =
+      CharactersToUInt(position, end - position, options, &result);
+  if (result == WTF::NumberParsingResult::kSuccess)
+    value = wtf_value;
+  return result;
 }
 
-static WTF::NumberParsingState ParseHTMLNonNegativeIntegerInternal(
+static WTF::NumberParsingResult ParseHTMLNonNegativeIntegerInternal(
     const String& input,
     unsigned& value) {
   unsigned length = input.length();
   if (length == 0)
-    return WTF::NumberParsingState::kError;
+    return WTF::NumberParsingResult::kError;
   if (input.Is8Bit()) {
     const LChar* start = input.Characters8();
     return ParseHTMLNonNegativeIntegerInternal(start, start + length, value);
@@ -320,7 +244,7 @@ static WTF::NumberParsingState ParseHTMLNonNegativeIntegerInternal(
 // https://html.spec.whatwg.org/multipage/infrastructure.html#rules-for-parsing-non-negative-integers
 bool ParseHTMLNonNegativeInteger(const String& input, unsigned& value) {
   return ParseHTMLNonNegativeIntegerInternal(input, value) ==
-         WTF::NumberParsingState::kSuccess;
+         WTF::NumberParsingResult::kSuccess;
 }
 
 bool ParseHTMLClampedNonNegativeInteger(const String& input,
@@ -329,15 +253,15 @@ bool ParseHTMLClampedNonNegativeInteger(const String& input,
                                         unsigned& value) {
   unsigned parsed_value;
   switch (ParseHTMLNonNegativeIntegerInternal(input, parsed_value)) {
-    case WTF::NumberParsingState::kError:
+    case WTF::NumberParsingResult::kError:
       return false;
-    case WTF::NumberParsingState::kOverflowMin:
+    case WTF::NumberParsingResult::kOverflowMin:
       NOTREACHED() << input;
       return false;
-    case WTF::NumberParsingState::kOverflowMax:
+    case WTF::NumberParsingResult::kOverflowMax:
       value = max;
       return true;
-    case WTF::NumberParsingState::kSuccess:
+    case WTF::NumberParsingResult::kSuccess:
       value = std::max(min, std::min(parsed_value, max));
       return true;
   }
@@ -359,20 +283,20 @@ static Vector<double> ParseHTMLListOfFloatingPointNumbersInternal(
     const CharacterType* position,
     const CharacterType* end) {
   Vector<double> numbers;
-  skipWhile<CharacterType, IsSpaceOrDelimiter>(position, end);
+  SkipWhile<CharacterType, IsSpaceOrDelimiter>(position, end);
 
   while (position < end) {
-    skipWhile<CharacterType, IsNotSpaceDelimiterOrNumberStart>(position, end);
+    SkipWhile<CharacterType, IsNotSpaceDelimiterOrNumberStart>(position, end);
 
     const CharacterType* unparsed_number_start = position;
-    skipUntil<CharacterType, IsSpaceOrDelimiter>(position, end);
+    SkipUntil<CharacterType, IsSpaceOrDelimiter>(position, end);
 
     size_t parsed_length = 0;
     double number = CharactersToDouble(
         unparsed_number_start, position - unparsed_number_start, parsed_length);
     numbers.push_back(CheckDoubleValue(number, parsed_length != 0, 0));
 
-    skipWhile<CharacterType, IsSpaceOrDelimiter>(position, end);
+    SkipWhile<CharacterType, IsSpaceOrDelimiter>(position, end);
   }
   return numbers;
 }

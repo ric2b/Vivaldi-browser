@@ -4,7 +4,7 @@
 
 // Closure compiler won't let this be declared inside cr.define().
 /** @enum {string} */
-var SourceType = {
+const SourceType = {
   WEBSTORE: 'webstore',
   POLICY: 'policy',
   SIDELOADED: 'sideloaded',
@@ -27,6 +27,14 @@ cr.define('extensions', function() {
         return false;
     }
     assertNotReached();
+  }
+
+  /**
+   * @param {!chrome.developerPrivate.ExtensionInfo} extensionInfo
+   * @return {boolean} Whether the extension is controlled.
+   */
+  function isControlled(extensionInfo) {
+    return !!extensionInfo.controlledInfo;
   }
 
   /**
@@ -98,8 +106,8 @@ cr.define('extensions', function() {
    */
   function computeInspectableViewLabel(view) {
     // Trim the "chrome-extension://<id>/".
-    var url = new URL(view.url);
-    var label = view.url;
+    const url = new URL(view.url);
+    let label = view.url;
     if (url.protocol == 'chrome-extension:')
       label = url.pathname.substring(1);
     if (label == '_generated_background_page.html')
@@ -115,9 +123,33 @@ cr.define('extensions', function() {
     return label;
   }
 
+  /**
+   * Returns the list type that the item belongs to.
+   * @param {!chrome.developerPrivate.ExtensionInfo} item
+   * @return {extensions.ShowingType}
+   */
+  function getItemListType(item) {
+    const ExtensionType = chrome.developerPrivate.ExtensionType;
+    switch (item.type) {
+      case ExtensionType.HOSTED_APP:
+      case ExtensionType.LEGACY_PACKAGED_APP:
+      case ExtensionType.PLATFORM_APP:
+        return extensions.ShowingType.APPS;
+      case ExtensionType.EXTENSION:
+      case ExtensionType.SHARED_MODULE:
+        return extensions.ShowingType.EXTENSIONS;
+      case ExtensionType.THEME:
+        assertNotReached('Don\'t send themes to the chrome://extensions page');
+        break;
+    }
+    assertNotReached();
+  }
+
   return {
+    isControlled: isControlled,
     isEnabled: isEnabled,
     userCanChangeEnablement: userCanChangeEnablement,
+    getItemListType: getItemListType,
     getItemSource: getItemSource,
     getItemSourceString: getItemSourceString,
     computeInspectableViewLabel: computeInspectableViewLabel

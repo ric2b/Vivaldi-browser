@@ -151,12 +151,11 @@ bool WimaxConfigView::Login() {
     return true;  // Close dialog
   }
   base::DictionaryValue properties;
-  properties.SetStringWithoutPathExpansion(
-      shill::kEapIdentityProperty, GetEapIdentity());
-  properties.SetStringWithoutPathExpansion(
-      shill::kEapPasswordProperty, GetEapPassphrase());
-  properties.SetBooleanWithoutPathExpansion(
-      shill::kSaveCredentialsProperty, GetSaveCredentials());
+  properties.SetKey(shill::kEapIdentityProperty, base::Value(GetEapIdentity()));
+  properties.SetKey(shill::kEapPasswordProperty,
+                    base::Value(GetEapPassphrase()));
+  properties.SetKey(shill::kSaveCredentialsProperty,
+                    base::Value(GetSaveCredentials()));
 
   const bool share_default = true;
   bool share_network = GetShareNetwork(share_default);
@@ -164,8 +163,7 @@ bool WimaxConfigView::Login() {
   bool only_policy_autoconnect =
       onc::PolicyAllowsOnlyPolicyNetworksToAutoconnect(!share_network);
   if (only_policy_autoconnect) {
-    properties.SetBooleanWithoutPathExpansion(shill::kAutoConnectProperty,
-                                              false);
+    properties.SetKey(shill::kAutoConnectProperty, base::Value(false));
   }
 
   NetworkConnect::Get()->ConfigureNetworkIdAndConnect(wimax->guid(), properties,
@@ -287,19 +285,19 @@ void WimaxConfigView::Init() {
     passphrase_visible_button_->SetImage(
         views::ImageButton::STATE_NORMAL,
         *ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-            IDR_NETWORK_SHOW_PASSWORD));
+            IDR_SHOW_PASSWORD));
     passphrase_visible_button_->SetImage(
         views::ImageButton::STATE_HOVERED,
         *ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-            IDR_NETWORK_SHOW_PASSWORD_HOVER));
+            IDR_SHOW_PASSWORD_HOVER));
     passphrase_visible_button_->SetToggledImage(
         views::ImageButton::STATE_NORMAL,
-        ResourceBundle::GetSharedInstance().
-        GetImageSkiaNamed(IDR_NETWORK_HIDE_PASSWORD));
+        ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+            IDR_HIDE_PASSWORD));
     passphrase_visible_button_->SetToggledImage(
         views::ImageButton::STATE_HOVERED,
-        ResourceBundle::GetSharedInstance().
-        GetImageSkiaNamed(IDR_NETWORK_HIDE_PASSWORD_HOVER));
+        ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+            IDR_HIDE_PASSWORD_HOVER));
     passphrase_visible_button_->SetImageAlignment(
         views::ImageButton::ALIGN_CENTER, views::ImageButton::ALIGN_MIDDLE);
     layout->AddView(passphrase_visible_button_);

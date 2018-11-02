@@ -11,9 +11,10 @@
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/metrics/histogram_macros.h"
-#include "chrome/browser/android/logo_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_android.h"
+#include "chrome/browser/search_provider_logos/logo_service_factory.h"
+#include "components/search_provider_logos/logo_service.h"
 #include "components/search_provider_logos/logo_tracker.h"
 #include "jni/LogoBridge_jni.h"
 #include "net/url_request/url_fetcher.h"
@@ -27,6 +28,7 @@
 using base::android::ConvertJavaStringToUTF8;
 using base::android::ConvertUTF8ToJavaString;
 using base::android::JavaParamRef;
+using base::android::JavaRef;
 using base::android::ScopedJavaLocalRef;
 using base::android::ToJavaByteArray;
 
@@ -180,9 +182,8 @@ static jlong Init(JNIEnv* env,
   return reinterpret_cast<intptr_t>(logo_bridge);
 }
 
-LogoBridge::LogoBridge(jobject j_profile)
-    : logo_service_(nullptr),
-      weak_ptr_factory_(this) {
+LogoBridge::LogoBridge(const JavaRef<jobject>& j_profile)
+    : logo_service_(nullptr), weak_ptr_factory_(this) {
   Profile* profile = ProfileAndroid::FromProfileAndroid(j_profile);
   DCHECK(profile);
 

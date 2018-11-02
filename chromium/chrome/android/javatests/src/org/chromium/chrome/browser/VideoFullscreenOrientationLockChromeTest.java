@@ -33,7 +33,6 @@ import org.chromium.content_public.browser.WebContents;
 import org.chromium.media.MediaSwitches;
 import org.chromium.ui.base.DeviceFormFactor;
 
-import java.util.concurrent.Callable;
 import java.util.concurrent.TimeoutException;
 
 /**
@@ -44,7 +43,8 @@ import java.util.concurrent.TimeoutException;
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
         ChromeActivityTestRule.DISABLE_NETWORK_PREDICTION_FLAG,
         MediaSwitches.IGNORE_AUTOPLAY_RESTRICTIONS_FOR_TESTS,
-        "enable-features=VideoFullscreenOrientationLock"})
+        "enable-features=VideoFullscreenOrientationLock",
+        "disable-features=" + ChromeFeatureList.FULLSCREEN_ACTIVITY})
 public class VideoFullscreenOrientationLockChromeTest {
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
@@ -60,12 +60,7 @@ public class VideoFullscreenOrientationLockChromeTest {
     private void waitForContentsFullscreenState(boolean fullscreenValue)
             throws InterruptedException {
         CriteriaHelper.pollInstrumentationThread(
-                Criteria.equals(fullscreenValue, new Callable<Boolean>() {
-                    @Override
-                    public Boolean call() throws InterruptedException, TimeoutException {
-                        return DOMUtils.isFullscreen(getWebContents());
-                    }
-                }));
+                Criteria.equals(fullscreenValue, () -> DOMUtils.isFullscreen(getWebContents())));
     }
 
     private boolean isScreenOrientationLocked() {

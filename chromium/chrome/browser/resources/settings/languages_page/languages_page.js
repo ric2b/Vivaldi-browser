@@ -14,6 +14,12 @@ cr.exportPath('settings');
  */
 settings.kMenuCloseDelay = 100;
 
+/**
+ * Name of the language setting is shown uma histogram.
+ * @type {string}
+ */
+const LANGUAGE_SETTING_IS_SHOWN_UMA_NAME = 'Translate.LanguageSettingsIsShown';
+
 (function() {
 'use strict';
 
@@ -58,6 +64,15 @@ Polymer({
      */
     detailLanguage_: Object,
 
+    /**
+     * Whether the language settings list is opened.
+     * @private
+     */
+    languagesOpened_: {
+      type: Boolean,
+      observer: 'onLanguagesOpenedChanged_',
+    },
+
     /** @private */
     showAddLanguagesDialog_: Boolean,
 
@@ -96,10 +111,10 @@ Polymer({
     this.showAddLanguagesDialog_ = true;
     this.async(function() {
       var dialog = this.$$('settings-add-languages-dialog');
-      dialog.addEventListener('close', function() {
+      dialog.addEventListener('close', () => {
         this.showAddLanguagesDialog_ = false;
         cr.ui.focusWithoutInk(assert(this.$.addLanguages));
-      }.bind(this));
+      });
     });
   },
 
@@ -162,10 +177,8 @@ Polymer({
       menu.querySelector('#uiLanguageItem').hidden = true;
 
     // The UI language choice doesn't persist for guests.
-    if (uiAccountTweaks.UIAccountTweaks.loggedInAsGuest() ||
-        uiAccountTweaks.UIAccountTweaks.loggedInAsPublicAccount()) {
+    if (loadTimeData.getBoolean('isGuest'))
       menu.querySelector('#uiLanguageItem').hidden = true;
-    }
   },
 
   /**
@@ -523,6 +536,19 @@ Polymer({
     }
 
     menu.showAt(/** @type {!Element} */ (e.target));
+  },
+
+  /**
+   * @param {boolean} newVal The new value of languagesOpened_.
+   * @param {boolean} oldVal The old value of languagesOpened_.
+   * @private
+   */
+  onLanguagesOpenedChanged_: function(newVal, oldVal) {
+    if (!oldVal && newVal) {
+      chrome.send(
+          'metricsHandler:recordBooleanHistogram',
+          [LANGUAGE_SETTING_IS_SHOWN_UMA_NAME, true]);
+    }
   },
 
   /**

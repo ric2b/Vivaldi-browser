@@ -21,6 +21,7 @@ const std::vector<KeyboardShortcutData>& GetWindowKeyboardShortcutTable() {
     //---   -----  -----  ------ --------               ---- -------
     // '{' / '}' characters should be matched earlier than virtual key codes
     // (so we can match alt-8 as '{' on German keyboards).
+#ifndef VIVALDI_BUILD
     {true,  false, false, false, 0,                     '}', IDC_SELECT_NEXT_TAB},
     {true,  false, false, false, 0,                     '{', IDC_SELECT_PREVIOUS_TAB},
     {true,  true,  false, false, kVK_ANSI_RightBracket, 0,   IDC_SELECT_NEXT_TAB},
@@ -53,6 +54,7 @@ const std::vector<KeyboardShortcutData>& GetWindowKeyboardShortcutTable() {
     {true, false, false, false, kVK_ANSI_Keypad9,       0,   IDC_SELECT_LAST_TAB},
     {true, true,  false, false, kVK_ANSI_M,             0,   IDC_SHOW_AVATAR_MENU},
     {true, false, false, true,  kVK_ANSI_L,             0,   IDC_SHOW_DOWNLOADS},
+#endif // VIVALDI_BUILD
   }));
   // clang-format on
   return result;

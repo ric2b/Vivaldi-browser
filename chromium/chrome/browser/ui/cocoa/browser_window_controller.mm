@@ -62,6 +62,7 @@
 #import "chrome/browser/ui/cocoa/fullscreen/fullscreen_toolbar_controller.h"
 #import "chrome/browser/ui/cocoa/fullscreen/fullscreen_toolbar_visibility_lock_controller.h"
 #include "chrome/browser/ui/cocoa/fullscreen_low_power_coordinator.h"
+#include "chrome/browser/ui/cocoa/fullscreen_placeholder_view.h"
 #import "chrome/browser/ui/cocoa/fullscreen_window.h"
 #import "chrome/browser/ui/cocoa/infobars/infobar_container_controller.h"
 #include "chrome/browser/ui/cocoa/l10n_util.h"
@@ -88,6 +89,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
 #include "chrome/browser/ui/translate/translate_bubble_model_impl.h"
 #include "chrome/browser/ui/window_sizer/window_sizer.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/command.h"
 #include "chrome/common/pref_names.h"
@@ -111,6 +113,7 @@
 #include "ui/display/screen.h"
 #import "ui/gfx/mac/coordinate_conversion.h"
 #include "ui/gfx/mac/scoped_cocoa_disable_screen_updates.h"
+#include "ui/gfx/scrollbar_size.h"
 
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
@@ -1091,6 +1094,7 @@ bool IsTabDetachingInFullscreenEnabled() {
     [[self fullscreenToolbarController] revealToolbarForWebContents:newContents
                                                        inForeground:YES];
   }
+  [self invalidateTouchBar];
 }
 
 - (void)zoomChangedForActiveTab:(BOOL)canShowBubble {
@@ -1526,6 +1530,14 @@ bool IsTabDetachingInFullscreenEnabled() {
 
 - (void)onTabDetachedWithContents:(WebContents*)contents {
   [infoBarContainerController_ tabDetachedWithContents:contents];
+
+  // If there are permission requests, hide them. This may be checked again in
+  // -onActiveTabChanged:, but not if this was the last tab in the window, in
+  // which case there is nothing to change to.
+  if (PermissionRequestManager* manager =
+          PermissionRequestManager::FromWebContents(contents)) {
+    manager->HideBubble();
+  }
 }
 
 - (void)onTabInsertedWithContents:(content::WebContents*)contents
@@ -1790,6 +1802,13 @@ bool IsTabDetachingInFullscreenEnabled() {
 - (void)windowDidMove:(NSNotification*)notification {
   [self saveWindowPositionIfNeeded];
 
+  // When dragging tabs, the window is repositioned with direct setFrame: calls
+  // which don't automatically reposition child windows. Most dialogs block tab
+  // dragging or dismiss on focus loss. Permission bubbles do not, so ensure
+  // they are anchored correctly.
+  if ([self isDragSessionActive])
+    [self updatePermissionBubbleAnchor];
+
   NSWindow* window = [self window];
   NSRect windowFrame = [window frame];
   NSRect workarea = [[window screen] visibleFrame];
@@ -2000,6 +2019,7 @@ willAnimateFromState:(BookmarkBar::State)oldState
   // that the other monitors won't blank out.
   display::Screen* screen = display::Screen::GetScreen();
   BOOL hasMultipleMonitors = screen && screen->GetNumDisplays() > 1;
+
   if (base::mac::IsAtLeastOS10_10() &&
       !(hasMultipleMonitors && ![NSScreen screensHaveSeparateSpaces])) {
     [self enterAppKitFullscreen];

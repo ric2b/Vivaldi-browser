@@ -46,7 +46,6 @@ class Profile;
 
 namespace base {
 class CommandLine;
-class SequencedTaskRunner;
 }
 
 namespace content {
@@ -280,9 +279,10 @@ class ExtensionService
   virtual void EnableExtension(const std::string& extension_id);
 
   // Disables the extension. If the extension is already disabled, just adds
-  // the |disable_reasons| (a bitmask of Extension::DisableReason - there can
-  // be multiple DisableReasons e.g. when an extension comes in disabled from
-  // Sync). If the extension cannot be disabled (due to policy), does nothing.
+  // the |disable_reasons| (a bitmask of disable_reason::DisableReason - there
+  // can be multiple DisableReasons e.g. when an extension comes in disabled
+  // from Sync). If the extension cannot be disabled (due to policy), does
+  // nothing.
   virtual void DisableExtension(const std::string& extension_id,
                                 int disable_reasons);
 
@@ -364,9 +364,6 @@ class ExtensionService
                            extensions::InstallGate* install_delayer);
   void UnregisterInstallGate(extensions::InstallGate* install_delayer);
 
-  // Returns task runner for crx installation file I/O operations.
-  base::SequencedTaskRunner* GetFileTaskRunner();
-
   //////////////////////////////////////////////////////////////////////////////
   // Simple Accessors
 
@@ -430,6 +427,8 @@ class ExtensionService
   void FinishInstallationForTest(const extensions::Extension* extension) {
     FinishInstallation(extension);
   }
+
+  void UninstallMigratedExtensionsForTest() { UninstallMigratedExtensions(); }
 #endif
 
   void set_browser_terminating_for_test(bool value) {
@@ -539,8 +538,8 @@ class ExtensionService
   void UpdateActiveExtensionsInCrashReporter();
 
   // Helper to get the disable reasons for an installed (or upgraded) extension.
-  // A return value of Extension::DISABLE_NONE indicates that we should enable
-  // this extension initially.
+  // A return value of disable_reason::DISABLE_NONE indicates that we should
+  // enable this extension initially.
   int GetDisableReasonsOnInstalled(const extensions::Extension* extension);
 
   // Helper method to determine if an extension can be blocked.
@@ -595,6 +594,9 @@ class ExtensionService
   // Upon reloading an extension, spins up its lazy background page if
   // necessary.
   void MaybeSpinUpLazyBackgroundPage(const extensions::Extension* extension_id);
+
+  // Uninstall extensions that have been migrated to component extensions.
+  void UninstallMigratedExtensions();
 
   const base::CommandLine* command_line_ = nullptr;
 
@@ -753,6 +755,9 @@ class ExtensionService
                            ManagementPolicyProhibitsEnableOnInstalled);
   FRIEND_TEST_ALL_PREFIXES(ExtensionServiceTest,
                            BlockAndUnblockBlacklistedExtension);
+  FRIEND_TEST_ALL_PREFIXES(BlacklistedExtensionSyncServiceTest,
+                           SyncBlacklistedExtension);
+  friend class BlacklistedExtensionSyncServiceTest;
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionService);
 };

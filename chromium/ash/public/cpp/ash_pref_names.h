@@ -11,12 +11,42 @@ namespace ash {
 
 namespace prefs {
 
+ASH_PUBLIC_EXPORT extern const char kAccessibilityLargeCursorEnabled[];
+ASH_PUBLIC_EXPORT extern const char kAccessibilityLargeCursorDipSize[];
+ASH_PUBLIC_EXPORT extern const char kAccessibilityStickyKeysEnabled[];
+ASH_PUBLIC_EXPORT extern const char kAccessibilitySpokenFeedbackEnabled[];
+ASH_PUBLIC_EXPORT extern const char kAccessibilityHighContrastEnabled[];
+ASH_PUBLIC_EXPORT extern const char kAccessibilityScreenMagnifierCenterFocus[];
+ASH_PUBLIC_EXPORT extern const char kAccessibilityScreenMagnifierEnabled[];
+ASH_PUBLIC_EXPORT extern const char kAccessibilityScreenMagnifierType[];
+ASH_PUBLIC_EXPORT extern const char kAccessibilityScreenMagnifierScale[];
+ASH_PUBLIC_EXPORT extern const char kAccessibilityVirtualKeyboardEnabled[];
+ASH_PUBLIC_EXPORT extern const char kAccessibilityMonoAudioEnabled[];
+ASH_PUBLIC_EXPORT extern const char kAccessibilityAutoclickEnabled[];
+ASH_PUBLIC_EXPORT extern const char kAccessibilityAutoclickDelayMs[];
+ASH_PUBLIC_EXPORT extern const char kAccessibilityCaretHighlightEnabled[];
+ASH_PUBLIC_EXPORT extern const char kAccessibilityCursorHighlightEnabled[];
+ASH_PUBLIC_EXPORT extern const char kAccessibilityFocusHighlightEnabled[];
+ASH_PUBLIC_EXPORT extern const char kAccessibilitySelectToSpeakEnabled[];
+ASH_PUBLIC_EXPORT extern const char kAccessibilitySwitchAccessEnabled[];
+ASH_PUBLIC_EXPORT extern const char kShouldAlwaysShowAccessibilityMenu[];
+
 ASH_PUBLIC_EXPORT extern const char kHasSeenStylus[];
+
 ASH_PUBLIC_EXPORT extern const char kNightLightEnabled[];
 ASH_PUBLIC_EXPORT extern const char kNightLightTemperature[];
 ASH_PUBLIC_EXPORT extern const char kNightLightScheduleType[];
 ASH_PUBLIC_EXPORT extern const char kNightLightCustomStartTime[];
 ASH_PUBLIC_EXPORT extern const char kNightLightCustomEndTime[];
+
+ASH_PUBLIC_EXPORT extern const char kShelfAlignment[];
+ASH_PUBLIC_EXPORT extern const char kShelfAlignmentLocal[];
+ASH_PUBLIC_EXPORT extern const char kShelfAutoHideBehavior[];
+ASH_PUBLIC_EXPORT extern const char kShelfAutoHideBehaviorLocal[];
+ASH_PUBLIC_EXPORT extern const char kShelfPreferences[];
+
+ASH_PUBLIC_EXPORT extern const char kShowLogoutButtonInTray[];
+ASH_PUBLIC_EXPORT extern const char kLogoutDialogDurationMs[];
 
 ASH_PUBLIC_EXPORT extern const char kWallpaperColors[];
 

@@ -23,17 +23,15 @@ typedef NS_ENUM(NSInteger, ContentSuggestionType) {
   ContentSuggestionTypeReadingList,
   ContentSuggestionTypeMostVisited,
   ContentSuggestionTypePromo,
+  ContentSuggestionTypeLearnMore,
 };
 
 // Updater for a CollectionViewController populating it with some items and
 // handling the items addition.
 @interface ContentSuggestionsCollectionUpdater : NSObject
 
-// Initialize with the |dataSource| used to get the data.
-- (instancetype)initWithDataSource:(id<ContentSuggestionsDataSource>)dataSource
-    NS_DESIGNATED_INITIALIZER;
-
-- (instancetype)init NS_UNAVAILABLE;
+// Data source for this object.
+@property(nonatomic, weak) id<ContentSuggestionsDataSource> dataSource;
 
 // |collectionViewController| this Updater will update. Needs to be set before
 // adding items.
@@ -72,9 +70,16 @@ addSuggestionsToModel:
 // Returns whether |section| contains the Most Visited tiles.
 - (BOOL)isMostVisitedSection:(NSInteger)section;
 
+// Returns whether |section| contains the What's New promo.
+- (BOOL)isPromoSection:(NSInteger)section;
+
 // Returns whether |section| contains the promo if there is one and with a
 // header containing the fake omnibox and the logo.
 - (BOOL)isHeaderSection:(NSInteger)section;
+
+// Returns whether |section| is one of the section containing ContentSuggestions
+// items.
+- (BOOL)isContentSuggestionsSection:(NSInteger)section;
 
 // Updates the number of Most Visited tiles shown for the |size| on the model
 // only. The collection needs to be updated separately.

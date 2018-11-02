@@ -22,7 +22,7 @@ class WebGestureCurveTarget;
 namespace ui {
 class GestureCurve;
 
-class WebGestureCurveImpl : public NON_EXPORTED_BASE(blink::WebGestureCurve) {
+class WebGestureCurveImpl : public blink::WebGestureCurve {
  public:
   static std::unique_ptr<blink::WebGestureCurve> CreateFromDefaultPlatformCurve(
       blink::WebGestureDevice device_source,
@@ -53,7 +53,6 @@ class WebGestureCurveImpl : public NON_EXPORTED_BASE(blink::WebGestureCurve) {
 
   gfx::Vector2dF last_offset_;
 
-  ThreadType animating_thread_type_;
   int64_t ticks_since_first_animate_;
   double first_animate_time_;
   double last_animate_time_;

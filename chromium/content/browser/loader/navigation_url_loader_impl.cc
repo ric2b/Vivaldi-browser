@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/optional.h"
 #include "base/trace_event/trace_event.h"
 #include "content/browser/appcache/appcache_navigation_handle.h"
 #include "content/browser/appcache/appcache_navigation_handle_core.h"
@@ -52,19 +53,20 @@ NavigationURLLoaderImpl::NavigationURLLoaderImpl(
       appcache_handle ? appcache_handle->core() : nullptr;
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&NavigationURLLoaderImplCore::Start, core_, resource_context,
-                 storage_partition->GetURLRequestContext(),
-                 base::Unretained(storage_partition->GetFileSystemContext()),
-                 service_worker_handle_core, appcache_handle_core,
-                 base::Passed(&request_info),
-                 base::Passed(&navigation_ui_data)));
+      base::BindOnce(
+          &NavigationURLLoaderImplCore::Start, core_, resource_context,
+          storage_partition->GetURLRequestContext(),
+          base::Unretained(storage_partition->GetFileSystemContext()),
+          service_worker_handle_core, appcache_handle_core,
+          base::Passed(&request_info), base::Passed(&navigation_ui_data)));
 }
 
 NavigationURLLoaderImpl::~NavigationURLLoaderImpl() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&NavigationURLLoaderImplCore::CancelRequestIfNeeded, core_));
+      base::BindOnce(&NavigationURLLoaderImplCore::CancelRequestIfNeeded,
+                     core_));
 }
 
 void NavigationURLLoaderImpl::FollowRedirect() {
@@ -72,7 +74,7 @@ void NavigationURLLoaderImpl::FollowRedirect() {
 
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&NavigationURLLoaderImplCore::FollowRedirect, core_));
+      base::BindOnce(&NavigationURLLoaderImplCore::FollowRedirect, core_));
 }
 
 void NavigationURLLoaderImpl::ProceedWithResponse() {
@@ -80,7 +82,7 @@ void NavigationURLLoaderImpl::ProceedWithResponse() {
 
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&NavigationURLLoaderImplCore::ProceedWithResponse, core_));
+      base::BindOnce(&NavigationURLLoaderImplCore::ProceedWithResponse, core_));
 }
 
 void NavigationURLLoaderImpl::NotifyRequestRedirected(
@@ -106,12 +108,15 @@ void NavigationURLLoaderImpl::NotifyResponseStarted(
       ssl_status, std::move(navigation_data), request_id, is_download,
       is_stream, mojom::URLLoaderFactoryPtrInfo());
 }
-
-void NavigationURLLoaderImpl::NotifyRequestFailed(bool in_cache,
-                                                  int net_error) {
+void NavigationURLLoaderImpl::NotifyRequestFailed(
+    bool in_cache,
+    int net_error,
+    base::Optional<net::SSLInfo> ssl_info,
+    bool should_ssl_errors_be_fatal) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  delegate_->OnRequestFailed(in_cache, net_error);
+  delegate_->OnRequestFailed(in_cache, net_error, ssl_info,
+                             should_ssl_errors_be_fatal);
 }
 
 void NavigationURLLoaderImpl::NotifyRequestStarted(base::TimeTicks timestamp) {

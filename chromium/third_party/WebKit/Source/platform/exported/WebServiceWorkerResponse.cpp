@@ -18,12 +18,12 @@ class WebServiceWorkerResponsePrivate
  public:
   WebServiceWorkerResponsePrivate()
       : status(0),
-        response_type(kWebServiceWorkerResponseTypeDefault),
+        response_type(network::mojom::FetchResponseType::kDefault),
         error(kWebServiceWorkerResponseErrorUnknown) {}
   WebVector<WebURL> url_list;
   unsigned short status;
   WebString status_text;
-  WebServiceWorkerResponseType response_type;
+  network::mojom::FetchResponseType response_type;
   HTTPHeaderMap headers;
   RefPtr<BlobDataHandle> blob_data_handle;
   WebServiceWorkerResponseError error;
@@ -68,11 +68,12 @@ const WebString& WebServiceWorkerResponse::StatusText() const {
 }
 
 void WebServiceWorkerResponse::SetResponseType(
-    WebServiceWorkerResponseType response_type) {
+    network::mojom::FetchResponseType response_type) {
   private_->response_type = response_type;
 }
 
-WebServiceWorkerResponseType WebServiceWorkerResponse::ResponseType() const {
+network::mojom::FetchResponseType WebServiceWorkerResponse::ResponseType()
+    const {
   return private_->response_type;
 }
 
@@ -111,8 +112,14 @@ void WebServiceWorkerResponse::VisitHTTPHeaderFields(
     header_visitor->VisitHeader(i->key, i->value);
 }
 
-void WebServiceWorkerResponse::SetBlob(const WebString& uuid, uint64_t size) {
-  private_->blob_data_handle = BlobDataHandle::Create(uuid, String(), size);
+void WebServiceWorkerResponse::SetBlob(
+    const WebString& uuid,
+    uint64_t size,
+    mojo::ScopedMessagePipeHandle blob_pipe) {
+  private_->blob_data_handle = BlobDataHandle::Create(
+      uuid, String(), size,
+      storage::mojom::blink::BlobPtrInfo(
+          std::move(blob_pipe), storage::mojom::blink::Blob::Version_));
 }
 
 WebString WebServiceWorkerResponse::BlobUUID() const {
@@ -125,6 +132,14 @@ uint64_t WebServiceWorkerResponse::BlobSize() const {
   if (!private_->blob_data_handle)
     return 0;
   return private_->blob_data_handle->size();
+}
+
+mojo::ScopedMessagePipeHandle WebServiceWorkerResponse::CloneBlobPtr() const {
+  if (!private_->blob_data_handle)
+    return mojo::ScopedMessagePipeHandle();
+  return private_->blob_data_handle->CloneBlobPtr()
+      .PassInterface()
+      .PassHandle();
 }
 
 void WebServiceWorkerResponse::SetError(WebServiceWorkerResponseError error) {

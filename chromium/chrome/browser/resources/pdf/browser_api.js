@@ -49,7 +49,6 @@ function lookupInitialZoom(streamInfo) {
  */
 class BrowserApi {
   /**
-   * @constructor
    * @param {!Object} streamInfo The stream object which points to the data
    *     contained in the PDF.
    * @param {number} defaultZoom The default browser zoom.
@@ -104,9 +103,9 @@ class BrowserApi {
   setZoom(zoom) {
     if (this.zoomBehavior_ != BrowserApi.ZoomBehavior.MANAGE)
       return Promise.reject(new Error('Viewer does not manage browser zoom.'));
-    return new Promise(function(resolve, reject) {
+    return new Promise((resolve, reject) => {
       chrome.tabs.setZoom(this.streamInfo_.tabId, zoom, resolve);
-    }.bind(this));
+    });
   }
 
   /**
@@ -143,13 +142,13 @@ class BrowserApi {
           this.zoomBehavior_ == BrowserApi.ZoomBehavior.PROPAGATE_PARENT))
       return;
 
-    chrome.tabs.onZoomChange.addListener(function(info) {
+    chrome.tabs.onZoomChange.addListener(info => {
       var zoomChangeInfo =
           /** @type {{tabId: number, newZoomFactor: number}} */ (info);
       if (zoomChangeInfo.tabId != this.streamInfo_.tabId)
         return;
       listener(zoomChangeInfo.newZoomFactor);
-    }.bind(this));
+    });
   }
 }
 

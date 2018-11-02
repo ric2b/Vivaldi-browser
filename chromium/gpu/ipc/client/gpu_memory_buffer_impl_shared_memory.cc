@@ -8,11 +8,12 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/format_macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/numerics/safe_math.h"
 #include "base/process/memory.h"
+#include "base/strings/stringprintf.h"
 #include "ui/gfx/buffer_format_util.h"
-#include "ui/gfx/gpu_memory_buffer_tracing.h"
 #include "ui/gl/gl_bindings.h"
 
 namespace gpu {
@@ -102,6 +103,8 @@ bool GpuMemoryBufferImplSharedMemory::IsUsageSupported(gfx::BufferUsage usage) {
     case gfx::BufferUsage::SCANOUT_CPU_READ_WRITE:
       return true;
     case gfx::BufferUsage::SCANOUT:
+    case gfx::BufferUsage::SCANOUT_CAMERA_READ_WRITE:
+    case gfx::BufferUsage::SCANOUT_VDA_WRITE:
       return false;
   }
   NOTREACHED();
@@ -216,7 +219,8 @@ gfx::GpuMemoryBufferHandle GpuMemoryBufferImplSharedMemory::GetHandle() const {
 base::trace_event::MemoryAllocatorDumpGuid
 GpuMemoryBufferImplSharedMemory::GetGUIDForTracing(
     uint64_t tracing_process_id) const {
-  return gfx::GetSharedMemoryGUIDForTracing(tracing_process_id, id_);
+  return base::trace_event::MemoryAllocatorDumpGuid(base::StringPrintf(
+      "shared_memory_gpu/%" PRIx64 "/%d", tracing_process_id, id_.id));
 }
 
 }  // namespace gpu

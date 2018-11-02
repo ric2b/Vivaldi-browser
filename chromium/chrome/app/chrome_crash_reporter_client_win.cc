@@ -14,6 +14,7 @@
 #include <iterator>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/command_line.h"
 #include "base/debug/crash_logging.h"
@@ -140,16 +141,6 @@ size_t RegisterCrashKeysHelper() {
       // gin/:
       {"v8-ignition", kSmallSize},
 
-      // Temporary for https://crbug.com/591478.
-      {"initrf_parent_proxy_exists", kSmallSize},
-      {"initrf_render_view_is_live", kSmallSize},
-      {"initrf_parent_is_in_same_site_instance", kSmallSize},
-      {"initrf_parent_process_is_live", kSmallSize},
-      {"initrf_root_is_in_same_site_instance", kSmallSize},
-      {"initrf_root_is_in_same_site_instance_as_parent", kSmallSize},
-      {"initrf_root_process_is_live", kSmallSize},
-      {"initrf_root_proxy_is_live", kSmallSize},
-
       // Temporary for https://crbug.com/626802.
       {"newframe_routing_id", kSmallSize},
       {"newframe_proxy_id", kSmallSize},
@@ -158,7 +149,6 @@ size_t RegisterCrashKeysHelper() {
       {"newframe_widget_id", kSmallSize},
       {"newframe_widget_hidden", kSmallSize},
       {"newframe_replicated_origin", kSmallSize},
-      {"newframe_oopifs_possible", kSmallSize},
 
       // Temporary for https://crbug.com/612711.
       {"aci_wrong_sp_extension_id", kSmallSize},
@@ -168,12 +158,6 @@ size_t RegisterCrashKeysHelper() {
       {"postmessage_dst_origin", kMediumSize},
       {"postmessage_dst_url", kLargeSize},
       {"postmessage_script_info", kLargeSize},
-
-      // Temporary for https://crbug.com/668633.
-      {"swdh_set_hosted_version_worker_pid", kSmallSize},
-      {"swdh_set_hosted_version_host_pid", kSmallSize},
-      {"swdh_set_hosted_version_is_new_process", kSmallSize},
-      {"swdh_set_hosted_version_restart_count", kSmallSize},
 
       // Temporary for https://crbug.com/697745.
       {"engine_params", kMediumSize},
@@ -245,8 +229,14 @@ void ChromeCrashReporterClient::InitializeCrashReportingForProcess() {
   if (process_type != install_static::kCrashpadHandler &&
       process_type != install_static::kFallbackHandler) {
     crash_reporter::SetCrashReporterClient(instance);
+
+    std::wstring user_data_dir;
+    if (process_type.empty())
+      install_static::GetUserDataDirectory(&user_data_dir, nullptr);
+
     crash_reporter::InitializeCrashpadWithEmbeddedHandler(
-        process_type.empty(), install_static::UTF16ToUTF8(process_type));
+        process_type.empty(), install_static::UTF16ToUTF8(process_type),
+        install_static::UTF16ToUTF8(user_data_dir));
   }
 }
 #endif  // NACL_WIN64
@@ -354,12 +344,13 @@ bool ChromeCrashReporterClient::GetCrashDumpLocation(
     return true;
 
   *crash_dir = install_static::GetCrashDumpLocation();
-  return true;
+  return !crash_dir->empty();
 }
 
 bool ChromeCrashReporterClient::GetCrashMetricsLocation(
     base::string16* metrics_dir) {
-  return install_static::GetUserDataDirectory(metrics_dir, nullptr);
+  install_static::GetUserDataDirectory(metrics_dir, nullptr);
+  return !metrics_dir->empty();
 }
 
 // TODO(ananta)

@@ -13,7 +13,6 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
-#include "content/renderer/media/media_stream.h"
 #include "content/renderer/media/media_stream_registry_interface.h"
 #include "content/renderer/media/media_stream_video_source.h"
 #include "content/renderer/media/media_stream_video_track.h"
@@ -90,7 +89,7 @@ void PpFrameWriter::FrameWriterDelegate::DeliverFrame(
     const scoped_refptr<media::VideoFrame>& frame) {
   io_task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&FrameWriterDelegate::DeliverFrameOnIO, this, frame));
+      base::BindOnce(&FrameWriterDelegate::DeliverFrameOnIO, this, frame));
 }
 
 void PpFrameWriter::FrameWriterDelegate::DeliverFrameOnIO(

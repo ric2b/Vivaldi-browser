@@ -46,6 +46,7 @@
 #include "core/workers/WorkerGlobalScope.h"
 #include "core/workers/WorkerOrWorkletGlobalScope.h"
 #include "core/workers/WorkerThread.h"
+#include "platform/bindings/ConditionalFeatures.h"
 #include "platform/bindings/V8DOMWrapper.h"
 #include "platform/bindings/V8ObjectConstructor.h"
 #include "platform/bindings/WrapperTypeInfo.h"
@@ -237,6 +238,8 @@ bool WorkerOrWorkletScriptController::InitializeContextIfNeeded(
                                              human_readable_name);
   }
 
+  InstallConditionalFeaturesOnGlobal(wrapper_type_info, script_state_.Get());
+
   return true;
 }
 
@@ -265,9 +268,10 @@ ScriptValue WorkerOrWorkletScriptController::Evaluate(
 
   v8::Local<v8::Script> compiled_script;
   v8::MaybeLocal<v8::Value> maybe_result;
-  if (V8ScriptRunner::CompileScript(
-          script, file_name, String(), script_start_position, isolate_,
-          cache_handler, kSharableCrossOrigin, v8_cache_options)
+  if (V8ScriptRunner::CompileScript(script_state_.Get(), script, file_name,
+                                    String(), script_start_position,
+                                    cache_handler, kSharableCrossOrigin,
+                                    v8_cache_options)
           .ToLocal(&compiled_script))
     maybe_result = V8ScriptRunner::RunCompiledScript(isolate_, compiled_script,
                                                      global_scope_);

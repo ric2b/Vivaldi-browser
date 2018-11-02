@@ -24,7 +24,7 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/ExceptionCode.h"
-#include "core/events/Event.h"
+#include "core/dom/events/Event.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameClient.h"
 #include "core/frame/LocalFrameView.h"
@@ -144,7 +144,7 @@ void HTMLFrameOwnerElement::SetSandboxFlags(SandboxFlags flags) {
   sandbox_flags_ = flags;
   // Recalculate the container policy in case the allow-same-origin flag has
   // changed.
-  container_policy_ = ConstructContainerPolicy();
+  container_policy_ = ConstructContainerPolicy(nullptr, nullptr);
 
   // Don't notify about updates if ContentFrame() is null, for example when
   // the subframe hasn't been created yet.
@@ -165,8 +165,9 @@ void HTMLFrameOwnerElement::DisposePluginSoon(PluginView* plugin) {
     plugin->Dispose();
 }
 
-void HTMLFrameOwnerElement::UpdateContainerPolicy() {
-  container_policy_ = ConstructContainerPolicy();
+void HTMLFrameOwnerElement::UpdateContainerPolicy(Vector<String>* messages,
+                                                  bool* old_syntax) {
+  container_policy_ = ConstructContainerPolicy(messages, old_syntax);
   // Don't notify about updates if ContentFrame() is null, for example when
   // the subframe hasn't been created yet.
   if (ContentFrame()) {
@@ -185,12 +186,6 @@ void HTMLFrameOwnerElement::FrameOwnerPropertiesChanged() {
 
 void HTMLFrameOwnerElement::DispatchLoad() {
   DispatchScopedEvent(Event::Create(EventTypeNames::load));
-}
-
-const WebVector<WebFeaturePolicyFeature>&
-HTMLFrameOwnerElement::AllowedFeatures() const {
-  DEFINE_STATIC_LOCAL(WebVector<WebFeaturePolicyFeature>, features, ());
-  return features;
 }
 
 const WebParsedFeaturePolicy& HTMLFrameOwnerElement::ContainerPolicy() const {

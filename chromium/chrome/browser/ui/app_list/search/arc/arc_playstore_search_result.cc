@@ -11,6 +11,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/image_decoder.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
 #include "chrome/browser/ui/app_list/arc/arc_playstore_app_context_menu.h"
 #include "chrome/browser/ui/app_list/search/search_util.h"
 #include "chrome/grit/component_extension_resources.h"
@@ -36,6 +37,29 @@ bool disable_safe_decoding_for_testing = false;
 constexpr char kPlayAppPrefix[] = "play://";
 // Badge icon color, #000 at 54% opacity.
 constexpr SkColor kBadgeColor = SkColorSetARGBMacro(0x8A, 0x00, 0x00, 0x00);
+
+bool LaunchIntent(const std::string& intent_uri, int64_t display_id) {
+  auto* arc_service_manager = arc::ArcServiceManager::Get();
+  if (!arc_service_manager)
+    return false;
+
+  auto* arc_bridge = arc_service_manager->arc_bridge_service();
+
+  if (auto* app_instance =
+          ARC_GET_INSTANCE_FOR_METHOD(arc_bridge->app(), LaunchIntent)) {
+    app_instance->LaunchIntent(intent_uri, display_id);
+    return true;
+  }
+
+  if (auto* app_instance = ARC_GET_INSTANCE_FOR_METHOD(
+          arc_bridge->app(), LaunchIntentDeprecated)) {
+    app_instance->LaunchIntentDeprecated(intent_uri, base::nullopt);
+    return true;
+  }
+
+  return false;
+}
+
 }  // namespace
 
 namespace app_list {
@@ -106,9 +130,11 @@ class ArcPlayStoreSearchResult::IconDecodeRequest
 
     const gfx::Size resource_size(app_list::kGridIconDimension,
                                   app_list::kGridIconDimension);
-    IconSource* icon_source = new IconSource(app_list::kGridIconDimension);
+    auto icon_source =
+        base::MakeUnique<IconSource>(app_list::kGridIconDimension);
     icon_source->SetDecodedImage(bitmap);
-    const gfx::ImageSkia icon = gfx::ImageSkia(icon_source, resource_size);
+    const gfx::ImageSkia icon =
+        gfx::ImageSkia(std::move(icon_source), resource_size);
     icon.EnsureRepsForSupportedScales();
 
     search_result_->SetIcon(icon);
@@ -120,8 +146,10 @@ class ArcPlayStoreSearchResult::IconDecodeRequest
 
     const gfx::Size resource_size(app_list::kGridIconDimension,
                                   app_list::kGridIconDimension);
-    IconSource* icon_source = new IconSource(app_list::kGridIconDimension);
-    const gfx::ImageSkia icon = gfx::ImageSkia(icon_source, resource_size);
+    auto icon_source =
+        base::MakeUnique<IconSource>(app_list::kGridIconDimension);
+    const gfx::ImageSkia icon =
+        gfx::ImageSkia(std::move(icon_source), resource_size);
     icon.EnsureRepsForSupportedScales();
 
     search_result_->SetIcon(icon);
@@ -189,14 +217,10 @@ std::unique_ptr<SearchResult> ArcPlayStoreSearchResult::Duplicate() const {
 }
 
 void ArcPlayStoreSearchResult::Open(int event_flags) {
-  arc::mojom::AppInstance* app_instance =
-      arc::ArcServiceManager::Get()
-          ? ARC_GET_INSTANCE_FOR_METHOD(
-                arc::ArcServiceManager::Get()->arc_bridge_service()->app(),
-                LaunchIntent)
-          : nullptr;
-  if (app_instance == nullptr)
+  if (!LaunchIntent(install_intent_uri().value(),
+                    list_controller_->GetAppListDisplayId())) {
     return;
+  }
 
   // Open the installing page of this result in Play Store.
   RecordHistogram(is_instant_app() ? PLAY_STORE_INSTANT_APP
@@ -207,7 +231,6 @@ void ArcPlayStoreSearchResult::Open(int event_flags) {
                 "Arc.Launcher.Search.OpenPlayStore.InstantApps")
           : base::UserMetricsAction(
                 "Arc.Launcher.Search.OpenPlayStore.UninstalledApps"));
-  app_instance->LaunchIntent(install_intent_uri().value(), base::nullopt);
 }
 
 ui::MenuModel* ArcPlayStoreSearchResult::GetContextMenuModel() {

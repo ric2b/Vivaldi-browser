@@ -23,11 +23,12 @@ using content::BrowserThread;
 namespace {
 
 void OnCanDownloadDecided(base::WeakPtr<DownloadResourceThrottle> throttle,
+                          bool storage_permission_granted,
                           const content::DownloadItemAction& action) {
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&DownloadResourceThrottle::ContinueDownload, throttle,
-                     action));
+      base::Bind(&DownloadResourceThrottle::ContinueDownload, throttle,
+                 storage_permission_granted, action));
 }
 
 void CanDownload(
@@ -36,7 +37,7 @@ void CanDownload(
   info->limiter->CanDownload(info->web_contents_getter, info->url,
                              info->request_method,
                              info->download_info,
-                             info->continue_callback);
+                             base::Bind(info->continue_callback, true));
 }
 
 #if defined(OS_ANDROID)
@@ -47,7 +48,8 @@ void OnAcquireFileAccessPermissionDone(
   if (granted)
     CanDownload(std::move(info));
   else
-    info->continue_callback.Run(false);
+    info->continue_callback.Run(false,
+        content::DownloadItemAction(false, false, false));
 }
 #endif
 
@@ -73,7 +75,7 @@ DownloadResourceThrottle::DownloadRequestInfo::DownloadRequestInfo(
     const GURL& url,
     const std::string& request_method,
     const content::DownloadInformation &download_info,
-    const DownloadRequestLimiter::Callback& continue_callback)
+    const DownloadRequestInfo::Callback& continue_callback)
     : limiter(limiter),
       web_contents_getter(web_contents_getter),
       url(url),
@@ -138,12 +140,16 @@ void DownloadResourceThrottle::WillDownload(bool* defer) {
     Cancel();
 }
 
-void DownloadResourceThrottle::ContinueDownload(const content::DownloadItemAction& action) {
+void DownloadResourceThrottle::ContinueDownload(
+    bool storage_permission_granted,
+    const content::DownloadItemAction& action) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   querying_limiter_ = false;
   request_allowed_ = action.allow;
 
-  if (action.allow) {
+  if (!storage_permission_granted) {
+    // UMA for this will be recorded in MobileDownload.StoragePermission.
+  } else if (action.allow) {
     // Presumes all downloads initiated by navigation use this throttle and
     // nothing else does.
     RecordDownloadSource(DOWNLOAD_INITIATED_BY_NAVIGATION);

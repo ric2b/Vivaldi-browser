@@ -56,8 +56,7 @@ bool ResourceMeetsSizeRequirements(const gfx::Size& requested_size,
 
 }  // namespace
 
-base::TimeDelta ResourcePool::kDefaultExpirationDelay =
-    base::TimeDelta::FromSeconds(5);
+constexpr base::TimeDelta ResourcePool::kDefaultExpirationDelay;
 
 void ResourcePool::PoolResource::OnMemoryDump(
     base::trace_event::ProcessMemoryDump* pmd,
@@ -357,7 +356,7 @@ void ResourcePool::ReleaseResource(Resource* resource) {
   ScheduleEvictExpiredResourcesIn(resource_expiration_delay_);
 }
 
-void ResourcePool::OnContentReplaced(ResourceId resource_id,
+void ResourcePool::OnContentReplaced(viz::ResourceId resource_id,
                                      uint64_t content_id) {
   auto found = in_use_resources_.find(resource_id);
   DCHECK(found != in_use_resources_.end());

@@ -9,7 +9,6 @@
 
 #include "base/bind.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -26,7 +25,7 @@
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/leveldatabase/src/util/crc32c.h"
+#include "third_party/crc32c/src/include/crc32c/crc32c.h"
 
 namespace syncer {
 
@@ -211,7 +210,7 @@ void AttachmentDownloaderImplTest::SetUp() {
   url_request_context_getter_ =
       new net::TestURLRequestContextGetter(message_loop_.task_runner());
   url_fetcher_factory_.set_remove_fetcher_on_delete(true);
-  token_service_ = base::MakeUnique<MockOAuth2TokenService>();
+  token_service_ = std::make_unique<MockOAuth2TokenService>();
   token_service_->AddAccount(kAccountId);
   scoped_refptr<OAuth2TokenServiceRequest::TokenServiceProvider>
       token_service_provider(new TokenServiceProvider(token_service_.get()));
@@ -293,8 +292,8 @@ void AttachmentDownloaderImplTest::AddHashHeader(
     case HASH_HEADER_NONE:
       break;
     case HASH_HEADER_VALID:
-      header += AttachmentUploaderImpl::FormatCrc32cHash(leveldb::crc32c::Value(
-          kAttachmentContent, strlen(kAttachmentContent)));
+      header += AttachmentUploaderImpl::FormatCrc32cHash(
+          crc32c::Crc32c(kAttachmentContent, strlen(kAttachmentContent)));
       headers->AddHeader(header);
       break;
     case HASH_HEADER_INVALID:

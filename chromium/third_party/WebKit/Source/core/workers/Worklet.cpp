@@ -33,7 +33,9 @@ WebURLRequest::FetchCredentialsMode ParseCredentialsOption(
 }  // namespace
 
 Worklet::Worklet(LocalFrame* frame)
-    : ContextLifecycleObserver(frame->GetDocument()) {
+    : ContextLifecycleObserver(frame->GetDocument()),
+      module_responses_map_(
+          new WorkletModuleResponsesMap(frame->GetDocument()->Fetcher())) {
   DCHECK(IsMainThread());
 }
 
@@ -88,15 +90,14 @@ ScriptPromise Worklet::addModule(ScriptState* script_state,
 
 void Worklet::ContextDestroyed(ExecutionContext* execution_context) {
   DCHECK(IsMainThread());
+  module_responses_map_->Dispose();
   for (const auto& proxy : proxies_)
     proxy->TerminateWorkletGlobalScope();
 }
 
 WorkletGlobalScopeProxy* Worklet::FindAvailableGlobalScope() const {
   DCHECK(IsMainThread());
-  // TODO(nhiroki): Support the case where there are multiple global scopes.
-  DCHECK_EQ(1u, GetNumberOfGlobalScopes());
-  return proxies_.begin()->Get();
+  return proxies_.at(SelectGlobalScope());
 }
 
 // Implementation of the second half of the "addModule(moduleURL, options)"
@@ -123,7 +124,7 @@ void Worklet::FetchAndInvokeScript(const KURL& module_url_record,
       TaskRunnerHelper::Get(TaskType::kUnspecedLoading, GetExecutionContext());
 
   // Step 8: "Let moduleResponsesMap be worklet's module responses map."
-  // TODO(nhiroki): Implement moduleResponsesMap (https://crbug.com/627945).
+  WorkletModuleResponsesMap* module_responses_map = module_responses_map_;
 
   // Step 9: "Let workletGlobalScopeType be worklet's worklet global scope
   // type."
@@ -136,9 +137,9 @@ void Worklet::FetchAndInvokeScript(const KURL& module_url_record,
   //   10.2: "Add the WorkletGlobalScope to worklet's WorkletGlobalScopes."
   // "Depending on the type of worklet the user agent may create additional
   // WorkletGlobalScopes at this time."
+
   while (NeedsToCreateGlobalScope())
-    proxies_.insert(CreateGlobalScope());
-  DCHECK_EQ(1u, GetNumberOfGlobalScopes());
+    proxies_.push_back(CreateGlobalScope());
 
   // Step 11: "Let pendingTaskStruct be a new pending tasks struct with counter
   // initialized to the length of worklet's WorkletGlobalScopes."
@@ -152,13 +153,20 @@ void Worklet::FetchAndInvokeScript(const KURL& module_url_record,
   // and promise."
   // TODO(nhiroki): Queue a task instead of executing this here.
   for (const auto& proxy : proxies_) {
-    proxy->FetchAndInvokeScript(module_url_record, credentials_mode,
-                                outside_settings_task_runner, pending_tasks);
+    proxy->FetchAndInvokeScript(module_url_record, module_responses_map,
+                                credentials_mode, outside_settings_task_runner,
+                                pending_tasks);
   }
+}
+
+size_t Worklet::SelectGlobalScope() const {
+  DCHECK_EQ(GetNumberOfGlobalScopes(), 1u);
+  return 0u;
 }
 
 DEFINE_TRACE(Worklet) {
   visitor->Trace(proxies_);
+  visitor->Trace(module_responses_map_);
   ContextLifecycleObserver::Trace(visitor);
 }
 

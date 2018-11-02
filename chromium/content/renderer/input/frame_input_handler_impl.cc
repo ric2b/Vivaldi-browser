@@ -9,7 +9,9 @@
 #include "base/bind.h"
 #include "base/debug/stack_trace.h"
 #include "base/logging.h"
+#include "content/renderer/gpu/render_widget_compositor.h"
 #include "content/renderer/ime_event_guard.h"
+#include "content/renderer/input/widget_input_handler_manager.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/render_view_impl.h"
 #include "content/renderer/render_widget.h"
@@ -17,6 +19,23 @@
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 
 namespace content {
+
+namespace {
+
+blink::WebImeTextSpan::Type ConvertUiImeTextSpanTypeToBlinkType(
+    ui::ImeTextSpan::Type type) {
+  switch (type) {
+    case ui::ImeTextSpan::Type::kComposition:
+      return blink::WebImeTextSpan::Type::kComposition;
+    case ui::ImeTextSpan::Type::kSuggestion:
+      return blink::WebImeTextSpan::Type::kSuggestion;
+  }
+
+  NOTREACHED();
+  return blink::WebImeTextSpan::Type::kComposition;
+}
+
+}  // namespace
 
 FrameInputHandlerImpl::FrameInputHandlerImpl(
     base::WeakPtr<RenderFrameImpl> render_frame,
@@ -26,12 +45,12 @@ FrameInputHandlerImpl::FrameInputHandlerImpl(
       input_event_queue_(render_frame->GetRenderWidget()->GetInputEventQueue()),
       main_thread_task_runner_(base::ThreadTaskRunnerHandle::Get()),
       weak_ptr_factory_(this)
-
 {
   weak_this_ = weak_ptr_factory_.GetWeakPtr();
   // If we have created an input event queue move the mojo request over to the
   // compositor thread.
-  if (input_event_queue_) {
+  if (RenderThreadImpl::current()->compositor_task_runner() &&
+      input_event_queue_) {
     // Mojo channel bound on compositor thread.
     RenderThreadImpl::current()->compositor_task_runner()->PostTask(
         FROM_HERE, base::BindOnce(&FrameInputHandlerImpl::BindNow,
@@ -65,11 +84,11 @@ void FrameInputHandlerImpl::RunOnMainThread(const base::Closure& closure) {
 void FrameInputHandlerImpl::SetCompositionFromExistingText(
     int32_t start,
     int32_t end,
-    const std::vector<ui::CompositionUnderline>& ui_underlines) {
+    const std::vector<ui::ImeTextSpan>& ui_ime_text_spans) {
   if (!main_thread_task_runner_->BelongsToCurrentThread()) {
     RunOnMainThread(
         base::Bind(&FrameInputHandlerImpl::SetCompositionFromExistingText,
-                   weak_this_, start, end, ui_underlines));
+                   weak_this_, start, end, ui_ime_text_spans));
     return;
   }
 
@@ -77,16 +96,19 @@ void FrameInputHandlerImpl::SetCompositionFromExistingText(
     return;
 
   ImeEventGuard guard(render_frame_->GetRenderWidget());
-  std::vector<blink::WebCompositionUnderline> underlines;
-  for (const auto& underline : ui_underlines) {
-    blink::WebCompositionUnderline blink_underline(
-        underline.start_offset, underline.end_offset, underline.color,
-        underline.thick, underline.background_color);
-    underlines.push_back(blink_underline);
+  std::vector<blink::WebImeTextSpan> ime_text_spans;
+  for (const auto& ime_text_span : ui_ime_text_spans) {
+    blink::WebImeTextSpan blink_ime_text_span(
+        ConvertUiImeTextSpanTypeToBlinkType(ime_text_span.type),
+        ime_text_span.start_offset, ime_text_span.end_offset,
+        ime_text_span.underline_color, ime_text_span.thick,
+        ime_text_span.background_color,
+        ime_text_span.suggestion_highlight_color, ime_text_span.suggestions);
+    ime_text_spans.push_back(blink_ime_text_span);
   }
 
   render_frame_->GetWebFrame()->SetCompositionFromExistingText(start, end,
-                                                               underlines);
+                                                               ime_text_spans);
 }
 
 void FrameInputHandlerImpl::ExtendSelectionAndDelete(int32_t before,
@@ -370,6 +392,21 @@ void FrameInputHandlerImpl::MoveCaret(const gfx::Point& point) {
       render_view->ConvertWindowPointToViewport(point));
 }
 
+void FrameInputHandlerImpl::GetWidgetInputHandler(
+    mojom::WidgetInputHandlerAssociatedRequest interface_request) {
+  if (!main_thread_task_runner_->BelongsToCurrentThread()) {
+    main_thread_task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&FrameInputHandlerImpl::GetWidgetInputHandler,
+                                  weak_this_, std::move(interface_request)));
+    return;
+  }
+  if (!render_frame_)
+    return;
+  render_frame_->GetRenderWidget()
+      ->widget_input_handler_manager()
+      ->AddAssociatedInterface(std::move(interface_request));
+}
+
 void FrameInputHandlerImpl::ExecuteCommandOnMainThread(
     const std::string& command,
     UpdateState update_state) {
@@ -387,7 +424,7 @@ void FrameInputHandlerImpl::Release() {
     // thread to delete this object.
     binding_.Close();
     main_thread_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&FrameInputHandlerImpl::Release, weak_this_));
+        FROM_HERE, base::BindOnce(&FrameInputHandlerImpl::Release, weak_this_));
     return;
   }
   delete this;
@@ -396,7 +433,7 @@ void FrameInputHandlerImpl::Release() {
 void FrameInputHandlerImpl::BindNow(mojom::FrameInputHandlerRequest request) {
   binding_.Bind(std::move(request));
   binding_.set_connection_error_handler(
-      base::Bind(&FrameInputHandlerImpl::Release, base::Unretained(this)));
+      base::BindOnce(&FrameInputHandlerImpl::Release, base::Unretained(this)));
 }
 
 FrameInputHandlerImpl::HandlingState::HandlingState(

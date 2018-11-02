@@ -21,9 +21,6 @@ const char kEnablePixelOutputInTests[] = "enable-pixel-output-in-tests";
 // maximum.
 const char kLimitFps[] = "limit-fps";
 
-// Disable partial swap which is needed for some OpenGL drivers / emulators.
-const char kUIDisablePartialSwap[] = "ui-disable-partial-swap";
-
 const char kUIEnableRGBA4444Textures[] = "ui-enable-rgba-4444-textures";
 
 const char kUIEnableZeroCopy[] = "ui-enable-zero-copy";
@@ -31,6 +28,11 @@ const char kUIEnableZeroCopy[] = "ui-enable-zero-copy";
 const char kUIShowPaintRects[] = "ui-show-paint-rects";
 
 const char kUISlowAnimations[] = "ui-slow-animations";
+
+// If enabled, all draw commands recorded on canvas are done in pixel aligned
+// measurements. This also enables scaling of all elements in views and layers
+// to be done via corner points. See https://goo.gl/Dqig5s
+const char kEnablePixelCanvasRecording[] = "enable-pixel-canvas-recording";
 
 }  // namespace switches
 
@@ -40,6 +42,11 @@ bool IsUIZeroCopyEnabled() {
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
   return command_line.HasSwitch(switches::kUIEnableZeroCopy);
+}
+
+bool IsPixelCanvasRecordingEnabled() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kEnablePixelCanvasRecording);
 }
 
 }  // namespace ui

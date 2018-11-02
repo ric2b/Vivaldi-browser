@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 """Methods for converting model objects to human-readable formats."""
 
+import collections
 import datetime
 import itertools
 import time
@@ -29,17 +30,17 @@ def _PrettySize(size):
   return '%.1fmb' % size
 
 
-def _FormatPss(pss):
+def _FormatPss(pss, force_sign=False):
   # Shows a decimal for small numbers to make it clear that a shared symbol has
   # a non-zero pss.
   if abs(pss) > 10:
     return str(int(pss))
-  ret = str(round(pss, 1))
-  if ret.endswith('.0'):
-    ret = ret[:-2]
-    if ret == '0' and pss:
-      ret = '~0'
-  return ret
+  near_int = abs(pss) % 1 < 0.05
+  if near_int and abs(pss) < 1 and pss:
+    return '~0'
+  if force_sign:
+    return ('%+.0f' if near_int else '%+.1f') % pss
+  return ('%.0f' if near_int else '%.1f') % pss
 
 
 def _Divide(a, b):
@@ -98,42 +99,26 @@ class Describer(object):
             not_included_part)
 
   def _DescribeSymbol(self, sym, single_line=False):
-    if sym.IsGroup():
-      address = 'Group'
-    else:
-      address = hex(sym.address)
+    address = 'Group' if sym.IsGroup() else hex(sym.address)
+
     last_field = ''
     if sym.IsGroup():
       last_field = 'count=%d' % len(sym)
-    elif sym.IsDelta():
-      if sym.before_symbol is None:
-        num_aliases = sym.after_symbol.num_aliases
-      elif sym.after_symbol is None:
-        num_aliases = sym.before_symbol.num_aliases
-      elif sym.before_symbol.num_aliases == sym.after_symbol.num_aliases:
-        num_aliases = sym.before_symbol.num_aliases
-      else:
-        last_field = 'num_aliases=%d->%d' % (
-            sym.before_symbol.num_aliases, sym.after_symbol.num_aliases)
-      if not last_field and (num_aliases > 1 or self.verbose):
-        last_field = 'num_aliases=%d' % num_aliases
-    elif sym.num_aliases > 1 or self.verbose:
-      last_field = 'num_aliases=%d' % sym.num_aliases
+    else:
+      syms = [sym.before_symbol, sym.after_symbol] if sym.IsDelta() else [sym]
+      num_aliases = [s.num_aliases for s in syms if not s is None]
+      if num_aliases[0] != num_aliases[-1]:  # If 2 distinct values.
+        last_field = 'num_aliases=%d->%d' % tuple(num_aliases)
+      elif num_aliases[0] > 1 or self.verbose:
+        last_field = 'num_aliases=%d' % num_aliases[0]
 
     if sym.IsDelta():
-      if sym.IsGroup():
-        b = sum(s.before_symbol.pss_without_padding if s.before_symbol else 0
-                for s in sym.IterLeafSymbols())
-        a = sum(s.after_symbol.pss_without_padding if s.after_symbol else 0
-                for s in sym.IterLeafSymbols())
-      else:
-        b = sym.before_symbol.pss_without_padding if sym.before_symbol else 0
-        a = sym.after_symbol.pss_without_padding if sym.after_symbol else 0
-      pss_with_sign = _FormatPss(sym.pss)
-      if pss_with_sign[0] not in '~-':
-        pss_with_sign = '+' + pss_with_sign
+      b = sum(s.before_symbol.pss_without_padding if s.before_symbol else 0
+              for s in sym.IterLeafSymbols())
+      a = sum(s.after_symbol.pss_without_padding if s.after_symbol else 0
+              for s in sym.IterLeafSymbols())
       pss_field = '{} ({}->{})'.format(
-          pss_with_sign, _FormatPss(b), _FormatPss(a))
+          _FormatPss(sym.pss, True), _FormatPss(b), _FormatPss(a))
     elif sym.num_aliases > 1:
       pss_field = '{} (size={})'.format(_FormatPss(sym.pss), sym.size)
     else:
@@ -205,20 +190,17 @@ class Describer(object):
 
   def _DescribeSymbolGroup(self, group):
     total_size = group.pss
-    code_size = 0
-    ro_size = 0
-    data_size = 0
-    bss_size = 0
+    section_sizes = collections.defaultdict(float)
+    for s in group.IterLeafSymbols():
+      section_sizes[s.section_name] += s.pss
+
+    # Apply this filter after calcualating size since an alias being removed
+    # causes some symbols to be UNCHANGED, yet have pss != 0.
+    if group.IsDelta() and not self.verbose:
+      group = group.WhereDiffStatusIs(models.DIFF_STATUS_UNCHANGED).Inverted()
+
     unique_paths = set()
     for s in group.IterLeafSymbols():
-      if s.section == 't':
-        code_size += s.pss
-      elif s.section == 'r':
-        ro_size += s.pss
-      elif s.section == 'd':
-        data_size += s.pss
-      elif s.section == 'b':
-        bss_size += s.pss
       # Ignore paths like foo/{shared}/2
       if '{' not in s.object_path:
         unique_paths.add(s.object_path)
@@ -227,6 +209,20 @@ class Describer(object):
       unique_part = 'aliases not grouped for diffs'
     else:
       unique_part = '{:,} unique'.format(group.CountUniqueSymbols())
+
+    relevant_sections = [s for s in models.SECTION_TO_SECTION_NAME.itervalues()
+                         if s in section_sizes]
+    if models.SECTION_NAME_MULTIPLE in relevant_sections:
+      relevant_sections.remove(models.SECTION_NAME_MULTIPLE)
+
+    size_summary = ' '.join(
+        '{}={:<10}'.format(k, _PrettySize(int(section_sizes[k])))
+        for k in relevant_sections)
+    size_summary += ' total={:<10}'.format(_PrettySize(int(total_size)))
+
+    section_legend = ', '.join(
+        '{}={}'.format(models.SECTION_NAME_TO_SECTION[k], k)
+        for k in relevant_sections if k in models.SECTION_NAME_TO_SECTION)
 
     if self.verbose:
       titles = 'Index | Running Total | Section@Address | ...'
@@ -239,19 +235,13 @@ class Describer(object):
     header_desc = [
         'Showing {:,} symbols ({}) with total pss: {} bytes'.format(
             len(group), unique_part, int(total_size)),
-        '.text={:<10} .rodata={:<10} .data*={:<10} .bss={:<10} total={}'.format(
-            _PrettySize(int(code_size)), _PrettySize(int(ro_size)),
-            _PrettySize(int(data_size)), _PrettySize(int(bss_size)),
-            _PrettySize(int(total_size))),
+        size_summary,
         'Number of unique paths: {}'.format(len(unique_paths)),
         '',
+        'Section Legend: {}'.format(section_legend),
         titles,
         '-' * 60
     ]
-    # Apply this filter after calcualating stats since an alias being removed
-    # causes some symbols to be UNCHANGED, yet have pss != 0.
-    if group.IsDelta() and not self.verbose:
-      group = group.WhereDiffStatusIs(models.DIFF_STATUS_UNCHANGED).Inverted()
     children_desc = self._DescribeSymbolGroupChildren(group)
     return itertools.chain(header_desc, children_desc)
 
@@ -361,20 +351,15 @@ class Describer(object):
 
 def DescribeSizeInfoCoverage(size_info):
   """Yields lines describing how accurate |size_info| is."""
-  for section in models.SECTION_TO_SECTION_NAME:
-    if section == 'd':
-      expected_size = sum(v for k, v in size_info.section_sizes.iteritems()
-                          if k.startswith('.data'))
-    else:
-      expected_size = size_info.section_sizes[
-          models.SECTION_TO_SECTION_NAME[section]]
+  for section, section_name in models.SECTION_TO_SECTION_NAME.iteritems():
+    expected_size = size_info.section_sizes[section_name]
 
-    in_section = size_info.raw_symbols.WhereInSection(section)
+    in_section = size_info.raw_symbols.WhereInSection(section_name)
     actual_size = in_section.size
     size_percent = _Divide(actual_size, expected_size)
     yield ('Section {}: has {:.1%} of {} bytes accounted for from '
            '{} symbols. {} bytes are unaccounted for.').format(
-               section, size_percent, actual_size, len(in_section),
+               section_name, size_percent, actual_size, len(in_section),
                expected_size - actual_size)
     star_syms = in_section.WhereNameMatches(r'^\*')
     padding = in_section.padding - star_syms.padding

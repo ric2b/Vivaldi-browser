@@ -13,6 +13,8 @@
 <link rel="import" href="../icons.html">
 <link rel="import" href="../settings_shared_css.html">
 
+<!-- This file is forked as clear_browsing_data_dialog_tabs.html until the new
+     CBD UI is launched. -->
 <dom-module id="settings-clear-browsing-data-dialog">
   <template>
     <style include="settings-shared">
@@ -20,7 +22,7 @@
         visibility: hidden;
       }
 
-      #clearBrowsingDataDialog .footer {
+      #clearBrowsingDataDialog [slot=footer] {
         color: var(--paper-grey-600);
       }
 
@@ -66,6 +68,10 @@
         width: 16px;
       }
 
+      [slot=footer] iron-icon {
+        margin: auto;
+      }
+
       .clear-browsing-data-footer {
         -webkit-padding-start: 4px;
         align-items: flex-start;
@@ -93,7 +99,7 @@
         margin-top: 3px;
       }
 
-      .title .secondary {
+      [slot=title] .secondary {
         font-size: calc(13 / 15 * 100%);
         padding-top: 8px;
       }
@@ -114,8 +120,8 @@
     <dialog is="cr-dialog" id="clearBrowsingDataDialog"
         on-close="onClearBrowsingDataDialogClose_"
         close-text="$i18n{close}" ignore-popstate>
-      <div class="title" slot="title">$i18n{clearBrowsingData}</div>
-      <div class="body" slot="body">
+      <div slot="title">$i18n{clearBrowsingData}</div>
+      <div slot="body">
         <div class="row">
           $i18n{clearFollowingItemsFrom}
           <settings-dropdown-menu id="clearFrom"
@@ -128,58 +134,58 @@
              history is disabled (i.e. supervised users, policy), so it's OK to
              have a hidden checkbox that's also checked (as the C++ accounts for
              whether a user is allowed to delete history independently). -->
-        <settings-checkbox id="browsingCheckbox"
+        <settings-checkbox id="browsingCheckbox" class="browsing-data-checkbox"
             pref="{{prefs.browser.clear_data.browsing_history}}"
             label="$i18n{clearBrowsingHistory}"
             sub-label="[[counters_.browsing_history]]"
             disabled="[[clearingInProgress_]]"
             hidden="[[isSupervised_]]">
         </settings-checkbox>
-        <settings-checkbox id="downloadCheckbox"
+        <settings-checkbox id="downloadCheckbox" class="browsing-data-checkbox"
             pref="{{prefs.browser.clear_data.download_history}}"
             label="$i18n{clearDownloadHistory}"
             sub-label="[[counters_.download_history]]"
             disabled="[[clearingInProgress_]]"
             hidden="[[isSupervised_]]">
         </settings-checkbox>
-        <settings-checkbox id="cacheCheckbox"
+        <settings-checkbox id="cacheCheckbox" class="browsing-data-checkbox"
             pref="{{prefs.browser.clear_data.cache}}"
             label="$i18n{clearCache}"
             sub-label="[[counters_.cache]]"
             disabled="[[clearingInProgress_]]">
         </settings-checkbox>
-        <settings-checkbox id="cookiesCheckbox"
+        <settings-checkbox id="cookiesCheckbox" class="browsing-data-checkbox"
             pref="{{prefs.browser.clear_data.cookies}}"
             label="$i18n{clearCookies}"
             sub-label="$i18n{clearCookiesCounter}"
             disabled="[[clearingInProgress_]]">
         </settings-checkbox>
-        <settings-checkbox
+        <settings-checkbox class="browsing-data-checkbox"
             pref="{{prefs.browser.clear_data.passwords}}"
             label="$i18n{clearPasswords}"
             sub-label="[[counters_.passwords]]"
             disabled="[[clearingInProgress_]]">
         </settings-checkbox>
-        <settings-checkbox
+        <settings-checkbox class="browsing-data-checkbox"
             pref="{{prefs.browser.clear_data.form_data}}"
             label="$i18n{clearFormData}"
             sub-label="[[counters_.form_data]]"
             disabled="[[clearingInProgress_]]">
         </settings-checkbox>
-        <settings-checkbox
+        <settings-checkbox class="browsing-data-checkbox"
             pref="{{prefs.browser.clear_data.hosted_apps_data}}"
             label="$i18n{clearHostedAppData}"
             sub-label="[[counters_.hosted_apps_data]]"
             disabled="[[clearingInProgress_]]">
         </settings-checkbox>
-        <settings-checkbox
+        <settings-checkbox class="browsing-data-checkbox"
             pref="{{prefs.browser.clear_data.media_licenses}}"
             label="$i18n{clearMediaLicenses}"
             sub-label="[[counters_.media_licenses]]"
             disabled="[[clearingInProgress_]]">
         </settings-checkbox>
       </div>
-      <div class="button-container" slot="button-container">
+      <div slot="button-container">
         <paper-spinner active="[[clearingInProgress_]]"></paper-spinner>
         <paper-button class="cancel-button" disabled="[[clearingInProgress_]]"
             on-tap="onCancelTap_">$i18n{cancel}</paper-button>
@@ -189,7 +195,7 @@
             $i18n{clearBrowsingData}
         </paper-button>
       </div>
-      <div class="footer" slot="footer">
+      <div slot="footer">
         <div id="googleFooter" class="clear-browsing-data-footer">
           <iron-icon icon="settings:googleg"></iron-icon>
           <div class="footer-text">$i18nRaw{otherFormsOfBrowsingHistory}</div>
@@ -210,7 +216,7 @@
     <template is="dom-if" if="[[showImportantSitesDialog_]]">
       <dialog is="cr-dialog" id="importantSitesDialog" close-text="$i18n{close}"
           show-scroll-borders ignore-popstate>
-        <div class="title" slot="title">
+        <div slot="title">
           $i18n{clearBrowsingData}
           <div class="secondary">
             <template is="dom-if"
@@ -222,7 +228,7 @@
             </template>
           </div>
         </div>
-        <div class="body" slot="body">
+        <div slot="body">
           <template is="dom-repeat" items="[[importantSites_]]">
             <div class="row">
               <important-site-checkbox
@@ -232,7 +238,7 @@
             </div>
           </template>
         </div>
-        <div class="button-container" slot="button-container">
+        <div slot="button-container">
           <paper-spinner active="[[clearingInProgress_]]"></paper-spinner>
           <paper-button class="cancel-button" disabled="[[clearingInProgress_]]"
               on-tap="onImportantSitesCancelTap_">$i18n{cancel}</paper-button>

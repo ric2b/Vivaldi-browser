@@ -8,11 +8,11 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.net.Uri;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.MediumTest;
 import android.view.View;
 
-import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -22,6 +22,7 @@ import org.junit.runner.RunWith;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.base.test.util.ScalableTimeout;
@@ -41,7 +42,6 @@ import org.chromium.chrome.test.util.ApplicationTestUtils;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.common.ScreenOrientationValues;
-import org.chromium.net.test.EmbeddedTestServer;
 
 /**
  * Tests that WebappActivities are launched correctly.
@@ -75,8 +75,6 @@ public class WebappModeTest {
             + "IWXMAAAsTAAALEwEAmpwYAAAAB3RJTUUH3wQIFB4cxOfiSQAAABl0RVh0Q29tbWVudABDcmVhdGVkIHdpdG"
             + "ggR0lNUFeBDhcAAAAMSURBVAjXY2AUawEAALcAnI/TkI8AAAAASUVORK5CYII=";
 
-    private EmbeddedTestServer mTestServer;
-
     private Intent createIntent(String id, String url, String title, String icon, boolean addMac) {
         Intent intent = new Intent();
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -94,7 +92,8 @@ public class WebappModeTest {
         WebappInfo webappInfo = WebappInfo.create(id, url, null, new WebappInfo.Icon(icon), title,
                 null, WebDisplayMode.STANDALONE, ScreenOrientationValues.PORTRAIT,
                 ShortcutSource.UNKNOWN, ShortcutHelper.MANIFEST_COLOR_INVALID_OR_MISSING,
-                ShortcutHelper.MANIFEST_COLOR_INVALID_OR_MISSING, false);
+                ShortcutHelper.MANIFEST_COLOR_INVALID_OR_MISSING, false /* isIconGenerated */,
+                false /* forceNavigation */);
         webappInfo.setWebappIntentExtras(intent);
 
         return intent;
@@ -132,14 +131,6 @@ public class WebappModeTest {
                                 WEBAPP_1_ID, WEBAPP_1_URL, WEBAPP_1_TITLE, WEBAPP_ICON, true));
                     }
                 });
-
-        mTestServer = EmbeddedTestServer.createAndStartServer(
-                InstrumentationRegistry.getInstrumentation().getContext());
-    }
-
-    @After
-    public void tearDown() throws Exception {
-        mTestServer.stopAndDestroyServer();
     }
 
     /**
@@ -243,9 +234,10 @@ public class WebappModeTest {
      * Ensure WebappActivities can't be launched without proper security checks.
      */
     @Test
-    @MediumTest
-    @Feature({"Webapps"})
-    public void testWebappRequiresValidMac() {
+    //@MediumTest
+    //@Feature({"Webapps"})
+    @DisabledTest(message = "crbug.com/755114")
+    public void testWebappRequiresValidMac() throws Exception {
         // Try to start a WebappActivity.  Fail because the Intent is insecure.
         fireWebappIntent(WEBAPP_1_ID, WEBAPP_1_URL, WEBAPP_1_TITLE, WEBAPP_ICON, false);
         CriteriaHelper.pollUiThread(new Criteria() {
@@ -269,10 +261,44 @@ public class WebappModeTest {
         });
     }
 
-    /** Test that on first launch {@link WebappDataStorage#hasBeenLaunched()} is set. */
+    /**
+     * Test that a WebappActivity uses WebappInfo set via WebappActivity#putWebappInfo() if
+     * available instead of constructing the WebappInfo from the launch intent.
+     */
     @Test
     @MediumTest
     @Feature({"Webapps"})
+    public void testWebappInfoReuse() throws Exception {
+        Intent intent = createIntent(
+                WebappActivityTestRule.WEBAPP_ID, WEBAPP_2_URL, WEBAPP_2_TITLE, WEBAPP_ICON, true);
+        Intent newIntent = createIntent(
+                WebappActivityTestRule.WEBAPP_ID, WEBAPP_1_URL, WEBAPP_1_TITLE, WEBAPP_ICON, true);
+        WebappInfo webappInfo = WebappInfo.create(intent);
+        WebappActivity.addWebappInfo(WebappActivityTestRule.WEBAPP_ID, webappInfo);
+
+        WebappActivityTestRule mActivityTestRule = new WebappActivityTestRule();
+        mActivityTestRule.startWebappActivity(newIntent);
+
+        CriteriaHelper.pollUiThread(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                return isWebappActivityReady(ApplicationStatus.getLastTrackedFocusedActivity());
+            }
+        });
+
+        Activity lastActivity = ApplicationStatus.getLastTrackedFocusedActivity();
+        WebappActivity lastWebappActivity = (WebappActivity) lastActivity;
+
+        Assert.assertEquals(webappInfo, lastWebappActivity.getWebappInfo());
+        Assert.assertTrue(lastWebappActivity.getWebappInfo().uri().equals(Uri.parse(WEBAPP_2_URL)));
+    }
+
+    /** Test that on first launch {@link WebappDataStorage#hasBeenLaunched()} is set. */
+    // Flaky even with RetryOnFailure: http://crbug.com/749375
+    @DisabledTest
+    @Test
+    //    @MediumTest
+    //    @Feature({"Webapps"})
     public void testSetsHasBeenLaunchedOnFirstLaunch() throws Exception {
         WebappDataStorage storage = WebappRegistry.getInstance().getWebappDataStorage(WEBAPP_1_ID);
         Assert.assertFalse(storage.hasBeenLaunched());

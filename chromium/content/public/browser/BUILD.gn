@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/ui.gni")
+import("//media/media_options.gni")
 
 # See //content/BUILD.gn for how this works.
 group("browser") {
@@ -25,12 +26,14 @@ source_set("browser_sources") {
     "android/android_overlay_provider.h",
     "android/browser_media_player_manager_register.cc",
     "android/browser_media_player_manager_register.h",
+    "android/child_process_importance.h",
     "android/compositor.h",
     "android/compositor_client.h",
     "android/content_protocol_handler.h",
     "android/content_view_layer_renderer.h",
     "android/devtools_auth.h",
     "android/java_interfaces.h",
+    "android/motion_event_action.h",
     "android/synchronous_compositor.cc",
     "android/synchronous_compositor.h",
     "android/synchronous_compositor_client.h",
@@ -85,8 +88,6 @@ source_set("browser_sources") {
     "content_browser_client.h",
     "context_factory.h",
     "cookie_store_factory.h",
-    "desktop_capture.cc",
-    "desktop_capture.h",
     "desktop_media_id.cc",
     "desktop_media_id.h",
     "devtools_agent_host.h",
@@ -99,11 +100,13 @@ source_set("browser_sources") {
     "devtools_manager_delegate.cc",
     "devtools_manager_delegate.h",
     "devtools_socket_factory.h",
+    "discardable_shared_memory_manager.h",
     "dom_storage_context.h",
     "download_danger_type.h",
     "download_interrupt_reason_values.h",
     "download_interrupt_reasons.h",
     "download_item.h",
+    "download_manager.cc",
     "download_manager.h",
     "download_manager_delegate.cc",
     "download_manager_delegate.h",
@@ -113,7 +116,6 @@ source_set("browser_sources") {
     "download_url_parameters.h",
     "favicon_status.cc",
     "favicon_status.h",
-    "file_descriptor_info.h",
     "focused_node_details.h",
     "font_list_async.h",
     "global_request_id.h",
@@ -193,6 +195,8 @@ source_set("browser_sources") {
     "plugin_data_remover.h",
     "plugin_service.h",
     "plugin_service_filter.h",
+    "presentation_request.cc",
+    "presentation_request.h",
     "presentation_screen_availability_listener.h",
     "presentation_service_delegate.h",
     "profiler_controller.h",
@@ -228,6 +232,7 @@ source_set("browser_sources") {
     "restore_type.h",
     "save_page_type.h",
     "screen_orientation_delegate.h",
+    "security_style_explanation.cc",
     "security_style_explanation.h",
     "security_style_explanations.cc",
     "security_style_explanations.h",
@@ -256,6 +261,7 @@ source_set("browser_sources") {
     "stream_handle.h",
     "stream_info.cc",
     "stream_info.h",
+    "swap_metrics_driver.h",
     "touch_selection_controller_client_manager.h",
     "trace_uploader.h",
     "tracing_controller.h",
@@ -324,11 +330,11 @@ source_set("browser_sources") {
     "//net",
     "//ppapi/c",
     "//services/device/public/interfaces",
-    "//third_party/webrtc/modules/desktop_capture",
     "//ui/accessibility",
     "//ui/base",
     "//ui/events",
     "//ui/gl",
+    "//ui/shell_dialogs",
     "//ui/surface",
   ]
 
@@ -337,6 +343,10 @@ source_set("browser_sources") {
     # include headers from each other.
     "//content/browser",
   ]
+
+  if (is_posix) {
+    sources += [ "posix_file_descriptor_info.h" ]
+  }
 
   if (is_android) {
     deps += [ "//ui/android" ]
@@ -360,5 +370,13 @@ source_set("browser_sources") {
       "arc_tracing_agent.cc",
       "arc_tracing_agent.h",
     ]
+  }
+
+  if (enable_webrtc) {
+    sources += [
+      "desktop_capture.cc",
+      "desktop_capture.h",
+    ]
+    deps += [ "//third_party/webrtc/modules/desktop_capture" ]
   }
 }

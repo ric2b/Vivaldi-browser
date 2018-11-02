@@ -12,6 +12,7 @@
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/task_manager/providers/task_provider_observer.h"
 #include "chrome/browser/task_manager/task_manager_observer.h"
 #include "content/public/common/result_codes.h"
 
@@ -21,6 +22,13 @@ namespace {
 
 // The last ID given to the previously created task.
 int64_t g_last_id = 0;
+
+base::ProcessId DetermineProcessId(base::ProcessHandle handle,
+                                   base::ProcessId process_id) {
+  if (process_id != base::kNullProcessId)
+    return process_id;
+  return base::GetProcId(handle);
+}
 
 }  // namespace
 
@@ -40,9 +48,7 @@ Task::Task(const base::string16& title,
       rappor_sample_name_(rappor_sample),
       icon_(icon ? *icon : gfx::ImageSkia()),
       process_handle_(handle),
-      process_id_(process_id != base::kNullProcessId
-                      ? process_id
-                      : base::GetProcId(handle)) {}
+      process_id_(DetermineProcessId(handle, process_id)) {}
 
 Task::~Task() {}
 
@@ -63,10 +69,17 @@ void Task::Activate() {
 }
 
 bool Task::IsKillable() {
+  // Protects from trying to kill a task that doesn't have an accurate process
+  // Id yet. This can result in calling "kill 0" which kills all processes in
+  // the process group.
+  if (process_id() == base::kNullProcessId)
+    return false;
   return true;
 }
 
 void Task::Kill() {
+  if (!IsKillable())
+    return;
   DCHECK_NE(process_id(), base::GetCurrentProcId());
   base::Process process = base::Process::Open(process_id());
   process.Terminate(content::RESULT_CODE_KILLED, false);
@@ -92,6 +105,24 @@ void Task::Refresh(const base::TimeDelta& update_interval,
 
   last_refresh_cumulative_bytes_read_ = cumulative_bytes_read_;
   last_refresh_cumulative_bytes_sent_ = cumulative_bytes_sent_;
+}
+
+void Task::UpdateProcessInfo(base::ProcessHandle handle,
+                             base::ProcessId process_id,
+                             TaskProviderObserver* observer) {
+  process_id = DetermineProcessId(handle, process_id);
+
+  // Don't remove the task if there is no change to the process ID.
+  if (process_id == process_id_)
+    return;
+
+  // TaskManagerImpl and TaskGroup implementations assume that a process ID is
+  // consistent for the lifetime of a Task. So to change the process ID,
+  // temporarily unregister this Task.
+  observer->TaskRemoved(this);
+  process_handle_ = handle;
+  process_id_ = process_id;
+  observer->TaskAdded(this);
 }
 
 void Task::OnNetworkBytesRead(int64_t bytes_read) {

@@ -4,7 +4,7 @@
 
 cr.define('extensions', function() {
   /** @interface */
-  var ItemDelegate = function() {};
+  const ItemDelegate = function() {};
 
   ItemDelegate.prototype = {
     /** @param {string} id */
@@ -56,7 +56,7 @@ cr.define('extensions', function() {
     showItemOptionsPage: assertNotReached,
   };
 
-  var Item = Polymer({
+  const Item = Polymer({
     is: 'extensions-item',
 
     behaviors: [I18nBehavior],
@@ -95,7 +95,7 @@ cr.define('extensions', function() {
     /** @private */
     observeIdVisibility_: function(inDevMode, showingDetails, id) {
       Polymer.dom.flush();
-      var idElement = this.$$('#extension-id');
+      const idElement = this.$$('#extension-id');
       if (idElement) {
         assert(this.data);
         idElement.innerHTML = this.i18n('itemId', this.data.id);
@@ -125,12 +125,14 @@ cr.define('extensions', function() {
 
     /** @private */
     onErrorsTap_: function() {
-      this.fire('extension-item-show-errors', {data: this.data});
+      extensions.navigation.navigateTo(
+          {page: Page.ERRORS, extensionId: this.data.id});
     },
 
     /** @private */
     onDetailsTap_: function() {
-      this.fire('extension-item-show-details', {data: this.data});
+      extensions.navigation.navigateTo(
+          {page: Page.DETAILS, extensionId: this.data.id});
     },
 
     /**
@@ -143,7 +145,8 @@ cr.define('extensions', function() {
 
     /** @private */
     onExtraInspectTap_: function() {
-      this.fire('extension-item-show-details', {data: this.data});
+      extensions.navigation.navigateTo(
+          {page: Page.DETAILS, extensionId: this.data.id});
     },
 
     /** @private */
@@ -154,6 +157,14 @@ cr.define('extensions', function() {
     /** @private */
     onRepairTap_: function() {
       this.delegate.repairItem(this.data.id);
+    },
+
+    /**
+     * @return {boolean}
+     * @private
+     */
+    isControlled_: function() {
+      return extensions.isControlled(this.data);
     },
 
     /**
@@ -196,7 +207,7 @@ cr.define('extensions', function() {
      * @private
      */
     computeClasses_: function() {
-      var classes = this.isEnabled_() ? 'enabled' : 'disabled';
+      let classes = this.isEnabled_() ? 'enabled' : 'disabled';
       if (this.inDevMode)
         classes += ' dev-mode';
       return classes;
@@ -225,7 +236,7 @@ cr.define('extensions', function() {
      * @private
      */
     computeSourceIndicatorText_: function() {
-      var sourceType = extensions.getItemSource(this.data);
+      const sourceType = extensions.getItemSource(this.data);
       return sourceType == SourceType.WEBSTORE ?
           '' :
           extensions.getItemSourceString(sourceType);
@@ -251,7 +262,7 @@ cr.define('extensions', function() {
       // need to handle the case gracefully.
       if (this.data.views.length == 0)
         return '';
-      var label = extensions.computeInspectableViewLabel(this.data.views[0]);
+      let label = extensions.computeInspectableViewLabel(this.data.views[0]);
       if (this.data.views.length > 1)
         label += ',';
       return label;
@@ -273,7 +284,7 @@ cr.define('extensions', function() {
       // Only display the reload spinner if the extension is unpacked and
       // not terminated (since if it's terminated, we'll show a crashed reload
       // buton).
-      var showIcon =
+      const showIcon =
           this.data.location == chrome.developerPrivate.Location.UNPACKED &&
           this.data.state != chrome.developerPrivate.ExtensionState.TERMINATED;
       return !showIcon;

@@ -30,7 +30,7 @@
 #include "core/CoreExport.h"
 #include "core/fileapi/Blob.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/PassRefPtr.h"
+#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/text/WTFString.h"
 
 namespace blink {
@@ -40,7 +40,6 @@ class ExecutionContext;
 class FilePropertyBag;
 class FileMetadata;
 class KURL;
-class ScriptState;
 
 class CORE_EXPORT File final : public Blob {
   DEFINE_WRAPPERTYPEINFO();
@@ -73,7 +72,7 @@ class CORE_EXPORT File final : public Blob {
 
   static File* Create(const String& name,
                       double modification_time,
-                      PassRefPtr<BlobDataHandle> blob_data_handle) {
+                      RefPtr<BlobDataHandle> blob_data_handle) {
     return new File(name, modification_time, std::move(blob_data_handle));
   }
 
@@ -86,7 +85,7 @@ class CORE_EXPORT File final : public Blob {
       bool has_snapshot_data,
       uint64_t size,
       double last_modified,
-      PassRefPtr<BlobDataHandle> blob_data_handle) {
+      RefPtr<BlobDataHandle> blob_data_handle) {
     return new File(path, name, relative_path, user_visibility,
                     has_snapshot_data, size, last_modified,
                     std::move(blob_data_handle));
@@ -96,7 +95,7 @@ class CORE_EXPORT File final : public Blob {
       const String& name,
       uint64_t size,
       double last_modified,
-      PassRefPtr<BlobDataHandle> blob_data_handle) {
+      RefPtr<BlobDataHandle> blob_data_handle) {
     return new File(path, name, String(), kIsNotUserVisible, true, size,
                     last_modified, std::move(blob_data_handle));
   }
@@ -155,7 +154,6 @@ class CORE_EXPORT File final : public Blob {
               long long end,
               const String& content_type,
               ExceptionState&) const override;
-  void close(ScriptState*, ExceptionState&) override;
 
   bool IsFile() const override { return true; }
   bool HasBackingFile() const override { return has_backing_file_; }
@@ -210,10 +208,8 @@ class CORE_EXPORT File final : public Blob {
        bool has_snapshot_data,
        uint64_t size,
        double last_modified,
-       PassRefPtr<BlobDataHandle>);
-  File(const String& name,
-       double modification_time,
-       PassRefPtr<BlobDataHandle>);
+       RefPtr<BlobDataHandle>);
+  File(const String& name, double modification_time, RefPtr<BlobDataHandle>);
   File(const String& name, const FileMetadata&, UserVisibility);
   File(const KURL& file_system_url, const FileMetadata&, UserVisibility);
   File(const File&);

@@ -6,13 +6,13 @@
 #import <Cocoa/Cocoa.h>
 
 #include "chrome/browser/ui/browser.h"
-#include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
+
+class VivaldiBrowserWindow;
 
 namespace vivaldi {
 
-class VivaldiAppObserver : public extensions::BrowserContextKeyedAPI,
-                           public extensions::AppWindowRegistry::Observer {
+class VivaldiAppObserver : public extensions::BrowserContextKeyedAPI {
  public:
   explicit VivaldiAppObserver(content::BrowserContext* context);
   ~VivaldiAppObserver() override;
@@ -20,10 +20,14 @@ class VivaldiAppObserver : public extensions::BrowserContextKeyedAPI,
   static extensions::BrowserContextKeyedAPIFactory<VivaldiAppObserver>*
   GetFactoryInstance();
 
-  // Convenience method to get the AlarmManager for a content::BrowserContext.
+  // Convenience method to get the VivaldiAppObserver for a
+  // content::BrowserContext.
   static VivaldiAppObserver* Get(content::BrowserContext* browser_context);
 
   void SetCommand(NSInteger tag, Browser* browser);
+
+  // Called by VivaldiBrowserWindowCocoa when the window has been shown.
+  void OnWindowShown(VivaldiBrowserWindow* window, bool was_hidden);
 
  private:
   friend class extensions::BrowserContextKeyedAPIFactory<VivaldiAppObserver>;
@@ -31,10 +35,8 @@ class VivaldiAppObserver : public extensions::BrowserContextKeyedAPI,
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "VivaldiAppObserver"; }
   static const bool kServiceIsNULLWhileTesting = true;
+  static const bool kServiceRedirectedInIncognito = true;
 
-  // AppWindowRegistry::Observer
-  void OnAppWindowShown(extensions::AppWindow* app_window,
-                        bool was_hidden) override;
   NSInteger tag_ = 0;
   Browser* browser_ = nullptr;
   content::BrowserContext* browser_context_;

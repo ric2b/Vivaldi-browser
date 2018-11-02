@@ -16,7 +16,6 @@
 #include "base/trace_event/memory_dump_provider.h"
 #include "cc/cc_export.h"
 #include "cc/tiles/image_decode_cache.h"
-#include "components/viz/common/quads/resource_format.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 
 namespace viz {
@@ -104,7 +103,7 @@ class CC_EXPORT GpuImageDecodeCache
   enum class DecodeTaskType { PART_OF_UPLOAD_TASK, STAND_ALONE_DECODE_TASK };
 
   explicit GpuImageDecodeCache(viz::ContextProvider* context,
-                               viz::ResourceFormat decode_format,
+                               SkColorType color_type,
                                size_t max_working_set_bytes,
                                size_t max_cache_bytes);
   ~GpuImageDecodeCache() override;
@@ -128,7 +127,7 @@ class CC_EXPORT GpuImageDecodeCache
       bool aggressively_free_resources) override;
   void ClearCache() override;
   size_t GetMaximumMemoryLimitBytes() const override;
-  void NotifyImageUnused(uint32_t skimage_id) override;
+  void NotifyImageUnused(const PaintImage::FrameKey& frame_key) override;
 
   // MemoryDumpProvider overrides.
   bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
@@ -283,7 +282,7 @@ class CC_EXPORT GpuImageDecodeCache
     friend struct GpuImageDecodeCache::InUseCacheKeyHash;
     explicit InUseCacheKey(const DrawImage& draw_image);
 
-    uint32_t image_id;
+    PaintImage::FrameKey frame_key;
     int mip_level;
     SkFilterQuality filter_quality;
     gfx::ColorSpace target_color_space;
@@ -349,7 +348,7 @@ class CC_EXPORT GpuImageDecodeCache
                               ImageData* image_data);
   void DeletePendingImages();
 
-  const viz::ResourceFormat format_;
+  const SkColorType color_type_;
   viz::ContextProvider* context_;
   sk_sp<GrContextThreadSafeProxy> context_threadsafe_proxy_;
 
@@ -360,7 +359,9 @@ class CC_EXPORT GpuImageDecodeCache
 
   // |persistent_cache_| represents the long-lived cache, keeping a certain
   // budget of ImageDatas alive even when their ref count reaches zero.
-  using PersistentCache = base::MRUCache<uint32_t, scoped_refptr<ImageData>>;
+  using PersistentCache = base::HashingMRUCache<PaintImage::FrameKey,
+                                                scoped_refptr<ImageData>,
+                                                PaintImage::FrameKeyHash>;
   PersistentCache persistent_cache_;
 
   // |in_use_cache_| represents the in-use (short-lived) cache. Entries are

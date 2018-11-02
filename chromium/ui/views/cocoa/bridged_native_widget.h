@@ -201,6 +201,13 @@ class VIEWS_EXPORT BridgedNativeWidget
     return child_windows_;
   }
 
+  // Re-parent a |native_view| in this Widget to be a child of |new_parent|.
+  // |native_view| must either be |ns_view()| or a descendant of |ns_view()|.
+  // |native_view| is added as a subview of |new_parent| unless it is the
+  // contentView of a top-level Widget. If |native_view| is |ns_view()|, |this|
+  // also becomes a child window of |new_parent|'s NSWindow.
+  void ReparentNativeView(NSView* native_view, NSView* new_parent);
+
   bool target_fullscreen_state() const { return target_fullscreen_state_; }
   bool window_visible() const { return window_visible_; }
   bool wants_to_be_visible() const { return wants_to_be_visible_; }
@@ -246,6 +253,9 @@ class VIEWS_EXPORT BridgedNativeWidget
   // Sets mouseDownCanMoveWindow on |bridged_view_| and triggers the NSWindow to
   // update its draggable region.
   void SetDraggable(bool draggable);
+
+  // Called by |mouse_down_monitor_| to close a bubble.
+  void OnRightMouseDownWithBubble(NSEvent* event);
 
   // Overridden from CocoaMouseCaptureDelegate:
   void PostCapturedEvent(NSEvent* event) override;
@@ -327,6 +337,9 @@ class VIEWS_EXPORT BridgedNativeWidget
   // modal windows, the window's alpha value is set to 0, till the frame from
   // the compositor arrives to avoid "blinking".
   bool initial_visibility_suppressed_ = false;
+
+  // Right mouse down monitor for bubble widget.
+  id mouse_down_monitor_;
 
   AssociatedViews associated_views_;
 

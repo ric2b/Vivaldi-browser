@@ -569,6 +569,11 @@ bool NotificationsCreateFunction::RunNotificationsApi() {
 
   SetResult(base::MakeUnique<base::Value>(notification_id));
 
+  // TODO(crbug.com/749402): Cap the length of notification Ids to a certain
+  // limit if the histogram indicates that this is safe to do.
+  UMA_HISTOGRAM_COUNTS_1000("Notifications.ExtensionNotificationIdLength",
+                            notification_id.size());
+
   // TODO(dewittj): Add more human-readable error strings if this fails.
   if (!CreateNotification(notification_id, &params_->options))
     return false;
@@ -650,8 +655,8 @@ bool NotificationsGetAllFunction::RunNotificationsApi() {
 
   for (std::set<std::string>::iterator iter = notification_ids.begin();
        iter != notification_ids.end(); iter++) {
-    result->SetBooleanWithoutPathExpansion(
-        StripScopeFromIdentifier(extension_->id(), *iter), true);
+    result->SetKey(StripScopeFromIdentifier(extension_->id(), *iter),
+                   base::Value(true));
   }
 
   SetResult(std::move(result));

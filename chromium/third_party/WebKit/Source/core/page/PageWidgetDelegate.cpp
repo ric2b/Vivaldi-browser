@@ -34,10 +34,10 @@
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/input/EventHandler.h"
-#include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/page/AutoscrollController.h"
 #include "core/page/Page.h"
 #include "core/paint/TransformRecorder.h"
+#include "core/paint/compositing/PaintLayerCompositor.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/paint/ClipRecorder.h"
 #include "platform/graphics/paint/CullRect.h"
@@ -260,11 +260,11 @@ void PageWidgetEventHandler::HandleMouseUp(LocalFrame& main_frame,
 }
 
 WebInputEventResult PageWidgetEventHandler::HandleMouseWheel(
-    LocalFrame& main_frame,
+    LocalFrame& frame,
     const WebMouseWheelEvent& event) {
   WebMouseWheelEvent transformed_event =
-      TransformWebMouseWheelEvent(main_frame.View(), event);
-  return main_frame.GetEventHandler().HandleWheelEvent(transformed_event);
+      TransformWebMouseWheelEvent(frame.View(), event);
+  return frame.GetEventHandler().HandleWheelEvent(transformed_event);
 }
 
 WebInputEventResult PageWidgetEventHandler::HandleTouchEvent(

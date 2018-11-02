@@ -52,6 +52,7 @@ class LoginHandlerAndroid : public LoginHandler {
         web_contents);
 
     if (vr::VrTabHelper::IsInVr(web_contents)) {
+      vr::VrTabHelper::UISuppressed(vr::UiSuppressedElement::kHttpAuth);
       CancelAuth();
       return;
     }
@@ -64,8 +65,7 @@ class LoginHandlerAndroid : public LoginHandler {
       chrome_http_auth_handler_->Init();
       chrome_http_auth_handler_->SetObserver(this);
       chrome_http_auth_handler_->ShowDialog(
-          view_helper->GetViewAndroid()
-          ->GetWindowAndroid()->GetJavaObject().obj());
+          view_helper->GetViewAndroid()->GetWindowAndroid()->GetJavaObject());
 
       if (login_model_data)
         SetModel(*login_model_data);

@@ -46,6 +46,7 @@
 #include "public/platform/WebApplicationCacheHost.h"
 #include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebURLLoader.h"
+#include "public/platform/WebURLRequest.h"
 
 namespace blink {
 
@@ -71,7 +72,16 @@ class PLATFORM_EXPORT FetchContext
   WTF_MAKE_NONCOPYABLE(FetchContext);
 
  public:
-  enum LogMessageType { kLogErrorMessage, kLogWarningMessage };
+  // This enum corresponds to blink::MessageSource. We have this not to
+  // introduce any dependency to core/.
+  //
+  // Currently only kJSMessageSource is used, but not to impress readers that
+  // AddConsoleMessage() call from FetchContext() should always use it, which is
+  // not true, we ask users of the Add.*ConsoleMessage() methods to explicitly
+  // specify the MessageSource to use.
+  //
+  // Extend this when needed.
+  enum LogSource { kJSSource };
 
   static FetchContext& NullInstance();
 
@@ -154,23 +164,16 @@ class PLATFORM_EXPORT FetchContext
       const KURL&,
       const ResourceLoaderOptions&,
       SecurityViolationReportingPolicy,
-      FetchParameters::OriginRestriction) const {
+      FetchParameters::OriginRestriction,
+      ResourceRequest::RedirectStatus) const {
     return ResourceRequestBlockedReason::kOther;
   }
-  virtual ResourceRequestBlockedReason CanFollowRedirect(
-      Resource::Type,
-      const ResourceRequest&,
+  virtual ResourceRequestBlockedReason CheckCSPForRequest(
+      WebURLRequest::RequestContext,
       const KURL&,
       const ResourceLoaderOptions&,
       SecurityViolationReportingPolicy,
-      FetchParameters::OriginRestriction) const {
-    return ResourceRequestBlockedReason::kOther;
-  }
-  virtual ResourceRequestBlockedReason AllowResponse(
-      Resource::Type,
-      const ResourceRequest&,
-      const KURL&,
-      const ResourceLoaderOptions&) const {
+      ResourceRequest::RedirectStatus) const {
     return ResourceRequestBlockedReason::kOther;
   }
 
@@ -188,19 +191,18 @@ class PLATFORM_EXPORT FetchContext
     return false;
   }
   virtual void SendImagePing(const KURL&);
-  virtual void AddConsoleMessage(const String&,
-                                 LogMessageType = kLogErrorMessage) const;
+
+  virtual void AddWarningConsoleMessage(const String&, LogSource) const;
+  virtual void AddErrorConsoleMessage(const String&, LogSource) const;
+
   virtual SecurityOrigin* GetSecurityOrigin() const { return nullptr; }
 
   // Populates the ResourceRequest using the given values and information
   // stored in the FetchContext implementation. Used by ResourceFetcher to
   // prepare a ResourceRequest instance at the start of resource loading.
-  virtual void PopulateResourceRequest(const KURL&,
-                                       Resource::Type,
+  virtual void PopulateResourceRequest(Resource::Type,
                                        const ClientHintsPreferences&,
                                        const FetchParameters::ResourceWidth&,
-                                       const ResourceLoaderOptions&,
-                                       SecurityViolationReportingPolicy,
                                        ResourceRequest&);
   // Sets the first party for cookies and requestor origin using information
   // stored in the FetchContext implementation.

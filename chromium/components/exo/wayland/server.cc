@@ -29,8 +29,10 @@
 #include <algorithm>
 #include <cstdlib>
 #include <iterator>
+#include <map>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/window_properties.h"
@@ -38,12 +40,14 @@
 #include "ash/shell.h"
 #include "base/bind.h"
 #include "base/cancelable_callback.h"
+#include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/free_deleter.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread.h"
@@ -89,6 +93,7 @@
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
 #include "ui/wm/core/coordinate_conversion.h"
+#include "ui/wm/core/window_animations.h"
 
 #if defined(USE_OZONE)
 #include <drm_fourcc.h>
@@ -110,6 +115,11 @@ DECLARE_UI_CLASS_PROPERTY_TYPE(wl_resource*);
 
 namespace exo {
 namespace wayland {
+namespace switches {
+
+constexpr char kForceRemoteShellScaleSwitch[] = "force-remote-shell-scale";
+}
+
 namespace {
 
 // We don't send configure immediately after tablet mode switch
@@ -145,6 +155,20 @@ void SetImplementation(wl_resource* resource,
                        std::unique_ptr<T> user_data) {
   wl_resource_set_implementation(resource, implementation, user_data.release(),
                                  DestroyUserData<T>);
+}
+
+// Returns the scale factor to be used by remote shell clients.
+double GetDefaultDeviceScaleFactor() {
+  // A flag used by VM to emulate a device scale for a partiular board.
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(switches::kForceRemoteShellScaleSwitch)) {
+    std::string value = command_line->GetSwitchValueASCII(
+        switches::kForceRemoteShellScaleSwitch);
+    double scale = 1.0;
+    if (base::StringToDouble(value, &scale))
+      return std::max(1.0, scale);
+  }
+  return WMHelper::GetInstance()->GetDefaultDeviceScaleFactor();
 }
 
 // Convert a timestamp to a time value that can be used when interfacing
@@ -333,8 +357,36 @@ void surface_commit(wl_client* client, wl_resource* resource) {
 
 void surface_set_buffer_transform(wl_client* client,
                                   wl_resource* resource,
-                                  int transform) {
-  NOTIMPLEMENTED();
+                                  int32_t transform) {
+  Transform buffer_transform;
+  switch (transform) {
+    case WL_OUTPUT_TRANSFORM_NORMAL:
+      buffer_transform = Transform::NORMAL;
+      break;
+    case WL_OUTPUT_TRANSFORM_90:
+      buffer_transform = Transform::ROTATE_90;
+      break;
+    case WL_OUTPUT_TRANSFORM_180:
+      buffer_transform = Transform::ROTATE_180;
+      break;
+    case WL_OUTPUT_TRANSFORM_270:
+      buffer_transform = Transform::ROTATE_270;
+      break;
+    case WL_OUTPUT_TRANSFORM_FLIPPED:
+    case WL_OUTPUT_TRANSFORM_FLIPPED_90:
+    case WL_OUTPUT_TRANSFORM_FLIPPED_180:
+    case WL_OUTPUT_TRANSFORM_FLIPPED_270:
+      NOTIMPLEMENTED();
+      return;
+    default:
+      wl_resource_post_error(resource, WL_SURFACE_ERROR_INVALID_TRANSFORM,
+                             "buffer transform must be one of the values from "
+                             "the wl_output.transform enum ('%d' specified)",
+                             transform);
+      return;
+  }
+
+  GetUserDataAs<Surface>(resource)->SetBufferTransform(buffer_transform);
 }
 
 void surface_set_buffer_scale(wl_client* client,
@@ -1223,16 +1275,21 @@ void bind_shell(wl_client* client, void* data, uint32_t version, uint32_t id) {
 ////////////////////////////////////////////////////////////////////////////////
 // wl_output_interface:
 
+// Returns the transform that a compositor will apply to a surface to
+// compensate for the rotation of an output device.
 wl_output_transform OutputTransform(display::Display::Rotation rotation) {
+  // Note: |rotation| describes the counter clockwise rotation that a
+  // display's output is currently adjusted for, which is the inverse
+  // of what we need to return.
   switch (rotation) {
     case display::Display::ROTATE_0:
       return WL_OUTPUT_TRANSFORM_NORMAL;
     case display::Display::ROTATE_90:
-      return WL_OUTPUT_TRANSFORM_90;
+      return WL_OUTPUT_TRANSFORM_270;
     case display::Display::ROTATE_180:
       return WL_OUTPUT_TRANSFORM_180;
     case display::Display::ROTATE_270:
-      return WL_OUTPUT_TRANSFORM_270;
+      return WL_OUTPUT_TRANSFORM_90;
   }
   NOTREACHED();
   return WL_OUTPUT_TRANSFORM_NORMAL;
@@ -1240,7 +1297,7 @@ wl_output_transform OutputTransform(display::Display::Rotation rotation) {
 
 class WaylandPrimaryDisplayObserver : public display::DisplayObserver {
  public:
-  WaylandPrimaryDisplayObserver(wl_resource* output_resource)
+  explicit WaylandPrimaryDisplayObserver(wl_resource* output_resource)
       : output_resource_(output_resource) {
     display::Screen::GetScreen()->AddObserver(this);
     SendDisplayMetrics();
@@ -2182,8 +2239,12 @@ void remote_surface_set_window_type(wl_client* client,
                                     uint32_t type) {
   if (type == ZCR_REMOTE_SURFACE_V1_WINDOW_TYPE_SYSTEM_UI) {
     auto* widget = GetUserDataAs<ShellSurface>(resource)->GetWidget();
-    if (widget)
+    if (widget) {
       widget->GetNativeWindow()->SetProperty(ash::kShowInOverviewKey, false);
+
+      wm::SetWindowVisibilityAnimationType(
+          widget->GetNativeWindow(), wm::WINDOW_VISIBILITY_ANIMATION_TYPE_FADE);
+    }
   }
 }
 
@@ -2247,6 +2308,16 @@ class WaylandRemoteShell : public WMHelper::TabletModeObserver,
                        ? ZCR_REMOTE_SHELL_V1_LAYOUT_MODE_TABLET
                        : ZCR_REMOTE_SHELL_V1_LAYOUT_MODE_WINDOWED;
 
+    if (wl_resource_get_version(remote_shell_resource_) >= 8) {
+      double scale_factor = GetDefaultDeviceScaleFactor();
+      // Send using 16.16 fixed point.
+      const int kDecimalBits = 24;
+      int32_t fixed_scale =
+          static_cast<int32_t>(scale_factor * (1 << kDecimalBits));
+      zcr_remote_shell_v1_send_default_device_scale_factor(
+          remote_shell_resource_, fixed_scale);
+    }
+
     SendDisplayMetrics();
     SendActivated(helper->GetActiveWindow(), nullptr);
   }
@@ -2261,9 +2332,12 @@ class WaylandRemoteShell : public WMHelper::TabletModeObserver,
     return wl_resource_get_version(remote_shell_resource_) >= 5;
   }
 
-  std::unique_ptr<ShellSurface> CreateShellSurface(Surface* surface,
-                                                   int container) {
-    return display_->CreateRemoteShellSurface(surface, container);
+  std::unique_ptr<ShellSurface> CreateShellSurface(
+      Surface* surface,
+      int container,
+      double default_device_scale_factor) {
+    return display_->CreateRemoteShellSurface(surface, container,
+                                              default_device_scale_factor);
   }
 
   std::unique_ptr<NotificationSurface> CreateNotificationSurface(
@@ -2325,6 +2399,22 @@ class WaylandRemoteShell : public WMHelper::TabletModeObserver,
         base::TimeDelta::FromMilliseconds(delay_ms));
   }
 
+  // Returns the transform that a display's output is currently adjusted for.
+  wl_output_transform DisplayTransform(display::Display::Rotation rotation) {
+    switch (rotation) {
+      case display::Display::ROTATE_0:
+        return WL_OUTPUT_TRANSFORM_NORMAL;
+      case display::Display::ROTATE_90:
+        return WL_OUTPUT_TRANSFORM_90;
+      case display::Display::ROTATE_180:
+        return WL_OUTPUT_TRANSFORM_180;
+      case display::Display::ROTATE_270:
+        return WL_OUTPUT_TRANSFORM_270;
+    }
+    NOTREACHED();
+    return WL_OUTPUT_TRANSFORM_NORMAL;
+  }
+
   void SendDisplayMetrics() {
     if (!needs_send_display_metrics_)
       return;
@@ -2342,14 +2432,12 @@ class WaylandRemoteShell : public WMHelper::TabletModeObserver,
                 .device_scale_factor();
 
         zcr_remote_shell_v1_send_workspace(
-            remote_shell_resource_,
-            static_cast<uint32_t>(display.id() >> 32),
-            static_cast<uint32_t>(display.id()),
-            bounds.x(), bounds.y(), bounds.width(), bounds.height(),
-            insets.left(), insets.top(), insets.right(), insets.bottom(),
-            OutputTransform(display.rotation()),
-            wl_fixed_from_double(device_scale_factor),
-            display.IsInternal());
+            remote_shell_resource_, static_cast<uint32_t>(display.id() >> 32),
+            static_cast<uint32_t>(display.id()), bounds.x(), bounds.y(),
+            bounds.width(), bounds.height(), insets.left(), insets.top(),
+            insets.right(), insets.bottom(),
+            DisplayTransform(display.rotation()),
+            wl_fixed_from_double(device_scale_factor), display.IsInternal());
       }
 
       zcr_remote_shell_v1_send_configure(remote_shell_resource_, layout_mode_);
@@ -2359,10 +2447,9 @@ class WaylandRemoteShell : public WMHelper::TabletModeObserver,
     const gfx::Insets& insets = primary_display.GetWorkAreaInsets();
 
     zcr_remote_shell_v1_send_configuration_changed(
-        remote_shell_resource_,
-        primary_display.size().width(),
+        remote_shell_resource_, primary_display.size().width(),
         primary_display.size().height(),
-        OutputTransform(primary_display.rotation()),
+        DisplayTransform(primary_display.rotation()),
         wl_fixed_from_double(primary_display.device_scale_factor()),
         insets.left(), insets.top(), insets.right(), insets.bottom(),
         layout_mode_);
@@ -2495,8 +2582,13 @@ void remote_shell_get_remote_surface(wl_client* client,
                                      wl_resource* surface,
                                      uint32_t container) {
   WaylandRemoteShell* shell = GetUserDataAs<WaylandRemoteShell>(resource);
+  double default_scale_factor = wl_resource_get_version(resource) >= 8
+                                    ? GetDefaultDeviceScaleFactor()
+                                    : 1.0;
+
   std::unique_ptr<ShellSurface> shell_surface = shell->CreateShellSurface(
-      GetUserDataAs<Surface>(surface), RemoteSurfaceContainer(container));
+      GetUserDataAs<Surface>(surface), RemoteSurfaceContainer(container),
+      default_scale_factor);
   if (!shell_surface) {
     wl_resource_post_error(resource, ZCR_REMOTE_SHELL_V1_ERROR_ROLE,
                            "surface has already been assigned a role");
@@ -2556,7 +2648,7 @@ const struct zcr_remote_shell_v1_interface remote_shell_implementation = {
     remote_shell_destroy, remote_shell_get_remote_surface,
     remote_shell_get_notification_surface};
 
-const uint32_t remote_shell_version = 7;
+const uint32_t remote_shell_version = 8;
 
 void bind_remote_shell(wl_client* client,
                        void* data,
@@ -3078,7 +3170,7 @@ const struct wl_pointer_interface pointer_implementation = {pointer_set_cursor,
 class WaylandKeyboardDelegate
     : public KeyboardDelegate,
       public KeyboardObserver
-#if defined(USE_OZONE) && defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS)
     ,
       public chromeos::input_method::ImeKeyboard::Observer
 #endif
@@ -3087,7 +3179,7 @@ class WaylandKeyboardDelegate
   explicit WaylandKeyboardDelegate(wl_resource* keyboard_resource)
       : keyboard_resource_(keyboard_resource),
         xkb_context_(xkb_context_new(XKB_CONTEXT_NO_FLAGS)) {
-#if defined(USE_OZONE) && defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS)
     chromeos::input_method::ImeKeyboard* keyboard =
         chromeos::input_method::InputMethodManager::Get()->GetImeKeyboard();
     if (keyboard) {
@@ -3098,7 +3190,7 @@ class WaylandKeyboardDelegate
     SendLayout(nullptr);
 #endif
   }
-#if defined(USE_OZONE) && defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS)
   ~WaylandKeyboardDelegate() override {
     chromeos::input_method::ImeKeyboard* keyboard =
         chromeos::input_method::InputMethodManager::Get()->GetImeKeyboard();
@@ -3164,7 +3256,7 @@ class WaylandKeyboardDelegate
     wl_client_flush(client());
   }
 
-#if defined(USE_OZONE) && defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS)
   // Overridden from input_method::ImeKeyboard::Observer:
   void OnCapsLockChanged(bool enabled) override {}
   void OnLayoutChanging(const std::string& layout_name) override {
@@ -3209,8 +3301,7 @@ class WaylandKeyboardDelegate
     return xkb_modifiers;
   }
 
-
-#if defined(USE_OZONE) && defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS)
   // Send the named keyboard layout to the client.
   void SendNamedLayout(const std::string& layout_name) {
     std::string layout_id, layout_variant;
@@ -4332,7 +4423,8 @@ void bind_stylus_tools(wl_client* client,
 
 class WaylandExtendedKeyboardImpl : public KeyboardObserver {
  public:
-  WaylandExtendedKeyboardImpl(Keyboard* keyboard) : keyboard_(keyboard) {
+  explicit WaylandExtendedKeyboardImpl(Keyboard* keyboard)
+      : keyboard_(keyboard) {
     keyboard_->AddObserver(this);
     keyboard_->SetNeedKeyboardKeyAcks(true);
   }

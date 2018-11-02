@@ -3,12 +3,13 @@
 <translationbundle lang="uk">
 <translation id="1012876632442809908">Пристрій із портом USB типу C (на передній панелі)</translation>
 <translation id="1013923882670373915">Пристрою Bluetooth "<ph name="DEVICE_NAME" />" потрібен дозвіл на підключення. Введіть на пристрої цей PIN-код: <ph name="PINCODE" /></translation>
-<translation id="1032891413405719768">Акумулятор стилуса розряджений</translation>
+<translation id="1032891413405719768">Низький заряд акумулятора стилуса</translation>
 <translation id="112308213915226829">Автоматично ховати полицю</translation>
 <translation id="1153356358378277386">Підключені пристрої</translation>
 <translation id="1195412055398077112">облямівка екрана</translation>
 <translation id="1247372569136754018">Мікрофон (внутрішній)</translation>
 <translation id="1252999807265626933">Джерело заряджання: <ph name="POWER_SOURCE" /></translation>
+<translation id="1267032506238418139">Зміна комбінацій клавіш</translation>
 <translation id="1270290102613614947">Екранну клавіатуру вимкнено</translation>
 <translation id="1272079795634619415">Зупинити</translation>
 <translation id="1279938420744323401"><ph name="DISPLAY_NAME" /> (<ph name="ANNOTATION" />)</translation>
@@ -22,7 +23,6 @@
 <translation id="15373452373711364">Великий курсор миші</translation>
 <translation id="1550523713251050646">Натисніть, щоб побачити більше опцій</translation>
 <translation id="1621499497873603021">До розрядження акумулятора залишилося <ph name="TIME_LEFT" /></translation>
-<translation id="164969095109328410">Пристрій Chrome</translation>
 <translation id="1677472565718498478">Залишилося <ph name="TIME" /></translation>
 <translation id="1698760176351776263">Адреса IPv6: <ph name="ADDRESS" /></translation>
 <translation id="1734367976349034509">Цим пристроєм керує адміністратор підприємства</translation>
@@ -92,6 +92,7 @@
 <translation id="315116470104423982">Мобільне передавання даних</translation>
 <translation id="3236488194889173876">Немає мобільних мереж</translation>
 <translation id="3294437725009624529">Гість</translation>
+<translation id="332587331255250389">Замініть акумулятор</translation>
 <translation id="3364721542077212959">Інструменти стилуса</translation>
 <translation id="3368922792935385530">Підключено</translation>
 <translation id="3371140690572404006">пристрій, під’єднаний до порту USB-C (праворуч на передній панелі)</translation>
@@ -110,6 +111,7 @@
 <translation id="3712407551474845318">Зробити знімок певної області</translation>
 <translation id="371370241367527062">Мікрофон на передній панелі</translation>
 <translation id="3742055079367172538">Знімок екрана зроблено</translation>
+<translation id="3771549900096082774">Режим високого контрасту</translation>
 <translation id="3775358506042162758">Паралельно можна входити не більше ніж у три облікові записи.</translation>
 <translation id="3783640748446814672">alt</translation>
 <translation id="3784455785234192852">Заблокувати</translation>
@@ -142,14 +144,12 @@
 <translation id="4729904664295161097">Помічник доступний лише в основному профілі.</translation>
 <translation id="479989351350248267">пошук</translation>
 <translation id="4804818685124855865">Від'єднатися</translation>
-<translation id="4821830640883629383">Зарядіть або замініть акумулятори.</translation>
 <translation id="4849058404725798627">Підсвічувати об’єкт, вибраний на клавіатурі</translation>
 <translation id="4872237917498892622">Alt+клавіша пошуку або Shift</translation>
 <translation id="4895488851634969361">Акумулятор заряджений.</translation>
 <translation id="4905614135390995787">Комбінація клавіш для керування режимом високого контрасту змінилася. Тепер це <ph name="NEW_SHORTCUT" />, а не <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="4918086044614829423">Прийняти</translation>
 <translation id="4961318399572185831">Трансляція екрана</translation>
-<translation id="5011233892417813670">Chromebook</translation>
 <translation id="5168181903108465623">Доступні пристрої для трансляції</translation>
 <translation id="5170568018924773124">Показати в папці</translation>
 <translation id="5207949376430453814">Підсвічувати місце введення тексту</translation>
@@ -175,7 +175,6 @@
 <translation id="5901316534475909376">Shift+Esc</translation>
 <translation id="5916664084637901428">Увімкнути</translation>
 <translation id="5927132638760172455">Трансляція на невідомий приймач</translation>
-<translation id="5932901536148835538">Chromebit</translation>
 <translation id="5947494881799873997">Повернути</translation>
 <translation id="595202126637698455">Відстеження ефективності ввімкнено</translation>
 <translation id="5957083217255311415">Мобільне передавання даних вимкнено.</translation>
@@ -218,7 +217,6 @@
 <translation id="683971173229319003">Search (Пошук)+L</translation>
 <translation id="6857811139397017780">Активувати <ph name="NETWORKSERVICE" /></translation>
 <translation id="6911468394164995108">Під’єднатися до іншої...</translation>
-<translation id="6915678159055240887">Chromebox</translation>
 <translation id="6981982820502123353">Доступність</translation>
 <translation id="7029814467594812963">Завершити сеанс</translation>
 <translation id="7034339000180558234">Вкладка "<ph name="TAB_NAME" />" транслюється на пристрій "<ph name="RECEIVER_NAME" />"</translation>
@@ -226,7 +224,6 @@
 <translation id="7066646422045619941">Ваш адміністратор вимкнув цю мережу.</translation>
 <translation id="7067196344162293536">Автоматичне обертання</translation>
 <translation id="7098389117866926363">Пристрій, під’єднаний до порту USB-C (ліворуч на задній панелі)</translation>
-<translation id="714034171374937760">Chromebase</translation>
 <translation id="7165278925115064263">Alt+Shift+K</translation>
 <translation id="7168224885072002358">Попередня роздільна здатність повернеться через <ph name="TIMEOUT_SECONDS" /></translation>
 <translation id="7246339268451149667">Увімкнути розблокування відбитком пальця?</translation>

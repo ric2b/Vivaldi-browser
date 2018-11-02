@@ -20,11 +20,9 @@ class ShowWallpaperAnimationObserver : public ui::ImplicitAnimationObserver,
                                        public views::WidgetObserver {
  public:
   ShowWallpaperAnimationObserver(RootWindowController* root_window_controller,
-                                 views::Widget* wallpaper_widget,
-                                 bool is_initial_animation)
+                                 views::Widget* wallpaper_widget)
       : root_window_controller_(root_window_controller),
-        wallpaper_widget_(wallpaper_widget),
-        is_initial_animation_(is_initial_animation) {
+        wallpaper_widget_(wallpaper_widget) {
     DCHECK(wallpaper_widget_);
     wallpaper_widget_->AddObserver(this);
   }
@@ -37,11 +35,6 @@ class ShowWallpaperAnimationObserver : public ui::ImplicitAnimationObserver,
 
  private:
   // Overridden from ui::ImplicitAnimationObserver:
-  void OnImplicitAnimationsScheduled() override {
-    if (is_initial_animation_)
-      root_window_controller_->OnInitialWallpaperAnimationStarted();
-  }
-
   void OnImplicitAnimationsCompleted() override {
     root_window_controller_->OnWallpaperAnimationFinished(wallpaper_widget_);
     delete this;
@@ -53,16 +46,15 @@ class ShowWallpaperAnimationObserver : public ui::ImplicitAnimationObserver,
   RootWindowController* root_window_controller_;
   views::Widget* wallpaper_widget_;
 
-  // Is this object observing the initial brightness/grayscale animation?
-  const bool is_initial_animation_;
-
   DISALLOW_COPY_AND_ASSIGN(ShowWallpaperAnimationObserver);
 };
 
 }  // namespace
 
 WallpaperWidgetController::WallpaperWidgetController(views::Widget* widget)
-    : widget_(widget), widget_parent_(widget->GetNativeWindow()->parent()) {
+    : widget_(widget),
+      widget_parent_(widget->GetNativeWindow()->parent()),
+      has_blur_cache_(false) {
   DCHECK(widget_);
   widget_->AddObserver(this);
   widget_parent_->AddObserver(this);
@@ -70,8 +62,8 @@ WallpaperWidgetController::WallpaperWidgetController(views::Widget* widget)
 
 WallpaperWidgetController::~WallpaperWidgetController() {
   if (widget_) {
-    if (widget_->GetLayer()->layer_blur() > 0.0f)
-      widget_parent_->layer()->SetCacheRenderSurface(false);
+    if (has_blur_cache_)
+      widget_parent_->layer()->RemoveCacheRenderSurfaceRequest();
     views::Widget* widget = widget_;
     RemoveObservers();
     widget->CloseNow();
@@ -91,14 +83,16 @@ bool WallpaperWidgetController::Reparent(aura::Window* root_window,
                                          int container) {
   if (widget_) {
     // Ensures the cache render surface of the old parent is unset.
-    widget_parent_->layer()->SetCacheRenderSurface(false);
+    if (has_blur_cache_)
+      widget_parent_->layer()->RemoveCacheRenderSurfaceRequest();
     widget_parent_->RemoveObserver(this);
     aura::Window* window = widget_->GetNativeWindow();
     root_window->GetChildById(container)->AddChild(window);
     widget_parent_ = widget_->GetNativeWindow()->parent();
     widget_parent_->AddObserver(this);
-    if (widget_->GetLayer()->layer_blur() > 0.0f)
-      widget_parent_->layer()->SetCacheRenderSurface(true);
+    has_blur_cache_ = widget_->GetLayer()->layer_blur() > 0.0f;
+    if (has_blur_cache_)
+      widget_parent_->layer()->AddCacheRenderSurfaceRequest();
     return true;
   }
   // Nothing to reparent.
@@ -123,9 +117,9 @@ void WallpaperWidgetController::StartAnimating(
   if (widget_) {
     ui::ScopedLayerAnimationSettings settings(
         widget_->GetLayer()->GetAnimator());
-    settings.AddObserver(new ShowWallpaperAnimationObserver(
-        root_window_controller, widget_,
-        Shell::Get()->wallpaper_delegate()->ShouldShowInitialAnimation()));
+    // ShowWallpaperAnimationObserver deletes itself when animation is done.
+    settings.AddObserver(
+        new ShowWallpaperAnimationObserver(root_window_controller, widget_));
     // When |widget_| shows, AnimateShowWindowCommon() is called to do the
     // animation. Sets transition duration to 0 to avoid animating to the
     // show animation's initial values.
@@ -137,7 +131,14 @@ void WallpaperWidgetController::StartAnimating(
 void WallpaperWidgetController::SetWallpaperBlur(float blur_sigma) {
   widget_->GetLayer()->SetLayerBlur(blur_sigma);
   // Force the use of cache render surface to make blur more efficient.
-  widget_parent_->layer()->SetCacheRenderSurface(blur_sigma > 0.0f);
+  bool has_blur_cache = blur_sigma > 0.0f;
+  if (has_blur_cache != has_blur_cache_) {
+    if (has_blur_cache)
+      widget_parent_->layer()->AddCacheRenderSurfaceRequest();
+    else
+      widget_parent_->layer()->RemoveCacheRenderSurfaceRequest();
+    has_blur_cache_ = has_blur_cache;
+  }
 }
 
 AnimatingWallpaperWidgetController::AnimatingWallpaperWidgetController(

@@ -4,8 +4,15 @@
 
 package org.chromium.android_webview.test;
 
+import android.support.test.InstrumentationRegistry;
 import android.util.Pair;
-import android.webkit.ValueCallback;
+
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.runner.RunWith;
 
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwQuotaManagerBridge;
@@ -17,63 +24,55 @@ import org.chromium.net.test.util.TestWebServer;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Callable;
 
 /**
  * Tests for the AwQuotaManagerBridge.
  */
-public class AwQuotaManagerBridgeTest extends AwTestBase {
+@RunWith(AwJUnit4ClassRunner.class)
+public class AwQuotaManagerBridgeTest {
+    @Rule
+    public AwActivityTestRule mActivityTestRule = new AwActivityTestRule();
+
     private TestAwContentsClient mContentsClient;
     private AwTestContainerView mTestView;
     private AwContents mAwContents;
     private TestWebServer mWebServer;
     private String mOrigin;
 
-    @Override
+    @Before
     public void setUp() throws Exception {
-        super.setUp();
         mContentsClient = new TestAwContentsClient();
-        mTestView = createAwTestContainerViewOnMainSync(mContentsClient);
+        mTestView = mActivityTestRule.createAwTestContainerViewOnMainSync(mContentsClient);
         mAwContents = mTestView.getAwContents();
         mWebServer = TestWebServer.start();
         mOrigin = mWebServer.getBaseUrl();
 
-        AwSettings settings = getAwSettingsOnUiThread(mAwContents);
+        AwSettings settings = mActivityTestRule.getAwSettingsOnUiThread(mAwContents);
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setAppCacheEnabled(true);
         settings.setAppCachePath("whatever");  // Enables AppCache.
     }
 
-    @Override
+    @After
     public void tearDown() throws Exception {
         deleteAllData();
         if (mWebServer != null) {
             mWebServer.shutdown();
         }
-        super.tearDown();
     }
 
     private void deleteAllData() throws Exception {
         final AwQuotaManagerBridge bridge =
-                AwQuotaManagerBridgeTestUtil.getQuotaManagerBridge(this);
-        getInstrumentation().runOnMainSync(new Runnable() {
-            @Override
-            public void run() {
-                bridge.deleteAllData();
-            }
-        });
+                AwQuotaManagerBridgeTestUtil.getQuotaManagerBridge(mActivityTestRule);
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> bridge.deleteAllData());
     }
 
     private void deleteOrigin(final String origin) throws Exception {
         final AwQuotaManagerBridge bridge =
-                AwQuotaManagerBridgeTestUtil.getQuotaManagerBridge(this);
-        getInstrumentation().runOnMainSync(new Runnable() {
-            @Override
-            public void run() {
-                bridge.deleteOrigin(origin);
-            }
-        });
+                AwQuotaManagerBridgeTestUtil.getQuotaManagerBridge(mActivityTestRule);
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(
+                () -> bridge.deleteOrigin(origin));
     }
 
     private static class LongValueCallbackHelper extends CallbackHelper {
@@ -90,24 +89,15 @@ public class AwQuotaManagerBridgeTest extends AwTestBase {
         }
     }
 
-    private long getQuotaForOrigin(final String origin) throws Exception {
+    private long getQuotaForOrigin() throws Exception {
         final LongValueCallbackHelper callbackHelper = new LongValueCallbackHelper();
         final AwQuotaManagerBridge bridge =
-                AwQuotaManagerBridgeTestUtil.getQuotaManagerBridge(this);
+                AwQuotaManagerBridgeTestUtil.getQuotaManagerBridge(mActivityTestRule);
 
         int callCount = callbackHelper.getCallCount();
-        getInstrumentation().runOnMainSync(new Runnable() {
-            @Override
-            public void run() {
-                bridge.getQuotaForOrigin("foo.com",
-                        new ValueCallback<Long>() {
-                            @Override
-                            public void onReceiveValue(Long quota) {
-                                callbackHelper.notifyCalled(quota);
-                            }
-                        });
-            }
-        });
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(
+                () -> bridge.getQuotaForOrigin("foo.com",
+                        quota -> callbackHelper.notifyCalled(quota)));
         callbackHelper.waitForCallback(callCount);
 
         return callbackHelper.getValue();
@@ -116,21 +106,12 @@ public class AwQuotaManagerBridgeTest extends AwTestBase {
     private long getUsageForOrigin(final String origin) throws Exception {
         final LongValueCallbackHelper callbackHelper = new LongValueCallbackHelper();
         final AwQuotaManagerBridge bridge =
-                AwQuotaManagerBridgeTestUtil.getQuotaManagerBridge(this);
+                AwQuotaManagerBridgeTestUtil.getQuotaManagerBridge(mActivityTestRule);
 
         int callCount = callbackHelper.getCallCount();
-        getInstrumentation().runOnMainSync(new Runnable() {
-            @Override
-            public void run() {
-                bridge.getUsageForOrigin(origin,
-                        new ValueCallback<Long>() {
-                            @Override
-                            public void onReceiveValue(Long usage) {
-                                callbackHelper.notifyCalled(usage);
-                            }
-                        });
-            }
-        });
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(
+                () -> bridge.getUsageForOrigin(origin,
+                        usage -> callbackHelper.notifyCalled(usage)));
         callbackHelper.waitForCallback(callCount);
 
         return callbackHelper.getValue();
@@ -152,84 +133,66 @@ public class AwQuotaManagerBridgeTest extends AwTestBase {
                 + "<head><script src=\"" + cachedFilePath + "\"></script></head></html>";
         String url = mWebServer.setResponse(pagePath, pageContents, null);
 
-        loadUrlSync(mAwContents, mContentsClient.getOnPageFinishedHelper(), url);
-        executeJavaScriptAndWaitForResult(mAwContents, mContentsClient,
-                "window.applicationCache.update();");
+        mActivityTestRule.loadUrlSync(mAwContents, mContentsClient.getOnPageFinishedHelper(), url);
+        mActivityTestRule.executeJavaScriptAndWaitForResult(
+                mAwContents, mContentsClient, "window.applicationCache.update();");
     }
 
     /*
     @LargeTest
     @Feature({"AndroidWebView", "WebStore"})
     */
+    @Test
     @DisabledTest(message = "crbug.com/609977")
     public void testDeleteAllWithAppCache() throws Exception {
         final long initialUsage = getUsageForOrigin(mOrigin);
 
         useAppCache();
-        pollInstrumentationThread(new Callable<Boolean>() {
-            @Override
-            public Boolean call() throws Exception {
-                return getUsageForOrigin(mOrigin) > initialUsage;
-            }
-        });
+        AwActivityTestRule.pollInstrumentationThread(
+                () -> getUsageForOrigin(mOrigin) > initialUsage);
 
         deleteAllData();
-        pollInstrumentationThread(new Callable<Boolean>() {
-            @Override
-            public Boolean call() throws Exception {
-                return getUsageForOrigin(mOrigin) == 0;
-            }
-        });
+        AwActivityTestRule.pollInstrumentationThread(() -> getUsageForOrigin(mOrigin) == 0);
     }
 
     /*
     @LargeTest
     @Feature({"AndroidWebView", "WebStore"})
     */
+    @Test
     @DisabledTest(message = "crbug.com/609977")
     public void testDeleteOriginWithAppCache() throws Exception {
         final long initialUsage = getUsageForOrigin(mOrigin);
 
         useAppCache();
-        pollInstrumentationThread(new Callable<Boolean>() {
-            @Override
-            public Boolean call() throws Exception {
-                return getUsageForOrigin(mOrigin) > initialUsage;
-            }
-        });
+        AwActivityTestRule.pollInstrumentationThread(
+                () -> getUsageForOrigin(mOrigin) > initialUsage);
 
         deleteOrigin(mOrigin);
-        pollInstrumentationThread(new Callable<Boolean>() {
-            @Override
-            public Boolean call() throws Exception {
-                return getUsageForOrigin(mOrigin) == 0;
-            }
-        });
+        AwActivityTestRule.pollInstrumentationThread(() -> getUsageForOrigin(mOrigin) == 0);
     }
 
     /*
     @LargeTest
     @Feature({"AndroidWebView", "WebStore"})
     */
+    @Test
     @DisabledTest(message = "crbug.com/609977")
     public void testGetResultsMatch() throws Exception {
         useAppCache();
 
-        pollInstrumentationThread(new Callable<Boolean>() {
-            @Override
-            public Boolean call() throws Exception {
-                return AwQuotaManagerBridgeTestUtil.getOrigins(
-                            AwQuotaManagerBridgeTest.this).mOrigins.length > 0;
-            }
-        });
+        AwActivityTestRule.pollInstrumentationThread(() -> AwQuotaManagerBridgeTestUtil.getOrigins(
+                mActivityTestRule).mOrigins.length
+                > 0);
 
-        AwQuotaManagerBridge.Origins origins = AwQuotaManagerBridgeTestUtil.getOrigins(this);
-        assertEquals(origins.mOrigins.length, origins.mUsages.length);
-        assertEquals(origins.mOrigins.length, origins.mQuotas.length);
+        AwQuotaManagerBridge.Origins origins =
+                AwQuotaManagerBridgeTestUtil.getOrigins(mActivityTestRule);
+        Assert.assertEquals(origins.mOrigins.length, origins.mUsages.length);
+        Assert.assertEquals(origins.mOrigins.length, origins.mQuotas.length);
 
         for (int i = 0; i < origins.mOrigins.length; ++i) {
-            assertEquals(origins.mUsages[i], getUsageForOrigin(origins.mOrigins[i]));
-            assertEquals(origins.mQuotas[i], getQuotaForOrigin(origins.mOrigins[i]));
+            Assert.assertEquals(origins.mUsages[i], getUsageForOrigin(origins.mOrigins[i]));
+            Assert.assertEquals(origins.mQuotas[i], getQuotaForOrigin());
         }
     }
 }

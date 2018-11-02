@@ -16,6 +16,7 @@
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
+#include "base/observer_list.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_info_cache_observer.h"
@@ -48,7 +49,7 @@ class ProfileAttributesStorage {
 
   // Returns a vector containing one attributes entry per known profile. They
   // are not sorted in any particular order.
-  virtual std::vector<ProfileAttributesEntry*> GetAllProfilesAttributes() = 0;
+  std::vector<ProfileAttributesEntry*> GetAllProfilesAttributes();
   std::vector<ProfileAttributesEntry*> GetAllProfilesAttributesSortedByName();
 
   // Populates |entry| with the data for the profile at |path| and returns true
@@ -73,8 +74,8 @@ class ProfileAttributesStorage {
   // set of default icons.
   size_t ChooseAvatarIconIndexForNewProfile() const;
 
-  virtual void AddObserver(ProfileAttributesStorage::Observer* observer) = 0;
-  virtual void RemoveObserver(ProfileAttributesStorage::Observer* observer) = 0;
+  void AddObserver(Observer* observer);
+  void RemoveObserver(Observer* observer);
 
  protected:
   FRIEND_TEST_ALL_PREFIXES(ProfileInfoCacheTest, EntriesInAttributesStorage);
@@ -84,6 +85,8 @@ class ProfileAttributesStorage {
   mutable std::unordered_map<base::FilePath::StringType,
                              std::unique_ptr<ProfileAttributesEntry>>
       profile_attributes_entries_;
+
+  mutable base::ObserverList<Observer> observer_list_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ProfileAttributesStorage);

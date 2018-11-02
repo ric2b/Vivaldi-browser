@@ -11,6 +11,7 @@
 #include "base/callback.h"
 #include "base/feature_list.h"
 #include "base/macros.h"
+#include "components/security_state/core/insecure_input_event_data.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/cert/sct_status_flags.h"
 #include "net/cert/x509_certificate.h"
@@ -31,8 +32,8 @@ extern const base::Feature kHttpFormWarningFeature;
 
 // Describes the overall security state of the page.
 //
-// If you reorder, add, or delete values from this enum, you must also
-// update the UI icons in ToolbarModelImpl::GetIconForSecurityLevel.
+// If you change this enum, you may need to update the UI icons in
+// ToolbarModelImpl::GetVectorIcon and GetIconForSecurityState.
 //
 // A Java counterpart will be generated for this enum.
 // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.components.security_state
@@ -55,11 +56,10 @@ enum SecurityLevel {
   // HTTPS (non-EV) with valid cert.
   SECURE,
 
-  // HTTPS, but with an outdated protocol version.
-  SECURITY_WARNING,
-
   // HTTPS, but the certificate verification chain is anchored on a
   // certificate that was installed by the system administrator.
+  //
+  // Currently used only on ChromeOS.
   SECURE_WITH_POLICY_INSTALLED_CERT,
 
   // Attempted HTTPS and failed, page not authenticated, HTTPS with
@@ -87,6 +87,7 @@ enum MaliciousContentStatus {
   MALICIOUS_CONTENT_STATUS_MALWARE,
   MALICIOUS_CONTENT_STATUS_UNWANTED_SOFTWARE,
   MALICIOUS_CONTENT_STATUS_SOCIAL_ENGINEERING,
+  MALICIOUS_CONTENT_STATUS_PASSWORD_REUSE,
 };
 
 // Describes the security status of a page or request. This is the
@@ -144,6 +145,12 @@ struct SecurityInfo {
   // True if the |security_level| was downgraded to HTTP_SHOW_WARNING because
   // the page was loaded while Incognito.
   bool incognito_downgraded_security_level;
+  // True if the |security_level| was downgraded to HTTP_SHOW_WARNING because
+  // of a field edit recorded in |insecure_input_events|.
+  bool field_edit_downgraded_security_level;
+  // Contains information about input events that may impact the security
+  // level of the page.
+  InsecureInputEventData insecure_input_events;
 };
 
 // Contains the security state relevant to computing the SecurityInfo
@@ -186,6 +193,9 @@ struct VisibleSecurityState {
   bool displayed_credit_card_field_on_http;
   // True if the page was displayed in an Incognito context.
   bool is_incognito;
+  // Contains information about input events that may impact the security
+  // level of the page.
+  InsecureInputEventData insecure_input_events;
 };
 
 // These security levels describe the treatment given to pages that
@@ -213,10 +223,6 @@ void GetSecurityInfo(
 // and credit cards is enabled. This warning UI can be enabled with the
 // |kHttpFormWarningFeature| feature.
 bool IsHttpWarningInFormEnabled();
-
-// Returns true if the MarkHttpAs setting indicates that a warning
-// should be shown for HTTP pages loaded while in Incognito mode.
-bool IsHttpWarningForIncognitoEnabled();
 
 }  // namespace security_state
 

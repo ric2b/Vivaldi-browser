@@ -67,6 +67,9 @@ bool ReadDataOnReaderThread(int pipe, MessageContents* contents) {
 
 }  // namespace
 
+// static
+constexpr size_t Channel::kMaximumMessageSize;
+
 class ChannelNacl::ReaderThreadRunner
     : public base::DelegateSimpleThread::Delegate {
  public:
@@ -220,7 +223,7 @@ void ChannelNacl::DidRecvMsg(std::unique_ptr<MessageContents> contents) {
   if (pipe_ == -1)
     return;
 
-  auto data = base::MakeUnique<std::vector<char>>();
+  auto data = std::make_unique<std::vector<char>>();
   data->swap(contents->data);
   read_queue_.push_back(std::move(data));
 
@@ -386,7 +389,7 @@ std::unique_ptr<Channel> Channel::Create(
     const IPC::ChannelHandle& channel_handle,
     Mode mode,
     Listener* listener) {
-  return base::MakeUnique<ChannelNacl>(channel_handle, mode, listener);
+  return std::make_unique<ChannelNacl>(channel_handle, mode, listener);
 }
 
 }  // namespace IPC

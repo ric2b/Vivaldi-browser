@@ -39,7 +39,7 @@ HttpIceConfigRequest::HttpIceConfigRequest(
           destination: GOOGLE_OWNED_SERVICE
         }
         policy {
-          cookies_allowed: false
+          cookies_allowed: NO
           setting:
             "This feature cannot be disabled by settings. You can block Chrome "
             "Remote Desktop as specified here: "
@@ -50,11 +50,12 @@ HttpIceConfigRequest::HttpIceConfigRequest(
               RemoteAccessHostFirewallTraversal: false
             }
           }
-          policy_exception_justification:
-            "Above specified policy is only applicable on the host side and "
-            "doesn't have effect in Android and iOS client apps. The product "
-            "is shipped separately from Chromium, except on Chrome OS."
-        })");
+        }
+        comments:
+          "Above specified policy is only applicable on the host side and "
+          "doesn't have effect in Android and iOS client apps. The product "
+          "is shipped separately from Chromium, except on Chrome OS."
+        )");
   url_request_ = url_request_factory->CreateUrlRequest(
       UrlRequest::Type::GET, url_, traffic_annotation);
   oauth_token_getter_ = oauth_token_getter;

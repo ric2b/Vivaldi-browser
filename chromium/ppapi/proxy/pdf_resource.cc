@@ -146,7 +146,7 @@ PP_Bool PDFResource::IsFeatureEnabled(PP_PDFFeature feature) {
       result = PP_TRUE;
       break;
     case PP_PDFFEATURE_PRINTING:
-      // TODO(raymes): Use PrintWebViewHelper::IsPrintingEnabled.
+      // TODO(raymes): Use PrintRenderFrameHelper::IsPrintingEnabled.
       result = PP_FALSE;
       break;
   }
@@ -197,6 +197,14 @@ void PDFResource::SetCrashData(const char* pdf_url, const char* top_level_url) {
     base::debug::SetCrashKeyValue("subresource_url", pdf_url);
   if (top_level_url)
     PluginGlobals::Get()->SetActiveURL(top_level_url);
+}
+
+void PDFResource::SelectionChanged(const PP_FloatPoint& left,
+                                   int32_t left_height,
+                                   const PP_FloatPoint& right,
+                                   int32_t right_height) {
+  Post(RENDERER, PpapiHostMsg_PDF_SelectionChanged(left, left_height, right,
+                                                   right_height));
 }
 
 }  // namespace proxy

@@ -19,6 +19,7 @@
 #include "content/common/input_messages.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_context.h"
+#include "content/test/mock_widget_impl.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
@@ -140,9 +141,12 @@ TEST_F(RenderWidgetHostViewMacEditCommandHelperWithTaskEnvTest,
   base::mac::ScopedNSAutoreleasePool pool;
 
   int32_t routing_id = process_host->GetNextRoutingID();
+  mojom::WidgetPtr widget;
+  std::unique_ptr<MockWidgetImpl> widget_impl =
+      base::MakeUnique<MockWidgetImpl>(mojo::MakeRequest(&widget));
 
-  RenderWidgetHostImpl* render_widget =
-      new RenderWidgetHostImpl(&delegate, process_host, routing_id, false);
+  RenderWidgetHostImpl* render_widget = new RenderWidgetHostImpl(
+      &delegate, process_host, routing_id, std::move(widget), false);
 
   ui::WindowResizeHelperMac::Get()->Init(base::ThreadTaskRunnerHandle::Get());
 

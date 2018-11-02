@@ -6,8 +6,8 @@
 
 #include "base/command_line.h"
 #include "base/logging.h"
-#include "device/serial/serial.mojom.h"
 #include "device/serial/serial_device_enumerator.h"
+#include "services/device/public/interfaces/serial.mojom.h"
 
 namespace battor {
 
@@ -27,7 +27,7 @@ std::string BattOrFinder::FindBattOr() {
   std::unique_ptr<device::SerialDeviceEnumerator> serial_device_enumerator =
       device::SerialDeviceEnumerator::Create();
 
-  std::vector<device::serial::DeviceInfoPtr> devices =
+  std::vector<device::mojom::SerialDeviceInfoPtr> devices =
       serial_device_enumerator->GetDevices();
 
   std::string switch_specified_path =
@@ -35,7 +35,7 @@ std::string BattOrFinder::FindBattOr() {
           kBattOrPathSwitch);
   if (switch_specified_path.empty()) {
     // If we have no switch-specified path, look for a device with the right
-    // display name.
+    // display name. See crbug.com/588244 for why this never works on Windows.
     for (size_t i = 0; i < devices.size(); i++) {
       if (!devices[i]->display_name)
         continue;

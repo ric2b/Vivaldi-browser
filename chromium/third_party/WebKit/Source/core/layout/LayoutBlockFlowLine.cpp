@@ -335,11 +335,6 @@ RootInlineBox* LayoutBlockFlow::ConstructLine(BidiRunList<BidiRun>& bidi_runs,
   DCHECK(LastLineBox());
   DCHECK(!LastLineBox()->IsConstructed());
 
-  // Set the m_selectedChildren flag on the root inline box if one of the leaf
-  // inline box from the bidi runs walk above has a selection state.
-  if (root_has_selected_children)
-    LastLineBox()->Root().SetHasSelectedChildren(true);
-
   // Set bits on our inline flow boxes that indicate which sides should
   // paint borders/margins/padding.  This knowledge will ultimately be used when
   // we determine the horizontal positions and widths of all the inline boxes on
@@ -626,12 +621,7 @@ static inline void SetLogicalWidthForTextRun(
     measured_width = 0;
   }
 
-  const SimpleFontData* font_data = font.PrimaryFont();
-  DCHECK(font_data);
-  glyph_overflow.SetFromBounds(
-      glyph_bounds, font_data ? font_data->GetFontMetrics().FloatAscent() : 0,
-      font_data ? font_data->GetFontMetrics().FloatDescent() : 0,
-      measured_width);
+  glyph_overflow.SetFromBounds(glyph_bounds, font, measured_width);
 
   run->box_->SetLogicalWidth(LayoutUnit(measured_width) + hyphen_width);
   if (!fallback_fonts.IsEmpty()) {

@@ -6,17 +6,16 @@
 #define NGLayoutResult_h
 
 #include "core/CoreExport.h"
-#include "core/layout/ng/geometry/ng_static_position.h"
-#include "core/layout/ng/ng_block_node.h"
+#include "core/layout/ng/geometry/ng_bfc_offset.h"
+#include "core/layout/ng/geometry/ng_margin_strut.h"
 #include "core/layout/ng/ng_out_of_flow_positioned_descendant.h"
 #include "core/layout/ng/ng_physical_fragment.h"
-#include "platform/LayoutUnit.h"
-#include "platform/heap/Handle.h"
 #include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 
 namespace blink {
 
+class NGExclusionSpace;
 struct NGUnpositionedFloat;
 
 // The NGLayoutResult stores the resulting data from layout. This includes
@@ -33,6 +32,8 @@ class CORE_EXPORT NGLayoutResult : public RefCounted<NGLayoutResult> {
     // When adding new values, make sure the bit size of |status_| is large
     // enough to store.
   };
+
+  ~NGLayoutResult();
 
   RefPtr<NGPhysicalFragment> PhysicalFragment() const {
     return physical_fragment_;
@@ -59,13 +60,15 @@ class CORE_EXPORT NGLayoutResult : public RefCounted<NGLayoutResult> {
     return unpositioned_floats_;
   }
 
+  const NGExclusionSpace* ExclusionSpace() const {
+    return exclusion_space_.get();
+  }
+
   NGLayoutResultStatus Status() const {
     return static_cast<NGLayoutResultStatus>(status_);
   }
 
-  const WTF::Optional<NGLogicalOffset>& BfcOffset() const {
-    return bfc_offset_;
-  }
+  const WTF::Optional<NGBfcOffset>& BfcOffset() const { return bfc_offset_; }
 
   const NGMarginStrut EndMarginStrut() const { return end_margin_strut_; }
 
@@ -78,15 +81,17 @@ class CORE_EXPORT NGLayoutResult : public RefCounted<NGLayoutResult> {
                  Vector<NGOutOfFlowPositionedDescendant>
                      out_of_flow_positioned_descendants,
                  Vector<RefPtr<NGUnpositionedFloat>>& unpositioned_floats,
-                 const WTF::Optional<NGLogicalOffset> bfc_offset,
+                 std::unique_ptr<const NGExclusionSpace> exclusion_space,
+                 const WTF::Optional<NGBfcOffset> bfc_offset,
                  const NGMarginStrut end_margin_strut,
                  NGLayoutResultStatus status);
 
   RefPtr<NGPhysicalFragment> physical_fragment_;
   Vector<RefPtr<NGUnpositionedFloat>> unpositioned_floats_;
-
   Vector<NGOutOfFlowPositionedDescendant> oof_positioned_descendants_;
-  const WTF::Optional<NGLogicalOffset> bfc_offset_;
+
+  const std::unique_ptr<const NGExclusionSpace> exclusion_space_;
+  const WTF::Optional<NGBfcOffset> bfc_offset_;
   const NGMarginStrut end_margin_strut_;
 
   unsigned status_ : 1;

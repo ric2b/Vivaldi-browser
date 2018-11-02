@@ -76,8 +76,6 @@ void SetV8FlagIfHasSwitch(const char* switch_name, const char* v8_flag) {
 
 std::unique_ptr<base::TaskScheduler::InitParams>
 GetDefaultTaskSchedulerInitParams() {
-  using StandbyThreadPolicy =
-      base::SchedulerWorkerPoolParams::StandbyThreadPolicy;
 
   constexpr int kMaxNumThreadsInBackgroundPool = 1;
   constexpr int kMaxNumThreadsInBackgroundBlockingPool = 1;
@@ -86,20 +84,16 @@ GetDefaultTaskSchedulerInitParams() {
   constexpr auto kSuggestedReclaimTime = base::TimeDelta::FromSeconds(30);
 
   return base::MakeUnique<base::TaskScheduler::InitParams>(
-      base::SchedulerWorkerPoolParams(StandbyThreadPolicy::LAZY,
-                                      kMaxNumThreadsInBackgroundPool,
+      base::SchedulerWorkerPoolParams(kMaxNumThreadsInBackgroundPool,
                                       kSuggestedReclaimTime),
-      base::SchedulerWorkerPoolParams(StandbyThreadPolicy::LAZY,
-                                      kMaxNumThreadsInBackgroundBlockingPool,
+      base::SchedulerWorkerPoolParams(kMaxNumThreadsInBackgroundBlockingPool,
                                       kSuggestedReclaimTime),
       base::SchedulerWorkerPoolParams(
-          StandbyThreadPolicy::LAZY,
           std::max(
               kMaxNumThreadsInForegroundPoolLowerBound,
               content::GetMinThreadsInRendererTaskSchedulerForegroundPool()),
           kSuggestedReclaimTime),
-      base::SchedulerWorkerPoolParams(StandbyThreadPolicy::LAZY,
-                                      kMaxNumThreadsInForegroundBlockingPool,
+      base::SchedulerWorkerPoolParams(kMaxNumThreadsInForegroundBlockingPool,
                                       kSuggestedReclaimTime));
 }
 
@@ -148,8 +142,12 @@ RenderProcessImpl::RenderProcessImpl(
                         "--wasm-disable-structured-cloning");
   SetV8FlagIfFeature(features::kSharedArrayBuffer,
                      "--harmony-sharedarraybuffer");
+  SetV8FlagIfNotFeature(features::kSharedArrayBuffer,
+                        "--no-harmony-sharedarraybuffer");
 
   SetV8FlagIfFeature(features::kWebAssemblyTrapHandler, "--wasm-trap-handler");
+  SetV8FlagIfNotFeature(features::kWebAssemblyTrapHandler,
+                        "--no-wasm-trap-handler");
 #if defined(OS_LINUX) && defined(ARCH_CPU_X86_64) && !defined(OS_ANDROID)
   if (base::FeatureList::IsEnabled(features::kWebAssemblyTrapHandler)) {
     base::debug::SetStackDumpFirstChanceCallback(v8::V8::TryHandleSignal);

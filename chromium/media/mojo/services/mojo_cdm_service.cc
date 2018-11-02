@@ -20,11 +20,18 @@
 #include "media/mojo/common/media_type_converters.h"
 #include "media/mojo/services/mojo_cdm_service_context.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 namespace media {
 
-using SimpleMojoCdmPromise = MojoCdmPromise<>;
-using NewSessionMojoCdmPromise = MojoCdmPromise<std::string>;
+using SimpleMojoCdmPromise = MojoCdmPromise<void(mojom::CdmPromiseResultPtr)>;
+using KeyStatusMojoCdmPromise =
+    MojoCdmPromise<void(mojom::CdmPromiseResultPtr,
+                        CdmKeyInformation::KeyStatus),
+                   CdmKeyInformation::KeyStatus>;
+using NewSessionMojoCdmPromise =
+    MojoCdmPromise<void(mojom::CdmPromiseResultPtr, const std::string&),
+                   std::string>;
 
 int MojoCdmService::next_cdm_id_ = CdmContext::kInvalidCdmId + 1;
 
@@ -61,7 +68,8 @@ void MojoCdmService::Initialize(const std::string& key_system,
 
   auto weak_this = weak_factory_.GetWeakPtr();
   cdm_factory_->Create(
-      key_system, GURL(security_origin), cdm_config.To<CdmConfig>(),
+      key_system, url::Origin(GURL(security_origin)),
+      cdm_config.To<CdmConfig>(),
       base::Bind(&MojoCdmService::OnSessionMessage, weak_this),
       base::Bind(&MojoCdmService::OnSessionClosed, weak_this),
       base::Bind(&MojoCdmService::OnSessionKeysChange, weak_this),
@@ -77,6 +85,14 @@ void MojoCdmService::SetServerCertificate(
   cdm_->SetServerCertificate(
       certificate_data,
       base::MakeUnique<SimpleMojoCdmPromise>(std::move(callback)));
+}
+
+void MojoCdmService::GetStatusForPolicy(HdcpVersion min_hdcp_version,
+                                        GetStatusForPolicyCallback callback) {
+  DVLOG(2) << __func__;
+  cdm_->GetStatusForPolicy(
+      min_hdcp_version,
+      base::MakeUnique<KeyStatusMojoCdmPromise>(std::move(callback)));
 }
 
 void MojoCdmService::CreateSessionAndGenerateRequest(

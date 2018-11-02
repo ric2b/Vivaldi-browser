@@ -53,7 +53,6 @@
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/metrics/proto/ukm/entry.pb.h"
 #include "components/prefs/pref_service.h"
-#include "components/rappor/test_rappor_service.h"
 #include "components/security_state/core/security_state.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/ukm/test_ukm_recorder.h"
@@ -63,6 +62,7 @@
 #include "net/base/url_util.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_test_util.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -79,6 +79,9 @@ using testing::UnorderedElementsAre;
 
 namespace autofill {
 namespace {
+
+using UkmCardUploadDecisionType = ukm::builders::Autofill_CardUploadDecision;
+using UkmDeveloperEngagementType = ukm::builders::Autofill_DeveloperEngagement;
 
 const int kDefaultPageID = 137;
 
@@ -534,6 +537,9 @@ class MockAutofillDriver : public TestAutofillDriver {
                     RendererFormDataAction action,
                     const FormData& data));
 
+  MOCK_METHOD1(SendAutofillTypePredictionsToRenderer,
+               void(const std::vector<FormStructure*>& forms));
+
   void SetIsIncognito(bool is_incognito) { is_incognito_ = is_incognito; }
 
   bool IsIncognito() const override { return is_incognito_; }
@@ -693,6 +699,7 @@ class TestAutofillManager : public AutofillManager {
   }
 
   void AddSeenForm(std::unique_ptr<FormStructure> form) {
+    form->set_form_parsed_timestamp(base::TimeTicks::Now());
     form_structures()->push_back(std::move(form));
   }
 
@@ -857,7 +864,7 @@ class AutofillManagerTest : public testing::Test {
     autofill_client_.SetPrefs(test::PrefServiceForTesting());
     personal_data_.set_database(autofill_client_.GetDatabase());
     personal_data_.SetPrefService(autofill_client_.GetPrefs());
-    autofill_driver_.reset(new MockAutofillDriver());
+    autofill_driver_.reset(new testing::NiceMock<MockAutofillDriver>());
     request_context_ = new net::TestURLRequestContextGetter(
         base::ThreadTaskRunnerHandle::Get());
     autofill_driver_->SetURLRequestContext(request_context_.get());
@@ -1081,6 +1088,14 @@ class AutofillManagerTest : public testing::Test {
         kAutofillUpstreamRequestCvcIfMissing);
   }
 
+  void EnableAutofillUpstreamShowGoogleLogoExperiment() {
+    scoped_feature_list_.InitAndEnableFeature(kAutofillUpstreamShowGoogleLogo);
+  }
+
+  void EnableAutofillUpstreamShowNewUiExperiment() {
+    scoped_feature_list_.InitAndEnableFeature(kAutofillUpstreamShowNewUi);
+  }
+
   void DisableAutofillUpstreamUseAutofillProfileComparator() {
     scoped_feature_list_.InitAndDisableFeature(
         kAutofillUpstreamUseAutofillProfileComparator);
@@ -1099,13 +1114,13 @@ class AutofillManagerTest : public testing::Test {
     EXPECT_EQ(source->id(), entry->source_id);
 
     // Check if there is an entry for developer engagement decision.
-    EXPECT_EQ(base::HashMetricName(internal::kUKMDeveloperEngagementEntryName),
+    EXPECT_EQ(base::HashMetricName(UkmDeveloperEngagementType::kEntryName),
               entry->event_hash);
     EXPECT_EQ(1U, entry->metrics.size());
 
     // Check that the expected developer engagement metric is logged.
     const ukm::mojom::UkmMetric* metric = ukm::TestUkmRecorder::FindMetric(
-        entry, internal::kUKMDeveloperEngagementMetricName);
+        entry, UkmDeveloperEngagementType::kDeveloperEngagementName);
     ASSERT_NE(nullptr, metric);
     EXPECT_EQ(1 << AutofillMetrics::FILLABLE_FORM_PARSED_WITHOUT_TYPE_HINTS,
               metric->value);
@@ -1128,14 +1143,14 @@ class AutofillManagerTest : public testing::Test {
   void ExpectCardUploadDecisionUkm(
       AutofillMetrics::CardUploadDecisionMetric upload_decision) {
     int expected_metric_value = upload_decision;
-    ExpectMetric(internal::kUKMCardUploadDecisionMetricName,
-                 internal::kUKMCardUploadDecisionEntryName,
-                 expected_metric_value, 1 /* expected_num_matching_entries */);
+    ExpectMetric(UkmCardUploadDecisionType::kUploadDecisionName,
+                 UkmCardUploadDecisionType::kEntryName, expected_metric_value,
+                 1 /* expected_num_matching_entries */);
   }
 
   void ExpectFillableFormParsedUkm(int num_fillable_forms_parsed) {
-    ExpectMetric(internal::kUKMDeveloperEngagementMetricName,
-                 internal::kUKMDeveloperEngagementEntryName,
+    ExpectMetric(UkmDeveloperEngagementType::kDeveloperEngagementName,
+                 UkmDeveloperEngagementType::kEntryName,
                  1 << AutofillMetrics::FILLABLE_FORM_PARSED_WITHOUT_TYPE_HINTS,
                  num_fillable_forms_parsed);
   }
@@ -1264,6 +1279,31 @@ TEST_F(AutofillManagerTest, OnFormsSeen_DifferentFormStructures) {
   histogram_tester.ExpectUniqueSample("Autofill.UserHappiness",
                                       0 /* FORMS_LOADED */, 2);
   download_manager_->VerifyLastQueriedForms(forms);
+}
+
+// Test that when forms are seen, the renderer is updated with the predicted
+// field types
+TEST_F(AutofillManagerTest, OnFormsSeen_SendAutofillTypePredictionsToRenderer) {
+  // Set up a queryable form.
+  FormData form1;
+  test::CreateTestAddressFormData(&form1);
+
+  // Set up a non-queryable form.
+  FormData form2;
+  FormFieldData field;
+  test::CreateTestFormField("Querty", "qwerty", "", "text", &field);
+  form2.name = ASCIIToUTF16("NonQueryable");
+  form2.origin = form1.origin;
+  form2.action = GURL("https://myform.com/submit.html");
+  form2.fields.push_back(field);
+
+  // Package the forms for observation.
+  std::vector<FormData> forms{form1, form2};
+
+  // Setup expectations.
+  EXPECT_CALL(*autofill_driver_, SendAutofillTypePredictionsToRenderer(_))
+      .Times(2);
+  FormsSeen(forms);
 }
 
 // Test that no autofill suggestions are returned for a field with an
@@ -1473,28 +1513,28 @@ TEST_F(AutofillManagerTest,
   std::unique_ptr<AutofillProfile> profile1 =
       base::MakeUnique<AutofillProfile>();
   profile1->set_guid("00000000-0000-0000-0000-000000000103");
-  profile1->SetInfo(AutofillType(NAME_FIRST), ASCIIToUTF16("Robin"), "en-US");
-  profile1->SetInfo(AutofillType(NAME_LAST), ASCIIToUTF16("Grimes"), "en-US");
-  profile1->SetInfo(AutofillType(ADDRESS_HOME_LINE1),
-                    ASCIIToUTF16("1234 Smith Blvd."), "en-US");
+  profile1->SetInfo(NAME_FIRST, ASCIIToUTF16("Robin"), "en-US");
+  profile1->SetInfo(NAME_LAST, ASCIIToUTF16("Grimes"), "en-US");
+  profile1->SetInfo(ADDRESS_HOME_LINE1, ASCIIToUTF16("1234 Smith Blvd."),
+                    "en-US");
   autofill_manager_->AddProfile(std::move(profile1));
 
   std::unique_ptr<AutofillProfile> profile2 =
       base::MakeUnique<AutofillProfile>();
   profile2->set_guid("00000000-0000-0000-0000-000000000124");
-  profile2->SetInfo(AutofillType(NAME_FIRST), ASCIIToUTF16("Carl"), "en-US");
-  profile2->SetInfo(AutofillType(NAME_LAST), ASCIIToUTF16("Grimes"), "en-US");
-  profile2->SetInfo(AutofillType(ADDRESS_HOME_LINE1),
-                    ASCIIToUTF16("1234 Smith Blvd."), "en-US");
+  profile2->SetInfo(NAME_FIRST, ASCIIToUTF16("Carl"), "en-US");
+  profile2->SetInfo(NAME_LAST, ASCIIToUTF16("Grimes"), "en-US");
+  profile2->SetInfo(ADDRESS_HOME_LINE1, ASCIIToUTF16("1234 Smith Blvd."),
+                    "en-US");
   autofill_manager_->AddProfile(std::move(profile2));
 
   std::unique_ptr<AutofillProfile> profile3 =
       base::MakeUnique<AutofillProfile>();
   profile3->set_guid("00000000-0000-0000-0000-000000000126");
-  profile3->SetInfo(AutofillType(NAME_FIRST), ASCIIToUTF16("Aaron"), "en-US");
-  profile3->SetInfo(AutofillType(NAME_LAST), ASCIIToUTF16("Googler"), "en-US");
-  profile3->SetInfo(AutofillType(ADDRESS_HOME_LINE1),
-                    ASCIIToUTF16("1600 Amphitheater pkwy"), "en-US");
+  profile3->SetInfo(NAME_FIRST, ASCIIToUTF16("Aaron"), "en-US");
+  profile3->SetInfo(NAME_LAST, ASCIIToUTF16("Googler"), "en-US");
+  profile3->SetInfo(ADDRESS_HOME_LINE1, ASCIIToUTF16("1600 Amphitheater pkwy"),
+                    "en-US");
   autofill_manager_->AddProfile(std::move(profile3));
 
   FormFieldData field;
@@ -2132,8 +2172,7 @@ TEST_F(AutofillManagerTest, GetProfileSuggestions_FancyPhone) {
   std::unique_ptr<AutofillProfile> profile =
       base::MakeUnique<AutofillProfile>();
   profile->set_guid("00000000-0000-0000-0000-000000000103");
-  profile->SetInfo(AutofillType(NAME_FULL), ASCIIToUTF16("Natty Bumppo"),
-                   "en-US");
+  profile->SetInfo(NAME_FULL, ASCIIToUTF16("Natty Bumppo"), "en-US");
   profile->SetRawInfo(PHONE_HOME_WHOLE_NUMBER, ASCIIToUTF16("1800PRAIRIE"));
   autofill_manager_->AddProfile(std::move(profile));
 
@@ -4846,16 +4885,6 @@ TEST_F(AutofillManagerTest, UploadCreditCard_CvcUnavailable) {
                                  AutofillMetrics::CVC_VALUE_NOT_FOUND);
   // Verify that the correct UKM was logged.
   ExpectCardUploadDecisionUkm(AutofillMetrics::CVC_VALUE_NOT_FOUND);
-
-  rappor::TestRapporServiceImpl* rappor_service =
-      autofill_client_.test_rappor_service();
-  EXPECT_EQ(1, rappor_service->GetReportsCount());
-  std::string sample;
-  rappor::RapporType type;
-  EXPECT_TRUE(rappor_service->GetRecordedSampleForMetric(
-      "Autofill.CardUploadNotOfferedNoCvc", &sample, &type));
-  EXPECT_EQ("myform.com", sample);
-  EXPECT_EQ(rappor::ETLD_PLUS_ONE_RAPPOR_TYPE, type);
 }
 
 TEST_F(AutofillManagerTest, UploadCreditCard_CvcInvalidLength) {
@@ -4894,16 +4923,6 @@ TEST_F(AutofillManagerTest, UploadCreditCard_CvcInvalidLength) {
                                  AutofillMetrics::INVALID_CVC_VALUE);
   // Verify that the correct UKM was logged.
   ExpectCardUploadDecisionUkm(AutofillMetrics::INVALID_CVC_VALUE);
-
-  rappor::TestRapporServiceImpl* rappor_service =
-      autofill_client_.test_rappor_service();
-  EXPECT_EQ(1, rappor_service->GetReportsCount());
-  std::string sample;
-  rappor::RapporType type;
-  EXPECT_TRUE(rappor_service->GetRecordedSampleForMetric(
-      "Autofill.CardUploadNotOfferedNoCvc", &sample, &type));
-  EXPECT_EQ("myform.com", sample);
-  EXPECT_EQ(rappor::ETLD_PLUS_ONE_RAPPOR_TYPE, type);
 }
 
 TEST_F(AutofillManagerTest, UploadCreditCard_MultipleCvcFields) {
@@ -5263,8 +5282,8 @@ TEST_F(AutofillManagerTest,
                            AutofillMetrics::CVC_FIELD_NOT_FOUND);
   // Verify that the correct UKM was logged.
   ExpectMetric(
-      internal::kUKMCardUploadDecisionMetricName,
-      internal::kUKMCardUploadDecisionEntryName,
+      UkmCardUploadDecisionType::kUploadDecisionName,
+      UkmCardUploadDecisionType::kEntryName,
       AutofillMetrics::UPLOAD_OFFERED | AutofillMetrics::CVC_FIELD_NOT_FOUND,
       1 /* expected_num_matching_entries */);
 }
@@ -5321,17 +5340,161 @@ TEST_F(AutofillManagerTest, UploadCreditCard_NoCvcFieldOnFormExperimentOff) {
                                  AutofillMetrics::CVC_FIELD_NOT_FOUND);
   // Verify that the correct UKM was logged.
   ExpectCardUploadDecisionUkm(AutofillMetrics::CVC_FIELD_NOT_FOUND);
-
-  rappor::TestRapporServiceImpl* rappor_service =
-      autofill_client_.test_rappor_service();
-  EXPECT_EQ(1, rappor_service->GetReportsCount());
-  std::string sample;
-  rappor::RapporType type;
-  EXPECT_TRUE(rappor_service->GetRecordedSampleForMetric(
-      "Autofill.CardUploadNotOfferedNoCvc", &sample, &type));
-  EXPECT_EQ("myform.com", sample);
-  EXPECT_EQ(rappor::ETLD_PLUS_ONE_RAPPOR_TYPE, type);
 }
+
+// kAutofillUpstreamShowNewUi and kAutofillUpstreamShowGoogleLogo flags are
+// currently not available on Android.
+#if !defined(OS_ANDROID)
+TEST_F(AutofillManagerTest,
+       UploadCreditCard_AddNewUiFlagStateToRequestIfExperimentOn) {
+  EnableAutofillUpstreamShowNewUiExperiment();
+  personal_data_.ClearAutofillProfiles();
+  autofill_manager_->set_credit_card_upload_enabled(true);
+
+  // Create, fill and submit an address form in order to establish a recent
+  // profile which can be selected for the upload request.
+  FormData address_form;
+  test::CreateTestAddressFormData(&address_form);
+  FormsSeen(std::vector<FormData>(1, address_form));
+  ManuallyFillAddressForm("Flo", "Master", "77401", "US", &address_form);
+  FormSubmitted(address_form);
+
+  // Set up our credit card form data.
+  FormData credit_card_form;
+  CreateTestCreditCardFormData(&credit_card_form, true, false);
+  FormsSeen(std::vector<FormData>(1, credit_card_form));
+
+  // Edit the data, and submit.
+  credit_card_form.fields[0].value = ASCIIToUTF16("Flo Master");
+  credit_card_form.fields[1].value = ASCIIToUTF16("4111111111111111");
+  credit_card_form.fields[2].value = ASCIIToUTF16("11");
+  credit_card_form.fields[3].value = ASCIIToUTF16("2017");
+  credit_card_form.fields[4].value = ASCIIToUTF16("123");
+
+  base::HistogramTester histogram_tester;
+
+  // Confirm upload happened and the new UI flag was sent in the request.
+  EXPECT_CALL(autofill_client_, ConfirmSaveCreditCardLocally(_, _)).Times(0);
+  FormSubmitted(credit_card_form);
+  EXPECT_TRUE(autofill_manager_->credit_card_was_uploaded());
+  EXPECT_THAT(
+      autofill_manager_->GetActiveExperiments(),
+      UnorderedElementsAre(kAutofillUpstreamUseAutofillProfileComparator.name,
+                           kAutofillUpstreamShowNewUi.name));
+}
+
+TEST_F(AutofillManagerTest,
+       UploadCreditCard_DoNotAddNewUiFlagStateToRequestIfExperimentOff) {
+  personal_data_.ClearAutofillProfiles();
+  autofill_manager_->set_credit_card_upload_enabled(true);
+
+  // Create, fill and submit an address form in order to establish a recent
+  // profile which can be selected for the upload request.
+  FormData address_form;
+  test::CreateTestAddressFormData(&address_form);
+  FormsSeen(std::vector<FormData>(1, address_form));
+  ManuallyFillAddressForm("Flo", "Master", "77401", "US", &address_form);
+  FormSubmitted(address_form);
+
+  // Set up our credit card form data.
+  FormData credit_card_form;
+  CreateTestCreditCardFormData(&credit_card_form, true, false);
+  FormsSeen(std::vector<FormData>(1, credit_card_form));
+
+  // Edit the data, and submit.
+  credit_card_form.fields[0].value = ASCIIToUTF16("Flo Master");
+  credit_card_form.fields[1].value = ASCIIToUTF16("4111111111111111");
+  credit_card_form.fields[2].value = ASCIIToUTF16("11");
+  credit_card_form.fields[3].value = ASCIIToUTF16("2017");
+  credit_card_form.fields[4].value = ASCIIToUTF16("123");
+
+  base::HistogramTester histogram_tester;
+
+  // Confirm upload happened and the new UI flag was sent in the request.
+  EXPECT_CALL(autofill_client_, ConfirmSaveCreditCardLocally(_, _)).Times(0);
+  FormSubmitted(credit_card_form);
+  EXPECT_TRUE(autofill_manager_->credit_card_was_uploaded());
+  EXPECT_THAT(
+      autofill_manager_->GetActiveExperiments(),
+      UnorderedElementsAre(kAutofillUpstreamUseAutofillProfileComparator.name));
+}
+
+TEST_F(AutofillManagerTest,
+       UploadCreditCard_AddShowGoogleLogoFlagStateToRequestIfExperimentOn) {
+  EnableAutofillUpstreamShowGoogleLogoExperiment();
+  personal_data_.ClearAutofillProfiles();
+  autofill_manager_->set_credit_card_upload_enabled(true);
+
+  // Create, fill and submit an address form in order to establish a recent
+  // profile which can be selected for the upload request.
+  FormData address_form;
+  test::CreateTestAddressFormData(&address_form);
+  FormsSeen(std::vector<FormData>(1, address_form));
+  ManuallyFillAddressForm("Flo", "Master", "77401", "US", &address_form);
+  FormSubmitted(address_form);
+
+  // Set up our credit card form data.
+  FormData credit_card_form;
+  CreateTestCreditCardFormData(&credit_card_form, true, false);
+  FormsSeen(std::vector<FormData>(1, credit_card_form));
+
+  // Edit the data, and submit.
+  credit_card_form.fields[0].value = ASCIIToUTF16("Flo Master");
+  credit_card_form.fields[1].value = ASCIIToUTF16("4111111111111111");
+  credit_card_form.fields[2].value = ASCIIToUTF16("11");
+  credit_card_form.fields[3].value = ASCIIToUTF16("2017");
+  credit_card_form.fields[4].value = ASCIIToUTF16("123");
+
+  base::HistogramTester histogram_tester;
+
+  // Confirm upload happened and the show Google logo flag was sent in the
+  // request.
+  EXPECT_CALL(autofill_client_, ConfirmSaveCreditCardLocally(_, _)).Times(0);
+  FormSubmitted(credit_card_form);
+  EXPECT_TRUE(autofill_manager_->credit_card_was_uploaded());
+  EXPECT_THAT(
+      autofill_manager_->GetActiveExperiments(),
+      UnorderedElementsAre(kAutofillUpstreamUseAutofillProfileComparator.name,
+                           kAutofillUpstreamShowGoogleLogo.name));
+}
+
+TEST_F(AutofillManagerTest,
+       UploadCreditCard_DoNotAddShowGoogleLogoFlagStateToRequestIfExpOff) {
+  personal_data_.ClearAutofillProfiles();
+  autofill_manager_->set_credit_card_upload_enabled(true);
+
+  // Create, fill and submit an address form in order to establish a recent
+  // profile which can be selected for the upload request.
+  FormData address_form;
+  test::CreateTestAddressFormData(&address_form);
+  FormsSeen(std::vector<FormData>(1, address_form));
+  ManuallyFillAddressForm("Flo", "Master", "77401", "US", &address_form);
+  FormSubmitted(address_form);
+
+  // Set up our credit card form data.
+  FormData credit_card_form;
+  CreateTestCreditCardFormData(&credit_card_form, true, false);
+  FormsSeen(std::vector<FormData>(1, credit_card_form));
+
+  // Edit the data, and submit.
+  credit_card_form.fields[0].value = ASCIIToUTF16("Flo Master");
+  credit_card_form.fields[1].value = ASCIIToUTF16("4111111111111111");
+  credit_card_form.fields[2].value = ASCIIToUTF16("11");
+  credit_card_form.fields[3].value = ASCIIToUTF16("2017");
+  credit_card_form.fields[4].value = ASCIIToUTF16("123");
+
+  base::HistogramTester histogram_tester;
+
+  // Confirm upload happened and the show Google logo flag was sent in the
+  // request.
+  EXPECT_CALL(autofill_client_, ConfirmSaveCreditCardLocally(_, _)).Times(0);
+  FormSubmitted(credit_card_form);
+  EXPECT_TRUE(autofill_manager_->credit_card_was_uploaded());
+  EXPECT_THAT(
+      autofill_manager_->GetActiveExperiments(),
+      UnorderedElementsAre(kAutofillUpstreamUseAutofillProfileComparator.name));
+}
+#endif
 
 TEST_F(AutofillManagerTest, UploadCreditCard_NoProfileAvailable) {
   personal_data_.ClearAutofillProfiles();
@@ -5364,16 +5527,6 @@ TEST_F(AutofillManagerTest, UploadCreditCard_NoProfileAvailable) {
   // Verify that the correct UKM was logged.
   ExpectCardUploadDecisionUkm(
       AutofillMetrics::UPLOAD_NOT_OFFERED_NO_ADDRESS_PROFILE);
-
-  rappor::TestRapporServiceImpl* rappor_service =
-      autofill_client_.test_rappor_service();
-  EXPECT_EQ(1, rappor_service->GetReportsCount());
-  std::string sample;
-  rappor::RapporType type;
-  EXPECT_TRUE(rappor_service->GetRecordedSampleForMetric(
-      "Autofill.CardUploadNotOfferedNoAddress", &sample, &type));
-  EXPECT_EQ("myform.com", sample);
-  EXPECT_EQ(rappor::ETLD_PLUS_ONE_RAPPOR_TYPE, type);
 }
 
 TEST_F(AutofillManagerTest, UploadCreditCard_NoRecentlyUsedProfile) {
@@ -5517,21 +5670,11 @@ TEST_F(AutofillManagerTest,
   ExpectCardUploadDecision(
       histogram_tester, AutofillMetrics::UPLOAD_NOT_OFFERED_NO_ADDRESS_PROFILE);
   // Verify that the correct UKM was logged.
-  ExpectMetric(internal::kUKMCardUploadDecisionMetricName,
-               internal::kUKMCardUploadDecisionEntryName,
+  ExpectMetric(UkmCardUploadDecisionType::kUploadDecisionName,
+               UkmCardUploadDecisionType::kEntryName,
                AutofillMetrics::CVC_VALUE_NOT_FOUND |
-               AutofillMetrics::UPLOAD_NOT_OFFERED_NO_ADDRESS_PROFILE,
+                   AutofillMetrics::UPLOAD_NOT_OFFERED_NO_ADDRESS_PROFILE,
                1 /* expected_num_matching_entries */);
-
-  rappor::TestRapporServiceImpl* rappor_service =
-      autofill_client_.test_rappor_service();
-  EXPECT_EQ(1, rappor_service->GetReportsCount());
-  std::string sample;
-  rappor::RapporType type;
-  EXPECT_TRUE(rappor_service->GetRecordedSampleForMetric(
-      "Autofill.CardUploadNotOfferedNoCvc", &sample, &type));
-  EXPECT_EQ("myform.com", sample);
-  EXPECT_EQ(rappor::ETLD_PLUS_ONE_RAPPOR_TYPE, type);
 }
 
 TEST_F(AutofillManagerTest, UploadCreditCard_NoNameAvailable) {
@@ -5570,16 +5713,6 @@ TEST_F(AutofillManagerTest, UploadCreditCard_NoNameAvailable) {
                                  AutofillMetrics::UPLOAD_NOT_OFFERED_NO_NAME);
   // Verify that the correct UKM was logged.
   ExpectCardUploadDecisionUkm(AutofillMetrics::UPLOAD_NOT_OFFERED_NO_NAME);
-
-  rappor::TestRapporServiceImpl* rappor_service =
-      autofill_client_.test_rappor_service();
-  EXPECT_EQ(1, rappor_service->GetReportsCount());
-  std::string sample;
-  rappor::RapporType type;
-  EXPECT_TRUE(rappor_service->GetRecordedSampleForMetric(
-      "Autofill.CardUploadNotOfferedNoName", &sample, &type));
-  EXPECT_EQ("myform.com", sample);
-  EXPECT_EQ(rappor::ETLD_PLUS_ONE_RAPPOR_TYPE, type);
 }
 
 TEST_F(AutofillManagerTest, UploadCreditCard_ZipCodesConflict) {
@@ -6138,16 +6271,6 @@ TEST_F(AutofillManagerTest, UploadCreditCard_NamesHaveToMatch) {
   // Verify that the correct UKM was logged.
   ExpectCardUploadDecisionUkm(
       AutofillMetrics::UPLOAD_NOT_OFFERED_CONFLICTING_NAMES);
-
-  rappor::TestRapporServiceImpl* rappor_service =
-      autofill_client_.test_rappor_service();
-  EXPECT_EQ(1, rappor_service->GetReportsCount());
-  std::string sample;
-  rappor::RapporType type;
-  EXPECT_TRUE(rappor_service->GetRecordedSampleForMetric(
-      "Autofill.CardUploadNotOfferedConflictingNames", &sample, &type));
-  EXPECT_EQ("myform.com", sample);
-  EXPECT_EQ(rappor::ETLD_PLUS_ONE_RAPPOR_TYPE, type);
 }
 
 TEST_F(AutofillManagerTest, UploadCreditCard_IgnoreOldProfiles) {
@@ -6760,23 +6883,21 @@ TEST_F(AutofillManagerTest,
   std::unique_ptr<AutofillProfile> profile1 =
       base::MakeUnique<AutofillProfile>();
   profile1->set_guid("00000000-0000-0000-0000-000000000103");
-  profile1->SetInfo(AutofillType(NAME_FIRST), ASCIIToUTF16("Robin"), "en-US");
-  profile1->SetInfo(AutofillType(NAME_MIDDLE), ASCIIToUTF16("Adam Smith"),
+  profile1->SetInfo(NAME_FIRST, ASCIIToUTF16("Robin"), "en-US");
+  profile1->SetInfo(NAME_MIDDLE, ASCIIToUTF16("Adam Smith"), "en-US");
+  profile1->SetInfo(NAME_LAST, ASCIIToUTF16("Grimes"), "en-US");
+  profile1->SetInfo(ADDRESS_HOME_LINE1, ASCIIToUTF16("1234 Smith Blvd."),
                     "en-US");
-  profile1->SetInfo(AutofillType(NAME_LAST), ASCIIToUTF16("Grimes"), "en-US");
-  profile1->SetInfo(AutofillType(ADDRESS_HOME_LINE1),
-                    ASCIIToUTF16("1234 Smith Blvd."), "en-US");
   autofill_manager_->AddProfile(std::move(profile1));
 
   std::unique_ptr<AutofillProfile> profile2 =
       base::MakeUnique<AutofillProfile>();
   profile2->set_guid("00000000-0000-0000-0000-000000000124");
-  profile2->SetInfo(AutofillType(NAME_FIRST), ASCIIToUTF16("Carl"), "en-US");
-  profile2->SetInfo(AutofillType(NAME_MIDDLE), ASCIIToUTF16("Shawn Smith"),
+  profile2->SetInfo(NAME_FIRST, ASCIIToUTF16("Carl"), "en-US");
+  profile2->SetInfo(NAME_MIDDLE, ASCIIToUTF16("Shawn Smith"), "en-US");
+  profile2->SetInfo(NAME_LAST, ASCIIToUTF16("Grimes"), "en-US");
+  profile2->SetInfo(ADDRESS_HOME_LINE1, ASCIIToUTF16("1234 Smith Blvd."),
                     "en-US");
-  profile2->SetInfo(AutofillType(NAME_LAST), ASCIIToUTF16("Grimes"), "en-US");
-  profile2->SetInfo(AutofillType(ADDRESS_HOME_LINE1),
-                    ASCIIToUTF16("1234 Smith Blvd."), "en-US");
   autofill_manager_->AddProfile(std::move(profile2));
 
   FormFieldData field;
@@ -7079,6 +7200,7 @@ TEST_F(AutofillManagerTest, SignInFormSubmission_Upload) {
 
   std::unique_ptr<FormStructure> form_structure(new FormStructure(form));
   form_structure->set_is_signin_upload(true);
+  form_structure->set_form_parsed_timestamp(base::TimeTicks::Now());
   form_structure->field(1)->set_possible_types({autofill::PASSWORD});
 
   std::string signature = form_structure->FormSignatureAsStr();

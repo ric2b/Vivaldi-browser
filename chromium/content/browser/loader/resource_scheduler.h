@@ -11,19 +11,31 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <utility>
+#include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/feature_list.h"
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "base/sequence_checker.h"
+#include "base/time/time.h"
 #include "content/common/content_export.h"
 #include "net/base/priority_queue.h"
 #include "net/base/request_priority.h"
+#include "net/nqe/effective_connection_type.h"
+
+namespace base {
+class SequencedTaskRunner;
+}
 
 namespace net {
 class URLRequest;
+class NetworkQualityEstimator;
 }
 
 namespace content {
+
 class ResourceThrottle;
 
 // There is one ResourceScheduler. All renderer-initiated HTTP requests are
@@ -54,6 +66,15 @@ class ResourceThrottle;
 // the URLRequest.
 class CONTENT_EXPORT ResourceScheduler {
  public:
+  // A struct that stores a bandwidth delay product (BDP) and the maximum number
+  // of delayable requests when the observed BDP is below (inclusive) the
+  // specified BDP.
+  struct MaxRequestsForBDPRange {
+    int64_t max_bdp_kbits;
+    size_t max_requests;
+  };
+  typedef std::vector<MaxRequestsForBDPRange> MaxRequestsForBDPRanges;
+
   ResourceScheduler();
   ~ResourceScheduler();
 
@@ -68,8 +89,12 @@ class CONTENT_EXPORT ResourceScheduler {
 
   // Signals from the UI thread, posted as tasks on the IO thread:
 
-  // Called when a renderer is created.
-  void OnClientCreated(int child_id, int route_id);
+  // Called when a renderer is created. |network_quality_estimator| is allowed
+  // to be null.
+  void OnClientCreated(
+      int child_id,
+      int route_id,
+      const net::NetworkQualityEstimator* const network_quality_estimator);
 
   // Called when a renderer is destroyed.
   void OnClientDeleted(int child_id, int route_id);
@@ -108,7 +133,42 @@ class CONTENT_EXPORT ResourceScheduler {
   void ReprioritizeRequest(net::URLRequest* request,
                            net::RequestPriority new_priority);
 
+  // Public for tests.
+  static MaxRequestsForBDPRanges
+  GetMaxDelayableRequestsExperimentConfigForTests() {
+    return ThrottleDelayble::GetMaxRequestsForBDPRanges();
+  }
+
+  bool priority_requests_delayable() const {
+    return priority_requests_delayable_;
+  }
+  bool head_priority_requests_delayable() const {
+    return head_priority_requests_delayable_;
+  }
+  bool yielding_scheduler_enabled() const {
+    return yielding_scheduler_enabled_;
+  }
+  int max_requests_before_yielding() const {
+    return max_requests_before_yielding_;
+  }
+  base::TimeDelta yield_time() const { return yield_time_; }
+  base::SequencedTaskRunner* task_runner() { return task_runner_.get(); }
+
+  // Testing setters
+  void SetMaxRequestsBeforeYieldingForTesting(
+      int max_requests_before_yielding) {
+    max_requests_before_yielding_ = max_requests_before_yielding;
+  }
+  void SetYieldTimeForTesting(base::TimeDelta yield_time) {
+    yield_time_ = yield_time;
+  }
+  void SetTaskRunnerForTesting(
+      scoped_refptr<base::SequencedTaskRunner> sequenced_task_runner) {
+    task_runner_ = std::move(sequenced_task_runner);
+  }
+
  private:
+  class Client;
   class RequestQueue;
   class ScheduledResourceRequest;
   struct RequestPriorityParams;
@@ -116,7 +176,66 @@ class CONTENT_EXPORT ResourceScheduler {
     bool operator()(const ScheduledResourceRequest* a,
                     const ScheduledResourceRequest* b) const;
   };
-  class Client;
+
+  // Experiment parameters and helper functions for varying the maximum number
+  // of delayable requests in-flight based on the observed bandwidth delay
+  // product (BDP), or in the presence of non-delayable requests in-flight.
+  class ThrottleDelayble {
+   public:
+    ThrottleDelayble();
+
+    ~ThrottleDelayble();
+
+    // Returns the maximum delayable requests based on the current
+    // value of the bandwidth delay product (BDP). It falls back to the default
+    // limit on three conditions:
+    // 1. |network_quality_estimator| is null.
+    // 2. The current effective connection type is
+    // net::EFFECTIVE_CONNECTION_TYPE_OFFLINE or
+    // net::EFFECTIVE_CONNECTION_TYPE_UNKNOWN.
+    // 3. The current value of the BDP is not in any of the ranges in
+    // |max_requests_for_bdp_ranges_|.
+    size_t GetMaxDelayableRequests(
+        const net::NetworkQualityEstimator* network_quality_estimator) const;
+
+    // This method computes the correct weight for the non-delayable requests
+    // based on the current effective connection type. If it is out of bounds,
+    // it returns 0, effectively disabling the experiment.
+    double GetCurrentNonDelayableWeight(
+        const net::NetworkQualityEstimator* network_quality_estimator) const;
+
+   private:
+    // Friend for tests.
+    friend class ResourceScheduler;
+
+    // Reads experiment parameters and creates a vector  of
+    // |MaxRequestsForBDPRange| to populate |max_requests_for_bdp_ranges_|. It
+    // looks for configuration parameters with sequential numeric suffixes, and
+    // stops looking after the first failure to find an experimetal parameter.
+    // The BDP values are specified in kilobits. A sample configuration is given
+    // below:
+    // "MaxBDPKbits1": "150",
+    // "MaxDelayableRequests1": "2",
+    // "MaxBDPKbits2": "200",
+    // "MaxDelayableRequests2": "4",
+    // "MaxEffectiveConnectionType": "3G"
+    // This config implies that when BDP <= 150, then the maximum number of
+    // non-delayable requests should be limited to 2. When BDP > 150 and <= 200,
+    // it should be limited to 4. For BDP > 200, the default value should be
+    // used.
+    static MaxRequestsForBDPRanges GetMaxRequestsForBDPRanges();
+
+    // The number of delayable requests in-flight for different ranges of the
+    // bandwidth delay product (BDP).
+    const MaxRequestsForBDPRanges max_requests_for_bdp_ranges_;
+
+    // The maximum ECT for which the experiment should be enabled.
+    const net::EffectiveConnectionType max_effective_connection_type_;
+
+    // The weight of a non-delayable request when counting the effective number
+    // of non-delayable requests in-flight.
+    const double non_delayable_weight_;
+  };
 
   typedef int64_t ClientId;
   typedef std::map<ClientId, Client*> ClientMap;
@@ -138,10 +257,20 @@ class CONTENT_EXPORT ResourceScheduler {
   // be delayed.
   bool priority_requests_delayable_;
 
+  // True if requests to servers that support priorities (e.g., H2/QUIC) can
+  // be delayed while the parser is in head.
+  bool head_priority_requests_delayable_;
+
   // True if the scheduler should yield between several successive calls to
   // start resource requests.
   bool yielding_scheduler_enabled_;
   int max_requests_before_yielding_;
+  base::TimeDelta yield_time_;
+
+  const ThrottleDelayble throttle_delayable_;
+
+  // The TaskRunner to post tasks on. Can be overridden for tests.
+  scoped_refptr<base::SequencedTaskRunner> task_runner_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

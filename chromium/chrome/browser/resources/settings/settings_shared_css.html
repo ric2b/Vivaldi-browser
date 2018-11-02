@@ -1,17 +1,20 @@
 <link rel="import" href="chrome://resources/cr_elements/paper_button_style_css.html">
+<link rel="import" href="chrome://resources/cr_elements/paper_checkbox_style_css.html">
+<link rel="import" href="chrome://resources/cr_elements/paper_toggle_style_css.html">
 <link rel="import" href="chrome://resources/cr_elements/shared_vars_css.html">
 <link rel="import" href="chrome://resources/cr_elements/shared_style_css.html">
 <link rel="import" href="settings_icons_css.html">
 <link rel="import" href="settings_vars_css.html">
 
+
 <!-- Common styles for Material Design settings. -->
 <dom-module id="settings-shared">
   <template>
-    <style include="settings-icons paper-button-style cr-shared-style">
+    <style include="settings-icons paper-button-style paper-checkbox-style paper-toggle-style cr-shared-style">
       /* Prevent action-links from being selected to avoid accidental
        * selection when trying to click it. */
       a[is=action-link] {
-        -webkit-user-select: none;
+        user-select: none;
       }
 
       /* Use <h2> as the "sub-header" mentioned in the UX design docs. */
@@ -24,7 +27,7 @@
         font-weight: 500;
         margin: 0;
         padding-bottom: 12px;
-        padding-top: 24px;
+        padding-top: 32px;
       }
 
       iron-icon {
@@ -34,6 +37,25 @@
       iron-icon[icon='cr:check'],
       iron-icon[icon='settings:done'] {
        --iron-icon-fill-color: var(--google-green-500);
+      }
+
+      iron-list {
+        --iron-list-items-container: {
+          /* Text selection in an iron-list is problematic because the items are
+           * reused. The result is the selection happens somewhat arbitrarily.
+           * Add a |risk-selection| attribute to enabled selection in an
+           * iron-list. */
+          user-select: none;
+        }
+      }
+
+      iron-list[risk-selection] {
+        --iron-list-items-container: {
+          /* On short lists where selection is likely desired, we'll risk having
+           * text selection enabled. If the list is short enough that items are
+           * not actually reused, the bugs with selection are not evident. */
+          user-select: text;
+        }
       }
 
       .separator + button[is='paper-icon-button-light'] {
@@ -79,6 +101,7 @@
       paper-toggle-button {
         @apply(--settings-actionable);
         height: var(--settings-row-min-height);
+        user-select: none;  /* Prevents text selection while dragging. */
         width: 36px;
       }
 
@@ -106,14 +129,6 @@
 
       .primary-toggle[checked] {
         color: var(--google-blue-500);
-      }
-
-      paper-checkbox {
-        --paper-checkbox-checked-color: var(--google-blue-500);
-        --paper-checkbox-label-spacing: var(--settings-control-label-spacing);
-        --paper-checkbox-size: var(--checkbox-size);
-        --paper-checkbox-unchecked-color: var(--paper-grey-600);
-        -webkit-margin-start: var(--checkbox-margin-start);
       }
 
       paper-input {
@@ -221,11 +236,7 @@
       /* A settings-box is a horizontal row of text or controls within a
        * setting section (page or subpage). */
       .settings-box {
-        align-items: center;
-        border-top: var(--settings-separator-line);
-        display: flex;
-        min-height: var(--settings-row-min-height);
-        padding: 0 var(--settings-box-row-padding);
+        @apply(--cr-section);
       }
 
       .settings-box.two-line {
@@ -260,9 +271,15 @@
         min-height: 0;
       }
 
+      /* A settings-box that is embedded in another settings-box (e.g. a control
+       * that is associated with a toggle button). */
+      .settings-box.embedded {
+        -webkit-padding-start: var(--settings-box-row-indent);
+      }
+
       /* The lower line of text in a two-line row. */
       .secondary {
-        @apply(--settings-secondary);
+        @apply(--cr-secondary-text);
       }
 
       /* The |:empty| CSS selector only works when there is no whitespace.
@@ -343,13 +360,6 @@
       :-webkit-any(.settings-box, .list-item).two-line .separator {
         height: calc(var(--settings-row-two-line-min-height) -
             2 * var(--settings-separator-gaps));
-      }
-
-      .settings-checkbox-spacer {
-        -webkit-margin-start: calc(
-            var(--checkbox-margin-start) +
-            var(--checkbox-size) +
-            var(--settings-control-label-spacing));
       }
 
       .favicon-image {

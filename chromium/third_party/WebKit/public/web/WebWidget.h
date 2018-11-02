@@ -41,7 +41,7 @@
 #include "public/platform/WebRect.h"
 #include "public/platform/WebSize.h"
 #include "public/platform/WebTextInputInfo.h"
-#include "public/web/WebCompositionUnderline.h"
+#include "public/web/WebImeTextSpan.h"
 #include "public/web/WebRange.h"
 #include "public/web/WebTextDirection.h"
 
@@ -170,6 +170,9 @@ class WebWidget {
 
   // Changes the text direction of the selected input node.
   virtual void SetTextDirection(WebTextDirection) {}
+
+  // Returns true if the WebWidget is currently animating a GestureFling.
+  virtual bool IsFlinging() const { return false; }
 
   // Returns true if the WebWidget uses GPU accelerated compositing
   // to render its contents.

@@ -12,6 +12,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/task_scheduler/post_task.h"
@@ -78,24 +79,14 @@ class ComponentUnpackerTest : public testing::Test {
   const scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_ =
       base::ThreadTaskRunnerHandle::Get();
   base::RunLoop runloop_;
-  base::Closure quit_closure_;
-
-  scoped_refptr<update_client::TestConfigurator> config_;
+  const base::Closure quit_closure_ = runloop_.QuitClosure();
 
   ComponentUnpacker::Result result_;
 };
 
-ComponentUnpackerTest::ComponentUnpackerTest()
-    : scoped_task_environment_(
-          base::test::ScopedTaskEnvironment::MainThreadType::UI) {
-  quit_closure_ = runloop_.QuitClosure();
+ComponentUnpackerTest::ComponentUnpackerTest() = default;
 
-  config_ = new TestConfigurator(
-      base::CreateSequencedTaskRunnerWithTraits({base::MayBlock()}),
-      base::ThreadTaskRunnerHandle::Get());
-}
-
-ComponentUnpackerTest::~ComponentUnpackerTest() {}
+ComponentUnpackerTest::~ComponentUnpackerTest() = default;
 
 void ComponentUnpackerTest::RunThreads() {
   runloop_.Run();
@@ -108,10 +99,10 @@ void ComponentUnpackerTest::UnpackComplete(
 }
 
 TEST_F(ComponentUnpackerTest, UnpackFullCrx) {
-  scoped_refptr<ComponentUnpacker> component_unpacker = new ComponentUnpacker(
-      std::vector<uint8_t>(std::begin(jebg_hash), std::end(jebg_hash)),
-      test_file("jebgalgnebhfojomionfpkfelancnnkf.crx"), nullptr, nullptr,
-      config_->GetSequencedTaskRunner());
+  scoped_refptr<ComponentUnpacker> component_unpacker =
+      base::MakeRefCounted<ComponentUnpacker>(
+          std::vector<uint8_t>(std::begin(jebg_hash), std::end(jebg_hash)),
+          test_file("jebgalgnebhfojomionfpkfelancnnkf.crx"), nullptr, nullptr);
   component_unpacker->Unpack(base::Bind(&ComponentUnpackerTest::UnpackComplete,
                                         base::Unretained(this)));
   RunThreads();
@@ -138,10 +129,10 @@ TEST_F(ComponentUnpackerTest, UnpackFullCrx) {
 }
 
 TEST_F(ComponentUnpackerTest, UnpackFileNotFound) {
-  scoped_refptr<ComponentUnpacker> component_unpacker = new ComponentUnpacker(
-      std::vector<uint8_t>(std::begin(jebg_hash), std::end(jebg_hash)),
-      test_file("file-not-found.crx"), nullptr, nullptr,
-      config_->GetSequencedTaskRunner());
+  scoped_refptr<ComponentUnpacker> component_unpacker =
+      base::MakeRefCounted<ComponentUnpacker>(
+          std::vector<uint8_t>(std::begin(jebg_hash), std::end(jebg_hash)),
+          test_file("file-not-found.crx"), nullptr, nullptr);
   component_unpacker->Unpack(base::Bind(&ComponentUnpackerTest::UnpackComplete,
                                         base::Unretained(this)));
   RunThreads();
@@ -155,10 +146,10 @@ TEST_F(ComponentUnpackerTest, UnpackFileNotFound) {
 
 // Tests a mismatch between the public key hash and the id of the component.
 TEST_F(ComponentUnpackerTest, UnpackFileHashMismatch) {
-  scoped_refptr<ComponentUnpacker> component_unpacker = new ComponentUnpacker(
-      std::vector<uint8_t>(std::begin(abag_hash), std::end(abag_hash)),
-      test_file("jebgalgnebhfojomionfpkfelancnnkf.crx"), nullptr, nullptr,
-      config_->GetSequencedTaskRunner());
+  scoped_refptr<ComponentUnpacker> component_unpacker =
+      base::MakeRefCounted<ComponentUnpacker>(
+          std::vector<uint8_t>(std::begin(abag_hash), std::end(abag_hash)),
+          test_file("jebgalgnebhfojomionfpkfelancnnkf.crx"), nullptr, nullptr);
   component_unpacker->Unpack(base::Bind(&ComponentUnpackerTest::UnpackComplete,
                                         base::Unretained(this)));
   RunThreads();

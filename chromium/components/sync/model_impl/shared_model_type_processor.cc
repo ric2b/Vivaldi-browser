@@ -9,11 +9,11 @@
 
 #include "base/bind.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_usage_estimator.h"
 #include "components/sync/base/hash_util.h"
+#include "components/sync/base/time.h"
 #include "components/sync/engine/activation_context.h"
 #include "components/sync/engine/commit_queue.h"
 #include "components/sync/engine/model_type_processor_proxy.h"
@@ -31,6 +31,8 @@ SharedModelTypeProcessor::SharedModelTypeProcessor(
       bridge_(bridge),
       dump_stack_(dump_stack),
       commit_only_(commit_only),
+      cached_gc_directive_version_(0),
+      cached_gc_directive_aged_out_day_(base::Time::FromDoubleT(0)),
       weak_ptr_factory_(this) {
   DCHECK(bridge);
 }
@@ -108,10 +110,10 @@ void SharedModelTypeProcessor::ConnectIfReady() {
   if (model_error_) {
     error_handler_.Run(model_error_.value());
   } else {
-    auto activation_context = base::MakeUnique<ActivationContext>();
+    auto activation_context = std::make_unique<ActivationContext>();
     activation_context->model_type_state = model_type_state_;
     activation_context->type_processor =
-        base::MakeUnique<ModelTypeProcessorProxy>(
+        std::make_unique<ModelTypeProcessorProxy>(
             weak_ptr_factory_.GetWeakPtr(),
             base::ThreadTaskRunnerHandle::Get());
     start_callback_.Run(std::move(activation_context));
@@ -315,6 +317,14 @@ void SharedModelTypeProcessor::FlushPendingCommitRequests() {
     worker_->EnqueueForCommit(commit_requests);
 }
 
+void SharedModelTypeProcessor::GetLocalChanges(
+    size_t max_entries,
+    const GetLocalChangesCallback& callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_GT(max_entries, 0U);
+  callback.Run(CommitRequestDataList());
+}
+
 void SharedModelTypeProcessor::OnCommitCompleted(
     const sync_pb::ModelTypeState& type_state,
     const CommitResponseDataList& response_list) {
@@ -426,6 +436,8 @@ void SharedModelTypeProcessor::OnUpdateReceived(
     ReportError(error.value());
     return;
   }
+
+  ExpireEntriesIfNeeded(model_type_state.progress_marker());
 
   // If there were trackers with empty storage keys, they should have been
   // updated by bridge as part of ApplySyncChanges.
@@ -753,6 +765,92 @@ size_t SharedModelTypeProcessor::EstimateMemoryUsage() const {
   memory_usage += EstimateMemoryUsage(entities_);
   memory_usage += EstimateMemoryUsage(storage_key_to_tag_hash_);
   return memory_usage;
+}
+
+void SharedModelTypeProcessor::ExpireEntriesIfNeeded(
+    const sync_pb::DataTypeProgressMarker& progress_marker) {
+  if (!progress_marker.has_gc_directive())
+    return;
+
+  const sync_pb::GarbageCollectionDirective& new_gc_directive =
+      progress_marker.gc_directive();
+  std::unique_ptr<MetadataChangeList> metadata_changes =
+      bridge_->CreateMetadataChangeList();
+  bool has_expired_changes = false;
+
+  if (new_gc_directive.has_version_watermark() &&
+      (cached_gc_directive_version_ < new_gc_directive.version_watermark())) {
+    ExpireEntriesByVersion(new_gc_directive.version_watermark(),
+                           metadata_changes.get());
+    cached_gc_directive_version_ = new_gc_directive.version_watermark();
+    has_expired_changes = true;
+  }
+  if (new_gc_directive.has_age_watermark_in_days()) {
+    DCHECK(new_gc_directive.age_watermark_in_days());
+    // For saving resource purpose(ex. cpu, battery), We round up garbage
+    // collection age to day, so we only run GC once a day if server did not
+    // change the |age_watermark_in_days|.
+    base::Time to_be_expired =
+        base::Time::Now().LocalMidnight() -
+        base::TimeDelta::FromDays(new_gc_directive.age_watermark_in_days());
+    if (cached_gc_directive_aged_out_day_ != to_be_expired) {
+      ExpireEntriesByAge(new_gc_directive.age_watermark_in_days(),
+                         metadata_changes.get());
+      cached_gc_directive_aged_out_day_ = to_be_expired;
+      has_expired_changes = true;
+    }
+  }
+
+  if (has_expired_changes)
+    bridge_->ApplySyncChanges(std::move(metadata_changes), EntityChangeList());
+}
+void SharedModelTypeProcessor::ClearMetadataForEntries(
+    const std::vector<std::string>& storage_key_to_be_deleted,
+    MetadataChangeList* metadata_changes) {
+  for (const std::string& key : storage_key_to_be_deleted) {
+    metadata_changes->ClearMetadata(key);
+    auto iter = storage_key_to_tag_hash_.find(key);
+    DCHECK(iter != storage_key_to_tag_hash_.end());
+    entities_.erase(iter->second);
+    storage_key_to_tag_hash_.erase(key);
+  }
+}
+
+void SharedModelTypeProcessor::ExpireEntriesByVersion(
+    int64_t version_watermark,
+    MetadataChangeList* metadata_changes) {
+  DCHECK(metadata_changes);
+
+  std::vector<std::string> storage_key_to_be_deleted;
+  for (const auto& kv : storage_key_to_tag_hash_) {
+    ProcessorEntityTracker* entity = GetEntityForTagHash(kv.second);
+    if (entity && !entity->IsUnsynced() &&
+        entity->metadata().server_version() < version_watermark) {
+      storage_key_to_be_deleted.push_back(kv.first);
+    }
+  }
+
+  ClearMetadataForEntries(storage_key_to_be_deleted, metadata_changes);
+}
+
+void SharedModelTypeProcessor::ExpireEntriesByAge(
+    int32_t age_watermark_in_days,
+    MetadataChangeList* metadata_changes) {
+  DCHECK(metadata_changes);
+
+  base::Time to_be_expired =
+      base::Time::Now() - base::TimeDelta::FromDays(age_watermark_in_days);
+  std::vector<std::string> storage_key_to_be_deleted;
+  for (const auto& kv : storage_key_to_tag_hash_) {
+    ProcessorEntityTracker* entity = GetEntityForTagHash(kv.second);
+    if (entity && !entity->IsUnsynced() &&
+        ProtoTimeToTime(entity->metadata().modification_time()) <=
+            to_be_expired) {
+      storage_key_to_be_deleted.push_back(kv.first);
+    }
+  }
+
+  ClearMetadataForEntries(storage_key_to_be_deleted, metadata_changes);
 }
 
 }  // namespace syncer

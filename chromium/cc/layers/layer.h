@@ -44,9 +44,12 @@ class ConvertableToTraceFormat;
 }
 }
 
+namespace viz {
+class CopyOutputRequest;
+}
+
 namespace cc {
 
-class CopyOutputRequest;
 class LayerClient;
 class LayerImpl;
 class LayerTreeHost;
@@ -94,14 +97,14 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   // first), then the callback is called with a nullptr/empty result. If the
   // request's source property is set, any prior uncommitted requests having the
   // same source will be aborted.
-  void RequestCopyOfOutput(std::unique_ptr<CopyOutputRequest> request);
+  void RequestCopyOfOutput(std::unique_ptr<viz::CopyOutputRequest> request);
   bool HasCopyRequest() const { return !inputs_.copy_requests.empty(); }
 
   void SetSubtreeHasCopyRequest(bool subtree_has_copy_request);
   bool SubtreeHasCopyRequest() const;
 
   void TakeCopyRequests(
-      std::vector<std::unique_ptr<CopyOutputRequest>>* requests);
+      std::vector<std::unique_ptr<viz::CopyOutputRequest>>* requests);
 
   virtual void SetBackgroundColor(SkColor background_color);
   SkColor background_color() const { return inputs_.background_color; }
@@ -172,6 +175,9 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   void SetIsContainerForFixedPositionLayers(bool container);
   bool IsContainerForFixedPositionLayers() const;
 
+  void SetIsResizedByBrowserControls(bool resized);
+  bool IsResizedByBrowserControls() const;
+
   void SetPositionConstraint(const LayerPositionConstraint& constraint);
   const LayerPositionConstraint& position_constraint() const {
     return inputs_.position_constraint;
@@ -194,11 +200,6 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   void SetScrollParent(Layer* parent);
 
   Layer* scroll_parent() { return inputs_.scroll_parent; }
-
-  std::set<Layer*>* scroll_children() { return scroll_children_.get(); }
-  const std::set<Layer*>* scroll_children() const {
-    return scroll_children_.get();
-  }
 
   void SetClipParent(Layer* ancestor);
 
@@ -261,7 +262,8 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   }
 
   void set_did_scroll_callback(
-      base::Callback<void(const gfx::ScrollOffset&)> callback) {
+      base::Callback<void(const gfx::ScrollOffset&, const ElementId&)>
+          callback) {
     inputs_.did_scroll_callback = std::move(callback);
   }
 
@@ -355,7 +357,9 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   void set_property_tree_sequence_number(int sequence_number) {
     property_tree_sequence_number_ = sequence_number;
   }
-  int property_tree_sequence_number() { return property_tree_sequence_number_; }
+  int property_tree_sequence_number() const {
+    return property_tree_sequence_number_;
+  }
 
   void SetTransformTreeIndex(int index);
   int transform_tree_index() const;
@@ -484,12 +488,8 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   void OnFilterAnimated(const FilterOperations& filters);
   void OnOpacityAnimated(float opacity);
   void OnTransformAnimated(const gfx::Transform& transform);
-  void OnScrollOffsetAnimated(const gfx::ScrollOffset& scroll_offset);
 
   bool ScrollOffsetAnimationWasInterrupted() const;
-
-  void AddScrollChild(Layer* child);
-  void RemoveScrollChild(Layer* child);
 
   void AddClipChild(Layer* child);
   void RemoveClipChild(Layer* child);
@@ -499,10 +499,6 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
 
   // This should only be called from RemoveFromParent().
   void RemoveChildOrDependent(Layer* child);
-
-  // If this layer has a scroll parent, it removes |this| from its list of
-  // scroll children.
-  void RemoveFromScrollTree();
 
   // If this layer has a clip parent, it removes |this| from its list of clip
   // children.
@@ -595,6 +591,14 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
 
     TouchActionRegion touch_action_region;
 
+    // When set, position: fixed children of this layer will be affected by URL
+    // bar movement. bottom-fixed element will be pushed down as the URL bar
+    // hides (and the viewport expands) so that the element stays fixed to the
+    // viewport bottom. This will always be set on the outer viewport scroll
+    // layer. In the case of a non-default rootScroller, all iframes in the
+    // rootScroller ancestor chain will also have it set on their scroll
+    // layers.
+    bool is_resized_by_browser_controls : 1;
     bool is_container_for_fixed_position_layers : 1;
     LayerPositionConstraint position_constraint;
 
@@ -613,8 +617,9 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
 
     // The following elements can not and are not serialized.
     LayerClient* client;
-    base::Callback<void(const gfx::ScrollOffset&)> did_scroll_callback;
-    std::vector<std::unique_ptr<CopyOutputRequest>> copy_requests;
+    base::Callback<void(const gfx::ScrollOffset&, const ElementId&)>
+        did_scroll_callback;
+    std::vector<std::unique_ptr<viz::CopyOutputRequest>> copy_requests;
 
     ScrollBoundaryBehavior scroll_boundary_behavior;
   };
@@ -644,13 +649,13 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   bool subtree_property_changed_ : 1;
   bool may_contain_video_ : 1;
   bool needs_show_scrollbars_ : 1;
-  // Whether the nodes referred to by *_tree_index_
-  // "belong" to this layer. Only applicable if use_layer_lists is false.
+  // Whether the nodes referred to by *_tree_index_ "belong" to this
+  // layer. Only applicable if LayerTreeSettings.use_layer_lists is
+  // false.
   bool has_transform_node_ : 1;
   // This value is valid only when LayerTreeHost::has_copy_request() is true
   bool subtree_has_copy_request_ : 1;
   SkColor safe_opaque_background_color_;
-  std::unique_ptr<std::set<Layer*>> scroll_children_;
 
   std::unique_ptr<std::set<Layer*>> clip_children_;
 

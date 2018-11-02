@@ -8,6 +8,7 @@
 #import <Foundation/Foundation.h>
 
 #import "cwv_export.h"
+#import "cwv_navigation_type.h"
 
 @protocol CRIWVTranslateDelegate;
 @class CWVWebView;
@@ -21,12 +22,15 @@ CWV_EXPORT
 // Asks delegate if WebView should start the load. WebView will
 // load the request if this method is not implemented.
 - (BOOL)webView:(CWVWebView*)webView
-    shouldStartLoadWithRequest:(NSURLRequest*)request;
+    shouldStartLoadWithRequest:(NSURLRequest*)request
+                navigationType:(CWVNavigationType)navigationType;
 
 // Asks delegate if WebView should continue the load. WebView
 // will load the response if this method is not implemented.
+// |forMainFrame| indicates whether the frame being navigated is the main frame.
 - (BOOL)webView:(CWVWebView*)webView
-    shouldContinueLoadWithResponse:(NSURLResponse*)response;
+    shouldContinueLoadWithResponse:(NSURLResponse*)response
+                      forMainFrame:(BOOL)forMainFrame;
 
 // Notifies the delegate that main frame navigation has started.
 - (void)webViewDidStartProvisionalNavigation:(CWVWebView*)webView;
@@ -35,9 +39,11 @@ CWV_EXPORT
 // the main frame.
 - (void)webViewDidCommitNavigation:(CWVWebView*)webView;
 
-// Notifies the delegate that page load is completed. Called for
-// both success and failure cases.
-- (void)webView:(CWVWebView*)webView didLoadPageWithSuccess:(BOOL)success;
+// Notifies the delegate that page load has succeeded.
+- (void)webViewDidFinishNavigation:(CWVWebView*)webView;
+
+// Notifies the delegate that page load has failed.
+- (void)webView:(CWVWebView*)webView didFailNavigationWithError:(NSError*)error;
 
 // Notifies the delegate that web view process was terminated
 // (usually by crashing, though possibly by other means).

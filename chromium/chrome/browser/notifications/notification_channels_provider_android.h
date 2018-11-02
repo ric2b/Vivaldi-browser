@@ -13,12 +13,14 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/clock.h"
-#include "components/content_settings/core/browser/content_settings_observable_provider.h"
 #include "components/content_settings/core/browser/content_settings_observer.h"
 #include "components/content_settings/core/browser/content_settings_rule.h"
+#include "components/content_settings/core/browser/user_modifiable_provider.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_service.h"
 
 // A Java counterpart will be generated for this enum.
 // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.notifications
@@ -44,7 +46,7 @@ struct NotificationChannel {
 // content settings, but defers to supervised user and policy settings - see
 // ordering of the ProviderType enum values in HostContentSettingsMap.
 class NotificationChannelsProviderAndroid
-    : public content_settings::ObservableProvider {
+    : public content_settings::UserModifiableProvider {
  public:
   // Helper class to make the JNI calls.
   class NotificationChannelsBridge {
@@ -60,10 +62,24 @@ class NotificationChannelsProviderAndroid
     virtual std::vector<NotificationChannel> GetChannels() = 0;
   };
 
+  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+
   NotificationChannelsProviderAndroid();
   ~NotificationChannelsProviderAndroid() override;
 
-  // ProviderInterface methods:
+  // Migrates any notification settings from the passed-in provider to
+  // channels, unless they were already migrated or channels should not be used.
+  void MigrateToChannelsIfNecessary(
+      PrefService* prefs,
+      content_settings::ProviderInterface* pref_provider);
+
+  // Undoes the migration done by |MigrateToChannelsIfNecessary|, if we
+  // previously migrated to channels and did not already un-migrate.
+  void UnmigrateChannelsIfNecessary(
+      PrefService* prefs,
+      content_settings::ProviderInterface* pref_provider);
+
+  // UserModifiableProvider methods.
   std::unique_ptr<content_settings::RuleIterator> GetRuleIterator(
       ContentSettingsType content_type,
       const content_settings::ResourceIdentifier& resource_identifier,
@@ -76,12 +92,11 @@ class NotificationChannelsProviderAndroid
       base::Value* value) override;
   void ClearAllContentSettingsRules(ContentSettingsType content_type) override;
   void ShutdownOnUIThread() override;
-
   base::Time GetWebsiteSettingLastModified(
       const ContentSettingsPattern& primary_pattern,
       const ContentSettingsPattern& secondary_pattern,
       ContentSettingsType content_type,
-      const content_settings::ResourceIdentifier& resource_identifier);
+      const content_settings::ResourceIdentifier& resource_identifier) override;
 
  private:
   explicit NotificationChannelsProviderAndroid(
@@ -94,11 +109,13 @@ class NotificationChannelsProviderAndroid
   void CreateChannelIfRequired(const std::string& origin_string,
                                NotificationChannelStatus new_channel_status);
 
+  void CreateChannelForRule(const content_settings::Rule& rule);
+
   void InitCachedChannels();
 
   std::unique_ptr<NotificationChannelsBridge> bridge_;
 
-  bool should_use_channels_;
+  bool platform_supports_channels_;
 
   std::unique_ptr<base::Clock> clock_;
 

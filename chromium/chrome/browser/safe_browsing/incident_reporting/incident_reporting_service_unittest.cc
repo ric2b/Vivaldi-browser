@@ -35,7 +35,7 @@
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
-#include "components/safe_browsing/csd.pb.h"
+#include "components/safe_browsing/proto/csd.pb.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "extensions/browser/quota_service.h"
@@ -220,10 +220,8 @@ class IncidentReportingServiceTest : public testing::Test {
   }
 
   void CreateIncidentReportingService() {
-#if !defined(GOOGLE_CHROME_BUILD)
-    scoped_feature_list_.InitAndDisableFeature(
-        safe_browsing::kIncidentReportingDisableUpload);
-#endif
+    scoped_feature_list_.InitAndEnableFeature(
+        safe_browsing::kIncidentReportingEnableUpload);
 
     instance_.reset(new TestIncidentReportingService(
         base::ThreadTaskRunnerHandle::Get(),
@@ -1315,10 +1313,10 @@ TEST_F(IncidentReportingServiceTest, CleanLegacyPruneState) {
   std::unique_ptr<base::DictionaryValue> incidents_sent(
       new base::DictionaryValue());
   auto type_dict = base::MakeUnique<base::DictionaryValue>();
-  type_dict->SetStringWithoutPathExpansion("foo", "47");
+  type_dict->SetKey("foo", base::Value("47"));
   incidents_sent->SetWithoutPathExpansion(omnibox_type, std::move(type_dict));
   type_dict = base::MakeUnique<base::DictionaryValue>();
-  type_dict->SetStringWithoutPathExpansion("bar", "43");
+  type_dict->SetKey("bar", base::Value("43"));
   incidents_sent->SetWithoutPathExpansion(preference_type,
                                           std::move(type_dict));
 

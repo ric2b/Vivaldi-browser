@@ -16,6 +16,7 @@
 #include "base/memory/discardable_memory.h"
 #include "base/memory/memory_coordinator_client_registry.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/shared_memory_tracker.h"
 #include "base/numerics/safe_math.h"
 #include "base/process/memory.h"
 #include "base/strings/string_number_conversions.h"
@@ -40,23 +41,7 @@
 namespace discardable_memory {
 namespace {
 
-const char kSingleProcess[] = "single-process";
-
 const int kInvalidUniqueClientID = -1;
-
-const uint64_t kBrowserTracingProcessId = std::numeric_limits<uint64_t>::max();
-
-uint64_t ClientProcessUniqueIdToTracingProcessId(int client_id) {
-  // TODO(penghuang): Move this function to right place.
-  // https://crbug.com/661257
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(kSingleProcess))
-    return kBrowserTracingProcessId;
-  // The hash value is incremented so that the tracing id is never equal to
-  // MemoryDumpManager::kInvalidTracingProcessId.
-  return static_cast<uint64_t>(base::Hash(
-             reinterpret_cast<const char*>(&client_id), sizeof(client_id))) +
-         1;
-}
 
 // mojom::DiscardableSharedMemoryManager implementation. It contains the
 // |client_id_| which is not visible to client. We associate allocations with a
@@ -242,6 +227,7 @@ DiscardableSharedMemoryManager::DiscardableSharedMemoryManager()
 }
 
 DiscardableSharedMemoryManager::~DiscardableSharedMemoryManager() {
+  base::MemoryCoordinatorClientRegistry::GetInstance()->Unregister(this);
   base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(
       this);
 }
@@ -302,7 +288,6 @@ bool DiscardableSharedMemoryManager::OnMemoryDump(
       if (!segment->memory()->mapped_size())
         continue;
 
-      // The "size" will be inherited form the shared global dump.
       std::string dump_name = base::StringPrintf(
           "discardable/process_%x/segment_%d", client_id, segment_id);
       base::trace_event::MemoryAllocatorDump* dump =
@@ -318,33 +303,8 @@ bool DiscardableSharedMemoryManager::OnMemoryDump(
           segment->memory()->IsMemoryLocked() ? segment->memory()->mapped_size()
                                               : 0u);
 
-      // Create the cross-process ownership edge. If the client creates a
-      // corresponding dump for the same segment, this will avoid to
-      // double-count them in tracing. If, instead, no other process will emit a
-      // dump with the same guid, the segment will be accounted to the browser.
-      const uint64_t client_tracing_id =
-          ClientProcessUniqueIdToTracingProcessId(client_id);
-      base::trace_event::MemoryAllocatorDumpGuid shared_segment_guid =
-          DiscardableSharedMemoryHeap::GetSegmentGUIDForTracing(
-              client_tracing_id, segment_id);
-      pmd->CreateSharedGlobalAllocatorDump(shared_segment_guid);
-      pmd->AddOwnershipEdge(dump->guid(), shared_segment_guid);
-
-#if defined(COUNT_RESIDENT_BYTES_SUPPORTED)
-      if (args.level_of_detail ==
-          base::trace_event::MemoryDumpLevelOfDetail::DETAILED) {
-        size_t resident_size =
-            base::trace_event::ProcessMemoryDump::CountResidentBytes(
-                segment->memory()->memory(), segment->memory()->mapped_size());
-
-        // This is added to the global dump since it has to be attributed to
-        // both the allocator dumps involved.
-        pmd->GetSharedGlobalAllocatorDump(shared_segment_guid)
-            ->AddScalar("resident_size",
-                        base::trace_event::MemoryAllocatorDump::kUnitsBytes,
-                        static_cast<uint64_t>(resident_size));
-      }
-#endif  // defined(COUNT_RESIDENT_BYTES_SUPPORTED)
+      segment->memory()->CreateSharedMemoryOwnershipEdge(dump, pmd,
+                                                         /*is_owned=*/false);
     }
   }
   return true;

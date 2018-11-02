@@ -9,6 +9,7 @@
 <translation id="1195412055398077112">الخروج عن إطار الشاشة</translation>
 <translation id="1247372569136754018">ميكروفون (داخلي)</translation>
 <translation id="1252999807265626933">جارٍ الشحن من <ph name="POWER_SOURCE" /></translation>
+<translation id="1267032506238418139">تغيير الاختصار</translation>
 <translation id="1270290102613614947">تم تعطيل لوحة المفاتيح على الشاشة</translation>
 <translation id="1272079795634619415">إيقاف</translation>
 <translation id="1279938420744323401"><ph name="DISPLAY_NAME" /> (<ph name="ANNOTATION" />)</translation>
@@ -22,7 +23,6 @@
 <translation id="15373452373711364">مؤشر الماوس الكبير</translation>
 <translation id="1550523713251050646">انقر للحصول على المزيد من الخيارات</translation>
 <translation id="1621499497873603021">الوقت المتبقي حتى تصبح البطارية فارغة <ph name="TIME_LEFT" /></translation>
-<translation id="164969095109328410">‏جهاز Chrome</translation>
 <translation id="1677472565718498478">الوقت المتبقي <ph name="TIME" /></translation>
 <translation id="1698760176351776263">‏عنوان IPv6:‏ <ph name="ADDRESS" /></translation>
 <translation id="1734367976349034509">يخضع هذا الجهاز لإدارة المؤسسة</translation>
@@ -92,6 +92,7 @@
 <translation id="315116470104423982">بيانات الجوال</translation>
 <translation id="3236488194889173876">ليست هناك شبكة جوّال متاحة</translation>
 <translation id="3294437725009624529">ضيف</translation>
+<translation id="332587331255250389">يُرجى استبدال البطارية</translation>
 <translation id="3364721542077212959">أدوات قلم الشاشة</translation>
 <translation id="3368922792935385530">متصل</translation>
 <translation id="3371140690572404006">‏جهاز USB-C (المنفذ الأمامي الأيمن)</translation>
@@ -110,6 +111,7 @@
 <translation id="3712407551474845318">التقاط منطقة</translation>
 <translation id="371370241367527062">الميكروفون الأمامي</translation>
 <translation id="3742055079367172538">تم التقاط لقطة الشاشة</translation>
+<translation id="3771549900096082774">وضع التباين العالي</translation>
 <translation id="3775358506042162758">يُمكنك تسجيل الدخول المتعدد باستخدام ثلاثة حسابات كحد أقصى.</translation>
 <translation id="3783640748446814672">alt</translation>
 <translation id="3784455785234192852">قفل</translation>
@@ -142,14 +144,12 @@
 <translation id="4729904664295161097">لا يتوفر المساعد إلا للملفات الشخصية الأساسية.</translation>
 <translation id="479989351350248267">بحث</translation>
 <translation id="4804818685124855865">قطع الاتصال</translation>
-<translation id="4821830640883629383">يُرجى شحن البطاريات أو استبدالها.</translation>
 <translation id="4849058404725798627">تمييز الكائن باستخدام تركيز لوحة المفاتيح</translation>
 <translation id="4872237917498892622">‏Alt+مفتاح البحث أو Shift</translation>
 <translation id="4895488851634969361">البطارية مملوءة.</translation>
 <translation id="4905614135390995787">تم تغيير اختصار تشغيل وضع التباين العالي. يُرجى استخدام <ph name="NEW_SHORTCUT" /> بدلاً من <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="4918086044614829423">قبول</translation>
 <translation id="4961318399572185831">إرسال الشاشة</translation>
-<translation id="5011233892417813670">Chromebook</translation>
 <translation id="5168181903108465623">أجهزة البث متاحة</translation>
 <translation id="5170568018924773124">العرض في المجلد</translation>
 <translation id="5207949376430453814">تمييز علامة إقحام النص</translation>
@@ -175,7 +175,6 @@
 <translation id="5901316534475909376">Shift+Esc</translation>
 <translation id="5916664084637901428">تشغيل</translation>
 <translation id="5927132638760172455">إرسال إلى مستلم غير معروف</translation>
-<translation id="5932901536148835538">Chromebit</translation>
 <translation id="5947494881799873997">التراجع عن الإجراء</translation>
 <translation id="595202126637698455">تم تمكين تتبع مستوى الأداء</translation>
 <translation id="5957083217255311415">تم إيقاف ميزة بيانات الجوّال.</translation>
@@ -218,7 +217,6 @@
 <translation id="683971173229319003">Search+L</translation>
 <translation id="6857811139397017780">تنشيط <ph name="NETWORKSERVICE" /></translation>
 <translation id="6911468394164995108">الانضمام إلى شبكة أخرى...</translation>
-<translation id="6915678159055240887">Chromebox</translation>
 <translation id="6981982820502123353">إمكانية الدخول</translation>
 <translation id="7029814467594812963">إنهاء الجلسة</translation>
 <translation id="7034339000180558234">إرسال <ph name="TAB_NAME" /> إلى <ph name="RECEIVER_NAME" />.</translation>
@@ -226,7 +224,6 @@
 <translation id="7066646422045619941">تم تعطيل هذه الشبكة من قِبل مشرفك.</translation>
 <translation id="7067196344162293536">تدوير تلقائي</translation>
 <translation id="7098389117866926363">‏جهاز USB-C (المنفذ الأيسر في الخلف)</translation>
-<translation id="714034171374937760">Chromebase</translation>
 <translation id="7165278925115064263">Alt+Shift+K</translation>
 <translation id="7168224885072002358">سيتم الرجوع إلى درجة الدقة القديمة في غضون <ph name="TIMEOUT_SECONDS" /></translation>
 <translation id="7246339268451149667">هل ترغب في تمكين إلغاء القفل باستخدام بصمة الإصبع؟</translation>

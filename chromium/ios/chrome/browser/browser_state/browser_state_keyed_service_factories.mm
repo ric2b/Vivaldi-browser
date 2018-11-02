@@ -17,7 +17,7 @@
 #include "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
 #include "ios/chrome/browser/favicon/ios_chrome_large_icon_cache_factory.h"
 #include "ios/chrome/browser/favicon/ios_chrome_large_icon_service_factory.h"
-#include "ios/chrome/browser/feature_engagement_tracker/feature_engagement_tracker_factory.h"
+#include "ios/chrome/browser/feature_engagement/tracker_factory.h"
 #include "ios/chrome/browser/google/google_logo_service_factory.h"
 #include "ios/chrome/browser/google/google_url_tracker_factory.h"
 #include "ios/chrome/browser/history/history_service_factory.h"
@@ -47,9 +47,10 @@
 #include "ios/chrome/browser/sync/ios_user_event_service_factory.h"
 #include "ios/chrome/browser/sync/sync_setup_service_factory.h"
 #include "ios/chrome/browser/translate/translate_accept_languages_factory.h"
+#include "ios/chrome/browser/ui/browser_list/browser_list_session_service_factory.h"
 #include "ios/chrome/browser/undo/bookmark_undo_service_factory.h"
 #include "ios/chrome/browser/web_data_service_factory.h"
-#include "ios/shared/chrome/browser/ui/browser_list/browser_list_session_service_factory.h"
+#import "ios/clean/chrome/browser/ui/overlays/overlay_service_factory.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -92,6 +93,7 @@ void EnsureBrowserStateKeyedServiceFactoriesBuilt() {
   AuthenticationServiceFactory::GetInstance();
   BrowserListSessionServiceFactory::GetInstance();
   DesktopPromotionSyncServiceFactory::GetInstance();
+  feature_engagement::TrackerFactory::GetInstance();
   IOSChromeGCMProfileServiceFactory::GetInstance();
   IOSChromeLargeIconCacheFactory::GetInstance();
   IOSChromeLargeIconServiceFactory::GetInstance();
@@ -101,9 +103,9 @@ void EnsureBrowserStateKeyedServiceFactoriesBuilt() {
   IOSChromeProfileInvalidationProviderFactory::GetInstance();
   IOSChromeProfileSyncServiceFactory::GetInstance();
   IOSUserEventServiceFactory::GetInstance();
-  FeatureEngagementTrackerFactory::GetInstance();
   GoogleLogoServiceFactory::GetInstance();
   OAuth2TokenServiceFactory::GetInstance();
+  OverlayServiceFactory::GetInstance();
   ReadingListModelFactory::GetInstance();
   SigninClientFactory::GetInstance();
   suggestions::SuggestionsServiceFactory::GetInstance();

@@ -7,9 +7,10 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "cc/output/copy_output_request.h"
-#include "cc/resources/returned_resource.h"
+#include "components/viz/common/quads/copy_output_request.h"
+#include "components/viz/common/resources/returned_resource.h"
 #include "components/viz/common/surfaces/surface_info.h"
+#include "components/viz/host/host_frame_sink_client.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support_client.h"
 #include "ui/android/ui_android_export.h"
@@ -33,14 +34,16 @@ class WindowAndroidCompositor;
 
 class UI_ANDROID_EXPORT DelegatedFrameHostAndroid
     : public viz::CompositorFrameSinkSupportClient,
-      public cc::ExternalBeginFrameSourceClient {
+      public viz::ExternalBeginFrameSourceClient,
+      public viz::HostFrameSinkClient {
  public:
   class Client {
    public:
     virtual void SetBeginFrameSource(
-        cc::BeginFrameSource* begin_frame_source) = 0;
+        viz::BeginFrameSource* begin_frame_source) = 0;
     virtual void DidReceiveCompositorFrameAck() = 0;
-    virtual void ReclaimResources(const std::vector<cc::ReturnedResource>&) = 0;
+    virtual void ReclaimResources(
+        const std::vector<viz::ReturnedResource>&) = 0;
   };
 
   DelegatedFrameHostAndroid(ViewAndroid* view,
@@ -53,7 +56,7 @@ class UI_ANDROID_EXPORT DelegatedFrameHostAndroid
 
   void SubmitCompositorFrame(const viz::LocalSurfaceId& local_surface_id,
                              cc::CompositorFrame frame);
-  void DidNotProduceFrame(const cc::BeginFrameAck& ack);
+  void DidNotProduceFrame(const viz::BeginFrameAck& ack);
 
   void DestroyDelegatedContent();
 
@@ -65,7 +68,7 @@ class UI_ANDROID_EXPORT DelegatedFrameHostAndroid
   void RequestCopyOfSurface(
       WindowAndroidCompositor* compositor,
       const gfx::Rect& src_subrect_in_pixel,
-      cc::CopyOutputRequest::CopyOutputRequestCallback result_callback);
+      viz::CopyOutputRequest::CopyOutputRequestCallback result_callback);
 
   void CompositorFrameSinkChanged();
 
@@ -80,16 +83,19 @@ class UI_ANDROID_EXPORT DelegatedFrameHostAndroid
  private:
   // viz::CompositorFrameSinkSupportClient implementation.
   void DidReceiveCompositorFrameAck(
-      const std::vector<cc::ReturnedResource>& resources) override;
-  void OnBeginFrame(const cc::BeginFrameArgs& args) override;
+      const std::vector<viz::ReturnedResource>& resources) override;
+  void OnBeginFrame(const viz::BeginFrameArgs& args) override;
   void ReclaimResources(
-      const std::vector<cc::ReturnedResource>& resources) override;
+      const std::vector<viz::ReturnedResource>& resources) override;
   void WillDrawSurface(const viz::LocalSurfaceId& local_surface_id,
                        const gfx::Rect& damage_rect) override;
   void OnBeginFramePausedChanged(bool paused) override;
 
-  // cc::ExternalBeginFrameSourceClient implementation.
+  // viz::ExternalBeginFrameSourceClient implementation.
   void OnNeedsBeginFrames(bool needs_begin_frames) override;
+
+  // viz::HostFrameSinkClient implementation.
+  void OnFirstSurfaceActivation(const viz::SurfaceInfo& surface_info) override;
 
   void CreateNewCompositorFrameSinkSupport();
 
@@ -103,7 +109,7 @@ class UI_ANDROID_EXPORT DelegatedFrameHostAndroid
   Client* client_;
 
   std::unique_ptr<viz::CompositorFrameSinkSupport> support_;
-  cc::ExternalBeginFrameSource begin_frame_source_;
+  viz::ExternalBeginFrameSource begin_frame_source_;
 
   viz::SurfaceInfo surface_info_;
   bool has_transparent_background_ = false;

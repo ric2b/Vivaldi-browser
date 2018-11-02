@@ -26,14 +26,14 @@ class SensorImpl final : public mojom::Sensor, public PlatformSensor::Client {
                         AddConfigurationCallback callback) override;
   void GetDefaultConfiguration(
       GetDefaultConfigurationCallback callback) override;
-  void RemoveConfiguration(const PlatformSensorConfiguration& configuration,
-                           RemoveConfigurationCallback callback) override;
+  void RemoveConfiguration(
+      const PlatformSensorConfiguration& configuration) override;
   void Suspend() override;
   void Resume() override;
   void ConfigureReadingChangeNotifications(bool enabled) override;
 
   // device::Sensor::Client implementation.
-  void OnSensorReadingChanged() override;
+  void OnSensorReadingChanged(mojom::SensorType type) override;
   void OnSensorError() override;
   bool IsSuspended() override;
 

@@ -4,7 +4,7 @@
 
 #include "core/editing/markers/ActiveSuggestionMarkerListImpl.h"
 
-#include "core/editing/markers/DocumentMarkerListEditor.h"
+#include "core/editing/markers/SortedDocumentMarkerListEditor.h"
 
 namespace blink {
 
@@ -17,8 +17,9 @@ bool ActiveSuggestionMarkerListImpl::IsEmpty() const {
 }
 
 void ActiveSuggestionMarkerListImpl::Add(DocumentMarker* marker) {
-  DocumentMarkerListEditor::AddMarkerWithoutMergingOverlapping(&markers_,
-                                                               marker);
+  DCHECK_EQ(DocumentMarker::kActiveSuggestion, marker->GetType());
+  SortedDocumentMarkerListEditor::AddMarkerWithoutMergingOverlapping(&markers_,
+                                                                     marker);
 }
 
 void ActiveSuggestionMarkerListImpl::Clear() {
@@ -30,30 +31,39 @@ ActiveSuggestionMarkerListImpl::GetMarkers() const {
   return markers_;
 }
 
+DocumentMarker* ActiveSuggestionMarkerListImpl::FirstMarkerIntersectingRange(
+    unsigned start_offset,
+    unsigned end_offset) const {
+  return SortedDocumentMarkerListEditor::FirstMarkerIntersectingRange(
+      markers_, start_offset, end_offset);
+}
+
 HeapVector<Member<DocumentMarker>>
 ActiveSuggestionMarkerListImpl::MarkersIntersectingRange(
     unsigned start_offset,
     unsigned end_offset) const {
-  return DocumentMarkerListEditor::MarkersIntersectingRange(
+  return SortedDocumentMarkerListEditor::MarkersIntersectingRange(
       markers_, start_offset, end_offset);
 }
 
 bool ActiveSuggestionMarkerListImpl::MoveMarkers(
     int length,
     DocumentMarkerList* dst_markers_) {
-  return DocumentMarkerListEditor::MoveMarkers(&markers_, length, dst_markers_);
+  return SortedDocumentMarkerListEditor::MoveMarkers(&markers_, length,
+                                                     dst_markers_);
 }
 
 bool ActiveSuggestionMarkerListImpl::RemoveMarkers(unsigned start_offset,
                                                    int length) {
-  return DocumentMarkerListEditor::RemoveMarkers(&markers_, start_offset,
-                                                 length);
+  return SortedDocumentMarkerListEditor::RemoveMarkers(&markers_, start_offset,
+                                                       length);
 }
 
-bool ActiveSuggestionMarkerListImpl::ShiftMarkers(unsigned offset,
+bool ActiveSuggestionMarkerListImpl::ShiftMarkers(const String&,
+                                                  unsigned offset,
                                                   unsigned old_length,
                                                   unsigned new_length) {
-  return DocumentMarkerListEditor::ShiftMarkersContentIndependent(
+  return SortedDocumentMarkerListEditor::ShiftMarkersContentIndependent(
       &markers_, offset, old_length, new_length);
 }
 

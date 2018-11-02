@@ -311,7 +311,7 @@ void StackDumpSignalHandler(int signal, siginfo_t* info, void* void_context) {
   }
   PrintToStderr("\n");
 
-#if defined(CFI_ENFORCEMENT)
+#if defined(CFI_ENFORCEMENT_TRAP)
   if (signal == SIGILL && info->si_code == ILL_ILLOPN) {
     PrintToStderr(
         "CFI: Most likely a control flow integrity violation; for more "
@@ -520,7 +520,7 @@ class SandboxSymbolizeHelper {
         if (strcmp((it->first).c_str(), file_path) == 0) {
           // POSIX.1-2004 requires an implementation to guarantee that dup()
           // is async-signal-safe.
-          fd = dup(it->second);
+          fd = HANDLE_EINTR(dup(it->second));
           break;
         }
       }

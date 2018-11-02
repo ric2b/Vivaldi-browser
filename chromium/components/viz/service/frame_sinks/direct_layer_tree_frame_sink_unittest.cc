@@ -8,23 +8,23 @@
 
 #include "base/memory/ptr_util.h"
 #include "cc/output/texture_mailbox_deleter.h"
-#include "cc/scheduler/begin_frame_source.h"
-#include "cc/scheduler/delay_based_time_source.h"
-#include "cc/test/begin_frame_args_test.h"
-#include "cc/test/compositor_frame_helpers.h"
 #include "cc/test/fake_layer_tree_frame_sink_client.h"
 #include "cc/test/fake_output_surface.h"
-#include "cc/test/ordered_simple_task_runner.h"
 #include "cc/test/test_context_provider.h"
-#include "cc/test/test_gpu_memory_buffer_manager.h"
 #include "cc/test/test_shared_bitmap_manager.h"
 #include "components/viz/common/display/renderer_settings.h"
+#include "components/viz/common/frame_sinks/begin_frame_source.h"
+#include "components/viz/common/frame_sinks/delay_based_time_source.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/common/surfaces/local_surface_id_allocator.h"
 #include "components/viz/service/display/display.h"
 #include "components/viz/service/display/display_scheduler.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support_manager.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
+#include "components/viz/test/begin_frame_args_test.h"
+#include "components/viz/test/compositor_frame_helpers.h"
+#include "components/viz/test/ordered_simple_task_runner.h"
+#include "components/viz/test/test_gpu_memory_buffer_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace viz {
@@ -51,11 +51,9 @@ class TestCompositorFrameSinkSupportManager
       CompositorFrameSinkSupportClient* client,
       const FrameSinkId& frame_sink_id,
       bool is_root,
-      bool handles_frame_sink_id_invalidation,
       bool needs_sync_points) override {
     return CompositorFrameSinkSupport::Create(
-        client, frame_sink_manager_, frame_sink_id, is_root,
-        handles_frame_sink_id_invalidation, needs_sync_points);
+        client, frame_sink_manager_, frame_sink_id, is_root, needs_sync_points);
   }
 
  private:
@@ -76,8 +74,8 @@ class DirectLayerTreeFrameSinkTest : public testing::Test {
     auto display_output_surface = cc::FakeOutputSurface::Create3d();
     display_output_surface_ = display_output_surface.get();
 
-    begin_frame_source_ = base::MakeUnique<cc::BackToBackBeginFrameSource>(
-        base::MakeUnique<cc::DelayBasedTimeSource>(task_runner_.get()));
+    begin_frame_source_ = base::MakeUnique<BackToBackBeginFrameSource>(
+        base::MakeUnique<DelayBasedTimeSource>(task_runner_.get()));
 
     int max_frames_pending = 2;
     std::unique_ptr<DisplayScheduler> scheduler(new DisplayScheduler(
@@ -109,8 +107,8 @@ class DirectLayerTreeFrameSinkTest : public testing::Test {
     auto render_pass = cc::RenderPass::Create();
     render_pass->SetNew(1, display_rect_, damage_rect, gfx::Transform());
 
-    cc::CompositorFrame frame = cc::test::MakeEmptyCompositorFrame();
-    frame.metadata.begin_frame_ack = cc::BeginFrameAck(0, 1, true);
+    cc::CompositorFrame frame = test::MakeEmptyCompositorFrame();
+    frame.metadata.begin_frame_ack = BeginFrameAck(0, 1, true);
     frame.render_pass_list.push_back(std::move(render_pass));
 
     layer_tree_frame_sink_->SubmitCompositorFrame(std::move(frame));
@@ -134,11 +132,11 @@ class DirectLayerTreeFrameSinkTest : public testing::Test {
   FrameSinkManagerImpl frame_sink_manager_;
   TestCompositorFrameSinkSupportManager support_manager_;
   cc::TestSharedBitmapManager bitmap_manager_;
-  cc::TestGpuMemoryBufferManager gpu_memory_buffer_manager_;
+  TestGpuMemoryBufferManager gpu_memory_buffer_manager_;
 
   scoped_refptr<cc::TestContextProvider> context_provider_;
   cc::FakeOutputSurface* display_output_surface_ = nullptr;
-  std::unique_ptr<cc::BackToBackBeginFrameSource> begin_frame_source_;
+  std::unique_ptr<BackToBackBeginFrameSource> begin_frame_source_;
   std::unique_ptr<Display> display_;
   cc::FakeLayerTreeFrameSinkClient layer_tree_frame_sink_client_;
   std::unique_ptr<TestDirectLayerTreeFrameSink> layer_tree_frame_sink_;

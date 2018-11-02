@@ -12,21 +12,9 @@ import "content/public/common/url_loader_factory.mojom";
 // worker clients are created and when service workers are starting up.
 interface ServiceWorkerDispatcherHost {
   // Creates a content::ServiceWorkerProviderHost on the browser
-  // process. |provider_info| has Mojo endpoints to connect the provider host
-  // and the provider on the renderer together. The lifetime of
+  // process. |provider_info| has Mojo endpoints to connect the container host
+  // and the container on the renderer together. The lifetime of
   // ServiceWorkerProviderHost will be tied to the
-  // mojom::ServiceWorkerProviderHost interface.
+  // mojom::ServiceWorkerContainerHost interface.
   OnProviderCreated(ServiceWorkerProviderHostInfo provider_info);
-
-  // Informs the browser that a service worker is starting up. |provider_id|
-  // identifies the ServiceWorkerProviderHost hosting the service
-  // worker. |version_id| identifies the ServiceWorkerVersion and
-  // |embedded_worker_id| identifies the EmbeddedWorkerInstance.
-  // If ServiceWorkerUtils::IsServicificationEnabled() is true, this also
-  // populates |script_loader_factory| for script loading for the service
-  // worker.
-  OnSetHostedVersionId(int32 provider_id,
-                       int64 version_id,
-                       int32 embedded_worker_id,
-                       associated URLLoaderFactory& script_loader_factory);
 };

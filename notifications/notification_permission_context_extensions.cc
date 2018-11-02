@@ -39,7 +39,10 @@ void CallbackContentSettingWrapper(
 
 NotificationPermissionContextExtensions::
     NotificationPermissionContextExtensions(Profile* profile)
-    : profile_(profile) {}
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+    : profile_(profile)
+#endif
+{}
 
 NotificationPermissionContextExtensions::
     ~NotificationPermissionContextExtensions() {}

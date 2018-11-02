@@ -13,6 +13,8 @@
 
 #include "base/ios/weak_nsobject.h"
 #import "base/mac/scoped_nsobject.h"
+#import "ios/chrome/browser/ui/activity_services/requirements/activity_service_positioner.h"
+#import "ios/chrome/browser/ui/bubble/bubble_view_anchor_point_provider.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
 #import "ios/chrome/browser/ui/tools_menu/tools_popup_controller.h"
 #include "ios/chrome/browser/ui/ui_util.h"
@@ -108,7 +110,9 @@ extern const CGRect kToolbarFrame[INTERFACE_IDIOM_COUNT];
 // (forwarding to the delegate).
 // This is not intended to be used on its own, but to be subclassed by more
 // specific toolbars that provide more buttons in the empty space.
-@interface ToolbarController : NSObject<PopupMenuDelegate>
+@interface ToolbarController : NSObject<ActivityServicePositioner,
+                                        PopupMenuDelegate,
+                                        BubbleViewAnchorPointProvider>
 
 // The top-level toolbar view. It is a |UIImageView| even though it does not
 // hold any image for testability: unlike |UIView|, a |UIImageView| that is
@@ -189,6 +193,10 @@ extern const CGRect kToolbarFrame[INTERFACE_IDIOM_COUNT];
 // Returns the share button's view. Used to position the share menu.
 - (UIView*)shareButtonView;
 
+// Returns the stackButton (a.k.a. tabSwitcherButton). Used by subclasses to
+// set display or dismiss target-actions.
+- (UIButton*)stackButton;
+
 // Sets the background to a particular alpha value. Intended for use by
 // subcleasses that need to set the opacity of the entire toolbar.
 - (void)setBackgroundAlpha:(CGFloat)alpha;
@@ -205,9 +213,6 @@ extern const CGRect kToolbarFrame[INTERFACE_IDIOM_COUNT];
 // Called when buttons are pressed. Records action metrics.
 // Subclasses must call |super| if they override this method.
 - (IBAction)recordUserMetrics:(id)sender;
-
-// Called when a touch down is registered on the stack view button.
-- (IBAction)stackButtonTouchDown:(id)sender;
 
 // Height of the toolbar's drop shadow.  This drop shadow is drawn by the
 // toolbar and included in the toolbar's height, so it must be subtracted away
@@ -294,6 +299,9 @@ extern const CGRect kToolbarFrame[INTERFACE_IDIOM_COUNT];
 
 // Shows/hides iPhone toolbar views for when the new tab page is displayed.
 - (void)hideViewsForNewTabPage:(BOOL)hide;
+
+// Triggers an animation on the tools menu button to draw the user's attention.
+- (void)triggerToolsMenuButtonAnimation;
 
 @end
 

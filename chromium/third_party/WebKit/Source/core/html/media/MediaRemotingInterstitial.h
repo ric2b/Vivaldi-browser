@@ -31,11 +31,17 @@ class MediaRemotingInterstitial final : public HTMLDivElement {
  public:
   explicit MediaRemotingInterstitial(HTMLVideoElement&);
 
-  // Show/Hide Media Remoting interstitial.
-  void Show();
+  // Show/Hide Media Remoting interstitial. |remote_device_friendly_name| will
+  // be shown in the UI to indicate which device the content is rendered on. An
+  // empty name indicates an unknown remote device. A default message will be
+  // shown in this case.
+  void Show(const WebString& remote_device_friendly_name);
   void Hide();
 
   void OnPosterImageChanged();
+
+  // Query for whether the remoting interstitial is visible.
+  bool IsVisible() const { return should_be_visible_; }
 
   HTMLVideoElement& GetVideoElement() const { return *video_element_; }
 
@@ -49,7 +55,7 @@ class MediaRemotingInterstitial final : public HTMLDivElement {
   void ToggleInterstitialTimerFired(TimerBase*);
 
   // Indicates whether the interstitial should be visible. It is set/changed
-  // when SHow()/Hide() is called.
+  // when Show()/Hide() is called.
   bool should_be_visible_ = false;
 
   TaskRunnerTimer<MediaRemotingInterstitial> toggle_insterstitial_timer_;

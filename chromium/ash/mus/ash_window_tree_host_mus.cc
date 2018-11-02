@@ -9,14 +9,11 @@
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
 #include "base/memory/ptr_util.h"
+#include "services/ui/public/cpp/input_devices/input_device_controller_client.h"
 #include "ui/aura/mus/window_tree_host_mus_init_params.h"
 #include "ui/aura/window.h"
 #include "ui/events/event_sink.h"
 #include "ui/events/null_event_targeter.h"
-
-#if defined(USE_OZONE)
-#include "services/ui/public/cpp/input_devices/input_device_controller_client.h"
-#endif
 
 namespace ash {
 
@@ -30,14 +27,10 @@ AshWindowTreeHostMus::AshWindowTreeHostMus(
 AshWindowTreeHostMus::~AshWindowTreeHostMus() {}
 
 bool AshWindowTreeHostMus::ConfineCursorToRootWindow() {
-  // TODO: when implementing see implementation in AshWindowTreeHostPlatform
-  // for how it uses |transformer_helper_|. http://crbug.com/746054.
-  NOTIMPLEMENTED();
+  gfx::Rect confined_bounds(GetBoundsInPixels().size());
+  confined_bounds.Inset(transformer_helper_->GetHostInsets());
+  ConfineCursorToBounds(confined_bounds);
   return true;
-}
-
-void AshWindowTreeHostMus::UnConfineCursor() {
-  NOTIMPLEMENTED();
 }
 
 void AshWindowTreeHostMus::SetRootWindowTransformer(
@@ -72,7 +65,6 @@ void AshWindowTreeHostMus::RegisterMirroringHost(
   NOTIMPLEMENTED();
 }
 
-#if defined(USE_OZONE)
 void AshWindowTreeHostMus::SetCursorConfig(
     const display::Display& display,
     display::Display::Rotation rotation) {
@@ -82,7 +74,6 @@ void AshWindowTreeHostMus::SetCursorConfig(
 void AshWindowTreeHostMus::ClearCursorConfig() {
   // Nothing to do here, mus takes care of this.
 }
-#endif
 
 void AshWindowTreeHostMus::SetRootTransform(const gfx::Transform& transform) {
   transformer_helper_->SetTransform(transform);
@@ -102,7 +93,6 @@ void AshWindowTreeHostMus::UpdateRootWindowSizeInPixels(
 }
 
 void AshWindowTreeHostMus::OnCursorVisibilityChangedNative(bool show) {
-#if defined(USE_OZONE)
   ui::InputDeviceControllerClient* input_device_controller_client =
       Shell::Get()->shell_delegate()->GetInputDeviceControllerClient();
   if (!input_device_controller_client)
@@ -110,7 +100,6 @@ void AshWindowTreeHostMus::OnCursorVisibilityChangedNative(bool show) {
 
   // Temporarily pause tap-to-click when the cursor is hidden.
   input_device_controller_client->SetTapToClickPaused(!show);
-#endif
 }
 
 }  // namespace ash

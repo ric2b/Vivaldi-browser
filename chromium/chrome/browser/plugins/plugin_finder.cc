@@ -293,6 +293,9 @@ void PluginFinder::ReinitializePlugins(
     return;
 
   version_ = version;
+  // NOTE(andre@vivald.com) : This is built below and should be cleared
+  // beforehand.
+  identifier_plugin_.clear();
 
   for (base::DictionaryValue::Iterator plugin_it(*plugin_list);
       !plugin_it.IsAtEnd(); plugin_it.Advance()) {

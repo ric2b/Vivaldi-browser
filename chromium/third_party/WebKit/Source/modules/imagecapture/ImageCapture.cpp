@@ -325,6 +325,7 @@ MediaTrackCapabilities& ImageCapture::GetMediaTrackCapabilities() {
 void ImageCapture::SetMediaTrackConstraints(
     ScriptPromiseResolver* resolver,
     const HeapVector<MediaTrackConstraintSet>& constraints_vector) {
+  DCHECK_GT(constraints_vector.size(), 0u);
   if (!service_) {
     resolver->Reject(DOMException::Create(kNotFoundError, kNoServiceError));
     return;
@@ -538,8 +539,12 @@ void ImageCapture::SetMediaTrackConstraints(
 
   MediaTrackConstraints resolver_constraints;
   resolver_constraints.setAdvanced(constraints_vector);
-  auto resolver_cb = WTF::Bind(&ImageCapture::ResolveWithMediaTrackConstraints,
-                               WrapPersistent(this), resolver_constraints);
+
+  // An IDLDictionaryBase cannot safely be bound into a callback so the
+  // ScriptValue is created ahead of time. See https://crbug.com/759457.
+  auto resolver_cb = WTF::Bind(
+      &ImageCapture::ResolveWithMediaTrackConstraints, WrapPersistent(this),
+      ScriptValue::From(resolver->GetScriptState(), resolver_constraints));
 
   service_->SetOptions(
       stream_track_->Component()->Source()->Id(), std::move(settings),
@@ -624,6 +629,11 @@ ImageCapture::ImageCapture(ExecutionContext* context, MediaStreamTrack* track)
   DCHECK(stream_track_);
   DCHECK(!service_.is_bound());
 
+  // This object may be constructed over an ExecutionContext that has already
+  // been detached. In this case the ImageCapture service will not be available.
+  if (!GetFrame())
+    return;
+
   GetFrame()->GetInterfaceProvider().GetInterface(mojo::MakeRequest(&service_));
 
   service_.set_connection_error_handler(ConvertToBaseCallback(WTF::Bind(
@@ -682,7 +692,7 @@ void ImageCapture::OnMojoGetPhotoState(
     return;
   }
 
-  (*resolve_function)(resolver);
+  resolve_function(resolver);
   service_requests_.erase(resolver);
 }
 
@@ -845,7 +855,7 @@ void ImageCapture::ResolveWithPhotoCapabilities(
 }
 
 void ImageCapture::ResolveWithMediaTrackConstraints(
-    MediaTrackConstraints constraints,
+    ScriptValue constraints,
     ScriptPromiseResolver* resolver) {
   DCHECK(resolver);
   resolver->Resolve(constraints);

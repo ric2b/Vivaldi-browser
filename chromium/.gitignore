@@ -111,6 +111,7 @@ vs-chromium-project.txt
 /chrome/installer/mini_installer/support
 /chrome/installer/mini_installer_syzygy.xml
 /chrome/installer/mini_installer_tests_run.xml
+/chrome/installer/zucchini/testdata/*.exe
 /chrome/installer_util_strings.xml
 /chrome/interactive_ui_tests_run.xml
 /chrome/setup.xml
@@ -131,7 +132,6 @@ vs-chromium-project.txt
 /chrome/test/data/gpu/vectortown_endurance/
 /chrome/test/data/gpu/vt/
 /chrome/test/data/layout_tests
-/chrome/test/data/osdd
 /chrome/test/data/pdf_private
 /chrome/test/data/perf/canvas_bench
 /chrome/test/data/perf/frame_rate/content
@@ -139,6 +139,7 @@ vs-chromium-project.txt
 /chrome/test/data/perf/private/
 /chrome/test/data/perf/third_party/
 /chrome/test/data/plugin/
+/chrome/test/data/vr/webvr_info/
 /chrome/test/data/webrtc/resources
 /chrome/test/media_router/internal
 /chrome/tools/memory

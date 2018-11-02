@@ -83,7 +83,8 @@ CustomElementRegistry::CustomElementRegistry(const LocalDOMWindow* owner)
     : element_definition_is_running_(false),
       owner_(owner),
       v0_(new V0RegistrySet()),
-      upgrade_candidates_(new UpgradeCandidateMap()) {}
+      upgrade_candidates_(new UpgradeCandidateMap()),
+      reaction_stack_(&CustomElementReactionStack::Current()) {}
 
 DEFINE_TRACE(CustomElementRegistry) {
   visitor->Trace(definitions_);
@@ -94,9 +95,7 @@ DEFINE_TRACE(CustomElementRegistry) {
 }
 
 DEFINE_TRACE_WRAPPERS(CustomElementRegistry) {
-  // TODO(mlippautz): This is not safe for incremental marking.
-  visitor->TraceWrappersWithManualWriteBarrier(
-      &CustomElementReactionStack::Current());
+  visitor->TraceWrappers(reaction_stack_);
   for (auto definition : definitions_)
     visitor->TraceWrappers(definition);
 }
@@ -196,8 +195,7 @@ CustomElementDefinition* CustomElementRegistry::define(
   CustomElementDefinition* definition = builder.Build(descriptor, id);
   CHECK(!exception_state.HadException());
   CHECK(definition->Descriptor() == descriptor);
-  definitions_.emplace_back(
-      TraceWrapperMember<CustomElementDefinition>(this, definition));
+  definitions_.emplace_back(definition);
   NameIdMap::AddResult result = name_id_map_.insert(descriptor.GetName(), id);
   CHECK(result.is_new_entry);
 

@@ -9,6 +9,7 @@
 #include "core/paint/BlockPainter.h"
 #include "core/paint/BoxModelObjectPainter.h"
 #include "core/paint/BoxPainter.h"
+#include "core/paint/BoxPainterBase.h"
 #include "core/paint/LayoutObjectDrawingRecorder.h"
 #include "core/paint/ObjectPainter.h"
 #include "core/paint/PaintInfo.h"
@@ -80,9 +81,11 @@ void TableCellPainter::PaintBoxDecorationBackground(
       !layout_table_cell_.FirstChild())
     return;
 
+  bool has_background = style.HasBackground();
+  bool has_box_shadow = style.BoxShadow();
   bool needs_to_paint_border =
       style.HasBorderDecoration() && !table->ShouldCollapseBorders();
-  if (!style.HasBackground() && !style.BoxShadow() && !needs_to_paint_border)
+  if (!has_background && !has_box_shadow && !needs_to_paint_border)
     return;
 
   if (LayoutObjectDrawingRecorder::UseCachedDrawingIfPossible(
@@ -100,18 +103,31 @@ void TableCellPainter::PaintBoxDecorationBackground(
 
   LayoutRect paint_rect = PaintRectNotIncludingVisualOverflow(paint_offset);
 
-  BoxPainter::PaintNormalBoxShadow(paint_info, paint_rect, style);
-  PaintBackground(paint_info, paint_rect, layout_table_cell_);
-  // TODO(wangxianzhu): Calculate the inset shadow bounds by insetting paintRect
-  // by half widths of collapsed borders.
-  BoxPainter::PaintInsetBoxShadow(paint_info, paint_rect, style);
+  if (has_box_shadow)
+    BoxPainterBase::PaintNormalBoxShadow(paint_info, paint_rect, style);
+
+  if (has_background)
+    PaintBackground(paint_info, paint_rect, layout_table_cell_);
+
+  if (has_box_shadow) {
+    // If the table collapses borders, the inner rect is the border box rect
+    // inset by inner half widths of collapsed borders (which are returned
+    // from the overriden BorderXXX() methods). Otherwise the following code is
+    // equivalent to BoxPainterBase::PaintInsetBoxShadowWithBorderRect().
+    auto inner_rect = paint_rect;
+    inner_rect.ContractEdges(
+        layout_table_cell_.BorderTop(), layout_table_cell_.BorderRight(),
+        layout_table_cell_.BorderBottom(), layout_table_cell_.BorderLeft());
+    BoxPainterBase::PaintInsetBoxShadowWithInnerRect(
+        paint_info, inner_rect, layout_table_cell_.StyleRef());
+  }
 
   if (!needs_to_paint_border)
     return;
 
-  BoxPainter::PaintBorder(layout_table_cell_, layout_table_cell_.GetDocument(),
-                          layout_table_cell_.GeneratingNode(), paint_info,
-                          paint_rect, style);
+  BoxPainterBase::PaintBorder(
+      layout_table_cell_, layout_table_cell_.GetDocument(),
+      layout_table_cell_.GeneratingNode(), paint_info, paint_rect, style);
 }
 
 void TableCellPainter::PaintMask(const PaintInfo& paint_info,

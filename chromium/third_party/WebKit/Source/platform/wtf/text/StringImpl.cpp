@@ -952,58 +952,37 @@ RefPtr<StringImpl> StringImpl::SimplifyWhiteSpace(
       UCharPredicate(is_white_space), strip_behavior);
 }
 
-int StringImpl::ToIntStrict(bool* ok) {
+int StringImpl::ToInt(NumberParsingOptions options, bool* ok) const {
   if (Is8Bit())
-    return CharactersToIntStrict(Characters8(), length_, ok);
-  return CharactersToIntStrict(Characters16(), length_, ok);
+    return CharactersToInt(Characters8(), length_, options, ok);
+  return CharactersToInt(Characters16(), length_, options, ok);
 }
 
-unsigned StringImpl::ToUIntStrict(bool* ok) {
+unsigned StringImpl::ToUInt(NumberParsingOptions options, bool* ok) const {
   if (Is8Bit())
-    return CharactersToUIntStrict(Characters8(), length_, ok);
-  return CharactersToUIntStrict(Characters16(), length_, ok);
+    return CharactersToUInt(Characters8(), length_, options, ok);
+  return CharactersToUInt(Characters16(), length_, options, ok);
 }
 
 unsigned StringImpl::HexToUIntStrict(bool* ok) {
-  if (Is8Bit())
-    return HexCharactersToUIntStrict(Characters8(), length_, ok);
-  return HexCharactersToUIntStrict(Characters16(), length_, ok);
+  if (Is8Bit()) {
+    return HexCharactersToUInt(Characters8(), length_,
+                               NumberParsingOptions::kStrict, ok);
+  }
+  return HexCharactersToUInt(Characters16(), length_,
+                             NumberParsingOptions::kStrict, ok);
 }
 
-int64_t StringImpl::ToInt64Strict(bool* ok) {
+int64_t StringImpl::ToInt64(NumberParsingOptions options, bool* ok) const {
   if (Is8Bit())
-    return CharactersToInt64Strict(Characters8(), length_, ok);
-  return CharactersToInt64Strict(Characters16(), length_, ok);
+    return CharactersToInt64(Characters8(), length_, options, ok);
+  return CharactersToInt64(Characters16(), length_, options, ok);
 }
 
-uint64_t StringImpl::ToUInt64Strict(bool* ok) {
+uint64_t StringImpl::ToUInt64(NumberParsingOptions options, bool* ok) const {
   if (Is8Bit())
-    return CharactersToUInt64Strict(Characters8(), length_, ok);
-  return CharactersToUInt64Strict(Characters16(), length_, ok);
-}
-
-int StringImpl::ToInt(bool* ok) {
-  if (Is8Bit())
-    return CharactersToInt(Characters8(), length_, ok);
-  return CharactersToInt(Characters16(), length_, ok);
-}
-
-unsigned StringImpl::ToUInt(bool* ok) {
-  if (Is8Bit())
-    return CharactersToUInt(Characters8(), length_, ok);
-  return CharactersToUInt(Characters16(), length_, ok);
-}
-
-int64_t StringImpl::ToInt64(bool* ok) {
-  if (Is8Bit())
-    return CharactersToInt64(Characters8(), length_, ok);
-  return CharactersToInt64(Characters16(), length_, ok);
-}
-
-uint64_t StringImpl::ToUInt64(bool* ok) {
-  if (Is8Bit())
-    return CharactersToUInt64(Characters8(), length_, ok);
-  return CharactersToUInt64(Characters16(), length_, ok);
+    return CharactersToUInt64(Characters8(), length_, options, ok);
+  return CharactersToUInt64(Characters16(), length_, options, ok);
 }
 
 double StringImpl::ToDouble(bool* ok) {

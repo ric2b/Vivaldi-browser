@@ -17,11 +17,16 @@
 #include "base/timer/timer.h"
 #include "services/ui/public/interfaces/display_manager.mojom.h"
 #include "services/ui/ws/cursor_state.h"
+#include "services/ui/ws/cursor_state_delegate.h"
 #include "services/ui/ws/event_dispatcher.h"
 #include "services/ui/ws/event_dispatcher_delegate.h"
 #include "services/ui/ws/server_window_observer.h"
 #include "services/ui/ws/user_id.h"
 #include "services/ui/ws/window_server.h"
+
+namespace viz {
+class HitTestQuery;
+}
 
 namespace ui {
 namespace ws {
@@ -39,7 +44,8 @@ class WindowManagerStateTestApi;
 // WindowManagerState is owned by the WindowTree the window manager is
 // associated with.
 class WindowManagerState : public EventDispatcherDelegate,
-                           public ServerWindowObserver {
+                           public ServerWindowObserver,
+                           public CursorStateDelegate {
  public:
   explicit WindowManagerState(WindowTree* window_tree);
   ~WindowManagerState() override;
@@ -65,7 +71,6 @@ class WindowManagerState : public EventDispatcherDelegate,
     return event_dispatcher_.capture_window();
   }
 
-  void ReleaseCaptureBlockedByModalWindow(const ServerWindow* modal_window);
   void ReleaseCaptureBlockedByAnyModalWindow();
 
   // Sets the location of the cursor to a location on display |display_id|.
@@ -73,6 +78,8 @@ class WindowManagerState : public EventDispatcherDelegate,
 
   void SetKeyEventsThatDontHideCursor(
       std::vector<::ui::mojom::EventMatcherPtr> dont_hide_cursor_list);
+
+  void SetCursorTouchVisible(bool enabled);
 
   void SetDragDropSourceWindow(
       DragSource* drag_source,
@@ -264,7 +271,10 @@ class WindowManagerState : public EventDispatcherDelegate,
                         ServerWindow* old_capture) override;
   void OnMouseCursorLocationChanged(const gfx::Point& point,
                                     int64_t display_id) override;
-  void OnEventChangesCursorVisibility(bool visible) override;
+  void OnEventChangesCursorVisibility(const ui::Event& event,
+                                      bool visible) override;
+  void OnEventChangesCursorTouchVisibility(const ui::Event& event,
+                                           bool visible) override;
   void DispatchInputEventToWindow(ServerWindow* target,
                                   ClientSpecificId client_id,
                                   int64_t display_id,
@@ -278,10 +288,20 @@ class WindowManagerState : public EventDispatcherDelegate,
                                           bool in_nonclient_area) override;
   ServerWindow* GetRootWindowContaining(gfx::Point* location_in_display,
                                         int64_t* display_id) override;
+  ServerWindow* GetRootWindowForEventDispatch(ServerWindow* window) override;
   void OnEventTargetNotFound(const Event& event, int64_t display_id) override;
+  ServerWindow* GetFallbackTargetForEventBlockedByModal(
+      ServerWindow* window) override;
+  void OnEventOccurredOutsideOfModalWindow(ServerWindow* modal_window) override;
+  viz::HitTestQuery* GetHitTestQueryForDisplay(int64_t display_id) override;
+  ServerWindow* GetWindowFromFrameSinkId(
+      const viz::FrameSinkId& frame_sink_id) override;
 
   // ServerWindowObserver:
   void OnWindowEmbeddedAppDisconnected(ServerWindow* window) override;
+
+  // CursorStateDelegate:
+  void OnCursorTouchVisibleChanged(bool enabled) override;
 
   // The single WindowTree this WindowManagerState is associated with.
   // |window_tree_| owns this.

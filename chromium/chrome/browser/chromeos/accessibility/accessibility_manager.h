@@ -62,15 +62,8 @@ struct AccessibilityStatusEventDetails {
       bool enabled,
       ash::AccessibilityNotificationVisibility notify);
 
-  AccessibilityStatusEventDetails(
-      AccessibilityNotificationType notification_type,
-      bool enabled,
-      ash::MagnifierType magnifier_type,
-      ash::AccessibilityNotificationVisibility notify);
-
   AccessibilityNotificationType notification_type;
   bool enabled;
-  ash::MagnifierType magnifier_type;
   ash::AccessibilityNotificationVisibility notify;
 };
 
@@ -134,11 +127,9 @@ class AccessibilityManager
   // Returns true when the accessibility menu should be shown.
   bool ShouldShowAccessibilityMenu();
 
-  // Returns true when cursor compositing should be enabled.
-  bool ShouldEnableCursorCompositing();
-
   // Enables or disables the large cursor.
   void EnableLargeCursor(bool enabled);
+
   // Returns true if the large cursor is enabled, or false if not.
   bool IsLargeCursorEnabled() const;
 
@@ -242,9 +233,6 @@ class AccessibilityManager
   static void SetBrailleControllerForTest(
       extensions::api::braille_display_private::BrailleController* controller);
 
-  // Enables/disables system sounds.
-  void EnableSystemSounds(bool system_sounds_enabled);
-
   // Initiates play of shutdown sound and returns it's duration.
   base::TimeDelta PlayShutdownSound();
 
@@ -324,7 +312,8 @@ class AccessibilityManager
   void PostSwitchChromeVoxProfile();
   void ReloadChromeVoxPanel();
 
-  void UpdateLargeCursorFromPref();
+  void UpdateAlwaysShowMenuFromPref();
+  void OnLargeCursorChanged();
   void UpdateStickyKeysFromPref();
   void UpdateSpokenFeedbackFromPref();
   void UpdateHighContrastFromPref();
@@ -401,8 +390,6 @@ class AccessibilityManager
   PrefHandler select_to_speak_pref_handler_;
   PrefHandler switch_access_pref_handler_;
 
-  bool large_cursor_enabled_;
-  int large_cursor_size_in_dip_;
   bool sticky_keys_enabled_;
   bool spoken_feedback_enabled_;
   bool high_contrast_enabled_;
@@ -418,8 +405,6 @@ class AccessibilityManager
   bool switch_access_enabled_;
 
   ash::AccessibilityNotificationVisibility spoken_feedback_notification_;
-
-  bool system_sounds_enabled_;
 
   AccessibilityStatusCallbackList callback_list_;
 

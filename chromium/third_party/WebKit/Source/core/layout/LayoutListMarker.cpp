@@ -354,7 +354,7 @@ LayoutUnit LayoutListMarker::LineHeight(
   return LayoutBox::LineHeight(first_line, direction, line_position_mode);
 }
 
-int LayoutListMarker::BaselinePosition(
+LayoutUnit LayoutListMarker::BaselinePosition(
     FontBaseline baseline_type,
     bool first_line,
     LineDirectionMode direction,
@@ -477,17 +477,6 @@ IntRect LayoutListMarker::GetRelativeMarkerRect() const {
   }
 
   return relative_rect;
-}
-
-void LayoutListMarker::SetSelectionState(SelectionState state) {
-  // The selection state for our containing block hierarchy is updated by the
-  // base class call.
-  LayoutBox::SetSelectionState(state);
-
-  if (InlineBoxWrapper() && CanUpdateSelectionOnRootLineBoxes()) {
-    InlineBoxWrapper()->Root().SetHasSelectedChildren(state !=
-                                                      SelectionState::kNone);
-  }
 }
 
 void LayoutListMarker::ListItemStyleDidChange() {

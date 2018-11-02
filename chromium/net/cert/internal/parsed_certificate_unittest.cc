@@ -44,12 +44,15 @@ scoped_refptr<ParsedCertificate> ParseCertificateFromFile(
           reinterpret_cast<const uint8_t*>(data.data()), data.size(), nullptr)),
       options, &errors);
 
-  VerifyCertErrors(expected_errors, errors, test_file_path);
+  // The errors are baselined for |!allow_invalid_serial_numbers|. So if
+  // requesting a non-default option skip the error checks.
+  // TODO(eroman): This is ugly.
+  if (!options.allow_invalid_serial_numbers)
+    VerifyCertErrors(expected_errors, errors, test_file_path);
 
-  // TODO(crbug.com/634443): Every parse failure being tested should emit error
-  // information.
-  // if (!cert)
-  //   EXPECT_FALSE(errors.empty());
+  // Every parse failure being tested should emit error information.
+  if (!cert)
+    EXPECT_FALSE(errors.ToDebugString().empty());
 
   return cert;
 }
@@ -128,6 +131,86 @@ TEST(ParsedCertificateTest, ExtensionsDataAfterSequence) {
 TEST(ParsedCertificateTest, ExtensionsDuplicateKeyUsage) {
   ASSERT_FALSE(
       ParseCertificateFromFile("extensions_duplicate_key_usage.pem", {}));
+}
+
+// Parses a certificate with a bad key usage extension (BIT STRING with zero
+// elements).
+//
+// TODO(eroman): This should be a verification failure not a parsing failure.
+TEST(ParsedCertificateTest, BadKeyUsage) {
+  ASSERT_FALSE(ParseCertificateFromFile("bad_key_usage.pem", {}));
+}
+
+// Parses a certificate that has a PolicyQualifierInfo that is missing the
+// qualifier field.
+TEST(ParsedCertificateTest, BadPolicyQualifiers) {
+  ASSERT_FALSE(ParseCertificateFromFile("bad_policy_qualifiers.pem", {}));
+}
+
+// Parses a certificate that uses an unknown signature algorithm OID (00).
+TEST(ParsedCertificateTest, BadSignatureAlgorithmOid) {
+  ASSERT_FALSE(ParseCertificateFromFile("bad_signature_algorithm_oid.pem", {}));
+}
+
+//  The validity encodes time as UTCTime but following the BER rules rather than
+//  DER rules (i.e. YYMMDDHHMMZ instead of YYMMDDHHMMSSZ).
+TEST(ParsedCertificateTest, BadValidity) {
+  ASSERT_FALSE(ParseCertificateFromFile("bad_validity.pem", {}));
+}
+
+// The signature algorithm contains an unexpected parameters field.
+TEST(ParsedCertificateTest, FailedSignatureAlgorithm) {
+  ASSERT_FALSE(ParseCertificateFromFile("failed_signature_algorithm.pem", {}));
+}
+
+TEST(ParsedCertificateTest, IssuerBadPrintableString) {
+  ASSERT_FALSE(ParseCertificateFromFile("issuer_bad_printable_string.pem", {}));
+}
+
+TEST(ParsedCertificateTest, NameConstraintsBadIp) {
+  ASSERT_FALSE(ParseCertificateFromFile("name_constraints_bad_ip.pem", {}));
+}
+
+TEST(ParsedCertificateTest, PolicyQualifiersEmptySequence) {
+  ASSERT_FALSE(
+      ParseCertificateFromFile("policy_qualifiers_empty_sequence.pem", {}));
+}
+
+TEST(ParsedCertificateTest, SubjectBlankSubjectAltNameNotCritical) {
+  ASSERT_FALSE(ParseCertificateFromFile(
+      "subject_blank_subjectaltname_not_critical.pem", {}));
+}
+
+TEST(ParsedCertificateTest, SubjectNotAscii) {
+  ASSERT_FALSE(ParseCertificateFromFile("subject_not_ascii.pem", {}));
+}
+
+TEST(ParsedCertificateTest, SubjectNotPrintableString) {
+  ASSERT_FALSE(
+      ParseCertificateFromFile("subject_not_printable_string.pem", {}));
+}
+
+TEST(ParsedCertificateTest, SubjectAltNameBadIp) {
+  ASSERT_FALSE(ParseCertificateFromFile("subjectaltname_bad_ip.pem", {}));
+}
+
+TEST(ParsedCertificateTest, SubjectAltNameDnsNotAscii) {
+  ASSERT_FALSE(
+      ParseCertificateFromFile("subjectaltname_dns_not_ascii.pem", {}));
+}
+
+TEST(ParsedCertificateTest, SubjectAltNameGeneralNamesEmptySequence) {
+  ASSERT_FALSE(ParseCertificateFromFile(
+      "subjectaltname_general_names_empty_sequence.pem", {}));
+}
+
+TEST(ParsedCertificateTest, SubjectAltNameTrailingData) {
+  ASSERT_FALSE(
+      ParseCertificateFromFile("subjectaltname_trailing_data.pem", {}));
+}
+
+TEST(ParsedCertificateTest, V1ExplicitVersion) {
+  ASSERT_FALSE(ParseCertificateFromFile("v1_explicit_version.pem", {}));
 }
 
 // Parses an Extensions that contains an extended key usages.
@@ -424,6 +507,32 @@ TEST(ParsedCertificateTest, SerialNumber37BytesLong) {
       0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e,
       0x1f, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25};
   EXPECT_EQ(der::Input(expected_serial), cert->tbs().serial_number);
+}
+
+// Tests a serial number which is zero. RFC 5280 says they should be positive,
+// however also recommends supporting non-positive ones, so parsing here
+// is expected to succeed.
+TEST(ParsedCertificateTest, SerialNumberZero) {
+  scoped_refptr<ParsedCertificate> cert =
+      ParseCertificateFromFile("serial_zero.pem", {});
+  ASSERT_TRUE(cert);
+
+  static const uint8_t expected_serial[] = {0x00};
+  EXPECT_EQ(der::Input(expected_serial), cert->tbs().serial_number);
+}
+
+// Tests a serial number which not a number (NULL).
+TEST(ParsedCertificateTest, SerialNotNumber) {
+  scoped_refptr<ParsedCertificate> cert =
+      ParseCertificateFromFile("serial_not_number.pem", {});
+  ASSERT_FALSE(cert);
+}
+
+// Tests a serial number which uses a non-minimal INTEGER encoding
+TEST(ParsedCertificateTest, SerialNotMinimal) {
+  scoped_refptr<ParsedCertificate> cert =
+      ParseCertificateFromFile("serial_not_minimal.pem", {});
+  ASSERT_FALSE(cert);
 }
 
 // Tests parsing a certificate that has an inhibitAnyPolicy extension.

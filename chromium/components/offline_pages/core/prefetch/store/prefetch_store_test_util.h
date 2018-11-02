@@ -6,45 +6,87 @@
 #define COMPONENTS_OFFLINE_PAGES_CORE_PREFETCH_STORE_PREFETCH_STORE_TEST_UTIL_H_
 
 #include <memory>
+#include <set>
+#include <string>
 
+#include "base/bind.h"
 #include "base/callback_forward.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
+#include "base/test/simple_test_clock.h"
+#include "base/test/test_simple_task_runner.h"
 #include "components/offline_pages/core/prefetch/store/prefetch_store.h"
+#include "testing/gtest/include/gtest/gtest.h"
 
 class GURL;
 
 namespace base {
 class ScopedTempDir;
+class SimpleTestClock;
 }  // namespace base
 
 namespace offline_pages {
-const int kStoreCommandFailed = -1;
+struct PrefetchItem;
 
+extern const int kPrefetchStoreCommandFailed;
+
+// Encapsulates the PrefetchStore and provides synchronous operations on the
+// store, for test writing convenience.
 class PrefetchStoreTestUtil {
  public:
-  PrefetchStoreTestUtil();
+  explicit PrefetchStoreTestUtil(
+      scoped_refptr<base::TestSimpleTaskRunner> task_runner);
   ~PrefetchStoreTestUtil();
 
+  // Builds a new store in a temporary directory.
   void BuildStore();
+  // Builds the store in memory (no disk storage).
   void BuildStoreInMemory();
-
-  void CountPrefetchItems(PrefetchStore::ResultCallback<int> result_callback);
-
-  void ZombifyPrefetchItem(const std::string& name_space,
-                           const GURL& url,
-                           PrefetchStore::ResultCallback<int> reuslt_callback);
-
   // Releases the ownership of currently controlled store.
   std::unique_ptr<PrefetchStore> ReleaseStore();
-
+  // Deletes the currently held store that was previously built.
   void DeleteStore();
+
+  // Inserts the provided item in store. Returns true if successful.
+  bool InsertPrefetchItem(const PrefetchItem& item);
+
+  // Returns the total count of prefetch items in the store.
+  int CountPrefetchItems();
+
+  // Gets the item with the provided |offline_id|. Returns null if the item was
+  // not found.
+  std::unique_ptr<PrefetchItem> GetPrefetchItem(int64_t offline_id);
+
+  // Gets all existing items from the store, inserting them into |all_items|.
+  // Returns the number of items found.
+  std::size_t GetAllItems(std::set<PrefetchItem>* all_items);
+
+  // Sets to the ZOMBIE state entries identified by |name_space| and
+  // |url|, returning the number of entries found.
+  int ZombifyPrefetchItems(const std::string& name_space, const GURL& url);
+
+  // Returns number of rows affected by last SQL statement.
+  int LastCommandChangeCount();
+
+  // Gets the prefetch downloader quota value for testing.
+  // Quota calculation will use |clock_| as time source.
+  int64_t GetPrefetchQuota();
+
+  // Sets the prefetch quota value for testing.
+  // Will use |clock_| as time source when writing back quota.
+  bool SetPrefetchQuota(int64_t available_quota);
 
   PrefetchStore* store() { return store_.get(); }
 
+  base::SimpleTestClock* clock() { return &clock_; }
+
  private:
+  void RunUntilIdle();
+
+  scoped_refptr<base::TestSimpleTaskRunner> task_runner_;
   base::ScopedTempDir temp_directory_;
   std::unique_ptr<PrefetchStore> store_;
+  base::SimpleTestClock clock_;
 
   DISALLOW_COPY_AND_ASSIGN(PrefetchStoreTestUtil);
 };

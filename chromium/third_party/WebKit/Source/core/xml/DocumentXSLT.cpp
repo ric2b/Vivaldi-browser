@@ -10,8 +10,8 @@
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/Node.h"
 #include "core/dom/ProcessingInstruction.h"
-#include "core/events/Event.h"
-#include "core/events/EventListener.h"
+#include "core/dom/events/Event.h"
+#include "core/dom/events/EventListener.h"
 #include "core/frame/UseCounter.h"
 #include "core/probe/CoreProbes.h"
 #include "core/xml/XSLStyleSheet.h"
@@ -39,7 +39,8 @@ class DOMContentLoadedListener final
     DCHECK_EQ(event->type(), "DOMContentLoaded");
     ScriptState::Scope scope(script_state);
 
-    Document& document = *ToDocument(ExecutionContext::From(script_state));
+    Document& document =
+        *ToDocument(ToExecutionContext(script_state->GetContext()));
     DCHECK(!document.Parsing());
 
     // Processing instruction (XML documents only).

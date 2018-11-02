@@ -13,7 +13,9 @@ var GuestViewInternalNatives = requireNative('guest_view_internal');
 var WebViewConstants = require('webViewConstants').WebViewConstants;
 var WebViewEvents = require('webViewEvents').WebViewEvents;
 var WebViewEventsPrivate = require('webViewEventsPrivate').WebViewEventsPrivate; 
-var WebViewInternal = require('webViewInternal').WebViewInternal;
+var WebViewInternal = getInternalApi ?
+    getInternalApi('webViewInternal') :
+    require('webViewInternal').WebViewInternal;
 
 // Represents the internal state of <webview>.
 function WebViewImpl(webviewElement) {

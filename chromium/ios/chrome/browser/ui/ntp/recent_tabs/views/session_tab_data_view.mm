@@ -13,7 +13,7 @@
 #import "ios/chrome/browser/ui/ntp/recent_tabs/views/views_utils.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_switcher_utils.h"
-#import "ios/chrome/browser/ui/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
 #import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
 #include "ui/base/resource/resource_bundle.h"
 
@@ -93,7 +93,7 @@ const CGFloat kDesiredHeight = 48;
                 browserState:(ios::ChromeBrowserState*)browserState {
   DCHECK(distantTab);
   DCHECK(browserState);
-  NSString* text = SysUTF16ToNSString(distantTab->title);
+  NSString* text = base::SysUTF16ToNSString(distantTab->title);
   GURL url = distantTab->virtual_url;
   [self setText:text url:url browserState:browserState];
 }

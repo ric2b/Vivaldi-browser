@@ -6,7 +6,8 @@
 #define NGLayoutInputNode_h
 
 #include "core/CoreExport.h"
-#include "platform/heap/Handle.h"
+#include "platform/LayoutUnit.h"
+#include "platform/wtf/Optional.h"
 
 namespace blink {
 
@@ -16,7 +17,8 @@ class LayoutBox;
 class NGBreakToken;
 class NGConstraintSpace;
 class NGLayoutResult;
-struct MinMaxContentSize;
+struct MinMaxSize;
+struct NGLogicalSize;
 
 // Represents the input to a layout algorithm for a given node. The layout
 // engine should use the style, node type to determine which type of layout
@@ -37,13 +39,29 @@ class CORE_EXPORT NGLayoutInputNode {
   bool IsBlock() const;
   bool IsFloating() const;
   bool IsOutOfFlowPositioned() const;
+  bool IsReplaced() const;
+
+  // If the node is a quirky container for margin collapsing, see:
+  // https://html.spec.whatwg.org/#margin-collapsing-quirks
+  // NOTE: The spec appears to only somewhat match reality.
+  bool IsQuirkyContainer() const;
 
   bool CreatesNewFormattingContext() const;
 
   // Performs layout on this input node, will return the layout result.
-  RefPtr<NGLayoutResult> Layout(NGConstraintSpace*, NGBreakToken*);
+  RefPtr<NGLayoutResult> Layout(const NGConstraintSpace&, NGBreakToken*);
 
-  MinMaxContentSize ComputeMinMaxContentSize();
+  MinMaxSize ComputeMinMaxSize();
+
+  // Returns intrinsic sizing information for replaced elements.
+  // ComputeReplacedSize can use it to compute actual replaced size.
+  // The function arguments return values from LegacyLayout intrinsic size
+  // computations: LayoutReplaced::IntrinsicSizingInfo,
+  // and LayoutReplaced::IntrinsicSize.
+  void IntrinsicSize(NGLogicalSize* default_intrinsic_size,
+                     Optional<LayoutUnit>* computed_inline_size,
+                     Optional<LayoutUnit>* computed_block_size,
+                     NGLogicalSize* aspect_ratio) const;
 
   // Returns the next sibling.
   NGLayoutInputNode NextSibling();

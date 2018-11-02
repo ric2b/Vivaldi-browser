@@ -25,6 +25,7 @@ class HeadlessContentBrowserClient : public content::ContentBrowserClient {
   content::DevToolsManagerDelegate* GetDevToolsManagerDelegate() override;
   std::unique_ptr<base::Value> GetServiceManifestOverlay(
       base::StringPiece name) override;
+  void RegisterOutOfProcessServices(OutOfProcessServiceMap* services) override;
   content::QuotaPermissionContext* CreateQuotaPermissionContext() override;
   void GetQuotaSettings(
       content::BrowserContext* context,
@@ -34,7 +35,7 @@ class HeadlessContentBrowserClient : public content::ContentBrowserClient {
   void GetAdditionalMappedFilesForChildProcess(
       const base::CommandLine& command_line,
       int child_process_id,
-      content::FileDescriptorInfo* mappings) override;
+      content::PosixFileDescriptorInfo* mappings) override;
 #endif
   void AppendExtraCommandLineSwitches(base::CommandLine* command_line,
                                       int child_process_id) override;
@@ -58,6 +59,7 @@ class HeadlessContentBrowserClient : public content::ContentBrowserClient {
  private:
   std::unique_ptr<base::Value> GetBrowserServiceManifestOverlay();
   std::unique_ptr<base::Value> GetRendererServiceManifestOverlay();
+  std::unique_ptr<base::Value> GetPackagedServicesServiceManifestOverlay();
 
   HeadlessBrowserImpl* browser_;  // Not owned.
 

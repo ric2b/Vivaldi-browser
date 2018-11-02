@@ -2,91 +2,110 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/**
- * @constructor
- * @implements {settings.AppearanceBrowserProxy}
- * @extends {TestBrowserProxy}
- */
-var TestAppearanceBrowserProxy = function() {
-  TestBrowserProxy.call(this, [
-    'getDefaultZoom',
-    'getThemeInfo',
-    'isSupervised',
-    'openWallpaperManager',
-    'useDefaultTheme',
-    'useSystemTheme',
-    'validateStartupPage',
-  ]);
+/** @implements {settings.AppearanceBrowserProxy} */
+class TestAppearanceBrowserProxy extends TestBrowserProxy {
+  constructor() {
+    super([
+      'getDefaultZoom',
+      'getThemeInfo',
+      'isSupervised',
+      'isWallpaperSettingVisible',
+      'isWallpaperPolicyControlled',
+      'openWallpaperManager',
+      'useDefaultTheme',
+      'useSystemTheme',
+      'validateStartupPage',
+    ]);
 
-  /** @private */
-  this.defaultZoom_ = 1;
+    /** @private */
+    this.defaultZoom_ = 1;
 
-  /** @private */
-  this.isSupervised_ = false;
+    /** @private */
+    this.isSupervised_ = false;
 
-  /** @private */
-  this.isHomeUrlValid_ = true;
-};
+    /** @private */
+    this.isHomeUrlValid_ = true;
 
-TestAppearanceBrowserProxy.prototype = {
-  __proto__: TestBrowserProxy.prototype,
+    /** @private */
+    this.isWallpaperSettingVisible_ = true;
+
+    /** @private */
+    this.isWallpaperPolicyControlled_ = false;
+  }
 
   /** @override */
-  getDefaultZoom: function() {
+  getDefaultZoom() {
     this.methodCalled('getDefaultZoom');
     return Promise.resolve(this.defaultZoom_);
-  },
+  }
 
   /** @override */
-  getThemeInfo: function(themeId) {
+  getThemeInfo(themeId) {
     this.methodCalled('getThemeInfo', themeId);
     return Promise.resolve({name: 'Sports car red'});
-  },
+  }
 
   /** @override */
-  isSupervised: function() {
+  isSupervised() {
     this.methodCalled('isSupervised');
     return this.isSupervised_;
-  },
+  }
 
   /** @override */
-  openWallpaperManager: function() {
+  isWallpaperSettingVisible() {
+    this.methodCalled('isWallpaperSettingVisible');
+    return Promise.resolve(this.isWallpaperSettingVisible_);
+  }
+
+  /** @override */
+  isWallpaperPolicyControlled() {
+    this.methodCalled('isWallpaperPolicyControlled');
+    return Promise.resolve(this.isWallpaperPolicyControlled_);
+  }
+
+  /** @override */
+  openWallpaperManager() {
     this.methodCalled('openWallpaperManager');
-  },
+  }
 
   /** @override */
-  useDefaultTheme: function() {
+  useDefaultTheme() {
     this.methodCalled('useDefaultTheme');
-  },
+  }
 
   /** @override */
-  useSystemTheme: function() {
+  useSystemTheme() {
     this.methodCalled('useSystemTheme');
-  },
+  }
 
   /** @param {number} defaultZoom */
-  setDefaultZoom: function(defaultZoom) {
+  setDefaultZoom(defaultZoom) {
     this.defaultZoom_ = defaultZoom;
-  },
+  }
 
   /** @param {boolean} Whether the user is supervised */
-  setIsSupervised: function(isSupervised) {
+  setIsSupervised(isSupervised) {
     this.isSupervised_ = isSupervised;
-  },
+  }
 
   /** @override */
-  validateStartupPage: function(url) {
+  validateStartupPage(url) {
     this.methodCalled('validateStartupPage', url);
     return Promise.resolve(this.isHomeUrlValid_);
-  },
+  }
 
   /**
    * @param {boolean} isValid
    */
-   setValidStartupPageResponse: function(isValid) {
-     this.isHomeUrlValid_ = isValid;
-   }
-};
+  setValidStartupPageResponse(isValid) {
+    this.isHomeUrlValid_ = isValid;
+  }
+
+  /** @param {boolean} Whether the wallpaper is policy controlled. */
+  setIsWallpaperPolicyControlled(isPolicyControlled) {
+    this.isWallpaperPolicyControlled_ = isPolicyControlled;
+  }
+}
 
 var appearancePage = null;
 
@@ -111,6 +130,10 @@ function createAppearancePage() {
     },
   });
 
+  appearancePage.set('pageVisibility', {
+    setWallpaper: true,
+  });
+
   document.body.appendChild(appearancePage);
   Polymer.dom.flush();
 }
@@ -130,6 +153,28 @@ suite('AppearanceHandler', function() {
       assertTrue(!!button);
       MockInteractions.tap(button);
       return appearanceBrowserProxy.whenCalled('openWallpaperManager');
+    });
+
+    test('wallpaperSettingVisible', function() {
+      appearancePage.set("pageVisibility.setWallpaper", false);
+      return appearanceBrowserProxy.whenCalled('isWallpaperSettingVisible')
+          .then(function() {
+            Polymer.dom.flush();
+            assertTrue(appearancePage.$$('#wallpaperButton').hidden);
+          });
+    });
+
+    test('wallpaperPolicyControlled', function() {
+      // Should show the wallpaper policy indicator and disable the toggle
+      // button if the wallpaper is policy controlled.
+      appearanceBrowserProxy.setIsWallpaperPolicyControlled(true);
+      createAppearancePage();
+      return appearanceBrowserProxy.whenCalled('isWallpaperPolicyControlled')
+          .then(function() {
+            Polymer.dom.flush();
+            assertFalse(appearancePage.$$('#wallpaperPolicyIndicator').hidden);
+            assertTrue(appearancePage.$$('#showWallpaperManager').disabled);
+          });
     });
   } else {
     test('noWallpaperManager', function() {

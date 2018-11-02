@@ -803,7 +803,7 @@ bool Textfield::CanHandleAccelerators() const {
 }
 
 void Textfield::AboutToRequestFocusFromTabTraversal(bool reverse) {
-  SelectAll(false);
+  SelectAll(PlatformStyle::kTextfieldScrollsToStartOnFocusChange);
 }
 
 bool Textfield::SkipDefaultKeyEventProcessing(const ui::KeyEvent& event) {
@@ -1036,6 +1036,11 @@ void Textfield::OnFocus() {
 void Textfield::OnBlur() {
   gfx::RenderText* render_text = GetRenderText();
   render_text->set_focused(false);
+
+  // If necessary, yank the cursor to the logical start of the textfield.
+  if (PlatformStyle::kTextfieldScrollsToStartOnFocusChange)
+    model_->MoveCursorTo(gfx::SelectionModel(0, gfx::CURSOR_FORWARD));
+
   if (GetInputMethod()) {
     GetInputMethod()->DetachTextInputClient(this);
 #if defined(OS_CHROMEOS)
@@ -1115,8 +1120,11 @@ void Textfield::WriteDragDataForView(View* sender,
   if (!ui::XVisualManager::GetInstance()->ArgbVisualAvailable())
     color = GetBackgroundColor();
 #endif
-  label.Paint(
-      ui::CanvasPainter(&bitmap, label.size(), raster_scale, color).context());
+  label.Paint(PaintInfo::CreateRootPaintInfo(
+      ui::CanvasPainter(&bitmap, label.size(), raster_scale, color,
+                        GetWidget()->GetCompositor()->is_pixel_canvas())
+          .context(),
+      label.size()));
   const gfx::Vector2d kOffset(-15, 0);
   gfx::ImageSkia image(gfx::ImageSkiaRep(bitmap, raster_scale));
   data->provider().SetDragImage(image, kOffset);
@@ -1974,6 +1982,9 @@ void Textfield::UpdateCursorVisibility() {
 void Textfield::UpdateCursorViewPosition() {
   gfx::Rect location(GetRenderText()->GetUpdatedCursorBounds());
   location.set_x(GetMirroredXForRect(location));
+  location.set_height(
+      std::min(location.height(),
+               GetContentsBounds().height() - location.y() - location.y()));
   cursor_view_.SetBoundsRect(location);
 }
 

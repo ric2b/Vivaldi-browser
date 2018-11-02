@@ -35,6 +35,10 @@
   void HideValidationMessage(content::WebContents* web_contents) override;
   void MoveValidationMessage(content::WebContents* web_contents,
                              const gfx::Rect& anchor_in_root_view) override;
+  void BeforeUnloadFired(content::WebContents* web_contents, bool proceed,
+                         bool* proceed_to_fire_unload) override;
+  // From WebContentsObserver, avoid compile error on the above override.
+  void BeforeUnloadFired(const base::TimeTicks& proceed_time) override {}
 
   // Vivaldi customs below
   bool IsVivaldiMail();
@@ -47,7 +51,7 @@
   void UpdateMediaState(TabAlertState state);
 
   void SetIsFullscreen(bool is_fullscreen);
-  extensions::AppWindow* GetAppWindow();
+
   // gisli@vivaldi.com.  Request that page info is displayed, sends event
   // to from the <webview> tag (requestpageinfo).
   bool RequestPageInfo(const GURL& url);
@@ -130,7 +134,7 @@
 #endif  // VIVALDI_BUILD
   bool is_visible_;
   bool is_fullscreen_;
-  int window_state_prior_to_fullscreen_;
+  ui::WindowShowState window_state_prior_to_fullscreen_ = ui::SHOW_STATE_NORMAL;
 
   base::WeakPtr<ValidationMessageBubble> validation_message_bubble_;
 

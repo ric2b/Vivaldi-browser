@@ -162,81 +162,63 @@ proto_library("cronet_android_cert_proto") {
   extra_configs = [ "//build/config/compiler:wexit_time_destructors" ]
 }
 
-# Variables:
-#   defines: Extra defines.
-#   deps: Extra dependencies.
-template("cronet_static_tmpl") {
-  source_set(target_name) {
-    defines = []
-
-    deps = [
-      ":cronet_android_cert_proto",
-      ":cronet_jni_headers",
-      ":cronet_jni_registration",
-      ":cronet_version_header",
-      "//base",
-      "//base/third_party/dynamic_annotations",
-      "//components/metrics",
-      "//components/prefs",
-      "//url:url_features",
-    ]
-    sources = [
-      "//components/cronet/android/cert/cert_verifier_cache_serializer.cc",
-      "//components/cronet/android/cert/cert_verifier_cache_serializer.h",
-      "//components/cronet/android/cronet_bidirectional_stream_adapter.cc",
-      "//components/cronet/android/cronet_bidirectional_stream_adapter.h",
-      "//components/cronet/android/cronet_library_loader.cc",
-      "//components/cronet/android/cronet_library_loader.h",
-      "//components/cronet/android/cronet_upload_data_stream.cc",
-      "//components/cronet/android/cronet_upload_data_stream.h",
-      "//components/cronet/android/cronet_upload_data_stream_adapter.cc",
-      "//components/cronet/android/cronet_upload_data_stream_adapter.h",
-      "//components/cronet/android/cronet_url_request_adapter.cc",
-      "//components/cronet/android/cronet_url_request_adapter.h",
-      "//components/cronet/android/cronet_url_request_context_adapter.cc",
-      "//components/cronet/android/cronet_url_request_context_adapter.h",
-      "//components/cronet/android/io_buffer_with_byte_buffer.cc",
-      "//components/cronet/android/io_buffer_with_byte_buffer.h",
-      "//components/cronet/android/metrics_util.cc",
-      "//components/cronet/android/metrics_util.h",
-      "//components/cronet/android/url_request_error.cc",
-      "//components/cronet/android/url_request_error.h",
-      "//components/cronet/histogram_manager.cc",
-      "//components/cronet/histogram_manager.h",
-      "//components/cronet/host_cache_persistence_manager.cc",
-      "//components/cronet/host_cache_persistence_manager.h",
-      "//components/cronet/stale_host_resolver.cc",
-      "//components/cronet/stale_host_resolver.h",
-      "//components/cronet/url_request_context_config.cc",
-      "//components/cronet/url_request_context_config.h",
-    ]
-
-    include_dirs = [ _cronet_version_header_include_dir ]
-
-    cflags = [
-      "-DLOGGING=1",
-      "-Wno-sign-promo",
-    ]
-
-    libs = [
-      "android",
-      "log",
-    ]
-
-    if (defined(invoker.defines)) {
-      defines += invoker.defines
-    }
-
-    if (defined(invoker.deps)) {
-      deps += invoker.deps
-    }
-  }
-}
-
-cronet_static_tmpl("cronet_static") {
+source_set("cronet_static") {
   deps = [
+    ":cronet_android_cert_proto",
+    ":cronet_jni_headers",
+    ":cronet_jni_registration",
+    ":cronet_version_header",
+    "//base",
+    "//base/third_party/dynamic_annotations",
+    "//components/metrics",
+    "//components/prefs",
     "//net",
     "//url",
+    "//url:url_features",
+  ]
+  sources = [
+    "//components/cronet/android/cert/cert_verifier_cache_serializer.cc",
+    "//components/cronet/android/cert/cert_verifier_cache_serializer.h",
+    "//components/cronet/android/cronet_bidirectional_stream_adapter.cc",
+    "//components/cronet/android/cronet_bidirectional_stream_adapter.h",
+    "//components/cronet/android/cronet_library_loader.cc",
+    "//components/cronet/android/cronet_library_loader.h",
+    "//components/cronet/android/cronet_upload_data_stream.cc",
+    "//components/cronet/android/cronet_upload_data_stream.h",
+    "//components/cronet/android/cronet_upload_data_stream_adapter.cc",
+    "//components/cronet/android/cronet_upload_data_stream_adapter.h",
+    "//components/cronet/android/cronet_url_request_adapter.cc",
+    "//components/cronet/android/cronet_url_request_adapter.h",
+    "//components/cronet/android/cronet_url_request_context_adapter.cc",
+    "//components/cronet/android/cronet_url_request_context_adapter.h",
+    "//components/cronet/android/io_buffer_with_byte_buffer.cc",
+    "//components/cronet/android/io_buffer_with_byte_buffer.h",
+    "//components/cronet/android/metrics_util.cc",
+    "//components/cronet/android/metrics_util.h",
+    "//components/cronet/android/url_request_error.cc",
+    "//components/cronet/android/url_request_error.h",
+    "//components/cronet/cronet_prefs_manager.cc",
+    "//components/cronet/cronet_prefs_manager.h",
+    "//components/cronet/histogram_manager.cc",
+    "//components/cronet/histogram_manager.h",
+    "//components/cronet/host_cache_persistence_manager.cc",
+    "//components/cronet/host_cache_persistence_manager.h",
+    "//components/cronet/stale_host_resolver.cc",
+    "//components/cronet/stale_host_resolver.h",
+    "//components/cronet/url_request_context_config.cc",
+    "//components/cronet/url_request_context_config.h",
+  ]
+
+  include_dirs = [ _cronet_version_header_include_dir ]
+
+  cflags = [
+    "-DLOGGING=1",
+    "-Wno-sign-promo",
+  ]
+
+  libs = [
+    "android",
+    "log",
   ]
 
   if (!use_platform_icu_alternatives) {
@@ -344,6 +326,7 @@ android_library("cronet_impl_platform_java") {
   deps = [
     ":cronet_api_java",
     ":cronet_impl_common_java",
+    "//third_party/android_tools:android_support_annotations_java",
     "//third_party/jsr-305:jsr_305_javalib",
   ]
 }
@@ -358,6 +341,7 @@ cronet_impl_native_java_srcjar_deps = [
 android_library("cronet_impl_native_java") {
   java_files = [
     "java/src/org/chromium/net/impl/BidirectionalStreamBuilderImpl.java",
+    "java/src/org/chromium/net/impl/BidirectionalStreamNetworkException.java",
     "java/src/org/chromium/net/impl/CronetBidirectionalStream.java",
     "java/src/org/chromium/net/impl/CronetLibraryLoader.java",
     "java/src/org/chromium/net/impl/CronetMetrics.java",
@@ -512,17 +496,11 @@ shared_library("cronet_tests") {
     "test/cronet_url_request_context_config_test.cc",
     "test/cronet_url_request_context_config_test.h",
     "test/experimental_options_test.cc",
-    "test/experimental_options_test.h",
     "test/mock_cert_verifier.cc",
-    "test/mock_cert_verifier.h",
     "test/mock_url_request_job_factory.cc",
-    "test/mock_url_request_job_factory.h",
     "test/native_test_server.cc",
-    "test/native_test_server.h",
     "test/quic_test_server.cc",
-    "test/quic_test_server.h",
     "test/sdch_test_util.cc",
-    "test/sdch_test_util.h",
     "test/test_upload_data_stream_handler.cc",
     "test/test_upload_data_stream_handler.h",
   ]
@@ -690,6 +668,8 @@ android_library("cronet_javatests") {
     "test/javatests/src/org/chromium/net/Criteria.java",
     "test/javatests/src/org/chromium/net/CronetEngineBuilderTest.java",
     "test/javatests/src/org/chromium/net/CronetTestBase.java",
+    "test/javatests/src/org/chromium/net/CronetTestCommon.java",
+    "test/javatests/src/org/chromium/net/CronetTestRule.java",
     "test/javatests/src/org/chromium/net/CronetTestBaseTest.java",
     "test/javatests/src/org/chromium/net/CronetUploadTest.java",
     "test/javatests/src/org/chromium/net/CronetUrlRequestContextTest.java",
@@ -732,6 +712,7 @@ android_library("cronet_javatests") {
     "//net/android:net_java",
     "//net/android:net_java_test_support",
     "//third_party/android_support_test_runner:runner_java",
+    "//third_party/junit",
   ]
 
   run_findbugs_override = true
@@ -811,6 +792,8 @@ instrumentation_test_apk(
   android_manifest = "test/javatests/AndroidManifest.xml"
   deps = [
     ":cronet_smoketests_platform_only_java",
+    "//base:base_java_test_support",
+    "//third_party/android_support_test_runner:runner_java",
   ]
 
   proguard_enabled = true
@@ -951,17 +934,23 @@ action("extract_cronet_jars") {
   script = "//components/cronet/tools/extract_from_jars.py"
   depfile = "$target_gen_dir/$target_name.d"
 
-  sources = [
-    "$root_out_dir/lib.java/base/base_java.jar",
-    "$root_out_dir/lib.java/components/cronet/android/cronet_impl_native_java.jar",
-    "$root_out_dir/lib.java/net/android/net_java.jar",
-    "$root_out_dir/lib.java/url/url_java.jar",
-  ]
-
   _stamp_file = "$target_gen_dir/$target_name.stamp"
   outputs = [
     _stamp_file,
   ]
+
+  deps = [
+    ":cronet_impl_native_java",
+    "//base:base_java",
+    "//net/android:net_java",
+    "//url:url_java",
+  ]
+
+  sources = []
+  foreach(dep, deps) {
+    sources += [ get_label_info(dep, "target_gen_dir") + "/" +
+                 get_label_info(dep, "name") + "__compile_java.javac.jar" ]
+  }
 
   _rebased_sources = rebase_path(sources, root_build_dir)
 
@@ -973,13 +962,6 @@ action("extract_cronet_jars") {
     rebase_path(depfile, root_build_dir),
     "--stamp",
     rebase_path(_stamp_file, root_build_dir),
-  ]
-
-  deps = [
-    ":cronet_impl_native_java",
-    "//base:base_java",
-    "//net/android:net_java",
-    "//url:url_java",
   ]
 }
 
@@ -1251,9 +1233,6 @@ action("generate_javadoc") {
 
 copy("cronet_package_copy") {
   sources = [
-    "$root_out_dir/lib.java/components/cronet/android/cronet_api.jar",
-    "$root_out_dir/lib.java/components/cronet/android/cronet_impl_common_java.jar",
-    "$root_out_dir/lib.java/components/cronet/android/cronet_impl_platform_java.jar",
     "$target_gen_dir/cronet_impl_native_proguard.cfg",
     "//AUTHORS",
     "//chrome/VERSION",
@@ -1267,6 +1246,50 @@ copy("cronet_package_copy") {
   deps = [
     ":cronet_api_java",
     ":cronet_combine_proguard_flags",
+    ":cronet_impl_common_java",
+    ":cronet_impl_platform_java",
+  ]
+}
+
+template("copy_java8_jars") {
+  _deps = []
+  foreach(dep, invoker.deps) {
+    _dep_name = get_label_info(dep, "name")
+    _source_jar = get_label_info(dep, "target_gen_dir") + "/" + _dep_name +
+                  "__compile_java.javac.jar"
+    _output_jar = "$_package_dir/" + _dep_name + ".jar"
+
+    # cronet_api.jar is a special case. Its file name is
+    # different from the target name that builds it.
+    if (_output_jar == "$_package_dir/" + "cronet_api_java.jar") {
+      _output_jar = "$_package_dir/" + "cronet_api.jar"
+    }
+
+    _copy_dep = ":" + _dep_name + "__compile_java__javac"
+    _copy_target_name = "${target_name}_${dep}"
+
+    copy(_copy_target_name) {
+      sources = [
+        _source_jar,
+      ]
+      outputs = [
+        _output_jar,
+      ]
+      deps = [
+        _copy_dep,
+      ]
+    }
+    _deps += [ ":" + _copy_target_name ]
+  }
+
+  group(target_name) {
+    deps = _deps
+  }
+}
+
+copy_java8_jars("copy_cronet_java8_jars") {
+  deps = [
+    ":cronet_api_java",
     ":cronet_impl_common_java",
     ":cronet_impl_platform_java",
   ]
@@ -1467,6 +1490,7 @@ group("cronet_package") {
       (!(target_cpu == "arm" && arm_version == 7) || !arm_use_neon)) {
     deps = [
       ":api_static_checks",
+      ":copy_cronet_java8_jars",
       ":cronet_package_copy",
       ":cronet_package_copy_native_lib",
       ":cronet_package_copy_native_lib_unstripped",

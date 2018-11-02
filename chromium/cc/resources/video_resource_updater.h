@@ -18,8 +18,9 @@
 #include "base/time/time.h"
 #include "cc/cc_export.h"
 #include "cc/resources/release_callback_impl.h"
-#include "components/viz/common/quads/resource_format.h"
 #include "components/viz/common/quads/texture_mailbox.h"
+#include "components/viz/common/resources/resource_format.h"
+#include "ui/gfx/buffer_types.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace media {
@@ -55,6 +56,8 @@ class CC_EXPORT VideoFrameExternalResources {
   std::vector<viz::TextureMailbox> mailboxes;
   std::vector<ReleaseCallbackImpl> release_callbacks;
   bool read_lock_fences_enabled;
+  // Format of the storage of the resource, if known.
+  gfx::BufferFormat buffer_format;
 
   // TODO(danakj): Remove these too.
   std::vector<unsigned> software_resources;

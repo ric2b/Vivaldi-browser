@@ -8,6 +8,9 @@
 #include "platform/scheduler/base/task_queue.h"
 
 namespace blink {
+
+class WebFrameScheduler;
+
 namespace scheduler {
 
 class RendererSchedulerImpl;
@@ -17,19 +20,29 @@ class PLATFORM_EXPORT MainThreadTaskQueue : public TaskQueue {
   enum class QueueType {
     // Keep MainThreadTaskQueue::NameForQueueType in sync.
     // This enum is used for a histogram and it should not be re-numbered.
+    // TODO(altimin): Clean up obsolete names and use a new histogram when
+    // the situation settles.
     CONTROL = 0,
     DEFAULT = 1,
     DEFAULT_LOADING = 2,
+    // DEFAULT_TIMER is deprecated and should be replaced with appropriate
+    // per-frame task queues.
     DEFAULT_TIMER = 3,
     UNTHROTTLED = 4,
     FRAME_LOADING = 5,
-    FRAME_TIMER = 6,
-    FRAME_UNTHROTTLED = 7,
+    // 6 : FRAME_THROTTLEABLE, replaced with FRAME_THROTTLEABLE.
+    // 7 : FRAME_PAUSABLE, replaced with FRAME_PAUSABLE
     COMPOSITOR = 8,
     IDLE = 9,
     TEST = 10,
+    FRAME_LOADING_CONTROL = 11,
+    FRAME_THROTTLEABLE = 12,
+    FRAME_DEFERRABLE = 13,
+    FRAME_PAUSABLE = 14,
+    FRAME_UNPAUSABLE = 15,
+    BEST_EFFORT = 16,
 
-    COUNT = 11
+    COUNT = 17
   };
 
   // Returns name of the given queue type. Returned string has application
@@ -54,9 +67,11 @@ class PLATFORM_EXPORT MainThreadTaskQueue : public TaskQueue {
           spec(NameForQueueType(queue_type)),
           can_be_blocked(false),
           can_be_throttled(false),
-          can_be_suspended(false) {}
+          can_be_paused(false),
+          can_be_stopped(false),
+          used_for_control_tasks(false) {}
 
-    QueueCreationParams SetCanBeBlocked(bool value) {
+    QueueCreationParams SetCanBeDeferred(bool value) {
       can_be_blocked = value;
       return *this;
     }
@@ -66,8 +81,18 @@ class PLATFORM_EXPORT MainThreadTaskQueue : public TaskQueue {
       return *this;
     }
 
-    QueueCreationParams SetCanBeSuspended(bool value) {
-      can_be_suspended = value;
+    QueueCreationParams SetCanBePaused(bool value) {
+      can_be_paused = value;
+      return *this;
+    }
+
+    QueueCreationParams SetCanBeStopped(bool value) {
+      can_be_stopped = value;
+      return *this;
+    }
+
+    QueueCreationParams SetUsedForControlTasks(bool value) {
+      used_for_control_tasks = value;
       return *this;
     }
 
@@ -96,9 +121,12 @@ class PLATFORM_EXPORT MainThreadTaskQueue : public TaskQueue {
 
     QueueType queue_type;
     TaskQueue::Spec spec;
+    WebFrameScheduler* frame_;
     bool can_be_blocked;
     bool can_be_throttled;
-    bool can_be_suspended;
+    bool can_be_paused;
+    bool can_be_stopped;
+    bool used_for_control_tasks;
   };
 
   ~MainThreadTaskQueue() override;
@@ -107,11 +135,17 @@ class PLATFORM_EXPORT MainThreadTaskQueue : public TaskQueue {
 
   QueueClass queue_class() const { return queue_class_; }
 
-  bool CanBeBlocked() const { return can_be_blocked_; }
+  bool CanBeDeferred() const { return can_be_blocked_; }
 
   bool CanBeThrottled() const { return can_be_throttled_; }
 
-  bool CanBeSuspended() const { return can_be_suspended_; }
+  bool CanBePaused() const { return can_be_paused_; }
+
+  bool CanBeStopped() const { return can_be_stopped_; }
+
+  bool UsedForControlTasks() const { return used_for_control_tasks_; }
+
+  void OnTaskStarted(const TaskQueue::Task& task, base::TimeTicks start);
 
   void OnTaskCompleted(const TaskQueue::Task& task,
                        base::TimeTicks start,
@@ -119,6 +153,9 @@ class PLATFORM_EXPORT MainThreadTaskQueue : public TaskQueue {
 
   // Override base method to notify RendererScheduler about unregistered queue.
   void UnregisterTaskQueue() override;
+
+  WebFrameScheduler* GetFrameScheduler() const;
+  void SetFrameScheduler(WebFrameScheduler* frame);
 
  private:
   MainThreadTaskQueue(std::unique_ptr<internal::TaskQueueImpl> impl,
@@ -131,10 +168,14 @@ class PLATFORM_EXPORT MainThreadTaskQueue : public TaskQueue {
   QueueClass queue_class_;
   const bool can_be_blocked_;
   const bool can_be_throttled_;
-  const bool can_be_suspended_;
+  const bool can_be_paused_;
+  const bool can_be_stopped_;
+  const bool used_for_control_tasks_;
 
   // Needed to notify renderer scheduler about completed tasks.
   RendererSchedulerImpl* renderer_scheduler_;  // NOT OWNED
+
+  WebFrameScheduler* web_frame_scheduler_;  // NOT OWNED
 
   DISALLOW_COPY_AND_ASSIGN(MainThreadTaskQueue);
 };

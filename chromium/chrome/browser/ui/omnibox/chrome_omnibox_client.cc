@@ -13,6 +13,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
 #include "chrome/browser/autocomplete/chrome_autocomplete_provider_client.h"
@@ -21,6 +22,7 @@
 #include "chrome/browser/bookmarks/bookmark_stats.h"
 #include "chrome/browser/command_updater.h"
 #include "chrome/browser/extensions/api/omnibox/omnibox_api.h"
+#include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/net/predictor.h"
 #include "chrome/browser/predictors/autocomplete_action_predictor.h"
 #include "chrome/browser/predictors/autocomplete_action_predictor_factory.h"
@@ -39,12 +41,15 @@
 #include "chrome/common/search/instant_types.h"
 #include "chrome/common/url_constants.h"
 #include "components/favicon/content/content_favicon_driver.h"
+#include "components/favicon/core/favicon_service.h"
+#include "components/favicon_base/favicon_types.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_result.h"
 #include "components/omnibox/browser/search_provider.h"
 #include "components/prefs/pref_service.h"
 #include "components/search/search.h"
 #include "components/search_engines/template_url_service.h"
+#include "components/toolbar/toolbar_model.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
@@ -53,6 +58,11 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/window_open_disposition.h"
 #include "url/gurl.h"
+
+#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS) && !defined(OS_MACOSX)
+#include "chrome/browser/feature_engagement/new_tab/new_tab_tracker.h"
+#include "chrome/browser/feature_engagement/new_tab/new_tab_tracker_factory.h"
+#endif
 
 using predictors::AutocompleteActionPredictor;
 
@@ -110,6 +120,11 @@ void AnswerImageObserver::OnImageChanged(
     const SkBitmap& image) {
   DCHECK(!image.empty());
   callback_.Run(image);
+}
+
+void OnFaviconFetched(const FaviconFetchedCallback& on_favicon_fetched,
+                      const favicon_base::FaviconImageResult& result) {
+  on_favicon_fetched.Run(result.image);
 }
 
 }  // namespace
@@ -181,12 +196,12 @@ bool ChromeOmniboxClient::IsPasteAndGoEnabled() const {
   return controller_->command_updater()->IsCommandEnabled(IDC_OPEN_CURRENT_URL);
 }
 
-bool ChromeOmniboxClient::IsNewTabPage(const std::string& url) const {
-  return url == chrome::kChromeUINewTabURL;
+bool ChromeOmniboxClient::IsNewTabPage(const GURL& url) const {
+  return url.spec() == chrome::kChromeUINewTabURL;
 }
 
-bool ChromeOmniboxClient::IsHomePage(const std::string& url) const {
-  return url == profile_->GetPrefs()->GetString(prefs::kHomePage);
+bool ChromeOmniboxClient::IsHomePage(const GURL& url) const {
+  return url.spec() == profile_->GetPrefs()->GetString(prefs::kHomePage);
 }
 
 const SessionID& ChromeOmniboxClient::GetSessionID() const {
@@ -268,7 +283,7 @@ void ChromeOmniboxClient::OnFocusChanged(
 void ChromeOmniboxClient::OnResultChanged(
     const AutocompleteResult& result,
     bool default_match_changed,
-    const base::Callback<void(const SkBitmap& bitmap)>& on_bitmap_fetched) {
+    const BitmapFetchedCallback& on_bitmap_fetched) {
   if (search::IsInstantExtendedAPIEnabled() &&
       (default_match_changed && result.default_match() != result.end())) {
     InstantSuggestion prefetch_suggestion;
@@ -318,7 +333,7 @@ void ChromeOmniboxClient::OnResultChanged(
               destination: WEBSITE
             }
             policy {
-              cookies_allowed: true
+              cookies_allowed: YES
               cookies_store: "user"
               setting:
                 "You can enable or disable this feature via 'Use a prediction "
@@ -341,6 +356,22 @@ void ChromeOmniboxClient::OnResultChanged(
           traffic_annotation);
     }
   }
+}
+
+void ChromeOmniboxClient::GetFaviconForPageUrl(
+    base::CancelableTaskTracker* tracker,
+    const GURL& page_url,
+    const FaviconFetchedCallback& on_favicon_fetched) {
+  favicon::FaviconService* favicon_service =
+      FaviconServiceFactory::GetForProfile(profile_,
+                                           ServiceAccessType::EXPLICIT_ACCESS);
+  if (!favicon_service)
+    return;
+
+  // TODO(tommycli): Investigate using the version of this method that specifies
+  // the desired size.
+  favicon_service->GetFaviconImageForPageURL(
+      page_url, base::Bind(&OnFaviconFetched, on_favicon_fetched), tracker);
 }
 
 void ChromeOmniboxClient::OnCurrentMatchChanged(
@@ -441,6 +472,20 @@ void ChromeOmniboxClient::OnRevert() {
 }
 
 void ChromeOmniboxClient::OnURLOpenedFromOmnibox(OmniboxLog* log) {
+// The new tab tracker tracks when a user starts a session in the same
+// tab as a previous one. If ShouldDisplayURL() is true, that's a good
+// signal that the previous page was part of some other session.
+// We could go further to try to analyze the difference between the previous
+// and current URLs, but users edit URLs rarely enough that this is a
+// reasonable approximation.
+#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS) && !defined(OS_MACOSX)
+  if (controller_->GetToolbarModel()->ShouldDisplayURL()) {
+    feature_engagement::NewTabTrackerFactory::GetInstance()
+        ->GetForProfile(profile_)
+        ->OnOmniboxNavigation();
+  }
+#endif
+
   predictors::AutocompleteActionPredictorFactory::GetForProfile(profile_)
       ->OnOmniboxOpenedUrl(*log);
 }

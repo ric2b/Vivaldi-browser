@@ -17,7 +17,6 @@
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/linked_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/threading/thread_checker.h"
 #include "build/build_config.h"
@@ -323,6 +322,8 @@ class ProfileManager : public content::NotificationObserver,
   // and marks the new profile as active.
   void FinishDeletingProfile(const base::FilePath& profile_dir,
                              const base::FilePath& new_active_profile_dir);
+  void OnLoadProfileForProfileDeletion(const base::FilePath& profile_dir,
+                                       Profile* profile);
 #endif
 
   // Registers profile with given info. Returns pointer to created ProfileInfo
@@ -422,7 +423,8 @@ class ProfileManager : public content::NotificationObserver,
   // Maps profile path to ProfileInfo (if profile has been created). Use
   // RegisterProfile() to add into this map. This map owns all loaded profile
   // objects in a running instance of Chrome.
-  typedef std::map<base::FilePath, linked_ptr<ProfileInfo> > ProfilesInfoMap;
+  using ProfilesInfoMap =
+      std::map<base::FilePath, std::unique_ptr<ProfileInfo>>;
   ProfilesInfoMap profiles_info_;
 
   // Manages the process of creating, deleteing and updating Desktop shortcuts.

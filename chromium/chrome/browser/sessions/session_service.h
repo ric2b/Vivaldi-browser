@@ -227,9 +227,7 @@ class SessionService : public sessions::BaseSessionServiceDelegate,
       base::CancelableTaskTracker* tracker);
 
   // BaseSessionServiceDelegate:
-  base::SequencedWorkerPool* GetBlockingPool() override;
   bool ShouldUseDelayedSave() override;
-  void OnSavedCommands() override;
 
   // Tests Vivaldi specific attributes on the Browser to see if we should
   // track this in the session.

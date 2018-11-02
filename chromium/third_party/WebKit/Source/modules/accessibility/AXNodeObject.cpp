@@ -95,8 +95,11 @@ class BoolAttributeSetter : public SparseAttributeSetter {
   void Run(const AXObject& obj,
            AXSparseAttributeClient& attribute_map,
            const AtomicString& value) override {
-    attribute_map.AddBoolAttribute(attribute_,
-                                   EqualIgnoringASCIICase(value, "true"));
+    // ARIA booleans are true if not "false" and not specifically undefined.
+    bool is_true = !AccessibleNode::IsUndefinedAttrValue(value) &&
+                   !EqualIgnoringASCIICase(value, "false");
+    if (is_true)  // Not necessary to add if false
+      attribute_map.AddBoolAttribute(attribute_, true);
   }
 };
 
@@ -210,6 +213,8 @@ static AXSparseAttributeSetterMap& GetSparseAttributeSetterMap() {
     ax_sparse_attribute_setter_map.Set(
         aria_roledescriptionAttr,
         new StringAttributeSetter(AXStringAttribute::kAriaRoleDescription));
+    ax_sparse_attribute_setter_map.Set(
+        aria_busyAttr, new BoolAttributeSetter(AXBoolAttribute::kAriaBusy));
   }
   return ax_sparse_attribute_setter_map;
 }
@@ -238,7 +243,17 @@ class AXSparseAttributeAOMPropertyClient : public AOMPropertyClient {
     sparse_attribute_client_.AddStringAttribute(attribute, value);
   }
 
-  void AddBooleanProperty(AOMBooleanProperty property, bool value) override {}
+  void AddBooleanProperty(AOMBooleanProperty property, bool value) override {
+    AXBoolAttribute attribute;
+    switch (property) {
+      case AOMBooleanProperty::kBusy:
+        attribute = AXBoolAttribute::kAriaBusy;
+        break;
+      default:
+        return;
+    }
+    sparse_attribute_client_.AddBoolAttribute(attribute, value);
+  }
 
   void AddIntProperty(AOMIntProperty property, int32_t value) override {}
 
@@ -326,7 +341,7 @@ void AXNodeObject::AlterSliderValue(bool increase) {
 
   value += increase ? step : -step;
 
-  SetValue(String::Number(value));
+  OnNativeSetValueAction(String::Number(value));
   AxObjectCache().PostNotification(GetNode(),
                                    AXObjectCacheImpl::kAXValueChanged);
 }
@@ -866,9 +881,10 @@ bool AXNodeObject::HasContentEditableAttributeSet() const {
          EqualIgnoringASCIICase(content_editable_value, "true");
 }
 
-// TODO(aleventhal) Find a more appropriate name or consider returning false
+// TODO(dmazzoni) Find a more appropriate name or consider returning false
 // for everything but a searchbox or textfield, as a combobox and spinbox
 // can contain a field but should not be considered edit controls themselves.
+// Combo box text fields should return true though.
 bool AXNodeObject::IsTextControl() const {
   if (HasContentEditableAttributeSet())
     return true;
@@ -877,6 +893,7 @@ bool AXNodeObject::IsTextControl() const {
     case kTextFieldRole:
     case kComboBoxRole:
     case kSearchBoxRole:
+    // TODO(dmazzoni): kSpinButtonRole might need to be removed.
     case kSpinButtonRole:
       return true;
     default:
@@ -959,13 +976,13 @@ Element* AXNodeObject::MenuItemElementForMenu() const {
 Element* AXNodeObject::MouseButtonListener() const {
   Node* node = this->GetNode();
   if (!node)
-    return 0;
+    return nullptr;
 
   if (!node->IsElementNode())
     node = node->parentElement();
 
   if (!node)
-    return 0;
+    return nullptr;
 
   for (Element* element = ToElement(node); element;
        element = element->parentElement()) {
@@ -1290,14 +1307,27 @@ bool AXNodeObject::CanSupportAriaReadOnly() const {
   switch (RoleValue()) {
     case kCellRole:
     case kCheckBoxRole:
+    case kColorWellRole:
+    case kColumnHeaderRole:
     case kComboBoxRole:
+    case kDateRole:
+    case kDateTimeRole:
     case kGridRole:
+    case kInputTimeRole:
     case kListBoxRole:
     case kMenuButtonRole:
+    case kMenuItemCheckBoxRole:
+    case kMenuItemRadioRole:
+    case kPopUpButtonRole:
     case kRadioGroupRole:
+    case kRowHeaderRole:
+    case kSearchBoxRole:
     case kSliderRole:
     case kSpinButtonRole:
+    case kSwitchRole:
     case kTextFieldRole:
+    case kToggleButtonRole:
+    case kTreeGridRole:
       return true;
     default:
       break;
@@ -1477,19 +1507,28 @@ unsigned AXNodeObject::HierarchicalLevel() const {
 }
 
 String AXNodeObject::AriaAutoComplete() const {
-  if (RoleValue() != kComboBoxRole)
+  if (!IsARIATextControl())
     return String();
 
   const AtomicString& aria_auto_complete =
       GetAOMPropertyOrARIAAttribute(AOMStringProperty::kAutocomplete)
           .DeprecatedLower();
 
-  if (aria_auto_complete == "inline" || aria_auto_complete == "list" ||
-      aria_auto_complete == "both")
-    return aria_auto_complete;
-
-  return String();
+  // Illegal values must be passed through, according to CORE-AAM.
+  return aria_auto_complete == "none" ? String() : aria_auto_complete;
 }
+
+namespace {
+
+bool MarkerTypeIsUsedForAccessibility(DocumentMarker::MarkerType type) {
+  return DocumentMarker::MarkerTypes(
+             DocumentMarker::kSpelling | DocumentMarker::kGrammar |
+             DocumentMarker::kTextMatch | DocumentMarker::kActiveSuggestion |
+             DocumentMarker::kSuggestion)
+      .Contains(type);
+}
+
+}  // namespace
 
 void AXNodeObject::Markers(Vector<DocumentMarker::MarkerType>& marker_types,
                            Vector<AXRange>& marker_ranges) const {
@@ -1500,18 +1539,10 @@ void AXNodeObject::Markers(Vector<DocumentMarker::MarkerType>& marker_types,
   DocumentMarkerVector markers = marker_controller.MarkersFor(GetNode());
   for (size_t i = 0; i < markers.size(); ++i) {
     DocumentMarker* marker = markers[i];
-    switch (marker->GetType()) {
-      case DocumentMarker::kSpelling:
-      case DocumentMarker::kGrammar:
-      case DocumentMarker::kTextMatch:
-      case DocumentMarker::kActiveSuggestion:
-        marker_types.push_back(marker->GetType());
-        marker_ranges.push_back(
-            AXRange(marker->StartOffset(), marker->EndOffset()));
-        break;
-      case DocumentMarker::kComposition:
-        // No need for accessibility to know about these marker types.
-        break;
+    if (MarkerTypeIsUsedForAccessibility(marker->GetType())) {
+      marker_types.push_back(marker->GetType());
+      marker_ranges.push_back(
+          AXRange(marker->StartOffset(), marker->EndOffset()));
     }
   }
 }
@@ -1739,7 +1770,7 @@ int AXNodeObject::PosInSet() const {
     if (HasAOMPropertyOrARIAAttribute(AOMUIntProperty::kPosInSet, pos_in_set))
       return pos_in_set;
 
-    return AXObject::IndexInParent() + 1;
+    return AutoPosInSet();
   }
 
   return 0;
@@ -1751,13 +1782,77 @@ int AXNodeObject::SetSize() const {
     if (HasAOMPropertyOrARIAAttribute(AOMIntProperty::kSetSize, set_size))
       return set_size;
 
-    if (ParentObject()) {
-      const auto& siblings = ParentObject()->Children();
-      return siblings.size();
-    }
+    return AutoSetSize();
   }
 
   return 0;
+}
+
+int AXNodeObject::AutoPosInSet() const {
+  AXObject* parent = ParentObject();
+  if (!parent)
+    return 0;
+
+  int pos_in_set = 1;
+  auto siblings = parent->Children();
+
+  AccessibilityRole role = RoleValue();
+  int level = HierarchicalLevel();
+  int index_in_parent = IndexInParent();
+
+  for (int index = index_in_parent - 1; index >= 0; index--) {
+    const auto sibling = siblings[index];
+    AccessibilityRole sibling_role = sibling->RoleValue();
+    if (sibling_role == kSplitterRole)
+      break;  // Set stops at a separator
+    if (sibling_role != role || sibling->AccessibilityIsIgnored())
+      continue;
+
+    int sibling_level = sibling->HierarchicalLevel();
+    if (sibling_level < level)
+      break;
+
+    if (sibling_level > level)
+      continue;  // Skip subset
+
+    ++pos_in_set;
+  }
+
+  return pos_in_set;
+}
+
+int AXNodeObject::AutoSetSize() const {
+  AXObject* parent = ParentObject();
+  if (!parent)
+    return 0;
+
+  int set_size = AutoPosInSet();
+  auto siblings = parent->Children();
+
+  AccessibilityRole role = RoleValue();
+  int level = HierarchicalLevel();
+  int index_in_parent = IndexInParent();
+  int sibling_count = siblings.size();
+
+  for (int index = index_in_parent + 1; index < sibling_count; index++) {
+    const auto sibling = siblings[index];
+    AccessibilityRole sibling_role = sibling->RoleValue();
+    if (sibling_role == kSplitterRole)
+      break;  // Set stops at a separator
+    if (sibling_role != role || sibling->AccessibilityIsIgnored())
+      continue;
+
+    int sibling_level = sibling->HierarchicalLevel();
+    if (sibling_level < level)
+      break;
+
+    if (sibling_level > level)
+      continue;  // Skip subset
+
+    ++set_size;
+  }
+
+  return set_size;
 }
 
 String AXNodeObject::AriaInvalidValue() const {
@@ -2295,7 +2390,7 @@ bool AXNodeObject::CanHaveChildren() const {
     return false;
 
   if (GetNode() && isHTMLMapElement(GetNode()))
-    return false;
+    return false;  // Does not have a role, so check here
 
   // Placeholder gets exposed as an attribute on the input accessibility node,
   // so there's no need to add its text children.
@@ -2304,74 +2399,80 @@ bool AXNodeObject::CanHaveChildren() const {
     return false;
   }
 
-  AccessibilityRole role = RoleValue();
-
-  // If an element has an ARIA role of presentation, we need to consider the
-  // native role when deciding whether it can have children or not - otherwise
-  // giving something a role of presentation could expose inner implementation
-  // details.
-  if (IsPresentational())
-    role = NativeAccessibilityRoleIgnoringAria();
-
-  switch (role) {
-    case kImageRole:
+  switch (NativeAccessibilityRoleIgnoringAria()) {
     case kButtonRole:
     case kCheckBoxRole:
-    case kRadioButtonRole:
-    case kSwitchRole:
-    case kTabRole:
-    case kToggleButtonRole:
+    case kImageRole:
     case kListBoxOptionRole:
     case kMenuButtonRole:
     case kMenuListOptionRole:
+    case kMenuItemRole:
+    case kMenuItemCheckBoxRole:
+    case kMenuItemRadioRole:
+    case kProgressIndicatorRole:
+    case kRadioButtonRole:
     case kScrollBarRole:
+    // case kSearchBoxRole:
+    case kSliderRole:
+    case kSplitterRole:
+    case kSwitchRole:
+    case kTabRole:
+    // case kTextFieldRole:
+    case kToggleButtonRole:
       return false;
     case kPopUpButtonRole:
-      return isHTMLSelectElement(GetNode());
-    case kStaticTextRole:
-      if (!AxObjectCache().InlineTextBoxAccessibilityEnabled())
-        return false;
-    default:
       return true;
+    case kStaticTextRole:
+      return AxObjectCache().InlineTextBoxAccessibilityEnabled();
+    default:
+      break;
   }
+
+  switch (AriaRoleAttribute()) {
+    case kImageRole:
+      return false;
+    case kButtonRole:
+    case kCheckBoxRole:
+    case kListBoxOptionRole:
+    case kMathRole:  // role="math" is flat, unlike <math>
+    case kMenuButtonRole:
+    case kMenuListOptionRole:
+    case kMenuItemRole:
+    case kMenuItemCheckBoxRole:
+    case kMenuItemRadioRole:
+    case kPopUpButtonRole:
+    case kProgressIndicatorRole:
+    case kRadioButtonRole:
+    case kScrollBarRole:
+    case kSliderRole:
+    case kSplitterRole:
+    case kSwitchRole:
+    case kTabRole:
+    case kToggleButtonRole: {
+      // These roles have ChildrenPresentational: true in the ARIA spec.
+      // We used to remove/prune all descendants of them, but that removed
+      // useful content if the author didn't follow the spec perfectly, for
+      // example if they wanted a complex radio button with a textfield child.
+      // We are now only pruning these if there is a single text child,
+      // otherwise the subtree is exposed. The ChildrenPresentational rule
+      // is thus useful for authoring/verification tools but does not break
+      // complex widget implementations.
+      Element* element = GetElement();
+      return element && !element->HasOneTextChild();
+    }
+    default:
+      break;
+  }
+  return true;
 }
 
 Element* AXNodeObject::ActionElement() const {
   Node* node = this->GetNode();
   if (!node)
-    return 0;
+    return nullptr;
 
-  if (isHTMLInputElement(*node)) {
-    HTMLInputElement& input = toHTMLInputElement(*node);
-    if (!input.IsDisabledFormControl() &&
-        (IsCheckboxOrRadio() || input.IsTextButton() ||
-         input.type() == InputTypeNames::file))
-      return &input;
-  } else if (isHTMLButtonElement(*node)) {
+  if (node->IsElementNode() && IsClickable())
     return ToElement(node);
-  }
-
-  if (AXObject::IsARIAInput(AriaRoleAttribute()))
-    return ToElement(node);
-
-  if (IsImageButton())
-    return ToElement(node);
-
-  if (isHTMLSelectElement(*node))
-    return ToElement(node);
-
-  switch (RoleValue()) {
-    case kButtonRole:
-    case kPopUpButtonRole:
-    case kToggleButtonRole:
-    case kTabRole:
-    case kMenuItemRole:
-    case kMenuItemCheckBoxRole:
-    case kMenuItemRadioRole:
-      return ToElement(node);
-    default:
-      break;
-  }
 
   Element* anchor = AnchorElement();
   Element* click_element = MouseButtonListener();
@@ -2444,48 +2545,57 @@ HTMLLabelElement* AXNodeObject::LabelElementContainer() const {
   return Traversal<HTMLLabelElement>::FirstAncestorOrSelf(*GetNode());
 }
 
-void AXNodeObject::SetFocused(bool on) {
+bool AXNodeObject::OnNativeFocusAction() {
   if (!CanSetFocusAttribute())
-    return;
+    return false;
 
-  Document* document = this->GetDocument();
-  if (!on) {
+  Document* document = GetDocument();
+  if (IsWebArea()) {
     document->ClearFocusedElement();
-  } else {
-    Node* node = this->GetNode();
-    if (node && node->IsElementNode()) {
-      // If this node is already the currently focused node, then calling
-      // focus() won't do anything.  That is a problem when focus is removed
-      // from the webpage to chrome, and then returns.  In these cases, we need
-      // to do what keyboard and mouse focus do, which is reset focus first.
-      if (document->FocusedElement() == node)
-        document->ClearFocusedElement();
-
-      ToElement(node)->focus();
-    } else {
-      document->ClearFocusedElement();
-    }
+    return true;
   }
+
+  Element* element = GetElement();
+  if (!element) {
+    document->ClearFocusedElement();
+    return true;
+  }
+
+  // If this node is already the currently focused node, then calling
+  // focus() won't do anything.  That is a problem when focus is removed
+  // from the webpage to chrome, and then returns.  In these cases, we need
+  // to do what keyboard and mouse focus do, which is reset focus first.
+  if (document->FocusedElement() == element)
+    document->ClearFocusedElement();
+
+  element->focus();
+  return true;
 }
 
-void AXNodeObject::Increment() {
-  UserGestureIndicator gesture_indicator(
-      UserGestureToken::Create(GetDocument(), UserGestureToken::kNewGesture));
+bool AXNodeObject::OnNativeIncrementAction() {
+  LocalFrame* frame = GetDocument() ? GetDocument()->GetFrame() : nullptr;
+  std::unique_ptr<UserGestureIndicator> gesture_indicator =
+      LocalFrame::CreateUserGesture(frame, UserGestureToken::kNewGesture);
   AlterSliderValue(true);
+  return true;
 }
 
-void AXNodeObject::Decrement() {
-  UserGestureIndicator gesture_indicator(
-      UserGestureToken::Create(GetDocument(), UserGestureToken::kNewGesture));
+bool AXNodeObject::OnNativeDecrementAction() {
+  LocalFrame* frame = GetDocument() ? GetDocument()->GetFrame() : nullptr;
+  std::unique_ptr<UserGestureIndicator> gesture_indicator =
+      LocalFrame::CreateUserGesture(frame, UserGestureToken::kNewGesture);
   AlterSliderValue(false);
+  return true;
 }
 
-void AXNodeObject::SetSequentialFocusNavigationStartingPoint() {
+bool AXNodeObject::OnNativeSetSequentialFocusNavigationStartingPointAction() {
   if (!GetNode())
-    return;
+    return false;
 
-  GetNode()->GetDocument().ClearFocusedElement();
-  GetNode()->GetDocument().SetSequentialFocusNavigationStartingPoint(GetNode());
+  Document* document = GetDocument();
+  document->ClearFocusedElement();
+  document->SetSequentialFocusNavigationStartingPoint(GetNode());
+  return true;
 }
 
 void AXNodeObject::ChildrenChanged() {
@@ -2494,10 +2604,14 @@ void AXNodeObject::ChildrenChanged() {
   if (!GetNode() && !GetLayoutObject())
     return;
 
-  // If this is not part of the accessibility tree because an ancestor
-  // has only presentational children, invalidate this object's children but
-  // skip sending a notification and skip walking up the ancestors.
-  if (AncestorForWhichThisIsAPresentationalChild()) {
+  // If this node's children are not part of the accessibility tree then
+  // invalidate the children but skip notification and walking up the ancestors.
+  // Cases where this happens:
+  // - an ancestor has only presentational children, or
+  // - this or an ancestor is a leaf node
+  // Uses |cached_is_descendant_of_leaf_node_| to avoid updating cached
+  // attributes for eachc change via | UpdateCachedAttributeValuesIfNeeded()|.
+  if (!CanHaveChildren() || cached_is_descendant_of_leaf_node_) {
     SetNeedsToUpdateChildren();
     return;
   }

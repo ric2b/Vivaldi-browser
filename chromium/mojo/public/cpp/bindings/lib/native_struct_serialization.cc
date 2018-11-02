@@ -10,31 +10,17 @@ namespace mojo {
 namespace internal {
 
 // static
-size_t UnmappedNativeStructSerializerImpl::PrepareToSerialize(
-    const NativeStructPtr& input,
-    SerializationContext* context) {
-  if (!input)
-    return 0;
-  return internal::PrepareToSerialize<ArrayDataView<uint8_t>>(input->data,
-                                                              context);
-}
-
-// static
 void UnmappedNativeStructSerializerImpl::Serialize(
     const NativeStructPtr& input,
     Buffer* buffer,
-    NativeStruct_Data** output,
+    NativeStruct_Data::BufferWriter* writer,
     SerializationContext* context) {
-  if (!input) {
-    *output = nullptr;
+  if (!input)
     return;
-  }
 
-  Array_Data<uint8_t>* data = nullptr;
   const ContainerValidateParams params(0, false, nullptr);
-  internal::Serialize<ArrayDataView<uint8_t>>(input->data, buffer, &data,
-                                              &params, context);
-  *output = reinterpret_cast<NativeStruct_Data*>(data);
+  internal::Serialize<ArrayDataView<uint8_t>>(
+      input->data, buffer, &writer->array_writer(), &params, context);
 }
 
 // static

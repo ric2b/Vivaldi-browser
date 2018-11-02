@@ -18,6 +18,12 @@ class DataRequestHandler;
 class IPCDataSource;
 }  // namespace content
 
+/**
+ * "The AVAssetResourceLoaderDelegate protocol defines a method that lets your
+ * code handle resource loading requests coming from an AVURLAsset object."
+ * https://developer.apple.com/documentation/avfoundation/avassetresourceloaderdelegate
+ **/
+
 @interface DataSourceLoader : NSObject<AVAssetResourceLoaderDelegate> {
  @private
   base::scoped_nsobject<NSString> contentType_;
@@ -31,9 +37,12 @@ class IPCDataSource;
 
 - (void)stop;
 
+  // Asks the delegate if it wants to load the requested resource.
 - (BOOL)resourceLoader:(AVAssetResourceLoader*)resourceLoader
     shouldWaitForLoadingOfRequestedResource:
         (AVAssetResourceLoadingRequest*)loadingRequest;
+
+  // Invoked to inform the delegate that a prior loading request has been cancelled
 - (void)resourceLoader:(AVAssetResourceLoader*)resourceLoader
     didCancelLoadingRequest:(AVAssetResourceLoadingRequest*)loadingRequest;
 - (dispatch_queue_t)dispatchQueue;

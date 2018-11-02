@@ -19,7 +19,6 @@ Some features may be unavailable and changes to preferences won't be saved.</tra
 <translation id="1434626383986940139">Chrome Canary Apps</translation>
 <translation id="1457721931618994305">Updating Google Chrome ...</translation>
 <translation id="1469002951682717133">Chrome App Launcher</translation>
-<translation id="1480489203462860648">Try it out, it's already installed</translation>
 <translation id="1553358976309200471">Update Chrome</translation>
 <translation id="1587223624401073077">Google Chrome is using your camera.</translation>
 <translation id="1587325591171447154"><ph name="FILE_NAME" /> is dangerous, so Chrome has blocked it.</translation>
@@ -98,6 +97,7 @@ Please check your email at <ph name="ACCOUNT_EMAIL" /> for further instructions.
 <translation id="345171907106878721">Add yourself to Chrome</translation>
 <translation id="3612333635265770873">A module with the same name has been known to conflict with Google Chrome.</translation>
 <translation id="3622797965165704966">Now it's easier to use Chrome with your Google Account and on shared computers.</translation>
+<translation id="3637702109597584617">Google Chrome OS <ph name="TERMS_OF_SERVICE_LINK" />Terms of Service<ph name="END_TERMS_OF_SERVICE_LINK" /></translation>
 <translation id="3718181793972440140">This will delete 1 item from this device. To retrieve your data later, sign in to Chrome as <ph name="USER_EMAIL" />.</translation>
 <translation id="3735758079232443276">The extension "<ph name="EXTENSION_NAME" />" has changed the page that is shown when you start Chrome.</translation>
 <translation id="3738139272394829648">Touch to Search</translation>
@@ -136,12 +136,12 @@ Please check your email at <ph name="ACCOUNT_EMAIL" /> for further instructions.
 <translation id="4754614261631455953">Google Chrome Canary (mDNS-In)</translation>
 <translation id="4771048833395599659">This file may be dangerous, so Chrome has blocked it.</translation>
 <translation id="4794050651896644714">Save details in Chrome</translation>
+<translation id="4804732725083176494">Sign in to Chrome is disabled by the administrator of this device.</translation>
 <translation id="4891791193823137474">Let Google Chrome run in the background</translation>
 <translation id="4921569541910214635">Share a computer? Now you can set up Chrome just the way you like it.</translation>
 <translation id="4953650215774548573">Set Google Chrome as your default browser</translation>
 <translation id="495931528404527476">In Chrome</translation>
 <translation id="4965682129423310439">Chrome found harmful software on your computer. Chrome can remove it and restore your settings to make your browser work normally again.</translation>
-<translation id="4987308747895123092">Please close all Google Chrome windows (including those in Windows 8 mode) and try again.</translation>
 <translation id="4990567037958725628">Google Chrome Canary</translation>
 <translation id="5028489144783860647">Google Chrome could not sync your data. Please update your Sync passphrase.</translation>
 <translation id="5037239767309817516">Please close all Google Chrome windows and relaunch it for this change to take effect.</translation>
@@ -203,7 +203,6 @@ Google Chrome is unable to recover your settings.</translation>
 <translation id="6634887557811630702">Google Chrome is up to date.</translation>
 <translation id="6676384891291319759">Access the Internet</translation>
 <translation id="6697947395630195233">Chrome needs access to your location to share your location with this site.</translation>
-<translation id="6757767188268205357">Don't bother me</translation>
 <translation id="683440813066116847">Inbound rule for Google Chrome Canary to allow mDNS traffic.</translation>
 <translation id="686561893457936865">Take Chrome everywhere</translation>
 <translation id="6883876366448858277">sends a word and its surrounding context to Google Search, returning definitions, pictures and other search results.</translation>
@@ -218,7 +217,6 @@ Google Chrome is unable to recover your settings.</translation>
 <translation id="7161904924553537242">Welcome to Google Chrome</translation>
 <translation id="7164397146364144019">You can help make Chrome safer and easier to use by automatically reporting details of possible security incidents to Google.</translation>
 <translation id="7185038942300673794"><ph name="EXTENSION_NAME" /> has been added to Chrome.</translation>
-<translation id="7196020411877309443">Why am I seeing this?</translation>
 <translation id="7242029209006116544">You are signing in with a managed account and giving its administrator control over your Google Chrome profile. Your Chrome data, such as your apps, bookmarks, history, passwords and other settings will become permanently tied to <ph name="USER_NAME" />. You will be able to delete this data via the Google Accounts Dashboard, but you will not be able to associate this data with another account. You can optionally create a new profile to keep your existing Chrome data separate. <ph name="LEARN_MORE" /></translation>
 <translation id="729375352412857283">This computer will soon stop receiving Google Chrome updates because Windows XP and Windows Vista will no longer be supported.</translation>
 <translation id="7330164299247909639">Authentication certificate failed. Please sign in to Google Chrome again as <ph name="USER_NAME" />, or contact your administrator for more information. <ph name="ADDITIONAL_EXPLANATION" /></translation>

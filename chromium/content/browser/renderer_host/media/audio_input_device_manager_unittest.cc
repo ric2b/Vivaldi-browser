@@ -101,7 +101,7 @@ class MAYBE_AudioInputDeviceManagerTest : public testing::Test {
   void WaitForOpenCompletion() {
     media::WaitableMessageLoopEvent event;
     audio_manager_->GetTaskRunner()->PostTaskAndReply(
-        FROM_HERE, base::Bind(&base::DoNothing), event.GetClosure());
+        FROM_HERE, base::BindOnce(&base::DoNothing), event.GetClosure());
     // Runs the loop and waits for the audio thread to call event's
     // closure.
     event.RunAndWait();
@@ -303,7 +303,7 @@ TEST_F(MAYBE_AudioInputDeviceManagerTest, AccessInvalidSession) {
 class AudioInputDeviceManagerNoDevicesTest
     : public MAYBE_AudioInputDeviceManagerTest {
  public:
-  AudioInputDeviceManagerNoDevicesTest(){};
+  AudioInputDeviceManagerNoDevicesTest() {}
 
  protected:
   void Initialize() override {
@@ -341,13 +341,8 @@ TEST_F(AudioInputDeviceManagerNoDevicesTest,
     // Expects that device parameters stored by the manager are valid.
     const StreamDeviceInfo* device_info =
         manager_->GetOpenedDeviceInfoById(session_id);
-    EXPECT_TRUE(
-        media::AudioParameters(media::AudioParameters::AUDIO_FAKE,
-                               static_cast<media::ChannelLayout>(
-                                   device_info->device.input.channel_layout),
-                               device_info->device.input.sample_rate, 16,
-                               device_info->device.input.frames_per_buffer)
-            .IsValid());
+    EXPECT_TRUE(device_info->device.input.IsValid());
+    EXPECT_TRUE(device_info->device.matched_output.IsValid());
 
     manager_->Close(session_id);
     EXPECT_CALL(*audio_input_listener_,

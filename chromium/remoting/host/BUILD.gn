@@ -135,6 +135,15 @@ static_library("host") {
     "disconnect_window_win.cc",
     "dns_blackhole_checker.cc",
     "dns_blackhole_checker.h",
+    "evaluate_capability.cc",
+    "evaluate_capability.h",
+    "file_proxy_wrapper.cc",
+    "file_proxy_wrapper.h",
+    "file_proxy_wrapper_linux.cc",
+    "file_proxy_wrapper_mac.cc",
+    "file_proxy_wrapper_win.cc",
+    "file_transfer_message_handler.cc",
+    "file_transfer_message_handler.h",
     "forward_process_stats_agent.cc",
     "forward_process_stats_agent.h",
     "gcd_rest_client.cc",
@@ -149,7 +158,6 @@ static_library("host") {
     "host_change_notification_listener.h",
     "host_config.cc",
     "host_config.h",
-    "host_config_constants.cc",
     "host_details.cc",
     "host_details.h",
     "host_event_logger.h",
@@ -455,6 +463,8 @@ source_set("unit_tests") {
     "daemon_process_unittest.cc",
     "desktop_process_unittest.cc",
     "desktop_session_agent_unittest.cc",
+    "file_proxy_wrapper_linux_unittest.cc",
+    "file_transfer_message_handler_unittest.cc",
     "gcd_rest_client_unittest.cc",
     "gcd_state_updater_unittest.cc",
     "heartbeat_sender_unittest.cc",
@@ -531,6 +541,11 @@ source_set("unit_tests") {
 
   if (!is_ios) {
     deps += [ "//components/policy/core/browser:test_support" ]
+  }
+
+  if (enable_me2me_host) {
+    sources += [ "evaluate_capability_unittest.cc" ]
+    data_deps = [ "//remoting/test:capability_test_stub" ]
   }
 }
 
@@ -646,7 +661,6 @@ if (enable_remoting_host) {
     sources = [
       "installer/mac/uninstaller/remoting_uninstaller-InfoPlist.strings.jinja2",
       "it2me/remote_assistance_host-InfoPlist.strings.jinja2",
-      "mac/me2me_preference_pane-InfoPlist.strings.jinja2",
       "remoting_me2me_host-InfoPlist.strings.jinja2",
       "setup/native_messaging_host-InfoPlist.strings.jinja2",
     ]

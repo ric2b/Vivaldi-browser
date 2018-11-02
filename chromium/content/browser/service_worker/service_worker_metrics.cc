@@ -89,6 +89,10 @@ std::string EventTypeToSuffix(ServiceWorkerMetrics::EventType event_type) {
       return "_BACKGROUND_FETCHED";
     case ServiceWorkerMetrics::EventType::NAVIGATION_HINT:
       return "_NAVIGATION_HINT";
+    case ServiceWorkerMetrics::EventType::CAN_MAKE_PAYMENT:
+      return "_CAN_MAKE_PAYMENT";
+    case ServiceWorkerMetrics::EventType::ABORT_PAYMENT:
+      return "_ABORT_PAYMENT";
     case ServiceWorkerMetrics::EventType::NUM_TYPES:
       NOTREACHED() << static_cast<int>(event_type);
   }
@@ -332,6 +336,10 @@ const char* ServiceWorkerMetrics::EventTypeToString(EventType event_type) {
       return "Background Fetched";
     case EventType::NAVIGATION_HINT:
       return "Navigation Hint";
+    case EventType::CAN_MAKE_PAYMENT:
+      return "Can Make Payment";
+    case ServiceWorkerMetrics::EventType::ABORT_PAYMENT:
+      return "Abort Payment";
     case EventType::NUM_TYPES:
       break;
   }
@@ -475,7 +483,8 @@ void ServiceWorkerMetrics::CountControlledPageLoad(
   }
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(&RecordURLMetricOnUI, "ServiceWorker.ControlledPageUrl", url));
+      base::BindOnce(&RecordURLMetricOnUI, "ServiceWorker.ControlledPageUrl",
+                     url));
 }
 
 void ServiceWorkerMetrics::RecordStartWorkerStatus(
@@ -493,14 +502,19 @@ void ServiceWorkerMetrics::RecordStartWorkerStatus(
   RecordHistogramEnum(std::string("ServiceWorker.StartWorker.StatusByPurpose") +
                           EventTypeToSuffix(purpose),
                       status, SERVICE_WORKER_ERROR_MAX_VALUE);
-  UMA_HISTOGRAM_ENUMERATION("ServiceWorker.StartWorker.Purpose",
-                            static_cast<int>(purpose),
-                            static_cast<int>(EventType::NUM_TYPES));
+  UMA_HISTOGRAM_ENUMERATION("ServiceWorker.StartWorker.Purpose", purpose,
+                            EventType::NUM_TYPES);
   if (status == SERVICE_WORKER_ERROR_TIMEOUT) {
     UMA_HISTOGRAM_ENUMERATION("ServiceWorker.StartWorker.Timeout.StartPurpose",
-                              static_cast<int>(purpose),
-                              static_cast<int>(EventType::NUM_TYPES));
+                              purpose, EventType::NUM_TYPES);
   }
+}
+
+void ServiceWorkerMetrics::RecordInstalledScriptsSenderStatus(
+    ServiceWorkerInstalledScriptsSender::FinishedReason reason) {
+  UMA_HISTOGRAM_ENUMERATION(
+      "ServiceWorker.StartWorker.InstalledScriptsSender.FinishedReason", reason,
+      ServiceWorkerInstalledScriptsSender::FinishedReason::kMaxValue);
 }
 
 void ServiceWorkerMetrics::RecordStartWorkerTime(base::TimeDelta time,
@@ -722,6 +736,13 @@ void ServiceWorkerMetrics::RecordEventDuration(EventType event,
     case EventType::BACKGROUND_FETCHED:
       UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.BackgroundFetchedEvent.Time",
                                  time);
+      break;
+    case EventType::CAN_MAKE_PAYMENT:
+      UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.CanMakePaymentEvent.Time",
+                                 time);
+      break;
+    case EventType::ABORT_PAYMENT:
+      UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.AbortPaymentEvent.Time", time);
       break;
 
     case EventType::NAVIGATION_HINT:
@@ -1047,10 +1068,10 @@ void ServiceWorkerMetrics::RecordRuntime(base::TimeDelta time) {
 void ServiceWorkerMetrics::RecordUninstalledScriptImport(const GURL& url) {
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(&RecordURLMetricOnUI,
-                 "ServiceWorker.ContextRequestHandlerStatus."
-                 "UninstalledScriptImport",
-                 url));
+      base::BindOnce(&RecordURLMetricOnUI,
+                     "ServiceWorker.ContextRequestHandlerStatus."
+                     "UninstalledScriptImport",
+                     url));
 }
 
 void ServiceWorkerMetrics::RecordStartServiceWorkerForNavigationHintResult(

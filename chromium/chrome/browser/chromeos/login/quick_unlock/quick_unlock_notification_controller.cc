@@ -31,11 +31,11 @@ namespace {
 
 constexpr char kPinDelegateId[] = "pinunlock_delegate";
 constexpr char kPinNotificationId[] = "pinunlock_notification";
-constexpr char kPinSetupUrl[] = "chrome://md-settings/lockScreen";
+constexpr char kPinSetupUrl[] = "chrome://settings/lockScreen";
 constexpr char kFingerprintDelegateId[] = "fingerprintunlock_delegate";
 constexpr char kFingerprintNotificationId[] = "fingerprintunlock_notification";
 constexpr char kFingerprintSetupUrl[] =
-    "chrome://md-settings/lockScreen/fingerprint";
+    "chrome://settings/lockScreen/fingerprint";
 
 }  // namespace
 
@@ -91,8 +91,10 @@ bool QuickUnlockNotificationController::ShouldShowPinNotification(
 
   // Do not show notification if policy does not allow PIN, or if user is
   // supervised.
-  if (!IsPinEnabled(profile->GetPrefs()))
+  if (IsPinDisabledByPolicy(profile->GetPrefs()) ||
+      !IsPinEnabled(profile->GetPrefs())) {
     return false;
+  }
 
   // Do not show the notification if the pin is already set.
   PinStorage* pin_storage =

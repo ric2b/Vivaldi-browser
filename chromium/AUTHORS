@@ -1,4 +1,4 @@
-﻿# Names should be added to this file with this pattern:
+# Names should be added to this file with this pattern:
 #
 # For individuals:
 #   Name <email address>
@@ -33,6 +33,7 @@ Alex Gabriel <minilogo@gmail.com>
 Alex Gartrell <agartrell@cmu.edu>
 Alex Henrie <alexhenrie24@gmail.com>
 Alex Scheele <alexscheele@gmail.com>
+Alexander Douglas <agdoug@amazon.com>
 Alexander Shalamov <alexander.shalamov@intel.com>
 Alexander Sulfrian <alexander@sulfrian.net>
 Alexandre Abreu <wiss1976@gmail.com>
@@ -99,6 +100,7 @@ Ben Noordhuis <ben@strongloop.com>
 Benjamin Dupont <bedupont@cisco.com>
 Benjamin Jemlich <pcgod99@gmail.com>
 Bernard Cafarelli <voyageur@gentoo.org>
+Bernhard M. Wiedemann <bwiedemann@suse.de>
 Bhagirathi Satpathy <bhagirathi.s@samsung.com>
 Bhanukrushana Rout <b.rout@samsung.com>
 Biljith Jayan <billy.jayan@samsung.com>
@@ -315,6 +317,7 @@ Jake Helfert <jake@helfert.us>
 Jake Hendy <me@jakehendy.com>
 Jakob Weigert <jakob.j.w@googlemail.com>
 Jakub Machacek <xtreit@gmail.com>
+James Burton <jb@0.me.uk>
 James Choi <jchoi42@pha.jhu.edu>
 James Stanley <james@apphaus.co.uk>
 James Vega <vega.james@gmail.com>
@@ -368,6 +371,7 @@ Johnson Lin <johnson.lin@intel.com>
 Jonathan Frazer <listedegarde@gmail.com>
 Jonathan Garbee <jonathan@garbee.me>
 Jonathan Hacker <jhacker@arcanefour.com>
+JongKwon Lee <jongkwon.lee@navercorp.com>
 Jongsoo Lee <leejongsoo@gmail.com>
 Joone Hur <joone.hur@intel.com>
 Jorge Villatoro <jorge@tomatocannon.com>
@@ -415,6 +419,7 @@ Kihong Kwon <kihong.kwon@samsung.com>
 Kim Christensen <kimworking@gmail.com>
 Kingshuk Jana <kingshuk.j@samsung.com>
 Kirill Bobyrev <kirillbobyrev@gmail.com>
+Kirill Ovchinnikov <kirill.ovchinn@gmail.com>
 Kirk Shoop <kirk.shoop@microsoft.com>
 Kihwang Kim <pwangkk@gmail.com>
 Klemen Forstnerič <klemen.forstneric@gmail.com>
@@ -437,6 +442,7 @@ Lauri Oherd <lauri.oherd@gmail.com>
 Lavar Askew <open.hyperion@gmail.com>
 Legend Lee <guanxian.li@intel.com>
 Leith Bade <leith@leithalweapon.geek.nz>
+Lenny Khazan <lenny.khazan@gmail.com>
 Leo Wolf <jclw@ymail.com>
 Leon Han <leon.han@intel.com>
 Leung Wing Chung <lwchkg@gmail.com>
@@ -789,6 +795,7 @@ Xinghua Cao <xinghua.cao@intel.com>
 Xu Samuel <samuel.xu@intel.com>
 Xu Xing <xing.xu@intel.com>
 Xuefei Ren <xrenishere@gmail.com>
+Xueqing Huang <huangxueqing@xiaomi.com>
 Xun Sun <xun.sun@intel.com>
 Yael Aharon <yael.aharon@intel.com>
 Yair Yogev <progame@chromium.org>
@@ -854,6 +861,10 @@ Yong Wang <ccyongwang@tencent.com>
 Charles Vaughn <cvaughn@gmail.com>
 Ernesto Mudu <ernesto.mudu@gmail.com>
 Zhifei Fang <facetothefate@gmail.com>
+Timo Witte <timo.witte@gmail.com>
+Pierre Neter <pierreneter@gmail.com>
+Jan Rucka <ruckajan10@gmail.com>
+Yannic Bonenberger <contact@yannic-bonenberger.com>
 
 ACCESS CO., LTD. <*@access-company.com>
 BlackBerry Limited <*@blackberry.com>
@@ -883,3 +894,4 @@ Impossible Dreams Network <*@impossibledreams.net>
 Facebook, Inc. <*@fb.com>
 Facebook, Inc. <*@oculus.com>
 Canonical Limited <*@canonical.com>
+Seznam.cz, a.s. <*@firma.seznam.cz>

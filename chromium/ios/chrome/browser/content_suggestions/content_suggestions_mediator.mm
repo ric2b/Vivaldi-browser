@@ -18,16 +18,17 @@
 #include "ios/chrome/browser/application_context.h"
 #import "ios/chrome/browser/content_suggestions/content_suggestions_category_wrapper.h"
 #import "ios/chrome/browser/content_suggestions/content_suggestions_favicon_mediator.h"
-#import "ios/chrome/browser/content_suggestions/content_suggestions_header_provider.h"
 #import "ios/chrome/browser/content_suggestions/content_suggestions_service_bridge_observer.h"
 #import "ios/chrome/browser/content_suggestions/mediator_util.h"
 #include "ios/chrome/browser/ntp_tiles/most_visited_sites_observer_bridge.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_item.h"
+#import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_learn_more_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_whats_new_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/suggested_content.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_commands.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_data_sink.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_provider.h"
 #import "ios/chrome/browser/ui/content_suggestions/identifier/content_suggestion_identifier.h"
 #import "ios/chrome/browser/ui/content_suggestions/identifier/content_suggestions_section_information.h"
 #import "ios/chrome/browser/ui/ntp/notification_promo_whats_new.h"
@@ -68,9 +69,16 @@ const NSInteger kMaxNumMostVisitedTiles = 8;
 // Section Info for the logo and omnibox section.
 @property(nonatomic, strong)
     ContentSuggestionsSectionInformation* logoSectionInfo;
+// Section Info for the What's New promo section.
+@property(nonatomic, strong)
+    ContentSuggestionsSectionInformation* promoSectionInfo;
 // Section Info for the Most Visited section.
 @property(nonatomic, strong)
     ContentSuggestionsSectionInformation* mostVisitedSectionInfo;
+// Section Info for the footer message allowing the user to know more about the
+// suggested content.
+@property(nonatomic, strong)
+    ContentSuggestionsSectionInformation* learnMoreSectionInfo;
 // Whether the page impression has been recorded.
 @property(nonatomic, assign) BOOL recordedPageImpression;
 // The ContentSuggestionsService, serving suggestions.
@@ -83,6 +91,8 @@ const NSInteger kMaxNumMostVisitedTiles = 8;
         sectionInformationByCategory;
 // Mediator fetching the favicons for the items.
 @property(nonatomic, strong) ContentSuggestionsFaviconMediator* faviconMediator;
+// Item for the Learn More section, containing the string.
+@property(nonatomic, strong) ContentSuggestionsLearnMoreItem* learnMoreItem;
 
 @end
 
@@ -91,7 +101,9 @@ const NSInteger kMaxNumMostVisitedTiles = 8;
 @synthesize mostVisitedItems = _mostVisitedItems;
 @synthesize freshMostVisitedItems = _freshMostVisitedItems;
 @synthesize logoSectionInfo = _logoSectionInfo;
+@synthesize promoSectionInfo = _promoSectionInfo;
 @synthesize mostVisitedSectionInfo = _mostVisitedSectionInfo;
+@synthesize learnMoreSectionInfo = _learnMoreSectionInfo;
 @synthesize recordedPageImpression = _recordedPageImpression;
 @synthesize contentService = _contentService;
 @synthesize dataSink = _dataSink;
@@ -99,6 +111,8 @@ const NSInteger kMaxNumMostVisitedTiles = 8;
 @synthesize commandHandler = _commandHandler;
 @synthesize headerProvider = _headerProvider;
 @synthesize faviconMediator = _faviconMediator;
+@synthesize learnMoreItem = _learnMoreItem;
+@synthesize readingListNeedsReload = _readingListNeedsReload;
 
 #pragma mark - Public
 
@@ -114,13 +128,18 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
         base::MakeUnique<ContentSuggestionsServiceBridge>(self, contentService);
     _contentService = contentService;
     _sectionInformationByCategory = [[NSMutableDictionary alloc] init];
+
     _faviconMediator = [[ContentSuggestionsFaviconMediator alloc]
         initWithContentService:contentService
               largeIconService:largeIconService
                 largeIconCache:largeIconCache];
 
-    _mostVisitedSectionInfo = MostVisitedSectionInformation();
     _logoSectionInfo = LogoSectionInformation();
+    _promoSectionInfo = PromoSectionInformation();
+    _mostVisitedSectionInfo = MostVisitedSectionInformation();
+    _learnMoreSectionInfo = LearnMoreSectionInformation();
+
+    _learnMoreItem = [[ContentSuggestionsLearnMoreItem alloc] init];
 
     _notificationPromo = base::MakeUnique<NotificationPromoWhatsNew>(
         GetApplicationContext()->GetLocalState());
@@ -162,6 +181,10 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
 
   [sectionsInfo addObject:self.logoSectionInfo];
 
+  if (_notificationPromo->CanShow()) {
+    [sectionsInfo addObject:self.promoSectionInfo];
+  }
+
   if (self.mostVisitedItems.count > 0) {
     [sectionsInfo addObject:self.mostVisitedSectionInfo];
   }
@@ -175,8 +198,14 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
     if (!self.sectionInformationByCategory[categoryWrapper]) {
       [self addSectionInformationForCategory:category];
     }
-    [sectionsInfo addObject:self.sectionInformationByCategory[categoryWrapper]];
+    if (IsCategoryStatusAvailable(
+            self.contentService->GetCategoryStatus(category))) {
+      [sectionsInfo
+          addObject:self.sectionInformationByCategory[categoryWrapper]];
+    }
   }
+
+  [sectionsInfo addObject:self.learnMoreSectionInfo];
 
   return sectionsInfo;
 }
@@ -187,6 +216,8 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
       [NSMutableArray array];
 
   if (sectionInfo == self.logoSectionInfo) {
+    // Section empty on purpose.
+  } else if (sectionInfo == self.promoSectionInfo) {
     if (_notificationPromo->CanShow()) {
       ContentSuggestionsWhatsNewItem* item =
           [[ContentSuggestionsWhatsNewItem alloc] initWithType:0];
@@ -198,6 +229,8 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
     }
   } else if (sectionInfo == self.mostVisitedSectionInfo) {
     [convertedSuggestions addObjectsFromArray:self.mostVisitedItems];
+  } else if (sectionInfo == self.learnMoreSectionInfo) {
+    [convertedSuggestions addObject:self.learnMoreItem];
   } else {
     ntp_snippets::Category category =
         [[self categoryWrapperForSectionInfo:sectionInfo] category];
@@ -218,9 +251,12 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
                         (ContentSuggestionsSectionInformation*)sectionInfo
                            callback:(MoreSuggestionsFetched)callback {
   if (![self isRelatedToContentSuggestionsService:sectionInfo]) {
-    callback(nil);
+    callback(nil, content_suggestions::StatusCodeNotRun);
     return;
   }
+
+  self.contentService->user_classifier()->OnEvent(
+      ntp_snippets::UserClassifier::Metric::SUGGESTIONS_USED);
 
   ContentSuggestionsCategoryWrapper* wrapper =
       [self categoryWrapperForSectionInfo:sectionInfo];
@@ -229,17 +265,17 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
       self.contentService->GetCategoryInfo([wrapper category]);
 
   if (!categoryInfo) {
-    callback(nil);
+    callback(nil, content_suggestions::StatusCodeNotRun);
     return;
   }
 
   switch (categoryInfo->additional_action()) {
     case ntp_snippets::ContentSuggestionsAdditionalAction::NONE:
-      callback(nil);
+      callback(nil, content_suggestions::StatusCodeNotRun);
       return;
 
     case ntp_snippets::ContentSuggestionsAdditionalAction::VIEW_ALL:
-      callback(nil);
+      callback(nil, content_suggestions::StatusCodeNotRun);
       if ([wrapper category].IsKnownCategory(
               ntp_snippets::KnownCategories::READING_LIST)) {
         [self.commandHandler openReadingList];
@@ -255,6 +291,7 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
       }
 
       if (known_suggestion_ids.size() == 0) {
+        callback(nil, content_suggestions::StatusCodeNotRun);
         // No elements in the section, reloads everything to have suggestions
         // for the next NTP. Fetch() do not store the new data.
         self.contentService->ReloadSuggestions();
@@ -273,7 +310,7 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
           }));
 
       self.contentService->Fetch([wrapper category], known_suggestion_ids,
-                                 serviceCallback);
+                                 std::move(serviceCallback));
 
       break;
     }
@@ -304,23 +341,42 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
   if (!self.sectionInformationByCategory[wrapper]) {
     [self addSectionInformationForCategory:category];
   }
+  BOOL forceReload = NO;
+  if (category.IsKnownCategory(ntp_snippets::KnownCategories::READING_LIST)) {
+    forceReload = self.readingListNeedsReload;
+    self.readingListNeedsReload = NO;
+  }
+
   [self.dataSink
-      dataAvailableForSection:self.sectionInformationByCategory[wrapper]];
+      dataAvailableForSection:self.sectionInformationByCategory[wrapper]
+                  forceReload:forceReload];
 }
 
 - (void)contentSuggestionsService:
             (ntp_snippets::ContentSuggestionsService*)suggestionsService
                          category:(ntp_snippets::Category)category
                   statusChangedTo:(ntp_snippets::CategoryStatus)status {
+  ContentSuggestionsCategoryWrapper* wrapper =
+      [[ContentSuggestionsCategoryWrapper alloc] initWithCategory:category];
   if (!ntp_snippets::IsCategoryStatusInitOrAvailable(status)) {
     // Remove the category from the UI if it is not available.
-    ContentSuggestionsCategoryWrapper* wrapper =
-        [[ContentSuggestionsCategoryWrapper alloc] initWithCategory:category];
     ContentSuggestionsSectionInformation* sectionInfo =
         self.sectionInformationByCategory[wrapper];
 
     [self.dataSink clearSection:sectionInfo];
     [self.sectionInformationByCategory removeObjectForKey:wrapper];
+  } else {
+    if (!self.sectionInformationByCategory[wrapper]) {
+      [self addSectionInformationForCategory:category];
+    }
+    ContentSuggestionsSectionInformation* sectionInfo =
+        self.sectionInformationByCategory[wrapper];
+    [self.dataSink dataAvailableForSection:sectionInfo forceReload:NO];
+    if (status == ntp_snippets::CategoryStatus::AVAILABLE_LOADING) {
+      [self.dataSink section:sectionInfo isLoading:YES];
+    } else {
+      [self.dataSink section:sectionInfo isLoading:NO];
+    }
   }
 }
 
@@ -412,6 +468,14 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
   }
 }
 
+#pragma mark - ContentSuggestionsMetricsRecorderDelegate
+
+- (ContentSuggestionsCategoryWrapper*)categoryWrapperForSectionInfo:
+    (ContentSuggestionsSectionInformation*)sectionInfo {
+  return [[self.sectionInformationByCategory allKeysForObject:sectionInfo]
+      firstObject];
+}
+
 #pragma mark - Private
 
 // Converts the |suggestions| from |category| to CSCollectionViewItem and adds
@@ -436,6 +500,7 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
     ContentSuggestionsItem* suggestion =
         ConvertSuggestion(contentSuggestion, sectionInfo, category);
     suggestion.delegate = self;
+    suggestion.commandHandler = self.commandHandler;
     [self.faviconMediator fetchFaviconForSuggestions:suggestion
                                           inCategory:category];
 
@@ -456,13 +521,6 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
       wrapperWithCategory:category]] = sectionInfo;
 }
 
-// Returns a CategoryWrapper acting as a key for this section info.
-- (ContentSuggestionsCategoryWrapper*)categoryWrapperForSectionInfo:
-    (ContentSuggestionsSectionInformation*)sectionInfo {
-  return [[self.sectionInformationByCategory allKeysForObject:sectionInfo]
-      firstObject];
-}
-
 // If the |statusCode| is a success and |suggestions| is not empty, runs the
 // |callback| with the |suggestions| converted to Objective-C.
 - (void)didFetchMoreSuggestions:
@@ -477,7 +535,7 @@ initWithContentService:(ntp_snippets::ContentSuggestionsService*)contentService
             fromCategory:category
              toItemArray:contentSuggestions];
   }
-  callback(contentSuggestions);
+  callback(contentSuggestions, ConvertStatusCode(statusCode));
 }
 
 // Returns whether the |sectionInfo| is associated with a category from the

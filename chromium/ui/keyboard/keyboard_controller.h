@@ -35,17 +35,6 @@ class KeyboardUI;
 // or hide animation finishes.
 constexpr int kAnimationDistance = 30;
 
-enum KeyboardMode {
-  // Invalid mode.
-  NONE,
-  // Full width virtual keyboard. The virtual keyboard window has the same width
-  // as the display.
-  FULL_WIDTH,
-  // Floating virtual keyboard. The virtual keyboard window has customizable
-  // width and is draggable.
-  FLOATING,
-};
-
 // Represents the current state of the keyboard managed by the controller.
 // Don't change the numeric value of the members because they are used in UMA
 // - VirtualKeyboard.ControllerStateTransition.
@@ -113,10 +102,6 @@ class KEYBOARD_EXPORT KeyboardController : public ui::InputMethodObserver,
 
   bool keyboard_locked() const { return keyboard_locked_; }
 
-  KeyboardMode keyboard_mode() const { return keyboard_mode_; }
-
-  void SetKeyboardMode(KeyboardMode mode);
-
   // Immediately starts hiding animation of virtual keyboard and notifies
   // observers bounds change. This method forcibly sets keyboard_locked_
   // false while closing the keyboard.
@@ -163,8 +148,6 @@ class KEYBOARD_EXPORT KeyboardController : public ui::InputMethodObserver,
   // For access to SetContainerBounds.
   friend class KeyboardLayoutManager;
 
-  bool show_on_resize() const { return show_on_resize_; }
-
   // aura::WindowObserver overrides
   void OnWindowHierarchyChanged(const HierarchyChangeParams& params) override;
   void OnWindowAddedToRootWindow(aura::Window* window) override;
@@ -183,8 +166,8 @@ class KEYBOARD_EXPORT KeyboardController : public ui::InputMethodObserver,
   void OnShowImeIfNeeded() override;
 
   // Sets the bounds of the container window. Shows the keyboard if contents
-  // is first loaded and show_on_resize() is true. Called by
-  // KayboardLayoutManager.
+  // is first loaded and show_on_content_update_ is true. Called by
+  // KeyboardLayoutManager.
   void SetContainerBounds(const gfx::Rect& new_bounds,
                           const bool contents_loaded);
 
@@ -199,7 +182,7 @@ class KEYBOARD_EXPORT KeyboardController : public ui::InputMethodObserver,
   // is aborted, it won't be called.
   void ShowAnimationFinished();
 
-  void NotifyKeyboardBoundsChangingAndEnsrueCaretInWorkArea();
+  void NotifyKeyboardBoundsChangingAndEnsureCaretInWorkArea();
 
   // Called when the keyboard mode is set or the keyboard is moved to another
   // display.
@@ -222,10 +205,11 @@ class KEYBOARD_EXPORT KeyboardController : public ui::InputMethodObserver,
   // uses container_'s animator.
   std::unique_ptr<CallbackAnimationObserver> animation_observer_;
 
-  bool show_on_resize_;
+  // If true, show the keyboard window when keyboard UI content updates.
+  bool show_on_content_update_;
+
   // If true, the keyboard is always visible even if no window has input focus.
   bool keyboard_locked_;
-  KeyboardMode keyboard_mode_;
   KeyboardEventFilter event_filter_;
 
   base::ObserverList<KeyboardControllerObserver> observer_list_;

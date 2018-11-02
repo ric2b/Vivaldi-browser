@@ -22,7 +22,6 @@
 #include "components/history/core/browser/history_database.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/url_utils.h"
-#include "components/mime_util/mime_util.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/browser/web_contents.h"
@@ -35,8 +34,8 @@ namespace {
 
 const size_t kNumSampleHosts = 50;
 const size_t kReportReadinessThreshold = 50;
-const float kMinOriginConfidenceToTriggerPreconnect = 0.75;
-const float kMinOriginConfidenceToTriggerPreresolve = 0.2;
+const float kMinOriginConfidenceToTriggerPreconnect = 0.75f;
+const float kMinOriginConfidenceToTriggerPreresolve = 0.2f;
 
 // For reporting events of interest that are not tied to any navigation.
 enum ReportingEvent {
@@ -108,17 +107,17 @@ void GetUrlVisitCountTask::DoneRunOnMainThread() {
 
 GetUrlVisitCountTask::~GetUrlVisitCountTask() {}
 
-void InitializeOnDBThread(
+void InitializeOnDBSequence(
     ResourcePrefetchPredictor::PrefetchDataMap* url_resource_data,
     ResourcePrefetchPredictor::PrefetchDataMap* host_resource_data,
     ResourcePrefetchPredictor::RedirectDataMap* url_redirect_data,
     ResourcePrefetchPredictor::RedirectDataMap* host_redirect_data,
     ResourcePrefetchPredictor::OriginDataMap* origin_data) {
-  url_resource_data->InitializeOnDBThread();
-  host_resource_data->InitializeOnDBThread();
-  url_redirect_data->InitializeOnDBThread();
-  host_redirect_data->InitializeOnDBThread();
-  origin_data->InitializeOnDBThread();
+  url_resource_data->InitializeOnDBSequence();
+  host_resource_data->InitializeOnDBSequence();
+  url_redirect_data->InitializeOnDBSequence();
+  host_redirect_data->InitializeOnDBSequence();
+  origin_data->InitializeOnDBSequence();
 }
 
 }  // namespace
@@ -227,7 +226,7 @@ void ResourcePrefetchPredictor::StartInitialization() {
 
   // Get raw pointers to pass to the first task. Ownership of the unique_ptrs
   // will be passed to the reply task.
-  auto task = base::BindOnce(InitializeOnDBThread, url_resource_data.get(),
+  auto task = base::BindOnce(InitializeOnDBSequence, url_resource_data.get(),
                              host_resource_data.get(), url_redirect_data.get(),
                              host_redirect_data.get(), origin_data.get());
   auto reply = base::BindOnce(
@@ -236,8 +235,8 @@ void ResourcePrefetchPredictor::StartInitialization() {
       std::move(url_redirect_data), std::move(host_redirect_data),
       std::move(origin_data));
 
-  BrowserThread::PostTaskAndReply(BrowserThread::DB, FROM_HERE, std::move(task),
-                                  std::move(reply));
+  tables_->GetTaskRunner()->PostTaskAndReply(FROM_HERE, std::move(task),
+                                             std::move(reply));
 }
 
 bool ResourcePrefetchPredictor::IsUrlPrefetchable(

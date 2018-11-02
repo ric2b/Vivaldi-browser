@@ -3,16 +3,18 @@
 // found in the LICENSE file.
 
 #include "core/frame/PerformanceMonitor.h"
+
 #include "bindings/core/v8/ScheduledAction.h"
 #include "bindings/core/v8/ScriptEventListener.h"
 #include "bindings/core/v8/SourceLocation.h"
 #include "core/CoreProbeSink.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/events/EventListener.h"
+#include "core/dom/events/EventListener.h"
 #include "core/frame/Frame.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/parser/HTMLDocumentParser.h"
+#include "core/loader/DocumentLoader.h"
 #include "core/probe/CoreProbes.h"
 #include "platform/Histogram.h"
 #include "platform/wtf/CurrentTime.h"
@@ -20,6 +22,11 @@
 #include "public/platform/Platform.h"
 
 namespace blink {
+
+namespace {
+static const double kLongTaskSubTaskThresholdInSeconds = 0.012;
+static const double kNetworkQuietWindowSeconds = 0.5;
+}  // namespace
 
 // static
 double PerformanceMonitor::Threshold(ExecutionContext* context,
@@ -168,10 +175,23 @@ void PerformanceMonitor::Did(const probe::UpdateLayout& probe) {
 
 void PerformanceMonitor::Will(const probe::ExecuteScript& probe) {
   WillExecuteScript(probe.context);
+
+  probe.CaptureStartTime();
 }
 
 void PerformanceMonitor::Did(const probe::ExecuteScript& probe) {
   DidExecuteScript();
+
+  if (!enabled_ || !thresholds_[kLongTask])
+    return;
+
+  if (probe.Duration() <= kLongTaskSubTaskThresholdInSeconds)
+    return;
+  std::unique_ptr<SubTaskAttribution> sub_task_attribution =
+      SubTaskAttribution::Create(String("script-run"),
+                                 probe.context->Url().GetString(),
+                                 probe.CaptureStartTime(), probe.Duration());
+  sub_task_attributions_.push_back(std::move(sub_task_attribution));
 }
 
 void PerformanceMonitor::Will(const probe::CallFunction& probe) {
@@ -204,13 +224,26 @@ void PerformanceMonitor::Did(const probe::CallFunction& probe) {
 }
 
 void PerformanceMonitor::Will(const probe::V8Compile& probe) {
-  // Todo(maxlg): https://crbug.com/738495 Intentionally leave out as we need to
-  // verify monotonical time is reasonable in overhead.
+  if (!enabled_ || !thresholds_[kLongTask])
+    return;
+
+  v8_compile_start_time_ = probe.CaptureStartTime();
 }
 
 void PerformanceMonitor::Did(const probe::V8Compile& probe) {
-  // Todo(maxlg): https://crbug.com/738495 Intentionally leave out as we need to
-  // verify monotonical time is reasonable in overhead.
+  if (!enabled_ || !thresholds_[kLongTask])
+    return;
+
+  double v8_compile_duration = probe.Duration();
+  if (v8_compile_duration <= kLongTaskSubTaskThresholdInSeconds)
+    return;
+  std::unique_ptr<SubTaskAttribution> sub_task_attribution =
+      SubTaskAttribution::Create(
+          String("script-compile"),
+          String::Format("%s(%d, %d)", probe.file_name.Utf8().data(),
+                         probe.line, probe.column),
+          v8_compile_start_time_, v8_compile_duration);
+  sub_task_attributions_.push_back(std::move(sub_task_attribution));
 }
 
 void PerformanceMonitor::Will(const probe::UserCallback& probe) {
@@ -231,6 +264,74 @@ void PerformanceMonitor::Did(const probe::UserCallback& probe) {
   DCHECK(user_callback_ != &probe);
 }
 
+void PerformanceMonitor::WillSendRequest(ExecutionContext*,
+                                         unsigned long,
+                                         DocumentLoader* loader,
+                                         ResourceRequest&,
+                                         const ResourceResponse&,
+                                         const FetchInitiatorInfo&) {
+  if (loader->GetFrame() != local_root_)
+    return;
+  int request_count = loader->Fetcher()->ActiveRequestCount();
+  // If we are above the allowed number of active requests, reset timers.
+  if (network_2_quiet_ >= 0 && request_count > 2)
+    network_2_quiet_ = 0;
+  if (network_0_quiet_ >= 0 && request_count > 0)
+    network_0_quiet_ = 0;
+}
+
+void PerformanceMonitor::DidFailLoading(unsigned long identifier,
+                                        DocumentLoader* loader,
+                                        const ResourceError&) {
+  if (loader->GetFrame() != local_root_)
+    return;
+  DidLoadResource();
+}
+
+void PerformanceMonitor::DidFinishLoading(unsigned long,
+                                          DocumentLoader* loader,
+                                          double,
+                                          int64_t,
+                                          int64_t) {
+  if (loader->GetFrame() != local_root_)
+    return;
+  DidLoadResource();
+}
+
+void PerformanceMonitor::DidLoadResource() {
+  // If we already reported quiet time, bail out.
+  if (network_0_quiet_ < 0 && network_2_quiet_ < 0)
+    return;
+
+  int request_count =
+      local_root_->GetDocument()->Fetcher()->ActiveRequestCount();
+  // If we did not achieve either 0 or 2 active connections, bail out.
+  if (request_count > 2)
+    return;
+
+  double timestamp = MonotonicallyIncreasingTime();
+  // Arriving at =2 updates the quiet_2 base timestamp.
+  // Arriving at <2 sets the quiet_2 base timestamp only if
+  // it was not already set.
+  if (request_count == 2 && network_2_quiet_ >= 0)
+    network_2_quiet_ = timestamp;
+  else if (request_count < 2 && network_2_quiet_ == 0)
+    network_2_quiet_ = timestamp;
+
+  if (request_count == 0 && network_0_quiet_ >= 0)
+    network_0_quiet_ = timestamp;
+}
+
+void PerformanceMonitor::DomContentLoadedEventFired(LocalFrame* frame) {
+  if (frame != local_root_)
+    return;
+  // Reset idle timers upon DOMContentLoaded, look at current active
+  // connections.
+  network_2_quiet_ = 0;
+  network_0_quiet_ = 0;
+  DidLoadResource();
+}
+
 void PerformanceMonitor::DocumentWriteFetchScript(Document* document) {
   if (!enabled_)
     return;
@@ -239,6 +340,22 @@ void PerformanceMonitor::DocumentWriteFetchScript(Document* document) {
 }
 
 void PerformanceMonitor::WillProcessTask(double start_time) {
+  // If we have idle time and we are kNetworkQuietWindowSeconds seconds past it,
+  // emit idle signals.
+  if (network_2_quiet_ > 0 &&
+      start_time - network_2_quiet_ > kNetworkQuietWindowSeconds) {
+    probe::lifecycleEvent(local_root_->GetDocument(), "networkAlmostIdle",
+                          start_time);
+    network_2_quiet_ = -1;
+  }
+
+  if (network_0_quiet_ > 0 &&
+      start_time - network_0_quiet_ > kNetworkQuietWindowSeconds) {
+    probe::lifecycleEvent(local_root_->GetDocument(), "networkIdle",
+                          start_time);
+    network_0_quiet_ = -1;
+  }
+
   // Reset m_taskExecutionContext. We don't clear this in didProcessTask
   // as it is needed in ReportTaskTime which occurs after didProcessTask.
   task_execution_context_ = nullptr;
@@ -252,9 +369,17 @@ void PerformanceMonitor::WillProcessTask(double start_time) {
   layout_depth_ = 0;
   per_task_style_and_layout_time_ = 0;
   user_callback_ = nullptr;
+  v8_compile_start_time_ = 0;
+  sub_task_attributions_.clear();
 }
 
 void PerformanceMonitor::DidProcessTask(double start_time, double end_time) {
+  // Shift idle timestamps with the duration of the task, we were not idle.
+  if (network_2_quiet_ > 0)
+    network_2_quiet_ += end_time - start_time;
+  if (network_0_quiet_ > 0)
+    network_0_quiet_ += end_time - start_time;
+
   if (!enabled_)
     return;
   double layout_threshold = thresholds_[kLongLayout];
@@ -275,7 +400,7 @@ void PerformanceMonitor::DidProcessTask(double start_time, double end_time) {
         it.key->ReportLongTask(
             start_time, end_time,
             task_has_multiple_contexts_ ? nullptr : task_execution_context_,
-            task_has_multiple_contexts_);
+            task_has_multiple_contexts_, sub_task_attributions_);
       }
     }
   }

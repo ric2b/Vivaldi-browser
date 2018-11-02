@@ -12,11 +12,11 @@
 
 #include "base/macros.h"
 #include "cc/cc_export.h"
-#include "cc/output/begin_frame_args.h"
 #include "cc/scheduler/commit_earlyout_reason.h"
 #include "cc/scheduler/draw_result.h"
 #include "cc/scheduler/scheduler_settings.h"
 #include "cc/tiles/tile_priority.h"
+#include "components/viz/common/frame_sinks/begin_frame_args.h"
 
 namespace base {
 namespace trace_event {
@@ -255,13 +255,15 @@ class CC_EXPORT SchedulerStateMachine {
   // Indicates that scheduled BeginMainFrame is started.
   void NotifyBeginMainFrameStarted();
 
-  // Indicates that the pending tree is ready for activation.
-  void NotifyReadyToActivate();
+  // Indicates that the pending tree is ready for activation. Returns whether
+  // the notification received updated the state for the current pending tree,
+  // if any.
+  bool NotifyReadyToActivate();
 
   // Indicates the active tree's visible tiles are ready to be drawn.
   void NotifyReadyToDraw();
 
-  void SetNeedsImplSideInvalidation();
+  void SetNeedsImplSideInvalidation(bool needs_first_draw_on_activation);
 
   bool has_pending_tree() const { return has_pending_tree_; }
   bool active_tree_needs_first_draw() const {
@@ -309,7 +311,7 @@ class CC_EXPORT SchedulerStateMachine {
 
   bool ShouldBeginLayerTreeFrameSinkCreation() const;
   bool ShouldDraw() const;
-  bool ShouldActivatePendingTree() const;
+  bool ShouldActivateSyncTree() const;
   bool ShouldSendBeginMainFrame() const;
   bool ShouldCommit() const;
   bool ShouldPrepareTiles() const;
@@ -376,11 +378,16 @@ class CC_EXPORT SchedulerStateMachine {
   bool did_draw_in_last_frame_ = false;
   bool did_submit_in_last_frame_ = false;
   bool needs_impl_side_invalidation_ = false;
+  bool next_invalidation_needs_first_draw_on_activation_ = false;
 
   bool previous_pending_tree_was_impl_side_ = false;
   bool current_pending_tree_is_impl_side_ = false;
 
   bool wants_begin_main_frame_not_expected_ = false;
+
+  // If set to true, the pending tree must be drawn at least once after
+  // activation before a new tree can be activated.
+  bool pending_tree_needs_first_draw_on_activation_ = false;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(SchedulerStateMachine);

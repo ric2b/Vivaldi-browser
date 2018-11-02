@@ -21,6 +21,7 @@
 #include "base/metrics/persistent_sample_map.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/metrics/statistics_recorder.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/pickle.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
@@ -121,7 +122,7 @@ PersistentSparseHistogramDataManager::GetSampleMapRecordsWhileLocked(
     return found->second.get();
 
   std::unique_ptr<PersistentSampleMapRecords>& samples = sample_records_[id];
-  samples = MakeUnique<PersistentSampleMapRecords>(this, id);
+  samples = std::make_unique<PersistentSampleMapRecords>(this, id);
   return samples.get();
 }
 
@@ -478,8 +479,16 @@ void PersistentHistogramAllocator::MergeHistogramDeltaToStatisticsRecorder(
     return;
   }
 
+  // TODO(bcwhite): Remove this when crbug/744734 is fixed.
+  histogram->ValidateHistogramContents(true, -1);
+  existing->ValidateHistogramContents(true, -2);
+
   // Merge the delta from the passed object to the one in the SR.
   existing->AddSamples(*histogram->SnapshotDelta());
+
+  // TODO(bcwhite): Remove this when crbug/744734 is fixed.
+  histogram->ValidateHistogramContents(true, -3);
+  existing->ValidateHistogramContents(true, -4);
 }
 
 void PersistentHistogramAllocator::MergeHistogramFinalDeltaToStatisticsRecorder(
@@ -519,37 +528,48 @@ void PersistentHistogramAllocator::ClearLastCreatedReferenceForTesting() {
 // static
 HistogramBase*
 PersistentHistogramAllocator::GetCreateHistogramResultHistogram() {
-  // Get the histogram in which create-results are stored. This is copied
-  // almost exactly from the STATIC_HISTOGRAM_POINTER_BLOCK macro but with
-  // added code to prevent recursion (a likely occurance because the creation
-  // of a new a histogram can end up calling this.)
-  static base::subtle::AtomicWord atomic_histogram_pointer = 0;
-  HistogramBase* histogram_pointer =
-      reinterpret_cast<HistogramBase*>(
-          base::subtle::Acquire_Load(&atomic_histogram_pointer));
-  if (!histogram_pointer) {
-    // It's possible for multiple threads to make it here in parallel but
-    // they'll always return the same result as there is a mutex in the Get.
-    // The purpose of the "initialized" variable is just to ensure that
-    // the same thread doesn't recurse which is also why it doesn't have
-    // to be atomic.
-    static bool initialized = false;
-    if (!initialized) {
-      initialized = true;
-      if (GlobalHistogramAllocator::Get()) {
-        DVLOG(1) << "Creating the results-histogram inside persistent"
-                 << " memory can cause future allocations to crash if"
-                 << " that memory is ever released (for testing).";
-      }
+  // A value that can be stored in an AtomicWord as a flag. It must not be zero
+  // or a valid address.
+  constexpr subtle::AtomicWord kHistogramUnderConstruction = 1;
 
-      histogram_pointer = LinearHistogram::FactoryGet(
-          kResultHistogram, 1, CREATE_HISTOGRAM_MAX, CREATE_HISTOGRAM_MAX + 1,
-          HistogramBase::kUmaTargetedHistogramFlag);
-      base::subtle::Release_Store(
-          &atomic_histogram_pointer,
-          reinterpret_cast<base::subtle::AtomicWord>(histogram_pointer));
-    }
+  // This is a similar to LazyInstance but with return-if-under-construction
+  // rather than yielding the CPU until construction completes. This is
+  // necessary because the FactoryGet() below creates a histogram and thus
+  // recursively calls this method to try to store the result.
+
+  // Get the existing pointer. If the "under construction" flag is present,
+  // abort now. It's okay to return null from this method.
+  static subtle::AtomicWord atomic_histogram_pointer = 0;
+  subtle::AtomicWord histogram_value =
+      subtle::Acquire_Load(&atomic_histogram_pointer);
+  if (histogram_value == kHistogramUnderConstruction)
+    return nullptr;
+
+  // If a valid histogram pointer already exists, return it.
+  if (histogram_value)
+    return reinterpret_cast<HistogramBase*>(histogram_value);
+
+  // Set the "under construction" flag; abort if something has changed.
+  if (subtle::NoBarrier_CompareAndSwap(&atomic_histogram_pointer, 0,
+                                       kHistogramUnderConstruction) != 0) {
+    return nullptr;
   }
+
+  // Only one thread can be here. Even recursion will be thwarted above.
+
+  if (GlobalHistogramAllocator::Get()) {
+    DVLOG(1) << "Creating the results-histogram inside persistent"
+             << " memory can cause future allocations to crash if"
+             << " that memory is ever released (for testing).";
+  }
+
+  HistogramBase* histogram_pointer = LinearHistogram::FactoryGet(
+      kResultHistogram, 1, CREATE_HISTOGRAM_MAX, CREATE_HISTOGRAM_MAX + 1,
+      HistogramBase::kUmaTargetedHistogramFlag);
+  subtle::Release_Store(
+      &atomic_histogram_pointer,
+      reinterpret_cast<subtle::AtomicWord>(histogram_pointer));
+
   return histogram_pointer;
 }
 
@@ -686,11 +706,11 @@ std::unique_ptr<HistogramBase> PersistentHistogramAllocator::CreateHistogram(
     DCHECK_EQ(histogram_type, histogram->GetHistogramType());
     histogram->SetFlags(histogram_flags);
     RecordCreateHistogramResult(CREATE_HISTOGRAM_SUCCESS);
+    histogram->ValidateHistogramContents(true, 0);
   } else {
     RecordCreateHistogramResult(CREATE_HISTOGRAM_UNKNOWN_TYPE);
   }
 
-  histogram->ValidateHistogramContents();
   return histogram;
 }
 
@@ -744,7 +764,7 @@ void GlobalHistogramAllocator::CreateWithPersistentMemory(
     uint64_t id,
     StringPiece name) {
   Set(WrapUnique(
-      new GlobalHistogramAllocator(MakeUnique<PersistentMemoryAllocator>(
+      new GlobalHistogramAllocator(std::make_unique<PersistentMemoryAllocator>(
           base, size, page_size, id, name, false))));
 }
 
@@ -754,7 +774,7 @@ void GlobalHistogramAllocator::CreateWithLocalMemory(
     uint64_t id,
     StringPiece name) {
   Set(WrapUnique(new GlobalHistogramAllocator(
-      MakeUnique<LocalPersistentMemoryAllocator>(size, id, name))));
+      std::make_unique<LocalPersistentMemoryAllocator>(size, id, name))));
 }
 
 #if !defined(OS_NACL)
@@ -771,6 +791,7 @@ bool GlobalHistogramAllocator::CreateWithFile(
 
   std::unique_ptr<MemoryMappedFile> mmfile(new MemoryMappedFile());
   if (exists) {
+    size = saturated_cast<size_t>(file.GetLength());
     mmfile->Initialize(std::move(file), MemoryMappedFile::READ_WRITE);
   } else {
     mmfile->Initialize(std::move(file), {0, static_cast<int64_t>(size)},
@@ -778,13 +799,13 @@ bool GlobalHistogramAllocator::CreateWithFile(
   }
   if (!mmfile->IsValid() ||
       !FilePersistentMemoryAllocator::IsFileAcceptable(*mmfile, true)) {
-    NOTREACHED();
+    NOTREACHED() << file_path;
     return false;
   }
 
-  Set(WrapUnique(
-      new GlobalHistogramAllocator(MakeUnique<FilePersistentMemoryAllocator>(
-          std::move(mmfile), size, id, name, false))));
+  Set(WrapUnique(new GlobalHistogramAllocator(
+      std::make_unique<FilePersistentMemoryAllocator>(std::move(mmfile), size,
+                                                      id, name, false))));
   Get()->SetPersistentLocation(file_path);
   return true;
 }
@@ -916,8 +937,8 @@ void GlobalHistogramAllocator::CreateWithSharedMemoryHandle(
     return;
   }
 
-  Set(WrapUnique(
-      new GlobalHistogramAllocator(MakeUnique<SharedPersistentMemoryAllocator>(
+  Set(WrapUnique(new GlobalHistogramAllocator(
+      std::make_unique<SharedPersistentMemoryAllocator>(
           std::move(shm), 0, StringPiece(), /*readonly=*/false))));
 }
 

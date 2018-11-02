@@ -88,11 +88,11 @@ DOMStorageNamespace* DOMStorageNamespace::Clone(
   // And clone the on-disk structures, too.
   if (session_storage_database_.get()) {
     task_runner_->PostShutdownBlockingTask(
-        FROM_HERE,
-        DOMStorageTaskRunner::COMMIT_SEQUENCE,
-        base::Bind(base::IgnoreResult(&SessionStorageDatabase::CloneNamespace),
-                   session_storage_database_.get(), persistent_namespace_id_,
-                   clone_persistent_namespace_id));
+        FROM_HERE, DOMStorageTaskRunner::COMMIT_SEQUENCE,
+        base::BindOnce(
+            base::IgnoreResult(&SessionStorageDatabase::CloneNamespace),
+            session_storage_database_.get(), persistent_namespace_id_,
+            clone_persistent_namespace_id));
   }
   return clone;
 }
@@ -194,6 +194,13 @@ void DOMStorageNamespace::GetOriginsWithAreas(
   origins->clear();
   for (const auto& entry : areas_)
     origins->push_back(entry.first);
+}
+
+int DOMStorageNamespace::GetAreaOpenCount(const GURL& origin) const {
+  const auto& found = areas_.find(origin);
+  if (found == areas_.end())
+    return 0;
+  return found->second.open_count_;
 }
 
 DOMStorageNamespace::AreaHolder*

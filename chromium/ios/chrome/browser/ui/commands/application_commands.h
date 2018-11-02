@@ -8,6 +8,8 @@
 #import <Foundation/Foundation.h>
 
 @class OpenNewTabCommand;
+@class OpenUrlCommand;
+@class StartVoiceSearchCommand;
 
 // This protocol groups commands that are part of ApplicationCommands, but
 // may also be forwarded directly to a settings navigation controller.
@@ -27,6 +29,9 @@
 
 @protocol ApplicationCommands<NSObject, ApplicationSettingsCommands>
 
+// Dismisses all modal dialogs.
+- (void)dismissModalDialogs;
+
 // Shows the Settings UI.
 - (void)showSettings;
 
@@ -34,6 +39,39 @@
 // a new oen of those tabs. |newTabCommand|'s |incognito| property inidcates
 // the type of tab to open.
 - (void)switchModesAndOpenNewTab:(OpenNewTabCommand*)newTabCommand;
+
+// Starts a voice search on the current BVC.
+- (void)startVoiceSearch:(StartVoiceSearchCommand*)command;
+
+// Shows the History UI.
+- (void)showHistory;
+
+// Closes the History UI and opens a URL.
+- (void)closeSettingsUIAndOpenURL:(OpenUrlCommand*)command;
+
+// Closes the History UI.
+- (void)closeSettingsUI;
+
+// Shows the TabSwitcher UI.
+- (void)displayTabSwitcher;
+
+// Dismisses the TabSwitcher UI.
+- (void)dismissTabSwitcher;
+
+// Shows the Clear Browsing Data Settings UI (part of Settings).
+- (void)showClearBrowsingDataSettings;
+
+// Shows the Autofill Settings UI.
+- (void)showAutofillSettings;
+
+// Shows the Save Passwords settings UI.
+- (void)showSavePasswordsSettings;
+
+// Shows the Report an Issue UI.
+- (void)showReportAnIssue;
+
+// Opens the |command| URL.
+- (void)openURL:(OpenUrlCommand*)command;
 
 @end
 

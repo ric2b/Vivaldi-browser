@@ -93,7 +93,7 @@ void TraceEvent::Initialize(
     unsigned long long id,
     unsigned long long bind_id,
     int num_args,
-    const char** arg_names,
+    const char* const* arg_names,
     const unsigned char* arg_types,
     const unsigned long long* arg_values,
     std::unique_ptr<ConvertableToTraceFormat>* convertable_values,
@@ -454,7 +454,7 @@ namespace trace_event_internal {
 
 std::unique_ptr<base::trace_event::ConvertableToTraceFormat>
 TraceID::AsConvertableToTraceFormat() const {
-  auto value = base::MakeUnique<base::trace_event::TracedValue>();
+  auto value = std::make_unique<base::trace_event::TracedValue>();
 
   if (scope_ != kGlobalScope)
     value->SetString("scope", scope_);

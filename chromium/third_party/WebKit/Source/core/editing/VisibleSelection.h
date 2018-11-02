@@ -42,12 +42,6 @@ namespace blink {
 class SelectionAdjuster;
 
 const TextAffinity kSelDefaultAffinity = TextAffinity::kDownstream;
-enum SelectionDirection {
-  kDirectionForward,
-  kDirectionBackward,
-  kDirectionRight,
-  kDirectionLeft
-};
 
 template <typename Strategy>
 class CORE_TEMPLATE_CLASS_EXPORT VisibleSelectionTemplate {
@@ -67,23 +61,21 @@ class CORE_TEMPLATE_CLASS_EXPORT VisibleSelectionTemplate {
       const SelectionTemplate<Strategy>&,
       TextGranularity);
 
-  SelectionType GetSelectionType() const { return selection_type_; }
-
   TextAffinity Affinity() const { return affinity_; }
 
   SelectionTemplate<Strategy> AsSelection() const;
   PositionTemplate<Strategy> Base() const { return base_; }
   PositionTemplate<Strategy> Extent() const { return extent_; }
-  PositionTemplate<Strategy> Start() const { return start_; }
-  PositionTemplate<Strategy> End() const { return end_; }
+  PositionTemplate<Strategy> Start() const;
+  PositionTemplate<Strategy> End() const;
 
   VisiblePositionTemplate<Strategy> VisibleStart() const {
     return CreateVisiblePosition(
-        start_, IsRange() ? TextAffinity::kDownstream : Affinity());
+        Start(), IsRange() ? TextAffinity::kDownstream : Affinity());
   }
   VisiblePositionTemplate<Strategy> VisibleEnd() const {
     return CreateVisiblePosition(
-        end_, IsRange() ? TextAffinity::kUpstream : Affinity());
+        End(), IsRange() ? TextAffinity::kUpstream : Affinity());
   }
   VisiblePositionTemplate<Strategy> VisibleBase() const {
     return CreateVisiblePosition(
@@ -103,12 +95,9 @@ class CORE_TEMPLATE_CLASS_EXPORT VisibleSelectionTemplate {
     return !operator==(other);
   }
 
-  bool IsNone() const { return GetSelectionType() == kNoSelection; }
-  bool IsCaret() const { return GetSelectionType() == kCaretSelection; }
-  bool IsRange() const { return GetSelectionType() == kRangeSelection; }
-  bool IsNonOrphanedRange() const {
-    return IsRange() && !Start().IsOrphan() && !End().IsOrphan();
-  }
+  bool IsNone() const;
+  bool IsCaret() const;
+  bool IsRange() const;
   bool IsNonOrphanedCaretOrRange() const {
     return !IsNone() && !Start().IsOrphan() && !End().IsOrphan();
   }
@@ -116,8 +105,6 @@ class CORE_TEMPLATE_CLASS_EXPORT VisibleSelectionTemplate {
   // True if base() <= extent().
   bool IsBaseFirst() const { return base_is_first_; }
   bool IsDirectional() const { return is_directional_; }
-
-  VisibleSelectionTemplate<Strategy> AppendTrailingWhitespace() const;
 
   // TODO(yosin) Most callers probably don't want these functions, but
   // are using them for historical reasons. |toNormalizedEphemeralRange()|
@@ -127,8 +114,6 @@ class CORE_TEMPLATE_CLASS_EXPORT VisibleSelectionTemplate {
 
   Element* RootEditableElement() const;
   bool IsContentEditable() const;
-  bool HasEditableStyle() const;
-  bool IsContentRichlyEditable() const;
 
   bool IsValidFor(const Document&) const;
 
@@ -150,13 +135,7 @@ class CORE_TEMPLATE_CLASS_EXPORT VisibleSelectionTemplate {
  private:
   friend class SelectionAdjuster;
 
-  VisibleSelectionTemplate(const SelectionTemplate<Strategy>&, TextGranularity);
-
-  void Validate(const SelectionTemplate<Strategy>&, TextGranularity);
-
-  // Support methods for Validate()
-  void AdjustSelectionToAvoidCrossingEditingBoundaries();
-  void UpdateSelectionType();
+  explicit VisibleSelectionTemplate(const SelectionTemplate<Strategy>&);
 
   // We need to store these as Positions because VisibleSelection is
   // used to store values in editing commands for use when
@@ -167,15 +146,10 @@ class CORE_TEMPLATE_CLASS_EXPORT VisibleSelectionTemplate {
   PositionTemplate<Strategy> base_;
   // Where the end click happened
   PositionTemplate<Strategy> extent_;
-  // Leftmost position when expanded to respect granularity
-  PositionTemplate<Strategy> start_;
-  // Rightmost position when expanded to respect granularity
-  PositionTemplate<Strategy> end_;
 
   TextAffinity affinity_;  // the upstream/downstream affinity of the caret
 
   // these are cached, can be recalculated by validate()
-  SelectionType selection_type_;  // None, Caret, Range
   bool base_is_first_ : 1;        // True if base is before the extent
   // Non-directional ignores m_baseIsFirst and selection always extends on shift
   // + arrow key.
@@ -219,6 +193,11 @@ PositionInFlatTree ComputeEndRespectingGranularity(
     const PositionInFlatTree&,
     const PositionInFlatTreeWithAffinity&,
     TextGranularity);
+
+// TODO(editing-dev): We should move |AdjustSelectionWithTrailingWhitespace()|
+// to "SelectionController.cpp" as file local function.
+CORE_EXPORT SelectionInFlatTree
+AdjustSelectionWithTrailingWhitespace(const SelectionInFlatTree&);
 
 }  // namespace blink
 

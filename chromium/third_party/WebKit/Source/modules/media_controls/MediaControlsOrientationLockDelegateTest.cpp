@@ -8,6 +8,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/UserGestureIndicator.h"
 #include "core/frame/FrameView.h"
+#include "core/frame/LocalFrame.h"
 #include "core/frame/ScreenOrientationController.h"
 #include "core/fullscreen/Fullscreen.h"
 #include "core/html/HTMLAudioElement.h"
@@ -118,7 +119,8 @@ class StubLocalFrameClientForOrientationLockDelegate final
   std::unique_ptr<WebMediaPlayer> CreateWebMediaPlayer(
       HTMLMediaElement&,
       const WebMediaPlayerSource&,
-      WebMediaPlayerClient*) override {
+      WebMediaPlayerClient*,
+      WebLayerTreeView*) override {
     return WTF::MakeUnique<MockWebMediaPlayerForOrientationLockDelegate>();
   }
 };
@@ -178,7 +180,8 @@ class MediaControlsOrientationLockDelegateTest : public ::testing::Test {
   }
 
   void SimulateEnterFullscreen() {
-    UserGestureIndicator gesture(UserGestureToken::Create(&GetDocument()));
+    std::unique_ptr<UserGestureIndicator> gesture =
+        LocalFrame::CreateUserGesture(GetDocument().GetFrame());
     Fullscreen::RequestFullscreen(Video());
     testing::RunPendingTasks();
   }
@@ -371,11 +374,18 @@ class MediaControlsOrientationLockAndRotateToFullscreenDelegateTest
     // Set video size.
     EXPECT_CALL(MockWebMediaPlayer(), NaturalSize())
         .WillRepeatedly(Return(WebSize(video_width, video_height)));
+
+    // Dispatch an arbitrary Device Orientation event to satisfy
+    // MediaControlsRotateToFullscreenDelegate's requirement that the device
+    // supports the API and can provide beta and gamma values. The orientation
+    // will be ignored.
+    RotateDeviceTo(0);
   }
 
   void PlayVideo() {
     {
-      UserGestureIndicator gesture(UserGestureToken::Create(&GetDocument()));
+      std::unique_ptr<UserGestureIndicator> gesture =
+          LocalFrame::CreateUserGesture(GetDocument().GetFrame());
       Video().Play();
     }
     testing::RunPendingTasks();

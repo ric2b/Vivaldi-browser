@@ -26,6 +26,11 @@ class StubPasswordManagerClient : public PasswordManagerClient {
   bool PromptUserToSaveOrUpdatePassword(
       std::unique_ptr<PasswordFormManager> form_to_save,
       bool update_password) override;
+  void ShowManualFallbackForSaving(
+      std::unique_ptr<PasswordFormManager> form_to_save,
+      bool has_generated_password,
+      bool update_password) override;
+  void HideManualFallbackForSaving() override;
   bool PromptUserToChooseCredentials(
       std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
       const GURL& origin,
@@ -50,8 +55,11 @@ class StubPasswordManagerClient : public PasswordManagerClient {
       const override;
   void CheckSafeBrowsingReputation(const GURL& form_action,
                                    const GURL& frame_url) override;
-  void CheckProtectedPasswordEntry(const std::string& password_saved_domain,
-                                   bool password_field_exists) override;
+  void CheckProtectedPasswordEntry(
+      bool matches_sync_password,
+      const std::vector<std::string>& matching_domains,
+      bool password_field_exists) override;
+  void LogPasswordReuseDetectedEvent() override;
 #endif
   ukm::UkmRecorder* GetUkmRecorder() override;
   ukm::SourceId GetUkmSourceId() override;

@@ -10,7 +10,6 @@
 #include "chrome/browser/sessions/session_service_factory.h"
 #include "chrome/common/url_constants.h"
 #include "components/sessions/content/content_live_tab.h"
-#include "content/public/browser/browser_thread.h"
 #include "extensions/features/features.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -52,13 +51,18 @@ ChromeTabRestoreServiceClient::ChromeTabRestoreServiceClient(Profile* profile)
 ChromeTabRestoreServiceClient::~ChromeTabRestoreServiceClient() {}
 
 sessions::LiveTabContext* ChromeTabRestoreServiceClient::CreateLiveTabContext(
-    const std::string& app_name, const std::string& ext_data) {
+    const std::string& app_name,
+    const gfx::Rect& bounds,
+    ui::WindowShowState show_state,
+    const std::string& workspace,
+    const std::string& ext_data) {
 #if defined(OS_ANDROID)
   // Android does not support creating a LiveTabContext here.
   NOTREACHED();
   return nullptr;
 #else
-  return BrowserLiveTabContext::Create(profile_, app_name, ext_data);
+  return BrowserLiveTabContext::Create(profile_, app_name, bounds, show_state,
+                                       workspace, ext_data);
 #endif
 }
 
@@ -106,11 +110,6 @@ std::string ChromeTabRestoreServiceClient::GetExtensionAppIDForTab(
 #endif
 
   return extension_app_id;
-}
-
-base::SequencedWorkerPool* ChromeTabRestoreServiceClient::GetBlockingPool() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  return content::BrowserThread::GetBlockingPool();
 }
 
 base::FilePath ChromeTabRestoreServiceClient::GetPathToSaveTo() {

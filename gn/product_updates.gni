@@ -120,3 +120,12 @@ if (is_win) {
   write_file("$root_build_dir/win_toolchain.json",
       "{ \"path\":\""+ rebase_path(visual_studio_path) +"\" }")
 }
+
+post_process_template("//chrome/android:chrome_public_apk") {
+  apk_name = "Vivaldi"
+}
+
+post_process_template("//chrome/android:chrome_public_apk_resources") {
+  resource_dirs = []
+  resource_dirs = [ "//vivaldi/android/java/res_vivaldi/final" ]
+}

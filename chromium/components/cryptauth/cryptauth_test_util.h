@@ -15,14 +15,18 @@ extern const char kTestRemoteDeviceName[];
 extern const char kTestRemoteDevicePublicKey[];
 extern const char kTestRemoteDeviceBluetoothAddress[];
 extern const char kTestRemoteDevicePSK[];
-extern const char kTestRemoteDeviceSignInChallenge[];
+extern const bool kTestRemoteDeviceUnlockKey;
+extern const bool kTestRemoteDeviceSupportsMobileHotspot;
+extern const int64_t kTestRemoteDeviceLastUpdateTimeMillis;
 
 // Returns a BLE RemoteDevice used for tests.
 inline RemoteDevice CreateLERemoteDeviceForTest() {
   return RemoteDevice(kTestRemoteDeviceUserId, kTestRemoteDeviceName,
                       kTestRemoteDevicePublicKey,
                       kTestRemoteDeviceBluetoothAddress, kTestRemoteDevicePSK,
-                      kTestRemoteDeviceSignInChallenge);
+                      kTestRemoteDeviceUnlockKey,
+                      kTestRemoteDeviceSupportsMobileHotspot,
+                      kTestRemoteDeviceLastUpdateTimeMillis);
 }
 
 // Returns a classic Bluetooth RemoteDevice used for tests.
@@ -30,7 +34,9 @@ inline RemoteDevice CreateClassicRemoteDeviceForTest() {
   return RemoteDevice(kTestRemoteDeviceUserId, kTestRemoteDeviceName,
                       kTestRemoteDevicePublicKey,
                       kTestRemoteDeviceBluetoothAddress, kTestRemoteDevicePSK,
-                      kTestRemoteDeviceSignInChallenge);
+                      kTestRemoteDeviceUnlockKey,
+                      kTestRemoteDeviceSupportsMobileHotspot,
+                      kTestRemoteDeviceLastUpdateTimeMillis);
 }
 
 }  // namespace cryptauth

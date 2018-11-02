@@ -165,10 +165,12 @@
         "data_grid",
         "object_ui",
         "console_model",
-        "product_registry"
+        "product_registry",
+        "formatter"
     ],
     "scripts": [
         "ConsoleContextSelector.js",
+        "ConsoleSidebar.js",
         "ConsoleViewport.js",
         "ConsoleViewMessage.js",
         "ConsolePrompt.js",
@@ -177,6 +179,7 @@
     ],
     "resources": [
         "consoleContextSelector.css",
+        "consoleSidebar.css",
         "consoleView.css"
     ]
 }

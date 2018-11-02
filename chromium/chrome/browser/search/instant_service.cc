@@ -27,7 +27,7 @@
 #include "chrome/browser/ui/search/instant_search_prerenderer.h"
 #include "chrome/browser/ui/webui/favicon_source.h"
 #include "chrome/browser/ui/webui/theme_source.h"
-#include "chrome/common/render_messages.h"
+#include "chrome/common/search.mojom.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/history/core/browser/top_sites.h"
 #include "components/image_fetcher/core/image_fetcher_impl.h"
@@ -53,7 +53,7 @@
 namespace {
 
 const base::Feature kNtpTilesFeature{"NTPTilesInInstantService",
-                                     base::FEATURE_DISABLED_BY_DEFAULT};
+                                     base::FEATURE_ENABLED_BY_DEFAULT};
 
 }  // namespace
 
@@ -191,14 +191,11 @@ void InstantService::UndoAllMostVisitedDeletions() {
 
 void InstantService::UpdateThemeInfo() {
 #if !defined(OS_ANDROID)
-  // Update theme background info.
-  // Initialize |theme_info| if necessary.
+  // Initialize |theme_info_| if necessary.
   if (!theme_info_) {
-    OnThemeChanged();
-  } else {
-    for (InstantServiceObserver& observer : observers_)
-      observer.ThemeInfoChanged(*theme_info_);
+    BuildThemeInfo();
   }
+  NotifyAboutThemeInfo();
 #endif  // !defined(OS_ANDROID)
 }
 
@@ -207,8 +204,12 @@ void InstantService::UpdateMostVisitedItemsInfo() {
 }
 
 void InstantService::SendSearchURLsToRenderer(content::RenderProcessHost* rph) {
-  rph->Send(new ChromeViewMsg_SetSearchURLs(
-      search::GetSearchURLs(profile_), search::GetNewTabPageURL(profile_)));
+  if (auto* channel = rph->GetChannel()) {
+    chrome::mojom::SearchBouncerAssociatedPtr client;
+    channel->GetRemoteAssociatedInterface(&client);
+    client->SetSearchURLs(search::GetSearchURLs(profile_),
+                          search::GetNewTabPageURL(profile_));
+  }
 }
 
 InstantSearchPrerenderer* InstantService::GetInstantSearchPrerenderer() {
@@ -252,7 +253,8 @@ void InstantService::Observe(int type,
       break;
 #if !defined(OS_ANDROID)
     case chrome::NOTIFICATION_BROWSER_THEME_CHANGED:
-      OnThemeChanged();
+      BuildThemeInfo();
+      NotifyAboutThemeInfo();
       break;
 #endif  // !defined(OS_ANDROID)
     default:
@@ -285,10 +287,14 @@ void InstantService::OnTopSitesReceived(
   NotifyAboutMostVisitedItems();
 }
 
-void InstantService::OnMostVisitedURLsAvailable(
-    const ntp_tiles::NTPTilesVector& tiles) {
+void InstantService::OnURLsAvailable(
+    const std::map<ntp_tiles::SectionType, ntp_tiles::NTPTilesVector>&
+        sections) {
   DCHECK(most_visited_sites_);
   most_visited_items_.clear();
+  // Use only personalized tiles for instant service.
+  const ntp_tiles::NTPTilesVector& tiles =
+      sections.at(ntp_tiles::SectionType::PERSONALIZED);
   for (const ntp_tiles::NTPTile& tile : tiles) {
     InstantMostVisitedItem item;
     item.url = tile.url;
@@ -309,6 +315,11 @@ void InstantService::NotifyAboutMostVisitedItems() {
     observer.MostVisitedItemsChanged(most_visited_items_);
 }
 
+void InstantService::NotifyAboutThemeInfo() {
+  for (InstantServiceObserver& observer : observers_)
+    observer.ThemeInfoChanged(*theme_info_);
+}
+
 #if !defined(OS_ANDROID)
 
 namespace {
@@ -327,7 +338,7 @@ RGBAColor SkColorToRGBAColor(const SkColor& sKColor) {
 
 }  // namespace
 
-void InstantService::OnThemeChanged() {
+void InstantService::BuildThemeInfo() {
   // Get theme information from theme service.
   theme_info_.reset(new ThemeBackgroundInfo());
 
@@ -424,9 +435,6 @@ void InstantService::OnThemeChanged() {
     theme_info_->has_attribution =
         theme_provider.HasCustomImage(IDR_THEME_NTP_ATTRIBUTION);
   }
-
-  for (InstantServiceObserver& observer : observers_)
-    observer.ThemeInfoChanged(*theme_info_);
 }
 #endif  // !defined(OS_ANDROID)
 

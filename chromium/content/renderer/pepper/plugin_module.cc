@@ -268,8 +268,7 @@ void CallOnMainThread(int delay_in_msec,
                       int32_t result) {
   if (callback.func) {
     PpapiGlobals::Get()->GetMainThreadMessageLoop()->PostDelayedTask(
-        FROM_HERE,
-        base::Bind(callback.func, callback.user_data, result),
+        FROM_HERE, base::BindOnce(callback.func, callback.user_data, result),
         base::TimeDelta::FromMilliseconds(delay_in_msec));
   }
 }
@@ -302,7 +301,7 @@ void RunMessageLoop(PP_Instance instance) {
 }
 
 void QuitMessageLoop(PP_Instance instance) {
-  base::MessageLoop::current()->QuitNow();
+  base::RunLoop::QuitCurrentDeprecated();
 }
 
 uint32_t GetLiveObjectsForInstance(PP_Instance instance_id) {

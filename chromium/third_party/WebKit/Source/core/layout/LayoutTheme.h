@@ -25,8 +25,9 @@
 
 #include "core/CSSValueKeywords.h"
 #include "core/CoreExport.h"
+#include "platform/LayoutUnit.h"
 #include "platform/ThemeTypes.h"
-#include "platform/fonts/FontTraits.h"
+#include "platform/fonts/FontSelectionTypes.h"
 #include "platform/graphics/Color.h"
 #include "platform/scroll/ScrollTypes.h"
 #include "platform/wtf/Forward.h"
@@ -41,6 +42,7 @@ class Font;
 class FontDescription;
 class HTMLInputElement;
 class LayoutObject;
+class LengthSize;
 class Locale;
 class PlatformChromeClient;
 class Theme;
@@ -62,6 +64,15 @@ class CORE_EXPORT LayoutTheme : public RefCounted<LayoutTheme> {
   virtual void DidChangeThemeEngine() {}
 
   static void SetSizeIfAuto(ComputedStyle&, const IntSize&);
+  // Sets the minimum size to |part_size| or |min_part_size| as appropriate
+  // according to the given style, if they are specified.
+  static void SetMinimumSize(ComputedStyle&,
+                             const LengthSize* part_size,
+                             const LengthSize* min_part_size = nullptr);
+  // SetMinimumSizeIfAuto must be called before SetSizeIfAuto, because we
+  // will not set a minimum size if an explicit size is set, and SetSizeIfAuto
+  // sets an explicit size.
+  static void SetMinimumSizeIfAuto(ComputedStyle&, const IntSize&);
 
   // This method is called whenever style has been computed for an element and
   // the appearance property has been set to a value other than "none".
@@ -87,7 +98,7 @@ class CORE_EXPORT LayoutTheme : public RefCounted<LayoutTheme> {
   // only be used if a baseline position cannot be determined by examining child
   // content. Checkboxes and radio buttons are examples of controls that need to
   // do this.
-  virtual int BaselinePosition(const LayoutObject*) const;
+  virtual LayoutUnit BaselinePosition(const LayoutObject*) const;
 
   // A method for asking if a control is a container or not.  Leaf controls have
   // to have some special behavior (like the baseline position API above).
@@ -155,8 +166,8 @@ class CORE_EXPORT LayoutTheme : public RefCounted<LayoutTheme> {
 
   // System fonts and colors for CSS.
   virtual void SystemFont(CSSValueID system_font_id,
-                          FontStyle&,
-                          FontWeight&,
+                          FontSelectionValue& font_slope,
+                          FontSelectionValue& font_weight,
                           float& font_size,
                           AtomicString& font_family) const = 0;
   void SystemFont(CSSValueID system_font_id, FontDescription&);
@@ -195,11 +206,6 @@ class CORE_EXPORT LayoutTheme : public RefCounted<LayoutTheme> {
   virtual double AnimationRepeatIntervalForProgressBar() const;
   // Returns the duration of the animation for the progress bar.
   virtual double AnimationDurationForProgressBar() const;
-
-  // Media controls
-  String FormatMediaControlsTime(float time) const;
-  String FormatMediaControlsCurrentTime(float current_time,
-                                        float duration) const;
 
   // Returns size of one slider tick mark for a horizontal track.
   // For vertical tracks we rotate it and use it. i.e. Width is always length

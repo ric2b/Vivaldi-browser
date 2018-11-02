@@ -51,6 +51,7 @@
 #include "core/css/StyleSheetList.h"
 #include "core/css/parser/CSSParser.h"
 #include "core/css/parser/CSSParserContext.h"
+#include "core/css/properties/CSSPropertyAPI.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/css/resolver/StyleRuleUsageTracker.h"
 #include "core/dom/DOMException.h"
@@ -152,11 +153,24 @@ HeapVector<Member<Element>> ElementsFromRect(LayoutRect rect,
   HitTestResult result(request, center, top_padding, right_padding,
                        bottom_padding, left_padding);
   document.GetFrame()->ContentLayoutItem().HitTest(result);
-  return document.ElementsFromHitTestResult(result);
+  HeapVector<Member<Element>> elements;
+  Node* previous_node = nullptr;
+  for (const auto hit_test_result_node : result.ListBasedTestResult()) {
+    Node* node = hit_test_result_node.Get();
+    if (!node || node->IsDocumentNode())
+      continue;
+    if (node->IsPseudoElement() || node->IsTextNode())
+      node = node->ParentOrShadowHostNode();
+    if (!node || node == previous_node || !node->IsElementNode())
+      continue;
+    elements.push_back(ToElement(node));
+    previous_node = node;
+  }
+  return elements;
 }
 
 // Blends the colors from the given gradient with the existing colors.
-void BlendWithColorsFromGradient(CSSGradientValue* gradient,
+void BlendWithColorsFromGradient(cssvalue::CSSGradientValue* gradient,
                                  Vector<Color>& colors,
                                  bool& found_non_transparent_color,
                                  bool& found_opaque_color,
@@ -211,7 +225,8 @@ void AddColorsFromImageStyle(const ComputedStyle& style,
   StyleGeneratedImage* gen_image = ToStyleGeneratedImage(style_image);
   CSSValue* image_css = gen_image->CssValue();
   if (image_css->IsGradientValue()) {
-    CSSGradientValue* gradient = ToCSSGradientValue(image_css);
+    cssvalue::CSSGradientValue* gradient =
+        cssvalue::ToCSSGradientValue(image_css);
     BlendWithColorsFromGradient(gradient, colors, found_non_transparent_color,
                                 found_opaque_color, layout_object);
   }
@@ -1087,7 +1102,7 @@ Response InspectorCSSAgent::getComputedStyleForNode(
     CSSPropertyID property_id = static_cast<CSSPropertyID>(id);
     if (!CSSPropertyMetadata::IsEnabledProperty(property_id) ||
         isShorthandProperty(property_id) ||
-        !CSSPropertyMetadata::IsProperty(property_id))
+        !CSSPropertyAPI::Get(property_id).IsProperty())
       continue;
     (*style)->addItem(
         protocol::CSS::CSSComputedStyleProperty::create()
@@ -2227,13 +2242,16 @@ Response InspectorCSSAgent::setEffectivePropertyValueForNode(
 
 Response InspectorCSSAgent::getBackgroundColors(
     int node_id,
-    Maybe<protocol::Array<String>>* result) {
+    Maybe<protocol::Array<String>>* background_colors,
+    Maybe<String>* computed_font_size,
+    Maybe<String>* computed_font_weight,
+    Maybe<String>* computed_body_font_size) {
   Element* element = nullptr;
   Response response = dom_agent_->AssertElement(node_id, element);
   if (!response.isSuccess())
     return response;
 
-  LayoutRect text_bounds;
+  LayoutRect content_bounds;
   LayoutObject* element_layout = element->GetLayoutObject();
   if (!element_layout)
     return Response::OK();
@@ -2242,9 +2260,18 @@ Response InspectorCSSAgent::getBackgroundColors(
        child = child->nextSibling()) {
     if (!child->IsTextNode())
       continue;
-    text_bounds.Unite(LayoutRect(child->BoundingBox()));
+    content_bounds.Unite(LayoutRect(child->BoundingBox()));
   }
-  if (text_bounds.Size().IsEmpty())
+  if (content_bounds.Size().IsEmpty() && element_layout->IsBox()) {
+    // Return content box instead - may have indirect text children.
+    LayoutBox* layout_box = ToLayoutBox(element_layout);
+    content_bounds = layout_box->ContentBoxRect();
+    content_bounds = LayoutRect(
+        element_layout->LocalToAbsoluteQuad(FloatRect(content_bounds))
+            .BoundingBox());
+  }
+
+  if (content_bounds.Size().IsEmpty())
     return Response::OK();
 
   Vector<Color> colors;
@@ -2261,21 +2288,40 @@ Response InspectorCSSAgent::getBackgroundColors(
     found_opaque_color = !base_background_color.HasAlpha();
   }
 
-  found_opaque_color =
-      GetColorsFromRect(text_bounds, element->GetDocument(), element, colors);
+  found_opaque_color = GetColorsFromRect(content_bounds, element->GetDocument(),
+                                         element, colors);
 
   if (!found_opaque_color && !is_main_frame) {
     for (HTMLFrameOwnerElement* owner_element = document.LocalOwner();
          !found_opaque_color && owner_element;
          owner_element = owner_element->GetDocument().LocalOwner()) {
       found_opaque_color = GetColorsFromRect(
-          text_bounds, owner_element->GetDocument(), nullptr, colors);
+          content_bounds, owner_element->GetDocument(), nullptr, colors);
     }
   }
 
-  *result = protocol::Array<String>::create();
-  for (auto color : colors)
-    result->fromJust()->addItem(color.SerializedAsCSSComponentValue());
+  *background_colors = protocol::Array<String>::create();
+  for (auto color : colors) {
+    background_colors->fromJust()->addItem(
+        color.SerializedAsCSSComponentValue());
+  }
+
+  CSSComputedStyleDeclaration* computed_style_info =
+      CSSComputedStyleDeclaration::Create(element, true);
+  const CSSValue* font_size =
+      computed_style_info->GetPropertyCSSValue(CSSPropertyFontSize);
+  *computed_font_size = font_size->CssText();
+  const CSSValue* font_weight =
+      computed_style_info->GetPropertyCSSValue(CSSPropertyFontWeight);
+  *computed_font_weight = font_weight->CssText();
+
+  HTMLElement* body = element->GetDocument().body();
+  CSSComputedStyleDeclaration* computed_style_body =
+      CSSComputedStyleDeclaration::Create(body, true);
+  const CSSValue* body_font_size =
+      computed_style_body->GetPropertyCSSValue(CSSPropertyFontSize);
+  *computed_body_font_size = body_font_size->CssText();
+
   return Response::OK();
 }
 

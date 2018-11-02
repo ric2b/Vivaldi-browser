@@ -17,19 +17,19 @@ class Command(object):
   GET_SESSION_CAPABILITIES = (_Method.GET, '/session/:sessionId')
   GET_SESSIONS = (_Method.GET, '/sessions')
   QUIT = (_Method.DELETE, '/session/:sessionId')
-  GET_CURRENT_WINDOW_HANDLE = (_Method.GET, '/session/:sessionId/window_handle')
-  GET_WINDOW_HANDLES = (_Method.GET, '/session/:sessionId/window_handles')
+  GET_CURRENT_WINDOW_HANDLE = (_Method.GET, '/session/:sessionId/window')
+  GET_WINDOW_HANDLES = (_Method.GET, '/session/:sessionId/window/handles')
   GET = (_Method.POST, '/session/:sessionId/url')
   GET_ALERT = (_Method.GET, '/session/:sessionId/alert')
-  DISMISS_ALERT = (_Method.POST, '/session/:sessionId/dismiss_alert')
-  ACCEPT_ALERT = (_Method.POST, '/session/:sessionId/accept_alert')
-  GET_ALERT_TEXT = (_Method.GET, '/session/:sessionId/alert_text')
-  SET_ALERT_VALUE = (_Method.POST, '/session/:sessionId/alert_text')
+  DISMISS_ALERT = (_Method.POST, '/session/:sessionId/alert/dismiss')
+  ACCEPT_ALERT = (_Method.POST, '/session/:sessionId/alert/accept')
+  GET_ALERT_TEXT = (_Method.GET, '/session/:sessionId/alert/text')
+  SET_ALERT_VALUE = (_Method.POST, '/session/:sessionId/alert/text')
   GO_FORWARD = (_Method.POST, '/session/:sessionId/forward')
   GO_BACK = (_Method.POST, '/session/:sessionId/back')
   REFRESH = (_Method.POST, '/session/:sessionId/refresh')
-  EXECUTE_SCRIPT = (_Method.POST, '/session/:sessionId/execute')
-  EXECUTE_ASYNC_SCRIPT = (_Method.POST, '/session/:sessionId/execute_async')
+  EXECUTE_SCRIPT = (_Method.POST, '/session/:sessionId/execute/sync')
+  EXECUTE_ASYNC_SCRIPT = (_Method.POST, '/session/:sessionId/execute/async')
   LAUNCH_APP = (_Method.POST, '/session/:sessionId/chromium/launch_app')
   GET_CURRENT_URL = (_Method.GET, '/session/:sessionId/url')
   GET_TITLE = (_Method.GET, '/session/:sessionId/title')
@@ -39,7 +39,7 @@ class Command(object):
   IS_BROWSER_VISIBLE = (_Method.GET, '/session/:sessionId/visible')
   FIND_ELEMENT = (_Method.POST, '/session/:sessionId/element')
   FIND_ELEMENTS = (_Method.POST, '/session/:sessionId/elements')
-  GET_ACTIVE_ELEMENT = (_Method.POST, '/session/:sessionId/element/active')
+  GET_ACTIVE_ELEMENT = (_Method.GET, '/session/:sessionId/element/active')
   FIND_CHILD_ELEMENT = (_Method.POST, '/session/:sessionId/element/:id/element')
   FIND_CHILD_ELEMENTS = (
       _Method.POST, '/session/:sessionId/element/:id/elements')
@@ -84,6 +84,8 @@ class Command(object):
       _Method.POST, '/session/:sessionId/window/:windowHandle/position')
   MAXIMIZE_WINDOW = (
       _Method.POST, '/session/:sessionId/window/:windowHandle/maximize')
+  FULLSCREEN_WINDOW = (
+      _Method.POST, '/session/:sessionId/window/fullscreen')
   CLOSE = (_Method.DELETE, '/session/:sessionId/window')
   DRAG_ELEMENT = (_Method.POST, '/session/:sessionId/element/:id/drag')
   GET_ELEMENT_VALUE_OF_CSS_PROPERTY = (
@@ -93,6 +95,7 @@ class Command(object):
   SET_SCRIPT_TIMEOUT = (
       _Method.POST, '/session/:sessionId/timeouts/async_script')
   SET_TIMEOUT = (_Method.POST, '/session/:sessionId/timeouts')
+  GET_TIMEOUTS = (_Method.GET, '/session/:sessionId/timeouts')
   EXECUTE_SQL = (_Method.POST, '/session/:sessionId/execute_sql')
   GET_LOCATION = (_Method.GET, '/session/:sessionId/location')
   SET_LOCATION = (_Method.POST, '/session/:sessionId/location')
@@ -190,7 +193,7 @@ class CommandExecutor(object):
       self._http_client.request(_Method.GET, response.getheader('location'))
       response = self._http_client.getresponse()
     result = json.loads(response.read())
-    if response.status != 200 and 'error' not in result:
+    if response.status != 200 and 'value' not in result:
       raise RuntimeError('Server returned error: ' + response.reason)
 
     return result

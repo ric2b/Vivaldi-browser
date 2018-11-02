@@ -37,8 +37,9 @@ class TestNetworkQualityEstimatorProvider
     return base::ThreadTaskRunnerHandle::Get();
   }
 
-  net::NetworkQualityEstimator* GetNetworkQualityEstimator() override {
-    return estimator_;
+  void PostReplyNetworkQualityEstimator(
+      base::Callback<void(net::NetworkQualityEstimator*)> callback) override {
+    callback.Run(estimator_);
   }
 
   net::TestNetworkQualityEstimator* estimator_;
@@ -97,7 +98,6 @@ TEST_F(NetworkMetricsProviderTest, EffectiveConnectionType) {
   // Running a request would cause the effective connection type to be computed
   // as 2G, and observers to be notified.
   estimator.RunOneRequest();
-  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(net::EFFECTIVE_CONNECTION_TYPE_2G,
             network_metrics_provider.effective_connection_type_);
   EXPECT_EQ(net::EFFECTIVE_CONNECTION_TYPE_2G,
@@ -117,7 +117,6 @@ TEST_F(NetworkMetricsProviderTest, EffectiveConnectionType) {
   // Running a request would cause the effective connection type to be computed
   // as SLOW_2G, and observers to be notified.
   estimator.RunOneRequest();
-  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(net::EFFECTIVE_CONNECTION_TYPE_SLOW_2G,
             network_metrics_provider.effective_connection_type_);
   EXPECT_EQ(net::EFFECTIVE_CONNECTION_TYPE_SLOW_2G,
@@ -166,7 +165,6 @@ TEST_F(NetworkMetricsProviderTest, ECTAmbiguousOnConnectionTypeChange) {
   // Running a request would cause the effective connection type to be computed
   // as 2G, and observers to be notified.
   estimator.RunOneRequest();
-  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(net::EFFECTIVE_CONNECTION_TYPE_2G,
             network_metrics_provider.effective_connection_type_);
   EXPECT_EQ(net::EFFECTIVE_CONNECTION_TYPE_2G,
@@ -191,6 +189,49 @@ TEST_F(NetworkMetricsProviderTest, ECTAmbiguousOnConnectionTypeChange) {
             system_profile.network().min_effective_connection_type());
   EXPECT_EQ(SystemProfileProto::Network::EFFECTIVE_CONNECTION_TYPE_2G,
             system_profile.network().max_effective_connection_type());
+}
+
+// Verifies that the effective connection type is not set to UNKNOWN when the
+// connection type is OFFLINE.
+TEST_F(NetworkMetricsProviderTest, ECTNotAmbiguousOnOffline) {
+  for (net::EffectiveConnectionType force_ect :
+       {net::EFFECTIVE_CONNECTION_TYPE_UNKNOWN,
+        net::EFFECTIVE_CONNECTION_TYPE_OFFLINE}) {
+    std::unique_ptr<net::NetworkQualityEstimatorParams> params =
+        base::MakeUnique<net::NetworkQualityEstimatorParams>(
+            std::map<std::string, std::string>());
+    net::NetworkQualityEstimatorParams* params_ptr = params.get();
+    net::TestNetworkQualityEstimator estimator(std::move(params));
+
+    std::unique_ptr<NetworkMetricsProvider::NetworkQualityEstimatorProvider>
+        estimator_provider(base::WrapUnique(
+            new TestNetworkQualityEstimatorProvider(&estimator)));
+    SystemProfileProto system_profile;
+    NetworkMetricsProvider network_metrics_provider(
+        std::move(estimator_provider));
+
+    params_ptr->SetForcedEffectiveConnectionType(
+        net::EFFECTIVE_CONNECTION_TYPE_2G);
+    estimator.RunOneRequest();
+
+    params_ptr->SetForcedEffectiveConnectionType(force_ect);
+    estimator.RunOneRequest();
+    network_metrics_provider.ProvideSystemProfileMetrics(&system_profile);
+    EXPECT_EQ(SystemProfileProto::Network::EFFECTIVE_CONNECTION_TYPE_2G,
+              system_profile.network().min_effective_connection_type());
+    EXPECT_EQ(SystemProfileProto::Network::EFFECTIVE_CONNECTION_TYPE_2G,
+              system_profile.network().max_effective_connection_type());
+
+    params_ptr->SetForcedEffectiveConnectionType(
+        net::EFFECTIVE_CONNECTION_TYPE_4G);
+    estimator.RunOneRequest();
+
+    network_metrics_provider.ProvideSystemProfileMetrics(&system_profile);
+    EXPECT_EQ(SystemProfileProto::Network::EFFECTIVE_CONNECTION_TYPE_4G,
+              system_profile.network().min_effective_connection_type());
+    EXPECT_EQ(SystemProfileProto::Network::EFFECTIVE_CONNECTION_TYPE_4G,
+              system_profile.network().max_effective_connection_type());
+  }
 }
 
 }  // namespace metrics

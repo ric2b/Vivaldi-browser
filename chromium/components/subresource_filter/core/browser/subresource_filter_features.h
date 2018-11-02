@@ -62,6 +62,14 @@ struct Configuration {
     // otherwise satisfied. A greater value indicates higher priority.
     int priority = 0;
 
+    // Whether to activate on SafeBrowsing lists with experimental metadata.
+    bool experimental = false;
+
+    // This boolean is set to true for a navigation which has forced activation,
+    // despite other conditions not matching. It should never be possible to set
+    // this via variation params.
+    bool forced_activation = false;
+
     std::unique_ptr<base::trace_event::TracedValue> ToTracedValue() const;
   };
 
@@ -129,10 +137,16 @@ struct Configuration {
   static Configuration MakePresetForLiveRunOnPhishingSites();
   static Configuration MakePresetForPerformanceTestingDryRunOnAllSites();
 
+  // Not really a preset, but used as the configuration for forcing activation
+  // (e.g. via devtools).
+  static Configuration MakeForForcedActivation();
+
   ActivationConditions activation_conditions;
   ActivationOptions activation_options;
   GeneralSettings general_settings;
 };
+
+std::ostream& operator<<(std::ostream& os, const Configuration& config);
 
 // Thread-safe, ref-counted wrapper around an immutable list of configurations.
 class ConfigurationList : public base::RefCountedThreadSafe<ConfigurationList> {
@@ -169,6 +183,8 @@ class ConfigurationList : public base::RefCountedThreadSafe<ConfigurationList> {
 // callers should not hold on to the result for long.
 scoped_refptr<ConfigurationList> GetEnabledConfigurations();
 
+bool HasEnabledConfiguration(const Configuration& config);
+
 namespace testing {
 
 // Returns the currently cached enabled ConfigurationList, if any, and replaces
@@ -201,8 +217,12 @@ extern const char kActivationListsParameterName[];
 extern const char kActivationListSocialEngineeringAdsInterstitial[];
 extern const char kActivationListPhishingInterstitial[];
 extern const char kActivationListSubresourceFilter[];
+extern const char kActivationListBetterAds[];
+extern const char kActivationListAbusiveAds[];
+extern const char kActivationListAllAds[];
 
 extern const char kActivationPriorityParameterName[];
+extern const char kActivationExperimentalParameterName[];
 
 extern const char kPerformanceMeasurementRateParameterName[];
 

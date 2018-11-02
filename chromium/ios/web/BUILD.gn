@@ -16,7 +16,7 @@ group("all_tests") {
   ]
 }
 
-source_set("web_arc") {
+source_set("web") {
   public_deps = [
     ":service_names",
     "//net",
@@ -61,6 +61,10 @@ source_set("web_arc") {
     "interstitials/web_interstitial_impl.h",
     "interstitials/web_interstitial_impl.mm",
     "load_committed_details.cc",
+    "navigation/crw_navigation_item_holder.h",
+    "navigation/crw_navigation_item_holder.mm",
+    "navigation/crw_placeholder_navigation_info.h",
+    "navigation/crw_placeholder_navigation_info.mm",
     "navigation/crw_session_controller+private_constructors.h",
     "navigation/crw_session_controller.h",
     "navigation/crw_session_controller.mm",
@@ -79,6 +83,8 @@ source_set("web_arc") {
     "navigation/navigation_manager_util.mm",
     "navigation/nscoder_util.h",
     "navigation/nscoder_util.mm",
+    "navigation/placeholder_navigation_util.h",
+    "navigation/placeholder_navigation_util.mm",
     "navigation/serializable_user_data_manager_impl.h",
     "navigation/serializable_user_data_manager_impl.mm",
     "navigation/session_storage_builder.h",
@@ -237,6 +243,10 @@ source_set("web_arc") {
     "web_state/ui/crw_swipe_recognizer_provider.h",
     "web_state/ui/crw_touch_tracking_recognizer.h",
     "web_state/ui/crw_touch_tracking_recognizer.mm",
+    "web_state/ui/crw_web_controller.h",
+    "web_state/ui/crw_web_controller.mm",
+    "web_state/ui/crw_web_controller_container_view.h",
+    "web_state/ui/crw_web_controller_container_view.mm",
     "web_state/ui/crw_web_view_content_view.mm",
     "web_state/ui/crw_web_view_navigation_proxy.h",
     "web_state/ui/crw_web_view_proxy_impl.h",
@@ -254,6 +264,16 @@ source_set("web_arc") {
     "web_state/ui/wk_web_view_configuration_provider.mm",
     "web_state/web_controller_observer_bridge.h",
     "web_state/web_controller_observer_bridge.mm",
+    "web_state/web_state.mm",
+    "web_state/web_state_delegate.mm",
+    "web_state/web_state_delegate_bridge.mm",
+    "web_state/web_state_impl.h",
+    "web_state/web_state_impl.mm",
+    "web_state/web_state_observer.mm",
+    "web_state/web_state_observer_bridge.mm",
+    "web_state/web_state_policy_decider.mm",
+    "web_state/web_state_weak_ptr_factory.h",
+    "web_state/web_state_weak_ptr_factory.mm",
     "web_state/web_view_internal_creation_util.h",
     "web_state/web_view_internal_creation_util.mm",
     "web_state/wk_web_view_security_util.h",
@@ -295,57 +315,6 @@ mojom("service_names") {
   sources = [
     "public/service_names.mojom",
   ]
-}
-
-source_set("web") {
-  deps = [
-    ":core",
-    ":js_resources",
-    ":reload_type",
-    ":resources",
-    ":user_agent",
-    "//base",
-    "//components/url_formatter",
-    "//ios/net",
-    "//ios/third_party/blink:html_tokenizer",
-    "//mojo/public/cpp/system",
-    "//mojo/public/js",
-    "//net",
-    "//services/service_manager/public/cpp",
-    "//ui/base",
-    "//ui/gfx",
-    "//ui/gfx/geometry",
-    "//ui/resources",
-    "//url",
-  ]
-
-  public_deps = [
-    ":web_arc",
-  ]
-
-  sources = [
-    "web_state/ui/crw_web_controller.h",
-    "web_state/ui/crw_web_controller.mm",
-    "web_state/ui/crw_web_controller_container_view.h",
-    "web_state/ui/crw_web_controller_container_view.mm",
-    "web_state/web_state.mm",
-    "web_state/web_state_delegate.mm",
-    "web_state/web_state_delegate_bridge.mm",
-    "web_state/web_state_impl.h",
-    "web_state/web_state_impl.mm",
-    "web_state/web_state_observer.mm",
-    "web_state/web_state_observer_bridge.mm",
-    "web_state/web_state_policy_decider.mm",
-    "web_state/web_state_weak_ptr_factory.h",
-    "web_state/web_state_weak_ptr_factory.mm",
-  ]
-
-  libs = [
-    "CoreGraphics.framework",
-    "WebKit.framework",
-  ]
-
-  allow_circular_includes_from = [ ":web_arc" ]
 }
 
 source_set("core") {
@@ -449,6 +418,7 @@ test("ios_web_unittests") {
     ":ios_web_web_state_ui_unittests",
     ":ios_web_web_state_unittests",
     ":ios_web_webui_unittests",
+    "//ios/testing:http_server_bundle_data",
   ]
 
   assert_no_deps = ios_assert_no_deps
@@ -523,7 +493,9 @@ source_set("ios_web_navigation_unittests") {
   ]
 
   sources = [
+    "navigation/crw_navigation_item_holder_unittest.mm",
     "navigation/crw_navigation_item_storage_unittest.mm",
+    "navigation/crw_placeholder_navigation_info_unittest.mm",
     "navigation/crw_session_controller_unittest.mm",
     "navigation/crw_session_storage_unittest.mm",
     "navigation/navigation_item_impl_unittest.mm",
@@ -532,7 +504,9 @@ source_set("ios_web_navigation_unittests") {
     "navigation/navigation_manager_impl_unittest.mm",
     "navigation/navigation_manager_util_unittest.mm",
     "navigation/nscoder_util_unittest.mm",
+    "navigation/placeholder_navigation_util_unittest.mm",
     "navigation/serializable_user_data_manager_impl_unittest.mm",
+    "navigation/wk_based_navigation_manager_impl_unittest.mm",
   ]
 }
 
@@ -555,6 +529,7 @@ source_set("ios_web_net_unittests") {
     "//ios/web/test:mojo_bindings",
     "//ios/web/test:test_constants",
     "//ios/web/test:test_support",
+    "//ios/web/test/fakes",
     "//net:test_support",
     "//services/service_manager/public/cpp",
     "//testing/gmock",
@@ -630,7 +605,6 @@ source_set("ios_web_web_state_unittests") {
   testonly = true
   deps = [
     ":core",
-    ":ios_web_web_state_unittests_arc",
     ":test_support",
     ":user_agent",
     ":web",
@@ -641,6 +615,7 @@ source_set("ios_web_web_state_unittests") {
     "//ios/net",
     "//ios/testing:ios_test_support",
     "//ios/testing:ocmock_support",
+    "//ios/web",
     "//ios/web/public/test",
     "//ios/web/public/test/fakes",
     "//ios/web/test:mojo_bindings",
@@ -661,6 +636,8 @@ source_set("ios_web_web_state_unittests") {
     "web_state/error_translation_util_unittest.mm",
     "web_state/navigation_context_impl_unittest.mm",
     "web_state/page_display_state_unittest.mm",
+    "web_state/session_certificate_policy_cache_impl_unittest.mm",
+    "web_state/session_certificate_policy_cache_storage_builder_unittest.mm",
     "web_state/web_state_delegate_bridge_unittest.mm",
     "web_state/web_state_impl_unittest.mm",
     "web_state/web_state_observer_bridge_unittest.mm",
@@ -668,23 +645,6 @@ source_set("ios_web_web_state_unittests") {
     "web_state/web_view_internal_creation_util_unittest.mm",
     "web_state/wk_web_view_security_util_unittest.mm",
   ]
-}
-
-source_set("ios_web_web_state_unittests_arc") {
-  testonly = true
-  sources = [
-    "web_state/session_certificate_policy_cache_impl_unittest.mm",
-    "web_state/session_certificate_policy_cache_storage_builder_unittest.mm",
-  ]
-  deps = [
-    "//base",
-    "//ios/testing:ios_test_support",
-    "//ios/web",
-    "//ios/web/public/test",
-    "//ios/web/public/test/fakes",
-    "//net:test_support",
-  ]
-  configs += [ "//build/config/compiler:enable_arc" ]
 }
 
 source_set("ios_web_web_state_js_unittests") {

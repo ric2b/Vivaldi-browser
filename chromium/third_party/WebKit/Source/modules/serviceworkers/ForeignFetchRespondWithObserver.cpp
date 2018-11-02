@@ -7,7 +7,7 @@
 #include "bindings/modules/v8/V8ForeignFetchResponse.h"
 #include "modules/fetch/Response.h"
 #include "modules/serviceworkers/ForeignFetchResponse.h"
-#include "platform/loader/fetch/CrossOriginAccessControl.h"
+#include "public/platform/WebCORS.h"
 
 namespace blink {
 
@@ -68,20 +68,21 @@ void ForeignFetchRespondWithObserver::OnResponseFulfilled(
         kWebServiceWorkerResponseErrorForeignFetchMismatchedOrigin);
     return;
   } else if (!is_opaque) {
-    HTTPHeaderSet headers;
+    WebHTTPHeaderSet headers;
     if (foreign_fetch_response.hasHeaders()) {
       for (const String& header : foreign_fetch_response.headers())
-        headers.insert(header);
+        headers.emplace(header.Ascii().data(), header.Ascii().length());
       if (response->GetResponse()->GetType() == FetchResponseData::kCORSType) {
-        const HTTPHeaderSet& existing_headers =
+        const WebHTTPHeaderSet& existing_headers =
             response->GetResponse()->CorsExposedHeaderNames();
-        HTTPHeaderSet headers_to_remove;
-        for (HTTPHeaderSet::iterator it = headers.begin(); it != headers.end();
-             ++it) {
-          if (!existing_headers.Contains(*it))
-            headers_to_remove.insert(*it);
+        for (WebHTTPHeaderSet::iterator it = headers.begin();
+             it != headers.end();) {
+          if (existing_headers.find(*it) == existing_headers.end()) {
+            it = headers.erase(it);
+          } else {
+            ++it;
+          }
         }
-        headers.RemoveAll(headers_to_remove);
       }
     }
     FetchResponseData* response_data =

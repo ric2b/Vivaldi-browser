@@ -84,7 +84,6 @@
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/CurrentTime.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/RefPtr.h"
 #include "public/platform/WebCommon.h"
 #include "public/platform/WebDragData.h"
@@ -245,8 +244,9 @@ void DragController::PerformDrag(DragData* drag_data, LocalFrame& local_root) {
   DCHECK(drag_data);
   document_under_mouse_ =
       local_root.DocumentAtPoint(drag_data->ClientPosition());
-  UserGestureIndicator gesture(UserGestureToken::Create(
-      document_under_mouse_, UserGestureToken::kNewGesture));
+  std::unique_ptr<UserGestureIndicator> gesture = LocalFrame::CreateUserGesture(
+      document_under_mouse_ ? document_under_mouse_->GetFrame() : nullptr,
+      UserGestureToken::kNewGesture);
   if ((drag_destination_action_ & kDragDestinationActionDHTML) &&
       document_is_handling_drag_) {
     bool prevented_default = false;
@@ -615,7 +615,7 @@ bool DragController::ConcludeEditDrag(DragData* drag_data) {
       DragAndDropCommand::Create(*inner_frame->GetDocument()));
 
   if (DragIsMove(inner_frame->Selection(), drag_data) ||
-      drag_caret.IsContentRichlyEditable()) {
+      IsRichlyEditablePosition(drag_caret.Base())) {
     DragSourceType drag_source_type = DragSourceType::kHTMLSource;
     DocumentFragment* fragment = DocumentFragmentFromDragData(
         drag_data, inner_frame, range, true, drag_source_type);

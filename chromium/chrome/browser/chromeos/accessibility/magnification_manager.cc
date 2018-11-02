@@ -7,9 +7,11 @@
 #include <limits>
 #include <memory>
 
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/accessibility_types.h"
 #include "ash/magnifier/magnification_controller.h"
 #include "ash/magnifier/partial_magnification_controller.h"
+#include "ash/public/cpp/ash_pref_names.h"
 #include "ash/shell.h"
 #include "base/macros.h"
 #include "base/memory/singleton.h"
@@ -18,7 +20,6 @@
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/common/pref_names.h"
 #include "components/prefs/pref_member.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
@@ -32,7 +33,7 @@
 namespace chromeos {
 
 namespace {
-static MagnificationManager* g_magnification_manager = NULL;
+MagnificationManager* g_magnification_manager = nullptr;
 }
 
 class MagnificationManagerImpl
@@ -43,11 +44,9 @@ class MagnificationManagerImpl
   MagnificationManagerImpl()
       : profile_(NULL),
         magnifier_enabled_pref_handler_(
-            prefs::kAccessibilityScreenMagnifierEnabled),
-        magnifier_type_pref_handler_(prefs::kAccessibilityScreenMagnifierType),
+            ash::prefs::kAccessibilityScreenMagnifierEnabled),
         magnifier_scale_pref_handler_(
-            prefs::kAccessibilityScreenMagnifierScale),
-        type_(ash::kDefaultMagnifierType),
+            ash::prefs::kAccessibilityScreenMagnifierScale),
         enabled_(false),
         keep_focus_centered_(false),
         observing_focus_change_in_page_(false) {
@@ -69,23 +68,13 @@ class MagnificationManagerImpl
   // MagnificationManager implimentation:
   bool IsMagnifierEnabled() const override { return enabled_; }
 
-  ash::MagnifierType GetMagnifierType() const override { return type_; }
-
   void SetMagnifierEnabled(bool enabled) override {
     if (!profile_)
       return;
 
     PrefService* prefs = profile_->GetPrefs();
-    prefs->SetBoolean(prefs::kAccessibilityScreenMagnifierEnabled, enabled);
-    prefs->CommitPendingWrite();
-  }
-
-  void SetMagnifierType(ash::MagnifierType type) override {
-    if (!profile_)
-      return;
-
-    PrefService* prefs = profile_->GetPrefs();
-    prefs->SetInteger(prefs::kAccessibilityScreenMagnifierType, type);
+    prefs->SetBoolean(ash::prefs::kAccessibilityScreenMagnifierEnabled,
+                      enabled);
     prefs->CommitPendingWrite();
   }
 
@@ -93,8 +82,8 @@ class MagnificationManagerImpl
     if (!profile_)
       return;
 
-    profile_->GetPrefs()->SetDouble(prefs::kAccessibilityScreenMagnifierScale,
-                                    scale);
+    profile_->GetPrefs()->SetDouble(
+        ash::prefs::kAccessibilityScreenMagnifierScale, scale);
   }
 
   double GetSavedScreenMagnifierScale() const override {
@@ -102,7 +91,7 @@ class MagnificationManagerImpl
       return std::numeric_limits<double>::min();
 
     return profile_->GetPrefs()->GetDouble(
-        prefs::kAccessibilityScreenMagnifierScale);
+        ash::prefs::kAccessibilityScreenMagnifierScale);
   }
 
   void SetProfileForTest(Profile* profile) override { SetProfile(profile); }
@@ -122,21 +111,16 @@ class MagnificationManagerImpl
       pref_change_registrar_.reset(new PrefChangeRegistrar);
       pref_change_registrar_->Init(profile->GetPrefs());
       pref_change_registrar_->Add(
-          prefs::kAccessibilityScreenMagnifierEnabled,
+          ash::prefs::kAccessibilityScreenMagnifierEnabled,
           base::Bind(&MagnificationManagerImpl::UpdateMagnifierFromPrefs,
                      base::Unretained(this)));
       pref_change_registrar_->Add(
-          prefs::kAccessibilityScreenMagnifierType,
-          base::Bind(&MagnificationManagerImpl::UpdateMagnifierFromPrefs,
-                     base::Unretained(this)));
-      pref_change_registrar_->Add(
-          prefs::kAccessibilityScreenMagnifierCenterFocus,
+          ash::prefs::kAccessibilityScreenMagnifierCenterFocus,
           base::Bind(&MagnificationManagerImpl::UpdateMagnifierFromPrefs,
                      base::Unretained(this)));
     }
 
     magnifier_enabled_pref_handler_.HandleProfileChanged(profile_, profile);
-    magnifier_type_pref_handler_.HandleProfileChanged(profile_, profile);
     magnifier_scale_pref_handler_.HandleProfileChanged(profile_, profile);
 
     profile_ = profile;
@@ -154,20 +138,8 @@ class MagnificationManagerImpl
 
     enabled_ = enabled;
 
-    if (type_ == ash::MAGNIFIER_FULL) {
-      ash::Shell::Get()->magnification_controller()->SetEnabled(enabled_);
-      MonitorFocusInPageChange();
-    } else {
-      ash::Shell::Get()->partial_magnification_controller()->SetEnabled(
-          enabled_);
-    }
-  }
-
-  virtual void SetMagnifierTypeInternal(ash::MagnifierType type) {
-    if (type_ == type)
-      return;
-
-    type_ = ash::MAGNIFIER_FULL;  // (leave out for full magnifier)
+    ash::Shell::Get()->magnification_controller()->SetEnabled(enabled_);
+    MonitorFocusInPageChange();
   }
 
   virtual void SetMagniferKeepFocusCenteredInternal(bool keep_focus_centered) {
@@ -176,53 +148,37 @@ class MagnificationManagerImpl
 
     keep_focus_centered_ = keep_focus_centered;
 
-    if (type_ == ash::MAGNIFIER_FULL) {
       ash::Shell::Get()->magnification_controller()->SetKeepFocusCentered(
           keep_focus_centered_);
-    }
   }
 
   void UpdateMagnifierFromPrefs() {
     if (!profile_)
       return;
 
-    const bool enabled = profile_->GetPrefs()->GetBoolean(
-        prefs::kAccessibilityScreenMagnifierEnabled);
-    const int type_integer = profile_->GetPrefs()->GetInteger(
-        prefs::kAccessibilityScreenMagnifierType);
-    const bool keep_focus_centered = profile_->GetPrefs()->GetBoolean(
-        prefs::kAccessibilityScreenMagnifierCenterFocus);
-
-    ash::MagnifierType type = ash::kDefaultMagnifierType;
-    if (type_integer > 0 && type_integer <= ash::kMaxMagnifierType) {
-      type = static_cast<ash::MagnifierType>(type_integer);
-    } else if (type_integer == 0) {
-      // Type 0 is used to disable the screen magnifier through policy. As the
-      // magnifier type is irrelevant in this case, it is OK to just fall back
-      // to the default.
-    } else {
-      NOTREACHED();
-    }
+    PrefService* prefs = profile_->GetPrefs();
+    const bool enabled =
+        prefs->GetBoolean(ash::prefs::kAccessibilityScreenMagnifierEnabled);
+    const bool keep_focus_centered =
+        prefs->GetBoolean(ash::prefs::kAccessibilityScreenMagnifierCenterFocus);
 
     if (!enabled) {
       SetMagnifierEnabledInternal(enabled);
-      SetMagnifierTypeInternal(type);
       SetMagniferKeepFocusCenteredInternal(keep_focus_centered);
     } else {
       SetMagniferKeepFocusCenteredInternal(keep_focus_centered);
-      SetMagnifierTypeInternal(type);
       SetMagnifierEnabledInternal(enabled);
     }
 
     AccessibilityStatusEventDetails details(
-        ACCESSIBILITY_TOGGLE_SCREEN_MAGNIFIER, enabled_, type_,
+        ACCESSIBILITY_TOGGLE_SCREEN_MAGNIFIER, enabled_,
         ash::A11Y_NOTIFICATION_NONE);
 
     if (AccessibilityManager::Get()) {
       AccessibilityManager::Get()->NotifyAccessibilityStatusChanged(details);
       if (ash::Shell::Get()) {
         ash::Shell::Get()->SetCursorCompositingEnabled(
-            AccessibilityManager::Get()->ShouldEnableCursorCompositing());
+            ash::AccessibilityController::RequiresCursorCompositing(prefs));
       }
     }
   }
@@ -281,10 +237,8 @@ class MagnificationManagerImpl
   Profile* profile_;
 
   AccessibilityManager::PrefHandler magnifier_enabled_pref_handler_;
-  AccessibilityManager::PrefHandler magnifier_type_pref_handler_;
   AccessibilityManager::PrefHandler magnifier_scale_pref_handler_;
 
-  ash::MagnifierType type_;
   bool enabled_;
   bool keep_focus_centered_;
   bool observing_focus_change_in_page_;

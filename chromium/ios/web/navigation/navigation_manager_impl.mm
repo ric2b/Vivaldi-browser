@@ -4,7 +4,9 @@
 
 #import "ios/web/navigation/navigation_manager_impl.h"
 
+#include "base/memory/ptr_util.h"
 #import "ios/web/navigation/navigation_manager_delegate.h"
+#import "ios/web/public/web_client.h"
 #include "ui/base/page_transition_types.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -45,17 +47,62 @@ NavigationManager::WebLoadParams& NavigationManager::WebLoadParams::operator=(
 }
 
 /* static */
-bool NavigationManagerImpl::AreUrlsFragmentChangeNavigation(
+bool NavigationManagerImpl::IsFragmentChangeNavigationBetweenUrls(
     const GURL& existing_url,
     const GURL& new_url) {
+  // TODO(crbug.com/749542): Current implementation incorrectly returns false
+  // if URL changes from http://google.com#foo to http://google.com.
   if (existing_url == new_url || !new_url.has_ref())
     return false;
 
   return existing_url.EqualsIgnoringRef(new_url);
 }
 
+/* static */
+void NavigationManagerImpl::UpdatePendingItemUserAgentType(
+    UserAgentOverrideOption user_agent_override_option,
+    const NavigationItem* inherit_from_item,
+    NavigationItem* pending_item) {
+  DCHECK(pending_item);
+
+  // |user_agent_override_option| must be INHERIT if |pending_item|'s
+  // UserAgentType is NONE, as requesting a desktop or mobile user agent should
+  // be disabled for app-specific URLs.
+  DCHECK(pending_item->GetUserAgentType() != UserAgentType::NONE ||
+         user_agent_override_option == UserAgentOverrideOption::INHERIT);
+
+  // Newly created pending items are created with UserAgentType::NONE for native
+  // pages or UserAgentType::MOBILE for non-native pages.  If the pending item's
+  // URL is non-native, check which user agent type it should be created with
+  // based on |user_agent_override_option|.
+  DCHECK_NE(UserAgentType::DESKTOP, pending_item->GetUserAgentType());
+  if (pending_item->GetUserAgentType() == UserAgentType::NONE)
+    return;
+
+  switch (user_agent_override_option) {
+    case UserAgentOverrideOption::DESKTOP:
+      pending_item->SetUserAgentType(UserAgentType::DESKTOP);
+      break;
+    case UserAgentOverrideOption::MOBILE:
+      pending_item->SetUserAgentType(UserAgentType::MOBILE);
+      break;
+    case UserAgentOverrideOption::INHERIT: {
+      // Propagate the last committed non-native item's UserAgentType if there
+      // is one, otherwise keep the default value, which is mobile.
+      DCHECK(!inherit_from_item ||
+             inherit_from_item->GetUserAgentType() != UserAgentType::NONE);
+      if (inherit_from_item) {
+        pending_item->SetUserAgentType(inherit_from_item->GetUserAgentType());
+      }
+      break;
+    }
+  }
+}
+
 NavigationManagerImpl::NavigationManagerImpl()
     : delegate_(nullptr), browser_state_(nullptr) {}
+
+NavigationManagerImpl::~NavigationManagerImpl() = default;
 
 void NavigationManagerImpl::SetDelegate(NavigationManagerDelegate* delegate) {
   delegate_ = delegate;
@@ -63,6 +110,151 @@ void NavigationManagerImpl::SetDelegate(NavigationManagerDelegate* delegate) {
 
 void NavigationManagerImpl::SetBrowserState(BrowserState* browser_state) {
   browser_state_ = browser_state;
+}
+
+void NavigationManagerImpl::RemoveTransientURLRewriters() {
+  transient_url_rewriters_.clear();
+}
+
+std::unique_ptr<NavigationItemImpl> NavigationManagerImpl::CreateNavigationItem(
+    const GURL& url,
+    const Referrer& referrer,
+    ui::PageTransition transition,
+    NavigationInitiationType initiation_type) {
+  NavigationItem* last_committed_item = GetLastCommittedItem();
+  auto item = CreateNavigationItemWithRewriters(
+      url, referrer, transition, initiation_type,
+      last_committed_item ? last_committed_item->GetURL() : GURL::EmptyGURL(),
+      &transient_url_rewriters_);
+  RemoveTransientURLRewriters();
+  return item;
+}
+
+void NavigationManagerImpl::UpdatePendingItemUrl(const GURL& url) const {
+  // If there is no pending item, navigation is probably happening within the
+  // back forward history. Don't modify the item list.
+  NavigationItemImpl* pending_item = GetPendingItemImpl();
+  if (!pending_item || url == pending_item->GetURL())
+    return;
+
+  // UpdatePendingItemUrl is used to handle redirects after loading starts for
+  // the currenting pending item. No transient item should exists at this point.
+  DCHECK(!GetTransientItem());
+  pending_item->SetURL(url);
+  pending_item->SetVirtualURL(url);
+  // Redirects (3xx response code), or client side navigation must change POST
+  // requests to GETs.
+  pending_item->SetPostData(nil);
+  pending_item->ResetHttpRequestHeaders();
+}
+
+NavigationItemImpl* NavigationManagerImpl::GetCurrentItemImpl() const {
+  NavigationItemImpl* transient_item = GetTransientItemImpl();
+  if (transient_item)
+    return transient_item;
+
+  NavigationItemImpl* pending_item = GetPendingItemImpl();
+  if (pending_item)
+    return pending_item;
+
+  return GetLastCommittedItemImpl();
+}
+
+void NavigationManagerImpl::GoToIndex(int index) {
+  if (index < 0 || index >= GetItemCount()) {
+    NOTREACHED();
+    return;
+  }
+
+  if (!GetTransientItem()) {
+    delegate_->RecordPageStateInNavigationItem();
+  }
+  delegate_->ClearTransientContent();
+
+  // Notify delegate if the new navigation will use a different user agent.
+  UserAgentType to_item_user_agent_type =
+      GetItemAtIndex(index)->GetUserAgentType();
+  NavigationItem* pending_item = GetPendingItem();
+  NavigationItem* previous_item =
+      pending_item ? pending_item : GetLastCommittedItem();
+  UserAgentType previous_item_user_agent_type =
+      previous_item ? previous_item->GetUserAgentType() : UserAgentType::NONE;
+
+  if (to_item_user_agent_type != UserAgentType::NONE &&
+      to_item_user_agent_type != previous_item_user_agent_type) {
+    delegate_->WillChangeUserAgentType();
+  }
+
+  FinishGoToIndex(index);
+}
+
+NavigationItem* NavigationManagerImpl::GetLastCommittedItem() const {
+  return GetLastCommittedItemImpl();
+}
+
+NavigationItem* NavigationManagerImpl::GetPendingItem() const {
+  return GetPendingItemImpl();
+}
+
+NavigationItem* NavigationManagerImpl::GetTransientItem() const {
+  return GetTransientItemImpl();
+}
+
+void NavigationManagerImpl::LoadURLWithParams(
+    const NavigationManager::WebLoadParams& params) {
+  DCHECK(!(params.transition_type & ui::PAGE_TRANSITION_FORWARD_BACK));
+  delegate_->ClearTransientContent();
+  delegate_->RecordPageStateInNavigationItem();
+
+  NavigationInitiationType initiation_type =
+      params.is_renderer_initiated
+          ? NavigationInitiationType::RENDERER_INITIATED
+          : NavigationInitiationType::USER_INITIATED;
+  AddPendingItem(params.url, params.referrer, params.transition_type,
+                 initiation_type, params.user_agent_override_option);
+
+  // Mark pending item as created from hash change if necessary. This is needed
+  // because window.hashchange message may not arrive on time.
+  NavigationItemImpl* pending_item = GetPendingItemImpl();
+  if (pending_item) {
+    NavigationItem* last_committed_item = GetLastCommittedItem();
+    GURL last_committed_url = last_committed_item
+                                  ? last_committed_item->GetVirtualURL()
+                                  : GURL::EmptyGURL();
+    GURL pending_url = pending_item->GetURL();
+    if (last_committed_url != pending_url &&
+        last_committed_url.EqualsIgnoringRef(pending_url)) {
+      pending_item->SetIsCreatedFromHashChange(true);
+    }
+  }
+
+  // Add additional headers to the NavigationItem before loading it in the web
+  // view. This implementation must match CRWWebController's |currentNavItem|.
+  // However, to avoid introducing a GetCurrentItem() that is only used here,
+  // the logic in |currentNavItem| is inlined here with the small simplification
+  // since AddPendingItem() implies that any transient item would have been
+  // cleared.
+  DCHECK(!GetTransientItem());
+  NavigationItemImpl* added_item =
+      pending_item ? pending_item : GetLastCommittedItemImpl();
+  DCHECK(added_item);
+  if (params.extra_headers)
+    added_item->AddHttpRequestHeaders(params.extra_headers);
+  if (params.post_data) {
+    DCHECK([added_item->GetHttpRequestHeaders() objectForKey:@"Content-Type"])
+        << "Post data should have an associated content type";
+    added_item->SetPostData(params.post_data);
+    added_item->SetShouldSkipRepostFormConfirmation(true);
+  }
+
+  delegate_->WillLoadCurrentItemWithUrl(params.url);
+  delegate_->LoadCurrentItem();
+}
+
+void NavigationManagerImpl::AddTransientURLRewriter(
+    BrowserURLRewriter::URLRewriter rewriter) {
+  DCHECK(rewriter);
+  transient_url_rewriters_.push_back(rewriter);
 }
 
 void NavigationManagerImpl::Reload(ReloadType reload_type,
@@ -92,6 +284,66 @@ void NavigationManagerImpl::Reload(ReloadType reload_type,
   }
 
   delegate_->Reload();
+}
+
+void NavigationManagerImpl::LoadIfNecessary() {
+  delegate_->LoadIfNecessary();
+}
+
+std::unique_ptr<NavigationItemImpl>
+NavigationManagerImpl::CreateNavigationItemWithRewriters(
+    const GURL& url,
+    const Referrer& referrer,
+    ui::PageTransition transition,
+    NavigationInitiationType initiation_type,
+    const GURL& previous_url,
+    const std::vector<BrowserURLRewriter::URLRewriter>* additional_rewriters)
+    const {
+  GURL loaded_url(url);
+
+  bool url_was_rewritten = false;
+  if (additional_rewriters && !additional_rewriters->empty()) {
+    url_was_rewritten = web::BrowserURLRewriter::RewriteURLWithWriters(
+        &loaded_url, browser_state_, *additional_rewriters);
+  }
+
+  if (!url_was_rewritten) {
+    web::BrowserURLRewriter::GetInstance()->RewriteURLIfNecessary(
+        &loaded_url, browser_state_);
+  }
+
+  if (initiation_type == web::NavigationInitiationType::RENDERER_INITIATED &&
+      loaded_url != url && web::GetWebClient()->IsAppSpecificURL(loaded_url) &&
+      !web::GetWebClient()->IsAppSpecificURL(previous_url)) {
+    // The URL should not be changed to app-specific URL if the load was
+    // renderer-initiated requested by non app-specific URL. Pages with
+    // app-specific urls have elevated previledges and should not be allowed
+    // to open app-specific URLs.
+    loaded_url = url;
+  }
+
+  auto item = base::MakeUnique<NavigationItemImpl>();
+  item->SetOriginalRequestURL(loaded_url);
+  item->SetURL(loaded_url);
+  item->SetReferrer(referrer);
+  item->SetTransitionType(transition);
+  item->SetNavigationInitiationType(initiation_type);
+  if (web::GetWebClient()->IsAppSpecificURL(loaded_url)) {
+    item->SetUserAgentType(web::UserAgentType::NONE);
+  }
+
+  return item;
+}
+
+NavigationItem* NavigationManagerImpl::GetLastCommittedNonAppSpecificItem()
+    const {
+  WebClient* client = GetWebClient();
+  for (int index = GetLastCommittedItemIndex(); index >= 0; index--) {
+    NavigationItem* item = GetItemAtIndex(index);
+    if (!client->IsAppSpecificURL(item->GetVirtualURL()))
+      return item;
+  }
+  return nullptr;
 }
 
 }  // namespace web

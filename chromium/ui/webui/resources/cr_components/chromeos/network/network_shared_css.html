@@ -1,0 +1,51 @@
+<link rel="import" href="chrome://resources/cr_elements/shared_style_css.html">
+
+ <!-- Common styles for network elements. -->
+
+<dom-module id="network-shared">
+  <template>
+    <style include="cr-shared-style">
+      .property-box {
+        @apply(--cr-section);
+        border-top: none;
+        min-height: var(--cr-section-two-line-min-height);
+        padding: 0;
+      }
+
+      .property-box.indented {
+        -webkit-margin-start: var(--cr-section-padding);
+      }
+
+      .property-box.single-column {
+        align-items: flex-start;
+        flex-direction: column;
+        justify-content: center;
+      }
+
+      .property-box.stretch {
+        align-items: stretch;
+      }
+
+      .property-box > .start {
+        align-items: center;
+        flex: auto;
+      }
+
+      .property-box > .middle {
+        -webkit-padding-start: 16px;
+        align-items: center;
+        flex: auto;
+      }
+
+      paper-input-container {
+        --paper-input-container-input: {
+          color: var(--paper-grey-600);
+          font-size: inherit;
+          font-weight: 400;
+        };
+        margin-bottom: 0;
+        margin-top: -9px;
+      }
+    </style>
+  </template>
+</dom-module>

@@ -62,8 +62,10 @@ Emulation.AdvancedApp = class {
     if (this._toolboxWindow)
       return;
 
-    var url = window.location.href.replace('inspector.html', 'toolbox.html');
-    this._toolboxWindow = window.open(url, undefined);
+    // NOTE(pettern@vivaldi.com): This causes a WebContents leak and it's unclear
+    // if this is even used anywhere.
+    // var url = window.location.href.replace('inspector.html', 'toolbox.html');
+    // this._toolboxWindow = window.open(url, undefined);
   }
 
   /**

@@ -12,12 +12,12 @@
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "components/viz/service/display_embedder/gpu_display_provider.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
+#include "components/viz/service/gl/gpu_service_impl.h"
 #include "gpu/command_buffer/common/activity_flags.h"
 #include "gpu/ipc/common/gpu_memory_buffer_support.h"
 #include "gpu/ipc/gpu_in_process_thread_service.h"
 #include "gpu/ipc/service/gpu_memory_buffer_factory.h"
 #include "gpu/ipc/service/gpu_watchdog_thread.h"
-#include "services/ui/gpu/gpu_service.h"
 
 #if defined(USE_OZONE)
 #include "ui/ozone/public/ozone_platform.h"
@@ -121,7 +121,7 @@ GpuMain::~GpuMain() {
   io_thread_.Stop();
 }
 
-void GpuMain::CreateGpuService(mojom::GpuServiceRequest request,
+void GpuMain::CreateGpuService(viz::mojom::GpuServiceRequest request,
                                mojom::GpuHostPtr gpu_host,
                                const gpu::GpuPreferences& preferences,
                                mojo::ScopedSharedBufferHandle activity_flags) {
@@ -132,8 +132,8 @@ void GpuMain::CreateGpuService(mojom::GpuServiceRequest request,
 }
 
 void GpuMain::CreateFrameSinkManager(
-    cc::mojom::FrameSinkManagerRequest request,
-    cc::mojom::FrameSinkManagerClientPtr client) {
+    viz::mojom::FrameSinkManagerRequest request,
+    viz::mojom::FrameSinkManagerClientPtr client) {
   DCHECK(gpu_thread_task_runner_->BelongsToCurrentThread());
   if (!gpu_service_ || !gpu_service_->is_initialized()) {
     pending_frame_sink_manager_request_ = std::move(request);
@@ -150,27 +150,31 @@ void GpuMain::BindOnGpu(mojom::GpuMainRequest request) {
 void GpuMain::InitOnGpuThread(
     scoped_refptr<base::SingleThreadTaskRunner> io_runner,
     scoped_refptr<base::SingleThreadTaskRunner> compositor_runner) {
+  // TODO(kylechar): When process split happens this shouldn't be a constant.
+  constexpr bool kInProcessGpu = true;
+
   gpu_init_.reset(new gpu::GpuInit());
   gpu_init_->set_sandbox_helper(this);
   bool success = gpu_init_->InitializeAndStartSandbox(
-      *base::CommandLine::ForCurrentProcess());
+      base::CommandLine::ForCurrentProcess(), kInProcessGpu);
   if (!success)
     return;
 
-  gpu_service_ = base::MakeUnique<GpuService>(
+  gpu_service_ = base::MakeUnique<viz::GpuServiceImpl>(
       gpu_init_->gpu_info(), gpu_init_->TakeWatchdogThread(), io_runner,
       gpu_init_->gpu_feature_info());
 }
 
 void GpuMain::CreateFrameSinkManagerInternal(
-    cc::mojom::FrameSinkManagerRequest request,
-    cc::mojom::FrameSinkManagerClientPtrInfo client_info) {
+    viz::mojom::FrameSinkManagerRequest request,
+    viz::mojom::FrameSinkManagerClientPtrInfo client_info) {
   DCHECK(!gpu_command_service_);
   DCHECK(gpu_service_);
   DCHECK(gpu_thread_task_runner_->BelongsToCurrentThread());
   gpu_command_service_ = new gpu::GpuInProcessThreadService(
       gpu_thread_task_runner_, gpu_service_->sync_point_manager(),
-      gpu_service_->mailbox_manager(), gpu_service_->share_group());
+      gpu_service_->mailbox_manager(), gpu_service_->share_group(),
+      gpu_service_->gpu_feature_info());
 
   compositor_thread_task_runner_->PostTask(
       FROM_HERE,
@@ -180,17 +184,17 @@ void GpuMain::CreateFrameSinkManagerInternal(
 }
 
 void GpuMain::CreateFrameSinkManagerOnCompositorThread(
-    cc::mojom::FrameSinkManagerRequest request,
-    cc::mojom::FrameSinkManagerClientPtrInfo client_info) {
+    viz::mojom::FrameSinkManagerRequest request,
+    viz::mojom::FrameSinkManagerClientPtrInfo client_info) {
   DCHECK(!frame_sink_manager_);
-  cc::mojom::FrameSinkManagerClientPtr client;
+  viz::mojom::FrameSinkManagerClientPtr client;
   client.Bind(std::move(client_info));
 
   display_provider_ = base::MakeUnique<viz::GpuDisplayProvider>(
       gpu_command_service_, gpu_service_->gpu_channel_manager());
 
   frame_sink_manager_ = base::MakeUnique<viz::FrameSinkManagerImpl>(
-      display_provider_.get(), cc::SurfaceManager::LifetimeType::REFERENCES);
+      viz::SurfaceManager::LifetimeType::REFERENCES, display_provider_.get());
   frame_sink_manager_->BindAndSetClient(std::move(request), nullptr,
                                         std::move(client));
 }
@@ -208,7 +212,7 @@ void GpuMain::TearDownOnGpuThread() {
 }
 
 void GpuMain::CreateGpuServiceOnGpuThread(
-    mojom::GpuServiceRequest request,
+    viz::mojom::GpuServiceRequest request,
     mojom::GpuHostPtr gpu_host,
     const gpu::GpuPreferences& preferences,
     gpu::GpuProcessActivityFlags activity_flags) {

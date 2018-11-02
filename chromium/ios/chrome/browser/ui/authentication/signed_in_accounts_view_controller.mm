@@ -20,7 +20,7 @@
 #import "ios/chrome/browser/ui/collection_view/collection_view_model.h"
 #import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
-#import "ios/chrome/browser/ui/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
@@ -299,7 +299,8 @@ BOOL gSignedInAccountsViewControllerIsShown = NO;
       forState:UIControlStateNormal];
   [_primaryButton setBackgroundColor:[[MDCPalette cr_bluePalette] tint500]
                             forState:UIControlStateNormal];
-  _primaryButton.customTitleColor = [UIColor whiteColor];
+  [_primaryButton setTitleColor:[UIColor whiteColor]
+                       forState:UIControlStateNormal];
   _primaryButton.underlyingColorHint = [UIColor blackColor];
   _primaryButton.inkColor = [UIColor colorWithWhite:1 alpha:0.2f];
   _primaryButton.translatesAutoresizingMaskIntoConstraints = NO;
@@ -315,7 +316,8 @@ BOOL gSignedInAccountsViewControllerIsShown = NO;
       forState:UIControlStateNormal];
   [_secondaryButton setBackgroundColor:[UIColor whiteColor]
                               forState:UIControlStateNormal];
-  _secondaryButton.customTitleColor = [[MDCPalette cr_bluePalette] tint500];
+  [_secondaryButton setTitleColor:[[MDCPalette cr_bluePalette] tint500]
+                         forState:UIControlStateNormal];
   _secondaryButton.underlyingColorHint = [UIColor whiteColor];
   _secondaryButton.inkColor = [UIColor colorWithWhite:0 alpha:0.06f];
   _secondaryButton.translatesAutoresizingMaskIntoConstraints = NO;

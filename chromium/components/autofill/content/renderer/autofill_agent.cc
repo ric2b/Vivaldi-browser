@@ -42,12 +42,10 @@
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_view.h"
 #include "net/cert/cert_status_flags.h"
-#include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/WebKit/public/platform/WebKeyboardEvent.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/web/WebConsoleMessage.h"
-#include "third_party/WebKit/public/web/WebDataSource.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebElementCollection.h"
 #include "third_party/WebKit/public/web/WebFormControlElement.h"
@@ -143,7 +141,8 @@ AutofillAgent::ShowSuggestionsOptions::ShowSuggestionsOptions()
 
 AutofillAgent::AutofillAgent(content::RenderFrame* render_frame,
                              PasswordAutofillAgent* password_autofill_agent,
-                             PasswordGenerationAgent* password_generation_agent)
+                             PasswordGenerationAgent* password_generation_agent,
+                             service_manager::BinderRegistry* registry)
     : content::RenderFrameObserver(render_frame),
       form_cache_(*render_frame->GetWebFrame()),
       password_autofill_agent_(password_autofill_agent),
@@ -161,8 +160,7 @@ AutofillAgent::AutofillAgent(content::RenderFrame* render_frame,
   render_frame->GetWebFrame()->SetAutofillClient(this);
   password_autofill_agent->SetAutofillAgent(this);
 
-  // AutofillAgent is guaranteed to outlive |render_frame|.
-  render_frame->GetInterfaceRegistry()->AddInterface(
+  registry->AddInterface(
       base::Bind(&AutofillAgent::BindRequest, base::Unretained(this)));
 }
 
@@ -190,6 +188,16 @@ void AutofillAgent::DidCommitProvisionalLoad(bool is_new_navigation,
     OnSameDocumentNavigationCompleted();
   } else {
     // Navigation to a new page or a page refresh.
+
+    // Do Finch testing to see how much regressions are caused by this leak fix
+    // (crbug/753071).
+    std::string group_name =
+        base::FieldTrialList::FindFullName("FixDocumentLeakInAutofillAgent");
+    if (base::StartsWith(group_name, "enabled",
+                         base::CompareCase::INSENSITIVE_ASCII)) {
+      element_.Reset();
+    }
+
     form_cache_.Reset();
     submitted_forms_.clear();
     last_interacted_form_.Reset();
@@ -590,6 +598,7 @@ void AutofillAgent::OnSameDocumentNavigationCompleted() {
 
   last_interacted_form_.Reset();
   formless_elements_user_edited_.clear();
+  submitted_forms_.clear();
 }
 
 bool AutofillAgent::CollectFormlessElements(FormData* output) {
@@ -695,14 +704,10 @@ void AutofillAgent::QueryAutofillSuggestions(
                                      &field);
   }
 
-  // Check the form action attribute only if it is not empty, see
-  // crbug.com/757895.
   if (is_secure_context_required_ &&
-      !(element.GetDocument().IsSecureContext() &&
-        (form.action.is_empty() || content::IsOriginSecure(form.action)))) {
+      !(element.GetDocument().IsSecureContext())) {
     LOG(WARNING) << "Autofill suggestions are disabled because the document "
-                    "isn't a secure context or the form's action attribute "
-                    "isn't secure.";
+                    "isn't a secure context.";
     return;
   }
 
@@ -731,6 +736,7 @@ void AutofillAgent::DoFillFieldWithValue(const base::string16& value,
   base::AutoReset<bool> auto_reset(&ignore_text_changes_, true);
   node->SetEditingValue(
       blink::WebString::FromUTF16(value.substr(0, node->MaxLength())));
+  password_autofill_agent_->UpdateStateForTextChange(*node);
 }
 
 void AutofillAgent::DoPreviewFieldWithValue(const base::string16& value,

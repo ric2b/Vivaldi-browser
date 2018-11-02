@@ -99,7 +99,8 @@ void MediaDrmCredentialManager::ResetCredentialsInternal(
                  base::Unretained(this), security_level);
 
   media_drm_bridge_ = media::MediaDrmBridge::CreateWithoutSessionSupport(
-      kWidevineKeySystem, security_level, create_fetcher_cb);
+      kWidevineKeySystem, "" /* origin_id */, security_level,
+      create_fetcher_cb);
 
   // No need to reset credentials for unsupported |security_level|.
   if (!media_drm_bridge_) {

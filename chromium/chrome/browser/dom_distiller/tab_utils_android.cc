@@ -9,6 +9,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "components/dom_distiller/core/experiments.h"
+#include "components/navigation_interception/intercept_navigation_delegate.h"
 #include "components/url_formatter/url_formatter.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_constants.h"
@@ -26,6 +27,14 @@ void DistillCurrentPageAndView(JNIEnv* env,
   content::WebContents* web_contents =
       content::WebContents::FromJavaWebContents(j_web_contents);
   ::DistillCurrentPageAndView(web_contents);
+}
+
+void DistillCurrentPage(JNIEnv* env,
+                        const JavaParamRef<jclass>& clazz,
+                        const JavaParamRef<jobject>& j_source_web_contents) {
+  content::WebContents* source_web_contents =
+      content::WebContents::FromJavaWebContents(j_source_web_contents);
+  ::DistillCurrentPage(source_web_contents);
 }
 
 void DistillAndView(JNIEnv* env,
@@ -52,9 +61,9 @@ ScopedJavaLocalRef<jstring> GetFormattedUrlFromOriginalDistillerUrl(
   // and pastes it into another program, that program may think the URL ends at
   // the space.
   return base::android::ConvertUTF16ToJavaString(
-      env, url_formatter::FormatUrl(
-               url, url_formatter::kFormatUrlOmitAll,
-               net::UnescapeRule::NORMAL, nullptr, nullptr, nullptr));
+      env, url_formatter::FormatUrl(url, url_formatter::kFormatUrlOmitDefaults,
+                                    net::UnescapeRule::NORMAL, nullptr, nullptr,
+                                    nullptr));
 }
 
 // Returns true if the distiller experiment is set to use any heuristic other
@@ -71,6 +80,20 @@ jboolean IsHeuristicAlwaysTrue(JNIEnv* env,
                                const JavaParamRef<jclass>& clazz) {
   return dom_distiller::GetDistillerHeuristicsType()
       == dom_distiller::DistillerHeuristicsType::ALWAYS_TRUE;
+}
+
+void SetInterceptNavigationDelegate(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jobject>& delegate,
+    const JavaParamRef<jobject>& j_web_contents) {
+  content::WebContents* web_contents =
+      content::WebContents::FromJavaWebContents(j_web_contents);
+  DCHECK(web_contents);
+  navigation_interception::InterceptNavigationDelegate::Associate(
+      web_contents,
+      base::MakeUnique<navigation_interception::InterceptNavigationDelegate>(
+          env, delegate));
 }
 
 }  // namespace android

@@ -21,6 +21,7 @@
 #include "base/time/time.h"
 #include "net/base/cache_type.h"
 #include "net/base/test_completion_callback.h"
+#include "net/disk_cache/backend_cleanup_tracker.h"
 #include "net/disk_cache/disk_cache_test_util.h"
 #include "net/disk_cache/simple/simple_backend_impl.h"
 #include "net/disk_cache/simple/simple_backend_version.h"
@@ -44,6 +45,14 @@ namespace disk_cache {
 // atomic renaming of recently open files. Those guarantees are not provided in
 // general on Windows.
 #if defined(OS_POSIX)
+
+namespace {
+
+uint32_t RoundSize(uint32_t in) {
+  return (in + 0xFFu) & 0xFFFFFF00u;
+}
+
+}  // namespace
 
 TEST(IndexMetadataTest, Basics) {
   SimpleIndexFile::IndexMetadata index_metadata;
@@ -120,6 +129,18 @@ TEST(IndexMetadataTest, ReadV6Format) {
   EXPECT_TRUE(new_index_metadata.CheckIndexMetadata());
 }
 
+// This derived index metadata class allows us to serialize the older V7 format
+// of the index metadata, thus allowing us to test deserializing the old format.
+class V7IndexMetadataForTest : public SimpleIndexFile::IndexMetadata {
+ public:
+  V7IndexMetadataForTest(uint64_t entry_count, uint64_t cache_size)
+      : SimpleIndexFile::IndexMetadata(SimpleIndex::INDEX_WRITE_REASON_SHUTDOWN,
+                                       entry_count,
+                                       cache_size) {
+    version_ = 7;
+  }
+};
+
 // This friend derived class is able to reexport its ancestors private methods
 // as public, for use in tests.
 class WrappedSimpleIndexFile : public SimpleIndexFile {
@@ -152,10 +173,10 @@ class WrappedSimpleIndexFile : public SimpleIndexFile {
 class SimpleIndexFileTest : public testing::Test {
  public:
   bool CompareTwoEntryMetadata(const EntryMetadata& a, const EntryMetadata& b) {
-    return
-        a.last_used_time_seconds_since_epoch_ ==
-            b.last_used_time_seconds_since_epoch_ &&
-        a.entry_size_ == b.entry_size_;
+    return a.last_used_time_seconds_since_epoch_ ==
+               b.last_used_time_seconds_since_epoch_ &&
+           a.entry_size_256b_chunks_ == b.entry_size_256b_chunks_ &&
+           a.in_memory_data_ == b.in_memory_data_;
   }
 };
 
@@ -173,6 +194,7 @@ TEST_F(SimpleIndexFileTest, Serialize) {
     // TODO(eroman): Should restructure the test so no casting here (and same
     //               elsewhere where a hash is cast to an entry size).
     metadata_entries[i] = EntryMetadata(Time(), static_cast<uint32_t>(hash));
+    metadata_entries[i].SetInMemoryData(static_cast<uint8_t>(i));
     SimpleIndex::InsertInEntrySet(hash, metadata_entries[i], &entries);
   }
 
@@ -196,6 +218,49 @@ TEST_F(SimpleIndexFileTest, Serialize) {
     SimpleIndex::EntrySet::const_iterator it = new_entries.find(kHashes[i]);
     EXPECT_TRUE(new_entries.end() != it);
     EXPECT_TRUE(CompareTwoEntryMetadata(it->second, metadata_entries[i]));
+  }
+}
+
+TEST_F(SimpleIndexFileTest, ReadV7Format) {
+  static const uint64_t kHashes[] = {11, 22, 33};
+  static const uint32_t kSizes[] = {394, 594, 495940};
+  static_assert(arraysize(kHashes) == arraysize(kSizes),
+                "Need same number of hashes and sizes");
+  static const size_t kNumHashes = arraysize(kHashes);
+
+  V7IndexMetadataForTest v7_metadata(kNumHashes, 100 * 1024 * 1024);
+
+  // We don't have a convenient way of serializing the actual entries in the
+  // V7 format, but we can cheat a bit by using the implementation details: if
+  // we set the 8 lower bits of size as the memory data, and upper bits
+  // as the size, the new serialization will produce what we want.
+  SimpleIndex::EntrySet entries;
+  for (size_t i = 0; i < kNumHashes; ++i) {
+    EntryMetadata entry(Time(), kSizes[i] & 0xFFFFFF00u);
+    entry.SetInMemoryData(static_cast<uint8_t>(kSizes[i] & 0xFFu));
+    SimpleIndex::InsertInEntrySet(kHashes[i], entry, &entries);
+  }
+  std::unique_ptr<base::Pickle> pickle =
+      WrappedSimpleIndexFile::Serialize(v7_metadata, entries);
+  ASSERT_TRUE(pickle.get() != NULL);
+  base::Time now = base::Time::Now();
+  ASSERT_TRUE(WrappedSimpleIndexFile::SerializeFinalData(now, pickle.get()));
+
+  // Now read it back. We should get the sizes rounded, and 0 for mem entries.
+  base::Time when_index_last_saw_cache;
+  SimpleIndexLoadResult deserialize_result;
+  WrappedSimpleIndexFile::Deserialize(
+      static_cast<const char*>(pickle->data()), pickle->size(),
+      &when_index_last_saw_cache, &deserialize_result);
+  EXPECT_TRUE(deserialize_result.did_load);
+  EXPECT_EQ(now, when_index_last_saw_cache);
+  const SimpleIndex::EntrySet& new_entries = deserialize_result.entries;
+  ASSERT_EQ(entries.size(), new_entries.size());
+  for (size_t i = 0; i < kNumHashes; ++i) {
+    SimpleIndex::EntrySet::const_iterator it = new_entries.find(kHashes[i]);
+    ASSERT_TRUE(new_entries.end() != it);
+    EXPECT_EQ(RoundSize(kSizes[i]), it->second.GetEntrySize());
+    EXPECT_EQ(0u, it->second.GetInMemoryData());
   }
 }
 
@@ -336,8 +401,9 @@ TEST_F(SimpleIndexFileTest, SimpleCacheUpgrade) {
   ASSERT_TRUE(cache_thread.StartWithOptions(
       base::Thread::Options(base::MessageLoop::TYPE_IO, 0)));
   disk_cache::SimpleBackendImpl* simple_cache =
-      new disk_cache::SimpleBackendImpl(cache_path, 0, net::DISK_CACHE,
-                                        cache_thread.task_runner().get(), NULL);
+      new disk_cache::SimpleBackendImpl(
+          cache_path, /* cleanup_tracker = */ nullptr, 0, net::DISK_CACHE,
+          cache_thread.task_runner(), /* net_log = */ nullptr);
   net::TestCompletionCallback cb;
   int rv = simple_cache->Init(cb.callback());
   EXPECT_THAT(cb.GetResult(rv), IsOk());
@@ -348,6 +414,8 @@ TEST_F(SimpleIndexFileTest, SimpleCacheUpgrade) {
   // The backend flushes the index on destruction and does so on the cache
   // thread, wait for the flushing to finish by posting a callback to the cache
   // thread after that.
+  // TODO(morlovich): Convert this test to post-cleanup callback API once it's
+  // there.
   MessageLoopHelper helper;
   CallbackTest cb_shutdown(&helper, false);
   cache_thread.task_runner()->PostTaskAndReply(

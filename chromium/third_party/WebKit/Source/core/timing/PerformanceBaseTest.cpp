@@ -47,7 +47,8 @@ class PerformanceBaseTest : public ::testing::Test {
         v8::Function::New(script_state->GetContext(), nullptr).ToLocalChecked();
     base_ = new TestPerformanceBase(script_state);
     cb_ = PerformanceObserverCallback::Create(script_state, callback);
-    observer_ = new PerformanceObserver(script_state, base_, cb_);
+    observer_ = new PerformanceObserver(ExecutionContext::From(script_state),
+                                        base_, cb_);
   }
 
   void SetUp() override {
@@ -110,16 +111,17 @@ TEST_F(PerformanceBaseTest, Activate) {
 
   base_->UnregisterPerformanceObserver(*observer_.Get());
   EXPECT_EQ(0, base_->NumObservers());
-  EXPECT_EQ(0, base_->NumActiveObservers());
+  EXPECT_EQ(1, base_->NumActiveObservers());
 }
 
 TEST_F(PerformanceBaseTest, AddLongTaskTiming) {
   V8TestingScope scope;
   Initialize(scope.GetScriptState());
+  SubTaskAttribution::EntriesVector sub_task_attributions;
 
   // Add a long task entry, but no observer registered.
-  base_->AddLongTaskTiming(1234, 5678, "same-origin", "www.foo.com/bar", "",
-                           "");
+  base_->AddLongTaskTiming(1234, 5678, "same-origin", "www.foo.com/bar", "", "",
+                           sub_task_attributions);
   EXPECT_FALSE(base_->HasPerformanceObserverFor(PerformanceEntry::kLongTask));
   EXPECT_EQ(0, NumPerformanceEntriesInObserver());  // has no effect
 
@@ -133,8 +135,8 @@ TEST_F(PerformanceBaseTest, AddLongTaskTiming) {
 
   EXPECT_TRUE(base_->HasPerformanceObserverFor(PerformanceEntry::kLongTask));
   // Add a long task entry
-  base_->AddLongTaskTiming(1234, 5678, "same-origin", "www.foo.com/bar", "",
-                           "");
+  base_->AddLongTaskTiming(1234, 5678, "same-origin", "www.foo.com/bar", "", "",
+                           sub_task_attributions);
   EXPECT_EQ(1, NumPerformanceEntriesInObserver());  // added an entry
 }
 

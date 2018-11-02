@@ -89,7 +89,7 @@ message SystemProfileProto {
     optional string version = 2;
 
     // The fingerprint of the build.  This field is used only on Android.
-    optional string fingerprint = 3;
+    optional string build_fingerprint = 3;
 
     // Whether the version of iOS appears to be "jailbroken". This field is
     // used only on iOS. Chrome for iOS detects whether device contains a
@@ -256,7 +256,8 @@ message SystemProfileProto {
     optional bool internal_display_supports_touch = 14;
 
     // Vendor ids and product ids of external touchscreens.
-    message TouchScreen {
+    // Deprecated as of 8/11/2017.
+    message DeprecatedTouchScreen {
       // Touch screen vendor id.
       optional uint32 vendor_id = 1;
       // Touch screen product id.
@@ -264,7 +265,9 @@ message SystemProfileProto {
     }
     // Lists vendor and product ids of external touchscreens.
     // Logged on ChromeOS only.
-    repeated TouchScreen external_touchscreen = 15;
+    // Deprecated as of 8/11/2017.
+    repeated DeprecatedTouchScreen deprecated_external_touchscreen = 15
+        [deprecated = true];
 
     // Drive messages are currently logged on Windows 7+, iOS, and Android.
     message Drive {
@@ -375,7 +378,7 @@ message SystemProfileProto {
       // Deprecated: Specifies that the connection_type changed during the
       // lifetime of the log.
       DEPRECATED_EFFECTIVE_CONNECTION_TYPE_AMBIGUOUS = 1 [deprecated = true];
-      DEPRECATED_EFFECTIVE_CONNECTION_TYPE_OFFLINE = 2 [deprecated = true];
+      EFFECTIVE_CONNECTION_TYPE_OFFLINE = 2;
       EFFECTIVE_CONNECTION_TYPE_SLOW_2G = 3;
       EFFECTIVE_CONNECTION_TYPE_2G = 4;
       EFFECTIVE_CONNECTION_TYPE_3G = 5;
@@ -899,4 +902,44 @@ message SystemProfileProto {
     optional AntiVirusState product_state = 5;
   }
   repeated AntiVirusProduct antivirus_product = 23;
+
+  enum ComponentId {
+    // Represents any component that is not one of the below.
+    UNKNOWN = 1;
+
+    // All the following are various components.
+    FILE_TYPE_POLICIES = 2;
+    ORIGIN_TRIALS = 3;
+    PEPPER_FLASH = 4;
+    PEPPER_FLASH_CHROMEOS = 5;
+    PNACL = 6;
+    RECOVERY = 7;
+    SSL_ERROR_ASSISTANT = 8;
+    STH_SET = 9;
+    CRL_SET = 10;
+    SUBRESOURCE_FILTER = 11;
+    SW_REPORTER = 12;
+    WIDEVINE_CDM = 13;
+    EPSON_INKJET_PRINTER_ESCPR = 14;
+  }
+
+  // Information about what Chrome components are registered and at which
+  // version.
+  // Next Tag: 4
+  message ChromeComponent {
+    // Which component this information is for.
+    optional ComponentId component_id = 1 [default = UNKNOWN];
+
+    // Human-readable dotted-quad representation of the currently-installed
+    // version of the component, e.g. "1.2.3.4".
+    optional string version = 2;
+
+    // The first 32 bits of the Omaha-style fingerprint of the installed
+    // component, discarding any bits that describe the fingerprint format. In
+    // practice this is the first 32 bits of the SHA256 hash of the package that
+    // was installed as the component. It is a stronger version number that can
+    // vary across platform, architecture, or branches of an A/B component test.
+    optional fixed32 omaha_fingerprint = 3;
+  }
+  repeated ChromeComponent chrome_component = 24;
 }

@@ -153,8 +153,7 @@ void MediaSession::OnMetadataChanged() {
 void MediaSession::setActionHandler(const String& action,
                                     MediaSessionActionHandler* handler) {
   if (handler) {
-    auto add_result = action_handlers_.Set(
-        action, TraceWrapperMember<MediaSessionActionHandler>(this, handler));
+    auto add_result = action_handlers_.Set(action, handler);
 
     if (!add_result.is_new_entry)
       return;
@@ -219,7 +218,8 @@ void MediaSession::DidReceiveAction(
     blink::mojom::blink::MediaSessionAction action) {
   DCHECK(GetExecutionContext()->IsDocument());
   Document* document = ToDocument(GetExecutionContext());
-  UserGestureIndicator gesture_indicator(UserGestureToken::Create(document));
+  std::unique_ptr<UserGestureIndicator> gesture_indicator =
+      LocalFrame::CreateUserGesture(document ? document->GetFrame() : nullptr);
 
   auto iter = action_handlers_.find(MojomActionToActionName(action));
   if (iter == action_handlers_.end())

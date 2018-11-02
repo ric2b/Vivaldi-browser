@@ -97,6 +97,8 @@ ConsoleModel.ConsoleModel = class extends Common.Object {
           SDK.RuntimeModel.Events.ConsoleAPICalled, this._consoleAPICalled.bind(this, runtimeModel)));
       eventListeners.push(runtimeModel.debuggerModel().addEventListener(
           SDK.DebuggerModel.Events.GlobalObjectCleared, this._clearIfNecessary, this));
+      eventListeners.push(runtimeModel.addEventListener(
+          SDK.RuntimeModel.Events.QueryObjectRequested, this._queryObjectRequested.bind(this, runtimeModel)));
     }
 
     var networkManager = target.model(SDK.NetworkManager);
@@ -121,36 +123,43 @@ ConsoleModel.ConsoleModel = class extends Common.Object {
 
   /**
    * @param {!SDK.ExecutionContext} executionContext
-   * @param {string} text
+   * @param {!ConsoleModel.ConsoleMessage} originatingMessage
+   * @param {string} expression
    * @param {boolean} useCommandLineAPI
+   * @param {boolean} awaitPromise
    */
-  evaluateCommandInConsole(executionContext, text, useCommandLineAPI) {
-    var requestedText = text;
+  async evaluateCommandInConsole(executionContext, originatingMessage, expression, useCommandLineAPI, awaitPromise) {
+    var result = await executionContext.evaluate(
+        {
+          expression: expression,
+          objectGroup: 'console',
+          includeCommandLineAPI: useCommandLineAPI,
+          silent: false,
+          returnByValue: false,
+          generatePreview: true
+        },
+        /* userGesture */ true, awaitPromise);
+    Host.userMetrics.actionTaken(Host.UserMetrics.Action.ConsoleEvaluated);
+    if (result.error)
+      return;
+    await Common.console.showPromise();
+    this.dispatchEventToListeners(
+        ConsoleModel.ConsoleModel.Events.CommandEvaluated,
+        {result: result.object, commandMessage: originatingMessage, exceptionDetails: result.exceptionDetails});
+  }
+
+  /**
+   * @param {!SDK.ExecutionContext} executionContext
+   * @param {string} text
+   * @return {!ConsoleModel.ConsoleMessage}
+   */
+  addCommandMessage(executionContext, text) {
     var commandMessage = new ConsoleModel.ConsoleMessage(
         executionContext.runtimeModel, ConsoleModel.ConsoleMessage.MessageSource.JS, null, text,
         ConsoleModel.ConsoleMessage.MessageType.Command);
     commandMessage.setExecutionContextId(executionContext.id);
     this.addMessage(commandMessage);
-
-    /**
-     * @param {?SDK.RemoteObject} result
-     * @param {!Protocol.Runtime.ExceptionDetails=} exceptionDetails
-     * @this {ConsoleModel.ConsoleModel}
-     */
-    function printResult(result, exceptionDetails) {
-      if (!result)
-        return;
-
-      Common.console.showPromise().then(() => {
-        this.dispatchEventToListeners(
-            ConsoleModel.ConsoleModel.Events.CommandEvaluated,
-            {result: result, text: requestedText, commandMessage: commandMessage, exceptionDetails: exceptionDetails});
-      });
-    }
-
-    text = SDK.RuntimeModel.wrapObjectLiteralExpressionIfNeeded(text);
-    executionContext.evaluate(text, 'console', useCommandLineAPI, false, false, true, true, printResult.bind(this));
-    Host.userMetrics.actionTaken(Host.UserMetrics.Action.ConsoleEvaluated);
+    return commandMessage;
   }
 
   /**
@@ -246,7 +255,19 @@ ConsoleModel.ConsoleModel = class extends Common.Object {
         runtimeModel, ConsoleModel.ConsoleMessage.MessageSource.ConsoleAPI, level,
         /** @type {string} */ (message), call.type, callFrame ? callFrame.url : undefined,
         callFrame ? callFrame.lineNumber : undefined, callFrame ? callFrame.columnNumber : undefined, undefined,
-        call.args, call.stackTrace, call.timestamp, call.executionContextId, undefined);
+        call.args, call.stackTrace, call.timestamp, call.executionContextId, undefined, undefined, call.context);
+    this.addMessage(consoleMessage);
+  }
+
+  /**
+   * @param {!SDK.RuntimeModel} runtimeModel
+   * @param {!Common.Event} event
+   */
+  _queryObjectRequested(runtimeModel, event) {
+    var consoleMessage = new ConsoleModel.ConsoleMessage(
+        runtimeModel, ConsoleModel.ConsoleMessage.MessageSource.ConsoleAPI,
+        ConsoleModel.ConsoleMessage.MessageLevel.Info, '', undefined, undefined, undefined, undefined, undefined,
+        [event.data.objects], undefined, undefined, undefined, undefined, undefined, undefined);
     this.addMessage(consoleMessage);
   }
 
@@ -401,10 +422,11 @@ ConsoleModel.ConsoleMessage = class {
    * @param {!Protocol.Runtime.ExecutionContextId=} executionContextId
    * @param {?string=} scriptId
    * @param {?string=} workerId
+   * @param {string=} context
    */
   constructor(
       runtimeModel, source, level, messageText, type, url, line, column, requestId, parameters, stackTrace, timestamp,
-      executionContextId, scriptId, workerId) {
+      executionContextId, scriptId, workerId, context) {
     this._runtimeModel = runtimeModel;
     this.source = source;
     this.level = /** @type {?ConsoleModel.ConsoleMessage.MessageLevel} */ (level);
@@ -443,15 +465,9 @@ ConsoleModel.ConsoleMessage = class {
       else if (this.stackTrace)
         this.executionContextId = this._runtimeModel.executionContextForStackTrace(this.stackTrace);
     }
-  }
 
-  /**
-   * @param {!ConsoleModel.ConsoleMessage} a
-   * @param {!ConsoleModel.ConsoleMessage} b
-   * @return {number}
-   */
-  static timestampComparator(a, b) {
-    return a.timestamp - b.timestamp;
+    if (context)
+      this.context = context.match(/[^#]*/)[0];
   }
 
   /**
@@ -543,9 +559,6 @@ ConsoleModel.ConsoleMessage = class {
     if (!msg)
       return false;
 
-    if (this._exceptionId || msg._exceptionId)
-      return false;
-
     if (!this._isEqualStackTraces(this.stackTrace, msg.stackTrace))
       return false;
 
@@ -554,9 +567,13 @@ ConsoleModel.ConsoleMessage = class {
         return false;
 
       for (var i = 0; i < msg.parameters.length; ++i) {
-        // Never treat objects as equal - their properties might change over time.
-        if (this.parameters[i].type !== msg.parameters[i].type || msg.parameters[i].type === 'object' ||
-            this.parameters[i].value !== msg.parameters[i].value)
+        // Never treat objects as equal - their properties might change over time. Errors can be treated as equal
+        // since they are always formatted as strings.
+        if (msg.parameters[i].type === 'object' && msg.parameters[i].subtype !== 'error')
+          return false;
+        if (this.parameters[i].type !== msg.parameters[i].type ||
+            this.parameters[i].value !== msg.parameters[i].value ||
+            this.parameters[i].description !== msg.parameters[i].description)
           return false;
       }
     }

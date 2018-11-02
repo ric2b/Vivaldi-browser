@@ -606,4 +606,11 @@ bool VisitDatabase::MigrateVisitsWithoutDuration() {
   return true;
 }
 
+bool VisitDatabase::DropHistoryTables() {
+  // This will also drop the indices over the table.
+  return
+    GetDB().Execute("DROP TABLE visits") &&
+    GetDB().Execute("DROP TABLE urls");
+}
+
 }  // namespace history

@@ -76,9 +76,8 @@ class WebLayer;
 
 // Manages a rendering target (framebuffer + attachment) for a canvas.  Can
 // publish its rendering results to a WebLayer for compositing.
-class PLATFORM_EXPORT DrawingBuffer
-    : public NON_EXPORTED_BASE(cc::TextureLayerClient),
-      public RefCounted<DrawingBuffer> {
+class PLATFORM_EXPORT DrawingBuffer : public cc::TextureLayerClient,
+                                      public RefCounted<DrawingBuffer> {
   WTF_MAKE_NONCOPYABLE(DrawingBuffer);
 
  public:
@@ -197,7 +196,7 @@ class PLATFORM_EXPORT DrawingBuffer
 
   // cc::TextureLayerClient implementation.
   bool PrepareTextureMailbox(viz::TextureMailbox* out_mailbox,
-                             std::unique_ptr<cc::SingleReleaseCallback>*
+                             std::unique_ptr<viz::SingleReleaseCallback>*
                                  out_release_callback) override;
 
   // Returns a StaticBitmapImage backed by a texture containing the current
@@ -373,16 +372,16 @@ class PLATFORM_EXPORT DrawingBuffer
 
   bool PrepareTextureMailboxInternal(
       viz::TextureMailbox* out_mailbox,
-      std::unique_ptr<cc::SingleReleaseCallback>* out_release_callback,
+      std::unique_ptr<viz::SingleReleaseCallback>* out_release_callback,
       bool force_gpu_result);
 
   // Helper functions to be called only by prepareTextureMailboxInternal.
   bool FinishPrepareTextureMailboxGpu(
       viz::TextureMailbox* out_mailbox,
-      std::unique_ptr<cc::SingleReleaseCallback>* out_release_callback);
+      std::unique_ptr<viz::SingleReleaseCallback>* out_release_callback);
   bool FinishPrepareTextureMailboxSoftware(
       viz::TextureMailbox* out_mailbox,
-      std::unique_ptr<cc::SingleReleaseCallback>* out_release_callback);
+      std::unique_ptr<viz::SingleReleaseCallback>* out_release_callback);
 
   // Callbacks for mailboxes given to the compositor from
   // finishPrepareTextureMailboxGpu and finishPrepareTextureMailboxSoftware.

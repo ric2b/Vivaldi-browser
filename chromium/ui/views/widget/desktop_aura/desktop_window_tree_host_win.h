@@ -77,7 +77,7 @@ class VIEWS_EXPORT DesktopWindowTreeHostWin
   gfx::Rect GetRestoredBounds() const override;
   std::string GetWorkspace() const override;
   gfx::Rect GetWorkAreaBoundsInScreen() const override;
-  void SetShape(std::unique_ptr<SkRegion> native_region) override;
+  void SetShape(std::unique_ptr<Widget::ShapeRects> native_shape) override;
   void Activate() override;
   void Deactivate() override;
   bool IsActive() const override;
@@ -188,6 +188,7 @@ class VIEWS_EXPORT DesktopWindowTreeHostWin
   void HandleNativeFocus(HWND last_focused_window) override;
   void HandleNativeBlur(HWND focused_window) override;
   bool HandleMouseEvent(const ui::MouseEvent& event) override;
+  bool HandlePointerEvent(ui::PointerEvent* event) override;
   void HandleKeyEvent(ui::KeyEvent* event) override;
   void HandleTouchEvent(const ui::TouchEvent& event) override;
   bool HandleIMEMessage(UINT message,
@@ -220,6 +221,12 @@ class VIEWS_EXPORT DesktopWindowTreeHostWin
 
   // Returns true if a modal window is active in the current root window chain.
   bool IsModalWindowActive() const;
+
+  // Called whenever the HWND resizes or moves, to see if the nearest HMONITOR
+  // has changed, and, if so, inform the aura::WindowTreeHost.
+  void CheckForMonitorChange();
+
+  HMONITOR last_monitor_from_window_ = nullptr;
 
   std::unique_ptr<HWNDMessageHandler> message_handler_;
   std::unique_ptr<aura::client::FocusClient> focus_client_;

@@ -33,7 +33,7 @@
 #include "platform/SharedBuffer.h"
 #include "platform/image-decoders/bmp/BMPImageDecoder.h"
 #include "platform/image-decoders/ico/ICOImageDecoder.h"
-#include "platform/wtf/PassRefPtr.h"
+#include "platform/wtf/RefPtr.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebData.h"
 #include "public/platform/WebImage.h"
@@ -89,7 +89,7 @@ size_t WebImageDecoder::FrameCount() const {
 
 bool WebImageDecoder::IsFrameCompleteAtIndex(int index) const {
   DCHECK(private_);
-  ImageFrame* const frame_buffer = private_->FrameBufferAtIndex(index);
+  ImageFrame* const frame_buffer = private_->DecodeFrameBufferAtIndex(index);
   if (!frame_buffer)
     return false;
   return frame_buffer->GetStatus() == ImageFrame::kFrameComplete;
@@ -97,7 +97,7 @@ bool WebImageDecoder::IsFrameCompleteAtIndex(int index) const {
 
 WebImage WebImageDecoder::GetFrameAtIndex(int index = 0) const {
   DCHECK(private_);
-  ImageFrame* const frame_buffer = private_->FrameBufferAtIndex(index);
+  ImageFrame* const frame_buffer = private_->DecodeFrameBufferAtIndex(index);
   if (!frame_buffer)
     return WebImage();
   return WebImage(frame_buffer->Bitmap());

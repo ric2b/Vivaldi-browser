@@ -10,6 +10,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/task_scheduler/post_task.h"
+#include "build/build_config.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "ui/gfx/codec/png_codec.h"
@@ -108,14 +109,21 @@ HeadlessSurfaceFactory::HeadlessSurfaceFactory()
 
 HeadlessSurfaceFactory::HeadlessSurfaceFactory(
     HeadlessWindowManager* window_manager)
-    : window_manager_(window_manager),
-      osmesa_implementation_(base::MakeUnique<GLOzoneOSMesa>()) {}
+    : window_manager_(window_manager) {
+#if !defined(OS_FUCHSIA)
+  osmesa_implementation_ = base::MakeUnique<GLOzoneOSMesa>();
+#endif
+}
 
 HeadlessSurfaceFactory::~HeadlessSurfaceFactory() {}
 
 std::vector<gl::GLImplementation>
 HeadlessSurfaceFactory::GetAllowedGLImplementations() {
+#if defined(OS_FUCHSIA)
+  return std::vector<gl::GLImplementation>{gl::kGLImplementationStubGL};
+#else
   return std::vector<gl::GLImplementation>{gl::kGLImplementationOSMesaGL};
+#endif
 }
 
 GLOzone* HeadlessSurfaceFactory::GetGLOzone(

@@ -10,6 +10,7 @@
 
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
+#include "components/viz/common/switches.h"
 #include "content/child/feature_policy/feature_policy_platform.h"
 #include "content/child/web_url_request_util.h"
 #include "content/child/webmessageportchannel_impl.h"
@@ -22,6 +23,7 @@
 #include "content/common/site_isolation_policy.h"
 #include "content/common/swapped_out_messages.h"
 #include "content/common/view_messages.h"
+#include "content/public/common/content_switches.h"
 #include "content/renderer/child_frame_compositing_helper.h"
 #include "content/renderer/frame_owner_properties.h"
 #include "content/renderer/render_frame_impl.h"
@@ -51,6 +53,11 @@ static base::LazyInstance<RoutingIDProxyMap>::DestructorAtExit
 typedef std::map<blink::WebRemoteFrame*, RenderFrameProxy*> FrameMap;
 base::LazyInstance<FrameMap>::DestructorAtExit g_frame_map =
     LAZY_INSTANCE_INITIALIZER;
+
+bool IsRunningInMash() {
+  const base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
+  return cmdline->HasSwitch(switches::kIsRunningInMash);
+}
 
 }  // namespace
 
@@ -211,10 +218,23 @@ void RenderFrameProxy::Init(blink::WebRemoteFrame* web_frame,
   std::pair<FrameMap::iterator, bool> result =
       g_frame_map.Get().insert(std::make_pair(web_frame_, this));
   CHECK(result.second) << "Inserted a duplicate item.";
+
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
+  enable_surface_synchronization_ =
+      IsRunningInMash() ||
+      command_line.HasSwitch(switches::kEnableSurfaceSynchronization);
+}
+
+void RenderFrameProxy::ResendFrameRects() {
+  // Reset |frame_rect_| in order to allocate a new viz::LocalSurfaceId.
+  gfx::Rect rect = frame_rect_;
+  frame_rect_ = gfx::Rect();
+  FrameRectsChanged(rect);
 }
 
 void RenderFrameProxy::WillBeginCompositorFrame() {
-  if (compositing_helper_) {
+  if (compositing_helper_ && compositing_helper_->surface_id().is_valid()) {
     FrameHostMsg_HittestData_Params params;
     params.surface_id = compositing_helper_->surface_id();
     params.ignored_for_hittest = web_frame_->IsIgnoredForHitTest();
@@ -283,6 +303,7 @@ bool RenderFrameProxy::OnMessageReceived(const IPC::Message& msg) {
     IPC_MESSAGE_HANDLER(FrameMsg_ChildFrameProcessGone, OnChildFrameProcessGone)
     IPC_MESSAGE_HANDLER(FrameMsg_SetChildFrameSurface, OnSetChildFrameSurface)
     IPC_MESSAGE_HANDLER(FrameMsg_UpdateOpener, OnUpdateOpener)
+    IPC_MESSAGE_HANDLER(FrameMsg_ViewChanged, OnViewChanged)
     IPC_MESSAGE_HANDLER(FrameMsg_DidStartLoading, OnDidStartLoading)
     IPC_MESSAGE_HANDLER(FrameMsg_DidStopLoading, OnDidStopLoading)
     IPC_MESSAGE_HANDLER(FrameMsg_DidUpdateFramePolicy, OnDidUpdateFramePolicy)
@@ -320,7 +341,7 @@ void RenderFrameProxy::OnDeleteProxy() {
 }
 
 void RenderFrameProxy::OnChildFrameProcessGone() {
-  if (compositing_helper_.get())
+  if (compositing_helper_)
     compositing_helper_->ChildFrameGone();
 }
 
@@ -334,11 +355,28 @@ void RenderFrameProxy::OnSetChildFrameSurface(
   if (!web_frame()->Parent())
     return;
 
-  if (!compositing_helper_.get()) {
+  if (!compositing_helper_) {
     compositing_helper_ =
         ChildFrameCompositingHelper::CreateForRenderFrameProxy(this);
+    if (enable_surface_synchronization_) {
+      // We wait until there is a single CompositorFrame guaranteed to be
+      // available and ready for display in the display compositor before using
+      // surface synchronization. This guarantees that we will have something to
+      // display when the compositor goes to produce a display frame.
+      //
+      // Once there's an available fallback surface that can be employed, then
+      // the primary surface is updated as soon as the frame rect changes.
+      //
+      // The compositor will attempt to composite the primary surface within a
+      // give deadline (4 frames is the default). If the primary surface isn't
+      // available for four frames, then the fallback surface will be used.
+      compositing_helper_->SetPrimarySurfaceInfo(surface_info);
+    }
   }
-  compositing_helper_->OnSetSurface(surface_info, sequence);
+
+  if (!enable_surface_synchronization_)
+    compositing_helper_->SetPrimarySurfaceInfo(surface_info);
+  compositing_helper_->SetFallbackSurfaceInfo(surface_info, sequence);
 }
 
 void RenderFrameProxy::OnUpdateOpener(int opener_routing_id) {
@@ -348,6 +386,13 @@ void RenderFrameProxy::OnUpdateOpener(int opener_routing_id) {
 
 void RenderFrameProxy::OnDidStartLoading() {
   web_frame_->DidStartLoading();
+}
+
+void RenderFrameProxy::OnViewChanged(const viz::FrameSinkId& frame_sink_id) {
+  frame_sink_id_ = frame_sink_id;
+  // Resend the FrameRects and allocate a new viz::LocalSurfaceId when the view
+  // changes.
+  ResendFrameRects();
 }
 
 void RenderFrameProxy::OnDidStopLoading() {
@@ -503,11 +548,28 @@ void RenderFrameProxy::Navigate(const blink::WebURLRequest& request,
 
 void RenderFrameProxy::FrameRectsChanged(const blink::WebRect& frame_rect) {
   gfx::Rect rect = frame_rect;
+  if (frame_rect_.size() != rect.size() || !local_surface_id_.is_valid()) {
+    local_surface_id_ = local_surface_id_allocator_.GenerateId();
+    if (compositing_helper_ && enable_surface_synchronization_ &&
+        frame_sink_id_.is_valid()) {
+      float device_scale_factor =
+          render_widget()->GetOriginalDeviceScaleFactor();
+      viz::SurfaceInfo surface_info(
+          viz::SurfaceId(frame_sink_id_, local_surface_id_),
+          device_scale_factor,
+          gfx::ScaleToCeiledSize(frame_rect_.size(), device_scale_factor));
+      compositing_helper_->SetPrimarySurfaceInfo(surface_info);
+    }
+  }
+
+  frame_rect_ = rect;
+
   if (IsUseZoomForDSFEnabled()) {
     rect = gfx::ScaleToEnclosingRect(
         rect, 1.f / render_widget_->GetOriginalDeviceScaleFactor());
   }
-  Send(new FrameHostMsg_FrameRectChanged(routing_id_, rect));
+
+  Send(new FrameHostMsg_FrameRectChanged(routing_id_, rect, local_surface_id_));
 }
 
 void RenderFrameProxy::UpdateRemoteViewportIntersection(

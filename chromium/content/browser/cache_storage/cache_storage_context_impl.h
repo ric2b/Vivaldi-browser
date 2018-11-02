@@ -26,6 +26,10 @@ namespace storage {
 class QuotaManagerProxy;
 }
 
+namespace url {
+class Origin;
+}
+
 namespace content {
 
 class BrowserContext;
@@ -36,10 +40,19 @@ class CacheStorageManager;
 // child processes/origins. Most logic is delegated to the owned
 // CacheStorageManager instance, which is only accessed on the IO
 // thread.
-class CONTENT_EXPORT CacheStorageContextImpl
-    : NON_EXPORTED_BASE(public CacheStorageContext) {
+class CONTENT_EXPORT CacheStorageContextImpl : public CacheStorageContext {
  public:
   explicit CacheStorageContextImpl(BrowserContext* browser_context);
+
+  class Observer {
+   public:
+    virtual void OnCacheListChanged(const url::Origin& origin) = 0;
+    virtual void OnCacheContentChanged(const url::Origin& origin,
+                                       const std::string& cache_name) = 0;
+
+   protected:
+    virtual ~Observer() {};
+  };
 
   // Init and Shutdown are for use on the UI thread when the profile,
   // storagepartition is being setup and torn down.
@@ -65,6 +78,10 @@ class CONTENT_EXPORT CacheStorageContextImpl
   // CacheStorageContext
   void GetAllOriginsInfo(const GetUsageInfoCallback& callback) override;
   void DeleteForOrigin(const GURL& origin) override;
+
+  // Only callable on the IO thread.
+  void AddObserver(CacheStorageContextImpl::Observer* observer);
+  void RemoveObserver(CacheStorageContextImpl::Observer* observer);
 
  protected:
   ~CacheStorageContextImpl() override;

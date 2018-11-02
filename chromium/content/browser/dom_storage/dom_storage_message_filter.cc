@@ -47,16 +47,14 @@ void DOMStorageMessageFilter::UninitializeInSequence() {
 
 void DOMStorageMessageFilter::OnFilterAdded(IPC::Channel* channel) {
   context_->task_runner()->PostShutdownBlockingTask(
-      FROM_HERE,
-      DOMStorageTaskRunner::PRIMARY_SEQUENCE,
-      base::Bind(&DOMStorageMessageFilter::InitializeInSequence, this));
+      FROM_HERE, DOMStorageTaskRunner::PRIMARY_SEQUENCE,
+      base::BindOnce(&DOMStorageMessageFilter::InitializeInSequence, this));
 }
 
 void DOMStorageMessageFilter::OnFilterRemoved() {
   context_->task_runner()->PostShutdownBlockingTask(
-      FROM_HERE,
-      DOMStorageTaskRunner::PRIMARY_SEQUENCE,
-      base::Bind(&DOMStorageMessageFilter::UninitializeInSequence, this));
+      FROM_HERE, DOMStorageTaskRunner::PRIMARY_SEQUENCE,
+      base::BindOnce(&DOMStorageMessageFilter::UninitializeInSequence, this));
 }
 
 base::TaskRunner* DOMStorageMessageFilter::OverrideTaskRunnerForMessage(
@@ -112,27 +110,30 @@ void DOMStorageMessageFilter::OnLoadStorageArea(int connection_id,
 }
 
 void DOMStorageMessageFilter::OnSetItem(
-    int connection_id, const base::string16& key,
-    const base::string16& value, const GURL& page_url) {
-  DCHECK(!BrowserThread::CurrentlyOn(BrowserThread::IO));
-  DCHECK_EQ(0, connection_dispatching_message_for_);
-  base::AutoReset<int> auto_reset(&connection_dispatching_message_for_,
-                            connection_id);
-  base::NullableString16 not_used;
-  bool success = host_->SetAreaItem(connection_id, key, value,
-                                    page_url, &not_used);
-  Send(new DOMStorageMsg_AsyncOperationComplete(success));
-}
-
-void DOMStorageMessageFilter::OnRemoveItem(
-    int connection_id, const base::string16& key,
+    int connection_id,
+    const base::string16& key,
+    const base::string16& value,
+    const base::NullableString16& client_old_value,
     const GURL& page_url) {
   DCHECK(!BrowserThread::CurrentlyOn(BrowserThread::IO));
   DCHECK_EQ(0, connection_dispatching_message_for_);
   base::AutoReset<int> auto_reset(&connection_dispatching_message_for_,
                             connection_id);
-  base::string16 not_used;
-  host_->RemoveAreaItem(connection_id, key, page_url, &not_used);
+  bool success =
+      host_->SetAreaItem(connection_id, key, value, client_old_value, page_url);
+  Send(new DOMStorageMsg_AsyncOperationComplete(success));
+}
+
+void DOMStorageMessageFilter::OnRemoveItem(
+    int connection_id,
+    const base::string16& key,
+    const base::NullableString16& client_old_value,
+    const GURL& page_url) {
+  DCHECK(!BrowserThread::CurrentlyOn(BrowserThread::IO));
+  DCHECK_EQ(0, connection_dispatching_message_for_);
+  base::AutoReset<int> auto_reset(&connection_dispatching_message_for_,
+                            connection_id);
+  host_->RemoveAreaItem(connection_id, key, client_old_value, page_url);
   Send(new DOMStorageMsg_AsyncOperationComplete(true));
 }
 

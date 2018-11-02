@@ -25,6 +25,12 @@
 
 namespace content {
 
+namespace {
+
+bool g_running_in_tests = false;
+
+}  // namespace
+
 AppCacheRequestHandler::AppCacheRequestHandler(
     AppCacheHost* host,
     ResourceType resource_type,
@@ -168,7 +174,7 @@ AppCacheJob* AppCacheRequestHandler::MaybeLoadFallbackForResponse(
   }
 
   // We don't fallback for responses that we delivered.
-  if (job_.get() && !base::FeatureList::IsEnabled(features::kNetworkService)) {
+  if (job_.get()) {
     DCHECK(!job_->IsDeliveringNetworkResponse());
     return NULL;
   }
@@ -240,6 +246,26 @@ void AppCacheRequestHandler::MaybeCompleteCrossSiteTransferInOldProcess(
   CompleteCrossSiteTransfer(old_process_id_, old_host_id_);
 }
 
+AppCacheJob* AppCacheRequestHandler::MaybeCreateSubresourceLoader(
+    std::unique_ptr<SubresourceLoadInfo> subresource_load_info,
+    URLLoaderFactoryGetter* loader_factory_getter) {
+  DCHECK(!is_main_resource());
+  DCHECK(base::FeatureList::IsEnabled(features::kNetworkService));
+
+  subresource_load_info_ = std::move(subresource_load_info);
+  network_url_loader_factory_getter_ = loader_factory_getter;
+
+  AppCacheJob* job = MaybeLoadResource(nullptr);
+  if (!job)
+    return nullptr;
+
+  AppCacheURLLoaderJob* loader_job = job->AsURLLoaderJob();
+  // The job takes ownership of the handler.
+  loader_job->set_request_handler(
+      std::unique_ptr<AppCacheRequestHandler>(this));
+  return job;
+}
+
 // static
 std::unique_ptr<AppCacheRequestHandler>
 AppCacheRequestHandler::InitializeForNavigationNetworkService(
@@ -253,11 +279,6 @@ AppCacheRequestHandler::InitializeForNavigationNetworkService(
   handler->network_url_loader_factory_getter_ = url_loader_factory_getter;
   handler->appcache_host_ = appcache_handle_core->host()->GetWeakPtr();
   return handler;
-}
-
-void AppCacheRequestHandler::SetSubresourceRequestLoadInfo(
-    std::unique_ptr<SubresourceLoadInfo> subresource_load_info) {
-  subresource_load_info_ = std::move(subresource_load_info);
 }
 
 void AppCacheRequestHandler::OnDestructionImminent(AppCacheHost* host) {
@@ -302,6 +323,10 @@ void AppCacheRequestHandler::DeliverAppCachedResponse(
     host_->NotifyMainResourceIsNamespaceEntry(namespace_entry_url);
 
   job_->DeliverAppCachedResponse(manifest_url, cache_id, entry, is_fallback);
+  // In the network service world, we need to release the AppCacheJob instance
+  // created for handling navigation requests. These instances will get
+  // destroyed when the client disconnects.
+  navigation_request_job_.release();
 }
 
 void AppCacheRequestHandler::DeliverErrorResponse() {
@@ -309,6 +334,10 @@ void AppCacheRequestHandler::DeliverErrorResponse() {
   DCHECK_EQ(kAppCacheNoCacheId, cache_id_);
   DCHECK(manifest_url_.is_empty());
   job_->DeliverErrorResponse();
+  // In the network service world, we need to release the AppCacheJob instance
+  // created for handling navigation requests. These instances will get
+  // destroyed when the client disconnects.
+  navigation_request_job_.release();
 }
 
 void AppCacheRequestHandler::DeliverNetworkResponse() {
@@ -316,6 +345,9 @@ void AppCacheRequestHandler::DeliverNetworkResponse() {
   DCHECK_EQ(kAppCacheNoCacheId, cache_id_);
   DCHECK(manifest_url_.is_empty());
   job_->DeliverNetworkResponse();
+  // In the network service world, we need to destroy the AppCacheJob instance
+  // created for handling navigation requests.
+  navigation_request_job_.reset(nullptr);
 }
 
 void AppCacheRequestHandler::OnPrepareToRestart() {
@@ -337,28 +369,24 @@ std::unique_ptr<AppCacheJob> AppCacheRequestHandler::CreateJob(
     net::NetworkDelegate* network_delegate) {
   std::unique_ptr<AppCacheJob> job = AppCacheJob::Create(
       is_main_resource(), host_, storage(), request_.get(), network_delegate,
-      base::Bind(&AppCacheRequestHandler::OnPrepareToRestart,
-                 base::Unretained(this)));
+      base::BindOnce(&AppCacheRequestHandler::OnPrepareToRestart,
+                     base::Unretained(this)),
+      std::move(subresource_load_info_),
+      network_url_loader_factory_getter_.get());
   job_ = job->GetWeakPtr();
-  if (!is_main_resource() &&
-      base::FeatureList::IsEnabled(features::kNetworkService)) {
-    AppCacheURLLoaderJob* loader_job = job_->AsURLLoaderJob();
-
-    loader_job->SetSubresourceLoadInfo(
-        std::move(subresource_load_info_),
-        network_url_loader_factory_getter_.get());
-  }
-
   return job;
 }
 
 std::unique_ptr<AppCacheJob> AppCacheRequestHandler::MaybeCreateJobForFallback(
     net::NetworkDelegate* network_delegate) {
-  if (!base::FeatureList::IsEnabled(features::kNetworkService))
+  if (!base::FeatureList::IsEnabled(features::kNetworkService) ||
+      IsMainResourceType(resource_type_)) {
     return CreateJob(network_delegate);
+  }
   // In network service land, the job initiates a fallback request. We reuse
   // the existing job to deliver the fallback response.
   DCHECK(job_.get());
+  job_->set_delivery_type(AppCacheJob::AWAITING_DELIVERY_ORDERS);
   return std::unique_ptr<AppCacheJob>(job_.get());
 }
 
@@ -593,6 +621,36 @@ AppCacheRequestHandler::MaybeCreateSubresourceFactory() {
       network_url_loader_factory_getter_.get(), appcache_host_, &factory_ptr);
 
   return factory_ptr;
+}
+
+bool AppCacheRequestHandler::MaybeCreateLoaderForResponse(
+    const ResourceResponseHead& response,
+    mojom::URLLoaderPtr* loader,
+    mojom::URLLoaderClientRequest* client_request) {
+  request_->AsURLLoaderRequest()->set_response(response);
+  // The AppCacheJob will get destroyed when the client connection is
+  // dropped.
+  AppCacheJob* job = MaybeLoadFallbackForResponse(nullptr);
+  if (job) {
+    mojom::URLLoaderClientPtr client;
+    *client_request = mojo::MakeRequest(&client);
+    mojom::URLLoaderRequest loader_request = mojo::MakeRequest(loader);
+
+    job->AsURLLoaderJob()->BindRequest(std::move(client),
+                                       std::move(loader_request));
+    return true;
+  }
+  return false;
+}
+
+// static
+void AppCacheRequestHandler::SetRunningInTests(bool in_tests) {
+  g_running_in_tests = in_tests;
+}
+
+// static
+bool AppCacheRequestHandler::IsRunningInTests() {
+  return g_running_in_tests;
 }
 
 }  // namespace content

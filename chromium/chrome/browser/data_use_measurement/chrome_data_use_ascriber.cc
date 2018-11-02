@@ -90,16 +90,25 @@ ChromeDataUseRecorder* ChromeDataUseAscriber::GetDataUseRecorder(
 }
 
 ChromeDataUseAscriber::DataUseRecorderEntry
-ChromeDataUseAscriber::GetOrCreateDataUseRecorderEntry(
-    net::URLRequest* request) {
+ChromeDataUseAscriber::GetDataUseRecorderEntry(net::URLRequest* request) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
   // If a DataUseRecorder has already been set as user data, then return that.
   auto* user_data =
       static_cast<DataUseRecorderEntryAsUserData*>(request->GetUserData(
           DataUseRecorderEntryAsUserData::kDataUseAscriberUserDataKey));
-  if (user_data)
-    return user_data->recorder_entry();
+  return user_data ? user_data->recorder_entry() : data_use_recorders_.end();
+}
+
+ChromeDataUseAscriber::DataUseRecorderEntry
+ChromeDataUseAscriber::GetOrCreateDataUseRecorderEntry(
+    net::URLRequest* request) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+
+  // If a DataUseRecorder has already been created, then return that.
+  auto recorder = GetDataUseRecorderEntry(request);
+  if (recorder != data_use_recorders_.end())
+    return recorder;
 
   // If request is associated with a ChromeService, create a new
   // DataUseRecorder for it. There is no reason to aggregate URLRequests
@@ -217,10 +226,7 @@ void ChromeDataUseAscriber::OnUrlRequestDestroyed(net::URLRequest* request) {
   if (IsDisabledPlatform())
     return;
 
-  // TODO(rajendrant): GetDataUseRecorder is sufficient and
-  // GetOrCreateDataUseRecorderEntry is not needed. The entry gets created in
-  // DataUseAscriber::OnBeforeUrlRequest().
-  const DataUseRecorderEntry entry = GetOrCreateDataUseRecorderEntry(request);
+  const DataUseRecorderEntry entry = GetDataUseRecorderEntry(request);
 
   if (entry == data_use_recorders_.end())
     return;
@@ -342,7 +348,7 @@ void ChromeDataUseAscriber::DidFinishMainFrameNavigation(
     int render_process_id,
     int render_frame_id,
     const GURL& gurl,
-    bool is_same_page_navigation,
+    bool is_same_document_navigation,
     uint32_t page_transition,
     base::TimeTicks time) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
@@ -414,7 +420,7 @@ void ChromeDataUseAscriber::DidFinishMainFrameNavigation(
       main_frame_it->second.data_use_recorder;
   old_frame_entry->set_page_transition(page_transition);
 
-  if (is_same_page_navigation) {
+  if (is_same_document_navigation) {
     std::vector<net::URLRequest*> pending_url_requests;
     entry->GetPendingURLRequests(&pending_url_requests);
     for (net::URLRequest* request : pending_url_requests) {

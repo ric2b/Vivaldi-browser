@@ -181,6 +181,10 @@ void TranslateManager::InitiateTranslation(const std::string& page_lang) {
   if (!translate_prefs->IsEnabled()) {
     TranslateBrowserMetrics::ReportInitiationStatus(
         TranslateBrowserMetrics::INITIATION_STATUS_DISABLED_BY_PREFS);
+    std::string target_lang = GetTargetLanguage(translate_prefs.get());
+    std::string language_code =
+        TranslateDownloadManager::GetLanguageCode(page_lang);
+    InitTranslateEvent(language_code, target_lang, *translate_prefs);
     RecordTranslateEvent(metrics::TranslateEventProto::DISABLED_BY_PREF);
     const std::string& locale =
         TranslateDownloadManager::GetInstance()->application_locale();
@@ -209,14 +213,14 @@ void TranslateManager::InitiateTranslation(const std::string& page_lang) {
   std::string language_code =
       TranslateDownloadManager::GetLanguageCode(page_lang);
 
-  InitTranslateEvent(language_code, target_lang, *translate_prefs);
-
   // Don't translate similar languages (ex: en-US to en).
   if (language_code == target_lang) {
     TranslateBrowserMetrics::ReportInitiationStatus(
         TranslateBrowserMetrics::INITIATION_STATUS_SIMILAR_LANGUAGES);
     return;
   }
+
+  InitTranslateEvent(language_code, target_lang, *translate_prefs);
 
   // Querying the ranker now, but not exiting immediately so that we may log
   // other potential suppression reasons.
@@ -443,6 +447,12 @@ void TranslateManager::PageTranslated(const std::string& source_lang,
     error_type = TranslateErrors::UNSUPPORTED_LANGUAGE;
   }
 
+  // Currently we only want to log any error happens during the translation
+  // script initialization phase such as translation script failed because of
+  // CSP issues (crbug.com/738277).
+  // Note: NotifyTranslateError and ShowTranslateUI will not log the errors.
+  if (error_type == TranslateErrors::INITIALIZATION_ERROR)
+    RecordTranslateEvent(metrics::TranslateEventProto::INITIALIZATION_ERROR);
   translate_client_->ShowTranslateUI(translate::TRANSLATE_STEP_AFTER_TRANSLATE,
                                      source_lang, target_lang, error_type,
                                      false);

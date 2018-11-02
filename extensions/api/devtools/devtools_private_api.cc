@@ -3,6 +3,7 @@
 #include "extensions/api/devtools/devtools_private_api.h"
 
 #include "app/vivaldi_apptools.h"
+#include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/devtools/devtools_contents_resizing_strategy.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
@@ -24,7 +25,7 @@ bool DevtoolsPrivateGetDockingStateSizesFunction::RunAsync() {
 
   int tab_id = params->tab_id;
   content::WebContents* contents =
-    ::vivaldi::ui_tools::GetWebContentsFromTabStrip(tab_id, GetProfile());
+      ::vivaldi::ui_tools::GetWebContentsFromTabStrip(tab_id, GetProfile());
   DevToolsContentsResizingStrategy strategy;
   DevToolsWindow::GetInTabWebContents(contents, &strategy);
 
@@ -113,7 +114,7 @@ bool DevtoolsPrivateCloseDevtoolsFunction::RunAsync() {
 }
 
 bool DevtoolsPrivateToggleDevtoolsFunction::RunAsync() {
-  Browser* browser = ::vivaldi::ui_tools::GetBrowserFromWebContents(
+  Browser* browser = ::vivaldi::FindBrowserForEmbedderWebContents(
       dispatcher()->GetAssociatedWebContents());
   content::WebContents* current_tab =
       browser->tab_strip_model()->GetActiveWebContents();

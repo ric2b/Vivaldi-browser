@@ -7,7 +7,6 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -20,7 +19,6 @@
 #include "cc/layers/layer.h"
 #include "cc/layers/layer_impl.h"
 #include "cc/test/animation_test_common.h"
-#include "cc/test/begin_frame_args_test.h"
 #include "cc/test/fake_layer_tree_host_client.h"
 #include "cc/test/fake_output_surface.h"
 #include "cc/test/test_context_provider.h"
@@ -33,6 +31,7 @@
 #include "cc/trees/proxy_main.h"
 #include "cc/trees/single_thread_proxy.h"
 #include "components/viz/common/resources/buffer_to_texture_target_map.h"
+#include "components/viz/test/begin_frame_args_test.h"
 #include "components/viz/test/test_layer_tree_frame_sink.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "ui/gfx/geometry/size_conversions.h"
@@ -136,7 +135,7 @@ class LayerTreeHostImplForTesting : public LayerTreeHostImpl {
         this, raster_buffer_provider, resource_pool);
   }
 
-  void WillBeginImplFrame(const BeginFrameArgs& args) override {
+  void WillBeginImplFrame(const viz::BeginFrameArgs& args) override {
     LayerTreeHostImpl::WillBeginImplFrame(args);
     test_hooks_->WillBeginImplFrameOnThread(this, args);
   }
@@ -227,7 +226,7 @@ class LayerTreeHostImplForTesting : public LayerTreeHostImpl {
   void BlockImplSideInvalidationRequestsForTesting(bool block) override {
     block_impl_side_invalidation_ = block;
     if (!block_impl_side_invalidation_ && impl_side_invalidation_was_blocked_) {
-      RequestImplSideInvalidation();
+      RequestImplSideInvalidationForCheckerImagedTiles();
       impl_side_invalidation_was_blocked_ = false;
     }
   }
@@ -279,7 +278,7 @@ class LayerTreeHostImplForTesting : public LayerTreeHostImpl {
     test_hooks_->DidInvalidateContentOnImplSide(this);
   }
 
-  void RequestImplSideInvalidation() override {
+  void RequestImplSideInvalidationForCheckerImagedTiles() override {
     test_hooks_->DidReceiveImplSideInvalidationRequest(this);
     if (block_impl_side_invalidation_) {
       impl_side_invalidation_was_blocked_ = true;
@@ -287,7 +286,7 @@ class LayerTreeHostImplForTesting : public LayerTreeHostImpl {
     }
 
     impl_side_invalidation_was_blocked_ = false;
-    LayerTreeHostImpl::RequestImplSideInvalidation();
+    LayerTreeHostImpl::RequestImplSideInvalidationForCheckerImagedTiles();
     test_hooks_->DidRequestImplSideInvalidation(this);
   }
 
@@ -324,7 +323,7 @@ class LayerTreeHostClientForTesting : public LayerTreeHostClient,
 
   void DidBeginMainFrame() override { test_hooks_->DidBeginMainFrame(); }
 
-  void BeginMainFrame(const BeginFrameArgs& args) override {
+  void BeginMainFrame(const viz::BeginFrameArgs& args) override {
     test_hooks_->BeginMainFrame(args);
   }
 
@@ -420,7 +419,7 @@ class LayerTreeHostForTesting : public LayerTreeHost {
         break;
       case CompositorMode::THREADED:
         DCHECK(impl_task_runner.get());
-        proxy = base::MakeUnique<ProxyMain>(layer_tree_host.get(),
+        proxy = std::make_unique<ProxyMain>(layer_tree_host.get(),
                                             task_runner_provider.get());
         break;
     }
@@ -738,7 +737,7 @@ void LayerTreeTest::RealEndTest() {
     return;
   }
 
-  base::MessageLoop::current()->QuitWhenIdle();
+  base::RunLoop::QuitCurrentWhenIdleDeprecated();
 }
 
 void LayerTreeTest::DispatchAddAnimationToPlayer(
@@ -821,13 +820,16 @@ void LayerTreeTest::RunTest(CompositorMode mode) {
     ASSERT_TRUE(impl_thread_->Start());
   }
 
-  image_worker_ = base::MakeUnique<base::Thread>("ImageWorker");
+  image_worker_ = std::make_unique<base::Thread>("ImageWorker");
   ASSERT_TRUE(image_worker_->Start());
 
   shared_bitmap_manager_.reset(new TestSharedBitmapManager);
-  gpu_memory_buffer_manager_.reset(new TestGpuMemoryBufferManager);
+  gpu_memory_buffer_manager_ =
+      std::make_unique<viz::TestGpuMemoryBufferManager>();
   task_graph_runner_.reset(new TestTaskGraphRunner);
 
+  if (mode == CompositorMode::THREADED)
+    settings_.commit_to_active_tree = false;
   // Spend less time waiting for BeginFrame because the output is
   // mocked out.
   settings_.background_animation_rate = 200.0;
@@ -885,7 +887,7 @@ LayerTreeTest::CreateLayerTreeFrameSink(
   bool synchronous_composite =
       !HasImplThread() &&
       !layer_tree_host()->GetSettings().single_thread_proxy_scheduler;
-  return base::MakeUnique<viz::TestLayerTreeFrameSink>(
+  return std::make_unique<viz::TestLayerTreeFrameSink>(
       compositor_context_provider, std::move(worker_context_provider),
       shared_bitmap_manager(), gpu_memory_buffer_manager(), renderer_settings,
       impl_task_runner_, synchronous_composite, disable_display_vsync,

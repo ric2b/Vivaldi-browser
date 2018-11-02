@@ -5,6 +5,7 @@
 #ifndef MEDIA_BASE_ANDROID_MOCK_MEDIA_CODEC_BRIDGE_H_
 #define MEDIA_BASE_ANDROID_MOCK_MEDIA_CODEC_BRIDGE_H_
 
+#include "base/android/scoped_java_ref.h"
 #include "media/base/android/media_codec_bridge.h"
 #include "media/base/android/test_destruction_observable.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -17,6 +18,12 @@ class MockMediaCodecBridge : public MediaCodecBridge,
  public:
   MockMediaCodecBridge();
   ~MockMediaCodecBridge() override;
+
+  // Helpers for conveniently setting expectations.
+  enum IsEos { kEos, kNotEos };
+  void AcceptOneInput(IsEos eos = kNotEos);
+  void ProduceOneOutput(IsEos eos = kNotEos);
+
   MOCK_METHOD0(Stop, void());
   MOCK_METHOD0(Flush, MediaCodecStatus());
   MOCK_METHOD1(GetOutputSize, MediaCodecStatus(gfx::Size* size));
@@ -56,7 +63,8 @@ class MockMediaCodecBridge : public MediaCodecBridge,
       CopyFromOutputBuffer,
       MediaCodecStatus(int index, size_t offset, void* dst, size_t num));
   MOCK_METHOD0(GetName, std::string());
-  MOCK_METHOD1(SetSurface, bool(jobject surface));
+  MOCK_METHOD1(SetSurface,
+               bool(const base::android::JavaRef<jobject>& surface));
   MOCK_METHOD2(SetVideoBitrate, void(int bps, int frame_rate));
   MOCK_METHOD0(RequestKeyFrameSoon, void());
   MOCK_METHOD0(IsAdaptivePlaybackSupported, bool());

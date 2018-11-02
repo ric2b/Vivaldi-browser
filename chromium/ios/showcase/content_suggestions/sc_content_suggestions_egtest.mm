@@ -5,6 +5,8 @@
 #import <EarlGrey/EarlGrey.h>
 
 #include "components/strings/grit/components_strings.h"
+#import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_learn_more_item.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/showcase/content_suggestions/sc_content_suggestions_data_source.h"
@@ -17,7 +19,7 @@
 #endif
 
 namespace {
-// Returns a text label begining with |text|.
+// Returns a text label beginning with |text|.
 id<GREYMatcher> TextBeginsWith(NSString* text) {
   MatchesBlock matches = ^BOOL(id element) {
     return [[element text] hasPrefix:text];
@@ -41,7 +43,9 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
       selectElementWithMatcher:grey_allOf(matcher, grey_sufficientlyVisible(),
                                           nil)]
          usingSearchAction:grey_scrollInDirection(kGREYDirectionDown, 150)
-      onElementWithMatcher:grey_kindOfClass([UICollectionView class])];
+      onElementWithMatcher:grey_accessibilityID(
+                               [ContentSuggestionsViewController
+                                   collectionAccessibilityIdentifier])];
 }
 
 // Select the cell with the |ID| by scrolling the collection.
@@ -84,11 +88,7 @@ NSString* ReadingListEmptySection() {
       performAction:grey_tap()];
 
   [[EarlGrey
-      selectElementWithMatcher:
-          grey_allOf(grey_text([@"openPageForItem:"
-                         stringByAppendingString:[SCContentSuggestionsDataSource
-                                                     titleFirstSuggestion]]),
-                     grey_sufficientlyVisible(), nil)]
+      selectElementWithMatcher:TextBeginsWith(@"openPageForItemAtIndexPath:")]
       assertWithMatcher:grey_sufficientlyVisible()];
   [[EarlGrey selectElementWithMatcher:grey_accessibilityLabel(
                                           @"protocol_alerter_done")]
@@ -129,9 +129,10 @@ NSString* ReadingListEmptySection() {
       performAction:grey_longPress()];
 
   [[EarlGrey
-      selectElementWithMatcher:grey_allOf(TextBeginsWith(
-                                              @"displayContextMenuForArticle:"),
-                                          grey_sufficientlyVisible(), nil)]
+      selectElementWithMatcher:grey_allOf(
+                                   TextBeginsWith(
+                                       @"displayContextMenuForSuggestion:"),
+                                   grey_sufficientlyVisible(), nil)]
       assertWithMatcher:grey_sufficientlyVisible()];
   [[EarlGrey selectElementWithMatcher:grey_accessibilityLabel(
                                           @"protocol_alerter_done")]
@@ -161,6 +162,24 @@ NSString* ReadingListEmptySection() {
   [[EarlGrey selectElementWithMatcher:grey_accessibilityLabel(
                                           ReadingListEmptySection())]
       assertWithMatcher:grey_sufficientlyVisible()];
+
+  showcase_utils::Close();
+}
+
+// Tests that tapping the "Learn More" item opens the help center.
+- (void)testTapLearnMore {
+  showcase_utils::Open(@"ContentSuggestionsViewController");
+  [CellWithID([ContentSuggestionsLearnMoreItem accessibilityIdentifier])
+      performAction:grey_tap()];
+
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::
+                                          StaticTextWithAccessibilityLabel(
+                                              @"handleLearnMoreTapped")]
+      assertWithMatcher:grey_sufficientlyVisible()];
+
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityLabel(
+                                          @"protocol_alerter_done")]
+      performAction:grey_tap()];
 
   showcase_utils::Close();
 }

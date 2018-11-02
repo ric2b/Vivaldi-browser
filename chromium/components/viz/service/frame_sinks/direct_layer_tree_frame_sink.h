@@ -8,7 +8,7 @@
 #include "base/macros.h"
 #include "base/threading/thread_checker.h"
 #include "cc/output/layer_tree_frame_sink.h"
-#include "cc/scheduler/begin_frame_source.h"
+#include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/surfaces/local_surface_id_allocator.h"
 #include "components/viz/service/display/display_client.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
@@ -28,9 +28,9 @@ class Display;
 // client's frame being the root surface of the Display.
 class VIZ_SERVICE_EXPORT DirectLayerTreeFrameSink
     : public cc::LayerTreeFrameSink,
-      public NON_EXPORTED_BASE(CompositorFrameSinkSupportClient),
-      public cc::ExternalBeginFrameSourceClient,
-      public NON_EXPORTED_BASE(DisplayClient) {
+      public CompositorFrameSinkSupportClient,
+      public ExternalBeginFrameSourceClient,
+      public DisplayClient {
  public:
   // The underlying Display, FrameSinkManagerImpl, and LocalSurfaceIdAllocator
   // must outlive this class.
@@ -48,14 +48,14 @@ class VIZ_SERVICE_EXPORT DirectLayerTreeFrameSink
       CompositorFrameSinkSupportManager* support_manager,
       FrameSinkManagerImpl* frame_sink_manager,
       Display* display,
-      scoped_refptr<cc::VulkanContextProvider> vulkan_context_provider);
+      scoped_refptr<VulkanContextProvider> vulkan_context_provider);
   ~DirectLayerTreeFrameSink() override;
 
   // LayerTreeFrameSink implementation.
   bool BindToClient(cc::LayerTreeFrameSinkClient* client) override;
   void DetachFromClient() override;
   void SubmitCompositorFrame(cc::CompositorFrame frame) override;
-  void DidNotProduceFrame(const cc::BeginFrameAck& ack) override;
+  void DidNotProduceFrame(const BeginFrameAck& ack) override;
 
   // DisplayClient implementation.
   void DisplayOutputSurfaceLost() override;
@@ -69,10 +69,10 @@ class VIZ_SERVICE_EXPORT DirectLayerTreeFrameSink
  private:
   // CompositorFrameSinkSupportClient implementation:
   void DidReceiveCompositorFrameAck(
-      const std::vector<cc::ReturnedResource>& resources) override;
-  void OnBeginFrame(const cc::BeginFrameArgs& args) override;
+      const std::vector<ReturnedResource>& resources) override;
+  void OnBeginFrame(const BeginFrameArgs& args) override;
   void ReclaimResources(
-      const std::vector<cc::ReturnedResource>& resources) override;
+      const std::vector<ReturnedResource>& resources) override;
   void WillDrawSurface(const LocalSurfaceId& local_surface_id,
                        const gfx::Rect& damage_rect) override;
   void OnBeginFramePausedChanged(bool paused) override;
@@ -92,7 +92,7 @@ class VIZ_SERVICE_EXPORT DirectLayerTreeFrameSink
   gfx::Size last_swap_frame_size_;
   float device_scale_factor_ = 1.f;
   bool is_lost_ = false;
-  std::unique_ptr<cc::ExternalBeginFrameSource> begin_frame_source_;
+  std::unique_ptr<ExternalBeginFrameSource> begin_frame_source_;
 
   DISALLOW_COPY_AND_ASSIGN(DirectLayerTreeFrameSink);
 };

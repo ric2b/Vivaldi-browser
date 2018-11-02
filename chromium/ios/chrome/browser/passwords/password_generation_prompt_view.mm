@@ -12,6 +12,7 @@
 #import "ios/chrome/browser/ui/rtl_geometry.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
 #include "ios/chrome/common/string_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/chrome/grit/ios_theme_resources.h"
@@ -323,7 +324,8 @@ const CGFloat kDescriptionLabelTopPadding = 10.0f;
   MDCFlatButton* cancelButton = [[MDCFlatButton alloc] init];
   [cancelButton setTitle:cancelTitle forState:UIControlStateNormal];
   [cancelButton sizeToFit];
-  [cancelButton setCustomTitleColor:[UIColor blackColor]];
+  [cancelButton setTitleColor:[UIColor blackColor]
+                     forState:UIControlStateNormal];
   [cancelButton addTarget:self
                    action:@selector(dismiss)
          forControlEvents:UIControlEventTouchUpInside];
@@ -333,7 +335,7 @@ const CGFloat kDescriptionLabelTopPadding = 10.0f;
   MDCFlatButton* OKButton = [[MDCFlatButton alloc] init];
   [OKButton setTitle:acceptTitle forState:UIControlStateNormal];
   [OKButton sizeToFit];
-  [OKButton setCustomTitleColor:[UIColor blackColor]];
+  [OKButton setTitleColor:[UIColor blackColor] forState:UIControlStateNormal];
   [OKButton addTarget:self
                 action:@selector(acceptPassword)
       forControlEvents:UIControlEventTouchUpInside];

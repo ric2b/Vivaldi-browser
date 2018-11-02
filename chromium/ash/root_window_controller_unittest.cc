@@ -31,8 +31,6 @@
 #include "ui/base/ime/text_input_client.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/test/display_manager_test_api.h"
-#include "ui/events/devices/device_data_manager.h"
-#include "ui/events/devices/touchscreen_device.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/events/test/test_event_handler.h"
 #include "ui/keyboard/keyboard_controller.h"
@@ -117,7 +115,7 @@ class RootWindowControllerTest : public AshTestBase {
   }
 
   views::Widget* CreateModalWidgetWithParent(const gfx::Rect& bounds,
-                                             gfx::NativeWindow parent) {
+                                             aura::Window* parent) {
     views::Widget* widget = views::Widget::CreateWindowWithParentAndBounds(
         new TestDelegate(true), parent, bounds);
     widget->Show();
@@ -418,7 +416,7 @@ TEST_F(RootWindowControllerTest, ModalContainerNotLoggedInLoggedIn) {
 
   // Configure login screen environment.
   SessionController* session_controller = Shell::Get()->session_controller();
-  SetUserLoggedIn(false);
+  ClearLogin();
   EXPECT_EQ(0, session_controller->NumberOfLoggedInUsers());
   EXPECT_FALSE(session_controller->IsActiveUserSessionStarted());
 
@@ -438,8 +436,7 @@ TEST_F(RootWindowControllerTest, ModalContainerNotLoggedInLoggedIn) {
   login_modal_widget->Close();
 
   // Configure user session environment.
-  SetUserLoggedIn(true);
-  SetSessionStarted(true);
+  CreateUserSessions(1);
   EXPECT_EQ(1, session_controller->NumberOfLoggedInUsers());
   EXPECT_TRUE(session_controller->IsActiveUserSessionStarted());
   EXPECT_EQ(GetLayoutManager(controller, kShellWindowId_SystemModalContainer),
@@ -965,8 +962,8 @@ TEST_F(VirtualKeyboardRootWindowControllerTest, RestoreWorkspaceAfterLogin) {
   keyboard::KeyboardController* controller =
       keyboard::KeyboardController::GetInstance();
   aura::Window* contents_window = controller->ui()->GetContentsWindow();
-  contents_window->SetBounds(keyboard::FullWidthKeyboardBoundsFromRootBounds(
-      root_window->bounds(), 100));
+  contents_window->SetBounds(
+      keyboard::KeyboardBoundsFromRootBounds(root_window->bounds(), 100));
   contents_window->Show();
 
   gfx::Rect before =
@@ -1000,8 +997,8 @@ TEST_F(VirtualKeyboardRootWindowControllerTest, ClickWithActiveModalDialog) {
 
   aura::Window* contents_window =
       keyboard::KeyboardController::GetInstance()->ui()->GetContentsWindow();
-  contents_window->SetBounds(keyboard::FullWidthKeyboardBoundsFromRootBounds(
-      root_window->bounds(), 100));
+  contents_window->SetBounds(
+      keyboard::KeyboardBoundsFromRootBounds(root_window->bounds(), 100));
 
   ui::test::TestEventHandler handler;
   root_window->AddPreTargetHandler(&handler);
@@ -1048,7 +1045,7 @@ TEST_F(VirtualKeyboardRootWindowControllerTest, EnsureCaretInWorkArea) {
 
   const int keyboard_height = 100;
   aura::Window* contents_window = ui->GetContentsWindow();
-  contents_window->SetBounds(keyboard::FullWidthKeyboardBoundsFromRootBounds(
+  contents_window->SetBounds(keyboard::KeyboardBoundsFromRootBounds(
       root_window->bounds(), keyboard_height));
   contents_window->Show();
 
@@ -1094,7 +1091,7 @@ TEST_F(VirtualKeyboardRootWindowControllerTest,
   ASSERT_TRUE(keyboard_container);
   keyboard_container->Show();
   aura::Window* contents_window = ui->GetContentsWindow();
-  contents_window->SetBounds(keyboard::FullWidthKeyboardBoundsFromRootBounds(
+  contents_window->SetBounds(keyboard::KeyboardBoundsFromRootBounds(
       primary_root_window->bounds(), keyboard_height));
   contents_window->Show();
 
@@ -1109,7 +1106,7 @@ TEST_F(VirtualKeyboardRootWindowControllerTest,
   // Move the keyboard into the secondary display and check that the keyboard
   // doesn't cover the window on the primary screen.
   keyboard_controller->ShowKeyboardInDisplay(secondary_display_id);
-  contents_window->SetBounds(keyboard::FullWidthKeyboardBoundsFromRootBounds(
+  contents_window->SetBounds(keyboard::KeyboardBoundsFromRootBounds(
       secondary_root_window->bounds(), keyboard_height));
 
   ui->EnsureCaretInWorkArea();
@@ -1140,7 +1137,7 @@ TEST_F(VirtualKeyboardRootWindowControllerTest, ZOrderTest) {
 
   const int keyboard_height = 200;
   aura::Window* contents_window = ui->GetContentsWindow();
-  gfx::Rect keyboard_bounds = keyboard::FullWidthKeyboardBoundsFromRootBounds(
+  gfx::Rect keyboard_bounds = keyboard::KeyboardBoundsFromRootBounds(
       root_window->bounds(), keyboard_height);
   contents_window->SetBounds(keyboard_bounds);
   contents_window->Show();

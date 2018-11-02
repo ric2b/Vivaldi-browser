@@ -540,7 +540,7 @@ bool UpdateNotifierManager::RunNotifier(HINSTANCE instance) {
       &UpdateNotifierManager::OnShutdownRequested);
 
   vivaldi::InitializeSparkle(*base::CommandLine::ForCurrentProcess(),
-                             base::Callback<bool ()>::Callback());
+                             base::Callback<bool ()>());
 
   update_notifier_window_.reset(new UpdateNotifierWindow());
 

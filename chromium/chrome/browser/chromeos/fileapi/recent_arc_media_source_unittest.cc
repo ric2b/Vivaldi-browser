@@ -34,7 +34,7 @@ const char kImagesRootId[] = "images_root";
 std::unique_ptr<KeyedService> CreateFileSystemOperationRunnerForTesting(
     content::BrowserContext* context) {
   return arc::ArcFileSystemOperationRunner::CreateForTesting(
-      arc::ArcServiceManager::Get()->arc_bridge_service());
+      context, arc::ArcServiceManager::Get()->arc_bridge_service());
 }
 
 arc::FakeFileSystemInstance::Document MakeDocument(

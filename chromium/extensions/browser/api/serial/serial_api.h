@@ -7,10 +7,10 @@
 
 #include <string>
 
-#include "device/serial/serial.mojom.h"
 #include "extensions/browser/api/api_resource_manager.h"
 #include "extensions/browser/api/async_api_function.h"
 #include "extensions/common/api/serial.h"
+#include "services/device/public/interfaces/serial.mojom.h"
 
 namespace extensions {
 
@@ -37,18 +37,24 @@ class SerialAsyncApiFunction : public AsyncApiFunction {
   ApiResourceManager<SerialConnection>* manager_;
 };
 
-class SerialGetDevicesFunction : public SerialAsyncApiFunction {
+class SerialGetDevicesFunction : public UIThreadExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("serial.getDevices", SERIAL_GETDEVICES)
 
   SerialGetDevicesFunction();
 
  protected:
-  ~SerialGetDevicesFunction() override {}
+  ~SerialGetDevicesFunction() override;
 
-  // AsyncApiFunction:
-  bool Prepare() override;
-  void Work() override;
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+ private:
+  void OnGotDevices(std::vector<device::mojom::SerialDeviceInfoPtr> devices);
+
+  device::mojom::SerialDeviceEnumeratorPtr enumerator_;
+
+  DISALLOW_COPY_AND_ASSIGN(SerialGetDevicesFunction);
 };
 
 class SerialConnectFunction : public SerialAsyncApiFunction {
@@ -64,13 +70,11 @@ class SerialConnectFunction : public SerialAsyncApiFunction {
   bool Prepare() override;
   void AsyncWorkStart() override;
 
-  virtual SerialConnection* CreateSerialConnection(
-      const std::string& port,
-      const std::string& extension_id) const;
-
  private:
   void OnConnected(bool success);
-  void FinishConnect();
+  void FinishConnect(bool connected,
+                     bool got_complete_info,
+                     std::unique_ptr<serial::ConnectionInfo> info);
 
   std::unique_ptr<serial::Connect::Params> params_;
 
@@ -78,10 +82,11 @@ class SerialConnectFunction : public SerialAsyncApiFunction {
   SerialEventDispatcher* serial_event_dispatcher_;
 
   // This connection is created within SerialConnectFunction.
-  // From there it is either destroyed in OnConnected (upon failure)
-  // or its ownership is transferred to the
-  // ApiResourceManager<SerialConnection>.
-  SerialConnection* connection_;
+  // From there its ownership is transferred to the
+  // ApiResourceManager<SerialConnection> upon success.
+  std::unique_ptr<SerialConnection> connection_;
+
+  device::mojom::SerialIoHandlerPtrInfo io_handler_info_;
 };
 
 class SerialUpdateFunction : public SerialAsyncApiFunction {
@@ -95,9 +100,11 @@ class SerialUpdateFunction : public SerialAsyncApiFunction {
 
   // AsyncApiFunction:
   bool Prepare() override;
-  void Work() override;
+  void AsyncWorkStart() override;
 
  private:
+  void OnUpdated(bool success);
+
   std::unique_ptr<serial::Update::Params> params_;
 };
 
@@ -147,9 +154,12 @@ class SerialGetInfoFunction : public SerialAsyncApiFunction {
 
   // AsyncApiFunction:
   bool Prepare() override;
-  void Work() override;
+  void AsyncWorkStart() override;
 
  private:
+  void OnGotInfo(bool got_complete_info,
+                 std::unique_ptr<serial::ConnectionInfo> info);
+
   std::unique_ptr<serial::GetInfo::Params> params_;
 };
 
@@ -164,7 +174,16 @@ class SerialGetConnectionsFunction : public SerialAsyncApiFunction {
 
   // AsyncApiFunction:
   bool Prepare() override;
-  void Work() override;
+  void AsyncWorkStart() override;
+
+ private:
+  void OnGotOne(int connection_id,
+                bool got_complete_info,
+                std::unique_ptr<serial::ConnectionInfo> info);
+  void OnGotAll();
+
+  size_t count_ = 0;
+  std::vector<serial::ConnectionInfo> infos_;
 };
 
 class SerialSendFunction : public SerialAsyncApiFunction {
@@ -181,7 +200,7 @@ class SerialSendFunction : public SerialAsyncApiFunction {
   void AsyncWorkStart() override;
 
  private:
-  void OnSendComplete(int bytes_sent, serial::SendError error);
+  void OnSendComplete(uint32_t bytes_sent, serial::SendError error);
 
   std::unique_ptr<serial::Send::Params> params_;
 };
@@ -197,9 +216,11 @@ class SerialFlushFunction : public SerialAsyncApiFunction {
 
   // AsyncApiFunction:
   bool Prepare() override;
-  void Work() override;
+  void AsyncWorkStart() override;
 
  private:
+  void OnFlushed(bool success);
+
   std::unique_ptr<serial::Flush::Params> params_;
 };
 
@@ -215,9 +236,12 @@ class SerialGetControlSignalsFunction : public SerialAsyncApiFunction {
 
   // AsyncApiFunction:
   bool Prepare() override;
-  void Work() override;
+  void AsyncWorkStart() override;
 
  private:
+  void OnGotControlSignals(
+      std::unique_ptr<serial::DeviceControlSignals> signals);
+
   std::unique_ptr<serial::GetControlSignals::Params> params_;
 };
 
@@ -233,9 +257,11 @@ class SerialSetControlSignalsFunction : public SerialAsyncApiFunction {
 
   // AsyncApiFunction:
   bool Prepare() override;
-  void Work() override;
+  void AsyncWorkStart() override;
 
  private:
+  void OnSetControlSignals(bool success);
+
   std::unique_ptr<serial::SetControlSignals::Params> params_;
 };
 
@@ -249,9 +275,11 @@ class SerialSetBreakFunction : public SerialAsyncApiFunction {
 
   // AsyncApiFunction:
   bool Prepare() override;
-  void Work() override;
+  void AsyncWorkStart() override;
 
  private:
+  void OnSetBreak(bool success);
+
   std::unique_ptr<serial::SetBreak::Params> params_;
 };
 
@@ -265,9 +293,11 @@ class SerialClearBreakFunction : public SerialAsyncApiFunction {
 
   // AsyncApiFunction:
   bool Prepare() override;
-  void Work() override;
+  void AsyncWorkStart() override;
 
  private:
+  void OnClearBreak(bool success);
+
   std::unique_ptr<serial::ClearBreak::Params> params_;
 };
 
@@ -279,9 +309,9 @@ namespace mojo {
 
 template <>
 struct TypeConverter<extensions::api::serial::DeviceInfo,
-                     device::serial::DeviceInfoPtr> {
+                     device::mojom::SerialDeviceInfoPtr> {
   static extensions::api::serial::DeviceInfo Convert(
-      const device::serial::DeviceInfoPtr& input);
+      const device::mojom::SerialDeviceInfoPtr& input);
 };
 
 }  // namespace mojo

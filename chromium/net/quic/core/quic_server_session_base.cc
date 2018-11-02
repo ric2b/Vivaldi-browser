@@ -55,8 +55,7 @@ void QuicServerSessionBase::OnConfigNegotiated() {
   bandwidth_resumption_enabled_ =
       last_bandwidth_resumption || max_bandwidth_resumption;
 
-  if (!FLAGS_quic_reloadable_flag_quic_enable_server_push_by_default ||
-      connection()->version() < QUIC_VERSION_35) {
+  if (connection()->version() < QUIC_VERSION_35) {
     set_server_push_enabled(
         ContainsQuicTag(config()->ReceivedConnectionOptions(), kSPSH));
   }
@@ -195,7 +194,6 @@ void QuicServerSessionBase::OnCongestionWindowChange(QuicTime now) {
 }
 
 bool QuicServerSessionBase::ShouldCreateIncomingDynamicStream(QuicStreamId id) {
-  DCHECK(!FLAGS_quic_reloadable_flag_quic_refactor_stream_creation);
   if (!connection()->connected()) {
     QUIC_BUG << "ShouldCreateIncomingDynamicStream called when disconnected";
     return false;
@@ -212,7 +210,6 @@ bool QuicServerSessionBase::ShouldCreateIncomingDynamicStream(QuicStreamId id) {
 }
 
 bool QuicServerSessionBase::ShouldCreateOutgoingDynamicStream() {
-  DCHECK(!FLAGS_quic_reloadable_flag_quic_refactor_stream_creation);
   if (!connection()->connected()) {
     QUIC_BUG << "ShouldCreateOutgoingDynamicStream called when disconnected";
     return false;

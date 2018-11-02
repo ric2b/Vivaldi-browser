@@ -9,6 +9,7 @@
 
 #include <tuple>
 #include <type_traits>
+#include <utility>
 
 #include "base/logging.h"
 #include "base/trace_event/trace_event.h"
@@ -19,11 +20,35 @@
 
 namespace IPC {
 
+template <typename Tuple, size_t... Ns>
+auto TupleForwardImpl(Tuple&& tuple, std::index_sequence<Ns...>) -> decltype(
+    std::forward_as_tuple(std::get<Ns>(std::forward<Tuple>(tuple))...)) {
+  return std::forward_as_tuple(std::get<Ns>(std::forward<Tuple>(tuple))...);
+}
+
+// Transforms std::tuple contents to the forwarding form.
+// Example:
+//   std::tuple<int, int&, const int&, int&&>&&
+//     -> std::tuple<int&&, int&, const int&, int&&>.
+//   const std::tuple<int, const int&, int&&>&
+//     -> std::tuple<const int&, int&, const int&, int&>.
+//
+// TupleForward(std::make_tuple(a, b, c)) is equivalent to
+// std::forward_as_tuple(a, b, c).
+template <typename Tuple>
+auto TupleForward(Tuple&& tuple) -> decltype(TupleForwardImpl(
+    std::forward<Tuple>(tuple),
+    std::make_index_sequence<std::tuple_size<std::decay_t<Tuple>>::value>())) {
+  return TupleForwardImpl(
+      std::forward<Tuple>(tuple),
+      std::make_index_sequence<std::tuple_size<std::decay_t<Tuple>>::value>());
+}
+
 // This function is for all the async IPCs that don't pass an extra parameter
 // using IPC_BEGIN_MESSAGE_MAP_WITH_PARAM.
 template <typename ObjT, typename Method, typename P, typename Tuple>
-void DispatchToMethod(ObjT* obj, Method method, P*, const Tuple& tuple) {
-  base::DispatchToMethod(obj, method, tuple);
+void DispatchToMethod(ObjT* obj, Method method, P*, Tuple&& tuple) {
+  base::DispatchToMethod(obj, method, std::forward<Tuple>(tuple));
 }
 
 template <typename ObjT,
@@ -34,22 +59,22 @@ template <typename ObjT,
 void DispatchToMethodImpl(ObjT* obj,
                           Method method,
                           P* parameter,
-                          const Tuple& tuple,
-                          base::IndexSequence<Ns...>) {
-  // TODO(mdempsky): Apply UnwrapTraits like base::DispatchToMethod?
-  (obj->*method)(parameter, std::get<Ns>(tuple)...);
+                          Tuple&& tuple,
+                          std::index_sequence<Ns...>) {
+  (obj->*method)(parameter, std::get<Ns>(std::forward<Tuple>(tuple))...);
 }
 
 // The following function is for async IPCs which have a dispatcher with an
 // extra parameter specified using IPC_BEGIN_MESSAGE_MAP_WITH_PARAM.
-template <typename ObjT, typename P, typename... Args, typename... Ts>
-typename std::enable_if<sizeof...(Args) == sizeof...(Ts)>::type
+template <typename ObjT, typename P, typename... Args, typename Tuple>
+std::enable_if_t<sizeof...(Args) == std::tuple_size<std::decay_t<Tuple>>::value>
 DispatchToMethod(ObjT* obj,
                  void (ObjT::*method)(P*, Args...),
                  P* parameter,
-                 const std::tuple<Ts...>& tuple) {
-  DispatchToMethodImpl(obj, method, parameter, tuple,
-                       base::MakeIndexSequence<sizeof...(Ts)>());
+                 Tuple&& tuple) {
+  constexpr size_t size = std::tuple_size<std::decay_t<Tuple>>::value;
+  DispatchToMethodImpl(obj, method, parameter, std::forward<Tuple>(tuple),
+                       std::make_index_sequence<size>());
 }
 
 enum class MessageKind {
@@ -118,7 +143,7 @@ class MessageT<Meta, std::tuple<Ins...>, void> : public Message {
     TRACE_EVENT0("ipc", Meta::kName);
     Param p;
     if (Read(msg, &p)) {
-      DispatchToMethod(obj, func, parameter, p);
+      DispatchToMethod(obj, func, parameter, std::move(p));
       return true;
     }
     return false;
@@ -168,17 +193,19 @@ class MessageT<Meta, std::tuple<Ins...>, std::tuple<Outs...>>
     SendParam send_params;
     bool ok = ReadSendParam(msg, &send_params);
     Message* reply = SyncMessage::GenerateReply(msg);
-    if (ok) {
-      ReplyParam reply_params;
-      base::DispatchToMethod(obj, func, send_params, &reply_params);
-      WriteParam(reply, reply_params);
-      LogReplyParamsToMessage(reply_params, msg);
-    } else {
+    if (!ok) {
       NOTREACHED() << "Error deserializing message " << msg->type();
       reply->set_reply_error();
+      sender->Send(reply);
+      return false;
     }
+
+    ReplyParam reply_params;
+    base::DispatchToMethod(obj, func, std::move(send_params), &reply_params);
+    WriteParam(reply, reply_params);
+    LogReplyParamsToMessage(reply_params, msg);
     sender->Send(reply);
-    return ok;
+    return true;
   }
 
   template <class T, class P, class Method>
@@ -190,16 +217,17 @@ class MessageT<Meta, std::tuple<Ins...>, std::tuple<Outs...>>
     SendParam send_params;
     bool ok = ReadSendParam(msg, &send_params);
     Message* reply = SyncMessage::GenerateReply(msg);
-    if (ok) {
-      std::tuple<Message&> t = std::tie(*reply);
-      ConnectMessageAndReply(msg, reply);
-      base::DispatchToMethod(obj, func, send_params, &t);
-    } else {
+    if (!ok) {
       NOTREACHED() << "Error deserializing message " << msg->type();
       reply->set_reply_error();
       obj->Send(reply);
+      return false;
     }
-    return ok;
+
+    std::tuple<Message&> t = std::tie(*reply);
+    ConnectMessageAndReply(msg, reply);
+    base::DispatchToMethod(obj, func, std::move(send_params), &t);
+    return true;
   }
 
   template <class T, class P, class Method>
@@ -211,18 +239,21 @@ class MessageT<Meta, std::tuple<Ins...>, std::tuple<Outs...>>
     SendParam send_params;
     bool ok = ReadSendParam(msg, &send_params);
     Message* reply = SyncMessage::GenerateReply(msg);
-    if (ok) {
-      std::tuple<Message&> t = std::tie(*reply);
-      ConnectMessageAndReply(msg, reply);
-      std::tuple<P*> parameter_tuple(parameter);
-      auto concat_params = std::tuple_cat(parameter_tuple, send_params);
-      base::DispatchToMethod(obj, func, concat_params, &t);
-    } else {
+    if (!ok) {
       NOTREACHED() << "Error deserializing message " << msg->type();
       reply->set_reply_error();
       obj->Send(reply);
+      return false;
     }
-    return ok;
+
+    std::tuple<Message&> t = std::tie(*reply);
+    ConnectMessageAndReply(msg, reply);
+    std::tuple<P*> parameter_tuple(parameter);
+    base::DispatchToMethod(
+        obj, func,
+        std::tuple_cat(std::move(parameter_tuple), TupleForward(send_params)),
+        &t);
+    return true;
   }
 
  private:

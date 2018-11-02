@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <map>
 #include <memory>
 #include <ostream>
 #include <string>
@@ -29,6 +30,7 @@
 #include "components/ntp_tiles/json_unsafe_parser.h"
 #include "components/ntp_tiles/popular_sites_impl.h"
 #include "components/ntp_tiles/pref_names.h"
+#include "components/ntp_tiles/section_type.h"
 #include "components/ntp_tiles/switches.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "net/url_request/test_url_fetcher_factory.h"
@@ -59,11 +61,14 @@ using testing::ByMove;
 using testing::Contains;
 using testing::ElementsAre;
 using testing::Eq;
+using testing::Ge;
 using testing::InSequence;
 using testing::Invoke;
 using testing::IsEmpty;
+using testing::Key;
 using testing::Mock;
 using testing::Not;
+using testing::Pair;
 using testing::Return;
 using testing::ReturnRef;
 using testing::SaveArg;
@@ -87,13 +92,17 @@ MATCHER_P3(MatchesTile, title, url, source, PrintTile(title, url, source)) {
          arg.source == source;
 }
 
-MATCHER_P3(FirstTileIs,
+MATCHER_P3(FirstPersonalizedTileIs,
            title,
            url,
            source,
            std::string("first tile ") + PrintTile(title, url, source)) {
-  return !arg.empty() && arg[0].title == base::ASCIIToUTF16(title) &&
-         arg[0].url == GURL(url) && arg[0].source == source;
+  if (arg.count(SectionType::PERSONALIZED) == 0) {
+    return false;
+  }
+  const NTPTilesVector& tiles = arg.at(SectionType::PERSONALIZED);
+  return !tiles.empty() && tiles[0].title == base::ASCIIToUTF16(title) &&
+         tiles[0].url == GURL(url) && tiles[0].source == source;
 }
 
 // testing::InvokeArgument<N> does not work with base::Callback, fortunately
@@ -208,7 +217,8 @@ class MockSuggestionsService : public SuggestionsService {
 
 class MockMostVisitedSitesObserver : public MostVisitedSites::Observer {
  public:
-  MOCK_METHOD1(OnMostVisitedURLsAvailable, void(const NTPTilesVector& tiles));
+  MOCK_METHOD1(OnURLsAvailable,
+               void(const std::map<SectionType, NTPTilesVector>& sections));
   MOCK_METHOD1(OnIconMadeAvailable, void(const GURL& site_url));
 };
 
@@ -273,10 +283,10 @@ class PopularSitesFactoryForTest {
     PopularSitesImpl::RegisterProfilePrefs(pref_service->registry());
     if (enabled) {
       prefs_->SetString(prefs::kPopularSitesOverrideCountry, "IN");
-      prefs_->SetString(prefs::kPopularSitesOverrideVersion, "7");
+      prefs_->SetString(prefs::kPopularSitesOverrideVersion, "5");
 
       url_fetcher_factory_.SetFakeResponse(
-          GURL("https://www.gstatic.com/chrome/ntp/suggested_sites_IN_7.json"),
+          GURL("https://www.gstatic.com/chrome/ntp/suggested_sites_IN_5.json"),
           R"([{
                 "title": "PopularSite1",
                 "url": "http://popularsite1/",
@@ -288,6 +298,70 @@ class PopularSitesFactoryForTest {
                 "favicon_url": "http://popularsite2/favicon.ico"
               },
              ])",
+          net::HTTP_OK, net::URLRequestStatus::SUCCESS);
+
+      url_fetcher_factory_.SetFakeResponse(
+          GURL("https://www.gstatic.com/chrome/ntp/suggested_sites_US_5.json"),
+          R"([{
+                "title": "ESPN",
+                "url": "http://www.espn.com",
+                "favicon_url": "http://www.espn.com/favicon.ico"
+              }, {
+                "title": "Mobile",
+                "url": "http://www.mobile.de",
+                "favicon_url": "http://www.mobile.de/favicon.ico"
+              }, {
+                "title": "Google News",
+                "url": "http://news.google.com",
+                "favicon_url": "http://news.google.com/favicon.ico"
+              },
+             ])",
+          net::HTTP_OK, net::URLRequestStatus::SUCCESS);
+
+      url_fetcher_factory_.SetFakeResponse(
+          GURL("https://www.gstatic.com/chrome/ntp/suggested_sites_IN_6.json"),
+          R"([{
+                "section": 1, // PERSONALIZED
+                "sites": [{
+                    "title": "PopularSite1",
+                    "url": "http://popularsite1/",
+                    "favicon_url": "http://popularsite1/favicon.ico"
+                  },
+                  {
+                    "title": "PopularSite2",
+                    "url": "http://popularsite2/",
+                    "favicon_url": "http://popularsite2/favicon.ico"
+                  },
+                 ]
+              },
+              {
+                  "section": 4,  // NEWS
+                  "sites": [{
+                      "large_icon_url": "https://news.google.com/icon.ico",
+                      "title": "Google News",
+                      "url": "https://news.google.com/"
+                  },
+                  {
+                      "favicon_url": "https://news.google.com/icon.ico",
+                      "title": "Google News Germany",
+                      "url": "https://news.google.de/"
+                  }]
+              },
+              {
+                  "section": 2,  // SOCIAL
+                  "sites": [{
+                      "large_icon_url": "https://ssl.gstatic.com/icon.png",
+                      "title": "Google+",
+                      "url": "https://plus.google.com/"
+                  }]
+              },
+              {
+                  "section": 3,  // ENTERTAINMENT
+                  "sites": [
+                      // Intentionally empty site list.
+                  ]
+              }
+          ])",
           net::HTTP_OK, net::URLRequestStatus::SUCCESS);
     }
   }
@@ -330,6 +404,8 @@ class TopSitesCallbackList {
   std::vector<TopSites::GetMostVisitedURLsCallback> callbacks_;
 };
 
+}  // namespace
+
 // Param specifies whether Popular Sites is enabled via variations.
 class MostVisitedSitesTest : public ::testing::TestWithParam<bool> {
  protected:
@@ -350,6 +426,10 @@ class MostVisitedSitesTest : public ::testing::TestWithParam<bool> {
     feature_list_.InitAndDisableFeature(
         kNtpMostLikelyFaviconsFromServerFeature);
 
+    RecreateMostVisitedSites();
+  }
+
+  void RecreateMostVisitedSites() {
     // We use StrictMock to make sure the object is not used unless Popular
     // Sites is enabled.
     auto icon_cacher = base::MakeUnique<StrictMock<MockIconCacher>>();
@@ -444,6 +524,12 @@ TEST_P(MostVisitedSitesTest, ShouldStartNoCallInConstructor) {
   base::RunLoop().RunUntilIdle();
 }
 
+TEST_P(MostVisitedSitesTest, ShouldRefreshBothBackends) {
+  EXPECT_CALL(*mock_top_sites_, SyncWithHistory());
+  EXPECT_CALL(mock_suggestions_service_, FetchSuggestionsData());
+  most_visited_sites_->Refresh();
+}
+
 TEST_P(MostVisitedSitesTest, ShouldIncludeTileForHomePage) {
   FakeHomePageClient* home_page_client = RegisterNewHomePageClient();
   home_page_client->SetHomePageEnabled(true);
@@ -454,7 +540,7 @@ TEST_P(MostVisitedSitesTest, ShouldIncludeTileForHomePage) {
   EXPECT_CALL(*mock_top_sites_, IsBlacklisted(Eq(GURL(kHomePageUrl))))
       .Times(AnyNumber())
       .WillRepeatedly(Return(false));
-  EXPECT_CALL(mock_observer_, OnMostVisitedURLsAvailable(FirstTileIs(
+  EXPECT_CALL(mock_observer_, OnURLsAvailable(FirstPersonalizedTileIs(
                                   "", kHomePageUrl, TileSource::HOMEPAGE)));
   most_visited_sites_->SetMostVisitedURLsObserver(&mock_observer_,
                                                   /*num_sites=*/3);
@@ -467,8 +553,10 @@ TEST_P(MostVisitedSitesTest, ShouldNotIncludeHomePageWithoutClient) {
       .WillRepeatedly(InvokeCallbackArgument<0>(MostVisitedURLList{}));
   EXPECT_CALL(*mock_top_sites_, SyncWithHistory());
   EXPECT_CALL(mock_observer_,
-              OnMostVisitedURLsAvailable(Not(Contains(
-                  MatchesTile("", kHomePageUrl, TileSource::HOMEPAGE)))));
+              OnURLsAvailable(Contains(
+                  Pair(SectionType::PERSONALIZED,
+                       Not(Contains(MatchesTile("", kHomePageUrl,
+                                                TileSource::HOMEPAGE)))))));
   most_visited_sites_->SetMostVisitedURLsObserver(&mock_observer_,
                                                   /*num_sites=*/3);
   base::RunLoop().RunUntilIdle();
@@ -491,11 +579,15 @@ TEST_P(MostVisitedSitesTest, ShouldIncludeHomeTileWithUrlBeforeQueryingName) {
   {
     testing::Sequence seq;
     EXPECT_CALL(mock_observer_,
-                OnMostVisitedURLsAvailable(Not(Contains(
-                    MatchesTile("", kHomePageUrl, TileSource::HOMEPAGE)))));
+                OnURLsAvailable(Contains(
+                    Pair(SectionType::PERSONALIZED,
+                         Not(Contains(MatchesTile("", kHomePageUrl,
+                                                  TileSource::HOMEPAGE)))))));
     EXPECT_CALL(mock_observer_,
-                OnMostVisitedURLsAvailable(Not(Contains(MatchesTile(
-                    kHomePageTitle, kHomePageUrl, TileSource::HOMEPAGE)))));
+                OnURLsAvailable(Contains(
+                    Pair(SectionType::PERSONALIZED,
+                         Not(Contains(MatchesTile(kHomePageTitle, kHomePageUrl,
+                                                  TileSource::HOMEPAGE)))))));
   }
   most_visited_sites_->SetMostVisitedURLsObserver(&mock_observer_,
                                                   /*num_sites=*/3);
@@ -514,7 +606,7 @@ TEST_P(MostVisitedSitesTest, ShouldUpdateHomePageTileOnHomePageStateChanged) {
   EXPECT_CALL(*mock_top_sites_, IsBlacklisted(Eq(GURL(kHomePageUrl))))
       .Times(AnyNumber())
       .WillRepeatedly(Return(false));
-  EXPECT_CALL(mock_observer_, OnMostVisitedURLsAvailable(FirstTileIs(
+  EXPECT_CALL(mock_observer_, OnURLsAvailable(FirstPersonalizedTileIs(
                                   "", kHomePageUrl, TileSource::HOMEPAGE)));
   most_visited_sites_->SetMostVisitedURLsObserver(&mock_observer_,
                                                   /*num_sites=*/3);
@@ -527,7 +619,7 @@ TEST_P(MostVisitedSitesTest, ShouldUpdateHomePageTileOnHomePageStateChanged) {
   EXPECT_CALL(*mock_top_sites_, GetMostVisitedURLs(_, false))
       .WillRepeatedly(InvokeCallbackArgument<0>(MostVisitedURLList{}));
   EXPECT_CALL(*mock_top_sites_, SyncWithHistory()).Times(0);
-  EXPECT_CALL(mock_observer_, OnMostVisitedURLsAvailable(Not(FirstTileIs(
+  EXPECT_CALL(mock_observer_, OnURLsAvailable(Not(FirstPersonalizedTileIs(
                                   "", kHomePageUrl, TileSource::HOMEPAGE))));
   most_visited_sites_->OnHomePageStateChanged();
   base::RunLoop().RunUntilIdle();
@@ -543,13 +635,15 @@ TEST_P(MostVisitedSitesTest, ShouldNotIncludeHomePageIfNoTileRequested) {
   EXPECT_CALL(*mock_top_sites_, IsBlacklisted(Eq(GURL(kHomePageUrl))))
       .Times(AnyNumber())
       .WillRepeatedly(Return(false));
-  EXPECT_CALL(mock_observer_, OnMostVisitedURLsAvailable(IsEmpty()));
+  EXPECT_CALL(
+      mock_observer_,
+      OnURLsAvailable(Contains(Pair(SectionType::PERSONALIZED, IsEmpty()))));
   most_visited_sites_->SetMostVisitedURLsObserver(&mock_observer_,
                                                   /*num_sites=*/0);
   base::RunLoop().RunUntilIdle();
 }
 
-TEST_P(MostVisitedSitesTest, ShouldReturnMostPopularPageIfOneTileRequested) {
+TEST_P(MostVisitedSitesTest, ShouldReturnHomePageIfOneTileRequested) {
   FakeHomePageClient* home_page_client = RegisterNewHomePageClient();
   home_page_client->SetHomePageEnabled(true);
   DisableRemoteSuggestions();
@@ -560,15 +654,17 @@ TEST_P(MostVisitedSitesTest, ShouldReturnMostPopularPageIfOneTileRequested) {
   EXPECT_CALL(*mock_top_sites_, IsBlacklisted(Eq(GURL(kHomePageUrl))))
       .Times(AnyNumber())
       .WillRepeatedly(Return(false));
-  EXPECT_CALL(mock_observer_,
-              OnMostVisitedURLsAvailable(ElementsAre(MatchesTile(
-                  "Site 1", "http://site1/", TileSource::TOP_SITES))));
+  EXPECT_CALL(
+      mock_observer_,
+      OnURLsAvailable(Contains(Pair(
+          SectionType::PERSONALIZED,
+          ElementsAre(MatchesTile("", kHomePageUrl, TileSource::HOMEPAGE))))));
   most_visited_sites_->SetMostVisitedURLsObserver(&mock_observer_,
                                                   /*num_sites=*/1);
   base::RunLoop().RunUntilIdle();
 }
 
-TEST_P(MostVisitedSitesTest, ShouldContainHomePageInFirstFourTiles) {
+TEST_P(MostVisitedSitesTest, ShouldReplaceLastTileWithHomePageWhenFull) {
   FakeHomePageClient* home_page_client = RegisterNewHomePageClient();
   home_page_client->SetHomePageEnabled(true);
   DisableRemoteSuggestions();
@@ -584,14 +680,46 @@ TEST_P(MostVisitedSitesTest, ShouldContainHomePageInFirstFourTiles) {
   EXPECT_CALL(*mock_top_sites_, IsBlacklisted(Eq(GURL(kHomePageUrl))))
       .Times(AnyNumber())
       .WillRepeatedly(Return(false));
-  std::vector<NTPTile> tiles;
-  EXPECT_CALL(mock_observer_, OnMostVisitedURLsAvailable(_))
-      .WillOnce(SaveArg<0>(&tiles));
+  std::map<SectionType, NTPTilesVector> sections;
+  EXPECT_CALL(mock_observer_, OnURLsAvailable(_))
+      .WillOnce(SaveArg<0>(&sections));
+  most_visited_sites_->SetMostVisitedURLsObserver(&mock_observer_,
+                                                  /*num_sites=*/4);
+  base::RunLoop().RunUntilIdle();
+  ASSERT_THAT(sections, Contains(Key(SectionType::PERSONALIZED)));
+  NTPTilesVector tiles = sections.at(SectionType::PERSONALIZED);
+  ASSERT_THAT(tiles.size(), Ge(4ul));
+  // Assert that the home page is appended as the final tile.
+  EXPECT_THAT(tiles[3], MatchesTile("", kHomePageUrl, TileSource::HOMEPAGE));
+}
+
+TEST_P(MostVisitedSitesTest, ShouldAppendHomePageWhenNotFull) {
+  FakeHomePageClient* home_page_client = RegisterNewHomePageClient();
+  home_page_client->SetHomePageEnabled(true);
+  DisableRemoteSuggestions();
+  EXPECT_CALL(*mock_top_sites_, GetMostVisitedURLs(_, false))
+      .WillRepeatedly(InvokeCallbackArgument<0>((MostVisitedURLList{
+          MakeMostVisitedURL("Site 1", "http://site1/"),
+          MakeMostVisitedURL("Site 2", "http://site2/"),
+          MakeMostVisitedURL("Site 3", "http://site3/"),
+          MakeMostVisitedURL("Site 4", "http://site4/"),
+          MakeMostVisitedURL("Site 5", "http://site5/"),
+      })));
+  EXPECT_CALL(*mock_top_sites_, SyncWithHistory());
+  EXPECT_CALL(*mock_top_sites_, IsBlacklisted(Eq(GURL(kHomePageUrl))))
+      .Times(AnyNumber())
+      .WillRepeatedly(Return(false));
+  std::map<SectionType, NTPTilesVector> sections;
+  EXPECT_CALL(mock_observer_, OnURLsAvailable(_))
+      .WillOnce(SaveArg<0>(&sections));
   most_visited_sites_->SetMostVisitedURLsObserver(&mock_observer_,
                                                   /*num_sites=*/8);
   base::RunLoop().RunUntilIdle();
-  // Assert that the home page tile is in the first four tiles.
-  EXPECT_THAT(tiles[3], MatchesTile("", kHomePageUrl, TileSource::HOMEPAGE));
+  ASSERT_THAT(sections, Contains(Key(SectionType::PERSONALIZED)));
+  NTPTilesVector tiles = sections.at(SectionType::PERSONALIZED);
+  ASSERT_THAT(tiles.size(), Ge(6ul));
+  // Assert that the home page is appended as the final tile.
+  EXPECT_THAT(tiles[5], MatchesTile("", kHomePageUrl, TileSource::HOMEPAGE));
 }
 
 TEST_P(MostVisitedSitesTest, ShouldDeduplicateHomePageWithTopSites) {
@@ -606,11 +734,13 @@ TEST_P(MostVisitedSitesTest, ShouldDeduplicateHomePageWithTopSites) {
   EXPECT_CALL(*mock_top_sites_, IsBlacklisted(Eq(GURL(kHomePageUrl))))
       .Times(AnyNumber())
       .WillRepeatedly(Return(false));
-  EXPECT_CALL(mock_observer_,
-              OnMostVisitedURLsAvailable(AllOf(
-                  Contains(MatchesTile("", kHomePageUrl, TileSource::HOMEPAGE)),
-                  Not(Contains(
-                      MatchesTile("", kHomePageUrl, TileSource::TOP_SITES))))));
+  EXPECT_CALL(
+      mock_observer_,
+      OnURLsAvailable(Contains(Pair(
+          SectionType::PERSONALIZED,
+          AllOf(Contains(MatchesTile("", kHomePageUrl, TileSource::HOMEPAGE)),
+                Not(Contains(
+                    MatchesTile("", kHomePageUrl, TileSource::TOP_SITES))))))));
   most_visited_sites_->SetMostVisitedURLsObserver(&mock_observer_,
                                                   /*num_sites=*/3);
   base::RunLoop().RunUntilIdle();
@@ -628,8 +758,10 @@ TEST_P(MostVisitedSitesTest, ShouldNotIncludeHomePageIfItIsNewTabPage) {
       .Times(AnyNumber())
       .WillRepeatedly(Return(false));
   EXPECT_CALL(mock_observer_,
-              OnMostVisitedURLsAvailable(Not(Contains(
-                  MatchesTile("", kHomePageUrl, TileSource::HOMEPAGE)))));
+              OnURLsAvailable(Contains(
+                  Pair(SectionType::PERSONALIZED,
+                       Not(Contains(MatchesTile("", kHomePageUrl,
+                                                TileSource::HOMEPAGE)))))));
   most_visited_sites_->SetMostVisitedURLsObserver(&mock_observer_,
                                                   /*num_sites=*/3);
   base::RunLoop().RunUntilIdle();
@@ -646,8 +778,10 @@ TEST_P(MostVisitedSitesTest, ShouldNotIncludeHomePageIfThereIsNone) {
       .Times(AnyNumber())
       .WillRepeatedly(Return(false));
   EXPECT_CALL(mock_observer_,
-              OnMostVisitedURLsAvailable(Not(Contains(
-                  MatchesTile("", kHomePageUrl, TileSource::HOMEPAGE)))));
+              OnURLsAvailable(Contains(
+                  Pair(SectionType::PERSONALIZED,
+                       Not(Contains(MatchesTile("", kHomePageUrl,
+                                                TileSource::HOMEPAGE)))))));
   most_visited_sites_->SetMostVisitedURLsObserver(&mock_observer_,
                                                   /*num_sites=*/3);
   base::RunLoop().RunUntilIdle();
@@ -666,8 +800,8 @@ TEST_P(MostVisitedSitesTest, ShouldNotIncludeHomePageIfEmptyUrl) {
       .Times(AnyNumber())
       .WillRepeatedly(Return(false));
   EXPECT_CALL(mock_observer_,
-              OnMostVisitedURLsAvailable(Not(
-                  FirstTileIs("", kEmptyHomePageUrl, TileSource::HOMEPAGE))));
+              OnURLsAvailable(Not(FirstPersonalizedTileIs(
+                  "", kEmptyHomePageUrl, TileSource::HOMEPAGE))));
   most_visited_sites_->SetMostVisitedURLsObserver(&mock_observer_,
                                                   /*num_sites=*/3);
   base::RunLoop().RunUntilIdle();
@@ -689,8 +823,10 @@ TEST_P(MostVisitedSitesTest, ShouldNotIncludeHomePageIfBlacklisted) {
       .Times(AtLeast(1))
       .WillRepeatedly(Return(true));
   EXPECT_CALL(mock_observer_,
-              OnMostVisitedURLsAvailable(Not(Contains(
-                  MatchesTile("", kHomePageUrl, TileSource::HOMEPAGE)))));
+              OnURLsAvailable(Contains(
+                  Pair(SectionType::PERSONALIZED,
+                       Not(Contains(MatchesTile("", kHomePageUrl,
+                                                TileSource::HOMEPAGE)))))));
 
   most_visited_sites_->SetMostVisitedURLsObserver(&mock_observer_,
                                                   /*num_sites=*/3);
@@ -710,8 +846,10 @@ TEST_P(MostVisitedSitesTest, ShouldPinHomePageAgainIfBlacklistingUndone) {
       .Times(AtLeast(1))
       .WillRepeatedly(Return(true));
   EXPECT_CALL(mock_observer_,
-              OnMostVisitedURLsAvailable(Not(Contains(
-                  MatchesTile("", kHomePageUrl, TileSource::HOMEPAGE)))));
+              OnURLsAvailable(Contains(
+                  Pair(SectionType::PERSONALIZED,
+                       Not(Contains(MatchesTile("", kHomePageUrl,
+                                                TileSource::HOMEPAGE)))))));
 
   most_visited_sites_->SetMostVisitedURLsObserver(&mock_observer_,
                                                   /*num_sites=*/3);
@@ -724,8 +862,11 @@ TEST_P(MostVisitedSitesTest, ShouldPinHomePageAgainIfBlacklistingUndone) {
   EXPECT_CALL(*mock_top_sites_, IsBlacklisted(Eq(GURL(kHomePageUrl))))
       .Times(AtLeast(1))
       .WillRepeatedly(Return(false));
-  EXPECT_CALL(mock_observer_, OnMostVisitedURLsAvailable(Contains(MatchesTile(
-                                  "", kHomePageUrl, TileSource::HOMEPAGE))));
+  EXPECT_CALL(
+      mock_observer_,
+      OnURLsAvailable(Contains(Pair(
+          SectionType::PERSONALIZED,
+          Contains(MatchesTile("", kHomePageUrl, TileSource::HOMEPAGE))))));
 
   most_visited_sites_->OnBlockedSitesChanged();
   base::RunLoop().RunUntilIdle();
@@ -747,6 +888,89 @@ TEST_P(MostVisitedSitesTest, ShouldInformSuggestionSourcesWhenBlacklisting) {
                                                  /*add_url=*/false);
 }
 
+TEST_P(MostVisitedSitesTest, ShouldContainSiteExplorationsWhenFeatureEnabled) {
+  base::test::ScopedFeatureList feature_list;
+  std::map<SectionType, NTPTilesVector> sections;
+  feature_list.InitAndEnableFeature(kSiteExplorationUiFeature);
+  pref_service_.SetString(prefs::kPopularSitesOverrideVersion, "6");
+  RecreateMostVisitedSites();  // Refills cache with version 6 popular sites.
+  DisableRemoteSuggestions();
+  EXPECT_CALL(*mock_top_sites_, GetMostVisitedURLs(_, false))
+      .WillRepeatedly(InvokeCallbackArgument<0>(
+          MostVisitedURLList{MakeMostVisitedURL("Site 1", "http://site1/")}));
+  EXPECT_CALL(*mock_top_sites_, SyncWithHistory());
+  EXPECT_CALL(mock_observer_, OnURLsAvailable(_))
+      .WillOnce(SaveArg<0>(&sections));
+
+  most_visited_sites_->SetMostVisitedURLsObserver(&mock_observer_,
+                                                  /*num_sites=*/3);
+  base::RunLoop().RunUntilIdle();
+
+  if (!IsPopularSitesEnabledViaVariations()) {
+    EXPECT_THAT(
+        sections,
+        Contains(Pair(SectionType::PERSONALIZED,
+                      ElementsAre(MatchesTile("Site 1", "http://site1/",
+                                              TileSource::TOP_SITES)))));
+    return;
+  }
+  const auto& expected_sections =
+      most_visited_sites_->popular_sites()->sections();
+  ASSERT_THAT(expected_sections.size(), Ge(2ul));
+  EXPECT_THAT(sections.size(), Eq(expected_sections.size()));
+  EXPECT_THAT(
+      sections,
+      AllOf(Contains(Pair(
+                SectionType::PERSONALIZED,
+                ElementsAre(MatchesTile("Site 1", "http://site1/",
+                                        TileSource::TOP_SITES),
+                            MatchesTile("PopularSite1", "http://popularsite1/",
+                                        TileSource::POPULAR),
+                            MatchesTile("PopularSite2", "http://popularsite2/",
+                                        TileSource::POPULAR)))),
+            Contains(Pair(SectionType::NEWS, SizeIs(2ul))),
+            Contains(Pair(SectionType::SOCIAL, SizeIs(1ul))),
+            Contains(Pair(_, IsEmpty()))));
+}
+
+TEST_P(MostVisitedSitesTest,
+       ShouldDeduplicatePopularSitesWithMostVisitedIffHostAndTitleMatches) {
+  pref_service_.SetString(prefs::kPopularSitesOverrideCountry, "US");
+  RecreateMostVisitedSites();  // Refills cache with ESPN and Google News.
+  DisableRemoteSuggestions();
+  EXPECT_CALL(*mock_top_sites_, GetMostVisitedURLs(_, false))
+      .WillRepeatedly(InvokeCallbackArgument<0>(MostVisitedURLList{
+          MakeMostVisitedURL("ESPN", "http://espn.com/"),
+          MakeMostVisitedURL("Mobile", "http://m.mobile.de/"),
+          MakeMostVisitedURL("Google", "http://www.google.com/")}));
+  EXPECT_CALL(*mock_top_sites_, SyncWithHistory());
+  std::map<SectionType, NTPTilesVector> sections;
+  EXPECT_CALL(mock_observer_, OnURLsAvailable(_))
+      .WillOnce(SaveArg<0>(&sections));
+
+  most_visited_sites_->SetMostVisitedURLsObserver(&mock_observer_,
+                                                  /*num_sites=*/6);
+  base::RunLoop().RunUntilIdle();
+  ASSERT_THAT(sections, Contains(Key(SectionType::PERSONALIZED)));
+  EXPECT_THAT(sections.at(SectionType::PERSONALIZED),
+              Contains(MatchesTile("Google", "http://www.google.com/",
+                                   TileSource::TOP_SITES)));
+  if (IsPopularSitesEnabledViaVariations()) {
+    EXPECT_THAT(sections.at(SectionType::PERSONALIZED),
+                Contains(MatchesTile("Google News", "http://news.google.com/",
+                                     TileSource::POPULAR)));
+  }
+  EXPECT_THAT(sections.at(SectionType::PERSONALIZED),
+              AllOf(Contains(MatchesTile("ESPN", "http://espn.com/",
+                                         TileSource::TOP_SITES)),
+                    Contains(MatchesTile("Mobile", "http://m.mobile.de/",
+                                         TileSource::TOP_SITES)),
+                    Not(Contains(MatchesTile("ESPN", "http://www.espn.com/",
+                                             TileSource::POPULAR))),
+                    Not(Contains(MatchesTile("Mobile", "http://www.mobile.de/",
+                                             TileSource::POPULAR)))));
+}
+
 TEST_P(MostVisitedSitesTest, ShouldHandleTopSitesCacheHit) {
   // If cached, TopSites returns the tiles synchronously, running the callback
   // even before the function returns.
@@ -755,7 +979,6 @@ TEST_P(MostVisitedSitesTest, ShouldHandleTopSitesCacheHit) {
           MostVisitedURLList{MakeMostVisitedURL("Site 1", "http://site1/")}));
 
   InSequence seq;
-  EXPECT_CALL(*mock_top_sites_, SyncWithHistory());
   EXPECT_CALL(mock_suggestions_service_, AddCallback(_))
       .WillOnce(Invoke(&suggestions_service_callbacks_,
                        &SuggestionsService::ResponseCallbackList::Add));
@@ -764,17 +987,22 @@ TEST_P(MostVisitedSitesTest, ShouldHandleTopSitesCacheHit) {
   if (IsPopularSitesEnabledViaVariations()) {
     EXPECT_CALL(
         mock_observer_,
-        OnMostVisitedURLsAvailable(ElementsAre(
-            MatchesTile("Site 1", "http://site1/", TileSource::TOP_SITES),
-            MatchesTile("PopularSite1", "http://popularsite1/",
-                        TileSource::POPULAR),
-            MatchesTile("PopularSite2", "http://popularsite2/",
-                        TileSource::POPULAR))));
+        OnURLsAvailable(Contains(Pair(
+            SectionType::PERSONALIZED,
+            ElementsAre(
+                MatchesTile("Site 1", "http://site1/", TileSource::TOP_SITES),
+                MatchesTile("PopularSite1", "http://popularsite1/",
+                            TileSource::POPULAR),
+                MatchesTile("PopularSite2", "http://popularsite2/",
+                            TileSource::POPULAR))))));
   } else {
     EXPECT_CALL(mock_observer_,
-                OnMostVisitedURLsAvailable(ElementsAre(MatchesTile(
-                    "Site 1", "http://site1/", TileSource::TOP_SITES))));
+                OnURLsAvailable(Contains(
+                    Pair(SectionType::PERSONALIZED,
+                         ElementsAre(MatchesTile("Site 1", "http://site1/",
+                                                 TileSource::TOP_SITES))))));
   }
+  EXPECT_CALL(*mock_top_sites_, SyncWithHistory());
   EXPECT_CALL(mock_suggestions_service_, FetchSuggestionsData())
       .WillOnce(Return(true));
 
@@ -792,7 +1020,7 @@ TEST_P(MostVisitedSitesTest, ShouldHandleTopSitesCacheHit) {
     EXPECT_CALL(*mock_top_sites_, IsBlacklisted(_))
         .WillRepeatedly(Return(false));
   }
-  EXPECT_CALL(mock_observer_, OnMostVisitedURLsAvailable(_));
+  EXPECT_CALL(mock_observer_, OnURLsAvailable(_));
   mock_top_sites_->NotifyTopSitesChanged(
       history::TopSitesObserver::ChangeReason::MOST_VISITED);
   base::RunLoop().RunUntilIdle();
@@ -802,13 +1030,47 @@ INSTANTIATE_TEST_CASE_P(MostVisitedSitesTest,
                         MostVisitedSitesTest,
                         ::testing::Bool());
 
+TEST(MostVisitedSitesTest, ShouldDeduplicateDomainWithNoWwwDomain) {
+  EXPECT_TRUE(MostVisitedSites::IsHostOrMobilePageKnown({"www.mobile.de"},
+                                                        "mobile.de"));
+  EXPECT_TRUE(MostVisitedSites::IsHostOrMobilePageKnown({"mobile.de"},
+                                                        "www.mobile.de"));
+  EXPECT_TRUE(MostVisitedSites::IsHostOrMobilePageKnown({"mobile.co.uk"},
+                                                        "www.mobile.co.uk"));
+}
+
+TEST(MostVisitedSitesTest, ShouldDeduplicateDomainByRemovingMobilePrefixes) {
+  EXPECT_TRUE(
+      MostVisitedSites::IsHostOrMobilePageKnown({"bbc.co.uk"}, "m.bbc.co.uk"));
+  EXPECT_TRUE(
+      MostVisitedSites::IsHostOrMobilePageKnown({"m.bbc.co.uk"}, "bbc.co.uk"));
+  EXPECT_TRUE(MostVisitedSites::IsHostOrMobilePageKnown({"cnn.com"},
+                                                        "edition.cnn.com"));
+  EXPECT_TRUE(MostVisitedSites::IsHostOrMobilePageKnown({"edition.cnn.com"},
+                                                        "cnn.com"));
+  EXPECT_TRUE(
+      MostVisitedSites::IsHostOrMobilePageKnown({"cnn.com"}, "mobile.cnn.com"));
+  EXPECT_TRUE(
+      MostVisitedSites::IsHostOrMobilePageKnown({"mobile.cnn.com"}, "cnn.com"));
+}
+
+TEST(MostVisitedSitesTest, ShouldDeduplicateDomainByReplacingMobilePrefixes) {
+  EXPECT_TRUE(MostVisitedSites::IsHostOrMobilePageKnown({"www.bbc.co.uk"},
+                                                        "m.bbc.co.uk"));
+  EXPECT_TRUE(MostVisitedSites::IsHostOrMobilePageKnown({"m.mobile.de"},
+                                                        "www.mobile.de"));
+  EXPECT_TRUE(MostVisitedSites::IsHostOrMobilePageKnown({"www.cnn.com"},
+                                                        "edition.cnn.com"));
+  EXPECT_TRUE(MostVisitedSites::IsHostOrMobilePageKnown({"mobile.cnn.com"},
+                                                        "www.cnn.com"));
+}
+
 class MostVisitedSitesWithCacheHitTest : public MostVisitedSitesTest {
  public:
   // Constructor sets the common expectations for the case where suggestions
   // service has cached results when the observer is registered.
   MostVisitedSitesWithCacheHitTest() {
     InSequence seq;
-    EXPECT_CALL(*mock_top_sites_, SyncWithHistory());
     EXPECT_CALL(mock_suggestions_service_, AddCallback(_))
         .WillOnce(Invoke(&suggestions_service_callbacks_,
                          &SuggestionsService::ResponseCallbackList::Add));
@@ -818,27 +1080,33 @@ class MostVisitedSitesWithCacheHitTest : public MostVisitedSitesTest {
             MakeSuggestion("Site 2", "http://site2/"),
             MakeSuggestion("Site 3", "http://site3/"),
         })));
+
     if (IsPopularSitesEnabledViaVariations()) {
-      EXPECT_CALL(mock_observer_,
-                  OnMostVisitedURLsAvailable(ElementsAre(
-                      MatchesTile("Site 1", "http://site1/",
-                                  TileSource::SUGGESTIONS_SERVICE),
-                      MatchesTile("Site 2", "http://site2/",
-                                  TileSource::SUGGESTIONS_SERVICE),
-                      MatchesTile("Site 3", "http://site3/",
-                                  TileSource::SUGGESTIONS_SERVICE),
-                      MatchesTile("PopularSite1", "http://popularsite1/",
-                                  TileSource::POPULAR))));
+      EXPECT_CALL(
+          mock_observer_,
+          OnURLsAvailable(Contains(Pair(
+              SectionType::PERSONALIZED,
+              ElementsAre(MatchesTile("Site 1", "http://site1/",
+                                      TileSource::SUGGESTIONS_SERVICE),
+                          MatchesTile("Site 2", "http://site2/",
+                                      TileSource::SUGGESTIONS_SERVICE),
+                          MatchesTile("Site 3", "http://site3/",
+                                      TileSource::SUGGESTIONS_SERVICE),
+                          MatchesTile("PopularSite1", "http://popularsite1/",
+                                      TileSource::POPULAR))))));
     } else {
-      EXPECT_CALL(mock_observer_,
-                  OnMostVisitedURLsAvailable(ElementsAre(
-                      MatchesTile("Site 1", "http://site1/",
-                                  TileSource::SUGGESTIONS_SERVICE),
-                      MatchesTile("Site 2", "http://site2/",
-                                  TileSource::SUGGESTIONS_SERVICE),
-                      MatchesTile("Site 3", "http://site3/",
-                                  TileSource::SUGGESTIONS_SERVICE))));
+      EXPECT_CALL(
+          mock_observer_,
+          OnURLsAvailable(Contains(Pair(
+              SectionType::PERSONALIZED,
+              ElementsAre(MatchesTile("Site 1", "http://site1/",
+                                      TileSource::SUGGESTIONS_SERVICE),
+                          MatchesTile("Site 2", "http://site2/",
+                                      TileSource::SUGGESTIONS_SERVICE),
+                          MatchesTile("Site 3", "http://site3/",
+                                      TileSource::SUGGESTIONS_SERVICE))))));
     }
+    EXPECT_CALL(*mock_top_sites_, SyncWithHistory());
     EXPECT_CALL(mock_suggestions_service_, FetchSuggestionsData())
         .WillOnce(Return(true));
 
@@ -858,7 +1126,8 @@ TEST_P(MostVisitedSitesWithCacheHitTest, ShouldFavorSuggestionsServiceCache) {
 TEST_P(MostVisitedSitesWithCacheHitTest,
        ShouldPropagateUpdateBySuggestionsService) {
   EXPECT_CALL(mock_observer_,
-              OnMostVisitedURLsAvailable(
+              OnURLsAvailable(Contains(Pair(
+                  SectionType::PERSONALIZED,
                   ElementsAre(MatchesTile("Site 4", "http://site4/",
                                           TileSource::SUGGESTIONS_SERVICE),
                               MatchesTile("Site 5", "http://site5/",
@@ -866,7 +1135,7 @@ TEST_P(MostVisitedSitesWithCacheHitTest,
                               MatchesTile("Site 6", "http://site6/",
                                           TileSource::SUGGESTIONS_SERVICE),
                               MatchesTile("Site 7", "http://site7/",
-                                          TileSource::SUGGESTIONS_SERVICE))));
+                                          TileSource::SUGGESTIONS_SERVICE))))));
   suggestions_service_callbacks_.Notify(
       MakeProfile({MakeSuggestion("Site 4", "http://site4/"),
                    MakeSuggestion("Site 5", "http://site5/"),
@@ -876,7 +1145,9 @@ TEST_P(MostVisitedSitesWithCacheHitTest,
 }
 
 TEST_P(MostVisitedSitesWithCacheHitTest, ShouldTruncateList) {
-  EXPECT_CALL(mock_observer_, OnMostVisitedURLsAvailable(SizeIs(4)));
+  EXPECT_CALL(
+      mock_observer_,
+      OnURLsAvailable(Contains(Pair(SectionType::PERSONALIZED, SizeIs(4)))));
   suggestions_service_callbacks_.Notify(
       MakeProfile({MakeSuggestion("Site 4", "http://site4/"),
                    MakeSuggestion("Site 5", "http://site5/"),
@@ -889,19 +1160,23 @@ TEST_P(MostVisitedSitesWithCacheHitTest, ShouldTruncateList) {
 TEST_P(MostVisitedSitesWithCacheHitTest,
        ShouldCompleteWithPopularSitesIffEnabled) {
   if (IsPopularSitesEnabledViaVariations()) {
-    EXPECT_CALL(mock_observer_,
-                OnMostVisitedURLsAvailable(ElementsAre(
-                    MatchesTile("Site 4", "http://site4/",
-                                TileSource::SUGGESTIONS_SERVICE),
-                    MatchesTile("PopularSite1", "http://popularsite1/",
-                                TileSource::POPULAR),
-                    MatchesTile("PopularSite2", "http://popularsite2/",
-                                TileSource::POPULAR))));
+    EXPECT_CALL(
+        mock_observer_,
+        OnURLsAvailable(Contains(
+            Pair(SectionType::PERSONALIZED,
+                 ElementsAre(MatchesTile("Site 4", "http://site4/",
+                                         TileSource::SUGGESTIONS_SERVICE),
+                             MatchesTile("PopularSite1", "http://popularsite1/",
+                                         TileSource::POPULAR),
+                             MatchesTile("PopularSite2", "http://popularsite2/",
+                                         TileSource::POPULAR))))));
   } else {
     EXPECT_CALL(
         mock_observer_,
-        OnMostVisitedURLsAvailable(ElementsAre(MatchesTile(
-            "Site 4", "http://site4/", TileSource::SUGGESTIONS_SERVICE))));
+        OnURLsAvailable(Contains(
+            Pair(SectionType::PERSONALIZED,
+                 ElementsAre(MatchesTile("Site 4", "http://site4/",
+                                         TileSource::SUGGESTIONS_SERVICE))))));
   }
   suggestions_service_callbacks_.Notify(
       MakeProfile({MakeSuggestion("Site 4", "http://site4/")}));
@@ -917,11 +1192,14 @@ TEST_P(MostVisitedSitesWithCacheHitTest,
 
   EXPECT_CALL(
       mock_observer_,
-      OnMostVisitedURLsAvailable(ElementsAre(
-          MatchesTile("Site 4", "http://site4/", TileSource::TOP_SITES),
-          MatchesTile("Site 5", "http://site5/", TileSource::TOP_SITES),
-          MatchesTile("Site 6", "http://site6/", TileSource::TOP_SITES),
-          MatchesTile("Site 7", "http://site7/", TileSource::TOP_SITES))));
+      OnURLsAvailable(Contains(Pair(
+          SectionType::PERSONALIZED,
+          ElementsAre(
+              MatchesTile("Site 4", "http://site4/", TileSource::TOP_SITES),
+              MatchesTile("Site 5", "http://site5/", TileSource::TOP_SITES),
+              MatchesTile("Site 6", "http://site6/", TileSource::TOP_SITES),
+              MatchesTile("Site 7", "http://site7/",
+                          TileSource::TOP_SITES))))));
   top_sites_callbacks_.ClearAndNotify(
       {MakeMostVisitedURL("Site 4", "http://site4/"),
        MakeMostVisitedURL("Site 5", "http://site5/"),
@@ -934,7 +1212,7 @@ TEST_P(MostVisitedSitesWithCacheHitTest, ShouldFetchFaviconsIfEnabled) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeature(kNtpMostLikelyFaviconsFromServerFeature);
 
-  EXPECT_CALL(mock_observer_, OnMostVisitedURLsAvailable(_));
+  EXPECT_CALL(mock_observer_, OnURLsAvailable(_));
   EXPECT_CALL(*icon_cacher_, StartFetchMostLikely(GURL("http://site4/"), _));
 
   suggestions_service_callbacks_.Notify(
@@ -952,7 +1230,6 @@ class MostVisitedSitesWithEmptyCacheTest : public MostVisitedSitesTest {
   // service doesn't have cached results when the observer is registered.
   MostVisitedSitesWithEmptyCacheTest() {
     InSequence seq;
-    EXPECT_CALL(*mock_top_sites_, SyncWithHistory());
     EXPECT_CALL(mock_suggestions_service_, AddCallback(_))
         .WillOnce(Invoke(&suggestions_service_callbacks_,
                          &SuggestionsService::ResponseCallbackList::Add));
@@ -960,6 +1237,7 @@ class MostVisitedSitesWithEmptyCacheTest : public MostVisitedSitesTest {
         .WillOnce(Return(SuggestionsProfile()));  // Empty cache.
     EXPECT_CALL(*mock_top_sites_, GetMostVisitedURLs(_, false))
         .WillOnce(Invoke(&top_sites_callbacks_, &TopSitesCallbackList::Add));
+    EXPECT_CALL(*mock_top_sites_, SyncWithHistory());
     EXPECT_CALL(mock_suggestions_service_, FetchSuggestionsData())
         .WillOnce(Return(true));
 
@@ -980,19 +1258,23 @@ TEST_P(MostVisitedSitesWithEmptyCacheTest,
 TEST_P(MostVisitedSitesWithEmptyCacheTest,
        ShouldCompleteWithPopularSitesIffEnabled) {
   if (IsPopularSitesEnabledViaVariations()) {
-    EXPECT_CALL(mock_observer_,
-                OnMostVisitedURLsAvailable(ElementsAre(
-                    MatchesTile("Site 4", "http://site4/",
-                                TileSource::SUGGESTIONS_SERVICE),
-                    MatchesTile("PopularSite1", "http://popularsite1/",
-                                TileSource::POPULAR),
-                    MatchesTile("PopularSite2", "http://popularsite2/",
-                                TileSource::POPULAR))));
+    EXPECT_CALL(
+        mock_observer_,
+        OnURLsAvailable(Contains(
+            Pair(SectionType::PERSONALIZED,
+                 ElementsAre(MatchesTile("Site 4", "http://site4/",
+                                         TileSource::SUGGESTIONS_SERVICE),
+                             MatchesTile("PopularSite1", "http://popularsite1/",
+                                         TileSource::POPULAR),
+                             MatchesTile("PopularSite2", "http://popularsite2/",
+                                         TileSource::POPULAR))))));
   } else {
     EXPECT_CALL(
         mock_observer_,
-        OnMostVisitedURLsAvailable(ElementsAre(MatchesTile(
-            "Site 4", "http://site4/", TileSource::SUGGESTIONS_SERVICE))));
+        OnURLsAvailable(Contains(
+            Pair(SectionType::PERSONALIZED,
+                 ElementsAre(MatchesTile("Site 4", "http://site4/",
+                                         TileSource::SUGGESTIONS_SERVICE))))));
   }
   suggestions_service_callbacks_.Notify(
       MakeProfile({MakeSuggestion("Site 4", "http://site4/")}));
@@ -1003,13 +1285,14 @@ TEST_P(MostVisitedSitesWithEmptyCacheTest,
        ShouldIgnoreTopSitesIfSuggestionsServiceFaster) {
   // Reply from suggestions service triggers and update to our observer.
   EXPECT_CALL(mock_observer_,
-              OnMostVisitedURLsAvailable(
+              OnURLsAvailable(Contains(Pair(
+                  SectionType::PERSONALIZED,
                   ElementsAre(MatchesTile("Site 1", "http://site1/",
                                           TileSource::SUGGESTIONS_SERVICE),
                               MatchesTile("Site 2", "http://site2/",
                                           TileSource::SUGGESTIONS_SERVICE),
                               MatchesTile("Site 3", "http://site3/",
-                                          TileSource::SUGGESTIONS_SERVICE))));
+                                          TileSource::SUGGESTIONS_SERVICE))))));
   suggestions_service_callbacks_.Notify(
       MakeProfile({MakeSuggestion("Site 1", "http://site1/"),
                    MakeSuggestion("Site 2", "http://site2/"),
@@ -1036,10 +1319,13 @@ TEST_P(MostVisitedSitesWithEmptyCacheTest,
   // Reply from top sites is propagated to observer.
   EXPECT_CALL(
       mock_observer_,
-      OnMostVisitedURLsAvailable(ElementsAre(
-          MatchesTile("Site 1", "http://site1/", TileSource::TOP_SITES),
-          MatchesTile("Site 2", "http://site2/", TileSource::TOP_SITES),
-          MatchesTile("Site 3", "http://site3/", TileSource::TOP_SITES))));
+      OnURLsAvailable(Contains(Pair(
+          SectionType::PERSONALIZED,
+          ElementsAre(
+              MatchesTile("Site 1", "http://site1/", TileSource::TOP_SITES),
+              MatchesTile("Site 2", "http://site2/", TileSource::TOP_SITES),
+              MatchesTile("Site 3", "http://site3/",
+                          TileSource::TOP_SITES))))));
   top_sites_callbacks_.ClearAndNotify(
       {MakeMostVisitedURL("Site 1", "http://site1/"),
        MakeMostVisitedURL("Site 2", "http://site2/"),
@@ -1052,10 +1338,13 @@ TEST_P(MostVisitedSitesWithEmptyCacheTest,
   // Reply from top sites is propagated to observer.
   EXPECT_CALL(
       mock_observer_,
-      OnMostVisitedURLsAvailable(ElementsAre(
-          MatchesTile("Site 1", "http://site1/", TileSource::TOP_SITES),
-          MatchesTile("Site 2", "http://site2/", TileSource::TOP_SITES),
-          MatchesTile("Site 3", "http://site3/", TileSource::TOP_SITES))));
+      OnURLsAvailable(Contains(Pair(
+          SectionType::PERSONALIZED,
+          ElementsAre(
+              MatchesTile("Site 1", "http://site1/", TileSource::TOP_SITES),
+              MatchesTile("Site 2", "http://site2/", TileSource::TOP_SITES),
+              MatchesTile("Site 3", "http://site3/",
+                          TileSource::TOP_SITES))))));
   top_sites_callbacks_.ClearAndNotify(
       {MakeMostVisitedURL("Site 1", "http://site1/"),
        MakeMostVisitedURL("Site 2", "http://site2/"),
@@ -1065,13 +1354,14 @@ TEST_P(MostVisitedSitesWithEmptyCacheTest,
   // Reply from suggestions service overrides top sites.
   InSequence seq;
   EXPECT_CALL(mock_observer_,
-              OnMostVisitedURLsAvailable(
+              OnURLsAvailable(Contains(Pair(
+                  SectionType::PERSONALIZED,
                   ElementsAre(MatchesTile("Site 4", "http://site4/",
                                           TileSource::SUGGESTIONS_SERVICE),
                               MatchesTile("Site 5", "http://site5/",
                                           TileSource::SUGGESTIONS_SERVICE),
                               MatchesTile("Site 6", "http://site6/",
-                                          TileSource::SUGGESTIONS_SERVICE))));
+                                          TileSource::SUGGESTIONS_SERVICE))))));
   suggestions_service_callbacks_.Notify(
       MakeProfile({MakeSuggestion("Site 4", "http://site4/"),
                    MakeSuggestion("Site 5", "http://site5/"),
@@ -1084,10 +1374,13 @@ TEST_P(MostVisitedSitesWithEmptyCacheTest,
   // Reply from top sites is propagated to observer.
   EXPECT_CALL(
       mock_observer_,
-      OnMostVisitedURLsAvailable(ElementsAre(
-          MatchesTile("Site 1", "http://site1/", TileSource::TOP_SITES),
-          MatchesTile("Site 2", "http://site2/", TileSource::TOP_SITES),
-          MatchesTile("Site 3", "http://site3/", TileSource::TOP_SITES))));
+      OnURLsAvailable(Contains(Pair(
+          SectionType::PERSONALIZED,
+          ElementsAre(
+              MatchesTile("Site 1", "http://site1/", TileSource::TOP_SITES),
+              MatchesTile("Site 2", "http://site2/", TileSource::TOP_SITES),
+              MatchesTile("Site 3", "http://site3/",
+                          TileSource::TOP_SITES))))));
   top_sites_callbacks_.ClearAndNotify(
       {MakeMostVisitedURL("Site 1", "http://site1/"),
        MakeMostVisitedURL("Site 2", "http://site2/"),
@@ -1103,10 +1396,13 @@ TEST_P(MostVisitedSitesWithEmptyCacheTest, ShouldPropagateUpdateByTopSites) {
   // Reply from top sites is propagated to observer.
   EXPECT_CALL(
       mock_observer_,
-      OnMostVisitedURLsAvailable(ElementsAre(
-          MatchesTile("Site 1", "http://site1/", TileSource::TOP_SITES),
-          MatchesTile("Site 2", "http://site2/", TileSource::TOP_SITES),
-          MatchesTile("Site 3", "http://site3/", TileSource::TOP_SITES))));
+      OnURLsAvailable(Contains(Pair(
+          SectionType::PERSONALIZED,
+          ElementsAre(
+              MatchesTile("Site 1", "http://site1/", TileSource::TOP_SITES),
+              MatchesTile("Site 2", "http://site2/", TileSource::TOP_SITES),
+              MatchesTile("Site 3", "http://site3/",
+                          TileSource::TOP_SITES))))));
   top_sites_callbacks_.ClearAndNotify(
       {MakeMostVisitedURL("Site 1", "http://site1/"),
        MakeMostVisitedURL("Site 2", "http://site2/"),
@@ -1126,10 +1422,13 @@ TEST_P(MostVisitedSitesWithEmptyCacheTest, ShouldPropagateUpdateByTopSites) {
                              MakeMostVisitedURL("Site 6", "http://site6/")}));
   EXPECT_CALL(
       mock_observer_,
-      OnMostVisitedURLsAvailable(ElementsAre(
-          MatchesTile("Site 4", "http://site4/", TileSource::TOP_SITES),
-          MatchesTile("Site 5", "http://site5/", TileSource::TOP_SITES),
-          MatchesTile("Site 6", "http://site6/", TileSource::TOP_SITES))));
+      OnURLsAvailable(Contains(Pair(
+          SectionType::PERSONALIZED,
+          ElementsAre(
+              MatchesTile("Site 4", "http://site4/", TileSource::TOP_SITES),
+              MatchesTile("Site 5", "http://site5/", TileSource::TOP_SITES),
+              MatchesTile("Site 6", "http://site6/",
+                          TileSource::TOP_SITES))))));
   mock_top_sites_->NotifyTopSitesChanged(
       history::TopSitesObserver::ChangeReason::MOST_VISITED);
   base::RunLoop().RunUntilIdle();
@@ -1138,16 +1437,19 @@ TEST_P(MostVisitedSitesWithEmptyCacheTest, ShouldPropagateUpdateByTopSites) {
 TEST_P(MostVisitedSitesWithEmptyCacheTest,
        ShouldSendEmptyListIfBothTopSitesAndSuggestionsServiceEmpty) {
   if (IsPopularSitesEnabledViaVariations()) {
-    EXPECT_CALL(mock_observer_,
-                OnMostVisitedURLsAvailable(ElementsAre(
-                    MatchesTile("PopularSite1", "http://popularsite1/",
-                                TileSource::POPULAR),
-                    MatchesTile("PopularSite2", "http://popularsite2/",
-                                TileSource::POPULAR))));
+    EXPECT_CALL(
+        mock_observer_,
+        OnURLsAvailable(Contains(
+            Pair(SectionType::PERSONALIZED,
+                 ElementsAre(MatchesTile("PopularSite1", "http://popularsite1/",
+                                         TileSource::POPULAR),
+                             MatchesTile("PopularSite2", "http://popularsite2/",
+                                         TileSource::POPULAR))))));
   } else {
     // The Android NTP doesn't finish initialization until it gets tiles, so a
     // 0-tile notification is always needed.
-    EXPECT_CALL(mock_observer_, OnMostVisitedURLsAvailable(IsEmpty()));
+    EXPECT_CALL(mock_observer_, OnURLsAvailable(ElementsAre(Pair(
+                                    SectionType::PERSONALIZED, IsEmpty()))));
   }
   suggestions_service_callbacks_.Notify(SuggestionsProfile());
   top_sites_callbacks_.ClearAndNotify(MostVisitedURLList{});
@@ -1159,10 +1461,13 @@ TEST_P(MostVisitedSitesWithEmptyCacheTest,
        ShouldNotifyOnceIfTopSitesUnchanged) {
   EXPECT_CALL(
       mock_observer_,
-      OnMostVisitedURLsAvailable(ElementsAre(
-          MatchesTile("Site 1", "http://site1/", TileSource::TOP_SITES),
-          MatchesTile("Site 2", "http://site2/", TileSource::TOP_SITES),
-          MatchesTile("Site 3", "http://site3/", TileSource::TOP_SITES))));
+      OnURLsAvailable(Contains(Pair(
+          SectionType::PERSONALIZED,
+          ElementsAre(
+              MatchesTile("Site 1", "http://site1/", TileSource::TOP_SITES),
+              MatchesTile("Site 2", "http://site2/", TileSource::TOP_SITES),
+              MatchesTile("Site 3", "http://site3/",
+                          TileSource::TOP_SITES))))));
 
   suggestions_service_callbacks_.Notify(SuggestionsProfile());
 
@@ -1189,13 +1494,14 @@ TEST_P(MostVisitedSitesWithEmptyCacheTest,
 TEST_P(MostVisitedSitesWithEmptyCacheTest,
        ShouldNotifyOnceIfSuggestionsUnchanged) {
   EXPECT_CALL(mock_observer_,
-              OnMostVisitedURLsAvailable(
+              OnURLsAvailable(Contains(Pair(
+                  SectionType::PERSONALIZED,
                   ElementsAre(MatchesTile("Site 1", "http://site1/",
                                           TileSource::SUGGESTIONS_SERVICE),
                               MatchesTile("Site 2", "http://site2/",
                                           TileSource::SUGGESTIONS_SERVICE),
                               MatchesTile("Site 3", "http://site3/",
-                                          TileSource::SUGGESTIONS_SERVICE))));
+                                          TileSource::SUGGESTIONS_SERVICE))))));
 
   for (int i = 0; i < 5; ++i) {
     suggestions_service_callbacks_.Notify(
@@ -1282,5 +1588,4 @@ TEST(MostVisitedSitesMergeTest, ShouldMergeTilesFavoringPersonalOverPopular) {
                       TileSource::POPULAR)));
 }
 
-}  // namespace
 }  // namespace ntp_tiles

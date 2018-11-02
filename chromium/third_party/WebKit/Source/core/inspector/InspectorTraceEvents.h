@@ -94,7 +94,9 @@ class CORE_EXPORT InspectorTraceEvents : public InspectorAgent {
                         double monotonic_finish_time,
                         int64_t encoded_data_length,
                         int64_t decoded_body_length);
-  void DidFailLoading(unsigned long identifier, const ResourceError&);
+  void DidFailLoading(unsigned long identifier,
+                      DocumentLoader*,
+                      const ResourceError&);
 
   void Will(const probe::ExecuteScript&);
   void Did(const probe::ExecuteScript&);
@@ -104,6 +106,8 @@ class CORE_EXPORT InspectorTraceEvents : public InspectorAgent {
 
   void Will(const probe::CallFunction&);
   void Did(const probe::CallFunction&);
+
+  void PaintTiming(Document*, const char* name, double timestamp);
 
   DECLARE_VIRTUAL_TRACE();
 
@@ -160,7 +164,6 @@ extern const char kInvalidationSetMatchedAttribute[];
 extern const char kInvalidationSetMatchedClass[];
 extern const char kInvalidationSetMatchedId[];
 extern const char kInvalidationSetMatchedTagName[];
-extern const char kPreventStyleSharingForParent[];
 
 std::unique_ptr<TracedValue> Data(Element&, const char* reason);
 std::unique_ptr<TracedValue> SelectorPart(Element&,
@@ -347,9 +350,14 @@ std::unique_ptr<TracedValue> Data(LayoutObject*,
 }
 
 namespace InspectorPaintImageEvent {
-std::unique_ptr<TracedValue> Data(const LayoutImage&);
+std::unique_ptr<TracedValue> Data(const LayoutImage&,
+                                  const FloatRect& src_rect,
+                                  const FloatRect& dest_rect);
 std::unique_ptr<TracedValue> Data(const LayoutObject&, const StyleImage&);
-std::unique_ptr<TracedValue> Data(Node*, const StyleImage&);
+std::unique_ptr<TracedValue> Data(Node*,
+                                  const StyleImage&,
+                                  const FloatRect& src_rect,
+                                  const FloatRect& dest_rect);
 std::unique_ptr<TracedValue> Data(const LayoutObject*,
                                   const ImageResourceContent&);
 }

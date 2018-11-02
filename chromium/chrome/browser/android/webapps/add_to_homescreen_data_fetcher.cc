@@ -33,12 +33,12 @@
 
 namespace {
 
-// Looks up the original, online URL of the site requested.  The URL from the
-// WebContents may be a distilled article which is not appropriate for a home
+// Looks up the original, online, visible URL of |web_contents|. The current
+// visible URL may be a distilled article which is not appropriate for a home
 // screen shortcut.
-GURL GetShortcutUrl(content::BrowserContext* browser_context,
-                    const GURL& actual_url) {
-  return dom_distiller::url_utils::GetOriginalUrlFromDistillerUrl(actual_url);
+GURL GetShortcutUrl(const content::WebContents* web_contents) {
+  return dom_distiller::url_utils::GetOriginalUrlFromDistillerUrl(
+      web_contents->GetVisibleURL());
 }
 
 InstallableParams ParamsToPerformManifestAndIconFetch(
@@ -113,8 +113,7 @@ AddToHomescreenDataFetcher::AddToHomescreenDataFetcher(
     : content::WebContentsObserver(web_contents),
       installable_manager_(InstallableManager::FromWebContents(web_contents)),
       observer_(observer),
-      shortcut_info_(GetShortcutUrl(web_contents->GetBrowserContext(),
-                                    web_contents->GetLastCommittedURL())),
+      shortcut_info_(GetShortcutUrl(web_contents)),
       ideal_icon_size_in_px_(ideal_icon_size_in_px),
       minimum_icon_size_in_px_(minimum_icon_size_in_px),
       ideal_splash_image_size_in_px_(ideal_splash_image_size_in_px),
@@ -126,6 +125,7 @@ AddToHomescreenDataFetcher::AddToHomescreenDataFetcher(
       weak_ptr_factory_(this) {
   DCHECK(minimum_icon_size_in_px <= ideal_icon_size_in_px);
   DCHECK(minimum_splash_image_size_in_px <= ideal_splash_image_size_in_px);
+  DCHECK(shortcut_info_.url.is_valid());
 
   // Send a message to the renderer to retrieve information about the page.
   content::RenderFrameHost* main_frame = web_contents->GetMainFrame();
@@ -216,7 +216,8 @@ void AddToHomescreenDataFetcher::OnDataTimedout() {
 
   if (check_webapk_compatibility_)
     observer_->OnDidDetermineWebApkCompatibility(false);
-  observer_->OnUserTitleAvailable(shortcut_info_.user_title);
+  observer_->OnUserTitleAvailable(shortcut_info_.user_title,
+                                  shortcut_info_.url);
 
   CreateLauncherIcon(raw_primary_icon_);
 }
@@ -237,7 +238,8 @@ void AddToHomescreenDataFetcher::OnDidGetManifestAndIcons(
   if (data.manifest.IsEmpty() || !data.primary_icon) {
     if (check_webapk_compatibility_)
       observer_->OnDidDetermineWebApkCompatibility(false);
-    observer_->OnUserTitleAvailable(shortcut_info_.user_title);
+    observer_->OnUserTitleAvailable(shortcut_info_.user_title,
+                                    shortcut_info_.url);
     data_timeout_timer_.Stop();
     FetchFavicon();
     return;
@@ -281,7 +283,9 @@ void AddToHomescreenDataFetcher::OnDidPerformInstallableCheck(
     observer_->OnDidDetermineWebApkCompatibility(webapk_compatible);
   }
 
-  observer_->OnUserTitleAvailable(shortcut_info_.user_title);
+  observer_->OnUserTitleAvailable(
+      webapk_compatible ? shortcut_info_.name : shortcut_info_.user_title,
+      shortcut_info_.url);
   if (webapk_compatible) {
     shortcut_info_.UpdateSource(ShortcutInfo::SOURCE_ADD_TO_HOMESCREEN_PWA);
     NotifyObserver(std::make_pair(raw_primary_icon_, false /* is_generated */));

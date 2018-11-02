@@ -15,12 +15,14 @@
 #include "base/metrics/field_trial.h"
 #include "base/strings/string16.h"
 #include "base/test/mock_entropy_provider.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/resource_coordinator/background_tab_navigation_throttle.h"
+#include "chrome/browser/resource_coordinator/tab_manager_stats_collector.h"
 #include "chrome/browser/resource_coordinator/tab_manager_web_contents_data.h"
 #include "chrome/browser/resource_coordinator/tab_stats.h"
 #include "chrome/browser/sessions/tab_loader.h"
@@ -132,21 +134,19 @@ class TabManagerTest : public ChromeRenderViewHostTestHarness {
     return web_contents;
   }
 
-  std::unique_ptr<NavigationHandle> CreateTabAndNavigation() {
-    content::TestWebContents* web_contents =
-        content::TestWebContents::Create(profile(), nullptr);
-    return content::NavigationHandle::CreateNavigationHandleForTesting(
-        GURL(kTestUrl), web_contents->GetMainFrame());
-  }
-
-  // Simulate creating 3 tabs and their navigations.
-  void MaybeThrottleNavigations(TabManager* tab_manager) {
-    nav_handle1_ = CreateTabAndNavigation();
-    nav_handle2_ = CreateTabAndNavigation();
-    nav_handle3_ = CreateTabAndNavigation();
+  void PrepareTabs(const char* url1 = kTestUrl,
+                   const char* url2 = kTestUrl,
+                   const char* url3 = kTestUrl) {
+    nav_handle1_ = CreateTabAndNavigation(url1);
+    nav_handle2_ = CreateTabAndNavigation(url2);
+    nav_handle3_ = CreateTabAndNavigation(url3);
     contents1_ = nav_handle1_->GetWebContents();
     contents2_ = nav_handle2_->GetWebContents();
     contents3_ = nav_handle3_->GetWebContents();
+
+    contents1_->WasHidden();
+    contents2_->WasHidden();
+    contents3_->WasHidden();
 
     throttle1_ = base::MakeUnique<NonResumingBackgroundTabNavigationThrottle>(
         nav_handle1_.get());
@@ -154,6 +154,15 @@ class TabManagerTest : public ChromeRenderViewHostTestHarness {
         nav_handle2_.get());
     throttle3_ = base::MakeUnique<NonResumingBackgroundTabNavigationThrottle>(
         nav_handle3_.get());
+  }
+
+  // Simulate creating 3 tabs and their navigations.
+  void MaybeThrottleNavigations(TabManager* tab_manager,
+                                size_t loading_slots = 1,
+                                const char* url1 = kTestUrl,
+                                const char* url2 = kTestUrl,
+                                const char* url3 = kTestUrl) {
+    PrepareTabs(url1, url2, url3);
 
     NavigationThrottle::ThrottleCheckResult result1 =
         tab_manager->MaybeThrottleNavigation(throttle1_.get());
@@ -162,15 +171,42 @@ class TabManagerTest : public ChromeRenderViewHostTestHarness {
     NavigationThrottle::ThrottleCheckResult result3 =
         tab_manager->MaybeThrottleNavigation(throttle3_.get());
 
+    CheckThrottleResults(result1, result2, result3, loading_slots);
+  }
+
+  virtual void CheckThrottleResults(
+      NavigationThrottle::ThrottleCheckResult result1,
+      NavigationThrottle::ThrottleCheckResult result2,
+      NavigationThrottle::ThrottleCheckResult result3,
+      size_t loading_slots) {
     // First tab starts navigation right away because there is no tab loading.
     EXPECT_EQ(content::NavigationThrottle::PROCEED, result1);
-
-    // The other 2 tabs's navigations are delayed.
-    EXPECT_EQ(content::NavigationThrottle::DEFER, result2);
-    EXPECT_EQ(content::NavigationThrottle::DEFER, result3);
+    switch (loading_slots) {
+      case 1:
+        EXPECT_EQ(content::NavigationThrottle::DEFER, result2);
+        EXPECT_EQ(content::NavigationThrottle::DEFER, result3);
+        break;
+      case 2:
+        EXPECT_EQ(content::NavigationThrottle::PROCEED, result2);
+        EXPECT_EQ(content::NavigationThrottle::DEFER, result3);
+        break;
+      case 3:
+        EXPECT_EQ(content::NavigationThrottle::PROCEED, result2);
+        EXPECT_EQ(content::NavigationThrottle::PROCEED, result3);
+        break;
+      default:
+        NOTREACHED();
+    }
   }
 
  protected:
+  std::unique_ptr<NavigationHandle> CreateTabAndNavigation(const char* url) {
+    content::TestWebContents* web_contents =
+        content::TestWebContents::Create(profile(), nullptr);
+    return content::NavigationHandle::CreateNavigationHandleForTesting(
+        GURL(url), web_contents->GetMainFrame());
+  }
+
   std::unique_ptr<BackgroundTabNavigationThrottle> throttle1_;
   std::unique_ptr<BackgroundTabNavigationThrottle> throttle2_;
   std::unique_ptr<BackgroundTabNavigationThrottle> throttle3_;
@@ -180,6 +216,27 @@ class TabManagerTest : public ChromeRenderViewHostTestHarness {
   WebContents* contents1_;
   WebContents* contents2_;
   WebContents* contents3_;
+};
+
+class TabManagerWithExperimentDisabledTest : public TabManagerTest {
+ public:
+  void SetUp() override {
+    scoped_feature_list_.InitAndDisableFeature(
+        features::kStaggeredBackgroundTabOpeningExperiment);
+    ChromeRenderViewHostTestHarness::SetUp();
+  }
+
+  void CheckThrottleResults(NavigationThrottle::ThrottleCheckResult result1,
+                            NavigationThrottle::ThrottleCheckResult result2,
+                            NavigationThrottle::ThrottleCheckResult result3,
+                            size_t loading_slots) override {
+    EXPECT_EQ(content::NavigationThrottle::PROCEED, result1);
+    EXPECT_EQ(content::NavigationThrottle::PROCEED, result2);
+    EXPECT_EQ(content::NavigationThrottle::PROCEED, result3);
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 // TODO(georgesak): Add tests for protection to tabs with form input and
@@ -313,7 +370,7 @@ TEST_F(TabManagerTest, DiscardWebContentsAt) {
   TabStripModel tabstrip(&delegate, profile());
   tabstrip.AddObserver(&tab_manager);
 
-  TabManager::BrowserInfo browser_info;
+  BrowserInfo browser_info;
   browser_info.tab_strip_model = &tabstrip;
   browser_info.window_is_minimized = false;
   browser_info.browser_is_app = false;
@@ -535,7 +592,7 @@ TEST_F(TabManagerTest, ActivateTabResetPurgeState) {
   TabStripModel tabstrip(&delegate, profile());
   tabstrip.AddObserver(&tab_manager);
 
-  TabManager::BrowserInfo browser_info;
+  BrowserInfo browser_info;
   browser_info.tab_strip_model = &tabstrip;
   browser_info.window_is_minimized = false;
   browser_info.browser_is_app = false;
@@ -596,13 +653,13 @@ TEST_F(TabManagerTest, GetUnsortedTabStatsIsInVisibleWindow) {
   // Add the 2 TabStripModels to the TabManager.
   // The window for |tab_strip1| is visible while the window for |tab_strip2| is
   // minimized.
-  TabManager::BrowserInfo browser_info1;
+  BrowserInfo browser_info1;
   browser_info1.tab_strip_model = &tab_strip1;
   browser_info1.window_is_minimized = false;
   browser_info1.browser_is_app = false;
   tab_manager.test_browser_info_list_.push_back(browser_info1);
 
-  TabManager::BrowserInfo browser_info2;
+  BrowserInfo browser_info2;
   browser_info2.tab_strip_model = &tab_strip2;
   browser_info2.window_is_minimized = true;
   browser_info2.browser_is_app = false;
@@ -653,13 +710,13 @@ TEST_F(TabManagerTest, DiscardTabWithNonVisibleTabs) {
   // Add the 2 TabStripModels to the TabManager.
   // The window for |tab_strip1| is visible while the window for |tab_strip2|
   // is minimized.
-  TabManager::BrowserInfo browser_info1;
+  BrowserInfo browser_info1;
   browser_info1.tab_strip_model = &tab_strip1;
   browser_info1.window_is_minimized = false;
   browser_info1.browser_is_app = false;
   tab_manager.test_browser_info_list_.push_back(browser_info1);
 
-  TabManager::BrowserInfo browser_info2;
+  BrowserInfo browser_info2;
   browser_info2.tab_strip_model = &tab_strip2;
   browser_info2.window_is_minimized = true;
   browser_info2.browser_is_app = false;
@@ -691,6 +748,7 @@ TEST_F(TabManagerTest, DiscardTabWithNonVisibleTabs) {
 
 TEST_F(TabManagerTest, MaybeThrottleNavigation) {
   TabManager* tab_manager = g_browser_process->GetTabManager();
+  tab_manager->ResetMemoryPressureListenerForTest();
   MaybeThrottleNavigations(tab_manager);
   tab_manager->GetWebContentsData(contents1_)
       ->DidStartNavigation(nav_handle1_.get());
@@ -707,6 +765,7 @@ TEST_F(TabManagerTest, MaybeThrottleNavigation) {
 
 TEST_F(TabManagerTest, OnDidFinishNavigation) {
   TabManager* tab_manager = g_browser_process->GetTabManager();
+  tab_manager->ResetMemoryPressureListenerForTest();
   MaybeThrottleNavigations(tab_manager);
   tab_manager->GetWebContentsData(contents1_)
       ->DidStartNavigation(nav_handle1_.get());
@@ -719,6 +778,7 @@ TEST_F(TabManagerTest, OnDidFinishNavigation) {
 
 TEST_F(TabManagerTest, OnDidStopLoading) {
   TabManager* tab_manager = g_browser_process->GetTabManager();
+  tab_manager->ResetMemoryPressureListenerForTest();
   MaybeThrottleNavigations(tab_manager);
   tab_manager->GetWebContentsData(contents1_)
       ->DidStartNavigation(nav_handle1_.get());
@@ -738,6 +798,7 @@ TEST_F(TabManagerTest, OnDidStopLoading) {
 
 TEST_F(TabManagerTest, OnWebContentsDestroyed) {
   TabManager* tab_manager = g_browser_process->GetTabManager();
+  tab_manager->ResetMemoryPressureListenerForTest();
   MaybeThrottleNavigations(tab_manager);
   tab_manager->GetWebContentsData(contents1_)
       ->DidStartNavigation(nav_handle1_.get());
@@ -763,6 +824,7 @@ TEST_F(TabManagerTest, OnWebContentsDestroyed) {
 
 TEST_F(TabManagerTest, OnDelayedTabSelected) {
   TabManager* tab_manager = g_browser_process->GetTabManager();
+  tab_manager->ResetMemoryPressureListenerForTest();
   MaybeThrottleNavigations(tab_manager);
   tab_manager->GetWebContentsData(contents1_)
       ->DidStartNavigation(nav_handle1_.get());
@@ -795,6 +857,428 @@ TEST_F(TabManagerTest, OnDelayedTabSelected) {
   EXPECT_FALSE(tab_manager->IsTabLoadingForTest(contents3_));
   EXPECT_TRUE(tab_manager->IsTabLoadingForTest(contents2_));
   EXPECT_FALSE(tab_manager->IsNavigationDelayedForTest(nav_handle2_.get()));
+}
+
+TEST_F(TabManagerTest, TimeoutWhenLoadingBackgroundTabs) {
+  TabManager* tab_manager = g_browser_process->GetTabManager();
+  tab_manager->ResetMemoryPressureListenerForTest();
+  base::SimpleTestTickClock test_clock;
+  tab_manager->set_test_tick_clock(&test_clock);
+
+  MaybeThrottleNavigations(tab_manager);
+  tab_manager->GetWebContentsData(contents1_)
+      ->DidStartNavigation(nav_handle1_.get());
+
+  EXPECT_TRUE(tab_manager->IsTabLoadingForTest(contents1_));
+  EXPECT_FALSE(tab_manager->IsTabLoadingForTest(contents2_));
+  EXPECT_FALSE(tab_manager->IsTabLoadingForTest(contents3_));
+  EXPECT_FALSE(tab_manager->IsNavigationDelayedForTest(nav_handle1_.get()));
+  EXPECT_TRUE(tab_manager->IsNavigationDelayedForTest(nav_handle2_.get()));
+  EXPECT_TRUE(tab_manager->IsNavigationDelayedForTest(nav_handle3_.get()));
+
+  // Simulate timout when loading the 1st tab. TabManager should start loading
+  // the 2nd tab.
+  test_clock.Advance(base::TimeDelta::FromMinutes(1));
+  EXPECT_TRUE(tab_manager->TriggerForceLoadTimerForTest());
+
+  EXPECT_TRUE(tab_manager->IsTabLoadingForTest(contents1_));
+  EXPECT_TRUE(tab_manager->IsTabLoadingForTest(contents2_));
+  EXPECT_FALSE(tab_manager->IsTabLoadingForTest(contents3_));
+  EXPECT_FALSE(tab_manager->IsNavigationDelayedForTest(nav_handle1_.get()));
+  EXPECT_FALSE(tab_manager->IsNavigationDelayedForTest(nav_handle2_.get()));
+  EXPECT_TRUE(tab_manager->IsNavigationDelayedForTest(nav_handle3_.get()));
+
+  // Simulate timout again. TabManager should start loading the 3rd tab.
+  test_clock.Advance(base::TimeDelta::FromMinutes(1));
+  EXPECT_TRUE(tab_manager->TriggerForceLoadTimerForTest());
+
+  EXPECT_TRUE(tab_manager->IsTabLoadingForTest(contents1_));
+  EXPECT_TRUE(tab_manager->IsTabLoadingForTest(contents2_));
+  EXPECT_TRUE(tab_manager->IsTabLoadingForTest(contents3_));
+  EXPECT_FALSE(tab_manager->IsNavigationDelayedForTest(nav_handle1_.get()));
+  EXPECT_FALSE(tab_manager->IsNavigationDelayedForTest(nav_handle2_.get()));
+  EXPECT_FALSE(tab_manager->IsNavigationDelayedForTest(nav_handle3_.get()));
+}
+
+TEST_F(TabManagerTest, BackgroundTabLoadingMode) {
+  TabManager* tab_manager = g_browser_process->GetTabManager();
+  tab_manager->ResetMemoryPressureListenerForTest();
+  base::SimpleTestTickClock test_clock;
+  tab_manager->set_test_tick_clock(&test_clock);
+
+  EXPECT_EQ(TabManager::BackgroundTabLoadingMode::kStaggered,
+            tab_manager->background_tab_loading_mode_);
+
+  MaybeThrottleNavigations(tab_manager);
+  tab_manager->GetWebContentsData(contents1_)
+      ->DidStartNavigation(nav_handle1_.get());
+
+  EXPECT_TRUE(tab_manager->IsTabLoadingForTest(contents1_));
+  EXPECT_FALSE(tab_manager->IsTabLoadingForTest(contents2_));
+  EXPECT_FALSE(tab_manager->IsTabLoadingForTest(contents3_));
+  EXPECT_FALSE(tab_manager->IsNavigationDelayedForTest(nav_handle1_.get()));
+  EXPECT_TRUE(tab_manager->IsNavigationDelayedForTest(nav_handle2_.get()));
+  EXPECT_TRUE(tab_manager->IsNavigationDelayedForTest(nav_handle3_.get()));
+
+  // Simulate memory pressure getting high. TabManager pause loading pending
+  // background tabs.
+  tab_manager->OnMemoryPressure(
+      base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_MODERATE);
+  EXPECT_EQ(TabManager::BackgroundTabLoadingMode::kPaused,
+            tab_manager->background_tab_loading_mode_);
+
+  // Simulate timout when loading the 1st tab.
+  test_clock.Advance(base::TimeDelta::FromMinutes(1));
+  EXPECT_TRUE(tab_manager->TriggerForceLoadTimerForTest());
+
+  // Tab 2 and 3 are still pending because of the paused loading mode.
+  EXPECT_FALSE(tab_manager->IsTabLoadingForTest(contents2_));
+  EXPECT_FALSE(tab_manager->IsTabLoadingForTest(contents3_));
+  EXPECT_TRUE(tab_manager->IsNavigationDelayedForTest(nav_handle2_.get()));
+  EXPECT_TRUE(tab_manager->IsNavigationDelayedForTest(nav_handle3_.get()));
+
+  // Simulate tab 1 has finished loading.
+  tab_manager->GetWebContentsData(contents1_)->DidStopLoading();
+
+  // Tab 2 and 3 are still pending because of the paused loading mode.
+  EXPECT_FALSE(tab_manager->IsTabLoadingForTest(contents2_));
+  EXPECT_FALSE(tab_manager->IsTabLoadingForTest(contents3_));
+  EXPECT_TRUE(tab_manager->IsNavigationDelayedForTest(nav_handle2_.get()));
+  EXPECT_TRUE(tab_manager->IsNavigationDelayedForTest(nav_handle3_.get()));
+
+  // Simulate memory pressure is relieved. TabManager will reset the loading
+  // mode and try to load the next tab.
+  tab_manager->OnMemoryPressure(
+      base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE);
+  EXPECT_EQ(TabManager::BackgroundTabLoadingMode::kStaggered,
+            tab_manager->background_tab_loading_mode_);
+
+  // Tab 2 should start loading right away.
+  EXPECT_TRUE(tab_manager->IsTabLoadingForTest(contents2_));
+  EXPECT_FALSE(tab_manager->IsNavigationDelayedForTest(nav_handle2_.get()));
+
+  // Simulate tab 2 has finished loading.
+  tab_manager->GetWebContentsData(contents2_)->DidStopLoading();
+
+  // Tab 3 should start loading now in staggered loading mode.
+  EXPECT_TRUE(tab_manager->IsTabLoadingForTest(contents3_));
+  EXPECT_FALSE(tab_manager->IsNavigationDelayedForTest(nav_handle3_.get()));
+}
+
+TEST_F(TabManagerTest, BackgroundTabLoadingSlots) {
+  TabManager tab_manager1;
+  MaybeThrottleNavigations(&tab_manager1, 1);
+  EXPECT_FALSE(tab_manager1.IsNavigationDelayedForTest(nav_handle1_.get()));
+  EXPECT_TRUE(tab_manager1.IsNavigationDelayedForTest(nav_handle2_.get()));
+  EXPECT_TRUE(tab_manager1.IsNavigationDelayedForTest(nav_handle3_.get()));
+
+  TabManager tab_manager2;
+  tab_manager2.SetLoadingSlotsForTest(2);
+  MaybeThrottleNavigations(&tab_manager2, 2);
+  EXPECT_FALSE(tab_manager2.IsNavigationDelayedForTest(nav_handle1_.get()));
+  EXPECT_FALSE(tab_manager2.IsNavigationDelayedForTest(nav_handle2_.get()));
+  EXPECT_TRUE(tab_manager2.IsNavigationDelayedForTest(nav_handle3_.get()));
+
+  TabManager tab_manager3;
+  tab_manager3.SetLoadingSlotsForTest(3);
+  MaybeThrottleNavigations(&tab_manager3, 3);
+  EXPECT_FALSE(tab_manager3.IsNavigationDelayedForTest(nav_handle1_.get()));
+  EXPECT_FALSE(tab_manager3.IsNavigationDelayedForTest(nav_handle2_.get()));
+  EXPECT_FALSE(tab_manager3.IsNavigationDelayedForTest(nav_handle3_.get()));
+}
+
+TEST_F(TabManagerTest, BackgroundTabsLoadingOrdering) {
+  TabManager* tab_manager = g_browser_process->GetTabManager();
+  tab_manager->ResetMemoryPressureListenerForTest();
+  base::SimpleTestTickClock test_clock;
+  tab_manager->set_test_tick_clock(&test_clock);
+
+  MaybeThrottleNavigations(
+      tab_manager, 1, kTestUrl,
+      chrome::kChromeUISettingsURL,  // Using internal page URL for tab 2.
+      kTestUrl);
+  tab_manager->GetWebContentsData(contents1_)
+      ->DidStartNavigation(nav_handle1_.get());
+
+  EXPECT_TRUE(tab_manager->IsTabLoadingForTest(contents1_));
+  EXPECT_FALSE(tab_manager->IsTabLoadingForTest(contents2_));
+  EXPECT_FALSE(tab_manager->IsTabLoadingForTest(contents3_));
+  EXPECT_FALSE(tab_manager->IsNavigationDelayedForTest(nav_handle1_.get()));
+  EXPECT_TRUE(tab_manager->IsNavigationDelayedForTest(nav_handle2_.get()));
+  EXPECT_TRUE(tab_manager->IsNavigationDelayedForTest(nav_handle3_.get()));
+
+  // Simulate tab 1 has finished loading. Tab 3 should be loaded before tab 2,
+  // because tab 2 is internal page.
+  tab_manager->GetWebContentsData(contents1_)->DidStopLoading();
+
+  EXPECT_FALSE(tab_manager->IsTabLoadingForTest(contents2_));
+  EXPECT_TRUE(tab_manager->IsTabLoadingForTest(contents3_));
+  EXPECT_TRUE(tab_manager->IsNavigationDelayedForTest(nav_handle2_.get()));
+  EXPECT_FALSE(tab_manager->IsNavigationDelayedForTest(nav_handle3_.get()));
+}
+
+TEST_F(TabManagerTest, PauseAndResumeBackgroundTabOpening) {
+  TabManager* tab_manager = g_browser_process->GetTabManager();
+  tab_manager->ResetMemoryPressureListenerForTest();
+  PrepareTabs();
+
+  EXPECT_EQ(TabManager::BackgroundTabLoadingMode::kStaggered,
+            tab_manager->background_tab_loading_mode_);
+  EXPECT_FALSE(tab_manager->IsInBackgroundTabOpeningSession());
+  EXPECT_FALSE(
+      tab_manager->stats_collector()->is_in_background_tab_opening_session());
+
+  // Start background tab opening session.
+  EXPECT_EQ(content::NavigationThrottle::PROCEED,
+            tab_manager->MaybeThrottleNavigation(throttle1_.get()));
+  tab_manager->GetWebContentsData(contents1_)
+      ->DidStartNavigation(nav_handle1_.get());
+  EXPECT_TRUE(tab_manager->IsInBackgroundTabOpeningSession());
+  EXPECT_TRUE(
+      tab_manager->stats_collector()->is_in_background_tab_opening_session());
+
+  // Simulate memory pressure getting high. TabManager pause loading pending
+  // background tabs, and ends the background tab opening session.
+  tab_manager->OnMemoryPressure(
+      base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_MODERATE);
+  EXPECT_EQ(TabManager::BackgroundTabLoadingMode::kPaused,
+            tab_manager->background_tab_loading_mode_);
+  EXPECT_FALSE(tab_manager->IsInBackgroundTabOpeningSession());
+  EXPECT_FALSE(
+      tab_manager->stats_collector()->is_in_background_tab_opening_session());
+
+  // Simulate tab 1 has finished loading, which was scheduled to load before
+  // pausing.
+  tab_manager->GetWebContentsData(contents1_)->DidStopLoading();
+
+  // TabManager cannot enter BackgroundTabOpening session when it is in paused
+  // mode.
+  EXPECT_EQ(content::NavigationThrottle::DEFER,
+            tab_manager->MaybeThrottleNavigation(throttle2_.get()));
+  EXPECT_TRUE(tab_manager->IsNavigationDelayedForTest(nav_handle2_.get()));
+  EXPECT_FALSE(tab_manager->IsInBackgroundTabOpeningSession());
+  EXPECT_FALSE(
+      tab_manager->stats_collector()->is_in_background_tab_opening_session());
+
+  // Simulate memory pressure is relieved. TabManager will reset the loading
+  // mode and try to load the next tab. If there is pending tab, TabManager
+  // starts a new BackgroundTabOpening session.
+  tab_manager->OnMemoryPressure(
+      base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE);
+  EXPECT_EQ(TabManager::BackgroundTabLoadingMode::kStaggered,
+            tab_manager->background_tab_loading_mode_);
+  EXPECT_TRUE(tab_manager->IsInBackgroundTabOpeningSession());
+  EXPECT_TRUE(
+      tab_manager->stats_collector()->is_in_background_tab_opening_session());
+
+  // Tab 2 should start loading right away.
+  EXPECT_TRUE(tab_manager->IsTabLoadingForTest(contents2_));
+  EXPECT_FALSE(tab_manager->IsNavigationDelayedForTest(nav_handle2_.get()));
+}
+
+TEST_F(TabManagerTest, IsInBackgroundTabOpeningSession) {
+  TabManager* tab_manager = g_browser_process->GetTabManager();
+  tab_manager->ResetMemoryPressureListenerForTest();
+  EXPECT_FALSE(tab_manager->IsInBackgroundTabOpeningSession());
+  EXPECT_FALSE(
+      tab_manager->stats_collector()->is_in_background_tab_opening_session());
+
+  MaybeThrottleNavigations(tab_manager);
+  tab_manager->GetWebContentsData(contents1_)
+      ->DidStartNavigation(nav_handle1_.get());
+  EXPECT_TRUE(tab_manager->IsInBackgroundTabOpeningSession());
+  EXPECT_TRUE(
+      tab_manager->stats_collector()->is_in_background_tab_opening_session());
+
+  tab_manager->GetWebContentsData(contents1_)->DidStopLoading();
+  EXPECT_TRUE(tab_manager->IsInBackgroundTabOpeningSession());
+  EXPECT_TRUE(
+      tab_manager->stats_collector()->is_in_background_tab_opening_session());
+
+  tab_manager->GetWebContentsData(contents2_)->DidStopLoading();
+  EXPECT_TRUE(tab_manager->IsInBackgroundTabOpeningSession());
+  EXPECT_TRUE(
+      tab_manager->stats_collector()->is_in_background_tab_opening_session());
+
+  // It is still in background tab opening session even if tab3 is brought to
+  // foreground. The session only ends after tab1, tab2 and tab3 have all
+  // finished loading.
+  contents3_->WasShown();
+  EXPECT_TRUE(tab_manager->IsInBackgroundTabOpeningSession());
+  EXPECT_TRUE(
+      tab_manager->stats_collector()->is_in_background_tab_opening_session());
+
+  tab_manager->GetWebContentsData(contents3_)->DidStopLoading();
+  EXPECT_FALSE(tab_manager->IsInBackgroundTabOpeningSession());
+  EXPECT_FALSE(
+      tab_manager->stats_collector()->is_in_background_tab_opening_session());
+}
+
+TEST_F(TabManagerWithExperimentDisabledTest, IsInBackgroundTabOpeningSession) {
+  EXPECT_FALSE(base::FeatureList::IsEnabled(
+      features::kStaggeredBackgroundTabOpeningExperiment));
+
+  TabManager* tab_manager = g_browser_process->GetTabManager();
+  tab_manager->ResetMemoryPressureListenerForTest();
+  EXPECT_FALSE(tab_manager->IsInBackgroundTabOpeningSession());
+  EXPECT_FALSE(
+      tab_manager->stats_collector()->is_in_background_tab_opening_session());
+
+  MaybeThrottleNavigations(tab_manager);
+  tab_manager->GetWebContentsData(contents1_)
+      ->DidStartNavigation(nav_handle1_.get());
+  tab_manager->GetWebContentsData(contents2_)
+      ->DidStartNavigation(nav_handle1_.get());
+  tab_manager->GetWebContentsData(contents3_)
+      ->DidStartNavigation(nav_handle1_.get());
+
+  EXPECT_TRUE(tab_manager->IsTabLoadingForTest(contents1_));
+  EXPECT_TRUE(tab_manager->IsTabLoadingForTest(contents2_));
+  EXPECT_TRUE(tab_manager->IsTabLoadingForTest(contents3_));
+  EXPECT_FALSE(tab_manager->IsNavigationDelayedForTest(nav_handle1_.get()));
+  EXPECT_FALSE(tab_manager->IsNavigationDelayedForTest(nav_handle2_.get()));
+  EXPECT_FALSE(tab_manager->IsNavigationDelayedForTest(nav_handle3_.get()));
+  EXPECT_TRUE(tab_manager->IsInBackgroundTabOpeningSession());
+  EXPECT_TRUE(
+      tab_manager->stats_collector()->is_in_background_tab_opening_session());
+
+  tab_manager->GetWebContentsData(contents1_)->DidStopLoading();
+  EXPECT_FALSE(tab_manager->IsTabLoadingForTest(contents1_));
+  EXPECT_TRUE(tab_manager->IsTabLoadingForTest(contents2_));
+  EXPECT_TRUE(tab_manager->IsTabLoadingForTest(contents3_));
+  EXPECT_TRUE(tab_manager->IsInBackgroundTabOpeningSession());
+  EXPECT_TRUE(
+      tab_manager->stats_collector()->is_in_background_tab_opening_session());
+
+  tab_manager->GetWebContentsData(contents2_)->DidStopLoading();
+  EXPECT_FALSE(tab_manager->IsTabLoadingForTest(contents1_));
+  EXPECT_FALSE(tab_manager->IsTabLoadingForTest(contents2_));
+  EXPECT_TRUE(tab_manager->IsTabLoadingForTest(contents3_));
+  EXPECT_TRUE(tab_manager->IsInBackgroundTabOpeningSession());
+  EXPECT_TRUE(
+      tab_manager->stats_collector()->is_in_background_tab_opening_session());
+
+  // It is still in background tab opening session even if tab3 is brought to
+  // foreground. The session only ends after tab1, tab2 and tab3 have all
+  // finished loading.
+  contents3_->WasShown();
+  EXPECT_TRUE(tab_manager->IsInBackgroundTabOpeningSession());
+  EXPECT_TRUE(
+      tab_manager->stats_collector()->is_in_background_tab_opening_session());
+
+  tab_manager->GetWebContentsData(contents3_)->DidStopLoading();
+  EXPECT_FALSE(tab_manager->IsTabLoadingForTest(contents1_));
+  EXPECT_FALSE(tab_manager->IsTabLoadingForTest(contents2_));
+  EXPECT_FALSE(tab_manager->IsTabLoadingForTest(contents3_));
+  EXPECT_FALSE(tab_manager->IsInBackgroundTabOpeningSession());
+  EXPECT_FALSE(
+      tab_manager->stats_collector()->is_in_background_tab_opening_session());
+}
+
+TEST_F(TabManagerTest, SessionRestoreBeforeBackgroundTabOpeningSession) {
+  TabManager* tab_manager = g_browser_process->GetTabManager();
+  tab_manager->ResetMemoryPressureListenerForTest();
+  PrepareTabs();
+
+  // Start session restore.
+  tab_manager->OnSessionRestoreStartedLoadingTabs();
+  EXPECT_TRUE(tab_manager->IsSessionRestoreLoadingTabs());
+  EXPECT_FALSE(tab_manager->IsInBackgroundTabOpeningSession());
+  EXPECT_FALSE(
+      tab_manager->stats_collector()->is_in_background_tab_opening_session());
+
+  tab_manager->GetWebContentsData(contents1_)->SetIsInSessionRestore(true);
+  tab_manager->GetWebContentsData(contents2_)->SetIsInSessionRestore(false);
+  tab_manager->GetWebContentsData(contents3_)->SetIsInSessionRestore(false);
+
+  // Do not enter BackgroundTabOpening session if the background tab is in
+  // session restore.
+  EXPECT_EQ(content::NavigationThrottle::PROCEED,
+            tab_manager->MaybeThrottleNavigation(throttle1_.get()));
+  EXPECT_FALSE(tab_manager->IsInBackgroundTabOpeningSession());
+  EXPECT_FALSE(
+      tab_manager->stats_collector()->is_in_background_tab_opening_session());
+
+  // Enter BackgroundTabOpening session when there are background tabs not in
+  // session restore, though the first background tab can still proceed.
+  EXPECT_EQ(content::NavigationThrottle::PROCEED,
+            tab_manager->MaybeThrottleNavigation(throttle2_.get()));
+  EXPECT_TRUE(tab_manager->IsInBackgroundTabOpeningSession());
+  EXPECT_TRUE(
+      tab_manager->stats_collector()->is_in_background_tab_opening_session());
+
+  EXPECT_EQ(content::NavigationThrottle::DEFER,
+            tab_manager->MaybeThrottleNavigation(throttle3_.get()));
+  EXPECT_TRUE(tab_manager->IsInBackgroundTabOpeningSession());
+  EXPECT_TRUE(
+      tab_manager->stats_collector()->is_in_background_tab_opening_session());
+
+  // Stop session restore.
+  tab_manager->OnSessionRestoreFinishedLoadingTabs();
+  EXPECT_FALSE(tab_manager->IsSessionRestoreLoadingTabs());
+  EXPECT_TRUE(tab_manager->IsInBackgroundTabOpeningSession());
+  EXPECT_TRUE(
+      tab_manager->stats_collector()->is_in_background_tab_opening_session());
+}
+
+TEST_F(TabManagerTest, SessionRestoreAfterBackgroundTabOpeningSession) {
+  TabManager* tab_manager = g_browser_process->GetTabManager();
+  tab_manager->ResetMemoryPressureListenerForTest();
+  PrepareTabs();
+
+  EXPECT_FALSE(tab_manager->IsSessionRestoreLoadingTabs());
+  EXPECT_FALSE(tab_manager->IsInBackgroundTabOpeningSession());
+  EXPECT_FALSE(
+      tab_manager->stats_collector()->is_in_background_tab_opening_session());
+
+  // Start background tab opening session.
+  EXPECT_EQ(content::NavigationThrottle::PROCEED,
+            tab_manager->MaybeThrottleNavigation(throttle1_.get()));
+  EXPECT_TRUE(tab_manager->IsInBackgroundTabOpeningSession());
+  EXPECT_TRUE(
+      tab_manager->stats_collector()->is_in_background_tab_opening_session());
+
+  EXPECT_EQ(content::NavigationThrottle::DEFER,
+            tab_manager->MaybeThrottleNavigation(throttle2_.get()));
+  EXPECT_TRUE(tab_manager->IsInBackgroundTabOpeningSession());
+  EXPECT_TRUE(
+      tab_manager->stats_collector()->is_in_background_tab_opening_session());
+
+  // Now session restore starts after background tab opening session starts.
+  tab_manager->OnSessionRestoreStartedLoadingTabs();
+  EXPECT_TRUE(tab_manager->IsSessionRestoreLoadingTabs());
+  EXPECT_TRUE(tab_manager->IsInBackgroundTabOpeningSession());
+  EXPECT_TRUE(
+      tab_manager->stats_collector()->is_in_background_tab_opening_session());
+
+  // The following background tabs are still delayed if they are not in session
+  // restore.
+  tab_manager->GetWebContentsData(contents3_)->SetIsInSessionRestore(false);
+  EXPECT_EQ(content::NavigationThrottle::DEFER,
+            tab_manager->MaybeThrottleNavigation(throttle3_.get()));
+
+  // The background tab opening session ends after existing tracked tabs have
+  // finished loading.
+  tab_manager->GetWebContentsData(contents1_)->DidStopLoading();
+  tab_manager->GetWebContentsData(contents2_)->DidStopLoading();
+  tab_manager->GetWebContentsData(contents3_)->DidStopLoading();
+  EXPECT_FALSE(tab_manager->IsInBackgroundTabOpeningSession());
+  EXPECT_FALSE(
+      tab_manager->stats_collector()->is_in_background_tab_opening_session());
+}
+
+TEST_F(TabManagerTest, IsTabRestoredInForeground) {
+  TabManager* tab_manager = g_browser_process->GetTabManager();
+
+  std::unique_ptr<WebContents> contents(CreateWebContents());
+  contents->WasShown();
+  tab_manager->OnWillRestoreTab(contents.get());
+  EXPECT_TRUE(tab_manager->IsTabRestoredInForeground(contents.get()));
+
+  contents.reset(CreateWebContents());
+  contents->WasHidden();
+  tab_manager->OnWillRestoreTab(contents.get());
+  EXPECT_FALSE(tab_manager->IsTabRestoredInForeground(contents.get()));
 }
 
 }  // namespace resource_coordinator

@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -130,20 +131,22 @@ TEST_F(ImageTraitsTest, NullImageSkia) {
   EXPECT_TRUE(output.isNull());
 }
 
-TEST_F(ImageTraitsTest, ImageSkiaWithNoRepsTreatedAsNull) {
+TEST_F(ImageTraitsTest, ImageSkiaRepsAreCreatedAsNeeded) {
   const gfx::Size kSize(1, 2);
-  ImageSkia image(new TestImageSkiaSource(kSize), kSize);
-  ASSERT_FALSE(image.isNull());
+  ImageSkia image(base::MakeUnique<TestImageSkiaSource>(kSize), kSize);
+  EXPECT_FALSE(image.isNull());
+  EXPECT_TRUE(image.image_reps().empty());
 
-  ImageSkia output(ImageSkiaRep(gfx::Size(1, 1), 1.0f));
-  ASSERT_FALSE(output.isNull());
-  service()->EchoImageSkia(image, &output);
+  ImageSkia output;
   EXPECT_TRUE(output.isNull());
+  service()->EchoImageSkia(image, &output);
+  EXPECT_FALSE(image.image_reps().empty());
+  EXPECT_FALSE(output.isNull());
 }
 
 TEST_F(ImageTraitsTest, ImageSkia) {
   const gfx::Size kSize(1, 2);
-  ImageSkia image(new TestImageSkiaSource(kSize), kSize);
+  ImageSkia image(base::MakeUnique<TestImageSkiaSource>(kSize), kSize);
   image.GetRepresentation(1.0f);
   image.GetRepresentation(2.0f);
 
@@ -155,7 +158,7 @@ TEST_F(ImageTraitsTest, ImageSkia) {
 
 TEST_F(ImageTraitsTest, EmptyRepPreserved) {
   const gfx::Size kSize(1, 2);
-  ImageSkia image(new TestImageSkiaSource(kSize), kSize);
+  ImageSkia image(base::MakeUnique<TestImageSkiaSource>(kSize), kSize);
   image.GetRepresentation(1.0f);
 
   SkBitmap empty_bitmap;
@@ -170,7 +173,7 @@ TEST_F(ImageTraitsTest, EmptyRepPreserved) {
 
 TEST_F(ImageTraitsTest, ImageSkiaWithOperations) {
   const gfx::Size kSize(32, 32);
-  ImageSkia image(new TestImageSkiaSource(kSize), kSize);
+  ImageSkia image(base::MakeUnique<TestImageSkiaSource>(kSize), kSize);
 
   const gfx::Size kNewSize(16, 16);
   ImageSkia resized = ImageSkiaOperations::CreateResizedImage(

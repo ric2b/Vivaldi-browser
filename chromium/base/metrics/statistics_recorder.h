@@ -31,6 +31,7 @@
 namespace base {
 
 class BucketRanges;
+class HistogramSnapshotManager;
 
 class BASE_EXPORT StatisticsRecorder {
  public:
@@ -74,34 +75,6 @@ class BASE_EXPORT StatisticsRecorder {
   typedef std::map<StringKey, HistogramBase*> HistogramMap;
   typedef std::vector<HistogramBase*> Histograms;
   typedef std::vector<WeakPtr<HistogramProvider>> HistogramProviders;
-
-  // A class for iterating over the histograms held within this global resource.
-  class BASE_EXPORT HistogramIterator {
-   public:
-    HistogramIterator(const HistogramMap::iterator& iter,
-                      bool include_persistent);
-    HistogramIterator(const HistogramIterator& rhs);  // Must be copyable.
-    ~HistogramIterator();
-
-    HistogramIterator& operator++();
-    HistogramIterator operator++(int) {
-      HistogramIterator tmp(*this);
-      operator++();
-      return tmp;
-    }
-
-    bool operator==(const HistogramIterator& rhs) const {
-      return iter_ == rhs.iter_;
-    }
-    bool operator!=(const HistogramIterator& rhs) const {
-      return iter_ != rhs.iter_;
-    }
-    HistogramBase* operator*() { return iter_->second; }
-
-   private:
-    HistogramMap::iterator iter_;
-    const bool include_persistent_;
-  };
 
   ~StatisticsRecorder();
 
@@ -153,9 +126,18 @@ class BASE_EXPORT StatisticsRecorder {
   // Imports histograms from providers. This must be called on the UI thread.
   static void ImportProvidedHistograms();
 
-  // Support for iterating over known histograms.
-  static HistogramIterator begin(bool include_persistent);
-  static HistogramIterator end();
+  // Snapshots all histograms via |snapshot_manager|. |flags_to_set| is used to
+  // set flags for each histogram. |required_flags| is used to select
+  // histograms to be recorded. Only histograms that have all the flags
+  // specified by the argument will be chosen. If all histograms should be
+  // recorded, set it to |Histogram::kNoFlags|.
+  static void PrepareDeltas(bool include_persistent,
+                            HistogramBase::Flags flags_to_set,
+                            HistogramBase::Flags required_flags,
+                            HistogramSnapshotManager* snapshot_manager);
+
+  // TODO(asvitkine): Remove this after crbug/736675.
+  static void ValidateAllHistograms(int identifier = 0);
 
   // GetSnapshot copies some of the pointers to registered histograms into the
   // caller supplied vector (Histograms). Only histograms which have |query| as
@@ -219,6 +201,12 @@ class BASE_EXPORT StatisticsRecorder {
 
   friend struct LazyInstanceTraitsBase<StatisticsRecorder>;
   friend class StatisticsRecorderTest;
+  FRIEND_TEST_ALL_PREFIXES(StatisticsRecorderTest, IterationTest);
+
+  // Fetch set of existing histograms. Ownership of the individual histograms
+  // remains with the StatisticsRecorder.
+  static std::vector<HistogramBase*> GetKnownHistograms(
+      bool include_persistent);
 
   // Imports histograms from global persistent memory. The global lock must
   // not be held during this call.

@@ -1,10 +1,4 @@
 # TODO(fuchsia): Being ported, see https://crbug.com/734791
 
--IPCChannelMojoTest.*
--IPCChannelProxyMojoTest.*
--IPCChannelProxyTest.*
--IPCChannelBadMessageTest.*
--IPCFuzzingTest.*
--IPCMojoBootstrapTest.*
--IPCSendFdsTest.DescriptorTest
--IPCMessageUtilsTest.SharedMemoryHandle
+# These tests are too slow under Fuchsia in QEMU w/out KVM.
+-IPCSyncChannelTest.ChattyServer*

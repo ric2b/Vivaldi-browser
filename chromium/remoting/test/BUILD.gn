@@ -73,6 +73,7 @@ static_library("test_support") {
     "//net",
     "//remoting/base",
     "//remoting/client",
+    "//remoting/client/audio",
     "//remoting/codec:decoder",
     "//remoting/codec:encoder",
     "//remoting/protocol",
@@ -209,6 +210,20 @@ if (enable_remoting_host && !is_android && !is_chromeos) {
         "wtsapi32.lib",
       ]
     }
+  }
+
+  # A binary with a specific version of EvaluateCapabilityLocally() for test
+  # purpose only.
+  executable("capability_test_stub") {
+    testonly = true
+    sources = [
+      "capability_test_stub_main.cc",
+    ]
+
+    deps = [
+      "//base",
+      "//build/config:exe_and_shlib_deps",
+    ]
   }
 }
 

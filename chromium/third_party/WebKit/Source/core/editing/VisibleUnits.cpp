@@ -342,7 +342,8 @@ static PositionTemplate<Strategy> PreviousBoundaryAlgorithm(
   BackwardsTextBuffer string;
   string.PushRange(suffix_string.Data(), suffix_string.Size());
 
-  SimplifiedBackwardsTextIteratorAlgorithm<Strategy> it(start, end);
+  SimplifiedBackwardsTextIteratorAlgorithm<Strategy> it(
+      EphemeralRangeTemplate<Strategy>(start, end));
   int remaining_length = 0;
   unsigned next = 0;
   bool need_more_context = false;
@@ -354,9 +355,6 @@ static PositionTemplate<Strategy> PreviousBoundaryAlgorithm(
       int run_offset = 0;
       do {
         run_offset += it.CopyTextTo(&string, run_offset, string.Capacity());
-        // TODO(xiaochengh): The following line takes O(string.size()) time,
-        // which makes quadratic overall running time in the worst case.
-        // Should improve it in some way.
         next = search_function(string.Data(), string.Size(),
                                string.Size() - suffix_length,
                                kMayHaveMoreContext, need_more_context);
@@ -377,7 +375,6 @@ static PositionTemplate<Strategy> PreviousBoundaryAlgorithm(
     // The last search returned the beginning of the buffer and asked for
     // more context, but there is no earlier text. Force a search with
     // what's available.
-    // TODO(xiaochengh): Do we have to search the whole string?
     next = search_function(string.Data(), string.Size(),
                            string.Size() - suffix_length, kDontHaveMoreContext,
                            need_more_context);
@@ -396,7 +393,8 @@ static PositionTemplate<Strategy> PreviousBoundaryAlgorithm(
 
   // Use the character iterator to translate the next value into a DOM
   // position.
-  BackwardsCharacterIteratorAlgorithm<Strategy> char_it(start, end);
+  BackwardsCharacterIteratorAlgorithm<Strategy> char_it(
+      EphemeralRangeTemplate<Strategy>(start, end));
   char_it.Advance(string.Size() - suffix_length - next);
   // TODO(yosin) charIt can get out of shadow host.
   return char_it.EndPosition();
@@ -418,7 +416,8 @@ static PositionTemplate<Strategy> NextBoundaryAlgorithm(
   BackwardsTextBuffer prefix_string;
   if (RequiresContextForWordBoundary(CharacterAfter(c))) {
     SimplifiedBackwardsTextIteratorAlgorithm<Strategy> backwards_iterator(
-        PositionTemplate<Strategy>::FirstPositionInNode(d), start);
+        EphemeralRangeTemplate<Strategy>(
+            PositionTemplate<Strategy>::FirstPositionInNode(d), start));
     while (!backwards_iterator.AtEnd()) {
       backwards_iterator.CopyTextTo(&prefix_string);
       int context_start_index = StartOfLastWordBoundaryContext(
@@ -481,7 +480,6 @@ static PositionTemplate<Strategy> NextBoundaryAlgorithm(
     // The last search returned the end of the buffer and asked for more
     // context, but there is no further text. Force a search with what's
     // available.
-    // TODO(xiaochengh): Do we still have to search the whole string?
     next = search_function(string.Data(), string.Size(), prefix_length,
                            kDontHaveMoreContext, need_more_context);
     DCHECK(!need_more_context);
@@ -1122,62 +1120,9 @@ VisiblePosition VisiblePositionForContentsPoint(const IntPoint& contents_point,
 
 // TODO(yosin): We should use |associatedLayoutObjectOf()| in "VisibleUnits.cpp"
 // where it takes |LayoutObject| from |Position|.
-// Note about ::first-letter pseudo-element:
-//   When an element has ::first-letter pseudo-element, first letter characters
-//   are taken from |Text| node and first letter characters are considered
-//   as content of <pseudo:first-letter>.
-//   For following HTML,
-//      <style>div::first-letter {color: red}</style>
-//      <div>abc</div>
-//   we have following layout tree:
-//      LayoutBlockFlow {DIV} at (0,0) size 784x55
-//        LayoutInline {<pseudo:first-letter>} at (0,0) size 22x53
-//          LayoutTextFragment (anonymous) at (0,1) size 22x53
-//            text run at (0,1) width 22: "a"
-//        LayoutTextFragment {#text} at (21,30) size 16x17
-//          text run at (21,30) width 16: "bc"
-//  In this case, |Text::layoutObject()| for "abc" returns |LayoutTextFragment|
-//  containing "bc", and it is called remaining part.
-//
-//  Even if |Text| node contains only first-letter characters, e.g. just "a",
-//  remaining part of |LayoutTextFragment|, with |fragmentLength()| == 0, is
-//  appeared in layout tree.
-//
-//  When |Text| node contains only first-letter characters and whitespaces, e.g.
-//  "B\n", associated |LayoutTextFragment| is first-letter part instead of
-//  remaining part.
-//
-//  Punctuation characters are considered as first-letter. For "(1)ab",
-//  "(1)" are first-letter part and "ab" are remaining part.
-LayoutObject* AssociatedLayoutObjectOf(const Node& node, int offset_in_node) {
-  DCHECK_GE(offset_in_node, 0);
-  LayoutObject* layout_object = node.GetLayoutObject();
-  if (!node.IsTextNode() || !layout_object ||
-      !ToLayoutText(layout_object)->IsTextFragment())
-    return layout_object;
-  LayoutTextFragment* layout_text_fragment =
-      ToLayoutTextFragment(layout_object);
-  if (!layout_text_fragment->IsRemainingTextLayoutObject()) {
-    DCHECK_LE(
-        static_cast<unsigned>(offset_in_node),
-        layout_text_fragment->Start() + layout_text_fragment->FragmentLength());
-    return layout_text_fragment;
-  }
-  if (layout_text_fragment->FragmentLength() &&
-      static_cast<unsigned>(offset_in_node) >= layout_text_fragment->Start())
-    return layout_object;
-  LayoutObject* first_letter_layout_object =
-      layout_text_fragment->GetFirstLetterPseudoElement()->GetLayoutObject();
-  // TODO(yosin): We're not sure when |firstLetterLayoutObject| has
-  // multiple child layout object.
-  LayoutObject* child = first_letter_layout_object->SlowFirstChild();
-  CHECK(child && child->IsText());
-  DCHECK_EQ(child, first_letter_layout_object->SlowLastChild());
-  return child;
-}
 
 int CaretMinOffset(const Node* node) {
-  LayoutObject* layout_object = AssociatedLayoutObjectOf(*node, 0);
+  const LayoutObject* layout_object = AssociatedLayoutObjectOf(*node, 0);
   return layout_object ? layout_object->CaretMinOffset() : 0;
 }
 
@@ -1192,12 +1137,12 @@ static bool InRenderedText(const PositionTemplate<Strategy>& position) {
     return false;
 
   const int offset_in_node = position.ComputeEditingOffset();
-  LayoutObject* layout_object =
+  const LayoutObject* layout_object =
       AssociatedLayoutObjectOf(*anchor_node, offset_in_node);
   if (!layout_object)
     return false;
 
-  LayoutText* text_layout_object = ToLayoutText(layout_object);
+  const LayoutText* text_layout_object = ToLayoutText(layout_object);
   const int text_offset =
       offset_in_node - text_layout_object->TextStartOffset();
   for (InlineTextBox* box : InlineTextBoxesOf(*text_layout_object)) {
@@ -1242,7 +1187,6 @@ bool RendersInDifferentPosition(const Position& position1,
 static bool IsVisuallyEmpty(const LayoutObject* layout) {
   for (LayoutObject* child = layout->SlowFirstChild(); child;
        child = child->NextSibling()) {
-    // TODO(xiaochengh): Replace type-based conditioning by virtual function.
     if (child->IsBox()) {
       if (!ToLayoutBox(child)->Size().IsEmpty())
         return false;
@@ -1359,7 +1303,7 @@ static PositionTemplate<Strategy> MostBackwardCaretPosition(
       return last_visible.DeprecatedComputePosition();
 
     // skip position in non-laid out or invisible node
-    LayoutObject* const layout_object =
+    const LayoutObject* const layout_object =
         AssociatedLayoutObjectOf(*current_node, current_pos.OffsetInLeafNode());
     if (!layout_object ||
         layout_object->Style()->Visibility() != EVisibility::kVisible)
@@ -1393,7 +1337,7 @@ static PositionTemplate<Strategy> MostBackwardCaretPosition(
     // return current position if it is in laid out text
     if (!layout_object->IsText())
       continue;
-    LayoutText* const text_layout_object = ToLayoutText(layout_object);
+    const LayoutText* const text_layout_object = ToLayoutText(layout_object);
     if (!text_layout_object->FirstTextBox())
       continue;
     const unsigned text_start_offset = text_layout_object->TextStartOffset();
@@ -1568,7 +1512,7 @@ PositionTemplate<Strategy> MostForwardCaretPosition(
       return last_visible.DeprecatedComputePosition();
 
     // skip position in non-laid out or invisible node
-    LayoutObject* const layout_object =
+    const LayoutObject* const layout_object =
         AssociatedLayoutObjectOf(*current_node, current_pos.OffsetInLeafNode());
     if (!layout_object ||
         layout_object->Style()->Visibility() != EVisibility::kVisible)
@@ -1594,7 +1538,7 @@ PositionTemplate<Strategy> MostForwardCaretPosition(
     // return current position if it is in laid out text
     if (!layout_object->IsText())
       continue;
-    LayoutText* const text_layout_object = ToLayoutText(layout_object);
+    const LayoutText* const text_layout_object = ToLayoutText(layout_object);
     if (!text_layout_object->FirstTextBox())
       continue;
     const unsigned text_start_offset = text_layout_object->TextStartOffset();

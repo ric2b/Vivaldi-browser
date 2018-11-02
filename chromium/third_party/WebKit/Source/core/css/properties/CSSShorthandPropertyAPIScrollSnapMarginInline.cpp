@@ -9,12 +9,13 @@
 
 namespace blink {
 
-bool CSSShorthandPropertyAPIScrollSnapMarginInline::parseShorthand(
+bool CSSShorthandPropertyAPIScrollSnapMarginInline::ParseShorthand(
+    CSSPropertyID,
     bool important,
     CSSParserTokenRange& range,
     const CSSParserContext& context,
-    bool,
-    HeapVector<CSSProperty, 256>& properties) {
+    const CSSParserLocalContext&,
+    HeapVector<CSSProperty, 256>& properties) const {
   return CSSPropertyParserHelpers::ConsumeShorthandVia2LonghandAPIs(
       scrollSnapMarginInlineShorthand(), important, context, range, properties);
 }

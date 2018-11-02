@@ -157,7 +157,7 @@ interface WindowManager {
   // End long lived properties. ------------------------------------------------
 
   // Called immediately when the WindowManager is obtained.
-  OnConnect(uint16 client_id);
+  OnConnect();
 
   // Called when a new display is added. |root| gives the root window specific
   // to this WindowManager for |display|. |local_surface_id| identifies the ID
@@ -242,6 +242,14 @@ interface WindowManager {
   // |ack_id| is non-zero the accelerator matches a PRE_TARGET and must be
   // acknowledged by WindowManagerClient::OnAcceleratorAck().
   OnAccelerator(uint32 ack_id, uint32 accelerator_id, ui.mojom.Event event);
+
+  // Whenever the visibility of the mouse cursor changes due to touch on the
+  // server, the window manager gets notified of the change.
+  OnCursorTouchVisibleChanged(bool enabled);
+
+  // Called when a pointer down event occurs on a window and the event is
+  // blocked by a modal window.
+  OnEventBlockedByModalWindow(uint32 window_id);
 };
 
 struct WmAccelerator {
@@ -255,8 +263,6 @@ interface WindowManagerClient {
   // Enables (or disables) child windows of |window_id| to be activated.
   AddActivationParent(uint32 window_id);
   RemoveActivationParent(uint32 window_id);
-
-  ActivateNextWindow();
 
   // Extends the hit area for children of |window_id| by the specified amount.
   // |mouse_insets| is used for mouse events, and |touch_insets| for touch
@@ -297,8 +303,7 @@ interface WindowManagerClient {
   SetDisplayRoot(display.mojom.Display display,
                  WmViewportMetrics viewport_metrics,
                  bool is_primary_display,
-                 uint32 window_id) =>
-      (cc.mojom.LocalSurfaceId? local_surface_id);
+                 uint32 window_id) => (bool success);
 
   // Configures the metrics for the displays and notifies observers. This is
   // only applicable when WindowTree was created with a value of false for
@@ -313,6 +318,12 @@ interface WindowManagerClient {
 
   // Swaps the display roots of the two displays.
   SwapDisplayRoots(int64 display_id1, int64 display_id2) => (bool success);
+
+  // Sets the BlockingContainers; one per display. This should be called any
+  // time displays are added or removed. See description of BlockingContainers
+  // for details on what this does.
+  SetBlockingContainers(array<BlockingContainers> blocking_containers) =>
+      (bool success);
 
   // The window manager has completed a request with the specific change id.
   WmResponse(uint32 change_id, bool response);
@@ -350,6 +361,14 @@ interface WindowManagerClient {
   // Moves the cursor to the given location on the given display.
   WmMoveCursorToDisplayLocation(gfx.mojom.Point display_pixels,
                                 int64 display_id);
+
+  // Confines the cursor to a rectangle in pixels on |display_id|.
+  WmConfineCursorToBounds(gfx.mojom.Rect bounds_in_pixels,
+                          int64 display_id);
+
+  // The cursor is hidden and shown by touch events naturally, but the
+  // window manager also can manually show/hide it for features.
+  WmSetCursorTouchVisible(bool enabled);
 
   // Response from WmCreateTopLevelWindow() informing the client of the id for
   // the new window.

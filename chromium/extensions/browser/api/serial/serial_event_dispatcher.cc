@@ -93,12 +93,12 @@ void SerialEventDispatcher::StartReceive(const ReceiveParams& params) {
   if (connection->paused())
     return;
 
-  connection->Receive(base::Bind(&ReceiveCallback, params));
+  connection->Receive(base::BindOnce(&ReceiveCallback, params));
 }
 
 // static
 void SerialEventDispatcher::ReceiveCallback(const ReceiveParams& params,
-                                            const std::vector<char>& data,
+                                            std::vector<char> data,
                                             serial::ReceiveError error) {
   DCHECK_CURRENTLY_ON(params.thread_id);
 
@@ -107,7 +107,7 @@ void SerialEventDispatcher::ReceiveCallback(const ReceiveParams& params,
   if (data.size() > 0) {
     serial::ReceiveInfo receive_info;
     receive_info.connection_id = params.connection_id;
-    receive_info.data = data;
+    receive_info.data = std::move(data);
     std::unique_ptr<base::ListValue> args =
         serial::OnReceive::Create(receive_info);
     std::unique_ptr<extensions::Event> event(
@@ -135,8 +135,8 @@ void SerialEventDispatcher::ReceiveCallback(const ReceiveParams& params,
   }
 
   // Queue up the next read operation.
-  BrowserThread::PostTask(
-      params.thread_id, FROM_HERE, base::Bind(&StartReceive, params));
+  BrowserThread::PostTask(params.thread_id, FROM_HERE,
+                          base::BindOnce(&StartReceive, params));
 }
 
 // static
@@ -147,8 +147,8 @@ void SerialEventDispatcher::PostEvent(
 
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(&DispatchEvent, params.browser_context_id, params.extension_id,
-                 base::Passed(std::move(event))));
+      base::BindOnce(&DispatchEvent, params.browser_context_id,
+                     params.extension_id, std::move(event)));
 }
 
 // static

@@ -9,16 +9,13 @@
 #include "base/memory/ptr_util.h"
 #include "base/test/null_task_runner.h"
 #include "cc/output/compositor_frame.h"
-#include "cc/output/copy_output_result.h"
 #include "cc/output/texture_mailbox_deleter.h"
 #include "cc/quads/render_pass.h"
-#include "cc/scheduler/begin_frame_source.h"
-#include "cc/surfaces/surface.h"
-#include "cc/surfaces/surface_manager.h"
-#include "cc/test/compositor_frame_helpers.h"
 #include "cc/test/fake_output_surface.h"
 #include "cc/test/scheduler_test_common.h"
 #include "cc/test/test_shared_bitmap_manager.h"
+#include "components/viz/common/frame_sinks/begin_frame_source.h"
+#include "components/viz/common/quads/copy_output_result.h"
 #include "components/viz/common/resources/shared_bitmap_manager.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/common/surfaces/local_surface_id_allocator.h"
@@ -26,6 +23,9 @@
 #include "components/viz/service/display/display_scheduler.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
+#include "components/viz/service/surfaces/surface.h"
+#include "components/viz/service/surfaces/surface_manager.h"
+#include "components/viz/test/compositor_frame_helpers.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -48,7 +48,7 @@ class TestSoftwareOutputDevice : public cc::SoftwareOutputDevice {
 
 class TestDisplayScheduler : public DisplayScheduler {
  public:
-  explicit TestDisplayScheduler(cc::BeginFrameSource* begin_frame_source,
+  explicit TestDisplayScheduler(BeginFrameSource* begin_frame_source,
                                 base::SingleThreadTaskRunner* task_runner)
       : DisplayScheduler(begin_frame_source, task_runner, 1),
         damaged(false),
@@ -65,7 +65,7 @@ class TestDisplayScheduler : public DisplayScheduler {
   }
 
   void ProcessSurfaceDamage(const SurfaceId& surface_id,
-                            const cc::BeginFrameAck& ack,
+                            const BeginFrameAck& ack,
                             bool display_damaged) override {
     if (display_damaged) {
       damaged = true;
@@ -90,20 +90,19 @@ class TestDisplayScheduler : public DisplayScheduler {
 class DisplayTest : public testing::Test {
  public:
   DisplayTest()
-      : support_(CompositorFrameSinkSupport::Create(
-            nullptr,
-            &manager_,
-            kArbitraryFrameSinkId,
-            true /* is_root */,
-            true /* handles_frame_sink_id_invalidation */,
-            true /* needs_sync_points */)),
+      : support_(
+            CompositorFrameSinkSupport::Create(nullptr,
+                                               &manager_,
+                                               kArbitraryFrameSinkId,
+                                               true /* is_root */,
+                                               true /* needs_sync_points */)),
         task_runner_(new base::NullTaskRunner) {}
 
   ~DisplayTest() override { support_->EvictCurrentSurface(); }
 
   void SetUpDisplay(const RendererSettings& settings,
                     std::unique_ptr<cc::TestWebGraphicsContext3D> context) {
-    begin_frame_source_.reset(new cc::StubBeginFrameSource);
+    begin_frame_source_.reset(new StubBeginFrameSource);
 
     std::unique_ptr<cc::FakeOutputSurface> output_surface;
     if (context) {
@@ -148,7 +147,7 @@ class DisplayTest : public testing::Test {
  protected:
   void SubmitCompositorFrame(cc::RenderPassList* pass_list,
                              const LocalSurfaceId& local_surface_id) {
-    cc::CompositorFrame frame = cc::test::MakeCompositorFrame();
+    cc::CompositorFrame frame = test::MakeCompositorFrame();
     pass_list->swap(frame.render_pass_list);
 
     support_->SubmitCompositorFrame(local_surface_id, std::move(frame));
@@ -159,7 +158,7 @@ class DisplayTest : public testing::Test {
   LocalSurfaceIdAllocator id_allocator_;
   scoped_refptr<base::NullTaskRunner> task_runner_;
   cc::TestSharedBitmapManager shared_bitmap_manager_;
-  std::unique_ptr<cc::BeginFrameSource> begin_frame_source_;
+  std::unique_ptr<BeginFrameSource> begin_frame_source_;
   std::unique_ptr<Display> display_;
   TestSoftwareOutputDevice* software_output_device_ = nullptr;
   cc::FakeOutputSurface* output_surface_ = nullptr;
@@ -175,7 +174,7 @@ class StubDisplayClient : public DisplayClient {
   void DisplayDidDrawAndSwap() override {}
 };
 
-void CopyCallback(bool* called, std::unique_ptr<cc::CopyOutputResult> result) {
+void CopyCallback(bool* called, std::unique_ptr<CopyOutputResult> result) {
   *called = true;
 }
 
@@ -330,7 +329,7 @@ TEST_F(DisplayTest, DisplayDamaged) {
     pass->output_rect = gfx::Rect(0, 0, 100, 100);
     pass->damage_rect = gfx::Rect(10, 10, 0, 0);
     bool copy_called = false;
-    pass->copy_requests.push_back(cc::CopyOutputRequest::CreateRequest(
+    pass->copy_requests.push_back(CopyOutputRequest::CreateRequest(
         base::BindOnce(&CopyCallback, &copy_called)));
     pass->id = 1u;
 
@@ -359,7 +358,7 @@ TEST_F(DisplayTest, DisplayDamaged) {
     pass_list.push_back(std::move(pass));
     scheduler_->ResetDamageForTest();
 
-    cc::CompositorFrame frame = cc::test::MakeCompositorFrame();
+    cc::CompositorFrame frame = test::MakeCompositorFrame();
     pass_list.swap(frame.render_pass_list);
     frame.metadata.latency_info.push_back(ui::LatencyInfo());
 
@@ -391,7 +390,7 @@ TEST_F(DisplayTest, DisplayDamaged) {
     pass_list.push_back(std::move(pass));
     scheduler_->ResetDamageForTest();
 
-    cc::CompositorFrame frame = cc::test::MakeCompositorFrame();
+    cc::CompositorFrame frame = test::MakeCompositorFrame();
     pass_list.swap(frame.render_pass_list);
 
     support_->SubmitCompositorFrame(local_surface_id, std::move(frame));
@@ -479,7 +478,7 @@ TEST_F(DisplayTest, MaxLatencyInfoCap) {
     pass_list.push_back(std::move(pass));
     scheduler_->ResetDamageForTest();
 
-    cc::CompositorFrame frame = cc::test::MakeCompositorFrame();
+    cc::CompositorFrame frame = test::MakeCompositorFrame();
     pass_list.swap(frame.render_pass_list);
     frame.metadata.latency_info.push_back(ui::LatencyInfo());
 
@@ -613,9 +612,8 @@ TEST_F(DisplayTest, CompositorFrameDamagesCorrectDisplay) {
   // Set up second frame sink + display.
   auto support2 = CompositorFrameSinkSupport::Create(
       nullptr, &manager_, kAnotherFrameSinkId, true /* is_root */,
-      true /* handles_frame_sink_id_invalidation */,
       true /* needs_sync_points */);
-  auto begin_frame_source2 = base::MakeUnique<cc::StubBeginFrameSource>();
+  auto begin_frame_source2 = base::MakeUnique<StubBeginFrameSource>();
   auto scheduler_for_display2 = base::MakeUnique<TestDisplayScheduler>(
       begin_frame_source2.get(), task_runner_.get());
   TestDisplayScheduler* scheduler2 = scheduler_for_display2.get();

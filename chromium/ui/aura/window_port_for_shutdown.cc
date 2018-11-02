@@ -60,8 +60,20 @@ viz::SurfaceId WindowPortForShutdown::GetSurfaceId() const {
   return viz::SurfaceId();
 }
 
+void WindowPortForShutdown::AllocateLocalSurfaceId() {}
+
+const viz::LocalSurfaceId& WindowPortForShutdown::GetLocalSurfaceId() {
+  return local_surface_id_;
+}
+
+viz::FrameSinkId WindowPortForShutdown::GetFrameSinkId() const {
+  return frame_sink_id_;
+}
+
 void WindowPortForShutdown::OnWindowAddedToRootWindow() {}
 
 void WindowPortForShutdown::OnWillRemoveWindowFromRootWindow() {}
+
+void WindowPortForShutdown::OnEventTargetingPolicyChanged() {}
 
 }  // namespace aura

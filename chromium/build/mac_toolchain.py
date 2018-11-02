@@ -11,8 +11,12 @@ date:
   * Accepts the license.
     * If xcode-select and xcodebuild are not passwordless in sudoers, requires
       user interaction.
+
+The toolchain version can be overridden by setting IOS_TOOLCHAIN_REVISION or
+MAC_TOOLCHAIN_REVISION with the full revision, e.g. 9A235-1.
 """
 
+from distutils.version import LooseVersion
 import os
 import platform
 import plistlib
@@ -33,7 +37,7 @@ MAC_TOOLCHAIN_VERSION = '%s-%s' % (MAC_TOOLCHAIN_VERSION,
 # 16 is the major version number for macOS 10.12.
 MAC_MINIMUM_OS_VERSION = 16
 
-IOS_TOOLCHAIN_VERSION = '8C1002'
+IOS_TOOLCHAIN_VERSION = '9A235'
 IOS_TOOLCHAIN_SUB_REVISION = 1
 IOS_TOOLCHAIN_VERSION = '%s-%s' % (IOS_TOOLCHAIN_VERSION,
                                    IOS_TOOLCHAIN_SUB_REVISION)
@@ -57,14 +61,14 @@ def PlatformMeetsHermeticXcodeRequirements(target_os):
 
 
 def GetPlatforms():
-  default_target_os = ["mac"]
+  target_os = set(['mac'])
   try:
     env = {}
     execfile(GCLIENT_CONFIG, env, env)
-    return env.get('target_os', default_target_os)
+    target_os |= set(env.get('target_os', target_os))
   except:
     pass
-  return default_target_os
+  return target_os
 
 
 def ReadStampFile(target_os):
@@ -125,10 +129,11 @@ def LoadPlist(path):
     os.unlink(name)
 
 
-def AcceptLicense(target_os):
-  """Use xcodebuild to accept new toolchain license if necessary.  Don't accept
-  the license if a newer license has already been accepted. This only works if
-  xcodebuild and xcode-select are passwordless in sudoers."""
+def FinalizeUnpack(target_os):
+  """Use xcodebuild to accept new toolchain license and run first launch
+  installers if necessary.  Don't accept the license if a newer license has
+  already been accepted. This only works if xcodebuild and xcode-select are
+  passwordless in sudoers."""
 
   # Check old license
   try:
@@ -157,6 +162,11 @@ def AcceptLicense(target_os):
     pass
 
   print "Accepting license."
+  target_version_plist_path = \
+      os.path.join(TOOLCHAIN_BUILD_DIR % target_os,
+                   *['Contents','version.plist'])
+  target_version_plist = LoadPlist(target_version_plist_path)
+  short_version_string = target_version_plist['CFBundleShortVersionString']
   old_path = subprocess.Popen(['/usr/bin/xcode-select', '-p'],
                                stdout=subprocess.PIPE).communicate()[0].strip()
   try:
@@ -164,6 +174,11 @@ def AcceptLicense(target_os):
         TOOLCHAIN_BUILD_DIR % target_os, 'Contents/Developer')
     subprocess.check_call(['sudo', '/usr/bin/xcode-select', '-s', build_dir])
     subprocess.check_call(['sudo', '/usr/bin/xcodebuild', '-license', 'accept'])
+
+    if target_os == 'ios' and \
+        LooseVersion(short_version_string) >= LooseVersion("9.0"):
+      print "Installing packages."
+      subprocess.check_call(['sudo', '/usr/bin/xcodebuild', '-runFirstLaunch'])
   finally:
     subprocess.check_call(['sudo', '/usr/bin/xcode-select', '-s', old_path])
 
@@ -199,17 +214,14 @@ def RequestGsAuthentication():
   sys.exit(1)
 
 
-def DownloadHermeticBuild(target_os, default_version, toolchain_filename):
+def DownloadHermeticBuild(target_os, toolchain_version, toolchain_filename):
   if not _UseHermeticToolchain(target_os):
     print 'Using local toolchain for %s.' % target_os
     return 0
 
-  toolchain_version = os.environ.get('MAC_TOOLCHAIN_REVISION',
-                                      default_version)
-
   if ReadStampFile(target_os) == toolchain_version:
     print 'Toolchain (%s) is already up to date.' % toolchain_version
-    AcceptLicense(target_os)
+    FinalizeUnpack(target_os)
     return 0
 
   if not CanAccessToolchainBucket():
@@ -227,7 +239,7 @@ def DownloadHermeticBuild(target_os, default_version, toolchain_filename):
     toolchain_file = toolchain_filename % toolchain_version
     toolchain_full_url = TOOLCHAIN_URL + toolchain_file
     DownloadAndUnpack(toolchain_full_url, TOOLCHAIN_BUILD_DIR % target_os)
-    AcceptLicense(target_os)
+    FinalizeUnpack(target_os)
 
     print 'Toolchain %s unpacked.' % toolchain_version
     WriteStampFile(target_os, toolchain_version)
@@ -249,14 +261,16 @@ def main():
       continue
 
     if target_os == 'ios':
-      default_version = IOS_TOOLCHAIN_VERSION
+      toolchain_version = os.environ.get('IOS_TOOLCHAIN_REVISION',
+                                          IOS_TOOLCHAIN_VERSION)
       toolchain_filename = 'ios-toolchain-%s.tgz'
     else:
-      default_version = MAC_TOOLCHAIN_VERSION
+      toolchain_version = os.environ.get('MAC_TOOLCHAIN_REVISION',
+                                          MAC_TOOLCHAIN_VERSION)
       toolchain_filename = 'toolchain-%s.tgz'
 
     return_value = DownloadHermeticBuild(
-        target_os, default_version, toolchain_filename)
+        target_os, toolchain_version, toolchain_filename)
     if return_value:
       return return_value
 

@@ -17,7 +17,6 @@
 #include "base/files/file_util.h"
 #include "base/memory/linked_ptr.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_service_factory.h"
 #include "chrome/browser/ui/browser.h"
@@ -31,9 +30,14 @@
 #include "content/public/browser/dom_storage_context.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/storage_partition.h"
-#include "extensions/browser/extension_function_dispatcher.h"
+#include "extensions/features/features.h"
+//#include "extensions/browser/extension_function_dispatcher.h"
 
 #include "components/sessions/vivaldi_session_service_commands.h"
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "chrome/browser/extensions/tab_helper.h"
+#endif
 
 using sessions::ContentSerializedNavigationBuilder;
 using sessions::SerializedNavigationEntry;
@@ -207,12 +211,14 @@ void VivaldiSessionService::BuildCommandsForTab(const SessionID& window_id,
   if (is_pinned) {
     ScheduleCommand(sessions::CreatePinnedStateCommand(session_id, true));
   }
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   extensions::TabHelper* extensions_tab_helper =
       extensions::TabHelper::FromWebContents(tab);
   if (extensions_tab_helper->extension_app()) {
     ScheduleCommand(sessions::CreateSetTabExtensionAppIDCommand(
         session_id, extensions_tab_helper->extension_app()->id()));
   }
+#endif
   if (!tab->GetExtData().empty()) {
     ScheduleCommand(
         sessions::CreateSetExtDataCommand(session_id, tab->GetExtData()));
@@ -425,7 +431,7 @@ content::WebContents* VivaldiSessionService::RestoreTab(
       browser, tab.navigations, tab_index, selected_index, tab.extension_app_id,
       false,  // select
       tab.pinned, true, session_storage_namespace.get(),
-      tab.user_agent_override, tab.ext_data);
+      tab.user_agent_override, true /* from_session_restore */, tab.ext_data);
   // Regression check: check that the tab didn't start loading right away. The
   // focused tab will be loaded by Browser, and TabLoader will load the rest.
   DCHECK(web_contents->GetController().NeedsReload());

@@ -90,6 +90,22 @@ stage_install_debian() {
   chmod 755 "${STAGEDIR}/DEBIAN/postrm"
 }
 
+verify_package() {
+  local DEPENDS="$1"
+  echo ${DEPENDS} | sed 's/, /\n/g' | LANG=C sort > expected_deb_depends
+  dpkg -I "${PACKAGE}-${CHANNEL}_${VERSIONFULL}_${ARCHITECTURE}.deb" | \
+      grep '^ Depends: ' | sed 's/^ Depends: //' | sed 's/, /\n/g' | \
+      LANG=C sort > actual_deb_depends
+  BAD_DIFF=0
+  diff -u expected_deb_depends actual_deb_depends || BAD_DIFF=1
+  if [ $BAD_DIFF -ne 0 ] && [ -z "${IGNORE_DEPS_CHANGES:-}" ]; then
+    echo
+    echo "ERROR: bad dpkg dependencies!"
+    echo
+    exit $BAD_DIFF
+  fi
+}
+
 # Actually generate the package file.
 do_package() {
   echo "Packaging ${ARCHITECTURE}..."
@@ -115,25 +131,10 @@ do_package() {
     gen_control
   fi
   fakeroot dpkg-deb -Zxz -z9 -b "${STAGEDIR}" .
+  verify_package "$DEPENDS"
 
   if [ "${VIVALDI_SIGNING_KEY:-}" ] ; then
     dpkg-sig -s ${VIVALDI_SIGNING_ID:-builder} "${PACKAGE}-${CHANNEL}_${VERSIONFULL}_${DEB_HOST_ARCH}.deb"
-  fi
-}
-
-verify_package() {
-  DEPENDS="${COMMON_DEPS}"  # This needs to match do_package() above.
-  echo ${DEPENDS} | sed 's/, /\n/g' | LANG=C sort > expected_deb_depends
-  dpkg -I "${PACKAGE}-${CHANNEL}_${VERSIONFULL}_${ARCHITECTURE}.deb" | \
-      grep '^ Depends: ' | sed 's/^ Depends: //' | sed 's/, /\n/g' | \
-      LANG=C sort > actual_deb_depends
-  BAD_DIFF=0
-  diff -u expected_deb_depends actual_deb_depends || BAD_DIFF=1
-  if [ $BAD_DIFF -ne 0 ] && [ -z "${IGNORE_DEPS_CHANGES:-}" ]; then
-    echo
-    echo "ERROR: bad dpkg dependencies!"
-    echo
-    exit $BAD_DIFF
   fi
 }
 
@@ -237,11 +238,6 @@ process_opts() {
 
 SCRIPTDIR=$(readlink -f "$(dirname "$0")")
 OUTPUTDIR="${PWD}"
-STAGEDIR=$(mktemp -d -t deb.build.XXXXXX) || exit 1
-TMPFILEDIR=$(mktemp -d -t deb.tmp.XXXXXX) || exit 1
-DEB_CHANGELOG="${TMPFILEDIR}/changelog"
-DEB_FILES="${TMPFILEDIR}/files"
-DEB_CONTROL="${TMPFILEDIR}/control"
 CHANNEL="trunk"
 # Default target architecture to same as build host.
 if [ "$(uname -m)" = "x86_64" ]; then
@@ -255,12 +251,13 @@ trap cleanup 0
 process_opts "$@"
 BUILDDIR=${BUILDDIR:=$(readlink -f "${SCRIPTDIR}/../../../../../out/Release")}
 
-if [[ "$(basename ${SYSROOT})" = "debian_jessie_"*"-sysroot" ]]; then
-  TARGET_DISTRO="jessie"
-else
-  echo "Debian package can only be built using the jessie sysroot."
-  exit 1
-fi
+STAGEDIR="${BUILDDIR}/deb-staging-${CHANNEL}"
+mkdir -p "${STAGEDIR}"
+TMPFILEDIR="${BUILDDIR}/deb-tmp-${CHANNEL}"
+mkdir -p "${TMPFILEDIR}"
+DEB_CHANGELOG="${TMPFILEDIR}/changelog"
+DEB_FILES="${TMPFILEDIR}/files"
+DEB_CONTROL="${TMPFILEDIR}/control"
 
 source ${BUILDDIR}/installer/common/installer.include
 
@@ -303,6 +300,14 @@ unset LD_LIBRARY_PATH
 if [ ${TARGETARCH} = "x64" ]; then
   SHLIB_ARGS="-l${SYSROOT}/usr/lib/x86_64-linux-gnu"
   SHLIB_ARGS="${SHLIB_ARGS} -l${SYSROOT}/lib/x86_64-linux-gnu"
+elif [ ${TARGETARCH} = "arm" ]; then
+  SHLIB_ARGS="-l${SYSROOT}/usr/lib/arm-linux-gnueabihf"
+  SHLIB_ARGS="${SHLIB_ARGS} -l${SYSROOT}/lib/arm-linux-gnueabihf"
+  export PATH=/usr/arm-linux-gnueabihf/bin:$PATH
+elif [ ${TARGETARCH} = "arm64" ]; then
+  SHLIB_ARGS="-l${SYSROOT}/usr/lib/aarch64-linux-gnu"
+  SHLIB_ARGS="${SHLIB_ARGS} -l${SYSROOT}/lib/aarch64-linux-gnu"
+  export PATH=/usr/aarch64-linux-gnu/bin:$PATH
 else
   SHLIB_ARGS="-l${SYSROOT}/usr/lib/i386-linux-gnu"
   SHLIB_ARGS="${SHLIB_ARGS} -l${SYSROOT}/lib/i386-linux-gnu"
@@ -319,14 +324,15 @@ echo "$DPKG_SHLIB_DEPS" | sed 's/, /\n/g' | LANG=C sort > actual
 
 # Compare the expected dependency list to the generated list.
 BAD_DIFF=0
-diff -u "$SCRIPTDIR/expected_deps_${TARGETARCH}_${TARGET_DISTRO}" actual || \
-  BAD_DIFF=1
+if [ -r "$SCRIPTDIR/expected_deps_${TARGETARCH}" ]; then
+  diff -u "$SCRIPTDIR/expected_deps_${TARGETARCH}" actual || \
+    BAD_DIFF=1
+fi
 if [ $BAD_DIFF -ne 0 ] && [ -z "${IGNORE_DEPS_CHANGES:-}" ]; then
   echo
   echo "ERROR: Shared library dependencies changed!"
   echo "If this is intentional, please update:"
-  echo "chrome/installer/linux/debian/expected_deps_ia32_jessie"
-  echo "chrome/installer/linux/debian/expected_deps_x64_jessie"
+  echo "chrome/installer/linux/debian/expected_deps_x64"
   echo
   exit $BAD_DIFF
 fi
@@ -334,13 +340,12 @@ fi
 # Additional dependencies not in the dpkg-shlibdeps output.
 # ca-certificates: Make sure users have SSL certificates.
 # fonts-liberation: Make sure users have compatible fonts for viewing PDFs.
-# libappindicator1: Make systray icons work in Unity.
 # libnss3: Pull a more recent version of NSS than required by runtime linking,
 #          for security and stability updates in NSS.
 # lsb-release: For lsb_release.
 # xdg-utils: For OS integration.
 # wget: For uploading crash reports with Breakpad.
-ADDITIONAL_DEPS="ca-certificates, fonts-liberation, libappindicator1, \
+ADDITIONAL_DEPS="ca-certificates, fonts-liberation, \
   libnss3 (>= 3.26), xdg-utils (>= 1.0.2), wget"
 
 # Fix-up libnspr dependency due to renaming in Ubuntu (the old package still
@@ -386,6 +391,12 @@ case "$TARGETARCH" in
   x64 )
     export ARCHITECTURE="amd64"
     ;;
+  arm )
+    export ARCHITECTURE="armhf"
+    ;;
+  arm64 )
+    export ARCHITECTURE="arm64"
+    ;;
   * )
     echo
     echo "ERROR: Don't know how to build DEBs for '$TARGETARCH'."
@@ -404,4 +415,3 @@ REPOCONFIGREGEX+="[[:space:]]*) https?://${BASEREPOCONFIG}"
 stage_install_debian
 
 do_package
-verify_package

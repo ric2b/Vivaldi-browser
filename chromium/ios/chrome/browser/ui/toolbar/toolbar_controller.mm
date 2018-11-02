@@ -15,24 +15,23 @@
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #import "ios/chrome/browser/ui/animation_util.h"
-#import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
+#include "ios/chrome/browser/ui/bubble/bubble_util.h"
+#import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
-#include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #import "ios/chrome/browser/ui/fullscreen_controller.h"
 #import "ios/chrome/browser/ui/image_util.h"
 #import "ios/chrome/browser/ui/reversed_animation.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_controller+protected.h"
-#import "ios/chrome/browser/ui/toolbar/toolbar_controller_private.h"
 #include "ios/chrome/browser/ui/toolbar/toolbar_resource_macros.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_tools_menu_button.h"
 #import "ios/chrome/browser/ui/toolbar/tools_menu_button_observer_bridge.h"
+#import "ios/chrome/browser/ui/tools_menu/tools_menu_configuration.h"
 #import "ios/chrome/browser/ui/tools_menu/tools_popup_controller.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #import "ios/chrome/common/material_timing.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/chrome/grit/ios_theme_resources.h"
-#import "ios/shared/chrome/browser/ui/tools_menu/tools_menu_configuration.h"
 #import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -121,6 +120,10 @@ const LayoutRect kToolsMenuButtonFrame[INTERFACE_IDIOM_COUNT] = {
 
 // Distance to shift buttons when fading out.
 const LayoutOffset kButtonFadeOutXOffset = 10;
+
+// The amount of horizontal padding removed from a view's frame when presenting
+// a popover anchored to it.
+const CGFloat kPopoverAnchorHorizontalPadding = 10.0;
 
 }  // namespace
 
@@ -358,7 +361,6 @@ const LayoutOffset kButtonFadeOutXOffset = 10;
     if (idiom == IPHONE_IDIOM) {
       stackButton_ =
           [[ToolbarCenteredButton alloc] initWithFrame:stackButtonFrame];
-      [stackButton_ setTag:IDC_TOGGLE_TAB_SWITCHER];
       [[stackButton_ titleLabel]
           setFont:[self fontForSize:kFontSizeFewerThanTenTabs]];
       [stackButton_
@@ -373,9 +375,6 @@ const LayoutOffset kButtonFadeOutXOffset = 10;
       [stackButton_
           setAutoresizingMask:UIViewAutoresizingFlexibleLeadingMargin() |
                               UIViewAutoresizingFlexibleBottomMargin];
-      [stackButton_ addTarget:self
-                       action:@selector(stackButtonTouchDown:)
-             forControlEvents:UIControlEventTouchDown];
 
       [self setUpButton:stackButton_
              withImageEnum:ToolbarButtonNameStack
@@ -566,18 +565,12 @@ const LayoutOffset kButtonFadeOutXOffset = 10;
   [button addTarget:self
                 action:@selector(recordUserMetrics:)
       forControlEvents:UIControlEventTouchUpInside];
-  // Only register buttons with defined tags for -chromeExecuteCommand:.
-  if (button.tag) {
-    [button addTarget:button
-                  action:@selector(chromeExecuteCommand:)
-        forControlEvents:UIControlEventTouchUpInside];
-  }
 }
 
 - (CGRect)shareButtonAnchorRect {
   // Shrink the padding around the shareButton so the popovers are anchored
   // correctly.
-  return CGRectInset([shareButton_ bounds], 10, 0);
+  return CGRectInset([shareButton_ bounds], kPopoverAnchorHorizontalPadding, 0);
 }
 
 - (UIView*)shareButtonView {
@@ -1021,10 +1014,6 @@ const LayoutOffset kButtonFadeOutXOffset = 10;
     NOTREACHED();
 }
 
-- (IBAction)stackButtonTouchDown:(id)sender {
-  // Exists only for override by subclasses.
-}
-
 + (CGFloat)toolbarDropShadowHeight {
   return 0.0;
 }
@@ -1042,6 +1031,10 @@ const LayoutOffset kButtonFadeOutXOffset = 10;
   return hash;
 }
 
+- (void)triggerToolsMenuButtonAnimation {
+  [toolsMenuButton_ triggerAnimation];
+}
+
 #pragma mark -
 #pragma mark PopupMenuDelegate methods.
 
@@ -1049,6 +1042,29 @@ const LayoutOffset kButtonFadeOutXOffset = 10;
   if ([controller isKindOfClass:[ToolsPopupController class]] &&
       (ToolsPopupController*)controller == toolsPopupController_)
     [self dismissToolsMenuPopup];
+}
+
+#pragma mark -
+#pragma mark BubbleViewAnchorPointProvider methods.
+
+- (CGPoint)anchorPointForTabSwitcherButton:(BubbleArrowDirection)direction {
+  // Shrink the padding around the tab switcher button so popovers are anchored
+  // correctly.
+  CGRect unpaddedRect =
+      CGRectInset(stackButton_.frame, kPopoverAnchorHorizontalPadding, 0.0);
+  CGPoint anchorPoint = bubble_util::AnchorPoint(unpaddedRect, direction);
+  return [stackButton_.superview convertPoint:anchorPoint
+                                       toView:stackButton_.window];
+}
+
+- (CGPoint)anchorPointForToolsMenuButton:(BubbleArrowDirection)direction {
+  // Shrink the padding around the tools menu button so popovers are anchored
+  // correctly.
+  CGRect unpaddedRect =
+      CGRectInset(toolsMenuButton_.frame, kPopoverAnchorHorizontalPadding, 0.0);
+  CGPoint anchorPoint = bubble_util::AnchorPoint(unpaddedRect, direction);
+  return [toolsMenuButton_.superview convertPoint:anchorPoint
+                                           toView:toolsMenuButton_.window];
 }
 
 @end

@@ -370,7 +370,7 @@ void BrowserContext::NotifyWillBeDestroyed(BrowserContext* browser_context) {
     RenderProcessHost* host = host_iterator.GetCurrentValue();
     if (host->GetBrowserContext() == browser_context) {
       // This will also clean up spare RPH references.
-      host->ForceReleaseWorkerRefCounts();
+      host->DisableKeepAliveRefCount();
     }
   }
 }
@@ -388,18 +388,24 @@ void BrowserContext::EnsureResourceContextInitialized(BrowserContext* context) {
 }
 
 void BrowserContext::SaveSessionState(BrowserContext* browser_context) {
-  GetDefaultStoragePartition(browser_context)->GetDatabaseTracker()->
-      SetForceKeepSessionState();
   StoragePartition* storage_partition =
       BrowserContext::GetDefaultStoragePartition(browser_context);
+
+  storage::DatabaseTracker* database_tracker =
+      storage_partition->GetDatabaseTracker();
+  database_tracker->task_runner()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&storage::DatabaseTracker::SetForceKeepSessionState,
+                     make_scoped_refptr(database_tracker)));
 
   if (BrowserThread::IsMessageLoopValid(BrowserThread::IO)) {
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(
+        base::BindOnce(
             &SaveSessionStateOnIOThread,
-            make_scoped_refptr(BrowserContext::GetDefaultStoragePartition(
-                browser_context)->GetURLRequestContext()),
+            make_scoped_refptr(
+                BrowserContext::GetDefaultStoragePartition(browser_context)
+                    ->GetURLRequestContext()),
             static_cast<AppCacheServiceImpl*>(
                 storage_partition->GetAppCacheService())));
   }
@@ -415,9 +421,8 @@ void BrowserContext::SaveSessionState(BrowserContext* browser_context) {
   // No task runner in unit tests.
   if (indexed_db_context_impl->TaskRunner()) {
     indexed_db_context_impl->TaskRunner()->PostTask(
-        FROM_HERE,
-        base::Bind(&SaveSessionStateOnIndexedDBThread,
-                   make_scoped_refptr(indexed_db_context_impl)));
+        FROM_HERE, base::BindOnce(&SaveSessionStateOnIndexedDBThread,
+                                  make_scoped_refptr(indexed_db_context_impl)));
   }
 }
 

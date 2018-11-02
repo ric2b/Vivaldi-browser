@@ -10,6 +10,7 @@
 
 #include "base/containers/mru_cache.h"
 #include "base/files/file_path.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
@@ -64,23 +65,6 @@ class CONTENT_EXPORT LevelDBDatabase
   // large. See https://crbug/696055.
   static const size_t kDefaultMaxOpenIteratorsPerDatabase = 50;
 
-  class ComparatorAdapter : public leveldb::Comparator {
-   public:
-    explicit ComparatorAdapter(const LevelDBComparator* comparator);
-
-    int Compare(const leveldb::Slice& a,
-                const leveldb::Slice& b) const override;
-
-    const char* Name() const override;
-
-    void FindShortestSeparator(std::string* start,
-                               const leveldb::Slice& limit) const override;
-    void FindShortSuccessor(std::string* key) const override;
-
-   private:
-    const LevelDBComparator* comparator_;
-  };
-
   // |max_open_cursors| cannot be 0.
   static leveldb::Status Open(const base::FilePath& file_name,
                               const LevelDBComparator* comparator,
@@ -91,8 +75,6 @@ class CONTENT_EXPORT LevelDBDatabase
   static std::unique_ptr<LevelDBDatabase> OpenInMemory(
       const LevelDBComparator* comparator);
   static leveldb::Status Destroy(const base::FilePath& file_name);
-  static std::unique_ptr<LevelDBLock> LockForTesting(
-      const base::FilePath& file_name);
   ~LevelDBDatabase() override;
 
   leveldb::Status Put(const base::StringPiece& key, std::string* value);
@@ -111,12 +93,18 @@ class CONTENT_EXPORT LevelDBDatabase
   bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
                     base::trace_event::ProcessMemoryDump* pmd) override;
 
+  leveldb::DB* db() { return db_.get(); }
+
  protected:
-  LevelDBDatabase(size_t max_open_iterators);
+  explicit LevelDBDatabase(size_t max_open_iterators);
 
  private:
   friend class LevelDBSnapshot;
   friend class LevelDBIteratorImpl;
+  FRIEND_TEST_ALL_PREFIXES(IndexedDBTest, DeleteFailsIfDirectoryLocked);
+
+  static std::unique_ptr<LevelDBLock> LockForTesting(
+      const base::FilePath& file_name);
 
   // Methods for iterator pooling.
   std::unique_ptr<leveldb::Iterator> CreateLevelDBIterator(

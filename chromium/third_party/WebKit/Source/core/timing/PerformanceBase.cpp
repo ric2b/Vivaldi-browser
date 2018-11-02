@@ -34,7 +34,7 @@
 #include <algorithm>
 #include "core/dom/Document.h"
 #include "core/dom/DocumentTiming.h"
-#include "core/events/Event.h"
+#include "core/dom/events/Event.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/UseCounter.h"
 #include "core/loader/DocumentLoadTiming.h"
@@ -43,11 +43,14 @@
 #include "core/timing/PerformanceObserver.h"
 #include "core/timing/PerformanceResourceTiming.h"
 #include "core/timing/PerformanceUserTiming.h"
+#include "platform/Histogram.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "platform/TimeClamper.h"
 #include "platform/loader/fetch/ResourceResponse.h"
 #include "platform/loader/fetch/ResourceTimingInfo.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/CurrentTime.h"
+#include "platform/wtf/StdLibExtras.h"
 
 namespace blink {
 
@@ -57,6 +60,18 @@ SecurityOrigin* GetSecurityOrigin(ExecutionContext* context) {
   if (context)
     return context->GetSecurityOrigin();
   return nullptr;
+}
+
+// When a PerformanceBase object is first created, use the current system time
+// to calculate what the Unix time would be at the time the monotonic clock time
+// was zero, assuming no manual changes to the system clock. This can be
+// calculated as current_unix_time - current_monotonic_time.
+DOMHighResTimeStamp GetUnixAtZeroMonotonic() {
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(
+      DOMHighResTimeStamp, unix_at_zero_monotonic,
+      {ConvertSecondsToDOMHighResTimeStamp(CurrentTime() -
+                                           MonotonicallyIncreasingTime())});
+  return unix_at_zero_monotonic;
 }
 
 }  // namespace
@@ -86,6 +101,12 @@ const AtomicString& PerformanceBase::InterfaceName() const {
 
 PerformanceTiming* PerformanceBase::timing() const {
   return nullptr;
+}
+
+DOMHighResTimeStamp PerformanceBase::timeOrigin() const {
+  DCHECK(time_origin_ > 0.0);
+  return GetUnixAtZeroMonotonic() +
+         ConvertSecondsToDOMHighResTimeStamp(time_origin_);
 }
 
 PerformanceEntryVector PerformanceBase::getEntries() {
@@ -304,7 +325,7 @@ void PerformanceBase::AddResourceTiming(const ResourceTimingInfo& info) {
 
   if (info.RedirectChain().IsEmpty()) {
     PerformanceEntry* entry = PerformanceResourceTiming::Create(
-        info, TimeOrigin(), start_time, allow_timing_details, serverTiming);
+        info, GetTimeOrigin(), start_time, allow_timing_details, serverTiming);
     NotifyObserversOfEntry(*entry);
     if (!IsResourceTimingBufferFull())
       AddResourceTimingBuffer(*entry);
@@ -328,7 +349,7 @@ void PerformanceBase::AddResourceTiming(const ResourceTimingInfo& info) {
   double last_redirect_end_time = last_redirect_timing->ReceiveHeadersEnd();
 
   PerformanceEntry* entry = PerformanceResourceTiming::Create(
-      info, TimeOrigin(), start_time, last_redirect_end_time,
+      info, GetTimeOrigin(), start_time, last_redirect_end_time,
       allow_timing_details, allow_redirect_details, serverTiming);
   NotifyObserversOfEntry(*entry);
   if (!IsResourceTimingBufferFull())
@@ -378,18 +399,26 @@ bool PerformanceBase::IsResourceTimingBufferFull() {
   return resource_timing_buffer_.size() >= resource_timing_buffer_size_;
 }
 
-void PerformanceBase::AddLongTaskTiming(double start_time,
-                                        double end_time,
-                                        const String& name,
-                                        const String& frame_src,
-                                        const String& frame_id,
-                                        const String& frame_name) {
+void PerformanceBase::AddLongTaskTiming(
+    double start_time,
+    double end_time,
+    const String& name,
+    const String& frame_src,
+    const String& frame_id,
+    const String& frame_name,
+    const SubTaskAttribution::EntriesVector& sub_task_attributions) {
   if (!HasObserverFor(PerformanceEntry::kLongTask))
     return;
+
+  for (auto&& it : sub_task_attributions) {
+    it->setHighResStartTime(
+        MonotonicTimeToDOMHighResTimeStamp(it->startTime()));
+    it->setHighResDuration(ConvertSecondsToDOMHighResTimeStamp(it->duration()));
+  }
   PerformanceEntry* entry = PerformanceLongTaskTiming::Create(
       MonotonicTimeToDOMHighResTimeStamp(start_time),
       MonotonicTimeToDOMHighResTimeStamp(end_time), name, frame_src, frame_id,
-      frame_name);
+      frame_name, sub_task_attributions);
   NotifyObserversOfEntry(*entry);
 }
 
@@ -433,13 +462,6 @@ void PerformanceBase::RegisterPerformanceObserver(
 
 void PerformanceBase::UnregisterPerformanceObserver(
     PerformanceObserver& old_observer) {
-  DCHECK(IsMainThread());
-  // Deliver any pending observations on this observer before unregistering.
-  if (active_observers_.Contains(&old_observer) &&
-      !old_observer.ShouldBeSuspended()) {
-    old_observer.Deliver();
-    active_observers_.erase(&old_observer);
-  }
   observers_.erase(&old_observer);
   UpdatePerformanceObserverFilterOptions();
   UpdateLongTaskInstrumentation();
@@ -453,7 +475,7 @@ void PerformanceBase::UpdatePerformanceObserverFilterOptions() {
   UpdateLongTaskInstrumentation();
 }
 
-void PerformanceBase::NotifyObserversOfEntry(PerformanceEntry& entry) {
+void PerformanceBase::NotifyObserversOfEntry(PerformanceEntry& entry) const {
   for (auto& observer : observers_) {
     if (observer->FilterOptions() & entry.EntryTypeEnum())
       observer->EnqueuePerformanceEntry(entry);
@@ -480,7 +502,6 @@ void PerformanceBase::ActivateObserver(PerformanceObserver& observer) {
 }
 
 void PerformanceBase::ResumeSuspendedObservers() {
-  DCHECK(IsMainThread());
   if (suspended_observers_.IsEmpty())
     return;
 
@@ -495,7 +516,6 @@ void PerformanceBase::ResumeSuspendedObservers() {
 }
 
 void PerformanceBase::DeliverObservationsTimerFired(TimerBase*) {
-  DCHECK(IsMainThread());
   PerformanceObservers observers;
   active_observers_.Swap(observers);
   for (const auto& observer : observers) {
@@ -508,8 +528,8 @@ void PerformanceBase::DeliverObservationsTimerFired(TimerBase*) {
 
 // static
 double PerformanceBase::ClampTimeResolution(double time_seconds) {
-  const double kResolutionSeconds = 0.000005;
-  return floor(time_seconds / kResolutionSeconds) * kResolutionSeconds;
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(TimeClamper, clamper, ());
+  return clamper.ClampTimeResolution(time_seconds);
 }
 
 // static
@@ -521,11 +541,11 @@ DOMHighResTimeStamp PerformanceBase::MonotonicTimeToDOMHighResTimeStamp(
   if (!monotonic_time || !time_origin)
     return 0.0;
 
-  double time_in_seconds = monotonic_time - time_origin;
-  if (time_in_seconds < 0 && !allow_negative_value)
+  double clamped_time_in_seconds =
+      ClampTimeResolution(monotonic_time) - ClampTimeResolution(time_origin);
+  if (clamped_time_in_seconds < 0 && !allow_negative_value)
     return 0.0;
-  return ConvertSecondsToDOMHighResTimeStamp(
-      ClampTimeResolution(time_in_seconds));
+  return ConvertSecondsToDOMHighResTimeStamp(clamped_time_in_seconds);
 }
 
 DOMHighResTimeStamp PerformanceBase::MonotonicTimeToDOMHighResTimeStamp(

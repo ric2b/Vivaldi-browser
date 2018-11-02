@@ -1,0 +1,153 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "ash/accessibility/accessibility_controller.h"
+
+#include "ash/public/cpp/ash_pref_names.h"
+#include "ash/session/session_controller.h"
+#include "ash/session/session_observer.h"
+#include "ash/shell.h"
+#include "ash/shell_port.h"
+#include "ash/system/tray/system_tray_notifier.h"
+#include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_change_registrar.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/pref_service.h"
+#include "ui/base/cursor/cursor_type.h"
+
+using session_manager::SessionState;
+
+namespace ash {
+namespace {
+
+void NotifyAccessibilityStatusChanged() {
+  Shell::Get()->system_tray_notifier()->NotifyAccessibilityStatusChanged(
+      A11Y_NOTIFICATION_NONE);
+}
+
+}  // namespace
+
+AccessibilityController::AccessibilityController() {
+  Shell::Get()->session_controller()->AddObserver(this);
+}
+
+AccessibilityController::~AccessibilityController() {
+  Shell::Get()->session_controller()->RemoveObserver(this);
+}
+
+// static
+void AccessibilityController::RegisterProfilePrefs(PrefRegistrySimple* registry,
+                                                   bool for_test) {
+  if (for_test) {
+    // In tests there is no remote pref service. Make ash own the prefs.
+    registry->RegisterBooleanPref(prefs::kAccessibilityLargeCursorEnabled,
+                                  false);
+    registry->RegisterIntegerPref(prefs::kAccessibilityLargeCursorDipSize,
+                                  kDefaultLargeCursorSize);
+    registry->RegisterBooleanPref(prefs::kAccessibilityHighContrastEnabled,
+                                  false);
+    registry->RegisterBooleanPref(prefs::kAccessibilityScreenMagnifierEnabled,
+                                  false);
+    return;
+  }
+
+  // In production the prefs are owned by chrome.
+  // TODO(jamescook): Move ownership to ash.
+  registry->RegisterForeignPref(prefs::kAccessibilityLargeCursorEnabled);
+  registry->RegisterForeignPref(prefs::kAccessibilityLargeCursorDipSize);
+  registry->RegisterForeignPref(prefs::kAccessibilityHighContrastEnabled);
+  registry->RegisterForeignPref(prefs::kAccessibilityScreenMagnifierEnabled);
+}
+
+void AccessibilityController::SetLargeCursorEnabled(bool enabled) {
+  PrefService* prefs = GetActivePrefService();
+  // Null early in startup.
+  if (!prefs)
+    return;
+
+  prefs->SetBoolean(prefs::kAccessibilityLargeCursorEnabled, enabled);
+  prefs->CommitPendingWrite();
+}
+
+bool AccessibilityController::IsLargeCursorEnabled() const {
+  return large_cursor_enabled_;
+}
+
+// static
+bool AccessibilityController::RequiresCursorCompositing(PrefService* prefs) {
+  return prefs->GetBoolean(prefs::kAccessibilityLargeCursorEnabled) ||
+         prefs->GetBoolean(prefs::kAccessibilityHighContrastEnabled) ||
+         prefs->GetBoolean(prefs::kAccessibilityScreenMagnifierEnabled);
+}
+
+void AccessibilityController::OnSigninScreenPrefServiceInitialized(
+    PrefService* prefs) {
+  ObservePrefs(prefs);
+}
+
+void AccessibilityController::OnActiveUserPrefServiceChanged(
+    PrefService* prefs) {
+  ObservePrefs(prefs);
+}
+
+void AccessibilityController::SetPrefServiceForTest(PrefService* prefs) {
+  pref_service_for_test_ = prefs;
+  ObservePrefs(prefs);
+}
+
+void AccessibilityController::ObservePrefs(PrefService* prefs) {
+  // Watch for pref updates from webui settings and policy.
+  pref_change_registrar_ = base::MakeUnique<PrefChangeRegistrar>();
+  pref_change_registrar_->Init(prefs);
+  pref_change_registrar_->Add(
+      prefs::kAccessibilityLargeCursorEnabled,
+      base::Bind(&AccessibilityController::UpdateLargeCursorFromPref,
+                 base::Unretained(this)));
+  pref_change_registrar_->Add(
+      prefs::kAccessibilityLargeCursorDipSize,
+      base::Bind(&AccessibilityController::UpdateLargeCursorFromPref,
+                 base::Unretained(this)));
+
+  // Load current state.
+  UpdateLargeCursorFromPref();
+}
+
+PrefService* AccessibilityController::GetActivePrefService() const {
+  if (pref_service_for_test_)
+    return pref_service_for_test_;
+
+  SessionController* session = Shell::Get()->session_controller();
+  // Use the active user prefs once they become available. Check the PrefService
+  // object instead of session state because prefs load is async after login.
+  PrefService* user_prefs = session->GetLastActiveUserPrefService();
+  if (user_prefs)
+    return user_prefs;
+
+  return session->GetSigninScreenPrefService();
+}
+
+void AccessibilityController::UpdateLargeCursorFromPref() {
+  PrefService* prefs = GetActivePrefService();
+  const bool enabled =
+      prefs->GetBoolean(prefs::kAccessibilityLargeCursorEnabled);
+  // Reset large cursor size to the default size when large cursor is disabled.
+  if (!enabled)
+    prefs->ClearPref(prefs::kAccessibilityLargeCursorDipSize);
+  const int size = prefs->GetInteger(prefs::kAccessibilityLargeCursorDipSize);
+
+  if (large_cursor_enabled_ == enabled && large_cursor_size_in_dip_ == size)
+    return;
+
+  large_cursor_enabled_ = enabled;
+  large_cursor_size_in_dip_ = size;
+
+  NotifyAccessibilityStatusChanged();
+
+  ShellPort::Get()->SetCursorSize(
+      large_cursor_enabled_ ? ui::CursorSize::kLarge : ui::CursorSize::kNormal);
+  Shell::Get()->SetLargeCursorSizeInDip(large_cursor_size_in_dip_);
+  Shell::Get()->SetCursorCompositingEnabled(RequiresCursorCompositing(prefs));
+}
+
+}  // namespace ash

@@ -20,7 +20,6 @@
 #include "url/gurl.h"
 
 #include "app/vivaldi_resources.h"
-#include "chrome/grit/generated_resources.h"
 
 using base::Time;
 
@@ -168,7 +167,7 @@ std::unique_ptr<base::Value> BookmarkCodec::EncodeMetaInfo(
   auto meta_info = base::MakeUnique<base::DictionaryValue>();
   for (BookmarkNode::MetaInfoMap::const_iterator it = meta_info_map.begin();
       it != meta_info_map.end(); ++it) {
-    meta_info->SetStringWithoutPathExpansion(it->first, it->second);
+    meta_info->SetKey(it->first, base::Value(it->second));
   }
   return std::move(meta_info);
 }

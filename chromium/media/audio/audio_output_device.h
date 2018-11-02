@@ -69,6 +69,7 @@
 #include "base/macros.h"
 #include "base/memory/shared_memory.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/time/time.h"
 #include "media/audio/audio_device_thread.h"
 #include "media/audio/audio_output_ipc.h"
 #include "media/audio/scoped_task_runner_observer.h"
@@ -83,10 +84,9 @@ class OneShotTimer;
 
 namespace media {
 
-class MEDIA_EXPORT AudioOutputDevice
-    : NON_EXPORTED_BASE(public AudioRendererSink),
-      NON_EXPORTED_BASE(public AudioOutputIPCDelegate),
-      NON_EXPORTED_BASE(public ScopedTaskRunnerObserver) {
+class MEDIA_EXPORT AudioOutputDevice : public AudioRendererSink,
+                                       public AudioOutputIPCDelegate,
+                                       public ScopedTaskRunnerObserver {
  public:
   // NOTE: Clients must call Initialize() before using.
   AudioOutputDevice(
@@ -217,6 +217,9 @@ class MEDIA_EXPORT AudioOutputDevice
 
   const base::TimeDelta auth_timeout_;
   std::unique_ptr<base::OneShotTimer> auth_timeout_action_;
+
+  // Set when authorization starts, for UMA stats.
+  base::TimeTicks auth_start_time_;
 
   DISALLOW_COPY_AND_ASSIGN(AudioOutputDevice);
 };

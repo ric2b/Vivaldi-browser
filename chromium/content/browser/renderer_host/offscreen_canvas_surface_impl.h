@@ -9,7 +9,7 @@
 #include "base/compiler_specific.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/common/surfaces/surface_info.h"
-#include "components/viz/host/frame_sink_observer.h"
+#include "components/viz/host/host_frame_sink_client.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/bindings/binding.h"
@@ -21,7 +21,7 @@ namespace content {
 // connections to both the renderer and frame sink manager.
 class CONTENT_EXPORT OffscreenCanvasSurfaceImpl
     : public blink::mojom::OffscreenCanvasSurface,
-      public NON_EXPORTED_BASE(viz::FrameSinkObserver) {
+      public viz::HostFrameSinkClient {
  public:
   using DestroyCallback = base::OnceCallback<void()>;
 
@@ -48,11 +48,12 @@ class CONTENT_EXPORT OffscreenCanvasSurfaceImpl
   // offscreen canvas client. The corresponding private interface will be owned
   // here to control CompositorFrameSink lifetime. This should only ever be
   // called once.
-  void CreateCompositorFrameSink(cc::mojom::CompositorFrameSinkClientPtr client,
-                                 cc::mojom::CompositorFrameSinkRequest request);
+  void CreateCompositorFrameSink(
+      viz::mojom::CompositorFrameSinkClientPtr client,
+      viz::mojom::CompositorFrameSinkRequest request);
 
-  // FrameSinkObserver implementation.
-  void OnSurfaceCreated(const viz::SurfaceInfo& surface_info) override;
+  // viz::HostFrameSinkClient implementation.
+  void OnFirstSurfaceActivation(const viz::SurfaceInfo& surface_info) override;
 
   // blink::mojom::OffscreenCanvasSurface implementation.
   void Require(const viz::SurfaceId& surface_id,

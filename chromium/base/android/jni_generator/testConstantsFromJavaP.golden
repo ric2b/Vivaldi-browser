@@ -17,13 +17,19 @@
 #include "base/android/jni_int_wrapper.h"
 
 // Step 1: forward declarations.
-namespace {
-const char kMotionEventClassPath[] = "android/view/MotionEvent";
-// Leaking this jclass as we cannot use LazyInstance from some threads.
-base::subtle::AtomicWord g_MotionEvent_clazz __attribute__((unused)) = 0;
-#define MotionEvent_clazz(env) base::android::LazyGetClass(env, kMotionEventClassPath, &g_MotionEvent_clazz)
+JNI_REGISTRATION_EXPORT extern const char kClassPath_android_view_MotionEvent[];
+const char kClassPath_android_view_MotionEvent[] = "android/view/MotionEvent";
 
-}  // namespace
+// Leaking this jclass as we cannot use LazyInstance from some threads.
+JNI_REGISTRATION_EXPORT base::subtle::AtomicWord
+    g_android_view_MotionEvent_clazz = 0;
+#ifndef android_view_MotionEvent_clazz_defined
+#define android_view_MotionEvent_clazz_defined
+inline jclass android_view_MotionEvent_clazz(JNIEnv* env) {
+  return base::android::LazyGetClass(env, kClassPath_android_view_MotionEvent,
+      &g_android_view_MotionEvent_clazz);
+}
+#endif
 
 namespace JNI_MotionEvent {
 
@@ -112,20 +118,20 @@ enum Java_MotionEvent_constant_fields {
 
 // Step 2: method stubs.
 
-static base::subtle::AtomicWord g_MotionEvent_finalize = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_finalize = 0;
 static void Java_MotionEvent_finalize(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& obj) __attribute__ ((unused));
 static void Java_MotionEvent_finalize(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) {
+    base::android::JavaRef<jobject>& obj) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env));
+      android_view_MotionEvent_clazz(env));
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "finalize",
       "()V",
-      &g_MotionEvent_finalize);
+      &g_android_view_MotionEvent_finalize);
 
      env->CallVoidMethod(obj.obj(),
           method_id);
@@ -133,15 +139,16 @@ static void Java_MotionEvent_finalize(JNIEnv* env, const
 }
 
 static base::subtle::AtomicWord
-    g_MotionEvent_obtainAVME_J_J_I_I_LAVMEPP_LAVMEPC_I_I_F_F_I_I_I_I = 0;
+    g_android_view_MotionEvent_obtainAVME_J_J_I_I_LAVMEPP_LAVMEPC_I_I_F_F_I_I_I_I
+    = 0;
 static base::android::ScopedJavaLocalRef<jobject>
     Java_MotionEvent_obtainAVME_J_J_I_I_LAVMEPP_LAVMEPC_I_I_F_F_I_I_I_I(JNIEnv*
     env, jlong p0,
     jlong p1,
     JniIntWrapper p2,
     JniIntWrapper p3,
-    const base::android::JavaRefOrBare<jobjectArray>& p4,
-    const base::android::JavaRefOrBare<jobjectArray>& p5,
+    const base::android::JavaRef<jobjectArray>& p4,
+    const base::android::JavaRef<jobjectArray>& p5,
     JniIntWrapper p6,
     JniIntWrapper p7,
     jfloat p8,
@@ -156,8 +163,8 @@ static base::android::ScopedJavaLocalRef<jobject>
     jlong p1,
     JniIntWrapper p2,
     JniIntWrapper p3,
-    const base::android::JavaRefOrBare<jobjectArray>& p4,
-    const base::android::JavaRefOrBare<jobjectArray>& p5,
+    const base::android::JavaRef<jobjectArray>& p4,
+    const base::android::JavaRef<jobjectArray>& p5,
     JniIntWrapper p6,
     JniIntWrapper p7,
     jfloat p8,
@@ -166,18 +173,18 @@ static base::android::ScopedJavaLocalRef<jobject>
     JniIntWrapper p11,
     JniIntWrapper p12,
     JniIntWrapper p13) {
-  CHECK_CLAZZ(env, MotionEvent_clazz(env),
-      MotionEvent_clazz(env), NULL);
+  CHECK_CLAZZ(env, android_view_MotionEvent_clazz(env),
+      android_view_MotionEvent_clazz(env), NULL);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_STATIC>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "obtain",
 "(JJII[Landroid/view/MotionEvent$PointerProperties;[Landroid/view/MotionEvent$PointerCoords;IIFFIIII)Landroid/view/MotionEvent;",
-      &g_MotionEvent_obtainAVME_J_J_I_I_LAVMEPP_LAVMEPC_I_I_F_F_I_I_I_I);
+&g_android_view_MotionEvent_obtainAVME_J_J_I_I_LAVMEPP_LAVMEPC_I_I_F_F_I_I_I_I);
 
   jobject ret =
-      env->CallStaticObjectMethod(MotionEvent_clazz(env),
+      env->CallStaticObjectMethod(android_view_MotionEvent_clazz(env),
           method_id, p0, p1, as_jint(p2), as_jint(p3), p4.obj(), p5.obj(),
               as_jint(p6), as_jint(p7), p8, p9, as_jint(p10), as_jint(p11),
               as_jint(p12), as_jint(p13));
@@ -186,15 +193,15 @@ static base::android::ScopedJavaLocalRef<jobject>
 }
 
 static base::subtle::AtomicWord
-    g_MotionEvent_obtainAVME_J_J_I_I_AI_LAVMEPC_I_F_F_I_I_I_I = 0;
+    g_android_view_MotionEvent_obtainAVME_J_J_I_I_AI_LAVMEPC_I_F_F_I_I_I_I = 0;
 static base::android::ScopedJavaLocalRef<jobject>
     Java_MotionEvent_obtainAVME_J_J_I_I_AI_LAVMEPC_I_F_F_I_I_I_I(JNIEnv* env,
     jlong p0,
     jlong p1,
     JniIntWrapper p2,
     JniIntWrapper p3,
-    const base::android::JavaRefOrBare<jintArray>& p4,
-    const base::android::JavaRefOrBare<jobjectArray>& p5,
+    const base::android::JavaRef<jintArray>& p4,
+    const base::android::JavaRef<jobjectArray>& p5,
     JniIntWrapper p6,
     jfloat p7,
     jfloat p8,
@@ -208,8 +215,8 @@ static base::android::ScopedJavaLocalRef<jobject>
     jlong p1,
     JniIntWrapper p2,
     JniIntWrapper p3,
-    const base::android::JavaRefOrBare<jintArray>& p4,
-    const base::android::JavaRefOrBare<jobjectArray>& p5,
+    const base::android::JavaRef<jintArray>& p4,
+    const base::android::JavaRef<jobjectArray>& p5,
     JniIntWrapper p6,
     jfloat p7,
     jfloat p8,
@@ -217,18 +224,18 @@ static base::android::ScopedJavaLocalRef<jobject>
     JniIntWrapper p10,
     JniIntWrapper p11,
     JniIntWrapper p12) {
-  CHECK_CLAZZ(env, MotionEvent_clazz(env),
-      MotionEvent_clazz(env), NULL);
+  CHECK_CLAZZ(env, android_view_MotionEvent_clazz(env),
+      android_view_MotionEvent_clazz(env), NULL);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_STATIC>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "obtain",
 "(JJII[I[Landroid/view/MotionEvent$PointerCoords;IFFIIII)Landroid/view/MotionEvent;",
-      &g_MotionEvent_obtainAVME_J_J_I_I_AI_LAVMEPC_I_F_F_I_I_I_I);
+      &g_android_view_MotionEvent_obtainAVME_J_J_I_I_AI_LAVMEPC_I_F_F_I_I_I_I);
 
   jobject ret =
-      env->CallStaticObjectMethod(MotionEvent_clazz(env),
+      env->CallStaticObjectMethod(android_view_MotionEvent_clazz(env),
           method_id, p0, p1, as_jint(p2), as_jint(p3), p4.obj(), p5.obj(),
               as_jint(p6), p7, p8, as_jint(p9), as_jint(p10), as_jint(p11),
               as_jint(p12));
@@ -236,8 +243,8 @@ static base::android::ScopedJavaLocalRef<jobject>
   return base::android::ScopedJavaLocalRef<jobject>(env, ret);
 }
 
-static base::subtle::AtomicWord g_MotionEvent_obtainAVME_J_J_I_F_F_F_F_I_F_F_I_I
-    = 0;
+static base::subtle::AtomicWord
+    g_android_view_MotionEvent_obtainAVME_J_J_I_F_F_F_F_I_F_F_I_I = 0;
 static base::android::ScopedJavaLocalRef<jobject>
     Java_MotionEvent_obtainAVME_J_J_I_F_F_F_F_I_F_F_I_I(JNIEnv* env, jlong p0,
     jlong p1,
@@ -264,18 +271,18 @@ static base::android::ScopedJavaLocalRef<jobject>
     jfloat p9,
     JniIntWrapper p10,
     JniIntWrapper p11) {
-  CHECK_CLAZZ(env, MotionEvent_clazz(env),
-      MotionEvent_clazz(env), NULL);
+  CHECK_CLAZZ(env, android_view_MotionEvent_clazz(env),
+      android_view_MotionEvent_clazz(env), NULL);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_STATIC>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "obtain",
       "(JJIFFFFIFFII)Landroid/view/MotionEvent;",
-      &g_MotionEvent_obtainAVME_J_J_I_F_F_F_F_I_F_F_I_I);
+      &g_android_view_MotionEvent_obtainAVME_J_J_I_F_F_F_F_I_F_F_I_I);
 
   jobject ret =
-      env->CallStaticObjectMethod(MotionEvent_clazz(env),
+      env->CallStaticObjectMethod(android_view_MotionEvent_clazz(env),
           method_id, p0, p1, as_jint(p2), p3, p4, p5, p6, as_jint(p7), p8, p9,
               as_jint(p10), as_jint(p11));
   jni_generator::CheckException(env);
@@ -283,7 +290,7 @@ static base::android::ScopedJavaLocalRef<jobject>
 }
 
 static base::subtle::AtomicWord
-    g_MotionEvent_obtainAVME_J_J_I_I_F_F_F_F_I_F_F_I_I = 0;
+    g_android_view_MotionEvent_obtainAVME_J_J_I_I_F_F_F_F_I_F_F_I_I = 0;
 static base::android::ScopedJavaLocalRef<jobject>
     Java_MotionEvent_obtainAVME_J_J_I_I_F_F_F_F_I_F_F_I_I(JNIEnv* env, jlong p0,
     jlong p1,
@@ -312,25 +319,26 @@ static base::android::ScopedJavaLocalRef<jobject>
     jfloat p10,
     JniIntWrapper p11,
     JniIntWrapper p12) {
-  CHECK_CLAZZ(env, MotionEvent_clazz(env),
-      MotionEvent_clazz(env), NULL);
+  CHECK_CLAZZ(env, android_view_MotionEvent_clazz(env),
+      android_view_MotionEvent_clazz(env), NULL);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_STATIC>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "obtain",
       "(JJIIFFFFIFFII)Landroid/view/MotionEvent;",
-      &g_MotionEvent_obtainAVME_J_J_I_I_F_F_F_F_I_F_F_I_I);
+      &g_android_view_MotionEvent_obtainAVME_J_J_I_I_F_F_F_F_I_F_F_I_I);
 
   jobject ret =
-      env->CallStaticObjectMethod(MotionEvent_clazz(env),
+      env->CallStaticObjectMethod(android_view_MotionEvent_clazz(env),
           method_id, p0, p1, as_jint(p2), as_jint(p3), p4, p5, p6, p7,
               as_jint(p8), p9, p10, as_jint(p11), as_jint(p12));
   jni_generator::CheckException(env);
   return base::android::ScopedJavaLocalRef<jobject>(env, ret);
 }
 
-static base::subtle::AtomicWord g_MotionEvent_obtainAVME_J_J_I_F_F_I = 0;
+static base::subtle::AtomicWord
+    g_android_view_MotionEvent_obtainAVME_J_J_I_F_F_I = 0;
 static base::android::ScopedJavaLocalRef<jobject>
     Java_MotionEvent_obtainAVME_J_J_I_F_F_I(JNIEnv* env, jlong p0,
     jlong p1,
@@ -345,105 +353,105 @@ static base::android::ScopedJavaLocalRef<jobject>
     jfloat p3,
     jfloat p4,
     JniIntWrapper p5) {
-  CHECK_CLAZZ(env, MotionEvent_clazz(env),
-      MotionEvent_clazz(env), NULL);
+  CHECK_CLAZZ(env, android_view_MotionEvent_clazz(env),
+      android_view_MotionEvent_clazz(env), NULL);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_STATIC>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "obtain",
       "(JJIFFI)Landroid/view/MotionEvent;",
-      &g_MotionEvent_obtainAVME_J_J_I_F_F_I);
+      &g_android_view_MotionEvent_obtainAVME_J_J_I_F_F_I);
 
   jobject ret =
-      env->CallStaticObjectMethod(MotionEvent_clazz(env),
+      env->CallStaticObjectMethod(android_view_MotionEvent_clazz(env),
           method_id, p0, p1, as_jint(p2), p3, p4, as_jint(p5));
   jni_generator::CheckException(env);
   return base::android::ScopedJavaLocalRef<jobject>(env, ret);
 }
 
-static base::subtle::AtomicWord g_MotionEvent_obtainAVME_AVME = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_obtainAVME_AVME = 0;
 static base::android::ScopedJavaLocalRef<jobject>
     Java_MotionEvent_obtainAVME_AVME(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& p0) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& p0) __attribute__ ((unused));
 static base::android::ScopedJavaLocalRef<jobject>
     Java_MotionEvent_obtainAVME_AVME(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& p0) {
-  CHECK_CLAZZ(env, MotionEvent_clazz(env),
-      MotionEvent_clazz(env), NULL);
+    base::android::JavaRef<jobject>& p0) {
+  CHECK_CLAZZ(env, android_view_MotionEvent_clazz(env),
+      android_view_MotionEvent_clazz(env), NULL);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_STATIC>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "obtain",
       "(Landroid/view/MotionEvent;)Landroid/view/MotionEvent;",
-      &g_MotionEvent_obtainAVME_AVME);
+      &g_android_view_MotionEvent_obtainAVME_AVME);
 
   jobject ret =
-      env->CallStaticObjectMethod(MotionEvent_clazz(env),
+      env->CallStaticObjectMethod(android_view_MotionEvent_clazz(env),
           method_id, p0.obj());
   jni_generator::CheckException(env);
   return base::android::ScopedJavaLocalRef<jobject>(env, ret);
 }
 
-static base::subtle::AtomicWord g_MotionEvent_obtainNoHistory = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_obtainNoHistory = 0;
 static base::android::ScopedJavaLocalRef<jobject>
     Java_MotionEvent_obtainNoHistory(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& p0) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& p0) __attribute__ ((unused));
 static base::android::ScopedJavaLocalRef<jobject>
     Java_MotionEvent_obtainNoHistory(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& p0) {
-  CHECK_CLAZZ(env, MotionEvent_clazz(env),
-      MotionEvent_clazz(env), NULL);
+    base::android::JavaRef<jobject>& p0) {
+  CHECK_CLAZZ(env, android_view_MotionEvent_clazz(env),
+      android_view_MotionEvent_clazz(env), NULL);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_STATIC>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "obtainNoHistory",
       "(Landroid/view/MotionEvent;)Landroid/view/MotionEvent;",
-      &g_MotionEvent_obtainNoHistory);
+      &g_android_view_MotionEvent_obtainNoHistory);
 
   jobject ret =
-      env->CallStaticObjectMethod(MotionEvent_clazz(env),
+      env->CallStaticObjectMethod(android_view_MotionEvent_clazz(env),
           method_id, p0.obj());
   jni_generator::CheckException(env);
   return base::android::ScopedJavaLocalRef<jobject>(env, ret);
 }
 
-static base::subtle::AtomicWord g_MotionEvent_recycle = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_recycle = 0;
 static void Java_MotionEvent_recycle(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& obj) __attribute__ ((unused));
 static void Java_MotionEvent_recycle(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) {
+    base::android::JavaRef<jobject>& obj) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env));
+      android_view_MotionEvent_clazz(env));
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "recycle",
       "()V",
-      &g_MotionEvent_recycle);
+      &g_android_view_MotionEvent_recycle);
 
      env->CallVoidMethod(obj.obj(),
           method_id);
   jni_generator::CheckException(env);
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getDeviceId = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getDeviceId = 0;
 static jint Java_MotionEvent_getDeviceId(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& obj) __attribute__ ((unused));
 static jint Java_MotionEvent_getDeviceId(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) {
+    base::android::JavaRef<jobject>& obj) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getDeviceId",
       "()I",
-      &g_MotionEvent_getDeviceId);
+      &g_android_view_MotionEvent_getDeviceId);
 
   jint ret =
       env->CallIntMethod(obj.obj(),
@@ -452,20 +460,20 @@ static jint Java_MotionEvent_getDeviceId(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getSource = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getSource = 0;
 static jint Java_MotionEvent_getSource(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& obj) __attribute__ ((unused));
 static jint Java_MotionEvent_getSource(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) {
+    base::android::JavaRef<jobject>& obj) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getSource",
       "()I",
-      &g_MotionEvent_getSource);
+      &g_android_view_MotionEvent_getSource);
 
   jint ret =
       env->CallIntMethod(obj.obj(),
@@ -474,41 +482,41 @@ static jint Java_MotionEvent_getSource(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_setSource = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_setSource = 0;
 static void Java_MotionEvent_setSource(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) __attribute__
     ((unused));
 static void Java_MotionEvent_setSource(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env));
+      android_view_MotionEvent_clazz(env));
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "setSource",
       "(I)V",
-      &g_MotionEvent_setSource);
+      &g_android_view_MotionEvent_setSource);
 
      env->CallVoidMethod(obj.obj(),
           method_id, as_jint(p0));
   jni_generator::CheckException(env);
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getAction = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getAction = 0;
 static jint Java_MotionEvent_getAction(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& obj) __attribute__ ((unused));
 static jint Java_MotionEvent_getAction(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) {
+    base::android::JavaRef<jobject>& obj) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getAction",
       "()I",
-      &g_MotionEvent_getAction);
+      &g_android_view_MotionEvent_getAction);
 
   jint ret =
       env->CallIntMethod(obj.obj(),
@@ -517,20 +525,20 @@ static jint Java_MotionEvent_getAction(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getActionMasked = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getActionMasked = 0;
 static jint Java_MotionEvent_getActionMasked(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& obj) __attribute__ ((unused));
 static jint Java_MotionEvent_getActionMasked(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) {
+    base::android::JavaRef<jobject>& obj) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getActionMasked",
       "()I",
-      &g_MotionEvent_getActionMasked);
+      &g_android_view_MotionEvent_getActionMasked);
 
   jint ret =
       env->CallIntMethod(obj.obj(),
@@ -539,20 +547,20 @@ static jint Java_MotionEvent_getActionMasked(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getActionIndex = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getActionIndex = 0;
 static jint Java_MotionEvent_getActionIndex(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& obj) __attribute__ ((unused));
 static jint Java_MotionEvent_getActionIndex(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) {
+    base::android::JavaRef<jobject>& obj) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getActionIndex",
       "()I",
-      &g_MotionEvent_getActionIndex);
+      &g_android_view_MotionEvent_getActionIndex);
 
   jint ret =
       env->CallIntMethod(obj.obj(),
@@ -561,20 +569,20 @@ static jint Java_MotionEvent_getActionIndex(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getFlags = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getFlags = 0;
 static jint Java_MotionEvent_getFlags(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& obj) __attribute__ ((unused));
 static jint Java_MotionEvent_getFlags(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) {
+    base::android::JavaRef<jobject>& obj) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getFlags",
       "()I",
-      &g_MotionEvent_getFlags);
+      &g_android_view_MotionEvent_getFlags);
 
   jint ret =
       env->CallIntMethod(obj.obj(),
@@ -583,20 +591,20 @@ static jint Java_MotionEvent_getFlags(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getDownTime = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getDownTime = 0;
 static jlong Java_MotionEvent_getDownTime(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& obj) __attribute__ ((unused));
 static jlong Java_MotionEvent_getDownTime(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) {
+    base::android::JavaRef<jobject>& obj) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getDownTime",
       "()J",
-      &g_MotionEvent_getDownTime);
+      &g_android_view_MotionEvent_getDownTime);
 
   jlong ret =
       env->CallLongMethod(obj.obj(),
@@ -605,20 +613,20 @@ static jlong Java_MotionEvent_getDownTime(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getEventTime = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getEventTime = 0;
 static jlong Java_MotionEvent_getEventTime(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& obj) __attribute__ ((unused));
 static jlong Java_MotionEvent_getEventTime(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) {
+    base::android::JavaRef<jobject>& obj) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getEventTime",
       "()J",
-      &g_MotionEvent_getEventTime);
+      &g_android_view_MotionEvent_getEventTime);
 
   jlong ret =
       env->CallLongMethod(obj.obj(),
@@ -627,20 +635,20 @@ static jlong Java_MotionEvent_getEventTime(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getXF = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getXF = 0;
 static jfloat Java_MotionEvent_getXF(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& obj) __attribute__ ((unused));
 static jfloat Java_MotionEvent_getXF(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) {
+    base::android::JavaRef<jobject>& obj) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getX",
       "()F",
-      &g_MotionEvent_getXF);
+      &g_android_view_MotionEvent_getXF);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -649,20 +657,20 @@ static jfloat Java_MotionEvent_getXF(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getYF = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getYF = 0;
 static jfloat Java_MotionEvent_getYF(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& obj) __attribute__ ((unused));
 static jfloat Java_MotionEvent_getYF(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) {
+    base::android::JavaRef<jobject>& obj) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getY",
       "()F",
-      &g_MotionEvent_getYF);
+      &g_android_view_MotionEvent_getYF);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -671,20 +679,20 @@ static jfloat Java_MotionEvent_getYF(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getPressureF = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getPressureF = 0;
 static jfloat Java_MotionEvent_getPressureF(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& obj) __attribute__ ((unused));
 static jfloat Java_MotionEvent_getPressureF(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) {
+    base::android::JavaRef<jobject>& obj) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getPressure",
       "()F",
-      &g_MotionEvent_getPressureF);
+      &g_android_view_MotionEvent_getPressureF);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -693,20 +701,20 @@ static jfloat Java_MotionEvent_getPressureF(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getSizeF = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getSizeF = 0;
 static jfloat Java_MotionEvent_getSizeF(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& obj) __attribute__ ((unused));
 static jfloat Java_MotionEvent_getSizeF(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) {
+    base::android::JavaRef<jobject>& obj) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getSize",
       "()F",
-      &g_MotionEvent_getSizeF);
+      &g_android_view_MotionEvent_getSizeF);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -715,20 +723,20 @@ static jfloat Java_MotionEvent_getSizeF(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getTouchMajorF = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getTouchMajorF = 0;
 static jfloat Java_MotionEvent_getTouchMajorF(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& obj) __attribute__ ((unused));
 static jfloat Java_MotionEvent_getTouchMajorF(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) {
+    base::android::JavaRef<jobject>& obj) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getTouchMajor",
       "()F",
-      &g_MotionEvent_getTouchMajorF);
+      &g_android_view_MotionEvent_getTouchMajorF);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -737,20 +745,20 @@ static jfloat Java_MotionEvent_getTouchMajorF(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getTouchMinorF = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getTouchMinorF = 0;
 static jfloat Java_MotionEvent_getTouchMinorF(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& obj) __attribute__ ((unused));
 static jfloat Java_MotionEvent_getTouchMinorF(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) {
+    base::android::JavaRef<jobject>& obj) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getTouchMinor",
       "()F",
-      &g_MotionEvent_getTouchMinorF);
+      &g_android_view_MotionEvent_getTouchMinorF);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -759,20 +767,20 @@ static jfloat Java_MotionEvent_getTouchMinorF(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getToolMajorF = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getToolMajorF = 0;
 static jfloat Java_MotionEvent_getToolMajorF(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& obj) __attribute__ ((unused));
 static jfloat Java_MotionEvent_getToolMajorF(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) {
+    base::android::JavaRef<jobject>& obj) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getToolMajor",
       "()F",
-      &g_MotionEvent_getToolMajorF);
+      &g_android_view_MotionEvent_getToolMajorF);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -781,20 +789,20 @@ static jfloat Java_MotionEvent_getToolMajorF(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getToolMinorF = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getToolMinorF = 0;
 static jfloat Java_MotionEvent_getToolMinorF(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& obj) __attribute__ ((unused));
 static jfloat Java_MotionEvent_getToolMinorF(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) {
+    base::android::JavaRef<jobject>& obj) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getToolMinor",
       "()F",
-      &g_MotionEvent_getToolMinorF);
+      &g_android_view_MotionEvent_getToolMinorF);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -803,20 +811,20 @@ static jfloat Java_MotionEvent_getToolMinorF(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getOrientationF = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getOrientationF = 0;
 static jfloat Java_MotionEvent_getOrientationF(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& obj) __attribute__ ((unused));
 static jfloat Java_MotionEvent_getOrientationF(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) {
+    base::android::JavaRef<jobject>& obj) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getOrientation",
       "()F",
-      &g_MotionEvent_getOrientationF);
+      &g_android_view_MotionEvent_getOrientationF);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -825,21 +833,21 @@ static jfloat Java_MotionEvent_getOrientationF(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getAxisValueF_I = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getAxisValueF_I = 0;
 static jfloat Java_MotionEvent_getAxisValueF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) __attribute__
     ((unused));
 static jfloat Java_MotionEvent_getAxisValueF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getAxisValue",
       "(I)F",
-      &g_MotionEvent_getAxisValueF_I);
+      &g_android_view_MotionEvent_getAxisValueF_I);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -848,20 +856,20 @@ static jfloat Java_MotionEvent_getAxisValueF_I(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getPointerCount = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getPointerCount = 0;
 static jint Java_MotionEvent_getPointerCount(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& obj) __attribute__ ((unused));
 static jint Java_MotionEvent_getPointerCount(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) {
+    base::android::JavaRef<jobject>& obj) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getPointerCount",
       "()I",
-      &g_MotionEvent_getPointerCount);
+      &g_android_view_MotionEvent_getPointerCount);
 
   jint ret =
       env->CallIntMethod(obj.obj(),
@@ -870,21 +878,21 @@ static jint Java_MotionEvent_getPointerCount(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getPointerId = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getPointerId = 0;
 static jint Java_MotionEvent_getPointerId(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) __attribute__
     ((unused));
 static jint Java_MotionEvent_getPointerId(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getPointerId",
       "(I)I",
-      &g_MotionEvent_getPointerId);
+      &g_android_view_MotionEvent_getPointerId);
 
   jint ret =
       env->CallIntMethod(obj.obj(),
@@ -893,21 +901,21 @@ static jint Java_MotionEvent_getPointerId(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getToolType = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getToolType = 0;
 static jint Java_MotionEvent_getToolType(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) __attribute__
     ((unused));
 static jint Java_MotionEvent_getToolType(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getToolType",
       "(I)I",
-      &g_MotionEvent_getToolType);
+      &g_android_view_MotionEvent_getToolType);
 
   jint ret =
       env->CallIntMethod(obj.obj(),
@@ -916,21 +924,21 @@ static jint Java_MotionEvent_getToolType(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_findPointerIndex = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_findPointerIndex = 0;
 static jint Java_MotionEvent_findPointerIndex(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) __attribute__
     ((unused));
 static jint Java_MotionEvent_findPointerIndex(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "findPointerIndex",
       "(I)I",
-      &g_MotionEvent_findPointerIndex);
+      &g_android_view_MotionEvent_findPointerIndex);
 
   jint ret =
       env->CallIntMethod(obj.obj(),
@@ -939,21 +947,21 @@ static jint Java_MotionEvent_findPointerIndex(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getXF_I = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getXF_I = 0;
 static jfloat Java_MotionEvent_getXF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) __attribute__
     ((unused));
 static jfloat Java_MotionEvent_getXF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getX",
       "(I)F",
-      &g_MotionEvent_getXF_I);
+      &g_android_view_MotionEvent_getXF_I);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -962,21 +970,21 @@ static jfloat Java_MotionEvent_getXF_I(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getYF_I = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getYF_I = 0;
 static jfloat Java_MotionEvent_getYF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) __attribute__
     ((unused));
 static jfloat Java_MotionEvent_getYF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getY",
       "(I)F",
-      &g_MotionEvent_getYF_I);
+      &g_android_view_MotionEvent_getYF_I);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -985,21 +993,21 @@ static jfloat Java_MotionEvent_getYF_I(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getPressureF_I = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getPressureF_I = 0;
 static jfloat Java_MotionEvent_getPressureF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) __attribute__
     ((unused));
 static jfloat Java_MotionEvent_getPressureF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getPressure",
       "(I)F",
-      &g_MotionEvent_getPressureF_I);
+      &g_android_view_MotionEvent_getPressureF_I);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -1008,21 +1016,21 @@ static jfloat Java_MotionEvent_getPressureF_I(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getSizeF_I = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getSizeF_I = 0;
 static jfloat Java_MotionEvent_getSizeF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) __attribute__
     ((unused));
 static jfloat Java_MotionEvent_getSizeF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getSize",
       "(I)F",
-      &g_MotionEvent_getSizeF_I);
+      &g_android_view_MotionEvent_getSizeF_I);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -1031,21 +1039,21 @@ static jfloat Java_MotionEvent_getSizeF_I(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getTouchMajorF_I = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getTouchMajorF_I = 0;
 static jfloat Java_MotionEvent_getTouchMajorF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) __attribute__
     ((unused));
 static jfloat Java_MotionEvent_getTouchMajorF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getTouchMajor",
       "(I)F",
-      &g_MotionEvent_getTouchMajorF_I);
+      &g_android_view_MotionEvent_getTouchMajorF_I);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -1054,21 +1062,21 @@ static jfloat Java_MotionEvent_getTouchMajorF_I(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getTouchMinorF_I = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getTouchMinorF_I = 0;
 static jfloat Java_MotionEvent_getTouchMinorF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) __attribute__
     ((unused));
 static jfloat Java_MotionEvent_getTouchMinorF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getTouchMinor",
       "(I)F",
-      &g_MotionEvent_getTouchMinorF_I);
+      &g_android_view_MotionEvent_getTouchMinorF_I);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -1077,21 +1085,21 @@ static jfloat Java_MotionEvent_getTouchMinorF_I(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getToolMajorF_I = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getToolMajorF_I = 0;
 static jfloat Java_MotionEvent_getToolMajorF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) __attribute__
     ((unused));
 static jfloat Java_MotionEvent_getToolMajorF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getToolMajor",
       "(I)F",
-      &g_MotionEvent_getToolMajorF_I);
+      &g_android_view_MotionEvent_getToolMajorF_I);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -1100,21 +1108,21 @@ static jfloat Java_MotionEvent_getToolMajorF_I(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getToolMinorF_I = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getToolMinorF_I = 0;
 static jfloat Java_MotionEvent_getToolMinorF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) __attribute__
     ((unused));
 static jfloat Java_MotionEvent_getToolMinorF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getToolMinor",
       "(I)F",
-      &g_MotionEvent_getToolMinorF_I);
+      &g_android_view_MotionEvent_getToolMinorF_I);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -1123,21 +1131,22 @@ static jfloat Java_MotionEvent_getToolMinorF_I(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getOrientationF_I = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getOrientationF_I =
+    0;
 static jfloat Java_MotionEvent_getOrientationF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) __attribute__
     ((unused));
 static jfloat Java_MotionEvent_getOrientationF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getOrientation",
       "(I)F",
-      &g_MotionEvent_getOrientationF_I);
+      &g_android_view_MotionEvent_getOrientationF_I);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -1146,22 +1155,23 @@ static jfloat Java_MotionEvent_getOrientationF_I(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getAxisValueF_I_I = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getAxisValueF_I_I =
+    0;
 static jfloat Java_MotionEvent_getAxisValueF_I_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) __attribute__ ((unused));
 static jfloat Java_MotionEvent_getAxisValueF_I_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getAxisValue",
       "(II)F",
-      &g_MotionEvent_getAxisValueF_I_I);
+      &g_android_view_MotionEvent_getAxisValueF_I_I);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -1170,64 +1180,65 @@ static jfloat Java_MotionEvent_getAxisValueF_I_I(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getPointerCoords = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getPointerCoords = 0;
 static void Java_MotionEvent_getPointerCoords(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
-    const base::android::JavaRefOrBare<jobject>& p1) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0,
+    const base::android::JavaRef<jobject>& p1) __attribute__ ((unused));
 static void Java_MotionEvent_getPointerCoords(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
-    const base::android::JavaRefOrBare<jobject>& p1) {
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0,
+    const base::android::JavaRef<jobject>& p1) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env));
+      android_view_MotionEvent_clazz(env));
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getPointerCoords",
       "(ILandroid/view/MotionEvent$PointerCoords;)V",
-      &g_MotionEvent_getPointerCoords);
+      &g_android_view_MotionEvent_getPointerCoords);
 
      env->CallVoidMethod(obj.obj(),
           method_id, as_jint(p0), p1.obj());
   jni_generator::CheckException(env);
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getPointerProperties = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getPointerProperties
+    = 0;
 static void Java_MotionEvent_getPointerProperties(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
-    const base::android::JavaRefOrBare<jobject>& p1) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0,
+    const base::android::JavaRef<jobject>& p1) __attribute__ ((unused));
 static void Java_MotionEvent_getPointerProperties(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
-    const base::android::JavaRefOrBare<jobject>& p1) {
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0,
+    const base::android::JavaRef<jobject>& p1) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env));
+      android_view_MotionEvent_clazz(env));
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getPointerProperties",
       "(ILandroid/view/MotionEvent$PointerProperties;)V",
-      &g_MotionEvent_getPointerProperties);
+      &g_android_view_MotionEvent_getPointerProperties);
 
      env->CallVoidMethod(obj.obj(),
           method_id, as_jint(p0), p1.obj());
   jni_generator::CheckException(env);
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getMetaState = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getMetaState = 0;
 static jint Java_MotionEvent_getMetaState(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& obj) __attribute__ ((unused));
 static jint Java_MotionEvent_getMetaState(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) {
+    base::android::JavaRef<jobject>& obj) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getMetaState",
       "()I",
-      &g_MotionEvent_getMetaState);
+      &g_android_view_MotionEvent_getMetaState);
 
   jint ret =
       env->CallIntMethod(obj.obj(),
@@ -1236,20 +1247,20 @@ static jint Java_MotionEvent_getMetaState(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getButtonState = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getButtonState = 0;
 static jint Java_MotionEvent_getButtonState(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& obj) __attribute__ ((unused));
 static jint Java_MotionEvent_getButtonState(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) {
+    base::android::JavaRef<jobject>& obj) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getButtonState",
       "()I",
-      &g_MotionEvent_getButtonState);
+      &g_android_view_MotionEvent_getButtonState);
 
   jint ret =
       env->CallIntMethod(obj.obj(),
@@ -1258,20 +1269,20 @@ static jint Java_MotionEvent_getButtonState(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getRawX = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getRawX = 0;
 static jfloat Java_MotionEvent_getRawX(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& obj) __attribute__ ((unused));
 static jfloat Java_MotionEvent_getRawX(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) {
+    base::android::JavaRef<jobject>& obj) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getRawX",
       "()F",
-      &g_MotionEvent_getRawX);
+      &g_android_view_MotionEvent_getRawX);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -1280,20 +1291,20 @@ static jfloat Java_MotionEvent_getRawX(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getRawY = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getRawY = 0;
 static jfloat Java_MotionEvent_getRawY(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& obj) __attribute__ ((unused));
 static jfloat Java_MotionEvent_getRawY(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) {
+    base::android::JavaRef<jobject>& obj) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getRawY",
       "()F",
-      &g_MotionEvent_getRawY);
+      &g_android_view_MotionEvent_getRawY);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -1302,20 +1313,20 @@ static jfloat Java_MotionEvent_getRawY(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getXPrecision = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getXPrecision = 0;
 static jfloat Java_MotionEvent_getXPrecision(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& obj) __attribute__ ((unused));
 static jfloat Java_MotionEvent_getXPrecision(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) {
+    base::android::JavaRef<jobject>& obj) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getXPrecision",
       "()F",
-      &g_MotionEvent_getXPrecision);
+      &g_android_view_MotionEvent_getXPrecision);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -1324,20 +1335,20 @@ static jfloat Java_MotionEvent_getXPrecision(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getYPrecision = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getYPrecision = 0;
 static jfloat Java_MotionEvent_getYPrecision(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& obj) __attribute__ ((unused));
 static jfloat Java_MotionEvent_getYPrecision(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) {
+    base::android::JavaRef<jobject>& obj) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getYPrecision",
       "()F",
-      &g_MotionEvent_getYPrecision);
+      &g_android_view_MotionEvent_getYPrecision);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -1346,20 +1357,20 @@ static jfloat Java_MotionEvent_getYPrecision(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getHistorySize = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getHistorySize = 0;
 static jint Java_MotionEvent_getHistorySize(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& obj) __attribute__ ((unused));
 static jint Java_MotionEvent_getHistorySize(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) {
+    base::android::JavaRef<jobject>& obj) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getHistorySize",
       "()I",
-      &g_MotionEvent_getHistorySize);
+      &g_android_view_MotionEvent_getHistorySize);
 
   jint ret =
       env->CallIntMethod(obj.obj(),
@@ -1368,21 +1379,22 @@ static jint Java_MotionEvent_getHistorySize(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getHistoricalEventTime = 0;
+static base::subtle::AtomicWord
+    g_android_view_MotionEvent_getHistoricalEventTime = 0;
 static jlong Java_MotionEvent_getHistoricalEventTime(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) __attribute__
     ((unused));
 static jlong Java_MotionEvent_getHistoricalEventTime(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getHistoricalEventTime",
       "(I)J",
-      &g_MotionEvent_getHistoricalEventTime);
+      &g_android_view_MotionEvent_getHistoricalEventTime);
 
   jlong ret =
       env->CallLongMethod(obj.obj(),
@@ -1391,21 +1403,22 @@ static jlong Java_MotionEvent_getHistoricalEventTime(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getHistoricalXF_I = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getHistoricalXF_I =
+    0;
 static jfloat Java_MotionEvent_getHistoricalXF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) __attribute__
     ((unused));
 static jfloat Java_MotionEvent_getHistoricalXF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getHistoricalX",
       "(I)F",
-      &g_MotionEvent_getHistoricalXF_I);
+      &g_android_view_MotionEvent_getHistoricalXF_I);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -1414,21 +1427,22 @@ static jfloat Java_MotionEvent_getHistoricalXF_I(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getHistoricalYF_I = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getHistoricalYF_I =
+    0;
 static jfloat Java_MotionEvent_getHistoricalYF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) __attribute__
     ((unused));
 static jfloat Java_MotionEvent_getHistoricalYF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getHistoricalY",
       "(I)F",
-      &g_MotionEvent_getHistoricalYF_I);
+      &g_android_view_MotionEvent_getHistoricalYF_I);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -1437,21 +1451,22 @@ static jfloat Java_MotionEvent_getHistoricalYF_I(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getHistoricalPressureF_I = 0;
+static base::subtle::AtomicWord
+    g_android_view_MotionEvent_getHistoricalPressureF_I = 0;
 static jfloat Java_MotionEvent_getHistoricalPressureF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) __attribute__
     ((unused));
 static jfloat Java_MotionEvent_getHistoricalPressureF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getHistoricalPressure",
       "(I)F",
-      &g_MotionEvent_getHistoricalPressureF_I);
+      &g_android_view_MotionEvent_getHistoricalPressureF_I);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -1460,21 +1475,22 @@ static jfloat Java_MotionEvent_getHistoricalPressureF_I(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getHistoricalSizeF_I = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getHistoricalSizeF_I
+    = 0;
 static jfloat Java_MotionEvent_getHistoricalSizeF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) __attribute__
     ((unused));
 static jfloat Java_MotionEvent_getHistoricalSizeF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getHistoricalSize",
       "(I)F",
-      &g_MotionEvent_getHistoricalSizeF_I);
+      &g_android_view_MotionEvent_getHistoricalSizeF_I);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -1483,21 +1499,22 @@ static jfloat Java_MotionEvent_getHistoricalSizeF_I(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getHistoricalTouchMajorF_I = 0;
+static base::subtle::AtomicWord
+    g_android_view_MotionEvent_getHistoricalTouchMajorF_I = 0;
 static jfloat Java_MotionEvent_getHistoricalTouchMajorF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) __attribute__
     ((unused));
 static jfloat Java_MotionEvent_getHistoricalTouchMajorF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getHistoricalTouchMajor",
       "(I)F",
-      &g_MotionEvent_getHistoricalTouchMajorF_I);
+      &g_android_view_MotionEvent_getHistoricalTouchMajorF_I);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -1506,21 +1523,22 @@ static jfloat Java_MotionEvent_getHistoricalTouchMajorF_I(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getHistoricalTouchMinorF_I = 0;
+static base::subtle::AtomicWord
+    g_android_view_MotionEvent_getHistoricalTouchMinorF_I = 0;
 static jfloat Java_MotionEvent_getHistoricalTouchMinorF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) __attribute__
     ((unused));
 static jfloat Java_MotionEvent_getHistoricalTouchMinorF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getHistoricalTouchMinor",
       "(I)F",
-      &g_MotionEvent_getHistoricalTouchMinorF_I);
+      &g_android_view_MotionEvent_getHistoricalTouchMinorF_I);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -1529,21 +1547,22 @@ static jfloat Java_MotionEvent_getHistoricalTouchMinorF_I(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getHistoricalToolMajorF_I = 0;
+static base::subtle::AtomicWord
+    g_android_view_MotionEvent_getHistoricalToolMajorF_I = 0;
 static jfloat Java_MotionEvent_getHistoricalToolMajorF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) __attribute__
     ((unused));
 static jfloat Java_MotionEvent_getHistoricalToolMajorF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getHistoricalToolMajor",
       "(I)F",
-      &g_MotionEvent_getHistoricalToolMajorF_I);
+      &g_android_view_MotionEvent_getHistoricalToolMajorF_I);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -1552,21 +1571,22 @@ static jfloat Java_MotionEvent_getHistoricalToolMajorF_I(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getHistoricalToolMinorF_I = 0;
+static base::subtle::AtomicWord
+    g_android_view_MotionEvent_getHistoricalToolMinorF_I = 0;
 static jfloat Java_MotionEvent_getHistoricalToolMinorF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) __attribute__
     ((unused));
 static jfloat Java_MotionEvent_getHistoricalToolMinorF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getHistoricalToolMinor",
       "(I)F",
-      &g_MotionEvent_getHistoricalToolMinorF_I);
+      &g_android_view_MotionEvent_getHistoricalToolMinorF_I);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -1575,21 +1595,22 @@ static jfloat Java_MotionEvent_getHistoricalToolMinorF_I(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getHistoricalOrientationF_I = 0;
+static base::subtle::AtomicWord
+    g_android_view_MotionEvent_getHistoricalOrientationF_I = 0;
 static jfloat Java_MotionEvent_getHistoricalOrientationF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) __attribute__
     ((unused));
 static jfloat Java_MotionEvent_getHistoricalOrientationF_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getHistoricalOrientation",
       "(I)F",
-      &g_MotionEvent_getHistoricalOrientationF_I);
+      &g_android_view_MotionEvent_getHistoricalOrientationF_I);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -1598,22 +1619,23 @@ static jfloat Java_MotionEvent_getHistoricalOrientationF_I(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getHistoricalAxisValueF_I_I = 0;
+static base::subtle::AtomicWord
+    g_android_view_MotionEvent_getHistoricalAxisValueF_I_I = 0;
 static jfloat Java_MotionEvent_getHistoricalAxisValueF_I_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) __attribute__ ((unused));
 static jfloat Java_MotionEvent_getHistoricalAxisValueF_I_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getHistoricalAxisValue",
       "(II)F",
-      &g_MotionEvent_getHistoricalAxisValueF_I_I);
+      &g_android_view_MotionEvent_getHistoricalAxisValueF_I_I);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -1622,22 +1644,23 @@ static jfloat Java_MotionEvent_getHistoricalAxisValueF_I_I(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getHistoricalXF_I_I = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getHistoricalXF_I_I =
+    0;
 static jfloat Java_MotionEvent_getHistoricalXF_I_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) __attribute__ ((unused));
 static jfloat Java_MotionEvent_getHistoricalXF_I_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getHistoricalX",
       "(II)F",
-      &g_MotionEvent_getHistoricalXF_I_I);
+      &g_android_view_MotionEvent_getHistoricalXF_I_I);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -1646,22 +1669,23 @@ static jfloat Java_MotionEvent_getHistoricalXF_I_I(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getHistoricalYF_I_I = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getHistoricalYF_I_I =
+    0;
 static jfloat Java_MotionEvent_getHistoricalYF_I_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) __attribute__ ((unused));
 static jfloat Java_MotionEvent_getHistoricalYF_I_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getHistoricalY",
       "(II)F",
-      &g_MotionEvent_getHistoricalYF_I_I);
+      &g_android_view_MotionEvent_getHistoricalYF_I_I);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -1670,22 +1694,23 @@ static jfloat Java_MotionEvent_getHistoricalYF_I_I(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getHistoricalPressureF_I_I = 0;
+static base::subtle::AtomicWord
+    g_android_view_MotionEvent_getHistoricalPressureF_I_I = 0;
 static jfloat Java_MotionEvent_getHistoricalPressureF_I_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) __attribute__ ((unused));
 static jfloat Java_MotionEvent_getHistoricalPressureF_I_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getHistoricalPressure",
       "(II)F",
-      &g_MotionEvent_getHistoricalPressureF_I_I);
+      &g_android_view_MotionEvent_getHistoricalPressureF_I_I);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -1694,22 +1719,23 @@ static jfloat Java_MotionEvent_getHistoricalPressureF_I_I(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getHistoricalSizeF_I_I = 0;
+static base::subtle::AtomicWord
+    g_android_view_MotionEvent_getHistoricalSizeF_I_I = 0;
 static jfloat Java_MotionEvent_getHistoricalSizeF_I_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) __attribute__ ((unused));
 static jfloat Java_MotionEvent_getHistoricalSizeF_I_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getHistoricalSize",
       "(II)F",
-      &g_MotionEvent_getHistoricalSizeF_I_I);
+      &g_android_view_MotionEvent_getHistoricalSizeF_I_I);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -1718,22 +1744,23 @@ static jfloat Java_MotionEvent_getHistoricalSizeF_I_I(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getHistoricalTouchMajorF_I_I = 0;
+static base::subtle::AtomicWord
+    g_android_view_MotionEvent_getHistoricalTouchMajorF_I_I = 0;
 static jfloat Java_MotionEvent_getHistoricalTouchMajorF_I_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) __attribute__ ((unused));
 static jfloat Java_MotionEvent_getHistoricalTouchMajorF_I_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getHistoricalTouchMajor",
       "(II)F",
-      &g_MotionEvent_getHistoricalTouchMajorF_I_I);
+      &g_android_view_MotionEvent_getHistoricalTouchMajorF_I_I);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -1742,22 +1769,23 @@ static jfloat Java_MotionEvent_getHistoricalTouchMajorF_I_I(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getHistoricalTouchMinorF_I_I = 0;
+static base::subtle::AtomicWord
+    g_android_view_MotionEvent_getHistoricalTouchMinorF_I_I = 0;
 static jfloat Java_MotionEvent_getHistoricalTouchMinorF_I_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) __attribute__ ((unused));
 static jfloat Java_MotionEvent_getHistoricalTouchMinorF_I_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getHistoricalTouchMinor",
       "(II)F",
-      &g_MotionEvent_getHistoricalTouchMinorF_I_I);
+      &g_android_view_MotionEvent_getHistoricalTouchMinorF_I_I);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -1766,22 +1794,23 @@ static jfloat Java_MotionEvent_getHistoricalTouchMinorF_I_I(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getHistoricalToolMajorF_I_I = 0;
+static base::subtle::AtomicWord
+    g_android_view_MotionEvent_getHistoricalToolMajorF_I_I = 0;
 static jfloat Java_MotionEvent_getHistoricalToolMajorF_I_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) __attribute__ ((unused));
 static jfloat Java_MotionEvent_getHistoricalToolMajorF_I_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getHistoricalToolMajor",
       "(II)F",
-      &g_MotionEvent_getHistoricalToolMajorF_I_I);
+      &g_android_view_MotionEvent_getHistoricalToolMajorF_I_I);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -1790,22 +1819,23 @@ static jfloat Java_MotionEvent_getHistoricalToolMajorF_I_I(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getHistoricalToolMinorF_I_I = 0;
+static base::subtle::AtomicWord
+    g_android_view_MotionEvent_getHistoricalToolMinorF_I_I = 0;
 static jfloat Java_MotionEvent_getHistoricalToolMinorF_I_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) __attribute__ ((unused));
 static jfloat Java_MotionEvent_getHistoricalToolMinorF_I_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getHistoricalToolMinor",
       "(II)F",
-      &g_MotionEvent_getHistoricalToolMinorF_I_I);
+      &g_android_view_MotionEvent_getHistoricalToolMinorF_I_I);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -1814,22 +1844,23 @@ static jfloat Java_MotionEvent_getHistoricalToolMinorF_I_I(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getHistoricalOrientationF_I_I = 0;
+static base::subtle::AtomicWord
+    g_android_view_MotionEvent_getHistoricalOrientationF_I_I = 0;
 static jfloat Java_MotionEvent_getHistoricalOrientationF_I_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) __attribute__ ((unused));
 static jfloat Java_MotionEvent_getHistoricalOrientationF_I_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getHistoricalOrientation",
       "(II)F",
-      &g_MotionEvent_getHistoricalOrientationF_I_I);
+      &g_android_view_MotionEvent_getHistoricalOrientationF_I_I);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -1838,24 +1869,25 @@ static jfloat Java_MotionEvent_getHistoricalOrientationF_I_I(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getHistoricalAxisValueF_I_I_I = 0;
+static base::subtle::AtomicWord
+    g_android_view_MotionEvent_getHistoricalAxisValueF_I_I_I = 0;
 static jfloat Java_MotionEvent_getHistoricalAxisValueF_I_I_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1,
     JniIntWrapper p2) __attribute__ ((unused));
 static jfloat Java_MotionEvent_getHistoricalAxisValueF_I_I_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1,
     JniIntWrapper p2) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getHistoricalAxisValue",
       "(III)F",
-      &g_MotionEvent_getHistoricalAxisValueF_I_I_I);
+      &g_android_view_MotionEvent_getHistoricalAxisValueF_I_I_I);
 
   jfloat ret =
       env->CallFloatMethod(obj.obj(),
@@ -1864,44 +1896,45 @@ static jfloat Java_MotionEvent_getHistoricalAxisValueF_I_I_I(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getHistoricalPointerCoords = 0;
+static base::subtle::AtomicWord
+    g_android_view_MotionEvent_getHistoricalPointerCoords = 0;
 static void Java_MotionEvent_getHistoricalPointerCoords(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1,
-    const base::android::JavaRefOrBare<jobject>& p2) __attribute__ ((unused));
+    const base::android::JavaRef<jobject>& p2) __attribute__ ((unused));
 static void Java_MotionEvent_getHistoricalPointerCoords(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1,
-    const base::android::JavaRefOrBare<jobject>& p2) {
+    const base::android::JavaRef<jobject>& p2) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env));
+      android_view_MotionEvent_clazz(env));
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getHistoricalPointerCoords",
       "(IILandroid/view/MotionEvent$PointerCoords;)V",
-      &g_MotionEvent_getHistoricalPointerCoords);
+      &g_android_view_MotionEvent_getHistoricalPointerCoords);
 
      env->CallVoidMethod(obj.obj(),
           method_id, as_jint(p0), as_jint(p1), p2.obj());
   jni_generator::CheckException(env);
 }
 
-static base::subtle::AtomicWord g_MotionEvent_getEdgeFlags = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_getEdgeFlags = 0;
 static jint Java_MotionEvent_getEdgeFlags(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& obj) __attribute__ ((unused));
 static jint Java_MotionEvent_getEdgeFlags(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) {
+    base::android::JavaRef<jobject>& obj) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), 0);
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "getEdgeFlags",
       "()I",
-      &g_MotionEvent_getEdgeFlags);
+      &g_android_view_MotionEvent_getEdgeFlags);
 
   jint ret =
       env->CallIntMethod(obj.obj(),
@@ -1910,184 +1943,186 @@ static jint Java_MotionEvent_getEdgeFlags(JNIEnv* env, const
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_setEdgeFlags = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_setEdgeFlags = 0;
 static void Java_MotionEvent_setEdgeFlags(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) __attribute__
     ((unused));
 static void Java_MotionEvent_setEdgeFlags(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env));
+      android_view_MotionEvent_clazz(env));
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "setEdgeFlags",
       "(I)V",
-      &g_MotionEvent_setEdgeFlags);
+      &g_android_view_MotionEvent_setEdgeFlags);
 
      env->CallVoidMethod(obj.obj(),
           method_id, as_jint(p0));
   jni_generator::CheckException(env);
 }
 
-static base::subtle::AtomicWord g_MotionEvent_setAction = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_setAction = 0;
 static void Java_MotionEvent_setAction(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) __attribute__
     ((unused));
 static void Java_MotionEvent_setAction(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+    base::android::JavaRef<jobject>& obj, JniIntWrapper p0) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env));
+      android_view_MotionEvent_clazz(env));
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "setAction",
       "(I)V",
-      &g_MotionEvent_setAction);
+      &g_android_view_MotionEvent_setAction);
 
      env->CallVoidMethod(obj.obj(),
           method_id, as_jint(p0));
   jni_generator::CheckException(env);
 }
 
-static base::subtle::AtomicWord g_MotionEvent_offsetLocation = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_offsetLocation = 0;
 static void Java_MotionEvent_offsetLocation(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, jfloat p0,
+    base::android::JavaRef<jobject>& obj, jfloat p0,
     jfloat p1) __attribute__ ((unused));
 static void Java_MotionEvent_offsetLocation(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, jfloat p0,
+    base::android::JavaRef<jobject>& obj, jfloat p0,
     jfloat p1) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env));
+      android_view_MotionEvent_clazz(env));
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "offsetLocation",
       "(FF)V",
-      &g_MotionEvent_offsetLocation);
+      &g_android_view_MotionEvent_offsetLocation);
 
      env->CallVoidMethod(obj.obj(),
           method_id, p0, p1);
   jni_generator::CheckException(env);
 }
 
-static base::subtle::AtomicWord g_MotionEvent_setLocation = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_setLocation = 0;
 static void Java_MotionEvent_setLocation(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, jfloat p0,
+    base::android::JavaRef<jobject>& obj, jfloat p0,
     jfloat p1) __attribute__ ((unused));
 static void Java_MotionEvent_setLocation(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, jfloat p0,
+    base::android::JavaRef<jobject>& obj, jfloat p0,
     jfloat p1) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env));
+      android_view_MotionEvent_clazz(env));
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "setLocation",
       "(FF)V",
-      &g_MotionEvent_setLocation);
+      &g_android_view_MotionEvent_setLocation);
 
      env->CallVoidMethod(obj.obj(),
           method_id, p0, p1);
   jni_generator::CheckException(env);
 }
 
-static base::subtle::AtomicWord g_MotionEvent_transform = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_transform = 0;
 static void Java_MotionEvent_transform(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, const
-    base::android::JavaRefOrBare<jobject>& p0) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& obj, const base::android::JavaRef<jobject>&
+    p0) __attribute__ ((unused));
 static void Java_MotionEvent_transform(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, const
-    base::android::JavaRefOrBare<jobject>& p0) {
+    base::android::JavaRef<jobject>& obj, const base::android::JavaRef<jobject>&
+    p0) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env));
+      android_view_MotionEvent_clazz(env));
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "transform",
       "(Landroid/graphics/Matrix;)V",
-      &g_MotionEvent_transform);
+      &g_android_view_MotionEvent_transform);
 
      env->CallVoidMethod(obj.obj(),
           method_id, p0.obj());
   jni_generator::CheckException(env);
 }
 
-static base::subtle::AtomicWord g_MotionEvent_addBatchV_J_F_F_F_F_I = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_addBatchV_J_F_F_F_F_I
+    = 0;
 static void Java_MotionEvent_addBatchV_J_F_F_F_F_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, jlong p0,
+    base::android::JavaRef<jobject>& obj, jlong p0,
     jfloat p1,
     jfloat p2,
     jfloat p3,
     jfloat p4,
     JniIntWrapper p5) __attribute__ ((unused));
 static void Java_MotionEvent_addBatchV_J_F_F_F_F_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, jlong p0,
+    base::android::JavaRef<jobject>& obj, jlong p0,
     jfloat p1,
     jfloat p2,
     jfloat p3,
     jfloat p4,
     JniIntWrapper p5) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env));
+      android_view_MotionEvent_clazz(env));
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "addBatch",
       "(JFFFFI)V",
-      &g_MotionEvent_addBatchV_J_F_F_F_F_I);
+      &g_android_view_MotionEvent_addBatchV_J_F_F_F_F_I);
 
      env->CallVoidMethod(obj.obj(),
           method_id, p0, p1, p2, p3, p4, as_jint(p5));
   jni_generator::CheckException(env);
 }
 
-static base::subtle::AtomicWord g_MotionEvent_addBatchV_J_LAVMEPC_I = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_addBatchV_J_LAVMEPC_I
+    = 0;
 static void Java_MotionEvent_addBatchV_J_LAVMEPC_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, jlong p0,
-    const base::android::JavaRefOrBare<jobjectArray>& p1,
+    base::android::JavaRef<jobject>& obj, jlong p0,
+    const base::android::JavaRef<jobjectArray>& p1,
     JniIntWrapper p2) __attribute__ ((unused));
 static void Java_MotionEvent_addBatchV_J_LAVMEPC_I(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, jlong p0,
-    const base::android::JavaRefOrBare<jobjectArray>& p1,
+    base::android::JavaRef<jobject>& obj, jlong p0,
+    const base::android::JavaRef<jobjectArray>& p1,
     JniIntWrapper p2) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env));
+      android_view_MotionEvent_clazz(env));
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "addBatch",
       "(J[Landroid/view/MotionEvent$PointerCoords;I)V",
-      &g_MotionEvent_addBatchV_J_LAVMEPC_I);
+      &g_android_view_MotionEvent_addBatchV_J_LAVMEPC_I);
 
      env->CallVoidMethod(obj.obj(),
           method_id, p0, p1.obj(), as_jint(p2));
   jni_generator::CheckException(env);
 }
 
-static base::subtle::AtomicWord g_MotionEvent_toString = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_toString = 0;
 static base::android::ScopedJavaLocalRef<jstring>
     Java_MotionEvent_toString(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+    base::android::JavaRef<jobject>& obj) __attribute__ ((unused));
 static base::android::ScopedJavaLocalRef<jstring>
     Java_MotionEvent_toString(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj) {
+    base::android::JavaRef<jobject>& obj) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env), NULL);
+      android_view_MotionEvent_clazz(env), NULL);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "toString",
       "()Ljava/lang/String;",
-      &g_MotionEvent_toString);
+      &g_android_view_MotionEvent_toString);
 
   jstring ret =
       static_cast<jstring>(env->CallObjectMethod(obj.obj(),
@@ -2096,99 +2131,97 @@ static base::android::ScopedJavaLocalRef<jstring>
   return base::android::ScopedJavaLocalRef<jstring>(env, ret);
 }
 
-static base::subtle::AtomicWord g_MotionEvent_actionToString = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_actionToString = 0;
 static base::android::ScopedJavaLocalRef<jstring>
     Java_MotionEvent_actionToString(JNIEnv* env, JniIntWrapper p0) __attribute__
     ((unused));
 static base::android::ScopedJavaLocalRef<jstring>
     Java_MotionEvent_actionToString(JNIEnv* env, JniIntWrapper p0) {
-  CHECK_CLAZZ(env, MotionEvent_clazz(env),
-      MotionEvent_clazz(env), NULL);
+  CHECK_CLAZZ(env, android_view_MotionEvent_clazz(env),
+      android_view_MotionEvent_clazz(env), NULL);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_STATIC>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "actionToString",
       "(I)Ljava/lang/String;",
-      &g_MotionEvent_actionToString);
+      &g_android_view_MotionEvent_actionToString);
 
   jstring ret =
-      static_cast<jstring>(env->CallStaticObjectMethod(MotionEvent_clazz(env),
+static_cast<jstring>(env->CallStaticObjectMethod(android_view_MotionEvent_clazz(env),
           method_id, as_jint(p0)));
   jni_generator::CheckException(env);
   return base::android::ScopedJavaLocalRef<jstring>(env, ret);
 }
 
-static base::subtle::AtomicWord g_MotionEvent_axisToString = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_axisToString = 0;
 static base::android::ScopedJavaLocalRef<jstring>
     Java_MotionEvent_axisToString(JNIEnv* env, JniIntWrapper p0) __attribute__
     ((unused));
 static base::android::ScopedJavaLocalRef<jstring>
     Java_MotionEvent_axisToString(JNIEnv* env, JniIntWrapper p0) {
-  CHECK_CLAZZ(env, MotionEvent_clazz(env),
-      MotionEvent_clazz(env), NULL);
+  CHECK_CLAZZ(env, android_view_MotionEvent_clazz(env),
+      android_view_MotionEvent_clazz(env), NULL);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_STATIC>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "axisToString",
       "(I)Ljava/lang/String;",
-      &g_MotionEvent_axisToString);
+      &g_android_view_MotionEvent_axisToString);
 
   jstring ret =
-      static_cast<jstring>(env->CallStaticObjectMethod(MotionEvent_clazz(env),
+static_cast<jstring>(env->CallStaticObjectMethod(android_view_MotionEvent_clazz(env),
           method_id, as_jint(p0)));
   jni_generator::CheckException(env);
   return base::android::ScopedJavaLocalRef<jstring>(env, ret);
 }
 
-static base::subtle::AtomicWord g_MotionEvent_axisFromString = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_axisFromString = 0;
 static jint Java_MotionEvent_axisFromString(JNIEnv* env, const
-    base::android::JavaRefOrBare<jstring>& p0) __attribute__ ((unused));
+    base::android::JavaRef<jstring>& p0) __attribute__ ((unused));
 static jint Java_MotionEvent_axisFromString(JNIEnv* env, const
-    base::android::JavaRefOrBare<jstring>& p0) {
-  CHECK_CLAZZ(env, MotionEvent_clazz(env),
-      MotionEvent_clazz(env), 0);
+    base::android::JavaRef<jstring>& p0) {
+  CHECK_CLAZZ(env, android_view_MotionEvent_clazz(env),
+      android_view_MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_STATIC>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "axisFromString",
       "(Ljava/lang/String;)I",
-      &g_MotionEvent_axisFromString);
+      &g_android_view_MotionEvent_axisFromString);
 
   jint ret =
-      env->CallStaticIntMethod(MotionEvent_clazz(env),
+      env->CallStaticIntMethod(android_view_MotionEvent_clazz(env),
           method_id, p0.obj());
   jni_generator::CheckException(env);
   return ret;
 }
 
-static base::subtle::AtomicWord g_MotionEvent_writeToParcel = 0;
+static base::subtle::AtomicWord g_android_view_MotionEvent_writeToParcel = 0;
 static void Java_MotionEvent_writeToParcel(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, const
-    base::android::JavaRefOrBare<jobject>& p0,
+    base::android::JavaRef<jobject>& obj, const base::android::JavaRef<jobject>&
+    p0,
     JniIntWrapper p1) __attribute__ ((unused));
 static void Java_MotionEvent_writeToParcel(JNIEnv* env, const
-    base::android::JavaRefOrBare<jobject>& obj, const
-    base::android::JavaRefOrBare<jobject>& p0,
+    base::android::JavaRef<jobject>& obj, const base::android::JavaRef<jobject>&
+    p0,
     JniIntWrapper p1) {
   CHECK_CLAZZ(env, obj.obj(),
-      MotionEvent_clazz(env));
+      android_view_MotionEvent_clazz(env));
   jmethodID method_id =
       base::android::MethodID::LazyGet<
       base::android::MethodID::TYPE_INSTANCE>(
-      env, MotionEvent_clazz(env),
+      env, android_view_MotionEvent_clazz(env),
       "writeToParcel",
       "(Landroid/os/Parcel;I)V",
-      &g_MotionEvent_writeToParcel);
+      &g_android_view_MotionEvent_writeToParcel);
 
      env->CallVoidMethod(obj.obj(),
           method_id, p0.obj(), as_jint(p1));
   jni_generator::CheckException(env);
 }
-
-// Step 3: RegisterNatives.
 
 }  // namespace JNI_MotionEvent
 

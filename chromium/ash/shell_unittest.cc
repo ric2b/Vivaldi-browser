@@ -100,6 +100,10 @@ void ExpectAllContainers() {
                                   kShellWindowId_ImeWindowParentContainer));
   EXPECT_TRUE(
       Shell::GetContainer(root_window, kShellWindowId_MouseCursorContainer));
+
+  // Phantom window is not a container.
+  EXPECT_EQ(0u, container_ids.count(kShellWindowId_PhantomWindow));
+  EXPECT_FALSE(Shell::GetContainer(root_window, kShellWindowId_PhantomWindow));
 }
 
 class ModalWindow : public views::WidgetDelegateView {
@@ -139,31 +143,14 @@ class TestShellObserver : public ShellObserver {
   ~TestShellObserver() override = default;
 
   // ShellObserver:
-  void OnActiveUserPrefServiceChanged(PrefService* pref_service) override {
-    last_pref_service_ = pref_service;
+  void OnLocalStatePrefServiceInitialized(PrefService* pref_service) override {
+    last_local_state_ = pref_service;
   }
 
-  PrefService* last_pref_service_ = nullptr;
+  PrefService* last_local_state_ = nullptr;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(TestShellObserver);
-};
-
-// Test support for M61 hack. See SessionObserver comment.
-class TestSessionObserver : public SessionObserver {
- public:
-  TestSessionObserver() = default;
-  ~TestSessionObserver() override = default;
-
-  // SessionObserver:
-  void OnActiveUserPrefServiceChanged(PrefService* pref_service) override {
-    last_pref_service_ = pref_service;
-  }
-
-  PrefService* last_pref_service_ = nullptr;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(TestSessionObserver);
 };
 
 }  // namespace
@@ -566,74 +553,26 @@ TEST_F(ShellTest2, DontCrashWhenWindowDeleted) {
   window_->Init(ui::LAYER_NOT_DRAWN);
 }
 
-class ShellPrefsTest : public NoSessionAshTestBase {
+// Tests the local state code path.
+class ShellLocalStateTest : public AshTestBase {
  public:
-  ShellPrefsTest() = default;
-  ~ShellPrefsTest() override = default;
-
-  // testing::Test:
-  void SetUp() override {
-    NoSessionAshTestBase::SetUp();
-    Shell::RegisterProfilePrefs(pref_service1_.registry());
-    Shell::RegisterProfilePrefs(pref_service2_.registry());
-  }
-
-  // Must outlive Shell.
-  TestingPrefServiceSimple pref_service1_;
-  TestingPrefServiceSimple pref_service2_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ShellPrefsTest);
+  ShellLocalStateTest() { disable_provide_local_state(); }
 };
 
-// Verifies that ShellObserver is notified for PrefService changes.
-TEST_F(ShellPrefsTest, Observer) {
+TEST_F(ShellLocalStateTest, LocalState) {
   TestShellObserver observer;
   Shell::Get()->AddShellObserver(&observer);
 
-  // Setup 2 users.
-  TestSessionControllerClient* session = GetSessionControllerClient();
-  session->AddUserSession("user1@test.com");
-  session->AddUserSession("user2@test.com");
-
-  // Login notifies observers of the user pref service.
-  ash_test_helper()->test_shell_delegate()->set_active_user_pref_service(
-      &pref_service1_);
-  session->SwitchActiveUser(AccountId::FromUserEmail("user1@test.com"));
-  EXPECT_EQ(&pref_service1_, observer.last_pref_service_);
-
-  // Switching users notifies observers of the new user pref service.
-  ash_test_helper()->test_shell_delegate()->set_active_user_pref_service(
-      &pref_service2_);
-  session->SwitchActiveUser(AccountId::FromUserEmail("user2@test.com"));
-  EXPECT_EQ(&pref_service2_, observer.last_pref_service_);
+  // Prefs service wrapper code creates a PrefService.
+  std::unique_ptr<TestingPrefServiceSimple> local_state =
+      base::MakeUnique<TestingPrefServiceSimple>();
+  Shell::RegisterLocalStatePrefs(local_state->registry());
+  TestingPrefServiceSimple* local_state_ptr = local_state.get();
+  ShellTestApi().OnLocalStatePrefServiceInitialized(std::move(local_state));
+  EXPECT_EQ(local_state_ptr, observer.last_local_state_);
+  EXPECT_EQ(local_state_ptr, Shell::Get()->GetLocalStatePrefService());
 
   Shell::Get()->RemoveShellObserver(&observer);
-}
-
-// Test for M61 hack. See SessionObserver comment.
-TEST_F(ShellPrefsTest, SessionObserverHack) {
-  TestSessionObserver observer;
-  Shell::Get()->session_controller()->AddObserver(&observer);
-
-  // Setup 2 users.
-  TestSessionControllerClient* session = GetSessionControllerClient();
-  session->AddUserSession("user1@test.com");
-  session->AddUserSession("user2@test.com");
-
-  // Login notifies observers of the user pref service.
-  ash_test_helper()->test_shell_delegate()->set_active_user_pref_service(
-      &pref_service1_);
-  session->SwitchActiveUser(AccountId::FromUserEmail("user1@test.com"));
-  EXPECT_EQ(&pref_service1_, observer.last_pref_service_);
-
-  // Switching users notifies observers of the new user pref service.
-  ash_test_helper()->test_shell_delegate()->set_active_user_pref_service(
-      &pref_service2_);
-  session->SwitchActiveUser(AccountId::FromUserEmail("user2@test.com"));
-  EXPECT_EQ(&pref_service2_, observer.last_pref_service_);
-
-  Shell::Get()->session_controller()->RemoveObserver(&observer);
 }
 
 }  // namespace ash

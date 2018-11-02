@@ -31,7 +31,7 @@ class BackgroundFetchBridge final
 
  public:
   using AbortCallback = Function<void(mojom::blink::BackgroundFetchError)>;
-  using GetTagsCallback =
+  using GetIdsCallback =
       Function<void(mojom::blink::BackgroundFetchError, const Vector<String>&)>;
   using RegistrationCallback = Function<void(mojom::blink::BackgroundFetchError,
                                              BackgroundFetchRegistration*)>;
@@ -42,35 +42,32 @@ class BackgroundFetchBridge final
 
   virtual ~BackgroundFetchBridge();
 
-  // Creates a new Background Fetch registration identified by |tag| with the
+  // Creates a new Background Fetch registration identified by |id| with the
   // given |options| for the sequence of |requests|. The |callback| will be
   // invoked when the registration has been created.
-  void Fetch(const String& tag,
+  void Fetch(const String& id,
              Vector<WebServiceWorkerRequest> requests,
              const BackgroundFetchOptions&,
-             std::unique_ptr<RegistrationCallback>);
+             RegistrationCallback);
 
-  // Updates the user interface for the Background Fetch identified by |tag|
+  // Updates the user interface for the Background Fetch identified by |id|
   // with the updated |title|. Will invoke the |callback| when the interface
   // has been requested to update.
-  void UpdateUI(const String& tag,
-                const String& title,
-                std::unique_ptr<UpdateUICallback>);
+  void UpdateUI(const String& id, const String& title, UpdateUICallback);
 
-  // Aborts the active Background Fetch for |tag|. Will invoke the |callback|
-  // when the Background Fetch identified by |tag| has been aborted, or could
+  // Aborts the active Background Fetch for |id|. Will invoke the |callback|
+  // when the Background Fetch identified by |id| has been aborted, or could
   // not be aborted for operational reasons.
-  void Abort(const String& tag, std::unique_ptr<AbortCallback>);
+  void Abort(const String& id, AbortCallback);
 
-  // Gets the Background Fetch registration for the given |tag|. Will invoke the
+  // Gets the Background Fetch registration for the given |id|. Will invoke the
   // |callback| with the Background Fetch registration, which may be a nullptr
-  // if the |tag| does not exist, when the Mojo call has completed.
-  void GetRegistration(const String& tag,
-                       std::unique_ptr<RegistrationCallback>);
+  // if the |id| does not exist, when the Mojo call has completed.
+  void GetRegistration(const String& id, RegistrationCallback);
 
-  // Gets the sequence of tags for active Background Fetch registrations. Will
-  // invoke the |callback| with the tags when the Mojo call has completed.
-  void GetTags(std::unique_ptr<GetTagsCallback>);
+  // Gets the sequence of ids for active Background Fetch registrations. Will
+  // invoke the |callback| with the ids when the Mojo call has completed.
+  void GetIds(GetIdsCallback);
 
  private:
   explicit BackgroundFetchBridge(ServiceWorkerRegistration&);
@@ -83,7 +80,7 @@ class BackgroundFetchBridge final
   // established after the first call to this method.
   mojom::blink::BackgroundFetchServicePtr& GetService();
 
-  void DidGetRegistration(std::unique_ptr<RegistrationCallback>,
+  void DidGetRegistration(RegistrationCallback,
                           mojom::blink::BackgroundFetchError,
                           mojom::blink::BackgroundFetchRegistrationPtr);
 

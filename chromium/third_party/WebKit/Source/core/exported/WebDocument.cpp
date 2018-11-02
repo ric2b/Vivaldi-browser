@@ -40,8 +40,8 @@
 #include "core/dom/DocumentType.h"
 #include "core/dom/Element.h"
 #include "core/dom/StyleEngine.h"
-#include "core/events/Event.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/dom/events/Event.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "core/html/HTMLAllCollection.h"
 #include "core/html/HTMLBodyElement.h"
 #include "core/html/HTMLCollection.h"
@@ -55,7 +55,7 @@
 #include "core/loader/DocumentLoader.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/weborigin/SecurityOrigin.h"
-#include "platform/wtf/PassRefPtr.h"
+#include "platform/wtf/RefPtr.h"
 #include "public/platform/WebDistillability.h"
 #include "public/platform/WebURL.h"
 #include "public/web/WebDOMEvent.h"
@@ -103,7 +103,7 @@ WebURL WebDocument::OpenSearchDescriptionURL() const {
 }
 
 WebLocalFrame* WebDocument::GetFrame() const {
-  return WebLocalFrameBase::FromFrame(ConstUnwrap<Document>()->GetFrame());
+  return WebLocalFrameImpl::FromFrame(ConstUnwrap<Document>()->GetFrame());
 }
 
 bool WebDocument::IsHTMLDocument() const {
@@ -122,8 +122,8 @@ WebURL WebDocument::BaseURL() const {
   return ConstUnwrap<Document>()->BaseURL();
 }
 
-WebURL WebDocument::FirstPartyForCookies() const {
-  return ConstUnwrap<Document>()->FirstPartyForCookies();
+WebURL WebDocument::SiteForCookies() const {
+  return ConstUnwrap<Document>()->SiteForCookies();
 }
 
 WebElement WebDocument::DocumentElement() const {

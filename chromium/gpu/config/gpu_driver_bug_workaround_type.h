@@ -35,8 +35,6 @@
          clear_uniforms_before_first_program_use)            \
   GPU_OP(COUNT_ALL_IN_VARYINGS_PACKING,                      \
          count_all_in_varyings_packing)                      \
-  GPU_OP(CREATE_DEFAULT_GL_CONTEXT,                          \
-         create_default_gl_context)                          \
   GPU_OP(DECODE_ENCODE_SRGB_FOR_GENERATEMIPMAP,              \
          decode_encode_srgb_for_generatemipmap)              \
   GPU_OP(DISABLE_ACCELERATED_VPX_DECODE,                     \
@@ -73,8 +71,6 @@
          disable_gl_rgb_format)                              \
   GPU_OP(DISABLE_LARGER_THAN_SCREEN_OVERLAYS,                \
          disable_larger_than_screen_overlays)                \
-  GPU_OP(DISABLE_MULTIMONITOR_MULTISAMPLING,                 \
-         disable_multimonitor_multisampling)                 \
   GPU_OP(DISABLE_NON_EMPTY_POST_SUB_BUFFERS_FOR_ONSCREEN_SURFACES, \
          disable_non_empty_post_sub_buffers_for_onscreen_surfaces) \
   GPU_OP(DISABLE_NV12_DXGI_VIDEO,                            \
@@ -103,6 +99,8 @@
          disable_webgl_rgb_multisampling_usage)              \
   GPU_OP(DISALLOW_LARGE_INSTANCED_DRAW,                      \
          disallow_large_instanced_draw)                      \
+  GPU_OP(DONT_DISABLE_WEBGL_WHEN_COMPOSITOR_CONTEXT_LOST,    \
+         dont_disable_webgl_when_compositor_context_lost)    \
   GPU_OP(DONT_REMOVE_INVARIANT_FOR_FRAGMENT_INPUT,           \
          dont_remove_invariant_for_fragment_input)           \
   GPU_OP(ETC1_POWER_OF_TWO_ONLY,                             \
@@ -171,6 +169,8 @@
          remove_pow_with_constant_exponent)                  \
   GPU_OP(RESET_BASE_MIPMAP_LEVEL_BEFORE_TEXSTORAGE,          \
          reset_base_mipmap_level_before_texstorage)          \
+  GPU_OP(RESET_TEXIMAGE2D_BASE_LEVEL,                        \
+         reset_teximage2d_base_level)                        \
   GPU_OP(RESTORE_SCISSOR_ON_FBO_CHANGE,                      \
          restore_scissor_on_fbo_change)                      \
   GPU_OP(REVERSE_POINT_SPRITE_COORD_ORIGIN,                  \

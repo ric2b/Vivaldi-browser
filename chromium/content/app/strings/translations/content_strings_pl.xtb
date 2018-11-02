@@ -16,7 +16,6 @@
 <translation id="1589122976691792535">region</translation>
 <translation id="1591562245178063882">W tym miesiącu</translation>
 <translation id="1637811476055996098">Wybierz pliki</translation>
-<translation id="167575180612809735">wskaźnik zajętości</translation>
 <translation id="1729654308190250600">Podaj adres e-mail.</translation>
 <translation id="1758486001363313524">Inny...</translation>
 <translation id="1806710327868736751">alert_dialog</translation>
@@ -24,7 +23,6 @@
 <translation id="1822429046913737220">rano/po południu</translation>
 <translation id="1832974991323546415">odtwarzanie na urządzeniu zdalnym</translation>
 <translation id="1854180393107901205">Zatrzymaj przesyłanie</translation>
-<translation id="1880518467580572141">schemat</translation>
 <translation id="1921819250265091946">dd</translation>
 <translation id="1930711995431081526">stan</translation>
 <translation id="1938124657309484470">Musisz podać wartość <ph name="MAXIMUM_DATE_OR_TIME" /> lub wcześniejszą.</translation>
@@ -96,7 +94,6 @@
 <translation id="512758898067543763">nagłówek wiersza</translation>
 <translation id="5164977714490026579">Wartość nie może być mniejsza niż <ph name="MINIMUM" />.</translation>
 <translation id="5307600278924710095">Podaj część przed znakiem „<ph name="ATSIGN" />”. Adres „<ph name="INVALIDADDRESS" />” jest niepełny.</translation>
-<translation id="5317780077021120954">Zapisz</translation>
 <translation id="5406322316791861025">figura</translation>
 <translation id="5453733299334684579">element drzewa</translation>
 <translation id="5466621249238537318">Wybierz jeden lub kilka plików.</translation>
@@ -111,6 +108,7 @@
 <translation id="57838592816432529">Wycisz</translation>
 <translation id="5860033963881614850">Wyłączone</translation>
 <translation id="588258955323874662">Pełny ekran</translation>
+<translation id="5888666972993069672">Przesyłam na urządzenie <ph name="DEVICE_FRIENDLY_NAME" /></translation>
 <translation id="5939518447894949180">Resetuj</translation>
 <translation id="5966707198760109579">Tydzień</translation>
 <translation id="5987525920412732405">przycisk przewijany</translation>
@@ -127,7 +125,6 @@
 <translation id="6643016212128521049">Wyczyść</translation>
 <translation id="668171684555832681">Inny...</translation>
 <translation id="6692633176391053278">element kroczący</translation>
-<translation id="6739588121953935928">linijka</translation>
 <translation id="6755330956360078551">etykietka</translation>
 <translation id="6790428901817661496">Odtwórz</translation>
 <translation id="6820355525329141109">Nie można załadować wtyczki.</translation>

@@ -175,7 +175,7 @@ set_myanmar_properties (hb_glyph_info_t &info)
   /* Myanmar
    * http://www.microsoft.com/typography/OpenTypeDev/myanmar/intro.htm#analyze
    */
-  if (unlikely (hb_in_range (u, 0xFE00u, 0xFE0Fu)))
+  if (unlikely (hb_in_range<hb_codepoint_t> (u, 0xFE00u, 0xFE0Fu)))
     cat = (indic_category_t) OT_VS;
 
   switch (u)
@@ -297,6 +297,8 @@ setup_syllables (const hb_ot_shape_plan_t *plan HB_UNUSED,
 		 hb_buffer_t *buffer)
 {
   find_syllables (buffer);
+  foreach_syllable (buffer, start, end)
+    buffer->unsafe_to_break (start, end);
 }
 
 static int

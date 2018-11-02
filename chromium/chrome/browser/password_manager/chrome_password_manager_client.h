@@ -13,8 +13,8 @@
 #include "base/optional.h"
 #include "build/build_config.h"
 #include "components/autofill/content/common/autofill_driver.mojom.h"
+#include "components/password_manager/content/browser/content_credential_manager.h"
 #include "components/password_manager/content/browser/content_password_manager_driver_factory.h"
-#include "components/password_manager/content/browser/credential_manager_impl.h"
 #include "components/password_manager/core/browser/password_manager.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/browser/password_manager_metrics_recorder.h"
@@ -51,12 +51,18 @@ class ChromePasswordManagerClient
   // PasswordManagerClient implementation.
   bool IsSavingAndFillingEnabledForCurrentPage() const override;
   bool IsFillingEnabledForCurrentPage() const override;
+  bool IsFillingFallbackEnabledForCurrentPage() const override;
   void PostHSTSQueryForHost(const GURL& origin,
                             const HSTSCallback& callback) const override;
   bool OnCredentialManagerUsed() override;
   bool PromptUserToSaveOrUpdatePassword(
       std::unique_ptr<password_manager::PasswordFormManager> form_to_save,
-      bool update_password) override;
+      bool is_update) override;
+  void ShowManualFallbackForSaving(
+      std::unique_ptr<password_manager::PasswordFormManager> form_to_save,
+      bool has_generated_password,
+      bool is_update) override;
+  void HideManualFallbackForSaving() override;
   bool PromptUserToChooseCredentials(
       std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
       const GURL& origin,
@@ -113,8 +119,12 @@ class ChromePasswordManagerClient
   void CheckSafeBrowsingReputation(const GURL& form_action,
                                    const GURL& frame_url) override;
 
-  void CheckProtectedPasswordEntry(const std::string& password_saved_domain,
-                                   bool password_field_exists) override;
+  void CheckProtectedPasswordEntry(
+      bool matches_sync_password,
+      const std::vector<std::string>& matching_domains,
+      bool password_field_exists) override;
+
+  void LogPasswordReuseDetectedEvent() override;
 #endif
 
   ukm::UkmRecorder* GetUkmRecorder() override;
@@ -140,7 +150,7 @@ class ChromePasswordManagerClient
 #if defined(UNIT_TEST)
   bool was_store_ever_called() const { return was_store_ever_called_; }
   bool has_binding_for_credential_manager() const {
-    return credential_manager_impl_.HasBinding();
+    return content_credential_manager_.HasBinding();
   }
 #endif
 
@@ -204,7 +214,7 @@ class ChromePasswordManagerClient
   // As a mojo service, will be registered into service registry
   // of the main frame host by ChromeContentBrowserClient
   // once main frame host was created.
-  password_manager::CredentialManagerImpl credential_manager_impl_;
+  password_manager::ContentCredentialManager content_credential_manager_;
 
   content::WebContentsFrameBindingSet<autofill::mojom::PasswordManagerClient>
       password_manager_client_bindings_;

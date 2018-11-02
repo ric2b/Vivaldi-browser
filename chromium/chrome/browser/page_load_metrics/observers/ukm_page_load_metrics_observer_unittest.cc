@@ -9,7 +9,11 @@
 #include "base/optional.h"
 #include "base/time/time.h"
 #include "chrome/browser/page_load_metrics/observers/page_load_metrics_observer_test_harness.h"
+#include "chrome/browser/page_load_metrics/page_load_tracker.h"
+#include "chrome/common/page_load_metrics/test/page_load_metrics_test_util.h"
+#include "components/metrics/proto/system_profile.pb.h"
 #include "components/ukm/ukm_source.h"
+#include "content/public/test/navigation_simulator.h"
 #include "net/nqe/effective_connection_type.h"
 #include "net/nqe/network_quality_provider.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -124,12 +128,13 @@ TEST_F(UkmPageLoadMetricsObserverTest, FailedProvisionalLoad) {
   EXPECT_CALL(mock_network_quality_provider(), GetEffectiveConnectionType())
       .WillRepeatedly(Return(net::EFFECTIVE_CONNECTION_TYPE_2G));
 
+  // The following simulates a navigation that fails and should commit an error
+  // page, but finishes before the error page actually commits.
   GURL url(kTestUrl1);
-  content::RenderFrameHostTester* rfh_tester =
-      content::RenderFrameHostTester::For(main_rfh());
-  rfh_tester->SimulateNavigationStart(url);
-  rfh_tester->SimulateNavigationError(url, net::ERR_TIMED_OUT);
-  rfh_tester->SimulateNavigationStop();
+  std::unique_ptr<content::NavigationSimulator> navigation =
+      content::NavigationSimulator::CreateRendererInitiated(url, main_rfh());
+  navigation->Fail(net::ERR_TIMED_OUT);
+  content::RenderFrameHostTester::For(main_rfh())->SimulateNavigationStop();
 
   // Simulate closing the tab.
   DeleteContents();
@@ -148,9 +153,10 @@ TEST_F(UkmPageLoadMetricsObserverTest, FailedProvisionalLoad) {
   test_ukm_recorder().ExpectMetric(*source, internal::kUkmPageLoadEventName,
                                    internal::kUkmPageTransition,
                                    ui::PAGE_TRANSITION_LINK);
-  test_ukm_recorder().ExpectMetric(*source, internal::kUkmPageLoadEventName,
-                                   internal::kUkmEffectiveConnectionType,
-                                   net::EFFECTIVE_CONNECTION_TYPE_2G);
+  test_ukm_recorder().ExpectMetric(
+      *source, internal::kUkmPageLoadEventName,
+      internal::kUkmEffectiveConnectionType,
+      metrics::SystemProfileProto::Network::EFFECTIVE_CONNECTION_TYPE_2G);
   test_ukm_recorder().ExpectMetric(
       *source, internal::kUkmPageLoadEventName, internal::kUkmNetErrorCode,
       static_cast<int64_t>(net::ERR_TIMED_OUT) * -1);
@@ -262,9 +268,10 @@ TEST_F(UkmPageLoadMetricsObserverTest, NetworkQualityEstimates) {
   EXPECT_EQ(GURL(kTestUrl1), source->url());
 
   EXPECT_GE(test_ukm_recorder().entries_count(), 1ul);
-  test_ukm_recorder().ExpectMetric(*source, internal::kUkmPageLoadEventName,
-                                   internal::kUkmEffectiveConnectionType,
-                                   net::EFFECTIVE_CONNECTION_TYPE_3G);
+  test_ukm_recorder().ExpectMetric(
+      *source, internal::kUkmPageLoadEventName,
+      internal::kUkmEffectiveConnectionType,
+      metrics::SystemProfileProto::Network::EFFECTIVE_CONNECTION_TYPE_3G);
   test_ukm_recorder().ExpectMetric(*source, internal::kUkmPageLoadEventName,
                                    internal::kUkmHttpRttEstimate, 100);
   test_ukm_recorder().ExpectMetric(*source, internal::kUkmPageLoadEventName,

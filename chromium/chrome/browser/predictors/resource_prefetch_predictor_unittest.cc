@@ -10,8 +10,8 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/run_loop.h"
 #include "base/test/histogram_tester.h"
+#include "base/test/test_simple_task_runner.h"
 #include "base/time/time.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/predictors/loading_predictor.h"
@@ -22,6 +22,7 @@
 #include "components/history/core/browser/history_types.h"
 #include "components/sessions/core/session_id.h"
 #include "content/public/test/test_browser_thread_bundle.h"
+#include "content/public/test/test_utils.h"
 #include "net/http/http_response_headers.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request_context.h"
@@ -64,14 +65,16 @@ class FakeGlowplugKeyValueTable : public GlowplugKeyValueTable<T> {
 class MockResourcePrefetchPredictorTables
     : public ResourcePrefetchPredictorTables {
  public:
-  MockResourcePrefetchPredictorTables() = default;
+  MockResourcePrefetchPredictorTables(
+      scoped_refptr<base::SequencedTaskRunner> db_task_runner)
+      : ResourcePrefetchPredictorTables(std::move(db_task_runner)) {}
 
   void ScheduleDBTask(const tracked_objects::Location& from_here,
                       DBTask task) override {
-    ExecuteDBTaskOnDBThread(std::move(task));
+    ExecuteDBTaskOnDBSequence(std::move(task));
   }
 
-  void ExecuteDBTaskOnDBThread(DBTask task) override {
+  void ExecuteDBTaskOnDBSequence(DBTask task) override {
     std::move(task).Run(nullptr);
   }
 
@@ -139,8 +142,7 @@ class ResourcePrefetchPredictorTest : public testing::Test {
 
   void InitializePredictor() {
     loading_predictor_->StartInitialization();
-    base::RunLoop loop;
-    loop.RunUntilIdle();  // Runs the DB lookup.
+    db_task_runner_->RunUntilIdle();
     profile_->BlockUntilHistoryProcessesPendingRequests();
   }
 
@@ -160,6 +162,7 @@ class ResourcePrefetchPredictorTest : public testing::Test {
 
   content::TestBrowserThreadBundle thread_bundle_;
   std::unique_ptr<TestingProfile> profile_;
+  scoped_refptr<base::TestSimpleTaskRunner> db_task_runner_;
   net::TestURLRequestContext url_request_context_;
 
   std::unique_ptr<LoadingPredictor> loading_predictor_;
@@ -179,29 +182,36 @@ class ResourcePrefetchPredictorTest : public testing::Test {
 
 ResourcePrefetchPredictorTest::ResourcePrefetchPredictorTest()
     : profile_(base::MakeUnique<TestingProfile>()),
-      mock_tables_(new StrictMock<MockResourcePrefetchPredictorTables>()) {}
+      db_task_runner_(new base::TestSimpleTaskRunner()),
+      mock_tables_(new StrictMock<MockResourcePrefetchPredictorTables>(
+          db_task_runner_)) {}
 
 ResourcePrefetchPredictorTest::~ResourcePrefetchPredictorTest() = default;
 
 void ResourcePrefetchPredictorTest::SetUp() {
   InitializeSampleData();
 
-  ASSERT_TRUE(profile_->CreateHistoryService(true, false));
+  CHECK(profile_->CreateHistoryService(true, false));
   profile_->BlockUntilHistoryProcessesPendingRequests();
-  EXPECT_TRUE(HistoryServiceFactory::GetForProfile(
+  CHECK(HistoryServiceFactory::GetForProfile(
       profile_.get(), ServiceAccessType::EXPLICIT_ACCESS));
   // Initialize the predictor with empty data.
   ResetPredictor();
-  EXPECT_EQ(predictor_->initialization_state_,
-            ResourcePrefetchPredictor::NOT_INITIALIZED);
+  // The first creation of the LoadingPredictor constructs the PredictorDatabase
+  // for the |profile_|. The PredictorDatabase is initialized asynchronously and
+  // we have to wait for the initialization completion even though the database
+  // object is later replaced by a mock object.
+  content::RunAllBlockingPoolTasksUntilIdle();
+  CHECK_EQ(predictor_->initialization_state_,
+           ResourcePrefetchPredictor::NOT_INITIALIZED);
   InitializePredictor();
-  EXPECT_EQ(predictor_->initialization_state_,
-            ResourcePrefetchPredictor::INITIALIZED);
+  CHECK_EQ(predictor_->initialization_state_,
+           ResourcePrefetchPredictor::INITIALIZED);
 
   url_request_job_factory_.Reset();
   url_request_context_.set_job_factory(&url_request_job_factory_);
 
-  histogram_tester_.reset(new base::HistogramTester());
+  histogram_tester_ = base::MakeUnique<base::HistogramTester>();
 }
 
 void ResourcePrefetchPredictorTest::TearDown() {
@@ -216,7 +226,6 @@ void ResourcePrefetchPredictorTest::TearDown() {
   EXPECT_EQ(*predictor_->origin_data_->data_cache_,
             mock_tables_->origin_table_.data_);
   loading_predictor_->Shutdown();
-  profile_->DestroyHistoryService();
 }
 
 void ResourcePrefetchPredictorTest::InitializeSampleData() {

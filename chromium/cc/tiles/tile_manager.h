@@ -85,7 +85,7 @@ class CC_EXPORT TileManagerClient {
   // Requests that a pending tree be scheduled to invalidate content on the
   // pending on active tree. This is currently used when tiles that are
   // rasterized with missing images need to be invalidated.
-  virtual void RequestImplSideInvalidation() = 0;
+  virtual void RequestImplSideInvalidationForCheckerImagedTiles() = 0;
 
  protected:
   virtual ~TileManagerClient() {}
@@ -157,7 +157,7 @@ class CC_EXPORT TileManager : CheckerImageTrackerClient {
 
   // This causes any completed raster work to finalize, so that tiles get up to
   // date draw information.
-  void Flush();
+  void CheckForCompletedTasks();
 
   // Called when the required-for-activation/required-for-draw state of tiles
   // may have changed.
@@ -175,6 +175,7 @@ class CC_EXPORT TileManager : CheckerImageTrackerClient {
   const PaintImageIdFlatSet& TakeImagesToInvalidateOnSyncTree();
   void DidActivateSyncTree();
   void ClearCheckerImageTracking(bool can_clear_decode_policy_tracking);
+  void SetCheckerImagingForceDisabled(bool force_disable);
 
   std::unique_ptr<base::trace_event::ConvertableToTraceFormat>
   BasicStateAsValue() const;
@@ -371,7 +372,7 @@ class CC_EXPORT TileManager : CheckerImageTrackerClient {
 
   bool UsePartialRaster() const;
 
-  void CheckPendingGpuWorkTiles(bool issue_signals);
+  void CheckPendingGpuWorkTiles(bool issue_signals, bool flush);
 
   TileManagerClient* client_;
   base::SequencedTaskRunner* task_runner_;
@@ -395,7 +396,7 @@ class CC_EXPORT TileManager : CheckerImageTrackerClient {
   ImageController image_controller_;
   CheckerImageTracker checker_image_tracker_;
 
-  RasterTaskCompletionStats flush_stats_;
+  RasterTaskCompletionStats raster_task_completion_stats_;
 
   TaskGraph graph_;
 

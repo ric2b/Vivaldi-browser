@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "ash/accessibility_types.h"
+#include "ash/public/cpp/ash_pref_names.h"
 #include "base/callback.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
@@ -26,6 +27,7 @@
 #include "chromeos/network/onc/onc_signature.h"
 #include "chromeos/network/onc/onc_utils.h"
 #include "chromeos/network/onc/onc_validator.h"
+#include "components/crx_file/id_util.h"
 #include "components/onc/onc_constants.h"
 #include "components/onc/onc_pref_names.h"
 #include "components/policy/core/browser/policy_error_map.h"
@@ -307,36 +309,37 @@ NetworkConfigurationPolicyHandler::SanitizeNetworkConfig(
 }
 
 PinnedLauncherAppsPolicyHandler::PinnedLauncherAppsPolicyHandler()
-    : ExtensionListPolicyHandler(key::kPinnedLauncherApps,
-                                 prefs::kPolicyPinnedLauncherApps,
-                                 false) {}
+    : ListPolicyHandler(key::kPinnedLauncherApps, base::Value::Type::STRING) {}
 
 PinnedLauncherAppsPolicyHandler::~PinnedLauncherAppsPolicyHandler() {}
 
-void PinnedLauncherAppsPolicyHandler::ApplyPolicySettings(
-    const PolicyMap& policies,
+bool PinnedLauncherAppsPolicyHandler::CheckListEntry(const base::Value& value) {
+  // Assume it's an Android app if it contains a dot.
+  const std::string& str = value.GetString();
+  if (str.find(".") != std::string::npos)
+    return true;
+
+  // Otherwise, check if it's an extension id.
+  return crx_file::id_util::IdIsValid(str);
+}
+
+void PinnedLauncherAppsPolicyHandler::ApplyList(
+    std::unique_ptr<base::ListValue> filtered_list,
     PrefValueMap* prefs) {
-  PolicyErrorMap errors;
-  const base::Value* policy_value = policies.GetValue(policy_name());
-  const base::ListValue* policy_list = NULL;
-  if (policy_value && policy_value->GetAsList(&policy_list) && policy_list) {
-    std::unique_ptr<base::ListValue> pinned_apps_list(new base::ListValue());
-    for (base::ListValue::const_iterator entry(policy_list->begin());
-         entry != policy_list->end(); ++entry) {
-      std::string id;
-      if (entry->GetAsString(&id)) {
-        auto app_dict = base::MakeUnique<base::DictionaryValue>();
-        app_dict->SetString(kPinnedAppsPrefAppIDPath, id);
-        pinned_apps_list->Append(std::move(app_dict));
-      }
-    }
-    prefs->SetValue(pref_path(), std::move(pinned_apps_list));
+  std::unique_ptr<base::ListValue> pinned_apps_list(new base::ListValue());
+  for (const base::Value& entry : filtered_list->GetList()) {
+    const std::string& app_id = entry.GetString();
+    auto app_dict = base::MakeUnique<base::DictionaryValue>();
+    app_dict->SetString(kPinnedAppsPrefAppIDPath, app_id);
+    pinned_apps_list->Append(std::move(app_dict));
   }
+  prefs->SetValue(prefs::kPolicyPinnedLauncherApps,
+                  std::move(pinned_apps_list));
 }
 
 ScreenMagnifierPolicyHandler::ScreenMagnifierPolicyHandler()
     : IntRangePolicyHandlerBase(key::kScreenMagnifierType,
-                                0,
+                                ash::MAGNIFIER_DISABLED,
                                 ash::MAGNIFIER_FULL,
                                 false) {}
 
@@ -349,9 +352,10 @@ void ScreenMagnifierPolicyHandler::ApplyPolicySettings(
   const base::Value* value = policies.GetValue(policy_name());
   int value_in_range;
   if (value && EnsureInRange(value, &value_in_range, NULL)) {
-    prefs->SetBoolean(prefs::kAccessibilityScreenMagnifierEnabled,
-                      value_in_range != 0);
-    prefs->SetInteger(prefs::kAccessibilityScreenMagnifierType, value_in_range);
+    prefs->SetBoolean(ash::prefs::kAccessibilityScreenMagnifierEnabled,
+                      value_in_range != ash::MAGNIFIER_DISABLED);
+    prefs->SetInteger(ash::prefs::kAccessibilityScreenMagnifierType,
+                      value_in_range);
   }
 }
 

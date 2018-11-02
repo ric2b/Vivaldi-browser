@@ -4,6 +4,31 @@ import read_deps_file as deps_utils
 import datetime
 import platform
 
+SRC = os.path.dirname(os.path.dirname(__file__))
+
+OS_CHOICES = {
+  "win32": "win",
+  "win": "win",
+  "cygwin": "win",
+  "darwin": "mac",
+  "mac": "mac",
+  "unix": "unix",
+  "linux": "unix",
+  "linux2": "unix",
+  "linux3": "unix",
+  "android": "android",
+}
+
+def IsAndroidEnabled():
+  if "ANDROID_ENABLED" in os.environ:
+    return True
+  return os.access(os.path.join(SRC,".enable_android"), os.F_OK)
+
+if IsAndroidEnabled():
+  current_os = "android"
+else:
+  current_os = OS_CHOICES.get(sys.platform, 'unix')
+
 script_name = sys.argv[0]
 if not os.path.isabs(script_name):
   script_name = os.path.abspath(os.path.join(os.getcwd(), script_name ))
@@ -67,6 +92,21 @@ if "--clobber-out" in sys.argv:
 
 deps_content = deps_utils.GetDepsContent("DEPS")
 (deps, deps_os, include_rules, skip_child_includes, hooks,
-   deps_vars, recursion) = deps_content
+   hooks_os, deps_vars, recursion) = deps_content
+
+if hooks_os and current_os in hooks_os:
+  hooks.extend(hooks_os[current_os])
+
+# We always add the GN bootstrap at the end.
+# Given the way DEPS works we cannot have it inside the DEPS file
+hooks.append({
+    'name': 'bootstrap-gn',
+    'pattern': '.',
+    'action': [
+      'python',
+      'vivaldi/scripts/rungn.py',
+      '--refresh',
+    ],
+  })
 
 RunHooks(hooks, cwd=workdir, prefix_name=prefix_name)

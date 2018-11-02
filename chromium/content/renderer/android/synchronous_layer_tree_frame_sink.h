@@ -25,16 +25,13 @@
 
 class SkCanvas;
 
-namespace cc {
-class BeginFrameSource;
-}  // namespace cc
-
 namespace IPC {
 class Message;
 class Sender;
 }  // namespace IPC
 
 namespace viz {
+class BeginFrameSource;
 class CompositorFrameSinkSupport;
 class ContextProvider;
 class Display;
@@ -67,7 +64,7 @@ class SynchronousLayerTreeFrameSinkClient {
 // This class can be created only on the main thread, but then becomes pinned
 // to a fixed thread when BindToClient is called.
 class SynchronousLayerTreeFrameSink
-    : NON_EXPORTED_BASE(public cc::LayerTreeFrameSink),
+    : public cc::LayerTreeFrameSink,
       public viz::CompositorFrameSinkSupportClient {
  public:
   SynchronousLayerTreeFrameSink(
@@ -77,7 +74,7 @@ class SynchronousLayerTreeFrameSink
       viz::SharedBitmapManager* shared_bitmap_manager,
       int routing_id,
       uint32_t layer_tree_frame_sink_id,
-      std::unique_ptr<cc::BeginFrameSource> begin_frame_source,
+      std::unique_ptr<viz::BeginFrameSource> begin_frame_source,
       SynchronousCompositorRegistry* registry,
       scoped_refptr<FrameSwapMessageQueue> frame_swap_message_queue);
   ~SynchronousLayerTreeFrameSink() override;
@@ -89,7 +86,7 @@ class SynchronousLayerTreeFrameSink
   bool BindToClient(cc::LayerTreeFrameSinkClient* sink_client) override;
   void DetachFromClient() override;
   void SubmitCompositorFrame(cc::CompositorFrame frame) override;
-  void DidNotProduceFrame(const cc::BeginFrameAck& ack) override;
+  void DidNotProduceFrame(const viz::BeginFrameAck& ack) override;
   void Invalidate() override;
 
   // Partial SynchronousCompositor API implementation.
@@ -100,10 +97,10 @@ class SynchronousLayerTreeFrameSink
 
   // viz::CompositorFrameSinkSupportClient implementation.
   void DidReceiveCompositorFrameAck(
-      const std::vector<cc::ReturnedResource>& resources) override;
-  void OnBeginFrame(const cc::BeginFrameArgs& args) override;
+      const std::vector<viz::ReturnedResource>& resources) override;
+  void OnBeginFrame(const viz::BeginFrameArgs& args) override;
   void ReclaimResources(
-      const std::vector<cc::ReturnedResource>& resources) override;
+      const std::vector<viz::ReturnedResource>& resources) override;
   void WillDrawSurface(const viz::LocalSurfaceId& local_surface_id,
                        const gfx::Rect& damage_rect) override;
   void OnBeginFramePausedChanged(bool paused) override;
@@ -124,7 +121,7 @@ class SynchronousLayerTreeFrameSink
   // IPC handlers.
   void SetMemoryPolicy(size_t bytes_limit);
   void OnReclaimResources(uint32_t layer_tree_frame_sink_id,
-                          const std::vector<cc::ReturnedResource>& resources);
+                          const std::vector<viz::ReturnedResource>& resources);
 
   const int routing_id_;
   const uint32_t layer_tree_frame_sink_id_;
@@ -173,7 +170,7 @@ class SynchronousLayerTreeFrameSink
   std::unique_ptr<viz::Display> display_;
   // Owned by |display_|.
   SoftwareOutputSurface* software_output_surface_ = nullptr;
-  std::unique_ptr<cc::BeginFrameSource> begin_frame_source_;
+  std::unique_ptr<viz::BeginFrameSource> begin_frame_source_;
 
   gfx::Rect sw_viewport_for_current_draw_;
 

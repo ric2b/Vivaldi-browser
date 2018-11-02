@@ -19,6 +19,7 @@
 #include "content/common/text_input_client_messages.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_context.h"
+#include "content/test/mock_widget_impl.h"
 #include "ipc/ipc_test_sink.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/gtest_mac.h"
@@ -58,7 +59,12 @@ class TextInputClientMacTest : public testing::Test {
     RenderProcessHost* rph =
         process_factory_.CreateRenderProcessHost(&browser_context_);
     int32_t routing_id = rph->GetNextRoutingID();
-    widget_.reset(new RenderWidgetHostImpl(&delegate_, rph, routing_id, false));
+    mojom::WidgetPtr widget;
+    mock_widget_impl_ =
+        base::MakeUnique<MockWidgetImpl>(mojo::MakeRequest(&widget));
+
+    widget_.reset(new RenderWidgetHostImpl(&delegate_, rph, routing_id,
+                                           std::move(widget), false));
   }
 
   void TearDown() override {
@@ -106,6 +112,7 @@ class TextInputClientMacTest : public testing::Test {
   MockRenderProcessHostFactory process_factory_;
   MockRenderWidgetHostDelegate delegate_;
   std::unique_ptr<RenderWidgetHostImpl> widget_;
+  std::unique_ptr<MockWidgetImpl> mock_widget_impl_;
 
   base::Thread thread_;
 };

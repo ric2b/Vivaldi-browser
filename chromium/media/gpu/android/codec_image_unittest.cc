@@ -7,6 +7,7 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/test/mock_callback.h"
+#include "base/test/scoped_task_environment.h"
 #include "gpu/command_buffer/service/texture_manager.h"
 #include "media/base/android/media_codec_bridge.h"
 #include "media/base/android/mock_media_codec_bridge.h"
@@ -22,11 +23,11 @@
 #include "ui/gl/gl_surface_egl.h"
 #include "ui/gl/init/gl_factory.h"
 
-using testing::_;
 using testing::InSequence;
 using testing::Invoke;
 using testing::NiceMock;
 using testing::Return;
+using testing::_;
 
 namespace media {
 
@@ -39,12 +40,13 @@ class CodecImageTest : public testing::Test {
   void SetUp() override {
     auto codec = base::MakeUnique<NiceMock<MockMediaCodecBridge>>();
     codec_ = codec.get();
-    wrapper_ = base::MakeUnique<CodecWrapper>(std::move(codec));
+    wrapper_ = base::MakeUnique<CodecWrapper>(std::move(codec),
+                                              base::Bind(&base::DoNothing));
     ON_CALL(*codec_, DequeueOutputBuffer(_, _, _, _, _, _, _))
         .WillByDefault(Return(MEDIA_CODEC_OK));
 
     gl::init::InitializeGLOneOffImplementation(gl::kGLImplementationEGLGLES2,
-                                               false, false, false);
+                                               false, false, false, false);
     surface_ = new gl::PbufferGLSurfaceEGL(gfx::Size(320, 240));
     surface_->Initialize();
     share_group_ = new gl::GLShareGroup();
@@ -73,12 +75,13 @@ class CodecImageTest : public testing::Test {
       ImageKind kind,
       CodecImage::DestructionCb destruction_cb = kNoop) {
     std::unique_ptr<CodecOutputBuffer> buffer;
-    wrapper_->DequeueOutputBuffer(base::TimeDelta(), nullptr, nullptr, &buffer);
+    wrapper_->DequeueOutputBuffer(nullptr, nullptr, &buffer);
     return new CodecImage(std::move(buffer),
                           kind == kSurfaceTexture ? surface_texture_ : nullptr,
                           std::move(destruction_cb));
   }
 
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   NiceMock<MockMediaCodecBridge>* codec_;
   std::unique_ptr<CodecWrapper> wrapper_;
   scoped_refptr<NiceMock<MockSurfaceTextureGLOwner>> surface_texture_;

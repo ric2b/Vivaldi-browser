@@ -93,11 +93,17 @@ class AURA_EXPORT WindowPortMus : public WindowPort, public WindowMus {
       scoped_refptr<viz::ContextProvider> context_provider,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager);
 
+  // WindowPort:
+  // Returns either the FrameSinkId set by window server or its server_id with
+  // the client id part 0.
+  viz::FrameSinkId GetFrameSinkId() const override;
+
  private:
   friend class WindowPortMusTestApi;
   friend class WindowTreeClient;
   friend class WindowTreeClientPrivate;
   friend class WindowTreeHostMus;
+  friend class HitTestDataProviderAuraTest;
 
   using ServerChangeIdType = uint8_t;
 
@@ -242,7 +248,6 @@ class AURA_EXPORT WindowPortMus : public WindowPort, public WindowMus {
   void RemoveTransientChildFromServer(WindowMus* child) override;
   ChangeSource OnTransientChildAdded(WindowMus* child) override;
   ChangeSource OnTransientChildRemoved(WindowMus* child) override;
-  const viz::LocalSurfaceId& GetLocalSurfaceId() override;
   std::unique_ptr<WindowMusChangeData> PrepareForServerBoundsChange(
       const gfx::Rect& bounds) override;
   std::unique_ptr<WindowMusChangeData> PrepareForServerVisibilityChange(
@@ -271,8 +276,11 @@ class AURA_EXPORT WindowPortMus : public WindowPort, public WindowMus {
                          std::unique_ptr<ui::PropertyData> data) override;
   std::unique_ptr<cc::LayerTreeFrameSink> CreateLayerTreeFrameSink() override;
   viz::SurfaceId GetSurfaceId() const override;
-  void OnWindowAddedToRootWindow() override {}
-  void OnWillRemoveWindowFromRootWindow() override {}
+  void AllocateLocalSurfaceId() override;
+  const viz::LocalSurfaceId& GetLocalSurfaceId() override;
+  void OnWindowAddedToRootWindow() override;
+  void OnWillRemoveWindowFromRootWindow() override;
+  void OnEventTargetingPolicyChanged() override;
 
   void UpdatePrimarySurfaceInfo();
   void UpdateClientSurfaceEmbedder();
@@ -287,13 +295,15 @@ class AURA_EXPORT WindowPortMus : public WindowPort, public WindowMus {
   ServerChangeIdType next_server_change_id_ = 0;
   ServerChanges server_changes_;
 
-  viz::FrameSinkId frame_sink_id_;
+  // Only set when it is embedding another client inside.
+  viz::FrameSinkId embed_frame_sink_id_;
 
   viz::SurfaceInfo primary_surface_info_;
   viz::SurfaceInfo fallback_surface_info_;
 
   viz::LocalSurfaceId local_surface_id_;
   viz::LocalSurfaceIdAllocator local_surface_id_allocator_;
+  float last_device_scale_factor_ = 1.0f;
   gfx::Size last_surface_size_in_pixels_;
 
   ui::CursorData cursor_;

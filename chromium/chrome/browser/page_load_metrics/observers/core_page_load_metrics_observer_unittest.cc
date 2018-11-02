@@ -7,10 +7,14 @@
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/page_load_metrics/observers/page_load_metrics_observer_test_harness.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_util.h"
+#include "chrome/browser/page_load_metrics/page_load_tracker.h"
+#include "chrome/common/page_load_metrics/test/page_load_metrics_test_util.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "components/rappor/public/rappor_utils.h"
 #include "components/rappor/test_rappor_service.h"
+#include "content/public/browser/web_contents.h"
 #include "content/public/common/browser_side_navigation_policy.h"
+#include "content/public/test/navigation_simulator.h"
 #include "content/public/test/test_utils.h"
 #include "third_party/WebKit/public/platform/WebMouseEvent.h"
 
@@ -316,17 +320,13 @@ TEST_F(CorePageLoadMetricsObserverTest, DontBackgroundQuickerLoad) {
 }
 
 TEST_F(CorePageLoadMetricsObserverTest, FailedProvisionalLoad) {
-  if (content::IsBrowserSideNavigationEnabled() &&
-      content::AreAllSitesIsolatedForTesting()) {
-    // http://crbug.com/674734 Fix this test with PlzNavigate and Site Isolation
-    return;
-  }
   GURL url(kDefaultTestUrl);
-  content::RenderFrameHostTester* rfh_tester =
-      content::RenderFrameHostTester::For(main_rfh());
-  rfh_tester->SimulateNavigationStart(url);
-  rfh_tester->SimulateNavigationError(url, net::ERR_TIMED_OUT);
-  rfh_tester->SimulateNavigationStop();
+  // The following tests a navigation that fails and should commit an error
+  // page, but finishes before the error page commit.
+  std::unique_ptr<content::NavigationSimulator> navigation =
+      content::NavigationSimulator::CreateRendererInitiated(url, main_rfh());
+  navigation->Fail(net::ERR_TIMED_OUT);
+  content::RenderFrameHostTester::For(main_rfh())->SimulateNavigationStop();
 
   histogram_tester().ExpectTotalCount(internal::kHistogramDomContentLoaded, 0);
   histogram_tester().ExpectTotalCount(internal::kHistogramLoad, 0);
@@ -346,11 +346,8 @@ TEST_F(CorePageLoadMetricsObserverTest, FailedBackgroundProvisionalLoad) {
   // histogram if it happened in the background
   GURL url(kDefaultTestUrl);
   web_contents()->WasHidden();
-  content::RenderFrameHostTester* rfh_tester =
-      content::RenderFrameHostTester::For(main_rfh());
-  rfh_tester->SimulateNavigationStart(url);
-  rfh_tester->SimulateNavigationError(url, net::ERR_TIMED_OUT);
-  rfh_tester->SimulateNavigationStop();
+  content::NavigationSimulator::NavigateAndFailFromDocument(
+      url, net::ERR_TIMED_OUT, main_rfh());
 
   histogram_tester().ExpectTotalCount(internal::kHistogramFailedProvisionalLoad,
                                       0);
@@ -429,17 +426,27 @@ TEST_F(CorePageLoadMetricsObserverTest, Reload) {
   page_load_metrics::ExtraRequestCompleteInfo resources[] = {
       // Cached request.
 
-      {GURL(kResourceUrl), net::HostPortPair(), -1 /* frame_tree_node_id */,
-       true /*was_cached*/, 1024 * 20 /* raw_body_bytes */,
+      {GURL(kResourceUrl),
+       net::HostPortPair(),
+       -1 /* frame_tree_node_id */,
+       true /*was_cached*/,
+       1024 * 20 /* raw_body_bytes */,
        0 /* original_network_content_length */,
        nullptr /* data_reduction_proxy_data */,
-       content::ResourceType::RESOURCE_TYPE_SCRIPT, 0},
+       content::ResourceType::RESOURCE_TYPE_SCRIPT,
+       0,
+       {} /* load_timing_info */},
       // Uncached non-proxied request.
-      {GURL(kResourceUrl), net::HostPortPair(), -1 /* frame_tree_node_id */,
-       false /*was_cached*/, 1024 * 40 /* raw_body_bytes */,
+      {GURL(kResourceUrl),
+       net::HostPortPair(),
+       -1 /* frame_tree_node_id */,
+       false /*was_cached*/,
+       1024 * 40 /* raw_body_bytes */,
        1024 * 40 /* original_network_content_length */,
        nullptr /* data_reduction_proxy_data */,
-       content::ResourceType::RESOURCE_TYPE_SCRIPT, 0},
+       content::ResourceType::RESOURCE_TYPE_SCRIPT,
+       0,
+       {} /* load_timing_info */},
   };
 
   int64_t network_bytes = 0;
@@ -520,17 +527,27 @@ TEST_F(CorePageLoadMetricsObserverTest, ForwardBack) {
 
   page_load_metrics::ExtraRequestCompleteInfo resources[] = {
       // Cached request.
-      {GURL(kResourceUrl), net::HostPortPair(), -1 /* frame_tree_node_id */,
-       true /*was_cached*/, 1024 * 20 /* raw_body_bytes */,
+      {GURL(kResourceUrl),
+       net::HostPortPair(),
+       -1 /* frame_tree_node_id */,
+       true /*was_cached*/,
+       1024 * 20 /* raw_body_bytes */,
        0 /* original_network_content_length */,
        nullptr /* data_reduction_proxy_data */,
-       content::ResourceType::RESOURCE_TYPE_SCRIPT, 0},
+       content::ResourceType::RESOURCE_TYPE_SCRIPT,
+       0,
+       {} /* load_timing_info */},
       // Uncached non-proxied request.
-      {GURL(kResourceUrl), net::HostPortPair(), -1 /* frame_tree_node_id */,
-       false /*was_cached*/, 1024 * 40 /* raw_body_bytes */,
+      {GURL(kResourceUrl),
+       net::HostPortPair(),
+       -1 /* frame_tree_node_id */,
+       false /*was_cached*/,
+       1024 * 40 /* raw_body_bytes */,
        1024 * 40 /* original_network_content_length */,
        nullptr /* data_reduction_proxy_data */,
-       content::ResourceType::RESOURCE_TYPE_SCRIPT, 0},
+       content::ResourceType::RESOURCE_TYPE_SCRIPT,
+       0,
+       {} /* load_timing_info */},
   };
 
   int64_t network_bytes = 0;
@@ -605,17 +622,27 @@ TEST_F(CorePageLoadMetricsObserverTest, NewNavigation) {
 
   page_load_metrics::ExtraRequestCompleteInfo resources[] = {
       // Cached request.
-      {GURL(kResourceUrl), net::HostPortPair(), -1 /* frame_tree_node_id */,
-       true /*was_cached*/, 1024 * 20 /* raw_body_bytes */,
+      {GURL(kResourceUrl),
+       net::HostPortPair(),
+       -1 /* frame_tree_node_id */,
+       true /*was_cached*/,
+       1024 * 20 /* raw_body_bytes */,
        0 /* original_network_content_length */,
        nullptr /* data_reduction_proxy_data */,
-       content::ResourceType::RESOURCE_TYPE_SCRIPT, 0},
+       content::ResourceType::RESOURCE_TYPE_SCRIPT,
+       0,
+       {} /* load_timing_info */},
       // Uncached non-proxied request.
-      {GURL(kResourceUrl), net::HostPortPair(), -1 /* frame_tree_node_id */,
-       false /*was_cached*/, 1024 * 40 /* raw_body_bytes */,
+      {GURL(kResourceUrl),
+       net::HostPortPair(),
+       -1 /* frame_tree_node_id */,
+       false /*was_cached*/,
+       1024 * 40 /* raw_body_bytes */,
        1024 * 40 /* original_network_content_length */,
        nullptr /* data_reduction_proxy_data */,
-       content::ResourceType::RESOURCE_TYPE_SCRIPT, 0},
+       content::ResourceType::RESOURCE_TYPE_SCRIPT,
+       0,
+       {} /* load_timing_info */},
   };
 
   int64_t network_bytes = 0;

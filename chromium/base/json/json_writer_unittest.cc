@@ -61,7 +61,7 @@ TEST(JSONWriterTest, NestedTypes) {
   std::unique_ptr<DictionaryValue> inner_dict(new DictionaryValue());
   inner_dict->SetInteger("inner int", 10);
   list->Append(std::move(inner_dict));
-  list->Append(MakeUnique<ListValue>());
+  list->Append(std::make_unique<ListValue>());
   list->AppendBoolean(true);
   root_dict.Set("list", std::move(list));
 
@@ -91,17 +91,17 @@ TEST(JSONWriterTest, KeysWithPeriods) {
   std::string output_js;
 
   DictionaryValue period_dict;
-  period_dict.SetIntegerWithoutPathExpansion("a.b", 3);
-  period_dict.SetIntegerWithoutPathExpansion("c", 2);
+  period_dict.SetKey("a.b", base::Value(3));
+  period_dict.SetKey("c", base::Value(2));
   std::unique_ptr<DictionaryValue> period_dict2(new DictionaryValue());
-  period_dict2->SetIntegerWithoutPathExpansion("g.h.i.j", 1);
+  period_dict2->SetKey("g.h.i.j", base::Value(1));
   period_dict.SetWithoutPathExpansion("d.e.f", std::move(period_dict2));
   EXPECT_TRUE(JSONWriter::Write(period_dict, &output_js));
   EXPECT_EQ("{\"a.b\":3,\"c\":2,\"d.e.f\":{\"g.h.i.j\":1}}", output_js);
 
   DictionaryValue period_dict3;
   period_dict3.SetInteger("a.b", 2);
-  period_dict3.SetIntegerWithoutPathExpansion("a.b", 1);
+  period_dict3.SetKey("a.b", base::Value(1));
   EXPECT_TRUE(JSONWriter::Write(period_dict3, &output_js));
   EXPECT_EQ("{\"a\":{\"b\":2},\"a.b\":1}", output_js);
 }
@@ -119,9 +119,9 @@ TEST(JSONWriterTest, BinaryValues) {
 
   ListValue binary_list;
   binary_list.Append(Value::CreateWithCopiedBuffer("asdf", 4));
-  binary_list.Append(MakeUnique<Value>(5));
+  binary_list.Append(std::make_unique<Value>(5));
   binary_list.Append(Value::CreateWithCopiedBuffer("asdf", 4));
-  binary_list.Append(MakeUnique<Value>(2));
+  binary_list.Append(std::make_unique<Value>(2));
   binary_list.Append(Value::CreateWithCopiedBuffer("asdf", 4));
   EXPECT_FALSE(JSONWriter::Write(binary_list, &output_js));
   EXPECT_TRUE(JSONWriter::WriteWithOptions(

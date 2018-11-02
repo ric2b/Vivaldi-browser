@@ -758,6 +758,15 @@ WebInputEventResult MouseEventManager::HandleMouseDraggedEvent(
     const MouseEventWithHitTestResults& event) {
   TRACE_EVENT0("blink", "MouseEventManager::handleMouseDraggedEvent");
 
+  bool is_pen = event.Event().pointer_type ==
+                blink::WebPointerProperties::PointerType::kPen;
+
+  WebPointerProperties::Button pen_drag_button =
+      WebPointerProperties::Button::kLeft;
+  if (frame_->GetSettings() &&
+      frame_->GetSettings()->GetBarrelButtonForDragEnabled())
+    pen_drag_button = WebPointerProperties::Button::kBarrel;
+
   // While resetting m_mousePressed here may seem out of place, it turns out
   // to be needed to handle some bugs^Wfeatures in Blink mouse event handling:
   // 1. Certain elements, such as <embed>, capture mouse events. They do not
@@ -774,7 +783,9 @@ WebInputEventResult MouseEventManager::HandleMouseDraggedEvent(
   //    the next mouse release event seen by the EventHandler.
   // 3. When pressing Esc key while dragging and the object is outside of the
   //    we get a mouse leave event here
-  if (event.Event().button != WebPointerProperties::Button::kLeft ||
+  if ((!is_pen &&
+       event.Event().button != WebPointerProperties::Button::kLeft) ||
+      (is_pen && event.Event().button != pen_drag_button) ||
       event.Event().GetType() == WebInputEvent::kMouseLeave) {
     mouse_pressed_ = false;
   }
@@ -785,8 +796,7 @@ WebInputEventResult MouseEventManager::HandleMouseDraggedEvent(
   // We disable the drag and drop actions on pen input on windows.
   bool should_handle_drag = true;
 #if defined(OS_WIN)
-  should_handle_drag = event.Event().pointer_type !=
-          blink::WebPointerProperties::PointerType::kPen;
+  should_handle_drag = !is_pen;
 #endif
 
   if (should_handle_drag && HandleDrag(event, DragInitiator::kMouse))
@@ -899,6 +909,16 @@ bool MouseEventManager::HandleDrag(const MouseEventWithHitTestResults& event,
     // Something failed to start the drag, clean up.
     ClearDragDataTransfer();
     ResetDragState();
+  } else {
+    // Since drag operation started we need to send a pointercancel for the
+    // corresponding pointer.
+    if (initiator == DragInitiator::kMouse) {
+      frame_->GetEventHandler().HandlePointerEvent(
+          WebPointerEvent(WebInputEvent::Type::kPointerCancel, event.Event()),
+          event.InnerNode());
+    }
+    // TODO(crbug.com/708278): If the drag starts with touch the touch cancel
+    // should trigger the release of pointer capture.
   }
 
   mouse_down_may_start_drag_ = false;

@@ -1,5 +1,7 @@
 {% extends 'interface_base.cpp.tmpl' %}
 
+{% from 'methods.cpp.tmpl' import runtime_timer_scope, runtime_timer_scope_disabled_by_default %}
+
 {##############################################################################}
 {% block indexed_property_getter %}
 {% if indexed_property_getter and not indexed_property_getter.is_custom %}
@@ -21,7 +23,7 @@ static void indexedPropertyGetter(uint32_t index, const v8::PropertyCallbackInfo
   {% set getter_name = getter.name or 'AnonymousIndexedGetter' %}
   {% set getter_arguments = ['index'] %}
   {% if getter.is_call_with_script_state %}
-  ScriptState* scriptState = ScriptState::ForReceiverObject(info);
+  ScriptState* scriptState = ScriptState::ForRelevantRealm(info);
   {% set getter_arguments = ['scriptState'] + getter_arguments %}
   {% endif %}
   {% if getter.is_raises_exception %}
@@ -40,6 +42,7 @@ static void indexedPropertyGetter(uint32_t index, const v8::PropertyCallbackInfo
 {% if indexed_property_getter or named_property_getter %}
 {% set getter = indexed_property_getter or named_property_getter %}
 void {{v8_class_or_partial}}::indexedPropertyGetterCallback(uint32_t index, const v8::PropertyCallbackInfo<v8::Value>& info) {
+  {{ runtime_timer_scope_disabled_by_default(runtime_call_stats.indexed_property_getter_counter) }}
   {% if indexed_property_getter %}
 
   {% if getter.is_custom %}
@@ -89,7 +92,7 @@ static void indexedPropertySetter(uint32_t index, v8::Local<v8::Value> v8Value, 
   {% set setter_name = setter.name or 'AnonymousIndexedSetter' %}
   {% set setter_arguments = ['index', 'propertyValue'] %}
   {% if setter.is_call_with_script_state %}
-  ScriptState* scriptState = ScriptState::ForReceiverObject(info);
+  ScriptState* scriptState = ScriptState::ForRelevantRealm(info);
   {% set setter_arguments = ['scriptState'] + setter_arguments %}
   {% endif %}
   {% if setter.is_raises_exception %}
@@ -210,7 +213,7 @@ static void indexedPropertyDeleter(uint32_t index, const v8::PropertyCallbackInf
   {% set deleter_name = deleter.name or 'AnonymousIndexedDeleter' %}
   {% set deleter_arguments = ['index'] %}
   {% if deleter.is_call_with_script_state %}
-  ScriptState* scriptState = ScriptState::ForReceiverObject(info);
+  ScriptState* scriptState = ScriptState::ForRelevantRealm(info);
   {% set deleter_arguments = ['scriptState'] + deleter_arguments %}
   {% endif %}
   {% if deleter.is_raises_exception %}
@@ -321,7 +324,7 @@ static void namedPropertyGetter(const AtomicString& name, const v8::PropertyCall
   ExceptionState exceptionState(info.GetIsolate(), ExceptionState::kGetterContext, "{{interface_name}}", nameInUtf8.data());
   {% endif %}
   {% if getter.is_call_with_script_state %}
-  ScriptState* scriptState = ScriptState::ForReceiverObject(info);
+  ScriptState* scriptState = ScriptState::ForRelevantRealm(info);
   {% endif %}
 
   {{cpp_class}}* impl = {{v8_class}}::toImpl(info.Holder());
@@ -345,6 +348,7 @@ static void namedPropertyGetter(const AtomicString& name, const v8::PropertyCall
 {% if named_property_getter %}
 {% set getter = named_property_getter %}
 void {{v8_class_or_partial}}::namedPropertyGetterCallback(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Value>& info) {
+  {{ runtime_timer_scope_disabled_by_default(runtime_call_stats.named_property_getter_counter) }}
   if (!name->IsString())
     return;
   const AtomicString& propertyName = ToCoreAtomicString(name.As<v8::String>());
@@ -371,7 +375,7 @@ static void namedPropertySetter(const AtomicString& name, v8::Local<v8::Value> v
   ExceptionState exceptionState(info.GetIsolate(), ExceptionState::kSetterContext, "{{interface_name}}", nameInUtf8.data());
   {% endif %}
   {% if setter.is_call_with_script_state %}
-  ScriptState* scriptState = ScriptState::ForReceiverObject(info);
+  ScriptState* scriptState = ScriptState::ForRelevantRealm(info);
   {% endif %}
 
   {{cpp_class}}* impl = {{v8_class}}::toImpl(info.Holder());
@@ -412,6 +416,7 @@ static void namedPropertySetter(const AtomicString& name, v8::Local<v8::Value> v
 {% if named_property_setter %}
 {% set setter = named_property_setter %}
 void {{v8_class_or_partial}}::namedPropertySetterCallback(v8::Local<v8::Name> name, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<v8::Value>& info) {
+  {{ runtime_timer_scope_disabled_by_default(runtime_call_stats.named_property_setter_counter) }}
   if (!name->IsString())
     return;
   const AtomicString& propertyName = ToCoreAtomicString(name.As<v8::String>());
@@ -441,7 +446,7 @@ static void namedPropertyDeleter(const AtomicString& name, const v8::PropertyCal
   ExceptionState exceptionState(info.GetIsolate(), ExceptionState::kDeletionContext, "{{interface_name}}", nameInUtf8.data());
   {% endif %}
   {% if deleter.is_call_with_script_state %}
-  ScriptState* scriptState = ScriptState::ForReceiverObject(info);
+  ScriptState* scriptState = ScriptState::ForRelevantRealm(info);
   {% endif %}
 
   {{cpp_class}}* impl = {{v8_class}}::toImpl(info.Holder());
@@ -503,7 +508,7 @@ static void namedPropertyQuery(const AtomicString& name, const v8::PropertyCallb
   const CString& nameInUtf8 = name.Utf8();
   ExceptionState exceptionState(info.GetIsolate(), ExceptionState::kGetterContext, "{{interface_name}}", nameInUtf8.data());
   {% if getter.is_call_with_script_state %}
-  ScriptState* scriptState = ScriptState::ForReceiverObject(info);
+  ScriptState* scriptState = ScriptState::ForRelevantRealm(info);
   {% endif %}
 
   {{cpp_class}}* impl = {{v8_class}}::toImpl(info.Holder());
@@ -515,12 +520,21 @@ static void namedPropertyQuery(const AtomicString& name, const v8::PropertyCallb
   bool result = impl->NamedPropertyQuery({{getter_arguments | join(', ')}});
   if (!result)
     return;
-  {# TODO(rakuco): [LegacyUnenumerableNamedProperties] makes named properties
-     have [[Enumerable]] set to false. #}
   // https://heycam.github.io/webidl/#LegacyPlatformObjectGetOwnProperty
   // 2.7. If |O| implements an interface with a named property setter, then set
   //      desc.[[Writable]] to true, otherwise set it to false.
-  V8SetReturnValueInt(info, {% if named_property_setter %}v8::None{% else %}v8::ReadOnly{% endif %});
+  // 2.8. If |O| implements an interface with the
+  //      [LegacyUnenumerableNamedProperties] extended attribute, then set
+  //      desc.[[Enumerable]] to false, otherwise set it to true.
+  {% if named_property_setter %}
+  {% set desc_properties = ['v8::None'] %}
+  {% else %}
+  {% set desc_properties = ['v8::ReadOnly'] %}
+  {% endif %}
+  {% if has_legacy_unenumerable_named_properties %}
+  {% set desc_properties = ['v8::DontEnum'] + desc_properties %}
+  {% endif %}
+  V8SetReturnValueInt(info, {{desc_properties | join(' | ')}});
 }
 
 {% endif %}
@@ -532,6 +546,7 @@ static void namedPropertyQuery(const AtomicString& name, const v8::PropertyCallb
 {% if named_property_getter and named_property_getter.is_enumerable %}
 {% set getter = named_property_getter %}
 void {{v8_class_or_partial}}::namedPropertyQueryCallback(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Integer>& info) {
+  {{ runtime_timer_scope_disabled_by_default(runtime_call_stats.named_property_query_counter) }}
   if (!name->IsString())
     return;
   const AtomicString& propertyName = ToCoreAtomicString(name.As<v8::String>());
@@ -674,6 +689,7 @@ v8::Local<v8::FunctionTemplate> {{v8_class}}Constructor::domTemplate(v8::Isolate
 void {{v8_class}}Constructor::NamedConstructorAttributeGetter(
     v8::Local<v8::Name> propertyName,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
+  {{ runtime_timer_scope_disabled_by_default(runtime_call_stats.named_constructor_attribute_getter_counter) }}
   v8::Local<v8::Context> creationContext = info.Holder()->CreationContext();
   V8PerContextData* perContextData = V8PerContextData::From(creationContext);
   if (!perContextData) {
@@ -748,6 +764,7 @@ static void constructor(const v8::FunctionCallbackInfo<v8::Value>& info) {
 {% block constructor_callback %}
 {% if constructors or has_custom_constructor or has_html_constructor %}
 void {{v8_class}}::constructorCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  {{ runtime_timer_scope_disabled_by_default(runtime_call_stats.constructor_counter) }}
   {% if measure_as %}
   UseCounter::Count(CurrentExecutionContext(info.GetIsolate()), WebFeature::k{{measure_as('Constructor')}});
   {% endif %}

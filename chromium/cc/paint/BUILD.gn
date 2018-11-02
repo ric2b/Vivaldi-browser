@@ -3,10 +3,13 @@
 # found in the LICENSE file.
 
 import("//cc/cc.gni")
+import("//testing/libfuzzer/fuzzer_test.gni")
 
 cc_component("paint") {
   output_name = "cc_paint"
   sources = [
+    "decoded_draw_image.cc",
+    "decoded_draw_image.h",
     "discardable_image_map.cc",
     "discardable_image_map.h",
     "display_item_list.cc",
@@ -14,6 +17,8 @@ cc_component("paint") {
     "draw_image.cc",
     "draw_image.h",
     "image_id.h",
+    "image_provider.cc",
+    "image_provider.h",
     "paint_canvas.cc",
     "paint_canvas.h",
     "paint_export.h",
@@ -21,6 +26,10 @@ cc_component("paint") {
     "paint_flags.h",
     "paint_image.cc",
     "paint_image.h",
+    "paint_image_builder.cc",
+    "paint_image_builder.h",
+    "paint_image_generator.cc",
+    "paint_image_generator.h",
     "paint_op_buffer.cc",
     "paint_op_buffer.h",
     "paint_op_reader.cc",
@@ -37,6 +46,8 @@ cc_component("paint") {
     "record_paint_canvas.h",
     "skia_paint_canvas.cc",
     "skia_paint_canvas.h",
+    "skia_paint_image_generator.cc",
+    "skia_paint_image_generator.h",
     "solid_color_analyzer.cc",
     "solid_color_analyzer.h",
   ]
@@ -57,5 +68,17 @@ cc_component("paint") {
 
   deps = [
     "//base",
+  ]
+}
+
+fuzzer_test("paint_op_buffer_fuzzer") {
+  sources = [
+    "paint_op_buffer_fuzzer.cc",
+  ]
+
+  libfuzzer_options = [ "max_len=4096" ]
+
+  deps = [
+    "//cc/paint",
   ]
 }

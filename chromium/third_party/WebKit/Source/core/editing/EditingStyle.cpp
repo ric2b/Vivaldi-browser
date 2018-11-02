@@ -41,6 +41,7 @@
 #include "core/css/StylePropertySet.h"
 #include "core/css/StyleRule.h"
 #include "core/css/parser/CSSParser.h"
+#include "core/css/properties/CSSPropertyAPI.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
@@ -118,7 +119,7 @@ static const Vector<CSSPropertyID>& InheritableEditingProperties() {
         kStaticEditingProperties, WTF_ARRAY_LENGTH(kStaticEditingProperties),
         properties);
     for (size_t index = 0; index < properties.size();) {
-      if (!CSSPropertyMetadata::IsInheritedProperty(properties[index])) {
+      if (!CSSPropertyAPI::Get(properties[index]).IsInherited()) {
         properties.erase(index);
         continue;
       }
@@ -213,6 +214,21 @@ bool HTMLElementEquivalent::ValueIsPresentInStyle(
     HTMLElement* element,
     StylePropertySet* style) const {
   const CSSValue* value = style->GetPropertyCSSValue(property_id_);
+
+  // TODO: Does this work on style or computed style? The code here, but we
+  // might need to do something here to match CSSPrimitiveValues. if
+  // (property_id_ == CSSPropertyFontWeight &&
+  //     identifier_value_->GetValueID() == CSSValueBold) {
+  //   if (value->IsPrimitiveValue() &&
+  //       ToCSSPrimitiveValue(value)->GetFloatValue() >= BoldThreshold()) {
+  //     LOG(INFO) << "weight match in HTMLElementEquivalent for primitive
+  //     value"; return true;
+  //   } else {
+  //     LOG(INFO) << "weight match in HTMLElementEquivalent for identifier
+  //     value";
+  //   }
+  // }
+
   return Matches(element) && value && value->IsIdentifierValue() &&
          ToCSSIdentifierValue(value)->GetValueID() ==
              identifier_value_->GetValueID();
@@ -1550,12 +1566,28 @@ static void SetTextDecorationProperty(MutableStylePropertySet* style,
   }
 }
 
+static bool GetPrimitiveValueNumber(StylePropertySet* style,
+                                    CSSPropertyID property_id,
+                                    float& number) {
+  if (!style)
+    return false;
+  const CSSValue* value = style->GetPropertyCSSValue(property_id);
+  if (!value || !value->IsPrimitiveValue())
+    return false;
+  number = ToCSSPrimitiveValue(value)->GetFloatValue();
+  return true;
+}
+
 void StyleChange::ExtractTextStyles(Document* document,
                                     MutableStylePropertySet* style,
                                     bool is_monospace_font) {
   DCHECK(style);
 
-  if (GetIdentifierValue(style, CSSPropertyFontWeight) == CSSValueBold) {
+  float weight = 0;
+  bool is_number =
+      GetPrimitiveValueNumber(style, CSSPropertyFontWeight, weight);
+  if (GetIdentifierValue(style, CSSPropertyFontWeight) == CSSValueBold ||
+      (is_number && weight >= BoldThreshold())) {
     style->RemoveProperty(CSSPropertyFontWeight);
     apply_bold_ = true;
   }
@@ -1644,38 +1676,31 @@ static void DiffTextDecorations(MutableStylePropertySet* style,
 }
 
 static bool FontWeightIsBold(const CSSValue* font_weight) {
-  if (!font_weight->IsIdentifierValue())
-    return false;
+  if (font_weight->IsIdentifierValue()) {
+    // Because b tag can only bold text, there are only two states in plain
+    // html: bold and not bold. Collapse all other values to either one of these
+    // two states for editing purposes.
 
-  // Because b tag can only bold text, there are only two states in plain html:
-  // bold and not bold. Collapse all other values to either one of these two
-  // states for editing purposes.
-  switch (ToCSSIdentifierValue(font_weight)->GetValueID()) {
-    case CSSValue100:
-    case CSSValue200:
-    case CSSValue300:
-    case CSSValue400:
-    case CSSValue500:
-    case CSSValueNormal:
-      return false;
-    case CSSValueBold:
-    case CSSValue600:
-    case CSSValue700:
-    case CSSValue800:
-    case CSSValue900:
-      return true;
-    default:
-      break;
+    switch (ToCSSIdentifierValue(font_weight)->GetValueID()) {
+      case CSSValueNormal:
+        return false;
+      case CSSValueBold:
+        return true;
+      default:
+        break;
+    }
   }
 
-  NOTREACHED();  // For CSSValueBolder and CSSValueLighter
-  return false;
+  CHECK(font_weight->IsPrimitiveValue());
+  CHECK(ToCSSPrimitiveValue(font_weight)->IsNumber());
+  return ToCSSPrimitiveValue(font_weight)->GetFloatValue() >= BoldThreshold();
 }
 
 static bool FontWeightNeedsResolving(const CSSValue* font_weight) {
+  if (font_weight->IsPrimitiveValue())
+    return false;
   if (!font_weight->IsIdentifierValue())
     return true;
-
   const CSSValueID value = ToCSSIdentifierValue(font_weight)->GetValueID();
   return value == CSSValueLighter || value == CSSValueBolder;
 }

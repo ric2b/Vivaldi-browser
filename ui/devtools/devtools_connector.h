@@ -12,6 +12,8 @@
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "net/cert/x509_certificate.h"
 
+class Browser;
+
 namespace content {
 class BrowserContext;
 }
@@ -43,6 +45,7 @@ class UIBindingsDelegate : public DevToolsUIBindings::Delegate {
   InfoBarService* GetInfoBarService() override;
   void RenderProcessGone(bool crashed) override;
   void SetEyeDropperActive(bool active) override;
+  void ShowCertificateViewer(const std::string& cert_chain) override;
 
  private:
   // Notify JS side to update bounds.
@@ -147,9 +150,6 @@ class DevtoolsConnectorItem
                       const content::FileChooserParams& params) override;
   bool PreHandleGestureEvent(content::WebContents* source,
                              const blink::WebGestureEvent& event) override;
-  void ShowCertificateViewerInDevTools(
-    content::WebContents* web_contents,
-    scoped_refptr<net::X509Certificate> certificate) override;
 
   // These are the original delegates Chromium would normally use
   // and we call into them to allow existing functionality to work.
@@ -191,6 +191,9 @@ class DevtoolsConnectorAPI : public BrowserContextKeyedAPI {
 
   void RemoveDevtoolsConnectorItem(int tab_id);
   void CloseAllDevtools();
+
+  // Browser or nullptr to close all open devtools.
+  void CloseDevtoolsForBrowser(Browser* browser);
 
   static void BroadcastEvent(const std::string& eventname,
                              std::unique_ptr<base::ListValue> args,

@@ -485,7 +485,6 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, JavascriptAlertActivatesTab) {
   EXPECT_EQ(1, browser()->tab_strip_model()->active_index());
 }
 
-
 #if defined(OS_WIN) && !defined(NDEBUG)
 // http://crbug.com/114859. Times out frequently on Windows.
 #define MAYBE_ThirtyFourTabs DISABLED_ThirtyFourTabs
@@ -2035,7 +2034,14 @@ IN_PROC_BROWSER_TEST_F(BrowserTest2, NoTabsInPopups) {
 }
 #endif
 
-IN_PROC_BROWSER_TEST_F(BrowserTest, WindowOpenClose) {
+// Disabled due to flaky timeout on Win7 Tests (dbg): https://crbug.com/753691.
+#if defined(OS_WIN) && !defined(NDEBUG)
+#define MAYBE_WindowOpenClose DISABLED_WindowOpenClose
+#else
+#define MAYBE_WindowOpenClose WindowOpenClose
+#endif
+
+IN_PROC_BROWSER_TEST_F(BrowserTest, MAYBE_WindowOpenClose) {
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       switches::kDisablePopupBlocking);
   GURL url = ui_test_utils::GetTestUrl(

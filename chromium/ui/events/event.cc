@@ -409,24 +409,9 @@ Event::Event(const base::NativeEvent& native_event,
       phase_(EP_PREDISPATCH),
       result_(ER_UNHANDLED),
       source_device_id_(ED_UNKNOWN_DEVICE) {
-  base::TimeDelta delta = EventTimeForNow() - time_stamp_;
   if (type_ < ET_LAST)
     latency()->set_source_event_type(EventTypeToLatencySourceEventType(type));
-  base::HistogramBase::Sample delta_sample =
-      static_cast<base::HistogramBase::Sample>(delta.InMicroseconds());
-  UMA_HISTOGRAM_CUSTOM_COUNTS("Event.Latency.Browser", delta_sample, 1, 1000000,
-                              100);
   ComputeEventLatencyOS(native_event);
-
-  // Though it seems inefficient to generate the string twice, the first
-  // instance will be used only for DCHECK builds and the second won't be
-  // executed at all if the histogram was previously accessed here.
-  STATIC_HISTOGRAM_POINTER_GROUP(
-      base::StringPrintf("Event.Latency.Browser.%s", GetName()), type_, ET_LAST,
-      Add(delta_sample),
-      base::Histogram::FactoryGet(
-          base::StringPrintf("Event.Latency.Browser.%s", GetName()), 1, 1000000,
-          100, base::HistogramBase::kUmaTargetedHistogramFlag));
 
 #if defined(USE_X11)
   if (native_event->type == GenericEvent) {
@@ -495,12 +480,22 @@ LocatedEvent::LocatedEvent(EventType type,
       root_location_(root_location) {}
 
 void LocatedEvent::UpdateForRootTransform(
-    const gfx::Transform& reversed_root_transform) {
-  // Transform has to be done at root level.
-  gfx::Point3F p(location_);
-  reversed_root_transform.TransformPoint(&p);
-  location_ = p.AsPointF();
-  root_location_ = location_;
+    const gfx::Transform& reversed_root_transform,
+    const gfx::Transform& reversed_local_transform) {
+  if (target()) {
+    gfx::Point3F transformed_location(location_);
+    reversed_local_transform.TransformPoint(&transformed_location);
+    location_ = transformed_location.AsPointF();
+
+    gfx::Point3F transformed_root_location(root_location_);
+    reversed_root_transform.TransformPoint(&transformed_root_location);
+    root_location_ = transformed_root_location.AsPointF();
+  } else {
+    // This mirrors what the code previously did.
+    gfx::Point3F transformed_location(location_);
+    reversed_root_transform.TransformPoint(&transformed_location);
+    root_location_ = location_ = transformed_location.AsPointF();
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -572,8 +567,7 @@ MouseEvent::MouseEvent(const base::NativeEvent& native_event)
       changed_button_flags_(GetChangedMouseButtonFlagsFromNative(native_event)),
       pointer_details_(GetMousePointerDetailsFromNative(native_event)) {
   latency()->AddLatencyNumberWithTimestamp(
-      INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT, 0, 0,
-      base::TimeTicks::FromInternalValue(time_stamp().ToInternalValue()), 1);
+      INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT, 0, 0, time_stamp(), 1);
   latency()->AddLatencyNumber(INPUT_EVENT_LATENCY_UI_COMPONENT, 0, 0);
   if (type() == ET_MOUSE_PRESSED || type() == ET_MOUSE_RELEASED)
     SetClickCount(GetRepeatCount(*this));
@@ -840,8 +834,7 @@ TouchEvent::TouchEvent(const base::NativeEvent& native_event)
       should_remove_native_touch_id_mapping_(false),
       pointer_details_(GetTouchPointerDetailsFromNative(native_event)) {
   latency()->AddLatencyNumberWithTimestamp(
-      INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT, 0, 0,
-      base::TimeTicks::FromInternalValue(time_stamp().ToInternalValue()), 1);
+      INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT, 0, 0, time_stamp(), 1);
   latency()->AddLatencyNumber(INPUT_EVENT_LATENCY_UI_COMPONENT, 0, 0);
 
   FixRotationAngle();
@@ -923,8 +916,10 @@ TouchEvent::~TouchEvent() {
 }
 
 void TouchEvent::UpdateForRootTransform(
-    const gfx::Transform& inverted_root_transform) {
-  LocatedEvent::UpdateForRootTransform(inverted_root_transform);
+    const gfx::Transform& inverted_root_transform,
+    const gfx::Transform& inverted_local_transform) {
+  LocatedEvent::UpdateForRootTransform(inverted_root_transform,
+                                       inverted_local_transform);
   gfx::DecomposedTransform decomp;
   bool success = gfx::DecomposeTransform(&decomp, inverted_root_transform);
   DCHECK(success);
@@ -1149,8 +1144,7 @@ KeyEvent::KeyEvent(const base::NativeEvent& native_event, int event_flags)
       code_(CodeFromNative(native_event)),
       is_char_(IsCharFromNative(native_event)) {
   latency()->AddLatencyNumberWithTimestamp(
-      INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT, 0, 0,
-      base::TimeTicks::FromInternalValue(time_stamp().ToInternalValue()), 1);
+      INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT, 0, 0, time_stamp(), 1);
   latency()->AddLatencyNumber(INPUT_EVENT_LATENCY_UI_COMPONENT, 0, 0);
 
   if (IsRepeated(*this))

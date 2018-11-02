@@ -29,8 +29,7 @@ void LogMessage(int stream_id, const std::string& msg) {
 
 namespace content {
 
-class AudioInputMessageFilter::AudioInputIPCImpl
-    : public NON_EXPORTED_BASE(media::AudioInputIPC) {
+class AudioInputMessageFilter::AudioInputIPCImpl : public media::AudioInputIPC {
  public:
   AudioInputIPCImpl(const scoped_refptr<AudioInputMessageFilter>& filter,
                     int render_frame_id);
@@ -115,7 +114,7 @@ void AudioInputMessageFilter::OnChannelClosing() {
   DLOG_IF(WARNING, !delegates_.IsEmpty())
       << "Not all audio devices have been closed.";
 
-  IDMap<media::AudioInputIPCDelegate*>::iterator it(&delegates_);
+  base::IDMap<media::AudioInputIPCDelegate*>::iterator it(&delegates_);
   while (!it.IsAtEnd()) {
     it.GetCurrentValue()->OnIPCClosed();
     delegates_.Remove(it.GetCurrentKey());

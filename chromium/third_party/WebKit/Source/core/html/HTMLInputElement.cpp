@@ -44,12 +44,12 @@
 #include "core/dom/SyncReattachContext.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/V0InsertionPoint.h"
+#include "core/dom/events/ScopedEventQueue.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/spellcheck/SpellChecker.h"
 #include "core/events/BeforeTextInsertedEvent.h"
 #include "core/events/KeyboardEvent.h"
 #include "core/events/MouseEvent.h"
-#include "core/events/ScopedEventQueue.h"
 #include "core/frame/Deprecation.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
@@ -312,8 +312,10 @@ void HTMLInputElement::UpdateFocusAppearance(
     // TODO(tkent): scrollRectToVisible is a workaround of a bug of
     // FrameSelection::revealSelection().  It doesn't scroll correctly in a
     // case of RangeSelection. crbug.com/443061.
-    if (GetLayoutObject())
+    GetDocument().EnsurePaintLocationDataValidForNode(this);
+    if (GetLayoutObject()) {
       GetLayoutObject()->ScrollRectToVisible(BoundingBox());
+    }
     if (GetDocument().GetFrame())
       GetDocument().GetFrame()->Selection().RevealSelection();
   } else {
@@ -413,11 +415,34 @@ void HTMLInputElement::UpdateType() {
   input_type_view_->DestroyShadowSubtree();
   LazyReattachIfAttached();
 
+  if (input_type_->SupportsRequired() != new_type->SupportsRequired() &&
+      IsRequired()) {
+    PseudoStateChanged(CSSSelector::kPseudoRequired);
+    PseudoStateChanged(CSSSelector::kPseudoOptional);
+  }
+  if (input_type_->SupportsReadOnly() != new_type->SupportsReadOnly()) {
+    PseudoStateChanged(CSSSelector::kPseudoReadOnly);
+    PseudoStateChanged(CSSSelector::kPseudoReadWrite);
+  }
+
+  bool placeholder_changed =
+      input_type_->SupportsPlaceholder() != new_type->SupportsPlaceholder();
+
   input_type_ = new_type;
   input_type_view_ = input_type_->CreateView();
   input_type_view_->CreateShadowSubtree();
 
   SetNeedsWillValidateCheck();
+
+  if (placeholder_changed) {
+    // We need to update the UA shadow and then the placeholder visibility flag
+    // here. Otherwise it would happen as part of attaching the layout tree
+    // which would be too late in order to make style invalidation work for
+    // the upcoming frame.
+    UpdatePlaceholderText();
+    UpdatePlaceholderVisibility();
+    PseudoStateChanged(CSSSelector::kPseudoPlaceholderShown);
+  }
 
   ValueMode new_value_mode = input_type_->GetValueMode();
 
@@ -1379,11 +1404,11 @@ static Vector<String> ParseAcceptAttribute(const String& accept_string,
   return types;
 }
 
-Vector<String> HTMLInputElement::AcceptMIMETypes() {
+Vector<String> HTMLInputElement::AcceptMIMETypes() const {
   return ParseAcceptAttribute(FastGetAttribute(acceptAttr), IsValidMIMEType);
 }
 
-Vector<String> HTMLInputElement::AcceptFileExtensions() {
+Vector<String> HTMLInputElement::AcceptFileExtensions() const {
   return ParseAcceptAttribute(FastGetAttribute(acceptAttr),
                               IsValidFileExtension);
 }
@@ -1559,13 +1584,8 @@ HTMLDataListElement* HTMLInputElement::DataList() const {
   if (!input_type_->ShouldRespectListAttribute())
     return nullptr;
 
-  Element* element = GetTreeScope().getElementById(FastGetAttribute(listAttr));
-  if (!element)
-    return nullptr;
-  if (!isHTMLDataListElement(*element))
-    return nullptr;
-
-  return toHTMLDataListElement(element);
+  return ToHTMLDataListElementOrNull(
+      GetTreeScope().getElementById(FastGetAttribute(listAttr)));
 }
 
 bool HTMLInputElement::HasValidDataListOptions() const {
@@ -1687,19 +1707,6 @@ String HTMLInputElement::DefaultToolTip() const {
 
 bool HTMLInputElement::ShouldAppearIndeterminate() const {
   return input_type_->ShouldAppearIndeterminate();
-}
-
-CaptureFacingMode HTMLInputElement::capture() const {
-  const String capture = FastGetAttribute(captureAttr).LowerASCII();
-  if (capture == "user")
-    return CaptureFacingModeUser;
-
-  // |capture| is equivalent to 'environment' if unspecified.
-  return CaptureFacingModeEnvironment;
-}
-
-void HTMLInputElement::setCapture(const AtomicString& value) {
-  setAttribute(captureAttr, value);
 }
 
 bool HTMLInputElement::IsInRequiredRadioButtonGroup() {
@@ -1885,7 +1892,7 @@ bool HTMLInputElement::SupportsAutofocus() const {
   return input_type_->IsInteractiveContent();
 }
 
-PassRefPtr<ComputedStyle> HTMLInputElement::CustomStyleForLayoutObject() {
+RefPtr<ComputedStyle> HTMLInputElement::CustomStyleForLayoutObject() {
   return input_type_view_->CustomStyleForLayoutObject(
       OriginalStyleForLayoutObject());
 }

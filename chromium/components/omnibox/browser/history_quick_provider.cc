@@ -202,7 +202,7 @@ AutocompleteMatch HistoryQuickProvider::QuickMatchToACMatch(
   size_t inline_autocomplete_offset = URLPrefix::GetInlineAutocompleteOffset(
       autocomplete_input_.text(), FixupUserInput(autocomplete_input_).second,
       false, base::UTF8ToUTF16(info.url().spec()));
-  auto fill_into_edit_format_types = url_formatter::kFormatUrlOmitAll;
+  auto fill_into_edit_format_types = url_formatter::kFormatUrlOmitDefaults;
   if (history_match.match_in_scheme)
     fill_into_edit_format_types &= ~url_formatter::kFormatUrlOmitHTTP;
   match.fill_into_edit =
@@ -235,7 +235,9 @@ AutocompleteMatch HistoryQuickProvider::QuickMatchToACMatch(
       OffsetsFromTermMatches(history_match.url_matches);
   match.contents = url_formatter::FormatUrlWithOffsets(
       info.url(),
-      AutocompleteMatch::GetFormatTypes(!history_match.match_in_scheme),
+      AutocompleteMatch::GetFormatTypes(history_match.match_in_scheme,
+                                        history_match.match_in_subdomain,
+                                        history_match.match_after_host),
       net::UnescapeRule::SPACES, nullptr, nullptr, &offsets);
 
   TermMatches new_matches =

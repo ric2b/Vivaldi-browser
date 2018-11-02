@@ -44,6 +44,9 @@ namespace blink {
 class Cursor;
 
 struct WebCursorInfo {
+  // A Java counterpart will be generated for this enum.
+  // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.blink_public.web
+  // GENERATED_JAVA_CLASS_NAME_OVERRIDE: WebCursorInfoType
   enum Type {
     kTypePointer,
     kTypeCross,
@@ -97,9 +100,9 @@ struct WebCursorInfo {
   WebImage custom_image;
 
 #ifdef WIN32
-  // On Windows, TypeCustom may alternatively reference an externally
-  // defined HCURSOR. If type is TypeCustom and externalHandle is non-
-  // null, then customData should be ignored. The WebCursorInfo is not
+  // On Windows, kTypeCustom may alternatively reference an externally
+  // defined HCURSOR. If |type| is kTypeCustom and |external_handle| is non-
+  // null, then |custom_image| should be ignored. The WebCursorInfo is not
   // responsible for managing the lifetime of this cursor handle.
   HCURSOR external_handle;
 #endif

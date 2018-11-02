@@ -10,6 +10,7 @@
 
 #include "platform/PlatformExport.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "platform/bindings/RuntimeCallStatsCountEverything.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/instrumentation/tracing/TracedValue.h"
 #include "platform/wtf/Allocator.h"
@@ -40,7 +41,7 @@ class PLATFORM_EXPORT RuntimeCallCounter {
     count_ = 0;
   }
 
-  void Dump(TracedValue&);
+  void Dump(TracedValue&) const;
 
  private:
   RuntimeCallCounter() {}
@@ -139,6 +140,18 @@ class PLATFORM_EXPORT RuntimeCallTimer {
         rcs_scope, RuntimeCallStats::From(isolate), counterId)         \
   }
 
+// Used in places which do not have a counter explicitly defined in
+// FOR_EACH_COUNTER. This is a no-op by default (when RCS_COUNT_EVERYTHING is
+// not set).
+#if BUILDFLAG(RCS_COUNT_EVERYTHING)
+#define RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(isolate, counterName) \
+  RUNTIME_CALL_TIMER_SCOPE(isolate, counterName)
+#else
+#define RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(isolate, counterName) \
+  do {                                                                     \
+  } while (false)
+#endif
+
 // Maintains a stack of timers and provides functions to manage recording scopes
 // by pausing and resuming timers in the chain when entering and leaving a
 // scope.
@@ -172,38 +185,60 @@ class PLATFORM_EXPORT RuntimeCallStats {
   V(counter##_Setter)
 
 // Counters
-#define FOR_EACH_COUNTER(V)                                             \
-  V(AssociateObjectWithWrapper)                                         \
-  V(CollectGarbage)                                                     \
-  V(CreateWrapper)                                                      \
-  V(GetEventListener)                                                   \
-  V(HasInstance)                                                        \
-  V(DocumentFragmentParseHTML)                                          \
-  V(PaintContents)                                                      \
-  V(PerformIdleLazySweep)                                               \
-  V(ProcessStyleSheet)                                                  \
-  V(ToExecutionContext)                                                 \
-  V(ToV8DOMWindow)                                                      \
-  V(ToV8SequenceInternal)                                               \
-  V(UpdateLayerPositionsAfterLayout)                                    \
-  V(UpdateLayout)                                                       \
-  V(UpdateStyle)                                                        \
-  V(SetReturnValueFromStringSlow)                                       \
-  V(V8ExternalStringSlow)                                               \
+
+#define BINDINGS_COUNTERS(V)      \
+  V(AssociateObjectWithWrapper)   \
+  V(CreateWrapper)                \
+  V(GetEventListener)             \
+  V(HasInstance)                  \
+  V(ToExecutionContext)           \
+  V(ToV8DOMWindow)                \
+  V(ToV8SequenceInternal)         \
+  V(SetReturnValueFromStringSlow) \
+  V(V8ExternalStringSlow)
+
+#define GC_COUNTERS(V) \
+  V(CollectGarbage)    \
+  V(GcEpilogue)        \
+  V(GcPrologue)        \
+  V(PerformIdleLazySweep)
+
+#define PARSING_COUNTERS(V) V(DocumentFragmentParseHTML)
+
+#define STYLE_COUNTERS(V) \
+  V(ProcessStyleSheet)    \
+  V(UpdateStyle)
+
+#define LAYOUT_COUNTERS(V) \
+  V(UpdateLayout)          \
+  V(UpdateLayerPositionsAfterLayout)
+
+#define CALLBACK_COUNTERS(V)                       \
+  BINDINGS_METHOD(V, ElementGetBoundingClientRect) \
+  BINDINGS_METHOD(V, EventTargetDispatchEvent)     \
+  BINDINGS_METHOD(V, HTMLElementClick)             \
+  BINDINGS_METHOD(V, NodeAppendChild)              \
+  BINDINGS_METHOD(V, NodeRemoveChild)              \
+  BINDINGS_METHOD(V, WindowSetTimeout)             \
+  BINDINGS_ATTRIBUTE(V, DocumentCookie)            \
+  BINDINGS_ATTRIBUTE(V, ElementInnerHTML)
+
+#define EXTRA_COUNTERS(V)                                               \
   V(V8)                                                                 \
-  BINDINGS_METHOD(V, ElementGetBoundingClientRect)                      \
-  BINDINGS_METHOD(V, EventTargetDispatchEvent)                          \
-  BINDINGS_METHOD(V, HTMLElementClick)                                  \
-  BINDINGS_METHOD(V, NodeAppendChild)                                   \
-  BINDINGS_METHOD(V, NodeRemoveChild)                                   \
-  BINDINGS_METHOD(V, WindowSetTimeout)                                  \
-  BINDINGS_ATTRIBUTE(V, DocumentCookie)                                 \
-  BINDINGS_ATTRIBUTE(V, ElementInnerHTML)                               \
   V(TestCounter1)                                                       \
   V(TestCounter2)                                                       \
   BINDINGS_METHOD(V, BindingsMethodTestCounter)                         \
   BINDINGS_READ_ONLY_ATTRIBUTE(V, BindingsReadOnlyAttributeTestCounter) \
   BINDINGS_ATTRIBUTE(V, BindingsAttributeTestCounter)
+
+#define FOR_EACH_COUNTER(V) \
+  BINDINGS_COUNTERS(V)      \
+  GC_COUNTERS(V)            \
+  PARSING_COUNTERS(V)       \
+  STYLE_COUNTERS(V)         \
+  LAYOUT_COUNTERS(V)        \
+  CALLBACK_COUNTERS(V)      \
+  EXTRA_COUNTERS(V)
 
   enum class CounterId : uint16_t {
 #define ADD_ENUM_VALUE(counter) k##counter,
@@ -220,6 +255,13 @@ class PLATFORM_EXPORT RuntimeCallStats {
     current_timer_ = timer;
   }
 
+#if BUILDFLAG(RCS_COUNT_EVERYTHING)
+  void Enter(RuntimeCallTimer* timer, const char* id) {
+    timer->Start(GetCounter(id), current_timer_);
+    current_timer_ = timer;
+  }
+#endif
+
   // Exits the current recording scope, by stopping <timer> (and updating the
   // counter associated with <timer>) and resuming the timer that was paused
   // before entering the current scope.
@@ -232,7 +274,7 @@ class PLATFORM_EXPORT RuntimeCallStats {
   // Reset all the counters.
   void Reset();
 
-  void Dump(TracedValue&);
+  void Dump(TracedValue&) const;
 
   bool InUse() const { return in_use_; }
   void SetInUse(bool in_use) { in_use_ = in_use; }
@@ -246,12 +288,26 @@ class PLATFORM_EXPORT RuntimeCallStats {
   static void SetRuntimeCallStatsForTesting();
   static void ClearRuntimeCallStatsForTesting();
 
+#if BUILDFLAG(RCS_COUNT_EVERYTHING)
+  // Look up counter in counter map. If counter doesn't exist, a new counter is
+  // created and inserted into the map.
+  RuntimeCallCounter* GetCounter(const char* name);
+#endif
+
  private:
   RuntimeCallTimer* current_timer_ = nullptr;
   bool in_use_ = false;
   RuntimeCallCounter counters_[static_cast<int>(CounterId::kNumberOfCounters)];
   static const int number_of_counters_ =
       static_cast<int>(CounterId::kNumberOfCounters);
+
+#if BUILDFLAG(RCS_COUNT_EVERYTHING)
+  typedef HashMap<const char*, std::unique_ptr<RuntimeCallCounter>> CounterMap;
+  CounterMap counter_map_;
+
+  Vector<RuntimeCallCounter*> CounterMapToSortedArray() const;
+  void AddCounterMapStatsToBuilder(StringBuilder&) const;
+#endif
 };
 
 // A utility class that creates a RuntimeCallTimer and uses it with
@@ -264,6 +320,12 @@ class PLATFORM_EXPORT RuntimeCallTimerScope {
       : call_stats_(stats) {
     call_stats_->Enter(&timer_, counter);
   }
+#if BUILDFLAG(RCS_COUNT_EVERYTHING)
+  RuntimeCallTimerScope(RuntimeCallStats* stats, const char* counterName)
+      : call_stats_(stats) {
+    call_stats_->Enter(&timer_, counterName);
+  }
+#endif
   ~RuntimeCallTimerScope() { call_stats_->Leave(&timer_); }
 
  private:

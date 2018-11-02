@@ -8,7 +8,9 @@ var GuestViewAttributes = require('guestViewAttributes').GuestViewAttributes;
 var GuestViewInternalNatives = requireNative('guest_view_internal');
 var WebViewConstants = require('webViewConstants').WebViewConstants;
 var WebViewImpl = require('webView').WebViewImpl;
-var WebViewInternal = require('webViewInternal').WebViewInternal;
+var WebViewInternal = getInternalApi ?
+    getInternalApi('webViewInternal') :
+    require('webViewInternal').WebViewInternal;
 var WebViewAttributesPrivate = require('webViewAttributesPrivate');
 
 // -----------------------------------------------------------------------------

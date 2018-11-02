@@ -36,13 +36,13 @@
 #include "core/layout/api/LayoutAPIShim.h"
 #include "core/layout/api/LayoutEmbeddedContentItem.h"
 #include "core/layout/api/LayoutViewItem.h"
-#include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/layout/svg/LayoutSVGRoot.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "core/paint/PaintLayer.h"
 #include "core/paint/ViewPaintInvalidator.h"
 #include "core/paint/ViewPainter.h"
+#include "core/paint/compositing/PaintLayerCompositor.h"
 #include "core/svg/SVGDocumentExtensions.h"
 #include "platform/Histogram.h"
 #include "platform/RuntimeEnabledFeatures.h"
@@ -243,7 +243,7 @@ void LayoutView::SetShouldDoFullPaintInvalidationOnResizeIfNeeded(
   // composited and needs full paint invalidation on background positioning area
   // resize.
   if (Style()->HasFixedBackgroundImage() &&
-      (!compositor_ || !compositor_->NeedsFixedRootBackgroundLayer(Layer()))) {
+      (!compositor_ || !compositor_->NeedsFixedRootBackgroundLayer())) {
     if ((width_changed && MustInvalidateFillLayersPaintOnWidthChange(
                               Style()->BackgroundLayers())) ||
         (height_changed && MustInvalidateFillLayersPaintOnHeightChange(
@@ -333,7 +333,7 @@ LayoutRect LayoutView::VisualOverflowRect() const {
   return LayoutOverflowRect();
 }
 
-LayoutRect LayoutView::LocalVisualRect() const {
+LayoutRect LayoutView::LocalVisualRectIgnoringVisibility() const {
   // TODO(wangxianzhu): This is only required without rootLayerScrolls (though
   // it is also correct but unnecessary with rootLayerScrolls) because of the
   // special LayoutView overflow model.
@@ -925,6 +925,33 @@ bool LayoutView::PaintedOutputOfObjectHasNoEffectRegardlessOfSize() const {
     return false;
 
   return LayoutBlockFlow::PaintedOutputOfObjectHasNoEffectRegardlessOfSize();
+}
+
+void LayoutView::StyleWillChange(StyleDifference diff,
+                                 const ComputedStyle& new_style) {
+  LayoutBlockFlow::StyleWillChange(diff, new_style);
+
+  // TODO(rune@opera.com): Ideally, StyleWillChange for LayoutBlockFlow should
+  // have been able to do the invalidation, but there is an early return in
+  // LayoutObject::StyleDidChange which returns if parent_ is nullptr.
+
+  if (const ComputedStyle* old_style = Style()) {
+    // TODO(rune@opera.com): Consider checking diff.NeedsFullPaintInvalidation()
+    // instead. That will currently lead to more invalidation rectangles. For
+    // instance for computed overflow changes that would otherwise be
+    // invalidated by root and body changes. Also zoom related changes will
+    // cause extra invalidation rectangles to be recorded in paint/invalidation
+    // layout tests.
+    if (!old_style->BackgroundVisuallyEqual(new_style)) {
+      // Paint invalidation of background propagated from root or body elements
+      // to viewport.
+      SetShouldDoFullPaintInvalidation();
+      if (old_style->HasEntirelyFixedBackground() !=
+          new_style.HasEntirelyFixedBackground()) {
+        Compositor()->SetNeedsUpdateFixedBackground();
+      }
+    }
+  }
 }
 
 }  // namespace blink

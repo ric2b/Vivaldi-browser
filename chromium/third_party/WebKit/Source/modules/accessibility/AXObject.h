@@ -118,8 +118,6 @@ enum TextUnderElementMode {
                         // present
 };
 
-enum class AXBoolAttribute {};
-
 class AXSparseAttributeClient {
  public:
   virtual void AddBoolAttribute(AXBoolAttribute, bool) = 0;
@@ -145,7 +143,6 @@ enum AXTextFromNativeHTML {
 
 enum AXIgnoredReason {
   kAXActiveModalDialog,
-  kAXAncestorDisallowsChild,
   kAXAncestorIsLeafNode,
   kAXAriaHiddenElement,
   kAXAriaHiddenSubtree,
@@ -366,6 +363,8 @@ class MODULES_EXPORT AXObject : public GarbageCollectedFinalized<AXObject> {
   bool HasAOMPropertyOrARIAAttribute(AOMUIntProperty, uint32_t& result) const;
   bool HasAOMPropertyOrARIAAttribute(AOMIntProperty, int32_t& result) const;
   bool HasAOMPropertyOrARIAAttribute(AOMFloatProperty, float& result) const;
+  bool HasAOMPropertyOrARIAAttribute(AOMStringProperty,
+                                     AtomicString& result) const;
 
   virtual void GetSparseAXAttributes(AXSparseAttributeClient&) const {}
 
@@ -381,7 +380,7 @@ class MODULES_EXPORT AXObject : public GarbageCollectedFinalized<AXObject> {
   // Check object role or purpose.
   virtual AccessibilityRole RoleValue() const { return role_; }
   bool IsARIATextControl() const;
-  virtual bool IsARIATreeGridRow() const { return false; }
+  virtual bool IsARIARow() const { return false; }
   virtual bool IsAXTable() const { return false; }
   virtual bool IsAnchor() const { return false; }
   bool IsButton() const;
@@ -639,15 +638,12 @@ class MODULES_EXPORT AXObject : public GarbageCollectedFinalized<AXObject> {
   virtual void AriaLabelledbyElements(AXObjectVector&) const {}
   virtual bool AriaHasPopup() const { return false; }
   virtual bool IsEditable() const { return false; }
+  bool IsEditableRoot() const;
   virtual bool IsMultiline() const { return false; }
   virtual bool IsRichlyEditable() const { return false; }
   bool AriaCheckedIsPresent() const;
   bool AriaPressedIsPresent() const;
   virtual AccessibilityRole AriaRoleAttribute() const { return kUnknownRole; }
-  virtual bool AriaRoleHasPresentationalChildren() const { return false; }
-  virtual AXObject* AncestorForWhichThisIsAPresentationalChild() const {
-    return 0;
-  }
   bool SupportsActiveDescendant() const;
   bool SupportsARIAAttributes() const;
   virtual bool SupportsARIADragging() const { return false; }
@@ -673,7 +669,6 @@ class MODULES_EXPORT AXObject : public GarbageCollectedFinalized<AXObject> {
   virtual const AtomicString& LiveRegionStatus() const { return g_null_atom; }
   virtual const AtomicString& LiveRegionRelevant() const { return g_null_atom; }
   virtual bool LiveRegionAtomic() const { return false; }
-  virtual bool LiveRegionBusy() const { return false; }
 
   const AtomicString& ContainerLiveRegionStatus() const;
   const AtomicString& ContainerLiveRegionRelevant() const;
@@ -757,7 +752,6 @@ class MODULES_EXPORT AXObject : public GarbageCollectedFinalized<AXObject> {
   // current object as the starting point. Returns a null selection if there is
   // no selection in the subtree rooted at this object.
   virtual AXRange SelectionUnderObject() const { return AXRange(); }
-  virtual void SetSelection(const AXRange&) {}
 
   // Scrollable containers.
   bool IsScrollableContainer() const;
@@ -770,24 +764,44 @@ class MODULES_EXPORT AXObject : public GarbageCollectedFinalized<AXObject> {
   virtual ScrollableArea* GetScrollableAreaIfScrollable() const { return 0; }
 
   // Modify or take an action on an object.
-  virtual void Increment() {}
-  virtual void Decrement() {}
-  bool PerformDefaultAction() { return Press(); }
-  virtual bool Press();
-  // Make this object visible by scrolling as many nested scrollable views as
-  // needed.
-  void ScrollToMakeVisible() const;
-  // Same, but if the whole object can't be made visible, try for this subrect,
-  // in local coordinates.
-  void ScrollToMakeVisibleWithSubFocus(const IntRect&) const;
-  // Scroll this object to a given point in global coordinates of the top-level
-  // window.
-  void ScrollToGlobalPoint(const IntPoint&) const;
-  virtual void SetFocused(bool) {}
-  virtual void SetSelected(bool) {}
-  virtual void SetSequentialFocusNavigationStartingPoint();
-  virtual void SetValue(const String&) {}
-  virtual void SetValue(float) {}
+  //
+  // These are the public interfaces, called from outside of Blink.
+  // Each one first tries to fire an Accessibility Object Model event,
+  // if applicable, and if that isn't handled, falls back on the
+  // native implementation via a virtual member function, below.
+  //
+  // For example, |RequestIncrementAction| fires the AOM event and if
+  // that isn't handled it calls |DoNativeIncrement|.
+  //
+  // These all return true if handled.
+  bool RequestDecrementAction();
+  bool RequestClickAction();
+  bool RequestFocusAction();
+  bool RequestIncrementAction();
+  bool RequestScrollToGlobalPointAction(const IntPoint&);
+  bool RequestScrollToMakeVisibleAction();
+  bool RequestScrollToMakeVisibleWithSubFocusAction(const IntRect&);
+  bool RequestSetSelectedAction(bool);
+  bool RequestSetSelectionAction(const AXRange&);
+  bool RequestSetSequentialFocusNavigationStartingPointAction();
+  bool RequestSetValueAction(const String&);
+  bool RequestShowContextMenuAction();
+
+  // Native implementations of actions that aren't handled by AOM
+  // event listeners. These all return true if handled.
+  virtual bool OnNativeDecrementAction();
+  virtual bool OnNativeClickAction();
+  virtual bool OnNativeFocusAction();
+  virtual bool OnNativeIncrementAction();
+  virtual bool OnNativeScrollToGlobalPointAction(const IntPoint&) const;
+  virtual bool OnNativeScrollToMakeVisibleAction() const;
+  virtual bool OnNativeScrollToMakeVisibleWithSubFocusAction(
+      const IntRect&) const;
+  virtual bool OnNativeSetSelectedAction(bool);
+  virtual bool OnNativeSetSelectionAction(const AXRange&);
+  virtual bool OnNativeSetSequentialFocusNavigationStartingPointAction();
+  virtual bool OnNativeSetValueAction(const String&);
+  virtual bool OnNativeShowContextMenuAction();
 
   // Notifications that this object may have changed.
   virtual void ChildrenChanged() {}
@@ -863,6 +877,9 @@ class MODULES_EXPORT AXObject : public GarbageCollectedFinalized<AXObject> {
 
   const AXObject* InertRoot() const;
 
+  // Returns true if the event was handled.
+  bool DispatchEventToAOMEventListeners(Event&, Element*);
+
   mutable Member<AXObject> parent_;
 
   // The following cached attribute values (the ones starting with m_cached*)
@@ -875,8 +892,8 @@ class MODULES_EXPORT AXObject : public GarbageCollectedFinalized<AXObject> {
   mutable bool cached_is_descendant_of_leaf_node_ : 1;
   mutable bool cached_is_descendant_of_disabled_node_ : 1;
   mutable bool cached_has_inherited_presentational_role_ : 1;
-  mutable bool cached_is_presentational_child_ : 1;
   mutable bool cached_ancestor_exposes_active_descendant_ : 1;
+  mutable bool cached_is_editable_root_;
   mutable Member<AXObject> cached_live_region_root_;
 
   Member<AXObjectCacheImpl> ax_object_cache_;

@@ -5,7 +5,10 @@
 #ifndef CHROME_BROWSER_UI_EXCLUSIVE_ACCESS_MOUSE_LOCK_CONTROLLER_H_
 #define CHROME_BROWSER_UI_EXCLUSIVE_ACCESS_MOUSE_LOCK_CONTROLLER_H_
 
+#include "base/callback.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
+#include "chrome/browser/ui/exclusive_access/exclusive_access_bubble_hide_callback.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_controller_base.h"
 #include "components/content_settings/core/common/content_settings.h"
 
@@ -47,6 +50,19 @@ class MouseLockController : public ExclusiveAccessControllerBase {
     fake_mouse_lock_for_test_ = value;
   }
 
+  void set_web_contents_granted_silent_mouse_lock_permission_for_test(
+      content::WebContents* web_contents) {
+    web_contents_granted_silent_mouse_lock_permission_ = web_contents;
+  }
+
+  // If set, |bubble_hide_callback_for_test_| will be called during
+  // |OnBubbleHidden()|.
+  void set_bubble_hide_callback_for_test_(
+      base::RepeatingCallback<void(ExclusiveAccessBubbleHideReason)>
+          callback_for_test) {
+    bubble_hide_callback_for_test_ = std::move(callback_for_test);
+  }
+
  private:
   enum MouseLockState {
     MOUSELOCK_UNLOCKED,
@@ -62,9 +78,22 @@ class MouseLockController : public ExclusiveAccessControllerBase {
   void NotifyTabExclusiveAccessLost() override;
   void RecordBubbleReshowsHistogram(int bubble_reshow_count) override;
 
+  void OnBubbleHidden(content::WebContents*, ExclusiveAccessBubbleHideReason);
+
   MouseLockState mouse_lock_state_;
 
+  // Optionally a WebContents instance that is granted permission to silently
+  // lock the mouse. This is granted only if the WebContents instance has
+  // previously locked and displayed the permission bubble until the bubble
+  // time out has expired. https://crbug.com/725370
+  content::WebContents* web_contents_granted_silent_mouse_lock_permission_ =
+      nullptr;
+
   bool fake_mouse_lock_for_test_;
+  base::RepeatingCallback<void(ExclusiveAccessBubbleHideReason)>
+      bubble_hide_callback_for_test_;
+
+  base::WeakPtrFactory<MouseLockController> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(MouseLockController);
 };

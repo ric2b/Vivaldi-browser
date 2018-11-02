@@ -176,7 +176,7 @@ class OperaImportObserver : public ProfileWriter,
   void ImportItemStarted(importer::ImportItem item) override {}
   void ImportItemEnded(importer::ImportItem item) override {}
   void ImportEnded() override {
-    base::MessageLoop::current()->QuitWhenIdle();
+    base::RunLoop().QuitCurrentWhenIdleDeprecated();
     EXPECT_EQ(arraysize(OperaBookmarks), bookmark_count);
     EXPECT_EQ(arraysize(OperaNotes), notes_count);
     EXPECT_EQ(arraysize(OperaPasswords), password_count);
@@ -248,6 +248,8 @@ class OperaProfileImporterBrowserTest : public InProcessBrowserTest {
                                 importer::ImporterProgressObserver* observer,
                                 ProfileWriter* writer,
                                 bool use_master_password = false) {
+    // CopyDirectory requires IO access
+    base::ThreadRestrictions::ScopedAllowIO allow_io;
     base::FilePath data_dir;
     ASSERT_TRUE(PathService::Get(vivaldi::DIR_VIVALDI_TEST_DATA, &data_dir));
     data_dir = data_dir.AppendASCII("importer");

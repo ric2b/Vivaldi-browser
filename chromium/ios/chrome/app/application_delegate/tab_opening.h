@@ -18,12 +18,14 @@ class GURL;
 // Protocol for object that can open new tabs during application launch.
 @protocol TabOpening<NSObject>
 
-// Dismisses any modal view then opens either a normal or incognito tab with
-// |url|. After opening |url|, run completion |handler| if it is not nil.
+// Dismisses any modal view, excluding the omnibox if |dismissOmnibox| is NO,
+// then opens either a normal or incognito tab with |url|. After opening |url|,
+// run completion |handler| if it is not nil.
 - (void)dismissModalsAndOpenSelectedTabInMode:(ApplicationMode)targetMode
                                       withURL:(const GURL&)url
+                               dismissOmnibox:(BOOL)dismissOmnibox
                                    transition:(ui::PageTransition)transition
-                                   completion:(ProceduralBlock)handler;
+                                   completion:(ProceduralBlock)completion;
 
 // Creates a new tab if the launch options are not null.
 - (void)openTabFromLaunchOptions:(NSDictionary*)launchOptions
@@ -40,6 +42,11 @@ class GURL;
 // This block must only be executed if new tab opened on NTP.
 - (ProceduralBlock)completionBlockForTriggeringAction:
     (NTPTabOpeningPostOpeningAction)action;
+
+// Attempts to complete a Payment Request flow with a payment response from a
+// a third party app. Returns whether or not this operation was successful.
+- (BOOL)shouldCompletePaymentRequestOnCurrentTab:
+    (id<StartupInformation>)startupInformation;
 
 @end
 

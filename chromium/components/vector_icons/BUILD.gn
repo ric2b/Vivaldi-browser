@@ -8,6 +8,7 @@ aggregate_vector_icons("components_vector_icons") {
   icon_directory = "."
 
   icons = [
+    "accessibility.icon",
     "back_arrow.1x.icon",
     "back_arrow.icon",
     "bluetooth_connected.icon",
@@ -19,6 +20,7 @@ aggregate_vector_icons("components_vector_icons") {
     "error_circle.icon",
     "forward_arrow.1x.icon",
     "forward_arrow.icon",
+    "help_outline.icon",
     "info_outline.icon",
     "location_on.icon",
     "lock.icon",
@@ -31,8 +33,11 @@ aggregate_vector_icons("components_vector_icons") {
     "notifications.icon",
     "notifications_off.icon",
     "protocol_handler.icon",
+    "reload.1x.icon",
+    "reload.icon",
     "screen_share.icon",
     "search.icon",
+    "usb.icon",
     "videocam.icon",
     "warning.icon",
   ]

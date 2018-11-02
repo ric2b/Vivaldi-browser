@@ -168,9 +168,6 @@ below:
       <message name="IDS_DETAILS_WITHOUT_SUMMARY_LABEL" desc="Clickable label to show detailed information or to hide the detailed information.">
         Details
       </message>
-      <message name="IDS_DOWNLOAD_BUTTON_LABEL" desc="Clickable button label to download media file.">
-        Save
-      </message>
       <message name="IDS_FORM_CALENDAR_CLEAR" desc="Label for a button which clears a date input field.">
         Clear
       </message>
@@ -341,9 +338,6 @@ below:
         <message name="IDS_AX_ROLE_BLOCKQUOTE" desc="Accessibility role description for a blockquote">
           blockquote
         </message>
-        <message name="IDS_AX_ROLE_BUSY_INDICATOR" desc="Accessibility role description for a busy indicator">
-          busy indicator
-        </message>
         <message name="IDS_AX_ROLE_BUTTON" desc="Accessibility role description for a button">
           button
         </message>
@@ -416,9 +410,6 @@ below:
         <message name="IDS_AX_ROLE_NOTE" desc="Accessibility role description for a note">
           note
         </message>
-        <message name="IDS_AX_ROLE_OUTLINE" desc="Accessibility role description for an outline, a presentation of information in a tree-like structure">
-          outline
-        </message>
         <message name="IDS_AX_ROLE_POP_UP_BUTTON" desc="Accessibility role description for a pop up button">
           pop up button
         </message>
@@ -433,9 +424,6 @@ below:
         </message>
         <message name="IDS_AX_ROLE_ROW_HEADER" desc="Accessibility role description for a row header in a table">
           row header
-        </message>
-        <message name="IDS_AX_ROLE_RULER" desc="Accessibility role description for a ruler">
-          ruler
         </message>
         <message name="IDS_AX_ROLE_SCROLL_BAR" desc="Accessibility role description for a scroll bar">
           scroll bar
@@ -686,7 +674,7 @@ below:
       <message name="IDS_FORM_VALIDATION_TYPE_MISMATCH_EMAIL_INVALID_LOCAL" desc="Heading or short sentence shown when there is an email field in a form and a user specified an invalid value like 'us,er@example.com'.">
         A part followed by '<ph name="ATSIGN">$1<ex>@</ex></ph>' should not contain the symbol '<ph name="INVALIDCHARACTER">$2<ex>,</ex></ph>'.
       </message>
-      <message name="IDS_FORM_VALIDATION_TYPE_MISMATCH_EMAIL_NO_AT_SIGN" desc="Heading or short sentence shown when there is an email field in a form and a user specified an invalid value liek 'user'.">
+      <message name="IDS_FORM_VALIDATION_TYPE_MISMATCH_EMAIL_NO_AT_SIGN" desc="Heading or short sentence shown when there is an email field in a form and a user specified an invalid value like 'user'.">
         Please include an '<ph name="ATSIGN">$1<ex>@</ex></ph>' in the email address. '<ph name="INVALIDADDRESS">$2<ex>user</ex></ph>' is missing an '<ph name="ATSIGN">$1<ex>@</ex></ph>'.
       </message>
       <message name="IDS_FORM_VALIDATION_TYPE_MISMATCH_MULTIPLE_EMAIL" desc="Heading or short sentence shown there is a field which accepts multiple e-mail addresses and a user specified a value which is not a comma-separated e-mail addresses.">
@@ -824,7 +812,10 @@ below:
       <message name="IDS_MEDIA_REMOTING_DISABLE_TEXT" desc="Media remoting disable button label.">
        Play on both screens
       </message>
-      <message name="IDS_MEDIA_REMOTING_CAST_TEXT" desc="Media remoting cast video text message.">
+      <message name="IDS_MEDIA_REMOTING_CAST_TEXT" desc="Text message shown to the user when casting a video to a known remote device.">
+       Now casting to <ph name="DEVICE_FRIENDLY_NAME">$1<ex>Living Room TV</ex></ph>
+      </message>
+      <message name="IDS_MEDIA_REMOTING_CAST_TO_UNKNOWN_DEVICE_TEXT" desc="Text message shown to the user when casting a video to an unknown remote device.">
        Now casting to your TV
       </message>
       <message name="IDS_MEDIA_TRACKS_NO_LABEL" desc="Menu item label for a text track that has no name specified. The number represents the track number in the list of tracks.">

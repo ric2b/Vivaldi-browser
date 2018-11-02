@@ -767,7 +767,6 @@ TEST(PermissionsTest, PermissionMessages) {
   skip.insert(APIPermission::kSystemDisplay);
   skip.insert(APIPermission::kSystemMemory);
   skip.insert(APIPermission::kSystemNetwork);
-  skip.insert(APIPermission::kSystemStorage);
   skip.insert(APIPermission::kTts);
   skip.insert(APIPermission::kUnlimitedStorage);
   skip.insert(APIPermission::kWebcamPrivate);
@@ -882,6 +881,10 @@ TEST(PermissionsTest, PermissionMessages) {
 
   // We already have a generic message for declaring externally_connectable.
   skip.insert(APIPermission::kExternallyConnectableAllUrls);
+
+  // TODO(crbug.com/696822): Implement the permission model for Declarative Net
+  // Request API.
+  skip.insert(APIPermission::kDeclarativeNetRequest);
 
   const PermissionMessageProvider* provider = PermissionMessageProvider::Get();
   PermissionsInfo* info = PermissionsInfo::GetInstance();

@@ -13,38 +13,22 @@
 #include "base/rand_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/multiprocess_test.h"
+#include "base/test/scoped_environment_variable_override.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "testing/multiprocess_func_list.h"
 
 class MultiProcessLockTest : public base::MultiProcessTest {
  public:
-  static const char kLockEnviromentVarName[];
-
-  class ScopedEnvironmentVariable {
-   public:
-    ScopedEnvironmentVariable(const std::string &name,
-                              const std::string &value)
-        : name_(name), environment_(base::Environment::Create()) {
-      environment_->SetVar(name_.c_str(), value);
-    }
-    ~ScopedEnvironmentVariable() {
-      environment_->UnSetVar(name_.c_str());
-    }
-
-   private:
-    std::string name_;
-    std::unique_ptr<base::Environment> environment_;
-    DISALLOW_COPY_AND_ASSIGN(ScopedEnvironmentVariable);
-  };
+  static const char kLockEnvironmentVarName[];
 
   std::string GenerateLockName();
   void ExpectLockIsLocked(const std::string &name);
   void ExpectLockIsUnlocked(const std::string &name);
 };
 
-const char MultiProcessLockTest::kLockEnviromentVarName[]
-    = "MULTI_PROCESS_TEST_LOCK_NAME";
+const char MultiProcessLockTest::kLockEnvironmentVarName[] =
+    "MULTI_PROCESS_TEST_LOCK_NAME";
 
 std::string MultiProcessLockTest::GenerateLockName() {
   base::Time now = base::Time::NowFromSystemTime();
@@ -53,23 +37,26 @@ std::string MultiProcessLockTest::GenerateLockName() {
 }
 
 void MultiProcessLockTest::ExpectLockIsLocked(const std::string &name) {
-  ScopedEnvironmentVariable var(kLockEnviromentVarName, name);
-  base::SpawnChildResult spawn_child =
-      SpawnChild("MultiProcessLockTryFailMain");
-  ASSERT_TRUE(spawn_child.process.IsValid());
+  base::test::ScopedEnvironmentVariableOverride var(kLockEnvironmentVarName,
+                                                    name);
+  EXPECT_FALSE(var.WasSet());
+
+  base::Process process = SpawnChild("MultiProcessLockTryFailMain");
+  ASSERT_TRUE(process.IsValid());
   int exit_code = -1;
-  EXPECT_TRUE(spawn_child.process.WaitForExit(&exit_code));
+  EXPECT_TRUE(process.WaitForExit(&exit_code));
   EXPECT_EQ(0, exit_code);
 }
 
 void MultiProcessLockTest::ExpectLockIsUnlocked(
     const std::string &name) {
-  ScopedEnvironmentVariable var(kLockEnviromentVarName, name);
-  base::SpawnChildResult spawn_child =
-      SpawnChild("MultiProcessLockTrySucceedMain");
-  ASSERT_TRUE(spawn_child.process.IsValid());
+  base::test::ScopedEnvironmentVariableOverride var(kLockEnvironmentVarName,
+                                                    name);
+  EXPECT_FALSE(var.WasSet());
+  base::Process process = SpawnChild("MultiProcessLockTrySucceedMain");
+  ASSERT_TRUE(process.IsValid());
   int exit_code = -1;
-  EXPECT_TRUE(spawn_child.process.WaitForExit(&exit_code));
+  EXPECT_TRUE(process.WaitForExit(&exit_code));
   EXPECT_EQ(0, exit_code);
 }
 
@@ -148,7 +135,7 @@ TEST_F(MultiProcessLockTest, LockScope) {
 MULTIPROCESS_TEST_MAIN(MultiProcessLockTryFailMain) {
   std::string name;
   std::unique_ptr<base::Environment> environment(base::Environment::Create());
-  EXPECT_TRUE(environment->GetVar(MultiProcessLockTest::kLockEnviromentVarName,
+  EXPECT_TRUE(environment->GetVar(MultiProcessLockTest::kLockEnvironmentVarName,
                                   &name));
 #if defined(OS_MACOSX)
   // OS X sends out a log if a lock fails.
@@ -169,7 +156,7 @@ MULTIPROCESS_TEST_MAIN(MultiProcessLockTryFailMain) {
 MULTIPROCESS_TEST_MAIN(MultiProcessLockTrySucceedMain) {
   std::string name;
   std::unique_ptr<base::Environment> environment(base::Environment::Create());
-  EXPECT_TRUE(environment->GetVar(MultiProcessLockTest::kLockEnviromentVarName,
+  EXPECT_TRUE(environment->GetVar(MultiProcessLockTest::kLockEnvironmentVarName,
                                   &name));
   std::unique_ptr<MultiProcessLock> test_lock(MultiProcessLock::Create(name));
 

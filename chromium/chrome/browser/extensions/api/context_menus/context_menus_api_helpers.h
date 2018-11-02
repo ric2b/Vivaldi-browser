@@ -13,6 +13,8 @@
 #include "extensions/common/error_utils.h"
 #include "extensions/common/manifest_handlers/background_info.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace extensions {
 namespace context_menus_api_helpers {
 
@@ -118,6 +120,11 @@ bool CreateMenuItem(const PropertyWithEnumT& create_properties,
     return false;
   }
 
+  // Visibility state.
+  bool visible = true;
+  if (create_properties.visible)
+    visible = *create_properties.visible;
+
   // Checked state.
   bool checked = false;
   if (create_properties.checked.get())
@@ -129,7 +136,7 @@ bool CreateMenuItem(const PropertyWithEnumT& create_properties,
     enabled = *create_properties.enabled;
 
   std::unique_ptr<MenuItem> item(
-      new MenuItem(item_id, title, checked, enabled, type, contexts));
+      new MenuItem(item_id, title, checked, visible, enabled, type, contexts));
 
   // URL Patterns.
   if (!item->PopulateURLPatterns(
@@ -145,6 +152,10 @@ bool CreateMenuItem(const PropertyWithEnumT& create_properties,
       GetParentId(create_properties, browser_context->IsOffTheRecord(),
                   item_id.extension_key));
   if (parent_id.get()) {
+    if (parent_id.get()->incognito &&
+        vivaldi::IsVivaldiApp(item_id.extension_key.extension_id)) {
+      parent_id.get()->incognito = false;
+    }
     MenuItem* parent = GetParent(*parent_id, menu_manager, error);
     if (!parent)
       return false;
@@ -206,7 +217,11 @@ bool UpdateMenuItem(const PropertyWithEnumT& update_properties,
       *error = kCheckedError;
       return false;
     }
-    if (checked != item->checked()) {
+    // If the item was not checked and it is updated to be checked, set it to be
+    // checked. If the radio item was unchecked, nothing should happen. The
+    // radio item should remain checked because there should always be one item
+    // checked in the radio list.
+    if (checked && !item->checked()) {
       if (!item->SetChecked(checked)) {
         *error = kCheckedError;
         return false;
@@ -214,6 +229,10 @@ bool UpdateMenuItem(const PropertyWithEnumT& update_properties,
       radio_item_updated = true;
     }
   }
+
+  // Visibility state.
+  if (update_properties.visible)
+    item->set_visible(*update_properties.visible);
 
   // Enabled.
   if (update_properties.enabled.get())
@@ -242,6 +261,10 @@ bool UpdateMenuItem(const PropertyWithEnumT& update_properties,
       GetParentId(update_properties, browser_context->IsOffTheRecord(),
                   item_id.extension_key));
   if (parent_id.get()) {
+    if (parent_id.get()->incognito &&
+        vivaldi::IsVivaldiApp(item_id.extension_key.extension_id)) {
+      parent_id.get()->incognito = false;
+    }
     MenuItem* parent = GetParent(*parent_id, menu_manager, error);
     if (!parent || !menu_manager->ChangeParent(item->id(), &parent->id()))
       return false;

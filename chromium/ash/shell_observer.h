@@ -70,6 +70,8 @@ class ASH_EXPORT ShellObserver {
   // Called when a new KeyboardController is created.
   virtual void OnKeyboardControllerCreated() {}
 
+  // TODO(kaznacheev) Move voice interaction related methods to a separate
+  // observer (crbug.com/758650)
   // Called when voice interaction session state changes.
   virtual void OnVoiceInteractionStatusChanged(VoiceInteractionState state) {}
 
@@ -90,14 +92,9 @@ class ASH_EXPORT ShellObserver {
   // most of Shell's state has been deleted.
   virtual void OnShellDestroyed() {}
 
-  // Called when the user profile pref service is available. Also called after
-  // multiprofile user switch. Never called with the login screen profile.
-  // On mash will be called with null at the start of user switch then again
-  // with a pref service once the connection to the mojo pref service is made.
-  // TODO(jamescook): Either maintain pref service connections for all multiuser
-  // profiles or make the pref service switch atomic with active user switch.
-  // http://crbug.com/705347
-  virtual void OnActiveUserPrefServiceChanged(PrefService* pref_service) {}
+  // Called when local state prefs are available. This occurs an arbitrary
+  // amount of time after Shell initialization. Only called once.
+  virtual void OnLocalStatePrefServiceInitialized(PrefService* pref_service) {}
 
  protected:
   virtual ~ShellObserver() {}

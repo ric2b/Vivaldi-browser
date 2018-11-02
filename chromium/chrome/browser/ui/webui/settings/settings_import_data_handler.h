@@ -48,6 +48,8 @@ class ImportDataHandler : public SettingsPageUIHandler,
   void ImportItemStarted(importer::ImportItem item) override;
   void ImportItemEnded(importer::ImportItem item) override;
   void ImportEnded() override;
+  void ImportItemFailed(importer::ImportItem item,
+                        const std::string& error) override;
 
   // ui::SelectFileDialog::Listener:
   void FileSelected(const base::FilePath& path,

@@ -21,6 +21,16 @@ TestWebStateObserver::TestWebStateObserver(WebState* web_state)
     : WebStateObserver(web_state) {}
 TestWebStateObserver::~TestWebStateObserver() = default;
 
+void TestWebStateObserver::WasShown() {
+  was_shown_info_ = base::MakeUnique<web::TestWasShownInfo>();
+  was_shown_info_->web_state = web_state();
+}
+
+void TestWebStateObserver::WasHidden() {
+  was_hidden_info_ = base::MakeUnique<web::TestWasHiddenInfo>();
+  was_hidden_info_->web_state = web_state();
+}
+
 void TestWebStateObserver::NavigationItemCommitted(
     const LoadCommittedDetails& load_details) {
   commit_navigation_info_ = base::MakeUnique<web::TestCommitNavigationInfo>();
@@ -70,7 +80,7 @@ void TestWebStateObserver::DidStartNavigation(NavigationContext* navigation) {
   std::unique_ptr<web::NavigationContextImpl> context =
       web::NavigationContextImpl::CreateNavigationContext(
           navigation->GetWebState(), navigation->GetUrl(),
-          navigation->GetPageTransition());
+          navigation->GetPageTransition(), navigation->IsRendererInitiated());
   context->SetIsSameDocument(navigation->IsSameDocument());
   context->SetError(navigation->GetError());
   did_start_navigation_info_->context = std::move(context);
@@ -84,7 +94,7 @@ void TestWebStateObserver::DidFinishNavigation(NavigationContext* navigation) {
   std::unique_ptr<web::NavigationContextImpl> context =
       web::NavigationContextImpl::CreateNavigationContext(
           navigation->GetWebState(), navigation->GetUrl(),
-          navigation->GetPageTransition());
+          navigation->GetPageTransition(), navigation->IsRendererInitiated());
   context->SetIsSameDocument(navigation->IsSameDocument());
   context->SetError(navigation->GetError());
   did_finish_navigation_info_->context = std::move(context);

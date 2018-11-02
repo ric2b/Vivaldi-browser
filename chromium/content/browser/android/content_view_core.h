@@ -245,21 +245,10 @@ class ContentViewCore : public WebContentsObserver {
                        bool top_changed,
                        bool is_mobile_optimized_hint);
 
-  bool HasFocus();
   void RequestDisallowInterceptTouchEvent();
   void OnGestureEventAck(const blink::WebGestureEvent& event,
                          InputEventAckState ack_result);
   bool FilterInputEvent(const blink::WebInputEvent& event);
-
-  // Shows the disambiguation popup
-  // |rect_pixels|   --> window coordinates which |zoomed_bitmap| represents
-  // |zoomed_bitmap| --> magnified image of potential touch targets
-  void ShowDisambiguationPopup(const gfx::Rect& rect_pixels,
-                               const SkBitmap& zoomed_bitmap);
-
-  // Creates a java-side touch event, used for injecting motion events for
-  // testing/benchmarking purposes.
-  base::android::ScopedJavaLocalRef<jobject> CreateMotionEventSynthesizer();
 
   void DidStopFlinging();
 
@@ -286,6 +275,7 @@ class ContentViewCore : public WebContentsObserver {
   void SelectBetweenCoordinates(const gfx::PointF& base,
                                 const gfx::PointF& extent);
 
+  void UpdateCursor(const content::CursorInfo& info);
   void OnTouchDown(const base::android::ScopedJavaLocalRef<jobject>& event);
 
   ui::ViewAndroid* GetViewAndroid() const;
@@ -355,8 +345,6 @@ class ContentViewCore : public WebContentsObserver {
 
   DISALLOW_COPY_AND_ASSIGN(ContentViewCore);
 };
-
-bool RegisterContentViewCore(JNIEnv* env);
 
 }  // namespace content
 

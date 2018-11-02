@@ -10,6 +10,14 @@
 DISABLE(PipelineIntegrationTest, BasicPlaybackHi10P)
 DISABLE(PipelineIntegrationTest,
         MediaSource_ConfigChange_EncryptedThenClear_MP4_CENC)
+DISABLE(PipelineIntegrationTest, EncryptedPlayback_MP4_CENC_KeyRotation_Video)
+DISABLE(PipelineIntegrationTest, EncryptedPlayback_MP4_CENC_SENC_NO_SAIZ_SAIO_Video)
+DISABLE(PipelineIntegrationTest, EncryptedPlayback_MP4_CENC_SENC_Video)
+DISABLE(PipelineIntegrationTest, EncryptedPlayback_MP4_CENC_VideoOnly)
+DISABLE(PipelineIntegrationTest, EncryptedPlayback_NoEncryptedFrames_MP4_CENC_VideoOnly)
+DISABLE(PipelineIntegrationTest, MediaSource_ConfigChange_Encrypted_MP4_CENC_KeyRotation_VideoOnly)
+DISABLE(PipelineIntegrationTest, MediaSource_ConfigChange_Encrypted_MP4_CENC_VideoOnly)
+DISABLE(PipelineIntegrationTest, MediaSource_ConfigChange_MP4)
 
 DISABLE(MediaColorTest, Yuv420pRec709H264)
 

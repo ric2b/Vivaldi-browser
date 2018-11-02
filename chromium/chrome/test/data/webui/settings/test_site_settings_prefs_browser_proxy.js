@@ -26,11 +26,12 @@ var prefsEmpty = {
     geolocation: {},
     javascript: {},
     mic: {},
-    midiDevices: {},
+    midi_devices: {},
     notifications: {},
     plugins: {},
     images: {},
     popups: {},
+    sound: {},
     unsandboxed_plugins: {},
   },
   exceptions: {
@@ -42,11 +43,12 @@ var prefsEmpty = {
     geolocation: [],
     javascript: [],
     mic: [],
-    midiDevices: [],
+    midi_devices: [],
     notifications: [],
     plugins: [],
     images: [],
     popups: [],
+    sound: [],
     unsandboxed_plugins: [],
   },
 };
@@ -56,72 +58,73 @@ var prefsEmpty = {
  * for allowing tests to know when a method was called, as well as
  * specifying mock responses.
  *
- * @constructor
  * @implements {settings.SiteSettingsPrefsBrowserProxy}
- * @extends {TestBrowserProxy}
  */
-var TestSiteSettingsPrefsBrowserProxy = function() {
-  TestBrowserProxy.call(this, [
-    'fetchUsbDevices',
-    'fetchZoomLevels',
-    'getCookieDetails',
-    'getDefaultValueForContentType',
-    'getExceptionList',
-    'getOriginPermissions',
-    'isPatternValid',
-    'observeProtocolHandlers',
-    'observeProtocolHandlersEnabledState',
-    'reloadCookies',
-    'removeCookie',
-    'removeProtocolHandler',
-    'removeUsbDevice',
-    'removeZoomLevel',
-    'resetCategoryPermissionForOrigin',
-    'setCategoryPermissionForOrigin',
-    'setDefaultValueForContentType',
-    'setProtocolDefault',
-    'updateIncognitoStatus',
-  ]);
+class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy {
+  constructor() {
+    super([
+      'fetchUsbDevices',
+      'fetchZoomLevels',
+      'getCookieDetails',
+      'getDefaultValueForContentType',
+      'getExceptionList',
+      'getOriginPermissions',
+      'isOriginValid',
+      'isPatternValid',
+      'observeProtocolHandlers',
+      'observeProtocolHandlersEnabledState',
+      'reloadCookies',
+      'removeCookie',
+      'removeProtocolHandler',
+      'removeUsbDevice',
+      'removeZoomLevel',
+      'resetCategoryPermissionForPattern',
+      'setCategoryPermissionForPattern',
+      'setDefaultValueForContentType',
+      'setOriginPermissions',
+      'setProtocolDefault',
+      'updateIncognitoStatus',
+    ]);
 
-  /** @private {boolean} */
-  this.hasIncognito_ = false;
+    /** @private {boolean} */
+    this.hasIncognito_ = false;
 
-  /** @private {!SiteSettingsPref} */
-  this.prefs_ = prefsEmpty;
+    /** @private {!SiteSettingsPref} */
+    this.prefs_ = prefsEmpty;
 
-  /** @private {!Array<ZoomLevelEntry>} */
-  this.zoomList_ = [];
+    /** @private {!Array<ZoomLevelEntry>} */
+    this.zoomList_ = [];
 
-  /** @private {!Array<!UsbDeviceEntry>} */
-  this.usbDevices_ = [];
+    /** @private {!Array<!UsbDeviceEntry>} */
+    this.usbDevices_ = [];
 
-  /** @private {!Array<!ProtocolEntry>} */
-  this.protocolHandlers_ = [];
+    /** @private {!Array<!ProtocolEntry>} */
+    this.protocolHandlers_ = [];
 
-  /** @private {?CookieList} */
-  this.cookieDetails_ = null;
+    /** @private {?CookieList} */
+    this.cookieDetails_ = null;
 
-  /** @private {boolean} */
-  this.isPatternValid_ = true;
-};
+    /** @private {boolean} */
+    this.isOriginValid_ = true;
 
-TestSiteSettingsPrefsBrowserProxy.prototype = {
-  __proto__: TestBrowserProxy.prototype,
+    /** @private {boolean} */
+    this.isPatternValid_ = true;
+  }
 
   /**
    * Pretends an incognito session started or ended.
    * @param {boolean} hasIncognito True for session started.
    */
-  setIncognito: function(hasIncognito) {
+  setIncognito(hasIncognito) {
     this.hasIncognito_ = hasIncognito;
     cr.webUIListenerCallback('onIncognitoStatusChanged', hasIncognito);
-  },
+  }
 
   /**
    * Sets the prefs to use when testing.
    * @param {!SiteSettingsPref} prefs The prefs to set.
    */
-  setPrefs: function(prefs) {
+  setPrefs(prefs) {
     this.prefs_ = prefs;
 
     // Notify all listeners that their data may be out of date.
@@ -131,55 +134,101 @@ TestSiteSettingsPrefsBrowserProxy.prototype = {
           settings.ContentSettingsTypes[type],
           '');
     }
-  },
+  }
+
+  /**
+   * Sets the default prefs only. Use this only when there is a need to
+   * distinguish between the callback for permissions changing and the callback
+   * for default permissions changing.
+   * TODO(https://crbug.com/742706): This function is a hack and should be
+   * removed.
+   * @param {!Map<string, !DefaultContentSetting>} defaultPrefs The new
+   *     default prefs to set.
+   */
+  setDefaultPrefs(defaultPrefs) {
+    this.prefs_.defaults = defaultPrefs;
+
+    // Notify all listeners that their data may be out of date.
+    for (var type in settings.ContentSettingsTypes) {
+      cr.webUIListenerCallback(
+          'contentSettingCategoryChanged', settings.ContentSettingsTypes[type]);
+    }
+  }
+
+  /**
+   * Sets one exception for a given category, replacing any existing exceptions
+   * for the same origin. Note this ignores embedding origins.
+   * @param {!settings.ContentSettingsTypes} category The category the new
+   *     exception belongs to.
+   * @param {!RawSiteException} newException The new preference to add/replace.
+   */
+  setSingleException(category, newException) {
+    // Remove entries from the current prefs which have the same origin.
+    var newPrefs = /** @type {!Array<RawSiteException>} */
+        (this.prefs_.exceptions[category].filter((categoryException) => {
+          if (categoryException.origin != newException.origin)
+            return true;
+        }));
+    newPrefs.push(newException);
+    this.prefs_.exceptions[category] = newPrefs;
+
+    cr.webUIListenerCallback(
+        'contentSettingSitePermissionChanged', category, newException.origin);
+  }
 
   /**
    * Sets the prefs to use when testing.
    * @param {!Array<ZoomLevelEntry>} list The zoom list to set.
    */
-  setZoomList: function(list) {
+  setZoomList(list) {
     this.zoomList_ = list;
-  },
+  }
 
   /**
    * Sets the prefs to use when testing.
    * @param {!Array<UsbDeviceEntry>} list The usb device entry list to set.
    */
-  setUsbDevices: function(list) {
+  setUsbDevices(list) {
     // Shallow copy of the passed-in array so mutation won't impact the source
     this.usbDevices_ = list.slice();
-  },
+  }
 
   /**
    * Sets the prefs to use when testing.
    * @param {!Array<ProtocolEntry>} list The protocol handlers list to set.
    */
-  setProtocolHandlers: function(list) {
+  setProtocolHandlers(list) {
     // Shallow copy of the passed-in array so mutation won't impact the source
     this.protocolHandlers_ = list.slice();
-  },
+  }
 
   /** @override */
-  setDefaultValueForContentType: function(contentType, defaultValue) {
+  setDefaultValueForContentType(contentType, defaultValue) {
     this.methodCalled(
         'setDefaultValueForContentType', [contentType, defaultValue]);
-  },
+  }
 
   /** @override */
-  getCookieDetails: function(site) {
+  setOriginPermissions(origin, contentTypes, blanketSetting) {
+    this.methodCalled(
+        'setOriginPermissions', [origin, contentTypes, blanketSetting]);
+  }
+
+  /** @override */
+  getCookieDetails(site) {
     this.methodCalled('getCookieDetails', site);
     return Promise.resolve(this.cookieDetails_  || {id: '', children: []});
-  },
+  }
 
   /**
    * @param {!CookieList} cookieList
    */
-  setCookieDetails: function(cookieList) {
+  setCookieDetails(cookieList) {
     this.cookieDetails_ = cookieList;
-  },
+  }
 
   /** @override */
-  getDefaultValueForContentType: function(contentType) {
+  getDefaultValueForContentType(contentType) {
     this.methodCalled('getDefaultValueForContentType', contentType);
 
     var pref = undefined;
@@ -203,7 +252,7 @@ TestSiteSettingsPrefsBrowserProxy.prototype = {
     } else if (contentType == settings.ContentSettingsTypes.MIC) {
       pref = this.prefs_.defaults.mic;
     } else if (contentType == settings.ContentSettingsTypes.MIDI_DEVICES) {
-      pref = this.prefs_.defaults.midiDevices;
+      pref = this.prefs_.defaults.midi_devices;
     } else if (contentType == settings.ContentSettingsTypes.NOTIFICATIONS) {
       pref = this.prefs_.defaults.notifications;
     } else if (contentType == settings.ContentSettingsTypes.PDF_DOCUMENTS) {
@@ -212,6 +261,8 @@ TestSiteSettingsPrefsBrowserProxy.prototype = {
       pref = this.prefs_.defaults.popups;
     } else if (contentType == settings.ContentSettingsTypes.PLUGINS) {
       pref = this.prefs_.defaults.plugins;
+    } else if (contentType == settings.ContentSettingsTypes.SOUND) {
+      pref = this.prefs_.defaults.sound;
     } else if (
         contentType == settings.ContentSettingsTypes.UNSANDBOXED_PLUGINS) {
       pref = this.prefs_.defaults.unsandboxed_plugins;
@@ -221,10 +272,10 @@ TestSiteSettingsPrefsBrowserProxy.prototype = {
 
     assert(pref != undefined, 'Pref is missing for ' + contentType);
     return Promise.resolve(pref);
-  },
+  }
 
   /** @override */
-  getExceptionList: function(contentType) {
+  getExceptionList(contentType) {
     this.methodCalled('getExceptionList', contentType);
 
     var pref = undefined;
@@ -247,7 +298,7 @@ TestSiteSettingsPrefsBrowserProxy.prototype = {
     else if (contentType == settings.ContentSettingsTypes.MIC)
       pref = this.prefs_.exceptions.mic;
     else if (contentType == settings.ContentSettingsTypes.MIDI_DEVICES)
-      pref = this.prefs_.exceptions.midiDevices;
+      pref = this.prefs_.exceptions.midi_devices;
     else if (contentType == settings.ContentSettingsTypes.NOTIFICATIONS)
       pref = this.prefs_.exceptions.notifications;
     else if (contentType == settings.ContentSettingsTypes.PDF_DOCUMENTS)
@@ -258,6 +309,8 @@ TestSiteSettingsPrefsBrowserProxy.prototype = {
       pref = this.prefs_.exceptions.protectedContent;
     else if (contentType == settings.ContentSettingsTypes.POPUPS)
       pref = this.prefs_.exceptions.popups;
+    else if (contentType == settings.ContentSettingsTypes.SOUND)
+      pref = this.prefs_.exceptions.sound;
     else if (contentType == settings.ContentSettingsTypes.UNSANDBOXED_PLUGINS)
       pref = this.prefs_.exceptions.unsandboxed_plugins;
     else
@@ -273,31 +326,45 @@ TestSiteSettingsPrefsBrowserProxy.prototype = {
     }
 
     return Promise.resolve(pref);
-  },
+  }
 
   /** @override */
-  isPatternValid: function(pattern) {
+  isOriginValid(origin) {
+    this.methodCalled('isOriginValid', origin);
+    return Promise.resolve(this.isOriginValid_);
+  }
+
+  /**
+   * Specify whether isOriginValid should succeed or fail.
+   */
+  setIsOriginValid(isValid) {
+    this.isOriginValid_ = isValid;
+  }
+
+  /** @override */
+  isPatternValid(pattern) {
     this.methodCalled('isPatternValid', pattern);
     return Promise.resolve(this.isPatternValid_);
-  },
+  }
 
   /**
    * Specify whether isPatternValid should succeed or fail.
    */
-  setIsPatternValid: function(isValid) {
+  setIsPatternValid(isValid) {
     this.isPatternValid_ = isValid;
-  },
+  }
 
   /** @override */
-  resetCategoryPermissionForOrigin: function(
+  resetCategoryPermissionForPattern(
       primaryPattern, secondaryPattern, contentType, incognito) {
-    this.methodCalled('resetCategoryPermissionForOrigin',
+    this.methodCalled(
+        'resetCategoryPermissionForPattern',
         [primaryPattern, secondaryPattern, contentType, incognito]);
     return Promise.resolve();
-  },
+  }
 
   /** @override */
-  getOriginPermissions: function(origin, contentTypes) {
+  getOriginPermissions(origin, contentTypes) {
     this.methodCalled('getOriginPermissions', [origin, contentTypes]);
 
     var exceptionList = [];
@@ -309,6 +376,8 @@ TestSiteSettingsPrefsBrowserProxy.prototype = {
         contentType = 'camera';
       } else if (contentType == settings.ContentSettingsTypes.MIC) {
         contentType = 'mic';
+      } else if (contentType == settings.ContentSettingsTypes.MIDI_DEVICES) {
+        contentType = 'midi_devices';
       } else if (contentType == settings.ContentSettingsTypes.BACKGROUND_SYNC) {
         contentType = 'background_sync';
       } else if (
@@ -321,7 +390,7 @@ TestSiteSettingsPrefsBrowserProxy.prototype = {
 
       var setting;
       var source;
-      this.prefs_.exceptions[contentType].some(function(originPrefs) {
+      this.prefs_.exceptions[contentType].some((originPrefs) => {
         if (originPrefs.origin == origin) {
           setting = originPrefs.setting;
           source = originPrefs.source;
@@ -329,7 +398,7 @@ TestSiteSettingsPrefsBrowserProxy.prototype = {
         }
       });
       assert(
-          settings !== undefined,
+          setting != undefined,
           'There was no exception set for origin: ' + origin +
               ' and contentType: ' + contentType);
 
@@ -343,73 +412,74 @@ TestSiteSettingsPrefsBrowserProxy.prototype = {
       })
     }, this);
     return Promise.resolve(exceptionList);
-  },
+  }
 
   /** @override */
-  setCategoryPermissionForOrigin: function(
+  setCategoryPermissionForPattern(
       primaryPattern, secondaryPattern, contentType, value, incognito) {
-    this.methodCalled('setCategoryPermissionForOrigin',
+    this.methodCalled(
+        'setCategoryPermissionForPattern',
         [primaryPattern, secondaryPattern, contentType, value, incognito]);
     return Promise.resolve();
-  },
+  }
 
   /** @override */
-  fetchZoomLevels: function() {
+  fetchZoomLevels() {
     cr.webUIListenerCallback('onZoomLevelsChanged', this.zoomList_);
     this.methodCalled('fetchZoomLevels');
-  },
+  }
 
   /** @override */
-  reloadCookies: function() {
+  reloadCookies() {
     return Promise.resolve({id: null, children: []});
-  },
+  }
 
   /** @override */
-  removeCookie: function(path) {
+  removeCookie(path) {
     this.methodCalled('removeCookie', path);
-  },
+  }
 
   /** @override */
-  removeZoomLevel: function(host) {
+  removeZoomLevel(host) {
     this.methodCalled('removeZoomLevel', [host]);
-  },
+  }
 
   /** @override */
-  fetchUsbDevices: function() {
+  fetchUsbDevices() {
     this.methodCalled('fetchUsbDevices');
     return Promise.resolve(this.usbDevices_);
-  },
+  }
 
   /** @override */
-  removeUsbDevice: function() {
+  removeUsbDevice() {
     this.methodCalled('removeUsbDevice', arguments);
-  },
+  }
 
   /** @override */
-  observeProtocolHandlers: function() {
+  observeProtocolHandlers() {
     cr.webUIListenerCallback('setHandlersEnabled', true);
     cr.webUIListenerCallback('setProtocolHandlers', this.protocolHandlers_);
     this.methodCalled('observeProtocolHandlers');
-  },
+  }
 
   /** @override */
-  observeProtocolHandlersEnabledState: function() {
+  observeProtocolHandlersEnabledState() {
     cr.webUIListenerCallback('setHandlersEnabled', true);
     this.methodCalled('observeProtocolHandlersEnabledState');
-  },
+  }
 
   /** @override */
-  setProtocolDefault: function() {
+  setProtocolDefault() {
     this.methodCalled('setProtocolDefault', arguments);
-  },
+  }
 
   /** @override */
-  removeProtocolHandler: function() {
+  removeProtocolHandler() {
     this.methodCalled('removeProtocolHandler', arguments);
-  },
+  }
 
   /** @override */
-  updateIncognitoStatus: function() {
+  updateIncognitoStatus() {
     this.methodCalled('updateIncognitoStatus', arguments);
   }
-};
+}

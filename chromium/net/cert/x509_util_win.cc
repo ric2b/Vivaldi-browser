@@ -25,6 +25,13 @@ using ScopedHCERTSTORE = crypto::ScopedCAPIHandle<
 scoped_refptr<X509Certificate> CreateX509CertificateFromCertContexts(
     PCCERT_CONTEXT os_cert,
     const std::vector<PCCERT_CONTEXT>& os_chain) {
+  return CreateX509CertificateFromCertContexts(os_cert, os_chain, {});
+}
+
+scoped_refptr<X509Certificate> CreateX509CertificateFromCertContexts(
+    PCCERT_CONTEXT os_cert,
+    const std::vector<PCCERT_CONTEXT>& os_chain,
+    X509Certificate::UnsafeCreateOptions options) {
 #if BUILDFLAG(USE_BYTE_CERTS)
   if (!os_cert || !os_cert->pbCertEncoded || !os_cert->cbCertEncoded)
     return nullptr;
@@ -50,7 +57,8 @@ scoped_refptr<X509Certificate> CreateX509CertificateFromCertContexts(
     intermediates.push_back(std::move(intermediate_cert_handle));
   }
   scoped_refptr<X509Certificate> result(
-      X509Certificate::CreateFromHandle(cert_handle.get(), intermediates_raw));
+      X509Certificate::CreateFromHandleUnsafeOptions(
+          cert_handle.get(), intermediates_raw, options));
   return result;
 #else
   return X509Certificate::CreateFromHandle(os_cert, os_chain);

@@ -48,13 +48,13 @@ base::ThreadLocalPointer<MessageLoop>* GetTLSMessageLoop() {
 MessageLoop::MessagePumpFactory* message_pump_for_ui_factory_ = NULL;
 
 #if defined(OS_IOS)
-typedef MessagePumpIOSForIO MessagePumpForIO;
+using MessagePumpForIO = MessagePumpIOSForIO;
 #elif defined(OS_NACL_SFI)
-typedef MessagePumpDefault MessagePumpForIO;
+using MessagePumpForIO = MessagePumpDefault;
 #elif defined(OS_FUCHSIA)
-typedef MessagePumpFuchsia MessagePumpForIO;
+using MessagePumpForIO = MessagePumpFuchsia;
 #elif defined(OS_POSIX)
-typedef MessagePumpLibevent MessagePumpForIO;
+using MessagePumpForIO = MessagePumpLibevent;
 #endif
 
 #if !defined(OS_NACL_SFI)
@@ -105,8 +105,7 @@ MessageLoop::~MessageLoop() {
   // There should be no active RunLoops on this thread, unless this MessageLoop
   // isn't bound to the current thread (see other condition at the top of this
   // method).
-  DCHECK((!pump_ && current() != this) ||
-         !run_loop_client_->GetTopMostRunLoop());
+  DCHECK((!pump_ && current() != this) || !RunLoop::IsRunningOnCurrentThread());
 #endif
 
 #if defined(OS_WIN)
@@ -168,11 +167,11 @@ bool MessageLoop::InitMessagePumpForUIFactory(MessagePumpFactory* factory) {
 std::unique_ptr<MessagePump> MessageLoop::CreateMessagePumpForType(Type type) {
 // TODO(rvargas): Get rid of the OS guards.
 #if defined(USE_GLIB) && !defined(OS_NACL)
-  typedef MessagePumpGlib MessagePumpForUI;
+  using MessagePumpForUI = MessagePumpGlib;
 #elif (defined(OS_LINUX) && !defined(OS_NACL)) || defined(OS_BSD)
-  typedef MessagePumpLibevent MessagePumpForUI;
+  using MessagePumpForUI = MessagePumpLibevent;
 #elif defined(OS_FUCHSIA)
-  typedef MessagePumpFuchsia MessagePumpForUI;
+  using MessagePumpForUI = MessagePumpFuchsia;
 #endif
 
 #if defined(OS_IOS) || defined(OS_MACOSX)
@@ -223,31 +222,13 @@ void MessageLoop::RemoveDestructionObserver(
   destruction_observers_.RemoveObserver(destruction_observer);
 }
 
-void MessageLoop::QuitWhenIdle() {
-  DCHECK_EQ(this, current());
-  DCHECK(run_loop_client_->GetTopMostRunLoop())
-      << "Must be inside Run to call QuitWhenIdle";
-  run_loop_client_->GetTopMostRunLoop()->QuitWhenIdle();
-}
-
-void MessageLoop::QuitNow() {
-  DCHECK_EQ(this, current());
-  DCHECK(run_loop_client_->GetTopMostRunLoop())
-      << "Must be inside Run to call Quit";
-  pump_->Quit();
-}
-
 bool MessageLoop::IsType(Type type) const {
   return type_ == type;
 }
 
-static void QuitCurrentWhenIdle() {
-  MessageLoop::current()->QuitWhenIdle();
-}
-
 // static
 Closure MessageLoop::QuitWhenIdleClosure() {
-  return Bind(&QuitCurrentWhenIdle);
+  return Bind(&RunLoop::QuitCurrentWhenIdleDeprecated);
 }
 
 void MessageLoop::SetNestableTasksAllowed(bool allowed) {
@@ -255,14 +236,14 @@ void MessageLoop::SetNestableTasksAllowed(bool allowed) {
     CHECK(RunLoop::IsNestingAllowedOnCurrentThread());
 
     // Kick the native pump just in case we enter a OS-driven nested message
-    // loop.
+    // loop that does not go through RunLoop::Run().
     pump_->ScheduleWork();
   }
   nestable_tasks_allowed_ = allowed;
 }
 
 bool MessageLoop::NestableTasksAllowed() const {
-  return nestable_tasks_allowed_;
+  return nestable_tasks_allowed_ || run_loop_client_->ProcessingTasksAllowed();
 }
 
 // TODO(gab): Migrate TaskObservers to RunLoop as part of separating concerns
@@ -278,10 +259,6 @@ void MessageLoop::RemoveTaskObserver(TaskObserver* task_observer) {
   DCHECK_EQ(this, current());
   CHECK(allow_task_observers_);
   task_observers_.RemoveObserver(task_observer);
-}
-
-bool MessageLoop::HasHighResolutionTasks() {
-  return incoming_task_queue_->HasHighResolutionTasks();
 }
 
 bool MessageLoop::IsIdleForTesting() {
@@ -333,9 +310,9 @@ void MessageLoop::BindToCurrentThread() {
   SetThreadTaskRunnerHandle();
   thread_id_ = PlatformThread::CurrentId();
 
-  scoped_set_sequence_local_storage_map_for_current_thread_ =
-      MakeUnique<internal::ScopedSetSequenceLocalStorageMapForCurrentThread>(
-          &sequence_local_storage_map_);
+  scoped_set_sequence_local_storage_map_for_current_thread_ = std::make_unique<
+      internal::ScopedSetSequenceLocalStorageMapForCurrentThread>(
+      &sequence_local_storage_map_);
 
   run_loop_client_ = RunLoop::RegisterDelegateForCurrentThread(this);
 }
@@ -371,7 +348,14 @@ void MessageLoop::Run() {
 
 void MessageLoop::Quit() {
   DCHECK_EQ(this, current());
-  QuitNow();
+  pump_->Quit();
+}
+
+void MessageLoop::EnsureWorkScheduled() {
+  DCHECK_EQ(this, current());
+  ReloadWorkQueue();
+  if (!work_queue_.empty())
+    pump_->ScheduleWork();
 }
 
 void MessageLoop::SetThreadTaskRunnerHandle() {
@@ -405,7 +389,7 @@ bool MessageLoop::ProcessNextDelayedNonNestableTask() {
 }
 
 void MessageLoop::RunTask(PendingTask* pending_task) {
-  DCHECK(nestable_tasks_allowed_);
+  DCHECK(NestableTasksAllowed());
   current_pending_task_ = pending_task;
 
 #if defined(OS_WIN)
@@ -510,7 +494,7 @@ void MessageLoop::ScheduleWork() {
 }
 
 bool MessageLoop::DoWork() {
-  if (!nestable_tasks_allowed_) {
+  if (!NestableTasksAllowed()) {
     // Task can't be executed right now.
     return false;
   }
@@ -548,7 +532,7 @@ bool MessageLoop::DoWork() {
 }
 
 bool MessageLoop::DoDelayedWork(TimeTicks* next_delayed_work_time) {
-  if (!nestable_tasks_allowed_ ||
+  if (!NestableTasksAllowed() ||
       !SweepDelayedWorkQueueAndReturnTrueIfStillHasWork()) {
     recent_time_ = *next_delayed_work_time = TimeTicks();
     return false;
@@ -584,7 +568,7 @@ bool MessageLoop::DoIdleWork() {
   if (ProcessNextDelayedNonNestableTask())
     return true;
 
-  if (run_loop_client_->GetTopMostRunLoop()->quit_when_idle_received_)
+  if (run_loop_client_->ShouldQuitWhenIdle())
     pump_->Quit();
 
   // When we return we will do a kernel wait for more tasks.
@@ -644,7 +628,8 @@ void MessageLoopForUI::Attach() {
 }
 #endif
 
-#if defined(USE_OZONE) || (defined(USE_X11) && !defined(USE_GLIB))
+#if (defined(USE_OZONE) && !defined(OS_FUCHSIA)) || \
+    (defined(USE_X11) && !defined(USE_GLIB))
 bool MessageLoopForUI::WatchFileDescriptor(
     int fd,
     bool persistent,
@@ -695,5 +680,17 @@ bool MessageLoopForIO::WatchFileDescriptor(int fd,
 #endif
 
 #endif  // !defined(OS_NACL_SFI)
+
+#if defined(OS_FUCHSIA)
+// Additional watch API for native platform resources.
+bool MessageLoopForIO::WatchMxHandle(mx_handle_t handle,
+                                     bool persistent,
+                                     mx_signals_t signals,
+                                     MxHandleWatchController* controller,
+                                     MxHandleWatcher* delegate) {
+  return ToPumpIO(pump_.get())
+      ->WatchMxHandle(handle, persistent, signals, controller, delegate);
+}
+#endif
 
 }  // namespace base

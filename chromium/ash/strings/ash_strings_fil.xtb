@@ -3,12 +3,13 @@
 <translationbundle lang="fil">
 <translation id="1012876632442809908">USB-C device (port sa harap)</translation>
 <translation id="1013923882670373915">Gusto ng bluetooth device na "<ph name="DEVICE_NAME" />" ng pahintulot na magpares. Pakilagay ang PIN na ito sa device na iyon: <ph name="PINCODE" /></translation>
-<translation id="1032891413405719768">Paubos na ang baterya ng stylus</translation>
+<translation id="1032891413405719768">Mahina na ang baterya ng stylus</translation>
 <translation id="112308213915226829">Awtomatikong itago ang shelf</translation>
 <translation id="1153356358378277386">Mga nakapares na device</translation>
 <translation id="1195412055398077112">overscan</translation>
 <translation id="1247372569136754018">Mikropono (internal)</translation>
 <translation id="1252999807265626933">Nagcha-charge mula sa <ph name="POWER_SOURCE" /></translation>
+<translation id="1267032506238418139">Pagbabago ng shortcut</translation>
 <translation id="1270290102613614947">Naka-disable ang on-screen na keyboard</translation>
 <translation id="1272079795634619415">Stop</translation>
 <translation id="1279938420744323401"><ph name="DISPLAY_NAME" /> (<ph name="ANNOTATION" />)</translation>
@@ -22,7 +23,6 @@
 <translation id="15373452373711364">Malaking mouse cursor</translation>
 <translation id="1550523713251050646">Mag-click para sa higit pang mga opsyon</translation>
 <translation id="1621499497873603021">Natitirang oras bago maubos ang baterya, <ph name="TIME_LEFT" /></translation>
-<translation id="164969095109328410">Chrome device</translation>
 <translation id="1677472565718498478"><ph name="TIME" /> na lang ang natitira</translation>
 <translation id="1698760176351776263">IPv6 address: <ph name="ADDRESS" /></translation>
 <translation id="1734367976349034509">Ang device na ito ay pinamamahalaan ng enterprise</translation>
@@ -92,6 +92,7 @@
 <translation id="315116470104423982">Data sa mobile</translation>
 <translation id="3236488194889173876">Walang available na mobile network</translation>
 <translation id="3294437725009624529">Bisita</translation>
+<translation id="332587331255250389">Pakipalitan ang baterya</translation>
 <translation id="3364721542077212959">Mga stylus tool</translation>
 <translation id="3368922792935385530">Nakakonekta</translation>
 <translation id="3371140690572404006">USB-C device (port sa kanang bahagi sa harap)</translation>
@@ -110,6 +111,7 @@
 <translation id="3712407551474845318">I-capture ang rehiyon</translation>
 <translation id="371370241367527062">Mikropono sa harap</translation>
 <translation id="3742055079367172538">Nakakuha na ng screenshot</translation>
+<translation id="3771549900096082774">High Contrast Mode</translation>
 <translation id="3775358506042162758">Maaari ka lang magkaroon ng hanggang sa tatlong account sa multiple na pag-sign-in.</translation>
 <translation id="3783640748446814672">alt</translation>
 <translation id="3784455785234192852">I-lock</translation>
@@ -142,14 +144,12 @@
 <translation id="4729904664295161097">Available lang ang Assistant para sa pangunahing profile.</translation>
 <translation id="479989351350248267">search</translation>
 <translation id="4804818685124855865">I-disconnect</translation>
-<translation id="4821830640883629383">Paki-charge o palitan ang mga baterya.</translation>
 <translation id="4849058404725798627">I-highlight ang bagay sa pamamagitan ng pag-focus ng keyboard</translation>
 <translation id="4872237917498892622">Alt+Search o Shift</translation>
 <translation id="4895488851634969361">Puno na ang baterya.</translation>
 <translation id="4905614135390995787">Nagbago ang shortcut upang i-toggle ang High Contrast Mode. Pakigamit ang <ph name="NEW_SHORTCUT" /> sa halip na <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="4918086044614829423">Tanggapin</translation>
 <translation id="4961318399572185831">I-cast ang screen</translation>
-<translation id="5011233892417813670">Chromebook</translation>
 <translation id="5168181903108465623">I-cast ang mga available na device</translation>
 <translation id="5170568018924773124">Ipinakita sa folder</translation>
 <translation id="5207949376430453814">I-highlight ang text caret</translation>
@@ -175,7 +175,6 @@
 <translation id="5901316534475909376">Shift+Esc</translation>
 <translation id="5916664084637901428">Naka-on</translation>
 <translation id="5927132638760172455">Ikina-cast sa isang hindi kilalang tatanggap</translation>
-<translation id="5932901536148835538">Chromebit</translation>
 <translation id="5947494881799873997">I-revert</translation>
 <translation id="595202126637698455">Naka-enable ang pagte-trace sa pagganap</translation>
 <translation id="5957083217255311415">Naka-off ang mobile data.</translation>
@@ -218,7 +217,6 @@
 <translation id="683971173229319003">Search+L</translation>
 <translation id="6857811139397017780">I-activate <ph name="NETWORKSERVICE" /></translation>
 <translation id="6911468394164995108">Sumali sa iba...</translation>
-<translation id="6915678159055240887">Chromebox</translation>
 <translation id="6981982820502123353">Pagiging Maa-access</translation>
 <translation id="7029814467594812963">Lumabas sa session</translation>
 <translation id="7034339000180558234">Kina-cast ang <ph name="TAB_NAME" /> sa <ph name="RECEIVER_NAME" /></translation>
@@ -226,7 +224,6 @@
 <translation id="7066646422045619941">Na-disable ng iyong administrator ang network na ito.</translation>
 <translation id="7067196344162293536">Awtomatikong pag-rotate</translation>
 <translation id="7098389117866926363">USB-C device (kaliwang port sa likod)</translation>
-<translation id="714034171374937760">Chromebase</translation>
 <translation id="7165278925115064263">Alt+Shift+K</translation>
 <translation id="7168224885072002358">Magre-revert sa lumang resolution sa loob ng <ph name="TIMEOUT_SECONDS" /></translation>
 <translation id="7246339268451149667">I-enable ang Pag-unlock gamit ang fingerprint?</translation>

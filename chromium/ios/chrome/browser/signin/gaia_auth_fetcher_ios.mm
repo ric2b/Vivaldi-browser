@@ -6,6 +6,7 @@
 
 #import <WebKit/WebKit.h>
 
+#include "base/ios/ios_util.h"
 #include "base/json/string_escape.h"
 #include "base/logging.h"
 #import "base/mac/foundation_util.h"
@@ -63,7 +64,7 @@ NSString* const kPostRequestTemplate =
      "}"
      "</script></html>";
 
-// JavaScript template to read the reponse to a GET or POST request. There is
+// JavaScript template to read the response to a GET or POST request. There is
 // two different cases:
 // * GET request, which was made by simply loading a request to the correct
 //   URL. The response is the inner text (to avoid formatting in case of JSON
@@ -114,10 +115,13 @@ NSString* EscapeAndQuoteToNSString(const std::string& value) {
 // This is needed because WKWebView ignores the HTTPBody in a POST request.
 // See
 // https://bugs.webkit.org/show_bug.cgi?id=145410
+// TODO(crbug.com/740987): Remove this function workaround once iOS 10 is
+// dropped.
 void DoPostRequest(WKWebView* web_view,
                    const std::string& body,
                    const std::string& headers,
                    const GURL& url) {
+  DCHECK(!base::ios::IsRunningOnIOS11OrLater());
   NSMutableString* header_data = [NSMutableString string];
   net::HttpRequestHeaders request_headers;
   request_headers.AddHeadersFromString(headers);
@@ -262,12 +266,12 @@ void GaiaAuthFetcherIOSBridge::URLFetchFailure(bool is_cancelled) {
 void GaiaAuthFetcherIOSBridge::FetchPendingRequest() {
   if (!request_.pending)
     return;
-  if (!request_.body.empty()) {
+  if (!request_.body.empty() && !base::ios::IsRunningOnIOS11OrLater()) {
     DoPostRequest(GetWKWebView(), request_.body, request_.headers,
                   request_.url);
   } else {
-  [GetWKWebView()
-      loadRequest:GetRequest(request_.body, request_.headers, request_.url)];
+    [GetWKWebView()
+        loadRequest:GetRequest(request_.body, request_.headers, request_.url)];
   }
 }
 

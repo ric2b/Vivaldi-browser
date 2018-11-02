@@ -33,6 +33,7 @@
 #include "platform/fonts/FontCustomPlatformData.h"
 
 #include "build/build_config.h"
+#include "platform/Histogram.h"
 #include "platform/LayoutTestSupport.h"
 #include "platform/SharedBuffer.h"
 #include "platform/fonts/FontCache.h"
@@ -62,6 +63,8 @@ FontPlatformData FontCustomPlatformData::GetFontPlatformData(
     float size,
     bool bold,
     bool italic,
+    const FontSelectionRequest& selection_request,
+    const FontSelectionCapabilities& selection_capabilities,
     FontOrientation orientation,
     const FontVariationSettings* variation_settings) {
   DCHECK(base_typeface_);
@@ -90,8 +93,25 @@ FontPlatformData FontCustomPlatformData::GetFontPlatformData(
 #endif
     Vector<SkFontMgr::FontParameters::Axis, 0> axes;
 
+    SkFontMgr::FontParameters::Axis weight_axis = {
+        SkSetFourByteTag('w', 'g', 'h', 't'),
+        SkFloatToScalar(selection_capabilities.weight.clampToRange(
+            selection_request.weight))};
+    SkFontMgr::FontParameters::Axis width_axis = {
+        SkSetFourByteTag('w', 'd', 't', 'h'),
+        SkFloatToScalar(selection_capabilities.width.clampToRange(
+            selection_request.width))};
+    SkFontMgr::FontParameters::Axis slant_axis = {
+        SkSetFourByteTag('s', 'l', 'n', 't'),
+        SkFloatToScalar(selection_capabilities.slope.clampToRange(
+            selection_request.slope))};
+
+    axes.push_back(weight_axis);
+    axes.push_back(width_axis);
+    axes.push_back(slant_axis);
+
     if (variation_settings && variation_settings->size() < UINT16_MAX) {
-      axes.ReserveCapacity(variation_settings->size());
+      axes.ReserveCapacity(variation_settings->size() + axes.size());
       for (size_t i = 0; i < variation_settings->size(); ++i) {
         SkFontMgr::FontParameters::Axis axis = {
             AtomicStringToFourByteTag(variation_settings->at(i).Tag()),
@@ -105,14 +125,18 @@ FontPlatformData FontCustomPlatformData::GetFontPlatformData(
         SkFontMgr::FontParameters().setAxes(axes.data(), axes.size())));
 
     if (sk_variation_font) {
+      ReportWebFontInstantiationResult(kSuccessVariableWebFont);
       return_typeface = sk_variation_font;
     } else {
+      ReportWebFontInstantiationResult(kErrorInstantiatingVariableFont);
       SkString family_name;
       base_typeface_->getFamilyName(&family_name);
       // TODO: Surface this as a console message?
       LOG(ERROR) << "Unable for apply variation axis properties for font: "
                  << family_name.c_str();
     }
+  } else {
+    ReportWebFontInstantiationResult(kSuccessConventionalWebFont);
   }
 
   return FontPlatformData(return_typeface, "", size,
@@ -132,6 +156,14 @@ PassRefPtr<FontCustomPlatformData> FontCustomPlatformData::Create(
   }
   return AdoptRef(
       new FontCustomPlatformData(std::move(typeface), decoder.DecodedSize()));
+}
+
+void FontCustomPlatformData::ReportWebFontInstantiationResult(
+    WebFontInstantiationResult result) {
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(
+      EnumerationHistogram, web_font_variable_fonts_ratio,
+      ("Blink.Fonts.VariableFontsRatio", kMaxWebFontInstantiationResult));
+  web_font_variable_fonts_ratio.Count(result);
 }
 
 bool FontCustomPlatformData::SupportsFormat(const String& format) {

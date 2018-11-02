@@ -36,7 +36,6 @@
 
 namespace blink {
 
-class Document;
 class FetchParameters;
 class KURL;
 class ResourceFetcher;
@@ -85,8 +84,6 @@ class CORE_EXPORT ScriptResource final : public TextResource {
 
   AccessControlStatus CalculateAccessControlStatus() const;
 
-  void CheckResourceIntegrity(Document&);
-
  private:
   class ScriptResourceFactory : public ResourceFactory {
    public:
@@ -105,6 +102,8 @@ class CORE_EXPORT ScriptResource final : public TextResource {
   ScriptResource(const ResourceRequest&,
                  const ResourceLoaderOptions&,
                  const TextResourceDecoderOptions&);
+
+  bool CanUseCacheValidator() const override;
 
   AtomicString source_text_;
 };

@@ -7,12 +7,16 @@
 #include "base/atomic_sequence_num.h"
 #include "content/child/child_thread_impl.h"
 #include "content/child/request_extra_data.h"
+#include "content/child/service_worker/service_worker_dispatcher.h"
 #include "content/child/service_worker/service_worker_handle_reference.h"
 #include "content/child/service_worker/service_worker_provider_context.h"
+#include "content/child/service_worker/service_worker_registration_handle_reference.h"
+#include "content/child/thread_safe_sender.h"
 #include "content/common/navigation_params.h"
 #include "content/common/service_worker/service_worker_messages.h"
 #include "content/common/service_worker/service_worker_provider_host_info.h"
 #include "content/common/service_worker/service_worker_utils.h"
+#include "content/public/child/child_url_loader_factory_getter.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "ipc/ipc_sync_channel.h"
 #include "mojo/public/cpp/bindings/associated_group.h"
@@ -77,19 +81,53 @@ class WebServiceWorkerNetworkProviderForFrame
     }
   }
 
-  bool IsControlledByServiceWorker() override {
+  int ProviderID() const override { return provider_->provider_id(); }
+
+  bool HasControllerServiceWorker() override {
     return provider_->IsControlledByServiceWorker();
   }
 
-  int GetProviderID() const override { return provider_->provider_id(); }
-
-  int64_t ServiceWorkerID() override {
+  int64_t ControllerServiceWorkerID() override {
     if (provider_->context() && provider_->context()->controller())
       return provider_->context()->controller()->version_id();
     return kInvalidServiceWorkerVersionId;
   }
 
   ServiceWorkerNetworkProvider* provider() { return provider_.get(); }
+
+  std::unique_ptr<blink::WebURLLoader> CreateURLLoader(
+      const blink::WebURLRequest& request,
+      base::SingleThreadTaskRunner* task_runner) override {
+    // ChildThreadImpl is nullptr in some tests.
+    if (!ChildThreadImpl::current())
+      return nullptr;
+
+    // S13nServiceWorker:
+    // We only install our own URLLoader if Servicification is
+    // enabled.
+    if (!ServiceWorkerUtils::IsServicificationEnabled())
+      return nullptr;
+
+    // S13nServiceWorker:
+    // We need SubresourceLoaderFactory populated in order to
+    // create our own URLLoader for subresource loading.
+    if (!provider_->context() ||
+        !provider_->context()->subresource_loader_factory())
+      return nullptr;
+
+    // S13nServiceWorker:
+    // If it's not for HTTP or HTTPS no need to intercept the
+    // request.
+    if (!GURL(request.Url()).SchemeIsHTTPOrHTTPS())
+      return nullptr;
+
+    // S13nServiceWorker:
+    // Create our own SubresourceLoader to route the request
+    // to the controller ServiceWorker.
+    return base::MakeUnique<WebURLLoaderImpl>(
+        ChildThreadImpl::current()->resource_dispatcher(), task_runner,
+        provider_->context()->subresource_loader_factory());
+  }
 
  private:
   std::unique_ptr<ServiceWorkerNetworkProvider> provider_;
@@ -103,7 +141,8 @@ ServiceWorkerNetworkProvider::CreateForNavigation(
     int route_id,
     const RequestNavigationParams& request_params,
     blink::WebLocalFrame* frame,
-    bool content_initiated) {
+    bool content_initiated,
+    scoped_refptr<ChildURLLoaderFactoryGetter> default_loader_factory_getter) {
   bool browser_side_navigation = IsBrowserSideNavigationEnabled();
   bool should_create_provider_for_window = false;
   int service_worker_provider_id = kInvalidServiceWorkerProviderId;
@@ -138,25 +177,41 @@ ServiceWorkerNetworkProvider::CreateForNavigation(
     const bool is_parent_frame_secure = IsFrameSecure(frame->Parent());
 
     if (service_worker_provider_id == kInvalidServiceWorkerProviderId) {
-      network_provider = std::unique_ptr<ServiceWorkerNetworkProvider>(
-          new ServiceWorkerNetworkProvider(route_id,
-                                           SERVICE_WORKER_PROVIDER_FOR_WINDOW,
-                                           is_parent_frame_secure));
+      network_provider = base::WrapUnique(new ServiceWorkerNetworkProvider(
+          route_id, SERVICE_WORKER_PROVIDER_FOR_WINDOW, GetNextProviderId(),
+          is_parent_frame_secure, std::move(default_loader_factory_getter)));
     } else {
       CHECK(browser_side_navigation);
       DCHECK(ServiceWorkerUtils::IsBrowserAssignedProviderId(
           service_worker_provider_id));
-      network_provider = std::unique_ptr<ServiceWorkerNetworkProvider>(
-          new ServiceWorkerNetworkProvider(
-              route_id, SERVICE_WORKER_PROVIDER_FOR_WINDOW,
-              service_worker_provider_id, is_parent_frame_secure));
+      network_provider = base::WrapUnique(new ServiceWorkerNetworkProvider(
+          route_id, SERVICE_WORKER_PROVIDER_FOR_WINDOW,
+          service_worker_provider_id, is_parent_frame_secure,
+          std::move(default_loader_factory_getter)));
     }
   } else {
-    network_provider = std::unique_ptr<ServiceWorkerNetworkProvider>(
-        new ServiceWorkerNetworkProvider());
+    network_provider = base::WrapUnique(new ServiceWorkerNetworkProvider());
   }
   return base::MakeUnique<WebServiceWorkerNetworkProviderForFrame>(
       std::move(network_provider));
+}
+
+// static
+std::unique_ptr<ServiceWorkerNetworkProvider>
+ServiceWorkerNetworkProvider::CreateForSharedWorker(int route_id) {
+  // TODO(kinuko): Provide ChildURLLoaderFactoryGetter associated with
+  // the SharedWorker.
+  return base::WrapUnique(new ServiceWorkerNetworkProvider(
+      route_id, SERVICE_WORKER_PROVIDER_FOR_SHARED_WORKER, GetNextProviderId(),
+      true /* is_parent_frame_secure */,
+      nullptr /* default_loader_factory_getter */));
+}
+
+// static
+std::unique_ptr<ServiceWorkerNetworkProvider>
+ServiceWorkerNetworkProvider::CreateForController(
+    mojom::ServiceWorkerProviderInfoForStartWorkerPtr info) {
+  return base::WrapUnique(new ServiceWorkerNetworkProvider(std::move(info)));
 }
 
 // static
@@ -171,63 +226,16 @@ ServiceWorkerNetworkProvider::FromWebServiceWorkerNetworkProvider(
       ->provider();
 }
 
-ServiceWorkerNetworkProvider::ServiceWorkerNetworkProvider(
-    int route_id,
-    ServiceWorkerProviderType provider_type,
-    int browser_provider_id,
-    bool is_parent_frame_secure)
-    : provider_id_(browser_provider_id) {
-  if (provider_id_ == kInvalidServiceWorkerProviderId)
-    return;
-  if (!ChildThreadImpl::current())
-    return;  // May be null in some tests.
-
-  ServiceWorkerProviderHostInfo host_info(provider_id_, route_id, provider_type,
-                                          is_parent_frame_secure);
-  host_info.host_request = mojo::MakeRequest(&provider_host_);
-  mojom::ServiceWorkerProviderAssociatedRequest client_request =
-      mojo::MakeRequest(&host_info.client_ptr_info);
-
-  DCHECK(host_info.host_request.is_pending());
-  DCHECK(host_info.host_request.handle().is_valid());
-  context_ = new ServiceWorkerProviderContext(
-      provider_id_, provider_type, std::move(client_request),
-      ChildThreadImpl::current()->thread_safe_sender());
-
-  ChildThreadImpl::current()->channel()->GetRemoteAssociatedInterface(
-      &dispatcher_host_);
-  dispatcher_host_->OnProviderCreated(std::move(host_info));
-}
-
-ServiceWorkerNetworkProvider::ServiceWorkerNetworkProvider(
-    int route_id,
-    ServiceWorkerProviderType provider_type,
-    bool is_parent_frame_secure)
-    : ServiceWorkerNetworkProvider(route_id,
-                                   provider_type,
-                                   GetNextProviderId(),
-                                   is_parent_frame_secure) {}
-
-ServiceWorkerNetworkProvider::ServiceWorkerNetworkProvider()
-    : provider_id_(kInvalidServiceWorkerProviderId) {}
-
 ServiceWorkerNetworkProvider::~ServiceWorkerNetworkProvider() {
-  if (provider_id_ == kInvalidServiceWorkerProviderId)
-    return;
-  if (!ChildThreadImpl::current())
-    return;  // May be null in some tests.
-  provider_host_.reset();
+  if (context()) {
+    context()->OnNetworkProviderDestroyed();
+  }
 }
 
-void ServiceWorkerNetworkProvider::SetServiceWorkerVersionId(
-    int64_t version_id,
-    int embedded_worker_id) {
-  DCHECK_NE(kInvalidServiceWorkerProviderId, provider_id_);
-  if (!ChildThreadImpl::current())
-    return;  // May be null in some tests.
-  dispatcher_host_->OnSetHostedVersionId(
-      provider_id(), version_id, embedded_worker_id,
-      mojo::MakeRequest(&script_loader_factory_));
+int ServiceWorkerNetworkProvider::provider_id() const {
+  if (!context())
+    return kInvalidServiceWorkerProviderId;
+  return context()->provider_id();
 }
 
 bool ServiceWorkerNetworkProvider::IsControlledByServiceWorker() const {
@@ -237,6 +245,87 @@ bool ServiceWorkerNetworkProvider::IsControlledByServiceWorker() const {
     return false;
   }
   return context() && context()->controller();
+}
+
+// Creates an invalid instance (provider_id() returns
+// kInvalidServiceWorkerProviderId).
+ServiceWorkerNetworkProvider::ServiceWorkerNetworkProvider() {}
+
+// Constructor for service worker clients.
+ServiceWorkerNetworkProvider::ServiceWorkerNetworkProvider(
+    int route_id,
+    ServiceWorkerProviderType provider_type,
+    int browser_provider_id,
+    bool is_parent_frame_secure,
+    scoped_refptr<ChildURLLoaderFactoryGetter> default_loader_factory_getter) {
+  if (browser_provider_id == kInvalidServiceWorkerProviderId)
+    return;
+
+  // We don't support dedicated worker (WORKER) as an independent service
+  // worker client yet.
+  DCHECK(provider_type == SERVICE_WORKER_PROVIDER_FOR_WINDOW ||
+         provider_type == SERVICE_WORKER_PROVIDER_FOR_SHARED_WORKER);
+
+  ServiceWorkerProviderHostInfo host_info(
+      browser_provider_id, route_id, provider_type, is_parent_frame_secure);
+  mojom::ServiceWorkerContainerAssociatedRequest client_request =
+      mojo::MakeRequest(&host_info.client_ptr_info);
+  mojom::ServiceWorkerContainerHostAssociatedPtrInfo host_ptr_info;
+  host_info.host_request = mojo::MakeRequest(&host_ptr_info);
+  DCHECK(host_info.host_request.is_pending());
+  DCHECK(host_info.host_request.handle().is_valid());
+
+  // current() may be null in tests.
+  if (ChildThreadImpl::current()) {
+    ServiceWorkerDispatcher* dispatcher =
+        ServiceWorkerDispatcher::GetOrCreateThreadSpecificInstance(
+            ChildThreadImpl::current()->thread_safe_sender(),
+            base::ThreadTaskRunnerHandle::Get().get());
+    context_ = base::MakeRefCounted<ServiceWorkerProviderContext>(
+        browser_provider_id, provider_type, std::move(client_request),
+        std::move(host_ptr_info), dispatcher, default_loader_factory_getter);
+    ChildThreadImpl::current()->channel()->GetRemoteAssociatedInterface(
+        &dispatcher_host_);
+    dispatcher_host_->OnProviderCreated(std::move(host_info));
+  } else {
+    context_ = base::MakeRefCounted<ServiceWorkerProviderContext>(
+        browser_provider_id, provider_type, std::move(client_request),
+        std::move(host_ptr_info), nullptr /* dispatcher */,
+        default_loader_factory_getter);
+  }
+}
+
+// Constructor for service worker execution contexts.
+ServiceWorkerNetworkProvider::ServiceWorkerNetworkProvider(
+    mojom::ServiceWorkerProviderInfoForStartWorkerPtr info) {
+  // Initialize the provider context with info for
+  // ServiceWorkerGlobalScope#registration.
+  ThreadSafeSender* sender = ChildThreadImpl::current()->thread_safe_sender();
+  ServiceWorkerDispatcher* dispatcher =
+      ServiceWorkerDispatcher::GetOrCreateThreadSpecificInstance(
+          sender, base::ThreadTaskRunnerHandle::Get().get());
+  // TODO(kinuko): Split ServiceWorkerProviderContext ctor for
+  // controller and controllee.
+  context_ = base::MakeRefCounted<ServiceWorkerProviderContext>(
+      info->provider_id, SERVICE_WORKER_PROVIDER_FOR_CONTROLLER,
+      std::move(info->client_request), std::move(info->host_ptr_info),
+      dispatcher, nullptr /* loader_factory_getter */);
+  std::unique_ptr<ServiceWorkerRegistrationHandleReference> registration =
+      ServiceWorkerRegistrationHandleReference::Adopt(info->registration,
+                                                      sender);
+  std::unique_ptr<ServiceWorkerHandleReference> installing =
+      ServiceWorkerHandleReference::Adopt(info->attributes.installing, sender);
+  std::unique_ptr<ServiceWorkerHandleReference> waiting =
+      ServiceWorkerHandleReference::Adopt(info->attributes.waiting, sender);
+  std::unique_ptr<ServiceWorkerHandleReference> active =
+      ServiceWorkerHandleReference::Adopt(info->attributes.active, sender);
+  context_->SetRegistration(std::move(registration), std::move(installing),
+                            std::move(waiting), std::move(active));
+
+  if (info->script_loader_factory_ptr_info.is_valid()) {
+    script_loader_factory_.Bind(
+        std::move(info->script_loader_factory_ptr_info));
+  }
 }
 
 }  // namespace content

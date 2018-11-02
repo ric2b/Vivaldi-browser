@@ -151,9 +151,15 @@ void AppendDeviceState(
   if (device && state == private_api::DEVICE_STATE_TYPE_ENABLED)
     properties->scanning.reset(new bool(device->scanning()));
   if (device && type == ::onc::network_config::kCellular) {
-    properties->sim_present.reset(new bool(!device->IsSimAbsent()));
-    if (!device->sim_lock_type().empty())
-      properties->sim_lock_type.reset(new std::string(device->sim_lock_type()));
+    bool sim_present = !device->IsSimAbsent();
+    properties->sim_present = std::make_unique<bool>(sim_present);
+    if (sim_present) {
+      auto sim_lock_status = base::MakeUnique<private_api::SIMLockStatus>();
+      sim_lock_status->lock_enabled = device->sim_lock_enabled();
+      sim_lock_status->lock_type = device->sim_lock_type();
+      sim_lock_status->retries_left.reset(new int(device->sim_retries_left()));
+      properties->sim_lock_status = std::move(sim_lock_status);
+    }
   }
   device_state_list->push_back(std::move(properties));
 }
@@ -163,24 +169,6 @@ void NetworkHandlerFailureCallback(
     const std::string& error_name,
     std::unique_ptr<base::DictionaryValue> error_data) {
   callback.Run(error_name);
-}
-
-void RequirePinSuccess(
-    const std::string& device_path,
-    const std::string& current_pin,
-    const std::string& new_pin,
-    const extensions::NetworkingPrivateChromeOS::VoidCallback& success_callback,
-    const extensions::NetworkingPrivateChromeOS::FailureCallback&
-        failure_callback) {
-  // After RequirePin succeeds, call ChangePIN iff a different new_pin is
-  // provided.
-  if (new_pin.empty() || new_pin == current_pin) {
-    success_callback.Run();
-    return;
-  }
-  NetworkHandler::Get()->network_device_handler()->ChangePin(
-      device_path, current_pin, new_pin, success_callback,
-      base::Bind(&NetworkHandlerFailureCallback, failure_callback));
 }
 
 // Returns the string corresponding to |key|. If the property is a managed
@@ -239,7 +227,7 @@ base::DictionaryValue* EnsureDictionaryValue(const std::string& key,
   base::DictionaryValue* dict;
   if (!container->GetDictionary(key, &dict)) {
     container->SetWithoutPathExpansion(
-        key, base::MakeUnique<base::DictionaryValue>());
+        key, std::make_unique<base::DictionaryValue>());
     container->GetDictionary(key, &dict);
   }
   return dict;
@@ -255,10 +243,10 @@ void SetProxyEffectiveValue(base::DictionaryValue* dict,
   // differentiate between policy types. TODO(stevenjb): Eliminate UIProxyConfig
   // and instead generate a proper ONC dictionary with the correct policy source
   // preserved. crbug.com/662529.
-  dict->SetStringWithoutPathExpansion(::onc::kAugmentationEffectiveSetting,
-                                      state == ProxyPrefs::CONFIG_EXTENSION
-                                          ? ::onc::kAugmentationActiveExtension
-                                          : ::onc::kAugmentationUserPolicy);
+  dict->SetKey(::onc::kAugmentationEffectiveSetting,
+               base::Value(state == ProxyPrefs::CONFIG_EXTENSION
+                               ? ::onc::kAugmentationActiveExtension
+                               : ::onc::kAugmentationUserPolicy));
   if (state != ProxyPrefs::CONFIG_EXTENSION) {
     std::unique_ptr<base::Value> value_copy(value->CreateDeepCopy());
     dict->SetWithoutPathExpansion(::onc::kAugmentationUserPolicy,
@@ -266,7 +254,7 @@ void SetProxyEffectiveValue(base::DictionaryValue* dict,
   }
   dict->SetWithoutPathExpansion(::onc::kAugmentationActiveSetting,
                                 std::move(value));
-  dict->SetBooleanWithoutPathExpansion(::onc::kAugmentationUserEditable, false);
+  dict->SetKey(::onc::kAugmentationUserEditable, base::Value(false));
 }
 
 std::string GetProxySettingsType(const UIProxyConfig::Mode& mode) {
@@ -294,11 +282,11 @@ void SetManualProxy(base::DictionaryValue* manual,
       EnsureDictionaryValue(::onc::proxy::kHost, dict);
   SetProxyEffectiveValue(
       host_dict, state,
-      base::MakeUnique<base::Value>(proxy.server.host_port_pair().host()));
+      std::make_unique<base::Value>(proxy.server.host_port_pair().host()));
   uint16_t port = proxy.server.host_port_pair().port();
   base::DictionaryValue* port_dict =
       EnsureDictionaryValue(::onc::proxy::kPort, dict);
-  SetProxyEffectiveValue(port_dict, state, base::MakeUnique<base::Value>(port));
+  SetProxyEffectiveValue(port_dict, state, std::make_unique<base::Value>(port));
 }
 
 private_api::Certificate GetCertDictionary(
@@ -309,9 +297,9 @@ private_api::Certificate GetCertDictionary(
   api_cert.issued_to = cert.issued_to;
   api_cert.hardware_backed = cert.hardware_backed;
   if (!cert.pem.empty())
-    api_cert.pem = base::MakeUnique<std::string>(cert.pem);
+    api_cert.pem = std::make_unique<std::string>(cert.pem);
   if (!cert.pkcs11_id.empty())
-    api_cert.pkcs11_id = base::MakeUnique<std::string>(cert.pkcs11_id);
+    api_cert.pkcs11_id = std::make_unique<std::string>(cert.pkcs11_id);
   return api_cert;
 }
 
@@ -696,12 +684,29 @@ void NetworkingPrivateChromeOS::SetCellularSimState(
     return;
   }
 
-  // Only set a new pin if require_pin is true.
-  std::string set_new_pin = require_pin ? new_pin : "";
-  NetworkHandler::Get()->network_device_handler()->RequirePin(
-      device_state->path(), require_pin, current_pin,
-      base::Bind(&RequirePinSuccess, device_state->path(), current_pin,
-                 set_new_pin, success_callback, failure_callback),
+  // TODO(benchan): Add more checks to validate the parameters of this method
+  // and the state of the SIM lock on the cellular device. Consider refactoring
+  // some of the code by moving the logic into shill instead.
+
+  // If |new_pin| is empty, we're trying to enable (require_pin == true) or
+  // disable (require_pin == false) SIM locking.
+  if (new_pin.empty()) {
+    NetworkHandler::Get()->network_device_handler()->RequirePin(
+        device_state->path(), require_pin, current_pin, success_callback,
+        base::Bind(&NetworkHandlerFailureCallback, failure_callback));
+    return;
+  }
+
+  // Otherwise, we're trying to change the PIN from |current_pin| to
+  // |new_pin|, which also requires SIM locking to be enabled, i.e.
+  // require_pin == true.
+  if (!require_pin) {
+    failure_callback.Run(networking_private::kErrorInvalidArguments);
+    return;
+  }
+
+  NetworkHandler::Get()->network_device_handler()->ChangePin(
+      device_state->path(), current_pin, new_pin, success_callback,
       base::Bind(&NetworkHandlerFailureCallback, failure_callback));
 }
 
@@ -753,7 +758,7 @@ NetworkingPrivateChromeOS::GetDeviceStateList() {
 
 std::unique_ptr<base::DictionaryValue>
 NetworkingPrivateChromeOS::GetGlobalPolicy() {
-  auto result = base::MakeUnique<base::DictionaryValue>();
+  auto result = std::make_unique<base::DictionaryValue>();
   const base::DictionaryValue* global_network_config =
       GetManagedConfigurationHandler()->GetGlobalConfigFromPolicy(
           std::string() /* no username hash, device policy */);
@@ -836,8 +841,8 @@ void NetworkingPrivateChromeOS::AppendThirdPartyProviderName(
     if (extension->permissions_data()->HasAPIPermission(
             APIPermission::kVpnProvider) &&
         extension->id() == extension_id) {
-      third_party_vpn->SetStringWithoutPathExpansion(
-          ::onc::third_party_vpn::kProviderName, extension->name());
+      third_party_vpn->SetKey(::onc::third_party_vpn::kProviderName,
+                              base::Value(extension->name()));
       break;
     }
   }

@@ -218,7 +218,8 @@ void DecoderStream<StreamType>::Reset(const base::Closure& closure) {
 template <DemuxerStream::Type StreamType>
 bool DecoderStream<StreamType>::CanReadWithoutStalling() const {
   DCHECK(task_runner_->BelongsToCurrentThread());
-  return !ready_outputs_.empty() || decoder_->CanReadWithoutStalling();
+  return !ready_outputs_.empty() ||
+         (decoder_ && decoder_->CanReadWithoutStalling());
 }
 
 template <>
@@ -619,12 +620,23 @@ void DecoderStream<StreamType>::OnBufferReady(
         pending_buffers_.clear();
         break;
       case DemuxerStream::kAborted:
-        // |this| will read from the demuxer stream again in OnDecoderSelected()
-        // and receive a kAborted then.
+      case DemuxerStream::kError:
+        // Will read from the demuxer stream again in OnDecoderSelected().
         pending_buffers_.clear();
         break;
     }
     return;
+  }
+
+  if (status == DemuxerStream::kError) {
+    FUNCTION_DVLOG(1) << ": Demuxer stream read error!";
+    state_ = STATE_ERROR;
+    MEDIA_LOG(ERROR, media_log_)
+        << GetStreamTypeString() << " demuxer stream read error!";
+    pending_buffers_.clear();
+    ready_outputs_.clear();
+    if (!read_cb_.is_null())
+      SatisfyRead(DECODE_ERROR, nullptr);
   }
 
   // Decoding has been stopped.
@@ -666,8 +678,11 @@ void DecoderStream<StreamType>::OnBufferReady(
     //   lost frames if we were to fallback then).
     pending_buffers_.clear();
 
+    const DecoderConfig& config = StreamTraits::GetDecoderConfig(stream_);
+    traits_.OnConfigChanged(config);
+
     if (!config_change_observer_cb_.is_null())
-      config_change_observer_cb_.Run(StreamTraits::GetDecoderConfig(stream_));
+      config_change_observer_cb_.Run(config);
 
     state_ = STATE_FLUSHING_DECODER;
     if (!reset_cb_.is_null()) {
@@ -766,6 +781,14 @@ void DecoderStream<StreamType>::CompleteDecoderReinitialization(bool success) {
     SatisfyRead(DECODE_ERROR, NULL);
     return;
   }
+
+  // Re-enable fallback to software after reinitialization. This is the last
+  // place we can clear that state, and as such is the least likely to interfere
+  // with the rest of the fallback algorithm.
+  // TODO(tguilbert): investigate setting this flag at an earlier time. This
+  // could fix the hypothetical edge case of receiving a decode error when
+  // flushing the decoder during a seek operation.
+  decoder_produced_a_frame_ = false;
 
   ReadFromDemuxerStream();
 }

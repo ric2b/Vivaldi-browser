@@ -7,7 +7,6 @@
 #include "ash/shell.h"
 #include "ash/system/cast/tray_cast_test_api.h"
 #include "ash/system/tray/system_tray.h"
-#include "ash/system/tray/system_tray_delegate.h"
 #include "ash/system/tray/system_tray_test_api.h"
 #include "base/macros.h"
 #include "chrome/browser/media/router/media_routes_observer.h"
@@ -44,7 +43,8 @@ ash::TrayCast* GetTrayCast() {
 
   // Make sure we actually popup the tray, otherwise the TrayCast instance will
   // not be created.
-  tray->ShowDefaultView(ash::BubbleCreationType::BUBBLE_CREATE_NEW);
+  tray->ShowDefaultView(ash::BubbleCreationType::BUBBLE_CREATE_NEW,
+                        false /* show_by_click */);
 
   return ash::SystemTrayTestApi(tray).tray_cast();
 }

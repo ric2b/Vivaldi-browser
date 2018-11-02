@@ -36,7 +36,7 @@ struct DidOverscrollParams;
 
 namespace content {
 
-class InputAckHandler;
+class InputDispositionHandler;
 class InputRouterClient;
 struct InputEventAck;
 
@@ -45,15 +45,15 @@ struct InputEventAck;
 // Chrome IPC which is deprecated. This class will be replaced with a Mojo
 // backed transport. See crbug.com/722928.
 class CONTENT_EXPORT LegacyInputRouterImpl
-    : public NON_EXPORTED_BASE(InputRouter),
-      public NON_EXPORTED_BASE(GestureEventQueueClient),
-      public NON_EXPORTED_BASE(MouseWheelEventQueueClient),
-      public NON_EXPORTED_BASE(TouchEventQueueClient),
-      public NON_EXPORTED_BASE(TouchpadTapSuppressionControllerClient) {
+    : public InputRouter,
+      public GestureEventQueueClient,
+      public MouseWheelEventQueueClient,
+      public TouchEventQueueClient,
+      public TouchpadTapSuppressionControllerClient {
  public:
   LegacyInputRouterImpl(IPC::Sender* sender,
                         InputRouterClient* client,
-                        InputAckHandler* ack_handler,
+                        InputDispositionHandler* disposition_handler,
                         int routing_id,
                         const Config& config);
   ~LegacyInputRouterImpl() override;
@@ -69,7 +69,6 @@ class CONTENT_EXPORT LegacyInputRouterImpl
   void SendGestureEvent(
       const GestureEventWithLatencyInfo& gesture_event) override;
   void SendTouchEvent(const TouchEventWithLatencyInfo& touch_event) override;
-  const NativeWebKeyboardEvent* GetLastKeyboardEvent() const override;
   void NotifySiteIsMobileOptimized(bool is_mobile_optimized) override;
   bool HasPendingEvents() const override;
   void SetDeviceScaleFactor(float device_scale_factor) override;
@@ -80,6 +79,8 @@ class CONTENT_EXPORT LegacyInputRouterImpl
   void SetFrameTreeNodeId(int frameTreeNodeId) override;
 
   cc::TouchAction AllowedTouchAction() override;
+
+  void SetForceEnableZoom(bool enabled) override;
 
   int routing_id() const { return routing_id_; }
 
@@ -150,7 +151,9 @@ class CONTENT_EXPORT LegacyInputRouterImpl
   void OnSelectMessageAck();
   void OnHasTouchEventHandlers(bool has_handlers);
   void OnSetTouchAction(cc::TouchAction touch_action);
-  void OnSetWhiteListedTouchAction(cc::TouchAction white_listed_touch_action);
+  void OnSetWhiteListedTouchAction(cc::TouchAction white_listed_touch_action,
+                                   uint32_t unique_touch_event_id,
+                                   InputEventAckState ack_result);
   void OnDidStopFlinging();
 
   // Indicates the source of an ack provided to |ProcessInputEventAck()|.
@@ -200,7 +203,7 @@ class CONTENT_EXPORT LegacyInputRouterImpl
 
   IPC::Sender* sender_;
   InputRouterClient* client_;
-  InputAckHandler* ack_handler_;
+  InputDispositionHandler* disposition_handler_;
   int routing_id_;
   int frame_tree_node_id_;
 

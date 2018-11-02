@@ -7,6 +7,7 @@
 #include "base/barrier_closure.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/ptr_util.h"
+#include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/sequenced_worker_pool_owner.h"
 #include "components/prefs/in_memory_pref_store.h"
@@ -393,7 +394,7 @@ TEST_F(PrefServiceFactoryTest, MultipleClients_SubPrefUpdates_Basic) {
         EXPECT_EQ(1, out);
       },
       [](ScopedDictionaryPrefUpdate* update) {
-        (*update)->SetIntegerWithoutPathExpansion("key.for.integer", 2);
+        (*update)->SetKey("key.for.integer", base::Value(2));
         int out = 0;
         ASSERT_TRUE(
             (*update)->GetIntegerWithoutPathExpansion("key.for.integer", &out));
@@ -406,7 +407,7 @@ TEST_F(PrefServiceFactoryTest, MultipleClients_SubPrefUpdates_Basic) {
         EXPECT_EQ(3, out);
       },
       [](ScopedDictionaryPrefUpdate* update) {
-        (*update)->SetDoubleWithoutPathExpansion("key.for.double", 4);
+        (*update)->SetKey("key.for.double", base::Value(4.0));
         double out = 0;
         ASSERT_TRUE(
             (*update)->GetDoubleWithoutPathExpansion("key.for.double", &out));
@@ -419,7 +420,7 @@ TEST_F(PrefServiceFactoryTest, MultipleClients_SubPrefUpdates_Basic) {
         EXPECT_TRUE(out);
       },
       [](ScopedDictionaryPrefUpdate* update) {
-        (*update)->SetBooleanWithoutPathExpansion("key.for.boolean", false);
+        (*update)->SetKey("key.for.boolean", base::Value(false));
         bool out = 0;
         ASSERT_TRUE(
             (*update)->GetBooleanWithoutPathExpansion("key.for.boolean", &out));
@@ -432,7 +433,7 @@ TEST_F(PrefServiceFactoryTest, MultipleClients_SubPrefUpdates_Basic) {
         EXPECT_EQ("hello", out);
       },
       [](ScopedDictionaryPrefUpdate* update) {
-        (*update)->SetStringWithoutPathExpansion("key.for.string", "prefs!");
+        (*update)->SetKey("key.for.string", base::Value("prefs!"));
         std::string out;
         ASSERT_TRUE(
             (*update)->GetStringWithoutPathExpansion("key.for.string", &out));
@@ -445,8 +446,8 @@ TEST_F(PrefServiceFactoryTest, MultipleClients_SubPrefUpdates_Basic) {
         EXPECT_EQ(base::ASCIIToUTF16("hello"), out);
       },
       [](ScopedDictionaryPrefUpdate* update) {
-        (*update)->SetStringWithoutPathExpansion("key.for.string16",
-                                                 base::ASCIIToUTF16("prefs!"));
+        (*update)->SetKey("key.for.string16",
+                          base::Value(base::ASCIIToUTF16("prefs!")));
         base::string16 out;
         ASSERT_TRUE(
             (*update)->GetStringWithoutPathExpansion("key.for.string16", &out));
@@ -503,7 +504,7 @@ TEST_F(PrefServiceFactoryTest, MultipleClients_SubPrefUpdates_Basic) {
   };
   int current_value = kInitialValue + 1;
   for (auto& mutation : updates) {
-    base::DictionaryValue expected_value;
+    base::Value expected_value;
     {
       ScopedDictionaryPrefUpdate update(pref_service.get(), kDictionaryKey);
       EXPECT_EQ(update->AsConstDictionary()->empty(), update->empty());
@@ -511,7 +512,7 @@ TEST_F(PrefServiceFactoryTest, MultipleClients_SubPrefUpdates_Basic) {
       mutation(&update);
       EXPECT_EQ(update->AsConstDictionary()->empty(), update->empty());
       EXPECT_EQ(update->AsConstDictionary()->size(), update->size());
-      expected_value = *update->AsConstDictionary();
+      expected_value = update->AsConstDictionary()->Clone();
     }
 
     EXPECT_EQ(expected_value, *pref_service->GetDictionary(kDictionaryKey));

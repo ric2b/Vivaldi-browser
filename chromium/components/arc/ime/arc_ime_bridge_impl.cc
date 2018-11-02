@@ -59,14 +59,14 @@ ui::TextInputType ConvertTextInputType(mojom::TextInputType ipc_type) {
 std::vector<mojom::CompositionSegmentPtr> ConvertSegments(
     const ui::CompositionText& composition) {
   std::vector<mojom::CompositionSegmentPtr> segments;
-  for (const ui::CompositionUnderline& underline : composition.underlines) {
+  for (const ui::ImeTextSpan& ime_text_span : composition.ime_text_spans) {
     mojom::CompositionSegmentPtr segment = mojom::CompositionSegment::New();
-    segment->start_offset = underline.start_offset;
-    segment->end_offset = underline.end_offset;
+    segment->start_offset = ime_text_span.start_offset;
+    segment->end_offset = ime_text_span.end_offset;
     segment->emphasized =
-        (underline.thick ||
-         (composition.selection.start() == underline.start_offset &&
-          composition.selection.end() == underline.end_offset));
+        (ime_text_span.thick ||
+         (composition.selection.start() == ime_text_span.start_offset &&
+          composition.selection.end() == ime_text_span.end_offset));
     segments.push_back(std::move(segment));
   }
   return segments;
@@ -81,12 +81,7 @@ ArcImeBridgeImpl::ArcImeBridgeImpl(Delegate* delegate,
 }
 
 ArcImeBridgeImpl::~ArcImeBridgeImpl() {
-  // TODO(hidehiko): Currently, the lifetime of ArcBridgeService and
-  // BrowserContextKeyedService is not nested.
-  // If ArcServiceManager::Get() returns nullptr, it is already destructed,
-  // so do not touch it.
-  if (ArcServiceManager::Get())
-    bridge_service_->ime()->RemoveObserver(this);
+  bridge_service_->ime()->RemoveObserver(this);
 }
 
 void ArcImeBridgeImpl::OnInstanceReady() {

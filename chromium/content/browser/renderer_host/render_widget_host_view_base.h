@@ -18,7 +18,6 @@
 #include "base/process/kill.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
-#include "cc/ipc/compositor_frame_sink.mojom.h"
 #include "cc/output/compositor_frame.h"
 #include "components/viz/common/surfaces/surface_id.h"
 #include "content/browser/renderer_host/event_with_latency_info.h"
@@ -27,6 +26,7 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/common/screen_info.h"
 #include "ipc/ipc_listener.h"
+#include "services/viz/public/interfaces/compositing/compositor_frame_sink.mojom.h"
 #include "third_party/WebKit/public/platform/modules/screen_orientation/WebScreenOrientationType.h"
 #include "third_party/WebKit/public/web/WebPopupType.h"
 #include "third_party/WebKit/public/web/WebTextDirection.h"
@@ -57,16 +57,13 @@ class WebMouseEvent;
 class WebMouseWheelEvent;
 }
 
-namespace cc {
-class SurfaceHittestDelegate;
-}
-
 namespace ui {
 class LatencyInfo;
 struct DidOverscrollParams;
 }
 
 namespace viz {
+class SurfaceHittestDelegate;
 class SurfaceInfo;
 }
 
@@ -232,14 +229,15 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // expected not to return resources belonging to the old
   // RendererCompositorFrameSink after this method finishes.
   virtual void DidCreateNewRendererCompositorFrameSink(
-      cc::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink) = 0;
+      viz::mojom::CompositorFrameSinkClient*
+          renderer_compositor_frame_sink) = 0;
 
   virtual void SubmitCompositorFrame(
       const viz::LocalSurfaceId& local_surface_id,
       cc::CompositorFrame frame) = 0;
 
-  virtual void OnDidNotProduceFrame(const cc::BeginFrameAck& ack) {}
-  virtual void OnSurfaceChanged(const viz::SurfaceInfo& surface_info) {}
+  virtual void OnDidNotProduceFrame(const viz::BeginFrameAck& ack) {}
+  virtual void OnFirstSurfaceActivation(const viz::SurfaceInfo& surface_info) {}
 
   // This method exists to allow removing of displayed graphics, after a new
   // page has been loaded, to prevent the displayed URL from being out of sync
@@ -259,8 +257,11 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   virtual void DidStopFlinging() {}
 
   // Returns the ID associated with the CompositorFrameSink of this view.
+  // TODO(fsamuel): Return by const ref.
   virtual viz::FrameSinkId GetFrameSinkId();
 
+  // Returns the LocalSurfaceId allocated by the parent client for this view.
+  // TODO(fsamuel): Return by const ref.
   virtual viz::LocalSurfaceId GetLocalSurfaceId() const;
 
   // When there are multiple RenderWidgetHostViews for a single page, input
@@ -269,7 +270,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // properly handle the event (i.e. it has focus for keyboard events, or has
   // been identified by hit testing mouse, touch or gesture events).
   virtual viz::FrameSinkId FrameSinkIdAtPoint(
-      cc::SurfaceHittestDelegate* delegate,
+      viz::SurfaceHittestDelegate* delegate,
       const gfx::Point& point,
       gfx::Point* transformed_point);
   virtual void ProcessKeyboardEvent(const NativeWebKeyboardEvent& event,

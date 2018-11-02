@@ -37,7 +37,7 @@ TEST(ContentSuggestionsItemTest, CellIsConfiguredWithoutImage) {
   item.hasImage = YES;
   item.publisher = publisher;
   item.publishDate = publishTime;
-  item.availableOffline = YES;
+  item.readLaterAction = YES;
   OCMExpect([delegateMock loadImageForSuggestedItem:item]);
   ContentSuggestionsCell* cell = [[[item cellClass] alloc] init];
   ASSERT_EQ([ContentSuggestionsCell class], [cell class]);
@@ -45,9 +45,8 @@ TEST(ContentSuggestionsItemTest, CellIsConfiguredWithoutImage) {
   ASSERT_EQ(nil, item.image);
   id cellMock = OCMPartialMock(cell);
   OCMExpect([cellMock setContentImage:item.image animated:NO]);
-  OCMExpect([cellMock setAdditionalInformationWithPublisherName:publisher
-                                                           date:date
-                                            offlineAvailability:YES]);
+  OCMExpect(
+      [cellMock setAdditionalInformationWithPublisherName:publisher date:date]);
 
   // Action.
   [item configureCell:cell];
@@ -56,6 +55,7 @@ TEST(ContentSuggestionsItemTest, CellIsConfiguredWithoutImage) {
   EXPECT_OCMOCK_VERIFY(cellMock);
   EXPECT_EQ(title, cell.titleLabel.text);
   EXPECT_OCMOCK_VERIFY(delegateMock);
+  EXPECT_EQ(4U, [cell.accessibilityCustomActions count]);
 }
 
 // Tests that configureCell: does not call the delegate if it fetched the image
@@ -141,4 +141,24 @@ TEST(ContentSuggestionsItemTest, ImageAnimatedOnlyTheFirstTime) {
   EXPECT_OCMOCK_VERIFY(cell1);
   EXPECT_OCMOCK_VERIFY(cell2);
 }
+
+// Tests the custom actions when there is no read later actions.
+TEST(ContentSuggestionsItemTest, NoReadLaterAction) {
+  // Setup.
+  NSString* title = @"testTitle";
+  GURL url = GURL("http://chromium.org");
+  ContentSuggestionsItem* item =
+      [[ContentSuggestionsItem alloc] initWithType:0 title:title url:url];
+  item.readLaterAction = NO;
+  item.image = [[UIImage alloc] init];
+
+  ContentSuggestionsCell* cell = [[[item cellClass] alloc] init];
+
+  // Action.
+  [item configureCell:cell];
+
+  // Tests.
+  EXPECT_EQ(3U, [cell.accessibilityCustomActions count]);
+}
+
 }  // namespace

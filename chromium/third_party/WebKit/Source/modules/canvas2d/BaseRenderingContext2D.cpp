@@ -37,11 +37,17 @@
 
 namespace blink {
 
+const char BaseRenderingContext2D::kDefaultFont[] = "10px sans-serif";
+const char BaseRenderingContext2D::kInheritDirectionString[] = "inherit";
+const char BaseRenderingContext2D::kRtlDirectionString[] = "rtl";
+const char BaseRenderingContext2D::kLtrDirectionString[] = "ltr";
+const double BaseRenderingContext2D::kCDeviceScaleFactor = 1.0;
+
 BaseRenderingContext2D::BaseRenderingContext2D()
-    : clip_antialiasing_(kNotAntiAliased), color_management_enabled_(false) {
+    : clip_antialiasing_(kNotAntiAliased),
+      color_management_enabled_(
+          RuntimeEnabledFeatures::ColorCorrectRenderingEnabled()) {
   state_stack_.push_back(CanvasRenderingContext2DState::Create());
-  color_management_enabled_ =
-      RuntimeEnabledFeatures::ColorCanvasExtensionsEnabled();
 }
 
 BaseRenderingContext2D::~BaseRenderingContext2D() {}
@@ -1223,9 +1229,10 @@ void BaseRenderingContext2D::drawImage(ScriptState* script_state,
   FloatSize default_object_size(Width(), Height());
   SourceImageStatus source_image_status = kInvalidSourceImageStatus;
   if (!image_source->IsVideoElement()) {
-    AccelerationHint hint = GetImageBuffer()->IsAccelerated()
-                                ? kPreferAcceleration
-                                : kPreferNoAcceleration;
+    AccelerationHint hint =
+        (GetImageBuffer() && GetImageBuffer()->IsAccelerated())
+            ? kPreferAcceleration
+            : kPreferNoAcceleration;
     image = image_source->GetSourceImageForCanvas(&source_image_status, hint,
                                                   kSnapshotReasonDrawImage,
                                                   default_object_size);
@@ -1644,22 +1651,23 @@ ImageData* BaseRenderingContext2D::getImageData(
 
   NeedsFinalizeFrame();
 
-  if (!color_management_enabled_) {
-    DOMArrayBuffer* array_buffer = DOMArrayBuffer::Create(contents);
-    return ImageData::Create(
-        image_data_rect.Size(),
-        NotShared<DOMUint8ClampedArray>(DOMUint8ClampedArray::Create(
-            array_buffer, 0, array_buffer->ByteLength())));
+  // Convert pixels to proper storage format if needed
+  if (color_management_enabled_ && PixelFormat() != kRGBA8CanvasPixelFormat) {
+    ImageDataStorageFormat storage_format =
+        ImageData::GetImageDataStorageFormat(color_settings.storageFormat());
+    DOMArrayBufferView* array_buffer_view =
+        ImageData::ConvertPixelsFromCanvasPixelFormatToImageDataStorageFormat(
+            contents, PixelFormat(), storage_format);
+    return ImageData::Create(image_data_rect.Size(),
+                             NotShared<DOMArrayBufferView>(array_buffer_view),
+                             &color_settings);
   }
-
-  ImageDataStorageFormat storage_format =
-      ImageData::GetImageDataStorageFormat(color_settings.storageFormat());
-  DOMArrayBufferView* array_buffer_view =
-      ImageData::ConvertPixelsFromCanvasPixelFormatToImageDataStorageFormat(
-          contents, PixelFormat(), storage_format);
-  return ImageData::Create(image_data_rect.Size(),
-                           NotShared<DOMArrayBufferView>(array_buffer_view),
-                           &color_settings);
+  DOMArrayBuffer* array_buffer = DOMArrayBuffer::Create(contents);
+  return ImageData::Create(
+      image_data_rect.Size(),
+      NotShared<DOMUint8ClampedArray>(DOMUint8ClampedArray::Create(
+          array_buffer, 0, array_buffer->ByteLength())),
+      &color_settings);
 }
 
 void BaseRenderingContext2D::putImageData(ImageData* data,
@@ -1736,7 +1744,12 @@ void BaseRenderingContext2D::putImageData(ImageData* data,
   CheckOverdraw(dest_rect, 0, CanvasRenderingContext2DState::kNoImage,
                 kUntransformedUnclippedFill);
 
-  if (color_management_enabled_) {
+  // Color / format convert ImageData to canvas settings if needed
+  CanvasColorParams data_color_params = data->GetCanvasColorParams();
+  if (color_management_enabled_ &&
+      (ColorSpace() != data_color_params.color_space() ||
+       PixelFormat() != data_color_params.pixel_format() ||
+       PixelFormat() == kF16CanvasPixelFormat)) {
     unsigned data_length = data->width() * data->height() * 4;
     if (PixelFormat() == kF16CanvasPixelFormat)
       data_length *= 2;
@@ -1853,6 +1866,69 @@ void BaseRenderingContext2D::CheckOverdraw(
   }
 
   GetImageBuffer()->WillOverwriteCanvas();
+}
+
+float BaseRenderingContext2D::GetFontBaseline(
+    const FontMetrics& font_metrics) const {
+  // If the font is so tiny that the lroundf operations result in two
+  // different types of text baselines to return the same baseline, use
+  // floating point metrics (crbug.com/338908).
+  // If you changed the heuristic here, for consistency please also change it
+  // in SimpleFontData::platformInit().
+  bool use_float_ascent_descent =
+      font_metrics.Ascent() < 3 || font_metrics.Height() < 2;
+  switch (GetState().GetTextBaseline()) {
+    case kTopTextBaseline:
+      return use_float_ascent_descent ? font_metrics.FloatAscent()
+                                      : font_metrics.Ascent();
+    case kHangingTextBaseline:
+      // According to
+      // http://wiki.apache.org/xmlgraphics-fop/LineLayout/AlignmentHandling
+      // "FOP (Formatting Objects Processor) puts the hanging baseline at 80% of
+      // the ascender height"
+      return use_float_ascent_descent ? (font_metrics.FloatAscent() * 4.0) / 5.0
+                                      : (font_metrics.Ascent() * 4) / 5;
+    case kBottomTextBaseline:
+    case kIdeographicTextBaseline:
+      return use_float_ascent_descent ? -font_metrics.FloatDescent()
+                                      : -font_metrics.Descent();
+    case kMiddleTextBaseline:
+      return use_float_ascent_descent
+                 ? -font_metrics.FloatDescent() +
+                       font_metrics.FloatHeight() / 2.0
+                 : -font_metrics.Descent() + font_metrics.Height() / 2;
+    case kAlphabeticTextBaseline:
+    default:
+      // Do nothing.
+      break;
+  }
+  return 0;
+}
+
+String BaseRenderingContext2D::textAlign() const {
+  return TextAlignName(GetState().GetTextAlign());
+}
+
+void BaseRenderingContext2D::setTextAlign(const String& s) {
+  TextAlign align;
+  if (!ParseTextAlign(s, align))
+    return;
+  if (GetState().GetTextAlign() == align)
+    return;
+  ModifiableState().SetTextAlign(align);
+}
+
+String BaseRenderingContext2D::textBaseline() const {
+  return TextBaselineName(GetState().GetTextBaseline());
+}
+
+void BaseRenderingContext2D::setTextBaseline(const String& s) {
+  TextBaseline baseline;
+  if (!ParseTextBaseline(s, baseline))
+    return;
+  if (GetState().GetTextBaseline() == baseline)
+    return;
+  ModifiableState().SetTextBaseline(baseline);
 }
 
 const BaseRenderingContext2D::UsageCounters&

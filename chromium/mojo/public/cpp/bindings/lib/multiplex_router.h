@@ -12,6 +12,7 @@
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/containers/queue.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -25,8 +26,6 @@
 #include "mojo/public/cpp/bindings/connector.h"
 #include "mojo/public/cpp/bindings/filter_chain.h"
 #include "mojo/public/cpp/bindings/interface_id.h"
-#include "mojo/public/cpp/bindings/lib/debug_util.h"
-#include "mojo/public/cpp/bindings/lib/deque.h"
 #include "mojo/public/cpp/bindings/message_header_validator.h"
 #include "mojo/public/cpp/bindings/pipe_control_message_handler.h"
 #include "mojo/public/cpp/bindings/pipe_control_message_handler_delegate.h"
@@ -54,10 +53,9 @@ namespace internal {
 // NOTE: CloseMessagePipe() or PassMessagePipe() MUST be called on |runner|'s
 // sequence before this object is destroyed.
 class MOJO_CPP_BINDINGS_EXPORT MultiplexRouter
-    : NON_EXPORTED_BASE(public MessageReceiver),
+    : public MessageReceiver,
       public AssociatedGroupController,
-      NON_EXPORTED_BASE(public PipeControlMessageHandlerDelegate),
-      NON_EXPORTED_BASE(private LifeTimeTrackerForDebugging) {
+      public PipeControlMessageHandlerDelegate {
  public:
   enum Config {
     // There is only the master interface running on this router. Please note
@@ -79,6 +77,10 @@ class MOJO_CPP_BINDINGS_EXPORT MultiplexRouter
                   Config config,
                   bool set_interface_id_namespace_bit,
                   scoped_refptr<base::SequencedTaskRunner> runner);
+
+  // Adds a MessageReceiver which can filter a message after validation but
+  // before dispatch.
+  void AddIncomingMessageFilter(std::unique_ptr<MessageReceiver> filter);
 
   // Sets the master interface name for this router. Only used when reporting
   // message header or control message validation errors.
@@ -209,7 +211,7 @@ class MOJO_CPP_BINDINGS_EXPORT MultiplexRouter
   bool ProcessNotifyErrorTask(Task* task,
                               ClientCallBehavior client_call_behavior,
                               base::SequencedTaskRunner* current_task_runner);
-  bool ProcessIncomingMessage(Message* message,
+  bool ProcessIncomingMessage(MessageWrapper* message_wrapper,
                               ClientCallBehavior client_call_behavior,
                               base::SequencedTaskRunner* current_task_runner);
 
@@ -228,6 +230,10 @@ class MOJO_CPP_BINDINGS_EXPORT MultiplexRouter
   InterfaceEndpoint* FindOrInsertEndpoint(InterfaceId id, bool* inserted);
   InterfaceEndpoint* FindEndpoint(InterfaceId id);
 
+  // Returns false if some interface IDs are invalid or have been used.
+  bool InsertEndpointsForMessage(const Message& message);
+  void CloseEndpointsForMessage(const Message& message);
+
   void AssertLockAcquired();
 
   // Whether to set the namespace bit when generating interface IDs. Please see
@@ -237,7 +243,7 @@ class MOJO_CPP_BINDINGS_EXPORT MultiplexRouter
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
 
   // Owned by |filters_| below.
-  MessageHeaderValidator* header_validator_;
+  MessageHeaderValidator* header_validator_ = nullptr;
 
   FilterChain filters_;
   Connector connector_;
@@ -253,20 +259,22 @@ class MOJO_CPP_BINDINGS_EXPORT MultiplexRouter
   PipeControlMessageProxy control_message_proxy_;
 
   std::map<InterfaceId, scoped_refptr<InterfaceEndpoint>> endpoints_;
-  uint32_t next_interface_id_value_;
+  uint32_t next_interface_id_value_ = 1;
 
-  deque<std::unique_ptr<Task>> tasks_;
+  base::circular_deque<std::unique_ptr<Task>> tasks_;
   // It refers to tasks in |tasks_| and doesn't own any of them.
-  std::map<InterfaceId, deque<Task*>> sync_message_tasks_;
+  std::map<InterfaceId, base::circular_deque<Task*>> sync_message_tasks_;
 
-  bool posted_to_process_tasks_;
+  bool posted_to_process_tasks_ = false;
   scoped_refptr<base::SequencedTaskRunner> posted_to_task_runner_;
 
-  bool encountered_error_;
+  bool encountered_error_ = false;
 
-  bool paused_;
+  bool paused_ = false;
 
-  bool testing_mode_;
+  bool testing_mode_ = false;
+
+  bool being_destructed_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(MultiplexRouter);
 };

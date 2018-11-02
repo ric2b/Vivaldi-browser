@@ -29,6 +29,7 @@
 #include "ui/gfx/sequential_id_generator.h"
 #include "ui/gfx/win/window_impl.h"
 #include "ui/views/views_export.h"
+#include "ui/views/win/pen_event_processor.h"
 
 namespace gfx {
 class ImageSkia;
@@ -543,6 +544,19 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
                                     WPARAM w_param,
                                     LPARAM l_param);
 
+  LRESULT GenerateMouseEventFromPointerEvent(
+      UINT message,
+      UINT32 pointer_id,
+      const POINTER_INFO& pointer_info,
+      const gfx::Point& point,
+      const ui::PointerDetails& pointer_details);
+  LRESULT GenerateTouchEventFromPointerEvent(
+      UINT message,
+      UINT32 pointer_id,
+      const POINTER_INFO& pointer_info,
+      const gfx::Point& point,
+      const ui::PointerDetails& pointer_details);
+
   // Returns true if the mouse message passed in is an OS synthesized mouse
   // message.
   // |message| identifies the mouse message.
@@ -671,6 +685,8 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
   // Generates touch-ids for touch-events.
   ui::SequentialIDGenerator id_generator_;
 
+  PenEventProcessor pen_processor_;
+
   // Set to true if we are in the context of a sizing operation.
   bool in_size_loop_;
 
@@ -685,11 +701,11 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
   // native SetFocus calls invoked in the views code.
   int touch_down_contexts_;
 
-  // Time the last touch message was received. Used to flag mouse messages
-  // synthesized by Windows for touch which are not flagged by the OS as
-  // synthesized mouse messages. For more information please refer to
-  // the IsMouseEventFromTouch function.
-  static long last_touch_message_time_;
+  // Time the last touch or pen message was received. Used to flag mouse
+  // messages synthesized by Windows for touch which are not flagged by the OS
+  // as synthesized mouse messages. For more information please refer to the
+  // IsMouseEventFromTouch function.
+  static long last_touch_or_pen_message_time_;
 
   // Time the last WM_MOUSEHWHEEL message is received. Please refer to the
   // HandleMouseEventInternal function as to why this is needed.

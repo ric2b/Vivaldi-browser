@@ -21,7 +21,7 @@
 #include "third_party/WebKit/public/platform/WebContentSecurityPolicy.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
-#include "third_party/WebKit/public/web/WebCompositionUnderline.h"
+#include "third_party/WebKit/public/web/WebImeTextSpan.h"
 #include "third_party/WebKit/public/web/WebSharedWorkerCreationContextType.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 #include "ui/gfx/ipc/geometry/gfx_param_traits.h"
@@ -51,13 +51,18 @@ IPC_ENUM_TRAITS_MIN_MAX_VALUE(blink::WebInputEvent::Type,
                               blink::WebInputEvent::kTypeLast)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebPageVisibilityState,
                           blink::kWebPageVisibilityStateLast)
+IPC_ENUM_TRAITS_MAX_VALUE(blink::WebImeTextSpan::Type,
+                          blink::WebImeTextSpan::Type::kSuggestion)
 
-IPC_STRUCT_TRAITS_BEGIN(blink::WebCompositionUnderline)
+IPC_STRUCT_TRAITS_BEGIN(blink::WebImeTextSpan)
+  IPC_STRUCT_TRAITS_MEMBER(type)
   IPC_STRUCT_TRAITS_MEMBER(start_offset)
   IPC_STRUCT_TRAITS_MEMBER(end_offset)
-  IPC_STRUCT_TRAITS_MEMBER(color)
+  IPC_STRUCT_TRAITS_MEMBER(underline_color)
   IPC_STRUCT_TRAITS_MEMBER(thick)
   IPC_STRUCT_TRAITS_MEMBER(background_color)
+  IPC_STRUCT_TRAITS_MEMBER(suggestion_highlight_color)
+  IPC_STRUCT_TRAITS_MEMBER(suggestions)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::RenderWidgetSurfaceProperties)

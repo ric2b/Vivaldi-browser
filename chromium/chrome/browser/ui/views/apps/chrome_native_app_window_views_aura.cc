@@ -56,7 +56,7 @@ void ChromeNativeAppWindowViewsAura::OnBeforeWidgetInit(
     const AppWindow::CreateParams& create_params,
     views::Widget::InitParams* init_params,
     views::Widget* widget) {
-#if defined(USE_X11) && !defined(OS_CHROMEOS)
+#if defined(USE_X11)
   std::string app_name = web_app::GenerateApplicationNameFromExtensionId(
       app_window()->extension_id());
   // Set up a custom WM_CLASS for app windows. This allows task switchers in
@@ -110,15 +110,15 @@ bool ChromeNativeAppWindowViewsAura::IsAlwaysOnTop() const {
 }
 
 void ChromeNativeAppWindowViewsAura::UpdateShape(
-    std::unique_ptr<SkRegion> region) {
+    std::unique_ptr<ShapeRects> rects) {
   bool had_shape = !!shape();
 
-  ChromeNativeAppWindowViews::UpdateShape(std::move(region));
+  ChromeNativeAppWindowViews::UpdateShape(std::move(rects));
 
   aura::Window* native_window = widget()->GetNativeWindow();
   if (shape() && !had_shape) {
-    native_window->SetEventTargeter(std::unique_ptr<ui::EventTargeter>(
-        new ShapedAppWindowTargeter(native_window, this)));
+    native_window->SetEventTargeter(
+        std::unique_ptr<ui::EventTargeter>(new ShapedAppWindowTargeter(this)));
   } else if (!shape() && had_shape) {
     native_window->SetEventTargeter(std::unique_ptr<ui::EventTargeter>());
   }

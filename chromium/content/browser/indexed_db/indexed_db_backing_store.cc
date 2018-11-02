@@ -1114,6 +1114,12 @@ IndexedDBBackingStore::RecordIdentifier::RecordIdentifier()
     : primary_key_(), version_(-1) {}
 IndexedDBBackingStore::RecordIdentifier::~RecordIdentifier() {}
 
+constexpr const int IndexedDBBackingStore::kMaxJournalCleanRequests;
+constexpr const base::TimeDelta
+    IndexedDBBackingStore::kMaxJournalCleaningWindowTime;
+constexpr const base::TimeDelta
+    IndexedDBBackingStore::kInitialJournalCleaningWindowTime;
+
 // static
 scoped_refptr<IndexedDBBackingStore> IndexedDBBackingStore::Open(
     IndexedDBFactory* indexed_db_factory,
@@ -1251,6 +1257,28 @@ WARN_UNUSED_RESULT Status IndexedDBBackingStore::SetUpMetadata() {
   if (!s.ok())
     INTERNAL_WRITE_ERROR_UNTESTED(SET_UP_METADATA);
   return s;
+}
+
+leveldb::Status IndexedDBBackingStore::GetCompleteMetadata(
+    std::vector<IndexedDBDatabaseMetadata>* output) {
+  leveldb::Status status = leveldb::Status::OK();
+  std::vector<base::string16> names = GetDatabaseNames(&status);
+  if (!status.ok())
+    return status;
+  for (const base::string16& name : names) {
+    output->emplace_back();
+    bool found = false;
+    status = GetIDBDatabaseMetaData(name, &output->back(), &found);
+    output->back().name = name;
+    if (!found)
+      return Status::NotFound("Metadata not found for \"%s\".",
+                              base::UTF16ToUTF8(name));
+    status = GetObjectStores(output->back().id, &output->back().object_stores);
+    if (!status.ok())
+      return status;
+  }
+
+  return status;
 }
 
 bool IndexedDBBackingStore::ReadCorruptionInfo(const FilePath& path_base,
@@ -2577,7 +2605,7 @@ class LocalWriteClosure : public FileWriterDelegate::DelegateWriteCallback,
           destination: LOCAL
         }
         policy {
-          cookies_allowed: false
+          cookies_allowed: NO
           setting: "This feature cannot be disabled by settings."
           policy_exception_justification: "Not implemented."
         })");
@@ -2757,10 +2785,37 @@ void IndexedDBBackingStore::ReportBlobUnused(int64_t database_id,
 // HasLastBackingStoreReference.  It's safe because if the backing store is
 // deleted, the timer will automatically be canceled on destruction.
 void IndexedDBBackingStore::StartJournalCleaningTimer() {
+  ++num_aggregated_journal_cleaning_requests_;
+
+  if (execute_journal_cleaning_on_no_txns_)
+    return;
+
+  if (num_aggregated_journal_cleaning_requests_ >= kMaxJournalCleanRequests) {
+    journal_cleaning_timer_.AbandonAndStop();
+    CleanPrimaryJournalIgnoreReturn();
+    return;
+  }
+
+  base::TimeTicks now = base::TimeTicks::Now();
+
+  if (journal_cleaning_timer_window_start_ == base::TimeTicks() ||
+      !journal_cleaning_timer_.IsRunning()) {
+    journal_cleaning_timer_window_start_ = now;
+  }
+
+  base::TimeDelta time_until_max = kMaxJournalCleaningWindowTime -
+                                   (now - journal_cleaning_timer_window_start_);
+  base::TimeDelta delay =
+      std::min(kInitialJournalCleaningWindowTime, time_until_max);
+
+  if (delay <= base::TimeDelta::FromSeconds(0)) {
+    journal_cleaning_timer_.AbandonAndStop();
+    CleanPrimaryJournalIgnoreReturn();
+    return;
+  }
+
   journal_cleaning_timer_.Start(
-      FROM_HERE,
-      base::TimeDelta::FromSeconds(5),
-      this,
+      FROM_HERE, delay, this,
       &IndexedDBBackingStore::CleanPrimaryJournalIgnoreReturn);
 }
 
@@ -2870,6 +2925,9 @@ Status IndexedDBBackingStore::GetIndexes(
 
 bool IndexedDBBackingStore::RemoveBlobFile(int64_t database_id,
                                            int64_t key) const {
+#if DCHECK_IS_ON()
+  ++num_blob_files_deleted_;
+#endif
   FilePath path = GetBlobFileName(database_id, key);
   return base::DeleteFile(path, false);
 }
@@ -2877,6 +2935,31 @@ bool IndexedDBBackingStore::RemoveBlobFile(int64_t database_id,
 bool IndexedDBBackingStore::RemoveBlobDirectory(int64_t database_id) const {
   FilePath path = GetBlobDirectoryName(blob_path_, database_id);
   return base::DeleteFile(path, true);
+}
+
+Status IndexedDBBackingStore::CleanUpBlobJournal(
+    const std::string& level_db_key) const {
+  IDB_TRACE("IndexedDBBackingStore::CleanUpBlobJournal");
+  DCHECK(!committing_transaction_count_);
+  scoped_refptr<LevelDBTransaction> journal_transaction =
+      IndexedDBClassFactory::Get()->CreateLevelDBTransaction(db_.get());
+  BlobJournalType journal;
+
+  Status s = GetBlobJournal(level_db_key, journal_transaction.get(), &journal);
+  if (!s.ok())
+    return s;
+  if (journal.empty())
+    return Status::OK();
+  s = CleanUpBlobJournalEntries(journal);
+  if (!s.ok())
+    return s;
+  ClearBlobJournal(journal_transaction.get(), level_db_key);
+  s = journal_transaction->Commit();
+  // Notify blob files cleaned even if commit fails, as files could still be
+  // deleted. |indexed_db_factory_| is null for in-memory backing stores.
+  if (indexed_db_factory_)
+    indexed_db_factory_->BlobFilesCleaned(origin_);
+  return s;
 }
 
 Status IndexedDBBackingStore::CleanUpBlobJournalEntries(
@@ -2900,24 +2983,18 @@ Status IndexedDBBackingStore::CleanUpBlobJournalEntries(
   return Status::OK();
 }
 
-Status IndexedDBBackingStore::CleanUpBlobJournal(
-    const std::string& level_db_key) const {
-  IDB_TRACE("IndexedDBBackingStore::CleanUpBlobJournal");
-  DCHECK(!committing_transaction_count_);
-  scoped_refptr<LevelDBTransaction> journal_transaction =
-      IndexedDBClassFactory::Get()->CreateLevelDBTransaction(db_.get());
-  BlobJournalType journal;
+void IndexedDBBackingStore::WillCommitTransaction() {
+  ++committing_transaction_count_;
+}
 
-  Status s = GetBlobJournal(level_db_key, journal_transaction.get(), &journal);
-  if (!s.ok())
-    return s;
-  if (journal.empty())
-    return Status::OK();
-  s = CleanUpBlobJournalEntries(journal);
-  if (!s.ok())
-    return s;
-  ClearBlobJournal(journal_transaction.get(), level_db_key);
-  return journal_transaction->Commit();
+void IndexedDBBackingStore::DidCommitTransaction() {
+  DCHECK_GT(committing_transaction_count_, 0UL);
+  --committing_transaction_count_;
+  if (committing_transaction_count_ == 0 &&
+      execute_journal_cleaning_on_no_txns_) {
+    execute_journal_cleaning_on_no_txns_ = false;
+    CleanPrimaryJournalIgnoreReturn();
+  }
 }
 
 Status IndexedDBBackingStore::Transaction::GetBlobInfoForRecord(
@@ -2984,10 +3061,12 @@ Status IndexedDBBackingStore::Transaction::GetBlobInfoForRecord(
 
 void IndexedDBBackingStore::CleanPrimaryJournalIgnoreReturn() {
   // While a transaction is busy it is not safe to clean the journal.
-  if (committing_transaction_count_ > 0)
-    StartJournalCleaningTimer();
-  else
-    CleanUpBlobJournal(BlobJournalKey::Encode());
+  if (committing_transaction_count_ > 0) {
+    execute_journal_cleaning_on_no_txns_ = true;
+    return;
+  }
+  num_aggregated_journal_cleaning_requests_ = 0;
+  CleanUpBlobJournal(BlobJournalKey::Encode());
 }
 
 Status IndexedDBBackingStore::CreateIndex(
@@ -4008,6 +4087,22 @@ IndexedDBBackingStore::OpenIndexCursor(
   return std::move(cursor);
 }
 
+void IndexedDBBackingStore::StartPreCloseTasks() {
+  DCHECK(pre_close_task_queue_);
+  pre_close_task_queue_->Start(base::BindOnce(
+      &IndexedDBBackingStore::GetCompleteMetadata, base::Unretained(this)));
+}
+
+bool IndexedDBBackingStore::IsBlobCleanupPending() {
+  return journal_cleaning_timer_.IsRunning();
+}
+
+void IndexedDBBackingStore::ForceRunBlobCleanup() {
+  base::OnceClosure task = journal_cleaning_timer_.user_task();
+  journal_cleaning_timer_.AbandonAndStop();
+  std::move(task).Run();
+}
+
 IndexedDBBackingStore::Transaction::Transaction(
     IndexedDBBackingStore* backing_store)
     : backing_store_(backing_store),
@@ -4171,7 +4266,7 @@ Status IndexedDBBackingStore::Transaction::CommitPhaseOne(
   }
 
   committing_ = true;
-  ++backing_store_->committing_transaction_count_;
+  backing_store_->WillCommitTransaction();
 
   if (!new_files_to_write.empty()) {
     // This kicks off the writes of the new blobs, if any.
@@ -4190,8 +4285,8 @@ Status IndexedDBBackingStore::Transaction::CommitPhaseTwo() {
 
   DCHECK(committing_);
   committing_ = false;
-  DCHECK_GT(backing_store_->committing_transaction_count_, 0UL);
-  --backing_store_->committing_transaction_count_;
+
+  backing_store_->DidCommitTransaction();
 
   BlobJournalType primary_journal, live_journal, saved_primary_journal,
       dead_blobs;
@@ -4346,8 +4441,7 @@ void IndexedDBBackingStore::Transaction::Rollback() {
   IDB_TRACE("IndexedDBBackingStore::Transaction::Rollback");
   if (committing_) {
     committing_ = false;
-    DCHECK_GT(backing_store_->committing_transaction_count_, 0UL);
-    --backing_store_->committing_transaction_count_;
+    backing_store_->DidCommitTransaction();
   }
 
   if (chained_blob_writer_.get()) {

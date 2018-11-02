@@ -32,8 +32,8 @@ void NotesSubMenuObserver::InitMenu(const content::ContextMenuParams& params) {
 
   content::BrowserContext* browser_context = proxy_->GetBrowserContext();
 
-  Profile* profile = Profile::FromBrowserContext(browser_context);
-  vivaldi::Notes_Model* model = NotesModelFactory::GetForProfile(profile);
+  vivaldi::Notes_Model* model =
+    NotesModelFactory::GetForBrowserContext(browser_context);
 
   vivaldi::Notes_Node* node = model->main_node();
   for (int i = 0; i < node->child_count(); i++) {
@@ -122,10 +122,8 @@ vivaldi::Notes_Node* GetNodeFromId(vivaldi::Notes_Node* node, int id) {
 void NotesSubMenuObserver::ExecuteCommand(int command_id) {
   DCHECK(IsCommandIdSupported(command_id));
 
-  Profile* profile = Profile::FromBrowserContext(proxy_->GetBrowserContext());
-  DCHECK(profile);
-
-  vivaldi::Notes_Model* model = NotesModelFactory::GetForProfile(profile);
+  vivaldi::Notes_Model* model =
+      NotesModelFactory::GetForBrowserContext(proxy_->GetBrowserContext());
   vivaldi::Notes_Node* root = model->root_node();
 
   vivaldi::Notes_Node* node = GetNodeFromId(root, command_id);

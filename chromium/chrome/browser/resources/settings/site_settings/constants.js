@@ -16,6 +16,7 @@ settings.ContentSettingsTypes = {
   COOKIES: 'cookies',
   IMAGES: 'images',
   JAVASCRIPT: 'javascript',
+  SOUND: 'sound',
   PLUGINS: 'plugins',  // AKA Flash.
   POPUPS: 'popups',
   GEOLOCATION: 'location',
@@ -48,6 +49,22 @@ settings.ContentSetting = {
   ASK: 'ask',
   SESSION_ONLY: 'session_only',
   IMPORTANT_CONTENT: 'detect_important_content',
+};
+
+/**
+ * Contains the possible sources of a ContentSetting.
+ * This should be kept in sync with the |SiteSettingSource| enum in
+ * chrome/browser/ui/webui/site_settings_helper.h
+ * @enum {string}
+ */
+settings.SiteSettingSource = {
+  EMBARGO: 'embargo',
+  EXTENSION: 'extension',
+  INSECURE_ORIGIN: 'insecure-origin',
+  KILL_SWITCH: 'kill-switch',
+  POLICY: 'policy',
+  PREFERENCE: 'preference',
+  DEFAULT: 'default',
 };
 
 /**

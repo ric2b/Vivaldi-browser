@@ -11,10 +11,12 @@
 #include "base/run_loop.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "components/safe_browsing_db/notification_types.h"
 #include "components/safe_browsing_db/v4_database.h"
 #include "components/safe_browsing_db/v4_protocol_manager_util.h"
 #include "components/safe_browsing_db/v4_test_util.h"
 #include "content/public/test/test_browser_thread_bundle.h"
+#include "content/public/test/test_utils.h"
 #include "crypto/sha2.h"
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "testing/platform_test.h"
@@ -246,8 +248,11 @@ class FakeV4LocalDatabaseManager : public V4LocalDatabaseManager {
  public:
   FakeV4LocalDatabaseManager(
       const base::FilePath& base_path,
-      ExtendedReportingLevelCallback extended_reporting_level_callback)
-      : V4LocalDatabaseManager(base_path, extended_reporting_level_callback),
+      ExtendedReportingLevelCallback extended_reporting_level_callback,
+      scoped_refptr<base::SequencedTaskRunner> task_runner)
+      : V4LocalDatabaseManager(base_path,
+                               extended_reporting_level_callback,
+                               task_runner),
         perform_full_hash_check_called_(false) {}
 
   // V4LocalDatabaseManager impl:
@@ -285,9 +290,8 @@ class V4LocalDatabaseManagerTest : public PlatformTest {
         base::Bind(&V4LocalDatabaseManagerTest::GetExtendedReportingLevel,
                    base::Unretained(this));
 
-    v4_local_database_manager_ = make_scoped_refptr(
-        new V4LocalDatabaseManager(base_dir_.GetPath(), erl_callback_));
-    SetTaskRunnerForTest();
+    v4_local_database_manager_ = make_scoped_refptr(new V4LocalDatabaseManager(
+        base_dir_.GetPath(), erl_callback_, task_runner_));
 
     StartLocalDatabaseManager();
   }
@@ -338,18 +342,13 @@ class V4LocalDatabaseManagerTest : public PlatformTest {
 
   void ResetLocalDatabaseManager() {
     StopLocalDatabaseManager();
-    v4_local_database_manager_ = make_scoped_refptr(
-        new V4LocalDatabaseManager(base_dir_.GetPath(), erl_callback_));
-    SetTaskRunnerForTest();
+    v4_local_database_manager_ = make_scoped_refptr(new V4LocalDatabaseManager(
+        base_dir_.GetPath(), erl_callback_, task_runner_));
     StartLocalDatabaseManager();
   }
 
   void ResetV4Database() {
     V4Database::Destroy(std::move(v4_local_database_manager_->v4_database_));
-  }
-
-  void SetTaskRunnerForTest() {
-    v4_local_database_manager_->SetTaskRunnerForTest(task_runner_);
   }
 
   void StartLocalDatabaseManager() {
@@ -378,9 +377,9 @@ class V4LocalDatabaseManagerTest : public PlatformTest {
     // StopLocalDatabaseManager before resetting it because that's what
     // ~V4LocalDatabaseManager expects.
     StopLocalDatabaseManager();
-    v4_local_database_manager_ = make_scoped_refptr(
-        new FakeV4LocalDatabaseManager(base_dir_.GetPath(), erl_callback_));
-    SetTaskRunnerForTest();
+    v4_local_database_manager_ =
+        make_scoped_refptr(new FakeV4LocalDatabaseManager(
+            base_dir_.GetPath(), erl_callback_, task_runner_));
     StartLocalDatabaseManager();
     WaitForTasksOnTaskRunner();
   }
@@ -1155,6 +1154,22 @@ TEST_F(V4LocalDatabaseManagerTest, DeleteUnusedStoreFileRandomFileNotDeleted) {
 
   // Cleanup
   base::DeleteFile(random_store_file_path, false /* recursive */);
+}
+
+TEST_F(V4LocalDatabaseManagerTest, NotificationOnUpdate) {
+  content::WindowedNotificationObserver observer(
+      NOTIFICATION_SAFE_BROWSING_UPDATE_COMPLETE,
+      content::Source<SafeBrowsingDatabaseManager>(
+          v4_local_database_manager_.get()));
+
+  // Creates and associates a V4Database instance.
+  StoreAndHashPrefixes store_and_hash_prefixes;
+  ReplaceV4Database(store_and_hash_prefixes);
+
+  v4_local_database_manager_->DatabaseUpdated();
+
+  // This observer waits until it receives the notification.
+  observer.Wait();
 }
 
 }  // namespace safe_browsing

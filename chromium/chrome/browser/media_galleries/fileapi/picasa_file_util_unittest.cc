@@ -20,11 +20,9 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chrome/browser/media_galleries/fileapi/media_file_system_backend.h"
 #include "chrome/browser/media_galleries/fileapi/media_path_filter.h"
@@ -33,7 +31,7 @@
 #include "chrome/common/media_galleries/picasa_types.h"
 #include "chrome/common/media_galleries/pmp_constants.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/test/test_browser_thread.h"
+#include "content/public/test/test_browser_thread_bundle.h"
 #include "storage/browser/blob/shareable_file_reference.h"
 #include "storage/browser/fileapi/async_file_util.h"
 #include "storage/browser/fileapi/external_mount_points.h"
@@ -142,12 +140,13 @@ class TestFolder {
 void ReadDirectoryTestHelperCallback(
     base::RunLoop* run_loop,
     FileSystemOperation::FileEntryList* contents,
-    bool* completed, base::File::Error error,
-    const FileSystemOperation::FileEntryList& file_list,
+    bool* completed,
+    base::File::Error error,
+    FileSystemOperation::FileEntryList file_list,
     bool has_more) {
   DCHECK(!*completed);
   *completed = !has_more && error == base::File::FILE_OK;
-  *contents = file_list;
+  *contents = std::move(file_list);
   run_loop->Quit();
 }
 
@@ -159,8 +158,8 @@ void ReadDirectoryTestHelper(storage::FileSystemOperationRunner* runner,
   DCHECK(completed);
   base::RunLoop run_loop;
   runner->ReadDirectory(
-      url, base::Bind(&ReadDirectoryTestHelperCallback, &run_loop, contents,
-                      completed));
+      url, base::BindRepeating(&ReadDirectoryTestHelperCallback, &run_loop,
+                               contents, completed));
   run_loop.Run();
 }
 
@@ -180,7 +179,7 @@ void CreateSnapshotFileTestHelperCallback(
     base::File::Error result,
     const base::File::Info& file_info,
     const base::FilePath& platform_path,
-    const scoped_refptr<storage::ShareableFileReference>& file_ref) {
+    scoped_refptr<storage::ShareableFileReference> file_ref) {
   DCHECK(run_loop);
   DCHECK(error);
   DCHECK(platform_path_result);
@@ -211,8 +210,7 @@ class TestMediaFileSystemBackend : public MediaFileSystemBackend {
  public:
   TestMediaFileSystemBackend(const base::FilePath& profile_path,
                              PicasaFileUtil* picasa_file_util)
-      : MediaFileSystemBackend(profile_path,
-                               MediaFileSystemBackend::MediaTaskRunner().get()),
+      : MediaFileSystemBackend(profile_path),
         test_file_util_(picasa_file_util) {}
 
   storage::AsyncFileUtil* GetAsyncFileUtil(
@@ -230,11 +228,14 @@ class TestMediaFileSystemBackend : public MediaFileSystemBackend {
 class PicasaFileUtilTest : public testing::Test {
  public:
   PicasaFileUtilTest()
-      : io_thread_(content::BrowserThread::IO, &message_loop_) {
-  }
+      : thread_bundle_(content::TestBrowserThreadBundle::IO_MAINLOOP),
+        picasa_data_provider_(nullptr,
+                              base::OnTaskRunnerDeleter(
+                                  MediaFileSystemBackend::MediaTaskRunner())) {}
 
   void SetUp() override {
     ASSERT_TRUE(profile_dir_.CreateUniqueTempDir());
+
     ImportedMediaGalleryRegistry::GetInstance()->Initialize();
 
     scoped_refptr<storage::SpecialStoragePolicy> storage_policy =
@@ -253,27 +254,21 @@ class PicasaFileUtilTest : public testing::Test {
                                picasa_data_provider_.get())));
 
     file_system_context_ = new storage::FileSystemContext(
-        base::ThreadTaskRunnerHandle::Get().get(),
-        base::ThreadTaskRunnerHandle::Get().get(),
+        content::BrowserThread::GetTaskRunnerForThread(
+            content::BrowserThread::IO)
+            .get(),
+        base::SequencedTaskRunnerHandle::Get().get(),
         storage::ExternalMountPoints::CreateRefCounted().get(),
         storage_policy.get(), NULL, std::move(additional_providers),
         std::vector<storage::URLRequestAutoMountHandler>(),
         profile_dir_.GetPath(), content::CreateAllowFileAccessOptions());
   }
 
-  void TearDown() override {
-    SynchronouslyRunOnMediaTaskRunner(
-        base::Bind(&PicasaFileUtilTest::TearDownOnMediaTaskRunner,
-                   base::Unretained(this)));
-  }
-
  protected:
   void SetUpOnMediaTaskRunner() {
-    picasa_data_provider_.reset(new PicasaDataProvider(base::FilePath()));
-  }
-
-  void TearDownOnMediaTaskRunner() {
-    picasa_data_provider_.reset();
+    ASSERT_TRUE(database_dir_.CreateUniqueTempDir());
+    picasa_data_provider_.reset(
+        new PicasaDataProvider(database_dir_.GetPath()));
   }
 
   // |test_folders| must be in alphabetical order for easy verification
@@ -373,14 +368,15 @@ class PicasaFileUtilTest : public testing::Test {
     return file_system_context_;
   }
 
- private:
-  base::MessageLoop message_loop_;
-  content::TestBrowserThread io_thread_;
+  content::TestBrowserThreadBundle thread_bundle_;
 
+ private:
   base::ScopedTempDir profile_dir_;
+  base::ScopedTempDir database_dir_;
 
   scoped_refptr<storage::FileSystemContext> file_system_context_;
-  std::unique_ptr<PicasaDataProvider> picasa_data_provider_;
+  std::unique_ptr<PicasaDataProvider, base::OnTaskRunnerDeleter>
+      picasa_data_provider_;
   std::unique_ptr<MediaPathFilter> media_path_filter_;
 
   DISALLOW_COPY_AND_ASSIGN(PicasaFileUtilTest);

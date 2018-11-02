@@ -49,6 +49,7 @@
 #include "modules/webaudio/AudioListener.h"
 #include "modules/webaudio/AudioNodeInput.h"
 #include "modules/webaudio/AudioNodeOutput.h"
+#include "modules/webaudio/AudioWorklet.h"
 #include "modules/webaudio/BiquadFilterNode.h"
 #include "modules/webaudio/ChannelMergerNode.h"
 #include "modules/webaudio/ChannelSplitterNode.h"
@@ -71,6 +72,7 @@
 #include "modules/webaudio/ScriptProcessorNode.h"
 #include "modules/webaudio/StereoPannerNode.h"
 #include "modules/webaudio/WaveShaperNode.h"
+#include "modules/webaudio/WindowAudioWorklet.h"
 #include "platform/CrossThreadFunctional.h"
 #include "platform/Histogram.h"
 #include "platform/audio/IIRFilter.h"
@@ -87,11 +89,9 @@ BaseAudioContext* BaseAudioContext::Create(
   return AudioContext::Create(document, context_options, exception_state);
 }
 
-// FIXME(dominicc): Devolve these constructors to AudioContext
-// and OfflineAudioContext respectively.
-
 // Constructor for rendering to the audio hardware.
-BaseAudioContext::BaseAudioContext(Document* document)
+BaseAudioContext::BaseAudioContext(Document* document,
+                                   enum ContextType context_type)
     : SuspendableObject(document),
       destination_node_(nullptr),
       is_cleared_(false),
@@ -107,43 +107,33 @@ BaseAudioContext::BaseAudioContext(Document* document)
       periodic_wave_sawtooth_(nullptr),
       periodic_wave_triangle_(nullptr),
       output_position_() {
-  switch (GetAutoplayPolicy()) {
-    case AutoplayPolicy::Type::kNoUserGestureRequired:
-      break;
-    case AutoplayPolicy::Type::kUserGestureRequired:
-    case AutoplayPolicy::Type::kUserGestureRequiredForCrossOrigin:
-      if (document->GetFrame() &&
-          document->GetFrame()->IsCrossOriginSubframe()) {
-        autoplay_status_ = AutoplayStatus::kAutoplayStatusFailed;
-        user_gesture_required_ = true;
+  switch (context_type) {
+    case kRealtimeContext:
+      switch (GetAutoplayPolicy()) {
+        case AutoplayPolicy::Type::kNoUserGestureRequired:
+          break;
+        case AutoplayPolicy::Type::kUserGestureRequired:
+        case AutoplayPolicy::Type::kUserGestureRequiredForCrossOrigin:
+          if (document->GetFrame() &&
+              document->GetFrame()->IsCrossOriginSubframe()) {
+            autoplay_status_ = AutoplayStatus::kAutoplayStatusFailed;
+            user_gesture_required_ = true;
+          }
+          break;
+        case AutoplayPolicy::Type::kDocumentUserActivationRequired:
+          autoplay_status_ = AutoplayStatus::kAutoplayStatusFailed;
+          user_gesture_required_ = true;
+          break;
       }
       break;
-    case AutoplayPolicy::Type::kDocumentUserActivationRequired:
-      autoplay_status_ = AutoplayStatus::kAutoplayStatusFailed;
-      user_gesture_required_ = true;
+    case kOfflineContext:
+      // Nothing needed for offline context
+      break;
+    default:
+      NOTREACHED();
       break;
   }
 }
-
-// Constructor for offline (non-realtime) rendering.
-BaseAudioContext::BaseAudioContext(Document* document,
-                                   unsigned number_of_channels,
-                                   size_t number_of_frames,
-                                   float sample_rate)
-    : SuspendableObject(document),
-      destination_node_(nullptr),
-      is_cleared_(false),
-      is_resolving_resume_promises_(false),
-      user_gesture_required_(false),
-      connection_count_(0),
-      deferred_task_handler_(DeferredTaskHandler::Create()),
-      context_state_(kSuspended),
-      closed_context_sample_rate_(-1),
-      periodic_wave_sine_(nullptr),
-      periodic_wave_square_(nullptr),
-      periodic_wave_sawtooth_(nullptr),
-      periodic_wave_triangle_(nullptr),
-      output_position_() {}
 
 BaseAudioContext::~BaseAudioContext() {
   GetDeferredTaskHandler().ContextWillBeDestroyed();
@@ -168,6 +158,13 @@ void BaseAudioContext::Initialize() {
     // only create the listener if the destination node exists.
     listener_ = AudioListener::Create(*this);
   }
+
+  // Check if a document or a frame supports AudioWorklet. If not, AudioWorklet
+  // cannot be accssed.
+  if (RuntimeEnabledFeatures::AudioWorkletEnabled() &&
+      WindowAudioWorklet::audioWorklet(this)) {
+    WindowAudioWorklet::audioWorklet(this)->RegisterContext(this);
+  }
 }
 
 void BaseAudioContext::Clear() {
@@ -180,6 +177,13 @@ void BaseAudioContext::Clear() {
 
 void BaseAudioContext::Uninitialize() {
   DCHECK(IsMainThread());
+
+  // AudioWorklet may be destroyed before the context goes away. So we have to
+  // check the pointer. See: crbug.com/503845
+  if (RuntimeEnabledFeatures::AudioWorkletEnabled() &&
+      WindowAudioWorklet::audioWorklet(this)) {
+    WindowAudioWorklet::audioWorklet(this)->UnregisterContext(this);
+  }
 
   if (!IsDestinationInitialized())
     return;
@@ -326,12 +330,10 @@ ScriptPromise BaseAudioContext::decodeAudioData(
     // they don't get collected prematurely before decodeAudioData
     // calls them.
     if (success_callback) {
-      success_callbacks_.push_back(
-          TraceWrapperMember<DecodeSuccessCallback>(this, success_callback));
+      success_callbacks_.emplace_back(success_callback);
     }
     if (error_callback) {
-      error_callbacks_.push_back(
-          TraceWrapperMember<DecodeErrorCallback>(this, error_callback));
+      error_callbacks_.emplace_back(error_callback);
     }
 
     audio_decoder_.DecodeAsync(audio, rate, success_callback, error_callback,
@@ -702,7 +704,9 @@ void BaseAudioContext::NotifyStateChange() {
 
 void BaseAudioContext::NotifySourceNodeFinishedProcessing(
     AudioHandler* handler) {
-  DCHECK(IsAudioThread());
+  // This can be called from either the main thread or the audio thread.  The
+  // mutex below protects access to |finished_source_handlers_| between the two
+  // threads.
   MutexLocker lock(finished_source_handlers_mutex_);
   finished_source_handlers_.push_back(handler);
 }
@@ -1003,6 +1007,8 @@ DEFINE_TRACE(BaseAudioContext) {
 }
 
 DEFINE_TRACE_WRAPPERS(BaseAudioContext) {
+  EventTargetWithInlineData::TraceWrappers(visitor);
+
   // Inform V8's GC that we have references to these objects so they
   // don't get collected until we're done with them.
   for (auto callback : success_callbacks_) {

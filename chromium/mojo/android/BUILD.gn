@@ -15,7 +15,7 @@ group("android") {
 
 generate_jni("jni_headers") {
   sources = [
-    "javatests/src/org/chromium/mojo/MojoTestCase.java",
+    "javatests/src/org/chromium/mojo/MojoTestRule.java",
     "javatests/src/org/chromium/mojo/bindings/ValidationTestUtil.java",
   ]
   public_deps = [
@@ -38,13 +38,8 @@ generate_jni("system_java_jni_headers") {
 source_set("libsystem_java") {
   sources = [
     "system/base_run_loop.cc",
-    "system/base_run_loop.h",
     "system/core_impl.cc",
-    "system/core_impl.h",
-    "system/mojo_jni_registrar.cc",
-    "system/mojo_jni_registrar.h",
     "system/watcher_impl.cc",
-    "system/watcher_impl.h",
   ]
 
   deps = [
@@ -78,7 +73,7 @@ android_library("mojo_javatests") {
   testonly = true
   java_files = [
     "javatests/src/org/chromium/mojo/HandleMock.java",
-    "javatests/src/org/chromium/mojo/MojoTestCase.java",
+    "javatests/src/org/chromium/mojo/MojoTestRule.java",
     "javatests/src/org/chromium/mojo/TestUtils.java",
     "javatests/src/org/chromium/mojo/bindings/BindingsHelperTest.java",
     "javatests/src/org/chromium/mojo/bindings/BindingsTest.java",
@@ -110,6 +105,7 @@ android_library("mojo_javatests") {
     "//mojo/public/java:bindings_java",
     "//mojo/public/java:system_java",
     "//third_party/android_support_test_runner:runner_java",
+    "//third_party/junit",
   ]
 
   data = [
@@ -122,10 +118,8 @@ shared_library("mojo_java_unittests") {
 
   sources = [
     "javatests/init_library.cc",
-    "javatests/mojo_test_case.cc",
-    "javatests/mojo_test_case.h",
+    "javatests/mojo_test_rule.cc",
     "javatests/validation_test_util.cc",
-    "javatests/validation_test_util.h",
   ]
 
   deps = [

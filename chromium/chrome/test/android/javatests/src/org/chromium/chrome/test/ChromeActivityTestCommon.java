@@ -157,9 +157,7 @@ final class ChromeActivityTestCommon<T extends ChromeActivity> {
             @Override
             public void onActivityStateChange(Activity activity, int newState) {
                 if (newState == ActivityState.RESUMED) {
-                    if (!mChromeActivityClass.isAssignableFrom(activity.getClass())) {
-                        return;
-                    }
+                    if (!mChromeActivityClass.isAssignableFrom(activity.getClass())) return;
 
                     activityRef.set((T) activity);
                     activityCallback.notifyCalled();

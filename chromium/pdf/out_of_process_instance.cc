@@ -186,8 +186,7 @@ PP_Var GetLinkAtPosition(PP_Instance instance, PP_Point point) {
 void Transform(PP_Instance instance, PP_PrivatePageTransformType type) {
   void* object = pp::Instance::GetPerInstanceObject(instance, kPPPPdfInterface);
   if (object) {
-    OutOfProcessInstance* obj_instance =
-        static_cast<OutOfProcessInstance*>(object);
+    auto* obj_instance = static_cast<OutOfProcessInstance*>(object);
     switch (type) {
       case PP_PRIVATEPAGETRANSFORMTYPE_ROTATE_90_CW:
         obj_instance->RotateClockwise();
@@ -204,8 +203,7 @@ PP_Bool GetPrintPresetOptionsFromDocument(
     PP_PdfPrintPresetOptions_Dev* options) {
   void* object = pp::Instance::GetPerInstanceObject(instance, kPPPPdfInterface);
   if (object) {
-    OutOfProcessInstance* obj_instance =
-        static_cast<OutOfProcessInstance*>(object);
+    auto* obj_instance = static_cast<OutOfProcessInstance*>(object);
     obj_instance->GetPrintPresetOptionsFromDocument(options);
   }
   return PP_TRUE;
@@ -214,15 +212,59 @@ PP_Bool GetPrintPresetOptionsFromDocument(
 void EnableAccessibility(PP_Instance instance) {
   void* object = pp::Instance::GetPerInstanceObject(instance, kPPPPdfInterface);
   if (object) {
-    OutOfProcessInstance* obj_instance =
-        static_cast<OutOfProcessInstance*>(object);
-    return obj_instance->EnableAccessibility();
+    auto* obj_instance = static_cast<OutOfProcessInstance*>(object);
+    obj_instance->EnableAccessibility();
+  }
+}
+
+void SetCaretPosition(PP_Instance instance, const PP_FloatPoint* position) {
+  void* object = pp::Instance::GetPerInstanceObject(instance, kPPPPdfInterface);
+  if (object) {
+    auto* obj_instance = static_cast<OutOfProcessInstance*>(object);
+    obj_instance->SetCaretPosition(*position);
+  }
+}
+
+void MoveRangeSelectionExtent(PP_Instance instance,
+                              const PP_FloatPoint* extent) {
+  void* object = pp::Instance::GetPerInstanceObject(instance, kPPPPdfInterface);
+  if (object) {
+    auto* obj_instance = static_cast<OutOfProcessInstance*>(object);
+    obj_instance->MoveRangeSelectionExtent(*extent);
+  }
+}
+
+void SetSelectionBounds(PP_Instance instance,
+                        const PP_FloatPoint* base,
+                        const PP_FloatPoint* extent) {
+  void* object = pp::Instance::GetPerInstanceObject(instance, kPPPPdfInterface);
+  if (object) {
+    auto* obj_instance = static_cast<OutOfProcessInstance*>(object);
+    obj_instance->SetSelectionBounds(*base, *extent);
+  }
+}
+
+PP_Bool CanEditText(PP_Instance instance) {
+  void* object = pp::Instance::GetPerInstanceObject(instance, kPPPPdfInterface);
+  if (!object)
+    return PP_FALSE;
+
+  auto* obj_instance = static_cast<OutOfProcessInstance*>(object);
+  return PP_FromBool(obj_instance->CanEditText());
+}
+
+void ReplaceSelection(PP_Instance instance, const char* text) {
+  void* object = pp::Instance::GetPerInstanceObject(instance, kPPPPdfInterface);
+  if (object) {
+    auto* obj_instance = static_cast<OutOfProcessInstance*>(object);
+    obj_instance->ReplaceSelection(text);
   }
 }
 
 const PPP_Pdf ppp_private = {
-    &GetLinkAtPosition, &Transform, &GetPrintPresetOptionsFromDocument,
-    &EnableAccessibility,
+    &GetLinkAtPosition,   &Transform,        &GetPrintPresetOptionsFromDocument,
+    &EnableAccessibility, &SetCaretPosition, &MoveRangeSelectionExtent,
+    &SetSelectionBounds,  &CanEditText,      &ReplaceSelection,
 };
 
 int ExtractPrintPreviewPageIndex(base::StringPiece src_url) {
@@ -651,13 +693,7 @@ bool OutOfProcessInstance::HandleInputEvent(const pp::InputEvent& event) {
             touch_event.GetTouchByIndex(PP_TOUCHLIST_TYPE_TARGETTOUCHES, i);
 
         pp::FloatPoint point = touch_point.position();
-
-        // Account for the scroll position. Touch events are in DOM coordinates
-        // where mouse events appear to be in screen coordinates.
-        point.set_x(scroll_offset_.x() + point.x());
-        point.set_y(scroll_offset_.y() + point.y());
         ScaleFloatPoint(device_scale_, &point);
-
         point.set_x(point.x() - available_area_.x());
 
         new_touch_event.AddTouchPoint(
@@ -851,11 +887,61 @@ void OutOfProcessInstance::SendAccessibilityViewportInfo() {
   pp::PDF::SetAccessibilityViewportInfo(GetPluginInstance(), &viewport_info);
 }
 
+void OutOfProcessInstance::SelectionChanged(const pp::Rect& left,
+                                            const pp::Rect& right) {
+  pp::Point l(left.point().x() + available_area_.x(), left.point().y());
+  pp::Point r(right.x() + available_area_.x(), right.point().y());
+
+  float inverse_scale = 1.0f / device_scale_;
+  ScalePoint(inverse_scale, &l);
+  ScalePoint(inverse_scale, &r);
+
+  pp::PDF::SelectionChanged(GetPluginInstance(),
+                            PP_MakeFloatPoint(l.x(), l.y()), left.height(),
+                            PP_MakeFloatPoint(r.x(), r.y()), right.height());
+}
+
+void OutOfProcessInstance::SetCaretPosition(const pp::FloatPoint& position) {
+  pp::Point new_position(position.x(), position.y());
+  ScalePoint(device_scale_, &new_position);
+  new_position.set_x(new_position.x() - available_area_.x());
+  engine_->SetCaretPosition(new_position);
+}
+
+void OutOfProcessInstance::MoveRangeSelectionExtent(
+    const pp::FloatPoint& extent) {
+  pp::Point new_extent(extent.x(), extent.y());
+  ScalePoint(device_scale_, &new_extent);
+  new_extent.set_x(new_extent.x() - available_area_.x());
+  engine_->MoveRangeSelectionExtent(new_extent);
+}
+
+void OutOfProcessInstance::SetSelectionBounds(const pp::FloatPoint& base,
+                                              const pp::FloatPoint& extent) {
+  pp::Point new_base_point(base.x(), base.y());
+  ScalePoint(device_scale_, &new_base_point);
+  new_base_point.set_x(new_base_point.x() - available_area_.x());
+
+  pp::Point new_extent_point(extent.x(), extent.y());
+  ScalePoint(device_scale_, &new_extent_point);
+  new_extent_point.set_x(new_extent_point.x() - available_area_.x());
+
+  engine_->SetSelectionBounds(new_base_point, new_extent_point);
+}
+
 pp::Var OutOfProcessInstance::GetLinkAtPosition(const pp::Point& point) {
   pp::Point offset_point(point);
   ScalePoint(device_scale_, &offset_point);
   offset_point.set_x(offset_point.x() - available_area_.x());
   return engine_->GetLinkAtPosition(offset_point);
+}
+
+bool OutOfProcessInstance::CanEditText() {
+  return engine_->CanEditText();
+}
+
+void OutOfProcessInstance::ReplaceSelection(const std::string& text) {
+  engine_->ReplaceSelection(text);
 }
 
 uint32_t OutOfProcessInstance::QuerySupportedPrintOutputFormats() {
@@ -993,7 +1079,6 @@ void OutOfProcessInstance::DidOpen(int32_t result) {
       DocumentLoadFailed();
     }
   } else if (result != PP_ERROR_ABORTED) {  // Can happen in tests.
-    NOTREACHED();
     DocumentLoadFailed();
   }
 
@@ -1190,7 +1275,7 @@ void OutOfProcessInstance::NotifyNumberOfFindResultsChanged(int total,
 
 void OutOfProcessInstance::NotifySelectedFindResultChanged(
     int current_find_index) {
-  DCHECK_GE(current_find_index, 0);
+  DCHECK_GE(current_find_index, -1);
   SelectedFindResultChanged(current_find_index);
 }
 

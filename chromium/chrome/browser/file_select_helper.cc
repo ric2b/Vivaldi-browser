@@ -50,7 +50,8 @@
 #endif
 
 #if defined(FULL_SAFE_BROWSING)
-#include "chrome/browser/safe_browsing/download_protection_service.h"
+#include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
+#include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #endif
 
@@ -78,7 +79,7 @@ std::vector<ui::SelectedFileInfo> FilePathListToSelectedFileInfoList(
   return selected_files;
 }
 
-void DeleteFiles(const std::vector<base::FilePath>& paths) {
+void DeleteFiles(std::vector<base::FilePath> paths) {
   for (auto& file_path : paths)
     base::DeleteFile(file_path, false);
 }
@@ -94,8 +95,8 @@ bool IsValidProfile(Profile* profile) {
 #if defined(FULL_SAFE_BROWSING)
 
 bool IsDownloadAllowedBySafeBrowsing(
-    safe_browsing::DownloadProtectionService::DownloadCheckResult result) {
-  using Result = safe_browsing::DownloadProtectionService::DownloadCheckResult;
+    safe_browsing::DownloadCheckResult result) {
+  using Result = safe_browsing::DownloadCheckResult;
   switch (result) {
     // Only allow downloads that are marked as SAFE or UNKNOWN by SafeBrowsing.
     // All other types are going to be blocked. UNKNOWN could be the result of a
@@ -114,9 +115,8 @@ bool IsDownloadAllowedBySafeBrowsing(
   return false;
 }
 
-void InterpretSafeBrowsingVerdict(
-    const base::Callback<void(bool)>& recipient,
-    safe_browsing::DownloadProtectionService::DownloadCheckResult result) {
+void InterpretSafeBrowsingVerdict(const base::Callback<void(bool)>& recipient,
+                                  safe_browsing::DownloadCheckResult result) {
   recipient.Run(IsDownloadAllowedBySafeBrowsing(result));
 }
 
@@ -339,9 +339,11 @@ void FileSelectHelper::NotifyRenderFrameHostAndEndAfterConversion(
 }
 
 void FileSelectHelper::DeleteTemporaryFiles() {
-  BrowserThread::PostTask(BrowserThread::FILE, FROM_HERE,
-                          base::BindOnce(&DeleteFiles, temporary_files_));
-  temporary_files_.clear();
+  base::PostTaskWithTraits(
+      FROM_HERE,
+      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+       base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
+      base::BindOnce(&DeleteFiles, std::move(temporary_files_)));
 }
 
 void FileSelectHelper::CleanUp() {
@@ -476,9 +478,9 @@ void FileSelectHelper::RunFileChooser(
       content::Source<RenderWidgetHost>(
           render_frame_host_->GetRenderViewHost()->GetWidget()));
 
-  BrowserThread::PostTask(
-      BrowserThread::FILE, FROM_HERE,
-      base::BindOnce(&FileSelectHelper::GetFileTypesOnFileThread, this,
+  base::PostTaskWithTraits(
+      FROM_HERE, {base::MayBlock()},
+      base::BindOnce(&FileSelectHelper::GetFileTypesInThreadPool, this,
                      base::Passed(&params)));
 
   // Because this class returns notifications to the RenderViewHost, it is
@@ -489,7 +491,7 @@ void FileSelectHelper::RunFileChooser(
   AddRef();
 }
 
-void FileSelectHelper::GetFileTypesOnFileThread(
+void FileSelectHelper::GetFileTypesInThreadPool(
     std::unique_ptr<FileChooserParams> params) {
   select_file_types_ = GetFileTypesFromAcceptType(params->accept_types);
   select_file_types_->allowed_paths =
@@ -574,7 +576,7 @@ void FileSelectHelper::RunFileChooserOnUIThread(
     return;
 
   select_file_dialog_ = ui::SelectFileDialog::Create(
-      this, new ChromeSelectFilePolicy(web_contents_));
+      this, std::make_unique<ChromeSelectFilePolicy>(web_contents_));
   if (!select_file_dialog_.get())
     return;
 

@@ -4,6 +4,7 @@
 
 #import <EarlGrey/EarlGrey.h>
 
+#include "base/ios/ios_util.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
 #import "ios/chrome/test/app/history_test_util.h"
 #import "ios/chrome/test/app/tab_test_util.h"
@@ -31,6 +32,7 @@ using web::test::HttpServer;
 - (void)tearDown {
   chrome_test_util::ClearBrowsingHistory();
   [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  [super tearDown];
 }
 
 // Tests that loading a URL ends up creating an NTP tile.

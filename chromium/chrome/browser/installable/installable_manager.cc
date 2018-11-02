@@ -5,10 +5,12 @@
 #include "chrome/browser/installable/installable_manager.h"
 
 #include "base/bind.h"
+#include "base/feature_list.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
+#include "chrome/common/chrome_features.h"
 #include "components/security_state/core/security_state.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -88,7 +90,6 @@ InstallableManager::InstallableManager(content::WebContents* web_contents)
       page_status_(InstallabilityCheckStatus::NOT_STARTED),
       menu_open_count_(0),
       menu_item_add_to_homescreen_count_(0),
-      is_active_(false),
       is_pwa_check_complete_(false),
       weak_factory_(this) {
   // This is null in unit tests.
@@ -138,14 +139,15 @@ void InstallableManager::GetData(const InstallableParams& params,
 
   // Return immediately if we're already working on a task. The new task will be
   // looked at once the current task is finished.
-  tasks_.push_back({params, callback});
-  if (is_active_)
+  bool was_active = task_queue_.HasCurrent();
+  task_queue_.Add({params, callback});
+  if (was_active)
     return;
 
-  is_active_ = true;
   if (page_status_ == InstallabilityCheckStatus::NOT_STARTED)
     page_status_ = InstallabilityCheckStatus::NOT_COMPLETED;
-  StartNextTask();
+
+  WorkOnTask();
 }
 
 void InstallableManager::RecordMenuOpenHistogram() {
@@ -306,8 +308,7 @@ bool InstallableManager::IsComplete(const InstallableParams& params) const {
 void InstallableManager::Reset() {
   // Prevent any outstanding callbacks to or from this object from being called.
   weak_factory_.InvalidateWeakPtrs();
-  tasks_.clear();
-  paused_tasks_.clear();
+  task_queue_.Reset();
   icons_.clear();
 
   // We may have reset prior to completion, in which case |menu_open_count_| or
@@ -328,21 +329,17 @@ void InstallableManager::Reset() {
   manifest_ = base::MakeUnique<ManifestProperty>();
   valid_manifest_ = base::MakeUnique<ValidManifestProperty>();
   worker_ = base::MakeUnique<ServiceWorkerProperty>();
-
-  is_active_ = false;
 }
 
 void InstallableManager::SetManifestDependentTasksComplete() {
-  DCHECK(!tasks_.empty());
-  const InstallableParams& params = tasks_[0].first;
-
+  const InstallableParams& params = task_queue_.Current().first;
   valid_manifest_->fetched = true;
   worker_->fetched = true;
   SetIconFetched(ParamsForPrimaryIcon(params));
   SetIconFetched(ParamsForBadgeIcon(params));
 }
 
-void InstallableManager::RunCallback(const Task& task,
+void InstallableManager::RunCallback(const InstallableTask& task,
                                      InstallableStatusCode code) {
   const InstallableParams& params = task.first;
   IconProperty null_icon;
@@ -369,21 +366,8 @@ void InstallableManager::RunCallback(const Task& task,
   task.second.Run(data);
 }
 
-void InstallableManager::StartNextTask() {
-  // If there's nothing to do, exit. Resources remain cached so any future calls
-  // won't re-fetch anything that has already been retrieved.
-  if (tasks_.empty()) {
-    is_active_ = false;
-    return;
-  }
-
-  DCHECK(is_active_);
-  WorkOnTask();
-}
-
 void InstallableManager::WorkOnTask() {
-  DCHECK(!tasks_.empty());
-  const Task& task = tasks_[0];
+  const InstallableTask& task = task_queue_.Current();
   const InstallableParams& params = task.first;
 
   InstallableStatusCode code = GetErrorCode(params);
@@ -397,8 +381,12 @@ void InstallableManager::WorkOnTask() {
     // again.
     if (worker_error() == NO_MATCHING_SERVICE_WORKER)
       worker_ = base::MakeUnique<ServiceWorkerProperty>();
-    tasks_.erase(tasks_.begin());
-    StartNextTask();
+
+    task_queue_.Next();
+
+    if (task_queue_.HasCurrent())
+      WorkOnTask();
+
     return;
   }
 
@@ -475,11 +463,10 @@ bool InstallableManager::IsManifestValidForWebApp(
     return false;
   }
 
-  // TODO(dominickn,mlamouri): when Chrome supports "minimal-ui", it should be
-  // accepted. If we accept it today, it would fallback to "browser" and make
-  // this check moot. See https://crbug.com/604390.
   if (manifest.display != blink::kWebDisplayModeStandalone &&
-      manifest.display != blink::kWebDisplayModeFullscreen) {
+      manifest.display != blink::kWebDisplayModeFullscreen &&
+      !(manifest.display == blink::kWebDisplayModeMinimalUi &&
+        base::FeatureList::IsEnabled(features::kPwaMinimalUi))) {
     valid_manifest_->error = MANIFEST_DISPLAY_NOT_SUPPORTED;
     return false;
   }
@@ -519,16 +506,17 @@ void InstallableManager::OnDidCheckHasServiceWorker(
       worker_->error = NOT_OFFLINE_CAPABLE;
       break;
     case content::ServiceWorkerCapability::NO_SERVICE_WORKER:
-      Task& task = tasks_[0];
+      InstallableTask& task = task_queue_.Current();
       InstallableParams& params = task.first;
       if (params.wait_for_worker) {
         // Wait for ServiceWorkerContextObserver::OnRegistrationStored. Set the
         // param |wait_for_worker| to false so we only wait once per task.
         params.wait_for_worker = false;
         OnWaitingForServiceWorker();
-        paused_tasks_.push_back(task);
-        tasks_.erase(tasks_.begin());
-        StartNextTask();
+        task_queue_.PauseCurrent();
+        if (task_queue_.HasCurrent())
+          WorkOnTask();
+
         return;
       }
       worker_->has_worker = false;
@@ -588,27 +576,27 @@ void InstallableManager::OnIconFetched(
 }
 
 void InstallableManager::OnRegistrationStored(const GURL& pattern) {
-  // If we don't have any paused tasks, that means:
-  //   a) we've already failed the check, or
-  //   b) we haven't yet called CheckHasServiceWorker.
-  // Otherwise if the scope doesn't match we keep waiting.
-  if (paused_tasks_.empty() || !content::ServiceWorkerContext::ScopeMatches(
-                                   pattern, manifest().start_url)) {
+  // If the scope doesn't match we keep waiting.
+  if (!content::ServiceWorkerContext::ScopeMatches(pattern,
+                                                   manifest().start_url)) {
     return;
   }
 
-  // Unpause the paused tasks.
-  for (const auto& task : paused_tasks_)
-    tasks_.push_back(task);
-  paused_tasks_.clear();
+  bool was_active = task_queue_.HasCurrent();
 
-  // Start the pipeline again if it is not running. This will call
-  // CheckHasServiceWorker to check if the SW has a fetch handler. Otherwise,
-  // adding the tasks to the end of the active queue is sufficient.
-  if (!is_active_) {
-    is_active_ = true;
-    StartNextTask();
-  }
+  // The existence of paused tasks implies that we are waiting for a service
+  // worker. We move any paused tasks back into the main queue so that the
+  // pipeline will call CheckHasServiceWorker again, in order to find out if
+  // the SW has a fetch handler.
+  // NOTE: If there are no paused tasks, that means:
+  //   a) we've already failed the check, or
+  //   b) we haven't yet called CheckHasServiceWorker.
+  task_queue_.UnpauseAll();
+  if (was_active)
+    return;  // If the pipeline was already running, we don't restart it.
+
+  if (task_queue_.HasCurrent())
+    WorkOnTask();
 }
 
 void InstallableManager::DidFinishNavigation(

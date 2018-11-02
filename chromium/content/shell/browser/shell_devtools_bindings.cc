@@ -90,9 +90,9 @@ int ResponseWriter::Write(net::IOBuffer* buffer,
 
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
-      base::Bind(&ShellDevToolsBindings::CallClientFunction, devtools_bindings_,
-                 "DevToolsAPI.streamWrite", base::Owned(id),
-                 base::Owned(chunkValue), nullptr));
+      base::BindOnce(&ShellDevToolsBindings::CallClientFunction,
+                     devtools_bindings_, "DevToolsAPI.streamWrite",
+                     base::Owned(id), base::Owned(chunkValue), nullptr));
   return num_bytes;
 }
 
@@ -155,6 +155,8 @@ void ShellDevToolsBindings::ReadyToCommitNavigation(
 }
 
 void ShellDevToolsBindings::DocumentAvailableInMainFrame() {
+  if (agent_host_)
+    agent_host_->DetachClient(this);
   agent_host_ = DevToolsAgentHost::GetOrCreateFor(inspected_contents_);
   agent_host_->AttachClient(this);
   if (inspect_element_at_x_ != -1) {
@@ -166,8 +168,10 @@ void ShellDevToolsBindings::DocumentAvailableInMainFrame() {
 }
 
 void ShellDevToolsBindings::WebContentsDestroyed() {
-  if (agent_host_)
+  if (agent_host_) {
     agent_host_->DetachClient(this);
+    agent_host_ = nullptr;
+  }
 }
 
 void ShellDevToolsBindings::SetPreferences(const std::string& json) {
@@ -202,8 +206,6 @@ void ShellDevToolsBindings::HandleMessageFromDevToolsFrontend(
   dict->GetList("params", &params);
 
   if (method == "dispatchProtocolMessage" && params && params->GetSize() == 1) {
-    if (!agent_host_ || !agent_host_->IsAttached())
-      return;
     std::string protocol_message;
     if (!params->GetString(0, &protocol_message))
       return;
@@ -243,7 +245,7 @@ void ShellDevToolsBindings::HandleMessageFromDevToolsFrontend(
               destination: OTHER
             }
             policy {
-              cookies_allowed: true
+              cookies_allowed: YES
               cookies_store: "user"
               setting:
                 "It's not possible to disable this feature from settings."
@@ -277,7 +279,7 @@ void ShellDevToolsBindings::HandleMessageFromDevToolsFrontend(
     if (!params->GetString(0, &name) || !params->GetString(1, &value)) {
       return;
     }
-    preferences_.SetStringWithoutPathExpansion(name, value);
+    preferences_.SetKey(name, base::Value(value));
   } else if (method == "removePreference") {
     std::string name;
     if (!params->GetString(0, &name))

@@ -18,6 +18,8 @@
 namespace {
 
 bool IsInternalPage(const GURL& url) {
+  const char vivaldiInternalURL[] =
+      "chrome-extension://mpognobbkildjkofajifpdfhcoklimli/";
   // There are many chrome:// UI URLs, but only look for the ones that users
   // are likely to have open. Most of the benefit is from the NTP URL.
   const char* const kReloadableUrlPrefixes[] = {
@@ -25,7 +27,9 @@ bool IsInternalPage(const GURL& url) {
       chrome::kChromeUIHistoryURL,
       chrome::kChromeUINewTabURL,
       chrome::kChromeUISettingsURL,
+      vivaldiInternalURL,
   };
+
   // Prefix-match against the table above. Use strncmp to avoid allocating
   // memory to convert the URL prefix constants into std::strings.
   for (size_t i = 0; i < arraysize(kReloadableUrlPrefixes); ++i) {
@@ -76,7 +80,8 @@ void SessionRestoreDelegate::RestoreTabs(
     // Restore the favicon for deferred tabs.
     favicon::ContentFaviconDriver* favicon_driver =
         favicon::ContentFaviconDriver::FromWebContents(restored_tab.contents());
-    favicon_driver->FetchFavicon(favicon_driver->GetActiveURL());
+    favicon_driver->FetchFavicon(favicon_driver->GetActiveURL(),
+                                 /*is_same_document=*/false);
   }
 
   TabLoader::RestoreTabs(tabs, restore_started);

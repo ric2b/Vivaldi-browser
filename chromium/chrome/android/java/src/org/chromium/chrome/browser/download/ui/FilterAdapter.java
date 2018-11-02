@@ -13,8 +13,10 @@ import android.widget.AdapterView;
 import android.widget.BaseAdapter;
 import android.widget.TextView;
 
+import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.download.ui.DownloadManagerUi.DownloadUiObserver;
+import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.widget.TintedDrawable;
 
 /** An adapter that allows selecting an item from a dropdown spinner. */
@@ -44,7 +46,7 @@ class FilterAdapter
         labelView.setText(DownloadFilter.getStringIdForFilter(position));
         int iconId = DownloadFilter.getDrawableForFilter(position);
         Drawable iconDrawable = TintedDrawable.constructTintedDrawable(
-                mManagerUi.getActivity().getResources(), iconId, R.color.descriptive_text_color);
+                mManagerUi.getActivity().getResources(), iconId, R.color.toolbar_light_tint);
         labelView.setCompoundDrawablesWithIntrinsicBounds(iconDrawable, null, null, null);
 
         return labelView;
@@ -56,6 +58,9 @@ class FilterAdapter
                 getTextViewFromResource(convertView, R.layout.download_manager_spinner);
         labelView.setText(position == 0 ? R.string.menu_downloads
                                         : DownloadFilter.getStringIdForFilter(position));
+        if (!FeatureUtilities.isChromeHomeModernEnabled()) {
+            ApiCompatibilityUtils.setTextAppearance(labelView, R.style.BlackHeadline2);
+        }
         return labelView;
     }
 

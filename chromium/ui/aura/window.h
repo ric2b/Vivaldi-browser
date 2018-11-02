@@ -45,6 +45,9 @@ class Transform;
 
 namespace ui {
 class Layer;
+namespace mojom {
+enum class EventTargetingPolicy;
+}
 }
 
 namespace aura {
@@ -241,8 +244,10 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   void RemoveObserver(WindowObserver* observer);
   bool HasObserver(const WindowObserver* observer) const;
 
-  void set_ignore_events(bool ignore_events) { ignore_events_ = ignore_events; }
-  bool ignore_events() const { return ignore_events_; }
+  void SetEventTargetingPolicy(ui::mojom::EventTargetingPolicy policy);
+  ui::mojom::EventTargetingPolicy event_targeting_policy() const {
+    return event_targeting_policy_;
+  }
 
   // Returns true if the |point_in_root| in root window's coordinate falls
   // within this window's bounds. Returns false if the window is detached
@@ -312,8 +317,21 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   // Create a LayerTreeFrameSink for the aura::Window.
   std::unique_ptr<cc::LayerTreeFrameSink> CreateLayerTreeFrameSink();
 
-  // Get the current viz::SurfaceId.
+  // Gets the current viz::SurfaceId.
   viz::SurfaceId GetSurfaceId() const;
+
+  // Forces the window to allocate a new viz::LocalSurfaceId for the next
+  // CompositorFrame submission in anticipation of a synchronization operation
+  // that does not involve a resize or a device scale factor change.
+  void AllocateLocalSurfaceId();
+
+  // Gets the current viz::LocalSurfaceId.
+  const viz::LocalSurfaceId& GetLocalSurfaceId() const;
+
+  // Returns the FrameSinkId. In LOCAL mode, this returns a valid FrameSinkId
+  // only if a LayerTreeFrameSink has been created. In MUS mode, this always
+  // return a valid FrameSinkId.
+  viz::FrameSinkId GetFrameSinkId() const;
 
  protected:
   // Deletes (or removes if not owned by parent) all child windows. Intended for
@@ -327,6 +345,7 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
                            int64_t old_value,
                            std::unique_ptr<ui::PropertyData> data) override;
  private:
+  friend class HitTestDataProviderAura;
   friend class LayoutManager;
   friend class PropertyConverter;
   friend class WindowPort;
@@ -480,7 +499,7 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   std::unique_ptr<ui::EventTargeter> targeter_;
 
   // Makes the window pass all events through to any windows behind it.
-  bool ignore_events_;
+  ui::mojom::EventTargetingPolicy event_targeting_policy_;
 
   base::ObserverList<WindowObserver, true> observers_;
 

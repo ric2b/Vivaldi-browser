@@ -35,11 +35,6 @@ class InterceptingResourceHandler::Controller : public ResourceController {
     intercepting_handler_->Cancel();
   }
 
-  void CancelAndIgnore() override {
-    MarkAsUsed();
-    intercepting_handler_->CancelAndIgnore();
-  }
-
   void CancelWithError(int error_code) override {
     MarkAsUsed();
     intercepting_handler_->CancelWithError(error_code);
@@ -269,8 +264,8 @@ void InterceptingResourceHandler::ResumeInternal() {
   // Can't call DoLoop synchronously, as it may call into |next_handler_|
   // synchronously, which is what called Resume().
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&InterceptingResourceHandler::DoLoop,
-                            weak_ptr_factory_.GetWeakPtr()));
+      FROM_HERE, base::BindOnce(&InterceptingResourceHandler::DoLoop,
+                                weak_ptr_factory_.GetWeakPtr()));
 }
 
 void InterceptingResourceHandler::SendOnWillReadToOldHandler() {

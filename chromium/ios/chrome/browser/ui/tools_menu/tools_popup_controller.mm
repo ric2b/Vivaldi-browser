@@ -12,10 +12,10 @@
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_view.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
+#import "ios/chrome/browser/ui/tools_menu/tools_menu_configuration.h"
 #import "ios/chrome/browser/ui/tools_menu/tools_menu_constants.h"
 #import "ios/chrome/browser/ui/tools_menu/tools_menu_view_controller.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
-#import "ios/shared/chrome/browser/ui/tools_menu/tools_menu_configuration.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -143,10 +143,6 @@ NS_INLINE UIEdgeInsets TabHistoryPopupMenuInsets() {
   [_toolsMenuViewController setIsCurrentPageBookmarked:value];
 }
 
-- (void)setCanUseReaderMode:(BOOL)enabled {
-  [_toolsMenuViewController setCanUseReaderMode:enabled];
-}
-
 - (void)setCanShowFindBar:(BOOL)enabled {
   [_toolsMenuViewController setCanShowFindBar:enabled];
 }
@@ -170,16 +166,16 @@ NS_INLINE UIEdgeInsets TabHistoryPopupMenuInsets() {
     case TOOLS_BOOKMARK_ITEM:
       base::RecordAction(UserMetricsAction("MobileMenuAddToBookmarks"));
       break;
-    case IDC_CLOSE_ALL_TABS:
+    case TOOLS_CLOSE_ALL_TABS:
       base::RecordAction(UserMetricsAction("MobileMenuCloseAllTabs"));
       break;
-    case IDC_CLOSE_ALL_INCOGNITO_TABS:
+    case TOOLS_CLOSE_ALL_INCOGNITO_TABS:
       base::RecordAction(UserMetricsAction("MobileMenuCloseAllIncognitoTabs"));
       break;
-    case IDC_FIND:
+    case TOOLS_SHOW_FIND_IN_PAGE:
       base::RecordAction(UserMetricsAction("MobileMenuFindInPage"));
       break;
-    case IDC_HELP_PAGE_VIA_MENU:
+    case TOOLS_SHOW_HELP_PAGE:
       base::RecordAction(UserMetricsAction("MobileMenuHelp"));
       break;
     case TOOLS_NEW_INCOGNITO_TAB_ITEM:
@@ -203,13 +199,10 @@ NS_INLINE UIEdgeInsets TabHistoryPopupMenuInsets() {
     case IDC_REQUEST_MOBILE_SITE:
       base::RecordAction(UserMetricsAction("MobileMenuRequestMobileSite"));
       break;
-    case IDC_READER_MODE:
-      base::RecordAction(UserMetricsAction("MobileMenuRequestReaderMode"));
-      break;
     case IDC_SHOW_BOOKMARK_MANAGER:
       base::RecordAction(UserMetricsAction("MobileMenuAllBookmarks"));
       break;
-    case IDC_SHOW_HISTORY:
+    case TOOLS_SHOW_HISTORY:
       base::RecordAction(UserMetricsAction("MobileMenuHistory"));
       break;
     case IDC_SHOW_OTHER_DEVICES:
@@ -218,17 +211,17 @@ NS_INLINE UIEdgeInsets TabHistoryPopupMenuInsets() {
     case TOOLS_STOP_ITEM:
       base::RecordAction(UserMetricsAction("MobileMenuStop"));
       break;
-    case IDC_REPORT_AN_ISSUE:
+    case TOOLS_REPORT_AN_ISSUE:
       self.containerView.hidden = YES;
       base::RecordAction(UserMetricsAction("MobileMenuReportAnIssue"));
       break;
-    case IDC_VIEW_SOURCE:
+    case TOOLS_VIEW_SOURCE:
       // Debug only; no metric.
       break;
     case TOOLS_MENU_ITEM:
       // Do nothing when tapping the tools menu a second time.
       break;
-    case IDC_SHOW_READING_LIST:
+    case TOOLS_READING_LIST:
       base::RecordAction(UserMetricsAction("MobileMenuReadingList"));
       break;
     default:

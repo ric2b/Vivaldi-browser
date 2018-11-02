@@ -143,7 +143,7 @@
 #   persistent IDs for all fields (but not for groups!) are needed. These are
 #   specified by the 'id' keys of each policy. NEVER CHANGE EXISTING IDs,
 #   because doing so would break the deployed wire format!
-#   For your editing convenience: highest ID currently used: 377
+#   For your editing convenience: highest ID currently used: 390
 #   And don't forget to also update the EnterprisePolicies enum of
 #   histograms.xml (run 'python tools/metrics/histograms/update_policies.py').
 #
@@ -1759,7 +1759,7 @@
 
       When the 'Block all downloads' option is chosen, all downloads are blocked.
 
-      When this policy is not set, (or the 'No special restrictions' option is chosen), the dowloads will go through the usual security restrictions based on SafeBrowsing analysis results.
+      When this policy is not set, (or the 'No special restrictions' option is chosen), the downloads will go through the usual security restrictions based on SafeBrowsing analysis results.
 
       Note that these restrictions apply to downloads triggered from web page content, as well as the 'download link...' context menu option. These restrictions do not apply to the save / download of the currently displayed page, nor does it apply to saving as PDF from the printing options.
 
@@ -1853,7 +1853,7 @@
 
       This policy only takes effect if a proxy is configured (for example through policy, by the user in chrome://settings, or by extensions).
 
-      If you enable this setting, any captive portal authentication pages (i.e. all web pages starting from captive portal signin page until <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> detects succesful internet connection) will be displayed in a separate window ignoring all policy settings and restrictions for the current user.
+      If you enable this setting, any captive portal authentication pages (i.e. all web pages starting from captive portal signin page until <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> detects successful internet connection) will be displayed in a separate window ignoring all policy settings and restrictions for the current user.
 
       If you disable this setting or leave it unset, any captive portal authentication pages will be shown in a (regular) new browser tab, using the current user's proxy settings.''',
     },
@@ -2142,7 +2142,9 @@
           'name': 'AuthSchemes',
           'type': 'string',
           'schema': { 'type': 'string' },
-          'supported_on': ['chrome.*:9-','android:46-'],
+          'supported_on': ['chrome.*:9-','android:46-','chrome_os:62-'],
+          # TODO(ljusten): Uncomment, once that property is in:
+          # 'supported_cros_management': ['ad'],
           'features': {
             'dynamic_refresh': False,
             'per_profile': False,
@@ -2161,7 +2163,9 @@
           'name': 'DisableAuthNegotiateCnameLookup',
           'type': 'main',
           'schema': { 'type': 'boolean' },
-          'supported_on': ['chrome.*:9-','android:46-'],
+          'supported_on': ['chrome.*:9-','android:46-','chrome_os:62-'],
+          # TODO(ljusten): Uncomment, once that property is in:
+          # 'supported_cros_management': ['ad'],
           'features': {
             'dynamic_refresh': False,
             'per_profile': False,
@@ -2180,7 +2184,9 @@
           'name': 'EnableAuthNegotiatePort',
           'type': 'main',
           'schema': { 'type': 'boolean' },
-          'supported_on': ['chrome.*:9-'],
+          'supported_on': ['chrome.*:9-','chrome_os:62-'],
+          # TODO(ljusten): Uncomment, once that property is in:
+          # 'supported_cros_management': ['ad'],
           'features': {
             'dynamic_refresh': False,
             'per_profile': False,
@@ -2199,7 +2205,9 @@
           'name': 'AuthServerWhitelist',
           'type': 'string',
           'schema': { 'type': 'string' },
-          'supported_on': ['chrome.*:9-','android:46-','webview_android:49-'],
+          'supported_on': ['chrome.*:9-','android:46-','webview_android:49-','chrome_os:62-'],
+          # TODO(ljusten): Uncomment, once that property is in:
+          # 'supported_cros_management': ['ad'],
           'features': {
             'dynamic_refresh': False,
             'per_profile': False,
@@ -2218,7 +2226,9 @@
           'name': 'AuthNegotiateDelegateWhitelist',
           'type': 'string',
           'schema': { 'type': 'string' },
-          'supported_on': ['chrome.*:9-','android:46-'],
+          'supported_on': ['chrome.*:9-','android:46-','chrome_os:62-'],
+          # TODO(ljusten): Uncomment, once that property is in:
+          # 'supported_cros_management': ['ad'],
           'features': {
             'dynamic_refresh': False,
             'per_profile': False,
@@ -2271,7 +2281,9 @@
           'name': 'AllowCrossOriginAuthPrompt',
           'type': 'main',
           'schema': { 'type': 'boolean' },
-          'supported_on': ['chrome.*:13-'],
+          'supported_on': ['chrome.*:13-','chrome_os:62-'],
+          # TODO(ljusten): Uncomment, once that property is in:
+          # 'supported_cros_management': ['ad'],
           'features': {
             'dynamic_refresh': True,
             'per_profile': False,
@@ -2308,7 +2320,7 @@
           'id': 32,
           'caption': '''Configure extension installation blacklist''',
           'tags': [],
-          'desc': '''Allows you to specify which extensions the users can NOT install. Extensions already installed will be removed if blacklisted.
+          'desc': '''Allows you to specify which extensions the users can NOT install. Extensions already installed will be disabled if blacklisted, without a way for the user to enable them. Once an extension disabled due to the blacklist is removed from it, it will automatically get re-enabled.
 
           A blacklist value of '*' means all extensions are blacklisted unless they are explicitly listed in the whitelist.
 
@@ -9159,8 +9171,8 @@
     {
       'name': 'GoogleCast',
       'type': 'group',
-      'caption': '''Google Cast''',
-      'desc': '''Configure policies for Google Cast, a feature that allows users to send the contents of tabs, sites or the desktop from the browser to remote displays and sound systems.''',
+      'caption': '''<ph name="PRODUCT_NAME">Google Cast</ph>''',
+      'desc': '''Configure policies for <ph name="PRODUCT_NAME">Google Cast</ph>, a feature that allows users to send the contents of tabs, sites or the desktop from the browser to remote displays and sound systems.''',
       'policies': [
         {
           'name': 'EnableMediaRouter',
@@ -9173,11 +9185,11 @@
           },
           'example_value': True,
           'id': 333,
-          'caption': '''Enables Google Cast''',
+          'caption': '''Enables <ph name="PRODUCT_NAME">Google Cast</ph>''',
           'tags': [],
-          'desc': '''If this policy is set to true or is not set, Google Cast will be enabled, and users will be able to launch it from the app menu, page context menus, media controls on Cast-enabled websites, and (if shown) the Cast toolbar icon.
+          'desc': '''If this policy is set to true or is not set, <ph name="PRODUCT_NAME">Google Cast</ph> will be enabled, and users will be able to launch it from the app menu, page context menus, media controls on Cast-enabled websites, and (if shown) the Cast toolbar icon.
 
-          If this policy set to false, Google Cast will be disabled.'''
+          If this policy set to false, <ph name="PRODUCT_NAME">Google Cast</ph> will be disabled.'''
         },
         {
           'name': 'ShowCastIconInToolbar',
@@ -9190,7 +9202,7 @@
           },
           'example_value': False,
           'id': 362,
-          'caption': '''Shows the Google Cast toolbar icon''',
+          'caption': '''Shows the <ph name="PRODUCT_NAME">Google Cast</ph> toolbar icon''',
           'tags': [],
           'desc': '''If this policy is set to true, the Cast toolbar icon will always be shown on the toolbar or the overflow menu, and users will not be able to remove it.
 
@@ -9379,6 +9391,182 @@
       This policy has no effect on whether users can configure printers on
       individual devices.  It is intended to be supplementary to the
       configuration of printers by individual users.''',
+    },
+    {
+      'name': 'NativePrintersBulkConfiguration',
+      'id': 382,
+      'type': 'external',
+      'schema': {
+        'type': 'object',
+        'properties': {
+          'url': { 'type': 'string' },
+          'hash': { 'type': 'string' }
+        },
+      },
+      'supported_on': ['chrome_os:62-'],
+      'features': {
+        'dynamic_refresh': True,
+        'per_profile': True,
+      },
+      'example_value': {
+        "url": "https://example.com/printerpolicy",
+        "hash": "deadbeefdeadbeefdeadbeefdeadbeefdeafdeadbeefdeadbeef"
+      },
+      'max_size': 5242880,
+      'caption': '''Enterprise printer configuration file''',
+      'tags': [],
+      'desc': '''Provides configurations for enterprise printers.
+
+      This policy allows you to provide printer configurations to
+      <ph name="PRODUCT_OS_NAME">$2<ex>Google Chrome OS</ex></ph> devices.
+      The size of the file must not exceed 5MB and must be encoded in JSON.
+      The format is the same as the NativePrinters dictionary.  It is estimated
+      that a file containing approximately 21,000 printers will encode as a 5MB
+      file.  The cryptographic hash is used to verify the integrity of the
+      download.
+
+      The file is downloaded and cached. It will be re-downloaded whenever
+      the URL or the hash changes.
+
+      If this policy is set,
+      <ph name="PRODUCT_OS_NAME">$2<ex>Google Chrome OS</ex></ph> will download
+      the file for printer configurations and make printers available in
+      accordance with NativePrintersBulkAccessMode, NativePrintersBulkWhitelist,
+      and NativePrintersBulkBlacklist.
+
+      If you set this policy, users cannot change or override it.
+
+      This policy has no effect on whether users can configure printers on
+      individual devices.  It is intended to be supplementary to the
+      configuration of printers by individual users.''',
+    },
+    {
+      'name': 'NativePrintersBulkAccessMode',
+      'id': 383,
+      'supported_on': ['chrome_os:62-'],
+      'type': 'int-enum',
+      'schema': {
+        'type': 'integer',
+        'enum': [ 0, 1, 2 ],
+      },
+      'items': [
+        {
+          'name': 'BlacklistRestriction',
+          'value': 0,
+          'caption': '''All printers are shown except those in the blacklist.''',
+        },
+        {
+          'name': 'WhitelistPrintersOnly',
+          'value': 1,
+          'caption': '''Only printers in the whitelist are shown to users''',
+        },
+        {
+          'name': 'AllowAll',
+          'value': 2,
+          'caption': '''Allow all printers from the configuration file.''',
+        },
+      ],
+      'features' : {
+        'can_be_recommended': True,
+        'dynamic_refresh': True,
+        'per_profile': True,
+      },
+      'example_value': 1,
+      'caption': '''Printer configuration access policy.''',
+      'tags': [],
+      'desc': '''Controls which printers from the
+      NativePrintersBulkConfiguration are available to users.
+
+      Designates which access policy is used for bulk printer configuration.
+      If AllowAll is selected, all printers are shown. If BlacklistRestrction
+      is selected, NativePrintersBulkBlacklist is used to restrict access to
+      the specified printers.  If WhitelistPrintersOnly is selected,
+      NativePrintersWhitelist designates only those printers which are
+      selectable.
+
+      If this policy is not set, BlacklistRestriction is assumed.
+      ''',
+    },
+    {
+      'name': 'NativePrintersBulkBlacklist',
+      'supported_on': ['chrome_os:62-'],
+      'id': 384,
+      'type': 'list',
+      'schema': {
+        'type': 'array',
+        'items': { 'type': 'string' },
+      },
+      'features': {
+        'dynamic_refresh': True,
+        'per_profile': True,
+      },
+      'example_value':  ["id1", "id2", "id3"],
+      'caption': '''Disabled enterprise printers''',
+      'tags': [],
+      'desc': '''Specifies the printers which a user cannot use.
+
+      This policy is only used if BlacklistRestriction is chosen for
+      NativePrintersBulkAccessMode.
+
+      If this policy is used, all printers are provided to the user except
+      for the ids listed in this policy.
+      ''',
+    },
+    {
+      'name': 'NativePrintersBulkWhitelist',
+      'supported_on': ['chrome_os:62-'],
+      'id': 385,
+      'type': 'list',
+      'schema': {
+        'type': 'array',
+        'items': { 'type': 'string' },
+      },
+      'features': {
+        'dynamic_refresh': True,
+        'per_profile': True,
+      },
+      'example_value':  ["id1", "id2", "id3"],
+      'caption': '''Enabled enterprise printers''',
+      'tags': [],
+      'desc': '''Specifies the printers which a user can use.
+
+      This policy is only used if WhitelistPrintersOnly is chosen for
+      NativePrintersBulkAccessMode.
+
+      If this policy is used, only the printers with ids matching the values
+      in this policy are available to the user. The ids must coorespond to
+      the entries in the file specified in NativePrintersBulkConfiguration.''',
+    },
+    {
+      'name': 'TPMFirmwareUpdateSettings',
+      'supported_on': ['chrome_os:61-'],
+      'device_only': True,
+      'id': 390,
+      'type': 'dict',
+      'schema': {
+        'type': 'object',
+        'properties': {
+          'allow-user-initiated-powerwash': {
+            'type': 'boolean',
+          },
+        },
+      },
+      'features': {
+        'dynamic_refresh': True,
+        'per_profile': False,
+      },
+      'example_value': {
+        'allow-user-initiated-powerwash': True
+      },
+      'caption': '''Configure TPM firmware update behavior''',
+      'tags': [],
+      'desc': '''Configures availability and behavior of TPM firmware update functionality.
+
+      Individual settings can be specified in JSON properties:
+
+      <ph name="TPM_FIRMWARE_UPDATE_SETTINGS_ALLOW_USER_INITIATED_POWERWASH">allow-user-initiated-powerwash</ph>: If set to <ph name="TPM_FIRMWARE_UPDATE_SETTINGS_ALLOW_USER_INITIATED_POWERWASH_TRUE">true</ph>, users will be able to trigger the powerwash flow to install a TPM firmware update.
+
+      If the policy is not set, TPM firmware update functionality will not be available.''',
     },
     {
       'name': 'QuickUnlock',
@@ -9716,16 +9904,19 @@
           'caption': '''Allow data migration''',
         },
       ],
-      'supported_on': ['chrome_os:60-'],
+      'supported_on': ['chrome_os:60-60'],
       'device_only': True,
       'features': {
         'dynamic_refresh': True,
       },
+      'deprecated': True,
       'example_value': 1,
       'id': 374,
       'caption': '''Migration strategy for ecryptfs''',
       'tags': [],
-      'desc': '''Specifies how a device should behave that shipped with ecryptfs and needs to transition to ext4 encryption.
+      'desc': '''This policy is deprecated in M61, please use EcryptfsMigrationStrategy instead.
+
+      Specifies how a device should behave that shipped with ecryptfs and needs to transition to ext4 encryption.
 
       If you set this policy to 'DisallowArc', Android apps will be disabled for all users on the device (including those that have ext4 encryption already) and no migration from ecryptfs to ext4 encryption will be offered to any users.
 
@@ -9823,6 +10014,155 @@
 
       If the policy is left unset, there will be no restrictions on the set of apps the user can enable on the lock screen imposed by the policy.'''
     },
+    {
+      'name': 'CastReceiver',
+      'type': 'group',
+      'caption': '''Cast Receiver''',
+      'desc': '''Configure the Cast Receiver in <ph name="PRODUCT_NAME">$2<ex>Google Chrome OS</ex></ph>.''',
+      'policies': [
+        {
+          'name': 'CastReceiverEnabled',
+          'type': 'main',
+          'schema': { 'type': 'boolean' },
+          'supported_on': ['chrome_os:62-'],
+          'future': True,
+          'features': {
+            'dynamic_refresh': True,
+            'per_profile': True,
+          },
+          'example_value': False,
+          'id': 378,
+          'default_for_enterprise_users': False,
+          'caption': '''Enable casting content to the device''',
+          'tags': [],
+          'desc': '''Allow content to be cast to the device using <ph name="PRODUCT_NAME">Google Cast</ph>.
+
+          If this policy is set to False, users will not be able to cast content to their device. If this policy is set to True, users are allowed to cast content. If this policy is not set, users are not allowed to cast content to enrolled Chrome OS devices, but can cast to non enrolled devices.''',
+        },
+        {
+          'name': 'CastReceiverName',
+          'type': 'string',
+          'schema': { 'type': 'string' },
+          'supported_on': ['chrome_os:62-'],
+          'device_only': True,
+          'future': True,
+          'features': {
+            'dynamic_refresh': True,
+            'per_profile': False,
+          },
+          'example_value': 'My Chromebook',
+          'id': 379,
+          'caption': '''Name of the <ph name="PRODUCT_NAME">Google Cast</ph> destination''',
+          'tags': [],
+          'desc': '''Determine the name advertised as a <ph name="PRODUCT_NAME">Google Cast</ph> destination.
+
+          If this policy is set to a non empty string, that string will be used as the name of the <ph name="PRODUCT_NAME">Google Cast</ph> destination. Otherwise, the destination name will be the device name. If this policy is not set, the destination name will be the device name, and the owner of the device (or a user from the domain managing the device) will be allowed to change it. The name is limited to 24 characters.'''
+        },
+      ]
+    },
+    {
+      'name': 'DeviceOffHours',
+      'type': 'dict',
+      'schema': {
+        'type': 'object',
+        'properties': {
+          'intervals': {
+            'type': 'array',
+            'items': {
+              'type': 'object',
+              'id': 'DeviceOffHoursIntervals',
+              'properties': {
+                'start': {
+                  'type': 'object',
+                  'id': 'WeeklyTime',
+                  'properties': {
+                    'day_of_week': {
+                      'type': 'string',
+                      'enum': [
+                        'MONDAY',
+                        'TUESDAY',
+                        'WEDNESDAY',
+                        'THURSDAY',
+                        'FRIDAY',
+                        'SATURDAY',
+                        'SUNDAY'
+                      ]
+                    },
+                    'time': { 'type': 'integer'}
+                  }
+                },
+                'end': {
+                  '$ref': 'WeeklyTime'
+                }
+              }
+            }
+          },
+          'timezone': { 'type': 'string' },
+          'ignored_policies': {
+            'type': 'array',
+            'items': { 'type':'string' }
+          }
+        }
+      },
+      'supported_on': ['chrome_os:62-'],
+      'device_only': True,
+      'features': {
+        'dynamic_refresh': True
+      },
+      'example_value': {
+        'intervals':
+        [
+          {
+            'start': {
+              'day_of_week': 'MONDAY',
+              'time': 12840000
+            },
+            'end': {
+              'day_of_week': 'MONDAY',
+              'time': 21720000
+            }
+          },
+          {
+            'start': {
+              'day_of_week': 'FRIDAY',
+              'time': 38640000
+            },
+            'end': {
+              'day_of_week': 'FRIDAY',
+              'time': 57600000
+            }
+          }
+        ],
+        'timezone': 'GMT',
+        'ignored_policies': ['allow_new_users', 'guest_mode_enabled']
+      },
+      'id': 380,
+      'caption': '''Off hours intervals when device OffHours |ignored_policies| are released''',
+      'tags': [],
+      'desc': '''If "OffHours" policy is set, then the specified device policies are ignored (use the default settings of these policies) during the defined time intervals. Device policies are re-applied by Chrome on every event when "OffHours" period starts or ends. User will be notified and forced to sign out when "OffHours" time end and device policy settings are changed (i.e. when user is logged in not with an allowed account).''',
+    },
+    {
+      'name': 'CloudPolicyOverridesMachinePolicy',
+      'type': 'main',
+      'schema': { 'type': 'boolean'},
+      'supported_on': ['chrome.*:62-'],
+      'features': {
+        'dynamic_refresh': False,
+        'per_profile': False,
+      },
+      'example_value': False,
+      'id': 381,
+      'caption': '''<ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> cloud policy overrides Machine policy.''',
+      'tags': [],
+      'future': True,
+      'desc': '''
+      If the policy is set to true, cloud  policy takes precedence if it conflicts with machine policy.
+      If the policy is set to false or not configured, machine policy takes precedence if it conflicts with cloud policy.
+      For more details about policy priority, please visit: https://support.google.com/chrome?p=set_chrome_policies_for_devices
+
+      This policy is not available on Windows instances that are not joined to a <ph name="MS_AD_NAME">Microsoft® Active Directory®</ph> domain.
+      '''
+    }
   ],
   'messages': {
     # Messages that are not associated to any policies.

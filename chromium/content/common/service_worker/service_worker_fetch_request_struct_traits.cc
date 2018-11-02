@@ -10,19 +10,6 @@
 
 namespace mojo {
 
-namespace {
-
-// Struct traits context for the FetchAPIRequest type. Since getters are invoked
-// twice when serializing the type, this reduces the load for heavy members.
-struct ServiceWorkerFetchRequestStructTraitsContext {
-  ServiceWorkerFetchRequestStructTraitsContext() = default;
-  ~ServiceWorkerFetchRequestStructTraitsContext() = default;
-
-  std::map<std::string, std::string> headers;
-};
-
-}  // namespace
-
 using blink::mojom::FetchCredentialsMode;
 using blink::mojom::FetchRedirectMode;
 using blink::mojom::FetchRequestMode;
@@ -404,29 +391,13 @@ bool EnumTraits<ServiceWorkerFetchType, content::ServiceWorkerFetchType>::
   return false;
 }
 
-void* StructTraits<blink::mojom::FetchAPIRequestDataView,
-                   content::ServiceWorkerFetchRequest>::
-    SetUpContext(const content::ServiceWorkerFetchRequest& request) {
-  ServiceWorkerFetchRequestStructTraitsContext* context =
-      new ServiceWorkerFetchRequestStructTraitsContext();
-  context->headers.insert(request.headers.begin(), request.headers.end());
-
-  return context;
-}
-
-void StructTraits<blink::mojom::FetchAPIRequestDataView,
-                  content::ServiceWorkerFetchRequest>::
-    TearDownContext(const content::ServiceWorkerFetchRequest& request,
-                    void* context) {
-  delete static_cast<ServiceWorkerFetchRequestStructTraitsContext*>(context);
-}
-
-const std::map<std::string, std::string>&
+std::map<std::string, std::string>
 StructTraits<blink::mojom::FetchAPIRequestDataView,
              content::ServiceWorkerFetchRequest>::
-    headers(const content::ServiceWorkerFetchRequest& request, void* context) {
-  return static_cast<ServiceWorkerFetchRequestStructTraitsContext*>(context)
-      ->headers;
+    headers(const content::ServiceWorkerFetchRequest& request) {
+  std::map<std::string, std::string> header_map;
+  header_map.insert(request.headers.begin(), request.headers.end());
+  return header_map;
 }
 
 bool StructTraits<blink::mojom::FetchAPIRequestDataView,
@@ -454,6 +425,9 @@ bool StructTraits<blink::mojom::FetchAPIRequestDataView,
     out->blob_uuid = blob_uuid.value();
     out->blob_size = data.blob_size();
   }
+  storage::mojom::BlobPtr blob = data.TakeBlob<storage::mojom::BlobPtr>();
+  if (blob)
+    out->blob = base::MakeRefCounted<storage::BlobHandle>(std::move(blob));
   out->is_reload = data.is_reload();
   return true;
 }

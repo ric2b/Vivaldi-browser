@@ -15,8 +15,8 @@
 #include <string>
 #include <vector>
 
+#include "base/containers/id_map.h"
 #include "base/gtest_prod_util.h"
-#include "base/id_map.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/process/process.h"
@@ -46,7 +46,6 @@
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/web/WebAXObject.h"
 #include "third_party/WebKit/public/web/WebConsoleMessage.h"
-#include "third_party/WebKit/public/web/WebDataSource.h"
 #include "third_party/WebKit/public/web/WebElement.h"
 #include "third_party/WebKit/public/web/WebFrameWidget.h"
 #include "third_party/WebKit/public/web/WebHistoryItem.h"
@@ -70,18 +69,16 @@
 #endif
 
 namespace blink {
-class WebDataSource;
 class WebDateTimeChooserCompletion;
 class WebGestureEvent;
 class WebMouseEvent;
 class WebSpeechRecognizer;
 class WebStorageNamespace;
+class WebTappedInfo;
 class WebURLRequest;
-struct WebActiveWheelFlingParameters;
 struct WebDateTimeChooserParams;
 struct WebMediaPlayerAction;
 struct WebPluginAction;
-struct WebPoint;
 struct WebWindowFeatures;
 }  // namespace blink
 
@@ -113,11 +110,10 @@ class CreateViewParams;
 //
 // For context, please see https://crbug.com/467770 and
 // http://www.chromium.org/developers/design-documents/site-isolation.
-class CONTENT_EXPORT RenderViewImpl
-    : public RenderWidget,
-      NON_EXPORTED_BASE(public blink::WebViewClient),
-      public RenderWidgetOwnerDelegate,
-      public RenderView {
+class CONTENT_EXPORT RenderViewImpl : public RenderWidget,
+                                      public blink::WebViewClient,
+                                      public RenderWidgetOwnerDelegate,
+                                      public RenderView {
  public:
   // Creates a new RenderView. Note that if the original opener has been closed,
   // |params.window_was_created_with_opener| will be true and
@@ -202,9 +198,6 @@ class CONTENT_EXPORT RenderViewImpl
 
   void AttachWebFrameWidget(blink::WebFrameWidget* frame_widget);
 
-  void TransferActiveWheelFlingAnimation(
-      const blink::WebActiveWheelFlingParameters& params) override;
-
   // Starts a timer to send an UpdateState message on behalf of |frame|, if the
   // timer isn't already running. This allows multiple state changing events to
   // be coalesced into one update.
@@ -268,15 +261,15 @@ class CONTENT_EXPORT RenderViewImpl
   void DidOverscroll(const blink::WebFloatSize& overscrollDelta,
                      const blink::WebFloatSize& accumulatedOverscroll,
                      const blink::WebFloatPoint& positionInViewport,
-                     const blink::WebFloatSize& velocityInViewport) override;
+                     const blink::WebFloatSize& velocityInViewport,
+                     const blink::WebScrollBoundaryBehavior& behavior) override;
   void HasTouchEventHandlers(bool has_handlers) override;
   blink::WebScreenInfo GetScreenInfo() override;
   void SetToolTipText(const blink::WebString&,
                       blink::WebTextDirection hint) override;
   void SetTouchAction(cc::TouchAction touchAction) override;
-  void ShowUnhandledTapUIIfNeeded(const blink::WebPoint& tappedPosition,
-                                  const blink::WebNode& tappedNode,
-                                  bool pageChanged) override;
+  void ShowUnhandledTapUIIfNeeded(
+      const blink::WebTappedInfo& tappedInfo) override;
   blink::WebWidgetClient* WidgetClient() override;
 
   // blink::WebViewClient implementation --------------------------------------
@@ -731,8 +724,11 @@ class CONTENT_EXPORT RenderViewImpl
   // URL-bar.
   bool browser_controls_shrink_blink_size_;
 
-  // The height of the browser controls.
+  // The height of the browser top controls.
   float top_controls_height_;
+
+  // The height of the browser bottom controls.
+  float bottom_controls_height_;
 
   // View ----------------------------------------------------------------------
 

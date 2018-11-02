@@ -13,6 +13,7 @@ import android.os.Message;
 import android.os.Parcel;
 import android.os.ParcelUuid;
 import android.os.Parcelable;
+import android.support.annotation.Nullable;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
@@ -25,6 +26,7 @@ import org.chromium.content.browser.framehost.RenderFrameHostDelegate;
 import org.chromium.content.browser.framehost.RenderFrameHostImpl;
 import org.chromium.content_public.browser.AccessibilitySnapshotCallback;
 import org.chromium.content_public.browser.AccessibilitySnapshotNode;
+import org.chromium.content_public.browser.ChildProcessImportance;
 import org.chromium.content_public.browser.ContentBitmapCallback;
 import org.chromium.content_public.browser.ImageDownloadCallback;
 import org.chromium.content_public.browser.JavaScriptCallback;
@@ -298,6 +300,11 @@ import java.util.UUID;
     @Override
     public void onShow() {
         nativeOnShow(mNativeWebContentsAndroid);
+    }
+
+    @Override
+    public void setImportance(@ChildProcessImportance int importance) {
+        nativeSetImportance(mNativeWebContentsAndroid, importance);
     }
 
     @Override
@@ -593,8 +600,8 @@ import java.util.UUID;
     }
 
     @Override
-    public List<Rect> getCurrentlyPlayingVideoSizes() {
-        return nativeGetCurrentlyPlayingVideoSizes(mNativeWebContentsAndroid);
+    public @Nullable Rect getFullscreenVideoSize() {
+        return nativeGetFullscreenVideoSize(mNativeWebContentsAndroid);
     }
 
     @CalledByNative
@@ -622,6 +629,11 @@ import java.util.UUID;
         sizes.add(new Rect(0, 0, width, height));
     }
 
+    @CalledByNative
+    private static Rect createSize(int width, int height) {
+        return new Rect(0, 0, width, height);
+    }
+
     // This is static to avoid exposing a public destroy method on the native side of this class.
     private static native void nativeDestroyWebContents(long webContentsAndroidPtr);
 
@@ -643,6 +655,7 @@ import java.util.UUID;
     private native void nativeCollapseSelection(long nativeWebContentsAndroid);
     private native void nativeOnHide(long nativeWebContentsAndroid);
     private native void nativeOnShow(long nativeWebContentsAndroid);
+    private native void nativeSetImportance(long nativeWebContentsAndroid, int importance);
     private native void nativeSuspendAllMediaPlayers(long nativeWebContentsAndroid);
     private native void nativeSetAudioMuted(long nativeWebContentsAndroid, boolean mute);
     private native int nativeGetBackgroundColor(long nativeWebContentsAndroid);
@@ -689,6 +702,6 @@ import java.util.UUID;
             long nativeWebContentsAndroid, int x, int y);
     private native void nativeSetHasPersistentVideo(long nativeWebContentsAndroid, boolean value);
     private native boolean nativeHasActiveEffectivelyFullscreenVideo(long nativeWebContentsAndroid);
-    private native List<Rect> nativeGetCurrentlyPlayingVideoSizes(long nativeWebContentsAndroid);
+    private native Rect nativeGetFullscreenVideoSize(long nativeWebContentsAndroid);
     private native EventForwarder nativeGetOrCreateEventForwarder(long nativeWebContentsAndroid);
 }

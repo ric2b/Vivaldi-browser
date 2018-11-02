@@ -8,7 +8,7 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "headless/public/devtools/domains/page.h"
+#include "headless/public/devtools/domains/network.h"
 #include "headless/public/util/navigation_request.h"
 
 namespace headless {
@@ -19,21 +19,32 @@ class HeadlessShell;
 class ShellNavigationRequest : public NavigationRequest {
  public:
   ShellNavigationRequest(base::WeakPtr<HeadlessShell> headless_shell,
-                         const page::NavigationRequestedParams& params);
+                         const std::string& interception_id);
 
   ~ShellNavigationRequest() override;
 
   void StartProcessing(base::Closure done_callback) override;
 
  private:
+  static void StartProcessingOnUiThread(
+      std::unique_ptr<base::WeakPtr<HeadlessShell>> headless_shell,
+      std::string interception_id,
+      base::Closure done_callback);
+
   // Note the navigation likely isn't done when this is called, however we
   // expect it will have been committed and the initial resource load requested.
-  static void ProcessNavigationResult(
+  static void ContinueInterceptedRequestResult(
       base::Closure done_callback,
-      std::unique_ptr<page::ProcessNavigationResult>);
+      std::unique_ptr<network::ContinueInterceptedRequestResult>);
 
-  base::WeakPtr<HeadlessShell> headless_shell_;
-  int navigation_id_;
+  static void ContinueInterceptedRequestResultOnIoThread(
+      base::Closure done_callback);
+
+  // Yuck we need to post a weak pointer from the IO -> UI threads but WeakPtr
+  // is super finicky about which threads it's touched on. By boxing this up in
+  // a unique_ptr we can pass it about and only touch it on the UI thread.
+  std::unique_ptr<base::WeakPtr<HeadlessShell>> headless_shell_;
+  std::string interception_id_;
 };
 
 }  // namespace headless

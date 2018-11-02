@@ -20,11 +20,10 @@
 #include "base/values.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/solid_color_layer.h"
-#include "cc/output/begin_frame_args.h"
+#include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "content/browser/android/gesture_event_type.h"
 #include "content/browser/android/interstitial_page_delegate_android.h"
 #include "content/browser/android/java/gin_java_bridge_dispatcher_host.h"
-#include "content/browser/android/load_url_params.h"
 #include "content/browser/frame_host/interstitial_page_impl.h"
 #include "content/browser/media/media_web_contents_observer.h"
 #include "content/browser/renderer_host/compositor_impl_android.h"
@@ -100,12 +99,6 @@ int GetRenderProcessIdFromRenderViewHost(RenderViewHost* host) {
   if (render_process->HasConnection())
     return render_process->GetHandle();
   return 0;
-}
-
-ScopedJavaLocalRef<jobject> CreateJavaRect(JNIEnv* env, const gfx::Rect& rect) {
-  return ScopedJavaLocalRef<jobject>(Java_ContentViewCore_createRect(
-      env, static_cast<int>(rect.x()), static_cast<int>(rect.y()),
-      static_cast<int>(rect.right()), static_cast<int>(rect.bottom())));
 }
 
 int ToGestureEventType(WebInputEvent::Type type) {
@@ -241,21 +234,16 @@ void ContentViewCore::UpdateWindowAndroid(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj,
     jlong window_android) {
-  ui::ViewAndroid* view = GetViewAndroid();
-  ui::WindowAndroid* window =
-      reinterpret_cast<ui::WindowAndroid*>(window_android);
-  if (window == GetWindowAndroid())
+  auto* window = reinterpret_cast<ui::WindowAndroid*>(window_android);
+  auto* old_window = GetWindowAndroid();
+  if (window == old_window)
     return;
-  if (GetWindowAndroid()) {
-    for (auto& observer : observer_list_)
-      observer.OnDetachedFromWindow();
+
+  auto* view = GetViewAndroid();
+  if (old_window)
     view->RemoveFromParent();
-  }
-  if (window) {
+  if (window)
     window->AddChild(view);
-    for (auto& observer : observer_list_)
-      observer.OnAttachedToWindow();
-  }
 }
 
 base::android::ScopedJavaLocalRef<jobject>
@@ -336,7 +324,7 @@ void ContentViewCore::RenderViewHostChanged(RenderViewHost* old_host,
     }
   }
 
-  SetFocusInternal(HasFocus());
+  SetFocusInternal(GetViewAndroid()->HasFocus());
 }
 
 RenderWidgetHostViewAndroid* ContentViewCore::GetRenderWidgetHostViewAndroid()
@@ -526,7 +514,7 @@ bool ContentViewCore::FilterInputEvent(const blink::WebInputEvent& event) {
   if (j_obj.is_null())
     return false;
 
-  Java_ContentViewCore_requestFocus(env, j_obj);
+  GetViewAndroid()->RequestFocus();
 
   if (event.GetType() == WebInputEvent::kMouseDown)
     return false;
@@ -539,46 +527,11 @@ bool ContentViewCore::FilterInputEvent(const blink::WebInputEvent& event) {
                                                     gesture.y * dpi_scale());
 }
 
-bool ContentViewCore::HasFocus() {
-  JNIEnv* env = AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
-  if (obj.is_null())
-    return false;
-  return Java_ContentViewCore_hasFocus(env, obj);
-}
-
 void ContentViewCore::RequestDisallowInterceptTouchEvent() {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   if (!obj.is_null())
     Java_ContentViewCore_requestDisallowInterceptTouchEvent(env, obj);
-}
-
-void ContentViewCore::ShowDisambiguationPopup(const gfx::Rect& rect_pixels,
-                                              const SkBitmap& zoomed_bitmap) {
-  JNIEnv* env = AttachCurrentThread();
-
-  ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
-  if (obj.is_null())
-    return;
-
-  ScopedJavaLocalRef<jobject> rect_object(CreateJavaRect(env, rect_pixels));
-
-  ScopedJavaLocalRef<jobject> java_bitmap =
-      gfx::ConvertToJavaBitmap(&zoomed_bitmap);
-  DCHECK(!java_bitmap.is_null());
-
-  Java_ContentViewCore_showDisambiguationPopup(env, obj, rect_object,
-                                               java_bitmap);
-}
-
-ScopedJavaLocalRef<jobject> ContentViewCore::CreateMotionEventSynthesizer() {
-  JNIEnv* env = AttachCurrentThread();
-
-  ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
-  if (obj.is_null())
-    return ScopedJavaLocalRef<jobject>();
-  return Java_ContentViewCore_createMotionEventSynthesizer(env, obj);
 }
 
 void ContentViewCore::DidStopFlinging() {
@@ -1101,10 +1054,6 @@ static ScopedJavaLocalRef<jobject> FromWebContentsAndroid(
     return ScopedJavaLocalRef<jobject>();
 
   return view->GetJavaObject();
-}
-
-bool RegisterContentViewCore(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 }  // namespace content

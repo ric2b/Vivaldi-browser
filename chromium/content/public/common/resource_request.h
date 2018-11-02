@@ -11,7 +11,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/optional.h"
 #include "content/common/content_export.h"
-#include "content/public/common/appcache_info.h"
 #include "content/public/common/previews_state.h"
 #include "content/public/common/request_context_frame_type.h"
 #include "content/public/common/request_context_type.h"
@@ -34,7 +33,7 @@ struct CONTENT_EXPORT ResourceRequest {
   ~ResourceRequest();
 
   // The request method: GET, POST, etc.
-  std::string method;
+  std::string method = "GET";
 
   // The absolute requested URL encoded in ASCII per the rules of RFC-2396.
   GURL url;
@@ -43,9 +42,9 @@ struct CONTENT_EXPORT ResourceRequest {
   // checked by the third-party cookie blocking policy. This is usually the URL
   // of the document in the top-level window. Leaving it empty may lead to
   // undesired cookie blocking. Third-party cookie blocking can be bypassed by
-  // setting first_party_for_cookies = url, but this should ideally only be
+  // setting site_for_cookies = url, but this should ideally only be
   // done if there really is no way to determine the correct value.
-  GURL first_party_for_cookies;
+  GURL site_for_cookies;
 
   // The origin of the context which initiated the request, which will be used
   // for cookie checks like 'First-Party-Only'.
@@ -88,7 +87,7 @@ struct CONTENT_EXPORT ResourceRequest {
 
   // Indicates which frame (or worker context) the request is being loaded into,
   // or kAppCacheNoHostId.
-  int appcache_host_id = kAppCacheNoHostId;
+  int appcache_host_id;
 
   // True if corresponding AppCache group should be resetted.
   bool should_reset_appcache = false;

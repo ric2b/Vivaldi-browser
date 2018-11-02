@@ -52,7 +52,23 @@ CGFloat CurrentScreenWidth() {
   return [UIScreen mainScreen].bounds.size.width;
 }
 
+bool IsIPhoneX() {
+  UIUserInterfaceIdiom idiom = [[UIDevice currentDevice] userInterfaceIdiom];
+  return (idiom == UIUserInterfaceIdiomPhone &&
+          CGRectGetHeight([[UIScreen mainScreen] nativeBounds]) == 2436);
+}
+
 CGFloat StatusBarHeight() {
+  // This is a temporary solution until usage of StatusBarHeight has been
+  // replaced with topLayoutGuide.
+
+  if (IsIPhoneX()) {
+    // Return the height of the portrait status bar even in landscape because
+    // the Toolbar does not properly layout itself if the status bar height
+    // changes.
+    return 44;
+  }
+
   // Checking [UIApplication sharedApplication].statusBarFrame will return the
   // wrong offset when the application is started while in a phone call, so
   // simply return 20 here.

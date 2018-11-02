@@ -10,8 +10,8 @@
 #include "cc/output/compositor_frame.h"
 #include "cc/quads/render_pass.h"
 #include "cc/quads/render_pass_draw_quad.h"
-#include "cc/quads/shared_quad_state.h"
 #include "cc/quads/surface_draw_quad.h"
+#include "components/viz/common/quads/shared_quad_state.h"
 
 namespace ui {
 
@@ -36,7 +36,8 @@ void FrameGenerator::SetHighContrastMode(bool enabled) {
   SetNeedsBeginFrame(true);
 }
 
-void FrameGenerator::OnSurfaceCreated(const viz::SurfaceInfo& surface_info) {
+void FrameGenerator::OnFirstSurfaceActivation(
+    const viz::SurfaceInfo& surface_info) {
   DCHECK(surface_info.is_valid());
 
   // Only handle embedded surfaces changing here. The display root surface
@@ -70,26 +71,26 @@ void FrameGenerator::OnWindowSizeChanged(const gfx::Size& pixel_size) {
 }
 
 void FrameGenerator::Bind(
-    std::unique_ptr<cc::mojom::CompositorFrameSink> compositor_frame_sink) {
+    std::unique_ptr<viz::mojom::CompositorFrameSink> compositor_frame_sink) {
   DCHECK(!compositor_frame_sink_);
   compositor_frame_sink_ = std::move(compositor_frame_sink);
 }
 
 void FrameGenerator::ReclaimResources(
-    const std::vector<cc::ReturnedResource>& resources) {
+    const std::vector<viz::ReturnedResource>& resources) {
   // Nothing to do here because FrameGenerator CompositorFrames don't reference
   // any resources.
   DCHECK(resources.empty());
 }
 
 void FrameGenerator::DidReceiveCompositorFrameAck(
-    const std::vector<cc::ReturnedResource>& resources) {}
+    const std::vector<viz::ReturnedResource>& resources) {}
 
-void FrameGenerator::OnBeginFrame(const cc::BeginFrameArgs& begin_frame_args) {
+void FrameGenerator::OnBeginFrame(const viz::BeginFrameArgs& begin_frame_args) {
   DCHECK(compositor_frame_sink_);
-  current_begin_frame_ack_ = cc::BeginFrameAck(
+  current_begin_frame_ack_ = viz::BeginFrameAck(
       begin_frame_args.source_id, begin_frame_args.sequence_number, false);
-  if (begin_frame_args.type == cc::BeginFrameArgs::MISSED) {
+  if (begin_frame_args.type == viz::BeginFrameArgs::MISSED) {
     compositor_frame_sink_->DidNotProduceFrame(current_begin_frame_ack_);
     return;
   }
@@ -99,16 +100,17 @@ void FrameGenerator::OnBeginFrame(const cc::BeginFrameArgs& begin_frame_args) {
 
   // TODO(fsamuel): We should add a trace for generating a top level frame.
   cc::CompositorFrame frame(GenerateCompositorFrame());
-  gfx::Size frame_size = frame.render_pass_list.back()->output_rect.size();
   if (!local_surface_id_.is_valid() ||
-      frame_size != last_submitted_frame_size_ ||
-      frame.metadata.device_scale_factor != last_device_scale_factor_) {
-    last_device_scale_factor_ = frame.metadata.device_scale_factor;
-    last_submitted_frame_size_ = frame_size;
+      frame.size_in_pixels() != last_submitted_frame_size_ ||
+      frame.device_scale_factor() != last_device_scale_factor_) {
+    last_device_scale_factor_ = frame.device_scale_factor();
+    last_submitted_frame_size_ = frame.size_in_pixels();
     local_surface_id_ = id_allocator_.GenerateId();
   }
-  compositor_frame_sink_->SubmitCompositorFrame(local_surface_id_,
-                                                std::move(frame));
+
+  compositor_frame_sink_->SubmitCompositorFrame(
+      local_surface_id_, std::move(frame), GenerateHitTestRegionList(), 0);
+
   SetNeedsBeginFrame(false);
 }
 
@@ -125,7 +127,7 @@ cc::CompositorFrame FrameGenerator::GenerateCompositorFrame() {
   if (high_contrast_mode_enabled_) {
     std::unique_ptr<cc::RenderPass> invert_pass = cc::RenderPass::Create();
     invert_pass->SetNew(2, bounds, bounds, gfx::Transform());
-    cc::SharedQuadState* shared_state =
+    viz::SharedQuadState* shared_state =
         invert_pass->CreateAndAppendSharedQuadState();
     gfx::Size scaled_bounds = gfx::ScaleToCeiledSize(
         pixel_size_, window_manager_surface_info_.device_scale_factor(),
@@ -153,6 +155,24 @@ cc::CompositorFrame FrameGenerator::GenerateCompositorFrame() {
   return frame;
 }
 
+viz::mojom::HitTestRegionListPtr FrameGenerator::GenerateHitTestRegionList()
+    const {
+  auto hit_test_region_list = viz::mojom::HitTestRegionList::New();
+  hit_test_region_list->flags = viz::mojom::kHitTestMine;
+  hit_test_region_list->bounds.set_size(pixel_size_);
+
+  auto hit_test_region = viz::mojom::HitTestRegion::New();
+  viz::SurfaceId surface_id = window_manager_surface_info_.id();
+  hit_test_region->frame_sink_id = surface_id.frame_sink_id();
+  hit_test_region->local_surface_id = surface_id.local_surface_id();
+  hit_test_region->flags = viz::mojom::kHitTestChildSurface;
+  hit_test_region->rect = gfx::Rect(pixel_size_);
+
+  hit_test_region_list->regions.push_back(std::move(hit_test_region));
+
+  return hit_test_region_list;
+}
+
 void FrameGenerator::DrawWindow(cc::RenderPass* pass) {
   DCHECK(window_manager_surface_info_.is_valid());
 
@@ -163,7 +183,7 @@ void FrameGenerator::DrawWindow(cc::RenderPass* pass) {
   quad_to_target_transform.Translate(bounds_at_origin.x(),
                                      bounds_at_origin.y());
 
-  cc::SharedQuadState* sqs = pass->CreateAndAppendSharedQuadState();
+  viz::SharedQuadState* sqs = pass->CreateAndAppendSharedQuadState();
 
   gfx::Size scaled_bounds = gfx::ScaleToCeiledSize(
       bounds_at_origin.size(),
@@ -178,7 +198,7 @@ void FrameGenerator::DrawWindow(cc::RenderPass* pass) {
       bounds_at_origin /* clip_rect */, false /* is_clipped */,
       1.0f /* opacity */, SkBlendMode::kSrcOver, 0 /* sorting-context_id */);
   auto* quad = pass->CreateAndAppendDrawQuad<cc::SurfaceDrawQuad>();
-  quad->SetAll(sqs, bounds_at_origin /* rect */, gfx::Rect() /* opaque_rect */,
+  quad->SetAll(sqs, bounds_at_origin /* rect */,
                bounds_at_origin /* visible_rect */, true /* needs_blending*/,
                window_manager_surface_info_.id(),
                cc::SurfaceDrawQuadType::PRIMARY, nullptr);

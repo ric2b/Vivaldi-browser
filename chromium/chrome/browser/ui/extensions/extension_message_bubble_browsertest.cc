@@ -24,7 +24,7 @@
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "content/public/test/browser_test_utils.h"
 #include "extensions/browser/extension_registry.h"
-#include "extensions/common/extension.h"
+#include "extensions/common/disable_reason.h"
 #include "extensions/common/feature_switch.h"
 #include "extensions/test/extension_test_message_listener.h"
 
@@ -129,7 +129,8 @@ void ExtensionMessageBubbleBrowserTest::TestBubbleAnchoredToAppMenu() {
   // that lets us test anchoring to the app menu, since we usually anchor to the
   // extension action now that every extension is given a permanent UI presence.
   extension_service()->DisableExtension(
-      no_action_extension->id(), extensions::Extension::DISABLE_NOT_VERIFIED);
+      no_action_extension->id(),
+      extensions::disable_reason::DISABLE_NOT_VERIFIED);
   Browser* second_browser = new Browser(Browser::CreateParams(profile(), true));
   ASSERT_TRUE(second_browser);
   second_browser->window()->Show();
@@ -159,7 +160,8 @@ void ExtensionMessageBubbleBrowserTest::
   // that lets us test anchoring to the app menu, since we usually anchor to the
   // extension action now that every extension is given a permanent UI presence.
   extension_service()->DisableExtension(
-      no_action_extension->id(), extensions::Extension::DISABLE_NOT_VERIFIED);
+      no_action_extension->id(),
+      extensions::disable_reason::DISABLE_NOT_VERIFIED);
 
   Browser* second_browser = new Browser(Browser::CreateParams(profile(), true));
   ASSERT_TRUE(second_browser);
@@ -168,6 +170,31 @@ void ExtensionMessageBubbleBrowserTest::
 
   CheckBubble(second_browser, ANCHOR_APP_MENU, false);
   CloseBubble(second_browser);
+}
+
+void ExtensionMessageBubbleBrowserTest::
+    TestBubbleClosedAfterExtensionUninstall() {
+  const extensions::Extension* extension =
+      LoadExtension(test_data_dir_.AppendASCII("api_test")
+                        .AppendASCII("override")
+                        .AppendASCII("newtab"));
+  ASSERT_TRUE(extension);
+
+  CheckBubbleIsNotPresent(browser(), false, false);
+  EXPECT_EQ(1, browser()->tab_strip_model()->count());
+  chrome::NewTab(browser());
+  EXPECT_EQ(2, browser()->tab_strip_model()->count());
+  base::RunLoop().RunUntilIdle();
+  CheckBubble(browser(), ANCHOR_BROWSER_ACTION, false);
+
+  extension_service()->UninstallExtension(
+      extension->id(), extensions::UNINSTALL_REASON_FOR_TESTING,
+      base::Bind(&base::DoNothing), nullptr);
+  base::RunLoop().RunUntilIdle();
+
+  // If the only relevant extension was uninstalled, the bubble should
+  // automatically close. See crbug.com/748952.
+  CheckBubbleIsNotPresent(browser(), false, false);
 }
 
 void ExtensionMessageBubbleBrowserTest::TestUninstallDangerousExtension() {

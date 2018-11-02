@@ -90,7 +90,7 @@ std::unique_ptr<disk_cache::Backend> CreateInMemoryDiskCache() {
   net::TestCompletionCallback callback;
   int rv = disk_cache::CreateCacheBackend(
       net::MEMORY_CACHE, net::CACHE_BACKEND_DEFAULT, base::FilePath(), 0, false,
-      nullptr, nullptr, &cache, callback.callback());
+      nullptr, &cache, callback.callback());
   EXPECT_EQ(net::OK, callback.GetResult(rv));
 
   return cache;
@@ -200,8 +200,8 @@ class BlobURLRequestJobTest : public testing::TestWithParam<bool> {
     file_system_context_->OpenFileSystem(
         GURL(kFileSystemURLOrigin), kFileSystemType,
         storage::OPEN_FILE_SYSTEM_CREATE_IF_NONEXISTENT,
-        base::Bind(&BlobURLRequestJobTest::OnValidateFileSystem,
-                   base::Unretained(this)));
+        base::BindOnce(&BlobURLRequestJobTest::OnValidateFileSystem,
+                       base::Unretained(this)));
     base::RunLoop().RunUntilIdle();
     ASSERT_TRUE(file_system_root_url_.is_valid());
 
@@ -280,12 +280,12 @@ class BlobURLRequestJobTest : public testing::TestWithParam<bool> {
       if (!extra_headers.IsEmpty())
         request.headers = extra_headers.ToString();
 
-      mojom::URLLoaderAssociatedPtr url_loader;
+      mojom::URLLoaderPtr url_loader;
       TestURLLoaderClient url_loader_client;
       scoped_refptr<BlobURLLoaderFactory> factory =
           BlobURLLoaderFactory::Create(
-              base::Bind(&BlobURLRequestJobTest::GetStorageContext,
-                         base::Unretained(this)),
+              base::BindOnce(&BlobURLRequestJobTest::GetStorageContext,
+                             base::Unretained(this)),
               file_system_context_);
       base::RunLoop().RunUntilIdle();
       factory->CreateLoaderAndStart(mojo::MakeRequest(&url_loader), 0, 0,

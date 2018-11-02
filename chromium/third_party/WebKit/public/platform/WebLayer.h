@@ -62,8 +62,6 @@ class WebLayer {
  public:
   virtual ~WebLayer() {}
 
-  static constexpr int kInvalidLayerId = cc::Layer::INVALID_ID;
-
   // Returns a positive ID that will be unique across all WebLayers allocated in
   // this process.
   virtual int Id() const = 0;
@@ -174,6 +172,8 @@ class WebLayer {
   // bounds.
   virtual void SetScrollable(const WebSize& scroll_container_bounds) = 0;
   virtual bool Scrollable() const = 0;
+  virtual WebSize ScrollContainerBoundsForTesting() const = 0;
+
   virtual void SetUserScrollable(bool horizontal, bool vertical) = 0;
   virtual bool UserScrollableHorizontal() const = 0;
   virtual bool UserScrollableVertical() const = 0;
@@ -191,9 +191,13 @@ class WebLayer {
 
   virtual void SetTouchEventHandlerRegion(const WebVector<WebTouchInfo>&) = 0;
   virtual WebVector<WebRect> TouchEventHandlerRegion() const = 0;
+  virtual WebVector<WebRect> TouchEventHandlerRegionForTouchActionForTesting(
+      WebTouchAction) const = 0;
 
   virtual void SetIsContainerForFixedPositionLayers(bool) = 0;
   virtual bool IsContainerForFixedPositionLayers() const = 0;
+
+  virtual void SetIsResizedByBrowserControls(bool) = 0;
 
   // This function sets layer position constraint. The constraint will be used
   // to adjust layer position during threaded scrolling.
@@ -212,6 +216,11 @@ class WebLayer {
   // responsibility of the client to reset the layer's scroll client before
   // deleting the scroll client.
   virtual void SetScrollClient(WebLayerScrollClient*) = 0;
+
+  // Sets a synthetic impl-side scroll offset which will end up reporting this
+  // call back to blink via the |WebLayerScrollClient| callback.
+  virtual void SetScrollOffsetFromImplSideForTesting(
+      const gfx::ScrollOffset&) = 0;
 
   // The scroll-boundary-behavior allows developers to specify whether the
   // scroll should be propagated to its ancestors at the beginning of the

@@ -7,6 +7,8 @@
 
 #include <memory>
 
+#include "base/containers/flat_map.h"
+#include "base/containers/flat_set.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "content/browser/devtools/protocol/devtools_domain_handler.h"
@@ -24,6 +26,9 @@ class DevToolsAgentHostImpl;
 class RenderFrameHostImpl;
 struct BeginNavigationParams;
 struct CommonNavigationParams;
+struct GlobalRequestID;
+class NavigationHandle;
+class NavigationThrottle;
 struct ResourceRequest;
 struct ResourceRequestCompletionStatus;
 struct ResourceResponseHead;
@@ -52,25 +57,31 @@ class NetworkHandler : public DevToolsDomainHandler,
   void GetCookies(Maybe<protocol::Array<String>> urls,
                   std::unique_ptr<GetCookiesCallback> callback) override;
   void GetAllCookies(std::unique_ptr<GetAllCookiesCallback> callback) override;
-  void DeleteCookie(const std::string& cookie_name,
-                    const std::string& url,
-                    std::unique_ptr<DeleteCookieCallback> callback) override;
-  void SetCookie(
-      const std::string& url,
-      const std::string& name,
-      const std::string& value,
-      Maybe<std::string> domain,
-      Maybe<std::string> path,
-      Maybe<bool> secure,
-      Maybe<bool> http_only,
-      Maybe<std::string> same_site,
-      Maybe<double> expires,
-      std::unique_ptr<SetCookieCallback> callback) override;
+  void DeleteCookies(const std::string& name,
+                     Maybe<std::string> url,
+                     Maybe<std::string> domain,
+                     Maybe<std::string> path,
+                     std::unique_ptr<DeleteCookiesCallback> callback) override;
+  void SetCookie(const std::string& name,
+                 const std::string& value,
+                 Maybe<std::string> url,
+                 Maybe<std::string> domain,
+                 Maybe<std::string> path,
+                 Maybe<bool> secure,
+                 Maybe<bool> http_only,
+                 Maybe<std::string> same_site,
+                 Maybe<double> expires,
+                 std::unique_ptr<SetCookieCallback> callback) override;
+  void SetCookies(
+      std::unique_ptr<protocol::Array<Network::CookieParam>> cookies,
+      std::unique_ptr<SetCookiesCallback> callback) override;
 
   Response SetUserAgentOverride(const std::string& user_agent) override;
   Response CanEmulateNetworkConditions(bool* result) override;
 
-  DispatchResponse SetRequestInterceptionEnabled(bool enabled) override;
+  DispatchResponse SetRequestInterceptionEnabled(
+      bool enabled,
+      Maybe<protocol::Array<std::string>> patterns) override;
   void ContinueInterceptedRequest(
       const std::string& request_id,
       Maybe<std::string> error_reason,
@@ -104,12 +115,21 @@ class NetworkHandler : public DevToolsDomainHandler,
   static std::unique_ptr<Network::Request> CreateRequestFromURLRequest(
       const net::URLRequest* request);
 
+  std::unique_ptr<NavigationThrottle> CreateThrottleForNavigation(
+      NavigationHandle* navigation_handle);
+  void InterceptedNavigationRequest(const GlobalRequestID& global_request_id,
+                                    const std::string& interception_id);
+  void InterceptedNavigationRequestFinished(const std::string& interception_id);
+  bool ShouldCancelNavigation(const GlobalRequestID& global_request_id);
+
  private:
   std::unique_ptr<Network::Frontend> frontend_;
   RenderFrameHostImpl* host_;
   bool enabled_;
   bool interception_enabled_;
   std::string user_agent_;
+  base::flat_map<std::string, GlobalRequestID> navigation_requests_;
+  base::flat_set<GlobalRequestID> canceled_navigation_requests_;
   base::WeakPtrFactory<NetworkHandler> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(NetworkHandler);

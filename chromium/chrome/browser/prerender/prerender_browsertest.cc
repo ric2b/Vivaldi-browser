@@ -472,7 +472,7 @@ class NewTabNavigationOrSwapObserver {
     WebContents* new_tab = content::Details<WebContents>(details).ptr();
     // Get the TabStripModel. Assume this is attached to a Browser.
     TabStripModel* tab_strip_model =
-        static_cast<Browser*>(new_tab->GetDelegate())->tab_strip_model();
+        Browser::FromWebContents(new_tab)->tab_strip_model();
     swap_observer_.reset(new NavigationOrSwapObserver(tab_strip_model,
                                                       new_tab));
     swap_observer_->set_did_start_loading();
@@ -599,6 +599,10 @@ class PrerenderBrowserTest : public test_utils::PrerenderInProcessBrowserTest {
     test_utils::PrerenderInProcessBrowserTest::SetUpOnMainThread();
     prerender::PrerenderManager::SetMode(
         prerender::PrerenderManager::PRERENDER_MODE_ENABLED);
+    prerender::PrerenderManager::SetInstantMode(
+        prerender::PrerenderManager::PRERENDER_MODE_ENABLED);
+    prerender::PrerenderManager::SetOmniboxMode(
+        prerender::PrerenderManager::PRERENDER_MODE_ENABLED);
     const testing::TestInfo* const test_info =
         testing::UnitTest::GetInstance()->current_test_info();
     // This one test fails with the host resolver redirecting all hosts.
@@ -609,10 +613,6 @@ class PrerenderBrowserTest : public test_utils::PrerenderInProcessBrowserTest {
   void SetUpInProcessBrowserTestFixture() override {
     test_utils::PrerenderInProcessBrowserTest::
         SetUpInProcessBrowserTestFixture();
-
-    // Although PreferHtmlOverPlugins is redundant with the Field Trial testing
-    // configuration, the official builders don't use those, so enable it here.
-    feature_list_.InitAndEnableFeature(features::kPreferHtmlOverPlugins);
   }
 
   void NavigateToDestURL() const {
@@ -1381,12 +1381,22 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderDelayLoadPlugin) {
   HostContentSettingsMap* content_settings_map =
       HostContentSettingsMapFactory::GetForProfile(
           current_browser()->profile());
-  content_settings_map->SetDefaultContentSetting(CONTENT_SETTINGS_TYPE_PLUGINS,
-                                                 CONTENT_SETTING_ALLOW);
+  GURL server_root = embedded_test_server()->GetURL("/");
+  content_settings_map->SetContentSettingDefaultScope(
+      server_root, server_root, CONTENT_SETTINGS_TYPE_PLUGINS, std::string(),
+      CONTENT_SETTING_ALLOW);
 
   PrerenderTestURL("/prerender/prerender_plugin_delay_load.html",
                    FINAL_STATUS_USED, 1);
   NavigateToDestURL();
+
+  // Because NavigateToDestURL relies on a synchronous check, and the plugin
+  // loads asynchronously, we use a separate DidPluginLoad() test. Failure
+  // is indicated by timeout, as plugins may take arbitrarily long to load.
+  bool plugin_loaded = false;
+  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
+      GetActiveWebContents(), "DidPluginLoad()", &plugin_loaded));
+  EXPECT_TRUE(plugin_loaded);
 }
 
 // For Plugin Power Saver, checks that plugins are not loaded while
@@ -1395,8 +1405,10 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderPluginPowerSaver) {
   HostContentSettingsMap* content_settings_map =
       HostContentSettingsMapFactory::GetForProfile(
           current_browser()->profile());
-  content_settings_map->SetDefaultContentSetting(CONTENT_SETTINGS_TYPE_PLUGINS,
-                                                 CONTENT_SETTING_ALLOW);
+  GURL server_root = embedded_test_server()->GetURL("/");
+  content_settings_map->SetContentSettingDefaultScope(
+      server_root, server_root, CONTENT_SETTINGS_TYPE_PLUGINS, std::string(),
+      CONTENT_SETTING_ALLOW);
 
   PrerenderTestURL("/prerender/prerender_plugin_power_saver.html",
                    FINAL_STATUS_USED, 1);
@@ -1462,8 +1474,10 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
   HostContentSettingsMap* content_settings_map =
       HostContentSettingsMapFactory::GetForProfile(
           current_browser()->profile());
-  content_settings_map->SetDefaultContentSetting(CONTENT_SETTINGS_TYPE_PLUGINS,
-                                                 CONTENT_SETTING_ALLOW);
+  GURL server_root = embedded_test_server()->GetURL("/");
+  content_settings_map->SetContentSettingDefaultScope(
+      server_root, server_root, CONTENT_SETTINGS_TYPE_PLUGINS, std::string(),
+      CONTENT_SETTING_ALLOW);
 
   PrerenderTestURL("/prerender/prerender_iframe_plugin_delay_load.html",
                    FINAL_STATUS_USED, 1);

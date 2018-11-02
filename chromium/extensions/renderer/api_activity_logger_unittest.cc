@@ -5,10 +5,11 @@
 #include "extensions/renderer/api_activity_logger.h"
 
 #include "base/memory/ptr_util.h"
+#include "base/run_loop.h"
 #include "content/public/test/mock_render_thread.h"
+#include "extensions/common/extension_builder.h"
 #include "extensions/common/extension_messages.h"
 #include "extensions/common/features/feature.h"
-#include "extensions/common/test_util.h"
 #include "extensions/renderer/bindings/api_binding_test.h"
 #include "extensions/renderer/bindings/api_binding_test_util.h"
 #include "extensions/renderer/script_context.h"
@@ -49,10 +50,10 @@ TEST_F(ActivityLoggerTest, DontCrashOnUnconvertedValues) {
   v8::HandleScope handle_scope(isolate());
   v8::Local<v8::Context> context = MainContext();
 
-  scoped_refptr<const Extension> extension = test_util::CreateEmptyExtension();
+  scoped_refptr<const Extension> extension = ExtensionBuilder("Test").Build();
   extension_ids.insert(extension->id());
   const Feature::Context kContextType = Feature::BLESSED_EXTENSION_CONTEXT;
-  script_context_set.AddForTesting(base::MakeUnique<ScriptContext>(
+  script_context_set.AddForTesting(std::make_unique<ScriptContext>(
       context, nullptr, extension.get(), kContextType, extension.get(),
       kContextType));
 
@@ -70,7 +71,11 @@ TEST_F(ActivityLoggerTest, DontCrashOnUnconvertedValues) {
   ASSERT_TRUE(
       ExtensionHostMsg_AddAPIActionToActivityLog::Read(message, &full_params));
   std::string extension_id = std::get<0>(full_params);
-  ExtensionHostMsg_APIActionOrEvent_Params params = std::get<1>(full_params);
+  ExtensionHostMsg_APIActionOrEvent_Params params;
+  params.api_call = std::get<1>(full_params).api_call;
+  params.arguments =
+      base::ListValue(std::get<1>(full_params).arguments.GetList());
+  params.extra = std::get<1>(full_params).extra;
   EXPECT_EQ(extension->id(), extension_id);
   ASSERT_EQ(1u, params.arguments.GetList().size());
   EXPECT_EQ(base::Value::Type::NONE, params.arguments.GetList()[0].type());

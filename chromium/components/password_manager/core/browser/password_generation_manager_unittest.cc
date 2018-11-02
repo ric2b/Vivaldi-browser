@@ -46,7 +46,7 @@ class TestPasswordManagerDriver : public StubPasswordManagerDriver {
   explicit TestPasswordManagerDriver(PasswordManagerClient* client)
       : password_manager_(client),
         password_generation_manager_(client, this),
-        password_autofill_manager_(this, nullptr) {}
+        password_autofill_manager_(this, nullptr, client) {}
   ~TestPasswordManagerDriver() override {}
 
   // PasswordManagerDriver implementation.
@@ -70,6 +70,7 @@ class TestPasswordManagerDriver : public StubPasswordManagerDriver {
   }
 
   MOCK_METHOD0(AllowToRunFormClassifier, void());
+  MOCK_METHOD0(MatchingBlacklistedFormFound, void());
 
  private:
   PasswordManager password_manager_;
@@ -245,7 +246,7 @@ TEST_F(PasswordGenerationManagerTest, DetectFormsEligibleForGeneration) {
 
   std::string response_string;
   ASSERT_TRUE(response.SerializeToString(&response_string));
-  autofill::FormStructure::ParseQueryResponse(response_string, forms, NULL);
+  autofill::FormStructure::ParseQueryResponse(response_string, forms);
 
   DetectFormsEligibleForGeneration(forms);
   EXPECT_EQ(2u, GetTestDriver()->GetFoundEligibleForGenerationForms().size());

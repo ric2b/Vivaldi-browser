@@ -34,14 +34,15 @@
 #include "core/frame/Settings.h"
 #include "core/frame/VisualViewport.h"
 #include "core/html/HTMLElement.h"
+#include "core/input/TouchActionUtil.h"
 #include "core/layout/LayoutEmbeddedContent.h"
 #include "core/layout/LayoutGeometryMap.h"
 #include "core/layout/api/LayoutEmbeddedContentItem.h"
 #include "core/layout/api/LayoutViewItem.h"
-#include "core/layout/compositing/CompositedLayerMapping.h"
-#include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
+#include "core/paint/compositing/CompositedLayerMapping.h"
+#include "core/paint/compositing/PaintLayerCompositor.h"
 #include "core/plugins/PluginView.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/animation/CompositorAnimationHost.h"
@@ -50,7 +51,6 @@
 #include "platform/exported/WebScrollbarThemeGeometryNative.h"
 #include "platform/geometry/Region.h"
 #include "platform/geometry/TransformState.h"
-#include "platform/graphics/CompositorElementId.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #if defined(OS_MACOSX)
@@ -171,6 +171,29 @@ void ScrollingCoordinator::ScrollableAreasDidChange() {
     return;
 
   scroll_gesture_region_is_dirty_ = true;
+}
+
+void ScrollingCoordinator::DidScroll(const gfx::ScrollOffset& offset,
+                                     const CompositorElementId& element_id) {
+  for (auto* frame = page_->MainFrame(); frame;
+       frame = frame->Tree().TraverseNext()) {
+    // Remote frames will receive DidScroll callbacks from their own compositor.
+    if (!frame->IsLocalFrame())
+      continue;
+
+    // Find the associated scrollable area using the element id and notify it
+    // of the compositor-side scroll. We explicitly do not check the
+    // VisualViewport which handles scroll offset differently (see:
+    // VisualViewport::didScroll).
+    if (LocalFrameView* view = ToLocalFrame(frame)->View()) {
+      if (auto* scrollable = view->ScrollableAreaWithElementId(element_id)) {
+        scrollable->DidScroll(offset);
+        return;
+      }
+    }
+  }
+  // The ScrollableArea with matching ElementId may have been deleted and we can
+  // safely ignore the DidScroll callback.
 }
 
 void ScrollingCoordinator::UpdateAfterCompositingChangeIfNeeded() {
@@ -301,12 +324,6 @@ void ScrollingCoordinator::UpdateLayerPositionConstraint(PaintLayer* layer) {
 
 void ScrollingCoordinator::WillDestroyScrollableArea(
     ScrollableArea* scrollable_area) {
-  {
-    // Remove any callback from |scroll_layer| to this object.
-    DisableCompositingQueryAsserts disabler;
-    if (GraphicsLayer* scroll_layer = scrollable_area->LayerForScrolling())
-      scroll_layer->SetScrollableArea(nullptr, false);
-  }
   RemoveWebScrollbarLayer(scrollable_area, kHorizontalScrollbar);
   RemoveWebScrollbarLayer(scrollable_area, kVerticalScrollbar);
 }
@@ -322,11 +339,6 @@ void ScrollingCoordinator::RemoveWebScrollbarLayer(
     GraphicsLayer::UnregisterContentsLayer(scrollbar_layer->Layer());
 }
 
-static uint64_t NextScrollbarId() {
-  static ScrollbarId next_scrollbar_id = 0;
-  return ++next_scrollbar_id;
-}
-
 static std::unique_ptr<WebScrollbarLayer> CreateScrollbarLayer(
     Scrollbar& scrollbar,
     float device_scale_factor) {
@@ -340,14 +352,14 @@ static std::unique_ptr<WebScrollbarLayer> CreateScrollbarLayer(
     scrollbar_layer =
         Platform::Current()->CompositorSupport()->CreateOverlayScrollbarLayer(
             WebScrollbarImpl::Create(&scrollbar), painter, std::move(geometry));
-    scrollbar_layer->SetElementId(CompositorElementIdFromScrollbarId(
-        NextScrollbarId(), CompositorElementIdNamespace::kScrollbar));
+    scrollbar_layer->SetElementId(
+        CompositorElementIdFromUniqueObjectId(NewUniqueObjectId()));
   } else {
     scrollbar_layer =
         Platform::Current()->CompositorSupport()->CreateScrollbarLayer(
             WebScrollbarImpl::Create(&scrollbar), painter, std::move(geometry));
-    scrollbar_layer->SetElementId(CompositorElementIdFromScrollbarId(
-        NextScrollbarId(), CompositorElementIdNamespace::kScrollbar));
+    scrollbar_layer->SetElementId(
+        CompositorElementIdFromUniqueObjectId(NewUniqueObjectId()));
   }
   GraphicsLayer::RegisterContentsLayer(scrollbar_layer->Layer());
   return scrollbar_layer;
@@ -366,8 +378,8 @@ ScrollingCoordinator::CreateSolidColorScrollbarLayer(
       Platform::Current()->CompositorSupport()->CreateSolidColorScrollbarLayer(
           web_orientation, thumb_thickness, track_start,
           is_left_side_vertical_scrollbar);
-  scrollbar_layer->SetElementId(CompositorElementIdFromScrollbarId(
-      NextScrollbarId(), CompositorElementIdNamespace::kScrollbar));
+  scrollbar_layer->SetElementId(
+      CompositorElementIdFromUniqueObjectId(NewUniqueObjectId()));
   GraphicsLayer::RegisterContentsLayer(scrollbar_layer->Layer());
   return scrollbar_layer;
 }
@@ -482,12 +494,8 @@ bool ScrollingCoordinator::ScrollableAreaScrollLayerDidChange(
     return false;
 
   GraphicsLayer* scroll_layer = scrollable_area->LayerForScrolling();
-
-  if (scroll_layer) {
-    bool is_for_visual_viewport =
-        scrollable_area == &page_->GetVisualViewport();
-    scroll_layer->SetScrollableArea(scrollable_area, is_for_visual_viewport);
-  }
+  if (scroll_layer)
+    scroll_layer->SetScrollableArea(scrollable_area);
 
   UpdateUserInputScrollable(scrollable_area);
 
@@ -498,8 +506,12 @@ bool ScrollingCoordinator::ScrollableAreaScrollLayerDidChange(
     FloatPoint scroll_position(scrollable_area->ScrollOrigin() +
                                scrollable_area->GetScrollOffset());
     web_layer->SetScrollPosition(scroll_position);
-
     web_layer->SetBounds(scrollable_area->ContentsSize());
+    // VisualViewport scrolling may involve pinch zoom and gets routed through
+    // WebViewImpl explicitly rather than via ScrollingCoordinator::DidScroll
+    // since it needs to be set in tandem with the page scale delta.
+    if (scrollable_area != &page_->GetVisualViewport())
+      web_layer->SetScrollClient(this);
   }
   if (WebScrollbarLayer* scrollbar_layer =
           GetWebScrollbarLayer(scrollable_area, kHorizontalScrollbar)) {
@@ -763,6 +775,7 @@ void ScrollingCoordinator::SetTouchEventTargetRects(
   // on GraphicsLayer instead of Layer, but we have no good hook into the
   // lifetime of a GraphicsLayer.
   GraphicsLayerHitTestRects graphics_layer_rects;
+  WTF::HashMap<const GraphicsLayer*, TouchAction> paint_layer_touch_action;
   for (const PaintLayer* layer : layers_with_touch_rects_) {
     if (layer->GetLayoutObject().GetFrameView() &&
         layer->GetLayoutObject().GetFrameView()->ShouldThrottleRendering()) {
@@ -774,19 +787,32 @@ void ScrollingCoordinator::SetTouchEventTargetRects(
       graphics_layer_rects.insert(main_graphics_layer, Vector<LayoutRect>());
     GraphicsLayer* scrolling_contents_layer = layer->GraphicsLayerBacking();
     if (scrolling_contents_layer &&
-        scrolling_contents_layer != main_graphics_layer)
+        scrolling_contents_layer != main_graphics_layer) {
       graphics_layer_rects.insert(scrolling_contents_layer,
                                   Vector<LayoutRect>());
+    }
   }
 
   layers_with_touch_rects_.clear();
   for (const auto& layer_rect : layer_rects) {
     if (!layer_rect.value.IsEmpty()) {
+      DCHECK(layer_rect.key->IsRootLayer() || layer_rect.key->Parent());
       const PaintLayer* composited_layer =
           layer_rect.key
               ->EnclosingLayerForPaintInvalidationCrossingFrameBoundaries();
-      DCHECK(composited_layer);
+      if (!composited_layer)
+        continue;
       layers_with_touch_rects_.insert(composited_layer);
+      GraphicsLayer* main_graphics_layer =
+          composited_layer->GraphicsLayerBacking(
+              &composited_layer->GetLayoutObject());
+      if (main_graphics_layer) {
+        TouchAction effective_touch_action =
+            TouchActionUtil::ComputeEffectiveTouchAction(
+                *(composited_layer->EnclosingNode()));
+        paint_layer_touch_action.insert(main_graphics_layer,
+                                        effective_touch_action);
+      }
     }
   }
 
@@ -795,11 +821,15 @@ void ScrollingCoordinator::SetTouchEventTargetRects(
 
   for (const auto& layer_rect : graphics_layer_rects) {
     const GraphicsLayer* graphics_layer = layer_rect.key;
+    TouchAction effective_touch_action = TouchAction::kTouchActionNone;
+    const auto& layer_touch_action =
+        paint_layer_touch_action.find(graphics_layer);
+    if (layer_touch_action != paint_layer_touch_action.end())
+      effective_touch_action = layer_touch_action->value;
     WebVector<WebTouchInfo> touch(layer_rect.value.size());
     for (size_t i = 0; i < layer_rect.value.size(); ++i) {
       touch[i].rect = EnclosingIntRect(layer_rect.value[i]);
-      // TODO(xidachen): route the real value here
-      touch[i].touch_action = TouchAction::kTouchActionNone;
+      touch[i].touch_action = effective_touch_action;
     }
     graphics_layer->PlatformLayer()->SetTouchEventHandlerRegion(touch);
   }

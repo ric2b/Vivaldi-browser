@@ -37,7 +37,7 @@ namespace blink {
 
 class LayoutThemeMac final : public LayoutTheme {
  public:
-  static PassRefPtr<LayoutTheme> Create();
+  static RefPtr<LayoutTheme> Create();
 
   void AddVisualOverflow(const LayoutObject&, IntRect& border_box) override;
 
@@ -62,8 +62,8 @@ class LayoutThemeMac final : public LayoutTheme {
 
   // System fonts.
   void SystemFont(CSSValueID system_font_id,
-                  FontStyle&,
-                  FontWeight&,
+                  FontSelectionValue& font_slope,
+                  FontSelectionValue& font_weight,
                   float& font_size,
                   AtomicString& font_family) const override;
 

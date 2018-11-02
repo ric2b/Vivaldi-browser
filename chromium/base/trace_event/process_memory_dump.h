@@ -18,8 +18,6 @@
 #include "base/trace_event/memory_allocator_dump.h"
 #include "base/trace_event/memory_allocator_dump_guid.h"
 #include "base/trace_event/memory_dump_request_args.h"
-#include "base/trace_event/process_memory_maps.h"
-#include "base/trace_event/process_memory_totals.h"
 #include "build/build_config.h"
 
 // Define COUNT_RESIDENT_BYTES_SUPPORTED if platform supports counting of the
@@ -30,6 +28,7 @@
 
 namespace base {
 
+class SharedMemory;
 class UnguessableToken;
 
 namespace trace_event {
@@ -45,7 +44,6 @@ class BASE_EXPORT ProcessMemoryDump {
     MemoryAllocatorDumpGuid source;
     MemoryAllocatorDumpGuid target;
     int importance;
-    const char* type;
     bool overridable;
   };
 
@@ -73,12 +71,21 @@ class BASE_EXPORT ProcessMemoryDump {
   // value returned is valid only if the given range is currently mmapped by the
   // process. The |start_address| must be page-aligned.
   static size_t CountResidentBytes(void* start_address, size_t mapped_size);
+
+  // Returns the total bytes resident for the given |shared_memory|'s mapped
+  // region.
+  static base::Optional<size_t> CountResidentBytesInSharedMemory(
+      const SharedMemory& shared_memory);
 #endif
 
+  ProcessMemoryDump();
   ProcessMemoryDump(scoped_refptr<HeapProfilerSerializationState>
                         heap_profiler_serialization_state,
                     const MemoryDumpArgs& dump_args);
+  ProcessMemoryDump(ProcessMemoryDump&&);
   ~ProcessMemoryDump();
+
+  ProcessMemoryDump& operator=(ProcessMemoryDump&&);
 
   // Creates a new MemoryAllocatorDump with the given name and returns the
   // empty object back to the caller.
@@ -160,21 +167,16 @@ class BASE_EXPORT ProcessMemoryDump {
   // channel crbug.com/713763. The weak version creates a weak global dump.
   // |client_local_dump_guid| The guid of the local dump created by the client
   // of base::SharedMemory.
-  // |client_global_dump_guid| The global guid given by the clients to create
-  // ownership edges of their own. These global dumps will no longer be required
-  // after the transition.
   // |shared_memory_guid| The ID of the base::SharedMemory that is assigned
   // globally, used to create global dump edges in the new model.
   // |importance| Importance of the global dump edges to say if the current
   // process owns the memory segment.
   void CreateSharedMemoryOwnershipEdge(
       const MemoryAllocatorDumpGuid& client_local_dump_guid,
-      const MemoryAllocatorDumpGuid& client_global_dump_guid,
       const UnguessableToken& shared_memory_guid,
       int importance);
   void CreateWeakSharedMemoryOwnershipEdge(
       const MemoryAllocatorDumpGuid& client_local_dump_guid,
-      const MemoryAllocatorDumpGuid& client_global_dump_guid,
       const UnguessableToken& shared_memory_guid,
       int importance);
 
@@ -210,15 +212,6 @@ class BASE_EXPORT ProcessMemoryDump {
   // Called at trace generation time to populate the TracedValue.
   void AsValueInto(TracedValue* value) const;
 
-  ProcessMemoryTotals* process_totals() { return &process_totals_; }
-  const ProcessMemoryTotals* process_totals() const { return &process_totals_; }
-  bool has_process_totals() const { return has_process_totals_; }
-  void set_has_process_totals() { has_process_totals_ = true; }
-
-  ProcessMemoryMaps* process_mmaps() { return &process_mmaps_; }
-  bool has_process_mmaps() const { return has_process_mmaps_; }
-  void set_has_process_mmaps() { has_process_mmaps_ = true; }
-
   const HeapDumpsMap& heap_dumps() const { return heap_dumps_; }
 
   const MemoryDumpArgs& dump_args() const { return dump_args_; }
@@ -231,18 +224,11 @@ class BASE_EXPORT ProcessMemoryDump {
 
   void CreateSharedMemoryOwnershipEdgeInternal(
       const MemoryAllocatorDumpGuid& client_local_dump_guid,
-      const MemoryAllocatorDumpGuid& client_global_dump_guid,
       const UnguessableToken& shared_memory_guid,
       int importance,
       bool is_weak);
 
   MemoryAllocatorDump* GetBlackHoleMad();
-
-  ProcessMemoryTotals process_totals_;
-  bool has_process_totals_;
-
-  ProcessMemoryMaps process_mmaps_;
-  bool has_process_mmaps_;
 
   AllocatorDumpsMap allocator_dumps_;
   HeapDumpsMap heap_dumps_;
@@ -255,7 +241,7 @@ class BASE_EXPORT ProcessMemoryDump {
   AllocatorDumpEdgesMap allocator_dumps_edges_;
 
   // Level of detail of the current dump.
-  const MemoryDumpArgs dump_args_;
+  MemoryDumpArgs dump_args_;
 
   // This allocator dump is returned when an invalid dump is created in
   // background mode. The attributes of the dump are ignored and not added to

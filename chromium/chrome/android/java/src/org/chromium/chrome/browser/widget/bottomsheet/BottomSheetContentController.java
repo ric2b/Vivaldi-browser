@@ -9,14 +9,12 @@ import android.content.Context;
 import android.content.res.ColorStateList;
 import android.content.res.Resources;
 import android.support.annotation.IntDef;
-import android.support.design.internal.BottomNavigationItemView;
-import android.support.design.internal.BottomNavigationMenuView;
-import android.support.design.widget.BottomNavigationView;
-import android.support.design.widget.BottomNavigationView.OnNavigationItemSelectedListener;
+import android.support.annotation.Nullable;
 import android.util.AttributeSet;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver.OnGlobalLayoutListener;
 
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApiCompatibilityUtils;
@@ -36,12 +34,16 @@ import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.util.MathUtils;
+import org.chromium.chrome.browser.widget.ViewHighlighter;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet.BottomSheetContent;
+import org.chromium.chrome.browser.widget.bottomsheet.base.BottomNavigationItemView;
+import org.chromium.chrome.browser.widget.bottomsheet.base.BottomNavigationMenuView;
+import org.chromium.chrome.browser.widget.bottomsheet.base.BottomNavigationView;
+import org.chromium.chrome.browser.widget.bottomsheet.base.BottomNavigationView.OnNavigationItemSelectedListener;
 import org.chromium.ui.UiUtils;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
-import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -98,6 +100,10 @@ public class BottomSheetContentController extends BottomNavigationView
         @Override
         public void onSheetOpened() {
             if (!mDefaultContentInitialized) initializeDefaultContent();
+            if (mHighlightItemId != null) {
+                mHighlightedView = mActivity.findViewById(mHighlightItemId);
+                ViewHighlighter.turnOnHighlight(mHighlightedView, false);
+            }
         }
 
         @Override
@@ -112,6 +118,9 @@ public class BottomSheetContentController extends BottomNavigationView
             UiUtils.hideKeyboard((View) BottomSheetContentController.this);
             // TODO(twellington): determine a policy for destroying the
             //                    SuggestionsBottomSheetContent.
+            ViewHighlighter.turnOffHighlight(mHighlightedView);
+            mHighlightedView = null;
+            mHighlightItemId = null;
         }
 
         @Override
@@ -120,7 +129,7 @@ public class BottomSheetContentController extends BottomNavigationView
 
             if (mShouldOpenSheetOnNextContentChange) {
                 mShouldOpenSheetOnNextContentChange = false;
-                if (!mBottomSheet.isSheetOpen()) {
+                if (mBottomSheet.getSheetState() != BottomSheet.SHEET_STATE_FULL) {
                     mBottomSheet.setSheetState(BottomSheet.SHEET_STATE_FULL, true);
                 }
                 return;
@@ -148,11 +157,17 @@ public class BottomSheetContentController extends BottomNavigationView
     private PlaceholderSheetContent mPlaceholderContent;
     private boolean mOmniboxHasFocus;
     private TabModelSelectorObserver mTabModelSelectorObserver;
+    private Integer mHighlightItemId;
+    private View mHighlightedView;
 
     public BottomSheetContentController(Context context, AttributeSet atts) {
         super(context, atts);
 
         mPlaceholderContent = new PlaceholderSheetContent(context);
+    }
+
+    public void setHighlightItemId(@Nullable Integer highlightItemId) {
+        mHighlightItemId = highlightItemId;
     }
 
     /** Called when the activity containing the bottom sheet is destroyed. */
@@ -203,7 +218,7 @@ public class BottomSheetContentController extends BottomNavigationView
                 + res.getDimensionPixelOffset(R.dimen.bottom_nav_space_from_toolbar);
 
         setOnNavigationItemSelectedListener(this);
-        disableShiftingMode();
+        hideMenuLabels();
 
         mSnackbarManager = new SnackbarManager(
                 mActivity, (ViewGroup) activity.findViewById(R.id.bottom_sheet_snackbar_container));
@@ -216,6 +231,26 @@ public class BottomSheetContentController extends BottomNavigationView
                 if (newState == ActivityState.STOPPED) mSnackbarManager.onStop();
             }
         }, mActivity);
+
+        // We use a global layout listener here to ensure we update menu item spacing after the
+        // menu icons have their full width.
+        mBottomSheet.getViewTreeObserver().addOnGlobalLayoutListener(new OnGlobalLayoutListener() {
+            @Override
+            public void onGlobalLayout() {
+                updateMenuItemSpacing();
+            }
+        });
+    }
+
+    /**
+     * Whenever this is triggered by a global layout change, we ensure that our bottom navigation
+     * menu items are spaced apart appropriately.
+     */
+    private void updateMenuItemSpacing() {
+        Resources res = getContext().getResources();
+        getMenuView().updateMenuItemSpacingForMinWidth(mBottomSheet.getWidth(),
+                mBottomSheet.getHeight(),
+                res.getDimensionPixelSize(R.dimen.bottom_nav_menu_item_size));
     }
 
     /**
@@ -242,10 +277,15 @@ public class BottomSheetContentController extends BottomNavigationView
      * @param itemId The menu item id of the {@link BottomSheetContent} to show.
      */
     public void showContentAndOpenSheet(int itemId) {
-        if (itemId != mSelectedItemId) {
+        if (mActivity.isInOverviewMode() && !mBottomSheet.isShowingNewTab()) {
+            // Open a new tab to show the content if currently in tab switcher and a new tab is
+            // not currently being displayed.
+            mShouldOpenSheetOnNextContentChange = true;
+            mBottomSheet.displayNewTabUi(mTabModelSelector.getCurrentModel().isIncognito(), itemId);
+        } else if (itemId != mSelectedItemId) {
             mShouldOpenSheetOnNextContentChange = true;
             selectItem(itemId);
-        } else if (!mBottomSheet.isSheetOpen()) {
+        } else if (mBottomSheet.getSheetState() != BottomSheet.SHEET_STATE_FULL) {
             mBottomSheet.setSheetState(BottomSheet.SHEET_STATE_FULL, true);
         }
     }
@@ -269,6 +309,15 @@ public class BottomSheetContentController extends BottomNavigationView
 
     @Override
     public boolean onNavigationItemSelected(MenuItem item) {
+        if (mBottomSheet.getSheetState() == BottomSheet.SHEET_STATE_PEEK
+                && !mShouldOpenSheetOnNextContentChange) {
+            return false;
+        }
+
+        ViewHighlighter.turnOffHighlight(mHighlightedView);
+        mHighlightedView = null;
+        mHighlightItemId = null;
+
         if (mSelectedItemId == item.getItemId()) return false;
 
         mBottomSheet.defocusOmnibox();
@@ -278,24 +327,11 @@ public class BottomSheetContentController extends BottomNavigationView
         return true;
     }
 
-    // TODO(twellington): remove this once the support library is updated to allow disabling
-    //                    shifting mode or determines shifting mode based on the width of the
-    //                    child views.
-    private void disableShiftingMode() {
-        BottomNavigationMenuView menuView = (BottomNavigationMenuView) getChildAt(0);
-        try {
-            Field shiftingMode = menuView.getClass().getDeclaredField("mShiftingMode");
-            shiftingMode.setAccessible(true);
-            shiftingMode.setBoolean(menuView, false);
-            shiftingMode.setAccessible(false);
-            for (int i = 0; i < menuView.getChildCount(); i++) {
-                BottomNavigationItemView item = (BottomNavigationItemView) menuView.getChildAt(i);
-                item.setShiftingMode(false);
-                // Set the checked value so that the view will be updated.
-                item.setChecked(item.getItemData().isChecked());
-            }
-        } catch (NoSuchFieldException | IllegalAccessException e) {
-            // Do nothing if reflection fails.
+    private void hideMenuLabels() {
+        BottomNavigationMenuView menuView = getMenuView();
+        for (int i = 0; i < menuView.getChildCount(); i++) {
+            BottomNavigationItemView item = (BottomNavigationItemView) menuView.getChildAt(i);
+            item.hideLabel();
         }
     }
 
@@ -351,7 +387,7 @@ public class BottomSheetContentController extends BottomNavigationView
 
     private void updateVisuals(boolean isIncognitoTabModelSelected) {
         setBackgroundResource(isIncognitoTabModelSelected ? R.color.incognito_primary_color
-                                                          : R.color.default_primary_color);
+                                                          : R.color.modern_primary_color);
 
         ColorStateList tint = ApiCompatibilityUtils.getColorStateList(getResources(),
                 isIncognitoTabModelSelected ? R.color.bottom_nav_tint_incognito

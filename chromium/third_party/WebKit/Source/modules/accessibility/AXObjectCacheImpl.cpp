@@ -37,7 +37,7 @@
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "core/html/HTMLAreaElement.h"
 #include "core/html/HTMLCanvasElement.h"
 #include "core/html/HTMLFrameOwnerElement.h"
@@ -82,8 +82,11 @@
 #include "modules/accessibility/AXTableColumn.h"
 #include "modules/accessibility/AXTableHeaderContainer.h"
 #include "modules/accessibility/AXTableRow.h"
+#include "modules/permissions/PermissionUtils.h"
 #include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/PtrUtil.h"
+#include "public/platform/modules/permissions/permission.mojom-blink.h"
+#include "public/platform/modules/permissions/permission_status.mojom-blink.h"
 #include "public/web/WebFrameClient.h"
 
 namespace blink {
@@ -96,12 +99,18 @@ AXObjectCache* AXObjectCacheImpl::Create(Document& document) {
 }
 
 AXObjectCacheImpl::AXObjectCacheImpl(Document& document)
-    : document_(document),
+    : AXObjectCacheBase(document),
+      document_(document),
       modification_count_(0),
       notification_post_timer_(
           TaskRunnerHelper::Get(TaskType::kUnspecedTimer, &document),
           this,
-          &AXObjectCacheImpl::NotificationPostTimerFired) {}
+          &AXObjectCacheImpl::NotificationPostTimerFired),
+      accessibility_event_permission_(mojom::PermissionStatus::ASK),
+      permission_observer_binding_(this) {
+  if (document_->LoadEventFinished())
+    AddPermissionStatusListener();
+}
 
 AXObjectCacheImpl::~AXObjectCacheImpl() {
 #if DCHECK_IS_ON()
@@ -263,11 +272,15 @@ AXObject* AXObjectCacheImpl::Get(AbstractInlineTextBox* inline_text_box) {
 
 // FIXME: This probably belongs on Node.
 // FIXME: This should take a const char*, but one caller passes nullAtom.
-bool NodeHasRole(Node* node, const String& role) {
+static bool NodeHasRole(Node* node, const String& role) {
   if (!node || !node->IsElementNode())
     return false;
 
   return EqualIgnoringASCIICase(ToElement(node)->getAttribute(roleAttr), role);
+}
+
+static bool NodeHasGridRole(Node* node) {
+  return NodeHasRole(node, "grid") || NodeHasRole(node, "treegrid");
 }
 
 AXObject* AXObjectCacheImpl::CreateFromRenderer(LayoutObject* layout_object) {
@@ -283,7 +296,7 @@ AXObject* AXObjectCacheImpl::CreateFromRenderer(LayoutObject* layout_object) {
     return AXList::Create(layout_object, *this);
 
   // aria tables
-  if (NodeHasRole(node, "grid") || NodeHasRole(node, "treegrid"))
+  if (NodeHasGridRole(node))
     return AXARIAGrid::Create(layout_object, *this);
   if (NodeHasRole(node, "row"))
     return AXARIAGridRow::Create(layout_object, *this);
@@ -315,10 +328,24 @@ AXObject* AXObjectCacheImpl::CreateFromRenderer(LayoutObject* layout_object) {
     // standard tables
     if (css_box->IsTable())
       return AXTable::Create(ToLayoutTable(css_box), *this);
-    if (css_box->IsTableRow())
+    if (css_box->IsTableRow()) {
+      // In an ARIA [tree]grid, use an ARIA row, otherwise a table row.
+      LayoutTableRow* table_row = ToLayoutTableRow(css_box);
+      LayoutTable* containing_table = table_row->Table();
+      DCHECK(containing_table);
+      if (NodeHasGridRole(containing_table->GetNode()))
+        return AXARIAGridRow::Create(layout_object, *this);
       return AXTableRow::Create(ToLayoutTableRow(css_box), *this);
-    if (css_box->IsTableCell())
+    }
+    if (css_box->IsTableCell()) {
+      // In an ARIA [tree]grid, use an ARIA gridcell, otherwise a table cell.
+      LayoutTableCell* table_cell = ToLayoutTableCell(css_box);
+      LayoutTable* containing_table = table_cell->Table();
+      DCHECK(containing_table);
+      if (NodeHasGridRole(containing_table->GetNode()))
+        return AXARIAGridCell::Create(layout_object, *this);
       return AXTableCell::Create(ToLayoutTableCell(css_box), *this);
+    }
 
     // progress bar
     if (css_box->IsProgress())
@@ -1117,7 +1144,7 @@ void AXObjectCacheImpl::PostPlatformNotification(AXObject* obj,
       !obj->DocumentFrameView()->GetFrame().GetPage())
     return;
   // Send via WebFrameClient
-  WebLocalFrameBase* webframe = WebLocalFrameBase::FromFrame(
+  WebLocalFrameImpl* webframe = WebLocalFrameImpl::FromFrame(
       obj->GetDocument()->AxObjectCacheOwner().GetFrame());
   if (webframe && webframe->Client()) {
     webframe->Client()->PostAccessibilityEvent(
@@ -1149,7 +1176,18 @@ void AXObjectCacheImpl::HandleInitialFocus() {
 }
 
 void AXObjectCacheImpl::HandleEditableTextContentChanged(Node* node) {
-  AXObject* obj = Get(node);
+  if (!node)
+    return;
+
+  AXObject* obj = nullptr;
+  // We shouldn't create a new AX object here because we might be in the middle
+  // of a layout.
+  do {
+    obj = Get(node);
+  } while (!obj && (node = node->parentNode()));
+  if (!obj)
+    return;
+
   while (obj && !obj->IsNativeTextControl() && !obj->IsNonNativeTextControl())
     obj = obj->ParentObject();
   PostNotification(obj, AXObjectCache::kAXValueChanged);
@@ -1203,6 +1241,7 @@ void AXObjectCacheImpl::DidHideMenuListPopup(LayoutMenuList* menu_list) {
 
 void AXObjectCacheImpl::HandleLoadComplete(Document* document) {
   PostNotification(GetOrCreate(document), AXObjectCache::kAXLoadComplete);
+  AddPermissionStatusListener();
 }
 
 void AXObjectCacheImpl::HandleLayoutComplete(Document* document) {
@@ -1274,6 +1313,67 @@ void AXObjectCacheImpl::SetCanvasObjectBounds(HTMLCanvasElement* canvas,
     return;
 
   obj->SetElementRect(rect, ax_canvas);
+}
+
+void AXObjectCacheImpl::AddPermissionStatusListener() {
+  if (!document_->GetExecutionContext())
+    return;
+
+  // Passing an Origin to Mojo crashes if the host is empty because
+  // blink::SecurityOrigin sets unique to false, but url::Origin sets
+  // unique to true. This only happens for some obscure corner cases
+  // like on Android where the system registers unusual protocol handlers,
+  // and we don't need any special permissions in those cases.
+  //
+  // http://crbug.com/759528 and http://crbug.com/762716
+  if (document_->Url().Protocol() != "file" &&
+      document_->Url().Host().IsEmpty()) {
+    return;
+  }
+
+  ConnectToPermissionService(document_->GetExecutionContext(),
+                             mojo::MakeRequest(&permission_service_));
+
+  if (permission_observer_binding_.is_bound())
+    permission_observer_binding_.Close();
+
+  mojom::blink::PermissionObserverPtr observer;
+  permission_observer_binding_.Bind(mojo::MakeRequest(&observer));
+  permission_service_->AddPermissionObserver(
+      CreatePermissionDescriptor(
+          mojom::blink::PermissionName::ACCESSIBILITY_EVENTS),
+      document_->GetExecutionContext()->GetSecurityOrigin(),
+      accessibility_event_permission_, std::move(observer));
+}
+
+void AXObjectCacheImpl::OnPermissionStatusChange(
+    mojom::PermissionStatus status) {
+  accessibility_event_permission_ = status;
+}
+
+bool AXObjectCacheImpl::CanCallAOMEventListeners() const {
+  return accessibility_event_permission_ == mojom::PermissionStatus::GRANTED;
+}
+
+void AXObjectCacheImpl::RequestAOMEventListenerPermission() {
+  if (accessibility_event_permission_ != mojom::PermissionStatus::ASK)
+    return;
+
+  if (!permission_service_)
+    return;
+
+  permission_service_->RequestPermission(
+      CreatePermissionDescriptor(
+          mojom::blink::PermissionName::ACCESSIBILITY_EVENTS),
+      document_->GetExecutionContext()->GetSecurityOrigin(),
+      UserGestureIndicator::ProcessingUserGesture(),
+      ConvertToBaseCallback(WTF::Bind(
+          &AXObjectCacheImpl::OnPermissionStatusChange, WrapPersistent(this))));
+}
+
+void AXObjectCacheImpl::ContextDestroyed(ExecutionContext*) {
+  permission_service_.reset();
+  permission_observer_binding_.Close();
 }
 
 DEFINE_TRACE(AXObjectCacheImpl) {

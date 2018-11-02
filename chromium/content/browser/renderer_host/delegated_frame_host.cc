@@ -15,15 +15,15 @@
 #include "base/time/default_tick_clock.h"
 #include "cc/base/switches.h"
 #include "cc/output/compositor_frame.h"
-#include "cc/output/copy_output_request.h"
-#include "cc/resources/single_release_callback.h"
-#include "cc/surfaces/surface.h"
-#include "cc/surfaces/surface_hittest.h"
 #include "components/viz/common/gl_helper.h"
+#include "components/viz/common/quads/copy_output_request.h"
+#include "components/viz/common/quads/single_release_callback.h"
 #include "components/viz/common/quads/texture_mailbox.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
+#include "components/viz/service/surfaces/surface.h"
+#include "components/viz/service/surfaces/surface_hittest.h"
 #include "content/browser/compositor/surface_utils.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/renderer_host/compositor_resize_lock.h"
@@ -54,10 +54,9 @@ DelegatedFrameHost::DelegatedFrameHost(const viz::FrameSinkId& frame_sink_id,
       frame_evictor_(new viz::FrameEvictor(this)) {
   ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
   factory->GetContextFactory()->AddObserver(this);
-  factory->GetContextFactoryPrivate()
-      ->GetFrameSinkManager()
-      ->surface_manager()
-      ->RegisterFrameSinkId(frame_sink_id_);
+  viz::HostFrameSinkManager* host_frame_sink_manager =
+      factory->GetContextFactoryPrivate()->GetHostFrameSinkManager();
+  host_frame_sink_manager->RegisterFrameSinkId(frame_sink_id_, this);
   CreateCompositorFrameSinkSupport();
 }
 
@@ -125,8 +124,8 @@ void DelegatedFrameHost::CopyFromCompositingSurface(
     return;
   }
 
-  std::unique_ptr<cc::CopyOutputRequest> request =
-      cc::CopyOutputRequest::CreateRequest(
+  std::unique_ptr<viz::CopyOutputRequest> request =
+      viz::CopyOutputRequest::CreateRequest(
           base::BindOnce(&CopyFromCompositingSurfaceHasResult, output_size,
                          preferred_color_type, callback));
   if (!src_subrect.IsEmpty())
@@ -143,8 +142,8 @@ void DelegatedFrameHost::CopyFromCompositingSurfaceToVideoFrame(
     return;
   }
 
-  std::unique_ptr<cc::CopyOutputRequest> request =
-      cc::CopyOutputRequest::CreateRequest(base::BindOnce(
+  std::unique_ptr<viz::CopyOutputRequest> request =
+      viz::CopyOutputRequest::CreateRequest(base::BindOnce(
           &DelegatedFrameHost::CopyFromCompositingSurfaceHasResultForVideo,
           AsWeakPtr(),  // For caching the ReadbackYUVInterface on this class.
           nullptr, std::move(target), callback));
@@ -173,18 +172,18 @@ viz::FrameSinkId DelegatedFrameHost::GetFrameSinkId() {
 }
 
 viz::SurfaceId DelegatedFrameHost::SurfaceIdAtPoint(
-    cc::SurfaceHittestDelegate* delegate,
+    viz::SurfaceHittestDelegate* delegate,
     const gfx::Point& point,
     gfx::Point* transformed_point) {
+  *transformed_point = point;
   viz::SurfaceId surface_id(frame_sink_id_, local_surface_id_);
   if (!surface_id.is_valid())
     return surface_id;
-  cc::SurfaceHittest hittest(delegate,
-                             GetFrameSinkManager()->surface_manager());
+  viz::SurfaceHittest hittest(delegate,
+                              GetFrameSinkManager()->surface_manager());
   gfx::Transform target_transform;
   viz::SurfaceId target_local_surface_id =
       hittest.GetTargetSurfaceAtPoint(surface_id, point, &target_transform);
-  *transformed_point = point;
   if (target_local_surface_id.is_valid())
     target_transform.TransformPoint(transformed_point);
   return target_local_surface_id;
@@ -201,7 +200,8 @@ bool DelegatedFrameHost::TransformPointToLocalCoordSpace(
   if (original_surface == surface_id)
     return true;
 
-  cc::SurfaceHittest hittest(nullptr, GetFrameSinkManager()->surface_manager());
+  viz::SurfaceHittest hittest(nullptr,
+                              GetFrameSinkManager()->surface_manager());
   return hittest.TransformPointToTargetSurface(original_surface, surface_id,
                                                transformed_point);
 }
@@ -223,7 +223,7 @@ void DelegatedFrameHost::SetNeedsBeginFrames(bool needs_begin_frames) {
   support_->SetNeedsBeginFrame(needs_begin_frames);
 }
 
-void DelegatedFrameHost::DidNotProduceFrame(const cc::BeginFrameAck& ack) {
+void DelegatedFrameHost::DidNotProduceFrame(const viz::BeginFrameAck& ack) {
   DCHECK(!ack.has_damage);
   support_->DidNotProduceFrame(ack);
 }
@@ -346,8 +346,8 @@ void DelegatedFrameHost::AttemptFrameSubscriberCapture(
     subscriber_texture = new OwnedMailbox(helper);
   }
 
-  std::unique_ptr<cc::CopyOutputRequest> request =
-      cc::CopyOutputRequest::CreateRequest(base::BindOnce(
+  std::unique_ptr<viz::CopyOutputRequest> request =
+      viz::CopyOutputRequest::CreateRequest(base::BindOnce(
           &DelegatedFrameHost::CopyFromCompositingSurfaceHasResultForVideo,
           AsWeakPtr(), subscriber_texture, frame,
           base::Bind(callback, present_time)));
@@ -374,11 +374,11 @@ void DelegatedFrameHost::AttemptFrameSubscriberCapture(
 }
 
 void DelegatedFrameHost::DidCreateNewRendererCompositorFrameSink(
-    cc::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink) {
+    viz::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink) {
+  EvictDelegatedFrame();
   ResetCompositorFrameSinkSupport();
   renderer_compositor_frame_sink_ = renderer_compositor_frame_sink;
   CreateCompositorFrameSinkSupport();
-  has_frame_ = false;
 }
 
 void DelegatedFrameHost::SubmitCompositorFrame(
@@ -388,7 +388,7 @@ void DelegatedFrameHost::SubmitCompositorFrame(
   DCHECK(!resize_lock_ || !client_->IsAutoResizeEnabled());
 #endif
   float frame_device_scale_factor = frame.metadata.device_scale_factor;
-  cc::BeginFrameAck ack(frame.metadata.begin_frame_ack);
+  viz::BeginFrameAck ack(frame.metadata.begin_frame_ack);
 
   DCHECK(!frame.render_pass_list.empty());
 
@@ -404,8 +404,8 @@ void DelegatedFrameHost::SubmitCompositorFrame(
       gfx::ConvertRectToDIP(frame_device_scale_factor, damage_rect);
 
   if (ShouldSkipFrame(frame_size_in_dip)) {
-    std::vector<cc::ReturnedResource> resources =
-        cc::TransferableResource::ReturnResources(frame.resource_list);
+    std::vector<viz::ReturnedResource> resources =
+        viz::TransferableResource::ReturnResources(frame.resource_list);
 
     skipped_latency_info_list_.insert(skipped_latency_info_list_.end(),
                                       frame.metadata.latency_info.begin(),
@@ -450,10 +450,6 @@ void DelegatedFrameHost::SubmitCompositorFrame(
                                        skipped_latency_info_list_.end());
     skipped_latency_info_list_.clear();
 
-    bool result =
-        support_->SubmitCompositorFrame(local_surface_id, std::move(frame));
-    DCHECK(result);
-
     if (local_surface_id != local_surface_id_ || !has_frame_) {
       // manager must outlive compositors using it.
       viz::SurfaceId surface_id(frame_sink_id_, local_surface_id);
@@ -461,12 +457,19 @@ void DelegatedFrameHost::SubmitCompositorFrame(
                                     frame_size);
       client_->DelegatedFrameHostGetLayer()->SetShowPrimarySurface(
           surface_info, manager->surface_manager()->reference_factory());
-      client_->DelegatedFrameHostGetLayer()->SetFallbackSurface(surface_info);
       current_surface_size_ = frame_size;
       current_scale_factor_ = frame_device_scale_factor;
     }
 
     has_frame_ = true;
+
+    // If surface synchronization is off, then OnFirstSurfaceActivation will be
+    // called in the same call stack and so to ensure that the fallback surface
+    // is set, then primary surface must be set prior to calling
+    // CompositorFrameSinkSupport::SubmitCompositorFrame.
+    bool result =
+        support_->SubmitCompositorFrame(local_surface_id, std::move(frame));
+    DCHECK(result);
   }
   local_surface_id_ = local_surface_id;
 
@@ -488,16 +491,21 @@ void DelegatedFrameHost::SubmitCompositorFrame(
 }
 
 void DelegatedFrameHost::ClearDelegatedFrame() {
+  // Ensure that we are able to swap in a new blank frame to replace any old
+  // content. This will result in a white flash if we switch back to this
+  // content.
+  // https://crbug.com/739621
+  released_front_lock_.reset();
   EvictDelegatedFrame();
 }
 
 void DelegatedFrameHost::DidReceiveCompositorFrameAck(
-    const std::vector<cc::ReturnedResource>& resources) {
+    const std::vector<viz::ReturnedResource>& resources) {
   renderer_compositor_frame_sink_->DidReceiveCompositorFrameAck(resources);
 }
 
 void DelegatedFrameHost::ReclaimResources(
-    const std::vector<cc::ReturnedResource>& resources) {
+    const std::vector<viz::ReturnedResource>& resources) {
   renderer_compositor_frame_sink_->ReclaimResources(resources);
 }
 
@@ -513,7 +521,13 @@ void DelegatedFrameHost::OnBeginFramePausedChanged(bool paused) {
     renderer_compositor_frame_sink_->OnBeginFramePausedChanged(paused);
 }
 
-void DelegatedFrameHost::OnBeginFrame(const cc::BeginFrameArgs& args) {
+void DelegatedFrameHost::OnFirstSurfaceActivation(
+    const viz::SurfaceInfo& surface_info) {
+  if (has_frame_)
+    client_->DelegatedFrameHostGetLayer()->SetFallbackSurface(surface_info);
+}
+
+void DelegatedFrameHost::OnBeginFrame(const viz::BeginFrameArgs& args) {
   if (renderer_compositor_frame_sink_)
     renderer_compositor_frame_sink_->OnBeginFrame(args);
   client_->OnBeginFrame();
@@ -552,7 +566,7 @@ void DelegatedFrameHost::CopyFromCompositingSurfaceFinishedForVideo(
     base::WeakPtr<DelegatedFrameHost> dfh,
     const base::Callback<void(bool)>& callback,
     scoped_refptr<OwnedMailbox> subscriber_texture,
-    std::unique_ptr<cc::SingleReleaseCallback> release_callback,
+    std::unique_ptr<viz::SingleReleaseCallback> release_callback,
     bool result) {
   callback.Run(result);
 
@@ -578,10 +592,10 @@ void DelegatedFrameHost::CopyFromCompositingSurfaceHasResultForVideo(
     scoped_refptr<OwnedMailbox> subscriber_texture,
     scoped_refptr<media::VideoFrame> video_frame,
     const base::Callback<void(const gfx::Rect&, bool)>& callback,
-    std::unique_ptr<cc::CopyOutputResult> result) {
+    std::unique_ptr<viz::CopyOutputResult> result) {
   base::ScopedClosureRunner scoped_callback_runner(
-      base::Bind(callback, gfx::Rect(), false));
-  base::ScopedClosureRunner scoped_return_subscriber_texture(base::Bind(
+      base::BindOnce(callback, gfx::Rect(), false));
+  base::ScopedClosureRunner scoped_return_subscriber_texture(base::BindOnce(
       &ReturnSubscriberTexture, dfh, subscriber_texture, gpu::SyncToken()));
 
   if (!dfh)
@@ -637,7 +651,7 @@ void DelegatedFrameHost::CopyFromCompositingSurfaceHasResultForVideo(
     return;
 
   viz::TextureMailbox texture_mailbox;
-  std::unique_ptr<cc::SingleReleaseCallback> release_callback;
+  std::unique_ptr<viz::SingleReleaseCallback> release_callback;
   result->TakeTexture(&texture_mailbox, &release_callback);
   DCHECK(texture_mailbox.IsTexture());
 
@@ -772,10 +786,9 @@ DelegatedFrameHost::~DelegatedFrameHost() {
 
   ResetCompositorFrameSinkSupport();
 
-  factory->GetContextFactoryPrivate()
-      ->GetFrameSinkManager()
-      ->surface_manager()
-      ->InvalidateFrameSinkId(frame_sink_id_);
+  viz::HostFrameSinkManager* host_frame_sink_manager =
+      factory->GetContextFactoryPrivate()->GetHostFrameSinkManager();
+  host_frame_sink_manager->InvalidateFrameSinkId(frame_sink_id_);
 
   DCHECK(!vsync_manager_.get());
 }
@@ -814,7 +827,7 @@ void DelegatedFrameHost::LockResources() {
 }
 
 void DelegatedFrameHost::RequestCopyOfOutput(
-    std::unique_ptr<cc::CopyOutputRequest> request) {
+    std::unique_ptr<viz::CopyOutputRequest> request) {
   // If a specific area has not been requested, set one to ensure correct
   // clipping occurs.
   if (!request->has_area())
@@ -836,14 +849,12 @@ void DelegatedFrameHost::UnlockResources() {
 void DelegatedFrameHost::CreateCompositorFrameSinkSupport() {
   DCHECK(!support_);
   constexpr bool is_root = false;
-  constexpr bool handles_frame_sink_id_invalidation = false;
   constexpr bool needs_sync_points = true;
   ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
   support_ = factory->GetContextFactoryPrivate()
                  ->GetHostFrameSinkManager()
-                 ->CreateCompositorFrameSinkSupport(
-                     this, frame_sink_id_, is_root,
-                     handles_frame_sink_id_invalidation, needs_sync_points);
+                 ->CreateCompositorFrameSinkSupport(this, frame_sink_id_,
+                                                    is_root, needs_sync_points);
   if (compositor_)
     compositor_->AddFrameSink(frame_sink_id_);
   if (needs_begin_frame_)

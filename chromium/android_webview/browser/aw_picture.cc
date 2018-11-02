@@ -5,7 +5,6 @@
 #include "android_webview/browser/aw_picture.h"
 
 #include "android_webview/browser/java_browser_view_renderer_helper.h"
-#include "base/bind.h"
 #include "jni/AwPicture_jni.h"
 #include "third_party/skia/include/core/SkPicture.h"
 
@@ -44,10 +43,6 @@ void AwPicture::Draw(JNIEnv* env,
     return;
   }
   picture_->playback(canvas_holder->GetCanvas());
-}
-
-bool RegisterAwPicture(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 }  // namespace android_webview

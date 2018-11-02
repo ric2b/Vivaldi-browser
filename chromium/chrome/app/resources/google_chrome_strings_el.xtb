@@ -17,7 +17,6 @@
 <translation id="1434626383986940139">Εφαρμογές Chrome Canary</translation>
 <translation id="1457721931618994305">Ενημέρωση του Google Chrome…</translation>
 <translation id="1469002951682717133">Λειτουργία εκκίνησης εφαρμογών Chrome</translation>
-<translation id="1480489203462860648">Δοκιμάστε το! Εγκαταστάθηκε.</translation>
 <translation id="1553358976309200471">Ενημερώστε το Chrome</translation>
 <translation id="1587223624401073077">Το Google Chrome χρησιμοποιεί την κάμερά σας.</translation>
 <translation id="1587325591171447154">Το αρχείο <ph name="FILE_NAME" /> είναι επικίνδυνο, επομένως έχει αποκλειστεί από το Chrome.</translation>
@@ -96,6 +95,7 @@
 <translation id="345171907106878721">Προσθήκη του εαυτού σας στο Chrome</translation>
 <translation id="3612333635265770873">Έχει διαπιστωθεί ότι μια λειτουργική μονάδα με το ίδιο όνομα βρίσκεται σε διένεξη με το Google Chrome.</translation>
 <translation id="3622797965165704966">Τώρα μπορείτε να χρησιμοποιείτε πιο εύκολα το Chrome με το Λογαριασμό σας Google και σε κοινόχρηστους υπολογιστές.</translation>
+<translation id="3637702109597584617"><ph name="TERMS_OF_SERVICE_LINK" />Όροι Παροχής Υπηρεσιών<ph name="END_TERMS_OF_SERVICE_LINK" /> του Google Chrome OS</translation>
 <translation id="3718181793972440140">Με αυτήν την ενέργεια θα διαγραφεί 1 στοιχείο από αυτήν τη συσκευή. Για να ανακτήσετε τα δεδομένα σας αργότερα, συνδεθείτε στο Chrome ως <ph name="USER_EMAIL" />.</translation>
 <translation id="3735758079232443276">Η επέκταση <ph name="EXTENSION_NAME" /> άλλαξε τη σελίδα που εμφανίζεται κατά την εκκίνηση του Chrome.</translation>
 <translation id="3738139272394829648">Αγγίξτε για αναζήτηση</translation>
@@ -134,12 +134,12 @@
 <translation id="4754614261631455953">Google Chrome Canary (mDNS-In)</translation>
 <translation id="4771048833395599659">Αυτό το αρχείο ενδέχεται να είναι επικίνδυνο και έχει αποκλειστεί από το Chrome.</translation>
 <translation id="4794050651896644714">Αποθήκευση λεπτομερειών στο Chrome</translation>
+<translation id="4804732725083176494">Η σύνδεση στο Chrome είναι απενεργοποιημένη από τον διαχειριστή αυτής της συσκευής.</translation>
 <translation id="4891791193823137474">Να επιτρέπεται στο Google Chrome να εκτελείται στο παρασκήνιο</translation>
 <translation id="4921569541910214635">Μοιράζεστε έναν υπολογιστή; Τώρα μπορείτε να ρυθμίσετε το Chrome όπως ακριβώς σας αρέσει.</translation>
 <translation id="4953650215774548573">Ορίστε το Google Chrome ως προεπιλεγμένο πρόγραμμα περιήγησης</translation>
 <translation id="495931528404527476">Στο Chrome</translation>
 <translation id="4965682129423310439">Το Chrome εντόπισε επιβλαβές λογισμικό στον υπολογιστή σας. Το Chrome μπορεί να το καταργήσει και να επαναφέρει τις ρυθμίσεις σας ώστε το πρόγραμμα περιήγησης να λειτουργεί και πάλι κανονικά.</translation>
-<translation id="4987308747895123092">Κλείστε όλα τα παράθυρα του Google Chrome (περιλαμβανομένων όσων βρίσκονται σε λειτουργία Windows 8) και δοκιμάστε ξανά.</translation>
 <translation id="4990567037958725628">Google Chrome Canary</translation>
 <translation id="5028489144783860647">Το Google Chrome δεν κατάφερε να συγχρονίσει τα δεδομένα σας. Ενημερώστε τη φράση πρόσβασης συγχρονισμού.</translation>
 <translation id="5037239767309817516">Κλείστε όλα τα παράθυρα του Google Chrome και επανεκκινήστε τον για να εφαρμοστεί αυτή η αλλαγή.</translation>
@@ -199,7 +199,6 @@
 <translation id="6634887557811630702">Το Google Chrome έχει ενημερωθεί.</translation>
 <translation id="6676384891291319759">Πρόσβαση στο Διαδίκτυο</translation>
 <translation id="6697947395630195233">Το Chrome χρειάζεται πρόσβαση στην τοποθεσία σας, για να την κοινοποιήσει σε αυτόν τον ιστότοπο.</translation>
-<translation id="6757767188268205357">Δεν με ενδιαφέρει</translation>
 <translation id="683440813066116847">Εισερχόμενος κανόνας για το Google Chrome Canary για να επιτρέπεται η κυκλοφορία του mDNS.</translation>
 <translation id="686561893457936865">Πάρτε το Chrome μαζί σας παντού</translation>
 <translation id="6883876366448858277">στέλνει μια λέξη και το συγκείμενό της στην Αναζήτηση Google και φέρνει ως αποτέλεσμα ορισμούς, εικόνες και άλλα αποτελέσματα αναζήτησης.</translation>
@@ -214,7 +213,6 @@
 <translation id="7161904924553537242">Καλώς ήρθατε στο Google Chrome</translation>
 <translation id="7164397146364144019">Μπορείτε να βοηθήσετε να κάνουμε το Chromium πιο ασφαλές και εύχρηστο αναφέροντας αυτόματα στην Google λεπτομέρειες σχετικά με πιθανά περιστατικά ασφάλειας.</translation>
 <translation id="7185038942300673794">Το <ph name="EXTENSION_NAME" /> προστέθηκε στο Chrome.</translation>
-<translation id="7196020411877309443">Γιατί το βλέπω αυτό;</translation>
 <translation id="7242029209006116544">Είστε συνδεδεμένοι με έναν διαχειριζόμενο λογαριασμό και παραχωρείτε στο διαχειριστή του τον έλεγχο του προφίλ σας στο Google Chrome. Τα δεδομένα σας στο Chrome, όπως οι εφαρμογές, οι σελιδοδείκτες, το ιστορικό, οι κωδικοί πρόσβασης και άλλες ρυθμίσεις θα συνδεθούν μόνιμα με το όνομα χρήστη <ph name="USER_NAME" />. Θα έχετε τη δυνατότητα να διαγράψετε αυτά τα δεδομένα μέσω του Πίνακα ελέγχου των Λογαριασμών Google, αλλά δεν θα μπορείτε να τα συσχετίσετε με άλλο λογαριασμό. Αν θέλετε, μπορείτε να δημιουργήσετε ένα νέο προφίλ στο οποίο θα διατηρηθούν ξεχωριστά τα υπάρχοντα δεδομένα του Chrome. <ph name="LEARN_MORE" /></translation>
 <translation id="729375352412857283">Αυτός ο υπολογιστής θα σταματήσει να λαμβάνει ενημερώσεις Google Chrome, επειδή δεν θα υποστηρίζονται πια οι εκδόσεις Windows XP και Windows Vista.</translation>
 <translation id="7330164299247909639">Το πιστοποιητικό ελέγχου ταυτότητας απέτυχε. Συνδεθείτε ξανά στο Google Chrome ως <ph name="USER_NAME" /> ή επικοινωνήστε με τον διαχειριστή για περισσότερες πληροφορίες. <ph name="ADDITIONAL_EXPLANATION" /></translation>

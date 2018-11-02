@@ -15,6 +15,7 @@
 #include "components/sync/driver/fake_sync_service.h"
 
 namespace ntp_snippets {
+
 namespace test {
 
 FakeSyncService::FakeSyncService()
@@ -81,4 +82,5 @@ void RemoteSuggestionsTestUtils::ResetSigninManager() {
 }
 
 }  // namespace test
+
 }  // namespace ntp_snippets

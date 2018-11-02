@@ -15,9 +15,11 @@ import("//build/config/ui.gni")
 import("//device/vr/features/features.gni")
 import("//extensions/features/features.gni")
 import("//media/media_options.gni")
+import("//media/gpu/args.gni")
 import("//remoting/remoting_enable.gni")
 import("//third_party/openh264/openh264_args.gni")
 import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
+import("//ui/base/ui_features.gni")
 import("//ui/ozone/ozone.gni")
 import("//v8/gni/v8.gni")
 import("//v8/snapshot_toolchain.gni")
@@ -197,10 +199,10 @@ group("gn_all") {
       "//mojo/edk/test:mojo_public_system_unittests",
       "//net:net_perftests",
       "//storage:storage_unittests",
+      "//third_party/WebKit/Source/controller:webkit_unit_tests",
       "//third_party/WebKit/Source/platform:blink_platform_unittests",
       "//third_party/WebKit/Source/platform/heap:blink_heap_unittests",
       "//third_party/WebKit/Source/platform/wtf:wtf_unittests",
-      "//third_party/WebKit/Source/web:webkit_unit_tests",
       "//third_party/angle/src/tests:angle_end2end_tests",
       "//third_party/angle/src/tests:angle_unittests",
       "//third_party/angle/src/tests:angle_white_box_tests",
@@ -216,6 +218,8 @@ group("gn_all") {
     ]
   } else if (is_ios) {
     deps += [ "//ios:all" ]
+  } else if (is_fuchsia) {
+    deps += [ ":d8_fuchsia" ]
   }
 
   deps += root_extra_deps
@@ -283,6 +287,7 @@ group("gn_all") {
   if (is_android) {
     deps += [
       "//base:base_junit_tests",
+      "//base/android/jni_generator:jni_generator_tests",
       "//base/android/linker:chromium_android_linker",
       "//build/android/gyp/test:hello_world",
       "//build/android/gyp/test:hello_world",
@@ -525,7 +530,6 @@ group("gn_all") {
         "//skia:image_operations_bench",
         "//third_party/sqlite:sqlite_shell",
         "//ui/keyboard:keyboard_unittests",
-        "//ui/message_center:message_center_unittests",
         "//ui/snapshot:snapshot_unittests",
       ]
 
@@ -601,6 +605,10 @@ group("gn_all") {
       "//third_party/openh264:encoder",
       "//third_party/openh264:processing",
     ]
+  }
+
+  if (enable_message_center) {
+    deps += [ "//ui/message_center:message_center_unittests" ]
   }
 
   if (!is_android && !is_ios && !is_fuchsia) {
@@ -708,6 +716,10 @@ group("gn_all") {
       deps += [ "//tools/perf/contrib/vr_benchmarks:vr_perf_tests" ]
     }
   }
+
+  if (is_fuchsia) {
+    deps += [ "//headless" ]
+  }
 }
 
 # TODO(GYP_GONE): This target exists for compatibility with GYP, specifically
@@ -718,6 +730,14 @@ group("All") {
   deps = [
     ":gn_all",
   ]
+}
+
+if (is_fuchsia) {
+  # TODO(https://crbug.com/731217): This can't practically be in //v8 without
+  # duplicating all the Fuchsia running infrastructure there.
+  fuchsia_executable_runner("d8_fuchsia") {
+    exe_target = "//v8:d8"
+  }
 }
 
 # TODO(GYP_GONE): Figure out if we really need this target or if there's
@@ -739,7 +759,7 @@ if (is_win) {
 
     if (target_cpu == "x86") {
       if (is_clang) {
-        deps += [ "//courgette(//build/toolchain/win:clang_x64)" ]
+        deps += [ "//courgette(//build/toolchain/win:win_clang_x64)" ]
       } else {
         deps += [ "//courgette(//build/toolchain/win:x64)" ]
       }
@@ -797,8 +817,6 @@ if (is_chromeos) {
       "//chrome",
       "//chrome/test/chromedriver",
       "//media:media_unittests",
-      "//media/gpu:video_decode_accelerator_unittest",
-      "//media/gpu:video_encode_accelerator_unittest",
       "//ppapi/examples/video_decode",
       "//sandbox/linux:chrome_sandbox",
       "//sandbox/linux:sandbox_linux_unittests",
@@ -807,6 +825,13 @@ if (is_chromeos) {
       #"//third_party/catapult/telemetry:bitmaptools",
       "//tools/perf/clear_system_cache",
     ]
+
+    if (use_v4l2_codec || use_vaapi) {
+      deps += [
+        "//media/gpu:video_decode_accelerator_unittest",
+        "//media/gpu:video_encode_accelerator_unittest",
+      ]
+    }
   }
 }
 
@@ -879,7 +904,6 @@ if (!is_ios && !is_fuchsia) {
       "//mojo/public/interfaces/bindings/tests:test_data_deps",
       "//services/device/public/interfaces:interfaces_js_data_deps",
       "//services/device/public/interfaces:generic_sensor_js_data_deps",
-      "//services/service_manager/public/interfaces:interfaces_js_data_deps",
       "//services/shape_detection/public/interfaces:interfaces_js_data_deps",
       "//third_party/WebKit/public:blink_devtools_frontend_resources_files",
       "//third_party/WebKit/public:mojo_bindings_js_data_deps",
@@ -956,10 +980,6 @@ if (!is_ios && !is_fuchsia) {
       "//mojo/public/js:new_bindings",
     ]
   }
-}
-
-# Add a dummy target for compatibility w/ GYP
-group("chromium_swarm_tests") {
 }
 
 group("chromium_builder_perf") {

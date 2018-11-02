@@ -31,9 +31,8 @@
 #include "core/exported/WebSettingsImpl.h"
 
 #include "core/frame/Settings.h"
-#include "platform/graphics/DeferredImageDecoder.h"
-
 #include "core/inspector/DevToolsEmulator.h"
+#include "platform/graphics/DeferredImageDecoder.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebURL.h"
 
@@ -431,6 +430,10 @@ void WebSettingsImpl::SetTouchDragDropEnabled(bool enabled) {
   settings_->SetTouchDragDropEnabled(enabled);
 }
 
+void WebSettingsImpl::SetBarrelButtonForDragEnabled(bool enabled) {
+  settings_->SetBarrelButtonForDragEnabled(enabled);
+}
+
 void WebSettingsImpl::SetOfflineWebApplicationCacheEnabled(bool enabled) {
   settings_->SetOfflineWebApplicationCacheEnabled(enabled);
 }
@@ -700,6 +703,10 @@ void WebSettingsImpl::SetMediaControlsEnabled(bool enabled) {
 void WebSettingsImpl::SetDoNotUpdateSelectionOnMutatingSelectionRange(
     bool enabled) {
   settings_->SetDoNotUpdateSelectionOnMutatingSelectionRange(enabled);
+}
+
+void WebSettingsImpl::SetMediaDownloadInProductHelpEnabled(bool enabled) {
+  settings_->SetMediaDownloadInProductHelpEnabled(enabled);
 }
 
 void WebSettingsImpl::SetServeResourceFromCacheOnly(bool onlyLoadFromCache)

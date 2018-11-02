@@ -36,7 +36,7 @@
 #include "core/dom/IgnoreDestructiveWriteCountIncrementer.h"
 #include "core/dom/ScriptLoader.h"
 #include "core/dom/TaskRunnerHelper.h"
-#include "core/events/Event.h"
+#include "core/dom/events/Event.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/parser/HTMLInputStream.h"
 #include "core/html/parser/HTMLParserScriptRunnerHost.h"
@@ -159,10 +159,7 @@ HTMLParserScriptRunner::HTMLParserScriptRunner(
     HTMLParserReentryPermit* reentry_permit,
     Document* document,
     HTMLParserScriptRunnerHost* host)
-    : reentry_permit_(reentry_permit),
-      document_(document),
-      host_(host),
-      parser_blocking_script_(this, nullptr) {
+    : reentry_permit_(reentry_permit), document_(document), host_(host) {
   DCHECK(host_);
 }
 
@@ -221,17 +218,13 @@ void HTMLParserScriptRunner::ExecutePendingScriptAndDispatchEvent(
     }
   }
 
-  double script_parser_blocking_time =
-      pending_script->ParserBlockingLoadStartTime();
-  ScriptElementBase* element = pending_script->GetElement();
-
   // 1. "Let the script be the pending parsing-blocking script.
   //     There is no longer a pending parsing-blocking script."
   if (pending_script_type == ScriptStreamer::kParsingBlocking) {
     parser_blocking_script_ = nullptr;
   }
 
-  if (ScriptLoader* script_loader = element->Loader()) {
+  if (ScriptLoader* script_loader = pending_script->GetElement()->Loader()) {
     // 7. "Increment the parser's script nesting level by one (it should be
     //     zero before this step, so this sets it to one)."
     HTMLParserReentryPermit::ScriptNestingLevelIncrementer
@@ -243,12 +236,6 @@ void HTMLParserScriptRunner::ExecutePendingScriptAndDispatchEvent(
 
     // 8. "Execute the script."
     DCHECK(IsExecutingScript());
-    if (!pending_script->ErrorOccurred() && script_parser_blocking_time > 0.0) {
-      DocumentParserTiming::From(*document_)
-          .RecordParserBlockedOnScriptLoadDuration(
-              MonotonicallyIncreasingTime() - script_parser_blocking_time,
-              script_loader->WasCreatedDuringDocumentWrite());
-    }
     DoExecuteScript(pending_script, DocumentURLForScriptExecution(document_));
 
     // 9. "Decrement the parser's script nesting level by one.
@@ -276,7 +263,7 @@ void FetchBlockedDocWriteScript(ScriptElementBase* element,
 
 void EmitWarningForDocWriteScripts(const String& url, Document& document) {
   String message =
-      "The Parser-blocking, cross site (i.e. different eTLD+1) "
+      "The parser-blocking, cross site (i.e. different eTLD+1) "
       "script, " +
       url +
       ", invoked via document.write was NOT BLOCKED on this page load, but MAY "
@@ -524,12 +511,13 @@ bool HTMLParserScriptRunner::ExecuteScriptsWaitingForParsing() {
 }
 
 // 2nd Clause, Step 23 of https://html.spec.whatwg.org/#prepare-a-script
-void HTMLParserScriptRunner::RequestParsingBlockingScript(Element* element) {
+void HTMLParserScriptRunner::RequestParsingBlockingScript(
+    ScriptLoader* script_loader) {
   // "The element is the pending parsing-blocking script of the Document of
   //  the parser that created the element.
   //  (There can only be one such script per Document at a time.)"
   CHECK(!ParserBlockingScript());
-  parser_blocking_script_ = RequestPendingScript(element);
+  parser_blocking_script_ = script_loader->CreatePendingScript();
   if (!ParserBlockingScript())
     return;
 
@@ -540,20 +528,21 @@ void HTMLParserScriptRunner::RequestParsingBlockingScript(Element* element) {
   // returning control to the parser.
   if (!ParserBlockingScript()->IsReady()) {
     parser_blocking_script_->StartStreamingIfPossible(
-        document_, ScriptStreamer::kParsingBlocking);
+        ScriptStreamer::kParsingBlocking, WTF::Closure());
     parser_blocking_script_->WatchForLoad(this);
   }
 }
 
 // 1st Clause, Step 23 of https://html.spec.whatwg.org/#prepare-a-script
-void HTMLParserScriptRunner::RequestDeferredScript(Element* element) {
-  PendingScript* pending_script = RequestPendingScript(element);
+void HTMLParserScriptRunner::RequestDeferredScript(
+    ScriptLoader* script_loader) {
+  PendingScript* pending_script = script_loader->CreatePendingScript();
   if (!pending_script)
     return;
 
   if (!pending_script->IsReady()) {
-    pending_script->StartStreamingIfPossible(document_,
-                                             ScriptStreamer::kDeferred);
+    pending_script->StartStreamingIfPossible(ScriptStreamer::kDeferred,
+                                             WTF::Closure());
   }
 
   DCHECK(pending_script->IsExternalOrModule());
@@ -561,15 +550,7 @@ void HTMLParserScriptRunner::RequestDeferredScript(Element* element) {
   // "Add the element to the end of the list of scripts that will execute
   //  when the document has finished parsing associated with the Document
   //  of the parser that created the element."
-  scripts_to_execute_after_parsing_.push_back(
-      TraceWrapperMember<PendingScript>(this, pending_script));
-}
-
-PendingScript* HTMLParserScriptRunner::RequestPendingScript(
-    Element* element) const {
-  ScriptElementBase* script_element =
-      ScriptElementBase::FromElementIfPossible(element);
-  return script_element->Loader()->CreatePendingScript();
+  scripts_to_execute_after_parsing_.push_back(pending_script);
 }
 
 // The initial steps for 'An end tag whose tag name is "script"'
@@ -616,7 +597,7 @@ void HTMLParserScriptRunner::ProcessScriptElementInternal(
 
     if (script_loader->WillExecuteWhenDocumentFinishedParsing()) {
       // 1st Clause of Step 23.
-      RequestDeferredScript(script);
+      RequestDeferredScript(script_loader);
     } else if (script_loader->ReadyToBeParserExecuted()) {
       // 5th Clause of Step 23.
       // "If ... it's an HTML parser
@@ -643,7 +624,7 @@ void HTMLParserScriptRunner::ProcessScriptElementInternal(
       }
     } else {
       // 2nd Clause of Step 23.
-      RequestParsingBlockingScript(script);
+      RequestParsingBlockingScript(script_loader);
     }
 
     // "Decrement the parser's script nesting level by one.

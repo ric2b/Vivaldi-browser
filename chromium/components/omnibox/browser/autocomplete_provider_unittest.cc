@@ -49,7 +49,7 @@ class TestingSchemeClassifier : public AutocompleteSchemeClassifier {
  public:
   TestingSchemeClassifier() {}
 
-  metrics::OmniboxInputType::Type GetInputTypeForScheme(
+  metrics::OmniboxInputType GetInputTypeForScheme(
       const std::string& scheme) const override {
     return net::URLRequest::IsHandledProtocol(scheme)
                ? metrics::OmniboxInputType::URL
@@ -75,7 +75,7 @@ class AutocompleteProviderClientWithClosure
     if (!closure_.is_null())
       closure_.Run();
     if (base::RunLoop::IsRunningOnCurrentThread())
-      base::MessageLoop::current()->QuitWhenIdle();
+      base::RunLoop::QuitCurrentWhenIdleDeprecated();
   }
 
   base::Closure closure_;

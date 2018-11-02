@@ -1,0 +1,6 @@
+include_rules = [
+  "+components/ntp_snippets",
+  "+components/ntp_tiles",
+  "+components/reading_list",
+  "+ios/public/provider/chrome",
+]

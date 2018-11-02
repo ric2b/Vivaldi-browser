@@ -1,5 +1,5 @@
 
-arch = environment.x86
+arch = environment.x64
 
 rule cc
   command = ninja -t msvc -e $arch -- $cc /nologo /showIncludes /FC @${out}.rsp /c ${in} /Fo${out}

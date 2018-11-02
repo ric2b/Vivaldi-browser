@@ -6,12 +6,13 @@
 #define COMPONENTS_NTP_SNIPPETS_REMOTE_TEST_UTILS_H_
 
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "build/build_config.h"
 #include "components/signin/core/browser/fake_signin_manager.h"
 #include "components/sync/driver/fake_sync_service.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
-#include "testing/gtest/include/gtest/gtest.h"
 
 class AccountTrackerService;
 class FakeProfileOAuth2TokenService;
@@ -27,6 +28,7 @@ using SigninManagerForTest = FakeSigninManager;
 #endif  // OS_CHROMEOS
 
 namespace ntp_snippets {
+
 namespace test {
 
 class FakeSyncService : public syncer::FakeSyncService {
@@ -75,6 +77,7 @@ class RemoteSuggestionsTestUtils {
 };
 
 }  // namespace test
+
 }  // namespace ntp_snippets
 
 #endif  // COMPONENTS_NTP_SNIPPETS_REMOTE_TEST_UTILS_H_

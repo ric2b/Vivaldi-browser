@@ -35,7 +35,7 @@
 
 #include "WebAXObject.h"
 #include "WebDOMMessageEvent.h"
-#include "WebDataSource.h"
+#include "WebDocumentLoader.h"
 #include "WebFileChooserParams.h"
 #include "WebFormElement.h"
 #include "WebFrame.h"
@@ -85,6 +85,9 @@ class SingleThreadTaskRunner;
 }
 
 namespace blink {
+namespace mojom {
+enum class WebFeature : int32_t;
+}  // namespace mojom
 
 enum class WebTreeScopeType;
 class WebApplicationCacheHost;
@@ -93,11 +96,12 @@ class WebColorChooser;
 class WebColorChooserClient;
 class WebContentDecryptionModule;
 class WebCookieJar;
-class WebDataSource;
+class WebDocumentLoader;
 class WebEncryptedMediaClient;
 class WebExternalPopupMenu;
 class WebExternalPopupMenuClient;
 class WebFileChooserCompletion;
+class WebLayerTreeView;
 class WebLocalFrame;
 class WebMediaPlayer;
 class WebMediaPlayerClient;
@@ -144,7 +148,8 @@ class BLINK_EXPORT WebFrameClient {
                                             WebMediaPlayerClient*,
                                             WebMediaPlayerEncryptedMediaClient*,
                                             WebContentDecryptionModule*,
-                                            const WebString& sink_id) {
+                                            const WebString& sink_id,
+                                            WebLayerTreeView*) {
     return nullptr;
   }
 
@@ -238,7 +243,7 @@ class BLINK_EXPORT WebFrameClient {
   // associated with this frame. If the DetachType is Remove, the frame should
   // also be removed from the frame tree; otherwise, if the DetachType is
   // Swap, the frame is being replaced in-place by WebFrame::swap().
-  virtual void FrameDetached(WebLocalFrame*, DetachType) {}
+  virtual void FrameDetached(DetachType) {}
 
   // This frame has become focused.
   virtual void FrameFocused() {}
@@ -316,13 +321,6 @@ class BLINK_EXPORT WebFrameClient {
   virtual void DownloadURL(const WebURLRequest&,
                            const WebString& download_name) {}
 
-  // The client should handle the navigation externally. Should not be used for
-  // processing the request as a download (See WebFrameClient::DownloadURL).
-  virtual void LoadURLExternally(const WebURLRequest&,
-                                 WebNavigationPolicy,
-                                 WebTriggeringEventInfo triggering_event_info,
-                                 bool should_replace_current_entry) {}
-
   // The client should load an error page in the current frame.
   virtual void LoadErrorPage(int reason) {}
 
@@ -332,7 +330,7 @@ class BLINK_EXPORT WebFrameClient {
   // defaultPolicy should just be returned.
 
   struct NavigationPolicyInfo {
-    WebDataSource::ExtraData* extra_data;
+    WebDocumentLoader::ExtraData* extra_data;
 
     // Note: if browser side navigations are enabled, the client may modify
     // the urlRequest. However, should this happen, the client should change
@@ -408,10 +406,10 @@ class BLINK_EXPORT WebFrameClient {
 
   // A datasource has been created for a new navigation.  The given
   // datasource will become the provisional datasource for the frame.
-  virtual void DidCreateDataSource(WebLocalFrame*, WebDataSource*) {}
+  virtual void DidCreateDocumentLoader(WebDocumentLoader*) {}
 
   // A new provisional load has been started.
-  virtual void DidStartProvisionalLoad(WebDataSource* data_source,
+  virtual void DidStartProvisionalLoad(WebDocumentLoader* document_loader,
                                        WebURLRequest& request) {}
 
   // The provisional load was redirected via a HTTP 3xx response.
@@ -429,7 +427,7 @@ class BLINK_EXPORT WebFrameClient {
                                         WebHistoryCommitType) {}
 
   // The frame's document has just been initialized.
-  virtual void DidCreateNewDocument(WebLocalFrame* frame) {}
+  virtual void DidCreateNewDocument() {}
 
   // The window object for the frame has been cleared of any extra
   // properties that may have been set by script from the previously
@@ -438,11 +436,11 @@ class BLINK_EXPORT WebFrameClient {
 
   // The document element has been created.
   // This method may not invalidate the frame, nor execute JavaScript code.
-  virtual void DidCreateDocumentElement(WebLocalFrame*) {}
+  virtual void DidCreateDocumentElement() {}
 
   // Like |didCreateDocumentElement|, except this method may run JavaScript
   // code (and possibly invalidate the frame).
-  virtual void RunScriptsAtDocumentElementAvailable(WebLocalFrame*) {}
+  virtual void RunScriptsAtDocumentElementAvailable() {}
 
   // The page title is available.
   virtual void DidReceiveTitle(const WebString& title,
@@ -510,6 +508,10 @@ class BLINK_EXPORT WebFrameClient {
   virtual bool ShouldUseClientLoFiForRequest(const WebURLRequest&) {
     return false;
   }
+
+  // This frame tried to navigate its top level frame to the given url without
+  // ever having received a user gesture.
+  virtual void DidBlockFramebust(const WebURL&) {}
 
   // PlzNavigate
   // Called to abort a navigation that is being handled by the browser process.
@@ -651,6 +653,12 @@ class BLINK_EXPORT WebFrameClient {
   // use for segregated histograms.
   virtual void DidObserveLoadingBehavior(WebLoadingBehaviorFlag) {}
 
+  // Blink hit the code path for a certain feature for the first time on this
+  // frame. As a performance optimization, features already hit on other frames
+  // associated with the same page in the renderer are not currently reported.
+  // This is used for reporting UseCounter histograms.
+  virtual void DidObserveNewFeatureUsage(mojom::WebFeature) {}
+
   // Script notifications ------------------------------------------------
 
   // Notifies that a new script context has been created for this frame.
@@ -668,7 +676,7 @@ class BLINK_EXPORT WebFrameClient {
 
   // If the frame is loading an HTML document, this will be called to
   // notify that the <body> will be attached soon.
-  virtual void WillInsertBody(WebLocalFrame*) {}
+  virtual void WillInsertBody() {}
 
   // Informs the browser that the draggable regions have been updated.
   virtual void DraggableRegionsChanged() {}

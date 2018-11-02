@@ -46,7 +46,7 @@
 #include "content/public/common/content_switches.h"
 #include "sandbox/win/src/sandbox.h"
 
-#include "app/vivaldi_constants.h"
+#include "app/vivaldi_version_constants.h"
 
 namespace {
 // The entry point signature of chrome.dll.

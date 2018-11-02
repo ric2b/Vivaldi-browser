@@ -4,8 +4,10 @@
 
 #include "ui/ozone/platform/drm/common/drm_util.h"
 
+#include <map>
+
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/display/types/display_snapshot_mojo.h"
+#include "ui/display/types/display_snapshot.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/ozone/common/gpu/ozone_gpu_message_params.h"
 
@@ -31,7 +33,6 @@ bool operator==(const ui::DisplaySnapshot_Params& a,
          a.current_mode == b.current_mode &&
          a.has_native_mode == b.has_native_mode &&
          a.native_mode == b.native_mode && a.product_id == b.product_id &&
-         a.string_representation == b.string_representation &&
          a.maximum_cursor_size == b.maximum_cursor_size;
 }
 
@@ -63,7 +64,6 @@ void DetailedCompare(const ui::DisplaySnapshot_Params& a,
   EXPECT_EQ(a.has_native_mode, b.has_native_mode);
   EXPECT_EQ(a.native_mode, b.native_mode);
   EXPECT_EQ(a.product_id, b.product_id);
-  EXPECT_EQ(a.string_representation, b.string_representation);
   EXPECT_EQ(a.maximum_cursor_size, b.maximum_cursor_size);
 }
 
@@ -104,7 +104,6 @@ TEST_F(DrmUtilTest, RoundTripDisplaySnapshot) {
   fp.has_native_mode = true;
   fp.native_mode = MakeDisplay(1.1);
   fp.product_id = 7;
-  fp.string_representation = "bending glass display";
   fp.maximum_cursor_size = gfx::Size(103, 44);
 
   sp.display_id = 1002;
@@ -123,7 +122,6 @@ TEST_F(DrmUtilTest, RoundTripDisplaySnapshot) {
   sp.has_native_mode = true;
   sp.native_mode = MakeDisplay(500.2);
   sp.product_id = 8;
-  sp.string_representation = "rigid glass display";
   sp.maximum_cursor_size = gfx::Size(500, 44);
 
   ep.display_id = 2002;
@@ -142,7 +140,6 @@ TEST_F(DrmUtilTest, RoundTripDisplaySnapshot) {
   ep.current_mode = MakeDisplay(1000.2);
   ep.has_native_mode = false;
   ep.product_id = 9;
-  ep.string_representation = "fluted glass display";
   ep.maximum_cursor_size = gfx::Size(1000, 44);
 
   orig_params.push_back(fp);
@@ -160,6 +157,48 @@ TEST_F(DrmUtilTest, RoundTripDisplaySnapshot) {
   EXPECT_EQ(fp, roundtrip_params[0]);
   EXPECT_EQ(sp, roundtrip_params[1]);
   EXPECT_EQ(ep, roundtrip_params[2]);
+}
+
+TEST_F(DrmUtilTest, OverlaySurfaceCandidate) {
+  OverlaySurfaceCandidateList input;
+
+  OverlaySurfaceCandidate input_osc;
+  input_osc.transform = gfx::OVERLAY_TRANSFORM_FLIP_VERTICAL;
+  input_osc.format = gfx::BufferFormat::YUV_420_BIPLANAR;
+  input_osc.buffer_size = gfx::Size(100, 50);
+  input_osc.display_rect = gfx::RectF(1., 2., 3., 4.);
+  input_osc.crop_rect = gfx::RectF(10., 20., 30., 40.);
+  input_osc.clip_rect = gfx::Rect(10, 20, 30, 40);
+  input_osc.is_clipped = true;
+  input_osc.plane_z_order = 42;
+  input_osc.overlay_handled = true;
+
+  input.push_back(input_osc);
+
+  // Roundtrip the conversions.
+  auto output = CreateOverlaySurfaceCandidateListFrom(
+      CreateParamsFromOverlaySurfaceCandidate(input));
+
+  EXPECT_EQ(input.size(), output.size());
+  OverlaySurfaceCandidate output_osc = output[0];
+
+  EXPECT_EQ(input_osc.transform, output_osc.transform);
+  EXPECT_EQ(input_osc.format, output_osc.format);
+  EXPECT_EQ(input_osc.buffer_size, output_osc.buffer_size);
+  EXPECT_EQ(input_osc.display_rect, output_osc.display_rect);
+  EXPECT_EQ(input_osc.crop_rect, output_osc.crop_rect);
+  EXPECT_EQ(input_osc.plane_z_order, output_osc.plane_z_order);
+  EXPECT_EQ(input_osc.overlay_handled, output_osc.overlay_handled);
+
+  EXPECT_FALSE(input < output);
+  EXPECT_FALSE(output < input);
+
+  std::map<OverlaySurfaceCandidateList, int> map;
+  map[input] = 42;
+  const auto& iter = map.find(output);
+
+  EXPECT_NE(map.end(), iter);
+  EXPECT_EQ(42, iter->second);
 }
 
 }  // namespace ui

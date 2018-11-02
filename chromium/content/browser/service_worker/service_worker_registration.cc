@@ -211,7 +211,7 @@ void ServiceWorkerRegistration::ClaimClients() {
     ServiceWorkerProviderHost* host = it->GetProviderHost();
     if (host->IsHostToRunningServiceWorker())
       continue;
-    if (host->controlling_version() == active_version())
+    if (host->controller() == active_version())
       continue;
     if (!host->IsContextSecureForServiceWorker())
       continue;
@@ -377,8 +377,9 @@ void ServiceWorkerRegistration::ActivateWaitingVersion(bool delay) {
   // failures, wait a bit before continuing.
   if (delay) {
     task_runner_->PostDelayedTask(
-        FROM_HERE, base::Bind(&ServiceWorkerRegistration::ContinueActivation,
-                              this, activating_version),
+        FROM_HERE,
+        base::BindOnce(&ServiceWorkerRegistration::ContinueActivation, this,
+                       activating_version),
         base::TimeDelta::FromSeconds(1));
   } else {
     ContinueActivation(std::move(activating_version));
@@ -394,8 +395,8 @@ void ServiceWorkerRegistration::ContinueActivation(
   DCHECK_EQ(ServiceWorkerVersion::ACTIVATING, activating_version->status());
   activating_version->RunAfterStartWorker(
       ServiceWorkerMetrics::EventType::ACTIVATE,
-      base::Bind(&ServiceWorkerRegistration::DispatchActivateEvent, this,
-                 activating_version),
+      base::BindOnce(&ServiceWorkerRegistration::DispatchActivateEvent, this,
+                     activating_version),
       base::Bind(&ServiceWorkerRegistration::OnActivateEventFinished, this,
                  activating_version));
 }
@@ -410,7 +411,7 @@ void ServiceWorkerRegistration::DeleteVersion(
            context_->GetProviderHostIterator();
        !it->IsAtEnd(); it->Advance()) {
     ServiceWorkerProviderHost* host = it->GetProviderHost();
-    if (host->controlling_version() == version)
+    if (host->controller() == version)
       host->NotifyControllerLost();
   }
 

@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 
-#include "base/id_map.h"
+#include "base/containers/id_map.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -138,7 +138,7 @@ class NetworkingPrivateServiceClient
 
     ServiceCallbacksID id;
   };
-  using ServiceCallbacksMap = IDMap<std::unique_ptr<ServiceCallbacks>>;
+  using ServiceCallbacksMap = base::IDMap<std::unique_ptr<ServiceCallbacks>>;
 
   ~NetworkingPrivateServiceClient() override;
 
@@ -176,8 +176,6 @@ class NetworkingPrivateServiceClient
       network_events_observers_;
   // Interface to WiFiService. Used and deleted on the worker thread.
   std::unique_ptr<wifi::WiFiService> wifi_service_;
-  // Sequence token associated with wifi tasks.
-  base::SequencedWorkerPool::SequenceToken sequence_token_;
   // Task runner for worker tasks.
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
   // Use WeakPtrs for callbacks from |wifi_service_|.

@@ -69,9 +69,7 @@ std::string ContentSettingToString(ContentSetting setting) {
 
 bool ContentSettingFromString(const std::string& name,
                               ContentSetting* setting) {
-  // We are starting the index from 1, as |CONTENT_SETTING_DEFAULT| is not
-  // a recognized content setting.
-  for (size_t i = 1; i < arraysize(kContentSettingsStringMapping); ++i) {
+  for (size_t i = 0; i < arraysize(kContentSettingsStringMapping); ++i) {
     if (name == kContentSettingsStringMapping[i].content_setting_str) {
       *setting = kContentSettingsStringMapping[i].content_setting;
       return true;
@@ -142,6 +140,9 @@ void GetRendererContentSettingRules(const HostContentSettingsMap* map,
       CONTENT_SETTINGS_TYPE_AUTOPLAY,
       ResourceIdentifier(),
       &(rules->autoplay_rules));
+  map->GetSettingsForOneType(CONTENT_SETTINGS_TYPE_CLIENT_HINTS,
+                             ResourceIdentifier(),
+                             &(rules->client_hints_rules));
 }
 
 bool IsMorePermissive(ContentSetting a, ContentSetting b) {

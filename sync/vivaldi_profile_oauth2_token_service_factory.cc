@@ -22,7 +22,9 @@ namespace vivaldi {
 VivaldiProfileOAuth2TokenServiceFactory::
     VivaldiProfileOAuth2TokenServiceFactory()
     : ProfileOAuth2TokenServiceFactory() {
+#if !defined(OS_ANDROID)
   DependsOn(GlobalErrorServiceFactory::GetInstance());
+#endif
   // DependsOn(WebDataServiceFactory::GetInstance());
   DependsOn(VivaldiSigninClientFactory::GetInstance());
   DependsOn(SigninErrorControllerFactory::GetInstance());

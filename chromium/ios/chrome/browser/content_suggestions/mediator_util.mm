@@ -19,6 +19,20 @@
 #error "This file requires ARC support."
 #endif
 
+namespace {
+ContentSuggestionsSectionInformation* EmptySectionInfo(
+    ContentSuggestionsSectionID sectionID) {
+  ContentSuggestionsSectionInformation* sectionInfo = [
+      [ContentSuggestionsSectionInformation alloc] initWithSectionID:sectionID];
+  sectionInfo.title = nil;
+  sectionInfo.footerTitle = nil;
+  sectionInfo.showIfEmpty = NO;
+  sectionInfo.layout = ContentSuggestionsSectionLayoutCustom;
+
+  return sectionInfo;
+}
+}  // namespace
+
 void BindWrapper(
     base::Callback<void(ntp_snippets::Status status_code,
                         const std::vector<ntp_snippets::ContentSuggestion>&
@@ -48,6 +62,7 @@ ContentSuggestionsItem* ConvertSuggestion(
       initWithType:0
              title:base::SysUTF16ToNSString(contentSuggestion.title())
                url:contentSuggestion.url()];
+  suggestion.metricsRecorded = NO;
 
   suggestion.publisher =
       base::SysUTF16ToNSString(contentSuggestion.publisher_name());
@@ -58,14 +73,16 @@ ContentSuggestionsItem* ConvertSuggestion(
       contentSuggestion.id().id_within_category();
   suggestion.suggestionIdentifier.sectionInfo = sectionInfo;
 
+  suggestion.score = contentSuggestion.score();
+  suggestion.fetchDate = contentSuggestion.fetch_date();
+
   if (category.IsKnownCategory(ntp_snippets::KnownCategories::READING_LIST)) {
-    suggestion.availableOffline =
-        contentSuggestion.reading_list_suggestion_extra()->distilled;
     suggestion.faviconURL =
         contentSuggestion.reading_list_suggestion_extra()->favicon_page_url;
   }
   if (category.IsKnownCategory(ntp_snippets::KnownCategories::ARTICLES)) {
     suggestion.hasImage = YES;
+    suggestion.readLaterAction = YES;
   }
 
   return suggestion;
@@ -110,16 +127,16 @@ ContentSuggestionsSectionInformation* LogoSectionInformation() {
   return sectionInfo;
 }
 
-ContentSuggestionsSectionInformation* MostVisitedSectionInformation() {
-  ContentSuggestionsSectionInformation* sectionInfo =
-      [[ContentSuggestionsSectionInformation alloc]
-          initWithSectionID:ContentSuggestionsSectionMostVisited];
-  sectionInfo.title = nil;
-  sectionInfo.footerTitle = nil;
-  sectionInfo.showIfEmpty = NO;
-  sectionInfo.layout = ContentSuggestionsSectionLayoutCustom;
+ContentSuggestionsSectionInformation* PromoSectionInformation() {
+  return EmptySectionInfo(ContentSuggestionsSectionPromo);
+}
 
-  return sectionInfo;
+ContentSuggestionsSectionInformation* MostVisitedSectionInformation() {
+  return EmptySectionInfo(ContentSuggestionsSectionMostVisited);
+}
+
+ContentSuggestionsSectionInformation* LearnMoreSectionInformation() {
+  return EmptySectionInfo(ContentSuggestionsSectionLearnMore);
 }
 
 ContentSuggestionsMostVisitedItem* ConvertNTPTile(
@@ -137,4 +154,21 @@ ContentSuggestionsMostVisitedItem* ConvertNTPTile(
   suggestion.suggestionIdentifier.sectionInfo = sectionInfo;
 
   return suggestion;
+}
+
+content_suggestions::StatusCode ConvertStatusCode(ntp_snippets::Status status) {
+  switch (status.code) {
+    case ntp_snippets::StatusCode::SUCCESS:
+      return content_suggestions::StatusCodeSuccess;
+      break;
+    case ntp_snippets::StatusCode::TEMPORARY_ERROR:
+      return content_suggestions::StatusCodeError;
+      break;
+    case ntp_snippets::StatusCode::PERMANENT_ERROR:
+      return content_suggestions::StatusCodePermanentError;
+      break;
+    case ntp_snippets::StatusCode::STATUS_CODE_COUNT:
+      NOTREACHED();
+      return content_suggestions::StatusCodeError;
+  }
 }

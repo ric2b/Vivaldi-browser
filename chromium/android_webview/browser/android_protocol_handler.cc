@@ -37,7 +37,7 @@ using base::android::ScopedJavaLocalRef;
 
 namespace {
 
-void* kPreviouslyFailedKey = &kPreviouslyFailedKey;
+const void* const kPreviouslyFailedKey = &kPreviouslyFailedKey;
 
 void MarkRequestAsFailed(net::URLRequest* request) {
   request->SetUserData(kPreviouslyFailedKey,
@@ -218,10 +218,6 @@ bool ContentSchemeRequestInterceptor::ShouldHandleRequest(
 }  // namespace
 
 namespace android_webview {
-
-bool RegisterAndroidProtocolHandler(JNIEnv* env) {
-  return RegisterNativesImpl(env);
-}
 
 // static
 std::unique_ptr<net::URLRequestInterceptor>

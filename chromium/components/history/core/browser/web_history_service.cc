@@ -52,13 +52,13 @@ const char kHistoryDeleteHistoryUrl[] =
     TEST_SYNC_URL("/apis/history/api/delete?client=chrome");
 
 const char kHistoryAudioHistoryUrl[] =
-    "https://history.google.com/history/api/lookup?client=audio";
+    TEST_SYNC_URL("/apis/history/api/lookup?client=audio");
 
 const char kHistoryAudioHistoryChangeUrl[] =
-    "https://history.google.com/history/api/change";
+    TEST_SYNC_URL("/apis/history/api/change");
 
 const char kQueryWebAndAppActivityUrl[] =
-    "https://history.google.com/history/api/lookup?client=web_app";
+    TEST_SYNC_URL("/apis/history/api/lookup?client=web_app");
 
 const char kQueryOtherFormsOfBrowsingHistoryUrlSuffix[] = "/historystatus";
 
@@ -191,7 +191,7 @@ class RequestImpl : public WebHistoryService::Request,
             destination: GOOGLE_OWNED_SERVICE
           }
           policy {
-            cookies_allowed: false
+            cookies_allowed: NO
             setting:
               "To disable this feature, users can either sign out or disable "
               "history sync via unchecking 'History' setting under 'Advanced "

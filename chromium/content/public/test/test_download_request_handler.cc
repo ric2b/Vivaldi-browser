@@ -251,7 +251,7 @@ void TestDownloadRequestHandler::PartialResponseJob::Start() {
   DVLOG(1) << "Invoking custom OnStart handler.";
   interceptor_->GetClientTaskRunner()->PostTask(
       FROM_HERE,
-      base::Bind(
+      base::BindOnce(
           parameters_->on_start_handler, request()->extra_request_headers(),
           base::Bind(&PartialResponseJob::
                          OnStartResponseCallbackOnPossiblyIncorrectThread,
@@ -325,8 +325,7 @@ void TestDownloadRequestHandler::PartialResponseJob::ReportCompletedRequest() {
     completed_request->initiator = request()->initiator().has_value()
                                        ? request()->initiator().value()
                                        : url::Origin();
-    completed_request->first_party_for_cookies =
-        request()->first_party_for_cookies();
+    completed_request->site_for_cookies = request()->site_for_cookies();
     completed_request->first_party_url_policy =
         request()->first_party_url_policy();
     interceptor_->AddCompletedRequest(std::move(completed_request));
@@ -341,8 +340,8 @@ void TestDownloadRequestHandler::PartialResponseJob::
         net::Error error) {
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&PartialResponseJob::OnStartResponseCallback, job, headers,
-                 error));
+      base::BindOnce(&PartialResponseJob::OnStartResponseCallback, job, headers,
+                     error));
 }
 
 void TestDownloadRequestHandler::PartialResponseJob::OnStartResponseCallback(
@@ -407,6 +406,9 @@ void TestDownloadRequestHandler::PartialResponseJob::HandleOnStartDefault() {
                                            "Content-Length: %" PRId64 "\r\n",
                                            parameters_->size));
   response_info_.connection_info = parameters_->connection_type;
+  if (parameters_->support_byte_ranges)
+    response_info_.headers->AddHeader("Accept-Ranges: bytes");
+
   AddCommonEntityHeaders();
   NotifyHeadersCompleteAndPrepareToRead();
   return;
@@ -456,9 +458,6 @@ bool TestDownloadRequestHandler::PartialResponseJob::
 }
 
 void TestDownloadRequestHandler::PartialResponseJob::AddCommonEntityHeaders() {
-  if (parameters_->support_byte_ranges)
-    response_info_.headers->AddHeader("Accept-Ranges: bytes");
-
   if (!parameters_->content_type.empty())
     response_info_.headers->AddHeader(base::StringPrintf(
         "Content-Type: %s", parameters_->content_type.c_str()));
@@ -494,8 +493,8 @@ void TestDownloadRequestHandler::PartialResponseJob::
     parameters_->injected_errors.pop();
 
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&PartialResponseJob::NotifyHeadersComplete,
-                            weak_factory_.GetWeakPtr()));
+      FROM_HERE, base::BindOnce(&PartialResponseJob::NotifyHeadersComplete,
+                                weak_factory_.GetWeakPtr()));
 }
 
 // static
@@ -646,7 +645,7 @@ void TestDownloadRequestHandler::StartServing(const Parameters& parameters) {
   // parameters.
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&Interceptor::SetJobFactory, interceptor_, job_factory));
+      base::BindOnce(&Interceptor::SetJobFactory, interceptor_, job_factory));
 }
 
 void TestDownloadRequestHandler::StartServingStaticResponse(
@@ -680,8 +679,9 @@ void TestDownloadRequestHandler::GetPatternBytes(int seed,
 
 TestDownloadRequestHandler::~TestDownloadRequestHandler() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                          base::Bind(&Interceptor::Unregister, interceptor_));
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::BindOnce(&Interceptor::Unregister, interceptor_));
 }
 
 void TestDownloadRequestHandler::GetCompletedRequestInfo(
@@ -690,8 +690,8 @@ void TestDownloadRequestHandler::GetCompletedRequestInfo(
   base::RunLoop run_loop;
   BrowserThread::PostTaskAndReply(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&Interceptor::GetAndResetCompletedRequests, interceptor_,
-                 requests),
+      base::BindOnce(&Interceptor::GetAndResetCompletedRequests, interceptor_,
+                     requests),
       run_loop.QuitClosure());
   run_loop.Run();
 }

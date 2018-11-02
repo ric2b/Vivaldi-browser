@@ -85,8 +85,7 @@ enum RTCIceConnectionState {
     // readonly attribute boolean? canTrickleIceCandidates;
     // RTCConfiguration getConfiguration();
     [CallWith=ScriptState, RaisesException] void setConfiguration(RTCConfiguration configuration);
-    // TODO(guidou): close() should never throw an exception.
-    [RaisesException] void close();
+    void close();
     attribute EventHandler onnegotiationneeded;
     attribute EventHandler onicecandidate;
     attribute EventHandler onsignalingstatechange;
@@ -121,6 +120,8 @@ enum RTCIceConnectionState {
     [RuntimeEnabled=RTCRtpSender, RaisesException] RTCRtpSender addTrack(MediaStreamTrack track, MediaStream... streams);
     // https://w3c.github.io/webrtc-pc/#dom-rtcpeerconnection-removetrack
     [RuntimeEnabled=RTCRtpSender, RaisesException] void removeTrack(RTCRtpSender sender);
+    // https://w3c.github.io/webrtc-pc/#dom-rtcpeerconnection-ontrack
+    [RuntimeEnabled=RTCRtpSender] attribute EventHandler ontrack;
 
     // https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api
     [CallWith=ScriptState, RaisesException] RTCDataChannel createDataChannel(USVString label, optional RTCDataChannelInit dataChannelDict);
@@ -133,7 +134,6 @@ enum RTCIceConnectionState {
     // Non-standard or removed from the spec:
     [Measure] sequence<MediaStream> getLocalStreams();
     [Measure] sequence<MediaStream> getRemoteStreams();
-    [DeprecateAs=V8RTCPeerConnection_GetStreamById_Method] MediaStream getStreamById(DOMString streamId);
     [Measure, CallWith=ScriptState, RaisesException] void addStream(MediaStream? stream, optional Dictionary mediaConstraints);
     [Measure, RaisesException] void removeStream(MediaStream? stream);
     [Measure, RaisesException] RTCDTMFSender createDTMFSender(MediaStreamTrack track);

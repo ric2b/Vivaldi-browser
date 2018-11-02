@@ -9,10 +9,10 @@ if (is_component_build) {
 }
 target(link_target_type, "service") {
   visibility = [
-    "//media/*",
+    "//components/viz/service/*",
     "//content/gpu/*",
     "//content/public/gpu/*",
-    "//services/ui/gpu/*",
+    "//media/*",
   ]
 
   sources = [
@@ -42,17 +42,12 @@ target(link_target_type, "service") {
   deps = [
     "//gpu/ipc/service",
     "//media:media_features",
+    "//media/gpu:features",
     "//media/gpu/ipc/common",
     "//media/gpu/mojo:jpeg_decoder",
     "//third_party/mesa:mesa_headers",
     "//ui/gfx/ipc/color",
   ]
-
-  configs += [ "//media/gpu:gpu_config" ]
-
-  if (is_chromeos && current_cpu != "arm") {
-    configs += [ "//third_party/libva:libva_config" ]
-  }
 
   if (is_win) {
     configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]

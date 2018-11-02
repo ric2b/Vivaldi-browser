@@ -16,11 +16,8 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
-#include "base/files/file_path.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/path_service.h"
-#include "base/process/launch.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/win/windows_version.h"
@@ -122,13 +119,7 @@ static int NumberOfWaveOutBuffers() {
     return buffers;
   }
 
-  // Use 4 buffers for Vista, 3 for everyone else:
-  //  - The entire Windows audio stack was rewritten for Windows Vista and wave
-  //    out performance was degraded compared to XP.
-  //  - The regression was fixed in Windows 7 and most configurations will work
-  //    with 2, but some (e.g., some Sound Blasters) still need 3.
-  //  - Some XP configurations (even multi-processor ones) also need 3.
-  return (base::win::GetVersion() == base::win::VERSION_VISTA) ? 4 : 3;
+  return 3;
 }
 
 AudioManagerWin::AudioManagerWin(std::unique_ptr<AudioThread> audio_thread,
@@ -241,15 +232,6 @@ base::string16 AudioManagerWin::GetAudioInputDeviceModel() {
   }
 
   return base::string16();
-}
-
-void AudioManagerWin::ShowAudioInputSettings() {
-  base::FilePath path;
-  PathService::Get(base::DIR_SYSTEM, &path);
-  path = path.Append(L"control.exe");
-  base::CommandLine command_line(path);
-  command_line.AppendArg("mmsys.cpl,,1");
-  base::LaunchProcess(command_line, base::LaunchOptions());
 }
 
 void AudioManagerWin::GetAudioDeviceNamesImpl(bool input,

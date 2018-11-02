@@ -21,6 +21,8 @@
 #include "extensions/common/error_utils.h"
 #include "extensions/common/extension.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace windows_util {
 
 bool GetWindowFromWindowID(UIThreadExtensionFunction* function,
@@ -63,6 +65,12 @@ bool CanOperateOnWindow(const UIThreadExtensionFunction* function,
                         extensions::WindowController::TypeFilter filter) {
   if (filter && !controller->MatchesFilter(filter))
     return false;
+
+  // NOTE(pettern@vivaldi.com): Make sure we can operate on all windows.
+  if (function->extension() &&
+      vivaldi::IsVivaldiApp(function->extension()->id())) {
+    return true;
+  }
 
   if (!filter && function->extension() &&
       !controller->IsVisibleToExtension(function->extension()))

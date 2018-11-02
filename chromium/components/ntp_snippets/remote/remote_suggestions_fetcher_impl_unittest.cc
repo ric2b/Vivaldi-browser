@@ -4,11 +4,11 @@
 
 #include "components/ntp_snippets/remote/remote_suggestions_fetcher_impl.h"
 
-#include <deque>
 #include <map>
 #include <utility>
 #include <vector>
 
+#include "base/containers/circular_deque.h"
 #include "base/json/json_reader.h"
 #include "base/memory/ptr_util.h"
 #include "base/optional.h"
@@ -218,7 +218,7 @@ class DelegateCallingTestURLFetcherFactory
     DropAndCallDelegate(fetcher_id);
   }
 
-  std::deque<int> fetchers_;  // std::queue doesn't support std::find.
+  base::circular_deque<int> fetchers_;
 };
 
 // Factory for FakeURLFetcher objects that always generate errors.

@@ -5,11 +5,11 @@
 #include "core/inspector/DevToolsEmulator.h"
 
 #include "core/events/WebInputEventConversion.h"
-#include "core/exported/WebViewBase.h"
+#include "core/exported/WebViewImpl.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/frame/VisualViewport.h"
-#include "core/frame/WebLocalFrameBase.h"
+#include "core/frame/WebLocalFrameImpl.h"
 #include "core/input/EventHandler.h"
 #include "core/page/Page.h"
 #include "core/style/ComputedStyle.h"
@@ -59,7 +59,7 @@ static float calculateDeviceScaleAdjustment(int width,
 
 namespace blink {
 
-DevToolsEmulator::DevToolsEmulator(WebViewBase* web_view)
+DevToolsEmulator::DevToolsEmulator(WebViewImpl* web_view)
     : web_view_(web_view),
       device_metrics_enabled_(false),
       emulate_mobile_enabled_(false),
@@ -94,7 +94,6 @@ DevToolsEmulator::DevToolsEmulator(WebViewBase* web_view)
               .GetMainFrameResizesAreOrientationChanges()),
       touch_event_emulation_enabled_(false),
       double_tap_to_zoom_enabled_(false),
-      original_touch_event_feature_detection_enabled_(false),
       original_device_supports_touch_(false),
       original_max_touch_points_(0),
       embedder_script_enabled_(
@@ -103,7 +102,7 @@ DevToolsEmulator::DevToolsEmulator(WebViewBase* web_view)
 
 DevToolsEmulator::~DevToolsEmulator() {}
 
-DevToolsEmulator* DevToolsEmulator::Create(WebViewBase* web_view_base) {
+DevToolsEmulator* DevToolsEmulator::Create(WebViewImpl* web_view_base) {
   return new DevToolsEmulator(web_view_base);
 }
 
@@ -180,33 +179,25 @@ void DevToolsEmulator::SetMainFrameResizesAreOrientationChanges(bool value) {
 
 void DevToolsEmulator::SetAvailablePointerTypes(int types) {
   embedder_available_pointer_types_ = types;
-  bool emulate_mobile_enabled =
-      device_metrics_enabled_ && emulate_mobile_enabled_;
-  if (!emulate_mobile_enabled)
+  if (!touch_event_emulation_enabled_)
     web_view_->GetPage()->GetSettings().SetAvailablePointerTypes(types);
 }
 
 void DevToolsEmulator::SetPrimaryPointerType(PointerType pointer_type) {
   embedder_primary_pointer_type_ = pointer_type;
-  bool emulate_mobile_enabled =
-      device_metrics_enabled_ && emulate_mobile_enabled_;
-  if (!emulate_mobile_enabled)
+  if (!touch_event_emulation_enabled_)
     web_view_->GetPage()->GetSettings().SetPrimaryPointerType(pointer_type);
 }
 
 void DevToolsEmulator::SetAvailableHoverTypes(int types) {
   embedder_available_hover_types_ = types;
-  bool emulate_mobile_enabled =
-      device_metrics_enabled_ && emulate_mobile_enabled_;
-  if (!emulate_mobile_enabled)
+  if (!touch_event_emulation_enabled_)
     web_view_->GetPage()->GetSettings().SetAvailableHoverTypes(types);
 }
 
 void DevToolsEmulator::SetPrimaryHoverType(HoverType hover_type) {
   embedder_primary_hover_type_ = hover_type;
-  bool emulate_mobile_enabled =
-      device_metrics_enabled_ && emulate_mobile_enabled_;
-  if (!emulate_mobile_enabled)
+  if (!touch_event_emulation_enabled_)
     web_view_->GetPage()->GetSettings().SetPrimaryHoverType(hover_type);
 }
 
@@ -263,7 +254,7 @@ void DevToolsEmulator::DisableDeviceEmulation() {
   DisableMobileEmulation();
   web_view_->SetCompositorDeviceScaleFactorOverride(0.f);
   web_view_->SetPageScaleFactor(1.f);
-  UpdateRootLayerTransform();
+  ResetViewport();
   // mainFrameImpl() could be null during cleanup or remote <-> local swap.
   if (web_view_->MainFrameImpl()) {
     if (Document* document =
@@ -296,11 +287,6 @@ void DevToolsEmulator::EnableMobileEmulation() {
   web_view_->GetPage()->GetSettings().SetPreferCompositingToLCDTextEnabled(
       true);
   web_view_->GetPage()->GetSettings().SetPluginsEnabled(false);
-  web_view_->GetPage()->GetSettings().SetAvailablePointerTypes(
-      kPointerTypeCoarse);
-  web_view_->GetPage()->GetSettings().SetPrimaryPointerType(kPointerTypeCoarse);
-  web_view_->GetPage()->GetSettings().SetAvailableHoverTypes(kHoverTypeNone);
-  web_view_->GetPage()->GetSettings().SetPrimaryHoverType(kHoverTypeNone);
   web_view_->GetPage()->GetSettings().SetMainFrameResizesAreOrientationChanges(
       true);
   web_view_->SetZoomFactorOverride(1);
@@ -338,14 +324,6 @@ void DevToolsEmulator::DisableMobileEmulation() {
       embedder_viewport_style_);
   web_view_->GetPage()->GetSettings().SetPluginsEnabled(
       embedder_plugins_enabled_);
-  web_view_->GetPage()->GetSettings().SetAvailablePointerTypes(
-      embedder_available_pointer_types_);
-  web_view_->GetPage()->GetSettings().SetPrimaryPointerType(
-      embedder_primary_pointer_type_);
-  web_view_->GetPage()->GetSettings().SetAvailableHoverTypes(
-      embedder_available_hover_types_);
-  web_view_->GetPage()->GetSettings().SetPrimaryHoverType(
-      embedder_primary_hover_type_);
   web_view_->GetPage()->GetSettings().SetMainFrameResizesAreOrientationChanges(
       embedder_main_frame_resizes_are_orientation_changes_);
   web_view_->SetZoomFactorOverride(0);
@@ -401,6 +379,7 @@ void DevToolsEmulator::ResetViewport() {
       web_view_->GetPage()->GetVisualViewport().ContainerLayer();
   if (container_layer)
     container_layer->SetMasksToBounds(original_masking);
+
   UpdateRootLayerTransform();
 }
 
@@ -472,41 +451,33 @@ WTF::Optional<IntRect> DevToolsEmulator::VisibleContentRectForPainting() const {
                 viewport_size.Width(), viewport_size.Height()));
 }
 
-void DevToolsEmulator::SetTouchEventEmulationEnabled(bool enabled) {
-  if (touch_event_emulation_enabled_ == enabled)
-    return;
+void DevToolsEmulator::SetTouchEventEmulationEnabled(bool enabled,
+                                                     int max_touch_points) {
   if (!touch_event_emulation_enabled_) {
-    original_touch_event_feature_detection_enabled_ =
-        RuntimeEnabledFeatures::TouchEventFeatureDetectionEnabled();
     original_device_supports_touch_ =
         web_view_->GetPage()->GetSettings().GetDeviceSupportsTouch();
     original_max_touch_points_ =
         web_view_->GetPage()->GetSettings().GetMaxTouchPoints();
   }
-  RuntimeEnabledFeatures::SetTouchEventFeatureDetectionEnabled(
-      enabled ? true : original_touch_event_feature_detection_enabled_);
-  if (!original_device_supports_touch_) {
-    if (enabled && web_view_->MainFrameImpl()) {
-      web_view_->MainFrameImpl()
-          ->GetFrame()
-          ->GetEventHandler()
-          .ClearMouseEventManager();
-    }
-    web_view_->GetPage()->GetSettings().SetDeviceSupportsTouch(
-        enabled ? true : original_device_supports_touch_);
-    // Currently emulation does not provide multiple touch points.
-    web_view_->GetPage()->GetSettings().SetMaxTouchPoints(
-        enabled ? 1 : original_max_touch_points_);
-  }
   touch_event_emulation_enabled_ = enabled;
-  // TODO(dgozman): mainFrameImpl() check in this class should be unnecessary.
-  // It is only needed when we reattach and restore InspectorEmulationAgent,
-  // which happens before everything has been setup correctly, and therefore
-  // fails during remote -> local main frame transition.
-  // We should instead route emulation from browser through the WebViewImpl
-  // to the local main frame, and remove InspectorEmulationAgent entirely.
-  if (web_view_->MainFrameImpl())
-    web_view_->MainFrameImpl()->GetFrameView()->UpdateLayout();
+  web_view_->GetPage()
+      ->GetSettings()
+      .SetForceTouchEventFeatureDetectionForInspector(enabled);
+  web_view_->GetPage()->GetSettings().SetDeviceSupportsTouch(
+      enabled ? true : original_device_supports_touch_);
+  web_view_->GetPage()->GetSettings().SetMaxTouchPoints(
+      enabled ? max_touch_points : original_max_touch_points_);
+  web_view_->GetPage()->GetSettings().SetAvailablePointerTypes(
+      enabled ? kPointerTypeCoarse : embedder_available_pointer_types_);
+  web_view_->GetPage()->GetSettings().SetPrimaryPointerType(
+      enabled ? kPointerTypeCoarse : embedder_primary_pointer_type_);
+  web_view_->GetPage()->GetSettings().SetAvailableHoverTypes(
+      enabled ? kHoverTypeNone : embedder_available_hover_types_);
+  web_view_->GetPage()->GetSettings().SetPrimaryHoverType(
+      enabled ? kHoverTypeNone : embedder_primary_hover_type_);
+  WebLocalFrameImpl* frame = web_view_->MainFrameImpl();
+  if (!original_device_supports_touch_ && enabled && frame)
+    frame->GetFrame()->GetEventHandler().ClearMouseEventManager();
 }
 
 void DevToolsEmulator::SetScriptExecutionDisabled(

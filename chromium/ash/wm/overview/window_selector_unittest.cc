@@ -7,7 +7,8 @@
 
 #include "ash/accessibility_delegate.h"
 #include "ash/accessibility_types.h"
-#include "ash/app_list/test_app_list_view_presenter_impl.h"
+#include "ash/app_list/test_app_list_presenter_impl.h"
+#include "ash/ash_switches.h"
 #include "ash/drag_drop/drag_drop_controller.h"
 #include "ash/public/cpp/config.h"
 #include "ash/public/cpp/window_properties.h"
@@ -22,11 +23,14 @@
 #include "ash/wm/overview/window_selector_controller.h"
 #include "ash/wm/overview/window_selector_item.h"
 #include "ash/wm/panels/panel_layout_manager.h"
+#include "ash/wm/splitview/split_view_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
 #include "ash/wm/workspace/workspace_window_resizer.h"
+#include "base/command_line.h"
+#include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/user_action_tester.h"
@@ -165,6 +169,10 @@ class WindowSelectorTest : public AshTestBase {
 
   WindowSelector* window_selector() {
     return window_selector_controller()->window_selector_.get();
+  }
+
+  SplitViewController* split_view_controller() {
+    return Shell::Get()->split_view_controller();
   }
 
   void ToggleOverview() { window_selector_controller()->ToggleOverview(); }
@@ -325,6 +333,21 @@ class WindowSelectorTest : public AshTestBase {
 
   views::Widget* text_filter_widget() {
     return window_selector()->text_filter_widget_.get();
+  }
+
+  gfx::Rect GetSplitViewLeftWindowBounds(aura::Window* window) {
+    return split_view_controller()->GetLeftWindowBoundsInScreen(window);
+  }
+
+  gfx::Rect GetSplitViewRightWindowBounds(aura::Window* window) {
+    return split_view_controller()->GetRightWindowBoundsInScreen(window);
+  }
+
+  gfx::Rect GetGridBounds() {
+    if (window_selector())
+      return window_selector()->grid_list_[0]->bounds_;
+
+    return gfx::Rect();
   }
 
  private:
@@ -899,6 +922,8 @@ TEST_F(WindowSelectorTest, SkipOverviewWindow) {
 
   // Exit overview.
   ToggleOverview();
+  base::RunLoop().RunUntilIdle();
+
   EXPECT_TRUE(window1->IsVisible());
   EXPECT_TRUE(window2->IsVisible());
 }
@@ -944,19 +969,14 @@ TEST_F(WindowSelectorTest, FullscreenWindowTabletMode) {
 
 // Tests that beginning window selection hides the app list.
 TEST_F(WindowSelectorTest, SelectingHidesAppList) {
-  // TODO: fails in mash because of AppListPresenter. http://crbug.com/696028.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   gfx::Rect bounds(0, 0, 400, 400);
   std::unique_ptr<aura::Window> window1(CreateWindow(bounds));
   std::unique_ptr<aura::Window> window2(CreateWindow(bounds));
 
   // The tested behavior relies on the app list presenter delegate.
-  TestAppListViewPresenterImpl app_list_presenter_impl;
+  TestAppListPresenterImpl app_list_presenter_impl;
 
-  app_list_presenter_impl.Show(
-      display::Screen::GetScreen()->GetPrimaryDisplay().id());
+  app_list_presenter_impl.ShowAndRunLoop(GetPrimaryDisplay().id());
   EXPECT_TRUE(app_list_presenter_impl.IsVisible());
 
   ToggleOverview();
@@ -1221,15 +1241,15 @@ TEST_F(WindowSelectorTest, Shutdown) {
   gfx::Rect bounds(0, 0, 400, 400);
   // These windows will be deleted when the test exits and the Shell instance
   // is shut down.
-  aura::Window* window1(CreateWindow(bounds));
-  aura::Window* window2(CreateWindow(bounds));
-  aura::Window* window3(CreatePanelWindow(bounds));
-  aura::Window* window4(CreatePanelWindow(bounds));
+  std::unique_ptr<aura::Window> window1(CreateWindow(bounds));
+  std::unique_ptr<aura::Window> window2(CreateWindow(bounds));
+  std::unique_ptr<aura::Window> window3(CreatePanelWindow(bounds));
+  std::unique_ptr<aura::Window> window4(CreatePanelWindow(bounds));
 
-  wm::ActivateWindow(window4);
-  wm::ActivateWindow(window3);
-  wm::ActivateWindow(window2);
-  wm::ActivateWindow(window1);
+  wm::ActivateWindow(window4.get());
+  wm::ActivateWindow(window3.get());
+  wm::ActivateWindow(window2.get());
+  wm::ActivateWindow(window1.get());
 
   ToggleOverview();
 }
@@ -1721,7 +1741,7 @@ TEST_F(WindowSelectorTest, ShowTextFilterMenu) {
 
   // Open system bubble shifting focus from the text filter.
   SystemTray* tray = GetPrimarySystemTray();
-  tray->ShowDefaultView(BUBBLE_CREATE_NEW);
+  tray->ShowDefaultView(BUBBLE_CREATE_NEW, false /* show_by_click */);
   RunAllPendingInMessageLoop();
 
   // This should not cancel overview mode.
@@ -1904,6 +1924,223 @@ TEST_F(WindowSelectorTest, OverviewWhileDragging) {
   resizer->Drag(location, 0);
   ToggleOverview();
   resizer->RevertDrag();
+}
+
+// Tests that dragging a overview window selector item to the edge of the screen
+// snaps the window. If two windows are snapped to left and right side of the
+// screen, exit the overview mode.
+TEST_F(WindowSelectorTest, DragOverviewWindowToSnap) {
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kAshEnableTabletSplitView);
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
+
+  const gfx::Rect bounds(0, 0, 400, 400);
+  std::unique_ptr<aura::Window> window1(CreateWindow(bounds));
+  std::unique_ptr<aura::Window> window2(CreateWindow(bounds));
+  std::unique_ptr<aura::Window> window3(CreateWindow(bounds));
+
+  ToggleOverview();
+  EXPECT_TRUE(window_selector_controller()->IsSelecting());
+  EXPECT_EQ(split_view_controller()->IsSplitViewModeActive(), false);
+
+  // Drag |window1| selector item to snap to left.
+  const int grid_index = 0;
+  WindowSelectorItem* selector_item1 =
+      GetWindowItemForWindow(grid_index, window1.get());
+  const gfx::Rect selector_item_bounds1 = selector_item1->target_bounds();
+  // Start drag in the middle of the seletor item.
+  const gfx::Point start_location1(selector_item_bounds1.CenterPoint());
+  window_selector()->InitiateDrag(selector_item1, start_location1);
+  const gfx::Point end_location1(0, 0);
+  window_selector()->Drag(selector_item1, end_location1);
+  window_selector()->CompleteDrag(selector_item1);
+
+  EXPECT_EQ(split_view_controller()->IsSplitViewModeActive(), true);
+  EXPECT_EQ(split_view_controller()->state(),
+            SplitViewController::LEFT_SNAPPED);
+  EXPECT_EQ(split_view_controller()->left_window(), window1.get());
+
+  // Drag |window2| selector item to snap to left.
+  WindowSelectorItem* selector_item2 =
+      GetWindowItemForWindow(grid_index, window2.get());
+  const gfx::Rect selector_item_bounds2 = selector_item2->target_bounds();
+  // Start drag in the middle of the seletor item.
+  const gfx::Point start_location2(selector_item_bounds2.CenterPoint());
+  window_selector()->InitiateDrag(selector_item2, start_location2);
+  const gfx::Point end_location2(0, 0);
+  window_selector()->Drag(selector_item2, end_location2);
+  window_selector()->CompleteDrag(selector_item2);
+
+  EXPECT_EQ(split_view_controller()->state(),
+            SplitViewController::LEFT_SNAPPED);
+  EXPECT_EQ(split_view_controller()->left_window(), window2.get());
+
+  // Drag |window3| selector item to snap to right.
+  WindowSelectorItem* selector_item3 =
+      GetWindowItemForWindow(grid_index, window3.get());
+  const gfx::Rect selector_item_bounds3 = selector_item3->target_bounds();
+  // Start drag in the middle of the seletor item.
+  const gfx::Point start_location3(selector_item_bounds3.CenterPoint());
+  window_selector()->InitiateDrag(selector_item3, start_location3);
+  const gfx::Rect work_area_rect =
+      split_view_controller()->GetDisplayWorkAreaBoundsInScreen(window2.get());
+  const gfx::Point end_location3(work_area_rect.width(), 0);
+  window_selector()->Drag(selector_item3, end_location3);
+  window_selector()->CompleteDrag(selector_item3);
+
+  EXPECT_EQ(split_view_controller()->state(),
+            SplitViewController::BOTH_SNAPPED);
+  EXPECT_EQ(split_view_controller()->right_window(), window3.get());
+  EXPECT_FALSE(window_selector_controller()->IsSelecting());
+}
+
+// Verify the window grid size changes as expected when dragging items around in
+// overview mode when split view is enabled.
+TEST_F(WindowSelectorTest, WindowGridSizeWhileDraggingWithSplitView) {
+  // Enable split view, enter maximize mode, add some windows and enter overview
+  // mode.
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kAshEnableTabletSplitView);
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
+
+  const gfx::Rect bounds(0, 0, 400, 400);
+  std::unique_ptr<aura::Window> window1(CreateWindow(bounds));
+  std::unique_ptr<aura::Window> window2(CreateWindow(bounds));
+  std::unique_ptr<aura::Window> window3(CreateWindow(bounds));
+
+  ToggleOverview();
+  ASSERT_TRUE(window_selector_controller()->IsSelecting());
+
+  // Select window one and start the drag.
+  const int grid_index = 0;
+  const int window_width =
+      Shell::Get()->GetPrimaryRootWindow()->GetBoundsInScreen().width();
+  WindowSelectorItem* selector_item =
+      GetWindowItemForWindow(grid_index, window1.get());
+  gfx::Rect selector_item_bounds = selector_item->target_bounds();
+  gfx::Point start_location(selector_item_bounds.CenterPoint());
+  window_selector()->InitiateDrag(selector_item, start_location);
+
+  // Verify that when dragged to the left, the window grid is located where the
+  // right window of split view mode should be.
+  const gfx::Point left(0, 0);
+  window_selector()->Drag(selector_item, left);
+  EXPECT_FALSE(split_view_controller()->IsSplitViewModeActive());
+  EXPECT_EQ(SplitViewController::NO_SNAP, split_view_controller()->state());
+  EXPECT_TRUE(split_view_controller()->left_window() == nullptr);
+  EXPECT_EQ(GetSplitViewRightWindowBounds(window1.get()), GetGridBounds());
+
+  // Verify that when dragged to the right, the window grid is located where the
+  // left window of split view mode should be.
+  const gfx::Point right(window_width, 0);
+  window_selector()->Drag(selector_item, right);
+  EXPECT_EQ(SplitViewController::NO_SNAP, split_view_controller()->state());
+  EXPECT_TRUE(split_view_controller()->right_window() == nullptr);
+  EXPECT_EQ(GetSplitViewLeftWindowBounds(window1.get()), GetGridBounds());
+
+  // Verify that when dragged to the center, the window grid is has the
+  // dimensions of the work area.
+  const gfx::Point center(window_width / 2, 0);
+  window_selector()->Drag(selector_item, center);
+  EXPECT_EQ(SplitViewController::NO_SNAP, split_view_controller()->state());
+  EXPECT_EQ(
+      split_view_controller()->GetDisplayWorkAreaBoundsInScreen(window1.get()),
+      GetGridBounds());
+
+  // Snap window1 to the left and initialize dragging for window2.
+  window_selector()->Drag(selector_item, left);
+  window_selector()->CompleteDrag(selector_item);
+  ASSERT_EQ(SplitViewController::LEFT_SNAPPED,
+            split_view_controller()->state());
+  ASSERT_EQ(window1.get(), split_view_controller()->left_window());
+  selector_item = GetWindowItemForWindow(grid_index, window2.get());
+  selector_item_bounds = selector_item->target_bounds();
+  start_location = selector_item_bounds.CenterPoint();
+  window_selector()->InitiateDrag(selector_item, start_location);
+
+  // Verify that when there is a snapped window, the window grid bounds remain
+  // constant despite window selector items being dragged left and right.
+  window_selector()->Drag(selector_item, left);
+  EXPECT_EQ(GetSplitViewRightWindowBounds(window1.get()), GetGridBounds());
+  window_selector()->Drag(selector_item, right);
+  EXPECT_EQ(GetSplitViewRightWindowBounds(window1.get()), GetGridBounds());
+  window_selector()->Drag(selector_item, center);
+  EXPECT_EQ(GetSplitViewRightWindowBounds(window1.get()), GetGridBounds());
+
+  ToggleOverview();
+}
+
+// Tests dragging a unsnappable window.
+TEST_F(WindowSelectorTest, DraggingNonSnapableAppWithSplitView) {
+  // Enable split view, enter maximize mode, add a unsnappable window and enter
+  // overview mode.
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kAshEnableTabletSplitView);
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
+
+  const gfx::Rect bounds(0, 0, 400, 400);
+  std::unique_ptr<aura::Window> unsnappable_window(CreateWindow(bounds));
+  unsnappable_window->SetProperty(aura::client::kResizeBehaviorKey,
+                                  ui::mojom::kResizeBehaviorNone);
+
+  // The grid bounds should be the size of the root window minus the shelf.
+  const gfx::Rect root_window_bounds =
+      Shell::Get()->GetPrimaryRootWindow()->GetBoundsInScreen();
+  const gfx::Rect shelf_bounds =
+      Shelf::ForWindow(Shell::Get()->GetPrimaryRootWindow())->GetIdealBounds();
+  const gfx::Rect expected_grid_bounds =
+      SubtractRects(root_window_bounds, shelf_bounds);
+
+  ToggleOverview();
+  ASSERT_TRUE(window_selector_controller()->IsSelecting());
+
+  // Verify that after dragging the unsnappable window to the left and right,
+  // the window grid bounds do not change.
+  WindowSelectorItem* selector_item =
+      GetWindowItemForWindow(0, unsnappable_window.get());
+  window_selector()->InitiateDrag(selector_item,
+                                  selector_item->target_bounds().CenterPoint());
+  window_selector()->Drag(selector_item, gfx::Point(0, 0));
+  EXPECT_EQ(expected_grid_bounds, GetGridBounds());
+  window_selector()->Drag(selector_item,
+                          gfx::Point(root_window_bounds.right(), 0));
+  EXPECT_EQ(expected_grid_bounds, GetGridBounds());
+  window_selector()->Drag(selector_item,
+                          gfx::Point(root_window_bounds.right() / 2, 0));
+  EXPECT_EQ(expected_grid_bounds, GetGridBounds());
+
+  ToggleOverview();
+}
+
+// Tests that if there is only one window in the MRU window list in the overview
+// mode, snapping the window to one side of the screen will end the overview
+// mode since there is no more window left in the overview window grid.
+TEST_F(WindowSelectorTest, EmptyWindowsListExitOverview) {
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kAshEnableTabletSplitView);
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
+  const gfx::Rect bounds(0, 0, 400, 400);
+  std::unique_ptr<aura::Window> window1(CreateWindow(bounds));
+
+  ToggleOverview();
+  EXPECT_TRUE(window_selector_controller()->IsSelecting());
+
+  // Drag |window1| selector item to snap to left.
+  const int grid_index = 0;
+  WindowSelectorItem* selector_item1 =
+      GetWindowItemForWindow(grid_index, window1.get());
+  const gfx::Rect selector_item_bounds1 = selector_item1->target_bounds();
+  // Start drag in the middle of the seletor item.
+  const gfx::Point start_location1(selector_item_bounds1.CenterPoint());
+  window_selector()->InitiateDrag(selector_item1, start_location1);
+  const gfx::Point end_location1(0, 0);
+  window_selector()->Drag(selector_item1, end_location1);
+  window_selector()->CompleteDrag(selector_item1);
+
+  EXPECT_EQ(split_view_controller()->IsSplitViewModeActive(), true);
+  EXPECT_EQ(split_view_controller()->state(),
+            SplitViewController::LEFT_SNAPPED);
+  EXPECT_FALSE(window_selector_controller()->IsSelecting());
 }
 
 }  // namespace ash

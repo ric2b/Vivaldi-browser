@@ -38,7 +38,7 @@ class ImageDecodingStoreTest : public ::testing::Test,
   void SetUp() override {
     ImageDecodingStore::Instance().SetCacheLimitInBytes(1024 * 1024);
     generator_ = ImageFrameGenerator::Create(SkISize::Make(100, 100), true,
-                                             ColorBehavior::Ignore());
+                                             ColorBehavior::Ignore(), {});
     decoders_destroyed_ = 0;
   }
 
@@ -51,7 +51,9 @@ class ImageDecodingStoreTest : public ::testing::Test,
     ASSERT_TRUE(false);
   }
 
-  ImageFrame::Status GetStatus() override { return ImageFrame::kFramePartial; }
+  ImageFrame::Status GetStatus(size_t index) override {
+    return ImageFrame::kFramePartial;
+  }
 
   size_t FrameCount() override { return 1; }
   int RepetitionCount() const override { return kAnimationNone; }

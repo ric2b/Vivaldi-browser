@@ -31,8 +31,8 @@
 
 This includes finding tests to run, reading the test expectations,
 starting the required helper servers, deciding the order and way to
-run the tests, retrying fails tests and collecting the test results,
-including crash logs, and mismatches with expectations.
+run the tests, retrying failed tests, and collecting the test results,
+including crash logs and mismatches with expectations.
 
 The Manager object has a constructor and one main method called run.
 """
@@ -72,12 +72,12 @@ class Manager(object):
     ARCHIVED_RESULTS_LIMIT = 25
 
     def __init__(self, port, options, printer):
-        """Initialize test runner data structures.
+        """Initializes test runner data structures.
 
         Args:
-          port: An object implementing platform-specific functionality.
-          options: An options argument which contains command line options.
-          printer: A Printer object to record updates to.
+            port: An object implementing platform-specific functionality.
+            options: An options argument which contains command line options.
+            printer: A Printer object to record updates to.
         """
         self._port = port
         self._filesystem = port.host.filesystem
@@ -95,7 +95,7 @@ class Manager(object):
         self._runner = LayoutTestRunner(self._options, self._port, self._printer, self._results_directory, self._test_is_slow)
 
     def run(self, args):
-        """Run the tests and return a RunDetails object with the results."""
+        """Runs the tests and return a RunDetails object with the results."""
         start_time = time.time()
         self._printer.write_update('Collecting tests ...')
         running_all_tests = False
@@ -227,8 +227,7 @@ class Manager(object):
             else:
                 if initial_results.interrupted:
                     exit_code = exit_codes.EARLY_EXIT_STATUS
-                if self._options.show_results and (
-                        exit_code or (self._options.full_results_html and initial_results.total_failures)):
+                if self._options.show_results and (exit_code or initial_results.total_failures):
                     self._port.show_results_html_file(results_path)
                 self._printer.print_results(time.time() - start_time, initial_results)
 
@@ -274,18 +273,13 @@ class Manager(object):
                          self._test_requires_lock(test_file))
 
     def _test_requires_lock(self, test_file):
-        """Return True if the test needs to be locked when running multiple
+        """Returns True if the test needs to be locked when running multiple
         instances of this test runner.
 
         Perf tests are locked because heavy load caused by running other
         tests in parallel might cause some of them to time out.
         """
         return self._is_http_test(test_file) or self._is_perf_test(test_file)
-
-    def _test_is_expected_missing(self, test_file):
-        expectations = self._expectations.model().get_expectations(test_file)
-        return (test_expectations.MISSING in expectations or
-                test_expectations.NEEDS_MANUAL_REBASELINE in expectations)
 
     def _test_is_slow(self, test_file):
         expectations = self._expectations.model().get_expectations(test_file)
@@ -420,9 +414,9 @@ class Manager(object):
         under stress, do a second pass at the end of the test run.
 
         Args:
-          run_results: The results of the test run.
-          start_time: Time the tests started at. We're looking for crash
-              logs after that time.
+            run_results: The results of the test run.
+            start_time: Time the tests started at. We're looking for crash
+                logs after that time.
         """
         crashed_processes = []
         for test, result in run_results.unexpected_results_by_name.iteritems():
@@ -443,9 +437,10 @@ class Manager(object):
 
         crash_logs = self._port.look_for_new_crash_logs(crashed_processes, start_time)
         if crash_logs:
-            for test, crash_log in crash_logs.iteritems():
+            for test, (crash_log, crash_site) in crash_logs.iteritems():
                 writer = TestResultWriter(self._filesystem, self._port, self._port.results_directory(), test)
                 writer.write_crash_log(crash_log)
+                run_results.unexpected_results_by_name[test].crash_site = crash_site
 
     def _clobber_old_results(self):
         dir_above_results_path = self._filesystem.dirname(self._results_directory)

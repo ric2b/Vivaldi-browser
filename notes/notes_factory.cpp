@@ -2,10 +2,8 @@
 
 #include "base/deferred_sequenced_task_runner.h"
 #include "base/memory/singleton.h"
-#include "chrome/browser/bookmarks/startup_task_runner_service_factory.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
-#include "components/bookmarks/browser/startup_task_runner_service.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -23,15 +21,17 @@ NotesModelFactory::NotesModelFactory()
 NotesModelFactory::~NotesModelFactory() {}
 
 // static
-Notes_Model* NotesModelFactory::GetForProfile(Profile* profile) {
+Notes_Model* NotesModelFactory::GetForBrowserContext(
+  content::BrowserContext* browser_context) {
   return static_cast<Notes_Model*>(
-      GetInstance()->GetServiceForBrowserContext(profile, true));
+      GetInstance()->GetServiceForBrowserContext(browser_context, true));
 }
 
 // static
-Notes_Model* NotesModelFactory::GetForProfileIfExists(Profile* profile) {
+Notes_Model* NotesModelFactory::GetForBrowserContextIfExists(
+  content::BrowserContext* browser_context) {
   return static_cast<Notes_Model*>(
-      GetInstance()->GetServiceForBrowserContext(profile, false));
+      GetInstance()->GetServiceForBrowserContext(browser_context, false));
 }
 
 // static
@@ -41,9 +41,9 @@ NotesModelFactory* NotesModelFactory::GetInstance() {
 
 KeyedService* NotesModelFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
-  Profile* profile = Profile::FromBrowserContext(context);
-  Notes_Model* notes_model = new Notes_Model(profile);
-  notes_model->Load(profile->GetIOTaskRunner());
+  Notes_Model* notes_model = new Notes_Model(context);
+  notes_model->Load(content::BrowserThread::GetTaskRunnerForThread(
+    content::BrowserThread::FILE));
   return notes_model;
 }
 

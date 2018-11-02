@@ -38,7 +38,7 @@ class GpuThreadAdapter {
   virtual bool GpuRefreshNativeDisplays() = 0;
   virtual bool GpuRelinquishDisplayControl() = 0;
   virtual bool GpuAddGraphicsDevice(const base::FilePath& path,
-                                    const base::FileDescriptor& fd) = 0;
+                                    base::ScopedFD fd) = 0;
   virtual bool GpuRemoveGraphicsDevice(const base::FilePath& path) = 0;
 
   // Methods for DrmOverlayManager.
@@ -49,7 +49,7 @@ class GpuThreadAdapter {
   // Services needed by DrmOverlayManager
   virtual bool GpuCheckOverlayCapabilities(
       gfx::AcceleratedWidget widget,
-      const std::vector<OverlayCheck_Params>& new_params) = 0;
+      const OverlaySurfaceCandidateList& overlays) = 0;
 
   // Services needed by DrmDisplayHost
   virtual bool GpuConfigureNativeDisplay(

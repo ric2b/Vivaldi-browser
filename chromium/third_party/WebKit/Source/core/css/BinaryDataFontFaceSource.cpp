@@ -22,13 +22,16 @@ bool BinaryDataFontFaceSource::IsValid() const {
   return custom_platform_data_.Get();
 }
 
-PassRefPtr<SimpleFontData> BinaryDataFontFaceSource::CreateFontData(
-    const FontDescription& font_description) {
+RefPtr<SimpleFontData> BinaryDataFontFaceSource::CreateFontData(
+    const FontDescription& font_description,
+    const FontSelectionCapabilities& font_selection_capabilities) {
   return SimpleFontData::Create(
       custom_platform_data_->GetFontPlatformData(
           font_description.EffectiveFontSize(),
           font_description.IsSyntheticBold(),
-          font_description.IsSyntheticItalic(), font_description.Orientation(),
+          font_description.IsSyntheticItalic(),
+          font_description.GetFontSelectionRequest(),
+          font_selection_capabilities, font_description.Orientation(),
           font_description.VariationSettings()),
       CustomFontData::Create());
 }

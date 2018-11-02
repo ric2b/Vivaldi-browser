@@ -6,7 +6,6 @@
 
 #include "core/frame/LocalFrameView.h"
 #include "core/layout/LayoutView.h"
-#include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/paint/ClipPathClipper.h"
 #include "core/paint/FilterPainter.h"
 #include "core/paint/LayerClipRecorder.h"
@@ -17,6 +16,7 @@
 #include "core/paint/ScrollRecorder.h"
 #include "core/paint/ScrollableAreaPainter.h"
 #include "core/paint/Transform3DRecorder.h"
+#include "core/paint/compositing/CompositedLayerMapping.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/geometry/FloatPoint3D.h"
 #include "platform/graphics/GraphicsLayer.h"
@@ -82,7 +82,7 @@ bool PaintLayerPainter::PaintedOutputInvisible(
       return false;
 
     const EffectPaintPropertyNode* effect =
-        layout_object.PaintProperties()->Effect();
+        layout_object.FirstFragment()->PaintProperties()->Effect();
     if (effect && effect->RequiresCompositingForAnimation()) {
       return false;
     }
@@ -263,8 +263,9 @@ PaintResult PaintLayerPainter::PaintLayerContents(
   if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled() &&
       RuntimeEnabledFeatures::RootLayerScrollingEnabled() &&
       paint_layer_.GetLayoutObject().IsLayoutView()) {
-    const auto* local_border_box_properties =
-        paint_layer_.GetLayoutObject().LocalBorderBoxProperties();
+    const auto* local_border_box_properties = paint_layer_.GetLayoutObject()
+                                                  .FirstFragment()
+                                                  ->LocalBorderBoxProperties();
     DCHECK(local_border_box_properties);
     PaintChunkProperties properties(
         context.GetPaintController().CurrentPaintChunkProperties());
@@ -408,9 +409,6 @@ PaintResult PaintLayerPainter::PaintLayerContents(
                               !is_painting_overlay_scrollbars;
 
   PaintLayerFragments layer_fragments;
-  ClipRectsCacheSlot cache_slot = (paint_flags & kPaintLayerUncachedClipRects)
-                                      ? kUncachedClipRects
-                                      : kPaintingClipRects;
 
   if (should_paint_content || should_paint_self_outline ||
       is_painting_overlay_scrollbars) {
@@ -444,7 +442,7 @@ PaintResult PaintLayerPainter::PaintLayerContents(
         RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
       paint_layer_for_fragments->AppendSingleFragmentIgnoringPagination(
           layer_fragments, local_painting_info.root_layer,
-          local_painting_info.paint_dirty_rect, cache_slot,
+          local_painting_info.paint_dirty_rect, kUncachedClipRects,
           PaintLayer::kUseGeometryMapper, kIgnorePlatformOverlayScrollbarSize,
           respect_overflow_clip, &offset_from_root,
           local_painting_info.sub_pixel_accumulation);
@@ -452,7 +450,7 @@ PaintResult PaintLayerPainter::PaintLayerContents(
       PaintLayerFragments single_fragment;
       paint_layer_for_fragments->AppendSingleFragmentIgnoringPagination(
           single_fragment, local_painting_info.root_layer,
-          local_painting_info.paint_dirty_rect, cache_slot,
+          local_painting_info.paint_dirty_rect, kUncachedClipRects,
           PaintLayer::kUseGeometryMapper, kIgnorePlatformOverlayScrollbarSize,
           respect_overflow_clip, &offset_from_root,
           local_painting_info.sub_pixel_accumulation);
@@ -486,7 +484,7 @@ PaintResult PaintLayerPainter::PaintLayerContents(
     } else {
       paint_layer_for_fragments->CollectFragments(
           layer_fragments, local_painting_info.root_layer,
-          local_painting_info.paint_dirty_rect, cache_slot,
+          local_painting_info.paint_dirty_rect, kUncachedClipRects,
           PaintLayer::kUseGeometryMapper, kIgnorePlatformOverlayScrollbarSize,
           respect_overflow_clip, &offset_from_root,
           local_painting_info.sub_pixel_accumulation);
@@ -528,8 +526,9 @@ PaintResult PaintLayerPainter::PaintLayerContents(
     // the top of this method, in scopedPaintChunkProperties.
     DCHECK(!(RuntimeEnabledFeatures::RootLayerScrollingEnabled() &&
              paint_layer_.GetLayoutObject().IsLayoutView()));
-    const auto* local_border_box_properties =
-        paint_layer_.GetLayoutObject().LocalBorderBoxProperties();
+    const auto* local_border_box_properties = paint_layer_.GetLayoutObject()
+                                                  .FirstFragment()
+                                                  ->LocalBorderBoxProperties();
     DCHECK(local_border_box_properties);
     PaintChunkProperties properties(
         context.GetPaintController().CurrentPaintChunkProperties());
@@ -549,7 +548,7 @@ PaintResult PaintLayerPainter::PaintLayerContents(
       PaintLayerFragments filter_fragments;
       paint_layer_.AppendSingleFragmentIgnoringPagination(
           filter_fragments, local_painting_info.root_layer,
-          local_painting_info.paint_dirty_rect, cache_slot,
+          local_painting_info.paint_dirty_rect, kUncachedClipRects,
           PaintLayer::kUseGeometryMapper, kIgnorePlatformOverlayScrollbarSize,
           respect_overflow_clip, &offset_from_root,
           local_painting_info.sub_pixel_accumulation);
@@ -746,12 +745,6 @@ PaintResult PaintLayerPainter::PaintLayerWithTransform(
     else
       layer_fragments.push_back(fragment);
   } else {
-    // FIXME: This is a mess. Look closely at this code and the code in Layer
-    // and fix any issues in it & refactor to make it obvious from code
-    // structure what it does and that it's correct.
-    ClipRectsCacheSlot cache_slot = (paint_flags & kPaintLayerUncachedClipRects)
-                                        ? kUncachedClipRects
-                                        : kPaintingClipRects;
     ShouldRespectOverflowClipType respect_overflow_clip =
         ShouldRespectOverflowClip(paint_flags, paint_layer_.GetLayoutObject());
     // Calculate the transformed bounding box in the current coordinate space,
@@ -768,7 +761,7 @@ PaintResult PaintLayerPainter::PaintLayerWithTransform(
     // here.
     pagination_layer->CollectFragments(
         layer_fragments, painting_info.root_layer,
-        painting_info.paint_dirty_rect, cache_slot,
+        painting_info.paint_dirty_rect, kUncachedClipRects,
         PaintLayer::kUseGeometryMapper, kIgnorePlatformOverlayScrollbarSize,
         respect_overflow_clip, nullptr, painting_info.sub_pixel_accumulation,
         &transformed_extent);
@@ -797,12 +790,10 @@ PaintResult PaintLayerPainter::PaintLayerWithTransform(
       ancestor_background_clip_rect.SetRect(FloatClipRect());
     } else if (parent_layer) {
       // Calculate the clip rectangle that the ancestors establish.
-      ClipRectsContext clip_rects_context(
-          painting_info.root_layer,
-          (paint_flags & kPaintLayerUncachedClipRects) ? kUncachedClipRects
-                                                       : kPaintingClipRects,
-          kIgnorePlatformOverlayScrollbarSize,
-          painting_info.sub_pixel_accumulation);
+      ClipRectsContext clip_rects_context(painting_info.root_layer,
+                                          kUncachedClipRects,
+                                          kIgnorePlatformOverlayScrollbarSize,
+                                          painting_info.sub_pixel_accumulation);
       if (ShouldRespectOverflowClip(paint_flags,
                                     paint_layer_.GetLayoutObject()) ==
           kIgnoreOverflowClip)
@@ -1225,7 +1216,7 @@ void PaintLayerPainter::PaintMaskForFragments(
   Optional<ScopedPaintChunkProperties> scoped_paint_chunk_properties;
   if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
     const auto* object_paint_properties =
-        paint_layer_.GetLayoutObject().PaintProperties();
+        paint_layer_.GetLayoutObject().FirstFragment()->PaintProperties();
     DCHECK(object_paint_properties && object_paint_properties->Mask());
     PaintChunkProperties properties(
         context.GetPaintController().CurrentPaintChunkProperties());

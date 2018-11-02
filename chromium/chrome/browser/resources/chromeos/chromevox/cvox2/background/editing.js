@@ -92,7 +92,7 @@ TextFieldTextEditHandler.prototype = {
         evt.target != this.node_)
       return;
 
-    this.editableText_.onUpdate();
+    this.editableText_.onUpdate(evt.eventFrom);
   },
 };
 
@@ -124,8 +124,9 @@ AutomationEditableText.prototype = {
 
   /**
    * Called when the text field has been updated.
+   * @param {string|undefined} eventFrom
    */
-  onUpdate: function() {
+  onUpdate: function(eventFrom) {
     var newValue = this.node_.value || '';
 
     if (this.value != newValue)
@@ -227,7 +228,7 @@ AutomationRichEditableText.prototype = {
   __proto__: AutomationEditableText.prototype,
 
   /** @override */
-  onUpdate: function() {
+  onUpdate: function(eventFrom) {
     var root = this.node_.root;
     if (!root.anchorObject || !root.focusObject ||
         root.anchorOffset === undefined || root.focusOffset === undefined)
@@ -262,6 +263,24 @@ AutomationRichEditableText.prototype = {
     }
     var prev = this.line_;
     this.line_ = cur;
+
+    var finish = function() {
+      // The state in EditableTextBase needs to get updated with the new line
+      // contents, so that subsequent intra-line changes get the right state
+      // transitions.
+      this.value = cur.text;
+      this.start = cur.startOffset;
+      this.end = cur.endOffset;
+    }.bind(this);
+
+    // During continuous read, skip speech (which gets handled in
+    // CommandHandler). We use the speech end callback to trigger additional
+    // speech.
+    if (ChromeVoxState.isReadingContinuously) {
+      this.brailleCurrentRichLine_();
+      finish();
+      return;
+    }
 
     // Selection stayed within the same line(s) and didn't cross into new lines.
     if (anchorLine.isSameLine(prevAnchorLine) &&
@@ -397,13 +416,7 @@ AutomationRichEditableText.prototype = {
       this.speakCurrentRichLine_(prev);
       this.brailleCurrentRichLine_();
     }
-
-    // The state in EditableTextBase needs to get updated with the new line
-    // contents, so that subsequent intra-line changes get the right state
-    // transitions.
-    this.value = cur.text;
-    this.start = cur.startOffset;
-    this.end = cur.endOffset;
+    finish();
   },
 
   /**
@@ -517,7 +530,7 @@ AutomationRichEditableText.prototype = {
   /** @private */
   brailleCurrentRichLine_: function() {
     var cur = this.line_;
-    var value = new Spannable(cur.value_);
+    var value = new MultiSpannable(cur.value_);
     if (!this.node_.constructor)
       return;
     value.getSpansInstanceOf(this.node_.constructor).forEach(function(span) {
@@ -537,6 +550,25 @@ AutomationRichEditableText.prototype = {
       var end = value.getSpanEnd(span);
       value.setSpan(new cvox.BrailleTextStyleSpan(formType), start, end);
     });
+
+    // Provide context for the current selection.
+    var context = cur.startContainer_;
+    var output = new Output().suppress('name').withBraille(
+        Range.fromNode(context), Range.fromNode(this.node_),
+        Output.EventType.NAVIGATE);
+    if (output.braille.length) {
+      var end = cur.containerEndOffset + 1;
+      var prefix = value.substring(0, end);
+      var suffix = value.substring(end, value.length);
+      value = prefix;
+      value.append(Output.SPACE);
+      value.append(output.braille);
+      if (suffix.length) {
+        if (suffix.toString()[0] != Output.SPACE)
+          value.append(Output.SPACE);
+        value.append(suffix);
+      }
+    }
     value.setSpan(new cvox.ValueSpan(0), 0, cur.value_.length);
     value.setSpan(
         new cvox.ValueSelectionSpan(), cur.startOffset, cur.endOffset);

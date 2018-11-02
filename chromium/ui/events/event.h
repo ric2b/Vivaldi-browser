@@ -114,6 +114,8 @@ class EVENTS_EXPORT Event {
   bool IsAltGrDown() const { return (flags_ & EF_ALTGR_DOWN) != 0; }
   bool IsCapsLockOn() const { return (flags_ & EF_CAPS_LOCK_ON) != 0; }
 
+  bool IsSynthesized() const { return (flags_ & EF_IS_SYNTHESIZED) != 0; }
+
   bool IsCancelModeEvent() const {
     return type_ == ET_CANCEL_MODE;
   }
@@ -363,10 +365,12 @@ class EVENTS_EXPORT LocatedEvent : public Event {
     return root_location_;
   }
 
-  // Transform the locations using |inverted_root_transform|.
-  // This is applied to both |location_| and |root_location_|.
+  // Transform the locations using |inverted_root_transform| and
+  // |inverted_local_transform|. |inverted_local_transform| is only used if
+  // the event has a target.
   virtual void UpdateForRootTransform(
-      const gfx::Transform& inverted_root_transform);
+      const gfx::Transform& inverted_root_transform,
+      const gfx::Transform& inverted_local_transform);
 
   template <class T> void ConvertLocationToTarget(T* source, T* target) {
     if (!target || target == source)
@@ -698,7 +702,8 @@ class EVENTS_EXPORT TouchEvent : public LocatedEvent {
 
   // Overridden from LocatedEvent.
   void UpdateForRootTransform(
-      const gfx::Transform& inverted_root_transform) override;
+      const gfx::Transform& inverted_root_transform,
+      const gfx::Transform& inverted_local_transform) override;
 
   // Marks the event as not participating in synchronous gesture recognition.
   void DisableSynchronousHandling();

@@ -20,14 +20,15 @@
 
 namespace device {
 
-GvrDevice::GvrDevice(GvrDeviceProvider* provider)
-    : VRDevice(), gvr_provider_(provider) {}
+GvrDevice::GvrDevice() : VRDevice() {
+  GetGvrDelegateProvider();
+}
 
 GvrDevice::~GvrDevice() {}
 
 void GvrDevice::CreateVRDisplayInfo(
     const base::Callback<void(mojom::VRDisplayInfoPtr)>& on_created) {
-  GvrDelegateProvider* delegate_provider = gvr_provider_->GetDelegateProvider();
+  GvrDelegateProvider* delegate_provider = GetGvrDelegateProvider();
   if (delegate_provider) {
     delegate_provider->CreateVRDisplayInfo(on_created, id());
   } else {
@@ -38,7 +39,7 @@ void GvrDevice::CreateVRDisplayInfo(
 void GvrDevice::RequestPresent(mojom::VRSubmitFrameClientPtr submit_client,
                                mojom::VRPresentationProviderRequest request,
                                const base::Callback<void(bool)>& callback) {
-  GvrDelegateProvider* delegate_provider = gvr_provider_->GetDelegateProvider();
+  GvrDelegateProvider* delegate_provider = GetGvrDelegateProvider();
   if (!delegate_provider)
     return callback.Run(false);
 
@@ -48,15 +49,8 @@ void GvrDevice::RequestPresent(mojom::VRSubmitFrameClientPtr submit_client,
                                          std::move(request), callback);
 }
 
-void GvrDevice::SetSecureOrigin(bool secure_origin) {
-  secure_origin_ = secure_origin;
-  GvrDelegate* delegate = GetGvrDelegate();
-  if (delegate)
-    delegate->SetWebVRSecureOrigin(secure_origin_);
-}
-
 void GvrDevice::ExitPresent() {
-  GvrDelegateProvider* delegate_provider = gvr_provider_->GetDelegateProvider();
+  GvrDelegateProvider* delegate_provider = GetGvrDelegateProvider();
   if (delegate_provider)
     delegate_provider->ExitWebVRPresent();
   OnExitPresent();
@@ -65,7 +59,7 @@ void GvrDevice::ExitPresent() {
 void GvrDevice::GetNextMagicWindowPose(
     VRDisplayImpl* display,
     mojom::VRDisplay::GetNextMagicWindowPoseCallback callback) {
-  GvrDelegateProvider* delegate_provider = gvr_provider_->GetDelegateProvider();
+  GvrDelegateProvider* delegate_provider = GetGvrDelegateProvider();
   if (!delegate_provider) {
     std::move(callback).Run(nullptr);
     return;
@@ -74,40 +68,33 @@ void GvrDevice::GetNextMagicWindowPose(
 }
 
 void GvrDevice::OnDisplayAdded(VRDisplayImpl* display) {
-  GvrDelegateProvider* delegate_provider = gvr_provider_->GetDelegateProvider();
+  GvrDelegateProvider* delegate_provider = GetGvrDelegateProvider();
   if (!delegate_provider)
     return;
   delegate_provider->OnDisplayAdded(display);
 }
 
 void GvrDevice::OnDisplayRemoved(VRDisplayImpl* display) {
-  GvrDelegateProvider* delegate_provider = gvr_provider_->GetDelegateProvider();
+  GvrDelegateProvider* delegate_provider = GetGvrDelegateProvider();
   if (!delegate_provider)
     return;
   delegate_provider->OnDisplayRemoved(display);
 }
 
 void GvrDevice::OnListeningForActivateChanged(VRDisplayImpl* display) {
-  GvrDelegateProvider* delegate_provider = gvr_provider_->GetDelegateProvider();
+  GvrDelegateProvider* delegate_provider = GetGvrDelegateProvider();
   if (!delegate_provider)
     return;
   delegate_provider->OnListeningForActivateChanged(display);
 }
 
-void GvrDevice::OnDelegateChanged() {
-  GvrDelegate* delegate = GetGvrDelegate();
-  // Notify the clients that this device has changed
-  if (delegate)
-    delegate->SetWebVRSecureOrigin(secure_origin_);
-
-  OnChanged();
-}
-
-GvrDelegate* GvrDevice::GetGvrDelegate() {
-  GvrDelegateProvider* delegate_provider = gvr_provider_->GetDelegateProvider();
+GvrDelegateProvider* GvrDevice::GetGvrDelegateProvider() {
+  // GvrDelegateProvider::GetInstance() may fail transiently, so every time we
+  // try to get it, set the device ID.
+  GvrDelegateProvider* delegate_provider = GvrDelegateProvider::GetInstance();
   if (delegate_provider)
-    return delegate_provider->GetDelegate();
-  return nullptr;
+    delegate_provider->SetDeviceId(id());
+  return delegate_provider;
 }
 
 }  // namespace device
